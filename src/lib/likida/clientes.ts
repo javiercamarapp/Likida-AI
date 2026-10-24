@@ -590,6 +590,13 @@ export interface PanelClientes {
   hoy: string;
 }
 
+/** El día (AAAA-MM-DD, zona de México) de un instante ISO; `null` si falta o no se lee. */
+function diaDelViaje(instante: unknown): string | null {
+  if (typeof instante !== 'string' || instante === '') return null;
+  const t = new Date(instante);
+  return Number.isNaN(t.getTime()) ? null : hoyMx(t);
+}
+
 /**
  * Todo lo que la pantalla de Clientes y tarifas necesita, en una llamada.
  *
@@ -693,7 +700,9 @@ export async function getPanelClientes(
         origen: (v.origen as string) ?? null,
         destino: (v.destino as string) ?? null,
         km,
-        fecha: hoy,
+        // A37-S34-06: la tarifa se juzga con el día DEL VIAJE (día de la flota), no con el de hoy: una tarifa nueva no reescribe el precio
+        // de un viaje de marzo. Sin fecha de inicio (o ilegible) no se inventa una: rige la de hoy, como siempre.
+        fecha: diaDelViaje(v.fecha_inicio) ?? hoy,
       }),
     };
   });

@@ -29,12 +29,14 @@ import {
 } from './desglose_puerto';
 import { recibirDesglose, type ResultadoDesglose } from './desglose_recibir';
 import {
-  abrirExcepcion, entregasDe, guardarCursorPull, leerCursorPull, listarExcepciones, resolverExcepcion,
+  abrirExcepcion, DesgloseEnConflicto, entregasDe, guardarCursorPull, leerCursorPull, listarExcepciones, resolverExcepcion,
   type EntregaCorreo, type EstadoPull, type TipoExcepcion,
 } from './repo_correo';
 
 export const TOPE_ITEMS_POR_PASADA = 100;
 export const TOPE_RELECTURA = 300;
+/** A37-A1-liquidaciones-06: un pull que falla y no tiene un éxito en más de esto (o nunca lo tuvo) está atascado y se avisa. */
+export const ATASCO_PULL_MS = 6 * 3_600_000;
 
 export interface DependenciasPull {
   ahora: () => Date;
@@ -93,6 +95,10 @@ export interface ResultadoPull {
   cursor: CursorDesglose | null;
   /** Clase del error (sin datos personales); solo con `estado: 'error'`. */
   error?: string;
+  /** A37-A1-liquidaciones-06: la pasada falló y el último éxito es de hace más de `ATASCO_PULL_MS` (o nunca hubo): hay que avisar. */
+  atascado?: true;
+  /** A37-A1-liquidaciones-17: la relectura del traslape superó el tope y se saltó al cursor (los nuevos sí se procesaron). */
+  relecturaTruncada?: true;
 }
 
 function posicion(c: CursorDesglose): [number, string] {
@@ -135,6 +141,7 @@ export async function pullDesgloses(
   r.cursor = cursorInicial;
   const tamano = Math.min(Math.max(Math.trunc(opciones.limite ?? TOPE_ITEMS_POR_PASADA), 1), TOPE_ITEMS_POR_PASADA);
   const reLeerDesde = reLeerDesdeDeCursor(cursorInicial);
+  let saltoRelectura = false;
   const acumulado = () => ({
     leidas: estado.leidas + r.leidas, importadas: estado.importadas + r.importadas, excepciones: estado.excepciones + r.excepciones,
   });
@@ -158,7 +165,16 @@ export async function pullDesgloses(
 
       const esNueva = !cursorInicial || (pagina.siguiente !== null && comparar(pagina.siguiente, cursorInicial) > 0);
       if (esNueva) nuevos += pagina.items.length; else releidos += pagina.items.length;
-      if (releidos > TOPE_RELECTURA) throw new Error('ventana de traslape mayor que el tope de relectura');
+      if (releidos > TOPE_RELECTURA && !saltoRelectura && pagina.items.length > 0 && cursorInicial) {
+        // A37-A1-liquidaciones-17: más de TOPE_RELECTURA ítems ya procesados en la ventana (flota grande o cursor viejo tras una caída).
+        // Antes la pasada LANZABA y, como el cursor no avanzaba, fallaba igual para siempre. La relectura es solo una cortesía para
+        // las pólizas tardías: se acota (esta página no se reprocesa) y se salta al cursor para que lo NUEVO sí se procese.
+        saltoRelectura = true;
+        r.relecturaTruncada = true;
+        logger.warn('liqcorreo.pull_relectura_truncada', { releidos });
+        lectura = cursorInicial;
+        continue;
+      }
 
       const porMarcar: string[] = [];
       // Filas que el lector ya no pudo mapear: excepción visible (solo el nombre del campo), nunca descarte silencioso.
@@ -190,8 +206,15 @@ export async function pullDesgloses(
         try {
           res = await deps.recibir(tenantId, d);
         } catch (e) {
-          if (!(e instanceof CampoInvalido)) throw e;
-          await deps.abrirExcepcion(tenantId, clave, 'mapeo_invalido', { campo: e.campo }, ahora);
+          // A37-A1-liquidaciones-07: un error de DATOS del ítem (contrato inválido, bitácora que choca con el índice único) es
+          // una excepción visible por ítem; el pull sigue con los demás. Un error de infraestructura SÍ detiene la pasada.
+          if (e instanceof CampoInvalido) {
+            await deps.abrirExcepcion(tenantId, clave, 'mapeo_invalido', { campo: e.campo }, ahora);
+          } else if (e instanceof DesgloseEnConflicto) {
+            await deps.abrirExcepcion(tenantId, clave, 'mapeo_invalido', { campo: 'bitacora (ya existe con otra clave)' }, ahora);
+          } else {
+            throw e;
+          }
           r.excepciones += 1;
           continue;
         }
@@ -232,6 +255,9 @@ export async function pullDesgloses(
     const error = descripcionError(e);
     r.estado = 'error';
     r.error = error;
+    // A37-A1-liquidaciones-06: un fallo aislado no es atasco; sí lo es uno sin éxito en horas (o que nunca lo tuvo).
+    const ultimoExito = estado.ultimoExito ? Date.parse(estado.ultimoExito) : NaN;
+    if (Number.isNaN(ultimoExito) || ahora.getTime() - ultimoExito > ATASCO_PULL_MS) r.atascado = true;
     logger.warn('liqcorreo.pull_error', { tipo: e instanceof Error ? e.name : 'desconocido' });
     try {
       await deps.guardarEstado(tenantId, { ahora, exito: false, error, ...acumulado() });

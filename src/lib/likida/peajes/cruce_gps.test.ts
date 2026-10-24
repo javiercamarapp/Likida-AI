@@ -26,6 +26,12 @@ describe('evaluarCruceGps — confirma', () => {
     const a = evaluarCruceGps(T0, CASETA, [m(1, 0.027), m(-1, -0.027)]);
     expect(a.veredicto).toBe('confirma');
   });
+  it('A37-A2-22: una posición dentro del radio a 18 min del cobro NO lo confirma; a 5 min sí', () => {
+    expect(evaluarCruceGps(T0, CASETA, [m(-18, 0.001)]).veredicto).not.toBe('confirma');
+    expect(evaluarCruceGps(T0, CASETA, [m(18, 0.001)]).veredicto).not.toBe('confirma');
+    expect(evaluarCruceGps(T0, CASETA, [m(-5, 0.001)]).veredicto).toBe('confirma');
+    expect(evaluarCruceGps(T0, CASETA, [m(5, 0.001)]).veredicto).toBe('confirma');
+  });
   it('el borde del radio cuenta como dentro', () => {
     // ~300 m al norte: 0.0027° ≈ 300.2 m → fuera; 0.0026° ≈ 289 m → dentro.
     expect(evaluarCruceGps(T0, CASETA, [m(0, 0.0026)]).veredicto).toBe('confirma');

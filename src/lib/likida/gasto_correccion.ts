@@ -53,6 +53,47 @@ export type ResultadoCorreccion =
 const TOPE_MONTO = 1_000_000;
 
 /**
+ * A37-S45-10 — el merge de `ocr_extra` en SQL (migración 0876).
+ *
+ * Leer `ocr_extra`, agregarle una clave y reescribir la columna ENTERA pisaba lo
+ * que la validación SAT o la ingesta del XML escribieron en medio, perdía una de
+ * dos correcciones concurrentes y devolvía ok sobre un gasto ya borrado.
+ * `gasto_mezclar_ocr_extra` hace el `||`, el append al historial y el cambio de
+ * monto en UNA sentencia y dice cuántas filas tocó.
+ *
+ *  · `{ filas }`  — la RPC corrió (0 = el gasto ya no existe o dejó de cumplir la condición).
+ *  · `{ error }`  — falló de verdad (p. ej. CU001: la liquidación ya se emitió).
+ *  · `null`       — la base aún no trae la 0876 (PGRST202 / 42883): se avisa y quien
+ *                   llama cae al camino anterior (leer-fusionar-escribir).
+ */
+async function mezclarOcrExtraAtomico(a: {
+  tenantId: string; gastoId: string; parche?: Record<string, unknown>;
+  historial?: { clave: string; entrada: Record<string, unknown> };
+  monto?: number; sinXmlVerificado?: boolean; contexto: string;
+}): Promise<{ filas: number } | { error: { message: string; code?: string } } | null> {
+  const { data, error } = await acotada(
+    supabaseAdmin().rpc('gasto_mezclar_ocr_extra', {
+      p_tenant: a.tenantId,
+      p_gasto: a.gastoId,
+      p_parche: a.parche ?? {},
+      p_historial_clave: a.historial?.clave ?? null,
+      p_historial_entrada: a.historial?.entrada ?? null,
+      p_monto: a.monto ?? null,
+      p_sin_xml_verificado: a.sinXmlVerificado ?? false,
+    }),
+    a.contexto,
+  ) as { data: unknown; error: { message: string; code?: string } | null };
+  if (error) {
+    if (error.code === 'PGRST202' || error.code === '42883') {
+      logger.warn('gasto.mezcla_atomica_no_disponible', { contexto: a.contexto, code: error.code });
+      return null;
+    }
+    return { error };
+  }
+  return { filas: Number(data ?? 0) };
+}
+
+/**
  * Cambia el monto de un gasto y deja constancia. NUNCA lanza.
  *
  * Devuelve el motivo con nombre para que quien llame pueda decir la verdad:
@@ -90,22 +131,46 @@ export async function corregirMontoGasto(c: CorreccionDeMonto): Promise<Resultad
   const antes = Number(fila.monto ?? 0);
   if (antes === montoNuevo) return { ok: true, antes, despues: montoNuevo };
 
-  const extra = { ...((fila.ocr_extra ?? {}) as Record<string, unknown>) };
-  // La HISTORIA se conserva: si ya se había corregido, la corrección anterior
-  // no se pisa. El contralor tiene que poder ver que esta cifra se movió dos
-  // veces, no solo la última.
-  const previas = Array.isArray(extra.montoCorregido) ? extra.montoCorregido : (extra.montoCorregido ? [extra.montoCorregido] : []);
-  extra.montoCorregido = [...previas, {
+  const entrada = {
     antes, despues: montoNuevo, motivo,
     por: c.actor.email ?? c.actor.id ?? null,
     en: new Date().toISOString(),
-  }];
+  };
 
-  const { error } = await acotada(
-    supabaseAdmin().from('gasto').update({ monto: montoNuevo, ocr_extra: extra })
-      .eq('id', c.gastoId).eq('tenant_id', c.tenantId),
-    'corregirMontoGasto.update',
-  );
+  // Camino atómico (0876). La HISTORIA se conserva en SQL: la corrección
+  // anterior no se pisa y dos correcciones concurrentes dejan las dos entradas.
+  let error: { message: string; code?: string } | null = null;
+  const atomico = await mezclarOcrExtraAtomico({
+    tenantId: c.tenantId, gastoId: c.gastoId, monto: montoNuevo, sinXmlVerificado: true,
+    historial: { clave: 'montoCorregido', entrada }, contexto: 'corregirMontoGasto.mezclar',
+  });
+  if (atomico && 'error' in atomico) {
+    error = atomico.error;
+  } else if (atomico) {
+    if (atomico.filas === 0) {
+      // 0 filas: se borró entre la lectura y la escritura, o llegó el XML y ya es
+      // la autoridad. Nunca «ok» sobre una fila que no se tocó.
+      const { data: ahora } = await acotada(
+        supabaseAdmin().from('gasto').select('id, xml_verificado')
+          .eq('id', c.gastoId).eq('tenant_id', c.tenantId).maybeSingle(),
+        'corregirMontoGasto.releer',
+      ) as { data: { id: string; xml_verificado: boolean | null } | null };
+      logger.warn('gasto.correccion_sin_filas', { tenant: c.tenantId, gasto: c.gastoId, existe: Boolean(ahora) });
+      if (!ahora) return { ok: false, motivo: 'no_existe' };
+      if (ahora.xml_verificado) return { ok: false, motivo: 'xml_verificado' };
+      return { ok: false, motivo: 'error', detalle: 'el gasto cambió mientras se corregía; vuelve a intentar' };
+    }
+  } else {
+    // La base aún no trae la 0876: camino anterior (leer-fusionar-escribir).
+    const extra = { ...((fila.ocr_extra ?? {}) as Record<string, unknown>) };
+    const previas = Array.isArray(extra.montoCorregido) ? extra.montoCorregido : (extra.montoCorregido ? [extra.montoCorregido] : []);
+    extra.montoCorregido = [...previas, entrada];
+    ({ error } = await acotada(
+      supabaseAdmin().from('gasto').update({ monto: montoNuevo, ocr_extra: extra })
+        .eq('id', c.gastoId).eq('tenant_id', c.tenantId),
+      'corregirMontoGasto.update',
+    ));
+  }
   if (error) {
     // CU001 es el trigger de la 0036/0037: la liquidación de ese viaje ya se
     // emitió. NO es un fallo técnico y no se le puede pedir que reintente.
@@ -156,18 +221,34 @@ export async function marcarMontoDisputado(
     logger.warn('gasto.disputa_sin_lectura', { tenant: d.tenantId, gasto: d.gastoId, err: errorLectura?.message ?? 'no existe' });
     return false;
   }
-  const extra = { ...((fila.ocr_extra ?? {}) as Record<string, unknown>) };
-  extra.montoDisputado = {
+  const disputa = {
     montoLeido: Number(fila.monto ?? 0),
     por: d.quien,
     dijo: d.dijo ?? null,
     en: new Date().toISOString(),
   };
-  const { error } = await acotada(
-    supabaseAdmin().from('gasto').update({ ocr_extra: extra })
-      .eq('id', d.gastoId).eq('tenant_id', d.tenantId),
-    'marcarMontoDisputado.update',
-  );
+  // A37-S45-10: merge atómico (0876) para no pisar lo que la validación SAT o la
+  // ingesta del XML escribieron entre la lectura y la escritura.
+  let error: { message: string; code?: string } | null = null;
+  const atomico = await mezclarOcrExtraAtomico({
+    tenantId: d.tenantId, gastoId: d.gastoId, parche: { montoDisputado: disputa }, contexto: 'marcarMontoDisputado.mezclar',
+  });
+  if (atomico && 'error' in atomico) {
+    error = atomico.error;
+  } else if (atomico) {
+    if (atomico.filas === 0) {
+      logger.warn('gasto.disputa_sin_filas', { tenant: d.tenantId, gasto: d.gastoId });
+      return false;
+    }
+  } else {
+    const extra = { ...((fila.ocr_extra ?? {}) as Record<string, unknown>) };
+    extra.montoDisputado = disputa;
+    ({ error } = await acotada(
+      supabaseAdmin().from('gasto').update({ ocr_extra: extra })
+        .eq('id', d.gastoId).eq('tenant_id', d.tenantId),
+      'marcarMontoDisputado.update',
+    ));
+  }
   if (error) {
     logger.warn('gasto.disputa_no_marcada', { tenant: d.tenantId, gasto: d.gastoId, err: error.message, code: error.code });
     return false;

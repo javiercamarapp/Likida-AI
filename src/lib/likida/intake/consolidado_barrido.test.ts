@@ -34,6 +34,7 @@ let respLineaUpdate: Resp;
 /** Cada UPDATE a `gasto` (el sello de `ligarLineaAGasto`): payload y filtros. */
 /** `range(desde > 0)` pedidos: OFFSETS. El fondo de gastos del barrido ya no debe usar ninguno (ronda 16). */
 let offsetsPedidos: number[];
+let filtrosNot: Array<[string, string, unknown]>;
 let sellos: Array<{ fila: Record<string, unknown>; por: Array<[string, unknown]> }>;
 /** Cada UPDATE a `cfdi_consolidado_linea` (marcar o refrescar): payload y filtros. */
 let escriturasLinea: Array<{ fila: Record<string, unknown>; por: Array<[string, unknown]> }>;
@@ -46,6 +47,7 @@ function lecturable(resp: () => Resp) {
   let tope = Number.POSITIVE_INFINITY;
   let ordenaPorFecha = false;
   for (const m of ['eq', 'is', 'in', 'lte']) nodo[m] = () => nodo;
+  nodo.not = (col: string, op: string, val: unknown) => { filtrosNot.push([col, op, val]); return nodo; };
   nodo.order = (col: string) => { if (col === 'fecha') ordenaPorFecha = true; return nodo; };
   nodo.gte = () => nodo;
   // `.or('fecha.gt.F,and(fecha.eq.F,id.gt.I)')`: el cursor `(fecha, id)` de `traerTodoPorLlave`.
@@ -136,6 +138,7 @@ beforeEach(() => {
   sellos = [];
   escriturasLinea = [];
   offsetsPedidos = [];
+  filtrosNot = [];
   for (const f of Object.values(logger)) f.mockReset();
 });
 
@@ -146,6 +149,11 @@ describe('barrerPorConciliar', () => {
     expect(sellos).toEqual([]);
     expect(escriturasLinea).toEqual([]);
     expect(logger.info).toHaveBeenCalledWith('peajes.barrido', { tenant: 't1', revisadas: 0, conciliadas: 0, candidatosRefrescados: 0, siguenPendientes: 0, cortadosPorReloj: 0 });
+  });
+
+  it('A37-S46-07: el barrido NO lee líneas sin fecha (saturaban el corte de 1,000)', async () => {
+    await barrerPorConciliar('t1');
+    expect(filtrosNot).toContainEqual(['fecha', 'is', null]);
   });
 
   it('UN ERROR DE LECTURA LANZA: una base caída no es una cola vacía', async () => {

@@ -78,7 +78,7 @@ vi.mock('@/lib/likida/vendedores', () => ({
   }),
   normalizarEstadoProspecto: (estado: string) => estado,
 }));
-vi.mock('@/lib/saas/transferencia', () => ({ getPorCobrar: async () => ([]) }));
+vi.mock('@/lib/saas/transferencia', () => ({ getPorCobrarCompleto: async () => ([]) }));
 vi.mock('@/lib/admin/ficha-cliente', () => ({
   getFichaCliente: async (id: string) => ({ id, nombre: 'FLOTA DEMO', viajes: 42 }),
 }));

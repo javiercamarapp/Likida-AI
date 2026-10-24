@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { CONFIG_ATIPICOS_DEFAULT, type ConfigAtipicos } from './atipicos';
+import { CONFIG_ATIPICOS_DEFAULT, VELOCIDAD_MIN_KMH, VELOCIDAD_MAX_KMH, type ConfigAtipicos } from './atipicos';
+import type { UmbralesAtipicos, ResultadoAtipicos, SenalAtipica } from './cruces_atipicos';
+
+export { VELOCIDAD_MIN_KMH, VELOCIDAD_MAX_KMH };
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA CONFIGURACIÓN DE LOS CRUCES ATÍPICOS, validada (T-A2-12). PURO: sin base ni red.
@@ -14,8 +17,6 @@ import { CONFIG_ATIPICOS_DEFAULT, type ConfigAtipicos } from './atipicos';
 export const VENTANA_HORAS_MAX = 72;
 export const MIN_CRUCES_MIN = 2;
 export const MIN_CRUCES_MAX = 50;
-export const VELOCIDAD_MIN_KMH = 30;
-export const VELOCIDAD_MAX_KMH = 400;
 
 const activa = z.boolean({ error: 'Indica si la regla está activa (sí o no).' });
 
@@ -85,4 +86,32 @@ export const exigeRevisor = (e: EstadoAtipico): boolean => e === 'revisado' || e
 /** El estado resultante de volver a guardar un hallazgo que ya existía: nunca retrocede. */
 export function estadoTrasReguardar(previo: EstadoAtipico, propuesto: EstadoAtipico = 'nuevo'): EstadoAtipico {
   return puedeCambiarEstado(previo, propuesto) ? propuesto : previo;
+}
+
+// ── La misma configuración, para el detector de la pantalla de candidatos (A37-A2-17) ──
+/**
+ * Los umbrales que la flota guardó en Configuración, traducidos al detector de la pantalla (`cruces_atipicos.ts`):
+ * repetición (mínimo de cruces y ventana) y velocidad máxima. «Madrugada» no tiene equivalente (la pantalla usa una franja
+ * de horario, no un mínimo de cruces) y el interruptor general `activo` lo decide el producto: aquí no se tocan.
+ */
+export function umbralesDePantalla(c: ConfigAtipicos): { umbrales: Partial<UmbralesAtipicos>; apagadas: SenalAtipica[] } {
+  const apagadas: SenalAtipica[] = [];
+  if (!c.repeticion_caseta.activa) apagadas.push('repeticion_caseta');
+  if (!c.secuencia_imposible.activa) apagadas.push('salto_imposible');
+  return {
+    umbrales: { repeticiones: c.repeticion_caseta.minCruces, ventanaHoras: c.repeticion_caseta.ventanaHoras, velocidadMaxKmh: c.secuencia_imposible.velocidadMaxKmh },
+    apagadas,
+  };
+}
+
+/** Quita lo de las señales que la flota apagó y lo dice en «no aplicadas» (no se presenta como «no hubo»). */
+export function sinSenalesApagadas(r: ResultadoAtipicos, apagadas: readonly SenalAtipica[]): ResultadoAtipicos {
+  if (apagadas.length === 0) return r;
+  return {
+    atipicos: r.atipicos.filter((a) => !apagadas.includes(a.senal)),
+    noAplicadas: [
+      ...r.noAplicadas,
+      ...apagadas.map((senal) => ({ senal, motivo: 'La regla está apagada en la configuración de cruces atípicos de la flota.' })),
+    ],
+  };
 }

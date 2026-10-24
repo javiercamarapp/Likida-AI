@@ -177,6 +177,31 @@ describe('el Excel que recibe el operador', () => {
   });
 });
 
+describe('A37-S49-05: el Excel no miente con el signo ni con la columna del total', () => {
+  const matriz = (f: FormatoFlota) => XLSX.utils.sheet_to_json<unknown[]>(XLSX.read(generarExcelFormato(f, DATOS), { type: 'array' }).Sheets.Liquidación, { header: 1, defval: null });
+
+  it('Percepciones | Deducciones: el total NO cae bajo «Deducciones», va en su celda junto a la etiqueta', () => {
+    const m = matriz(FORMATO_BASE);
+    const filaEnc = m.findIndex((f) => f[0] === 'Clave');
+    const idxDeduccion = (m[filaEnc] as unknown[]).indexOf('Deducciones');
+    const filaTotal = m.find((f) => f[0] === 'Total a pagar')!;
+    expect(filaTotal[1]).toBe(2499.75);
+    expect(filaTotal[idxDeduccion]).toBeNull();
+  });
+
+  it('una tabla con solo «Importe» (sin Tipo) imprime las deducciones en NEGATIVO y el total en esa columna', () => {
+    const f: FormatoFlota = validarFormato({ ...FORMATO_BASE, columnas: [{ encabezado: 'Concepto', campo: 'descripcion' }, { encabezado: 'Importe', campo: 'monto' }] });
+    const m = matriz(f);
+    expect(m.find((x) => x[0] === 'Anticipo')).toEqual(['Anticipo', -1000.25]);
+    expect(m.find((x) => x[0] === 'Total a pagar')).toEqual(['Total a pagar', 2499.75]);
+  });
+
+  it('con columna «Tipo» el importe se queda en positivo (el tipo ya dice si es deducción)', () => {
+    const f: FormatoFlota = validarFormato({ ...FORMATO_BASE, columnas: [{ encabezado: 'Concepto', campo: 'descripcion' }, { encabezado: 'Tipo', campo: 'tipo' }, { encabezado: 'Importe', campo: 'monto' }] });
+    expect(matriz(f).find((x) => x[0] === 'Anticipo')).toEqual(['Anticipo', 'Deducción', 1000.25]);
+  });
+});
+
 describe('el PDF en el formato de la flota', () => {
   it('es un PDF válido y determinista', async () => {
     const a = await generarPdfFormato(formatoDerivado(), DATOS);
@@ -201,5 +226,14 @@ describe('el PDF en el formato de la flota', () => {
     };
     const doc = await PDFDocument.load(await generarPdfFormato(formatoDerivado(), muchos));
     expect(doc.getPageCount()).toBeGreaterThan(1);
+  });
+
+  it('A37-S49-10: en «Concepto | Cantidad | Precio | Importe» el importe es la columna Importe, no Cantidad', () => {
+    const r = derivarFormatoDeMatriz([['Concepto', 'Cantidad', 'Precio', 'Importe'], ['Sueldo', 1, 500, 500]] as never);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.formato.columnas.find((c) => c.campo === 'monto')?.encabezado).toBe('Importe');
+    expect(r.sinMapear).toEqual(expect.arrayContaining(['Cantidad', 'Precio']));
+    expect(r.advertencias.join(' ')).not.toMatch(/repite el campo/);
   });
 });

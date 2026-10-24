@@ -153,3 +153,43 @@ describe('validarDatosFiscales — el domicilio del aviso de privacidad', () => 
     expect(() => validarDatosFiscales({ ...BASE, domicilioFiscal: 'Centro' })).toThrow(/incompleto/i);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A37-S61-10 — EL TIPO DE PERSONA DEL RFC DEBE CABER EN EL RÉGIMEN ELEGIDO.
+//
+// RFC de 12 caracteres = persona moral; de 13 = persona física. El SAT rechaza
+// el CFDI 4.0 si el régimen no corresponde al tipo de persona del receptor, y
+// eso se descubre al timbrar, con el cobro ya hecho. Solo se rechaza lo que el
+// catálogo c_RegimenFiscal marca sin ambigüedad: 601/603 son de moral; 612/621
+// son de física. 624 y 626 admiten ambos tipos y no se restringen.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('validarDatosFiscales — RFC (moral/física) contra régimen (A37-S61-10)', () => {
+  const RFC_FISICA = 'PEPA900101ABA'; // sintético, 13 caracteres, dígito verificador válido
+
+  it('persona moral (12) con régimen de física se rechaza', () => {
+    for (const r of ['612', '621']) {
+      expect(() => validarDatosFiscales({ ...BASE, rfc: RFC_OK, regimenFiscal: r })).toThrow(/persona moral/i);
+    }
+  });
+
+  it('persona física (13) con régimen de moral se rechaza', () => {
+    for (const r of ['601', '603']) {
+      expect(() => validarDatosFiscales({ ...BASE, rfc: RFC_FISICA, regimenFiscal: r })).toThrow(/persona física/i);
+    }
+  });
+
+  it('las combinaciones válidas pasan', () => {
+    expect(validarDatosFiscales({ ...BASE, rfc: RFC_OK, regimenFiscal: '601' }).regimen_fiscal).toBe('601');
+    expect(validarDatosFiscales({ ...BASE, rfc: RFC_OK, regimenFiscal: '603' }).regimen_fiscal).toBe('603');
+    expect(validarDatosFiscales({ ...BASE, rfc: RFC_FISICA, regimenFiscal: '612' }).regimen_fiscal).toBe('612');
+    expect(validarDatosFiscales({ ...BASE, rfc: RFC_FISICA, regimenFiscal: '621' }).regimen_fiscal).toBe('621');
+  });
+
+  it('624 y 626 no se restringen por tipo de persona (el catálogo admite ambos)', () => {
+    for (const r of ['624', '626']) {
+      expect(validarDatosFiscales({ ...BASE, rfc: RFC_OK, regimenFiscal: r }).regimen_fiscal).toBe(r);
+      expect(validarDatosFiscales({ ...BASE, rfc: RFC_FISICA, regimenFiscal: r }).regimen_fiscal).toBe(r);
+    }
+  });
+});

@@ -402,7 +402,8 @@ export default async function PaginaAgenteLiquidacion({
   async function reintentarExterna(fd: FormData): Promise<void> {
     'use server';
     const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
-    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion')) throw new Error('Tu rol no ve esta pantalla.');
+    // A37-A1-liquidaciones-20: manda por WhatsApp a teléfonos reales con cifras: lo administra el dueño, no basta VER la ruta (el contador ve dinero).
+    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion') || !puedeAdministrar(s.rol)) throw new Error('Solo quien administra la flota puede hacer esto.');
     const id = String(fd.get('id') ?? '');
     let resultado: 'reintentada' | 'no_aplica' | 'no_encontrada' | 'error' = 'no_encontrada';
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
@@ -445,7 +446,8 @@ export default async function PaginaAgenteLiquidacion({
   async function reenviarCopiaExterna(fd: FormData): Promise<void> {
     'use server';
     const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
-    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion')) throw new Error('Tu rol no ve esta pantalla.');
+    // A37-A1-liquidaciones-20: manda por WhatsApp a teléfonos reales con cifras: lo administra el dueño, no basta VER la ruta (el contador ve dinero).
+    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion') || !puedeAdministrar(s.rol)) throw new Error('Solo quien administra la flota puede hacer esto.');
     const id = String(fd.get('id') ?? '');
     let resultado: 'copia_enviada' | 'copia_ya' | 'copia_fallo' | 'copia_sin_jefe' | 'no_encontrada' | 'error' = 'no_encontrada';
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
@@ -466,7 +468,8 @@ export default async function PaginaAgenteLiquidacion({
   async function reavisarExterna(fd: FormData): Promise<void> {
     'use server';
     const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
-    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion')) throw new Error('Tu rol no ve esta pantalla.');
+    // A37-A1-liquidaciones-20: manda por WhatsApp a teléfonos reales con cifras: lo administra el dueño, no basta VER la ruta (el contador ve dinero).
+    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion') || !puedeAdministrar(s.rol)) throw new Error('Solo quien administra la flota puede hacer esto.');
     const id = String(fd.get('id') ?? '');
     let resultado: 'reaviso_ok' | 'reaviso_parcial' | 'reaviso_pendiente' | 'reaviso_ya' | 'reaviso_en_curso' | 'no_aplica' | 'no_encontrada' | 'error' = 'no_encontrada';
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {

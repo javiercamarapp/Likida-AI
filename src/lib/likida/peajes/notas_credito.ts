@@ -16,6 +16,9 @@ import { evaluarReclamo, type EstadoReclamo } from './reclamos_seguimiento';
 // La combinatoria está acotada: con más de `MAX_RECLAMOS_SUBCONJUNTO` reclamos
 // abiertos (o si la búsqueda excede su presupuesto) responde `demasiados`.
 //
+// ESTADO (A37-S52-04): este módulo y `reclamosParaCasar` (repo.ts) TODAVÍA NO tienen llamador fuera de pruebas: ninguna pantalla ofrece
+// la propuesta, así que el «acreditado» se sigue capturando a mano. Cablearlo a la pantalla de seguimiento es trabajo de producto pendiente.
+//
 // PURO: sin base, sin red; el reloj se inyecta. Dinero en centavos enteros.
 // ═══════════════════════════════════════════════════════════════════════════
 

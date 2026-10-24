@@ -17,12 +17,16 @@ const m = vi.hoisted(() => {
     getKpis: vi.fn(async () => ({ porRevisar: 0 })),
     colaRevision: vi.fn(async () => ({ filas: [] })),
     otras: vacio,
+    admin: vi.fn((_rol?: string) => true),
+    reintentar: vi.fn(async () => 'reintentada'),
+    copia: vi.fn(async () => ({ estado: 'enviada' })),
+    reavisar: vi.fn(async () => 'reavisada'),
   };
 });
 
 vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => ({ tenantId: 't-1', rol: 'flota_admin', userId: 'u-1' }) }));
 vi.mock('@/lib/auth/visibilidad', () => ({ puedeVerRuta: () => true, puedeVerArea: () => true }));
-vi.mock('@/lib/auth/permisos', () => ({ puedeAdministrar: () => true }));
+vi.mock('@/lib/auth/permisos', () => ({ puedeAdministrar: (r: string) => m.admin(r) }));
 vi.mock('next/navigation', () => ({ redirect: () => { throw new Error('redirect'); } }));
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 vi.mock('@/lib/likida/analytics', () => ({
@@ -44,7 +48,7 @@ vi.mock('@/lib/likida/liquidacion_externa/repo', () => ({
   leerFormatoFlota: m.otras(), leerTelefonosFlota: m.otras(), leerPorId: m.otras(),
 }));
 vi.mock('@/lib/likida/liquidacion_externa/servicio', () => ({
-  reintentarLiquidacionExterna: async () => 'reintentada', reenviarCopiaAJefe: async () => ({ estado: 'enviada' }), reavisarDiscrepancia: async () => 'reavisada',
+  reintentarLiquidacionExterna: (...a: unknown[]) => (m.reintentar as (...x: unknown[]) => unknown)(...a), reenviarCopiaAJefe: (...a: unknown[]) => (m.copia as (...x: unknown[]) => unknown)(...a), reavisarDiscrepancia: (...a: unknown[]) => (m.reavisar as (...x: unknown[]) => unknown)(...a),
 }));
 vi.mock('@/lib/likida/liquidacion_externa/reenvio_correo', () => ({ reenviarDesglose: async () => ({ estado: 'reenviado' }) }));
 vi.mock('@/lib/likida/liquidacion_externa/importar_archivo', () => ({ importarLiquidacionesDeArchivo: async () => ({}) }));
@@ -109,5 +113,37 @@ describe('la puerta elige la pantalla por el canal', () => {
     expect(seccion.filtro).toBeNull();
     expect(seccion.desde).toBeNull();
     expect(seccion.hasta).toBe('2026-10-05');
+  });
+});
+
+describe('A37-A1-liquidaciones-20: las acciones de WhatsApp de la pantalla exigen administrar, no solo ver la ruta', () => {
+  const ID = '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d001';
+  const fd = () => { const f = new FormData(); f.set('id', ID); return f; };
+  type Acciones = { reintentar: (f: FormData) => Promise<void>; reenviarCopia: (f: FormData) => Promise<void>; reavisar: (f: FormData) => Promise<void> };
+  const acciones = async () => {
+    m.leerConfigCorreo.mockResolvedValue(config('whatsapp'));
+    const el = await pedir();
+    const bloque = el.props.externas as ReactElement<{ children: ReactElement<Acciones> }>;
+    return bloque.props.children.props;
+  };
+
+  it('un rol que ve dinero pero no administra (contador) NO dispara reintento, copia ni reaviso', async () => {
+    const a = await acciones();
+    m.admin.mockImplementation(() => false);
+    m.reintentar.mockClear(); m.copia.mockClear(); m.reavisar.mockClear();
+    await expect(a.reintentar(fd())).rejects.toThrow(/administra/);
+    await expect(a.reenviarCopia(fd())).rejects.toThrow(/administra/);
+    await expect(a.reavisar(fd())).rejects.toThrow(/administra/);
+    expect(m.reintentar).not.toHaveBeenCalled();
+    expect(m.copia).not.toHaveBeenCalled();
+    expect(m.reavisar).not.toHaveBeenCalled();
+    m.admin.mockImplementation(() => true);
+  });
+
+  it('quien administra sí llega al servicio', async () => {
+    const a = await acciones();
+    m.reintentar.mockClear();
+    await expect(a.reintentar(fd())).rejects.toThrow('redirect'); // la acción termina con redirect()
+    expect(m.reintentar).toHaveBeenCalledTimes(1);
   });
 });

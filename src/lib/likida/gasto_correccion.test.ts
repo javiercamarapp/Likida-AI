@@ -15,6 +15,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 let llamadas: Array<{ tabla: string; metodo: string; args: unknown[] }> = [];
 let lectura: { data: unknown; error: unknown } = { data: null, error: null };
 let escritura: { data: unknown; error: unknown } = { data: null, error: null };
+// La RPC atómica (0876). Por omisión «la base aún no la trae» (PGRST202): los tests
+// de abajo cubren el camino anterior, que debe seguir funcionando; los de
+// `A37-S45-10` programan una RPC que sí existe.
+const SIN_RPC = { data: null, error: { message: 'Could not find the function', code: 'PGRST202' } };
+let rpcResp: { data: unknown; error: unknown } = SIN_RPC;
+// Lecturas programadas EN ORDEN (la primera, la segunda…); agotadas, vale `lectura`.
+let lecturasEnOrden: Array<{ data: unknown; error: unknown }> = [];
+let rpcLlamadas: Array<{ fn: string; args: Record<string, unknown> }> = [];
 
 const from = vi.fn((tabla: string) => {
   const enlace: Record<string, unknown> = {};
@@ -23,7 +31,7 @@ const from = vi.fn((tabla: string) => {
     enlace[m] = (...a: unknown[]) => {
       llamadas.push({ tabla, metodo: m, args: a });
       if (m === 'update' || m === 'insert') esUpdate = true;
-      if (m === 'maybeSingle') return Promise.resolve(lectura);
+      if (m === 'maybeSingle') return Promise.resolve(lecturasEnOrden.length ? lecturasEnOrden.shift()! : lectura);
       return enlace;
     };
   }
@@ -31,7 +39,11 @@ const from = vi.fn((tabla: string) => {
   return enlace;
 });
 
-vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from }) }));
+const rpc = vi.fn((fn: string, args: Record<string, unknown>) => {
+  rpcLlamadas.push({ fn, args });
+  return Promise.resolve(rpcResp);
+});
+vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from, rpc }) }));
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
 
@@ -50,6 +62,7 @@ beforeEach(() => {
   llamadas = [];
   lectura = { data: FILA, error: null };
   escritura = { data: null, error: null };
+  rpcResp = SIN_RPC; rpcLlamadas = []; lecturasEnOrden = [];
   from.mockClear();
   logger.info.mockReset(); logger.warn.mockReset(); logger.error.mockReset();
 });
@@ -172,6 +185,69 @@ describe('marcarMontoDisputado — el botón «No, corregir» por fin deja rastr
 
   it('un fallo de escritura tampoco lanza: el gasto ya está en el viaje', async () => {
     escritura = { data: null, error: { message: 'CU001', code: 'CU001' } };
+    expect(await marcarMontoDisputado({ tenantId: 't1', gastoId: 'g1', quien: 'o1' })).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A37-S45-10 — el merge de ocr_extra es ATÓMICO (RPC 0876), no leer-y-reescribir.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('A37-S45-10 — con la 0876, ocr_extra se mezcla en SQL y se comprueban las filas', () => {
+  const base = { tenantId: 't1', gastoId: 'g1', actor: ACTOR, motivo: 'el ticket dice 8,000' };
+
+  it('corregirMontoGasto NO reescribe la columna entera: llama a la RPC con el historial y el monto', async () => {
+    rpcResp = { data: 1, error: null };
+    const r = await corregirMontoGasto({ ...base, montoNuevo: 8000 });
+    expect(r).toEqual({ ok: true, antes: 800, despues: 8000 });
+    expect(update(), 'ningún UPDATE de la columna entera').toBeUndefined();
+    expect(rpcLlamadas).toHaveLength(1);
+    expect(rpcLlamadas[0].fn).toBe('gasto_mezclar_ocr_extra');
+    expect(rpcLlamadas[0].args).toMatchObject({
+      p_tenant: 't1', p_gasto: 'g1', p_monto: 8000, p_sin_xml_verificado: true,
+      p_historial_clave: 'montoCorregido',
+      p_historial_entrada: { antes: 800, despues: 8000, motivo: 'el ticket dice 8,000', por: 'contralor@flota.mx' },
+    });
+  });
+
+  it('si el gasto se BORRÓ entre la lectura y la escritura (0 filas) no devuelve ok y no escribe bitácora', async () => {
+    rpcResp = { data: 0, error: null };
+    // 1.ª lectura: existe; la relectura tras las 0 filas: ya no.
+    lecturasEnOrden = [{ data: FILA, error: null }, { data: null, error: null }];
+    const r = await corregirMontoGasto({ ...base, montoNuevo: 8000 });
+    expect(r).toEqual({ ok: false, motivo: 'no_existe' });
+    expect(llamadas.find((l) => l.tabla === 'bitacora_auditoria')).toBeUndefined();
+  });
+
+  it('0 filas porque llegó el XML entre la lectura y la escritura → xml_verificado, no «ok»', async () => {
+    rpcResp = { data: 0, error: null };
+    lecturasEnOrden = [{ data: FILA, error: null }, { data: { id: 'g1', xml_verificado: true }, error: null }];
+    expect(await corregirMontoGasto({ ...base, montoNuevo: 8000 })).toEqual({ ok: false, motivo: 'xml_verificado' });
+  });
+
+  it('CU001 desde la RPC sigue siendo «liquidado»', async () => {
+    rpcResp = { data: null, error: { message: 'el viaje ya tiene liquidación emitida', code: 'CU001' } };
+    expect(await corregirMontoGasto({ ...base, montoNuevo: 8000 })).toEqual({ ok: false, motivo: 'liquidado' });
+  });
+
+  it('otro error de la RPC es «error», no se cae al camino anterior (no se pisa nada)', async () => {
+    rpcResp = { data: null, error: { message: 'canceling statement', code: '57014' } };
+    const r = await corregirMontoGasto({ ...base, montoNuevo: 8000 });
+    expect(r).toMatchObject({ ok: false, motivo: 'error' });
+    expect(update()).toBeUndefined();
+  });
+
+  it('marcarMontoDisputado manda SOLO la clave montoDisputado como parche (lo demás de ocr_extra no se toca)', async () => {
+    rpcResp = { data: 1, error: null };
+    expect(await marcarMontoDisputado({ tenantId: 't1', gastoId: 'g1', quien: 'o1', dijo: 'son 8000' })).toBe(true);
+    expect(update(), 'ningún UPDATE de la columna entera').toBeUndefined();
+    expect(rpcLlamadas[0].args).toMatchObject({
+      p_parche: { montoDisputado: { montoLeido: 800, por: 'o1', dijo: 'son 8000' } },
+      p_historial_clave: null, p_monto: null,
+    });
+  });
+
+  it('marcarMontoDisputado con 0 filas (el gasto ya no existe) devuelve false', async () => {
+    rpcResp = { data: 0, error: null };
     expect(await marcarMontoDisputado({ tenantId: 't1', gastoId: 'g1', quien: 'o1' })).toBe(false);
   });
 });

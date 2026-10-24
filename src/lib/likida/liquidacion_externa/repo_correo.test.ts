@@ -22,7 +22,7 @@ function constructor(tabla: string) {
   const ll: Llamada = { tabla, ops: [] };
   llamadas.push(ll);
   const b: Record<string, unknown> = {};
-  for (const m of ['select', 'insert', 'update', 'upsert', 'delete', 'eq', 'in', 'gte', 'lt', 'or', 'is', 'not', 'order', 'range', 'limit', 'neq']) {
+  for (const m of ['select', 'insert', 'update', 'upsert', 'delete', 'eq', 'in', 'gte', 'gt', 'lt', 'or', 'is', 'not', 'order', 'range', 'limit', 'neq']) {
     b[m] = (...a: unknown[]) => { ll.ops.push([m, ...a]); return b; };
   }
   const resolver = (): Resp => (comportamiento ? comportamiento(ll) : (respuestas.shift() ?? { data: [], error: null, count: 0 }));
@@ -79,6 +79,22 @@ describe('configuración de la flota', () => {
     expect(await r.leerConfigCorreo(T)).toEqual({ ok: false, motivo: 'no_disponible' });
     respuestas = [{ data: null, error: { message: 'x', code: 'PGRST205' } }];
     expect(await r.leerConfigCorreo(T)).toEqual({ ok: false, motivo: 'no_disponible' });
+  });
+
+  it('A37-S49-01: al activar el envío con «Responder a», las entregas pendientes de la flota se adelantan a ya', async () => {
+    respuestas = [{ data: [{ tenant_id: T }], error: null }, { data: [], error: null }];
+    await r.guardarConfigCorreo(T, { ...r.CONFIG_CORREO_POR_DEFECTO, canal: 'correo', activa: true, responderA: 'nomina@ejemplo.test' }, 'oficina');
+    const adelanto = llamadas.find((l) => l.tabla === 'liquidacion_entrega_correo')!;
+    expect(adelanto).toBeDefined();
+    expect(tieneEq(adelanto, 'tenant_id', T)).toBe(true);
+    expect(tieneEq(adelanto, 'estado', 'pendiente')).toBe(true);
+    expect(adelanto.ops.some((o) => o[0] === 'update')).toBe(true);
+  });
+
+  it('A37-S49-01: apagado no adelanta nada', async () => {
+    respuestas = [{ data: [{ tenant_id: T }], error: null }];
+    await r.guardarConfigCorreo(T, { ...r.CONFIG_CORREO_POR_DEFECTO, canal: 'correo', activa: false }, 'oficina');
+    expect(llamadas.some((l) => l.tabla === 'liquidacion_entrega_correo')).toBe(false);
   });
 
   it('un error que NO es ausencia (base caída) LANZA: no se lee como «sin configuración»', async () => {

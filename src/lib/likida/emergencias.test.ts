@@ -91,6 +91,12 @@ describe('crearProveedorEmergencia — capturar no es verificar', () => {
     expect('verificado_en' in fila).toBe(false);
   });
 
+  it.each([-5, 0, 5000, Number.NaN])('A37-S18-09: radioKm %s rebota antes del insert', async (radioKm) => {
+    await expect(crearProveedorEmergencia('t-1', { tipo: 'grua', nombre: 'X', telefono: '5219991234567', radioKm }))
+      .rejects.toThrow(/radio/i);
+    expect(insertado).not.toHaveBeenCalled();
+  });
+
   it('un tipo inventado rebota antes del insert', async () => {
     await expect(crearProveedorEmergencia('t-1', { tipo: 'drone', nombre: 'X', telefono: '5219991234567' }))
       .rejects.toThrow(/tipo de proveedor no existe/);

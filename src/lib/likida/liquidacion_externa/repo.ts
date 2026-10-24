@@ -13,7 +13,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { exigir } from '../pg';
-import { DatoInvalido } from '../errores';
+import { DatoInvalido, OperadorDeBaja } from '../errores';
 import { destinatarioWhatsApp } from '@/lib/meta/client';
 import { validarFormato, type FormatoFlota } from './formato_flota';
 import { PATRON_FOLIO } from '../orquestador/escalamiento';
@@ -333,7 +333,7 @@ export async function resolverOperadorDestino(
   const operador = resultados.flat().find((o) => o.id === comunes[0]);
   if (!operador) throw noEncontrado();
   if (!operador.activo) {
-    throw new DatoInvalido('Ese operador está dado de baja: no se le entrega una liquidación por WhatsApp. Reactívalo en Likida o corrige el operador.');
+    throw new OperadorDeBaja('Ese operador está dado de baja: no se le entrega una liquidación por WhatsApp. Reactívalo en Likida o corrige el operador.');
   }
   return operador;
 }

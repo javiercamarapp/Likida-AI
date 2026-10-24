@@ -77,7 +77,7 @@ describe('correrAlertasEstadia', () => {
     expect(r2.alertas).toBe(1);
   });
 
-  it('sin a quién avisar: se dice (fallo + sinDestinatario) y el claim queda cerrado sin ok', async () => {
+  it('A37-S34-09: sin a quién avisar: se dice (fallo + sinDestinatario) y NO se quema el claim', async () => {
     const { puertos, enviados, reclamos } = crearPuertos({
       viajes: [viajeBase({ id: 'v1' })], hitos: sembrar('v1', { llegada_carga: hace(200) }), configs: { t1: cfg() }, destinatarios: () => [],
     });
@@ -85,7 +85,7 @@ describe('correrAlertasEstadia', () => {
     expect(r).toMatchObject({ alertas: 0, sinDestinatario: 1 });
     expect(r.fallos[0]).toMatch(/no hay a quién avisar/);
     expect(enviados).toHaveLength(0);
-    expect([...reclamos.values()][0]).toMatchObject({ ok: false, motivo: 'sin_destinatario' });
+    expect(reclamos.size).toBe(0);
   });
 
   it('un rechazo reintentable YA dejó el texto en el outbox: el claim se cierra y la siguiente corrida NO lo manda otra vez', async () => {
@@ -339,10 +339,10 @@ describe('descarga interactiva: la respuesta del chofer (responderEstadiaDescarg
     expect([apagada, sin, cerrada].flatMap((x) => x.enviados)).toHaveLength(0);
   });
 
-  it('sin destinatario configurado «no» NO es silencio: queda fallo y claim cerrado sin ok, y al chofer no se le promete el aviso', async () => {
+  it('A37-S34-09: sin destinatario configurado «no» NO es silencio: queda el fallo, no se quema el claim y al chofer no se le promete el aviso', async () => {
     const m = crearPuertos({ viajes: [viajeBase({ id: 'v1' })], hitos: unaDescarga(130), configs: { t1: cfgI() }, destinatarios: () => [] });
     const out = await responderEstadiaDescarga(m.puertos, { viaje: viajeBase({ id: 'v1' }), hitos: [...m.hitos.values()], config: cfgI(), respuesta: 'no', ahora: AHORA });
     expect(out[0].texto).not.toMatch(/Ya le avisé/);
-    expect([...m.reclamos.values()].find((c) => c.motivo === 'sin_destinatario')).toMatchObject({ ok: false });
+    expect(m.reclamos.size).toBe(0);
   });
 });

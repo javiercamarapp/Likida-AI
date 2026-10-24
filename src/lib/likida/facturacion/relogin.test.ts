@@ -128,6 +128,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   registros.length = 0;
   registrarIntento.mockResolvedValue(true);
+  registrarResultado.mockResolvedValue(true as never);
   contrasenaDePortal.mockResolvedValue({ usuario: 'ana@flota.mx', contrasena: SECRETO });
 });
 
@@ -206,6 +207,44 @@ describe('con opt-in y sesión caducada — reconecta y guarda', () => {
     expect(pagina.escrito).toEqual([]);
   });
 
+  describe('A37-S45-03: una SPA que aún no dibuja nada NO es «ya estamos dentro»', () => {
+    const VACIA = INV({ texto: '' });
+    /** Reloj que avanza con `dormir`, para que el tope se pueda cumplir. */
+    function conReloj(guion: InventarioPagina[]) {
+      const { pagina, args } = entorno(guion);
+      let t = Date.parse('2026-08-27T21:00:00.000Z');
+      return { pagina, args: { ...args, ahora: () => t, dormir: async (ms: number) => { t += ms; } } };
+    }
+
+    it('si nunca dibuja, NO guarda la sesión anónima ni anota «vinculado»', async () => {
+      permisoDeRelogin.mockResolvedValue(permitido());
+      const { args } = conReloj([VACIA]);
+      const r = await reconectarPortal({ tenantId: TENANT, comercio: CLAVE, entorno: args, topeMs: 3000, intervaloMs: 1000 });
+      expect(r.ok).toBe(false);
+      expect(r.ok === false && r.clase).toBe('portal_no_contesto');
+      expect(guardarSesionPortal).not.toHaveBeenCalled();
+      expect(anotarVinculo).not.toHaveBeenCalled();
+      expect(contrasenaDePortal).not.toHaveBeenCalled();
+    });
+
+    it('si luego dibuja el login, lo reconoce y reconecta', async () => {
+      permisoDeRelogin.mockResolvedValue(permitido());
+      const { pagina, args } = conReloj([VACIA, LOGIN, DENTRO]);
+      const r = await reconectarPortal({ tenantId: TENANT, comercio: CLAVE, entorno: args, topeMs: 5000, intervaloMs: 1000 });
+      expect(r.ok).toBe(true);
+      expect(pagina.escrito.length).toBe(2);
+    });
+
+    it('si luego dibuja contenido de adentro, guarda', async () => {
+      permisoDeRelogin.mockResolvedValue(permitido());
+      const { pagina, args } = conReloj([VACIA, DENTRO]);
+      const r = await reconectarPortal({ tenantId: TENANT, comercio: CLAVE, entorno: args, topeMs: 5000, intervaloMs: 1000 });
+      expect(r.ok).toBe(true);
+      expect(pagina.escrito).toEqual([]);
+      expect(guardarSesionPortal).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('autorizado pero sin contraseña guardada: se dice, y no se teclea nada', async () => {
     permisoDeRelogin.mockResolvedValue(permitido());
     contrasenaDePortal.mockResolvedValue(null);
@@ -257,6 +296,33 @@ describe('los cortes que solo un humano pasa', () => {
     // no hay un segundo intento: una sola pasada por el formulario.
     expect(pagina.clics).toEqual(['#btnEntrar']);
     expect(guardarSesionPortal).not.toHaveBeenCalled();
+  });
+
+  it('A37-S45-02: si otra corrida reclamó el intento, NO abre el cofre ni teclea', async () => {
+    permisoDeRelogin.mockResolvedValue(permitido());
+    registrarIntento.mockResolvedValue('ocupado' as never);
+    const { pagina, args } = entorno([LOGIN]);
+
+    const r = await reconectarPortal({ tenantId: TENANT, comercio: CLAVE, entorno: args });
+
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.intentado).toBe(false);
+    expect(r.ok === false && r.pideHumano).toBe(false);
+    expect(pagina.abrir).not.toHaveBeenCalled();
+    expect(contrasenaDePortal).not.toHaveBeenCalled();
+  });
+
+  it('A37-S45-04: si no se pudo guardar el bloqueo de credencial inválida, el motivo lo dice', async () => {
+    permisoDeRelogin.mockResolvedValue(permitido());
+    registrarResultado.mockResolvedValue(false as never);
+    const rechazada = INV({ ...LOGIN, texto: 'Usuario o contraseña incorrectos' });
+    const { args } = entorno([LOGIN, rechazada]);
+
+    const r = await reconectarPortal({ tenantId: TENANT, comercio: CLAVE, entorno: args });
+
+    expect(r.ok === false && r.clase).toBe('credencial_invalida');
+    expect(r.ok === false && r.motivo).toContain('no se pudo guardar el bloqueo');
+    expect(r.ok === false && r.pideHumano).toBe(true);
   });
 
   it('CUENTA BLOQUEADA: se corta antes de teclear, y el motivo lo dice', async () => {

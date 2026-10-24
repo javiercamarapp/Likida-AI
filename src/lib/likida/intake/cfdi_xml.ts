@@ -398,6 +398,49 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
   }
 }
 
+/** Un `Pago` del complemento de pagos (Pagos 1.0 / 2.0) de un CFDI tipo P. */
+export interface PagoRepXml {
+  /** Solo la fecha (AAAA-MM-DD) de `@FechaPago`. */
+  fechaPago?: string;
+  /** `@Monto` del pago. */
+  monto?: number;
+  /** Los `@ImpPagado` de cada `DoctoRelacionado` (importe aplicado a cada documento). */
+  impPagadoDoctos: number[];
+}
+
+/**
+ * Los `Pago` del complemento de pagos de un REP, o `[]` si el XML no trae
+ * ese complemento (o no se puede leer). A37-S18-07: `registrarRepEmitido` lo usa
+ * para contrastar el XML pegado contra el folio, la fecha y el importe que
+ * capturó el contralor. NO decide nada fiscal: solo lee atributos.
+ */
+export function leerPagosRep(xml: string): PagoRepXml[] {
+  try {
+    const doc = parser.parse(xml) as Record<string, unknown>;
+    const comp = doc?.Comprobante as Record<string, unknown> | undefined;
+    if (!comp || typeof comp !== 'object') return [];
+    const complemento = (comp.Complemento ?? {}) as Record<string, unknown>;
+    const pagosNodo = toArr(complemento.Pagos as Record<string, unknown>[] | Record<string, unknown> | undefined)[0];
+    if (!pagosNodo || typeof pagosNodo !== 'object') return [];
+    const num = (v: unknown): number | undefined => {
+      if (v == null) return undefined;
+      const n = parseFloat(String(v));
+      return Number.isNaN(n) ? undefined : n;
+    };
+    return toArr(pagosNodo.Pago as Record<string, unknown>[] | Record<string, unknown> | undefined).map((p) => {
+      const fecha = typeof p['@_FechaPago'] === 'string' ? (p['@_FechaPago'] as string).slice(0, 10) : undefined;
+      const doctos = toArr(p.DoctoRelacionado as Record<string, unknown>[] | Record<string, unknown> | undefined);
+      return {
+        fechaPago: fecha && /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? fecha : undefined,
+        monto: num(p['@_Monto']),
+        impPagadoDoctos: doctos.map((d) => num(d['@_ImpPagado'])).filter((n): n is number => n !== undefined),
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
 /** DAT-19: `@Moneda` normalizada a ISO 4217, o `undefined` si no se puede leer. */
 function monedaIso(bruto: string | undefined): string | undefined {
   const m = (bruto ?? '').toUpperCase().replace(/[^A-Z]/g, '');

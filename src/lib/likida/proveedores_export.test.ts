@@ -97,6 +97,12 @@ describe('ESC-8 — el export de proveedor trae TODAS las aprobadas o lanza', ()
     });
   });
 
+  it('A37-S55-03: una aprobada con estado SAT cancelado NO sale al ERP', async () => {
+    facturas = [factura(1), { ...factura(2), estado_sat: 'cancelado' }, { ...factura(3), estado_sat: 'vigente' }];
+    const r = await exportarAprobadas('t-1', 'generico');
+    expect(r.ids).toEqual(['f-1', 'f-3']);
+  });
+
   it('sin aprobadas: lista vacía, sin error', async () => {
     const r = await exportarAprobadas('t-1', 'sap_b1');
     expect(r).toEqual({ filas: [], ids: [] });

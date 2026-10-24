@@ -157,16 +157,30 @@ function mezclar(base: ConfigAtipicos, p: ConfigAtipicosParcial): ConfigAtipicos
   };
 }
 
-/** Texto de por qué una configuración es inválida, o null si está bien. */
-export function validarConfigAtipicos(c: ConfigAtipicos): string | null {
+/** Rango de la velocidad máxima de la regla «secuencia imposible». UNA sola fuente: el esquema guardado
+ *  (`atipicos_config.ts`) y el detector usan estos mismos límites (A37-S51-02: antes el esquema aceptaba 30–400 y el
+ *  detector solo 60–300, y un valor guardado válido descartaba TODA la configuración al detectar). */
+export const VELOCIDAD_MIN_KMH = 30;
+export const VELOCIDAD_MAX_KMH = 400;
+
+/** Por regla: el texto de por qué su configuración es inválida (solo las que lo son). */
+export function erroresDeConfigAtipicos(c: ConfigAtipicos): Partial<Record<ReglaAtipica, string>> {
+  const e: Partial<Record<ReglaAtipica, string>> = {};
   const r = c.repeticion_caseta;
-  if (!Number.isInteger(r.minCruces) || r.minCruces < 2) return 'repeticion_caseta.minCruces debe ser un entero de 2 o más.';
-  if (!(r.ventanaHoras > 0 && r.ventanaHoras <= 72)) return 'repeticion_caseta.ventanaHoras debe estar entre 0 y 72.';
+  if (!Number.isInteger(r.minCruces) || r.minCruces < 2) e.repeticion_caseta = 'repeticion_caseta.minCruces debe ser un entero de 2 o más.';
+  else if (!(r.ventanaHoras > 0 && r.ventanaHoras <= 72)) e.repeticion_caseta = 'repeticion_caseta.ventanaHoras debe estar entre 0 y 72.';
   const m = c.ida_y_vuelta_madrugada;
-  if (!Number.isInteger(m.minCruces) || m.minCruces < 2) return 'ida_y_vuelta_madrugada.minCruces debe ser un entero de 2 o más.';
+  if (!Number.isInteger(m.minCruces) || m.minCruces < 2) e.ida_y_vuelta_madrugada = 'ida_y_vuelta_madrugada.minCruces debe ser un entero de 2 o más.';
   const s = c.secuencia_imposible;
-  if (!(s.velocidadMaxKmh >= 60 && s.velocidadMaxKmh <= 300)) return 'secuencia_imposible.velocidadMaxKmh debe estar entre 60 y 300.';
-  return null;
+  if (!(s.velocidadMaxKmh >= VELOCIDAD_MIN_KMH && s.velocidadMaxKmh <= VELOCIDAD_MAX_KMH)) {
+    e.secuencia_imposible = `secuencia_imposible.velocidadMaxKmh debe estar entre ${VELOCIDAD_MIN_KMH} y ${VELOCIDAD_MAX_KMH}.`;
+  }
+  return e;
+}
+
+/** Texto de por qué una configuración es inválida (la primera regla que lo es), o null si está bien. */
+export function validarConfigAtipicos(c: ConfigAtipicos): string | null {
+  return Object.values(erroresDeConfigAtipicos(c))[0] ?? null;
 }
 
 // ── Detector ─────────────────────────────────────────────────────────────────
@@ -177,10 +191,12 @@ export function detectarAtipicos(
 ): ResultadoAtipicos {
   const reglasNoAplicadas: ReglaNoAplicada[] = [];
   let config = mezclar(CONFIG_ATIPICOS_DEFAULT, configParcial);
-  const invalida = validarConfigAtipicos(config);
-  if (invalida) {
-    reglasNoAplicadas.push({ regla: 'repeticion_caseta', motivo: `Configuración inválida (${invalida}): se usaron los valores de partida.` });
-    config = CONFIG_ATIPICOS_DEFAULT;
+  // A37-S51-02: una regla inválida vuelve a SUS valores de partida y se avisa de ESA regla; las demás conservan lo que la
+  // flota configuró (antes se tiraba la configuración entera: la regla apagada se encendía y la encendida se apagaba).
+  const erroresRegla = erroresDeConfigAtipicos(config);
+  for (const [regla, motivo] of Object.entries(erroresRegla) as Array<[ReglaAtipica, string]>) {
+    reglasNoAplicadas.push({ regla, motivo: `Configuración inválida (${motivo}): para esta regla se usaron los valores de partida.` });
+    config = { ...config, [regla]: CONFIG_ATIPICOS_DEFAULT[regla] };
   }
 
   const cache = new Map<string, { key: string; nombre: string; coord: { lat: number; lng: number } | null }>();

@@ -568,7 +568,7 @@ async function recordarPeticionDeFoto(
  * pelón al regex no puede costarle sus formas fuertes al freno.
  */
 function pareceCierre(texto: string): boolean {
-  return /^\s*(listo|ya est[aá]|ya qued[óo]|ya no tengo m[áa]s|(ya\s+)?termin[éeoó]|(ya\s+)?acab[éeoó]|cierra|cerrar|eso es todo|es todo)(?!\p{L})/iu.test(texto);
+  return /^\s*(listo|ya est[aá]|ya qued[óo]|ya no tengo m[áa]s|(ya\s+)?termin[éeoó](?!\p{L}|\s+de\s)|(ya\s+)?acab[éeoó](?!\p{L}|\s+de\s)|cierra|cerrar|eso es todo|es todo)(?!\p{L})/iu.test(texto);
 }
 
 /**
@@ -600,7 +600,16 @@ function pareceCierre(texto: string): boolean {
 export function pidioCerrar(texto: string | undefined): boolean {
   if (typeof texto !== 'string' || !texto.trim()) return false;
   if (pareceCierre(texto)) return true;
-  return /liquidaci[óo]n|liquid[ae]|ci[ée]rr|cerrar|cerramos|cu[áa]dra|cuadrar|finaliz|termin[éeoó]|acab[éeoó]|ya estuvo|ya fue|(no|sin)\s+(traigo|tengo|me\s+falta|falta)\s*(m[áa]s|nada|otro|ninguno)?|[úu]ltimo\s+(ticket|comprobante|recibo)|es\s+todo/iu.test(texto);
+  // A37-S55-07: frases que contienen la raíz pero NO piden cerrar: «acabo de cargar diésel»,
+  // «terminé de cargar» (relatan una acción), «cierran la caseta» (un lugar, no el viaje) y
+  // «a una cuadra» (sustantivo). Se quitan antes del regex ancho para no habilitar la única
+  // tool irreversible con un reporte de avance; todo lo demás se queda como estaba.
+  const t = texto
+    // eslint-disable-next-line security/detect-unsafe-regex -- sin cuantificadores anidados sobre el mismo texto; la entrada es un mensaje corto de chat.
+    .replace(/(?<!\p{L})(?:ya\s+)?(?:acab|termin)[éeoóa]\p{L}*\s+de\s+\p{L}+/giu, ' ')
+    .replace(/(?<!\p{L})ci[ée]rr\p{L}*\s+(?:la|el|las|los)\s+(?:caseta|carretera|autopista|puente|aduana|gasolinera|bomba|vialidad|paso|circulaci[óo]n|accesos?|port[oó]n)/giu, ' ')
+    .replace(/(?<!\p{L})(?:una|la|otra|esa|esta|las|dos|tres|cuatro|\d+)\s+cuadras?(?!\p{L})/giu, ' ');
+  return /liquidaci[óo]n|liquid[ae]|ci[ée]rr|cerrar|cerramos|cu[áa]dra|cuadrar|finaliz|termin[éeoó]|acab[éeoó]|ya estuvo|ya fue|(no|sin)\s+(traigo|tengo|me\s+falta|falta)\s*(m[áa]s|nada|otro|ninguno)?|[úu]ltimo\s+(ticket|comprobante|recibo)|es\s+todo/iu.test(t);
 }
 
 /**
@@ -1636,19 +1645,38 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       // `buscarOperadorPorTelefono`. Se resuelve el operador primero (misma
       // consulta, con el id), y solo si no hay operador (cuenta de oficina) se
       // cae al tenant-only.
-      const porOperador = await buscarOperadorPorTelefono(msg.from).catch(() => null);
+      // A37-S55-05: «no existe» y «no pude consultar» son cosas distintas. Antes cada búsqueda
+      // se tragaba su error con `.catch(() => null)` y un fallo transitorio de base terminaba en
+      // «No te tengo identificado» + claim completado: se le decía una falsedad a quien ejerce un
+      // derecho ARCO, no se creaba solicitud (el plazo legal no corría) y nadie reintentaba.
+      let consultaFallo = false as boolean;
+      const siFalla = (donde: string) => (e: unknown): null => {
+        consultaFallo = true;
+        logger.error('privacidad.identidad_no_consultada', { donde, err: e instanceof Error ? e.message : String(e) });
+        return null;
+      };
+      const porOperador = await buscarOperadorPorTelefono(msg.from).catch(siFalla('operador'));
       // 0442 (auditoría ola 1 #46): la cuenta de oficina se conserva COMPLETA
       // (no solo su tenant): su `userId` es el titular de la solicitud ARCO, y sin
       // él la cancelación de un dueño/contador/encargado no tenía sobre quién ejecutarse.
-      const cuentaOficina = porOperador ? null : await resolverCuentaOficina(msg.from).catch(() => null);
+      const cuentaOficina = porOperador ? null : await resolverCuentaOficina(msg.from).catch(siFalla('oficina'));
       const tenantId = porOperador?.tenantId
         ?? cuentaOficina?.tenantId
         // Un CLIENTE de la flota (Vigía, 0400) también ejerce sus derechos por aquí: la
         // solicitud queda a nombre de SU flota. El teléfono se guarda como `titularRef`
         // (igual que con un chofer); la supresión de sus chats la ejecuta la flota desde
         // el tablero del Vigía.
-        ?? (await crearRepoVigia().contactoPorTelefono(msg.from).catch(() => null))?.tenantId
+        ?? (await crearRepoVigia().contactoPorTelefono(msg.from).catch(siFalla('vigia')))?.tenantId
         ?? null;
+      if (!tenantId && consultaFallo) {
+        // Fail-closed: ni se afirma «no te tengo identificado» ni se da por atendido. Se avisa que
+        // se reintenta y se suelta el claim para que el mensaje vuelva a procesarse.
+        try {
+          await sendText(msg.from, 'Recibí tu mensaje, pero se me trabó tantito al revisarlo. Lo vuelvo a intentar en unos minutos; no tienes que escribir otra vez. 🙏');
+        } catch { /* best-effort */ }
+        await soltarClaim();
+        return;
+      }
       if (tenantId) {
         await atenderPrivacidad(tenantId, porOperador?.operadorId ?? null, msg.from, msg.text, cuentaOficina?.userId ?? null);
       } else {
@@ -1943,9 +1971,12 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       // La transcripción queda citable en el log con su marca de origen; el
       // texto que sigue el camino es el LIMPIO — un prefijo rompería los
       // comandos exactos («va», «radio F-123 25») que el chofer sí puede decir.
+      // A37-S55-08: NO se escribe el texto transcrito al log: una nota de voz puede contar datos
+      // de salud o de terceros («mi compañero está herido») y el logger solo redacta teléfono/RFC/
+      // correo/CLABE/tarjeta. El texto vive en la conversación (con su retención); aquí solo su tamaño.
       logger.info('voz.transcrita', {
         operador: op.operadorId, id: msg.waMessageId ?? null,
-        texto: `🎤 (transcrito): ${t.texto}`,
+        caracteres: t.texto.length,
       });
       msg = { ...msg, type: 'text', text: t.texto };
     }
@@ -2141,6 +2172,12 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       // este corte— y por eso aquí solo se garantiza que el dato no se pierda y
       // que al operador se le diga la verdad.
       if (msg.type === 'document' && msg.mediaId) {
+        // A37-S55-06: el XML es un comprobante igual que la foto: una flota con perfil `cinco_agentes`
+        // (0770) declaró no recibir comprobantes por WhatsApp. Misma compuerta `ocr` que la foto de abajo.
+        if (await pipelineTenantApagado(op.tenantId, 'ocr')) {
+          await sendText(msg.from, MENSAJE_SIN_COMPROBANTES_POR_WA);
+          return;
+        }
         const xmlText = await downloadMediaAsText(msg.mediaId);
         const xml = xmlText ? parseCfdiXml(xmlText) : null;
         // ── FASE 7 (mig. 0199): REP sin viaje abierto — el caso NATURAL ─────
@@ -3168,7 +3205,14 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
               : null;
             if (donde && donde.viajeId !== viajeId) {
               logger.info('foto.ya_en_otro_viaje', { viaje: viajeId, otro: donde.viajeId, monto: donde.monto });
-              await say(`Ese comprobante de ${mxn(donde.monto)} ya estaba registrado en ${donde.folio ? `tu viaje *${donde.folio}*` : 'otro viaje tuyo'}, así que no lo agregué aquí para no cobrarlo dos veces. Si de verdad es de este viaje, dile a la oficina que lo mueva. 🙏`);
+              // A37-S55-10: folio y monto SOLO si el viaje es de este mismo
+              // operador. Si es de otro (o no se sabe), nada de cifras ajenas ni
+              // «tu viaje»: la foto es la misma, pero lo registrado no es suyo.
+              if (donde.operadorId && donde.operadorId === op.operadorId) {
+                await say(`Ese comprobante de ${mxn(donde.monto)} ya estaba registrado en ${donde.folio ? `tu viaje *${donde.folio}*` : 'otro viaje tuyo'}, así que no lo agregué aquí para no cobrarlo dos veces. Si de verdad es de este viaje, dile a la oficina que lo mueva. 🙏`);
+              } else {
+                await say('Ese comprobante ya estaba registrado en otro viaje de la flota, así que no lo agregué aquí para no cobrarlo dos veces. Si de verdad es de este viaje, dile a la oficina que lo revise. 🙏');
+              }
               return;
             }
             logger.info('foto.dedup_race', { viaje: viajeId });
@@ -3600,6 +3644,11 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // se confirma, no se sigue procesando (nada que insertar sin que la
     // barrera lo sepa).
     if (msg.type === 'document' && msg.mediaId) {
+      // A37-S55-06: misma compuerta del perfil `cinco_agentes` que la foto — ANTES de la barrera de intake.
+      if (await pipelineTenantApagado(op.tenantId, 'ocr')) {
+        await say(MENSAJE_SIN_COMPROBANTES_POR_WA);
+        return;
+      }
       const incrementado = await intakeDelta(viajeId, 1);
       if (incrementado == null) {
         logger.error('intake.incremento_fallido', { viaje: viajeId, tenant: op.tenantId });

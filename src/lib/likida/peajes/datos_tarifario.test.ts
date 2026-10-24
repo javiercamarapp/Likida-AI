@@ -130,8 +130,12 @@ describe('importarTarifasArchivo', () => {
   });
 
   it('solo una carga declarada «proveedor» deja las tarifas confirmadas', async () => {
-    await D.importarTarifasArchivo(T, 'p.csv', bytes('caseta;clase;importe;desde\nCaseta Ejemplo Norte;5;300;2026-01-01\n'), 'proveedor');
-    expect((await D.listarTarifas(T))[0]).toMatchObject({ confirmada: true, origen: 'proveedor', confirmadaPor: null });
+    await D.importarTarifasArchivo(T, 'p.csv', bytes('caseta;clase;importe;desde\nCaseta Ejemplo Norte;5;300;2026-01-01\n'), 'proveedor', 'Ana Ejemplo');
+    expect((await D.listarTarifas(T))[0]).toMatchObject({ confirmada: true, origen: 'proveedor', confirmadaPor: 'Ana Ejemplo' });
+    // A37-A2-26: sin nombre de quien confirma no se guarda nada.
+    const sin = await D.importarTarifasArchivo(OTRA, 'q.csv', bytes('caseta;clase;importe;desde\nCaseta Ejemplo Norte;5;300;2026-01-01\n'), 'proveedor');
+    expect(sin).toMatchObject({ ok: false, guardadas: 0 });
+    expect(await D.listarTarifas(OTRA)).toHaveLength(0);
     await D.importarTarifasArchivo(OTRA, 'i.csv', bytes('caseta;clase;importe;desde\nCaseta Ejemplo Norte;5;300;2026-01-01\n'), 'inferida');
     expect((await D.listarTarifas(OTRA))[0]).toMatchObject({ confirmada: false, origen: 'inferida' });
   });

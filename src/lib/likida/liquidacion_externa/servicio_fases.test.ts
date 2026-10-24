@@ -83,6 +83,17 @@ describe('procesarLiquidacionesExternas: fases de pull y correo', () => {
     expect(r.pull).toMatchObject({ errores: 1, error: 'TmsNoDisponible: x' });
   });
 
+  it('A37-A1-liquidaciones-06: una flota con el pull ATASCADO queda identificada en el resumen (sin ella, el resumen no cambia)', async () => {
+    const r = await procesarLiquidacionesExternas({
+      ...base,
+      lectoresPull: async () => [{ tenantId: 't-1', lector }, { tenantId: 't-2', lector }],
+      pullDeFlota: vi.fn(async (t: string) => (t === 't-1' ? pullOk({ estado: 'error', error: 'TmsCredenciales: x', atascado: true }) : pullOk({ estado: 'error', error: 'TmsLimite: y' }))),
+      entregasCorreo: async () => correoOk,
+    }, 10);
+    expect(r.pull).toMatchObject({ errores: 2, flotasAtascadas: ['t-1'] });
+    expect(logError).toHaveBeenCalledWith('liqext.pull_atascado', expect.objectContaining({ tenantId: 't-1' }));
+  });
+
   it('si no se pueden obtener los lectores, es error de pull y lo demás sigue', async () => {
     const r = await procesarLiquidacionesExternas({
       ...base, lectoresPull: async () => { throw new Error('base caída'); }, entregasCorreo: async () => correoOk,

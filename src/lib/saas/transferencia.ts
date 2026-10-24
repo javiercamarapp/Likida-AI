@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { DatoInvalido } from '@/lib/likida/errores';
 import { logger } from '@/lib/logger';
+import { alertarOperador } from '@/lib/observability/alerta';
 import { facturapiConfigurado, timbrarMensualidad, enviarPorCorreo } from './facturapi';
 import { getDatosFiscales, estanCompletos } from './fiscal';
 import { desglosarPrecio, desgloseCuadra } from './iva';
@@ -263,7 +264,11 @@ export async function conciliar(
       referencia_banco: ref,
     })
     .eq('id', facturaId)
-    .neq('estado', 'pagada')
+    // A37-S61-08: solo lo que de verdad puede estar esperando un depósito. El
+    // `neq('pagada')` dejaba pasar 'cancelada' (reembolsada por Stripe): una
+    // referencia tecleada por error la resucitaba a 'pagada' y se timbraba un
+    // CFDI por dinero ya devuelto.
+    .in('estado', ['pendiente', 'fallida'])
     .select('id');
   if (error) throw new Error(`conciliar: ${error.message}`);
   if ((tocadas ?? []).length > 0) return;
@@ -275,6 +280,7 @@ export async function conciliar(
   if (errLee) throw new Error(`conciliar.leer: ${errLee.message}`);
   if (!f) throw new DatoInvalido('Esa factura ya no existe.');
   if (f.estado === 'pagada') throw new DatoInvalido('Esa factura ya estaba marcada como pagada.');
+  if (f.estado === 'cancelada') throw new DatoInvalido('Esa factura está cancelada (el cobro se anuló o se reembolsó): no se puede marcar como pagada. Si el depósito es real, emite una factura nueva.');
   throw new DatoInvalido(`Esa factura está "${String(f.estado)}" y no se pudo marcar como pagada.`);
 }
 
@@ -309,13 +315,15 @@ export async function timbrarFactura(facturaId: string): Promise<{ uuid: string 
   const admin = supabaseAdmin();
   const { data: f, error } = await admin
     .from('factura_saas')
-    .select('id, tenant_id, estado, monto, subtotal, iva, moneda, periodo_inicio, periodo_fin, referencia, cfdi_uuid')
+    .select('id, tenant_id, estado, monto, subtotal, iva, moneda, periodo_inicio, periodo_fin, referencia, cfdi_uuid, cfdi_cancelado_en')
     .eq('id', facturaId)
     .maybeSingle();
   if (error) throw new Error(`timbrarFactura.leer: ${error.message}`);
   if (!f) throw new DatoInvalido('Esa factura ya no existe.');
   if (f.cfdi_uuid) throw new DatoInvalido(`Esa factura ya está timbrada (UUID ${String(f.cfdi_uuid).slice(0, 8)}…). Timbrarla otra vez crearía un segundo CFDI que habría que cancelar.`);
   if (f.estado !== 'pagada') throw new DatoInvalido('Solo se timbra lo que ya está pagado.');
+  // A37-S61-08: un CFDI cancelado ya cerró ese cobro (reembolso): no se emite otro por el mismo dinero.
+  if (f.cfdi_cancelado_en) throw new DatoInvalido('El CFDI de esta factura ya fue cancelado (el dinero se devolvió o el cobro se anuló): no se timbra otro por el mismo cobro.');
 
   const total = Number(f.monto);
   const subtotal = f.subtotal === null || f.subtotal === undefined ? null : Number(f.subtotal);
@@ -426,25 +434,36 @@ export async function timbrarFactura(facturaId: string): Promise<{ uuid: string 
     throw e;
   }
 
-  // El CFDI YA EXISTE ante el SAT en este punto. Si guardarlo falla, se loguea
-  // fuerte y se devuelve igual: perder el UUID en nuestra base es un problema
-  // de registro; volver a timbrar sería un problema fiscal del cliente.
-  const { error: errGuardar } = await admin
-    .from('factura_saas')
-    .update({
-      cfdi_uuid: cfdi.uuid,
-      cfdi_xml_url: cfdi.urlXml,
-      // El id del PAC y la liga de verificación (0163, DAT-33): sin el primero
-      // no se puede CANCELAR el papel si el cobro se reembolsa, y la segunda es
-      // lo que el contador del cliente pide para comprobarlo contra el SAT.
-      cfdi_proveedor_id: cfdi.id,
-      cfdi_verificacion_url: cfdi.urlVerificacion,
-      timbrada_en: new Date().toISOString(),
-      timbrando_en: null,
-    })
-    .eq('id', facturaId);
-  if (errGuardar) {
-    logger.error('facturapi.uuid_sin_guardar', { facturaId, uuid: cfdi.uuid, err: errGuardar.message });
+  // El CFDI YA EXISTE ante el SAT en este punto. Volver a timbrar sería un
+  // problema fiscal del cliente; perder el UUID en nuestra base, uno de registro.
+  //
+  // A37-S61-02: si el guardado falla, `timbrando_en` seguía puesto pero la
+  // reserva CADUCA a los 10 min y exige `cfdi_uuid is null`: pasados 10 min la
+  // factura volvía a mostrarse «pagada sin timbrar» y un clic creaba un SEGUNDO
+  // CFDI. Ahora (1) el guardado se reintenta; (2) si no se logra, la reserva se
+  // deja con un valor centinela SIN caducidad práctica; (3) se alerta con el
+  // UUID, para ligarlo a mano.
+  const guardado = await guardarCfdiTimbrado(admin, facturaId, {
+    cfdi_uuid: cfdi.uuid,
+    cfdi_xml_url: cfdi.urlXml,
+    // El id del PAC y la liga de verificación (0163, DAT-33): sin el primero
+    // no se puede CANCELAR el papel si el cobro se reembolsa, y la segunda es
+    // lo que el contador del cliente pide para comprobarlo contra el SAT.
+    cfdi_proveedor_id: cfdi.id,
+    cfdi_verificacion_url: cfdi.urlVerificacion,
+    timbrada_en: new Date().toISOString(),
+    timbrando_en: null,
+  });
+  if (!guardado.ok) {
+    logger.error('facturapi.uuid_sin_guardar', { facturaId, uuid: cfdi.uuid, err: guardado.error });
+    // Centinela: ~10 años. Mientras la fila no tenga UUID, la reserva NO caduca.
+    const centinela = new Date(Date.now() + 3650 * 86_400_000).toISOString();
+    const r = await admin.from('factura_saas').update({ timbrando_en: centinela }).eq('id', facturaId);
+    if (r.error) logger.error('facturapi.reserva_sin_blindar', { facturaId, uuid: cfdi.uuid, err: r.error.message });
+    await alertarOperador('timbre.uuid_sin_guardar', {
+      facturaId, uuid: cfdi.uuid, referencia: (f.referencia as string) ?? null,
+      accion: 'Liga este UUID a la factura a mano; el CFDI YA existe ante el SAT y la reserva quedó sin caducidad para impedir un segundo timbrado.',
+    });
   }
 
   // Se manda al correo DE LA FLOTA, explícito. Antes iba sin destinatario y
@@ -454,6 +473,27 @@ export async function timbrarFactura(facturaId: string): Promise<{ uuid: string 
     logger.error('facturapi.cfdi_sin_entregar', { facturaId, uuid: cfdi.uuid, hayCorreo: Boolean(fiscales!.email) });
   }
   return { uuid: cfdi.uuid };
+}
+
+/**
+ * Guarda el resultado del timbrado con hasta 3 intentos (0 / 150 / 450 ms de
+ * espera): el fallo típico es un timeout del pooler que no se repite. Nunca lanza.
+ */
+async function guardarCfdiTimbrado(
+  admin: ReturnType<typeof supabaseAdmin>, facturaId: string, valores: Record<string, unknown>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  let ultimo = '';
+  for (const espera of [0, 150, 450]) {
+    if (espera > 0) await new Promise((r) => setTimeout(r, espera));
+    try {
+      const { error } = await admin.from('factura_saas').update(valores).eq('id', facturaId);
+      if (!error) return { ok: true };
+      ultimo = error.message;
+    } catch (e) {
+      ultimo = e instanceof Error ? e.message : String(e);
+    }
+  }
+  return { ok: false, error: ultimo };
 }
 
 /** Techo de filas de la lectura «completa» para los totales de la pantalla.
@@ -467,6 +507,7 @@ async function leerPorCobrar(limite: number): Promise<{ facturas: FacturaPorCobr
     .select('id, tenant_id, periodo_inicio, periodo_fin, monto, subtotal, iva, moneda, estado, referencia, cfdi_uuid, tenant(nombre)', { count: 'exact' })
     .in('estado', ['pendiente', 'fallida'])
     .order('periodo_fin', { ascending: false })
+    .order('id', { ascending: false })
     .limit(limite);
 
   if (error) throw new Error(`getPorCobrar: ${error.message}`);
@@ -494,6 +535,21 @@ async function leerPorCobrar(limite: number): Promise<{ facturas: FacturaPorCobr
 /** Lo que está por cobrarse, para la pantalla de Javier (las 50 más recientes). */
 export async function getPorCobrar(): Promise<FacturaPorCobrar[]> {
   return (await leerPorCobrar(50)).facturas;
+}
+
+/**
+ * TODAS las pendientes o fallidas, para quien REPORTA cifras (cobranza SaaS,
+ * finanzas, copiloto). A37-S27-02: con `getPorCobrar()` (50 más recientes) el
+ * parte decía «Por cobrar: 50 facturas $X» y las más viejas y vencidas nunca
+ * recibían recordatorio. Si la base tiene más de las que caben en el techo,
+ * LANZA: un total parcial presentado como completo es peor que no darlo.
+ */
+export async function getPorCobrarCompleto(): Promise<FacturaPorCobrar[]> {
+  const { facturas, total } = await leerPorCobrar(TECHO_POR_COBRAR_TOTAL);
+  if (total > facturas.length) {
+    throw new Error(`getPorCobrarCompleto: la base tiene ${total} facturas por cobrar y solo se leyeron ${facturas.length}; no se reporta un total parcial.`);
+  }
+  return facturas;
 }
 
 /** TODAS las pendientes o fallidas (hasta el techo) más el conteo exacto de la base:

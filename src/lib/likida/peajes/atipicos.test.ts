@@ -181,6 +181,22 @@ describe('detectarAtipicos — propiedades', () => {
     expect(r.reglasNoAplicadas[0].motivo).toContain('Configuración inválida');
     expect(validarConfigAtipicos(CONFIG_ATIPICOS_DEFAULT)).toBeNull();
   });
+  it('A37-S51-02: una regla inválida cae a SUS valores de partida; las otras conservan lo configurado', () => {
+    const r = detectarAtipicos([], {
+      repeticion_caseta: { minCruces: 1, activa: false },
+      ida_y_vuelta_madrugada: { activa: true },
+    });
+    expect(r.reglasNoAplicadas.filter((x) => x.motivo.includes('Configuración inválida')).map((x) => x.regla)).toEqual(['repeticion_caseta']);
+    expect(validarConfigAtipicos({ ...CONFIG_ATIPICOS_DEFAULT, secuencia_imposible: { activa: true, velocidadMaxKmh: 45 } })).toBeNull();
+    expect(validarConfigAtipicos({ ...CONFIG_ATIPICOS_DEFAULT, secuencia_imposible: { activa: true, velocidadMaxKmh: 400 } })).toBeNull();
+    expect(validarConfigAtipicos({ ...CONFIG_ATIPICOS_DEFAULT, secuencia_imposible: { activa: true, velocidadMaxKmh: 401 } })).toMatch(/entre 30 y 400/);
+  });
+  it('A37-S51-02: lo que el esquema guardado acepta (velocidad 45 o 400), el detector lo respeta', () => {
+    for (const v of [45, 400]) {
+      const r = detectarAtipicos([], { secuencia_imposible: { velocidadMaxKmh: v }, ida_y_vuelta_madrugada: { activa: true } });
+      expect(r.reglasNoAplicadas.some((x) => x.motivo.includes('Configuración inválida')), String(v)).toBe(false);
+    }
+  });
   it('60 000 filas sintéticas se procesan en menos de 5 s', () => {
     const filas: CruceEntrada[] = [];
     for (let u = 0; u < 250; u++) {

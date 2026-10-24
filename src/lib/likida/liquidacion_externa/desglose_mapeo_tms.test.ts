@@ -62,6 +62,28 @@ describe('mapearBitacoraTms · viáticos', () => {
   });
 });
 
+describe('mapearBitacoraTms · A37-S48-07 viáticos que no concilian', () => {
+  const rawCon = (monto: number, detalle: Array<{ descripcion: string; monto: number }>) => ({
+    ...TMS_NODOS,
+    percepciones: [{ desglose: 'Viáticos', descripcion: 'VIATICOS', tipo: 'V', monto, detalle }],
+    deducciones: [],
+  });
+
+  it('si el detalle suma menos que el renglón, se conserva el monto del renglón y se anota la diferencia', () => {
+    const raw = rawCon(1500, [{ descripcion: 'Taxi', monto: 700 }, { descripcion: 'Talacha', monto: 500 }]);
+    const { desglose, ignorados } = mapearBitacoraTms(raw, MAPEO_NODOS);
+    expect(desglose.percepciones).toEqual([{ concepto: 'Viáticos', monto: 1500 }]);
+    expect(ignorados.some((i) => /no concilia/.test(i.motivo))).toBe(true);
+  });
+
+  it('si el detalle concilia al centavo, sí sustituye al renglón', () => {
+    const raw = rawCon(1200, [{ descripcion: 'Taxi', monto: 700 }, { descripcion: 'Talacha', monto: 500 }]);
+    const { desglose, ignorados } = mapearBitacoraTms(raw, MAPEO_NODOS);
+    expect(desglose.percepciones).toEqual([{ concepto: 'Taxi', monto: 700 }, { concepto: 'Talacha', monto: 500 }]);
+    expect(ignorados.some((i) => /no concilia/.test(i.motivo))).toBe(false);
+  });
+});
+
 describe('mapearBitacoraTms · errores con campo', () => {
   const con = (cambio: (r: typeof TMS_PLANA) => void) => {
     const raw = JSON.parse(JSON.stringify(TMS_PLANA)) as typeof TMS_PLANA;
@@ -145,5 +167,54 @@ describe('utilidades', () => {
     expect(leerRuta(o, 'a.x.c')).toBeUndefined();
     expect(leerRuta(o, 'a.b[3].c')).toBeUndefined();
     expect(leerRuta(null, 'a')).toBeUndefined();
+  });
+});
+
+describe('A37-A1-liquidaciones-14: más de 2 decimales NO se redondean en silencio', () => {
+  const con = (cambio: (r: typeof TMS_PLANA) => void) => {
+    const raw = JSON.parse(JSON.stringify(TMS_PLANA)) as typeof TMS_PLANA;
+    cambio(raw);
+    return () => mapearBitacoraTms(raw, MAPEO_PLANA);
+  };
+  it('cargo 1250.005 ⇒ error con el campo (el desglose queda en mapeo_invalido, visible), no un redondeo por renglón', () => {
+    const f = con((r) => { (r.renglones[0] as { cargo: unknown }).cargo = 1250.005; });
+    expect(f).toThrow(CampoInvalido);
+    try { f(); } catch (e) { expect((e as CampoInvalido).campo).toBe('renglones[0].cargo'); expect((e as CampoInvalido).message).toMatch(/2 decimales/); }
+  });
+  it('texto «300.123» también se rechaza; «300.10», «300.1» y «4000» siguen entrando', () => {
+    expect(con((r) => { (r.renglones[1] as { cargo: unknown }).cargo = '300.123'; })).toThrow(CampoInvalido);
+    expect(con((r) => { (r.renglones[1] as { cargo: unknown }).cargo = '300.10'; })).not.toThrow();
+    expect(con((r) => { (r.renglones[1] as { cargo: unknown }).cargo = 300.1; })).not.toThrow();
+    expect(con((r) => { (r.renglones[1] as { cargo: unknown }).cargo = 0.07; })).not.toThrow();
+  });
+  it('decimales con ruido de coma flotante (1.1, 19.99, 0.29) no se confunden con más de 2 decimales', () => {
+    for (const v of [1.1, 19.99, 0.29, 1234567.89]) {
+      expect(con((r) => { (r.renglones[1] as { cargo: unknown }).cargo = v; })).not.toThrow();
+    }
+  });
+  it('un viático anidado con 3 decimales se rechaza con el campo del detalle', () => {
+    const raw = JSON.parse(JSON.stringify(TMS_NODOS)) as typeof TMS_NODOS;
+    (raw.percepciones[1]!.detalle![0] as { monto: unknown }).monto = 300.555;
+    expect(() => mapearBitacoraTms(raw, MAPEO_NODOS)).toThrow(/detalleViaticos\[0\]\.monto/);
+  });
+});
+
+describe('A37-A1-liquidaciones-16: las fechas con zona se pasan al día LOCAL de México', () => {
+  const con = (inicio: string, fin: string) => {
+    const raw = JSON.parse(JSON.stringify(TMS_PLANA)) as typeof TMS_PLANA;
+    (raw.cabecera as { inicio: string }).inicio = inicio;
+    (raw.cabecera as { fin: string }).fin = fin;
+    return mapearBitacoraTms(raw, MAPEO_PLANA).desglose;
+  };
+  it('fin del día 14 en CDMX como 15T05:59Z ⇒ 14 (no 15); inicio 9 a las 00:00 CDMX como 09T06:00Z ⇒ 9', () => {
+    const d = con('2026-10-09T06:00:00Z', '2026-10-15T05:59:00Z');
+    expect(d.desde).toBe('2026-10-09');
+    expect(d.hasta).toBe('2026-10-14');
+  });
+  it('con offset explícito −06:00 también', () => {
+    expect(con('2026-10-09T00:00:00-06:00', '2026-10-14T23:59:00-06:00')).toMatchObject({ desde: '2026-10-09', hasta: '2026-10-14' });
+  });
+  it('sin zona se toma el día tal cual (hora local del origen) y la fecha sola no cambia', () => {
+    expect(con('2026-10-09T06:00:00', '2026-10-14')).toMatchObject({ desde: '2026-10-09', hasta: '2026-10-14' });
   });
 });

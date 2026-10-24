@@ -6,6 +6,7 @@ import { acotada } from '@/lib/likida/presupuesto';
 import { anotarBitacora, type EntidadBitacora } from './bitacora_escritura';
 import { DatoInvalido, AbonoYaRegistrado } from './errores';
 import { esUuidValido } from './intake/cfdi';
+import { parseCfdiXml, leerPagosRep } from './intake/cfdi_xml';
 import { parseRepXml } from './intake/rep';
 import { abonoEquivalente } from './portal_pago_propuesta';
 import { registrarPago } from './facturacion_escritura';
@@ -405,6 +406,31 @@ const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const XML_MAX = 500_000;
 
+/** ¿El XML pegado ES el complemento de pago que se está registrando? Lanza `DatoInvalido` con el motivo. PURA. */
+function verificarXmlDeRep(xml: string, cfdiUuid: string, fechaPago: string, imp: number): void {
+  const SIN_ARCHIVO = ' Corrígelo, o registra el complemento sin archivo y compártelo por tu canal de siempre.';
+  const cfdi = parseCfdiXml(xml);
+  if (!cfdi) throw new DatoInvalido('Ese archivo no se lee como un CFDI (XML del SAT).' + SIN_ARCHIVO);
+  if (cfdi.tipoComprobante !== 'P') {
+    throw new DatoInvalido(`Ese XML es un CFDI de tipo «${cfdi.tipoComprobante ?? 'desconocido'}», no un complemento de pago (tipo P).` + SIN_ARCHIVO);
+  }
+  if (!cfdi.uuid) throw new DatoInvalido('Ese XML no trae el timbre fiscal (UUID): no es un complemento ya timbrado.' + SIN_ARCHIVO);
+  if (cfdi.uuid !== cfdiUuid) {
+    throw new DatoInvalido(`El folio fiscal del XML (${cfdi.uuid}) no es el que capturaste (${cfdiUuid}): parece el archivo de OTRO complemento.` + SIN_ARCHIVO);
+  }
+  const pagos = leerPagosRep(xml);
+  if (pagos.length === 0) throw new DatoInvalido('Ese XML no trae el complemento de pagos (Pagos): no se puede comprobar fecha ni importe.' + SIN_ARCHIVO);
+  const cuadra = (n: number | undefined) => n !== undefined && Math.abs(round2(n) - imp) <= TOLERANCIA_ABONO_MXN;
+  const delDia = pagos.filter((p) => p.fechaPago === fechaPago);
+  if (delDia.length === 0) {
+    throw new DatoInvalido(`El XML no trae ningún pago con fecha ${fechaPago}: la fecha del complemento no coincide con la que capturaste.` + SIN_ARCHIVO);
+  }
+  const importeOk = delDia.some((p) => cuadra(p.monto) || p.impPagadoDoctos.some(cuadra) || cuadra(round2(p.impPagadoDoctos.reduce((a, b) => a + b, 0))));
+  if (!importeOk) {
+    throw new DatoInvalido(`El importe del XML no coincide con el que capturaste (${mxn(imp)}): revisa que sea el complemento de ese pago.` + SIN_ARCHIVO);
+  }
+}
+
 /**
  * Registra el complemento de pago que el PAC de la flota ya timbró.
  *
@@ -446,6 +472,11 @@ export async function registrarRepEmitido(
   if (xml.length > XML_MAX) {
     throw new DatoInvalido('Ese XML es demasiado grande. Registra el complemento sin archivo y compártelo por tu canal de siempre.');
   }
+  // A37-S18-07: el XML que se guarda es el que el portal le ENTREGA al contador del cliente como «el complemento» con este
+  // folio. Antes solo se medía su longitud: cualquier texto —o el XML de OTRO complemento— quedaba rotulado con el UUID
+  // tecleado. Ahora tiene que ser un CFDI tipo P cuyo timbre sea ESTE folio y cuyo pago coincida en fecha e importe. Si no
+  // se puede comprobar, no se guarda: el complemento se puede registrar sin archivo (el campo es opcional).
+  if (xml !== '') verificarXmlDeRep(xml, cfdiUuid, fechaPago, imp);
 
   // ── EL ABONO QUE AMPARA TIENE QUE SER DE ESTA FACTURA (`c7-25`) ──────────
   //
@@ -480,19 +511,13 @@ export async function registrarRepEmitido(
     throw new DatoInvalido(`El importe del complemento (${mxn(imp)}) no cuadra con el abono que dice amparar (${mxn(montoPago)}). Si el complemento cubre varias parcialidades, regístralo contra el abono que le corresponde; si el que está mal es el abono, corrígelo primero.`);
   }
 
-  // ── A37-S54-03: EL XML TIENE QUE SER EL COMPLEMENTO DE ESTA FACTURA Y DE ESTE ABONO ─────────────────────────────────────
-  // El UUID, la fecha y el importe se teclean aparte; el XML se guardaba y el portal PÚBLICO se lo ofrecía al cliente como
-  // «el complemento» sin cotejar nada: pegar el XML de otro pago junto a un UUID bien formado lo publicaba tal cual. Si hay XML,
-  // se lee y se coteja: es un REP, su timbre es el UUID capturado, trae un pago de la factura por el importe del abono y, si
-  // ambos dicen RFC del receptor, es el del cliente de la factura. Sin XML no hay nada que cotejar (el portal ya lo dice).
+  // ── A37-S54-03: EL XML TIENE QUE SER DE ESTA FACTURA Y DE SU CLIENTE ─────────────────────────────────────────────────────
+  // `verificarXmlDeRep` (A37-S18-07, arriba) ya comprobó que es un REP tipo P, que su timbre es el UUID tecleado y que fecha e importe
+  // coinciden. Falta lo que ata el archivo a ESTA factura: un REP de otro pago —con la misma fecha e importe— se guardaba y el portal
+  // PÚBLICO se lo ofrecía al cliente como «el complemento» de esta factura. Se coteja que uno de sus documentos relacionados sea el
+  // UUID de la factura (el importe ya lo comprobó `verificarXmlDeRep`) y, si ambos dicen RFC del receptor, que sea el del cliente de la factura.
   if (xml !== '') {
     const rep = parseRepXml(xml);
-    if (!rep) {
-      throw new DatoInvalido('Ese XML no es un complemento de pago (tipo P) con timbre y al menos un pago legible. Pega el XML que te dio tu PAC, o registra el complemento sin archivo.');
-    }
-    if (rep.uuid !== cfdiUuid) {
-      throw new DatoInvalido(`El folio fiscal del XML (${rep.uuid}) no es el que capturaste (${cfdiUuid}). Revisa que el archivo sea el de este complemento.`);
-    }
     const { data: fac, error: errFac } = await acotada(supabaseAdmin().from('factura_emitida')
       .select('id, cfdi_uuid, cliente:cliente_id(rfc)')
       .eq('id', c.facturaId).eq('tenant_id', tenantId).maybeSingle(), 'registrarRepEmitido.factura');
@@ -502,16 +527,13 @@ export async function registrarRepEmitido(
     if (uuidFactura === '') {
       throw new DatoInvalido('La factura aún no tiene UUID registrado, así que no hay con qué cotejar el XML del complemento. Registra el complemento sin archivo, o captura primero el UUID de la factura.');
     }
-    const amparaEsta = rep.pagos.flatMap((p) => p.doctos).filter((d) => d.idDocumento === uuidFactura);
+    const amparaEsta = (rep?.pagos ?? []).flatMap((p) => p.doctos).filter((d) => d.idDocumento === uuidFactura);
     if (amparaEsta.length === 0) {
       throw new DatoInvalido('Ese XML no ampara esta factura: ninguno de sus documentos relacionados trae el UUID de la factura. Es probable que sea el complemento de otro pago.');
     }
-    if (!amparaEsta.some((d) => Math.abs(round2(d.impPagado) - imp) <= TOLERANCIA_ABONO_MXN)) {
-      throw new DatoInvalido(`El XML trae pagos de esta factura por ${amparaEsta.map((d) => mxn(d.impPagado)).join(', ')}, y ninguno es el importe del complemento (${mxn(imp)}). Revisa que sea el archivo de ese abono.`);
-    }
     const cliente = Array.isArray(filaFac?.cliente) ? filaFac?.cliente[0] : filaFac?.cliente;
     const rfcCliente = typeof cliente?.rfc === 'string' ? cliente.rfc.trim().toUpperCase() : '';
-    if (rep.rfcReceptor && rfcCliente !== '' && rep.rfcReceptor !== rfcCliente) {
+    if (rep?.rfcReceptor && rfcCliente !== '' && rep.rfcReceptor !== rfcCliente) {
       throw new DatoInvalido(`El receptor del XML (${rep.rfcReceptor}) no es el RFC del cliente de esta factura (${rfcCliente}). No se publica un complemento que es de otro cliente.`);
     }
   }

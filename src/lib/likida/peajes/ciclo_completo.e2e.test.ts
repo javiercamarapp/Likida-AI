@@ -370,6 +370,45 @@ describe('DUPLICADO', () => {
   });
 });
 
+describe('A37-A2-07: anular un desglose cierra sus reclamos preparados', () => {
+  it('los preparados (nunca enviados) pasan a rechazado con la causa; los ya enviados no se tocan; los de otro desglose tampoco', async () => {
+    await atenderCorreoPeajes(TOKEN, correo('e1', [['corte.csv', 'adj1']]), deps);
+    await procesar();
+    const id = idDesglose();
+    const base = { tenant_id: T, categoria: 'doble_cobro', n_cruces: 2, monto_reclamado: 100, monto_acreditado: 0, fecha_cobro_mas_antiguo: '2026-08-05' };
+    db.tablas.peaje_reclamo = [
+      { ...base, id: 'r-prep', desglose_id: id, estado: 'preparado' },
+      { ...base, id: 'r-env', desglose_id: id, estado: 'enviado', enviado_en: '2026-09-01' },
+      { ...base, id: 'r-otro', desglose_id: 'otro-desglose', estado: 'preparado' },
+      { ...base, id: 'r-ajeno', tenant_id: 'otra-flota', desglose_id: id, estado: 'preparado' },
+    ];
+    await datos.anularDesgloseDb(T, id, 'archivo equivocado', 'ana');
+    const por = (rid: string) => db.tablas.peaje_reclamo.find((r) => r.id === rid)!;
+    expect(por('r-prep').estado).toBe('rechazado');
+    expect(String(por('r-prep').notas)).toMatch(/desglose.*anul/i);
+    expect(por('r-env').estado).toBe('enviado');
+    expect(por('r-otro').estado).toBe('preparado');
+    expect(por('r-ajeno').estado).toBe('preparado');
+  });
+});
+
+describe('A37-A2-12: declarar el periodo de un desglose ya importado', () => {
+  it('un corte sin periodo (nombre sin decena) recibe el periodo declarado; fechas inválidas, anulados y otra flota no', async () => {
+    await atenderCorreoPeajes(TOKEN, correo('e1', [['corte.csv', 'adj1']]), deps);
+    await procesar();
+    const id = idDesglose();
+    expect(db.tablas.desglose_peaje[0].periodo_oficial_desde ?? null).toBeNull();
+    expect(await datos.declararPeriodoDesglose(T, id, '2026-08-10', '2026-08-01')).toMatchObject({ ok: false });
+    expect(await datos.declararPeriodoDesglose(T, id, '2026-02-30', '2026-03-01')).toMatchObject({ ok: false });
+    expect(await datos.declararPeriodoDesglose('otra-flota', id, '2026-08-01', '2026-08-10')).toMatchObject({ ok: false });
+    expect(db.tablas.desglose_peaje[0].periodo_oficial_desde ?? null).toBeNull();
+    expect(await datos.declararPeriodoDesglose(T, id, '2026-08-01', '2026-08-10')).toEqual({ ok: true });
+    expect(db.tablas.desglose_peaje[0]).toMatchObject({ periodo_oficial_desde: '2026-08-01', periodo_oficial_hasta: '2026-08-10', periodo_origen: 'declarado' });
+    await datos.anularDesgloseDb(T, id, 'error', 'ana');
+    expect(await datos.declararPeriodoDesglose(T, id, '2026-08-11', '2026-08-20')).toMatchObject({ ok: false, motivo: expect.stringMatching(/anulado/) });
+  });
+});
+
 describe('FUERA DE ORDEN', () => {
   it('anulan el desglose ANTES de que salga el aviso pendiente: el barrido ya no avisa', async () => {
     telefonoDinero = { [T]: null };

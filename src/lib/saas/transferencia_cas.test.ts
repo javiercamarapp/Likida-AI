@@ -27,6 +27,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 type Fila = Record<string, unknown>;
 const TABLAS: Record<string, Fila[]> = {};
+/** A37-S61-02: cuántos UPDATE que guardan `cfdi_uuid` fallan antes de que uno pase. */
+let fallasGuardarUuid = 0;
 
 /** Un `or(...)` de PostgREST, acotado a lo que usa la reserva del timbrado:
  *  `timbrando_en.is.null,timbrando_en.lt.<iso>`. */
@@ -66,8 +68,13 @@ function tabla(nombre: string) {
       return api;
     },
     maybeSingle: () => Promise.resolve({ data: (cambios ? aplicar() : coinciden())[0] ?? null, error: null }),
-    then: (res: (v: unknown) => unknown) =>
-      Promise.resolve({ data: cambios ? aplicar() : coinciden(), error: null }).then(res),
+    then: (res: (v: unknown) => unknown) => {
+      if (cambios && 'cfdi_uuid' in cambios && fallasGuardarUuid > 0) {
+        fallasGuardarUuid--;
+        return Promise.resolve({ data: null, error: { message: 'timeout del pooler' } }).then(res);
+      }
+      return Promise.resolve({ data: cambios ? aplicar() : coinciden(), error: null }).then(res);
+    },
   };
   return api;
 }
@@ -94,6 +101,9 @@ vi.mock('./fiscal', () => ({
   estanCompletos: () => true,
 }));
 
+const alertarOperador = vi.fn(async (..._a: unknown[]) => true);
+vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]) => alertarOperador(...a) }));
+
 const { conciliar, timbrarFactura, emitirMensualidad } = await import('./transferencia');
 
 const FACTURA = () => ({
@@ -107,6 +117,7 @@ beforeEach(() => {
   for (const k of Object.keys(TABLAS)) delete TABLAS[k];
   timbrarMensualidad.mockClear(); enviarPorCorreo.mockClear();
   logger.info.mockClear(); logger.warn.mockClear(); logger.error.mockClear();
+  fallasGuardarUuid = 0; alertarOperador.mockClear();
 });
 
 describe('DAT-13 · conciliar es un compare-and-set', () => {
@@ -125,6 +136,27 @@ describe('DAT-13 · conciliar es un compare-and-set', () => {
     // Y la referencia del banco es la de QUIEN GANÓ, no una mezcla de las dos.
     expect(TABLAS.factura_saas[0].referencia_banco).toBe('SPEI-0001');
     expect(TABLAS.factura_saas[0].conciliada_por).toBe('u-1');
+  });
+
+  it('A37-S61-08: una factura CANCELADA (reembolsada) no se puede volver a marcar como pagada', async () => {
+    TABLAS.factura_saas = [{ ...FACTURA(), estado: 'cancelada', pagada_en: null, cfdi_cancelado_en: '2026-09-02T00:00:00Z' }];
+    await expect(conciliar('f-1', 'SPEI-ERROR-1', 'u-1')).rejects.toThrow(/cancelada/i);
+    expect(TABLAS.factura_saas[0].estado).toBe('cancelada');
+    expect(TABLAS.factura_saas[0].referencia_banco).toBeUndefined();
+  });
+
+  it('A37-S61-08: pendiente y fallida SÍ se concilian (el pago por transferencia llegó)', async () => {
+    for (const estado of ['pendiente', 'fallida']) {
+      TABLAS.factura_saas = [{ ...FACTURA(), estado, pagada_en: null }];
+      await conciliar('f-1', 'SPEI-OK-1', 'u-1');
+      expect(TABLAS.factura_saas[0].estado).toBe('pagada');
+    }
+  });
+
+  it('A37-S61-08: timbrarFactura se niega si el CFDI de la factura ya fue cancelado', async () => {
+    TABLAS.factura_saas = [{ ...FACTURA(), estado: 'pagada', pagada_en: '2026-09-01T00:00:00Z', cfdi_cancelado_en: '2026-09-02T00:00:00Z' }];
+    await expect(timbrarFactura('f-1')).rejects.toThrow(/cancel/i);
+    expect(timbrarMensualidad).not.toHaveBeenCalled();
   });
 
   it('sobre una factura que ya no existe, lo dice en vez de fingir que se pagó', async () => {
@@ -189,6 +221,38 @@ describe('DAT-13 · el timbrado se RESERVA antes de llamar al PAC', () => {
     const hace20min = new Date(Date.now() - 20 * 60_000).toISOString();
     TABLAS.factura_saas = [{ ...FACTURA(), timbrando_en: hace20min }];
     await expect(timbrarFactura('f-1')).resolves.toMatchObject({ uuid: expect.any(String) });
+  });
+});
+
+describe('A37-S61-02 · si el UUID del CFDI timbrado no se guarda, NO se puede timbrar de nuevo', () => {
+  it('un fallo transitorio del guardado se reintenta y el UUID queda guardado (sin alerta)', async () => {
+    TABLAS.factura_saas = [FACTURA()];
+    fallasGuardarUuid = 1;
+    await expect(timbrarFactura('f-1')).resolves.toMatchObject({ uuid: '11111111-2222-3333-4444-555555555555' });
+    expect(TABLAS.factura_saas[0].cfdi_uuid).toBe('11111111-2222-3333-4444-555555555555');
+    expect(alertarOperador).not.toHaveBeenCalled();
+  });
+
+  it('si el guardado falla siempre: la reserva queda SIN caducidad, se alerta con el UUID y un segundo clic no llama al PAC', async () => {
+    TABLAS.factura_saas = [FACTURA()];
+    fallasGuardarUuid = 99;
+    const r = await timbrarFactura('f-1');
+    expect(r).toEqual({ uuid: '11111111-2222-3333-4444-555555555555' });
+    expect(TABLAS.factura_saas[0].cfdi_uuid).toBeNull();
+
+    // Centinela lejano: la reserva de 10 min NO caduca (el CFDI existe ante el SAT).
+    const hasta = Date.parse(String(TABLAS.factura_saas[0].timbrando_en));
+    expect(hasta).toBeGreaterThan(Date.now() + 300 * 86_400_000);
+
+    expect(alertarOperador).toHaveBeenCalledWith('timbre.uuid_sin_guardar', expect.objectContaining({
+      facturaId: 'f-1', uuid: '11111111-2222-3333-4444-555555555555',
+    }));
+
+    // Pasados 20 minutos, el segundo clic sigue bloqueado: no hay segundo CFDI.
+    fallasGuardarUuid = 0;
+    timbrarMensualidad.mockClear();
+    await expect(timbrarFactura('f-1')).rejects.toThrow(/se está timbrando/i);
+    expect(timbrarMensualidad).not.toHaveBeenCalled();
   });
 });
 

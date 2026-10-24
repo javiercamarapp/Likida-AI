@@ -30,13 +30,14 @@ vi.mock('@/lib/meta/client', () => ({
 // con la cerrada) se simula sobre `sendText`: aquí se prueba el contrato de los
 // relojes (sello después de mandar, canal por canal); la selección de canal tiene
 // sus propias pruebas (enviar_con_fallback.test.ts).
+let modoEncolado = false;
 const llamadasAviso: Array<{ parametros: string[]; contexto?: Record<string, unknown> }> = [];
 vi.mock('@/lib/meta/aviso_oficina', () => ({
   parametrosAvisoOficina: (a: string, b: string, c: string) => [a, b, c],
   avisarOficina: async (t: string, b: string, o: { parametros: string[]; contexto?: Record<string, unknown> }) => {
     llamadasAviso.push(o);
     const id = await (sendText as unknown as (t: string, b: string) => Promise<string | null>)(t, b);
-    return id ? { ok: true, via: 'texto', id } : { ok: false, motivo: 'rechazado', fueraDeVentana: false };
+    return id ? { ok: true, via: 'texto', id } : { ok: false, motivo: 'rechazado', fueraDeVentana: false, ...(modoEncolado ? { encolado: true, reintentable: true } : {}) };
   },
 }));
 vi.mock('./contactos', () => ({ telefonoJefeDe, telefonoParaDineroDe }));
@@ -95,6 +96,7 @@ beforeEach(() => {
   sendText.mockClear();
   sendText.mockResolvedValue('wamid.OK');
   llamadasAviso.length = 0;
+  modoEncolado = false;
   telefonoJefeDe.mockClear();
   telefonoJefeDe.mockResolvedValue('5210000000001');
   telefonoParaDineroDe.mockClear();
@@ -211,6 +213,32 @@ describe('avisarVencimientos — un aviso por umbral, sellado después de mandar
     expect(llamadasAviso[0].contexto).toMatchObject({ agente: 'vencimientos', tenantId: 't1' });
   });
 
+  it('A37-S56-05: con 60 vencimientos el texto muestra 10 líneas y «y N más», y sella los 60', async () => {
+    tablas.respuestas.set('unidad', Array.from({ length: 60 }, (_, i) => (
+      { id: `u${i}`, tenant_id: 't1', numero_economico: `ECO-${i}`, poliza_vence: '2026-09-01', permiso_sict_vence: null, verificacion_vence: null }
+    )));
+    tablas.respuestas.set('operador', []);
+    tablas.respuestas.set('flota_poliza', []);
+    tablas.respuestas.set('aviso_vigencia', []);
+    const r = await avisarVencimientos(AHORA);
+    expect(r.avisados).toBe(60);
+    const texto = (sendText.mock.calls[0] as unknown as [string, string])[1];
+    expect(texto.split('\n').filter((l) => l.startsWith('· '))).toHaveLength(10);
+    expect(texto).toContain('50 más');
+    expect(texto.length).toBeLessThan(4_096);
+    const sello = tablas.upserts.find((u) => u.tabla === 'aviso_vigencia');
+    expect((sello?.filas as unknown[]).length).toBe(60);
+  });
+
+  it('A37-S56-05: la lectura de operadores excluye a los dados de baja', async () => {
+    tablas.respuestas.set('unidad', []);
+    tablas.respuestas.set('operador', []);
+    tablas.respuestas.set('flota_poliza', []);
+    await avisarVencimientos(AHORA);
+    const filtroOperador = tablas.llamadas.filter((c) => c.tabla === 'operador' && c.metodo === 'eq');
+    expect(filtroOperador.some((c) => c.args[0] === 'activo' && c.args[1] === true)).toBe(true);
+  });
+
   it('lo ya sellado NO se re-avisa', async () => {
     tablas.respuestas.set('unidad', [
       { id: 'u1', tenant_id: 't1', numero_economico: 'C2-08', poliza_vence: '2026-09-01', permiso_sict_vence: null, verificacion_vence: null },
@@ -239,6 +267,22 @@ describe('avisarVencimientos — un aviso por umbral, sellado después de mandar
     expect(r.avisados).toBe(0);
     expect(r.fallos).toBe(1);
     expect(tablas.upserts.filter((u) => u.tabla === 'aviso_vigencia')).toHaveLength(0);
+  });
+
+  it('A37-S56-02: si el aviso quedó ENCOLADO en wa_outbox (timeout/5xx) se sella como enviado — no se reenvía cada hora', async () => {
+    sendText.mockResolvedValueOnce(null as never);
+    modoEncolado = true;
+    tablas.respuestas.set('unidad', [
+      { id: 'u1', tenant_id: 't1', numero_economico: 'C2-08', poliza_vence: '2026-09-01', permiso_sict_vence: null, verificacion_vence: null },
+    ]);
+    tablas.respuestas.set('operador', []);
+    tablas.respuestas.set('flota_poliza', []);
+    tablas.respuestas.set('aviso_vigencia', []);
+
+    const r = await avisarVencimientos(AHORA);
+    expect(r.avisados).toBe(1);
+    expect(r.fallos).toBe(0);
+    expect(tablas.upserts.filter((u) => u.tabla === 'aviso_vigencia').length).toBeGreaterThan(0);
   });
 
   it('sin teléfono de jefe no se manda a nadie — y cuenta como fallo visible', async () => {
@@ -350,6 +394,25 @@ describe('avisarVencimientos — un aviso por umbral, sellado después de mandar
     expect(r.cortadosPorReloj).toBe(2);
     expect(sendText).not.toHaveBeenCalled();
     expect(tablas.upserts).toHaveLength(0);
+  });
+
+  it('A37-S56-10: horas consecutivas avisan primero a flotas distintas (el corte por reloj no deja fuera siempre a las mismas)', async () => {
+    const primeros = new Set<string>();
+    for (const h of [0, 1]) {
+      sendText.mockClear();
+      tablas.respuestas.set('unidad', [
+        { id: 'u1', tenant_id: 't1', numero_economico: 'UNO-1', poliza_vence: '2026-09-01', permiso_sict_vence: null, verificacion_vence: null },
+        { id: 'u2', tenant_id: 't2', numero_economico: 'DOS-2', poliza_vence: '2026-09-01', permiso_sict_vence: null, verificacion_vence: null },
+      ]);
+      tablas.respuestas.set('operador', []);
+      tablas.respuestas.set('flota_poliza', []);
+      tablas.respuestas.set('aviso_vigencia', []);
+      await avisarVencimientos(new Date(AHORA.getTime() + h * 3_600_000));
+      const textos = (sendText.mock.calls as unknown as Array<[string, string]>).map((c) => c[1]);
+      expect(textos).toHaveLength(2);
+      primeros.add(textos[0].includes('UNO-1') ? 't1' : 't2');
+    }
+    expect(primeros).toEqual(new Set(['t1', 't2']));
   });
 
   it('BE-7: sin reloj (la Mac, esta suite) el barrido corre hasta el final', async () => {
@@ -484,6 +547,18 @@ describe('avisarRelojesLegales — los relojes colgados de una incidencia', () =
     const r = await avisarRelojesLegales(new Date('2026-08-26T18:00:00Z'));
     expect(r.avisadas).toBe(0);
     expect(sendText).not.toHaveBeenCalled();
+  });
+
+  it('A37-S56-02: el reloj legal ENCOLADO en wa_outbox se sella — no se duplica el plazo legal', async () => {
+    sendText.mockResolvedValue(null as never);
+    modoEncolado = true;
+    tablas.respuestas.set('incidencia', [inc('bloqueo')]);
+    tablas.respuestas.set('incidencia_evento', []);
+    tablas.respuestas.set('viaje', [{ folio: 'V-9' }]);
+
+    const r = await avisarRelojesLegales(new Date('2026-08-26T18:00:00Z'));
+    expect(r.avisadas).toBe(1);
+    expect(anotarEventoIncidencia).toHaveBeenCalled();
   });
 
   it('si el aviso no llega a nadie, NO se sella — reintento en la siguiente corrida', async () => {

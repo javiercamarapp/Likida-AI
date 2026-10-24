@@ -20,6 +20,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { exigir, traerTodo } from '../pg';
 import { DatoInvalido } from '../errores';
@@ -234,6 +235,17 @@ export async function guardarConfigCorreo(tenantId: string, c: ConfigCorreo, por
   const res = await acotada(supabaseAdmin().from('liquidacion_correo_config')
     .upsert(fila, { onConflict: 'tenant_id' }).select('tenant_id'), 'liqcorreo.config_guardar');
   exigirEscritura(res as unknown as { data: unknown; error: ErrorPg }, 'liqcorreo.config_guardar');
+  // A37-S49-01: mientras el envío estaba apagado (o sin «Responder a») sus entregas esperaban horas para no acaparar la cola
+  // global; al quedar la flota lista se adelantan a «ya». Es solo puntualidad: si falla, salen en su siguiente turno.
+  if (c.activa && c.canal !== 'whatsapp' && fila.responder_a) {
+    try {
+      const ya = new Date().toISOString();
+      await acotada(supabaseAdmin().from('liquidacion_entrega_correo')
+        .update({ proximo_intento_en: ya }).eq('tenant_id', tenantId).eq('estado', 'pendiente').gt('proximo_intento_en', ya), 'liqcorreo.config_adelantar');
+    } catch (e) {
+      logger.warn('liqcorreo.config_adelantar_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    }
+  }
 }
 
 // ── Contacto del operador y coordinadores ───────────────────────────────────
@@ -371,6 +383,24 @@ export function puertoContactosReal(tenantId: string): PuertoContactos {
     },
     async guardarContacto(operadorId, cambios) {
       await guardarContactoOperador(tenantId, operadorId, cambios);
+    },
+    // A37-S48-06: el puerto NO traía esta consulta, así que el choque con otro operador de la flota nunca se detectaba.
+    // Los correos se guardan en minúsculas (el import los normaliza); se consulta por igualdad y se descartan en memoria
+    // los operadores que el propio archivo va a tocar. Un error de lectura LANZA: sin saberlo, no se escribe.
+    async correosEnUsoPorOtros(correos, excluirOperadorIds) {
+      const excluidos = new Set(excluirOperadorIds);
+      const ocupados = new Set<string>();
+      const lista = [...new Set(correos.map((c) => c.toLowerCase()))];
+      for (let i = 0; i < lista.length; i += 200) {
+        const res = await acotada(supabaseAdmin().from('operador')
+          .select('id, correo').eq('tenant_id', tenantId).in('correo', lista.slice(i, i + 200))
+          .order('id').limit(1000), 'liqcorreo.contactos_choques');
+        const r = res as unknown as { data: Fila[] | null; error: ErrorPg };
+        for (const f of exigirEscritura(r, 'liqcorreo.contactos_choques') ?? []) {
+          if (!excluidos.has(String(f.id)) && typeof f.correo === 'string') ocupados.add(f.correo.toLowerCase());
+        }
+      }
+      return ocupados;
     },
   };
 }
@@ -517,6 +547,14 @@ export interface RecepcionAtomica { liquidacionId: string; creada: boolean; repa
  * existe con la misma huella pero a medias, la RPC completa lo que falta. `no_disponible` = la base aún no tiene la 0857: el
  * llamador cae al camino anterior (no atómico) y lo avisa. Cualquier otro error LANZA: nada queda a medias y se reintenta.
  */
+/** La bitácora ya existe en la flota/terminal bajo OTRA clave (índice único `liquidacion_desglose_bitacora_unica`). Error de datos del ítem. */
+export class DesgloseEnConflicto extends Error {
+  constructor(mensaje: string) {
+    super(mensaje);
+    this.name = 'DesgloseEnConflicto';
+  }
+}
+
 export async function recibirDesgloseAtomico(tenantId: string, p: PedidoRecepcionAtomica): Promise<Lectura<RecepcionAtomica>> {
   const d = p.liquidacion.datos;
   const m = p.meta;
@@ -545,6 +583,10 @@ export async function recibirDesgloseAtomico(tenantId: string, p: PedidoRecepcio
     if (r.error.code === '42883' || r.error.code === 'PGRST202' || /could not find the function/i.test(r.error.message ?? '')) {
       return { ok: false, motivo: 'no_disponible' };
     }
+    // A37-A1-liquidaciones-07: la violación del índice único (flota, terminal, bitácora) es un error de DATOS del ítem (la misma
+    // bitácora llegó con otra clave, p. ej. antes sin número de liquidación y ahora con él), no una falla de infraestructura:
+    // se tipa para que el pull lo vuelva excepción visible y siga con los demás en vez de reintentarlo para siempre.
+    if (r.error.code === '23505') throw new DesgloseEnConflicto('liqcorreo.recibir_atomico: la bitácora ya existe con otra clave de idempotencia');
     throw new Error(`liqcorreo.recibir_atomico: ${r.error.message ?? 'error de base'}`);
   }
   if (!r.data || typeof r.data.liquidacion_id !== 'string') throw new Error('liqcorreo.recibir_atomico: respuesta sin liquidacion_id');

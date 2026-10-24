@@ -375,7 +375,7 @@ function Complemento({ panel, anotarRep }: {
             <Campo nombre="formaPago" etiqueta="Forma de pago del SAT (2 dígitos)"
               ayuda="03 transferencia, 01 efectivo, 02 cheque… Déjalo vacío si no lo tienes." />
             <Campo nombre="xml" etiqueta="XML del complemento (opcional)"
-              ayuda="Pégalo si lo tienes a la mano. Vacío = tu cliente verá el folio citable, no una descarga vacía." />
+              ayuda="Pégalo si lo tienes a la mano: se comprueba que sea ESTE complemento (tipo P, mismo folio, fecha e importe). Vacío = tu cliente verá el folio citable, no una descarga vacía." />
           </FormaConAviso>
         )}
 

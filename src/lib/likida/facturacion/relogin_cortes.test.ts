@@ -144,6 +144,21 @@ describe('camposDeEntrada — qué se llena, leído de la página', () => {
     expect(c).toEqual({ usuario: '[name="correo"]', contrasena: '[name="clave"]', boton: null });
   });
 
+  it('A37-S45-05: ids JSF/ASP.NET con `:` `$` `.` salen como [id="…"], no como #id inválido', () => {
+    const c = camposDeEntrada(INV({
+      campos: [campo({ id: 'formLogin:usuario' }), campo({ type: 'password', id: 'formLogin:clave$1.x' })],
+    }));
+    expect(c).toEqual({ usuario: '[id="formLogin:usuario"]', contrasena: '[id="formLogin:clave$1.x"]', boton: null });
+  });
+
+  it('A37-S45-05: comillas y barras en name/id se escapan', () => {
+    const c = camposDeEntrada(INV({
+      campos: [campo({ name: 'a"b' }), campo({ type: 'password', id: 'p\\q' })],
+    }));
+    expect(c?.usuario).toBe('[name="a\\"b"]');
+    expect(c?.contrasena).toBe('[id="p\\\\q"]');
+  });
+
   it('sin campo de contraseña NO inventa nada', () => {
     expect(camposDeEntrada(INV({ campos: [USUARIO] }))).toBeNull();
   });

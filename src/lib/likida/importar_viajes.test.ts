@@ -38,6 +38,12 @@ describe('leerFechaImportada', () => {
 
   it('mes 13 o texto raro es ilegible, no una fecha adivinada', () => {
     expect(leerFechaImportada('13/13/2026')).toBe('ilegible');
+    // A37-S46-03: fechas que no existen en el calendario
+    expect(leerFechaImportada('31/04/2026')).toBe('ilegible');
+    expect(leerFechaImportada('29/02/2026')).toBe('ilegible');
+    expect(leerFechaImportada('2026-13-45')).toBe('ilegible');
+    expect(leerFechaImportada('2026-02-30')).toBe('ilegible');
+    expect(leerFechaImportada('29/02/2028')).toBe('2028-02-29');
     expect(leerFechaImportada('agosto')).toBe('ilegible');
     expect(leerFechaImportada('')).toBeNull();
   });

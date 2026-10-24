@@ -637,6 +637,14 @@ const hitoDe = (hs: readonly HitoFila[], tipo: HitoFila['tipo']): HitoFila => {
 async function aplicar(d: Decision, c: ContextoAplicar): Promise<'ok' | 'carrera' | 'fallo'> {
   const { deps, viaje, hitos, ahora } = c;
   const resultado = (r: ResultadoEscritura) => r;
+  // A37-S34-10: tras `registrarHito` el hito YA está consumado. Los efectos que siguen son best-effort: un fallo aquí se registra y
+  // NO convierte el acuse en «No pude anotarlo» (el chofer reenviaría, entraría por «duplicado» y la oficina nunca sería avisada).
+  const mejor = async <T,>(efecto: string, f: () => Promise<T>): Promise<T | undefined> => {
+    try { return await f(); } catch (err) {
+      logger.error('hito.conductor_efecto_fallo', { viaje: viaje.id, efecto, err: err instanceof Error ? err.message : String(err) });
+      return undefined;
+    }
+  };
 
   switch (d.accion) {
     case 'registrar': {
@@ -651,33 +659,33 @@ async function aplicar(d: Decision, c: ContextoAplicar): Promise<'ok' | 'carrera
       // `viaje.llegada_en` (la llegada al DESTINO) no se sella con un «ya llegué» a secas: espera a que la ubicación lo respalde
       // (más abajo, tras validar) o lo difiere al barrido y al pin. Los otros sellos de la 0090 no dependen de la ubicación.
       const difiereLlegada = d.legado.includes('llegada') && c.config.validarUbicacion;
-      await deps.sincronizarLegado(viaje.tenantId, viaje.id, difiereLlegada ? d.legado.filter((l) => l !== 'llegada') : d.legado, d.mensajeEn);
-      await deps.evento(objetivo, 'recibido', { fuente: c.fuente, via: c.interp.via, ambigua: d.ambigua, tarde: d.reabre, hora_ajustada: d.ajustadaPorFuturo });
-      for (const t of d.omitir) await deps.evento(hitoDe(hitos, t), 'omitido', { por: d.objetivo });
-      if (d.contacto) await deps.evento(objetivo, 'contacto', {});
+      await mejor('legado', () => deps.sincronizarLegado(viaje.tenantId, viaje.id, difiereLlegada ? d.legado.filter((l) => l !== 'llegada') : d.legado, d.mensajeEn));
+      await mejor('evento', () => deps.evento(objetivo, 'recibido', { fuente: c.fuente, via: c.interp.via, ambigua: d.ambigua, tarde: d.reabre, hora_ajustada: d.ajustadaPorFuturo }));
+      for (const t of d.omitir) await mejor('evento', () => deps.evento(hitoDe(hitos, t), 'omitido', { por: d.objetivo }));
+      if (d.contacto) await mejor('evento', () => deps.evento(objetivo, 'contacto', {}));
       // 0385: la llegada se compara contra el sitio del viaje (GPS cercano a la hora del mensaje). Best-effort:
       // `validarHito` nunca lanza y el acuse no espera más de lo que cuestan dos consultas.
       const registrado: HitoFila = { ...objetivo, estado: 'recibido', mensajeEn: d.mensajeEn.toISOString(), recibidoEn: ahora.toISOString() };
-      const v = await deps.validarHito({ viaje, hito: registrado, config: c.config, mensajeEn: d.mensajeEn, ahora });
+      const v = await mejor('validar', () => deps.validarHito({ viaje, hito: registrado, config: c.config, mensajeEn: d.mensajeEn, ahora }));
       if (v?.pedirUbicacion) c.efectos.pedirUbicacion = true;
-      if (difiereLlegada && veredictoSellaLlegada(v?.veredicto ?? null, true)) await deps.sincronizarLegado(viaje.tenantId, viaje.id, ['llegada'], d.mensajeEn);
+      if (difiereLlegada && veredictoSellaLlegada(v?.veredicto ?? null, true)) await mejor('legado', () => deps.sincronizarLegado(viaje.tenantId, viaje.id, ['llegada'], d.mensajeEn));
       // T-A5-44: la llegada a descargar abre la pregunta «¿en qué patio entregas?» (solo si la flota lo encendió; best-effort).
       if (d.objetivo === 'llegada_descarga' && c.config.patioEntregaActivo === true) {
-        c.efectos.preguntaPatio = await preguntarPatio(deps.patio ?? puertosPatioReales(), c.config, viaje, registrado);
+        c.efectos.preguntaPatio = await mejor('patio', () => preguntarPatio(deps.patio ?? puertosPatioReales(), c.config, viaje, registrado));
       }
       // T-A5-46: la salida de la descarga abre «¿cómo terminó?» (solo si la flota lo encendió; best-effort; sin respuesta no bloquea el cierre).
       if (d.objetivo === 'salida_descarga' && c.config.resultadoDescargaActivo === true) {
-        c.efectos.preguntaResultado = await preguntarResultado(deps.resultado ?? puertosResultadoReales(), c.config, viaje, registrado);
+        c.efectos.preguntaResultado = await mejor('resultado', () => preguntarResultado(deps.resultado ?? puertosResultadoReales(), c.config, viaje, registrado));
       }
       // T-A5-53: la salida de la descarga abre la solicitud de documentos de cierre (N11; solo si la flota lo encendió y el cliente
       // tiene catálogo; best-effort; sin respuesta no bloquea el cierre ni el regreso).
       if (d.objetivo === 'salida_descarga' && c.config.pedirDocumentosCierreActivo === true) {
-        c.efectos.preguntaDocumentos = await preguntarDocumentosCierre(deps.documentosCierre ?? puertosDocumentosCierreReales(), c.config, viaje, registrado);
+        c.efectos.preguntaDocumentos = await mejor('documentos', () => preguntarDocumentosCierre(deps.documentosCierre ?? puertosDocumentosCierreReales(), c.config, viaje, registrado));
       }
       // El aviso a la oficina es best-effort y no retrasa el acuse más de lo que cuesta un envío.
       const esLlegada = d.objetivo === 'llegada_carga' || d.objetivo === 'llegada_descarga';
       if (esLlegada ? c.config.avisarOficinaLlegada : c.config.avisarOficinaSalida) {
-        await deps.avisarOficina({ viaje, hito: { ...objetivo, estado: 'recibido' }, mensajeEn: d.mensajeEn, contacto: d.contacto, ahora });
+        await mejor('aviso_oficina', () => deps.avisarOficina({ viaje, hito: { ...objetivo, estado: 'recibido' }, mensajeEn: d.mensajeEn, contacto: d.contacto, ahora }));
       }
       return 'ok';
     }
@@ -1018,7 +1026,7 @@ export async function registrarHitoDesdeFoto(e: EntradaFotoComoHito, deps: DepsA
         : mensajeEvidencia('sin_hito', e.tipo) }] };
     }
 
-    const efectos: { pedirUbicacion: boolean; preguntaPatio?: Salida | null } = { pedirUbicacion: false };
+    const efectos: { pedirUbicacion: boolean; preguntaPatio?: Salida | null; preguntaResultado?: Salida | null; preguntaDocumentos?: Salida | null } = { pedirUbicacion: false };
     const interp: Interpretacion = { intencion, contacto: null, via: 'foto', confianza: 1 };
     const aplicado = await aplicar(decision, {
       deps, e: { tenantId: e.tenantId, operadorId: e.operadorId, telefono: e.telefono, viajeAbiertoId: viaje.id, texto: '', waMessageId: e.waMessageId ?? null }, viaje, hitos,
@@ -1045,7 +1053,9 @@ export async function registrarHitoDesdeFoto(e: EntradaFotoComoHito, deps: DepsA
     // Si la foto no se pudo colgar (raro: el hito acaba de registrarse), el chofer lo sabe; el hito sí quedó.
     const aviso = evidencia && !/Recibí la foto/.test(evidencia) ? [{ texto: evidencia }] : [];
     // Con la confirmación apagada el hito queda en silencio, pero lo que falló de la foto sí se dice.
-    const pregunta = efectos.preguntaPatio ? [efectos.preguntaPatio] : [];
+    // A37-S34-02: `aplicar` ya dejó «preguntado» (resultado) y las filas pendientes (documentos) en la base; sin entregar esos mensajes el chofer
+    // nunca los ve y el reintento ya no los regenera. Mismo orden que el camino de texto (línea ~370).
+    const pregunta = [efectos.preguntaPatio, efectos.preguntaResultado, efectos.preguntaDocumentos].filter((x): x is Salida => Boolean(x));
     if (!config.confirmarAlChofer) return { mensajes: [...aviso, ...pregunta], ...pedir };
     return { mensajes: [{ ...acuse, texto: conFoto }, ...aviso, ...pregunta], ...pedir };
   } catch (err) {

@@ -2,7 +2,7 @@ import { revalidatePath } from 'next/cache';
 import { Hourglass } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
-import { supabaseAdmin } from '@/lib/supabase/admin';
+import { clientesActivosCompletos, geocercasActivasCompletas } from '@/lib/likida/catalogo_selectores';
 import { logger } from '@/lib/logger';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import {
@@ -132,18 +132,11 @@ export async function BloqueEstadias({
   let leyoOk = true;
   try {
     panel = await getEstadias(tenantId);
-    const admin = supabaseAdmin();
-    const [c, g] = await Promise.all([
-      admin.from('cliente').select('id, nombre, geocerca_id')
-        .eq('tenant_id', tenantId).eq('activo', true).order('nombre').limit(500),
-      admin.from('geocerca').select('id, nombre')
-        .eq('tenant_id', tenantId).eq('activa', true).order('nombre').limit(500),
-    ]);
-    if (c.error || g.error) throw new Error(c.error?.message ?? g.error?.message);
-    clientes = (c.data ?? []).map((x) => ({
-      id: String(x.id), nombre: String(x.nombre), geocercaId: (x.geocerca_id as string | null) ?? null,
-    }));
-    geocercas = (g.data ?? []).map((x) => ({ id: String(x.id), nombre: String(x.nombre) }));
+    // A37-S18-06: TODOS los clientes y geocercas (antes `.limit(500)`: el cliente 501 no podía pactar detención ni vincular
+    // su geocerca, y nada lo decía). Si la lectura no se puede completar LANZA y la sección dice que no se pudo leer.
+    const [c, g] = await Promise.all([clientesActivosCompletos(tenantId), geocercasActivasCompletas(tenantId)]);
+    clientes = c.map((x) => ({ id: x.id, nombre: x.nombre, geocercaId: x.geocercaId }));
+    geocercas = g;
   } catch (e) {
     leyoOk = false;
     logger.warn('estadias.no_leido', { tenantId, err: e instanceof Error ? e.message : String(e) });
@@ -176,13 +169,21 @@ export async function BloqueEstadias({
         horasLibres: perilla(fd.get('horasLibres')),
         tarifaHora: perilla(fd.get('tarifaHora')),
       }, s.userId);
-      // El sitio se vincula en el mismo envío porque es el mismo gesto de
-      // configuración; '' = no tocar el vínculo, 'ninguno' = desvincular.
-      const sitio = String(fd.get('geocercaId') ?? '');
-      if (sitio === 'ninguno') await vincularSitioCliente(s.tenantId, clienteId, null);
-      else if (sitio !== '') await vincularSitioCliente(s.tenantId, clienteId, sitio);
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'pactar la detención del cliente') };
+    }
+    // A37-S18-08: el pacto YA quedó escrito. El sitio se vincula en el mismo
+    // envío (mismo gesto de configuración; '' = no tocar, 'ninguno' = desvincular),
+    // pero si el vínculo falla no se debe decir que el pacto no se guardó.
+    const sitio = String(fd.get('geocercaId') ?? '');
+    if (sitio !== '') {
+      try {
+        await vincularSitioCliente(s.tenantId, clienteId, sitio === 'ninguno' ? null : sitio);
+      } catch (e) {
+        revalidatePath(RUTA);
+        const motivo = mensajeParaPantalla(e, 'vincular el sitio del cliente');
+        return { error: `El pacto del cliente sí se guardó, pero el sitio no se pudo vincular: ${motivo}` };
+      }
     }
     revalidatePath(RUTA);
     return { ok: 'Pacto del cliente guardado — gana sobre el de flota.' };

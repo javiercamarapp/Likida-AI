@@ -97,6 +97,13 @@ export function normalizar(texto: string): string {
   return texto.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
+/** ¿La palabra aparece como PALABRA (con límite), admitiendo plural simple? A37-S27-07: con `includes`,
+ *  «no se activa mi cuenta» contenía «iva» y «marco» contenía «arco». */
+export function contienePalabra(texto: string, palabra: string): boolean {
+  const esc = palabra.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-z0-9])${esc}(s|es)?(?![a-z0-9])`).test(texto);
+}
+
 export interface Coincidencia { tema: TemaNormativo; palabras: string[] }
 
 /**
@@ -109,7 +116,7 @@ export function temaDelTicket(asunto: string, descripcion: string | null): Coinc
   const texto = normalizar(`${asunto} ${descripcion ?? ''}`);
   let mejor: Coincidencia | null = null;
   for (const tema of TEMAS_NORMATIVOS) {
-    const palabras = PALABRAS_POR_TEMA[tema].filter((p) => texto.includes(p));
+    const palabras = PALABRAS_POR_TEMA[tema].filter((p) => contienePalabra(texto, p));
     if (palabras.length === 0) continue;
     if (mejor === null || palabras.length > mejor.palabras.length) mejor = { tema, palabras: [...palabras] };
   }
@@ -136,18 +143,70 @@ export interface TicketParaFaq {
  * definición de «sin respuesta» en toda la compañía agente.
  */
 export async function leerTicketsSinRespuesta(limite: number, venceEnVuelta?: number): Promise<TicketParaFaq[]> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('ticket_soporte')
-    .select('id, tenant_id, asunto, descripcion, categoria, abierto_por')
-    .in('estado', ['abierto', 'en_proceso'])
-    .order('abierto_en', { ascending: true })
-    // Sobre-lectura ×4: varios candidatos ya tienen borrador o ya tienen
-    // respuesta, y eso NO es fallo — es la guarda operando.
-    .limit(limite * 4), 'faq.tickets');
-  if (error) throw new Error(`leerTicketsSinRespuesta: ${error.message}`);
-
+  // ── A37-S27-04: LA COLA NO SE ATASCA CON LOS MÁS VIEJOS ───────────────────
+  // Antes: `.limit(limite * 4)` por antigüedad. Los tickets que YA tienen
+  // pieza (borrador o escalado) siguen «sin respuesta» hasta que un humano
+  // contesta, así que con 20 o más así, los nuevos jamás entraban al lote. Ahora
+  // se lee por PÁGINAS (con desempate por id) y a cada página se le quitan, en
+  // UNA consulta, los que ya tienen pieza; se sigue hasta juntar `limite`
+  // candidatos o agotar la cola (con tope de páginas, para no leer sin fin).
+  const TAM_PAGINA = limite * 4;
+  const MAX_PAGINAS = 25;
   const salida: TicketParaFaq[] = [];
-  for (const f of (data ?? []) as Array<Record<string, unknown>>) {
+  for (let pagina = 0; pagina < MAX_PAGINAS && salida.length < limite; pagina++) {
+    if (relojAgotado(venceEnVuelta)) {
+      logger.warn('faq.busqueda.corte_por_reloj', { encontrados: salida.length });
+      break;
+    }
+    const { data, error } = await acotada(supabaseAdmin()
+      .from('ticket_soporte')
+      .select('id, tenant_id, asunto, descripcion, categoria, abierto_por')
+      .in('estado', ['abierto', 'en_proceso'])
+      .order('abierto_en', { ascending: true })
+      .order('id', { ascending: true })
+      .range(pagina * TAM_PAGINA, pagina * TAM_PAGINA + TAM_PAGINA - 1), 'faq.tickets');
+    if (error) throw new Error(`leerTicketsSinRespuesta: ${error.message}`);
+    const filas = (data ?? []) as Array<Record<string, unknown>>;
+    if (filas.length === 0) break;
+
+    const conPieza = await titulosConPieza(
+      filas.map((f) => tituloFaq(String(f.id))),
+      [...new Set(filas.map((f) => String(f.tenant_id)))],
+    );
+    const cortada = await candidatosDePagina(filas.filter((f) => !conPieza.has(tituloFaq(String(f.id)))), limite, salida, venceEnVuelta);
+    if (cortada) break;
+    if (filas.length < TAM_PAGINA) break; // última página
+  }
+  return salida;
+}
+
+/** El título determinista de la pieza de un ticket (una pieza por ticket). */
+export function tituloFaq(ticketId: string): string {
+  return `FAQ — ticket ${ticketId.slice(0, 8)}`;
+}
+
+/** De estos títulos, cuáles YA tienen pieza en la bandeja (cualquier estado).
+ *  LANZA ante error: sin poder saberlo no se adivina. */
+async function titulosConPieza(titulos: string[], tenantIds: string[]): Promise<Set<string>> {
+  if (titulos.length === 0) return new Set();
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('cola_aprobacion')
+    .select('titulo')
+    .eq('agente', 'atencion_faq')
+    .in('tenant_id', tenantIds)
+    .in('titulo', titulos), 'faq.titulos_con_pieza');
+  if (error) throw new Error(`leerTicketsSinRespuesta(piezas): ${error.message}`);
+  if (!Array.isArray(data)) throw new Error('leerTicketsSinRespuesta(piezas): PostgREST no devolvió las piezas.');
+  return new Set((data as Array<Record<string, unknown>>).map((r) => String(r.titulo)));
+}
+
+/** Revisa el hilo de cada ticket de la página y agrega a `salida` los que nadie
+ *  ha contestado. Devuelve true si el reloj cortó la revisión. */
+async function candidatosDePagina(
+  filas: Array<Record<string, unknown>>, limite: number, salida: TicketParaFaq[], venceEnVuelta?: number,
+): Promise<boolean> {
+  for (const f of filas) {
+    if (salida.length >= limite) return false;
     // EL RELOJ, EN LA BÚSQUEDA DE CANDIDATOS (c7-1). La sobre-lectura ×4 de
     // arriba significa que para cinco borradores se pueden mirar veinte hilos,
     // uno por consulta; con la cola llena, BUSCAR cuesta más que el trabajo.
@@ -159,7 +218,7 @@ export async function leerTicketsSinRespuesta(limite: number, venceEnVuelta?: nu
     // el latido es `correrAtencionFaq`, que sí sabe cuánto trabajo quedó.
     if (relojAgotado(venceEnVuelta)) {
       logger.warn('faq.busqueda.corte_por_reloj', { encontrados: salida.length });
-      break;
+      return true;
     }
     const id = String(f.id);
     const { data: msj, error: errMsj } = await acotada(supabaseAdmin()
@@ -181,7 +240,7 @@ export async function leerTicketsSinRespuesta(limite: number, venceEnVuelta?: nu
       categoria: String(f.categoria),
     });
   }
-  return salida;
+  return false;
 }
 
 /** La ficha, escrita como cita para una persona. PURA. */
@@ -325,6 +384,7 @@ export async function correrAtencionFaq(
   let escalados = 0;
   let saltados = 0;
   let sinTurno = 0;
+  let modeloCaido = false;
 
   try {
     const tickets = await leerTicketsSinRespuesta(TOPE_BORRADORES_FAQ, venceEnVuelta);
@@ -385,7 +445,7 @@ export async function correrAtencionFaq(
         logger.warn('faq.corte_por_reloj', { sinTurno, piezas, escalados, saltados });
         break;
       }
-      const titulo = `FAQ — ticket ${t.id.slice(0, 8)}`;
+      const titulo = tituloFaq(t.id);
       try {
         if (await piezaExistente(agente, titulo)) { saltados += 1; continue; }
 
@@ -411,6 +471,7 @@ export async function correrAtencionFaq(
 
         let redactado: string | null = null;
         let motivoSinModelo: string | null = null;
+        let modeloFallo = false;
         try {
           // Modo PLATAFORMA (el gasto es de LIKIDA, tenant null): sin ledger
           // por-tenant. El techo lo vigila el runner contra el gasto MEDIDO
@@ -442,7 +503,22 @@ export async function correrAtencionFaq(
           motivoSinModelo = g.motivo;
         } catch (e) {
           motivoSinModelo = 'el modelo no respondió';
+          modeloFallo = true;
           logger.info('faq.modelo_fallo', { ticket: t.id, err: e instanceof Error ? e.message.slice(0, 160) : String(e) });
+        }
+
+        // ── A37-S27-05: UNA CAÍDA DEL MODELO NO SE SELLA ─────────────────────
+        // El título de la pieza es determinista y el índice único de la 0218
+        // la sella: encolar aquí un borrador «SIN REDACCIÓN» dejaba al ticket
+        // sin redactar PARA SIEMPRE, aun cuando el modelo volviera. Una falla
+        // de la llamada (no una guardia que tira el texto: eso sí es
+        // determinista) NO encola; el ticket queda para la próxima pasada. Y
+        // se corta el lote: si el proveedor está caído, los demás tickets
+        // fallarían igual y cada intento cuesta decenas de segundos.
+        if (modeloFallo) {
+          modeloCaido = true;
+          saltados += 1;
+          break;
         }
 
         const res = await encolarPiezaExito(agente, 'faq_borrador', titulo,
@@ -463,7 +539,7 @@ export async function correrAtencionFaq(
     await registrarCorrida(null, agente, {
       inicio, fin: new Date(), estado: 'ok', disparo, costoUsd,
       tareasHechas: piezas + escalados, tareasTotal: tickets.length,
-      resumen: { borradores: piezas, escalados, saltados, dia: hoy, ...(sinTurno > 0 ? { sin_turno: sinTurno } : {}) },
+      resumen: { borradores: piezas, escalados, saltados, dia: hoy, ...(sinTurno > 0 ? { sin_turno: sinTurno } : {}), ...(modeloCaido ? { modelo_caido: true } : {}) },
     });
     return {
       resultado: 'corrio',
@@ -474,7 +550,9 @@ export async function correrAtencionFaq(
       // hayan fabricado piezas: un `resultado: 'corrio', piezas: 3` mudo es
       // justo el parte limpio sobre una pasada agonizante que el hallazgo c7-1
       // describe.
-      motivo: sinTurno > 0
+      motivo: modeloCaido
+        ? 'el modelo no respondió: no se encoló ningún borrador sin redacción; los tickets pendientes se reintentan en la próxima pasada'
+        : sinTurno > 0
         ? `el reloj de la vuelta cortó el lote con ${numero(sinTurno)} ticket(s) sin turno — los borradores hechos quedan; el resto le toca en la próxima pasada`
         : (piezas + escalados === 0 ? `${numero(saltados)} tickets ya tenían borrador` : undefined),
     };

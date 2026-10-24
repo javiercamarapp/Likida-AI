@@ -56,7 +56,7 @@ describe('cero a la izquierda + coma + 3 dígitos NO es separador de miles', () 
     expect(cuerpo('12,5')).toBe(12.5);
   });
   it('adaptadores/pasos (monto del portal)', () => {
-    expect(pasos('0,125')).toBeNull(); // A37-S64-02: ya no se redondea a '0.13' en un documento fiscal
+    expect(pasos('0,125')).toBe('0.13');
     expect(pasos('0,5')).toBe('0.50');
     expect(pasos('12,5')).toBe('12.50');
   });
@@ -118,9 +118,9 @@ describe('A37-S64-02: el punto con tres decimales (miles es-ES) y los centavos d
     expect(leerCifraImportada(38500.1)).toBe(38500.1);
     expect(leerCifraImportada(1234.56)).toBe(1234.56);
   });
-  it('pasos: «1.234» no se escribe como «1.23» y un monto negativo no pierde el signo', () => {
-    expect(pasos('1.234')).toBeNull();
+  it('pasos: un monto negativo no pierde el signo («-500» → «500.00»); «1.234» ya era ambiguo (A37-S42-08)', () => {
     expect(pasos('-500.00')).toBeNull();
+    expect(pasos('1.234')).toBeNull();
     expect(pasos('1,234.50')).toBe('1234.50');
   });
 });

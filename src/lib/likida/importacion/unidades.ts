@@ -183,13 +183,13 @@ export function interpretarFilasUnidades(matriz: unknown[][], hoy = new Date()):
         descartadas.push({ fila: numero, motivo: `placa ${v.placas} repetida en el archivo (ya viene en la fila ${placaRepetida})` });
         continue;
       }
-      const ecoRepetido = economicosVistos.get(v.numeroEconomico);
+      const ecoRepetido = economicosVistos.get(v.numeroEconomico.toLowerCase());
       if (ecoRepetido !== undefined) {
         descartadas.push({ fila: numero, motivo: `número económico ${v.numeroEconomico} repetido en el archivo (ya viene en la fila ${ecoRepetido})` });
         continue;
       }
       placasVistas.set(v.placas, numero);
-      economicosVistos.set(v.numeroEconomico, numero);
+      economicosVistos.set(v.numeroEconomico.toLowerCase(), numero);
       filas.push(v);
     } catch (e) {
       if (e instanceof DatoInvalido) { descartadas.push({ fila: numero, motivo: e.message }); continue; }
@@ -279,10 +279,11 @@ export async function planificarUnidades(tenantId: string, filas: UnidadImportad
     logger.error('importar_unidades.parque_ilegible', { tenantId, err: e instanceof Error ? e.message : String(e) });
     return { ...plan, error: 'No pude leer el parque actual para comprobar placas y números económicos — no importé nada. Vuelve a intentar.' };
   }
-  const porEconomico = new Map(parque.map((u) => [u.numero_economico, u] as const));
+  // A37-S46-10: sin distinguir mayúsculas, como el mapeo GPS (gps_dispositivos.ts).
+  const porEconomico = new Map(parque.map((u) => [String(u.numero_economico).toLowerCase(), u] as const));
   const porPlaca = new Map(parque.filter((u) => u.placas).map((u) => [normalizarPlaca(String(u.placas)), u] as const));
   for (const f of filas) {
-    const yaEco = porEconomico.get(f.numeroEconomico);
+    const yaEco = porEconomico.get(f.numeroEconomico.toLowerCase());
     if (yaEco) {
       plan.duplicadas.push({ fila: f.fila, id: yaEco.id, numeroEconomico: f.numeroEconomico, motivo: 'ya estaba (mismo número económico); no se tocó lo que hay' });
       continue;

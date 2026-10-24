@@ -105,18 +105,19 @@ async function avisarEstadia(
   r: ResultadoAlertasEstadia, extra: ExtraAvisoEstadia = {},
 ): Promise<'entregado' | 'en_cola' | 'fallo_envio' | 'perdido' | 'otro'> {
   try {
+    // A37-S34-09: los destinatarios se comprueban ANTES de reclamar. Si no hay a quién avisar, no se quema el claim: cuando la flota
+    // cargue el contacto del patio, las paradas que siguen en curso sí avisan. (Cada pasada vuelve a reportar el hueco: es la señal.)
+    const destinos = await p.destinatarios(v.tenantId, v.terminalId, 1);
+    if (destinos.length === 0) {
+      r.sinDestinatario++;
+      r.fallos.push(`${v.folio ?? v.id}: no hay a quién avisar la estadía`);
+      return 'otro';
+    }
     const claim = llave(v, hl);
     const gano = await p.reclamar(claim);
     if (gano === 'perdido') { r.yaReclamadas++; return 'perdido'; }
     if (gano === 'fallo') { r.fallos.push(`reclamo estadía ${v.id}`); return 'otro'; }
 
-    const destinos = await p.destinatarios(v.tenantId, v.terminalId, 1);
-    if (destinos.length === 0) {
-      r.sinDestinatario++;
-      r.fallos.push(`${v.folio ?? v.id}: no hay a quién avisar la estadía`);
-      await p.cerrarAviso(claim, { ok: false, canal: 'ninguno', motivo: 'sin_destinatario', ult4: null });
-      return 'otro';
-    }
     const msg = armarAlertaEstadia(v, e, umbralMin, ahora, config.zonaHoraria, extra);
     let entregados = 0;
     let reintentables = 0;

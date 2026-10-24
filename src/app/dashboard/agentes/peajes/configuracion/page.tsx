@@ -165,7 +165,7 @@ export default async function PaginaConfiguracionPeajes({
     const no = await puertaConfig(tenantId);
     if (no) volverConfig(sufijo, `error:${no}`);
     const id = String(fd.get('archivo') ?? '');
-    volverConfig(sufijo, (await reintentarArchivoPeaje(tenantId, id)) ? 'El archivo volvió a la cola: el siguiente ciclo (≤ 15 min) lo procesa.' : 'error:Ese archivo no se puede reintentar (solo los fallidos que conservan su contenido).');
+    volverConfig(sufijo, (await reintentarArchivoPeaje(tenantId, id, String(fd.get('proveedor') ?? ''))) ? 'El archivo volvió a la cola: el siguiente ciclo (≤ 15 min) lo procesa.' : 'error:Ese archivo no se puede reintentar (solo los fallidos que conservan su contenido).');
   }
 
   // ── Recepción por correo y pull (0563) ──
@@ -366,7 +366,10 @@ export default async function PaginaConfiguracionPeajes({
     const pedido = String(fd.get('origen') ?? 'declarada');
     // «inferida» no se carga a mano: la produce el sistema; el formulario solo ofrece declarada o proveedor.
     const origen: OrigenTarifa = (ORIGENES_TARIFA as readonly string[]).includes(pedido) && pedido !== 'inferida' ? (pedido as OrigenTarifa) : 'declarada';
-    const r = await importarTarifasArchivo(tenantId, (a as { nombre: string }).nombre, (a as { buffer: Uint8Array }).buffer, origen);
+    const sesion = await requireSessionTenant(RUTA);
+    // A37-A2-26: con origen «proveedor» las tarifas nacen confirmadas; quien sube el archivo es quien las confirma.
+    const quien = sesion.nombre?.trim() || 'usuario de la flota';
+    const r = await importarTarifasArchivo(tenantId, (a as { nombre: string }).nombre, (a as { buffer: Uint8Array }).buffer, origen, quien);
     const resumen = resumenImportacion(r, 'tarifas');
     volverConfig(sufijo, !r.error && origen !== 'proveedor' && r.guardadas > 0 ? `${resumen} · Quedan por confirmar: confírmalas una a una abajo.` : resumen);
   }

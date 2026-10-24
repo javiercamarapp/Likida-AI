@@ -145,23 +145,18 @@ export function leerFechaImportada(v: unknown): string | null | 'ilegible' {
     return new Date(ms).toISOString().slice(0, 10);
   }
   const t = String(v).trim();
+  // A37-S46-03: una fecha que no existe (31/04, 2026-13-45) NO puede llegar a la
+  // columna `date`: tumbaría el lote completo de 100. Se valida con ida y vuelta.
+  const fechaReal = (a: number, mes: number, dia: number): string | 'ilegible' => {
+    const d = new Date(Date.UTC(a, mes - 1, dia));
+    if (d.getUTCFullYear() !== a || d.getUTCMonth() !== mes - 1 || d.getUTCDate() !== dia) return 'ilegible';
+    return `${String(a).padStart(4, '0')}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+  };
   let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
-  if (m) return esDiaReal(Number(m[1]), Number(m[2]), Number(m[3])) ? `${m[1]}-${m[2]}-${m[3]}` : 'ilegible';
+  if (m) return fechaReal(Number(m[1]), Number(m[2]), Number(m[3]));
   m = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(t);
-  if (m) {
-    const dia = Number(m[1]), mes = Number(m[2]);
-    if (!esDiaReal(Number(m[3]), mes, dia)) return 'ilegible';
-    return `${m[3]}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
-  }
+  if (m) return fechaReal(Number(m[3]), Number(m[2]), Number(m[1]));
   return 'ilegible';
-}
-
-/** A37-S64-02/S64-01: el día EXISTE en el calendario (round-trip por UTC): «31/04» y «2026-02-30» no pasan. `fecha_inicio` es `date`:
- *  Postgres rechazaría la fila con 22008 y tumbaba el lote entero de 100. */
-function esDiaReal(a: number, mes: number, dia: number): boolean {
-  if (!Number.isInteger(a) || !Number.isInteger(mes) || !Number.isInteger(dia) || mes < 1 || mes > 12 || dia < 1 || a < 1900 || a > 2200) return false;
-  const d = new Date(Date.UTC(a, mes - 1, dia));
-  return d.getUTCFullYear() === a && d.getUTCMonth() === mes - 1 && d.getUTCDate() === dia;
 }
 
 /** ¿El archivo trae columnas de cita? Solo entonces hace falta conocer la zona de la flota (T-A5-05). */
@@ -745,23 +740,11 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
       data = filasOk as typeof data;
       error = otroError;
     }
-    if (error) {
-      logger.error('importar_viajes.lote_fallo', { tenantId, desde: i, err: error.message });
-      return {
-        creados, saltados, operadoresSinAmarrar: [...operadoresSinAmarrar],
-        sinOperador, operadorOcupado,
-        unidadesSinAmarrar: [...unidadesSinAmarrar], sinUnidad,
-        clientesSinAmarrar: [...clientesSinAmarrar], sinCliente,
-        ...campoUnidadOcupada(),
-        ...campoSeguimiento(),
-        error: `Se crearon ${creados} y el lote que empieza en la fila ${i + 1} falló — revisa y vuelve a subir el archivo: los ya creados se saltan solos.`,
-      };
-    }
+    // A37-S46-04: lo que YA entró (en bloque o fila por fila) se cuenta y se le activa
+    // el seguimiento ANTES de decidir si el lote falló: si otra fila rebota por otra
+    // causa, las anteriores existen en la base y el acuse no puede ignorarlas.
     const insertados = new Set((data ?? []).map((v) => String(v.folio)));
     creados += insertados.size;
-    for (const fila of lote) {
-      if (!insertados.has(fila.folio) && !unidadOcupada.includes(fila.folio) && !rechazadasPorBase.some((r) => r.folio === fila.folio)) saltados.push(fila.folio);
-    }
     const idsNuevos = (data ?? []).map((v) => (v as { id?: unknown }).id).filter((x): x is string => typeof x === 'string' && x !== '');
     if (idsNuevos.length > 0 && !seg.noDisponible) {
       seg.intentado = true;
@@ -772,6 +755,21 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
       } else {
         seg.noDisponible = true;
       }
+    }
+    if (error) {
+      logger.error('importar_viajes.lote_fallo', { tenantId, desde: i, err: error.message });
+      return {
+        creados, saltados, operadoresSinAmarrar: [...operadoresSinAmarrar],
+        sinOperador, operadorOcupado,
+        unidadesSinAmarrar: [...unidadesSinAmarrar], sinUnidad,
+        clientesSinAmarrar: [...clientesSinAmarrar], sinCliente,
+        ...campoUnidadOcupada(),
+        ...campoSeguimiento(),
+        error: `Se crearon ${creados} y el lote de viajes que empieza en el viaje ${i + 1} (de los que quedaron listos para crear, no la fila del archivo) falló — revisa y vuelve a subir el archivo: los ya creados se saltan solos.`,
+      };
+    }
+    for (const fila of lote) {
+      if (!insertados.has(fila.folio) && !unidadOcupada.includes(fila.folio) && !rechazadasPorBase.some((r) => r.folio === fila.folio)) saltados.push(fila.folio);
     }
   }
 

@@ -34,6 +34,8 @@ function montar(sobre: {
   entregas?: EntregaCorreo[] | null;
   contacto?: { correo: string | null; correoRebotadoEn: string | null; coordinadorId: string | null } | null;
   liquidacion?: boolean;
+  /** A37-A1-liquidaciones-08: encabezado del desglose (`null` = no se pudo leer; `{retenidaMotivo}` = lo que dice la base). */
+  desglose?: { existe: boolean; retenidaMotivo: string | null } | null;
 } = {}) {
   const e: Estado = { entregas: sobre.entregas === undefined ? [entrega()] : sobre.entregas, insertadas: [], correosGuardados: [], eventos: [], orden: [] };
   const contacto = sobre.contacto === undefined ? { correo: 'ana.prueba@ejemplo.test', correoRebotadoEn: null, coordinadorId: 'c-1' } : sobre.contacto;
@@ -47,6 +49,8 @@ function montar(sobre: {
     guardarCorreoOperador: async (_t, _o, correo) => { e.orden.push('guardar'); e.correosGuardados.push(correo); },
     insertarEntregas: async (_t, filas) => { e.orden.push('insertar'); e.insertadas.push(...filas); return filas.length; },
     registrarEvento: async (_t, _l, tipo, detalle) => { e.eventos.push({ tipo, detalle }); },
+    leerDesglose: async () => (sobre.desglose === undefined ? { existe: true, retenidaMotivo: null } : sobre.desglose),
+    rutaXlsx: (t, clave, huella) => `${t}/${clave}/${huella}.xlsx`,
   };
   return { e, deps };
 }
@@ -193,5 +197,47 @@ describe('reenviarDesglose', () => {
     const r = await reenviarDesglose(TENANT, LIQ, op(), m.deps);
     expect(r).toMatchObject({ estado: 'reenviado', entregas: 0 });
     expect(r.estado === 'reenviado' && r.avisos.length).toBe(1);
+  });
+});
+
+
+describe('A37-A1-liquidaciones-08: reenviar cuando la recepción no creó ninguna entrega', () => {
+  const sinEntregas = (extra: Parameters<typeof montar>[0] = {}) => montar({ entregas: [], ...extra });
+  const conHuella = (deps: DependenciasReenvio): DependenciasReenvio => ({
+    ...deps,
+    leerLiquidacion: async () => ({ id: LIQ, tenantId: TENANT, operadorId: OPERADOR, claveExterna: 'BIT-T01-1228', huella: 'h'.repeat(64) } as unknown as LiquidacionExterna),
+  });
+
+  it('primer día sin RH ni correos: con RH ya configurado, usa el Excel ya guardado (ruta por clave+huella) y crea la generación 1', async () => {
+    const { e, deps } = sinEntregas();
+    const r = await reenviarDesglose(TENANT, LIQ, op({ a: 'todos', motivo: 'manual' }), conHuella(deps));
+    expect(r).toMatchObject({ estado: 'reenviado', generacion: 1 });
+    expect(e.insertadas.length).toBeGreaterThan(0);
+    for (const f of e.insertadas) {
+      expect(f.xlsxRuta).toBe(`${TENANT}/BIT-T01-1228/${'h'.repeat(64)}.xlsx`);
+      expect(f.xlsxSha256 ?? null).toBeNull();
+      expect(f.generacion).toBe(1);
+    }
+  });
+
+  it('un desglose RETENIDO no se reenvía por aquí (se libera con su decisión humana): no escribe nada', async () => {
+    const { e, deps } = sinEntregas({ desglose: { existe: true, retenidaMotivo: 'El neto es negativo.' } });
+    const r = await reenviarDesglose(TENANT, LIQ, op({ a: 'todos' }), conHuella(deps));
+    expect(r.estado).toBe('rechazado');
+    expect(e.insertadas).toHaveLength(0);
+    expect(e.eventos).toHaveLength(0);
+  });
+
+  it('si no se puede leer el encabezado (¿retenido?) NO se adivina: rechaza y no escribe', async () => {
+    const { e, deps } = sinEntregas({ desglose: null });
+    const r = await reenviarDesglose(TENANT, LIQ, op({ a: 'todos' }), conHuella(deps));
+    expect(r.estado).toBe('rechazado');
+    expect(e.insertadas).toHaveLength(0);
+  });
+
+  it('sin encabezado de desglose (no hay Excel que reenviar) sigue siendo sin_archivo', async () => {
+    const { deps } = sinEntregas();
+    const r = await reenviarDesglose(TENANT, LIQ, op({ a: 'todos' }), { ...conHuella(deps), leerDesglose: async () => ({ existe: false, retenidaMotivo: null }) });
+    expect(r).toMatchObject({ estado: 'rechazado', motivo: 'sin_archivo' });
   });
 });

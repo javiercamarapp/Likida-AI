@@ -36,7 +36,7 @@ function escenario(opts: { perilla: boolean; guardar?: ResultadoGuardarGastos; g
   };
   m.deps.asignacion = {
     aceptar: async () => 'aceptado', datos: async () => ({ caja: 'CJ-5521', rutaCarga: null, rutaPatio: null }), convenio: async () => undefined,
-    reclamar: async () => 'ganado', cerrarAviso: async () => undefined, destinatarios: async () => [], enviar,
+    reclamar: async () => 'ganado', cerrarAviso: async () => undefined, destinatarios: async () => [], enviar, avisosDe: async () => [],
   };
   const gastos: PuertosGastos = {
     enviar,

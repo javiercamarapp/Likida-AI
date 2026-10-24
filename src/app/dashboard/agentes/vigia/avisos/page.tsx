@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { ahoraMs } from '@/lib/saludo';
 import { logger } from '@/lib/logger';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -333,6 +334,18 @@ async function ejecutarConfig(a: { tenantId: string; userId: string; rol: string
   const cambios = cambiosDeConfig(previo.config, previo.ventanaIlegible, nuevo);
   if (cambios.config.length === 0 && cambios.operador.length === 0) return bien('No hay cambios que guardar: la configuración ya estaba así.');
 
+  // ── A37-S15-05: ENCENDER, MODO Y CANAL SON DE LA DUEÑA ─────────────────────
+  // La configuración del Vigía (../page.tsx, `actor(sp, 'administra')`) exige `flota_admin` y le cierra el autoenvío al
+  // perfil `cinco_agentes`; aquí el encargado podía guardar modo autónomo + WhatsApp directo + encendido sin ese candado.
+  // Se relee el rol de la SESIÓN (nunca del formulario) y se compara contra lo ya guardado: el encargado sigue ajustando
+  // horarios, secciones y reenvíos, pero no estos tres. Autónomo, además, se cierra bajo el perfil restringido.
+  if (!esDuena && (nuevo.habilitado !== previo.config.habilitado || nuevo.modo !== previo.config.modo || nuevo.canalDefault !== previo.config.canalDefault)) {
+    return falloCfg('Solo la dueña de la flota enciende o apaga el aviso y cambia el modo o el canal de envío.');
+  }
+  if (nuevo.modo === 'autonomo' && previo.config.modo !== 'autonomo' && (await perfilDeTenant(a.tenantId)) === 'cinco_agentes') {
+    return falloCfg('El modo autónomo no está disponible en tu plan.');
+  }
+
   const hechos: CambioConfig[] = [];
   try {
     if (cambios.operador.length > 0) {
@@ -401,6 +414,7 @@ export default async function PaginaAvisosVigia({ searchParams }: { searchParams
         opciones={OPCIONES_CONFIG}
         puedeEditar={puedeDecidir}
         puedeEditarPrivacidad={rol === DUENA}
+        puedeEditarEnvio={rol === DUENA}
         ventanaIlegible={leida?.ventanaIlegible ?? false}
         errorLectura={errorCfg}
         sinMigrar={sinMigrarCfg}

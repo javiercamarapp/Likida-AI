@@ -30,6 +30,10 @@ export const REGIMENES = [
   { clave: '626', nombre: 'RESICO' },
 ] as const;
 
+/** Regímenes que c_RegimenFiscal marca solo para personas morales / solo físicas. */
+const REGIMENES_SOLO_MORAL: readonly string[] = ['601', '603'];
+const REGIMENES_SOLO_FISICA: readonly string[] = ['612', '621'];
+
 /** Catálogo `c_UsoCFDI`. G03 es como una flota deduce una suscripción. */
 export const USOS_CFDI = [
   { clave: 'G03', nombre: 'Gastos en general' },
@@ -180,6 +184,20 @@ export function validarDatosFiscales(d: DatosFiscalesCapturados): FilaFiscalTena
 
   if (!REGIMENES.some((r) => r.clave === d.regimenFiscal)) {
     throw new DatoInvalido('Elige un régimen fiscal de la lista.');
+  }
+  // A37-S61-10: el tipo de persona del RFC (12 = moral, 13 = física) debe caber
+  // en el régimen. Solo se rechaza lo que c_RegimenFiscal marca sin ambigüedad;
+  // 624 y 626 admiten ambos tipos y no se restringen (ante duda, no adivinar).
+  const esMoral = rfc.length === 12;
+  if (esMoral && REGIMENES_SOLO_FISICA.includes(d.regimenFiscal)) {
+    throw new DatoInvalido(
+      `El RFC "${rfc}" es de persona moral y el régimen ${d.regimenFiscal} es solo de personas físicas. El SAT rechazaría la factura al timbrar. Revisa el régimen en tu Constancia de Situación Fiscal.`,
+    );
+  }
+  if (!esMoral && REGIMENES_SOLO_MORAL.includes(d.regimenFiscal)) {
+    throw new DatoInvalido(
+      `El RFC "${rfc}" es de persona física y el régimen ${d.regimenFiscal} es solo de personas morales. El SAT rechazaría la factura al timbrar. Revisa el régimen en tu Constancia de Situación Fiscal.`,
+    );
   }
   if (!USOS_CFDI.some((u) => u.clave === d.usoCfdi)) {
     throw new DatoInvalido('Elige un uso de CFDI de la lista.');

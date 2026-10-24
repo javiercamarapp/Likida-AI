@@ -45,6 +45,8 @@ export interface DetalleDesglose {
   periodoHasta: string;
   moneda: 'MXN' | 'USD';
   neto: number;
+  /** A37-A1-liquidaciones-13: `calculado` = la suma de los renglones (chequeo tautológico), no un neto que trajo el sistema. */
+  totalOrigen: 'tms' | 'calculado';
   percepciones: RenglonDetalle[];
   deducciones: RenglonDetalle[];
   destinatarios: DestinatarioDetalle[];
@@ -136,7 +138,7 @@ export function armarDetalle(e: EntradaDetalle): DetalleDesglose {
 
   return {
     liquidacionId: liq.id, bitacora: desglose.bitacora, terminal: desglose.terminal, operador: liq.operadorNombre,
-    periodoDesde: liq.periodoDesde, periodoHasta: liq.periodoHasta, moneda: liq.moneda, neto: liq.total,
+    periodoDesde: liq.periodoDesde, periodoHasta: liq.periodoHasta, moneda: liq.moneda, neto: liq.total, totalOrigen: desglose.totalOrigen,
     percepciones: liq.conceptos.filter((c) => c.tipo === 'percepcion').map((c) => ({ descripcion: c.descripcion, monto: c.monto })),
     deducciones: liq.conceptos.filter((c) => c.tipo === 'deduccion').map((c) => ({ descripcion: c.descripcion, monto: c.monto })),
     destinatarios, generaciones, enCurso, retenido,

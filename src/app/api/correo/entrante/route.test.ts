@@ -8,6 +8,8 @@ let flotaDevuelta: { id: string; rfc: string | null } | null = { id: 't-1', rfc:
 let errorFlota: { message: string } | null = null;
 let errorDedup: { code?: string; message: string } | null = null;
 let errorBorrado: { message: string } | null = null;
+/** El perfil de la flota (mig. 0770): `null` = sin fila = comportamiento de siempre. */
+let perfilDevuelto: string | null = null;
 const tablasTocadas: string[] = [];
 // `correo_procesado` CON ESTADO: el RPC imita el lease durable. La entrega
 // concurrente recibe `busy` (503), no el falso 200 que perdió el correo A/B.
@@ -41,6 +43,9 @@ vi.mock('@/lib/supabase/admin', () => ({
     },
     from(tabla: string) {
       tablasTocadas.push(tabla);
+      if (tabla === 'tenant_perfil') {
+        return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: perfilDevuelto ? { perfil: perfilDevuelto } : null, error: null }) }) }) };
+      }
       if (tabla === 'interruptor') {
         return { select: () => ({ eq: () => ({ maybeSingle: async () => interruptorResp }) }) };
       }
@@ -157,6 +162,8 @@ beforeEach(async () => {
   limitar = () => true;
   errorFlota = null; errorDedup = null; errorBorrado = null;
   interruptorResp = { data: null, error: null }; // sin fila = ENCENDIDO
+  perfilDevuelto = null;
+  (await import('@/lib/auth/perfil_tenant')).reiniciarCachePerfil();
   tablasTocadas.length = 0;
   caidasDeIngesta = 0;
   recibidosPorIngesta.length = 0;
@@ -519,6 +526,24 @@ describe('el kill switch de agente:proveedores (0110) — Fase 1 del blueprint',
     const r = await POST(pedir(evento({ attachments: [] })));
     expect(r.status).toBe(200);
     expect(await r.json()).toMatchObject({ ignorado: 'sin_adjuntos' });
+  });
+});
+
+describe('A37-TRANSVERSAL-05 — el buzón de facturas de proveedor bajo el perfil cinco_agentes (módulo en stand-by)', () => {
+  it('con perfil: 200 ignorado, SIN consumir el correo ni tocar la ingesta', async () => {
+    perfilDevuelto = 'cinco_agentes';
+    const r = await POST(pedir(evento()));
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ ignorado: 'modulo_no_incluido' });
+    expect(correosRegistrados.size).toBe(0);
+    expect(rpcs).not.toContain('reclamar_correo');
+    expect(recibidosPorIngesta).toHaveLength(0);
+  });
+
+  it('sin perfil: procesa como siempre', async () => {
+    const r = await POST(pedir(evento()));
+    expect(r.status).toBe(200);
+    expect(recibidosPorIngesta).toHaveLength(1);
   });
 });
 

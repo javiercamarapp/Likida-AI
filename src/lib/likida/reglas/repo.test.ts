@@ -502,4 +502,20 @@ describe('frecuencia e historial (0520)', () => {
     pon('regla_aviso:delete', { error: { message: 'x' } });
     expect(await purgarAvisosViejos(new Date())).toBe(0);
   });
+
+  it('A37-S56-06: pasado el plazo, retira el TEXTO de la evidencia de regla_disparo y conserva la fila (el sello)', async () => {
+    await purgarAvisosViejos(new Date('2026-10-02T00:00:00Z'));
+    const ups = llamadas('regla_disparo', 'update');
+    expect(ups).toHaveLength(1);
+    expect(Object.keys(ups[0][0] as object)).toEqual(['evidencia']);
+    expect(llamadas('regla_disparo', 'delete')).toHaveLength(0);
+    expect(llamadas('regla_disparo', 'lt')[0][0]).toBe('disparado_en');
+  });
+
+  it('A37-S56-06: si retirar la evidencia falla, la purga de avisos no se cae', async () => {
+    pon('regla_aviso:delete', { data: [{ id: 'a' }] });
+    pon('regla_disparo:update', { error: { message: 'caído' } });
+    expect(await purgarAvisosViejos(new Date('2026-10-02T00:00:00Z'))).toBe(1);
+    expect(logger.warn).toHaveBeenCalledWith('reglas.retencion_evidencia_fallo', expect.anything());
+  });
 });
