@@ -39,7 +39,12 @@ const MAX_MB = 4;
 /** Un CSV a partir de filas, con BOM (Excel en español lo abre con acentos) y
  *  comillas RFC 4180. */
 export function csvDeProblemas(filas: ReadonlyArray<{ fila: number; motivo: string }>): string {
-  const celda = (v: string) => (/[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  // A37-S18-10: el motivo puede traer celdas del archivo subido. Una que empiece
+  // con = + - @ (o tab/CR) Excel la evalúa como fórmula: se le antepone apóstrofo.
+  const celda = (crudo: string) => {
+    const v = /^[=+\-@\t\r]/.test(crudo) ? `'${crudo}` : crudo;
+    return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  };
   return '﻿' + ['fila,motivo', ...filas.map((f) => `${f.fila},${celda(f.motivo)}`)].join('\r\n') + '\r\n';
 }
 
