@@ -378,6 +378,26 @@ export async function correrAlertasTope(p: PuertosAlerta, opts: { ahora?: Date; 
 
       // ── ENCARGADO ──
       const cfg = f.config;
+      // A37-S47-06: el candado «ya se envió de verdad» (0845) se fija EN CUANTO el primer destinatario confirma, no al final de
+      // todos los envíos. Con 3 encargados y el operador, una invocación que muere (o un `marcarEnviada` que falla por un
+      // parpadeo) a mitad del reparto dejaba el claim sin `enviado_en`: al vencer, la siguiente corrida lo reclamaba y mandaba
+      // OTRA VEZ WhatsApp reales a los mismos. Si la marca falla se reintenta tras cada envío confirmado y al final; si nunca
+      // entra, se dice (fallos) en vez de callarlo. Los estados parciales que quedan en el candado se reemplazan al cerrar.
+      let marcada = false;
+      const estadoOperadorParcial: EstadoDestino = cfg.canalOperador === 'whatsapp' ? 'pendiente' : 'no_aplica';
+      const fijarCandado = async (parcial: boolean): Promise<void> => {
+        if (marcada) return;
+        marcada = await p.marcarEnviada({
+          tenantId: f.tenantId, reclamo,
+          encargado: parcial
+            ? { canal: cfg.canalEncargado === 'ninguno' ? null : cfg.canalEncargado, estado: 'enviado', motivo: null }
+            : { canal: cfg.canalEncargado === 'ninguno' ? null : cfg.canalEncargado, estado: encEstado, motivo: encMotivo },
+          operador: parcial
+            ? { canal: cfg.canalOperador === 'whatsapp' ? 'whatsapp' : null, estado: estadoOperadorParcial, motivo: null }
+            : { canal: cfg.canalOperador === 'whatsapp' ? 'whatsapp' : null, estado: opEstado, motivo: opMotivo },
+          ahora,
+        });
+      };
       let encEstado: EstadoDestino = 'no_aplica';
       let encMotivo: string | null = null;
       let encReintentable = false;
@@ -398,7 +418,7 @@ export async function correrAlertasTope(p: PuertosAlerta, opts: { ahora?: Date; 
             for (const d of dest ?? []) {
               intentos++;
               const e = await p.enviarWa(d.telefono, msg, f.tenantId, ahora, 'jornada.alerta_encargado');
-              if (e.ok) enviados++; else {
+              if (e.ok) { enviados++; await fijarCandado(true); } else {
                 ultimo = e.motivo ?? 'rechazado';
                 // `encolado === true`: Meta ya dejó ESTE mensaje en `wa_outbox` (RES-1); cuenta como
                 // reintentable (no se consume el nivel), pero NO se libera el claim por él — ver abajo.
@@ -411,7 +431,7 @@ export async function correrAlertasTope(p: PuertosAlerta, opts: { ahora?: Date; 
         if ((cfg.canalEncargado === 'correo' || cfg.canalEncargado === 'ambos') && cfg.correoEncargado) {
           intentos++;
           const e = await p.enviarCorreo(cfg.correoEncargado, armarCorreoEncargado(datos));
-          if (e.ok) enviados++; else { ultimo = e.motivo ?? 'rechazado'; if (e.reintentable || e.encolado === true) reint++; if (e.encolado === true) encol++; }
+          if (e.ok) { enviados++; await fijarCandado(true); } else { ultimo = e.motivo ?? 'rechazado'; if (e.reintentable || e.encolado === true) reint++; if (e.encolado === true) encol++; }
         }
         if (enviados > 0) encEstado = 'enviado';
         else if (intentos === 0) encEstado = 'sin_destinatario';
@@ -427,7 +447,7 @@ export async function correrAlertasTope(p: PuertosAlerta, opts: { ahora?: Date; 
         if (!op?.telefono) { opEstado = 'sin_destinatario'; }
         else {
           const e = await p.enviarWa(op.telefono, armarAvisoOperador(datos), f.tenantId, ahora, 'jornada.alerta_operador');
-          if (e.ok) opEstado = 'enviado'; else {
+          if (e.ok) { opEstado = 'enviado'; await fijarCandado(true); } else {
             opEstado = 'fallido'; opMotivo = (e.motivo ?? 'rechazado').slice(0, 200);
             opReintentable = e.reintentable || e.encolado === true;
             opEncolado = e.encolado === true;
@@ -471,10 +491,10 @@ export async function correrAlertasTope(p: PuertosAlerta, opts: { ahora?: Date; 
       const encCerrado: DestinoCerrado<CanalEncargado> = { canal: cfg.canalEncargado === 'ninguno' ? null : cfg.canalEncargado, estado: encEstado, motivo: encMotivo };
       const opCerrado: DestinoCerrado<CanalOperador> = { canal: cfg.canalOperador === 'whatsapp' ? 'whatsapp' : null, estado: opEstado, motivo: opMotivo };
       if (algunEnviado) {
-        // EL CANDADO (0845): al menos un destinatario YA recibió el aviso real (Meta lo confirmó, o
-        // salió el correo). Se marca AQUÍ MISMO, antes de cerrar — si el proceso muere entre esta
-        // línea y `cerrar`, la siguiente corrida verá `reclamo.yaEnviado` y no reenviará nada.
-        await p.marcarEnviada({ tenantId: f.tenantId, reclamo, encargado: encCerrado, operador: opCerrado, ahora });
+        // EL CANDADO (0845): normalmente ya se fijó tras el primer envío confirmado (arriba). Si aún no (la marca falló), se
+        // reintenta AQUÍ con los estados finales, antes de cerrar. Si tampoco entra, no se calla: queda en `fallos`.
+        await fijarCandado(false);
+        if (!marcada) r.fallos.push(`jornada ${f.jornadaId} (${nivel}): el aviso salió pero no se pudo fijar el candado «ya enviado»; si el cierre falla, podría reenviarse`);
       }
       const estado = algunEnviado ? (algunFallido || aplicables.includes('sin_destinatario') ? 'parcial' : 'enviada')
         : algunFallido ? 'fallida' : 'sin_destinatario';

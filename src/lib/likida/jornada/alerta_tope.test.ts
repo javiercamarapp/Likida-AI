@@ -95,8 +95,10 @@ describe('correrAlertasTope', () => {
       cerrar: vi.fn(async () => { orden.push('cerrar'); return true; }),
     });
     await correrAlertasTope(p, { ahora: AHORA });
+    // A37-S47-06: se marca tras el PRIMER envío confirmado (el del encargado); el operador aún está pendiente y el cierre fija el final.
+    expect(p.marcarEnviada).toHaveBeenCalledTimes(1);
     expect(p.marcarEnviada).toHaveBeenCalledWith(expect.objectContaining({
-      encargado: expect.objectContaining({ estado: 'enviado' }), operador: expect.objectContaining({ estado: 'enviado' }),
+      encargado: expect.objectContaining({ estado: 'enviado' }), operador: expect.objectContaining({ estado: 'pendiente' }),
     }));
     expect(orden).toEqual(['marcar', 'cerrar']);
   });
@@ -229,5 +231,40 @@ describe('correrAlertasTope', () => {
       expect(r.alertas.aviso).toBe(3);
       expect(r.revisadas).toBe(5 + 3);
     });
+  });
+});
+
+
+describe('A37-S47-06: el candado «ya enviado» se fija tras el primer envío, no al final del reparto', () => {
+  it('la marca ocurre ANTES del segundo destinatario: si la invocación muere a medias, no se reenvía a los primeros', async () => {
+    const orden: string[] = [];
+    let envios = 0;
+    const p = puertos([a('inicio_jornada', hace(10))], {
+      encargados: async () => [
+        { nombre: 'Jefe 1', telefono: '5215500000002' }, { nombre: 'Jefe 2', telefono: '5215500000003' }, { nombre: 'Jefe 3', telefono: '5215500000004' },
+      ],
+      marcarEnviada: vi.fn(async () => { orden.push('marcar'); return true; }),
+      enviarWa: vi.fn(async () => { envios++; orden.push(`wa${envios}`); if (envios === 2) throw new Error('la invocación murió'); return { ok: true, reintentable: false }; }),
+    });
+    const r = await correrAlertasTope(p, { ahora: AHORA });
+    expect(orden.slice(0, 3)).toEqual(['wa1', 'marcar', 'wa2']);
+    expect(p.marcarEnviada).toHaveBeenCalledTimes(1);
+    // El error del segundo envío no se traga, y el candado ya quedó fijado antes de morir.
+    expect(r.fallos.join(' ')).toContain('la invocación murió');
+  });
+
+  it('si la marca falla (false), se reintenta con el siguiente envío confirmado', async () => {
+    const marcar = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+    const p = puertos([a('inicio_jornada', hace(10))], { marcarEnviada: marcar });
+    const r = await correrAlertasTope(p, { ahora: AHORA });
+    expect(marcar).toHaveBeenCalledTimes(2); // tras el encargado (falla) y tras el operador (entra)
+    expect(r.fallos).toEqual([]);
+  });
+
+  it('si la marca nunca entra, no se calla: queda en fallos y aun así se cierra', async () => {
+    const p = puertos([a('inicio_jornada', hace(10))], { marcarEnviada: vi.fn(async () => false) });
+    const r = await correrAlertasTope(p, { ahora: AHORA });
+    expect(r.fallos.join(' ')).toContain('candado');
+    expect(p.cerrar).toHaveBeenCalled();
   });
 });
