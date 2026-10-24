@@ -21,6 +21,7 @@ vi.mock('./index', () => ({
 
 let configs: Array<Record<string, unknown>> = [];
 let tenants: Array<Record<string, unknown>> = [];
+const ordenes: Array<[string, ...unknown[]]> = [];
 let errTenant: { message: string } | null = null;
 
 vi.mock('@/lib/supabase/admin', () => ({
@@ -30,7 +31,7 @@ vi.mock('@/lib/supabase/admin', () => ({
       let verbo = 'select';
       const cadena = () => b;
       Object.assign(b, {
-        select: cadena, order: cadena, limit: cadena, eq: cadena, in: cadena, is: cadena,
+        select: cadena, order: (...a: unknown[]) => { ordenes.push([tabla, ...a]); return b; }, limit: cadena, eq: cadena, in: cadena, is: cadena,
         insert: () => { verbo = 'insert'; return b; },
         update: () => { verbo = 'update'; return b; },
         single: () => Promise.resolve({ data: { id: 'sol-1' }, error: null }),
@@ -57,6 +58,16 @@ beforeEach(() => {
     { tenant_id: B, rfc: 'AAA010101AB1', ultima_descarga_hasta: '2026-10-22' }, // declara el RFC de A
   ];
   tenants = [{ id: A, rfc: 'AAA010101AB1' }, { id: B, rfc: 'BBB020202BB2' }];
+});
+
+describe('A37-S18-09 · el barrido de 200 flotas tiene orden determinista', () => {
+  it('ordena por última descarga (las nunca descargadas primero) y desempata por tenant_id', async () => {
+    ordenes.length = 0;
+    await correrDescargaSat(new Date('2026-10-23T12:00:00Z'));
+    const deConfig = ordenes.filter((o) => o[0] === 'sat_descarga_config');
+    expect(deConfig[0]).toEqual(['sat_descarga_config', 'ultima_descarga_hasta', { ascending: true, nullsFirst: true }]);
+    expect(deConfig[1][1]).toBe('tenant_id');
+  });
 });
 
 describe('correrDescargaSat · el RFC del buzón es el del tenant', () => {
