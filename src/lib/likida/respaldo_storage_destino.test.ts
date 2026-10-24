@@ -10,7 +10,7 @@ import { join } from 'node:path';
 const RAIZ = process.cwd();
 const correr = (destino: string) => spawnSync('bash', ['scripts/respaldo-storage.sh', destino], {
   cwd: RAIZ, encoding: 'utf8',
-  env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:9', SUPABASE_SERVICE_ROLE_KEY: 'x' },
+  env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:9', SUPABASE_SERVICE_ROLE_KEY: 'x' } as unknown as NodeJS.ProcessEnv,
 });
 
 describe('A37-S04-01 · respaldo-storage.sh no escribe dentro del repo', () => {
@@ -44,7 +44,7 @@ describe('A37-S04-02 · respaldo.sh no deja el dump en carpetas de iCloud ni con
     expect(sh).toMatch(/supabase@\$\{SUPABASE_CLI_VERSION\}/);
   });
   it('rechaza (exit 2) un destino en el Escritorio sin ejecutar el CLI', () => {
-    const r = spawnSync('bash', ['scripts/respaldo.sh', join(process.env.HOME ?? '/x', 'Desktop/likida-prueba')], { cwd: RAIZ, encoding: 'utf8', env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' } });
+    const r = spawnSync('bash', ['scripts/respaldo.sh', join(process.env.HOME ?? '/x', 'Desktop/likida-prueba')], { cwd: RAIZ, encoding: 'utf8', env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' } as unknown as NodeJS.ProcessEnv });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain('iCloud');
   });

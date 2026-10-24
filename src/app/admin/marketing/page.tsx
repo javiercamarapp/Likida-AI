@@ -12,7 +12,7 @@ import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { fechaHoraMx } from '@/lib/formato';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { EstadoVacio } from '../ui/kit';
-import { FormaConAviso } from '../ui/forma';
+import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import { SubirHook, type ResultadoFirmaHook, type ResultadoGuardar } from './subir-hook';
 import { SubirReferencia, type ResultadoReferencia } from './subir-referencia';
 import { TarjetaPieza, type ResultadoPublicar } from './tarjeta-pieza';
@@ -103,7 +103,7 @@ export default async function EstudioMarketingPage() {
     }
   }
 
-  async function accionBorrarReferencia(_previo: ResultadoPublicar, fd: FormData): Promise<ResultadoPublicar> {
+  async function accionBorrarReferencia(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
     const s = await requireSuperadmin();
     try {
