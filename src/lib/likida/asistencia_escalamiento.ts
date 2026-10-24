@@ -9,6 +9,7 @@ import { leerConfigCobranza } from './agentes/cobranza';
 import { dentroDeVentana } from './agentes/cobranza_pura';
 import { sendButtons } from '@/lib/meta/client';
 import { alertarOperador } from '@/lib/observability/alerta';
+import { fechaMx, hoyMx } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL ESCALAMIENTO DE ASISTENCIA (Fase 5, paso 4 del plano).
@@ -177,7 +178,11 @@ function textoEscalada(args: {
   nivel: number;
   tipo: string;
   descripcion: string;
-  poliza: { aseguradora: string; numeroPoliza: string; telefonoSiniestros: string } | null;
+  poliza: { aseguradora: string; numeroPoliza: string; telefonoSiniestros: string; vigenciaHasta?: string | null } | null;
+  /** A37-S18-03: la LECTURA de la póliza falló. No es lo mismo que «no hay póliza»: se dice lo que se sabe. */
+  polizaIlegible?: boolean;
+  /** Hoy en México (AAAA-MM-DD), para rotular una póliza vencida. */
+  hoy?: string;
   contactoLesionados: { nombre: string; telefono: string; parentesco: string | null } | null;
 }): string {
   const desc = args.descripcion.replace(/\s+/g, ' ').trim().slice(0, 180);
@@ -192,9 +197,17 @@ function textoEscalada(args: {
     return `🚨 EMERGENCIA SIN ATENDER — nadie la ha tomado:\n«${desc}»${robo}${lesionados}\n\nAprieta el botón si ya la estás atendiendo.`;
   }
   if (args.nivel === 3) {
+    // A37-S18-03: tres verdades distintas, nunca mezcladas. (1) Hay póliza: se pone el 800 y, si la vigencia capturada ya
+    // pasó, se rotula VENCIDA (la flota pudo renovarla y no actualizar el panel: el 800 sigue siendo el dato útil, pero no
+    // se presenta como vigente algo que el sistema sabe expirado). (2) La lectura falló: no se afirma que no existe.
+    // (3) De verdad no hay póliza capturada.
+    const vigencia = args.poliza?.vigenciaHasta ?? null;
+    const vencida = Boolean(vigencia && args.hoy && vigencia < args.hoy);
     const seguro = args.poliza
-      ? `Marca a tu aseguradora YA: ${args.poliza.aseguradora}, siniestros ${args.poliza.telefonoSiniestros}, póliza ${args.poliza.numeroPoliza}. Likida no puede marcar por ti — una llamada abre el siniestro.`
-      : 'Tu flota NO tiene póliza capturada en Likida — el 800 de siniestros de tu aseguradora es el dato que ahora mismo falta. Captúralo en el panel (Emergencias) para la próxima.';
+      ? `${vencida ? `⚠️ La póliza capturada figura VENCIDA desde el ${fechaMx(vigencia)} (si ya la renovaste, actualízala en el panel). ` : ''}Marca a tu aseguradora YA: ${args.poliza.aseguradora}, siniestros ${args.poliza.telefonoSiniestros}, póliza ${args.poliza.numeroPoliza}${vigencia && !vencida ? ` (vigente hasta ${fechaMx(vigencia)})` : ''}. Likida no puede marcar por ti — una llamada abre el siniestro.`
+      : args.polizaIlegible
+        ? 'No pude consultar la póliza de tu flota en este momento (fue un fallo de lectura, no quiere decir que no exista). Búscala en el panel (Emergencias) o llama YA al 800 de siniestros de tu aseguradora.'
+        : 'Tu flota NO tiene póliza capturada en Likida — el 800 de siniestros de tu aseguradora es el dato que ahora mismo falta. Captúralo en el panel (Emergencias) para la próxima.';
     return `🚨 EMERGENCIA SIN ATENDER (tercer aviso):\n«${desc}»${robo}${lesionados}\n\n${seguro}`;
   }
   return `🚨 NADIE HA ATENDIDO ESTA EMERGENCIA en ~20 minutos:\n«${desc}»${robo}${lesionados}\n\nSi hay riesgo de vida, marca 911 AHORA. Este es el último aviso automático — el equipo de Likida también fue alertado.`;
@@ -319,8 +332,18 @@ async function escalarUna(inc: IncidenciaEscalable, ahora: Date): Promise<'sin_c
 
   // Los datos del texto — best-effort declarado: sin póliza el nivel 3 lo
   // DICE; sin contacto, la línea no aparece.
-  let poliza = null, contacto = null;
-  try { poliza = await polizaVigenteDe(inc.tenantId); } catch { /* el texto lo dice */ }
+  // A37-S18-03: la póliza se lee con UN reintento, y una lectura que sigue fallando se marca `polizaIlegible` para que el
+  // texto NO diga «no tiene póliza» (el claim ya se consumió: no hay segunda oportunidad de decirlo bien).
+  let poliza = null, contacto = null, polizaIlegible = false;
+  try {
+    poliza = await polizaVigenteDe(inc.tenantId);
+  } catch (e1) {
+    logger.warn('asistencia.poliza_reintento', { incidencia: inc.id, err: e1 instanceof Error ? e1.message : String(e1) });
+    try { poliza = await polizaVigenteDe(inc.tenantId); } catch (e2) {
+      polizaIlegible = true;
+      logger.error('asistencia.poliza_ilegible', { incidencia: inc.id, err: e2 instanceof Error ? e2.message : String(e2) });
+    }
+  }
   if (inc.hayLesionados === true) {
     try {
       let operadorId = inc.operadorId;
@@ -343,6 +366,8 @@ async function escalarUna(inc: IncidenciaEscalable, ahora: Date): Promise<'sin_c
     tipo: inc.tipo,
     descripcion: inc.descripcion ?? '(sin descripción)',
     poliza,
+    polizaIlegible,
+    hoy: hoyMx(ahora),
     contactoLesionados: contacto,
   });
 
