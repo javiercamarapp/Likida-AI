@@ -14,7 +14,7 @@ import { contieneDatoDeSeguridad } from './guardia_seguridad';
 import { aHitoApi, type EventoApi, type FiltrosHitos, type HitoApi, type CambioCitas } from './lectura';
 import type { AvisoReclamado } from './planificador';
 import type { ContactoTrafico } from './escalamiento';
-import type { EpisodioFila } from './senal_vida';
+import { avisosFallidosAlChofer, type EpisodioFila } from './senal_vida';
 import type { EstadoTransito } from './estados_transito';
 import type { MotivoSenalVida } from './solicitudes';
 import { esMotivoParada, type MotivoParada, type ParadaFila } from './paradas';
@@ -1335,6 +1335,13 @@ export async function cerrarEpisodioSenalVida(
   if (error) logger.warn('conductor.senal_cerrar_fallo', { episodio: ep.id, err: error.message });
 }
 
+/** A37-S36-05: deshace el reclamo del nivel 3 (sin destinatario): vuelve a `nivel_enviado = 2` y sin `escalado_en`. Solo si sigue en 3 y abierto. */
+export async function liberarNivelSenalVida(ep: Pick<EpisodioFila, 'id' | 'tenantId'>, nivel: 3): Promise<void> {
+  const { error } = await acotada(supabaseAdmin().from('viaje_senal_vida').update({ nivel_enviado: nivel - 1, escalado_en: null })
+    .eq('id', ep.id).eq('tenant_id', ep.tenantId).eq('nivel_enviado', nivel).is('cerrado_en', null), 'conductor.senal_nivel_liberar');
+  if (error) logger.warn('conductor.senal_nivel_liberar_fallo', { episodio: ep.id, err: error.message });
+}
+
 export async function anotarFalloSenalVida(ep: Pick<EpisodioFila, 'id' | 'tenantId'>, texto: string): Promise<void> {
   const { error } = await acotada(supabaseAdmin().from('viaje_senal_vida').update({ ultimo_error: texto.slice(0, 200) }).eq('id', ep.id).eq('tenant_id', ep.tenantId), 'conductor.senal_error');
   if (error) logger.warn('conductor.senal_error_fallo', { episodio: ep.id, err: error.message });
@@ -1395,6 +1402,8 @@ export interface EpisodioTablero {
   aviso1En: string | null;
   aviso2En: string | null;
   escaladoEn: string | null;
+  /** A37-S36-05: el nivel 3 quedó tomado pero el aviso al jefe NO llegó (el episodio guarda el error). */
+  sinAvisarAlJefe?: boolean;
   cerradoEn: string | null;
   cierreMotivo: 'respondio' | 'senal_recuperada' | 'viaje_cerrado' | 'atendido_por_jefe' | null;
   respuesta: 'estoy' | 'voy_a_cargar' | 'estoy_bien' | null;
@@ -1422,7 +1431,7 @@ export async function leerEpisodiosParaTablero(
     if (viajeIds.length === 0) return { episodios: [], hayMas: false };
   }
   let q = supabaseAdmin().from('viaje_senal_vida')
-    .select('id, viaje_id, motivo, abierto_en, nivel_enviado, aviso_1_en, aviso_2_en, escalado_en, cerrado_en, cierre_motivo, respuesta')
+    .select('id, viaje_id, motivo, abierto_en, nivel_enviado, aviso_1_en, aviso_2_en, escalado_en, cerrado_en, cierre_motivo, respuesta, ultimo_error')
     .eq('tenant_id', tenantId).gte('abierto_en', desde.toISOString());
   if (viajeIds) q = q.in('viaje_id', viajeIds.slice(0, 1000));
   const r = await acotada(q.order('abierto_en', { ascending: false }).order('id').limit(limite + 1), 'tablero.episodios');
@@ -1454,6 +1463,8 @@ export async function leerEpisodiosParaTablero(
         motivo: x.motivo === 'gps_detenido' ? 'gps_detenido' : 'gps_obsoleto',
         abiertoEn: String(x.abierto_en), nivelEnviado: (nivel === 1 || nivel === 2 || nivel === 3 ? nivel : 0),
         aviso1En: str(x.aviso_1_en), aviso2En: str(x.aviso_2_en), escaladoEn: str(x.escalado_en), cerradoEn: str(x.cerrado_en),
+        // A37-S36-05: en el nivel 3, un `ultimo_error` que no es la marca de un aviso fallido al CHOFER es que el aviso al jefe no salió.
+        sinAvisarAlJefe: nivel === 3 && typeof x.ultimo_error === 'string' && x.ultimo_error !== '' && avisosFallidosAlChofer(x.ultimo_error) === 0,
         cierreMotivo: (['respondio', 'senal_recuperada', 'viaje_cerrado', 'atendido_por_jefe'] as const).find((c) => c === x.cierre_motivo) ?? null,
         respuesta: (['estoy', 'voy_a_cargar', 'estoy_bien'] as const).find((c) => c === x.respuesta) ?? null,
       };
