@@ -53,7 +53,7 @@ test.describe('PoC B: decisión humana de proveedor y CSV SAP con marca de expor
       id: facturaId, tenant_id: TENANT, cfdi_uuid: facturaId,
       emisor_rfc: 'AAA010101AAA', emisor_nombre: 'Proveedor sintético el cliente de demo', receptor_rfc: 'XAXX010101000', receptor_es_flota: null,
       fecha: '2026-06-15', sub_total: 1000 + i * 100, iva: 160 + i * 16, total: 1160 + i * 116,
-      descripcion: `${DESCRIPCION} ${i}`, conceptos: 1, estado: 'pendiente', origen: 'subida', estado_sat: null,
+      descripcion: `${DESCRIPCION} ${i}`, conceptos: 1, estado: 'pendiente', origen: 'subida', estado_sat: 'vigente',
       xml_crudo: `<Comprobante sintetico="true" UUID="${facturaId}"/>`,
     })), maxRedirects: 0 });
     expect(r.ok(), `siembra de facturas: ${await r.text()}`).toBeTruthy();
