@@ -93,16 +93,41 @@ export async function POST(req: Request, ctx: { params: Promise<{ accion: string
         const carpeta = typeof cuerpo?.carpeta === 'string' ? cuerpo.carpeta.slice(0, 300) : '';
         if (!carpeta) return NextResponse.json({ error: 'Falta carpeta.' }, { status: 400 });
         let mediaPath: string | null = null;
+        let media: Buffer | null = null;
+        let objeto: string | null = null;
         const b64 = typeof cuerpo?.mediaBase64 === 'string' ? cuerpo.mediaBase64 : null;
         if (b64) {
           if (b64.length > 4 * Math.ceil(TOPE_MEDIA / 3)) return NextResponse.json({ error: 'La vista previa pasa de 3 MB. Reduce la imagen.' }, { status: 413 });
-          const media = Buffer.from(b64, 'base64');
+          media = Buffer.from(b64, 'base64');
           if (media.toString('base64') !== b64) return NextResponse.json({ error: 'La media no es base64 válido.' }, { status: 400 });
           if (media.length > TOPE_MEDIA) return NextResponse.json({ error: 'La vista previa pasa de 3 MB. Reduce la imagen.' }, { status: 413 });
           // El path lo arma el SERVIDOR con la carpeta declarada — el nombre
           // se sanea: un ../ aquí escribiría fuera de piezas/.
           const nombre = String(cuerpo?.mediaNombre ?? 'preview.png').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120);
-          const objeto = `piezas/${carpeta.replace(/\.\./g, '_')}/${nombre}`;
+          objeto = `piezas/${carpeta.replace(/\.\./g, '_')}/${nombre}`;
+        }
+        const copyNuevo = typeof cuerpo?.copyMd === 'string' ? cuerpo.copyMd.slice(0, 4000) : null;
+        // A37-S12-06: si la pieza YA fue resuelta (aprobada/descartada/publicada) y llega con otro copy u otra imagen, vuelve a
+        // `pendiente` y se limpia la firma — el tap de publicar no debe actuar sobre contenido que nadie revisó.
+        const { data: previas, error: errPrevia } = await admin.from('bus_pieza')
+          .select('id, estado, copy_md, media_path').eq('carpeta', carpeta).order('id').limit(1);
+        if (errPrevia) throw new Error(errPrevia.message);
+        const previa = (previas as Array<{ estado?: string; copy_md?: string | null; media_path?: string | null }> | null)?.[0];
+        let reabrir = false;
+        if (previa && previa.estado !== 'pendiente') {
+          reabrir = copyNuevo !== (previa.copy_md ?? null);
+          if (!reabrir && media && objeto) {
+            if (previa.media_path !== objeto) reabrir = true;
+            else {
+              // Mismo nombre: se compara el contenido; si no se puede leer el anterior, se asume cambiado (fail-closed).
+              try {
+                const previo = await admin.storage.from('bus').download(objeto);
+                reabrir = previo.error != null || !previo.data || !Buffer.from(await previo.data.arrayBuffer()).equals(media);
+              } catch { reabrir = true; }
+            }
+          }
+        }
+        if (media && objeto) {
           const up = await admin.storage.from('bus').upload(objeto, media, {
             contentType: typeof cuerpo?.mediaMime === 'string' ? cuerpo.mediaMime : 'application/octet-stream',
             upsert: true,
@@ -110,13 +135,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ accion: string
           if (!up.error) mediaPath = objeto;
           else logger.warn('worker.pieza_media', { err: up.error.message });
         }
+        if (reabrir) logger.warn('worker.pieza_reabierta', { carpeta, estadoPrevio: previa?.estado });
         const { error } = await admin.from('bus_pieza').upsert({
           rutina: String(cuerpo?.rutina ?? '').slice(0, 80),
           carpeta,
           titulo: String(cuerpo?.titulo ?? carpeta).slice(0, 200),
           tipo: String(cuerpo?.tipo ?? 'otro').slice(0, 30),
-          copy_md: typeof cuerpo?.copyMd === 'string' ? cuerpo.copyMd.slice(0, 4000) : null,
+          copy_md: copyNuevo,
           ...(mediaPath ? { media_path: mediaPath } : {}),
+          ...(reabrir ? { estado: 'pendiente', resuelto_en: null, resuelto_por: null } : {}),
         }, { onConflict: 'carpeta' });
         if (error) throw new Error(error.message);
         return NextResponse.json({ ok: true, mediaPath });
