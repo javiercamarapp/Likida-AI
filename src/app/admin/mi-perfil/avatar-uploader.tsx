@@ -54,7 +54,7 @@ export default function AvatarUploader({
           Cambiar foto
         </button>
       </div>
-      <input ref={inputRef} type="file" name="avatar" accept="image/*" className="hidden" onChange={onChange} />
+      <input ref={inputRef} type="file" name="avatar" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onChange} />
     </form>
   );
 }

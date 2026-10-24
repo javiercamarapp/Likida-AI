@@ -61,3 +61,19 @@ describe('admin/mi-perfil: el avatar del superadmin valida tipo y peso antes de 
     expect(PAGINA).toMatch(/archivo\.type === 'image\/png' \? 'png' : archivo\.type === 'image\/webp' \? 'webp' : 'jpg'/);
   });
 });
+
+// A37-S07-05 — error=tipo y error=peso caían en «El nombre no puede quedar
+// vacío»: subir un GIF o una foto de 3 MB mostraba un mensaje falso.
+describe('A37-S07-05: admin/mi-perfil muestra mensajes propios para tipo y peso', () => {
+  it('mapea error=tipo y error=peso a mensajes que hablan de la imagen, no del nombre', () => {
+    const mapa = PAGINA.slice(PAGINA.indexOf("sp.error === 'avatar'"));
+    expect(mapa).toMatch(/sp\.error === 'tipo'\s*\?\s*'[^']*(JPG|imagen)[^']*'/);
+    expect(mapa).toMatch(/sp\.error === 'peso'\s*\?\s*'[^']*2 MB[^']*'/);
+  });
+
+  it('el input acepta solo los tipos que el servidor acepta (no image/*)', () => {
+    const uploader = readFileSync(fileURLToPath(new URL('./avatar-uploader.tsx', import.meta.url)), 'utf8');
+    expect(uploader).toMatch(/accept="image\/jpeg,image\/png,image\/webp"/);
+    expect(uploader).not.toMatch(/accept="image\/\*"/);
+  });
+});

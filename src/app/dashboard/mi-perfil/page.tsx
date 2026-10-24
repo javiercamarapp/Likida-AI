@@ -13,6 +13,7 @@ import {
 import AvatarUploader from '../../admin/mi-perfil/avatar-uploader';
 import { BarraPagina } from '../resumen-visual';
 import { sufijoTenant } from '../sufijo';
+import { descartarAvataresViejos } from '@/lib/perfil/avatar_huerfanos';
 import { TablaClientesMcp } from '../sesiones-mcp/vista';
 
 export const dynamic = 'force-dynamic';
@@ -194,6 +195,9 @@ export default async function MiPerfilFlota({
     const { error: errUpdate } = await admin.from('app_user')
       .update({ avatar_url: `${pub.publicUrl}?t=${Date.now()}` }).eq('id', userId);
     if (errUpdate) redirect(volverAMiPerfil(sufijo, 'error=avatar'));
+    // A37-S07-06: bucket público; al cambiar de extensión el avatar anterior
+    // quedaba servido sin referencia. Se retira SOLO tras guardar el nuevo.
+    await descartarAvataresViejos(admin, userId, ext);
     redirect(volverAMiPerfil(sufijo, 'ok=avatar'));
   }
 
