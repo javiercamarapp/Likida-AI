@@ -20,6 +20,7 @@ import * as XLSX from 'xlsx';
 import { campoDoc, campoMercancia, extraccionVacia, MAX_MERCANCIAS, type CampoDoc, type CampoValor, type Extraccion } from './campos';
 import { ESTADOS_SAT } from './catalogos';
 import { esHojaIgnorada, esLibroPlantillaTms, llaveHoja } from './contenido';
+import { exigirZipAcotado } from './zip_seguro';
 import { normalizarIdDestino, normalizarNumero, normalizarValor, limpiarTexto } from './normalizar';
 import { campoDestino, campoOrigen, MAX_DESTINOS } from './plantilla_tms';
 import { LAYOUT_NORMAL, LAYOUT_NUEVA, MAX_DESTINOS_NUEVA, MAX_ORIGENES_NUEVA, type LayoutPlantilla, type TablaLayout } from './plantilla_tms.layout';
@@ -143,7 +144,7 @@ function leerDestinos(ws: XLSX.WorkSheet, filaDest: number, tDest: TablaLayout, 
  */
 export function leerPlantillaTms(bytes: Uint8Array): LecturaPlantillaTms | null {
   let libro: XLSX.WorkBook;
-  try { libro = XLSX.read(bytes, { type: 'array', cellDates: false, cellFormula: false, cellHTML: false, cellStyles: false, sheetRows: TOPE_FILAS + 1 }); }
+  try { exigirZipAcotado(bytes); libro = XLSX.read(bytes, { type: 'array', cellDates: false, cellFormula: false, cellHTML: false, cellStyles: false, sheetRows: TOPE_FILAS + 1 }); }
   catch { return null; }
   const nombres = libro.SheetNames;
   if (esLibroPlantillaNueva(nombres)) return leerPlantillaNueva(libro);

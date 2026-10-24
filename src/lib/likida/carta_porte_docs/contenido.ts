@@ -13,6 +13,7 @@
 import * as XLSX from 'xlsx';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { llaveTexto } from './catalogos';
+import { exigirZipAcotado } from './zip_seguro';
 import { ETIQUETA_HTML, quitarScriptYEstilo } from './html_quitar';
 import { aBuffer, textoDeBase64, textoDeBytes, utf8DeLatin1 } from './bytes';
 
@@ -303,6 +304,7 @@ function prepararHoja(bytes: Uint8Array, esCsv: boolean, avisos: string[]): Cont
     // raw: el CSV se lee como TEXTO — «01000» no se vuelve 1000 y «1/2/2026» no se reinterpreta.
     libro = XLSX.read(textoDeBytes(bytes).replace(/^\ufeff/, ''), { type: 'string', raw: true, cellDates: false });
   } else {
+    exigirZipAcotado(bytes); // A37-S31-05: antes de descomprimir nada
     libro = XLSX.read(aBuffer(bytes), { type: 'buffer', cellDates: true, cellFormula: false, cellHTML: false, cellStyles: false, sheetRows: MAX_FILAS_HOJA + 1 });
   }
   const nombresDatos = esCsv ? libro.SheetNames : hojasDeDatos(libro.SheetNames);
