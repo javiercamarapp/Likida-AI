@@ -9,6 +9,8 @@ export interface ResultadosPurgas {
   storage: { fallidos: number } | null;
   mcpOauth: unknown | null;
   llmPresupuesto: unknown | null;
+  /** A37 (lote legal-ia-08): purga de la idempotencia de agentes; omitida = no aplica. */
+  agenteIdempotencia?: unknown | null;
   cartaPorteDocs: { fallidos: number } | null;
   agentesDatos: Array<{ nombre: string; ok: boolean; error?: string | null }> | null;
   buzonRecepcionesPurgadas: number | null;
@@ -22,6 +24,7 @@ export function fallosDePurgas(r: ResultadosPurgas): string[] {
   else if (r.storage.fallidos > 0) out.push(`storage: ${r.storage.fallidos} archivo(s) sin borrar`);
   if (r.mcpOauth === null) out.push('mcp_oauth: no se pudo');
   if (r.llmPresupuesto === null) out.push('llm_presupuesto: no se pudo');
+  if (r.agenteIdempotencia === null) out.push('agente_idempotencia: no se pudo');
   if (r.cartaPorteDocs === null) out.push('carta_porte_docs: la corrida lanzó');
   else if (r.cartaPorteDocs.fallidos > 0) out.push(`carta_porte_docs: ${r.cartaPorteDocs.fallidos} documento(s) sin purgar`);
   if (r.agentesDatos === null) out.push('agentes_datos: la corrida lanzó');
