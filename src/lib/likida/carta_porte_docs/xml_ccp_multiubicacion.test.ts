@@ -56,3 +56,12 @@ describe('A37-S33-01: XML de Carta Porte con varias ubicaciones', () => {
     expect(r.extraccion.campos.destino_cp.confianza).toBeLessThanOrEqual(0.5);
   });
 });
+
+describe('A37-A3-20: la clave del material peligroso del XML se lee', () => {
+  it('MaterialPeligroso Sí con CveMaterialPeligroso: la clave llega a la mercancía', () => {
+    const r = leerCartaPorteXml(arbol([ub('Origen', 'OR000001', '66600'), ub('Destino', 'DE000001', '64000')],
+      [{ '@_Descripcion': 'A', '@_MaterialPeligroso': 'Sí', '@_CveMaterialPeligroso': '1203' }]))!;
+    expect(r.extraccion.mercancias[0].clave_material_peligroso?.valor).toBe('1203');
+  });
+});
+

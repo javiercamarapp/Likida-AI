@@ -334,6 +334,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
                         {envio?.simulado && <span className="text-[10.5px] font-medium px-1.5 py-0.5 rounded" style={{ color: 'var(--warn)', border: '1px solid var(--warn)' }} data-testid="rotulo-simulado">{ROTULO_SIMULADO}</span>}
                       </p>
                       <p className="text-[12.5px]" role="status">{fraseEnvio(envio)}</p>
+                      {envio === null && <BotonEnvio variante="secundario" intencion="preparar_envio" etiqueta="Preparar el envío" pendiente="Preparando…" icono={<Send width={14} height={14} strokeWidth={1.75} />} />}
                     </div>
                   )}
                   {doc.estado === 'aprobado' && !perfilRestringido && (

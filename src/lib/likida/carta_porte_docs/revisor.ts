@@ -49,7 +49,11 @@ export async function asignarAlLlegarARevision(
     }
     const actual = (await repo.revisoresDeDocumentos(tenantId, [documentoId])).get(documentoId) ?? null;
     if (actual) return { asignado: false, motivo: 'ya_asignado' };
-    if (!(await repo.asignarRevisorDoc(tenantId, documentoId, persona.id))) return { asignado: false, motivo: 'error' };
+    // Condicional en la base: si una persona asignó entre la lectura y este update, no se pisa (A37-S32-10).
+    if (!(await repo.asignarRevisorDoc(tenantId, documentoId, persona.id, true))) {
+      const ahora = (await repo.revisoresDeDocumentos(tenantId, [documentoId])).get(documentoId) ?? null;
+      return ahora ? { asignado: false, motivo: 'ya_asignado' } : { asignado: false, motivo: 'error' };
+    }
     await repo.registrarEvento(tenantId, documentoId, 'revisor_asignado', null, { origen: 'automatica', hacia: persona.id });
     return { asignado: true, usuarioId: persona.id };
   } catch (e) {

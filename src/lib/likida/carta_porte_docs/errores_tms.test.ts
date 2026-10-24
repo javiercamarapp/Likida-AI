@@ -51,6 +51,10 @@ describe('traducirErroresTms: celda/columna del TMS → campo de Likida', () => 
     expect(ubicar({ hoja: 'RemintenteDestinatario', fila: 7, campo: 'Cliente', detalle: 'x' }, LAYOUT_NORMAL, 1)).toEqual({ campo: 'numero_cliente_interno', renglon: null });
   });
 
+  it('A37-A3-19: un error en la fila del destino 2 NO se ubica en el campo del destino 1', () => {
+    expect(ubicar({ hoja: 'RemintenteDestinatario', fila: 51, campo: 'RFC', detalle: 'x' }, LAYOUT_NORMAL, 1)).toBeNull();
+  });
+
   it('tabla de destinos: columnas del destino ⇒ campos del documento', () => {
     expect(ubicar({ hoja: 'RemintenteDestinatario', fila: 50, campo: 'RFC', detalle: 'x' }, LAYOUT_NORMAL, 1)).toEqual({ campo: 'destino_rfc', renglon: null });
   });
