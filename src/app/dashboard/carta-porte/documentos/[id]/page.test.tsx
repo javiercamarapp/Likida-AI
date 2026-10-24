@@ -275,7 +275,7 @@ it('A37-A3-18: un documento aprobado SIN envío se puede preparar desde su panta
   sembrarDoc({ estado: 'aprobado', aprobadoEn: '2026-10-02T00:00:00.000Z', version: 5 });
   fijarGuardiaPerfil(async () => true);
   const p = await montar();
-  expect(p.props.envio).toBeNull();
+  expect((p.props as unknown as { envio: unknown }).envio).toBeNull();
   expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: '4', intencion: 'preparar_envio' }))).toMatchObject({ ok: false, error: expect.stringMatching(/Otra persona cambió/) });
   expect(estado.envios).toHaveLength(0);
   expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: '5', intencion: 'preparar_envio' }))).toMatchObject({ ok: true, mensaje: expect.stringMatching(/Envío preparado/) });
