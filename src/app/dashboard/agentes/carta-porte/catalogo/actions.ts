@@ -102,11 +102,12 @@ export async function guardarFilaCatalogo(_previo: ResultadoAccion, fd: FormData
     const v = validarRegistro(tipo, clienteId, valores);
     if (!v.ok) return { ok: false, error: v.mensaje };
     // Editar una fila que no existe sería crearla a escondidas: se comprueba por la clave natural.
-    if (modo === 'editar') {
-      const existentes = await puerto.existentes(s.tenantId, tipo, [clienteId]);
-      const llave = (r: Record<string, unknown>): string => COLUMNAS_CLAVE[tipo].map((c) => String(r[c] ?? '')).join('|');
-      if (!existentes.some((e) => llave(e) === llave(v.registro))) return { ok: false, error: 'Esa fila ya no existe. Recarga la pantalla.' };
-    }
+    // Agregar una clave que YA existe sería un upsert que pisa la fila en silencio (A37-S12-03).
+    const existentes = await puerto.existentes(s.tenantId, tipo, [clienteId]);
+    const llave = (r: Record<string, unknown>): string => COLUMNAS_CLAVE[tipo].map((c) => String(r[c] ?? '')).join('|');
+    const yaExiste = existentes.some((e) => llave(e) === llave(v.registro));
+    if (modo === 'editar' && !yaExiste) return { ok: false, error: 'Esa fila ya no existe. Recarga la pantalla.' };
+    if (modo === 'nuevo' && yaExiste) return { ok: false, error: 'Esa fila ya existe en el catálogo: edítala en lugar de agregarla.' };
     await puerto.aplicarLote(s.tenantId, tipo, [v.registro], s.userId);
     await anotarBitacora(
       { tenantId: s.tenantId, actor: { id: s.userId }, accion: 'ccp.catalogo_editado', entidad: 'tenant', entidadId: s.tenantId, detalle: { tipo, modo } },
