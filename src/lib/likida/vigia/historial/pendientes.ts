@@ -42,6 +42,8 @@ export function pendientesDeHistorial(entrada: readonly EntradaPendientes[], opc
   const ventana = opciones.ventanaMin ?? VENTANA_RESPUESTA_MIN;
   const msgs = [...entrada].sort((a, b) => (a.enviadoEn < b.enviadoEn ? -1 : a.enviadoEn > b.enviadoEn ? 1 : 0));
   if (msgs.length === 0) return { pendientes: [], ignorados: 0, fotoEn: null };
+  const tiempos = msgs.map((x) => Date.parse(x.enviadoEn));
+  const ventanaMs = ventana * 60_000;
   const fotoEn = msgs[msgs.length - 1].enviadoEn;
   const fotoMs = Date.parse(fotoEn);
 
@@ -51,8 +53,13 @@ export function pendientesDeHistorial(entrada: readonly EntradaPendientes[], opc
     if (m.rol !== 'cliente') return;
     const p = prioridadDe(m.texto);
     if (p.nivel === 0) { ignorados += 1; return; }
-    const ms = Date.parse(m.enviadoEn);
-    const respondido = msgs.slice(i + 1).some((r) => r.rol === 'equipo' && (Date.parse(r.enviadoEn) - ms) / 60_000 <= ventana);
+    const ms = tiempos[i];
+    // `msgs` va ordenado: se corta al salir de la ventana (con 50,000 mensajes el slice+some era cuadrático).
+    let respondido = false;
+    for (let j = i + 1; j < msgs.length; j++) {
+      if (tiempos[j] - ms > ventanaMs) break;
+      if (msgs[j].rol === 'equipo') { respondido = true; break; }
+    }
     if (respondido) return;
     pendientes.push({
       texto: m.texto.replace(/\s+/g, ' ').trim().slice(0, MAX_TEXTO_PENDIENTE),
