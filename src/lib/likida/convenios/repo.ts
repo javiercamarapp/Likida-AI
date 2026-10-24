@@ -597,8 +597,8 @@ export async function reiniciarEnvios(tenantId: string, viajeId: string): Promis
   ok(res as never, 'convenios.reiniciar_envios');
 }
 
-/** Cuánto se congela el reclamo tras un rechazo DEFINITIVO: más que la vigilancia (`DIAS_VIGILANCIA` = 3 d), así el viaje no vuelve a reclamarse. */
-export const CONGELA_RECHAZO_DEFINITIVO_DIAS = 4;
+/** Cuánto se congela el reclamo tras un rechazo DEFINITIVO: más que la vigilancia (`DIAS_VIGILANCIA` = 7 d en trabajo.ts), así el viaje no vuelve a reclamarse. */
+export const CONGELA_RECHAZO_DEFINITIVO_DIAS = 8;
 
 /**
  * A37-A5-01: un rechazo DEFINITIVO (plantilla sin aprobar, número sin WhatsApp) deja el reclamo puesto, pero el reclamo CADUCA a los

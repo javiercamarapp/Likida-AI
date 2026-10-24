@@ -96,6 +96,28 @@ describe('con polígono nativo (0630): «cerca» se mide al borde del polígono,
   });
 });
 
+describe('A37-S40-05 — la cola de candidatos no se llena de viajes muertos ni vence a los 3 días', () => {
+  it('(a) 410 viajes ya liquidados con un aviso sin sellar NO desplazan al viaje vivo más viejo', async () => {
+    const vivo = mundo.tablas.viaje_convenio[0];
+    const base = Date.now() + 60_000;
+    for (let i = 0; i < 410; i++) {
+      const v = mundo.poner('viaje', { tenant_id: A, unidad_id: unidadId, estatus: 'liquidado', aceptado_en: AHORA.toISOString(), folio: `M-${i}` });
+      mundo.poner('viaje_convenio', {
+        tenant_id: A, viaje_id: v.id, convenio_id: vivo.convenio_id, ligado_en: new Date(base + i * 1000).toISOString(),
+        acercamiento_origen_enviado_en: AHORA.toISOString(), acercamiento_destino_enviado_en: null,
+      });
+    }
+    posicion({ lat: ORIGEN.lat + 0.02, lng: ORIGEN.lng });
+    expect(await barridoAcercamiento(undefined, AHORA)).toMatchObject({ candidatos: 1, enviados: 1 });
+  });
+
+  it('(b) un viaje ligado hace 5 días (ruta larga / espera en planta) sigue vigilado', async () => {
+    mundo.tablas.viaje_convenio[0].ligado_en = new Date(Date.now() - 5 * 86_400_000).toISOString();
+    posicion({ lat: ORIGEN.lat + 0.02, lng: ORIGEN.lng });
+    expect(await barridoAcercamiento(undefined, AHORA)).toMatchObject({ candidatos: 1, enviados: 1 });
+  });
+});
+
 describe('estaCerca', () => {
   it('cuenta el radio de la geocerca más el margen de acercamiento', () => {
     const sitio = { ...DESTINO, radioM: 300 };
