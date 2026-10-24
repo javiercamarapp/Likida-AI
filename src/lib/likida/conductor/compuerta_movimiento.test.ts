@@ -86,6 +86,18 @@ describe('puedeEscribirAlChofer — la función pura', () => {
     expect(puedeEscribirAlChofer({ posiciones: baile, sitioDelViaje: { origen: lejos, destino: null }, config: ENCENDIDA, ahora: AHORA }).razon).toBe('en_movimiento');
   });
 
+  it('A37-S34-04: un sitio con radio absurdo (30 km) NO exime: la unidad en marcha dentro de ese círculo sigue sin recibir mensajes', () => {
+    const baile = [M(240, 0), M(120, 220), M(5, 60)];
+    const enorme = { ...sitio('patio'), radioM: 30_000 };
+    expect(puedeEscribirAlChofer({ posiciones: baile, sitioDelViaje: { origen: enorme, destino: null }, config: ENCENDIDA, ahora: AHORA }).razon).toBe('en_movimiento');
+    // el tope es de 5 km: un patio grande de 4 km sigue eximiendo
+    const grande = { ...sitio('patio'), radioM: 4_000 };
+    expect(puedeEscribirAlChofer({ posiciones: baile, sitioDelViaje: { origen: grande, destino: null }, config: ENCENDIDA, ahora: AHORA }).razon).toBe('dentro_del_sitio');
+    // un polígono nativo no tiene «radio»: su exención no se toca
+    const poli = { ...enorme, poligono: [{ lat: LAT + 0.01, lng: LNG - 0.01 }, { lat: LAT + 0.01, lng: LNG + 0.01 }, { lat: LAT - 0.01, lng: LNG + 0.01 }, { lat: LAT - 0.01, lng: LNG - 0.01 }] };
+    expect(puedeEscribirAlChofer({ posiciones: baile, sitioDelViaje: { origen: poli, destino: null }, config: ENCENDIDA, ahora: AHORA }).razon).toBe('dentro_del_sitio');
+  });
+
   it('dentro del sitio pero SIN GPS reciente no hay exención (no se sabe dónde está)', () => {
     const r = puedeEscribirAlChofer({ posiciones: [M(3600)], sitioDelViaje: { origen: sitio('patio'), destino: null }, config: ENCENDIDA, ahora: AHORA });
     expect(r.razon).toBe('sin_gps');
