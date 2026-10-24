@@ -88,7 +88,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 vi.mock('@/lib/logger', () => ({ logger }));
 
 const { processInbound } = await import('./processor');
-const { RESPUESTA_NO_ENTENDI, RESPUESTA_SIN_PRESUPUESTO } = await import('./voz_transcrita');
+const { RESPUESTA_NO_ENTENDI, RESPUESTA_SIN_PRESUPUESTO, RESPUESTA_AUDIO_LARGO } = await import('./voz_transcrita');
 
 const CHOFER_TEL = '5219993700779';
 let n = 0;
@@ -139,6 +139,12 @@ describe('la nota de voz del chofer (capa E1)', () => {
     transcribirNotaDeVoz.mockResolvedValue({ ok: false, motivo: 'presupuesto' });
     await processInbound(notaDeVoz());
     expect(sendText).toHaveBeenCalledWith(CHOFER_TEL, RESPUESTA_SIN_PRESUPUESTO);
+  });
+
+  it('A37-S59-08: audio demasiado largo → «¿me lo escribes?» con su propio mensaje', async () => {
+    transcribirNotaDeVoz.mockResolvedValue({ ok: false, motivo: 'demasiado_largo' });
+    await processInbound(notaDeVoz());
+    expect(sendText).toHaveBeenCalledWith(CHOFER_TEL, RESPUESTA_AUDIO_LARGO);
   });
 
   it('audio sin mediaId (webhook raro) → también "¿me lo escribes?", jamás silencio', async () => {

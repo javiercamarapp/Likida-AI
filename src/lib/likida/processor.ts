@@ -107,7 +107,7 @@ import { resolverCuentaOficina, telefonoJefeDe, type CuentaOficina } from './con
 import { atenderComandoAdmin } from './admin_comandos_wa';
 import { atenderConfirmacion, aceptarPorActividad } from './confirmar_viaje';
 import { enviarBriefingInicio } from './briefing_inicio_wa';
-import { transcribirNotaDeVoz, RESPUESTA_NO_ENTENDI, RESPUESTA_SIN_PRESUPUESTO } from './voz_transcrita';
+import { transcribirNotaDeVoz, RESPUESTA_NO_ENTENDI, RESPUESTA_SIN_PRESUPUESTO, RESPUESTA_AUDIO_LARGO } from './voz_transcrita';
 import { avisarCierreAlJefe, pdfListoParaSellar, pdfEstadoDe } from './avisar_cierre';
 import { rutaPdfOperador } from './liquidacion/rutas_pdf';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -1937,7 +1937,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         senal: reloj.senal(30_000),
       });
       if (!t.ok) {
-        await sendText(msg.from, t.motivo === 'presupuesto' ? RESPUESTA_SIN_PRESUPUESTO : RESPUESTA_NO_ENTENDI);
+        await sendText(msg.from, t.motivo === 'presupuesto' ? RESPUESTA_SIN_PRESUPUESTO : t.motivo === 'demasiado_largo' ? RESPUESTA_AUDIO_LARGO : RESPUESTA_NO_ENTENDI);
         return;
       }
       // La transcripción queda citable en el log con su marca de origen; el
