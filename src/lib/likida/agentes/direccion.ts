@@ -187,6 +187,10 @@ export const DIAS_TELEMETRIA = 7;
 /** Corridas que una ventana lee como máximo. Si se llena, el parte lo DICE. */
 export const TOPE_CORRIDAS = 5_000;
 
+/** Piezas por página al contarlas por agente (= `max_rows` de PostgREST) y páginas máximas. */
+const PAGINA_PIEZAS = 1_000;
+const PAGINAS_PIEZAS_MAX = 30;
+
 export interface FilaCorrida {
   agente: string;
   estado: string;
@@ -208,15 +212,18 @@ export interface SaludAgente {
   ultimoError: string | null;
   /** Piezas que dejó en la bandeja en la ventana. MEDIDO. */
   piezas: number;
+  /** Corridas que terminaron `parcial` (ni `ok` ni `fallo`): no cuentan como fallo, pero tampoco se pintan como «ok». */
+  parciales: number;
 }
 
 /** La salud por agente, PURA. Ordenada por fallos descendente y, en empate,
  *  por nombre — determinista para que la misma semana produzca el mismo texto. */
 export function saludPorAgente(corridas: FilaCorrida[], piezasPorAgente: Map<string, number>): SaludAgente[] {
-  const acc = new Map<string, { corridas: number; fallos: number; costo: number; medidas: number; sinMedir: number; ultimoError: string | null }>();
+  const acc = new Map<string, { corridas: number; fallos: number; parciales: number; costo: number; medidas: number; sinMedir: number; ultimoError: string | null }>();
   for (const c of corridas) {
-    const a = acc.get(c.agente) ?? { corridas: 0, fallos: 0, costo: 0, medidas: 0, sinMedir: 0, ultimoError: null };
+    const a = acc.get(c.agente) ?? { corridas: 0, fallos: 0, parciales: 0, costo: 0, medidas: 0, sinMedir: 0, ultimoError: null };
     a.corridas += 1;
+    if (c.estado === 'parcial') a.parciales += 1;
     if (c.estado === 'fallo') {
       a.fallos += 1;
       if (a.ultimoError === null && c.error) a.ultimoError = c.error;
@@ -229,6 +236,7 @@ export function saludPorAgente(corridas: FilaCorrida[], piezasPorAgente: Map<str
     agente,
     corridas: a.corridas,
     fallos: a.fallos,
+    parciales: a.parciales,
     costoUsd: a.medidas === 0 ? null : Math.round(a.costo * 10_000) / 10_000,
     sinMedir: a.sinMedir,
     ultimoError: a.ultimoError,
@@ -300,7 +308,7 @@ export function armarParteAutomejora(
     } else {
       l.push('CORRIERON SIN FALLAR Y NO DEJARON NI UNA PIEZA (esto es una PREGUNTA, no una acusación):');
       for (const s of mudos.slice(0, 20)) {
-        l.push(`  · ${s.agente} — ${numero(s.corridas)} corrida(s) 'ok', 0 piezas en la bandeja.`);
+        l.push(`  · ${s.agente} — ${numero(s.corridas)} corrida(s)${s.parciales > 0 ? ` (${numero(s.parciales)} parcial)` : " 'ok'"}, 0 piezas en la bandeja.`);
       }
       if (mudos.length > 20) l.push(`  … y ${numero(mudos.length - 20)} más.`);
       l.push('  POR QUÉ ES UNA PREGUNTA: para varios agentes esto es el comportamiento CORRECTO — un vigía sin señales, un cazador sin celdas nuevas o un preparador de demos sin demos agendadas no tienen nada que fabricar, y fabricar algo para no salir en esta lista sería peor. La pregunta que este parte deja es si alguno de estos debería haber producido y su guarda lo está frenando de más.');
@@ -393,17 +401,23 @@ async function leerCorridas(desdeIso: string, hastaIso: string): Promise<{ filas
  *  pondría a TODOS los agentes en «corrió y no produjo». */
 async function leerPiezasPorAgente(desdeIso: string, hastaIso: string): Promise<Map<string, number>> {
   const mapa = new Map<string, number>();
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('cola_aprobacion')
-    .select('agente')
-    .gte('creado_en', desdeIso)
-    .lt('creado_en', hastaIso)
-    .limit(TOPE_CORRIDAS), 'direccion.automejora.piezas');
-  if (error) throw new Error(`leerPiezasPorAgente: ${error.message}`);
-  for (const f of (data ?? []) as Array<{ agente: string }>) {
-    mapa.set(f.agente, (mapa.get(f.agente) ?? 0) + 1);
+  // A37-S26-08: PostgREST recorta a `max_rows` (1,000) aunque se pida más y no avisa. Se pagina de 1,000 en 1,000 con
+  // desempate por llave; si la ventana rebasa el tope de páginas se LANZA (un conteo a medias pondría a agentes que
+  // sí produjeron en «corrieron y no dejaron ni una pieza»).
+  for (let pagina = 0; pagina < PAGINAS_PIEZAS_MAX; pagina++) {
+    const { data, error } = await acotada(supabaseAdmin()
+      .from('cola_aprobacion')
+      .select('agente')
+      .gte('creado_en', desdeIso)
+      .lt('creado_en', hastaIso)
+      .order('id')
+      .range(pagina * PAGINA_PIEZAS, pagina * PAGINA_PIEZAS + PAGINA_PIEZAS - 1), 'direccion.automejora.piezas');
+    if (error) throw new Error(`leerPiezasPorAgente: ${error.message}`);
+    const filas = (data ?? []) as Array<{ agente: string }>;
+    for (const f of filas) mapa.set(f.agente, (mapa.get(f.agente) ?? 0) + 1);
+    if (filas.length < PAGINA_PIEZAS) return mapa;
   }
-  return mapa;
+  throw new Error(`leerPiezasPorAgente: la ventana rebasa ${PAGINAS_PIEZAS_MAX * PAGINA_PIEZAS} piezas — no se afirma un conteo a medias.`);
 }
 
 /** Los interruptores ya apagados. LANZA ante error: proponer apagar algo que
