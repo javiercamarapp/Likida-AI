@@ -99,7 +99,9 @@ async function ejecutar(a: { tenantId: string; userId: string }, fd: FormData): 
   if (que === 'descartar') {
     if (!EDITABLES.includes(av.estado) && av.estado !== 'aprobado') return fallo('Este aviso ya no se puede descartar.');
     const ok = await crearRepoCambios().cambiarEstado(a.tenantId, id, av.estado, 'descartado', 'descartado por una persona');
-    return ok ? bien('Descartado: no se enviará.') : fallo(CARRERA);
+    if (ok) return bien('Descartado: no se enviará.');
+    // A37-S58-01: un aprobado que no se pudo cerrar suele ser porque el envío ya está en curso.
+    return fallo(av.estado === 'aprobado' ? 'Este aviso se está enviando en este momento y ya no se puede descartar. Recarga la pantalla.' : CARRERA);
   }
 
   if (que === 'capturar') {

@@ -82,7 +82,7 @@ const avisarOficina = vi.hoisted(() => vi.fn(async (
   llamadasAvisoOficina.push({ telefono, texto, parametros: o.parametros, contexto: o.contexto });
   return { ok: true, via: 'texto', id: 'wamid.TEST' };
 }));
-const cargarViajeContexto = vi.hoisted(() => vi.fn(async (): Promise<{ operadorNombre: string | null; folio: string | null } | null> => null));
+const cargarViajeContexto = vi.hoisted(() => vi.fn(async (): Promise<{ operadorNombre: string | null; folio: string | null; terminalId?: string | null } | null> => null));
 
 vi.mock('./contactos', () => ({ telefonoJefeDe }));
 vi.mock('@/lib/meta/aviso_oficina', () => ({
@@ -200,12 +200,13 @@ describe('A8 ESCALACIÓN · caso "SÍ" — el jefe recibe un aviso de confirmaci
   it('tras aceptar por PRIMERA vez, se avisa al jefe que el chofer YA confirmó', async () => {
     LISTA = { data: [{ id: 'v-7', folio: 'VJ-7', origen: 'GDL', destino: 'MTY' }], error: null };
     RESULTADO_UPDATE = { data: [{ id: 'v-7' }], error: null };
-    cargarViajeContexto.mockResolvedValue({ operadorNombre: 'Juan Pérez', folio: 'VJ-7' });
+    cargarViajeContexto.mockResolvedValue({ operadorNombre: 'Juan Pérez', folio: 'VJ-7', terminalId: 'patio-b' });
 
     const r = await atenderConfirmacion({ tenantId: 't-1', operadorId: 'op-9', texto: 'va' });
 
     expect(r.viajeConfirmado).toBe('v-7');
-    expect(telefonoJefeDe).toHaveBeenCalledWith('t-1');
+    // A37-S39-06: el aviso se resuelve con el patio del viaje.
+    expect(telefonoJefeDe).toHaveBeenCalledWith('t-1', 'patio-b');
     expect(avisarOficina).toHaveBeenCalledTimes(1);
     expect(llamadasAvisoOficina[0].telefono).toBe('5210000000001');
     // El jefe se queda, HASTA HOY, con "no ha confirmado, conviene

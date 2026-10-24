@@ -362,6 +362,27 @@ describe('conversacionesEnEspera / expirarCiclosInactivos: la cola no se tapa', 
   const ahora = new Date('2026-10-01T18:00:00Z');
   const cfg = (tenant: string, sla: number) => ({ tenant_id: tenant, habilitado: true, sla_respuesta_min: sla, sla_critico_min: 10, escalar_nivel2_min: 60 });
 
+  it('A37-S59-03: con cientos de hilos los contactos se piden en TANDAS (la URL de un .in() gigante falla y tumbaba el barrido)', async () => {
+    const N = 450;
+    const conv = (i: number) => ({ id: `c${i}`, tenant_id: T1, contacto_id: `k${i}`, cliente_id: 'c', estado: 'activa', sin_respuesta_desde: '2026-10-01T10:00:00Z', escalamiento_nivel: 0, entradas_sin_respuesta: 1, molestia_nivel: 0 });
+    respuesta = (l) => {
+      if (l.tabla === 'vigia_config') return { data: [cfg(T1, 30)], error: null };
+      if (l.tabla === 'vigia_conversacion') {
+        return { data: Array.from({ length: N }, (_, i) => conv(i)), error: null };
+      }
+      if (l.tabla === 'vigia_contacto') {
+        const ids = (l.filtros.find(([o, c]) => o === 'in' && c === 'id')?.[2] ?? []) as string[];
+        return { data: ids.map((id) => ({ id, tenant_id: T1, cliente_id: 'c', telefono: '5255111100', estado: 'activo' })), error: null };
+      }
+      return { data: [], error: null };
+    };
+    const filas = await crearRepoVigia().conversacionesEnEspera(1000, ahora);
+    const consultas = llamadas.filter((l) => l.tabla === 'vigia_contacto');
+    expect(consultas.length).toBeGreaterThan(1);
+    for (const q of consultas) expect(((q.filtros.find(([o, c]) => o === 'in' && c === 'id')?.[2]) as string[]).length).toBeLessThanOrEqual(200);
+    expect(filas).toHaveLength(N);
+  });
+
   it('pide solo lo que no llegó al nivel 2, por flota y desde su propio plazo corto, y lo ordena por vencimiento', async () => {
     const conv = (id: string, tenant: string, desde: string, contacto: string) => ({ id, tenant_id: tenant, contacto_id: contacto, cliente_id: 'c', estado: 'activa', sin_respuesta_desde: desde, escalamiento_nivel: 0, entradas_sin_respuesta: 1, molestia_nivel: 0 });
     respuesta = (l) => {

@@ -121,3 +121,34 @@ describe('leerFoto', () => {
     expect(leerFoto('no es arreglo')).toEqual([]);
   });
 });
+
+// A37-S39-07: 40 × 400 caracteres rebasaban el máximo de un mensaje de WhatsApp
+// (4096): Meta lo rechazaba sin reintento y el operador no recibía nada.
+describe('A37-S39-07 el texto cabe en un mensaje de WhatsApp', () => {
+  const largas: Instruccion[] = Array.from({ length: 40 }, (_, k) =>
+    I(k % 2 ? 'seguridad' : 'puerta', `${k}-${'x'.repeat(380)}`, 'ambos', 'ambos', k));
+  it('el despacho no pasa de 4096 y avisa cuántas instrucciones quedaron fuera', () => {
+    const m = armarMensajeDespacho(CTX, largas)!;
+    expect(m.texto.length).toBeLessThanOrEqual(4096);
+    expect(m.texto).toMatch(/instrucciones más/);
+    expect(m.texto).toContain('¿qué instrucciones tengo?');
+  });
+  it('nunca corta una instrucción a la mitad', () => {
+    const m = armarMensajeDespacho(CTX, largas)!;
+    for (const k of [0, 1, 2]) expect(m.texto).toContain(`${k}-${'x'.repeat(380)}`);
+    expect(m.texto).not.toMatch(/(^|[^x])x{1,379}(\n|$)/);
+  });
+  it('el acercamiento y la respuesta al operador también caben', () => {
+    expect(armarMensajeAcercamiento(CTX, largas, 'destino')!.texto.length).toBeLessThanOrEqual(4096);
+    expect(responderPerfil(largas, 'todo', null).texto.length).toBeLessThanOrEqual(4096);
+  });
+  it('la plantilla que trunca lo dice, sin cortar una instrucción', () => {
+    const p = piezaPlantilla(largas, false);
+    expect(p.length).toBeLessThanOrEqual(700);
+    expect(p).toContain('¿qué instrucciones tengo?');
+  });
+  it('un convenio corto sale igual que antes (sin aviso de recorte)', () => {
+    expect(armarMensajeDespacho(CTX, FOTO)!.texto).not.toMatch(/instrucciones más/);
+    expect(piezaPlantilla(FOTO, true)).not.toContain('¿qué instrucciones tengo?');
+  });
+});

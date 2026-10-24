@@ -14,6 +14,8 @@ import { sufijoTenant } from '../../../sufijo';
 import { VistaProgramaVigia, TOPE_ARCHIVO_PROGRAMA_BYTES, type ResultadoPrograma, type ResumenPrograma } from './vista';
 
 export const dynamic = 'force-dynamic';
+// A37-S59-05: la subida (hasta 12 MB, escritura serial por lotes) puede pasar del tope por omisión; que no muera a medias.
+export const maxDuration = 120;
 
 const RUTA = '/dashboard/agentes/vigia/programa';
 

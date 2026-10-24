@@ -69,6 +69,15 @@ describe('permiso y entradas', () => {
 });
 
 describe('importarHistorialPanel', () => {
+  // A37-S58-02
+  it('un chat que rebasa el tope de mensajes se rechaza sin guardar nada (no se corta en silencio)', async () => {
+    const d = deps();
+    const lineas = Array.from({ length: 50_002 }, (_, i) => `12/09/2026 10:00 - ${i % 2 ? 'Ana Servicio' : 'Cliente Uno'}: m${i}`).join('\n');
+    const r = await importarHistorialPanel(dueno, fd({ grupoId: G, equipo: 'Ana Servicio' }), archivo(lineas), d);
+    expect(r).toMatchObject({ ok: false, error: expect.stringContaining('más de 50000 mensajes') });
+    expect(d.guardarImportacion).not.toHaveBeenCalled();
+  });
+
   it('guarda lo leído SIN teléfonos ni nombres, con la sal de la flota, y la bitácora solo lleva conteos', async () => {
     const d = deps();
     const r = await importarHistorialPanel(dueno, fd({ grupoId: G, equipo: 'Ana Servicio' }), archivo(CHAT), d);

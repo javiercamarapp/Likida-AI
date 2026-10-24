@@ -20,7 +20,7 @@ vi.mock('@/lib/correo/avisos', () => ({ avisoEscalados: vi.fn(async () => {}) })
 vi.mock('../agentes/notificaciones', () => ({ avisar: vi.fn(async () => {}), avisarCorridasPorFlota: vi.fn(async () => {}) }));
 const corridas: unknown[] = [];
 vi.mock('../agentes/corridas', () => ({ registrarCorrida: async (t: string, a: string, c: unknown) => { corridas.push({ t, a, c }); } }));
-vi.mock('../contactos', () => ({ telefonosJefe: async (ts: string[]) => Object.fromEntries(ts.filter((t) => jefes[t]).map((t) => [t, jefes[t]])) }));
+vi.mock('../contactos', () => ({ resolverJefes: async () => (t: string) => jefes[t] ?? null }));
 // avisarAlChofer (operacion.ts) y notificarAsignacion (notificar.ts) corren REALES: solo el cliente de Meta es doble.
 vi.mock('@/lib/meta/client', async (original) => {
   const real = await original<Record<string, unknown>>();
