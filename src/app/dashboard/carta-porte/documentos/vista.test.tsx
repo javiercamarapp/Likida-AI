@@ -40,6 +40,12 @@ describe('VistaDocumentos', () => {
     expect(h).not.toMatch(/Bandeja de revisión/);
   });
 
+  it('A37-S16-01: si las métricas se calcularon sobre una muestra lo dice; sin muestra no hay aviso', () => {
+    const con = html(<VistaDocumentos datos={datos([], { metricasMuestra: { usados: 500, total: 731 } })} acciones={todas} />);
+    expect(con).toMatch(/Hubo 731 documentos en los últimos 90 días; estas cifras se calcularon solo con los 500 más recientes/);
+    expect(html(<VistaDocumentos datos={datos()} acciones={todas} />)).not.toMatch(/se calcularon solo con/);
+  });
+
   it('sin documentos: estado vacío honesto y métricas sin cifras inventadas', () => {
     const h = html(<VistaDocumentos datos={datos()} acciones={todas} />);
     expect(h).toMatch(/Todavía no ha llegado ningún documento/);
@@ -197,6 +203,18 @@ describe('VistaRevision', () => {
     const d = doc({ estado: 'fallido', extraccion: null, validacion: null, ultimoError: 'x' });
     const h = html(<VistaRevision doc={d} revision={null} original={{ tipo: 'nada', motivo: 'n' }} operadores={[]} eventos={[]} acciones={{ revisar: null }} />);
     expect(conIntencion(h, 'reintentar')).toBe(false);
+  });
+
+  it('A37-S16-04: eliminar el documento pide confirmación con el alcance; el submit vive dentro del diálogo', () => {
+    const h = montar(doc(), { puedeEliminar: true });
+    const iDisparador = h.indexOf('Eliminar documento y archivo');
+    expect(iDisparador).toBeGreaterThan(-1);
+    expect(h.slice(h.lastIndexOf('<button', iDisparador), iDisparador)).toContain('type="button"');
+    expect(h).toContain('Se borra el archivo y todo lo leído de él');
+    expect(conIntencion(h, 'eliminar')).toBe(true);
+    const confirmar = /<button type="submit"[^>]*>Sí, eliminar<\/button>/.exec(h)![0];
+    expect(confirmar).toContain('name="intencion"');
+    expect(confirmar).toContain('value="eliminar"');
   });
 
   it('eliminar solo se ofrece a quien administra, y no mientras se lee', () => {

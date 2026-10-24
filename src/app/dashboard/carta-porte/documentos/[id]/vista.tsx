@@ -287,7 +287,8 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
                   <legend className="text-[12.5px] font-medium px-1">{m.esNuevo ? 'Agregar una mercancía que falte' : `Mercancía ${m.indice + 1}`}</legend>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">{m.filas.map((f) => <Campo key={f.nombre} f={f} editable={editable} />)}</div>
                   {!m.esNuevo && editable && (
-                    <BotonEnvio variante="peligro" intencion={`quitar:${m.indice}`} etiqueta="Quitar este renglón" pendiente="Quitando…" icono={<Trash2 width={13} height={13} strokeWidth={1.75} />} />
+                    <BotonEnvio variante="peligro" intencion={`quitar:${m.indice}`} etiqueta="Quitar este renglón" pendiente="Quitando…"
+                      confirmar={{ titulo: `Quitar la mercancía ${m.indice + 1}`, descripcion: 'Se quita este renglón de la revisión del documento. Los cambios que escribiste en la forma se guardan junto con esta acción.', etiquetaConfirmar: 'Sí, quitar' }} icono={<Trash2 width={13} height={13} strokeWidth={1.75} />} />
                   )}
                 </fieldset>
               ))}
@@ -400,7 +401,8 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
             Eliminar borra el archivo y todo lo leído de él (nombres, licencias y RFC de terceros). Úsalo para una solicitud de cancelación o un documento subido por error.
             Las mercancías que ya pasaron a un viaje se conservan.
           </p>
-          <BotonEnvio variante="peligro" intencion="eliminar" etiqueta="Eliminar documento y archivo" pendiente="Eliminando…" icono={<Trash2 width={13} height={13} strokeWidth={1.75} />} />
+          <BotonEnvio variante="peligro" intencion="eliminar" etiqueta="Eliminar documento y archivo" pendiente="Eliminando…"
+            confirmar={{ titulo: 'Eliminar el documento y su archivo', descripcion: 'Se borra el archivo y todo lo leído de él (nombres, licencias y RFC de terceros). No se puede deshacer. Las mercancías que ya pasaron a un viaje se conservan.', etiquetaConfirmar: 'Sí, eliminar' }} icono={<Trash2 width={13} height={13} strokeWidth={1.75} />} />
         </FormaAccion>
       )}
 

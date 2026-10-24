@@ -61,6 +61,13 @@ describe('estados vacíos honestos', () => {
     expect(html).toContain('no se enviarán hasta tener póliza');
   });
 
+  it('A37-S14-03: «sin póliza» truncada avisa que hay más de las que se muestran', async () => {
+    const f = { bitacora: 'BIT-1', desde: '2026-10-01T10:00:00Z', ultimaVez: '2026-10-02T10:00:00Z' };
+    const html = await pintar(ok([], { sinPoliza: [f], sinPolizaTruncada: true }), { filtro: 'sin_poliza' });
+    expect(html).toContain('hay más bitácoras sin póliza');
+    expect(await pintar(ok([], { sinPoliza: [f] }), { filtro: 'sin_poliza' })).not.toContain('hay más bitácoras sin póliza');
+  });
+
   it('«sin póliza» sin nada pendiente lo dice', async () => {
     expect(await pintar(ok([]), { filtro: 'sin_poliza' })).toContain('Ninguna bitácora está esperando póliza');
   });
@@ -234,7 +241,7 @@ describe('lo que viene de la URL se valida', () => {
 //   · ningún texto de la sección menciona el otro canal.
 // ═══════════════════════════════════════════════════════════════════════════
 import {
-  PanelDetalleDesglose, SeccionExcepciones, leerMensajeDesglose, type PanelDetalleProps,
+  PanelDetalleDesglose, SeccionExcepciones, TOPE_EXCEPCIONES, leerMensajeDesglose, type PanelDetalleProps,
 } from './desgloses';
 import { armarDetalle, enmascararCorreo, nombreDescarga, leerIdDetalle, type DetalleDesglose, type LecturaDetalle } from './detalle_desglose';
 import type { Desglose, Excepcion } from '@/lib/likida/liquidacion_externa/repo_correo';
@@ -467,6 +474,15 @@ describe('sección de excepciones de la flota', () => {
   it('lista cada excepción con su bitácora y qué hacer', async () => {
     const html = await pintarEx([ex('sin_poliza', 1, { bitacora: 'BIT-77' }), ex('operador_no_encontrado', 2, { bitacora: 'BIT-78' }), ex('neto_negativo', 3)]);
     for (const t of ['Sin póliza', 'bitácora BIT-77', 'Operador sin alta', 'bitácora BIT-78', 'Retenido: neto negativo', 'bitácora T1-BIT-1001']) expect(html).toContain(t);
+  });
+
+  it('A37-S14-03: con más excepciones que el tope se pintan solo las del tope y se avisa', async () => {
+    const muchas = Array.from({ length: TOPE_EXCEPCIONES + 1 }, (_, i) => ex('sin_poliza', i + 1, { bitacora: `BIT-X${i + 1}` }));
+    const html = await pintarEx(muchas);
+    expect(html).toContain(`Se muestran las ${TOPE_EXCEPCIONES} más recientes`);
+    expect(html).toContain(`bitácora BIT-X${TOPE_EXCEPCIONES}<`);
+    expect(html).not.toContain(`bitácora BIT-X${TOPE_EXCEPCIONES + 1}<`);
+    expect(await pintarEx(muchas.slice(0, TOPE_EXCEPCIONES))).not.toContain('Se muestran las');
   });
 
   it('sin excepciones lo dice', async () => {

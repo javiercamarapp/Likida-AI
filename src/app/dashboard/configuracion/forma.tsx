@@ -64,11 +64,11 @@ export function FormaAjustes({ inicial, ejemploKm, guardar, catalogo }: {
 
   const revision = useMemo(() => {
     try {
-      return { ok: true as const, valor: validarAjustes(v) };
+      return { ok: true as const, valor: validarAjustes(v, { permitirCatalogoVacio: catalogo === 'sin_declarar' }) };
     } catch (e) {
       return { ok: false as const, error: e instanceof Error ? e.message : 'Algo no cuadra.' };
     }
-  }, [v]);
+  }, [v, catalogo]);
 
   // El mismo cálculo que hace el motor para el diésel esperado de un tramo.
   const previo = useMemo(() => {

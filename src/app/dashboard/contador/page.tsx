@@ -1,9 +1,8 @@
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { sufijoTenant } from '../sufijo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
-import { fuentes } from '@/lib/likida/orquestador/fuentes';
 import '@/lib/likida/orquestador/fuentes_reales';
-import { rolPuedeLeerTarea, tareaEsDeDinero } from '@/lib/likida/orquestador/permisos';
+import { leerTareasDeDinero, TOPE_TAREAS_DINERO } from '@/lib/likida/orquestador/tareas_de_dinero';
 import { TareasAbiertas } from '../viajes-en-vivo/vista';
 import { InicioContador } from './inicio-contador';
 
@@ -42,10 +41,13 @@ export default async function PanelContadorPage({
 
   // Las tareas de dinero que el asistente derivó (liquidación, contador): su dueño es quien ve `dinero`, y el contador no
   // entra a /dashboard/viajes-en-vivo (es de operación), así que las lee aquí. Solo lectura: atenderlas es de quien asigna.
-  const tareas = await fuentes().escalacionesAbiertas(tenantId, 60)
-    .then((l) => l && l.filter((t) => tareaEsDeDinero(t) && rolPuedeLeerTarea(rol, t)).slice(0, 20))
-    .catch(() => null);
-  const hayTareas = puedeVerRuta(rol, '/dashboard/contador') && tareas !== null && tareas.length > 0;
+  // A37-S17-03: el filtro de dinero va en la consulta (no después de un límite), se avisa si hay más de las que se pintan y un
+  // fallo de lectura se dice (no se confunde con «no hay tareas»).
+  const lectura = await leerTareasDeDinero(tenantId, rol);
+  const veLaRuta = puedeVerRuta(rol, '/dashboard/contador');
+  const tareas = lectura.estado === 'ok' ? lectura.tareas : null;
+  const hayTareas = veLaRuta && tareas !== null && tareas.length > 0;
+  const hayMas = lectura.estado === 'ok' && lectura.hayMas;
 
   return (
     <>
@@ -57,7 +59,17 @@ export default async function PanelContadorPage({
       sufijo={sufijo}
       searchParams={sp}
     />
-    {hayTareas && <main className="px-4 md:px-6 pb-6"><TareasAbiertas tareas={tareas} accion={null} ocultos={{}} /></main>}
+    {hayTareas && (
+      <main className="px-4 md:px-6 pb-6 space-y-2">
+        <TareasAbiertas tareas={tareas} accion={null} ocultos={{}} />
+        {hayMas && <p className="text-[12px]" role="status" style={{ color: 'var(--muted)' }}>Hay más de {TOPE_TAREAS_DINERO} tareas de dinero abiertas: se muestran las {TOPE_TAREAS_DINERO} más recientes.</p>}
+      </main>
+    )}
+    {veLaRuta && lectura.estado === 'error' && (
+      <main className="px-4 md:px-6 pb-6">
+        <p className="card p-4 text-[12.5px]" role="alert">No se pudieron leer las tareas de dinero que dejó el asistente. No es que no haya: no pudimos consultarlas ahora. Recarga la página.</p>
+      </main>
+    )}
     </>
   );
 }

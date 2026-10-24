@@ -30,7 +30,20 @@ export interface PropsVistaConvenios {
   /** Alta y edición en pantalla (P7). Sin catálogos o sin acción, la pantalla se queda como estaba (solo importar). */
   catalogos?: CatalogosFormaConvenio | null;
   accionGuardar?: AccionConvenio;
+  /**
+   * A37-S17-04: el id del convenio que se está editando (`?editar=`). El formulario de edición (con TODOS los sitios en dos
+   * selects) se monta SOLO para ese; los demás tienen un enlace. Con 300 convenios × 1,000 sitios, montar uno por convenio eran
+   * ~600k `<option>`.
+   */
+  editarId?: string | null;
+  /** Página de la lista (1-based, `?pag=`). */
+  pagina?: number;
 }
+
+/** Cuántos convenios se pintan por página. */
+export const CONVENIOS_POR_PAGINA = 50;
+
+const numeroDe = (n: number): string => n.toLocaleString('es-MX');
 
 const vigencia = (c: ConvenioFila): string => {
   if (!c.vigenteDesde && !c.vigenteHasta) return 'sin vencimiento';
@@ -39,6 +52,15 @@ const vigencia = (c: ConvenioFila): string => {
 
 export function VistaConvenios(p: PropsVistaConvenios) {
   const lista = p.convenios ?? [];
+  const paginas = Math.max(1, Math.ceil(lista.length / CONVENIOS_POR_PAGINA));
+  const pagina = Math.min(Math.max(Math.trunc(p.pagina ?? 1) || 1, 1), paginas);
+  const visibles = lista.slice((pagina - 1) * CONVENIOS_POR_PAGINA, pagina * CONVENIOS_POR_PAGINA);
+  const href = (extra: Record<string, string | null>): string => {
+    const q = new URLSearchParams(p.sufijo.startsWith('?') ? p.sufijo.slice(1) : '');
+    for (const [k, v] of Object.entries(extra)) { if (v === null) q.delete(k); else q.set(k, v); }
+    const t = q.toString();
+    return `/dashboard/convenios${t ? `?${t}` : ''}`;
+  };
   const puedeEditarEnPantalla = p.estado === 'ok' && p.puedeEditar && !!p.accionGuardar && !!p.catalogos;
   // La base sin la 0656 no trae versiones: la edición se apaga y se dice (importar sigue funcionando).
   const edicionDisponible = puedeEditarEnPantalla && lista.every((c) => c.version !== null);
@@ -82,7 +104,7 @@ export function VistaConvenios(p: PropsVistaConvenios) {
                 </p>
               ) : (
                 <ul className="divide-y" style={{ borderColor: 'var(--line2)' }}>
-                  {lista.map((c) => (
+                  {visibles.map((c) => (
                     <li key={c.id} className="py-3 space-y-1.5" style={{ opacity: c.activo ? 1 : 0.55 }}>
                       <div className="flex items-baseline gap-2 flex-wrap">
                         <span className="font-medium text-[13.5px]">{c.cliente}</span>
@@ -101,14 +123,16 @@ export function VistaConvenios(p: PropsVistaConvenios) {
                         {(c.sitioOrigenNombre || c.sitioDestinoNombre) && <> · sitios: {c.sitioOrigenNombre ?? '—'} → {c.sitioDestinoNombre ?? '—'}</>}
                         {' · '}{vigencia(c)}
                       </p>
-                      {edicionDisponible && c.version !== null && (
-                        <details className="text-[12.5px]">
-                          <summary className="cursor-pointer underline" style={{ color: 'var(--muted)' }}>Editar convenio e instrucciones</summary>
+                      {edicionDisponible && c.version !== null && (p.editarId === c.id ? (
+                        <div className="text-[12.5px]">
+                          <Link href={href({ editar: null, pag: pagina > 1 ? String(pagina) : null })} className="underline" style={{ color: 'var(--muted)' }}>Cerrar la edición</Link>
                           <div className="mt-2 p-3 rounded-lg" style={{ background: 'var(--canvas)' }}>
                             <FormaConvenio accion={p.accionGuardar!} catalogos={p.catalogos!} convenio={{ ...c, version: c.version }} />
                           </div>
-                        </details>
-                      )}
+                        </div>
+                      ) : (
+                        <Link href={href({ editar: c.id, pag: pagina > 1 ? String(pagina) : null })} className="text-[12.5px] underline" style={{ color: 'var(--muted)' }}>Editar convenio e instrucciones</Link>
+                      ))}
                       {c.instrucciones.length === 0 ? (
                         <p className="text-[12px]" style={{ color: 'var(--warn)' }}>Sin instrucciones de operación: el operador no recibirá nada de este convenio.</p>
                       ) : (
@@ -137,6 +161,13 @@ export function VistaConvenios(p: PropsVistaConvenios) {
                     </li>
                   ))}
                 </ul>
+              )}
+              {paginas > 1 && (
+                <nav aria-label="Páginas de convenios" className="flex items-center gap-3 text-[12.5px]">
+                  <span style={{ color: 'var(--muted)' }}>Convenios {numeroDe((pagina - 1) * CONVENIOS_POR_PAGINA + 1)}–{numeroDe(Math.min(pagina * CONVENIOS_POR_PAGINA, lista.length))} de {numeroDe(lista.length)}</span>
+                  {pagina > 1 && <Link href={href({ pag: pagina - 1 > 1 ? String(pagina - 1) : null, editar: null })} className="underline">Anterior</Link>}
+                  {pagina < paginas && <Link href={href({ pag: String(pagina + 1), editar: null })} className="underline">Siguiente</Link>}
+                </nav>
               )}
             </section>
           )}

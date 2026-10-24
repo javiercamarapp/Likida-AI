@@ -70,6 +70,8 @@ export interface DatosDocumentos {
   asignacionActiva?: boolean;
   total: number;
   metricas: MetricasAgente;
+  /** A37-S16-01: presente solo si las métricas se calcularon sobre `usados` de `total` documentos de los 90 días (tope de lectura). */
+  metricasMuestra?: { usados: number; total: number };
   perfiles: PerfilVista[];
   clientes: Array<{ id: string; nombre: string }>;
   buzon: BuzonVista | null;
@@ -138,7 +140,7 @@ export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', 
             <EstadoError mensaje="No pude leer los documentos de tu flota. No se pinta una bandeja vacía sobre una base que no contestó: eso diría «no hay nada que revisar» estando ciego." />
           ) : (
             <>
-              <Metricas m={datos.metricas} />
+              <Metricas m={datos.metricas} muestra={datos.metricasMuestra} />
               {acciones.subir && <Subir accion={acciones.subir} clientes={datos.clientes} />}
               <Bandeja datos={datos} acciones={acciones} sufijo={sufijo} filtroEnvio={filtroEnvio} perfilRestringido={perfilRestringido} soloMios={soloMios} usuarioId={usuarioId} />
               <Canales buzon={datos.buzon} acciones={acciones} />
@@ -152,9 +154,14 @@ export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', 
   );
 }
 
-function Metricas({ m }: { m: MetricasAgente }) {
+function Metricas({ m, muestra }: { m: MetricasAgente; muestra?: { usados: number; total: number } }) {
   return (
     <section className="space-y-2" aria-label="Métricas del agente">
+      {muestra && (
+        <p className="text-[12px]" role="status" style={{ color: 'var(--bad)' }}>
+          Hubo {numero(muestra.total)} documentos en los últimos 90 días; estas cifras se calcularon solo con los {numero(muestra.usados)} más recientes.
+        </p>
+      )}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Cifra rotulo="Documentos recibidos (90 días)" valor={numero(m.recibidos)} nota={`${numero(m.porRevisar)} por revisar · ${numero(m.fallidos)} sin poder leer`} />
         <Cifra rotulo="Aprobados" valor={numero(m.aprobados)} nota={`${numero(m.rechazados)} rechazados`} />
@@ -320,7 +327,7 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
         </div>
       )}
       {datos.filas.length < datos.total && (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Se muestran los {numero(datos.filas.length)} más recientes de {numero(datos.total)}.</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Se muestran {numero(datos.filas.length)} de {numero(datos.total)}: los más recientes y todos los que esperan revisión o no se pudieron leer.</p>
       )}
     </section>
   );

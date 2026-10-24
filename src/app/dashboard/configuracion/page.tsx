@@ -85,6 +85,10 @@ export default async function ConfiguracionPage({
       return { ok: false, error: 'Tu rol no puede cambiar la configuración de la flota.' };
     }
     try {
+      // A37-S17-02: vaciar el catálogo sigue prohibido, pero una flota que NUNCA lo declaró puede guardar su tabulador sin inventar
+      // cuentas. Se relee del tenant efectivo; si no se puede leer, fail-closed (se exige catálogo, como siempre).
+      let sinCatalogoDeclarado = false;
+      try { sinCatalogoDeclarado = (await cuentasDeclaradas(s.tenantId)) === null; } catch { sinCatalogoDeclarado = false; }
       // La validación del cliente es para avisar; ÉSTA es la que manda.
       const ajustes = validarAjustes({
         rendimientoPorDefecto: String(fd.get('rendimientoPorDefecto') ?? ''),
@@ -93,7 +97,7 @@ export default async function ConfiguracionPage({
         umbralDesviacionPct: String(fd.get('umbralDesviacionPct') ?? ''),
         salida: String(fd.get('salida') ?? ''),
         cuentas: String(fd.get('cuentas') ?? ''),
-      });
+      }, { permitirCatalogoVacio: sinCatalogoDeclarado });
       await guardarAjustesOperativos(s.tenantId, ajustes, { id: userId });
       return { ok: true };
     } catch (e) {

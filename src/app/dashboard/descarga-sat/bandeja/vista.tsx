@@ -7,7 +7,7 @@ import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { estadoDescargaSat } from '@/lib/likida/sat_descarga';
 import { leerDescargaSat, type VistaDescargaSat } from '@/lib/likida/sat_descarga/lectura';
 import {
-  leerBandeja, buscarGastosParaLigar, esEstatusCfdi, paginaPedida,
+  leerBandeja, buscarGastosParaLigar, interpretarImporteBusqueda, esEstatusCfdi, paginaPedida,
   POR_PAGINA, PAGINA_MAX, ESTATUS_CFDI,
   type EstatusCfdi, type PaginaBandeja, type ResultadoBusquedaGastos,
 } from '@/lib/likida/sat_descarga/bandeja';
@@ -412,13 +412,17 @@ export async function VistaBandejaSat({ searchParams, tenantExiste = true }: {
       hasta: searchParams.bhasta ?? (f ? sumarDias(f, 3) : ''),
       texto: searchParams.btexto ?? '',
     };
-    const impNum = Number.parseFloat(prefill.importe);
-    busqueda = await buscarGastosParaLigar(tenantId, {
-      importe: Number.isFinite(impNum) ? impNum : null,
-      desde: prefill.desde || null,
-      hasta: prefill.hasta || null,
-      texto: prefill.texto || null,
-    });
+    // A37-S17-05: un importe ilegible NO quita el filtro ni se lee como 1;
+    // se avisa y no se busca (la pantalla no sugiere archivar).
+    const imp = interpretarImporteBusqueda(prefill.importe);
+    busqueda = imp.error !== null
+      ? { gastos: [], truncada: false, error: imp.error }
+      : await buscarGastosParaLigar(tenantId, {
+        importe: imp.importe,
+        desde: prefill.desde || null,
+        hasta: prefill.hasta || null,
+        texto: prefill.texto || null,
+      });
   }
 
   return (

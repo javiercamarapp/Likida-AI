@@ -108,7 +108,7 @@ const canalRecordado = new Map<string, { canal: CanalEntrega; hasta: number }>()
  * flota que SÍ se confirmó `cinco_agentes` alguna vez sigue protegida: `perfilDeTenant` recuerda ese último valor y
  * lo devuelve aunque la lectura de ahora falle.
  */
-async function canalDeEntregaPorOmision(tenantId: string): Promise<CanalEntrega> {
+export async function canalDeEntregaPorOmision(tenantId: string): Promise<CanalEntrega> {
   const ahora = Date.now();
   const r = canalRecordado.get(tenantId);
   if (r && r.hasta > ahora) return r.canal;
@@ -373,10 +373,18 @@ async function copiarSinTumbar(liq: LiquidacionExterna, doc: DocumentoEntrega, d
  */
 export async function reenviarCopiaAJefe(
   tenantId: string, id: string, deps: Dependencias = dependenciasPorOmision,
-): Promise<ResultadoCopia | { estado: 'no_encontrada' } | { estado: 'no_aplica' }> {
+): Promise<ResultadoCopia | { estado: 'no_encontrada' } | { estado: 'no_aplica' } | { estado: 'canal_correo' }> {
   const liq = await leerPorId(tenantId, id);
   if (!liq) return { estado: 'no_encontrada' };
   if (!liq.pdfRuta || liq.estado === 'pendiente') return { estado: 'no_aplica' };
+  // A37-S14-02: la copia sale por WhatsApp (con liga al PDF con cifras). Misma compuerta que `intentarEntrega`: flota por
+  // correo ⇒ no se manda; canal ilegible ⇒ fail-closed (no se manda nada a personas).
+  try {
+    if ((await (deps.canalDeEntrega ?? canalDeEntregaPorOmision)(tenantId)) === 'correo') return { estado: 'canal_correo' };
+  } catch (e) {
+    logger.warn('liqext.canal_no_leido', { id, err: e instanceof Error ? e.message : String(e) });
+    return { estado: 'no_aplica' };
+  }
   const base = `liquidacion-${liq.claveExterna.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 60)}`;
   const doc = await documentoDeEntrega(liq, base, deps);
   return deps.copiarAJefe(liq, { url: doc.url, nombre: doc.nombre });
@@ -707,7 +715,7 @@ async function descartarAviso(a: AvisoDiscrepancia, deps: Pick<Dependencias, 'ah
   }
 }
 
-export type ResultadoReaviso = 'reavisada' | 'parcial' | 'pendiente' | 'ya_enviado' | 'en_curso' | 'no_aplica' | 'no_encontrada';
+export type ResultadoReaviso = 'canal_correo' | 'reavisada' | 'parcial' | 'pendiente' | 'ya_enviado' | 'en_curso' | 'no_aplica' | 'no_encontrada';
 
 /**
  * «Reavisar» (el panel): rearma el aviso de discrepancia fallido o pendiente y lo intenta ya. No repite a quien ya lo recibió.
@@ -719,6 +727,13 @@ export async function reavisarDiscrepancia(
   const liq = await leerPorId(tenantId, id);
   if (!liq) return 'no_encontrada';
   if (liq.acuseTipo !== 'no_coincide') return 'no_aplica';
+  // A37-S14-02: el aviso sale por WhatsApp; misma compuerta de canal que `intentarEntrega` (fail-closed si no se lee).
+  try {
+    if ((await (deps.canalDeEntrega ?? canalDeEntregaPorOmision)(tenantId)) === 'correo') return 'canal_correo';
+  } catch (e) {
+    logger.warn('liqext.canal_no_leido', { id, err: e instanceof Error ? e.message : String(e) });
+    return 'no_aplica';
+  }
   const r = await rearmarAvisoDiscrepancia(tenantId, id, deps.ahora().toISOString());
   const ciclo = r === 'sin_rpc' ? null : r.ciclo;
   if (r !== 'sin_rpc' && ciclo === null) return 'ya_enviado';

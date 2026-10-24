@@ -22,7 +22,7 @@ import { buscarCatalogo, type OpcionCatalogo, type TipoCatalogo } from '@/lib/li
 import {
   contarPorEstado, contarNoCoincide, listarLiquidacionesExternas, avisosDiscrepanciaDe, type FiltroListado,
 } from '@/lib/likida/liquidacion_externa/repo';
-import { reintentarLiquidacionExterna, reenviarCopiaAJefe, reavisarDiscrepancia } from '@/lib/likida/liquidacion_externa/servicio';
+import { reintentarLiquidacionExterna, reenviarCopiaAJefe, reavisarDiscrepancia, canalDeEntregaPorOmision } from '@/lib/likida/liquidacion_externa/servicio';
 import { reenviarDesglose, type DestinoReenvio, type MotivoReenvio } from '@/lib/likida/liquidacion_externa/reenvio_correo';
 import { liberarEnvio } from '@/lib/likida/liquidacion_externa/liberar_envio';
 import { leerFormatoFlota, leerTelefonosFlota } from '@/lib/likida/liquidacion_externa/repo';
@@ -30,12 +30,12 @@ import { importarLiquidacionesDeArchivo } from '@/lib/likida/liquidacion_externa
 import { decodificarCursor, codificarCursor } from '@/app/api/v1/_comun';
 import { SeccionExternas, leerFiltroExterno, leerMensajeExterno } from './externas';
 import {
-  SeccionDesgloses, VistaDesgloses, PanelDetalleDesglose, SeccionExcepciones, leerMensajeDesglose,
+  SeccionDesgloses, VistaDesgloses, PanelDetalleDesglose, SeccionExcepciones, TOPE_EXCEPCIONES, TOPE_SIN_POLIZA, leerMensajeDesglose,
   leerFiltroDesglose, leerDia, destinosDe, cumpleFiltro,
   type FiltroDesglose, type FilaDesglose, type FilaSinPoliza, type FichasDesgloses, type LecturaDesgloses,
 } from './desgloses';
 import {
-  leerConfigCorreo, listarDesgloses, entregasDe, contarParaInsights, listarExcepciones, type CursorLista,
+  listarDesgloses, entregasDe, contarParaInsights, listarExcepciones, type CursorLista,
 } from '@/lib/likida/liquidacion_externa/repo_correo';
 import { leerPorId } from '@/lib/likida/liquidacion_externa/repo';
 import { hoyMx, inicioDiaMx, finDiaMx } from '@/lib/formato';
@@ -56,12 +56,12 @@ const LOTE_FILTRADO = 40;
 const MAX_LOTES = 5;
 const DIA_MS = 24 * 3600 * 1000;
 
-/** El canal del desglose de la flota. Sin fila de configuración, o si no se puede leer, es el de siempre (`whatsapp`): jamás se cambia la
- *  pantalla de una flota por una lectura que falló. */
+/** El canal del desglose de la flota: LA MISMA función que usa la entrega (A37-S14-02), con el fail-safe `cinco_agentes` (siempre
+ *  correo). Sin fila de configuración, o si no se puede leer, es el de siempre (`whatsapp`): jamás se cambia la pantalla de una flota
+ *  por una lectura que falló. */
 async function canalDeLaFlota(tenantId: string): Promise<'whatsapp' | 'correo' | 'ambos'> {
   try {
-    const c = await leerConfigCorreo(tenantId);
-    return c.ok ? c.valor.canal : 'whatsapp';
+    return await canalDeEntregaPorOmision(tenantId);
   } catch {
     return 'whatsapp';
   }
@@ -106,10 +106,10 @@ function volverAlDetalle(contexto: Array<[string, string]>, id: string | null, c
   redirect(`/dashboard/agentes/liquidacion?${new URLSearchParams(params).toString()}#detalle-desglose`);
 }
 
-/** Las excepciones abiertas de la flota (las 50 más recientes). `null` = no se pudo leer: jamás «sin excepciones». */
+/** Las excepciones abiertas de la flota (las 50 más recientes; pide una más para que la sección avise «hay más»). `null` = no se pudo leer: jamás «sin excepciones». */
 async function cargarExcepciones(tenantId: string) {
   try {
-    const r = await listarExcepciones(tenantId, { limite: 50 });
+    const r = await listarExcepciones(tenantId, { limite: TOPE_EXCEPCIONES + 1 });
     return r.ok ? r.valor : null;
   } catch {
     return null;
@@ -127,10 +127,11 @@ async function cargarDesgloses(
   try {
     const fichas = await fichasDesgloses(tenantId);
     if (filtro === 'sin_poliza') {
-      const ex = await listarExcepciones(tenantId, { tipo: 'sin_poliza', limite: 200 });
+      const ex = await listarExcepciones(tenantId, { tipo: 'sin_poliza', limite: TOPE_SIN_POLIZA + 1 });
       if (!ex.ok) return { ok: false };
-      const sinPoliza: FilaSinPoliza[] = ex.valor.map((x) => ({ bitacora: x.claveExterna, desde: x.primeraVez, ultimaVez: x.ultimaVez }));
-      return { ok: true, fichas, filas: [], sinPoliza, siguiente: null };
+      const sinPolizaTruncada = ex.valor.length > TOPE_SIN_POLIZA;
+      const sinPoliza: FilaSinPoliza[] = ex.valor.slice(0, TOPE_SIN_POLIZA).map((x) => ({ bitacora: x.claveExterna, desde: x.primeraVez, ultimaVez: x.ultimaVez }));
+      return { ok: true, fichas, filas: [], sinPoliza, siguiente: null, sinPolizaTruncada };
     }
     const cota = { desde: desde ? Date.parse(inicioDiaMx(desde)) : null, hasta: hasta ? Date.parse(finDiaMx(hasta)) : null };
     const filtrando = !!(filtro || desde || hasta);
@@ -447,12 +448,12 @@ export default async function PaginaAgenteLiquidacion({
     const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
     if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion')) throw new Error('Tu rol no ve esta pantalla.');
     const id = String(fd.get('id') ?? '');
-    let resultado: 'copia_enviada' | 'copia_ya' | 'copia_fallo' | 'copia_sin_jefe' | 'no_encontrada' | 'error' = 'no_encontrada';
+    let resultado: 'copia_enviada' | 'copia_ya' | 'copia_fallo' | 'copia_sin_jefe' | 'canal_correo' | 'no_encontrada' | 'error' = 'no_encontrada';
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
       try {
         const r = await reenviarCopiaAJefe(s.tenantId, id.toLowerCase());
         resultado = r.estado === 'enviada' ? 'copia_enviada' : r.estado === 'ya_enviada' ? 'copia_ya'
-          : r.estado === 'sin_destinatarios' ? 'copia_sin_jefe' : r.estado === 'no_enviada' ? 'copia_fallo' : 'no_encontrada';
+          : r.estado === 'sin_destinatarios' ? 'copia_sin_jefe' : r.estado === 'canal_correo' ? 'canal_correo' : r.estado === 'no_enviada' ? 'copia_fallo' : 'no_encontrada';
       } catch {
         resultado = 'error';
       }
@@ -468,7 +469,7 @@ export default async function PaginaAgenteLiquidacion({
     const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
     if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion')) throw new Error('Tu rol no ve esta pantalla.');
     const id = String(fd.get('id') ?? '');
-    let resultado: 'reaviso_ok' | 'reaviso_parcial' | 'reaviso_pendiente' | 'reaviso_ya' | 'reaviso_en_curso' | 'no_aplica' | 'no_encontrada' | 'error' = 'no_encontrada';
+    let resultado: 'reaviso_ok' | 'reaviso_parcial' | 'reaviso_pendiente' | 'reaviso_ya' | 'reaviso_en_curso' | 'canal_correo' | 'no_aplica' | 'no_encontrada' | 'error' = 'no_encontrada';
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
       try {
         const r = await reavisarDiscrepancia(s.tenantId, id.toLowerCase(), s.userId);

@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { puedeAdministrar } from '@/lib/auth/permisos';
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
@@ -29,15 +30,31 @@ const MAX_BYTES_SUBIDA = 9 * 1024 * 1024;
 const mensajeDeDivision = (n: number): string =>
   `El archivo trae ${n} embarques: lo separé en ${n} documentos, uno por embarque. Se van leyendo y los verás en la bandeja para revisar; el archivo original queda como constancia.`;
 
+const LIMITE_BANDEJA = 200;
+/** Tope de por_revisar + fallidos que la bandeja carga siempre (repo.listarDocumentos corta en 500). */
+const LIMITE_PENDIENTES = 500;
+const LIMITE_METRICAS = 500;
+
+/** Las `base` más las `extra` que no estén ya (por id), de lo más reciente a lo más antiguo. */
+function unirSinRepetir<T extends { id: string; createdAt: string }>(base: T[], extra: T[]): T[] {
+  const vistos = new Set(base.map((d) => d.id));
+  return [...base, ...extra.filter((d) => !vistos.has(d.id))].sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * La sesión y el área, DE NUEVO, dentro de cada acción. A nivel de módulo a propósito: una función declarada en el
  * cuerpo del componente y usada dentro de un `'use server'` se captura por closure y Next no puede serializarla.
  */
-async function sesionDeAccion(sp: { tenant?: string; rol?: string; vista?: string }): Promise<{ tenantId: string; userId: string } | { error: string }> {
+async function sesionDeAccion(
+  sp: { tenant?: string; rol?: string; vista?: string }, opts: { configuracion?: boolean } = {},
+): Promise<{ tenantId: string; userId: string } | { error: string }> {
   const s = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede administrar los documentos de Carta Porte.' };
+  // A37-S16-03: la configuración (buzón, remitentes, formatos de exportación, versión del perfil que lee los documentos de cada
+  // cliente) es del dueño de la cuenta, no de quien solo ve la ruta (el encargado). Mismo criterio que /dashboard/arco.
+  if (opts.configuracion && !puedeAdministrar(s.rol)) return { error: 'Configurar los documentos de Carta Porte es del dueño de la flota.' };
   return { tenantId: s.tenantId, userId: s.userId };
 }
 
@@ -58,14 +75,18 @@ async function cargarAsignacion(tenantId: string, ids: string[]): Promise<Pick<D
 async function cargarDatos(tenantId: string): Promise<DatosDocumentos | null> {
   try {
     const desde = new Date(Date.now() - DIAS_VENTANA * 86_400_000).toISOString();
-    const [lista, perfiles, clientes, buzon, configs] = await Promise.all([
-      repo.listarDocumentos(tenantId, { limite: 200 }),
+    const [recientesLista, pendientes, perfiles, clientes, buzon, configs] = await Promise.all([
+      repo.listarDocumentos(tenantId, { limite: LIMITE_BANDEJA }),
+      // A37-S16-02: lo que espera a una persona (por revisar) o falló NUNCA se corta con los 200 más recientes.
+      repo.listarDocumentos(tenantId, { estados: ['por_revisar', 'fallido'], limite: LIMITE_PENDIENTES }),
       repo.listarPerfiles(tenantId),
       repo.listarClientes(tenantId),
       repo.buzonDeFlota(tenantId),
       repo.listarExportConfigs(tenantId),
     ]);
-    const recientes = (await repo.listarDocumentos(tenantId, { desde, limite: 500 })).filas;
+    const lista = { total: recientesLista.total, filas: unirSinRepetir(recientesLista.filas, pendientes.filas) };
+    const ventana = await repo.listarDocumentos(tenantId, { desde, limite: LIMITE_METRICAS });
+    const recientes = ventana.filas;
     const correcciones = await repo.contarCorreccionesPorDocumento(tenantId, recientes.filter((d) => d.estado === 'aprobado').map((d) => d.id));
     const versiones = await Promise.all(perfiles.map((p) => repo.listarVersionesPerfil(tenantId, p.id)));
     const dominio = dominioBuzon();
@@ -74,6 +95,8 @@ async function cargarDatos(tenantId: string): Promise<DatosDocumentos | null> {
     const asignacion = await cargarAsignacion(tenantId, lista.filas.map((d) => d.id));
     return {
       filas: lista.filas, total: lista.total, envios, ...asignacion,
+      // A37-S16-01: las métricas «90 días» se calculan sobre a lo más LIMITE_METRICAS documentos; si hay más, se dice.
+      ...(ventana.total > recientes.length ? { metricasMuestra: { usados: recientes.length, total: ventana.total } } : {}),
       linaje: Object.fromEntries([...linaje].map(([id, l]) => [id, { rol: l.rol, indice: l.indice, total: l.total, clave: l.clave }])), metricas: calcularMetricas(recientes, correcciones), clientes,
       perfiles: perfiles.map((p, i) => ({ id: p.id, nombre: p.nombre, formato: p.formato, versionActiva: p.versionActiva, mapeos: p.activa.mapeos.length, versiones: versiones[i].map((v) => ({ version: v.version, nota: v.nota, mapeos: v.mapeos })) })),
       buzon: buzon ? { direccion: direccionCp(buzon.token, dominio), activo: buzon.activo, remitentes: buzon.remitentesPermitidos, dominioConfigurado: dominio !== null } : null,
@@ -147,7 +170,7 @@ export default async function PaginaDocumentos({
 
   async function activarBuzon(): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp);
+    const s = await sesionDeAccion(sp, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       await repo.crearBuzon(s.tenantId, generarTokenCp());
@@ -160,7 +183,7 @@ export default async function PaginaDocumentos({
 
   async function guardarRemitentes(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp);
+    const s = await sesionDeAccion(sp, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const lista = String(fd.get('remitentes') ?? '').split(/\r?\n/).map((x) => x.trim().toLowerCase()).filter(Boolean);
@@ -177,7 +200,7 @@ export default async function PaginaDocumentos({
 
   async function guardarExport(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp);
+    const s = await sesionDeAccion(sp, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const nombre = String(fd.get('nombre') ?? '').trim();
@@ -198,7 +221,7 @@ export default async function PaginaDocumentos({
 
   async function borrarExport(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp);
+    const s = await sesionDeAccion(sp, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const id = String(fd.get('id') ?? '');
@@ -213,7 +236,7 @@ export default async function PaginaDocumentos({
 
   async function volverVersion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp);
+    const s = await sesionDeAccion(sp, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const perfilId = String(fd.get('perfilId') ?? '');

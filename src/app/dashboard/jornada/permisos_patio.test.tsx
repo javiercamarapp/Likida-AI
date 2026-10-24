@@ -43,6 +43,8 @@ vi.mock('@/lib/likida/bitacora_escritura', () => ({ anotarBitacora: (...a: unkno
 vi.mock('@/lib/likida/jornada/firma', () => ({ correoDelUsuario: async () => 'jefe@flota.mx' }));
 vi.mock('@/lib/likida/jornada/repo', () => ({
   JornadaIlegible: class extends Error {},
+  diaDeJornada: async () => '2026-10-01',
+  asientosDeJornada: async () => [],
   leerJornadas: async () => ({
     truncada: false,
     dias: [
@@ -140,7 +142,7 @@ describe('anularMarca', () => {
 });
 
 describe('capturarMarca y cerrarElDia', () => {
-  const MARCA = { tipo: 'inicio_jornada', momento: '2026-10-01T06:00' };
+  const MARCA = { tipo: 'inicio_jornada', momento: '2026-10-01T06:00', nota: 'me lo dijo por teléfono' };
   it('capturar: del patio del jefe sí; de otro patio no', async () => {
     m.patioJefe = NORTE;
     const p = await props();
@@ -148,6 +150,15 @@ describe('capturarMarca y cerrarElDia', () => {
     expect(m.asentar).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 't1', jornadaId: J_NORTE, procedencia: 'capturado_contralor', registradoPor: 'u-jefe' }));
     expect(await p.capturarMarca({ ok: false }, fd({ jornadaId: J_SUR, ...MARCA }))).toMatchObject({ ok: false, error: expect.stringMatching(/no es de tu patio/) });
     expect(m.asentar).toHaveBeenCalledTimes(1);
+  });
+
+  it('A37-S19-01/02: sin nota o con una hora de otro mes no se asienta nada', async () => {
+    m.patioJefe = NORTE;
+    const p = await props();
+    expect(await p.capturarMarca({ ok: false }, fd({ jornadaId: J_NORTE, ...MARCA, nota: '' }))).toMatchObject({ ok: false });
+    expect(await p.capturarMarca({ ok: false }, fd({ jornadaId: J_NORTE, ...MARCA, momento: '2026-11-01T06:00' }))).toMatchObject({ ok: false });
+    expect(await p.capturarMarca({ ok: false }, fd({ jornadaId: J_NORTE, ...MARCA, momento: '2026-02-30T06:00' }))).toMatchObject({ ok: false });
+    expect(m.asentar).not.toHaveBeenCalled();
   });
 
   it('cerrar el día: del patio sí; de otro no', async () => {

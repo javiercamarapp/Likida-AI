@@ -906,7 +906,8 @@ export async function guardarAjustesOperativos(
   // UPDATE, así que dos pantallas guardando a la vez ya no se pisan (DAT-20).
   const { error } = await mezclarConfig(tenantId, {
     tabulador: ajustes.tabulador,
-    catalogoCuentas: ajustes.catalogoCuentas,
+    // A37-S17-02: sin cuentas no se escribe la llave (ni se declara un catálogo vacío ni se pisa uno existente).
+    ...(Object.keys(ajustes.catalogoCuentas).length > 0 ? { catalogoCuentas: ajustes.catalogoCuentas } : {}),
     salida: ajustes.salida,
   }, 'guardarAjustesOperativos');
   if (error) throw error;

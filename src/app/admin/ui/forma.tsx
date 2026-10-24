@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react';
 import { AlertTriangle, Check } from 'lucide-react';
+import { BotonConfirmar } from './confirmar';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOS FORMULARIOS QUE DAN DE ALTA — y el aviso que dice por qué NO se pudo.
@@ -49,12 +50,15 @@ export function FormaConAviso({
   boton,
   children,
   columnas = 'md:grid-cols-3',
+  confirmar,
 }: {
   accion: AccionDeForma;
   boton: string;
   children: React.ReactNode;
   /** Clases de columnas del grid de campos. Una lista larga usa `md:grid-cols-1`. */
   columnas?: string;
+  /** A37-S16-04: para lo irreversible. El botón visible abre un diálogo que DICE el alcance; el envío es el botón del diálogo. */
+  confirmar?: { titulo: string; descripcion: React.ReactNode; etiquetaConfirmar: string };
 }) {
   const [estado, enviar, pendiente] = useActionState<ResultadoAccion, FormData>(accion, null);
 
@@ -63,14 +67,23 @@ export function FormaConAviso({
       <div className={`grid grid-cols-1 ${columnas} gap-3`}>{children}</div>
       <Aviso estado={estado} />
       <div>
-        <button
-          type="submit"
-          disabled={pendiente}
-          className="text-sm font-medium rounded-lg px-4 py-2 w-full md:w-auto disabled:opacity-60 disabled:cursor-not-allowed"
-          style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}
-        >
-          {pendiente ? 'Guardando…' : boton}
-        </button>
+        {confirmar ? (
+          <BotonConfirmar
+            etiqueta={pendiente ? 'Guardando…' : boton} deshabilitado={pendiente}
+            titulo={confirmar.titulo} descripcion={confirmar.descripcion} etiquetaConfirmar={confirmar.etiquetaConfirmar}
+            className="text-sm font-medium rounded-lg px-4 py-2 w-full md:w-auto disabled:opacity-60 disabled:cursor-not-allowed"
+            style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}
+          />
+        ) : (
+          <button
+            type="submit"
+            disabled={pendiente}
+            className="text-sm font-medium rounded-lg px-4 py-2 w-full md:w-auto disabled:opacity-60 disabled:cursor-not-allowed"
+            style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}
+          >
+            {pendiente ? 'Guardando…' : boton}
+          </button>
+        )}
       </div>
     </form>
   );

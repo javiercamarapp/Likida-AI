@@ -29,6 +29,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { logger } from '@/lib/logger';
+import { parsearImporteMx } from '@/lib/formato';
 
 /** Los cuatro estatus del CHECK `sat_cfdi_descargado_estatus_dominio` (0231). */
 export const ESTATUS_CFDI = ['ambiguo', 'disponible', 'casado', 'ignorado'] as const;
@@ -444,6 +445,22 @@ export const MAX_BUSQUEDA_GASTOS = 20;
 /** Tolerancia por defecto del importe, en pesos. El total del CFDI y el del
  *  ticket pueden diferir por redondeo de centavos, no por más. */
 export const TOLERANCIA_IMPORTE = 1;
+
+/**
+ * El importe que el contralor tecleó en el buscador (A37-S17-05). Se lee con
+ * `parsearImporteMx`, igual que el resto del repo: `parseFloat('1,250.50')`
+ * daba 1 (y '$1,250.50' daba NaN, que quitaba el filtro en silencio). Vacío =
+ * sin filtro; ilegible o ambiguo = error visible, NUNCA un importe adivinado
+ * ni un filtro quitado.
+ */
+export function interpretarImporteBusqueda(texto: string): { importe: number | null; error: string | null } {
+  if (texto.trim() === '') return { importe: null, error: null };
+  const n = parsearImporteMx(texto);
+  if (!Number.isFinite(n) || n < 0) {
+    return { importe: null, error: `importe no válido («${texto.trim().slice(0, 30)}»): escríbelo como 1250.50` };
+  }
+  return { importe: n, error: null };
+}
 
 /**
  * Los gastos SIN comprobante que podrían corresponder a este CFDI.
