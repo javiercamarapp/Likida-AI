@@ -75,6 +75,8 @@ export function crearDbFalsa(
     is(c: string, v: unknown) { this.filtros.push([c, 'is', v]); return this; }
     not(c: string, o: string, v: unknown) { this.filtros.push([c, o === 'is' ? 'nis' : o, v]); return this; }
     lt(c: string, v: unknown) { this.filtros.push([c, 'lt', v]); return this; }
+    /** `or('col.is.null,col.gte.X')`: solo los operadores is/eq/gte/lte/lt que usa el código. */
+    or(expr: string) { this.filtros.push(['', 'or', expr]); return this; }
     order(c: string, o?: { ascending?: boolean }) { this.orden.push([c, o?.ascending !== false]); return this; }
     range(d: number, h: number) { this.desde = d; this.hasta = h; return this; }
     limit(n: number) { this.desde = 0; this.hasta = n - 1; return this; }
@@ -83,6 +85,20 @@ export function crearDbFalsa(
 
     private coincide(f: Fila): boolean {
       return this.filtros.every(([c, o, v]) => {
+        if (o === 'or') {
+          return (v as string).split(',').some((cl) => {
+            const [col, op, ...resto] = cl.split('.');
+            const lit = resto.join('.');
+            const y = f[col];
+            if (op === 'is') return lit === 'null' ? y === null || y === undefined : String(y) === lit;
+            if (y === null || y === undefined) return false;
+            if (op === 'eq') return String(y) === lit;
+            if (op === 'gte') return (y as string) >= lit;
+            if (op === 'lte') return (y as string) <= lit;
+            if (op === 'lt') return (y as string) < lit;
+            throw new Error(`db_falsa: operador or no soportado: ${op}`);
+          });
+        }
         const x = f[c];
         if (o === 'eq') return x === v;
         if (o === 'in') return (v as Set<unknown>).has(x);

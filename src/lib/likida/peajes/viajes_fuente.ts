@@ -115,6 +115,11 @@ export async function desdeConectorTms(
   return { viajes: validarLote(v, validarViajeFuente), posiciones: validarLote(p, validarPosicionConViaje) };
 }
 
+/** El día calendario anterior a una fecha ISO real (YYYY-MM-DD). */
+function diaAntes(iso: string): string {
+  return new Date(Date.parse(`${iso}T00:00:00.000Z`) - 86_400_000).toISOString().slice(0, 10);
+}
+
 /**
  * Viajes de la tabla local `viaje` cuyo [inicio, fin] toca el rango. Solo
  * lectura. `unidad_id` → `numero_economico`; un viaje sin unidad o con
@@ -128,7 +133,11 @@ export async function desdeTablaViajeLocal(
   const filas = await traerTodo<Record<string, unknown>>(
     (d, h) => acotada(supabaseAdmin()
       .from('viaje').select('id, folio, unidad_id, fecha_inicio, fecha_fin, origen, destino', conteo(d))
-      .eq('tenant_id', tenantId).lte('fecha_inicio', rango.hasta).order('id').range(d, h), 'peajes.viajes_fuente'),
+      .eq('tenant_id', tenantId).lte('fecha_inicio', rango.hasta)
+      // A37-A2-28: cota inferior por fecha_fin (con un día de margen por zona horaria; el filtro exacto sigue abajo).
+      // El viaje abierto (sin fecha_fin) siempre entra.
+      .or(`fecha_fin.is.null,fecha_fin.gte.${diaAntes(rango.desde)}`)
+      .order('id').range(d, h), 'peajes.viajes_fuente'),
     'peajes.viajes_fuente',
   );
   const tocan = filas.filter((f) => {

@@ -59,6 +59,15 @@ describe('adaptador de la tabla local de viajes', () => {
     expect(ids).not.toContain('v5');
   });
 
+  it('A37-A2-28: la consulta se acota por fecha_fin (viajes terminados antes del rango no se traen), conservando los abiertos', async () => {
+    await V.desdeTablaViajeLocal(T, RANGO);
+    const q = db.llamadas.find((l) => l.tabla === 'viaje')!;
+    const or = q.filtros.find(([, o]) => o === 'or');
+    expect(or, 'falta la cota inferior por fecha_fin').toBeDefined();
+    expect(String(or![2])).toContain('fecha_fin.is.null');
+    expect(String(or![2])).toMatch(/fecha_fin\.gte\.2026-08-31/); // un día de margen por zona horaria; el filtro exacto sigue en memoria
+  });
+
   it('es solo lectura', async () => {
     await V.desdeTablaViajeLocal(T, RANGO);
     expect(db.llamadas.every((l) => l.op === 'select')).toBe(true);
