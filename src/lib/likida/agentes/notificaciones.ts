@@ -817,6 +817,8 @@ async function cerrarIncidente(
 
 async function guardarMagnitud(
   tenantId: string, agente: AgenteId, evento: EventoId, magnitud: number,
+  /** `true` cuando `leerEstado` no encontró fila: este upsert es el INSERT. */
+  filaNueva = false,
 ): Promise<void> {
   // Lectura-modificación-escritura: dos corridas simultáneas pueden leer la
   // misma racha y escribir el mismo +1 (una se pierde). Se acepta a
@@ -850,6 +852,15 @@ async function guardarMagnitud(
     .upsert({
       tenant_id: tenantId, agente, evento,
       magnitud,
+      // A37-S28-07: en el INSERT, `actualizado_en` nacía con el `now()` de la
+      // base, POSTERIOR al `ahora` de JS que `reclamarAviso` graba en
+      // `avisado_en`; el primer incidente quedaba como «cerrado»
+      // (`actualizado_en > avisado_en`) y, aún roto con racha 2-4, mandaba un
+      // segundo correo solo por el piso de una hora. Una fila NUEVA no es un
+      // cierre: nace con la época. (Si otra corrida creó la fila entre la
+      // lectura y este upsert, el peor caso es no ver un cierre ya anotado:
+      // el lado conservador, menos correos.)
+      ...(filaNueva ? { actualizado_en: new Date(0).toISOString() } : {}),
     }, { onConflict: 'tenant_id,agente,evento' });
   if (error) throw new Error(`guardarMagnitud: ${error.message}`);
 }
@@ -1029,7 +1040,7 @@ export async function avisar(
     const magnitud = estado.magnitud === null
       ? (previo?.magnitud ?? 0) + 1
       : Math.max(1, Math.floor(estado.magnitud));
-    await guardarMagnitud(tenantId, agenteId, evento, magnitud);
+    await guardarMagnitud(tenantId, agenteId, evento, magnitud, previo === null);
 
     const conf = await leerConfigNotificaciones(tenantId, agente);
     if ('error' in conf) return nada(conf.error, magnitud);
