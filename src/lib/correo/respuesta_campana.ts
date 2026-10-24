@@ -30,6 +30,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { suprimirCorreo } from '@/lib/likida/agentes/enviador';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { logger } from '@/lib/logger';
+import { direccionDeEncabezado } from '@/lib/correo/remitente';
 
 /** El buzón del que sale la campaña (enviar.ts, remitente local 'avisos'). */
 export function direccionDeCampana(): string | null {
@@ -37,12 +38,9 @@ export function direccionDeCampana(): string | null {
   return dominio ? `avisos@${dominio}`.toLowerCase() : null;
 }
 
-const RE_CORREO = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
-
 /** El correo pelón de un encabezado From/To ("Nombre <a@b>" o "a@b"). */
 export function extraerCorreo(encabezado: string | undefined | null): string | null {
-  const m = (encabezado ?? '').match(RE_CORREO);
-  return m ? m[0].toLowerCase() : null;
+  return direccionDeEncabezado(encabezado);
 }
 
 /** ¿Alguno de los destinatarios es el buzón de campaña? Exportada para su
