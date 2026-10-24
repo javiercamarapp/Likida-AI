@@ -155,15 +155,6 @@ describe('buscarCatalogo / contarCatalogo (FE-2)', () => {
     inAbiertas.mockClear(); eqTenantAbiertas.mockClear(); selectAbiertas.mockClear();
   });
 
-  it('la unidad se busca y se ordena por numero_economico, no por nombre', async () => {
-    listaResult.mockResolvedValue({ data: [{ id: 'u-1', numero_economico: 'T-014' }], error: null });
-    const r = await buscarCatalogo('t-1', 'unidad', 'T-0');
-    expect(from).toHaveBeenCalledWith('unidad');
-    expect(ilikeLista).toHaveBeenCalledWith('numero_economico', '%T-0%');
-    expect(orderLista).toHaveBeenCalledWith('numero_economico');
-    expect(r).toEqual([{ id: 'u-1', etiqueta: 'T-014' }]);
-  });
-
   // R15-ux-01 (auditoría 35): dos operadores activos con el MISMO nombre daban dos
   // etiquetas idénticas y el combo resolvía al primero → el viaje y el WhatsApp
   // del anticipo iban al homónimo equivocado. Solo el teléfono es único (0024).
@@ -196,31 +187,8 @@ describe('buscarCatalogo / contarCatalogo (FE-2)', () => {
   // un viaje abierto — el jefe de tráfico podía elegirlas desde la UI y
   // chocar con el candado de servidor (operacion.ts) en vez de no verlas.
   // ═══════════════════════════════════════════════════════════════════════
-  it('el catálogo de UNIDAD consulta primero qué unidades tienen viaje abierto, acotado por tenant', async () => {
-    listaResult.mockResolvedValue({ data: [{ id: 'u-1', numero_economico: 'T-014' }], error: null });
-    await buscarCatalogo('t-1', 'unidad');
-    expect(from).toHaveBeenCalledWith('viaje');
-    expect(eqTenantAbiertas).toHaveBeenCalledWith('tenant_id', 't-1');
-    expect(inAbiertas).toHaveBeenCalledWith('estatus', ['abierto', 'en_cuadre']);
-    expect(notAbiertas).toHaveBeenCalledWith('unidad_id', 'is', null);
-  });
-
-  it('el catálogo de UNIDAD EXCLUYE las que ya tienen viaje abierto', async () => {
-    abiertasResult.mockResolvedValue({ data: [{ unidad_id: 'u-1' }], error: null, count: 1 });
-    listaResult.mockResolvedValue({ data: [{ id: 'u-2', numero_economico: 'T-020' }], error: null });
-    const r = await buscarCatalogo('t-1', 'unidad');
-    expect(notLista).toHaveBeenCalledWith('id', 'in', '(u-1)');
-    expect(r).toEqual([{ id: 'u-2', etiqueta: 'T-020' }]);
-  });
-
-  it('con CERO unidades ocupadas, el catálogo de UNIDAD no manda ningún `.not(id, in, …)` — solo lo pide si hay algo que excluir', async () => {
-    abiertasResult.mockResolvedValue({ data: [], error: null, count: 0 });
-    listaResult.mockResolvedValue({ data: [{ id: 'u-1', numero_economico: 'T-014' }], error: null });
-    const r = await buscarCatalogo('t-1', 'unidad');
-    expect(notLista).not.toHaveBeenCalled();
-    expect(r).toEqual([{ id: 'u-1', etiqueta: 'T-014' }]);
-  });
-
+  // Las pruebas de UNIDAD (orden por numero_economico, exclusión de las ocupadas,
+  // sin `.not(id, in, …)`) viven en repo_catalogo_unidades.test.ts (A37-S56-08).
   it('cliente y operador NO consultan viajes abiertos — la exclusión es SOLO de unidad', async () => {
     listaResult.mockResolvedValue({ data: [{ id: 'c-1', nombre: 'ACME' }], error: null });
     await buscarCatalogo('t-1', 'cliente');

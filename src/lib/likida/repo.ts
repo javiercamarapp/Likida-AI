@@ -285,26 +285,31 @@ export function sanearCatalogo(q: string | undefined | null): string {
 }
 
 /**
- * Ids de unidades con viaje ABIERTO en este tenant (hallazgo ALTO: ver
- * `uq_viaje_abierto_por_unidad`, 0849). `asignarUnidad`/`crearViaje`
- * (operacion.ts) ya tienen su propio candado de servidor contra esto, pero
- * eso solo evita que un POST directo lo logre — sin esto, el COMBO de
- * `/dashboard/despacho` seguía OFRECIENDO esas unidades, así que el jefe de
- * tráfico podía intentarlo (y chocar con el candado) cuando la pantalla
- * debía habérselo quitado de enfrente desde antes.
+ * De estos ids de unidad, cuáles tienen un viaje ABIERTO o en cuadre (hallazgo
+ * ALTO: ver `uq_viaje_abierto_por_unidad`, 0849). `asignarUnidad`/`crearViaje`
+ * (operacion.ts) ya tienen su propio candado de servidor contra esto, pero eso
+ * solo evita que un POST directo lo logre — sin esto, el COMBO de
+ * `/dashboard/despacho` seguía OFRECIENDO esas unidades.
  *
- * Acotado igual que el resto del catálogo: una flota con más unidades
- * abiertas que `MAX_PAGINAS` páginas necesita filtrar en SQL, no aquí — pero
- * eso excede lo que un combo de 20 opciones resuelve.
+ * A37-S56-08: antes releía TODOS los viajes abiertos de la flota en cada tecla
+ * y armaba `.not('id','in',(todos los ocupados))`: con 250 camiones casi todos
+ * ocupados la URL pasaba de 9 KB. Ahora recibe SOLO los ids de la página que
+ * se está mirando (≤ `UNIDADES_POR_PAGINA`), así la lista de la URL no crece
+ * con la flota. Las filas de respuesta son a lo más una por unidad más sus
+ * viajes en cuadre, muy por debajo del recorte de 1,000 de PostgREST.
  */
-async function unidadesConViajeAbierto(tenantId: string): Promise<string[]> {
-  const filas = await traerTodo<{ unidad_id: unknown }>(
-    (d, h) => acotada(supabaseAdmin().from('viaje').select('unidad_id', conteo(d))
-      .eq('tenant_id', tenantId).in('estatus', ['abierto', 'en_cuadre']).not('unidad_id', 'is', null)
-      .order('unidad_id').range(d, h), 'unidadesConViajeAbierto'),
-    'unidadesConViajeAbierto',
-  );
-  return [...new Set(filas.map((f) => f.unidad_id).filter((id): id is string => typeof id === 'string'))];
+const UNIDADES_POR_PAGINA = 100;
+/** 50 × 100 = 5,000 unidades revisadas como máximo por tecla del combo. */
+const MAX_PAGINAS_UNIDADES = 50;
+
+async function unidadesOcupadasEntre(tenantId: string, ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const { data, error } = await acotada(supabaseAdmin().from('viaje').select('id, unidad_id')
+    .eq('tenant_id', tenantId).in('estatus', ['abierto', 'en_cuadre']).in('unidad_id', ids)
+    .order('id').limit(1_000), 'unidadesOcupadasEntre');
+  if (error) throw new Error(`unidadesOcupadasEntre: ${error.message}`);
+  return new Set(((data ?? []) as Array<{ unidad_id: unknown }>)
+    .map((f) => f.unidad_id).filter((id): id is string => typeof id === 'string'));
 }
 
 /**
@@ -327,21 +332,41 @@ export async function buscarCatalogo(
   const texto = sanearCatalogo(q);
   const tope = Math.max(1, Math.min(TOPE_CATALOGO, limite));
 
-  let consulta = supabaseAdmin()
-    .from(cat.tabla)
-    .select(cat.pista ? `id, ${cat.columna}, ${cat.pista}` : `id, ${cat.columna}`)
-    .eq('tenant_id', tenantId)
-    .eq('activo', true);
-  if (texto) consulta = consulta.ilike(cat.columna, `%${texto}%`);
-  // HALLAZGO ALTO: el combo de unidades no debe ni OFRECER una unidad que ya
-  // está en otro viaje abierto — ver `unidadesConViajeAbierto` arriba.
-  if (tipo === 'unidad') {
-    const ocupadas = await unidadesConViajeAbierto(tenantId);
-    if (ocupadas.length > 0) consulta = consulta.not('id', 'in', `(${ocupadas.join(',')})`);
-  }
+  const base = () => {
+    let c = supabaseAdmin()
+      .from(cat.tabla)
+      .select(cat.pista ? `id, ${cat.columna}, ${cat.pista}` : `id, ${cat.columna}`)
+      .eq('tenant_id', tenantId)
+      .eq('activo', true);
+    if (texto) c = c.ilike(cat.columna, `%${texto}%`);
+    return c;
+  };
 
-  const { data, error } = await acotada(consulta.order(cat.columna).limit(tope), `buscarCatalogo:${tipo}`);
-  if (error) throw new Error(`buscarCatalogo:${tipo}: ${error.message}`);
+  let data: unknown[] | null;
+  if (tipo === 'unidad') {
+    // HALLAZGO ALTO: el combo de unidades no debe ni OFRECER una unidad que ya
+    // está en otro viaje abierto. A37-S56-08: se pagina el catálogo y, por
+    // página, se pregunta cuáles de ESOS ids están ocupadas — sin listas de
+    // ids que crezcan con la flota en la URL.
+    const libres: unknown[] = [];
+    for (let pagina = 0; pagina < MAX_PAGINAS_UNIDADES && libres.length < tope; pagina++) {
+      const desde = pagina * UNIDADES_POR_PAGINA;
+      const { data: filas, error: errPag } = await acotada(
+        base().order(cat.columna).order('id').range(desde, desde + UNIDADES_POR_PAGINA - 1), `buscarCatalogo:${tipo}`);
+      if (errPag) throw new Error(`buscarCatalogo:${tipo}: ${errPag.message}`);
+      const pag = (filas ?? []) as unknown as Array<Record<string, unknown>>;
+      const ocupadas = await unidadesOcupadasEntre(tenantId, pag.map((f) => f.id as string));
+      for (const f of pag) {
+        if (libres.length < tope && !ocupadas.has(f.id as string)) libres.push(f);
+      }
+      if (pag.length < UNIDADES_POR_PAGINA) break;
+    }
+    data = libres;
+  } else {
+    const r = await acotada(base().order(cat.columna).limit(tope), `buscarCatalogo:${tipo}`);
+    if (r.error) throw new Error(`buscarCatalogo:${tipo}: ${r.error.message}`);
+    data = r.data as unknown[] | null;
+  }
   // `as unknown as` y no un cast directo: el `.select()` se arma con la
   // columna en runtime, así que el tipo derivado de postgrest-js es un
   // `ParserError`, no una fila. La FORMA se comprueba abajo, que es lo que
