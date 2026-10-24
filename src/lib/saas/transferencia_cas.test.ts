@@ -216,7 +216,7 @@ describe('A37-S61-02 · si el UUID del CFDI timbrado no se guarda, NO se puede t
     TABLAS.factura_saas = [FACTURA()];
     fallasGuardarUuid = 99;
     const r = await timbrarFactura('f-1');
-    expect(r.uuid).toBe('11111111-2222-3333-4444-555555555555');
+    expect(r).toEqual({ uuid: '11111111-2222-3333-4444-555555555555' });
     expect(TABLAS.factura_saas[0].cfdi_uuid).toBeNull();
 
     // Centinela lejano: la reserva de 10 min NO caduca (el CFDI existe ante el SAT).
