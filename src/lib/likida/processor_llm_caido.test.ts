@@ -130,6 +130,12 @@ vi.mock('@/lib/likida/intake/cfdi_xml', () => ({
   esConsolidado: (xml: { lineas: unknown[] }) => xml.lineas.length > 1,
 }));
 
+const alertarOperador = vi.fn(async (..._a: unknown[]) => true);
+vi.mock('@/lib/observability/alerta', async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  alertarOperador: (...a: unknown[]) => alertarOperador(...a),
+}));
+
 const avisarCierreAlJefe = vi.fn(async (_a: unknown) => ({ enviado: true }));
 vi.mock('./avisar_cierre', () => ({ avisarCierreAlJefe: (a: unknown) => avisarCierreAlJefe(a) }));
 
@@ -279,5 +285,32 @@ describe('RES-15 — el LLM caído no puede dejar al operador sin su cuadre', ()
 
     expect(textos().join(' | ')).toContain('reenvías');
     expect(logger.error).toHaveBeenCalledWith('agent.degradado_fallo', expect.objectContaining({ viaje: 'v1' }));
+  });
+
+  // A37-L-01: 401/402/403 de OpenRouter (llave rota, saldo prepago agotado).
+  it('A37-L-01: un 402 (saldo agotado) alerta al operador y degrada al CUADRE REAL, no a «se me trabó»', async () => {
+    alertarOperador.mockClear();
+    runAgent.mockRejectedValue(new PartialExecutionError('ciclo abortado', Object.assign(new Error('Payment Required'), { status: 402 }), [], 0, 0, 0));
+    await processInbound(listo);
+    const dichos = textos().join(' | ');
+    expect(dichos).toContain('CUADRE REAL');
+    expect(dichos).not.toContain('reenvías');
+    expect(alertarOperador).toHaveBeenCalledWith('agente.credencial', expect.objectContaining({ clase: 'credito', status: 402 }));
+    expect(logger.error).toHaveBeenCalledWith('agent.fail', expect.objectContaining({ transitorio: true }));
+  });
+
+  it('A37-L-01: un 401 también', async () => {
+    alertarOperador.mockClear();
+    runAgent.mockRejectedValue(Object.assign(new Error('No auth credentials found'), { status: 401 }));
+    await processInbound(listo);
+    expect(textos().join(' | ')).toContain('CUADRE REAL');
+    expect(alertarOperador).toHaveBeenCalledWith('agente.credencial', expect.objectContaining({ clase: 'auth', status: 401 }));
+  });
+
+  it('A37-L-01: un error nuestro NO dispara la alerta de credencial', async () => {
+    alertarOperador.mockClear();
+    runAgent.mockRejectedValue(new TypeError('x is undefined'));
+    await processInbound(listo);
+    expect(alertarOperador).not.toHaveBeenCalledWith('agente.credencial', expect.anything());
   });
 });

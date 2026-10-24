@@ -21,6 +21,7 @@ import { PartialExecutionError, isTransientError, esErrorDePresupuesto, type Too
 import type { Gasto } from '@/types/likida';
 import { extraerComprobante } from '@/lib/likida/intake/ocr';
 import { createLlmBudget } from '@/lib/llm/budget';
+import { clasificarFalloModelo } from '@/lib/llm/fallo_modelo';
 import { hashImagen } from '@/lib/likida/intake/hash';
 import { metadatosDeFoto } from '@/lib/likida/intake/calidad_foto';
 import { subirComprobante } from '@/lib/likida/intake/almacen';
@@ -4833,7 +4834,17 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         // `false` siempre y esta rama seguía muerta. Se decide sobre la causa
         // de fondo, atravesando envoltorios (`esErrorDePresupuesto`).
         const agotoPresupuesto = esErrorDePresupuesto(e);
-        const transitorio = isTransientError(causaDeFondo(e)) || agotoPresupuesto;
+        // A37-L-01: 401/402/403 (llave rota, saldo prepago agotado, sin permiso) NO eran
+        // «transitorios»: el chofer recibía «se me trabó, reenvía» en cada «listo», sin
+        // cuadre y sin que Javier se enterara salvo por una foto. Se clasifican, se
+        // avisa al operador (alertarOperador ya trae su piso de una hora por evento) y
+        // se degrada al cuadre determinístico: el motor no necesita al modelo.
+        const fallo = clasificarFalloModelo(causaDeFondo(e));
+        const fallaCredencial = !agotoPresupuesto && (fallo.clase === 'auth' || fallo.clase === 'credito');
+        if (fallaCredencial) {
+          await alertarOperador('agente.credencial', { clase: fallo.clase, status: fallo.status ?? null, causa: fallo.detalle });
+        }
+        const transitorio = isTransientError(causaDeFondo(e)) || agotoPresupuesto || fallaCredencial;
         logger.error('agent.fail', { tenant: op.tenantId, viaje: viajeId, operador: op.operadorId, transitorio, agotoPresupuesto, err: e instanceof Error ? e.message : String(e) });
         reply = agotoPresupuesto
           ? COLOFON_SIN_PRESUPUESTO

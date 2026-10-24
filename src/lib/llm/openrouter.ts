@@ -19,6 +19,7 @@ import { reserveLlmBudget, settleLlmBudget, type LlmBudget, type LlmBudgetReserv
 // `instanceof` sobre el envoltorio, que era `false` en producción.
 export { esErrorDePresupuesto } from './budget';
 import { runWithToolSignal } from './runtime-signal';
+import { breakerVerificar, conBreaker, CircuitoLlmAbiertoError, esTimeoutDeProveedor } from './breaker';
 import { aprenderSinEsquemaEstricto, esErrorEsquemaRechazado, registrarCaida, usaEsquemaEstricto, type CaidaLlm } from './caidas';
 
 let _client: OpenAI | null = null;
@@ -176,6 +177,17 @@ export function resumenCausa(err: unknown, profundidad = 3): string {
   return txt || 'sin detalle de causa';
 }
 
+/** 401/402/403 del proveedor: llave rota, saldo agotado o sin permiso (A37-L-01). */
+export function esFalloDeCredencial(err: unknown): boolean {
+  let cur: unknown = err;
+  for (let i = 0; i < 4 && cur && typeof cur === 'object'; i++) {
+    const st = (cur as { status?: unknown }).status;
+    if (st === 401 || st === 402 || st === 403) return true;
+    cur = (cur as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
 export function isTransientError(err: unknown): boolean {
   // POR TIPO ANTES QUE POR TEXTO. El SDK de OpenAI aplasta CUALQUIER fallo de
   // conexión —DNS, TCP rechazado, TLS, `fetch failed` de undici— en un
@@ -184,6 +196,8 @@ export function isTransientError(err: unknown): boolean {
   // el caso para el que existe el fallback: el proveedor caído. Los 503 sí
   // pasaban, y por eso los tests no lo vieron.
   const e = err as { name?: unknown; status?: unknown; cause?: unknown } | null;
+  // A37-L-06: el breaker abierto es transitorio — el llamador degrada de inmediato.
+  if (err instanceof CircuitoLlmAbiertoError) return true;
   if (e && typeof e === 'object') {
     if (typeof e.name === 'string' && /^APIConnection(Timeout)?Error$/.test(e.name)) return true;
     if (typeof e.status === 'number' && (e.status >= 500 || e.status === 429 || e.status === 408)) return true;
@@ -391,6 +405,7 @@ export async function generateResponse(opts: {
 
   const once = async (m: string) => {
     opts.signal?.throwIfAborted();
+    breakerVerificar(opts.role); // A37-L-06: abierto = falla ya, antes de reservar presupuesto
     // CACHÉ DE PROMPT — la misma palanca (y el mismo razonamiento medido) que
     // en `generateWithTools`: si el modelo es de Anthropic, el SYSTEM se marca
     // con el breakpoint y las llamadas siguientes con el mismo prefijo pagan
@@ -423,7 +438,7 @@ export async function generateResponse(opts: {
     let res: OpenAI.Chat.ChatCompletion;
     const t0Llamada = Date.now();
     try {
-      res = await getClient().chat.completions.create(body, opts.signal ? { signal: opts.signal } : undefined);
+      res = await conBreaker(opts.role, () => getClient().chat.completions.create(body, opts.signal ? { signal: opts.signal } : undefined));
     } catch (e) {
       // BACKEND-19C2-1: antes se liquidaba aquí al monto RESERVADO (el
       // estimado, no lo que de verdad se gastó) — una racha de
@@ -724,6 +739,7 @@ export async function generateStructured<T>(opts: {
     // Si el presupuesto ya se agotó, no se paga una llamada que se va a cortar a
     // media respuesta.
     opts.signal?.throwIfAborted();
+    breakerVerificar(opts.role); // A37-L-06
     const msgs = note
       ? [{ role: 'system' as const, content: `${opts.system}\n\n${note}` }, ...built.slice(1)]
       : built;
@@ -765,13 +781,13 @@ export async function generateStructured<T>(opts: {
     const t0Llamada = Date.now();
     try {
       try {
-        res = await getClient().chat.completions.create(body, opts.signal ? { signal: opts.signal } : undefined);
+        res = await conBreaker(opts.role, () => getClient().chat.completions.create(body, opts.signal ? { signal: opts.signal } : undefined));
       } catch (e0) {
         // Un 400 del esquema estricto no es transitorio ni se arregla con el respaldo: se repite UNA vez con `json_object`.
         if (!estrictoInicial || !esErrorEsquemaRechazado(e0)) throw e0;
         aprenderSinEsquemaEstricto(m);
         avisarCaida({ tipo: 'modo_json', rol: opts.role, de: m, a: m, motivo: 'esquema_estricto_rechazado', detalle: resumenCausa(e0).slice(0, 160) });
-        res = await getClient().chat.completions.create(armarBody(false), opts.signal ? { signal: opts.signal } : undefined);
+        res = await conBreaker(opts.role, () => getClient().chat.completions.create(armarBody(false), opts.signal ? { signal: opts.signal } : undefined));
       }
     } catch (e) {
       msAcumulados += Date.now() - t0Llamada;
@@ -842,6 +858,10 @@ export async function generateStructured<T>(opts: {
   try {
     return await attempt(model);
   } catch (e1) {
+    // A37-L-01: 401/402/403 (llave rota, saldo agotado, sin permiso) NO se arreglan
+    // repitiendo la llamada ni con otro modelo del mismo gateway: se rinde ya, con
+    // el error intacto para que el llamador alerte y degrade.
+    if (esFalloDeCredencial(e1)) throw conGastado(e1, 'Falló generación estructurada (credencial/saldo)');
     // Truncamiento: reintentar con la nota NO sirve — el modelo ya estaba
     // respondiendo JSON, se quedó sin presupuesto a media escritura. Lo único
     // que falta es techo, así que el reintento sube el tope en vez de regañarlo.
@@ -858,9 +878,13 @@ export async function generateStructured<T>(opts: {
       }
     }
     // Reintento con el MISMO modelo + nota (típicamente errores de formato JSON).
+    // A37-L-06: tras un TIMEOUT/caída del proveedor la nota no ayuda y otro intento
+    // al mismo modelo apila otros 30 s: se pasa directo al respaldo.
     try {
+      if (esTimeoutDeProveedor(e1)) throw e1;
       return await attempt(model, note);
     } catch (e2) {
+      if (esFalloDeCredencial(e2)) throw conGastado(e2, 'Falló generación estructurada (credencial/saldo)');
       // CR-5: si el fallo es transient (provider caído/429/timeout) y hay
       // fallback cross-provider, intentar con OTRO proveedor antes de rendirse.
       if (fallback && (isTransientError(e1) || isTransientError(e2))) {
@@ -1149,6 +1173,7 @@ export async function generateWithTools(opts: {
   };
 
   const completion = async (body: Record<string, unknown>, signalOpt: { signal: AbortSignal } | undefined) => {
+    breakerVerificar(opts.role); // A37-L-06
     const reservation = await reservarCompletion(body, activeModel);
     try {
       // AUDITORÍA prod 25-ago-2026, CRÍTICO: extraer `create` sin `.bind()`
@@ -1167,7 +1192,7 @@ export async function generateWithTools(opts: {
         request: Record<string, unknown>,
         options?: { signal?: AbortSignal },
       ) => PromiseLike<OpenAI.Chat.ChatCompletion>;
-      const response = await create(body, signalOpt);
+      const response = await conBreaker(opts.role, () => create(body, signalOpt));
       if (reservation) {
         try {
           const usage = response.usage as (typeof response.usage & { cost?: number }) | undefined;
