@@ -17,6 +17,7 @@ const respuestas = new Map<string, Array<{ data?: unknown; error?: { message: st
 const inserts: Array<{ tabla: string; fila: Record<string, unknown> }> = [];
 const updates: Array<{ tabla: string; fila: Record<string, unknown> }> = [];
 const deletes: string[] = [];
+const eqs: Array<{ tabla: string; c: string; v: unknown }> = [];
 function builder(tabla: string) {
   const responder = () => {
     const cola = respuestas.get(tabla);
@@ -24,7 +25,7 @@ function builder(tabla: string) {
   };
   const b: Record<string, unknown> = {};
   Object.assign(b, {
-    select: () => b, eq: () => b, is: () => b, in: () => b, not: () => b, gte: () => b,
+    select: () => b, eq: (c: string, v: unknown) => { eqs.push({ tabla, c, v }); return b; }, is: () => b, in: () => b, not: () => b, gte: () => b,
     order: () => b, limit: () => b, range: () => b,
     insert: (fila: Record<string, unknown>) => {
       inserts.push({ tabla, fila });
@@ -87,7 +88,7 @@ vi.mock('@/lib/correo/enviar', () => ({ enviarCorreo: (...a: unknown[]) => envia
 const mod = await import('./reportes');
 const {
   partesMx, lunesDe, diaAnterior, lineaNorte, armarKpiDiario, armarDiagnostico,
-  armarSeccionesCiclo, detectarAnomalias, correrAgenteDireccion, contarProspectosPorEstado,
+  armarSeccionesCiclo, detectarAnomalias, ultimasCorridasPorAgente, correrAgenteDireccion, contarProspectosPorEstado,
 } = mod;
 
 // Lunes 24-ago-2026: 16:00Z = 10:00 de México. Martes 25, misma hora.
@@ -106,6 +107,7 @@ beforeEach(() => {
   inserts.length = 0;
   updates.length = 0;
   deletes.length = 0;
+  eqs.length = 0;
   registrar.mockClear();
   enviar.mockClear();
   enviar.mockResolvedValue({ ok: true as const, id: 'correo-1' });
@@ -321,6 +323,24 @@ describe('los cuatro detectores del orquestador', () => {
       ['sin_medida', [{ estado: 'ok' as const, inicio: '2026-08-24T10:00:00Z', tareasHechas: null, tareasTotal: null, resumen: null }]],
     ]);
     expect(detectarAnomalias([{ id: 'sin_medida' }], corridas, AHORA)).toEqual([]);
+  });
+});
+
+describe('A37-S41-06: la bitácora se lee POR AGENTE, no en una ventana global', () => {
+  it('consulta cada agente con su propio filtro y no pierde al semanal que no está en las últimas 400 filas', async () => {
+    respuestas.set('agente_corrida', [
+      { data: [], error: null },                                   // diario: sin filas
+      { data: [{ agente: 'semanal', estado: 'ok', inicio: '2026-08-17T10:00:00Z', tareas_hechas: 2, tareas_total: 2, resumen: null }], error: null },
+    ]);
+    const m = await ultimasCorridasPorAgente(['diario', 'semanal']);
+    expect(eqs.filter((e) => e.tabla === 'agente_corrida' && e.c === 'agente').map((e) => e.v)).toEqual(['diario', 'semanal']);
+    expect(m.get('semanal')?.[0].estado).toBe('ok');
+    expect(m.has('diario')).toBe(false);
+  });
+
+  it('si una consulta falla lanza: base caída no puede leerse como «nunca corrió»', async () => {
+    respuestas.set('agente_corrida', [{ data: null, error: { message: 'timeout' } }]);
+    await expect(ultimasCorridasPorAgente(['diario'])).rejects.toThrow(/direccion.corridas/);
   });
 });
 
