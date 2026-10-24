@@ -62,6 +62,14 @@ describe('mapearBitacoraTms · viáticos', () => {
   });
 });
 
+describe('mapearBitacoraTms · A37-A1-liquidaciones-13', () => {
+  it('un viático cuyo detalle no suma el monto padre se rechaza con el campo (no se elige uno en silencio)', () => {
+    const raw = { ...TMS_NODOS, percepciones: [{ desglose: 'Viáticos', descripcion: 'VIATICOS', tipo: 'V', monto: 1200, detalle: [{ descripcion: 'Taxi', monto: 300 }, { descripcion: 'Lavada', monto: 650 }] }], deducciones: [] };
+    expect(() => mapearBitacoraTms(raw, MAPEO_NODOS)).toThrow(CampoInvalido);
+    try { mapearBitacoraTms(raw, MAPEO_NODOS); } catch (e) { expect((e as CampoInvalido).campo).toBe('percepciones[0].detalleViaticos'); }
+  });
+});
+
 describe('mapearBitacoraTms · errores con campo', () => {
   const con = (cambio: (r: typeof TMS_PLANA) => void) => {
     const raw = JSON.parse(JSON.stringify(TMS_PLANA)) as typeof TMS_PLANA;

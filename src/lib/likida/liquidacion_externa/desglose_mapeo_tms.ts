@@ -192,6 +192,12 @@ function procesarRenglon(
         if (desc === undefined) throw new CampoInvalido(`${dd}.descripcion`, `\`${dd}\` no trae descripción del concepto.`);
         sub.push({ tipo: 'percepcion', renglon: { concepto: desc, monto: Math.round(mm * 100) / 100 } });
       });
+      // A37-A1-liquidaciones-13: el detalle SUSTITUYE al monto padre, así que tiene que sumarlo. Si no, el operador vería
+      // la suma del detalle y el neto saldría de ella sin que nada lo comparara con lo que dijo el sistema: se rechaza.
+      const sumaCent = sub.reduce((a, c) => a + Math.round(c.renglon.monto * 100), 0);
+      if (sumaCent !== Math.round(montoNum * 100)) {
+        throw new CampoInvalido(`${donde}.detalleViaticos`, `\`${donde}\` trae un monto de ${montoNum.toFixed(2)} pero su detalle suma ${(sumaCent / 100).toFixed(2)}; no se sabe cuál es el correcto.`);
+      }
       return sub;
     }
   }
