@@ -560,7 +560,9 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
     r.avisos.push(...lec.avisos.filter((a) => !r.avisos.includes(a)));
     if (lec.capturaIncompleta) r.capturaIncompleta = lec.capturaIncompleta;
     if (lec.leido) {
-      r.extraccion = completarDerivados(lec.extraccion, derivar);
+      // A37-A3-19: un escaneo leído por visión (sin texto para anclar) tiene el mismo tope de confianza que la cascada del
+      // modelo: lo crítico lo confirma una persona aunque la lectura diga 0.92.
+      r.extraccion = completarDerivados(c.texto === null ? taparCriticosSinAnclaje(lec.extraccion) : lec.extraccion, derivar);
       r.origen = f === 'C' || c.formato === 'imagen' ? 'llm' : 'perfil';
       r.lector = { formato: lec.formato, incidencias: lec.incidencias, vacios: lec.vacios, adicionales: lec.adicionales };
       return r;
