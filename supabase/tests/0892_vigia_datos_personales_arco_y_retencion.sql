@@ -117,4 +117,24 @@ do $$ begin
   end if;
 end $$;
 
+-- (g) A37-S32-01: la depuración de documentos de Carta Porte ya purgados es idempotente y conserva campo/renglón de las correcciones.
+insert into public.cp_documento (id, tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, remitente, asunto, extraccion, validacion, purgado_en)
+values ('b8920000-0000-4000-8000-0000000000d1', 'b8920000-0000-4000-8000-000000000001', 'manual', 'pdf_texto', 'a.pdf', 10, repeat('a', 64), 'fallido',
+        'alguien@ejemplo.test', 'asunto', '{"x":1}', '{"y":2}', now());
+insert into public.cp_correccion (documento_id, tenant_id, campo, renglon, valor_antes, valor_despues)
+values ('b8920000-0000-4000-8000-0000000000d1', 'b8920000-0000-4000-8000-000000000001', 'operador_nombre', null, 'Persona A', 'Persona B');
+-- Se vuelve a correr la migración (idempotente): su sección 3 es la depuración.
+\ir ../migrations/0892_vigia_datos_personales_arco_y_retencion.sql
+do $$ begin
+  if exists (select 1 from public.cp_correccion where documento_id = 'b8920000-0000-4000-8000-0000000000d1' and (valor_antes is not null or valor_despues is not null)) then
+    raise exception '(g) la corrección conserva valores';
+  end if;
+  if exists (select 1 from public.cp_documento where id = 'b8920000-0000-4000-8000-0000000000d1' and (extraccion is not null or validacion is not null or remitente is not null or asunto is not null)) then
+    raise exception '(g) el documento purgado conserva datos personales';
+  end if;
+  if (select campo from public.cp_correccion where documento_id = 'b8920000-0000-4000-8000-0000000000d1') <> 'operador_nombre' then
+    raise exception '(g) la corrección debía conservar su campo';
+  end if;
+end $$;
+
 rollback;

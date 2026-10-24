@@ -363,7 +363,8 @@ export const api: typeof Real = {
   async marcarPurgado(tenantId, id) {
     const d = estado.docs.get(id);
     if (!d || d.tenantId !== tenantId || d.purgadoEn) return false;
-    d.storageRuta = null; d.textoExtracto = null; d.purgadoEn = ahoraIso();
+    d.storageRuta = null; d.textoExtracto = null; d.extraccion = null; d.validacion = null; d.remitente = null; d.asunto = null; d.purgadoEn = ahoraIso();
+    for (const c of estado.correcciones) if (c.tenantId === tenantId && c.documentoId === id) { c.valorAntes = null; c.valorDespues = null; }
     return true;
   },
 

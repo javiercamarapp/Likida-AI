@@ -1,4 +1,4 @@
--- REVERSA: drop trigger if exists vigia_datos_personales_por_arco on public.operador; drop function if exists public.vigia_datos_personales_por_arco(); drop function if exists public.purgar_vigia_datos_personales(integer, integer, date); y volver a aplicar el cuerpo de vigia_aviso_transicion de supabase/migrations/0797_vigia_aviso.sql (create or replace). Ninguna tabla cambia.
+-- REVERSA: (los datos personales ya vaciados NO se restauran: es la intención) drop trigger if exists vigia_datos_personales_por_arco on public.operador; drop function if exists public.vigia_datos_personales_por_arco(); drop function if exists public.purgar_vigia_datos_personales(integer, integer, date); y volver a aplicar el cuerpo de vigia_aviso_transicion de supabase/migrations/0797_vigia_aviso.sql (create or replace). Ninguna tabla cambia.
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 0892 · Vigía: datos personales del operador con ARCO y retención (A37-A4-07)
 --
@@ -17,6 +17,11 @@
 --   3. `vigia_aviso_transicion` (0797) deja pasar SOLO el cambio del campo `texto` de un aviso cerrado cuando lo pide una de
 --      estas dos funciones (variable de transacción `likida.vigia_redactar`); cualquier otra edición de la historia sigue
 --      prohibida. Es la misma función de la 0797 con ese único añadido.
+--
+--   4. A37-S32-01 (Carta Porte): hasta hoy `marcarPurgado` solo vaciaba archivo y texto; la fila purgada conservaba en
+--      `extraccion`/`validacion` (jsonb) el nombre, la licencia, el RFC y el teléfono del operador, y `remitente`/`asunto`, y
+--      las correcciones sus valores. El código nuevo los vacía al purgar; aquí se depuran los YA purgados (una sola vez,
+--      idempotente). Las correcciones conservan campo y renglón (la métrica «% sin corrección» sigue contando).
 --
 -- Idempotente: create or replace / drop trigger if exists. Todo es SECURITY DEFINER con search_path fijo y solo service_role.
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -166,3 +171,15 @@ comment on function public.purgar_vigia_datos_personales(integer, integer, date)
   '0892: retención (default 90 días desde la fecha de la cita, mínimo 30; plazo PROPUESTO) de datos personales del Vigía: vacía nombre/licencia/teléfono de la captura manual, el texto de los avisos cerrados y los comentarios libres del programa. No borra filas ni la historia de cambios. Solo service_role.';
 comment on function public.vigia_datos_personales_por_arco() is
   '0892: al marcar operador.anonimizado_en (cancelación ARCO) retira del Vigía los datos personales del operador: captura manual y texto de los avisos que lo nombran.';
+
+-- ── 3. Documentos de Carta Porte ya purgados (A37-S32-01) ───────────────────
+update public.cp_documento
+   set extraccion = null, validacion = null, remitente = null, asunto = null
+ where purgado_en is not null
+   and (extraccion is not null or validacion is not null or remitente is not null or asunto is not null);
+
+update public.cp_correccion c
+   set valor_antes = null, valor_despues = null
+  from public.cp_documento d
+ where d.id = c.documento_id and d.tenant_id = c.tenant_id and d.purgado_en is not null
+   and (c.valor_antes is not null or c.valor_despues is not null);

@@ -653,10 +653,21 @@ export async function documentosVencidos(limite = 100): Promise<Array<{ id: stri
   return ((exigir(r, 'cpdocs.vencidos') ?? []) as unknown as Fila[]).map((f) => ({ id: String(f.id), tenantId: String(f.tenant_id), storageRuta: s(f.storage_ruta) }));
 }
 
-/** Marca la purga: sin archivo ni texto. La fila queda como constancia. Condicional a que NO se haya purgado ya. */
+/**
+ * Marca la purga: sin archivo, texto, extracción ni validación (A37-S32-01: el jsonb trae nombre, licencia, RFC y teléfono del
+ * operador), sin remitente ni asunto, y las correcciones pierden sus valores (quedan campo y renglón: la métrica «% sin
+ * corrección» sigue contando). La fila queda como constancia. Condicional a que NO se haya purgado ya.
+ */
 export async function marcarPurgado(tenantId: string, id: string): Promise<boolean> {
+  // Primero las correcciones: si algo falla después, el reintento (purgado_en sigue null) las vuelve a vaciar sin daño.
+  const c = await acotada(supabaseAdmin().from('cp_correccion').update({ valor_antes: null, valor_despues: null })
+    .eq('tenant_id', tenantId).eq('documento_id', id), 'cpdocs.purgar_correcciones');
+  if (c.error) throw new Error(`cartaporte_docs purgar correcciones: ${c.error.message}`);
   const r = await acotada(supabaseAdmin().from('cp_documento')
-    .update({ storage_ruta: null, texto_extracto: null, purgado_en: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .update({
+      storage_ruta: null, texto_extracto: null, extraccion: null, validacion: null, remitente: null, asunto: null,
+      purgado_en: new Date().toISOString(), updated_at: new Date().toISOString(),
+    })
     .eq('tenant_id', tenantId).eq('id', id).is('purgado_en', null).select('id'), 'cpdocs.purgar');
   return ((exigir(r, 'cpdocs.purgar') ?? []) as unknown[]).length > 0;
 }
