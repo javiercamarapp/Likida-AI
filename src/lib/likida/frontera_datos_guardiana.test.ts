@@ -583,6 +583,8 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 324;
 // `borrarReferencia` (baja de la foto de un personaje): lectura de la ruta (`marketing_referencia`), borrado del objeto (`storage.from`, que este
 // guardia cuenta como `.from(`) y borrado de la fila. Cubierta por `estudio.borrar.test.ts`. Si otro lote toca este techo, sumar el incremento al integrar.
 const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_357;
+// Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
+// `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // A37-S27-10 (lote b-sat-fiscal-05): +1 (2,284 → 2,285), en `agentes/insumos.ts` (`crearInsumoArchivo`): `storage.from('agente-insumos').remove`
 // para no dejar huérfano el objeto subido cuando falla el insert.
 // LOTE A37 B-sat-fiscal-06 (migración 0876): +3 llamadas (2,284 → 2,287), 0 archivos nuevos, medido con el barrido real. `gasto_correccion.ts` +2: el RPC

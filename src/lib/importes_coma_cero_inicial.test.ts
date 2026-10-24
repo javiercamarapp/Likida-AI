@@ -34,7 +34,7 @@ describe('cero a la izquierda + coma + 3 dígitos NO es separador de miles', () 
     expect(ingreso('12,5')).toBe(12.5);
   });
   it('clientes (precio de tarifa)', () => {
-    expect(tarifa('0,125')).toBe(0.13); // la tarifa se redondea a centavos; lo que importa: no es 125
+    expect(() => tarifa('0,125')).toThrow(DatoInvalido); // A37-S64-02: ya no se redondea en silencio; tampoco es 125
     expect(tarifa('0,5')).toBe(0.5);
     expect(tarifa('12,5')).toBe(12.5);
   });
@@ -97,5 +97,31 @@ describe('la regla de miles NO cambia', () => {
     expect(pasos('')).toBeNull();
     expect(pasos('abc')).toBeNull();
     expect(cuerpo('')).toBeNull();
+  });
+});
+
+
+describe('A37-S64-02: el punto con tres decimales (miles es-ES) y los centavos de más no se redondean en silencio', () => {
+  it('ingreso_viaje: «38.500» y «1234.567» se rechazan; «1.240» km también', () => {
+    expect(() => ingreso('38.500')).toThrow(/dos decimales/);
+    expect(() => ingreso('1234.567')).toThrow(DatoInvalido);
+    expect(() => validarIngreso({ clienteId: '', ingresoFlete: '', kmRecorridos: '1.240' })).toThrow(DatoInvalido);
+    expect(ingreso('38500.50')).toBe(38500.5);
+  });
+  it('clientes: precio «28.500» se rechaza', () => {
+    expect(() => tarifa('28.500')).toThrow(DatoInvalido);
+    expect(tarifa('28500.50')).toBe(28500.5);
+  });
+  it('importar_viajes: «38.500», «1.240» y un número con 3 decimales son ilegibles; los centavos sanos pasan', () => {
+    expect(leerCifraImportada('38.500')).toBe('ilegible');
+    expect(leerCifraImportada('1.240')).toBe('ilegible');
+    expect(leerCifraImportada(1234.567)).toBe('ilegible');
+    expect(leerCifraImportada(38500.1)).toBe(38500.1);
+    expect(leerCifraImportada(1234.56)).toBe(1234.56);
+  });
+  it('pasos: un monto negativo no pierde el signo («-500» → «500.00»); «1.234» ya era ambiguo (A37-S42-08)', () => {
+    expect(pasos('-500.00')).toBeNull();
+    expect(pasos('1.234')).toBeNull();
+    expect(pasos('1,234.50')).toBe('1234.50');
   });
 });

@@ -49,3 +49,17 @@ describe('A37-A2-02: la bitácora RMF 9.1.8 no declara conciliado lo que está �
     expect(csv).not.toMatch(/F-[123]\b/);
   });
 });
+
+describe('A37-S47-01: la bitácora rotula la diferencia admitida por la tolerancia', () => {
+  it('el CSV lleva la columna diferencia_admitida con la diferencia con signo de cada cruce', async () => {
+    db.tablas.desglose_peaje_linea.push(linea(6, 100.5, { diferencia: 0.5 }));
+    db.tablas.viaje.push({ id: 'v6', tenant_id: T, folio: 'F-6', origen: 'Patio Ejemplo', destino: 'Destino Ejemplo', unidad_id: null });
+    const { bitacoraRmf918, bitacoraACsv } = await import('./desglose_peaje');
+    const b = (await bitacoraRmf918(T, D))!;
+    const fila = b.filas.find((f) => f.viajeFolio === 'F-6');
+    expect(fila?.diferenciaAdmitida).toBe(0.5);
+    const csv = bitacoraACsv(b);
+    expect(csv).toContain('posiciones_gps_dia,diferencia_admitida');
+  });
+});
+
