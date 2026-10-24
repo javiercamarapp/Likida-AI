@@ -88,6 +88,7 @@ vi.mock('../sufijo', () => ({ sufijoTenant: () => '' }));
 let selectResultado: { data: { email: string } | null; error: { message: string } | null } = { data: { email: 'ana@flota.mx' }, error: null };
 let updateResultado: { error: { message: string } | null } = { error: null };
 const updateLlamadas: Array<Record<string, unknown>> = [];
+const removeLlamadas: string[][] = [];
 
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
@@ -101,6 +102,7 @@ vi.mock('@/lib/supabase/admin', () => ({
     storage: {
       from: () => ({
         upload: async () => ({ error: null }),
+        remove: async (rutas: string[]) => { removeLlamadas.push(rutas); return { error: null }; },
         getPublicUrl: () => ({ data: { publicUrl: 'https://storage/avatares/u-1/avatar.png' } }),
       }),
     },
@@ -132,6 +134,7 @@ beforeEach(() => {
   selectResultado = { data: { email: 'ana@flota.mx' }, error: null };
   updateResultado = { error: null };
   updateLlamadas.length = 0;
+  removeLlamadas.length = 0;
   redirectMock.mockClear();
   signOutResultado = { error: null };
   signOut.mockClear();
@@ -334,6 +337,25 @@ describe('H17 — subirAvatar falla cerrado tras la subida a Storage', () => {
     fd.set('avatar', archivoDePrueba());
     await expect(accion!(fd)).rejects.toThrow('NEXT_REDIRECT');
     expect(redirectMock).toHaveBeenCalledWith(expect.stringContaining('ok=avatar'));
+  });
+
+  it('A37-S19-06: al cambiar de formato se borran las fotos anteriores de otras extensiones (bucket público)', async () => {
+    const arbol = await MiPerfilFlota({ searchParams: Promise.resolve({}) }) as ReactElement;
+    const accion = hallarAvatarAction(arbol);
+    const fd = new FormData();
+    fd.set('avatar', archivoDePrueba());
+    await expect(accion!(fd)).rejects.toThrow('NEXT_REDIRECT');
+    expect(removeLlamadas).toEqual([['u-1/avatar.webp', 'u-1/avatar.jpg']]);
+  });
+
+  it('A37-S19-06: si el UPDATE de avatar_url falla NO se borra nada (la foto anterior sigue siendo la vigente)', async () => {
+    updateResultado = { error: { message: 'la base no contestó' } };
+    const arbol = await MiPerfilFlota({ searchParams: Promise.resolve({}) }) as ReactElement;
+    const accion = hallarAvatarAction(arbol);
+    const fd = new FormData();
+    fd.set('avatar', archivoDePrueba());
+    await expect(accion!(fd)).rejects.toThrow('NEXT_REDIRECT');
+    expect(removeLlamadas).toEqual([]);
   });
 
   it('Storage sube pero el UPDATE de avatar_url falla: error=avatar, NO ok=avatar — la foto vieja se queda puesta sin decirlo', async () => {
