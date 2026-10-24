@@ -222,3 +222,11 @@ describe('getPorFacturar está acotado en periodo y concepto (ESC-12)', () => {
     expect(desdeVentana('2026-01-10', 45)).toBe('2025-11-26');
   });
 });
+
+describe('A37-S47-03: sin comercio identificado, la liga leída de una foto NO llega al botón «Abrir el portal»', () => {
+  it('un QR con dominio desconocido y ticket sin RFC ni emisor reconocible: urlTicket queda null', () => {
+    const t = armar({ ...base, rfc_emisor: null, ocr_extra: { urlFacturacion: 'https://portal-falso.example/facturar' } }, '2026-08-04');
+    expect(t.comercio).toBeNull();
+    expect(t.urlTicket).toBeNull();
+  });
+});

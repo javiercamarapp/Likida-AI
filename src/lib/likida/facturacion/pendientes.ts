@@ -270,10 +270,13 @@ export function armar(g: FilaGasto, hoy: string): TicketPorFacturar {
   // `megasur.com.mx` y `g500sureste.com.mx`— para el mismo portal, así que la
   // comparación es contra la lista completa del comercio, no solo contra
   // `portal`).
+  // A37-S47-03: SIN comercio identificado tampoco se propaga. Antes el filtro solo corría con `c` no nulo, así que un QR con
+  // un dominio desconocido (justo lo que un atacante usa) llegaba crudo a «Abrir el portal» en una fila «Sin identificar», donde
+  // el jefe teclea RFC, correo y credenciales. Si el comercio no se identificó, no hay catálogo contra el cual dar fe de la liga.
   let urlTicket = urlTicketCrudo;
-  if (urlTicket && c && !hostnameDeConfianza(urlTicket, c.reconocer.dominios ?? [])) {
+  if (urlTicket && (!c || !hostnameDeConfianza(urlTicket, c.reconocer.dominios ?? []))) {
     logger.warn('facturacion.liga_ticket_dominio_ajeno', {
-      gastoId: g.id, comercio: c.clave, urlTicket,
+      gastoId: g.id, comercio: c?.clave ?? null, urlTicket,
     });
     urlTicket = null;
   }
