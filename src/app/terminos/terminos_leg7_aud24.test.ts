@@ -35,3 +35,11 @@ describe('LEG-7 · el pendiente contractual vive en un documento interno, no pub
     expect(PAGINA).not.toMatch(/from\s+['"].*PENDIENTES-ABOGADO/);
   });
 });
+
+describe('A37-L-07 · la variable LEGAL_DPA_VERSION no afirma un contrato', () => {
+  it('con versión configurada, el texto NO dice que el contrato «forma parte del paquete» ni que ya está firmado', () => {
+    expect(PAGINA).not.toMatch(/que forma parte del paquete contractual/);
+    expect(PAGINA).toMatch(/versión de referencia \$\{LEGAL_CONFIG\.dpaVersion\}/);
+    expect(PAGINA).toMatch(/se acuerda y firma con tu empresa/);
+  });
+});
