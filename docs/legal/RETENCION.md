@@ -23,6 +23,7 @@ si lo hiciera — por eso hay dos bloques, no uno con una columna optimista.
 | Evento comercial del prospecto (anonimiza, no borra la fila) | `comercial_evento` | 365 días | `purgar_comercial_evento` |
 | Eventos de WhatsApp pendientes de procesar | `wa_evento_pendiente` | 30 / 90 días (dos etapas) | `purgar_wa_evento_pendiente` |
 | **Posición GPS de la unidad** (poller y pin del chofer) | `posicion` | 90 días | `purgar_posicion` |
+| Resultado de las herramientas mutadoras de los agentes (liga de PDF, folio, cifras; solo filas terminadas) | `agente_mutacion_idempotencia` | 90 días (default técnico, piso 7; no es decisión legal) | `mantener_agente_idempotencia` (0909; cron `purgar`) — A37-S60-07 |
 | Costo de LLM por llamada (se consolida antes) | `llm_costo` | 13 meses | `purgar_llm_costo` |
 | Bitácora de auditoría | `bitacora_auditoria` | 365 días | `purgar_bitacora_auditoria` |
 | Contacto de cobranza | `cobranza_contacto` | 180 días | `purgar_cobranza_contacto` |

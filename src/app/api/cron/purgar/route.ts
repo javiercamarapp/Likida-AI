@@ -402,6 +402,36 @@ export async function GET(req: Request) {
       await alertarOperador('cron.purgar.llm_presupuesto', { error });
     }
 
+    // ── IDEMPOTENCIA DE LAS TOOLS DE AGENTES (0909, A37-S60-07) ──────────────
+    // `agente_mutacion_idempotencia` guarda el resultado completo de cada tool
+    // mutadora (liga de PDF, folio, cifras) y nada la purgaba. Se borran solo
+    // las filas terminales de más de 90 días; la llave lleva runId, así que una
+    // fila vieja ya no protege ningún reintento. Si la migración aún no está
+    // aplicada (42883/PGRST202) se avisa en el log y la corrida sigue.
+    let agenteIdempotencia: Record<string, unknown> | null = null;
+    try {
+      const ai = await supabaseAdmin().rpc('mantener_agente_idempotencia', {
+        p_dias: 90,
+        p_ahora: ahoraRetencion,
+        p_vence: new Date(venceRetencionMs).toISOString(),
+      });
+      if (ai.error) {
+        const codigo = codigoDeError(ai.error);
+        if (codigo === '42883' || codigo === 'PGRST202') {
+          logger.warn('cron.purgar.agente_idempotencia_sin_migracion_0909', { codigo });
+        } else {
+          logger.error('cron.purgar.agente_idempotencia_falló', { error: ai.error.message, codigo });
+          await alertarOperador('cron.purgar.agente_idempotencia', { error: ai.error.message, codigo });
+        }
+      } else {
+        agenteIdempotencia = (ai.data ?? {}) as Record<string, unknown>;
+      }
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      logger.error('cron.purgar.agente_idempotencia_excepcion', { error });
+      await alertarOperador('cron.purgar.agente_idempotencia', { error });
+    }
+
     // ── CARTA PORTE MULTI-FORMATO (mig. 0420): documentos de clientes vencidos ──
     // El archivo y el texto del documento (datos personales de terceros) se borran al vencer
     // `retener_hasta`; la fila queda de constancia. Su fallo NO tumba la corrida —las purgas de arriba
@@ -476,7 +506,7 @@ export async function GET(req: Request) {
     const estado = erroresRetencion0104.length > 0 || productoEventoError !== null
       ? 'fallo'
       : parcialGlobal ? 'parcial' : 'ok';
-    const detalleFinal = { ...data, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal, ledgers };
+    const detalleFinal = { ...data, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, agenteIdempotencia, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal, ledgers };
     if (estado === 'fallo') logger.error('cron.purgar.retencion_0104_incompleta', detalleFinal);
     else if (estado === 'parcial') logger.warn('cron.purgar.incompleta', detalleFinal);
     else logger.info('cron.purgar.ok', detalleFinal);
@@ -489,7 +519,7 @@ export async function GET(req: Request) {
       productoEventoError,
     });
     return NextResponse.json(
-      { corrio: true, ...data, parcial: parcialGlobal, estado, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal, ledgers },
+      { corrio: true, ...data, parcial: parcialGlobal, estado, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, agenteIdempotencia, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal, ledgers },
       { status: estado === 'fallo' ? 500 : 200 },
     );
   } catch (e) {

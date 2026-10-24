@@ -31,6 +31,8 @@ let rpcProductoRespuesta: { data: unknown; error: { message: string; code?: stri
 let rpcMcpOauthRespuesta: { data: unknown; error: { message: string; code?: string } | null };
 /** Lo que contesta la RPC hermana `mantener_llm_presupuesto` (0441). */
 let rpcLlmPresupuestoRespuesta: { data: unknown; error: { message: string; code?: string } | null };
+/** Lo que contesta la RPC hermana `mantener_agente_idempotencia` (0909, A37-S60-07). */
+let rpcAgenteIdemRespuesta: { data: unknown; error: { message: string; code?: string } | null };
 type RespuestaRpc = { data: unknown; error: { message: string; code?: string } | null };
 let rpcConversacionRespuestas: RespuestaRpc[];
 let rpcCodigoRespuestas: RespuestaRpc[];
@@ -40,6 +42,7 @@ const rpc = vi.fn(async (nombre?: unknown) => {
   if (nombre === 'mantener_producto_evento') return rpcProductoRespuesta;
   if (nombre === 'mantener_mcp_oauth') return rpcMcpOauthRespuesta;
   if (nombre === 'mantener_llm_presupuesto') return rpcLlmPresupuestoRespuesta;
+  if (nombre === 'mantener_agente_idempotencia') return rpcAgenteIdemRespuesta;
   if (nombre === 'purgar_wa_conversacion') return rpcConversacionRespuestas.shift() ?? rpcConversacionDefault;
   if (nombre === 'purgar_codigo_pendiente') return rpcCodigoRespuestas.shift() ?? rpcCodigoDefault;
   return rpcRespuesta;
@@ -98,6 +101,7 @@ beforeEach(() => {
   rpcProductoRespuesta = { data: { mesesConsolidados: 0, detalleBorrado: 0, parcial: false }, error: null };
   rpcMcpOauthRespuesta = { data: { tokensBorrados: 0, codigosBorrados: 0, clientesBorrados: 0, parcial: false }, error: null };
   rpcLlmPresupuestoRespuesta = { data: { liquidadasBorradas: 0, vencidasBorradas: 0, parcial: false }, error: null };
+  rpcAgenteIdemRespuesta = { data: { borradas: 0, parcial: false }, error: null };
   rpcConversacionRespuestas = [];
   rpcCodigoRespuestas = [];
   rpcConversacionDefault = { data: { borradas: 0, parcial: false, agotado: true }, error: null };
@@ -181,6 +185,29 @@ describe('la corrida', () => {
     expect(res.status).toBe(200);
     expect(cuerpo.llmPresupuesto).toBeNull();
     expect(alertarOperador).toHaveBeenCalledWith('cron.purgar.llm_presupuesto', expect.objectContaining({ error: 'no existe' }));
+  });
+
+  it('A37-S60-07: purga la idempotencia de las tools de agentes (90 días) y la reporta; su fallo real se alerta, la migración ausente solo se avisa', async () => {
+    rpcAgenteIdemRespuesta = { data: { borradas: 7, parcial: false }, error: null };
+    let res = await GET(peticion('Bearer secreto-de-prueba'));
+    let cuerpo = await res.json();
+    expect(rpc).toHaveBeenCalledWith('mantener_agente_idempotencia', expect.objectContaining({ p_dias: 90 }));
+    expect(cuerpo.agenteIdempotencia).toEqual({ borradas: 7, parcial: false });
+
+    alertarOperador.mockClear();
+    rpcAgenteIdemRespuesta = { data: null, error: { message: 'no existe', code: '42883' } };
+    res = await GET(peticion('Bearer secreto-de-prueba'));
+    cuerpo = await res.json();
+    expect(res.status).toBe(200);
+    expect(cuerpo.agenteIdempotencia).toBeNull();
+    expect(alertarOperador).not.toHaveBeenCalledWith('cron.purgar.agente_idempotencia', expect.anything());
+
+    rpcAgenteIdemRespuesta = { data: null, error: { message: 'boom', code: '57014' } };
+    res = await GET(peticion('Bearer secreto-de-prueba'));
+    cuerpo = await res.json();
+    expect(res.status).toBe(200);
+    expect(cuerpo.agenteIdempotencia).toBeNull();
+    expect(alertarOperador).toHaveBeenCalledWith('cron.purgar.agente_idempotencia', expect.objectContaining({ error: 'boom' }));
   });
 
   it('si producto_evento falla, responde 500, late fallo y conserva la causa', async () => {
