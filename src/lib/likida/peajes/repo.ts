@@ -44,6 +44,7 @@ import {
   type CategoriaCobro, type LineaCobro, type MotivoInmovilizada, type ReglasCobro, type ResultadoRevision, type TipoUnidadPeaje, type VentanaInmovilizada,
 } from './reglas_cobro';
 import { validarMapeo, type ConfigMapeo } from './mapeo';
+import { evaluarContraTarifa } from './reglas_tarifa';
 import { planificarGps, evaluarCruceGps, VENTANA_GPS_MIN, type LineaParaGps, type VeredictoGps, type Muestra } from './cruce_gps';
 import { createHash } from 'node:crypto';
 import { generarToken, esTokenValido } from '@/lib/correo/buzon';
@@ -2222,6 +2223,22 @@ export async function lineasDeDesglose(tenantId: string, desgloseId: string) {
   );
 }
 
+/**
+ * A37-L-02: cuánto se puede RECLAMAR de verdad por cada cruce de «clase distinta de 3 y 5». El cobro del cruce
+ * completo no es lo reclamable: lo es la diferencia contra la tarifa de la clase correcta, y solo si esa tarifa está
+ * CONFIRMADA (una inferida de los propios archivos es un candidato, no una cifra para el proveedor). `null` = no hay
+ * tarifa confirmada, o no hay exceso: sin monto defendible NO se arma reclamo (ante la duda no se adivina).
+ * Lanza si no se pudo leer (el llamador falla cerrado).
+ */
+export async function montosReclamablesDeClase(tenantId: string, desgloseId: string): Promise<Map<number, number | null>> {
+  const [filas, tarifas, casetas] = await Promise.all([
+    lineasDeDesglose(tenantId, desgloseId), listarTarifas(tenantId), listarReglasCasetas(tenantId),
+  ]);
+  const excepcionesClase = new Map(casetas.filter((c) => c.clasesPermitidas.length > 0).map((c) => [c.nombreNorm, c.clasesPermitidas]));
+  const evaluadas = evaluarContraTarifa(filas.map(lineaCobroDeFila), tarifas.filter((t) => t.confirmada), { excepcionesClase });
+  return new Map(evaluadas.map((e) => [e.indice, e.importeEsperado !== null && e.montoReclamable > 0 ? e.montoReclamable : null]));
+}
+
 /** Una fila de la base → la línea que entienden las reglas. La unidad es la que declara el archivo. */
 export function lineaCobroDeFila(f: Record<string, unknown>): LineaCobro {
   return {
@@ -2375,13 +2392,25 @@ export async function crearReclamoDeCategoria(
     return { ok: false, motivo: `«${ETIQUETA_CATEGORIA_COBRO[entrada.categoria]}» es un asunto interno de la flota, no un cobro del proveedor: no se registra como reclamo.` };
   }
   const decididos = new Set((await listarDecisionesCandidatos(tenantId, entrada.desgloseId)).map((d) => `${d.indice}|${d.categoria}`));
-  const cands = reporte.revision.candidatos.filter((c) => c.categoria === entrada.categoria && !c.justificacion && !decididos.has(`${c.indice}|${c.categoria}`));
+  let cands = reporte.revision.candidatos.filter((c) => c.categoria === entrada.categoria && !c.justificacion && !decididos.has(`${c.indice}|${c.categoria}`));
   if (cands.length === 0) return { ok: false, motivo: `No hay candidatos pendientes de «${ETIQUETA_CATEGORIA_COBRO[entrada.categoria]}» en ese desglose (los que había ya se descartaron, justificaron o reclamaron).` };
+  // A37-L-02: en «clase distinta de 3 y 5» el monto del reclamo es el EXCESO contra la tarifa confirmada, no el cruce completo.
+  let montosClase: Map<number, number | null> | null = null;
+  if (entrada.categoria === 'clase_fuera_de_3_5') {
+    try {
+      montosClase = await montosReclamablesDeClase(tenantId, entrada.desgloseId);
+    } catch (err) {
+      logger.error('revision_cobros.crear_reclamo_tarifas', { tenant: tenantId, err: err instanceof Error ? err.message : String(err) });
+      return { ok: false, motivo: 'No se pudo leer el tarifario para calcular el monto reclamable. No se creó nada: inténtalo de nuevo.' };
+    }
+    cands = cands.filter((c) => montosClase!.get(c.indice) != null);
+    if (cands.length === 0) return { ok: false, motivo: 'Ningún cruce de esta categoría tiene una tarifa confirmada con exceso: sin ella no hay monto defendible que reclamar. Confirma la tarifa de la caseta y vuelve a intentarlo.' };
+  }
   const fechas = cands.map((c) => c.fecha).filter((f): f is string => f !== null).sort();
   if (fechas.length === 0) return { ok: false, motivo: 'Los candidatos no traen fecha de cobro: no se puede calcular el plazo de reclamo.' };
   const enviado = entrada.enviadoEn?.trim() || null;
   if (enviado && !/^\d{4}-\d{2}-\d{2}$/.test(enviado)) return { ok: false, motivo: 'La fecha de envío debe ser AAAA-MM-DD.' };
-  const monto = Math.round(cands.reduce((s, c) => s + c.monto, 0) * 100) / 100;
+  const monto = Math.round(cands.reduce((s, c) => s + (montosClase?.get(c.indice) ?? c.monto), 0) * 100) / 100;
   const { data, error } = await acotada(supabaseAdmin().from('peaje_reclamo').insert({
     tenant_id: tenantId, desglose_id: entrada.desgloseId, proveedor: reporte.proveedor, categoria: entrada.categoria,
     estado: enviado ? 'enviado' : 'preparado', n_cruces: cands.length, monto_reclamado: monto, monto_acreditado: 0,

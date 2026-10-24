@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { crearDbFalsa, type DbFalsa, type Fila } from '@/lib/likida/peajes/db_falsa.test.util';
+import { normalizarNombre } from '@/lib/likida/peajes/formatos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Las acciones de la tabla de candidatos (T-A2-28b), de PUNTA A PUNTA contra una base en memoria:
@@ -24,7 +25,7 @@ const linea = (tenant: string, indice: number, p: Fila = {}): Fila => ({
 });
 
 /** Un desglose sintético: n líneas de clase 9 (candidatas), 3 extemporáneas (antes del periodo) y una repetición atípica. */
-function sembrar(opts: { clase9?: number; tenant?: string } = {}) {
+function sembrar(opts: { clase9?: number; tenant?: string; sinTarifa?: boolean } = {}) {
   const tenant = opts.tenant ?? T;
   const n = opts.clase9 ?? 5;
   const lineas: Fila[] = [];
@@ -36,6 +37,11 @@ function sembrar(opts: { clase9?: number; tenant?: string } = {}) {
     desglose_peaje: [{ id: DES, tenant_id: tenant, proveedor: 'Proveedor Ejemplo', archivo_nombre: 'prueba.xlsx', periodo_desde: '2026-03-01', periodo_hasta: '2026-03-10',
       periodo_oficial_desde: '2026-03-01', periodo_oficial_hasta: '2026-03-10', periodo_origen: 'nombre_archivo', no_periodo: '801', calidad: null, anulado_en: null }],
     desglose_peaje_linea: lineas,
+    // A37-L-02: tarifa CONFIRMADA de clase 5 en $50 para las casetas de los cruces de clase 9: lo reclamable es el exceso sobre ella.
+    peaje_tarifa: opts.sinTarifa ? [] : [0, 1, 2, 3, 4].map((i) => ({
+      id: `tar-${i}`, tenant_id: tenant, caseta_norm: normalizarNombre(`Caseta Ejemplo ${i}`), clase: 5, importe: 50,
+      vigente_desde: '2020-01-01', vigente_hasta: null, origen: 'manual', confirmada: true, confirmada_por: 'prueba', created_at: '2026-01-01T00:00:00Z',
+    })),
   });
   return lineas;
 }
@@ -54,13 +60,33 @@ describe('reclamar', () => {
     expect(db.tablas.peaje_reclamo).toHaveLength(1);
     expect(db.tablas.peaje_reclamo[0]).toMatchObject({
       tenant_id: T, desglose_id: DES, categoria: 'clase_fuera_de_3_5', estado: 'preparado', n_cruces: 1,
-      fecha_cobro_mas_antiguo: '2026-03-05', monto_reclamado: 102, proveedor: 'Proveedor Ejemplo',
+      fecha_cobro_mas_antiguo: '2026-03-05', monto_reclamado: 52, proveedor: 'Proveedor Ejemplo',
     });
     expect(db.tablas.peaje_candidato_accion).toHaveLength(1);
     expect(db.tablas.peaje_candidato_accion[0]).toMatchObject({
       tenant_id: T, desglose_id: DES, indice: 2, categoria: 'clase_fuera_de_3_5', accion: 'reclamado', motivo: null,
       actor: 'panel:flota_admin', reclamo_id: db.tablas.peaje_reclamo[0].id,
     });
+  });
+
+  it('A37-L-02: el reclamo de clase fuera de 3 y 5 es el EXCESO sobre la tarifa confirmada, no el cruce completo', async () => {
+    sembrar({ clase9: 10 });
+    const lotes = { entrada: { cat: 'clase_fuera_de_3_5' }, confirmar: true, esperado: 10 };
+    const r = await A.aplicarAccionCandidatos(T, { ...base, accion: 'reclamado', filtro: lotes });
+    expect(r).toMatchObject({ ok: true, aplicadas: 10, reclamos: 1 });
+    const completo = (db.tablas.desglose_peaje_linea as Fila[]).filter((l) => l.clase === 9).reduce((s2, l) => s2 + Number(l.monto), 0);
+    const exceso = Math.round((completo - 10 * 50) * 100) / 100;
+    expect(db.tablas.peaje_reclamo[0].monto_reclamado).toBe(exceso);
+    expect(exceso).toBeLessThan(completo);
+  });
+
+  it('A37-L-02: sin tarifa confirmada NO se reclama (no hay cifra defendible) y se dice por qué', async () => {
+    sembrar({ sinTarifa: true });
+    const r = await A.aplicarAccionCandidatos(T, { ...base, accion: 'reclamado', fila: fila(2) });
+    expect(r).toMatchObject({ ok: false });
+    expect(JSON.stringify(r)).toContain('tarifa confirmada');
+    expect(db.tablas.peaje_reclamo ?? []).toHaveLength(0);
+    expect(db.tablas.peaje_candidato_accion ?? []).toHaveLength(0);
   });
 
   it('doble clic = un solo efecto: un reclamo, una decisión', async () => {

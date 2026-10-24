@@ -192,6 +192,18 @@ describe('el seguimiento de reclamos de punta a punta', () => {
     expect(reclamos[0].evaluacion.fechaLimite).toBe(`2026-${masAntiguo.slice(5, 7) === '03' ? '06' : '05'}-${masAntiguo.slice(8)}`);
   }, 60_000);
 
+  it('A37-L-02: el reclamo por categoría de clase fuera de 3 y 5 exige tarifa confirmada y reclama solo el exceso', async () => {
+    const { id } = await subir('01 A 10 DE MARZO.xlsx', { filas: 2000, inicio: '2026-03-01', extemporaneos: 0 });
+    const rep = await R.revisionDeDesglose(T, id);
+    const clase = rep!.revision.candidatos.filter((c) => c.categoria === 'clase_fuera_de_3_5');
+    expect(clase.length).toBeGreaterThan(0);
+
+    // Sin tarifa confirmada no hay cifra defendible: no se crea el reclamo (antes salía el importe completo de los cruces).
+    const sin = await R.crearReclamoDeCategoria(T, { desgloseId: id, categoria: 'clase_fuera_de_3_5' });
+    expect(sin.ok).toBe(false);
+    expect(db.tablas.peaje_reclamo ?? []).toHaveLength(0);
+  }, 60_000);
+
   it('un reclamo preparado que nadie envía vence a los 3 meses del cobro más antiguo', async () => {
     const { id } = await subir('01 A 10 DE MARZO.xlsx', { filas: 500, inicio: '2026-03-01', extemporaneos: 5 });
     await R.crearReclamoDeCategoria(T, { desgloseId: id, categoria: 'extemporaneo' });

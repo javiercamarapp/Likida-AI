@@ -4,7 +4,7 @@ import { logger } from '@/lib/logger';
 import { revisionDeDesglose } from '@/lib/likida/peajes/revision_cobros';
 import {
   listarDecisionesCandidatos, registrarDecisionesCandidatos, ligarDecisionesAReclamo, retirarDecisionesCandidatos,
-  crearReclamoDeCandidatos, guardarJustificacionesDeCruces,
+  crearReclamoDeCandidatos, guardarJustificacionesDeCruces, montosReclamablesDeClase,
 } from '@/lib/likida/peajes/datos';
 import {
   ACCIONES_CANDIDATO, aplicaAccion, filasDeCandidatos, filasFiltradas, normalizarFiltros, validarMotivoAccion,
@@ -46,7 +46,8 @@ export type ResultadoAccion =
   | { ok: true; aplicadas: number; omitidas: number; reclamos: number; mensaje: string }
   | { ok: false; error: string };
 
-const TEXTO_OMITIDA: Record<MotivoNoAplica, string> = {
+const TEXTO_OMITIDA: Record<MotivoNoAplica | 'sin_tarifa', string> = {
+  sin_tarifa: 'son de «clase distinta de 3 y 5» sin tarifa confirmada con exceso (sin ella no hay monto defendible que reclamar: confirma la tarifa de la caseta)',
   ya_decidido: 'ya tenían decisión', no_reclamable: 'son avisos atípicos o asuntos internos de la flota, no cobros del proveedor (no se reclaman)', sin_fecha: 'no traen fecha (no se puede contar el plazo)',
 };
 const VERBO: Record<AccionCandidato, { hecho: string; nada: string }> = {
@@ -105,10 +106,31 @@ export async function aplicarAccionCandidatos(tenantId: string, e: EntradaAccion
   }
 
   const aplicables: FilaCandidato[] = [];
-  const omitidasPor = new Map<MotivoNoAplica, number>();
+  const omitidasPor = new Map<MotivoNoAplica | 'sin_tarifa', number>();
   for (const f of objetivo) {
     const r = aplicaAccion(f, e.accion);
     if (r.ok) aplicables.push(f); else omitidasPor.set(r.motivo, (omitidasPor.get(r.motivo) ?? 0) + 1);
+  }
+  // A37-L-02: el monto de un reclamo de «clase distinta de 3 y 5» es el EXCESO contra la tarifa confirmada, no el cruce
+  // completo. Sin tarifa confirmada con exceso no hay cifra defendible: esa fila no se reclama (y se dice).
+  const montoReclamo = new Map<string, number>();
+  if (e.accion === 'reclamado' && aplicables.some((f) => f.categoria === 'clase_fuera_de_3_5')) {
+    let montos: Map<number, number | null>;
+    try {
+      montos = await montosReclamablesDeClase(tenantId, desgloseId);
+    } catch (err) {
+      logger.error('peajes.candidatos_accion_tarifas', { tenant: tenantId, err: err instanceof Error ? err.message : String(err) });
+      return { ok: false, error: 'No se pudo leer el tarifario para calcular el monto reclamable. No se aplicó nada: inténtalo de nuevo.' };
+    }
+    for (let i = aplicables.length - 1; i >= 0; i--) {
+      const f = aplicables[i]!;
+      if (f.categoria !== 'clase_fuera_de_3_5') continue;
+      const exceso = montos.get(f.indice) ?? null;
+      if (exceso === null) {
+        aplicables.splice(i, 1);
+        omitidasPor.set('sin_tarifa', (omitidasPor.get('sin_tarifa') ?? 0) + 1);
+      } else montoReclamo.set(f.clave, exceso);
+    }
   }
   const textoOmitidas = [...omitidasPor].map(([k, n]) => `${n} ${TEXTO_OMITIDA[k]}`).join('; ');
   if (aplicables.length === 0) {
@@ -136,7 +158,7 @@ export async function aplicarAccionCandidatos(tenantId: string, e: EntradaAccion
           const fechas = grupo.map((f) => f.fecha).filter((x): x is string => x !== null).sort();
           const reclamoId = await crearReclamoDeCandidatos(tenantId, {
             desgloseId, proveedor: reporte.proveedor, categoria, nCruces: grupo.length,
-            monto: r2(grupo.reduce((s, f) => s + f.monto, 0)), fechaCobroMasAntigua: fechas[0]!, enviadoEn: enviado,
+            monto: r2(grupo.reduce((s, f) => s + (montoReclamo.get(f.clave) ?? f.monto), 0)), fechaCobroMasAntigua: fechas[0]!, enviadoEn: enviado,
           });
           await ligarDecisionesAReclamo(tenantId, idsGrupo, reclamoId);
           reclamos++;
