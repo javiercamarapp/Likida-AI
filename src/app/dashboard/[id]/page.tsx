@@ -323,7 +323,8 @@ export default async function Detalle({
     const g = det?.gastos.find((x) => x.id === gastoId);
     if (!g || !disputaPendiente(g.ocrExtra)) return { error: 'Ese comprobante ya no tiene una disputa pendiente en esta liquidación.' };
     const crudo = String(fd.get('monto') ?? '').replace(/\s/g, '').replace(/,/g, '');
-    const monto = /^\d+(\.\d{1,2})?$/.test(crudo) ? Number(crudo) : NaN;
+    const [enteros = '', decimales = '', ...resto] = crudo.split('.');
+    const monto = resto.length === 0 && /^\d+$/.test(enteros) && /^\d{0,2}$/.test(decimales) ? Number(crudo) : NaN;
     if (!Number.isFinite(monto) || monto <= 0) return { error: 'Escribe el monto correcto en pesos, con hasta dos decimales.' };
     const r = await corregirMontoGasto({
       tenantId: t, gastoId, montoNuevo: monto,
