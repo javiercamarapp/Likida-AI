@@ -4,6 +4,7 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { tablasEsperadas } from './tablas-esperadas.mjs';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { validateDatabase } from './supabase-preflight.mjs';
@@ -110,6 +111,9 @@ export async function inspectEmpty(env, deps = {}) {
     truncated, truncatedCounts: truncatedCounts.sort((a, b) => a.truncated_table.localeCompare(b.truncated_table)) };
 }
 
+/** Piso de tablas public al terminar (las 154 de 0347; las migraciones posteriores añaden más): piso, no igualdad. */
+const TABLAS_MINIMAS_FINALES = 154;
+
 export async function recover(mode, env = process.env, deps = {}) {
   if (!['capture', 'execute'].includes(mode)) fail('RECOVERY_MODE');
   if (env.SUPABASE_PROJECT_REF !== STAGING || !env.SUPABASE_DB_PASSWORD) fail('RECOVERY_STAGING_CREDENTIALS');
@@ -206,12 +210,16 @@ export async function recover(mode, env = process.env, deps = {}) {
   cli('PUSH', ['db', 'push', '--linked', '--yes']);
   const applied = await query('select version from supabase_migrations.schema_migrations order by version');
   if (canonical(applied) !== canonical(expected.map((version) => ({ version })))) fail('RECOVERY_FINAL_HISTORY');
+  // A37-S02-02: antes exigía EXACTAMENTE 154 tablas (el estado de 0347) y fallaba siempre tras el reset
+  // completo. Ahora: toda tabla que las migraciones dejan en pie debe existir, y nunca menos de la base 0331.
+  const esperadas = tablasEsperadas();
   const physical = await query(`select
     (select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind in ('r','p')) as tables,
+    (select count(*) from unnest(array[${esperadas.map((t) => `'${t}'`).join(',')}]::text[]) as n(t) where to_regclass('public.' || quote_ident(n.t)) is null) as missing_tables,
     (select count(*) from information_schema.columns where table_schema='public' and table_name='gasto' and (column_name,data_type) in (('metodo_pago','text'),('pagado_en','date'),('pagado_forma','text'))) as rep_columns,
     to_regclass('public.cfdi_pago') is not null as cfdi_pago,
     (select count(*) from pg_index where indexrelid in (to_regclass('public.wa_conversacion_purga_idx'),to_regclass('public.codigo_pendiente_purga_idx')) and indisvalid and indisready) as valid_indexes`);
-  if (!Array.isArray(physical) || physical.length !== 1 || Number(physical[0].tables) !== 154
+  if (!Array.isArray(physical) || physical.length !== 1 || Number(physical[0].tables) < TABLAS_MINIMAS_FINALES || Number(physical[0].missing_tables) !== 0
     || Number(physical[0].rep_columns) !== 3 || physical[0].cfdi_pago !== true || Number(physical[0].valid_indexes) !== 2) fail('RECOVERY_FINAL_SCHEMA');
   const policiesAfter = await query(POLICIES_QUERY);
   const normalizePolicies = (rows) => rows.map((p) => ({ ...p,
@@ -222,7 +230,7 @@ export async function recover(mode, env = process.env, deps = {}) {
   write(join(directory, 'policies-after.json'), canonical(policiesAfter), { mode: 0o600 });
   write(join(directory, 'physical.json'), canonical(physical), { mode: 0o600 });
   write(join(directory, 'applied.json'), canonical(applied), { mode: 0o600 });
-  console.log('RECOVERY_MIGRATIONS_COMPLETE: historial reconstruido hasta 0347; verificar catálogo, permisos API y Preview antes del release.');
+  console.log('RECOVERY_MIGRATIONS_COMPLETE: historial reconstruido hasta la última migración; verificar catálogo, permisos API y Preview antes del release.');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

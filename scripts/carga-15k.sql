@@ -4,9 +4,9 @@
 -- Simula UN MES del cliente de 15,000 viajes/mes: un tenant 'ZZZ CARGA' con
 -- 200 choferes, 15,000 viajes (500/día × 30 días), 45,000 gastos (3 por
 -- viaje) y 12,000 liquidaciones. Todo obviamente sintético: folios ZZZ-,
--- teléfonos del rango falso 5215559xxxxxx, UUIDs ZZZZZZZZ-.
+-- teléfonos NO asignables 521550000xxxx (el abonado empieza en 0: no existe), UUIDs ZZZZZZZZ-.
 --
--- CÓMO CORRERLO: pegar entero en el SQL editor de Supabase (corre como
+-- CÓMO CORRERLO: primero `set likida.permitir_siembra = 'si';` (solo base efímera o staging); pegar entero en el SQL editor de Supabase (corre como
 -- postgres, dueño de las tablas: la RLS no aplica). Un solo DO = una sola
 -- transacción: si algo choca contra un constraint, no queda nada.
 --
@@ -23,8 +23,9 @@
 --     y el bloque 8 de verificaciones.sql lo usa).
 --   · uq_gasto_cfdi_uuid / uq_gasto_img_hash: cfdi_uuid distinto por gasto
 --     donde se pone; img_hash se deja NULL (no participa del unique parcial).
---   · uq_operador_telefono_activo (0024, GLOBAL): teléfonos del rango
---     5215559000001..5215559000200, imposible en un chofer real.
+--   · uq_operador_telefono_activo (0024, GLOBAL): teléfonos
+--     5215500000001..5215500000200: el abonado de 8 dígitos empieza en 0000, que
+--     la numeración mexicana no asigna (antes 55 5900 xxxx sí era un móvil CDMX plausible).
 --   · gasto_concepto_dominio / liquidacion_estatus_dominio (0025).
 --
 -- LIMPIEZA: scripts/carga-15k-limpiar.sql (delete del tenant — todo cascada).
@@ -35,6 +36,11 @@ declare
   t   uuid := 'aaaaaaaa-0000-4000-8000-000000015000';  -- fijo: lo usan medir y limpiar
   ops uuid[];
 begin
+  -- A37-S01-03 / A37-S02-04: nunca sobre una base viva. Hay que declarar a mano, en la MISMA sesión,
+  -- que esta base es efímera o de staging:  set likida.permitir_siembra = 'si';
+  if coalesce(current_setting('likida.permitir_siembra', true), '') <> 'si' then
+    raise exception 'Siembra sintética abortada: corre antes «set likida.permitir_siembra = ''si'';» y SOLO en una base efímera o de staging.';
+  end if;
   if exists (select 1 from tenant where id = t) then
     raise exception 'ZZZ CARGA ya existe: corre scripts/carga-15k-limpiar.sql primero';
   end if;
@@ -43,7 +49,7 @@ begin
 
   -- ── 200 choferes ──────────────────────────────────────────────────────────
   insert into operador (tenant_id, nombre, telefono, activo)
-  select t, 'ZZZ Chofer ' || lpad(i::text, 3, '0'), '5215559' || lpad(i::text, 6, '0'), true
+  select t, 'ZZZ Chofer ' || lpad(i::text, 3, '0'), '521550000' || lpad(i::text, 4, '0'), true
   from generate_series(1, 200) i;
 
   select array_agg(id order by telefono) into ops from operador where tenant_id = t;

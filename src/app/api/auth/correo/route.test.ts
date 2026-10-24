@@ -124,6 +124,20 @@ describe('sin firma válida no sale un solo correo', () => {
   });
 });
 
+describe('A37-S02-03: sonda firmada (dry-run) para verificar que el secreto coincide', () => {
+  it('firmada con el secreto correcto: 200 {dry_run:true} y CERO envíos', async () => {
+    const r = await postear({ likida_dry_run: true });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ dry_run: true });
+    expect(enviados).toHaveLength(0);
+  });
+  it('con firma equivocada: 401 (el mismo código que sin firma, pero ahora distinguible del 200)', async () => {
+    const r = await postear({ likida_dry_run: true }, { firmar: false });
+    expect(r.status).toBe(401);
+    expect(enviados).toHaveLength(0);
+  });
+});
+
 describe('el magic link, de punta a punta', () => {
   it('manda el correo de la marca a quien lo pidió, desde acceso@', async () => {
     const r = await postear(MAGIC);

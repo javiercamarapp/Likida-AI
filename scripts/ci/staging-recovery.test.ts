@@ -17,7 +17,7 @@ function fixture() {
   const policies = JSON.parse(readFileSync('scripts/ci/fixtures/staging-storage-policies.json', 'utf8'));
   const policiesAfter = structuredClone(policies);
   let didReset = false;
-  const physical = [{ tables: 154, rep_columns: 3, cfdi_pago: true, valid_indexes: 2 }];
+  const physical = [{ tables: 400, missing_tables: 0, rep_columns: 3, cfdi_pago: true, valid_indexes: 2 }];
   const migrations = readdirSync('supabase/migrations');
   const history = migrations.filter(x => /^\d{4}_.+\.sql$/.test(x)).map(x => ({ version: x.slice(0, 4) })).sort((a, b) => a.version.localeCompare(b.version));
   const files = new Map<string, string>([['supabase/.temp/project-ref', STAGING]]);
@@ -185,6 +185,14 @@ describe('recuperación excepcional de staging vacío', () => {
     const f = fixture(); await recover('capture', f.env, f.deps); f.physical[0].rep_columns = 0;
     await expect(recover('execute', f.env, f.deps)).rejects.toThrow('RECOVERY_FINAL_SCHEMA');
   });
+  it('A37-S02-02: más tablas que las 154 de antes NO es esquema roto; una tabla de migración ausente SÍ', async () => {
+    const ok = fixture(); await recover('capture', ok.env, ok.deps);
+    await expect(recover('execute', ok.env, ok.deps)).resolves.toBeUndefined();
+    const f = fixture(); await recover('capture', f.env, f.deps); f.physical[0].missing_tables = 1;
+    await expect(recover('execute', f.env, f.deps)).rejects.toThrow('RECOVERY_FINAL_SCHEMA');
+    const g = fixture(); await recover('capture', g.env, g.deps); g.physical[0].tables = 10;
+    await expect(recover('execute', g.env, g.deps)).rejects.toThrow('RECOVERY_FINAL_SCHEMA');
+  });
   it('workflow sólo staging, preparación por defecto y descarga del respaldo revisado', () => {
     const text = readFileSync('.github/workflows/recover-empty-staging.yml', 'utf8');
     expect(text).toContain('environment: staging');
@@ -194,5 +202,17 @@ describe('recuperación excepcional de staging vacío', () => {
     expect(text).toContain('gh run download "$BACKUP_RUN_ID"');
     expect(text.indexOf('gh run download')).toBeLessThan(text.indexOf('staging-recovery.mjs execute'));
     expect(text).toContain('cancel-in-progress: false');
+  });
+});
+
+describe('A37-S02-02: tablasEsperadas deriva las tablas de las migraciones', () => {
+  it('create menos drop, y los renombres siguen a la tabla', async () => {
+    const { tablasEsperadas } = await import('./tablas-esperadas.mjs');
+    const archivos: Record<string, string> = {
+      '0001_a.sql': 'create table public.a (id int); create table if not exists public."b" (id int); -- create table public.fantasma',
+      '0002_b.sql': 'drop table if exists public.a; alter table public.b rename to c;',
+    };
+    const r = tablasEsperadas('m', ((p: string) => archivos[p.split('/')[1]]) as never, (() => Object.keys(archivos)) as never);
+    expect(r).toEqual(['c']);
   });
 });

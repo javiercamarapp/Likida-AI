@@ -95,7 +95,9 @@ export async function GET(req: Request) {
     // jornada vacío, y eso el latido tiene que decirlo o el hueco es invisible.
     // `parcial`, que es exactamente lo que significa: la ventana no se derivó
     // entera y la razón está escrita.
-    const parcial = r.cortadosPorReloj > 0 || r.listaTruncada || r.sinAvisoPrevio > 0;
+    // A37-L-06: «sin aviso de privacidad» es una condición ESPERADA y legal de UNA flota (la plataforma
+    // hizo lo correcto al negarse): queda en el detalle y el motivo, pero no degrada el health global.
+    const parcial = r.cortadosPorReloj > 0 || r.listaTruncada;
     const huboFallo = r.fallos.length > 0;
     await registrarLatido('jornada', huboFallo ? 'fallo' : parcial ? 'parcial' : 'ok', {
       cortadosPorReloj: r.cortadosPorReloj,
