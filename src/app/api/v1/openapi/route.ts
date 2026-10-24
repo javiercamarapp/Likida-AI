@@ -1567,7 +1567,7 @@ function documento(servidor: string) {
           summary: 'Los desgloses del proveedor de peaje de la flota y su conciliación medida.',
           description: 'Área `dinero`. Del más nuevo al más viejo; los ANULADOS no salen. Cada uno trae cuántas líneas cuadran, no cuadran o no tienen contraparte (conteos medidos, nunca un 0 inventado). El `id` es el que se pasa a `GET /v1/peajes/exportacion`. `limite` de 1 a 50; `desplazamiento` es 400.',
           tags: ['peajes', 'dinero'],
-          parameters: [parametrosPagina[0]],
+          parameters: [{ ...parametrosPagina[0], description: 'Cuántos desgloses devolver (1 a 50, defecto 50). Un valor mayor devuelve 400: cada desglose cuesta 4 conteos exactos.', schema: { type: 'integer', minimum: 1, maximum: 50, default: 50 } }],
           responses: {
             '200': {
               description: 'Desgloses vigentes.',

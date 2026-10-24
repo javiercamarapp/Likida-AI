@@ -15,12 +15,18 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
+/** A37-S11-06: lo que la ruta DOCUMENTA (1-50). Cada desglose cuesta 4 conteos exactos; con 200 eran ~800 consultas y podía pasar el timeout. */
+const LIMITE_MAXIMO_DESGLOSES = 50;
+
 export async function GET(req: Request) {
   const acceso = await abrir(req, 'dinero');
   if (!acceso.ok) return acceso.respuesta;
 
   const pag = leerPagina(req.url);
   if (!pag.ok) return pag.respuesta;
+  if (pag.pagina.limite > LIMITE_MAXIMO_DESGLOSES) {
+    return errorApi('parametro_invalido', `\`limite\` no puede pasar de ${LIMITE_MAXIMO_DESGLOSES} en esta ruta.`);
+  }
   if (pag.pagina.desplazamiento > 0) {
     return errorApi('parametro_invalido', 'Esta ruta no pagina por desplazamiento: pide `limite` (hasta 50) y acota con la exportación por desglose.');
   }
