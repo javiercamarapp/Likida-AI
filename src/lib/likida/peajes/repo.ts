@@ -1148,8 +1148,22 @@ export async function anularDesgloseDb(tenantId: string, desgloseId: string, mot
   if ((upd.data ?? []).length === 0) {
     const ex = await acotada(supabaseAdmin().from('desglose_peaje').select('id').eq('tenant_id', tenantId).eq('id', desgloseId).maybeSingle(), 'peajes.anular_existe');
     if (ex.error) throw new Error(`anularDesglose: ${ex.error.message}`);
-    return ex.data ? 'ya_anulado' : 'no_encontrado';
+    if (!ex.data) return 'no_encontrado';
+    // A37-S11-05: el desglose ya estaba anulado, pero una anulación anterior pudo cortarse entre el UPDATE
+    // de `anulado_en` y el de la huella: reintentar REPARA liberando las huellas aún pendientes (idempotente).
+    await liberarHuellasDeDesglose(tenantId, desgloseId);
+    return 'ya_anulado';
   }
+  await liberarHuellasDeDesglose(tenantId, desgloseId);
+  return 'anulado';
+}
+
+/**
+ * Libera la huella de los archivos de la cola que generaron este desglose anulado. Idempotente: repetirla solo
+ * vuelve a derivar otra huella igualmente libre. Si una escritura falla LANZA (la API contesta error y el
+ * integrador reintenta, que cae en `ya_anulado` y repara) en vez de prometer «anulado» con el archivo bloqueado.
+ */
+async function liberarHuellasDeDesglose(tenantId: string, desgloseId: string): Promise<void> {
   const arch = await acotada(supabaseAdmin().from('peaje_ingesta_archivo')
     .select('id, huella').eq('tenant_id', tenantId).eq('desglose_id', desgloseId).order('id'), 'peajes.anular_archivos');
   if (arch.error) throw new Error(`anularDesglose: ${arch.error.message}`);
@@ -1157,9 +1171,8 @@ export async function anularDesgloseDb(tenantId: string, desgloseId: string, mot
     const libre = createHash('sha256').update(`${a.huella}:anulada:${desgloseId}`).digest('hex');
     const r = await acotada(supabaseAdmin().from('peaje_ingesta_archivo').update({ huella: libre })
       .eq('tenant_id', tenantId).eq('id', a.id), 'peajes.anular_huella');
-    if (r.error) logger.error('peajes.anular_huella', { tenant: tenantId, err: r.error.message });
+    if (r.error) throw new Error(`anularDesglose: huella: ${r.error.message}`);
   }
-  return 'anulado';
 }
 
 export interface ArchivoIngestaVista {
