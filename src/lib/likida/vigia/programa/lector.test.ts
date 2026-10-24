@@ -282,3 +282,41 @@ describe('leerProgramaCsv · encabezado por mayoría de rótulos (T-A4-49)', () 
     expect(r.filas).toHaveLength(1);
   });
 });
+
+// A37-S59-02: comillas RFC-4180 (Excel entrecomilla celdas con «;», comillas o Alt+Enter).
+describe('leerProgramaCsv · comillas y celdas multilínea', () => {
+  const CAB = '#;SUC;TIPO DE VIAJE;ORIGEN-DESTINO;CLIENTE;CONSIGNATARIO;LINEA;CAJA;COMENTARIOS;CITA;CITA LIMITE;UNIDAD';
+  const TIT = 'EXPORTACION LUNES 05 DE OCTUBRE 2026';
+  it('un COMENTARIOS con salto de línea y «;» entrecomillado es UNA fila, sin filas ni títulos fantasma', () => {
+    const csv = [
+      TIT, CAB,
+      '1;GDL;EXPO;GDL-NLD;CLIENTE SINT 01;CONSIG SINT A;LNA;ZC0001;"llega tarde;\nmanda aviso";05/10/2026 8:00;;ZU0001',
+      '2;GDL;EXPO;GDL-NLD;CLIENTE SINT 02;CONSIG SINT B;LNA;ZC0002;;05/10/2026 9:00;;ZU0002',
+    ].join('\n');
+    const r = leerProgramaCsv(csv, T);
+    expect(r.secciones).toHaveLength(1);
+    expect(r.filas).toHaveLength(2);
+    expect(r.filas[0].celdas.COMENTARIOS).toBe('llega tarde; manda aviso');
+    expect(r.filas[0].celdas.UNIDAD).toBe('ZU0001');
+    expect(r.filas[1].celdas.CAJA).toBe('ZC0002');
+    expect(r.filas[1].lineaCsv).toBe(5); // las líneas siguen contando las físicas
+  });
+  it('comillas dobles escapadas dentro de la celda', () => {
+    const csv = [TIT, CAB, '1;GDL;EXPO;GDL-NLD;CLIENTE SINT 01;CONSIG SINT A;LNA;ZC0001;"dice ""urgente""";05/10/2026 8:00;;ZU0001'].join('\n');
+    expect(leerProgramaCsv(csv, T).filas[0].celdas.COMENTARIOS).toBe('dice "urgente"');
+  });
+  it('un «;» dentro de comillas en un archivo de comas no cambia el delimitador', () => {
+    const csv = [
+      TIT, CAB.replace(/;/g, ','),
+      '1,GDL,EXPO,GDL-NLD,CLIENTE SINT 01,CONSIG SINT A,LNA,ZC0001,"a;b",05/10/2026 8:00,,ZU0001',
+    ].join('\n');
+    const r = leerProgramaCsv(csv, T);
+    expect(r.resumen.delimitador).toBe(',');
+    expect(r.filas[0].celdas.COMENTARIOS).toBe('a;b');
+    expect(r.filas[0].celdas.UNIDAD).toBe('ZU0001');
+  });
+  it('comillas sin cerrar: error llano (no se traga el resto del archivo)', () => {
+    const csv = [TIT, CAB, '1;GDL;EXPO;GDL-NLD;CLIENTE SINT 01;CONSIG SINT A;LNA;ZC0001;"abierta;05/10/2026 8:00;;ZU0001', '2;GDL;EXPO;X;C;D;L;ZC0002;;;;ZU0002'].join('\n');
+    expect(() => leerProgramaCsv(csv, T)).toThrow(/comillas/);
+  });
+});
