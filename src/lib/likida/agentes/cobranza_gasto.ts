@@ -409,7 +409,13 @@ export async function ejecutarCobranzaGastos(
 
   r.pendientes = plan.pendientes.length;
   r.sinTelefono = plan.sinTelefono.reduce((n, g) => n + g.items.length, 0);
-  r.viajesConGastoPendiente = [...new Set(plan.pendientes.map((i) => i.viajeId))];
+  // A37-S26-05: un viaje solo se aparta de la cobranza por viaje mientras su gasto TODAVÍA tiene aviso por
+  // darse (en cola, o entre dos tiers). Cuando el gasto ya agotó toda su escalera (el último tier ya se
+  // consumió), no cobra nada más: dejar su viaje fuera lo dejaba sin un solo aviso aunque siguiera abierto.
+  // El «ya se le escribió hoy» lo cubre `telefonosHoy`.
+  const ultimoTier = Math.max(0, ...config.tiersGasto);
+  const agotado = (gastoId: string) => (previos.get(gastoId) ?? []).some((t) => t >= ultimoTier);
+  r.viajesConGastoPendiente = [...new Set(plan.pendientes.filter((i) => !agotado(i.gastoId)).map((i) => i.viajeId))];
 
   // Los sin teléfono TAMBIÉN quedan en bitácora (enviado=false, con el motivo): el tablero los enseña y
   // el tier no se reintenta cada hora contra el mismo hueco.
@@ -423,11 +429,15 @@ export async function ejecutarCobranzaGastos(
     if (error && error.code !== '23505') logger.warn('cobranza_gasto.sin_telefono_sin_anotar', { tenantId, err: error.message });
   }
 
-  const enviadosHoy = await mensajesDeHoy(tenantId, plan.paraContactar.map((g) => g.operador.operadorId), ahora);
+  // A37-S26-05: el «ya se le escribió hoy» cubre a TODO chofer con gasto pendiente (también si su gasto ya
+  // no tiene tier por avisar), porque ese viaje ya no se aparta de la cobranza por viaje y no debe duplicarle el día.
+  const operadoresPendientes = new Map<string, OperadorCobro>();
+  for (const g of gastos) if (motivoFaltante(g, config) !== null) operadoresPendientes.set(g.operador.operadorId, g.operador);
+  const enviadosHoy = await mensajesDeHoy(tenantId, [...operadoresPendientes.keys()], ahora);
   const telefonosHoy = new Set<string>();
   // Quien ya recibió hoy (en una corrida anterior) cuenta para que la cobranza por viaje no le duplique el día.
-  for (const g of plan.paraContactar) {
-    if ((enviadosHoy.get(g.operador.operadorId) ?? 0) > 0 && g.operador.telefono) telefonosHoy.add(g.operador.telefono);
+  for (const op of operadoresPendientes.values()) {
+    if ((enviadosHoy.get(op.operadorId) ?? 0) > 0 && op.telefono) telefonosHoy.add(op.telefono);
   }
   let rechazosSeguidos = 0;
 
