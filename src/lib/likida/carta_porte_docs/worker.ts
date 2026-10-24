@@ -40,6 +40,19 @@ export const MARGEN_EXTRACCION_MS = 25_000;
 export const TOPE_FALLOS_MODELO_SEGUIDOS = 4;
 /** Avisos a la oficina por pasada: la oficina no necesita una avalancha, y el resto sale en la siguiente. */
 export const TOPE_AVISOS_POR_PASADA = 10;
+/** A37-S33-03: cuántas filas se piden a la lista de avisos (la RPC admite hasta 200). Más que el tope por pasada, para que las filas de una flota sin teléfono (que no se reclaman) no ocupen toda la ventana. */
+export const VENTANA_LISTA_AVISOS = 100;
+
+/** Reparto por flota (round-robin, conservando el orden dentro de cada una): ninguna flota acapara el tope por pasada. */
+export function intercalarAvisosPorFlota<T extends { tenantId: string }>(lista: T[]): T[] {
+  const porFlota = new Map<string, T[]>();
+  for (const d of lista) porFlota.set(d.tenantId, [...(porFlota.get(d.tenantId) ?? []), d]);
+  const salida: T[] = [];
+  for (let i = 0; salida.length < lista.length; i++) {
+    for (const fila of porFlota.values()) if (i < fila.length) salida.push(fila[i]);
+  }
+  return salida;
+}
 /** Rechazos DEFINITIVOS seguidos que paran los avisos (una plantilla sin aprobar rebota para todos). */
 export const TOPE_AVISOS_RECHAZADOS_SEGUIDOS = 3;
 
@@ -281,16 +294,26 @@ export function armarAvisoDivision(doc: DocumentoFila, embarques: number, reabie
 async function avisarOficinaDe(deps: DepsWorker, opts: OpcionesWorker, r: ResultadoWorker): Promise<void> {
   let presupuesto = TOPE_AVISOS_POR_PASADA;
   let rechazadosSeguidos = 0;
-  const telefonos = new Map<string, string | null>();
-  const telefonoDe = async (tenantId: string): Promise<string | null> => {
-    if (!telefonos.has(tenantId)) telefonos.set(tenantId, await deps.telefonoOficina(tenantId).catch(() => null));
+  const telefonos = new Map<string, string | null | 'error'>();
+  const sinTelefonoAvisadas = new Set<string>();
+  // A37-S33-03: un fallo de lectura NO es «sin teléfono» (antes se convertía en null y se contaba como tal): se salta la flota en
+  // esta pasada, se dice, y la siguiente lo reintenta.
+  const telefonoDe = async (tenantId: string): Promise<string | null | 'error'> => {
+    if (!telefonos.has(tenantId)) {
+      telefonos.set(tenantId, await deps.telefonoOficina(tenantId).catch((e: unknown) => {
+        r.fallos.push(`teléfono de oficina ilegible (${msg(e).slice(0, 80)}): los avisos de esa flota esperan a la siguiente pasada`);
+        return 'error' as const;
+      }));
+    }
     return telefonos.get(tenantId) ?? null;
   };
 
   const lotes: Array<{ tipo: TipoAvisoDoc; lista: Array<{ tenantId: string; id: string }> | null }> = [];
   try {
-    lotes.push({ tipo: 'agotado', lista: await deps.agotados(TOPE_AVISOS_POR_PASADA) });
-    lotes.push({ tipo: 'hallazgos', lista: await deps.porAvisar(UMBRAL_CRITICO, TOPE_AVISOS_POR_PASADA) });
+    const agotados = await deps.agotados(VENTANA_LISTA_AVISOS);
+    const hallazgos = await deps.porAvisar(UMBRAL_CRITICO, VENTANA_LISTA_AVISOS);
+    lotes.push({ tipo: 'agotado', lista: agotados === null ? null : intercalarAvisosPorFlota(agotados) });
+    lotes.push({ tipo: 'hallazgos', lista: hallazgos === null ? null : intercalarAvisosPorFlota(hallazgos) });
   } catch (e) {
     r.errores++;
     r.fallos.push(`avisos: ${msg(e)}`);
@@ -305,11 +328,16 @@ async function avisarOficinaDe(deps: DepsWorker, opts: OpcionesWorker, r: Result
       if (deps.ahora() + 3_000 >= opts.venceEn) return;
 
       const telRevisor = tipo === 'hallazgos' && deps.telefonoRevisor ? await deps.telefonoRevisor(d.tenantId, d.id).catch(() => null) : null;
-      const tel = telRevisor ?? await telefonoDe(d.tenantId);
+      const telOficina = telRevisor ? null : await telefonoDe(d.tenantId);
+      if (telOficina === 'error') continue;
+      const tel = telRevisor ?? telOficina;
       if (!tel) {
         // Sin a quién avisar no se reclama el candado: cuando capturen el teléfono, el aviso sale.
         r.sinTelefono++;
-        logger.error('cp_worker.aviso_sin_telefono_de_oficina', { tenantId: d.tenantId, documentoId: d.id, tipo });
+        if (!sinTelefonoAvisadas.has(d.tenantId)) {
+          sinTelefonoAvisadas.add(d.tenantId);
+          logger.error('cp_worker.aviso_sin_telefono_de_oficina', { tenantId: d.tenantId, documentoId: d.id, tipo });
+        }
         continue;
       }
       try {
