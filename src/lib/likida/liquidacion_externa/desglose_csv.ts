@@ -234,6 +234,13 @@ async function recibirPorOmision(tenantId: string, d: DesgloseBitacora): Promise
   return recibirDesglose(tenantId, d);
 }
 
+/** A37-S48-09: UTF-8 estricto; si los bytes no son UTF-8 válido (el «CSV» de Excel en español sale en Windows-1252), respaldo a windows-1252. */
+export function decodificarTextoCsv(bytes: Uint8Array): string {
+  let texto: string;
+  try { texto = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { texto = new TextDecoder('windows-1252').decode(bytes); }
+  return texto.replace(/^﻿/, '');
+}
+
 export async function importarDesglosesDeArchivo(
   tenantId: string, nombre: string, bytes: Uint8Array, deps: DependenciasImportacionDesgloses = { recibir: recibirPorOmision },
 ): Promise<ResultadoImportacionDesgloses> {
@@ -244,7 +251,7 @@ export async function importarDesglosesDeArchivo(
   let matriz: readonly (readonly string[])[]; let decimalComa = false;
   if (ext === 'csv' || ext === 'txt' || ext === '') {
     if (bytes.length === 0) return { ...base, error: 'El archivo está vacío.' };
-    const texto = new TextDecoder('utf-8').decode(bytes).replace(/^﻿/, '');
+    const texto = decodificarTextoCsv(bytes);
     matriz = partirCsv(texto); decimalComa = separadorDe(texto) === ';';
   } else {
     const m = matrizDeArchivoCatalogo(nombre, bytes);
