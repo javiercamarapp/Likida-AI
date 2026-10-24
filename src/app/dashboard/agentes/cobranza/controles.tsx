@@ -114,6 +114,8 @@ export function BotonPausa({ alternarPausa, activo }: { alternarPausa: AccionSim
   return (
     <div className="text-right shrink-0">
       <form action={accion} className="inline">
+        {/* A37-S12-04: el estado DESEADO viaja en el form; el servidor no invierte. */}
+        <input type="hidden" name="deseado" value={activo ? 'pausado' : 'activo'} />
         <BotonPausaInterno activo={activo} />
       </form>
       {estado?.error && <p className="text-[12px] mt-1" style={{ color: 'var(--bad)' }}>{estado.error}</p>}

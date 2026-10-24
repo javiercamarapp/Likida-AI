@@ -9,6 +9,8 @@ import {
 } from '@/lib/likida/agentes/cobranza';
 import { colaPorGasto, tableroGastos, guardarConfigGasto } from '@/lib/likida/agentes/cobranza_gasto';
 import { logger } from '@/lib/logger';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
+import { decidirPausa } from './pausa';
 import { ahoraMs } from '@/lib/saludo';
 import { registrarCorrida, ultimasCorridas, type CorridaRegistrada } from '@/lib/likida/agentes/corridas';
 import { VistaAgenteCobranza } from './vista';
@@ -29,10 +31,15 @@ function safe<T>(fn: () => Promise<T>): Promise<T | null> {
  *  y no closure: una action solo puede capturar VALORES serializables
  *  (tenantId), no funciones. */
 async function exigirPermiso(tenantId: string): Promise<string | null> {
+  return (await exigirPermisoConActor(tenantId)).negado;
+}
+
+/** Igual, pero devuelve también el actor para la bitácora (A37-S12-04). */
+async function exigirPermisoConActor(tenantId: string): Promise<{ negado: string | null; userId: string }> {
   const sesion = await requireSessionTenant('/dashboard/agentes/cobranza');
-  if (!puedeVerArea(sesion.rol, 'dinero')) return 'Tu rol no puede operar este agente.';
-  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return 'Este agente no es de tu flota.';
-  return null;
+  if (!puedeVerArea(sesion.rol, 'dinero')) return { negado: 'Tu rol no puede operar este agente.', userId: sesion.userId };
+  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { negado: 'Este agente no es de tu flota.', userId: sesion.userId };
+  return { negado: null, userId: sesion.userId };
 }
 
 /**
@@ -105,15 +112,25 @@ export default async function PaginaAgenteCobranza({
     redirect(`/dashboard/agentes/cobranza${sufijo}`);
   }
 
-  async function alternarPausa(_prev: { error?: string } | null, _fd: FormData): Promise<{ error?: string } | null> {
+  async function alternarPausa(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
-    const negado = await exigirPermiso(tenantId);
+    const { negado, userId } = await exigirPermisoConActor(tenantId);
     if (negado) return { error: negado };
 
+    // A37-S12-04: se aplica el estado DESEADO que mostraba la página, no una
+    // inversión del que hay ahora (una página vieja reactivaba una pausa).
     const actual = await leerConfigCobranza(tenantId);
-    const r = await guardarConfigCobranza(tenantId, { ...actual, activo: !actual.activo });
-    if (r.error) return { error: r.error };
-    logger.info('agente_cobranza.pausa', { tenantId, activo: !actual.activo });
+    const decision = decidirPausa(actual.activo, fd.get('deseado'));
+    if (decision.accion === 'recargar') return { error: 'Recarga la página: no pude saber si querías pausar o reanudar.' };
+    if (decision.accion === 'cambiar') {
+      const r = await guardarConfigCobranza(tenantId, { ...actual, activo: decision.activo });
+      if (r.error) return { error: r.error };
+      logger.info('agente_cobranza.pausa', { tenantId, activo: decision.activo, userId });
+      await anotarBitacora(
+        { tenantId, actor: { id: userId }, accion: decision.activo ? 'cobranza.reanudar' : 'cobranza.pausar', entidad: 'tenant', entidadId: tenantId, detalle: { activo: decision.activo } },
+        { evento: 'agente_cobranza.bitacora_no_escribio' },
+      );
+    }
     redirect(`/dashboard/agentes/cobranza${sufijo}`);
   }
 
@@ -122,7 +139,7 @@ export default async function PaginaAgenteCobranza({
     _fd: FormData,
   ): Promise<{ error?: string; resultado?: Awaited<ReturnType<typeof ejecutarCobranza>> } | null> {
     'use server';
-    const negado = await exigirPermiso(tenantId);
+    const { negado, userId } = await exigirPermisoConActor(tenantId);
     if (negado) return { error: negado };
 
     // `ignorarVentana`: el humano que aprieta ES la autorización de contactar
@@ -153,6 +170,11 @@ export default async function PaginaAgenteCobranza({
       disparo: 'manual',
       ...corridaDeCobranza(resultado),
     });
+    // A37-S12-04: quién disparó el envío fuera de horario.
+    await anotarBitacora(
+      { tenantId, actor: { id: userId }, accion: 'cobranza.ejecutar_ahora', entidad: 'tenant', entidadId: tenantId, detalle: { fuera_de_ventana: true } },
+      { evento: 'agente_cobranza.bitacora_no_escribio' },
+    );
     return { resultado };
   }
 

@@ -586,6 +586,8 @@ interface WaWebhook {
   entry?: Array<{
     changes?: Array<{
       value?: {
+        /** El número de la app al que va dirigido el evento (A37-S12-05). */
+        metadata?: { phone_number_id?: string };
         messages?: Array<{
           id: string;
           from: string;
@@ -658,10 +660,26 @@ async function avisarMantenimiento(mensajes: InboundMessage[]): Promise<void> {
   }
 }
 
+/**
+ * A37-S12-05: ¿el evento va dirigido a NUESTRO número? Si otro número de la
+ * misma app de Meta (sandbox, otro producto) manda eventos con la misma firma,
+ * no deben entrar al motor. Sin metadata o sin WHATSAPP_PHONE_NUMBER_ID no hay
+ * contra qué comparar y se deja pasar (no se apaga el canal por un campo
+ * ausente); un id presente que no coincide se descarta con log.
+ */
+function esDeNuestroNumero(value: { metadata?: { phone_number_id?: string } } | undefined): boolean {
+  const propio = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const recibido = value?.metadata?.phone_number_id;
+  if (!propio || !recibido || recibido === propio) return true;
+  logger.warn('webhook.numero_ajeno', { recibido });
+  return false;
+}
+
 function extractStatuses(p: WaWebhook): WaEstado[] {
   const out: WaEstado[] = [];
   for (const entry of p.entry ?? []) {
     for (const change of entry.changes ?? []) {
+      if (!esDeNuestroNumero(change.value)) continue;
       for (const s of change.value?.statuses ?? []) out.push(s);
     }
   }
@@ -686,6 +704,7 @@ function extractMessages(p: WaWebhook): InboundMessage[] {
   const out: InboundMessage[] = [];
   for (const entry of p.entry ?? []) {
     for (const change of entry.changes ?? []) {
+      if (!esDeNuestroNumero(change.value)) continue;
       for (const m of change.value?.messages ?? []) {
         // ── DAT-38 · LA HORA DEL MENSAJE ES LA DE META, NO LA NUESTRA ──────
         //

@@ -59,6 +59,16 @@ describe('guardarFilaCatalogo', () => {
     expect(puerto.aplicarLote).not.toHaveBeenCalled();
   });
 
+  it('A37-S12-03: «agregar» una clave que ya existe NO la sobrescribe en silencio', async () => {
+    puerto.existentes.mockImplementation(async () => [{ cliente_id: C1, sku: 'SKU-1' }]);
+    const r = await guardarFilaCatalogo(null, fd({ ...PRODUCTO, modo: 'nuevo' }));
+    expect(r).toMatchObject({ ok: false, error: expect.stringMatching(/ya existe.*edít/i) });
+    expect(puerto.aplicarLote).not.toHaveBeenCalled();
+    // Y si no existe, se agrega.
+    puerto.existentes.mockImplementation(async () => []);
+    expect(await guardarFilaCatalogo(null, fd({ ...PRODUCTO, modo: 'nuevo' }))).toEqual({ ok: true, mensaje: 'Agregado al catálogo.' });
+  });
+
   it('editar solo cambia una fila que existe (no crea una a escondidas) y deja la clave natural como estaba', async () => {
     const sinFila = await guardarFilaCatalogo(null, fd({ ...PRODUCTO, modo: 'editar' }));
     expect(sinFila).toEqual({ ok: false, error: 'Esa fila ya no existe. Recarga la pantalla.' });

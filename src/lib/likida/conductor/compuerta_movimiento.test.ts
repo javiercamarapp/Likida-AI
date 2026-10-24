@@ -107,6 +107,18 @@ describe('puedeEscribirAlChofer — la función pura', () => {
       expect(puedeEscribirAlChofer({ posiciones: QUIETA, sitioDelViaje: { origen: sitio('patio'), destino: null }, config: ENCENDIDA, ahora: AHORA, senalExtra: andando }).razon).toBe('conduciendo');
       expect(puedeEscribirAlChofer({ posiciones: QUIETA, sitioDelViaje: null, config: ENCENDIDA, ahora: AHORA, senalExtra: { velocidadKmh: 0 } }).permitido).toBe(true);
     });
+    it('A37-A5-10: la ignición y la velocidad que YA vienen en la muestra de posición cuentan aunque no haya puerto de proveedor', () => {
+      const conIgnicion = [M(240), M(120), M(5, 0, { ignicion: true })];
+      expect(puedeEscribirAlChofer({ posiciones: conIgnicion, sitioDelViaje: null, config: ENCENDIDA, ahora: AHORA, senalExtra: null }))
+        .toEqual({ permitido: false, razon: 'ignicion_encendida' });
+      const conVelocidad = [M(240), M(120), M(5, 0, { velocidadKmh: VELOCIDAD_MARCHA_KMH + 3 })];
+      expect(puedeEscribirAlChofer({ posiciones: conVelocidad, sitioDelViaje: null, config: ENCENDIDA, ahora: AHORA }))
+        .toEqual({ permitido: false, razon: 'conduciendo' });
+      // Ignición apagada o sin dato en la muestra: sigue siendo «detenida».
+      expect(puedeEscribirAlChofer({ posiciones: [M(240), M(120), M(5, 0, { ignicion: false, velocidadKmh: 0 })], sitioDelViaje: null, config: ENCENDIDA, ahora: AHORA }).razon).toBe('detenida');
+      // El proveedor manda sobre la muestra.
+      expect(puedeEscribirAlChofer({ posiciones: conIgnicion, sitioDelViaje: null, config: ENCENDIDA, ahora: AHORA, senalExtra: { ignicion: false } }).razon).toBe('detenida');
+    });
     it('ignición encendida DENTRO del sitio (espera en el andén con el motor prendido) sí queda exenta', () => {
       const r = puedeEscribirAlChofer({ posiciones: QUIETA, sitioDelViaje: { origen: sitio('patio'), destino: null }, config: ENCENDIDA, ahora: AHORA, senalExtra: { ignicion: true } });
       expect(r.razon).toBe('dentro_del_sitio');
