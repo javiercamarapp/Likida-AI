@@ -140,7 +140,7 @@ vi.mock('@/lib/admin/negocio', () => ({
   costoIaVentana: (...a: unknown[]) => costoIaVentana(...a),
 }));
 const getPorCobrar = vi.fn(async (): Promise<Array<{ monto: number }>> => []);
-vi.mock('@/lib/saas/transferencia', () => ({ getPorCobrar: () => getPorCobrar() }));
+vi.mock('@/lib/saas/transferencia', () => ({ getPorCobrarCompleto: () => getPorCobrar() }));
 const getPlanes = vi.fn(async (): Promise<unknown[]> => []);
 vi.mock('@/lib/saas/suscripcion', () => ({ getPlanes: () => getPlanes() }));
 

@@ -38,7 +38,7 @@ import { traerTodo, conteo } from '../pg';
 import { hoyMx, round2, mxn, numero, litros, pctCambio, fechaMx } from '@/lib/formato';
 import { telefonosJefe } from '../contactos';
 import { getOnboardingFlotas, type OnboardingFlota } from '@/lib/admin/onboarding';
-import { getPorCobrar, type FacturaPorCobrar } from '@/lib/saas/transferencia';
+import { getPorCobrarCompleto, type FacturaPorCobrar } from '@/lib/saas/transferencia';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { encolarPieza } from './cola';
 import { registrarCorrida, type DisparoCorrida } from './corridas';
@@ -1156,11 +1156,21 @@ export function esToqueAtrasado(t: ToqueCobranza): boolean {
 }
 
 /** La clave del toque: una propuesta por (factura, hito), para siempre. La
- *  referencia bancaria es el identificador humano; sin ella (una factura de
- *  Stripe) se cae al id corto — nunca a un texto ambiguo. */
+ *  referencia bancaria es el identificador humano; PERO NO ES ÚNICA: lleva solo
+ *  4 hex del tenant (`referenciaDe`), así que dos flotas con el mismo prefijo
+ *  que facturen el mismo mes compartían título y el índice único de la 0218
+ *  (agente+título, sin tenant) rebotaba el recordatorio de la segunda como «ya
+ *  existía» (A37-S27-03). La llave real es el id COMPLETO de la factura.
+ *
+ *  Al desplegar, las propuestas que ya existían con el título viejo no casan
+ *  con este: las facturas abiertas reciben UNA vez más sus hitos ya alcanzados
+ *  (el agente propone, nadie envía solo). */
 export function tituloToque(t: ToqueCobranza): string {
-  const ref = t.factura.referencia?.trim() || t.factura.id.slice(0, 8);
-  return `Cobranza SaaS — ${ref} — D${t.hito >= 0 ? `+${t.hito}` : t.hito}`;
+  const hito = `D${t.hito >= 0 ? `+${t.hito}` : t.hito}`;
+  const ref = t.factura.referencia?.trim();
+  return ref
+    ? `Cobranza SaaS — ${ref} — ${t.factura.id} — ${hito}`
+    : `Cobranza SaaS — ${t.factura.id} — ${hito}`;
 }
 
 export function armarPropuestaCobranza(t: ToqueCobranza, hoy: string): string {
@@ -1254,7 +1264,7 @@ async function correrCobranzaSaas(disparo: DisparoCorrida, hoy: string, venceEnV
   const agente = 'cobranza_saas';
   const titulo = `Cobranza SaaS — ${hoy}`;
   try {
-    const facturas = await getPorCobrar();
+    const facturas = await getPorCobrarCompleto();
     const toques = toquesDeHoy(facturas, hoy);
 
     let propuestas = 0;

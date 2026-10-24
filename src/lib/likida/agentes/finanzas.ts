@@ -39,7 +39,7 @@ import {
   costoIaMesActual, costoIaVentana,
   type ResumenNegocio, type CostoPorFaseModelo, type ConteosPlataforma,
 } from '@/lib/admin/negocio';
-import { getPorCobrar } from '@/lib/saas/transferencia';
+import { getPorCobrarCompleto } from '@/lib/saas/transferencia';
 import { getPlanes } from '@/lib/saas/suscripcion';
 import { desglosarPrecio } from '@/lib/saas/iva';
 import { alertarOperador } from '@/lib/observability/alerta';
@@ -520,7 +520,7 @@ async function correrAnalistaMetricas(disparo: DisparoCorrida, hoy: string): Pro
 
     const [activasFilas, planes, pipeline, conteos, r, porCobrar] = await Promise.all([
       leerSuscripcionesActivas(), getPlanes(), contarPipeline(), getConteosPlataforma(),
-      getResumenNegocio(hoy), getPorCobrar(),
+      getResumenNegocio(hoy), getPorCobrarCompleto(),
     ]);
     // A37-S27-01: el MRR es ingreso SIN IVA. `precioMensual` puede traer el IVA
     // (`precioIvaIncluido === true`) o no (`false`); si nadie lo declaró (null) NO se
@@ -701,7 +701,7 @@ async function correrTesoreria(disparo: DisparoCorrida, hoy: string): Promise<Re
 
     const mesInicio = new Date(`${hoy.slice(0, 7)}-01T00:00:00-06:00`).toISOString();
     const [cfg, porCobrar, costoMes, cobrado] = await Promise.all([
-      leerConfigFinanzas(), getPorCobrar(), costoIaMesActual(),
+      leerConfigFinanzas(), getPorCobrarCompleto(), costoIaMesActual(),
       cobradoVentana(mesInicio, new Date().toISOString()),
     ]);
     const { cuerpo, semaforo, runwayMeses } = armarParteTesoreria({
@@ -842,7 +842,7 @@ async function correrCierreMensual(disparo: DisparoCorrida, hoy: string): Promis
     const desde = new Date(`${mes}-01T00:00:00-06:00`).toISOString();
     const hasta = new Date(`${hoy.slice(0, 7)}-01T00:00:00-06:00`).toISOString();
     const [cfg, cobrado, costo, porCobrar] = await Promise.all([
-      leerConfigFinanzas(), cobradoVentana(desde, hasta), costoIaVentana(desde, hasta), getPorCobrar(),
+      leerConfigFinanzas(), cobradoVentana(desde, hasta), costoIaVentana(desde, hasta), getPorCobrarCompleto(),
     ]);
 
     // Nombres de flota para el margen por cliente — cortesía de lectura; si
