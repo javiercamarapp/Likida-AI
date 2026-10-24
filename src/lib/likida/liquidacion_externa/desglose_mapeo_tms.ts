@@ -15,6 +15,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { CampoInvalido } from '@/lib/http/campos_cuerpo';
+import { fechaLocalMX } from '../peajes/plazo_reclamo';
 import { TIPOS_OPERADOR, validarDesgloseBitacora, type DesgloseBitacora, type RenglonBitacora, type TipoOperadorDesglose } from './desglose_contrato';
 
 /** Ruta con puntos y índices: `datos.bitacora.id`, `renglones[0].monto`. */
@@ -118,6 +119,12 @@ function montoTms(v: unknown, campo: string): number {
   } else throw new CampoInvalido(campo, `\`${campo}\` tiene que ser un número.`);
   if (!Number.isFinite(n)) throw new CampoInvalido(campo, `\`${campo}\` tiene que ser un número.`);
   if (n < 0) throw new CampoInvalido(campo, `\`${campo}\` no puede ser negativo (cargo/abono ya dan el signo).`);
+  // A37-A1-liquidaciones-14: más de 2 decimales no se redondean en silencio (el neto sería la suma de redondeos por renglón):
+  // se rechaza con el campo y la bitácora queda en `mapeo_invalido`, visible. La tolerancia absorbe el ruido de coma flotante.
+  const cent = n * 100;
+  if (Math.abs(cent - Math.round(cent)) > 1e-6 * Math.max(1, Math.abs(cent))) {
+    throw new CampoInvalido(campo, `\`${campo}\` trae más de 2 decimales; no se redondea en silencio: corrígelo en el origen.`);
+  }
   return n;
 }
 
@@ -129,11 +136,16 @@ export function normalizarUnidad(crudo: string): string {
 function fechaIso(v: unknown, campo: string): string | undefined {
   const t = textoOpt(v, campo);
   if (t === undefined) return undefined;
-  // SUPUESTO-API: la fecha puede venir como AAAA-MM-DD o con hora; se toma el día tal como viene (sin zona).
+  // SUPUESTO-API: la fecha puede venir como AAAA-MM-DD o con hora. A37-A1-liquidaciones-16: un instante CON zona (`Z`/`±hh:mm`)
+  // se pasa al día local de México (15T05:59Z es el 14 en CDMX); sin zona o solo fecha, el día tal como viene.
   // eslint-disable-next-line security/detect-unsafe-regex -- patrón anclado de formato fijo, sin cuantificadores anidados ni retroceso exponencial; la entrada es un valor corto de una celda o campo
-  const m = /^(\d{4}-\d{2}-\d{2})(?:[T ].*)?$/.exec(t);
-  if (!m) throw new CampoInvalido(campo, `\`${campo}\` tiene que ser una fecha AAAA-MM-DD.`);
-  return m[1];
+  if (!/^\d{4}-\d{2}-\d{2}(?:[T ].*)?$/.test(t)) throw new CampoInvalido(campo, `\`${campo}\` tiene que ser una fecha AAAA-MM-DD.`);
+  try {
+    return fechaLocalMX(t);
+  } catch {
+    // Hora ilegible tras la fecha (p. ej. «T25:99»): se conserva el día escrito, como antes.
+    return t.slice(0, 10);
+  }
 }
 
 function listaEn(raw: unknown, ruta: RutaJson | undefined, campo: string): unknown[] {
