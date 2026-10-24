@@ -54,8 +54,13 @@ describe('OP-P3: lo que no se pudo cotejar no es verde', () => {
     expect(v.motivo).toContain('timeout');
   });
 
-  it('health de la versión anterior (sin `migracion`): construye UNA vez con aviso — es el arranque de la compuerta', () => {
+  it('A37-S02-05: health sin `migracion` (CDN, mantenimiento, versión vieja): NO construye', () => {
     const v = decidir({ asunto: 'x [deploy]', codigo: '0276', health: { ok: true, status: 'ok', version: 'abc1234' } });
+    expect(v).toMatchObject({ construir: false, nivel: 'error' });
+  });
+
+  it('A37-S02-05: [deploy:forzar] sí permite construir con un health sin `migracion`', () => {
+    const v = decidir({ asunto: 'x [deploy:forzar]', codigo: '0276', health: { ok: true } });
     expect(v).toMatchObject({ construir: true, nivel: 'aviso' });
   });
 
