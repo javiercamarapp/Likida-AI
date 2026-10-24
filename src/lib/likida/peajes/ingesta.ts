@@ -9,7 +9,7 @@ import { avisarDesgloseConciliado } from './aviso_oficina';
 import { revisarAtipicosDeDesglose } from './revision_atipicos';
 import { vincularDesglose } from './vinculos_conciliacion';
 import { avisarDiscrepanciasDesglose } from './aviso_discrepancia';
-import { declararPeriodoDesglose } from './repo';
+import { declararPeriodoDesglose, liberarHuellaDeAnulado } from './repo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA INGESTA AUTOMÁTICA DEL DESGLOSE DE PEAJE (0376).
@@ -487,7 +487,12 @@ export async function subirDesglosePorCola(
   if (archivo.buffer.length === 0) return { ok: false, motivo: 'El archivo está vacío.' };
   if (archivo.buffer.length > MAX_ARCHIVO_INGESTA_BYTES) return { ok: false, motivo: `El archivo pasa de ${MAX_ARCHIVO_INGESTA_BYTES / 1024 / 1024} MB.` };
 
-  const rec = await recibirArchivoPeaje(tenantId, { nombre, proveedor: archivo.proveedor?.trim() || null, contenido: archivo.buffer }, 'panel');
+  let rec = await recibirArchivoPeaje(tenantId, { nombre, proveedor: archivo.proveedor?.trim() || null, contenido: archivo.buffer }, 'panel');
+  // A37-A2-08: la huella de un archivo de pull/SFTP cuyo desglose se anuló se conserva (para que el endpoint no lo reimporte
+  // solo); la persona que lo sube a propósito desde el panel sí puede: se libera y se vuelve a recibir una vez.
+  if (rec.ok && rec.duplicado && rec.estado === 'procesada' && await liberarHuellaDeAnulado(tenantId, rec.id)) {
+    rec = await recibirArchivoPeaje(tenantId, { nombre, proveedor: archivo.proveedor?.trim() || null, contenido: archivo.buffer }, 'panel');
+  }
   if (!rec.ok) {
     return { ok: false, motivo: rec.codigo === 'cola_llena' ? rec.motivo : 'No se pudo recibir el archivo. Inténtalo de nuevo.' };
   }

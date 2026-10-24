@@ -1178,13 +1178,15 @@ export async function anularDesgloseDb(tenantId: string, desgloseId: string, mot
     return ex.data ? 'ya_anulado' : 'no_encontrado';
   }
   const arch = await acotada(supabaseAdmin().from('peaje_ingesta_archivo')
-    .select('id, huella').eq('tenant_id', tenantId).eq('desglose_id', desgloseId).order('id'), 'peajes.anular_archivos');
+    .select('id, huella, origen').eq('tenant_id', tenantId).eq('desglose_id', desgloseId).order('id'), 'peajes.anular_archivos');
   if (arch.error) throw new Error(`anularDesglose: ${arch.error.message}`);
-  for (const a of (arch.data ?? []) as Array<{ id: string; huella: string }>) {
-    const libre = createHash('sha256').update(`${a.huella}:anulada:${desgloseId}`).digest('hex');
-    const r = await acotada(supabaseAdmin().from('peaje_ingesta_archivo').update({ huella: libre })
-      .eq('tenant_id', tenantId).eq('id', a.id), 'peajes.anular_huella');
-    if (r.error) logger.error('peajes.anular_huella', { tenant: tenantId, err: r.error.message });
+  for (const a of (arch.data ?? []) as Array<{ id: string; huella: string; origen?: string }>) {
+    // A37-A2-08: lo que llega por CONSULTA PERIÓDICA (pull, SFTP) es el mismo archivo ciclo tras ciclo si el endpoint de la flota
+    // devuelve siempre el mismo: liberar su huella lo reimportaba, reconciliaba y volvía a avisar a la oficina solo, deshaciendo
+    // la anulación. Esas huellas se CONSERVAN (el siguiente ciclo lo ve como duplicado); la persona que quiera cargarlo de
+    // nuevo lo sube a mano desde el panel (`liberarHuellaDeAnulado`). Correo y API los manda una persona a propósito: se liberan.
+    if (a.origen === 'pull' || a.origen === 'sftp') continue;
+    await liberarHuellaArchivo(tenantId, a.id, a.huella, desgloseId);
   }
   // A37-A2-07: los reclamos PREPARADOS (aún no enviados) de un desglose anulado dejan de contar como pendientes (plazo, KPI
   // «por vencer», totales): pasan a `rechazado` con la causa, lo que además libera el único parcial por categoría para
@@ -1194,6 +1196,31 @@ export async function anularDesgloseDb(tenantId: string, desgloseId: string, mot
     .eq('tenant_id', tenantId).eq('desglose_id', desgloseId).eq('estado', 'preparado'), 'peajes.anular_reclamos');
   if (rec.error) logger.error('peajes.anular_reclamos', { tenant: tenantId, err: rec.error.message });
   return 'anulado';
+}
+
+/** Reemplaza la huella de un archivo de la cola por otra derivada (misma forma), para que el mismo contenido pueda volver a recibirse. */
+async function liberarHuellaArchivo(tenantId: string, archivoId: string, huella: string, desgloseId: string): Promise<void> {
+  const libre = createHash('sha256').update(`${huella}:anulada:${desgloseId}`).digest('hex');
+  const r = await acotada(supabaseAdmin().from('peaje_ingesta_archivo').update({ huella: libre })
+    .eq('tenant_id', tenantId).eq('id', archivoId), 'peajes.anular_huella');
+  if (r.error) logger.error('peajes.anular_huella', { tenant: tenantId, err: r.error.message });
+}
+
+/**
+ * Subida MANUAL de un archivo cuya huella se conservó al anular su desglose (entregado por pull/SFTP, A37-A2-08): si el archivo
+ * de la cola quedó ligado a un desglose ANULADO, se libera su huella para que la persona pueda cargarlo otra vez. `true` si se liberó.
+ */
+export async function liberarHuellaDeAnulado(tenantId: string, archivoId: string): Promise<boolean> {
+  const { data: a, error } = await acotada(supabaseAdmin().from('peaje_ingesta_archivo')
+    .select('id, huella, desglose_id').eq('tenant_id', tenantId).eq('id', archivoId).maybeSingle(), 'peajes.liberar_anulado_archivo');
+  if (error) throw new Error(`liberarHuellaDeAnulado: ${error.message}`);
+  if (!a || typeof a.desglose_id !== 'string') return false;
+  const { data: d, error: errD } = await acotada(supabaseAdmin().from('desglose_peaje')
+    .select('id, anulado_en').eq('tenant_id', tenantId).eq('id', a.desglose_id).maybeSingle(), 'peajes.liberar_anulado_desglose');
+  if (errD) throw new Error(`liberarHuellaDeAnulado: ${errD.message}`);
+  if (!d || !d.anulado_en) return false;
+  await liberarHuellaArchivo(tenantId, String(a.id), String(a.huella), String(a.desglose_id));
+  return true;
 }
 
 export interface ArchivoIngestaVista {
