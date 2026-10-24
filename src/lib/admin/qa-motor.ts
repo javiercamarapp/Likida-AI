@@ -147,21 +147,44 @@ export const contextoQa = new AsyncLocalStorage<{ corridaId: string }>();
 
 interface EventoCapturado { nivel: 'info' | 'warn' | 'error'; msg: string; meta?: Record<string, unknown> }
 
-function capturarBitacora(corridaId: string): { eventos: EventoCapturado[]; restaurar: () => void } {
+// A37-S23-03: UN solo parche de `logger.*` para todas las corridas simultáneas,
+// con conteo de referencias. Antes cada corrida guardaba "los originales" al
+// instalar y los reasignaba al restaurar: con A y B solapadas, si A terminaba
+// primero restauraba los originales y BORRABA el parche de B (B perdía sus
+// eventos y el oráculo #8 reportaba un falso fallo). Ahora el parche despacha por
+// `contextoQa` a la lista de eventos de la corrida y solo se desinstala cuando
+// sale la última.
+const eventosPorCorrida = new Map<string, EventoCapturado[]>();
+let loggerOriginales: { info: typeof logger.info; warn: typeof logger.warn; error: typeof logger.error } | null = null;
+
+export function capturarBitacora(corridaId: string): { eventos: EventoCapturado[]; restaurar: () => void } {
   const eventos: EventoCapturado[] = [];
-  const originales = { info: logger.info, warn: logger.warn, error: logger.error };
-  (['info', 'warn', 'error'] as const).forEach((nivel) => {
-    logger[nivel] = (m: string, meta?: Record<string, unknown>) => {
-      if (contextoQa.getStore()?.corridaId === corridaId) eventos.push({ nivel, msg: m, meta });
-      return originales[nivel](m, meta);
-    };
-  });
+  eventosPorCorrida.set(corridaId, eventos);
+  if (loggerOriginales === null) {
+    const originales = { info: logger.info, warn: logger.warn, error: logger.error };
+    loggerOriginales = originales;
+    (['info', 'warn', 'error'] as const).forEach((nivel) => {
+      logger[nivel] = (m: string, meta?: Record<string, unknown>) => {
+        const id = contextoQa.getStore()?.corridaId;
+        const destino = id === undefined ? undefined : eventosPorCorrida.get(id);
+        if (destino) destino.push({ nivel, msg: m, meta });
+        return originales[nivel](m, meta);
+      };
+    });
+  }
+  let restaurada = false;
   return {
     eventos,
     restaurar: () => {
-      logger.info = originales.info;
-      logger.warn = originales.warn;
-      logger.error = originales.error;
+      if (restaurada) return;
+      restaurada = true;
+      if (eventosPorCorrida.get(corridaId) === eventos) eventosPorCorrida.delete(corridaId);
+      if (eventosPorCorrida.size === 0 && loggerOriginales) {
+        logger.info = loggerOriginales.info;
+        logger.warn = loggerOriginales.warn;
+        logger.error = loggerOriginales.error;
+        loggerOriginales = null;
+      }
     },
   };
 }
@@ -187,13 +210,38 @@ function capturarBitacora(corridaId: string): { eventos: EventoCapturado[]; rest
 // wamid— no truene.
 const HOST_META_GRAPH = 'graph.facebook.com';
 
+// A37-S23-03: UN solo parche de `fetch` con conteo de referencias (ver el bloque
+// de `capturarBitacora`). `corridasConInterceptor` es el conjunto de corridas
+// vivas; el parche despacha por `contextoQa` y solo se quita al salir la última.
+const corridasConInterceptor = new Set<string>();
+let fetchOriginal: typeof fetch | null = null;
+
 export function instalarInterceptorSalidaMeta(corridaId: string): () => void {
-  const original = globalThis.fetch;
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  corridasConInterceptor.add(corridaId);
+  if (fetchOriginal === null) {
+    const original = globalThis.fetch;
+    fetchOriginal = original;
+    globalThis.fetch = crearFetchInterceptor(original);
+  }
+  let restaurada = false;
+  return () => {
+    if (restaurada) return;
+    restaurada = true;
+    corridasConInterceptor.delete(corridaId);
+    if (corridasConInterceptor.size === 0 && fetchOriginal) {
+      globalThis.fetch = fetchOriginal;
+      fetchOriginal = null;
+    }
+  };
+}
+
+function crearFetchInterceptor(original: typeof fetch): typeof fetch {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
     // SEG-A1: una invocación concurrente que no entró a `contextoQa.run` de
-    // ESTA corridaId (el cron real, u otra corrida) nunca debe verse
-    // interceptada, aunque el parche siga instalado en `globalThis`.
-    if (contextoQa.getStore()?.corridaId !== corridaId) return original(input, init);
+    // una corrida viva (el cron real, u otra corrida ya terminada) nunca debe
+    // verse interceptada, aunque el parche siga instalado en `globalThis`.
+    const corridaId = contextoQa.getStore()?.corridaId;
+    if (corridaId === undefined || !corridasConInterceptor.has(corridaId)) return original(input, init);
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     let host: string;
     try { host = new URL(url).hostname.replace(/\.$/, ''); } catch { return original(input, init); }
@@ -224,7 +272,6 @@ export function instalarInterceptorSalidaMeta(corridaId: string): () => void {
       status: 200, headers: { 'content-type': 'application/json' },
     });
   }) as typeof fetch;
-  return () => { globalThis.fetch = original; };
 }
 
 // ── El renglón del paso de medición del OCR ─────────────────────────────────
