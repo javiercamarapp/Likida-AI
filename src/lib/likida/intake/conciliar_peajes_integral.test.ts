@@ -110,6 +110,23 @@ describe('A37-A2-10: un mismo gasto no respalda líneas de varios desgloses', ()
   });
 });
 
+describe('A37-A2-11: la baja de un TAG no reescribe el pasado al re-conciliar', () => {
+  it('un TAG dado de baja con fecha pasada conserva su unidad en las líneas ANTERIORES a la baja y la pierde en las posteriores', async () => {
+    // t1 se da de baja el 2026-08-05 (último día vigente): activo=false + su registro de baja.
+    db.tablas.peaje_tag[0].activo = false;
+    db.tablas.peaje_tag_baja = [{ id: 'b1', tenant_id: T, tag: 'IMDM10000001', baja_en: '2026-08-05', motivo: 'vendido' }];
+    await conciliarDesglose(T, 'd1', 'manual');
+    expect(linea('l1').unidad_id).toBe('u1'); // 2026-08-05: el día de la baja todavía era vigente
+    expect(linea('l2').unidad_id).toBeNull(); // 2026-08-06: posterior a la baja
+  });
+
+  it('un TAG apagado sin registro de baja (legado) no atribuye su unidad', async () => {
+    db.tablas.peaje_tag[0].activo = false;
+    await conciliarDesglose(T, 'd1', 'manual');
+    expect(linea('l1').unidad_id).toBeNull();
+  });
+});
+
 describe('conciliarDesglose: tag↔unidad, caseta y GPS', () => {
   it('escribe estatus, unidad, caseta y veredicto GPS por línea', async () => {
     const r = await conciliarDesglose(T, 'd1', 'cron');

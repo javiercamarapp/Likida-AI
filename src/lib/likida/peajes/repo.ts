@@ -149,14 +149,19 @@ async function leerBajas(tenantId: string): Promise<Map<string, { bajaEn: string
  * unidad y uno POSTERIOR no. Lanza ante error de base (un mapa a medias daría «sin alta» falsos).
  */
 export async function cargarVigenciaTags(tenantId: string): Promise<Map<string, VigenciaTag>> {
-  const filas = await traerTodo<{ tag: unknown; unidad_id: unknown }>(
+  const filas = await traerTodo<{ tag: unknown; unidad_id: unknown; activo: unknown }>(
     (d, h) => acotada(supabaseAdmin()
-      .from('peaje_tag').select('tag, unidad_id', conteo(d))
+      .from('peaje_tag').select('tag, unidad_id, activo', conteo(d))
       .eq('tenant_id', tenantId).order('tag').range(d, h), 'peajes.vigencia_tags'),
     'peajes.vigencia_tags',
   );
   const bajas = await leerBajas(tenantId);
-  return new Map(filas.map((f) => [String(f.tag), { unidadId: String(f.unidad_id), bajaEn: bajas.get(String(f.tag))?.bajaEn ?? null }]));
+  // Un TAG apagado (`activo=false`) SIN registro de baja (alta/baja anteriores a la 0776) no tiene fecha desde la cual
+  // dejar de atribuir su unidad: se trata como dado de baja desde siempre (fail-closed), igual que `cargarMapaTags`.
+  return new Map(filas.map((f) => [String(f.tag), {
+    unidadId: String(f.unidad_id),
+    bajaEn: bajas.get(String(f.tag))?.bajaEn ?? (f.activo === false ? '0001-01-01' : null),
+  }]));
 }
 
 /** TAG normalizado → unidad, solo los activos. Lanza ante error de base: un mapa a medias dejaría líneas «sin unidad» falsas. */

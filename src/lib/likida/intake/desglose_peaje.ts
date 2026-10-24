@@ -59,7 +59,8 @@ import { MARCA_TEXTO_SOSPECHOSO } from './ocr';
 import { VENTANA_DIAS_FECHA, TOLERANCIA_MONTO_MXN } from './consolidado';
 import { registrarCorrida } from '../agentes/corridas';
 import { contextoEvidenciaGps, llaveUnidadDia } from '../peajes/evidencia_gps';
-import { cargarMapaTags, cargarMapeo, listarCasetas, evaluarGpsDeLineas } from '../peajes/datos';
+import { resolverTagEnFecha } from '../peajes/tags';
+import { cargarVigenciaTags, cargarMapeo, listarCasetas, evaluarGpsDeLineas } from '../peajes/datos';
 import { normalizarTag } from '../peajes/formatos';
 import { resolverPeriodo } from '../peajes/periodo';
 import { registrarNombresDeCasetas } from '../peajes/revision_cobros';
@@ -1180,9 +1181,12 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
 
   // El TAG dado de alta → su unidad (0375). Lanza ante error de base: un mapa a
   // medias dejaría líneas «sin unidad» que sí la tienen.
-  const unidadPorTag = await cargarMapaTags(tenantId);
+  // A37-A2-11: con la VIGENCIA del TAG (alta + baja), no solo los activos de hoy: una baja con fecha pasada no le quita
+  // la unidad a las líneas ANTERIORES a ella al re-conciliar; solo las posteriores quedan sin unidad.
+  const vigenciaTags = await cargarVigenciaTags(tenantId);
   const lineas = filas.map((f) => {
     const tagNorm = normalizarTag(f.tag as string | null);
+    const res = resolverTagEnFecha(tagNorm, (f.fecha as string | null) ?? null, vigenciaTags);
     return {
       id: String(f.id),
       indice: Number(f.indice),
@@ -1190,7 +1194,7 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
       monto: Number(f.monto),
       caseta: (f.caseta as string | null) ?? null,
       cruceEn: (f.cruce_en as string | null) ?? null,
-      unidadId: tagNorm ? (unidadPorTag.get(tagNorm) ?? null) : null,
+      unidadId: res.estado === 'vigente' ? res.unidadId : null,
     };
   });
   const resumen: ResumenCruceDesglose = {
