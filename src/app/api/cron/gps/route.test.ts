@@ -232,3 +232,20 @@ describe('P1: la re-importación diaria de geocercas viaja en la misma corrida',
     expect((registrarLatido.mock.calls[0] as unknown as [string, string])[1]).toBe('ok');
   });
 });
+
+describe('A37-S38-01: el fallo de la fase de eventos no tumba las posiciones', () => {
+  it('si sincronizarEventosTodas LANZA, las posiciones corren igual, latido `parcial` con el error y cuerpo 200', async () => {
+    sincronizarEventosTodas.mockRejectedValue(new Error('estado_eventos_gps_operativo: statement timeout'));
+    sincronizarGpsTodas.mockResolvedValue([flotaOk('t-1')]);
+
+    const res = await GET(peticion());
+    const cuerpo = await res.json() as { guardadas: number; eventos: { faseConError?: string } };
+
+    expect(sincronizarGpsTodas).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(200);
+    expect(cuerpo.guardadas).toBe(2);
+    expect(cuerpo.eventos.faseConError).toContain('statement timeout');
+    expect(registrarLatido).toHaveBeenCalledWith('gps', 'parcial', expect.objectContaining({ eventosFaseFallo: true }));
+    expect(alertarOperador).toHaveBeenCalledWith('cron.gps.eventos_fase', expect.objectContaining({ error: expect.stringContaining('statement timeout') }));
+  });
+});

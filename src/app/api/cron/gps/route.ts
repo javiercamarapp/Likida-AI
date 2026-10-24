@@ -118,7 +118,18 @@ export async function GET(req: Request) {
     // de asistencia y avisa al jefe ANTES de que el chofer pueda escribir.
     // Van PRIMERO: con presupuesto compartido, la telemetría ordinaria nunca
     // puede consumir el turno de un choque pendiente.
-    const eventos = await sincronizarEventosTodas(httpReal, { venceEn });
+    // A37-S38-01: la fase de eventos NO puede tumbar las posiciones de todas las
+    // flotas. Si lanza (p. ej. la RPC de salud pasa su statement_timeout), la
+    // falla se DICE (cuerpo, latido `parcial`, alerta) y las posiciones corren.
+    let eventos: Awaited<ReturnType<typeof sincronizarEventosTodas>> = [];
+    let eventosFaseError: string | undefined;
+    try {
+      eventos = await sincronizarEventosTodas(httpReal, { venceEn });
+    } catch (e) {
+      eventosFaseError = e instanceof Error ? e.message : String(e);
+      logger.error('cron.gps.eventos_fase_fallo', { error: eventosFaseError, codigo: codigoDeError(e) });
+      await alertarOperador('cron.gps.eventos_fase', { error: eventosFaseError, codigo: codigoDeError(e) });
+    }
 
     const resultados = await sincronizarGpsTodas(httpReal, { venceEn });
 
@@ -187,6 +198,7 @@ export async function GET(req: Request) {
         sinAvisoPrevio: eventosSinAvisoPrevio,
         sinPermiso: eventos.filter((r) => r.sinPermiso).map((r) => ({ tenantId: r.tenantId, proveedor: r.proveedor })),
         conError: eventosConError.length,
+        faseConError: eventosFaseError,
         enCuarentena, cuarentenaMuertos, outboxPendientes, outboxMuertos,
         avisosPendientes, avisosMuertos,
         errores: eventosConError.map((r) => ({ tenantId: r.tenantId, proveedor: r.proveedor, error: r.error })),
@@ -209,7 +221,7 @@ export async function GET(req: Request) {
     // hay camiones que esta corrida NO sincronizó, y un «ok» lo taparía.
     const incompleta = recortadas > 0 || backlog > 0 || eventosBacklog > 0 ||
       enCuarentena > 0 || outboxPendientes > 0 || avisosPendientes > 0 || eventosMuertos > 0 ||
-      sinAvisoPrevio > 0 || eventosSinAvisoPrevio > 0;
+      sinAvisoPrevio > 0 || eventosSinAvisoPrevio > 0 || eventosFaseError !== undefined;
     if (eventosMuertos > 0) {
       const afectados = eventos.filter((r) =>
         (r.eventosCuarentenaMuertos ?? 0) + (r.eventosOutboxMuertos ?? 0) + (r.avisosMuertos ?? 0) > 0)
@@ -226,6 +238,7 @@ export async function GET(req: Request) {
         backlogPendiente: backlog + eventosBacklog,
         sinAvisoPrevio: sinAvisoPrevio + eventosSinAvisoPrevio,
         eventosMuertos,
+        eventosFaseFallo: eventosFaseError !== undefined,
       });
     } else {
       logger.info('cron.gps.ok', cuerpo);

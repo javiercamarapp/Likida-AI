@@ -187,8 +187,16 @@ describe('VistaRevision', () => {
     const d = doc({ estado: 'fallido', extraccion: null, validacion: null, ultimoError: 'El PDF está dañado.' });
     const h = html(<VistaRevision doc={d} revision={null} original={{ tipo: 'nada', motivo: 'No hay archivo.' }} operadores={[]} eventos={[]} acciones={{ revisar: accion }} />);
     expect(h).toMatch(/El documento no se pudo leer; no hay datos que revisar/);
-    expect(h).not.toContain('name="intencion"');
+    // A37-A3-04: no hay formulario de revisión, pero SÍ la única salida: «Reintentar lectura».
+    expect(conIntencion(h, 'reintentar')).toBe(true);
+    expect(conIntencion(h, 'aprobar')).toBe(false);
+    expect(conIntencion(h, 'guardar')).toBe(false);
     expect(h).toMatch(/No hay archivo\./);
+  });
+  it('A37-A3-04: sin acciones de revisión (rol sin permiso) no se ofrece reintentar', () => {
+    const d = doc({ estado: 'fallido', extraccion: null, validacion: null, ultimoError: 'x' });
+    const h = html(<VistaRevision doc={d} revision={null} original={{ tipo: 'nada', motivo: 'n' }} operadores={[]} eventos={[]} acciones={{ revisar: null }} />);
+    expect(conIntencion(h, 'reintentar')).toBe(false);
   });
 
   it('eliminar solo se ofrece a quien administra, y no mientras se lee', () => {

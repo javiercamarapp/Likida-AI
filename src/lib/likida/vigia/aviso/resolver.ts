@@ -8,8 +8,9 @@
 //    el catálogo → `unidad_no_registrada`. Cada hueco queda en `faltantes`.
 //  - El `clienteId` sale de la tabla de alias de ESTA flota (`deps.aliasDe`), nunca del texto. Toda fila que regrese una
 //    dependencia con otra `tenantId` se descarta (un cliente, contacto, unidad u operador de otra flota «no existe»).
-//  - Operador: primero el del viaje abierto de esa unidad (sistema); si no hay, el capturado a mano para la fila, completado
-//    con el catálogo de operadores si trae `operadorId`. Cada dato lleva su `fuente`.
+//  - Operador (A37-A4-05): primero lo CAPTURADO A MANO para la fila (completado con el catálogo si trae `operadorId`); el del
+//    viaje abierto de la unidad (sistema) solo si ese viaje corresponde al SERVICIO de la fila (mismo REQUE, o misma fecha si
+//    no hay REQUE). Cada dato lleva su `fuente`.
 //  - Caja: el número sale de la fila; placas y estado, de lo capturado a mano para la fila y si no del catálogo de cajas.
 // Función con dependencias inyectadas: no toca la base ni la red por sí misma.
 
@@ -53,6 +54,12 @@ export interface OperadorDato {
   licenciaVence: string | null;
   /** 52 + 10 dígitos. */
   telefono: string | null;
+  /**
+   * A37-A4-05: de QUÉ servicio es el viaje abierto de la unidad (su fecha AAAA-MM-DD y su REQUE). Sin esto el operador del
+   * sistema NO se usa: una unidad hace un servicio distinto cada día y el aviso del servicio B no puede nombrar al operador
+   * del servicio A. El implementador del conector debe llenarlo con los datos del despacho/viaje que ya trae.
+   */
+  servicio?: { fecha: string | null; reque: string | null };
 }
 
 export interface DatoViajeManual {
@@ -69,7 +76,7 @@ export interface DatoViajeManual {
 }
 
 export type FilaParaResolver =
-  Pick<FilaPrograma, 'cliente' | 'consignatario' | 'caja' | 'unidad'> & {
+  Pick<FilaPrograma, 'cliente' | 'consignatario' | 'caja' | 'unidad'> & Partial<Pick<FilaPrograma, 'fecha' | 'reque'>> & {
     /** Id de la fila persistida (`programa_despacho_fila`), para buscar lo capturado a mano. */
     filaId?: string | null;
   };
@@ -149,28 +156,44 @@ function elegirContacto(contactos: readonly Contacto[], tenantId: string, client
   return c ? { id: c.id, telefono: c.telefono, nombre: c.nombre } : null;
 }
 
+/** ¿El viaje abierto de la unidad es el servicio de ESTA fila? REQUE si ambos lo traen; si no, la fecha; sin ninguno de los dos, NO. */
+function mismoServicio(s: OperadorDato, fila: FilaParaResolver): boolean {
+  const sv = s.servicio;
+  if (!sv) return false;
+  const rq = (v: string | null | undefined) => limpio(v)?.toUpperCase() ?? null;
+  const rs = rq(sv.reque); const rf = rq(fila.reque);
+  if (rs !== null && rf !== null) return rs === rf;
+  const fs = limpio(sv.fecha); const ff = limpio(fila.fecha);
+  return fs !== null && ff !== null && fs === ff;
+}
+
 async function resolverOperador(
-  unidadId: string | null, manual: DatoViajeManual | null, deps: DepsResolver,
+  unidadId: string | null, fila: FilaParaResolver, manual: DatoViajeManual | null, deps: DepsResolver,
 ): Promise<OperadorResuelto | null> {
+  // 1. Lo capturado a mano para ESTA fila manda: es lo que una persona dijo de este servicio.
+  if (manual) {
+    let cat: OperadorDato | null = null;
+    if (manual.operadorId && deps.operadorPorId) {
+      const o = await deps.operadorPorId(manual.operadorId);
+      if (o && o.tenantId === deps.tenantId) cat = o;
+    }
+    const nombre = limpio(manual.operadorNombre) ?? limpio(cat?.nombre);
+    const licencia = limpio(manual.licencia) ?? limpio(cat?.licencia);
+    const vence = manual.licenciaVence ?? cat?.licenciaVence ?? null;
+    const telefono = limpio(manual.telefono) ?? limpio(cat?.telefono);
+    if (nombre || licencia || telefono) {
+      const usoManual = !!(limpio(manual.operadorNombre) || limpio(manual.licencia) || manual.licenciaVence || limpio(manual.telefono));
+      return { nombre, licencia, vence, telefono, fuente: usoManual ? 'manual' : 'catalogo' };
+    }
+  }
+  // 2. El del viaje abierto de la unidad, SOLO si es el servicio de esta fila.
   if (unidadId) {
     const s = await deps.operadorDeUnidad(unidadId);
-    if (s && s.tenantId === deps.tenantId && (limpio(s.nombre) || limpio(s.telefono) || limpio(s.licencia))) {
+    if (s && s.tenantId === deps.tenantId && mismoServicio(s, fila) && (limpio(s.nombre) || limpio(s.telefono) || limpio(s.licencia))) {
       return { nombre: limpio(s.nombre), licencia: limpio(s.licencia), vence: s.licenciaVence, telefono: limpio(s.telefono), fuente: 'sistema' };
     }
   }
-  if (!manual) return null;
-  let cat: OperadorDato | null = null;
-  if (manual.operadorId && deps.operadorPorId) {
-    const o = await deps.operadorPorId(manual.operadorId);
-    if (o && o.tenantId === deps.tenantId) cat = o;
-  }
-  const nombre = limpio(manual.operadorNombre) ?? limpio(cat?.nombre);
-  const licencia = limpio(manual.licencia) ?? limpio(cat?.licencia);
-  const vence = manual.licenciaVence ?? cat?.licenciaVence ?? null;
-  const telefono = limpio(manual.telefono) ?? limpio(cat?.telefono);
-  if (!nombre && !licencia && !telefono) return null;
-  const usoManual = !!(limpio(manual.operadorNombre) || limpio(manual.licencia) || manual.licenciaVence || limpio(manual.telefono));
-  return { nombre, licencia, vence, telefono, fuente: usoManual ? 'manual' : 'catalogo' };
+  return null;
 }
 
 export async function resolverFila(fila: FilaParaResolver, deps: DepsResolver): Promise<FilaResuelta> {
@@ -239,7 +262,7 @@ export async function resolverFila(fila: FilaParaResolver, deps: DepsResolver): 
     };
   }
 
-  const operador = await resolverOperador(unidad?.id ?? null, datoManual, deps);
+  const operador = await resolverOperador(unidad?.id ?? null, fila, datoManual, deps);
   if (!operador) faltantes.push('sin_operador');
 
   return { clienteId, estadoCliente, contacto, unidad, caja, operador, faltantes };

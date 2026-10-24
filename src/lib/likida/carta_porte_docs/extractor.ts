@@ -62,7 +62,7 @@ import { leerCorreoF2 } from './lectores/correo_f2';
 import { leerCorreoF3 } from './lectores/correo_f3';
 import { clasificarFormato } from './registro_formatos';
 import { leerRotulosCorreo, lecturaConfiable } from './rotulos';
-import { extraerCartaPorteXml } from './xml_ccp';
+import { leerCartaPorteXml } from './xml_ccp';
 
 // ── El contrato con el modelo ───────────────────────────────────────────────
 
@@ -532,8 +532,13 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
   // 1. XML con Carta Porte: sin modelo, y no se le pregunta a nadie lo que el XML no dice.
   // Solo un XML de verdad: un JSON de cliente con una clave «CartaPorte» no es un CFDI con 0.99 de confianza.
   if (c.xml && c.formato !== 'json') {
-    const ccp = extraerCartaPorteXml(c.xml);
-    if (ccp) { r.extraccion = completarDerivados(ccp, derivar); r.origen = 'xml'; return r; }
+    const ccp = leerCartaPorteXml(c.xml);
+    if (ccp) {
+      r.extraccion = completarDerivados(ccp.extraccion, derivar); r.origen = 'xml';
+      // A37-S33-01: lo que el XML trae y no se pudo mapear (o los destinos extra leídos) se DICE en los avisos del documento.
+      r.avisos.push(...ccp.avisos.filter((a) => !r.avisos.includes(a)));
+      return r;
+    }
   }
 
   // 1b. Lector de formato C, D o E: lee lo que el documento escribe y deja vacío lo que no trae. Si no pudo leer ningún renglón,
@@ -592,6 +597,7 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
   let acumulado: Extraccion | null = null;
   const lecturas: Extraccion[] = [];
   let fallos: FalloValidador[] = [];
+  let falloUltimoNivel: string | null = null;
   for (let i = 0; i < secuencia.length; i++) {
     const nivel = secuencia[i];
     ctx.signal?.throwIfAborted();
@@ -601,7 +607,18 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
     } catch (e) {
       // Un nivel que falla (salida inválida tras sus reintentos, proveedor caído) no tumba el documento si hay otro nivel: se
       // escala y se deja constancia. Presupuesto agotado y abortos sí detienen (los decide quien llama).
-      if (i === secuencia.length - 1 || ctx.signal?.aborted || (ctx.errorFatal ?? presupuestoAgotado)(e)) throw e;
+      if (ctx.signal?.aborted || (ctx.errorFatal ?? presupuestoAgotado)(e)) throw e;
+      if (i === secuencia.length - 1) {
+        // A37-A3-05: el último nivel (el más lento) falló pero ya hay una lectura de niveles anteriores: NO se descarta. Se
+        // conserva marcada por confirmar y se deja constancia del error. Sin ninguna lectura previa sí se relanza.
+        if (!acumulado) throw e;
+        const motivoFallo = `el modelo del nivel ${nivel} no entregó una lectura válida: ${(e instanceof Error ? e.message : String(e)).slice(0, 120)}`;
+        const esc = { de: (secuencia[i - 1] ?? nivel) as NivelModelo, a: nivel, codigo: 'error_modelo' as const, motivo: motivoFallo };
+        r.escalamientos.push(esc);
+        registrarEscalamiento(esc);
+        falloUltimoNivel = motivoFallo;
+        break;
+      }
       const esc = { de: nivel, a: secuencia[i + 1], codigo: 'error_modelo' as const, motivo: `el modelo del nivel ${nivel} no entregó una lectura válida: ${(e instanceof Error ? e.message : String(e)).slice(0, 120)}` };
       r.escalamientos.push(esc);
       registrarEscalamiento(esc);
@@ -639,6 +656,10 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
     if (c.texto === null) acumulado = taparCriticosSinAnclaje(acumulado);
     r.revisionHumana = revisionHumanaFinal(acumulado, fallos, lecturas);
     for (const h of r.revisionHumana) r.avisos.push(`Revisión humana: ${etiquetaCampo(h.campo, h.renglon)} — ${h.motivo} Valores en conflicto: ${h.valores.map((v) => `«${v}»`).join(', ')}.`);
+    if (falloUltimoNivel) {
+      r.revisionHumana.push({ campo: 'documento', renglon: null, codigo: 'error_modelo', motivo: `Se conservó la lectura del nivel anterior, por confirmar: ${falloUltimoNivel}.`, valores: [] });
+      r.avisos.push(`El último nivel de lectura falló (${falloUltimoNivel}); se conservó la mejor lectura anterior para que una persona la confirme.`);
+    }
   }
   const delModelo = acumulado ?? extraccionVacia();
   r.extraccion = completarDerivados(base ? completarCon(base, delModelo) : delModelo, derivar);

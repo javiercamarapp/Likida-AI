@@ -6,7 +6,10 @@ import { CONFIG_SALIDA_ARRANQUE } from '@/lib/likida/carta_porte_docs/salida_con
 import { SIN_TMS } from '@/lib/likida/carta_porte_docs/tms_puerto';
 import { salidaDeFlota } from '@/lib/likida/carta_porte_docs/worker_envios_deps';
 import { sufijoTenant } from '../../../sufijo';
+import { listarCcpRecibidos, respuestaActiva } from '@/lib/likida/carta_porte_docs/ccp_respuesta_repo';
+import { logger } from '@/lib/logger';
 import { guardarConfiguracionSalida, probarConexionSalida } from './actions';
+import { confirmarRespuestaCcp, fijarRespuestaCcp } from './ccp_actions';
 import { esProbable } from './formato';
 import { VistaConfiguracionSalida } from './vista';
 
@@ -33,6 +36,16 @@ export default async function PaginaConfiguracionSalida({
   const puerto = await salidaDeFlota(tenantId); // nunca lanza: sin conector es SIN_TMS
   const hayConector = puerto !== SIN_TMS;
 
+  // A37-A3-01: los CCP timbrados recibidos y el interruptor de la respuesta. Si no se pueden leer, la pantalla de configuración
+  // sigue viva y la sección lo DICE (no finge «no ha llegado ninguno»).
+  let ccp: { activa: boolean | 'sin_migracion'; filas: Awaited<ReturnType<typeof listarCcpRecibidos>> } | null = null;
+  try {
+    const [activa, filas] = await Promise.all([respuestaActiva(tenantId), listarCcpRecibidos(tenantId)]);
+    ccp = { activa, filas };
+  } catch (e) {
+    logger.error('carta_porte_docs.ccp_pantalla_lectura', { error: e instanceof Error ? e.message : String(e) });
+  }
+
   return (
     <VistaConfiguracionSalida
       config={fila ?? { ...CONFIG_SALIDA_ARRANQUE }}
@@ -42,6 +55,8 @@ export default async function PaginaConfiguracionSalida({
       sufijo={sufijoTenant(sp)}
       ver={{ ...(sp.tenant ? { tenant: sp.tenant } : {}), ...(sp.rol ? { rol: sp.rol } : {}), ...(sp.vista ? { vista: sp.vista } : {}) }}
       acciones={{ guardar: guardarConfiguracionSalida, probar: probarConexionSalida }}
+      ccp={ccp}
+      accionesCcp={{ fijar: fijarRespuestaCcp, confirmar: confirmarRespuestaCcp }}
     />
   );
 }

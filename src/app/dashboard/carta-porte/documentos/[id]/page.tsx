@@ -5,7 +5,7 @@ import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
 import { DatoInvalido, mensajeParaPantalla } from '@/lib/likida/errores';
-import { aprobarDocumento, abrirRevision, corregirCampos, crearViajeDeDocumento, eliminarDocumento, quitarRenglon, rechazarDocumento, reabrirDocumento } from '@/lib/likida/carta_porte_docs/bandeja';
+import { aprobarDocumento, abrirRevision, corregirCampos, crearViajeDeDocumento, eliminarDocumento, quitarRenglon, rechazarDocumento, reabrirDocumento, reintentarLectura } from '@/lib/likida/carta_porte_docs/bandeja';
 import { flotaBajoPerfil, marcarSubidoAMano, MENSAJE_FUNCION_NO_DISPONIBLE } from '@/lib/likida/carta_porte_docs/envio';
 import { esFlotaSimulada } from '@/lib/likida/carta_porte_docs/salida_simulada';
 import { puertoSupabase } from '@/lib/likida/carta_porte_docs/catalogo_puerto';
@@ -195,6 +195,11 @@ export default async function PaginaRevision({
         revalidatePath(ruta); revalidatePath(RUTA_PADRE);
         return { ok: true, mensaje: 'Documento rechazado.' };
       }
+      if (intencion === 'reintentar') {
+        await reintentarLectura(s.tenantId, id, version, s.userId);
+        revalidatePath(ruta); revalidatePath(RUTA_PADRE);
+        return { ok: true, mensaje: 'Listo: el documento volvió a la cola y se vuelve a leer en unos minutos.' };
+      }
       if (intencion === 'reabrir') {
         await reabrirDocumento(s.tenantId, id, version, s.userId);
         revalidatePath(ruta); revalidatePath(RUTA_PADRE);
@@ -210,7 +215,7 @@ export default async function PaginaRevision({
       if (intencion === 'subido_a_mano') {
         const d = await repo.leerDocumento(s.tenantId, id);
         if (!d) throw new DatoInvalido('Ese documento no está en tu flota, o alguien lo borró. Recarga la pantalla.');
-        const r = await marcarSubidoAMano(s.tenantId, d, version, actor);
+        const r = await marcarSubidoAMano(s.tenantId, d, version, actor, String(fd.get('referenciaTms') ?? ''));
         revalidatePath(ruta); revalidatePath(RUTA_PADRE);
         return r.ok
           ? { ok: true, mensaje: r.yaEstaba ? 'Ya estaba marcada como subida a mano.' : 'Listo: quedó registrado que la plantilla se subió a mano. Likida no la volverá a enviar.' }

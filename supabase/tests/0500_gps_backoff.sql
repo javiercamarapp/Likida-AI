@@ -113,7 +113,7 @@ end $$;
 -- (e) permisos: solo service_role ejecuta
 do $$ begin
   if has_function_privilege('anon', 'public.finalizar_poll_conector(uuid,text,text,uuid,boolean,timestamptz,boolean,timestamptz,timestamptz,integer,integer,integer,text,timestamptz,text)', 'execute')
-     or has_function_privilege('authenticated', 'public.reclamar_polls_conector(text,text[],integer,text,integer,timestamptz)', 'execute') then
+     or has_function_privilege('authenticated', 'public.reclamar_polls_conector(text,text[],integer,text,integer,timestamptz,timestamptz)', 'execute') then
     raise exception '(e) anon/authenticated ejecutan las funciones del poll';
   end if;
   if not has_function_privilege('service_role', 'public.finalizar_poll_conector(uuid,text,text,uuid,boolean,timestamptz,boolean,timestamptz,timestamptz,integer,integer,integer,text,timestamptz,text)', 'execute') then

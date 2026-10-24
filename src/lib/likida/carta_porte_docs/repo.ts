@@ -43,6 +43,8 @@ export interface MetaExtraccion {
   indiciosInyeccion: string[];
   /** T-A3-53: la captura del correo llegó cortada (termina en este rótulo sin valor). Se revalida en cada corrección y al aprobar. */
   capturaIncompleta?: { ultimoRotulo: string } | null;
+  /** A37-A3-03: lo que la lectura dejó fuera (embarques, páginas, filas, hojas). `bloquea` = pudo perderse una mercancía o un embarque. Se revalida en cada corrección. */
+  lecturaIncompleta?: Array<{ mensaje: string; bloquea: boolean }>;
   /** T-A3-67: el formato de entrada que reconoció el servicio y despachó a su lector (C remisión escaneada, D BOL en inglés, E orden del agente aduanal). */
   formatoEntrada?: 'C' | 'D' | 'E';
   /** T-A3-67: el lector no pudo leer el documento (hoy: remisión escaneada sin modelo de visión). Nada se inventó: se captura a mano. Se revalida en cada corrección. */
@@ -1048,6 +1050,16 @@ export async function marcarEnvioSubidoAMano(tenantId: string, id: string, desde
   const r = await acotada(supabaseAdmin().from('cp_envio_tms').update({ estado: 'subido_a_mano', procesando_hasta: null, proxima_revision: null, updated_at: new Date().toISOString() })
     .eq('tenant_id', tenantId).eq('id', id).in('estado', desde).select('id'), 'cpdocs.envio_subido_a_mano');
   return ((exigir(r, 'cpdocs.envio_subido_a_mano') ?? []) as unknown[]).length > 0;
+}
+
+/**
+ * A37-A3-01: guarda la referencia que el sistema del cliente dio a esta carga (`referencia_tms`), la llave con la que después
+ * se casa el CCP timbrado. Solo si el envío es de la flota. `false` = no existe ese envío.
+ */
+export async function fijarReferenciaEnvio(tenantId: string, id: string, referencia: string): Promise<boolean> {
+  const r = await acotada(supabaseAdmin().from('cp_envio_tms').update({ referencia_tms: referencia.slice(0, 200), updated_at: new Date().toISOString() })
+    .eq('tenant_id', tenantId).eq('id', id).select('id'), 'cpdocs.envio_referencia');
+  return ((exigir(r, 'cpdocs.envio_referencia') ?? []) as unknown[]).length > 0;
 }
 
 /** El estado del envío más reciente (no descartado) de cada documento, para la lista de la bandeja. Sin envío = sin clave. */

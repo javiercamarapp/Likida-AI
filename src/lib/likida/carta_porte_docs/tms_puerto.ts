@@ -13,6 +13,16 @@
 //     las exponga; quien implemente el puerto puede omitirlas y quien lo use
 //     debe tratar su ausencia como «desconocido».
 //
+// ── A37-A3-02 · ESTADO REAL: NO EXISTE ADAPTADOR DE PRODUCCIÓN ──────────────
+//   Hoy NINGUNA flota tiene un `SalidaTms` real: `fijarProveedorSalida` no tiene llamadores de producción y toda flota cae en
+//   `SIN_TMS` (rechaza siempre: FAIL-CLOSED, jamás finge un envío). Consecuencias, visibles en la configuración de la salida:
+//   el modo API no se puede activar, el prechequeo de existencia queda «desconocido» y TODO envío termina en descarga manual.
+//   NO se inventa el adaptador: depende de la API del cliente (autenticación, endpoint de carga, respuesta con `referencia`).
+//   CUANDO EL CLIENTE LA ENTREGUE, el adaptador debe: (1) usar `idempotencyKey` (ya persistente en `cp_envio_tms.idempotency_key`)
+//   como llave de idempotencia ANTE el TMS y NO un almacén en memoria (en serverless se pierde entre invocaciones); (2) devolver
+//   `referencia` para que `cp_envio_tms.referencia_tms` permita casar el CCP timbrado; (3) clasificar los errores en
+//   `ClaseErrorCarga`; (4) traer pruebas de contrato. Hasta entonces la automatización de la subida NO está entregada.
+//
 // ESTE MÓDULO NO TIMBRA y no importa nada del camino del timbre (PAC, CFDI):
 // una prueba vigila los imports. Es solo tipos y una constante.
 // ═══════════════════════════════════════════════════════════════════════════

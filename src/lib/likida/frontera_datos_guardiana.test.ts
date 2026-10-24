@@ -575,6 +575,9 @@ const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_268;
 // mientras la base no la tenga). `liquidacion_externa/repo_correo.ts` +4 (A37-A1-01, carga de contactos de operadores y coordinadores): conteo de
 // operadores con correo (guardia de activar el envío), búsqueda de operadores por número de empleado, búsqueda y UPDATE de nombre del coordinador; todas
 // con `tenant_id`. Cubiertas por `jornada/repo_declaracion_rpc.test.ts` y `liquidacion_externa/repo_correo.test.ts`.
+// Auditoría 37, lote cartaporte-vigia (A37-A3-01): 2,264 → 2,269 (+5, medido). `carta_porte_docs/ccp_respuesta_repo.ts` +4 (listar los CCP timbrados recibidos
+// y los nombres de sus documentos; encender/apagar `responder_ccp` con update + alta), `carta_porte_docs/repo.ts` +1 (`fijarReferenciaEnvio`: la referencia del TMS
+// al marcar «subido a mano»). Todo por `acotada` y con `tenant_id`. Funcionalidad nueva (la pantalla de CCP recibidos y su confirmación), no código migrado.
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`
