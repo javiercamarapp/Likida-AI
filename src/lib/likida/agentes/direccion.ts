@@ -686,7 +686,13 @@ async function incidenteSinParte(venceEn?: number): Promise<{ incidente: Inciden
     .select('id, tenant_id, tipo, prioridad, estado, descripcion, abierta_en, hay_lesionados, unidad_movible, reconocida_en, nivel_escalado, operador_id, operador:operador_id(nombre), unidad:unidad_id(numero_economico), flota:tenant_id(nombre)')
     .in('tipo', TIPOS_EMERGENCIA)
     .neq('estado', 'resuelta')
-    .order('abierta_en', { ascending: true })
+    // A37-S26-02: las MÁS NUEVAS primero. Con las más viejas primero, 30 emergencias
+    // antiguas que nadie cerró (y que ya tienen parte) llenaban la ventana y un robo
+    // o siniestro nuevo no entraba nunca: el agente decía «ningún incidente abierto
+    // sin parte». Cada parte es único por expediente, así que los viejos sin parte
+    // se atienden cuando los nuevos ya tienen el suyo.
+    .order('abierta_en', { ascending: false })
+    .order('id', { ascending: true })
     .limit(30), 'direccion.incidente.abiertos');
   if (error) throw new Error(`incidenteSinParte: ${error.message}`);
   const filas = (data ?? []) as Array<Record<string, unknown>>;

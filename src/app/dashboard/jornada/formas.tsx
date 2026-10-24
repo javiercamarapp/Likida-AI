@@ -251,8 +251,9 @@ function FormaCaptura({
     <form action={accion} className="space-y-2">
       <h3 className="text-[13px] font-medium">Capturar una marca</h3>
       <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
-        Queda con tu nombre y la hora en que la capturaste. La hora que escribas es la del
-        operador, en horario de México.
+        Queda con tu nombre y la hora en que la capturaste. Escribe la hora en horario del
+        centro de México (hora de CDMX, sin horario de verano): si el operador está en otra zona
+        (Pacífico, Sonora, frontera), conviértela antes de capturarla.
       </p>
       <Aviso estado={estado} />
       <input type="hidden" name="jornadaId" value={jornadaId} />

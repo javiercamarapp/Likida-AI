@@ -417,6 +417,18 @@ export async function abrirOrdenProgramada(
 }
 
 /**
+ * La unidad de una orden de la flota (A37-S20-01): las acciones del taller la
+ * necesitan para comprobar el patio ANTES de cerrar. `null` = la orden no existe
+ * en esta flota o no trae unidad.
+ */
+export async function unidadDeOrden(tenantId: string, ordenId: string): Promise<string | null> {
+  const { data, error } = await acotada(supabaseAdmin().from('mantenimiento')
+    .select('unidad_id').eq('id', ordenId).eq('tenant_id', tenantId).maybeSingle(), 'mantenimiento.unidad_de_orden');
+  if (error) throw new Error(`unidadDeOrden: ${error.message}`);
+  return ((data as { unidad_id?: string | null } | null)?.unidad_id) ?? null;
+}
+
+/**
  * Cierra una orden. Atómico por el WHERE (el molde de la firma de talacha):
  * exactamente un ganador; el segundo clic no encuentra fila y se le dice.
  * `kmServicio` es opcional y DECLARADO — null se queda null, jamás 0.

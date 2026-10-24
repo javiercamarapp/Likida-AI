@@ -6,7 +6,6 @@ import {
   resolverLiga, vistaDelPortal, anotarAcceso, sellarUltimoAcceso,
   type VistaPortal,
 } from '@/lib/likida/portal_pago_lectura';
-import { sellarRepEntregado } from '@/lib/likida/portal_pago_escritura';
 import { FormaDePago } from './forma';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -139,15 +138,14 @@ export default async function PaginaPago({ params }: { params: Promise<{ token: 
 
   const v = vista.vista;
 
-  // Los sellos van DESPUÉS del hecho, y ninguno puede tumbar la página: los
-  // tres tragan su propio error. El del REP solo escribe la PRIMERA vez, y solo
-  // sobre los complementos que esta página SÍ está enseñando (`c7-16`).
-  await anotarAcceso(liga, 'vista');
+  // A37-S21-03: un GET NO es una entrega. Lo hace también un servidor de vista
+  // previa (WhatsApp, correo) o un antivirus, y sellar `entregado_en` aquí le
+  // mostraba al contralor «Tu cliente lo abrió» sobre un REP que nadie vio ni
+  // descargó (y aun sin XML). La constancia de entrega se sella SOLO en la ruta
+  // de descarga del XML (complemento/[uuid]/route.ts), que ya exige que exista.
+  // La vista se anota una vez por ventana, no una fila por GET.
+  await anotarAcceso(liga, 'vista', undefined, { unaVezCadaMs: 10 * 60_000 });
   await sellarUltimoAcceso(liga);
-  if (v.reps.length > 0) {
-    await anotarAcceso(liga, 'rep_mostrado', { cfdiUuids: v.reps.map((r) => r.cfdiUuid) });
-    await sellarRepEntregado(v.tenantId, v.facturaId, v.reps.map((r) => r.cfdiUuid));
-  }
 
   return <Contenido v={v} token={token} />;
 }

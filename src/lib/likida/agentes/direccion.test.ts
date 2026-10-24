@@ -12,6 +12,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const excluidos: Array<[string, string, unknown]> = [];
 const respuestas = new Map<string, Array<{ data?: unknown; error?: { message: string } | null; count?: number }>>();
+const ordenes: Array<{ tabla: string; args: unknown[] }> = [];
 function builder(tabla: string) {
   const responder = () => {
     const cola = respuestas.get(tabla);
@@ -20,7 +21,7 @@ function builder(tabla: string) {
   const b: Record<string, unknown> = {};
   Object.assign(b, {
     select: () => b, eq: () => b, is: () => b, neq: (c: string, v: unknown) => { excluidos.push([tabla, c, v]); return b; }, not: () => b,
-    in: () => b, gte: () => b, lt: () => b, order: () => b, limit: () => b, range: () => b,
+    in: () => b, gte: () => b, lt: () => b, order: (...a: unknown[]) => { ordenes.push({ tabla, args: a }); return b; }, limit: () => b, range: () => b,
     maybeSingle: () => b,
     then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) =>
       Promise.resolve().then(responder).then(res, rej),
@@ -335,6 +336,14 @@ describe('especialistas_incidente: ni un teléfono que no esté en la base', () 
     expect(r).toMatchObject({ resultado: 'corrio', piezas: 0, sinTurno: true });
     expect(r.motivo).toContain('NO significa que no haya ninguno abierto');
     expect(encolar).not.toHaveBeenCalled();
+  });
+
+  it('A37-S26-02: la ventana de incidentes trae los más NUEVOS primero (no se llena de viejos ya atendidos)', async () => {
+    ordenes.length = 0;
+    respuestas.set('incidencia', [{ data: [], error: null }]);
+    await correrAgenteDireccionBandeja('especialistas_incidente', 'cron', HOY);
+    const o = ordenes.find((x) => x.tabla === 'incidencia')!;
+    expect(o.args).toEqual(['abierta_en', { ascending: false }]);
   });
 
   it('sin incidentes abiertos no fabrica nada y lo llama estado normal', async () => {
