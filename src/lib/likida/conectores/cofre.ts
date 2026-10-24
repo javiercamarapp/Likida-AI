@@ -77,7 +77,7 @@ export function cofreConfigurado(): boolean {
 export function cifrar(valores: ValoresCredencial, contexto?: string): string {
   const iv = randomBytes(12); // 96 bits, el tamaño que GCM espera
   const c = createCipheriv('aes-256-gcm', llave(), iv);
-  if (contexto !== undefined) c.setAAD(Buffer.from(contexto, 'utf8'));
+  if (contexto !== undefined) c.setAAD(new TextEncoder().encode(contexto));
   const cifrado = Buffer.concat([c.update(JSON.stringify(valores), 'utf8'), c.final()]);
   const tag = c.getAuthTag();
   const version = contexto !== undefined ? VERSION_CON_CONTEXTO : VERSION;
@@ -102,7 +102,7 @@ export function descifrar(guardado: string, contexto?: string): ValoresCredencia
   }
   const [, iv, tag, cifrado] = partes;
   const d = createDecipheriv('aes-256-gcm', llave(), Buffer.from(iv, 'base64url'));
-  if (conContexto) d.setAAD(Buffer.from(contexto as string, 'utf8'));
+  if (conContexto) d.setAAD(new TextEncoder().encode(contexto as string));
   d.setAuthTag(Buffer.from(tag, 'base64url'));
   // `final()` es quien verifica el tag: si alguien alteró un bit, lanza aquí.
   const plano = Buffer.concat([d.update(Buffer.from(cifrado, 'base64url')), d.final()]).toString('utf8');
