@@ -570,7 +570,11 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 324;
 // Auditoría 37 (+4, 2264 → 2268): rfc_tenant.ts (+2 lecturas de tenant.rfc), ciclo.ts (+1, estatus del sello ya puesto, S57-04) y
 // transferencia.ts (+1, alargar la reserva del timbrado ante error ambiguo del PAC, S61-01).
 // INTEGRACIÓN ONDA 5 (23-oct-2026): el barrido real del árbol fusionado de las seis ramas mide 2,284 llamadas (techo = medido, sin holgura); las ramas declaraban techos parciales sobre la misma base de 2,264.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_284;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_287;
+// LOTE A37 B-sat-fiscal-06 (migración 0876): +3 llamadas (2,284 → 2,287), 0 archivos nuevos, medido con el barrido real. `gasto_correccion.ts` +2: el RPC
+// `gasto_mezclar_ocr_extra` (merge atómico de ocr_extra, A37-S45-10; el UPDATE de respaldo se conserva mientras la base no tenga la 0876) y la relectura
+// que distingue «borrado» de «llegó el XML» cuando el RPC toca 0 filas. `intake/consolidado.ts` +1: la lectura del sello del gasto en el reintento idempotente
+// de `resolverLineaAMano` (A37-S46-08). Todas por `acotada` con `tenant_id`. Si otro PR de la oleada toca este techo, sumar sus incrementos al integrar.
 // Auditoría 37, lote agentes-legal-ia (medido con el barrido real): +2 llamadas (2,264 → 2,266). `candidatos_redactor.ts` suma 3 `.from(` (prospecto, cola_aprobacion, prospecto_contacto) y `runner.ts` pierde la suya (+2 netas); `sdr.ts` pasa de 3 a 3 (la lectura por prospecto se volvió lectura en lote). Todo por `acotada`.
 // LOTE A37 peajes-liquidación-graves (migración 0865): +5 llamadas (2,264 → 2,269), 0 archivos nuevos, medido con el barrido real. `jornada/repo.ts` +1:
 // `.rpc('asentar_declaracion_jornada')` (A37-S48-01; la 0865 sustituye la marca derivada bajo el lock del expediente; el INSERT anterior se conserva
