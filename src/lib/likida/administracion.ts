@@ -368,12 +368,26 @@ export function normalizarRfcOperador(crudo: string | null | undefined): string 
   return rfc;
 }
 
+/**
+ * `AAAA-MM-DD` Y que el día EXISTA. `Date.parse('2026-02-30T00:00:00Z')` en V8
+ * NO falla (da el 1 de marzo), así que el regex + `Date.parse` dejaba pasar
+ * fechas inexistentes que Postgres rechazaba después con un 22008 crudo
+ * (A37-S25-09). Mismo criterio que `fecha()` de `http/campos_cuerpo.ts`.
+ */
+function esFechaIsoReal(v: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  if (!m) return false;
+  const [a, mes, dia] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const d = new Date(Date.UTC(a, mes - 1, dia));
+  return d.getUTCFullYear() === a && d.getUTCMonth() === mes - 1 && d.getUTCDate() === dia;
+}
+
 /** Una fecha de licencia ISO, o `null` si vino vacía. Una fecha que no se
  *  pueda interpretar se guardaría vencida o vigente sin serlo. */
 export function normalizarFechaLicencia(crudo: string | null | undefined): string | null {
   const v = (crudo ?? '').trim();
   if (!v) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(`${v}T00:00:00Z`))) {
+  if (!esFechaIsoReal(v)) {
     throw new DatoInvalido(`"${crudo}" no es una fecha válida (AAAA-MM-DD).`);
   }
   return v;
@@ -540,7 +554,7 @@ export async function actualizarOperador(
       // Mismo criterio que `operador.licencia_vence` (0053): una fecha que no
       // se pueda interpretar tal cual se guardaría vencida o vigente sin
       // serlo — ninguna de las dos es honesta si lo tecleado no es una fecha.
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(`${v}T00:00:00Z`))) {
+      if (!esFechaIsoReal(v)) {
         throw new DatoInvalido(`"${cambios.licenciaVence}" no es una fecha válida (AAAA-MM-DD).`);
       }
       fila.licencia_vence = v;

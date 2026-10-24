@@ -151,8 +151,10 @@ describe('correr_runner y su bitácora — el contrato que el comentario declara
   it('escribe SU entrada en bitacora_auditoria: el motivo, el userId de la sesión y qué corrió', async () => {
     const r = await ejecutarAccionCopiloto('correr_runner', { motivo: 'demo con GAL en una hora' }, 'u-javier');
     expect(r.ok).toBe(true);
-    expect(insertBitacora).toHaveBeenCalledTimes(1);
-    const fila = insertBitacora.mock.calls[0][0];
+    // Dos filas: la intención (antes de correr) y el cierre (A37-S23-07).
+    expect(insertBitacora).toHaveBeenCalledTimes(2);
+    expect(insertBitacora.mock.calls[0][0]).toMatchObject({ accion: 'runner.corrida_manual_inicio', actor_id: 'u-javier' });
+    const fila = insertBitacora.mock.calls[1][0];
     expect(fila).toMatchObject({
       tabla: 'bitacora_auditoria',
       tenant_id: null, // el runner es de PLATAFORMA, no de una flota
@@ -170,9 +172,20 @@ describe('correr_runner y su bitácora — el contrato que el comentario declara
     correrRunner.mockResolvedValueOnce({ apagadoGlobal: true, agentes: [] });
     const r = await ejecutarAccionCopiloto('correr_runner', { motivo: 'probar tras el incidente' }, 'u-1');
     expect(r.ok).toBe(true);
-    expect(insertBitacora).toHaveBeenCalledTimes(1);
-    const detalle = insertBitacora.mock.calls[0][0].detalle as Record<string, unknown>;
+    expect(insertBitacora).toHaveBeenCalledTimes(2);
+    const detalle = insertBitacora.mock.calls[1][0].detalle as Record<string, unknown>;
     expect(detalle.apagado_global).toBe(true);
+  });
+
+  it('A37-S23-07: la intención queda escrita ANTES de que el runner arranque, aunque el runner muera', async () => {
+    let filasAlCorrer = -1;
+    correrRunner.mockImplementationOnce(async () => {
+      filasAlCorrer = insertBitacora.mock.calls.length;
+      throw new Error('maxDuration');
+    });
+    await expect(ejecutarAccionCopiloto('correr_runner', { motivo: 'mandar el aviso' }, 'u-1')).rejects.toThrow('maxDuration');
+    expect(filasAlCorrer).toBe(1);
+    expect(insertBitacora.mock.calls[0][0]).toMatchObject({ accion: 'runner.corrida_manual_inicio' });
   });
 
   it('la bitácora es best-effort: si no escribe, la acción NO se cae (el runner ya corrió)', async () => {

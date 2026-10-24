@@ -401,6 +401,16 @@ describe('c5-1 — la lista de bajas EN LA PUERTA (camino humano incluido)', () 
     expect(para).toContain('vivo@x.mx');
     expect(para).not.toContain('muerto@x.mx');
   });
+
+  it('A37-S24-08: el envío con copias las manda ocultas (bcc), no visibles entre sí', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_B], error: null },
+      { data: null, error: null },
+    ]);
+    await enviarPiezaPorCorreo('p-1', 'u-1', ['otro@x.mx']);
+    const opciones = enviarCorreo.mock.calls[0][2] as { copiasOcultas?: boolean };
+    expect(opciones.copiasOcultas).toBe(true);
+  });
 });
 
 describe('c5-3 — el timeout de Resend es AMBIGUO: ni reversión ni reenvío automático', () => {

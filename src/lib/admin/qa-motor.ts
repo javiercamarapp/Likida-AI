@@ -102,6 +102,14 @@ export function prefijoMensajes(corridaId: string): string {
   return `${PREFIJO_QA}P${corridaId.slice(0, 8)}-`;
 }
 
+/** A37-S23-09: la marca con la que el interceptor etiqueta sus filas `wa_outbox`
+ *  (que no llevan tenant) y con la que `limpiarTenant` las encuentra. */
+const UUID_QA = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function marcaOutboxQa(corridaId: string): string {
+  return `QA: corrida ${corridaId}`;
+}
+
 /** La corrida recién nacida, lista para guardarse antes de ejecutar. El carril
  *  se pasa explícito (el validador ya lo decidió); sin él, el que le toque al
  *  número de fotos — la MISMA función que usa el formulario. */
@@ -214,7 +222,7 @@ export function instalarInterceptorSalidaMeta(corridaId: string): () => void {
       const { error } = await supabaseAdmin().from('wa_outbox').insert({
         payload,
         estado: 'dead',
-        ultimo_error: `QA: corrida ${corridaId} — interceptado, nunca se mandó a Meta`.slice(0, 500),
+        ultimo_error: `${marcaOutboxQa(corridaId)} — interceptado, nunca se mandó a Meta`.slice(0, 500),
       });
       if (error) logger.error('qa.interceptor_no_registrado', { corridaId, err: error.message });
     } catch (e) {
@@ -506,6 +514,16 @@ export async function limpiarTenant(db: SupabaseClient, corrida: CorridaQA): Pro
     exigirPrefijoQA(patron);
     await db.from('wa_mensaje_procesado').delete().like('wa_message_id', patron);
 
+    // A37-S23-09: el interceptor inserta filas `wa_outbox` 'dead' SIN tenant
+    // (no cuelgan del tenant, la cascada no las alcanza). Se borran por la
+    // marca exacta de ESTA corrida; el id debe ser un UUID para que el patrón
+    // LIKE no pueda abarcar más (sin comodines) que las filas de la corrida.
+    const patronOutbox = `${marcaOutboxQa(corrida.id)} %`;
+    const outboxBorrado = UUID_QA.test(corrida.id)
+      ? await db.from('wa_outbox').delete().like('ultimo_error', patronOutbox)
+      : { error: { message: 'id de corrida no es UUID' } };
+    if (outboxBorrado.error) notas.push(`wa_outbox: no se pudieron borrar las filas del interceptor (${outboxBorrado.error.message})`);
+
     // `qa_corrida` NO entra a esta lista a propósito: su FK a tenant es `set
     // null` (datos.md:135), así que perder al tenant no la deja como sobra —
     // queda desligada, que es justo lo que se pidió.
@@ -517,6 +535,12 @@ export async function limpiarTenant(db: SupabaseClient, corrida: CorridaQA): Pro
       const { count, error } = await db.from(tabla).select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId);
       if (error) sobras.push(`${tabla}: no se pudo contar (${error.message})`);
       else if ((count ?? 0) > 0) sobras.push(`${tabla}: ${count} filas`);
+    }
+    if (UUID_QA.test(corrida.id)) {
+      const { count, error } = await db.from('wa_outbox').select('*', { count: 'exact', head: true })
+        .like('ultimo_error', patronOutbox);
+      if (error) sobras.push(`wa_outbox: no se pudo contar (${error.message})`);
+      else if ((count ?? 0) > 0) sobras.push(`wa_outbox: ${count} filas`);
     }
     const detalle = notas.length ? ` (${notas.join('; ')})` : '';
     return sobras.length === 0

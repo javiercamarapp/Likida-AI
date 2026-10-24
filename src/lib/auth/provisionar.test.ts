@@ -65,6 +65,14 @@ describe('provisionarUsuario', () => {
       expect.objectContaining({ userId: 'u-medias2', err: 'auth caído', causa: 'fetch failed' }));
   });
 
+  // A37-S24-06: el correo se normaliza (trim + minúsculas) dentro de la función.
+  it('A37-S24-06: normaliza el correo antes de crear el usuario de Auth y de insertar en app_user', async () => {
+    createUser.mockResolvedValue({ data: { user: { id: 'u-norm' } }, error: null });
+    await provisionarUsuario('t-1', '  Ana@Flota.MX ');
+    expect(createUser).toHaveBeenCalledWith({ email: 'ana@flota.mx', email_confirm: true });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ email: 'ana@flota.mx' }));
+  });
+
   it('con alta buena NO se borra nada', async () => {
     createUser.mockResolvedValue({ data: { user: { id: 'u-ok' } }, error: null });
     await provisionarUsuario('t-1', 'ok@flotademo.mx');

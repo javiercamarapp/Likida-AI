@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '@/lib/likida/presupuesto';
+import { traerTodoDesdeId, PAGINA } from '@/lib/likida/pg';
 import {
   MANDATO_AUTOFACTURACION, versionVigente, type DocumentoLegal,
 } from './documentos';
@@ -94,20 +95,38 @@ export interface AceptacionFila {
 
 /** Las aceptaciones VIGENTES de la flota. LANZA ante un error de lectura. */
 export async function aceptacionesDeFlota(tenantId: string): Promise<AceptacionFila[]> {
-  const { data, error } = await acotada(supabaseAdmin().from('aceptacion_legal')
-    .select('documento, version, aceptado_en, user_id, revocado_en')
-    .eq('tenant_id', tenantId)
-    .order('aceptado_en', { ascending: false })
-    .order('id')
-    .limit(200), 'legal.aceptaciones');
-  if (error) throw new Error(`aceptacion_legal: ${error.message}`);
-  return (data ?? []).map((f) => ({
-    documento: f.documento as DocumentoLegal,
-    version: String(f.version),
-    aceptadoEn: String(f.aceptado_en),
-    userId: (f.user_id as string | null) ?? null,
-    revocadoEn: (f.revocado_en as string | null) ?? null,
-  }));
+  // A37-S25-07: antes `limit(200)` sin `count`: una flota con muchos usuarios y
+  // versiones dejaba fuera, en silencio, las filas antiguas —incluido el
+  // mandato— y la pantalla mostraba «sin mandato» o usuarios «pendientes».
+  // Ahora se lee TODO con cursor por `id` (completo y demostrado por el `count`
+  // exacto, o lanza) y el orden «más reciente primero» que espera `mandatoDe`
+  // se aplica aquí.
+  const leidas = await traerTodoDesdeId<{
+    id: string; documento: unknown; version: unknown; aceptado_en: unknown; user_id: unknown; revocado_en: unknown;
+  }>(
+    (despuesDe) => {
+      let q = supabaseAdmin().from('aceptacion_legal')
+        .select('id, documento, version, aceptado_en, user_id, revocado_en',
+          despuesDe === null ? { count: 'exact' as const } : {})
+        .eq('tenant_id', tenantId);
+      if (despuesDe !== null) q = q.gt('id', despuesDe);
+      return acotada(q.order('id').limit(PAGINA), 'legal.aceptaciones');
+    },
+    'legal.aceptaciones',
+  ).catch((e: unknown) => {
+    throw new Error(`aceptacion_legal: ${e instanceof Error ? e.message : String(e)}`);
+  });
+  return leidas
+    .map((f) => ({
+      documento: f.documento as DocumentoLegal,
+      version: String(f.version),
+      aceptadoEn: String(f.aceptado_en),
+      userId: (f.user_id as string | null) ?? null,
+      revocadoEn: (f.revocado_en as string | null) ?? null,
+      id: f.id,
+    }))
+    .sort((a, b) => (a.aceptadoEn < b.aceptadoEn ? 1 : a.aceptadoEn > b.aceptadoEn ? -1 : a.id < b.id ? -1 : 1))
+    .map(({ id: _id, ...fila }) => { void _id; return fila; });
 }
 
 /** ¿Este usuario ya aceptó la versión vigente? (solo para Términos y Aviso). */
