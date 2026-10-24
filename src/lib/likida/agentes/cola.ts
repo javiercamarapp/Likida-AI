@@ -651,7 +651,7 @@ export async function enviarPiezaPorCorreo(
     // quiera su propia baja sigue cubierta por "responde BAJA": esa vía lee
     // el remitente REAL de la respuesta, sea quien sea.
     ...(bajaHref ? { bajaHref } : {}),
-  }, { idempotencyKey: `pieza-${id}`, ...(bajaHref ? { listaBajaUrl: bajaHref } : {}) });
+  }, { idempotencyKey: `pieza-${id}`, copiasOcultas: true, ...(bajaHref ? { listaBajaUrl: bajaHref } : {}) });
   if (!r.ok) {
     // ── LA AMBIGÜEDAD DE RED (c5-3) ────────────────────────────────────────
     // 'red' incluye el timeout: el POST pudo haber sido ACEPTADO con la
