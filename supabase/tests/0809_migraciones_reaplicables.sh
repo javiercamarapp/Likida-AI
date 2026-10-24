@@ -56,6 +56,9 @@ for f in "${rango[@]}"; do
     for g in $(cd "$raiz/supabase/migrations" && ls -1 [0-9][0-9][0-9][0-9]_*.sql); do
       pg="${g:0:4}"
       [[ "$pg" > "$pf" ]] || continue
+      # Permitida: 0892 vuelve a crear vigia_aviso_transicion (0797) y la 0797 lleva el MISMO cuerpo final, así que reaplicar el rango
+      # no borra la guarda; la huella de (2) lo comprueba (si los cuerpos divergieran, fallaría allí).
+      [[ "$pf:$pg:$fn" = "0797:0892:vigia_aviso_transicion" ]] && continue
       if grep -Eiq "create[[:space:]]+(or[[:space:]]+replace[[:space:]]+)?function[[:space:]]+(public\.)?\"?${fn}\"?[[:space:]]*\(" "$raiz/supabase/migrations/$g"; then
         echo "0809: la función $fn (de $f) la redefine la migración $g, de prefijo mayor"; fallo=1
       fi

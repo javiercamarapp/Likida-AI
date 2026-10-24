@@ -27,7 +27,6 @@ import type { ViajeConstancia } from './constancia';
 import type { EventoHuerfano, EventoNuevo, UltimoCruce } from './huerfanos';
 import type { UnidadDeViaje } from './ciclo_gps';
 import type { CriterioSitio } from './sitio_derivado';
-import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { HORAS_GPS_RECIENTE, type DatosPreflight } from './preflight_piloto';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1705,7 +1704,7 @@ export async function leerDatosPreflight(tenantId: string, ahora: Date = new Dat
     config: { activo: config.activo, perfilSeguimiento: config.perfilSeguimiento, solicitudesMin: config.solicitudesMin, cohortePiloto: config.cohortePiloto ?? null },
     zonaDeclarada, voluntarios: voluntarios.map((o) => ({ telefono: o.telefono })), viajes, posicionesPorUnidad, contactos,
     // A37-S36-07: sin lectura del perfil se asume el restrictivo (falla cerrado: se exigen más plantillas, no menos).
-    perfilPlantillas: (await perfilDeTenant(tenantId)) === null ? 'piloto' : 'cinco_agentes',
+    perfilPlantillas: (await (await import('@/lib/auth/perfil_tenant')).perfilDeTenant(tenantId)) === null ? 'piloto' : 'cinco_agentes',
   };
 }
 

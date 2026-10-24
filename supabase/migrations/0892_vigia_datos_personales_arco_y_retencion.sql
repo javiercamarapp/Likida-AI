@@ -1,4 +1,4 @@
--- REVERSA: (los datos personales ya vaciados NO se restauran: es la intención) drop trigger if exists vigia_datos_personales_por_arco on public.operador; drop function if exists public.vigia_datos_personales_por_arco(); drop function if exists public.purgar_vigia_datos_personales(integer, integer, date); y volver a aplicar el cuerpo de vigia_aviso_transicion de supabase/migrations/0797_vigia_aviso.sql (create or replace). Ninguna tabla cambia.
+-- REVERSA: (los datos personales ya vaciados NO se restauran: es la intención) drop trigger if exists vigia_datos_personales_por_arco on public.operador; drop function if exists public.vigia_datos_personales_por_arco(); drop function if exists public.purgar_vigia_datos_personales(integer, integer, date); y recrear vigia_aviso_transicion SIN el bloque «0892: redacción por ARCO o retención» (create or replace; el resto del cuerpo es el de 0797). Ninguna tabla cambia.
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 0892 · Vigía: datos personales del operador con ARCO y retención (A37-A4-07)
 --
