@@ -104,8 +104,23 @@ describe('POST acuses/confirmar', () => {
     confirmar.mockResolvedValueOnce({ confirmadas: [ID1], yaConfirmadas: [], noAplican: [ID2] });
     const r = await post({ ids: [ID1, ID2] });
     expect(abrir.mock.calls[0][1]).toBe('administracion');
-    expect(confirmar).toHaveBeenCalledWith('t-1', [ID1, ID2], 'api');
+    expect(confirmar).toHaveBeenCalledWith('t-1', [ID1, ID2], 'api', undefined, undefined);
     expect(await json(r)).toEqual({ datos: { confirmadas: [ID1], yaConfirmadas: [], noAplican: [ID2] } });
+  });
+
+  it('A37-S11-02: con `{ id, respuestaEn }` manda al servicio lo que el integrador LEYÓ y reporta `cambiaron`', async () => {
+    const leido = '2026-10-02T10:00:00.000000+00:00';
+    confirmar.mockResolvedValueOnce({ confirmadas: [], yaConfirmadas: [], noAplican: [], cambiaron: [ID1] });
+    const r = await post({ ids: [{ id: ID1.toUpperCase(), respuestaEn: leido }] });
+    expect(confirmar).toHaveBeenCalledWith('t-1', [ID1], 'api', undefined, new Map([[ID1, leido]]));
+    expect((await json(r)).datos.cambiaron).toEqual([ID1]);
+  });
+
+  it('A37-S11-02: un elemento con respuestaEn ilegible o campos de más es 400 y no toca la base', async () => {
+    for (const c of [{ ids: [{ id: ID1 }] }, { ids: [{ id: ID1, respuestaEn: 'ayer' }] }, { ids: [{ id: ID1, respuestaEn: '2026-10-02T10:00:00Z', extra: 1 }] }, { ids: [{ id: 'x', respuestaEn: '2026-10-02T10:00:00Z' }] }]) {
+      expect((await post(c)).status, JSON.stringify(c).slice(0, 50)).toBe(400);
+    }
+    expect(confirmar).not.toHaveBeenCalled();
   });
 
   it('el reintento es inocuo: lo ya confirmado se reporta como tal', async () => {
