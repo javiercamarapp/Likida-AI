@@ -183,6 +183,16 @@ describe('POST — la idempotencia por clave externa', () => {
     expect(recibir).not.toHaveBeenCalled();
   });
 
+  it('A37-S11-08: la MISMA claveExterna con otro contenido y SIN Idempotency-Key es 409 conflicto, no 400 «llave nueva»', async () => {
+    expect((await postear(CUERPO())).status).toBe(201);
+    // La fila ya existe con el contenido de la primera vez.
+    existente = baseFila({ huella: huellaContenido(validarLiquidacionExterna(CUERPO())) });
+    const corregida = { ...CUERPO(), total: 250, conceptos: [{ descripcion: 'Sueldo', tipo: 'percepcion', monto: 250 }] };
+    const r = await postear(corregida);
+    expect(r.status).toBe(409);
+    expect((await json(r)).error.codigo).toBe('conflicto');
+  });
+
   it('un reintento IDÉNTICO tras el 201 devuelve la misma respuesta con la cabecera de eco', async () => {
     const a = await postear(CUERPO());
     const b = await postear(CUERPO());
