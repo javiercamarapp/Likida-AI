@@ -72,6 +72,8 @@ export interface PropsDetalle {
     gastos: GastoAjustable[];
     /** `null` = el rol ve la firma pero no la pone. */
     accion: ((previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>) | null;
+    /** A37-P-01: corregir el monto de un comprobante disputado por el operador. `null` = sin permiso. */
+    corregir?: ((previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>) | null;
   } | null;
 }
 
@@ -450,7 +452,7 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
               días; reabrir es lo excepcional y destructivo. */}
           {revision && (
             <PanelRevision estado={revision.estado} gastos={revision.gastos}
-              accion={revision.accion} folio={d.folio} />
+              accion={revision.accion} folio={d.folio} corregir={revision.corregir ?? null} />
           )}
 
           {reabrir && (

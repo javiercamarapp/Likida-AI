@@ -255,7 +255,7 @@ describe('configurable por el PUT de la flota (LLAVES_CONFIG, T-A5-37 y lección
 
 describe('persistencia honesta: sin columna no se pierde en silencio', () => {
   it('guardar una cadencia o un umbral distinto del default dice que falta la migración (no toca la base)', async () => {
-    for (const c of [{ poleoMin: 15 }, { poleoPorClaveMin: { lenta: 15 } }, { detenidoAvisoMin: 20 }, { detenidaVentanaMin: 10 }, { detenidaMetros: 200 }]) {
+    for (const c of [{ poleoMin: 15 }, { poleoPorClaveMin: { lenta: 15 } }, { detenidoAvisoMin: 20 }]) {  // detenidaVentanaMin/detenidaMetros ya tienen columna desde la 0870 (A37-P-08)
       await expect(guardarConfigConductor('t1', { ...CONFIG_CONDUCTOR_DEFAULT, ...c } as never, undefined), JSON.stringify(c)).rejects.toThrow(/migración pendiente/);
     }
   });

@@ -20,6 +20,14 @@ describe('A37-A3-01: pantalla de CCP timbrados recibidos', () => {
     expect(h).toContain('ENCENDIDO');
     expect(h).not.toContain('Confirmar y responder al cliente');
   });
+  it('A37-P-04: cada CCP ofrece descargar su PDF y su XML por la ruta autenticada (con ?tenant= al ver como otra flota)', () => {
+    const h = html(true, [fila({ id: '55555555-5555-4555-8555-555555555555' })]);
+    expect(h).toContain('/api/export/carta-porte-docs?ccp=55555555-5555-4555-8555-555555555555&amp;archivo=pdf');
+    expect(h).toContain('archivo=xml');
+    expect(h).toContain('Descargar PDF');
+    const ver = renderToStaticMarkup(<SeccionCcp activa filas={[fila()]} ver={{ tenant: 't-1' }} acciones={{ fijar: accion, confirmar: accion }} />);
+    expect(ver).toContain('tenant=t-1');
+  });
   it('sin CCP recibidos y sin migración lo dice', () => {
     expect(html(false, [])).toContain('Todavía no ha llegado ningún CCP timbrado');
     expect(html('sin_migracion', 'sin_migracion')).toContain('todavía no está disponible');

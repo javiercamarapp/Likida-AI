@@ -109,6 +109,8 @@ export async function corregirMontoGasto(c: CorreccionDeMonto): Promise<Resultad
   if (error) {
     // CU001 es el trigger de la 0036/0037: la liquidación de ese viaje ya se
     // emitió. NO es un fallo técnico y no se le puede pedir que reintente.
+    // CU017 (0870, A37-P-02): el candado en base del XML verificado; mismo motivo que el veto de arriba.
+    if (error.code === 'CU017') return { ok: false, motivo: 'xml_verificado' };
     if (error.code === 'CU001') {
       logger.info('gasto.correccion_tarde', { tenant: c.tenantId, gasto: c.gastoId, viaje: fila.viaje_id });
       return { ok: false, motivo: 'liquidado' };
