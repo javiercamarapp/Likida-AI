@@ -487,12 +487,13 @@ describe('ligar a mano — copia de los campos fiscales del XML (0858)', () => {
     expect(r.mensaje).toContain('no está guardado');
   });
 
-  it('un XML que es nota de crédito no copia nada (liga de siempre)', async () => {
+  it('un XML que es nota de crédito NO se liga (A37-S63-01: antes se ligaba verificado y sin campos)', async () => {
     prepara(XML.replace('TipoDeComprobante="I"', 'TipoDeComprobante="E"'));
     respuestasRpc = [{ data: { gasto_id: 'g-1', cfdi_uuid: UUID }, error: null }];
     const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
-    expect(llamadasRpc.map((l) => l.nombre)).toEqual(['sat_cfdi_ligar_tx']);
-    expect(r.mensaje).toContain('nota de crédito');
+    expect(llamadasRpc).toEqual([]);
+    expect(r.ok).toBe(false);
+    expect(r.motivo).toBe('nota_de_credito');
   });
 
   it('si la base rechaza los campos (total no coincide) liga y lo reporta', async () => {
@@ -510,5 +511,40 @@ describe('ligar a mano — copia de los campos fiscales del XML (0858)', () => {
     expect(r.ok).toBe(false);
     expect(r.motivo).toBe('gasto_ya_tiene_cfdi');
     expect(llamadasRpc).toHaveLength(1);
+  });
+});
+
+// ── A37-S63-01: la liga manual rechaza lo que contradice al gasto ───────────
+// Una nota de crédito (Egreso) o un CFDI de OTRO emisor con el mismo total NO se liga: la base marcaría `xml_verificado`.
+describe('ligar — nota de crédito y emisor distinto se rechazan antes del RPC (A37-S63-01)', () => {
+  function prepara(extraCfdi: Record<string, unknown>, extraGasto: Record<string, unknown> = {}) {
+    respuestas.sat_cfdi_descargado = [cfdi({ total: '300.00', ...extraCfdi })];
+    respuestas.gasto = [{ data: { id: 'g-1', cfdi_uuid: null, monto: '300.00', ...extraGasto }, error: null }];
+    respuestas.cfdi_xml = [{ data: null, error: null }];
+    respuestasRpc = [{ data: { gasto_id: 'g-1', cfdi_uuid: UUID }, error: null }];
+  }
+
+  it('un CFDI tipo Egreso (E) del mismo total NO se liga', async () => {
+    prepara({ tipo_comprobante: 'E' });
+    const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
+    expect(r.ok).toBe(false);
+    expect(r.motivo).toBe('nota_de_credito');
+    expect(llamadasRpc).toEqual([]);
+  });
+
+  it('un CFDI de otro emisor que el RFC del ticket NO se liga', async () => {
+    prepara({ rfc_emisor: 'AAA010101AAA' }, { rfc_emisor: 'BBB020202BB2' });
+    const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
+    expect(r.ok).toBe(false);
+    expect(r.motivo).toBe('emisor_distinto');
+    expect(llamadasRpc).toEqual([]);
+  });
+
+  it('mismo emisor (sin importar mayúsculas), o ticket sin RFC leído: sí se liga', async () => {
+    prepara({ rfc_emisor: 'aaa010101aaa', tipo_comprobante: 'I' }, { rfc_emisor: 'AAA010101AAA' });
+    expect((await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR)).ok).toBe(true);
+    llamadasRpc.length = 0;
+    prepara({ rfc_emisor: 'AAA010101AAA' }, { rfc_emisor: null });
+    expect((await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR)).ok).toBe(true);
   });
 });

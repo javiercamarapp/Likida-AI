@@ -70,6 +70,8 @@ export type MotivoFalla =
   | 'gasto_no_encontrado'
   | 'gasto_ya_tiene_cfdi'
   | 'total_no_coincide'
+  | 'nota_de_credito'
+  | 'emisor_distinto'
   | 'gasto_de_viaje_liquidado'
   | 'nada_que_revertir'
   | 'sin_firma'
@@ -145,12 +147,14 @@ interface CfdiActual {
   gastoId: string | null;
   candidatos: unknown;
   total: number | null;
+  tipoComprobante: string | null;
+  rfcEmisor: string | null;
 }
 
 async function leerCfdi(tenantId: string, cfdiId: string): Promise<CfdiActual | null> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('sat_cfdi_descargado')
-    .select('id, cfdi_uuid, estatus, gasto_id, candidatos, total')
+    .select('id, cfdi_uuid, estatus, gasto_id, candidatos, total, tipo_comprobante, rfc_emisor')
     .eq('tenant_id', tenantId)
     .eq('id', cfdiId)
     .maybeSingle(), 'sat_descarga.leer_cfdi');
@@ -165,6 +169,8 @@ async function leerCfdi(tenantId: string, cfdiId: string): Promise<CfdiActual | 
     gastoId: (data.gasto_id as string) || null,
     candidatos: data.candidatos ?? null,
     total: data.total === null || data.total === undefined ? null : Number(data.total),
+    tipoComprobante: typeof data.tipo_comprobante === 'string' && data.tipo_comprobante.trim() !== '' ? data.tipo_comprobante.trim().toUpperCase() : null,
+    rfcEmisor: typeof data.rfc_emisor === 'string' && data.rfc_emisor.trim() !== '' ? data.rfc_emisor.trim().toUpperCase() : null,
   };
 }
 
@@ -256,7 +262,7 @@ export async function ligarComprobante(
   // de devolver un 23503 que no le dice nada a nadie.
   const { data: gasto, error: errGasto } = await acotada(supabaseAdmin()
     .from('gasto')
-    .select('id, cfdi_uuid, monto')
+    .select('id, cfdi_uuid, monto, rfc_emisor')
     .eq('tenant_id', tenantId)
     .eq('id', gastoId)
     .maybeSingle(), 'sat_descarga.leer_gasto_a_ligar');
@@ -320,6 +326,25 @@ export async function ligarComprobante(
   const xmlCrudo = typeof (xmlFila as { xml?: unknown } | null)?.xml === 'string'
     ? ((xmlFila as { xml: string }).xml) : null;
   const { campos, motivo: motivoSinCampos } = camposFiscalesDeXml(xmlCrudo, cfdi.cfdiUuid);
+
+  // A37-S63-01: la base (0858) liga y marca `xml_verificado` aunque el XML sea una nota de crédito o de OTRO emisor (solo
+  // omite copiar campos). Un comprobante que CONTRADICE al gasto no puede dejarlo «facturado y verificado» por un clic: se
+  // rechaza aquí, antes de la transacción. La ruta automática ya descarta E en `decidirCruce`. Se mira tanto lo que anotó la
+  // descarga (tipo_comprobante, rfc_emisor) como lo que dice el XML guardado, por si la fila es anterior a esas columnas.
+  if (cfdi.tipoComprobante === 'E' || motivoSinCampos === 'nota_de_credito') {
+    return {
+      ok: false, motivo: 'nota_de_credito',
+      mensaje: 'Ese comprobante es una nota de crédito (Egreso): documenta una devolución o bonificación, no el gasto. No se ligó nada.',
+    };
+  }
+  const rfcGasto = typeof gasto.rfc_emisor === 'string' ? gasto.rfc_emisor.trim().toUpperCase() : '';
+  const rfcCfdi = cfdi.rfcEmisor ?? (typeof campos?.rfc_emisor === 'string' ? campos.rfc_emisor.trim().toUpperCase() : null);
+  if (rfcGasto !== '' && rfcCfdi !== null && rfcGasto !== rfcCfdi) {
+    return {
+      ok: false, motivo: 'emisor_distinto',
+      mensaje: `El emisor del comprobante (${rfcCfdi}) no es el RFC leído del ticket (${rfcGasto}), así que no se ligó. Elige el gasto correcto, o corrige primero el RFC del gasto si el comprobante es el bueno.`,
+    };
+  }
 
   const argsBase = {
     p_tenant: tenantId,
