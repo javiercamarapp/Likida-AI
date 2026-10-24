@@ -478,6 +478,16 @@ describe('probarCredencial — el ciclo completo, sin red', () => {
   // rojo, como si el cliente hubiera hecho algo mal.
   // ═════════════════════════════════════════════════════════════════════════
 
+  it('A37-S37-04: el sello se ancla a la versión probada; si la fila cambió mientras tanto, no se sella', async () => {
+    const cifrado = cifrar({ token: 'tok-samsara-largo' });
+    respuestasPorOp.set('conector_credencial:select', { data: { valores_cifrados: cifrado }, error: null });
+    respuestasPorOp.set('conector_credencial:update', { data: [], error: null }); // otro admin guardó un token nuevo
+    const { http } = httpFalso(200, '{"data":{"id":"org-1"}}');
+    await expect(probarCredencial(TENANT, 'samsara', undefined, http)).rejects.toThrow(/cambió mientras se probaba/);
+    const update = toquesDeCredencial().find((l) => l.op === 'update')!;
+    expect(update.eq).toContainEqual(['valores_cifrados', cifrado]);
+  });
+
   it('c7-12 · el 503 del proveedor NO toca la fila: `probada_en` conserva su fecha', async () => {
     respuestasPorOp.set('conector_credencial:select', { data: { valores_cifrados: cifrar({ token: 'tok-samsara-largo' }) }, error: null });
     respuestasPorOp.set('conector_credencial:update', { data: [{ id: 'cred-1' }], error: null });
