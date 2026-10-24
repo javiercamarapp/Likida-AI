@@ -533,6 +533,68 @@ describe('registrarRepEmitido — Likida no timbra, solo registra', () => {
   });
 });
 
+// ── A37-S54-03: el XML se coteja antes de guardarse y de ofrecerse al cliente ─────────────────────────────────────────────
+describe('registrarRepEmitido — el XML tiene que ser de ESTA factura y de ESTE abono (A37-S54-03)', () => {
+  const UUID_REP = 'aaaaaaaa-bbbb-4ccc-8ddd-000000000001';
+  const UUID_FAC = 'cccccccc-dddd-4eee-8fff-000000000009';
+  const xmlRep = (o: { uuid?: string; doc?: string; imp?: string; receptor?: string } = {}) => `<?xml version="1.0"?>
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:pago20="http://www.sat.gob.mx/Pagos20" Version="4.0" TipoDeComprobante="P" Fecha="2026-08-21T10:00:00">
+  <cfdi:Emisor Rfc="AAA010101AAA"/><cfdi:Receptor Rfc="${o.receptor ?? 'BBB020202BB2'}"/>
+  <cfdi:Complemento>
+    <pago20:Pagos Version="2.0"><pago20:Pago FechaPago="2026-08-20T12:00:00" FormaDePagoP="03">
+      <pago20:DoctoRelacionado IdDocumento="${o.doc ?? UUID_FAC}" ImpPagado="${o.imp ?? '11600.00'}" ImpSaldoInsoluto="0" NumParcialidad="1"/>
+    </pago20:Pago></pago20:Pagos>
+    <tfd:TimbreFiscalDigital xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" UUID="${o.uuid ?? UUID_REP}"/>
+  </cfdi:Complemento>
+</cfdi:Comprobante>`;
+  const BASE = { facturaId: FACTURA, pagoId: PAGO, cfdiUuid: UUID_REP, fechaPago: '2026-08-20', impPagado: '11,600.00', formaPago: '03' };
+  const ABONO = OK({ id: PAGO, factura_id: FACTURA, monto: 11600 });
+  const FAC = OK({ id: FACTURA, cfdi_uuid: UUID_FAC, cliente: { rfc: 'BBB020202BB2' } });
+  const tablas = (fac: Resultado = FAC) => conTablas({ pago_recibido: [ABONO], factura_emitida: [fac], rep_emitido: [OK({ id: 'rep-1' })] });
+
+  it('el XML bueno (timbre, factura, importe y receptor) se registra', async () => {
+    tablas();
+    await expect(registrarRepEmitido(T, { ...BASE, xml: xmlRep() })).resolves.toBe('rep-1');
+  });
+
+  it('el XML de OTRO pago (otro timbre) con el UUID tecleado de este se rechaza', async () => {
+    tablas();
+    await expect(registrarRepEmitido(T, { ...BASE, xml: xmlRep({ uuid: 'dddddddd-0000-4000-8000-000000000001' }) })).rejects.toThrow(/no es el que capturaste/i);
+  });
+
+  it('un XML que ampara OTRA factura se rechaza', async () => {
+    tablas();
+    await expect(registrarRepEmitido(T, { ...BASE, xml: xmlRep({ doc: 'eeeeeeee-0000-4000-8000-000000000002' }) })).rejects.toThrow(/no ampara esta factura/i);
+  });
+
+  it('un XML con otro importe pagado se rechaza, con las dos cifras', async () => {
+    tablas();
+    const e = registrarRepEmitido(T, { ...BASE, xml: xmlRep({ imp: '5000.00' }) });
+    await expect(e).rejects.toThrow(/\$5,000\.00/);
+    await expect(registrarRepEmitido(T, { ...BASE, xml: xmlRep({ imp: '5000.00' }) })).rejects.toThrow(/\$11,600\.00/);
+  });
+
+  it('un XML de otro cliente (receptor distinto) se rechaza', async () => {
+    tablas();
+    await expect(registrarRepEmitido(T, { ...BASE, xml: xmlRep({ receptor: 'ZZZ030303ZZ3' }) })).rejects.toThrow(/receptor/i);
+  });
+
+  it('un XML que no es un complemento de pago se rechaza', async () => {
+    tablas();
+    await expect(registrarRepEmitido(T, { ...BASE, xml: '<hola/>' })).rejects.toThrow(/no es un complemento de pago/i);
+  });
+
+  it('con XML pero factura sin UUID: no hay con qué cotejar, se rechaza', async () => {
+    tablas(OK({ id: FACTURA, cfdi_uuid: null, cliente: { rfc: 'BBB020202BB2' } }));
+    await expect(registrarRepEmitido(T, { ...BASE, xml: xmlRep() })).rejects.toThrow(/aún no tiene UUID/i);
+  });
+
+  it('sin XML nada se coteja (el portal ya dice que el archivo hay que pedirlo)', async () => {
+    tablas(OK(null));
+    await expect(registrarRepEmitido(T, { ...BASE, xml: '' })).resolves.toBe('rep-1');
+  });
+});
+
 describe('sellarRepEntregado — el sello no puede negar el documento', () => {
   const UUID = 'aaaaaaaa-bbbb-4ccc-8ddd-000000000001';
 

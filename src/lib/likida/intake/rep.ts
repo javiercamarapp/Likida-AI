@@ -62,6 +62,8 @@ export interface RepXmlData {
   uuid: string;
   fecha?: string;
   rfcEmisor?: string;
+  /** RFC del receptor del REP (el cliente que pagó); lo usan quienes cotejan el XML contra la factura. */
+  rfcReceptor?: string;
   pagos: RepPago[];
 }
 
@@ -149,10 +151,12 @@ export function parseRepXml(xml: string): RepXmlData | null {
     if (pagos.length === 0) return null;
 
     const emisor = (comp.Emisor ?? {}) as Record<string, string>;
+    const receptor = (comp.Receptor ?? {}) as Record<string, string>;
     return {
       uuid: uuidRaw.toLowerCase(),
       fecha: (comp['@_Fecha'] as string) || undefined,
       rfcEmisor: (emisor['@_Rfc'] as string)?.toUpperCase() || undefined,
+      rfcReceptor: (receptor['@_Rfc'] as string)?.toUpperCase() || undefined,
       pagos,
     };
   } catch {
