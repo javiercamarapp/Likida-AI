@@ -7,8 +7,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const TABLAS: Record<string, unknown[]> = {};
 let errorSiguiente: { message: string } | null = null;
+// A37-S39-06: la lectura del perfil (tabla `tenant`) puede fallar aparte.
+let errorTenant: { message: string } | null = null;
+let fallosTenant = 0; // fallos transitorios antes de responder bien
 
-function builder() {
+function builder(tabla = 'app_user') {
   const b: Record<string, unknown> = {};
   const self = () => b;
   // `or` entra con AGEN-1: el filtro de la baja va también en la base. El doble
@@ -17,9 +20,10 @@ function builder() {
   // `range`/`order` entran con el BAJO de la reauditoría 25 (`telefonosJefe`
   // ahora pasa por `traerTodo`) — mismo motivo, no-op en el doble.
   for (const m of ['select', 'in', 'limit', 'eq', 'not', 'or', 'range', 'order']) b[m] = self;
-  b.then = (ok: (v: unknown) => unknown) => Promise.resolve({
-    data: errorSiguiente ? null : (TABLAS.app_user ?? []), error: errorSiguiente,
-  }).then(ok);
+  b.then = (ok: (v: unknown) => unknown) => Promise.resolve(tabla === 'tenant'
+    ? (fallosTenant > 0 ? (fallosTenant--, { data: null, error: { message: 'blip' } }) : { data: errorTenant ? null : (TABLAS.tenant ?? []), error: errorTenant })
+    : { data: errorSiguiente ? null : (TABLAS.app_user ?? []), error: errorSiguiente },
+  ).then(ok);
   // `telefonoDeUsuario` filtra por `id` exacto y lee una fila (maybeSingle) en
   // vez del patrón array + `.find()` de las demás funciones de este archivo.
   b.maybeSingle = async () => ({
@@ -27,7 +31,7 @@ function builder() {
   });
   return b;
 }
-vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: () => builder() }) }));
+vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: (t: string) => builder(t) }) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 // `telefonosJefe` (BAJO, reauditoría 25) pasa por `traerTodo` para no
 // recortarse en silencio a 1,000 filas. Se mockea como UN solo viaje —la
@@ -45,9 +49,9 @@ const traerTodo = vi.hoisted(() => vi.fn(async (
 }));
 vi.mock('./pg', () => ({ traerTodo }));
 
-const { resolverCuentaOficina, TelefonoAmbiguo, telefonoJefeDe, telefonoParaDineroDe, telefonosJefe, telefonoDeUsuario } = await import('./contactos');
+const { resolverCuentaOficina, TelefonoAmbiguo, telefonoJefeDe, resolverJefes, telefonoParaDineroDe, telefonosJefe, telefonoDeUsuario } = await import('./contactos');
 
-beforeEach(() => { TABLAS.app_user = []; errorSiguiente = null; traerTodo.mockClear(); });
+beforeEach(() => { TABLAS.app_user = []; TABLAS.tenant = []; errorSiguiente = null; errorTenant = null; fallosTenant = 0; traerTodo.mockClear(); });
 
 describe('resolverCuentaOficina — quién es el teléfono', () => {
   const u = (p: Record<string, unknown>) => ({ id: 'u-1', tenant_id: 't-1', rol: 'encargado', nombre: 'Ana', email: 'ana@x.mx', telefono: '529991234567', ...p });
@@ -237,5 +241,48 @@ describe('telefonoDeUsuario — el teléfono de UN humano puntual', () => {
   it('LANZA si la base falló (no se afirma "sin teléfono")', async () => {
     errorSiguiente = { message: 'fetch failed' };
     await expect(telefonoDeUsuario('u-1', 't-1')).rejects.toThrow(/fetch failed/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A37-S39-06 — el aviso al jefe respeta el PATIO del viaje y, si el perfil de
+// la flota no se puede leer, NO cae al orden por omisión (fail-closed).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('A37-S39-06 · jefe por patio y perfil ilegible', () => {
+  const enc = (id: string, tel: string, terminal: string | null) =>
+    ({ id, tenant_id: 't-1', rol: 'encargado', telefono: tel, activo: true, terminal_id: terminal });
+
+  it('el aviso de un viaje del patio B llega al encargado del patio B, no al de menor id', async () => {
+    TABLAS.app_user = [enc('a', '5210000000001', 'patio-a'), enc('b', '5210000000002', 'patio-b')];
+    const jefe = await resolverJefes(['t-1']);
+    expect(jefe('t-1', 'patio-b')).toBe('5210000000002');
+    expect(jefe('t-1', 'patio-a')).toBe('5210000000001');
+  });
+
+  it('un encargado sin patio atiende los viajes de cualquier patio sin encargado propio', async () => {
+    TABLAS.app_user = [enc('a', '5210000000001', 'patio-a'), enc('g', '5210000000009', null)];
+    const jefe = await resolverJefes(['t-1']);
+    expect(jefe('t-1', 'patio-c')).toBe('5210000000009');
+  });
+
+  it('sin patio en el viaje se conserva el comportamiento anterior', async () => {
+    TABLAS.app_user = [enc('a', '5210000000001', 'patio-a')];
+    expect((await resolverJefes(['t-1']))('t-1')).toBe('5210000000001');
+    expect(await telefonosJefe(['t-1'])).toEqual({ 't-1': '5210000000001' });
+  });
+
+  it('si la lectura del perfil falla, la flota queda SIN destinatario (no cae al encargado por omisión)', async () => {
+    TABLAS.app_user = [
+      { id: 'e', tenant_id: 't-1', rol: 'encargado', telefono: '5210000000001', activo: true },
+      { id: 'o', tenant_id: 't-1', rol: 'flota_admin', telefono: '5210000000005', activo: true },
+    ];
+    errorTenant = { message: 'caída' };
+    expect(await telefonosJefe(['t-1'])).toEqual({});
+  });
+
+  it('un fallo pasajero del perfil se reintenta una vez', async () => {
+    TABLAS.app_user = [{ id: 'e', tenant_id: 't-1', rol: 'encargado', telefono: '5210000000001', activo: true }];
+    fallosTenant = 1;
+    expect(await telefonosJefe(['t-1'])).toEqual({ 't-1': '5210000000001' });
   });
 });

@@ -33,7 +33,7 @@ vi.mock('@/lib/meta/client', async (original) => ({
   },
 }));
 vi.mock('./operacion', () => ({ avisarAlChofer }));
-vi.mock('./contactos', () => ({ telefonosJefe }));
+vi.mock('./contactos', () => ({ telefonosJefe, resolverJefes: async (ids: string[]) => { const m = await telefonosJefe(ids); return (t: string) => m[t] ?? null; } }));
 vi.mock('./agentes/notificaciones', () => ({ avisar, avisarCorridasPorFlota }));
 vi.mock('./agentes/corridas', () => ({ registrarCorrida }));
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador }));

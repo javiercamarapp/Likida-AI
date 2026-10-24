@@ -231,9 +231,10 @@ const LIGA_DESPACHO = 'https://app.likida.ai/dashboard/despacho';
  */
 async function avisarJefeConfirmo(tenantId: string, viajeId: string, ahora: Date): Promise<void> {
   try {
-    const tel = await telefonoJefeDe(tenantId);
-    if (!tel) return;
+    // A37-S39-06: el viaje se lee primero para avisar al jefe de SU patio.
     const v = await cargarViajeContexto(tenantId, viajeId);
+    const tel = await telefonoJefeDe(tenantId, v?.terminalId ?? null);
+    if (!tel) return;
     const chofer = v?.operadorNombre ?? 'Tu chofer';
     const folio = v?.folio ?? 'sin folio';
     const texto = `${chofer} ya confirmó el viaje ${folio}: va en curso. No hace falta reasignarlo.`;
@@ -258,11 +259,12 @@ async function avisarJefeConfirmo(tenantId: string, viajeId: string, ahora: Date
 async function avisarJefeRechazo(tenantId: string, viajes: ViajeAsignado[], ahora: Date): Promise<void> {
   if (viajes.length === 0) return;
   try {
-    const tel = await telefonoJefeDe(tenantId);
-    if (!tel) return;
     // El operador es el mismo para todos los de esta lista (viene de
     // `viajesPorConfirmar`, acotada por operador); el nombre se lee del primero.
+    // A37-S39-06: el patio también se toma del primero, para avisar al jefe de ese patio.
     const v = await cargarViajeContexto(tenantId, viajes[0].id);
+    const tel = await telefonoJefeDe(tenantId, v?.terminalId ?? null);
+    if (!tel) return;
     const chofer = v?.operadorNombre ?? 'Tu chofer';
     const folios = viajes.map((x) => x.folio ?? x.id.slice(0, 8));
     const texto = viajes.length === 1
