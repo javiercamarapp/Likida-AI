@@ -30,6 +30,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { logger } from '@/lib/logger';
+import { httpsPublico } from '@/lib/http/https_publico';
 import { leerZip } from './zip';
 import type {
   ProveedorDescargaSat, RangoDescarga, ResultadoCredencial, ResultadoPaquete,
@@ -40,6 +41,10 @@ const TIMEOUT_MS = 30_000;
 /** Bajar el paquete es lo pesado del ciclo: un ZIP con miles de CFDI no cabe
  *  en los 30 s del resto de las llamadas. */
 const TIMEOUT_DESCARGA_MS = 120_000;
+/** A37-L-08: tope de bytes del ZIP YA COMPRIMIDO. 256 MB de XML desinflado
+ *  (`MAX_DESINFLADO`) comprimen ~10:1 o más, así que 64 MiB deja margen de
+ *  sobra a un paquete real y corta uno anómalo antes de llenar la memoria. */
+const MAX_PAQUETE_BYTES = 64 * 1024 * 1024;
 // Mismo criterio que la capa PAC: SW emite tokens largos y 2 h de caché deja
 // margen de sobra. Renovar de más es barato; usar un token muerto no.
 const TOKEN_CACHE_MS = 2 * 60 * 60 * 1000;
@@ -269,19 +274,25 @@ export function crearProveedorSatSw(cfg: ConfigSw): ProveedorDescargaSat {
         return err('rechazado', mensaje, codigo);
       }
 
-      let zip: Response;
+      // A37-L-08: la URL firmada la entrega el proveedor y se trata como dato
+      // no confiable — solo HTTPS a una IP pública (anti-SSRF) y con tope de
+      // bytes, no un `fetch` abierto que acumule lo que sea en memoria.
+      let zip: Awaited<ReturnType<typeof httpsPublico>>;
       try {
-        zip = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_DESCARGA_MS) });
+        zip = await httpsPublico(
+          { url, metodo: 'GET', maxBytesAbsoluto: MAX_PAQUETE_BYTES },
+          TIMEOUT_DESCARGA_MS,
+        );
       } catch (e) {
         return err('red', `No se pudo bajar el paquete: ${e instanceof Error ? e.message : String(e)}`);
       }
-      if (!zip.ok) {
+      if (zip.estado < 200 || zip.estado >= 300) {
         // El paquete del SAT vive 72 h y se puede bajar 2 veces. Un 403/404
         // aquí suele ser exactamente eso, y decirlo evita que alguien reintente
         // en vano lo que ya caducó.
-        return err('rechazado', `El paquete no se pudo bajar (HTTP ${zip.status}). Los paquetes del SAT viven 72 horas y admiten 2 descargas: si ya se consumieron, hay que volver a solicitar el rango.`);
+        return err('rechazado', `El paquete no se pudo bajar (HTTP ${zip.estado}). Los paquetes del SAT viven 72 horas y admiten 2 descargas: si ya se consumieron, hay que volver a solicitar el rango.`);
       }
-      const bytes = Buffer.from(await zip.arrayBuffer());
+      const bytes = Buffer.from(zip.bytes.buffer, zip.bytes.byteOffset, zip.bytes.byteLength);
       const { entradas, truncado, ilegibles } = leerZip(bytes);
       if (truncado || ilegibles > 0) {
         logger.warn('sat.sw.paquete_parcial', { entradas: entradas.length, truncado, ilegibles });

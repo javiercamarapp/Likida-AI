@@ -54,7 +54,19 @@ const RFC = /\b[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}\b/;
 // cubre. No se generaliza a "12 o 13 dígitos" a propósito: un epoch en
 // milisegundos tiene 13 dígitos y se convertiría en `[TEL]`, que es cómo se
 // pierde la hora de un evento.
-const PHONE = /\b\+?521?\d{10}\b|\b\d{10}\b/;
+//
+// A37-L-12: además de los pegados, el texto libre trae teléfonos con
+// SEPARADORES y con lada de otro país («+1 956 555 0100», «55 1234 5678»,
+// «(956) 555-0100»). Se cubren formas con estructura de teléfono —con «+» y
+// lada, o 3 grupos separados por espacio/guion/punto— y no «cualquier cosa con
+// 10 dígitos», para no tragarse fechas (4-2-2), importes ni versiones.
+const PHONE = new RegExp([
+  '\\b\\+?521?\\d{10}\\b',
+  '\\b\\d{10}\\b',
+  '\\+\\d{1,3}[\\s.-]?\\(?\\d{2,4}\\)?[\\s.-]\\d{3,4}[\\s.-]\\d{3,4}\\b',
+  '\\(\\d{2,4}\\)\\s?\\d{3,4}[\\s-]\\d{4}\\b',
+  '\\b\\d{2,3}[\\s-]\\d{3,4}[\\s-]\\d{4}\\b',
+].join('|'));
 // Datos patrimoniales. Auditoría 11 · ALTO (legal): la CLABE (18 dígitos) y el
 // PAN de tarjeta (16) vivían fuera del redactor, y un log de pago/devolución
 // que los trajera los emitía en claro. Se fijan en 18 y 16 EXACTOS y no en un
@@ -114,7 +126,9 @@ export function redactarTexto(s: string): string {
     // seguidas de dígitos («XAXX010101000@x.com») también cumple el patrón de
     // RFC — la presencia de `@` desambigua sin ambigüedad posible.
     if (m.includes('@')) return '[EMAIL]'; // dato personal: se borra
-    if (m.includes('-')) return huellaId(m); // UUID: se conserva la traza
+    // UUID por FORMA, no por «trae un guion»: un teléfono con guiones («956-555-0100») no es UUID y
+    // una huella suya sería reversible por fuerza bruta (A37-L-12).
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(m)) return huellaId(m);
     if (/^\d{18}$/.test(m)) return '[CLABE]'; // dato patrimonial: se borra
     if (/^\d{16}$/.test(m)) return '[TARJETA]'; // dato patrimonial: se borra
     if (/^[A-ZÑ&]/.test(m)) return '[RFC]'; // dato fiscal: se borra

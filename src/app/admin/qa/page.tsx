@@ -1,7 +1,7 @@
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
-  leerManifiesto, listarCorridas, gastoHoyUsd, firmarRutas, leerUltimasLecturas, BUCKET_QA_FOTOS,
+  leerManifiesto, listarCorridas, gastoTotalHoyUsd, firmarRutas, leerUltimasLecturas, BUCKET_QA_FOTOS,
 } from '@/lib/admin/qa-storage';
 import { TOPE_DIA_USD } from '@/lib/admin/qa-tipos';
 import { TOPE_CORRIDA_USD } from '../../../../scripts/qa-agentes/config.qa';
@@ -40,7 +40,7 @@ export default async function QaPage() {
   }
 
   const historial = await listarCorridas(db).catch((e) => ({ ok: false as const, error: String(e) }));
-  const gasto = await gastoHoyUsd(db).catch((e) => ({ ok: false as const, error: String(e) }));
+  const gasto = await gastoTotalHoyUsd(db).catch((e) => ({ ok: false as const, error: String(e) }));
 
   // La última medición del OCR por foto (mig. 0239). Fuente PROPIA: que falle
   // no puede vaciar el banco ni el historial — el panel dice qué fuente se

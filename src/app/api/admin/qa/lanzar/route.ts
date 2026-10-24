@@ -19,7 +19,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { validarLanzar } from '@/lib/admin/qa-tipos';
 import { crearCorrida, ejecutarCorridaRapida, TOPE_DIA_USD } from '@/lib/admin/qa-motor';
-import { gastoHoyUsd, guardarCorrida, leerManifiesto } from '@/lib/admin/qa-storage';
+import { gastoTotalHoyUsd, guardarCorrida, leerManifiesto } from '@/lib/admin/qa-storage';
 import { sesionSuperadmin } from '../puerta';
 import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
 
   // El freno del día, re-chequeado en el servidor (la UI también lo enseña,
   // pero la restricción de interfaz no es el candado).
-  const gasto = await gastoHoyUsd(db);
+  const gasto = await gastoTotalHoyUsd(db);
   if (!gasto.ok) {
     return NextResponse.json({ error: `no se pudo leer el gasto del día (${gasto.error}) — no se lanza a ciegas` }, { status: 502 });
   }

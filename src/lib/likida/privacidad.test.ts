@@ -496,4 +496,21 @@ describe('tipoDeSolicitudArco y venceArco — el registro que el aviso promete',
     const d = new Date(`${vence}T00:00:00Z`);
     expect([1, 2, 3, 4, 5]).toContain(d.getUTCDay());
   });
+
+  // A37-L-11: el calendario del plazo es el de MÉXICO, no el UTC. El jueves
+  // 22-oct-2026 a las 19:00 CDMX ya es viernes en UTC (01:00Z del 23): contando
+  // desde el día UTC, el plazo vencía un día hábil después del que ve la flota.
+  it('A37-L-11 · una solicitud del jueves 19:00 CDMX cuenta desde el jueves, no desde el viernes UTC', () => {
+    expect(venceArco(new Date('2026-10-23T01:00:00Z'), 1)).toBe('2026-10-23');
+    expect(venceArco(new Date('2026-10-23T01:00:00Z'), 2)).toBe('2026-10-26');
+  });
+
+  it('A37-L-11 · un sábado en México (aunque ya sea domingo UTC) cuenta desde el sábado', () => {
+    // Sáb 24-oct-2026 20:00 CDMX = dom 25 02:00Z. +1 hábil = lunes 26.
+    expect(venceArco(new Date('2026-10-25T02:00:00Z'), 1)).toBe('2026-10-26');
+  });
+
+  it('A37-L-11 · un mediodía normal sigue sumando igual', () => {
+    expect(venceArco(new Date('2026-10-21T18:00:00Z'), 3)).toBe('2026-10-26');
+  });
 });
