@@ -187,6 +187,18 @@ describe('logger — lo que sí es dato personal se borra entero', () => {
     logger.info('presupuesto', { ahora: 1785312000000 });
     expect(ultimaLinea(spy)).toContain('1785312000000');
   });
+
+  it('A37-S60-01: un número sin comillas de 10/16/18 dígitos NO invalida el meta', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    logger.error('x', { ts: 1700000000, bytes: 1073741824, costo: 0.1234567891, err: 'falló', tel: '9993700779' });
+    const salida = ultimaLinea(spy);
+    expect(salida).not.toContain('[unserializable]');
+    expect(salida).toContain('1700000000');
+    expect(salida).toContain('falló');
+    // los strings con dato personal siguen redactándose
+    expect(salida).toContain('[TEL]');
+    expect(salida).not.toContain('9993700779');
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
