@@ -120,7 +120,7 @@ async function ejecutarPorFacturar(tenantId: string): Promise<ResultadoHerramien
   });
   const texto = [
     `${numero(r.total)} comprobante${r.total === 1 ? '' : 's'} sin factura por ${mxn(r.montoTotal)} en total.`,
-    `Vencidos: ${numero(r.vencidos)} (${mxn(r.montoVencido)} cuyo IVA ya no se va a poder acreditar). Urgentes (2 días o menos): ${numero(r.urgentes)}.`,
+    `Vencidos: ${numero(r.vencidos)} (${mxn(r.montoVencido)} de gasto; el portal del comercio ya no los factura, pero legalmente aún puedes exigir la factura durante el ejercicio). Urgentes (2 días o menos): ${numero(r.urgentes)}.`,
     ...(lineas.length > 0 ? ['', 'Los que piden acción ya:', ...lineas] : []),
     '',
     'La facturación se hace desde el panel; aquí solo se reporta.',
