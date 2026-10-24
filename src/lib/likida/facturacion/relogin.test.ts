@@ -128,6 +128,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   registros.length = 0;
   registrarIntento.mockResolvedValue(true);
+  registrarResultado.mockResolvedValue(true as never);
   contrasenaDePortal.mockResolvedValue({ usuario: 'ana@flota.mx', contrasena: SECRETO });
 });
 
@@ -295,6 +296,33 @@ describe('los cortes que solo un humano pasa', () => {
     // no hay un segundo intento: una sola pasada por el formulario.
     expect(pagina.clics).toEqual(['#btnEntrar']);
     expect(guardarSesionPortal).not.toHaveBeenCalled();
+  });
+
+  it('A37-S45-02: si otra corrida reclamó el intento, NO abre el cofre ni teclea', async () => {
+    permisoDeRelogin.mockResolvedValue(permitido());
+    registrarIntento.mockResolvedValue('ocupado' as never);
+    const { pagina, args } = entorno([LOGIN]);
+
+    const r = await reconectarPortal({ tenantId: TENANT, comercio: CLAVE, entorno: args });
+
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.intentado).toBe(false);
+    expect(r.ok === false && r.pideHumano).toBe(false);
+    expect(pagina.abrir).not.toHaveBeenCalled();
+    expect(contrasenaDePortal).not.toHaveBeenCalled();
+  });
+
+  it('A37-S45-04: si no se pudo guardar el bloqueo de credencial inválida, el motivo lo dice', async () => {
+    permisoDeRelogin.mockResolvedValue(permitido());
+    registrarResultado.mockResolvedValue(false as never);
+    const rechazada = INV({ ...LOGIN, texto: 'Usuario o contraseña incorrectos' });
+    const { args } = entorno([LOGIN, rechazada]);
+
+    const r = await reconectarPortal({ tenantId: TENANT, comercio: CLAVE, entorno: args });
+
+    expect(r.ok === false && r.clase).toBe('credencial_invalida');
+    expect(r.ok === false && r.motivo).toContain('no se pudo guardar el bloqueo');
+    expect(r.ok === false && r.pideHumano).toBe(true);
   });
 
   it('CUENTA BLOQUEADA: se corta antes de teclear, y el motivo lo dice', async () => {

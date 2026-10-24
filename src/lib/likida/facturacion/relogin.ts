@@ -162,6 +162,12 @@ export async function reconectarPortal(args: {
   // esta función muere a media sesión, el contador ya se movió. No poder
   // contar es no poder frenar, así que si no se pudo anotar, no se intenta.
   const anotado = await registrarIntento({ tenantId, comercio, permiso, hoy, ahora: new Date(ahora()).toISOString() });
+  if (anotado === 'ocupado') {
+    // A37-S45-02: otra corrida del mismo portal reclamó este intento un instante
+    // antes. No se teclea una segunda vez; tampoco es algo que una persona deba
+    // resolver — la otra corrida reporta su propio resultado.
+    return no(comercio, 'backoff', 'Otra corrida acaba de reclamar el intento de reconexión de este portal, así que esta no teclea la contraseña por segunda vez.', false, false);
+  }
   if (!anotado) {
     return no(comercio, 'no_se_pudo_leer', 'No se pudo anotar el intento de reconexión, y sin poder contarlos no hay forma de topar los reintentos. No se intentó.', false, true);
   }
@@ -342,10 +348,16 @@ async function cortar(
 ): Promise<ResultadoRelogin> {
   const motivo = `${a.ficha.nombre}: ${corte.motivo}`;
   logger.info('relogin.corte', { tenant: a.tenantId, comercio: a.comercio, clase: corte.clase });
-  await registrarResultado({
+  const guardado = await registrarResultado({
     tenantId: a.tenantId, comercio: a.comercio, ok: false,
     clase: corte.clase, motivo, ahora: new Date(a.ahora()).toISOString(),
   });
+  // A37-S45-04: el candado de «credencial inválida» solo existe si quedó
+  // escrito. Si no se pudo guardar, se dice con todas sus letras para que la
+  // persona NO deje la cuenta a merced del siguiente ciclo.
+  if (corte.clase === 'credencial_invalida' && guardado === false) {
+    return no(a.comercio, corte.clase, `${motivo} ATENCIÓN: no se pudo guardar el bloqueo, así que el sistema podría volver a intentarlo. Revisa o quita el permiso de reconexión de este portal hasta guardar la contraseña correcta.`, true, true);
+  }
   return no(a.comercio, corte.clase, motivo, true, true);
 }
 

@@ -450,24 +450,50 @@ export async function registrarIntento(args: {
   permiso: PermisoRelogin;
   hoy: string;
   ahora: string;
-}): Promise<boolean> {
+}): Promise<boolean | 'ocupado'> {
   // El contador se reinicia al cambiar el día. Se calcula aquí y no con un
   // `+1` en SQL para que la ventana sea la del DÍA DE MÉXICO y no la del
   // servidor, que corre en UTC.
   const previos = args.permiso.diaDeIntentos === args.hoy ? args.permiso.intentosDia : 0;
 
-  const { error } = await acotada(supabaseAdmin().from('portal_relogin').upsert({
-    tenant_id: args.tenantId,
-    comercio: args.comercio,
-    intentos_dia: previos + 1,
-    dia_de_intentos: args.hoy,
-    ultimo_intento_en: args.ahora,
-    actualizado_en: args.ahora,
-  }, { onConflict: 'tenant_id,comercio' }), 'registrarIntento');
+  // A37-S45-02: RECLAMAR el intento con un UPDATE condicional (compare-and-swap)
+  // sobre exactamente lo que `candadoDeRelogin` evaluó. Antes era un upsert
+  // incondicional: dos corridas simultáneas (cron + QStash) leían ambas
+  // «0 intentos, sin último intento», ambas pasaban el candado y ambas tecleaban
+  // la contraseña. Ahora solo UNA afecta la fila; la otra ve cero filas y no
+  // intenta. También exige que el permiso siga vigente y sin bloqueo, para que
+  // una revocación o un bloqueo a medio vuelo no se pisen.
+  let q = supabaseAdmin()
+    .from('portal_relogin')
+    .update({
+      intentos_dia: previos + 1,
+      dia_de_intentos: args.hoy,
+      ultimo_intento_en: args.ahora,
+      actualizado_en: args.ahora,
+    })
+    .eq('tenant_id', args.tenantId)
+    .eq('comercio', args.comercio)
+    .eq('permitido', true)
+    .eq('bloqueado', false)
+    .eq('intentos_dia', args.permiso.intentosDia);
+  q = args.permiso.diaDeIntentos == null
+    ? q.is('dia_de_intentos', null)
+    : q.eq('dia_de_intentos', args.permiso.diaDeIntentos);
+  q = args.permiso.ultimoIntentoEn == null
+    ? q.is('ultimo_intento_en', null)
+    : q.eq('ultimo_intento_en', args.permiso.ultimoIntentoEn);
+
+  const { data, error } = await acotada(q.select('comercio'), 'registrarIntento');
 
   if (error) {
     logger.warn('relogin.intento_sin_anotar', { tenant: args.tenantId, comercio: args.comercio, err: error.message });
     return false;
+  }
+  if (!data || data.length === 0) {
+    // Otra corrida reclamó el intento primero (o el permiso cambió entre la
+    // lectura y la escritura). No es un error: es el candado haciendo su trabajo.
+    logger.info('relogin.intento_ya_reclamado', { tenant: args.tenantId, comercio: args.comercio });
+    return 'ocupado';
   }
   return true;
 }
@@ -488,7 +514,7 @@ export async function registrarResultado(args: {
   clase: ClaseDeCorte | 'reconectado' | 'sin_campos' | 'portal_no_contesto' | null;
   motivo: string | null;
   ahora: string;
-}): Promise<void> {
+}): Promise<boolean> {
   const bloquear = args.clase === 'credencial_invalida';
   const fila: Record<string, unknown> = {
     tenant_id: args.tenantId,
@@ -502,16 +528,26 @@ export async function registrarResultado(args: {
   if (args.ok) fila.ultimo_exito_en = args.ahora;
   if (bloquear) fila.bloqueado = true;
 
-  try {
-    const { error } = await acotada(supabaseAdmin()
-      .from('portal_relogin')
-      .upsert(fila, { onConflict: 'tenant_id,comercio' }), 'registrarResultado');
-    if (error) throw new Error(error.message);
-  } catch (e) {
-    logger.warn('relogin.resultado_sin_anotar', {
-      tenant: args.tenantId, comercio: args.comercio,
-      err: e instanceof Error ? e.message : String(e),
-    });
+  // A37-S45-04: el bloqueo por credencial inválida es el candado innegociable;
+  // si su escritura falla NO se puede tragar. Se reintenta (3 veces en total) y
+  // se devuelve si quedó. Los demás resultados siguen siendo best-effort.
+  const intentos = bloquear ? 3 : 1;
+  let guardado = false;
+  for (let i = 1; i <= intentos && !guardado; i++) {
+    try {
+      const { error } = await acotada(supabaseAdmin()
+        .from('portal_relogin')
+        .upsert(fila, { onConflict: 'tenant_id,comercio' }), 'registrarResultado');
+      if (error) throw new Error(error.message);
+      guardado = true;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (bloquear && i === intentos) {
+        logger.error('relogin.bloqueo_sin_guardar', { tenant: args.tenantId, comercio: args.comercio, err: msg });
+      } else {
+        logger.warn('relogin.resultado_sin_anotar', { tenant: args.tenantId, comercio: args.comercio, err: msg });
+      }
+    }
   }
 
   // La bitácora es lo que hace citable «reconecté sola el 9 de agosto». El
@@ -525,6 +561,7 @@ export async function registrarResultado(args: {
     entidadId: args.comercio,
     detalle: { comercio: args.comercio, clase: args.clase, motivo: args.motivo?.slice(0, MAX_MOTIVO) ?? null },
   }, { evento: 'relogin.bitacora_no_escribio' });
+  return guardado;
 }
 
 /**
