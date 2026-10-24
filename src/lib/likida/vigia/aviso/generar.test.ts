@@ -115,7 +115,7 @@ describe('generarAvisos · apagado por defecto', () => {
   });
 });
 
-describe('A37-INN-A4-02 · el mismo servicio subido con dos terminales distintas (typo) no duplica los avisos', () => {
+describe('A37-A4-02 · el mismo servicio subido con dos terminales distintas (typo) no duplica los avisos', () => {
   const gemela = (f: FilaDelPrograma): FilaDelPrograma => fila({ fecha: f.fecha, tipo: f.tipo, cliente: f.cliente, caja: f.caja, unidad: f.unidad, citaEn: f.citaEn, consignatario: f.consignatario });
 
   it('dos filas idénticas (GDL / GLD) generan UN aviso, y una pasada posterior tampoco crea el de la otra copia', async () => {

@@ -78,7 +78,7 @@ export interface ResultadoGeneracion {
   duplicados: number;
   /** Listas que no se procesaron por el tope de la pasada. */
   omitidas: number;
-  /** A37-INN-A4-02: copias del MISMO servicio (otra terminal por un typo) que no generaron un segundo aviso. */
+  /** A37-A4-02: copias del MISMO servicio (otra terminal por un typo) que no generaron un segundo aviso. */
   repetidasPorClave: number;
   /** true si se alcanzó algún tope (de proceso o de lectura). */
   acotada: boolean;
@@ -268,7 +268,7 @@ export async function generarAvisos(tenantId: string, ahora: Date, deps: DepsGen
   for (let i = 0; i < todas.length; i += PAGINA_FILAS) {
     for (const a of await deps.repo.avisosDeFilas(tenantId, todas.slice(i, i + PAGINA_FILAS).map((f) => f.id))) existentes.add(a.filaId);
   }
-  // A37-INN-A4-02: la terminal es texto libre; subir GDL y luego GLD deja DOS juegos de filas del mismo servicio. Un servicio es
+  // A37-A4-02: la terminal es texto libre; subir GDL y luego GLD deja DOS juegos de filas del mismo servicio. Un servicio es
   // (fecha, sección, caja, unidad, cliente, consignatario, cita); si alguna copia ya tiene aviso, las demás se tienen por cubiertas.
   const claveServicio = (f: FilaDelPrograma): string | null =>
     f.caja === null && f.unidad === null ? null : [f.fecha, f.tipo, f.caja, f.unidad, f.cliente, f.consignatario, f.citaEn].map((x) => x ?? '').join('|');

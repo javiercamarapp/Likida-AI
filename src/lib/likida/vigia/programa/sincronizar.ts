@@ -238,7 +238,7 @@ async function aplicar(
     if (delta.length > 0) { res.cambiadas++; cambios.push(...delta); } else res.sinCambio++;
   });
 
-  // A37-INN-A4-03: un archivo parcial (solo EXPORTACION de los últimos días) no dice nada de las secciones que no trae. Dentro de un
+  // A37-A4-03: un archivo parcial (solo EXPORTACION de los últimos días) no dice nada de las secciones que no trae. Dentro de un
   // día que el archivo SÍ trae, solo se ocultan las filas de las secciones (fecha, tipo) que el archivo trae; un día entero que no
   // viene en medio del rango conserva su regla de siempre (se oculta).
   const seccionesPorDia = new Map<string, Set<string>>();

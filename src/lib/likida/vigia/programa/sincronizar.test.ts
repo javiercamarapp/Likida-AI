@@ -249,7 +249,7 @@ describe('sincronizarPrograma · detección de cambios', () => {
     expect(r.desaparecidas).toBe(1);
   });
 
-  it('A37-INN-A4-03: un archivo parcial con solo EXPORTACION de esas fechas NO oculta las filas de IMPORTACION del mismo día', async () => {
+  it('A37-A4-03: un archivo parcial con solo EXPORTACION de esas fechas NO oculta las filas de IMPORTACION del mismo día', async () => {
     const m = repoEnMemoria();
     await sincronizarPrograma(T1, 'GDL', lectura([
       fila(1, { tipo: 'EXPORTACION' }), fila(2, { tipo: 'EXPORTACION' }), fila(1, { tipo: 'IMPORTACION' }), fila(2, { tipo: 'IMPORTACION' }),
