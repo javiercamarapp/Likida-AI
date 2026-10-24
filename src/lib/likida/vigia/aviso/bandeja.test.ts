@@ -156,16 +156,24 @@ describe('las escrituras', () => {
     expect(await crearRepoBandeja().guardarDatoManual(T1, FILA, U1, { placasCaja: 'ABC-123' })).toBe('fila_ajena');
     expect(llamadas.some((l) => l.op === 'upsert')).toBe(false);
   });
-  it('la captura manual mezcla con lo que ya había: lo vacío no borra', async () => {
-    respuesta = (l) => {
-      if (l.tabla === 'programa_despacho_fila') return { data: [{ id: FILA }], error: null };
-      if (l.op === 'select') return { data: [{ operador_nombre: 'Previo', licencia: 'L-1', licencia_vence: null, telefono: null, placas_unidad: 'OLD-111', placas_caja: null, estado_caja: null }], error: null };
-      return { data: null, error: null };
-    };
-    expect(await crearRepoBandeja().guardarDatoManual(T1, FILA, U1, { placasCaja: 'ABC-123', placasUnidad: '' })).toBe('guardado');
+  it('A37-INN-A4-08: la captura manual NO lee-mezcla-escribe: el upsert lleva solo las columnas tocadas', async () => {
+    respuesta = (l) => (l.tabla === 'programa_despacho_fila' ? { data: [{ id: FILA }], error: null } : { data: null, error: null });
+    expect(await crearRepoBandeja().guardarDatoManual(T1, FILA, U1, { placasCaja: 'ABC-123' })).toBe('guardado');
+    expect(llamadas.some((l) => l.tabla === 'vigia_dato_viaje_manual' && l.op === 'select')).toBe(false);
     const up = llamadas.find((l) => l.op === 'upsert');
-    expect(up?.valores).toMatchObject({ tenant_id: T1, fila_id: FILA, operador_nombre: 'Previo', licencia: 'L-1', placas_unidad: 'OLD-111', placas_caja: 'ABC-123', editado_por: U1 });
+    expect(up?.valores).toMatchObject({ tenant_id: T1, fila_id: FILA, placas_caja: 'ABC-123', editado_por: U1 });
+    expect(Object.keys(up?.valores as object)).not.toContain('operador_nombre');
     expect(up?.opciones).toEqual({ onConflict: 'tenant_id,fila_id' });
+  });
+  it('A37-INN-A4-08: borrar es explícito (null) y lo vacío no borra', async () => {
+    expect(validarDatoManual({ placasCaja: '', telefono: '' })).toMatchObject({ ok: false });
+    const v = validarDatoManual({ placasCaja: 'ABC-123', borrar: ['telefono'] });
+    expect(v).toMatchObject({ ok: true, valor: { placasCaja: 'ABC-123', telefono: null } });
+    expect(validarDatoManual({ telefono: '5512345678', borrar: ['telefono'] })).toMatchObject({ ok: false });
+    expect(validarDatoManual({ borrar: ['tenant_id'] })).toMatchObject({ ok: false });
+    respuesta = (l) => (l.tabla === 'programa_despacho_fila' ? { data: [{ id: FILA }], error: null } : { data: null, error: null });
+    await crearRepoBandeja().guardarDatoManual(T1, FILA, U1, { telefono: null });
+    expect(llamadas.find((l) => l.op === 'upsert')?.valores).toMatchObject({ telefono: null });
   });
 });
 

@@ -55,6 +55,7 @@ export interface AvisoBandeja {
   enviadoEn: string | null;
 }
 
+/** `undefined` = no se toca; texto = se escribe; `null` = se BORRA ese dato (acción explícita de la persona). */
 export interface DatoManualEntrada {
   operadorNombre?: string | null;
   licencia?: string | null;
@@ -154,18 +155,19 @@ export function crearRepoBandeja(): RepoBandeja {
       const fila = await acotada(db.from('programa_despacho_fila').select('id').eq('tenant_id', tenantId).eq('id', filaId).maybeSingle(), 'bandeja.fila');
       exigir('fila', fila.error);
       if (!fila.data) return 'fila_ajena';
-      const previo = await acotada(db.from('vigia_dato_viaje_manual')
-        .select('operador_nombre, licencia, licencia_vence, telefono, placas_unidad, placas_caja, estado_caja')
-        .eq('tenant_id', tenantId).eq('fila_id', filaId).maybeSingle(), 'bandeja.dato_previo');
-      exigir('dato_previo', previo.error);
-      const p = (previo.data ?? {}) as Record<string, unknown>;
-      const mezcla = (nuevo: string | null | undefined, antes: unknown): string | null => (nuevo ? nuevo : str(antes));
+      // A37-INN-A4-08: SIN leer y mezclar (dos capturas simultáneas se pisaban): el upsert lleva SOLO las columnas que la
+      // persona tocó, así que las demás ni se leen ni se escriben (merge por columna en la base). `null` = borrar ese dato.
+      const col = (v: string | null | undefined): { v: string | null } | null => (v === undefined ? null : { v: v === '' ? null : v });
+      const cambios: Record<string, string | null> = {};
+      for (const [clave, columna] of [
+        ['operadorNombre', 'operador_nombre'], ['licencia', 'licencia'], ['licenciaVence', 'licencia_vence'], ['telefono', 'telefono'],
+        ['placasUnidad', 'placas_unidad'], ['placasCaja', 'placas_caja'], ['estadoCaja', 'estado_caja'],
+      ] as const) {
+        const c = col(d[clave]);
+        if (c) cambios[columna] = c.v;
+      }
       const { error } = await acotada(db.from('vigia_dato_viaje_manual').upsert({
-        tenant_id: tenantId, fila_id: filaId,
-        operador_nombre: mezcla(d.operadorNombre, p.operador_nombre), licencia: mezcla(d.licencia, p.licencia),
-        licencia_vence: mezcla(d.licenciaVence, p.licencia_vence), telefono: mezcla(d.telefono, p.telefono),
-        placas_unidad: mezcla(d.placasUnidad, p.placas_unidad), placas_caja: mezcla(d.placasCaja, p.placas_caja),
-        estado_caja: mezcla(d.estadoCaja, p.estado_caja),
+        tenant_id: tenantId, fila_id: filaId, ...cambios,
         editado_por: userId, en: new Date().toISOString(),
       }, { onConflict: 'tenant_id,fila_id' }), 'bandeja.dato_manual');
       exigir('dato_manual', error);
@@ -226,6 +228,8 @@ function placa(v: string, rotulo: string): { ok: true; valor: string | null } | 
   return PLACA.test(p) ? { ok: true, valor: p } : { ok: false, error: `${rotulo}: usa de 3 a 12 letras, números o guiones (por ejemplo ABC-1234).` };
 }
 
+export const CAMPOS_BORRABLES = ['operadorNombre', 'licencia', 'licenciaVence', 'telefono', 'placasUnidad', 'placasCaja', 'estadoCaja'] as const;
+
 /** Valida lo que el ejecutivo escribió con las mismas reglas de la tabla (0796). Lo vacío se ignora; todo vacío es error. */
 export function validarDatoManual(entrada: Record<string, unknown>): ValidacionDato {
   const out: DatoManualEntrada = {};
@@ -266,6 +270,13 @@ export function validarDatoManual(entrada: Record<string, unknown>): ValidacionD
   if (estado !== '') {
     if (!(ESTADOS_CAJA as readonly string[]).includes(estado)) return { ok: false, error: 'Elige un estado de la caja de la lista.' };
     out.estadoCaja = estado;
+  }
+  // A37-INN-A4-08: borrar es una acción EXPLÍCITA (`borrar`: nombres de campo); lo vacío sigue sin tocar nada.
+  const borrar = Array.isArray(entrada.borrar) ? entrada.borrar.map(String) : [];
+  for (const campo of borrar) {
+    if (!(CAMPOS_BORRABLES as readonly string[]).includes(campo)) return { ok: false, error: 'Ese dato no se puede borrar.' };
+    if ((out as Record<string, unknown>)[campo] !== undefined) return { ok: false, error: 'No puedes escribir y borrar el mismo dato a la vez.' };
+    (out as Record<string, string | null>)[campo] = null;
   }
   if (Object.keys(out).length === 0) return { ok: false, error: 'Escribe al menos un dato para guardar.' };
   return { ok: true, valor: out };

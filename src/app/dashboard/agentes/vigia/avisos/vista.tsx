@@ -193,6 +193,14 @@ function Tarjeta({ t, accion, puedeDecidir }: { t: TarjetaAviso; accion: AccionA
                   <label><span className={ETIQUETA}>Vigencia de la licencia (no se envía)</span><input name="licenciaVence" type="date" className={CAMPO} /></label>
                   <label><span className={ETIQUETA}>Teléfono del operador (no se envía)</span><input name="telefono" inputMode="tel" maxLength={16} className={CAMPO} autoComplete="off" /></label>
                 </div>
+                <fieldset className="text-[11.5px]" data-testid="borrar-datos">
+                  <legend className={ETIQUETA}>Quitar un dato mal escrito (déjalo vacío arriba y márcalo aquí)</legend>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    {([['operadorNombre', 'Operador'], ['placasUnidad', 'Placas unidad'], ['placasCaja', 'Placas caja'], ['estadoCaja', 'Estado caja'], ['licencia', 'Licencia'], ['licenciaVence', 'Vigencia'], ['telefono', 'Teléfono']] as const).map(([v, r]) => (
+                      <label key={v} className="inline-flex items-center gap-1"><input type="checkbox" name="borrar" value={v} />{r}</label>
+                    ))}
+                  </div>
+                </fieldset>
                 <p className="text-[11.5px]" style={{ color: 'var(--muted)' }} data-testid="privacidad">{POLITICA_PRIVACIDAD}</p>
                 <Boton accion="capturar"><Truck width={14} height={14} strokeWidth={1.75} aria-hidden />Guardar los datos</Boton>
               </form>
