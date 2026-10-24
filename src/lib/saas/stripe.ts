@@ -359,6 +359,7 @@ export async function crearSuscripcionPorTransferencia(opciones: {
 
   const s = await pedir<{
     id: string;
+    status?: string;
     latest_invoice: { hosted_invoice_url?: string | null } | string | null;
   }>('/subscriptions', {
     cuerpo: {
@@ -402,6 +403,20 @@ export async function crearSuscripcionPorTransferencia(opciones: {
     }
     throw e;
   });
+
+  // A37-S61-05: la clave dura 24 h en Stripe. Si la flota canceló y recontrata
+  // con los mismos datos dentro de ese plazo, Stripe devuelve la respuesta
+  // GUARDADA —la suscripción ya cancelada— sin crear nada ni cobrar. Antes la
+  // pantalla decía "creada". Se verifica que lo devuelto esté vivo; no se
+  // reintenta con otra clave (ante la duda no se arriesga un doble cobro).
+  if (s.status === 'canceled' || s.status === 'incomplete_expired') {
+    logger.error('stripe.suscripcion_devuelta_muerta', { sub: s.id, status: s.status, tenantId: opciones.tenantId });
+    throw new DatoInvalido(
+      'Stripe devolvió la suscripción anterior de esta flota, que está cancelada, en lugar de crear una nueva ' +
+      '(pasa si se cancela y se vuelve a contratar en menos de 24 horas). No se creó ni se cobró nada. ' +
+      'Inténtalo de nuevo más tarde o escríbele a Likida.',
+    );
+  }
 
   const inv = s.latest_invoice;
   const urlFactura = inv && typeof inv === 'object' ? (inv.hosted_invoice_url ?? null) : null;
@@ -485,23 +500,46 @@ export async function cambiarPriceDeSuscripcion(opciones: {
   subscriptionId: string;
   priceId: string;
 }): Promise<{ subscriptionId: string }> {
-  const actual = await pedir<{ id: string; items: { data: Array<{ id: string }> } }>(
+  type ItemStripe = { id: string; price?: { id?: string } };
+  const actual = await pedir<{ id: string; items: { data: ItemStripe[] } }>(
     `/subscriptions/${encodeURIComponent(opciones.subscriptionId)}`,
     { metodo: 'GET' },
   );
 
-  const itemId = actual.items?.data?.[0]?.id;
+  const item = actual.items?.data?.[0];
+  const itemId = item?.id;
   if (!itemId) {
     throw new Error(`Stripe subscriptions/${opciones.subscriptionId}: no tiene ningún item que reemplazar.`);
   }
 
-  const s = await pedir<{ id: string }>(`/subscriptions/${encodeURIComponent(opciones.subscriptionId)}`, {
-    cuerpo: { items: [{ id: itemId, price: opciones.priceId }] },
-    // Sin esto, un reintento de red mandaría el mismo cambio dos veces — inofensivo
-    // aquí porque es idempotente por naturaleza (fija el price, no lo acumula),
-    // pero la misma disciplina que el resto del archivo.
-    idempotencia: `sub-update-${opciones.subscriptionId}-${opciones.priceId}`,
-  });
+  // Ya está en el price pedido: no hay nada que mandar (y así tampoco se choca
+  // con una respuesta guardada).
+  if (item.price?.id === opciones.priceId) return { subscriptionId: actual.id };
+
+  // A37-S61-05: la clave de Stripe dura 24 h. Con `sub-update-<sub>-<price>`, un
+  // A->B->A->B repetía exactamente la clave del primer cambio y Stripe
+  // devolvía su respuesta guardada SIN ejecutar, y la acción decía ok. Ahora la
+  // clave lleva el price de origen y el minuto: el reintento de red del mismo
+  // clic (segundos) sigue siendo la misma clave; un cambio deliberado
+  // posterior no.
+  const desde = item.price?.id ?? 'sin-price';
+  const minuto = Math.floor(Date.now() / 60_000);
+  const s = await pedir<{ id: string; items?: { data: ItemStripe[] } }>(
+    `/subscriptions/${encodeURIComponent(opciones.subscriptionId)}`,
+    {
+      cuerpo: { items: [{ id: itemId, price: opciones.priceId }] },
+      idempotencia: `sub-update-${opciones.subscriptionId}-${desde}-${opciones.priceId}-${minuto}`,
+    },
+  );
+
+  // Y se verifica lo que Stripe contesta: si no quedó en el price pedido (p. ej.
+  // una respuesta guardada), NO se reporta éxito.
+  const quedo = s.items?.data?.[0]?.price?.id;
+  if (quedo !== opciones.priceId) {
+    throw new Error(
+      `Stripe subscriptions/${opciones.subscriptionId}: el cambio no quedó aplicado (price actual ${quedo ?? 'desconocido'}, pedido ${opciones.priceId}).`,
+    );
+  }
 
   return { subscriptionId: s.id };
 }
