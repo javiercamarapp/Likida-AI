@@ -3,6 +3,7 @@ import { getConversacionesActivas, contarConversacionesActivas, TOPE_CONVERSACIO
 import { Server, Smartphone, MessageCircle, ChevronDown, Info } from 'lucide-react';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { StatCard, EstadoVacio } from '../ui/kit';
+import { destinatarioEnmascarado } from '@/lib/meta/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -98,7 +99,8 @@ export default async function WhatsappInfraPage() {
                   <details key={`${c.tenantId ?? "sin-flota"}-${c.telefono}`} className="hairline rounded-lg overflow-hidden group" style={{ background: 'var(--surface)' }}>
                     <summary className="px-3 py-2.5 flex items-center justify-between gap-4 cursor-pointer list-none hover:bg-[var(--canvas)] transition-colors">
                       <div>
-                        <div className="text-sm font-medium">{c.telefono}</div>
+                        {/* A37-S08-06 (minimización LFPDPPP): el teléfono sale enmascarado; el completo vive en el detalle de la conversación. */}
+                        <div className="text-sm font-medium">{destinatarioEnmascarado(c.telefono)}</div>
                         <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{c.tenantNombre}</div>
                       </div>
                       <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--muted)' }}>
