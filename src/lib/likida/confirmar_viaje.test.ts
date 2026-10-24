@@ -262,7 +262,7 @@ describe('A8 ESCALACIÓN · caso "NO" — rastro en la base + aviso inmediato al
 
     // Y el jefe se entera DE INMEDIATO — no cinco horas después, cuando A8 lo
     // trataría como "no contestó" perdiendo que SÍ contestó y dijo que no.
-    expect(telefonoJefeDe).toHaveBeenCalledWith('t-1', null);
+    expect(telefonoJefeDe).toHaveBeenCalledWith('t-1');
     expect(avisarOficina).toHaveBeenCalledTimes(1);
     expect(llamadasAvisoOficina[0].texto).toContain('Juan Pérez');
     expect(llamadasAvisoOficina[0].texto).toMatch(/NO le toca/);
