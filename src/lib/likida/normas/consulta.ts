@@ -20,6 +20,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { NORMAS, esVinculante, type Norma } from './indice';
+import { hoyMx } from '@/lib/formato';
 
 /** Los temas por los que el chat puede preguntar. Cerrado a propósito. */
 export const TEMAS_NORMATIVOS = [
@@ -127,16 +128,11 @@ function citaLegible(n: Norma): string {
   return legible ?? n.instrumento ?? n.id;
 }
 
-/** «AAAA-MM-DD» de hoy en la hora del Centro de México (como se declaran las vigencias). */
-function fechaMx(hoy: Date): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' }).format(hoy);
-}
-
 function aConsultada(n: Norma, hoy: Date): NormaConsultada {
   // A37-S50-04: `exigibleHasta` no lo leía nadie; desde 2027 el chat seguiría
   // afirmando facilidades de la RFA 2026 como vigentes. Vencida => no afirmable.
   const hasta = n.exigibleHasta ?? null;
-  const vencida = hasta !== null && fechaMx(hoy) > hasta;
+  const vencida = hasta !== null && hoyMx(hoy) > hasta;
   return {
     norma_id: n.id,
     cita: citaLegible(n),

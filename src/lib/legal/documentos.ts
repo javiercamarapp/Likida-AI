@@ -33,9 +33,9 @@ export type DocumentoLegal = 'terminos' | 'aviso_privacidad' | 'mandato_autofact
 export const VIGENTE_DESDE_TERMINOS = '2026-10-01';
 export const HUELLA_TERMINOS = 'c9334736bc982d10c15eb3c1f1f86574af33464eb7ceecc1af05ff70ef75a4e6';
 export const VERSION_TERMINOS = '2026-10-01+c9334736';
-export const VIGENTE_DESDE_AVISO_PRIVACIDAD = '2026-10-01';
-export const HUELLA_AVISO_PRIVACIDAD = '5e96f6d92d1bcb87f8af87ee0e26716f416f2396a59058ead374a5a095d9bf0e';
-export const VERSION_AVISO_PRIVACIDAD = '2026-10-01+5e96f6d9';
+export const VIGENTE_DESDE_AVISO_PRIVACIDAD = '2026-10-24';
+export const HUELLA_AVISO_PRIVACIDAD = '1ca0c8f32b899254520a801121330a59c2c26dafda414b1e1d87edf6eba4d927';
+export const VERSION_AVISO_PRIVACIDAD = '2026-10-24+1ca0c8f3';
 
 export const MANDATO_AUTOFACTURACION = {
   version: 'm-2026-10-01',

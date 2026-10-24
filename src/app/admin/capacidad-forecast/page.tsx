@@ -17,7 +17,9 @@ export default async function CapacidadForecastPage() {
   await requireSuperadmin();
   const r = await getResumenNegocio();
   // A37-S05-03: ventana REAL de 30 días (UTC, como la serie) y costo sin redondear.
-  const hoyUtc = new Date(ahoraMs()).toISOString().slice(0, 10);
+  // Día UTC A PROPÓSITO (no «hoy» de México): `porDia` viene de la agregación SQL por día UTC y la ventana tiene que casar con sus cubetas.
+  const ahoraIso = new Date(ahoraMs()).toISOString();
+  const hoyUtc = ahoraIso.slice(0, 10);
   let enVentana: Array<{ dia: string; costoUsd: number }> | null = null;
   try {
     enVentana = await costoIaPorDiaDesde(new Date(new Date(`${hoyUtc}T00:00:00Z`).getTime() - 29 * 86_400_000).toISOString());

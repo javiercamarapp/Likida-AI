@@ -125,13 +125,13 @@ export async function GET(req: Request) {
     // A37-S10-02 — EL SELLO ES UN RECLAMO ATÓMICO (`UPDATE … WHERE exportado_en IS NULL RETURNING`), no un aviso
     // posterior. Sin ids (la descarga «lo nuevo») dos clics o dos usuarios en paralelo leían el mismo conjunto y el TMS
     // recibía la carga duplicada: ahora cada descarga se queda SOLO con los que ganó, y si otra se llevó todo, 409.
-    // Con ?ids= el usuario pide a propósito volver a bajar lo ya exportado: se re-sella («la última gana»).
+    // Con ?ids= o ?todos=1 el usuario pide a propósito volver a bajar lo ya exportado: se re-sella («la última gana»).
     const s = await getSessionTenant();
     let idsSellados: string[] = [];
     let avisoSello: string | null = null;
     const idsListos = elegidos.filter((d) => !r.omitidos.some((o) => o.id === d.id)).map((d) => d.id);
     try {
-      if (idsParam) {
+      if (idsParam || todos) {
         await repo.marcarExportado(t.tenantId, idsListos);
         idsSellados = idsListos;
       } else {

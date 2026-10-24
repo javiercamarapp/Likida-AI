@@ -86,14 +86,13 @@ describe('leerArchivoUniversal — el lector del chat', () => {
   });
 
   // A37-S10-04
-  it('A37-S10-04: una hoja de miles de filas se lee solo hasta el tope, pero el total de filas se informa', async () => {
+  it('A37-S10-04: una hoja de miles de filas se lee solo hasta el tope y se dice «más de 60» (no se afirma un total sin leerlo)', async () => {
     const aoa: Array<Array<string | number>> = [['n', 'v']];
     for (let i = 1; i <= 5000; i++) aoa.push([i, i * 2]);
     const libro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(libro, XLSX.utils.aoa_to_sheet(aoa), 'Grande');
     const r = await leerArchivoUniversal('grande.xlsx', XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }) as Buffer);
-    expect(r.meta).toContainEqual(['Filas', 5001]);
-    expect(r.extracto).toContain('5001 filas, primeras 60');
+    expect(r.extracto).toContain('más de 60 filas, primeras 60');
     expect(r.extracto).not.toContain('4000 | 8000');
   });
 
