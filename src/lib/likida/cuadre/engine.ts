@@ -953,46 +953,51 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
             nota: `${etiqueta} ${medio} — ${motivo}. No se afirma deducible ni no deducible; no acredita IEPS.`,
             gastoId: g.id,
           });
-          continue;
-        }
-        // Contador del ejercicio: previo (otras liquidaciones) + este viaje.
-        // AUDITORÍA 14, MEDIO: el EXCEDENTE se reporta POR COMPROBANTE, no
-        // acumulativo — antes, cada gasto posterior al cruce colgaba TODO el
-        // excedente acumulado (`excedente = acumulado - tope`), la suma de la
-        // columna no cuadraba con totalNoDeducible, y un ticket de $1,000
-        // imprimía "el excedente de $1,500 NO se deduce". Misma disciplina que
-        // viatico_excede_fiscal: el monto de la diferencia es SOLO lo que de
-        // verdad resta de totalDeducible, y la frontera se cruza UNA vez.
-        const previoSinEste = (input.efectivoPrevEjercicio ?? 0) + efectivoAcumuladoEjercicio;
-        efectivoAcumuladoEjercicio += g.monto;
-        const acumulado = (input.efectivoPrevEjercicio ?? 0) + efectivoAcumuladoEjercicio;
-        const tope = 0.15 * total;
-        // Lo que queda del tope para ESTE comprobante (previo sin este ya
-        // consumió lo suyo); si ya se cruzó, queda 0.
-        const cupoRestante = Math.max(0, tope - previoSinEste);
-        const dentro = Math.min(g.monto, cupoRestante);
-        const excedenteDeEste = Math.max(0, g.monto - dentro);
-        if (g.monto > 0) proporcionDeducible.set(g.id, dentro / g.monto);
-        if (excedenteDeEste === 0) {
-          const pct = Math.round((acumulado / total) * 100);
-          diferencias.push({
-            tipo: 'combustible_efectivo_dentro15', concepto: g.concepto, monto: 0,
-            // FISCAL-19C2-4: `esperado` es lo que `derivoLaConfig` (analytics.ts)
-            // compara contra el `acumulado` recalculado del panel para detectar
-            // deriva — sin él, si `totalCombustibleEjercicio` cambia después de
-            // archivar esta liquidación, el TIPO sigue igual en ambos lados y la
-            // deriva pasa desapercibida.
-            nota: `${etiqueta} ${medio} — deducible por la facilidad del 15% (RFA 2026 regla 2.9): el ejercicio lleva ${mxn(acumulado)} de ${mxn(total)} de combustible pagado con medios que la LISR 27-III no admite (${pct}% del total, tope 15%). No acredita IEPS.`,
-            gastoId: g.id,
-            esperado: acumulado,
-          });
+          // A37-S40-07: SIN `continue`. La facilidad no se pudo evaluar, pero el resto de las validaciones del gasto
+          // (CFDI cancelado/EFOS, receptor, política, OCR, hidrocarburos) siguen: saltarlas dejaba «por confirmar»
+          // un CFDI cancelado que debía verse «no deducible». Solo se omite el contador del 15%.
         } else {
-          diferencias.push({
-            tipo: 'efectivo_sobre_15', concepto: g.concepto, monto: excedenteDeEste,
-            nota: `${etiqueta} ${medio} — el ejercicio lleva ${mxn(acumulado)} de combustible pagado con medios que la LISR 27-III no admite, contra un tope de ${mxn(tope)} (15% de ${mxn(total)}); el excedente de ${mxn(excedenteDeEste)} de ESTE comprobante NO se deduce (RFA 2026 regla 2.9). No acredita IEPS. ${LECTURA_RFA_29_PRORRATEO}`,
-            gastoId: g.id,
-            esperado: excedenteDeEste,
-          });
+          // Contador del ejercicio: previo (otras liquidaciones) + este viaje.
+          // AUDITORÍA 14, MEDIO: el EXCEDENTE se reporta POR COMPROBANTE, no
+          // acumulativo — antes, cada gasto posterior al cruce colgaba TODO el
+          // excedente acumulado (`excedente = acumulado - tope`), la suma de la
+          // columna no cuadraba con totalNoDeducible, y un ticket de $1,000
+          // imprimía "el excedente de $1,500 NO se deduce". Misma disciplina que
+          // viatico_excede_fiscal: el monto de la diferencia es SOLO lo que de
+          // verdad resta de totalDeducible, y la frontera se cruza UNA vez.
+          const previoSinEste = (input.efectivoPrevEjercicio ?? 0) + efectivoAcumuladoEjercicio;
+          efectivoAcumuladoEjercicio += g.monto;
+          const acumulado = (input.efectivoPrevEjercicio ?? 0) + efectivoAcumuladoEjercicio;
+          // A37-S40-08: dinero en centavos. Con flotante, un efectivo EXACTAMENTE en el 15% dejaba un residuo (1e-14) que
+          // pasaba el `=== 0` y se imprimía «excedente de $0.00» como `efectivo_sobre_15`.
+          const tope = round2(0.15 * total);
+          // Lo que queda del tope para ESTE comprobante (previo sin este ya
+          // consumió lo suyo); si ya se cruzó, queda 0.
+          const cupoRestante = round2(Math.max(0, tope - previoSinEste));
+          const dentro = Math.min(g.monto, cupoRestante);
+          const excedenteDeEste = round2(Math.max(0, g.monto - dentro));
+          if (g.monto > 0) proporcionDeducible.set(g.id, dentro / g.monto);
+          if (excedenteDeEste < 0.005) {
+            const pct = Math.round((acumulado / total) * 100);
+            diferencias.push({
+              tipo: 'combustible_efectivo_dentro15', concepto: g.concepto, monto: 0,
+              // FISCAL-19C2-4: `esperado` es lo que `derivoLaConfig` (analytics.ts)
+              // compara contra el `acumulado` recalculado del panel para detectar
+              // deriva — sin él, si `totalCombustibleEjercicio` cambia después de
+              // archivar esta liquidación, el TIPO sigue igual en ambos lados y la
+              // deriva pasa desapercibida.
+              nota: `${etiqueta} ${medio} — deducible por la facilidad del 15% (RFA 2026 regla 2.9): el ejercicio lleva ${mxn(acumulado)} de ${mxn(total)} de combustible pagado con medios que la LISR 27-III no admite (${pct}% del total, tope 15%). No acredita IEPS.`,
+              gastoId: g.id,
+              esperado: acumulado,
+            });
+          } else {
+            diferencias.push({
+              tipo: 'efectivo_sobre_15', concepto: g.concepto, monto: excedenteDeEste,
+              nota: `${etiqueta} ${medio} — el ejercicio lleva ${mxn(acumulado)} de combustible pagado con medios que la LISR 27-III no admite, contra un tope de ${mxn(tope)} (15% de ${mxn(total)}); el excedente de ${mxn(excedenteDeEste)} de ESTE comprobante NO se deduce (RFA 2026 regla 2.9). No acredita IEPS. ${LECTURA_RFA_29_PRORRATEO}`,
+              gastoId: g.id,
+              esperado: excedenteDeEste,
+            });
+          }
         }
       } else if (elegible === false) {
         diferencias.push({

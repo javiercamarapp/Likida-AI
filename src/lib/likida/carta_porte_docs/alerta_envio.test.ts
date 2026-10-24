@@ -159,6 +159,24 @@ describe('la regla del outbox', () => {
     await expect(crearAlertarEnvio(deps())(entrada())).rejects.toThrow(/ningún canal/);
   });
 
+  it('A37-S30-10: el fallo definitivo de todos los canales configurados TAMBIÉN escala al operador (y sigue lanzando)', async () => {
+    config = { ...config, destinatarioAlertaCorreo: 'oficina@flota.test' };
+    correoRes = { ok: false, motivo: 'sin_configurar' };
+    waRes = { ok: false, motivo: '131030', fueraDeVentana: false, reintentable: false };
+    await expect(crearAlertarEnvio(deps())(entrada()))
+      .rejects.toThrow(/ningún canal/);
+    expect(operador).toHaveLength(1);
+    expect(operador[0].detalle).toMatchObject({ codigo: 'cp_envio_reque_agotado_sin_canal' });
+  });
+
+  it('A37-S30-10: si alertarOperador lanza, el error que sale sigue siendo el del aviso', async () => {
+    config = { ...config, destinatarioAlertaCorreo: 'oficina@flota.test' };
+    correoRes = { ok: false, motivo: 'sin_configurar' };
+    waRes = { ok: false, motivo: 'x', fueraDeVentana: false, reintentable: false };
+    await expect(crearAlertarEnvio(deps({ alertarOperador: async () => { throw new Error('canal caído'); } }))(entrada()))
+      .rejects.toThrow(/ningún canal/);
+  });
+
   it('si el correo sale aunque WhatsApp falle definitivamente, el aviso cuenta como entregado', async () => {
     config = { ...config, destinatarioAlertaCorreo: 'oficina@flota.test' };
     waRes = { ok: false, motivo: 'número inválido', fueraDeVentana: false, reintentable: false };

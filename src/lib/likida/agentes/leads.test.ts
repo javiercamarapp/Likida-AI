@@ -213,6 +213,30 @@ describe('scorer: sin señal NO hay número', () => {
     await expect(correrAgenteLeads('scorer', 'cron', HOY)).rejects.toThrow(/el segundo lote no llegó/);
   });
 
+  // A37-S28-09: un lote que devuelve EXACTAMENTE el tope pudo quedar cortado.
+  it('A37-S28-09: un lote que llena el tope se parte en mitades en vez de contar filas cortadas', async () => {
+    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    respuestas.set('prospecto', [{
+      data: [{ id: 'p0', empresa: 'ZZZ 0', estado: 'nuevo' }, { id: 'p1', empresa: 'ZZZ 1', estado: 'nuevo' }],
+      error: null, count: 2,
+    }]);
+    respuestas.set('prospecto_correo', [{
+      data: Array.from({ length: IDS_POR_LOTE * 20 }, () => ({ prospecto_id: 'p0' })), error: null,
+    }]);
+    await correrAgenteLeads('scorer', 'cron', HOY);
+    // 1 lote lleno + 2 mitades (de 1 id cada una).
+    expect(consultas.get('prospecto_correo')).toBe(3);
+  });
+
+  it('A37-S28-09: si UN solo prospecto llena el tope LANZA (no se afirma sobre datos cortados)', async () => {
+    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    respuestas.set('prospecto', [{ data: [{ id: 'p0', empresa: 'ZZZ 0', estado: 'nuevo' }], error: null, count: 1 }]);
+    respuestas.set('prospecto_correo', [{
+      data: Array.from({ length: IDS_POR_LOTE * 20 }, () => ({ prospecto_id: 'p0' })), error: null,
+    }]);
+    await expect(correrAgenteLeads('scorer', 'cron', HOY)).rejects.toThrow(/truncada/);
+  });
+
   it('la tabla ilegible LANZA en vez de afirmar que no hay señal', async () => {
     respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
     respuestas.set('prospecto', [{ data: null, error: { message: 'base caída' } }]);

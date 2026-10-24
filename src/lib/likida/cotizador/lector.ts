@@ -469,6 +469,7 @@ export function falloDefinitivoAlCrearViaje(e: unknown): boolean {
  */
 async function viajeYaCreado(
   tenantId: string,
+  cotizacionId: string,
   cot: { origen: unknown; destino: unknown; precio: unknown },
   desdeIso: string,
 ): Promise<{ id: string | null } | null> {
@@ -480,13 +481,52 @@ async function viajeYaCreado(
     .eq('ingreso_flete', Number(cot.precio))
     .gte('created_at', desdeIso)
     .order('created_at', { ascending: false })
-    .limit(1), 'cotizador.viajeYaCreado');
+    .limit(20), 'cotizador.viajeYaCreado');
   if (error) {
     logger.warn('cotizador.verificacion_viaje_fallo', { err: error.message });
     return null;
   }
-  const filas = (data ?? []) as Array<{ id: unknown }>;
-  return { id: filas.length === 0 ? null : String(filas[0].id) };
+  const ids = ((data ?? []) as Array<{ id: unknown }>).map((f) => String(f.id));
+  if (ids.length === 0) return { id: null };
+
+  // A37-S40-09: ruta + precio + ventana no identifican a ESTA cotización. Dos
+  // cotizaciones iguales convertidas con segundos de diferencia compartirían
+  // viaje. (a) Un viaje que otra cotización ya tiene enlazado NO es de ésta.
+  const { data: enlazados, error: errEnlace } = await acotada(supabaseAdmin().from('cotizacion')
+    .select('viaje_id')
+    .eq('tenant_id', tenantId)
+    .in('viaje_id', ids), 'cotizador.viajeYaEnlazado');
+  if (errEnlace) {
+    logger.warn('cotizador.verificacion_enlace_fallo', { err: errEnlace.message });
+    return null;
+  }
+  const ocupados = new Set(((enlazados ?? []) as Array<{ viaje_id: unknown }>).map((f) => String(f.viaje_id)));
+  const libres = ids.filter((v) => !ocupados.has(v));
+  if (libres.length === 0) return { id: null };
+
+  // (b) Si OTRA cotización igual está decidiéndose ahora, el viaje libre puede
+  // ser el suyo (crearViaje ya corrió pero aún no lo enlazó): no se puede
+  // atribuir con certeza → «no se pudo saber», el claim se queda.
+  const { data: enVuelo, error: errVuelo } = await acotada(supabaseAdmin().from('cotizacion')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('origen', cot.origen as string)
+    .eq('destino', cot.destino as string)
+    .eq('precio', Number(cot.precio))
+    .neq('id', cotizacionId)
+    .in('estado', ['borrador', 'enviada'])
+    .not('decidida_en', 'is', null)
+    .order('id', { ascending: true })
+    .limit(1), 'cotizador.cotizacionesEnVuelo');
+  if (errVuelo) {
+    logger.warn('cotizador.verificacion_vuelo_fallo', { err: errVuelo.message });
+    return null;
+  }
+  if ((enVuelo ?? []).length > 0) {
+    logger.warn('cotizador.viaje_ambiguo_otra_cotizacion', { id: cotizacionId });
+    return null;
+  }
+  return { id: libres[0] };
 }
 
 /**
@@ -559,7 +599,7 @@ export async function convertirEnViaje(
     });
   } catch (e) {
     const definitivo = falloDefinitivoAlCrearViaje(e);
-    const existe = await viajeYaCreado(tenantId, cot, desdeIso);
+    const existe = await viajeYaCreado(tenantId, id, cot, desdeIso);
 
     // (1) El viaje SÍ está: el error se comió la respuesta, no el trabajo.
     if (existe?.id != null) {

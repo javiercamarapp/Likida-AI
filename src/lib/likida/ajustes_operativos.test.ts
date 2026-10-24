@@ -100,6 +100,18 @@ describe('validarAjustes — el formato de salida', () => {
 });
 
 describe('parsearCuentas — el contador pega su Excel', () => {
+  it('A37-S28-10: «constructor» y «__proto__» son conceptos válidos, no duplicados falsos', () => {
+    const r = parsearCuentas('constructor=600-001\n__proto__=600-002');
+    expect(Object.keys(r)).toEqual(['constructor', '__proto__']);
+    expect(Object.getOwnPropertyDescriptor(r, '__proto__')?.value).toBe('600-002');
+    expect(() => parsearCuentas('constructor=1\nconstructor=2')).toThrow(/ya tiene cuenta/);
+  });
+
+  it('A37-S28-10: acota número de líneas y longitud del concepto', () => {
+    expect(() => parsearCuentas(Array.from({ length: 501 }, (_, i) => `c${i}=1`).join('\n'))).toThrow(/demasiadas líneas/);
+    expect(() => parsearCuentas(`${'x'.repeat(81)}=1`)).toThrow(/concepto es demasiado largo/);
+  });
+
   it('lee el bloque entero, una cuenta por línea', () => {
     expect(parsearCuentas('diesel=600-001\ncaseta=600-002')).toEqual({
       diesel: '600-001', caseta: '600-002',

@@ -422,8 +422,19 @@ export async function canjearCodigo(
 
   // Reuso = robo (RFC 6749 §4.1.2): el segundo canje no solo se niega — tumba
   // lo que el primero emitió.
+  //
+  // A37-S60-08: pero solo si quien reusa PRUEBA ser el cliente de ese código (cliente_id) y
+  // conoce el verifier de PKCE. El código viaja en la URL de redirección, el historial y el
+  // referrer: con solo el código, cualquiera podía hacer POST sin verifier y tumbar la sesión
+  // MCP viva de otra persona. Quien lo reusa sin esa prueba no podría canjear nada de todos
+  // modos, así que simplemente se niega (misma respuesta opaca) sin tocar la familia.
   if (fila.usado_en !== null) {
-    await revocarFamilia(fila.familia, 'codigo_reusado');
+    const pruebaDelReuso = fila.cliente_id === clientId
+      && typeof codeVerifier === 'string'
+      && codeVerifier.length >= 43 && codeVerifier.length <= 128
+      && retoS256(codeVerifier) === fila.code_challenge;
+    if (pruebaDelReuso) await revocarFamilia(fila.familia, 'codigo_reusado');
+    else logger.warn('mcp.oauth.reuso_sin_prueba', { cliente: fila.cliente_id === clientId ? 'ok' : 'distinto' });
     return { ok: false, error: 'no_valido', detalle: CANJE_INVALIDO };
   }
   if (fila.cliente_id !== clientId) return { ok: false, error: 'no_valido', detalle: CANJE_INVALIDO };
