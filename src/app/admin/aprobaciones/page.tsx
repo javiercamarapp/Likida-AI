@@ -41,6 +41,11 @@ export default async function PaginaAprobaciones() {
     try {
       if (operacion === 'aprobar') {
         const edicion = String(fd.get('cuerpoEditado') ?? '').trim();
+        // A37-S05-08: con el modo edición activo el campo SÍ viaja; si llega vacío NO se aprueba el
+        // borrador original (el operador pudo borrarlo para neutralizar el correo): se rechaza con error.
+        if (fd.has('cuerpoEditado') && !edicion) {
+          return { error: 'El cuerpo editado está vacío: escribe el texto que debe salir, o rechaza la pieza. No se aprobó nada.' };
+        }
         await aprobarPieza(id, s.userId, edicion || undefined);
         revalidatePath('/admin/aprobaciones');
         return { ok: edicion ? 'Aprobada con tu edición — esa versión es la que sale.' : 'Aprobada tal cual. El envío es el paso siguiente, abajo.' };
