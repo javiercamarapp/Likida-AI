@@ -114,17 +114,22 @@ export async function listarMesaAsistencia(tenantId: string): Promise<Incidencia
   // AUDITORÍA 25, MEDIO (REND-A7, REINCIDENTE): mismo defecto que arriba —
   // ordenaba solo por `created_at` (empata entre eventos del mismo instante)
   // y no pedía `conteo()`.
-  const eventos = await traerTodo<Record<string, unknown>>(
-    (desde, hasta) => admin
-      .from('incidencia_evento')
-      .select('id, incidencia_id, tipo, detalle, created_at', conteo(desde))
-      .eq('tenant_id', tenantId)
-      .in('incidencia_id', ids)
-      .order('created_at', { ascending: true })
-      .order('id', { ascending: true })
-      .range(desde, hasta),
-    'mesa.eventos',
-  );
+  // A37-S50-07: `.in()` con cientos de ids revienta el límite de URL de PostgREST y
+  // la mesa quedaba en «Sin datos» justo en la emergencia: se trocea en lotes.
+  const eventos: Array<Record<string, unknown>> = [];
+  for (const lote of enLotes(ids)) {
+    eventos.push(...await traerTodo<Record<string, unknown>>(
+      (desde, hasta) => admin
+        .from('incidencia_evento')
+        .select('id, incidencia_id, tipo, detalle, created_at', conteo(desde))
+        .eq('tenant_id', tenantId)
+        .in('incidencia_id', lote)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(desde, hasta),
+      'mesa.eventos',
+    ));
+  }
   const porIncidencia = new Map<string, EventoMesa[]>();
   for (const e of eventos) {
     const lista = porIncidencia.get(e.incidencia_id as string) ?? [];
@@ -174,6 +179,14 @@ export async function listarMesaAsistencia(tenantId: string): Promise<Incidencia
   return resultado;
 }
 
+/** A37-S50-07: ids por consulta `.in()` (URL de PostgREST acotada). */
+const IDS_POR_LOTE_MESA = 100;
+function enLotes<T>(xs: T[], n = IDS_POR_LOTE_MESA): T[][] {
+  const salida: T[][] = [];
+  for (let i = 0; i < xs.length; i += n) salida.push(xs.slice(i, i + n));
+  return salida;
+}
+
 /** Lookup en tanda por ids (nulls y repetidos filtrados). Best-effort: ante
  *  error devuelve el mapa vacío y lo loguea — los rótulos no tumban la mesa. */
 async function rotulos(
@@ -183,13 +196,15 @@ async function rotulos(
   const mapa = new Map<string, Record<string, string | null>>();
   if (unicos.length === 0) return mapa;
   try {
-    const { data, error } = await acotada(supabaseAdmin()
-      .from(tabla).select(columnas)
-      .eq('tenant_id', tenantId)
-      .in('id', unicos), `mesa.rotulos_${tabla}`);
-    if (error) throw new Error(error.message);
-    for (const f of (data ?? []) as unknown as Array<Record<string, string | null>>) {
-      mapa.set(f.id as string, f);
+    for (const lote of enLotes(unicos)) {
+      const { data, error } = await acotada(supabaseAdmin()
+        .from(tabla).select(columnas)
+        .eq('tenant_id', tenantId)
+        .in('id', lote), `mesa.rotulos_${tabla}`);
+      if (error) throw new Error(error.message);
+      for (const f of (data ?? []) as unknown as Array<Record<string, string | null>>) {
+        mapa.set(f.id as string, f);
+      }
     }
   } catch (e) {
     logger.warn('mesa.rotulos_ilegibles', { tabla, err: e instanceof Error ? e.message : String(e) });
@@ -270,6 +285,19 @@ export async function resolverDesdeMesa(
   if (limpia.length < 5) {
     return { error: 'La nota de cierre es obligatoria: di cómo terminó (quién atendió, con qué resultado).' };
   }
+  // A37-S50-08: ANTES de anotar, la incidencia tiene que ser de ESTE tenant y seguir
+  // abierta. Antes el evento se insertaba con un `incidenciaId` del formulario sin
+  // validar (ajeno, inexistente o ya resuelto) y el UPDATE de abajo era lo único que
+  // filtraba tenant. Ante un error de lectura NO se anota (fail-closed).
+  const { data: previa, error: errPrevia } = await acotada(supabaseAdmin()
+    .from('incidencia').select('estado')
+    .eq('id', incidenciaId).eq('tenant_id', tenantId)
+    .order('id', { ascending: true })
+    .limit(1), 'mesa.resolver_previa');
+  if (errPrevia) return { error: 'No pude verificar la incidencia — inténtalo de nuevo.' };
+  const actual = (previa ?? [])[0] as { estado?: string } | undefined;
+  if (!actual) return { error: 'Esa incidencia ya no existe en esta flota — recarga la mesa.' };
+  if (actual.estado === 'resuelta') return { error: 'Esa incidencia ya estaba resuelta — recarga la mesa.' };
   // La NOTA va ANTES del cierre (c4-8): si la bitácora no la pudo escribir,
   // la incidencia NO se cierra — "cerrada con su nota" tiene que ser verdad
   // literal, no best-effort disfrazado. El costo de este orden es que un
