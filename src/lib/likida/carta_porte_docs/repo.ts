@@ -15,7 +15,8 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
-import { exigir, traerPorIds } from '../pg';
+import { conteo, exigir, traerPorIds } from '../pg';
+import { leerConTope } from './lectura_paginada';
 import { logger } from '@/lib/logger';
 import { aBuffer } from './bytes';
 import type { Extraccion } from './campos';
@@ -522,14 +523,17 @@ export function tablaAusente(error: { message?: string; code?: string } | null |
  * filtra por tenant Y cliente. Sin la 0792 aplicada devuelve el catálogo vacío (sin catálogo = no-op) y lo registra.
  */
 export async function cargarCatalogoCliente(tenantId: string, clienteId: string): Promise<CatalogoCliente> {
+  // A37-S31-01: `.limit(5000)` lo recortaba PostgREST a max_rows (1,000) sin avisar; se pagina con range() y el tope es real.
+  const COLS_PRODUCTO = 'sku, descripcion_patron, bienes_transp, clave_unidad, embalaje, fraccion, tipo_materia, material_peligroso, clave_material_peligroso';
+  const COLS_PARTE = 'rol, alias, razon_social, rfc, id_fiscal_extranjero, calle, num_ext, num_int, colonia_clave, colonia, cp, localidad_clave, localidad, municipio_clave, municipio, estado, pais, contacto, telefono, correo';
   const [n, p, q] = await Promise.all([
     acotada(supabaseAdmin().from('cp_cliente_numero').select('numero_interno, numero_pagador, activo').eq('tenant_id', tenantId).eq('cliente_id', clienteId).maybeSingle(), 'cpdocs.catalogo_numero'),
-    acotada(supabaseAdmin().from('cp_catalogo_producto')
-      .select('sku, descripcion_patron, bienes_transp, clave_unidad, embalaje, fraccion, tipo_materia, material_peligroso, clave_material_peligroso')
-      .eq('tenant_id', tenantId).eq('cliente_id', clienteId).order('sku').order('id').limit(TOPE_FILAS_CATALOGO), 'cpdocs.catalogo_productos'),
-    acotada(supabaseAdmin().from('cp_catalogo_parte')
-      .select('rol, alias, razon_social, rfc, id_fiscal_extranjero, calle, num_ext, num_int, colonia_clave, colonia, cp, localidad_clave, localidad, municipio_clave, municipio, estado, pais, contacto, telefono, correo')
-      .eq('tenant_id', tenantId).eq('cliente_id', clienteId).order('rol').order('alias').order('id').limit(TOPE_FILAS_CATALOGO), 'cpdocs.catalogo_partes'),
+    leerConTope<Fila>((d, h, primera) => acotada(supabaseAdmin().from('cp_catalogo_producto')
+      .select(COLS_PRODUCTO, conteo(primera ? 0 : 1))
+      .eq('tenant_id', tenantId).eq('cliente_id', clienteId).order('sku').order('id').range(d, h), 'cpdocs.catalogo_productos') as never, TOPE_FILAS_CATALOGO),
+    leerConTope<Fila>((d, h, primera) => acotada(supabaseAdmin().from('cp_catalogo_parte')
+      .select(COLS_PARTE, conteo(primera ? 0 : 1))
+      .eq('tenant_id', tenantId).eq('cliente_id', clienteId).order('rol').order('alias').order('id').range(d, h), 'cpdocs.catalogo_partes') as never, TOPE_FILAS_CATALOGO),
   ]);
   if (tablaAusente(n.error) || tablaAusente(p.error) || tablaAusente(q.error)) {
     logger.warn('cartaporte_docs.catalogo_sin_migracion', { tenantId });
@@ -546,7 +550,7 @@ export async function cargarCatalogoCliente(tenantId: string, clienteId: string)
     localidadClave: s(f.localidad_clave), localidad: s(f.localidad), municipioClave: s(f.municipio_clave), municipio: s(f.municipio),
     estado: s(f.estado), pais: s(f.pais), contacto: s(f.contacto), telefono: s(f.telefono), correo: s(f.correo),
   }));
-  const truncado = productos.length >= TOPE_FILAS_CATALOGO || partes.length >= TOPE_FILAS_CATALOGO;
+  const truncado = p.truncado || q.truncado;
   if (truncado) logger.warn('cartaporte_docs.catalogo_truncado', { tenantId, productos: productos.length, partes: partes.length });
   return {
     numero: num ? { tenantId, clienteId, numeroInterno: String(num.numero_interno), numeroPagador: s(num.numero_pagador), activo: num.activo !== false } : null,
