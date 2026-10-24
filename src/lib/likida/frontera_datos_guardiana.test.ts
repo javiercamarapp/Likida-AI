@@ -310,7 +310,8 @@ import { join, relative } from 'node:path';
 // la liga automática (`gasto_ligar_cfdi_campos`, con respaldo al UPDATE de siempre si la migración no está aplicada); todo por `acotada` con `tenant_id`.
 // Auditoría 37, S57-01/S18-01: +1 archivo (322 → 323), `sat_descarga/rfc_tenant.ts` — lee `tenant.rfc` (el RFC fiscal verificado) para atar el buzón del SAT al tenant; todo por `acotada`.
 // Auditoría 37, A37-S28-01 (lote del Redactor, 23-oct-2026): +1 archivo (322 → 323), `agentes/candidatos_redactor.ts` — la selección de candidatos que antes vivía en `runner.ts`; todo por `acotada`.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 323;
+// INTEGRACIÓN ONDA 5 (23-oct-2026, #651–#656): cada rama medía su techo sola; el barrido real del árbol fusionado mide 324 archivos (323 de la oleada 4 + sat/rfc_tenant.ts + agentes/candidatos_redactor.ts, +1 que ninguna rama veía por separado). Techo = medido, sin holgura.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 324;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -568,7 +569,8 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 323;
 // INTEGRACIÓN OLEADA 4 (23-oct-2026): de #644/#645/#646/#647 solo #647 toca el conteo (+1); el barrido real del árbol fusionado mide 2,264 (techo = medido, sin holgura).
 // Auditoría 37 (+4, 2264 → 2268): rfc_tenant.ts (+2 lecturas de tenant.rfc), ciclo.ts (+1, estatus del sello ya puesto, S57-04) y
 // transferencia.ts (+1, alargar la reserva del timbrado ante error ambiguo del PAC, S61-01).
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_268;
+// INTEGRACIÓN ONDA 5 (23-oct-2026): el barrido real del árbol fusionado de las seis ramas mide 2,284 llamadas (techo = medido, sin holgura); las ramas declaraban techos parciales sobre la misma base de 2,264.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_284;
 // Auditoría 37, lote agentes-legal-ia (medido con el barrido real): +2 llamadas (2,264 → 2,266). `candidatos_redactor.ts` suma 3 `.from(` (prospecto, cola_aprobacion, prospecto_contacto) y `runner.ts` pierde la suya (+2 netas); `sdr.ts` pasa de 3 a 3 (la lectura por prospecto se volvió lectura en lote). Todo por `acotada`.
 // LOTE A37 peajes-liquidación-graves (migración 0865): +5 llamadas (2,264 → 2,269), 0 archivos nuevos, medido con el barrido real. `jornada/repo.ts` +1:
 // `.rpc('asentar_declaracion_jornada')` (A37-S48-01; la 0865 sustituye la marca derivada bajo el lock del expediente; el INSERT anterior se conserva
