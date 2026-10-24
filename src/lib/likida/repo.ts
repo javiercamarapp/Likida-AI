@@ -50,11 +50,45 @@ function uuidCfdi(u: string | null | undefined): string | null {
  * para que un acuse explícito no prometa persistencia cuando falló.
  */
 export async function saveCfdiXmlRaw(tenantId: string, cfdiUuid: string, gastoId: string | null, xml: string): Promise<boolean> {
-  const { error } = await acotada(supabaseAdmin()
+  // A37-S56-07: el PRIMER XML que llega con ese UUID es el que se conserva
+  // (`ignoreDuplicates`: ON CONFLICT DO NOTHING). Antes el upsert sobrescribía:
+  // un reenvío con `gasto_id=null` desligaba el CFDI de su gasto y un XML con
+  // el mismo UUID y contenido distinto reemplazaba al original, incluido el que
+  // bajó del SAT — la evidencia del CFF art. 30 pasaba a ser «la última escritura».
+  const uuid = uuidCfdi(cfdiUuid);
+  const { data: nuevo, error } = await acotada(supabaseAdmin()
     .from('cfdi_xml')
-    .upsert({ tenant_id: tenantId, cfdi_uuid: uuidCfdi(cfdiUuid), gasto_id: gastoId, xml }, { onConflict: 'tenant_id,cfdi_uuid' }), 'saveCfdiXmlRaw');
-  if (error) logger.warn('cfdi_xml.save', { err: error.message });
-  return !error;
+    .upsert({ tenant_id: tenantId, cfdi_uuid: uuid, gasto_id: gastoId, xml }, { onConflict: 'tenant_id,cfdi_uuid', ignoreDuplicates: true })
+    .select('id'), 'saveCfdiXmlRaw');
+  if (error) { logger.warn('cfdi_xml.save', { err: error.message }); return false; }
+  if (((nuevo ?? []) as unknown[]).length > 0) return true;
+
+  // Ya existía una fila con ese UUID: se compara, no se pisa.
+  const { data: previo, error: errLee } = await acotada(supabaseAdmin()
+    .from('cfdi_xml').select('xml, gasto_id').eq('tenant_id', tenantId).eq('cfdi_uuid', uuid as string).maybeSingle(),
+    'saveCfdiXmlRaw.previo');
+  if (errLee) { logger.warn('cfdi_xml.save', { err: errLee.message }); return false; }
+  if (!previo) return true; // se borró entre medias: no hay nada que proteger
+  const p = previo as { xml: string; gasto_id: string | null };
+  if (p.xml.trim() !== xml.trim()) {
+    // Se registra el intento SIN el contenido (puede traer datos fiscales).
+    logger.error('cfdi_xml.contenido_distinto', { tenant: tenantId, uuid, largoConservado: p.xml.length, largoNuevo: xml.length });
+    // `true`, no `false`: el original SIGUE conservado (lo que prometen los
+    // acuses), y `false` es para fallos REINTENTABLES — en el ciclo del SAT
+    // (`ciclo.ts`) un `false` deja el paquete sin dar por bajado y lo reintenta
+    // en cada vuelta: una discrepancia permanente bloquearía la descarga de la
+    // flota entera. La anomalía queda en el log de error, que es lo que se vigila.
+    return true;
+  }
+  // Mismo contenido: solo se completa el vínculo si la fila no tenía gasto, y
+  // nunca se sustituye uno existente ni se escribe null.
+  if (gastoId && !p.gasto_id) {
+    const { error: errLiga } = await acotada(supabaseAdmin()
+      .from('cfdi_xml').update({ gasto_id: gastoId }).eq('tenant_id', tenantId).eq('cfdi_uuid', uuid as string).is('gasto_id', null),
+      'saveCfdiXmlRaw.ligar');
+    if (errLiga) logger.warn('cfdi_xml.ligar', { err: errLiga.message });
+  }
+  return true;
 }
 
 // `getPolitica` VIVÍA AQUÍ y no la llamaba nadie. Leía `politica_gasto`, una
