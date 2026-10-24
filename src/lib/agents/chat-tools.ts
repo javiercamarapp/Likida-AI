@@ -398,7 +398,8 @@ registerTool('consultar_normas', {
   handler: async (args) => {
     const tema = String(args.tema ?? '');
     const normas = normasPorTema(tema);
-    const sinVerificar = normas.filter((n) => !n.afirmable);
+    const vencidas = normas.filter((n) => n.vencida);
+    const sinVerificar = normas.filter((n) => !n.afirmable && !n.vencida);
     return {
       tema,
       normas,
@@ -410,6 +411,10 @@ registerTool('consultar_normas', {
         ...(sinVerificar.length > 0
           ? [`SIN AFIRMAR (ficha sin verificar contra fuente primaria): ${sinVerificar.map((n) => n.cita).join(', ')} — decláralo como pendiente de verificación.`]
           : []),
+        ...(vencidas.length > 0
+          ? [`VENCIDA (ya no rige hoy): ${vencidas.map((n) => `${n.cita} (rigió hasta ${n.exigible_hasta})`).join(', ')} — NO la afirmes como vigente; dilo y recomienda confirmar la resolución del ejercicio en curso con su contador.`]
+          : []),
+        'Cada norma trae exigible_desde y exigible_hasta: no afirmes una facilidad fuera de ese rango.',
         'Si el tema de la pregunta no está cubierto por estas fichas, dilo tal cual y recomienda validarlo con su contador o fiscalista — no rellenes el hueco.',
         'Esto es el corpus del motor de reglas, no un dictamen: toda respuesta fiscal cierra recomendando validarla con su contador.',
       ],

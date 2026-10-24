@@ -59,7 +59,7 @@ function ficha(id: string, cita: string, extra: Partial<{ afirmable: boolean; je
     norma_id: id, cita, titulo: `Título de ${id}`,
     jerarquia: (extra.jerarquia ?? 1) as 1, vinculante: true,
     estado: 'verificado_fuente_primaria' as const,
-    afirmable: extra.afirmable ?? true, exigible_desde: null,
+    afirmable: extra.afirmable ?? true, exigible_desde: null, exigible_hasta: null, vencida: false,
   };
 }
 

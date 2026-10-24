@@ -166,6 +166,21 @@ describe('viajesDeMismaRuta — la ruta se compara normalizada', () => {
 // inventar un 0 cuando falta un dato, esconder una pérdida, y dividir entre
 // cero al sacar el margen.
 // ═══════════════════════════════════════════════════════════════════════════
+describe('A37-S40-03 — markup objetivo vs margen sobre precio', () => {
+  it('markup 30 % sobre costo $10,000: sugerido $13,000 y la ganancia es 23.08 % DEL PRECIO (dos bases, dos rótulos)', () => {
+    expect(round2Test(10_000 * (1 + 30 / 100))).toBe(13_000);
+    expect(gananciaReal(13_000, 10_000)).toEqual({ pesos: 3_000, margenPct: 23.08 });
+  });
+  it('la pantalla rotula cada base: markup sobre el costo / % del precio', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('src/app/dashboard/cotizaciones/page.tsx', 'utf8');
+    expect(src).toContain('Markup objetivo sobre el costo (%)');
+    expect(src).not.toContain('etiqueta="Margen objetivo (%)"');
+    expect(src).toContain('del precio)');
+  });
+});
+const round2Test = (n: number) => Math.round(n * 100) / 100;
+
 describe('gananciaReal', () => {
   it('precio menos costo, con el margen sobre el PRECIO', () => {
     // 25,000 − 20,000 = 5,000, que es el 20% de 25,000.

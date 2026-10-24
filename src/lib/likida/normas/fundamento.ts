@@ -33,7 +33,11 @@ export const CITA_DESCONOCIDA = 'DESCONOCIDA';
 function patronesDe(id: string): RegExp[] {
   const n = NORMAS[id];
   if (!n) return [];
-  const out: RegExp[] = n.citas.map((c) => new RegExp(esc(c).replace(/\s+/g, '\\s*') + FIN_DE_NUMERO, 'i'));
+  // A37-S50-02: solo las citas con NÚMERO identifican una norma. «Carta Porte»,
+  // «salario base de cotización» o «Red Nacional de Autopistas de Cuota» son
+  // alias de TEMA de uso corriente: tratarlas como cita borraba la frase de
+  // respuestas legítimas ("Te falta el complemento Carta Porte").
+  const out: RegExp[] = n.citas.filter((c) => /\d/.test(c)).map((c) => new RegExp(esc(c).replace(/\s+/g, '\\s*') + FIN_DE_NUMERO, 'i'));
 
   // Forma larga. El modelo no dice siempre "LISR": dice "la Ley del ISR" o
   // "la Ley del Impuesto sobre la Renta". Se aceptan las tres.
@@ -357,7 +361,9 @@ const FORMA_DE_CITA = new RegExp(
   // (20-A). Eso lo distingue de un folio ("A-4501" empieza por letra), de una
   // fecha ("2026-07-28" tiene cuatro dígitos y termina en número) y de un rango
   // ("del 1-3"): los romanos y los apartados no aparecen en esos.
-  `|(?<![\\w-])\\d{1,3}\\s*-\\s*(?:[IVXLC]{1,6}|[A-D])(?![\\w-])` +
+  // A37-S50-03: no si la precede un identificador de equipo («unidad 21-B»,
+  // «caja 45-D», «folio 12-C»): ahí es un número económico, no una fracción.
+  `|(?<![\\w-])(?<!\\b(?:unidad(?:es)?|eco|econ[óo]mico|caja|folio|placas?|remolque|tracto|tractocami[óo]n|cami[óo]n|n[úu]m(?:ero)?\\.?|no\\.?|#)\\s*)\\d{1,3}\\s*-\\s*(?:[IVXLC]{1,6}|[A-D])(?![\\w-])` +
   // "el 2.9 de la RFA": regla con punto decimal citada sin la palabra "regla".
   `|(?<![\\w.-])\\d\\.\\d{1,3}(?:\\.\\d{1,3})*\\s+(?:de\\s+la\\s+)?(?:${SIGLAS.join('|')})\\b` +
   // La sigla DESPUÉS del número: "27-III LISR". Es tan natural en español

@@ -265,9 +265,12 @@ export interface Ganancia {
    * Margen sobre el PRECIO (`pesos / precio × 100`), en puntos porcentuales.
    *
    * Sobre el precio y no sobre el costo a propósito: es la convención con la
-   * que un transportista lee «margen», y la misma base que usa
-   * `margenObjetivoPct` para proponer el precio sugerido. Dos definiciones de
-   * margen en la misma pantalla serían dos cálculos.
+   * que un transportista lee «margen». OJO (A37-S40-03): NO es la base de
+   * `margenObjetivoPct`, que es un MARKUP sobre el costo (`precio = costo ×
+   * (1 + m/100)`): con m = 30 % y costo $10,000 el sugerido es $13,000 y esta
+   * función da 23.08 %. La pantalla rotula cada uno con su base («Markup
+   * objetivo sobre el costo» / «del precio») para que no parezcan el mismo
+   * número.
    *
    * `null` cuando el precio es 0: no hay margen que afirmar sobre nada, y un
    * Infinity pintado como cifra es peor que una raya.

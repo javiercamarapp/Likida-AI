@@ -758,7 +758,7 @@ export async function avisarAlChofer(tenantId: string, operadorId: string, viaje
   // B le manda a un chofer de la flota A el anticipo de un viaje ajeno.
   const [{ data: op, error: errOp }, { data: viaje, error: errViaje }] = await Promise.all([
     acotada(admin.from('operador').select('telefono, nombre').eq('id', operadorId).eq('tenant_id', tenantId).maybeSingle(), 'avisarAlChofer.operador'),
-    acotada(admin.from('viaje').select('folio, origen, destino, fecha_inicio, anticipo, unidad_id, cita_origen_en')
+    acotada(admin.from('viaje').select('folio, origen, destino, fecha_inicio, anticipo, unidad_id, cita_origen_en, avisado_en, avisos_enviados')
       .eq('tenant_id', tenantId).eq('id', viajeId).maybeSingle(), 'avisarAlChofer.viaje'),
   ]);
   const errLectura = errOp ?? errViaje;
@@ -802,33 +802,67 @@ export async function avisarAlChofer(tenantId: string, operadorId: string, viaje
     anticipo: viaje.anticipo === null ? null : Number(viaje.anticipo),
     unidad,
   };
+  // A37-S50-06: el PRIMER aviso (avisado_en nulo) se RECLAMA antes de enviar con
+  // un UPDATE condicional: un doble clic o un reintento concurrente ya no mandan
+  // dos plantillas (con dos botones «aceptar») a un chofer real ni cobran dos
+  // envíos. Si el envío no sale, se devuelve el reclamo para que el viaje siga
+  // visible como no avisado. Un reaviso deliberado (avisado_en ya puesto: botón
+  // «Reavisar», escalación) no reclama nada y reenvía como siempre; el primer
+  // aviso manda: un reaviso no reinicia el plazo.
+  let reclamo: string | null = null;
+  if (!viaje.avisado_en) {
+    const marca = new Date().toISOString();
+    const { data: ganado, error: errReclamo } = await acotada(admin
+      .from('viaje')
+      .update({ avisado_en: marca, avisos_enviados: 1 })
+      .eq('id', viajeId)
+      .eq('tenant_id', tenantId)
+      .is('avisado_en', null)
+      .select('id'), 'avisarAlChofer.reclamar');
+    if (errReclamo) {
+      logger.error('viaje.aviso_reclamo_fallo', { viajeId, err: errReclamo.message, escalaSolo: false });
+      throw new Error(`avisarAlChofer: no se pudo reclamar el aviso — ${errReclamo.message}`);
+    }
+    if (!ganado || ganado.length === 0) {
+      logger.info('viaje.aviso_ya_reclamado', { viajeId });
+      return;
+    }
+    reclamo = marca;
+  }
+  const devolverReclamo = async () => {
+    if (!reclamo) return;
+    const { error: errDev } = await acotada(admin
+      .from('viaje')
+      .update({ avisado_en: null, avisos_enviados: (viaje.avisos_enviados as number | null) ?? 0 })
+      .eq('id', viajeId)
+      .eq('tenant_id', tenantId)
+      .eq('avisado_en', reclamo), 'avisarAlChofer.devolver');
+    if (errDev) logger.error('viaje.aviso_reclamo_no_devuelto', { viajeId, err: errDev.message });
+  };
+
   // T-A5-47: en la flota con la perilla encendida la asignación sale con botones (N01) en vez de `viaje_asignado`.
-  const r = (await asignacionConBotones(tenantId))
-    ? await notificarAsignacionConBotones({
-      telefono: op.telefono as string,
-      tenantId,
-      viaje: { ...datosViaje, viajeId, operadorNombre: (op.nombre as string | null) ?? null, citaEn: (viaje.cita_origen_en as string | null) ?? null },
-    })
-    : await notificarAsignacion({ telefono: op.telefono as string, tenantId, viaje: datosViaje });
+  let r: Awaited<ReturnType<typeof notificarAsignacion>>;
+  try {
+    r = (await asignacionConBotones(tenantId))
+      ? await notificarAsignacionConBotones({
+        telefono: op.telefono as string,
+        tenantId,
+        viaje: { ...datosViaje, viajeId, operadorNombre: (op.nombre as string | null) ?? null, citaEn: (viaje.cita_origen_en as string | null) ?? null },
+      })
+      : await notificarAsignacion({ telefono: op.telefono as string, tenantId, viaje: datosViaje });
+  } catch (e) {
+    await devolverReclamo();
+    throw e;
+  }
   if (!r.enviado) {
     // ERROR, no WARN, y la razón importa: `avisado_en` es lo ÚNICO que hace
     // visible este viaje para la escalación de las 5 h. Si el aviso no salió, no
     // se marca —el reloj mide "desde que se le dijo al chofer", y nadie le
     // dijo—, así que este viaje NO va a escalar solo. Queda en el panel y en
     // este log, que es de donde alguien lo tiene que sacar.
+    await devolverReclamo();
     logger.error('viaje.aviso_no_salio', { viajeId, motivo: r.motivo, escalaSolo: false });
-    return;
   }
-
-  // Marca el arranque del reloj. Sin esto, `viajesSinAceptar()` no lo ve nunca:
-  // filtra por `avisado_en no es null`.
-  const { error } = await acotada(admin
-    .from('viaje')
-    .update({ avisado_en: new Date().toISOString(), avisos_enviados: 1 })
-    .eq('id', viajeId)
-    .eq('tenant_id', tenantId)
-    .is('avisado_en', null), 'avisarAlChofer.marcar'); // el primer aviso manda: un reaviso no reinicia el plazo
-  if (error) logger.warn('viaje.avisado_en_no_se_marcó', { viajeId, err: error.message });
 }
 
 /**

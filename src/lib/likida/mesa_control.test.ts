@@ -200,6 +200,25 @@ describe('resolverDesdeMesa — sin nota no hay cierre', () => {
   });
 });
 
+describe('A37-S50-05: no afirma «registrado en el expediente» si el evento no se escribió', () => {
+  it('tomar control: la acción se aplicó pero el expediente no se anotó → se dice', async () => {
+    anotarEventoIncidencia.mockResolvedValueOnce('fallo' as never);
+    const r = await tomarControlMesa('t1', 'inc-1', 'u-yo');
+    expect('ok' in r).toBe(true);
+    const txt = 'ok' in r ? r.ok : '';
+    expect(txt).not.toMatch(/quedó registrado en el expediente/);
+    expect(txt).toMatch(/NO se anotó en el expediente/);
+  });
+
+  it('reescalar: igual', async () => {
+    anotarEventoIncidencia.mockResolvedValueOnce('fallo' as never);
+    const r = await reescalarDesdeMesa('t1', 'inc-1', 'u-yo', 2);
+    const txt = 'ok' in r ? r.ok : '';
+    expect(txt).not.toMatch(/registrado en el expediente/);
+    expect(txt).toMatch(/NO se anotó en el expediente/);
+  });
+});
+
 describe('reescalarDesdeMesa — monótono, como el claim del cron', () => {
   it('un nivel inválido no llega a la base', async () => {
     for (const nivel of [0, 5, 2.5, NaN]) {
