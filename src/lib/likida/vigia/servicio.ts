@@ -1056,7 +1056,7 @@ async function pasadaAvisos(deps: DepsVigia, ahora: Date, r: ResultadoBarrido, v
     for (const f of flotas) {
       if (sinTiempo()) { r.cortadoPorReloj = true; return; }
       try {
-        // A37-INN-A4-09: generar y entregar NO se acoplan por flota: si generar lanza de forma persistente, los avisos que una
+        // A37-A4-09: generar y entregar NO se acoplan por flota: si generar lanza de forma persistente, los avisos que una
         // persona ya confirmó se entregan igual (el error queda en `avisosConError`).
         try {
           const g = await generarAvisos(f.tenantId, ahora, f.generar);

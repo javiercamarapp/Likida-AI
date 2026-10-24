@@ -155,7 +155,7 @@ export function crearRepoBandeja(): RepoBandeja {
       const fila = await acotada(db.from('programa_despacho_fila').select('id').eq('tenant_id', tenantId).eq('id', filaId).maybeSingle(), 'bandeja.fila');
       exigir('fila', fila.error);
       if (!fila.data) return 'fila_ajena';
-      // A37-INN-A4-08: SIN leer y mezclar (dos capturas simultáneas se pisaban): el upsert lleva SOLO las columnas que la
+      // A37-A4-08: SIN leer y mezclar (dos capturas simultáneas se pisaban): el upsert lleva SOLO las columnas que la
       // persona tocó, así que las demás ni se leen ni se escriben (merge por columna en la base). `null` = borrar ese dato.
       const col = (v: string | null | undefined): { v: string | null } | null => (v === undefined ? null : { v: v === '' ? null : v });
       const cambios: Record<string, string | null> = {};
@@ -271,7 +271,7 @@ export function validarDatoManual(entrada: Record<string, unknown>): ValidacionD
     if (!(ESTADOS_CAJA as readonly string[]).includes(estado)) return { ok: false, error: 'Elige un estado de la caja de la lista.' };
     out.estadoCaja = estado;
   }
-  // A37-INN-A4-08: borrar es una acción EXPLÍCITA (`borrar`: nombres de campo); lo vacío sigue sin tocar nada.
+  // A37-A4-08: borrar es una acción EXPLÍCITA (`borrar`: nombres de campo); lo vacío sigue sin tocar nada.
   const borrar = Array.isArray(entrada.borrar) ? entrada.borrar.map(String) : [];
   for (const campo of borrar) {
     if (!(CAMPOS_BORRABLES as readonly string[]).includes(campo)) return { ok: false, error: 'Ese dato no se puede borrar.' };

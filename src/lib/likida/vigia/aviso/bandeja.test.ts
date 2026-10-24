@@ -156,7 +156,7 @@ describe('las escrituras', () => {
     expect(await crearRepoBandeja().guardarDatoManual(T1, FILA, U1, { placasCaja: 'ABC-123' })).toBe('fila_ajena');
     expect(llamadas.some((l) => l.op === 'upsert')).toBe(false);
   });
-  it('A37-INN-A4-08: la captura manual NO lee-mezcla-escribe: el upsert lleva solo las columnas tocadas', async () => {
+  it('A37-A4-08: la captura manual NO lee-mezcla-escribe: el upsert lleva solo las columnas tocadas', async () => {
     respuesta = (l) => (l.tabla === 'programa_despacho_fila' ? { data: [{ id: FILA }], error: null } : { data: null, error: null });
     expect(await crearRepoBandeja().guardarDatoManual(T1, FILA, U1, { placasCaja: 'ABC-123' })).toBe('guardado');
     expect(llamadas.some((l) => l.tabla === 'vigia_dato_viaje_manual' && l.op === 'select')).toBe(false);
@@ -165,7 +165,7 @@ describe('las escrituras', () => {
     expect(Object.keys(up?.valores as object)).not.toContain('operador_nombre');
     expect(up?.opciones).toEqual({ onConflict: 'tenant_id,fila_id' });
   });
-  it('A37-INN-A4-08: borrar es explícito (null) y lo vacío no borra', async () => {
+  it('A37-A4-08: borrar es explícito (null) y lo vacío no borra', async () => {
     expect(validarDatoManual({ placasCaja: '', telefono: '' })).toMatchObject({ ok: false });
     const v = validarDatoManual({ placasCaja: 'ABC-123', borrar: ['telefono'] });
     expect(v).toMatchObject({ ok: true, valor: { placasCaja: 'ABC-123', telefono: null } });

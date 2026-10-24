@@ -87,7 +87,7 @@ describe('barridoVigia · pasada de avisos', () => {
     entregar.mockResolvedValue({ estado: 'enviado', via: 'plantilla' });
     const { deps } = armar([f1, f2]);
     const r = await barridoVigia(deps, { mantenimiento: true });
-    // A37-INN-A4-09: generar que lanza NO frena la entrega de lo ya confirmado de esa misma flota.
+    // A37-A4-09: generar que lanza NO frena la entrega de lo ya confirmado de esa misma flota.
     expect(r).toMatchObject({ avisosConError: true, avisosCreados: 1, avisosEnviados: 3 });
     expect(f1.aprobados).toHaveBeenCalled();
 
