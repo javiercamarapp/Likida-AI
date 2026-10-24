@@ -5,7 +5,8 @@
 // Pensado para que el sistema del cliente lo consulte cada pocos minutos con el
 // último `id` que ya procesó (`?despues=<id>`) y NO se pierda ni repita nada: el id
 // es un entero que solo crece. Los eventos no llevan datos personales (ids,
-// estados y fuentes); el detalle del hito está en `/v1/hitos`.
+// estados y fuentes); el detalle del hito está en `/v1/hitos`. Solo salen los 9 eventos del contrato y su `detalle` es de
+// lista blanca (A37-S11-03): los renglones internos de la bitácora (validación, evidencia, alertas…) no se publican.
 //
 // Es PULL. Un webhook saliente hacia el sistema del cliente exige una política de
 // destinos (SSRF), secretos y reintentos que esta ruta no inventa: ver
@@ -39,10 +40,10 @@ export async function GET(req: Request) {
   const despues = crudoDespues === null ? 0 : Number(crudoDespues);
 
   try {
-    const { filas, hayMas } = await leerEventos(acceso.tenantId, despues, limite);
+    const { filas, hayMas, ultimoIdLeido } = await leerEventos(acceso.tenantId, despues, limite);
     return NextResponse.json({
       datos: filas,
-      pagina: { limite, devueltos: filas.length, hayMas, siguiente: filas.length > 0 ? String(filas[filas.length - 1].id) : String(despues) },
+      pagina: { limite, devueltos: filas.length, hayMas, siguiente: String(ultimoIdLeido ?? (filas.length > 0 ? filas[filas.length - 1].id : despues)) },
     });
   } catch (e) {
     return fallo('v1.hitos_eventos', e, { tenant: acceso.tenantId });

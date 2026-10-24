@@ -814,7 +814,7 @@ function documento(servidor: string) {
         },
         HitoEvento: {
           type: 'object',
-          description: 'Un evento del feed incremental. Sin datos personales: ids, estados y fuentes.',
+          description: 'Un evento del feed incremental. Sin datos personales: ids, estados y fuentes. Solo los 9 eventos del enum; `detalle` trae únicamente escalares de sistema (nivel, canal, fuente, conteos).',
           properties: {
             id: { type: 'integer', description: 'Solo crece. Guarda el último que procesaste y pídelo en `?despues=`.' },
             viajeId: { type: 'string', format: 'uuid' },

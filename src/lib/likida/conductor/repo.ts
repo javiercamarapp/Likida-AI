@@ -11,7 +11,7 @@ import type { LegadoSello } from './maquina';
 import { CONFIG_CONDUCTOR_DEFAULT, COHORTES_PILOTO, validarConfigConductor, zonaOCdmx, type CohortePiloto, type ConfigConductor, type PerfilSeguimiento } from './config';
 import { MOTIVO_FUERA_DE_PERFIL, hitoEnPerfil } from './perfil';
 import { contieneDatoDeSeguridad } from './guardia_seguridad';
-import { aHitoApi, type EventoApi, type FiltrosHitos, type HitoApi, type CambioCitas } from './lectura';
+import { aHitoApi, EVENTOS_FEED, detalleDeFeed, type EventoApi, type FiltrosHitos, type HitoApi, type CambioCitas } from './lectura';
 import type { AvisoReclamado } from './planificador';
 import type { ContactoTrafico } from './escalamiento';
 import type { EpisodioFila } from './senal_vida';
@@ -766,21 +766,29 @@ export async function leerHitos(
   return { filas: pagina.map((h) => aHitoApi(h, folios.get(h.viajeId) ?? null)), hayMas };
 }
 
-/** El feed incremental: eventos con id > `despuesDeId`, del más viejo al más nuevo. */
-export async function leerEventos(tenantId: string, despuesDeId: number, limite: number): Promise<{ filas: EventoApi[]; hayMas: boolean }> {
+/**
+ * El feed incremental: eventos con id > `despuesDeId`, del más viejo al más nuevo.
+ * A37-S11-03: solo los 9 eventos del contrato y con `detalle` de lista blanca; los renglones internos de la bitácora no salen.
+ * `ultimoIdLeido` es el cursor REAL (incluye lo omitido por no ser del contrato) para que el integrador no vuelva a leerlo.
+ */
+export async function leerEventos(tenantId: string, despuesDeId: number, limite: number): Promise<{ filas: EventoApi[]; hayMas: boolean; ultimoIdLeido: number | null }> {
   const res = await acotada(supabaseAdmin()
     .from('viaje_hito_evento')
     .select('id, viaje_id, viaje_hito_id, tipo_hito, evento, detalle, created_at')
-    .eq('tenant_id', tenantId).gt('id', despuesDeId).order('id', { ascending: true }).limit(limite + 1), 'v1.hitos_eventos');
+    .eq('tenant_id', tenantId).in('evento', [...EVENTOS_FEED]).gt('id', despuesDeId).order('id', { ascending: true }).limit(limite + 1), 'v1.hitos_eventos');
   const filas = ((exigir(res as never, 'v1.hitos_eventos') ?? []) as unknown as Fila[]);
   const hayMas = filas.length > limite;
-  return {
-    hayMas,
-    filas: filas.slice(0, limite).map((f) => ({
+  const leidas = filas.slice(0, limite);
+  const publicas: EventoApi[] = [];
+  for (const f of leidas) {
+    const detalle = detalleDeFeed(String(f.evento), f.detalle);
+    if (detalle === null) continue;
+    publicas.push({
       id: Number(f.id), viajeId: String(f.viaje_id), hitoId: String(f.viaje_hito_id), tipoHito: f.tipo_hito as TipoHito,
-      evento: String(f.evento), detalle: (f.detalle ?? {}) as Record<string, unknown>, creadoEn: String(f.created_at),
-    })),
-  };
+      evento: String(f.evento), detalle, creadoEn: String(f.created_at),
+    });
+  }
+  return { hayMas, filas: publicas, ultimoIdLeido: leidas.length > 0 ? Number(leidas[leidas.length - 1].id) : null };
 }
 
 /** T-A5-44: un renglón de la bitácora del patio de entrega (`validacion` o `atendido` con `detalle.clase = 'patio_entrega'`). */
