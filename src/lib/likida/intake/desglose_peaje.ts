@@ -59,8 +59,9 @@ import { MARCA_TEXTO_SOSPECHOSO } from './ocr';
 import { VENTANA_DIAS_FECHA, TOLERANCIA_MONTO_MXN } from './consolidado';
 import { registrarCorrida } from '../agentes/corridas';
 import { contextoEvidenciaGps, llaveUnidadDia } from '../peajes/evidencia_gps';
-import { cargarMapaTags, cargarMapeo, listarCasetas, evaluarGpsDeLineas } from '../peajes/datos';
+import { cargarVigenciaTags, cargarMapeo, listarCasetas, evaluarGpsDeLineas } from '../peajes/datos';
 import { normalizarTag } from '../peajes/formatos';
+import { unidadDeTagEnFecha } from '../peajes/tags';
 import { resolverPeriodo } from '../peajes/periodo';
 import { registrarNombresDeCasetas } from '../peajes/revision_cobros';
 import { matrizDeCsv } from '../peajes/csv';
@@ -1176,9 +1177,10 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
     'desglose_peaje.leer_lineas',
   );
 
-  // El TAG dado de alta → su unidad (0375). Lanza ante error de base: un mapa a
-  // medias dejaría líneas «sin unidad» que sí la tienen.
-  const unidadPorTag = await cargarMapaTags(tenantId);
+  // El TAG dado de alta → su unidad (0375) CON su vigencia (A37-S53-01): un cruce anterior a la baja conserva su unidad aunque el
+  // archivo llegue después, y uno posterior a una baja programada deja de atribuirla sin necesitar un barrido. Lanza ante error
+  // de base: un mapa a medias dejaría líneas «sin unidad» que sí la tienen.
+  const vigenciaTags = await cargarVigenciaTags(tenantId);
   const lineas = filas.map((f) => {
     const tagNorm = normalizarTag(f.tag as string | null);
     return {
@@ -1188,7 +1190,7 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
       monto: Number(f.monto),
       caseta: (f.caseta as string | null) ?? null,
       cruceEn: (f.cruce_en as string | null) ?? null,
-      unidadId: tagNorm ? (unidadPorTag.get(tagNorm) ?? null) : null,
+      unidadId: unidadDeTagEnFecha(tagNorm, (f.fecha as string | null) ?? null, vigenciaTags),
     };
   });
   const resumen: ResumenCruceDesglose = {

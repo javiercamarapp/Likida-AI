@@ -219,3 +219,22 @@ export function resolverTagEnFecha(
   }
   return { estado: 'vigente', unidadId: v.unidadId };
 }
+
+/**
+ * La unidad a la que se atribuye un cruce por su TAG, en la FECHA del cruce (A37-S53-01). `null` = no se atribuye.
+ *  · TAG sin alta, o cruce POSTERIOR a la baja → null (el cruce se marca por otra vía, no se le pega la unidad).
+ *  · TAG con baja y cruce SIN fecha → null: no se puede afirmar que sea anterior a la baja (antes un TAG ya dado de baja
+ *    tampoco atribuía unidad, así que no se afloja nada).
+ *  · Una baja con fecha FUTURA sigue atribuyendo hasta ese día y deja de hacerlo después, sin barrido ni cron.
+ */
+export function unidadDeTagEnFecha(
+  tagNormalizado: string | null,
+  fechaCruce: string | null,
+  mapa: ReadonlyMap<string, VigenciaTag>,
+): string | null {
+  const v = tagNormalizado ? mapa.get(tagNormalizado) : undefined;
+  if (!v) return null;
+  if (v.bajaEn && !fechaCruce) return null;
+  const r = resolverTagEnFecha(tagNormalizado, fechaCruce, mapa);
+  return r.estado === 'vigente' ? r.unidadId : null;
+}
