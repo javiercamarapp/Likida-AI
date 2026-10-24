@@ -62,6 +62,28 @@ describe('mapearBitacoraTms · viáticos', () => {
   });
 });
 
+describe('mapearBitacoraTms · A37-S48-07 viáticos que no concilian', () => {
+  const rawCon = (monto: number, detalle: Array<{ descripcion: string; monto: number }>) => ({
+    ...TMS_NODOS,
+    percepciones: [{ desglose: 'Viáticos', descripcion: 'VIATICOS', tipo: 'V', monto, detalle }],
+    deducciones: [],
+  });
+
+  it('si el detalle suma menos que el renglón, se conserva el monto del renglón y se anota la diferencia', () => {
+    const raw = rawCon(1500, [{ descripcion: 'Taxi', monto: 700 }, { descripcion: 'Talacha', monto: 500 }]);
+    const { desglose, ignorados } = mapearBitacoraTms(raw, MAPEO_NODOS);
+    expect(desglose.percepciones).toEqual([{ concepto: 'Viáticos', monto: 1500 }]);
+    expect(ignorados.some((i) => /no concilia/.test(i.motivo))).toBe(true);
+  });
+
+  it('si el detalle concilia al centavo, sí sustituye al renglón', () => {
+    const raw = rawCon(1200, [{ descripcion: 'Taxi', monto: 700 }, { descripcion: 'Talacha', monto: 500 }]);
+    const { desglose, ignorados } = mapearBitacoraTms(raw, MAPEO_NODOS);
+    expect(desglose.percepciones).toEqual([{ concepto: 'Taxi', monto: 700 }, { concepto: 'Talacha', monto: 500 }]);
+    expect(ignorados.some((i) => /no concilia/.test(i.motivo))).toBe(false);
+  });
+});
+
 describe('mapearBitacoraTms · errores con campo', () => {
   const con = (cambio: (r: typeof TMS_PLANA) => void) => {
     const raw = JSON.parse(JSON.stringify(TMS_PLANA)) as typeof TMS_PLANA;

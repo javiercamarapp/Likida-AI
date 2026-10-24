@@ -71,6 +71,22 @@ describe('intentarEntrega: gate por canal', () => {
     expect(enviar).toHaveBeenCalledTimes(1);
   });
 
+  it('A37-S49-03: canal ambos y SIN PDF (flujo de desgloses) ⇒ no lanza «no tiene PDF»: se aparta sin gastar intento', async () => {
+    const r = await intentarEntrega(liq({ pdfRuta: null }), depsCon(async () => 'ambos'));
+    expect(r).toBe('sin_cambio');
+    expect(enviar).not.toHaveBeenCalled();
+    expect(transicionar).toHaveBeenCalledTimes(1);
+    const cambios = transicionar.mock.calls[0][3] as Record<string, unknown>;
+    expect(cambios).toHaveProperty('proximo_intento_en');
+    expect(cambios).not.toHaveProperty('intentos');
+    expect(cambios).not.toHaveProperty('estado');
+  });
+
+  it('canal whatsapp y SIN PDF sigue siendo un error real (se reintenta y termina fallida)', async () => {
+    const r = await intentarEntrega(liq({ pdfRuta: null }), depsCon(async () => 'whatsapp'));
+    expect(r).toBe('reintentar');
+  });
+
   it('si el canal no se puede leer ⇒ no se manda nada y no se gasta intento', async () => {
     const r = await intentarEntrega(liq(), depsCon(async () => { throw new Error('base caída'); }));
     expect(r).toBe('sin_cambio');

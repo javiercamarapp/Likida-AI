@@ -20,6 +20,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { exigir, traerTodo } from '../pg';
 import { DatoInvalido } from '../errores';
@@ -234,6 +235,17 @@ export async function guardarConfigCorreo(tenantId: string, c: ConfigCorreo, por
   const res = await acotada(supabaseAdmin().from('liquidacion_correo_config')
     .upsert(fila, { onConflict: 'tenant_id' }).select('tenant_id'), 'liqcorreo.config_guardar');
   exigirEscritura(res as unknown as { data: unknown; error: ErrorPg }, 'liqcorreo.config_guardar');
+  // A37-S49-01: mientras el envío estaba apagado (o sin «Responder a») sus entregas esperaban horas para no acaparar la cola
+  // global; al quedar la flota lista se adelantan a «ya». Es solo puntualidad: si falla, salen en su siguiente turno.
+  if (c.activa && c.canal !== 'whatsapp' && fila.responder_a) {
+    try {
+      const ya = new Date().toISOString();
+      await acotada(supabaseAdmin().from('liquidacion_entrega_correo')
+        .update({ proximo_intento_en: ya }).eq('tenant_id', tenantId).eq('estado', 'pendiente').gt('proximo_intento_en', ya), 'liqcorreo.config_adelantar');
+    } catch (e) {
+      logger.warn('liqcorreo.config_adelantar_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    }
+  }
 }
 
 // ── Contacto del operador y coordinadores ───────────────────────────────────
@@ -371,6 +383,24 @@ export function puertoContactosReal(tenantId: string): PuertoContactos {
     },
     async guardarContacto(operadorId, cambios) {
       await guardarContactoOperador(tenantId, operadorId, cambios);
+    },
+    // A37-S48-06: el puerto NO traía esta consulta, así que el choque con otro operador de la flota nunca se detectaba.
+    // Los correos se guardan en minúsculas (el import los normaliza); se consulta por igualdad y se descartan en memoria
+    // los operadores que el propio archivo va a tocar. Un error de lectura LANZA: sin saberlo, no se escribe.
+    async correosEnUsoPorOtros(correos, excluirOperadorIds) {
+      const excluidos = new Set(excluirOperadorIds);
+      const ocupados = new Set<string>();
+      const lista = [...new Set(correos.map((c) => c.toLowerCase()))];
+      for (let i = 0; i < lista.length; i += 200) {
+        const res = await acotada(supabaseAdmin().from('operador')
+          .select('id, correo').eq('tenant_id', tenantId).in('correo', lista.slice(i, i + 200))
+          .order('id').limit(1000), 'liqcorreo.contactos_choques');
+        const r = res as unknown as { data: Fila[] | null; error: ErrorPg };
+        for (const f of exigirEscritura(r, 'liqcorreo.contactos_choques') ?? []) {
+          if (!excluidos.has(String(f.id)) && typeof f.correo === 'string') ocupados.add(f.correo.toLowerCase());
+        }
+      }
+      return ocupados;
     },
   };
 }

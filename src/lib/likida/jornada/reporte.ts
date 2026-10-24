@@ -1,4 +1,4 @@
-import { TZ_MX } from '@/lib/formato';
+import { TZ_MX, hoyMx } from '@/lib/formato';
 import { toCsv } from '../export';
 import { componerJornada, fraseDelHueco, aHoras, ROTULO_PROCEDENCIA, type Asiento } from './modelo';
 import {
@@ -162,7 +162,7 @@ function filaDeDia(d: DiaDelReporte, politica: PoliticaFlota | null): FilaReport
     // «prueba plena». Su ausencia se dice: no se deja en blanco como si fuera
     // un campo opcional que a nadie le importa.
     conformidad_del_operador: d.conformeOperadorEn
-      ? `Sí, el ${d.conformeOperadorEn.slice(0, 10)}`
+      ? `Sí, el ${hoyMx(new Date(d.conformeOperadorEn))}`
       : 'Sin conformidad del operador',
   };
 }

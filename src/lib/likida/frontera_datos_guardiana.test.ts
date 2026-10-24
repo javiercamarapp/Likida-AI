@@ -588,6 +588,7 @@ const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_287;
 // Auditoría 37, lote b-sat-fiscal-04 (medido con el barrido real): +3 llamadas (2,284 → 2,287). reglas/repo.ts (+1, retención del texto de
 // `regla_disparo.evidencia`, S56-06), storage_borrado.ts (+1, `storage.from(bucket).exists` para confirmar la ausencia antes de sellar, S57-07) y
 // transferencia.ts (+1, blindar la reserva con centinela cuando el UUID del CFDI no se guardó, S61-02; el guardado con reintentos reemplaza al anterior, +0).
+// A37 lote M-D-peajes-liquidacion-04 (+3 medidas): repo_correo.ts +1 (correosEnUsoPorOtros, A37-S48-06) y +1 (adelantar entregas al activar el envío, A37-S49-01); peajes/repo.ts +1 (agotarIntentosAviso, A37-S51-03). Todas por `acotada`, ancladas a tenant_id.
 const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_287;
 // Auditoría 37, lote agentes-legal-ia (medido con el barrido real): +2 llamadas (2,264 → 2,266). `candidatos_redactor.ts` suma 3 `.from(` (prospecto, cola_aprobacion, prospecto_contacto) y `runner.ts` pierde la suya (+2 netas); `sdr.ts` pasa de 3 a 3 (la lectura por prospecto se volvió lectura en lote). Todo por `acotada`.
 // LOTE A37 peajes-liquidación-graves (migración 0865): +5 llamadas (2,264 → 2,269), 0 archivos nuevos, medido con el barrido real. `jornada/repo.ts` +1:

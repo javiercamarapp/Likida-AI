@@ -1118,10 +1118,28 @@ export async function reclamarIntentoAviso(tenantId: string, desgloseId: string,
   return (data ?? []).length > 0;
 }
 
-export async function marcarAvisoEnviado(tenantId: string, desgloseId: string): Promise<void> {
-  const { error } = await acotada(supabaseAdmin().from('desglose_peaje')
-    .update({ aviso_oficina_en: new Date().toISOString() }).eq('tenant_id', tenantId).eq('id', desgloseId).is('aviso_oficina_en', null), 'peajes.marcar_aviso');
-  if (error) logger.error('peajes.marcar_aviso', { tenant: tenantId, err: error.message });
+export async function marcarAvisoEnviado(tenantId: string, desgloseId: string): Promise<boolean> {
+  try {
+    const { error } = await acotada(supabaseAdmin().from('desglose_peaje')
+      .update({ aviso_oficina_en: new Date().toISOString() }).eq('tenant_id', tenantId).eq('id', desgloseId).is('aviso_oficina_en', null), 'peajes.marcar_aviso');
+    if (error) { logger.error('peajes.marcar_aviso', { tenant: tenantId, err: error.message }); return false; }
+    return true;
+  } catch (e) {
+    logger.error('peajes.marcar_aviso', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    return false;
+  }
+}
+
+/** A37-S51-03: el aviso YA salió pero no se pudo sellar `aviso_oficina_en`. Se agotan sus intentos para que el barrido no
+ *  lo reenvíe al dueño (un duplicado es peor que perder un reintento de un aviso que ya llegó). `false` si tampoco se pudo. */
+export async function agotarIntentosAviso(tenantId: string, desgloseId: string, maximo: number): Promise<boolean> {
+  try {
+    const { error } = await acotada(supabaseAdmin().from('desglose_peaje')
+      .update({ aviso_intentos: maximo }).eq('tenant_id', tenantId).eq('id', desgloseId).is('aviso_oficina_en', null), 'peajes.agotar_aviso');
+    return !error;
+  } catch {
+    return false;
+  }
 }
 
 /** Los desgloses con aviso por enviar, de todas las flotas (barrido del cron; solo ids). */

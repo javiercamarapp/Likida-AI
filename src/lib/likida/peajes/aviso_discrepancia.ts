@@ -1,4 +1,5 @@
 import { logger } from '@/lib/logger';
+import { quedoEnCola } from './aviso_en_cola';
 import { appUrl } from '@/lib/env';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
@@ -119,7 +120,8 @@ export async function avisarDiscrepanciasDesglose(
         ),
         contexto: { tenantId, agente: 'peajes', desglose: desgloseId },
       });
-      if (resultado.ok) r.enviados++;
+      // A37-S51-04: en cola del outbox = enviado (saldrá solo; contarlo como pendiente invita a mandarlo otra vez).
+      if (resultado.ok || quedoEnCola(resultado)) r.enviados++;
       else {
         logger.error('peajes.discrepancia_aviso_fallo', {
           tenant: tenantId, desglose: desgloseId, indice: c.indice, motivo: resultado.motivo, codigo: resultado.codigo,

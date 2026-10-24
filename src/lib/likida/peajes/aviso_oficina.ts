@@ -26,8 +26,9 @@ import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina'
 import { telefonoParaDineroDe } from '../contactos';
 import { bitacoraConciliada } from './bitacora_conciliada';
 import {
-  leerEstadoAvisoDesglose, reclamarIntentoAviso, marcarAvisoEnviado, avisosPendientesPeajes, MAX_INTENTOS_AVISO,
+  leerEstadoAvisoDesglose, reclamarIntentoAviso, marcarAvisoEnviado, agotarIntentosAviso, avisosPendientesPeajes, MAX_INTENTOS_AVISO,
 } from './datos';
+import { quedoEnCola } from './aviso_en_cola';
 
 export type ResultadoAvisoDesglose =
   | 'enviado' | 'no_requerido' | 'ya_avisado' | 'anulado' | 'no_existe' | 'agotado' | 'ocupado' | 'sin_destinatario' | 'rechazado';
@@ -85,11 +86,18 @@ export async function avisarDesgloseConciliado(tenantId: string, desgloseId: str
       parametros: parametrosAvisoOficina(`Peajes ${proveedor}`, `${c.gpsNoCoincide + c.sinRespaldo} cobros por revisar`, liga()),
       contexto: { tenantId, agente: 'peajes', desglose: desgloseId },
     });
-    if (!r.ok) {
+    const enCola = quedoEnCola(r);
+    if (!r.ok && !enCola) {
       logger.error('peajes.aviso_fallo', { tenant: tenantId, desglose: desgloseId, motivo: r.motivo, codigo: r.codigo });
       return 'rechazado';
     }
-    await marcarAvisoEnviado(tenantId, desgloseId);
+    if (enCola) logger.warn('peajes.aviso_en_cola', { tenant: tenantId, desglose: desgloseId, motivo: r.ok ? null : r.motivo, codigo: r.ok ? null : r.codigo });
+    // A37-S51-03: ya salió (o quedó en el outbox). Si el sello falla se reintenta una vez; si sigue fallando se agotan los
+    // intentos del desglose para que el barrido NO lo reenvíe hasta MAX_INTENTOS_AVISO veces.
+    if (!(await marcarAvisoEnviado(tenantId, desgloseId)) && !(await marcarAvisoEnviado(tenantId, desgloseId))) {
+      const agotado = await agotarIntentosAviso(tenantId, desgloseId, MAX_INTENTOS_AVISO);
+      logger.error('peajes.aviso_enviado_sin_sello', { tenant: tenantId, desglose: desgloseId, agotado });
+    }
     return 'enviado';
   } catch (e) {
     logger.error('peajes.aviso_error', { tenant: tenantId, desglose: desgloseId, err: e instanceof Error ? e.message : String(e) });

@@ -1,5 +1,7 @@
 import { z } from 'zod';
-import { CONFIG_ATIPICOS_DEFAULT, type ConfigAtipicos } from './atipicos';
+import { CONFIG_ATIPICOS_DEFAULT, VELOCIDAD_MIN_KMH, VELOCIDAD_MAX_KMH, type ConfigAtipicos } from './atipicos';
+
+export { VELOCIDAD_MIN_KMH, VELOCIDAD_MAX_KMH };
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA CONFIGURACIÓN DE LOS CRUCES ATÍPICOS, validada (T-A2-12). PURO: sin base ni red.
@@ -14,8 +16,6 @@ import { CONFIG_ATIPICOS_DEFAULT, type ConfigAtipicos } from './atipicos';
 export const VENTANA_HORAS_MAX = 72;
 export const MIN_CRUCES_MIN = 2;
 export const MIN_CRUCES_MAX = 50;
-export const VELOCIDAD_MIN_KMH = 30;
-export const VELOCIDAD_MAX_KMH = 400;
 
 const activa = z.boolean({ error: 'Indica si la regla está activa (sí o no).' });
 
