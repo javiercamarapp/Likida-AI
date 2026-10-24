@@ -291,6 +291,11 @@ function Enlaces({ panel, generar, revocar }: {
               />
             </FormaConAviso>
           )}
+          {panel.facturasTruncadas && (
+            <p className="mt-1.5 text-xs" style={{ color: 'var(--muted)' }}>
+              La lista está recortada: solo se revisan las facturas más recientes. Si no ves una factura con saldo, genera su enlace desde su detalle.
+            </p>
+          )}
         </div>
 
         {panel.ligasVivas.length > 0 && (

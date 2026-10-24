@@ -70,6 +70,8 @@ let ocupadosUnidadError: { message: string } | null;
  *  un INSERT con una fila de esa unidad choca con `uq_viaje_abierto_por_unidad`
  *  (23505) y, como en Postgres, la sentencia entera se revierte. */
 let unidadesOcupadasEnCarrera: Set<string>;
+/** A37-S64-01: folios cuya fila la base rechaza con 22008 (fecha fuera de rango): como Postgres, la sentencia entera se revierte. */
+let foliosDatoInvalido: Set<string>;
 
 /** La RPC de ANALYZE (0157, ESC-18): se anota cada llamada; `rpcError` la
  *  hace fallar para probar que el import NO se cae por ella. */
@@ -151,6 +153,9 @@ function fromViaje() {
               error: { code: '23502', message: 'null value in column "operador_id" of relation "viaje" violates not-null constraint' },
             });
           }
+          if (lote.some((f) => foliosDatoInvalido.has(f.folio))) {
+            return Promise.resolve({ data: null, error: { code: '22008', message: 'date/time field value out of range' } });
+          }
           const choque = lote.find((f) => f.unidad_id && unidadesOcupadasEnCarrera.has(f.unidad_id));
           if (choque) {
             return Promise.resolve({
@@ -203,6 +208,7 @@ beforeEach(() => {
   ocupadosUnidadResp = [];
   ocupadosUnidadError = null;
   unidadesOcupadasEnCarrera = new Set();
+  foliosDatoInvalido = new Set();
   catalogoUnidades = [];
   catalogoClientes = [];
   catalogoError = null;
@@ -335,6 +341,16 @@ describe('DAT-34-2: uq_viaje_abierto_por_unidad (0851) rechaza UNA fila, no el l
     expect(r.unidadOcupada).toEqual(['V-1']);
     expect(r.saltados).toEqual([]); // no es «el folio ya existía»
     expect([...enBase].sort()).toEqual(['V-2', 'V-3']);
+  });
+
+  it('A37-S64-01: un 22008/22003 de UNA fila no tumba el lote — solo esa fila se rechaza con su folio y código, las demás (y los lotes siguientes) entran', async () => {
+    foliosDatoInvalido = new Set(['V-2']);
+    const r = await importarViajes('t1', [fila('V-1'), fila('V-2'), fila('V-3')]);
+    expect(r.error).toBeUndefined();
+    expect(r.creados).toBe(2);
+    expect(r.rechazadasPorBase).toEqual([{ folio: 'V-2', codigo: '22008' }]);
+    expect(r.saltados).toEqual([]); // no es «el folio ya existía»
+    expect([...enBase].sort()).toEqual(['V-1', 'V-3']);
   });
 
   it('solo el 23505 del índice de la unidad cuenta como choque de unidad: el folio, el operador y otros códigos siguen siendo falla del lote', async () => {

@@ -399,9 +399,10 @@ describe('Agente 12 — Jornada: alerta de tope — DUPLICADO', () => {
     expect(r1.fallos.some((f) => f.includes('j-a'))).toBe(true);
     expect(alertas()).toHaveLength(1);
     const idOriginal = alertas()[0].id;
-    // El claim quedó abierto (nunca se cerró), pero el candado `enviado_en` ya marcó el envío real
-    // con el estado exacto por destinatario, ANTES del intento de cierre que falló.
-    expect(alertas()[0]).toMatchObject({ estado: 'reclamada', encargado_estado: 'enviado', operador_estado: 'enviado', minutos_registrados: 660 });
+    // El claim quedó abierto (nunca se cerró), pero el candado `enviado_en` ya marcó el envío real ANTES del intento de cierre
+    // que falló. A37-S47-06: el candado se fija tras el PRIMER envío confirmado (el del encargado), cuando el del operador aún no
+    // salía, así que ahí queda `pendiente`; el cierre normal lo reemplaza por el estado final. Lo que importa: `enviado_en` ya existe.
+    expect(alertas()[0]).toMatchObject({ estado: 'reclamada', encargado_estado: 'enviado', operador_estado: 'pendiente', minutos_registrados: 660 });
     expect(alertas()[0].enviado_en).toBeTruthy();
 
     // Pasan 301 s: el arriendo del claim (300 s) ya venció, pero el cron real corre cada 900 s, así
@@ -416,7 +417,7 @@ describe('Agente 12 — Jornada: alerta de tope — DUPLICADO', () => {
     // Es EL MISMO registro, cerrado ahora, con los datos EXACTOS del primer envío real (660 min,
     // no los ~665 que mediría esta segunda corrida si los recalculara).
     expect(alertas()[0]).toMatchObject({
-      id: idOriginal, estado: 'enviada', minutos_registrados: 660, encargado_estado: 'enviado', operador_estado: 'enviado', claim_token: null,
+      id: idOriginal, estado: 'enviada', minutos_registrados: 660, encargado_estado: 'enviado', operador_estado: 'pendiente', claim_token: null,
     });
   });
 });
