@@ -360,9 +360,23 @@ export async function listarPerfiles(tenantId: string): Promise<PerfilFila[]> {
     .select('id, clave, nombre, cliente_id, formato, firma, version_activa, created_at').eq('tenant_id', tenantId).order('updated_at', { ascending: false }).order('id').limit(200), 'cpdocs.perfiles');
   const perfiles = (exigir(p, 'cpdocs.perfiles') ?? []) as unknown as Fila[];
   if (perfiles.length === 0) return [];
-  const v = await acotada(supabaseAdmin().from('cp_perfil_version')
-    .select('perfil_id, version, mapeos, ejemplos, nota').eq('tenant_id', tenantId).in('perfil_id', perfiles.map((x) => String(x.id))).order('perfil_id').limit(5000), 'cpdocs.perfil_versiones');
-  const versiones = (exigir(v, 'cpdocs.perfil_versiones') ?? []) as unknown as Fila[];
+  // A37-S32-07: solo la versión ACTIVA de cada perfil (antes: TODAS las versiones con tope de 5000, y los perfiles de ids altos
+  // perdían la suya sin error). Se agrupa por número de versión activa: una consulta por cada versión distinta, con `perfil_id in (...)`.
+  const porVersion = new Map<number, string[]>();
+  for (const x of perfiles) {
+    const n = Number(x.version_activa);
+    porVersion.set(n, [...(porVersion.get(n) ?? []), String(x.id)]);
+  }
+  const versiones: Fila[] = [];
+  for (const [n, ids] of porVersion) {
+    const v = await acotada(supabaseAdmin().from('cp_perfil_version')
+      .select('perfil_id, version, mapeos, ejemplos, nota').eq('tenant_id', tenantId).eq('version', n).in('perfil_id', ids)
+      // orden-no-importa: (perfil_id, version) es único y `version` va fijo; a lo más una fila por perfil y ids ≤ 200 (tope de perfiles)
+      .limit(200), 'cpdocs.perfil_versiones');
+    versiones.push(...((exigir(v, 'cpdocs.perfil_versiones') ?? []) as unknown as Fila[]));
+  }
+  const sinActiva = perfiles.filter((x) => !versiones.some((y) => String(y.perfil_id) === String(x.id)));
+  if (sinActiva.length > 0) logger.warn('cpdocs.perfiles_sin_version_activa', { tenantId, n: sinActiva.length });
   return perfiles.flatMap((x) => {
     const act = versiones.find((y) => String(y.perfil_id) === String(x.id) && Number(y.version) === Number(x.version_activa));
     if (!act) return []; // un perfil sin su versión activa no se aplica
