@@ -20,6 +20,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { exigir, traerTodo } from '../pg';
 import { DatoInvalido } from '../errores';
@@ -234,6 +235,17 @@ export async function guardarConfigCorreo(tenantId: string, c: ConfigCorreo, por
   const res = await acotada(supabaseAdmin().from('liquidacion_correo_config')
     .upsert(fila, { onConflict: 'tenant_id' }).select('tenant_id'), 'liqcorreo.config_guardar');
   exigirEscritura(res as unknown as { data: unknown; error: ErrorPg }, 'liqcorreo.config_guardar');
+  // A37-S49-01: mientras el envío estaba apagado (o sin «Responder a») sus entregas esperaban horas para no acaparar la cola
+  // global; al quedar la flota lista se adelantan a «ya». Es solo puntualidad: si falla, salen en su siguiente turno.
+  if (c.activa && c.canal !== 'whatsapp' && fila.responder_a) {
+    try {
+      const ya = new Date().toISOString();
+      await acotada(supabaseAdmin().from('liquidacion_entrega_correo')
+        .update({ proximo_intento_en: ya }).eq('tenant_id', tenantId).eq('estado', 'pendiente').gt('proximo_intento_en', ya), 'liqcorreo.config_adelantar');
+    } catch (e) {
+      logger.warn('liqcorreo.config_adelantar_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    }
+  }
 }
 
 // ── Contacto del operador y coordinadores ───────────────────────────────────

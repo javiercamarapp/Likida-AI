@@ -44,6 +44,19 @@ const PRESUPUESTO_MS = 40_000;
 const VIGENCIA_LLAVE_MS = 23 * 3_600_000;
 const ESPERA_CONFIG_MS = 15 * 60_000;
 const MARCA_AMBIGUO = 'ambiguo:';
+/** A37-S49-01: una fila de una flota con el envío apagado (o sin «Responder a») espera HORAS, no 15 min: con 15 min vuelve a
+ *  vencer en cada pasada y, con más de ~75 filas, acapara la cola global y los correos de las flotas activas esperan detrás.
+ *  Al activar o corregir la configuración, `guardarConfigCorreo` adelanta esas filas a «ya». */
+const ESPERA_FLOTA_APAGADA_MS = 6 * 3_600_000;
+/** A37-S49-02: el instante del PRIMER intento ambiguo viaja dentro de `ultimo_error` (`ambiguo: [desde <ISO>] …`) y las
+ *  esperas no lo renuevan; `proximo_intento_en` sí se renueva en cada espera, por eso no sirve para medir las 23 h. */
+const RE_DESDE_AMBIGUO = /^ambiguo:\s*\[desde (\d{4}-\d{2}-\d{2}T[\d:.]+Z)\]/;
+const desdeAmbiguo = (ultimoError: string | null): Date | null => {
+  const m = RE_DESDE_AMBIGUO.exec(ultimoError ?? '');
+  if (!m) return null;
+  const d = new Date(m[1]);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
 const TIPO_XLSX_CORREO = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 // ── Puertos ─────────────────────────────────────────────────────────────────
@@ -270,7 +283,9 @@ async function procesarUna(
     return;
   }
   const ambiguo = (e.ultimoError ?? '').startsWith(MARCA_AMBIGUO);
-  if (ambiguo && ahora.getTime() - new Date(e.proximoIntentoEn).getTime() > VIGENCIA_LLAVE_MS) {
+  // Marcas anteriores a A37-S49-02 no traen `[desde …]`: caen a `proximoIntentoEn`, como antes.
+  const desde = desdeAmbiguo(e.ultimoError) ?? new Date(e.proximoIntentoEn);
+  if (ambiguo && ahora.getTime() - desde.getTime() > VIGENCIA_LLAVE_MS) {
     await deps.marcarFallida(e.tenantId, e.id, token, 'sin confirmar: el intento anterior quedó ambiguo y la llave de idempotencia ya venció; decide una persona');
     resumen.sinConfirmar += 1;
     return;
@@ -285,7 +300,7 @@ async function procesarUna(
   // aquí, ANTES de descargar el Excel o llamar al proveedor. No se gasta intento ni se falla la fila: queda pendiente y
   // sale sola cuando alguien enciende el envío. (Sin fila de config el valor por defecto es `activa=false`: tampoco sale.)
   if (!config.activa) {
-    await deps.reprogramar(e.tenantId, e.id, token, e.intentos, new Date(ahora.getTime() + ESPERA_CONFIG_MS), e.ultimoError);
+    await deps.reprogramar(e.tenantId, e.id, token, e.intentos, new Date(ahora.getTime() + ESPERA_FLOTA_APAGADA_MS), e.ultimoError);
     resumen.apagada += 1;
     return;
   }
@@ -294,7 +309,7 @@ async function procesarUna(
   // manda un correo con una promesa falsa a una persona. Igual que apagada: no se gasta intento, la fila espera la configuración.
   if (!config.responderA) {
     logger.warn('liqcorreo.sin_responder_a', { tenant: e.tenantId, entrega: e.id });
-    await deps.reprogramar(e.tenantId, e.id, token, e.intentos, new Date(ahora.getTime() + ESPERA_CONFIG_MS), e.ultimoError);
+    await deps.reprogramar(e.tenantId, e.id, token, e.intentos, new Date(ahora.getTime() + ESPERA_FLOTA_APAGADA_MS), e.ultimoError);
     resumen.sinConfigurar += 1;
     return;
   }
@@ -406,7 +421,11 @@ async function falloReintentable(
   deps: DependenciasEntregaCorreo, resumen: ResumenEntregasCorreo,
 ): Promise<void> {
   const intentos = e.intentos + 1;
-  const texto = ambiguo && !detalle.startsWith(MARCA_AMBIGUO) ? `${MARCA_AMBIGUO} ${detalle}` : detalle;
+  // El primer intento ambiguo manda: un fallo posterior (aunque ya no sea ambiguo) conserva el instante, porque el POST
+  // original pudo haberse aceptado y la llave de idempotencia sigue siendo la misma.
+  const desde = desdeAmbiguo(e.ultimoError) ?? (ambiguo ? ahora : null);
+  const limpio = detalle.replace(/^ambiguo:\s*/, '');
+  const texto = desde ? `${MARCA_AMBIGUO} [desde ${desde.toISOString()}] ${limpio}` : detalle;
   if (intentos >= MAX_INTENTOS_CORREO) {
     await deps.marcarFallida(e.tenantId, e.id, token, `${texto} (agotó ${MAX_INTENTOS_CORREO} intentos)`);
     resumen.fallidas += 1;

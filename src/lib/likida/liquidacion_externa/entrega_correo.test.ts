@@ -228,6 +228,31 @@ describe('procesarEntregasCorreo — interruptor «Activar el envío» (A35-A1-0
     expect(e.reprogramadas[0]?.proximo.getTime()).toBeGreaterThan(AHORA.getTime());
   });
 
+  it('A37-S49-01: la flota apagada espera HORAS (no 15 min) para no acaparar la cola global', async () => {
+    const { e, deps } = montar({ ok: true, id: 'x' }, { activa: false });
+    await procesarEntregasCorreo(deps, 10);
+    expect(e.reprogramadas[0]?.proximo.getTime()).toBeGreaterThanOrEqual(AHORA.getTime() + 3_600_000);
+  });
+
+  it('A37-S49-02: las esperas no renuevan el reloj de la llave de idempotencia (se mide desde el primer ambiguo)', async () => {
+    // Ambiguo a las 10:00 de ayer; la flota apagó el envío y `proximo_intento_en` se renovó hace 15 min.
+    const ya = entrega({ ultimoError: 'ambiguo: [desde 2026-10-13T16:00:00.000Z] timeout', proximoIntentoEn: '2026-10-14T18:15:00.000Z' });
+    const { e, deps } = montar({ ok: true, id: 'x' }, {}, [ya]);
+    const r = await procesarEntregasCorreo(deps, 10);
+    expect(e.llamadasEnviar).toEqual([]);
+    expect(r.sinConfirmar).toBe(1);
+  });
+
+  it('A37-S49-02: un primer ambiguo graba su instante y un fallo posterior lo conserva', async () => {
+    const { e, deps } = montar({ ok: false, motivo: 'red', detalle: 'timeout' });
+    await procesarEntregasCorreo(deps, 10);
+    const err = e.reprogramadas[0]?.error ?? '';
+    expect(err).toBe(`ambiguo: [desde ${AHORA.toISOString()}] timeout`);
+    const { e: e2, deps: d2 } = montar({ ok: false, motivo: 'rechazado', detalle: 'HTTP 503', status: 503 }, {}, [entrega({ ultimoError: err, intentos: 1 })]);
+    await procesarEntregasCorreo(d2, 10);
+    expect(e2.reprogramadas[0]?.error).toBe(`ambiguo: [desde ${AHORA.toISOString()}] HTTP 503`);
+  });
+
   it('activa=true ⇒ sigue enviando igual (el interruptor encendido no cambia nada)', async () => {
     const { e, deps } = montar({ ok: true, id: 're_ok' }, { activa: true });
     const r = await procesarEntregasCorreo(deps, 10);
