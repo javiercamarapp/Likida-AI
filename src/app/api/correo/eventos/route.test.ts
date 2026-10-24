@@ -129,6 +129,13 @@ describe('la puerta', () => {
     expect((await postear(EVENTO)).status).toBe(500);
   });
 
+  it('A37-S09-10: el 500 sin secreto no nombra variables de entorno (ruta pública)', async () => {
+    delete process.env.RESEND_EVENTOS_WEBHOOK_SECRET;
+    const r = await postear(EVENTO);
+    const texto = await r.text();
+    expect(texto).not.toMatch(/RESEND|SECRET|configurado/i);
+  });
+
   it('firma inválida: 401; timestamp viejo (replay): 401', async () => {
     expect((await postear(EVENTO, { firmar: false })).status).toBe(401);
     expect((await postear(EVENTO, { ts: Math.floor(Date.now() / 1000) - 3600 })).status).toBe(401);

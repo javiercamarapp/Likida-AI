@@ -227,6 +227,15 @@ describe('la flota sale del DESTINATARIO, nunca del remitente', () => {
     expect(await r.json()).toMatchObject({ ok: true });
   });
 
+  it('A37-S09-07: dos buzones de flota en To/CC se registran como AMBIGUO, no como «sin buzón»', async () => {
+    const otro = 'f-' + 'b'.repeat(TOKEN.length) + '@mail.likida.ai';
+    vi.mocked(logger.warn).mockClear();
+    const r = await POST(pedir(evento({ to: [`f-${TOKEN}@mail.likida.ai`], cc: [otro] })));
+    expect(r.status).toBe(200);
+    expect(logger.warn).toHaveBeenCalledWith('correo_entrante.buzon_ambiguo', expect.objectContaining({ buzones: 2 }));
+    expect(logger.warn).not.toHaveBeenCalledWith('correo_entrante.sin_buzon', expect.anything());
+  });
+
   it('un token que no corresponde a nadie se ignora sin reintentar', async () => {
     flotaDevuelta = null;
     const r = await POST(pedir(evento()));

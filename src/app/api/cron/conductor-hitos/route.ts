@@ -15,7 +15,7 @@ import { puertosSenalVidaReales } from '@/lib/likida/conductor/senal_vida_real';
 import { barridoAcercamiento, puertosAcercamientoReales, type ResultadoAcercamiento } from '@/lib/likida/convenios/acercamiento';
 import { ConveniosNoDisponibles } from '@/lib/likida/convenios/repo';
 import { alarmasConductor, contadoresConductor } from '@/lib/likida/conductor/observabilidad';
-import { horaYDiaMx } from '@/lib/likida/conductor/config';
+import { esVentanaDeMantenimiento } from '@/lib/admin/estado';
 import { contarVoluntariosActivos, correrMantenimientoConductor, leerConfigConductor } from '@/lib/likida/conductor/repo';
 import { leerInterruptor, type NombreInterruptor } from '@/lib/likida/interruptores';
 import { sinFlotasEnViajes, sinFlotasEnCandidatos, sinFlotasEnValidacion } from '@/lib/likida/conductor/sin_flotas';
@@ -185,10 +185,10 @@ export async function GET(req: Request) {
       logger.error('cron.conductor_hitos.senal_vida_fallo', { error: e instanceof Error ? e.message : String(e) });
     }
 
-    // Mantenimiento de privacidad: una vez al día, a las 03:xx de México.
+    // Mantenimiento de privacidad: una vez al día. A37-S09-08: el cron corre cada 5 min, así que
+    // «hora 3» lo ejecutaba ~12 veces; la ventana 03:00–03:04 de México es UNA sola corrida.
     let mantenimiento: Record<string, number | string> | undefined;
-    const { hora } = horaYDiaMx(new Date());
-    if (hora === 3 && Date.now() < inicio + (maxDuration * 1000) - MARGEN_MS) {
+    if (esVentanaDeMantenimiento(Date.now()) && Date.now() < inicio + (maxDuration * 1000) - MARGEN_MS) {
       mantenimiento = await correrMantenimientoConductor();
     }
 

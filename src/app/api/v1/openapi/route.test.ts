@@ -171,3 +171,29 @@ describe('las rutas de la 2.ª entrega del Agente Conductor (0385) están docume
     expect(new Set(ids.filter(Boolean)).size, 'operationId repetido').toBe(ids.filter(Boolean).length);
   });
 });
+
+describe('A37-S11-09/10 — descripción honesta y caché que respeta la credencial', () => {
+  it('S11-09: NO dice que la API es de solo lectura ni que no puede romper lo que opera', async () => {
+    const d = await doc();
+    const texto = JSON.stringify(d.info);
+    expect(texto).not.toMatch(/SOLO LECTURA/);
+    expect(texto).not.toMatch(/no puede romper/);
+    expect(texto).toMatch(/ESCRITURA/);
+  });
+
+  it('S11-09: POST /v1/viajes y /v1/liquidaciones-externas avisan que escriben a personas y que se prueba en sandbox', async () => {
+    const d = await doc();
+    const paths = d.paths as Record<string, { post: { description: string } }>;
+    for (const ruta of ['/v1/viajes', '/v1/liquidaciones-externas']) {
+      expect(paths[ruta].post.description, ruta).toMatch(/sandbox/i);
+      expect(paths[ruta].post.description, ruta).toMatch(/WhatsApp/);
+    }
+  });
+
+  it('S11-10: la respuesta pública declara Vary: Authorization, Cookie', async () => {
+    const r = await GET(new Request('https://app.likida.ai/api/v1/openapi'));
+    expect(r.headers.get('cache-control')).toMatch(/public/);
+    expect(r.headers.get('vary')).toMatch(/Authorization/i);
+    expect(r.headers.get('vary')).toMatch(/Cookie/i);
+  });
+});

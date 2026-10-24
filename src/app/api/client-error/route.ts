@@ -33,6 +33,30 @@ function sanear(valor: unknown, maxLargo: number): string {
   return valor.replace(/[\r\n\t]+/g, ' ').trim().slice(0, maxLargo);
 }
 
+// A37-S08-05: el nombre de evento lo controla quien llama. Solo se aceptan
+// identificadores con punto (`app.global_error`), cortos; cualquier otra forma
+// cae a un nombre fijo para no inflar la cardinalidad de logs/Sentry.
+const SEGMENTO_EVENTO = /^[a-z][a-z0-9_]{0,39}$/i;
+function eventoValido(nombre: string): boolean {
+  const partes = nombre.split('.');
+  return partes.length <= 4 && partes.every((p) => SEGMENTO_EVENTO.test(p));
+}
+const MAX_CLAVES_META = 16;
+const MAX_LARGO_VALOR = 200;
+
+/** Meta acotada: máx. 16 claves, solo escalares (sin anidar), cadenas ≤200. */
+function acotarMeta(meta: Record<string, unknown>): Record<string, string | number | boolean> {
+  const salida: Record<string, string | number | boolean> = {};
+  for (const [clave, valor] of Object.entries(meta)) {
+    if (Object.keys(salida).length >= MAX_CLAVES_META) break;
+    if (clave.length > 40) continue;
+    if (typeof valor === 'string') salida[clave] = valor.slice(0, MAX_LARGO_VALOR);
+    else if (typeof valor === 'number' && Number.isFinite(valor)) salida[clave] = valor;
+    else if (typeof valor === 'boolean') salida[clave] = valor;
+  }
+  return salida;
+}
+
 export async function POST(req: Request) {
   // Best-effort para el que llama (el cliente ya está en medio de un fallo),
   // pero SÍ acotado: sin techo, un cliente en bucle de render-error podría
@@ -57,15 +81,18 @@ export async function POST(req: Request) {
     level?: unknown; msg?: unknown; meta?: unknown;
   };
   const nivel = NIVELES.has(level as string) ? (level as 'warn' | 'error') : 'error';
-  const evento = `client.${sanear(msg, 80) || 'sin_evento'}`;
+  const nombre = sanear(msg, 80);
+  const evento = `client.${nombre ? (eventoValido(nombre) ? nombre : 'evento_no_reconocido') : 'sin_evento'}`;
   const detalle = meta && typeof meta === 'object' && !Array.isArray(meta)
-    ? (meta as Record<string, unknown>)
+    ? acotarMeta(meta as Record<string, unknown>)
     : {};
 
   // `logger[nivel]` ya redacta y ya replica a Sentry si SENTRY_DSN está
   // puesto — el mismo camino que un fallo de servidor. `origen: 'cliente'`
   // distingue esta línea de una equivalente que sí vino del servidor.
-  logger[nivel](evento, { ...detalle, origen: 'cliente', ip: clientIp(req) });
+  // A37-S08-05: sin IP del visitante en log/Sentry (dato personal innecesario;
+  // el tope por IP vive en rateLimit, no en el log).
+  logger[nivel](evento, { ...detalle, origen: 'cliente' });
 
   return NextResponse.json({ ok: true });
 }

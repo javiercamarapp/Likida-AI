@@ -22,6 +22,8 @@ const correr = vi.fn(async (): Promise<Record<string, unknown>> => ({
 }));
 vi.mock('@/lib/likida/conductor/ejecutor', () => ({ correrConductor: (...a: unknown[]) => correr(...(a as [])), puertosReales: () => ({ viajesActivos: async () => [{ tenantId: 'con-perfil', id: 'a' }, { tenantId: 'libre', id: 'b' }] }) }));
 let horaMx = 12;
+let minutoMx = 0;
+vi.mock('@/lib/admin/estado', () => ({ esVentanaDeMantenimiento: () => horaMx === 3 && minutoMx < 5 }));
 vi.mock('@/lib/likida/conductor/config', () => ({ horaYDiaMx: () => ({ hora: horaMx, dia: 5 }) }));
 const mantenimiento = vi.fn(async (): Promise<Record<string, number | string>> => ({ anonimizar_conductor_hitos: 3, purgar_conductor_auditoria: 3 }));
 let voluntarios: number | Error = 0;
@@ -65,7 +67,7 @@ const llamar = () => GET(new Request('https://app.likida.ai/api/cron/conductor-h
 const j = async (r: Response) => (await r.json()) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 beforeEach(() => {
-  autorizado = 'si'; interruptores = {}; horaMx = 12; voluntarios = 0;
+  autorizado = 'si'; interruptores = {}; horaMx = 12; minutoMx = 0; voluntarios = 0;
   correr.mockClear(); registrarLatido.mockClear(); alertarOperador.mockClear(); mantenimiento.mockClear(); alertasEstadia.mockClear(); llegadas.mockClear(); barrido.mockClear(); acercamiento.mockClear(); ciclo.mockClear(); sitios.mockClear(); senal.mockClear(); detencion.mockClear();
 });
 
@@ -208,6 +210,13 @@ describe('la corrida', () => {
     const r = await j(await llamar());
     expect(mantenimiento).toHaveBeenCalledTimes(1);
     expect(r.mantenimiento).toEqual({ anonimizar_conductor_hitos: 3, purgar_conductor_auditoria: 3 });
+  });
+
+  it('A37-S09-08: fuera de los primeros 5 minutos de la hora 03 NO corre (una vez al día, no 12)', async () => {
+    horaMx = 3; minutoMx = 35;
+    const r = await j(await llamar());
+    expect(mantenimiento).not.toHaveBeenCalled();
+    expect(r.mantenimiento).toBeUndefined();
   });
 
   it('un fallo del mantenimiento se reporta pero no tumba la corrida', async () => {

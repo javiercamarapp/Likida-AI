@@ -191,6 +191,20 @@ describe('la contabilidad', () => {
     });
   });
 
+  it('A37-S10-07 (ya cubierto): un fallo técnico del OCR (timeout/ilegible tras cobro) SÍ deja su fila con el consumo real', async () => {
+    // extraerComprobante captura sus fallos y devuelve `fallo_tecnico` con el `usage` del proveedor;
+    // la ruta lo registra por el mismo camino que un éxito (no hay camino «solo exitoso»).
+    extraer.mockResolvedValueOnce({
+      legible: false, motivo: 'fallo_tecnico', gasto: { concepto: 'otro', monto: 0 },
+      costo: { modelo: 'vision-x', tokensIn: 700, tokensOut: 0, costoUsd: 0.004 },
+    } as never);
+    const r = await postear();
+    expect(r.status).toBe(200);
+    expect(registrarCosto).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 't-1', fase: 'ocr', tokensIn: 700, costoUsd: 0.004,
+    }));
+  });
+
   it('el modelo truena: 502 y sin fila (no hubo costo que registrar)', async () => {
     extraer.mockRejectedValueOnce(new Error('timeout'));
     expect((await postear()).status).toBe(502);

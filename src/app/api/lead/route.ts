@@ -228,7 +228,17 @@ export async function POST(req: Request) {
         parche.notas = notaConLoNoAplicado(previo.notas, pisados);
         logger.warn('lead.no_pisa_datos', { empresa, campos: pisados.map((p) => p.split('=')[0]), canal: canal(atr) });
       }
-      await escribir(db, 'update', parche, previo.id as string);
+      try {
+        await escribir(db, 'update', parche, previo.id as string);
+      } catch (err) {
+        // A37-S10-10: una fila legada sin lead_clave que se rellena puede chocar con la 0181 si OTRA
+        // fila ya tiene esa clave. Antes: 503 y todo reintento fallaba igual (lead perdido). Ahora se
+        // reconcilia contra la fila ganadora, como hace la rama de INSERT.
+        if (!esViolacionUnica(err)) throw err;
+        await reconciliarConGanador(db, clave, campos);
+        logger.info('lead.duplicado_durable_update', { empresa, canal: canal(atr) });
+        return ok();
+      }
       logger.info('lead.actualizado', { empresa, tenia: previo.estado, canal: canal(atr) });
       return ok();
     }
@@ -240,14 +250,7 @@ export async function POST(req: Request) {
       // is the durable winner; reconcile the losing request against the row
       // that won instead of creating a second lead.
       if (!esViolacionUnica(err)) throw err;
-      const { data: ganadores, error: eGanador } = await db.from('prospecto')
-        .select('*').eq('lead_clave', clave).limit(1);
-      if (eGanador) throw new Error(eGanador.message);
-      const ganador = (ganadores as Array<Record<string, unknown>> | null)?.[0];
-      if (!ganador?.id) throw new Error('lead: la llave única chocó, pero no se pudo leer el prospecto ganador');
-      const { parche, pisados } = mezclaQueSoloRellena(ganador, campos);
-      if (pisados.length) parche.notas = notaConLoNoAplicado(ganador.notas, pisados);
-      await escribir(db, 'update', parche, String(ganador.id));
+      await reconciliarConGanador(db, clave, campos);
       logger.info('lead.duplicado_durable', { empresa, canal: canal(atr) });
     }
     logger.info('lead.nuevo', { empresa, canal: canal(atr), urgencia: campos.urgencia });
@@ -259,6 +262,22 @@ export async function POST(req: Request) {
     logger.error('lead.fallo', { err: String(err) });
     return noConfirmado();
   }
+}
+
+/** Relee el prospecto que ganó la unicidad (0181) y le aplica el lead con la regla «solo rellena». */
+async function reconciliarConGanador(
+  db: ReturnType<typeof supabaseAdmin>,
+  clave: string,
+  campos: Record<string, unknown>,
+): Promise<void> {
+  const { data: ganadores, error: eGanador } = await db.from('prospecto')
+    .select('*').eq('lead_clave', clave).limit(1);
+  if (eGanador) throw new Error(eGanador.message);
+  const ganador = (ganadores as Array<Record<string, unknown>> | null)?.[0];
+  if (!ganador?.id) throw new Error('lead: la llave única chocó, pero no se pudo leer el prospecto ganador');
+  const { parche, pisados } = mezclaQueSoloRellena(ganador, campos);
+  if (pisados.length) parche.notas = notaConLoNoAplicado(ganador.notas, pisados);
+  await escribir(db, 'update', parche, String(ganador.id));
 }
 
 function esViolacionUnica(err: unknown): boolean {

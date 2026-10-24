@@ -86,7 +86,12 @@ export async function POST(req: Request) {
     if (!l.ok) return l.respuesta;
     llave = l.llave;
   } else {
-    llave = `lx-${createHash('sha256').update(datos.claveExterna, 'utf8').digest('hex')}`;
+    // A37-S11-08: la llave derivada incluye la HUELLA del contenido. Con solo la claveExterna, una
+    // corrección (misma claveExterna, otros montos) chocaba en `escribir()` como «llave reusada» (400,
+    // «usa una llave nueva», imposible de obedecer: no mandó ninguna) ANTES de que `buscar()` decidiera
+    // el 409 documentado. Así: mismo contenido = misma llave (eco); otro contenido = llave nueva → buscar()
+    // → 409 «conflicto» con la instrucción correcta (claveExterna nueva).
+    llave = `lx-${createHash('sha256').update(`${datos.claveExterna}\n${huellaDelContenido}`, 'utf8').digest('hex')}`;
   }
 
   return escribir<LiquidacionExternaApi>({
