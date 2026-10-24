@@ -814,7 +814,7 @@ function documento(servidor: string) {
         },
         HitoEvento: {
           type: 'object',
-          description: 'Un evento del feed incremental. Sin datos personales: ids, estados y fuentes.',
+          description: 'Un evento del feed incremental. Sin datos personales: ids, estados y fuentes. Solo los 9 eventos del enum; `detalle` trae únicamente escalares de sistema (nivel, canal, fuente, conteos).',
           properties: {
             id: { type: 'integer', description: 'Solo crece. Guarda el último que procesaste y pídelo en `?despues=`.' },
             viajeId: { type: 'string', format: 'uuid' },
@@ -1449,14 +1449,18 @@ function documento(servidor: string) {
           'x-likida-area': 'administracion',
           summary: 'Confirma que tu sistema ya leyó estos acuses (deja de devolverlos).',
           description:
-            'Área `administracion`. Cuerpo `{ "ids": [uuid, …] }` (1 a 200). IDEMPOTENTE: repetirlo deja las ya confirmadas en `yaConfirmadas`. `noAplican` agrupa lo que no existe en tu flota o aún no tiene acuse del chofer (no se distingue cuál para no revelar liquidaciones ajenas).',
+            'Área `administracion`. Cuerpo `{ "ids": [ … ] }` (1 a 200); cada elemento es `{ "id", "respuestaEn" }` tal como los devolvió `GET /v1/liquidaciones-externas/acuses` (RECOMENDADO: confirma SOLO el acuse que leíste; si el chofer cambió su respuesta entre tu lectura y esta llamada, el id sale en `cambiaron`, no se confirma y el acuse nuevo vuelve a salir en la siguiente lectura) o el uuid suelto (forma anterior: confirma el acuse que haya en ese momento). IDEMPOTENTE: repetirlo deja las ya confirmadas en `yaConfirmadas`. `noAplican` agrupa lo que no existe en tu flota o aún no tiene acuse del chofer (no se distingue cuál para no revelar liquidaciones ajenas).',
           tags: ['liquidaciones', 'dinero'],
-          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { ids: { type: 'array', minItems: 1, maxItems: 200, items: { type: 'string', format: 'uuid' } } }, required: ['ids'], additionalProperties: false } } } },
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { ids: { type: 'array', minItems: 1, maxItems: 200, items: { oneOf: [
+            { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, respuestaEn: { type: 'string', description: 'El `respuestaEn` del acuse que leíste, sin modificar.' } }, required: ['id', 'respuestaEn'], additionalProperties: false },
+            { type: 'string', format: 'uuid', description: 'Forma anterior: confirma el acuse vigente.' },
+          ] } } }, required: ['ids'], additionalProperties: false } } } },
           responses: {
             '200': { description: 'Qué pasó con cada id.', content: { 'application/json': { schema: { type: 'object', properties: { datos: { type: 'object', properties: {
               confirmadas: { type: 'array', items: { type: 'string', format: 'uuid' } },
               yaConfirmadas: { type: 'array', items: { type: 'string', format: 'uuid' } },
               noAplican: { type: 'array', items: { type: 'string', format: 'uuid' } },
+              cambiaron: { type: 'array', items: { type: 'string', format: 'uuid' }, description: 'El chofer cambió su respuesta después de tu lectura: NO se confirmaron; vuelven a salir en `GET …/acuses`.' },
             }, required: ['confirmadas', 'yaConfirmadas', 'noAplican'] } }, required: ['datos'] } } } },
             ...respuestasError,
           },
@@ -1563,7 +1567,7 @@ function documento(servidor: string) {
           summary: 'Los desgloses del proveedor de peaje de la flota y su conciliación medida.',
           description: 'Área `dinero`. Del más nuevo al más viejo; los ANULADOS no salen. Cada uno trae cuántas líneas cuadran, no cuadran o no tienen contraparte (conteos medidos, nunca un 0 inventado). El `id` es el que se pasa a `GET /v1/peajes/exportacion`. `limite` de 1 a 50; `desplazamiento` es 400.',
           tags: ['peajes', 'dinero'],
-          parameters: [parametrosPagina[0]],
+          parameters: [{ ...parametrosPagina[0], description: 'Cuántos desgloses devolver (1 a 50, defecto 50). Un valor mayor devuelve 400: cada desglose cuesta 4 conteos exactos.', schema: { type: 'integer', minimum: 1, maximum: 50, default: 50 } }],
           responses: {
             '200': {
               description: 'Desgloses vigentes.',

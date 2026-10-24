@@ -57,10 +57,20 @@ export function armarFilasEstadias(
   return { filas, resumen: resumirEstadias(filas), truncada: datos.truncada };
 }
 
+/** ¿«AAAA-MM-DD» es un día REAL del calendario? (A37-S11-04: V8 acepta `2026-02-30` y lo corre al 2 de marzo.) */
+export function diaReal(dia: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dia);
+  if (!m) return false;
+  const [y, mes, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const f = new Date(Date.UTC(y, mes - 1, d));
+  return f.getUTCFullYear() === y && f.getUTCMonth() === mes - 1 && f.getUTCDate() === d;
+}
+
 /** Los días «AAAA-MM-DD» del periodo → el instante de inicio y de fin (exclusivo) en hora de México. */
 export function rangoDeDias(desde: string, hasta: string, maxDias = 93): { desde: Date; hasta: Date } | { error: string } {
   const re = /^\d{4}-\d{2}-\d{2}$/;
   if (!re.test(desde) || !re.test(hasta)) return { error: 'Las fechas van como AAAA-MM-DD.' };
+  if (!diaReal(desde) || !diaReal(hasta)) return { error: 'Alguna fecha no existe.' };
   const ini = new Date(`${desde}T00:00:00-06:00`);
   const fin = new Date(new Date(`${hasta}T00:00:00-06:00`).getTime() + 86_400_000);
   if (Number.isNaN(ini.getTime()) || Number.isNaN(fin.getTime())) return { error: 'Alguna fecha no existe.' };

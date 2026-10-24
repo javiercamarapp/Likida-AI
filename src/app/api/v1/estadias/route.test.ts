@@ -62,6 +62,10 @@ describe('GET /v1/estadias', () => {
     ['periodo de un año', 'desde=2026-01-01&hasta=2026-12-31'],
     ['formato desconocido', 'desde=2026-10-01&hasta=2026-10-02&formato=xml'],
     ['uuid inválido en el filtro', 'desde=2026-10-01&hasta=2026-10-02&clienteId=no-uuid'],
+    ['A37-S11-04: día inexistente en hasta (31 de febrero)', 'desde=2026-02-01&hasta=2026-02-31'],
+    ['A37-S11-04: día inexistente en desde (31 de abril)', 'desde=2026-04-31&hasta=2026-05-02'],
+    ['A37-S11-04: hasta inválido SIN desde (antes reventaba con un 500 sin cuerpo)', 'hasta=foo'],
+    ['A37-S11-04: hasta con mes 13 sin desde', 'hasta=2026-13-01'],
     ['inyección en el filtro', "desde=2026-10-01&hasta=2026-10-02&operadorId=' or 1=1"],
   ])('400 en palabras: %s', async (_n, qs) => {
     const r = await estadias.GET(new Request(`${BASE}/estadias?${qs}`));

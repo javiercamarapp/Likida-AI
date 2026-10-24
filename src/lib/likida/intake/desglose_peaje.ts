@@ -1453,20 +1453,29 @@ export async function listarDesgloses(tenantId: string, limite = 8): Promise<Res
     .order('creado_en', { ascending: false })
     .limit(limite), 'desglose_peaje.listar');
   if (error) throw new Error(`listarDesgloses: ${error.message}`);
-  const out: ResumenDesglose[] = [];
-  for (const d of data ?? []) {
-    out.push({
-      desgloseId: String(d.id),
-      proveedor: (d.proveedor as string | null) ?? null,
-      archivoNombre: (d.archivo_nombre as string | null) ?? null,
-      periodoDesde: (d.periodo_desde as string | null) ?? null,
-      periodoHasta: (d.periodo_hasta as string | null) ?? null,
-      creadoEn: String(d.creado_en),
-      ...(await agregarEstatus(tenantId, String(d.id))),
-    });
+  // A37-S11-06: antes los conteos de cada desglose iban EN SERIE (4 por desglose, uno tras otro): con 200 desgloses eran
+  // ~800 consultas secuenciales contra un `maxDuration` de 30 s. Ahora de a CONCURRENCIA_RESUMEN desglose a la vez (cada
+  // uno con sus 4 conteos en paralelo) y se conserva el orden de la lista.
+  const filas = data ?? [];
+  const out: ResumenDesglose[] = new Array(filas.length);
+  for (let i = 0; i < filas.length; i += CONCURRENCIA_RESUMEN) {
+    await Promise.all(filas.slice(i, i + CONCURRENCIA_RESUMEN).map(async (d, j) => {
+      out[i + j] = {
+        desgloseId: String(d.id),
+        proveedor: (d.proveedor as string | null) ?? null,
+        archivoNombre: (d.archivo_nombre as string | null) ?? null,
+        periodoDesde: (d.periodo_desde as string | null) ?? null,
+        periodoHasta: (d.periodo_hasta as string | null) ?? null,
+        creadoEn: String(d.creado_en),
+        ...(await agregarEstatus(tenantId, String(d.id))),
+      };
+    }));
   }
   return out;
 }
+
+/** Desgloses cuyo resumen se mide a la vez en `listarDesgloses` (cada uno lanza 4 conteos en paralelo). */
+const CONCURRENCIA_RESUMEN = 5;
 
 export interface LineaDesgloseVista {
   id: string;

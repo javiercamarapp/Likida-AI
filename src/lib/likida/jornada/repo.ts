@@ -340,6 +340,12 @@ export async function asentarMarca(m: MarcaNueva): Promise<ResultadoAsiento> {
  *  en analytics.ts): pedir menos del tope y comprobar el borde es lo que
  *  permite DECIR que la ventana no cupo en vez de enseñar media lista. */
 export const TOPE_EXPEDIENTES = 900;
+/** A37-S10-06: el tope de la EXPORTACIÓN (el registro que se enseña en una inspección): paginada, no de una sola lectura. */
+export const TOPE_EXPEDIENTES_EXPORTACION = 5000;
+/** A37-S10-06: expedientes por página y ids por consulta de asientos. 100 uuid son ~3.7 KB de URL: lejos del techo
+ *  de un gateway (el `.in()` de 900 uuid medía ~33 KB). */
+const PAGINA_EXPEDIENTES = 500;
+const IDS_POR_CONSULTA = 100;
 
 export interface LecturaJornadas {
   dias: FilaJornadaDia[];
@@ -363,26 +369,38 @@ export async function leerJornadas(
   desde: string,
   hasta: string,
   operadorId?: string | null,
+  opciones: { tope?: number } = {},
 ): Promise<LecturaJornadas> {
   const admin = supabaseAdmin();
-  let q = admin.from('jornada_dia')
-    .select('id, operador_id, dia, estado, cerrado_en, cerrado_por_email, conforme_operador_en, conforme_wa_message_id')
-    .eq('tenant_id', tenantId)
-    .gte('dia', desde)
-    .lte('dia', hasta)
-    .order('dia', { ascending: true })
-    .limit(TOPE_EXPEDIENTES);
-  if (operadorId) q = q.eq('operador_id', operadorId);
-
-  const { data, error } = await acotada(q, 'jornada.leer');
-  if (error) throw new JornadaIlegible(error.message);
+  const tope = opciones.tope ?? TOPE_EXPEDIENTES;
 
   type Fila = {
     id: string; operador_id: string; dia: string; estado: string;
     cerrado_en: string | null; cerrado_por_email: string | null;
     conforme_operador_en: string | null; conforme_wa_message_id: string | null;
   };
-  const filas = (data ?? []) as unknown as Fila[];
+  // A37-S10-06 — EXPEDIENTES PAGINADOS, no `.limit(900)`: una flota de 40+ operadores pidiendo un mes pasa de 900
+  // expedientes operador-día y el reporte salía truncado PERDIENDO LOS DÍAS MÁS RECIENTES. Se pagina por posición con
+  // un orden ÚNICO (dia, id) hasta el nuevo tope; se pide una fila de más para DEMOSTRAR si hubo más de lo que cupo.
+  const filas: Fila[] = [];
+  let truncada = false;
+  for (let desdePos = 0; ; desdePos += PAGINA_EXPEDIENTES) {
+    let q = admin.from('jornada_dia')
+      .select('id, operador_id, dia, estado, cerrado_en, cerrado_por_email, conforme_operador_en, conforme_wa_message_id')
+      .eq('tenant_id', tenantId)
+      .gte('dia', desde)
+      .lte('dia', hasta)
+      .order('dia', { ascending: true })
+      .order('id', { ascending: true })
+      .range(desdePos, desdePos + PAGINA_EXPEDIENTES - 1);
+    if (operadorId) q = q.eq('operador_id', operadorId);
+    const { data, error } = await acotada(q, 'jornada.leer');
+    if (error) throw new JornadaIlegible(error.message);
+    const pagina = (data ?? []) as unknown as Fila[];
+    filas.push(...pagina);
+    if (filas.length > tope) { truncada = true; filas.length = tope; break; }
+    if (pagina.length < PAGINA_EXPEDIENTES) break;
+  }
   if (filas.length === 0) return { dias: [], truncada: false };
 
   const ids = filas.map((f) => String(f.id));
@@ -398,24 +416,29 @@ export async function leerJornadas(
   // `traerTodo` pagina con `count` y LANZA `LecturaIncompleta` si no puede
   // demostrar que leyó todo — que es justo lo que este módulo necesita, porque
   // ya falla cerrado con `JornadaIlegible`.
-  let asientosFilas: Array<Record<string, unknown>>;
+  // A37-S10-06: los ids van en LOTES de IDS_POR_CONSULTA (un solo `.in()` de 900 uuid medía ~33 KB de URL y podía
+  // rebotar en el gateway con un 500 en lugar del archivo); cada lote pagina con `traerTodo`.
+  const asientosFilas: Array<Record<string, unknown>> = [];
   try {
-    asientosFilas = await traerTodo<Record<string, unknown>>(
-      (desde, hasta) => admin.from('jornada_asiento')
-        .select(`jornada_id, ${CAMPOS_ASIENTO}`, { count: 'exact' })
-        .eq('tenant_id', tenantId).in('jornada_id', ids)
-        // REN-9 (auditoría 24): `.order('momento')` solo no es un orden
-        // ÚNICO — dos marcas con el mismo `momento` (dos sellos en el mismo
-        // milisegundo, no imposible en un flujo de WhatsApp) podían caer en
-        // páginas distintas de `.range()` en cualquier orden, duplicándose o
-        // saltándose entre vueltas. El desempate por `id` (contrato de
-        // `pg.ts`: `traerTodo` necesita un orden determinista) lo vuelve
-        // reproducible.
-        .order('momento', { ascending: true })
-        .order('id', { ascending: true })
-        .range(desde, hasta),
-      'jornada.leer.asientos',
-    );
+    for (let i = 0; i < ids.length; i += IDS_POR_CONSULTA) {
+      const lote = ids.slice(i, i + IDS_POR_CONSULTA);
+      asientosFilas.push(...await traerTodo<Record<string, unknown>>(
+        (desde, hasta) => admin.from('jornada_asiento')
+          .select(`jornada_id, ${CAMPOS_ASIENTO}`, { count: 'exact' })
+          .eq('tenant_id', tenantId).in('jornada_id', lote)
+          // REN-9 (auditoría 24): `.order('momento')` solo no es un orden
+          // ÚNICO — dos marcas con el mismo `momento` (dos sellos en el mismo
+          // milisegundo, no imposible en un flujo de WhatsApp) podían caer en
+          // páginas distintas de `.range()` en cualquier orden, duplicándose o
+          // saltándose entre vueltas. El desempate por `id` (contrato de
+          // `pg.ts`: `traerTodo` necesita un orden determinista) lo vuelve
+          // reproducible.
+          .order('momento', { ascending: true })
+          .order('id', { ascending: true })
+          .range(desde, hasta),
+        'jornada.leer.asientos',
+      ));
+    }
   } catch (e) {
     throw new JornadaIlegible(e instanceof Error ? e.message : String(e));
   }
@@ -440,7 +463,7 @@ export async function leerJornadas(
       conformeWaMessageId: f.conforme_wa_message_id,
       asientos: porJornada.get(String(f.id)) ?? [],
     })),
-    truncada: filas.length >= TOPE_EXPEDIENTES,
+    truncada,
   };
 }
 

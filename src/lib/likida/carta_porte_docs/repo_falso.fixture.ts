@@ -129,7 +129,9 @@ export const api: typeof Real = {
     let filas = [...estado.docs.values()].filter((d) => d.tenantId === tenantId);
     if (f.estados?.length) filas = filas.filter((d) => f.estados!.includes(d.estado));
     if (f.desde) filas = filas.filter((d) => d.createdAt >= f.desde!);
-    filas.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    if (f.ids) filas = filas.filter((d) => f.ids!.includes(d.id));
+    if (f.sinExportar) filas = filas.filter((d) => d.exportadoEn === null);
+    filas.sort((a, b) => (a.createdAt === b.createdAt ? 0 : (a.createdAt < b.createdAt) === !!f.ascendente ? -1 : 1));
     return { filas: filas.slice(0, f.limite ?? 100).map(clon), total: filas.length };
   },
   async reclamarDocumento(tenantId, id, lease = 120) {
@@ -328,6 +330,16 @@ export const api: typeof Real = {
     let n = 0;
     for (const id of ids) { const d = estado.docs.get(id); if (d && d.tenantId === tenantId && d.estado === 'aprobado') { d.exportadoEn = ahora.toISOString(); n++; } }
     return n;
+  },
+
+  async reclamarExportacion(tenantId, ids, ahora = new Date()) {
+    falla('reclamarExportacion');
+    const ganados: string[] = [];
+    for (const id of ids) {
+      const d = estado.docs.get(id);
+      if (d && d.tenantId === tenantId && d.estado === 'aprobado' && d.exportadoEn === null) { d.exportadoEn = ahora.toISOString(); ganados.push(id); }
+    }
+    return ganados;
   },
 
   async reclamarCorreo(emailId) {

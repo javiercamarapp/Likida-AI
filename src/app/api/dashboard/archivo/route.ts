@@ -15,7 +15,7 @@ import { rateLimit } from '@/lib/ratelimit';
 import { getSessionTenant } from '@/lib/auth/session';
 import { rechazoMfaSuperadminApi } from '@/lib/auth/api-superadmin';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
-import { leerArchivoUniversal, ArchivoNoSoportado } from '@/lib/likida/intake/archivo';
+import { leerArchivoUniversal, ArchivoNoSoportado, ArchivoDemasiadoGrande } from '@/lib/likida/intake/archivo';
 import { logger } from '@/lib/logger';
 import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 import { respuestaSiPerfilNiegaApi } from '@/lib/auth/perfil_tenant';
@@ -74,6 +74,9 @@ export async function POST(req: NextRequest) {
     logger.info('archivo.leido', { tenantId: sesion.tenantId, clase: leido.clase, chars: leido.extracto.length });
     return NextResponse.json(leido);
   } catch (err) {
+    if (err instanceof ArchivoDemasiadoGrande) {
+      return NextResponse.json({ error: 'Ese libro es demasiado grande para leerlo con seguridad. Pásalo a un archivo más chico (menos filas o hojas).' }, { status: 413 });
+    }
     if (err instanceof ArchivoNoSoportado) {
       return NextResponse.json({
         error: `Todavía no leo archivos ${err.extension}. Sí leo: PDF, Excel (xlsx/xls), CSV, XML de CFDI, texto — y fotos de comprobantes por el clip.`,

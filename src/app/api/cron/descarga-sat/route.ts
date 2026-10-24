@@ -43,6 +43,9 @@ export const maxDuration = 300;
  * aunque el primero devuelva "no configurado".
  */
 export async function GET(req: Request) {
+  // A37-S09-06: el reloj arranca ANTES del prólogo (puerta, interruptores): `maxDuration` corre desde que Vercel
+  // invoca, no desde que termina la lectura de la base.
+  const entrada = Date.now();
   const puerta = await puertaCron('descarga-sat', req, 'La descarga masiva del SAT no corre sin él.');
   if (puerta) return puerta;
 
@@ -105,7 +108,7 @@ export async function GET(req: Request) {
   // no 48 — se documenta la diferencia aquí y en el PR y se deriva el margen
   // de la cadena real en vez de la cifra vieja.)
   const MARGEN_MS = margenUnidadAtomicaMs({ consultas: 3, envios: 1 });
-  const venceEn = Date.now() + maxDuration * 1000 - MARGEN_MS;
+  const venceEn = entrada + maxDuration * 1000 - MARGEN_MS;
 
   try {
     // EL RELOJ ENTRA TAMBIÉN A LA DESCARGA (c7-1; deuda anotada por el fork del

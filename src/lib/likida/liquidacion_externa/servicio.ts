@@ -802,9 +802,11 @@ export const MAX_IDS_CONFIRMACION = 200;
 
 export async function confirmarAcusesLeidos(
   tenantId: string, ids: string[], actor: string, deps: Pick<Dependencias, 'ahora'> = dependenciasPorOmision,
+  /** A37-S11-02: id → `respuestaEn` que el integrador leyó. Un id con entrada solo se confirma si ese acuse sigue vigente. */
+  leidos?: ReadonlyMap<string, string>,
 ): Promise<ResultadoConfirmacion> {
   const unicos = [...new Set(ids)];
-  const r = await confirmarAcuses(tenantId, unicos, deps.ahora().toISOString());
+  const r = await confirmarAcuses(tenantId, unicos, deps.ahora().toISOString(), leidos);
   for (const id of r.confirmadas) await registrarEvento(tenantId, id, 'acuse_confirmado', { actor });
   return r;
 }
