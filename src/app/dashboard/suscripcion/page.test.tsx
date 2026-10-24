@@ -27,6 +27,7 @@ const dobles = vi.hoisted(() => ({
   guardarDatosFiscales: vi.fn(),
   estanCompletos: vi.fn(),
   resolverTenantPedido: vi.fn(),
+  resolverTenantEfectivo: vi.fn(),
   revalidatePath: vi.fn(),
   redirect: vi.fn((url: string) => { throw new Error(`REDIRECT:${url}`); }),
 }));
@@ -34,7 +35,9 @@ const dobles = vi.hoisted(() => ({
 let sesion: { tenantId: string; rol: string; userId: string } = { tenantId: 't-1', rol: 'flota_admin', userId: 'u-1' };
 let correoCuenta: { email: string | null } | null = { email: 'duena@flota.com' };
 
-vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => sesion }));
+vi.mock('@/lib/auth/tenant-efectivo', () => ({
+  resolverTenantEfectivo: async (...a: unknown[]) => { dobles.resolverTenantEfectivo(...a); return sesion; },
+}));
 vi.mock('@/lib/auth/guard', () => ({ requireSessionTenant: async () => sesion }));
 vi.mock('@/lib/auth/tenant-api', () => ({ resolverTenantPedido: dobles.resolverTenantPedido }));
 vi.mock('next/navigation', () => ({ redirect: dobles.redirect }));
@@ -162,15 +165,15 @@ it('contratar: con URL de factura, redirige — el redirect NO se atrapa como er
   await expect(accion(null, fd({ plan: 'pro' }))).rejects.toThrow('REDIRECT:https://stripe.com/factura/x');
 });
 
-it('contratar: superadmin viendo-como otra flota (?tenant=) factura a ESA flota, no a la suya', async () => {
-  sesion = { tenantId: 't-super', rol: 'superadmin', userId: 'u-1' };
-  dobles.resolverTenantPedido.mockResolvedValue('t-vista-como');
+it('A37-S20-02 contratar: la action resuelve la flota con el MISMO resolutor y el mismo sp que la página (?vista=demo no escribe en la flota del selector)', async () => {
+  sesion = { tenantId: 't-demo', rol: 'superadmin', userId: 'u-1' }; // lo que resolverTenantEfectivo devuelve para ?vista=demo
   dobles.cambiarPlan.mockResolvedValue({ urlFactura: null, huboCambioDePrice: false });
-  const pagina = await SuscripcionPage({ searchParams: Promise.resolve({ tenant: 't-vista-como' }) });
+  const pagina = await SuscripcionPage({ searchParams: Promise.resolve({ vista: 'demo' }) });
   const accion = accionDelBoton(pagina, /Contratar por transferencia/);
+  dobles.resolverTenantEfectivo.mockClear();
   await accion(null, fd({ plan: 'pro' }));
-  expect(dobles.resolverTenantPedido).toHaveBeenCalledWith(expect.anything(), 't-super', 't-vista-como');
-  expect(dobles.cambiarPlan).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 't-vista-como' }));
+  expect(dobles.resolverTenantEfectivo).toHaveBeenCalledWith('/dashboard/suscripcion', { vista: 'demo' });
+  expect(dobles.cambiarPlan).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 't-demo' }));
 });
 
 it('guardar datos fiscales: contador queda rechazado por la server action', async () => {
