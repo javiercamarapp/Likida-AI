@@ -24,6 +24,7 @@ import { enviarCorreo } from '@/lib/correo/enviar';
 import { urlBaja } from '@/lib/correo/baja';
 import { pieAvisoProspectos } from '@/lib/likida/privacidad';
 import { hoyMx } from '@/lib/formato';
+import { TRACCION_PUBLICABLE, nombreTraccionNoAutorizado } from '../traccion';
 
 /** El tope de correos FRÍOS aprobados por día (Fase 2: "20–40, máximo" —
  *  reputación del dominio + lo que el embudo humano digiere). Vive en
@@ -51,27 +52,9 @@ export const TIPOS_CAMPANA = ['correo_frio', 'correo_seguimiento'] as const;
  *  teléfonos) quedaba a un clic de salir hacia el propio prospecto. */
 export const TIPOS_ENVIABLES: readonly string[] = TIPOS_CAMPANA;
 
-/** AGB-2 (auditoría 24, 1-sep-2026): nombres de prospectos/clientes que SÍ se
- *  autorizó nombrar como tracción en correo de campaña — VACÍA por default.
- *  Sin una entrada aquí, a propósito, ningún nombre de tercero sale en un
- *  correo automático. El SYSTEM del redactor y del SDR permitían literalmente
- *  "Grupo GAL" — el nombre del PROSPECTO DEL PILOTO
- *  saliendo hacia Coca-Cola FEMSA, Pepsi, Nadro, KFC sin su consentimiento.
- *  Poblar esta lista es una decisión explícita de Javier (acuerdo de
- *  referencia real), nunca un efecto secundario de que el modelo "decida
- *  mencionar tracción". */
-export const TRACCION_PUBLICABLE: readonly string[] = [];
-
-/** Los nombres que YA se cazaron saliendo sin autorización (AGB-2) — se
- *  bloquean SIEMPRE salvo que aparezcan, a propósito, en `TRACCION_PUBLICABLE`. */
-const NOMBRES_TRACCION_CAZADOS = ['Grupo GAL', 'Transportes ' + 'Innova' + 'tivos', 'Innova' + 'tivos'] as const;
-
-function nombreTraccionNoAutorizado(texto: string): string | null {
-  for (const nombre of NOMBRES_TRACCION_CAZADOS) {
-    if (texto.includes(nombre) && !TRACCION_PUBLICABLE.includes(nombre)) return nombre;
-  }
-  return null;
-}
+// A37-S26-06: la lista de nombres de tracción vive en `../traccion` (una sola
+// fuente que leen también el prompt del redactor, los partes y los artículos).
+export { TRACCION_PUBLICABLE };
 
 /** El verificador ESTRUCTURAL del formato de campaña — los guardarraíles
  *  cazados en vivo: jamás "clientes reales" (ninguna empresa ha firmado; la

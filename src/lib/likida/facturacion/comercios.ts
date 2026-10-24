@@ -741,7 +741,8 @@ export const COMERCIOS: Comercio[] = [
     reconocer: {
       dominios: [
         'cargogas.com', 'cargogas.dyndns.ws', 'facturagas.com', 'hidrolitro.com',
-        'warelan.com', 'cargogas.warelan.com',
+        // A37-S43-04: sin el apex `warelan.com` (plataforma compartida).
+        'cargogas.warelan.com',
       ],
       texto: ['CARGOGAS', 'CARGO GAS'],
     },
@@ -1114,8 +1115,9 @@ export const COMERCIOS: Comercio[] = [
     // URL no se reconocía y salía como emisor desconocido.
     reconocer: {
       dominios: [
-        'gorm.gasolinamexico.net', 'gasolinamexico.net',
-        'cvmx.gasolinamexico.mx', 'gasolinamexico.mx', 'cvmx.brentec.mx', 'brentec.mx',
+        // A37-S43-04: sin los apex `gasolinamexico.net/.mx` ni `brentec.mx`
+        // (plataforma compartida): solo los hosts propios de esta flota.
+        'gorm.gasolinamexico.net', 'cvmx.gasolinamexico.mx', 'cvmx.brentec.mx',
       ],
       texto: ['GORM', 'BRENTEC', 'CVMX'],
     },
@@ -1737,7 +1739,8 @@ export const COMERCIOS: Comercio[] = [
       { clave: 'referencia', etiquetaPortal: 'NRU (Número de Referencia Único)', requerido: true },
     ],
     reconocer: {
-      dominios: ['supercarreteras.haz-factura.com', 'haz-factura.com', 'supercarreteras.ddns.net'],
+      // A37-S43-04: sin el apex `haz-factura.com` (plataforma compartida).
+      dominios: ['supercarreteras.haz-factura.com', 'supercarreteras.ddns.net'],
       texto: ['SUPER CARRETERAS', 'SUPERCARRETERAS DEL NORTE', 'AUTOPISTA PREMIER', 'ALLENDE AGUJITA', 'NRU'],
     },
   },
@@ -2631,7 +2634,11 @@ export const COMERCIOS: Comercio[] = [
     // invención se propaga sin ruido hasta un CFDI. El reconocimiento se sostiene
     // en el dominio impreso —ya corregido— y en la razón social.
     reconocer: {
-      dominios: ['lostaquitosdepm.com', 'admin.softrestaurant.com'],
+      // A37-S43-04: SIN `admin.softrestaurant.com`. Es la plataforma Soft Restaurant,
+      // que aloja a OTROS restaurantes: registrarla como dominio de este comercio
+      // le aplicaba su plazo de 24 h al ticket de cualquier otro. Se reconoce por
+      // su dominio propio y por la razón social impresa.
+      dominios: ['lostaquitosdepm.com'],
       texto: ['LOS TAQUITOS DE PM'],
     },
   },

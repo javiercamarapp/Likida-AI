@@ -67,6 +67,7 @@ import { acotada } from '../presupuesto';
 import { hoyMx, numero, inicioDiaMx, fechaMx, mxn, porcentaje } from '@/lib/formato';
 import { appUrl } from '@/lib/env';
 import { ARTICULOS, type Articulo } from '../marketing/articulos';
+import { FRASE_TRACCION } from '../traccion';
 import { calcularEstimacion, CUOTA_DOF } from '../marketing/calculadora';
 import { NORMAS } from '../normas/indice';
 import { encolarPieza } from './cola';
@@ -1391,7 +1392,7 @@ export function armarParteAlianzas(
     l.push('    · Una calculadora pública de recuperación fiscal que entrega litros elegibles y el 50% de peaje con sus condiciones y supuestos a la vista, sin pedir datos para ver el resultado.');
     l.push('    · Un corpus de fichas normativas verificadas contra fuente primaria, con la jerarquía y el estado de verificación de cada una.');
     l.push('    · Contenido fiscal para el gremio, con fundamento citado por pieza.');
-    l.push('    · La verdad de la tracción: Likida está en pláticas con transportistas como Grupo GAL. NINGUNA empresa ha firmado, y decirlo así es lo que hace creíble todo lo anterior.');
+    l.push(`    · La verdad de la tracción: Likida está ${FRASE_TRACCION}. NINGUNA empresa ha firmado, y decirlo así es lo que hace creíble todo lo anterior. No nombres a ninguna empresa en concreto.`);
     l.push('');
     l.push('  EL MAPA QUE YA TENEMOS CAPTURADO (material real del acercamiento):');
     l.push(`    · ${numero(mapa.total)} prospecto(s) vivos en el directorio del censo.`);

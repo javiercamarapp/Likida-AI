@@ -5,20 +5,38 @@ import { armar } from './pendientes';
 // ── Mocks SOLO para `avisarPorFacturar` (el cableado). `armarAviso` es pura y
 // sus pruebas de abajo no tocan nada de esto. `armar` sigue siendo el real: el
 // spread del original solo sustituye `getPorFacturar`.
-const sendText = vi.fn();
+// `enviarTexto` devuelve el resultado de Meta ({ok,id} | {ok:false,codigo,status}).
+const enviarTexto = vi.fn();
 const sendTemplate = vi.fn();
 const getPorFacturar = vi.fn();
 const insert = vi.fn(async () => ({ error: null }));
+/** Lo que la bitácora dice que ya se avisó hoy (A37-S43-07). */
+let avisosPrevios: Array<{ detalle: { huella?: string } }> = [];
+let bitacoraIlegible = false;
 const cuentasCompartidas = vi.fn(async (_tenantId: string) => new Set<string>());
 
 vi.mock('@/lib/meta/client', () => ({
-  sendText: (...a: unknown[]) => sendText(...a),
+  enviarTexto: (...a: unknown[]) => enviarTexto(...a),
   sendTemplate: (...a: unknown[]) => sendTemplate(...a),
+  esReintentableMeta: (c?: number, st?: number) => c === 130429 || (st !== undefined && st >= 500),
+  esTokenMetaInvalido: (c?: number) => c === 190,
   motivoDeFalloWhatsApp: () => 'la plantilla no está aprobada (prueba)',
 }));
 vi.mock('@/lib/supabase/admin', () => ({
-  supabaseAdmin: () => ({ from: () => ({ insert } as unknown) }),
+  supabaseAdmin: () => ({
+    from: () => {
+      const b: Record<string, unknown> = {
+        insert,
+        select: () => b, eq: () => b, gte: () => b, order: () => b,
+        limit: () => Promise.resolve(bitacoraIlegible
+          ? { data: null, error: { message: 'timeout' } }
+          : { data: avisosPrevios, error: null }),
+      };
+      return b as unknown;
+    },
+  }),
 }));
+vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
 vi.mock('./cuentas', () => ({
   cuentasCompartidas: (tenantId: string) => cuentasCompartidas(tenantId),
 }));
@@ -155,20 +173,21 @@ describe('avisarPorFacturar', () => {
     // tiene cuerpo. La fecha cae dentro del mes de HOY para que no esté vencido.
     getPorFacturar.mockResolvedValue([armar(g({ id: '1', fecha: '2026-08-04', extra: CON_CUENTA }), HOY)]);
     cuentasCompartidas.mockResolvedValue(new Set());
+    avisosPrevios = []; bitacoraIlegible = false;
   });
 
   it('dentro de la ventana: sale el texto con la liga y NO se gasta plantilla', async () => {
-    sendText.mockResolvedValue('wamid-texto');
+    enviarTexto.mockResolvedValue({ ok: true, id: 'wamid-texto' });
     const r = await avisarPorFacturar({ tenantId: 't1', telefono: '5219990000001', hoy: HOY });
     expect(r.enviado).toBe(true);
     expect(r.via).toBe('texto');
     // Lo que hace útil al aviso: la liga del portal viaja en el mensaje.
-    expect(sendText.mock.calls[0][1]).toContain('oxxogas');
+    expect(enviarTexto.mock.calls[0][1]).toContain('oxxogas');
     expect(sendTemplate).not.toHaveBeenCalled();
   });
 
   it('fuera de la ventana: Meta rechaza el texto y entra la plantilla', async () => {
-    sendText.mockResolvedValue(null);
+    enviarTexto.mockResolvedValue({ ok: false, error: 'fuera de ventana', codigo: 131047, status: 400 });
     sendTemplate.mockResolvedValue({ ok: true, id: 'wamid-plantilla' });
     const r = await avisarPorFacturar({ tenantId: 't1', telefono: '5219990000001', hoy: HOY });
     expect(r.enviado).toBe(true);
@@ -180,7 +199,7 @@ describe('avisarPorFacturar', () => {
   // TENANT, y no firmaba actor: quien copiaba ese id para buscar el gasto no
   // lo encontraba. El aviso es un lote por flota que manda el cron.
   it('la constancia en bitácora es de la FLOTA, con el id de la flota, y la firma el sistema', async () => {
-    sendText.mockResolvedValue('wamid-texto');
+    enviarTexto.mockResolvedValue({ ok: true, id: 'wamid-texto' });
     await avisarPorFacturar({ tenantId: 't1', telefono: '5219990000001', hoy: HOY });
     expect(insert).toHaveBeenCalledOnce();
     expect((insert.mock.calls[0] as unknown[])[0]).toEqual({
@@ -190,19 +209,19 @@ describe('avisarPorFacturar', () => {
       accion: 'facturacion.aviso_enviado',
       entidad: 'tenant',
       entidad_id: 't1',
-      detalle: { tickets: 1, wamid: 'wamid-texto', via: 'texto' },
+      detalle: { tickets: 1, wamid: 'wamid-texto', via: 'texto', huella: expect.any(String) },
     });
   });
 
   it('si NO salió, no se anota nada: la bitácora dice lo que pasó, no lo que se intentó', async () => {
-    sendText.mockResolvedValue(null);
+    enviarTexto.mockResolvedValue({ ok: false, error: 'fuera de ventana', codigo: 131047, status: 400 });
     sendTemplate.mockResolvedValue({ ok: false, error: 'x', codigo: 132001 });
     await avisarPorFacturar({ tenantId: 't1', telefono: '5219990000001', hoy: HOY });
     expect(insert).not.toHaveBeenCalled();
   });
 
   it('los DOS caminos caídos: se dice el motivo, no se afirma enviado', async () => {
-    sendText.mockResolvedValue(null);
+    enviarTexto.mockResolvedValue({ ok: false, error: 'fuera de ventana', codigo: 131047, status: 400 });
     sendTemplate.mockResolvedValue({ ok: false, error: 'x', codigo: 132001 });
     const r = await avisarPorFacturar({ tenantId: 't1', telefono: '5219990000001', hoy: HOY });
     expect(r.enviado).toBe(false);
@@ -219,7 +238,7 @@ describe('avisarPorFacturar', () => {
   // y pasa a decir que falta el robot — exactamente lo que `enrutar` distingue.
   it('consulta la MISMA cuenta compartida que ve la decisión real de facturación', async () => {
     cuentasCompartidas.mockResolvedValue(new Set(['oxxo_gas']));
-    sendText.mockResolvedValue('wamid-texto');
+    enviarTexto.mockResolvedValue({ ok: true, id: 'wamid-texto' });
     const r = await avisarPorFacturar({ tenantId: 't1', telefono: '5219990000001', hoy: HOY });
     expect(cuentasCompartidas).toHaveBeenCalledWith('t1');
     expect(r.enviado).toBe(true);
@@ -230,9 +249,56 @@ describe('avisarPorFacturar', () => {
 
   it('sin cuenta compartida, no cambia nada: sigue avisando como antes', async () => {
     cuentasCompartidas.mockResolvedValue(new Set());
-    sendText.mockResolvedValue('wamid-texto');
+    enviarTexto.mockResolvedValue({ ok: true, id: 'wamid-texto' });
     const r = await avisarPorFacturar({ tenantId: 't1', telefono: '5219990000001', hoy: HOY });
     expect(r.enviado).toBe(true);
     expect(r.tickets).toBe(1);
+  });
+
+  // A37-S43-01: el registro de adaptadores es POR FLOTA.
+  it('A37-S43-01: un ticket CAPUFE de una flota SIN adaptadores registrados SÍ se avisa (antes se creía «automático» por el registro global)', async () => {
+    const capufe = { urlFacturacion: 'https://facturacioncapufe.com.mx/Capufe/facturacionrapida', codigo: 'ABCDEFGHIJKLMNOPQR' };
+    getPorFacturar.mockResolvedValue([armar(g({ id: 'c1', fecha: '2026-08-04', extra: capufe }), HOY)]);
+    enviarTexto.mockResolvedValue({ ok: true, id: 'wamid-texto' });
+    const r = await avisarPorFacturar({ tenantId: 't-sin-registro', telefono: '5219990000001', hoy: HOY });
+    expect(r.tickets).toBe(1);
+    expect(r.enviado).toBe(true);
+    expect(r.texto).toMatch(/faltan datos fiscales de la flota/);
+  });
+
+  // A37-S43-07
+  it('A37-S43-07: el MISMO conjunto de gastos no se reenvía el mismo día', async () => {
+    enviarTexto.mockResolvedValue({ ok: true, id: 'w1' });
+    await avisarPorFacturar({ tenantId: 't1', telefono: '5219990000001', hoy: HOY });
+    const huella = ((insert.mock.calls[0] as unknown[])[0] as { detalle: { huella: string } }).detalle.huella;
+    enviarTexto.mockClear();
+    avisosPrevios = [{ detalle: { huella } }];
+    const r = await avisarPorFacturar({ tenantId: 't1', telefono: '5219990000001', hoy: HOY });
+    expect(r.enviado).toBe(false);
+    expect(r.motivo).toMatch(/Ya se avisó hoy/);
+    expect(enviarTexto).not.toHaveBeenCalled();
+  });
+
+  it('A37-S43-07: tope diario por flota aunque el conjunto sea nuevo', async () => {
+    avisosPrevios = [{ detalle: { huella: 'a' } }, { detalle: { huella: 'b' } }, { detalle: { huella: 'c' } }];
+    const r = await avisarPorFacturar({ tenantId: 't1', telefono: '5219990000001', hoy: HOY });
+    expect(r.enviado).toBe(false);
+    expect(enviarTexto).not.toHaveBeenCalled();
+  });
+
+  it('A37-S43-07: bitácora ilegible = NO se manda (fail-closed hacia una persona)', async () => {
+    bitacoraIlegible = true;
+    const r = await avisarPorFacturar({ tenantId: 't1', telefono: '5219990000001', hoy: HOY });
+    expect(r.enviado).toBe(false);
+    expect(enviarTexto).not.toHaveBeenCalled();
+  });
+
+  it('A37-S43-07: un error AMBIGUO del texto (timeout, ya en cola) NO dispara además la plantilla, y queda anotado', async () => {
+    enviarTexto.mockResolvedValue({ ok: false, error: 'timeout', status: 503 });
+    const r = await avisarPorFacturar({ tenantId: 't1', telefono: '5219990000001', hoy: HOY });
+    expect(r.enviado).toBe(false);
+    expect(sendTemplate).not.toHaveBeenCalled();
+    expect(insert).toHaveBeenCalledOnce();
+    expect(((insert.mock.calls[0] as unknown[])[0] as { detalle: Record<string, unknown> }).detalle.en_cola).toBe(true);
   });
 });

@@ -743,6 +743,21 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
         };
       }
 
+      // A37-S41-05: ANTES de timbrar, lo que dice la tabla debe ser EXACTAMENTE
+      // lo que se cree agregado. Un código marcado «rechazado» porque la fila
+      // tardó en pintarse puede estar en la tabla (y entrar al CFDI) mientras
+      // su gasto queda sin UUID y se refactura en otra factura.
+      const enTabla = await this.codigosEnLaTabla(pagina);
+      const esperados = new Set(agregados.map((r) => r.codigo.trim().toUpperCase()));
+      const sobran = enTabla.filter((c) => !esperados.has(c));
+      if (sobran.length > 0 || enTabla.length !== esperados.size) {
+        return {
+          ...base,
+          ok: false,
+          error: `NO SE EMITIÓ: la tabla "CÓDIGOS AGREGADOS" del portal no coincide con lo que se agregó (portal: ${enTabla.length} fila(s)${sobran.length > 0 ? `, de más: ${sobran.join(', ')}` : ''}; esperadas: ${esperados.size}). Emitir facturaría una caseta que no quedó atribuida a su gasto. Revisa el portal con el ticket enfrente.`,
+        };
+      }
+
       // Marcado ANTES del clic: si `hacerClic` revienta no se sabe si el
       // formulario alcanzó a irse. Fallar cerrado aquí es asumir que sí.
       seApreto = true;
@@ -926,6 +941,23 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
       r.discrepanciaDeMonto = true;
       r.motivo = `El ticket decía ${r.montoEsperado} y CAPUFE cobra ${costo}. Manda el portal: o el OCR leyó mal el monto, o ese código es de otro cruce.`;
     }
+  }
+
+  /**
+   * Todos los códigos que la tabla muestra HOY (en mayúsculas). Si se agota
+   * `maxFilasTabla` sin llegar al final devuelve una fila de más a propósito
+   * (`'…'`): no se puede asegurar la conciliación y el llamador bloquea.
+   */
+  private async codigosEnLaTabla(pagina: PaginaCapufe): Promise<string[]> {
+    const col = await this.columnasDeLaTabla(pagina);
+    const codigos: string[] = [];
+    for (let i = 1; i <= this.maxFilasTabla; i++) {
+      const celda = await pagina.leerTexto(this.celda(i, col.codigo));
+      if (celda === null) return codigos;
+      codigos.push(celda.trim().toUpperCase());
+    }
+    codigos.push('…');
+    return codigos;
   }
 
   /**

@@ -312,6 +312,7 @@ import { join, relative } from 'node:path';
 // Auditoría 37, A37-S28-01 (lote del Redactor, 23-oct-2026): +1 archivo (322 → 323), `agentes/candidatos_redactor.ts` — la selección de candidatos que antes vivía en `runner.ts`; todo por `acotada`.
 // INTEGRACIÓN ONDA 5 (23-oct-2026, #651–#656): cada rama medía su techo sola; el barrido real del árbol fusionado mide 324 archivos (323 de la oleada 4 + sat/rfc_tenant.ts + agentes/candidatos_redactor.ts, +1 que ninguna rama veía por separado). Techo = medido, sin holgura.
 // Auditoría 37, lote M-Z-resto-10 (A37-S07-06): +1 archivo (324 → 325), `lib/perfil/avatar_huerfanos.ts` — borra del bucket público `avatares` las extensiones viejas del MISMO usuario tras guardar el avatar nuevo; solo Storage (`storage.from('avatares').remove`), cero tablas.
+// LOTE A37 M-Z-resto-06 (A37-S43-07): +1 archivo (324 → 325), `facturacion/avisar.ts` — lee la bitácora de avisos del día (`bitacora_auditoria`, filtrada por `tenant_id`, `acotada`, con `.order('id')`) para no reenviar el mismo aviso.
 const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 325;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
@@ -595,6 +596,7 @@ const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_357;
 // antes de aceptar otro, S54-04) y `portal_pago_escritura.ts` +1 (relee la liga por hash tras un error del insert, S54-07).
 // A37 lote M-Z-resto-13: 2,315 → 2,316 (+1): `purgarRetencion` de cobranza_gasto lee (select paginado) los contactos viejos antes de borrar solo los desprotegidos (A37-S26-09).
 // LOTE A37 z-resto-05: +7 llamadas (2,336 → 2,343): lotes de operadores/terminales (S19-04), claims y piezas de campaña, ventana del parte de emergencia (S26-02); todas con tenant_id.
+// LOTE A37 M-Z-resto-06: +2 llamadas (2,336 → 2,338): `avisar.ts` +1 (bitácora de avisos del día, S43-07) y `pendientes.ts` +1 (gastos SIN fecha legible por cursor de `id`, S43-05; `traerTodoDesdeId`, `tenant_id`). Medido, sin holgura.
 // A37-S27-10 (lote b-sat-fiscal-05): +1 (2,284 → 2,285), en `agentes/insumos.ts` (`crearInsumoArchivo`): `storage.from('agente-insumos').remove`
 // para no dejar huérfano el objeto subido cuando falla el insert.
 // LOTE A37 B-sat-fiscal-06 (migración 0876): +3 llamadas (2,284 → 2,287), 0 archivos nuevos, medido con el barrido real. `gasto_correccion.ts` +2: el RPC
