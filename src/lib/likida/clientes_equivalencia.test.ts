@@ -149,6 +149,21 @@ describe('EQUIVALENCIA getPanelClientes — la reducción JS vieja vs cartera_te
     expect(viajes.some((c) => c.conteo)).toBe(true);
   });
 
+  it('A37-S34-06: la tarifa sugerida de un viaje ya hecho se resuelve con la fecha DEL VIAJE, no con la de hoy', async () => {
+    const v2 = doble.base.viaje.find((v) => v.id === 'v-2') as Record<string, unknown>;
+    Object.assign(v2, { origen: 'Saltillo', destino: 'Guadalajara', fecha_inicio: '2026-03-10T15:00:00Z' });
+    const tar = (id: string, precio: number, desde: string, hasta: string | null) => ({
+      id, cliente_id: null, origen: 'Saltillo', destino: 'Guadalajara', modo: 'por_viaje', precio, moneda: 'MXN', vigente_desde: desde, vigente_hasta: hasta, activa: true, creada_en: '2026-01-01T00:00:00Z',
+    });
+    doble.base.tarifa = [tar('t-viejo', 18000, '2026-01-01', '2026-07-31'), tar('t-nuevo', 21000, '2026-08-01', null)];
+    const panel = await getPanelClientes('t-1', HOY);   // HOY = 2026-08-14: la tarifa nueva ya rige hoy
+    const v = panel.sinIngreso.find((x) => x.id === 'v-2')!;
+    expect(v.sugerencia?.tarifa.precio).toBe(18000);     // marzo → la de marzo, no los 21,000 de hoy
+    // un viaje sin fecha de inicio no inventa una: usa la de hoy (no hay otra)
+    const sinFecha = panel.sinIngreso.find((x) => x.id === 'v-4')!;
+    expect(sinFecha.fecha).toBeNull();
+  });
+
   it('si la cartera no se puede leer, LANZA — no devuelve "esta flota no tiene clientes"', async () => {
     doble.error = { message: 'base caída' };
     await expect(getPanelClientes('t-1', HOY)).rejects.toThrow('base caída');
