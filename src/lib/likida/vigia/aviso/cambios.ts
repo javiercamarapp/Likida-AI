@@ -465,9 +465,13 @@ export function crearRepoCambios(): RepoCambios {
     },
 
     async cambiarEstado(tenantId, avisoId, desde, hacia, motivo) {
-      const { data, error } = await acotada(supabaseAdmin().from('vigia_aviso')
+      // A37-S58-01: un aprobado con arriendo VIVO (reclamo_token + reclamo_expira_en futuro) ya lo lleva el cron a Meta;
+      // cerrarlo ahora diría «no se enviará» cuando el mensaje sale igual. Solo se cierra sin arriendo o con arriendo vencido.
+      let q = supabaseAdmin().from('vigia_aviso')
         .update({ estado: hacia, motivo: recorta(motivo, 200) })
-        .eq('tenant_id', tenantId).eq('id', avisoId).eq('estado', desde).select('id'), 'aviso.cambios.cambiar_estado');
+        .eq('tenant_id', tenantId).eq('id', avisoId).eq('estado', desde);
+      if (desde === 'aprobado') q = q.or(`reclamo_token.is.null,reclamo_expira_en.lte.${new Date().toISOString()}`);
+      const { data, error } = await acotada(q.select('id'), 'aviso.cambios.cambiar_estado');
       exigir('cambiar_estado', error);
       return Array.isArray(data) && data.length > 0;
     },
