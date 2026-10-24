@@ -60,7 +60,7 @@ const {
 const FICHA_CFDI = {
   norma_id: 'cff-29-A', cita: 'CFF art. 29-A', titulo: 'Requisitos de los comprobantes fiscales',
   jerarquia: 1 as const, vinculante: true, estado: 'verificado_fuente_primaria' as const,
-  afirmable: true, exigible_desde: null,
+  afirmable: true, exigible_desde: null, exigible_hasta: null, vencida: false,
 };
 
 const TICKET = {

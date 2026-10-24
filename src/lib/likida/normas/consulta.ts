@@ -106,6 +106,10 @@ export interface NormaConsultada {
   /** Desde cuándo es exigible, si alguna fuente lo respalda. null = nadie lo
    *  confirmó: se puede avisar, nunca declarar con fecha. */
   exigible_desde: string | null;
+  /** Hasta cuándo rige (p. ej. la RFA 2026: 2026-12-31). null = sin tope conocido. */
+  exigible_hasta: string | null;
+  /** true si hoy (hora de México) ya pasó `exigible_hasta`: la ficha NO se afirma como vigente. */
+  vencida: boolean;
 }
 
 /**
@@ -123,7 +127,16 @@ function citaLegible(n: Norma): string {
   return legible ?? n.instrumento ?? n.id;
 }
 
-function aConsultada(n: Norma): NormaConsultada {
+/** «AAAA-MM-DD» de hoy en la hora del Centro de México (como se declaran las vigencias). */
+function fechaMx(hoy: Date): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' }).format(hoy);
+}
+
+function aConsultada(n: Norma, hoy: Date): NormaConsultada {
+  // A37-S50-04: `exigibleHasta` no lo leía nadie; desde 2027 el chat seguiría
+  // afirmando facilidades de la RFA 2026 como vigentes. Vencida => no afirmable.
+  const hasta = n.exigibleHasta ?? null;
+  const vencida = hasta !== null && fechaMx(hoy) > hasta;
   return {
     norma_id: n.id,
     cita: citaLegible(n),
@@ -131,8 +144,10 @@ function aConsultada(n: Norma): NormaConsultada {
     jerarquia: n.jerarquia,
     vinculante: esVinculante(n.jerarquia),
     estado: n.estado,
-    afirmable: n.estado !== 'sin_verificar',
+    afirmable: n.estado !== 'sin_verificar' && !vencida,
     exigible_desde: n.exigibleDesde ?? null,
+    exigible_hasta: hasta,
+    vencida,
   };
 }
 
@@ -142,14 +157,14 @@ function aConsultada(n: Norma): NormaConsultada {
  * en vez de devolver vacío: un tema que no existe contestado con `[]` se
  * leería como "no hay norma", que es una afirmación.
  */
-export function normasPorTema(tema: string): NormaConsultada[] {
+export function normasPorTema(tema: string, hoy: Date = new Date()): NormaConsultada[] {
   const ids = (TEMAS as Record<string, readonly string[]>)[tema];
   if (!ids) throw new Error(`consultar_normas: tema desconocido "${tema}"`);
   return ids
     .map((id) => {
       const n = NORMAS[id];
       if (!n) throw new Error(`consultar_normas: la ficha "${id}" del tema "${tema}" no existe en el índice`);
-      return aConsultada(n);
+      return aConsultada(n, hoy);
     })
     .sort((a, b) => a.jerarquia - b.jerarquia);
 }
