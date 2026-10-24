@@ -8,7 +8,7 @@ import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { getPlanes, guardarPriceDePlan, type Plan } from '@/lib/saas/suscripcion';
 import { stripeConfigurado, modoStripe, webhookConfigurado } from '@/lib/saas/stripe';
 import {
-  datosBancarios, emitirMensualidad, conciliar, timbrarFactura, getPorCobrar, type FacturaPorCobrar,
+  datosBancarios, emitirMensualidad, conciliar, timbrarFactura, getPorCobrarTodas, type FacturaPorCobrar,
 } from '@/lib/saas/transferencia';
 import { etiquetaIva } from '@/lib/saas/iva';
 import { facturapiConfigurado, modoFacturapi } from '@/lib/saas/facturapi';
@@ -197,7 +197,9 @@ export default async function CostosFacturacionPage() {
 
   const banco = datosBancarios();
   let porCobrar: FacturaPorCobrar[] | null = null;
-  try { porCobrar = await getPorCobrar(); } catch (e) { logger.error('admin.por_cobrar', { err: e instanceof Error ? e.message : String(e) }); }
+  // A37-S06-07: la lectura completa trae además el total exacto de la base; si rebasa lo mostrado, se avisa.
+  let totalPorCobrar = 0;
+  try { const r = await getPorCobrarTodas(); porCobrar = r.facturas; totalPorCobrar = r.total; } catch (e) { logger.error('admin.por_cobrar', { err: e instanceof Error ? e.message : String(e) }); }
 
   return (
     <main className="h-full">
@@ -336,6 +338,12 @@ export default async function CostosFacturacionPage() {
                 <EstadoVacio>Nada pendiente de cobro. Aparece aquí en cuanto emitas una mensualidad.</EstadoVacio>
               ) : (
                 <div className="overflow-x-auto">
+                  {totalPorCobrar > porCobrar.length && (
+                    <p className="text-xs mb-2" role="status" style={{ color: 'var(--bad)' }}>
+                      Se muestran {porCobrar.length} de {totalPorCobrar} facturas por cobrar: la lista está recortada. Las más
+                      viejas no aparecen aquí.
+                    </p>
+                  )}
                   <table className="w-full text-sm">
                     <thead>
                       <tr style={{ color: 'var(--muted)' }} className="text-left">

@@ -239,7 +239,7 @@ export async function subirArchivoInsumo(agenteId: string, archivo: File, tipo: 
   return ruta;
 }
 
-function validarTipoAceptado(agente: string, departamento: string, tipo: TipoInsumo): void {
+export function validarTipoAceptado(agente: string, departamento: string, tipo: TipoInsumo): void {
   const aceptados = tiposAceptadosPorAgente(agente, departamento);
   if (!aceptados.includes(tipo)) {
     throw new DatoInvalido(`Este agente no recibe insumos de tipo "${tipo}" — acepta: ${aceptados.join(', ')}.`);
@@ -264,9 +264,29 @@ export async function crearInsumoArchivo(a: AltaInsumoArchivo): Promise<string> 
   return String((data as { id: string }).id);
 }
 
+/** A37-S05-05: topes de longitud de lo que entra al contexto que lee el agente. */
+export const MAX_TITULO_INSUMO = 200;
+export const MAX_TEXTO_INSUMO = 20_000;
+export const MAX_LINK_INSUMO = 2_048;
+
+/** A37-S05-05: valida EN EL SERVIDOR título y contenido de un insumo de texto/link (el `type=url` del
+ *  formulario es solo del cliente). El link debe ser una URL https sin credenciales. */
+export function validarContenidoInsumo(tipo: TipoInsumo, titulo: string, contenido: string): void {
+  if (titulo.length > MAX_TITULO_INSUMO) throw new DatoInvalido(`El título pasa de ${MAX_TITULO_INSUMO} caracteres.`);
+  if (tipo === 'link') {
+    if (contenido.length > MAX_LINK_INSUMO) throw new DatoInvalido(`El link pasa de ${MAX_LINK_INSUMO} caracteres.`);
+    let u: URL;
+    try { u = new URL(contenido); } catch { throw new DatoInvalido('El link no es una URL válida.'); }
+    if (u.protocol !== 'https:' || u.username || u.password) throw new DatoInvalido('El link debe ser https y sin usuario ni contraseña.');
+  } else if (contenido.length > MAX_TEXTO_INSUMO) {
+    throw new DatoInvalido(`El texto pasa de ${MAX_TEXTO_INSUMO} caracteres.`);
+  }
+}
+
 /** Inserta un insumo de link o texto libre — sin Storage de por medio. */
 export async function crearInsumoTexto(a: AltaInsumoTexto): Promise<string> {
   validarTipoAceptado(a.agente, a.departamento, a.tipo);
+  validarContenidoInsumo(a.tipo, a.titulo, a.contenido);
   const { data, error } = await supabaseAdmin()
     .from('agente_insumo')
     .insert({

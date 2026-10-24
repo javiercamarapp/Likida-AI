@@ -152,3 +152,20 @@ describe('vincularPortalAsistido', () => {
     expect(p.abrir).not.toHaveBeenCalled();
   });
 });
+
+// A37-S05-07
+describe('A37-S05-07: baseSeguraDeVinculacion', async () => {
+  const { baseSeguraDeVinculacion } = await import('./vinculacion_asistida');
+  it('acepta https y normaliza al origen', () => {
+    expect(baseSeguraDeVinculacion('https://app.likida.ai/')).toBe('https://app.likida.ai');
+  });
+  it('acepta http solo hacia localhost', () => {
+    expect(baseSeguraDeVinculacion('http://localhost:3000')).toBe('http://localhost:3000');
+    expect(() => baseSeguraDeVinculacion('http://app.ejemplo.com')).toThrow(/https/);
+  });
+  it('rechaza esquemas raros, credenciales y basura', () => {
+    expect(() => baseSeguraDeVinculacion('ftp://x.com')).toThrow();
+    expect(() => baseSeguraDeVinculacion('https://u:p@x.com')).toThrow(/usuario/);
+    expect(() => baseSeguraDeVinculacion('no es url')).toThrow();
+  });
+});

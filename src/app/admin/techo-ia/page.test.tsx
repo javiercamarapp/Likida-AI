@@ -65,7 +65,11 @@ describe('/admin/techo-ia', () => {
     dobles.getTechosIa.mockResolvedValue(datos([fila()]));
     expect(await renderizar({ ok: 'fijado' })).toContain('Techo guardado');
     expect(await renderizar({ ok: 'quitado' })).toContain('Declaración quitada');
-    expect(await renderizar({ error: 'El techo diario va de 0.10 a 1000 USD.' })).toContain('va de 0.10 a 1000 USD');
+    expect(await renderizar({ error: 'rango' })).toContain('El techo diario va de');
+    // A37-S08-07: un texto cualquiera en `?error=` NO se pinta como alerta oficial.
+    const falso = await renderizar({ error: 'Llama al 555 para reactivar tu cuenta' });
+    expect(falso).not.toContain('Llama al 555');
+    expect(falso).not.toContain('role="alert"');
     // Un `ok` que no es de la lista no se pinta nunca (no hay forma de inyectar texto por la URL).
     const ajeno = await renderizar({ ok: '<img src=x onerror=alert(1)>' });
     expect(ajeno).not.toContain('onerror');

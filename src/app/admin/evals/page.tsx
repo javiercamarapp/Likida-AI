@@ -17,13 +17,21 @@ export const dynamic = 'force-dynamic';
  *  tumba todo). */
 async function marcarResultado(fd: FormData) {
   'use server';
-  await requireSuperadmin();
+  const { userId } = await requireSuperadmin();
   const id = String(fd.get('id') ?? '');
-  const corridaId = String(fd.get('corridaId') ?? '');
   const veredicto = String(fd.get('veredicto') ?? '');
-  if (!/^[0-9a-f-]{36}$/.test(id) || !/^[0-9a-f-]{36}$/.test(corridaId)) return;
+  if (!/^[0-9a-f-]{36}$/.test(id)) return;
   if (veredicto !== 'paso' && veredicto !== 'fallo') return;
   const admin = supabaseAdmin();
+  // A37-S06-10: la corrida a recalcular se DERIVA del resultado en la base, no del formulario (el cliente
+  // podía mandar el id de otra corrida y recalcular su veredicto agregado).
+  const { data: fila, error: errFila } = await admin.from('eval_resultado').select('corrida_id').eq('id', id).maybeSingle();
+  if (errFila) {
+    logger.error('evals.resultado_no_leido', { id, err: errFila.message });
+    redirect('/admin/evals?error=marcar&paso=leer');
+  }
+  if (!fila?.corrida_id) return;
+  const corridaId = String(fila.corrida_id);
   // Solo lo que sigue en revisión se marca — un veredicto emitido no se
   // reescribe en silencio (el WHERE es el candado).
   //
@@ -32,7 +40,8 @@ async function marcarResultado(fd: FormData) {
   // que quedó registrado y podía no ser cierto. `redirect('?error=marcar')`
   // en vez de un `return` mudo: el clic tiene que decir si de verdad pegó.
   const { data, error: errMarcar } = await admin.from('eval_resultado')
-    .update({ veredicto, detalle: `juez humano: ${veredicto}` })
+    // A37-S06-10: el juez queda identificado (quién y cuándo) en el detalle: el gate de re-examen tiene responsable.
+    .update({ veredicto, detalle: `juez humano: ${veredicto} · ${userId} · ${new Date().toISOString()}` })
     .eq('id', id).eq('veredicto', 'revisar').select('id');
   if (errMarcar) {
     logger.error('evals.marcar_no_escrito', { id, err: errMarcar.message });
