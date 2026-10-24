@@ -108,6 +108,7 @@ async function ejecutar(a: { tenantId: string; userId: string }, fd: FormData): 
     const v = validarDatoManual({
       operadorNombre: texto(fd, 'operadorNombre'), licencia: texto(fd, 'licencia'), licenciaVence: texto(fd, 'licenciaVence'),
       telefono: texto(fd, 'telefono'), placasUnidad: texto(fd, 'placasUnidad'), placasCaja: texto(fd, 'placasCaja'), estadoCaja: texto(fd, 'estadoCaja'),
+      borrar: fd.getAll('borrar').map(String),
     });
     if (!v.ok) return fallo(v.error);
     const r = await repo.guardarDatoManual(a.tenantId, av.filaId, a.userId, v.valor);

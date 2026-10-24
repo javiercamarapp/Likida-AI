@@ -88,6 +88,18 @@ describe('recibirDocumento', () => {
     expect(estado.docs.size).toBe(0);
   });
 
+  it('A37-A3-17: el reenvío de un documento ya purgado no deja el archivo huérfano en Storage', async () => {
+    const bytes = await pdfBoreal();
+    const r1 = await recibirDocumento(A, { canal: 'manual', nombre: 'x.pdf', bytes }, sinAgenteApagado);
+    if (!r1.ok) throw new Error('no recibió');
+    const d = estado.docs.get(r1.documentoId)!;
+    estado.archivos.delete(d.storageRuta!); // la purga borró el archivo y la referencia
+    d.storageRuta = null; d.purgadoEn = new Date().toISOString();
+    const r2 = await recibirDocumento(A, { canal: 'manual', nombre: 'x.pdf', bytes }, sinAgenteApagado);
+    expect(r2).toMatchObject({ ok: true, duplicado: true });
+    expect(estado.archivos.size).toBe(0);
+  });
+
   it('un cliente de otra flota se rechaza', async () => {
     const r = await recibirDocumento(A, { canal: 'manual', nombre: 'x.pdf', bytes: await pdfBoreal(), clienteId: 'cli-b' }, sinAgenteApagado);
     expect(r).toMatchObject({ ok: false, motivo: 'cliente' });

@@ -146,6 +146,8 @@ export function leerCartaPorteXml(arbol: unknown): LecturaXmlCcp | null {
     poner(fila, CAMPOS_MERCANCIA, 'valor_mercancia', attr(m, 'ValorMercancia'), 'Mercancia@ValorMercancia');
     poner(fila, CAMPOS_MERCANCIA, 'moneda', attr(m, 'Moneda'), 'Mercancia@Moneda');
     poner(fila, CAMPOS_MERCANCIA, 'material_peligroso', attr(m, 'MaterialPeligroso'), 'Mercancia@MaterialPeligroso');
+    // A37-A3-20: la clave del material peligroso que SÍ trae el XML (si no se leía, caía en el bloqueo `peligroso_sin_clave`).
+    poner(fila, CAMPOS_MERCANCIA, 'clave_material_peligroso', attr(m, 'CveMaterialPeligroso'), 'Mercancia@CveMaterialPeligroso');
     // A37-S33-01: a qué destino/origen va cada mercancía (posición 1..N), por CantidadTransporta@IDDestino / @IDOrigen.
     const posDestino = (id: string | null): number => (id === null ? 0 : destinos.findIndex((u) => attr(u, 'IDUbicacion') === id) + 1);
     const posOrigen = (id: string | null): number => (id === null ? 0 : origenes.findIndex((u) => attr(u, 'IDUbicacion') === id) + 1);

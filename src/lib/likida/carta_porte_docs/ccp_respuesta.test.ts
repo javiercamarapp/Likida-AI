@@ -108,15 +108,15 @@ describe('procesarCcpTimbrado', () => {
     expect(e.archivos.size).toBe(0);
   });
 
-  it('si el correo no sale: queda error_envio, se suelta el candado y un nuevo aviso del MISMO UUID reintenta', async () => {
+  it('si el correo no sale: queda error_envio y un nuevo aviso del MISMO UUID NO reenvía solo (A37-S31-08); lo confirma una persona', async () => {
     const { deps, e } = dobleCcp({ correoOk: false }); conClienteConocido(e);
     const r1 = await procesarCcpTimbrado(deps, entrada());
     expect(r1).toEqual({ ok: true, duplicado: false, estado: 'error_envio', respondido: false });
     expect(e.logs.some((l) => l.evento === 'ccp_respuesta.correo_no_salio')).toBe(true);
     e.correoOk = true;
     const r2 = await procesarCcpTimbrado(deps, entrada());
-    expect(r2).toEqual({ ok: true, duplicado: true, estado: 'respondido', respondido: true });
-    expect(e.correos).toHaveLength(1);
+    expect(r2).toEqual({ ok: true, duplicado: true, estado: 'error_envio', respondido: false });
+    expect(e.correos).toHaveLength(0);
   });
 
   it('si otro hilo ganó el candado, este no manda un segundo correo', async () => {

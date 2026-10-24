@@ -100,6 +100,11 @@ export async function recibirDocumento(tenantId: string, e: EntradaDocumento, de
     storageRuta: ruta, clienteId: e.clienteId ?? null, remitente: e.remitente?.slice(0, 320) ?? null, asunto: e.asunto?.slice(0, 300) ?? null,
     remitenteReconocido: e.remitenteReconocido ?? null, retenerHasta: diasDespues(ahora, DIAS_RETENCION.recibido),
   });
+  // A37-A3-17: el duplicado de un documento ya purgado (sin storage_ruta) no vuelve a guardar el archivo: lo recién subido
+  // quedaría sin referencia y ningún barrido lo borraría. Se retira (mejor esfuerzo; si falla se avisa, no se rompe la recepción).
+  if (duplicado && !documento.storageRuta) {
+    try { await repo.borrarArchivo(ruta); } catch (err) { logger.warn('cpdocs.huerfano_no_borrado', { tenantId, error: err instanceof Error ? err.message : String(err) }); }
+  }
   await repo.registrarEvento(tenantId, documento.id, duplicado ? 'duplicado_recibido' : 'recibido', e.actorId ?? null,
     duplicado ? { canal: e.canal } : { canal: e.canal, formato, bytes: e.bytes.length });
   // A37-S33-05: el documento previo con esa huella ya se purgó (sin archivo): el archivo recién subido no tiene dueño ni entra a la purga

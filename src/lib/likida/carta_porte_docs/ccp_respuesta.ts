@@ -31,6 +31,7 @@ import type { ResultadoEnvio } from '@/lib/correo/enviar';
 import { MAX_ADJUNTO_BYTES } from './correo_entrante';
 import { parsearXml } from './contenido';
 import { bajar, extraerCartaPorteXml } from './xml_ccp';
+import { direccionDeRemitente } from '@/lib/correo/remitente';
 
 export { MAX_ADJUNTO_BYTES };
 
@@ -98,7 +99,6 @@ const falla = (codigo: CodigoErrorCcp, mensaje: string): ResultadoCcp => ({ ok: 
 // ── Lectura del XML ─────────────────────────────────────────────────────────
 
 const UUID_FISCAL = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const CORREO = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
 
 export interface CcpLeido { uuid: string; folio: string | null }
 
@@ -124,8 +124,7 @@ const esPdf = (b: Uint8Array): boolean => b.length >= 5 && b[0] === 0x25 && b[1]
 
 /** El correo del remitente original (`Nombre <a@b>` o `a@b`), en minúsculas; `null` si no hay uno utilizable. */
 export function destinoDeRemitente(remitente: string | null | undefined): string | null {
-  const m = CORREO.exec(remitente ?? '');
-  return m ? m[0].toLowerCase() : null;
+  return direccionDeRemitente(remitente); // A37-A3-16/S31-09: solo la dirección real (entre < >), nunca el nombre visible
 }
 
 /** El folio va en el asunto, pero acotado y sin saltos: es dato del cliente y no arrastra texto libre. */
@@ -198,14 +197,12 @@ export async function procesarCcpTimbrado(deps: DepsCcp, e: EntradaCcp): Promise
   const activa = await deps.respuestaActiva(e.tenantId);
   if (activa === 'sin_migracion') return falla('sin_migracion', 'La función aún no está disponible en esta cuenta.');
 
-  // ¿Ya lo teníamos? (el TMS reintenta). Solo un `error_envio` vuelve a intentar el correo.
+  // ¿Ya lo teníamos? (el TMS reintenta). Nunca se reenvía el correo desde aquí.
   const previa = await deps.buscarPorUuid(e.tenantId, ccp.uuid);
   if (previa) {
     if (previa.envioId !== envio.envioId) return falla('no_encontrado', 'No hay un envío de tu flota con esa referencia.');
-    if (previa.estado === 'error_envio' && activa && previa.destinoCorreo) {
-      const r = await responder(deps, previa, previa.destinoCorreo, e.xml, e.pdf, ccp.folio);
-      return { ok: true, duplicado: true, estado: r.estado, respondido: r.respondido };
-    }
+    // A37-S31-08: un `error_envio` NO se reenvía solo. Si el proveedor aceptó el correo y la respuesta se perdió, un
+    // reintento pasada su ventana de idempotencia duplicaría PDF y XML al cliente; lo decide una persona (`confirmarYResponder`).
     return { ok: true, duplicado: true, estado: previa.estado, respondido: previa.estado === 'respondido' };
   }
 

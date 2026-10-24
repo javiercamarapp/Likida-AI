@@ -90,6 +90,9 @@ export function ubicar(e: ErrorFila, layout: LayoutPlantilla, nMercancias: numbe
       }
       // Tabla de destinos: un solo destino por documento; sus columnas son campos del documento.
       if (e.fila !== undefined && (e.fila < tb.primeraFila || e.fila >= tb.primeraFila + tb.maxFilas)) continue;
+      // A37-A3-19: una fila 2..N de una tabla de varios destinos/orígenes NO es el campo del destino/origen 1: ubicarla ahí
+      // bloquearía un valor que no es y sin forma de resolverlo. Sin ubicación fiable queda como hallazgo del documento.
+      if (tb.multi && e.fila !== undefined && e.fila > tb.primeraFila) continue;
       const clave = claveDocumento(col.campo);
       if (campoDoc(clave)) return { campo: clave, renglon: null };
     }

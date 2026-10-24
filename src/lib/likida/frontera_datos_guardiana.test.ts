@@ -605,6 +605,9 @@ const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_315;
 // (A37-A4-01: `reabrirCargaSiNoEsUltima` lee la última carga, lee la carga por sha y la marca como reciente; `restaurarCarga` la devuelve a su fecha si la
 // sincronización falla) y `carta_porte_docs/repo.ts` +1 (A37-S32-01: `marcarPurgado` vacía los valores de las correcciones). Todas por `acotada`, ancladas a
 // `tenant_id`; cubiertas por `vigia/programa/repo.test.ts` y `carta_porte_docs/repo_purga.test.ts`. Funcionalidad nueva, no código migrado.
+// Auditoría 37, lote e-cartaporte-vigia-05: 2,284 → 2,287 (+3, medido). `carta_porte_docs/repo.ts` +4 (A37-S32-08: reparar un perfil sin versión
+// o una versión huérfana tras un corte: lectura de la clave, lectura de versiones, retiro del perfil y activación condicional) y
+// `vigia/aviso/bandeja.ts` -1 (A37-A4-08: el upsert por columna ya no lee el dato previo).
 // Auditoría 37, lote agentes-legal-ia (medido con el barrido real): +2 llamadas (2,264 → 2,266). `candidatos_redactor.ts` suma 3 `.from(` (prospecto, cola_aprobacion, prospecto_contacto) y `runner.ts` pierde la suya (+2 netas); `sdr.ts` pasa de 3 a 3 (la lectura por prospecto se volvió lectura en lote). Todo por `acotada`.
 // LOTE A37 peajes-liquidación-graves (migración 0865): +5 llamadas (2,264 → 2,269), 0 archivos nuevos, medido con el barrido real. `jornada/repo.ts` +1:
 // `.rpc('asentar_declaracion_jornada')` (A37-S48-01; la 0865 sustituye la marca derivada bajo el lock del expediente; el INSERT anterior se conserva

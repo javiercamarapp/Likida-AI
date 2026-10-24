@@ -87,8 +87,9 @@ describe('barridoVigia · pasada de avisos', () => {
     entregar.mockResolvedValue({ estado: 'enviado', via: 'plantilla' });
     const { deps } = armar([f1, f2]);
     const r = await barridoVigia(deps, { mantenimiento: true });
-    expect(r).toMatchObject({ avisosConError: true, avisosCreados: 1, avisosEnviados: 1 });
-    expect(f1.aprobados).not.toHaveBeenCalled();
+    // A37-A4-09: generar que lanza NO frena la entrega de lo ya confirmado de esa misma flota.
+    expect(r).toMatchObject({ avisosConError: true, avisosCreados: 1, avisosEnviados: 3 });
+    expect(f1.aprobados).toHaveBeenCalled();
 
     generar.mockResolvedValue(gen());
     entregar.mockReset();
@@ -176,7 +177,7 @@ describe('barridoVigia · cola atorada y logs de avisos (T-A4-42)', () => {
 
     const llamadas = (logger.error as unknown as { mock: { calls: Array<[string, Record<string, unknown>]> } }).mock.calls
       .filter(([evento]) => evento.startsWith('vigia.aviso.'));
-    expect(llamadas.map(([e]) => e).sort()).toEqual(['vigia.aviso.cola_fallo', 'vigia.aviso.entrega_fallo', 'vigia.aviso.flota_fallo', 'vigia.aviso.pasada_fallo']);
+    expect(llamadas.map(([e]) => e).sort()).toEqual(['vigia.aviso.cola_fallo', 'vigia.aviso.entrega_fallo', 'vigia.aviso.generar_fallo', 'vigia.aviso.pasada_fallo']);
     const volcado = JSON.stringify(llamadas);
     for (const s of SECRETOS) expect(volcado).not.toContain(s);
     expect(volcado).not.toContain('Failing row');

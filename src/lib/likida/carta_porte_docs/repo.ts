@@ -407,15 +407,35 @@ export async function crearPerfil(
   const r = await acotada(supabaseAdmin().from('cp_perfil').insert({
     tenant_id: tenantId, clave: p.clave, nombre: p.nombre, cliente_id: p.clienteId, formato: p.formato, firma: p.firma, version_activa: 1,
   }).select('id').single(), 'cpdocs.perfil_crear');
-  if (r.error) {
-    if ((r.error as { code?: string }).code === '23505') return null;
-    throw new Error(`cartaporte_docs perfil: ${r.error.message}`);
-  }
-  const id = String((r.data as unknown as Fila).id);
-  const v = await acotada(supabaseAdmin().from('cp_perfil_version').insert({
+  const insertarV1 = (id: string) => acotada(supabaseAdmin().from('cp_perfil_version').insert({
     tenant_id: tenantId, perfil_id: id, version: 1, mapeos: p.mapeos, ejemplos: p.ejemplos, nota: p.nota, origen_documento_id: p.documentoId, creada_por: p.actorId,
   }), 'cpdocs.perfil_v1');
-  if (v.error) throw new Error(`cartaporte_docs perfil v1: ${v.error.message}`);
+  if (r.error) {
+    if ((r.error as { code?: string }).code !== '23505') throw new Error(`cartaporte_docs perfil: ${r.error.message}`);
+    // A37-S32-08: ¿la clave ya existe porque un corte dejó un perfil SIN versión (invisible, y devolvería «ya existe» para siempre)?
+    // Si no tiene ninguna versión se repara con la v1 de esta aprobación; si tiene, es un perfil de verdad: `null`.
+    const ex = exigir(await acotada(supabaseAdmin().from('cp_perfil').select('id').eq('tenant_id', tenantId).eq('clave', p.clave).maybeSingle(), 'cpdocs.perfil_clave'), 'cpdocs.perfil_clave') as unknown as Fila | null;
+    if (!ex) return null;
+    const idEx = String(ex.id);
+    const vs = exigir(await acotada(supabaseAdmin().from('cp_perfil_version').select('version')
+      // orden-no-importa: solo se pregunta si hay AL MENOS una versión de este perfil
+      .eq('tenant_id', tenantId).eq('perfil_id', idEx).order('version').limit(1), 'cpdocs.perfil_sin_version'), 'cpdocs.perfil_sin_version') as unknown as Fila[] | null;
+    if ((vs ?? []).length > 0) return null;
+    const rep = await insertarV1(idEx);
+    if (rep.error) {
+      if ((rep.error as { code?: string }).code === '23505') return null;
+      throw new Error(`cartaporte_docs perfil v1 (reparación): ${rep.error.message}`);
+    }
+    logger.warn('cpdocs.perfil_huerfano_reparado', { tenantId, perfilId: idEx });
+    return idEx;
+  }
+  const id = String((r.data as unknown as Fila).id);
+  const v = await insertarV1(id);
+  if (v.error) {
+    // No se deja un perfil sin versión: se retira (mejor esfuerzo; si tampoco se puede, el siguiente intento lo repara).
+    try { await acotada(supabaseAdmin().from('cp_perfil').delete().eq('tenant_id', tenantId).eq('id', id), 'cpdocs.perfil_retirar'); } catch { /* lo repara el siguiente intento */ }
+    throw new Error(`cartaporte_docs perfil v1: ${v.error.message}`);
+  }
   return id;
 }
 
@@ -429,7 +449,14 @@ export async function crearVersionPerfil(
     tenant_id: tenantId, perfil_id: perfilId, version: nueva, mapeos: v.mapeos, ejemplos: v.ejemplos, nota: v.nota, origen_documento_id: v.documentoId, creada_por: v.actorId,
   }), 'cpdocs.perfil_version');
   if (ins.error) {
-    if ((ins.error as { code?: string }).code === '23505') return null;
+    if ((ins.error as { code?: string }).code === '23505') {
+      // A37-S32-08: la versión N+1 ya existe. Si la activa SIGUE en la base, un corte la dejó sin activar (huérfana: cada
+      // intento daría 23505 para siempre): se activa esa, condicionado a `version_activa = base` (idempotente).
+      const rep = await acotada(supabaseAdmin().from('cp_perfil').update({ version_activa: nueva, updated_at: new Date().toISOString() })
+        .eq('tenant_id', tenantId).eq('id', perfilId).eq('version_activa', versionBase).select('id'), 'cpdocs.perfil_reparar');
+      if (!rep.error && ((rep.data ?? []) as unknown[]).length > 0) logger.warn('cpdocs.version_huerfana_activada', { tenantId, perfilId, version: nueva });
+      return null;
+    }
     throw new Error(`cartaporte_docs perfil versión: ${ins.error.message}`);
   }
   // La activa solo avanza si SEGUÍA en la versión base (dos aprobaciones simultáneas no se pisan).
@@ -1035,9 +1062,10 @@ export async function idsAsignadosA(tenantId: string, userId: string): Promise<s
  * asignar a quién le toca no es un cambio de contenido y no debe invalidar la pantalla de quien está revisando.
  * `false` = el documento no es de esta flota. Sin la 0790 lanza con una frase para la pantalla.
  */
-export async function asignarRevisorDoc(tenantId: string, id: string, revisorId: string | null): Promise<boolean> {
-  const r = await acotada(supabaseAdmin().from('cp_documento').update({ revisor_asignado: revisorId })
-    .eq('tenant_id', tenantId).eq('id', id).select('id'), 'cpdocs.asignar_revisor');
+export async function asignarRevisorDoc(tenantId: string, id: string, revisorId: string | null, soloSiVacio = false): Promise<boolean> {
+  // A37-S32-10: la asignación automática es condicional (`revisor_asignado is null`) para no pisar la de una persona.
+  const q = supabaseAdmin().from('cp_documento').update({ revisor_asignado: revisorId }).eq('tenant_id', tenantId).eq('id', id);
+  const r = await acotada((soloSiVacio ? q.is('revisor_asignado', null) : q).select('id'), 'cpdocs.asignar_revisor');
   if (r.error && columnaAusente(r.error)) throw new Error('La asignación de revisor todavía no está disponible en esta base (falta la migración 0790).');
   return ((exigir(r, 'cpdocs.asignar_revisor') ?? []) as unknown as Fila[]).length > 0;
 }

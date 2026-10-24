@@ -556,11 +556,12 @@ export const api: typeof Real = {
     if (estado.sinColumnaRevisor) return [];
     return [...estado.revisores].filter(([id, r]) => r === userId && estado.docs.get(id)?.tenantId === tenantId).map(([id]) => id);
   },
-  async asignarRevisorDoc(tenantId, id, revisorId) {
+  async asignarRevisorDoc(tenantId, id, revisorId, soloSiVacio = false) {
     falla('asignarRevisorDoc');
     if (estado.sinColumnaRevisor) throw new Error('La asignación de revisor todavía no está disponible en esta base (falta la migración 0790).');
     const d = estado.docs.get(id);
     if (!d || d.tenantId !== tenantId) return false;
+    if (soloSiVacio && estado.revisores.has(id)) return false;
     if (revisorId === null) estado.revisores.delete(id); else estado.revisores.set(id, revisorId);
     return true;
   },
