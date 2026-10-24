@@ -709,18 +709,25 @@ async function enviarReporte(asunto: string, titulo: string, cuerpo: string): Pr
   if (r.ok) return { ok: true };
   // 'red' incluye el timeout: AMBIGUO — el correo pudo haber salido con la
   // respuesta perdida (c5-15). El llamador NO reintenta un ambiguo: reenvía
-  // solo lo definitivamente no-enviado.
-  return { ok: false, motivo: `el correo no salió (${r.motivo})`, definitivo: r.motivo !== 'red' };
+  // solo lo definitivamente no-enviado. A37-S41-07: un DNS caído o una conexión
+  // rechazada es previo a hablar con el canal — ese NO es ambiguo y se reintenta.
+  const previo = r.motivo === 'red' && 'previoAConexion' in r && r.previoAConexion === true;
+  return { ok: false, motivo: `el correo no salió (${r.motivo})`, definitivo: r.motivo !== 'red' || previo };
 }
 
 /** Sella el envío de un reporte YA reservado (c5-15): el INSERT del periodo
  *  va ANTES del correo — la carrera de dos pasadas la gana una — y este
  *  UPDATE pone la fecha solo tras la aceptación del canal. */
 async function marcarReporteEnviado(agente: AgenteDireccion, periodo: string): Promise<void> {
-  const { error } = await supabaseAdmin().from('reporte_direccion')
-    .update({ enviado_en: new Date().toISOString() })
-    .eq('agente', agente).eq('periodo', periodo).is('enviado_en', null);
-  if (error) logger.error('direccion.sello_no_escrito', { agente, periodo, err: error.message });
+  // A37-S41-07: el correo YA salió; si el sello falla, el parte de mañana diría «ayer no salió». Un reintento inmediato
+  // cubre el fallo transitorio de la base antes de rendirse al log.
+  for (let intento = 1; intento <= 2; intento++) {
+    const { error } = await supabaseAdmin().from('reporte_direccion')
+      .update({ enviado_en: new Date().toISOString() })
+      .eq('agente', agente).eq('periodo', periodo).is('enviado_en', null);
+    if (!error) return;
+    if (intento === 2) logger.error('direccion.sello_no_escrito', { agente, periodo, err: error.message });
+  }
 }
 
 /** Borra la reserva de un periodo cuyo envío falló DEFINITIVAMENTE (el canal

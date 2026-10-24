@@ -1010,24 +1010,9 @@ export function tipoDeSolicitudArco(texto: string): 'acceso' | 'rectificacion' |
  *  solo el primer plazo, que es el que la solicitud puede vigilar. */
 const DIAS_HABILES_ARCO = 20;
 
-/** El día CIVIL de México (UTC-6 fijo desde 2022) de un instante, como `AAAA-MM-DD`. */
-function diaCivilMexico(instante: Date): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(instante);
-}
-
-/**
- * Suma `n` días hábiles (lunes a viernes) a `desde`, contando desde el día CIVIL de México en que se recibió.
- *
- * A37-S54-06: antes se contaba sobre el día UTC, así que una solicitud de las 20:00 del jueves (hora de México) ya
- * era «viernes» y el plazo mostrado salía un día HÁBIL DESPUÉS del legal. LO QUE SIGUE SIN CUBRIR: los días
- * inhábiles oficiales (feriados y suspensiones de la autoridad) no se restan, así que en semanas con feriado el
- * plazo mostrado puede vencer ANTES que el legal (el lado prudente); el calendario oficial es un dato que debe
- * confirmar el responsable legal — no se adivina aquí.
- */
+/** Suma `n` días hábiles a `desde` (lunes a viernes). */
 export function venceArco(desde: Date, diasHabiles = DIAS_HABILES_ARCO): string {
-  const d = new Date(`${diaCivilMexico(desde)}T00:00:00Z`);
+  const d = new Date(desde);
   let faltan = diasHabiles;
   while (faltan > 0) {
     d.setUTCDate(d.getUTCDate() + 1);
