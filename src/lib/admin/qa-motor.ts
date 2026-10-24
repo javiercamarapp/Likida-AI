@@ -49,7 +49,7 @@ import { escenarioPorId, idsParaActoFotos, idFotoTrasCierre, type PasoGuion } fr
 import { medirCorrida } from './qa-medicion';
 import { agregar } from './qa-verdad';
 import {
-  dataUrlDeFoto, guardarCorrida, leerManifiesto, leerCorrida, gastoHoyUsd,
+  dataUrlDeFoto, guardarCorrida, leerManifiesto, leerCorrida, gastoTotalHoyUsd,
   tomarPasada, soltarPasada, tomarFoto, cerrarFoto, leerFotosDeCorrida,
   marcarInterrumpidas,
 } from './qa-storage';
@@ -1106,7 +1106,7 @@ export async function ejecutarPasada(corridaId: string, venceEn: number): Promis
     // Una corrida de 91 fotos dura varias pasadas y puede cruzar la
     // medianoche de México; preguntarlo sólo al lanzar dejaría al panel
     // gastando el resto de la noche contra un candado que ya se movió.
-    const gasto = await gastoHoyUsd(db);
+    const gasto = await gastoTotalHoyUsd(db);
     if (!gasto.ok) {
       corrida.motivo = `pasada ${pasada} no arrancó: no se pudo leer el gasto del día (${gasto.error}) — a ciegas no se gasta. La corrida sigue viva; reintenta.`;
       await guardar();

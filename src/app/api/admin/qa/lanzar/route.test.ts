@@ -26,7 +26,7 @@ vi.mock('@/lib/admin/qa-motor', () => ({
 }));
 const guardarCorrida = vi.fn(async () => undefined);
 vi.mock('@/lib/admin/qa-storage', () => ({
-  gastoHoyUsd: async () => ({ ok: true, datos: 0 }),
+  gastoTotalHoyUsd: async () => ({ ok: true, datos: 0 }),
   guardarCorrida: (...a: unknown[]) => guardarCorrida(...(a as [])),
   leerManifiesto: async () => ({ ok: true, datos: [{ id: 'foto-1' }] }),
 }));

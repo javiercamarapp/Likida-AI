@@ -930,18 +930,43 @@ export function mismoDiaMx(aIso: string, bIso: string): boolean {
 export async function gastoHoyUsd(db: SupabaseClient): Promise<Resultado<number>> {
   try {
     const dia = hoyMx();
-    const { data, error } = await db.from('qa_corrida').select('costo_usd_total')
-      .gte('creada_en', inicioDiaMx(dia)).lte('creada_en', finDiaMx(dia));
+    const ini = inicioDiaMx(dia);
+    const fin = finDiaMx(dia);
+    const { data, error } = await db.from('qa_corrida').select('id, costo_usd_total')
+      .gte('creada_en', ini).lte('creada_en', fin);
     if (error) return { ok: false, error: tabla(error, 'no se pudo leer el gasto del día') };
-    const total = ((data ?? []) as Array<{ costo_usd_total: number | string }>)
-      .reduce((s, c) => {
-        const v = Number(c.costo_usd_total);
-        return s + (Number.isFinite(v) ? v : 0);
-      }, 0);
+    // A37-S23-05: `creada_en` atribuye TODO el gasto de una corrida al día en que nació. Una corrida de ayer que sigue
+    // viva y gasta después de medianoche contaba como de ayer —justo el caso que el re-chequeo por pasada dice cubrir—.
+    // Mientras siga viva (pendiente/corriendo con latido hoy) se cuenta también contra hoy: es CONSERVADOR (puede contar
+    // dos veces lo que gastó ayer), nunca deja pasar de más. Una corrida creada y viva hoy se cuenta una sola vez (por id).
+    const { data: vivas, error: errVivas } = await db.from('qa_corrida').select('id, costo_usd_total')
+      .in('estado', ['pendiente', 'corriendo'])
+      .gte('latido_en', ini).lte('latido_en', fin);
+    if (errVivas) return { ok: false, error: tabla(errVivas, 'no se pudo leer el gasto del día') };
+    const porId = new Map<string, number | string>();
+    for (const c of [...((data ?? []) as Array<{ id: string; costo_usd_total: number | string }>),
+      ...((vivas ?? []) as Array<{ id: string; costo_usd_total: number | string }>)]) {
+      porId.set(c.id, c.costo_usd_total);
+    }
+    const total = [...porId.values()].reduce<number>((s, c) => {
+      const v = Number(c);
+      return s + (Number.isFinite(v) ? v : 0);
+    }, 0);
     return { ok: true, datos: Math.round(total * 10_000) / 10_000 };
   } catch (e) {
     return { ok: false, error: `no se pudo leer el gasto del día: ${e instanceof Error ? e.message : String(e)}` };
   }
+}
+
+/** A37-S23-05: el gasto del día de TODAS las fuentes que consumen el tope diario: las corridas del panel Y las lecturas
+ *  sueltas del OCR. Lanzar, cada pasada del motor y el botón de OCR deben medir contra ESTE total; antes las dos primeras
+ *  sumaban solo `qa_corrida` y el gasto del OCR no las frenaba. Falla por valor si cualquiera de las dos no se puede leer. */
+export async function gastoTotalHoyUsd(db: SupabaseClient): Promise<Resultado<number>> {
+  const corridas = await gastoHoyUsd(db);
+  if (!corridas.ok) return corridas;
+  const lecturas = await gastoLecturasHoyUsd(db);
+  if (!lecturas.ok) return lecturas;
+  return { ok: true, datos: Math.round((corridas.datos + lecturas.datos) * 10_000) / 10_000 };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

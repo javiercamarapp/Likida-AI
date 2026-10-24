@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   hashBytes, duplicadaPorHash, extensionDe, mismoDiaMx, asegurarBuckets,
   leerManifiesto, subirFotos, dataUrlDeFoto, firmarRuta, firmarRutas,
-  guardarCorrida, leerCorrida, listarCorridas, gastoHoyUsd,
+  guardarCorrida, leerCorrida, listarCorridas, gastoHoyUsd, gastoTotalHoyUsd,
   confirmarVerdadTerreno, guardarLectura, leerUltimasLecturas, gastoLecturasHoyUsd,
   guardarLecturaDeCorrida, leerLecturasDeCorrida,
   _olvidarBuckets, BUCKET_QA_FOTOS,
@@ -595,6 +595,34 @@ describe('las corridas (el ledger en tablas, mig. 0185)', () => {
     await guardarCorrida(db, corrida({ id: 'ayer', creadaEn: '2026-08-10T10:00:00Z', costoUsdTotal: 99 }));
     const r = await gastoHoyUsd(db);
     expect(r).toEqual({ ok: true, datos: 0.0422 });
+  });
+
+  // A37-S23-05: el gasto se atribuía SOLO por `creada_en`: lo que una corrida creada ayer gasta después de medianoche
+  // contaba como de ayer, justo el caso que el re-chequeo por pasada dice cubrir.
+  it('A37-S23-05 · una corrida de ayer que SIGUE viva hoy cuenta contra el tope de hoy (conservador)', async () => {
+    const db = dbFalsa();
+    await guardarCorrida(db, corrida({ id: 'viva-de-ayer', creadaEn: '2026-08-10T10:00:00Z', estado: 'corriendo', latidoEn: new Date().toISOString(), costoUsdTotal: 2 }));
+    await guardarCorrida(db, corrida({ id: 'cerrada-de-ayer', creadaEn: '2026-08-10T10:00:00Z', estado: 'ok', latidoEn: '2026-08-10T11:00:00Z', costoUsdTotal: 99 }));
+    await guardarCorrida(db, corrida({ id: 'hoy-viva', estado: 'corriendo', costoUsdTotal: 1 }));
+    const r = await gastoHoyUsd(db);
+    // la de hoy cuenta UNA vez aunque cumpla las dos condiciones (creada hoy y viva hoy)
+    expect(r).toEqual({ ok: true, datos: 3 });
+  });
+
+  it('A37-S23-05 · gastoTotalHoyUsd suma corridas Y lecturas del OCR (las dos fuentes del tope diario)', async () => {
+    const db = dbFalsa();
+    await guardarCorrida(db, corrida({ id: 'hoy-1', costoUsdTotal: 1.5 }));
+    tablas.qa_foto_lectura.push(
+      { id: 'l1', foto_id: 'f', corrida_en: new Date().toISOString(), modelo: 'm', ocr_leido: {}, medicion: {}, campos_ok: 0, campos_mal: 0, campos_no_medidos: 7, costo_usd: 0.25, motivo: null },
+    );
+    expect(await gastoTotalHoyUsd(db)).toEqual({ ok: true, datos: 1.75 });
+  });
+
+  it('A37-S23-05 · si las lecturas no se pueden leer, el total FALLA (no se autoriza a gastar a ciegas)', async () => {
+    const db = dbFalsa();
+    fallaTabla = 'qa_foto_lectura';
+    const r = await gastoTotalHoyUsd(db);
+    expect(r.ok).toBe(false);
   });
 
   it('el gasto del día NO se lee como $0 si la base falla — el tope diario no puede fallar abierto', async () => {
