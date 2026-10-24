@@ -14,7 +14,11 @@
 //     viaje (0048). Sin ingreso capturado no hay CFDI: el precio del flete
 //     jamás se inventa.
 //   · IVA trasladado 16% — tasa general vigente (LIVA 1). El autotransporte
-//     de carga NO es tasa 0 ni exento.
+//     de carga NO es tasa 0 ni exento. A37-L-10: la tasa está FIJA en 0.16 (no hay
+//     parámetro por cliente ni por flota): NO se soportan hoy el 8 % de la región
+//     fronteriza ni la tasa 0. Una flota que dijera necesitarlos no podría timbrar
+//     desde Likida; parametrizarla exige decisión de producto y validación fiscal
+//     con el contador (no se demostró que alguna flota lo requiera).
 //   · Retención de IVA del 4% SOLO cuando el receptor es persona MORAL:
 //     LIVA 1-A fracción II inciso c) obliga a las morales que reciben
 //     servicios de autotransporte terrestre de bienes a retener; la TASA del

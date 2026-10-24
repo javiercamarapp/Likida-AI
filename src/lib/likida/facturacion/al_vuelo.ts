@@ -366,7 +366,7 @@ export async function facturarAlVuelo(args: {
   // intentarlo la hora que viene" es la respuesta equivocada de las dos maneras:
   // contra un CAPTCHA no cambia nada, y tras un emitir sin confirmar duplica el
   // CFDI.
-  const cerrar1 = (uuid: string | null, detalle?: string) => (control ? cerrarControl(args.tenantId, t.comercio!.clave, control, [{ gastoId: args.gastoId, monto: Number(data.monto), cfdiUuid: uuid, detalle }]) : Promise.resolve());
+  const cerrar1 = (uuid: string | null, detalle?: string) => (control ? cerrarControl(args.tenantId, t.comercio!.clave, control, [{ gastoId: args.gastoId, monto: Number(data.monto), cfdiUuid: uuid, detalle, sinConfirmar: r.emisionSinConfirmar === true }]) : Promise.resolve());
   const bloqueo = motivoDeBloqueo(r);
   if (bloqueo) {
     await cerrar1(null, `${bloqueo} ${r.error ?? ''}`);
@@ -611,7 +611,7 @@ export async function facturarLoteAlVuelo(args: {
     const propio = await guardarUno(admin, args, p, r.error, ordenPorUuid, bloqueoDelLote, modo === 'emitir');
     porGasto.push({ gastoId: p.gastoId, ...propio });
     if (propio.bloqueado) bloqueados.push({ gastoId: p.gastoId, motivo: propio.bloqueado });
-    paraControl.push({ gastoId: p.gastoId, monto: montoDe(p.gastoId), cfdiUuid: propio.cfdiUuid ?? null, detalle: `${propio.detalle ?? ''} ${propio.bloqueado ?? ''}`.trim() || undefined });
+    paraControl.push({ gastoId: p.gastoId, monto: montoDe(p.gastoId), cfdiUuid: propio.cfdiUuid ?? null, detalle: `${propio.detalle ?? ''} ${propio.bloqueado ?? ''}`.trim() || undefined, sinConfirmar: r.emisionSinConfirmar === true });
   }
   if (control) await cerrarControl(args.tenantId, args.comercio, control, paraControl);
 

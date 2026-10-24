@@ -143,21 +143,39 @@ export async function decidirEmision(
     return dentro;
   };
 
+  let cupoYaReservado = false;
   // ── 6. Supervisada: solo emite lo que una persona confirmó ────────────────
   if (fase === 'supervisada') {
     const aProponer = recortar(candidatos); // lo que cabría emitir; la persona decide sobre ESTO
     if (aProponer.length === 0 && candidatos.length > 0) return ENSAYO('cupo_agotado', 'el cupo del día está agotado');
+    // A37-L-09: el cupo se reserva ANTES de consumir el lote confirmado. Si la reserva pierde la carrera, el lote
+    // sigue confirmado para la siguiente corrida (antes se «gastaba» la confirmación humana sin emitir nada).
+    // Se reserva para todo lo que cabría y, ya consumido el lote, se devuelve lo que no quedó confirmado.
+    const montoProp = aProponer.reduce((s, t) => s + t.monto, 0);
+    if (aProponer.length > 0) {
+      const previa = await deps.repo.reservarCupo(a.tenantId, dia, aProponer.length, montoProp, control.maxTicketsDia, control.maxMontoDia);
+      if (!previa) {
+        for (const t of aProponer) rechazar(t, 'limite_dia', 'otra corrida tomó el cupo del día mientras tanto: sigue en la siguiente');
+        return { modo: 'emitir', permitidos: [], rechazados, fase, reservado: { tickets: 0, monto: 0, dia } };
+      }
+    }
     const confirmados = await deps.repo.consumirLoteConfirmado(a.tenantId, a.comercio, aProponer.map((t) => t.gastoId));
-    if (confirmados === null) return ENSAYO('control_ilegible', 'no se pudo consultar el lote confirmado: se ensaya');
+    if (confirmados === null) {
+      if (aProponer.length > 0) await deps.repo.liberarCupo(a.tenantId, dia, aProponer.length, montoProp);
+      return ENSAYO('control_ilegible', 'no se pudo consultar el lote confirmado: se ensaya');
+    }
     const ok = new Set(confirmados);
     const pendientes = aProponer.filter((t) => !ok.has(t.gastoId));
     if (pendientes.length > 0) {
       const monto = pendientes.reduce((s, t) => s + t.monto, 0);
+      // Lo reservado para lo que NO quedó confirmado vuelve al cupo (la persona aún no lo autoriza).
+      await deps.repo.liberarCupo(a.tenantId, dia, pendientes.length, monto);
       const p = await deps.repo.proponerLote(a.tenantId, a.comercio, pendientes.map((t) => t.gastoId), monto);
       await deps.salidas.bitacora(a.tenantId, p.ok ? 'autofactura.lote_propuesto' : 'autofactura.lote_no_propuesto', a.comercio, { tickets: pendientes.length, monto, estado: p.estado ?? null });
       for (const t of pendientes) rechazar(t, 'espera_confirmacion', 'fase supervisada: espera a que una persona confirme el lote en el panel (Facturas en automático)');
     }
     candidatos = aProponer.filter((t) => ok.has(t.gastoId));
+    cupoYaReservado = true;
   } else {
     candidatos = recortar(candidatos);
   }
@@ -168,7 +186,8 @@ export async function decidirEmision(
 
   // ── 7. La reserva ATÓMICA del cupo (la lectura de arriba pudo envejecer) ──
   const monto = candidatos.reduce((s, t) => s + t.monto, 0);
-  const reservado = await deps.repo.reservarCupo(a.tenantId, dia, candidatos.length, monto, control.maxTicketsDia, control.maxMontoDia);
+  // En fase supervisada el cupo ya se reservó arriba (A37-L-09), antes de consumir el lote.
+  const reservado = cupoYaReservado || await deps.repo.reservarCupo(a.tenantId, dia, candidatos.length, monto, control.maxTicketsDia, control.maxMontoDia);
   if (!reservado) {
     for (const t of candidatos) rechazar(t, 'limite_dia', 'otra corrida tomó el cupo del día mientras tanto: sigue en la siguiente');
     return { modo: 'emitir', permitidos: [], rechazados, fase, reservado: { tickets: 0, monto: 0, dia } };
@@ -180,7 +199,14 @@ export async function decidirEmision(
 
 // ── Después de emitir ───────────────────────────────────────────────────────
 
-export interface ResultadoEmision { gastoId: string; monto: number; cfdiUuid: string | null; detalle?: string }
+export interface ResultadoEmision {
+  gastoId: string; monto: number; cfdiUuid: string | null; detalle?: string;
+  /**
+   * A37-L-08: el adaptador APRETÓ emitir y no pudo confirmar el UUID (`emisionSinConfirmar`): ese CFDI pudo existir y su cupo
+   * NO se libera. Es la señal estructurada; el texto del detalle solo queda como red de seguridad adicional.
+   */
+  sinConfirmar?: boolean;
+}
 
 /**
  * Cierra el ciclo de una autorización: devuelve el cupo de lo que NO salió con UUID, cuenta las emisiones
@@ -197,7 +223,7 @@ export async function registrarResultado(
     if (noEmitidos.length > 0 && a.decision.reservado.tickets > 0) {
       // Solo se devuelve lo que NO salió: lo emitido consume cupo. Un fallo ambiguo (sin confirmar) conserva el cupo a propósito:
       // ese CFDI pudo existir, y contarlo es el lado seguro.
-      const devolver = noEmitidos.filter((r) => !/sin confirmar|PUEDE QUE EL CFDI YA EXISTA|YA SE EMITI/i.test(r.detalle ?? ''));
+      const devolver = noEmitidos.filter((r) => r.sinConfirmar !== true && !/sin confirmar|PUEDE QUE EL CFDI YA EXISTA|YA SE EMITI/i.test(r.detalle ?? ''));
       if (devolver.length > 0) await deps.repo.liberarCupo(a.tenantId, a.decision.reservado.dia, devolver.length, devolver.reduce((s, r) => s + r.monto, 0));
     }
     if (emitidos.length > 0) await deps.repo.registrarEmision(a.tenantId, a.comercio, emitidos.length);

@@ -142,7 +142,8 @@ export async function POST(req: Request) {
 
   const r = await registrarPropuesta(liga, valores);
   if (!r.ok) {
-    return NextResponse.json({ error: r.motivo }, { status: 503 });
+    // A37-L-06: el tope por hora es 429 (reintentar más tarde), no una caída (503).
+    return NextResponse.json({ error: r.motivo }, { status: r.limite ? 429 : 503 });
   }
 
   if (r.repetida) {

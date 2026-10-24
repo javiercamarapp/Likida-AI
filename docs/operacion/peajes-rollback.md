@@ -21,23 +21,34 @@ del agente. Si no puede leer alguno, falla cerrado (error 500 y latido `fallo`).
 esperan sin perderse y se procesan cuando el interruptor vuelva a encenderse. **No hace falta retirar el cron del
 despliegue** para detenerlo. Comprobación: tras apagar, la siguiente corrida del cron aparece como `saltado`.
 
-## 2. Apagar los flags por flota
+## 2. Apagar los interruptores por flota
 
-No hay hoy flags por flota para atípicos, vínculos con viaje, aviso ni recordatorio de plazo: la revisión de cobros y
-los atípicos van prendidos siempre que el agente esté encendido, y el aviso a la oficina sale solo cuando el cron concilia
-un desglose. Hasta que existan esos flags, el único apagado granular es el del paso 1. Cuando se construyan, este paso
-se actualiza con el nombre exacto de cada flag.
+A37-L-docs-ux-calidad-04: desde la migración de configuración de avisos (`peajes/config_avisos.ts`) SÍ hay dos
+interruptores por flota, que **nacen apagados** y se encienden o apagan en `/dashboard/agentes/peajes/configuracion`
+(bloque de plazo de reclamo y avisos):
 
-Lo que sí se puede desactivar por flota hoy, en `/dashboard/agentes/peajes/configuracion`:
+- `aviso_plazo`: el aviso de que se acerca el vencimiento del plazo para reclamar al proveedor.
+- `recordatorio_archivo`: el recordatorio de que falta el archivo del periodo.
 
-- Los canales de entrada: buzón firmado, correo y pull.
-- Las reglas de cobro por caseta (clases permitidas, casetas prohibidas) y las bajas de TAG: se editan o se quitan; sin
-  reglas declaradas, la regla correspondiente no marca nada.
+Apagarlos detiene solo esos dos avisos para esa flota; no toca el cruce, los atípicos ni el aviso a la oficina cuando el cron
+concilia un desglose. La revisión de cobros y los atípicos siguen prendidos mientras el agente esté encendido: para
+detenerlo todo, el único apagado es el del paso 1.
 
-## 3. Migraciones 0775 a 0777: nada que revertir
+También se puede desactivar por flota, en la misma pantalla:
 
-Las tres son aditivas e idempotentes (`add column if not exists`, `create table if not exists`). No cambian ni borran
-datos existentes.
+- Los canales de entrada: buzón firmado, correo, pull y SFTP.
+- Las reglas de cobro por caseta (clases permitidas, casetas prohibidas), el tipo de unidad por TAG y las bajas de TAG: se
+  editan o se quitan; sin reglas declaradas, la regla correspondiente no marca nada.
+- Comprobación: tras apagar un interruptor, recarga la pantalla y confirma que quedó en «apagado»; el siguiente barrido
+  del cron ya no envía ese aviso para la flota.
+
+## 3. Migraciones 0775 a 0866: nada que revertir
+
+Todas son aditivas e idempotentes (`add column if not exists`, `create table if not exists`, `create or replace function`).
+No cambian ni borran datos existentes. La tabla siguiente cubre las tres primeras; las posteriores (0778 a 0866: atípicos,
+tarifario, tipo de unidad por TAG, unidades inmovilizadas, cruce con viaje, candidatos, SFTP, candados de idempotencia de
+reclamos y notas de crédito, tope de la cola) siguen el mismo criterio y cada una trae su propia cabecera `-- REVERSA:` en
+`supabase/migrations/`. Antes de revertir cualquiera, lee esa cabecera y no ejecutes nada que borre tablas con historial.
 
 | Migración | Qué agrega |
 |---|---|
@@ -65,8 +76,14 @@ Cuando se subió el archivo de otra flota, con periodo equivocado o con el prove
    responde 404.
 4. Comprobación: el desglose desaparece del tablero y la respuesta trae el estado de anulado.
 
-Los reclamos ya creados a partir de ese desglose **no se anulan solos**. Revísalos en el seguimiento: si todavía están en
-«preparado», márcalos como rechazados; si ya se enviaron al proveedor, avisa a finanzas antes de tocarlos.
+Los reclamos ya creados a partir de ese desglose **no se anulan solos**. Revísalos en el seguimiento:
+
+- Si todavía están en «preparado», márcalos como rechazados.
+- Si ya se enviaron al proveedor (estado «enviado»), avisa a finanzas antes de tocarlos.
+- **Si ya tienen una nota de crédito registrada (estado «acreditado en parte» o «acreditado»), NO los marques como
+  rechazados**: el monto acreditado y su estado se calculan sobre las notas, y rechazarlos esconde dinero que el proveedor
+  ya devolvió. Es un camino conocido como problemático: deja el reclamo como está y avisa a finanzas, que decide cómo
+  conciliar esa nota contra el desglose anulado.
 
 ## 5. Volver a importar
 

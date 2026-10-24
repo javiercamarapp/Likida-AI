@@ -228,7 +228,7 @@ describe('registrarPropuesta — el único verbo del cliente, y nunca lanza', ()
   });
 
   it('EL CHOQUE 23505 NO ES UN ERROR: es el segundo clic', async () => {
-    conTablas({ portal_pago_propuesta: [CHOQUE()] });
+    conTablas({ portal_pago_propuesta: [OK([]), CHOQUE()] }); // 1.ª: el conteo del tope (A37-L-06); 2.ª: el insert
     const r = await registrarPropuesta(LIGA, {
       fecha: '2026-08-20', monto: 1160, referencia: 'REF-1', metodo: 'transferencia',
     });
@@ -251,6 +251,36 @@ describe('registrarPropuesta — el único verbo del cliente, y nunca lanza', ()
       fecha: '2026-08-20', monto: 1160, referencia: 'REF-1', metodo: 'transferencia',
     });
     expect(r.ok).toBe(false);
+  });
+
+  // A37-L-06: quien tenga la liga (90 días) no puede llenar la bandeja y el buzón del contralor rotando referencia e IP.
+  it('A37-L-06: topa las propuestas por liga en la última hora, sin insertar ni avisar', async () => {
+    const hace = Array.from({ length: 5 }, () => ({ liga_id: LIGA.ligaId }));
+    conTablas({ portal_pago_propuesta: [OK(hace)] });
+    const r = await registrarPropuesta(LIGA, { fecha: '2026-08-20', monto: 10, referencia: 'REF-NUEVA', metodo: 'transferencia' });
+    expect(r).toMatchObject({ ok: false, limite: true });
+    expect(anotarBitacora).not.toHaveBeenCalled();
+  });
+
+  it('A37-L-06: topa también las propuestas de TODA la flota por hora', async () => {
+    const hace = Array.from({ length: 60 }, (_, i) => ({ liga_id: `otra-${i}` }));
+    conTablas({ portal_pago_propuesta: [OK(hace)] });
+    const r = await registrarPropuesta(LIGA, { fecha: '2026-08-20', monto: 10, referencia: 'REF-NUEVA', metodo: 'transferencia' });
+    expect(r).toMatchObject({ ok: false, limite: true });
+  });
+
+  it('A37-L-06: si no se puede contar, no se registra (falla cerrado: nadie recibe un correo sin tope)', async () => {
+    conTablas({ portal_pago_propuesta: [FALLA('sin red')] });
+    const r = await registrarPropuesta(LIGA, { fecha: '2026-08-20', monto: 10, referencia: 'REF-1', metodo: 'transferencia' });
+    expect(r.ok).toBe(false);
+    expect(anotarBitacora).not.toHaveBeenCalled();
+  });
+
+  it('A37-L-06: por debajo del tope se registra normal', async () => {
+    const hace = Array.from({ length: 2 }, () => ({ liga_id: LIGA.ligaId }));
+    conTablas({ portal_pago_propuesta: [OK(hace), OK({ id: 'p-9' })] });
+    const r = await registrarPropuesta(LIGA, { fecha: '2026-08-20', monto: 10, referencia: 'REF-OK', metodo: 'transferencia' });
+    expect(r).toEqual({ ok: true, id: 'p-9', repetida: false });
   });
 
   it('el actor de la bitácora es `sistema`: no hay cuenta detrás, hay un token', async () => {

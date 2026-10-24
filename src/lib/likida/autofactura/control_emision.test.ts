@@ -62,7 +62,8 @@ describe('fase supervisada: una persona confirma el lote', () => {
     expect(m.lotes).toHaveLength(1);
     expect(m.lotes[0]).toMatchObject({ estado: 'propuesto', gastoIds: ['g1', 'g2'], monto: 1200 });
     expect(m.bitacora.map((b) => b.accion)).toContain('autofactura.lote_propuesto');
-    expect(m.cupos.size).toBe(0); // no se reservó cupo: no se emite nada
+    // A37-L-09: se reserva antes de consumir el lote y se devuelve lo no confirmado: el neto es cero (no se emite nada)
+    expect(m.cupos.get(`${A}|${m.hoy}`) ?? { tickets: 0, monto: 0 }).toEqual({ tickets: 0, monto: 0 });
   });
   it('re-correr no duplica el lote: los mismos tickets siguen esperando en UNA propuesta', async () => {
     const m = crearMemoriaControl({ verificados: [COM] }); m.encender(A);
@@ -147,7 +148,42 @@ describe('autónoma: sin confirmación por lote, con todas las demás barreras',
   });
 });
 
+describe('A37-L-09 supervisada: el lote confirmado no se gasta si la reserva del cupo pierde', () => {
+  it('si otra corrida gana el cupo, el lote sigue CONFIRMADO para la siguiente corrida', async () => {
+    const m = crearMemoriaControl({ verificados: [COM] }); m.encender(A, { maxTicketsDia: 3, maxTicketsLote: 3 });
+    await pedir(m, [T('g1', 100)]); // propone
+    m.confirmarLote(A, COM);
+    const real = m.repo.reservarCupo;
+    m.repo.reservarCupo = async (...a) => { m.cupos.set(`${A}|${m.hoy}`, { tickets: 3, monto: 0 }); return real(...a); };
+    const d = emitir(await pedir(m, [T('g1', 100)]));
+    expect(d.permitidos).toEqual([]);
+    expect(d.rechazados[0].motivo).toBe('limite_dia');
+    expect(m.lotes[0].estado).toBe('confirmado'); // NO 'ejecutado'
+  });
+  it('lo reservado para lo que no quedó confirmado vuelve al cupo, y lo confirmado se queda reservado', async () => {
+    const m = crearMemoriaControl({ verificados: [COM] }); m.encender(A);
+    await pedir(m, [T('g1', 100)]); m.confirmarLote(A, COM);
+    const d = emitir(await pedir(m, [T('g1', 100), T('g2', 200)]));
+    expect(d.permitidos).toEqual(['g1']);
+    expect(d.reservado).toMatchObject({ tickets: 1, monto: 100 });
+    expect(m.cupos.get(`${A}|${m.hoy}`)).toEqual({ tickets: 1, monto: 100 });
+  });
+  it('si el lote no se puede consultar, se ensaya y el cupo reservado se devuelve', async () => {
+    const m = crearMemoriaControl({ verificados: [COM] }); m.encender(A);
+    m.falla.consumir = true;
+    expect(await pedir(m, [T('g1', 100)])).toMatchObject({ modo: 'ensayo', razon: 'control_ilegible' });
+    expect(m.cupos.get(`${A}|${m.hoy}`)).toEqual({ tickets: 0, monto: 0 });
+  });
+});
+
 describe('registrarResultado', () => {
+  it('A37-L-08: el booleano sinConfirmar conserva el cupo aunque el texto del detalle cambie de redacción', async () => {
+    const m = crearMemoriaControl({ verificados: [COM] }); m.encender(A); m.ponerFase(A, COM, 'autonoma', 0);
+    const d = emitir(await pedir(m, [T('g1', 500)]));
+    await registrarResultado({ tenantId: A, comercio: COM, decision: d, resultados: [{ gastoId: 'g1', monto: 500, cfdiUuid: null, detalle: 'el portal tardó', sinConfirmar: true }] }, m.deps);
+    expect(m.cupos.get(`${A}|${m.hoy}`)).toEqual({ tickets: 1, monto: 500 });
+  });
+
   it('devuelve el cupo de lo que NO salió, cuenta las emisiones del portal y deja bitácora', async () => {
     const m = crearMemoriaControl({ verificados: [COM] }); m.encender(A); m.ponerFase(A, COM, 'autonoma', 0);
     const d = emitir(await pedir(m, [T('g1', 500), T('g2', 700)]));

@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 /**
- * Lint ratchet: conserva los 157 avisos heredados, pero no permite que
- * aumenten por archivo/regla. Los avisos existentes se pueden ir corrigiendo
- * gradualmente; no hay una deuda artificial de arreglarlos todos en un PR.
+ * Lint ratchet: conserva los avisos heredados (la cifra vive en `totalWarnings` de
+ * `ci/eslint-warnings-baseline.json`: 217 al 24-oct-2026, A37-L-docs-ux-calidad-06; ya no se
+ * copia aquí para que el comentario no caduque), pero no permite que aumenten por
+ * archivo/regla. Los avisos existentes se pueden ir corrigiendo gradualmente; no hay una
+ * deuda artificial de arreglarlos todos en un PR.
+ *
+ * Revisión de baselines: `ci/limite-sin-orden-baseline.json` (límites sin `.order('id')`,
+ * 193 al 24-oct-2026) y este archivo se revisan a la baja; si una cifra sube, es un defecto.
  */
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { resolve, relative } from 'node:path';
