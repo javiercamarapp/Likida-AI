@@ -1,4 +1,5 @@
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -223,4 +224,26 @@ it('portal de cobro: redirige al portal real de Stripe del tenant de la SESIÓN'
   const accion = accionDelBoton(pagina, /Administrar cobro y tarjeta/);
   await expect(accion(null, new FormData())).rejects.toThrow('REDIRECT:https://billing.stripe.com/session/x');
   expect(dobles.crearPortal).toHaveBeenCalledWith('cus_1', 'https://app.likida.ai/dashboard/suscripcion');
+});
+
+it('A37-S20-05: el correo de facturación declarado por la flota gobierna al customer de Stripe, no el de quien hace clic', async () => {
+  dobles.getDatosFiscales.mockResolvedValue({ ...FISCALES_OK, email: 'facturas@flota.com' });
+  dobles.cambiarPlan.mockResolvedValue({ urlFactura: null, huboCambioDePrice: false });
+  const pagina = await SuscripcionPage({ searchParams: SP });
+  const accion = accionDelBoton(pagina, /Contratar por transferencia/);
+  await accion(null, fd({ plan: 'pro' }));
+  expect(dobles.cambiarPlan).toHaveBeenCalledWith(expect.objectContaining({
+    fiscales: expect.objectContaining({ email: 'facturas@flota.com' }),
+  }));
+});
+
+it('A37-S20-08: la pantalla de pago pasa el desglose de IVA a las instrucciones de transferencia', async () => {
+  dobles.datosBancarios.mockReturnValue({ beneficiario: 'LIKIDA SA', banco: 'BANCO X', clabe: 'CLABE-DE-PRUEBA' });
+  dobles.getFacturasSaas.mockResolvedValue([{
+    id: 'f-1', periodoInicio: '2026-10-01', periodoFin: '2026-10-31', monto: 1158.84, subtotal: 999, iva: 159.84,
+    moneda: 'MXN', estado: 'pendiente', pagadaEn: null, urlPago: null, cfdiUuid: null, referencia: 'REF-123',
+  }]);
+  const html = renderToStaticMarkup(await SuscripcionPage({ searchParams: SP }) as ReactElement);
+  expect(html).toContain('Se desglosa como');
+  expect(html).toContain('de IVA');
 });
