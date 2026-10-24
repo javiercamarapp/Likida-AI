@@ -44,7 +44,8 @@ describe('cero a la izquierda + coma + 3 dígitos NO es separador de miles', () 
     expect(() => pago('0,125')).toThrow(DatoInvalido);
   });
   it('importar_viajes (leerCifraImportada)', () => {
-    expect(leerCifraImportada('0,125')).toBe(0.13);
+    // A37-L-03: tres decimales ya no se redondean en silencio: se rechaza por centavos, como el resto de las lecturas de dinero.
+    expect(leerCifraImportada('0,125')).toBe('ilegible');
     expect(leerCifraImportada('0,5')).toBe(0.5);
     expect(leerCifraImportada('12,5')).toBe(12.5);
   });

@@ -4,6 +4,7 @@ import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { fuentes } from '@/lib/likida/orquestador/fuentes';
 import '@/lib/likida/orquestador/fuentes_reales';
 import { rolPuedeLeerTarea, tareaEsDeDinero } from '@/lib/likida/orquestador/permisos';
+import { logger } from '@/lib/logger';
 import { TareasAbiertas } from '../viajes-en-vivo/vista';
 import { InicioContador } from './inicio-contador';
 
@@ -42,10 +43,15 @@ export default async function PanelContadorPage({
 
   // Las tareas de dinero que el asistente derivó (liquidación, contador): su dueño es quien ve `dinero`, y el contador no
   // entra a /dashboard/viajes-en-vivo (es de operación), así que las lee aquí. Solo lectura: atenderlas es de quien asigna.
-  const tareas = await fuentes().escalacionesAbiertas(tenantId, 60)
-    .then((l) => l && l.filter((t) => tareaEsDeDinero(t) && rolPuedeLeerTarea(rol, t)).slice(0, 20))
-    .catch(() => null);
-  const hayTareas = puedeVerRuta(rol, '/dashboard/contador') && tareas !== null && tareas.length > 0;
+  // A37-L-docs-ux-calidad-01: un fallo de lectura (timeout/5xx) NO es «sin pendientes»: se avisa en vez de pintar nada.
+  const lectura = await fuentes().escalacionesAbiertas(tenantId, 60)
+    .then((l) => ({ tareas: l && l.filter((t) => tareaEsDeDinero(t) && rolPuedeLeerTarea(rol, t)).slice(0, 20), conError: false }))
+    .catch((e) => {
+      logger.warn('contador.tareas_sin_leer', { tenantId, err: e instanceof Error ? e.message : String(e) });
+      return { tareas: null, conError: true };
+    });
+  const { tareas, conError: tareasConError } = lectura;
+  const hayTareas = puedeVerRuta(rol, '/dashboard/contador') && ((tareas !== null && tareas.length > 0) || tareasConError);
 
   return (
     <>
@@ -57,7 +63,7 @@ export default async function PanelContadorPage({
       sufijo={sufijo}
       searchParams={sp}
     />
-    {hayTareas && <main className="px-4 md:px-6 pb-6"><TareasAbiertas tareas={tareas} accion={null} ocultos={{}} /></main>}
+    {hayTareas && <main className="px-4 md:px-6 pb-6"><TareasAbiertas tareas={tareas} errorLectura={tareasConError} accion={null} ocultos={{}} /></main>}
     </>
   );
 }

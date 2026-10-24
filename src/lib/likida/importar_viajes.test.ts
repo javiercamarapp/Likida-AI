@@ -28,6 +28,38 @@ describe('leerCifraImportada — el dinero del TMS ajeno', () => {
   });
 });
 
+describe('A37-L-03 — la cifra dudosa no se adivina', () => {
+  it('notación científica y hexadecimal son ilegibles (antes «1e6» entraba como 1,000,000)', () => {
+    expect(leerCifraImportada('1e6')).toBe('ilegible');
+    expect(leerCifraImportada('0x10')).toBe('ilegible');
+    expect(leerCifraImportada('12e3')).toBe('ilegible');
+  });
+
+  it('más de 2 decimales es ilegible: «12.500» NO entra como $12.50', () => {
+    expect(leerCifraImportada('12.500')).toBe('ilegible');
+    expect(leerCifraImportada('1.234.567')).toBe('ilegible');
+    expect(leerCifraImportada('12.50')).toBe(12.5);
+    expect(leerCifraImportada('12.5')).toBe(12.5);
+  });
+
+  it('un anticipo de más de un millón se descarta con su motivo; uno de $10,600 pasa', () => {
+    const ENC = ['Folio', 'Origen', 'Destino', 'Fecha inicio', 'Anticipo', 'Operador'];
+    const r = interpretarFilasViajes([
+      ENC,
+      ['V-1', 'GDL', 'MTY', '', '1250000', ''],
+      ['V-2', 'GDL', 'MTY', '', '1e6', ''],
+      ['V-3', 'GDL', 'MTY', '', '12.500', ''],
+      ['V-4', 'GDL', 'MTY', '', '10600', ''],
+    ]);
+    expect(r.viajes.map((v) => v.folio)).toEqual(['V-4']);
+    expect(r.descartadas).toEqual([
+      { fila: 2, motivo: 'anticipo fuera de rango (V-1)' },
+      { fila: 3, motivo: 'anticipo ilegible (V-2)' },
+      { fila: 4, motivo: 'anticipo ilegible (V-3)' },
+    ]);
+  });
+});
+
 describe('leerFechaImportada', () => {
   it('ISO, dd/mm/aaaa y serial de Excel', () => {
     expect(leerFechaImportada('2026-08-01')).toBe('2026-08-01');

@@ -487,12 +487,32 @@ describe('ligar a mano — copia de los campos fiscales del XML (0858)', () => {
     expect(r.mensaje).toContain('no está guardado');
   });
 
-  it('un XML que es nota de crédito no copia nada (liga de siempre)', async () => {
+  it('A37-L-01: un XML que es nota de crédito NO se liga (ni por la liga de siempre)', async () => {
     prepara(XML.replace('TipoDeComprobante="I"', 'TipoDeComprobante="E"'));
     respuestasRpc = [{ data: { gasto_id: 'g-1', cfdi_uuid: UUID }, error: null }];
     const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
-    expect(llamadasRpc.map((l) => l.nombre)).toEqual(['sat_cfdi_ligar_tx']);
+    expect(r.ok).toBe(false);
+    expect(r.motivo).toBe('cfdi_no_ligable');
     expect(r.mensaje).toContain('nota de crédito');
+    expect(llamadasRpc).toEqual([]);
+  });
+
+  it('A37-L-01: un XML de OTRO emisor que el del ticket NO se liga', async () => {
+    prepara(XML);
+    respuestas.gasto = [{ data: { id: 'g-1', cfdi_uuid: null, monto: '1160.00', rfc_emisor: 'ZZZ990909ZZZ' }, error: null }];
+    respuestasRpc = [{ data: { gasto_id: 'g-1', cfdi_uuid: UUID }, error: null }];
+    const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
+    expect(r.ok).toBe(false);
+    expect(r.motivo).toBe('cfdi_no_ligable');
+    expect(r.mensaje).toContain('AAA010101AAA');
+    expect(llamadasRpc).toEqual([]);
+  });
+
+  it('A37-L-01: el mismo emisor (en otra capitalización) sí se liga', async () => {
+    prepara(XML);
+    respuestas.gasto = [{ data: { id: 'g-1', cfdi_uuid: null, monto: '1160.00', rfc_emisor: 'aaa010101aaa' }, error: null }];
+    respuestasRpc = [{ data: { gasto_id: 'g-1', cfdi_uuid: UUID, campos_copiados: true, motivo_campos: null }, error: null }];
+    expect((await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR)).ok).toBe(true);
   });
 
   it('si la base rechaza los campos (total no coincide) liga y lo reporta', async () => {
