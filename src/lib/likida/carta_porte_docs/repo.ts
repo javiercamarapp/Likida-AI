@@ -975,9 +975,10 @@ export async function idsAsignadosA(tenantId: string, userId: string): Promise<s
  * asignar a quién le toca no es un cambio de contenido y no debe invalidar la pantalla de quien está revisando.
  * `false` = el documento no es de esta flota. Sin la 0790 lanza con una frase para la pantalla.
  */
-export async function asignarRevisorDoc(tenantId: string, id: string, revisorId: string | null): Promise<boolean> {
-  const r = await acotada(supabaseAdmin().from('cp_documento').update({ revisor_asignado: revisorId })
-    .eq('tenant_id', tenantId).eq('id', id).select('id'), 'cpdocs.asignar_revisor');
+export async function asignarRevisorDoc(tenantId: string, id: string, revisorId: string | null, soloSiVacio = false): Promise<boolean> {
+  // A37-S32-10: la asignación automática es condicional (`revisor_asignado is null`) para no pisar la de una persona.
+  const q = supabaseAdmin().from('cp_documento').update({ revisor_asignado: revisorId }).eq('tenant_id', tenantId).eq('id', id);
+  const r = await acotada((soloSiVacio ? q.is('revisor_asignado', null) : q).select('id'), 'cpdocs.asignar_revisor');
   if (r.error && columnaAusente(r.error)) throw new Error('La asignación de revisor todavía no está disponible en esta base (falta la migración 0790).');
   return ((exigir(r, 'cpdocs.asignar_revisor') ?? []) as unknown as Fila[]).length > 0;
 }
