@@ -114,6 +114,9 @@ describe('metodoPagoSat — el atributo que dice si un CFDI espera un REP', () =
 
 const upsert = vi.hoisted(() => vi.fn(async () => ({ error: null })));
 const update = vi.hoisted(() => vi.fn());
+// A37-S47-05: el sello ahora lleva un filtro `or(...)` por emisor; las pruebas lo registran y pueden vaciar el resultado.
+const filtroOr = vi.hoisted(() => vi.fn());
+const estado = vi.hoisted(() => ({ sellados: [{ id: 'g1' }] as Array<{ id: string }>, existentes: [] as Array<Record<string, unknown>> }));
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: (tabla: string) => tabla === 'cfdi_pago'
@@ -123,9 +126,10 @@ vi.mock('@/lib/supabase/admin', () => ({
         : { // gasto
             update: (fila: Record<string, unknown>) => {
               update(fila);
-              return { eq: () => ({ eq: () => ({ is: () => ({ select: async () => ({ data: [{ id: 'g1' }], error: null }) }) }) }) };
+              const cierre = { select: async () => ({ data: estado.sellados, error: null }) };
+              return { eq: () => ({ eq: () => ({ is: () => ({ ...cierre, or: (f: string) => { filtroOr(f); return cierre; } }) }) }) };
             },
-            select: () => ({ eq: () => ({ eq: () => ({ limit: async () => ({ data: [], error: null }) }) }) }),
+            select: () => ({ eq: () => ({ eq: () => ({ limit: async () => ({ data: estado.existentes, error: null }) }) }) }),
           },
   }),
 }));
@@ -133,7 +137,7 @@ vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 describe('ingerirRep — registro idempotente y sello fail-closed', () => {
-  beforeEach(() => { upsert.mockClear(); update.mockClear(); });
+  beforeEach(() => { upsert.mockClear(); update.mockClear(); filtroOr.mockClear(); estado.sellados = [{ id: 'g1' }]; estado.existentes = []; });
 
   it('registra el docto con la llave de idempotencia y sella el gasto liquidado', async () => {
     const { ingerirRep } = await import('./rep');
@@ -185,6 +189,42 @@ describe('ingerirRep — registro idempotente y sello fail-closed', () => {
   });
 });
 
+// ── A37-S47-05: el sello no se fija con un REP que no es creíble ───────────
+describe('ingerirRep — fecha futura y emisor distinto no sellan (A37-S47-05)', () => {
+  beforeEach(() => { upsert.mockClear(); update.mockClear(); filtroOr.mockClear(); estado.sellados = [{ id: 'g1' }]; estado.existentes = []; });
+  it('un FechaPago futuro se registra pero NO sella: el IVA no se acredita en un mes que no llega', async () => {
+    const { ingerirRep } = await import('./rep');
+    const futuro = REP_SINTETICO.replace('FechaPago="2026-09-02T12:00:00"', 'FechaPago="2099-01-02T12:00:00"');
+    const r = await ingerirRep('t-1', parseRepXml(futuro)!, futuro);
+    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(update).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ doctos: 1, sellados: 0, rechazados: 1 });
+  });
+
+  it('el sello solo aplica a un gasto sin RFC o del MISMO emisor que el REP', async () => {
+    const { ingerirRep } = await import('./rep');
+    await ingerirRep('t-1', parseRepXml(REP_SINTETICO)!, REP_SINTETICO);
+    expect(filtroOr).toHaveBeenCalledWith('rfc_emisor.is.null,rfc_emisor.eq.EST010101AB1');
+  });
+
+  it('si el gasto existe con OTRO emisor, no se selló: cuenta como rechazado, no como ligado', async () => {
+    const { ingerirRep } = await import('./rep');
+    estado.sellados = [];
+    estado.existentes = [{ id: 'g1', rfc_emisor: 'OTR010101AB1', pagado_en: null }];
+    const r = await ingerirRep('t-1', parseRepXml(REP_SINTETICO)!, REP_SINTETICO);
+    expect(r).toMatchObject({ sellados: 0, ligados: 0, rechazados: 1 });
+    expect(mensajeRepRecibido(r)).toContain('NO se marcó como pagado');
+  });
+
+  it('un reenvío sobre un gasto ya sellado sigue contando como ligado, no como rechazado', async () => {
+    const { ingerirRep } = await import('./rep');
+    estado.sellados = [];
+    estado.existentes = [{ id: 'g1', rfc_emisor: 'EST010101AB1', pagado_en: '2026-09-02' }];
+    const r = await ingerirRep('t-1', parseRepXml(REP_SINTETICO)!, REP_SINTETICO);
+    expect(r).toMatchObject({ ligados: 1, rechazados: 0 });
+  });
+});
+
 describe('mensajeRepRecibido — el acuse dice exactamente lo que pasó', () => {
   it('sellado completo', () => {
     const m = mensajeRepRecibido({ doctos: 1, ligados: 1, sellados: 1, parciales: 0, pendientes: 0 });
@@ -223,7 +263,7 @@ describe('mensajeRepRecibido — el acuse dice exactamente lo que pasó', () => 
 // idempotente: reenviar el MISMO REP más tarde retoma justo donde se cortó.
 // ═══════════════════════════════════════════════════════════════════════════
 describe('ingerirRep — corte por reloj (venceEn) y reanudación sin duplicar', () => {
-  beforeEach(() => { upsert.mockClear(); update.mockClear(); });
+  beforeEach(() => { upsert.mockClear(); update.mockClear(); filtroOr.mockClear(); estado.sellados = [{ id: 'g1' }]; estado.existentes = []; });
 
   /** 150 doctos sintéticos, cada uno liquidado por completo (impSaldoInsoluto=0). */
   const repDeNDoctos = (n: number, prefijoUuid: string): RepXmlData => ({

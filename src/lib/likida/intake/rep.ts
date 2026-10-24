@@ -32,6 +32,7 @@ import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { saveCfdiXmlRaw } from '../repo';
 import { formaPagoSat } from './cfdi_xml';
+import { hoyMx } from '@/lib/formato';
 
 export interface RepDoctoRelacionado {
   /** UUID (minúsculas) del CFDI PPD que este pago liquida. */
@@ -180,6 +181,12 @@ export interface ResumenIngestaRep {
    * justo donde se cortó, sin duplicar lo ya sellado.
    */
   pendientes: number;
+  /**
+   * A37-S47-05: doctos registrados en `cfdi_pago` pero NO sellados porque el REP no es creíble para sellar: `FechaPago` en el
+   * futuro, o su emisor no es el de la factura que liquidaría. Sellar fija el mes en que se acredita el IVA (LIVA 5-III) y el
+   * sello no se pisa después, así que ante la duda se registra y se deja a la vista de una persona.
+   */
+  rechazados?: number;
 }
 
 /**
@@ -201,7 +208,10 @@ export async function ingerirRep(tenantId: string, rep: RepXmlData, xmlCrudo: st
   // a propósito — un REP puede liquidar varios gastos.
   await saveCfdiXmlRaw(tenantId, rep.uuid, null, xmlCrudo);
 
-  const resumen: ResumenIngestaRep = { doctos: 0, ligados: 0, sellados: 0, parciales: 0, pendientes: 0 };
+  const resumen: ResumenIngestaRep = { doctos: 0, ligados: 0, sellados: 0, parciales: 0, pendientes: 0, rechazados: 0 };
+  const hoy = hoyMx();
+  // El RFC del emisor del REP va dentro de un filtro `or(...)` de PostgREST: solo con la forma de un RFC (12-13 alfanuméricos).
+  const rfcRep = rep.rfcEmisor && /^[A-ZÑ&0-9]{12,13}$/.test(rep.rfcEmisor) ? rep.rfcEmisor : null;
   const admin = supabaseAdmin();
 
   agotarPagos: for (const pago of rep.pagos) {
@@ -242,12 +252,22 @@ export async function ingerirRep(tenantId: string, rep: RepXmlData, xmlCrudo: st
       const liquidado = d.impSaldoInsoluto != null && d.impSaldoInsoluto === 0;
       if (!liquidado) { resumen.parciales++; continue; }
 
-      const { data: sellados, error: errSello } = await acotada(admin.from('gasto')
+      // A37-S47-05: un pago «de mañana» no acredita IVA hoy. Se registra (arriba) y no se sella.
+      if (fechaPago > hoy) {
+        logger.warn('rep.fecha_futura_no_sella', { tenant: tenantId, rep: rep.uuid, docto: d.idDocumento });
+        resumen.rechazados = (resumen.rechazados ?? 0) + 1;
+        continue;
+      }
+
+      // A37-S47-05: el REP lo emite el proveedor de la factura. Si el gasto ya trae el RFC de su emisor y no es el del REP,
+      // ese REP no liquida ese gasto (el filtro lo deja fuera; un gasto sin RFC leído sí se sella: no hay con qué contrastar).
+      let consulta = admin.from('gasto')
         .update({ pagado_en: fechaPago, pagado_forma: pago.formaDePagoP ?? null })
         .eq('tenant_id', tenantId)
         .eq('cfdi_uuid', uuidCfdi(d.idDocumento))
-        .is('pagado_en', null)
-        .select('id'), 'rep.sellar');
+        .is('pagado_en', null);
+      if (rfcRep) consulta = consulta.or(`rfc_emisor.is.null,rfc_emisor.eq.${rfcRep}`);
+      const { data: sellados, error: errSello } = await acotada(consulta.select('id'), 'rep.sellar');
       if (errSello) {
         logger.error('rep.sello_fallo', { tenant: tenantId, docto: d.idDocumento, err: errSello.message });
         continue;
@@ -258,9 +278,19 @@ export async function ingerirRep(tenantId: string, rep: RepXmlData, xmlCrudo: st
         // Sin gasto que sellar: o el CFDI PPD aún no está en la base (el REP
         // llegó antes que la factura — el registro en cfdi_pago queda y un
         // cruce futuro lo puede aplicar), o ya estaba sellado (reenvío).
-        const { data: existentes } = await acotada(admin.from('gasto').select('id')
+        const { data: existentes } = await acotada(admin.from('gasto').select('id, rfc_emisor, pagado_en')
           .eq('tenant_id', tenantId).eq('cfdi_uuid', uuidCfdi(d.idDocumento)).limit(1), 'rep.buscarGasto');
-        if ((existentes ?? []).length > 0) resumen.ligados++;
+        const existente = (existentes ?? [])[0] as { rfc_emisor?: string | null; pagado_en?: string | null } | undefined;
+        if (existente) {
+          const rfcGasto = typeof existente.rfc_emisor === 'string' ? existente.rfc_emisor.trim().toUpperCase() : '';
+          if (!existente.pagado_en && rfcRep && rfcGasto !== '' && rfcGasto !== rfcRep) {
+            // No se selló porque el emisor del REP no es el de la factura: NO cuenta como liga.
+            logger.warn('rep.emisor_distinto_no_sella', { tenant: tenantId, rep: rep.uuid, docto: d.idDocumento });
+            resumen.rechazados = (resumen.rechazados ?? 0) + 1;
+          } else {
+            resumen.ligados++;
+          }
+        }
       }
     }
   }
@@ -277,7 +307,11 @@ export function mensajeRepRecibido(r: ResumenIngestaRep): string {
   if (r.parciales > 0) {
     partes.push(`${r.parciales} con saldo pendiente: el IVA se libera hasta la última parcialidad.`);
   }
-  if (r.sellados === 0 && r.parciales === 0 && r.pendientes === 0) {
+  const rechazados = r.rechazados ?? 0;
+  if (rechazados > 0) {
+    partes.push(`${rechazados} documento${rechazados === 1 ? '' : 's'} NO se marcó como pagado: la fecha de pago es futura o el emisor del complemento no es el de la factura. Quedó registrado; revísalo con tu proveedor.`);
+  }
+  if (r.sellados === 0 && r.parciales === 0 && r.pendientes === 0 && rechazados === 0) {
     partes.push('No encontré facturas de esta flota que ese pago liquide — si la factura llega después, el pago ya quedó registrado.');
   }
   if (r.pendientes > 0) {
