@@ -1906,7 +1906,7 @@ export async function ejecutarOposicionArco(
 
 export async function ejecutarCancelacionArco(
   tenantId: string, solicitudId: string,
-): Promise<{ ok: boolean; motivo?: string; avisada: boolean; errorAviso?: string; errorAuth?: string; errorEntregas?: string }> {
+): Promise<{ ok: boolean; motivo?: string; avisada: boolean; errorAviso?: string; errorAuth?: string; errorEntregas?: string; errorEvidencia?: string }> {
   const { data: sol, error: errLee } = await acotada(supabaseAdmin()
     .from('solicitud_arco').select('titular_ref, tipo, titular_user_id, operador_id').eq('id', solicitudId).eq('tenant_id', tenantId).maybeSingle(),
     'ejecutarCancelacionArco.leer');
@@ -1915,6 +1915,21 @@ export async function ejecutarCancelacionArco(
   const telefono = (sol.titular_ref as string | null) ?? null;
   const titularUserId = (sol.titular_user_id as string | null) ?? null;
   const operadorId = (sol.operador_id as string | null) ?? null;
+
+  // A37-S56-06: el nombre HAY que leerlo antes de la RPC (que lo seudonimiza)
+  // para poder encontrar en `regla_disparo.evidencia` el texto que lo cita.
+  let nombreOperador: string | null = null;
+  if (operadorId) {
+    try {
+      const { data: op } = await acotada(supabaseAdmin()
+        .from('operador').select('nombre').eq('id', operadorId).eq('tenant_id', tenantId).maybeSingle(),
+        'ejecutarCancelacionArco.nombre');
+      const n = ((op as { nombre?: unknown } | null)?.nombre);
+      nombreOperador = typeof n === 'string' && n.trim().length >= 3 ? n.trim() : null;
+    } catch (e) {
+      logger.warn('arco.nombre_operador_no_leido', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    }
+  }
 
   const { data, error } = await acotada(supabaseAdmin().rpc('ejecutar_arco_cancelacion', {
     p_tenant: tenantId,
@@ -1938,7 +1953,16 @@ export async function ejecutarCancelacionArco(
     errorEntregas = await omitirEntregasCorreoDeOperador(tenantId, operadorId);
     if (errorEntregas) logger.error('arco.entregas_correo_no_omitidas', { tenant: tenantId, err: errorEntregas });
   }
-  const conEntregas = errorEntregas ? { errorEntregas } : {};
+  // A37-S56-06: la evidencia de «Mis reglas» cita al operador por nombre.
+  let errorEvidencia: string | undefined;
+  if (operadorId) {
+    errorEvidencia = await anonimizarEvidenciaReglasDeOperador(tenantId, operadorId, nombreOperador);
+    if (errorEvidencia) logger.error('arco.evidencia_reglas_no_anonimizada', { tenant: tenantId, err: errorEvidencia });
+  }
+  const conEntregas = {
+    ...(errorEntregas ? { errorEntregas } : {}),
+    ...(errorEvidencia ? { errorEvidencia } : {}),
+  };
 
   // 0442 (cuenta de oficina): la RPC ya seudonimizó la fila y la dio de baja; el
   // LOGIN vive en Supabase Auth y solo se borra desde aquí. Se hace ANTES del
@@ -1991,6 +2015,39 @@ export async function ejecutarCancelacionArco(
     return aviso.ok ? { ok: true, avisada: true, ...conEntregas } : { ok: true, avisada: false, errorAviso: aviso.error, ...conEntregas };
   } catch (e) {
     return { ok: true, avisada: false, errorAviso: e instanceof Error ? e.message : String(e), ...conEntregas };
+  }
+}
+
+/** Texto que sustituye la evidencia de una regla que citaba a un operador cancelado. */
+const EVIDENCIA_ANONIMIZADA = 'Evidencia anonimizada: el operador ejerció su derecho de cancelación (ARCO).';
+
+/**
+ * A37-S56-06: `regla_disparo.evidencia` conserva «<nombre> lleva N viajes sin
+ * liquidar» sin plazo, y la RPC de cancelación no la toca. Se reemplaza el
+ * TEXTO (nunca se borra la fila: el sello evita que la regla re-avise) de (a)
+ * las filas cuyo objeto ES el operador y (b) las que citan su nombre. Devuelve
+ * el mensaje de error si algo falló, o `undefined` si quedó hecho.
+ */
+async function anonimizarEvidenciaReglasDeOperador(
+  tenantId: string, operadorId: string, nombre: string | null,
+): Promise<string | undefined> {
+  try {
+    const { error: e1 } = await acotada(supabaseAdmin()
+      .from('regla_disparo').update({ evidencia: EVIDENCIA_ANONIMIZADA })
+      .eq('tenant_id', tenantId).eq('objeto', 'operador').eq('objeto_id', operadorId)
+      .select('id'), 'ejecutarCancelacionArco.evidencia_objeto');
+    if (e1) return e1.message;
+    if (nombre) {
+      const patron = `%${nombre.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+      const { error: e2 } = await acotada(supabaseAdmin()
+        .from('regla_disparo').update({ evidencia: EVIDENCIA_ANONIMIZADA })
+        .eq('tenant_id', tenantId).neq('evidencia', EVIDENCIA_ANONIMIZADA).ilike('evidencia', patron)
+        .select('id'), 'ejecutarCancelacionArco.evidencia_nombre');
+      if (e2) return e2.message;
+    }
+    return undefined;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
   }
 }
 
