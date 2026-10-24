@@ -132,3 +132,37 @@ esac
     expect(r.stdout).not.toContain('VERIFICACIÓN OK');
   });
 });
+
+// A37-S04-10 — una variable de repo RESPALDO_BUCKETS vieja sustituía en silencio la lista única: buzon-facturas y
+// cartaporte-docs quedaban fuera del respaldo y ninguna prueba fallaba.
+describe('A37-S04-10: respaldo-storage.sh no acepta una lista de buckets que omita alguno de la lista única', () => {
+  function respaldo(buckets: string | undefined, extra: Record<string, string> = {}) {
+    const dir = mkdtempSync(join(tmpdir(), 'respaldo-')); dirs.push(dir);
+    mkdirSync(join(dir, 'scripts'), { recursive: true });
+    writeFileSync(join(dir, 'scripts/respaldo-storage.sh'), readFileSync('scripts/respaldo-storage.sh'));
+    writeFileSync(join(dir, 'scripts/respaldo-buckets.txt'), 'comprobantes\nliquidaciones\nbuzon-facturas # evidencia\ncartaporte-docs\n');
+    const env: Record<string, string> = {
+      ...process.env as Record<string, string>,
+      NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:9', SUPABASE_SERVICE_ROLE_KEY: 'k', RESPALDO_BUCKETS: buckets ?? '', ...extra,
+    };
+    return spawnSync('bash', [join(dir, 'scripts/respaldo-storage.sh'), join(dir, 'salida')], { cwd: dir, encoding: 'utf8', timeout: 15_000, env });
+  }
+  it('la variable vieja (sin buzon-facturas ni cartaporte-docs) hace FALLAR el respaldo y nombra lo omitido', () => {
+    const r = respaldo('comprobantes liquidaciones');
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain('buzon-facturas');
+    expect(r.stderr).toContain('cartaporte-docs');
+  });
+  it('una lista que incluye todos (en otro orden o con extras) no se rechaza por esto', () => {
+    const r = respaldo('cartaporte-docs buzon-facturas liquidaciones comprobantes extra');
+    expect(r.stderr).not.toMatch(/omite|RESPALDO_BUCKETS/);
+  });
+  it('un respaldo parcial a propósito se declara con RESPALDO_PERMITIR_PARCIAL=true', () => {
+    const r = respaldo('comprobantes', { RESPALDO_PERMITIR_PARCIAL: 'true' });
+    expect(r.stderr).not.toMatch(/omite/);
+  });
+  it('sin variable usa la lista única completa (camino normal)', () => {
+    const r = respaldo(undefined);
+    expect(r.stderr).not.toMatch(/omite/);
+  });
+});
