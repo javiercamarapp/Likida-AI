@@ -613,7 +613,7 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
         // conserva marcada por confirmar y se deja constancia del error. Sin ninguna lectura previa sí se relanza.
         if (!acumulado) throw e;
         const motivoFallo = `el modelo del nivel ${nivel} no entregó una lectura válida: ${(e instanceof Error ? e.message : String(e)).slice(0, 120)}`;
-        const esc = { de: r.nivel ?? nivel, a: nivel, codigo: 'error_modelo' as const, motivo: motivoFallo };
+        const esc = { de: (secuencia[i - 1] ?? nivel) as NivelModelo, a: nivel, codigo: 'error_modelo' as const, motivo: motivoFallo };
         r.escalamientos.push(esc);
         registrarEscalamiento(esc);
         falloUltimoNivel = motivoFallo;

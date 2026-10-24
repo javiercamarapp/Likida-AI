@@ -67,7 +67,7 @@ export async function confirmarRespuestaCcp(_previo: ResultadoAccion, fd: FormDa
     const r = await confirmarYResponder(depsCcp(), s.tenantId, fila, crudo === '' ? undefined : crudo);
     if (!r.ok) return { ok: false, error: FRASE_MOTIVO[r.motivo] };
     await anotarBitacora(
-      { tenantId: s.tenantId, actor: { id: s.userId }, accion: 'ccp.respuesta_confirmada', entidad: 'cp_ccp_timbrado', entidadId: id, detalle: { respondido: r.respondido, estado: r.estado } },
+      { tenantId: s.tenantId, actor: { id: s.userId }, accion: 'ccp.respuesta_confirmada', entidad: 'tenant', entidadId: s.tenantId, detalle: { ccpId: id, respondido: r.respondido, estado: r.estado } },
       { evento: 'carta_porte_docs.bitacora_no_escribio' },
     );
     revalidatePath(RUTA);

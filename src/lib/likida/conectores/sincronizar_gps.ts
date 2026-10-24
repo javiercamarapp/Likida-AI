@@ -25,7 +25,6 @@ import { acotada } from '../presupuesto';
 import { descifrar } from './cofre';
 import { lectorDe, LECTORES_POSICION } from './posiciones';
 import { httpReal as crearHttpReal, type Http } from './tipos';
-import { conPool } from '../lotes';
 import { llaveEconomico } from './tabla_propia/validar';
 import { normalizarDespachoRef } from './tabla_propia/filas';
 import { PROVEEDOR_TABLA_PROPIA } from './tabla_propia/contrato';
