@@ -10,10 +10,10 @@ export interface ResultadosPurgas {
   mcpOauth: unknown | null;
   llmPresupuesto: unknown | null;
   cartaPorteDocs: { fallidos: number } | null;
-  agentesDatos: Array<{ nombre: string; ok: boolean; error?: string }> | null;
+  agentesDatos: Array<{ nombre: string; ok: boolean; error?: string | null }> | null;
   buzonRecepcionesPurgadas: number | null;
   vinculacionPortal: number | null;
-  ledgers: Array<{ nombre: string; ok: boolean; error?: string }> | null;
+  ledgers: Array<{ nombre: string; ok: boolean; error?: string | null }> | null;
 }
 
 export function fallosDePurgas(r: ResultadosPurgas): string[] {
