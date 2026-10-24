@@ -16,6 +16,9 @@ export interface PropsVistaSitios {
   sufijo: string;
   sitios: SitioFila[] | null;
   hayMas: boolean;
+  /** A37-S13-03: los sitios activos que ofrecen los selectores (padre y «Textos sin sitio»), SIN el filtro `?q` de la tabla; `undefined` = usar `sitios`. */
+  selectorSitios?: Array<{ id: string; nombre: string }>;
+  selectorHayMas?: boolean;
   clientes: Array<{ id: string; nombre: string }>;
   puedeEditar: boolean;
   editando: SitioFila | null;
@@ -43,7 +46,8 @@ const aEditable = (s: SitioFila): SitioEditable => ({
 });
 
 export function VistaSitios(p: PropsVistaSitios) {
-  const padres = (p.sitios ?? []).filter((s) => s.activa).map((s) => ({ id: s.id, nombre: s.nombre }));
+  const padres = p.selectorSitios ?? (p.sitios ?? []).filter((s) => s.activa).map((s) => ({ id: s.id, nombre: s.nombre }));
+  const avisoSelector = p.selectorHayMas ? 'Hay más sitios activos de los que caben en el selector (solo salen los primeros por nombre).' : null;
   return (
     <main className="h-full">
       <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
@@ -115,6 +119,7 @@ export function VistaSitios(p: PropsVistaSitios) {
             <>
               <section className="card p-4 space-y-3" aria-label={p.editando ? 'Editar sitio' : 'Nuevo sitio'}>
                 <h2 className="font-display text-[15px] font-semibold">{p.editando ? `Editar «${p.editando.nombre}»` : 'Nuevo sitio'}</h2>
+                {avisoSelector && <p role="status" className="text-[11px]" style={{ color: 'var(--warn)' }}>{avisoSelector}</p>}
                 <FormaSitio key={p.editando?.id ?? 'nuevo'} accion={p.accionGuardar} inicial={p.editando ? aEditable(p.editando) : SITIO_VACIO} clientes={p.clientes} padres={padres} />
                 {p.editando && <Link href={`/dashboard/agentes/conductores/sitios${p.sufijo}`} className="text-[12px] underline" style={{ color: 'var(--muted)' }}>Cancelar la edición</Link>}
               </section>
@@ -188,6 +193,7 @@ export function VistaSitios(p: PropsVistaSitios) {
                   </table>
                 </div>
               )}
+              {avisoSelector && p.puedeEditar && <p role="status" className="text-[11px]" style={{ color: 'var(--warn)' }}>{avisoSelector} Para uno que no aparezca, usa la importación de equivalencias por CSV (columna geocerca_codigo).</p>}
               {p.textosTruncado && <p className="text-[11px]" style={{ color: 'var(--warn)' }}>Hay más viajes de los que se leyeron: la cuenta es de una muestra.</p>}
               {p.descargaCsv && p.textosSinSitio !== null && p.textosSinSitio.length > 0 && (
                 <p className="text-[12px]">

@@ -38,6 +38,7 @@ async function main() {
   const veredictos: Array<'paso' | 'fallo' | 'revisar'> = [];
   let costo = 0;
   let modelo = '';
+  let seCayo: string | null = null;
   for (const caso of casos) {
     process.stdout.write(`\n── ${caso.pregunta}\n`);
     let veredicto: 'paso' | 'fallo' | 'revisar';
@@ -60,18 +61,28 @@ async function main() {
     }
     veredictos.push(veredicto);
     console.log(`   → ${veredicto.toUpperCase()}  (${detalle.slice(0, 100)})`);
-    await db.from('eval_resultado').insert({
+    // A37-S03-06: escritura verificada; si falla, la corrida queda PARCIAL (sin veredicto).
+    const { error: eR } = await db.from('eval_resultado').insert({
       corrida_id: corrida.id, caso_id: caso.id, veredicto, respuesta, detalle: detalle.slice(0, 400),
     });
+    if (eR) { seCayo = `no se pudo escribir el resultado: ${eR.message}`; break; }
   }
 
-  const agregado = veredictoAgregado(veredictos);
-  await db.from('eval_corrida').update({
+  const agregado = seCayo === null ? veredictoAgregado(veredictos) : null;
+  const { error: eU } = await db.from('eval_corrida').update({
     terminada_en: new Date().toISOString(), veredicto: agregado,
-    casos: casos.length, costo_usd: costo, modelo,
+    casos: veredictos.length, costo_usd: costo, modelo,
+    ...(seCayo ? { notas: `PARCIAL (${seCayo}) — no es calificación`.slice(0, 1500) } : {}),
   }).eq('id', corrida.id);
+  if (eU) throw new Error(`no se pudo cerrar la corrida: ${eU.message}`);
+  if (agregado === null) {
+    console.log(`\n═══ CORRIDA PARCIAL (sin veredicto): ${seCayo}`);
+    process.exitCode = 1;
+    return;
+  }
+  if (agregado === 'fallo') process.exitCode = 1;
   console.log(`\n═══ VEREDICTO: ${agregado.toUpperCase()} · ${casos.length} casos · $${costo.toFixed(4)} · prompt ${hash.slice(0, 12)}…`);
   console.log('Las trampas quedaron en REVISAR: léelas en /admin/evals y marca a mano si alguna falló.');
 }
 
-void main();
+main().catch((e) => { console.error(e instanceof Error ? e.message : e); process.exitCode = 1; });

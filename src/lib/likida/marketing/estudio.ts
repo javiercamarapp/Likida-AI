@@ -149,6 +149,16 @@ export function validarFotoReferencia(mime: string, bytes: number): void {
   }
 }
 
+/** A37-S07-04: una foto de PERSONAJE es (casi siempre) de una persona real —un
+ *  chofer—: sin su consentimiento expreso para usarla en material publicitario
+ *  no se sube. La casilla es obligatoria en el servidor, no solo en el formulario.
+ *  Un LUGAR no es dato personal por sí mismo. */
+export function exigirConsentimientoReferencia(tipo: TipoReferencia, consentimiento: FormDataEntryValue | null): void {
+  if (tipo === 'personaje' && consentimiento !== 'on') {
+    throw new DatoInvalido('Una foto de personaje exige confirmar que la persona retratada dio su consentimiento para usar su imagen en material publicitario.');
+  }
+}
+
 /** Sube la foto YA validada y devuelve la ruta dentro del bucket privado. */
 export async function subirFotoReferencia(archivo: File, mime: string): Promise<string> {
   const path = `${crypto.randomUUID()}.${extDeImagen(mime)}`;
@@ -172,6 +182,28 @@ export async function guardarReferencia(input: {
   const id = (data as { id?: unknown } | null)?.id;
   if (!id) throw new Error('guardarReferencia: el insert no devolvió id');
   return id as string;
+}
+
+/**
+ * A37-S07-04: la ruta de BAJA (ejercicio de cancelación/oposición ARCO o
+ * simple arrepentimiento): borra el OBJETO del bucket y luego la FILA. Primero
+ * el objeto: si falla, la fila sigue ahí y el borrado se puede reintentar; lo
+ * peor que puede pasar después es una fila sin foto, nunca una foto sin dueño
+ * que nadie vea. LANZA ante cualquier fallo — «borré» que no borró es peor que
+ * un error.
+ */
+export async function borrarReferencia(id: string): Promise<void> {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new DatoInvalido('Referencia desconocida.');
+  const { data, error } = await acotada(supabaseAdmin().from('marketing_referencia')
+    .select('foto_ruta').eq('id', id).maybeSingle(), 'estudio.borrar_referencia.leer');
+  if (error) throw new Error(`borrarReferencia/leer: ${error.message}`);
+  const ruta = (data as { foto_ruta?: unknown } | null)?.foto_ruta;
+  if (typeof ruta !== 'string' || !ruta) throw new DatoInvalido('Esa referencia ya no existe.');
+  const { error: eObj } = await supabaseAdmin().storage.from(BUCKET_REFERENCIAS).remove([ruta]);
+  if (eObj) throw new Error(`borrarReferencia/objeto: ${eObj.message}`);
+  const { error: eFila } = await acotada(supabaseAdmin().from('marketing_referencia')
+    .delete().eq('id', id), 'estudio.borrar_referencia.fila');
+  if (eFila) throw new Error(`borrarReferencia/fila: ${eFila.message}`);
 }
 
 export interface ReferenciaGuardada {

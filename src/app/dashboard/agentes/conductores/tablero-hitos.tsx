@@ -307,8 +307,8 @@ function ResumenEstancia({ e }: { e: Estancia }) {
   return <span>{e.lugar === 'carga' ? 'En carga' : 'En descarga'}: <span className="cifra-mono">{texto}</span></span>;
 }
 
-export function TarjetaViaje({ f, puedeActuar, accion, accionSitios, sitios }: {
-  f: FilaTablero; puedeActuar: boolean; accion: AccionOficinaServidor; accionSitios: AccionOficinaServidor; sitios: OpcionSitio[];
+export function TarjetaViaje({ f, puedeActuar, accion, accionSitios, sitios, sitiosHayMas = false }: {
+  f: FilaTablero; puedeActuar: boolean; accion: AccionOficinaServidor; accionSitios: AccionOficinaServidor; sitios: OpcionSitio[]; sitiosHayMas?: boolean;
 }) {
   const v = f.viaje;
   return (
@@ -351,7 +351,7 @@ export function TarjetaViaje({ f, puedeActuar, accion, accionSitios, sitios }: {
         <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Sin sitios asignados: las llegadas de este viaje no se pueden validar contra la ubicación.</p>
       )}
       {f.documentosCierre && <DocumentosCierreFila r={f.documentosCierre} />}
-      {puedeActuar && <FormaAsignarSitios accion={accionSitios} viajeId={v.id} sitios={sitios} />}
+      {puedeActuar && <FormaAsignarSitios accion={accionSitios} viajeId={v.id} sitios={sitios} hayMas={sitiosHayMas} />}
       <ol className="flex flex-wrap gap-x-4 gap-y-3">
         {f.hitos.map((h) => <CeldaHito key={h.id} h={h} puedeActuar={puedeActuar} accion={accion} viajeId={v.id} />)}
       </ol>
@@ -446,7 +446,7 @@ export function ReubicacionesPorCliente({ filas, csv }: { filas: ReubicacionesCl
 }
 
 export function TableroHitos({
-  tablero, indicadores, dias, filtros, catalogos, ocultos, accionUrl, puedeActuar, accion, accionSitios, sitios, episodios, hayMasEpisodios,
+  tablero, indicadores, dias, filtros, catalogos, ocultos, accionUrl, puedeActuar, accion, accionSitios, sitios, sitiosHayMas = false, episodios, hayMasEpisodios,
 }: {
   /** Episodios de «sin señal de vida» del periodo; `undefined` = esta vista no los trae (no se pinta la sección). */
   episodios?: EpisodioVista[] | null; hayMasEpisodios?: boolean;
@@ -454,6 +454,8 @@ export function TableroHitos({
   ocultos: Record<string, string>; accionUrl: string; puedeActuar: boolean; accion: AccionOficinaServidor;
   /** Asignar el sitio de carga y de descarga de un viaje (misma firma que las demás acciones del tablero). */
   accionSitios: AccionOficinaServidor; sitios: OpcionSitio[];
+  /** A37-S13-03: el catálogo tiene más sitios activos de los que caben en el selector. */
+  sitiosHayMas?: boolean;
 }) {
   return (
     <div className="space-y-4">
@@ -491,7 +493,7 @@ export function TableroHitos({
         </section>
       ) : (
         <ul className="space-y-3">
-          {tablero.filas.map((f) => <TarjetaViaje key={f.viaje.id} f={f} puedeActuar={puedeActuar} accion={accion} accionSitios={accionSitios} sitios={sitios} />)}
+          {tablero.filas.map((f) => <TarjetaViaje key={f.viaje.id} f={f} puedeActuar={puedeActuar} accion={accion} accionSitios={accionSitios} sitios={sitios} sitiosHayMas={sitiosHayMas} />)}
         </ul>
       )}
     </div>

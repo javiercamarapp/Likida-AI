@@ -19,9 +19,15 @@
 set -euo pipefail
 # RESPALDO_BUCKETS es configuración, no un patrón de archivos local.
 set -f
+ORIGEN_PWD="$(pwd -P)"
 cd "$(dirname "$0")/.."
+REPO_RAIZ="$(pwd -P)"
 
-DESTINO="${1:-${RESPALDO_ROOT:-./.backups/storage}}"
+# A37-S04-01: el respaldo trae CFDI, comprobantes y liquidaciones de TODAS las
+# flotas; el repo es PÚBLICO. Por omisión va FUERA del repo y un destino dentro
+# del repo se rechaza (exit 2). Una ruta relativa se lee desde donde se invocó.
+DESTINO="${1:-${RESPALDO_ROOT:-$HOME/likida-respaldos/storage}}"
+case "$DESTINO" in /*) ;; *) DESTINO="$ORIGEN_PWD/$DESTINO" ;; esac
 # Lista única de buckets (auditoría 35, R09-01): una prueba la cruza contra las
 # migraciones. RESPALDO_BUCKETS, si se define, la sustituye por completo.
 LISTA_BUCKETS="scripts/respaldo-buckets.txt" # ya estamos en la raíz del repo (cd de arriba)
@@ -102,8 +108,23 @@ crear_directorio_confinado() {
 }
 
 URL="${URL%/}"
+destino_en_repo() {
+  local d="${1%/}"
+  [[ "$d" == "$REPO_RAIZ" || "$d" == "$REPO_RAIZ/"* ]]
+}
+# Antes de crear nada: rechazo léxico (incluye `..`).
+destino_lexico="$(cd "$(dirname "$DESTINO")" 2>/dev/null && pwd -P || true)/$(basename "$DESTINO")"
+if destino_en_repo "$destino_lexico" || destino_en_repo "$DESTINO"; then
+  echo "ERROR: el destino ($DESTINO) cae dentro del repo (público). Usa una ruta fuera de $REPO_RAIZ." >&2
+  exit 2
+fi
 mkdir -p "$DESTINO"
 DESTINO="$(cd "$DESTINO" && pwd -P)"
+# Y después de resolver symlinks.
+if destino_en_repo "$DESTINO"; then
+  echo "ERROR: el destino resuelto ($DESTINO) cae dentro del repo (público)." >&2
+  exit 2
+fi
 TMP_BASE="${TMPDIR:-/tmp}"
 TMP_DIR="$(mktemp -d "${TMP_BASE%/}/likida-respaldo.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT

@@ -28,7 +28,7 @@ y no deben reutilizarse; ver [NUMERACION-SALTADA.md](../../supabase/migrations/N
 4. **Respaldo primero, siempre que haya datos de la flota.** El proyecto de base no tiene respaldo automático
    verificado; el procedimiento es:
    ```bash
-   ./scripts/respaldo.sh            # guarda en ~/Desktop/likida-respaldos/likida-<fecha>.sql
+   ./scripts/respaldo.sh            # guarda en ~/likida-respaldos/base/likida-<fecha>.sql
    ```
    Verifica que el archivo no pese 0 bytes y que se pueda leer antes de continuar. Si el respaldo no sale, no se
    revierte nada.

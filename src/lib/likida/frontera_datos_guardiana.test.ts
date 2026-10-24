@@ -579,6 +579,9 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 324;
 // INTEGRACION G1 (24-oct-2026, PRs #665-#679): el barrido real del arbol fusionado mide 2,315 llamadas (2,284 en master 6922916: +31 de las 15 ramas, techo = medido, sin holgura).
 // INTEGRACION G2 (24-oct-2026, PRs #680-#691): el barrido real del arbol fusionado mide 2,336 llamadas (2,315 en master 5135a0c: +21 de las 12 ramas, techo = medido, sin holgura).
 // INTEGRACION G3 (24-oct-2026, PRs #664, #692-#703): el barrido real del arbol fusionado mide 2,357 llamadas (2,336 en master 20900cdd2: +21 de las 13 ramas, techo = medido, sin holgura).
+// LOTE A37 M-Z-resto-03 (A37-S07-04): +3 llamadas (2,284 → 2,287), 0 archivos nuevos, medido con el barrido real. `marketing/estudio.ts`
+// `borrarReferencia` (baja de la foto de un personaje): lectura de la ruta (`marketing_referencia`), borrado del objeto (`storage.from`, que este
+// guardia cuenta como `.from(`) y borrado de la fila. Cubierta por `estudio.borrar.test.ts`. Si otro lote toca este techo, sumar el incremento al integrar.
 const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_357;
 // A37-S27-10 (lote b-sat-fiscal-05): +1 (2,284 → 2,285), en `agentes/insumos.ts` (`crearInsumoArchivo`): `storage.from('agente-insumos').remove`
 // para no dejar huérfano el objeto subido cuando falla el insert.

@@ -98,6 +98,10 @@ export type EntidadBitacora =
   // 0440: la aprobación o el rechazo de un cliente OAuth desconocido por el
   // superadmin (/admin/mcp-clientes): decide qué dominios pueden recibir accesos.
   | 'mcp_oauth_cliente'
+  // A37-S07-04: las fotos de personajes del estudio de marketing. Quién subió la
+  // foto de una persona (con su consentimiento declarado) y quién la dio de baja
+  // es lo que hay que poder reconstruir ante un ARCO. Solo ids: nunca el nombre.
+  | 'marketing_referencia'
   // Auditoría 20 (H4): el estado operativo de una unidad. Mandarla a taller o
   // DARLA DE BAJA son actos sobre un activo de la empresa —un camión vendido,
   // chocado o siniestrado— que cambian lo que el despacho puede ofrecer y el

@@ -226,8 +226,9 @@ export function validarUuidCfdi(crudo: unknown): string | null {
 /**
  * Cuántos gastos de la flota YA tienen CFDI amarrado — el acumulado del
  * trabajo automático (emitido por el agente o pescado del XML consolidado
- * que mandaron por WhatsApp; hoy no existe captura manual que escriba
- * `cfdi_uuid`). `null` ≠ 0: si no se pudo contar, se dice.
+ * que mandaron por WhatsApp) MÁS la captura manual de la cola «Te toca a ti»
+ * (A37-S13-01: `marcarFacturada` también escribe `cfdi_uuid`, solo validado de forma).
+ * `null` ≠ 0: si no se pudo contar, se dice.
  */
 export async function contarConCfdi(tenantId: string): Promise<number | null> {
   const { count, error } = await supabaseAdmin()

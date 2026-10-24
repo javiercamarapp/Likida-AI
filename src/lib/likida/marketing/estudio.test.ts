@@ -88,3 +88,17 @@ describe('esTipoReferencia', () => {
     expect(esTipoReferencia('')).toBe(false);
   });
 });
+
+// ── A37-S07-04 · consentimiento y baja de la foto de un personaje ────────────
+import { exigirConsentimientoReferencia } from './estudio';
+
+describe('A37-S07-04 · exigirConsentimientoReferencia', () => {
+  it('un personaje sin la casilla se rechaza; con ella pasa', () => {
+    expect(() => exigirConsentimientoReferencia('personaje', null)).toThrow(/consentimiento/);
+    expect(() => exigirConsentimientoReferencia('personaje', 'off')).toThrow(/consentimiento/);
+    expect(() => exigirConsentimientoReferencia('personaje', 'on')).not.toThrow();
+  });
+  it('un lugar no lo exige', () => {
+    expect(() => exigirConsentimientoReferencia('lugar', null)).not.toThrow();
+  });
+});

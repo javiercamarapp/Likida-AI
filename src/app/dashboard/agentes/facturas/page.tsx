@@ -8,6 +8,7 @@ import { mandatoFiscalAceptado, modoEfectivo } from '@/lib/likida/facturacion/mo
 import { mandatoFlotaVigente } from '@/lib/legal/aceptacion';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { PORTALES_CONOCIDOS } from '@/lib/likida/facturacion/adaptadores/registro';
 import { COMERCIOS } from '@/lib/likida/facturacion/comercios';
 import { repoControl, lotesVivos, fasesDePortales, verificacionDeComercio } from '@/lib/likida/autofactura/control_emision_repo';
@@ -161,6 +162,12 @@ export default async function PaginaAgenteFacturas({
       return { error: 'Ese ticket ya no está en la cola (¿ya tenía factura?). Recarga la página.' };
     }
     logger.info('facturas.marcada_a_mano', { tenantId, gastoId });
+    // A37-S13-01: el UUID se TECLEÓ a mano y solo se validó su forma (no hay cfdi_xml, RFC ni total que lo respalden). Queda
+    // QUIÉN lo capturó y que NO está verificado, para que el contralor lo distinga de uno emitido/pescado del XML.
+    await anotarBitacora(
+      { tenantId, actor: { id: sesion.userId }, accion: 'facturas.cfdi_capturado_a_mano', entidad: 'gasto', entidadId: gastoId, detalle: { cfdi_uuid: uuid, verificado: false } },
+      { evento: 'facturas.bitacora_no_escribio' },
+    );
     redirect(`/dashboard/agentes/facturas${sufijo}`);
   }
 
