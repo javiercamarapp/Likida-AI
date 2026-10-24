@@ -9,6 +9,7 @@ import {
 import { cancelarCfdi, facturapiConfigurado } from './facturapi';
 import { DatoInvalido } from '@/lib/likida/errores';
 import { hoyMx, inicioDiaMx } from '@/lib/formato';
+import { alertarOperador } from '@/lib/observability/alerta';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA SUSCRIPCIÓN DE UNA FLOTA A LIKIDA — lectura para el panel y escritura
@@ -963,7 +964,15 @@ export async function cancelarFacturaDeStripe(
     }
     return 'sin_factura';
   }
-  if (f.estado === 'cancelada') return 'ya_cancelada';
+  if (f.estado === 'cancelada') {
+    // A37-S61-06: un reembolso dispara varios eventos (charge.refunded y
+    // credit_note.created) y el primero marca la factura ANTES de llamar al PAC.
+    // Si el PAC falló entonces, este segundo evento salía por aquí sin mirar el
+    // CFDI: dinero devuelto y papel fiscal vivo. Se reintenta mientras quede
+    // pendiente (con uuid, sin sello de cancelado y con id de proveedor).
+    await cancelarCfdiPendiente(f, motivo);
+    return 'ya_cancelada';
+  }
 
   if (montoAnulado !== undefined && montoAnulado + 0.01 < Number(f.monto)) {
     logger.warn('stripe.anulacion_parcial', {
@@ -985,6 +994,18 @@ export async function cancelarFacturaDeStripe(
     await sellarOrden(stripeInvoiceId, eventoCreadoUnix, 'orden_factura');
   }
 
+  await cancelarCfdiPendiente(f, motivo);
+
+  return 'cancelada';
+}
+
+/** Cancela ante el PAC el CFDI de una factura ya anulada, si sigue vivo. Nunca
+ *  lanza (el webhook debe contestar 200): si falla, grita y alerta al operador. */
+async function cancelarCfdiPendiente(
+  f: Record<string, unknown>,
+  motivo: string,
+): Promise<void> {
+  const admin = supabaseAdmin();
   const proveedorId = (f.cfdi_proveedor_id as string) || null;
   if (f.cfdi_uuid && !f.cfdi_cancelado_en && proveedorId && facturapiConfigurado()) {
     try {
@@ -997,15 +1018,13 @@ export async function cancelarFacturaDeStripe(
     } catch (e) {
       // El dinero ya se devolvió y la factura ya está marcada: lo que queda es
       // un CFDI vivo que hay que cancelar A MANO en el PAC. Se grita.
-      logger.error('facturapi.cfdi_sin_cancelar', {
-        facturaId: f.id, uuid: f.cfdi_uuid, err: e instanceof Error ? e.message : String(e),
-      });
+      const err = e instanceof Error ? e.message : String(e);
+      logger.error('facturapi.cfdi_sin_cancelar', { facturaId: f.id, uuid: f.cfdi_uuid, err });
+      await alertarOperador('stripe.cfdi_sin_cancelar', { facturaId: f.id, uuid: f.cfdi_uuid, err }).catch(() => false);
     }
   } else if (f.cfdi_uuid && !proveedorId) {
     logger.error('facturapi.cfdi_sin_id_de_proveedor', { facturaId: f.id, uuid: f.cfdi_uuid });
   }
-
-  return 'cancelada';
 }
 
 /** La flota dueña de un customer de Stripe, para los eventos que no traen metadata. */
