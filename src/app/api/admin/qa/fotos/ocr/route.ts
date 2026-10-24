@@ -47,6 +47,7 @@ import {
 } from '@/lib/admin/qa-verdad';
 import { sesionSuperadmin } from '../../puerta';
 import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
+import { rateLimit } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -94,6 +95,12 @@ export async function POST(req: Request) {
 
   const { error: puerta, sesion } = await sesionSuperadmin();
   if (puerta) return puerta;
+
+  // A37-S08-04: doble clic / dos pestañas leen el mismo gasto previo (el tope
+  // se lee y luego se actúa, sin reserva). Un lote a la vez por usuario.
+  if (!(await rateLimit(`qa-ocr:${sesion.userId ?? 'sin-id'}`, 1, 20_000))) {
+    return NextResponse.json({ error: 'ya hay un lote OCR reciente — espera unos segundos' }, { status: 429 });
+  }
 
   const lecturaCuerpo = await leerTextoAcotado(req, MAX_BODY);
   if (!lecturaCuerpo.ok) return NextResponse.json({ error: lecturaCuerpo.motivo === 'demasiado_grande' ? 'payload muy grande' : 'JSON inválido' },
@@ -149,6 +156,13 @@ export async function POST(req: Request) {
     // Lo que no arrancó no cuesta nada y no deja fila a medias. Se nombra
     // entero en la respuesta: el corte mudo es lo que mató al runner dos veces.
     if (Date.now() >= venceEn) {
+      sinTurno.push(fotoId);
+      continue;
+    }
+    // A37-S08-04: el tope se miraba solo al inicio; un lote de hasta 25 fotos
+    // podía cruzarlo a media tanda. Se re-mira con lo gastado en ESTE lote y lo
+    // que no arrancó sale por su nombre en sinTurno (no cuesta nada).
+    if (gastadoHoy + resultados.reduce((t, r) => t + r.costoUsd, 0) >= TOPE_DIA_USD) {
       sinTurno.push(fotoId);
       continue;
     }

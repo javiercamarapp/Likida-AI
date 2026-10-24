@@ -773,6 +773,9 @@ export interface ResultadoConfirmacion {
   yaConfirmadas: string[];
   /** No existen en esta flota o todavía no tienen acuse del chofer. */
   noAplican: string[];
+  /** A37-S11-02: el integrador leyó un acuse (`respuestaEn`) y el chofer ya lo cambió (o se le adelantó otra confirmación):
+   *  NO se confirmó; el acuse vigente vuelve a salir en la siguiente lectura. Vacío si no se mandó `respuestaEn`. */
+  cambiaron: string[];
 }
 
 /**
@@ -780,7 +783,9 @@ export interface ResultadoConfirmacion {
  * reintento deja las ya confirmadas en `yaConfirmadas` sin tocarlas. Un id de
  * OTRA flota o sin acuse cae en `noAplican` sin decir cuál de las dos cosas es.
  */
-export async function confirmarAcuses(tenantId: string, ids: string[], ahoraIso: string): Promise<ResultadoConfirmacion> {
+export async function confirmarAcuses(
+  tenantId: string, ids: string[], ahoraIso: string, leidos?: ReadonlyMap<string, string>,
+): Promise<ResultadoConfirmacion> {
   const leidas = await acotada(supabaseAdmin().from('liquidacion_externa')
     .select('id, acuse_en, acuse_confirmado_en').eq('tenant_id', tenantId).in('id', ids).order('id'), 'liqext.confirmar_leer');
   const filas = (exigir(leidas, 'liqext.confirmar_leer') ?? []) as Array<{ id: string; acuse_en: string | null; acuse_confirmado_en: string | null }>;
@@ -789,17 +794,31 @@ export async function confirmarAcuses(tenantId: string, ids: string[], ahoraIso:
   const yaConfirmadas = ids.filter((id) => porId.get(id)?.acuse_en && porId.get(id)?.acuse_confirmado_en);
   const porConfirmar = ids.filter((id) => porId.get(id)?.acuse_en && !porId.get(id)?.acuse_confirmado_en);
   const confirmadas: string[] = [];
-  if (porConfirmar.length > 0) {
+  const cambiaron: string[] = [];
+  // A37-S11-02: los ids con `respuestaEn` se confirman UNO A UNO y condicionados al acuse leído (`acuse_en = leído`): si el
+  // chofer cambió su respuesta (acuse_en nuevo, confirmado = null) entre la lectura del integrador y esta llamada, el UPDATE no
+  // coincide y el acuse nuevo NO se confirma sin haberse entregado. Los ids sueltos (forma anterior) siguen en lote.
+  const conLectura = porConfirmar.filter((id) => leidos?.has(id));
+  const sinLectura = porConfirmar.filter((id) => !leidos?.has(id));
+  for (const id of conLectura) {
+    const upd = await acotada(supabaseAdmin().from('liquidacion_externa')
+      .update({ acuse_confirmado_en: ahoraIso, updated_at: ahoraIso })
+      .eq('tenant_id', tenantId).eq('id', id).eq('acuse_en', leidos!.get(id)!).is('acuse_confirmado_en', null)
+      .select('id'), 'liqext.confirmar_leido');
+    if (upd.error) throw new Error(`liquidacion_externa confirmar acuses: ${upd.error.message}`);
+    if (((upd.data ?? []) as Array<{ id: string }>).length > 0) confirmadas.push(id); else cambiaron.push(id);
+  }
+  if (sinLectura.length > 0) {
     // Condicional a «sin confirmar»: dos confirmaciones simultáneas no cuentan dos veces.
     const upd = await acotada(supabaseAdmin().from('liquidacion_externa')
       .update({ acuse_confirmado_en: ahoraIso, updated_at: ahoraIso })
-      .eq('tenant_id', tenantId).in('id', porConfirmar).not('acuse_en', 'is', null).is('acuse_confirmado_en', null)
+      .eq('tenant_id', tenantId).in('id', sinLectura).not('acuse_en', 'is', null).is('acuse_confirmado_en', null)
       .select('id'), 'liqext.confirmar');
     if (upd.error) throw new Error(`liquidacion_externa confirmar acuses: ${upd.error.message}`);
     const ganadas = new Set(((upd.data ?? []) as Array<{ id: string }>).map((f) => f.id));
-    for (const id of porConfirmar) (ganadas.has(id) ? confirmadas : yaConfirmadas).push(id);
+    for (const id of sinLectura) (ganadas.has(id) ? confirmadas : yaConfirmadas).push(id);
   }
-  return { confirmadas, yaConfirmadas, noAplican };
+  return { confirmadas, yaConfirmadas, noAplican, cambiaron };
 }
 
 /** Las liquidaciones para exportar a SAP/CSV (mismos filtros que el listado),

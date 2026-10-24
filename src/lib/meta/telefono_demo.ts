@@ -26,3 +26,23 @@ export const ERROR_TELEFONO_DEMO = 'destinatario de demo (teléfono con la marca
 
 /** Resultado de un envío rechazado por la marca. 422: no es reintentable (ni 429 ni 5xx) y no trae código de Meta. */
 export const RECHAZO_TELEFONO_DEMO = { ok: false as const, error: ERROR_TELEFONO_DEMO, status: 422 };
+
+// ── DESTINATARIO ANONIMIZADO O NO TELEFÓNICO (A37-L-02) ───────────────────────
+// La cancelación ARCO de un operador deja su `telefono` como `anon:<hex>` (mig. 0442).
+// `destinatarioWhatsApp` quita todo lo que no es dígito, así que ese texto se volvía una
+// cadena de dígitos del hash —posiblemente el número REAL de un tercero— y un flujo
+// proactivo le escribía. Un destinatario sin forma de teléfono (E.164: 8 a 15 dígitos) o con
+// prefijo `anon:` NUNCA se envía: negativa local y definitiva, igual que el demo.
+
+export const ERROR_TELEFONO_NO_ENVIABLE = 'destinatario anonimizado o sin forma de teléfono (anon:… / fuera de 8–15 dígitos): no se envía';
+
+/** ¿A este "teléfono" NO se le debe escribir nunca? (demo, anonimizado por ARCO o sin forma de número). */
+export function esDestinatarioBloqueado(telefono: unknown): boolean {
+  if (typeof telefono !== 'string') return true;
+  if (esTelefonoDemo(telefono)) return true;
+  if (/^\s*anon:/i.test(telefono)) return true;
+  const d = telefono.replace(/\D/g, '');
+  return d.length < 8 || d.length > 15;
+}
+
+export const RECHAZO_TELEFONO_NO_ENVIABLE = { ok: false as const, error: ERROR_TELEFONO_NO_ENVIABLE, status: 422 };

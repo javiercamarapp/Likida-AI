@@ -34,6 +34,23 @@ describe('validarLanzar — el cliente no es frontera de confianza', () => {
     expect(r.datos.params.retencion).toBe('borrar_al_terminar');
   });
 
+  // A37-S23-06: un id repetido inflaba el avance y, en el carril rápido, mandaba y PAGABA la misma foto dos veces.
+  test('A37-S23-06 · deduplica fotoIds conservando el orden (como validarLoteOcr)', () => {
+    const OTRA = 'aaaaaaaa-0000-4000-8000-000000000002';
+    const r = validarLanzar({ ...BASE, fotoIds: [FOTO, OTRA, FOTO, FOTO, OTRA] });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.datos.params.fotoIds).toEqual([FOTO, OTRA]);
+  });
+
+  test('A37-S23-06 · el carril se elige con las fotos ÚNICAS, no con las repeticiones', () => {
+    const r = validarLanzar({ ...BASE, fotoIds: Array.from({ length: MAX_FOTOS_CARRIL_RAPIDO + 5 }, () => FOTO), carril: 'rapido' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.datos.carril).toBe('rapido');
+    expect(r.datos.params.fotoIds).toEqual([FOTO]);
+  });
+
   test('rechaza un escenario que no está en el selector, y DICE cuántos faltan del catálogo', () => {
     const r = validarLanzar({ ...BASE, escenario: 'sobregiro' });
     expect(r.ok).toBe(false);

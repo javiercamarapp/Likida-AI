@@ -136,3 +136,44 @@ describe('leerZip', () => {
     expect(r.entradas.map((e) => e.nombre)).toEqual(['B.xml']);
   });
 });
+
+// A37-L-08: el presupuesto de desinflado se mide con lo que REALMENTE se
+// desinfló, no con el tamaño que el encabezado declara (un paquete anómalo
+// puede declarar tamCrudo = 0 y desinflar mucho más).
+describe('leerZip · presupuesto de desinflado real (A37-L-08)', () => {
+  /** Pone en 0 el tamaño crudo declarado en cada encabezado central. */
+  function mentirTamCrudo(zip: Buffer): Buffer {
+    const b = Buffer.from(zip);
+    for (let i = 0; i + 46 <= b.length; i++) {
+      if (b.readUInt32LE(i) === 0x02014b50) b.writeUInt32LE(0, i + 24);
+    }
+    return b;
+  }
+
+  it('un paquete que declara tamCrudo=0 pero desinfla de más se corta y se DECLARA truncado', () => {
+    const zip = mentirTamCrudo(armarZip([
+      { nombre: 'a.xml', contenido: 'x'.repeat(600) },
+      { nombre: 'b.xml', contenido: 'y'.repeat(600) },
+      { nombre: 'c.xml', contenido: 'z'.repeat(600) },
+    ]));
+    const r = leerZip(zip, undefined, { maxDesinflado: 1000 });
+    expect(r.truncado).toBe(true);
+    expect(r.entradas).toHaveLength(1);
+    expect(r.entradas[0].nombre).toBe('a.xml');
+  });
+
+  it('una sola entrada que desinfla por encima del tope es truncado, no «ilegible»', () => {
+    const zip = mentirTamCrudo(armarZip([{ nombre: 'a.xml', contenido: 'x'.repeat(5000) }]));
+    const r = leerZip(zip, undefined, { maxDesinflado: 1000 });
+    expect(r.truncado).toBe(true);
+    expect(r.ilegibles).toBe(0);
+    expect(r.entradas).toHaveLength(0);
+  });
+
+  it('un paquete honesto dentro del tope se lee completo', () => {
+    const r = leerZip(armarZip([{ nombre: 'a.xml', contenido: 'x'.repeat(600) }]), undefined, { maxDesinflado: 1000 });
+    expect(r.truncado).toBe(false);
+    expect(r.entradas).toHaveLength(1);
+  });
+});
+

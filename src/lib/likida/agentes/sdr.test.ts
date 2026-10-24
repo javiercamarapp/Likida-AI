@@ -53,7 +53,7 @@ const hace = (dias: number) => new Date(Date.now() - dias * 86_400_000).toISOStr
 /** Siembra la base en memoria: prospectos `contactado` con su historial. */
 function sembrar(o: {
   prospectos: Array<{ id: string; empresa?: string; contacto_nombre?: string | null }>;
-  contactos?: Array<{ prospecto_id: string; direccion: 'salida' | 'respuesta'; ocurrio_en: string }>;
+  contactos?: Array<{ prospecto_id: string; canal?: string; direccion: 'salida' | 'respuesta'; ocurrio_en: string }>;
   rebotadas?: string[];
 }) {
   TABLAS.prospecto = o.prospectos.map((p, i) => ({
@@ -72,7 +72,7 @@ beforeEach(() => {
 
 describe('candidatosDeSeguimiento', () => {
   it('una salida hace 4 días sin respuesta: toca el seguimiento 1', async () => {
-    sembrar({ prospectos: [PROSPECTO], contactos: [{ prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(4) }] });
+    sembrar({ prospectos: [PROSPECTO], contactos: [{ prospecto_id: 'pr-1', canal: 'correo', direccion: 'salida', ocurrio_en: hace(4) }] });
     const r = await candidatosDeSeguimiento(5);
     expect(r).toHaveLength(1);
     expect(r[0].numeroSeguimiento).toBe(1);
@@ -82,7 +82,7 @@ describe('candidatosDeSeguimiento', () => {
     sembrar({
       prospectos: [PROSPECTO],
       contactos: [
-        { prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(5) },
+        { prospecto_id: 'pr-1', canal: 'correo', direccion: 'salida', ocurrio_en: hace(5) },
         { prospecto_id: 'pr-1', direccion: 'respuesta', ocurrio_en: hace(3) },
       ],
     });
@@ -90,12 +90,12 @@ describe('candidatosDeSeguimiento', () => {
   });
 
   it('con REBOTE o QUEJA de cualquier pieza: fuera — no se insiste a un buzón quemado', async () => {
-    sembrar({ prospectos: [PROSPECTO], contactos: [{ prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(5) }], rebotadas: ['pr-1'] });
+    sembrar({ prospectos: [PROSPECTO], contactos: [{ prospecto_id: 'pr-1', canal: 'correo', direccion: 'salida', ocurrio_en: hace(5) }], rebotadas: ['pr-1'] });
     expect(await candidatosDeSeguimiento(5)).toHaveLength(0);
   });
 
   it('la salida es de hace 2 días: aún no toca (+3)', async () => {
-    sembrar({ prospectos: [PROSPECTO], contactos: [{ prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(2) }] });
+    sembrar({ prospectos: [PROSPECTO], contactos: [{ prospecto_id: 'pr-1', canal: 'correo', direccion: 'salida', ocurrio_en: hace(2) }] });
     expect(await candidatosDeSeguimiento(5)).toHaveLength(0);
   });
 
@@ -103,9 +103,9 @@ describe('candidatosDeSeguimiento', () => {
     sembrar({
       prospectos: [PROSPECTO, { ...PROSPECTO, id: 'pr-2' }],
       contactos: [
-        { prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(8) }, { prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(4) },
-        { prospecto_id: 'pr-2', direccion: 'salida', ocurrio_en: hace(20) }, { prospecto_id: 'pr-2', direccion: 'salida', ocurrio_en: hace(15) },
-        { prospecto_id: 'pr-2', direccion: 'salida', ocurrio_en: hace(10) },
+        { prospecto_id: 'pr-1', canal: 'correo', direccion: 'salida', ocurrio_en: hace(8) }, { prospecto_id: 'pr-1', canal: 'correo', direccion: 'salida', ocurrio_en: hace(4) },
+        { prospecto_id: 'pr-2', canal: 'correo', direccion: 'salida', ocurrio_en: hace(20) }, { prospecto_id: 'pr-2', canal: 'correo', direccion: 'salida', ocurrio_en: hace(15) },
+        { prospecto_id: 'pr-2', canal: 'correo', direccion: 'salida', ocurrio_en: hace(10) },
       ],
     });
     const r = await candidatosDeSeguimiento(5);
@@ -129,7 +129,7 @@ describe('candidatosDeSeguimiento', () => {
 });
 
 describe('c5-14 — el formato se verifica sobre el TEXTO FINAL, asunto incluido', () => {
-  const candidato = () => sembrar({ prospectos: [PROSPECTO], contactos: [{ prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(4) }] });
+  const candidato = () => sembrar({ prospectos: [PROSPECTO], contactos: [{ prospecto_id: 'pr-1', canal: 'correo', direccion: 'salida', ocurrio_en: hace(4) }] });
 
   it('un guion largo en el ASUNTO descarta la pieza — antes salía igual', async () => {
     candidato();
@@ -150,7 +150,7 @@ describe('c5-14 — el formato se verifica sobre el TEXTO FINAL, asunto incluido
 });
 
 describe('AGB-9 (auditoría 24) — 0 medido ≠ costo desconocido', () => {
-  const candidato = () => sembrar({ prospectos: [PROSPECTO], contactos: [{ prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(4) }] });
+  const candidato = () => sembrar({ prospectos: [PROSPECTO], contactos: [{ prospecto_id: 'pr-1', canal: 'correo', direccion: 'salida', ocurrio_en: hace(4) }] });
 
   it('con `usage` medido y cost real (incluido 0), costoUsd es el número — nunca null', async () => {
     candidato();
@@ -172,8 +172,8 @@ describe('AGB-9 (auditoría 24) — 0 medido ≠ costo desconocido', () => {
     sembrar({
       prospectos: [{ ...PROSPECTO, id: 'pr-1' }, { ...PROSPECTO, id: 'pr-2' }],
       contactos: [
-        { prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(4) },
-        { prospecto_id: 'pr-2', direccion: 'salida', ocurrio_en: hace(4) },
+        { prospecto_id: 'pr-1', canal: 'correo', direccion: 'salida', ocurrio_en: hace(4) },
+        { prospecto_id: 'pr-2', canal: 'correo', direccion: 'salida', ocurrio_en: hace(4) },
       ],
     });
     generar
@@ -203,7 +203,7 @@ describe('el reloj de la vuelta corta también la BÚSQUEDA del SDR (c7-1)', () 
   it('la búsqueda con el reloj vencido no gasta ni una consulta de historial', async () => {
     sembrar({
       prospectos: [PROSPECTO, { ...PROSPECTO, id: 'pr-2' }],
-      contactos: [{ prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(4) }],
+      contactos: [{ prospecto_id: 'pr-1', canal: 'correo', direccion: 'salida', ocurrio_en: hace(4) }],
     });
 
     const r = await candidatosDeSeguimiento(5, RELOJ_VENCIDO());
@@ -217,7 +217,7 @@ describe('el reloj de la vuelta corta también la BÚSQUEDA del SDR (c7-1)', () 
     // El `beforeEach` de este archivo solo limpia `respuestas`; el contador del
     // modelo se arrastra de las pruebas de arriba y aquí se afirma sobre él.
     generar.mockClear();
-    sembrar({ prospectos: [PROSPECTO], contactos: [{ prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(4) }] });
+    sembrar({ prospectos: [PROSPECTO], contactos: [{ prospecto_id: 'pr-1', canal: 'correo', direccion: 'salida', ocurrio_en: hace(4) }] });
 
     const r = await correrSdr('cron', 5, RELOJ_VENCIDO());
 
@@ -233,7 +233,7 @@ describe('el reloj de la vuelta corta también la BÚSQUEDA del SDR (c7-1)', () 
   });
 
   it('sin reloj la búsqueda corre entera — el parámetro es opcional a propósito', async () => {
-    sembrar({ prospectos: [PROSPECTO], contactos: [{ prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(4) }] });
+    sembrar({ prospectos: [PROSPECTO], contactos: [{ prospecto_id: 'pr-1', canal: 'correo', direccion: 'salida', ocurrio_en: hace(4) }] });
     const r = await candidatosDeSeguimiento(5);
     expect(r).toHaveLength(1);
   });

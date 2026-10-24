@@ -31,6 +31,10 @@ export function mezclaQueSoloRellena(
   for (const [k, v] of Object.entries(campos)) {
     // `updated_at` es del sistema, no del visitante.
     if (k === 'updated_at') { parche[k] = v; continue; }
+    // A37-S10-10: `lead_clave` es una llave técnica de deduplicación, no un dato del visitante.
+    // Un valor distinto NO es «dato pisado» (no va a notas): el prospecto conserva la suya.
+    // Si no tiene, se rellena (el índice único de la 0181 decide si alguien más la tiene).
+    if (k === 'lead_clave') { if (sinDato(previo[k])) parche[k] = v; continue; }
     // El formulario no lo trae: nunca se manda `null` (borraría el teléfono
     // que el censo del DENUE sí traía).
     if (v === null || v === undefined) continue;

@@ -21,6 +21,8 @@ import type { RespuestaOcrBanco } from '@/lib/admin/qa-verdad';
 
 let sesion: { userId: string | null; rol: string } | null = null;
 vi.mock('@/lib/auth/session', () => ({ getSessionTenant: async () => sesion }));
+let rlPermitido = true;
+vi.mock('@/lib/ratelimit', () => ({ rateLimit: async () => rlPermitido }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({}) }));
 
@@ -100,6 +102,7 @@ const pedir = (body: unknown) => POST(new Request('http://x/api/admin/qa/fotos/o
 
 beforeEach(() => {
   sesion = { userId: 'u-javier', rol: 'superadmin' };
+  rlPermitido = true;
   banco = [foto(ID_A, VERDAD), foto(ID_B, VERDAD), foto(ID_C, VERDAD)];
   gastoCorridas = { ok: true, datos: 0 };
   gastoLecturas = { ok: true, datos: 0 };
@@ -329,6 +332,25 @@ describe('EL RELOJ — nada de cortes mudos', () => {
     expect(d.sinTurno).toEqual([]);
     expect(d.resultados).toHaveLength(3);
     expect(d.resumen.medidos).toBe(21);
+  });
+});
+
+describe('A37-S08-04 — el tope y el doble clic', () => {
+  it('un segundo lote inmediato del mismo usuario: 429 y no se gasta', async () => {
+    rlPermitido = false;
+    const r = await pedir({ fotoIds: [ID_A] });
+    expect(r.status).toBe(429);
+    expect(extraerComprobante).not.toHaveBeenCalled();
+  });
+
+  it('un lote que cruza el tope a media tanda se detiene: el resto sale en sinTurno', async () => {
+    // Gasto previo 4.9985; la primera foto cuesta 0.0031 -> 5.0016 >= 5.
+    gastoCorridas = { ok: true, datos: 4.9985 };
+    respuestasOcr = [lecturaBuena, lecturaBuena, lecturaBuena];
+    const r = await pedir({ fotoIds: [ID_A, ID_B, ID_C] });
+    const d = await r.json() as RespuestaOcrBanco;
+    expect(extraerComprobante).toHaveBeenCalledTimes(1);
+    expect(d.sinTurno).toEqual([ID_B, ID_C]);
   });
 });
 

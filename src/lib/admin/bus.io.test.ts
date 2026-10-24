@@ -21,7 +21,7 @@ function builder(tabla: string) {
       return b;
     };
   };
-  ['select', 'order', 'limit', 'eq', 'insert', 'update'].forEach(encadena);
+  ['select', 'order', 'limit', 'eq', 'is', 'insert', 'update'].forEach(encadena);
   b.then = (res: (r: Resultado) => void) =>
     res(respuestas.get(tabla) ?? { data: [], error: null });
   return b;
@@ -93,6 +93,19 @@ describe('mutaciones — ancladas y con firma', () => {
     expect(inserts[0]).toMatchObject({ tabla: 'bus_orden', fila: { tipo: 'correr_ahora', rutina: 'dof-diario', creado_por: 'user-1' } });
     await expect(crearOrden('correr_ahora', null, 'user-1')).rejects.toThrow(/rutina/);
     expect(inserts).toHaveLength(1);
+  });
+
+  it('A37-S08-03: una orden idéntica ya pendiente no se vuelve a encolar (doble toque)', async () => {
+    respuestas.set('bus_orden', { data: [{ id: 'o-previa' }], error: null });
+    await expect(crearOrden('correr_ahora', 'dof-diario', 'user-1')).rejects.toThrow(/idéntica/);
+    await expect(crearOrden('kill_switch_on', null, 'user-1')).rejects.toThrow(/idéntica/);
+    expect(inserts).toHaveLength(0);
+  });
+
+  it('A37-S08-03: si la comprobación falla, NO encola a ciegas (fail-closed)', async () => {
+    respuestas.set('bus_orden', { data: null, error: { message: 'caída' } });
+    await expect(crearOrden('correr_ahora', 'dof-diario', 'user-1')).rejects.toThrow(/comprobar/);
+    expect(inserts).toHaveLength(0);
   });
 
   it('resolverPieza va anclada a pendiente; sin fila afectada = ya la resolvió otro tap', async () => {

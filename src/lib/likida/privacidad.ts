@@ -1,6 +1,7 @@
 import { appUrl } from '@/lib/env';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { hoyMx } from '@/lib/formato';
 import { acotada } from './presupuesto';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -561,7 +562,7 @@ export function pideAtencionPrivacidad(texto: string): boolean {
  * le da entonces lo que sí se tiene —a quién reclamarle y dónde emplazarlo,
  * que es lo que el art. 15 fr. I persigue— y se le dice que la liga no existe.
  */
-export function respuestaPrivacidad(r: DatosResponsable): string {
+export function respuestaPrivacidad(r: DatosResponsable, registrada = true): string {
   const razonSocial = r.razonSocial?.trim();
   const domicilio = r.domicilio?.trim();
   const partes = [
@@ -590,6 +591,14 @@ export function respuestaPrivacidad(r: DatosResponsable): string {
     );
   }
 
+  if (!registrada) {
+    // A37-L-01: el registro falló. Afirmar «queda registrada» sería una constancia falsa.
+    partes.push(
+      ``,
+      `No alcancé a dejar registrada tu solicitud en este momento. Escríbeme *PRIVACIDAD* otra vez en unos minutos; mientras tanto avisé a quien administra el sistema. Tu liquidación sigue igual. 🙏`,
+    );
+    return partes.join('\n');
+  }
   partes.push(
     ``,
     // "Queda registrada" y no "ya le avisé": lo que ocurre es un registro que la
@@ -1010,9 +1019,14 @@ export function tipoDeSolicitudArco(texto: string): 'acceso' | 'rectificacion' |
  *  solo el primer plazo, que es el que la solicitud puede vigilar. */
 const DIAS_HABILES_ARCO = 20;
 
-/** Suma `n` días hábiles a `desde` (lunes a viernes). */
+/** Suma `n` días hábiles a `desde` (lunes a viernes).
+ *
+ *  A37-L-11: el calendario es el de MÉXICO (`hoyMx`), no el UTC. Una solicitud
+ *  del jueves 19:00 CDMX ya es viernes en UTC; contarla desde el día UTC hacía
+ *  vencer el plazo un día hábil después del que la flota ve en pantalla.
+ *  (Los feriados no se descuentan: el plazo mostrado es el de lunes a viernes.) */
 export function venceArco(desde: Date, diasHabiles = DIAS_HABILES_ARCO): string {
-  const d = new Date(desde);
+  const d = new Date(`${hoyMx(desde)}T00:00:00Z`);
   let faltan = diasHabiles;
   while (faltan > 0) {
     d.setUTCDate(d.getUTCDate() + 1);

@@ -130,6 +130,13 @@ export interface OpcionesEnvio {
    * pie de campaña y SIN `List-Unsubscribe` aunque venga `listaBajaUrl`.
    */
   sobrio?: boolean;
+  /**
+   * A37-S24-08 (LFPDPPP, minimización): con varios destinatarios, solo el
+   * primero va en `to` y el resto en `bcc`, para que en una campaña en frío
+   * ningún contacto vea las direcciones de los demás. Defecto: todos en `to`
+   * (avisos internos al equipo, donde verse entre sí es lo esperado).
+   */
+  copiasOcultas?: boolean;
 }
 
 /** Tope crudo de los adjuntos de un correo: 28 MB ⇒ ~37.3 MB en base64, debajo de los 40 MB de Resend. */
@@ -190,7 +197,8 @@ export async function enviarCorreo(
       },
       body: JSON.stringify({
         from,
-        to: destinos,
+        to: op.copiasOcultas ? destinos.slice(0, 1) : destinos,
+        ...(op.copiasOcultas && destinos.length > 1 ? { bcc: destinos.slice(1) } : {}),
         subject: correo.asunto,
         html: sobrio ? armarHtmlSobrio(correo) : armarHtml(correo),
         // La parte de texto no es opcional: un correo sin ella puntúa peor en
@@ -223,11 +231,15 @@ export async function enviarCorreo(
 
     if (!r.ok) {
       // El cuerpo del error de Resend trae el motivo real (dominio no
-      // verificado, cuota, destinatario en la lista de rebotes). Se guarda
-      // recortado: completo puede traer el correo del destinatario y este log
-      // no es el lugar para un dato personal.
-      const cuerpo = (await r.text().catch(() => '')).slice(0, 200);
-      logger.error('correo.rechazado', { status: r.status, cuerpo, asunto: correo.asunto });
+      // verificado, cuota, destinatario en la lista de rebotes) y puede traer
+      // el correo del destinatario: este log no es el lugar para un dato
+      // personal. A37-S24-07: ni recortado a 200 caracteres (la dirección cabe
+      // ahí); solo se registra el nombre del error (`name`) de Resend.
+      const codigo = await r.json().then((j: unknown) => {
+        const n = (j as { name?: unknown } | null)?.name;
+        return typeof n === 'string' ? n.replace(/[^\w.-]/g, '').slice(0, 60) : null;
+      }).catch(() => null);
+      logger.error('correo.rechazado', { status: r.status, codigo, asunto: correo.asunto });
       return { ok: false, motivo: 'rechazado', detalle: `HTTP ${r.status}`, status: r.status };
     }
 

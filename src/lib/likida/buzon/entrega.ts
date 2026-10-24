@@ -9,7 +9,7 @@ import type * as repo from './entrega_repo';
 import type { Entrega } from './entrega_repo';
 import {
   tocaLoteAutomatico, decidirTamanoLote, trasFallo, nombreCsv, nombreZip, nombreArchivoFactura, textoCorreoEntrega,
-  MAX_FACTURAS_POR_LOTE, RETRASO_CONFIRMACION_MS,
+  MAX_FACTURAS_POR_LOTE, RETRASO_CONFIRMACION_MS, MAX_INTENTOS, MAX_BYTES_PDF_ZIP,
 } from './entrega_pura';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -86,8 +86,12 @@ export async function armarLote(
 export type ResultadoEnvioLote = { estado: 'enviada' | 'reprogramada' | 'fallida' | 'no_tomado'; detalle?: string };
 
 /** Envía UN lote (ya vencido). El claim decide quién lo manda; el que pierde no hace nada. */
-export async function enviarLote(deps: DepsEntrega, lote: Entrega): Promise<ResultadoEnvioLote> {
-  const ahora = deps.ahora();
+export async function enviarLote(deps: DepsEntrega, lote: Entrega, vencePorReloj?: number): Promise<ResultadoEnvioLote> {
+  // A37-S30-03: TODO lo que entra al correo (nombres del CSV/ZIP, hora DOS del ZIP) sale de la fecha de CREACIÓN del
+  // lote, no del reloj del intento: con la misma Idempotency-Key, un reintento tras un timeout ambiguo manda los
+  // MISMOS bytes y Resend lo deduplica en vez de rechazarlo (o mandar una segunda copia).
+  const creado = new Date(lote.creadoEn);
+  const ahora = Number.isNaN(creado.getTime()) ? deps.ahora() : creado;
   const tomado = await deps.repo.reclamarLote(lote, ahora);
   if (!tomado) return { estado: 'no_tomado' };
   await deps.repo.anotarEvento(tomado.tenantId, tomado.id, 'intento', `intento ${tomado.intentos}`);
@@ -103,6 +107,10 @@ export async function enviarLote(deps: DepsEntrega, lote: Entrega): Promise<Resu
     return { estado: 'fallida', detalle: mensaje };
   };
 
+  // A37-S30-02: un lote cuyo proceso murió una y otra vez (lease vencido) sumaba intentos sin pasar por `trasFallo`
+  // y se retomaba sin fin. Pasado el tope, se agota sin volver a armarlo.
+  if (tomado.intentos > MAX_INTENTOS) return await fallar(`El lote agotó los ${MAX_INTENTOS} intentos (el proceso murió al prepararlo); reintenta o cancela desde la pantalla.`);
+
   try {
     const filas = await deps.repo.facturasDelLote(tomado.tenantId, tomado.id);
     if (filas.length === 0) return await fallar('El lote no tiene facturas reservadas.');
@@ -115,6 +123,7 @@ export async function enviarLote(deps: DepsEntrega, lote: Entrega): Promise<Resu
 
     let faltanXml = 0;
     const sinPdf: string[] = [];
+    let bytesPdf = 0;
     if (tomado.incluyeZip) {
       const entradas: EntradaParaZip[] = [];
       for (const f of filas) {
@@ -122,7 +131,14 @@ export async function enviarLote(deps: DepsEntrega, lote: Entrega): Promise<Resu
         if (f.xmlCrudo) entradas.push({ nombre: nombreArchivoFactura(f.factura.emisorRfc, uuid, 'xml'), bytes: new Uint8Array(bufferDeTexto(f.xmlCrudo)) });
         else faltanXml++;
         if (f.pdfRuta) {
-          try { entradas.push({ nombre: nombreArchivoFactura(f.factura.emisorRfc, uuid, 'pdf'), bytes: await deps.descargarPdf(f.pdfRuta) }); }
+          // A37-S30-02: ni el reloj de la función ni el tope de adjuntos se pueden agotar descargando 200 PDF en serie.
+          if (vencePorReloj !== undefined && deps.ahora().getTime() >= vencePorReloj) { sinPdf.push(uuid); continue; }
+          try {
+            const pdf = await deps.descargarPdf(f.pdfRuta);
+            if (bytesPdf + pdf.byteLength > MAX_BYTES_PDF_ZIP) { sinPdf.push(uuid); continue; }
+            bytesPdf += pdf.byteLength;
+            entradas.push({ nombre: nombreArchivoFactura(f.factura.emisorRfc, uuid, 'pdf'), bytes: pdf });
+          }
           catch (e) {
             sinPdf.push(uuid);
             logger.warn('buzon_entrega.pdf_no_bajo', { tenantId: tomado.tenantId, entregaId: tomado.id, err: e instanceof Error ? e.message : String(e) });
@@ -138,7 +154,7 @@ export async function enviarLote(deps: DepsEntrega, lote: Entrega): Promise<Resu
 
     const nombre = await deps.nombreFlota(tomado.tenantId).catch(() => null);
     const t = textoCorreoEntrega({ nFacturas: filas.length, total: tomado.total, formato: tomado.formato, incluyeZip: tomado.incluyeZip, faltanXml, nombreFlota: nombre });
-    if (sinPdf.length > 0) t.parrafos.splice(t.parrafos.length - 1, 0, `${sinPdf.length} PDF no se pudieron adjuntar en este envío; el XML sí va.`);
+    if (sinPdf.length > 0) t.parrafos.splice(t.parrafos.length - 1, 0, `${sinPdf.length} PDF no se pudieron adjuntar en este envío (no bajaron, o no cabían en el tope del correo); el XML sí va.`);
     const correo: Correo = { ...t, porQueLoRecibes: 'Recibes esto porque la flota te registró como destinataria de sus facturas de proveedores aprobadas.', datos: [['Facturas', String(filas.length)], ['Total', `$${tomado.total.toFixed(2)} MXN`]] };
 
     // La llave NO lleva el intento: un reintento tras un timeout ambiguo debe deduplicarse en Resend.
@@ -188,7 +204,7 @@ export async function procesarEntregas(deps: DepsEntrega, opciones: { vencePorRe
   for (const lote of await deps.repo.lotesParaEnviar(deps.ahora())) {
     if (!quedaTiempo()) break;
     try {
-      const e = await enviarLote(deps, lote);
+      const e = await enviarLote(deps, lote, opciones.vencePorReloj);
       if (e.estado === 'enviada') r.enviados++;
       else if (e.estado === 'reprogramada') r.reprogramados++;
       else if (e.estado === 'fallida') r.fallidos++;

@@ -433,6 +433,10 @@ export function validarLanzar(crudo: unknown): { ok: true; datos: LanzarValidado
   const fotoIds = b.fotoIds;
   if (!Array.isArray(fotoIds) || fotoIds.length === 0) return { ok: false, error: 'elige al menos una foto del banco' };
   if (!fotoIds.every((f) => typeof f === 'string' && UUID_RE.test(f))) return { ok: false, error: 'fotoIds inválidos' };
+  // A37-S23-06: se deduplica ANTES de elegir carril y de contar (misma regla que `validarLoteOcr`): un id repetido
+  // inflaba el avance (`resumirAvance` cuenta cada repetición) y, en el carril rápido, mandaba la misma foto otra vez
+  // por el mismo chofer y pagaba otra llamada al modelo.
+  const fotoIdsUnicos = [...new Set(fotoIds as string[])];
 
   // ── EL CARRIL ────────────────────────────────────────────────────────────
   // Ausente = el que le toca al número de fotos (`carrilPara`). Se acepta la
@@ -445,16 +449,16 @@ export function validarLanzar(crudo: unknown): { ok: true; datos: LanzarValidado
   // todos modos daría una corrida muerta a la mitad.
   let carril: Carril;
   if (b.carril === undefined || b.carril === null || b.carril === '') {
-    carril = carrilPara(fotoIds.length);
+    carril = carrilPara(fotoIdsUnicos.length);
   } else if (b.carril === 'rapido' || b.carril === 'completo') {
     carril = b.carril;
   } else {
     return { ok: false, error: 'carril desconocido — "rapido" o "completo"' };
   }
-  if (carril === 'rapido' && fotoIds.length > MAX_FOTOS_CARRIL_RAPIDO) {
+  if (carril === 'rapido' && fotoIdsUnicos.length > MAX_FOTOS_CARRIL_RAPIDO) {
     return {
       ok: false,
-      error: `${fotoIds.length} fotos no caben en el carril rápido (máx. ${MAX_FOTOS_CARRIL_RAPIDO}: corre entero dentro de UNA función serverless). Elige el carril completo — avanza en varias pasadas y no tiene tope de fotos.`,
+      error: `${fotoIdsUnicos.length} fotos no caben en el carril rápido (máx. ${MAX_FOTOS_CARRIL_RAPIDO}: corre entero dentro de UNA función serverless). Elige el carril completo — avanza en varias pasadas y no tiene tope de fotos.`,
     };
   }
 
@@ -502,7 +506,7 @@ export function validarLanzar(crudo: unknown): { ok: true; datos: LanzarValidado
     datos: {
       escenario,
       carril,
-      params: { anticipo, rfcEmpresa, ruta: { origen, destino }, politica, fotoIds: fotoIds as string[], retencion },
+      params: { anticipo, rfcEmpresa, ruta: { origen, destino }, politica, fotoIds: fotoIdsUnicos, retencion },
     },
   };
 }

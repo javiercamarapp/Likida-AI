@@ -7,7 +7,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { hoyMx } from '@/lib/formato';
 import { acotada } from '@/lib/likida/presupuesto';
-import { leerJornadas, leerPolitica, nombresDeOperadores } from '@/lib/likida/jornada/repo';
+import { leerJornadas, leerPolitica, nombresDeOperadores, TOPE_EXPEDIENTES_EXPORTACION } from '@/lib/likida/jornada/repo';
 import { armarReporte, reporteACsv, type DiaDelReporte } from '@/lib/likida/jornada/reporte';
 
 export const runtime = 'nodejs';
@@ -76,7 +76,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const lectura = await leerJornadas(t.tenantId, desde, hasta, operador);
+    const lectura = await leerJornadas(t.tenantId, desde, hasta, operador, { tope: TOPE_EXPEDIENTES_EXPORTACION });
     const politica = await leerPolitica(t.tenantId);
     const nombres = await nombresDeOperadores(t.tenantId, lectura.dias.map((d) => d.operadorId));
 

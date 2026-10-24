@@ -56,6 +56,7 @@ import { hoyMx, numero, mxn, fechaMx } from '@/lib/formato';
 import { encolarPieza } from './cola';
 import { registrarCorrida, type DisparoCorrida } from './corridas';
 import { logger } from '@/lib/logger';
+import { traerTodoDesdeId, PAGINA } from '../pg';
 
 export const AGENTES_LEADS = [
   'scorer', 'dossier', 'vigia', 'demo_prep', 'propuestas', 'cazador',
@@ -200,15 +201,35 @@ export const ESTADOS_CERRADOS: readonly string[] = ['cerrado', 'won', 'perdido',
  *  200 deja la URL en unos 8 KB, muy por debajo de cualquier límite razonable,
  *  y 25 vueltas de 200 sobre tablas satélite pequeñas cuestan milisegundos. */
 export const IDS_POR_LOTE = 200;
+/** Tope de filas por consulta de lote (ver `porLotes`: llegar a él se trata como truncamiento). */
+const TOPE_FILAS_LOTE = IDS_POR_LOTE * 20;
 
 /** Corre `leer` por lotes de ids y junta las filas. LANZA en cuanto un lote
  *  falla: media lista es peor que ninguna — un mapa a medias haría que los
  *  prospectos del lote que no llegó se reportaran como «sin correos» o «sin
  *  tocar», que son afirmaciones, no huecos. */
-async function porLotes<T>(ids: string[], leer: (lote: string[]) => Promise<T[]>): Promise<T[]> {
+async function porLotes<T>(
+  ids: string[],
+  leer: (lote: string[]) => Promise<T[]>,
+  /** A37-S28-09: tope de filas con el que `leer` acota su consulta. Un lote que
+   *  devuelve EXACTAMENTE el tope pudo quedar truncado en silencio (los
+   *  sobrantes saldrían «nunca tocados» o «sin historial»): se parte en mitades
+   *  hasta que quepa; si un solo id lo llena, LANZA — no se afirma sobre datos
+   *  cortados. */
+  tope?: number,
+): Promise<T[]> {
   const salida: T[] = [];
+  const leerSinTruncar = async (lote: string[]): Promise<T[]> => {
+    const filas = await leer(lote);
+    if (tope === undefined || filas.length < tope) return filas;
+    if (lote.length <= 1) {
+      throw new Error(`porLotes: un solo prospecto llena el tope de ${tope} filas; la lectura quedaría truncada`);
+    }
+    const mitad = Math.ceil(lote.length / 2);
+    return [...await leerSinTruncar(lote.slice(0, mitad)), ...await leerSinTruncar(lote.slice(mitad))];
+  };
   for (let i = 0; i < ids.length; i += IDS_POR_LOTE) {
-    salida.push(...await leer(ids.slice(i, i + IDS_POR_LOTE)));
+    salida.push(...await leerSinTruncar(ids.slice(i, i + IDS_POR_LOTE)));
   }
   return salida;
 }
@@ -416,10 +437,10 @@ async function contarCorreos(ids: string[]): Promise<Map<string, number>> {
       .from('prospecto_correo')
       .select('prospecto_id')
       .in('prospecto_id', lote)
-      .limit(IDS_POR_LOTE * 20), 'leads.scorer.correos');
+      .limit(TOPE_FILAS_LOTE), 'leads.scorer.correos');
     if (error) throw new Error(`contarCorreos: ${error.message}`);
     return (data ?? []) as Array<{ prospecto_id: string }>;
-  });
+  }, TOPE_FILAS_LOTE);
   for (const f of filas) mapa.set(f.prospecto_id, (mapa.get(f.prospecto_id) ?? 0) + 1);
   return mapa;
 }
@@ -575,44 +596,84 @@ export function armarFicha(d: DatosFicha, dia: string): string {
 /** El prospecto al que le toca ficha: el vivo más avanzado del embudo que
  *  todavía no la tiene. LANZA ante error. `null` = no hay candidato. */
 async function candidatoFicha(venceEn?: number): Promise<{ datos: DatosFicha | null; sinTurno: boolean }> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('prospecto')
-    .select('id, empresa, ciudad, estado, vacante, num_unidades, unidades, sitio, sitio_verificado, historia')
-    .is('duplicado_de', null)
-    .in('estado', ['demo', 'appointment', 'negociacion', 'proposal', 'pilot'])
-    .order('created_at', { ascending: true })
-    .limit(50), 'leads.dossier.candidatos');
-  if (error) throw new Error(`candidatoFicha: ${error.message}`);
-  const filas = (data ?? []) as Array<Record<string, unknown>>;
-  if (filas.length === 0) return { datos: null, sinTurno: false };
+  // A37-S28-08: antes se leían los primeros 50 por `created_at` ASC y se
+  // buscaba el primero sin ficha: con más de 50 prospectos YA fichados en
+  // demo..pilot, ninguno nuevo recibía ficha jamás. Ahora se pagina por cursor
+  // `(created_at, id)` y la exclusión de los ya fichados se hace contra UNA
+  // lectura de los títulos de la bandeja (no una consulta por empresa).
+  let fichados: Set<string> | null = null;
+  let cursor: { creado: string; id: string } | null = null;
 
-  // El primero SIN ficha en la bandeja. Se pregunta por título determinista,
-  // que es la misma clave que arbitra el índice único de la 0235 — UNA ida a
-  // la base POR EMPRESA, y por eso el reloj se consulta en cada vuelta: con 50
-  // candidatos ya fichados, BUSCAR cuesta más que fabricar, y ese costo se lo
-  // estaría comiendo al agente que viene detrás en la pasada.
-  for (const f of filas) {
+  for (let pagina = 0; pagina < MAX_PAGINAS_CANDIDATOS; pagina++) {
+    let q = supabaseAdmin()
+      .from('prospecto')
+      .select('id, empresa, ciudad, estado, vacante, num_unidades, unidades, sitio, sitio_verificado, historia, created_at')
+      .is('duplicado_de', null)
+      .in('estado', ['demo', 'appointment', 'negociacion', 'proposal', 'pilot']);
+    if (cursor !== null) {
+      q = q.or(`created_at.gt.${cursor.creado},and(created_at.eq.${cursor.creado},id.gt.${cursor.id})`);
+    }
+    const { data, error } = await acotada(
+      q.order('created_at', { ascending: true }).order('id').limit(CANDIDATOS_POR_PAGINA),
+      'leads.dossier.candidatos');
+    if (error) throw new Error(`candidatoFicha: ${error.message}`);
+    const filas = (data ?? []) as Array<Record<string, unknown>>;
+    if (filas.length === 0) return { datos: null, sinTurno: false };
+
+    // La búsqueda honra el reloj de la vuelta: buscar puede comerse el turno
+    // de quien viene detrás en la pasada.
     if (relojAgotado(venceEn)) return { datos: null, sinTurno: true };
-    const id = String(f.id);
-    const empresa = String(f.empresa);
-    if (await piezaExistente('dossier', tituloFicha(empresa))) continue;
-    const [dossier, personas, correos] = await Promise.all([
-      leerDossier(id), leerPersonas(id), leerCorreos(id),
-    ]);
-    return { sinTurno: false, datos: {
-      id, empresa,
-      ciudad: (f.ciudad as string | null) ?? null,
-      estado: String(f.estado),
-      vacante: (f.vacante as string | null) ?? null,
-      numUnidades: f.num_unidades === null || f.num_unidades === undefined ? null : Number(f.num_unidades),
-      unidades: (f.unidades as string | null) ?? null,
-      sitio: (f.sitio as string | null) ?? null,
-      sitioVerificado: f.sitio_verificado === true,
-      historiaProspecto: (f.historia as string | null) ?? null,
-      dossier, personas, correos,
-    } };
+    if (fichados === null) fichados = await titulosDeFichas();
+
+    for (const f of filas) {
+      const id = String(f.id);
+      const empresa = String(f.empresa);
+      if (fichados.has(tituloFicha(empresa))) continue;
+      const [dossier, personas, correos] = await Promise.all([
+        leerDossier(id), leerPersonas(id), leerCorreos(id),
+      ]);
+      return { sinTurno: false, datos: {
+        id, empresa,
+        ciudad: (f.ciudad as string | null) ?? null,
+        estado: String(f.estado),
+        vacante: (f.vacante as string | null) ?? null,
+        numUnidades: f.num_unidades === null || f.num_unidades === undefined ? null : Number(f.num_unidades),
+        unidades: (f.unidades as string | null) ?? null,
+        sitio: (f.sitio as string | null) ?? null,
+        sitioVerificado: f.sitio_verificado === true,
+        historiaProspecto: (f.historia as string | null) ?? null,
+        dossier, personas, correos,
+      } };
+    }
+
+    if (filas.length < CANDIDATOS_POR_PAGINA) return { datos: null, sinTurno: false };
+    const ultima = filas[filas.length - 1];
+    cursor = { creado: String(ultima.created_at), id: String(ultima.id) };
   }
-  return { datos: null, sinTurno: false };
+  // Tope de páginas agotado sin hallar candidato: se dice, no se afirma «nadie».
+  return { datos: null, sinTurno: true };
+}
+
+const CANDIDATOS_POR_PAGINA = 50;
+/** 200 páginas × 50 = 10,000 prospectos vivos: muy por encima del embudo real. */
+const MAX_PAGINAS_CANDIDATOS = 200;
+
+/** Los títulos de TODAS las fichas ya en la bandeja (cualquier estado), leídos
+ *  completos y por cursor de `id`: o están todos, o LANZA — un conjunto
+ *  parcial haría fabricar fichas repetidas. */
+async function titulosDeFichas(): Promise<Set<string>> {
+  const filas = await traerTodoDesdeId<{ id: string; titulo: string }>(
+    (despuesDe) => {
+      let q = supabaseAdmin()
+        .from('cola_aprobacion')
+        .select('id, titulo', despuesDe === null ? { count: 'exact' as const } : {})
+        .eq('agente', 'dossier');
+      if (despuesDe !== null) q = q.gt('id', despuesDe);
+      return acotada(q.order('id').limit(PAGINA), 'leads.dossier.fichados');
+    },
+    'leads.dossier.fichados',
+  );
+  return new Set(filas.map((f) => f.titulo));
 }
 
 /** El título es determinista POR EMPRESA y no por periodo: una ficha se
@@ -893,10 +954,10 @@ async function leerHistorial(ids: string[]): Promise<Map<string, { salida: strin
       .select('prospecto_id, direccion, ocurrio_en')
       .in('prospecto_id', lote)
       .order('ocurrio_en', { ascending: false })
-      .limit(IDS_POR_LOTE * 20), 'leads.vigia.historial');
+      .limit(TOPE_FILAS_LOTE), 'leads.vigia.historial');
     if (error) throw new Error(`leerHistorial: ${error.message}`);
     return (data ?? []) as Array<{ prospecto_id: string; direccion: string; ocurrio_en: string }>;
-  });
+  }, TOPE_FILAS_LOTE);
   // Cada lote viene descendente, así que la PRIMERA fila que se ve de cada
   // (prospecto, dirección) es la última que ocurrió. El orden se compara igual
   // por si un lote llegara desordenado: quedarse con la más nueva es la
@@ -1579,10 +1640,10 @@ async function idsTocados(ids: string[]): Promise<Set<string>> {
       .from('prospecto_contacto')
       .select('prospecto_id')
       .in('prospecto_id', lote)
-      .limit(IDS_POR_LOTE * 20), 'leads.cazador.tocados');
+      .limit(TOPE_FILAS_LOTE), 'leads.cazador.tocados');
     if (error) throw new Error(`idsTocados: ${error.message}`);
     return (data ?? []) as Array<{ prospecto_id: string }>;
-  });
+  }, TOPE_FILAS_LOTE);
   for (const f of filas) s.add(f.prospecto_id);
   return s;
 }

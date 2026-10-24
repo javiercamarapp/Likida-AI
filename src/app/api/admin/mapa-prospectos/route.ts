@@ -19,13 +19,13 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
-  const { error } = await sesionSuperadmin();
+  const { error, sesion } = await sesionSuperadmin();
   if (error) return error;
   const crudo = new URL(req.url).searchParams.get('desde');
   // Una marca que no es una fecha se IGNORA (carga completa) en vez de
   // viajar a Postgres: `updated_at > 'perro'` es un 400 del otro lado, y el
   // cliente lo vería como "la red falló" y se quedaría con el mapa viejo.
   const desde = crudo && !Number.isNaN(Date.parse(crudo)) ? crudo : null;
-  const datos = await getDatosMapa({ desde });
+  const datos = await getDatosMapa({ desde, auditoria: { actorId: sesion.userId } });
   return NextResponse.json(datos, { headers: { 'Cache-Control': 'no-store' } });
 }

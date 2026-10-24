@@ -106,6 +106,45 @@ export interface EventoApi {
   creadoEn: string;
 }
 
+/**
+ * A37-S11-03: los eventos del CONTRATO del feed `/v1/hitos/eventos` (el enum `HitoEvento` del OpenAPI). La bitácora
+ * `viaje_hito_evento` guarda además renglones INTERNOS (`validacion`, `evidencia`, `captura_manual`, `alerta_estadia`,
+ * `alerta_llegada_sin_confirmar`) con texto libre del chofer, motivos y lugares: no salen por la API.
+ */
+export const EVENTOS_FEED = ['solicitado', 'recibido', 'validado', 'omitido', 'escalado', 'corregido', 'pospuesto', 'atendido', 'contacto'] as const;
+
+/** Llaves de `detalle` que cada evento del contrato puede mostrar (lista blanca; lo demás no sale). Todas son escalares de
+ *  sistema (nivel, canal, fuente, conteos), sin texto libre ni datos personales. */
+const DETALLE_PERMITIDO: Record<(typeof EVENTOS_FEED)[number], readonly string[]> = {
+  solicitado: ['nivel', 'canal'],
+  recibido: ['fuente', 'via', 'ambigua', 'tarde', 'hora_ajustada', 'por', 'cruce', 'distancia_m', 'fuera_de_orden'],
+  validado: ['fuente', 'resultado', 'distancia_m'],
+  omitido: ['por'],
+  escalado: ['nivel', 'destinatarios', 'entregados', 'motivo'],
+  corregido: ['revertidos'],
+  pospuesto: ['minutos'],
+  atendido: [],
+  contacto: [],
+};
+
+/**
+ * El `detalle` que SÍ se publica de un evento, o `null` si la fila no es del contrato (evento fuera del enum, o un
+ * renglón con `clase`: las bitácoras internas del patio, la descarga o el reporte de llegada reutilizan nombres como
+ * `atendido` con `detalle.clase`).
+ */
+export function detalleDeFeed(evento: string, detalle: unknown): Record<string, string | number | boolean | null> | null {
+  if (!(EVENTOS_FEED as readonly string[]).includes(evento)) return null;
+  const d = (detalle !== null && typeof detalle === 'object' && !Array.isArray(detalle) ? detalle : {}) as Record<string, unknown>;
+  if (d.clase !== undefined) return null;
+  const salida: Record<string, string | number | boolean | null> = {};
+  for (const k of DETALLE_PERMITIDO[evento as (typeof EVENTOS_FEED)[number]]) {
+    const v = d[k];
+    if (typeof v === 'string') salida[k] = v.slice(0, 60);
+    else if (typeof v === 'number' || typeof v === 'boolean' || v === null) salida[k] = v;
+  }
+  return salida;
+}
+
 // ── Citas y ETA ─────────────────────────────────────────────────────────────
 
 export interface CambioCitas {

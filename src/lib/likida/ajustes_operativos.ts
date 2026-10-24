@@ -137,9 +137,19 @@ function numero(crudo: string, campo: string, rango: { min: number; max: number 
  * Un renglón vacío se ignora; uno sin `=` es un error CON su número de línea,
  * porque "formato inválido" a secas sobre 40 renglones no ayuda a nadie.
  */
+/** A37-S28-10: topes del textarea del catálogo contable. */
+const MAX_LINEAS_CUENTAS = 500;
+const MAX_CONCEPTO_CUENTAS = 80;
+
 export function parsearCuentas(crudo: string): Record<string, string> {
   const cuentas: Record<string, string> = {};
+  // Un Set, no `concepto in cuentas`: «constructor» / «__proto__» «existen» en
+  // todo objeto literal y se rechazaban con un mensaje de duplicado falso.
+  const vistos = new Set<string>();
   const lineas = crudo.split('\n');
+  if (lineas.length > MAX_LINEAS_CUENTAS) {
+    throw new DatoInvalido(`El catálogo tiene demasiadas líneas (máximo ${MAX_LINEAS_CUENTAS}).`);
+  }
 
   for (let i = 0; i < lineas.length; i++) {
     const linea = lineas[i].trim();
@@ -154,13 +164,17 @@ export function parsearCuentas(crudo: string): Record<string, string> {
     const cuenta = linea.slice(corte + 1).trim();
     if (!concepto) throw new DatoInvalido(`Línea ${i + 1}: falta el concepto antes del "=".`);
     if (!cuenta) throw new DatoInvalido(`Línea ${i + 1}: falta la cuenta después del "=".`);
+    if (concepto.length > MAX_CONCEPTO_CUENTAS) throw new DatoInvalido(`Línea ${i + 1}: el concepto es demasiado largo.`);
     if (cuenta.length > 40) throw new DatoInvalido(`Línea ${i + 1}: la cuenta es demasiado larga.`);
-    if (concepto in cuentas) {
+    if (vistos.has(concepto)) {
       // Silenciarlo dejaría que la última línea gane sin avisar, y el contador
       // se quedaría buscando por qué su primera cuenta no se aplicó.
       throw new DatoInvalido(`Línea ${i + 1}: "${concepto}" ya tiene cuenta más arriba.`);
     }
-    cuentas[concepto] = cuenta;
+    vistos.add(concepto);
+    // defineProperty: `cuentas['__proto__'] = x` cambiaría el prototipo en vez
+    // de crear la clave.
+    Object.defineProperty(cuentas, concepto, { value: cuenta, enumerable: true, writable: true, configurable: true });
   }
 
   return cuentas;

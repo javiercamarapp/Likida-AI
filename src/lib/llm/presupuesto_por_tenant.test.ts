@@ -240,12 +240,23 @@ describe('el techo diario que llega a la RPC sale de la FLOTA, no de una env glo
     expect(loggerError).toHaveBeenCalledWith('presupuesto_llm.tope_tenant_ilegible', expect.objectContaining({ tenantId: 'flota-caida' }));
   });
 
-  it('un límite EXPLÍCITO del llamador (el runner) no se toca ni se consulta la base', async () => {
+  it('un límite EXPLÍCITO más estricto que el de la flota (el runner) manda', async () => {
     tablas.set('tenant', { data: { config: { [LLAVE_PRESUPUESTO_LLM_TENANT]: 40 } }, error: null });
     const budget = createLlmBudget('flota-runner', RUN, 'fondo', { maxTenantDailyUsd: 2 });
     await reserveLlmBudget(budget, 0.05);
     expect(reservaEnviada()?.p_tope_tenant_usd).toBe(2);
     expect(budget.origenTope).toBe('explicito');
+  });
+
+  // A37-S60-06: un agente de fondo con presupuesto_dia_usd mayor que el techo de la flota
+  // dejaba sumar gasto tenant-wide por encima de ese techo. El explícito no sube el techo.
+  it('A37-S60-06: un límite EXPLÍCITO mayor que el techo de la flota NO lo sube: gana el de la flota', async () => {
+    tablas.set('tenant', { data: { config: { [LLAVE_PRESUPUESTO_LLM_TENANT]: 3 } }, error: null });
+    const budget = createLlmBudget('flota-runner-alto', RUN, 'fondo', { maxTenantDailyUsd: 50 });
+    await reserveLlmBudget(budget, 0.05);
+    expect(reservaEnviada()?.p_tope_tenant_usd).toBe(3);
+    expect(budget.origenTope).toBe('tenant');
+    expect(budget.maxTenantDailyUsd).toBe(3);
   });
 
   // AUDITORÍA 28, REN-A1 (mecánico): `topeDerivadoDelPlan` acota con

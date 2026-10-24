@@ -34,7 +34,7 @@ const bandera = (n) => args.includes(n);
 const { GUIONES, guionDe } = await import('../src/lib/likida/facturacion/adaptadores/portales.ts');
 const { estadoVerificacion, aplicarEntrada } = await import('../src/lib/likida/autofactura/verificacion.ts');
 const { REGISTRO_VERIFICACIONES } = await import('../src/lib/likida/autofactura/registro_verificaciones.ts');
-const { correrPrevuelo, renderizarReporte, entradaDeRegistro, sanearHtml } = await import('../src/lib/likida/autofactura/verificacion_corrida.ts');
+const { correrPrevuelo, renderizarReporte, entradaDeRegistro, sanearHtml, tiposDePiiEnHtml } = await import('../src/lib/likida/autofactura/verificacion_corrida.ts');
 
 const RAIZ = process.cwd();
 const REGISTRO_RUTA = join(RAIZ, 'src/lib/likida/facturacion/adaptadores/verificaciones.json');
@@ -118,10 +118,17 @@ if (resultado.veredicto !== 'graduable') {
   process.exit(resultado.veredicto === 'no_abrio' ? 3 : 1);
 }
 
-const entrada = entradaDeRegistro({ guion: g, resultado, confirmadoPor: quien, reporteRel, reporteTexto: reporte, capturaRel });
-writeFileSync(REGISTRO_RUTA, aplicarEntrada(readFileSync(REGISTRO_RUTA, 'utf8'), clave, entrada), 'utf8');
+// A37-S05-09: red de seguridad contra datos personales ANTES de que nada llegue a git (repo público).
+const pii = tiposDePiiEnHtml(domSaneado ?? '');
+if (pii.length > 0 && !bandera('--pii-revisada')) {
+  console.log(`NO se escribió nada en el registro ni en los fixtures: el DOM saneado parece traer ${pii.join(', ')}.`);
+  console.log(`  Revisa ${join(dir, 'dom-saneado.html')}; si es falso positivo, repite con --pii-revisada.`);
+  process.exit(4);
+}
 
 // El DOM real saneado queda como fixture `grabado` del portal (el sintético no se toca: lleva el comportamiento de emitir).
+// ORDEN: primero fixture y manifiesto, y el REGISTRO al final: si algo falla antes, el portal no queda marcado
+// como verificado sin su fixture.
 const dirFx = join(FIXTURES, clave);
 mkdirSync(dirFx, { recursive: true });
 writeFileSync(join(dirFx, 'grabado.html'), domSaneado, 'utf8');
@@ -138,6 +145,9 @@ if (manifiesto) {
   manifiesto.portales[clave] = { ...(manifiesto.portales[clave] ?? {}), grabado: { fecha: hoy, archivo: 'grabado.html' } };
   writeFileSync(manifiestoRuta, `${JSON.stringify(manifiesto, null, 2)}\n`, 'utf8');
 }
+
+const entrada = entradaDeRegistro({ guion: g, resultado, confirmadoPor: quien, reporteRel, reporteTexto: reporte, capturaRel });
+writeFileSync(REGISTRO_RUTA, aplicarEntrada(readFileSync(REGISTRO_RUTA, 'utf8'), clave, entrada), 'utf8');
 console.log(`✓ ${clave} quedó VERIFICADO (nivel prevuelo, ${hoy}, confirmado por ${quien}).`);
 console.log('  REVISA el diff: el DOM saneado (grabado.html) va a git — confirma que no trae datos de nadie. Luego commitea.');
 console.log('  Ojo: la primera emisión real de este portal sigue siendo supervisada (confirmación humana por lote y límites).');

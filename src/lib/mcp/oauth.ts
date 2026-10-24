@@ -422,8 +422,19 @@ export async function canjearCodigo(
 
   // Reuso = robo (RFC 6749 §4.1.2): el segundo canje no solo se niega — tumba
   // lo que el primero emitió.
+  //
+  // A37-S60-08: pero solo si quien reusa PRUEBA ser el cliente de ese código (cliente_id) y
+  // conoce el verifier de PKCE. El código viaja en la URL de redirección, el historial y el
+  // referrer: con solo el código, cualquiera podía hacer POST sin verifier y tumbar la sesión
+  // MCP viva de otra persona. Quien lo reusa sin esa prueba no podría canjear nada de todos
+  // modos, así que simplemente se niega (misma respuesta opaca) sin tocar la familia.
   if (fila.usado_en !== null) {
-    await revocarFamilia(fila.familia, 'codigo_reusado');
+    const pruebaDelReuso = fila.cliente_id === clientId
+      && typeof codeVerifier === 'string'
+      && codeVerifier.length >= 43 && codeVerifier.length <= 128
+      && retoS256(codeVerifier) === fila.code_challenge;
+    if (pruebaDelReuso) await revocarFamilia(fila.familia, 'codigo_reusado');
+    else logger.warn('mcp.oauth.reuso_sin_prueba', { cliente: fila.cliente_id === clientId ? 'ok' : 'distinto' });
     return { ok: false, error: 'no_valido', detalle: CANJE_INVALIDO };
   }
   if (fila.cliente_id !== clientId) return { ok: false, error: 'no_valido', detalle: CANJE_INVALIDO };
@@ -740,19 +751,56 @@ async function contarTokensVivos(clientId: string): Promise<number> {
   return count;
 }
 
-/** Clientes pendientes (los más nuevos primero). LANZA si la base falla: «no hay
+/** Tope de la cola del superadmin (A37-S60-09): una pantalla de revisión no
+ *  necesita 200 filas, y cada fila costaba una consulta de conteo. */
+const TOPE_PENDIENTES = 50;
+/** Concurrencia del conteo de respaldo (solo mientras la 0909 no esté aplicada). */
+const CONCURRENCIA_CONTEO = 10;
+
+/** Tokens vivos de varios clientes en UNA consulta agrupada (0909,
+ *  `contar_tokens_mcp_vivos`). Un cliente sin tokens no aparece: es 0 medido
+ *  por la base. Si la RPC aún no existe (migración sin aplicar: 42883 /
+ *  PGRST202) cae al conteo por cliente de antes, acotado; cualquier otro fallo
+ *  LANZA — no se afirma un 0 que nadie midió. */
+async function contarTokensVivosDe(clientIds: string[]): Promise<Map<string, number>> {
+  const vivos = new Map<string, number>();
+  if (clientIds.length === 0) return vivos;
+  const { data, error } = await supabaseAdmin().rpc('contar_tokens_mcp_vivos', { p_clientes: clientIds });
+  if (!error) {
+    for (const f of (data ?? []) as Array<{ cliente_id: string; vivos: number | string }>) {
+      vivos.set(String(f.cliente_id), Number(f.vivos));
+    }
+    return vivos;
+  }
+  const codigo = (error as { code?: string }).code;
+  if (codigo !== '42883' && codigo !== 'PGRST202') {
+    throw new Error(`mcp.oauth.contar_tokens_vivos: ${error.message}`);
+  }
+  logger.warn('mcp.oauth.contar_tokens_sin_migracion_0909', { codigo });
+  for (let i = 0; i < clientIds.length; i += CONCURRENCIA_CONTEO) {
+    const lote = clientIds.slice(i, i + CONCURRENCIA_CONTEO);
+    const cuentas = await Promise.all(lote.map((id) => contarTokensVivos(id)));
+    lote.forEach((id, k) => vivos.set(id, cuentas[k]));
+  }
+  return vivos;
+}
+
+/** Clientes pendientes (los más nuevos primero, hasta 50). LANZA si la base falla: «no hay
  *  nada por revisar» pintado sobre una base caída es la mentira que evitamos.
- *  Trae también, por cliente, sus tokens vivos (ver `ClienteParaRevision`). */
-export async function listarClientesPendientes(limite = 100): Promise<ClienteParaRevision[]> {
+ *  Trae también, por cliente, sus tokens vivos (ver `ClienteParaRevision`) con
+ *  UN conteo agrupado, no uno por fila (A37-S60-09). */
+export async function listarClientesPendientes(limite = TOPE_PENDIENTES): Promise<ClienteParaRevision[]> {
   const { data, error } = await supabaseAdmin()
     .from('mcp_oauth_cliente')
     .select('id, nombre, redirect_uris, estado, creado_en')
     .eq('estado', 'pendiente')
     .order('creado_en', { ascending: false })
     .order('id')
-    .limit(Math.max(1, Math.min(limite, 200)));
+    .limit(Math.max(1, Math.min(limite, TOPE_PENDIENTES)));
   if (error) throw new Error(`mcp_oauth_cliente: ${error.message}`);
-  return Promise.all((data ?? []).map(async (f) => {
+  const filas = data ?? [];
+  const vivos = await contarTokensVivosDe(filas.map((f) => String(f.id)));
+  return filas.map((f) => {
     const uris = Array.isArray(f.redirect_uris) ? f.redirect_uris.map(String) : [];
     const clientId = String(f.id);
     return {
@@ -762,9 +810,9 @@ export async function listarClientesPendientes(limite = 100): Promise<ClientePar
       anfitriones: anfitrionesDe(uris),
       estado: 'pendiente' as const,
       creadoEn: String(f.creado_en),
-      tokensVivos: await contarTokensVivos(clientId),
+      tokensVivos: vivos.get(clientId) ?? 0,
     };
-  }));
+  });
 }
 
 /**

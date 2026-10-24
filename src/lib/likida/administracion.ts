@@ -26,6 +26,7 @@ import { getConfig } from './config';
 import { regimenElegiblePorClave } from './perfil/preguntas';
 import type { PoliticaGasto } from './cuadre/engine';
 import { logger } from '@/lib/logger';
+import { rateLimit } from '@/lib/ratelimit';
 import { DatoInvalido } from './errores';
 import type { AjustesValidos } from './ajustes_operativos';
 import { acotada } from './presupuesto';
@@ -321,11 +322,21 @@ export function normalizarTelefonoOperador(crudo: string): string {
  * `excluirOperadorId` es para la EDICIÓN (FE-4): la ficha que se está
  * corrigiendo no choca consigo misma.
  */
+/** A37-L-seguridad-tenant-02: el rechazo por un teléfono activo en OTRA flota NO dice de quién es ni en dónde — contestar
+ *  «está en otra flota» convertía el alta y la importación en un oráculo de qué choferes trabajan para la competencia. */
+export const TELEFONO_NO_DISPONIBLE = 'Ese teléfono no se puede registrar en tu flota. Revisa que el número esté bien escrito; si es correcto, escribe a soporte de Likida para validarlo.';
+
+/** Tope de comprobaciones de duplicado por flota y hora (A37-L-seguridad-tenant-02): acota el barrido de números. */
+const COMPROBACIONES_TELEFONO_POR_HORA = 120;
+
 export async function comprobarTelefonoLibre(
   tenantId: string,
   telefono: string,
   excluirOperadorId?: string,
 ): Promise<void> {
+  if (!(await rateLimit(`tel-libre:${tenantId}`, COMPROBACIONES_TELEFONO_POR_HORA, 3_600_000))) {
+    throw new DatoInvalido('Demasiadas comprobaciones de teléfonos en la última hora. Espera un rato e inténtalo de nuevo.');
+  }
   const admin = supabaseAdmin();
   const { data: choque, error: errBusca } = await admin
     .from('operador')
@@ -344,7 +355,7 @@ export async function comprobarTelefonoLibre(
     throw new DatoInvalido(
       yaActivo.tenant_id === tenantId
         ? `Ese teléfono ya está registrado en esta flota, a nombre de ${yaActivo.nombre}.`
-        : `Ese teléfono ya está registrado en OTRA flota. Dos operadores con el mismo número harían que sus comprobantes se anoten en la flota equivocada.`,
+        : TELEFONO_NO_DISPONIBLE,
     );
   }
   const propioDeBaja = filas.find((c) => c.tenant_id === tenantId);
@@ -368,12 +379,26 @@ export function normalizarRfcOperador(crudo: string | null | undefined): string 
   return rfc;
 }
 
+/**
+ * `AAAA-MM-DD` Y que el día EXISTA. `Date.parse('2026-02-30T00:00:00Z')` en V8
+ * NO falla (da el 1 de marzo), así que el regex + `Date.parse` dejaba pasar
+ * fechas inexistentes que Postgres rechazaba después con un 22008 crudo
+ * (A37-S25-09). Mismo criterio que `fecha()` de `http/campos_cuerpo.ts`.
+ */
+function esFechaIsoReal(v: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  if (!m) return false;
+  const [a, mes, dia] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const d = new Date(Date.UTC(a, mes - 1, dia));
+  return d.getUTCFullYear() === a && d.getUTCMonth() === mes - 1 && d.getUTCDate() === dia;
+}
+
 /** Una fecha de licencia ISO, o `null` si vino vacía. Una fecha que no se
  *  pueda interpretar se guardaría vencida o vigente sin serlo. */
 export function normalizarFechaLicencia(crudo: string | null | undefined): string | null {
   const v = (crudo ?? '').trim();
   if (!v) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(`${v}T00:00:00Z`))) {
+  if (!esFechaIsoReal(v)) {
     throw new DatoInvalido(`"${crudo}" no es una fecha válida (AAAA-MM-DD).`);
   }
   return v;
@@ -540,7 +565,7 @@ export async function actualizarOperador(
       // Mismo criterio que `operador.licencia_vence` (0053): una fecha que no
       // se pueda interpretar tal cual se guardaría vencida o vigente sin
       // serlo — ninguna de las dos es honesta si lo tecleado no es una fecha.
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(`${v}T00:00:00Z`))) {
+      if (!esFechaIsoReal(v)) {
         throw new DatoInvalido(`"${cambios.licenciaVence}" no es una fecha válida (AAAA-MM-DD).`);
       }
       fila.licencia_vence = v;

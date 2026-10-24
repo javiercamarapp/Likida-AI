@@ -139,6 +139,36 @@ describe('decidirAvisos — se avisa el CAMBIO, no el estado', () => {
   });
 });
 
+// A37-S22-07: con más urgentes vigentes que el tope del estado, los excedentes se reavisaban en CADA pasada.
+describe('decidirAvisos — el desborde del tope de vistos no reavisa en cada pasada (A37-S22-07)', () => {
+  const muchos = (n: number, prefijo = 'c') => Array.from({ length: n }, (_, i) => ({ ...item('corridas', null), titulo: `${prefijo}${i}` }));
+
+  it('con 260 urgentes: la 1.ª pasada avisa las 260; la 2.ª NO avisa ninguna (antes reavisaba las ~60 excedentes)', () => {
+    const clasif = clasificarBandeja(bandeja(muchos(260)), AHORA);
+    const d1 = decidirAvisos(clasif, ESTADO_GUARDIA_INICIAL);
+    expect(d1.nuevos).toHaveLength(260);
+    const d2 = decidirAvisos(clasif, d1.estado);
+    expect(d2.nuevos).toHaveLength(0);
+    expect(d2.estado.vistos.length).toBeLessThanOrEqual(200);
+  });
+
+  it('si aparece UN urgente nuevo con el desborde vigente, se avisa y la pasada siguiente calla', () => {
+    const base = muchos(260);
+    const d1 = decidirAvisos(clasificarBandeja(bandeja(base), AHORA), ESTADO_GUARDIA_INICIAL);
+    const conUno = clasificarBandeja(bandeja([...base, { ...item('corridas', null), titulo: 'nuevo-de-verdad' }]), AHORA);
+    const d2 = decidirAvisos(conUno, d1.estado);
+    expect(d2.nuevos.map((i) => i.titulo)).toContain('nuevo-de-verdad');
+    expect(decidirAvisos(conUno, d2.estado).nuevos).toHaveLength(0);
+  });
+
+  it('si el aviso NO salió, el desborde sigue pendiente y se reintenta en la pasada siguiente', () => {
+    const clasif = clasificarBandeja(bandeja(muchos(260)), AHORA);
+    const d1 = decidirAvisos(clasif, ESTADO_GUARDIA_INICIAL);
+    const sinAviso = estadoTrasAviso(d1, false);
+    expect(decidirAvisos(clasif, sinAviso).nuevos.length).toBeGreaterThan(0);
+  });
+});
+
 describe('decidirBaseCaida — una vez por racha', () => {
   it('la primera pasada ciega avisa y marca desde cuándo; las siguientes callan', () => {
     const a = decidirBaseCaida(ESTADO_GUARDIA_INICIAL, '2026-10-03T00:00:00Z');

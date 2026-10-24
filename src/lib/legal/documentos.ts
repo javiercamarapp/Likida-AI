@@ -25,8 +25,17 @@
 
 export type DocumentoLegal = 'terminos' | 'aviso_privacidad' | 'mandato_autofacturacion';
 
-export const VERSION_TERMINOS = '2026-10-01';
-export const VERSION_AVISO_PRIVACIDAD = '2026-10-01';
+// A37-L-09: la versión de Términos y Aviso se DERIVA del texto renderizado:
+// `AAAA-MM-DD+<8 hex de la huella>`. `huella_texto.test.tsx` renderiza la página
+// real y exige que la huella coincida; como la versión lleva la huella, no se
+// puede cambiar el texto (ni la huella) sin que cambie la versión. La fecha es
+// la que imprime la página («Vigente desde»).
+export const VIGENTE_DESDE_TERMINOS = '2026-10-01';
+export const HUELLA_TERMINOS = 'c9334736bc982d10c15eb3c1f1f86574af33464eb7ceecc1af05ff70ef75a4e6';
+export const VERSION_TERMINOS = '2026-10-01+c9334736';
+export const VIGENTE_DESDE_AVISO_PRIVACIDAD = '2026-10-24';
+export const HUELLA_AVISO_PRIVACIDAD = '1ca0c8f32b899254520a801121330a59c2c26dafda414b1e1d87edf6eba4d927';
+export const VERSION_AVISO_PRIVACIDAD = '2026-10-24+1ca0c8f3';
 
 export const MANDATO_AUTOFACTURACION = {
   version: 'm-2026-10-01',

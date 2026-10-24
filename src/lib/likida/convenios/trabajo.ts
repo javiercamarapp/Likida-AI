@@ -26,8 +26,15 @@ const trozos = <T>(xs: T[], n: number): T[][] => {
   return r;
 };
 
-/** Cuántos días atrás se sigue vigilando un viaje ligado (más viejo que esto, ya no es un viaje en curso). */
-const DIAS_VIGILANCIA = 3;
+/**
+ * Cuántos días atrás se sigue vigilando un viaje ligado (más viejo que esto, ya no es un viaje en curso).
+ * A37-S40-05: eran 3 y un viaje largo (ruta larga, espera en la planta de carga, programado con anticipación) salía de la ventana
+ * y su aviso de descarga no se generaba, en silencio. Ensanchado a 7; el filtro de estatus (abierto, aceptado, con unidad) sigue
+ * acotando el trabajo. `CONGELA_RECHAZO_DEFINITIVO_DIAS` (repo.ts) debe superar este valor.
+ */
+const DIAS_VIGILANCIA = 7;
+/** A37-S40-05: páginas máximas de `viaje_convenio` que se recorren por pasada buscando viajes vivos (cota del trabajo). */
+const MAX_PAGINAS_LIGADOS = 6;
 const ids = (fs: Fila[], c: string): string[] => fs.map((f) => String(f[c]));
 
 /**
@@ -46,17 +53,26 @@ export async function leerCandidatosAcercamiento(limite: number): Promise<Candid
 async function candidatos(limite: number): Promise<CandidatoAcercamiento[]> {
   const admin = supabaseAdmin();
   const desde = new Date(Date.now() - DIAS_VIGILANCIA * 86_400_000).toISOString();
-  const ligados = exigir(await acotada(admin.from('viaje_convenio').select('viaje_id, tenant_id, acercamiento_origen_enviado_en, acercamiento_destino_enviado_en')
-    .or('acercamiento_origen_enviado_en.is.null,acercamiento_destino_enviado_en.is.null').gte('ligado_en', desde).order('ligado_en', { ascending: false }).order('viaje_id').limit(limite), 'convenios.trabajo_ligados') as never, 'convenios.trabajo_ligados') as Fila[] | null;
-  if (!ligados || ligados.length === 0) return [];
-
+  // A37-S40-05: el límite se aplicaba a `viaje_convenio` ANTES de filtrar por estatus del viaje: los viajes ya terminados con un
+  // aviso sin sellar (p. ej. el de destino) llenaban las 400 plazas y desplazaban a viajes vivos más viejos. Ahora se PAGINA y se
+  // filtra el viaje en cada página hasta juntar `limite` viajes vivos (o agotar las páginas / la ventana).
+  const ligados: Fila[] = [];
   const viajes: Fila[] = [];
-  for (const lote of trozos(ids(ligados, 'viaje_id'), 150)) {
-    const rv = await acotada(admin.from('viaje').select('id, tenant_id, unidad_id, origen_geocerca_id, destino_geocerca_id')
-      .in('id', lote).eq('estatus', 'abierto').not('aceptado_en', 'is', null).not('unidad_id', 'is', null), 'convenios.trabajo_viajes');
-    viajes.push(...((exigir(rv as never, 'convenios.trabajo_viajes') ?? []) as Fila[]));
+  for (let pagina = 0; pagina < MAX_PAGINAS_LIGADOS; pagina++) {
+    const desdeFila = pagina * limite;
+    const lig = (exigir(await acotada(admin.from('viaje_convenio').select('viaje_id, tenant_id, acercamiento_origen_enviado_en, acercamiento_destino_enviado_en')
+      .or('acercamiento_origen_enviado_en.is.null,acercamiento_destino_enviado_en.is.null').gte('ligado_en', desde).order('ligado_en', { ascending: false }).order('viaje_id').range(desdeFila, desdeFila + limite - 1), 'convenios.trabajo_ligados') as never, 'convenios.trabajo_ligados') as Fila[] | null) ?? [];
+    if (lig.length === 0) break;
+    ligados.push(...lig);
+    for (const lote of trozos(ids(lig, 'viaje_id'), 150)) {
+      const rv = await acotada(admin.from('viaje').select('id, tenant_id, unidad_id, origen_geocerca_id, destino_geocerca_id')
+        .in('id', lote).eq('estatus', 'abierto').not('aceptado_en', 'is', null).not('unidad_id', 'is', null), 'convenios.trabajo_viajes');
+      viajes.push(...((exigir(rv as never, 'convenios.trabajo_viajes') ?? []) as Fila[]));
+    }
+    if (viajes.length >= limite || lig.length < limite) break;
   }
-  if (viajes.length === 0) return [];
+  if (ligados.length === 0 || viajes.length === 0) return [];
+  if (viajes.length > limite) viajes.length = limite;
   const tenantDeLigado = new Map(ligados.map((l) => [String(l.viaje_id), String(l.tenant_id)] as const));
   const yaAvisado = new Map(ligados.map((l) => [String(l.viaje_id), { origen: !!l.acercamiento_origen_enviado_en, destino: !!l.acercamiento_destino_enviado_en }] as const));
 

@@ -116,6 +116,17 @@ describe('notificarAsignacion', () => {
     for (const p of parametros) expect(p).not.toMatch(/[\n\t]|\s{4}/);
   });
 
+  it('A37-S50-09: un origen/destino larguísimo se acota (Meta rechaza parámetros de más de 1024 caracteres)', async () => {
+    await notificarAsignacion({
+      telefono: TELEFONO,
+      viaje: { ...COMPLETO, origen: 'O'.repeat(2000), destino: 'D'.repeat(2000), folio: 'F'.repeat(500), unidad: 'U'.repeat(500) },
+      tenantId: 't-1',
+    });
+    const { parametros } = (sendTemplate.mock.calls[0] as [string, string, { parametros: string[] }])[2];
+    for (const p of parametros) expect(p.length).toBeLessThan(300);
+    expect(parametros.join('|')).not.toContain('O'.repeat(61));
+  });
+
   it('sin teléfono NO intenta enviar y dice qué falta', async () => {
     for (const telefono of [null, undefined, '', '   ', 'n/a']) {
       const r = await notificarAsignacion({ telefono, viaje: COMPLETO, tenantId: 't-1' });

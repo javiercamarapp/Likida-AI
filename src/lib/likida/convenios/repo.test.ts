@@ -68,6 +68,23 @@ describe('importarConvenios', () => {
     expect(mundo.tablas.convenio_instruccion.map((i) => i.texto)).toEqual(['Puerta 5']);
   });
 
+  it('A37-S40-06: un archivo con el convenio SIN instrucciones deja el convenio sin instrucciones (reemplaza, no conserva las viejas)', async () => {
+    await importar([['Cliente Uno', 'R', '', '', '', 'puerta', 'Entra por la puerta 3', '', '', '', '', '']]);
+    expect(mundo.tablas.convenio_instruccion).toHaveLength(1);
+    // La planta cambió de puerta: se exporta, se borran las filas de instrucción y se reimporta.
+    await importar([['Cliente Uno', 'R', '', '', '', '', '', '', '', '', '', '']]);
+    expect(mundo.tablas.convenio_instruccion).toHaveLength(0);
+  });
+
+  it('A37-S40-06: vaciar un convenio no toca las instrucciones de OTRO convenio', async () => {
+    await importar([
+      ['Cliente Uno', 'R', '', '', '', 'puerta', 'Puerta 3', '', '', '', '', ''],
+      ['Cliente Uno', 'S', '', '', '', 'puerta', 'Puerta 9', '', '', '', '', ''],
+    ]);
+    await importar([['Cliente Uno', 'R', '', '', '', '', '', '', '', '', '', '']]);
+    expect(mundo.tablas.convenio_instruccion.map((i) => i.texto)).toEqual(['Puerta 9']);
+  });
+
   it('sin permiso de finanzas no escribe dinero (y lo que ya había no se toca)', async () => {
     await importar([['Cliente Uno', 'R', '', '', '', 'puerta', 'P3', '', '', 'por_viaje', '5000', '']]);
     const p = parsearMatrizConvenios([ENC.slice(0, 9), ['Cliente Uno', 'R', '', '', '', 'puerta', 'P4', '', '']], { puedeVerFinanzas: false });

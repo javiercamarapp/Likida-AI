@@ -103,8 +103,14 @@ export interface LlmBudget {
    * de la flota es asíncrona y se hace en `reserveLlmBudget`, no aquí.
    */
   origenTope?: OrigenTopeTenant;
-  /** `true` cuando el techo de la flota ya se leyó (o era explícito). */
+  /** `true` cuando el techo de la flota ya se leyó y se cruzó con el explícito (si lo hay). */
   topeTenantResuelto?: boolean;
+  /**
+   * A37-S60-06: el tope que pidió el llamador (presupuesto diario de un agente de fondo). Ya NO
+   * reemplaza al de la flota: el efectivo es min(explícito, techo de la flota). Un agente no
+   * puede subir el techo de la flota, y uno más estricto sigue frenándose solo a sí mismo.
+   */
+  topeExplicitoUsd?: number;
 }
 
 export type OrigenTopeTenant = 'explicito' | 'tenant' | 'plan' | 'piso';
@@ -426,7 +432,9 @@ export function createLlmBudget(
     runId,
     proposito,
     origenTope: explicito ? 'explicito' : 'piso',
-    topeTenantResuelto: explicito,
+    // A37-S60-06: el explícito también se cruza con el techo de la flota en la primera reserva.
+    topeTenantResuelto: false,
+    ...(explicito ? { topeExplicitoUsd: maxTenantDailyUsd } : {}),
     // Seis rondas de Sonnet con 4k de salida caben en este techo; el límite
     // sigue siendo duro y puede bajarse sin desplegar.
     maxRunUsd: limits.maxRunUsd && limits.maxRunUsd > 0
@@ -448,9 +456,12 @@ export async function reserveLlmBudget(budget: LlmBudget, amountUsd: number): Pr
   // la RPC lo aplique (ver el bloque de arriba: tenant → plan → piso).
   if (!budget.topeTenantResuelto) {
     const t = await topeDiarioDelTenant(budget.tenantId);
-    budget.maxTenantDailyUsd = t.topeUsd;
-    budget.origenTope = t.origen;
-    budget.reservaInteractivoUsd = Number((t.topeUsd * fraccionReservaInteractivo()).toFixed(6));
+    // A37-S60-06: min(explícito, flota). El explícito solo manda cuando es MÁS estricto.
+    const explicitoManda = budget.topeExplicitoUsd !== undefined && budget.topeExplicitoUsd <= t.topeUsd;
+    const efectivo = explicitoManda ? (budget.topeExplicitoUsd as number) : t.topeUsd;
+    budget.maxTenantDailyUsd = efectivo;
+    budget.origenTope = explicitoManda ? 'explicito' : t.origen;
+    budget.reservaInteractivoUsd = Number((efectivo * fraccionReservaInteractivo()).toFixed(6));
     budget.topeTenantResuelto = true;
   }
 

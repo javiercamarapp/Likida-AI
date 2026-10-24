@@ -188,7 +188,7 @@ export default async function PaginaCotizaciones({
               <Campo nombre="salarioDia" etiqueta="Salario operador ($/día)" valorInicial={c?.salarioDia === null || c?.salarioDia === undefined ? '' : String(c.salarioDia)} />
               <Campo nombre="viaticosDia" etiqueta="Viáticos ($/día)" valorInicial={c?.viaticosDia === null || c?.viaticosDia === undefined ? '' : String(c.viaticosDia)} ayuda="si no pagas viáticos, declara 0 — no lo dejes vacío" />
               <Campo nombre="factorRegresoVacio" etiqueta="Factor de regreso (1–3)" valorInicial={c?.factorRegresoVacio === null || c?.factorRegresoVacio === undefined ? '' : String(c.factorRegresoVacio)} ayuda="1 = regreso cargado; 2 = la ruta se cobra redonda" />
-              <Campo nombre="margenObjetivoPct" etiqueta="Margen objetivo (%)" valorInicial={c?.margenObjetivoPct === null || c?.margenObjetivoPct === undefined ? '' : String(c.margenObjetivoPct)} ayuda="markup sobre el costo, 0–90" />
+              <Campo nombre="margenObjetivoPct" etiqueta="Markup objetivo sobre el costo (%)" valorInicial={c?.margenObjetivoPct === null || c?.margenObjetivoPct === undefined ? '' : String(c.margenObjetivoPct)} ayuda="precio sugerido = costo × (1 + markup), 0–90; la ganancia de abajo se muestra como margen sobre el precio, por eso es menor" />
             </FormaConAviso>
           </section>
 
@@ -266,7 +266,7 @@ function Fila({
               <span style={{ color: g.pesos < 0 ? 'var(--color-bad)' : 'var(--color-ok)' }}>
                 {mxn(g.pesos)}
                 {g.margenPct !== null && (
-                  <span className="font-normal"> ({porcentaje(g.margenPct)})</span>
+                  <span className="font-normal"> ({porcentaje(g.margenPct)} del precio)</span>
                 )}
               </span>
             )}

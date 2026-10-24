@@ -62,7 +62,7 @@ registerTool('metrica_negocio', {
     type: 'function',
     function: {
       name: 'metrica_negocio',
-      description: 'Las métricas del negocio Likida (cross-tenant): flotas dadas de alta, viajes procesados, costo de IA USD con tendencia 7d, tokens, facturas procesadas. MRR hoy es $0 — cero clientes de pago, y se dice así.',
+      description: 'Las métricas del negocio Likida (cross-tenant): flotas dadas de alta, viajes procesados, costo de IA USD con tendencia 7d, tokens, facturas procesadas. El MRR NO se mide en este sistema (mrrUsd null = no medido): no lo afirmes ni lo estimes.',
       parameters: SIN_PARAMS,
     },
   },
@@ -70,8 +70,11 @@ registerTool('metrica_negocio', {
     const r = await getResumenNegocio();
     return {
       pantalla: PANTALLA_POR_TOOL.metrica_negocio.ruta,
-      mrrUsd: 0,
-      nota_mrr: 'Cero clientes de pago (verificado): el MRR es $0 real, no un hueco de datos.',
+      // A37-S24-01: el MRR no se calcula desde ninguna fuente real (no hay
+      // lectura de suscripciones). Antes era un 0 escrito a mano con sello de
+      // «verificado» que la guardia de cifras aceptaba; null = no medido.
+      mrrUsd: null,
+      nota_mrr: 'MRR no medido: el sistema no calcula ingresos recurrentes. No lo afirmes ni lo estimes; di «no medido».',
       flotas: r.tenants,
       viajesProcesados: r.viajesProcesados,
       costoIaUsd: Math.round(r.costoIaUsd * 100) / 100,
@@ -261,7 +264,7 @@ registerTool('cobranza_saas', {
     type: 'function',
     function: {
       name: 'cobranza_saas',
-      description: 'La cobranza SaaS de Likida: facturas de mensualidad por cobrar (hoy $0 — cero clientes de pago, y se dice así).',
+      description: 'La cobranza SaaS de Likida: facturas de mensualidad pendientes o fallidas por cobrar (cero facturas no implica ausencia de clientes: esta lectura no los mide).',
       parameters: SIN_PARAMS,
     },
   },
@@ -271,7 +274,7 @@ registerTool('cobranza_saas', {
       pantalla: PANTALLA_POR_TOOL.cobranza_saas.ruta,
       facturasPorCobrar: porCobrar.length,
       detalle: porCobrar.slice(0, 10),
-      nota: porCobrar.length === 0 ? 'Cero por cobrar porque hay cero clientes de pago — es el estado real, no un hueco.' : undefined,
+      nota: porCobrar.length === 0 ? 'Cero facturas pendientes o fallidas. Esta lectura no mide cuántos clientes de pago hay: no lo infieras de este cero.' : undefined,
     };
   },
 });

@@ -43,7 +43,7 @@ vi.mock('./conv', async (original) => ({
   releaseViajeLock: (...a: unknown[]) => releaseViajeLock(...a),
 }));
 
-const { crearFlota, crearOperador, actualizarOperador, guardarPolitica, guardarAjustesOperativos, reabrirViaje, DatoInvalido, armarPolitica, mensajeParaPantalla } =
+const { crearFlota, crearOperador, actualizarOperador, guardarPolitica, guardarAjustesOperativos, reabrirViaje, DatoInvalido, armarPolitica, mensajeParaPantalla, normalizarFechaLicencia } =
   await import('./administracion');
 
 /** Nodo encadenable: `.select().eq().in().limit().maybeSingle()` → `resultado`. */
@@ -194,7 +194,7 @@ describe('crearFlota', () => {
 });
 
 describe('crearOperador', () => {
-  it('RECHAZA un teléfono que ya existe en OTRA flota', async () => {
+  it('RECHAZA un teléfono que ya existe en OTRA flota — con mensaje NEUTRO (A37-L-seguridad-tenant-02)', async () => {
     // Es la fuga entre tenants: `resolveOperador` busca por teléfono sin
     // filtrar por tenant, así que con el número repetido el gasto se anota en
     // la flota que salga primero.
@@ -204,7 +204,10 @@ describe('crearOperador', () => {
     from.mockImplementation(() => cadena({ data: [{ id: 'o-9', tenant_id: 'OTRA', nombre: 'Pedro', activo: true }], error: null }));
 
     await expect(crearOperador('t-1', { nombre: 'Juan Pérez', telefono: '9993700779' }))
-      .rejects.toThrow(/OTRA flota/i);
+      .rejects.toThrow(/no se puede registrar en tu flota/i);
+    // El mensaje no delata de quién es ni en qué flota está (oráculo de membresía entre flotas).
+    await expect(crearOperador('t-1', { nombre: 'Juan Pérez', telefono: '9993700779' }))
+      .rejects.not.toThrow(/otra flota|Pedro/i);
   });
 
   it('y también si ya está en LA MISMA flota, con un mensaje distinto', async () => {
@@ -281,7 +284,7 @@ describe('crearOperador', () => {
     }));
 
     await expect(crearOperador('t-1', { nombre: 'Juan Pérez', telefono: '9993700779' }))
-      .rejects.toThrow(/OTRA flota/i);
+      .rejects.toThrow(/no se puede registrar en tu flota/i);
   });
 
   it('FALLA CERRADO: si no se puede comprobar el duplicado, no da de alta', async () => {
@@ -332,6 +335,16 @@ function cadenaEscritura(resultado: unknown, eqs: Array<[string, unknown]> = [])
   return nodo;
 }
 
+describe('normalizarFechaLicencia — A37-S25-09', () => {
+  it('una fecha real pasa; una inexistente (30 de febrero, 31 de abril) lanza DatoInvalido', () => {
+    expect(normalizarFechaLicencia('2028-02-29')).toBe('2028-02-29');
+    expect(normalizarFechaLicencia('')).toBeNull();
+    for (const mala of ['2026-02-30', '2026-04-31', '2027-02-29', '2026-13-01']) {
+      expect(() => normalizarFechaLicencia(mala)).toThrow(DatoInvalido);
+    }
+  });
+});
+
 describe('actualizarOperador', () => {
   it('RECHAZA editar un operador de OTRA flota: 0 filas tocadas es error, no éxito silencioso', async () => {
     // El modo de fallo que esto impide: `.update().eq('tenant_id', ...)` de un
@@ -373,6 +386,12 @@ describe('actualizarOperador', () => {
 
   it('rechaza una licencia_vence que no es una fecha, sin tocar la base', async () => {
     await expect(actualizarOperador('t-1', OPERADOR_ID, { licenciaVence: 'ayer' }))
+      .rejects.toThrow(DatoInvalido);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('A37-S25-09: rechaza una fecha inexistente (2026-02-30) con DatoInvalido, sin tocar la base', async () => {
+    await expect(actualizarOperador('t-1', OPERADOR_ID, { licenciaVence: '2026-02-30' }))
       .rejects.toThrow(DatoInvalido);
     expect(from).not.toHaveBeenCalled();
   });

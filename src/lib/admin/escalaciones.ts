@@ -21,7 +21,7 @@ import { conteo, traerTodo } from '@/lib/likida/pg';
 import { mxn } from '@/lib/formato';
 import { AGENTES_NOTIFICABLES } from '@/lib/likida/agentes/notificaciones';
 import {
-  getCorridasFallidas, contarCorridasFallidas, getUltimoInicioSinFalloPorAgente, llaveRacha, type CorridaReciente,
+  getCorridasFallidas, contarCorridasFallidas, getUltimoInicioSinFalloPorAgente, getFallosVigentesPorGrupo, llaveRacha, type CorridaReciente,
   getLiquidacionesEnRevisar, contarLiquidacionesEnRevisar,
 } from './negocio';
 import { getTicketsCruzados, contarTickets, ESTADOS_TICKET_CERRADO } from './soporte';
@@ -293,9 +293,10 @@ export async function getBandejaEscalaciones(ahoraMs: number): Promise<BandejaEs
     // va a mirar. Si cualquiera de las dos lecturas falla, la fuente entera
     // cae por valor (conteo null ≠ 0), igual que las liquidaciones de abajo.
     porValor(async () => {
-      const [fallos, total] = await Promise.all([
-        getCorridasFallidas(TOPE_CORRIDAS_PARA_AGRUPAR), contarCorridasFallidas(),
-      ]);
+      // A37-P-06: ventana por agente+flota (0870). Sin la función en base cae a la ventana global de siempre.
+      const [porGrupo, total] = await Promise.all([getFallosVigentesPorGrupo(), contarCorridasFallidas()]);
+      if (porGrupo) return { items: agruparRachasDeFallo(porGrupo.fallos, porGrupo.ultimoSinFallo), total };
+      const fallos = await getCorridasFallidas(TOPE_CORRIDAS_PARA_AGRUPAR);
       const ultimoSinFallo = await getUltimoInicioSinFalloPorAgente(fallos.map((c) => ({ agente: c.agente, tenantId: c.tenantId })));
       return { items: agruparRachasDeFallo(fallos, ultimoSinFallo), total };
     }),

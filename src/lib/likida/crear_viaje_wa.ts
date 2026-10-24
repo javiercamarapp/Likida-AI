@@ -318,6 +318,14 @@ const MONTO = `(?:\\$\\s*)?(?:${NUM})${SUF}`;
 // pegaba al nombre de la ciudad ("Guadalajara con").
 const RE_ANTICIPO_DESPUES = new RegExp(String.raw`(?:\b(?:con|y|mas)\s+)?\banticipo\b\s*(?:de|por|:|=)?\s*(${MONTO})`);
 const RE_ANTICIPO_ANTES = new RegExp(String.raw`(?:\b(?:con|y|mas)\s+)?(${MONTO})\s*(?:de\s+)?anticipo\b`);
+const PALABRAS_IDENTIFICADOR = ['unidad', 'unidades', 'economico', 'eco', 'folio', 'ticket', 'remolque', 'placa', 'placas', 'hora', 'las'];
+/** ¿Lo que precede al número termina en «unidad», «eco», «folio»… (con o sin «#»/«num»/«no.»)? Sin regex anidada. */
+function antesEsIdentificador(antes: string): boolean {
+  const palabras = antes.trim().split(/\s+/);
+  let ult = palabras.pop() ?? '';
+  if (['#', 'num', 'num.', 'numero', 'no', 'no.'].includes(ult)) ult = palabras.pop() ?? '';
+  return PALABRAS_IDENTIFICADOR.includes(ult);
+}
 const RE_PESOS = new RegExp(`\\$\\s*(?:${NUM})${SUF}`, 'g');
 const RE_MENCION_ANTICIPO = /\banticipo\b/g;
 
@@ -399,7 +407,20 @@ function leerAnticipo(plano: string, tope: number): LecturaAnticipo {
   if (menciones > 1) return { valor: null, dudoso: true, plano };
 
   if (menciones === 1) {
-    const m = RE_ANTICIPO_DESPUES.exec(plano) ?? RE_ANTICIPO_ANTES.exec(plano);
+    const despues = RE_ANTICIPO_DESPUES.exec(plano);
+    const m = despues ?? RE_ANTICIPO_ANTES.exec(plano);
+    // A37-S40-02: el número a la IZQUIERDA de «anticipo» solo vale como monto si
+    // no es parte de un identificador: «unidad 7 anticipo mil quinientos» no
+    // tiene cifra a la derecha legible, y el 7 de la unidad se leía como $7.
+    // Si lo que precede al número es unidad/eco/folio/#/hora, o va pegado a un
+    // token (T-102), no es dinero: se pregunta.
+    if (m && !despues) {
+      const ini = m.index + m[0].indexOf(m[1]);
+      const antes = plano.slice(0, ini);
+      if (antesEsIdentificador(antes) || /[a-z0-9-]$/.test(antes)) {
+        return { valor: null, dudoso: true, plano };
+      }
+    }
     // Dijo "anticipo" y no hay número legible ni detrás ni delante ("anticipo
     // ocho mil quinientos", que no se parsea; "anticipo -500", que no es un
     // monto). Se pregunta, no se deja en `null`: dejarlo en `null` crearía el

@@ -1,6 +1,7 @@
 import { logger } from '@/lib/logger';
 import { getSessionTenant } from './session';
 import { tenantDemo } from './tenant-demo';
+import { leerSeleccionFlota } from './admin-context';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { mfaSuperadminObligatorio, veredictoMfaSuperadmin } from './mfa';
 import { apiDenegadaPorPerfil, MOTIVO_PERFIL_API } from './perfil_tenant';
@@ -69,7 +70,18 @@ export async function resolverTenantApi(url: string): Promise<ResultadoTenantApi
     if (s.rol !== 'superadmin') {
       return { ok: false, status: 403, motivo: 'Tu cuenta no está asignada a una flota.' };
     }
-    tenantId = tenantDemo();
+    // A37-S24-03: la flota ELEGIDA en /admin/elegir-flota (cookie firmada) manda
+    // sobre la demo — igual que `requireSessionTenant` para las páginas. Antes
+    // un link sin `?tenant=` (y TODO /v1 por cookie, que lo borra) exportaba
+    // y ESCRIBÍA en la demo bajo el rótulo de la flota elegida.
+    let seleccion: string | null = null;
+    try {
+      seleccion = await leerSeleccionFlota();
+    } catch (e) {
+      // Fuera de una petición `cookies()` lanza: se cae a la demo (lo previo).
+      logger.warn('tenant.api_seleccion_ilegible', { err: e instanceof Error ? e.message : String(e) });
+    }
+    tenantId = seleccion ?? tenantDemo();
   }
 
   const pedido = new URL(url).searchParams.get('tenant');

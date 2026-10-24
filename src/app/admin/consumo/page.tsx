@@ -159,12 +159,11 @@ export default async function ConsumoPage() {
           {/* ── ADM-6 (auditoría 24) · Por FLOTA — cuánto cuesta cada cliente ──
               Antes no existía ninguna tabla de "cuánto cuesta el cliente de demo":
               `costoIaDeTenant`/`flotas[].costoIaUsd` existían en negocio.ts
-              sin una sola pantalla que los pintara. `r.flotas` ya trae el
-              costo de IA de la MISMA ventana que las tarjetas de arriba (7
-              días por default) — cero lecturas nuevas, solo pintar lo que
-              `getResumenNegocio` ya calcula. */}
+              sin una sola pantalla que los pintara. A37-S05-02: `r.flotas`
+              trae el costo de IA HISTÓRICO (traerResumenCostoIa() sin
+              ventana), NO el de 7 días: así se rotula. */}
           <div className="card p-4">
-            <TituloSeccion>Por flota — costo de IA de la ventana (7 días)</TituloSeccion>
+            <TituloSeccion>Por flota — costo de IA histórico (todo el tiempo)</TituloSeccion>
             {!r || r.flotas.length === 0 ? (
               <p className="text-sm mt-2 m-0" style={{ color: 'var(--muted)' }}>
                 {r ? 'Sin flotas dadas de alta todavía.' : 'No se pudo leer el costo por flota.'}
@@ -176,7 +175,7 @@ export default async function ConsumoPage() {
                     <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
                       <th className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Flota</th>
                       <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Viajes</th>
-                      <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Costo de IA</th>
+                      <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Costo de IA (histórico)</th>
                     </tr>
                   </thead>
                   <tbody>

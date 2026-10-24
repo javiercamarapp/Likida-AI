@@ -71,7 +71,7 @@ export default function Calles({ prospectos, titulo, obtenerTextos, pedirTextos,
           // NOSOTROS construimos y codificamos) — lo único del prospecto que
           // entra crudo al HTML pasa por `escapar`.
           const boton = (href: string, texto: string, fondo: string, tinta: string) =>
-            `<a href="${href}" target="_blank" rel="noreferrer" style="display:inline-block;margin:2px 4px 0 0;padding:3px 8px;border-radius:8px;background:${fondo};color:${tinta};text-decoration:none;font-weight:600">${texto}</a>`;
+            `<a href="${escapar(href)}" target="_blank" rel="noreferrer" style="display:inline-block;margin:2px 4px 0 0;padding:3px 8px;border-radius:8px;background:${fondo};color:${tinta};text-decoration:none;font-weight:600">${texto}</a>`;
           const apagado = (texto: string, fondo: string, tinta: string) =>
             `<span title="El mensaje del agente experto viene en camino" style="display:inline-block;margin:2px 4px 0 0;padding:3px 8px;border-radius:8px;background:${fondo};color:${tinta};font-weight:600;opacity:.5">${texto}</span>`;
           // El contenido se arma AL ABRIR (FE-16): las notas y el mensaje

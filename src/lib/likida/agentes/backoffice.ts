@@ -838,6 +838,8 @@ export interface DatosLegal {
   publicaciones: Lectura<Publicacion[]>;
   entidad: ReturnType<typeof estadoLegalProduccion>;
   arco: Lectura<ArcoPendiente[]>;
+  /** Conteo exacto de solicitudes pendientes (A37-S25-06); null = no se midió. Si excede las filas leídas, el parte lo declara. */
+  arcoTotal?: number | null;
   societarios: Lectura<PendienteSocietario[]>;
 }
 
@@ -886,6 +888,9 @@ export function armarParteLegal(d: DatosLegal): { cuerpo: string; vencidas: numb
       const reloj = restan < 0 ? `VENCIDA hace ${numero(-restan)} día(s)` : restan === 0 ? 'VENCE HOY' : `restan ${numero(restan)} día(s)`;
       lineas.push(`  ${s.id.slice(0, 8)} · ${s.tipo} · ${s.estado} · recibida ${s.recibidaEn.slice(0, 10)} · vence ${s.venceEn} — ${reloj}.`);
     }
+    if (typeof d.arcoTotal === 'number' && d.arcoTotal > d.arco.valor.length) {
+      lineas.push(`  ATENCIÓN: hay ${numero(d.arcoTotal)} solicitudes pendientes y esta lista muestra solo las ${numero(d.arco.valor.length)} que vencen primero. Revisa /admin/compliance.`);
+    }
     lineas.push('  Likida es ENCARGADA: la responsable frente al titular es la flota. Este reloj existe porque un plazo que nadie mira se vence igual.');
   }
 
@@ -912,21 +917,22 @@ export function armarParteLegal(d: DatosLegal): { cuerpo: string; vencidas: numb
   return { cuerpo: lineas.join('\n'), vencidas };
 }
 
-async function leerArcoPendientes(): Promise<ArcoPendiente[]> {
-  const { data, error } = await acotada(supabaseAdmin()
+async function leerArcoPendientes(): Promise<{ filas: ArcoPendiente[]; total: number | null }> {
+  const { data, error, count } = await acotada(supabaseAdmin()
     .from('solicitud_arco')
-    .select('id, tipo, estado, recibida_en, vence_en')
+    .select('id, tipo, estado, recibida_en, vence_en', { count: 'exact' })
     .in('estado', ['recibida', 'en_proceso'])
     .order('vence_en', { ascending: true })
     .limit(200), 'backoffice.arco');
   if (error) throw new Error(`leerArcoPendientes: ${error.message}`);
-  return ((data ?? []) as Array<Record<string, unknown>>).map((f) => ({
+  const filas = ((data ?? []) as Array<Record<string, unknown>>).map((f) => ({
     id: String(f.id),
     tipo: String(f.tipo),
     estado: String(f.estado),
     recibidaEn: String(f.recibida_en),
     venceEn: String(f.vence_en),
   }));
+  return { filas, total: typeof count === 'number' ? count : null };
 }
 
 async function leerSocietarios(): Promise<PendienteSocietario[]> {
@@ -952,25 +958,39 @@ async function correrLegalCompliance(disparo: DisparoCorrida, hoy: string): Prom
   const lunes = lunesDe(hoy);
   const titulo = `Legal — semana del ${lunes}`;
   try {
-    if (await parteExistente(agente, titulo)) {
-      await anotar(agente, inicio, 'ok', disparo, { parte: 'ya_existia', titulo });
-      return { piezas: 0, motivo: 'el parte legal de esta semana ya está en la bandeja' };
+    // A37-S25-06 — EL RELOJ ARCO NO ES SEMANAL: se lee y se alerta en CADA pasada,
+    // aunque el parte de la semana ya exista (antes el retorno anticipado dejaba un
+    // plazo legal sin alerta hasta el lunes siguiente).
+    let arcoTotal: number | null = null;
+    const arco = await porValor('solicitudes ARCO', async () => {
+      const r = await leerArcoPendientes();
+      arcoTotal = r.total;
+      return r.filas;
+    });
+    let vencidasAhora = 0; let porVencer = 0;
+    for (const sol of arco.valor ?? []) {
+      const restan = diasEntre(hoy, sol.venceEn);
+      if (restan < 0) vencidasAhora += 1; else if (restan <= 2) porVencer += 1;
     }
-    const [publicaciones, arco, societarios] = await Promise.all([
-      porValor('publicación de los avisos', () => comprobarPublicacion()),
-      porValor('solicitudes ARCO', () => leerArcoPendientes()),
-      porValor('pendientes societarios', () => leerSocietarios()),
-    ]);
-    const datos: DatosLegal = { hoy, lunes, publicaciones, entidad: estadoLegalProduccion(), arco, societarios };
-    const { cuerpo, vencidas } = armarParteLegal(datos);
-
-    // Un plazo legal vencido no espera a que alguien abra la bandeja.
-    if (vencidas > 0) {
+    if (vencidasAhora > 0 || porVencer > 0) {
       await alertarOperador('backoffice.legal_compliance', {
-        error: `${vencidas} solicitud(es) ARCO con el plazo del art. 31 LFPDPPP VENCIDO. El parte está en la bandeja.`,
-        codigo: 'legal_arco_vencida',
+        error: vencidasAhora > 0
+          ? `${vencidasAhora} solicitud(es) ARCO con el plazo del art. 31 LFPDPPP VENCIDO${porVencer > 0 ? ` y ${porVencer} por vencer en 2 días o menos` : ''}.`
+          : `${porVencer} solicitud(es) ARCO vencen en 2 días o menos (art. 31 LFPDPPP).`,
+        codigo: vencidasAhora > 0 ? 'legal_arco_vencida' : 'legal_arco_por_vencer',
       });
     }
+    if (await parteExistente(agente, titulo)) {
+      await anotar(agente, inicio, 'ok', disparo, { parte: 'ya_existia', titulo, arco_vencidas: arco.valor ? vencidasAhora : null, arco_por_vencer: arco.valor ? porVencer : null });
+      return { piezas: 0, motivo: 'el parte legal de esta semana ya está en la bandeja' };
+    }
+    const [publicaciones, societarios] = await Promise.all([
+      porValor('publicación de los avisos', () => comprobarPublicacion()),
+      porValor('pendientes societarios', () => leerSocietarios()),
+    ]);
+    const datos: DatosLegal = { hoy, lunes, publicaciones, entidad: estadoLegalProduccion(), arco, arcoTotal, societarios };
+    const { cuerpo, vencidas } = armarParteLegal(datos);
+
     const ciegas = [publicaciones, arco, societarios].filter((f) => f.error !== null).map((f) => f.error as string);
     const res = await encolarParte(agente, 'parte_legal', titulo, cuerpo, {
       arco_pendientes: arco.valor?.length ?? null,
@@ -1246,23 +1266,26 @@ async function correrTalento(disparo: DisparoCorrida, hoy: string, venceEnVuelta
       };
     }
 
-    // Y AHORA sí, lo semanal: el parte. Si el de esta semana ya está, la
-    // corrida no fue en balde — cribó lo que llegó desde entonces, y eso es
-    // lo que se anota.
-    if (await parteExistente(agente, titulo)) {
+    // A37-S25-05 — NO SE FABRICA UN PARTE VACÍO: un «sin candidatos nuevos» del
+    // lunes sellaba el título de la semana (índice único por periodo) y los
+    // candidatos cribados de martes a domingo no aparecían en ningún parte.
+    // Sin cribados en esta corrida no hay nada que reportar: se anota y se sigue.
+    if (cribados.length === 0) {
       await anotar(agente, inicio, 'ok', disparo,
-        { parte: 'ya_existia', titulo, cribados: cribados.length },
-        { tareasHechas: cribados.length, tareasTotal: cribados.length });
-      return {
-        piezas: 0,
-        motivo: cribados.length === 0
-          ? 'el parte de talento de esta semana ya está en la bandeja y no había candidatos nuevos por cribar'
-          : `el parte de talento de esta semana ya está en la bandeja; se cribaron ${numero(cribados.length)} candidato(s) nuevo(s) — entran al parte de la semana que viene`,
-      };
+        { parte: 'sin_candidatos_nuevos', titulo, cribados: 0 },
+        { tareasHechas: 0, tareasTotal: 0 });
+      return { piezas: 0, motivo: 'no había candidatos nuevos por cribar — no se fabrica un parte vacío que selle la semana' };
     }
 
+    // Si el parte de la semana ya existe, los cribados de ESTA corrida (cada
+    // candidato pasa a 'cribado' una sola vez, así que cada uno aparece en
+    // exactamente un parte) salen en un parte de actualización con título
+    // propio: no esperan al lunes siguiente.
+    const yaHayParte = await parteExistente(agente, titulo);
+    const tituloParte = yaHayParte ? `${titulo} — actualización ${inicio.toISOString().slice(0, 16)}Z` : titulo;
+
     const cuerpo = armarParteTalento(vacantes, cribados, Math.max(0, porCribar.length - lote.length), lunes);
-    const res = await encolarParte(agente, 'parte_talento', titulo, cuerpo, {
+    const res = await encolarParte(agente, 'parte_talento', tituloParte, cuerpo, {
       vacantes: vacantes.map((v) => v.clave),
       cribados: cribados.length,
       consultas: ['vacante (abiertas)', 'candidato (recibidos)'],

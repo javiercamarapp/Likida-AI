@@ -216,6 +216,7 @@ export async function cuadrarDesdeDB(
     // Liquidación, editable por flota (default 0.85 — el que era fijo).
     umbralConfianza: config.agentes.liquidacion.umbralConfianza,
     ruta: viaje.destino,
+    rutaOrigen: viaje.origen,
     empresaRfc: config.empresa.rfc,
     rfcsAdicionales: config.empresa.rfcsAdicionales,
     hidrocarburos: config.hidrocarburos,

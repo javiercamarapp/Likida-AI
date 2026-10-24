@@ -84,6 +84,9 @@ const MARGEN_RELOJ_MS = margenUnidadAtomicaMs({ consultas: 11, envios: 0 });
 // ═══════════════════════════════════════════════════════════════════════════
 
 export async function GET(req: Request) {
+  // A37-S09-06: el reloj arranca ANTES del prólogo (puerta, interruptores): `maxDuration` corre desde que Vercel
+  // invoca, no desde que termina la lectura de la base.
+  const entrada = Date.now();
   const puerta = await puertaCron('gps', req, 'El GPS no se sincroniza sin él.');
   if (puerta) return puerta;
 
@@ -108,7 +111,7 @@ export async function GET(req: Request) {
   // El reloj de ESTA invocación, uno solo para las dos fases (molde de
   // `descarga-sat`). Se cuenta desde aquí y no desde dentro del motor:
   // `maxDuration` corre desde que Vercel invoca.
-  const venceEn = Date.now() + maxDuration * 1000 - MARGEN_RELOJ_MS;
+  const venceEn = entrada + maxDuration * 1000 - MARGEN_RELOJ_MS;
 
   try {
     // Los EVENTOS DE SEGURIDAD de las cámaras del cliente van en la MISMA

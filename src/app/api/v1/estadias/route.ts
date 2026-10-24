@@ -47,6 +47,10 @@ export async function GET(req: Request) {
     return fallo('v1.estadias', e, { tenant: acceso.tenantId });
   }
   const hasta = p.get('hasta') ?? diaEnZona(new Date(), zona);
+  // A37-S11-04: `hasta` se valida ANTES de usarlo para derivar `desde` (un `hasta=foo` sin `desde` lanzaba un RangeError
+  // fuera del try y el cliente recibía un 500 sin cuerpo de la API).
+  const dia = rangoDeDias(hasta, hasta, 93, zona);
+  if ('error' in dia) return errorApi('parametro_invalido', dia.error);
   const desde = p.get('desde') ?? new Date(new Date(`${hasta}T12:00:00-06:00`).getTime() - 6 * 86_400_000).toISOString().slice(0, 10);
   const rango = rangoDeDias(desde, hasta, 93, zona);
   if ('error' in rango) return errorApi('parametro_invalido', rango.error);

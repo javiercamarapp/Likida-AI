@@ -1720,6 +1720,24 @@ export async function registrarSolicitudArco(opts: {
   canal: string;
 }): Promise<boolean> {
   const { venceArco } = await import('./privacidad');
+  // A37-L-11: tres mensajes «PRIVACIDAD» del mismo titular no son tres
+  // solicitudes. Si ya hay una ABIERTA del mismo titular (teléfono) y tipo, esa
+  // es la constancia —con su plazo original, que no se reinicia— y no se abre
+  // otra. Si la consulta falla se registra de todos modos: un duplicado es
+  // mejor que dejar al titular sin constancia.
+  const { data: previas, error: errPrevias } = await acotada(supabaseAdmin().from('solicitud_arco')
+    .select('id')
+    .eq('tenant_id', opts.tenantId)
+    .eq('titular_ref', opts.titularRef)
+    .eq('tipo', opts.tipo)
+    .in('estado', ['recibida', 'en_proceso'])
+    .order('recibida_en')
+    .order('id')
+    .limit(1), 'registrarSolicitudArco.previa');
+  if (!errPrevias && Array.isArray(previas) && previas.length > 0) {
+    logger.info('arco.ya_registrada', { tenant: opts.tenantId, tipo: opts.tipo, id: (previas[0] as { id?: string }).id });
+    return true;
+  }
   const { data, error } = await acotada(supabaseAdmin().from('solicitud_arco').insert({
     tenant_id: opts.tenantId,
     operador_id: opts.operadorId,
@@ -1902,7 +1920,9 @@ export async function resolverSolicitudArco(
 
   // Envío best-effort: si el titular está fuera de la ventana de 24h o el
   // número no está whitelisted, el texto no sale — la flota lo entrega aparte.
-  const telefono = (sol.titular_ref as string | null) ?? (sol.operador_id as string | null) ?? null;
+  // A37-L-02: antes caía a `operador_id` (un UUID) como «teléfono»: sus dígitos se volvían
+  // un destinatario falso. Sin titular_ref no hay a quién escribirle.
+  const telefono = (sol.titular_ref as string | null) ?? null;
   if (!telefono) return { enviada: false, error: 'sin teléfono del titular' };
   try {
     // AUDITORÍA 16, MEDIO: la plantilla lleva {{1}} = razón social REAL de la

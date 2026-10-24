@@ -329,7 +329,8 @@ export function resumen(lista: TicketPorFacturar[]) {
     urgentes: lista.filter((t) => t.caducidad.urgente && !t.caducidad.vencido).length,
     sinComercio: lista.filter((t) => t.comercio === null).length,
     montoTotal: lista.reduce((s, t) => s + t.monto, 0),
-    // Lo que se pierde si nadie los factura: el IVA de lo vencido.
+    // Monto del GASTO de lo vencido en el portal del comercio (no es IVA perdido:
+    // el derecho legal a exigir la factura vive todo el ejercicio).
     montoVencido: lista.filter((t) => t.caducidad.vencido).reduce((s, t) => s + t.monto, 0),
   };
 }

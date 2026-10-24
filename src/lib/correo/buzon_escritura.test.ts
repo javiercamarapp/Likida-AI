@@ -18,6 +18,7 @@ type Registro = {
   payload: unknown;
   eq: Array<[string, unknown]>;
   select: string | null;
+  is: Array<[string, unknown]>;
 };
 
 type Respuesta = { data: unknown; error: { message: string; code?: string } | null };
@@ -34,13 +35,14 @@ function contestar(tabla: string): Respuesta {
 }
 
 function builder(tabla: string) {
-  const r: Registro = { tabla, op: null, payload: null, eq: [], select: null };
+  const r: Registro = { tabla, op: null, payload: null, eq: [], select: null, is: [] };
   llamadas.push(r);
   const b: Record<string, unknown> = {};
   b.insert = (p: unknown) => { r.op = 'insert'; r.payload = p; return b; };
   b.update = (p: unknown) => { r.op = 'update'; r.payload = p; return b; };
   b.select = (cols: string) => { r.select = cols; if (!r.op) r.op = 'select'; return b; };
   b.eq = (c: string, v: unknown) => { r.eq.push([c, v]); return b; };
+  b.is = (c: string, v: unknown) => { r.is.push([c, v]); return b; };
   b.maybeSingle = async () => contestar(tabla);
   // El builder de supabase-js es "thenable": las cadenas sin `.single()` se
   // esperan directo (y `acotada` les hace Promise.race encima).
@@ -135,8 +137,37 @@ describe('generarBuzon — el token que viaja y a qué va anclado', () => {
   });
 
   it('0 filas tocadas LANZA: una flota que no existe no tiene buzón "generado"', async () => {
-    colas.set('tenant', [{ data: [], error: null }]);
+    // A37-S24-02: generar solo escribe si no hay token; con 0 filas relee y
+    // ahí detecta que la flota no existe (2.ª respuesta = lectura).
+    colas.set('tenant', [{ data: [], error: null }, { data: null, error: null }]);
     await expect(generarBuzon(TENANT)).rejects.toThrow(/la flota no existe/);
+  });
+
+  // A37-S24-02: doble clic / pestaña vieja con «Generar» no reemplaza el token vivo.
+  it('A37-S24-02: generar solo actualiza si buzon_token es null (.is) y no deja rastro de «generado» si no escribió', async () => {
+    colas.set('tenant', [{ data: [{ id: TENANT }], error: null }]);
+    await generarBuzon(TENANT);
+    const [upd] = updatesDeTenant();
+    expect(upd.is).toContainEqual(['buzon_token', null]);
+  });
+
+  it('A37-S24-02: si ya había token (0 filas por la guarda) devuelve el EXISTENTE sin rotarlo ni anotar «generado»', async () => {
+    colas.set('tenant', [
+      { data: [], error: null },
+      { data: { buzon_token: 'abcdefghjkmnpqrstvwxyz23' }, error: null },
+    ]);
+    const r = await generarBuzon(TENANT, { id: 'u-1' });
+    expect(r.token).toBe('abcdefghjkmnpqrstvwxyz23');
+    expect(r.direccion).toBe('f-abcdefghjkmnpqrstvwxyz23@mail.likida.ai');
+    expect(updatesDeTenant()).toHaveLength(1);
+    expect(llamadas.filter((l) => l.tabla === 'bitacora_auditoria')).toHaveLength(0);
+  });
+
+  it('A37-S24-02: rotar SÍ reemplaza un token vivo (sin guarda .is) — es la confirmación explícita', async () => {
+    colas.set('tenant', [{ data: [{ id: TENANT }], error: null }]);
+    await rotarBuzon(TENANT, { id: 'u-1' });
+    const [upd] = updatesDeTenant();
+    expect(upd.is).toEqual([]);
   });
 
   it('el token NO viaja a la bitácora ni al logger', async () => {

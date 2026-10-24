@@ -42,6 +42,9 @@ function ilegible(interruptor: NombreInterruptor) {
 }
 
 export async function GET(req: Request) {
+  // A37-S09-06: el reloj arranca ANTES del prólogo (puerta, interruptores): `maxDuration` corre desde que Vercel
+  // invoca, no desde que termina la lectura de la base.
+  const entrada = Date.now();
   const puerta = await puertaCron('jornada-alertas', req, 'La alerta de tope de jornada no corre sin él.');
   if (puerta) return puerta;
 
@@ -58,7 +61,7 @@ export async function GET(req: Request) {
 
   let latido: { estado: EstadoLatido; detalle: Record<string, unknown> } = { estado: 'fallo', detalle: { codigo: 'corrida_sin_cerrar' } };
   try {
-    const venceEn = Date.now() + (maxDuration * 1000) - MARGEN_MS;
+    const venceEn = entrada + (maxDuration * 1000) - MARGEN_MS;
     // Las flotas con perfil (0770) se saltan: la jornada es un módulo en stand-by.
     const excluirTenants = await tenantsConPerfilASaltar('jornada-alertas');
     const r = await correrAlertasTope(puertosAlertaReales, { venceEn, excluirTenants });

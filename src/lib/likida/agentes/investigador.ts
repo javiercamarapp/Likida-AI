@@ -287,6 +287,25 @@ export function separarPorDominio(
   return { propios, ajenos };
 }
 
+/** A37-S28-05: marca del dossier «provisional» que deja una caída del sitio declarado. Formato `MARCA|n|texto`,
+ *  con n = intentos fallidos. NO es un dossier investigado: `candidatosSinDossier` lo reintenta tras 24 h
+ *  (hasta `MAX_INTENTOS_SITIO_CAIDO`) y un fallo posterior jamás pisa un dossier real con él. */
+export const MARCA_SITIO_CAIDO = 'SITIO_NO_RESPONDIO';
+export const MAX_INTENTOS_SITIO_CAIDO = 5;
+const REINTENTO_SITIO_CAIDO_MS = 24 * 60 * 60 * 1000;
+
+function intentosSitioCaido(datos: unknown): number | null {
+  if (!Array.isArray(datos)) return null;
+  for (const d of datos) {
+    const t = (d as { dato?: unknown } | null)?.dato;
+    if (typeof t === 'string' && t.startsWith(`${MARCA_SITIO_CAIDO}|`)) {
+      const n = Number(t.split('|')[1]);
+      return Number.isFinite(n) ? n : 1;
+    }
+  }
+  return null;
+}
+
 export interface ResultadoInvestigacion {
   prospectoId: string;
   paginasLeidas: number;
@@ -368,10 +387,17 @@ export async function investigarProspecto(
       // crédito agotado. Clase + detalle corto a la bitácora; mensaje limpio
       // (≤ 200) + status + rol al log. Nunca llaves, cabeceras ni cuerpos.
       const fallo = clasificarFalloModelo(e);
+      // A37-S28-04: una extracción ilegible o truncada SÍ se cobró. Con `usage` del error se anota ese costo; un
+      // rechazo previo a generar (auth/crédito/límite/modelo) costó 0; lo demás (red, sin usage) queda NULL =
+      // DESCONOCIDO, que el runner trata como gasto no medido (fail closed), jamás como cero.
+      const usage = (e as { usage?: { cost?: unknown } } | null)?.usage;
+      const costoFallo = typeof usage?.cost === 'number' ? usage.cost
+        : ['auth', 'credito', 'limite', 'modelo_no_disponible'].includes(fallo.clase) ? 0 : undefined;
       await registrarCorrida(null, 'enriquecedor', {
         inicio, fin: new Date(), estado: 'fallo', disparo,
         resumen: { prospecto: prospectoId, paginas: paginas.length },
         error: `El modelo no pudo extraer el dossier (${fallo.clase}: ${fallo.detalle})`,
+        costoUsd: costoFallo,
       });
       logger.error('investigador.modelo_fallo', {
         prospecto: prospectoId, clase: fallo.clase, status: fallo.status, rol: 'back_office', err: fallo.mensaje,
@@ -419,7 +445,26 @@ export async function investigarProspecto(
       fuente: c.fuente,
     })),
   ];
-  const { error: errDossier } = await supabaseAdmin().from('prospecto_dossier').upsert({
+  // A37-S28-05: el sitio declarado no respondió (0 páginas). Un dossier todo-null con `investigado_en` puesto
+  // quedaba como «investigado» PARA SIEMPRE (el prospecto nunca se reinvestigaba) y un re-run con el sitio caído
+  // pisaba un dossier bueno con nulos. Ahora: si ya hay un dossier REAL no se toca; si no, se deja uno provisional
+  // marcado que `candidatosSinDossier` reintenta.
+  const sitioCaido = Boolean(sitio && /^https?:\/\//i.test(sitio)) && paginas.length === 0;
+  let saltarDossier = false;
+  if (sitioCaido) {
+    const { data: previo, error: errPrevio } = await supabaseAdmin()
+      .from('prospecto_dossier').select('datos, fuentes').eq('prospecto_id', prospectoId).maybeSingle();
+    if (errPrevio) throw new Error(`investigarProspecto.dossier_previo: ${errPrevio.message}`);
+    const previoFila = previo as { datos?: unknown; fuentes?: unknown } | null;
+    const intentosPrevios = previoFila ? intentosSitioCaido(previoFila.datos) : null;
+    if (previoFila && intentosPrevios === null) {
+      saltarDossier = true; // dossier real: no se pisa con nulos
+      aviso = `${aviso ?? ''} Dossier previo conservado.`.trim();
+    } else {
+      hallazgosConAjenos.unshift({ dato: `${MARCA_SITIO_CAIDO}|${(intentosPrevios ?? 0) + 1}|El sitio declarado no respondió; se reintenta.`, fuente: sitio ?? '' });
+    }
+  }
+  const { error: errDossier } = saltarDossier ? { error: null } : await supabaseAdmin().from('prospecto_dossier').upsert({
     prospecto_id: prospectoId,
     historia: extraccion.historia,
     empleados: extraccion.empleados,
@@ -436,6 +481,7 @@ export async function investigarProspecto(
       inicio, fin: new Date(), estado: 'fallo', disparo,
       resumen: { prospecto: prospectoId },
       error: 'El dossier no se pudo guardar.',
+      costoUsd,
     });
     throw new Error(`investigarProspecto.dossier: ${errDossier.message}`);
   }
@@ -457,7 +503,8 @@ export async function investigarProspecto(
       prospecto: prospectoId, paginas: paginas.length, correos_nuevos: correosNuevos,
       ...(aviso ? { aviso } : {}),
     },
-    costoUsd: costoUsd || undefined,
+    // 0 MEDIDO (sin llamada al modelo) se anota como 0, no como NULL: NULL = desconocido (A37-S28-04).
+    costoUsd,
   });
   return { prospectoId, paginasLeidas: paginas.length, correosNuevos, costoUsd, aviso };
 }
@@ -506,10 +553,19 @@ export async function candidatosSinDossier(limite: number): Promise<string[]> {
     const ids = pagina.map((f) => f.id);
     const { data: hechos, error: errHechos } = await acotada(supabaseAdmin()
       .from('prospecto_dossier')
-      .select('prospecto_id')
+      .select('prospecto_id, datos, investigado_en')
       .in('prospecto_id', ids), 'investigador.hechos');
     if (errHechos) throw new Error(`candidatosSinDossier: ${errHechos.message}`);
-    const ya = new Set(((hechos ?? []) as Array<{ prospecto_id: string }>).map((f) => f.prospecto_id));
+    // Un dossier provisional por caída del sitio NO cuenta como investigado una vez vencido el reintento.
+    const ahora = Date.now();
+    const ya = new Set(((hechos ?? []) as Array<{ prospecto_id: string; datos?: unknown; investigado_en?: string | null }>)
+      .filter((f) => {
+        const n = intentosSitioCaido(f.datos);
+        if (n === null || n >= MAX_INTENTOS_SITIO_CAIDO) return true;
+        const t = f.investigado_en ? Date.parse(f.investigado_en) : NaN;
+        return !(Number.isFinite(t) && ahora - t >= REINTENTO_SITIO_CAIDO_MS);
+      })
+      .map((f) => f.prospecto_id));
     for (const f of pagina) {
       if (!ya.has(f.id)) {
         encontrados.push(f.id);

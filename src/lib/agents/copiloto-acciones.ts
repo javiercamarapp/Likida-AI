@@ -189,6 +189,10 @@ export async function ejecutarAccionCopiloto(
     // sin `venceEn` el runner podía correr más de lo que la invocación
     // aguanta y Vercel la mataba a media vuelta, sin que nada del parte se
     // guardara. 45 s deja margen para la escritura del resultado.
+    // A37-S23-07: la INTENCIÓN se anota ANTES de correr. Si la función muere
+    // en maxDuration o la escritura final falla, el agente enviador pudo haber
+    // mandado un correo real: sin esta fila no quedaría quién lo pidió ni por qué.
+    await anotarCorridaEnBitacora(userId, motivo, { objetivo: soloAgente ?? 'todos' }, 'runner.corrida_manual_inicio');
     const r = await correrRunner(soloAgente, undefined, { venceEn: Date.now() + 45_000 });
     // Se firma TAMBIÉN la vuelta que el kill switch dejó en nada: la acción
     // confirmada fue "correr el runner", y eso es lo que la bitácora audita.
@@ -226,17 +230,18 @@ async function anotarCorridaEnBitacora(
   userId: string,
   motivo: string,
   detalle: Record<string, unknown>,
+  accion: 'runner.corrida_manual' | 'runner.corrida_manual_inicio' = 'runner.corrida_manual',
 ): Promise<void> {
   try {
     await anotarBitacora(
       { tenantId: null, // el runner barre TODAS las flotas: acción de plataforma
-        actor: { id: userId }, accion: 'runner.corrida_manual', entidad: 'runner', entidadId: 'nivel2',
+        actor: { id: userId }, accion, entidad: 'runner', entidadId: 'nivel2',
         detalle: { motivo, ...detalle } },
       { evento: 'copiloto.bitacora_no_escribio' },
     );
   } catch (e) {
     logger.warn('copiloto.bitacora_no_escribio', {
-      accion: 'runner.corrida_manual',
+      accion,
       err: e instanceof Error ? e.message : String(e),
     });
   }

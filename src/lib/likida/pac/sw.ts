@@ -45,7 +45,7 @@ export function _limpiarTokenSw(): void {
   tokenCache = null;
 }
 
-async function autenticar(cfg: ConfigSw): Promise<string | { error: ResultadoTimbre & { ok: false } }> {
+async function autenticar(cfg: ConfigSw): Promise<string | { error: ResultadoTimbre & { ok: false }; sinRed?: true }> {
   const llave = `${cfg.urlBase}|${cfg.usuario}`;
   if (tokenCache !== null && tokenCache.llave === llave && Date.now() - tokenCache.desde < TOKEN_CACHE_MS) {
     return tokenCache.token;
@@ -60,7 +60,7 @@ async function autenticar(cfg: ConfigSw): Promise<string | { error: ResultadoTim
   } catch (e) {
     // A37-S51-10: sin respuesta del PAC ni para autenticar NO es ambiguo: autenticar no timbra ni cancela nada, así que NO hay
     // timbre que verificar. Se clasifica 'auth' (no 'red'): quien timbra suelta la reserva y reintenta en vez de bloquear el viaje.
-    return { error: { ok: false, clase: 'auth', codigo: null, mensaje: `Sin respuesta del PAC al autenticar: ${e instanceof Error ? e.message : String(e)}` } };
+    return { error: { ok: false, clase: 'auth', codigo: null, mensaje: `Sin respuesta del PAC al autenticar: ${e instanceof Error ? e.message : String(e)}` }, sinRed: true };
   }
   let cuerpo: unknown = null;
   try { cuerpo = await res.json(); } catch { /* cuerpo no-JSON: se trata abajo */ }
@@ -79,6 +79,12 @@ async function autenticar(cfg: ConfigSw): Promise<string | { error: ResultadoTim
   }
   tokenCache = { token, desde: Date.now(), llave };
   return token;
+}
+
+/** A37-L-04: la CANCELACIÓN conserva su trato conservador: sin red al autenticar sigue siendo 'red' (la fila queda 'solicitada',
+ *  no 'rechazada'); el timbre, en cambio, lo trata como 'auth' (nada se envió: suelta la reserva y reintenta). */
+function errorCancelacion(a: { error: ResultadoTimbre & { ok: false }; sinRed?: true }): ResultadoCancelacion & { ok: false } {
+  return a.sinRed ? { ...a.error, clase: 'red' } : a.error;
 }
 
 interface RespuestaIssue {
@@ -215,7 +221,7 @@ export function crearProveedorSw(cfg: ConfigSw): ProveedorPac {
       }
 
       const auth = await autenticar(cfg);
-      if (typeof auth !== 'string') return auth.error;
+      if (typeof auth !== 'string') return errorCancelacion(auth);
 
       const ruta = [s.rfcEmisor, s.uuid, s.motivo, ...(s.folioSustitucion ? [s.folioSustitucion] : [])]
         .map(encodeURIComponent).join('/');
@@ -231,7 +237,7 @@ export function crearProveedorSw(cfg: ConfigSw): ProveedorPac {
         if (res.status === 401 && tokenCache !== null) {
           tokenCache = null;
           const fresco = await autenticar(cfg);
-          if (typeof fresco !== 'string') return fresco.error;
+          if (typeof fresco !== 'string') return errorCancelacion(fresco);
           res = await llamar(fresco);
         }
       } catch (e) {

@@ -161,7 +161,7 @@ puede colgarse de él). El cliente **jala** con su llave de API:
 | Ruta | Área | Para qué |
 |---|---|---|
 | `GET /v1/liquidaciones-externas/acuses` | `dinero` | Los acuses de los choferes (`recibida` / `no_coincide`) que su sistema **aún no confirmó** haber leído. Del más viejo al más nuevo, por cursor. |
-| `POST /v1/liquidaciones-externas/acuses/confirmar` | `administracion` | `{ "ids": [...] }` (1–200): confirma lo que ya registró. **Idempotente**; `noAplican` agrupa lo inexistente, ajeno o sin acuse. |
+| `POST /v1/liquidaciones-externas/acuses/confirmar` | `administracion` | `{ "ids": [{ "id", "respuestaEn" }, ...] }` (1–200; también acepta el uuid suelto): confirma SOLO el acuse leído — si el chofer cambió su respuesta antes, el id sale en `cambiaron` y no se confirma. **Idempotente**; `noAplican` agrupa lo inexistente, ajeno o sin acuse. |
 | `POST /v1/liquidaciones-externas/contactos` | `administracion` | `{ "contactos": [{ numeroEmpleado, correo?, coordinadorNombre?, coordinadorCorreo? }] }` (1–500): carga los correos de operadores y coordinadores para la entrega por correo (sin ellos cada desglose abre «operador sin correo»). No crea operadores ni toca teléfonos; **idempotente**; la respuesta nunca repite un correo. |
 | `GET /v1/liquidaciones-externas/exportacion` | `dinero` | Archivo CSV/TSV con el layout que pida: `columnas`, `granularidad` (`liquidacion`/`concepto`), `separador`, `decimal`, `fechas` (`iso`/`dmy`/`sap`), `bom`, `encabezado`, y los filtros del listado + `sinConfirmar=1`. |
 

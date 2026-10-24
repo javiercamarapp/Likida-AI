@@ -340,6 +340,18 @@ describe('timbrarViaje — lo que se hace con cada respuesta del PAC', () => {
     expect(alertarOperador).toHaveBeenCalledWith('timbre.ambiguo', expect.objectContaining({ codigo: 'timbre_ambiguo' }));
   });
 
+  it('A37-L-04: fallo de red al AUTENTICAR (clase auth): la reserva se SUELTA y sin alerta de timbre ambiguo', async () => {
+    prepararGanador([{ data: null, error: null }]);
+    timbrar.mockResolvedValue({ ok: false, clase: 'auth', codigo: null, mensaje: 'Sin respuesta del PAC al autenticar: timeout' });
+    const r = await timbrarViaje(T, V, { metodoPago: 'PPD', formaPago: '99' }, ACTOR);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.motivo).toContain('Sin respuesta del PAC al autenticar');
+    expect(r.motivo).not.toContain('BLOQUEADO');
+    expect(escrituras('delete')).toHaveLength(1);
+    expect(alertarOperador).not.toHaveBeenCalledWith('timbre.ambiguo', expect.anything());
+  });
+
   it('RECHAZO del PAC: la reserva se SUELTA y el mensaje del PAC viaja tal cual', async () => {
     prepararGanador([{ data: null, error: null }]);
     timbrar.mockResolvedValue({ ok: false, clase: 'rechazado', codigo: 'CFDI40147', mensaje: 'CFDI40147 - LugarExpedicion inválido' });

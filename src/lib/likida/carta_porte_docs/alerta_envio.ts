@@ -134,6 +134,11 @@ export function crearAlertarEnvio(deps: DepsAlertaEnvio): (a: EntradaAlerta) => 
       r.operador = true;
       return r;
     }
+    // A37-S30-10: había destino y TODOS los canales fallaron de forma definitiva. Soltar el candado deja el reintento
+    // en la siguiente pasada, pero sin esto nadie de plataforma se enteraba nunca de que el aviso no sale. El operador
+    // recibe un correo como máximo por hora y por evento (rate limit de `alertarOperador`), así que no hay tormenta.
+    await deps.alertarOperador(`cron.carta_porte_envio.${a.motivo}`, { error: `el aviso no salió por ningún canal (${razones.join('; ')})`, codigo: `cp_envio_${a.motivo}_sin_canal`, tenantId, envioId: a.envioId, documentoId: a.documentoId })
+      .catch(() => undefined);
     throw new Error(`el aviso no salió por ningún canal (${razones.join('; ')})`);
   };
 }

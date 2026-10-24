@@ -578,7 +578,8 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 324;
 // LOTE A37 b-sat-fiscal-02 (S45-07): +3 llamadas (2,284 → 2,287) en facturacion_escritura.ts: facturasQueAmparan (factura_viaje), borradorIdempotente (factura_emitida) y la lectura de ligas de marcarEmitida. Todas por `acotada`; 0 archivos nuevos.
 // INTEGRACION G1 (24-oct-2026, PRs #665-#679): el barrido real del arbol fusionado mide 2,315 llamadas (2,284 en master 6922916: +31 de las 15 ramas, techo = medido, sin holgura).
 // INTEGRACION G2 (24-oct-2026, PRs #680-#691): el barrido real del arbol fusionado mide 2,336 llamadas (2,315 en master 5135a0c: +21 de las 12 ramas, techo = medido, sin holgura).
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_336;
+// INTEGRACION G3 (24-oct-2026, PRs #664, #692-#703): el barrido real del arbol fusionado mide 2,357 llamadas (2,336 en master 20900cdd2: +21 de las 13 ramas, techo = medido, sin holgura).
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_357;
 // A37-S27-10 (lote b-sat-fiscal-05): +1 (2,284 → 2,285), en `agentes/insumos.ts` (`crearInsumoArchivo`): `storage.from('agente-insumos').remove`
 // para no dejar huérfano el objeto subido cuando falla el insert.
 // LOTE A37 B-sat-fiscal-06 (migración 0876): +3 llamadas (2,284 → 2,287), 0 archivos nuevos, medido con el barrido real. `gasto_correccion.ts` +2: el RPC
@@ -612,6 +613,23 @@ const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_336;
 // Lote M-E-cartaporte-vigia-04 (A37-S58-03 y A37-S59-05): +5 llamadas (2,284 → 2,289), 0 archivos nuevos. `vigia/historial/repo.ts` (+2: lectura de la
 // importación previa y conteo de sus mensajes para rehacer una importación a medias) y `vigia/programa/repo.ts` (+3: `cargaPrevia`, `completarCarga` y
 // `cambiosDeCarga`, estado de la carga de la 0894). Funcionalidad nueva; cubiertas por `historial/repo.test.ts` y `programa/repo.test.ts`.
+// Auditoría 37, lote parciales (A37-P-06, medido con el barrido real): +1 llamada (2,284 → 2,285), `admin/negocio.ts`: `.rpc('corridas_fallidas_por_grupo')` (0870), la ventana de fallos por agente+flota; service_role, sin tenant porque es la consola cruzada del superadmin (cae a la lectura anterior si la función no existe).
+// A37-S08-03 (lote M-C-seguridad-auth-01): +1 en lib/admin/bus.ts (crearOrden comprueba si ya hay una orden idéntica pendiente antes de encolar).
+// A37-S06-10 (+1, 2284 → 2285): evals/page.tsx lee `corrida_id` del resultado en la base en vez de confiar en el formulario.
+// +5 (lote a37 c-seguridad-auth-02): carta-porte-xml/route.ts +2 (leer/fijar el IdCCP del viaje, A37-S10-05), el pool de
+// descargas de correo/entrante (`Array.from(`, A37-S09-04) y 2 más que mide el patrón en los repos del lote.
+// A37-S50-06 (+1): `avisarAlChofer` reclama `avisado_en` antes de enviar (UPDATE condicional) y lo devuelve si no sale: 2 `.from` donde había 1.
+// LOTE M-F-agentes-legal-ia-03 (+2): sdr.ts lee los seguimientos previos (A37-S28-03), investigador.ts lee el dossier previo (A37-S28-05), carta_porte_datos.ts pasa de 1 a 2 consultas de viajes (A37-S30-08), y repo.ts/entrega_repo.ts no cuentan. Medido: 2,286.
+// Auditoría 37, lote M-F-agentes-legal-ia-01 (+2, 2,284 → 2,286, medido con el barrido real): `wa_outbox.ts` (+1, `.rpc('vencer_wa_outbox')`, A37-L-05) y
+// `storage_borrado.ts` (+1, `storage.from(bucket).exists()` para distinguir «ya no existe» de «no se borró» antes de sellar, A37-L-05 legal).
+// A37 lote F-agentes-legal-ia-08 (+2, 2284 → 2286): mcp/oauth.ts (+1 rpc contar_tokens_mcp_vivos, A37-S60-09: UN conteo agrupado; el conteo por cliente queda solo de respaldo) y cron/purgar/route.ts (+1 rpc mantener_agente_idempotencia, A37-S60-07).
+// Lote M-F-agentes-legal-ia-06 (+3, 2284 → 2287): admin/qa-motor.ts (+2: borrar y contar las filas wa_outbox del interceptor, A37-S23-09) y
+// agentes/leads.ts (+1: leer en bloque los títulos de fichas ya en la bandeja en vez de una consulta por empresa, A37-S28-08).
+// Lote M-F-agentes-legal-ia-07 (A37, +3, 2,284 → 2,287): cotizador/lector.ts (+2, A37-S40-09: viajes ya enlazados a otra cotización y
+// cotizaciones iguales decidiéndose, ambas lecturas de solo-lectura acotadas) y mesa_control.ts (+1, A37-S50-08: lectura de la incidencia
+// con tenant y estado antes de anotar). Cubiertas por cotizador/lector.test.ts y mesa_control.test.ts.
+// Lote M-F-agentes-legal-ia-05 (A37-S23-05): +1 llamada (2,284 → 2,285), en `admin/qa-storage.ts`: la 2.ª lectura de `qa_corrida` de
+// `gastoHoyUsd` (corridas vivas que cruzan la medianoche cuentan contra el tope de hoy). 0 archivos nuevos; cubierta por `qa-storage.test.ts`.
 // Auditoría 37, lote agentes-legal-ia (medido con el barrido real): +2 llamadas (2,264 → 2,266). `candidatos_redactor.ts` suma 3 `.from(` (prospecto, cola_aprobacion, prospecto_contacto) y `runner.ts` pierde la suya (+2 netas); `sdr.ts` pasa de 3 a 3 (la lectura por prospecto se volvió lectura en lote). Todo por `acotada`.
 // LOTE A37 peajes-liquidación-graves (migración 0865): +5 llamadas (2,264 → 2,269), 0 archivos nuevos, medido con el barrido real. `jornada/repo.ts` +1:
 // `.rpc('asentar_declaracion_jornada')` (A37-S48-01; la 0865 sustituye la marca derivada bajo el lock del expediente; el INSERT anterior se conserva

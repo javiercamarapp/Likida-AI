@@ -24,6 +24,7 @@
 // Javier, y hasta que estén la página lo DICE en vez de inventarlos.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { VIGENTE_DESDE_TERMINOS } from '@/lib/legal/documentos';
 import { PaginaLegal, FaltaDato, type SeccionLegal } from '../legal/marco';
 import { estadoLegalProduccion, LEGAL_CONFIG } from '@/lib/legal/config';
 
@@ -189,7 +190,9 @@ const SECCIONES: SeccionLegal[] = [
       // es un instrumento aparte de estos términos, y se remite al contacto
       // en vez de anunciar en la página pública que no existe.
       LEGAL_CONFIG.dpaVersion
-        ? `El encargo se documenta por escrito, como pide la ley, en el contrato de encargado del tratamiento (versión ${LEGAL_CONFIG.dpaVersion}) que forma parte del paquete contractual.`
+        // A37-L-07: `LEGAL_DPA_VERSION` es solo una referencia de configuración: NO prueba que haya un
+        // contrato firmado, así que la página no lo afirma. La versión se cita como la que se ofrece.
+        ? `El encargo se documenta por escrito, como pide la ley, en un contrato de encargado del tratamiento independiente de estos términos (versión de referencia ${LEGAL_CONFIG.dpaVersion}), que se acuerda y firma con tu empresa como parte de la contratación. Escribe a **${PRESTADOR.contacto}** para conocer su estado antes de conectar datos de tus operadores.`
         : `El encargo se documenta por escrito, como pide la ley, en un contrato de encargado del tratamiento independiente de estos términos, que se acuerda con tu empresa como parte de la contratación. Escribe a **${PRESTADOR.contacto}** para conocer su estado antes de conectar datos de tus operadores.`,
     ],
   },
@@ -236,7 +239,7 @@ export default function Terminos() {
       // LEG-12: fecha del último cambio SUSTANTIVO del texto (LEG-7,
       // auditoría 24: se reescribió §17 sobre el DPA), no la fecha en que
       // alguien abre la página.
-      vigenteDesde="2026-09-01"
+      vigenteDesde={VIGENTE_DESDE_TERMINOS}
       secciones={SECCIONES}
       aviso={estado.faltantesEntidad.length > 0 ? (
         // AUDITORÍA 19-c2 (A6): el rótulo era una nota interna de despliegue

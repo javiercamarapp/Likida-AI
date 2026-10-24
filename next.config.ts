@@ -285,6 +285,16 @@ const nextConfig: NextConfig = {
           ...(produccion ? [{ key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains; preload' }] : []),
         ],
       },
+      // A37-L-seguridad-tenant-04: la página de baja de correo (derecho de baja LFPDPPP) SÍ es HTML y usa
+      // atributos `style` en línea; con `default-src 'none'` salía sin formato. Esta regla va DESPUÉS de la
+      // general (misma clave, la última gana) y solo concede estilo en línea a esa ruta: sin script, sin
+      // imágenes, sin conexiones, sin incrustación.
+      {
+        source: '/api/correo/baja',
+        headers: [
+          { key: 'Content-Security-Policy', value: "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'" },
+        ],
+      },
     ];
   },
 };

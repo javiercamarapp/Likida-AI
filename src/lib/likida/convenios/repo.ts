@@ -223,21 +223,25 @@ export async function importarConvenios(tenantId: string, convenios: readonly Co
     const convenioId = String((ok(up as never, 'convenios.imp_convenio') as Fila).id);
     if (nuevo) creados++; else actualizados++;
 
+    // A37-S40-06: la lista del archivo REEMPLAZA la del convenio, también cuando viene VACÍA (la exportación saca un convenio sin
+    // instrucciones como una fila vacía): antes `if (length > 0)` envolvía también el borrado y las instrucciones viejas («entra por
+    // la puerta 3») seguían activas y se mandaban al operador.
+    let escritas: Fila[] = [];
     if (c.instrucciones.length > 0) {
       const ins = await acotada(admin.from('convenio_instruccion').upsert(
         c.instrucciones.map((i) => ({ tenant_id: tenantId, convenio_id: convenioId, categoria: i.categoria, texto: i.texto, momento: i.momento, lugar: i.lugar, orden: i.orden, activa: true })),
         { onConflict: 'convenio_id,categoria,texto' },
       ).select('id, categoria, texto'), 'convenios.imp_instrucciones');
-      const escritas = (ok(ins as never, 'convenios.imp_instrucciones') as Fila[]) ?? [];
+      escritas = (ok(ins as never, 'convenios.imp_instrucciones') as Fila[]) ?? [];
       nInstrucciones += escritas.length;
-      // El archivo manda: lo que ya no trae se quita (después de escribir lo nuevo, nunca antes).
-      const conservar = new Set(escritas.map((e) => String(e.id)));
-      const actuales = await leerTodo((d, h) => acotada(admin.from('convenio_instruccion').select('id', conteo(d))
-        .eq('tenant_id', tenantId).eq('convenio_id', convenioId).order('id').range(d, h), 'convenios.imp_actuales') as never, 'convenios.imp_actuales');
-      const sobran = actuales.map((a) => String(a.id)).filter((id) => !conservar.has(id));
-      if (sobran.length > 0) {
-        ok(await acotada(admin.from('convenio_instruccion').delete().eq('tenant_id', tenantId).eq('convenio_id', convenioId).in('id', sobran), 'convenios.imp_quitar') as never, 'convenios.imp_quitar');
-      }
+    }
+    // El archivo manda: lo que ya no trae se quita (después de escribir lo nuevo, nunca antes).
+    const conservar = new Set(escritas.map((e) => String(e.id)));
+    const actuales = await leerTodo((d, h) => acotada(admin.from('convenio_instruccion').select('id', conteo(d))
+      .eq('tenant_id', tenantId).eq('convenio_id', convenioId).order('id').range(d, h), 'convenios.imp_actuales') as never, 'convenios.imp_actuales');
+    const sobran = actuales.map((a) => String(a.id)).filter((id) => !conservar.has(id));
+    if (sobran.length > 0) {
+      ok(await acotada(admin.from('convenio_instruccion').delete().eq('tenant_id', tenantId).eq('convenio_id', convenioId).in('id', sobran), 'convenios.imp_quitar') as never, 'convenios.imp_quitar');
     }
     if (opciones.conFinanzas && c.comercial) {
       ok(await acotada(admin.from('convenio_comercial').upsert({
@@ -597,8 +601,8 @@ export async function reiniciarEnvios(tenantId: string, viajeId: string): Promis
   ok(res as never, 'convenios.reiniciar_envios');
 }
 
-/** Cuánto se congela el reclamo tras un rechazo DEFINITIVO: más que la vigilancia (`DIAS_VIGILANCIA` = 3 d), así el viaje no vuelve a reclamarse. */
-export const CONGELA_RECHAZO_DEFINITIVO_DIAS = 4;
+/** Cuánto se congela el reclamo tras un rechazo DEFINITIVO: más que la vigilancia (`DIAS_VIGILANCIA` = 7 d en trabajo.ts), así el viaje no vuelve a reclamarse. */
+export const CONGELA_RECHAZO_DEFINITIVO_DIAS = 8;
 
 /**
  * A37-A5-01: un rechazo DEFINITIVO (plantilla sin aprobar, número sin WhatsApp) deja el reclamo puesto, pero el reclamo CADUCA a los

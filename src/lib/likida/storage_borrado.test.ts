@@ -135,4 +135,28 @@ describe('El borrado de Storage sella solo lo que de verdad se borró', () => {
     const { logger } = await import('@/lib/logger');
     expect(logger.error).toHaveBeenCalledWith('storage.pendientes_ilegible', expect.anything());
   });
+
+  it('A37-L-05: respuesta VACÍA con archivos que SIGUEN en el bucket NO sella nada', async () => {
+    colaDevuelta = [{ bucket: 'comprobantes', nombre: 'a.jpg', motivo: 'arco' }, { bucket: 'comprobantes', nombre: 'b.jpg', motivo: 'arco' }];
+    removeDevuelve = { data: [], error: null };
+    existe = { 'a.jpg': true, 'b.jpg': true };
+    const r = await borrarStorageMarcado();
+    expect(sellados).toHaveLength(0);
+    expect(r.borrados).toBe(0);
+    expect(r.fallidos).toBe(2);
+  });
+
+  it('A37-L-05: lote MIXTO — lo borrado y lo que ya no existía se sellan; lo que sigue ahí queda para reintento', async () => {
+    colaDevuelta = [
+      { bucket: 'comprobantes', nombre: 'borrado.jpg', motivo: 'arco' },
+      { bucket: 'comprobantes', nombre: 'ya-no-existia.jpg', motivo: 'arco' },
+      { bucket: 'comprobantes', nombre: 'sigue.jpg', motivo: 'arco' },
+    ];
+    removeDevuelve = { data: [{ name: 'borrado.jpg' }], error: null };
+    existe = { 'sigue.jpg': true, 'ya-no-existia.jpg': false };
+    const r = await borrarStorageMarcado();
+    expect(sellados[0].nombres.sort()).toEqual(['borrado.jpg', 'ya-no-existia.jpg']);
+    expect(r.borrados).toBe(2);
+    expect(r.fallidos).toBe(1);
+  });
 });
