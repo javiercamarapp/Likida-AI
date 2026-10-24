@@ -82,6 +82,31 @@ export function leerDescripcionPrimerConcepto(xmlCrudo: string): string | null {
   return texto ? texto.slice(0, 200) : null;
 }
 
+function decodificarEntidades(t: string): string {
+  return t.replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+}
+
+/** A37-S55-09: la razón social del emisor (`Emisor/@Nombre`), que SAP (CardName)
+ *  y CONTPAQi (nombre_proveedor) esperan y `cfdi_xml.ts` no extrae. null = el
+ *  XML no la trae: no se inventa. */
+export function leerEmisorNombre(xmlCrudo: string): string | null {
+  const m = /<(?:cfdi:)?Emisor\b[^>]*?\bNombre="([^"]*)"/i.exec(xmlCrudo);
+  if (!m) return null;
+  const texto = decodificarEntidades(m[1]).trim();
+  return texto ? texto.slice(0, 200) : null;
+}
+
+/** A37-S55-09: el IVA trasladado de la factura. `ivaTraslado` vale 0 tanto
+ *  cuando el CFDI declara IVA a tasa 0 % (un `Traslado` 002 con `Importe`)
+ *  como cuando no trae IVA (exento, no desglosado): se distinguen mirando el
+ *  XML. 0 solo si el CFDI lo DECLARA; si no, null (= dato no traído). */
+export function ivaDeFactura(ivaTraslado: number | undefined, xmlCrudo: string): number | null {
+  if (typeof ivaTraslado === 'number' && ivaTraslado > 0) return ivaTraslado;
+  const declaraIva = /<(?:cfdi:)?Traslado\b(?=[^>]*\bImpuesto="002")(?=[^>]*\bImporte="[^"]+")[^>]*>/i.test(xmlCrudo);
+  return declaraIva ? 0 : null;
+}
+
 /** ¿El receptor del CFDI es el RFC de la flota? `null` cuando falta
  *  cualquiera de los dos: un `false` afirmaría "no es tuya" sin haber
  *  podido comparar. */
@@ -147,12 +172,12 @@ export async function guardarFacturaProveedor(
     tenant_id: tenantId,
     cfdi_uuid: xml.uuid,
     emisor_rfc: xml.rfcEmisor ?? null,
-    emisor_nombre: null,
+    emisor_nombre: leerEmisorNombre(xmlCrudo),
     receptor_rfc: xml.rfcReceptor ?? null,
     receptor_es_flota: receptorEsFlota,
     fecha: xml.fecha ? xml.fecha.slice(0, 10) : null,
     sub_total: typeof xml.subTotal === 'number' ? xml.subTotal : null,
-    iva: xml.ivaTraslado || null,
+    iva: ivaDeFactura(xml.ivaTraslado, xmlCrudo),
     total: xml.total,
     descripcion: leerDescripcionPrimerConcepto(xmlCrudo),
     conceptos: Math.max(1, xml.conceptos.length),

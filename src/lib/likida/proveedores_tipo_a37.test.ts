@@ -41,3 +41,37 @@ describe('guardarFacturaProveedor — solo facturas de compra', () => {
     expect(inserts).toHaveLength(1);
   });
 });
+
+// A37-S55-09: el nombre del emisor y el IVA a tasa 0 % no se pierden.
+describe('guardarFacturaProveedor — emisor_nombre e IVA 0 (A37-S55-09)', () => {
+  const xmlCon = (extra: string) =>
+    `<cfdi:Comprobante><cfdi:Emisor Rfc="AAA010101AB1" Nombre="Transportes &amp; Gas &quot;Prueba&quot; SA" RegimenFiscal="601"/>${extra}</cfdi:Comprobante>`;
+
+  it('guarda el Nombre del Emisor (entidades XML decodificadas)', async () => {
+    await guardarFacturaProveedor('t-1', base('I'), xmlCon(''), 'BBB020202BB2', 'subida');
+    expect(inserts[0].emisor_nombre).toBe('Transportes & Gas "Prueba" SA');
+  });
+
+  it('sin Nombre en el XML, emisor_nombre queda null (no se inventa)', async () => {
+    await guardarFacturaProveedor('t-1', base('I'), '<cfdi:Comprobante><cfdi:Emisor Rfc="AAA010101AB1"/></cfdi:Comprobante>', null, 'subida');
+    expect(inserts[0].emisor_nombre).toBeNull();
+  });
+
+  it('IVA a tasa 0 % (traslado 002 con Importe 0.00) se guarda como 0, no como null', async () => {
+    const xml = { ...base('I'), ivaTraslado: 0, subTotal: 1000, total: 1000 } as unknown as CfdiXmlData;
+    const crudo = xmlCon('<cfdi:Impuestos><cfdi:Traslados><cfdi:Traslado Base="1000" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00"/></cfdi:Traslados></cfdi:Impuestos>');
+    await guardarFacturaProveedor('t-1', xml, crudo, null, 'subida');
+    expect(inserts[0].iva).toBe(0);
+  });
+
+  it('sin traslado de IVA en el XML (exento / no traído) el IVA sigue null', async () => {
+    const xml = { ...base('I'), ivaTraslado: 0, subTotal: 1000, total: 1000 } as unknown as CfdiXmlData;
+    await guardarFacturaProveedor('t-1', xml, xmlCon(''), null, 'subida');
+    expect(inserts[0].iva).toBeNull();
+  });
+
+  it('con IVA positivo se guarda tal cual', async () => {
+    await guardarFacturaProveedor('t-1', base('I'), xmlCon(''), null, 'subida');
+    expect(inserts[0].iva).toBe(160);
+  });
+});
