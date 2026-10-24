@@ -4,7 +4,8 @@ import type { NuevoAviso, PuertosConductor } from './ejecutor';
 import { puertosReales } from './ejecutor';
 import type { Salida } from './mensajes';
 import type { EventoPatioFila, ViajeContexto } from './repo';
-import { leerEventosPatio } from './repo';
+import { leerEventosPatio, registrarEventoConfirmado } from './repo';
+import { limpiarComoDescarga } from './interprete';
 import { listarSitios } from './repo_validacion';
 import {
   NIVEL_AVISO_PATIO, armarAvisoPatioDistinto, armarPreguntaPatio, compararPatio, estadoPatio, ordenarPatios, patioDeTexto, textoEsperado,
@@ -47,6 +48,7 @@ export { leerTextoPatio, excepcionesPatio } from './patio_regla';
 
 const MAX_PATIOS = 30;
 const TEXTO_PEDIR_NOMBRE = 'Escríbeme el nombre del patio donde estás entregando, empezando con la palabra «patio» (por ejemplo: patio Norte).';
+const TEXTO_NO_PUDE_ANOTAR = 'No pude anotarlo ahorita. Intenta de nuevo en un momento. 🙏';
 const una = (t: string, n: number): string => t.replace(/\s+/g, ' ').trim().slice(0, n);
 
 // ── Con puertos ─────────────────────────────────────────────────────────────
@@ -54,6 +56,15 @@ const una = (t: string, n: number): string => t.replace(/\s+/g, ' ').trim().slic
 export interface PuertosPatio extends Pick<PuertosConductor, 'reclamar' | 'cerrarAviso' | 'enviar' | 'destinatarios' | 'evento'> {
   patios(tenantId: string): Promise<PatioOpcion[]>;
   eventos(tenantId: string, viajeIds: string[]): Promise<EventoPatioFila[]>;
+  /** A37-S36-03: como `evento`, pero devuelve si quedó guardado. Sin él (puertos de prueba) se asume que sí. */
+  guardar?(h: HitoFila, evento: Parameters<PuertosConductor['evento']>[1], detalle: Record<string, string | number | boolean | null>): Promise<boolean>;
+}
+
+/** Escribe un renglón y dice si quedó: «respondido» no se acusa como anotado si se perdió (el tablero no vería la excepción). */
+async function escribir(p: PuertosPatio, h: HitoFila, evento: Parameters<PuertosConductor['evento']>[1], d: Record<string, string | number | boolean | null>): Promise<boolean> {
+  if (p.guardar) return p.guardar(h, evento, d);
+  await p.evento(h, evento, d);
+  return true;
 }
 
 export function puertosPatioReales(): PuertosPatio {
@@ -65,6 +76,7 @@ export function puertosPatioReales(): PuertosPatio {
       return sitios.filter((s) => s.activa).map((s) => ({ id: s.id, nombre: s.nombre }));
     },
     eventos: leerEventosPatio,
+    guardar: registrarEventoConfirmado,
   };
 }
 
@@ -124,23 +136,36 @@ export async function responderPatio(p: PuertosPatio, e: EntradaPatio): Promise<
       const mas = /^mas(\d+)$/.exec(op);
       if (mas) return [armarPreguntaPatio(viaje, ordenados, Number(mas[1]))];
       if (op === 'otro') {
-        await p.evento(hito, 'validacion', detalle(hito.ciclo, 'esperando_texto'));
+        if (!await escribir(p, hito, 'validacion', detalle(hito.ciclo, 'esperando_texto'))) return [{ texto: TEXTO_NO_PUDE_ANOTAR }];
         return [{ texto: TEXTO_PEDIR_NOMBRE }];
       }
       if (!patios.some((x) => x.id === op)) return [{ texto: 'Ese patio ya no está en la lista. Toca uno de los botones nuevos. 🙏' }, armarPreguntaPatio(viaje, ordenados, 0)];
     }
 
-    const elegido = e.respuesta.tipo === 'boton' ? { id: e.respuesta.opcion } : { texto: e.respuesta.nombre };
+    // A37-S36-04: el nombre libre se guarda en una bitácora que lee un feed ajeno y que la cancelación ARCO no reescribe: sin teléfonos,
+    // correos ni enlaces (mismo limpiador que «¿cómo descargas?»). Si no queda nada utilizable se vuelve a pedir, no se guarda.
+    let elegido: { id: string } | { texto: string };
+    if (e.respuesta.tipo === 'boton') elegido = { id: e.respuesta.opcion };
+    else {
+      const limpio = limpiarComoDescarga(e.respuesta.nombre);
+      if (!limpio) return [{ texto: TEXTO_PEDIR_NOMBRE }];
+      elegido = { texto: limpio };
+    }
     const c = compararPatio(elegido, esperadoTexto, patios);
-    await p.evento(hito, 'validacion', detalle(hito.ciclo, 'respondido', {
+    if (!await escribir(p, hito, 'validacion', detalle(hito.ciclo, 'respondido', {
       resultado: c.resultado, elegido: una(c.elegido, 60), esperado: c.esperado ? una(c.esperado, 60) : null, campo: campoUsado,
       via: e.respuesta.tipo,
-    }));
+    }))) return [{ texto: TEXTO_NO_PUDE_ANOTAR }];
     if (c.resultado === 'igual' || c.resultado === 'sin_referencia') {
       return [{ texto: `Anotado ✅ entregas en ${una(c.elegido, 60)}.` }];
     }
-    await avisarSupervisor(p, viaje, hito, c, ahora);
-    return [{ texto: `Anotado ✅ entregas en ${una(c.elegido, 60)}. Es distinto al patio de tu instrucción: ya le avisé a tu supervisor para que lo confirme contigo. 🙏` }];
+    // A37-S36-02: solo se dice «ya le avisé» si el aviso de verdad salió (o quedó en cola).
+    const avisado = await avisarSupervisor(p, viaje, hito, c, ahora);
+    return [{
+      texto: avisado
+        ? `Anotado ✅ entregas en ${una(c.elegido, 60)}. Es distinto al patio de tu instrucción: ya le avisé a tu supervisor para que lo confirme contigo. 🙏`
+        : `Anotado ✅ entregas en ${una(c.elegido, 60)}. Es distinto al patio de tu instrucción y NO pude avisar a tu supervisor: llámale tú para que lo confirme. 🙏`,
+    }];
   } catch (err) {
     logger.error('conductor.patio_respuesta_fallo', { viaje: viaje.id, err: err instanceof Error ? err.message : String(err) });
     return [{ texto: 'No pude anotarlo ahorita. Intenta de nuevo en un momento. 🙏' }];
@@ -148,16 +173,16 @@ export async function responderPatio(p: PuertosPatio, e: EntradaPatio): Promise<
 }
 
 /** Claim primero (un solo aviso por llegada); sin destinatario NO es silencio: queda cerrado con el motivo y la excepción del tablero. */
-async function avisarSupervisor(p: PuertosPatio, v: ViajeContexto, h: HitoFila, c: Comparacion, ahora: Date): Promise<void> {
+async function avisarSupervisor(p: PuertosPatio, v: ViajeContexto, h: HitoFila, c: Comparacion, ahora: Date): Promise<boolean> {
   const claim: NuevoAviso = { tenantId: v.tenantId, viajeId: v.id, hitoId: h.id, operadorId: null, ciclo: h.ciclo, clase: 'escalacion', nivel: NIVEL_AVISO_PATIO };
   const gano = await p.reclamar(claim);
-  if (gano !== 'ganado') return;
+  if (gano !== 'ganado') return gano === 'perdido'; // un aviso previo ya salió (o va en camino)
   try {
     const destinos = await p.destinatarios(v.tenantId, v.terminalId, 1);
     if (destinos.length === 0) {
       await p.cerrarAviso(claim, { ok: false, canal: 'ninguno', motivo: 'sin_destinatario', ult4: null });
       await p.evento(h, 'validacion', detalle(h.ciclo, 'alertado', { destinatarios: 0, entregados: 0 }));
-      return;
+      return false;
     }
     const msg = armarAvisoPatioDistinto(v, c);
     let entregados = 0;
@@ -174,10 +199,13 @@ async function avisarSupervisor(p: PuertosPatio, v: ViajeContexto, h: HitoFila, 
       ok: entregados > 0 || enCola, canal: entregados > 0 ? canal : enCola ? 'texto' : 'ninguno',
       motivo: entregados > 0 ? null : enCola ? 'en_cola_outbox' : ultimoError.slice(0, 200), ult4: destinos[0].telefono.slice(-4),
     });
-    await p.evento(h, 'validacion', detalle(h.ciclo, 'alertado', { destinatarios: destinos.length, entregados: entregados > 0 || enCola ? Math.max(entregados, 1) : 0 }));
+    const llegaron = entregados > 0 || enCola;
+    await p.evento(h, 'validacion', detalle(h.ciclo, 'alertado', { destinatarios: destinos.length, entregados: llegaron ? Math.max(entregados, 1) : 0 }));
+    return llegaron;
   } catch (err) {
     logger.error('conductor.patio_aviso_fallo', { viaje: v.id, err: err instanceof Error ? err.message : String(err) });
     await p.cerrarAviso(claim, { ok: false, canal: 'ninguno', motivo: 'error_inesperado', ult4: null }).catch(() => undefined);
+    return false;
   }
 }
 

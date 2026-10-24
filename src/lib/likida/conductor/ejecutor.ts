@@ -356,6 +356,27 @@ async function escalar(
   if (gano === 'perdido') { r.yaReclamados++; return 'perdido'; }
   if (gano === 'fallo') { r.fallos.push(`reclamo escalación ${v.id}`); return 'sin_envio'; }
 
+  // A37-S35-05: cualquier excepción tras el claim (la base de contactos que lanza, un envío que revienta) lo dejaba QUEMADO con ok=null:
+  // el siguiente toque/pasada veía «perdido» y devolvía «sin_envio» para siempre. Si NADA salió se suelta para que reintente.
+  const estado = { huboEnvio: false, entregados: 0 };
+  try {
+    return await escalarConClaim(p, v, hs, a, avisos, ahora, r, motivoForzado, claim, esProblema, estado);
+  } catch (e) {
+    const causa = e instanceof Error ? e.message : 'error inesperado';
+    logger.error('conductor.escalacion_excepcion', { tenant: v.tenantId, viaje: v.id, nivel: a.nivel, causa });
+    r.fallos.push(`escalación ${v.folio ?? v.id}: ${causa}`);
+    if (estado.entregados === 0 && (!estado.huboEnvio || esProblema)) {
+      try { await p.liberarAviso(claim); } catch (e2) { logger.error('conductor.escalacion_liberar_fallo', { viaje: v.id, err: e2 instanceof Error ? e2.message : String(e2) }); }
+    }
+    return 'sin_envio';
+  }
+}
+
+async function escalarConClaim(
+  p: PuertosConductor, v: ViajeContexto, hs: HitoFila[], a: Escalacion,
+  avisos: ReadonlyArray<AvisoReclamado & { hitoId: string }>, ahora: Date, r: ResultadoConductor,
+  motivoForzado: MotivoEscalacion | undefined, claim: NuevoAviso, esProblema: boolean, estado: { huboEnvio: boolean; entregados: number },
+): Promise<'ok' | 'reintentable' | 'sin_envio' | 'perdido'> {
   const destinos = await p.destinatarios(v.tenantId, v.terminalId, a.nivel);
   if (destinos.length === 0) {
     // Esa flota no tiene a quién escalar: se marca igual (a la vista en el tablero) y se grita.
@@ -377,8 +398,9 @@ async function escalar(
   let ultimoError = '';
   let canal: CierreAviso['canal'] = 'ninguno';
   for (const d of destinos) {
+    estado.huboEnvio = true;
     const envio = await p.enviar(d.telefono, msg, `conductor.escalacion_n${a.nivel}`, v.tenantId, ahora);
-    if (envio.ok) { entregados++; canal = envio.via; } else { ultimoError = envio.mensaje; if (envio.reintentable) reintentables++; }
+    if (envio.ok) { entregados++; estado.entregados = entregados; canal = envio.via; } else { ultimoError = envio.mensaje; if (envio.reintentable) reintentables++; }
   }
 
   if (entregados === 0 && reintentables === destinos.length) {

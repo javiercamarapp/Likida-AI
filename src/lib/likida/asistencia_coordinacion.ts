@@ -599,20 +599,39 @@ export async function atenderMensajeProveedor(
   if (activas.length === 0) return null;
 
   if (activas.length > 1) {
-    // Dos gestiones vivas con el mismo teléfono (dos emergencias, o dos
-    // flotas con el mismo gruero): no se adivina a cuál contesta. El texto
-    // crudo va a la bitácora y al jefe de CADA una — que el humano atribuya.
+    // Dos gestiones vivas con el mismo teléfono: no se adivina a cuál contesta.
+    // A37-S29-04: si son de la MISMA flota (dos emergencias) el texto crudo va a la bitácora y al jefe de esa flota UNA vez, que atribuya
+    // el humano. Si son de FLOTAS DISTINTAS (el mismo gruero en dos directorios) el texto puede traer la unidad, el lugar o el cliente de
+    // una de ellas: NO se reenvía a ninguna ni se guarda en su bitácora (fuga entre flotas con el proveedor como canal); cada jefe solo
+    // sabe que escribió, sin contenido, y el texto queda en el registro interno de Likida.
+    const flotas = [...new Set(activas.map((c) => c.tenantId))];
+    if (flotas.length > 1) {
+      logger.warn('coordinacion.mensaje_ambiguo_entre_flotas', { flotas: flotas.length, gestiones: activas.length, telefono_ult4: from.slice(-4), texto: texto.replace(/\s+/g, ' ').trim().slice(0, 300) });
+      for (const c of activas) {
+        await anotarEventoIncidencia(c.tenantId, c.incidenciaId, 'proveedor_mensaje', {
+          coordinacionId: c.id, sinTexto: true, atribucion: 'ambigua_entre_flotas',
+        });
+      }
+      for (const tenantId of flotas) {
+        const c = activas.find((x) => x.tenantId === tenantId)!;
+        try {
+          const jefe = await telefonoJefeDe(tenantId);
+          if (jefe) await sendText(jefe, `${c.proveedorNombre} escribió, pero tenemos más de una gestión activa con su número y no podemos atribuir el mensaje a tu solicitud. Contáctalo directo si lo necesitas.`);
+        } catch { /* best-effort declarado: la bitácora ya lo tiene */ }
+      }
+      return 'Gracias — tenemos más de una solicitud activa con este número. ¿Nos dices a qué empresa o folio se refiere tu mensaje? El equipo le da seguimiento directo.';
+    }
     for (const c of activas) {
       await anotarEventoIncidencia(c.tenantId, c.incidenciaId, 'proveedor_mensaje', {
         coordinacionId: c.id, texto: texto.slice(0, 500), atribucion: 'ambigua',
       });
-      try {
-        const jefe = await telefonoJefeDe(c.tenantId);
-        if (jefe) {
-          await sendText(jefe, `${c.proveedorNombre} escribió (tenemos más de una gestión activa con su número — atribúyelo tú):\n«${texto.replace(/\s+/g, ' ').trim().slice(0, 220)}»`);
-        }
-      } catch { /* best-effort declarado: la bitácora ya lo tiene */ }
     }
+    try {
+      const jefe = await telefonoJefeDe(flotas[0]);
+      if (jefe) {
+        await sendText(jefe, `${activas[0].proveedorNombre} escribió (tenemos más de una gestión activa con su número — atribúyelo tú):\n«${texto.replace(/\s+/g, ' ').trim().slice(0, 220)}»`);
+      }
+    } catch { /* best-effort declarado: la bitácora ya lo tiene */ }
     return 'Gracias — tenemos más de una solicitud activa con este número, así que el jefe de tráfico le da seguimiento directo.';
   }
 

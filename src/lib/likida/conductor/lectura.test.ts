@@ -93,6 +93,15 @@ describe('PUT /v1/conductor/config — validación contra la config actual', () 
   const actual = { ...CONFIG_CONDUCTOR_DEFAULT, solicitudesMin: [0, 15, 30, 45], diasSemana: [1, 2, 3, 4, 5, 6, 7] };
   const T = '38000000-0000-4000-8000-0000000000a5';
 
+  it('A37-S35-02: una perilla booleana mandada como texto o número se rechaza (no se enciende con Boolean)', () => {
+    for (const cuerpo of [{ avisarSenalVida: 'false' }, { activo: '0' }, { avisarOficinaLlegada: 'no' }, { avisarOficinaSalida: 0 }]) {
+      const v = validarCambioConfig(cuerpo, actual);
+      expect('error' in v).toBe(true);
+    }
+    const ok = validarCambioConfig({ avisarSenalVida: false, activo: true }, actual);
+    expect('ok' in ok && ok.ok.config).toMatchObject({ avisarSenalVida: false, activo: true });
+  });
+
   it('se manda SOLO lo que cambia; lo demás queda como estaba', () => {
     const v = validarCambioConfig({ solicitudesMin: [0, 10, 20], horaInicio: 7 }, actual);
     expect('ok' in v && v.ok.config).toMatchObject({ solicitudesMin: [0, 10, 20], horaInicio: 7, horaFin: 22, escalarTrasMin: 90 });

@@ -196,7 +196,13 @@ export function VistaAgentePeajes({
                     <div key={d.cfdiXmlId} className="flex items-center gap-2.5">
                       <span className="cifra-mono text-[11px] shrink-0" style={{ color: 'var(--faint)' }}>{d.uuidCorto}</span>
                       <span className="shrink-0" style={{ color: 'var(--muted)' }}>{d.recibido ? fechaCorta(d.recibido) : '—'}</span>
-                      <span className="ml-auto shrink-0 cifra-mono">{mxn(d.monto)}</span>
+                      {d.parcial && (
+                        <span className="ml-auto shrink-0 text-[10.5px] px-1.5 py-0.5 rounded border" style={{ color: 'var(--warn)', borderColor: 'var(--warn)' }}
+                          title="Este estado de cuenta rebasa la ventana de 1,000 líneas que se lee aquí: el importe y los conteos son un mínimo, no el total.">
+                          parcial
+                        </span>
+                      )}
+                      <span className={`${d.parcial ? '' : 'ml-auto '}shrink-0 cifra-mono`}>{d.parcial ? '≥ ' : ''}{mxn(d.monto)}</span>
                       <span className="shrink-0 inline-flex items-center gap-1 text-[11px]" style={{ color: 'var(--ok)' }}>
                         <CircleCheck width={11} height={11} strokeWidth={2} /> {numero(d.conciliadas)}
                       </span>

@@ -1,6 +1,6 @@
 import { puertosReales } from './ejecutor';
 import {
-  abrirEpisodioSenalVida, anotarFalloSenalVida, cerrarEpisodioSenalVida, leerConfigConductor, reclamarNivelSenalVida,
+  abrirEpisodioSenalVida, anotarFalloSenalVida, cerrarEpisodioSenalVida, leerConfigConductor, liberarNivelSenalVida, reclamarNivelSenalVida,
 } from './repo';
 import { leerEpisodiosSenalVida, leerFlotasConConectorDegradado, leerHitosDeViajes, leerMuestrasGps, leerSitiosGeometriaDeFlotas, leerSitiosGeometriaDeViajes, leerUltimaMuestraGps, leerViajesAvisables } from './trabajo';
 import type { PuertosSenalVida } from './senal_vida';
@@ -23,6 +23,7 @@ export function puertosSenalVidaReales(): PuertosSenalVida {
     reclamarNivel: reclamarNivelSenalVida,
     cerrar: cerrarEpisodioSenalVida,
     anotarFallo: anotarFalloSenalVida,
+    liberarNivel: liberarNivelSenalVida,
     enviar: motor.enviar,
     destinatarios: motor.destinatarios,
     ubicacion: motor.ubicacion,

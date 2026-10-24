@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "total": 193,
+  "total": 192,
   "porArchivo": {
     "src/app/admin/agentes/contenido.tsx": 1,
     "src/app/admin/evals/page.tsx": 1,
@@ -57,7 +57,7 @@
     "src/lib/likida/carta_porte_timbre.ts": 2,
     "src/lib/likida/carta_porte_wa.ts": 2,
     "src/lib/likida/chat/conversaciones.ts": 2,
-    "src/lib/likida/conductor/repo.ts": 3,
+    "src/lib/likida/conductor/repo.ts": 2,
     "src/lib/likida/conectores/sincronizar_eventos.ts": 1,
     "src/lib/likida/confirmar_viaje.ts": 1,
     "src/lib/likida/contactos.ts": 1,

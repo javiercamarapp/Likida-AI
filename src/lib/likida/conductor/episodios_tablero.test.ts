@@ -85,6 +85,15 @@ describe('episodiosVista', () => {
     expect(e.estado).toContain('Escalado al jefe de tráfico');
   });
 
+  it('A37-S36-05: un nivel 3 cuyo aviso al jefe NO llegó no se pinta como «escalado al jefe»', () => {
+    const e = episodiosVista([{ ...base, nivelEnviado: 3, escaladoEn: '2026-10-01T13:00:00Z', sinAvisarAlJefe: true }])[0];
+    expect(e.estado).toMatch(/NO llegó/);
+    expect(e.estado).not.toContain('Escalado al jefe de tráfico');
+    expect(e.pasos.at(-1)!.texto).toMatch(/NO llegó/);
+    const ok = episodiosVista([{ ...base, nivelEnviado: 3, escaladoEn: '2026-10-01T13:00:00Z' }])[0];
+    expect(ok.estado).toContain('Escalado al jefe de tráfico');
+  });
+
   it('dice dónde va cada nivel abierto y cómo terminó cada cerrado, con la respuesta del chofer en sus botones', () => {
     const v = (o: Partial<EpisodioTablero>) => episodiosVista([{ ...base, ...o }])[0];
     expect(v({ nivelEnviado: 0 }).estado).toContain('falta mandar el primer aviso');
