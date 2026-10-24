@@ -636,6 +636,16 @@ export async function finalizarCorreo(emailId: string, token: string, ok: boolea
   return !r.error && r.data === true;
 }
 
+/**
+ * A37-A3-13: los archivos (PDF/XML) del CCP timbrado recibido de un documento (`cp_ccp_timbrado`, 0794). La fila cae por
+ * cascada al borrar el documento, así que sus objetos de Storage se borran ANTES. Sin la 0794 → `[]`.
+ */
+export async function ccpDeDocumento(tenantId: string, documentoId: string): Promise<Array<{ uuid: string; pdfRuta: string; xmlRuta: string }>> {
+  const r = await acotada(supabaseAdmin().from('cp_ccp_timbrado').select('uuid, pdf_ruta, xml_ruta').eq('tenant_id', tenantId).eq('documento_id', documentoId).order('id', { ascending: true }).limit(50), 'cpdocs.ccp_de_documento');
+  if (tablaAusente(r.error) || funcionAusente(r.error)) return [];
+  return ((exigir(r, 'cpdocs.ccp_de_documento') ?? []) as unknown as Fila[]).map((f) => ({ uuid: String(f.uuid), pdfRuta: String(f.pdf_ruta), xmlRuta: String(f.xml_ruta) }));
+}
+
 /** Borra el documento (la cascada se lleva sus eventos y correcciones; los renglones de mercancía quedan, sin la liga). */
 export async function borrarDocumento(tenantId: string, id: string): Promise<boolean> {
   const r = await acotada(supabaseAdmin().from('cp_documento').delete().eq('tenant_id', tenantId).eq('id', id).select('id'), 'cpdocs.borrar_doc');
