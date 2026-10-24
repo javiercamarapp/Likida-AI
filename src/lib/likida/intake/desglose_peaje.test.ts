@@ -355,7 +355,7 @@ describe('filasBitacora', () => {
     expect(filas).toEqual([{
       viajeFolio: 'F-001', origen: 'CDMX', destino: 'Querétaro',
       fechaCruce: '2026-08-05', caseta: 'Tepotzotlán', tag: 'IMDM12345678', montoConciliado: 189,
-      posicionesGpsDia: 87,
+      posicionesGpsDia: 87, diferenciaAdmitida: null,
     }]);
   });
 
@@ -368,7 +368,7 @@ describe('filasBitacora', () => {
     expect(fila).toEqual({
       viajeFolio: '', origen: '', destino: '',
       fechaCruce: '2026-08-05', caseta: '', tag: '', montoConciliado: 189,
-      posicionesGpsDia: null,
+      posicionesGpsDia: null, diferenciaAdmitida: null,
     });
   });
 
@@ -417,7 +417,7 @@ describe('la leyenda de la bitácora — dice qué cumple y qué NO afirma', () 
 describe('bitacoraACsv', () => {
   const bitacora: BitacoraRmf918 = {
     desgloseId: 'd-1', proveedor: 'IAVE', periodoDesde: '2026-08-01', periodoHasta: '2026-08-10',
-    filas: [{ viajeFolio: 'F-001', origen: 'CDMX', destino: 'Querétaro', fechaCruce: '2026-08-05', caseta: 'Tepotzotlán', tag: 'IMDM12345678', montoConciliado: 189, posicionesGpsDia: 87 }],
+    filas: [{ viajeFolio: 'F-001', origen: 'CDMX', destino: 'Querétaro', fechaCruce: '2026-08-05', caseta: 'Tepotzotlán', tag: 'IMDM12345678', montoConciliado: 189, posicionesGpsDia: 87, diferenciaAdmitida: null }],
     leyendas: LEYENDAS_BITACORA_RMF_918,
   };
 
@@ -457,11 +457,11 @@ describe('bitacoraACsv — texto del proveedor no se abre como fórmula en Excel
       desgloseId: 'd1', proveedor: 'PASE', periodoDesde: '2026-08-01', periodoHasta: '2026-08-02', leyendas: LEYENDAS_BITACORA_RMF_918,
       filas: [{
         viajeFolio: '=1+1', origen: '+52 55', destino: '@SUM(A1)', fechaCruce: '2026-08-01', caseta: '-cmd|calc', tag: 'IMDM1',
-        montoConciliado: -189.5, posicionesGpsDia: null,
+        montoConciliado: -189.5, posicionesGpsDia: null, diferenciaAdmitida: null,
       }],
     };
     const csv = bitacoraACsv(b);
     const fila = csv.trim().split('\n').pop()!;
-    expect(fila).toBe("'=1+1,'+52 55,'@SUM(A1),2026-08-01,'-cmd|calc,IMDM1,-189.5,sin datos");
+    expect(fila).toBe("'=1+1,'+52 55,'@SUM(A1),2026-08-01,'-cmd|calc,IMDM1,-189.5,sin datos,");
   });
 });

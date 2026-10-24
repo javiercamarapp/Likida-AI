@@ -1566,6 +1566,9 @@ export interface FilaBitacora {
    *  contexto), viaje sin unidad o fecha ilegible. Jamás un 0 que se leería
    *  como "la unidad no se movió". */
   posicionesGpsDia: number | null;
+  /** A37-S47-01: la diferencia con signo (cobro del desglose − gasto comprobado) que el cruce ADMITIÓ por la tolerancia de
+   *  $0.01 a $1. Se escribe, no se esconde: 0 = exacto; null = el cruce no la registró. */
+  diferenciaAdmitida: number | null;
 }
 
 export interface BitacoraRmf918 {
@@ -1583,7 +1586,7 @@ export interface BitacoraRmf918 {
  * una celda vacía es honesta; una inventada invalida el documento completo.
  */
 export function filasBitacora(
-  lineasCuadra: ReadonlyArray<{ fecha: string | null; caseta: string | null; monto: number; tag: string | null; viajeId: string | null }>,
+  lineasCuadra: ReadonlyArray<{ fecha: string | null; caseta: string | null; monto: number; tag: string | null; viajeId: string | null; diferencia?: number | null }>,
   viajePorId: ReadonlyMap<string, { folio: string | null; origen: string | null; destino: string | null; unidadId?: string | null }>,
   /** `llaveUnidadDia(unidad, fecha)` → conteo (contextoEvidenciaGps). Sin el
    *  mapa, toda la columna sale `null` — "sin datos", no un cero. */
@@ -1604,6 +1607,7 @@ export function filasBitacora(
         tag: l.tag ?? '',
         montoConciliado: l.monto,
         posicionesGpsDia: n > 0 ? n : null,
+        diferenciaAdmitida: l.diferencia ?? null,
       };
     });
 }
@@ -1623,10 +1627,10 @@ export async function bitacoraRmf918(tenantId: string, desgloseId: string): Prom
   // `traerTodo` por lo mismo que `agregarEstatus`: la bitácora RMF 9.18 con
   // el `.limit(5000)` recortado a 1,000 salía INCOMPLETA — y es un documento
   // fiscal descargable, no una vista.
-  const filasCuadra = await traerTodo<{ fecha: unknown; caseta: unknown; monto: unknown; tag: unknown; viaje_id: unknown; detalle: unknown; gps_veredicto: unknown; gps_detalle: unknown }>(
+  const filasCuadra = await traerTodo<{ fecha: unknown; caseta: unknown; monto: unknown; tag: unknown; viaje_id: unknown; detalle: unknown; gps_veredicto: unknown; gps_detalle: unknown; diferencia: unknown }>(
     (d, h) => acotada(supabaseAdmin()
       .from('desglose_peaje_linea')
-      .select('fecha, caseta, monto, tag, viaje_id, detalle, gps_veredicto, gps_detalle', conteo(d))
+      .select('fecha, caseta, monto, tag, viaje_id, detalle, gps_veredicto, gps_detalle, diferencia', conteo(d))
       .eq('tenant_id', tenantId)
       .eq('desglose_id', desgloseId)
       .eq('estatus', 'cuadra')
@@ -1653,6 +1657,7 @@ export async function bitacoraRmf918(tenantId: string, desgloseId: string): Prom
     monto: Number(f.monto),
     tag: (f.tag as string | null) ?? null,
     viajeId: (f.viaje_id as string | null) ?? null,
+    diferencia: f.diferencia === null || f.diferencia === undefined ? null : Number(f.diferencia),
   }));
 
   const viajeIds = [...new Set(lineas.map((l) => l.viajeId).filter((v): v is string => !!v))];
@@ -1720,6 +1725,8 @@ export function bitacoraACsv(b: BitacoraRmf918): string {
       // «sin datos», no 0: un cero se leería como "la unidad no se movió",
       // que es más de lo que sabemos (ver leyenda).
       posiciones_gps_dia: f.posicionesGpsDia ?? 'sin datos',
+      // A37-S47-01: la tolerancia admitida (hasta $1 por línea) se rotula; vacío = el cruce no la registró.
+      diferencia_admitida: f.diferenciaAdmitida ?? '',
     })));
   return `${encabezado}\n${tabla}`;
 }
