@@ -127,6 +127,27 @@ describe('DAT-13 · conciliar es un compare-and-set', () => {
     expect(TABLAS.factura_saas[0].conciliada_por).toBe('u-1');
   });
 
+  it('A37-S61-08: una factura CANCELADA (reembolsada) no se puede volver a marcar como pagada', async () => {
+    TABLAS.factura_saas = [{ ...FACTURA(), estado: 'cancelada', pagada_en: null, cfdi_cancelado_en: '2026-09-02T00:00:00Z' }];
+    await expect(conciliar('f-1', 'SPEI-ERROR-1', 'u-1')).rejects.toThrow(/cancelada/i);
+    expect(TABLAS.factura_saas[0].estado).toBe('cancelada');
+    expect(TABLAS.factura_saas[0].referencia_banco).toBeUndefined();
+  });
+
+  it('A37-S61-08: pendiente y fallida SÍ se concilian (el pago por transferencia llegó)', async () => {
+    for (const estado of ['pendiente', 'fallida']) {
+      TABLAS.factura_saas = [{ ...FACTURA(), estado, pagada_en: null }];
+      await conciliar('f-1', 'SPEI-OK-1', 'u-1');
+      expect(TABLAS.factura_saas[0].estado).toBe('pagada');
+    }
+  });
+
+  it('A37-S61-08: timbrarFactura se niega si el CFDI de la factura ya fue cancelado', async () => {
+    TABLAS.factura_saas = [{ ...FACTURA(), estado: 'pagada', pagada_en: '2026-09-01T00:00:00Z', cfdi_cancelado_en: '2026-09-02T00:00:00Z' }];
+    await expect(timbrarFactura('f-1')).rejects.toThrow(/cancel/i);
+    expect(timbrarMensualidad).not.toHaveBeenCalled();
+  });
+
   it('sobre una factura que ya no existe, lo dice en vez de fingir que se pagó', async () => {
     TABLAS.factura_saas = [];
     await expect(conciliar('f-1', 'SPEI-1', 'u-1')).rejects.toThrow(/ya no existe/i);

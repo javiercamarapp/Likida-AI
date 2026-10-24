@@ -263,7 +263,11 @@ export async function conciliar(
       referencia_banco: ref,
     })
     .eq('id', facturaId)
-    .neq('estado', 'pagada')
+    // A37-S61-08: solo lo que de verdad puede estar esperando un depósito. El
+    // `neq('pagada')` dejaba pasar 'cancelada' (reembolsada por Stripe): una
+    // referencia tecleada por error la resucitaba a 'pagada' y se timbraba un
+    // CFDI por dinero ya devuelto.
+    .in('estado', ['pendiente', 'fallida'])
     .select('id');
   if (error) throw new Error(`conciliar: ${error.message}`);
   if ((tocadas ?? []).length > 0) return;
@@ -275,6 +279,7 @@ export async function conciliar(
   if (errLee) throw new Error(`conciliar.leer: ${errLee.message}`);
   if (!f) throw new DatoInvalido('Esa factura ya no existe.');
   if (f.estado === 'pagada') throw new DatoInvalido('Esa factura ya estaba marcada como pagada.');
+  if (f.estado === 'cancelada') throw new DatoInvalido('Esa factura está cancelada (el cobro se anuló o se reembolsó): no se puede marcar como pagada. Si el depósito es real, emite una factura nueva.');
   throw new DatoInvalido(`Esa factura está "${String(f.estado)}" y no se pudo marcar como pagada.`);
 }
 
@@ -309,13 +314,15 @@ export async function timbrarFactura(facturaId: string): Promise<{ uuid: string 
   const admin = supabaseAdmin();
   const { data: f, error } = await admin
     .from('factura_saas')
-    .select('id, tenant_id, estado, monto, subtotal, iva, moneda, periodo_inicio, periodo_fin, referencia, cfdi_uuid')
+    .select('id, tenant_id, estado, monto, subtotal, iva, moneda, periodo_inicio, periodo_fin, referencia, cfdi_uuid, cfdi_cancelado_en')
     .eq('id', facturaId)
     .maybeSingle();
   if (error) throw new Error(`timbrarFactura.leer: ${error.message}`);
   if (!f) throw new DatoInvalido('Esa factura ya no existe.');
   if (f.cfdi_uuid) throw new DatoInvalido(`Esa factura ya está timbrada (UUID ${String(f.cfdi_uuid).slice(0, 8)}…). Timbrarla otra vez crearía un segundo CFDI que habría que cancelar.`);
   if (f.estado !== 'pagada') throw new DatoInvalido('Solo se timbra lo que ya está pagado.');
+  // A37-S61-08: un CFDI cancelado ya cerró ese cobro (reembolso): no se emite otro por el mismo dinero.
+  if (f.cfdi_cancelado_en) throw new DatoInvalido('El CFDI de esta factura ya fue cancelado (el dinero se devolvió o el cobro se anuló): no se timbra otro por el mismo cobro.');
 
   const total = Number(f.monto);
   const subtotal = f.subtotal === null || f.subtotal === undefined ? null : Number(f.subtotal);

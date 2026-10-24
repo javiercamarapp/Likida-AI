@@ -499,6 +499,19 @@ describe('los formatos', () => {
     expect(aplicarFormato('   ', 'monto')).toBeNull();
   });
 
+  it('A37-S42-08: monto_entero NO trunca centavos y monto rechaza el punto de miles ambiguo', () => {
+    // 99.99 escrito como «99» era un monto fiscal distinto del real.
+    expect(aplicarFormato('99.99', 'monto_entero')).toBeNull();
+    expect(aplicarFormato('1,234.90', 'monto_entero')).toBeNull();
+    expect(aplicarFormato('99.00', 'monto_entero')).toBe('99');
+    expect(aplicarFormato('850', 'monto_entero')).toBe('850');
+    // «12.345» puede ser 12 345 (miles europeos) o 12.35: no se adivina.
+    expect(aplicarFormato('12.345', 'monto')).toBeNull();
+    expect(aplicarFormato('1.234,50', 'monto')).toBeNull();
+    // el redondeo a centavos usa round2 (1.0050001 -> 1.01)
+    expect(aplicarFormato('1.0050001', 'monto')).toBe('1.01');
+  });
+
   it('la fecha se pasa al formato del portal, y una que no es fecha devuelve null', () => {
     expect(aplicarFormato('2026-08-04', 'fecha_dmy')).toBe('04/08/2026');
     expect(aplicarFormato('2026-08-04', 'fecha_dmy_guion')).toBe('04-08-2026');
@@ -513,7 +526,7 @@ describe('los formatos', () => {
     expect(aplicarFormato('AB-12 34', 'solo_digitos')).toBe('1234');
     expect(aplicarFormato('sin-numeros', 'solo_digitos')).toBeNull();
     expect(aplicarFormato(' hola ')).toBe('hola');
-    expect(aplicarFormato('1,234.90', 'monto_entero')).toBe('1234');
+    expect(aplicarFormato('1,234.00', 'monto_entero')).toBe('1234');
   });
 
   it('un valor del ticket que no se puede formatear DECLARA el fallo, no lo disimula', async () => {

@@ -40,10 +40,12 @@ const anotarCorrida = vi.hoisted(() => vi.fn(async () => {}));
 const avisosEnviadosDesde = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => [] as Date[]));
 const registrarAviso = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => {}));
 const purgarAvisosViejos = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => 0));
+const alertarOperador = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => true));
 
 vi.mock('@/lib/meta/enviar_con_fallback', () => ({ enviarConFallback }));
 vi.mock('../contactos', () => ({ telefonoJefeDe, telefonoParaDineroDe }));
 vi.mock('@/lib/logger', () => ({ logger }));
+vi.mock('@/lib/observability/alerta', () => ({ alertarOperador }));
 vi.mock('./lectores', () => ({ evaluar }));
 vi.mock('./repo', () => ({
   reglasActivas, sellosDe, sellarDisparos, anotarCorrida,
@@ -88,6 +90,7 @@ beforeEach(() => {
   anotarCorrida.mockReset().mockResolvedValue(undefined);
   avisosEnviadosDesde.mockReset().mockResolvedValue([]);
   registrarAviso.mockReset().mockResolvedValue(undefined);
+  alertarOperador.mockReset().mockResolvedValue(true);
   purgarAvisosViejos.mockReset().mockResolvedValue(0);
   logger.error.mockClear();
   logger.warn.mockClear();
@@ -508,5 +511,55 @@ describe('límite de frecuencia por regla (0520)', () => {
     purgarAvisosViejos.mockReset().mockResolvedValue(3);
     await vigilarReglas(AHORA);
     expect(purgarAvisosViejos).toHaveBeenCalledWith(AHORA);
+  });
+});
+
+// A37-S56-09: `costo_ia_dia_mayor_a` es `soloAdmin` — el gasto de modelo es de
+// Likida. Su aviso NO puede salir al teléfono de dinero de la flota cliente.
+describe('A37-S56-09 — las plantillas soloAdmin no van al teléfono de la flota', () => {
+  const REGLA_COSTO_IA = {
+    ...REGLA_DINERO, id: 'r-ia', plantilla: 'costo_ia_dia_mayor_a' as const, params: { usd: 5 },
+    frase: 'Voy a avisarte cuando el costo de IA del día rebase US$5.00.',
+  };
+  const D_IA = { objeto: 'tenant' as const, objetoId: 't-1', clave: '2026-08-27', evidencia: 'El costo de IA del 2026-08-27 va en US$7.00. Reparto: chat US$4.00' };
+
+  it('NO manda WhatsApp a la flota: va a la alerta interna de Likida y se sella', async () => {
+    reglasActivas.mockResolvedValue([REGLA_COSTO_IA]);
+    evaluar.mockResolvedValue([D_IA]);
+    const r = await vigilarReglas(AHORA);
+    expect(enviarConFallback).not.toHaveBeenCalled();
+    expect(telefonoParaDineroDe).not.toHaveBeenCalled();
+    expect(alertarOperador).toHaveBeenCalledTimes(1);
+    expect(sellarDisparos).toHaveBeenCalledTimes(1);
+    expect(r.avisos).toBe(1);
+  });
+
+  it('si la alerta interna no salió, NO se sella (se reintenta) y tampoco se manda a la flota', async () => {
+    reglasActivas.mockResolvedValue([REGLA_COSTO_IA]);
+    evaluar.mockResolvedValue([D_IA]);
+    alertarOperador.mockResolvedValue(false);
+    const r = await vigilarReglas(AHORA);
+    expect(enviarConFallback).not.toHaveBeenCalled();
+    expect(sellarDisparos).not.toHaveBeenCalled();
+    expect(r.avisos).toBe(0);
+  });
+});
+
+// A37-S56-10: cuando el reloj corta el barrido, no pueden quedar fuera SIEMPRE
+// las mismas flotas — el punto de arranque rota por hora.
+describe('A37-S56-10 — el arranque del barrido rota entre flotas', () => {
+  const rA = { ...REGLA_DINERO, id: 'r-A', tenantId: 't-A' };
+  const rB = { ...REGLA_DINERO, id: 'r-B', tenantId: 't-B' };
+
+  it('horas consecutivas empiezan por flotas distintas', async () => {
+    const primeros = new Set<string>();
+    for (const h of [7000, 7001]) {
+      evaluar.mockClear();
+      reglasActivas.mockResolvedValue([rA, rB]);
+      await vigilarReglas(new Date(h * 3_600_000));
+      primeros.add(evaluar.mock.calls[0][2] as string);
+      expect(evaluar).toHaveBeenCalledTimes(2); // sin corte, las dos corren
+    }
+    expect(primeros).toEqual(new Set(['t-A', 't-B']));
   });
 });

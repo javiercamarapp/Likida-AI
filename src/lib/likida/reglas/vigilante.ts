@@ -38,6 +38,7 @@ import {
   type ReglaGuardada,
 } from './repo';
 import { evaluarFrecuencia } from './frecuencia';
+import { rotarGruposPorHora } from '../rotacion_barrido';
 
 export interface ResultadoVigilancia {
   reglas: number;
@@ -135,6 +136,33 @@ async function correrRegla(regla: ReglaGuardada, ahora: Date): Promise<Resultado
     });
     await anotarCorrida(regla.tenantId, regla.id, ahora, 0);
     return { avisados: 0, diferida: true };
+  }
+
+  // ── LO QUE ES DE LIKIDA NO SE LE MANDA A LA FLOTA (A37-S56-09) ─────────────
+  // Una plantilla `soloAdmin` (hoy `costo_ia_dia_mayor_a`) mide cifras INTERNAS
+  // de la plataforma —el gasto de modelo es de Likida—. `telefonoParaDineroDe`
+  // resuelve al dueño o contador de la flota CLIENTE: mandarle ahí el desglose
+  // por fase en USD expone costos de plataforma. Fail-closed: nunca se toca el
+  // teléfono de la flota; el aviso va a la alerta interna del operador de
+  // Likida y solo se sella si esa alerta SALIÓ (si no, se reintenta a la hora
+  // siguiente; el piso de una hora por evento evita el ruido).
+  if (plantilla.soloAdmin) {
+    const { alertarOperador } = await import('@/lib/observability/alerta');
+    const salio = await alertarOperador(`reglas.${regla.plantilla}`, {
+      flota: regla.tenantId,
+      regla: regla.id,
+      casos: nuevos.length,
+      detalle: mensajeDeRegla(regla.frase, nuevos.map((d) => d.evidencia)),
+    });
+    if (!salio) {
+      logger.warn('reglas.solo_admin_sin_alerta', { regla: regla.id, tenant: regla.tenantId, plantilla: regla.plantilla, casos: nuevos.length });
+      await anotarCorrida(regla.tenantId, regla.id, ahora, 0);
+      return { avisados: 0, diferida: true };
+    }
+    await sellarDisparos(regla.tenantId, regla.id, nuevos);
+    await anotarCorrida(regla.tenantId, regla.id, ahora, nuevos.length);
+    logger.info('reglas.disparo_interno', { regla: regla.id, tenant: regla.tenantId, plantilla: regla.plantilla, casos: nuevos.length });
+    return { avisados: nuevos.length, diferida: false };
   }
 
   const telefono = plantilla.canal === 'dinero'
@@ -265,7 +293,13 @@ export async function vigilarReglas(
   opts: { venceEn?: number; excluirTenants?: ReadonlySet<string> } = {},
 ): Promise<ResultadoVigilancia> {
   // Las flotas con perfil (0770) no vigilan reglas: es un módulo en stand-by.
-  const reglas = (await reglasActivas()).filter((r) => !opts.excluirTenants?.has(r.tenantId));
+  // A37-S56-10: el arranque rota por hora entre flotas. Con el orden fijo por
+  // UUID, si el reloj del cron cortaba el barrido siempre quedaban fuera las
+  // mismas flotas y su vigilancia no corría jamás.
+  const reglas = rotarGruposPorHora(
+    (await reglasActivas()).filter((r) => !opts.excluirTenants?.has(r.tenantId)),
+    (r) => r.tenantId, ahora,
+  );
   const r: ResultadoVigilancia = { reglas: reglas.length, disparadas: 0, avisos: 0, fallos: 0, diferidas: 0, cortadasPorReloj: 0 };
   let intentadas = 0;
   for (const regla of reglas) {

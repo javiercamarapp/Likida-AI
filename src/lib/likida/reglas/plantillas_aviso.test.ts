@@ -93,7 +93,11 @@ describe('las 10 plantillas de regla, hasta el aviso', () => {
     for (const id of PLANTILLAS_ID) expect(validarParams(id, PARAMS[id]).ok, id).toBe(true);
   });
 
-  it.each([...PLANTILLAS_ID])('%s — ventana CERRADA: sale la plantilla regla_aviso_v1 con frase confirmada, al destinatario de su canal', async (id) => {
+  // A37-S56-09: las `soloAdmin` (costo de IA de Likida) NO salen al teléfono de la
+  // flota; su camino interno se prueba en vigilante.test.ts.
+  const DE_FLOTA = PLANTILLAS_ID.filter((id) => !CATALOGO[id].soloAdmin);
+
+  it.each([...DE_FLOTA])('%s — ventana CERRADA: sale la plantilla regla_aviso_v1 con frase confirmada, al destinatario de su canal', async (id) => {
     reglasActivas.mockResolvedValue([reglaDe(id)]);
     const r = await vigilarReglas(AHORA);
     expect(r).toMatchObject({ reglas: 1, disparadas: 1, avisos: 1, fallos: 0 });
@@ -110,7 +114,7 @@ describe('las 10 plantillas de regla, hasta el aviso', () => {
     expect(registrados[0]).toEqual(['t-1', `r-${id}`, expect.objectContaining({ resultado: 'enviado', via: 'plantilla' })]);
   });
 
-  it.each([...PLANTILLAS_ID])('%s — ventana ABIERTA: sale el texto completo con la frase y la evidencia, sin plantilla', async (id) => {
+  it.each([...DE_FLOTA])('%s — ventana ABIERTA: sale el texto completo con la frase y la evidencia, sin plantilla', async (id) => {
     ventana.estado = 'abierta';
     reglasActivas.mockResolvedValue([reglaDe(id)]);
     await vigilarReglas(AHORA);
