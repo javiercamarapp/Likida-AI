@@ -156,7 +156,8 @@ describe('importarOperadores', () => {
     const r = await importarOperadores('t-1', tres, { origen: 'api' });
     expect(r.creados.map((c) => c.fila)).toEqual([4]);
     expect(r.errores.map((e) => e.fila)).toEqual([2, 3]);
-    expect(r.errores[0].motivo).toMatch(/OTRA flota/);
+    expect(r.errores[0].motivo).toMatch(/no se puede registrar en tu flota/);
+    expect(r.errores[0].motivo).not.toMatch(/otra flota|Ajeno/i); // A37-L-seguridad-tenant-02
     expect(r.errores[1].motivo).toMatch(/Pedro Baja.*reactívalo/);
   });
 

@@ -74,6 +74,8 @@ export const dependenciasPullPorOmision: DependenciasPull = {
 export interface OpcionesPull {
   /** Tamaño de página pedido al puerto; entero ≥ 1, se recorta a `TOPE_ITEMS_POR_PASADA`. */
   limite?: number;
+  /** A37-S09-02: instante (ms) tras el cual no se pide otra página. El cursor ya guardado hace seguro cortar entre páginas. */
+  venceEn?: number;
 }
 
 export interface ResultadoPull {
@@ -224,6 +226,8 @@ export async function pullDesgloses(
       if (avanza) r.cursor = sig;
 
       if (!pagina.hayMas || pagina.items.length === 0 || sig === null) break;
+      // A37-S09-02: sin reloj no hay más páginas; `hayMas` queda en true y la siguiente pasada continúa desde el cursor.
+      if (opciones.venceEn !== undefined && Date.now() >= opciones.venceEn) break;
       if (!eraPrimera && lectura && comparar(sig, lectura) <= 0) break; // el origen no avanzó: no ciclar
       lectura = sig;
     }

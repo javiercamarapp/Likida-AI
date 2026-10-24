@@ -53,6 +53,12 @@ beforeEach(() => {
 });
 
 describe('GET /api/export/carta-porte-xml', () => {
+  it('A37-L-03: una navegación cross-site no genera ni sella (403)', async () => {
+    const r = await GET(new Request(URL_OK, { headers: { 'sec-fetch-site': 'cross-site' } }));
+    expect(r.status).toBe(403);
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it('un operador NO baja el XML (área operacion lo permite a flota_admin/encargado, no al chofer)', async () => {
     tenant = { ok: true, tenantId: 't-1', rol: 'operador' };
     expect((await GET(new Request(URL_OK))).status).toBe(403);

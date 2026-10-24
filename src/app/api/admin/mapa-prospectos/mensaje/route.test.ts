@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // aviso de prospectos al pie (art. 16 fr. II).
 // ═══════════════════════════════════════════════════════════════════════════
 
+let salidaModelo: Record<string, string> | null = null;
 const llamadas: Array<{ system: string; messages: Array<{ content: string }> }> = [];
 const escrituras: Array<Record<string, unknown>> = [];
 const estadoSesion = vi.hoisted(() => ({ tenantId: '22222222-2222-2222-2222-222222222222' as string | null }));
@@ -44,7 +45,7 @@ vi.mock('@/lib/llm/openrouter', () => ({
   generateStructured: (args: { system: string; messages: Array<{ content: string }> }) => {
     llamadas.push(args);
     return Promise.resolve({
-      data: {
+      data: salidaModelo ?? {
         mensaje_wa: 'Hola {{DECISOR}}, vi que buscan Auxiliar de liquidación de viajes — ese trabajo es el que automatizamos. ¿15 minutos esta semana?',
         correo_asunto: 'Su vacante de liquidación, {{DECISOR}}',
         correo_cuerpo: 'Estimado {{DECISOR}}: vi que Fletes del Norte busca Auxiliar de liquidación de viajes. Eso es lo que automatizamos: el operador manda sus comprobantes por WhatsApp y la liquidación sale cuadrada. ¿Tiene 15 minutos esta semana?\n\nJavier Cámara — Likida.ai',
@@ -77,9 +78,28 @@ beforeEach(() => {
   escrituras.length = 0;
   errorAlGuardar = null;
   estadoCrm.valor = 'nuevo';
+  salidaModelo = null;
   presupuestos.length = 0;
   estadoSesion.tenantId = '22222222-2222-2222-2222-222222222222';
   process.env.NEXT_PUBLIC_APP_URL = 'https://app.likida.ai';
+});
+
+describe('A37-S08-02 — el validador determinista manda sobre el modelo', () => {
+  it.each([
+    ['cifra no canónica', 'Hola {{DECISOR}}, solo $12 por viaje, ahorra $4,500 al mes con Likida. ¿15 minutos esta semana?'],
+    ['pesos del estímulo de diésel', 'Hola {{DECISOR}}, el estímulo del diésel te devuelve $35 por cada viaje. ¿15 minutos esta semana?'],
+    ['nuestros clientes', 'Hola {{DECISOR}}, nuestros clientes ya liquidan en minutos por WhatsApp. ¿15 minutos esta semana?'],
+  ])('%s: 422, no se guarda nada', async (_n, wa) => {
+    salidaModelo = {
+      mensaje_wa: wa,
+      correo_asunto: 'Su vacante de liquidación',
+      correo_cuerpo: 'Estimado {{DECISOR}}: el operador manda sus comprobantes por WhatsApp y la liquidación sale cuadrada. ¿Tiene 15 minutos esta semana?\n\nJavier Cámara — Likida.ai',
+    };
+    const r = await postear();
+    expect(r.status).toBe(422);
+    expect(((await r.json()) as { codigo: string }).codigo).toBe('redactor_texto_invalido');
+    expect(escrituras).toHaveLength(0);
+  });
 });
 
 describe('la puerta de origen (auditoría 21, BAJO-MEDIO)', () => {

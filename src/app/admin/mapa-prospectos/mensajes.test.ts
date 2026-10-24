@@ -39,6 +39,11 @@ describe('los href — el texto del agente experto manda', () => {
     expect(hrefWa({ ...base, telefono: null })).toBeNull();
     expect(hrefCorreo({ ...base, correo: null })).toBeNull();
   });
+  it('A37-S06-02: el correo del prospecto se codifica en el mailto (no rompe el atributo href)', () => {
+    const href = hrefCorreo({ ...base, correo: 'a"><img/src=//x.test/p@b.cc' })!;
+    expect(href).not.toMatch(/["<>]/);
+    expect(href.startsWith('mailto:')).toBe(true);
+  });
   it('con mensaje IA guardado, el botón abre con ESE texto', () => {
     const p = { ...base, mensajesGeneradosEn: '2026-08-17T00:00:00Z' };
     const t = textos({ mensajeWaIa: 'TEXTO-DEL-AGENTE', correoAsuntoIa: 'ASUNTO-IA', correoCuerpoIa: 'CUERPO-IA' });

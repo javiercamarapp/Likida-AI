@@ -439,6 +439,8 @@ function Exportacion({ configs, acciones, apiSufijo }: { configs: ConfigVista[];
         <a className="hairline rounded-lg px-3 h-8 inline-flex items-center hover:opacity-80" href={liga('estandar', 'csv')}>Estándar · CSV</a>
         <a className="hairline rounded-lg px-3 h-8 inline-flex items-center hover:opacity-80" href={liga('estandar', 'json')}>Estándar · JSON</a>
         <a className="hairline rounded-lg px-3 h-8 inline-flex items-center hover:opacity-80" href={liga('estandar', 'xlsx')}>Estándar · Excel</a>
+        {/* A37-L-03: si una descarga se cortó, los aprobados ya figuran como exportados; esta liga los baja todos otra vez. */}
+        <a className="hairline rounded-lg px-3 h-8 inline-flex items-center hover:opacity-80" href={`${liga('estandar', 'csv')}&todos=1`}>Volver a descargar todos los aprobados · CSV</a>
         {configs.map((c) => (
           <a key={c.id} className="hairline rounded-lg px-3 h-8 inline-flex items-center hover:opacity-80" href={liga(c.id, c.formato)}>{c.nombre} · {c.formato.toUpperCase()}</a>
         ))}

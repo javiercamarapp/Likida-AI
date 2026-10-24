@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { StatusPill, type Estado } from '../ui/kit';
 import { usd } from '@/lib/utils';
 import { numero, fechaCorta } from '@/lib/formato';
+import { cplAgregado } from './cpl';
 import type { Campana, EstadoIntegracionAds } from '@/lib/admin/campanas';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -61,8 +62,6 @@ export function ControlCampanas({ campanas, integracion, leadsAds, pausar, refre
           </thead>
           <tbody>
             {campanas.map((c) => {
-              // CPL real SOLO con gasto medido y leads de ads reales.
-              const cpl = c.gastoRealUsd !== null && leadsAds > 0 ? c.gastoRealUsd / leadsAds : null;
               return (
                 <tr key={c.id} className="border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}>
                   <td className="py-2">
@@ -78,9 +77,12 @@ export function ControlCampanas({ campanas, integracion, leadsAds, pausar, refre
                       : <span style={{ color: 'var(--muted)' }}>sin medir</span>}
                   </td>
                   <td className="py-2 text-right">
-                    {cpl !== null
-                      ? <span className="tabular">{usd(cpl)} ({numero(leadsAds)} leads){c.cplObjetivoUsd !== null ? ` vs ${usd(c.cplObjetivoUsd)}` : ''}</span>
-                      : <span style={{ color: 'var(--muted)' }}>{c.gastoRealUsd === null ? 'sin gasto medido' : 'cero leads de ads'}</span>}
+                    {/* A37-S06-04: los leads no se atribuyen por campaña; el CPL
+                        solo existe agregado (abajo). */}
+                    <span style={{ color: 'var(--muted)' }}>
+                      {c.gastoRealUsd === null ? 'sin gasto medido' : 'ver CPL agregado'}
+                      {c.cplObjetivoUsd !== null ? ` · objetivo ${usd(c.cplObjetivoUsd)}` : ''}
+                    </span>
                   </td>
                   <td className="py-2 text-right">
                     <span className="inline-flex items-center gap-1.5">
@@ -102,6 +104,16 @@ export function ControlCampanas({ campanas, integracion, leadsAds, pausar, refre
         </table>
         </div>
       )}
+      {(() => {
+        const agg = cplAgregado(campanas, leadsAds);
+        return campanas.length > 0 ? (
+          <p className="text-[12px] mt-2 m-0 tabular" style={{ color: 'var(--muted)' }}>
+            {agg
+              ? `CPL agregado: ${usd(agg.cplUsd)} (${usd(agg.gastoUsd)} medidos de ${agg.medidas} de ${agg.total} campañas ÷ ${numero(leadsAds)} leads de ads). Los leads no se atribuyen por campaña.`
+              : leadsAds > 0 ? 'CPL agregado: sin gasto medido.' : 'CPL agregado: cero leads de ads.'}
+          </p>
+        ) : null;
+      })()}
 
       <div className="flex items-center gap-2 mt-2">
         {integracion.metaConfigurada && campanas.some((c) => c.canal === 'meta' && c.idExterno) && (

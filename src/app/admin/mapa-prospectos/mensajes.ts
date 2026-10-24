@@ -59,7 +59,7 @@ export function hrefCorreo(p: ProspectoMapa, t?: TextosProspecto | null): string
   if (!p.correo) return null;
   const asunto = t?.correoAsuntoIa ?? correoProspecto(p).asunto;
   const cuerpo = t?.correoCuerpoIa ?? correoProspecto(p).cuerpo;
-  return `mailto:${p.correo}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+  return `mailto:${encodeURIComponent(p.correo).replace(/%40/g, '@')}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
 }
 
 /**
