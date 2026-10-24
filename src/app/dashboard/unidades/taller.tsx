@@ -5,7 +5,7 @@ import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAsignar, puedeAdministrar } from '@/lib/auth/permisos';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import {
-  getTaller, validarRutina, crearRutina, abrirOrdenProgramada, cerrarOrden,
+  getTaller, validarRutina, crearRutina, abrirOrdenProgramada, cerrarOrden, OrdenYaAbierta,
   type OrdenTaller, type PropuestaRutina,
 } from '@/lib/likida/mantenimiento';
 import { fechaHoraMx, numero } from '@/lib/formato';
@@ -79,17 +79,23 @@ export async function BloqueTaller({
     }
   }
 
-  async function accionAbrirOrden(fd: FormData): Promise<void> {
+  async function accionAbrirOrden(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
     const s = await resolverTenantEfectivo(RUTA, sp);
-    if (!puedeVerRuta(s.rol, RUTA) || !puedeAsignar(s.rol)) return;
+    if (!puedeVerRuta(s.rol, RUTA) || !puedeAsignar(s.rol)) return { error: 'Abrir órdenes de taller es del encargado o del dueño.' };
     try {
       await abrirOrdenProgramada(s.tenantId, String(fd.get('rutinaId') ?? ''), String(fd.get('unidadId') ?? ''));
-    } catch {
-      // El candado real es la unique de la 0209; el doble clic que pierde la
-      // carrera simplemente ve la orden ya abierta al revalidar.
+    } catch (e) {
+      // A37-S20-04: SOLO el choque de la unique de la 0209 es benigno (el doble clic que
+      // pierde la carrera ve la orden ya abierta al revalidar). Todo lo demás se DICE.
+      if (e instanceof OrdenYaAbierta) {
+        revalidatePath(RUTA);
+        return { ok: 'Esa orden ya estaba abierta.' };
+      }
+      return { error: mensajeParaPantalla(e, 'abrir la orden') };
     }
     revalidatePath(RUTA);
+    return { ok: 'Orden abierta.' };
   }
 
   async function accionCerrarOrden(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
@@ -179,13 +185,12 @@ export async function BloqueTaller({
               {/* Los motivos de dato faltante piden capturar el dato, no abrir
                   una orden que nadie sabe si toca. */}
               {opera && p.motivo !== 'sin_odometro' && p.motivo !== 'odometro_desactualizado' && (
-                <form action={accionAbrirOrden} className="ml-auto">
-                  <input type="hidden" name="rutinaId" value={p.rutinaId} />
-                  <input type="hidden" name="unidadId" value={p.unidadId} />
-                  <button type="submit" className="rounded-lg hairline px-2.5 py-1 text-xs font-medium">
-                    Abrir orden
-                  </button>
-                </form>
+                <div className="ml-auto">
+                  <FormaConAviso accion={accionAbrirOrden} boton="Abrir orden" columnas="md:grid-cols-1">
+                    <input type="hidden" name="rutinaId" value={p.rutinaId} />
+                    <input type="hidden" name="unidadId" value={p.unidadId} />
+                  </FormaConAviso>
+                </div>
               )}
               {opera && p.motivo === 'sin_odometro' && (
                 <span className="ml-auto text-xs" style={{ color: 'var(--muted)' }}>captura el km de la unidad para evaluarla</span>
