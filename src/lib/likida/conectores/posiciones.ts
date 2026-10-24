@@ -121,6 +121,8 @@ export async function leerPosicionesSamsara(
       pagination?: { hasNextPage?: boolean; endCursor?: string | null };
     };
     try { json = JSON.parse(r.cuerpo); } catch { return { ok: false, motivo: 'Samsara contestó 200 con un cuerpo que no es JSON.', falla: 'formato' }; }
+    // A37-S37-09: `JSON.parse('null')` pasa el try; sin esta guarda `json.data` lanzaba un TypeError fuera de él.
+    if (typeof json !== 'object' || json === null || Array.isArray(json)) return { ok: false, motivo: 'Samsara contestó 200 con un cuerpo que no es un objeto JSON.', falla: 'formato' };
     for (const v of json.data ?? []) {
       const g = v.gps;
       if (!v.id || !g || !coordenadaValida(g.latitude, g.longitude) || !g.time) {

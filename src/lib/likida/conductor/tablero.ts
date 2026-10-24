@@ -151,6 +151,10 @@ export interface UbicacionFila {
 }
 
 export const TEXTO_SIN_POSICION = 'Sin posición reciente (el GPS de esta unidad no ha reportado)';
+/** A37-S37-07: la marca de la posición es POSTERIOR al reloj (más allá de la tolerancia): no se pinta como fresca ni como dato. */
+export const TEXTO_POSICION_FUTURA = 'Sin posición confiable (la hora que reportó el GPS está en el futuro)';
+/** Cuánto adelanto de reloj se tolera antes de dudar de la marca. */
+const FUTURO_TOLERADO_POSICION_MIN = 5;
 export const TEXTO_POSICION_NO_LEIDA = 'No se pudo consultar la posición ahora mismo (no significa que la unidad no tenga GPS)';
 
 function haceTexto(min: number): string {
@@ -172,6 +176,7 @@ export function ubicacionDeFila(viaje: ViajeTablero, datos: DatosTablero, ahora:
   if (!p) return vacia(viaje.unidadId ? TEXTO_SIN_POSICION : 'Sin tractor asignado: no hay posición que mostrar');
   const t = Date.parse(p.medidaEn);
   if (!Number.isFinite(t) || !Number.isFinite(p.lat) || !Number.isFinite(p.lng)) return vacia(TEXTO_SIN_POSICION);
+  if (t > ahora.getTime() + FUTURO_TOLERADO_POSICION_MIN * MS_MIN) return vacia(TEXTO_POSICION_FUTURA);
   const min = Math.max(0, Math.floor((ahora.getTime() - t) / MS_MIN));
   let cercano: { nombre: string; d: number } | null = null;
   for (const id of [viaje.origenSitioId, viaje.destinoSitioId]) {

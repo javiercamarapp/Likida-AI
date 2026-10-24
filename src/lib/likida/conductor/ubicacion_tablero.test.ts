@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG_CONDUCTOR_DEFAULT } from './config';
 import type { DatosTablero, PosicionTablero, ViajeTablero } from './repo_validacion';
-import { armarTablero, MINUTOS_POSICION_OBSOLETA, TEXTO_POSICION_NO_LEIDA, TEXTO_SIN_POSICION } from './tablero';
+import { armarTablero, MINUTOS_POSICION_OBSOLETA, TEXTO_POSICION_FUTURA, TEXTO_POSICION_NO_LEIDA, TEXTO_SIN_POSICION } from './tablero';
 
 // T-A5-11 «dónde está»: la fila del tablero dice la última posición, nunca la inventa. Datos 100 % sintéticos.
 const AHORA = new Date('2026-10-02T18:00:00.000Z');
@@ -94,5 +94,18 @@ describe('«dónde está» en la fila del tablero', () => {
 
   it('el texto nunca trae coordenadas', () => {
     expect(ubicacion(viaje(), posicion(12)).texto).not.toMatch(/\d{2}\.\d{3,}/);
+  });
+});
+
+describe('A37-S37-07: una marca de posición en el futuro no se pinta como fresca', () => {
+  const adelante = (min: number) => new Date(AHORA.getTime() + min * 60_000).toISOString();
+  it('una marca 2 h en el futuro (reloj o zona mal leídos) dice que no es confiable, no «hace menos de 1 min»', () => {
+    const u = ubicacion(viaje(), new Map([['u1', { ...CERCA_DE_CARGA, medidaEn: adelante(120), fuente: 'gps' as const }]]));
+    expect(u.texto).toBe(TEXTO_POSICION_FUTURA);
+    expect(u).toMatchObject({ hace: null, sitioMasCercano: null, distanciaM: null, fuente: 'sin_dato' });
+  });
+  it('un adelanto de reloj chico (≤ 5 min) se tolera como «hace menos de 1 min»', () => {
+    const u = ubicacion(viaje(), new Map([['u1', { ...CERCA_DE_CARGA, medidaEn: adelante(3), fuente: 'gps' as const }]]));
+    expect(u.hace).toBe('hace menos de 1 min');
   });
 });

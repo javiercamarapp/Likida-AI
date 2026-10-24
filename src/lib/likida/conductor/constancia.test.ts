@@ -148,3 +148,48 @@ describe('constancia de reportes por operador (T-A5-67)', () => {
     expect(COLUMNAS_CSV_CONSTANCIA.join(',')).not.toMatch(/telefono|tel\b/i);
   });
 });
+
+describe('A37-S35-10: «completo» solo si lo reportó el operador; lo cubierto por oficina o sistema se cuenta aparte', () => {
+  const geocerca = (v: string, t: HitoFila['tipo']) => reportado(v, t, 'sistema', undefined, { validadoPor: 'gps', estado: 'validado', validadoEn: '2026-10-03T15:31:00.000Z' });
+
+  it('un operador que no escribió nada y cuyos 5 hitos cubrieron la geocerca y la oficina NO sale «completo»', () => {
+    const c = armarConstancia({
+      tenantId: T1, periodo: PERIODO, viajes: [viaje('1', 'a')],
+      hitos: [
+        geocerca('1', 'llegada_carga'), geocerca('1', 'salida_carga'), geocerca('1', 'llegada_descarga'),
+        reportado('1', 'salida_descarga', 'oficina'), reportado('1', 'regreso', 'oficina'),
+      ],
+    });
+    expect(c.operadores[0]).toMatchObject({
+      esperados: 5, reportados: 5, faltantes: 0, pendientes: 0, reportadosPorOperador: 0, cubiertosPorOficinaOSistema: 5, estado: 'completo_con_apoyo',
+    });
+  });
+
+  it('el operador que reportó todo (botón, texto, foto, ubicación compartida) sigue «completo»', () => {
+    const c = armarConstancia({
+      tenantId: T1, periodo: PERIODO, viajes: [viaje('1', 'a')],
+      hitos: cinco('1', { llegada_carga: 'boton', salida_carga: 'texto', llegada_descarga: 'foto', salida_descarga: 'ubicacion', regreso: 'boton' }),
+    });
+    expect(c.operadores[0]).toMatchObject({ reportadosPorOperador: 5, cubiertosPorOficinaOSistema: 0, estado: 'completo' });
+  });
+
+  it('con faltantes manda «con_faltantes» aunque también haya apoyo de oficina', () => {
+    const c = armarConstancia({
+      tenantId: T1, periodo: PERIODO, viajes: [viaje('1', 'a')],
+      hitos: cinco('1', { llegada_carga: 'oficina', salida_carga: 'boton' }),
+    });
+    expect(c.operadores[0]).toMatchObject({ reportadosPorOperador: 1, cubiertosPorOficinaOSistema: 1, estado: 'con_faltantes' });
+  });
+
+  it('el CSV dice quién reportó cada hito (operador u oficina/sistema)', () => {
+    const c = armarConstancia({
+      tenantId: T1, periodo: PERIODO, viajes: [viaje('1', 'a')],
+      hitos: cinco('1', { llegada_carga: 'boton', salida_carga: 'oficina' }),
+    });
+    expect(COLUMNAS_CSV_CONSTANCIA).toContain('quien_reporto');
+    const filas = csvConstancia(c).trim().split('\n').slice(1).map((l) => l.split(','));
+    const col = COLUMNAS_CSV_CONSTANCIA.indexOf('quien_reporto');
+    expect(filas.filter((f) => f[3] === 'reportado').map((f) => f[col])).toEqual(['operador', 'oficina_o_sistema']);
+    expect(filas.filter((f) => f[3] === 'faltante').every((f) => f[col] === '')).toBe(true);
+  });
+});

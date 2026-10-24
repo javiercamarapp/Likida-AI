@@ -754,7 +754,8 @@ export const MINUTOS_CAPTURA_MANUAL = 4;
 export interface ValorAhorro {
   /** Comprobantes que pasaron por el Agente OCR. Conteo real. */
   documentosProcesados: number;
-  /** Liquidaciones que cerró el motor de cuadre. Conteo real. */
+  /** Liquidaciones vigentes que cerró el motor de cuadre (sin las que el
+   *  contralor rechazó, como el resto de las métricas). Conteo real. */
   liquidacionesCerradas: number;
   /** Comprobantes que llegaron sin viaje y el sistema logró amarrar. Real. */
   huerfanosResueltos: number;
@@ -787,9 +788,17 @@ interface ResumenDocumentos {
  * `noNula` acota a las filas que tengan esa columna con valor — para separar
  * "huérfanos resueltos" de "huérfanos totales" sin traerse ninguno de los dos.
  */
-async function contarFilas(tabla: string, tenantId: string, noNula?: string): Promise<number> {
+async function contarFilas(
+  tabla: string,
+  tenantId: string,
+  noNula?: string,
+  /** A37-S29-10: excluye `revision = 'rechazada'` (columna NOT NULL, mig. 0299),
+   *  igual que las migraciones 0344/0348 con el resto de las métricas. */
+  sinRechazadas = false,
+): Promise<number> {
   let q = supabaseAdmin().from(tabla).select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId);
   if (noNula) q = q.not(noNula, 'is', null);
+  if (sinRechazadas) q = q.neq('revision', 'rechazada');
   const { count, error } = await acotada(
     q,
     'getValorAhorro/contarFilas',
@@ -830,7 +839,7 @@ async function contarFilas(tabla: string, tenantId: string, noNula?: string): Pr
 export async function getValorAhorro(tenantId: string): Promise<ValorAhorro> {
   const [docs, liquidacionesCerradas, huerfanosTotales, huerfanosResueltos, costoIa] = await Promise.all([
     traerResumenDocumentos(tenantId),
-    contarFilas('liquidacion', tenantId),
+    contarFilas('liquidacion', tenantId, undefined, true),
     contarFilas('comprobante_huerfano', tenantId),
     contarFilas('comprobante_huerfano', tenantId, 'resuelto_en'),
     traerResumenCostoIaTenant(tenantId, 'getValorAhorro.llm_costo'),
@@ -1727,7 +1736,14 @@ async function reconstruir(
         }),
       excluidos: duplicados,
     };
-  } catch {
+  } catch (err) {
+    // A37-S29-09: una EXCEPCIÓN del motor no es lo mismo que el
+    // portón que no cuadra (esperado, devuelve null arriba sin ruido). Si esto
+    // falla de forma recurrente, todas las liquidaciones se degradan a gastos
+    // crudos y nadie se entera: queda el rastro para verlo en los logs.
+    logger.warn('analytics.reconstruir_fallo', {
+      tenantId, viajeId, err: err instanceof Error ? err.message : String(err),
+    });
     return null;
   }
 }

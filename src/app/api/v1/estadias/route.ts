@@ -3,7 +3,7 @@
 // del mensaje, de dónde salió, si la ubicación la validó y cuántas fotos la respaldan; y, donde la flota
 // pactó horas libres y tarifa, el renglón PROPUESTO de cobro. Para el cobro de estadías al cliente.
 //
-//   ?desde=AAAA-MM-DD&hasta=AAAA-MM-DD   días de MÉXICO, ambos inclusive (por defecto, los últimos 7; máx. 93)
+//   ?desde=AAAA-MM-DD&hasta=AAAA-MM-DD   días en la zona de la flota (México por omisión), ambos inclusive (por defecto, los últimos 7; máx. 93)
 //   ?formato=json|csv                    csv = UTF-8 con BOM, listo para Excel
 //   ?terminalId= ?clienteId= ?operadorId= filtros opcionales (uuid)
 //
@@ -20,10 +20,12 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
-import { hoyMx } from '@/lib/formato';
+import { diaEnZona } from '@/lib/formato';
+import { zonaOCdmx } from '@/lib/likida/conductor/config';
 import { csvEstadias } from '@/lib/likida/conductor/estadias_anden';
 import { rangoDeDias } from '@/lib/likida/conductor/estadias_lectura';
 import { estadiasDelPeriodo } from '@/lib/likida/conductor/servicios';
+import { getZonaHorariaTenant } from '@/lib/likida/repo';
 import { abrir, errorApi, fallo } from '../_comun';
 
 export const runtime = 'nodejs';
@@ -36,9 +38,17 @@ export async function GET(req: Request) {
   if (!acceso.ok) return acceso.respuesta;
 
   const p = new URL(req.url).searchParams;
-  const hasta = p.get('hasta') ?? hoyMx();
+  // A37-S35-09: los días del periodo y las horas del CSV son los de la zona de LA FLOTA (México si la zona es inválida o
+  // no está). Si la base no contesta NO se adivina la zona: un borde de periodo corrido 1 h cambia lo que se cobra.
+  let zona: string;
+  try {
+    zona = zonaOCdmx(await getZonaHorariaTenant(acceso.tenantId));
+  } catch (e) {
+    return fallo('v1.estadias', e, { tenant: acceso.tenantId });
+  }
+  const hasta = p.get('hasta') ?? diaEnZona(new Date(), zona);
   const desde = p.get('desde') ?? new Date(new Date(`${hasta}T12:00:00-06:00`).getTime() - 6 * 86_400_000).toISOString().slice(0, 10);
-  const rango = rangoDeDias(desde, hasta);
+  const rango = rangoDeDias(desde, hasta, 93, zona);
   if ('error' in rango) return errorApi('parametro_invalido', rango.error);
 
   const formato = p.get('formato') ?? 'json';
@@ -54,7 +64,7 @@ export async function GET(req: Request) {
   try {
     const r = await estadiasDelPeriodo(acceso.tenantId, rango.desde, rango.hasta, filtros);
     if (formato === 'csv') {
-      return new Response(csvEstadias(r.filas), {
+      return new Response(csvEstadias(r.filas, zona), {
         status: 200,
         headers: {
           'content-type': 'text/csv; charset=utf-8',
