@@ -16,6 +16,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 // AGB-3: builder real por tabla, con una cola de respuestas por tabla — el
 // mismo patrón que enviador.test.ts — para poder ejercer `candidatosSinDossier`
 // (antes el mock trivial `from: () => ({})` bastaba porque nada la probaba).
+const upserts: Array<{ tabla: string; fila: unknown }> = [];
 const respuestas = new Map<string, Array<{ data: unknown; error: { message: string } | null }>>();
 function builder(tabla: string) {
   const responder = () => {
@@ -25,7 +26,7 @@ function builder(tabla: string) {
   const b: Record<string, unknown> = {};
   Object.assign(b, {
     select: () => b, eq: () => b, is: () => b, in: () => b, or: () => b,
-    order: () => b, limit: () => b, insert: () => b, upsert: () => b, maybeSingle: () => b,
+    order: () => b, limit: () => b, insert: () => b, upsert: (...a: unknown[]) => { upserts.push({ tabla, fila: a[0] }); return b; }, maybeSingle: () => b,
     then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) =>
       Promise.resolve().then(responder).then(res, rej),
   });
@@ -295,5 +296,59 @@ describe('investigarProspecto — el catch del modelo deja el motivo real', () =
     expect(datos).toMatchObject({ clase: 'auth', status: 401, rol: 'back_office' });
     expect(String(datos.err).length).toBeLessThanOrEqual(200);
     expect(JSON.stringify([corrida, datos])).not.toMatch(/sk-or/);
+  });
+});
+
+describe('A37-S28-05 — un sitio caído no deja un dossier vacío permanente ni pisa uno bueno', () => {
+  async function conSitioCaido(previo: unknown) {
+    const { httpsPublico } = await import('@/lib/http/https_publico');
+    upserts.length = 0;
+    respuestas.set('prospecto', [{ data: { id: 'p-9', empresa: 'Acme', sitio_web: 'https://acme.example', notas: null, correo: null, estado: 'nuevo' }, error: null }]);
+    respuestas.set('prospecto_dossier', [{ data: previo, error: null }]);
+    vi.mocked(httpsPublico).mockRejectedValue(new Error('ECONNREFUSED'));
+    return investigarProspecto('p-9', 'cron');
+  }
+  it('sin dossier previo deja uno PROVISIONAL marcado, reintentable', async () => {
+    await conSitioCaido(null);
+    expect(upserts).toHaveLength(1);
+    const fila = upserts[0].fila as { datos: Array<{ dato: string }>; fuentes: string[] };
+    expect(fila.datos[0].dato.startsWith('SITIO_NO_RESPONDIO|1|')).toBe(true);
+    expect(fila.fuentes).toEqual([]);
+  });
+  it('con un dossier REAL previo no escribe nada', async () => {
+    await conSitioCaido({ datos: [{ dato: 'Opera 20 camiones', fuente: 'https://acme.example' }], fuentes: ['https://acme.example'] });
+    expect(upserts).toHaveLength(0);
+  });
+  it('un provisional previo cuenta un intento más', async () => {
+    await conSitioCaido({ datos: [{ dato: 'SITIO_NO_RESPONDIO|2|x', fuente: '' }], fuentes: [] });
+    expect((upserts[0].fila as { datos: Array<{ dato: string }> }).datos[0].dato.startsWith('SITIO_NO_RESPONDIO|3|')).toBe(true);
+  });
+  it('candidatosSinDossier reintenta el provisional vencido y respeta el tope de intentos', async () => {
+    const viejo = new Date(Date.now() - 2 * 86_400_000).toISOString();
+    const reciente = new Date().toISOString();
+    respuestas.set('prospecto', [{ data: [
+      { id: 'a', created_at: '2026-01-01T00:00:00Z' }, { id: 'b', created_at: '2026-01-02T00:00:00Z' },
+      { id: 'c', created_at: '2026-01-03T00:00:00Z' }, { id: 'd', created_at: '2026-01-04T00:00:00Z' },
+    ], error: null }]);
+    respuestas.set('prospecto_dossier', [{ data: [
+      { prospecto_id: 'a', datos: [{ dato: 'SITIO_NO_RESPONDIO|1|x' }], investigado_en: viejo },
+      { prospecto_id: 'b', datos: [{ dato: 'SITIO_NO_RESPONDIO|1|x' }], investigado_en: reciente },
+      { prospecto_id: 'c', datos: [{ dato: 'SITIO_NO_RESPONDIO|5|x' }], investigado_en: viejo },
+      { prospecto_id: 'd', datos: [{ dato: 'real' }], investigado_en: viejo },
+    ], error: null }]);
+    expect(await candidatosSinDossier(10)).toEqual(['a']);
+  });
+});
+
+describe('A37-S28-04 — el fallo del modelo anota su costo', () => {
+  it('un StructuredError con usage deja ese costo en la corrida', async () => {
+    const { generateStructured } = await import('@/lib/llm/openrouter');
+    const { registrarCorrida } = await import('./corridas');
+    const { httpsPublico } = await import('@/lib/http/https_publico');
+    respuestas.set('prospecto', [{ data: { id: 'p-1', empresa: 'Acme', sitio_web: 'https://acme.example', notas: null, correo: null, estado: 'nuevo' }, error: null }]);
+    vi.mocked(httpsPublico).mockResolvedValue({ estado: 200, encabezados: { 'content-type': 'text/html' }, cuerpo: '<html><body>Acme</body></html>' } as never);
+    vi.mocked(generateStructured).mockRejectedValue(Object.assign(new Error('Validación falló: x'), { name: 'StructuredError', usage: { model: 'm', tokensIn: 1, tokensOut: 1, cost: 0.0123 } }));
+    await expect(investigarProspecto('p-1', 'cron')).rejects.toThrow();
+    expect(vi.mocked(registrarCorrida).mock.calls.at(-1)![2].costoUsd).toBe(0.0123);
   });
 });

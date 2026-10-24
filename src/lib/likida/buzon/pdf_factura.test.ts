@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
-  leerPdfFactura, extraerDeTexto, uuidsEnTexto, esPdf, requiereRevision, MAX_PDF_BYTES, UMBRAL_REVISION,
+  leerPdfFactura, extraerDeTexto, candidatosDeTotal, uuidsEnTexto, esPdf, requiereRevision, MAX_PDF_BYTES, UMBRAL_REVISION,
   type PuertosPdf, type LecturaVision,
 } from './pdf_factura';
 
@@ -140,5 +140,25 @@ describe('leerPdfFactura — lo que NO se puede leer', () => {
 
   it('sin imágenes que rendir y sin texto útil: ilegible', async () => {
     expect(await leerPdfFactura(PDF, puertos({ imagenes: async () => [] }, ''), { signal: senal() })).toEqual({ ok: false, motivo: 'ilegible' });
+  });
+});
+
+describe('A37-S30-06 — «Total impuestos» no es el total', () => {
+  it('con el bloque de impuestos DESPUÉS del Total, el total sigue siendo el del comprobante', () => {
+    const t = extraerDeTexto(`${UUID}\nSubtotal $1,000.00\nTotal $1,160.00\nTotal impuestos trasladados $160.00`);
+    expect(t.total).toBe(1160);
+  });
+  it('«Sub Total» (con espacio) no cuenta como total; «Total: $» y «Total a pagar $» sí', () => {
+    expect(candidatosDeTotal('Sub Total $1,000.00\nTotal a pagar: $1,160.00')).toEqual([1160]);
+    expect(candidatosDeTotal('Total: $5.00')).toEqual([5]);
+    expect(candidatosDeTotal('Total de retenciones $5.00\nTotal impuestos retenidos $3.00')).toEqual([]);
+  });
+  it('dos «Total» distintos bajan la confianza bajo el umbral: va a revisión', async () => {
+    const r = await leerPdfFactura(PDF, puertos({}, `${UUID}\nRFC Emisor: AAA010101AAA\nRFC Receptor: BBB010101BBB\nTotal $100.00\nTotal $1,160.00`), { signal: senal() });
+    expect(r.ok && r.datos.confianza).toBeLessThan(UMBRAL_REVISION);
+  });
+  it('un total menor que el subtotal también', async () => {
+    const r = await leerPdfFactura(PDF, puertos({}, `${UUID}\nRFC Emisor: AAA010101AAA\nRFC Receptor: BBB010101BBB\nSubtotal $1,000.00\nTotal $160.00`), { signal: senal() });
+    expect(r.ok && r.datos.confianza).toBeLessThan(UMBRAL_REVISION);
   });
 });

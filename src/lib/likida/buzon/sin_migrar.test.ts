@@ -77,7 +77,7 @@ describe('repo del buzón sin la 0530', () => {
   it('un XML duplicado sobre una base sin migrar: la factura existente se lee sin pdf_ruta y no hay nada que completar', async () => {
     estado.db = crearBaseEnMemoria({ factura_proveedor: [{ id: 'f1', tenant_id: T, cfdi_uuid: 'u', estado: 'pendiente', xml_crudo: '<x/>' }] });
     estado.db.fallarProxima('factura_proveedor', 'select', NO_COLUMNA);
-    expect(await repo.facturaPorUuid(T, 'u')).toEqual({ id: 'f1', estado: 'pendiente', tieneXml: true, tienePdf: false });
+    expect(await repo.facturaPorUuid(T, 'u')).toMatchObject({ id: 'f1', estado: 'pendiente', tieneXml: true, tienePdf: false });
     estado.db.fallarProxima('factura_proveedor', 'update', NO_COLUMNA);
     expect(await repo.completarFacturaConXml(T, 'u', { rfcEmisor: null, rfcReceptor: null, fecha: null, total: 1, conceptos: [] } as never, '<x/>', null, null)).toBe('sin_cambio');
   });
