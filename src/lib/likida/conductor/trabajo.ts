@@ -37,13 +37,18 @@ export async function tenantDelViaje(viajeId: string): Promise<string | null> {
   return f ? f.tenant_id : null;
 }
 
-const trozos = <T>(xs: T[], n: number): T[][] => {
+const trozos = <T,>(xs: T[], n: number): T[][] => {
   const r: T[][] = [];
   for (let i = 0; i < xs.length; i += n) r.push(xs.slice(i, i + n));
   return r;
 };
 
 export async function sembrarHitos(limite: number): Promise<number> {
+  // A37-S62-01 (0863): la siembra que también atiende a las flotas con perfil habilitadas. Sin la 0863 en la base cae a la de la 0801 (que las excluye).
+  const nueva = await acotada(supabaseAdmin().rpc('sembrar_hitos_conductor_con_compuerta', { p_limite: limite }), 'conductor.sembrar');
+  if (!nueva.error) return Number(nueva.data ?? 0);
+  const ausente = nueva.error.code === '42883' || nueva.error.code === 'PGRST202' || /could not find the function|does not exist/i.test(nueva.error.message ?? '');
+  if (!ausente) throw new Error(`conductor.sembrar: ${nueva.error.message}`);
   const { data, error } = await acotada(supabaseAdmin().rpc('sembrar_hitos_conductor', { p_limite: limite }), 'conductor.sembrar');
   if (error) throw new Error(`conductor.sembrar: ${error.message}`);
   return Number(data ?? 0);

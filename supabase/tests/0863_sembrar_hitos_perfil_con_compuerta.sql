@@ -41,7 +41,7 @@ declare
   vD constant uuid := '86300000-0000-4000-8000-000000000204';
   n int;
 begin
-  perform public.sembrar_hitos_conductor(500);
+  perform public.sembrar_hitos_conductor_con_compuerta(500);
   select count(*) into n from public.viaje_hito where viaje_id in (vA, vB, vD);
   if n <> 0 then raise exception '0863(a): sembró % hitos en flotas con perfil NO habilitadas o apagadas', n; end if;
   select count(*) into n from public.viaje_hito where viaje_id = vC;
@@ -49,14 +49,14 @@ begin
 
   -- (b) habilitar A: se siembra según su perfil (esenciales) y es idempotente; B (perfil, sin habilitar) sigue sin nada
   update public.agente_conductor_config set agente_chofer_habilitado = true where tenant_id = '86300000-0000-4000-8000-0000000000a1';
-  perform public.sembrar_hitos_conductor(500);
+  perform public.sembrar_hitos_conductor_con_compuerta(500);
   select count(*) into n from public.viaje_hito where viaje_id = vA;
   if n <> 5 then raise exception '0863(b): la flota con perfil habilitada debía sembrar 5 hitos, hay %', n; end if;
   select count(*) into n from public.viaje_hito where viaje_id = vA and tipo = 'salida_carga' and estado = 'esperado';
   if n <> 1 then raise exception '0863(b): esenciales debía dejar salida_carga esperado'; end if;
   select count(*) into n from public.viaje_hito where viaje_id = vA and tipo <> 'salida_carga' and estado = 'omitido' and omitido_motivo = 'fuera_de_perfil';
   if n <> 4 then raise exception '0863(b): esenciales debía omitir 4 por perfil, hay %', n; end if;
-  if public.sembrar_hitos_conductor(500) <> 0 then raise exception '0863(b): sembrar de nuevo no es idempotente'; end if;
+  if public.sembrar_hitos_conductor_con_compuerta(500) <> 0 then raise exception '0863(b): sembrar de nuevo no es idempotente'; end if;
   select count(*) into n from public.viaje_hito where viaje_id in (vB, vD);
   if n <> 0 then raise exception '0863(c): habilitar A sembró a otra flota con perfil (%)', n; end if;
 end $$;
@@ -65,11 +65,11 @@ end $$;
 reset role;
 do $$
 begin
-  if has_function_privilege('anon', 'public.sembrar_hitos_conductor(integer)', 'execute')
-     or has_function_privilege('authenticated', 'public.sembrar_hitos_conductor(integer)', 'execute') then
+  if has_function_privilege('anon', 'public.sembrar_hitos_conductor_con_compuerta(integer)', 'execute')
+     or has_function_privilege('authenticated', 'public.sembrar_hitos_conductor_con_compuerta(integer)', 'execute') then
     raise exception '0863(d): anon/authenticated no deben ejecutar la siembra';
   end if;
-  if not has_function_privilege('service_role', 'public.sembrar_hitos_conductor(integer)', 'execute') then
+  if not has_function_privilege('service_role', 'public.sembrar_hitos_conductor_con_compuerta(integer)', 'execute') then
     raise exception '0863(d): service_role debe poder ejecutarla';
   end if;
 end $$;

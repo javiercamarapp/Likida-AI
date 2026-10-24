@@ -1,7 +1,8 @@
--- 0863 — A37-S62-01: la siembra de hitos del Conductor deja de excluir PARA SIEMPRE a las flotas con perfil (tenant_perfil, 0770) y pasa a
+-- 0863 — A37-S62-01: NUEVA función `sembrar_hitos_conductor_con_compuerta` (la `sembrar_hitos_conductor` de la 0801 NO se redefine: la prueba
+-- 0809_migraciones_reaplicables prohíbe que una migración de prefijo mayor recree una función del rango 0770–0809). La siembra de hitos deja de excluir PARA SIEMPRE a las flotas con perfil (tenant_perfil, 0770) y pasa a
 -- exigir la compuerta explícita del Agente 5 (0859).
 --
--- HALLAZGO: `sembrar_hitos_conductor` (0801) saltaba por completo a toda flota con fila en `tenant_perfil`, pero el Conductor ya se encendió
+-- HALLAZGO: `sembrar_hitos_conductor_con_compuerta` (0801) saltaba por completo a toda flota con fila en `tenant_perfil`, pero el Conductor ya se encendió
 -- para esas flotas (MODULOS_PROXIMAMENTE_PERFIL = []): al habilitarlo, aceptaban viajes y no había hitos que perseguir (el latido salía «ok»
 -- con la pantalla vacía).
 --
@@ -12,10 +13,10 @@
 --
 -- Compatible hacia atrás: misma firma y mismo retorno; aditiva e idempotente (create or replace).
 --
--- REVERSA: re-aplicar la definición de `public.sembrar_hitos_conductor(integer)` del archivo 0801_conductor_perfil_seguimiento_y_umbrales.sql
--- (bloque `create or replace function ... end $$;` más su revoke/grant y comment). Vuelve a excluir por completo a las flotas con perfil.
+-- REVERSA: drop function if exists public.sembrar_hitos_conductor_con_compuerta(integer);
+-- (el código vuelve a llamar a `sembrar_hitos_conductor` de la 0801, que sigue intacta y excluye por completo a las flotas con perfil.)
 
-create or replace function public.sembrar_hitos_conductor(p_limite integer default 500)
+create or replace function public.sembrar_hitos_conductor_con_compuerta(p_limite integer default 500)
 returns integer
 language plpgsql security definer
 set search_path = public, pg_temp
@@ -96,11 +97,11 @@ begin
 
   return v_n;
 end $$;
-revoke all on function public.sembrar_hitos_conductor(integer) from public, anon, authenticated;
-grant execute on function public.sembrar_hitos_conductor(integer) to service_role;
+revoke all on function public.sembrar_hitos_conductor_con_compuerta(integer) from public, anon, authenticated;
+grant execute on function public.sembrar_hitos_conductor_con_compuerta(integer) to service_role;
 
-revoke all on function public.sembrar_hitos_conductor(integer) from public, anon, authenticated;
-grant execute on function public.sembrar_hitos_conductor(integer) to service_role;
+revoke all on function public.sembrar_hitos_conductor_con_compuerta(integer) from public, anon, authenticated;
+grant execute on function public.sembrar_hitos_conductor_con_compuerta(integer) to service_role;
 
-comment on function public.sembrar_hitos_conductor(integer) is
+comment on function public.sembrar_hitos_conductor_con_compuerta(integer) is
   '0863: como la 0801 (siembra por perfil de seguimiento y concilia al cambiar de perfil), pero una flota con fila en tenant_perfil (0770) se siembra y concilia SOLO si tiene el Agente 5 habilitado (0859, conductor_agente_chofer_habilitado). Sin la habilitación se salta por completo. Devuelve los hitos sembrados.';

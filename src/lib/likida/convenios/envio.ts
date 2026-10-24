@@ -43,6 +43,8 @@ export interface PuertosEnvio {
   enviar(telefono: string, m: MensajeInstrucciones, contexto: string, tenantId: string, ahora: Date): Promise<ResultadoEnvioConFallback>;
 }
 
+let enviarConCompuerta: PuertosEnvio['enviar'] | undefined;
+
 export const puertosEnvioReales: PuertosEnvio = {
   ligar: (t, v) => ligarConvenioAViaje(t, v),
   ligado: leerLigado,
@@ -54,10 +56,14 @@ export const puertosEnvioReales: PuertosEnvio = {
   reiniciar: reiniciarEnvios,
   // A37-A5-01: el aviso de acercamiento (`convenios.acercamiento_*`) le escribe al chofer en marcha: pasa por la compuerta 0859 (fail-closed) y
   // por la de emergencias. El despacho lo pide una persona al crear el viaje y no se toca.
-  enviar: conCompuertaAlChofer(
-    (telefono, m, contexto, tenantId, ahora) => enviarConFallback(telefono, { texto: m.texto, plantilla: m.plantilla, contexto, tenantId, ahora }),
-    leerAgenteChoferHabilitado, { emergencia: hayEmergenciaDeTelefono },
-  ),
+  // Se arma al primer uso (no al importar): los módulos que importan este puerto sin enviar nada no dependen de la lectura de la compuerta.
+  enviar: (telefono, m, contexto, tenantId, ahora) => {
+    enviarConCompuerta ??= conCompuertaAlChofer(
+      (tel, msg, ctx, tid, a) => enviarConFallback(tel, { texto: msg.texto, plantilla: msg.plantilla, contexto: ctx, tenantId: tid, ahora: a }),
+      leerAgenteChoferHabilitado, { emergencia: hayEmergenciaDeTelefono },
+    );
+    return enviarConCompuerta(telefono, m, contexto, tenantId, ahora);
+  },
 };
 
 async function enviarInstrucciones(
