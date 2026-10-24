@@ -327,7 +327,8 @@ export type EstadoCodigo =
 export function montoDeTicket(bruto: string | null | undefined): number | null {
   if (bruto === null || bruto === undefined) return null;
   const limpio = String(bruto).replace(/[$\s]/g, '').replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.');
-  if (!/^\d+(\.\d{1,2})?$/.test(limpio)) return null;
+  const [entera, decimales = '', ...resto] = limpio.split('.');
+  if (resto.length > 0 || !/^\d+$/.test(entera) || decimales.length > 2 || (decimales !== '' && !/^\d+$/.test(decimales))) return null;
   const n = Number(limpio);
   return Number.isFinite(n) ? n : null;
 }

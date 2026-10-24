@@ -1082,7 +1082,7 @@ export async function importarDesglose(
   };
   const insertarDesglose = (conHuella: boolean) => acotada(supabaseAdmin()
     .from('desglose_peaje')
-    .insert(conHuella ? { ...filaDesglose, archivo_sha256: huella } : filaDesglose)
+    .insert(conHuella ? { ...filaDesglose, archivo_sha256: huella } as typeof filaDesglose : filaDesglose)
     .select('id')
     .single(), 'desglose_peaje.insertar');
   let { data: fila, error: errDesglose } = await insertarDesglose(usarHuella);

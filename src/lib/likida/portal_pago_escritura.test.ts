@@ -630,7 +630,7 @@ describe('sellarRepEntregado — el sello no puede negar el documento', () => {
 
 // ── A37-S54-02: un depósito ya conciliado no se re-propone ni se concilia dos veces ─────────────────────────────────────────
 describe('A37-S54-02 — el mismo depósito no genera un segundo abono', () => {
-  const V = { fecha: '2026-08-20', monto: 5000, referencia: 'SPEI-8891', metodo: 'transferencia' };
+  const V = { fecha: '2026-08-20', monto: 5000, referencia: 'SPEI-8891', metodo: 'transferencia' as const };
   const ABONO_PREVIO = { id: 'pago-previo', referencia: 'spei 8891 ', propuesta_id: 'otra-propuesta' };
 
   it('registrar: si ya hay un abono con la misma fecha, monto y referencia (otra ortografía), contesta «repetida» y NO inserta otra pendiente', async () => {
