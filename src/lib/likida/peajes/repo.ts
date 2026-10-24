@@ -2266,7 +2266,7 @@ export async function revisionDeDesglose(
       umbralesFlota = traducido.umbrales;
       apagadas = traducido.apagadas;
     } catch (e) {
-      logger.warn('peajes.revision_config_atipicos', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+      logger.warn('peajes.revision_config_atipicos', { tenant: tenantId, codigo: codigoDeError(e) }); // sin el mensaje de la base: puede traer TAG/unidad/importe
     }
   }
   const atipicos = sinSenalesApagadas(detectarAtipicos(lineas, conCoords, umbralesFlota), apagadas);
