@@ -3,12 +3,13 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { acotada } from '../presupuesto';
-import { importarDesglose, conciliarDesglose } from '../intake/desglose_peaje';
+import { importarDesglose, conciliarDesglose, resumenConciliacion } from '../intake/desglose_peaje';
 import { registrarCorrida } from '../agentes/corridas';
 import { avisarDesgloseConciliado } from './aviso_oficina';
 import { revisarAtipicosDeDesglose } from './revision_atipicos';
 import { vincularDesglose } from './vinculos_conciliacion';
 import { avisarDiscrepanciasDesglose } from './aviso_discrepancia';
+import { declararPeriodoDesglose } from './repo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA INGESTA AUTOMÁTICA DEL DESGLOSE DE PEAJE (0376).
@@ -300,6 +301,65 @@ export async function barrerColaPeajes(): Promise<NonNullable<ResumenCola['barri
 
 const minutos = (n: number) => new Date(Date.now() + n * 60_000).toISOString();
 
+/**
+ * Lo que sigue a un desglose ya importado y cruzado: atípicos, vínculo cruce→viaje, aviso a la oficina y protocolo de
+ * discrepancia geográfica (el aviso crítico de unidad inmovilizada). Lo comparten el cron de la cola y la subida
+ * manual del panel (A37-A2-09: antes lo subido a mano nunca disparaba esto). Nunca lanza: cada paso va blindado y
+ * su fallo solo se cuenta/registra, jamás reabre ni tumba un archivo ya procesado.
+ */
+export async function posProcesarDesglose(
+  tenantId: string, desgloseId: string, archivoId: string | null, r: ResumenCola, disparo: 'cron' | 'manual' = 'cron',
+  avisar: (tenantId: string, desgloseId: string) => Promise<unknown> = avisarDesgloseConciliado,
+  avisarDiscrepancias: typeof avisarDiscrepanciasDesglose = avisarDiscrepanciasDesglose,
+): Promise<void> {
+  // Los cruces atípicos (T-A2-13): solo si la flota los activó, sobre este desglose + las decenas previas del
+  // mes. Va DESPUÉS de cerrar: su fallo nunca reabre ni tumba un archivo ya procesado (queda `parcial` en el latido).
+  // `revisarAtipicosDeDesglose` no lanza: devuelve `fallo` y ya dejó el log `cron.peajes.atipicos_fallo`; aquí solo se cuenta.
+  try {
+    const rev = await revisarAtipicosDeDesglose(tenantId, desgloseId, disparo);
+    // Solo existe cuando el detector corrió (activado por la flota): apagado no ensucia el resumen.
+    if (rev.estado === 'ok') { r.atipicos ??= { revisados: 0, hallazgos: 0, fallidos: 0 }; r.atipicos.revisados++; r.atipicos.hallazgos += rev.hallazgos; }
+    else if (rev.estado === 'fallo') { r.atipicos ??= { revisados: 0, hallazgos: 0, fallidos: 0 }; r.atipicos.fallidos++; }
+  } catch (e) {
+    r.atipicos ??= { revisados: 0, hallazgos: 0, fallidos: 0 };
+    r.atipicos.fallidos++;
+    logger.error('cron.peajes.atipicos_fallo', { archivo: archivoId, codigo: codigoDeError(e) });
+  }
+  // El vínculo cruce→viaje (T-A2-21): solo si la flota lo activó; recalculable y aparte de `desglose_peaje_linea.viaje_id`.
+  // Va DESPUÉS de cerrar y no lanza (devuelve `fallo` y deja el log); aquí solo se cuenta.
+  try {
+    const vin = await vincularDesglose(tenantId, desgloseId);
+    if (vin.estado === 'ok') { r.vinculos ??= { calculados: 0, fallidos: 0 }; r.vinculos.calculados++; }
+    else if (vin.estado === 'fallo') { r.vinculos ??= { calculados: 0, fallidos: 0 }; r.vinculos.fallidos++; }
+  } catch (e) {
+    r.vinculos ??= { calculados: 0, fallidos: 0 };
+    r.vinculos.fallidos++;
+    logger.error('cron.peajes.vinculos_fallo', { archivo: archivoId, codigo: codigoDeError(e) });
+  }
+  // El aviso a la oficina (0563) va DESPUÉS de cerrar: su fallo nunca reabre ni tumba un archivo ya
+  // procesado (el barrido del cron lo reintenta). Nunca lanza, pero se blinda de todos modos.
+  try { await avisar(tenantId, desgloseId); } catch (e) {
+    logger.error('peajes.cola.aviso', { archivo: archivoId, err: e instanceof Error ? e.message : String(e) });
+  }
+  // El protocolo de discrepancia geográfica (T-A2-37): candidatos críticos de `unidad_inmovilizada`
+  // de ESTE desglose. Va DESPUÉS de cerrar, igual que `atipicos`/`vinculos`: un fallo aquí no reabre
+  // ni tumba el archivo, y el candidato sigue visible en la pantalla de revisión aunque el aviso falle.
+  try {
+    const disc = await avisarDiscrepancias(tenantId, desgloseId);
+    if (disc.evaluados > 0) {
+      r.discrepancia ??= { evaluados: 0, enviados: 0, sinDestinatario: 0, pendientes: 0 };
+      r.discrepancia.evaluados += disc.evaluados;
+      r.discrepancia.enviados += disc.enviados;
+      r.discrepancia.sinDestinatario += disc.sinDestinatario;
+      r.discrepancia.pendientes += disc.pendientes;
+    }
+  } catch (e) {
+    r.discrepancia ??= { evaluados: 0, enviados: 0, sinDestinatario: 0, pendientes: 0 };
+    r.discrepancia.pendientes += 1;
+    logger.error('cron.peajes.discrepancia_fallo', { archivo: archivoId, codigo: codigoDeError(e) });
+  }
+}
+
 export async function procesarColaPeajes(
   opciones: {
     limite?: number; leaseSegundos?: number; venceEn?: number;
@@ -368,52 +428,7 @@ export async function procesarColaPeajes(
         ultimo_error: null, reclamo: null, reclamado_hasta: null,
       })) {
         r.procesados++;
-        // Los cruces atípicos (T-A2-13): solo si la flota los activó, sobre este desglose + las decenas previas del
-        // mes. Va DESPUÉS de cerrar: su fallo nunca reabre ni tumba un archivo ya procesado (queda `parcial` en el latido).
-        // `revisarAtipicosDeDesglose` no lanza: devuelve `fallo` y ya dejó el log `cron.peajes.atipicos_fallo`; aquí solo se cuenta.
-        try {
-          const rev = await revisarAtipicosDeDesglose(a.tenant_id, imp.desgloseId, 'cron');
-          // Solo existe cuando el detector corrió (activado por la flota): apagado no ensucia el resumen.
-          if (rev.estado === 'ok') { r.atipicos ??= { revisados: 0, hallazgos: 0, fallidos: 0 }; r.atipicos.revisados++; r.atipicos.hallazgos += rev.hallazgos; }
-          else if (rev.estado === 'fallo') { r.atipicos ??= { revisados: 0, hallazgos: 0, fallidos: 0 }; r.atipicos.fallidos++; }
-        } catch (e) {
-          r.atipicos ??= { revisados: 0, hallazgos: 0, fallidos: 0 };
-          r.atipicos.fallidos++;
-          logger.error('cron.peajes.atipicos_fallo', { archivo: a.id, codigo: codigoDeError(e) });
-        }
-        // El vínculo cruce→viaje (T-A2-21): solo si la flota lo activó; recalculable y aparte de `desglose_peaje_linea.viaje_id`.
-        // Va DESPUÉS de cerrar y no lanza (devuelve `fallo` y deja el log); aquí solo se cuenta.
-        try {
-          const vin = await vincularDesglose(a.tenant_id, imp.desgloseId);
-          if (vin.estado === 'ok') { r.vinculos ??= { calculados: 0, fallidos: 0 }; r.vinculos.calculados++; }
-          else if (vin.estado === 'fallo') { r.vinculos ??= { calculados: 0, fallidos: 0 }; r.vinculos.fallidos++; }
-        } catch (e) {
-          r.vinculos ??= { calculados: 0, fallidos: 0 };
-          r.vinculos.fallidos++;
-          logger.error('cron.peajes.vinculos_fallo', { archivo: a.id, codigo: codigoDeError(e) });
-        }
-        // El aviso a la oficina (0563) va DESPUÉS de cerrar: su fallo nunca reabre ni tumba un archivo ya
-        // procesado (el barrido del cron lo reintenta). Nunca lanza, pero se blinda de todos modos.
-        try { await avisar(a.tenant_id, imp.desgloseId); } catch (e) {
-          logger.error('peajes.cola.aviso', { archivo: a.id, err: e instanceof Error ? e.message : String(e) });
-        }
-        // El protocolo de discrepancia geográfica (T-A2-37): candidatos críticos de `unidad_inmovilizada`
-        // de ESTE desglose. Va DESPUÉS de cerrar, igual que `atipicos`/`vinculos`: un fallo aquí no reabre
-        // ni tumba el archivo, y el candidato sigue visible en la pantalla de revisión aunque el aviso falle.
-        try {
-          const disc = await avisarDiscrepancias(a.tenant_id, imp.desgloseId);
-          if (disc.evaluados > 0) {
-            r.discrepancia ??= { evaluados: 0, enviados: 0, sinDestinatario: 0, pendientes: 0 };
-            r.discrepancia.evaluados += disc.evaluados;
-            r.discrepancia.enviados += disc.enviados;
-            r.discrepancia.sinDestinatario += disc.sinDestinatario;
-            r.discrepancia.pendientes += disc.pendientes;
-          }
-        } catch (e) {
-          r.discrepancia ??= { evaluados: 0, enviados: 0, sinDestinatario: 0, pendientes: 0 };
-          r.discrepancia.pendientes += 1;
-          logger.error('cron.peajes.discrepancia_fallo', { archivo: a.id, codigo: codigoDeError(e) });
-        }
+        await posProcesarDesglose(a.tenant_id, imp.desgloseId, a.id, r, 'cron', avisar, avisarDiscrepancias);
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -444,6 +459,76 @@ export async function procesarColaPeajes(
     }
   }
   return r;
+}
+
+// ── La subida manual del panel (A37-A2-09) ──────────────────────────────────
+
+export type ResultadoSubidaPanel =
+  | { ok: true; estado: 'procesado'; desgloseId: string; totalLineas: number; cuadra: number; noCuadra: number; sinContraparte: number; avisos: string[] }
+  | { ok: true; estado: 'en_cola'; mensaje: string }
+  | { ok: false; motivo: string };
+
+/**
+ * Sube un desglose a mano POR LA MISMA COLA que el correo, el SFTP y la API (A37-A2-09). Antes el panel llamaba a
+ * `importarDesglose` + `conciliarDesglose` directo: no pasaba por la huella (el mismo xlsx dos veces, o a mano y luego por
+ * correo, dejaba dos desgloses vigentes) y lo subido a mano nunca disparaba atípicos, vínculos, aviso a la oficina ni el aviso
+ * crítico de unidad inmovilizada, que solo corrían en `procesarColaPeajes`. Ahora: se encola (dedup por huella, tope de la
+ * flota), se procesa en línea con el MISMO procesador del cron (con sus pasos posteriores) y, si todavía no le toca, queda en
+ * cola para el siguiente ciclo. El periodo declarado se aplica al desglose ya creado; si no alcanza a procesarse en línea se
+ * pide declararlo después desde el detalle (la cola no lo guarda).
+ */
+export async function subirDesglosePorCola(
+  tenantId: string,
+  archivo: { nombre: string; buffer: Buffer; proveedor?: string; periodo?: { desde: string; hasta: string } | null },
+  deps: { procesar?: typeof procesarColaPeajes } = {},
+): Promise<ResultadoSubidaPanel> {
+  const nombre = archivo.nombre.replace(/[\\/\u0000-\u001f]+/g, '_').trim().slice(0, 255);
+  if (!nombre || !EXT_ACEPTADAS.test(nombre)) return { ok: false, motivo: 'El archivo debe ser Excel (.xlsx/.xls/.ods), CSV/TSV o PDF.' };
+  if (archivo.buffer.length === 0) return { ok: false, motivo: 'El archivo está vacío.' };
+  if (archivo.buffer.length > MAX_ARCHIVO_INGESTA_BYTES) return { ok: false, motivo: `El archivo pasa de ${MAX_ARCHIVO_INGESTA_BYTES / 1024 / 1024} MB.` };
+
+  const rec = await recibirArchivoPeaje(tenantId, { nombre, proveedor: archivo.proveedor?.trim() || null, contenido: archivo.buffer }, 'panel');
+  if (!rec.ok) {
+    return { ok: false, motivo: rec.codigo === 'cola_llena' ? rec.motivo : 'No se pudo recibir el archivo. Inténtalo de nuevo.' };
+  }
+  if (rec.duplicado) {
+    if (rec.estado === 'procesada') return { ok: false, motivo: 'Este mismo archivo ya se recibió y se procesó (por el panel, el correo u otro canal). Si ese desglose estaba mal, anúlalo y vuelve a subir el archivo.' };
+    if (rec.estado === 'fallida') return { ok: false, motivo: 'Este mismo archivo ya se recibió y no se pudo leer. Revisa el motivo en Configuración → archivos recibidos y usa «Reintentar».' };
+    return { ok: false, motivo: 'Este mismo archivo ya está en la cola de procesamiento; no hace falta subirlo otra vez.' };
+  }
+
+  const procesar = deps.procesar ?? procesarColaPeajes;
+  try {
+    await procesar({ limite: 3, venceEn: Date.now() + 45_000 });
+  } catch (e) {
+    // Si el proceso en línea falla, el archivo sigue en cola y el cron lo toma: no se pierde.
+    logger.error('peajes.panel.proceso_en_linea', { tenant: tenantId, codigo: codigoDeError(e) });
+  }
+
+  const { data: fila, error } = await acotada(supabaseAdmin().from('peaje_ingesta_archivo')
+    .select('estado, desglose_id, ultimo_error').eq('tenant_id', tenantId).eq('id', rec.id).maybeSingle(), 'peajes.panel.estado');
+  if (error || !fila) return { ok: true, estado: 'en_cola', mensaje: 'Archivo recibido. Se procesa en el siguiente ciclo (hasta 15 min); lo verás en la lista de desgloses.' };
+  if (fila.estado === 'fallida') {
+    const motivo = typeof fila.ultimo_error === 'string' && fila.ultimo_error ? fila.ultimo_error : 'No se pudo leer el archivo.';
+    return { ok: false, motivo: `${motivo} El archivo quedó en «archivos recibidos» (Configuración) para reintentarlo cuando se corrija el mapeo.` };
+  }
+  if (fila.estado !== 'procesada' || typeof fila.desglose_id !== 'string') {
+    return {
+      ok: true, estado: 'en_cola',
+      mensaje: `Archivo recibido. Todavía no le toca procesarse: queda en cola para el siguiente ciclo (hasta 15 min).${archivo.periodo ? ' Cuando aparezca, declara su periodo desde el detalle del desglose.' : ''}`,
+    };
+  }
+  const avisos: string[] = [];
+  if (archivo.periodo) {
+    const p = await declararPeriodoDesglose(tenantId, fila.desglose_id, archivo.periodo.desde, archivo.periodo.hasta);
+    if (!p.ok) avisos.push(`El archivo se procesó, pero el periodo no se guardó: ${p.motivo}`);
+  }
+  const res = await resumenConciliacion(tenantId, fila.desglose_id);
+  if (!res) return { ok: true, estado: 'en_cola', mensaje: 'Archivo procesado; abre la lista de desgloses para ver su resultado.' };
+  return {
+    ok: true, estado: 'procesado', desgloseId: fila.desglose_id, totalLineas: res.total,
+    cuadra: res.cuadra, noCuadra: res.noCuadra, sinContraparte: res.sinContraparte, avisos,
+  };
 }
 
 /**

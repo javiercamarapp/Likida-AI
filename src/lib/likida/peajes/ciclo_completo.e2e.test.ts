@@ -392,6 +392,23 @@ describe('A37-A2-07: anular un desglose cierra sus reclamos preparados', () => {
   });
 });
 
+describe('A37-A2-12: declarar el periodo de un desglose ya importado', () => {
+  it('un corte sin periodo (nombre sin decena) recibe el periodo declarado; fechas inválidas, anulados y otra flota no', async () => {
+    await atenderCorreoPeajes(TOKEN, correo('e1', [['corte.csv', 'adj1']]), deps);
+    await procesar();
+    const id = idDesglose();
+    expect(db.tablas.desglose_peaje[0].periodo_oficial_desde ?? null).toBeNull();
+    expect(await datos.declararPeriodoDesglose(T, id, '2026-08-10', '2026-08-01')).toMatchObject({ ok: false });
+    expect(await datos.declararPeriodoDesglose(T, id, '2026-02-30', '2026-03-01')).toMatchObject({ ok: false });
+    expect(await datos.declararPeriodoDesglose('otra-flota', id, '2026-08-01', '2026-08-10')).toMatchObject({ ok: false });
+    expect(db.tablas.desglose_peaje[0].periodo_oficial_desde ?? null).toBeNull();
+    expect(await datos.declararPeriodoDesglose(T, id, '2026-08-01', '2026-08-10')).toEqual({ ok: true });
+    expect(db.tablas.desglose_peaje[0]).toMatchObject({ periodo_oficial_desde: '2026-08-01', periodo_oficial_hasta: '2026-08-10', periodo_origen: 'declarado' });
+    await datos.anularDesgloseDb(T, id, 'error', 'ana');
+    expect(await datos.declararPeriodoDesglose(T, id, '2026-08-11', '2026-08-20')).toMatchObject({ ok: false, motivo: expect.stringMatching(/anulado/) });
+  });
+});
+
 describe('FUERA DE ORDEN', () => {
   it('anulan el desglose ANTES de que salga el aviso pendiente: el barrido ya no avisa', async () => {
     telefonoDinero = { [T]: null };

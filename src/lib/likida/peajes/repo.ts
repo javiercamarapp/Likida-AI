@@ -33,7 +33,7 @@ import { traerTodo, traerPorIds, conteo, type RespuestaPg } from '../pg';
 import { normalizarNombre, normalizarTag } from './formatos';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from '../conductor/geometria_datos';
 import { matrizDeArchivoCatalogo } from './archivo';
-import { sumarMeses, limitesDelMes, mesAnterior } from './periodo';
+import { sumarMeses, limitesDelMes, mesAnterior, validarPeriodoDeclarado } from './periodo';
 import { revisarDobleEntreArchivos, VENTANA_MESES_DEFAULT, type ArchivoPrevio, type ResultadoDobleEntreArchivos } from './doble_entre_archivos';
 import { parsearCasetasMatriz, coordenadaDeCelda, validarCoordenadasMexico, type CasetaCatalogo } from './casetas';
 import { parsearTarifasMatriz, planificarTarifa, type OrigenTarifa, type TarifaEntrada, type TarifaExistente } from './tarifario_archivo';
@@ -1134,6 +1134,28 @@ export async function avisosPendientesPeajes(limite: number): Promise<Array<{ te
   const r = await acotada(supabaseAdmin().rpc('peaje_avisos_pendientes', { p_limite: limite, p_max_intentos: MAX_INTENTOS_AVISO }), 'peajes.avisos_pendientes');
   if (r.error) throw new Error(`peajes.avisos_pendientes: ${r.error.message}`);
   return ((r.data ?? []) as Array<Record<string, unknown>>).map((f) => ({ tenantId: String(f.tenant_id), desgloseId: String(f.desglose_id) }));
+}
+
+/**
+ * A37-A2-12: declara (o corrige) el periodo OFICIAL de un desglose YA importado. Los canales automáticos (correo, SFTP, API,
+ * pull) solo traen el periodo si el NOMBRE del archivo lo dice («01 A 10 DE SEPT»); un `corte.xlsx` entra sin periodo, y sin él
+ * los extemporáneos, el doble entre archivos y el cierre mensual quedan apagados. Manda sobre el nombre (origen `declarado`).
+ * Condicional a «no anulado» y acotada a la flota.
+ */
+export async function declararPeriodoDesglose(
+  tenantId: string, desgloseId: string, desde: string, hasta: string,
+): Promise<{ ok: true } | { ok: false; motivo: string }> {
+  const v = validarPeriodoDeclarado(desde, hasta);
+  if (!v.ok) return { ok: false, motivo: v.motivo };
+  const { data, error } = await acotada(supabaseAdmin().from('desglose_peaje')
+    .update({ periodo_oficial_desde: v.periodo.desde, periodo_oficial_hasta: v.periodo.hasta, periodo_origen: 'declarado' })
+    .eq('tenant_id', tenantId).eq('id', desgloseId).is('anulado_en', null).select('id'), 'peajes.declarar_periodo');
+  if (error) {
+    logger.error('peajes.declarar_periodo', { tenant: tenantId, err: error.message });
+    return { ok: false, motivo: 'No se pudo guardar el periodo. Inténtalo de nuevo.' };
+  }
+  if ((data ?? []).length === 0) return { ok: false, motivo: 'Ese desglose no existe en tu flota o ya fue anulado.' };
+  return { ok: true };
 }
 
 export type ResultadoAnulacion = 'anulado' | 'ya_anulado' | 'no_encontrado';
