@@ -1,6 +1,7 @@
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { logger } from '@/lib/logger';
+import { actorDePanel } from '@/lib/likida/peajes/actor_panel';
 import { revisionDeDesglose } from '@/lib/likida/peajes/revision_cobros';
 import {
   listarDecisionesCandidatos, registrarDecisionesCandidatos, ligarDecisionesAReclamo, retirarDecisionesCandidatos,
@@ -177,7 +178,7 @@ export async function ejecutarAccionDeFormulario(tenantId: string, fd: FormData)
 
   const campo = (k: string) => String(fd.get(k) ?? '').trim();
   const accion = campo('accion') as AccionCandidato;
-  const base = { desgloseId: campo('desglose'), accion, actor: `panel:${sesion.rol}`, motivo: campo('motivo') || null, enviadoEn: campo('enviado_en') || null };
+  const base = { desgloseId: campo('desglose'), accion, actor: actorDePanel(sesion), motivo: campo('motivo') || null, enviadoEn: campo('enviado_en') || null };
   if (campo('modo') === 'filtro') {
     const entrada: Record<string, string | undefined> = {};
     for (const k of ['cat', 'estado', 'unidad', 'caseta', 'desde', 'hasta', 'orden']) entrada[k] = campo(`f_${k}`);

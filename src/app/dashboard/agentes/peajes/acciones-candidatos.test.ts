@@ -8,7 +8,7 @@ import { crearDbFalsa, type DbFalsa, type Fila } from '@/lib/likida/peajes/db_fa
 // ═══════════════════════════════════════════════════════════════════════════
 
 let db: DbFalsa;
-let sesion: { rol: string; tenantId: string } = { rol: 'flota_admin', tenantId: 'tenant-1' };
+let sesion: { rol: string; tenantId: string; userId?: string } = { rol: 'flota_admin', tenantId: 'tenant-1' };
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => db.cliente }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/auth/guard', () => ({ requireSessionTenant: async () => sesion }));
@@ -241,9 +241,10 @@ describe('el formulario: puerta y campos', () => {
 
   it('una fila por formulario deja al rol como actor; un lote lee los filtros f_* y la casilla', async () => {
     sembrar({ clase9: 3 });
-    sesion = { rol: 'contador', tenantId: T };
+    sesion = { rol: 'contador', tenantId: T, userId: '11111111-1111-4111-8111-111111111111' };
     expect(await A.ejecutarAccionDeFormulario(T, form({ desglose: DES, modo: 'fila', accion: 'descartado', indice: '1', categoria: 'clase_fuera_de_3_5', motivo: 'ya cobrado' }))).toMatchObject({ ok: true });
-    expect(db.tablas.peaje_candidato_accion[0].actor).toBe('panel:contador');
+    // A37-A2-20: el actor lleva al usuario, no solo el rol.
+    expect(db.tablas.peaje_candidato_accion[0].actor).toBe('panel:contador:11111111-1111-4111-8111-111111111111');
     const lote = await A.ejecutarAccionDeFormulario(T, form({ desglose: DES, modo: 'filtro', accion: 'reclamado', esperado: '2', confirmar: 'on', f_cat: 'clase_fuera_de_3_5', f_estado: 'pendiente' }));
     expect(lote).toMatchObject({ ok: true, aplicadas: 2, reclamos: 1 });
     const sinCasilla = await A.ejecutarAccionDeFormulario(T, form({ desglose: DES, modo: 'filtro', accion: 'reclamado', esperado: '0', f_cat: 'extemporaneo' }));
