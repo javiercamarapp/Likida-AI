@@ -637,7 +637,7 @@ export async function validarAcceso(token: string): Promise<ResultadoAcceso> {
   // acto, no solo en el siguiente refresco.
   const { data, error } = await supabaseAdmin()
     .from('mcp_oauth_token')
-    .select('id, tipo, user_id, user_email, tenant_id, rol, expira_en, revocado_en, app_user:user_id(tenant_id, rol, activo)')
+    .select('id, tipo, user_id, user_email, tenant_id, rol, expira_en, revocado_en, app_user:user_id(tenant_id, rol, activo), cliente:cliente_id(estado)')
     .eq('token_hash', hashDeLlave(token))
     .maybeSingle();
   if (error) {
@@ -647,6 +647,13 @@ export async function validarAcceso(token: string): Promise<ResultadoAcceso> {
   if (!data || data.tipo !== 'acceso') return { ok: false, error: 'no_valido', detalle: ACCESO_INVALIDO };
   if (data.revocado_en !== null) return { ok: false, error: 'no_valido', detalle: ACCESO_INVALIDO };
   if (Date.parse(String(data.expira_en)) <= Date.now()) {
+    return { ok: false, error: 'no_valido', detalle: ACCESO_INVALIDO };
+  }
+  // A37-S07-02: el acceso de un cliente que ya no está `aprobado` (rechazado,
+  // aunque la revocación de sus tokens haya fallado a medias) NO sirve. Falla
+  // cerrado: sin embed, no — igual que el canje y el refresco (0440).
+  if (!clienteAprobado(data.cliente as FilaCodigo['cliente'])) {
+    logger.warn('mcp.oauth.cliente_no_aprobado', { tokenId: String(data.id) });
     return { ok: false, error: 'no_valido', detalle: ACCESO_INVALIDO };
   }
   // supabase-js sin tipos generados infiere el embed como arreglo por
@@ -781,7 +788,26 @@ export async function decidirCliente(
   if (!/^[0-9a-f-]{36}$/i.test(clientId)) {
     return { ok: false, error: 'no_valido', detalle: 'client_id desconocido.' };
   }
-  const antes = decision === 'aprobado' ? ['pendiente', 'rechazado'] : ['pendiente', 'aprobado'];
+  const antes = decision === 'aprobado' ? ['pendiente', 'rechazado'] : ['pendiente', 'aprobado', 'rechazado'];
+  const revocarVivos = () => supabaseAdmin()
+    .from('mcp_oauth_token')
+    .update({ revocado_en: new Date().toISOString() })
+    .eq('cliente_id', clientId)
+    .is('revocado_en', null)
+    .select('id');
+  let revocados = 0;
+  if (decision === 'rechazado') {
+    // A37-S07-02: PRIMERO se cortan los tokens vivos y SOLO después se marca el
+    // cliente. Si la revocación falla, el cliente sigue `pendiente` (visible en
+    // la cola) y el rechazo se puede reintentar; antes quedaba rechazado, fuera
+    // de la pantalla, con accesos vivos hasta 8 h.
+    const rev = await revocarVivos();
+    if (rev.error) {
+      logger.error('mcp.oauth.cliente_revocar_tokens', { err: rev.error.message });
+      return { ok: false, error: 'no_disponible', detalle: 'No se pudieron revocar los tokens vivos del cliente; no se marcó como rechazado. Reintenta el rechazo.' };
+    }
+    revocados = rev.data?.length ?? 0;
+  }
   const marcado = await supabaseAdmin()
     .from('mcp_oauth_cliente')
     .update({ estado: decision, estado_en: new Date().toISOString(), estado_por: porUserId })
@@ -795,21 +821,15 @@ export async function decidirCliente(
   if (!marcado.data || marcado.data.length === 0) {
     return { ok: false, error: 'no_valido', detalle: 'El cliente no existe o ya tenía esa decisión.' };
   }
-  let revocados = 0;
   if (decision === 'rechazado') {
-    const rev = await supabaseAdmin()
-      .from('mcp_oauth_token')
-      .update({ revocado_en: new Date().toISOString() })
-      .eq('cliente_id', clientId)
-      .is('revocado_en', null)
-      .select('id');
-    if (rev.error) {
-      // La decisión ya quedó guardada y el refresco ya no rota (clienteAprobado);
-      // solo el acceso vigente (≤ 8 h) sobrevive. Se dice, no se esconde.
-      logger.error('mcp.oauth.cliente_revocar_tokens', { err: rev.error.message });
-      return { ok: false, error: 'no_disponible', detalle: 'El cliente quedó rechazado, pero no se pudieron revocar sus tokens vivos; reintenta el rechazo.' };
+    // Barrido final: cualquier token emitido entre la primera revocación y la
+    // marca (el canje/refresco ya no emiten a un cliente no aprobado).
+    const rev2 = await revocarVivos();
+    if (rev2.error) {
+      logger.error('mcp.oauth.cliente_revocar_tokens', { err: rev2.error.message });
+      return { ok: false, error: 'no_disponible', detalle: 'El cliente quedó rechazado y sus accesos ya no validan, pero el barrido final de tokens falló; reintenta el rechazo.' };
     }
-    revocados = rev.data?.length ?? 0;
+    revocados += rev2.data?.length ?? 0;
   }
   return { ok: true, revocados };
 }

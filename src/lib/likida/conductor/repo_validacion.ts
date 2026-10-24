@@ -76,10 +76,12 @@ function filaASitio(f: Fila, clientes?: ReadonlyMap<string, string>): SitioFila 
 const TIPOS_DEL_CATALOGO = ['cliente', 'planta', 'anden', 'patio', 'punto_interes'] as const;
 
 export async function listarSitios(
-  tenantId: string, o: { busqueda?: string; tipo?: TipoSitio; limite?: number } = {},
+  tenantId: string, o: { busqueda?: string; tipo?: TipoSitio; limite?: number; soloActivas?: boolean } = {},
 ): Promise<{ sitios: SitioFila[]; hayMas: boolean }> {
   const limite = Math.min(Math.max(o.limite ?? 200, 1), 500);
   let q = supabaseAdmin().from('geocerca').select(COLUMNAS_SITIO).eq('tenant_id', tenantId).eq('catalogo', 'conductor').in('tipo', o.tipo ? [o.tipo] : [...TIPOS_DEL_CATALOGO]);
+  // A37-S13-03: un selector solo ofrece sitios ACTIVOS; filtrarlos DESPUÉS del tope regalaba lugares a los archivados.
+  if (o.soloActivas) q = q.eq('activa', true);
   const b = (o.busqueda ?? '').replace(/[%,()*\\]/g, ' ').trim().slice(0, 60);
   if (b) q = q.or(`nombre.ilike.%${b}%,codigo.ilike.%${b}%`);
   const res = await acotada(q.order('nombre', { ascending: true }).order('id').limit(limite + 1), 'sitios.listar');

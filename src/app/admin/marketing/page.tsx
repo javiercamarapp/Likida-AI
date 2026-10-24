@@ -6,11 +6,13 @@ import { aprobarPieza, rechazarPieza } from '@/lib/likida/agentes/cola';
 import {
   listarHooks, listarReferencias, piezasEstudioPendientes, piezasEstudioAprobadasRecientes,
   pedirUrlFirmadaHook, guardarHook, guardarReferencia, subirFotoReferencia, validarFotoReferencia,
-  esTipoReferencia, type UrlFirmadaSubida,
+  esTipoReferencia, exigirConsentimientoReferencia, borrarReferencia, type UrlFirmadaSubida,
 } from '@/lib/likida/marketing/estudio';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { fechaHoraMx } from '@/lib/formato';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { EstadoVacio } from '../ui/kit';
+import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import { SubirHook, type ResultadoFirmaHook, type ResultadoGuardar } from './subir-hook';
 import { SubirReferencia, type ResultadoReferencia } from './subir-referencia';
 import { TarjetaPieza, type ResultadoPublicar } from './tarjeta-pieza';
@@ -87,12 +89,34 @@ export default async function EstudioMarketingPage() {
       const archivo = fd.get('foto');
       if (!(archivo instanceof File) || archivo.size === 0) return { error: 'Elige una foto.' };
       validarFotoReferencia(archivo.type, archivo.size);
+      exigirConsentimientoReferencia(tipo, fd.get('consentimiento'));
       const ruta = await subirFotoReferencia(archivo, archivo.type);
-      await guardarReferencia({ tipo, nombre, etiqueta, fotoRuta: ruta, actorId: s.userId });
+      const idRef = await guardarReferencia({ tipo, nombre, etiqueta, fotoRuta: ruta, actorId: s.userId });
+      await anotarBitacora(
+        { tenantId: null, actor: { id: s.userId }, accion: 'marketing.referencia_subida', entidad: 'marketing_referencia', entidadId: idRef, detalle: { tipo, consentimiento: tipo === 'personaje' } },
+        { evento: 'marketing.bitacora' },
+      );
       revalidatePath('/admin/marketing');
       return { ok: true };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'subir la referencia') };
+    }
+  }
+
+  async function accionBorrarReferencia(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    const s = await requireSuperadmin();
+    try {
+      const id = String(fd.get('referencia') ?? '');
+      await borrarReferencia(id);
+      await anotarBitacora(
+        { tenantId: null, actor: { id: s.userId }, accion: 'marketing.referencia_borrada', entidad: 'marketing_referencia', entidadId: id, detalle: null },
+        { evento: 'marketing.bitacora' },
+      );
+      revalidatePath('/admin/marketing');
+      return { ok: 'Referencia borrada: fila y foto.' };
+    } catch (e) {
+      return { error: mensajeParaPantalla(e, 'borrar la referencia') };
     }
   }
 
@@ -208,6 +232,9 @@ export default async function EstudioMarketingPage() {
                     )}
                     <p className="text-[11.5px] font-medium mt-1 m-0 truncate">{r.nombre}</p>
                     <p className="text-[10px] m-0" style={{ color: 'var(--faint)' }}>{r.tipo}</p>
+                    <FormaConAviso accion={accionBorrarReferencia} boton="Borrar" columnas="md:grid-cols-1">
+                      <input type="hidden" name="referencia" value={r.id} />
+                    </FormaConAviso>
                   </div>
                 ))}
               </div>

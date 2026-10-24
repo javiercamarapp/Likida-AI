@@ -95,7 +95,7 @@ export function AccionesHito({ accion, modos, hitoId, viajeId }: {
 export type ResultadoSitios = ResultadoOficina;
 export interface OpcionSitio { id: string; nombre: string; tipo: string }
 
-export function FormaAsignarSitios({ accion, viajeId, sitios }: { accion: AccionOficinaServidor; viajeId: string; sitios: OpcionSitio[] }) {
+export function FormaAsignarSitios({ accion, viajeId, sitios, hayMas = false }: { accion: AccionOficinaServidor; viajeId: string; sitios: OpcionSitio[]; hayMas?: boolean }) {
   const [estado, enviar] = useActionState(accion, null);
   const opciones = (
     <>
@@ -110,6 +110,12 @@ export function FormaAsignarSitios({ accion, viajeId, sitios }: { accion: Accion
       <form action={enviar} className="mt-2 space-y-2 max-w-[52ch]">
         <input type="hidden" name="viajeId" value={viajeId} />
         <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Contra estos sitios se compara cada «ya llegué». Sin sitio, la llegada queda «sin dato» (nunca «no coincide»).</p>
+        {hayMas && (
+          <p role="status" className="text-[11px]" style={{ color: 'var(--warn)' }}>
+            Hay más sitios activos de los que caben en esta lista (solo salen los primeros {sitios.length} por nombre). Si no aparece el que buscas, ligarlo
+            desde aquí no es posible todavía: avisa a soporte o asígnalo con las equivalencias de «Textos sin sitio» en el catálogo.
+          </p>
+        )}
         <div className="grid sm:grid-cols-2 gap-2">
           <label className="block"><span className="block text-[11px] font-medium mb-1">Sitio de carga</span><select name="origen" defaultValue="" className={`${CAMPO} w-full`}>{opciones}</select></label>
           <label className="block"><span className="block text-[11px] font-medium mb-1">Sitio de descarga</span><select name="destino" defaultValue="" className={`${CAMPO} w-full`}>{opciones}</select></label>

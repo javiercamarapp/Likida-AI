@@ -38,6 +38,19 @@ describe('getEstadoEvals — el gate del re-examen', () => {
     expect(e2.driftDePrompt).toBe(false);
   });
 
+  it('A37-S03-05: una corrida parcial (casos < casosActivos) con el hash vivo SIGUE siendo drift', async () => {
+    corrida = { id: 'c1', prompt_hash: 'x', veredicto: 'paso', iniciada_en: 'x', terminada_en: 'x', casos: 1, costo_usd: 1 };
+    const base = await getEstadoEvals('analista');
+    corrida = { ...corrida, prompt_hash: base.hashVivo };
+    const e = await getEstadoEvals('analista');
+    expect(e.casosActivos).toBe(12);
+    expect(e.driftDePrompt).toBe(true);
+    corrida = { ...corrida, casos: 12 };
+    expect((await getEstadoEvals('analista')).driftDePrompt).toBe(false);
+    corrida = { ...corrida, casos: null };
+    expect((await getEstadoEvals('analista')).driftDePrompt).toBe(true);
+  });
+
   it('un error de lectura LANZA — el panel enseña su fallo, no un verde', async () => {
     error = { message: 'db down' };
     await expect(getEstadoEvals('analista')).rejects.toThrow('db down');

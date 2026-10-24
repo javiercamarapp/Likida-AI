@@ -181,6 +181,30 @@ describe('lote por filtro', () => {
     expect(ext).toMatchObject({ n_cruces: 3, fecha_cobro_mas_antiguo: '2026-02-20' });
   });
 
+  it('A37-S14-01: si falla el reclamo de una categoría en un lote, NINGUNA categoría queda «reclamado» sin reclamo (reintentable)', async () => {
+    sembrar({ clase9: 6 });
+    db.fallar('peaje_reclamo.insert', 'base caída');
+    const r = await A.aplicarAccionCandidatos(T, { ...base, accion: 'reclamado', filtro: { entrada: {}, confirmar: true, esperado: 9 } });
+    expect(r).toMatchObject({ ok: false });
+    // antes: las decisiones de las categorías aún no procesadas quedaban «reclamado» sin reclamo_id (y el reintento daba ya_decidido)
+    expect((db.tablas.peaje_candidato_accion ?? []).filter((x) => x.accion === 'reclamado' && !x.reclamo_id)).toHaveLength(0);
+    expect(db.tablas.peaje_candidato_accion ?? []).toHaveLength(0);
+    // la base vuelve: el mismo lote ahora sí se aplica completo
+    db = crearDbFalsa({ ...db.tablas });
+    const otra = await A.aplicarAccionCandidatos(T, { ...base, accion: 'reclamado', filtro: { entrada: {}, confirmar: true, esperado: 9 } });
+    expect(otra).toMatchObject({ ok: true, aplicadas: 9, reclamos: 2 });
+  });
+
+  it('A37-S14-01: si guardar la justificación de la regla lanza, la decisión se retira (el cruce no queda a medias)', async () => {
+    sembrar();
+    db.tablas.peaje_caseta_nombre = [{ tenant_id: T, nombre: 'Caseta Ejemplo 1', nombre_norm: 'caseta ejemplo 1', clases_permitidas: [], no_cruzar: true, lat: null, lng: null }];
+    db.fallar('peaje_cruce_justificado.upsert', 'base caída');
+    db.fallar('peaje_cruce_justificado.insert', 'base caída');
+    const r = await A.aplicarAccionCandidatos(T, { ...base, accion: 'justificado', fila: fila(1, 'caseta_no_debe_cruzarse'), motivo: 'Salida de servicio autorizada' });
+    expect(r).toMatchObject({ ok: false });
+    expect(db.tablas.peaje_candidato_accion ?? []).toHaveLength(0);
+  });
+
   it('descartar en lote exige motivo y lo aplica a todos', async () => {
     sembrar({ clase9: 4 });
     const f = { entrada: { cat: 'clase_fuera_de_3_5' }, confirmar: true, esperado: 4 };

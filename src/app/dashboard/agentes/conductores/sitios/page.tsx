@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantEfectivo, resolverTenantAtado, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
@@ -29,10 +29,12 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
   const puedeEditar = puedeAsignar(rol);
   const busqueda = (sp.q ?? '').slice(0, 60);
 
-  const [lista, catalogos, sinSitio] = await Promise.all([
+  const [lista, catalogos, sinSitio, selector] = await Promise.all([
     listarSitios(tenantId, { busqueda }).catch((e) => { logger.warn('sitios.no_leidos', { tenantId, err: e instanceof Error ? e.message : String(e) }); return null; }),
     leerCatalogosFiltro(tenantId).catch(() => null),
     leerTextosSinSitio(tenantId, new Date()).catch((e) => { logger.warn('equivalencias.textos_no_leidos', { tenantId, err: e instanceof Error ? e.message : String(e) }); return null; }),
+    // A37-S13-03: los selectores (padre, «Textos sin sitio») NO deben heredar el tope de 200 ni el filtro ?q de la tabla.
+    listarSitios(tenantId, { limite: 500, soloActivas: true }).catch(() => null),
   ]);
   const descargaCsv = sinSitio && sinSitio.textos.length > 0 ? `data:text/csv;charset=utf-8,${encodeURIComponent(csvTextosSinSitio(sinSitio.textos))}` : null;
   const editarId = sp.editar && UUID.test(sp.editar) ? sp.editar.toLowerCase() : null;
@@ -42,7 +44,8 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionGuardar(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtado(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico editan el catálogo.' };
     const r = aResultado(await guardarSitioDelPanel({ tenantId: s.tenantId, rol: s.rol }, fd));
     if (r?.ok) revalidatePath(RUTA);
@@ -51,7 +54,8 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionImportar(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtado(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico importan sitios.' };
     const archivo = fd.get('archivo');
     let texto = '';
@@ -67,7 +71,8 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionImportarEquivalencias(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtado(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico importan equivalencias.' };
     const archivo = fd.get('archivo');
     let texto = '';
@@ -82,7 +87,8 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionCatalogo(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtado(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico importan el catálogo.' };
     const archivo = fd.get('archivo');
     if (!(archivo instanceof File) || archivo.size === 0) return { ok: false, error: 'Elige el archivo del catálogo.' };
@@ -99,7 +105,8 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionAsignarEquivalencia(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtado(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico editan las equivalencias.' };
     const r = aResultado(await asignarEquivalenciaDelPanel({ tenantId: s.tenantId, rol: s.rol }, fd));
     if (r?.ok) revalidatePath(RUTA);
@@ -108,7 +115,8 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionEstado(fd: FormData): Promise<void> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtado(RUTA, sp, tenantId);
+    if (!s) return;
     if (!puedeVerRuta(s.rol, RUTA)) return;
     await archivarSitioDelPanel({ tenantId: s.tenantId, rol: s.rol }, String(fd.get('id') ?? ''), fd.get('activa') === 'si');
     revalidatePath(RUTA);
@@ -116,7 +124,7 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   return (
     <VistaSitios
-      sufijo={sufijoTenant(sp)} sitios={lista?.sitios ?? null} hayMas={lista?.hayMas ?? false} clientes={catalogos?.clientes ?? []}
+      sufijo={sufijoTenant(sp)} sitios={lista?.sitios ?? null} hayMas={lista?.hayMas ?? false} selectorSitios={selector ? selector.sitios.map((x) => ({ id: x.id, nombre: x.nombre })) : undefined} selectorHayMas={selector?.hayMas ?? false} clientes={catalogos?.clientes ?? []}
       puedeEditar={puedeEditar} editando={editando} busqueda={busqueda}
       accionGuardar={accionGuardar} accionImportar={accionImportar} accionEstado={accionEstado}
       textosSinSitio={sinSitio?.textos ?? null} textosTruncado={sinSitio?.truncado ?? false} descargaCsv={descargaCsv}

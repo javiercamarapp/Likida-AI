@@ -132,17 +132,20 @@ async function main() {
   const cal = calificar([...filas, ...sinCorrer]);
   const etiqueta = SABOTAJE ? 'SABOTAJE — prueba de que el examen puede reprobar; NO es calificación del agente' : 'examen real';
   const parcial = seCayo !== null;
-  const agregado = parcial ? null : veredictoAgregado(veredictos);
-  const notas = `${parcial ? `PARCIAL (${seCayo}) — no es calificación · ` : ''}${resumenCalificacion(cal, etiqueta)}`;
+  // A37-S03-05: con --limite (o si no se examinó todo el banco) NO hay veredicto
+  // agregado: un caso fácil no puede certificar el prompt ni apagar el drift.
+  const incompleta = filas.length < BANCO_CONTADOR.length;
+  const agregado = parcial || incompleta ? null : veredictoAgregado(veredictos);
+  const notas = `${parcial ? `PARCIAL (${seCayo}) — no es calificación · ` : incompleta ? `PARCIAL (${filas.length}/${BANCO_CONTADOR.length} casos, --limite) — no es calificación · ` : ''}${resumenCalificacion(cal, etiqueta)}`;
   await db.from('eval_corrida').update({
     terminada_en: new Date().toISOString(), veredicto: agregado,
     casos: filas.length, costo_usd: costo, modelo, notas: notas.slice(0, 1500),
   }).eq('id', corrida.id);
 
-  console.log(`\n═══ ${parcial ? 'CORRIDA PARCIAL (sin veredicto)' : `VEREDICTO: ${agregado!.toUpperCase()}`} · ${filas.length}/${BANCO_CONTADOR.length} casos · $${costo.toFixed(4)} · prompt ${hash.slice(0, 12)}…`);
+  console.log(`\n═══ ${parcial || incompleta ? 'CORRIDA PARCIAL (sin veredicto)' : `VEREDICTO: ${agregado!.toUpperCase()}`} · ${filas.length}/${BANCO_CONTADOR.length} casos · $${costo.toFixed(4)} · prompt ${hash.slice(0, 12)}…`);
   console.log(`    ${resumenCalificacion(cal, etiqueta)}`);
   console.log('Las trampas y desacuerdos quedaron en REVISAR: léelos en /admin/evals y marca a mano.');
   if (parcial) process.exitCode = 1;
 }
 
-void main();
+main().catch((e) => { console.error(e instanceof Error ? e.message : e); process.exitCode = 1; });
