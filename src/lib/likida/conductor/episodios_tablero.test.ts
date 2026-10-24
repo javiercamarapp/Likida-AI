@@ -27,7 +27,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
-const { leerEpisodiosParaTablero } = await import('./repo');
+const { leerEpisodiosParaTablero, leerEntradaInsights } = await import('./repo');
 const DESDE = new Date('2026-09-25T00:00:00.000Z');
 const UUID_C = '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0a1';
 const fila = (o: Record<string, unknown>) => ({ id: 'e1', viaje_id: 'v1', motivo: 'gps_obsoleto', abierto_en: '2026-10-01T10:00:00Z', nivel_enviado: 0, aviso_1_en: null, aviso_2_en: null, escalado_en: null, cerrado_en: null, cierre_motivo: null, respuesta: null, ...o });
@@ -64,6 +64,26 @@ describe('leerEpisodiosParaTablero', () => {
     respuestas = { viaje_senal_vida: { data: Array.from({ length: 3 }, (_, i) => fila({ id: `e${i}` })) }, viaje: { data: [] } };
     const r = (await leerEpisodiosParaTablero('t1', DESDE, {}, 2))!;
     expect(r.episodios).toHaveLength(2);
+    expect(r.hayMas).toBe(true);
+  });
+
+  it('A37-S36-10: un cliente con más de 1000 viajes recorta la lectura y LO DICE (hayMas), en vez de omitir episodios en silencio', async () => {
+    const ids = Array.from({ length: 1500 }, (_, i) => ({ id: `v${i}` }));
+    respuestas = { viaje: { data: ids }, viaje_senal_vida: { data: [] } };
+    const r = (await leerEpisodiosParaTablero('t1', DESDE, { clienteId: UUID_C }))!;
+    const q = registros.find((x) => x.tabla === 'viaje_senal_vida')!;
+    expect((q.ops.find((o) => o[0] === 'in')![2] as string[])).toHaveLength(1000);
+    expect(r.hayMas).toBe(true);
+    // Con 1000 o menos, la lectura es completa y no declara recorte.
+    registros.length = 0;
+    respuestas = { viaje: { data: ids.slice(0, 1000) }, viaje_senal_vida: { data: [] } };
+    expect((await leerEpisodiosParaTablero('t1', DESDE, { clienteId: UUID_C }))!.hayMas).toBe(false);
+  });
+
+  it('A37-S36-10: los insights filtrados por un cliente de más de 1000 viajes también declaran el recorte', async () => {
+    const ids = Array.from({ length: 1200 }, (_, i) => ({ id: `v${i}` }));
+    respuestas = { viaje: { data: ids } };
+    const r = await leerEntradaInsights('t1', DESDE, { clienteId: UUID_C });
     expect(r.hayMas).toBe(true);
   });
 

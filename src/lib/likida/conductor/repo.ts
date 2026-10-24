@@ -1396,6 +1396,8 @@ export interface EpisodioTablero {
 }
 
 const TOPE_EPISODIOS_TABLERO = 40;
+/** Cuántos viajes de un filtro del tablero se pasan a la consulta de episodios/insights; más de esto se RECORTA y se declara `hayMas` (A37-S36-10). */
+const TOPE_VIAJES_FILTRO = 1000;
 const UUID_FILTRO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -1407,6 +1409,7 @@ export async function leerEpisodiosParaTablero(
   tenantId: string, desde: Date, f: FiltrosTablero = {}, limite: number = TOPE_EPISODIOS_TABLERO,
 ): Promise<{ episodios: EpisodioTablero[]; hayMas: boolean } | null> {
   let viajeIds: string[] | null = null;
+  let recortadoPorViajes = false;
   if ((f.terminalId && UUID_FILTRO.test(f.terminalId)) || (f.clienteId && UUID_FILTRO.test(f.clienteId)) || (f.operadorId && UUID_FILTRO.test(f.operadorId))) {
     let q = supabaseAdmin().from('viaje').select('id').eq('tenant_id', tenantId);
     if (f.terminalId && UUID_FILTRO.test(f.terminalId)) q = q.eq('terminal_id', f.terminalId);
@@ -1415,20 +1418,21 @@ export async function leerEpisodiosParaTablero(
     const rv = await acotada(q.gte('created_at', new Date(desde.getTime() - 45 * 86_400_000).toISOString()).order('id').limit(2000), 'tablero.episodios_viajes');
     viajeIds = ((exigir(rv as never, 'tablero.episodios_viajes') ?? []) as unknown as Fila[]).map((x) => String(x.id));
     if (viajeIds.length === 0) return { episodios: [], hayMas: false };
+    recortadoPorViajes = viajeIds.length > TOPE_VIAJES_FILTRO;
   }
   let q = supabaseAdmin().from('viaje_senal_vida')
     .select('id, viaje_id, motivo, abierto_en, nivel_enviado, aviso_1_en, aviso_2_en, escalado_en, cerrado_en, cierre_motivo, respuesta')
     .eq('tenant_id', tenantId).gte('abierto_en', desde.toISOString());
-  if (viajeIds) q = q.in('viaje_id', viajeIds.slice(0, 1000));
+  if (viajeIds) q = q.in('viaje_id', viajeIds.slice(0, TOPE_VIAJES_FILTRO));
   const r = await acotada(q.order('abierto_en', { ascending: false }).order('id').limit(limite + 1), 'tablero.episodios');
   if (r.error) {
     if (faltaEsquema(r.error, /viaje_senal_vida/i)) return null;
     throw new Error(`tablero.episodios: ${r.error.message}`);
   }
   const filas = ((r.data ?? []) as unknown as Fila[]);
-  const hayMas = filas.length > limite;
+  const hayMas = filas.length > limite || recortadoPorViajes;
   const visibles = filas.slice(0, limite);
-  if (visibles.length === 0) return { episodios: [], hayMas: false };
+  if (visibles.length === 0) return { episodios: [], hayMas: recortadoPorViajes };
 
   const ids = [...new Set(visibles.map((x) => String(x.viaje_id)))];
   const viajes = await traerPorIds<Fila>(ids, (t) => acotada(supabaseAdmin().from('viaje').select('id, folio, operador_id').eq('tenant_id', tenantId).in('id', t), 'tablero.episodios_folios') as never, 'tablero.episodios_folios');
@@ -1466,13 +1470,16 @@ export async function leerEntradaInsights(
   tenantId: string, desde: Date, f: FiltrosTablero = {},
 ): Promise<{ hitos: HitoFila[]; cruces: Array<{ detectadoEn: string; registradoEn: string }>; episodios: EpisodioTablero[]; hayMas: boolean }> {
   let viajeIds: string[] | null = null;
+  let recortadoPorViajes = false;
   if ((f.terminalId && UUID_FILTRO.test(f.terminalId)) || (f.clienteId && UUID_FILTRO.test(f.clienteId)) || (f.operadorId && UUID_FILTRO.test(f.operadorId))) {
     let q = supabaseAdmin().from('viaje').select('id').eq('tenant_id', tenantId);
     if (f.terminalId && UUID_FILTRO.test(f.terminalId)) q = q.eq('terminal_id', f.terminalId);
     if (f.clienteId && UUID_FILTRO.test(f.clienteId)) q = q.eq('cliente_id', f.clienteId);
     if (f.operadorId && UUID_FILTRO.test(f.operadorId)) q = q.eq('operador_id', f.operadorId);
     const rv = await acotada(q.gte('created_at', new Date(desde.getTime() - 45 * 86_400_000).toISOString()).order('id').limit(2000), 'insights.viajes');
-    viajeIds = ((exigir(rv as never, 'insights.viajes') ?? []) as unknown as Fila[]).map((x) => String(x.id)).slice(0, 1000);
+    const todos = ((exigir(rv as never, 'insights.viajes') ?? []) as unknown as Fila[]).map((x) => String(x.id));
+    recortadoPorViajes = todos.length > TOPE_VIAJES_FILTRO;
+    viajeIds = todos.slice(0, TOPE_VIAJES_FILTRO);
     if (viajeIds.length === 0) return { hitos: [], cruces: [], episodios: [], hayMas: false };
   }
   let qh = supabaseAdmin().from('viaje_hito').select(COLUMNAS_HITO).eq('tenant_id', tenantId).gte('updated_at', desde.toISOString());
@@ -1488,7 +1495,7 @@ export async function leerEntradaInsights(
   if (rc.error) {
     if (!faltaEsquema(rc.error, /viaje_cruce_geocerca/i)) throw new Error(`insights.cruces: ${rc.error.message}`);
   } else filasC = (rc.data ?? []) as unknown as Fila[];
-  const hayMas = filasH.length > TOPE_INSIGHTS || filasC.length > TOPE_INSIGHTS || (ep?.hayMas ?? false);
+  const hayMas = filasH.length > TOPE_INSIGHTS || filasC.length > TOPE_INSIGHTS || (ep?.hayMas ?? false) || recortadoPorViajes;
   return {
     hitos: filasH.slice(0, TOPE_INSIGHTS).map(filaAHito),
     cruces: filasC.slice(0, TOPE_INSIGHTS).map((c) => ({ detectadoEn: String(c.detectado_en), registradoEn: String(c.registrado_en) })),
