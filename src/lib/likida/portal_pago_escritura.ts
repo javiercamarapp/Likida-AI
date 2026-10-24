@@ -7,7 +7,7 @@ import { anotarBitacora, type EntidadBitacora } from './bitacora_escritura';
 import { DatoInvalido, AbonoYaRegistrado } from './errores';
 import { esUuidValido } from './intake/cfdi';
 import { parseRepXml } from './intake/rep';
-import { abonoEquivalente } from './portal_pago_duplicado';
+import { abonoEquivalente } from './portal_pago_propuesta';
 import { registrarPago } from './facturacion_escritura';
 import { expiracionDesde, generarTokenPortal, diasDeVigencia, montoTecleado } from './portal_pago';
 
