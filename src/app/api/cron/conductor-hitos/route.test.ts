@@ -39,12 +39,12 @@ const barrido = vi.fn(async (): Promise<Record<string, unknown>> => ({ revisados
 vi.mock('@/lib/likida/conductor/validar_hito', () => ({ barridoValidacion: () => barrido(), depsValidacionReales: {} }));
 vi.mock('@/lib/likida/conductor/trabajo', () => ({ leerCandidatosValidacion: async () => [], leerCandidatosSitioDerivado: async () => [], leerCatalogoSitios: async () => new Map() }));
 const ciclo = vi.fn(async (): Promise<Record<string, unknown>> => ({ viajes: 4, evaluados: 3, detectados: 2, llegadas: 1, salidas: 1, fallos: [] }));
-vi.mock('@/lib/likida/conductor/ciclo_gps', () => ({ barridoCicloGps: () => ciclo() }));
+vi.mock('@/lib/likida/conductor/ciclo_gps', () => ({ barridoCicloGps: (...a: unknown[]) => (ciclo as (...x: unknown[]) => Promise<Record<string, unknown>>)(...a) }));
 vi.mock('@/lib/likida/conductor/ciclo_gps_real', () => ({ puertosCicloGpsReales: () => ({}) }));
 const sitios = vi.fn(async (): Promise<Record<string, unknown>> => ({ candidatos: 5, derivados: 3, sinCoincidencia: 2, yaAsignados: 0, fallos: 0, cortadosPorReloj: 0 }));
 vi.mock('@/lib/likida/conductor/sitio_derivado', () => ({ barridoSitioDerivado: () => sitios() }));
 const senal = vi.fn(async (): Promise<Record<string, unknown>> => ({ viajes: 4, avisosChofer: 1, escalaciones: 1, cortadaPorRechazoMasivo: false, fallos: [] }));
-vi.mock('@/lib/likida/conductor/senal_vida', () => ({ barridoSenalVida: () => senal() }));
+vi.mock('@/lib/likida/conductor/senal_vida', () => ({ barridoSenalVida: (...a: unknown[]) => (senal as (...x: unknown[]) => Promise<Record<string, unknown>>)(...a) }));
 vi.mock('@/lib/likida/conductor/senal_vida_real', () => ({ puertosSenalVidaReales: () => ({}) }));
 const acercamiento = vi.fn(async (): Promise<Record<string, unknown>> => ({ candidatos: 3, enviados: 1, sinPosicion: 1, lejos: 1, rechazados: 0, fallos: 0, cortadosPorReloj: 0 }));
 vi.mock('@/lib/likida/convenios/acercamiento', () => ({ barridoAcercamiento: () => acercamiento(), puertosAcercamientoReales: { candidatos: async () => [] } }));
@@ -101,6 +101,20 @@ describe('la puerta y las palancas', () => {
     expect(await j(r)).toMatchObject({ codigo: 'interruptor_ilegible' });
     expect(correr).not.toHaveBeenCalled();
     expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'fallo', { codigo: 'interruptor_ilegible' });
+  });
+});
+
+describe('A37-A5-11 · cada fase tiene su propio presupuesto de tiempo', () => {
+  it('el motor no se lleva todo el reloj: GPS y señal de vida reciben un vencimiento propio, la señal de vida el último', async () => {
+    await llamar();
+    const [, opcionesMotor] = (correr.mock.calls as unknown as Array<[unknown, { venceEn: number }]>)[0];
+    const venceGps = (ciclo.mock.calls as unknown as Array<[unknown, unknown, number]>)[0][2];
+    const venceSenal = (senal.mock.calls as unknown as Array<[unknown, unknown, number]>)[0][2];
+    // El motor corta antes que el tope global; la señal de vida conserva el tope completo (es el barrido que más importa si un camión se perdió).
+    expect(opcionesMotor.venceEn).toBeLessThan(venceSenal);
+    expect(venceGps).toBeLessThan(venceSenal);
+    // Y la señal de vida tiene un hueco real después del motor (no el mismo instante).
+    expect(venceSenal - opcionesMotor.venceEn).toBeGreaterThanOrEqual(10_000);
   });
 });
 
