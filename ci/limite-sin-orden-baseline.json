@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "total": 193,
+  "total": 192,
   "porArchivo": {
     "src/app/admin/agentes/contenido.tsx": 1,
     "src/app/admin/evals/page.tsx": 1,
@@ -13,7 +13,6 @@
     "src/app/dashboard/mapa/page.tsx": 1,
     "src/lib/admin/bitacora.ts": 1,
     "src/lib/admin/bus.ts": 3,
-    "src/lib/admin/campanas.ts": 1,
     "src/lib/admin/corridas-cruzadas.ts": 1,
     "src/lib/admin/evals.ts": 1,
     "src/lib/admin/ficha-cliente.ts": 1,

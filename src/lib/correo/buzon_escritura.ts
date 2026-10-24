@@ -78,6 +78,8 @@ async function escribirToken(
   tenantId: string,
   accion: 'buzon.generado' | 'buzon.rotado',
   actor?: { id?: string; email?: string },
+  /** A37-S24-02: `true` (generar) solo escribe si `buzon_token` es null. */
+  soloSiVacio = false,
 ): Promise<BuzonDeFlota> {
   for (let intento = 1; intento <= MAX_INTENTOS; intento++) {
     const token = generarToken();
@@ -86,11 +88,15 @@ async function escribirToken(
     // servidor, nunca del formulario. Y con `.select('id')` porque un UPDATE
     // de 0 filas no es un error para Postgres — sin mirarlo, la pantalla diría
     // "listo" sobre una flota que no existe (patrón `revocarLlaveApi`).
-    const { data, error } = await acotada(supabaseAdmin()
+    let consulta = supabaseAdmin()
       .from('tenant')
       .update({ buzon_token: token })
-      .eq('id', tenantId)
-      .select('id'), 'escribirToken');
+      .eq('id', tenantId);
+    // A37-S24-02: «Generar» desde una pestaña vieja o con doble clic no debe
+    // pisar el token vivo (los proveedores seguirían escribiendo a la
+    // dirección anterior y esos correos se perderían en silencio).
+    if (soloSiVacio) consulta = consulta.is('buzon_token', null);
+    const { data, error } = await acotada(consulta.select('id'), 'escribirToken');
 
     if (error) {
       // 23505 = choque del unique global `tenant_buzon_token_unico`: otro
@@ -102,6 +108,11 @@ async function escribirToken(
       throw new Error(`escribirToken(${accion}): ${error.message}`);
     }
     if (!Array.isArray(data) || data.length === 0) {
+      if (soloSiVacio) {
+        // 0 filas con la guarda: o la flota ya tenía token (se devuelve el
+        // vivo, sin rotarlo ni anotar «generado») o no existe (getBuzon lanza).
+        return getBuzon(tenantId);
+      }
       throw new Error(`escribirToken(${accion}): la flota no existe`);
     }
 
@@ -117,15 +128,16 @@ async function escribirToken(
 }
 
 /**
- * Genera el buzón de la flota (o lo reemplaza si ya había — para ESA
- * intención usa `rotarBuzon`, que existe para que el llamador diga lo que
- * está haciendo y la bitácora lo distinga).
+ * Genera el buzón de la flota SOLO si no tenía (A37-S24-02): si ya había
+ * token devuelve el vivo sin tocarlo. Para reemplazarlo —con la confirmación
+ * explícita del dueño— está `rotarBuzon`, que existe para que el llamador diga
+ * lo que está haciendo y la bitácora lo distinga.
  */
 export async function generarBuzon(
   tenantId: string,
   actor?: { id?: string; email?: string },
 ): Promise<BuzonDeFlota> {
-  return escribirToken(tenantId, 'buzon.generado', actor);
+  return escribirToken(tenantId, 'buzon.generado', actor, true);
 }
 
 /**

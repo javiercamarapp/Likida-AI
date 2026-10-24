@@ -14,7 +14,7 @@ import {
   registrarAceptacion, revocarMandato, mandatoFlotaVigente, aceptacionesDeFlota,
   pendientesDeUsuario, mandatoDe, type AceptacionFila,
 } from './aceptacion';
-import { MANDATO_AUTOFACTURACION } from './documentos';
+import { MANDATO_AUTOFACTURACION, HUELLA_TERMINOS, VERSION_TERMINOS, VERSION_AVISO_PRIVACIDAD } from './documentos';
 
 beforeEach(() => { vi.clearAllMocks(); d.filas = []; d.errorLectura = null; delete process.env.VERCEL_GIT_COMMIT_SHA; });
 
@@ -33,7 +33,8 @@ describe('registrarAceptacion', () => {
     d.rpc.mockResolvedValue({ data: { ok: true, registrada: false, motivo: 'ya estaba aceptada' }, error: null });
     const r = await registrarAceptacion('t-1', 'u-1', 'terminos');
     expect(r).toEqual({ ok: true, registrada: false });
-    expect(d.rpc.mock.calls[0][1]).toMatchObject({ p_documento: 'terminos', p_hash: null, p_commit: null });
+    // A37-L-09: Términos y Aviso ya viajan con la huella SHA-256 del texto aceptado.
+    expect(d.rpc.mock.calls[0][1]).toMatchObject({ p_documento: 'terminos', p_hash: HUELLA_TERMINOS, p_commit: null });
   });
   it('un rechazo de la base se propaga con su motivo; un error de red, con mensaje genérico', async () => {
     d.rpc.mockResolvedValue({ data: { ok: false, motivo: 'solo el dueño de la flota (flota_admin) puede otorgar el mandato' }, error: null });
@@ -74,7 +75,7 @@ describe('revocarMandato', () => {
 
 describe('lectura y derivados (puros)', () => {
   const fila = (o: Partial<AceptacionFila>): AceptacionFila => ({
-    documento: 'terminos', version: '2026-10-01', aceptadoEn: '2026-10-02T00:00:00Z', userId: 'u-1', revocadoEn: null, ...o,
+    documento: 'terminos', version: VERSION_TERMINOS, aceptadoEn: '2026-10-02T00:00:00Z', userId: 'u-1', revocadoEn: null, ...o,
   });
   it('aceptacionesDeFlota traduce filas y LANZA si la lectura falla (no devuelve vacío)', async () => {
     d.filas = [{ documento: 'terminos', version: '2026-10-01', aceptado_en: '2026-10-02T00:00:00Z', user_id: null, revocado_en: null }];
@@ -84,7 +85,7 @@ describe('lectura y derivados (puros)', () => {
   });
   it('pendientesDeUsuario: faltan los dos si no hay nada; una versión vieja o revocada no cuenta', () => {
     expect(pendientesDeUsuario([], 'u-1')).toEqual(['terminos', 'aviso_privacidad']);
-    const ok = [fila({}), fila({ documento: 'aviso_privacidad' })];
+    const ok = [fila({}), fila({ documento: 'aviso_privacidad', version: VERSION_AVISO_PRIVACIDAD })];
     expect(pendientesDeUsuario(ok, 'u-1')).toEqual([]);
     expect(pendientesDeUsuario(ok, 'u-2')).toEqual(['terminos', 'aviso_privacidad']);
     expect(pendientesDeUsuario([fila({ version: '2020-01-01' }), fila({ documento: 'aviso_privacidad', revocadoEn: 'x' })], 'u-1')).toEqual(['terminos', 'aviso_privacidad']);

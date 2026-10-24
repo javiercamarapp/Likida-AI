@@ -528,7 +528,14 @@ async function contarMapa(): Promise<number | null> {
  * un delta montado sobre ella habría contestado "nada cambió" mientras el
  * embudo avanzaba.
  */
-export async function getDatosMapa(opciones?: { desde?: string | null }): Promise<DatosMapa> {
+export async function getDatosMapa(
+  opciones?: {
+    desde?: string | null;
+    /** A37-S22-04: quien recibe la cartera. Con esto, la ENTREGA (n contado en
+     *  el servidor, con teléfonos y correos) deja rastro en la bitácora. */
+    auditoria?: { actorId: string | null };
+  },
+): Promise<DatosMapa> {
   const generadoEn = new Date().toISOString();
   // Cadena vacía = sin marca (primera carga), no una marca de 1970.
   const desde = opciones?.desde || null;
@@ -573,6 +580,11 @@ export async function getDatosMapa(opciones?: { desde?: string | null }): Promis
     (max, f) => (max === null || f.updated_at > max ? f.updated_at : max), null);
 
   const vivas = filas.filter((f) => !esDuplicado(f));
+  // A37-S22-04: el rastro nace donde sale el dato, no en lo que el cliente declare
+  // después. Un latido sin filas (cartera en reposo) no escribe: no entregó nada.
+  if (opciones?.auditoria && vivas.length > 0) {
+    await registrarEntregaProspectos(opciones.auditoria.actorId, vivas.length, desde !== null);
+  }
   return {
     filas: vivas.map(aProspecto).map(empacar),
     generadoEn,
@@ -730,6 +742,21 @@ export async function registrarExportacionProspectos(
   n: number,
   filtros: Record<string, unknown>,
 ): Promise<void> {
+  // A37-S22-04: el `n` y los filtros los declara el cliente (el CSV se arma en el
+  // navegador), así que se contrastan con la cartera que cuenta el SERVIDOR: un n
+  // mayor se recorta y se marca; siempre queda `cartera_servidor`. Si el conteo no
+  // se puede leer, se registra lo declarado tal cual (el rastro nunca se pierde).
+  let cartera: number | null = null;
+  try { cartera = await contarMapa(); } catch { cartera = null; }
+  const detalle: Record<string, unknown> = { n, filtros };
+  if (cartera !== null) {
+    detalle.cartera_servidor = cartera;
+    if (n > cartera) {
+      detalle.n = cartera;
+      detalle.n_declarado = n;
+      detalle.n_inconsistente = true;
+    }
+  }
   await anotarBitacora(
     {
       tenantId: null,
@@ -737,8 +764,31 @@ export async function registrarExportacionProspectos(
       accion: 'prospectos.exportados',
       entidad: 'prospecto',
       entidadId: 'csv',
-      detalle: { n, filtros },
+      detalle,
     },
     { evento: 'prospectos.exportacion_no_bitacorada' },
+  );
+}
+
+/**
+ * A37-S22-04: la ENTREGA de la cartera (carga completa o delta con filas) al
+ * navegador del superadmin. No escribe filas de prospecto: solo cuántas.
+ * Best-effort como todo `anotarBitacora`.
+ */
+export async function registrarEntregaProspectos(
+  actorId: string | null,
+  n: number,
+  delta: boolean,
+): Promise<void> {
+  await anotarBitacora(
+    {
+      tenantId: null,
+      actor: actorId ? { id: actorId } : 'sistema',
+      accion: 'prospectos.entregados',
+      entidad: 'prospecto',
+      entidadId: 'mapa',
+      detalle: { n, delta },
+    },
+    { evento: 'prospectos.entrega_no_bitacorada' },
   );
 }

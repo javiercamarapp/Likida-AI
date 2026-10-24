@@ -141,6 +141,30 @@ describe('API bajo el perfil', () => {
     expect(apiPermitidaEnPerfil('cinco_agentes', `/api/v1/viajes/${id}/citas`)).toBe(true);
     expect(apiPermitidaEnPerfil('cinco_agentes', `/api/v1/viajes/${id}/sitios`)).toBe(true);
   });
+  // A37-S24-04: la lista negra era un regex sobre el pathname CRUDO.
+  it('A37-S24-04: la subruta de stand-by no se esquiva con %-codificación, // , /./ ni %2F', () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    for (const ruta of [
+      `/api/v1/viajes/${id}/contribuci%6Fn`,
+      `/api/v1/viajes/${id}/contribuci%6fn`,
+      `/api/v1/viajes/${id}/%63ontribucion`,
+      `/api/v1/viajes/${id}//contribucion`,
+      `/api/v1/viajes/${id}/./contribucion`,
+      `/api/v1/viajes/%2e%2e/viajes/${id}/contribucion`,
+      `/api/v1/viajes/a%2Fb/contribucion`,
+      `/api/v1/viajes/${id}/contribucion/`,
+      `/api/v1/viajes/${id}/contribucion;x=1`,
+      `/api/v1/viajes/${id}/contribuci%256Fn`,
+      `/api/v1/vi%61jes/${id}/contribucion`,
+    ]) {
+      expect(apiPermitidaEnPerfil('cinco_agentes', ruta), ruta).toBe(false);
+    }
+  });
+  it('A37-S24-04: un %-escape malformado se niega (fail-closed) y las rutas normales siguen vivas', () => {
+    expect(apiPermitidaEnPerfil('cinco_agentes', '/api/v1/viajes/%E0%A4%A')).toBe(false);
+    expect(apiPermitidaEnPerfil('cinco_agentes', '/api/v1/viajes')).toBe(true);
+    expect(apiPermitidaEnPerfil('cinco_agentes', '/api/v1/viajes/11111111-1111-4111-8111-111111111111/citas')).toBe(true);
+  });
   it('export: los de stand-by se niegan', () => {
     for (const n of ['poliza', 'jornada', 'convenios', 'facturas-proveedor', 'nuevo']) {
       expect(apiPermitidaEnPerfil('cinco_agentes', `/api/export/${n}`), n).toBe(false);

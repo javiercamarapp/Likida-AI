@@ -39,6 +39,16 @@ export function direccionDeCampana(): string | null {
 
 const RE_CORREO = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
 
+/**
+ * A37-S25-02: `ilike` trata `_` y `%` como comodines y el regex de extracción
+ * admite ambos en la parte local. Sin escapar, `juan_perez@x.com` casa también
+ * `juanXperez@x.com`, y un remitente `%@dominio.com` casaría todo el dominio:
+ * la baja de uno anonimizaría a otro. `\\` se escapa primero.
+ */
+export function escaparLike(valor: string): string {
+  return valor.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
 /** El correo pelón de un encabezado From/To ("Nombre <a@b>" o "a@b"). */
 export function extraerCorreo(encabezado: string | undefined | null): string | null {
   const m = (encabezado ?? '').match(RE_CORREO);
@@ -167,23 +177,35 @@ export interface RespuestaCampanaEvento {
  * Mejor esfuerzo por tabla: el fallo de una no debe impedir el resto: cada
  * una se registra si truena, y nunca lanza hacia el webhook que la llama
  * (mismo contrato que `suprimirCorreo`).
+ *
+ * A37-S25-03: devuelve `true` solo si TODAS las tablas aplicables se
+ * borraron/anonimizaron. Antes un timeout dejaba la persona en la base y el
+ * webhook contestaba 200 (Resend no reintenta): un éxito falso sobre una
+ * promesa legal. Quien llama debe tratar `false` como «reintentar» (503/500);
+ * el reintento es idempotente (delete/update por las mismas llaves).
  */
-export async function borrarDatosPersonaPorBaja(prospectoId: string, correo: string, esContactoPrincipal: boolean): Promise<void> {
+export async function borrarDatosPersonaPorBaja(prospectoId: string, correo: string, esContactoPrincipal: boolean): Promise<boolean> {
+  let completo = true;
+  const fallo = (evento: string, err: { message: string } | null): void => {
+    if (!err) return;
+    completo = false;
+    logger.error(evento, { prospecto: prospectoId, err: err.message });
+  };
   const db = supabaseAdmin();
   const ahoraIso = new Date().toISOString();
 
   const { error: errPersona } = await db.from('prospecto_persona')
     .delete()
     .eq('prospecto_id', prospectoId)
-    .ilike('correo', correo)
+    .ilike('correo', escaparLike(correo))
     .or(`conservar_hasta.is.null,conservar_hasta.lt.${ahoraIso}`);
-  if (errPersona) logger.error('campania.baja_persona_no_borrada', { prospecto: prospectoId, err: errPersona.message });
+  fallo('campania.baja_persona_no_borrada', errPersona);
 
   const { error: errCopia } = await db.from('prospecto_correo')
     .delete()
     .eq('prospecto_id', prospectoId)
-    .ilike('correo', correo);
-  if (errCopia) logger.error('campania.baja_correo_no_borrado', { prospecto: prospectoId, err: errCopia.message });
+    .ilike('correo', escaparLike(correo));
+  fallo('campania.baja_correo_no_borrado', errCopia);
 
   // 0258 (bloque `prospecto_toque`): la prosa fuera, el hecho (canal, fecha,
   // actor interno) se queda. Del PROSPECTO, no del contacto — sin gate de
@@ -191,7 +213,7 @@ export async function borrarDatosPersonaPorBaja(prospectoId: string, correo: str
   const { error: errToque } = await db.from('prospecto_toque')
     .update({ resumen: null })
     .eq('prospecto_id', prospectoId);
-  if (errToque) logger.error('campania.baja_toque_no_anonimizado', { prospecto: prospectoId, err: errToque.message });
+  fallo('campania.baja_toque_no_anonimizado', errToque);
 
   // Solo si ESTE correo era el contacto de cabecera del prospecto: si el
   // remitente era una copia (`prospecto_correo`), el nombre/correo/teléfono
@@ -206,7 +228,7 @@ export async function borrarDatosPersonaPorBaja(prospectoId: string, correo: str
         atribucion: null, updated_at: ahoraIso,
       })
       .eq('id', prospectoId);
-    if (errPrincipal) logger.error('campania.baja_prospecto_no_anonimizado', { prospecto: prospectoId, err: errPrincipal.message });
+    fallo('campania.baja_prospecto_no_anonimizado', errPrincipal);
 
     // 0258 (bloque `prospecto_dossier`): telefonos/datos son lo personal; el
     // resto de la ficha (historia/empleados/flotilla/fuentes) es de la
@@ -214,7 +236,7 @@ export async function borrarDatosPersonaPorBaja(prospectoId: string, correo: str
     const { error: errDossier } = await db.from('prospecto_dossier')
       .update({ telefonos: null, datos: null })
       .eq('prospecto_id', prospectoId);
-    if (errDossier) logger.error('campania.baja_dossier_no_anonimizado', { prospecto: prospectoId, err: errDossier.message });
+    fallo('campania.baja_dossier_no_anonimizado', errDossier);
 
     // 0258 (bloque `cola_aprobacion`): borrador completo con el nombre de
     // pila adentro (0117) — no hay columna de destinatario que permita acotar
@@ -222,8 +244,9 @@ export async function borrarDatosPersonaPorBaja(prospectoId: string, correo: str
     const { error: errPiezas } = await db.from('cola_aprobacion')
       .delete()
       .eq('prospecto_id', prospectoId);
-    if (errPiezas) logger.error('campania.baja_piezas_no_borradas', { prospecto: prospectoId, err: errPiezas.message });
+    fallo('campania.baja_piezas_no_borradas', errPiezas);
   }
+  return completo;
 }
 
 export interface ProspectoPorCorreo {
@@ -240,7 +263,7 @@ export interface ProspectoPorCorreo {
 export async function resolverProspectoPorCorreo(correo: string): Promise<ProspectoPorCorreo | { error: string }> {
   const { data: porPrincipal, error: errPrincipal } = await supabaseAdmin()
     .from('prospecto').select('id')
-    .ilike('correo', correo).is('duplicado_de', null).limit(1);
+    .ilike('correo', escaparLike(correo)).is('duplicado_de', null).limit(1);
   if (errPrincipal) return { error: `prospecto ilegible: ${errPrincipal.message}` };
   const idPrincipal = (porPrincipal?.[0] as { id: string } | undefined)?.id ?? null;
   if (idPrincipal) return { prospectoId: idPrincipal, esContactoPrincipal: true };
@@ -268,7 +291,10 @@ export async function borrarDatosPersonaPorBajaPorCorreo(correo: string): Promis
     logger.error('campania.baja_prospecto_no_resuelto', { err: r.error });
     throw new Error(r.error);
   }
-  if (r.prospectoId) await borrarDatosPersonaPorBaja(r.prospectoId, correo, r.esContactoPrincipal);
+  if (r.prospectoId && !(await borrarDatosPersonaPorBaja(r.prospectoId, correo, r.esContactoPrincipal))) {
+    // A37-S25-03: borrado incompleto → la liga responde 500 y el cliente reintenta.
+    throw new Error('borrado incompleto de datos personales');
+  }
 }
 
 export type ResultadoRespuesta =
@@ -305,7 +331,11 @@ export async function procesarRespuestaCampana(d: RespuestaCampanaEvento): Promi
 
   // AUDITORÍA 25 (ALTO): el borrado real, ANTES del historial — la promesa
   // de la baja no depende de que el historial se pueda escribir.
-  if (baja) await borrarDatosPersonaPorBaja(prospectoId, remitente, esContactoPrincipal);
+  // A37-S25-03: si alguna tabla falló, 503 ANTES del historial (que reiniciaría
+  // el reloj de purga): Resend reintenta y el borrado idempotente se completa.
+  if (baja && !(await borrarDatosPersonaPorBaja(prospectoId, remitente, esContactoPrincipal))) {
+    return { ok: false, motivo: 'borrado de datos personales incompleto' };
+  }
 
   // La respuesta al historial (0118): es lo que detiene la cadencia del SDR.
   // AUDITORÍA 28 (LEG-M3): una BAJA ya NO lleva el asunto que la persona
