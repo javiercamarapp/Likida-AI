@@ -11,7 +11,7 @@
 // Reglas:
 //   · Separador `,` o `;` (se detecta del encabezado); UTF-8 con o sin BOM. Otra codificación se rechaza con un
 //     mensaje llano en vez de guardar basura.
-//   · Tope: 5 MB y 20 000 filas. Más que eso no es un catálogo de cliente: es un error de archivo.
+//   · Tope: 4 MB (la plataforma corta el cuerpo en 4.5 MB: más arriba el error no diría nada útil) y 20 000 filas. Más que eso no es un catálogo de cliente: es un error de archivo.
 //   · Bloqueo de fórmulas: una celda que empieza con `= + - @` (o tabulador / retorno) se RECHAZA, no se «arregla»:
 //     el CSV que la flota edite después en Excel no debe poder ejecutar nada. Único caso permitido: un teléfono
 //     con prefijo internacional (`+52 55 …`).
@@ -31,7 +31,7 @@ export type TipoPlantilla = 'producto' | 'parte' | 'cliente_numero';
 export const TIPOS_PLANTILLA: readonly TipoPlantilla[] = ['producto', 'parte', 'cliente_numero'];
 
 export const TOPE_FILAS_IMPORTACION = 20_000;
-export const TOPE_BYTES_IMPORTACION = 5 * 1024 * 1024;
+export const TOPE_BYTES_IMPORTACION = 4 * 1024 * 1024;
 export const TAMANO_LOTE = 500;
 /** Cuántos errores se enseñan; el conteo total siempre es completo. */
 export const TOPE_ERRORES_VISIBLES = 50;
