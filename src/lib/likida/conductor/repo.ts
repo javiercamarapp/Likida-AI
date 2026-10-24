@@ -282,17 +282,22 @@ export type EventoHito =
   | 'solicitado' | 'recibido' | 'validado' | 'omitido' | 'escalado' | 'corregido' | 'pospuesto' | 'atendido' | 'contacto'
   | 'validacion' | 'evidencia' | 'captura_manual' | 'alerta_estadia' | 'alerta_llegada_sin_confirmar';
 
-/** Best-effort: perder un renglón de bitácora no puede romper el registro del hito. SIN datos personales en `detalle`. */
+/**
+ * Best-effort: perder un renglón de bitácora no puede romper el registro del hito. SIN datos personales en `detalle`.
+ * Devuelve si quedó guardado (A37-S36-03): quien PERSISTE un estado que luego acusa al chofer («Anotado») debe mirarlo.
+ */
 export async function registrarEvento(
   h: Pick<HitoFila, 'id' | 'tenantId' | 'viajeId' | 'tipo'>, evento: EventoHito, detalle: Record<string, string | number | boolean | null> = {},
-): Promise<void> {
+): Promise<boolean> {
   try {
     const { error } = await acotada(supabaseAdmin().from('viaje_hito_evento').insert({
       tenant_id: h.tenantId, viaje_id: h.viajeId, viaje_hito_id: h.id, tipo_hito: h.tipo, evento, detalle,
     }), 'conductor.evento');
-    if (error) logger.warn('conductor.evento_no_guardado', { evento, hito: h.id, err: error.message });
+    if (error) { logger.warn('conductor.evento_no_guardado', { evento, hito: h.id, err: error.message }); return false; }
+    return true;
   } catch (e) {
     logger.warn('conductor.evento_no_guardado', { evento, hito: h.id, err: e instanceof Error ? e.message : String(e) });
+    return false;
   }
 }
 

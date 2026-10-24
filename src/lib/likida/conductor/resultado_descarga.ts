@@ -7,7 +7,7 @@ import type { NuevoAviso, PuertosConductor } from './ejecutor';
 import { puertosReales } from './ejecutor';
 import { acuseResultadoDescarga, preguntaResultadoDescarga, type OpcionResultadoDescarga, type Salida } from './mensajes';
 import type { EventoPatioFila, ViajeContexto } from './repo';
-import { leerEventosResultadoDescarga } from './repo';
+import { leerEventosResultadoDescarga, registrarEvento } from './repo';
 import type { MensajeSaliente } from './solicitudes';
 import { PREFIJO_BOTON, estaResuelto, type HitoFila } from './tipos';
 
@@ -47,10 +47,19 @@ const detalle = (ciclo: number, estado: string, extra: Record<string, string | n
 
 export interface PuertosResultado extends Pick<PuertosConductor, 'reclamar' | 'cerrarAviso' | 'enviar' | 'destinatarios' | 'evento'> {
   eventos(tenantId: string, viajeIds: string[]): Promise<EventoPatioFila[]>;
+  /** A37-S36-03: como `evento`, pero devuelve si quedó guardado. Sin él (puertos de prueba) se asume que sí. */
+  guardar?(h: HitoFila, evento: Parameters<PuertosConductor['evento']>[1], detalle: Record<string, string | number | boolean | null>): Promise<boolean>;
 }
 
 export function puertosResultadoReales(): PuertosResultado {
-  return { ...puertosReales(), eventos: leerEventosResultadoDescarga };
+  return { ...puertosReales(), eventos: leerEventosResultadoDescarga, guardar: registrarEvento };
+}
+
+/** Escribe un renglón y dice si quedó: el estado «respondido» y la bandera de caja cargada NO se acusan como anotados si se perdieron. */
+async function escribir(p: PuertosResultado, h: HitoFila, evento: Parameters<PuertosConductor['evento']>[1], d: Record<string, string | number | boolean | null>): Promise<boolean> {
+  if (p.guardar) return p.guardar(h, evento, d);
+  await p.evento(h, evento, d);
+  return true;
 }
 
 export interface EstadoResultado {
@@ -145,13 +154,27 @@ export async function responderResultadoDescarga(p: PuertosResultado, x: Entrada
     const st = estadoResultado(await p.eventos(v.tenantId, [v.id]), salida.id, salida.ciclo);
     if (x.via === 'texto' && (!st.preguntado || st.respondido)) return null;
     if (x.config.resultadoDescargaActivo !== true) return x.via === 'texto' ? null : una_([{ texto: 'Ese aviso ya no está vigente. 👍' }]);
-    if (st.respondido) return una_([{ texto: 'Ya tengo anotada tu respuesta sobre la descarga. 👍' }]);
+    const FALLO = una_([{ texto: 'No pude anotarlo ahorita. Intenta de nuevo en un momento. 🙏' }]);
+    const regreso = x.hitos.find((h) => h.tipo === 'regreso');
+    if (st.respondido) {
+      // A37-S36-03: la respuesta ya quedó, pero si a una caja cargada le faltó la bandera del regreso o el aviso, el siguiente toque lo completa
+      // (antes «respondido» bloqueaba el reintento y la alerta se perdía para siempre).
+      const previa = st.respondido;
+      if (previa === 'completa') return una_([{ texto: 'Ya tengo anotada tu respuesta sobre la descarga. 👍' }]);
+      const eventos = await p.eventos(v.tenantId, [v.id]);
+      const faltaBandera = !!regreso && !regresoConCajaCargada(eventos, regreso.id);
+      if (st.alertado && !faltaBandera) return una_([{ texto: 'Ya tengo anotada tu respuesta sobre la descarga. 👍' }]);
+      if (faltaBandera && !await escribir(p, regreso!, 'validacion', detalle(regreso!.ciclo, 'caja_cargada', { origen: previa }))) return FALLO;
+      const avisado = st.alertado ? true : await avisarSupervisor(p, v, salida, previa, ahora);
+      return una_([acuseResultadoDescarga(previa, avisado)], true);
+    }
 
-    await p.evento(salida, 'validacion', detalle(salida.ciclo, 'respondido', { opcion: x.opcion, via: x.via, caja_cargada: x.opcion !== 'completa' }));
+    // La bandera del regreso va ANTES de «respondido»: si «respondido» se pierde, el chofer reintenta; si se perdiera la bandera con
+    // «respondido» ya puesto, el reintento ya no la pondría.
+    if (x.opcion !== 'completa' && regreso && !await escribir(p, regreso, 'validacion', detalle(regreso.ciclo, 'caja_cargada', { origen: x.opcion }))) return FALLO;
+    if (!await escribir(p, salida, 'validacion', detalle(salida.ciclo, 'respondido', { opcion: x.opcion, via: x.via, caja_cargada: x.opcion !== 'completa' }))) return FALLO;
     if (x.opcion === 'completa') return una_([acuseResultadoDescarga('completa', false)]);
 
-    const regreso = x.hitos.find((h) => h.tipo === 'regreso');
-    if (regreso) await p.evento(regreso, 'validacion', detalle(regreso.ciclo, 'caja_cargada', { origen: x.opcion }));
     const avisado = await avisarSupervisor(p, v, salida, x.opcion, ahora);
     return una_([acuseResultadoDescarga(x.opcion, avisado)], true);
   } catch (err) {

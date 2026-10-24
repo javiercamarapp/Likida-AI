@@ -486,7 +486,7 @@ export function puertosReales(): PuertosConductor {
     }), leerAgenteChoferHabilitado, { emergencia: hayEmergenciaDeTelefono }),
     destinatarios: destinatariosEscalacion,
     ubicacion: ubicacionConocida,
-    evento: (h, evento, detalle) => registrarEvento(h, evento, detalle),
+    evento: async (h, evento, detalle) => { await registrarEvento(h, evento, detalle); },
     muestrasUnidad: leerMuestrasGps,
     sitiosDe: leerSitiosGeometriaDeViajes,
     // T-A5-68: nace apagado (sin adaptador de proveedor real: BLOQUEO EXTERNO); con uno, se cambia aquí y todo el cron lo recibe.
