@@ -168,5 +168,16 @@ export function destinoSeguro(next: unknown): string {
   if (!next.startsWith('/') || next.startsWith('//')) return '/dashboard';
   // Sin esquemas disfrazados (`/\evil.com`) ni saltos fuera del panel.
   if (next.includes('\\') || next.includes('..')) return '/dashboard';
+  // A37-S24-05: el navegador descarta TAB/CR/LF al seguir un Location, así que
+  // `/<TAB>/evil.com` termina siendo `//evil.com`. Se rechazan caracteres de
+  // control y espacios, y se confirma que el destino resuelto sigue en el mismo
+  // origen.
+  if (/[\u0000-\u0020\u007f-\u009f]/.test(next)) return '/dashboard';
+  try {
+    const base = 'http://panel.invalid';
+    if (new URL(next, base).origin !== base) return '/dashboard';
+  } catch {
+    return '/dashboard';
+  }
   return next;
 }

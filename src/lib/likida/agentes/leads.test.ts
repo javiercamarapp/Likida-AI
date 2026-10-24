@@ -23,7 +23,7 @@ function builder(tabla: string) {
   const b: Record<string, unknown> = {};
   Object.assign(b, {
     select: () => b, eq: () => b, is: () => b, neq: () => b, not: () => b,
-    in: () => b, gte: () => b, lt: () => b, order: () => b, limit: () => b,
+    in: () => b, gte: () => b, lt: () => b, order: () => b, limit: () => b, gt: () => b, or: () => b,
     maybeSingle: () => b,
     then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) =>
       Promise.resolve().then(responder).then(res, rej),
@@ -295,6 +295,30 @@ describe('dossier: la raya entre lo verificado y lo que solo se supone', () => {
     const r = await correrAgenteLeads('dossier', 'cron', HOY, Date.now() + 60_000);
     expect(r).toMatchObject({ resultado: 'corrio', piezas: 1 });
     expect(r.sinTurno).toBeUndefined();
+  });
+
+  // A37-S28-08: la ventana de 50 por created_at ASC se llenaba con prospectos
+  // YA fichados y ninguno nuevo recibía ficha. Ahora se excluyen los títulos ya
+  // fichados y se sigue paginando.
+  it('A37-S28-08: con más de 50 prospectos ya fichados, el 101.º recibe su ficha', async () => {
+    const fila = (i: number) => ({
+      id: `p${String(i).padStart(3, '0')}`, empresa: `Empresa ${i}`, estado: 'demo',
+      created_at: new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString(),
+    });
+    const pagina = (de: number, hasta: number) => Array.from({ length: hasta - de }, (_, k) => fila(de + k));
+    respuestas.set('prospecto', [
+      { data: pagina(0, 50), error: null },
+      { data: pagina(50, 100), error: null },
+      { data: pagina(100, 103), error: null },
+    ]);
+    // Los títulos de la bandeja: los primeros 100 ya tienen ficha.
+    respuestas.set('cola_aprobacion', [{
+      data: pagina(0, 100).map((f, i) => ({ id: `c${String(i).padStart(3, '0')}`, titulo: tituloFicha(f.empresa) })),
+      error: null, count: 100,
+    }]);
+    const r = await correrAgenteLeads('dossier', 'cron', HOY, Date.now() + 60_000);
+    expect(r).toMatchObject({ resultado: 'corrio', piezas: 1 });
+    expect(ultimoTitulo()).toBe(tituloFicha('Empresa 100'));
   });
 
   it('sin candidato NO fabrica nada y lo dice sin llamarlo fallo', async () => {

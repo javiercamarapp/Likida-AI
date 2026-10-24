@@ -274,7 +274,7 @@ export async function resolverPieza(
     .eq('estado', 'pendiente')
     .select('id');
   if (error) throw new Error(`No se pudo resolver la pieza: ${error.message}`);
-  if (!data?.length) throw new Error('Esa pieza ya estaba resuelta.');
+  if (!data?.length) throw new DatoInvalido('Esa pieza ya estaba resuelta.'); // DatoInvalido: el comando de WhatsApp lo distingue de un fallo de la base (A37-S25-10)
 }
 
 // ── PRs abiertos (GitHub) — la fuente que depende de una llave de Javier ────
