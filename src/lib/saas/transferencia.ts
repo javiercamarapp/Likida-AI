@@ -467,6 +467,7 @@ async function leerPorCobrar(limite: number): Promise<{ facturas: FacturaPorCobr
     .select('id, tenant_id, periodo_inicio, periodo_fin, monto, subtotal, iva, moneda, estado, referencia, cfdi_uuid, tenant(nombre)', { count: 'exact' })
     .in('estado', ['pendiente', 'fallida'])
     .order('periodo_fin', { ascending: false })
+    .order('id', { ascending: false })
     .limit(limite);
 
   if (error) throw new Error(`getPorCobrar: ${error.message}`);
@@ -494,6 +495,21 @@ async function leerPorCobrar(limite: number): Promise<{ facturas: FacturaPorCobr
 /** Lo que está por cobrarse, para la pantalla de Javier (las 50 más recientes). */
 export async function getPorCobrar(): Promise<FacturaPorCobrar[]> {
   return (await leerPorCobrar(50)).facturas;
+}
+
+/**
+ * TODAS las pendientes o fallidas, para quien REPORTA cifras (cobranza SaaS,
+ * finanzas, copiloto). A37-S27-02: con `getPorCobrar()` (50 más recientes) el
+ * parte decía «Por cobrar: 50 facturas $X» y las más viejas y vencidas nunca
+ * recibían recordatorio. Si la base tiene más de las que caben en el techo,
+ * LANZA: un total parcial presentado como completo es peor que no darlo.
+ */
+export async function getPorCobrarCompleto(): Promise<FacturaPorCobrar[]> {
+  const { facturas, total } = await leerPorCobrar(TECHO_POR_COBRAR_TOTAL);
+  if (total > facturas.length) {
+    throw new Error(`getPorCobrarCompleto: la base tiene ${total} facturas por cobrar y solo se leyeron ${facturas.length}; no se reporta un total parcial.`);
+  }
+  return facturas;
 }
 
 /** TODAS las pendientes o fallidas (hasta el techo) más el conteo exacto de la base:

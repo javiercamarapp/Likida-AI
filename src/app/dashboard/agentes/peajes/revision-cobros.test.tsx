@@ -114,6 +114,50 @@ describe('estadoRevisionCobros (de los datos de la base a lo que se pinta)', () 
     expect(e.insights.kpis.porVencer.monto).toBe(500);
   });
 
+  it('A37-S15-03: un reclamo PREPARADO (nadie lo envió al portal) NO apaga el aviso «por vencer» ni cuenta como atendido', () => {
+    const e = estadoRevisionCobros(datos({
+      hoy: '2026-09-01',
+      reclamos: [
+        reclamo(),
+        reclamo({ id: 'p1', categoria: 'extemporaneo', estado: 'preparado', nCruces: 2, enviadoEn: null, montoReclamado: 500, montoAcreditado: 0, fechaCobroMasAntiguo: '2026-06-20' }),
+      ],
+    }));
+    if (e.tipo !== 'ok') throw new Error('esperaba ok');
+    expect(e.insights.kpis.porVencer.valor).toBe(2);
+    expect(e.insights.kpis.porVencer.monto).toBe(500);
+    // duplicado (2 enviados) + 1 justificado de extemporaneo = 3 de 4; el preparado no suma.
+    expect(e.insights.kpis.pctRevisado.valor).toBe(75);
+  });
+
+  it('A37-S15-03: un reclamo RECHAZADO por el proveedor tampoco apaga el aviso de plazo', () => {
+    const e = estadoRevisionCobros(datos({
+      hoy: '2026-09-01',
+      reclamos: [reclamo({ id: 'x1', categoria: 'extemporaneo', estado: 'rechazado', nCruces: 2, montoReclamado: 500, montoAcreditado: 0, fechaCobroMasAntiguo: '2026-06-20' })],
+    }));
+    if (e.tipo !== 'ok') throw new Error('esperaba ok');
+    expect(e.insights.kpis.porVencer.valor).toBe(2);
+  });
+
+  it('A37-S15-03: un reclamo enviado cubre solo los cruces que traía; el que apareció después sigue avisando', () => {
+    // Enviado por 1 cruce (el más nuevo del grupo); el del 20-jun queda sin cubrir y por vencer.
+    const e = estadoRevisionCobros(datos({
+      hoy: '2026-09-01',
+      reclamos: [reclamo({ id: 'e2', categoria: 'extemporaneo', estado: 'enviado', nCruces: 1, montoReclamado: 250, montoAcreditado: 0, fechaCobroMasAntiguo: '2026-06-20' })],
+    }));
+    if (e.tipo !== 'ok') throw new Error('esperaba ok');
+    expect(e.insights.kpis.porVencer.valor).toBe(1);
+    expect(e.insights.kpis.porVencer.monto).toBe(250);
+  });
+
+  it('un reclamo enviado con fecha más NUEVA que un cruce no lo cubre (ese cruce es anterior al reclamo)', () => {
+    const e = estadoRevisionCobros(datos({
+      hoy: '2026-09-01',
+      reclamos: [reclamo({ id: 'e3', categoria: 'extemporaneo', estado: 'enviado', nCruces: 2, montoReclamado: 500, montoAcreditado: 0, fechaCobroMasAntiguo: '2026-06-21' })],
+    }));
+    if (e.tipo !== 'ok') throw new Error('esperaba ok');
+    expect(e.insights.kpis.porVencer.valor).toBe(1); // el del 20-jun
+  });
+
   it('sin viaje se cuenta de los vinculos; sin vinculos guardados es «sin dato» y se marca el cruce como no disponible', () => {
     const con = estadoRevisionCobros(datos());
     if (con.tipo !== 'ok') throw new Error('esperaba ok');

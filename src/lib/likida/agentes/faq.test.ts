@@ -55,6 +55,7 @@ vi.mock('@/lib/llm/openrouter', () => ({ generateResponse: (...a: unknown[]) => 
 const {
   normalizar, temaDelTicket, lineaDeFicha, borradorCitado, borradorHumano,
   guardarBorrador, armarPiezaFaq, correrAtencionFaq, PALABRAS_POR_TEMA,
+  leerTicketsSinRespuesta, tituloFaq,
 } = await import('./faq');
 
 const FICHA_CFDI = {
@@ -263,12 +264,16 @@ describe('la corrida de atencion_faq', () => {
     expect(r.costoUsd).toBeCloseTo(0.002, 6);
   });
 
-  it('si el modelo no responde, la pieza sale igual con las citas', async () => {
+  it('A37-S27-05: si el modelo no responde NO se encola un borrador sin redacción (sería un sello permanente)', async () => {
     sembrarTicket();
     generateResponse.mockRejectedValue(new Error('502 del proveedor'));
     const r = await correrAtencionFaq('cron', '2026-08-27');
-    expect(r.piezas).toBe(1);
-    expect((encolarPiezaExito.mock.calls[0] as unknown[])[3] as string).toContain('el modelo no respondió');
+    expect(r.piezas).toBe(0);
+    expect(encolarPiezaExito).not.toHaveBeenCalled();
+    expect(r.motivo).toContain('el modelo no respondió');
+    expect(registrarCorrida).toHaveBeenCalledWith(null, 'atencion_faq', expect.objectContaining({
+      estado: 'ok', resumen: expect.objectContaining({ modelo_caido: true }),
+    }));
   });
 
   it('un ticket que ya tiene borrador no recibe otro', async () => {
@@ -298,6 +303,30 @@ describe('la corrida de atencion_faq', () => {
     respuestas.set('ticket_soporte', [{ data: null, error: { message: 'base caída' } }]);
     await expect(correrAtencionFaq('cron', '2026-08-27')).rejects.toThrow(/base caída/);
     expect(registrarCorrida).toHaveBeenCalledWith(null, 'atencion_faq', expect.objectContaining({ estado: 'fallo', costoUsd: 0 }));
+  });
+});
+
+describe('A37-S27-04: la cola no se atasca con los tickets que ya tienen pieza', () => {
+  const fila = (n: number) => ({
+    id: `${String(n).padStart(8, '0')}-1111-2222-3333-444444444444`, tenant_id: 'f', asunto: `a ${n}`,
+    descripcion: null, categoria: 'otro', abierto_por: 'u-cliente',
+  });
+
+  it('20 tickets viejos YA con pieza no tapan al ticket nuevo de la página siguiente', async () => {
+    const viejos = Array.from({ length: 20 }, (_, i) => fila(i + 1));
+    respuestas.set('ticket_soporte', [{ data: viejos, error: null }, { data: [fila(21)], error: null }]);
+    respuestas.set('cola_aprobacion', [
+      { data: viejos.map((v) => ({ titulo: tituloFaq(v.id) })), error: null },
+      { data: [], error: null },
+    ]);
+    const r = await leerTicketsSinRespuesta(5);
+    expect(r.map((t) => t.asunto)).toEqual(['a 21']);
+  });
+
+  it('no puede saber qué tickets ya tienen pieza: LANZA en vez de reprocesarlos', async () => {
+    respuestas.set('ticket_soporte', [{ data: [fila(1)], error: null }]);
+    respuestas.set('cola_aprobacion', [{ data: null, error: { message: 'base caída' } }]);
+    await expect(leerTicketsSinRespuesta(5)).rejects.toThrow(/base caída/);
   });
 });
 

@@ -132,7 +132,11 @@ export default async function PaginaReclamacionPeajes({
     'use server';
     const no = await puertaReclamos(tenantId);
     if (no) volverReclamos(sufijo, `error:${no}`);
-    volverReclamos(sufijo, (await marcarReclamoRechazado(tenantId, String(fd.get('reclamo') ?? ''))) ? 'Reclamo marcado como rechazado.' : 'error:No se pudo actualizar el reclamo.');
+    const res = await marcarReclamoRechazado(tenantId, String(fd.get('reclamo') ?? ''));
+    volverReclamos(sufijo,
+      res === 'rechazado' ? 'Reclamo marcado como rechazado.'
+        : res === 'sin_cambio' ? 'error:El reclamo no cambió: ya no está enviado (quizá ya lo rechazaron o lo acreditaron desde otra pestaña) o no es de tu flota. Recarga la pantalla.'
+          : 'error:No se pudo actualizar el reclamo.');
   }
 
   const desglose = (sp.desglose ?? '').trim();

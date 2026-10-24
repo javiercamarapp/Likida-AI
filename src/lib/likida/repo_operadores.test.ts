@@ -45,7 +45,8 @@ const eqIdPropio = vi.fn(() => ({ eq: eqTenantPropio }));
 const selectPropio = vi.fn(() => ({ eq: eqIdPropio }));
 
 const updateResult = vi.fn();
-const eqTenantUpdate = vi.fn(() => updateResult());
+// A37-S18-04: el UPDATE lleva `.select('id')` para contar filas afectadas.
+const eqTenantUpdate = vi.fn(() => ({ select: () => updateResult() }));
 const eqViajeUpdate = vi.fn(() => ({ eq: eqTenantUpdate }));
 const update = vi.fn(() => ({ eq: eqViajeUpdate }));
 
@@ -270,7 +271,7 @@ describe('reasignarOperador', () => {
 
   it('actualiza operador_id del viaje, acotado por tenant, cuando el operador SÍ es de esta flota', async () => {
     propioResult.mockResolvedValue({ data: { id: 'o-2', nombre: 'Ana', telefono: '52999', terminal: null }, error: null });
-    updateResult.mockResolvedValue({ error: null });
+    updateResult.mockResolvedValue({ data: [{ id: 'v-1' }], error: null });
 
     const r = await reasignarOperador('t-1', 'v-1', 'o-2');
     expect(r).toEqual({ cambio: true, operadorAnteriorId: 'o-1' });
@@ -297,7 +298,7 @@ describe('reasignarOperador', () => {
 
   it('dice quién lo tenía: la primera asignación (sin chofer) y el mismo chofer se distinguen del cambio real', async () => {
     propioResult.mockResolvedValue({ data: { id: 'o-2', nombre: 'Ana', telefono: '52999', terminal: null }, error: null });
-    updateResult.mockResolvedValue({ error: null });
+    updateResult.mockResolvedValue({ data: [{ id: 'v-1' }], error: null });
     previoResult.mockResolvedValue({ data: { operador_id: null }, error: null });
     expect(await reasignarOperador('t-1', 'v-1', 'o-2')).toEqual({ cambio: true, operadorAnteriorId: null });
     previoResult.mockResolvedValue({ data: { operador_id: 'o-2' }, error: null });
@@ -313,7 +314,7 @@ describe('reasignarOperador', () => {
   describe('AUDITORÍA A8 — reset del reloj de aviso/escalación al reasignar', () => {
     beforeEach(() => {
       propioResult.mockResolvedValue({ data: { id: 'o-2', nombre: 'Ana', telefono: '52999', terminal: null }, error: null });
-      updateResult.mockResolvedValue({ error: null });
+      updateResult.mockResolvedValue({ data: [{ id: 'v-1' }], error: null });
     });
 
     it('CAMBIO real de operador (o-1 → o-2): resetea los tres campos en el MISMO update', async () => {
@@ -354,6 +355,21 @@ describe('reasignarOperador', () => {
     // directo, esta aserción es la que lo atrapa — sin ella, la prueba de
     // arriba (con `propioResult` en éxito) seguiría verde igual.
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it('A37-S18-04: un viaje inexistente o de otra flota (el UPDATE toca 0 filas) NO se reporta como asignado', async () => {
+    propioResult.mockResolvedValue({ data: { id: 'o-2', nombre: 'Ana', telefono: '52999', terminal: null }, error: null });
+    updateResult.mockResolvedValue({ data: [], error: null });
+    await expect(reasignarOperador('t-1', 'v-ajeno', 'o-2')).rejects.toThrow(/no existe en tu flota/);
+  });
+
+  it('A37-S18-05: el choque con uq_viaje_abierto_por_operador sale como DatoInvalido con mensaje de pantalla', async () => {
+    propioResult.mockResolvedValue({ data: { id: 'o-2', nombre: 'Ana', telefono: '52999', terminal: null }, error: null });
+    updateResult.mockResolvedValue({ data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "uq_viaje_abierto_por_operador"' } });
+    const { DatoInvalido } = await import('./errores');
+    const e = await reasignarOperador('t-1', 'v-1', 'o-2').catch((x) => x);
+    expect(e).toBeInstanceOf(DatoInvalido);
+    expect(e.message).toMatch(/ya trae un viaje abierto/);
   });
 
   it('si el UPDATE falla, lanza con el mensaje', async () => {

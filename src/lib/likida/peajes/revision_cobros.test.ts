@@ -249,6 +249,32 @@ describe('el seguimiento de reclamos de punta a punta', () => {
     expect(db.tablas.peaje_reclamo ?? []).toHaveLength(0);
   });
 
+  it('A37-S15-04: «el proveedor lo rechazó» solo da éxito si de verdad cambió una fila', async () => {
+    const { id } = await subir('01 A 10 DE MARZO.xlsx', { filas: 500, inicio: '2026-03-01', extemporaneos: 5 });
+    const c = await R.crearReclamoDeCategoria(T, { desgloseId: id, categoria: 'extemporaneo' });
+    if (!c.ok) throw new Error(c.motivo);
+    // preparado (nadie lo envió): no se puede "rechazar" lo que no llegó al proveedor.
+    expect(await R.marcarReclamoRechazado(T, c.id)).toBe('sin_cambio');
+    expect(db.tablas.peaje_reclamo[0].estado).toBe('preparado');
+    expect((await R.marcarReclamoEnviado(T, c.id, '2026-03-20')).ok).toBe(true);
+    // id ajeno / de otra flota: 0 filas, no es éxito.
+    expect(await R.marcarReclamoRechazado(OTRO, c.id)).toBe('sin_cambio');
+    expect(await R.marcarReclamoRechazado(T, 'no-existe')).toBe('sin_cambio');
+    expect(await R.marcarReclamoRechazado(T, c.id)).toBe('rechazado');
+    expect(db.tablas.peaje_reclamo[0].estado).toBe('rechazado');
+    // pestaña vieja: ya está rechazado (o acreditado), la segunda vez no cambia nada.
+    expect(await R.marcarReclamoRechazado(T, c.id)).toBe('sin_cambio');
+  }, 60_000);
+
+  it('A37-S15-04: un error de la base es «error», no «sin cambio»', async () => {
+    const { id } = await subir('01 A 10 DE MARZO.xlsx', { filas: 500, inicio: '2026-03-01', extemporaneos: 5 });
+    const c = await R.crearReclamoDeCategoria(T, { desgloseId: id, categoria: 'extemporaneo' });
+    if (!c.ok) throw new Error(c.motivo);
+    await R.marcarReclamoEnviado(T, c.id, '2026-03-20');
+    db.fallar('peaje_reclamo.update', 'base caída');
+    expect(await R.marcarReclamoRechazado(T, c.id)).toBe('error');
+  }, 60_000);
+
   it('el reclamo de una flota no lo toca otra', async () => {
     const { id } = await subir('01 A 10 DE MARZO.xlsx', { filas: 500, inicio: '2026-03-01', extemporaneos: 5 });
     const c = await R.crearReclamoDeCategoria(T, { desgloseId: id, categoria: 'extemporaneo' });

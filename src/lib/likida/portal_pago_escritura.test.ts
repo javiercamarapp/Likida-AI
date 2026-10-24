@@ -525,6 +525,34 @@ describe('registrarRepEmitido — Likida no timbra, solo registra', () => {
     await expect(registrarRepEmitido(T, { ...BASE, xml: 'x'.repeat(500_001) })).rejects.toThrow(/sin archivo/i);
   });
 
+  // ── A37-S18-07 · EL XML REGISTRADO TIENE QUE SER EL DEL COMPLEMENTO ─────────
+  const UUID_REP = 'aaaaaaaa-bbbb-4ccc-8ddd-000000000001';
+  const xmlRep = (o: { tipo?: string; uuid?: string; fecha?: string; monto?: string; sinPagos?: boolean } = {}) => `<?xml version="1.0"?>
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:pago20="http://www.sat.gob.mx/Pagos20" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="4.0" TipoDeComprobante="${o.tipo ?? 'P'}" SubTotal="0" Total="0" Moneda="XXX" Fecha="2026-08-21T10:00:00">
+  <cfdi:Complemento>
+    ${o.sinPagos ? '' : `<pago20:Pagos Version="2.0"><pago20:Pago FechaPago="${o.fecha ?? '2026-08-20'}T12:00:00" FormaDePagoP="03" MonedaP="MXN" Monto="${o.monto ?? '11600.00'}"><pago20:DoctoRelacionado IdDocumento="X" ImpPagado="${o.monto ?? '11600.00'}"/></pago20:Pago></pago20:Pagos>`}
+    <tfd:TimbreFiscalDigital UUID="${(o.uuid ?? UUID_REP).toUpperCase()}"/>
+  </cfdi:Complemento>
+</cfdi:Comprobante>`;
+
+  it('un XML que SÍ es el complemento (tipo P, mismo folio, fecha e importe) se guarda', async () => {
+    conTablas({ pago_recibido: [ABONO], rep_emitido: [OK({ id: 'rep-1' })] });
+    await expect(registrarRepEmitido(T, { ...BASE, xml: xmlRep() })).resolves.toBe('rep-1');
+  });
+
+  it.each([
+    ['texto que no es un CFDI', 'hola, aquí va el complemento', /no se lee como un CFDI/i],
+    ['un CFDI de ingreso, no de pago', xmlRep({ tipo: 'I' }), /tipo «I»/],
+    ['el XML de OTRO complemento (otro folio fiscal)', xmlRep({ uuid: 'aaaaaaaa-bbbb-4ccc-8ddd-0000000000ff' }), /OTRO complemento/],
+    ['un REP sin el nodo de pagos', xmlRep({ sinPagos: true }), /complemento de pagos/i],
+    ['otra fecha de pago', xmlRep({ fecha: '2026-07-01' }), /fecha/i],
+    ['otro importe', xmlRep({ monto: '999.00' }), /importe del XML/i],
+  ])('A37-S18-07: se rechaza %s y no se toca la base', async (_n, xml, mensaje) => {
+    conTablas({ pago_recibido: [ABONO], rep_emitido: [OK({ id: 'rep-1' })] });
+    await expect(registrarRepEmitido(T, { ...BASE, xml })).rejects.toThrow(mensaje);
+    expect(anotarBitacora).not.toHaveBeenCalled();
+  });
+
   it('ids que no son UUID ni consultan', async () => {
     conTablas({});
     await expect(registrarRepEmitido(T, { ...BASE, facturaId: 'x' })).rejects.toThrow(DatoInvalido);

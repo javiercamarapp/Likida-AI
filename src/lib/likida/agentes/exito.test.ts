@@ -55,7 +55,7 @@ const getOnboardingFlotas = vi.fn(async (): Promise<Map<string, Ob>> => new Map(
 vi.mock('@/lib/admin/onboarding', () => ({ getOnboardingFlotas: () => getOnboardingFlotas() }));
 
 const getPorCobrar = vi.fn(async (): Promise<unknown[]> => []);
-vi.mock('@/lib/saas/transferencia', () => ({ getPorCobrar: () => getPorCobrar() }));
+vi.mock('@/lib/saas/transferencia', () => ({ getPorCobrarCompleto: () => getPorCobrar() }));
 
 const {
   lunesDeSemana, mesAnterior, diasEntreDias, diasEntreIso,
@@ -477,17 +477,25 @@ describe('cobranza SaaS — la cadencia propone, nadie envía', () => {
     expect(cuerpo).toContain('TOQUE ATRASADO');
     expect(cuerpo).toContain('lleva 20 días vencida');
     // El SELLO sigue siendo el del hito: una propuesta por (factura, hito).
-    expect(tituloToque(tarde)).toBe('Cobranza SaaS — LKAAAA202608 — D-3');
+    expect(tituloToque(tarde)).toBe(`Cobranza SaaS — LKAAAA202608 — ${FACTURA.id} — D-3`);
   });
 
   it('el título del toque es determinista por factura y hito', () => {
-    expect(tituloToque({ factura: FACTURA, diasVsVencimiento: 7, hito: 7 })).toBe('Cobranza SaaS — LKAAAA202608 — D+7');
-    expect(tituloToque({ factura: FACTURA, diasVsVencimiento: -3, hito: -3 })).toBe('Cobranza SaaS — LKAAAA202608 — D-3');
+    expect(tituloToque({ factura: FACTURA, diasVsVencimiento: 7, hito: 7 })).toBe(`Cobranza SaaS — LKAAAA202608 — ${FACTURA.id} — D+7`);
+    expect(tituloToque({ factura: FACTURA, diasVsVencimiento: -3, hito: -3 })).toBe(`Cobranza SaaS — LKAAAA202608 — ${FACTURA.id} — D-3`);
   });
 
-  it('sin referencia bancaria el título cae al id corto, nunca a un texto ambiguo', () => {
+  it('A37-S27-03: dos flotas con la MISMA referencia (4 hex del tenant) y el mismo mes NO comparten título', () => {
+    const otra = { ...FACTURA, id: 'eeeeeeee-1111-2222-3333-444444444444', tenantId: 'otra-flota' };
+    expect(otra.referencia).toBe(FACTURA.referencia);
+    const a = tituloToque({ factura: FACTURA, diasVsVencimiento: 0, hito: 0 });
+    const b = tituloToque({ factura: otra, diasVsVencimiento: 0, hito: 0 });
+    expect(a).not.toBe(b);
+  });
+
+  it('sin referencia bancaria el título lleva el id completo de la factura, nunca un texto ambiguo', () => {
     const sinRef = { ...FACTURA, referencia: null };
-    expect(tituloToque({ factura: sinRef, diasVsVencimiento: 0, hito: 0 })).toBe('Cobranza SaaS — ffffffff — D+0');
+    expect(tituloToque({ factura: sinRef, diasVsVencimiento: 0, hito: 0 })).toBe(`Cobranza SaaS — ${FACTURA.id} — D+0`);
   });
 
   it('el texto propuesto usa el monto de la factura y nunca amenaza con cortar el servicio', () => {
