@@ -82,3 +82,15 @@ describe('encender-emision-vercel.sh (A37-S03-04)', () => {
     expect(t.indexOf('env add')).toBeLessThan(t.indexOf('env rm'));
   });
 });
+
+describe('A37-S03-07: re-sembrar el demo no pisa lo que cargó el cliente', () => {
+  it('los veredictos se borran solo por el id determinista del demo', () => {
+    const t = readFileSync('scripts/demo/cinco-agentes/generar-veredictos.mjs', 'utf8');
+    expect(t).not.toMatch(/delete from viaje_hito_validacion where tenant_id = '\$\{T\}';/);
+    expect(t).toContain("md5('cinco-agentes-demo-0620:veredicto:' || viaje_hito_id::text || ':' || ciclo::text)::uuid");
+  });
+  it("el formato y los teléfonos solo se actualizan si actualizado_por = 'demo'", () => {
+    const t = readFileSync('scripts/demo/cinco-agentes/sembrar-importadores.mjs', 'utf8');
+    expect(t).toMatch(/where liquidacion_formato_flota\.actualizado_por = 'demo';/);
+  });
+});
