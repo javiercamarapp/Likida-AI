@@ -98,9 +98,14 @@ export interface LecturaTexto {
  */
 export function candidatosDeTotal(texto: string): number[] {
   const plano = texto.replace(/[ \t]+/g, ' ');
-  const ms = plano.matchAll(/(?<![a-z])(?<!sub\s{0,3})total(?:\s+(?:a\s+pagar|cfdi|general|neto|factura))?\s*(?:mxn|m\.n\.)?\s*[:：]?\s*\$?\s*([\d,]+\.\d{2})/gi);
+  const ms = plano.matchAll(/(?<![a-z])total\b([^\d\n]{0,30}?)\$?\s*([\d,]+\.\d{2})/gi);
   const out: number[] = [];
-  for (const m of ms) { const n = dinero(m[1]); if (n !== null) out.push(n); }
+  for (const m of ms) {
+    if (/sub\s*$/i.test(plano.slice(Math.max(0, (m.index ?? 0) - 5), m.index ?? 0))) continue; // «Sub Total»
+    // Lo que va entre «Total» y el importe: solo calificativos del propio total, «MXN» y «:»/«$».
+    if (m[1].toLowerCase().replace(/[\s:：$]/g, '').replace(/apagar|cfdi|general|neto|factura|mxn|m\.n\./g, '') !== '') continue;
+    const n = dinero(m[2]); if (n !== null) out.push(n);
+  }
   return out;
 }
 
