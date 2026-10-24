@@ -221,7 +221,9 @@ export async function GET(req: Request) {
     // hay camiones que esta corrida NO sincronizó, y un «ok» lo taparía.
     const incompleta = recortadas > 0 || backlog > 0 || eventosBacklog > 0 ||
       enCuarentena > 0 || outboxPendientes > 0 || avisosPendientes > 0 || eventosMuertos > 0 ||
-      sinAvisoPrevio > 0 || eventosSinAvisoPrevio > 0 || eventosFaseError !== undefined;
+      eventosFaseError !== undefined;
+    // A37-L-06: unidades sin aviso de privacidad = condición esperada y legal de UNA flota; no es
+    // `parcial` de plataforma (degradaría health y /estado para todos). Viaja en el detalle y el cuerpo.
     if (eventosMuertos > 0) {
       const afectados = eventos.filter((r) =>
         (r.eventosCuarentenaMuertos ?? 0) + (r.eventosOutboxMuertos ?? 0) + (r.avisosMuertos ?? 0) > 0)
@@ -242,7 +244,10 @@ export async function GET(req: Request) {
       });
     } else {
       logger.info('cron.gps.ok', cuerpo);
-      await registrarLatido('gps', 'ok', { flotas: resultados.length, guardadas, disparos, geocercasConError: geocercas.conError });
+      await registrarLatido('gps', 'ok', {
+        flotas: resultados.length, guardadas, disparos, geocercasConError: geocercas.conError,
+        sinAvisoPrevio: sinAvisoPrevio + eventosSinAvisoPrevio,
+      });
     }
     return NextResponse.json(cuerpo);
   } catch (e) {

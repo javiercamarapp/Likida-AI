@@ -129,6 +129,9 @@ export async function GET(req: Request) {
     } catch (e) {
       peajeError = e instanceof Error ? e.message : String(e);
       logger.error('cron.descarga-sat.peaje_falló', { error: peajeError });
+      // A37-L-05: el aviso del último día de mes (derecho a facturar casetas) que no sale es una
+      // regresión, no un hueco de configuración: se avisa al operador como en el catch externo.
+      await alertarOperador('cron.descarga-sat.peaje', { error: peajeError, codigo: codigoDeError(e) });
     }
 
     const errores = descarga.resumenes.reduce((n, r) => n + r.errores.length, 0);
@@ -166,7 +169,8 @@ export async function GET(req: Request) {
       // las cuatro ramas de `estadoDescargaSat()` (proveedor ausente,
       // declarado y no construido, desconocido, o credenciales incompletas)
       // se clasifican igual sin depender de cómo esté redactado `motivo`.
-      configAusente: !descarga.configurado,
+      // A37-L-05: hueco declarado SOLO si es la única causa; con el peaje roto, errores o cortes es regresión.
+      configAusente: !descarga.configurado && peajeError === null && !peajeParcial && errores === 0,
       descargaSinTurno: descarga.sinTurno,
       peajeAvisadas: peaje?.avisadas ?? null,
       peajeSinTurno: peaje?.sinTurno ?? null,

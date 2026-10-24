@@ -41,7 +41,7 @@ vi.mock('@/lib/admin/salud', () => ({
 interface FlotaFalsa {
   tenantId: string; proveedor: string;
   leidas: number; guardadas: number; huerfanas: number;
-  sinTurno?: boolean; error?: string;
+  sinTurno?: boolean; error?: string; sinAvisoPrevio?: number;
 }
 interface EventosFalsos {
   tenantId: string; proveedor: string;
@@ -49,7 +49,7 @@ interface EventosFalsos {
   sinTurno?: boolean; sinPermiso?: boolean; error?: string;
   eventosEnCuarentena?: number; eventosCuarentenaMuertos?: number;
   eventosOutboxPendientes?: number; eventosOutboxMuertos?: number;
-  avisosPendientes?: number; avisosMuertos?: number;
+  avisosPendientes?: number; avisosMuertos?: number; sinAvisoPrevio?: number;
 }
 const flotaOk = (t: string): FlotaFalsa =>
   ({ tenantId: t, proveedor: 'samsara', leidas: 2, guardadas: 2, huerfanas: 0 });
@@ -247,5 +247,23 @@ describe('A37-S38-01: el fallo de la fase de eventos no tumba las posiciones', (
     expect(cuerpo.eventos.faseConError).toContain('statement timeout');
     expect(registrarLatido).toHaveBeenCalledWith('gps', 'parcial', expect.objectContaining({ eventosFaseFallo: true }));
     expect(alertarOperador).toHaveBeenCalledWith('cron.gps.eventos_fase', expect.objectContaining({ error: expect.stringContaining('statement timeout') }));
+  });
+});
+
+describe('A37-L-06: el aviso de privacidad pendiente de UNA flota no degrada la plataforma', () => {
+  it('solo unidades sin aviso previo → latido `ok` (el hueco viaja en el detalle y el cuerpo)', async () => {
+    sincronizarGpsTodas.mockResolvedValue([{ ...flotaOk('t-1'), sinAvisoPrevio: 3 }]);
+    sincronizarEventosTodas.mockResolvedValue([{ ...eventosOk('t-1'), sinAvisoPrevio: 3 }]);
+    const res = await GET(peticion());
+    const cuerpo = await res.json() as { sinAvisoPrevio: number; motivoSinAviso?: string };
+    expect(cuerpo.sinAvisoPrevio).toBe(3);
+    expect(cuerpo.motivoSinAviso).toContain('aviso de privacidad');
+    expect(registrarLatido).toHaveBeenCalledWith('gps', 'ok', expect.objectContaining({ sinAvisoPrevio: 3 }));
+  });
+
+  it('sin aviso previo MAS un error real de plataforma → sigue `parcial`', async () => {
+    sincronizarGpsTodas.mockResolvedValue([{ ...flotaOk('t-1'), sinAvisoPrevio: 3 }, { ...flotaOk('t-2'), error: 'proveedor caído' }]);
+    await GET(peticion());
+    expect(registrarLatido).toHaveBeenCalledWith('gps', 'parcial', expect.objectContaining({ sinAvisoPrevio: 3 }));
   });
 });

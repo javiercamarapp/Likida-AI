@@ -55,6 +55,7 @@ interface ResultadoFalso {
   cortadosPorReloj: number;
   diasSinGps: number;
   listaTruncada: boolean;
+  sinAvisoPrevio?: number;
 }
 const CORRIDA_LIMPIA: ResultadoFalso = {
   revisados: 3, asentados: 4, yaEstaban: 1, fallos: [],
@@ -171,6 +172,20 @@ describe('cron jornada — palanca, reloj y contrato de fallo', () => {
       listaTruncada: true,
     }));
     expect(await res.json()).toMatchObject({ listaTruncada: true });
+  });
+
+  it('A37-L-06: solo pares sin aviso de privacidad → latido `ok` con el hueco en el detalle', async () => {
+    derivarJornadas.mockResolvedValueOnce({ ...CORRIDA_LIMPIA, sinAvisoPrevio: 2 });
+    await GET(new Request(URL_CRON, CON_SECRETO));
+    expect(registrarLatido).toHaveBeenCalledWith('jornada', 'ok', expect.objectContaining({
+      sinAvisoPrevio: 2, motivo: expect.stringContaining('aviso de privacidad'),
+    }));
+  });
+
+  it('A37-L-06: sin aviso MAS reloj cortado → sigue `parcial`', async () => {
+    derivarJornadas.mockResolvedValueOnce({ ...CORRIDA_LIMPIA, sinAvisoPrevio: 2, cortadosPorReloj: 1 });
+    await GET(new Request(URL_CRON, CON_SECRETO));
+    expect(registrarLatido).toHaveBeenCalledWith('jornada', 'parcial', expect.anything());
   });
 
   it('`fallos.length > 0` → latido `fallo` y HTTP 500', async () => {
