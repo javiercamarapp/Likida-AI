@@ -597,3 +597,41 @@ describe('el portal sin verificar se declara con portalPendiente', () => {
     expect(identificarComercio({ rfcEmisor: 'NWM9709244W4' })?.clave).toBe('walmart');
   });
 });
+
+// A37-S43-04: el apex de una PLATAFORMA multi-comercio no identifica a un solo
+// comercio, y el dominio no puede contradecir al RFC.
+describe('identificarComercio — plataformas compartidas (A37-S43-04)', () => {
+  it('una liga admin.softrestaurant.com/... NO se toma por Los Taquitos de PM (24 h) sin otra señal', () => {
+    const c = identificarComercio({ urlFacturacion: 'https://admin.softrestaurant.com/Facturacion/MenuCliente/99999' });
+    expect(c?.clave).not.toBe('los_taquitos_pm');
+  });
+
+  it('Los Taquitos de PM se sigue reconociendo por su dominio propio y por su razón social', () => {
+    expect(identificarComercio({ urlFacturacion: 'https://www.lostaquitosdepm.com/facturacion' })?.clave).toBe('los_taquitos_pm');
+    expect(identificarComercio({
+      urlFacturacion: 'https://admin.softrestaurant.com/Facturacion/MenuCliente/25158',
+      textoTicket: 'LOS TAQUITOS DE PM',
+    })?.clave).toBe('los_taquitos_pm');
+  });
+
+  it('ningún comercio registra como dominio suyo el apex de una plataforma compartida', () => {
+    const apex = new Set(['admin.softrestaurant.com', 'softrestaurant.com', 'haz-factura.com', 'warelan.com', 'gasolinamexico.net', 'gasolinamexico.mx', 'brentec.mx']);
+    const mal = COMERCIOS.flatMap((c) => (c.reconocer.dominios ?? []).filter((d) => apex.has(d.toLowerCase())).map((d) => `${c.clave}:${d}`));
+    expect(mal).toEqual([]);
+  });
+
+  it('los hosts propios de esas plataformas siguen reconociéndose', () => {
+    expect(identificarComercio({ urlFacturacion: 'https://gorm.gasolinamexico.net/facturacion_x' })?.clave).toBe('gorm_brentec');
+    expect(identificarComercio({ urlFacturacion: 'https://supercarreteras.haz-factura.com/x' })).not.toBeNull();
+    expect(identificarComercio({ urlFacturacion: 'http://factura.cargogas.warelan.com/' })).not.toBeNull();
+  });
+
+  it('dominio y RFC que apuntan a comercios DISTINTOS no se resuelven adivinando: sin respuesta', () => {
+    const oxxoGas = identificarComercio({ urlFacturacion: 'https://facturacion.oxxogas.com/' });
+    expect(oxxoGas?.clave).toBe('oxxo_gas');
+    // RFC de CAPUFE con liga de OXXO GAS: se contradicen.
+    expect(identificarComercio({ urlFacturacion: 'https://facturacion.oxxogas.com/', rfcEmisor: 'CPU970326PZ4' })).toBeNull();
+    // Si coinciden, se reconoce.
+    expect(identificarComercio({ urlFacturacion: 'https://facturacioncapufe.com.mx/', rfcEmisor: 'CPU970326PZ4' })?.clave).toBe('capufe');
+  });
+});
