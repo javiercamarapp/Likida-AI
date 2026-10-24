@@ -70,3 +70,16 @@ describe('admin/evals: la pantalla dice "no se pudo leer" cuando de verdad no se
     expect(bloque).toMatch(/if \(rr\.error\) throw new Error\(rr\.error\.message\)/);
   });
 });
+
+// A37-S06-10
+describe('admin/evals: el juez queda registrado y la corrida se deriva de la base', () => {
+  const accion = cuerpo('async function marcarResultado', '\nconst AGENTES');
+  it('toma la corrida de eval_resultado, no del formulario', () => {
+    expect(accion).not.toMatch(/fd\.get\('corridaId'\)/);
+    expect(accion).toMatch(/from\('eval_resultado'\)\.select\('corrida_id'\)\.eq\('id', id\)/);
+  });
+  it('registra quién (userId de la sesión) y cuándo en el detalle', () => {
+    expect(accion).toMatch(/const \{ userId \} = await requireSuperadmin\(\)/);
+    expect(accion).toMatch(/detalle: `juez humano: \$\{veredicto\} · \$\{userId\} · \$\{new Date\(\)\.toISOString\(\)\}`/);
+  });
+});
