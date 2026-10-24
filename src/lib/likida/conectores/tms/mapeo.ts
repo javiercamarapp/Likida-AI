@@ -20,6 +20,8 @@ export interface CampoDetallado {
   zona?: string;
   /** Solo `fecha_local`: patrón con yyyy, MM, dd, H, HH, mm, ss (p. ej. 'dd/MM/yyyy H:mm'). */
   formato?: string;
+  /** Solo `numero`: separador decimal que usa el origen ('.' o ','). Sin declararlo, «d.ddd» es ambiguo y se rechaza (A37-TRANSVERSAL-10). */
+  decimal?: '.' | ',';
 }
 export type CampoMapeo = string | CampoDetallado;
 
@@ -121,7 +123,7 @@ type Resultado = { ok: unknown } | { error: string };
  * «189,50» → 189.5 · «1,234.50» → 1234.5 · «1.234,50» → 1234.5 · «1,234» → 1234 (la coma con tres dígitos
  * exactos y sin otro separador es de miles; con uno o dos dígitos es decimal). «$» y espacios se ignoran.
  */
-export function aNumero(v: unknown): Resultado {
+export function aNumero(v: unknown, decimalDeclarado?: '.' | ','): Resultado {
   if (typeof v === 'number') return Number.isFinite(v) ? { ok: v } : { error: 'número no finito' };
   if (typeof v !== 'string') return { error: 'se esperaba un número' };
   const t = v.trim().replace(/^\$\s*/, '').replace(/\s+/g, '');
@@ -131,7 +133,16 @@ export function aNumero(v: unknown): Resultado {
   const ultPunto = s.lastIndexOf('.');
   const ultComa = s.lastIndexOf(',');
   let normal: string;
-  if (ultPunto >= 0 && ultComa >= 0) {
+  if (decimalDeclarado !== undefined) {
+    // Formato declarado: el otro separador solo puede ser de miles (grupos de tres dígitos).
+    const miles = decimalDeclarado === '.' ? ',' : '.';
+    const partes = s.split(decimalDeclarado);
+    if (partes.length > 2) return { error: `«${v.slice(0, 30)}» no es un número` };
+    const grupos = partes[0].split(miles);
+    if (grupos.length > 1 && (grupos[0].length < 1 || grupos[0].length > 3 || !grupos.slice(1).every((g) => g.length === 3))) return { error: `«${v.slice(0, 30)}» no es un número` };
+    if (partes.length === 2 && partes[1].includes(miles)) return { error: `«${v.slice(0, 30)}» no es un número` };
+    normal = grupos.join('') + (partes.length === 2 ? `.${partes[1]}` : '');
+  } else if (ultPunto >= 0 && ultComa >= 0) {
     const decimal = ultPunto > ultComa ? '.' : ',';
     const miles = decimal === '.' ? ',' : '.';
     normal = s.split(miles).join('').replace(decimal, '.');
@@ -142,6 +153,9 @@ export function aNumero(v: unknown): Resultado {
     if (partes.length > 2) {
       if (!partes.slice(1).every((p) => p.length === 3)) return { error: `«${v.slice(0, 30)}» no es un número` };
       normal = partes.join('');
+    } else if (sep === '.' && cola.length === 3 && /^[1-9]\d{0,2}$/.test(partes[0])) {
+      // «1.234»: ¿mil doscientos treinta y cuatro o uno punto doscientos treinta y cuatro? No se adivina (dinero).
+      return { error: `«${v.slice(0, 30)}» es ambiguo (¿miles o decimales?): declara «decimal» en el mapeo` };
     } else if (sep === ',' && cola.length === 3 && partes[0].length >= 1 && partes[0].length <= 3 && partes[0] !== '') normal = partes.join('');
     else normal = partes.join('.');
   } else normal = s;
@@ -237,6 +251,7 @@ export function validarMapeo(m: unknown): string[] {
       if (typeof f === 'string') e.push(`campo «${dest}»: ${f}`);
       if (det.transformar !== undefined && !(TRANSFORMACIONES as readonly string[]).includes(det.transformar)) e.push(`campo «${dest}»: transformación desconocida «${String(det.transformar).slice(0, 20)}»`);
       if (det.transformar !== 'fecha_local' && (det.zona !== undefined || det.formato !== undefined)) e.push(`campo «${dest}»: «zona» y «formato» solo aplican a fecha_local`);
+      if (det.decimal !== undefined && (det.transformar !== 'numero' || (det.decimal !== '.' && det.decimal !== ','))) e.push(`campo «${dest}»: «decimal» solo aplica a numero y vale «.» o «,»`);
       if (det.zona !== undefined && (typeof det.zona !== 'string' || !zonaValida(det.zona))) e.push(`campo «${dest}»: zona horaria desconocida`);
       if (det.formato !== undefined) {
         if (typeof det.formato !== 'string' || det.formato.length > 40) e.push(`campo «${dest}»: formato de fecha inválido`);
@@ -297,7 +312,7 @@ export function aplicarMapeo<T = Record<string, unknown>>(mapeo: MapeoTms, respu
       }
       let r: Resultado;
       switch (c.det.transformar) {
-        case 'numero': r = aNumero(crudo); break;
+        case 'numero': r = aNumero(crudo, c.det.decimal); break;
         case 'fecha_local': r = aFechaLocal(crudo, c.det.formato, c.det.zona ?? ZONA_POR_OMISION); break;
         case 'booleano': r = aBooleano(crudo); break;
         case 'texto': r = aTexto(crudo); break;
