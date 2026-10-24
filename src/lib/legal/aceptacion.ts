@@ -2,7 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '@/lib/likida/presupuesto';
 import {
-  MANDATO_AUTOFACTURACION, versionVigente, type DocumentoLegal,
+  MANDATO_AUTOFACTURACION, HUELLA_TERMINOS, HUELLA_AVISO_PRIVACIDAD, versionVigente, type DocumentoLegal,
 } from './documentos';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -29,6 +29,15 @@ function commitDesplegado(): string | null {
   return c ? c.slice(0, 64) : null;
 }
 
+/** A37-L-09: la huella del texto aceptado (SHA-256 hex) para cada documento. */
+function huellaDe(documento: DocumentoLegal): string {
+  switch (documento) {
+    case 'mandato_autofacturacion': return MANDATO_AUTOFACTURACION.hashSha256;
+    case 'terminos': return HUELLA_TERMINOS;
+    case 'aviso_privacidad': return HUELLA_AVISO_PRIVACIDAD;
+  }
+}
+
 /** Registra la aceptación de la versión VIGENTE de un documento por esta persona. */
 export async function registrarAceptacion(
   tenantId: string, userId: string, documento: DocumentoLegal,
@@ -38,7 +47,7 @@ export async function registrarAceptacion(
     p_user: userId,
     p_documento: documento,
     p_version: versionVigente(documento),
-    p_hash: documento === 'mandato_autofacturacion' ? MANDATO_AUTOFACTURACION.hashSha256 : null,
+    p_hash: huellaDe(documento),
     p_commit: commitDesplegado(),
   }), 'legal.registrar');
   if (error) {

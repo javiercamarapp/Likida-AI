@@ -24,6 +24,7 @@
 // Javier, y hasta que estén la página lo DICE en vez de inventarlos.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { VIGENTE_DESDE_TERMINOS } from '@/lib/legal/documentos';
 import { PaginaLegal, FaltaDato, type SeccionLegal } from '../legal/marco';
 import { estadoLegalProduccion, LEGAL_CONFIG } from '@/lib/legal/config';
 
@@ -236,7 +237,7 @@ export default function Terminos() {
       // LEG-12: fecha del último cambio SUSTANTIVO del texto (LEG-7,
       // auditoría 24: se reescribió §17 sobre el DPA), no la fecha en que
       // alguien abre la página.
-      vigenteDesde="2026-09-01"
+      vigenteDesde={VIGENTE_DESDE_TERMINOS}
       secciones={SECCIONES}
       aviso={estado.faltantesEntidad.length > 0 ? (
         // AUDITORÍA 19-c2 (A6): el rótulo era una nota interna de despliegue
