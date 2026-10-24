@@ -14,8 +14,13 @@ import { armarAviso } from './worker';
 
 beforeEach(() => { reset(); sembrarFlotas(); });
 
+// pdf-lib estampa CreationDate/ModDate con la hora actual (resolución de segundo): dos `pdfBoreal()` generados en segundos distintos
+// (CI cargado, cobertura) tienen otro hash y «el MISMO archivo» dejaba de serlo. Se genera una vez y se reenvían los mismos bytes.
+let pdfUnico: Buffer | undefined;
+const mismoPdf = async () => (pdfUnico ??= await pdfBoreal());
+
 async function fallido() {
-  const r = await subir(A, await pdfBoreal(), 'doc.pdf');
+  const r = await subir(A, await mismoPdf(), 'doc.pdf');
   const d = estado.docs.get(r.documentoId)!;
   Object.assign(d, { estado: 'fallido', intentos: 5, ultimoError: 'proveedor caído' });
   estado.avisos.set(d.id, { agotado: new Date().toISOString() });
@@ -48,16 +53,16 @@ describe('A37-A3-04: salida de un documento fallido terminal', () => {
 
   it('reenviar el MISMO archivo de un fallido lo reabre (antes: «ya estaba en la bandeja»)', async () => {
     const { d } = await fallido();
-    const otra = await subir(A, await pdfBoreal(), 'reenvio.pdf');
+    const otra = await subir(A, await mismoPdf(), 'reenvio.pdf');
     expect(otra.documentoId).toBe(d.id);
     expect(otra).toMatchObject({ duplicado: false, estado: 'recibido', reabierto: true });
     expect(estado.docs.get(d.id)).toMatchObject({ estado: 'recibido', intentos: 0 });
   });
 
   it('reenviar el archivo de un documento por revisar sigue siendo un duplicado normal', async () => {
-    const r = await subir(A, await pdfBoreal(), 'a.pdf');
+    const r = await subir(A, await mismoPdf(), 'a.pdf');
     Object.assign(estado.docs.get(r.documentoId)!, { estado: 'por_revisar' });
-    const otra = await subir(A, await pdfBoreal(), 'b.pdf');
+    const otra = await subir(A, await mismoPdf(), 'b.pdf');
     expect(otra).toMatchObject({ duplicado: true });
     expect(otra).not.toHaveProperty('reabierto');
   });
