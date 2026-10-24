@@ -73,6 +73,7 @@ import {
 } from './verificacion';
 import { vincularPorIcident, type CruceIcident } from './vincular_viaje';
 import { desdeTablaViajeLocal, type ViajeFuente, type PosicionConViaje, type RangoFechas } from './viajes_fuente';
+import { esFechaReal } from './fecha_real';
 
 // ─────────────────────────────────────────────────────────────────────────
 // De `datos.ts` — catálogos (TAGs, casetas, geocercas, mapeos, buzón, pull,
@@ -2220,7 +2221,7 @@ export async function altaBajaDeTag(
 ): Promise<Resultado> {
   const tag = normalizarTag(entrada.tag);
   if (!tag) return { ok: false, motivo: 'El TAG no es válido (4 a 40 letras o dígitos).' };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(entrada.bajaEn) || Number.isNaN(Date.parse(`${entrada.bajaEn}T00:00:00Z`))) {
+  if (!esFechaReal(entrada.bajaEn)) {
     return { ok: false, motivo: 'La fecha de baja debe ser AAAA-MM-DD.' };
   }
   const { error } = await acotada(supabaseAdmin().from('peaje_tag_baja').upsert({
@@ -2637,7 +2638,7 @@ export async function crearReclamoDeCategoria(
   const fechas = cands.map((c) => c.fecha).filter((f): f is string => f !== null).sort();
   if (fechas.length === 0) return { ok: false, motivo: 'Los candidatos no traen fecha de cobro: no se puede calcular el plazo de reclamo.' };
   const enviado = entrada.enviadoEn?.trim() || null;
-  if (enviado && !/^\d{4}-\d{2}-\d{2}$/.test(enviado)) return { ok: false, motivo: 'La fecha de envío debe ser AAAA-MM-DD.' };
+  if (enviado && !esFechaReal(enviado)) return { ok: false, motivo: 'La fecha de envío debe ser AAAA-MM-DD.' };
   const monto = Math.round(cands.reduce((s, c) => s + (montosClase?.get(c.indice) ?? c.monto), 0) * 100) / 100;
   const { data, error } = await acotada(supabaseAdmin().from('peaje_reclamo').insert({
     tenant_id: tenantId, desglose_id: entrada.desgloseId, proveedor: reporte.proveedor, categoria: entrada.categoria,
@@ -2657,7 +2658,7 @@ export async function crearReclamoDeCategoria(
 
 /** Marca un reclamo preparado como enviado. */
 export async function marcarReclamoEnviado(tenantId: string, id: string, enviadoEn: string, referenciaPortal?: string | null): Promise<Resultado> {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(enviadoEn)) return { ok: false, motivo: 'La fecha de envío debe ser AAAA-MM-DD.' };
+  if (!esFechaReal(enviadoEn)) return { ok: false, motivo: 'La fecha de envío debe ser AAAA-MM-DD.' };
   const { data, error } = await acotada(supabaseAdmin().from('peaje_reclamo')
     .update({ estado: 'enviado', enviado_en: enviadoEn, referencia_portal: referenciaPortal?.trim().slice(0, 120) || null, actualizado_en: new Date().toISOString() })
     .eq('tenant_id', tenantId).eq('id', id).eq('estado', 'preparado').select('id'), 'revision_cobros.marcar_enviado');
@@ -2678,7 +2679,7 @@ export async function registrarNotaDeCredito(
   tenantId: string, entrada: { reclamoId: string; monto: number; fecha: string; referencia?: string | null; versionVista?: string | null },
 ): Promise<Resultado> {
   if (!Number.isFinite(entrada.monto) || entrada.monto <= 0 || entrada.monto > 1e9) return { ok: false, motivo: 'El monto de la nota de crédito debe ser mayor a cero.' };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(entrada.fecha)) return { ok: false, motivo: 'La fecha de la nota debe ser AAAA-MM-DD.' };
+  if (!esFechaReal(entrada.fecha)) return { ok: false, motivo: 'La fecha de la nota debe ser AAAA-MM-DD.' };
 
   // A33-06 (migración 0860): camino ATÓMICO e IDEMPOTENTE en la base (candado de fila + clave por reclamo). La clave junta el reclamo, lo que
   // la pantalla VIO (`versionVista`: estado y total acreditado al pintar el formulario) y el contenido de la nota: un doble clic o dos pestañas
