@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "total": 192,
+  "total": 190,
   "porArchivo": {
     "src/app/admin/agentes/contenido.tsx": 1,
     "src/app/admin/evals/page.tsx": 1,
@@ -34,7 +34,6 @@
     "src/lib/likida/agentes/enviador.ts": 2,
     "src/lib/likida/agentes/exito.ts": 3,
     "src/lib/likida/agentes/faq.ts": 2,
-    "src/lib/likida/agentes/finanzas.ts": 2,
     "src/lib/likida/agentes/ingenieria_producto.ts": 1,
     "src/lib/likida/agentes/ingenieria.ts": 3,
     "src/lib/likida/agentes/leads.ts": 14,
