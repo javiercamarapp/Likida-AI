@@ -656,6 +656,8 @@ export class AdaptadorDeclarativo implements AdaptadorPortal {
         });
       }
 
+      let emitirResuelto: string | undefined = vuelo.resueltos.get('el botón de emitir');
+
       // ── 4. LLENAR ──────────────────────────────────────────────────────
       for (const e of antes) {
         // El candidato que el pre-vuelo confirmó; si no hubo pre-vuelo (página
@@ -698,9 +700,9 @@ export class AdaptadorDeclarativo implements AdaptadorPortal {
             captura: await capturaSegura(pagina, this.comercio),
           });
         }
-        for (const [k, v] of segunda.resueltos) vuelo.resueltos.set(k, v);
+        emitirResuelto = segunda.resueltos.get('el botón de emitir');
         for (const e of despues) {
-          const selector = vuelo.resueltos.get(e.frase) ?? primerCandidato(e.selector);
+          const selector = segunda.resueltos.get(e.frase) ?? primerCandidato(e.selector);
           await escribirCampo(pagina, { selector, valor: e.valor, que: e.etiqueta, como: e.como }, contexto);
           capturado[e.llave] = e.valor;
         }
@@ -744,7 +746,7 @@ export class AdaptadorDeclarativo implements AdaptadorPortal {
         }
       }
       seApreto = true;
-      const selEmitir = vuelo.resueltos.get('el botón de emitir') ?? primerCandidato(this.g.botonEmitir);
+      const selEmitir = emitirResuelto ?? primerCandidato(this.g.botonEmitir);
       await pagina.hacerClic(selEmitir);
 
       captura = (await capturaSegura(pagina, this.comercio)) ?? captura;

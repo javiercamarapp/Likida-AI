@@ -568,9 +568,14 @@ const MAX_TEXTO_CON_SESION = 1_200;
 export function enmascararTexto(texto: string): string {
   return texto
     .slice(0, MAX_TEXTO_CON_SESION)
-    .replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, '[correo]')
-    .replace(/\b[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}\b/gi, '[rfc]')
-    .replace(/\d[\d\s-]{5,}\d/g, '[núm]');
+    .split(/\s+/)
+    .map((t) => {
+      if (t.includes('@')) return '[correo]';
+      if (/^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/i.test(t)) return '[rfc]';
+      // Cualquier cifra de 4+ dígitos (cuentas, CLABE por tramos, teléfonos, folios).
+      return t.replace(/\d{4,}/g, '[núm]');
+    })
+    .join(' ');
 }
 
 /** Una llamada de visión: pantalla + inventario → la siguiente acción. */
