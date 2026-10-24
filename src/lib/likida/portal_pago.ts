@@ -226,6 +226,9 @@ function enteroSano(entero: string): boolean {
   if (!grupos.every((g) => SOLO_DIGITOS.test(g))) return false;
   if (grupos.length === 1) return true;
   if (grupos[0].length < 1 || grupos[0].length > 3) return false;
+  // A37-S54-08: un millar no empieza en cero. «0,500» suele ser una coma DECIMAL (medio peso
+  // con tres decimales): se leía como $500.00; lo ambiguo se rechaza y se pregunta.
+  if (grupos[0].startsWith('0')) return false;
   return grupos.slice(1).every((g) => g.length === 3);
 }
 
