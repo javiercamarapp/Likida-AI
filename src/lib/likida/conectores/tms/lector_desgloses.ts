@@ -28,7 +28,7 @@ import { loginDe, urlBaseHttps, CONECTOR_TMS } from './sincronizar';
 
 const DIA_MS = 86_400_000;
 
-interface Entrada { desde: string; id: string; desglose?: DesgloseBitacora; rechazada?: FilaDesgloseRechazada }
+interface Entrada { desde: string; id: string; desglose?: DesgloseBitacora; rechazada?: FilaDesgloseRechazada; sinFecha?: true }
 
 const orden = (a: Entrada, b: Entrada): number => {
   const ta = Date.parse(a.desde); const tb = Date.parse(b.desde);
@@ -76,7 +76,10 @@ export function crearLectorDesglosesTms(o: OpcionesLectorTms): LectorDesglosesPu
       if (!Number.isInteger(p.limite) || p.limite < 1) throw new RangeError('limite debe ser un entero >= 1');
       const ahora = o.ahora();
       const desde = p.reLeerDesde ?? p.cursor?.desde ?? new Date(ahora - cfg.ventanaInicialDias * DIA_MS).toISOString();
-      const todas = (await leerVentana(desde, new Date(ahora).toISOString())).sort(orden);
+      const leidas = await leerVentana(desde, new Date(ahora).toISOString());
+      // A37-S38-08: una fila SIN fecha utilizable no tiene lugar en el cursor: no entra en la secuencia (jamás lo lleva a 1970);
+      // se reporta como rechazada, y solo en la última página de una lectura sin cursor (con cursor ya no es candidata).
+      const todas = leidas.filter((e) => !e.sinFecha).sort(orden);
       let candidatas = todas;
       if (p.reLeerDesde !== undefined) {
         const t = Date.parse(p.reLeerDesde);
@@ -87,11 +90,13 @@ export function crearLectorDesglosesTms(o: OpcionesLectorTms): LectorDesglosesPu
       }
       const pagina = candidatas.slice(0, p.limite);
       const ultima = pagina[pagina.length - 1];
+      const hayMas = candidatas.length > pagina.length;
+      const sinFecha = !hayMas && !p.cursor && p.reLeerDesde === undefined ? leidas.filter((e) => e.sinFecha) : [];
       return {
         items: pagina.flatMap((e) => (e.desglose ? [e.desglose] : [])),
-        rechazadas: pagina.flatMap((e) => (e.rechazada ? [e.rechazada] : [])),
+        rechazadas: [...pagina, ...sinFecha].flatMap((e) => (e.rechazada ? [e.rechazada] : [])),
         siguiente: ultima ? { desde: ultima.desde, despuesDe: ultima.id } : p.cursor,
-        hayMas: candidatas.length > pagina.length,
+        hayMas,
       };
     },
   };
@@ -105,7 +110,7 @@ function aEntrada(cruda: unknown, cfg: ConfigApiDesglose): Entrada {
   const clave = typeof bit === 'string' && bit !== '' ? claveDeBitacora(typeof term === 'string' ? term : undefined, bit) : 'BIT-DESCONOCIDA';
   // Sin instante utilizable no hay dónde colocarla en el cursor: se rechaza (visible) en vez de inventar una fecha.
   const desde = typeof campo === 'string' && !Number.isNaN(Date.parse(campo)) ? new Date(campo).toISOString() : null;
-  if (desde === null) return { desde: new Date(0).toISOString(), id: clave, rechazada: { clave, campo: cfg.campoCursor } };
+  if (desde === null) return { desde: new Date(0).toISOString(), id: clave, rechazada: { clave, campo: cfg.campoCursor }, sinFecha: true };
   try {
     const { desglose } = mapearBitacoraTms(cruda, m);
     return { desde, id: claveDeBitacora(desglose.terminal, desglose.bitacora), desglose };
