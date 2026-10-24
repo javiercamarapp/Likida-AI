@@ -577,7 +577,8 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 324;
 // (`estadias.tsx` -2, `facturacion/page.tsx` -1) y la lectura de `reenviarAviso` (-1). Todo por `acotada`/`traerTodo` con `tenant_id`.
 // LOTE A37 b-sat-fiscal-02 (S45-07): +3 llamadas (2,284 → 2,287) en facturacion_escritura.ts: facturasQueAmparan (factura_viaje), borradorIdempotente (factura_emitida) y la lectura de ligas de marcarEmitida. Todas por `acotada`; 0 archivos nuevos.
 // INTEGRACION G1 (24-oct-2026, PRs #665-#679): el barrido real del arbol fusionado mide 2,315 llamadas (2,284 en master 6922916: +31 de las 15 ramas, techo = medido, sin holgura).
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_315;
+// A37 lote M-Z-resto-13: 2,315 → 2,316 (+1): `purgarRetencion` de cobranza_gasto lee (select paginado) los contactos viejos antes de borrar solo los desprotegidos (A37-S26-09).
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_316;
 // A37-S27-10 (lote b-sat-fiscal-05): +1 (2,284 → 2,285), en `agentes/insumos.ts` (`crearInsumoArchivo`): `storage.from('agente-insumos').remove`
 // para no dejar huérfano el objeto subido cuando falla el insert.
 // LOTE A37 B-sat-fiscal-06 (migración 0876): +3 llamadas (2,284 → 2,287), 0 archivos nuevos, medido con el barrido real. `gasto_correccion.ts` +2: el RPC
