@@ -218,8 +218,8 @@ export async function BloqueConteos({ kpis: p }: { kpis: Promise<ConteosConducto
           la flota; lo único acotado es la LISTA de abajo, que lo dice
           en su propio pie. */}
       <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
-        Los cuatro conteos son de toda la flota: los tres primeros sobre los viajes en curso
-        (abiertos o en cuadre), Escalados sobre todo el histórico.
+        Los conteos son de toda la flota y de los viajes en curso (abiertos o en cuadre);
+        Escalados cuenta solo los viajes en curso escalados y sin aceptar.
       </p>
     </div>
   );

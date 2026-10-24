@@ -255,3 +255,11 @@ describe('Conductores — tarjeta de insights (T-A5-32)', () => {
     expect(html).not.toContain('Qué pasó');
   });
 });
+
+describe('A37-S13-07: los rótulos dicen lo que se cuenta', () => {
+  it('Escalados NO se rotula como «histórico»: cuenta solo viajes en curso escalados y sin aceptar', async () => {
+    const html = renderToStaticMarkup(await BloqueConteos({ kpis: Promise.resolve({ vivos: 3, aceptados: 1, esperan: 1, escalados: 2 }) }));
+    expect(html).not.toMatch(/hist[oó]rico/);
+    expect(html).toContain('escalados y sin aceptar');
+  });
+});

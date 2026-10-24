@@ -130,3 +130,13 @@ describe('SeccionCola', () => {
     expect(html).not.toContain('name="terminal"');
   });
 });
+
+describe('A37-S13-07: la pista de terminales recortadas dice la verdad', () => {
+  it('«N de más» se leía como sobrantes: ahora dice cuántas se muestran y que hay más', async () => {
+    const html = await pintar(pagina([fila(1)], 1), SIN_FILTROS, {
+      opciones: [{ id: U(9), nombre: 'Monterrey' }, { id: U(10), nombre: 'Saltillo' }], recortadas: true,
+    });
+    expect(html).not.toContain('de más');
+    expect(html).toContain('primeras 2; hay más');
+  });
+});
