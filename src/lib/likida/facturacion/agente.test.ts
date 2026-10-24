@@ -82,3 +82,34 @@ describe('facturarLoteConAgente — el vínculo se agrega al lote', () => {
     expect(r.portalCambio).toBeUndefined();
   });
 });
+
+// A37-S42-04 · un throw en modo emitir NO es «no se intentó».
+describe('un adaptador que lanza en modo emitir marca emisión sin confirmar', () => {
+  const quienLanza = (): AdaptadorPortal => ({
+    comercio: 'la_gas',
+    portal: 'https://facturacion.lagas.com.mx/',
+    facturar: async () => { throw new Error('se cerró la página'); },
+    facturarLote: async () => { throw new Error('se cerró la página'); },
+  });
+
+  it('lote en emitir: bandera puesta y motivo veraz (no «no se llegó a intentar»)', async () => {
+    registrarAdaptador(TENANT, quienLanza());
+    const r = await facturarLoteConAgente({ tenantId: TENANT, comercio: 'la_gas', tickets: [ticket('g1')], modo: 'emitir' });
+    expect(r.emisionSinConfirmar).toBe(true);
+    expect(r.ok).toBe(false);
+    expect(r.porGasto[0].motivo).not.toMatch(/No se llegó a intentar/);
+    expect(r.porGasto[0].motivo).toMatch(/NO se sabe si el portal alcanzó a emitir/);
+  });
+
+  it('un ticket en emitir (sin facturarLote) también la propaga al lote', async () => {
+    registrarAdaptador(TENANT, { ...quienLanza(), facturarLote: undefined });
+    const r = await facturarLoteConAgente({ tenantId: TENANT, comercio: 'la_gas', tickets: [ticket('g1')], modo: 'emitir' });
+    expect(r.emisionSinConfirmar).toBe(true);
+  });
+
+  it('en ensayo NO se marca: ahí no se aprieta emitir', async () => {
+    registrarAdaptador(TENANT, quienLanza());
+    const r = await facturarLoteConAgente({ tenantId: TENANT, comercio: 'la_gas', tickets: [ticket('g1')], modo: 'ensayo' });
+    expect(r.emisionSinConfirmar).toBeUndefined();
+  });
+});
