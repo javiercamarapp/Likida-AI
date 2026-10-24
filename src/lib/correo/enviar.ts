@@ -130,6 +130,12 @@ export interface OpcionesEnvio {
    * pie de campaña y SIN `List-Unsubscribe` aunque venga `listaBajaUrl`.
    */
   sobrio?: boolean;
+  /**
+   * A37-S26-04: el primer destinatario va en `to` y los demás en `bcc`, para que
+   * ninguno vea las direcciones de los otros (correo frío a varios buzones de
+   * una misma empresa: PII de terceros, LFPDPPP). Sin esto, todos van en `to`.
+   */
+  copiasOcultas?: boolean;
 }
 
 /** Tope crudo de los adjuntos de un correo: 28 MB ⇒ ~37.3 MB en base64, debajo de los 40 MB de Resend. */
@@ -190,7 +196,9 @@ export async function enviarCorreo(
       },
       body: JSON.stringify({
         from,
-        to: destinos,
+        ...(op.copiasOcultas && destinos.length > 1
+          ? { to: [destinos[0]], bcc: destinos.slice(1) }
+          : { to: destinos }),
         subject: correo.asunto,
         html: sobrio ? armarHtmlSobrio(correo) : armarHtml(correo),
         // La parte de texto no es opcional: un correo sin ella puntúa peor en
