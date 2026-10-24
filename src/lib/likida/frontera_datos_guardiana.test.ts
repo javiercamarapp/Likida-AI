@@ -614,6 +614,7 @@ const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_336;
 // `cambiosDeCarga`, estado de la carga de la 0894). Funcionalidad nueva; cubiertas por `historial/repo.test.ts` y `programa/repo.test.ts`.
 // Auditoría 37, lote parciales (A37-P-06, medido con el barrido real): +1 llamada (2,284 → 2,285), `admin/negocio.ts`: `.rpc('corridas_fallidas_por_grupo')` (0870), la ventana de fallos por agente+flota; service_role, sin tenant porque es la consola cruzada del superadmin (cae a la lectura anterior si la función no existe).
 // A37-S08-03 (lote M-C-seguridad-auth-01): +1 en lib/admin/bus.ts (crearOrden comprueba si ya hay una orden idéntica pendiente antes de encolar).
+// A37-S06-10 (+1, 2284 → 2285): evals/page.tsx lee `corrida_id` del resultado en la base en vez de confiar en el formulario.
 // Auditoría 37, lote agentes-legal-ia (medido con el barrido real): +2 llamadas (2,264 → 2,266). `candidatos_redactor.ts` suma 3 `.from(` (prospecto, cola_aprobacion, prospecto_contacto) y `runner.ts` pierde la suya (+2 netas); `sdr.ts` pasa de 3 a 3 (la lectura por prospecto se volvió lectura en lote). Todo por `acotada`.
 // LOTE A37 peajes-liquidación-graves (migración 0865): +5 llamadas (2,264 → 2,269), 0 archivos nuevos, medido con el barrido real. `jornada/repo.ts` +1:
 // `.rpc('asentar_declaracion_jornada')` (A37-S48-01; la 0865 sustituye la marca derivada bajo el lock del expediente; el INSERT anterior se conserva

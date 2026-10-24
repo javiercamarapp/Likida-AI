@@ -49,7 +49,7 @@ vi.mock('@/lib/likida/agentes/cola', async (importar) => ({
   liberarEnvioAmbiguo: dobles.liberarEnvioAmbiguo,
 }));
 
-import { FormaEnvio, FormaLiberarAmbiguo } from './forma-pieza';
+import { FormaEnvio, FormaLiberarAmbiguo, FormaPieza } from './forma-pieza';
 import PaginaAprobaciones from './page';
 
 /** Recorre el árbol ya renderizado (sin montar DOM) y junta cada elemento
@@ -155,4 +155,20 @@ it('A36-R11-01 — una pieza enviada con prueba del proveedor NO ofrece liberar'
   dobles.ultimasResueltas.mockResolvedValue([{ ...AMBIGUA, providerMessageId: 're_1' }]);
   const pagina = await PaginaAprobaciones();
   expect(buscarElementos(pagina, FormaLiberarAmbiguo)).toHaveLength(0);
+});
+
+// A37-S05-08
+it('A37-S05-08 — «Aprobar con mi edición» con el cuerpo vaciado NO aprueba el borrador original', async () => {
+  dobles.bandejaPendiente.mockResolvedValue([{ ...PIEZA_POR_ENVIAR, estado: 'pendiente' }]);
+  const pagina = await PaginaAprobaciones();
+  const [forma] = buscarElementos(pagina, FormaPieza);
+  const accion = forma.props.accion as AccionEnviar;
+  const r = await accion(null, fd({ pieza: 'pz-1', operacion: 'aprobar', cuerpoEditado: '   ' }));
+  expect(r.error).toMatch(/vacío/);
+  expect(dobles.aprobarPieza).not.toHaveBeenCalled();
+  // sin modo edición el campo no viaja: «Aprobar tal cual» sigue funcionando
+  dobles.aprobarPieza.mockResolvedValue(undefined);
+  const ok = await accion(null, fd({ pieza: 'pz-1', operacion: 'aprobar' }));
+  expect(ok.ok).toMatch(/tal cual/);
+  expect(dobles.aprobarPieza).toHaveBeenCalledWith('pz-1', 'admin-1', undefined);
 });

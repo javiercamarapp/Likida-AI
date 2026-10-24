@@ -1,6 +1,5 @@
 'use client';
 
-import { TZ_MX } from '@/lib/formato';
 import { useState } from 'react';
 
 /**
@@ -8,15 +7,21 @@ import { useState } from 'react';
  * pushes de ESE día, dicho abajo con todas sus letras. Cliente solo por el
  * clic — los datos llegan del servidor ya resueltos.
  */
+/** A37-S06-08: los buckets de GitHub (`stats/commit_activity`) son días UTC que arrancan en domingo 00:00 UTC;
+ *  formatear con la zona de CDMX (UTC-6) rotulaba cada cuadro con el día ANTERIOR. */
+export function fechaDeDiaUtc(ms: number): string {
+  return new Intl.DateTimeFormat('es-MX', {
+    timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  }).format(new Date(ms));
+}
+
 export function MapaActividad({ semanas, total }: {
   semanas: Array<{ inicio: number; dias: number[] }>;
   total: number;
 }) {
   const [dia, setDia] = useState<{ fecha: string; n: number } | null>(null);
   const tope = Math.max(1, ...semanas.flatMap((s) => s.dias));
-  const fechaDe = (ms: number) => new Intl.DateTimeFormat('es-MX', {
-    timeZone: TZ_MX, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  }).format(new Date(ms));
+  const fechaDe = fechaDeDiaUtc;
   return (
     <div>
       <div className="flex gap-[3px] overflow-x-auto pb-1">

@@ -5,7 +5,7 @@ import { requireSuperadmin } from '@/lib/auth/guard';
 import { listarAgentes, DEPARTAMENTOS } from '@/lib/likida/agentes/definiciones';
 import {
   tiposAceptadosPorAgente, listarInsumosDeAgente, contarInsumosDeAgente, urlsFirmadasInsumos,
-  crearInsumoArchivo, crearInsumoTexto, subirArchivoInsumo,
+  crearInsumoArchivo, crearInsumoTexto, subirArchivoInsumo, validarTipoAceptado,
   esTipoInsumo, TIPOS_ARCHIVO, TIPOS_TEXTO, type InsumoAgente,
 } from '@/lib/likida/agentes/insumos';
 import { DatoInvalido } from '@/lib/likida/errores';

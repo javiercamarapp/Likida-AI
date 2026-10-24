@@ -2,6 +2,7 @@
 
 import { usePrefersReducedMotion } from './prefers-reduced-motion';
 import { resolverFormato, type FormatoPreset } from './formato-preset';
+import { numero } from '@/lib/formato';
 
 /**
  * Librería de gráficas del design system v2 — mismas reglas que
@@ -176,7 +177,9 @@ export function StackedBars({
   // debajo. La gráfica nace con su valor real; las transiciones CSS animan
   // los cambios de valor posteriores.
   const animar = true;
-  const totales = categorias.map((_, i) => series.reduce((s, ser) => s + ser.valores[i], 0));
+  // A37-S08-08: un valor que falta suma 0 al total (no NaN, que rompía alturas y anchos).
+  const valorDe = (v: number | undefined) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+  const totales = categorias.map((_, i) => series.reduce((s, ser) => s + valorDe(ser.valores[i]), 0));
   const max = Math.max(...totales, 1);
   const pasos = series.length <= 1 ? [1] : series.map((_, i) => 0.3 + (0.7 * i) / (series.length - 1));
 
@@ -189,7 +192,7 @@ export function StackedBars({
             <div key={cat} className="flex-1 h-full flex flex-col justify-end items-center">
               <div className="w-full max-w-12 flex flex-col-reverse rounded-t-[4px] overflow-hidden" style={{ height: `${alturaTotalPct}%` }}>
                 {series.map((s, si) => {
-                  const segPct = totales[ci] > 0 ? (s.valores[ci] / totales[ci]) * 100 : 0;
+                  const segPct = totales[ci] > 0 ? (valorDe(s.valores[ci]) / totales[ci]) * 100 : 0;
                   return (
                     <div key={s.nombre} style={{
                       height: animar ? `${segPct}%` : '0%',
@@ -230,19 +233,21 @@ export function Funnel({ pasos }: { pasos: Array<{ etiqueta: string; valor: numb
   // debajo. La gráfica nace con su valor real; las transiciones CSS animan
   // los cambios de valor posteriores.
   const animar = true;
-  const base = pasos[0]?.valor || 1;
+  // A37-S08-08: con base cero NO se fabrica una base de 1 (daba 500 % y anchos > 100 %): sin base no hay
+  // conversión ni proporción que mostrar.
+  const base = pasos[0]?.valor ?? 0;
 
   return (
     <div className="space-y-2.5">
       {pasos.map((p, i) => {
-        const pct = Math.max(3, (p.valor / base) * 100);
-        const anterior = i > 0 ? pasos[i - 1].valor || 1 : null;
-        const conversion = anterior !== null ? Math.round((p.valor / anterior) * 100) : null;
+        const pct = base > 0 ? Math.min(100, Math.max(3, (p.valor / base) * 100)) : 3;
+        const anterior = i > 0 ? pasos[i - 1].valor : null;
+        const conversion = anterior === null ? null : anterior > 0 ? Math.round((p.valor / anterior) * 100) : '—';
         return (
           <div key={p.etiqueta}>
             <div className="flex items-center justify-between text-xs mb-1" style={{ color: 'var(--muted)' }}>
               <span>{p.etiqueta}</span>
-              <span className="tabular">{p.valor}{conversion !== null && ` · ${conversion}%`}</span>
+              <span className="tabular">{numero(p.valor)}{conversion !== null && (conversion === '—' ? ' · —' : ` · ${conversion}%`)}</span>
             </div>
             <div className="h-7 rounded-md overflow-hidden" style={{ background: 'var(--g1)' }}>
               <div className="h-full rounded-md" style={{
@@ -387,8 +392,19 @@ export function Heatmap({
             <tr key={f}>
               <td className="text-xs pr-2 whitespace-nowrap" style={{ color: 'var(--muted)' }}>{f}</td>
               {columnas.map((c, ci) => {
-                const v = valores[fi]?.[ci] ?? 0;
+                // A37-S08-08: una celda que falta NO es un 0 medido: se pinta vacía y dice «sin dato».
+                const crudo = valores[fi]?.[ci];
+                const sinDato = typeof crudo !== 'number' || !Number.isFinite(crudo);
+                const v = sinDato ? 0 : crudo;
                 const idx = fi * columnas.length + ci;
+                if (sinDato) {
+                  return (
+                    <td key={c} className="p-0.5">
+                      <div title={`${f} · ${c}: sin dato`} className="w-6 h-6 rounded-[3px]"
+                        style={{ border: '1px dashed var(--faint)', opacity: 0.6 }} />
+                    </td>
+                  );
+                }
                 return (
                   <td key={c} className="p-0.5">
                     <div title={`${f} · ${c}: ${fmt(v)}`} className="w-6 h-6 rounded-[3px]" style={{

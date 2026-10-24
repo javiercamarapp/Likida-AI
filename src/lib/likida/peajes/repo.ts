@@ -1265,8 +1265,29 @@ export async function anularDesgloseDb(tenantId: string, desgloseId: string, mot
   if ((upd.data ?? []).length === 0) {
     const ex = await acotada(supabaseAdmin().from('desglose_peaje').select('id').eq('tenant_id', tenantId).eq('id', desgloseId).maybeSingle(), 'peajes.anular_existe');
     if (ex.error) throw new Error(`anularDesglose: ${ex.error.message}`);
-    return ex.data ? 'ya_anulado' : 'no_encontrado';
+    if (!ex.data) return 'no_encontrado';
+    // A37-S11-05: el desglose ya estaba anulado, pero una anulación anterior pudo cortarse entre el UPDATE
+    // de `anulado_en` y el de la huella: reintentar REPARA liberando las huellas aún pendientes (idempotente).
+    await liberarHuellasDeDesglose(tenantId, desgloseId);
+    return 'ya_anulado';
   }
+  await liberarHuellasDeDesglose(tenantId, desgloseId);
+  // A37-A2-07: los reclamos PREPARADOS (aún no enviados) de un desglose anulado dejan de contar como pendientes (plazo, KPI
+  // «por vencer», totales): pasan a `rechazado` con la causa, lo que además libera el único parcial por categoría para
+  // reclamar de nuevo con el archivo correcto. Los ya ENVIADOS al proveedor no se tocan: son hechos externos que una persona decide.
+  const rec = await acotada(supabaseAdmin().from('peaje_reclamo')
+    .update({ estado: 'rechazado', notas: 'Anulado: el desglose de origen se anuló (archivo subido por error).', actualizado_en: ahora })
+    .eq('tenant_id', tenantId).eq('desglose_id', desgloseId).eq('estado', 'preparado'), 'peajes.anular_reclamos');
+  if (rec.error) logger.error('peajes.anular_reclamos', { tenant: tenantId, err: rec.error.message });
+  return 'anulado';
+}
+
+/**
+ * Libera la huella de los archivos de la cola que generaron este desglose anulado. Idempotente: repetirla solo
+ * vuelve a derivar otra huella igualmente libre. Si una escritura falla LANZA (la API contesta error y el
+ * integrador reintenta, que cae en `ya_anulado` y repara) en vez de prometer «anulado» con el archivo bloqueado.
+ */
+async function liberarHuellasDeDesglose(tenantId: string, desgloseId: string): Promise<void> {
   const arch = await acotada(supabaseAdmin().from('peaje_ingesta_archivo')
     .select('id, huella, origen').eq('tenant_id', tenantId).eq('desglose_id', desgloseId).order('id'), 'peajes.anular_archivos');
   if (arch.error) throw new Error(`anularDesglose: ${arch.error.message}`);
@@ -1278,14 +1299,6 @@ export async function anularDesgloseDb(tenantId: string, desgloseId: string, mot
     if (a.origen === 'pull' || a.origen === 'sftp') continue;
     await liberarHuellaArchivo(tenantId, a.id, a.huella, desgloseId);
   }
-  // A37-A2-07: los reclamos PREPARADOS (aún no enviados) de un desglose anulado dejan de contar como pendientes (plazo, KPI
-  // «por vencer», totales): pasan a `rechazado` con la causa, lo que además libera el único parcial por categoría para
-  // reclamar de nuevo con el archivo correcto. Los ya ENVIADOS al proveedor no se tocan: son hechos externos que una persona decide.
-  const rec = await acotada(supabaseAdmin().from('peaje_reclamo')
-    .update({ estado: 'rechazado', notas: 'Anulado: el desglose de origen se anuló (archivo subido por error).', actualizado_en: ahora })
-    .eq('tenant_id', tenantId).eq('desglose_id', desgloseId).eq('estado', 'preparado'), 'peajes.anular_reclamos');
-  if (rec.error) logger.error('peajes.anular_reclamos', { tenant: tenantId, err: rec.error.message });
-  return 'anulado';
 }
 
 /** El estado de UN archivo de la cola (acotado a la flota): lo que la subida manual lee tras procesar en línea. */
@@ -1299,7 +1312,7 @@ async function liberarHuellaArchivo(tenantId: string, archivoId: string, huella:
   const libre = createHash('sha256').update(`${huella}:anulada:${desgloseId}`).digest('hex');
   const r = await acotada(supabaseAdmin().from('peaje_ingesta_archivo').update({ huella: libre })
     .eq('tenant_id', tenantId).eq('id', archivoId), 'peajes.anular_huella');
-  if (r.error) logger.error('peajes.anular_huella', { tenant: tenantId, err: r.error.message });
+  if (r.error) throw new Error(`anularDesglose: huella: ${r.error.message}`);
 }
 
 /**

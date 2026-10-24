@@ -27,12 +27,19 @@ export default async function ConversacionPage({
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
   const { tenant, telefono: telefonoParam } = await params;
-  const telefono = decodeURIComponent(telefonoParam);
   if (!UUID.test(tenant)) notFound();
 
   let conversacion: ConversacionActiva | null | undefined;
   try {
-    conversacion = await getConversacion(tenant, telefono);
+    // A37-S05-06: Next ya entrega el parámetro decodificado; decodificarlo OTRA VEZ lanzaba URIError (500) con
+    // un % mal formado y doble-decodificaba un %25 legítimo. Se busca tal cual y, solo si no existe, con una
+    // decodificación protegida (por si algún camino lo entrega crudo).
+    conversacion = await getConversacion(tenant, telefonoParam);
+    if (conversacion === null && telefonoParam.includes('%')) {
+      let alterno: string | null = null;
+      try { alterno = decodeURIComponent(telefonoParam); } catch { /* % mal formado: no existe */ }
+      if (alterno && alterno !== telefonoParam) conversacion = await getConversacion(tenant, alterno);
+    }
   } catch {
     conversacion = undefined;
   }

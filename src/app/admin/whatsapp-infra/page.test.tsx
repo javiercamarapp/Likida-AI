@@ -76,3 +76,11 @@ it('declara honestamente lo fuera de alcance — no aparenta pool de números ni
   expect(html).toContain('Pool de números con rotación/balanceo');
   expect(html).toContain('Quality rating por número');
 });
+
+it('A37-S08-06: el teléfono completo NO se pinta en la lista, solo enmascarado', async () => {
+  dobles.getConversacionesActivas.mockResolvedValue([CONV({ telefono: '5219990001111' })]);
+  dobles.contarConversacionesActivas.mockResolvedValue(1);
+  const html = await renderizar();
+  expect(html).not.toContain('5219990001111');
+  expect(html).toContain('***1111');
+});
