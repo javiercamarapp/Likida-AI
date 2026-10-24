@@ -97,7 +97,7 @@ it('resolver: una resolución de menos de 5 caracteres se rechaza SIN tocar la b
   const pagina = await CompliancePage();
   const accion = buscar(pagina, FormaConAviso)[0].props.accion as AccionForma;
   const r = await accion(null, fd({ solicitudId: 's-1', resolucion: 'ok' }));
-  expect(r).toEqual({ error: 'Escribe la resolución (a quién se respondió y qué).' });
+  expect(r).toEqual({ error: 'Escribe la respuesta que se entrega al titular (qué se resolvió y cómo).' });
   expect(dobles.resolverSolicitudArco).not.toHaveBeenCalled();
 });
 
@@ -153,4 +153,28 @@ it('una solicitud ya resuelta NO ofrece el formulario de responder — muestra s
   const html = (await import('react-dom/server')).renderToStaticMarkup(pagina);
   expect(html).toContain('Se le envió su expediente el 2-ene.');
   expect(buscar(pagina, FormaConAviso)).toHaveLength(0);
+});
+
+it('A37-S05-04: si el WhatsApp NO salió, la pantalla lo dice (no afirma envío)', async () => {
+  dobles.from.mockReturnValue(encadenar([SOLICITUD_PENDIENTE]));
+  dobles.requireSuperadmin.mockResolvedValue(undefined);
+  dobles.resolverSolicitudArco.mockResolvedValue({ enviada: false, error: 'fuera de ventana' });
+  const pagina = await CompliancePage();
+  const accion = buscar(pagina, FormaConAviso)[0].props.accion as AccionForma;
+  dobles.from.mockReturnValueOnce(encadenar({ tenant_id: 't-1' }));
+  const r = await accion(null, fd({ solicitudId: 's-1', resolucion: 'Se le envió su expediente completo.' }));
+  expect((r as { ok: string }).ok).toContain('NO se pudo enviar por WhatsApp');
+  expect((r as { ok: string }).ok).toContain('fuera de ventana');
+});
+
+it('A37-S05-04: cancelación y oposición no ofrecen "Responder": enlazan a la bandeja ARCO', async () => {
+  dobles.from.mockReturnValue(encadenar([
+    { ...SOLICITUD_PENDIENTE, id: 's-c', tipo: 'cancelacion' },
+    { ...SOLICITUD_PENDIENTE, id: 's-o', tipo: 'oposicion' },
+  ]));
+  const pagina = await CompliancePage();
+  expect(buscar(pagina, FormaConAviso)).toHaveLength(0);
+  const html = (await import('react-dom/server')).renderToStaticMarkup(pagina);
+  expect(html).toContain('/dashboard/arco?tenant=t-1');
+  expect(html).toContain('Ejecutar cancelación');
 });
