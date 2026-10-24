@@ -1,6 +1,7 @@
 import { appUrl } from '@/lib/env';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { hoyMx } from '@/lib/formato';
 import { acotada } from './presupuesto';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1010,9 +1011,14 @@ export function tipoDeSolicitudArco(texto: string): 'acceso' | 'rectificacion' |
  *  solo el primer plazo, que es el que la solicitud puede vigilar. */
 const DIAS_HABILES_ARCO = 20;
 
-/** Suma `n` días hábiles a `desde` (lunes a viernes). */
+/** Suma `n` días hábiles a `desde` (lunes a viernes).
+ *
+ *  A37-L-11: el calendario es el de MÉXICO (`hoyMx`), no el UTC. Una solicitud
+ *  del jueves 19:00 CDMX ya es viernes en UTC; contarla desde el día UTC hacía
+ *  vencer el plazo un día hábil después del que la flota ve en pantalla.
+ *  (Los feriados no se descuentan: el plazo mostrado es el de lunes a viernes.) */
 export function venceArco(desde: Date, diasHabiles = DIAS_HABILES_ARCO): string {
-  const d = new Date(desde);
+  const d = new Date(`${hoyMx(desde)}T00:00:00Z`);
   let faltan = diasHabiles;
   while (faltan > 0) {
     d.setUTCDate(d.getUTCDate() + 1);
