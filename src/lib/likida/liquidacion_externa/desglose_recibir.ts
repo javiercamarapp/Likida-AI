@@ -22,7 +22,8 @@
 import { createHash } from 'node:crypto';
 import { logger } from '@/lib/logger';
 import { DatoInvalido } from '../errores';
-import { huellaContenido } from './esquema';
+import { huellaContenido, huellaDesglose } from './esquema';
+import type { LiquidacionExternaNormalizada } from './esquema';
 import {
   aLiquidacionExterna, claveDeBitacora, claveDeLiquidacion, UnidadesMezcladas, type DesgloseBitacora, type RenglonBitacora,
 } from './desglose_contrato';
@@ -134,6 +135,18 @@ export interface OpcionesDesglose {
 export const MAX_CORRECCIONES = 20;
 
 const SISTEMA_ORIGEN_DEFECTO = 'desglose-bitacora';
+/** Los orígenes con que se han guardado desgloses (pull/por omisión y POST): sus huellas ANTERIORES siguen reconociéndose. */
+const ORIGENES_CON_HUELLA_ANTERIOR = [SISTEMA_ORIGEN_DEFECTO, 'desglose-bitacora-api'];
+
+/**
+ * A37-A1-liquidaciones-09: ¿la huella guardada es la de este mismo contenido? La actual es canónica (sin orden de renglones ni
+ * origen); las filas guardadas ANTES llevan `huellaContenido` (con el orden recibido y el `sistemaOrigen`), que se reconoce con el
+ * origen de esta lectura y con los orígenes conocidos. Un contenido realmente distinto no coincide con ninguna.
+ */
+function mismaHuella(guardada: string, liq: LiquidacionExternaNormalizada): boolean {
+  if (guardada === huellaDesglose(liq)) return true;
+  return [liq.sistemaOrigen, ...ORIGENES_CON_HUELLA_ANTERIOR].some((o) => guardada === huellaContenido({ ...liq, sistemaOrigen: o }));
+}
 
 // ── Utilidades ──────────────────────────────────────────────────────────────
 
@@ -221,7 +234,7 @@ export async function recibirDesglose(
   }
   let liq = conversion.liquidacion;
   let claveExterna = liq.claveExterna;
-  let huella = huellaContenido(liq);
+  let huella = huellaDesglose(liq);
   const ahora = deps.ahora();
 
   // (2) idempotencia / corrección
@@ -230,7 +243,7 @@ export async function recibirDesglose(
   // hay que completarla. `rescate` guarda esa fila y el resto del flujo la completa en vez de insertar otra.
   let rescate: LiquidacionExterna | null = null;
   if (existente) {
-    if (existente.huella === huella) {
+    if (mismaHuella(existente.huella, liq)) {
       if (!deps.desgloseIncompleto || !(await deps.desgloseIncompleto(tenantId, existente.id))) {
         return { estado: 'idempotente', liquidacionId: existente.id, claveExterna };
       }
@@ -248,7 +261,7 @@ export async function recibirDesglose(
       const claveR = `${base}-R${n}`;
       const previa = await deps.buscarPorClave(tenantId, claveR);
       if (!previa) break;
-      if (previa.huella === huellaContenido({ ...liq, claveExterna: claveR })) {
+      if (mismaHuella(previa.huella, { ...liq, claveExterna: claveR })) {
         return { estado: 'idempotente', liquidacionId: previa.id, claveExterna: claveR };
       }
     }
@@ -256,7 +269,7 @@ export async function recibirDesglose(
     correccionDe = base;
     claveExterna = `${base}-R${n}`;
     liq = { ...liq, claveExterna };
-    huella = huellaContenido(liq);
+    huella = huellaDesglose(liq);
     existente = null;
   }
   if (existente) {

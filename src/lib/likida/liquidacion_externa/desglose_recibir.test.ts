@@ -3,7 +3,7 @@ import { DatoInvalido } from '../errores';
 import { CampoInvalido } from '@/lib/http/campos_cuerpo';
 import { DESGLOSE_SINTETICO } from './desglose.fixture';
 import type { DesgloseBitacora } from './desglose_contrato';
-import { huellaContenido } from './esquema';
+import { huellaContenido, huellaDesglose } from './esquema';
 import { aLiquidacionExterna } from './desglose_contrato';
 import type { LiquidacionExterna, NuevaLiquidacionExterna } from './repo';
 import { CONFIG_CORREO_POR_DEFECTO, type ConfigCorreo, type NuevaEntrega } from './repo_correo';
@@ -226,8 +226,46 @@ describe('recibirDesglose: idempotencia y correcciones', () => {
   it('la huella que se guarda es la del contrato (no la del Excel renombrado)', async () => {
     const b = banco({ config: { renombres: [{ patron: 'taxi', a: 'Otros' }] } });
     await recibirDesglose(TENANT, desglose(), b.deps);
-    const esperada = huellaContenido(aLiquidacionExterna(desglose(), { sistemaOrigen: 'desglose-bitacora' }).liquidacion);
+    const esperada = huellaDesglose(aLiquidacionExterna(desglose(), { sistemaOrigen: 'desglose-bitacora' }).liquidacion);
     expect(b.liquidaciones[0].huella).toBe(esperada);
+  });
+
+  describe('A37-A1-liquidaciones-09: la huella no depende del orden de renglones ni del sistema de origen', () => {
+    it('la misma bitácora con los renglones en OTRO orden es idempotente (no «correccion_pendiente»)', async () => {
+      const b = banco();
+      await recibirDesglose(TENANT, desglose(), b.deps);
+      const d = desglose();
+      const alReves = desglose({ percepciones: [...d.percepciones].reverse(), deducciones: [...d.deducciones].reverse() });
+      expect((await recibirDesglose(TENANT, alReves, b.deps)).estado).toBe('idempotente');
+      expect(b.excepciones).toHaveLength(0);
+    });
+    it('POST (origen «-api») y luego pull (origen por omisión) de lo mismo ⇒ idempotente', async () => {
+      const b = banco();
+      await recibirDesglose(TENANT, desglose(), b.deps, { sistemaOrigen: 'desglose-bitacora-api' });
+      const r = await recibirDesglose(TENANT, desglose(), b.deps);
+      expect(r.estado).toBe('idempotente');
+      expect(b.excepciones).toHaveLength(0);
+    });
+    it('una fila guardada ANTES con la huella anterior (orden recibido + origen) sigue reconociéndose, sin falsa corrección', async () => {
+      const b = banco();
+      const liq = aLiquidacionExterna(desglose(), { sistemaOrigen: 'desglose-bitacora-api' }).liquidacion;
+      b.liquidaciones.push({ id: 'liq-previa', tenantId: TENANT, claveExterna: liq.claveExterna, huella: huellaContenido(liq), total: liq.total } as unknown as LiquidacionExterna);
+      const r = await recibirDesglose(TENANT, desglose(), b.deps); // origen por omisión: la huella anterior era otra
+      expect(r.estado).toBe('idempotente');
+      expect(b.excepciones).toHaveLength(0);
+    });
+    it('un cambio REAL de importe sigue siendo correccion_pendiente (no se vuelve ciega)', async () => {
+      const b = banco();
+      await recibirDesglose(TENANT, desglose(), b.deps);
+      const d = desglose();
+      const otro = desglose({ percepciones: d.percepciones.map((r, i) => (i === 0 ? { ...r, monto: r.monto + 1 } : r)), neto: (d.neto ?? 0) + 1 });
+      expect((await recibirDesglose(TENANT, otro, b.deps)).estado).toBe('correccion_pendiente');
+    });
+    it('la huella canónica: distinto orden = igual; distinto importe = distinta', () => {
+      const l = aLiquidacionExterna(desglose(), { sistemaOrigen: 'A' }).liquidacion;
+      expect(huellaDesglose({ ...l, conceptos: [...l.conceptos].reverse(), sistemaOrigen: 'B' })).toBe(huellaDesglose(l));
+      expect(huellaDesglose({ ...l, total: l.total + 0.01 })).not.toBe(huellaDesglose(l));
+    });
   });
 });
 
