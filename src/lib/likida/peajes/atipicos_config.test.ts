@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { CONFIG_ATIPICOS_DEFAULT } from './atipicos';
+import { CONFIG_ATIPICOS_DEFAULT, VELOCIDAD_MIN_KMH, VELOCIDAD_MAX_KMH, validarConfigAtipicos as validarDetector } from './atipicos';
 import {
   configAtipicosSchema, validarConfigAtipicos, configAtipicosEfectiva, puedeCambiarEstado, estadoTrasReguardar,
   exigeRevisor, esEstadoAtipico, ESTADOS_ATIPICO,
@@ -33,13 +33,22 @@ describe('la configuración de cruces atípicos (zod)', () => {
     expect(validarConfigAtipicos({ repeticion_caseta: { ventanaHoras: 0.5 } }).ok).toBe(true);
   });
 
-  it('rechaza una velocidad máxima < 30 km/h (y > 400)', () => {
-    for (const k of [29.9, 0, -10, 401, '130']) {
+  it('A37-A2-27: rechaza una velocidad fuera de 60-300 km/h, los MISMOS límites del detector', () => {
+    for (const k of [59.9, 50, 30, 0, -10, 301, 400, '130']) {
       expect(validarConfigAtipicos({ secuencia_imposible: { velocidadMaxKmh: k } }).ok, `v=${String(k)}`).toBe(false);
     }
     const v = validarConfigAtipicos({ secuencia_imposible: { velocidadMaxKmh: 20 } });
-    expect(!v.ok && v.motivo).toMatch(/30 km\/h/);
-    expect(validarConfigAtipicos({ secuencia_imposible: { velocidadMaxKmh: 30 } }).ok).toBe(true);
+    expect(!v.ok && v.motivo).toMatch(/60 km\/h/);
+    expect(validarConfigAtipicos({ secuencia_imposible: { velocidadMaxKmh: 60 } }).ok).toBe(true);
+    expect(validarConfigAtipicos({ secuencia_imposible: { velocidadMaxKmh: 300 } }).ok).toBe(true);
+  });
+
+  it('A37-A2-27: todo lo que la pantalla acepta lo acepta también el detector (sin descartar la configuración)', () => {
+    for (const k of [VELOCIDAD_MIN_KMH, 100, VELOCIDAD_MAX_KMH]) {
+      const v = validarConfigAtipicos({ secuencia_imposible: { velocidadMaxKmh: k } });
+      expect(v.ok).toBe(true);
+      if (v.ok) expect(validarDetector(v.valor)).toBeNull();
+    }
   });
 
   it('el mínimo de cruces es un entero de 2 a 50', () => {

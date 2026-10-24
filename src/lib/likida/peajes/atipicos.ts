@@ -158,6 +158,10 @@ function mezclar(base: ConfigAtipicos, p: ConfigAtipicosParcial): ConfigAtipicos
 }
 
 /** Texto de por qué una configuración es inválida, o null si está bien. */
+/** Límites de la velocidad máxima: UNA sola fuente para la pantalla (`atipicos_config`) y el detector (A37-A2-27). */
+export const VELOCIDAD_MIN_KMH = 60;
+export const VELOCIDAD_MAX_KMH = 300;
+
 export function validarConfigAtipicos(c: ConfigAtipicos): string | null {
   const r = c.repeticion_caseta;
   if (!Number.isInteger(r.minCruces) || r.minCruces < 2) return 'repeticion_caseta.minCruces debe ser un entero de 2 o más.';
@@ -165,7 +169,7 @@ export function validarConfigAtipicos(c: ConfigAtipicos): string | null {
   const m = c.ida_y_vuelta_madrugada;
   if (!Number.isInteger(m.minCruces) || m.minCruces < 2) return 'ida_y_vuelta_madrugada.minCruces debe ser un entero de 2 o más.';
   const s = c.secuencia_imposible;
-  if (!(s.velocidadMaxKmh >= 60 && s.velocidadMaxKmh <= 300)) return 'secuencia_imposible.velocidadMaxKmh debe estar entre 60 y 300.';
+  if (!(s.velocidadMaxKmh >= VELOCIDAD_MIN_KMH && s.velocidadMaxKmh <= VELOCIDAD_MAX_KMH)) return `secuencia_imposible.velocidadMaxKmh debe estar entre ${VELOCIDAD_MIN_KMH} y ${VELOCIDAD_MAX_KMH}.`;
   return null;
 }
 
