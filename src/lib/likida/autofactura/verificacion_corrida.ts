@@ -289,7 +289,7 @@ export function tiposDePiiEnHtml(html: string): string[] {
     ['correo', /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i],
     ['CURP', /\b[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d\b/i],
     ['RFC', /\b[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}\b/i],
-    ['teléfono', /(?<![\d.])(?:\+?52[\s-]?)?\(?\d{2,3}\)?[\s-]?\d{3,4}[\s-]?\d{4}(?![\d.])/],
+    ['teléfono', /(?<![\d.])(?:\d{10}|\d{2,3}[ -]\d{3,4}[ -]\d{4})(?![\d.])/],
   ];
   return reglas.filter(([, r]) => r.test(texto)).map(([n]) => n);
 }
