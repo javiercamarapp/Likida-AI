@@ -1,9 +1,10 @@
 import { requireSuperadmin } from '@/lib/auth/guard';
-import { getResumenNegocio } from '@/lib/admin/negocio';
+import { getResumenNegocio, costoIaPorDiaDesde } from '@/lib/admin/negocio';
 import { getUnidadesMedidas, escenarioDe, ESCENARIOS_VIAJES_DIA, SUPUESTOS_CAPACIDAD, LIMITES_NOMINALES } from '@/lib/admin/capacidad';
 import { ahoraMs } from '@/lib/saludo';
 import { numero } from '@/lib/formato';
 import { usd } from '@/lib/utils';
+import { proyectarCosto } from './proyeccion';
 import { Gauge, TrendingUp, DollarSign } from 'lucide-react';
 import { AreaChartSimple } from '../charts';
 import { StatCard, EstadoVacio } from '../ui/kit';
@@ -11,34 +12,17 @@ import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 
 export const dynamic = 'force-dynamic';
 
-interface Proyeccion {
-  promedioDiario: number;
-  proyeccionMensual: number;
-  diasVentana: number;
-}
-
-/**
- * Extrapolación lineal HONESTA, no un modelo de forecasting: costo total de
- * IA en la ventana observada / número de días de calendario que abarca esa
- * ventana (de la primera a la última fecha con actividad, inclusive — no
- * solo los días con actividad, que inflaría el promedio si hubo huecos) ×
- * 30. Con `porDia.length === 0` no hay ninguna base, se regresa `null` en
- * vez de inventar un cero disfrazado de dato.
- */
-function proyectar(porDia: Array<{ dia: string; costoUsd: number }>): Proyeccion | null {
-  if (porDia.length === 0) return null;
-  const fechas = porDia.map((d) => new Date(`${d.dia}T00:00:00Z`).getTime());
-  const diasVentana = Math.round((Math.max(...fechas) - Math.min(...fechas)) / 86_400_000) + 1;
-  const total = porDia.reduce((s, d) => s + d.costoUsd, 0);
-  const promedioDiario = total / diasVentana;
-  return { promedioDiario, proyeccionMensual: promedioDiario * 30, diasVentana };
-}
-
 export default async function CapacidadForecastPage() {
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
   const r = await getResumenNegocio();
-  const proyeccion = proyectar(r.porDia);
+  // A37-S05-03: ventana REAL de 30 días (UTC, como la serie) y costo sin redondear.
+  const hoyUtc = new Date(ahoraMs()).toISOString().slice(0, 10);
+  let enVentana: Array<{ dia: string; costoUsd: number }> | null = null;
+  try {
+    enVentana = await costoIaPorDiaDesde(new Date(new Date(`${hoyUtc}T00:00:00Z`).getTime() - 29 * 86_400_000).toISOString());
+  } catch { enVentana = null; }
+  const proyeccion = enVentana === null ? null : proyectarCosto(r.porDia, enVentana, hoyUtc);
   // El modelo de capacidad (fase 7): unidades MEDIDAS si hay muestra; si la
   // lectura falla, la sección lo dice — jamás un escenario con base fantasma.
   let unidades: Awaited<ReturnType<typeof getUnidadesMedidas>> | null = null;
@@ -55,7 +39,11 @@ export default async function CapacidadForecastPage() {
         />
 
         <div className="px-5 py-5 flex-1 space-y-2.5">
-          {proyeccion === null ? (
+          {enVentana === null ? (
+            <EstadoVacio>
+              No se pudo leer el costo de la ventana de 30 días — esto NO significa que no haya gasto.
+            </EstadoVacio>
+          ) : proyeccion === null ? (
             <EstadoVacio>
               Sin datos de costo de IA registrados todavía — no hay base para proyectar nada.
             </EstadoVacio>

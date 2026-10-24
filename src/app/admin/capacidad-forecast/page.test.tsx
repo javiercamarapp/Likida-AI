@@ -13,10 +13,16 @@ vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: vi.fn(async () => ({ rol
 
 const dobles = vi.hoisted(() => ({
   getResumenNegocio: vi.fn(),
+  costoIaPorDiaDesde: vi.fn(),
   getUnidadesMedidas: vi.fn(),
 }));
 
-vi.mock('@/lib/admin/negocio', () => ({ getResumenNegocio: dobles.getResumenNegocio }));
+vi.mock('@/lib/admin/negocio', () => ({ getResumenNegocio: dobles.getResumenNegocio, costoIaPorDiaDesde: dobles.costoIaPorDiaDesde }));
+// Reloj fijo: 3-ene-2026 12:00 UTC.
+vi.mock('@/lib/saludo', async (importar) => ({
+  ...(await importar<typeof import('@/lib/saludo')>()),
+  ahoraMs: () => Date.UTC(2026, 0, 3, 12),
+}));
 vi.mock('@/lib/admin/capacidad', async (importar) => ({
   ...(await importar<typeof import('@/lib/admin/capacidad')>()),
   getUnidadesMedidas: dobles.getUnidadesMedidas,
@@ -28,6 +34,7 @@ async function renderizar() { return renderToStaticMarkup(await CapacidadForecas
 beforeEach(() => {
   vi.clearAllMocks();
   dobles.getUnidadesMedidas.mockResolvedValue(null);
+  dobles.costoIaPorDiaDesde.mockImplementation(async () => (dobles.getResumenNegocio.mock.results.at(-1)?.value ? (await dobles.getResumenNegocio.mock.results.at(-1)!.value).porDia : []));
 });
 
 it('sin ningún día de costo registrado, no inventa una proyección — dice que no hay base', async () => {
@@ -70,4 +77,11 @@ it('con unidades medidas, el escenario dice "sin base medida" para costo IA cuan
   const html = await renderizar();
   expect(html).toContain('Sin liquidaciones en 30d');
   expect(html).toContain('sin base medida');
+});
+
+it('A37-S05-03: si falla la lectura de la ventana de 30 días, lo dice (no pinta $0)', async () => {
+  dobles.getResumenNegocio.mockResolvedValue({ porDia: [{ dia: '2026-01-01', costoUsd: 10 }], porModelo: [] });
+  dobles.costoIaPorDiaDesde.mockRejectedValueOnce(new Error('caída'));
+  const html = await renderizar();
+  expect(html).toContain('No se pudo leer el costo de la ventana de 30 días');
 });

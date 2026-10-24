@@ -216,7 +216,7 @@ export default async function FlotasPage() {
                       <th className="px-4 py-2 font-medium">Flota</th>
                       <th className="px-4 py-2 font-medium">Plan</th>
                       <th className="px-4 py-2 font-medium text-right">Viajes</th>
-                      <th className="px-4 py-2 font-medium text-right">Costo de IA</th>
+                      <th className="px-4 py-2 font-medium text-right">Costo de IA (histórico)</th>
                       <th className="px-4 py-2 font-medium">Facilidad 15% (RFA 2.9)</th>
                       <th className="px-4 py-2 font-medium text-right"></th>
                     </tr>
