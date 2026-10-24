@@ -539,10 +539,18 @@ function parseSiNo(t: string): boolean | undefined {
   return undefined;
 }
 
+/** Duda o titubeo explícito: en un campo fiscal no se infiere nada de una frase así. */
+const DUDA = /\b(no se|no lo se|no estoy seguro|no estamos seguros|no tengo claro|creo|creemos|supongo|quiza|quizas|tal vez|probablemente|depende|a lo mejor)\b/;
+
 function parseIngresos(t: string): boolean | undefined {
   const s = strip(t);
   if (s === 'menor' || s === 'menores') return true;
   if (s === 'mayor' || s === 'mayores') return false;
+  // A37-S53-04: «no fueron menores a 300 millones» NO es «menores». Con duda o negación (salvo la frase
+  // «no llegamos a 300», que es afirmativa) no se declara nada: se vuelve a preguntar con los chips.
+  if (DUDA.test(s)) return undefined;
+  const sinFraseAfirmativa = s.replace(/no llegamos a 300/g, '');
+  if (/\b(no|nunca|tampoco)\s+(\w+\s+){0,2}(menores?|menos|mas|mayor(es)?|abajo|arriba|bajos|superamos|llegamos)\b/.test(sinFraseAfirmativa)) return undefined;
   if (/menos de 300|menores? (a|de) ?\$?300|abajo de 300|no llegamos a 300|bajos/.test(s)) return true;
   if (/mas de 300|arriba de 300|300 millones o mas|superamos|mayores? (a|de) ?\$?300/.test(s)) return false;
   // Un «sí» no es «menores a $300M». Los chips son menor/mayor/no_se.
@@ -613,9 +621,10 @@ function parseTopes(t: string): DatosOnboarding['topesPolitica'] | undefined {
   const s = strip(t);
   if (s === 'topes-demo') return { diesel: 4000, caseta: 1500, alimentacion: 800, hospedaje: 2500 };
   const num = (k: string): number | undefined => {
-    const m = s.match(new RegExp(`${k}\\s*:?\\s*\\$?\\s*(\\d{3,6})`));
+    // A37-S53-07: admite separador de miles («4,000» / «4.000»); sin él, «diésel 4,000» no se leía.
+    const m = s.match(new RegExp(`${k}\\s*:?\\s*\\$?\\s*(\\d{1,3}(?:[,.]\\d{3})+|\\d{3,6})(?![\\d,.]\\d)`));
     if (!m) return undefined;
-    const n = Number(m[1]);
+    const n = Number(m[1].replace(/[,.]/g, ''));
     return Number.isFinite(n) && n > 0 ? n : undefined;
   };
   const diesel = num('diesel');
@@ -636,15 +645,22 @@ function parseOperadores(t: string): Array<{ nombre: string; telefono: string }>
   return out.length > 0 ? out : undefined;
 }
 
+/** Máximo de unidades que se dan de alta por turno de chat (A37-S53-06). */
+export const MAX_UNIDADES_POR_TURNO = 20;
+
 function parseUnidades(t: string): Array<{ economico: string; placas?: string }> | undefined {
   const partes = t.split(/[,;]| y /i).map((p) => p.trim()).filter(Boolean);
   const out: Array<{ economico: string; placas?: string }> = [];
   for (const p of partes) {
     const tokens = p.split(/\s+/).filter(Boolean);
     if (tokens.length === 0) continue;
+    // A37-S53-06: un número económico lleva al menos un dígito (ECO-12, 305, T-7). «no tengo» o
+    // «las cargo después» NO crean unidades: si cualquier parte no tiene esa forma, se pide de nuevo.
+    if (!/\d/.test(tokens[0])) return undefined;
     if (tokens.length === 1) out.push({ economico: tokens[0].slice(0, 20) });
     else out.push({ economico: tokens[0].slice(0, 20), placas: tokens.slice(1).join('').slice(0, 12) });
   }
+  if (out.length > MAX_UNIDADES_POR_TURNO) return undefined;
   return out.length > 0 ? out : undefined;
 }
 
@@ -686,12 +702,12 @@ function parseCampo(id: CampoEntrevista, texto: string): Parseo {
       return { ok: true, hechos: { ingresosMenoresA300M: v } };
     }
     case 'parteRelacionada': {
-      const v = parseSiNo(texto);
+      const v = DUDA.test(strip(texto)) ? undefined : parseSiNo(texto);
       if (v === undefined) return { ok: false, motivo: 'ambiguo', detalle: '¿Es parte relacionada, sí o no? Si no estás seguro, dímelo y lo dejamos pendiente.' };
       return { ok: true, hechos: { parteRelacionada: v } };
     }
     case 'dedicacionExclusivaCarga': {
-      const v = parseSiNo(texto);
+      const v = DUDA.test(strip(texto)) ? undefined : parseSiNo(texto);
       if (v === undefined) return { ok: false, motivo: 'ambiguo', detalle: '¿Dedicación exclusiva, sí o no?' };
       return { ok: true, hechos: { dedicacionExclusivaCarga: v } };
     }
@@ -895,7 +911,7 @@ export function interpretarTurno(perfilCrudo: unknown, texto: string): {
 
   // Frases explícitas de otros campos — nunca un sí/no genérico.
   const s = strip(texto);
-  if (estado.pendientes.some((p) => p.id === 'parteRelacionada') && !('parteRelacionada' in hechos)) {
+  if (estado.pendientes.some((p) => p.id === 'parteRelacionada') && !('parteRelacionada' in hechos) && !DUDA.test(s)) {
     if (/no (somos|es|somos una)? ?parte relacionada/.test(s) || /sin parte relacionada/.test(s)) {
       hechos.parteRelacionada = false;
     } else if (/somos parte relacionada|es parte relacionada/.test(s)) {
