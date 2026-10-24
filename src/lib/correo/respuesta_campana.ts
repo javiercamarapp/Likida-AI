@@ -60,8 +60,15 @@ const INICIO_DE_CITA =
   /^\s*(?:-{2,}\s*(?:original message|mensaje original|forwarded message|mensaje reenviado)|_{5,}|on\s.{0,200}wrote:\s*$|el\s.{0,200}escribi[óo]:\s*$|(?:de|from|enviado el|sent)\s*:)/i;
 
 /** El pie que nosotros mismos ponemos en cada correo de campaña, por si el cliente lo pega sin marcarlo como cita. */
-const PIE_DE_CAMPANA =
-  /(?:si\s+prefieres\s+no\s+recibir\s+estos\s+correos,?\s*)?responde\s+(?:con\s+)?(?:la\s+palabra\s+)?[«"“]?baja[»"”]?(?:\s+y\s+no\s+volveremos\s+a\s+escribirte)?\.?|darte\s+de\s+baja:\s*\S+|darme\s+de\s+baja\s+de\s+estos\s+correos/gi;
+const PIE_DE_CAMPANA: readonly RegExp[] = [
+  /si\s+prefieres\s+no\s+recibir\s+estos\s+correos,?/gi,
+  /responde\s+con\s+la\s+palabra\s+[«"“]?baja[»"”]?/gi,
+  /responde\s+[«"“]?baja[»"”]?/gi,
+  /no\s+volveremos\s+a\s+escribirte/gi,
+  /darte\s+de\s+baja:\s*\S+/gi,
+  /darme\s+de\s+baja\s+de\s+estos\s+correos/gi,
+];
+const sinPieDeCampana = (t: string): string => PIE_DE_CAMPANA.reduce((acc, re) => acc.replace(re, ' '), t);
 
 /** «Estoy de baja médica», «de baja por maternidad»: incapacidad de quien contesta, no una petición. */
 const BAJA_LABORAL =
@@ -80,7 +87,7 @@ export function textoNuevo(cuerpo: string | null): string {
     if (/^\s*>/.test(linea)) continue;
     nuevas.push(linea);
   }
-  return nuevas.join('\n').replace(PIE_DE_CAMPANA, ' ').replace(BAJA_LABORAL, ' ').trim();
+  return sinPieDeCampana(nuevas.join('\n')).replace(BAJA_LABORAL, ' ').trim();
 }
 
 /** ¿El texto pide la BAJA? Palabra COMPLETA en el asunto o en el texto NUEVO del
@@ -89,7 +96,7 @@ export function textoNuevo(cuerpo: string | null): string {
  *  autorespondedor y, en un cuerpo largo, la palabra suelta, NO cuentan: borrar
  *  a quien solo contestó «sí, llámame» destruye el lead más caliente. */
 export function esBaja(asunto: string | null, cuerpo: string | null): boolean {
-  const reAsunto = (asunto ?? '').replace(PIE_DE_CAMPANA, ' ').replace(BAJA_LABORAL, ' ');
+  const reAsunto = sinPieDeCampana(asunto ?? '').replace(BAJA_LABORAL, ' ');
   if (/\bbaja\b/i.test(reAsunto) || /\bunsubscribe\b/i.test(reAsunto)) return true;
   const nuevo = textoNuevo(cuerpo);
   if (nuevo.length > CUERPO_NUEVO_CORTO) return PETICION_EXPLICITA.test(nuevo);
