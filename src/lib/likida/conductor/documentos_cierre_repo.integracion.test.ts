@@ -157,6 +157,36 @@ describe('documentoCierreDeLaFoto', () => {
   });
 });
 
+describe('A37-S36-08: si el estado del documento no se anota, NO se responde «recibido»', () => {
+  const guardar = (pod: { id: string; documentoRequeridoId: string | null }) => guardarEvidenciaDocumentoCierre({
+    tenantId: T, hito: HITO, documentoCierreId: pod.id, documentoRequeridoId: pod.documentoRequeridoId,
+    ruta: `${T}/foto.jpg`, sha256: 'd'.repeat(64), waMessageId: 'wa-9', accion: 'aceptar_ok', intentos: 0, ahora: AHORA,
+  });
+
+  it('un fallo pasajero del UPDATE se reintenta una vez y la foto queda recibida', async () => {
+    estado.db.tabla('cliente_documento_requerido').push(docCatalogo('Carta porte firmada y sellada', 'basico'));
+    const [pod] = await crearSolicitudDocumentosCierre(T, VIAJE, CLIENTE, AHORA);
+    estado.db.fallarProxima('viaje_documento_cierre', 'update', { message: 'timeout' });
+    expect(await guardar(pod)).toBe('ok');
+    expect(estado.db.tabla('viaje_documento_cierre')[0].estado).toBe('recibido');
+  });
+
+  it('si el UPDATE falla las dos veces devuelve «fallo» (el chofer NO lee «recibí tu documento») y su reenvío SÍ cierra el documento', async () => {
+    estado.db.tabla('cliente_documento_requerido').push(docCatalogo('Carta porte firmada y sellada', 'basico'));
+    const [pod] = await crearSolicitudDocumentosCierre(T, VIAJE, CLIENTE, AHORA);
+    estado.db.fallarProxima('viaje_documento_cierre', 'update', { message: 'caída 1' });
+    estado.db.fallarProxima('viaje_documento_cierre', 'update', { message: 'caída 2' });
+    expect(await guardar(pod)).toBe('fallo');
+    expect(estado.db.tabla('viaje_documento_cierre')[0].estado).toBe('pendiente');
+    // La evidencia del intento fallido se retira: si no, el reenvío de la misma foto toparía con el UNIQUE por sha
+    // y se contestaría «ya tenía esa foto» con el documento todavía pendiente.
+    expect(estado.db.tabla('viaje_hito_evidencia')).toHaveLength(0);
+    expect(logger.error).toHaveBeenCalled();
+    expect(await guardar(pod)).toBe('ok');
+    expect(estado.db.tabla('viaje_documento_cierre')[0].estado).toBe('recibido');
+  });
+});
+
 describe('guardarEvidenciaDocumentoCierre — escritura real contra viaje_hito_evidencia + viaje_documento_cierre', () => {
   it('ruta de OTRA flota se rechaza SIN tocar la base (defensa de tenant)', async () => {
     estado.db.tabla('cliente_documento_requerido').push(docCatalogo('Carta porte firmada y sellada', 'basico'));
@@ -283,16 +313,24 @@ describe('registrarFotoDocumentoCierre — el camino completo, foto → clasific
     expect(msg).toBe(MENSAJE_SIN_CATEGORIA_DOCUMENTO);
   });
 
-  it('un fallo de la base (select de viaje_documento_cierre) nunca lanza: responde el acuse de fallo', async () => {
+  it('un fallo de la base al anotar el estado nunca lanza: reintenta una vez y, si persiste, responde el acuse de fallo (A37-S36-08)', async () => {
     estado.db.tabla('cliente_documento_requerido').push(docCatalogo('Carta porte firmada y sellada', 'basico'));
     const [pod] = await crearSolicitudDocumentosCierre(T, VIAJE, CLIENTE, AHORA);
+    // Un solo fallo pasajero: el reintento lo anota y el chofer sí lee que se recibió.
     estado.db.fallarProxima('viaje_documento_cierre', 'update', { message: 'conexión perdida' });
-    const msg = await registrarFotoDocumentoCierre({
+    const ok = await registrarFotoDocumentoCierre({
       tenantId: T, hito: HITO, documentoId: pod.documentoRequeridoId, pendientes: [pod], ruta: `${T}/foto.jpg`, sha256: '4'.repeat(64), waMessageId: 'wa-10', ahora: AHORA,
     });
-    // `guardarEvidenciaDocumentoCierre` solo LOGUEA si el update final falla (el insert de la evidencia sí quedó) — sigue devolviendo el acuse normal.
-    expect(msg).toBe('Recibí tu foto de Carta porte firmada y sellada ✅.');
-    expect(logger.warn).toHaveBeenCalledWith('conductor.documento_cierre_estado_no_anotado', expect.objectContaining({ documento: pod.id }));
+    expect(ok).toBe('Recibí tu foto de Carta porte firmada y sellada ✅.');
+    // Dos fallos seguidos: ya NO se dice «recibí» con la fila pendiente; se pide reenviar.
+    estado.db.tabla('viaje_documento_cierre')[0].estado = 'pendiente';
+    estado.db.fallarProxima('viaje_documento_cierre', 'update', { message: 'conexión perdida' });
+    estado.db.fallarProxima('viaje_documento_cierre', 'update', { message: 'conexión perdida' });
+    const msg = await registrarFotoDocumentoCierre({
+      tenantId: T, hito: HITO, documentoId: pod.documentoRequeridoId, pendientes: [pod], ruta: `${T}/foto2.jpg`, sha256: '5'.repeat(64), waMessageId: 'wa-11', ahora: AHORA,
+    });
+    expect(msg).toBe(MENSAJE_FOTO_DOCUMENTO_FALLO);
+    expect(logger.error).toHaveBeenCalledWith('conductor.documento_cierre_estado_no_anotado', expect.objectContaining({ documento: pod.id }));
   });
 });
 
