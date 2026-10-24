@@ -20,7 +20,7 @@
 // Este archivo es PURO: no toca base ni red.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { CAMPOS_DOC, CAMPOS_MERCANCIA, campoDoc, campoMercancia, extraccionVacia, type CampoDoc, type CampoValor, type Extraccion } from './campos';
+import { CAMPOS_DOC, CAMPOS_MERCANCIA, campoDoc, campoMercancia, campoPersonal, extraccionVacia, type CampoDoc, type CampoValor, type Extraccion } from './campos';
 import { llaveTexto } from './catalogos';
 import { CLAVES_PROHIBIDAS_JSON, esLibroPlantillaTms, type ContenidoDoc, type FormatoDoc, type Hoja } from './contenido';
 import { normalizarNumero, normalizarValor, type OrdenFecha } from './normalizar';
@@ -716,18 +716,19 @@ export function aprender(inp: EntradaAprendizaje): ResultadoAprendizaje {
     const orden = celdaCruda ? ordenDeFecha(mercancia ? campoMercancia(campo) : campoDoc(campo), celdaCruda, finalV) : undefined;
     if (orden) ordenes.set(claveMapeo({ campo, mercancia }), orden);
     nuevos.set(claveMapeo({ campo, mercancia }), { campo, mercancia, fuente, ...(miles ? { separadorMiles: miles } : {}) });
-    evidencias.push({ campo: mercancia ? `mercancia.${campo}` : campo, linea: linea.slice(0, 200) });
+    // A37-A3-12: de un dato personal (operador, contacto, RFC) se guarda DE DÓNDE se lee, jamás el valor.
+    evidencias.push({ campo: mercancia ? `mercancia.${campo}` : campo, linea: (campoPersonal(campo) ? describir(fuente) : linea).slice(0, 200) });
   };
 
   for (const def of CAMPOS_DOC) {
     const v = inp.final.campos[def.clave]?.valor;
-    if (typeof v === 'string' && v !== '') { camposFinales[def.clave] = v; intentar(def.clave, false, v, null); }
+    if (typeof v === 'string' && v !== '') { if (!campoPersonal(def.clave)) camposFinales[def.clave] = v; intentar(def.clave, false, v, null); }
   }
   inp.final.mercancias.forEach((fila, idx) => {
     for (const def of CAMPOS_MERCANCIA) {
       const v = fila[def.clave]?.valor;
       if (typeof v !== 'string' || v === '') continue;
-      if (idx === 0) camposFinales[`mercancia.${def.clave}`] = v;
+      if (idx === 0 && !campoPersonal(def.clave)) camposFinales[`mercancia.${def.clave}`] = v;
       // Para texto/XML solo el primer renglón puede enseñar la etiqueta (el resto repite).
       if (c.tabla || idx === 0) intentar(def.clave, true, v, idx);
     }

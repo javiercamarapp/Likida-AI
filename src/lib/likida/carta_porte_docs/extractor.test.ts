@@ -363,6 +363,20 @@ describe('perfil: el segundo documento del mismo cliente no usa modelo', () => {
   });
 });
 
+describe('A37-A3-12: los ejemplos de perfiles ya guardados no mandan datos personales al proveedor de IA', () => {
+  it('una evidencia de operador/RFC/contacto (de versiones anteriores) se omite del prompt; las demás siguen', () => {
+    const u = construirUsuario({
+      formato: 'excel', texto: '### Hoja: A\nx', imagenes: [], nivel: 1, marcador: 'm1',
+      ejemplos: [{ campos: {}, evidencias: [
+        { campo: 'operador_nombre', linea: 'Operador: Persona Sintetica Uno' }, { campo: 'destino_rfc', linea: 'RFC: XAXX010101000' },
+        { campo: 'contacto_destino_telefono', linea: 'Tel: 5555550000' }, { campo: 'fecha_salida', linea: 'Fecha Salida: 15/10/2026' },
+      ] }],
+    });
+    for (const dato of ['Persona Sintetica Uno', 'XAXX010101000', '5555550000']) expect(u).not.toContain(dato);
+    expect(u).toContain('15/10/2026');
+  });
+});
+
 describe('construirUsuario: libro de pestañas de un mismo embarque (T-A3-14)', () => {
   const base = { formato: 'excel' as const, texto: '### Hoja: A\nx', imagenes: [], ejemplos: [], nivel: 1 as const, marcador: 'm1' };
   it('con hojasMismoEmbarque pide UNA mercancía por hoja y no "solo el primero"', () => {
