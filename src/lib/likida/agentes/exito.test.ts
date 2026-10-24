@@ -62,7 +62,7 @@ const {
   PASOS_ONBOARDING, casillaHecha, detectarAtoros, avisosDeHoy, armarParteOnboarding,
   enSilencio, armarParteSilencio, armarReporteValor, tocaReporteMensual,
   evaluarGatillos, armarParteRetencion,
-  toquesDeHoy, esToqueAtrasado, tituloToque, textoDelToque, armarPropuestaCobranza, armarParteCobranzaSaas,
+  toquesDeHoy, toquesParaProponer, esToqueAtrasado, tituloToque, textoDelToque, armarPropuestaCobranza, armarParteCobranzaSaas,
   semaforoTicket, armarParteSoporte,
   esAgenteExito, correrAgenteExito, AGENTES_EXITO, leerFlotas, leerValorDelMes,
 } = await import('./exito');
@@ -457,23 +457,24 @@ describe('cobranza SaaS — la cadencia propone, nadie envía', () => {
   it('un hito ALCANZADO cuenta aunque su día exacto ya haya pasado (c6-14)', () => {
     // Antes del primer hito no hay nada que proponer.
     expect(toquesDeHoy([FACTURA], '2026-07-25')).toEqual([]);
-    // A37-S27-08: por factura solo el hito MÁS ALTO alcanzado (antes, hasta 5 piezas
-    // casi idénticas de golpe para una factura vieja).
+    // El día exacto de cada hito, ese hito y los anteriores.
     expect(toquesDeHoy([FACTURA], '2026-07-29').map((t) => t.hito)).toEqual([-3]);
-    expect(toquesDeHoy([FACTURA], '2026-08-01').map((t) => t.hito)).toEqual([0]);
-    // Y un día que no es hito de nadie YA NO se queda mudo: propone el último alcanzado.
-    expect(toquesDeHoy([FACTURA], '2026-08-05').map((t) => t.hito)).toEqual([3]);
-    expect(toquesDeHoy([FACTURA], '2026-08-16').map((t) => t.hito)).toEqual([15]);
+    expect(toquesDeHoy([FACTURA], '2026-08-01').map((t) => t.hito)).toEqual([-3, 0]);
+    // Y un día que no es hito de nadie YA NO se queda mudo: recupera los que
+    // se perdieron (el cron pudo no correr esos días).
+    expect(toquesDeHoy([FACTURA], '2026-08-05').map((t) => t.hito)).toEqual([-3, 0, 3]);
+    expect(toquesDeHoy([FACTURA], '2026-08-16').map((t) => t.hito)).toEqual([-3, 0, 3, 7, 15]);
   });
 
   it('A37-S27-08: una factura con 20 días vencida produce UNA propuesta (el hito más alto), no cinco', () => {
-    const t = toquesDeHoy([FACTURA], '2026-08-21');
+    const t = toquesParaProponer([FACTURA], '2026-08-21');
     expect(t).toHaveLength(1);
     expect(t[0].hito).toBe(15);
+    expect(toquesParaProponer([FACTURA], '2026-07-25')).toEqual([]);
   });
 
   it('el toque atrasado se marca y su texto habla del HOY real, no del hito', () => {
-    const tarde = { ...toquesDeHoy([FACTURA], '2026-08-21')[0], hito: -3 };
+    const tarde = toquesDeHoy([FACTURA], '2026-08-21').find((t) => t.hito === -3)!;
     expect(esToqueAtrasado(tarde)).toBe(true);
     expect(tarde.diasVsVencimiento).toBe(20);
     // Nada de "faltan 3 días para el corte" sobre una factura de 20 días.
@@ -733,7 +734,7 @@ describe('el reloj de la vuelta corta los motores de éxito, y lo DICE (c7-1)', 
     getPorCobrar.mockResolvedValue([FACTURA, FACTURA_2]);
     // Dos facturas con un hito alcanzado cada una: dos toques, o sea una
     // lista de trabajo de verdad sobre la que se puede cortar A LA MITAD.
-    expect(toquesDeHoy([FACTURA, FACTURA_2], '2026-08-01')).toHaveLength(2);
+    expect(toquesParaProponer([FACTURA, FACTURA_2], '2026-08-01')).toHaveLength(2);
 
     // EL RELOJ QUE SE AGOTA A LA MITAD: arranca vivo y se vence en cuanto la
     // primera propuesta entra a la bandeja. Es la forma honesta de reproducir

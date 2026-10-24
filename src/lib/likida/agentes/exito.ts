@@ -1131,7 +1131,7 @@ export interface ToqueCobranza {
  * PARA SIEMPRE, en silencio. Una factura registrada con 9 días de vencida no
  * recibía −3, ni 0, ni +3, ni +7: su primera propuesta llegaba el día 15.
  *
- * Ahora se evalúan los hitos ALCANZADOS (`dias >= hito`) y se devuelve solo el más alto por factura (A37-S27-08). No duplica
+ * Ahora se devuelven todos los hitos ALCANZADOS (`dias >= hito`). No duplica
  * nada porque el árbitro ya existe y es una constraint: el título es
  * determinista por (factura, hito) y `piezaExistente` + el índice único de la
  * 0218 dejan pasar exactamente una propuesta por par, para siempre.
@@ -1144,15 +1144,27 @@ export function toquesDeHoy(facturas: FacturaPorCobrar[], hoy: string): ToqueCob
   const toques: ToqueCobranza[] = [];
   for (const f of facturas) {
     const dias = diasEntreDias(f.periodoInicio, hoy);
-    // A37-S27-08: SOLO el hito más alto alcanzado. Antes se devolvían todos los
-    // alcanzados y una factura de 20 días generaba cinco piezas con el mismo
-    // texto (el cuerpo habla de los días reales) en la bandeja. Los hitos
-    // inferiores de una factura que ya pasó de largo no se proponen nunca.
-    const alcanzados = HITOS_COBRANZA.filter((hito) => dias >= hito);
-    if (alcanzados.length === 0) continue;
-    toques.push({ factura: f, diasVsVencimiento: dias, hito: Math.max(...alcanzados) });
+    for (const hito of HITOS_COBRANZA) {
+      if (dias >= hito) toques.push({ factura: f, diasVsVencimiento: dias, hito });
+    }
   }
   return toques;
+}
+
+/**
+ * Los toques que el agente PROPONE hoy: de los alcanzados, solo el hito MÁS ALTO por factura (A37-S27-08).
+ * Con el catch-up de arriba, una factura de 20 días generaba cinco piezas casi idénticas de golpe (el cuerpo
+ * habla de los días reales) y, con facturas viejas, la bandeja se inundaba. Los hitos inferiores de una factura
+ * que ya pasó de largo no se proponen. `toquesDeHoy` queda completo porque el panel de cobranza los lista todos
+ * con su sello.
+ */
+export function toquesParaProponer(facturas: FacturaPorCobrar[], hoy: string): ToqueCobranza[] {
+  const masAlto = new Map<string, ToqueCobranza>();
+  for (const t of toquesDeHoy(facturas, hoy)) {
+    const previo = masAlto.get(t.factura.id);
+    if (!previo || t.hito > previo.hito) masAlto.set(t.factura.id, t);
+  }
+  return [...masAlto.values()];
 }
 
 /** ¿Este toque llega TARDE a su propio hito? (c6-14) */
@@ -1260,7 +1272,7 @@ async function correrCobranzaSaas(disparo: DisparoCorrida, hoy: string, venceEnV
   const titulo = `Cobranza SaaS — ${hoy}`;
   try {
     const facturas = await getPorCobrar();
-    const toques = toquesDeHoy(facturas, hoy);
+    const toques = toquesParaProponer(facturas, hoy);
 
     let propuestas = 0;
     let sinTurno = false;
