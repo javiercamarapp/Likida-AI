@@ -19,6 +19,13 @@ export const maxDuration = 120;
 
 /** Margen para el latido y la respuesta dentro del `maxDuration`. */
 const MARGEN_MS = 15_000;
+/**
+ * A37-A3-07: porción FIJA del reloj reservada a la salida al TMS. La extracción corta cuando le faltan 25 s para el
+ * vencimiento y la salida no arranca con menos de 25 s: con el mismo `venceEn` eran condiciones excluyentes y, con
+ * trabajo de extracción en la cola, ningún envío aprobado salía. Reservando 35 s la extracción termina (última
+ * extracción incluida, acotada por su señal) antes de que la salida necesite su margen.
+ */
+const RESERVA_SALIDA_MS = 35_000;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CRON DE LA BANDEJA DE CARTA PORTE (0640-0642, Agente 3).
@@ -106,9 +113,10 @@ export async function GET(req: Request) {
   let latido: { estado: EstadoLatido; detalle: Record<string, unknown> } = { estado: 'fallo', detalle: { codigo: 'corrida_sin_cerrar' } };
   try {
     const venceEn = Date.now() + maxDuration * 1000 - MARGEN_MS;
+    const venceEnExtraccion = venceEn - RESERVA_SALIDA_MS;
     const r = await conRelojDuro(
-      correrWorkerCartaPorte(depsWorkerReales(), { venceEn, urlBandeja: `${appUrl()}/dashboard/carta-porte/documentos` }),
-      venceEn,
+      correrWorkerCartaPorte(depsWorkerReales(), { venceEn: venceEnExtraccion, urlBandeja: `${appUrl()}/dashboard/carta-porte/documentos` }),
+      venceEnExtraccion,
       (): ResultadoWorker => ({
         pendientes: 0, procesados: 0, divididos: 0, fallidos: 0, yaTomados: 0, errores: 1, cortadosPorReloj: 0, paradaPorPresupuesto: false, omitidosPorPresupuesto: 0,
         paradaPorFallosSeguidos: false, agotados: 0, zombisCerrados: 0, divisionesAvisadas: 0, hallazgos: 0, avisosEnviados: 0, avisosEnCola: 0, avisosFallidos: 0,

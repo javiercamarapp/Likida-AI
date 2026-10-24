@@ -329,8 +329,14 @@ export async function procesarCambios(tenantId: string, ahora: Date, deps: DepsC
     }
 
     // Anti-ruido 2: tope de reenvíos por fila.
-    if (versiones.length - 1 >= params.maxReenvios) {
+    // A37-A4-06: el tope cuenta lo que el cliente RECIBIÓ (versiones enviadas), no cada versión generada: los cambios que nadie
+    // confirmó quedan «reemplazados» y no pueden agotar el tope con avisos que el cliente nunca vio.
+    if (Math.max(0, enviadas.length - 1) >= params.maxReenvios) {
       r.excedidos++;
+      // Lo pendiente lleva datos viejos y su botón «confirmar» seguiría activo: al exceder se cierra (la alerta interna avisa).
+      for (const a of sinEnviar) {
+        if (!(await deps.cambios.cambiarEstado(tenantId, a.id, a.estado, 'descartado', 'tope de reenvíos excedido: se revisa a mano'))) r.carreras++;
+      }
       if (grupo.some((a) => tipoDe(a) === 'alerta_cambia_demasiado')) continue;
       const texto = recorta(
         `Alerta interna: el servicio (${refFila(valoresVigente)}) cambió más de ${params.maxReenvios} veces después del primer aviso. `
@@ -338,7 +344,7 @@ export async function procesarCambios(tenantId: string, ahora: Date, deps: DepsC
       const res = await deps.repo.insertarAviso(tenantId, {
         filaId, clienteId: null, version: siguienteVersion, huella: sha(`exceso|${filaId}|${siguienteVersion}`),
         estado: 'sin_destinatario', canal: 'ejecutivo_copia', texto,
-        datos: { via: 'proxy', tipo: 'alerta_cambia_demasiado', interno: true, reenvios: versiones.length - 1 },
+        datos: { via: 'proxy', tipo: 'alerta_cambia_demasiado', interno: true, reenvios: Math.max(0, enviadas.length - 1) },
         motivo: 'alerta interna: cambia demasiado',
       });
       if (res === 'duplicado') { r.duplicados++; continue; }

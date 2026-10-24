@@ -57,6 +57,9 @@ export interface NuevaCarga {
 /** Lo que se lee de una fila ya guardada para decidir si cambió. */
 export interface FilaGuardada {
   id: string;
+  /** Sección del programa (EXPORTACION, IMPORTACION…). Ausente = no se sabe (se trata como cualquier sección). */
+  tipo?: string;
+  fecha?: string;
   claveNatural: string;
   cliente: string | null;
   consignatario: string | null;
@@ -118,13 +121,14 @@ export interface RepoPrograma {
   ocultarFilas(tenantId: string, ids: string[], cargaId: string): Promise<void>;
 }
 
-const COLS_FILA = 'id, clave_natural, cliente, consignatario, caja, unidad, cita_en, cita_texto, transito, ccp, huella, visible';
+const COLS_FILA = 'id, tipo, fecha, clave_natural, cliente, consignatario, caja, unidad, cita_en, cita_texto, transito, ccp, huella, visible';
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
 
 function aFilaGuardada(f: Record<string, unknown>): FilaGuardada {
   return {
     id: String(f.id), claveNatural: String(f.clave_natural),
+    ...(typeof f.tipo === 'string' ? { tipo: f.tipo } : {}), ...(typeof f.fecha === 'string' ? { fecha: f.fecha } : {}),
     cliente: str(f.cliente), consignatario: str(f.consignatario), caja: str(f.caja), unidad: str(f.unidad),
     citaEn: str(f.cita_en), citaTexto: str(f.cita_texto),
     transito: String(f.transito ?? 'vacio'), ccp: String(f.ccp ?? 'vacio'),

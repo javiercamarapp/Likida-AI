@@ -404,6 +404,12 @@ export async function procesarDocumento(
         }
         return await fallar('presupuesto', 'El presupuesto de IA de hoy se agotó. El documento queda en la bandeja y se puede reintentar mañana o cuando se amplíe el techo.', false, alcance);
       }
+      // A37-A3-06: la respuesta del modelo no cupo en su tope de salida (estimado: ~40 renglones o más). Reintentar da lo
+      // mismo (temperatura 0, ya se probó con el doble de tope) y cada intento paga varias llamadas: se cierra aquí, con el
+      // motivo claro, para que la oficina divida el documento o lo capture a mano.
+      if (e instanceof Error && e.name === 'TruncatedError') {
+        return await fallar('modelo', 'El documento trae demasiados renglones para leerse de una sola vez (la respuesta del modelo se truncó). Divídelo en documentos más cortos o captura el viaje a mano.', true);
+      }
       return await fallar('modelo', `El modelo no pudo leer el documento: ${resumenError(e)}`, false);
     }
 

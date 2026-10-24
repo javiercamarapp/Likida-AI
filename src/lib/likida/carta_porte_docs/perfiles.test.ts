@@ -119,6 +119,23 @@ describe('aprender de lo que un humano aprobó', () => {
     expect(r.mapeos.some((m) => m.campo === 'peso_bruto_total')).toBe(false);
   });
 
+  it('A37-A3-12: de operador, contacto y RFC se aprende DE DÓNDE se lee, pero el ejemplo inmutable no guarda el valor', async () => {
+    const wb = Buffer.from('Folio,Operador,Licencia,RFC Operador,Descripcion,Cantidad\nF1,Persona Sintetica Uno,LIC-998877,XAXX010101000,Cemento,5\n');
+    const c = await contenido(wb);
+    const fin: Extraccion = {
+      campos: {
+        folio_cliente: cv('F1', 1, 'humano'), operador_nombre: cv('Persona Sintetica Uno', 1, 'humano'),
+        operador_licencia: cv('LIC-998877', 1, 'humano'), operador_rfc: cv('XAXX010101000', 1, 'humano'),
+      },
+      mercancias: [{ descripcion: cv('Cemento', 1, 'humano'), cantidad: cv('5', 1, 'humano') }],
+    };
+    const r = aprender({ contenido: c, final: fin, previa: null, riesgoInyeccion: false });
+    expect(r.mapeos.map((m) => m.campo)).toEqual(expect.arrayContaining(['operador_nombre', 'operador_licencia', 'operador_rfc']));
+    const guardado = JSON.stringify(r.ejemplos);
+    for (const dato of ['Persona Sintetica Uno', 'LIC-998877', 'XAXX010101000']) expect(guardado).not.toContain(dato);
+    expect(guardado).toContain('Cemento'); // lo que no es personal sigue enseñando el formato
+  });
+
   it('es idempotente: aprender lo mismo dos veces no crea una versión nueva', async () => {
     const c = await contenido(excelAtlas());
     const fin = extraccionAtlasOk('humano', 1);

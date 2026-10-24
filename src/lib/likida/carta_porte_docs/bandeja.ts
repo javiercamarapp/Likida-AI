@@ -433,10 +433,18 @@ export async function eliminarDocumento(tenantId: string, id: string, actor: { i
       if (await repo.borrarDocumento(tenantId, h.documento.id)) hijosBorrados++;
     }
   }
+  // A37-A3-13: el CCP timbrado recibido (PDF/XML con RFC y nombres) vive en Storage y su fila cae por cascada: se borran los
+  // objetos ANTES (si Storage falla, la fila se queda) y los UUID fiscales quedan en la bitácora de la flota como constancia.
+  const ccpUuidsEliminados: string[] = [];
+  for (const x of await repo.ccpDeDocumento(tenantId, id)) {
+    await repo.borrarArchivo(x.pdfRuta);
+    await repo.borrarArchivo(x.xmlRuta);
+    ccpUuidsEliminados.push(x.uuid);
+  }
   if (d.storageRuta) await repo.borrarArchivo(d.storageRuta);
   if (!(await repo.borrarDocumento(tenantId, id))) throw new DatoInvalido('Ese documento ya no existe.');
   await anotarBitacora(
-    { tenantId, actor: { id: actor.id ?? undefined, email: actor.email }, accion: 'ccp.documento_eliminado', entidad: 'tenant', entidadId: tenantId, detalle: { documentoId: id, formato: d.formato, estado: d.estado, conViaje: d.viajeId !== null, ...(d.estado === 'dividido' ? { hijosBorrados } : {}) } },
+    { tenantId, actor: { id: actor.id ?? undefined, email: actor.email }, accion: 'ccp.documento_eliminado', entidad: 'tenant', entidadId: tenantId, detalle: { documentoId: id, formato: d.formato, estado: d.estado, conViaje: d.viajeId !== null, ...(d.estado === 'dividido' ? { hijosBorrados } : {}), ...(ccpUuidsEliminados.length > 0 ? { ccpUuidsEliminados } : {}) } },
     { evento: 'carta_porte_docs.bitacora_no_escribio' },
   );
 }

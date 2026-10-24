@@ -58,14 +58,22 @@ async function cargarAsignacion(tenantId: string, ids: string[]): Promise<Pick<D
 async function cargarDatos(tenantId: string): Promise<DatosDocumentos | null> {
   try {
     const desde = new Date(Date.now() - DIAS_VENTANA * 86_400_000).toISOString();
-    const [lista, perfiles, clientes, buzon, configs] = await Promise.all([
+    const [lista0, pendientesViejos, perfiles, clientes, buzon, configs] = await Promise.all([
       repo.listarDocumentos(tenantId, { limite: 200 }),
+      // A37-A3-14: lo que sigue esperando a una persona (por revisar, sin poder leer) se muestra SIEMPRE, sin importar su antigüedad.
+      repo.listarDocumentos(tenantId, { estados: ['por_revisar', 'fallido'], limite: 500 }),
       repo.listarPerfiles(tenantId),
       repo.listarClientes(tenantId),
       repo.buzonDeFlota(tenantId),
       repo.listarExportConfigs(tenantId),
     ]);
-    const recientes = (await repo.listarDocumentos(tenantId, { desde, limite: 500 })).filas;
+    const ventana = await repo.listarDocumentos(tenantId, { desde, limite: 500 });
+    const recientes = ventana.filas;
+    const vistos = new Set(lista0.filas.map((d) => d.id));
+    const lista = {
+      total: lista0.total,
+      filas: [...lista0.filas, ...pendientesViejos.filas.filter((d) => !vistos.has(d.id))].sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0)),
+    };
     const correcciones = await repo.contarCorreccionesPorDocumento(tenantId, recientes.filter((d) => d.estado === 'aprobado').map((d) => d.id));
     const versiones = await Promise.all(perfiles.map((p) => repo.listarVersionesPerfil(tenantId, p.id)));
     const dominio = dominioBuzon();
@@ -74,7 +82,7 @@ async function cargarDatos(tenantId: string): Promise<DatosDocumentos | null> {
     const asignacion = await cargarAsignacion(tenantId, lista.filas.map((d) => d.id));
     return {
       filas: lista.filas, total: lista.total, envios, ...asignacion,
-      linaje: Object.fromEntries([...linaje].map(([id, l]) => [id, { rol: l.rol, indice: l.indice, total: l.total, clave: l.clave }])), metricas: calcularMetricas(recientes, correcciones), clientes,
+      linaje: Object.fromEntries([...linaje].map(([id, l]) => [id, { rol: l.rol, indice: l.indice, total: l.total, clave: l.clave }])), metricas: calcularMetricas(recientes, correcciones, ventana.total), clientes,
       perfiles: perfiles.map((p, i) => ({ id: p.id, nombre: p.nombre, formato: p.formato, versionActiva: p.versionActiva, mapeos: p.activa.mapeos.length, versiones: versiones[i].map((v) => ({ version: v.version, nota: v.nota, mapeos: v.mapeos })) })),
       buzon: buzon ? { direccion: direccionCp(buzon.token, dominio), activo: buzon.activo, remitentes: buzon.remitentesPermitidos, dominioConfigurado: dominio !== null } : null,
       configs: configs.map((c) => ({ id: c.id, nombre: c.nombre, formato: c.formato, config: c.config })),
