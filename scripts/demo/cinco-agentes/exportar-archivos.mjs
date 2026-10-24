@@ -19,6 +19,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { bytesMultiembarque, NOMBRE_MULTIEMBARQUE } from './muestra-multiembarque.mjs';
+import { exigirBaseLocal } from './guarda-host.mjs';
+
+exigirBaseLocal(); // A37-S03-10: misma guarda que sus hermanos, antes de abrir ninguna conexión
 
 const require = createRequire(import.meta.url);
 const AQUI = dirname(fileURLToPath(import.meta.url));
