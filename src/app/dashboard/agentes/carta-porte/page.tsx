@@ -36,7 +36,7 @@ async function leerInsights(tenantId: string): Promise<{ insights: InsightsAgent
     ]);
     const nombresCliente = new Map(clientes.map((c) => [c.id, c.nombre]));
     return {
-      insights: calcularInsights({ docs: lista.filas, correcciones, camposCorregidos: campos, causasRechazo: causas, envios, nombresCliente, ahora: new Date() }),
+      insights: calcularInsights({ docs: lista.filas, totalVentana: lista.total, correcciones, camposCorregidos: campos, causasRechazo: causas, envios, nombresCliente, ahora: new Date() }),
       nombres: Object.fromEntries(nombresCliente),
     };
   } catch {

@@ -193,6 +193,14 @@ describe('procesarDocumento', () => {
     expect(tipos(r.documentoId)).toContain('extraccion_fallida');
   });
 
+  it('A37-A3-06: una respuesta truncada del modelo dice «demasiados renglones» y no se reintenta sola (daría lo mismo)', async () => {
+    const r = await subir(A, await pdfBoreal());
+    const truncado = llmFalso(() => { const e = new Error('Respuesta truncada: se agotaron los 16000 tokens de salida (usó 16000) antes de cerrar el JSON'); e.name = 'TruncatedError'; throw e; });
+    const p = await procesarDocumento(A, r.documentoId, { ...sinAgenteApagado, llm: () => truncado });
+    expect(p).toMatchObject({ ok: false, motivo: 'modelo', permanente: true });
+    expect(estado.docs.get(r.documentoId)?.ultimoError).toMatch(/demasiados renglones/);
+  });
+
   it('si el modelo falla, queda fallido REINTENTABLE y el reintento funciona', async () => {
     const r = await subir(A, await pdfBoreal());
     const roto = llmFalso(() => { throw new Error('502 bad gateway'); });

@@ -155,6 +155,11 @@ export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', 
 function Metricas({ m }: { m: MetricasAgente }) {
   return (
     <section className="space-y-2" aria-label="Métricas del agente">
+      {m.parcial && (
+        <p className="text-[12px]" role="note" style={{ color: 'var(--warn)' }}>
+          Cifras de los {numero(m.parcial.leidos)} más recientes de {numero(m.parcial.total)} documentos de los últimos 90 días: son parciales.
+        </p>
+      )}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Cifra rotulo="Documentos recibidos (90 días)" valor={numero(m.recibidos)} nota={`${numero(m.porRevisar)} por revisar · ${numero(m.fallidos)} sin poder leer`} />
         <Cifra rotulo="Aprobados" valor={numero(m.aprobados)} nota={`${numero(m.rechazados)} rechazados`} />
@@ -320,7 +325,7 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
         </div>
       )}
       {datos.filas.length < datos.total && (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Se muestran los {numero(datos.filas.length)} más recientes de {numero(datos.total)}.</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Se muestran {numero(datos.filas.length)} de {numero(datos.total)}: los más recientes y todo lo que sigue por revisar o sin poder leer.</p>
       )}
     </section>
   );

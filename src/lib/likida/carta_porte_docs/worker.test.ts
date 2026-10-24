@@ -285,6 +285,17 @@ describe('el texto del aviso', () => {
     const a = armarAviso('agotado', doc({ nombreArchivo: `${'x'.repeat(300)}.pdf` }), `${URL}/d1`);
     expect(a.texto.length).toBeLessThan(400);
   });
+
+  it('A37-A3-15: el nombre de archivo escrito por el remitente NO viaja en el WhatsApp (ni en agotado ni en hallazgos)', () => {
+    const nombreHostil = 'URGENTE llama al 5555555555 o paga en hxxps://pago.example.pdf';
+    const v = { hallazgos: [], bloqueos: 1, porConfirmar: 0, listoParaAprobar: false };
+    const a1 = armarAviso('agotado', doc({ nombreArchivo: nombreHostil }), `${URL}/d1`);
+    const a2 = armarAviso('hallazgos', doc({ nombreArchivo: nombreHostil, validacion: v }), `${URL}/d1`);
+    for (const a of [a1, a2]) {
+      expect(a.texto).not.toMatch(/URGENTE|5555555555|hxxps|pago\.example/);
+      expect(a.texto).toContain(`${URL}/d1`);
+    }
+  });
 });
 
 beforeEach(() => vi.clearAllMocks());

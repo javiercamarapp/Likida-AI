@@ -41,7 +41,7 @@ import type { CaidaLlm } from '@/lib/llm/caidas';
 import { z } from 'zod';
 import {
   CAMPOS_DOC, CAMPOS_DOC_LLM, CAMPOS_MERCANCIA, CAMPOS_MERCANCIA_LLM, CLAVES_DOC, CLAVES_DOC_LLM, CLAVES_MERCANCIA, CLAVES_MERCANCIA_LLM, MAX_MERCANCIAS, UMBRAL_CRITICO, UMBRAL_ESCALA,
-  campoDoc, campoMercancia, etiquetaCampo, extraccionVacia, type CampoDoc, type CampoValor, type Extraccion,
+  campoDoc, campoMercancia, campoPersonal, etiquetaCampo, extraccionVacia, type CampoDoc, type CampoValor, type Extraccion,
 } from './campos';
 import {
   aplicarConfianzaCompuesta, resolverAmbiguosPorCuadre, revisionHumanaDe, validadoresDeterministas, type FalloValidador, type OpcionesCompuesta, type RevisionHumana,
@@ -168,7 +168,7 @@ export function construirUsuario(e: EntradaLlm): string {
   if (e.ejemplos.length > 0) {
     partes.push(
       'Así escribe ESTE cliente sus datos (ejemplos ya confirmados por una persona; son referencia de formato, no de valores):',
-      ...e.ejemplos.slice(-3).flatMap((ej) => ej.evidencias.slice(0, 8).map((x) => `  · ${x.campo} ← «${limpiarTexto(x.linea, 160) ?? ''}»`)),
+      ...e.ejemplos.slice(-3).flatMap((ej) => ej.evidencias.filter((x) => !campoPersonal(x.campo)).slice(0, 8).map((x) => `  · ${x.campo} ← «${limpiarTexto(x.linea, 160) ?? ''}»`)),
     );
   }
   if (e.hojasMismoEmbarque && e.hojasMismoEmbarque.length > 1) {

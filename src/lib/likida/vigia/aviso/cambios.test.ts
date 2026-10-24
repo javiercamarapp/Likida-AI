@@ -371,6 +371,38 @@ describe('procesarCambios · anti-ruido', () => {
     expect(m.avisos).toHaveLength(5);
   });
 
+  it('A37-A4-06: el tope cuenta versiones ENVIADAS; los cambios que nadie confirmó no lo agotan y el aviso vigente se actualiza', async () => {
+    const m = mundo(); // max_reenvios = 3, modo confirmar: nadie confirma ni envía nada
+    const f = m.agregarFila();
+    await m.generar(); // v1 pendiente, jamás enviada
+    for (const u of ['U-201', 'U-202', 'U-203', 'U-204']) {
+      m.avanzar(30 * MIN); m.cambiar(f, 'unidad', u); m.avanzar(11 * MIN);
+      const r = await m.pasar();
+      expect(r).toMatchObject({ reenvios: 1, excedidos: 0, alertas: [] });
+    }
+    const ultima = m.avisos[m.avisos.length - 1];
+    expect(ultima.texto).toContain('U-204');
+    expect(m.avisos.filter((a) => ['pendiente_confirmacion', 'aprobado'].includes(a.estado))).toHaveLength(1); // solo la vigente, con la caja/unidad actual
+    expect(m.avisos.filter((a) => a.estado === 'reemplazado').length).toBe(m.avisos.length - 1);
+  });
+
+  it('A37-A4-06: al exceder el tope, el aviso pendiente (con datos viejos) se cierra: ya no queda un «confirmar» activo', async () => {
+    const m = mundo(); // max_reenvios = 3
+    const { f } = await avisada(m);
+    for (const u of ['U-201', 'U-202', 'U-203']) {
+      m.avanzar(30 * MIN); m.cambiar(f, 'unidad', u); m.avanzar(11 * MIN);
+      await m.pasar();
+      m.marcarEnviado(m.avisos[m.avisos.length - 1]);
+    }
+    const v4 = m.avisos[3];
+    m.avisos.push({ ...v4, id: 'a-pend', version: 5, huella: 'h-pend', estado: 'pendiente_confirmacion' });
+    m.avanzar(30 * MIN); m.cambiar(f, 'unidad', 'U-205'); m.avanzar(11 * MIN);
+    const r = await m.pasar();
+    expect(r).toMatchObject({ reenvios: 0, excedidos: 1 });
+    expect(m.avisos.find((a) => a.id === 'a-pend')?.estado).toBe('descartado');
+    expect(m.avisos.some((a) => a.estado === 'pendiente_confirmacion' || a.estado === 'aprobado')).toBe(false);
+  });
+
   it('max_reenvios = 0 no reenvía nunca', async () => {
     const m = mundo({ params: { maxReenvios: 0, debounceMin: 0 } });
     const { f } = await avisada(m);

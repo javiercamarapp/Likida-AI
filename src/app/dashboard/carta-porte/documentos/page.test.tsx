@@ -51,6 +51,20 @@ it('una lectura caída pasa `datos: null` (nunca una bandeja vacía)', async () 
   roto.mockRestore();
 });
 
+it('A37-A3-14: un documento VIEJO por revisar o fallido no se pierde detrás de los 200 más recientes de la bandeja', async () => {
+  const fila = (id: string, estadoDoc: string, creado: string) => ({ id, estado: estadoDoc, createdAt: creado, tenantId: 't-1' }) as never;
+  const original = repo.listarDocumentos;
+  const espia = vi.spyOn(repo, 'listarDocumentos').mockImplementation(async (t, f = {}) => {
+    if (f.estados?.length) return { filas: [fila('viejo-por-revisar', 'por_revisar', '2026-01-02T00:00:00Z'), fila('reciente-1', 'por_revisar', '2026-10-20T00:00:00Z')], total: 2 };
+    if (f.desde) return original(t, f);
+    return { filas: [fila('reciente-1', 'por_revisar', '2026-10-20T00:00:00Z'), fila('reciente-2', 'aprobado', '2026-10-19T00:00:00Z')], total: 450 };
+  });
+  const p = await pagina();
+  const ids = (p.props.datos?.filas as Array<{ id: string }>).map((d) => d.id);
+  expect(ids).toEqual(['reciente-1', 'reciente-2', 'viejo-por-revisar']); // sin duplicados, de lo más nuevo a lo más viejo
+  espia.mockRestore();
+});
+
 it('con la base sana arma datos, métricas en null y el buzón con su dirección', async () => {
   await repo.crearBuzon('t-1', 'abcdefghjkmnpqrstvwxyz23');
   const p = await pagina();

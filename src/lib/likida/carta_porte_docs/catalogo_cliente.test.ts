@@ -295,3 +295,27 @@ describe('documento sin clave SAT ni RFC (cliente con SKU y alias)', () => {
     expect(r.extraccion.campos.numero_cliente_interno.valor).toBe('CLI-0042');
   });
 });
+
+describe('A37-A3-09 — el catálogo no vuelve «No» un «Sí» peligroso del documento en silencio', () => {
+  it('documento dice peligroso (0.8) y el catálogo dice No: se conserva el Sí del documento y se pide confirmar', () => {
+    const e = sinSat();
+    e.mercancias[0].material_peligroso = cv('true', 0.8, 'llm', 'DISOLVENTE INFLAMABLE');
+    const r = enriquecer(e, cat({ productos: [producto('SKU-PX-205', { materialPeligroso: false })] }), ctx);
+    const campo = r.extraccion.mercancias[0].material_peligroso;
+    expect(campo).toMatchObject({ valor: 'true', origen: 'llm' });
+    expect(campo.notas?.join(' ')).toMatch(/catálogo dice «false».*Confírmalo/);
+    const h = validarExtraccion(r.extraccion).hallazgos.filter((x) => x.campo === 'material_peligroso');
+    expect(h.map((x) => x.codigo)).toContain('normalizacion_dudosa');
+  });
+  it('documento dice No (0.8) y el catálogo dice peligroso: tampoco se pisa; se pide confirmar', () => {
+    const e = sinSat();
+    e.mercancias[0].material_peligroso = cv('false', 0.8, 'llm', 'NO PELIGROSO');
+    const r = enriquecer(e, cat({ productos: [producto('SKU-PX-205', { materialPeligroso: true, claveMaterialPeligroso: '1203' })] }), ctx);
+    expect(r.extraccion.mercancias[0].material_peligroso).toMatchObject({ valor: 'false', origen: 'llm' });
+    expect(validarExtraccion(r.extraccion).hallazgos.map((x) => x.codigo)).toContain('normalizacion_dudosa');
+  });
+  it('si el documento no dice nada, el catálogo sigue llenando el campo', () => {
+    const r = enriquecer(sinSat(), cat({ productos: [producto('SKU-PX-205', { materialPeligroso: true, claveMaterialPeligroso: '1203' })] }), ctx);
+    expect(r.extraccion.mercancias[0].material_peligroso).toMatchObject({ valor: 'true', origen: 'catalogo' });
+  });
+});

@@ -120,7 +120,9 @@ function poner(
   }
   const leido = actual as CampoValor;
   if (comparable(leido.valor as string) === comparable(valor)) return; // ya coinciden
-  if (leido.confianza >= UMBRAL_CRITICO) {
+  // A37-A3-09: la declaración de material peligroso es regulatoria y la columna del catálogo es un booleano sin «no sé»:
+  // si el documento ya dice algo y el catálogo lo contradice, NO se pisa en ninguna confianza; gana lo leído y una persona confirma.
+  if (leido.confianza >= UMBRAL_CRITICO || (esMercancia && clave === 'material_peligroso')) {
     destino[clave] = {
       ...leido,
       notas: [...(leido.notas ?? []), `El catálogo dice «${valor}», el documento dice «${leido.valor}». Confírmalo.`],

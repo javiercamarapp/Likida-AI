@@ -636,6 +636,16 @@ export async function finalizarCorreo(emailId: string, token: string, ok: boolea
   return !r.error && r.data === true;
 }
 
+/**
+ * A37-A3-13: los archivos (PDF/XML) del CCP timbrado recibido de un documento (`cp_ccp_timbrado`, 0794). La fila cae por
+ * cascada al borrar el documento, así que sus objetos de Storage se borran ANTES. Sin la 0794 → `[]`.
+ */
+export async function ccpDeDocumento(tenantId: string, documentoId: string): Promise<Array<{ uuid: string; pdfRuta: string; xmlRuta: string }>> {
+  const r = await acotada(supabaseAdmin().from('cp_ccp_timbrado').select('uuid, pdf_ruta, xml_ruta').eq('tenant_id', tenantId).eq('documento_id', documentoId).order('id', { ascending: true }).limit(50), 'cpdocs.ccp_de_documento');
+  if (tablaAusente(r.error) || funcionAusente(r.error)) return [];
+  return ((exigir(r, 'cpdocs.ccp_de_documento') ?? []) as unknown as Fila[]).map((f) => ({ uuid: String(f.uuid), pdfRuta: String(f.pdf_ruta), xmlRuta: String(f.xml_ruta) }));
+}
+
 /** Borra el documento (la cascada se lleva sus eventos y correcciones; los renglones de mercancía quedan, sin la liga). */
 export async function borrarDocumento(tenantId: string, id: string): Promise<boolean> {
   const r = await acotada(supabaseAdmin().from('cp_documento').delete().eq('tenant_id', tenantId).eq('id', id).select('id'), 'cpdocs.borrar_doc');
@@ -649,12 +659,30 @@ export async function documentosVencidos(limite = 100): Promise<Array<{ id: stri
   return ((exigir(r, 'cpdocs.vencidos') ?? []) as unknown as Fila[]).map((f) => ({ id: String(f.id), tenantId: String(f.tenant_id), storageRuta: s(f.storage_ruta) }));
 }
 
-/** Marca la purga: sin archivo ni texto. La fila queda como constancia. Condicional a que NO se haya purgado ya. */
+/**
+ * Marca la purga: la fila queda como constancia SIN contenido personal (A37-A3-11): sin archivo, texto, extracción,
+ * validación (sus mensajes citan valores), remitente ni asunto. Solo sobreviven huella, estado, conteos, costos y fechas.
+ * Condicional a que NO se haya purgado ya.
+ */
 export async function marcarPurgado(tenantId: string, id: string): Promise<boolean> {
   const r = await acotada(supabaseAdmin().from('cp_documento')
-    .update({ storage_ruta: null, texto_extracto: null, purgado_en: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .update({
+      storage_ruta: null, texto_extracto: null, extraccion: null, validacion: null, remitente: null, asunto: null,
+      purgado_en: new Date().toISOString(), updated_at: new Date().toISOString(),
+    })
     .eq('tenant_id', tenantId).eq('id', id).is('purgado_en', null).select('id'), 'cpdocs.purgar');
   return ((exigir(r, 'cpdocs.purgar') ?? []) as unknown[]).length > 0;
+}
+
+/**
+ * A37-A3-11: al purgar, los VALORES de las correcciones (nombre, RFC, licencia que una persona tecleó) se anulan; las filas
+ * quedan (campo, renglón, quién y cuándo) para que los conteos de calidad no cambien. Idempotente.
+ */
+export async function anonimizarCorrecciones(tenantId: string, documentoId: string): Promise<void> {
+  const r = await acotada(supabaseAdmin().from('cp_correccion')
+    .update({ valor_antes: null, valor_despues: null })
+    .eq('tenant_id', tenantId).eq('documento_id', documentoId), 'cpdocs.anonimizar_correcciones');
+  if (r.error) throw new Error(`cartaporte_docs anonimizar correcciones: ${r.error.message}`);
 }
 
 // ── El worker de la bandeja (cron carta-porte-docs, 0640-0642) ──────────────

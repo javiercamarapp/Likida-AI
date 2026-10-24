@@ -27,6 +27,20 @@ describe('purgarDocumentosVencidos', () => {
     expect(estado.eventos.filter((e) => e.tipo === 'purgado')).toHaveLength(2);
   });
 
+  it('A37-A3-11: la constancia queda SIN extracción, validación, remitente, asunto ni valores de correcciones (conteos intactos)', async () => {
+    const a = await subir(A, await pdfBoreal({ folio: 'P-1' }));
+    const d = estado.docs.get(a.documentoId)!;
+    d.retenerHasta = new Date(Date.now() - 1000).toISOString();
+    d.extraccion = { campos: {}, mercanciasDummy: 'x' } as never; d.validacion = { hallazgos: [{ mensaje: 'RFC XAXX010101000' }] } as never;
+    d.remitente = 'alguien@example.test'; d.asunto = 'Orden de prueba';
+    estado.correcciones.push({ tenantId: A, documentoId: a.documentoId, campo: 'operador_nombre', renglon: null, valorAntes: 'Nombre Sintetico', valorDespues: 'Otro Sintetico' });
+    await purgarDocumentosVencidos();
+    expect(estado.docs.get(a.documentoId)).toMatchObject({ extraccion: null, validacion: null, remitente: null, asunto: null });
+    const cs = estado.correcciones.filter((c) => c.documentoId === a.documentoId);
+    expect(cs).toHaveLength(1);
+    expect(cs[0]).toMatchObject({ valorAntes: null, valorDespues: null, campo: 'operador_nombre' });
+  });
+
   it('es idempotente: una segunda corrida no vuelve a tocar lo ya purgado', async () => {
     const a = await subir(A, await pdfBoreal());
     estado.docs.get(a.documentoId)!.retenerHasta = new Date(Date.now() - 1000).toISOString();

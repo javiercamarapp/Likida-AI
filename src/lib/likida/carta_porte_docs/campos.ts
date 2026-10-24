@@ -154,6 +154,15 @@ export const UMBRAL_CRITICO = 0.85;
 export const UMBRAL_ESCALA = 0.8;
 
 /** Cómo se llama un campo en pantalla y en las correcciones. `renglon` null = campo del documento. */
+/**
+ * A37-A3-12: campos con datos personales de terceros (operador, contacto, RFC): su VALOR no se guarda en los ejemplos
+ * inmutables de un perfil ni viaja al proveedor de IA como referencia de formato. Solo importa de dónde se lee.
+ */
+export function campoPersonal(clave: string): boolean {
+  const c = clave.replace(/^mercancia\./, '');
+  return /^operador_/.test(c) || /^contacto_/.test(c) || /(^|_)rfc(_|$)/.test(c) || c === 'destino_id_fiscal';
+}
+
 export function etiquetaCampo(clave: string, renglon: number | null): string {
   const c = renglon === null ? campoDoc(clave) : campoMercancia(clave);
   return renglon === null ? (c?.rotulo ?? clave) : `Mercancía ${renglon + 1} · ${c?.rotulo ?? clave}`;

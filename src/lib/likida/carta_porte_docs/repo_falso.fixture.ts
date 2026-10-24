@@ -24,6 +24,8 @@ export const estado = {
   archivos: new Map<string, Uint8Array>(),
   eventos: [] as Evento[],
   correcciones: [] as Correccion[],
+  /** `cp_ccp_timbrado` (0794): el CCP timbrado recibido de cada documento (sus archivos viven en Storage). */
+  ccp: [] as Array<{ tenantId: string; documentoId: string; uuid: string; pdfRuta: string; xmlRuta: string }>,
   buzones: new Map<string, { tenantId: string; token: string; activo: boolean; remitentesPermitidos: string[] }>(),
   perfiles: new Map<string, { id: string; tenantId: string; clave: string; nombre: string; clienteId: string | null; formato: string; firma: unknown; versionActiva: number; creadaEn: string }>(),
   versiones: [] as Version[],
@@ -70,7 +72,7 @@ export const estado = {
 };
 
 export function reset(): void {
-  estado.docs.clear(); estado.archivos.clear(); estado.eventos.length = 0; estado.correcciones.length = 0; estado.buzones.clear();
+  estado.docs.clear(); estado.archivos.clear(); estado.eventos.length = 0; estado.correcciones.length = 0; estado.ccp.length = 0; estado.buzones.clear();
   estado.perfiles.clear(); estado.versiones.length = 0; estado.exportConfigs.length = 0; estado.viajes.length = 0; estado.mercancias.length = 0;
   estado.catalogoNumeros.length = 0; estado.catalogoProductos.length = 0; estado.catalogoPartes.length = 0; estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.avisos.clear(); estado.embarques.length = 0; estado.sinMigracion = false; estado.sinDivision = false; estado.antesDeDividir = null; estado.fallar.clear(); estado.llamadas.length = 0; estado.salidaConfigs.clear(); estado.catalogosSat.clear(); estado.consultasCatalogoSat.length = 0; estado.envios.length = 0; estado.usuarios.length = 0; estado.revisores.clear(); estado.sinColumnaRevisor = false;
   estado.seq = 0; estado.reloj.ahora = () => new Date();
@@ -357,14 +359,21 @@ export const api: typeof Real = {
     estado.docs.delete(id);
     estado.eventos = estado.eventos.filter((e) => e.documentoId !== id);
     estado.correcciones = estado.correcciones.filter((c) => c.documentoId !== id);
+    estado.ccp = estado.ccp.filter((c) => c.documentoId !== id); // la FK en cascada de la 0794
     estado.mercancias.forEach((m) => { if (m.documentoId === id) m.documentoId = null; });
     return true;
+  },
+  async ccpDeDocumento(tenantId, documentoId) {
+    return estado.ccp.filter((c) => c.tenantId === tenantId && c.documentoId === documentoId).map(({ uuid, pdfRuta, xmlRuta }) => ({ uuid, pdfRuta, xmlRuta }));
   },
   async marcarPurgado(tenantId, id) {
     const d = estado.docs.get(id);
     if (!d || d.tenantId !== tenantId || d.purgadoEn) return false;
-    d.storageRuta = null; d.textoExtracto = null; d.purgadoEn = ahoraIso();
+    d.storageRuta = null; d.textoExtracto = null; d.extraccion = null; d.validacion = null; d.remitente = null; d.asunto = null; d.purgadoEn = ahoraIso();
     return true;
+  },
+  async anonimizarCorrecciones(tenantId, documentoId) {
+    for (const c of estado.correcciones) if (c.tenantId === tenantId && c.documentoId === documentoId) { c.valorAntes = null; c.valorDespues = null; }
   },
 
   // ── El worker (0640-0642): la MISMA regla que las RPC de la 0641 ──────────
