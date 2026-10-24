@@ -196,7 +196,9 @@ describe('estadoDetencionDeEventos', () => {
     const e = [
       ev(1, { tipo: 'pregunta' }, 60), ev(2, { tipo: 'respuesta', opcion: 'apoyo' }, 55), ev(3, { tipo: 'apoyo', entregado: true }, 55), ev(4, { tipo: 'cierre' }, 40),
     ];
-    expect(estadoDetencionDeEventos(e, 'v1')).toMatchObject({ abierto: false, preguntas: 1, respuesta: 'apoyo', apoyoAvisado: true });
+    expect(estadoDetencionDeEventos(e, 'v1')).toMatchObject({ abierto: false, preguntas: 1, respuesta: 'apoyo', apoyoAvisado: false });
+    // A37-S35-04: un apoyo ENTREGADO antes del cierre no vale después; uno posterior al cierre sí vuelve a contar
+    expect(estadoDetencionDeEventos([...e, ev(6, { tipo: 'apoyo', entregado: true }, 3)], 'v1').apoyoAvisado).toBe(true);
     const e2 = [...e, ev(5, { tipo: 'pregunta' }, 5)];
     expect(estadoDetencionDeEventos(e2, 'v1')).toMatchObject({ abierto: true, preguntas: 2, respuesta: null, apoyoAvisado: false, escalada: false });
   });
@@ -461,6 +463,17 @@ describe('T-A5-39 · las respuestas del chofer', () => {
     expect(textos(await chofer(`parada_apoyo:${V1}`, 2))).toMatch(/ya le avisé/i);
     expect(enviados.filter((e) => e.telefono === SUPERVISOR)).toHaveLength(1);
     expect(bitacora.map((e) => `${e.detalle.tipo}:${e.detalle.opcion ?? e.detalle.entregado}`)).toEqual(['pregunta:undefined', 'respuesta:apoyo', 'apoyo:true']);
+  });
+
+  it('A37-S35-04: tras cerrarse el episodio, un botón viejo de «Necesito apoyo» vuelve a avisar al supervisor', async () => {
+    const { enviados, gps, pasada, chofer, bitacora } = mundo();
+    gps.muestras = quieta(T0, 40);
+    await pasada();
+    await chofer(`parada_apoyo:${V1}`, 1);
+    expect(enviados.filter((e) => e.telefono === SUPERVISOR)).toHaveLength(1);
+    bitacora.push({ id: 99, viajeId: V1, hitoId: bitacora[0].hitoId, detalle: { clase: 'deteccion_parada', tipo: 'cierre' }, creadoEn: T0.toISOString() });
+    expect(textos(await chofer(`parada_apoyo:${V1}`, 3))).toMatch(/avisé a tu supervisor/);
+    expect(enviados.filter((e) => e.telefono === SUPERVISOR)).toHaveLength(2);
   });
 
   it('«Necesito apoyo» sin destinatario configurado se lo dice al chofer con honestidad y permite reintentar', async () => {

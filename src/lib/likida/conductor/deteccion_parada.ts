@@ -137,7 +137,8 @@ export function estadoDetencionDeEventos(eventos: readonly EventoDetencionFila[]
     } else if (d.tipo === 'escalada') {
       st.escalada = true;
     } else if (d.tipo === 'cierre') {
-      st.abierto = false;
+      // A37-S35-04: al cerrarse el episodio, el aviso de apoyo ya no vale para el siguiente: un botón viejo no puede contestar «ya le avisé» sin avisar.
+      st.abierto = false; st.apoyoAvisado = false;
     }
   }
   return st;
