@@ -50,7 +50,8 @@ const PATRONES: ReadonlyArray<[string, RegExp]> = [
   ['rol_sistema', /\b(system\s*(prompt|message|instruction)|mensaje\s+del\s+sistema|prompt\s+del\s+sistema)\b/i],
   ['cambiar_rol', /\b(ahora\s+eres|eres\s+un\s+(asistente|modelo|bot|ia)|act[uú]a\s+como|you\s+are\s+(now|a|an)\b|pretend\s+(to\s+be|you)|from\s+now\s+on)\b/i],
   ['ordena_salida', /\b(responde|contesta|devuelve|regresa|escribe|reply|respond|output|return|answer)\b.{0,30}\b(con|solo|únicamente|unicamente|exactamente|only|exactly|json|true|false)\b.{0,40}\b(confianza|confidence|rfc|aprob|valor|value)/i],
-  ['forzar_confianza', /\b(confianza|confidence)\b.{0,15}(=|:|a|de|to|of|of\s+1|1\.0|100\s*%|alta|high|máxima|maxima)/i],
+  // A37-S41-09: ANCLADO al valor. Antes `.{0,15}` + «a»/«de» casaba con cualquier razón social («Transportes Confianza SA de CV»).
+  ['forzar_confianza', /\b(?:confianza|confidence)\b\s*(?:(?:=|:|a|al|de|del|en|to|of|at|is)\s*)*(?:1(?:\.0+)?|0?[.,]\d+|\d{1,3}\s*%|alta|high|m[áa]xima|maxima|max)(?![\w.,])/i],
   ['aprobar_sin_revision', /\b(aprueba|aprobar|approve|auto-?aprob|sin\s+revis|skip\s+the\s+review|skip\s+review|no\s+revises|do\s+not\s+review|no\s+requiere\s+revisi)/i],
   ['marcadores_chat', /(<\|?(im_start|im_end|system|assistant|user)\|?>|\[\/?(INST|SYS|SYSTEM)\]|^\s*(system|assistant|developer)\s*:)/im],
   ['exfiltrar', /\b(env[ií]a|manda|send|post|exfiltrate|reveal|muestra|imprime|print)\b.{0,40}\b(prompt|api[\s_-]?key|token|secret|contrase[ñn]a|password|credencial)/i],
