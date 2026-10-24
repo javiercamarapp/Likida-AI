@@ -80,9 +80,34 @@ export async function pedirUrlFirmadaHook(mime: string): Promise<UrlFirmadaSubid
   return { bucket: BUCKET_HOOKS, path: data.path, token: data.token, signedUrl: data.signedUrl };
 }
 
+/** A37-S07-06: el objeto ya está en Storage cuando falla el guardado de su
+ *  fila — sin esto queda un video (hasta 200 MB) o una foto con PII sin
+ *  referencia. Best-effort: NUNCA lanza (el error que importa es el original)
+ *  y solo borra rutas con la forma que NOSOTROS generamos (`uuid.ext`), jamás
+ *  una ruta arbitraria que mande el cliente. */
+const RUTA_PROPIA = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]{2,5}$/;
+async function descartarObjetoHuerfano(bucket: string, ruta: string): Promise<void> {
+  if (!RUTA_PROPIA.test(ruta)) return;
+  try {
+    await supabaseAdmin().storage.from(bucket).remove([ruta]);
+  } catch {
+    // Si Storage no contesta, el huérfano queda; el error original ya sube.
+  }
+}
+
 /** Guarda el hook YA subido — `videoRuta` es la ruta que devolvió la subida
- *  directa, nunca algo que este código adivine. */
+ *  directa, nunca algo que este código adivine. Si el guardado falla, el
+ *  video subido se descarta (A37-S07-06). */
 export async function guardarHook(input: { videoRuta: string; hookTexto: string; actorId: string | null }): Promise<string> {
+  try {
+    return await guardarHookSinLimpieza(input);
+  } catch (e) {
+    await descartarObjetoHuerfano(BUCKET_HOOKS, input.videoRuta.trim());
+    throw e;
+  }
+}
+
+async function guardarHookSinLimpieza(input: { videoRuta: string; hookTexto: string; actorId: string | null }): Promise<string> {
   const ruta = input.videoRuta.trim();
   const texto = input.hookTexto.trim();
   if (!ruta) throw new DatoInvalido('Falta la ruta del video — sube el video antes de guardar el hook.');
@@ -158,7 +183,19 @@ export async function subirFotoReferencia(archivo: File, mime: string): Promise<
   return path;
 }
 
+/** Si el guardado falla, la foto ya subida se descarta (A37-S07-06). */
 export async function guardarReferencia(input: {
+  tipo: TipoReferencia; nombre: string; etiqueta: string | null; fotoRuta: string; actorId: string | null;
+}): Promise<string> {
+  try {
+    return await guardarReferenciaSinLimpieza(input);
+  } catch (e) {
+    await descartarObjetoHuerfano(BUCKET_REFERENCIAS, input.fotoRuta);
+    throw e;
+  }
+}
+
+async function guardarReferenciaSinLimpieza(input: {
   tipo: TipoReferencia; nombre: string; etiqueta: string | null; fotoRuta: string; actorId: string | null;
 }): Promise<string> {
   const nombre = input.nombre.trim();

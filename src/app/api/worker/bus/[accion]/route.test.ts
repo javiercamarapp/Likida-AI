@@ -30,6 +30,7 @@ vi.mock('@/lib/supabase/admin', () => ({
         select: () => api,
         eq: (c: string, v: unknown) => { ll.filtros.push([c, v]); return api; },
         is: (c: string, v: unknown) => { ll.filtros.push([c, v]); return api; },
+        lt: (c: string, v: unknown) => { ll.filtros.push([`${c}<`, v]); return api; },
         order: () => api,
         limit: () => fin(filasSelect),
         single: () => fin({ id: 'corrida-1' }),
@@ -206,4 +207,31 @@ it.each([null,42,[],{nombre:42}].map((valor) => [valor]))('catálogo con rutina 
 });
 it('pieza no convierte objetos a strings para mutar',async()=>{
  expect((await pedir('pieza',{carpeta:'p',titulo:{texto:'incorrecto'}})).status).toBe(400);expect(escrituras).toHaveLength(0);
+});
+
+// A37-S04-07 — una orden `tomada` cuyo worker se cayó antes de resolver quedaba así PARA SIEMPRE y nadie
+// la reofrecía. No se re-ejecuta (editar_encargo abre un PR; correr_ahora lanza una corrida): se cierra como
+// `fallida` con motivo tras un vencimiento, para que /admin lo muestre y Javier decida si la emite otra vez.
+describe('A37-S04-07: lease de órdenes tomadas', () => {
+  it('ordenes barre las tomadas vencidas a fallida con motivo (anclado a estado=tomada y tomada_en < límite)', async () => {
+    const antes = Date.now();
+    await pedir('ordenes', {});
+    const barrido = escrituras.find((e) => e.tabla === 'bus_orden' && e.op === 'update');
+    expect(barrido).toBeTruthy();
+    const v = barrido!.valores as Record<string, unknown>;
+    expect(v.estado).toBe('fallida');
+    expect(String(v.resultado)).toMatch(/no la resolvió|sin resolver/);
+    expect(v.resuelta_en).toBeTruthy();
+    expect(barrido!.filtros).toContainEqual(['estado', 'tomada']);
+    const limite = barrido!.filtros.find(([c]) => c === 'tomada_en<')?.[1] as string;
+    expect(Date.parse(limite)).toBeLessThanOrEqual(antes - 29 * 60_000);
+    expect(Date.parse(limite)).toBeGreaterThanOrEqual(antes - 61 * 60_000);
+  });
+
+  it('el barrido no estorba: la lista de pendientes se entrega igual', async () => {
+    filasSelect = [{ id: 'p1' }];
+    const r = await pedir('ordenes', {});
+    expect(r.status).toBe(200);
+    expect((await r.json()).ordenes).toEqual([{ id: 'p1' }]);
+  });
 });

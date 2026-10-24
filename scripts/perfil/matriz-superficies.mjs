@@ -50,6 +50,8 @@ const ACCIONES_SIN_DATOS = {
   'src/app/sin-acceso/page.tsx': 'callejón 403: solo cierra la sesión de quien la pide',
   'src/app/dashboard/layout.tsx': '`cerrarSesion`: solo cierra la sesión de quien la pide',
 };
+/** Las puertas que dejan a una acción del dashboard con la flota de la sesión (A37-S04-06). */
+const PUERTA_DASHBOARD = /\b(resolverTenantEfectivo|requireSessionTenant|requireSession|resolverTenantApi)\(/;
 /** Archivos de acciones que NO cuelgan de una página y gatean con una ruta distinta a su carpeta. */
 const ACCIONES_RUTA_EXPLICITA = {
   'src/app/dashboard/inicio-contenido.tsx': '/dashboard',                    // el Resumen de siempre; bajo el perfil no se monta
@@ -202,7 +204,7 @@ export function clasificar(elementos, raiz = RAIZ_DEFECTO) {
         break;
       case 'webhook':
         if (API_SIN_DATOS[e.archivo]) r = { veredicto: 'permitido', nota: API_SIN_DATOS[e.archivo] };
-        else if (e.archivo.endsWith('webhook/whatsapp/route.ts') && /perfilDeTenant\(/.test(fuente('src/lib/likida/interruptor_tenant.ts')) && /perfilDeTenant\(|perfil/.test(fuente('src/lib/likida/processor.ts'))) {
+        else if (e.archivo.endsWith('webhook/whatsapp/route.ts') && /perfilDeTenant\(/.test(fuente('src/lib/likida/interruptor_tenant.ts')) && /\bmoduloEnStandBy\(/.test(fuente('src/lib/likida/processor.ts'))) {
           r = { veredicto: 'permitido', nota: 'WhatsApp del chofer (A5); OCR/cuadre apagados por perfil en processor/interruptor_tenant' };
         } else r = { veredicto: NO_CLASIFICADO, nota: 'sin declaración ni evidencia del perfil' };
         break;
@@ -247,6 +249,13 @@ export function clasificar(elementos, raiz = RAIZ_DEFECTO) {
           break;
         }
         if (e.archivo.startsWith('src/app/dashboard/')) {
+          // A37-S04-06: clasificar por la carpeta no prueba nada si el archivo no llama a la puerta. Se exige, al menos a
+          // nivel de archivo, una llamada a la puerta de sesión/flota (la comprobación por acción exportada requiere un
+          // parser; ver «pendientes» del PR).
+          if (!PUERTA_DASHBOARD.test(fuente(e.archivo))) {
+            r = { veredicto: NO_CLASIFICADO, nota: 'el archivo con acciones no llama a ninguna puerta de flota (resolverTenantEfectivo / requireSessionTenant / requireSession / resolverTenantApi)' };
+            break;
+          }
           const ruta = ACCIONES_RUTA_EXPLICITA[e.archivo]
             ?? ('/' + e.archivo.replace(/^src\/app\//, '').replace(/\/[^/]+$/, ''));
           const v = veredictoRuta(ruta);

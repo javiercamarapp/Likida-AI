@@ -130,6 +130,40 @@ describe('evaluar-carta-porte-local · CCP timbrado y PII', () => {
   });
 });
 
+describe('A37-S04-04: la promesa «sin valores leídos» se cumple y hay tope de gasto', () => {
+  it('sinValores redacta el valor convertido tras la flecha (conversión: «evidencia» → valor)', () => {
+    expect(sinValores('conversión: «12,500 lb» → 5669.9')).toBe('conversión: «…» → …');
+    expect(sinValores('confianza 70 %; conversión: «12,500 lb» → 5669.9; nota: x')).toBe('confianza 70 %; conversión: «…» → …; nota: (ver el visor)');
+  });
+
+  it('una nota con «;» se recorta COMPLETA (no filtra el resto del texto)', () => {
+    expect(sinValores('conversión: «a» → 1; nota: placas ABC123; operador JUAN PEREZ; unidad en libras'))
+      .toBe('conversión: «…» → …; nota: (ver el visor)');
+    expect(sinValores('nota: peso 1.234,50; destino SECRETO')).toBe('nota: (ver el visor)');
+  });
+
+  it('--tope-usd se lee, y debe ser un número positivo', () => {
+    const base = ['--muestras', '/x', '--salida', '/s.md'];
+    expect(leerArgumentos([...base, '--tope-usd', '2.5']).topeUsd).toBe(2.5);
+    expect(leerArgumentos(base).topeUsd).toBeNull();
+    expect(() => leerArgumentos([...base, '--tope-usd', 'mucho'])).toThrow(/--tope-usd/);
+    expect(() => leerArgumentos([...base, '--tope-usd', '0'])).toThrow(/--tope-usd/);
+  });
+
+  it('al alcanzar el tope se detiene: las muestras restantes quedan como omitidas, sin llamar al modelo', async () => {
+    let llamadas = 0;
+    const conCosto = (archivo: string) => {
+      const base = llmFalso(muestraDe(archivo).guion());
+      return (async (...a: Parameters<typeof base>) => { llamadas++; const r = await base(...a); return { ...r, costoUsd: 1 }; }) as typeof base;
+    };
+    const { informes } = await evaluarCarpeta(opciones({ llm: conCosto, topeUsd: 1.5, salida: join(raiz, 'tope.md') }));
+    const omitidas = informes.filter((i) => i.error?.includes('tope de gasto'));
+    expect(omitidas.length).toBeGreaterThan(0);
+    expect(informes).toHaveLength(5);
+    expect(llamadas).toBeLessThan(5);
+  });
+});
+
 describe('evaluar-carta-porte-local · argumentos y llave', () => {
   it('lee los argumentos y exige --muestras', () => {
     const a = leerArgumentos(['--muestras', '/x/y', '--ccp-timbrados', '/x/c', '--llave-archivo', '/k', '--salida', '/s.md', '--asignar', 'a.pdf=M3']);

@@ -179,7 +179,7 @@ function FormaFiltros({ filtros, terminales, buscar, contexto, conFiltros }: {
       {/* Sin terminales legibles NO se pinta el selector: un `<select>` con
           solo «Cualquiera» afirmaría que la flota no tiene sucursales. */}
       {terminales && terminales.opciones.length > 0 && (
-        <Campo etiqueta="Terminal" pista={terminales.recortadas ? `${numero(terminales.opciones.length)} de más` : undefined}>
+        <Campo etiqueta="Terminal" pista={terminales.recortadas ? `primeras ${numero(terminales.opciones.length)}; hay más` : undefined}>
           <select name="terminal" defaultValue={filtros.terminalId ?? ''} className={CLASE_CONTROL} style={ESTILO_CONTROL}>
             <option value="">Cualquiera</option>
             {terminales.opciones.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}

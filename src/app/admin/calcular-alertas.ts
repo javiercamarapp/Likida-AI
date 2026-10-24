@@ -33,7 +33,9 @@ const n = (cuenta: number, singular: string, plural: string) =>
  * porque una campana callada sobre una fuente ciega afirmaría "no hay nada".
  */
 export function calcularAlertas(
-  r: ResumenNegocio,
+  /** `null` = el resumen del negocio no se pudo leer (A37-S07-07): se omiten
+   *  las señales que dependen de él en vez de inventarlas. */
+  r: ResumenNegocio | null,
   conversaciones: ConversacionActiva[],
   escalaciones: ConteosEscalaciones,
   /** FE-9: cuántas conversaciones hay DE VERDAD (`contarConversacionesActivas`).
@@ -111,7 +113,7 @@ export function calcularAlertas(
   }
 
   // ── Las señales de siempre ─────────────────────────────────────────────
-  if (r.tendenciaCosto !== null && r.tendenciaCosto >= 30) {
+  if (r && r.tendenciaCosto !== null && r.tendenciaCosto >= 30) {
     alertas.push({
       tipo: 'atencion',
       texto: `El costo de IA subió ${r.tendenciaCosto}% esta semana vs la anterior.`,
@@ -132,7 +134,7 @@ export function calcularAlertas(
   // pero NO el demo. El criterio verificable (mismo que `esSoloDemo` en
   // consola.tsx) es que el ÚNICO tenant que hay sea, de verdad, el tenant
   // demo — no que haya como máximo uno.
-  const esSoloDemo = r.tenants === 1 && r.flotas[0]?.id === tenantDemo();
+  const esSoloDemo = r !== null && r.tenants === 1 && r.flotas[0]?.id === tenantDemo();
   if (esSoloDemo) {
     alertas.push({
       tipo: 'atencion',
