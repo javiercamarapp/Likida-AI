@@ -263,7 +263,9 @@ export async function refrescarGastoMeta(
       await medir(campanas[i]);
     }
   };
-  await Promise.all(Array.from({ length: Math.min(CONCURRENCIA_REFRESCO, campanas.length) }, obrero));
+  const obreros: Array<Promise<void>> = [];
+  for (let k = 0; k < Math.min(CONCURRENCIA_REFRESCO, campanas.length); k++) obreros.push(obrero());
+  await Promise.all(obreros);
 
   const pendientes = Math.max(0, campanas.length - Math.min(siguiente, campanas.length));
   return { medidas, fallidas, configurada: true, pendientes };
