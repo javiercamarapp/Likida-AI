@@ -169,3 +169,28 @@ describe('bruto/neto', () => {
     expect(e.mercancias[1].peso_kg.notas ?? []).toEqual([]);
   });
 });
+
+describe('A37-A3-08 — unidad de masa distinta de kg escrita dentro del peso', () => {
+  it('«24.5 TON» no pasa como 24.5 kg en silencio: nota «Confírmalo» y baja la confianza', () => {
+    const r = normalizarValor(pesoCampo, '24.5 TON');
+    expect(r.valor).toBe('24.5');
+    expect(r.notas.join(' ')).toMatch(/Confírmalo/);
+    expect(r.notas.join(' ')).toMatch(/TON/i);
+    expect(r.penalizacion).toBeGreaterThanOrEqual(0.3);
+  });
+  it('«1,200 lb» también se marca', () => {
+    const r = normalizarValor(pesoCampo, '1200 lb');
+    expect(r.notas.join(' ')).toMatch(/Confírmalo/);
+  });
+  it('«3,002.00 kg» sigue sin nota ni penalización', () => {
+    const r = normalizarValor(pesoCampo, '3,002.00 kg');
+    expect(r.notas).toEqual([]);
+    expect(r.penalizacion).toBe(0);
+  });
+  it('el hallazgo de validación es «confirmar» (normalizacion_dudosa) para el peso en toneladas', () => {
+    const e = embarque();
+    const n = normalizarValor(pesoCampo, '24.5 TON');
+    e.mercancias[0].peso_kg = { ...cv(n.valor as string), notas: n.notas };
+    expect(codigos(e)).toContain('normalizacion_dudosa');
+  });
+});

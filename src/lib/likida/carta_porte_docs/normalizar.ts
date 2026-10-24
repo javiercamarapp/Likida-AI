@@ -170,12 +170,21 @@ export function normalizarNumero(crudo: string | number, miles?: ',' | '.'): { v
  *     lectura para que quien tiene el documento decida. `alternativa` es esa otra lectura.
  * Si el perfil del cliente ya fijó su separador de miles (`miles`), no hay ambigüedad.
  */
+const UNIDADES_MASA_NO_KG: ReadonlySet<string> = new Set(['ton', 'tons', 'tonelada', 'toneladas', 'lb', 'lbs']);
+
 export function normalizarPeso(crudo: string | number, miles?: ',' | '.'): { valor: number | null; ambiguo: boolean; alternativa: number | null; notas: string[] } {
   const n = normalizarNumero(crudo, miles);
   const notas: string[] = [];
   if (n.valor === null || typeof crudo === 'number') return { valor: n.valor, ambiguo: n.ambiguo, alternativa: null, notas };
-  const m = /([+-]?\d[\d.,]*)\s*[a-z.]{0,12}$/i.exec(crudo.trim());
+  const m = /([+-]?\d[\d.,]*)\s*([a-z.]{0,12})$/i.exec(crudo.trim());
   const t = m ? m[1] : '';
+  // A37-A3-08: una unidad de masa distinta de kg escrita dentro de la cifra («24.5 TON») se quitó del número, pero
+  // no se convierte aquí (si el modelo también mandó `peso_unidad`, `completarDerivados` ya convierte y se duplicaría):
+  // se avisa para que baje la confianza y alguien confirme contra el documento.
+  const unidad = (m?.[2] ?? '').toLowerCase().replace(/\.+$/, '');
+  if (UNIDADES_MASA_NO_KG.has(unidad)) {
+    notas.push(`El peso venía con la unidad «${m?.[2]}» y se leyó la cifra ${n.valor} como kilogramos sin convertir. Confírmalo: confirma la unidad y la cifra contra el documento.`);
+  }
   let alternativa: number | null = null;
   if (n.ambiguo && /^[+-]?\d{1,3}[.,]\d{3}$/.test(t)) {
     const enteros = Number(t.replace(/^[+-]/, '').replace(/[.,]/, ''));
@@ -322,6 +331,7 @@ export function normalizarValor(campo: CampoDoc, crudo: unknown, opciones: { mil
         if (p.valor === null) { notas.push('No se reconoció como número.'); penalizacion = 0.3; return out(String(texto)); }
         notas.push(...p.notas);
         if (p.ambiguo) penalizacion = 0.2;
+        if (p.notas.some((n) => /unidad «/.test(n))) penalizacion = Math.max(penalizacion, 0.4);
         return out(aTexto(p.valor));
       }
       const n = normalizarNumero(texto, opciones.miles);
