@@ -201,7 +201,7 @@ begin
          anonimizado_en = now(),
          activo = false
    where id = v_operador and tenant_id = p_tenant;
-  get diagnostics n = row_count; ev := ev || jsonb_build_object('operador_anonimizado_y_dado_de_baja', n);
+  get diagnostics n = row_count; ev := ev || jsonb_build_object('operador_anonimizado', n, 'operador_anonimizado_y_dado_de_baja', n); -- la llave histórica se conserva: la leen la pantalla ARCO y las pruebas de navegador
 
   update app_user
      set nombre = seudonimo, telefono = null, avatar_url = null
