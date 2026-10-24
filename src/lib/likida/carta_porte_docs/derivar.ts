@@ -34,6 +34,16 @@ export function metadatosNombreArchivo(nombre: string | null | undefined): { ope
 }
 
 const REGIMEN_DE_OPERACION = { importacion: 'IMD', exportacion: 'EXD' } as const;
+const NOTA_REGIMEN_DE_NOMBRE = 'Se dedujo del nombre del archivo';
+/** A37-S31-06 · Nota fija (idempotente) cuando el nombre sugiere exportación pero el documento trae pedimento / RFC del importador. */
+export const NOTA_CONFLICTO_NOMBRE_EXPO = 'El documento trae pedimento o RFC del importador, pero el régimen salió solo del nombre del archivo (EXPO): confirma si es importación o exportación. No se omitió ningún dato.';
+
+/** ¿El régimen de las mercancías es solo una pista del nombre del archivo (no lo dice el documento)? */
+function regimenSoloDeNombre(e: Extraccion): boolean {
+  if (e.campos.regimen_aduanero?.valor) return false;
+  const filas = e.mercancias.filter((f) => f.regimen_aduanero?.valor);
+  return filas.length > 0 && filas.every((f) => f.regimen_aduanero.origen === 'derivado' && (f.regimen_aduanero.notas ?? []).some((n) => n.startsWith(NOTA_REGIMEN_DE_NOMBRE)));
+}
 
 /** Régimen, pedimento y caja a partir del contexto. Nunca pisa lo que un humano dejó ni inventa un pedimento. */
 function derivarAduana(e: Extraccion, ctx: ContextoDerivar): void {
@@ -44,7 +54,7 @@ function derivarAduana(e: Extraccion, ctx: ContextoDerivar): void {
     const base: CampoValor | null = dado?.valor
       ? dado
       : meta.operacion
-        ? { valor: REGIMEN_DE_OPERACION[meta.operacion], confianza: 0.6, evidencia: meta.operacion === 'importacion' ? 'IMPO' : 'EXPO', origen: 'derivado', notas: [`Se dedujo del nombre del archivo (${meta.operacion === 'importacion' ? 'IMPO' : 'EXPO'}): confirma el régimen.`] }
+        ? { valor: REGIMEN_DE_OPERACION[meta.operacion], confianza: 0.6, evidencia: meta.operacion === 'importacion' ? 'IMPO' : 'EXPO', origen: 'derivado', notas: [`${NOTA_REGIMEN_DE_NOMBRE} (${meta.operacion === 'importacion' ? 'IMPO' : 'EXPO'}): confirma el régimen.`] }
         : null;
     if (base) for (const fila of e.mercancias) if (!fila.regimen_aduanero?.valor) fila.regimen_aduanero = { ...base };
   }
@@ -53,8 +63,18 @@ function derivarAduana(e: Extraccion, ctx: ContextoDerivar): void {
     e.campos.caja_numero = { valor: meta.caja, confianza: 0.6, evidencia: null, origen: 'derivado', notas: ['La caja salió del nombre del archivo: confírmala contra el documento.'] };
   }
   const op = tipoOperacion(e);
+  const deNombre = regimenSoloDeNombre(e);
   const perfil = ctx.pedimentoPerfil && /^\d{2}$/.test(ctx.pedimentoPerfil.anio) && /^\d{2}$/.test(ctx.pedimentoPerfil.aduana) ? ctx.pedimentoPerfil : null;
   for (const fila of e.mercancias) {
+    if (op === 'exportacion' && deNombre) {
+      // A37-S31-06: el «EXPO» del nombre es una pista (0.6), no un hecho: NO se borran los valores que SÍ leyó el documento;
+      // se avisa del conflicto y la persona decide.
+      for (const k of ['pedimento', 'rfc_importador']) {
+        const c = fila[k];
+        if (c?.valor && c.origen !== 'humano' && !(c.notas ?? []).includes(NOTA_CONFLICTO_NOMBRE_EXPO)) fila[k] = { ...c, notas: [...(c.notas ?? []), NOTA_CONFLICTO_NOMBRE_EXPO] };
+      }
+      continue;
+    }
     if (op === 'exportacion') {
       // En exportación no hay pedimento ni RFC del importador (Guía de llenado): se vacían aunque el texto los mencione,
       // con o sin pedimento en la fila (un RFC solo también se omite).

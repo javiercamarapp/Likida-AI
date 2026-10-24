@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { campoDoc, campoMercancia } from './campos';
 import { detectarFormato, prepararContenido, type ContenidoDoc } from './contenido';
-import { completarDerivados, metadatosNombreArchivo } from './derivar';
+import { NOTA_CONFLICTO_NOMBRE_EXPO, completarDerivados, metadatosNombreArchivo } from './derivar';
 import { extraerDocumento } from './extractor';
 import { normalizarClavePeligroso, normalizarPedimento, normalizarRegimen, normalizarValor } from './normalizar';
 import { RFC, cv } from './documentos_sinteticos.fixture';
@@ -211,7 +211,25 @@ describe('exportación: el pedimento queda vacío', () => {
     const r = await extraerDocumento(await contenido(texto), { llm: sinRegimen, nivelMaximo: 1, nombreArchivo: 'CCP Transportes-Cliente EXPO TX4471 15-10-26.pdf' });
     const f = r.extraccion.mercancias[0];
     expect(f.regimen_aduanero).toMatchObject({ valor: 'EXD', origen: 'derivado' });
-    expect(f.pedimento.valor).toBeNull();
+    // A37-S31-06: el «EXPO» del NOMBRE es una pista (0.6): no borra el pedimento que el documento SÍ trae; avisa del conflicto.
+    expect(f.pedimento.valor).toBe(PED);
+    expect(f.pedimento.notas?.join(' ')).toContain(NOTA_CONFLICTO_NOMBRE_EXPO);
+  });
+
+  it('A37-S31-06: pedimento y RFC del importador leídos se conservan con el aviso, y re-derivar no repite la nota', () => {
+    const e = { campos: {}, mercancias: [{ pedimento: cv(PED), rfc_importador: cv(RFC.atlas) }] };
+    completarDerivados(e, { nombreArchivo: 'CCP Transportes-Cliente EXPO TX4471 15-10-26.pdf' });
+    completarDerivados(e, { nombreArchivo: 'CCP Transportes-Cliente EXPO TX4471 15-10-26.pdf' });
+    const f = e.mercancias[0];
+    expect(f.pedimento.valor).toBe(PED);
+    expect(f.rfc_importador.valor).toBe(RFC.atlas);
+    expect(f.pedimento.notas?.filter((n) => n === NOTA_CONFLICTO_NOMBRE_EXPO)).toHaveLength(1);
+  });
+
+  it('A37-S31-06: si el DOCUMENTO dice exportación (régimen leído), sí se vacían como siempre', () => {
+    const e = { campos: {}, mercancias: [{ regimen_aduanero: cv('EXD'), pedimento: cv(PED) }] };
+    completarDerivados(e, { nombreArchivo: 'CCP Transportes-Cliente EXPO TX4471 15-10-26.pdf' });
+    expect(e.mercancias[0].pedimento.valor).toBeNull();
   });
 
   it('exportación (EXD) con RFC del importador y SIN pedimento: el RFC también sale vacío', () => {
