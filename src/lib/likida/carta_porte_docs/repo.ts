@@ -240,10 +240,13 @@ export async function actualizarDocumento(
   return filas[0] ? aDocumento(filas[0]) : null;
 }
 
+/** Escapa `\`, `%` y `_` para usar un valor literal como patrón de `ilike` (igualdad sin distinguir mayúsculas). */
+const literalIlike = (v: string): string => v.trim().replace(/[\\%_]/g, (c) => `\\${c}`);
+
 /** Otros documentos de la flota con el mismo folio de cliente (posible duplicado lógico). */
 export async function documentosConFolio(tenantId: string, folio: string, exceptoId: string): Promise<Array<{ id: string; estado: EstadoDoc; nombreArchivo: string }>> {
   const r = await acotada(supabaseAdmin().from('cp_documento').select('id, estado, nombre_archivo')
-    .eq('tenant_id', tenantId).eq('extraccion->campos->folio_cliente->>valor', folio).neq('id', exceptoId)
+    .eq('tenant_id', tenantId).ilike('extraccion->campos->folio_cliente->>valor', literalIlike(folio)).neq('id', exceptoId)
     .neq('estado', 'rechazado').order('id').limit(5), 'cpdocs.folio_duplicado');
   return ((exigir(r, 'cpdocs.folio_duplicado') ?? []) as unknown as Fila[]).map((f) => ({ id: String(f.id), estado: f.estado as EstadoDoc, nombreArchivo: String(f.nombre_archivo) }));
 }
@@ -483,7 +486,8 @@ const aViaje = (f: Fila): ViajeMin => ({
 });
 
 export async function viajePorFolio(tenantId: string, folio: string): Promise<ViajeMin | null> {
-  const r = await acotada(supabaseAdmin().from('viaje').select(COL_VIAJE).eq('tenant_id', tenantId).eq('folio', folio).maybeSingle(), 'cpdocs.viaje_folio');
+  // A37-S33-04: la base unifica el folio SIN distinguir mayúsculas (`viaje_folio_upper_uidx` sobre `upper(folio)`): la búsqueda también.
+  const r = await acotada(supabaseAdmin().from('viaje').select(COL_VIAJE).eq('tenant_id', tenantId).ilike('folio', literalIlike(folio)).maybeSingle(), 'cpdocs.viaje_folio');
   const f = exigir(r, 'cpdocs.viaje_folio');
   return f ? aViaje(f as unknown as Fila) : null;
 }
@@ -510,6 +514,12 @@ export async function viajeAbiertoDeOperador(tenantId: string, operadorId: strin
   const r = await acotada(supabaseAdmin().from('viaje').select('id, folio').eq('tenant_id', tenantId).eq('operador_id', operadorId).in('estatus', ['abierto', 'en_cuadre']).order('id').limit(1), 'cpdocs.viaje_abierto');
   const f = ((exigir(r, 'cpdocs.viaje_abierto') ?? []) as unknown as Fila[])[0];
   return f ? { id: String(f.id), folio: s(f.folio) } : null;
+}
+
+/** ¿La unidad ya tiene un viaje abierto o en cuadre? (`uq_viaje_abierto_por_unidad`: un insert más chocaría con 23505). */
+export async function unidadConViajeAbierto(tenantId: string, unidadId: string): Promise<boolean> {
+  const r = await acotada(supabaseAdmin().from('viaje').select('id').eq('tenant_id', tenantId).eq('unidad_id', unidadId).in('estatus', ['abierto', 'en_cuadre']).order('id').limit(1), 'cpdocs.viaje_unidad_abierto');
+  return ((exigir(r, 'cpdocs.viaje_unidad_abierto') ?? []) as unknown[]).length > 0;
 }
 
 export async function clientePropio(tenantId: string, clienteId: string): Promise<boolean> {

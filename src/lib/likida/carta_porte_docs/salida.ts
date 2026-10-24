@@ -241,6 +241,12 @@ export async function aplicarSalidaViaje(
     if (ocupado) {
       return { ok: false, motivo: 'operador_ocupado', folio: plan.folio, mensaje: `${operador.nombre} ya tiene un viaje abierto${ocupado.folio ? ` (${ocupado.folio})` : ''}. Un operador solo puede tener uno: ciérralo o elige otro operador.` };
     }
+    // A37-S33-04: una unidad con otro viaje abierto chocaría con `uq_viaje_abierto_por_unidad` (23505) y se leería como «carrera».
+    // Como con las placas ambiguas, el viaje se crea sin unidad y se dice.
+    if (unidadId && (await repo.unidadConViajeAbierto(tenantId, unidadId))) {
+      advertencias.push(`La unidad de las placas ${plan.placas} ya tiene otro viaje abierto: este viaje queda sin unidad.`);
+      unidadId = null;
+    }
     const id = await repo.insertarViaje(tenantId, {
       folio: plan.folio, origen: plan.origen, destino: plan.destino, fechaInicio: plan.fechaInicio, kmRecorridos: plan.kmRecorridos,
       operadorId: operador.id, unidadId, clienteId: doc.clienteId, ccp: plan.ccp,
@@ -249,7 +255,10 @@ export async function aplicarSalidaViaje(
     if (id === null) {
       const ahora = await repo.viajePorFolio(tenantId, plan.folio);
       if (ahora) resultado = await completar(ahora.id);
-      else return { ok: false, motivo: 'carrera', mensaje: 'Otro viaje se abrió para ese operador mientras se creaba este. Vuelve a intentarlo.', folio: plan.folio };
+      else if (await repo.viajeAbiertoDeOperador(tenantId, operador.id)) {
+        // A37-S33-04: el 23505 fue por el operador (otro viaje abierto), no por el folio: se dice la causa real.
+        return { ok: false, motivo: 'operador_ocupado', folio: plan.folio, mensaje: `${operador.nombre} acaba de abrir otro viaje. Un operador solo puede tener uno: ciérralo o elige otro operador.` };
+      } else return { ok: false, motivo: 'carrera', mensaje: 'Otro viaje se abrió para ese operador mientras se creaba este. Vuelve a intentarlo.', folio: plan.folio };
     } else {
       const mercancias = await repo.reemplazarMercanciasDeDocumento(tenantId, id, doc.id, plan.mercancias);
       resultado = { ok: true, accion: 'creado', viajeId: id, folio: plan.folio, mercancias, columnasCompletadas: 0, advertencias, borrador: null };
