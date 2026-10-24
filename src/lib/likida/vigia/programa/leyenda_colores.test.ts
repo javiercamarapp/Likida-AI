@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  TOLERANCIA_MAXIMA,
+  avisosLeyenda,
   distanciaColor,
   ErrorLeyendaColores,
   estadoReglaColor,
@@ -133,5 +135,25 @@ describe('leyenda de colores · validación de la configuración', () => {
       tolerancia: 0,
       mapas: [{ colores: { '#ff99cc': 'patio', '#FF99CC': 'no_patio' } }],
     })).toThrowError(/dos veces/);
+  });
+});
+
+describe('A37-S59-10 · tope de la tolerancia y colores solapados', () => {
+  it('rechaza una tolerancia que haría coincidir cualquier color (442)', () => {
+    expect(() => validarConfigLeyenda({ tolerancia: 442, mapas: [] })).toThrowError(/tolerancia/);
+    expect(() => validarConfigLeyenda({ tolerancia: TOLERANCIA_MAXIMA + 1, mapas: [] })).toThrowError(/tolerancia/);
+    expect(validarConfigLeyenda({ tolerancia: TOLERANCIA_MAXIMA, mapas: [] }).tolerancia).toBe(TOLERANCIA_MAXIMA);
+  });
+
+  it('avisa cuando dos colores del mismo mapa caen dentro de la tolerancia entre sí', () => {
+    const cfg: ConfigLeyendaColores = {
+      tolerancia: 20,
+      mapas: [{ colores: { '#FF99CC': 'patio', '#FF99E0': 'no_patio', '#00FF00': 'despachando' } }],
+    };
+    const avisos = avisosLeyenda(cfg);
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]).toMatch(/#FF99CC/);
+    expect(avisos[0]).toMatch(/#FF99E0/);
+    expect(avisosLeyenda({ ...cfg, tolerancia: 5 })).toEqual([]);
   });
 });
