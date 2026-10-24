@@ -35,6 +35,17 @@ describe('guardarFacturaProveedor — solo facturas de compra', () => {
     });
   }
 
+  it('A37-S55-02: un CFDI tipo I en USD NO entra (la bandeja no guarda moneda): moneda_no_mxn', async () => {
+    const r = await guardarFacturaProveedor('t-1', { ...base('I'), moneda: 'USD', tipoCambio: 17.5 }, '<xml/>', 'BBB020202BB2', 'subida');
+    expect(r).toEqual({ ok: false, motivo: 'moneda_no_mxn' });
+    expect(inserts).toHaveLength(0);
+  });
+
+  it('A37-S55-02: MXN o sin Moneda legible entra como siempre', async () => {
+    expect((await guardarFacturaProveedor('t-1', { ...base('I'), moneda: 'MXN' }, '<xml/>', 'BBB020202BB2', 'subida')).ok).toBe(true);
+    expect((await guardarFacturaProveedor('t-1', base('I'), '<xml/>', 'BBB020202BB2', 'subida')).ok).toBe(true);
+  });
+
   it('un CFDI tipo I entra igual que siempre', async () => {
     const r = await guardarFacturaProveedor('t-1', base('I'), '<xml/>', 'BBB020202BB2', 'subida');
     expect(r.ok).toBe(true);

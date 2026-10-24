@@ -135,6 +135,9 @@ export default async function PaginaAgenteProveedores({
       if (r.motivo === 'no_es_compra') {
         return { error: 'Ese CFDI no es una factura de compra (es nota de crédito, pago, traslado o nómina). Una nota de crédito resta: regístrala con tu contador, no como compra.' };
       }
+      if (r.motivo === 'moneda_no_mxn') {
+        return { error: 'Ese CFDI no está en pesos (MXN). La bandeja y el export al ERP no guardan moneda ni tipo de cambio, así que no lo recibo: regístralo con tu contador.' };
+      }
       return r.motivo === 'duplicada'
         ? { error: 'Esa factura ya está en la bandeja (mismo folio fiscal).' }
         : { error: 'No se pudo guardar la factura. Inténtalo de nuevo.' };
@@ -189,7 +192,7 @@ export default async function PaginaAgenteProveedores({
     };
   }
 
-  async function decidir(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
+  async function decidir(_prev: { error?: string; confirmar?: boolean } | null, fd: FormData): Promise<{ error?: string; confirmar?: boolean } | null> {
     'use server';
     const permiso = await exigirPermiso(tenantId);
     if ('error' in permiso) return { error: permiso.error };
@@ -198,8 +201,8 @@ export default async function PaginaAgenteProveedores({
     const decision = fd.get('decision');
     if (!facturaId || (decision !== 'aprobada' && decision !== 'rechazada')) return { error: 'Decisión incompleta.' };
 
-    const r = await decidirFacturaProveedor(tenantId, facturaId, decision, permiso.quien);
-    if (r.error) return { error: r.error };
+    const r = await decidirFacturaProveedor(tenantId, facturaId, decision, permiso.quien, { confirmarAdvertencias: fd.get('confirmar') === '1' });
+    if (r.error) return { error: r.error, ...(r.requiereConfirmacion ? { confirmar: true } : {}) };
     logger.info('proveedores.decidida', { tenantId, facturaId, decision });
     redirect(`/dashboard/agentes/proveedores${sufijo}`);
   }

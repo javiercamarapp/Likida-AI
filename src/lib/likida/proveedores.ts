@@ -66,7 +66,7 @@ export interface FacturaProveedor {
 
 export type ResultadoIngesta =
   | { ok: true; facturaId: string; receptorEsFlota: boolean | null }
-  | { ok: false; motivo: 'duplicada' | 'error' | 'no_es_compra' };
+  | { ok: false; motivo: 'duplicada' | 'error' | 'no_es_compra' | 'moneda_no_mxn' };
 
 /** La Descripcion del PRIMER Concepto, directo del XML crudo — el parser de
  *  cfdi_xml.ts no la extrae (su ciclo no la necesita) y es el campo más
@@ -139,6 +139,13 @@ export async function guardarFacturaProveedor(
   // hay columna) ni se adivina un signo: se rechaza con motivo propio.
   if (xml.tipoComprobante !== undefined && xml.tipoComprobante !== 'I') {
     return { ok: false, motivo: 'no_es_compra' };
+  }
+  // A37-S55-02: la tabla no guarda moneda ni tipo de cambio, y el export no tiene columna de moneda:
+  // un CFDI en USD con Total 1,200.00 salía como 1,200 pesos en el CSV a SAP/CONTPAQi. Sin dónde
+  // guardarla (cambiar la base queda fuera de este arreglo) se RECHAZA con motivo propio en vez de
+  // convertir con un tipo de cambio que nadie confirmó. Sin `Moneda` legible se conserva el camino anterior.
+  if (xml.moneda !== undefined && xml.moneda !== 'MXN') {
+    return { ok: false, motivo: 'moneda_no_mxn' };
   }
 
   const receptorEsFlota = compararReceptor(xml.rfcReceptor, rfcFlota);
@@ -340,13 +347,57 @@ export async function listarFacturasProveedor(
  * La decisión del humano. El `.eq('estado', 'pendiente')` es el candado
  * anti-carrera: dos personas decidiendo la misma factura — el segundo clic
  * se entera, no pisa al primero.
+ *
+ * A37-S55-03: APROBAR comprueba en el servidor lo que la pantalla solo avisaba. Un CFDI
+ * `cancelado` no se aprueba nunca; uno `no_encontrado` o cuyo receptor NO es la flota exige
+ * `confirmarAdvertencias` (una persona que lo vio y lo acepta). Si el estatus guardado es
+ * una foto vieja (`pendiente`/null) se RECONSULTA al SAT ahora: un CFDI cancelado después
+ * de la ingesta ya no se aprueba. Rechazar no se condiciona: sacar una factura mala del export es siempre válido.
  */
 export async function decidirFacturaProveedor(
   tenantId: string,
   facturaId: string,
   decision: 'aprobada' | 'rechazada',
   decididoPor: string,
-): Promise<{ error?: string }> {
+  opciones: { confirmarAdvertencias?: boolean } = {},
+): Promise<{ error?: string; requiereConfirmacion?: boolean }> {
+  if (decision === 'aprobada') {
+    const { data: previa, error: errPrevia } = await acotada(supabaseAdmin()
+      .from('factura_proveedor')
+      .select('cfdi_uuid, emisor_rfc, receptor_rfc, total, estado, estado_sat, receptor_es_flota')
+      .eq('id', facturaId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle(), 'proveedores.decidir_leer');
+    if (errPrevia) {
+      logger.error('proveedores.decidir_leer_fallo', { tenantId, facturaId, err: errPrevia.message });
+      return { error: 'No se pudo comprobar la factura antes de aprobarla. Inténtalo de nuevo.' };
+    }
+    const p = previa as { cfdi_uuid?: string | null; emisor_rfc?: string | null; receptor_rfc?: string | null; total?: number | null; estado?: string; estado_sat?: EstadoSat | null; receptor_es_flota?: boolean | null } | null;
+    if (p && p.estado === 'pendiente') {
+      let estadoSat: EstadoSat | null = p.estado_sat ?? null;
+      if ((estadoSat === null || estadoSat === 'pendiente') && p.cfdi_uuid && p.emisor_rfc && p.receptor_rfc && typeof p.total === 'number') {
+        const r = await consultarCFDI({ re: p.emisor_rfc, rr: p.receptor_rfc, tt: p.total, id: p.cfdi_uuid });
+        if (r.estado !== 'pendiente') {
+          estadoSat = r.estado;
+          // Best effort: dejar el dato fresco para la bandeja y el export.
+          const { error: errSat } = await acotada(supabaseAdmin().from('factura_proveedor').update({ estado_sat: r.estado })
+            .eq('id', facturaId).eq('tenant_id', tenantId).eq('estado', 'pendiente').select('id'), 'proveedores.decidir_estado_sat');
+          if (errSat) logger.warn('proveedores.decidir_estado_sat_fallo', { tenantId, facturaId, err: errSat.message });
+        }
+      }
+      if (estadoSat === 'cancelado') {
+        return { error: 'El SAT reporta este CFDI como CANCELADO: no se puede aprobar. Recházala.' };
+      }
+      if (!opciones.confirmarAdvertencias) {
+        const avisos: string[] = [];
+        if (estadoSat === 'no_encontrado') avisos.push('el SAT no encuentra este CFDI');
+        if (p.receptor_es_flota === false) avisos.push('el receptor del CFDI NO es el RFC de tu flota');
+        if (avisos.length > 0) {
+          return { error: `Ojo: ${avisos.join(' y ')}. Confirma si aun así quieres aprobarla.`, requiereConfirmacion: true };
+        }
+      }
+    }
+  }
   const { data, error } = await acotada(supabaseAdmin()
     .from('factura_proveedor')
     .update({ estado: decision, decidido_por: decididoPor, decidido_en: new Date().toISOString() })
@@ -523,7 +574,9 @@ export async function exportarAprobadas(
   tenantId: string,
   formato: FormatoExport,
 ): Promise<{ filas: Record<string, string | number>[]; ids: string[] }> {
-  const aprobadas = await listarAprobadasCompletas(tenantId);
+  // A37-S55-03: una aprobada cuyo estatus SAT guardado es `cancelado` (aprobada antes de este
+  // candado, o cancelada y refrescada después) NO sale al ERP.
+  const aprobadas = (await listarAprobadasCompletas(tenantId)).filter((f) => f.estadoSat !== 'cancelado');
   const mapa = mapaDeFormato(formato);
   return {
     filas: aprobadas.map(mapa),

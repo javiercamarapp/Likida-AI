@@ -8,9 +8,9 @@ import { Upload, Check, X, Copy, Mail } from 'lucide-react';
 import { validarArchivoElegido } from '@/lib/http/subidas_formulario';
 
 export type AccionProveedores = (
-  prev: { error?: string; aviso?: string } | null,
+  prev: { error?: string; aviso?: string; confirmar?: boolean } | null,
   fd: FormData,
-) => Promise<{ error?: string; aviso?: string } | null>;
+) => Promise<{ error?: string; aviso?: string; confirmar?: boolean } | null>;
 
 /** Subida del XML. Tras guardar, la página se refresca para que la bandeja
  *  y los KPIs cuenten la factura nueva. */
@@ -114,7 +114,9 @@ export function BotonesDecision({ facturaId, decidir }: { facturaId: string; dec
           <form action={accion} className="inline">
             <input type="hidden" name="facturaId" value={facturaId} />
             <input type="hidden" name="decision" value="aprobada" />
-            <BotonMini texto="Aprobar" pendienteTexto="Guardando…" IconoOk />
+            {/* A37-S55-03: tras la advertencia del servidor, el siguiente clic ya es una confirmación. */}
+            {estado?.confirmar && <input type="hidden" name="confirmar" value="1" />}
+            <BotonMini texto={estado?.confirmar ? 'Aprobar de todos modos' : 'Aprobar'} pendienteTexto="Guardando…" IconoOk />
           </form>
           <button type="button" onClick={() => setConfirmando(true)} title="Rechazar la factura"
             className="hairline inline-flex items-center gap-1 text-[11.5px] font-medium px-2 py-1 rounded-lg transition-colors hover:bg-[var(--canvas)]"
