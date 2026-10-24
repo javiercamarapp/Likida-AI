@@ -50,6 +50,28 @@ if [ -z "${SUPABASE_DB_URL:-}" ]; then
   exit 2
 fi
 
+# A37-S01-02: las mismas guardas del pipeline (deploy-preview-promote.yml), porque este script
+# apunta a una base REAL con credenciales de quien lo corre.
+#  · CLI fijado a la versión del pipeline (nada de @latest).
+#  · El project-ref sale de la propia URL de conexión y tiene que estar en la lista autorizada.
+#  · En producción se exige el respaldo SQL verificado (supabase-preflight.mjs backup) ANTES de migrar.
+#  · Nada de --include-all (migraciones fuera de orden) salvo INCLUIR_TODAS=1 (ver abajo).
+SUPABASE_CLI_VERSION="${SUPABASE_CLI_VERSION:-2.115.0}"
+REF_STAGING="dmhhygwzgudwgcbixuwp"
+REF_PRODUCCION="gngoqsvrxdguxvsizpbw"
+REF_URL_CONEXION="$(printf '%s' "$SUPABASE_DB_URL" | sed -nE 's#.*(db\.|postgres\.)([a-z]{20})([.@:/].*)?$#\2#p' | head -1)"
+if [ "$REF_URL_CONEXION" != "$REF_STAGING" ] && [ "$REF_URL_CONEXION" != "$REF_PRODUCCION" ]; then
+  echo "El project-ref de SUPABASE_DB_URL no está en la lista autorizada (staging/producción). No se migra."
+  exit 3
+fi
+if [ "$REF_URL_CONEXION" = "$REF_PRODUCCION" ]; then
+  if [ -z "${SUPABASE_ACCESS_TOKEN:-}" ]; then
+    echo "Producción exige SUPABASE_ACCESS_TOKEN para verificar el respaldo SQL reciente antes de migrar."
+    exit 4
+  fi
+  SUPABASE_PROJECT_REF="$REF_URL_CONEXION" node scripts/ci/supabase-preflight.mjs backup || { echo "Sin respaldo SQL verificado: no se migra producción."; exit 4; }
+fi
+
 # El preflight de la 0335 crea (CONCURRENTLY, fuera de la transacción de `db
 # push`) dos índices que la migración 0332 exige YA VÁLIDOS al aplicarse — no
 # es opcional para cualquier base que todavía no tenga 0332 aplicada (una base
@@ -75,12 +97,6 @@ fi
 # aviso) con `--include-all` (aplica un prefijo MENOR que redefine una función ya endurecida), sin dry-run, sin comprobar
 # la base y sin pedir el respaldo. Ahora: CLI fijada a la MISMA versión que el workflow de despliegue, base comprobada,
 # respaldo confirmado a mano, dry-run antes del push y `--include-all` solo si se pide.
-SUPABASE_CLI_VERSION="${SUPABASE_CLI_VERSION:-2.115.0}"
-REF_PRODUCCION="gngoqsvrxdguxvsizpbw"
-if printf '%s' "$REF" | grep -Eq '^[a-z0-9]{20}$' && [ "$REF" != "$REF_PRODUCCION" ] && [ "${PERMITIR_OTRA_BASE:-}" != "1" ]; then
-  echo "La base apunta a '$REF', que NO es la de producción autorizada ($REF_PRODUCCION). Si de verdad es otra base, repite con PERMITIR_OTRA_BASE=1."
-  exit 2
-fi
 if [ "${RESPALDO_VERIFICADO:-}" != "1" ]; then
   echo "Esto migra la base real. Confirma primero que hay un respaldo fresco (node scripts/ci/supabase-preflight.mjs backup, o el"
   echo "respaldo nocturno verificado) y repite con RESPALDO_VERIFICADO=1."
@@ -127,7 +143,10 @@ process.stdin.on('data', d => s += d).on('end', () => {
 fi
 
 echo "═══ 3/3 · Humos de la app ═══"
-if ls pruebas-manuales/humo-*.prueba.ts >/dev/null 2>&1; then
+# A37-S01-02: los humos leen el .env.local que haya y pueden ESCRIBIR; solo corren con confirmación explícita.
+if [ "${CORRER_HUMOS:-}" != "si" ]; then
+  echo "(humos omitidos: usan el .env.local de esta máquina y pueden escribir en esa base. Corre con CORRER_HUMOS=si tras revisar a qué base apunta.)"
+elif ls pruebas-manuales/humo-*.prueba.ts >/dev/null 2>&1; then
   npx vitest run --config vitest.manual.config.ts pruebas-manuales/humo-*.prueba.ts 2>/dev/null \
     || npx vitest run pruebas-manuales/humo-*.prueba.ts
 else

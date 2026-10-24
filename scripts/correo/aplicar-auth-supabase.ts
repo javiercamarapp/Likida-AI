@@ -228,18 +228,32 @@ if (!secretoHook) {
   process.exit(1);
 }
 
-// EL CANDADO: 401 = el deployment tiene el secreto y verifica firmas. 500 =
-// la variable no llegó al build, y encender el hook dejaría a todos fuera.
+// EL CANDADO (A37-S02-03): una sonda SIN firma recibe 401 tanto con el secreto correcto como con uno
+// distinto, así que no prueba nada. Se manda una sonda FIRMADA con el secreto que se le va a dar a
+// Supabase contra el modo dry-run del endpoint: solo un 200 {dry_run:true} demuestra que el deployment
+// verifica con ESE secreto. 401 = el secreto no coincide (todo magic link fallaría); 500 = no llegó al build.
+const { createHmac, randomUUID } = await import('node:crypto');
+const cuerpoSonda = JSON.stringify({ likida_dry_run: true });
+const idSonda = `sonda_${randomUUID()}`;
+const tsSonda = String(Math.floor(Date.now() / 1000));
+const llaveSonda = Buffer.from(secretoHook.replace(/^v1,/, '').replace(/^whsec_/, ''), 'base64');
+const firmaSonda = createHmac('sha256', llaveSonda).update(`${idSonda}.${tsSonda}.${cuerpoSonda}`, 'utf8').digest('base64');
 const sonda = await fetch(ENDPOINT, {
-  method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+  method: 'POST',
+  headers: {
+    'content-type': 'application/json',
+    'webhook-id': idSonda, 'webhook-timestamp': tsSonda, 'webhook-signature': `v1,${firmaSonda}`,
+  },
+  body: cuerpoSonda,
 });
-if (sonda.status !== 401) {
-  console.error(`\n✗ ${ENDPOINT} contestó ${sonda.status}, no 401.`);
-  console.error('  401 = desplegado y con el secreto. 500 = falta la variable en el build.');
+const respSonda = (await sonda.json().catch(() => null)) as { dry_run?: boolean } | null;
+if (sonda.status !== 200 || respSonda?.dry_run !== true) {
+  console.error(`\n✗ ${ENDPOINT} contestó ${sonda.status} a la sonda firmada, no 200 dry_run.`);
+  console.error('  401 = el secreto del deployment NO coincide con SUPABASE_AUTH_HOOK_SECRET. 500 = falta la variable en el build.');
   console.error('  NO se enciende el hook: con el endpoint así, nadie podría entrar.');
   process.exit(1);
 }
-console.log(`\n✓ ${ENDPOINT} contesta 401 sin firma: desplegado y con secreto.`);
+console.log(`\n✓ ${ENDPOINT} verificó la sonda firmada con este secreto: desplegado y coincide.`);
 
 await api('PATCH', {
   hook_send_email_enabled: true,
