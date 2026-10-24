@@ -76,7 +76,10 @@ export async function getEstadoEvals(agente: AgenteExaminado = 'analista'): Prom
   return {
     agente, hashVivo, ultima,
     // Sin corrida NUNCA corrida = drift también: el examen no se ha hecho.
-    driftDePrompt: !ultima || ultima.promptHash !== hashVivo,
+    // A37-S03-05: una corrida que examinó MENOS casos que los activos (p. ej.
+    // `--limite 1`, o caída a la mitad) no certifica el banco: sigue siendo drift.
+    driftDePrompt: !ultima || ultima.promptHash !== hashVivo
+      || ultima.casos == null || ultima.casos < (rCasos.count ?? 0),
     casosActivos: rCasos.count ?? 0,
   };
 }
