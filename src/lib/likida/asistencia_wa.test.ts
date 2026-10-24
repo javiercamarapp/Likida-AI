@@ -162,7 +162,7 @@ describe('interpretarAsistencia — ROJO por familia', () => {
     expect(interpretarAsistencia('nos asaltaron y hay un herido')).toEqual({ nivel: 'rojo', modoMudo: true });
   });
 
-  it.each(['me quedé varado', 'no arranca el camión', 'se me fue el freno', 'sale humo del motor', 'se sobrecalentó'])(
+  it.each(['me quedé varado', 'no arranca el camión', 'se me fue el freno', 'sale humo del motor', 'se sobrecalentó', 'siento pánico, hay gente rara rondando el camión'])(
     '"%s" es ÁMBAR', (texto) => {
       expect(interpretarAsistencia(texto)).toEqual({ nivel: 'ambar', modoMudo: false });
     },
