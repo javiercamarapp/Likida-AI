@@ -29,6 +29,7 @@ import { reclamarCorreo, finalizarCorreo } from '../carta_porte_docs/repo';
 import { remitenteReconocido } from '@/lib/correo/remitente';
 import type { CorreoEntrante, DescargaAdjunto } from '../carta_porte_docs/correo_entrante';
 import { buzonCorreoPeajesPorToken } from './datos';
+import { registrarCorrida } from '../agentes/corridas';
 import { recibirArchivoPeaje, MAX_ARCHIVO_INGESTA_BYTES } from './ingesta';
 
 export const PREFIJO_PJ = 'pj-';
@@ -88,7 +89,9 @@ export async function atenderCorreoPeajes(token: string, correo: CorreoEntrante,
   if (!buzon.activo) return { status: 200, cuerpo: { ok: true, ignorado: 'buzon_apagado' } };
   const tenantId = buzon.tenantId;
 
-  const adjuntos = (correo.attachments ?? []).filter((a) => a.id && EXT_ADJUNTO.test(a.filename ?? '')).slice(0, MAX_ADJUNTOS_PEAJES);
+  const validos = (correo.attachments ?? []).filter((a) => a.id && EXT_ADJUNTO.test(a.filename ?? ''));
+  const adjuntos = validos.slice(0, MAX_ADJUNTOS_PEAJES);
+  const truncados = validos.length - adjuntos.length;
   if (adjuntos.length === 0) return { status: 200, cuerpo: { ok: true, ignorado: 'sin_adjuntos' } };
 
   if (buzon.remitentes.length > 0 && remitenteReconocido(correo.from, buzon.remitentes) !== true) {
@@ -134,6 +137,19 @@ export async function atenderCorreoPeajes(token: string, correo: CorreoEntrante,
     return { status: 503, cuerpo: { error: 'no se pudieron recibir todos los adjuntos' } };
   }
   if (!(await finalizarCorreo(correo.emailId, claim.token, true))) return { status: 503, cuerpo: { error: 'no se pudo finalizar el correo' } };
+  // A37-S52-02: lo que se descartó en silencio (vacío, >4 MB o del 6.º en adelante) debe verse en la pantalla
+  // de la oficina; antes el correo quedaba «procesado» sin corrida ni aviso mientras corre el plazo de reclamo.
+  if (ignorados > 0 || truncados > 0) {
+    const motivos: string[] = [];
+    if (ignorados > 0) motivos.push(`${ignorados} adjunto(s) vacío(s), ilegible(s) o de más de ${Math.round(MAX_ARCHIVO_INGESTA_BYTES / (1024 * 1024))} MB no se importaron`);
+    if (truncados > 0) motivos.push(`${truncados} adjunto(s) de más (máximo ${MAX_ADJUNTOS_PEAJES} por correo) no se importaron`);
+    const ahora = new Date();
+    await registrarCorrida(tenantId, 'peajes', {
+      inicio: ahora, fin: ahora, estado: recibidos + duplicados > 0 ? 'parcial' : 'fallo', disparo: 'correo',
+      resumen: { recibidos, duplicados, ignorados, truncados },
+      error: `Correo de peajes incompleto: ${motivos.join('; ')}. Súbelos de nuevo (más chicos o por separado) desde la pantalla de peajes.`,
+    });
+  }
   logger.info('peajes_correo.procesado', { emailId: correo.emailId, tenantId, recibidos, duplicados, ignorados });
   return { status: 200, cuerpo: { ok: true, recibidos, duplicados, ignorados } };
 }
