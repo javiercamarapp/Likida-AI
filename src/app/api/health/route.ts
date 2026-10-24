@@ -61,7 +61,10 @@ async function manejarGET(req: NextRequest) {
   // arriba), esta ruta hace 2 consultas reales a Supabase por petición, sin
   // ningún techo. 30/min por IP deja de sobra a un monitor externo (que le
   // pega "cada minuto", según el comentario original) y frena un scraper.
-  if (!(await rateLimit(`health:${clientIp(req)}`, 30, 60_000))) {
+  // A37-L-12: `fallaCerrado:false` — si Upstash parpadea, el health degrada al
+  // conteo local en vez de contestar 429 sin checks (eso pintaba rojo el pulso
+  // y dejaba ciega a la guardia aunque la app estuviera sana).
+  if (!(await rateLimit(`health:${clientIp(req)}`, 30, 60_000, { fallaCerrado: false }))) {
     return NextResponse.json({ ok: false, status: 'fail', error: 'demasiadas peticiones' }, {
       status: 429,
       headers: { 'cache-control': 'no-store' },
