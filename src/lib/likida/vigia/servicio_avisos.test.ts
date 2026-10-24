@@ -177,7 +177,7 @@ describe('barridoVigia · cola atorada y logs de avisos (T-A4-42)', () => {
 
     const llamadas = (logger.error as unknown as { mock: { calls: Array<[string, Record<string, unknown>]> } }).mock.calls
       .filter(([evento]) => evento.startsWith('vigia.aviso.'));
-    expect(llamadas.map(([e]) => e).sort()).toEqual(['vigia.aviso.cola_fallo', 'vigia.aviso.entrega_fallo', 'vigia.aviso.flota_fallo', 'vigia.aviso.pasada_fallo']);
+    expect(llamadas.map(([e]) => e).sort()).toEqual(['vigia.aviso.cola_fallo', 'vigia.aviso.entrega_fallo', 'vigia.aviso.generar_fallo', 'vigia.aviso.pasada_fallo']);
     const volcado = JSON.stringify(llamadas);
     for (const s of SECRETOS) expect(volcado).not.toContain(s);
     expect(volcado).not.toContain('Failing row');
