@@ -328,8 +328,10 @@ vercel --prod
 ```
 
 Para un entorno nuevo desde cero, `bash scripts/deploy-vercel.sh` vincula el
-proyecto, empuja las envs de `.env.local` a production + preview (salta las
-`WHATSAPP_*` vacías) y fija `NEXT_PUBLIC_APP_URL` al dominio real.
+proyecto, fija `NEXT_PUBLIC_APP_URL` al dominio real ANTES del build, empuja las envs de
+`.env.local` solo a production (salta las vacías; respeta comillas y no trunca `#` dentro del
+valor) y las de `.env.preview`, si existe, a preview (los secretos de producción nunca van a
+Preview). Aborta si el proyecto ya tiene deployments (A37-S03-02): no es para entornos vivos.
 
 **No** copies solo "las envs de `.env.example` que tengan valor": ese atajo fue
 el que dejó fuera el tenant del demo. El inventario de arriba es el que manda.
