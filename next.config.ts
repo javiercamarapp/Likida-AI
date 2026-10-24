@@ -47,6 +47,12 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: { bodySizeLimit: '10mb' },
   },
+  // A37 (build 7, 23-oct-2026): el paso «Running TypeScript» de `next build` agotó la memoria del
+  // contenedor de Vercel (OOM tras ~14 min) porque `tsconfig.json` incluye TODAS las pruebas
+  // (≈5 500 archivos, ≈4 GB). El build de producción solo necesita revisar el código de producción:
+  // `tsconfig.build.json` lo excluye (≈3 600 archivos, ≈3 GB). El typecheck COMPLETO, pruebas incluidas,
+  // sigue en CI (`verificar > Typecheck` con `tsconfig.json`), así que no se pierde ninguna garantía.
+  typescript: { tsconfigPath: 'tsconfig.build.json' },
   // `zxing-wasm` va aquí a propósito: el lector es WebAssembly y el `.wasm` se
   // lee de node_modules en tiempo de ejecución (ver cfdi.ts). Si el bundler se
   // lo lleva, el binario deja de estar donde `require.resolve` lo busca y el

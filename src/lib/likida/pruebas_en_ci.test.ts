@@ -149,6 +149,57 @@ describe('lo que se salta bajo cobertura sí corre en CI', () => {
     }
   });
 
+  it('el build de producción (Vercel incluido) hereda el techo de heap y no revisa tipos de pruebas', () => {
+    // ═════════════════════════════════════════════════════════════════════
+    // A37, build 7 (23-oct-2026): Vercel NUNCA tuvo `NODE_OPTIONS` (solo lo
+    // fijaban los workflows de GitHub). El paso «Running TypeScript» de
+    // `next build` agotó el heap por defecto de Node tras 14 minutos de GC y
+    // el despliegue terminó en ERROR («Failed to type check», evento OOM),
+    // aunque CI estaba verde. Medido el mismo día sobre este árbol (tsc,
+    // frío, `--incremental false`):
+    //
+    //   tsconfig.json       (5 526 archivos, 686 mil líneas) @ 3 GiB → exit 134
+    //   tsconfig.json                                         @ 3.5 GiB → exit 134
+    //   tsconfig.build.json (3 580 archivos, 357 mil líneas) @ 3 GiB → exit 0
+    //
+    // Dos defensas, ambas aquí vigiladas:
+    //  1. El techo vive en el SCRIPT de npm (Vercel ejecuta `npm run build`),
+    //     por la misma razón que el del typecheck: lo hereda quien lo invoque.
+    //  2. `next build` revisa solo código de producción (`tsconfig.build.json`,
+    //     vía `typescript.tsconfigPath`). El typecheck COMPLETO, con pruebas,
+    //     sigue en CI con `tsconfig.json`: no se pierde ninguna garantía.
+    // No relajes esta prueba: vuelve a medir en frío antes de tocar los números.
+    // ═════════════════════════════════════════════════════════════════════
+    const paquete = JSON.parse(readFileSync('package.json', 'utf8')) as { scripts: Record<string, string> };
+    const techoBuild = Number(paquete.scripts.build?.match(/--max-old-space-size=(\d+)/)?.[1] ?? 0);
+    expect(
+      techoBuild,
+      'package.json → scripts.build no declara --max-old-space-size. En Vercel no hay NODE_OPTIONS: ' +
+        'el heap por defecto se agota en «Running TypeScript» (build 7, 23-oct-2026).',
+    ).toBeGreaterThanOrEqual(4096);
+
+    const configNext = readFileSync('next.config.ts', 'utf8');
+    expect(configNext, 'next.config.ts dejó de apuntar el build a tsconfig.build.json').toMatch(
+      /tsconfigPath:\s*'tsconfig\.build\.json'/,
+    );
+
+    const tsBuild = JSON.parse(readFileSync('tsconfig.build.json', 'utf8')) as {
+      extends?: string;
+      include?: string[];
+      exclude?: string[];
+    };
+    expect(tsBuild.extends, 'tsconfig.build.json debe extender tsconfig.json').toBe('./tsconfig.json');
+    const excluye = (tsBuild.exclude ?? []).join(' ');
+    expect(excluye, 'tsconfig.build.json dejó de excluir las pruebas').toMatch(/\*\*\/\*\.test\.ts/);
+    expect(excluye, 'tsconfig.build.json dejó de excluir las pruebas de componentes').toMatch(/\*\*\/\*\.test\.tsx/);
+    // El de producción nunca puede incluir más de lo que incluye el completo: se acota a `src/`.
+    expect((tsBuild.include ?? []).some((i) => i.startsWith('src/')), 'tsconfig.build.json debe incluir src/').toBe(true);
+    expect(
+      (tsBuild.include ?? []).some((i) => i === '**/*.ts' || i === '**/*.tsx'),
+      'tsconfig.build.json no debe volver a incluir todo el repo (**/*.ts)',
+    ).toBe(false);
+  });
+
   it('el ayudante de pruebas no se cuela al producto', () => {
     // `src/lib/pruebas/` existe solo para las redes estructurales. Si algo del
     // producto lo importara, `node:fs` entraría a un bundle del servidor.
