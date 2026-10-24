@@ -115,6 +115,42 @@ describe('generarAvisos · apagado por defecto', () => {
   });
 });
 
+describe('A37-INN-A4-02 · el mismo servicio subido con dos terminales distintas (typo) no duplica los avisos', () => {
+  const gemela = (f: FilaDelPrograma): FilaDelPrograma => fila({ fecha: f.fecha, tipo: f.tipo, cliente: f.cliente, caja: f.caja, unidad: f.unidad, citaEn: f.citaEn, consignatario: f.consignatario });
+
+  it('dos filas idénticas (GDL / GLD) generan UN aviso, y una pasada posterior tampoco crea el de la otra copia', async () => {
+    const a = fila({ caja: 'CJ-DUP', unidad: 'U-7' });
+    const b = gemela(a);
+    const m = armar([a, b]);
+    const r = await generarAvisos(T1, AHORA, m.deps);
+    expect(r).toMatchObject({ creados: 1, repetidasPorClave: 1 });
+    expect(m.avisos).toHaveLength(1);
+    expect(m.avisos[0].filaId).toBe(a.id);
+    const r2 = await generarAvisos(T1, AHORA, m.deps);
+    expect(r2.creados).toBe(0);
+    expect(m.avisos).toHaveLength(1);
+  });
+
+  it('si el aviso ya salió de la copia con id MAYOR, la de id menor tampoco genera otro', async () => {
+    const a = fila({ caja: 'CJ-DUP2', unidad: 'U-8' });
+    const b = gemela(a);
+    const m = armar([b]);
+    await generarAvisos(T1, AHORA, m.deps); // solo existe la copia b en este momento
+    expect(m.avisos).toHaveLength(1);
+    const todas = armar([a, b]);
+    todas.avisos.push(...m.avisos);
+    await generarAvisos(T1, AHORA, todas.deps);
+    expect(todas.avisos).toHaveLength(1);
+  });
+
+  it('dos servicios distintos de la misma caja (otra cita) NO se confunden', async () => {
+    const a = fila({ caja: 'CJ-X', unidad: 'U-9', citaEn: '2026-10-05T20:00:00Z' });
+    const b = fila({ caja: 'CJ-X', unidad: 'U-9', citaEn: '2026-10-05T23:00:00Z' });
+    const m = armar([a, b]);
+    expect((await generarAvisos(T1, AHORA, m.deps)).creados).toBe(2);
+  });
+});
+
 describe('generarAvisos · fila lista', () => {
   it('crea un aviso pendiente de confirmación en canal ejecutivo_copia, con texto de campos estructurados', async () => {
     const f = fila();
