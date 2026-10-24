@@ -1,5 +1,9 @@
 # Capacidad SQL local para el cliente de demo
 
+> **EVIDENCIA CADUCADA (A37-S02-08).** Los resultados de este directorio certifican el esquema hasta la migración **0339**
+> (4–5 de septiembre de 2026); el repo va en la ~0866. No son vigentes para la base actual: antes de citarlos, repetir el
+> arnés contra el esquema de hoy. El soak de 24 horas quedó **NO APROBADO** y no se ha repetido.
+
 Este arnés mide SQL y recuperación lógica con datos sintéticos. No envía HTTP a proveedores, no carga archivos a Storage y no ejecuta OCR. No certifica viajes mensuales, comportamiento E2E, costos productivos ni RTO/RPO de infraestructura.
 
 ## Requisitos y aislamiento
@@ -64,7 +68,7 @@ Para detener con seguridad, crear el archivo `STOP` en el directorio de salida. 
 
 ## Evidencia del 4–5 de septiembre de 2026
 
-Reporte y artefactos completos: `/private/tmp/capacidad-flota/REPORT.md`. El soak iniciado el 5 de septiembre a las 02:50:29 UTC utiliza una copia congelada del runtime en `soak24h/runtime`; los cambios posteriores de estos scripts no alteran ese proceso. Fin previsto: 6 de septiembre a las 02:50:29 UTC. Su estado se conserva en `soak24h/soak-process.json`, `soak-telemetry.jsonl` y, cuando termine, `soak-finished.json`.
+Reporte y artefactos completos: `/private/tmp/capacidad-flota/REPORT.md`. El soak iniciado el 5 de septiembre a las 02:50:29 UTC utiliza una copia congelada del runtime en `soak24h/runtime`; los cambios posteriores de estos scripts no alteran ese proceso. Fin previsto original (ya no aplica: el intento terminó NO APROBADO, ver abajo): 6 de septiembre a las 02:50:29 UTC. Su estado se conserva en `soak24h/soak-process.json`, `soak-telemetry.jsonl` y, cuando termine, `soak-finished.json`.
 
 
 ### Resultado del primer intento largo

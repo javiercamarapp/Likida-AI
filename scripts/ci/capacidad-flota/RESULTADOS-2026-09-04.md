@@ -1,5 +1,7 @@
 # Capacidad y recuperación sintética para el cliente de demo
 
+> **CADUCADA (A37-S02-08):** esta evidencia es del esquema 0339; el repo va en ~0866. Soak de 24 h NO APROBADO. No usar como prueba vigente.
+
 Estado actualizado 2026-09-05 20:19 UTC: evidencia SQL local aprobada en el alcance descrito. Soak de 24 horas **NO APROBADO**, detenido por suspensión repetida del host y por incumplir sus percentiles originales. No constituye autorización de producción ni certificación de 50,000 viajes mensuales E2E.
 
 ## Entorno y método
