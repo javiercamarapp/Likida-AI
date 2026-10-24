@@ -79,6 +79,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.ref }}
+          fetch-depth: 0
       - id: resolve
         name: Fijar el ref a un SHA inmutable
         run: |
@@ -104,6 +105,15 @@ jobs:
           if [ "$PROMOTE" = "true" ] && [ "$CONFIRM" != "APPLY_MIGRATIONS_AND_PROMOTE" ]; then
             echo "::error::La promoción exige la confirmación APPLY_MIGRATIONS_AND_PROMOTE."
             exit 1
+          fi
+          # A37-S01-01: producción solo recibe código (y migraciones) que ya entró a master. Un SHA de una rama
+          # de trabajo con CI verde aplicaría SQL no revisado y un rollback de Vercel no lo revierte.
+          if [ "$PROMOTE" = "true" ]; then
+            git fetch --no-tags origin master:refs/remotes/origin/master
+            if ! git merge-base --is-ancestor "$(git rev-parse HEAD)" origin/master; then
+              echo "::error::La promoción exige un commit que ya esté en origin/master."
+              exit 1
+            fi
           fi
 
   prepare_preview:
