@@ -102,6 +102,9 @@ export function armarLectura(
 
 // ── Clave natural y huella ──────────────────────────────────────────────────
 
+/** Largo máximo de la clave natural antes de compactarla (la base acepta 300; deja margen para el sufijo «~n»). */
+const CLAVE_MAX_LARGO = 240;
+
 /**
  * fecha|tipo|bloque|número; sin «#» cae a la caja (c:), luego a la unidad (u:), y como último recurso a la línea del archivo (l:).
  * Las repetidas dentro del mismo archivo llevan «~2», «~3»… (la primera conserva la clave limpia).
@@ -114,7 +117,12 @@ export function clavesNaturales(filas: FilaConBloque[]): { claves: string[]; rep
       : f.caja !== null ? `c:${f.caja}`
         : f.unidad !== null ? `u:${f.unidad}`
           : `l:${f.lineaCsv}`;
-    const base = `${f.fecha}|${f.tipo}|${f.bloque ?? ''}|${id}`;
+    const completa = `${f.fecha}|${f.tipo}|${f.bloque ?? ''}|${id}`;
+    // A37-S59-09: la base exige ≤300 caracteres (programa_despacho_fila_clave_forma); una celda larga no debe
+    // abortar la carga entera. Si se pasa, la parte variable se sustituye por su huella (determinista y única).
+    const base = completa.length <= CLAVE_MAX_LARGO
+      ? completa
+      : `${completa.slice(0, 120)}|h:${sha256Hex(completa).slice(0, 32)}`;
     const n = (vistas.get(base) ?? 0) + 1;
     vistas.set(base, n);
     if (n === 1) return base;

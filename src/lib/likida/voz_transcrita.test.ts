@@ -24,7 +24,7 @@ vi.mock('@/lib/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-const { transcribirNotaDeVoz, formatoDesdeMime } = await import('./voz_transcrita');
+const { transcribirNotaDeVoz, formatoDesdeMime, MAX_AUDIO_BYTES } = await import('./voz_transcrita');
 const { LlmBudgetExceededError } = await import('@/lib/llm/budget');
 
 const AUDIO_OGG = 'data:audio/ogg; codecs=opus;base64,T2dnUw==';
@@ -60,6 +60,15 @@ describe('transcribirNotaDeVoz', () => {
       role: 'transcripcion',
       audios: [{ data: 'T2dnUw==', format: 'ogg' }],
     }));
+  });
+
+  it('A37-S59-08: un audio sobre el tope de tamaño no llega al modelo ni cuesta nada', async () => {
+    const grande = `data:audio/ogg;base64,${'A'.repeat(Math.ceil((MAX_AUDIO_BYTES + 1000) * 4 / 3))}`;
+    downloadMediaAsDataUrl.mockResolvedValue(grande);
+    const r = await transcribirNotaDeVoz({ tenantId: 't1', mediaId: 'm1' });
+    expect(r).toEqual({ ok: false, motivo: 'demasiado_largo' });
+    expect(generateStructured).not.toHaveBeenCalled();
+    expect(registrarCosto).not.toHaveBeenCalled();
   });
 
   it('audio ininteligible → motivo ilegible, y el costo se asienta igual (se pagó por escuchar)', async () => {

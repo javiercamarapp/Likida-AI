@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { deflateRawSync } from 'node:zlib';
-import { leerExportWhatsapp, taparDatosPersonales } from './export_whatsapp';
+import { leerExportWhatsapp, salDeFlota, taparDatosPersonales } from './export_whatsapp';
 import { textoDeZip, esZip } from './zip_lector';
 import { analizarHistorial, esPregunta, pideDatosUnidad, semanaDe, temaDe } from './analisis';
 
@@ -222,3 +222,15 @@ describe('datos de unidad: línea base de las 4 h', () => {
   });
 });
 
+describe('A37-S58-09 · sal del hash de autor', () => {
+  it('con secreto de servidor la sal no es solo el id de la flota; sin él cae a la sal anterior', () => {
+    expect(salDeFlota('flota-1', undefined)).toBe('flota-1');
+    expect(salDeFlota('flota-1', 'corto')).toBe('flota-1');
+    const con = salDeFlota('flota-1', 'un-secreto-de-servidor-largo');
+    expect(con).not.toBe('flota-1');
+    expect(con).toContain('flota-1');
+    const h = (sal: string) => leerExportWhatsapp('12/09/2026 10:00 - X: hola', { equipo: [], sal }).mensajes[0].autorHash;
+    expect(h(con)).not.toBe(h('flota-1'));
+    expect(salDeFlota('flota-2', 'un-secreto-de-servidor-largo')).not.toBe(con);
+  });
+});
