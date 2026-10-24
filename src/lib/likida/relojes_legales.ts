@@ -460,6 +460,9 @@ export interface ResultadoVencimientos {
   cortadosPorReloj: number;
 }
 
+/** Líneas por aviso de vencimientos (mismo criterio que `MAX_LINEAS_AVISO` del vigilante). */
+const MAX_LINEAS_VENCIMIENTOS = 10;
+
 /**
  * El barrido de vencimientos. Cada (documento, umbral, fecha) avisa UNA sola
  * vez — el sello vive en `aviso_vigencia` (0202) con la fecha en la llave:
@@ -511,6 +514,7 @@ export async function avisarVencimientos(ahora: Date = new Date(), opts: Opcione
       .range(d, h), 'vencimientos.unidades'), 'vencimientos.unidades'),
     traerTodo<Record<string, unknown>>((d, h) => acotada(admin.from('operador')
       .select('id, tenant_id, nombre, licencia_vence', conteo(d))
+      .eq('activo', true) // A37-S56-05: un chofer dado de baja no se avisa
       .gte('licencia_vence', piso)
       .lte('licencia_vence', horizonte)
       .order('id', { ascending: true })
@@ -603,10 +607,17 @@ export async function avisarVencimientos(ahora: Date = new Date(), opts: Opcione
         r.fallos++;
         continue;
       }
-      const lineas = items.map((i) =>
+      // A37-S56-05: tope de líneas, como el vigilante (`MAX_LINEAS_AVISO`). Un
+      // texto de WhatsApp admite 4,096 caracteres; con 50+ líneas Meta lo
+      // rechaza por tamaño y el aviso no salía ni con plantilla de respaldo.
+      // Lo más urgente primero; todo lo demás se sella igual y queda en el panel.
+      const urgentes = [...items].sort((a, b) => a.dias - b.dias);
+      const lineas = urgentes.slice(0, MAX_LINEAS_VENCIMIENTOS).map((i) =>
         i.dias <= 0
           ? `· ${i.rotulo}: VENCIÓ el ${i.vence}. La unidad/el operador no debería estar en carretera con esto vencido.`
           : `· ${i.rotulo}: vence el ${i.vence} (en ${i.dias} día${i.dias === 1 ? '' : 's'}).`);
+      const resto = urgentes.length - lineas.length;
+      if (resto > 0) lineas.push(`…y ${resto} más. Están todos en Unidades y Operadores del panel.`);
       const texto =
         `📋 Papeles de la flota por vencer:\n${lineas.join('\n')}\n` +
         `Renovar toma días hábiles (cita, taller, pago) — por eso el aviso sale con tiempo. Los detalles están en Unidades y Operadores del panel.`;
