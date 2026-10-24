@@ -542,6 +542,17 @@ function parseSiNo(t: string): boolean | undefined {
 /** Duda o titubeo explícito: en un campo fiscal no se infiere nada de una frase así. */
 const DUDA = /\b(no se|no lo se|no estoy seguro|no estamos seguros|no tengo claro|creo|creemos|supongo|quiza|quizas|tal vez|probablemente|depende|a lo mejor)\b/;
 
+/** ¿Hay un «no/nunca/tampoco» a menos de tres palabras de la palabra de umbral (menores, más, mayor…)? Sin regex anidada. */
+function negadoCercaDeUmbral(s: string): boolean {
+  const pal = s.split(/[^a-z0-9$]+/).filter(Boolean);
+  const umbral = new Set(['menor', 'menores', 'menos', 'mas', 'mayor', 'mayores', 'abajo', 'arriba', 'bajos', 'superamos', 'llegamos']);
+  for (let i = 0; i < pal.length; i++) {
+    if (pal[i] !== 'no' && pal[i] !== 'nunca' && pal[i] !== 'tampoco') continue;
+    for (let k = i + 1; k <= i + 3 && k < pal.length; k++) if (umbral.has(pal[k])) return true;
+  }
+  return false;
+}
+
 function parseIngresos(t: string): boolean | undefined {
   const s = strip(t);
   if (s === 'menor' || s === 'menores') return true;
@@ -550,7 +561,7 @@ function parseIngresos(t: string): boolean | undefined {
   // «no llegamos a 300», que es afirmativa) no se declara nada: se vuelve a preguntar con los chips.
   if (DUDA.test(s)) return undefined;
   const sinFraseAfirmativa = s.replace(/no llegamos a 300/g, '');
-  if (/\b(no|nunca|tampoco)\s+(\w+\s+){0,2}(menores?|menos|mas|mayor(es)?|abajo|arriba|bajos|superamos|llegamos)\b/.test(sinFraseAfirmativa)) return undefined;
+  if (negadoCercaDeUmbral(sinFraseAfirmativa)) return undefined;
   if (/menos de 300|menores? (a|de) ?\$?300|abajo de 300|no llegamos a 300|bajos/.test(s)) return true;
   if (/mas de 300|arriba de 300|300 millones o mas|superamos|mayores? (a|de) ?\$?300/.test(s)) return false;
   // Un «sí» no es «menores a $300M». Los chips son menor/mayor/no_se.
