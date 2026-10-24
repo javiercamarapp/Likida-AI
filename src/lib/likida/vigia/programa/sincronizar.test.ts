@@ -50,7 +50,7 @@ function repoEnMemoria() {
       for (const f of nuevas) {
         log.escrituras++;
         filas.set(`${tenantId}|${f.terminal}|${f.claveNatural}`, {
-          id: `fila-${++seq}`, tenant: tenantId, terminal: f.terminal, fecha: f.fecha, claveNatural: f.claveNatural,
+          id: `fila-${++seq}`, tenant: tenantId, terminal: f.terminal, fecha: f.fecha, tipo: f.tipo, claveNatural: f.claveNatural,
           cliente: f.cliente, consignatario: f.consignatario, caja: f.caja, unidad: f.unidad, citaEn: f.citaEn, citaTexto: f.citaTexto,
           transito: f.transito, ccp: f.ccp, huella: f.huella, visible: true, primeraVez: f.vistaEn, ultimaVez: f.vistaEn,
           comentarios: f.comentarios, linea: f.linea,
@@ -247,6 +247,19 @@ describe('sincronizarPrograma · detección de cambios', () => {
     ], 'a'), { repo: m.repo, ahora: AHORA });
     const r = await sincronizarPrograma(T1, 'GDL', lectura([fila(1, { fecha: '2026-10-05' }), fila(1, { fecha: '2026-10-07' })], 'b'), { repo: m.repo, ahora: AHORA });
     expect(r.desaparecidas).toBe(1);
+  });
+
+  it('A37-INN-A4-03: un archivo parcial con solo EXPORTACION de esas fechas NO oculta las filas de IMPORTACION del mismo día', async () => {
+    const m = repoEnMemoria();
+    await sincronizarPrograma(T1, 'GDL', lectura([
+      fila(1, { tipo: 'EXPORTACION' }), fila(2, { tipo: 'EXPORTACION' }), fila(1, { tipo: 'IMPORTACION' }), fila(2, { tipo: 'IMPORTACION' }),
+    ], 'a'), { repo: m.repo, ahora: AHORA });
+    const r = await sincronizarPrograma(T1, 'GDL', lectura([fila(1, { tipo: 'EXPORTACION' })], 'b'), { repo: m.repo, ahora: AHORA });
+    // Dentro de lo que el archivo SÍ trae (EXPORTACION de ese día) la fila 2 desapareció; la IMPORTACION no viene en el archivo: no se toca.
+    expect(r.desaparecidas).toBe(1);
+    const visibles = [...m.filas.values()].filter((f) => f.visible);
+    expect(visibles.filter((f) => f.claveNatural.includes('IMPORTACION'))).toHaveLength(2);
+    expect(m.cambios.every((c) => !c.filaId || ![...m.filas.values()].some((f) => f.id === c.filaId && f.claveNatural.includes('IMPORTACION')))).toBe(true);
   });
 
   it('las filas de otra flota o de otra terminal no se tocan', async () => {
