@@ -57,8 +57,10 @@ export async function POST(req: Request) {
   // secreto, y compartir el nombre hacía imposible que ambos verificaran.
   const secreto = process.env.RESEND_EVENTOS_WEBHOOK_SECRET;
   if (!secreto) {
-    logger.error('correo.eventos.sin_secreto', {});
-    return NextResponse.json({ error: 'RESEND_WEBHOOK_SECRET no está configurado.' }, { status: 500 });
+    // A37-S09-10: el nombre correcto de la variable va SOLO al log; hacia afuera (ruta pública)
+    // un mensaje genérico que no revela qué falta ni de qué webhook.
+    logger.error('correo.eventos.sin_secreto', { variable: 'RESEND_EVENTOS_WEBHOOK_SECRET' });
+    return NextResponse.json({ error: 'No disponible.' }, { status: 500 });
   }
 
   // AUDITORÍA 24, BE-21: era `await req.text()` y el tope se medía DESPUÉS.
