@@ -9,7 +9,7 @@ import { atenderCorreoCartaPorte, tokenCpDeDestinatarios } from '@/lib/likida/ca
 import { atenderCorreoPeajes, tokenPjDeDestinatarios } from '@/lib/likida/peajes/correo_entrante';
 import { descargadorResend } from '@/lib/likida/carta_porte_docs/resend';
 import { direccionDeCampana, esRespuestaACampana, procesarRespuestaCampana } from '@/lib/correo/respuesta_campana';
-import { atenderAdjuntosBuzon, type AdjuntoBuzon } from '@/lib/likida/buzon/servicio';
+import { atenderAdjuntosBuzon, registrarAdjuntoDescartado, type AdjuntoBuzon } from '@/lib/likida/buzon/servicio';
 import { estaApagado } from '@/lib/likida/interruptores';
 import { registrarCorrida } from '@/lib/likida/agentes/corridas';
 import { sanitizarTexto } from '@/lib/likida/intake/sanitizar';
@@ -87,6 +87,10 @@ const MAX_ADJUNTO_BYTES = 4 * 1024 * 1024;
 const MAX_ADJUNTO_PDF_ZIP_BYTES = 12 * 1024 * 1024;
 /** Lo que un solo correo puede acumular en memoria entre todos sus adjuntos. */
 const MAX_BYTES_CORREO = 30 * 1024 * 1024;
+/** A37-S09-04: tope de adjuntos que se intentan por correo (igual que `MAX_HOJAS_POR_CORREO` de la ingesta). */
+const MAX_ADJUNTOS_POR_CORREO = 60;
+/** Descargas simultáneas por correo: acota la memoria (4 × 12 MB) y cabe en el presupuesto de 57 s. */
+const CONCURRENCIA_DESCARGA = 4;
 const topeDe = (nombre: string): number => (/\.xml$/i.test(nombre) ? MAX_ADJUNTO_BYTES : MAX_ADJUNTO_PDF_ZIP_BYTES);
 /** El webhook no necesita un JSON enorme: Resend solo entrega metadatos y la
  * descarga de los adjuntos va por otra URL. Limitarlo ANTES de verificar HMAC
@@ -390,29 +394,50 @@ export async function POST(req: Request) {
   const restanteMs = () => Math.max(0, Math.min(8_000, finPresupuesto - Date.now()));
 
   // ── 1. DESCARGAR (bytes, no texto: un PDF o un zip no son UTF-8) ──────────
+  // A37-S09-04: tope de adjuntos por correo (el excedente se RECHAZA con rastro, no se pierde en silencio) y
+  // descarga con un pool de `CONCURRENCIA_DESCARGA`, no serial: con ~150 adjuntos pequeños la descarga serial
+  // agotaba los 57 s, todo el resto contaba como «caída», el 503 de Resend reiniciaba por el primero y los
+  // últimos jamás se alcanzaban.
+  // A37-S09-03: todo adjunto DESCARTADO (sin id, gigante, correo gigante, excedente) deja una fila `rechazada`
+  // en `buzon_recepcion`, visible a la flota; antes solo había un `logger.warn` y el correo se daba por bueno.
+  const aProcesar = adjuntos.slice(0, MAX_ADJUNTOS_POR_CORREO);
+  const excedentes = adjuntos.slice(MAX_ADJUNTOS_POR_CORREO);
   const descargados: AdjuntoBuzon[] = [];
   let bytesCorreo = 0;
-  for (const adj of adjuntos) {
-    // Sin id no hay qué pedirle a Resend, y el reintento trae el MISMO
-    // payload: permanente.
-    if (!adj.id) { ignoradas++; continue; }
+
+  /** Anota el descarte con rastro visible. Si la base no contesta es un fallo TRANSITORIO: cuenta como caída
+   *  (503, Resend reintenta; el upsert por (tenant, email, sha) es idempotente). */
+  const descartar = async (nombre: string, motivo: string, bytes: number): Promise<void> => {
+    ignoradas++;
+    try {
+      await registrarAdjuntoDescartado(flota.id as string, emailId, nombre, motivo, bytes);
+    } catch (e) {
+      caidas++;
+      logger.warn('correo_entrante.descarte_sin_rastro', { emailId, err: e instanceof Error ? e.message : String(e) });
+    }
+  };
+
+  const bajarUno = async (adj: AdjuntoEntrante): Promise<{ nombre: string; bytes: Uint8Array } | null> => {
+    const nombre = adj.filename ?? 'sin nombre';
+    // Sin id no hay qué pedirle a Resend, y el reintento trae el MISMO payload: permanente.
+    if (!adj.id) { await descartar(nombre, 'adjunto sin identificador en el correo: no se pudo descargar', 0); return null; }
     try {
       // La `download_url` viene firmada y CADUCA, así que se pide justo antes
       // de usarla en vez de guardarla.
       // Sin tiempo para intentarlo siquiera, se cuenta como caída: el 503 de
       // abajo devuelve el correo a la cola de Resend con todo por hacer.
-      if (restanteMs() === 0) { caidas++; continue; }
+      if (restanteMs() === 0) { caidas++; return null; }
 
       const meta = await httpsPublico({
         url: `https://api.resend.com/emails/${encodeURIComponent(emailId)}/attachments/${encodeURIComponent(adj.id)}`,
         metodo: 'GET',
         encabezados: { Authorization: `Bearer ${llave}`, Accept: 'application/json' },
       }, restanteMs());
-      if (meta.estado < 200 || meta.estado >= 300) { caidas++; continue; }
+      if (meta.estado < 200 || meta.estado >= 300) { caidas++; return null; }
       const { download_url: url } = JSON.parse(meta.cuerpo) as { download_url?: string };
-      if (!url) { caidas++; continue; }
+      if (!url) { caidas++; return null; }
 
-      if (restanteMs() === 0) { caidas++; continue; }
+      if (restanteMs() === 0) { caidas++; return null; }
       // El TOPE, con el doble chequeo de `leerCuerpo` (api/v1/_escritura.ts):
       // primero lo DECLARADO (vía `aceptar`, dentro de `bajarAdjuntoResend`),
       // para ni siquiera materializar un cuerpo gigante; después el largo REAL
@@ -421,7 +446,7 @@ export async function POST(req: Request) {
       // más. Pasarse es fallo PERMANENTE — el reintento trae el mismo
       // archivo—, se loguea con nombre (saneado: lo escribió el emisor) y
       // tamaño para que sea visible, y los demás adjuntos siguen.
-      const tope = topeDe(adj.filename ?? '');
+      const tope = topeDe(nombre);
       const descarga = await bajarAdjuntoResend(url, tope, restanteMs());
       if (!descarga.ok) {
         if (descarga.motivo === 'tope') {
@@ -431,25 +456,54 @@ export async function POST(req: Request) {
             // inventa una cifra, se dice que no se conoce el tamaño exacto.
             bytes: descarga.declarado > 0 ? descarga.declarado : null,
           });
-          ignoradas++;
+          await descartar(nombre, `adjunto demasiado grande (tope ${Math.round(tope / (1024 * 1024))} MB): no se procesó`, descarga.declarado);
         } else {
           caidas++;
         }
-        continue;
+        return null;
       }
       const bytes = descarga.bytes;
+      // Suma y comprobación SÍNCRONAS tras el `await`: con el pool no hay carrera.
       if (bytesCorreo + bytes.length > MAX_BYTES_CORREO) {
         logger.warn('correo_entrante.correo_gigante', { emailId, archivo: sanitizarTexto(adj.filename), bytes: bytesCorreo + bytes.length });
-        ignoradas++; continue;
+        await descartar(nombre, 'el correo supera el total de 30 MB de adjuntos: este archivo no se procesó', bytes.length);
+        return null;
       }
       bytesCorreo += bytes.length;
-      descargados.push({ nombre: adj.filename ?? 'sin nombre', bytes });
+      return { nombre, bytes };
     } catch (e) {
       // Aquí solo puede lanzar el JSON mal formado de los metadatos (`bajarAdjuntoResend` ya clasifica sus
       // propios fallos sin lanzar): es la red o un cuerpo ilegible — transitorio. Un adjunto caído NO tumba
       // a los demás: el resto del correo se sigue intentando.
       logger.warn('correo_entrante.adjunto', { emailId, err: e instanceof Error ? e.message : String(e) });
       caidas++;
+      return null;
+    }
+  };
+
+  // Pool: `CONCURRENCIA_DESCARGA` trabajadores toman el siguiente índice; el resultado se guarda POR ÍNDICE
+  // para que el orden de proceso siga siendo el del correo.
+  const resultados: Array<{ nombre: string; bytes: Uint8Array } | null> = new Array(aProcesar.length).fill(null);
+  let siguiente = 0;
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCIA_DESCARGA, aProcesar.length) }, async () => {
+    while (siguiente < aProcesar.length) {
+      const i = siguiente++;
+      resultados[i] = await bajarUno(aProcesar[i]);
+    }
+  }));
+  for (const r of resultados) if (r) descargados.push(r);
+
+  if (excedentes.length > 0) {
+    logger.warn('correo_entrante.exceso_adjuntos', { emailId, tenantId: flota.id, total: adjuntos.length, tope: MAX_ADJUNTOS_POR_CORREO });
+    ignoradas += excedentes.length;
+    try {
+      await registrarAdjuntoDescartado(
+        flota.id as string, emailId, `(+${excedentes.length} adjuntos omitidos)`,
+        `el correo trae ${adjuntos.length} adjuntos y el tope es ${MAX_ADJUNTOS_POR_CORREO}: se omitieron ${excedentes.length}; reenvíelos en otro correo`, 0,
+      );
+    } catch (e) {
+      caidas++;
+      logger.warn('correo_entrante.descarte_sin_rastro', { emailId, err: e instanceof Error ? e.message : String(e) });
     }
   }
 

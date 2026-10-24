@@ -61,7 +61,13 @@ vi.mock('@/lib/ratelimit', () => ({ rateLimit: async (clave: string) => limitar(
 // un fallo transitorio (`caidas`) se programa por prueba.
 let caidasDeIngesta = 0;
 const recibidosPorIngesta: Array<{ nombre: string; bytes: number }> = [];
+const descartesRegistrados: Array<{ nombre: string; motivo: string }> = [];
+let fallaRegistroDescarte = false;
 vi.mock('@/lib/likida/buzon/servicio', () => ({
+  registrarAdjuntoDescartado: async (_t: string, _e: string, nombre: string, motivo: string) => {
+    if (fallaRegistroDescarte) throw new Error('base caída');
+    descartesRegistrados.push({ nombre, motivo });
+  },
   atenderAdjuntosBuzon: async (_ctx: unknown, adjuntos: Array<{ nombre: string; bytes: Uint8Array }>) => {
     const r = { guardadas: 0, duplicadas: 0, revision: 0, rechazadas: 0, ignoradas: 0, caidas: caidasDeIngesta, documentos: [] };
     for (const a of adjuntos) {
@@ -160,6 +166,7 @@ beforeEach(async () => {
   tablasTocadas.length = 0;
   caidasDeIngesta = 0;
   recibidosPorIngesta.length = 0;
+  descartesRegistrados.length = 0; fallaRegistroDescarte = false;
   rpcs.length = 0;
   correosRegistrados.clear();
   borrados.length = 0;
@@ -564,5 +571,66 @@ describe('una descarga que se cuelga no se lleva el CFDI por delante', () => {
     const r = await POST(pedir(evento()));
     // 503 y no 200: Resend tiene que volver a entregarlo.
     expect(r.status).toBe(503);
+  });
+});
+
+
+describe('A37-S09-03/04 — adjuntos descartados con rastro, tope y descarga en pool', () => {
+  const adjuntos = (...n: string[]) => ({ attachments: n.map((filename, i) => ({ id: `att_${i}`, filename })) });
+
+  it('A37-S09-03: un adjunto gigante deja una recepción rechazada visible (no solo un warn)', async () => {
+    stubHttp((url) => url.includes('/attachments/')
+      ? { cuerpo: JSON.stringify({ download_url: 'https://x/g' }) }
+      : { bytes: new Uint8Array(5 * 1024 * 1024), headers: { 'content-length': String(5 * 1024 * 1024) } });
+    const r = await POST(pedir(evento(adjuntos('mensual.xml'))));
+    expect(r.status).toBe(200);
+    expect(descartesRegistrados).toHaveLength(1);
+    expect(descartesRegistrados[0]).toMatchObject({ nombre: 'mensual.xml' });
+    expect(descartesRegistrados[0].motivo).toMatch(/demasiado grande/);
+  });
+
+  it('A37-S09-03: un adjunto sin id deja rastro rechazado', async () => {
+    const r = await POST(pedir(evento({ attachments: [{ filename: 'sin_id.xml' }] })));
+    expect(r.status).toBe(200);
+    expect(descartesRegistrados.map((d) => d.nombre)).toEqual(['sin_id.xml']);
+  });
+
+  it('A37-S09-03: si no se puede anotar el descarte, 503 (no se da por procesado un correo sin rastro)', async () => {
+    fallaRegistroDescarte = true;
+    const r = await POST(pedir(evento({ attachments: [{ filename: 'sin_id.xml' }] })));
+    expect(r.status).toBe(503);
+    expect(borrados).toEqual(['em_1']);
+  });
+
+  it('A37-S09-04: más adjuntos que el tope → se procesan los primeros 60 y el resto queda rechazado con rastro', async () => {
+    stubHttp((url) => url.includes('/attachments/')
+      ? { cuerpo: JSON.stringify({ download_url: 'https://x/d' }) } : { cuerpo: '<Comprobante/>' });
+    const nombres = Array.from({ length: 70 }, (_, i) => `f${i}.xml`);
+    const r = await POST(pedir(evento(adjuntos(...nombres))));
+    expect(r.status).toBe(200);
+    expect(recibidosPorIngesta).toHaveLength(60);
+    expect(recibidosPorIngesta[0].nombre).toBe('f0.xml');
+    expect(recibidosPorIngesta[59].nombre).toBe('f59.xml');
+    expect(descartesRegistrados).toHaveLength(1);
+    expect(descartesRegistrados[0].nombre).toBe('(+10 adjuntos omitidos)');
+  });
+
+  it('A37-S09-04: la descarga va en pool de 4 (no serial) y conserva el orden del correo', async () => {
+    let enVuelo = 0; let maximo = 0;
+    vi.mocked(httpsPublico).mockImplementation(async (p: PeticionSim) => {
+      enVuelo++; maximo = Math.max(maximo, enVuelo);
+      await new Promise((res) => setTimeout(res, 5));
+      enVuelo--;
+      if (p.url.includes('/attachments/')) {
+        return { estado: 200, cuerpo: JSON.stringify({ download_url: 'https://x/d' }), bytes: new Uint8Array(0), encabezados: {} };
+      }
+      return { estado: 200, cuerpo: '<Comprobante/>', bytes: new TextEncoder().encode('<Comprobante/>'), encabezados: {} };
+    });
+    const nombres = Array.from({ length: 12 }, (_, i) => `p${i}.xml`);
+    const r = await POST(pedir(evento(adjuntos(...nombres))));
+    expect(r.status).toBe(200);
+    expect(maximo).toBeGreaterThan(1);
+    expect(maximo).toBeLessThanOrEqual(4);
+    expect(recibidosPorIngesta.map((x) => x.nombre)).toEqual(nombres);
   });
 });
