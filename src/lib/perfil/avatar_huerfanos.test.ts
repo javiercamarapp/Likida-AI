@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- lee fuentes fijas del propio repo durante la prueba */
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { rutasAvatarObsoletas, descartarAvataresViejos } from './avatar_huerfanos';

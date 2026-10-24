@@ -72,6 +72,7 @@ describe('A37-S07-05: admin/mi-perfil muestra mensajes propios para tipo y peso'
   });
 
   it('el input acepta solo los tipos que el servidor acepta (no image/*)', () => {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- lee el fuente fijo del propio componente
     const uploader = readFileSync(fileURLToPath(new URL('./avatar-uploader.tsx', import.meta.url)), 'utf8');
     expect(uploader).toMatch(/accept="image\/jpeg,image\/png,image\/webp"/);
     expect(uploader).not.toMatch(/accept="image\/\*"/);

@@ -141,8 +141,8 @@ describe('A37-S04-10: respaldo-storage.sh no acepta una lista de buckets que omi
     mkdirSync(join(dir, 'scripts'), { recursive: true });
     writeFileSync(join(dir, 'scripts/respaldo-storage.sh'), readFileSync('scripts/respaldo-storage.sh'));
     writeFileSync(join(dir, 'scripts/respaldo-buckets.txt'), 'comprobantes\nliquidaciones\nbuzon-facturas # evidencia\ncartaporte-docs\n');
-    const env: Record<string, string> = {
-      ...process.env as Record<string, string>,
+    const env = {
+      ...process.env,
       NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:9', SUPABASE_SERVICE_ROLE_KEY: 'k', RESPALDO_BUCKETS: buckets ?? '', ...extra,
     };
     return spawnSync('bash', [join(dir, 'scripts/respaldo-storage.sh'), join(dir, 'salida')], { cwd: dir, encoding: 'utf8', timeout: 15_000, env });
