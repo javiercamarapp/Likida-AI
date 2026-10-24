@@ -10,6 +10,8 @@ import type { PiezaEnCola } from '@/lib/likida/agentes/cola';
 import { fechaHoraMx } from '@/lib/formato';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { EstadoVacio, StatusPill } from '../ui/kit';
+import { BotonConfirmar } from '../ui/confirmar';
+import { BotonEnvio } from './boton_envio';
 
 const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
 
@@ -234,15 +236,22 @@ export function VistaTuTurno({
           <div className="flex gap-2">
             <form action={accionOrden}>
               <input type="hidden" name="tipo" value="kill_switch_on" />
-              <button className="px-3 py-1.5 rounded-lg text-xs hairline flex items-center gap-1.5" style={{ color: '#b91c1c' }}>
-                <PowerOff {...ICONO} /> Apagar todas
-              </button>
+              {/* A37-S08-03: un toque accidental apagaba TODAS las rutinas. */}
+              <BotonConfirmar
+                etiqueta="Apagar todas" icono={<PowerOff {...ICONO} />} tono="peligro"
+                etiquetaConfirmar="Sí, apagar todas" titulo="Apagar todas las rutinas"
+                descripcion={`Se encola la orden de apagado: la Mac detiene las ${bus.rutinas.length} rutinas en su siguiente latido (≤5 min) hasta que las enciendas.`}
+                className="px-3 py-1.5 rounded-lg text-xs hairline flex items-center gap-1.5" style={{ color: '#b91c1c' }}
+              />
             </form>
             <form action={accionOrden}>
               <input type="hidden" name="tipo" value="kill_switch_off" />
-              <button className="px-3 py-1.5 rounded-lg text-xs hairline flex items-center gap-1.5">
-                <Power {...ICONO} /> Encender todas
-              </button>
+              <BotonConfirmar
+                etiqueta="Encender todas" icono={<Power {...ICONO} />} tono="normal"
+                etiquetaConfirmar="Sí, encender todas" titulo="Encender todas las rutinas"
+                descripcion={`Se encola la orden de encendido: la Mac reactiva las ${bus.rutinas.length} rutinas en su siguiente latido (≤5 min). Pueden gastar modelo y publicar.`}
+                className="px-3 py-1.5 rounded-lg text-xs hairline flex items-center gap-1.5"
+              />
             </form>
           </div>
         </div>
@@ -295,9 +304,9 @@ export function VistaTuTurno({
                         <form action={accionOrden}>
                           <input type="hidden" name="tipo" value="correr_ahora" />
                           <input type="hidden" name="rutina" value={r.nombre} />
-                          <button className="px-2.5 py-1 rounded-lg text-xs hairline inline-flex items-center gap-1.5 hover:opacity-70">
+                          <BotonEnvio className="px-2.5 py-1 rounded-lg text-xs hairline inline-flex items-center gap-1.5 hover:opacity-70">
                             <Play {...ICONO} /> Correr ahora
-                          </button>
+                          </BotonEnvio>
                         </form>
                       </div>
                     </td>
