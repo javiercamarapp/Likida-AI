@@ -150,7 +150,7 @@ export function decidirCruce(
   // La DECISIÓN no se reescribe: la toma `emparejarXmlConTicket`, que ya sabe
   // exigir candidato único y desempatar por día. Aquí solo se le entrega el
   // fondo correcto.
-  const elegido = emparejarXmlConTicket({ total: cfdi.total, fecha: cfdi.fecha }, [...fondo]);
+  const elegido = emparejarXmlConTicket({ total: cfdi.total, fecha: cfdi.fecha }, [...fondo], { diaLibre: true });
   if (elegido !== null) {
     // A37-S57-03: con UN solo candidato por monto, `emparejarXmlConTicket` lo
     // devuelve sin mirar fecha ni RFC. En el barrido masivo (miles de CFDI de

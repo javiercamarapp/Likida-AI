@@ -136,3 +136,17 @@ describe('emparejarXmlConTicket', () => {
     expect(emparejarXmlConTicket({ total: 4812, fecha: '2026-05-01' }, [])).toBeNull();
   });
 });
+
+describe('emparejarXmlConTicket — el candidato único por monto también exige día compatible (A37-S47-04)', () => {
+  it('un CFDI de $1,160.00 NO se pega a un gasto de $1,160.00 de otro día', () => {
+    expect(emparejarXmlConTicket({ total: 1160, fecha: '2026-07-20' }, [ticket('t1', 1160, '2026-07-02')])).toBeNull();
+  });
+  it('mismo día o un día de diferencia sí empareja', () => {
+    expect(emparejarXmlConTicket({ total: 1160, fecha: '2026-07-20' }, [ticket('t1', 1160, '2026-07-20')])?.id).toBe('t1');
+    expect(emparejarXmlConTicket({ total: 1160, fecha: '2026-07-20' }, [ticket('t1', 1160, '2026-07-19')])?.id).toBe('t1');
+    expect(emparejarXmlConTicket({ total: 1160, fecha: '2026-07-20' }, [ticket('t1', 1160, '2026-07-18')])).toBeNull();
+  });
+  it('un gasto sin fecha legible sí puede emparejar: el XML llena el hueco', () => {
+    expect(emparejarXmlConTicket({ total: 1160, fecha: '2026-07-20' }, [ticket('t1', 1160)])?.id).toBe('t1');
+  });
+});
