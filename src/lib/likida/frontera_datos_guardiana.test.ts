@@ -311,7 +311,8 @@ import { join, relative } from 'node:path';
 // Auditoría 37, S57-01/S18-01: +1 archivo (322 → 323), `sat_descarga/rfc_tenant.ts` — lee `tenant.rfc` (el RFC fiscal verificado) para atar el buzón del SAT al tenant; todo por `acotada`.
 // Auditoría 37, A37-S28-01 (lote del Redactor, 23-oct-2026): +1 archivo (322 → 323), `agentes/candidatos_redactor.ts` — la selección de candidatos que antes vivía en `runner.ts`; todo por `acotada`.
 // INTEGRACIÓN ONDA 5 (23-oct-2026, #651–#656): cada rama medía su techo sola; el barrido real del árbol fusionado mide 324 archivos (323 de la oleada 4 + sat/rfc_tenant.ts + agentes/candidatos_redactor.ts, +1 que ninguna rama veía por separado). Techo = medido, sin holgura.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 324;
+// LOTE A37 M-Z-resto-06 (A37-S43-07): +1 archivo (324 → 325), `facturacion/avisar.ts` — lee la bitácora de avisos del día (`bitacora_auditoria`, filtrada por `tenant_id`, `acotada`, con `.order('id')`) para no reenviar el mismo aviso.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 325;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -578,7 +579,8 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 324;
 // LOTE A37 b-sat-fiscal-02 (S45-07): +3 llamadas (2,284 → 2,287) en facturacion_escritura.ts: facturasQueAmparan (factura_viaje), borradorIdempotente (factura_emitida) y la lectura de ligas de marcarEmitida. Todas por `acotada`; 0 archivos nuevos.
 // INTEGRACION G1 (24-oct-2026, PRs #665-#679): el barrido real del arbol fusionado mide 2,315 llamadas (2,284 en master 6922916: +31 de las 15 ramas, techo = medido, sin holgura).
 // INTEGRACION G2 (24-oct-2026, PRs #680-#691): el barrido real del arbol fusionado mide 2,336 llamadas (2,315 en master 5135a0c: +21 de las 12 ramas, techo = medido, sin holgura).
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_336;
+// LOTE A37 M-Z-resto-06: +2 llamadas (2,336 → 2,338): `avisar.ts` +1 (bitácora de avisos del día, S43-07) y `pendientes.ts` +1 (gastos SIN fecha legible por cursor de `id`, S43-05; `traerTodoDesdeId`, `tenant_id`). Medido, sin holgura.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_338;
 // A37-S27-10 (lote b-sat-fiscal-05): +1 (2,284 → 2,285), en `agentes/insumos.ts` (`crearInsumoArchivo`): `storage.from('agente-insumos').remove`
 // para no dejar huérfano el objeto subido cuando falla el insert.
 // LOTE A37 B-sat-fiscal-06 (migración 0876): +3 llamadas (2,284 → 2,287), 0 archivos nuevos, medido con el barrido real. `gasto_correccion.ts` +2: el RPC

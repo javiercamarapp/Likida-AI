@@ -159,6 +159,7 @@ async function avisosDeHoy(tenantId: string, dia: string): Promise<{ huellas: st
     const { data, error } = await acotada(supabaseAdmin()
       .from('bitacora_auditoria')
       .select('detalle')
+      .eq('tenant_id', tenantId)
       .eq('accion', 'facturacion.aviso_enviado')
       .eq('entidad', 'tenant')
       .eq('entidad_id', tenantId)

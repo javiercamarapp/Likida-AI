@@ -10,6 +10,7 @@ import { guardarBorrador } from './agentes/contenido';
 // el prompt del redactor y las guardias de salida la leen; ninguna puede instruir
 // a nombrar a un tercero que la puerta de salida veta.
 const raiz = join(__dirname, '..', '..', '..');
+// eslint-disable-next-line security/detect-non-literal-fs-filename -- rutas fijas del propio repo, sin entrada de usuario.
 const leer = (r: string) => readFileSync(join(raiz, r), 'utf8');
 
 describe('A37-S26-06: la tracción tiene una sola fuente', () => {
