@@ -370,6 +370,7 @@ export const api: typeof Real = {
 
   // ── El worker (0640-0642): la MISMA regla que las RPC de la 0641 ──────────
   TOPE_INTENTOS_DOC: 5,
+  TOPE_SALIDAS_SIN_CCP: 20_000,
   GRACIA_RECIBIDO_SEG: 120,
   esperaFallidoMin: (intentos) => 15 * 2 ** Math.max(Math.min(intentos, 6) - 1, 0),
   tablaAusente: (e) => Boolean(e && (e.code === 'PGRST205' || e.code === '42P01')),
