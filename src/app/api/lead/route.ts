@@ -228,7 +228,24 @@ export async function POST(req: Request) {
         parche.notas = notaConLoNoAplicado(previo.notas, pisados);
         logger.warn('lead.no_pisa_datos', { empresa, campos: pisados.map((p) => p.split('=')[0]), canal: canal(atr) });
       }
-      await escribir(db, 'update', parche, previo.id as string);
+      try {
+        await escribir(db, 'update', parche, previo.id as string);
+      } catch (err) {
+        // A37-S10-10: una fila legada sin lead_clave que se rellena puede chocar con la 0181 si OTRA
+        // fila ya tiene esa clave. Antes: 503 y todo reintento fallaba igual (lead perdido). Ahora se
+        // reconcilia contra la fila ganadora, como hace la rama de INSERT.
+        if (!esViolacionUnica(err)) throw err;
+        const { data: ganadores, error: eGanador } = await db.from('prospecto')
+          .select('*').eq('lead_clave', clave).limit(1);
+        if (eGanador) throw new Error(eGanador.message);
+        const ganador = (ganadores as Array<Record<string, unknown>> | null)?.[0];
+        if (!ganador?.id) throw new Error('lead: la llave única chocó en el update, pero no se pudo leer el prospecto ganador');
+        const m = mezclaQueSoloRellena(ganador, campos);
+        if (m.pisados.length) m.parche.notas = notaConLoNoAplicado(ganador.notas, m.pisados);
+        await escribir(db, 'update', m.parche, String(ganador.id));
+        logger.info('lead.duplicado_durable_update', { empresa, canal: canal(atr) });
+        return ok();
+      }
       logger.info('lead.actualizado', { empresa, tenia: previo.estado, canal: canal(atr) });
       return ok();
     }
