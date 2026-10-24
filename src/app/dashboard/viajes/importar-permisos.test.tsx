@@ -7,13 +7,14 @@ import { ImportarViajes } from './importar';
 import { interpretarFilasViajes } from '@/lib/likida/importar_viajes';
 
 const m = vi.hoisted(() => ({
-  rol: 'encargado', tenant: 't1', importar: vi.fn(async (..._args: unknown[]) => ({
+  rol: 'encargado', tenant: 't1', permitir: true, importar: vi.fn(async (..._args: unknown[]) => ({
     creados: 1, saltados: [], descartadas: [], operadoresSinAmarrar: [], sinOperador: [], operadorOcupado: [],
     unidadesSinAmarrar: [], sinUnidad: [], clientesSinAmarrar: [], sinCliente: [],
   })),
 }));
 vi.mock('next/navigation', () => ({ redirect: () => { throw new Error('REDIRECT'); }, useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => ({ tenantId: 't1', rol: m.rol }) }));
+vi.mock('@/lib/ratelimit', () => ({ rateLimit: async () => m.permitir }));
 vi.mock('@/lib/auth/guard', () => ({ requireSessionTenant: async () => ({ tenantId: m.tenant, rol: m.rol, userId: 'u1' }) }));
 vi.mock('@/lib/likida/analytics', () => ({ getLiquidacionesDeViajes: async () => [] }));
 vi.mock('@/lib/likida/viajes_registro', () => ({ getViajesRegistro: async () => ({ filas: [], hayMas: false, siguiente: null }), getConteosViajes: async () => null, TOPE_PAGINA: 25 }));
@@ -32,7 +33,7 @@ const archivo = (matriz: unknown[][], excel = false) => {
   return fd;
 };
 const OPERATIVA = [['folio', 'operador', 'unidad', 'km'], ['IMP-1', 'Operador', '', '400']];
-beforeEach(() => { m.rol = 'encargado'; m.tenant = 't1'; vi.clearAllMocks(); });
+beforeEach(() => { m.rol = 'encargado'; m.tenant = 't1'; m.permitir = true; vi.clearAllMocks(); });
 describe('importación: el rol vivo autoriza también las columnas del archivo', () => {
   it.each(['anticipo', 'anticipo mxn', 'monto anticipo', 'cliente', 'nombre cliente', 'razón social', 'ingreso', 'flete', 'ingreso flete', 'precio flete', 'monto flete'])('encargado rechaza alias %s antes de importar', async columna => {
     const p = await props();
@@ -68,5 +69,17 @@ describe('importación: el rol vivo autoriza también las columnas del archivo',
     const html = renderToStaticMarkup(<ImportarViajes importar={async () => null} verDinero={false} />);
     expect(html).toContain('operador'); expect(html).toContain('km');
     expect(html).not.toMatch(/anticipo|ingreso|cliente/);
+  });
+  // A37-S21-06: la hoja se lee ACOTADA (la misma lectura que los demás importadores) y la importación lleva rate limit por flota.
+  it('A37-S21-06: una hoja de miles de columnas se rechaza antes de materializarla', async () => {
+    const p = await props();
+    const ancha = [Array.from({ length: 1500 }, (_, i) => (i === 0 ? 'folio' : `c${i}`)), ['IMP-1']];
+    await expect(p.importar(null, archivo(ancha, true))).resolves.toHaveProperty('error');
+    expect(m.importar).not.toHaveBeenCalled();
+  });
+  it('A37-S21-06: pasado el límite de importaciones por minuto de la flota no se lee ni importa nada', async () => {
+    m.permitir = false; const p = await props();
+    await expect(p.importar(null, archivo(OPERATIVA))).resolves.toMatchObject({ error: expect.stringMatching(/espera/i) });
+    expect(m.importar).not.toHaveBeenCalled();
   });
 });
