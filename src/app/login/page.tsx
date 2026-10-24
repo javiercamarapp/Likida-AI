@@ -65,6 +65,11 @@ function siteUrl(): string {
   return appUrl();
 }
 
+async function ipDelCliente(): Promise<string> {
+  const h = await headers();
+  return (h.get('x-forwarded-for')?.split(',')[0].trim() || h.get('x-real-ip')) ?? 'desconocida';
+}
+
 /**
  * Mismo límite por IP que traía el passcode compartido que este login
  * reemplazó (10 / 5 min; la ruta `/acceso` y `auth/passcode.ts` se borraron
@@ -76,8 +81,7 @@ function siteUrl(): string {
  * hoy funciona.
  */
 async function dentroDelLimite(llave: string): Promise<boolean> {
-  const h = await headers();
-  const ip = (h.get('x-forwarded-for')?.split(',')[0].trim() || h.get('x-real-ip')) ?? 'desconocida';
+  const ip = await ipDelCliente();
   // AUDITORÍA 25, SEGURIDAD (ALTO, línea 181, REINCIDENTE). `rateLimit` falla
   // CERRADO por default ante un blip de Redis (SEG-4, auditoría 24) — la
   // decisión correcta para casi todo, pero /login es la ÚNICA vía de entrada
@@ -108,7 +112,19 @@ async function dentroDelLimite(llave: string): Promise<boolean> {
  * mismo contador de `ratelimit.ts` que ya expira solo.
  */
 async function dentroDelLimitePorCuenta(email: string): Promise<boolean> {
-  return await rateLimit(`login:cuenta:${email}`, 10, 5 * 60_000, { fallaCerrado: false });
+  // A37-S21-04: el contador por cuenta ya NO es uno solo y global. Con uno solo,
+  // un atacante desde UNA IP llenaba el cupo del correo del dueño de una flota
+  // (10 solicitudes) y lo dejaba sin su enlace mágico, sin saber por qué, cada
+  // 5 min. Ahora:
+  //  · por cuenta Y por IP: lo que una IP gasta con un correo ajeno solo cierra
+  //    ESA IP para ese correo (y el límite por IP de arriba ya la frena);
+  //  · por cuenta global, con techo más alto que el de una IP (30 > 10): una IP
+  //    sola no puede llenarlo; solo lo hace tráfico de varias IPs, que es el
+  //    abuso para el que existe (martillar el inbox de un tercero).
+  const ip = await ipDelCliente();
+  const porIp = await rateLimit(`login:cuenta-ip:${email}:${ip}`, 10, 5 * 60_000, { fallaCerrado: false });
+  const global = await rateLimit(`login:cuenta:${email}`, 30, 5 * 60_000, { fallaCerrado: false });
+  return porIp && global;
 }
 
 /**
