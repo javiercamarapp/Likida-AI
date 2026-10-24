@@ -58,6 +58,15 @@ export function armarFilasEstadias(
   return { filas, resumen: resumirEstadias(filas), truncada: datos.truncada };
 }
 
+/** ¿«AAAA-MM-DD» es un día REAL del calendario? (A37-S11-04: V8 acepta `2026-02-30` y lo corre al 2 de marzo.) */
+export function diaReal(dia: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dia);
+  if (!m) return false;
+  const [y, mes, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const f = new Date(Date.UTC(y, mes - 1, d));
+  return f.getUTCFullYear() === y && f.getUTCMonth() === mes - 1 && f.getUTCDate() === d;
+}
+
 /**
  * Los días «AAAA-MM-DD» del periodo → el instante de inicio y de fin (exclusivo) en la hora de la FLOTA (por omisión México).
  * A37-S35-09: antes era `-06:00` fijo; una flota con horario de verano (frontera) tenía los bordes corridos 1 h.
@@ -65,6 +74,7 @@ export function armarFilasEstadias(
 export function rangoDeDias(desde: string, hasta: string, maxDias = 93, zonaHoraria: string = TZ_MX): { desde: Date; hasta: Date } | { error: string } {
   const re = /^\d{4}-\d{2}-\d{2}$/;
   if (!re.test(desde) || !re.test(hasta)) return { error: 'Las fechas van como AAAA-MM-DD.' };
+  if (!diaReal(desde) || !diaReal(hasta)) return { error: 'Alguna fecha no existe.' };
   const ini = inicioDiaEnZona(desde, zonaHoraria);
   // El fin es la medianoche LOCAL del día siguiente a `hasta` (un día con cambio de hora no mide 24 h).
   const finDia = new Date(Date.UTC(Number(hasta.slice(0, 4)), Number(hasta.slice(5, 7)) - 1, Number(hasta.slice(8, 10)) + 1));
