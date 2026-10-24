@@ -30,7 +30,7 @@ if [ "$1" = "--prod" ]; then echo "https://likida-x.vercel.app"; exit 0; fi
 `);
   chmodSync(join(dir, 'bin/vercel'), 0o755);
   const r = spawnSync('bash', [join(dir, 'scripts/deploy-vercel.sh')], {
-    encoding: 'utf8', env: { PATH: `${join(dir, 'bin')}:${process.env.PATH}`, HOME: dir },
+    encoding: 'utf8', env: { PATH: `${join(dir, 'bin')}:${process.env.PATH}`, HOME: dir } as never,
   });
   return { r, log: existsSync(log) ? readFileSync(log, 'utf8') : '' };
 }
@@ -67,7 +67,7 @@ describe('deploy-vercel.sh', () => {
 
 describe('encender-emision-vercel.sh (A37-S03-04)', () => {
   const correr = (confirmo?: string) => spawnSync('bash', ['scripts/encender-emision-vercel.sh'], {
-    encoding: 'utf8', env: { PATH: '/usr/bin:/bin', ...(confirmo ? { CONFIRMO_EMISION_REAL: confirmo } : {}) },
+    encoding: 'utf8', env: { PATH: '/usr/bin:/bin', ...(confirmo ? { CONFIRMO_EMISION_REAL: confirmo } : {}) } as never,
   });
   it('sin confirmación escrita no toca nada (exit 1, ni siquiera llama a vercel)', () => {
     const r = correr();

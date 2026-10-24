@@ -50,8 +50,6 @@ export const dynamic = 'force-dynamic';
 interface PayloadHook {
   /** A37-S02-03: sonda FIRMADA del script de encendido; responde 200 sin armar ni mandar nada. */
   likida_dry_run?: boolean;
-  /** A37-S02-03: sonda FIRMADA del script de encendido; responde 200 sin armar ni mandar nada. */
-  likida_dry_run?: boolean;
   user?: { email?: string; new_email?: string };
   email_data?: {
     token?: string;

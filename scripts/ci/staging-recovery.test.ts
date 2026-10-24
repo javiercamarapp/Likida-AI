@@ -212,7 +212,7 @@ describe('A37-S02-02: tablasEsperadas deriva las tablas de las migraciones', () 
       '0001_a.sql': 'create table public.a (id int); create table if not exists public."b" (id int); -- create table public.fantasma',
       '0002_b.sql': 'drop table if exists public.a; alter table public.b rename to c;',
     };
-    const r = tablasEsperadas('m', (p: string) => archivos[p.split('/')[1]], () => Object.keys(archivos));
+    const r = tablasEsperadas('m', ((p: string) => archivos[p.split('/')[1]]) as never, (() => Object.keys(archivos)) as never);
     expect(r).toEqual(['c']);
   });
 });
