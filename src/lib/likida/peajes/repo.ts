@@ -2502,12 +2502,23 @@ export async function registrarNotaDeCredito(
   return { ok: true };
 }
 
-export async function marcarReclamoRechazado(tenantId: string, id: string): Promise<boolean> {
-  const { error } = await acotada(supabaseAdmin().from('peaje_reclamo')
+/**
+ * «El proveedor lo rechazó». A37-S15-04: devolvía `!error`, así que una pestaña
+ * vieja (reclamo ya acreditado o ya rechazado) o un id ajeno —0 filas
+ * afectadas— se contaba como éxito y la pantalla decía «Reclamo marcado como
+ * rechazado» sin que nada cambiara. Ahora se exige al menos una fila:
+ *  · `'rechazado'`  — se cambió el estado;
+ *  · `'sin_cambio'` — ninguna fila cumplía (no existe, es de otra flota, o ya no
+ *    está enviado/acreditado en parte);
+ *  · `'error'`      — la base falló.
+ */
+export async function marcarReclamoRechazado(tenantId: string, id: string): Promise<'rechazado' | 'sin_cambio' | 'error'> {
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_reclamo')
     .update({ estado: 'rechazado', actualizado_en: new Date().toISOString() })
-    .eq('tenant_id', tenantId).eq('id', id).in('estado', ['enviado', 'acreditado_parcial']), 'revision_cobros.rechazar');
-  if (error) logger.error('revision_cobros.rechazar', { tenant: tenantId, err: error.message });
-  return !error;
+    .eq('tenant_id', tenantId).eq('id', id).in('estado', ['enviado', 'acreditado_parcial'])
+    .select('id'), 'revision_cobros.rechazar');
+  if (error) { logger.error('revision_cobros.rechazar', { tenant: tenantId, err: error.message }); return 'error'; }
+  return Array.isArray(data) && data.length > 0 ? 'rechazado' : 'sin_cambio';
 }
 
 export { ESTADOS_RECLAMO };
