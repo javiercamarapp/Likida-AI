@@ -191,6 +191,10 @@ export async function GET(req: Request) {
     let codigosParcial = true;
     let conversacionesErrorMantenimiento: string | null = null;
     let codigosErrorMantenimiento: string | null = null;
+    // A37-L-06: toda purga de datos personales que falle se junta aquí y baja el estado del
+    // latido a 'fallo'; antes solo contaban la retención 0104 y producto_evento, y la purga
+    // de GPS/Carta Porte/ledgers podía fallar cada noche con el tablero en verde.
+    const purgasFallidas: string[] = [];
     do {
       vueltas++;
       const r = await supabaseAdmin().rpc('mantenimiento_de_datos', {
@@ -250,6 +254,7 @@ export async function GET(req: Request) {
       // arregla la que lanzó.
       const fallosPurga = Array.isArray(data.fallos) ? (data.fallos as unknown[]) : [];
       if (fallosPurga.length > 0) {
+        for (const f of fallosPurga) purgasFallidas.push(`mantenimiento_de_datos: ${String(f).slice(0, 120)}`);
         logger.error('cron.purgar.purgas_con_fallos', { fallos: fallosPurga, vuelta: vueltas });
         await alertarOperador('cron.purgar.purgas_con_fallos', { fallos: fallosPurga.map(String).join(' · ').slice(0, 500) });
         // Una purga que LANZA no es "quedó trabajo pendiente": reintentarla
@@ -318,9 +323,11 @@ export async function GET(req: Request) {
       storage = await borrarStorageMarcado();
       if (storage.fallidos > 0) {
         logger.warn('cron.purgar.storage_con_fallos', { ...storage });
+        purgasFallidas.push(`storage: ${storage.fallidos} archivo(s) sin borrar`);
       }
     } catch (e) {
       logger.error('cron.purgar.storage_excepcion', { err: e instanceof Error ? e.message : String(e) });
+      purgasFallidas.push('storage: excepción');
     }
 
     // ── PRODUCTO_EVENTO: consolidar el mes cerrado y purgar el detalle ─────
@@ -368,6 +375,7 @@ export async function GET(req: Request) {
       if (mo.error) {
         const codigo = codigoDeError(mo.error);
         logger.error('cron.purgar.mcp_oauth_falló', { error: mo.error.message, codigo });
+        purgasFallidas.push(`mcp_oauth: ${codigo}`);
         await alertarOperador('cron.purgar.mcp_oauth', { error: mo.error.message, codigo });
       } else {
         mcpOauth = (mo.data ?? {}) as Record<string, unknown>;
@@ -375,6 +383,7 @@ export async function GET(req: Request) {
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       logger.error('cron.purgar.mcp_oauth_excepcion', { error });
+      purgasFallidas.push('mcp_oauth: excepción');
       await alertarOperador('cron.purgar.mcp_oauth', { error });
     }
 
@@ -392,6 +401,7 @@ export async function GET(req: Request) {
       if (lp.error) {
         const codigo = codigoDeError(lp.error);
         logger.error('cron.purgar.llm_presupuesto_falló', { error: lp.error.message, codigo });
+        purgasFallidas.push(`llm_presupuesto: ${codigo}`);
         await alertarOperador('cron.purgar.llm_presupuesto', { error: lp.error.message, codigo });
       } else {
         llmPresupuesto = (lp.data ?? {}) as Record<string, unknown>;
@@ -399,6 +409,7 @@ export async function GET(req: Request) {
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       logger.error('cron.purgar.llm_presupuesto_excepcion', { error });
+      purgasFallidas.push('llm_presupuesto: excepción');
       await alertarOperador('cron.purgar.llm_presupuesto', { error });
     }
 
@@ -410,9 +421,13 @@ export async function GET(req: Request) {
     let cartaPorteDocs: Awaited<ReturnType<typeof purgarDocumentosVencidos>> | null = null;
     try {
       cartaPorteDocs = await purgarDocumentosVencidos(100);
-      if (cartaPorteDocs.fallidos > 0) logger.warn('cron.purgar.carta_porte_docs_con_fallos', { ...cartaPorteDocs });
+      if (cartaPorteDocs.fallidos > 0) {
+        logger.warn('cron.purgar.carta_porte_docs_con_fallos', { ...cartaPorteDocs });
+        purgasFallidas.push(`carta_porte_docs: ${cartaPorteDocs.fallidos} documento(s) sin purgar`);
+      }
     } catch (e) {
       logger.error('cron.purgar.carta_porte_docs_excepcion', { error: e instanceof Error ? e.message : String(e) });
+      purgasFallidas.push('carta_porte_docs: excepción');
     }
 
     // ── AGENTES 1 Y 2 (mig. 0562): ventana de WhatsApp, registro de envíos, liquidaciones externas
@@ -423,10 +438,12 @@ export async function GET(req: Request) {
       agentesDatos = await mantenerDatosAgentes(new Date(inicio));
       const fallidas = agentesDatos.filter((p) => !p.ok);
       if (fallidas.length > 0) {
+        for (const p of fallidas) purgasFallidas.push(`agentes_datos.${p.nombre}`);
         await alertarOperador('cron.purgar.agentes_datos', { error: fallidas.map((p) => `${p.nombre}: ${p.error}`).join(' · ').slice(0, 500) });
       }
     } catch (e) {
       logger.error('cron.purgar.agentes_datos_excepcion', { error: e instanceof Error ? e.message : String(e) });
+      purgasFallidas.push('agentes_datos: excepción');
     }
 
     // ── BUZÓN DE FACTURAS (mig. 0530): bitácora de archivos recibidos que no cuelgan de una factura ──
@@ -437,6 +454,7 @@ export async function GET(req: Request) {
       buzonRecepcionesPurgadas = await purgarRecepcionesVencidas(new Date(inicio));
     } catch (e) {
       logger.error('cron.purgar.buzon_recepcion_excepcion', { error: e instanceof Error ? e.message : String(e) });
+      purgasFallidas.push('buzon_recepcion: excepción');
     }
 
     // ── AUTOFACTURA (mig. 0540): solicitudes de vinculación de portal ya cerradas ──
@@ -445,10 +463,13 @@ export async function GET(req: Request) {
     let vinculacionPortal: number | null = null;
     try {
       const vp = await supabaseAdmin().rpc('purgar_vinculacion_portal', { p_dias: 90 });
-      if (vp.error) logger.error('cron.purgar.vinculacion_portal_falló', { error: vp.error.message, codigo: codigoDeError(vp.error) });
-      else vinculacionPortal = typeof vp.data === 'number' ? vp.data : null;
+      if (vp.error) {
+        logger.error('cron.purgar.vinculacion_portal_falló', { error: vp.error.message, codigo: codigoDeError(vp.error) });
+        purgasFallidas.push('vinculacion_portal');
+      } else vinculacionPortal = typeof vp.data === 'number' ? vp.data : null;
     } catch (e) {
       logger.error('cron.purgar.vinculacion_portal_excepcion', { error: e instanceof Error ? e.message : String(e) });
+      purgasFallidas.push('vinculacion_portal: excepción');
     }
 
     // ── LEDGERS SIN PURGA (mig. 0680) Y AUTOFACTURA (mig. 0542) ────────────────────────────────────
@@ -461,10 +482,12 @@ export async function GET(req: Request) {
       ledgers = await mantenerLedgers(new Date(inicio), new Date(venceRetencionMs));
       const fallidasLedgers = ledgers.filter((p) => !p.ok);
       if (fallidasLedgers.length > 0) {
+        for (const p of fallidasLedgers) purgasFallidas.push(`ledgers.${p.nombre}`);
         await alertarOperador('cron.purgar.ledgers', { error: fallidasLedgers.map((p) => `${p.nombre}: ${p.error}`).join(' · ').slice(0, 500) });
       }
     } catch (e) {
       logger.error('cron.purgar.ledgers_excepcion', { error: e instanceof Error ? e.message : String(e) });
+      purgasFallidas.push('ledgers: excepción');
     }
 
     // 0332 separa la señal de las purgas restantes: si conversación/códigos
@@ -473,10 +496,14 @@ export async function GET(req: Request) {
     // usa el agregado legado, que es el fallback conservador.
     const productoEventoParcial = productoEvento?.parcial === true;
     const parcialGlobal = (otrasPurgasParcial ?? parcial) || retencionParcial || productoEventoParcial;
-    const estado = erroresRetencion0104.length > 0 || productoEventoError !== null
+    const estadoHttp = erroresRetencion0104.length > 0 || productoEventoError !== null
       ? 'fallo'
       : parcialGlobal ? 'parcial' : 'ok';
-    const detalleFinal = { ...data, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal, ledgers };
+    // A37-L-06: una purga de datos personales que falló NO tumba la corrida (HTTP 200: las demás
+    // ya corrieron y el reintento es mañana), pero el LATIDO y el cuerpo sí dicen 'fallo' para
+    // que el tablero no la pinte en verde.
+    const estado = purgasFallidas.length > 0 ? 'fallo' : estadoHttp;
+    const detalleFinal = { ...data, vueltas, purgasFallidas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal, ledgers };
     if (estado === 'fallo') logger.error('cron.purgar.retencion_0104_incompleta', detalleFinal);
     else if (estado === 'parcial') logger.warn('cron.purgar.incompleta', detalleFinal);
     else logger.info('cron.purgar.ok', detalleFinal);
@@ -487,10 +514,11 @@ export async function GET(req: Request) {
       retencion0104,
       productoEventoParcial,
       productoEventoError,
+      purgasFallidas,
     });
     return NextResponse.json(
-      { corrio: true, ...data, parcial: parcialGlobal, estado, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal, ledgers },
-      { status: estado === 'fallo' ? 500 : 200 },
+      { corrio: true, ...data, parcial: parcialGlobal, estado, vueltas, purgasFallidas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal, ledgers },
+      { status: estadoHttp === 'fallo' ? 500 : 200 },
     );
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);

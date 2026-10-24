@@ -77,6 +77,11 @@ vi.mock('@/lib/likida/retencion_agentes', () => ({ mantenerDatosAgentes: (a?: Da
 const purgaLedgers = vi.fn(async (_ahora?: Date, _vence?: Date | null): Promise<PurgaAgente[]> => [{ nombre: 'evento_seguridad', ok: true, filas: 0, parcial: false, error: null }]);
 vi.mock('@/lib/likida/retencion_ledgers', () => ({ mantenerLedgers: (a?: Date, v?: Date | null) => purgaLedgers(a, v) }));
 
+// El borrador de Storage (A37-L-06): antes su excepción se tragaba en silencio y la prueba no lo notaba; ahora cuenta como purga
+// fallida, así que se mockea para que la «base sana» sea sana de verdad. Su lógica vive en storage_borrado.test.ts.
+const borradoStorage = vi.fn(async () => ({ intentados: 0, borrados: 0, fallidos: 0, pendientes: 0 }));
+vi.mock('@/lib/likida/storage_borrado', () => ({ borrarStorageMarcado: () => borradoStorage() }));
+
 process.env.CRON_SECRET = 'secreto-de-prueba';
 const { GET } = await import('./route');
 
@@ -516,5 +521,82 @@ describe('la retención de los ledgers y de la autofactura (0680 + 0542)', () =>
     estaApagado.mockResolvedValue(true);
     await GET(peticion('Bearer secreto-de-prueba'));
     expect(purgaLedgers).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A37-L-06 — el estado/latido ignoraba la mayoría de las purgas de datos personales:
+// la de GPS/Carta Porte/ledgers podía fallar cada noche y el tablero seguía en verde.
+// Una purga fallida NO tumba la corrida (HTTP 200: las demás ya corrieron), pero el
+// latido y el cuerpo dicen 'fallo' y nombran cuál.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('A37-L-06 — toda purga fallida marca el latido como fallo', () => {
+  const corre = async () => { const res = await GET(peticion('Bearer secreto-de-prueba')); return { res, cuerpo: await res.json() as Record<string, unknown> }; };
+  const latido = () => registrarLatido.mock.calls.at(-1) as [string, string, Record<string, unknown>];
+
+  beforeEach(() => {
+    borradoStorage.mockReset().mockResolvedValue({ intentados: 0, borrados: 0, fallidos: 0, pendientes: 0 });
+    purgaCartaPorte.mockReset().mockResolvedValue({ revisados: 0, purgados: 0, fallidos: 0 });
+    purgaAgentes.mockReset().mockResolvedValue([{ nombre: 'wa_ventana_contacto', ok: true, filas: 0, parcial: false, error: null }]);
+    purgaLedgers.mockReset().mockResolvedValue([{ nombre: 'evento_seguridad', ok: true, filas: 0, parcial: false, error: null }]);
+  });
+
+  it('control: todo sano = latido ok y sin purgasFallidas', async () => {
+    const { res, cuerpo } = await corre();
+    expect(res.status).toBe(200);
+    expect(cuerpo.purgasFallidas).toEqual([]);
+    expect(latido()[1]).toBe('ok');
+  });
+
+  it('la purga de documentos de Carta Porte con fallidos > 0 → latido fallo, HTTP 200', async () => {
+    purgaCartaPorte.mockResolvedValue({ revisados: 3, purgados: 1, fallidos: 2 });
+    const { res, cuerpo } = await corre();
+    expect(res.status).toBe(200);
+    expect(cuerpo.estado).toBe('fallo');
+    expect(latido()[1]).toBe('fallo');
+    expect(String(cuerpo.purgasFallidas)).toContain('carta_porte_docs');
+  });
+
+  it('una excepción de la purga de Carta Porte → fallo', async () => {
+    purgaCartaPorte.mockRejectedValue(new Error('base caída'));
+    const { cuerpo } = await corre();
+    expect(latido()[1]).toBe('fallo');
+    expect(String(cuerpo.purgasFallidas)).toContain('carta_porte_docs');
+  });
+
+  it('una purga de agentes (GPS/ventana) que devuelve ok:false → fallo y nombra la tabla', async () => {
+    purgaAgentes.mockResolvedValue([{ nombre: 'gps_posicion', ok: false, filas: null, parcial: false, error: 'timeout' }]);
+    const { cuerpo } = await corre();
+    expect(latido()[1]).toBe('fallo');
+    expect(String(cuerpo.purgasFallidas)).toContain('gps_posicion');
+  });
+
+  it('un ledger que falla → fallo', async () => {
+    purgaLedgers.mockResolvedValue([{ nombre: 'evento_seguridad', ok: false, filas: null, parcial: false, error: 'x' }]);
+    const { cuerpo } = await corre();
+    expect(latido()[1]).toBe('fallo');
+    expect(String(cuerpo.purgasFallidas)).toContain('evento_seguridad');
+  });
+
+  it('mcp_oauth y llm_presupuesto con error de RPC → fallo; el borrado de Storage con fallidos → fallo', async () => {
+    rpcMcpOauthRespuesta = { data: null, error: { message: 'boom', code: '57014' } };
+    const a = await corre();
+    expect(latido()[1]).toBe('fallo');
+    expect(String(a.cuerpo.purgasFallidas)).toContain('mcp_oauth');
+    rpcMcpOauthRespuesta = { data: { parcial: false }, error: null };
+    rpcLlmPresupuestoRespuesta = { data: null, error: { message: 'boom' } };
+    const b = await corre();
+    expect(String(b.cuerpo.purgasFallidas)).toContain('llm_presupuesto');
+    rpcLlmPresupuestoRespuesta = { data: { parcial: false }, error: null };
+    borradoStorage.mockResolvedValue({ intentados: 2, borrados: 0, fallidos: 2, pendientes: 2 });
+    const c = await corre();
+    expect(String(c.cuerpo.purgasFallidas)).toContain('storage');
+  });
+
+  it('`fallos` que devuelve mantenimiento_de_datos también cuentan', async () => {
+    rpcRespuesta = { data: { ...(rpcRespuesta.data as object), fallos: ['gps_posicion: statement timeout'] }, error: null };
+    const { cuerpo } = await corre();
+    expect(latido()[1]).toBe('fallo');
+    expect(String(cuerpo.purgasFallidas)).toContain('gps_posicion');
   });
 });
