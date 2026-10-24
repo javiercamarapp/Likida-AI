@@ -19,7 +19,7 @@
 // complemento es un comprobante falso (CFF 29-A fr. IX), no un error de captura.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { CAMPOS_DOC, CAMPOS_MERCANCIA, REFERENCIAS_MERCANCIA, UMBRAL_CRITICO, etiquetaCampo, type CampoDoc, type CampoValor, type Extraccion } from './campos';
+import { CAMPOS_DOC, CAMPOS_MERCANCIA, MAX_MERCANCIAS, REFERENCIAS_MERCANCIA, UMBRAL_CRITICO, etiquetaCampo, type CampoDoc, type CampoValor, type Extraccion } from './campos';
 import { CLAVES_UNIDAD, CODIGOS_ESTADO, CODIGOS_ESTADO_EEUU, FACTOR_A_KG, estadoDeCp } from './catalogos';
 import {
   CAT_COLONIA, CAT_CP, CAT_EMBALAJE, CAT_FRACCION, CAT_PELIGROSO, CAT_PRODUCTO, CAT_UNIDAD,
@@ -839,6 +839,10 @@ export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): R
 
   if (e.mercancias.length === 0) {
     reg({ campo: 'mercancias', renglon: null, severidad: 'bloqueo', codigo: 'sin_mercancias', mensaje: 'No se encontró ninguna mercancía en el documento. Agrega al menos un renglón para poder aprobar.' });
+  }
+  if (e.mercancias.length > MAX_MERCANCIAS) {
+    // A37-S32-05: la plantilla del TMS lleva 100 renglones; aprobar con más enviaría un libro recortado (CCP incompleto, otro peso).
+    reg({ campo: 'mercancias', renglon: null, severidad: 'bloqueo', codigo: 'demasiadas_mercancias', mensaje: `El documento trae ${e.mercancias.length} mercancías y la plantilla del TMS lleva ${MAX_MERCANCIAS} como máximo. Divide el embarque en dos documentos para poder aprobar.` });
   }
   e.mercancias.forEach((fila, i) => { for (const def of CAMPOS_MERCANCIA) revisarCampo(def, fila[def.clave], i); });
 
