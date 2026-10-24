@@ -219,6 +219,36 @@ describe('fuera de orden', () => {
     expect(estado.viajes.find((v) => v.folio === 'BOR-77120')!.origen).toBe('Origen capturado a mano');
   });
 
+  it('A37-S33-04: el viaje existe con el folio en OTRA caja: se completa ese viaje, no se intenta crear uno y chocar con el índice', async () => {
+    const r = await subirYProcesar(A, await pdfBoreal(), llmBoreal(), 'o.pdf', { clienteId: 'cli-boreal' });
+    estado.viajes.push({ tenantId: A, id: 'v-previo', folio: 'bor-77120', origen: 'Origen capturado a mano', operadorId: null, estatus: 'abierto' } as never);
+    const ap = await aprobarDocumento(A, r.documentoId, estado.docs.get(r.documentoId)!.version, ACTOR);
+    expect(estado.viajes).toHaveLength(1);
+    expect(ap.salida).toMatchObject({ ok: true, accion: 'actualizado', viajeId: 'v-previo' });
+  });
+
+  it('A37-S33-06: un viaje de OTRO cliente con el mismo folio NO se completa con los datos del documento', async () => {
+    const r = await subirYProcesar(A, await pdfBoreal(), llmBoreal(), 'o.pdf', { clienteId: 'cli-boreal' });
+    estado.viajes.push({ tenantId: A, id: 'v-ajeno', folio: 'BOR-77120', origen: null, operadorId: null, clienteId: 'cli-otro', estatus: 'abierto' } as never);
+    const ap = await aprobarDocumento(A, r.documentoId, estado.docs.get(r.documentoId)!.version, ACTOR);
+    expect(ap.salida).toMatchObject({ ok: false, motivo: 'folio_de_otro_cliente' });
+    expect(estado.viajes).toHaveLength(1);
+    expect(estado.viajes[0].origen ?? null).toBeNull();
+    expect(estado.mercancias.filter((m) => m.viajeId === 'v-ajeno')).toHaveLength(0);
+  });
+
+  it('A37-S33-04: una unidad con otro viaje abierto no produce el falso «otro viaje se abrió»: el viaje se crea sin unidad y se dice', async () => {
+    const r = await subirYProcesar(A, await pdfBoreal(), llmBoreal(), 'o.pdf', { clienteId: 'cli-boreal' });
+    for (const u of ['un-xyz', 'un-abc']) {
+      estado.viajes.push({ tenantId: A, id: `v-${u}`, folio: `OTRO-${u}`, operadorId: 'op-b1', unidadId: u, estatus: 'abierto' } as never);
+    }
+    const ap = await aprobarDocumento(A, r.documentoId, estado.docs.get(r.documentoId)!.version, ACTOR);
+    expect(ap.salida).toMatchObject({ ok: true, accion: 'creado' });
+    const creado = estado.viajes.find((v) => v.folio === 'BOR-77120')!;
+    expect(creado.unidadId ?? null).toBeNull();
+    if (ap.salida && ap.salida.ok) expect(ap.salida.advertencias.join(' ')).toMatch(/ya tiene otro viaje abierto/);
+  });
+
   it('rechazar y reabrir: un aprobado se reabre a revisión sin tocar el viaje ya creado; solo se exporta lo aprobado', async () => {
     const r = await subirYProcesar(A, await pdfBoreal(), llmBoreal(), 'o.pdf', { clienteId: 'cli-boreal' });
     const ap = await aprobarDocumento(A, r.documentoId, estado.docs.get(r.documentoId)!.version, ACTOR);

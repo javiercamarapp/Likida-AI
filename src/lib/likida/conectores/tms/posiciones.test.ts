@@ -75,7 +75,7 @@ import type { Http } from '../tipos';
 import { validarMapeo } from './mapeo';
 import { SesionTms } from './sesion';
 import {
-  asentarDespachoRef, asentarPosicionesTms, leerPosiciones, lectorPosiciones, MAPEO_POSICIONES_SUPUESTO, PROVEEDOR_TMS_POSICIONES,
+  asentarDespachoRef, asentarPosicionesTms, leerPosiciones, lectorPosiciones, SOLAPE_CURSOR_POSICIONES_MS, MAPEO_POSICIONES_SUPUESTO, PROVEEDOR_TMS_POSICIONES,
 } from './posiciones';
 
 const BASE = 'https://tms.ejemplo.test';
@@ -168,7 +168,8 @@ describe('leerPosiciones', () => {
     const completa = await leerPosiciones(sesionDe(origen(todas, 10).http), VENTANA, { paginacion: { tipo: 'pagina', tamano: 10 } });
     if (!completa.ok) throw new Error(completa.motivo);
     expect(completa.completa).toBe(true);
-    expect(completa.cursor).toBe(todas[29].fecha);
+    // A37-S39-03: el cursor retrocede un solape fijo del máximo leído.
+    expect(completa.cursor).toBe(new Date(Date.parse(String(todas[29].fecha)) - SOLAPE_CURSOR_POSICIONES_MS).toISOString());
 
     const parcial = await leerPosiciones(sesionDe(origen(todas, 10).http), VENTANA, { paginacion: { tipo: 'pagina', tamano: 10 }, maxPaginas: 1 });
     if (!parcial.ok) throw new Error(parcial.motivo);
@@ -176,6 +177,21 @@ describe('leerPosiciones', () => {
     expect(parcial.completa).toBe(false);
     expect(parcial.cursor).toBe(VENTANA.desde); // no se adelanta: las páginas sin leer podrían traer instantes anteriores
     expect(parcial.reanudar).toEqual({ tipo: 'pagina', pagina: 2 });
+  });
+
+  it('A37-S39-03: una marca de tiempo futura se descarta y no adelanta el cursor más allá de `hasta`', async () => {
+    const futura = p(0, { fecha: new Date(Date.parse(VENTANA.hasta) + 3 * 86_400_000).toISOString() });
+    const r = await leerPosiciones(sesionDe(origen([p(1), futura]).http), VENTANA);
+    if (!r.ok) throw new Error(r.motivo);
+    expect(r.filas).toHaveLength(1);
+    expect(Date.parse(r.cursor)).toBeLessThanOrEqual(Date.parse(VENTANA.hasta));
+    expect(r.avisos.join(' ')).toMatch(/posterior a la ventana/);
+  });
+
+  it('A37-S39-03: el cursor retrocede un solape para no perder lo que un dispositivo con buffer sube tarde', async () => {
+    const r = await leerPosiciones(sesionDe(origen([p(20)]).http), VENTANA);
+    if (!r.ok) throw new Error(r.motivo);
+    expect(Date.parse(r.cursor)).toBeLessThan(Date.parse(p(20).fecha as string));
   });
 
   it('una lectura completa sin filas conserva el cursor recibido', async () => {

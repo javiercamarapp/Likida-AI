@@ -49,6 +49,17 @@ describe('recibirDocumento', () => {
     expect(tipos(a.documentoId)).toEqual(['recibido', 'duplicado_recibido']);
   });
 
+  it('A37-S33-05: reenviar un archivo cuyo documento ya se purgó NO deja un archivo huérfano y lo dice', async () => {
+    const bytes = await pdfBoreal();
+    const a = await subir(A, bytes, 'a.pdf', { canal: 'manual' });
+    const ruta = estado.docs.get(a.documentoId)!.storageRuta!;
+    await repo.marcarPurgado(A, a.documentoId); // retención: deja storageRuta en null
+    estado.archivos.delete(ruta);
+    const b = await recibirDocumento(A, { canal: 'whatsapp', nombre: 'otra-vez.pdf', bytes }, sinAgenteApagado);
+    expect(b).toMatchObject({ ok: true, duplicado: true, documentoId: a.documentoId, archivoPurgado: true });
+    expect(estado.archivos.has(ruta)).toBe(false);
+  });
+
   it('el mismo archivo en OTRA flota es otro documento (aislamiento entre tenants)', async () => {
     const bytes = await pdfBoreal();
     const a = await subir(A, bytes);

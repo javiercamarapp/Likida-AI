@@ -96,6 +96,8 @@ export async function viajesPorConfirmar(tenantId: string, operadorId: string): 
     .eq('operador_id', operadorId)
     .eq('estatus', 'abierto')
     .is('aceptado_en', null)
+    // A37-S39-04: un viaje que el chofer ya rechazó no se vuelve a ofrecer ni secuestra sus mensajes.
+    .is('rechazado_en', null)
     .not('avisado_en', 'is', null)
     .order('avisado_en', { ascending: true })
     .limit(10);

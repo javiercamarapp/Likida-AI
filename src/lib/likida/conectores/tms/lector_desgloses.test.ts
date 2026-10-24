@@ -12,13 +12,13 @@ const fila = (n: string, de: string, extra: Partial<LiquidacionSintetica> = {}):
   tipo_operador: 'foraneo', terminal: 'T1', percepciones: [{ concepto: 'Sueldo', valor: 100 }], deducciones: [], desglose: { texto: 'x', renglones: 1 },
   enviado: false, ...extra,
 });
-function lector(filas: LiquidacionSintetica[]) {
+function lector(filas: LiquidacionSintetica[], config?: import('../../liquidacion_externa/desglose_tms_supuesto').ConfigApiDesglose) {
   const s = crearServidorTmsFalso({ datos: { liquidaciones: filas, peajes: [], viajes: [], posiciones: [] }, reloj: () => AHORA, vigenciaTokenMs: 3_600_000 });
   const sesion = new SesionTms({
     http: comoHttpDeConector(s), base: 'https://tms.ejemplo.test', login: { ruta: '/api/login', cuerpo: { usuario: '{usuario}', clave: '{clave}' }, campo_token: 'token' },
     credenciales: { usuario: 'usuario-sintetico', clave: 'clave-sintetica' }, reloj: { ahora: () => AHORA, dormir: async () => undefined },
   });
-  return crearLectorDesglosesTms({ sesion, ahora: () => AHORA });
+  return crearLectorDesglosesTms({ sesion, ahora: () => AHORA, ...(config ? { config } : {}) });
 }
 
 describe('lector de desgloses sobre el TMS', () => {
@@ -43,6 +43,23 @@ describe('lector de desgloses sobre el TMS', () => {
     expect(p.items).toEqual([]);
     expect(p.rechazadas).toEqual([{ clave: 'BIT-T1-B-1', campo: 'percepciones[0].monto' }]);
     expect(p.siguiente).toEqual({ desde: '2026-10-14T08:00:00.000Z', despuesDe: 'BIT-T1-B-1' });
+  });
+
+  it('A37-S38-06: sin total_paginas en la respuesta sigue paginando y no da por completa la primera página', async () => {
+    const { CONFIG_API_DESGLOSE } = await import('../../liquidacion_externa/desglose_tms_supuesto');
+    const filas = ['B-1', 'B-2', 'B-3', 'B-4', 'B-5'].map((b, i) => fila(b, `2026-10-14T0${i + 1}:00:00.000Z`));
+    // La API real nombra distinto el total: la ruta configurada no existe en la respuesta.
+    const l = lector(filas, { ...CONFIG_API_DESGLOSE, tamano: 2, rutaTotalPaginas: 'data.no_existe' });
+    const p = await l.listar({ tenantId: 't', cursor: null, limite: 10 });
+    expect(p.items.map((d) => d.bitacora)).toEqual(['B-1', 'B-2', 'B-3', 'B-4', 'B-5']);
+    expect(p.hayMas).toBe(false);
+  });
+
+  it('A37-S38-06: sin total_paginas y sin fin decidible (tope de páginas) lanza y no avanza el cursor', async () => {
+    const { CONFIG_API_DESGLOSE } = await import('../../liquidacion_externa/desglose_tms_supuesto');
+    const filas = ['B-1', 'B-2', 'B-3', 'B-4', 'B-5'].map((b, i) => fila(b, `2026-10-14T0${i + 1}:00:00.000Z`));
+    const l = lector(filas, { ...CONFIG_API_DESGLOSE, tamano: 2, rutaTotalPaginas: 'data.no_existe', maxPaginas: 2 });
+    await expect(l.listar({ tenantId: 't', cursor: null, limite: 10 })).rejects.toThrow();
   });
 
   it('credencial mala: lanza TmsCredenciales y no filtra la clave', async () => {

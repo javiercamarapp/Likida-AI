@@ -599,6 +599,7 @@ const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_315;
 // Lote A-conductor-A5-04 (+1, 2284 → 2285): `conductor/repo_validacion.ts` retira la evidencia recién insertada (`viaje_hito_evidencia`, por id y tenant)
 // cuando el UPDATE de estado del documento de cierre falla dos veces, para que el reenvío del chofer no tope con el UNIQUE por sha (A37-S36-08).
 // A37-S36-05 (lote M-A-conductor-A5-02): +1 llamada (2,284 → 2,285), `liberarNivelSenalVida` en `conductor/repo.ts` (UPDATE por id Y `tenant_id` del nivel 3 de un episodio sin destinatario, por `acotada`; cubierta por `senal_vida.test.ts` y la prueba SQL no aplica: no hay migración). Las lecturas por viaje (A37-S36-01) reemplazan llamadas existentes sin sumar.
+// Lote M-E-cartaporte-vigia-03 (A37-S33-04): +1 llamada (`unidadConViajeAbierto` en carta_porte_docs/repo.ts); medido: 2,285.
 // Auditoría 37, lote agentes-legal-ia (medido con el barrido real): +2 llamadas (2,264 → 2,266). `candidatos_redactor.ts` suma 3 `.from(` (prospecto, cola_aprobacion, prospecto_contacto) y `runner.ts` pierde la suya (+2 netas); `sdr.ts` pasa de 3 a 3 (la lectura por prospecto se volvió lectura en lote). Todo por `acotada`.
 // LOTE A37 peajes-liquidación-graves (migración 0865): +5 llamadas (2,264 → 2,269), 0 archivos nuevos, medido con el barrido real. `jornada/repo.ts` +1:
 // `.rpc('asentar_declaracion_jornada')` (A37-S48-01; la 0865 sustituye la marca derivada bajo el lock del expediente; el INSERT anterior se conserva

@@ -84,9 +84,10 @@ export function crearLectorDesglosesTms(o: OpcionesLectorTms): LectorDesglosesPu
       if (!Array.isArray(items)) throw new TmsNoDisponible('La respuesta del sistema de transporte no trae la lista esperada');
       crudas.push(...items);
       const total = Number(cuerpo ? leerRuta(cuerpo, cfg.rutaTotalPaginas) : undefined);
-      if (!Number.isFinite(total) || pagina >= total || items.length === 0) {
-        return crudas.map((c) => aEntrada(c, cfg));
-      }
+      // A37-S38-06: sin total numérico NO se da por completa la primera página; se sigue hasta una página
+      // vacía o más corta que el tamaño pedido (o el tope de páginas, que lanza).
+      const fin = items.length === 0 || (Number.isFinite(total) && total >= 1 ? pagina >= total : items.length < cfg.tamano);
+      if (fin) return crudas.map((c) => aEntrada(c, cfg));
     }
     // Más páginas que el tope: no se declara completa una lectura que no lo es (el cursor no avanza).
     throw new TmsNoDisponible('La lectura excedió el tope de páginas');
