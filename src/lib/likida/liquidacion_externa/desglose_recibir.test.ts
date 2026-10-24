@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DatoInvalido } from '../errores';
+import { DatoInvalido, OperadorDeBaja } from '../errores';
 import { CampoInvalido } from '@/lib/http/campos_cuerpo';
 import { DESGLOSE_SINTETICO } from './desglose.fixture';
 import type { DesgloseBitacora } from './desglose_contrato';
@@ -176,7 +176,9 @@ describe('recibirDesglose: idempotencia y correcciones', () => {
     expect(b.liquidaciones[0].huella).toBe(huellaAntes);
     expect(b.subidas).toHaveLength(1);
     expect(b.excepciones).toHaveLength(1);
-    expect(b.excepciones[0]).toMatchObject({ tipo: 'correccion_pendiente', detalle: { bitacora: 'B-0001', netoAntes: 4850, netoDespues: 4000 } });
+    expect(b.excepciones[0]).toMatchObject({ tipo: 'correccion_pendiente', detalle: { bitacora: 'B-0001', cambioElNeto: true } });
+    // A37-A1-liquidaciones-15: ninguna cifra de dinero queda en el detalle de la excepción.
+    expect(JSON.stringify(b.excepciones[0].detalle)).not.toMatch(/4850|4000/);
   });
 
   it('A37-A1-02: quien administra decide mandar la corrección => liquidación NUEVA «-R1», xlsx y entregas nuevas, la original intacta y la pendiente se cierra', async () => {
@@ -316,6 +318,14 @@ describe('recibirDesglose: guardas previas al envío', () => {
 });
 
 describe('recibirDesglose: operador y destinatarios', () => {
+  it('A37-A1-liquidaciones-12: operador de BAJA ⇒ misma excepción pero con motivo «baja» (no «no_existe»)', async () => {
+    const b = banco();
+    b.deps.resolverOperador = async () => { throw new OperadorDeBaja('Ese operador está dado de baja'); };
+    const r = await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(r.estado).toBe('operador_no_encontrado');
+    expect(b.excepciones[0]).toMatchObject({ tipo: 'operador_no_encontrado', detalle: { bitacora: 'B-0001', motivo: 'baja' } });
+  });
+
   it('operador inexistente => resultado operador_no_encontrado, excepción y nada escrito', async () => {
     const b = banco({ operador: 'inexistente' });
     const r = await recibirDesglose(TENANT, desglose(), b.deps);

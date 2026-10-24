@@ -21,7 +21,7 @@
 
 import { createHash } from 'node:crypto';
 import { logger } from '@/lib/logger';
-import { DatoInvalido } from '../errores';
+import { DatoInvalido, OperadorDeBaja } from '../errores';
 import { huellaContenido, huellaDesglose } from './esquema';
 import type { LiquidacionExternaNormalizada } from './esquema';
 import {
@@ -273,8 +273,10 @@ export async function recibirDesglose(
     existente = null;
   }
   if (existente) {
+    // A37-A1-liquidaciones-15: el detalle de la excepción NO guarda importes (la migración 0786 promete «ids y motivos»; esta tabla
+    // no tiene purga): la persona compara contra el origen. Solo se anota QUÉ cambió y que cambió el importe, sin la cifra.
     await deps.abrirExcepcion(tenantId, claveExterna, 'correccion_pendiente', {
-      bitacora: d.bitacora, netoAntes: existente.total, netoDespues: liq.total,
+      bitacora: d.bitacora, cambioElNeto: existente.total !== liq.total,
     }, ahora);
     logger.warn('liqcorreo.correccion_pendiente', { clave: claveExterna });
     return { estado: 'correccion_pendiente', liquidacionId: existente.id, claveExterna };
@@ -286,7 +288,10 @@ export async function recibirDesglose(
     operador = await deps.resolverOperador(tenantId, d.operador.numeroEmpleado);
   } catch (e) {
     if (!(e instanceof DatoInvalido)) throw e;
-    await deps.abrirExcepcion(tenantId, claveExterna, 'operador_no_encontrado', { bitacora: d.bitacora }, ahora);
+    // A37-A1-liquidaciones-12: la excepción distingue al operador DE BAJA (finiquito, reactivar) del que no existe (dar de alta).
+    await deps.abrirExcepcion(tenantId, claveExterna, 'operador_no_encontrado', {
+      bitacora: d.bitacora, motivo: e instanceof OperadorDeBaja ? 'baja' : 'no_existe',
+    }, ahora);
     return { estado: 'operador_no_encontrado', claveExterna };
   }
 
