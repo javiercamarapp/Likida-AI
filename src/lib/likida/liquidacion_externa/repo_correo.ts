@@ -517,6 +517,14 @@ export interface RecepcionAtomica { liquidacionId: string; creada: boolean; repa
  * existe con la misma huella pero a medias, la RPC completa lo que falta. `no_disponible` = la base aún no tiene la 0857: el
  * llamador cae al camino anterior (no atómico) y lo avisa. Cualquier otro error LANZA: nada queda a medias y se reintenta.
  */
+/** La bitácora ya existe en la flota/terminal bajo OTRA clave (índice único `liquidacion_desglose_bitacora_unica`). Error de datos del ítem. */
+export class DesgloseEnConflicto extends Error {
+  constructor(mensaje: string) {
+    super(mensaje);
+    this.name = 'DesgloseEnConflicto';
+  }
+}
+
 export async function recibirDesgloseAtomico(tenantId: string, p: PedidoRecepcionAtomica): Promise<Lectura<RecepcionAtomica>> {
   const d = p.liquidacion.datos;
   const m = p.meta;
@@ -545,6 +553,10 @@ export async function recibirDesgloseAtomico(tenantId: string, p: PedidoRecepcio
     if (r.error.code === '42883' || r.error.code === 'PGRST202' || /could not find the function/i.test(r.error.message ?? '')) {
       return { ok: false, motivo: 'no_disponible' };
     }
+    // A37-A1-liquidaciones-07: la violación del índice único (flota, terminal, bitácora) es un error de DATOS del ítem (la misma
+    // bitácora llegó con otra clave, p. ej. antes sin número de liquidación y ahora con él), no una falla de infraestructura:
+    // se tipa para que el pull lo vuelva excepción visible y siga con los demás en vez de reintentarlo para siempre.
+    if (r.error.code === '23505') throw new DesgloseEnConflicto('liqcorreo.recibir_atomico: la bitácora ya existe con otra clave de idempotencia');
     throw new Error(`liqcorreo.recibir_atomico: ${r.error.message ?? 'error de base'}`);
   }
   if (!r.data || typeof r.data.liquidacion_id !== 'string') throw new Error('liqcorreo.recibir_atomico: respuesta sin liquidacion_id');

@@ -83,6 +83,12 @@ export async function GET(req: Request) {
     const parcial = r.fallidas > 0 || r.reintentar > 0 || r.avisos.reintentar > 0 || r.avisos.fallidos > 0
       || correoSinTerminar || (r.pull?.errores ?? 0) > 0 || (r.huerfanasCorreo?.confirmadas ?? 0) > 0;
     await registrarLatido('liquidaciones-externas', parcial ? 'parcial' : 'ok', { ...r });
+    // A37-A1-liquidaciones-06: la flota deja de recibir nóminas si el pull no avanza (credencial, ítem envenenado…): el latido
+    // `parcial` solo no avisa a nadie. `alertarOperador` ya limita a una alerta por hora y por incidente.
+    const atascadas = r.pull?.flotasAtascadas ?? [];
+    if (atascadas.length > 0) {
+      await alertarOperador('cron.liquidaciones_externas.pull_atascado', { flotas: atascadas.length, tenants: atascadas.slice(0, 20), error: r.pull?.error ?? 'error' });
+    }
     return NextResponse.json({ corrio: true, ...r });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
