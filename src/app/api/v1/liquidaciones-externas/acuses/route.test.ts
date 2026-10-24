@@ -22,7 +22,8 @@ const fila = (p: Partial<LiquidacionExterna> = {}): LiquidacionExterna => ({
 
 const pendientes = vi.fn(async (..._a: unknown[]): Promise<{ filas: LiquidacionExterna[]; hayMas: boolean }> => ({ filas: [], hayMas: false }));
 const exportar = vi.fn(async (..._a: unknown[]): Promise<{ filas: LiquidacionExterna[]; truncado: boolean }> => ({ filas: [], truncado: false }));
-const confirmar = vi.fn(async (..._a: unknown[]) => ({ confirmadas: [] as string[], yaConfirmadas: [] as string[], noAplican: [] as string[] }));
+type Res = { confirmadas: string[]; yaConfirmadas: string[]; noAplican: string[]; cambiaron?: string[] };
+const confirmar = vi.fn(async (..._a: unknown[]): Promise<Res> => ({ confirmadas: [], yaConfirmadas: [], noAplican: [] }));
 vi.mock('@/lib/likida/liquidacion_externa/repo', async (orig) => ({
   ...(await orig<typeof import('@/lib/likida/liquidacion_externa/repo')>()),
   listarAcusesPendientes: (...a: unknown[]) => pendientes(...a),

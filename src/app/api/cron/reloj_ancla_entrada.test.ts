@@ -10,6 +10,7 @@ const CRONS = ['asistencia', 'conductor-hitos', 'jornada-alertas', 'descarga-sat
 
 describe('A37-S09-06: venceEn parte de la entrada del GET', () => {
   for (const nombre of CRONS) {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- lista fija de rutas del propio repo
     const fuente = readFileSync(join(__dirname, nombre, 'route.ts'), 'utf8');
     const get = fuente.slice(fuente.indexOf('export async function GET'));
 

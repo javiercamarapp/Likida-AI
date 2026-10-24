@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // A37-S10-06 — `leerJornadas` ya no corta en 900 expedientes ni arma un `.in()` de 900 uuid (≈33 KB de URL).
 // El doble implementa lo justo de PostgREST: filtros, orden, `range` y `in`, y registra el tamaño de cada `.in()`.
 
-interface Dia { id: string; operador_id: string; dia: string; estado: string; cerrado_en: null; cerrado_por_email: null; conforme_operador_en: null; conforme_wa_message_id: null }
+type Dia = { id: string; operador_id: string; dia: string; estado: string; cerrado_en: null; cerrado_por_email: null; conforme_operador_en: null; conforme_wa_message_id: null }
 let expedientes: Dia[] = [];
 const tamanosIn: number[] = [];
 

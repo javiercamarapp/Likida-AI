@@ -7,7 +7,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Un elemento de `ids`: el uuid solo (forma anterior: confirma lo que haya) o `{ id, respuestaEn }` (confirma SOLO ese acuse). */
 export interface ConfirmacionPedida { id: string; respuestaEn: string | null }
 
-const INSTANTE = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}(:?\d{2})?)$/;
+const INSTANTE = /^\d{4}-\d{2}-\d{2}[T ][0-9:.]{8,15}(Z|[+-][0-9:]{2,5})$/;
 
 /**
  * A37-S11-02: valida el cuerpo y devuelve cada confirmación con el instante del acuse que el integrador LEYÓ
