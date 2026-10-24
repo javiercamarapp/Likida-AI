@@ -167,6 +167,15 @@ describe('leerEtaMin — el ETA es el que DIJO, o null', () => {
     ['2 horas o 3', null],
     // Y el precio después de la unidad NO es una segunda lectura de ETA.
     ['llego en 40 min, cobro $1,500', 40],
+    // A37-S29-02: rangos con guion, «entre X y Y», h:mm y «1 h 30 min»
+    // se anulan (antes leían 40, 40, 30 y 1800); «2 horas y media» = 150.
+    ['30-40 min, 1,500', null],
+    ['30 - 40 minutos', null],
+    ['entre 30 y 40 minutos', null],
+    ['1:30 hrs', null],
+    ['1 h 30 min', null],
+    ['1 hora 30 minutos', null],
+    ['2 horas y media', 150],
   ])('«%s» → %s', (texto, esperado) => {
     expect(leerEtaMin(texto)).toBe(esperado);
   });

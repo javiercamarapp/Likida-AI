@@ -61,6 +61,15 @@ function limpiar(texto: string): string {
  */
 export function leerEtaMin(texto: string): number | null {
   const t = limpiar(texto);
+  // A37-S29-02: `limpiar` borra «-» y «:», así que el rango «30-40 min» y la
+  // hora «1:30 hrs» se leían como cifras sueltas (40 y 30 «min»). Se detectan
+  // sobre el texto sin limpiar, y dos cantidades con unidad pegadas
+  // («1 h 30 min», «entre 30 y 40 minutos») también anulan la lectura.
+  const crudo = strip_accents(texto.toLowerCase());
+  if (/\b\d{1,3}\s*[-–—]\s*\d{1,3}\s*(?:min|mins|minutos|horas?|hrs?|hr|h)\b/.test(crudo)) return null;
+  if (/\b\d{1,2}:\d{2}\b/.test(crudo)) return null;
+  if (/\b\d{1,3} y \d{1,3} (?:min|mins|minutos|horas?|hrs?|hr)\b/.test(t)) return null;
+  if (/\b\d{1,2} (?:h|hr|hrs|hora|horas) \d{1,2} (?:min|mins|minutos)\b/.test(t)) return null;
   // AUDITORÍA FABLE CICLO 4 (c4-7): el rango y la alternativa son AMBIGUOS
   // por definición — "de 40 a 50 minutos" no es 50, y "1 hora si acaso 2" no
   // es 60. Antes solo el número pegado a la unidad contaba y el otro se
@@ -80,11 +89,12 @@ export function leerEtaMin(texto: string): number | null {
     const n = Number(m[1]);
     if (n > 0) vistos.add(n);
   }
-  for (const m of t.matchAll(/\b(\d{1,2})\s*(?:horas?|hrs?|hr)\b/g)) {
+  for (const m of t.matchAll(/\b(\d{1,2})\s*(?:horas?|hrs?|hr)\b(?! y media)/g)) {
     const n = Number(m[1]);
     if (n > 0) vistos.add(n * 60);
   }
   if (/\bhora y media\b/.test(t)) vistos.add(90);
+  for (const m of t.matchAll(/\b(\d{1,2}) horas y media\b/g)) vistos.add(Number(m[1]) * 60 + 30);
   if (/\bmedia hora\b/.test(t)) vistos.add(30);
   // "una hora" sin dígito — solo si ningún dígito ya lo dijo distinto.
   if (/\b(una|1) hora\b/.test(t)) vistos.add(60);
