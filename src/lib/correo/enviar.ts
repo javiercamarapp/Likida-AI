@@ -47,7 +47,8 @@ export type ResultadoEnvio =
   | { ok: false; motivo: 'sin_configurar' }
   /** `status`: el código HTTP de Resend cuando fue ÉL quien rechazó (429 y 5xx son transitorios; el resto, de configuración o de datos). */
   | { ok: false; motivo: 'rechazado'; detalle: string; status?: number }
-  | { ok: false; motivo: 'red'; detalle: string };
+  /** `previoAConexion`: el fallo ocurrió ANTES de hablar con Resend (DNS, conexión rechazada): el correo NO salió. Sin la bandera (timeout, corte a media respuesta) es AMBIGUO. */
+  | { ok: false; motivo: 'red'; detalle: string; previoAConexion?: true };
 
 /** ¿Está el canal encendido? Lo usa la pantalla de Conexiones para decir la
  *  verdad en vez de pintar un semáforo. */
@@ -253,6 +254,9 @@ export async function enviarCorreo(
     // mismo trato, con el motivo en el log para distinguirlos.
     const detalle = e instanceof Error ? e.message : String(e);
     logger.error('correo.red', { detalle, asunto: correo.asunto, topeMs: TIMEOUT_CORREO_MS });
-    return { ok: false, motivo: 'red', detalle };
+    // A37-S41-07: solo lo que prueba que la petición nunca llegó a Resend se declara «previo a la conexión».
+    const codigo = (e as { cause?: { code?: unknown } } | null)?.cause?.code;
+    const previo = codigo === 'ENOTFOUND' || codigo === 'EAI_AGAIN' || codigo === 'ECONNREFUSED';
+    return { ok: false, motivo: 'red', detalle, ...(previo ? { previoAConexion: true as const } : {}) };
   }
 }

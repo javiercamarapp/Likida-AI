@@ -111,15 +111,17 @@ insert into terminal (id, tenant_id, nombre, ciudad) values
 on conflict (id) do nothing;
 
 -- ── Operadores  🔴 INVENTADO: nombres de fantasía ───────────────────────
---    ⚠️ OP-101 (el del viaje demo) usa el teléfono de Javier (529993700779) —
---    el del demo por WhatsApp real, número de prueba de Meta. Los otros cuatro
---    son placeholders; reemplaza con teléfonos reales cuando los tengas.
+--    A37-S63-06: los CINCO teléfonos son PLACEHOLDERS en un rango que no se asigna a nadie (lada «000»): este
+--    archivo vive en un repo PÚBLICO y no debe traer el teléfono real de una persona (minimización, LFPDPPP), ni
+--    números con forma válida que, si un entorno enciende el Agente 5 (0859) o jornada-alertas para este tenant,
+--    reciban WhatsApp reales. Para el demo por WhatsApp real, en TU base local (no en el repo):
+--      update operador set telefono = '<tu número>' where numero_empleado = 'OP-101';
 insert into operador (id, tenant_id, terminal_id, nombre, telefono, numero_empleado, activo) values
-  ('33333333-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', '22222222-0000-0000-0000-000000000001', 'Juan Pérez Ramírez',      '529993700779', 'OP-101', true),  -- 🔴 nombre INVENTADO; teléfono = el del demo
-  ('33333333-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', '22222222-0000-0000-0000-000000000001', 'Miguel Ángel Torres',     '+521111111102', 'OP-102', true),  -- 🔴 INVENTADO
-  ('33333333-0000-0000-0000-000000000003', '11111111-1111-1111-1111-111111111111', '22222222-0000-0000-0000-000000000002', 'José Luis Hernández',     '+521111111103', 'OP-103', true),  -- 🔴 INVENTADO
-  ('33333333-0000-0000-0000-000000000004', '11111111-1111-1111-1111-111111111111', '22222222-0000-0000-0000-000000000003', 'Ricardo Gómez Vázquez',   '+521111111104', 'OP-104', true),  -- 🔴 INVENTADO
-  ('33333333-0000-0000-0000-000000000005', '11111111-1111-1111-1111-111111111111', '22222222-0000-0000-0000-000000000002', 'Fernando Aguilar Cruz',   '+521111111105', 'OP-105', true)   -- 🔴 INVENTADO
+  ('33333333-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', '22222222-0000-0000-0000-000000000001', 'Juan Pérez Ramírez',      '520000000101', 'OP-101', true),  -- 🔴 nombre INVENTADO; teléfono = placeholder (ver arriba)
+  ('33333333-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', '22222222-0000-0000-0000-000000000001', 'Miguel Ángel Torres',     '520000000102', 'OP-102', true),  -- 🔴 INVENTADO
+  ('33333333-0000-0000-0000-000000000003', '11111111-1111-1111-1111-111111111111', '22222222-0000-0000-0000-000000000002', 'José Luis Hernández',     '520000000103', 'OP-103', true),  -- 🔴 INVENTADO
+  ('33333333-0000-0000-0000-000000000004', '11111111-1111-1111-1111-111111111111', '22222222-0000-0000-0000-000000000003', 'Ricardo Gómez Vázquez',   '520000000104', 'OP-104', true),  -- 🔴 INVENTADO
+  ('33333333-0000-0000-0000-000000000005', '11111111-1111-1111-1111-111111111111', '22222222-0000-0000-0000-000000000002', 'Fernando Aguilar Cruz',   '520000000105', 'OP-105', true)   -- 🔴 INVENTADO
 on conflict (id) do nothing;
 
 -- ── Cuentas web del panel ───────────────────────────────────────────────

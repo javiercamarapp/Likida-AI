@@ -590,6 +590,9 @@ const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_357;
 // 2,315 → 2,318 (+3, lote A37 M-Z-resto-11, medido con el barrido completo del guardia): `liquidacion_externa/repo.ts` suma `leerVersionFormato` (+1) y el guardado del formato
 // con control de versión de A37-S14-10 (+2: insert si no había fila, update condicional por `actualizado_en`); el upsert de siempre se conserva para los llamadores sin versión.
 // Auditoría 37, lote M-Z-resto-10: +3 llamadas (2,315 → 2,318): `avatar_huerfanos.ts` +1 (Storage `avatares`, A37-S07-06), `marketing/estudio.ts` +1 (Storage: descarta el objeto huérfano si falla el guardado, A37-S07-06) y `api/worker/bus/[accion]/route.ts` +1 (barrido de órdenes `tomada` vencidas a `fallida`, A37-S04-07; anclado a estado=tomada).
+// LOTE A37 M-Z-resto-14: +3 llamadas (2,315 → 2,318), medido con el barrido real, 0 archivos nuevos; todas por `acotada` con `tenant_id`:
+// `pod_wa.ts` +1 (lee el POD previo antes de reemplazarlo, S54-05), `portal_pago_propuesta.ts` +1 (cuenta los pendientes de la factura
+// antes de aceptar otro, S54-04) y `portal_pago_escritura.ts` +1 (relee la liga por hash tras un error del insert, S54-07).
 // A37-S27-10 (lote b-sat-fiscal-05): +1 (2,284 → 2,285), en `agentes/insumos.ts` (`crearInsumoArchivo`): `storage.from('agente-insumos').remove`
 // para no dejar huérfano el objeto subido cuando falla el insert.
 // LOTE A37 B-sat-fiscal-06 (migración 0876): +3 llamadas (2,284 → 2,287), 0 archivos nuevos, medido con el barrido real. `gasto_correccion.ts` +2: el RPC

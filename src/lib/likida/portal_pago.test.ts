@@ -312,6 +312,15 @@ describe('montoTecleado — el mismo lector para el portal y para el REP', () =>
     expect(montoTecleado('$ 11600.5')).toBe(11600.5);
     expect(() => montoTecleado('11.600,00')).toThrow(DatoInvalido);
   });
+
+  it('A37-S54-08: «0,500» (coma decimal) NO se lee como $500.00; los ceros sueltos de verdad siguen valiendo', () => {
+    expect(() => montoTecleado('0,500')).toThrow(DatoInvalido);
+    expect(() => montoTecleado('00,500')).toThrow(DatoInvalido);
+    expect(() => montoTecleado('0,500.00')).toThrow(DatoInvalido);
+    expect(montoTecleado('0.50')).toBe(0.5);
+    expect(montoTecleado('500')).toBe(500);
+    expect(montoTecleado('1,500')).toBe(1500);
+  });
 });
 
 describe('validarPropuesta — la referencia y el método', () => {

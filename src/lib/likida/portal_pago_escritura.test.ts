@@ -38,7 +38,7 @@ import {
   crearLigaPago, revocarLigaPago,
   conciliarPropuesta, descartarPropuesta, registrarRepEmitido, sellarRepEntregado,
 } from './portal_pago_escritura';
-import { registrarPropuesta } from './portal_pago_propuesta';
+import { registrarPropuesta, TOPE_PENDIENTES_POR_FACTURA } from './portal_pago_propuesta';
 // `AbonoYaRegistrado` se importa del módulo REAL de errores y no del mock de
 // `facturacion_escritura`: la clase vive en `errores.ts` justo para que quien
 // necesita reconocerla no tenga que arrastrar la cadena de facturación. Si
@@ -159,6 +159,26 @@ describe('crearLigaPago — sobre qué factura SÍ y sobre cuál no', () => {
     await expect(crearLigaPago(T, FACTURA)).rejects.toThrow(/ya tiene un enlace vigente/i);
   });
 
+  // ── A37-S54-07 · el tope de `acotada` devuelve error aunque la escritura pueda haberse completado ─────────────
+  it('A37-S54-07: si el insert da timeout pero la liga SÍ quedó (mismo hash), se devuelve esa liga — no «ya tiene enlace» en el reintento', async () => {
+    conTablas({
+      factura_emitida: [OK({ id: FACTURA, estatus: 'emitida' })],
+      // 1 = limpieza de caducadas; 2 = el insert (tope agotado); 3 = la relectura por hash: la fila existe.
+      portal_pago_liga: [OK([]), FALLA('sin respuesta en 12000 ms (tope de consulta)'), OK({ id: 'liga-huerfana' })],
+    });
+    const l = await crearLigaPago(T, FACTURA);
+    expect(l.id).toBe('liga-huerfana');
+    expect(l.url).toMatch(/\/pago\/pgo_[A-Za-z0-9_-]+$/);
+  });
+
+  it('A37-S54-07: si el insert da timeout y la relectura no halla la liga, el error original sube', async () => {
+    conTablas({
+      factura_emitida: [OK({ id: FACTURA, estatus: 'emitida' })],
+      portal_pago_liga: [OK([]), FALLA('sin respuesta en 12000 ms (tope de consulta)'), OK(null)],
+    });
+    await expect(crearLigaPago(T, FACTURA)).rejects.toThrow(/sin respuesta/);
+  });
+
   it('un error que NO es choque no se disfraza de dato inválido', async () => {
     conTablas({
       factura_emitida: [OK({ id: FACTURA, estatus: 'emitida' })],
@@ -235,6 +255,27 @@ describe('registrarPropuesta — el único verbo del cliente, y nunca lanza', ()
     expect(r).toEqual({ ok: true, id: null, repetida: true });
     // Y no se anota como hecho nuevo.
     expect(anotarBitacora).not.toHaveBeenCalled();
+  });
+
+  it('A37-S54-04: una factura con demasiados pagos PENDIENTES ya no acepta más (cada uno dispara un correo)', async () => {
+    conTablas({
+      portal_pago_propuesta: [{ data: null, error: null, count: TOPE_PENDIENTES_POR_FACTURA } as unknown as Resultado, OK({ id: 'p-1' })],
+    });
+    const r = await registrarPropuesta(LIGA, {
+      fecha: '2026-08-20', monto: 1160, referencia: 'REF-1', metodo: 'transferencia',
+    });
+    expect(r.ok).toBe(false);
+    expect(anotarBitacora).not.toHaveBeenCalled();
+  });
+
+  it('A37-S54-04: por debajo del tope se registra normal', async () => {
+    conTablas({
+      portal_pago_propuesta: [{ data: null, error: null, count: TOPE_PENDIENTES_POR_FACTURA - 1 } as unknown as Resultado, OK({ id: 'p-1' })],
+    });
+    const r = await registrarPropuesta(LIGA, {
+      fecha: '2026-08-20', monto: 1160, referencia: 'REF-1', metodo: 'transferencia',
+    });
+    expect(r).toEqual({ ok: true, id: 'p-1', repetida: false });
   });
 
   it('cualquier otro error contesta `ok: false` — no lanza contra la página pública', async () => {

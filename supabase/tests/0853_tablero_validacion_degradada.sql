@@ -10,8 +10,9 @@
 --   (b) una llegada 'validado' pero SOLO con el pin del chofer (fuente=pin)
 --       SÍ cuenta como degradada;
 --   (c) una llegada 'sin_dato' (sin geocerca o sin ubicación) SÍ cuenta;
---   (d) una llegada recibida que AÚN no tiene veredicto (barrido pendiente)
---       cuenta en el DENOMINADOR (validable) pero NO en el numerador;
+--   (d) una llegada recibida SIN fila de validación cuenta en el DENOMINADOR (validable) Y TAMBIÉN en el
+--       numerador (0923, A37-S63-03: sin evidencia de ubicación es modo degradado; el validador escribe
+--       `sin_dato` en el acto, así que una llegada sin fila no es «barrido pendiente»);
 --   (e) una SALIDA (nunca se valida por diseño) no cuenta ni en el
 --       denominador ni en el numerador, aunque esté 'recibido';
 --   (f) las cifras YA existentes (0385) no se mueven: esta migración solo
@@ -68,8 +69,8 @@ begin
   insert into public.viaje_hito_validacion (tenant_id, viaje_id, viaje_hito_id, ciclo, resultado, motivo, tolerancia_m)
   values (t, d2, h_d2_llegada_carga, 1, 'sin_dato', 'sin_sitio', 150);
 
-  -- (d) d3·llegada_carga: recibida, pero el barrido todavía no le puso veredicto — cuenta en el denominador
-  -- (es validable) pero NO en el numerador (no se sabe todavía si es degradada).
+  -- (d) d3·llegada_carga: recibida y SIN fila de validación — cuenta en el denominador (es validable) y, desde la
+  -- 0923 (A37-S63-03), también en el numerador: no se validó nada, es modo degradado.
   update public.viaje_hito set estado = 'recibido', fuente = 'texto', interpretacion = 'regla', mensaje_en = now(), recibido_en = now(), updated_at = now()
    where id = h_d3_llegada_carga;
 
@@ -78,8 +79,8 @@ begin
   if (ind->>'llegadas_validables')::int <> 4 then
     raise exception '0853: llegadas_validables incorrecto (esperaba 4, d1·llegada_carga + d1·llegada_descarga + d2·llegada_carga + d3·llegada_carga): %', ind;
   end if;
-  if (ind->>'validacion_degradada')::int <> 2 then
-    raise exception '0853: validacion_degradada incorrecto (esperaba 2, d1·llegada_descarga[pin] + d2·llegada_carga[sin_dato]): %', ind;
+  if (ind->>'validacion_degradada')::int <> 3 then
+    raise exception '0853: validacion_degradada incorrecto (esperaba 3, d1·llegada_descarga[pin] + d2·llegada_carga[sin_dato] + d3·llegada_carga[sin fila, 0923]): %', ind;
   end if;
 
   -- (f) las cifras ya existentes de la 0385 no se movieron por esta migración.

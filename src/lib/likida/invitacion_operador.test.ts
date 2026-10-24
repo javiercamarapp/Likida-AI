@@ -362,3 +362,50 @@ describe('mensajeDeInvitacion — dice lo que pasó, no lo que se pidió', () =>
     expect(mensajeDeInvitacion({ ...base0, error: 'No pude preparar.' })).toEqual({ ok: false, error: 'No pude preparar.' });
   });
 });
+
+// ── A37-S47-10 — el reclamo lleva SU PROPIA marca (la hora del reclamo) ──────────────────────────────────────
+//
+// Antes: si la constancia («plantilla/texto») no se afinaba por un parpadeo de red, el operador quedaba
+// `reclamada`, caducaba a los 15 min y «Invitar pendientes» le mandaba OTRA plantilla (cobro de Meta y mensaje
+// duplicado a una persona). Y `soltarReclamo` de una tanda lenta liberaba el reclamo que otra tanda ya había
+// recogido. Ahora: la constancia se reintenta, y marcar/soltar exigen la MARCA del reclamo propio.
+describe('A37-S47-10 — constancia reintentada y reclamo con marca propia', () => {
+  it('si la constancia falla UNA vez por red, se reintenta y el operador queda como enviado (no «reclamada»)', async () => {
+    base.tabla('operador').push(op(1));
+    // update #1 = reclamar (pasa); update #2 = primer intento de la constancia (falla); el reintento pasa.
+    base.fallarProxima('operador', 'update', { message: 'red caída' }, 1);
+    const ahora = new Date('2026-10-01T18:00:00Z');
+    const r = await invitarOperadores(T, { ...flota, ahora });
+    expect(r.enviadas).toBe(1);
+    expect(base.tabla('operador')[0].invitacion_via).toBe('plantilla');
+    // Y pasados 20 minutos NO es candidato a reenvío.
+    enviar.mockClear();
+    const luego = new Date(ahora.getTime() + 20 * 60_000);
+    const r2 = await invitarOperadores(T, { ...flota, ahora: luego });
+    expect(r2.enviadas).toBe(0);
+    expect(enviar).not.toHaveBeenCalled();
+  });
+
+  it('una tanda LENTA que falla de forma reintentable NO libera el reclamo que otra tanda recogió después', async () => {
+    base.tabla('operador').push(op(1));
+    const marcaDeLaOtraTanda = '2026-10-01T19:00:00.000Z';
+    enviar.mockImplementation(async () => {
+      // Mientras esta tanda enviaba, otra recogió el reclamo huérfano con su propia marca.
+      Object.assign(base.tabla('operador')[0], { invitacion_enviada_en: marcaDeLaOtraTanda, invitacion_via: 'reclamada' });
+      return { ok: false, motivo: 'rechazo_no_ventana', mensaje: 'Meta pide esperar.', reintentable: true, fueraDeVentana: false, ventana: 'desconocida' };
+    });
+    await invitarOperadores(T, { ...flota, ahora: new Date('2026-10-01T18:00:00Z') });
+    expect(base.tabla('operador')[0]).toMatchObject({ invitacion_enviada_en: marcaDeLaOtraTanda, invitacion_via: 'reclamada' });
+  });
+
+  it('una tanda lenta con éxito NO pisa la constancia del reclamo de otra tanda', async () => {
+    base.tabla('operador').push(op(1));
+    const marcaDeLaOtraTanda = '2026-10-01T19:00:00.000Z';
+    enviar.mockImplementation(async () => {
+      Object.assign(base.tabla('operador')[0], { invitacion_enviada_en: marcaDeLaOtraTanda, invitacion_via: 'reclamada' });
+      return { ok: true, via: 'plantilla', id: 'w', motivo: 'ventana_cerrada', ventana: 'cerrada' };
+    });
+    await invitarOperadores(T, { ...flota, ahora: new Date('2026-10-01T18:00:00Z') });
+    expect(base.tabla('operador')[0]).toMatchObject({ invitacion_enviada_en: marcaDeLaOtraTanda, invitacion_via: 'reclamada' });
+  });
+});

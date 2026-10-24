@@ -148,13 +148,19 @@ export async function crearLigaPago(
     creada_por: actor?.id ?? null,
   }).select('id').single(), 'crearLigaPago');
 
+  let idInsertado = (data as { id?: unknown } | null)?.id;
   if (error) {
     if (error.code === CHOQUE_UNICO) {
       throw new DatoInvalido('Esa factura ya tiene un enlace vigente. Revócalo antes de generar uno nuevo — así no quedan dos enlaces vivos y solo uno a la vista.');
     }
-    throw new Error(`crearLigaPago: ${error.message}`);
+    // A37-S54-07: un timeout (`acotada`) o un corte de red NO prueba que el insert no ocurrió. Si la liga existe con
+    // NUESTRO hash, el insert sí se completó y el token en claro lo tenemos: se devuelve esa liga. Si no, o si la
+    // relectura también falla, sube el error original (nunca se inventa un éxito).
+    idInsertado = await ligaYaInsertada(tenantId, facturaId, token.hash);
+    if (!idInsertado) throw new Error(`crearLigaPago: ${error.message}`);
+    logger.warn('portal_pago.liga_insert_recuperada', { facturaId, err: error.message });
   }
-  const id = (data as { id?: unknown } | null)?.id;
+  const id = idInsertado;
   if (!id) throw new Error('crearLigaPago: el insert no devolvió id');
 
   await anotar(tenantId, 'portal_pago.liga_creada', 'portal_pago_liga', String(id), {
@@ -167,6 +173,21 @@ export async function crearLigaPago(
     prefijo: token.prefijo,
     expiraEn,
   };
+}
+
+/** ¿Quedó escrita la liga con este hash a pesar del error del insert? Su id, o `null` si no (o si no se pudo leer). */
+async function ligaYaInsertada(tenantId: string, facturaId: string, tokenHash: string): Promise<string | null> {
+  try {
+    const { data, error } = await acotada(supabaseAdmin().from('portal_pago_liga')
+      .select('id')
+      .eq('tenant_id', tenantId).eq('factura_id', facturaId).eq('token_hash', tokenHash)
+      .is('revocada_en', null).maybeSingle(), 'crearLigaPago.relectura');
+    if (error) return null;
+    const id = (data as { id?: unknown } | null)?.id;
+    return id ? String(id) : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
