@@ -1083,6 +1083,17 @@ export async function correrRunner(
     // closed: si el gasto del día no se puede leer, el agente no corre.
     if (a.id === 'enriquecedor' || a.id === 'sdr' || a.id === 'enviador') {
       try {
+        // A37-S28-04: sdr y enriquecedor SÍ gastan modelo. `gastoDelDiaUsd` ignora las corridas con costo NULL
+        // (llamada sin `usage` medible): si hay alguna hoy, el gasto real es desconocido y no se despacha contra
+        // un techo que no se puede verificar (mismo candado que atencion_faq/contenido_fiscal). El enviador no
+        // llama al modelo (costo 0 fijo): no aplica.
+        if (a.id !== 'enviador') {
+          const sinMedir = await corridasSinCostoMedidoHoy(a.id);
+          if (sinMedir > 0) {
+            agentes.push({ agente: a.id, resultado: 'saltado', motivo: `${sinMedir} corrida(s) de hoy con costo NO MEDIDO: el gasto real del día es desconocido y un costo desconocido no es cero — no se despacha contra un techo que no se puede verificar` });
+            continue;
+          }
+        }
         const gastado = await gastoDelDiaUsd(a.id);
         if (gastado >= a.presupuesto_dia_usd) {
           agentes.push({ agente: a.id, resultado: 'saltado', motivo: `techo diario alcanzado (${gastado.toFixed(2)} de ${a.presupuesto_dia_usd} USD)` });
