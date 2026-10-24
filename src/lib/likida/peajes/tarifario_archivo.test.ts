@@ -99,7 +99,13 @@ describe('planificarTarifa: la regla de confirmación', () => {
       const p = planificarTarifa([], entrada, origen);
       expect(p).toMatchObject({ tipo: 'crear', fila: { confirmada: false, confirmadaPor: null, origen } });
     }
-    expect(planificarTarifa([], entrada, 'proveedor')).toMatchObject({ tipo: 'crear', fila: { confirmada: true, origen: 'proveedor' } });
+    expect(planificarTarifa([], entrada, 'proveedor', 'Ana Ejemplo')).toMatchObject({ tipo: 'crear', fila: { confirmada: true, origen: 'proveedor', confirmadaPor: 'Ana Ejemplo' } });
+  });
+
+  it('A37-A2-26: una tarifa «proveedor» sin nombre de quien confirma se rechaza (nunca confirmada sin responsable)', () => {
+    for (const quien of [null, '', '   ']) {
+      expect(planificarTarifa([], entrada, 'proveedor', quien)).toMatchObject({ tipo: 'rechazada', motivo: expect.stringMatching(/quién la confirma/) });
+    }
   });
 
   it('la misma llave actualiza (no duplica) y conserva el id', () => {
