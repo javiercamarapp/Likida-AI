@@ -172,7 +172,7 @@ nueva, jamás contra producción**:
    ```bash
    psql "$URL_RESTAURO" -v ON_ERROR_STOP=1 -f supabase/pruebas-aislamiento/andamio_ci.sql
    for f in supabase/migrations/*.sql; do psql "$URL_RESTAURO" -v ON_ERROR_STOP=1 -q -f "$f"; done
-   psql "$URL_RESTAURO" -v ON_ERROR_STOP=1 -f ~/Desktop/likida-respaldos/likida-AAAA-MM-DD_HHMM.sql
+   psql "$URL_RESTAURO" -v ON_ERROR_STOP=1 -f ~/likida-respaldos/base/likida-AAAA-MM-DD_HHMM.sql
    ```
 3. **Cotejar contra el manifiesto**, que es la parte que se salta todo el
    mundo: por cada `pdf_url` de `liquidacion` y cada `imagen_url` de `gasto`,

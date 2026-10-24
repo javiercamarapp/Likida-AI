@@ -129,3 +129,8 @@ pruebas-navegador/.artefactos/
 # sin rastrear; sin esta regla, acaba commiteado como .pyc.
 __pycache__/
 *.py[cod]
+
+# A37-S04-01: respaldos de Storage/base (CFDI, comprobantes de TODAS las flotas).
+# El script ya rechaza un destino dentro del repo; esto es la segunda red.
+.backups/
+likida-respaldos/
