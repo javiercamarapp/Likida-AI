@@ -27,7 +27,7 @@ import type { Correo } from '@/lib/correo/plantilla';
 import { aInstanteMx } from '../peajes/formatos';
 import { leerPorId, registrarEvento, transicionar, type TipoEvento } from './repo';
 import {
-  abrirExcepcion, firmarXlsx, leerConfigCorreo, marcarEnviada, marcarFallida, reclamarEntregas, reprogramarEntrega,
+  abrirExcepcion, firmarXlsx, leerConfigCorreo, leerDesglose, marcarEnviada, marcarFallida, reclamarEntregas, reprogramarEntrega,
   CONFIG_CORREO_POR_DEFECTO,
   type ConfigCorreo, type EntregaCorreo, type TipoExcepcion,
 } from './repo_correo';
@@ -51,7 +51,11 @@ const TIPO_XLSX_CORREO = 'application/vnd.openxmlformats-officedocument.spreadsh
 /** Quién envía de verdad. Por omisión Resend (`enviarCorreo`); T-A1-27 aporta SMTP/Graph del cliente. */
 export type EnvioCorreoPuerto = (para: string, correo: Correo, op: OpcionesEnvio) => Promise<ResultadoEnvio>;
 
-export interface ContextoLiquidacion { claveExterna: string; periodoDesde: string; periodoHasta: string }
+export interface ContextoLiquidacion {
+  claveExterna: string; periodoDesde: string; periodoHasta: string;
+  /** A37-A1-liquidaciones-10: la bitácora REAL del desglose (`liquidacion_desglose.bitacora`). Sin ella se infiere de la clave. */
+  bitacora?: string;
+}
 
 export interface DependenciasEntregaCorreo {
   ahora: () => Date;
@@ -113,9 +117,16 @@ export function sinCorreos(detalle: string): string {
   return detalle.replace(/[^\s@<>"',;:()\[\]]+@[^\s@<>"',;:()\[\]]+/g, (m) => enmascararCorreo(m));
 }
 
-/** La Idempotency-Key: estable entre reintentos, distinta por generación y por rol. */
-export function llaveIdempotencia(e: Pick<EntregaCorreo, 'liquidacionExternaId' | 'generacion' | 'rol'>): string {
-  return `liqcorreo:${e.liquidacionExternaId}:g${e.generacion}:${e.rol}`;
+/**
+ * La Idempotency-Key: estable entre reintentos, distinta por generación y por rol. A37-A1-liquidaciones-05: el rol `rh`
+ * admite varios buzones por generación; con la misma llave y otro destinatario Resend responde 409 (que aquí es
+ * reintentable) y los buzones siguientes quedaban `fallida`. Para `rh` la llave lleva la huella del correo (normalizado,
+ * nunca el correo). Los demás roles tienen UN correo por generación: su llave no cambia (un reintento en vuelo conserva la suya).
+ */
+export function llaveIdempotencia(e: Pick<EntregaCorreo, 'liquidacionExternaId' | 'generacion' | 'rol'> & { correo?: string }): string {
+  const base = `liqcorreo:${e.liquidacionExternaId}:g${e.generacion}:${e.rol}`;
+  if (e.rol !== 'rh' || !e.correo) return base;
+  return `${base}:${createHash('sha256').update(e.correo.trim().toLowerCase(), 'utf8').digest('hex').slice(0, 12)}`;
 }
 
 const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -142,7 +153,7 @@ export function bitacoraDeClave(clave: string): string {
 
 /** Asunto neutro y cuerpo de 3 líneas. NINGUNA cifra de dinero ni nombre de empresa: el dato va en el adjunto. */
 export function armarCorreoDesglose(ctx: ContextoLiquidacion): { correo: Correo; nombreAdjunto: string } {
-  const bitacora = bitacoraDeClave(ctx.claveExterna);
+  const bitacora = ctx.bitacora && ctx.bitacora.trim() !== '' ? ctx.bitacora.trim() : bitacoraDeClave(ctx.claveExterna);
   const rango = rangoCorto(ctx.periodoDesde, ctx.periodoHasta);
   // A37-A1-02: una clave terminada en `-R<n>` es la CORRECCIÓN de un desglose ya enviado: el operador debe saberlo de inmediato.
   const esCorreccion = /-R\d+$/.test(ctx.claveExterna);
@@ -192,7 +203,14 @@ export function dependenciasEntregaCorreo(): DependenciasEntregaCorreo {
     },
     leerContexto: async (tenantId, id) => {
       const l = await leerPorId(tenantId, id);
-      return l ? { claveExterna: l.claveExterna, periodoDesde: l.periodoDesde, periodoHasta: l.periodoHasta } : null;
+      if (!l) return null;
+      // A37-A1-liquidaciones-10: la bitácora sale del encabezado del desglose; si no se puede leer, se infiere de la clave.
+      let bitacora: string | undefined;
+      try {
+        const d = await leerDesglose(tenantId, id);
+        if (d.ok && d.valor?.bitacora) bitacora = d.valor.bitacora;
+      } catch { /* sin encabezado: se usa la clave */ }
+      return { claveExterna: l.claveExterna, periodoDesde: l.periodoDesde, periodoHasta: l.periodoHasta, ...(bitacora ? { bitacora } : {}) };
     },
     descargarXlsx: async (tenantId, ruta) => {
       // La URL firmada se pide con el módulo que valida que la ruta sea de la flota; se descarga con tope de tiempo.

@@ -416,6 +416,8 @@ export interface ResumenPull {
   errores: number;
   /** Clase del primer error, sin datos personales. */
   error?: string;
+  /** A37-A1-liquidaciones-06: flotas cuyo pull falla y no tiene un éxito reciente (o nunca lo tuvo): el cron avisa al operador de Likida. */
+  flotasAtascadas?: string[];
 }
 
 const CORREO_VACIO = (): ResumenEntregasCorreo => ({
@@ -441,6 +443,10 @@ async function faseDePull(deps: Dependencias): Promise<ResumenPull | undefined> 
       const p = await pull(tenantId, lector);
       r.leidas += p.leidas; r.importadas += p.importadas; r.excepciones += p.excepciones;
       if (p.estado === 'error') falla(p.error ?? 'error');
+      if (p.atascado) {
+        (r.flotasAtascadas ??= []).push(tenantId);
+        logger.error('liqext.pull_atascado', { tenantId, err: p.error ?? 'error' });
+      }
     } catch (e) {
       logger.error('liqext.pull_fallo', { tenantId, err: e instanceof Error ? e.name : 'error' });
       falla(e instanceof Error ? e.name : 'error');

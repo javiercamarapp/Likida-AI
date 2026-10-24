@@ -32,6 +32,8 @@ import { DatoInvalido } from '@/lib/likida/errores';
 import { logger } from '@/lib/logger';
 import { aLiquidacionExterna, validarDesgloseBitacora, type DesgloseBitacora } from '@/lib/likida/liquidacion_externa/desglose_contrato';
 import { recibirDesglose } from '@/lib/likida/liquidacion_externa/desglose_recibir';
+import { DesgloseEnConflicto } from '@/lib/likida/liquidacion_externa/repo_correo';
+import { claveDeBitacora, claveDeLiquidacion } from '@/lib/likida/liquidacion_externa/desglose_contrato';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -122,10 +124,21 @@ export async function POST(req: Request) {
   const salida: RespuestaDesgloses = { recibidas: 0, idempotentes: 0, retenidas: 0, excepciones: [] };
   try {
     for (const d of preparado.desgloses) {
-      const r = await recibirDesglose(acceso.tenantId, d, undefined, {
-        sistemaOrigen: SISTEMA_ORIGEN,
-        ...(preparado.correccion ? { correccion: { motivo: preparado.correccion.motivo, actor: String(acceso.rol) } } : {}),
-      });
+      let r: Awaited<ReturnType<typeof recibirDesglose>>;
+      try {
+        r = await recibirDesglose(acceso.tenantId, d, undefined, {
+          sistemaOrigen: SISTEMA_ORIGEN,
+          ...(preparado.correccion ? { correccion: { motivo: preparado.correccion.motivo, actor: String(acceso.rol) } } : {}),
+        });
+      } catch (e) {
+        // A37-A1-liquidaciones-07: la bitácora ya existe bajo OTRA clave (error de DATOS de este desglose): se reporta y el resto del
+        // lote sigue. Cualquier otro error (Storage, base) conserva el comportamiento de antes: 500 y se reintenta todo.
+        if (!(e instanceof DesgloseEnConflicto)) throw e;
+        const clave = typeof d.numeroLiquidacion === 'string' && d.numeroLiquidacion !== ''
+          ? claveDeLiquidacion(d.terminal, d.numeroLiquidacion) : claveDeBitacora(d.terminal, d.bitacora);
+        salida.excepciones.push({ clave, motivo: 'bitacora_duplicada' });
+        continue;
+      }
       switch (r.estado) {
         case 'creada':
           if (r.retenida) salida.retenidas += 1;

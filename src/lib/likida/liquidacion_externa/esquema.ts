@@ -324,6 +324,31 @@ export function validarLiquidacionExterna(cuerpo: Record<string, unknown>): Liqu
 }
 
 /**
+ * A37-A1-liquidaciones-09: la huella de un DESGLOSE por bitácora. Igual que `huellaContenido` pero canónica para lo que no es
+ * contenido: el ORDEN de los renglones (el TMS puede devolverlos en otro orden entre lecturas) y el `sistemaOrigen` (el mismo
+ * desglose entra por el POST de prueba y luego por el pull) no la cambian. Importes, descripciones, tipo, vale, periodo,
+ * operador, viajes, total y moneda sí. `huellaContenido` NO cambia (la usan el POST de PDF y el conector con otra semántica).
+ */
+export function huellaDesglose(n: LiquidacionExternaNormalizada): string {
+  const renglones = n.conceptos
+    .map((c) => JSON.stringify([c.clave, c.descripcion, c.tipo, aCentavos(c.monto)]))
+    .sort();
+  const canonico = JSON.stringify({
+    c: n.claveExterna,
+    o: [n.operador.id, n.operador.telefono, n.operador.numeroEmpleado],
+    v: [...n.viajes].sort(),
+    p: [n.periodo.desde, n.periodo.hasta],
+    k: renglones,
+    t: aCentavos(n.total),
+    m: n.moneda,
+    f: n.pdf?.sha256 ?? null,
+    // Marca de versión: jamás coincide con una huella anterior por accidente.
+    h: 'desglose-v2',
+  });
+  return createHash('sha256').update(canonico, 'utf8').digest('hex');
+}
+
+/**
  * La huella del CONTENIDO normalizado: lo que decide si dos peticiones con la
  * misma `claveExterna` son la misma operación (200) o dos contenidos distintos
  * (409). El orden de `viajes` no importa (es un conjunto); el de `conceptos`

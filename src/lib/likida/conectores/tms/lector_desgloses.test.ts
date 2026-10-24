@@ -57,6 +57,51 @@ describe('lector de desgloses sobre el TMS', () => {
   });
 });
 
+// Un servidor que devuelve EXACTAMENTE estas filas crudas (el falso filtra por fecha y no deja probar un campo de cursor ilegible).
+function lectorCrudo(items: unknown[]) {
+  const s = crearServidorTmsFalso({ datos: { liquidaciones: [], peajes: [], viajes: [], posiciones: [] }, reloj: () => AHORA, vigenciaTokenMs: 3_600_000 });
+  const base = comoHttpDeConector(s);
+  const http: typeof base = async (sol) => (new URL(sol.url).pathname === '/api/liquidaciones'
+    ? { estado: 200, encabezados: { 'content-type': 'application/json' }, cuerpo: JSON.stringify({ data: { items, total_paginas: 1 } }) }
+    : base(sol));
+  const sesion = new SesionTms({
+    http, base: 'https://tms.ejemplo.test', login: { ruta: '/api/login', cuerpo: { usuario: '{usuario}', clave: '{clave}' }, campo_token: 'token' },
+    credenciales: { usuario: 'usuario-sintetico', clave: 'clave-sintetica' }, reloj: { ahora: () => AHORA, dormir: async () => undefined },
+  });
+  return crearLectorDesglosesTms({ sesion, ahora: () => AHORA });
+}
+
+describe('A37-A1-liquidaciones-18: una fila sin instante de cursor utilizable NO desaparece en la relectura', () => {
+  const sinCursor = { ...fila('B-9', '2026-10-14T08:00:00.000Z'), de: null };
+  const normal = fila('B-1', '2026-10-14T09:00:00.000Z');
+  it('primera corrida (sin cursor): se reporta en `rechazadas`', async () => {
+    const p = await lectorCrudo([sinCursor, normal]).listar({ tenantId: 't', cursor: null, limite: 10 });
+    expect(p.rechazadas).toEqual([{ clave: 'BIT-T1-B-9', campo: 'de' }]);
+  });
+  it('corridas siguientes (con cursor ⇒ reLeerDesde): se SIGUE reportando, no se filtra por la ventana', async () => {
+    const p = await lectorCrudo([sinCursor, normal]).listar({
+      tenantId: 't', cursor: { desde: '2026-10-14T09:00:00.000Z', despuesDe: 'BIT-T1-B-1' }, limite: 10, reLeerDesde: '2026-10-13T09:00:00.000Z',
+    });
+    expect(p.rechazadas).toEqual([{ clave: 'BIT-T1-B-9', campo: 'de' }]);
+  });
+  it('una fila con instante válido anterior a la ventana de relectura sigue fuera (la ventana se respeta)', async () => {
+    const vieja = fila('B-0', '2026-10-01T09:00:00.000Z');
+    const p = await lectorCrudo([vieja, normal]).listar({
+      tenantId: 't', cursor: { desde: '2026-10-14T09:00:00.000Z', despuesDe: 'BIT-T1-B-1' }, limite: 10, reLeerDesde: '2026-10-13T09:00:00.000Z',
+    });
+    expect(p.items.map((d) => d.bitacora)).toEqual(['B-1']);
+  });
+});
+
+describe('A37-A1-liquidaciones-16: el instante de cursor sin zona se interpreta como hora de México, no la del servidor', () => {
+  it('«2026-10-14T08:00:00» (sin zona) ⇒ 14:00Z; con «Z» se respeta', async () => {
+    const sinZona = { ...fila('B-1', '2026-10-14T08:00:00.000Z'), de: '2026-10-14T08:00:00' };
+    const conZona = { ...fila('B-2', '2026-10-14T09:00:00.000Z'), de: '2026-10-14T09:00:00Z' };
+    const p = await lectorCrudo([sinZona, conZona]).listar({ tenantId: 't', cursor: null, limite: 10 });
+    expect(p.siguiente).toEqual({ desde: '2026-10-14T14:00:00.000Z', despuesDe: 'BIT-T1-B-1' });
+  });
+});
+
 describe('qué flotas leen', () => {
   const base = (c: object | null, canal: 'correo' | 'whatsapp' = 'correo') => lectoresDesglosesTms({
     ahora: () => AHORA, tenantsConEnvioActivo: async () => ['t1'], canalDeEntrega: async () => canal, credencial: async () => c as never,
