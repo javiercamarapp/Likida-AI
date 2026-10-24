@@ -200,6 +200,9 @@ describe('validarProspecto — la empresa es lo único obligatorio', () => {
 
   it('un correo sin arroba se rechaza; un teléfono de 7 dígitos también', () => {
     expect(() => validarProspecto({ ...OK, correo: 'rh.empresa.com' })).toThrow(DatoInvalido);
+    // A37-S06-02: comillas y ángulos no son correo (se inyectaban en el popup del mapa).
+    expect(() => validarProspecto({ ...OK, correo: 'a"><img/src=//x.test/p@b.cc' })).toThrow(DatoInvalido);
+    expect(() => validarProspecto({ ...OK, correo: "a'<b>@x.cc" })).toThrow(DatoInvalido);
     expect(() => validarProspecto({ ...OK, telefono: '1234567' })).toThrow(DatoInvalido);
   });
 
