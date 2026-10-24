@@ -1383,6 +1383,8 @@ export interface LiquidacionDetalle {
    *  unidad, cliente y los sellos de WhatsApp (0058/0090) para la línea de
    *  tiempo. Todo nullable: lo que no se capturó se pinta como guion. */
   viaje: {
+    /** `viaje.estatus` (no el de la liquidación): decide si se pinta «Reabrir» (A37-S12-02). */
+    estatus: string | null;
     origen: string | null; destino: string | null; fechaInicio: string | null;
     creadoEn: string | null;
     unidadEco: string | null; unidadPlacas: string | null; clienteNombre: string | null;
@@ -1423,7 +1425,7 @@ export async function getLiquidacionDetalle(id: string, tenantId: string): Promi
   const res = await acotada(
     admin
     .from('liquidacion')
-    .select('id, viaje_id, estatus, total_comprobado, total_anticipo, diferencia, diferencias, ieps_acreditable, litros_diesel_acreditables, iva_acreditable, peaje_acreditable, created_at, pdf_url, viaje:viaje_id(folio, origen, destino, fecha_inicio, created_at, avisado_en, aceptado_en, llegada_en, descarga_en, regreso_en, demora_no_imputable, operador_id, operador:operador_id(nombre, telefono), unidad:unidad_id(numero_economico, placas), cliente:cliente_id(nombre))')
+    .select('id, viaje_id, estatus, total_comprobado, total_anticipo, diferencia, diferencias, ieps_acreditable, litros_diesel_acreditables, iva_acreditable, peaje_acreditable, created_at, pdf_url, viaje:viaje_id(folio, estatus, origen, destino, fecha_inicio, created_at, avisado_en, aceptado_en, llegada_en, descarga_en, regreso_en, demora_no_imputable, operador_id, operador:operador_id(nombre, telefono), unidad:unidad_id(numero_economico, placas), cliente:cliente_id(nombre))')
     .eq('id', id)
     .eq('tenant_id', tenantId)
     .maybeSingle(),
@@ -1451,7 +1453,7 @@ export async function getLiquidacionDetalle(id: string, tenantId: string): Promi
   const gastos = reconstruida?.filas ?? crudos ?? [];
   const comprobantesEntre = await ventanaComprobantes(admin, tenantId, data.viaje_id as string);
   const viaje = data.viaje as {
-    folio?: string; origen?: string | null; destino?: string | null; fecha_inicio?: string | null;
+    folio?: string; estatus?: string | null; origen?: string | null; destino?: string | null; fecha_inicio?: string | null;
     created_at?: string | null; avisado_en?: string | null; aceptado_en?: string | null;
     llegada_en?: string | null; descarga_en?: string | null; regreso_en?: string | null;
     operador_id?: string; operador?: { nombre?: string; telefono?: string | null } | null;
@@ -1466,6 +1468,7 @@ export async function getLiquidacionDetalle(id: string, tenantId: string): Promi
     operadorId: viaje?.operador_id ?? '',
     operadorNombre: viaje?.operador?.nombre ?? '—',
     viaje: {
+      estatus: texto(viaje?.estatus),
       origen: texto(viaje?.origen), destino: texto(viaje?.destino),
       fechaInicio: texto(viaje?.fecha_inicio), creadoEn: texto(viaje?.created_at),
       unidadEco: texto(viaje?.unidad?.numero_economico), unidadPlacas: texto(viaje?.unidad?.placas),

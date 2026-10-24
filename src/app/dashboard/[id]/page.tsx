@@ -100,10 +100,9 @@ export default async function Detalle({
   const puedeReasignar = puedeAsignar(rol);
   // Reabrir es del dueño, no del encargado ni del contador: borra la
   // liquidación y el PDF que quizá ya se entregó.
-  // (Se conserva la condición original: `d.estatus` es el de la LIQUIDACIÓN
-  // —cuadrada / con_diferencias / revisar—, así que hoy esto no se pinta
-  // nunca; queda anotado en el resumen de la rama para decidirlo aparte.)
-  const puedeReabrir = puedeAdministrar(rol) && d.estatus === 'liquidado';
+  // A37-S12-02: se compara contra el estatus del VIAJE (`liquidado`); el de la
+  // liquidación es cuadrada / con_diferencias / revisar y nunca lo igualaba.
+  const puedeReabrir = puedeAdministrar(rol) && d.viaje.estatus === 'liquidado';
 
   /**
    * Reabre el viaje. NO BASTA CAMBIAR `viaje.estatus` — el trigger de la 0036
