@@ -380,9 +380,9 @@ Ahora hay tres piezas que lo atan:
    commit, la última `supabase/migrations/NNNN_*.sql` del repo y
    `migracion.base` del health de producción. Con `[deploy]` y base atrás
    **no construye**. Health caído o base ilegible tampoco construyen (un cotejo
-   que no se hizo no es verde). La única excepción de arranque: si el health
-   desplegado todavía no publica `migracion` (versión anterior), construye esa
-   vez con aviso. `[deploy:forzar]` en el asunto salta la compuerta a la vista.
+   que no se hizo no es verde). Un health sin el campo `migracion` (CDN, página de
+   mantenimiento, versión vieja) tampoco construye (A37-S02-05: la salida de
+   arranque de la auditoría 24 se retiró). `[deploy:forzar]` en el asunto salta la compuerta a la vista.
 3. **El mismo veredicto en rojo, en Actions.** `salud-produccion.yml` corre la
    compuerta en cada push con `[deploy]` (el `ignoreCommand` es mudo; esto no),
    y por `schedule` comprueba además que producción corra el último commit con
