@@ -41,6 +41,8 @@ export const PLAZOS_AGENTES = {
   liquidacionExternaMeses: 60,
   peajeFallidosDias: 30,
   liquidacionEntregaCorreoMeses: 13,
+  /** Programa de despacho (0890, A37-S62-07): historia de cambios, cargas y comentarios libres. Piso de la función: 6. */
+  programaDespachoMeses: 12,
   /** Tope por purga y corrida. */
   limite: 5000,
 } as const;
@@ -75,6 +77,27 @@ const LLAMADAS = (ahora: string): Llamada[] => [
     args: { p_meses: PLAZOS_AGENTES.liquidacionEntregaCorreoMeses, p_limite: 500, p_ahora: ahora },
     leer: (d) => ({ filas: numero((d as { purgadas?: unknown } | null)?.purgadas), parcial: (d as { parcial?: unknown } | null)?.parcial === true }),
   },
+  {
+    // 0890 (A37-S62-08): lo que la 0788 deja (pedido_por, ultimo_error) y la entrega atascada más de `meses`.
+    nombre: 'liquidacion_entrega_correo_residuos', rpc: 'purgar_liquidacion_entrega_correo_residuos',
+    args: { p_meses: PLAZOS_AGENTES.liquidacionEntregaCorreoMeses, p_limite: 500, p_ahora: ahora },
+    leer: (d) => {
+      const o = d as { limpiadas?: unknown; atascadasCerradas?: unknown; parcial?: unknown } | null;
+      const a = numero(o?.limpiadas);
+      const b = numero(o?.atascadasCerradas);
+      return { filas: a === null || b === null ? null : a + b, parcial: o?.parcial === true };
+    },
+  },
+  {
+    // 0890 (A37-S62-07): historia de cambios y cargas viejas; comentarios libres de filas viejas.
+    nombre: 'programa_despacho', rpc: 'purgar_programa_despacho',
+    args: { p_meses: PLAZOS_AGENTES.programaDespachoMeses, p_limite: 1000, p_ahora: ahora },
+    leer: (d) => {
+      const o = d as { cambios?: unknown; comentariosVaciados?: unknown; cargas?: unknown; parcial?: unknown } | null;
+      const partes = [numero(o?.cambios), numero(o?.comentariosVaciados), numero(o?.cargas)];
+      return { filas: partes.some((x) => x === null) ? null : (partes as number[]).reduce((x, y) => x + y, 0), parcial: o?.parcial === true };
+    },
+  },
 ];
 
 /** Corre una lista de purgas, una tras otra. Nunca lanza: cada una devuelve su propio resultado. */
@@ -104,7 +127,7 @@ export async function correrPurgas(llamadas: Llamada[], clavesLog = 'agentes'): 
   return salida;
 }
 
-/** Corre las cinco purgas. Nunca lanza. */
+/** Corre las purgas de los agentes (siete). Nunca lanza. */
 export async function mantenerDatosAgentes(ahora: Date = new Date()): Promise<ResultadoPurgaAgente[]> {
   return correrPurgas(LLAMADAS(ahora.toISOString()), 'agentes');
 }
