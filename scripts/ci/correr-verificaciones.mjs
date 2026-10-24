@@ -51,7 +51,7 @@
 
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { extraerBloques, esRaiseDelPropioBloque, extraerMensaje, calificar } from './calificar-verificacion.mjs';
+import { extraerBloques, esRaiseDelPropioBloque, extraerMensaje, calificar, esReportePermitido } from './calificar-verificacion.mjs';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
@@ -132,7 +132,13 @@ for (const archivo of archivos) {
     }
 
     const resultado = calificar(mensaje);
-    if (resultado.tipo === 'reporte') {
+    if (resultado.tipo === 'reporte' && !esReportePermitido(mensaje)) {
+      // A37-S02-06: un `raise` propio sin `(esperado` que NO está en la lista de reportes autorizados es un bloque que
+      // abortó antes de afirmar algo: falla, no reporte.
+      fallas++;
+      console.log(`x ${etiqueta}  RAISE SIN (esperado …) Y FUERA DE LA LISTA DE REPORTES (REPORTES_PERMITIDOS):`);
+      console.log(`   ${mensaje.slice(0, 200)}`);
+    } else if (resultado.tipo === 'reporte') {
       reportes++;
       console.log(
         `· ${etiqueta}  [reporte, sin (esperado) que calificar] ` +
