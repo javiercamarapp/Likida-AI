@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   enviarBotones, enviarRespuestaArco, enviarSolicitudUbicacion, enviarTexto, encolarBotonesWhatsApp, sendDocument, sendTemplate,
 } from './client';
-import { esTelefonoDemo, PREFIJO_TELEFONO_DEMO } from './telefono_demo';
+import { esTelefonoDemo, esDestinatarioBloqueado, PREFIJO_TELEFONO_DEMO } from './telefono_demo';
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/likida/wa_outbox', () => ({
@@ -87,5 +87,28 @@ describe('ningún camino de envío llama a Meta con un teléfono demo', () => {
     const r = await enviarTexto('5219993700779', 'hola');
     expect(r.ok).toBe(true);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+// A37-L-02: la cancelación ARCO deja `telefono = 'anon:<hex>'` (mig. 0442). Sin esta barrera,
+// destinatarioWhatsApp lo volvía una cadena de dígitos del hash —quizá el número real de un tercero.
+describe('A37-L-02 — destinatario anonimizado por ARCO o sin forma de teléfono', () => {
+  it('esDestinatarioBloqueado: anon:, vacío, muy corto o muy largo; un móvil MX normal no', () => {
+    for (const t of ['anon:3f9a1c07d2b54e66', 'ANON:abc', ' anon:12345678901', '', '123', '1'.repeat(16), '5299'])
+      expect(esDestinatarioBloqueado(t), t).toBe(true);
+    for (const t of ['5219993700779', '529993700779', '+52 999 370 0779']) expect(esDestinatarioBloqueado(t), t).toBe(false);
+    expect(esDestinatarioBloqueado(null)).toBe(true);
+    expect(esDestinatarioBloqueado(undefined)).toBe(true);
+  });
+
+  it('ningún camino de envío llama a la red con un teléfono anon:… (cero fetch, 422)', async () => {
+    const anon = 'anon:3f9a1c07d2b54e66';
+    const r1 = await enviarTexto(anon, 'hola');
+    const r2 = await enviarBotones(anon, 'hola', [{ id: 'a', titulo: 'A' }]);
+    const r3 = await enviarSolicitudUbicacion(anon, 'dónde estás');
+    const r4 = await sendTemplate(anon, 'plantilla', 'es_MX', []);
+    const r5 = await enviarRespuestaArco(anon, 'respuesta');
+    for (const r of [r1, r2, r3, r4, r5]) expect(r.ok).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
