@@ -45,14 +45,22 @@ export function pendientesDeHistorial(entrada: readonly EntradaPendientes[], opc
   const fotoEn = msgs[msgs.length - 1].enviadoEn;
   const fotoMs = Date.parse(fotoEn);
 
+  // A37-S58-06: «¿hay un mensaje del equipo dentro de la ventana, después de este?» en O(1): el instante MÁS TEMPRANO de un mensaje
+  // del equipo posterior (mínimo de sufijo) decide lo mismo que recorrer todos los posteriores, sin copiar ni recorrer el resto.
+  const tiempos = msgs.map((r) => Date.parse(r.enviadoEn));
+  const equipoDesde = new Array<number>(msgs.length + 1).fill(Number.POSITIVE_INFINITY);
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    equipoDesde[i] = msgs[i].rol === 'equipo' ? Math.min(equipoDesde[i + 1], tiempos[i]) : equipoDesde[i + 1];
+  }
+
   const pendientes: Pendiente[] = [];
   let ignorados = 0;
   msgs.forEach((m, i) => {
     if (m.rol !== 'cliente') return;
     const p = prioridadDe(m.texto);
     if (p.nivel === 0) { ignorados += 1; return; }
-    const ms = Date.parse(m.enviadoEn);
-    const respondido = msgs.slice(i + 1).some((r) => r.rol === 'equipo' && (Date.parse(r.enviadoEn) - ms) / 60_000 <= ventana);
+    const ms = tiempos[i];
+    const respondido = (equipoDesde[i + 1] - ms) / 60_000 <= ventana;
     if (respondido) return;
     pendientes.push({
       texto: m.texto.replace(/\s+/g, ' ').trim().slice(0, MAX_TEXTO_PENDIENTE),
