@@ -6,6 +6,13 @@ import type { Celda } from './formatos';
 export const MAX_CATALOGO_BYTES = 4 * 1024 * 1024;
 
 /**
+ * Filas FÍSICAS máximas que se leen de una hoja (A37-A2-15). Los catálogos topan en 5,000 filas y una liquidación en
+ * ~300 bitácoras; sin `sheetRows`, un .xlsx de pocos KB se descomprimía a millones de filas en memoria ANTES de que
+ * esos topes dijeran nada (bomba de descompresión; el desglose de peajes ya se acota igual).
+ */
+export const MAX_FILAS_LECTURA_CATALOGO = 50_000;
+
+/**
  * La matriz de celdas de un archivo de catálogo. CSV/TSV con el lector propio
  * (celdas de texto); Excel/ODS con la librería de hojas. Devuelve el motivo si
  * no se puede abrir — jamás lanza.
@@ -17,9 +24,11 @@ export function matrizDeArchivoCatalogo(nombre: string, buffer: Uint8Array): { o
   try {
     if (ext === 'csv' || ext === 'tsv' || ext === 'txt' || ext === '') return { ok: true, matriz: matrizDeCsv(buffer) };
     if (ext === 'xlsx' || ext === 'xls' || ext === 'ods') {
-      const libro = XLSX.read(buffer, { type: 'array' });
+      const libro = XLSX.read(buffer, { type: 'array', sheets: 0, sheetRows: MAX_FILAS_LECTURA_CATALOGO });
       const hoja = libro.Sheets[libro.SheetNames[0]];
       if (!hoja) return { ok: false, motivo: 'El archivo no trae ninguna hoja con datos.' };
+      // `!fullref` lo pone la librería solo si `sheetRows` truncó la hoja: trae demasiadas filas para ser un catálogo.
+      if ('!fullref' in hoja) return { ok: false, motivo: `La hoja trae demasiadas filas (más de ${MAX_FILAS_LECTURA_CATALOGO.toLocaleString('es-MX')}). Revisa que sea el archivo correcto o pártelo.` };
       return { ok: true, matriz: XLSX.utils.sheet_to_json<Celda[]>(hoja, { header: 1, raw: true, defval: '' }) };
     }
     return { ok: false, motivo: `No sé leer un archivo .${ext}. Sube un CSV o un Excel.` };
