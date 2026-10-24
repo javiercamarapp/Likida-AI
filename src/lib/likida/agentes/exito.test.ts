@@ -758,6 +758,8 @@ describe('el reloj de la vuelta corta los motores de éxito, y lo DICE (c7-1)', 
       expect(tipos).toEqual(['recordatorio_cobranza']);
       expect(tipos).not.toContain('parte_cobranza_saas');
       expect(r.piezas).toBe(1);
+      // A37-S27-09: cortada por reloj = 'parcial', no 'ok' 1/1.
+      expect(registrarCorrida).toHaveBeenCalledWith(null, 'cobranza_saas', expect.objectContaining({ estado: 'parcial' }));
     } finally {
       reloj.mockRestore();
     }

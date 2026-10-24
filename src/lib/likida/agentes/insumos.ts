@@ -93,7 +93,9 @@ export async function contarInsumosDeAgente(agenteId: string): Promise<number> {
     .select('id', { count: 'exact', head: true })
     .eq('agente', agenteId), 'insumos.contar');
   if (error) throw new Error(`contarInsumosDeAgente(${agenteId}): ${error.message}`);
-  return count ?? 0;
+  // A37-S27-09: sin conteo no se afirma un 0 que nadie midió.
+  if (typeof count !== 'number') throw new Error(`contarInsumosDeAgente(${agenteId}): PostgREST no devolvió el conteo.`);
+  return count;
 }
 
 /**

@@ -225,11 +225,12 @@ export async function encolarPiezaExito(
  *  tenant NULL: una pasada barre TODAS las flotas, así que la corrida no es
  *  de ninguna en particular — las PIEZAS sí llevan tenant cuando toca. */
 async function anotar(
-  agente: AgenteExito, inicio: Date, estado: 'ok' | 'fallo', disparo: DisparoCorrida,
+  agente: AgenteExito, inicio: Date, estado: 'ok' | 'parcial' | 'fallo', disparo: DisparoCorrida,
   resumen: Record<string, unknown>, error?: string, costoUsd = 0,
 ): Promise<void> {
   await registrarCorrida(null, agente, {
     inicio, fin: new Date(), estado, disparo, costoUsd,
+    // A37-S27-09: una corrida cortada por reloj ('parcial') ya no se archiva como 1/1 hecha.
     ...(estado === 'ok' ? { tareasHechas: 1, tareasTotal: 1 } : {}),
     resumen,
     ...(error ? { error } : {}),
@@ -509,7 +510,7 @@ async function correrOnboarding(disparo: DisparoCorrida, hoy: string, venceEnVue
       if (relojAgotado(venceEnVuelta)) {
         const sinMirar = flotas.length - enOnboarding.length;
         logger.warn('exito.onboarding.corte_por_reloj', { sinMirar, miradas: enOnboarding.length });
-        await anotar(agente, inicio, 'ok', disparo, { parte: 'sin_turno', sin_mirar: sinMirar, miradas: enOnboarding.length });
+        await anotar(agente, inicio, 'parcial', disparo, { parte: 'sin_turno', sin_mirar: sinMirar, miradas: enOnboarding.length });
         return {
           resultado: 'corrio', piezas: 0, costoUsd: 0, sinTurno: true,
           motivo: `el reloj de la vuelta se agotó con ${numero(sinMirar)} flota(s) sin mirar — el parte de hoy NO se fabricó a medias (sellaría el día con una lista incompleta); le toca completo en la próxima pasada`,
@@ -910,7 +911,7 @@ async function correrExitoCliente(disparo: DisparoCorrida, hoy: string, venceEnV
       }
     }
 
-    await anotar(agente, inicio, 'ok', disparo, { piezas, flotas: flotas.length, motivos, sin_turno: sinTurno });
+    await anotar(agente, inicio, sinTurno ? 'parcial' : 'ok', disparo, { piezas, flotas: flotas.length, motivos, sin_turno: sinTurno });
     return {
       resultado: 'corrio', piezas, costoUsd: 0,
       ...(sinTurno ? { sinTurno: true } : {}),
@@ -1035,7 +1036,7 @@ async function correrRetencion(disparo: DisparoCorrida, hoy: string, venceEnVuel
       if (relojAgotado(venceEnVuelta)) {
         const sinMirar = flotas.length - usos.length;
         logger.warn('exito.retencion.corte_por_reloj', { sinMirar, miradas: usos.length, semana: lunes });
-        await anotar(agente, inicio, 'ok', disparo, { parte: 'sin_turno', sin_mirar: sinMirar, miradas: usos.length, semana: lunes });
+        await anotar(agente, inicio, 'parcial', disparo, { parte: 'sin_turno', sin_mirar: sinMirar, miradas: usos.length, semana: lunes });
         return {
           resultado: 'corrio', piezas: 0, costoUsd: 0, sinTurno: true,
           motivo: `el reloj de la vuelta se agotó con ${numero(sinMirar)} flota(s) sin mirar — el parte SEMANAL no se fabricó a medias (sellaría la semana y apagaría los gatillos de las flotas no miradas hasta el lunes que viene); le toca completo en la próxima pasada`,
@@ -1313,7 +1314,7 @@ async function correrCobranzaSaas(disparo: DisparoCorrida, hoy: string, venceEnV
     }
 
     const piezas = propuestas + (parte === 'encolada' ? 1 : 0);
-    await anotar(agente, inicio, 'ok', disparo, {
+    await anotar(agente, inicio, sinTurno ? 'parcial' : 'ok', disparo, {
       por_cobrar: facturas.length, toques: toques.length, propuestas, parte,
       ...(sinTurno ? { sin_turno: toquesSinMirar } : {}),
     });
@@ -1519,7 +1520,7 @@ async function correrSoporte(disparo: DisparoCorrida, hoy: string, ahora: Date, 
     // tickets se mide en horas o días, así que esperar una pasada no pierde
     // nada, y afirmar un censo que no se terminó de leer sí.
     if (sinTurno) {
-      await anotar(agente, inicio, 'ok', disparo, { parte: 'sin_turno', leidos: tickets.length });
+      await anotar(agente, inicio, 'parcial', disparo, { parte: 'sin_turno', leidos: tickets.length });
       return {
         resultado: 'corrio', piezas: 0, costoUsd: 0, sinTurno: true,
         motivo: `el reloj de la vuelta cortó la lectura de tickets (${numero(tickets.length)} leído(s)) — ni se escaló ni se encoló sobre un censo incompleto: una alerta a la baja tranquiliza con un dato falso. Sale completo en la próxima pasada`,
