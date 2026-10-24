@@ -96,10 +96,13 @@ function hayAnticipo(n: number | null | undefined): n is number {
  * —el panel diría una cosa y el teléfono del chofer otra.
  */
 function piezasDeDatos(v: ViajeAsignado): string[] {
-  const folio = pieza(v.folio);
-  const origen = pieza(v.origen);
-  const destino = pieza(v.destino);
-  const unidad = pieza(v.unidad);
+  // A37-S50-09: los mismos topes que la variante con botones (`parametrosAsignacionConBotones`).
+  // Un origen tecleado a mano de más de 1024 caracteres hacía que Meta rechazara el aviso
+  // entero. `identificable` sigue mirando los datos completos.
+  const folio = pieza(v.folio).slice(0, 30);
+  const origen = pieza(v.origen).slice(0, 60);
+  const destino = pieza(v.destino).slice(0, 60);
+  const unidad = pieza(v.unidad).slice(0, 30);
 
   const ruta =
     origen && destino ? `Ruta: ${origen} → ${destino}`
