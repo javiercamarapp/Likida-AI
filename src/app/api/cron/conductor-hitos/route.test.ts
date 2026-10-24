@@ -216,6 +216,16 @@ describe('la corrida', () => {
     const r = await llamar();
     expect(r.status).toBe(200);
     expect((await j(r)).mantenimiento.anonimizar_conductor_hitos).toContain('boom');
+    // A37-S09-01: y el latido ya no queda en ok.
+    expect(registrarLatido).toHaveBeenLastCalledWith('conductor-hitos', 'parcial', expect.anything());
+  });
+
+  it('A37-S09-01: si el mantenimiento LANZA, la corrida sigue y el latido es parcial', async () => {
+    horaMx = 3;
+    mantenimiento.mockRejectedValueOnce(new Error('rpc caída'));
+    const r = await llamar();
+    expect(r.status).toBe(200);
+    expect(registrarLatido).toHaveBeenLastCalledWith('conductor-hitos', 'parcial', expect.anything());
   });
 });
 
