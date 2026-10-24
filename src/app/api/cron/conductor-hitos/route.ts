@@ -63,6 +63,9 @@ function ilegible(interruptor: NombreInterruptor) {
 }
 
 export async function GET(req: Request) {
+  // A37-S09-06: el reloj arranca ANTES del prólogo (puerta, interruptores): `maxDuration` corre desde que Vercel
+  // invoca, no desde que termina la lectura de la base.
+  const entrada = Date.now();
   const puerta = await puertaCron('conductor-hitos', req, 'El agente Conductor no corre sin él.');
   if (puerta) return puerta;
 
@@ -90,7 +93,7 @@ export async function GET(req: Request) {
 
   let latido: { estado: EstadoLatido; detalle: Record<string, unknown> } = { estado: 'fallo', detalle: { codigo: 'corrida_sin_cerrar' } };
   try {
-    const inicio = Date.now();
+    const inicio = entrada;
     const venceEn = inicio + (maxDuration * 1000) - MARGEN_MS;
     // El Conductor (A5) se encendió para las flotas con perfil el 18-oct-2026: ninguna flota se excluye ya por tener perfil.
     const saltar: ReadonlySet<string> = new Set();

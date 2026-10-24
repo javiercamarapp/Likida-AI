@@ -45,6 +45,9 @@ const vacio = (): ResumenSincronizacion => ({
 });
 
 export async function GET(req: Request) {
+  // A37-S09-06: el reloj arranca ANTES del prólogo (puerta, interruptores): `maxDuration` corre desde que Vercel
+  // invoca, no desde que termina la lectura de la base.
+  const entrada = Date.now();
   const puerta = await puertaCron('tms', req, 'El sincronizador del sistema de transporte no corre sin él.');
   if (puerta) return puerta;
 
@@ -60,7 +63,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const venceEn = Date.now() + maxDuration * 1000 - MARGEN_MS;
+    const venceEn = entrada + maxDuration * 1000 - MARGEN_MS;
     const r = await conRelojDuro(sincronizarTms(depsReales(), { venceEn }), venceEn, vacio);
 
     const cuerpo = {

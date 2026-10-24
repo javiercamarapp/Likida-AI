@@ -41,6 +41,9 @@ export const maxDuration = 300;
 // modelo y fabrica piezas hacia la bandeja de Javier.
 // ═══════════════════════════════════════════════════════════════════════════
 export async function GET(req: Request) {
+  // A37-S09-06: el reloj arranca ANTES del prólogo (puerta, interruptores): `maxDuration` corre desde que Vercel
+  // invoca, no desde que termina la lectura de la base.
+  const entrada = Date.now();
   // La puerta común (RES-7): sin secreto, 500 CON alerta; 401 con log y
   // código estable. Antes ninguna de las dos dejaba huella accionable.
   const puerta = await puertaCron('runner', req, 'El runner no corre sin él.');
@@ -49,7 +52,7 @@ export async function GET(req: Request) {
   // El reloj de ESTA invocación, uno solo para toda la vuelta (el molde es
   // `venceCobranza` del cron de escalar, ESC-3). Se cuenta desde aquí y no
   // desde dentro del motor: `maxDuration` corre desde que Vercel invoca.
-  const venceEn = Date.now() + maxDuration * 1000 - MARGEN_RELOJ_MS;
+  const venceEn = entrada + maxDuration * 1000 - MARGEN_RELOJ_MS;
 
   try {
     // ── LA VUELTA, ACOTADA POR FUERA (auditoría ciclo 7, c7-1) ──────────────
