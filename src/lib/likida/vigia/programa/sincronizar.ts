@@ -66,10 +66,14 @@ export interface ResultadoSincronizacion {
   clavesRepetidas: number;
   /** Cuántos campos cambiados se registraron en la historia. */
   camposCambiados: number;
+  /** Filas guardadas de un tipo que el archivo no trae para una fecha que SÍ trae: no se ocultan (archivo parcial). */
+  omitidasPorTipoAusente: number;
+  /** El archivo ya estaba registrado pero su carga quedó a medias; esta subida la retomó. */
+  retomada: boolean;
 }
 
 const VACIO: ResultadoSincronizacion = {
-  yaCargado: false, nuevas: 0, cambiadas: 0, sinCambio: 0, desaparecidas: 0, sinFecha: 0, clavesRepetidas: 0, camposCambiados: 0,
+  yaCargado: false, nuevas: 0, cambiadas: 0, sinCambio: 0, desaparecidas: 0, sinFecha: 0, clavesRepetidas: 0, camposCambiados: 0, omitidasPorTipoAusente: 0, retomada: false,
 };
 
 export function sha256Hex(texto: string): string {
@@ -161,6 +165,9 @@ export function huellaDe(v: ValoresVigilados): string {
 
 // ── Sincronización ──────────────────────────────────────────────────────────
 
+/** Una carga sin sellar con menos de esto puede seguir en curso en otra invocación (la acción de servidor dura ≤ 2 min). */
+const MINUTOS_PARA_RETOMAR = 10;
+
 export async function sincronizarPrograma(
   tenantId: string, terminal: string, lectura: LecturaPrograma, deps: DepsSincronizar,
 ): Promise<ResultadoSincronizacion> {
@@ -180,10 +187,18 @@ export async function sincronizarPrograma(
     filasLeidas: lectura.filasLeidas, filasValidas: lectura.filas.length,
     avisos: (lectura.avisos ?? []).slice(0, 200), creadoPor: lectura.creadoPor ?? null,
   });
-  if (carga === null) return { ...VACIO, yaCargado: true };
+  if (carga === null) {
+    // A37-S59-05: el reclamo no tenía arriendo: si el proceso moría a medias, el reintento decía «ya estaba cargado» y las filas
+    // restantes y los ocultamientos nunca se aplicaban. Ahora la carga se sella al FINAL; una sin sellar y vieja se retoma
+    // (escribir es idempotente: filas por clave natural, cambios sin repetir). Una reciente puede estar en curso: no se toca.
+    const previa = repo.cargaPrevia ? await repo.cargaPrevia(tenantId, term, lectura.sha256) : null;
+    if (!previa || previa.completa || !(previa.antiguedadMin >= MINUTOS_PARA_RETOMAR)) return { ...VACIO, yaCargado: true };
+    const res = await aplicar(repo, tenantId, term, previa.id, ahora, conFecha, claves, { sinFecha, repetidas }, true);
+    return { ...res, retomada: true };
+  }
 
   try {
-    return await aplicar(repo, tenantId, term, carga.id, ahora, conFecha, claves, { sinFecha, repetidas });
+    return await aplicar(repo, tenantId, term, carga.id, ahora, conFecha, claves, { sinFecha, repetidas }, false);
   } catch (e) {
     // Sin esto el reintento chocaría con la llave única y se leería «ya estaba cargado» sin estarlo.
     try { await repo.descartarCarga(tenantId, carga.id); } catch { /* el error original es el que importa */ }
@@ -194,10 +209,10 @@ export async function sincronizarPrograma(
 async function aplicar(
   repo: RepoPrograma, tenantId: string, terminal: string, cargaId: string, ahora: string,
   filas: Array<FilaConBloque & { fecha: string }>, claves: string[],
-  extra: { sinFecha: number; repetidas: number },
+  extra: { sinFecha: number; repetidas: number }, retomando: boolean,
 ): Promise<ResultadoSincronizacion> {
   const res: ResultadoSincronizacion = { ...VACIO, sinFecha: extra.sinFecha, clavesRepetidas: extra.repetidas };
-  if (filas.length === 0) return res;
+  if (filas.length === 0) { await repo.completarCarga?.(tenantId, cargaId); return res; }
 
   let desde = filas[0].fecha;
   let hasta = filas[0].fecha;
@@ -238,15 +253,38 @@ async function aplicar(
     if (delta.length > 0) { res.cambiadas++; cambios.push(...delta); } else res.sinCambio++;
   });
 
-  const desaparecidas = guardadas.filter((g) => g.visible && !enArchivo.has(g.claveNatural));
+  // A37-S59-04: «ya no viene» solo se juzga dentro de los tipos que el archivo SÍ trae para esa fecha. Un archivo con solo algunas
+  // secciones (p. ej. únicamente EXPORTACION) no oculta las demás secciones del mismo día. Un día completo que falta dentro del
+  // rango se sigue juzgando como antes. La fecha y el tipo son los dos primeros tramos de la clave natural (fecha|tipo|bloque|id).
+  const tiposPorFecha = new Map<string, Set<string>>();
+  for (const f of filas) {
+    const t = tiposPorFecha.get(f.fecha) ?? new Set<string>();
+    t.add(f.tipo);
+    tiposPorFecha.set(f.fecha, t);
+  }
+  const ausentes = guardadas.filter((g) => g.visible && !enArchivo.has(g.claveNatural));
+  const desaparecidas = ausentes.filter((g) => {
+    const [fecha, tipo] = g.claveNatural.split('|');
+    const tipos = tiposPorFecha.get(fecha);
+    return !tipos || tipos.has(tipo);
+  });
+  res.omitidasPorTipoAusente = ausentes.length - desaparecidas.length;
   for (const g of desaparecidas) cambios.push({ filaId: g.id, campo: 'visible', antes: 'true', despues: 'false', cargaId });
   res.desaparecidas = desaparecidas.length;
   res.camposCambiados = cambios.length;
 
-  // Cambios primero (ver encabezado): un fallo repite una línea, nunca pierde un cambio.
-  if (cambios.length > 0) await repo.registrarCambios(tenantId, cambios);
+  // Cambios primero (ver encabezado): un fallo repite una línea, nunca pierde un cambio. Al retomar una carga a medias se omiten
+  // los que esa misma carga ya había registrado.
+  let porRegistrar = cambios;
+  if (retomando && repo.cambiosDeCarga && cambios.length > 0) {
+    const ya = await repo.cambiosDeCarga(tenantId, cargaId);
+    porRegistrar = cambios.filter((c) => !ya.has(`${c.filaId}|${c.campo}|${c.despues ?? ''}`));
+  }
+  if (porRegistrar.length > 0) await repo.registrarCambios(tenantId, porRegistrar);
   if (nuevas.length > 0) await repo.insertarFilas(tenantId, nuevas);
   if (existentes.length > 0) await repo.actualizarFilas(tenantId, existentes);
   if (desaparecidas.length > 0) await repo.ocultarFilas(tenantId, desaparecidas.map((g) => g.id), cargaId);
+  // Sellar AL FINAL: solo con todo escrito la carga cuenta como completa.
+  await repo.completarCarga?.(tenantId, cargaId);
   return res;
 }
