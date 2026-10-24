@@ -218,7 +218,9 @@ export function dependenciasEntregaCorreo(): DependenciasEntregaCorreo {
     marcarFallida,
     reprogramar: reprogramarEntrega,
     liquidacionEnviada: (tenantId, id, ahora) =>
-      transicionar(tenantId, id, ['pendiente'], { estado: 'enviada', enviada_en: ahora.toISOString() }),
+      // A37-S49-03: también desde 'fallida' (liquidaciones de desglose que el camino WhatsApp marcó así antes de este arreglo):
+      // si el correo del operador salió, la verdad es 'enviada'.
+      transicionar(tenantId, id, ['pendiente', 'fallida'], { estado: 'enviada', enviada_en: ahora.toISOString() }),
     registrarEvento,
     abrirExcepcion,
   };

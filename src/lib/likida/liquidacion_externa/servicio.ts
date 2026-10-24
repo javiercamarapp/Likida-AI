@@ -226,6 +226,9 @@ function esperaMs(intentos: number): number {
   return Math.min(2 ** intentos, 30) * 60_000;
 }
 
+/** Cuánto se aparta del lote de WhatsApp una liquidación de desglose (sin PDF) en una flota `ambos`. */
+const APARTADA_SIN_PDF_MS = 6 * 3_600_000;
+
 export type ResultadoEntrega = 'en_cola' | 'enviada' | 'reintentar' | 'fallida' | 'sin_cambio';
 
 /**
@@ -250,6 +253,15 @@ export async function intentarEntrega(
       return 'sin_cambio';
     }
     if (canal === 'correo') return 'sin_cambio';
+    if (!liq.pdfRuta && canal === 'ambos') {
+      // A37-S49-03: una liquidación SIN PDF solo nace del flujo de desgloses (`desglose_recibir`), que es únicamente correo:
+      // WhatsApp no tiene qué mandar. Lanzar aquí la dejaba 'fallida' en ~30 min aunque el correo saliera después. Se aparta
+      // del lote de WhatsApp (sin gastar intento) y la entrega por correo la cierra sola.
+      await transicionar(tenantId, liq.id, ['pendiente'], {
+        proximo_intento_en: new Date(deps.ahora().getTime() + APARTADA_SIN_PDF_MS).toISOString(),
+      });
+      return 'sin_cambio';
+    }
     if (!liq.pdfRuta) throw new Error('la liquidación no tiene PDF en Storage');
     if (!liq.operadorTelefono) throw new Error('el operador no tiene teléfono');
 
