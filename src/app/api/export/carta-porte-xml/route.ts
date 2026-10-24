@@ -95,7 +95,24 @@ export async function GET(req: Request) {
     const v = await getBorradorViaje(t.tenantId, viajeId);
     if (!v) return new NextResponse('Ese viaje no existe en tu flota.', { status: 404 });
 
-    const r = generarXmlCcp(v, generarIdCcp());
+    // A37-S10-05 — EL IdCCP ES POR VIAJE, NO POR DESCARGA. Antes cada GET fabricaba uno nuevo y solo iba al log: el contador
+    // descargaba, timbraba en su PAC, volvía a descargar (para corregir otro dato) y recibía OTRO IdCCP para el mismo viaje
+    // — podía timbrar un segundo complemento y Likida no sabía cuál era el vigente. Ahora se persiste en el viaje (0899) y
+    // se reutiliza; solo `?regenerar=1` (acción explícita) lo cambia, y lo AVISA.
+    const regenerar = url.searchParams.get('regenerar') === '1';
+    const previo = await leerIdCcpDelViaje(t.tenantId, viajeId);
+    let idCcp: string;
+    if (previo.sinColumna) {
+      // La base aún no tiene la 0899: comportamiento anterior (un id nuevo por descarga), dicho en el log.
+      logger.warn('export.ccp_xml_id_sin_migrar', { viajeId });
+      idCcp = generarIdCcp();
+    } else if (regenerar || previo.id === null) {
+      idCcp = await fijarIdCcp(t.tenantId, viajeId, generarIdCcp(), regenerar);
+      if (regenerar && previo.id !== null) logger.warn('export.ccp_xml_id_regenerado', { viajeId, rol: t.rol, anterior: previo.id, nuevo: idCcp });
+    } else {
+      idCcp = previo.id;
+    }
+    const r = generarXmlCcp(v, idCcp);
     if (!r.ok) {
       // 409 y no 500: el estado del borrador es el conflicto, no un error del
       // sistema — y los motivos son los mismos que la página ya enseña.
@@ -124,6 +141,9 @@ export async function GET(req: Request) {
         'Content-Type': 'application/xml; charset=utf-8',
         'Content-Disposition': `attachment; filename="${r.nombreArchivo}"`,
         'Cache-Control': 'no-store',
+        // El IdCCP vigente del viaje (el mismo en cada descarga hasta una regeneración explícita).
+        'X-IdCCP': r.idCcp,
+        ...(regenerar ? { 'X-IdCCP-Regenerado': '1' } : {}),
       },
     });
   } catch (e) {
@@ -131,4 +151,40 @@ export async function GET(req: Request) {
     logger.error('export.ccp_xml_fallo', { viajeId, error });
     return new NextResponse('No se pudo generar el XML. Intenta de nuevo.', { status: 500 });
   }
+}
+
+/** ¿El error de PostgREST/Postgres es «la columna no existe» (migración aún sin aplicar)? */
+const columnaAusente = (e: { code?: string; message?: string }): boolean =>
+  e.code === '42703' || e.code === 'PGRST204' || /ccp_id_ccp/.test(e.message ?? '') && /does not exist|no existe|schema cache/i.test(e.message ?? '');
+
+/** El IdCCP ya fijado para el viaje (`null` si aún no tiene) o `sinColumna` si la 0899 no está. LANZA si la base no contesta:
+ *  sin saber si ya hay un IdCCP no se puede emitir otro. */
+async function leerIdCcpDelViaje(tenantId: string, viajeId: string): Promise<{ id: string | null; sinColumna: boolean }> {
+  const r = await acotada(
+    supabaseAdmin().from('viaje').select('ccp_id_ccp').eq('tenant_id', tenantId).eq('id', viajeId).maybeSingle(),
+    'export.ccp_xml.id_leer',
+  );
+  if (r.error) {
+    if (columnaAusente(r.error)) return { id: null, sinColumna: true };
+    throw new Error(`ccp_xml id: ${r.error.message}`);
+  }
+  const id = (r.data as { ccp_id_ccp?: string | null } | null)?.ccp_id_ccp;
+  return { id: typeof id === 'string' && id ? id : null, sinColumna: false };
+}
+
+/**
+ * Fija el IdCCP del viaje y devuelve el VIGENTE. Sin `forzar` es un reclamo atómico (`… WHERE ccp_id_ccp IS NULL`): dos
+ * descargas simultáneas de un viaje sin IdCCP terminan con el MISMO (el que ganó). Con `forzar` (regeneración explícita)
+ * sobrescribe.
+ */
+async function fijarIdCcp(tenantId: string, viajeId: string, candidato: string, forzar: boolean): Promise<string> {
+  let q = supabaseAdmin().from('viaje').update({ ccp_id_ccp: candidato }).eq('tenant_id', tenantId).eq('id', viajeId);
+  if (!forzar) q = q.is('ccp_id_ccp', null);
+  const r = await acotada(q.select('id'), 'export.ccp_xml.id_fijar');
+  if (r.error) throw new Error(`ccp_xml id fijar: ${r.error.message}`);
+  if (forzar || ((r.data ?? []) as unknown[]).length > 0) return candidato;
+  // Otra descarga se adelantó: se usa el suyo.
+  const vigente = await leerIdCcpDelViaje(tenantId, viajeId);
+  if (!vigente.id) throw new Error('ccp_xml id fijar: el viaje no tiene IdCCP tras el reclamo');
+  return vigente.id;
 }
