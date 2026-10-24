@@ -29,6 +29,9 @@ export const CONFIG_ENTREGA_DEFAULT: ConfigEntrega = {
 export const MAX_FACTURAS_POR_LOTE = 200;
 export const MAX_DESTINATARIOS = 5;
 export const MAX_INTENTOS = 5;
+/** A37-S30-02: tope de bytes CRUDOS de PDF dentro del ZIP (el XML es texto chico). Con base64 (+33 %) y el CSV, el
+ *  correo queda bajo el tope de adjuntos (28 MB). Lo que no cabe se OMITE y se dice, no tumba el lote. */
+export const MAX_BYTES_PDF_ZIP = 16 * 1024 * 1024;
 /** Minutos de espera tras el intento N (1-based) fallido: 15 min, 1 h, 4 h, 12 h; el 5.º agota. */
 export const ESPERA_REINTENTO_MIN = [15, 60, 240, 720] as const;
 /** El lease del claim de envío: si el proceso muere con el lote «enviando», pasado esto otro lo retoma. */

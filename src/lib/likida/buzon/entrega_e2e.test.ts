@@ -219,3 +219,52 @@ describe('E2E entrega al contador — el cron automático', () => {
     expect(m.lotes[0].estado).toBe('pendiente');
   });
 });
+
+describe('A37-S30-02/03 — lote acotado y payload determinista', () => {
+  const conPdf = (n: number): Fila => ({ f: factura(n), xml: xmlDe(factura(n)), pdf: `${T}/p${n}.pdf` });
+
+  it('A37-S30-03: el reintento manda los MISMOS bytes y nombres con la misma llave', async () => {
+    const m = mundo();
+    m.resend({ ok: false, motivo: 'red', detalle: 'timeout' });
+    await armarLote(m.deps, T, 'manual', null);
+    await procesarEntregas(m.deps);
+    m.avanzar(3 * 3_600_000 + 123_456); // otro día-hora distintos
+    await procesarEntregas(m.deps);
+    expect(m.correos).toHaveLength(2);
+    expect(m.correos[1].llave).toBe(m.correos[0].llave);
+    expect(m.correos[1].adjuntos).toEqual(m.correos[0].adjuntos);
+  });
+
+  it('A37-S30-02: los PDF se cortan por bytes acumulados: el lote sale, con el XML y un aviso', async () => {
+    const m = mundo({ facturas: [1, 2, 3].map(conPdf) });
+    m.deps.descargarPdf = async () => new Uint8Array(10 * 1024 * 1024); // 3 x 10 MB > tope
+    await armarLote(m.deps, T, 'manual', null);
+    const r = await enviarLote(m.deps, m.lotes[0]);
+    expect(r.estado).toBe('enviada');
+    const crudo = Buffer.from(m.correos[0].adjuntos[1].content, 'base64').toString('latin1');
+    // Cada entrada nombra su archivo dos veces (cabecera local + directorio central).
+    expect((crudo.match(/\.pdf/g) ?? []).length / 2).toBe(1);
+    expect((crudo.match(/\.xml/g) ?? []).length / 2).toBe(3);
+    expect(m.correos[0].parrafos.join(' ')).toContain('2 PDF no se pudieron adjuntar');
+  });
+
+  it('A37-S30-02: con el reloj vencido no se descarga ningún PDF', async () => {
+    const m = mundo({ facturas: [1, 2].map(conPdf) });
+    let bajadas = 0;
+    m.deps.descargarPdf = async () => { bajadas++; return new Uint8Array(10); };
+    await armarLote(m.deps, T, 'manual', null);
+    const r = await enviarLote(m.deps, m.lotes[0], 0);
+    expect(r.estado).toBe('enviada');
+    expect(bajadas).toBe(0);
+  });
+
+  it('A37-S30-02: un lote que ya agotó los intentos (proceso muerto, lease vencido) se agota, no se re-arma sin fin', async () => {
+    const m = mundo();
+    await armarLote(m.deps, T, 'manual', null);
+    m.lotes[0].estado = 'enviando'; m.lotes[0].intentos = MAX_INTENTOS; m.lotes[0].leaseHasta = new Date(0).toISOString();
+    const r = await enviarLote(m.deps, { ...m.lotes[0] });
+    expect(r.estado).toBe('fallida');
+    expect(m.correos).toHaveLength(0);
+    expect(m.lotes[0].estado).toBe('fallida');
+  });
+});
