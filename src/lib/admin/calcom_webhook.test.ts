@@ -51,7 +51,8 @@ vi.mock('@/lib/supabase/admin', () => ({
     },
   }),
 }));
-vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), error: vi.fn() } }));
+const log = vi.hoisted(() => ({ warn: vi.fn(), error: vi.fn() }));
+vi.mock('@/lib/logger', () => ({ logger: log }));
 
 const { procesarWebhookCalcom } = await import('./calcom_webhook');
 
@@ -72,6 +73,7 @@ beforeEach(() => {
   db.rpcCalls.length = 0;
   db.prospectos = [];
   db.keys.clear();
+  log.warn.mockClear();
 });
 afterEach(() => { delete process.env.CALCOM_WEBHOOK_SECRET; });
 
@@ -117,3 +119,23 @@ describe('procesarWebhookCalcom — el mismo contrato para la puerta pública y 
     expect(POST).toBe(procesarWebhookCalcom);
   });
 });
+
+// A37-S22-06: con un correo ambiguo el log lleva el uid de la reserva y el conteo, NO el correo del contacto.
+describe('procesarWebhookCalcom — correo ambiguo sin PII en el log', () => {
+  it('registra la reserva y las coincidencias, nunca el correo', async () => {
+    db.prospectos = [{ id: 'p-1' }, { id: 'p-2' }];
+    const res = await procesarWebhookCalcom(new Request('https://app.likida.ai/api/webhook/calcom', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-cal-signature-256': firmar(EVENTO) },
+      body: EVENTO,
+    }));
+    expect(res.status).toBe(200);
+    const llamada = log.warn.mock.calls.find((c) => c[0] === 'calcom.webhook.correo_ambiguo');
+    expect(llamada).toBeTruthy();
+    const meta = llamada![1] as Record<string, unknown>;
+    expect(meta).toMatchObject({ coincidencias: 2, reserva: 'booking-contrato' });
+    expect(JSON.stringify(meta)).not.toContain('lead@contrato.mx');
+    expect(meta).not.toHaveProperty('correo');
+  });
+});
+
