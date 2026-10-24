@@ -125,7 +125,7 @@ export function operadorPorNombre(operadores: OperadorMin[], nombre: string | nu
   return hits.length === 1 ? hits[0] : null;
 }
 
-export type MotivoSinViaje = 'falta_operador' | 'operador_ocupado' | 'operador_invalido' | 'datos_invalidos' | 'carrera';
+export type MotivoSinViaje = 'falta_operador' | 'operador_ocupado' | 'operador_invalido' | 'datos_invalidos' | 'carrera' | 'folio_de_otro_cliente';
 
 export interface BorradorCcp {
   armado: boolean;
@@ -192,6 +192,11 @@ export async function aplicarSalidaViaje(
   const completar = async (viajeId: string): Promise<ResultadoSalida> => {
     const existente = await repo.viajePorId(tenantId, viajeId);
     if (!existente) return { ok: false, motivo: 'carrera', mensaje: 'El viaje desapareció mientras se completaba. Vuelve a intentarlo.' };
+    // A37-S33-06: el folio es único por flota, no por cliente. Un viaje de OTRO cliente con el mismo folio NO se completa con datos de este
+    // documento (contaminaría su cuadre y su Carta Porte): se detiene y una persona decide. Otras discrepancias siguen como advertencia.
+    if (doc.clienteId && existente.clienteId && doc.clienteId !== existente.clienteId) {
+      return { ok: false, motivo: 'folio_de_otro_cliente', folio: plan.folio, mensaje: `Ya existe un viaje con el folio ${plan.folio} de OTRO cliente. No se completó con los datos de este documento: revisa el folio o captura el viaje a mano.` };
+    }
     const huecos: Record<string, unknown> = {};
     const poner = (col: string, actual: unknown, nuevo: unknown, rotulo: string): void => {
       if (nuevo === null || nuevo === undefined) return;

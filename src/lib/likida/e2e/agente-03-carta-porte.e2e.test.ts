@@ -227,6 +227,16 @@ describe('fuera de orden', () => {
     expect(ap.salida).toMatchObject({ ok: true, accion: 'actualizado', viajeId: 'v-previo' });
   });
 
+  it('A37-S33-06: un viaje de OTRO cliente con el mismo folio NO se completa con los datos del documento', async () => {
+    const r = await subirYProcesar(A, await pdfBoreal(), llmBoreal(), 'o.pdf', { clienteId: 'cli-boreal' });
+    estado.viajes.push({ tenantId: A, id: 'v-ajeno', folio: 'BOR-77120', origen: null, operadorId: null, clienteId: 'cli-otro', estatus: 'abierto' } as never);
+    const ap = await aprobarDocumento(A, r.documentoId, estado.docs.get(r.documentoId)!.version, ACTOR);
+    expect(ap.salida).toMatchObject({ ok: false, motivo: 'folio_de_otro_cliente' });
+    expect(estado.viajes).toHaveLength(1);
+    expect(estado.viajes[0].origen ?? null).toBeNull();
+    expect(estado.mercancias.filter((m) => m.viajeId === 'v-ajeno')).toHaveLength(0);
+  });
+
   it('A37-S33-04: una unidad con otro viaje abierto no produce el falso «otro viaje se abrió»: el viaje se crea sin unidad y se dice', async () => {
     const r = await subirYProcesar(A, await pdfBoreal(), llmBoreal(), 'o.pdf', { clienteId: 'cli-boreal' });
     for (const u of ['un-xyz', 'un-abc']) {
