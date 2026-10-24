@@ -131,7 +131,11 @@ export async function borrarPdf(ruta: string): Promise<void> {
 
 // ── Facturas: emparejar, completar, guardar desde PDF ───────────────────────
 
-export interface FacturaExistente { id: string; estado: 'pendiente' | 'aprobada' | 'rechazada'; tieneXml: boolean; tienePdf: boolean }
+export interface FacturaExistente {
+  id: string; estado: 'pendiente' | 'aprobada' | 'rechazada'; tieneXml: boolean; tienePdf: boolean;
+  /** Para cotejar el PDF que se quiere colgar (A37-S30-05). Opcionales: sin ellos no hay con qué cotejar. */
+  total?: number | null; emisorRfc?: string | null;
+}
 
 export async function facturaPorUuid(tenantId: string, uuid: string): Promise<FacturaExistente | null> {
   const leer = (columnas: string) => acotada(supabaseAdmin()
@@ -141,12 +145,17 @@ export async function facturaPorUuid(tenantId: string, uuid: string): Promise<Fa
     .eq('cfdi_uuid', uuid.toLowerCase())
     // orden-no-importa: (tenant_id, cfdi_uuid) es único en factura_proveedor: a lo más una fila
     .limit(1), 'buzon.factura_por_uuid');
-  let { data, error } = await leer('id, estado, xml_crudo, pdf_ruta');
+  let { data, error } = await leer('id, estado, xml_crudo, pdf_ruta, total, emisor_rfc');
   // Base sin la 0530 (no existe `pdf_ruta`): se lee con las columnas de antes; ninguna fila tiene PDF.
-  if (faltaMigracion(error)) ({ data, error } = await leer('id, estado, xml_crudo'));
+  if (faltaMigracion(error)) ({ data, error } = await leer('id, estado, xml_crudo, total, emisor_rfc'));
   if (error) throw new Error(`facturaPorUuid: ${error.message}`);
-  const f = ((data ?? []) as unknown as Array<Record<string, unknown>>)[0] as { id: string; estado: FacturaExistente['estado']; xml_crudo: string | null; pdf_ruta: string | null } | undefined;
-  return f ? { id: f.id, estado: f.estado, tieneXml: f.xml_crudo !== null, tienePdf: typeof f.pdf_ruta === 'string' } : null;
+  const f = ((data ?? []) as unknown as Array<Record<string, unknown>>)[0] as { id: string; estado: FacturaExistente['estado']; xml_crudo: string | null; pdf_ruta: string | null; total?: unknown; emisor_rfc?: unknown } | undefined;
+  if (!f) return null;
+  const total = f.total === null || f.total === undefined ? null : Number(f.total);
+  return {
+    id: f.id, estado: f.estado, tieneXml: f.xml_crudo !== null, tienePdf: typeof f.pdf_ruta === 'string',
+    total: total !== null && Number.isFinite(total) ? total : null, emisorRfc: typeof f.emisor_rfc === 'string' ? f.emisor_rfc : null,
+  };
 }
 
 /** Cuelga el PDF de una factura que aún no lo tiene. `false` = ya tenía uno (no se pisa). */

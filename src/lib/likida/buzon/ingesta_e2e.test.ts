@@ -169,3 +169,32 @@ describe('E2E buzón — del correo a la bandeja', () => {
     expect(r.ignoradas).toBe(1);
   });
 });
+
+describe('A37-S30-05 — el PDF se coteja contra la factura antes de colgarse', () => {
+  const conCotejo = (m: ReturnType<typeof mundo>, total: number, emisorRfc: string) => {
+    m.deps.repo.facturaPorUuid = async (_t, uuid) => {
+      const f = m.facturas.find((x) => x.uuid === uuid.toLowerCase());
+      return f ? { id: f.id, estado: 'pendiente', tieneXml: f.xml, tienePdf: f.pdf, total, emisorRfc } : null;
+    };
+  };
+  it('un PDF con otro TOTAL que cita el UUID de la factura NO se adjunta: va a revisión', async () => {
+    const m = mundo({ textosPdf: { p1: textoPdf(U1).replace('Total $1,160.00', 'Total $9,999.00') } });
+    conCotejo(m, 1160, 'AAA010101AAA');
+    const r = await procesarCorreoBuzon(ctx(), [{ nombre: 'a.xml', bytes: xml(U1) }, { nombre: 'a.pdf', bytes: pdf('p1') }], m.deps);
+    expect(m.facturas[0].pdf).toBe(false);
+    expect(r.revision).toBe(1);
+    expect(r.documentos.find((d) => d.nombre === 'a.pdf')?.motivo).toMatch(/no cuadra/);
+  });
+  it('un PDF con otro RFC emisor tampoco', async () => {
+    const m = mundo({ textosPdf: { p1: textoPdf(U1).replace('AAA010101AAA', 'ZZZ010101ZZZ') } });
+    conCotejo(m, 1160, 'AAA010101AAA');
+    await procesarCorreoBuzon(ctx(), [{ nombre: 'a.xml', bytes: xml(U1) }, { nombre: 'a.pdf', bytes: pdf('p1') }], m.deps);
+    expect(m.facturas[0].pdf).toBe(false);
+  });
+  it('el PDF que sí cuadra se adjunta como siempre', async () => {
+    const m = mundo({ textosPdf: { p1: textoPdf(U1) } });
+    conCotejo(m, 1160, 'AAA010101AAA');
+    await procesarCorreoBuzon(ctx(), [{ nombre: 'a.xml', bytes: xml(U1) }, { nombre: 'a.pdf', bytes: pdf('p1') }], m.deps);
+    expect(m.facturas[0].pdf).toBe(true);
+  });
+});

@@ -91,10 +91,23 @@ export interface LecturaTexto {
   fecha: string | null;
 }
 
+/**
+ * Los importes que el texto etiqueta como el TOTAL del comprobante, en orden de aparición (A37-S30-06).
+ * «Total» va seguido SOLO de «:», «$» o «MXN» (y a lo más «a pagar/CFDI/general/neto»): «Total impuestos
+ * trasladados $160.00», «Total concepto 1: $20.00» o «Total de retenciones» NO son el total y ya no entran.
+ */
+export function candidatosDeTotal(texto: string): number[] {
+  const plano = texto.replace(/[ \t]+/g, ' ');
+  const ms = plano.matchAll(/(?<![a-z])(?<!sub\s{0,3})total(?:\s+(?:a\s+pagar|cfdi|general|neto|factura))?\s*(?:mxn|m\.n\.)?\s*[:：]?\s*\$?\s*([\d,]+\.\d{2})/gi);
+  const out: number[] = [];
+  for (const m of ms) { const n = dinero(m[1]); if (n !== null) out.push(n); }
+  return out;
+}
+
 /** Lo que el texto del PDF dice. Heurística declarada: por eso la confianza máxima es 0.9. */
 export function extraerDeTexto(texto: string): LecturaTexto {
   const plano = texto.replace(/[ \t]+/g, ' ');
-  const totales = [...plano.matchAll(/(?<![a-z])total(?!es)[^\d\n]{0,25}\$?\s*([\d,]+\.\d{2})/gi)];
+  const totales = candidatosDeTotal(texto);
   const sub = /sub\s*total[^\d\n]{0,25}\$?\s*([\d,]+\.\d{2})/i.exec(plano);
   const emisor = new RegExp(`RFC\\s*(?:del\\s*)?emisor[^A-ZÑ&\\d]{0,15}(${RFC})`, 'i').exec(plano);
   const receptor = new RegExp(`RFC\\s*(?:del\\s*)?receptor[^A-ZÑ&\\d]{0,15}(${RFC})`, 'i').exec(plano);
@@ -102,7 +115,7 @@ export function extraerDeTexto(texto: string): LecturaTexto {
   return {
     uuids: uuidsEnTexto(texto),
     // El último «Total» del documento es el del comprobante (los anteriores suelen ser parciales por concepto).
-    total: totales.length > 0 ? dinero(totales[totales.length - 1][1]) : null,
+    total: totales.length > 0 ? totales[totales.length - 1] : null,
     subTotal: sub ? dinero(sub[1]) : null,
     rfcEmisor: emisor ? emisor[1].toUpperCase() : null,
     rfcReceptor: receptor ? receptor[1].toUpperCase() : null,
@@ -136,15 +149,22 @@ export async function leerPdfFactura(
   const delTexto = extraerDeTexto(texto);
   if (delTexto.uuids.length === 1 && delTexto.total !== null && delTexto.total > 0) {
     const completa = Boolean(delTexto.rfcEmisor && delTexto.rfcReceptor);
+    // Texto con UUID único + total + los dos RFC: 0.9. Sin los RFC no se puede cotejar el receptor: 0.7.
+    let confianza = completa ? 0.9 : 0.7;
+    const notas = completa ? [] : ['el PDF no trae los RFC en un formato legible'];
+    // A37-S30-06: el total del texto es una heurística. Dos importes «Total» DISTINTOS, o un total menor que el
+    // subtotal, delatan que se tomó la etiqueta equivocada: debajo del umbral, a revisión humana.
+    const distintos = new Set(candidatosDeTotal(texto).map((n) => n.toFixed(2)));
+    if (distintos.size > 1) { confianza = Math.min(confianza, UMBRAL_REVISION - 0.05); notas.push('el PDF trae más de un importe «Total» distinto: confirma cuál es el del comprobante'); }
+    if (delTexto.subTotal !== null && delTexto.total < delTexto.subTotal - 0.01) { confianza = Math.min(confianza, 0.6); notas.push('el total leído es menor que el subtotal: probablemente no es el total del comprobante'); }
     return {
       ok: true,
       datos: {
         uuid: delTexto.uuids[0], total: delTexto.total, subTotal: delTexto.subTotal,
         rfcEmisor: delTexto.rfcEmisor, rfcReceptor: delTexto.rfcReceptor, fecha: delTexto.fecha,
-        // Texto con UUID único + total + los dos RFC: 0.9. Sin los RFC no se puede cotejar el receptor: 0.7.
-        confianza: completa ? 0.9 : 0.7,
+        confianza,
         fuente: 'pdf_texto',
-        notas: completa ? [] : ['el PDF no trae los RFC en un formato legible'],
+        notas,
       },
     };
   }
