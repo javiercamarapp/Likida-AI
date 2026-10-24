@@ -107,6 +107,15 @@ export interface RepoPrograma {
   registrarCarga(tenantId: string, carga: NuevaCarga): Promise<{ id: string } | null>;
   /** Deshace el reclamo de una carga cuya sincronización falló, para que se pueda reintentar. */
   descartarCarga(tenantId: string, cargaId: string): Promise<void>;
+  /**
+   * A37-A4-01: el sha256 ya existe (llave única PERMANENTE). Si esa carga es la ÚLTIMA de la terminal, el
+   * archivo es el estado actual → `null` («ya cargado»). Si después entró otro archivo, esta subida vuelve a ser
+   * la vigente: se reutiliza la carga vieja (se marca como la más reciente) y se devuelve su fecha anterior para
+   * poder restaurarla si la sincronización falla.
+   */
+  reabrirCargaSiNoEsUltima(tenantId: string, terminal: string, archivoSha256: string): Promise<{ id: string; creadaAnterior: string } | null>;
+  /** Devuelve a una carga reabierta su fecha original (la sincronización falló). */
+  restaurarCarga(tenantId: string, cargaId: string, creadaAnterior: string): Promise<void>;
   /** Todas las filas de la terminal con fecha en [desde, hasta] (visibles o no). */
   filasEnRango(tenantId: string, terminal: string, desde: string, hasta: string): Promise<FilaGuardada[]>;
   /** Filas nuevas (con `primera_vez`). Lotes de ≤ LOTE_ESCRITURA. */
@@ -165,6 +174,32 @@ export function crearRepoPrograma(): RepoPrograma {
       const { error } = await acotada(supabaseAdmin().from('programa_despacho_carga')
         .delete().eq('tenant_id', tenantId).eq('id', cargaId), 'programa.descartar_carga');
       exigir('descartar_carga', error);
+    },
+
+    async reabrirCargaSiNoEsUltima(tenantId, terminal, archivoSha256) {
+      const ultima = await acotada(supabaseAdmin().from('programa_despacho_carga')
+        .select('id, archivo_sha256').eq('tenant_id', tenantId).eq('terminal', terminal)
+        .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(1).maybeSingle(),
+      'programa.carga_ultima');
+      exigir('carga_ultima', ultima.error);
+      // Sin lectura de la última no se puede afirmar nada: se queda en «ya cargado» (lo seguro, no reescribe).
+      if (!ultima.data || ultima.data.archivo_sha256 === archivoSha256) return null;
+      const previa = await acotada(supabaseAdmin().from('programa_despacho_carga')
+        .select('id, created_at').eq('tenant_id', tenantId).eq('terminal', terminal)
+        .eq('archivo_sha256', archivoSha256).maybeSingle(), 'programa.carga_por_sha');
+      exigir('carga_por_sha', previa.error);
+      if (!previa.data?.id || typeof previa.data.created_at !== 'string') return null;
+      const { error } = await acotada(supabaseAdmin().from('programa_despacho_carga')
+        .update({ created_at: new Date().toISOString() }).eq('tenant_id', tenantId).eq('id', previa.data.id),
+      'programa.reabrir_carga');
+      exigir('reabrir_carga', error);
+      return { id: String(previa.data.id), creadaAnterior: previa.data.created_at };
+    },
+
+    async restaurarCarga(tenantId, cargaId, creadaAnterior) {
+      const { error } = await acotada(supabaseAdmin().from('programa_despacho_carga')
+        .update({ created_at: creadaAnterior }).eq('tenant_id', tenantId).eq('id', cargaId), 'programa.restaurar_carga');
+      exigir('restaurar_carga', error);
     },
 
     async filasEnRango(tenantId, terminal, desde, hasta) {
