@@ -200,15 +200,35 @@ export const ESTADOS_CERRADOS: readonly string[] = ['cerrado', 'won', 'perdido',
  *  200 deja la URL en unos 8 KB, muy por debajo de cualquier límite razonable,
  *  y 25 vueltas de 200 sobre tablas satélite pequeñas cuestan milisegundos. */
 export const IDS_POR_LOTE = 200;
+/** Tope de filas por consulta de lote (ver `porLotes`: llegar a él se trata como truncamiento). */
+const TOPE_FILAS_LOTE = IDS_POR_LOTE * 20;
 
 /** Corre `leer` por lotes de ids y junta las filas. LANZA en cuanto un lote
  *  falla: media lista es peor que ninguna — un mapa a medias haría que los
  *  prospectos del lote que no llegó se reportaran como «sin correos» o «sin
  *  tocar», que son afirmaciones, no huecos. */
-async function porLotes<T>(ids: string[], leer: (lote: string[]) => Promise<T[]>): Promise<T[]> {
+async function porLotes<T>(
+  ids: string[],
+  leer: (lote: string[]) => Promise<T[]>,
+  /** A37-S28-09: tope de filas con el que `leer` acota su consulta. Un lote que
+   *  devuelve EXACTAMENTE el tope pudo quedar truncado en silencio (los
+   *  sobrantes saldrían «nunca tocados» o «sin historial»): se parte en mitades
+   *  hasta que quepa; si un solo id lo llena, LANZA — no se afirma sobre datos
+   *  cortados. */
+  tope?: number,
+): Promise<T[]> {
   const salida: T[] = [];
+  const leerSinTruncar = async (lote: string[]): Promise<T[]> => {
+    const filas = await leer(lote);
+    if (tope === undefined || filas.length < tope) return filas;
+    if (lote.length <= 1) {
+      throw new Error(`porLotes: un solo prospecto llena el tope de ${tope} filas; la lectura quedaría truncada`);
+    }
+    const mitad = Math.ceil(lote.length / 2);
+    return [...await leerSinTruncar(lote.slice(0, mitad)), ...await leerSinTruncar(lote.slice(mitad))];
+  };
   for (let i = 0; i < ids.length; i += IDS_POR_LOTE) {
-    salida.push(...await leer(ids.slice(i, i + IDS_POR_LOTE)));
+    salida.push(...await leerSinTruncar(ids.slice(i, i + IDS_POR_LOTE)));
   }
   return salida;
 }
@@ -416,10 +436,10 @@ async function contarCorreos(ids: string[]): Promise<Map<string, number>> {
       .from('prospecto_correo')
       .select('prospecto_id')
       .in('prospecto_id', lote)
-      .limit(IDS_POR_LOTE * 20), 'leads.scorer.correos');
+      .limit(TOPE_FILAS_LOTE), 'leads.scorer.correos');
     if (error) throw new Error(`contarCorreos: ${error.message}`);
     return (data ?? []) as Array<{ prospecto_id: string }>;
-  });
+  }, TOPE_FILAS_LOTE);
   for (const f of filas) mapa.set(f.prospecto_id, (mapa.get(f.prospecto_id) ?? 0) + 1);
   return mapa;
 }
@@ -893,10 +913,10 @@ async function leerHistorial(ids: string[]): Promise<Map<string, { salida: strin
       .select('prospecto_id, direccion, ocurrio_en')
       .in('prospecto_id', lote)
       .order('ocurrio_en', { ascending: false })
-      .limit(IDS_POR_LOTE * 20), 'leads.vigia.historial');
+      .limit(TOPE_FILAS_LOTE), 'leads.vigia.historial');
     if (error) throw new Error(`leerHistorial: ${error.message}`);
     return (data ?? []) as Array<{ prospecto_id: string; direccion: string; ocurrio_en: string }>;
-  });
+  }, TOPE_FILAS_LOTE);
   // Cada lote viene descendente, así que la PRIMERA fila que se ve de cada
   // (prospecto, dirección) es la última que ocurrió. El orden se compara igual
   // por si un lote llegara desordenado: quedarse con la más nueva es la
@@ -1579,10 +1599,10 @@ async function idsTocados(ids: string[]): Promise<Set<string>> {
       .from('prospecto_contacto')
       .select('prospecto_id')
       .in('prospecto_id', lote)
-      .limit(IDS_POR_LOTE * 20), 'leads.cazador.tocados');
+      .limit(TOPE_FILAS_LOTE), 'leads.cazador.tocados');
     if (error) throw new Error(`idsTocados: ${error.message}`);
     return (data ?? []) as Array<{ prospecto_id: string }>;
-  });
+  }, TOPE_FILAS_LOTE);
   for (const f of filas) s.add(f.prospecto_id);
   return s;
 }
