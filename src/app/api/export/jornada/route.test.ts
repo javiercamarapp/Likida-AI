@@ -74,6 +74,7 @@ const leerJornadas = vi.fn(async () => {
 });
 vi.mock('@/lib/likida/jornada/repo', () => ({
   leerJornadas: () => leerJornadas(),
+  TOPE_EXPEDIENTES_EXPORTACION: 5000,
   leerPolitica: async () => null,
   nombresDeOperadores: async () =>
     new Map([['op-1', { nombre: 'Juan Pérez Ramírez', numeroEmpleado: 'E-7' }]]),
