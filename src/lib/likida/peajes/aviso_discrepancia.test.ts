@@ -57,6 +57,13 @@ describe('avisarDiscrepanciasDesglose', () => {
     expect(texto).toMatch(/seguridad/);
   });
 
+  it('A37-S51-04: un envío no-ok pero ENCOLADO en el outbox cuenta como enviado (no pendiente)', async () => {
+    const avisar = vi.fn(async (_tel: string, _texto: string) => ({ ok: false as const, motivo: 'token vencido', codigo: 190, fueraDeVentana: false, reintentable: false, encolado: true }));
+    const r = await avisarDiscrepanciasDesglose(T, DES, deps({ avisar: avisar as unknown as DepsAvisoDiscrepancia['avisar'] }));
+    expect(r.enviados).toBe(1);
+    expect(r.pendientes).toBe(0);
+  });
+
   it('usa el MISMO destinatario configurado para los avisos de atípicos (T-A2-14)', async () => {
     const destinatario = vi.fn(async () => TEL);
     const d = deps({ destinatario });
