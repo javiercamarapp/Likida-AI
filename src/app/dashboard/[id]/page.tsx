@@ -102,7 +102,7 @@ export default async function Detalle({
   // liquidación y el PDF que quizá ya se entregó.
   // A37-S12-02: se compara contra el estatus del VIAJE (`liquidado`); el de la
   // liquidación es cuadrada / con_diferencias / revisar y nunca lo igualaba.
-  const puedeReabrir = puedeAdministrar(rol) && d.viaje.estatus === 'liquidado';
+  const puedeReabrir = puedeAdministrar(rol) && d.viaje?.estatus === 'liquidado';
 
   /**
    * Reabre el viaje. NO BASTA CAMBIAR `viaje.estatus` — el trigger de la 0036

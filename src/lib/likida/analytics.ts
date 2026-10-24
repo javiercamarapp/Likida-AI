@@ -1384,7 +1384,7 @@ export interface LiquidacionDetalle {
    *  tiempo. Todo nullable: lo que no se capturó se pinta como guion. */
   viaje: {
     /** `viaje.estatus` (no el de la liquidación): decide si se pinta «Reabrir» (A37-S12-02). */
-    estatus: string | null;
+    estatus?: string | null;
     origen: string | null; destino: string | null; fechaInicio: string | null;
     creadoEn: string | null;
     unidadEco: string | null; unidadPlacas: string | null; clienteNombre: string | null;
