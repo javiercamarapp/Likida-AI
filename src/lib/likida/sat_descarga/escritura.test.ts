@@ -211,6 +211,27 @@ describe('pedirRangoManual', () => {
       .rejects.toThrow(DatoInvalido);
   });
 
+  it('A37-S18-09: una fecha inexistente (2026-02-31) — DatoInvalido, sin tocar la base', async () => {
+    await expect(pedirRangoManual(TENANT, { desde: '2026-02-01', hasta: '2026-02-31', tipo: 'recibidos' }))
+      .rejects.toThrow(DatoInvalido);
+    expect(llamadas).toHaveLength(0);
+  });
+
+  it('A37-S18-09: un rango en el futuro — DatoInvalido, nada se pide al SAT', async () => {
+    await expect(pedirRangoManual(TENANT, { desde: '2099-01-01', hasta: '2099-01-10', tipo: 'recibidos' }))
+      .rejects.toThrow(/futuro/);
+    expect(proveedor!.solicitar).not.toHaveBeenCalled();
+  });
+
+  it('A37-S18-09: un error de base al reservar no filtra el texto de Postgres', async () => {
+    respuestas.set('sat_descarga_config#select', { data: { rfc: 'AAA010101AB1', activa: true }, error: null });
+    respuestas.set('sat_descarga_solicitud#insert', { data: null, error: { code: '23514', message: 'violates check constraint "sat_desde_hasta_ck"' } });
+    const r = await pedirRangoManual(TENANT, rango);
+    expect(r.ok).toBe(false);
+    expect(r.mensaje).not.toMatch(/constraint|sat_desde_hasta_ck/);
+    expect(r.mensaje).toMatch(/NO se pidió nada/);
+  });
+
   it('proveedor no configurado — {ok:false}, sin tocar la base', async () => {
     proveedor = null;
     const r = await pedirRangoManual(TENANT, rango);
@@ -271,13 +292,14 @@ describe('pedirRangoManual', () => {
     expect(r.mensaje).toMatch(/ya tiene una solicitud en curso/);
   });
 
-  it('otro código de error en la reserva — se propaga TAL CUAL, no se inventa "ya hay una en curso"', async () => {
+  it('otro código de error en la reserva — mensaje fijo (A37-S18-09), no se inventa "ya hay una en curso"', async () => {
     respuestas.set('sat_descarga_config#select', { data: { rfc: 'AAA010101AB1', activa: true }, error: null });
     respuestas.set('sat_descarga_solicitud#insert', { data: null, error: { code: '55000', message: 'object not in prerequisite state' } });
     const r = await pedirRangoManual(TENANT, rango);
     expect(r.ok).toBe(false);
     expect(r.mensaje).not.toMatch(/en curso/);
-    expect(r.mensaje).toMatch(/object not in prerequisite state/);
+    expect(r.mensaje).not.toMatch(/prerequisite state/);
+    expect(r.mensaje).toMatch(/NO se pidió nada/);
   });
 
   it('el SAT rechaza la solicitud: NO se reintenta desde aquí, se actualiza a error', async () => {

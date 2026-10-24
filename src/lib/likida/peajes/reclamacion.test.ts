@@ -144,6 +144,14 @@ describe('qué se reclama y por qué', () => {
     ]) expect(construirReclamacion([...base, otra], []).cruces).toEqual([]);
   });
 
+  it('A37-A2-19: el mismo TAG escrito distinto («IMDM 1000-0001» vs «imdm10000001») sí es doble cobro', () => {
+    const { cruces } = construirReclamacion([
+      linea({ indice: 0, tag: 'IMDM 10000001' }), linea({ indice: 1, tag: 'imdm-10000001', cruceMs: min(3) }),
+    ], []);
+    expect(cruces).toHaveLength(1);
+    expect(cruces[0]).toMatchObject({ indice: 1, motivo: 'doble_cobro', duplicadoDeLinea: 1 });
+  });
+
   it('el límite de la ventana es inclusivo (10 min) y la cadena se ancla en el PRIMER cobro', () => {
     const { cruces } = construirReclamacion([
       linea({ indice: 0 }), linea({ indice: 1, cruceMs: min(VENTANA_DOBLE_COBRO_MIN) }), linea({ indice: 2, cruceMs: min(VENTANA_DOBLE_COBRO_MIN + 1) }),

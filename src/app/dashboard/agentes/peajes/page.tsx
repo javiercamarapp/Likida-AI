@@ -8,16 +8,18 @@ import {
 import { parseCfdiXml, esConsolidado } from '@/lib/likida/intake/cfdi_xml';
 import { guardarYConciliarConsolidado, barrerPorConciliar, type ResumenBarrido } from '@/lib/likida/intake/consolidado';
 import {
-  importarDesglose, conciliarDesglose, listarDesgloses, detalleDesglose,
+  conciliarDesglose, listarDesgloses, detalleDesglose,
 } from '@/lib/likida/intake/desglose_peaje';
 import { evidenciaGpsDeDesglose } from '@/lib/likida/peajes/evidencia_gps';
-import { anularDesgloseDb, vinculosDeDesglose, listarTarifas } from '@/lib/likida/peajes/datos';
-import { revisionDeDesglose, listarReclamos } from '@/lib/likida/peajes/revision_cobros';
+import { anularDesgloseDb, vinculosDeDesglose, listarTarifas, declararPeriodoDesglose } from '@/lib/likida/peajes/datos';
+import { subirDesglosePorCola } from '@/lib/likida/peajes/ingesta';
+import { revisionDeDesglose, listarReclamos, listarDecisionesCandidatos } from '@/lib/likida/peajes/revision_cobros';
 import { validarPeriodoDeclarado } from '@/lib/likida/peajes/periodo';
 import { bitacoraConciliada } from '@/lib/likida/peajes/bitacora_conciliada';
 import { logger } from '@/lib/logger';
 import { sufijoTenant, querystringCompleto } from '../../sufijo';
 import { avisoAgentePeajesApagado } from './apagado';
+import { actorDePanel } from '@/lib/likida/peajes/actor_panel';
 import { superficiePeajesDeTenant, MOTIVO_STAND_BY_PERFIL } from '@/lib/likida/peajes/superficie_perfil';
 import { VistaAgentePeajes } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
@@ -29,6 +31,7 @@ import { estadoRevisionCobros } from './revision-cobros';
 import type { EstadoImportar } from './subir-desglose';
 import type { EstadoConciliar } from './conciliar-desglose';
 import type { EstadoAnular } from './anular-desglose';
+import type { EstadoPeriodo } from './declarar-periodo';
 import { MAX_ARCHIVO_SUBIDA_BYTES, MENSAJE_ARCHIVO_GRANDE } from '@/lib/http/subidas_formulario';
 
 export const dynamic = 'force-dynamic';
@@ -88,7 +91,7 @@ export default async function PaginaAgentePeajes({
   // FE-33: las dos lecturas de abajo solo dependen de `desgloseSel` — nada
   // de la segunda depende del resultado de la primera —, así que van en
   // paralelo en vez de en serie.
-  const [detalleSel, evidenciaSel, verificacionSel, reporteCobros, reclamosFlota, tarifasFlota, vinculosSel] = desgloseSel
+  const [detalleSel, evidenciaSel, verificacionSel, reporteCobros, reclamosFlota, tarifasFlota, vinculosSel, decisionesSel] = desgloseSel
     ? await Promise.all([
         safe(() => detalleDesglose(tenantId, desgloseSel.desgloseId)),
         // La evidencia GPS del desglose seleccionado (post-plan-maestro #1).
@@ -112,11 +115,13 @@ export default async function PaginaAgentePeajes({
         safe(async () => (await listarReclamos(tenantId, hoyMx())).reclamos),
         safe(async () => (await listarTarifas(tenantId)).length),
         safe(() => vinculosDeDesglose(tenantId, desgloseSel.desgloseId)),
+        // A37-A2-06: qué líneas ya se reclamaron (el reclamo desde la tabla cubre solo las suyas).
+        safe(() => listarDecisionesCandidatos(tenantId, desgloseSel.desgloseId)),
       ])
-    : [null, null, null, null, null, null, null];
+    : [null, null, null, null, null, null, null, null];
   const revisionCobros = estadoRevisionCobros({
     reporte: reporteCobros, hayDesglose: desgloseSel !== null,
-    reclamos: reclamosFlota, tarifas: tarifasFlota, vinculos: vinculosSel, hoy: hoyMx(),
+    reclamos: reclamosFlota, tarifas: tarifasFlota, vinculos: vinculosSel, decisiones: decisionesSel, hoy: hoyMx(),
   });
 
   async function subirDesglose(
@@ -188,28 +193,40 @@ export default async function PaginaAgentePeajes({
 
     try {
       const buffer = Buffer.from(await archivo.arrayBuffer());
-      const importado = await importarDesglose(tenantId, {
-        nombre: archivo.name, buffer, proveedor: proveedor || undefined, periodo,
-      });
-      // El motivo del parseo VIAJA al usuario tal cual: nombra la columna que
-      // faltó o por qué el PDF no alcanza — es el error útil, no uno genérico.
-      if (!importado.ok) return { error: importado.motivo };
-      const cruce = await conciliarDesglose(tenantId, importado.desgloseId, 'manual');
-      logger.info('peajes.desglose_proveedor', {
-        tenantId, desglose: importado.desgloseId, lineas: importado.totalLineas, cuadra: cruce.cuadra,
-      });
+      // A37-A2-09: por la MISMA cola que el correo/SFTP/API (huella, tope, procesador del cron y sus avisos). El motivo del
+      // parseo viaja al usuario tal cual: nombra la columna que faltó o por qué el PDF no alcanza.
+      const r = await subirDesglosePorCola(tenantId, { nombre: archivo.name, buffer, proveedor: proveedor || undefined, periodo });
+      if (!r.ok) return { error: r.motivo };
+      if (r.estado === 'en_cola') return { aviso: r.mensaje };
+      logger.info('peajes.desglose_proveedor', { tenantId, desglose: r.desgloseId, lineas: r.totalLineas, cuadra: r.cuadra });
       return {
-        resumen: {
-          totalLineas: importado.totalLineas,
-          cuadra: cruce.cuadra,
-          noCuadra: cruce.noCuadra,
-          sinContraparte: cruce.sinContraparte,
-          avisos: importado.avisos,
-        },
+        resumen: { totalLineas: r.totalLineas, cuadra: r.cuadra, noCuadra: r.noCuadra, sinContraparte: r.sinContraparte, avisos: r.avisos },
       };
     } catch (e) {
       logger.error('peajes.desglose_proveedor_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
       return { error: 'No se pudo procesar el desglose. Inténtalo de nuevo.' };
+    }
+  }
+
+  /**
+   * Declara (o corrige) el periodo de un desglose ya importado (A37-A2-12): el que entró por correo/SFTP/API con un nombre
+   * como `corte.xlsx` no trae periodo y, sin él, extemporáneos, doble entre archivos y cierre mensual no se aplican.
+   */
+  async function declararPeriodoAhora(_prev: EstadoPeriodo, fd: FormData): Promise<EstadoPeriodo> {
+    'use server';
+    const sesion = await requireSessionTenant('/dashboard/agentes/peajes');
+    if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede declarar el periodo de un desglose.' };
+    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
+    const apagado = await avisoAgentePeajesApagado();
+    if (apagado) return { error: apagado };
+    const desgloseId = String(fd.get('desglose') ?? '').trim().toLowerCase();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(desgloseId)) return { error: 'Falta el desglose.' };
+    try {
+      const r = await declararPeriodoDesglose(tenantId, desgloseId, String(fd.get('periodo_desde') ?? '').trim(), String(fd.get('periodo_hasta') ?? '').trim());
+      return r.ok ? { ok: 'Periodo guardado: la revisión de extemporáneos y el cierre mensual ya lo usan.' } : { error: r.motivo };
+    } catch (e) {
+      logger.error('peajes.declarar_periodo_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
+      return { error: 'No se pudo guardar el periodo. Inténtalo de nuevo.' };
     }
   }
 
@@ -258,7 +275,7 @@ export default async function PaginaAgentePeajes({
     if (!motivo) return { error: 'Escribe el motivo: una anulación sin porqué no se puede defender después.' };
     if (motivo.length > 500) return { error: 'El motivo pasa de 500 caracteres.' };
     try {
-      const r = await anularDesgloseDb(tenantId, desgloseId.toLowerCase(), motivo, `panel:${sesion.rol}`);
+      const r = await anularDesgloseDb(tenantId, desgloseId.toLowerCase(), motivo, actorDePanel(sesion));
       if (r === 'no_encontrado') return { error: 'No encontré ese desglose en tu flota.' };
       logger.info('peajes.desglose_anulado', { tenantId, desglose: desgloseId, resultado: r });
       return { ok: r === 'ya_anulado' ? 'Ese desglose ya estaba anulado.' : 'Desglose anulado: ya no cuenta. El archivo correcto puede volver a mandarse.' };
@@ -348,6 +365,8 @@ export default async function PaginaAgentePeajes({
       importarDesglose={importarYCruzarDesglose}
       conciliarDesglose={conciliarDesgloseAhora}
       anularDesglose={anularDesgloseAhora}
+      declararPeriodo={declararPeriodoAhora}
+      periodoOficial={reporteCobros ? { desde: reporteCobros.periodoOficialDesde, hasta: reporteCobros.periodoOficialHasta } : null}
       puedeAnular={puedeVerArea(rol, 'administracion')}
       notificaciones={
         <>

@@ -26,7 +26,7 @@ import { ultimasEntradasBitacora } from '@/lib/admin/bitacora';
 import { corridasRecientes, trazaDeCorrida } from '@/lib/admin/corridas-cruzadas';
 import { listarInterruptores } from '@/lib/likida/interruptores';
 import { listarProspectos, listarVendedores, conteosVacios, normalizarEstadoProspecto } from '@/lib/likida/vendedores';
-import { getPorCobrar } from '@/lib/saas/transferencia';
+import { getPorCobrarCompleto } from '@/lib/saas/transferencia';
 import { ahoraMs } from '@/lib/saludo';
 
 const SIN_PARAMS = { type: 'object', properties: {}, additionalProperties: false } as const;
@@ -266,7 +266,7 @@ registerTool('cobranza_saas', {
     },
   },
   handler: async () => {
-    const porCobrar = await getPorCobrar();
+    const porCobrar = await getPorCobrarCompleto();
     return {
       pantalla: PANTALLA_POR_TOOL.cobranza_saas.ruta,
       facturasPorCobrar: porCobrar.length,

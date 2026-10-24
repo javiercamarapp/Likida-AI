@@ -2,6 +2,7 @@ import { logger } from '@/lib/logger';
 import { CampoInvalido } from '@/lib/http/campos_cuerpo';
 import { cuerposDeLiquidacionesCsv } from './liquidacion_csv';
 import { matrizDeArchivoCatalogo } from '../peajes/archivo';
+import { decodificarTexto } from '../peajes/csv';
 import { validarLiquidacionExterna, huellaContenido, type LiquidacionExternaNormalizada } from './esquema';
 import { buscarPorClave, type LiquidacionExterna } from './repo';
 import { recibirLiquidacionExterna, intentarEntrega } from './servicio';
@@ -49,16 +50,22 @@ export function textoDeArchivoLiquidaciones(nombre: string, bytes: Uint8Array): 
   const ext = (/\.([a-z0-9]+)$/i.exec(nombre.trim())?.[1] ?? '').toLowerCase();
   if (ext === 'csv' || ext === 'txt' || ext === '') {
     if (bytes.length === 0) return { ok: false, motivo: 'El archivo está vacío.' };
-    return { ok: true, texto: new TextDecoder('utf-8').decode(bytes).replace(/^﻿/, '') };
+    return { ok: true, texto: decodificarTexto(bytes) };
   }
   const m = matrizDeArchivoCatalogo(nombre, bytes);
   if (!m.ok) return m;
   return { ok: true, texto: m.matriz.map((f) => f.map(celdaCsv).join(',')).join('\n') };
 }
 
+/** A37-S49-07: tope de tiempo de una carga (la acción de servidor tiene límite). Lo que no alcanza se avisa; repetir el archivo es seguro. */
+export const PRESUPUESTO_IMPORTACION_MS = 45_000;
+
 export async function importarLiquidacionesDeArchivo(
   tenantId: string, nombre: string, bytes: Uint8Array, deps: DependenciasImportacion = porOmision,
+  opciones: { presupuestoMs?: number; ahoraMs?: () => number } = {},
 ): Promise<ResultadoImportacion> {
+  const ahoraMs = opciones.ahoraMs ?? Date.now;
+  const limiteMs = ahoraMs() + (opciones.presupuestoMs ?? PRESUPUESTO_IMPORTACION_MS);
   const vacio: ResultadoImportacion = { recibidas: 0, repetidas: 0, problemas: [] };
   const t = textoDeArchivoLiquidaciones(nombre, bytes);
   if (!t.ok) return { ...vacio, error: t.motivo };
@@ -68,7 +75,16 @@ export async function importarLiquidacionesDeArchivo(
     return { ...vacio, problemas, error: `El archivo trae ${lectura.cuerpos.length} liquidaciones; el máximo por carga es ${MAX_LIQUIDACIONES_POR_ARCHIVO}. Pártelo en varios.` };
   }
   let recibidas = 0; let repetidas = 0;
+  let procesadas = 0;
   for (const cuerpo of lectura.cuerpos) {
+    if (ahoraMs() > limiteMs) {
+      const faltan = lectura.cuerpos.length - procesadas;
+      return {
+        recibidas, repetidas, problemas,
+        error: `Se acabó el tiempo de la carga: faltan ${faltan} liquidaci${faltan === 1 ? 'ón' : 'ones'} por procesar. Vuelve a subir el mismo archivo: lo ya recibido se reconoce como repetido y no se entrega dos veces.`,
+      };
+    }
+    procesadas++;
     const clave = cuerpo.claveExterna;
     try {
       const datos = validarLiquidacionExterna(cuerpo as unknown as Record<string, unknown>);
@@ -86,7 +102,7 @@ export async function importarLiquidacionesDeArchivo(
     } catch (e) {
       if (e instanceof CampoInvalido) { problemas.push({ clave, motivo: e.message }); continue; }
       logger.error('liqext.importar_archivo', { tenant: tenantId, clave, err: e instanceof Error ? e.message : String(e) });
-      problemas.push({ clave, motivo: e instanceof Error && e.message ? e.message : 'no se pudo guardar; vuelve a subir el archivo (es seguro repetirlo).' });
+      problemas.push({ clave, motivo: 'no se pudo guardar; vuelve a subir el archivo (es seguro repetirlo).' });
     }
   }
   return { recibidas, repetidas, problemas };

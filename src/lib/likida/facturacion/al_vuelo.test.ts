@@ -667,6 +667,17 @@ describe('facturarAlVuelo · lo que pasa después del portal', () => {
     }));
   });
 
+  it('A37-S42-03: un «folio» que no es UUID NO se escribe en el gasto: se bloquea', async () => {
+    facturarConAgente.mockResolvedValue({ modo: 'emitir', ok: true, capturado: {}, cfdiUuid: 'Folio fiscal' });
+
+    const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
+
+    // Ninguna escritura de cfdi_uuid con texto basura.
+    expect(sinSello().filter((u) => 'cfdi_uuid' in u.fila)).toEqual([]);
+    expect(r.bloqueado).toContain('NO tiene forma de UUID');
+    expect(logger.error).toHaveBeenCalledWith('autofactura.uuid_invalido', expect.objectContaining({ gastoId: 'g-1' }));
+  });
+
   it('si el portal falla, el gasto ya está guardado y esto solo lo reporta', async () => {
     // Best-effort a propósito: corre dentro del presupuesto del webhook de
     // WhatsApp y el chofer ya recibió su acuse. Tirar el mensaje entero porque

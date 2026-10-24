@@ -28,14 +28,18 @@ const VIAJE = '99999999-2222-3333-4444-555555555555';
 /** Lo mínimo de PostgREST que `crearFactura` encadena, sin más ceremonia. */
 interface Cadena {
   eq: () => Cadena;
-  in: () => Promise<{ data: unknown; error: null }>;
+  in: () => Cadena;
   maybeSingle: () => Promise<{ data: unknown; error: null }>;
+  then: (res: (v: { data: unknown; error: null }) => unknown, rej?: (e: unknown) => unknown) => Promise<unknown>;
 }
+// A37-S45-07: `crearFactura` ahora encadena `.in().eq().in()` (facturas que ya
+// amparan los viajes), así que la cadena es encadenable Y esperable.
 const cadena = (fila: unknown, lista: unknown[]): Cadena => {
   const c: Cadena = {
     eq: () => c,
-    in: async () => ({ data: lista, error: null }),
+    in: () => c,
     maybeSingle: async () => ({ data: fila, error: null }),
+    then: (res, rej) => Promise.resolve({ data: lista, error: null }).then(res, rej),
   };
   return c;
 };

@@ -476,12 +476,16 @@ export interface VendedorRow {
 
 /** El equipo de ventas con su cartera contada por estado. LANZA ante un
  *  error de lectura: "no hay vendedores" con la base caída sería mentira. */
-export async function listarVendedores(): Promise<VendedorRow[]> {
+export async function listarVendedores(opciones: { soloActivos?: boolean } = {}): Promise<VendedorRow[]> {
   const admin = supabaseAdmin();
   const [cuentas, prospectos] = await Promise.all([
     traerTodo<Record<string, unknown>>(
-      (d, h) => admin.from('app_user').select('id, nombre, email', conteo(d))
-        .eq('rol', 'vendedor').order('id').range(d, h),
+      (d, h) => {
+        const q = admin.from('app_user').select('id, nombre, email', conteo(d)).eq('rol', 'vendedor');
+        // A37-S57-09: el REPARTO solo cuenta cuentas activas; el panel sigue
+        // viendo a todos (la cartera de una baja no puede desaparecer de la vista).
+        return (opciones.soloActivos ? q.neq('activo', false) : q).order('id').range(d, h);
+      },
       'listarVendedores.cuentas',
     ),
     traerTodo<Record<string, unknown>>(
@@ -520,7 +524,8 @@ export async function listarVendedores(): Promise<VendedorRow[]> {
 async function esVendedor(vendedorId: string): Promise<boolean> {
   const filas = await traerTodo<{ id: unknown }>(
     (d, h) => supabaseAdmin().from('app_user').select('id', conteo(d))
-      .eq('id', vendedorId).eq('rol', 'vendedor').order('id').range(d, h),
+      // A37-S57-09: un vendedor dado de baja (activo=false) no recibe prospectos.
+      .eq('id', vendedorId).eq('rol', 'vendedor').neq('activo', false).order('id').range(d, h),
     'esVendedor',
   );
   return filas.length > 0;
@@ -536,11 +541,18 @@ async function esVendedor(vendedorId: string): Promise<boolean> {
  * Fail closed: si la lectura falla, se lanza — crear a ciegas es crear el
  * duplicado que este candado existe para impedir.
  */
+/** A37-S57-10: `\`, `%` y `_` son comodines/escape de ILIKE; en un dedup por
+ *  igualdad de texto deben ser literales (el `_` de «juan_perez@acme.mx» casaba
+ *  con «juan-perez@acme.mx» y marcaba el lead nuevo como duplicado). */
+function escaparIlike(t: string): string {
+  return t.replace(/[\\%_]/g, '\\$&');
+}
+
 async function prospectoExistente(correo: string | null, empresa: string): Promise<string | null> {
   const admin = supabaseAdmin();
   if (correo?.trim()) {
     const { data, error } = await acotada(admin.from('prospecto').select('id')
-      .ilike('correo', correo.trim()).is('duplicado_de', null).limit(1), 'crearProspecto.dedupCorreo');
+      .ilike('correo', escaparIlike(correo.trim())).is('duplicado_de', null).limit(1), 'crearProspecto.dedupCorreo');
     if (error) throw new Error(`crearProspecto.dedup: ${error.message}`);
     const id = (data?.[0] as { id?: string } | undefined)?.id;
     if (id) return id;
@@ -548,7 +560,7 @@ async function prospectoExistente(correo: string | null, empresa: string): Promi
   const nombre = empresa.trim();
   if (nombre) {
     const { data, error } = await acotada(admin.from('prospecto').select('id')
-      .ilike('empresa', nombre).is('duplicado_de', null).limit(1), 'crearProspecto.dedupEmpresa');
+      .ilike('empresa', escaparIlike(nombre)).is('duplicado_de', null).limit(1), 'crearProspecto.dedupEmpresa');
     if (error) throw new Error(`crearProspecto.dedup: ${error.message}`);
     const id = (data?.[0] as { id?: string } | undefined)?.id;
     if (id) return id;
@@ -749,7 +761,7 @@ export async function asignarPendientes(): Promise<ResultadoReparto> {
     return { repartidos: 0, pendientes: 0, porVendedor: [], sinVendedores: false, apagado: true };
   }
   const inicio = new Date();
-  const vendedores = await listarVendedores();
+  const vendedores = await listarVendedores({ soloActivos: true });
   const pendientesFilas = await traerTodo<Record<string, unknown>>(
     (d, h) => supabaseAdmin().from('prospecto').select('id', conteo(d))
       .is('vendedor_id', null).is('duplicado_de', null).eq('estado', 'nuevo')

@@ -831,10 +831,10 @@ async function correrMigraciones(disparo: DisparoCorrida, hoy: string): Promise<
   const lunes = lunesDe(hoy);
   const titulo = `Migraciones — semana del ${lunes}`;
   try {
-    if (await parteExistente(agente, titulo)) {
-      await anotar(agente, inicio, 'ok', disparo, { parte: 'ya_existia', titulo });
-      return { resultado: 'saltado', piezas: 0, costoUsd: 0, motivo: 'el parte de esta semana ya está en la bandeja' };
-    }
+    // A37-S27-06: lo SEMANAL es el parte, no la vigilancia. Con el parte ya
+    // sellado se evalúa igual y se alertan los ROJOS (el piso por hora de
+    // `alertarOperador` evita la lluvia); solo el parte se sella.
+    const yaHayParte = await parteExistente(agente, titulo);
     const [aplicadas, contrato, catalogo, tablas] = await Promise.all([
       porValor('migraciones aplicadas (schema_migrations)', leerMigracionesAplicadas),
       porValor('contrato de esquema', leerContrato),
@@ -847,6 +847,10 @@ async function correrMigraciones(disparo: DisparoCorrida, hoy: string): Promise<
     const ciegas = lineaFuentesCiegas([aplicadas, contrato, catalogo, tablas]);
     const cuerpo = armarParteMigraciones(hallazgos, lunes, aplicadas, ciegas);
     await alertarRojos(agente, hallazgos);
+    if (yaHayParte) {
+      await anotar(agente, inicio, 'ok', disparo, { parte: 'ya_existia', titulo, rojos: hallazgos.filter((h) => h.semaforo === 'ROJO').length });
+      return { resultado: 'saltado', piezas: 0, costoUsd: 0, motivo: 'el parte de esta semana ya está en la bandeja' };
+    }
     const res = await encolarParte(agente, 'parte_migraciones', titulo, cuerpo, {
       semana: lunes,
       aplicadas_disponible: aplicadas.valor?.disponible ?? null,
@@ -991,17 +995,24 @@ async function correrSeguridad(disparo: DisparoCorrida, hoy: string): Promise<Re
   const lunes = lunesDe(hoy);
   const titulo = `Seguridad — semana del ${lunes}`;
   try {
-    if (await parteExistente(agente, titulo)) {
-      await anotar(agente, inicio, 'ok', disparo, { parte: 'ya_existia', titulo });
+    // A37-S27-06: con el parte sellado se evalúa y se alerta igual (ver arriba).
+    const yaHayParte = await parteExistente(agente, titulo);
+    const postura = await porValor('postura de seguridad del catálogo', leerPostura);
+    if (yaHayParte && !postura.valor) {
+      // Sin poder mirar no se alerta ni se afirma nada; el parte ya está.
+      await anotar(agente, inicio, 'ok', disparo, { parte: 'ya_existia', titulo, vigilancia: 'catalogo_ciego' });
       return { resultado: 'saltado', piezas: 0, costoUsd: 0, motivo: 'el parte de esta semana ya está en la bandeja' };
     }
-    const postura = await porValor('postura de seguridad del catálogo', leerPostura);
     // FUENTE ÚNICA Y CIEGA = FALLO, no parte vacío: un parte de seguridad
     // sobre un catálogo que no contestó diría «nada disparó umbral».
     if (!postura.valor) throw new Error('postura_seguridad() no contestó: un parte de seguridad sobre un catálogo ciego afirmaría que no hay hallazgos.');
     const hallazgos = evaluarSeguridad(postura.valor);
     const cuerpo = armarParteSeguridad(hallazgos, postura, lunes, lineaFuentesCiegas([postura]));
     await alertarRojos(agente, hallazgos);
+    if (yaHayParte) {
+      await anotar(agente, inicio, 'ok', disparo, { parte: 'ya_existia', titulo, rojos: hallazgos.filter((h) => h.semaforo === 'ROJO').length });
+      return { resultado: 'saltado', piezas: 0, costoUsd: 0, motivo: 'el parte de esta semana ya está en la bandeja' };
+    }
     const res = await encolarParte(agente, 'parte_seguridad', titulo, cuerpo, {
       semana: lunes,
       inventario: {

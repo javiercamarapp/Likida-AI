@@ -175,6 +175,17 @@ describe('texto del proveedor, caracteres especiales y determinismo', () => {
     expect(csv.slice(1).split('\r\n')[0]).toBe(['Categoría', ...ENCABEZADOS_CANDIDATOS].join(','));
   });
 
+  it('A37-A2-18: el CSV neutraliza fórmulas también en fecha y hora del proveedor (no solo tag/caseta)', () => {
+    const csv = candidatosACsv(reporte({ lineas: [l(0, { clase: 9, monto: 400, fecha: '=1+1', hora: '@SUM(A1)', tag: '-2+3' })], tarifas: [] }));
+    const celdas = csv.slice(1).split('\r\n')[1].split(',');
+    // ninguna celda de texto del archivo del proveedor puede abrir con = + - @
+    expect(celdas.filter((c) => /^[=+\-@]/.test(c))).toEqual([]);
+    expect(celdas).toContain("'=1+1");
+    expect(celdas).toContain("'@SUM(A1)");
+    // idempotente: un texto ya neutralizado no recibe un segundo apóstrofo
+    expect(csv).not.toContain("''-2+3");
+  });
+
   it('el mismo contenido con las líneas barajadas da el mismo archivo', () => {
     // sin el par duplicado: cuál de los dos renglones iguales es «el repetido» depende del orden del archivo, a propósito
     const sinPar = lineas.filter((x) => x.indice !== 3);

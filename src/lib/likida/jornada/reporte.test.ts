@@ -227,6 +227,13 @@ describe('la fila del día', () => {
     expect(f.conformidad_del_operador).toContain('2026-08-27');
   });
 
+  it('A37-S48-04: la fecha de conformidad es el día de México, no el corte UTC', () => {
+    // 20:30 del 21-oct en CDMX = 02:30Z del 22-oct.
+    const conforme = dia({ conformeOperadorEn: '2026-10-22T02:30:00.000Z' });
+    const f = armarReporte({ ...base, dias: [conforme], politica: null }).filas[0];
+    expect(f.conformidad_del_operador).toBe('Sí, el 2026-10-21');
+  });
+
   it('un operador sin número de empleado se declara, no se inventa', () => {
     const f = armarReporte({ ...base, dias: [dia({ numeroEmpleado: null })], politica: null }).filas[0];
     expect(f.numero_empleado).toBe('sin registrar');

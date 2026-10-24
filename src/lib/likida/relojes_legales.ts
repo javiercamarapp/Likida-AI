@@ -3,12 +3,14 @@ import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { traerTodo, traerPorIds, conteo } from './pg';
 import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina';
+import { avisoQuedoEnCola } from '@/lib/meta/aviso_en_cola';
 import { appUrl } from '@/lib/env';
 import { telefonoJefeDe, telefonoParaDineroDe } from './contactos';
 import { anotarEventoIncidencia } from './asistencia_wa';
 import { hazmatDeclarado } from './perfil/preguntas';
 import { DIAS_AVISO } from './vigencias';
 import { hoyMx } from '@/lib/formato';
+import { rotarPorHora } from './rotacion_barrido';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOS RELOJES LEGALES (Fase 6 del plan de back office — etapa 14 del ciclo).
@@ -318,7 +320,8 @@ async function avisarRelojesDeIncidencia(
       parametros: parametrosAvisoOficina('Likida', 'plazo legal de un siniestro por atender', `${appUrl()}/dashboard/asistencia`),
       contexto: { agente: 'relojes_legales.dinero', tenantId: inc.tenantId, incidencia: inc.id },
     }) : null;
-    if (envio?.ok) dineroEnviadoAhora = true;
+    // A37-S56-02: encolado en wa_outbox = ya va en camino; no se reenvía (ni se queda sin sello).
+    if (envio?.ok || avisoQuedoEnCola(envio)) dineroEnviadoAhora = true;
     else logger.warn('relojes.dinero_sin_destinatario', { incidencia: inc.id, tenia_telefono: Boolean(tel) });
   }
   let operacionEnviadoAhora = false;
@@ -328,7 +331,7 @@ async function avisarRelojesDeIncidencia(
       parametros: parametrosAvisoOficina('Likida', 'plazo legal de un siniestro por atender', `${appUrl()}/dashboard/asistencia`),
       contexto: { agente: 'relojes_legales.operacion', tenantId: inc.tenantId, incidencia: inc.id },
     }) : null;
-    if (envio?.ok) operacionEnviadoAhora = true;
+    if (envio?.ok || avisoQuedoEnCola(envio)) operacionEnviadoAhora = true;
     else logger.warn('relojes.operacion_sin_destinatario', { incidencia: inc.id, tenia_telefono: Boolean(tel) });
   }
 
@@ -460,6 +463,9 @@ export interface ResultadoVencimientos {
   cortadosPorReloj: number;
 }
 
+/** Líneas por aviso de vencimientos (mismo criterio que `MAX_LINEAS_AVISO` del vigilante). */
+const MAX_LINEAS_VENCIMIENTOS = 10;
+
 /**
  * El barrido de vencimientos. Cada (documento, umbral, fecha) avisa UNA sola
  * vez — el sello vive en `aviso_vigencia` (0202) con la fecha en la llave:
@@ -511,6 +517,7 @@ export async function avisarVencimientos(ahora: Date = new Date(), opts: Opcione
       .range(d, h), 'vencimientos.unidades'), 'vencimientos.unidades'),
     traerTodo<Record<string, unknown>>((d, h) => acotada(admin.from('operador')
       .select('id, tenant_id, nombre, licencia_vence', conteo(d))
+      .eq('activo', true) // A37-S56-05: un chofer dado de baja no se avisa
       .gte('licencia_vence', piso)
       .lte('licencia_vence', horizonte)
       .order('id', { ascending: true })
@@ -584,7 +591,10 @@ export async function avisarVencimientos(ahora: Date = new Date(), opts: Opcione
     (porTenant.get(c.tenantId) ?? porTenant.set(c.tenantId, []).get(c.tenantId)!).push(c);
   }
 
-  const flotas = [...porTenant.entries()];
+  // A37-S56-10: el arranque rota por hora. Si el reloj corta el barrido, la
+  // hora siguiente atiende primero a las flotas que ésta dejó al final (antes
+  // el orden era fijo y las mismas flotas quedaban fuera en cada pasada).
+  const flotas = rotarPorHora([...porTenant.entries()], ahora);
   for (const [n, [tenantId, items]] of flotas.entries()) {
     // BE-7 (auditoría 24): el reloj se mira ANTES de cada flota. Este barrido
     // sella DESPUÉS de mandar (patrón 0202): si Vercel mata la lambda entre
@@ -603,10 +613,17 @@ export async function avisarVencimientos(ahora: Date = new Date(), opts: Opcione
         r.fallos++;
         continue;
       }
-      const lineas = items.map((i) =>
+      // A37-S56-05: tope de líneas, como el vigilante (`MAX_LINEAS_AVISO`). Un
+      // texto de WhatsApp admite 4,096 caracteres; con 50+ líneas Meta lo
+      // rechaza por tamaño y el aviso no salía ni con plantilla de respaldo.
+      // Lo más urgente primero; todo lo demás se sella igual y queda en el panel.
+      const urgentes = [...items].sort((a, b) => a.dias - b.dias);
+      const lineas = urgentes.slice(0, MAX_LINEAS_VENCIMIENTOS).map((i) =>
         i.dias <= 0
           ? `· ${i.rotulo}: VENCIÓ el ${i.vence}. La unidad/el operador no debería estar en carretera con esto vencido.`
           : `· ${i.rotulo}: vence el ${i.vence} (en ${i.dias} día${i.dias === 1 ? '' : 's'}).`);
+      const resto = urgentes.length - lineas.length;
+      if (resto > 0) lineas.push(`…y ${resto} más. Están todos en Unidades y Operadores del panel.`);
       const texto =
         `📋 Papeles de la flota por vencer:\n${lineas.join('\n')}\n` +
         `Renovar toma días hábiles (cita, taller, pago) — por eso el aviso sale con tiempo. Los detalles están en Unidades y Operadores del panel.`;
@@ -617,7 +634,7 @@ export async function avisarVencimientos(ahora: Date = new Date(), opts: Opcione
         parametros: parametrosAvisoOficina('Likida', 'papeles de la flota por vencer', `${appUrl()}/dashboard`),
         contexto: { agente: 'vencimientos', tenantId },
       });
-      if (!enviado.ok) {
+      if (!enviado.ok && !avisoQuedoEnCola(enviado)) {
         r.fallos++;
         logger.warn('vencimientos.no_enviado', { tenant: tenantId });
         continue; // sin sello: se reintenta a la siguiente corrida

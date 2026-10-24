@@ -39,6 +39,17 @@ describe('notasSinPersona', () => {
     expect(r).toContain('45 unidades');
     expect(r).toContain('Ramona');
   });
+  it('A37-S55-04: el nombre sin acentos/ñ también se tacha, y el correo con letras no ASCII completo', () => {
+    const r = notasSinPersona('Hablar con Ramon Trevino, o con RAMÓN; escribe a josé.treviño@fletes.mx', 'Ramón Treviño')!;
+    expect(r).not.toMatch(/ramon|trevino|treviño/i);
+    expect(r).not.toContain('@');
+    expect(r).toContain(MARCADOR_DECISOR);
+    expect(notasSinPersona('contacto Ramona', 'Ramón Treviño')).toContain('Ramona');
+  });
+  it('A37-S55-04: nombre en forma descompuesta (NFD) también se tacha sin dejar la marca suelta', () => {
+    const r = notasSinPersona('habla con Ramo\u0301n hoy', 'Ramón Treviño')!;
+    expect(r).toBe(`habla con ${MARCADOR_DECISOR} hoy`);
+  });
   it('null sigue siendo null', () => {
     expect(notasSinPersona(null, 'X')).toBeNull();
   });

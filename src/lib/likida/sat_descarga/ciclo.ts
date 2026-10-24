@@ -137,6 +137,9 @@ function vacio(tenantId: string): ResumenFlota {
   };
 }
 
+/** Días que cada solicitud retrocede sobre lo ya descargado (A37-S57-05). */
+export const TRASLAPE_DIAS = 3;
+
 function sumarDias(iso: string, dias: number): string {
   const t = Date.parse(`${iso}T00:00:00Z`) + dias * 86_400_000;
   return new Date(t).toISOString().slice(0, 10);
@@ -157,8 +160,17 @@ export function rangoPendiente(
 ): { desde: string; hasta: string } | null {
   // NULL significa NUNCA SE HA DESCARGADO — no "desde el principio". Se abre
   // una ventana acotada y declarada, jamás un rango abierto.
-  const desde = ultimaHasta === null ? sumarDias(hoy, -ventanaInicial) : sumarDias(ultimaHasta, 1);
-  if (desde > hoy) return null; // ya está al día
+  // A37-S57-05: el rango NO arrancaba en el día siguiente a lo ya descargado ni
+  // se traslapaba. El PAC puede reportar un CFDI al SAT hasta ~72 h después del
+  // timbrado (conocimiento del dominio, no algo que el código demuestre): un
+  // CFDI timbrado el 23 y registrado el 25 no estaba en el paquete del 22→23 y
+  // el 24 la ventana arrancaba en el 24 — se quedaba fuera para siempre. Ahora
+  // se retrocede `TRASLAPE_DIAS`; el sello de dedup hace barato lo repetido.
+  // Con el calendario ya en `hoy` (o más) NO se pide nada: las 4 corridas diarias
+  // no repiten una solicitud con los mismos parámetros (el SAT la rechaza).
+  if (ultimaHasta !== null && ultimaHasta >= hoy) return null; // ya está al día
+  const desde = ultimaHasta === null ? sumarDias(hoy, -ventanaInicial) : sumarDias(ultimaHasta, 1 - TRASLAPE_DIAS);
+  if (desde > hoy) return null;
   const tope = sumarDias(desde, ventanaMax - 1);
   return { desde, hasta: tope < hoy ? tope : hoy };
 }
@@ -965,8 +977,15 @@ export async function correrDescargaSat(
     .from('sat_descarga_config')
     .select('tenant_id, rfc, ultima_descarga_hasta')
     .eq('activa', true)
+    // A37-S18-09: sin orden, con más de 200 flotas activas las mismas quedaban
+    // fuera siempre. Las que llevan más tiempo sin descargar (o nunca) van primero.
+    .order('ultima_descarga_hasta', { ascending: true, nullsFirst: true })
+    .order('tenant_id')
     .limit(200), 'sat_descarga.configs');
   if (error) throw new Error(`correrDescargaSat: ${error.message}`);
+  if ((configs ?? []).length >= 200) {
+    logger.warn('sat.barrido.tope_de_flotas', { tope: 200, aviso: 'puede haber flotas activas fuera de este barrido' });
+  }
 
   const hoy = hoyMx(ahora);
   const resumenes: ResumenFlota[] = [];

@@ -3,7 +3,7 @@ import { comercio as fichaComercio } from './comercios';
 import { conectorDePortal } from '../conectores/portales_facturacion';
 import { guardarSesionPortal } from './sesion_portal';
 import { anotarVinculo, recortarEstadoAlPortal } from './vinculo_portal';
-import { escrituraPermitida, pantallaDeLogin } from './vinculo_senales';
+import { escrituraPermitida, paginaSinRenderizar, pantallaDeLogin } from './vinculo_senales';
 import {
   camposDeEntrada, corteDuro, credencialRechazada, type ClaseDeCorte,
 } from './relogin_cortes';
@@ -162,6 +162,12 @@ export async function reconectarPortal(args: {
   // esta función muere a media sesión, el contador ya se movió. No poder
   // contar es no poder frenar, así que si no se pudo anotar, no se intenta.
   const anotado = await registrarIntento({ tenantId, comercio, permiso, hoy, ahora: new Date(ahora()).toISOString() });
+  if (anotado === 'ocupado') {
+    // A37-S45-02: otra corrida del mismo portal reclamó este intento un instante
+    // antes. No se teclea una segunda vez; tampoco es algo que una persona deba
+    // resolver — la otra corrida reporta su propio resultado.
+    return no(comercio, 'backoff', 'Otra corrida acaba de reclamar el intento de reconexión de este portal, así que esta no teclea la contraseña por segunda vez.', false, false);
+  }
   if (!anotado) {
     return no(comercio, 'no_se_pudo_leer', 'No se pudo anotar el intento de reconexión, y sin poder contarlos no hay forma de topar los reintentos. No se intentó.', false, true);
   }
@@ -211,6 +217,28 @@ async function entrar(a: {
   // ── 3. ¿YA ESTAMOS DENTRO? Puede pasar: otra corrida reconectó, o la
   // caducidad fue un falso positivo del pre-cheque de edad. Se guarda lo que
   // hay y se sale SIN abrir el cofre. Es la rama idempotente.
+  // A37-S45-03: «no veo login» no es «estoy dentro» si la página aún no dibuja
+  // NADA (SPA con el login pintado por JavaScript): se espera a que dibuje y se
+  // vuelve a mirar. Si nunca dibuja, NO se guarda una sesión anónima como
+  // «vinculado».
+  if (!pantallaDeLogin(inv, a.senaDeAdentro) && paginaSinRenderizar(inv)) {
+    const arranqueEspera = a.ahora();
+    while (paginaSinRenderizar(inv) && !pantallaDeLogin(inv, a.senaDeAdentro)) {
+      if (a.ahora() - arranqueEspera >= a.tope) {
+        const motivo = `${ficha.nombre} no terminó de dibujar su pantalla en ${Math.round(a.tope / 1000)} s, así que no se puede afirmar que estemos dentro ni que sea la de entrar. No se guardó ninguna sesión.`;
+        await registrarResultado({ tenantId, comercio, ok: false, clase: 'portal_no_contesto', motivo, ahora: sello() });
+        return no(comercio, 'portal_no_contesto', motivo, true, true);
+      }
+      await a.dormir(a.intervalo);
+      try {
+        inv = await entorno.pagina.inventario();
+      } catch {
+        // Mirar es diagnóstico: un inventario que revienta a media navegación
+        // no cancela la espera; el tope la acota.
+      }
+    }
+  }
+
   if (!pantallaDeLogin(inv, a.senaDeAdentro)) {
     logger.info('relogin.ya_dentro', { tenant: tenantId, comercio });
     return await guardar({ tenantId, comercio, ficha, entorno, sello: sello() });
@@ -295,7 +323,9 @@ async function entrar(a: {
     const despues = corteDuro(inv);
     if (despues) return await cortar(a, despues);
 
-    if (!pantallaDeLogin(inv, a.senaDeAdentro)) {
+    // Una página que aún no dibuja nada no es «dentro» (A37-S45-03): se sigue
+    // sondeando hasta el tope.
+    if (!pantallaDeLogin(inv, a.senaDeAdentro) && !paginaSinRenderizar(inv)) {
       logger.info('relogin.dentro', { tenant: tenantId, comercio });
       return await guardar({ tenantId, comercio, ficha, entorno, sello: sello() });
     }
@@ -318,10 +348,16 @@ async function cortar(
 ): Promise<ResultadoRelogin> {
   const motivo = `${a.ficha.nombre}: ${corte.motivo}`;
   logger.info('relogin.corte', { tenant: a.tenantId, comercio: a.comercio, clase: corte.clase });
-  await registrarResultado({
+  const guardado = await registrarResultado({
     tenantId: a.tenantId, comercio: a.comercio, ok: false,
     clase: corte.clase, motivo, ahora: new Date(a.ahora()).toISOString(),
   });
+  // A37-S45-04: el candado de «credencial inválida» solo existe si quedó
+  // escrito. Si no se pudo guardar, se dice con todas sus letras para que la
+  // persona NO deje la cuenta a merced del siguiente ciclo.
+  if (corte.clase === 'credencial_invalida' && guardado === false) {
+    return no(a.comercio, corte.clase, `${motivo} ATENCIÓN: no se pudo guardar el bloqueo, así que el sistema podría volver a intentarlo. Revisa o quita el permiso de reconexión de este portal hasta guardar la contraseña correcta.`, true, true);
+  }
   return no(a.comercio, corte.clase, motivo, true, true);
 }
 

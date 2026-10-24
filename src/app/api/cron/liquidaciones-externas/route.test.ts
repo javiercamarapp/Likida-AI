@@ -130,6 +130,24 @@ describe('la corrida', () => {
     expect(registrarLatido).toHaveBeenCalledWith('liquidaciones-externas', 'ok', expect.objectContaining({ correo: correoOk, pull: pullOk }));
   });
 
+  it('A37-A1-liquidaciones-06: un pull ATASCADO de alguna flota ALERTA al operador de Likida (además del latido parcial)', async () => {
+    const avisos = { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 };
+    const pull = { flotas: 1, leidas: 0, importadas: 0, excepciones: 0, errores: 1, error: 'TmsCredenciales: x', flotasAtascadas: ['t-1'] };
+    procesar.mockResolvedValueOnce({ tomadas: 0, en_cola: 0, enviadas: 0, reintentar: 0, fallidas: 0, sin_cambio: 0, avisos, pull });
+    const r = await llamar();
+    expect(r.status).toBe(200);
+    expect(registrarLatido).toHaveBeenCalledWith('liquidaciones-externas', 'parcial', expect.anything());
+    expect(alertarOperador).toHaveBeenCalledTimes(1);
+    expect(alertarOperador).toHaveBeenCalledWith('cron.liquidaciones_externas.pull_atascado', expect.objectContaining({ flotas: 1, error: 'TmsCredenciales: x' }));
+  });
+
+  it('un pull con error pero NO atascado no alerta', async () => {
+    const avisos = { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 };
+    procesar.mockResolvedValueOnce({ tomadas: 0, en_cola: 0, enviadas: 0, reintentar: 0, fallidas: 0, sin_cambio: 0, avisos, pull: { flotas: 1, leidas: 0, importadas: 0, excepciones: 0, errores: 1, error: 'TmsLimite: x' } });
+    await llamar();
+    expect(alertarOperador).not.toHaveBeenCalled();
+  });
+
   it('si el procesamiento lanza: 500, latido `fallo` y ALERTA al operador (no un cron verde que no hace nada)', async () => {
     procesar.mockRejectedValueOnce(new Error('base caída'));
     const r = await llamar();

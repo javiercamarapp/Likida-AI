@@ -120,6 +120,9 @@ export const LLAVES_EXTRA_SEGURAS = new Set([
 // Next, nunca el código de negocio, así que no hay dato personal que redactar.
 const LLAVES_SIN_REDACTAR_VALOR = new Set(['digest']);
 
+/** Contextos que el SDK arma por sí mismo y no llevan datos de negocio. */
+const CONTEXTOS_TECNICOS = new Set(['trace', 'runtime', 'os', 'app', 'device', 'culture', 'cloud_resource']);
+
 /** Solo primitivos pasan; un objeto/arreglo anidado no se puede garantizar limpio y se descarta entero. */
 function valorExtraSeguro(clave: string, v: unknown): string | number | boolean | undefined {
   if (typeof v === 'string') return LLAVES_SIN_REDACTAR_VALOR.has(clave) ? v : redactarTexto(v);
@@ -169,14 +172,52 @@ export function sanitizarEventoSentry(evento: unknown): unknown {
       return s;
     });
   }
+  // A37-S61-07: un evento que llega por una integración AUTOMÁTICA del SDK
+  // (unhandledRejection, console, etc.) no pasa por `anonimizar()` de
+  // `reportarExcepcion`; el saneador es la ÚLTIMA defensa y debe redactar también
+  // el texto libre: mensaje, valor de cada excepción, mensaje de cada breadcrumb
+  // y valor de cada tag (las claves y el tipo de excepción se conservan: son lo
+  // que hace útil el evento).
+  if (typeof salida.message === 'string') salida.message = redactarTexto(salida.message);
+  else if (salida.message && typeof salida.message === 'object') {
+    const m = { ...(salida.message as Record<string, unknown>) };
+    for (const k of ['formatted', 'message']) if (typeof m[k] === 'string') m[k] = redactarTexto(m[k] as string);
+    if (Array.isArray(m.params)) delete m.params;
+    salida.message = m;
+  }
+  const excepcion = salida.exception;
+  if (excepcion && typeof excepcion === 'object' && Array.isArray((excepcion as { values?: unknown }).values)) {
+    salida.exception = {
+      ...(excepcion as Record<string, unknown>),
+      values: ((excepcion as { values: unknown[] }).values).map((v) => {
+        if (!v || typeof v !== 'object') return v;
+        const ev = { ...(v as Record<string, unknown>) };
+        if (typeof ev.value === 'string') ev.value = redactarTexto(ev.value);
+        return ev;
+      }),
+    };
+  }
+  if (salida.tags && typeof salida.tags === 'object' && !Array.isArray(salida.tags)) {
+    const tags: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(salida.tags as Record<string, unknown>)) {
+      tags[k] = typeof v === 'string' ? (LLAVES_SIN_REDACTAR_VALOR.has(k) ? v : redactarTexto(v)) : v;
+    }
+    salida.tags = tags;
+  }
+  // `contexts`: solo los técnicos que pone el SDK (sin datos de negocio). Un
+  // contexto arbitrario puede traer cualquier cosa y no se puede garantizar limpio.
   const contexts = salida.contexts;
   if (contexts && typeof contexts === 'object') {
-    const trace = (contexts as Record<string, unknown>).trace;
-    if (trace && typeof trace === 'object') {
-      const t = { ...(trace as Record<string, unknown>) };
-      delete t.data;
-      salida.contexts = { ...(contexts as Record<string, unknown>), trace: t };
+    const limpios: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(contexts as Record<string, unknown>)) {
+      if (!CONTEXTOS_TECNICOS.has(k)) continue;
+      if (k === 'trace' && v && typeof v === 'object') {
+        const t = { ...(v as Record<string, unknown>) };
+        delete t.data;
+        limpios[k] = t;
+      } else limpios[k] = v;
     }
+    salida.contexts = limpios;
   }
   const request = salida.request;
   if (request && typeof request === 'object') {
@@ -200,6 +241,7 @@ export function sanitizarEventoSentry(evento: unknown): unknown {
       if (!crumb || typeof crumb !== 'object') return crumb;
       const c = { ...(crumb as Record<string, unknown>) };
       delete c.data;
+      if (typeof c.message === 'string') c.message = redactarTexto(c.message);
       return c;
     });
   }

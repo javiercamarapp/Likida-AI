@@ -125,6 +125,16 @@ describe('leerLiquidaciones: póliza, conceptos y neto', () => {
     expect(r.cuerpos).toHaveLength(20);
   });
 
+  it('A37-TRANSVERSAL-04: un mapeo de nómina cuyo «cargo» no se convierte a número NO entrega una liquidación sin esos renglones: la lectura falla', async () => {
+    const t = tablasSinteticas();
+    t.nomina.forEach((f) => { if (Number(f.Cargo) > 999) f.Cargo = String(f.Cargo).replace(/(\d)(\d{3})$/, '$1,$2') + '.50'; });
+    const sinNumero = { ...MAPEO_LIQUIDACIONES_SUPUESTO, nomina: { ...MAPEO_LIQUIDACIONES_SUPUESTO.nomina, campos: { ...MAPEO_LIQUIDACIONES_SUPUESTO.nomina.campos, cargo: 'Cargo' } } };
+    const { http } = origen(t);
+    const r = await leerLiquidaciones(sesionDe(http), sinNumero, VENTANA, {});
+    expect(r.ok).toBe(false);
+    if (!r.ok) { expect(r.motivo).toMatch(/importe debe llevar transformar/); expect(r.parcial.cuerpos).toHaveLength(0); }
+  });
+
   it('neto negativo: se entrega tal cual y se ADVIERTE (no se oculta ni se corrige)', async () => {
     const t = tablasSinteticas();
     t.nomina.filter((f) => f.Bitacora === '2001' && Number(f.Abono) > 0).forEach((f) => { f.Abono = 99_000; });

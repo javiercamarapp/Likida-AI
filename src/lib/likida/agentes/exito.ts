@@ -38,7 +38,7 @@ import { traerTodo, conteo } from '../pg';
 import { hoyMx, round2, mxn, numero, litros, pctCambio, fechaMx } from '@/lib/formato';
 import { telefonosJefe } from '../contactos';
 import { getOnboardingFlotas, type OnboardingFlota } from '@/lib/admin/onboarding';
-import { getPorCobrar, type FacturaPorCobrar } from '@/lib/saas/transferencia';
+import { getPorCobrarCompleto, type FacturaPorCobrar } from '@/lib/saas/transferencia';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { encolarPieza } from './cola';
 import { registrarCorrida, type DisparoCorrida } from './corridas';
@@ -225,11 +225,12 @@ export async function encolarPiezaExito(
  *  tenant NULL: una pasada barre TODAS las flotas, así que la corrida no es
  *  de ninguna en particular — las PIEZAS sí llevan tenant cuando toca. */
 async function anotar(
-  agente: AgenteExito, inicio: Date, estado: 'ok' | 'fallo', disparo: DisparoCorrida,
+  agente: AgenteExito, inicio: Date, estado: 'ok' | 'parcial' | 'fallo', disparo: DisparoCorrida,
   resumen: Record<string, unknown>, error?: string, costoUsd = 0,
 ): Promise<void> {
   await registrarCorrida(null, agente, {
     inicio, fin: new Date(), estado, disparo, costoUsd,
+    // A37-S27-09: una corrida cortada por reloj ('parcial') ya no se archiva como 1/1 hecha.
     ...(estado === 'ok' ? { tareasHechas: 1, tareasTotal: 1 } : {}),
     resumen,
     ...(error ? { error } : {}),
@@ -509,7 +510,7 @@ async function correrOnboarding(disparo: DisparoCorrida, hoy: string, venceEnVue
       if (relojAgotado(venceEnVuelta)) {
         const sinMirar = flotas.length - enOnboarding.length;
         logger.warn('exito.onboarding.corte_por_reloj', { sinMirar, miradas: enOnboarding.length });
-        await anotar(agente, inicio, 'ok', disparo, { parte: 'sin_turno', sin_mirar: sinMirar, miradas: enOnboarding.length });
+        await anotar(agente, inicio, 'parcial', disparo, { parte: 'sin_turno', sin_mirar: sinMirar, miradas: enOnboarding.length });
         return {
           resultado: 'corrio', piezas: 0, costoUsd: 0, sinTurno: true,
           motivo: `el reloj de la vuelta se agotó con ${numero(sinMirar)} flota(s) sin mirar — el parte de hoy NO se fabricó a medias (sellaría el día con una lista incompleta); le toca completo en la próxima pasada`,
@@ -910,7 +911,7 @@ async function correrExitoCliente(disparo: DisparoCorrida, hoy: string, venceEnV
       }
     }
 
-    await anotar(agente, inicio, 'ok', disparo, { piezas, flotas: flotas.length, motivos, sin_turno: sinTurno });
+    await anotar(agente, inicio, sinTurno ? 'parcial' : 'ok', disparo, { piezas, flotas: flotas.length, motivos, sin_turno: sinTurno });
     return {
       resultado: 'corrio', piezas, costoUsd: 0,
       ...(sinTurno ? { sinTurno: true } : {}),
@@ -1035,7 +1036,7 @@ async function correrRetencion(disparo: DisparoCorrida, hoy: string, venceEnVuel
       if (relojAgotado(venceEnVuelta)) {
         const sinMirar = flotas.length - usos.length;
         logger.warn('exito.retencion.corte_por_reloj', { sinMirar, miradas: usos.length, semana: lunes });
-        await anotar(agente, inicio, 'ok', disparo, { parte: 'sin_turno', sin_mirar: sinMirar, miradas: usos.length, semana: lunes });
+        await anotar(agente, inicio, 'parcial', disparo, { parte: 'sin_turno', sin_mirar: sinMirar, miradas: usos.length, semana: lunes });
         return {
           resultado: 'corrio', piezas: 0, costoUsd: 0, sinTurno: true,
           motivo: `el reloj de la vuelta se agotó con ${numero(sinMirar)} flota(s) sin mirar — el parte SEMANAL no se fabricó a medias (sellaría la semana y apagaría los gatillos de las flotas no miradas hasta el lunes que viene); le toca completo en la próxima pasada`,
@@ -1150,17 +1151,43 @@ export function toquesDeHoy(facturas: FacturaPorCobrar[], hoy: string): ToqueCob
   return toques;
 }
 
+/**
+ * Los toques que el agente PROPONE hoy: de los alcanzados, solo el hito MÁS ALTO por factura (A37-S27-08).
+ * Con el catch-up de arriba, una factura de 20 días generaba cinco piezas casi idénticas de golpe (el cuerpo
+ * habla de los días reales) y, con facturas viejas, la bandeja se inundaba. Los hitos inferiores de una factura
+ * que ya pasó de largo no se proponen. `toquesDeHoy` queda completo porque el panel de cobranza los lista todos
+ * con su sello.
+ */
+export function toquesParaProponer(facturas: FacturaPorCobrar[], hoy: string): ToqueCobranza[] {
+  const masAlto = new Map<string, ToqueCobranza>();
+  for (const t of toquesDeHoy(facturas, hoy)) {
+    const previo = masAlto.get(t.factura.id);
+    if (!previo || t.hito > previo.hito) masAlto.set(t.factura.id, t);
+  }
+  return [...masAlto.values()];
+}
+
 /** ¿Este toque llega TARDE a su propio hito? (c6-14) */
 export function esToqueAtrasado(t: ToqueCobranza): boolean {
   return t.diasVsVencimiento !== t.hito;
 }
 
 /** La clave del toque: una propuesta por (factura, hito), para siempre. La
- *  referencia bancaria es el identificador humano; sin ella (una factura de
- *  Stripe) se cae al id corto — nunca a un texto ambiguo. */
+ *  referencia bancaria es el identificador humano; PERO NO ES ÚNICA: lleva solo
+ *  4 hex del tenant (`referenciaDe`), así que dos flotas con el mismo prefijo
+ *  que facturen el mismo mes compartían título y el índice único de la 0218
+ *  (agente+título, sin tenant) rebotaba el recordatorio de la segunda como «ya
+ *  existía» (A37-S27-03). La llave real es el id COMPLETO de la factura.
+ *
+ *  Al desplegar, las propuestas que ya existían con el título viejo no casan
+ *  con este: las facturas abiertas reciben UNA vez más sus hitos ya alcanzados
+ *  (el agente propone, nadie envía solo). */
 export function tituloToque(t: ToqueCobranza): string {
-  const ref = t.factura.referencia?.trim() || t.factura.id.slice(0, 8);
-  return `Cobranza SaaS — ${ref} — D${t.hito >= 0 ? `+${t.hito}` : t.hito}`;
+  const hito = `D${t.hito >= 0 ? `+${t.hito}` : t.hito}`;
+  const ref = t.factura.referencia?.trim();
+  return ref
+    ? `Cobranza SaaS — ${ref} — ${t.factura.id} — ${hito}`
+    : `Cobranza SaaS — ${t.factura.id} — ${hito}`;
 }
 
 export function armarPropuestaCobranza(t: ToqueCobranza, hoy: string): string {
@@ -1254,8 +1281,8 @@ async function correrCobranzaSaas(disparo: DisparoCorrida, hoy: string, venceEnV
   const agente = 'cobranza_saas';
   const titulo = `Cobranza SaaS — ${hoy}`;
   try {
-    const facturas = await getPorCobrar();
-    const toques = toquesDeHoy(facturas, hoy);
+    const facturas = await getPorCobrarCompleto();
+    const toques = toquesParaProponer(facturas, hoy);
 
     let propuestas = 0;
     let sinTurno = false;
@@ -1309,7 +1336,7 @@ async function correrCobranzaSaas(disparo: DisparoCorrida, hoy: string, venceEnV
     }
 
     const piezas = propuestas + (parte === 'encolada' ? 1 : 0);
-    await anotar(agente, inicio, 'ok', disparo, {
+    await anotar(agente, inicio, sinTurno ? 'parcial' : 'ok', disparo, {
       por_cobrar: facturas.length, toques: toques.length, propuestas, parte,
       ...(sinTurno ? { sin_turno: toquesSinMirar } : {}),
     });
@@ -1515,7 +1542,7 @@ async function correrSoporte(disparo: DisparoCorrida, hoy: string, ahora: Date, 
     // tickets se mide en horas o días, así que esperar una pasada no pierde
     // nada, y afirmar un censo que no se terminó de leer sí.
     if (sinTurno) {
-      await anotar(agente, inicio, 'ok', disparo, { parte: 'sin_turno', leidos: tickets.length });
+      await anotar(agente, inicio, 'parcial', disparo, { parte: 'sin_turno', leidos: tickets.length });
       return {
         resultado: 'corrio', piezas: 0, costoUsd: 0, sinTurno: true,
         motivo: `el reloj de la vuelta cortó la lectura de tickets (${numero(tickets.length)} leído(s)) — ni se escaló ni se encoló sobre un censo incompleto: una alerta a la baja tranquiliza con un dato falso. Sale completo en la próxima pasada`,

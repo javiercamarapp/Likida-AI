@@ -13,6 +13,7 @@
 import { NextResponse } from 'next/server';
 import { abrir, errorApi, fallo } from '../../_comun';
 import { bitacoraConciliada, LEYENDAS_BITACORA_CONCILIADA } from '@/lib/likida/peajes/bitacora_conciliada';
+import { superficiePeajesDeTenant, MOTIVO_STAND_BY_PERFIL } from '@/lib/likida/peajes/superficie_perfil';
 import { leerOpcionesExportacionPeajes, generarExportacionPeajes } from '@/lib/likida/peajes/exportacion';
 
 export const runtime = 'nodejs';
@@ -24,6 +25,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export async function GET(req: Request) {
   const acceso = await abrir(req, 'dinero');
   if (!acceso.ok) return acceso.respuesta;
+
+  // A37-A2-25: la bitácora conciliada con GPS es stand-by bajo el perfil `cinco_agentes` (como la pantalla y /api/export):
+  // la subruta no puede entregarla por la llave de API. Falla cerrado (sin perfil legible = restringido).
+  const superficie = await superficiePeajesDeTenant(acceso.tenantId);
+  if (!superficie.gps || !superficie.bitacoraEstimulo) return errorApi('sin_permiso', MOTIVO_STAND_BY_PERFIL);
 
   const q = new URL(req.url).searchParams;
   const desglose = q.get('desglose');

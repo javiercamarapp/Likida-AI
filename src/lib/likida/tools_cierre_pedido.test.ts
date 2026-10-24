@@ -117,6 +117,21 @@ describe('pidioCerrar', () => {
     }
   });
 
+  it('A37-S55-07: un reporte de avance con la raíz de «acabar/cerrar/cuadra» NO habilita el cierre', () => {
+    for (const t of [
+      'acabo de cargar diésel, fueron 1,200',
+      'terminé de cargar en la gasolinera',
+      'cierran la caseta, voy a tardar',
+      'estoy a una cuadra del patio',
+    ]) {
+      expect(pidioCerrar(t), t).toBe(false);
+    }
+    // y lo que sí es cierre sigue siéndolo
+    for (const t of ['acabé, ciérralo', 'ya terminé de cargar todo, mándame mi liquidación', 'cierra el viaje']) {
+      expect(pidioCerrar(t), t).toBe(true);
+    }
+  });
+
   it('NO reconoce el turno en el que el modelo no tiene derecho a cerrar', () => {
     for (const t of ['¿cuánto llevo?', 'hola', 'ya llegué', 'se me ponchó una llanta', 'ok', 'gracias']) {
       expect(pidioCerrar(t), t).toBe(false);

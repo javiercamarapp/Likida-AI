@@ -128,6 +128,15 @@ describe('la nota de voz del chofer (capa E1)', () => {
     expect(sendText).toHaveBeenCalledWith(CHOFER_TEL, 'Ya le avisé a tu jefe 🚨');
   });
 
+  it('A37-S55-08: la transcripción NO se escribe al log (datos de salud/terceros); solo su tamaño', async () => {
+    transcribirNotaDeVoz.mockResolvedValue({ ok: true, texto: 'chocamos, mi compañero Juan está herido' });
+    await processInbound(notaDeVoz());
+    const todo = JSON.stringify([...logger.info.mock.calls, ...logger.warn.mock.calls, ...logger.error.mock.calls]);
+    expect(todo).not.toContain('herido');
+    expect(todo).not.toContain('Juan');
+    expect(logger.info).toHaveBeenCalledWith('voz.transcrita', expect.objectContaining({ caracteres: 39 }));
+  });
+
   it('audio ininteligible → "¿me lo escribes?" y NINGÚN protocolo disparado', async () => {
     transcribirNotaDeVoz.mockResolvedValue({ ok: false, motivo: 'ilegible' });
     await processInbound(notaDeVoz());

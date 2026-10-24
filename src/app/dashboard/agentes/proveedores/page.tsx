@@ -5,7 +5,7 @@ import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { parseCfdiXml } from '@/lib/likida/intake/cfdi_xml';
 import {
-  guardarFacturaProveedor, listarFacturasProveedor, decidirFacturaProveedor,
+  guardarFacturaProveedor, listarBandejaProveedor, decidirFacturaProveedor,
   ingresarFacturaDesdeFoto, estadoSatDeCfdi,
 } from '@/lib/likida/proveedores';
 import { ultimasCorridas, type CorridaRegistrada } from '@/lib/likida/agentes/corridas';
@@ -88,7 +88,8 @@ export default async function PaginaAgenteProveedores({
     // Primario sin catch: bandeja ciega = página caída, no "no hay facturas".
     // El tope va EXPLÍCITO y espeja `TOPE_FACTURAS` de la vista, que es quien
     // lo declara en pantalla (FE-13). Antes viajaba como default silencioso.
-    listarFacturasProveedor(tenantId, 100),
+    // A37-S15-02: las 100 más recientes MÁS todas las pendientes (hasta 500).
+    listarBandejaProveedor(tenantId, 100, 500),
     getFiscalDeFlota(tenantId).catch(() => null),
     // La ficha de corridas es SECUNDARIA: si su lectura falla, la bandeja sigue
     // y la ficha dice que no pudo leer — nunca "sin corridas" sobre una caída.
@@ -134,6 +135,9 @@ export default async function PaginaAgenteProveedores({
     if (!r.ok) {
       if (r.motivo === 'no_es_compra') {
         return { error: 'Ese CFDI no es una factura de compra (es nota de crédito, pago, traslado o nómina). Una nota de crédito resta: regístrala con tu contador, no como compra.' };
+      }
+      if (r.motivo === 'moneda_no_mxn') {
+        return { error: 'Ese CFDI no está en pesos (MXN). La bandeja y el export al ERP no guardan moneda ni tipo de cambio, así que no lo recibo: regístralo con tu contador.' };
       }
       return r.motivo === 'duplicada'
         ? { error: 'Esa factura ya está en la bandeja (mismo folio fiscal).' }
@@ -189,7 +193,7 @@ export default async function PaginaAgenteProveedores({
     };
   }
 
-  async function decidir(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
+  async function decidir(_prev: { error?: string; confirmar?: boolean } | null, fd: FormData): Promise<{ error?: string; confirmar?: boolean } | null> {
     'use server';
     const permiso = await exigirPermiso(tenantId);
     if ('error' in permiso) return { error: permiso.error };
@@ -198,8 +202,8 @@ export default async function PaginaAgenteProveedores({
     const decision = fd.get('decision');
     if (!facturaId || (decision !== 'aprobada' && decision !== 'rechazada')) return { error: 'Decisión incompleta.' };
 
-    const r = await decidirFacturaProveedor(tenantId, facturaId, decision, permiso.quien);
-    if (r.error) return { error: r.error };
+    const r = await decidirFacturaProveedor(tenantId, facturaId, decision, permiso.quien, { confirmarAdvertencias: fd.get('confirmar') === '1' });
+    if (r.error) return { error: r.error, ...(r.requiereConfirmacion ? { confirmar: true } : {}) };
     logger.info('proveedores.decidida', { tenantId, facturaId, decision });
     redirect(`/dashboard/agentes/proveedores${sufijo}`);
   }

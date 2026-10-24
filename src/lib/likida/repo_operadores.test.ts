@@ -45,7 +45,8 @@ const eqIdPropio = vi.fn(() => ({ eq: eqTenantPropio }));
 const selectPropio = vi.fn(() => ({ eq: eqIdPropio }));
 
 const updateResult = vi.fn();
-const eqTenantUpdate = vi.fn(() => updateResult());
+// A37-S18-04: el UPDATE lleva `.select('id')` para contar filas afectadas.
+const eqTenantUpdate = vi.fn(() => ({ select: () => updateResult() }));
 const eqViajeUpdate = vi.fn(() => ({ eq: eqTenantUpdate }));
 const update = vi.fn(() => ({ eq: eqViajeUpdate }));
 
@@ -155,15 +156,6 @@ describe('buscarCatalogo / contarCatalogo (FE-2)', () => {
     inAbiertas.mockClear(); eqTenantAbiertas.mockClear(); selectAbiertas.mockClear();
   });
 
-  it('la unidad se busca y se ordena por numero_economico, no por nombre', async () => {
-    listaResult.mockResolvedValue({ data: [{ id: 'u-1', numero_economico: 'T-014' }], error: null });
-    const r = await buscarCatalogo('t-1', 'unidad', 'T-0');
-    expect(from).toHaveBeenCalledWith('unidad');
-    expect(ilikeLista).toHaveBeenCalledWith('numero_economico', '%T-0%');
-    expect(orderLista).toHaveBeenCalledWith('numero_economico');
-    expect(r).toEqual([{ id: 'u-1', etiqueta: 'T-014' }]);
-  });
-
   // R15-ux-01 (auditoría 35): dos operadores activos con el MISMO nombre daban dos
   // etiquetas idénticas y el combo resolvía al primero → el viaje y el WhatsApp
   // del anticipo iban al homónimo equivocado. Solo el teléfono es único (0024).
@@ -196,31 +188,8 @@ describe('buscarCatalogo / contarCatalogo (FE-2)', () => {
   // un viaje abierto — el jefe de tráfico podía elegirlas desde la UI y
   // chocar con el candado de servidor (operacion.ts) en vez de no verlas.
   // ═══════════════════════════════════════════════════════════════════════
-  it('el catálogo de UNIDAD consulta primero qué unidades tienen viaje abierto, acotado por tenant', async () => {
-    listaResult.mockResolvedValue({ data: [{ id: 'u-1', numero_economico: 'T-014' }], error: null });
-    await buscarCatalogo('t-1', 'unidad');
-    expect(from).toHaveBeenCalledWith('viaje');
-    expect(eqTenantAbiertas).toHaveBeenCalledWith('tenant_id', 't-1');
-    expect(inAbiertas).toHaveBeenCalledWith('estatus', ['abierto', 'en_cuadre']);
-    expect(notAbiertas).toHaveBeenCalledWith('unidad_id', 'is', null);
-  });
-
-  it('el catálogo de UNIDAD EXCLUYE las que ya tienen viaje abierto', async () => {
-    abiertasResult.mockResolvedValue({ data: [{ unidad_id: 'u-1' }], error: null, count: 1 });
-    listaResult.mockResolvedValue({ data: [{ id: 'u-2', numero_economico: 'T-020' }], error: null });
-    const r = await buscarCatalogo('t-1', 'unidad');
-    expect(notLista).toHaveBeenCalledWith('id', 'in', '(u-1)');
-    expect(r).toEqual([{ id: 'u-2', etiqueta: 'T-020' }]);
-  });
-
-  it('con CERO unidades ocupadas, el catálogo de UNIDAD no manda ningún `.not(id, in, …)` — solo lo pide si hay algo que excluir', async () => {
-    abiertasResult.mockResolvedValue({ data: [], error: null, count: 0 });
-    listaResult.mockResolvedValue({ data: [{ id: 'u-1', numero_economico: 'T-014' }], error: null });
-    const r = await buscarCatalogo('t-1', 'unidad');
-    expect(notLista).not.toHaveBeenCalled();
-    expect(r).toEqual([{ id: 'u-1', etiqueta: 'T-014' }]);
-  });
-
+  // Las pruebas de UNIDAD (orden por numero_economico, exclusión de las ocupadas,
+  // sin `.not(id, in, …)`) viven en repo_catalogo_unidades.test.ts (A37-S56-08).
   it('cliente y operador NO consultan viajes abiertos — la exclusión es SOLO de unidad', async () => {
     listaResult.mockResolvedValue({ data: [{ id: 'c-1', nombre: 'ACME' }], error: null });
     await buscarCatalogo('t-1', 'cliente');
@@ -270,7 +239,7 @@ describe('reasignarOperador', () => {
 
   it('actualiza operador_id del viaje, acotado por tenant, cuando el operador SÍ es de esta flota', async () => {
     propioResult.mockResolvedValue({ data: { id: 'o-2', nombre: 'Ana', telefono: '52999', terminal: null }, error: null });
-    updateResult.mockResolvedValue({ error: null });
+    updateResult.mockResolvedValue({ data: [{ id: 'v-1' }], error: null });
 
     const r = await reasignarOperador('t-1', 'v-1', 'o-2');
     expect(r).toEqual({ cambio: true, operadorAnteriorId: 'o-1' });
@@ -297,7 +266,7 @@ describe('reasignarOperador', () => {
 
   it('dice quién lo tenía: la primera asignación (sin chofer) y el mismo chofer se distinguen del cambio real', async () => {
     propioResult.mockResolvedValue({ data: { id: 'o-2', nombre: 'Ana', telefono: '52999', terminal: null }, error: null });
-    updateResult.mockResolvedValue({ error: null });
+    updateResult.mockResolvedValue({ data: [{ id: 'v-1' }], error: null });
     previoResult.mockResolvedValue({ data: { operador_id: null }, error: null });
     expect(await reasignarOperador('t-1', 'v-1', 'o-2')).toEqual({ cambio: true, operadorAnteriorId: null });
     previoResult.mockResolvedValue({ data: { operador_id: 'o-2' }, error: null });
@@ -313,7 +282,7 @@ describe('reasignarOperador', () => {
   describe('AUDITORÍA A8 — reset del reloj de aviso/escalación al reasignar', () => {
     beforeEach(() => {
       propioResult.mockResolvedValue({ data: { id: 'o-2', nombre: 'Ana', telefono: '52999', terminal: null }, error: null });
-      updateResult.mockResolvedValue({ error: null });
+      updateResult.mockResolvedValue({ data: [{ id: 'v-1' }], error: null });
     });
 
     it('CAMBIO real de operador (o-1 → o-2): resetea los tres campos en el MISMO update', async () => {
@@ -354,6 +323,21 @@ describe('reasignarOperador', () => {
     // directo, esta aserción es la que lo atrapa — sin ella, la prueba de
     // arriba (con `propioResult` en éxito) seguiría verde igual.
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it('A37-S18-04: un viaje inexistente o de otra flota (el UPDATE toca 0 filas) NO se reporta como asignado', async () => {
+    propioResult.mockResolvedValue({ data: { id: 'o-2', nombre: 'Ana', telefono: '52999', terminal: null }, error: null });
+    updateResult.mockResolvedValue({ data: [], error: null });
+    await expect(reasignarOperador('t-1', 'v-ajeno', 'o-2')).rejects.toThrow(/no existe en tu flota/);
+  });
+
+  it('A37-S18-05: el choque con uq_viaje_abierto_por_operador sale como DatoInvalido con mensaje de pantalla', async () => {
+    propioResult.mockResolvedValue({ data: { id: 'o-2', nombre: 'Ana', telefono: '52999', terminal: null }, error: null });
+    updateResult.mockResolvedValue({ data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "uq_viaje_abierto_por_operador"' } });
+    const { DatoInvalido } = await import('./errores');
+    const e = await reasignarOperador('t-1', 'v-1', 'o-2').catch((x) => x);
+    expect(e).toBeInstanceOf(DatoInvalido);
+    expect(e.message).toMatch(/ya trae un viaje abierto/);
   });
 
   it('si el UPDATE falla, lanza con el mensaje', async () => {

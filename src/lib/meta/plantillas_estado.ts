@@ -147,12 +147,24 @@ export async function consultarPlantillasMeta(c: CredencialesMeta, fetchFn: Fetc
 /** `POST /{WABA}/message_templates` de UNA plantilla del catálogo. */
 export async function crearPlantillaMeta(
   c: CredencialesMeta, p: PlantillaCatalogo, fetchFn: FetchLike,
+  /** `headerHandle`: el handle de una subida reanudable (Resumable Upload) de un
+   *  archivo de muestra; obligatorio para plantillas con encabezado de medios. */
+  opciones: { headerHandle?: string } = {},
 ): Promise<{ ok: true; id: string | null } | { ok: false; error: string }> {
   validarCredenciales(c);
+  // A37-S61-09: sin `example.header_handle` Meta rechaza el POST de una plantilla
+  // con encabezado de medios (hoy solo `liquidacion_externa_v1`). No se manda
+  // una petición que se sabe perdida: se dice qué hacer.
+  if (p.encabezado && p.encabezado.tipo !== 'TEXT' && !opciones.headerHandle) {
+    return {
+      ok: false,
+      error: `${p.nombre} tiene encabezado ${p.encabezado.tipo}: Meta exige example.header_handle (handle de Resumable Upload de un archivo de muestra). Pasa headerHandle o créala a mano en el WhatsApp Manager (panel de Meta).`,
+    };
+  }
   const res = await fetchFn(`https://graph.facebook.com/${GRAPH_VERSION_PLANTILLAS}/${c.wabaId}/message_templates`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${c.token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(cuerpoCreacionMeta(p)),
+    body: JSON.stringify(cuerpoCreacionMeta(p, opciones)),
   });
   const crudo = await res.text();
   if (!res.ok) return { ok: false, error: `Meta respondió ${res.status}: ${errorSeguro(crudo, c.token)}` };

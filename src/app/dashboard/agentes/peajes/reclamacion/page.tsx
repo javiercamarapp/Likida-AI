@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { importeDeNota } from '@/lib/likida/peajes/importe_nota';
 import { sufijoTenant } from '../../../sufijo';
 import { logger } from '@/lib/logger';
 import { requireSessionTenant } from '@/lib/auth/guard';
@@ -89,9 +90,10 @@ export default async function PaginaReclamacionPeajes({
     'use server';
     const no = await puertaReclamos(tenantId);
     if (no) volverReclamos(sufijo, `error:${no}`);
-    const monto = Number(String(fd.get('monto') ?? '').trim().replace(/[$,\s]/g, ''));
+    const importe = importeDeNota(String(fd.get('monto') ?? ''));
+    if (!importe.ok) volverReclamos(sufijo, `error:${importe.motivo}`);
     const r = await registrarNotaDeCredito(tenantId, {
-      reclamoId: String(fd.get('reclamo') ?? ''), monto, fecha: String(fd.get('fecha') ?? ''), referencia: String(fd.get('referencia') ?? '') || null,
+      reclamoId: String(fd.get('reclamo') ?? ''), monto: importe.ok ? importe.monto : Number.NaN, fecha: String(fd.get('fecha') ?? ''), referencia: String(fd.get('referencia') ?? '') || null,
       versionVista: fd.has('version_vista') ? String(fd.get('version_vista')) : null, // A33-06: idempotencia del doble envío (migración 0860)
     });
     volverReclamos(sufijo, r.ok ? 'Nota de crédito registrada.' : `error:${r.motivo}`);
@@ -132,7 +134,11 @@ export default async function PaginaReclamacionPeajes({
     'use server';
     const no = await puertaReclamos(tenantId);
     if (no) volverReclamos(sufijo, `error:${no}`);
-    volverReclamos(sufijo, (await marcarReclamoRechazado(tenantId, String(fd.get('reclamo') ?? ''))) ? 'Reclamo marcado como rechazado.' : 'error:No se pudo actualizar el reclamo.');
+    const res = await marcarReclamoRechazado(tenantId, String(fd.get('reclamo') ?? ''));
+    volverReclamos(sufijo,
+      res === 'rechazado' ? 'Reclamo marcado como rechazado.'
+        : res === 'sin_cambio' ? 'error:El reclamo no cambió: ya no está enviado (quizá ya lo rechazaron o lo acreditaron desde otra pestaña) o no es de tu flota. Recarga la pantalla.'
+          : 'error:No se pudo actualizar el reclamo.');
   }
 
   const desglose = (sp.desglose ?? '').trim();

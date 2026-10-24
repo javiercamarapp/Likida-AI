@@ -146,7 +146,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
                       <a href={`/api/export/vigia-faqs?${qExport}formato=xlsx${sufijo ? `&${sufijo.slice(1)}` : ''}`} className="underline">Excel</a>
                       <a href={`/api/export/vigia-faqs?${qExport}formato=pdf${sufijo ? `&${sufijo.slice(1)}` : ''}`} className="underline">PDF</a>
                     </p>
-                    {truncado && <Aviso>El histórico es más grande de lo que se analiza de una vez: el reporte usa solo los primeros 50,000 mensajes.</Aviso>}
+                    {truncado && <Aviso>El histórico es más grande de lo que se analiza de una vez: el reporte usa solo los 50,000 mensajes más recientes.</Aviso>}
                     <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
                       {numero(reporte.mensajes)} mensajes ({numero(reporte.mensajesCliente)} de clientes, {numero(reporte.mensajesEquipo)} de tu equipo)
                       {reporte.desde && reporte.hasta ? ` del ${fechaHoraMx(reporte.desde)} al ${fechaHoraMx(reporte.hasta)}` : ''}. Los temas se detectan por palabras clave, sin modelo: lo que no encaja queda en «Otros».

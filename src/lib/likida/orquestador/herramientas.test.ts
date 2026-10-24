@@ -212,6 +212,28 @@ describe('detalle_viaje', () => {
   });
 });
 
+describe('A37-S51-07: tablero recortado no se presenta como «no existe»', () => {
+  it('detalle_viaje: folio no hallado con hayMas verdadero NO dice encontrado:false', async () => {
+    const mundo = mundos();
+    (mundo[A].datos as any).hayMas = true;
+    const m = crearFuentesEnMemoria(mundo);
+    ponerFuentes(m.fuentes);
+    const exec = conPermisos('encargado', makeExecutor({ tenantId: A, rol: 'encargado', usuarioId: 'u-1', runId: 'r1', conversationId: 'r1' }));
+    const r = (await exec('detalle_viaje', { folio: 'F-RECIENTE' })).result as Record<string, any>;
+    expect(r.encontrado).toBeNull();
+    expect(r.nota).toMatch(/NO se pudo confirmar/);
+  });
+  it('filtro por terminal con catálogo en su tope: no responde «no existe»', async () => {
+    const mundo = mundos();
+    mundo[A].terminales = Array.from({ length: 300 }, (_, i) => ({ id: `t${i}`, nombre: `Terminal ${i}` }));
+    const m = crearFuentesEnMemoria(mundo);
+    ponerFuentes(m.fuentes);
+    const exec = conPermisos('encargado', makeExecutor({ tenantId: A, rol: 'encargado', usuarioId: 'u-1', runId: 'r1', conversationId: 'r1' }));
+    const r = (await exec('tablero_viajes', { terminal: 'Zzzz inexistente' })).result as Record<string, any>;
+    expect(r.error).toBe('catalogo_recortado');
+  });
+});
+
 describe('escalar_a_persona (la única acción)', () => {
   const ARGS = { destino: 'mesa_de_control', motivo: 'posible_emergencia', viaje_folio: 'F-a2', resumen: 'El chofer no contesta desde hace horas y el GPS está viejo.' };
 

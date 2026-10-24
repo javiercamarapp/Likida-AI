@@ -72,6 +72,61 @@ beforeEach(() => {
 
 const linea = (id: string) => db.tablas.desglose_peaje_linea.find((l) => l.id === id)!;
 
+describe('A37-A2-10: un mismo gasto no respalda líneas de varios desgloses', () => {
+  const previo = (over: Fila = {}): Fila => ({ id: 'd0', tenant_id: T, proveedor: 'PASE', creado_en: '2026-08-10T10:00:00Z', anulado_en: null, periodo_desde: '2026-08-01', periodo_hasta: '2026-08-10', ...over });
+  const lineaPrevia = (over: Fila = {}): Fila => ({ id: 'l0', tenant_id: T, desglose_id: 'd0', indice: 0, fecha: '2026-08-05', monto: 189, estatus: 'cuadra', detalle: { gastoId: 'g1' }, ...over });
+  const armar = (extra: { desglose?: Fila; linea?: Fila } = {}) => {
+    const b = base();
+    b.desglose_peaje = [
+      { id: 'd1', tenant_id: T, proveedor: 'PASE', creado_en: '2026-08-12T10:00:00Z', anulado_en: null, periodo_desde: '2026-08-01', periodo_hasta: '2026-08-10' },
+      previo(extra.desglose),
+    ];
+    b.desglose_peaje_linea.push(lineaPrevia(extra.linea));
+    db = crearDbFalsa(b, { peaje_posiciones_ventana: rpcPosiciones });
+  };
+
+  it('el gasto que ya respalda una línea de un desglose ANTERIOR vigente no vuelve a respaldar otra: queda «contraparte ya reclamada»', async () => {
+    armar();
+    await conciliarDesglose(T, 'd1', 'manual');
+    // g1 ya respalda la línea del desglose anterior: esta ya no cuadra con él (lo más cercano que queda es g2, a otro monto).
+    expect(linea('l1')).toMatchObject({ estatus: 'no_cuadra', detalle: expect.objectContaining({ motivo: 'monto_distinto' }) });
+    expect(JSON.stringify(linea('l1').detalle)).not.toContain('g1');
+    // lo demás sigue igual: g2 no lo usa nadie más
+    expect(linea('l2')).toMatchObject({ estatus: 'cuadra' });
+  });
+
+  it('un desglose ANULADO, uno posterior o de otra flota no consume gastos', async () => {
+    for (const desglose of [{ anulado_en: '2026-08-11T00:00:00Z' }, { creado_en: '2026-08-13T10:00:00Z' }, { tenant_id: OTRO }]) {
+      armar({ desglose, linea: desglose.tenant_id ? { tenant_id: OTRO } : {} });
+      await conciliarDesglose(T, 'd1', 'manual');
+      expect(linea('l1')).toMatchObject({ estatus: 'cuadra' });
+    }
+  });
+
+  it('un desglose cuyo periodo no se traslapa no consume gastos', async () => {
+    armar({ desglose: { periodo_desde: '2026-06-01', periodo_hasta: '2026-06-10' } });
+    await conciliarDesglose(T, 'd1', 'manual');
+    expect(linea('l1')).toMatchObject({ estatus: 'cuadra' });
+  });
+});
+
+describe('A37-A2-11: la baja de un TAG no reescribe el pasado al re-conciliar', () => {
+  it('un TAG dado de baja con fecha pasada conserva su unidad en las líneas ANTERIORES a la baja y la pierde en las posteriores', async () => {
+    // t1 se da de baja el 2026-08-05 (último día vigente): activo=false + su registro de baja.
+    db.tablas.peaje_tag[0].activo = false;
+    db.tablas.peaje_tag_baja = [{ id: 'b1', tenant_id: T, tag: 'IMDM10000001', baja_en: '2026-08-05', motivo: 'vendido' }];
+    await conciliarDesglose(T, 'd1', 'manual');
+    expect(linea('l1').unidad_id).toBe('u1'); // 2026-08-05: el día de la baja todavía era vigente
+    expect(linea('l2').unidad_id).toBeNull(); // 2026-08-06: posterior a la baja
+  });
+
+  it('un TAG apagado sin registro de baja (legado) no atribuye su unidad', async () => {
+    db.tablas.peaje_tag[0].activo = false;
+    await conciliarDesglose(T, 'd1', 'manual');
+    expect(linea('l1').unidad_id).toBeNull();
+  });
+});
+
 describe('conciliarDesglose: tag↔unidad, caseta y GPS', () => {
   it('escribe estatus, unidad, caseta y veredicto GPS por línea', async () => {
     const r = await conciliarDesglose(T, 'd1', 'cron');
@@ -132,6 +187,25 @@ describe('conciliarDesglose: tag↔unidad, caseta y GPS', () => {
     expect(linea('l1').gps_detalle).toMatchObject({ unidad_origen: 'viaje' });
     // La que NO cuadra y no tiene TAG vigente no tiene unidad: sin_unidad, sin acusar.
     expect(linea('l3')).toMatchObject({ gps_veredicto: 'sin_datos', gps_detalle: { motivo: 'sin_unidad', unidad_origen: null } });
+  });
+
+  it('A37-S53-01: una baja con fecha conserva la unidad de los cruces ANTERIORES (archivo tardío) y no atribuye los posteriores', async () => {
+    // l1 = 5-ago, l2 = 6-ago, l3 = 7-ago. La baja rige desde el 6-ago (ya vencida: activo=false, como la deja bajaTag).
+    db.tablas.peaje_tag[0].activo = false;
+    db.tablas.peaje_tag_baja = [{ id: 'b1', tenant_id: T, tag: 'IMDM10000001', baja_en: '2026-08-06', motivo: 'x' }];
+    await conciliarDesglose(T, 'd1', 'cron');
+    expect(linea('l1').unidad_id).toBe('u1'); // anterior a la baja: conserva la unidad por TAG
+    expect(linea('l2').unidad_id).toBe('u1'); // el mismo día de la baja todavía cuenta
+    expect(linea('l3').unidad_id).toBeNull(); // posterior: no se le atribuye
+    expect(linea('l1').gps_detalle).toMatchObject({ unidad_origen: 'tag' });
+  });
+
+  it('A37-S53-01: una baja programada a futuro (activo=true) deja de atribuir después de su fecha, sin barrido', async () => {
+    db.tablas.peaje_tag_baja = [{ id: 'b1', tenant_id: T, tag: 'IMDM10000001', baja_en: '2026-08-05', motivo: 'x' }];
+    await conciliarDesglose(T, 'd1', 'cron');
+    expect(linea('l1').unidad_id).toBe('u1');
+    expect(linea('l2').unidad_id).toBeNull();
+    expect(linea('l3').unidad_id).toBeNull();
   });
 
   it('sin catálogo de casetas: todas «sin_caseta», ninguna acusación', async () => {

@@ -203,9 +203,10 @@ export type PlanTarifa =
  *    procedencia se conservan (solo puede cambiar el fin de vigencia): volver a subir el
  *    mismo archivo no destruye el trabajo de quien confirmó.
  *  · Si el importe cambia, la confirmación se pierde: confirmó OTRO número.
- *  · Una fila nueva (o con importe cambiado) solo nace confirmada si la carga es 'proveedor'.
+ *  · Una fila nueva (o con importe cambiado) solo nace confirmada si la carga es 'proveedor', y entonces EXIGE el nombre de
+ *    quien confirma (A37-A2-26): sin él se rechaza, porque «confirmada» sin responsable alimenta un «indebido confirmado» sin dueño.
  */
-export function planificarTarifa(existentes: readonly TarifaExistente[], entrada: TarifaEntrada, origen: OrigenTarifa): PlanTarifa {
+export function planificarTarifa(existentes: readonly TarifaExistente[], entrada: TarifaEntrada, origen: OrigenTarifa, quienConfirma: string | null = null): PlanTarifa {
   const motivo = validarTarifaEntrada(entrada);
   if (motivo) return { tipo: 'rechazada', motivo };
   if (!ORIGENES_TARIFA.includes(origen)) return { tipo: 'rechazada', motivo: 'el origen de la tarifa no es válido' };
@@ -225,9 +226,11 @@ export function planificarTarifa(existentes: readonly TarifaExistente[], entrada
     return { tipo: previa.vigenteHasta === entrada.vigenteHasta ? 'igual' : 'actualizar', fila };
   }
   const confirmada = origen === 'proveedor';
-  const fila: TarifaExistente = { ...base, importe, origen, confirmada, confirmadaPor: null };
+  const confirmadaPor = confirmada ? (quienConfirma?.trim().replace(/\s+/g, ' ').slice(0, 120) || null) : null;
+  if (confirmada && !confirmadaPor) return { tipo: 'rechazada', motivo: 'una tarifa con origen «proveedor» nace confirmada: indica quién la confirma' };
+  const fila: TarifaExistente = { ...base, importe, origen, confirmada, confirmadaPor };
   if (previa) {
-    const sinCambio = previa.importe === importe && previa.vigenteHasta === entrada.vigenteHasta && previa.origen === origen && previa.confirmada === confirmada;
+    const sinCambio = previa.importe === importe && previa.vigenteHasta === entrada.vigenteHasta && previa.origen === origen && previa.confirmada === confirmada && previa.confirmadaPor === confirmadaPor;
     return { tipo: sinCambio ? 'igual' : 'actualizar', fila };
   }
   return { tipo: 'crear', fila };

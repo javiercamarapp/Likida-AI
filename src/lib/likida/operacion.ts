@@ -366,10 +366,12 @@ export async function marcarPodPedido(tenantId: string, viajeId: string, operado
  * chofer mandó, y borrarlo dejaría la discusión sin prueba.
  */
 export async function rechazarPod(tenantId: string, podId: string, nota: string | null): Promise<void> {
-  const { error } = await acotada(supabaseAdmin().from('pod')
+  // A37-S51-10: `.select('id')` para saber si tocó una fila; un id de otra flota no «tiene éxito» sin tocar nada.
+  const { data, error } = await acotada(supabaseAdmin().from('pod')
     .update({ estado: 'rechazado', nota })
-    .eq('id', podId).eq('tenant_id', tenantId), 'rechazarPod');
+    .eq('id', podId).eq('tenant_id', tenantId).select('id'), 'rechazarPod');
   if (error) throw new Error(`rechazarPod: ${error.message}`);
+  if ((data ?? []).length === 0) throw new Error('rechazarPod: el POD no existe en esta flota');
 }
 
 // ── Tablero de operación ───────────────────────────────────────────────────
@@ -741,8 +743,12 @@ async function asignacionConBotones(tenantId: string): Promise<boolean> {
 /**
  * Le manda al chofer el aviso de su viaje. Resuelve el teléfono aquí para que
  * quien llame no tenga que conocer la tabla `operador`.
+ *
+ * Devuelve `true` si el WhatsApp SALIÓ y `false` si no pudo salir (sin teléfono, viaje
+ * ajeno o rechazo de Meta): A37-S18-04, el despacho necesita saberlo para no decir «avisado»
+ * ni contar un reaviso que no ocurrió. Las fallas de lectura siguen LANZANDO.
  */
-export async function avisarAlChofer(tenantId: string, operadorId: string, viajeId: string): Promise<void> {
+export async function avisarAlChofer(tenantId: string, operadorId: string, viajeId: string): Promise<boolean> {
   const admin = supabaseAdmin();
   // SILENCIOSA POR PARTIDA DOBLE, hasta hoy. Estas dos lecturas desestructuraban
   // solo `data`, así que un fallo de Supabase se volvía `op = null` → `!op?.
@@ -775,7 +781,7 @@ export async function avisarAlChofer(tenantId: string, operadorId: string, viaje
     // es de esta flota. No es un error del sistema, pero tampoco puede pasar sin
     // rastro — este viaje tampoco va a escalar solo.
     logger.warn('viaje.aviso_sin_destinatario', { viajeId, operadorId, hayViaje: !!viaje, hayTelefono: !!op?.telefono, escalaSolo: false });
-    return;
+    return false;
   }
 
   let unidad: string | null = null;
@@ -817,7 +823,7 @@ export async function avisarAlChofer(tenantId: string, operadorId: string, viaje
     // dijo—, así que este viaje NO va a escalar solo. Queda en el panel y en
     // este log, que es de donde alguien lo tiene que sacar.
     logger.error('viaje.aviso_no_salio', { viajeId, motivo: r.motivo, escalaSolo: false });
-    return;
+    return false;
   }
 
   // Marca el arranque del reloj. Sin esto, `viajesSinAceptar()` no lo ve nunca:
@@ -829,6 +835,7 @@ export async function avisarAlChofer(tenantId: string, operadorId: string, viaje
     .eq('tenant_id', tenantId)
     .is('avisado_en', null), 'avisarAlChofer.marcar'); // el primer aviso manda: un reaviso no reinicia el plazo
   if (error) logger.warn('viaje.avisado_en_no_se_marcó', { viajeId, err: error.message });
+  return true; // el mensaje SALIÓ (marcar `avisado_en` es aparte)
 }
 
 /**
@@ -871,7 +878,7 @@ export async function asignarUnidad(tenantId: string, viajeId: string, unidadId:
     throw new Error(`asignarUnidad: ${error.message}`);
   }
   if (!Array.isArray(data) || data.length === 0) {
-    throw new Error('asignarUnidad: el viaje no existe en esta flota');
+    throw new DatoInvalido('Ese viaje no existe en tu flota. Recarga la pantalla.');
   }
 }
 
@@ -1343,8 +1350,9 @@ export async function crearIncidencia(tenantId: string, i: NuevaIncidencia): Pro
 export async function cambiarEstadoIncidencia(
   tenantId: string, incidenciaId: string, estado: string, ahora = new Date(),
 ): Promise<void> {
-  const { error } = await acotada(supabaseAdmin().from('incidencia')
+  const { data, error } = await acotada(supabaseAdmin().from('incidencia')
     .update({ estado, resuelta_en: estado === 'resuelta' ? ahora.toISOString() : null })
-    .eq('id', incidenciaId).eq('tenant_id', tenantId), 'cambiarEstadoIncidencia');
+    .eq('id', incidenciaId).eq('tenant_id', tenantId).select('id'), 'cambiarEstadoIncidencia');
   if (error) throw new Error(`cambiarEstadoIncidencia: ${error.message}`);
+  if ((data ?? []).length === 0) throw new Error('cambiarEstadoIncidencia: la incidencia no existe en esta flota');
 }

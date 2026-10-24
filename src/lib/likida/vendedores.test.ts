@@ -19,6 +19,7 @@ type Registro = {
   payload: unknown;
   eq: Array<[string, unknown]>;
   is: Array<[string, unknown]>;
+  neq: Array<[string, unknown]>;
   dentro: Array<[string, unknown]>;
   select: string | null;
 };
@@ -30,7 +31,7 @@ const llamadas: Registro[] = [];
 const respuestas = new Map<string, Array<{ data: unknown; error: { message: string } | null }>>();
 
 function builder(tabla: string) {
-  const r: Registro = { tabla, op: null, payload: null, eq: [], is: [], dentro: [], select: null };
+  const r: Registro = { tabla, op: null, payload: null, eq: [], is: [], neq: [], dentro: [], select: null };
   llamadas.push(r);
   const responder = () => {
     const cola = respuestas.get(tabla);
@@ -45,6 +46,7 @@ function builder(tabla: string) {
   b.select = (cols: string) => { r.select = cols; if (!r.op) r.op = 'select'; return b; };
   b.eq = (c: string, v: unknown) => { r.eq.push([c, v]); return b; };
   b.is = (c: string, v: unknown) => { r.is.push([c, v]); return b; };
+  b.neq = (c: string, v: unknown) => { r.neq.push([c, v]); return b; };
   b.in = (c: string, v: unknown) => { r.dentro.push([c, v]); return b; };
   b.ilike = (c: string, v: unknown) => { r.eq.push([c, v]); return b; };
   b.order = () => b;
@@ -616,5 +618,55 @@ describe('c5-7 — el dedup de crearProspecto: la misma empresa no abre dos hilo
     await crearProspecto(VALIDO, 'manual');
     const porCorreo = llamadas.find((l) => l.tabla === 'prospecto' && l.eq.some(([c]) => c === 'correo'));
     expect(porCorreo?.is).toContainEqual(['duplicado_de', null]);
+  });
+});
+
+// A37-S57-10: `_` y `%` del correo/empresa NO son comodines del dedup.
+describe('A37-S57-10 — el dedup con ILIKE escapa % _ \\', () => {
+  const V = {
+    empresa: 'Gas_Norte 100%', contactoNombre: null, telefono: null,
+    correo: 'juan_perez@acme.mx', ciudad: null, vacante: null, notas: null, vendedorId: null,
+  };
+  it('el guion bajo del correo y el % de la empresa viajan escapados', async () => {
+    respuestas.set('prospecto', [
+      { data: [], error: null }, { data: [], error: null }, { data: { id: 'x' }, error: null },
+    ]);
+    await crearProspecto(V, 'manual');
+    const porCorreo = llamadas.find((l) => l.tabla === 'prospecto' && l.eq.some(([c]) => c === 'correo'));
+    expect(porCorreo?.eq).toContainEqual(['correo', 'juan\\_perez@acme.mx']);
+    const porEmpresa = llamadas.find((l) => l.tabla === 'prospecto' && l.eq.some(([c]) => c === 'empresa'));
+    expect(porEmpresa?.eq).toContainEqual(['empresa', 'Gas\\_Norte 100\\%']);
+  });
+});
+
+// A37-S57-09: un vendedor dado de baja (activo=false) no recibe reparto ni asignación.
+describe('A37-S57-09 — los vendedores de baja no reciben prospectos', () => {
+  it('asignarPendientes lee solo cuentas activas (.neq activo false)', async () => {
+    respuestas.set('app_user', [{ data: [{ id: 'v1', nombre: 'Ana', email: 'ana@x.mx' }], error: null }]);
+    respuestas.set('prospecto', [
+      { data: [], error: null },
+      { data: [{ id: 'p1' }], error: null },
+      { data: [{ id: 'p1' }], error: null },
+    ]);
+    respuestas.set('agente_corrida', [{ data: null, error: null }]);
+    await asignarPendientes();
+    const lecturaCuentas = llamadas.find((l) => l.tabla === 'app_user');
+    expect(lecturaCuentas?.neq).toContainEqual(['activo', false]);
+  });
+
+  it('el panel (listarVendedores sin opciones) sigue viendo a todos: la cartera de una baja no desaparece', async () => {
+    respuestas.set('app_user', [{ data: [], error: null }]);
+    respuestas.set('prospecto', [{ data: [], error: null }]);
+    await listarVendedores();
+    const lecturaCuentas = llamadas.find((l) => l.tabla === 'app_user');
+    expect(lecturaCuentas?.neq).toEqual([]);
+  });
+
+  it('asignar a mano a un vendedor de baja se rechaza: esVendedor exige activo', async () => {
+    respuestas.set('app_user', [{ data: [{ id: V1 }], error: null }]);
+    respuestas.set('prospecto', [{ data: [{ id: P1 }], error: null }]);
+    await asignarProspecto(P1, V1);
+    const lectura = llamadas.find((l) => l.tabla === 'app_user');
+    expect(lectura?.neq).toContainEqual(['activo', false]);
   });
 });

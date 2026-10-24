@@ -32,6 +32,12 @@ export interface ArgsAvisoOficina {
 export async function avisarOficinaDeHito(a: ArgsAvisoOficina): Promise<'enviado' | 'ya_avisado' | 'sin_destinatario' | 'fallo'> {
   try {
     const p = puertosReales();
+    // A37-S34-09: el teléfono del jefe se comprueba ANTES de reclamar; sin él no se quema el aviso (cuando lo carguen, el siguiente sí sale).
+    const tel = (await telefonosJefe([a.viaje.tenantId]))[a.viaje.tenantId];
+    if (!tel) {
+      logger.error('conductor.aviso_oficina_sin_telefono', { tenant: a.viaje.tenantId, viaje: a.viaje.id });
+      return 'sin_destinatario';
+    }
     const claim = {
       tenantId: a.viaje.tenantId, viajeId: a.viaje.id, hitoId: a.hito.id, operadorId: null,
       ciclo: a.hito.ciclo, clase: 'aviso_oficina' as const, nivel: 0,
@@ -39,13 +45,6 @@ export async function avisarOficinaDeHito(a: ArgsAvisoOficina): Promise<'enviado
     const gano = await p.reclamar(claim);
     if (gano === 'perdido') return 'ya_avisado';
     if (gano === 'fallo') return 'fallo';
-
-    const tel = (await telefonosJefe([a.viaje.tenantId]))[a.viaje.tenantId];
-    if (!tel) {
-      logger.error('conductor.aviso_oficina_sin_telefono', { tenant: a.viaje.tenantId, viaje: a.viaje.id });
-      await p.cerrarAviso(claim, { ok: false, canal: 'ninguno', motivo: 'sin_destinatario', ult4: null });
-      return 'sin_destinatario';
-    }
     const datos = {
       chofer: a.viaje.operadorNombre, folio: a.viaje.folio, tipo: a.hito.tipo, mensajeEn: a.mensajeEn, ahora: a.ahora,
       lugar: a.hito.tipo.endsWith('carga') ? a.viaje.origen : a.viaje.destino, contacto: a.contacto,

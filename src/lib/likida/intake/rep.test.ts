@@ -119,7 +119,7 @@ vi.mock('@/lib/supabase/admin', () => ({
     from: (tabla: string) => tabla === 'cfdi_pago'
       ? { upsert }
       : tabla === 'cfdi_xml'
-        ? { upsert: async () => ({ error: null }) }
+        ? { upsert: () => ({ select: async () => ({ data: [{ id: 'x1' }], error: null }) }) }
         : { // gasto
             update: (fila: Record<string, unknown>) => {
               update(fila);

@@ -105,12 +105,12 @@ describe('interpretarContactos (pura)', () => {
     expect(l.invalidas[3].motivo).toMatch(/repetido en el archivo/);
   });
 
-  it('dos operadores con el mismo correo ⇒ advertencia con filas, sin mostrar el correo', () => {
-    const l = interpretarContactos([ENC, ['E-1', 'x@buzon.invalid', '', ''], ['E-2', 'X@buzon.invalid', '', '']]); // grep-limpio:ok
-    expect(l.filas).toHaveLength(2);
-    expect(l.advertencias).toHaveLength(1);
-    expect(l.advertencias[0]).toMatch(/filas 2, 3/);
-    expect(l.advertencias[0]).not.toMatch(/\.invalid/);
+  it('A37-S48-06: dos operadores con el mismo correo ⇒ ninguna de las dos filas se aplica, sin mostrar el correo', () => {
+    const l = interpretarContactos([ENC, ['E-1', 'x@buzon.invalid', '', ''], ['E-2', 'X@buzon.invalid', '', ''], ['E-3', 'y@buzon.invalid', '', '']]); // grep-limpio:ok
+    expect(l.filas.map((f) => f.numeroEmpleado)).toEqual(['E-3']);
+    expect(l.invalidas.map((i) => i.fila).sort()).toEqual([2, 3]);
+    expect(l.invalidas[0].motivo).toMatch(/comparte el correo/);
+    expect(JSON.stringify(l.invalidas)).not.toMatch(/\.invalid/);
   });
 
   it('archivo vacío, sin llave o sin columnas de correo ⇒ error en lenguaje llano', () => {
@@ -202,14 +202,26 @@ describe('aplicarContactos', () => {
     expect(m.operadores.get('E-001')!.coordinadorId).toBe('coord-2');
   });
 
-  it('el correo contra la flota que ya usa otro operador ⇒ advertencia por fila, sin el correo', async () => {
+  it('A37-S48-06: el correo que ya usa otro operador de la flota NO se escribe (se calcula antes de guardar)', async () => {
     const m = mundoInicial();
     const puerto = puertoDe(m);
     puerto.correosEnUsoPorOtros = async (correos) => new Set(correos.filter((c) => c === 'op4@flota.invalid')); // grep-limpio:ok
     const inf = await aplicarContactos(interpretarContactos(MATRIZ), puerto);
-    const aviso = inf.advertencias.find((a) => /ya tiene otro operador/.test(a));
-    expect(aviso).toMatch(/filas 5/);
-    expect(aviso).not.toMatch(/\.invalid/);
+    // E-004 (fila 5) no se tocó: ni su correo ni su coordinador.
+    expect(m.escrituras.some((e) => e.operadorId === 'op-4')).toBe(false);
+    const inv = inf.invalidas.find((i) => i.fila === 5);
+    expect(inv?.motivo).toMatch(/ya lo usa otro operador/);
+    expect(JSON.stringify(inf)).not.toMatch(/\.invalid/);
+    // El resto sí se aplicó.
+    expect(m.escrituras.some((e) => e.operadorId === 'op-1')).toBe(true);
+  });
+
+  it('A37-S48-06: si la consulta de choques falla, no se escribe nada (fail-closed)', async () => {
+    const m = mundoInicial();
+    const puerto = puertoDe(m);
+    puerto.correosEnUsoPorOtros = async () => { throw new Error('base caída'); };
+    await expect(aplicarContactos(interpretarContactos(MATRIZ), puerto)).rejects.toThrow('base caída');
+    expect(m.escrituras).toHaveLength(0);
   });
 
   it('el informe y los avisos jamás incluyen un correo', async () => {

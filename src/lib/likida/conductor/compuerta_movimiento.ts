@@ -1,4 +1,4 @@
-import { coordenadasValidas, dentroDeGeocerca, haversineM } from './geo';
+import { coordenadasValidas, dentroDeGeocerca, haversineM, type GeocercaGeom } from './geo';
 import type { MuestraGps, SitiosViaje } from './ciclo_gps';
 import { CONFIG_CONDUCTOR_DEFAULT, type ConfigConductor } from './config';
 
@@ -117,6 +117,14 @@ export interface EntradaCompuerta {
   senalExtra?: SenalExtra | null;
 }
 
+/**
+ * A37-S34-04: la exención «dentro del sitio» le permite escribir a una unidad que parece en marcha. Un círculo de decenas de km (un radio
+ * tecleado en metros de más) haría exenta a toda la región: pasado este tope el círculo NO exime (cae a las demás reglas, que fallan cerrado).
+ * Un polígono nativo se mide por su forma, no por el radio del círculo que conserva.
+ */
+export const RADIO_MAX_EXENCION_M = 5000;
+const sitioEximeLaCompuerta = (s: GeocercaGeom): boolean => Boolean(s.poligono && s.poligono.length >= 3) || s.radioM <= RADIO_MAX_EXENCION_M;
+
 const positivo = (v: unknown, defecto: number): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : defecto);
 
 export function puedeEscribirAlChofer(e: EntradaCompuerta): ResultadoCompuerta {
@@ -144,7 +152,7 @@ export function puedeEscribirAlChofer(e: EntradaCompuerta): ResultadoCompuerta {
 
   const margen = positivo(e.config.toleranciaUbicacionM, 0);
   const sitios = [e.sitioDelViaje?.origen ?? null, e.sitioDelViaje?.destino ?? null];
-  if (sitios.some((s) => s !== null && dentroDeGeocerca(ultima, s, margen).dentro)) return { permitido: true, razon: 'dentro_del_sitio' };
+  if (sitios.some((s) => s !== null && sitioEximeLaCompuerta(s) && dentroDeGeocerca(ultima, s, margen).dentro)) return { permitido: true, razon: 'dentro_del_sitio' };
 
   if (ventana.some((m) => haversineM(m, ultima) > metros)) return { permitido: false, razon: 'en_movimiento' };
   if (ventana.length < requisito.muestras) return { permitido: false, razon: 'pocas_muestras' };
@@ -204,6 +212,9 @@ export function detencionElegible(e: EntradaDetencion): { elegible: boolean; raz
   if (ventana.some((m) => haversineM(m, ultima) > metros)) return no('en_movimiento');
   if (ventana.length < requisitoDeMuestras(poleoMin, avisoMin).muestras) return no('pocas_muestras');
   // Cobertura: la primera muestra debe estar a ≥ `detenidoAvisoMin` de ahora, con la holgura de un poleo (la siguiente aún no llegó).
-  if (ahoraMs - primera.medidaEn.getTime() < (avisoMin - poleoMin) * 60_000) return no('lapso_corto');
+  // A37-S34-05: la holgura es UN poleo pero nunca más de la mitad del aviso; antes, con poleo ≥ aviso (el default conservador lo es) la resta daba ≤ 0 y
+  // la cobertura se anulaba: dos muestras de hace 2 min bastaban para «detenida ≥ 15 min».
+  const holguraMin = Math.min(poleoMin, avisoMin / 2);
+  if (ahoraMs - primera.medidaEn.getTime() < (avisoMin - holguraMin) * 60_000) return no('lapso_corto');
   return { elegible: true, razon: 'detenida' };
 }

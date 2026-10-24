@@ -53,6 +53,24 @@ describe('importar liquidaciones desde el archivo de la flota', () => {
     expect(r.problemas.some((p) => p.clave === 'LQ-1' && /OTRO contenido/.test(p.motivo))).toBe(true);
   });
 
+  it('A37-S49-07: un error de base no llega textual a la pantalla (mensaje genérico, detalle al log)', async () => {
+    const x = deps();
+    x.d.recibir = async () => { throw new Error('duplicate key value violates unique constraint "liq_pkey" (host db.interno)'); };
+    const r = await importarLiquidacionesDeArchivo('t', 'liq.csv', bytes(CSV), x.d);
+    const textos = r.problemas.map((p) => p.motivo).join('\n');
+    expect(textos).not.toMatch(/duplicate key|liq_pkey|db\.interno/);
+    expect(textos).toMatch(/no se pudo guardar/);
+  });
+
+  it('A37-S49-07: con el presupuesto de tiempo agotado se detiene, avisa cuántas faltan y es seguro repetir', async () => {
+    const x = deps();
+    let t = 0;
+    const r = await importarLiquidacionesDeArchivo('t', 'liq.csv', bytes(CSV), x.d, { presupuestoMs: 1000, ahoraMs: () => (t += 600) });
+    expect(r.recibidas).toBeLessThan(2);
+    expect(r.error).toMatch(/tiempo/);
+    expect(r.error).toMatch(/Vuelve a subir/);
+  });
+
   it('archivo vacío o de tipo desconocido: error de lectura, nada se recibe', async () => {
     const x = deps();
     expect((await importarLiquidacionesDeArchivo('t', 'a.csv', bytes(''), x.d)).error).toMatch(/vacío/);
@@ -89,5 +107,18 @@ describe('importar liquidaciones desde el archivo de la flota', () => {
     const r = await importarLiquidacionesDeArchivo('t', 'liq.csv', bytes(csv), deps().d);
     expect(r.recibidas).toBe(0);
     expect(r.problemas[0].motivo).toMatch(/periodo ilegible/);
+  });
+});
+
+describe('A37-A1-liquidaciones-19: CSV en Windows-1252', () => {
+  it('un export ANSI de Excel conserva los acentos en vez de U+FFFD', () => {
+    // «Viáticos» en Windows-1252: 0xE1 = á (no es UTF-8 válido).
+    const ansi = Uint8Array.from([...'concepto\nVi'].map((c) => c.charCodeAt(0)).concat([0xe1], [...'ticos'].map((c) => c.charCodeAt(0))));
+    const r = textoDeArchivoLiquidaciones('export.csv', ansi);
+    expect(r.ok && r.texto).toContain('Viáticos');
+  });
+  it('un CSV UTF-8 sigue igual', () => {
+    const r = textoDeArchivoLiquidaciones('export.csv', bytes('concepto\nViáticos'));
+    expect(r.ok && r.texto).toBe('concepto\nViáticos');
   });
 });

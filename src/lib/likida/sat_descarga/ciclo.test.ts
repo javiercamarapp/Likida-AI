@@ -5,7 +5,7 @@ vi.mock('@/lib/logger', () => ({
 }));
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: () => ({}) }) }));
 
-import { rangoPendiente, correrDescargaSat, VENTANA_MAX_DIAS, VENTANA_INICIAL_DIAS } from './ciclo';
+import { rangoPendiente, correrDescargaSat, VENTANA_MAX_DIAS, VENTANA_INICIAL_DIAS, TRASLAPE_DIAS } from './ciclo';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -21,14 +21,26 @@ describe('rangoPendiente — el calendario que no puede saltarse un día', () =>
     expect(VENTANA_MAX_DIAS).toBe(31);
   });
 
-  it('arranca EL DÍA SIGUIENTE al último descargado — ni lo repite ni lo salta', () => {
+  it('A37-S57-05: retrocede TRASLAPE_DIAS (3) sobre el último descargado — un CFDI que el PAC reporta al SAT tarde no se pierde', () => {
+    // Último descargado = 10; el rango pedido arranca el 9: cubre 9, 10 (ya vistos; el sello de dedup los
+    // responde «repetido») y todo lo nuevo hasta hoy. Antes arrancaba el 11 y lo que el SAT registraba con
+    // retraso sobre el 8-10 nunca se pedía.
+    expect(TRASLAPE_DIAS).toBe(3);
     const r = rangoPendiente('2026-08-10', '2026-08-27');
-    expect(r).toEqual({ desde: '2026-08-11', hasta: '2026-08-27' });
+    expect(r).toEqual({ desde: '2026-08-08', hasta: '2026-08-27' });
+  });
+
+  it('A37-S57-05: el rango de un día NUNCA se repite con los mismos parámetros (el SAT rechaza solicitudes idénticas)', () => {
+    // Dos días seguidos con el calendario al día producen rangos distintos…
+    expect(rangoPendiente('2026-10-22', '2026-10-23')).toEqual({ desde: '2026-10-20', hasta: '2026-10-23' });
+    expect(rangoPendiente('2026-10-23', '2026-10-24')).toEqual({ desde: '2026-10-21', hasta: '2026-10-24' });
+    // …y, ya descargado el día de hoy, las 4 corridas diarias no vuelven a pedir.
+    expect(rangoPendiente('2026-10-23', '2026-10-23')).toBeNull();
   });
 
   it('corta en la ventana máxima cuando el pendiente es largo', () => {
     const r = rangoPendiente('2026-01-01', '2026-08-27');
-    expect(r).toEqual({ desde: '2026-01-02', hasta: '2026-02-01' }); // 31 días
+    expect(r).toEqual({ desde: '2025-12-30', hasta: '2026-01-29' }); // 31 días
   });
 
   it('ya al día devuelve null: no se pide un rango vacío', () => {
@@ -37,7 +49,7 @@ describe('rangoPendiente — el calendario que no puede saltarse un día', () =>
     expect(rangoPendiente('2026-09-30', '2026-08-27')).toBeNull();
   });
 
-  it('los pedazos son CONTIGUOS: encadenados cubren el rango sin hueco', () => {
+  it('los pedazos se TRASLAPAN: encadenados cubren el rango sin hueco', () => {
     // La prueba de que el avance no pierde días en el camino largo.
     let ultima: string | null = '2026-01-01';
     const dias: string[] = [];
@@ -48,13 +60,13 @@ describe('rangoPendiente — el calendario que no puede saltarse un día', () =>
       ultima = r!.hasta;
     }
     expect(dias).toEqual([
-      '2026-01-02→2026-02-01', '2026-02-02→2026-03-04',
-      '2026-03-05→2026-04-04', '2026-04-05→2026-05-05',
+      '2025-12-30→2026-01-29', '2026-01-27→2026-02-26',
+      '2026-02-24→2026-03-26', '2026-03-24→2026-04-23',
     ]);
   });
 
   it('cruza el fin de año sin inventar fechas', () => {
-    expect(rangoPendiente('2025-12-31', '2026-01-15')).toEqual({ desde: '2026-01-01', hasta: '2026-01-15' });
+    expect(rangoPendiente('2025-12-31', '2026-01-15')).toEqual({ desde: '2025-12-29', hasta: '2026-01-15' });
   });
 });
 

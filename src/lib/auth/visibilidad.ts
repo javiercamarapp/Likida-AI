@@ -413,6 +413,8 @@ export const RUTAS_PERFIL_CINCO_AGENTES: Readonly<Record<string, ModuloPerfil>> 
   '/dashboard/mi-perfil': 'base',
   '/dashboard/soporte': 'base',
   '/dashboard/legal': 'base',
+  // Solicitudes ARCO (LFPDPPP art. 31): la flota es la responsable obligada y tiene 20 días hábiles; no es un módulo comercial (A37-TRANSVERSAL-06).
+  '/dashboard/arco': 'base',
 };
 
 /**
@@ -431,7 +433,7 @@ export const RUTAS_STAND_BY_PERFIL_CINCO_AGENTES: readonly string[] = [
   '/dashboard/convenios', '/dashboard/jornada', '/dashboard/patios', '/dashboard/asistencia',
   '/dashboard/emergencias', '/dashboard/arranque', '/dashboard/onboarding',
   '/dashboard/suscripcion', '/dashboard/llaves-api', '/dashboard/sesiones-mcp',
-  '/dashboard/politicas', '/dashboard/usuarios', '/dashboard/arco', '/dashboard/configuracion',
+  '/dashboard/politicas', '/dashboard/usuarios', '/dashboard/configuracion',
   '/dashboard/conversaciones',
 ];
 

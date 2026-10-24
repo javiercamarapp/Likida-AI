@@ -44,6 +44,25 @@ describe('transformaciones', () => {
     expect(aNumero('-45,5')).toEqual({ ok: -45.5 });
     expect(aNumero(12)).toEqual({ ok: 12 });
   });
+  it('A37-TRANSVERSAL-10: «1.234» sin formato declarado es ambiguo y se rechaza; declarado se lee exacto', () => {
+    expect('error' in aNumero('1.234')).toBe(true);
+    expect('error' in aNumero('1.500')).toBe(true);
+    expect(aNumero('1.234', '.')).toEqual({ ok: 1.234 });
+    expect(aNumero('1.234', ',')).toEqual({ ok: 1234 });
+    expect(aNumero('1.234,50', ',')).toEqual({ ok: 1234.5 });
+    expect(aNumero('1,234.50', '.')).toEqual({ ok: 1234.5 });
+    expect(aNumero('1,234', '.')).toEqual({ ok: 1234 });
+    expect(aNumero('189,50', ',')).toEqual({ ok: 189.5 });
+    // no ambiguos siguen igual
+    expect(aNumero('12.5')).toEqual({ ok: 12.5 });
+    expect(aNumero('0.123')).toEqual({ ok: 0.123 });
+  });
+  it('A37-TRANSVERSAL-10: «decimal» solo en numero y con valor «.» o «,»', () => {
+    const ok = base({ campos: { folio: 'id', operador: 'operador.nombre', neto: { fuente: 'neto', transformar: 'numero', decimal: ',' } } });
+    expect(validarMapeo(ok)).toEqual([]);
+    expect(validarMapeo(base({ campos: { folio: { fuente: 'id', decimal: ',' } } })).join(' ')).toMatch(/decimal/);
+    expect(validarMapeo(base({ campos: { folio: 'id', neto: { fuente: 'neto', transformar: 'numero', decimal: ';' as ',' } } })).join(' ')).toMatch(/decimal/);
+  });
   it('numero rechaza basura', () => {
     for (const v of ['abc', '', '1e5', '1,2,3', '12..5', null, {}]) expect('error' in aNumero(v)).toBe(true);
   });
@@ -91,6 +110,18 @@ describe('validarMapeo', () => {
     expect(validarMapeo(base({ clave_externa: ['nada'] })).join(' ')).toMatch(/no es un campo/);
     expect(validarMapeo(base({ obligatorios: ['nada'] })).join(' ')).toMatch(/no es un campo/);
     expect(validarMapeo(base({ params: { desde: 'a', hasta: 'b', pagina: 'p', cursor: 'c' } })).join(' ')).toMatch(/no ambas/);
+  });
+  it('A37-TRANSVERSAL-04: en liquidaciones y peajes, cargo, abono e importe exigen transformar «numero» (un «1,234.50» sin transformar se perdía en silencio)', () => {
+    for (const recurso of ['liquidaciones', 'peajes'] as const) {
+      for (const dest of ['cargo', 'abono', 'importe']) {
+        expect(validarMapeo(base({ obligatorios: [], recurso, campos: { folio: 'id', [dest]: 'Cargo' } })).join(' '), `${recurso}.${dest} sin transformar`).toMatch(new RegExp(`«${dest}».*numero`));
+        expect(validarMapeo(base({ obligatorios: [], recurso, campos: { folio: 'id', [dest]: { fuente: 'Cargo', transformar: 'texto' } } })).join(' '), `${recurso}.${dest} texto`).toMatch(/numero/);
+        expect(validarMapeo(base({ obligatorios: [], recurso, campos: { folio: 'id', [dest]: { fuente: 'Cargo', transformar: 'numero' } } })), `${recurso}.${dest} numero`).toEqual([]);
+      }
+    }
+    // otros recursos y otros campos no se tocan
+    expect(validarMapeo(base({ obligatorios: [], recurso: 'viajes', campos: { folio: 'id', importe: 'x' } }))).toEqual([]);
+    expect(validarMapeo(base({ obligatorios: [], recurso: 'liquidaciones', campos: { folio: 'id', desglose: 'x' } }))).toEqual([]);
   });
   it('no es un objeto', () => expect(validarMapeo(null)).toEqual(['el mapeo debe ser un objeto']));
 });

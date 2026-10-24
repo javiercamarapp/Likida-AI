@@ -226,6 +226,9 @@ function esperaMs(intentos: number): number {
   return Math.min(2 ** intentos, 30) * 60_000;
 }
 
+/** Cuánto se aparta del lote de WhatsApp una liquidación de desglose (sin PDF) en una flota `ambos`. */
+const APARTADA_SIN_PDF_MS = 6 * 3_600_000;
+
 export type ResultadoEntrega = 'en_cola' | 'enviada' | 'reintentar' | 'fallida' | 'sin_cambio';
 
 /**
@@ -250,6 +253,15 @@ export async function intentarEntrega(
       return 'sin_cambio';
     }
     if (canal === 'correo') return 'sin_cambio';
+    if (!liq.pdfRuta && canal === 'ambos') {
+      // A37-S49-03: una liquidación SIN PDF solo nace del flujo de desgloses (`desglose_recibir`), que es únicamente correo:
+      // WhatsApp no tiene qué mandar. Lanzar aquí la dejaba 'fallida' en ~30 min aunque el correo saliera después. Se aparta
+      // del lote de WhatsApp (sin gastar intento) y la entrega por correo la cierra sola.
+      await transicionar(tenantId, liq.id, ['pendiente'], {
+        proximo_intento_en: new Date(deps.ahora().getTime() + APARTADA_SIN_PDF_MS).toISOString(),
+      });
+      return 'sin_cambio';
+    }
     if (!liq.pdfRuta) throw new Error('la liquidación no tiene PDF en Storage');
     if (!liq.operadorTelefono) throw new Error('el operador no tiene teléfono');
 
@@ -416,6 +428,8 @@ export interface ResumenPull {
   errores: number;
   /** Clase del primer error, sin datos personales. */
   error?: string;
+  /** A37-A1-liquidaciones-06: flotas cuyo pull falla y no tiene un éxito reciente (o nunca lo tuvo): el cron avisa al operador de Likida. */
+  flotasAtascadas?: string[];
 }
 
 const CORREO_VACIO = (): ResumenEntregasCorreo => ({
@@ -441,6 +455,10 @@ async function faseDePull(deps: Dependencias): Promise<ResumenPull | undefined> 
       const p = await pull(tenantId, lector);
       r.leidas += p.leidas; r.importadas += p.importadas; r.excepciones += p.excepciones;
       if (p.estado === 'error') falla(p.error ?? 'error');
+      if (p.atascado) {
+        (r.flotasAtascadas ??= []).push(tenantId);
+        logger.error('liqext.pull_atascado', { tenantId, err: p.error ?? 'error' });
+      }
     } catch (e) {
       logger.error('liqext.pull_fallo', { tenantId, err: e instanceof Error ? e.name : 'error' });
       falla(e instanceof Error ? e.name : 'error');

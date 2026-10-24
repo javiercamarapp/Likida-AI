@@ -138,6 +138,13 @@ describe('montoDeCelda — el dinero no se adivina', () => {
     expect(montoDeCelda('1,234,567')).toBe(1234567);
     expect(montoDeCelda('1.234.567')).toBe(1234567);
   });
+  it('A37-S52-01: «1.234» (un punto, tres dígitos) es ambiguo: null, no 1.23', () => {
+    expect(montoDeCelda('1.234')).toBeNull();
+    expect(montoDeCelda('$ 12.500')).toBeNull();
+    expect(montoDeCelda('234.50')).toBe(234.5);
+    expect(montoDeCelda('1234.5')).toBe(1234.5);
+    expect(montoDeCelda('1234.567')).toBe(1234.57); // 4 enteros: no puede ser miles
+  });
   it('paréntesis = negativo contable', () => {
     expect(montoDeCelda('(189.00)')).toBe(-189);
     expect(montoDeCelda('($1,234.50)')).toBe(-1234.5);

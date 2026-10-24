@@ -6,6 +6,7 @@ import { acotada } from '@/lib/likida/presupuesto';
 import { anotarBitacora, type EntidadBitacora } from './bitacora_escritura';
 import { DatoInvalido, AbonoYaRegistrado } from './errores';
 import { esUuidValido } from './intake/cfdi';
+import { parseCfdiXml, leerPagosRep } from './intake/cfdi_xml';
 import { registrarPago } from './facturacion_escritura';
 import { expiracionDesde, generarTokenPortal, diasDeVigencia, montoTecleado } from './portal_pago';
 
@@ -392,6 +393,31 @@ const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const XML_MAX = 500_000;
 
+/** ¿El XML pegado ES el complemento de pago que se está registrando? Lanza `DatoInvalido` con el motivo. PURA. */
+function verificarXmlDeRep(xml: string, cfdiUuid: string, fechaPago: string, imp: number): void {
+  const SIN_ARCHIVO = ' Corrígelo, o registra el complemento sin archivo y compártelo por tu canal de siempre.';
+  const cfdi = parseCfdiXml(xml);
+  if (!cfdi) throw new DatoInvalido('Ese archivo no se lee como un CFDI (XML del SAT).' + SIN_ARCHIVO);
+  if (cfdi.tipoComprobante !== 'P') {
+    throw new DatoInvalido(`Ese XML es un CFDI de tipo «${cfdi.tipoComprobante ?? 'desconocido'}», no un complemento de pago (tipo P).` + SIN_ARCHIVO);
+  }
+  if (!cfdi.uuid) throw new DatoInvalido('Ese XML no trae el timbre fiscal (UUID): no es un complemento ya timbrado.' + SIN_ARCHIVO);
+  if (cfdi.uuid !== cfdiUuid) {
+    throw new DatoInvalido(`El folio fiscal del XML (${cfdi.uuid}) no es el que capturaste (${cfdiUuid}): parece el archivo de OTRO complemento.` + SIN_ARCHIVO);
+  }
+  const pagos = leerPagosRep(xml);
+  if (pagos.length === 0) throw new DatoInvalido('Ese XML no trae el complemento de pagos (Pagos): no se puede comprobar fecha ni importe.' + SIN_ARCHIVO);
+  const cuadra = (n: number | undefined) => n !== undefined && Math.abs(round2(n) - imp) <= TOLERANCIA_ABONO_MXN;
+  const delDia = pagos.filter((p) => p.fechaPago === fechaPago);
+  if (delDia.length === 0) {
+    throw new DatoInvalido(`El XML no trae ningún pago con fecha ${fechaPago}: la fecha del complemento no coincide con la que capturaste.` + SIN_ARCHIVO);
+  }
+  const importeOk = delDia.some((p) => cuadra(p.monto) || p.impPagadoDoctos.some(cuadra) || cuadra(round2(p.impPagadoDoctos.reduce((a, b) => a + b, 0))));
+  if (!importeOk) {
+    throw new DatoInvalido(`El importe del XML no coincide con el que capturaste (${mxn(imp)}): revisa que sea el complemento de ese pago.` + SIN_ARCHIVO);
+  }
+}
+
 /**
  * Registra el complemento de pago que el PAC de la flota ya timbró.
  *
@@ -433,6 +459,11 @@ export async function registrarRepEmitido(
   if (xml.length > XML_MAX) {
     throw new DatoInvalido('Ese XML es demasiado grande. Registra el complemento sin archivo y compártelo por tu canal de siempre.');
   }
+  // A37-S18-07: el XML que se guarda es el que el portal le ENTREGA al contador del cliente como «el complemento» con este
+  // folio. Antes solo se medía su longitud: cualquier texto —o el XML de OTRO complemento— quedaba rotulado con el UUID
+  // tecleado. Ahora tiene que ser un CFDI tipo P cuyo timbre sea ESTE folio y cuyo pago coincida en fecha e importe. Si no
+  // se puede comprobar, no se guarda: el complemento se puede registrar sin archivo (el campo es opcional).
+  if (xml !== '') verificarXmlDeRep(xml, cfdiUuid, fechaPago, imp);
 
   // ── EL ABONO QUE AMPARA TIENE QUE SER DE ESTA FACTURA (`c7-25`) ──────────
   //

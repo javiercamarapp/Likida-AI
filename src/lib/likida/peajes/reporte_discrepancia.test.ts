@@ -29,10 +29,13 @@ describe('reporte de discrepancia', () => {
     expect(r.destinatario).toBe('525500000000'); // grep-limpio:ok
     expect(r.motivoNoEnvio).toBeNull();
     expect(r.evidencia.join('\n')).toMatch(/Unidad: U-01/);
-    expect(r.evidencia.join('\n')).toMatch(/TAG: TAGEJEMPLO01/);
+    expect(r.evidencia.join('\n')).toMatch(/TAG: …LO01/);
     expect(r.evidencia.join('\n')).toMatch(/Caseta: Caseta Ejemplo Norte/);
     expect(r.evidencia.join('\n')).toMatch(/2026-03-04 10:15/);
-    expect(r.evidencia.join('\n')).toMatch(/19\.43260, -99\.13320 a las 2026-03-04 09:30/);
+    expect(r.evidencia.join('\n')).toMatch(/19\.43, -99\.13 a las 2026-03-04 09:30/);
+    // A37-A2-23: ni el TAG completo ni coordenadas exactas viajan a un teléfono libre.
+    expect(r.texto).not.toContain('TAGEJEMPLO01');
+    expect(r.texto).not.toMatch(/19\.4326|99\.1332/);
     expect(r.queHacer.join(' ')).toMatch(/seguridad/);
     expect(r.queHacer.join(' ')).toMatch(/dar de baja el TAG/);
     expect(r.texto).toMatch(/Qué pasó:.*Evidencia:.*Qué hacer:/s);
@@ -60,7 +63,7 @@ describe('reporte de discrepancia', () => {
     const r = armarReporteDiscrepancia(discrepanciaDeAtipico(atipico, 'TAGEJEMPLO02'), null, TEL);
     expect(r.evidencia.join('\n')).toMatch(/Caseta: Caseta Ejemplo Sur, Caseta Ejemplo Este/);
     expect(r.evidencia.join('\n')).toMatch(/2026-03-04 10:00 a 2026-03-04 10:20/);
-    expect(r.evidencia.join('\n')).toMatch(/TAG: TAGEJEMPLO02/);
+    expect(r.evidencia.join('\n')).toMatch(/TAG: …LO02/);
   });
 
   it('un candidato que no es crítico de unidad inmovilizada no genera discrepancia', () => {

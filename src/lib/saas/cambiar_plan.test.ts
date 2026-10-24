@@ -60,10 +60,10 @@ describe('cambiarPlan — con suscripción viva, ACTUALIZA en vez de crear otra'
   it('solo llama a GET+POST /subscriptions/{id} — jamás a /customers ni a crear una nueva', async () => {
     const llamadas = stubFetch((l) => {
       if (l.metodo === 'GET' && l.url.endsWith('/subscriptions/sub_viejo')) {
-        return new Response(JSON.stringify({ id: 'sub_viejo', items: { data: [{ id: 'si_1' }] } }), { status: 200 });
+        return new Response(JSON.stringify({ id: 'sub_viejo', items: { data: [{ id: 'si_1', price: { id: 'price_viejo' } }] } }), { status: 200 });
       }
       if (l.metodo === 'POST' && l.url.endsWith('/subscriptions/sub_viejo')) {
-        return new Response(JSON.stringify({ id: 'sub_viejo' }), { status: 200 });
+        return new Response(JSON.stringify({ id: 'sub_viejo', items: { data: [{ id: 'si_1', price: { id: 'price_nuevo' } }] } }), { status: 200 });
       }
       throw new Error(`llamada inesperada a Stripe: ${l.metodo} ${l.url}`);
     });
@@ -117,7 +117,7 @@ describe('cambiarPlan — Stripe falla a medio camino: NO deja doble cobro', () 
   it('si actualizar la suscripción existente falla, NO cae a crear una nueva de respaldo', async () => {
     const llamadas = stubFetch((l) => {
       if (l.metodo === 'GET' && l.url.endsWith('/subscriptions/sub_viejo')) {
-        return new Response(JSON.stringify({ id: 'sub_viejo', items: { data: [{ id: 'si_1' }] } }), { status: 200 });
+        return new Response(JSON.stringify({ id: 'sub_viejo', items: { data: [{ id: 'si_1', price: { id: 'price_viejo' } }] } }), { status: 200 });
       }
       if (l.metodo === 'POST' && l.url.endsWith('/subscriptions/sub_viejo')) {
         return new Response(JSON.stringify({ error: { message: 'No such price: price_nuevo' } }), { status: 400 });

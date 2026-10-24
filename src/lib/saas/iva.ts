@@ -128,3 +128,40 @@ export function desgloseCuadra(total: number, subtotal: number, iva: number): bo
   // Verificado con AUDITORÍA 10 · `iva.test.ts` (caso límite exacto a 1¢).
   return Math.abs(round2(total) - round2(subtotal + iva)) <= 0.01 + 1e-9;
 }
+
+/**
+ * A37-S61-03 · El desglose que la FACTURA DE STRIPE ya trae itemizado, o `null`.
+ *
+ * `aplicarFactura` guardaba `subtotal`/`iva` en `null` y sin desglose
+ * `timbrarFactura` se niega: ninguna factura cobrada por Stripe podía
+ * timbrarse. Aquí se rescata el desglose SOLO cuando Stripe lo calculó él mismo
+ * (Stripe Tax o tax rate) y las cifras demuestran ser IVA y cuadrar al centavo:
+ *
+ *  · todo en centavos ENTEROS (`total`, `amount_paid`, `tax`, base);
+ *  · la base es `total_excluding_tax` (o `subtotal` si no hay descuentos);
+ *  · base + tax === total  Y  amount_paid === total (cobro completo);
+ *  · el impuesto es el 16% de la base (±1 centavo): un `tax` que no es IVA
+ *    —o una retención— no se acepta como tal.
+ *
+ * Cualquier otra cosa (sin `tax`, descuentos que no cuadran, cobro parcial,
+ * moneda distinta de MXN) devuelve `null`: ante ambigüedad NO se adivina, y la
+ * factura sigue sin poder timbrarse hasta que alguien declare el criterio.
+ * Un `tax` nulo NO significa «sin IVA»: puede ser un precio con IVA incluido
+ * que Stripe no itemizó.
+ */
+export function desgloseDeFacturaStripe(inv: {
+  total?: unknown; amount_paid?: unknown; tax?: unknown; subtotal?: unknown;
+  total_excluding_tax?: unknown; currency?: unknown;
+}): { subtotal: number; iva: number } | null {
+  if (String(inv.currency ?? '').toLowerCase() !== 'mxn') return null;
+  const ent = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) ? v : null);
+  const total = ent(inv.total);
+  const pagado = ent(inv.amount_paid);
+  const tax = ent(inv.tax);
+  const base = ent(inv.total_excluding_tax) ?? ent(inv.subtotal);
+  if (total === null || pagado === null || tax === null || base === null) return null;
+  if (total <= 0 || tax <= 0 || base <= 0) return null;
+  if (base + tax !== total || pagado !== total) return null;
+  if (Math.abs(tax - Math.round(base * TASA_IVA)) > 1) return null;
+  return { subtotal: base / 100, iva: tax / 100 };
+}

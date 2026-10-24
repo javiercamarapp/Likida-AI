@@ -210,6 +210,22 @@ describe('fallas de infraestructura', () => {
 });
 
 
+describe('A37-A1-liquidaciones-07: un conflicto de DATOS de un desglose no tumba el resto del lote', () => {
+  it('la bitácora 2 choca con el índice único (misma bitácora, otra clave): queda como excepción y las demás se reciben (201)', async () => {
+    const { DesgloseEnConflicto } = await import('@/lib/likida/liquidacion_externa/repo_correo');
+    recibir.mockResolvedValueOnce(creada('BIT-T1-B-1'));
+    recibir.mockRejectedValueOnce(new DesgloseEnConflicto('detalle interno'));
+    recibir.mockResolvedValueOnce(creada('BIT-T1-B-3'));
+    const r = await postear({ desgloses: [DESGLOSE('B-1'), DESGLOSE('B-2'), DESGLOSE('B-3')] });
+    expect(r.status).toBe(201);
+    const b = await json(r);
+    expect(b.datos).toMatchObject({ recibidas: 2 });
+    expect(b.datos.excepciones).toEqual([{ clave: 'BIT-T1-B-2', motivo: 'bitacora_duplicada' }]);
+    expect(JSON.stringify(b)).not.toContain('detalle interno');
+    expect(recibir).toHaveBeenCalledTimes(3);
+  });
+});
+
 describe('A37-A1-02: la corrección decidida por quien administra', () => {
   it('`correccion.motivo` llega al servicio con el actor de la credencial', async () => {
     const r = await postear({ desgloses: [DESGLOSE()], correccion: { motivo: 'nómina corregida en origen' } });

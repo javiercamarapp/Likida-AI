@@ -59,7 +59,8 @@ import { MARCA_TEXTO_SOSPECHOSO } from './ocr';
 import { VENTANA_DIAS_FECHA, TOLERANCIA_MONTO_MXN } from './consolidado';
 import { registrarCorrida } from '../agentes/corridas';
 import { contextoEvidenciaGps, llaveUnidadDia } from '../peajes/evidencia_gps';
-import { cargarMapaTags, cargarMapeo, listarCasetas, evaluarGpsDeLineas } from '../peajes/datos';
+import { resolverTagEnFecha } from '../peajes/tags';
+import { cargarVigenciaTags, gastosRespaldadosPorOtrosDesgloses, cargarMapeo, listarCasetas, evaluarGpsDeLineas } from '../peajes/datos';
 import { normalizarTag } from '../peajes/formatos';
 import { resolverPeriodo } from '../peajes/periodo';
 import { registrarNombresDeCasetas } from '../peajes/revision_cobros';
@@ -782,6 +783,8 @@ export function cruzarLineasDesglose(
   /** `unidadId`: la unidad que `peaje_tag` casa con el TAG de la línea (null/ausente si el TAG no está dado de alta). */
   lineas: ReadonlyArray<{ fecha: string | null; monto: number; unidadId?: string | null }>,
   gastos: readonly GastoCaseta[],
+  /** A37-A2-10: ids de gasto que ya respaldan líneas de OTROS desgloses vigentes: no pueden respaldar otra. */
+  yaRespaldados: ReadonlySet<string> = new Set(),
 ): CruceLinea[] {
   // ESCALA (T-A2-32): el barrido de TODOS los gastos por cada línea era O(líneas × gastos) — a 60 000
   // líneas y ~45 000 gastos, miles de millones de comparaciones. Los gastos se indexan por día (medianoche
@@ -801,7 +804,7 @@ export function cruzarLineasDesglose(
     if (lista) lista.push({ gasto: g, orden, dia: d });
     else porDia.set(d, [{ gasto: g, orden, dia: d }]);
   });
-  const usados = new Set<string>();
+  const usados = new Set<string>(yaRespaldados);
   const resultados: CruceLinea[] = [];
 
   for (const linea of lineas) {
@@ -1178,9 +1181,12 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
 
   // El TAG dado de alta → su unidad (0375). Lanza ante error de base: un mapa a
   // medias dejaría líneas «sin unidad» que sí la tienen.
-  const unidadPorTag = await cargarMapaTags(tenantId);
+  // A37-A2-11: con la VIGENCIA del TAG (alta + baja), no solo los activos de hoy: una baja con fecha pasada no le quita
+  // la unidad a las líneas ANTERIORES a ella al re-conciliar; solo las posteriores quedan sin unidad.
+  const vigenciaTags = await cargarVigenciaTags(tenantId);
   const lineas = filas.map((f) => {
     const tagNorm = normalizarTag(f.tag as string | null);
+    const res = resolverTagEnFecha(tagNorm, (f.fecha as string | null) ?? null, vigenciaTags);
     return {
       id: String(f.id),
       indice: Number(f.indice),
@@ -1188,7 +1194,7 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
       monto: Number(f.monto),
       caseta: (f.caseta as string | null) ?? null,
       cruceEn: (f.cruce_en as string | null) ?? null,
-      unidadId: tagNorm ? (unidadPorTag.get(tagNorm) ?? null) : null,
+      unidadId: res.estado === 'vigente' ? res.unidadId : null,
     };
   });
   const resumen: ResumenCruceDesglose = {
@@ -1251,8 +1257,13 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
     gastos = gastos.map((g) => ({ ...g, unidadId: unidadPorViajeGasto.get(g.viajeId) ?? null }));
   }
 
+  // 2b) A37-A2-10: un gasto ya respaldado por una línea de OTRO desglose vigente (un corte reemitido con otros bytes, un
+  //     mensual solapado con decenales) no respalda también esta. Gana el desglose más antiguo: así re-conciliar uno no
+  //     cambia lo que el otro ya tiene, y el orden es determinista.
+  const yaRespaldados = await gastosRespaldadosPorOtrosDesgloses(tenantId, desgloseId, gastos.map((g) => g.id), fechas);
+
   // 3) El cruce puro.
-  const cruces = cruzarLineasDesglose(lineas, gastos);
+  const cruces = cruzarLineasDesglose(lineas, gastos, yaRespaldados);
 
   // 4) El cruce por CASETA con el GPS (0375/0376): la unidad a evaluar es la del
   //    TAG y, si el TAG no está dado de alta, la del viaje que cuadró. Sin

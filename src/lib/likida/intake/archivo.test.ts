@@ -16,6 +16,17 @@ describe('leerArchivoUniversal — el lector del chat', () => {
     expect(r.meta).toContainEqual(['Filas', 3]);
   });
 
+  it('A37-S46-06: un .xlsx grande se lee acotado (sheetRows), no entero', async () => {
+    const hoja = XLSX.utils.aoa_to_sheet([['Concepto'], ...Array.from({ length: 300 }, (_, i) => [`Fila ${i}`])]);
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, 'Gigante');
+    const buf = XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    const r = await leerArchivoUniversal('gigante.xlsx', buf);
+    const filas = r.meta.find(([k]) => k === 'Filas')?.[1];
+    expect(typeof filas === 'number' ? filas : 0).toBeLessThanOrEqual(61);
+    expect(r.extracto).toContain('más de 60 filas');
+  });
+
   it('lee un CSV por la misma vía', async () => {
     const r = await leerArchivoUniversal('viajes.csv', Buffer.from('folio,anticipo\nF-1,8000\nF-2,5500\n'));
     expect(r.clase).toBe('hoja');
