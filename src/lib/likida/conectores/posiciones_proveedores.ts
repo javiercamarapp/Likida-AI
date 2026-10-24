@@ -342,6 +342,7 @@ export async function leerPosicionesNavixy(
 // cada campo. Sin mapeo no hay lectura (no se adivina). Solo GET, solo el mismo
 // origen que la dirección de prueba (el token no viaja a otro host), solo HTTPS
 // público (el transporte rechaza IP privadas).
+const TAMANO_PAGINA_POR_OMISION = 200;
 export const PROHIBIDAS = new Set(['__proto__', 'constructor', 'prototype']);
 // Regex lineal (sin cuantificador anidado): la forma de cada segmento va aquí y los segmentos vacíos («a..b», «.a», «a.») se
 // rechazan abajo con split — equivale a `^seg(\.seg)*$` con seg = [A-Za-z0-9_$-]+.
@@ -357,7 +358,7 @@ export const MapeoGenerico = z.object({
   unidad_velocidad: z.enum(['kmh', 'mph', 'ms', 'nudos']).default('kmh'),
   paginacion: z.discriminatedUnion('tipo', [
     z.object({ tipo: z.literal('cursor'), param: RUTA, ruta_siguiente: RUTA }),
-    z.object({ tipo: z.literal('pagina'), param: RUTA, inicio: z.number().int().min(0).max(1).default(1), tamano_param: RUTA.optional(), tamano: z.number().int().min(10).max(1000).default(200) }),
+    z.object({ tipo: z.literal('pagina'), param: RUTA, inicio: z.number().int().min(0).max(1).default(1), tamano_param: RUTA.optional(), tamano: z.number().int().min(10).max(1000).optional() }),
   ]).optional(),
 }).strict();
 export type MapeoGenericoT = z.infer<typeof MapeoGenerico>;
@@ -411,6 +412,9 @@ export async function leerPosicionesGenerico(
   let cursor: string | null = null;
   let pagina = m.paginacion?.tipo === 'pagina' ? m.paginacion.inicio : 0;
   const cursores = new Set<string>();
+  // A37-S37-03: firma de la página anterior (para cortar un proveedor que ignora el número de página) y claves ya vistas (dedupe).
+  let firmaAnterior: string | null = null;
+  const vistas = new Set<string>();
 
   while (paginas < MAX_PAGINAS_DEFENSIVO) {
     const url = new URL(destino.toString());
@@ -421,7 +425,7 @@ export async function leerPosicionesGenerico(
     if (m.paginacion?.tipo === 'cursor' && cursor) url.searchParams.set(m.paginacion.param, cursor);
     if (m.paginacion?.tipo === 'pagina') {
       url.searchParams.set(m.paginacion.param, String(pagina));
-      if (m.paginacion.tamano_param) url.searchParams.set(m.paginacion.tamano_param, String(m.paginacion.tamano));
+      if (m.paginacion.tamano_param) url.searchParams.set(m.paginacion.tamano_param, String(m.paginacion.tamano ?? TAMANO_PAGINA_POR_OMISION));
     }
     const l = await llamar(http, { url: url.toString(), metodo: 'GET', encabezados }, 'El proveedor', reloj);
     if (!l.ok) return { ok: false, motivo: l.motivo, falla: l.falla, backlog: l.backlog, paginas };
@@ -432,6 +436,11 @@ export async function leerPosicionesGenerico(
     const lista = m.lista ? porRuta(crudo, m.lista) : crudo;
     if (!Array.isArray(lista)) return { ok: false, motivo: `La respuesta no trae la lista en «${m.lista ?? 'raíz'}»: el mapeo no corresponde a lo que contesta el proveedor.`, falla: 'formato', paginas };
     paginas += 1;
+    const firma = JSON.stringify(lista);
+    if (m.paginacion?.tipo === 'pagina' && lista.length > 0 && firma === firmaAnterior) {
+      return { ok: false, motivo: 'El proveedor devolvió la misma página dos veces: el parámetro de página no corresponde. La lectura no es completa.', falla: 'formato', paginas, backlog: true };
+    }
+    firmaAnterior = firma;
     for (const it of lista) {
       const idRaw = porRuta(it, m.id);
       const id = typeof idRaw === 'number' || typeof idRaw === 'string' ? String(idRaw).trim() : '';
@@ -439,6 +448,9 @@ export async function leerPosicionesGenerico(
       const f = porRuta(it, m.fecha);
       const medidaEn = m.formato_fecha === 'iso' ? isoConZona(f) : isoDeEpoch(f, m.formato_fecha === 'epoch_s' ? 's' : 'ms');
       if (!id || lat === null || lng === null || !coordenadaValida(lat, lng) || !medidaEn) { invalidas += 1; continue; }
+      const clave = `${id}|${medidaEn}`;
+      if (vistas.has(clave)) continue; // la misma muestra repetida entre páginas no se cuenta dos veces
+      vistas.add(clave);
       const vel = m.velocidad ? aNumero(porRuta(it, m.velocidad)) : null;
       const ign = m.ignicion ? porRuta(it, m.ignicion) : undefined;
       posiciones.push({
@@ -456,7 +468,10 @@ export async function leerPosicionesGenerico(
       if (s === cursor || cursores.has(s)) return { ok: false, motivo: 'El proveedor repitió un cursor: la lectura no es completa.', falla: 'formato', paginas, backlog: true };
       cursores.add(s); cursor = s;
     } else {
-      if (lista.length < m.paginacion.tamano || lista.length === 0) return { ok: true, posiciones, paginas, completo: true, invalidas };
+      // Una página corta solo es el final si SABEMOS el tamaño: lo pedimos (`tamano_param`) o la flota declaró el fijo del proveedor
+      // (`tamano`). Sin ninguno de los dos, el único fin seguro es una página vacía (A37-S37-03).
+      const tamanoConocido = m.paginacion.tamano_param ? (m.paginacion.tamano ?? TAMANO_PAGINA_POR_OMISION) : m.paginacion.tamano;
+      if (lista.length === 0 || (tamanoConocido !== undefined && lista.length < tamanoConocido)) return { ok: true, posiciones, paginas, completo: true, invalidas };
       pagina += 1;
     }
   }
