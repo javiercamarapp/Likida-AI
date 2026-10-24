@@ -93,6 +93,15 @@ function opcional(crudo: string, campo: string, tope: number): number | null {
 export function validarIngreso(c: IngresoCrudo): IngresoValido {
   const ingresoFlete = opcional(c.ingresoFlete, 'El ingreso del flete', TOPES.ingreso);
   const kmRecorridos = opcional(c.kmRecorridos, 'Los kilómetros', TOPES.km);
+  // A37-P-03: la base exige km > 0 y entero (viaje_km_sanos, 0048) y POST /v1/viajes ya valida 1..19999 entero. Aquí se
+  // rechaza con mensaje claro en vez de dejar que la base lo tire con un error genérico que el usuario reintenta sin fin.
+  if (kmRecorridos !== null && (!Number.isInteger(kmRecorridos) || kmRecorridos < 1 || kmRecorridos >= TOPES.km)) {
+    throw new DatoInvalido(
+      kmRecorridos >= TOPES.km
+        ? `Los kilómetros pasan de ${numero(TOPES.km - 1)} y eso casi siempre es un cero de más. Si es correcto, avísanos.`
+        : 'Los kilómetros tienen que ser un número entero entre 1 y 19,999 (déjalo vacío si no lo conoces).',
+    );
+  }
   const clienteId = c.clienteId.trim() || null;
 
   // Un ingreso SIN cliente se acepta: muchas flotas capturan primero el monto
