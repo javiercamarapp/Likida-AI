@@ -255,6 +255,13 @@ export const RESPIRO_TICKET_MS = 5_000;
 export const margenPorDefecto = (modo: ModoAgente, esperaUuidMs: number): number =>
   modo === 'emitir' ? esperaUuidMs + RESPIRO_TICKET_MS : RESPIRO_TICKET_MS;
 
+/** Cuánto se reserva para bajar el XML cuando el guion no fija `esperaXmlMs` (el tope de descarga de la página). */
+const ESPERA_XML_DEFECTO_MS = 30_000;
+
+/** El motivo cuando el tiempo se acabó DESPUÉS de llenar y ANTES de apretar emitir. */
+export const SIN_TURNO_ANTES_DE_EMITIR =
+  'no se emitió: el presupuesto de tiempo de esta corrida no alcanza para terminar una emisión y NO se apretó emitir (nada quedó timbrado). El ticket se recoge entero en la corrida siguiente.';
+
 /** El motivo con el que sale un ticket al que no le tocó turno. */
 export const SIN_TURNO =
   'no se intentó: se acabó el presupuesto de tiempo de esta corrida antes de llegar a este ticket. NO se abrió el portal y NO se marcó nada — se recoge entero en la corrida siguiente.';
@@ -678,6 +685,22 @@ export class AdaptadorDeclarativo implements AdaptadorPortal {
       // `seApreto` se marca ANTES del clic, no después: si `hacerClic` revienta
       // no se sabe si el formulario alcanzó a irse. Fallar cerrado aquí es
       // asumir que sí.
+      //
+      // A37-S42-06: EL PUNTO SIN RETORNO TAMBIÉN MIRA EL RELOJ. El margen de
+      // arranque por ticket no cubre lo que ya se gastó navegando, buscando y
+      // llenando; si a estas alturas ya no cabe la espera del UUID (y el XML,
+      // si el guion lo baja), apretar emitir sería arrancar una emisión que la
+      // función no alcanza a terminar: muerte AMBIGUA. Aquí todavía no se emitió
+      // nada, así que parar es LIMPIO (no es `emisionSinConfirmar`) y el ticket
+      // vuelve a la cola entero.
+      if (this.venceEn !== undefined) {
+        const necesario = this.esperaUuidMs + (this.g.xml ? (this.esperaXmlMs ?? ESPERA_XML_DEFECTO_MS) : 0) + RESPIRO_TICKET_MS;
+        if (this.ahora() + necesario >= this.venceEn) {
+          throw new FalloDePortal(
+            `${SIN_TURNO_ANTES_DE_EMITIR} Faltaban ~${Math.max(0, Math.round((this.venceEn - this.ahora()) / 1000))} s y emitir pide ~${Math.round(necesario / 1000)} s.`,
+          );
+        }
+      }
       seApreto = true;
       const selEmitir = vuelo.resueltos.get('el botón de emitir') ?? primerCandidato(this.g.botonEmitir);
       await pagina.hacerClic(selEmitir);

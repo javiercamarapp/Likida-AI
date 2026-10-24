@@ -371,6 +371,23 @@ describe('el reloj del lote (PR #152)', () => {
     expect(r.aviso).toBeUndefined();
   });
 
+  it('A37-S42-06: si al llegar al botón ya no cabe la emisión, NO aprieta y NO queda ambiguo', async () => {
+    const p = new PaginaDoble({ textos: { '.uuid': 'B0800A68-1111-2222-3333-444455556666' } });
+    // Arranca con margen de sobra (venceEn lejano en el primer vistazo), pero el
+    // reloj salta mientras se llena el formulario: al llegar al botón ya no cabe.
+    let t = 0;
+    const a = armar(GUION_MEDIDO, p, {
+      esperaUuidMs: 10_000, venceEn: 20_000, margenTicketMs: 1_000,
+      ahora: () => { t += 5_000; return t; },
+    });
+    const r = await a.facturar(CAMPOS, 'emitir');
+
+    expect(p.clics).toEqual([]);
+    expect(r.ok).toBe(false);
+    expect(r.emisionSinConfirmar).toBeUndefined();
+    expect(r.error).toMatch(/NO se apretó emitir/);
+  });
+
   it('en `emitir` el margen reserva la espera del UUID completa', async () => {
     // Un ticket que arranca con 200 ms por delante muere a media emisión, y esa
     // muerte es AMBIGUA: es como se acaba con dos CFDI por el mismo consumo.
