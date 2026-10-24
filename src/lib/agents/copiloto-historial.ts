@@ -134,10 +134,17 @@ export async function guardarIntercambioCopiloto({
     id = data.id as string;
   }
 
+  // A37-S23-08: los dos mensajes iban en un solo INSERT con el MISMO
+  // `created_at` (default now()) y la lectura ordena solo por ese campo: según
+  // el plan, el par podía reabrirse con los roles invertidos. Se fijan
+  // instantes explícitos y distintos (1 ms de diferencia).
+  const ahora = Date.now();
   const { error: errMsjs } = await acotada(
     supabaseAdmin().from('copiloto_mensaje').insert([
-      { conversacion_id: id, rol: 'usuario', texto: pregunta.slice(0, 4_000), bloques: null },
-      { conversacion_id: id, rol: 'asistente', texto: textoRespuesta.slice(0, 8_000), bloques },
+      { conversacion_id: id, rol: 'usuario', texto: pregunta.slice(0, 4_000), bloques: null,
+        created_at: new Date(ahora).toISOString() },
+      { conversacion_id: id, rol: 'asistente', texto: textoRespuesta.slice(0, 8_000), bloques,
+        created_at: new Date(ahora + 1).toISOString() },
     ]),
     'copiloto.guardar_mensajes');
   if (errMsjs) throw new Error(`guardarIntercambioCopiloto.mensajes: ${errMsjs.message}`);
