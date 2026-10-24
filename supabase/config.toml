@@ -76,6 +76,10 @@ file_size_limit = "50MiB"
 
 [auth]
 enabled = true
+# ⚠ ESTE ARCHIVO ES SOLO DE LA PILA LOCAL DE PRUEBAS. NO corras `supabase config push`
+# contra el proyecto vinculado: sobrescribiría la configuración de Auth de producción
+# (site_url localhost, registro abierto, sin confirmaciones, email_sent 360, MFA).
+# Ver docs/conocimiento/DEPLOY.md → «supabase/config.toml es solo local».
 # Tiene que coincidir con NEXT_PUBLIC_APP_URL del servidor bajo prueba: el
 # magic link aterriza en {site_url}/auth/callback (ver login/page.tsx).
 #
