@@ -533,3 +533,22 @@ describe('A37-S56-09 — las plantillas soloAdmin no van al teléfono de la flot
     expect(r.avisos).toBe(0);
   });
 });
+
+// A37-S56-10: cuando el reloj corta el barrido, no pueden quedar fuera SIEMPRE
+// las mismas flotas — el punto de arranque rota por hora.
+describe('A37-S56-10 — el arranque del barrido rota entre flotas', () => {
+  const rA = { ...REGLA_DINERO, id: 'r-A', tenantId: 't-A' };
+  const rB = { ...REGLA_DINERO, id: 'r-B', tenantId: 't-B' };
+
+  it('horas consecutivas empiezan por flotas distintas', async () => {
+    const primeros = new Set<string>();
+    for (const h of [7000, 7001]) {
+      evaluar.mockClear();
+      reglasActivas.mockResolvedValue([rA, rB]);
+      await vigilarReglas(new Date(h * 3_600_000));
+      primeros.add(evaluar.mock.calls[0][2] as string);
+      expect(evaluar).toHaveBeenCalledTimes(2); // sin corte, las dos corren
+    }
+    expect(primeros).toEqual(new Set(['t-A', 't-B']));
+  });
+});

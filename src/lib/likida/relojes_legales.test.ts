@@ -352,6 +352,25 @@ describe('avisarVencimientos — un aviso por umbral, sellado después de mandar
     expect(tablas.upserts).toHaveLength(0);
   });
 
+  it('A37-S56-10: horas consecutivas avisan primero a flotas distintas (el corte por reloj no deja fuera siempre a las mismas)', async () => {
+    const primeros = new Set<string>();
+    for (const h of [0, 1]) {
+      sendText.mockClear();
+      tablas.respuestas.set('unidad', [
+        { id: 'u1', tenant_id: 't1', numero_economico: 'UNO-1', poliza_vence: '2026-09-01', permiso_sict_vence: null, verificacion_vence: null },
+        { id: 'u2', tenant_id: 't2', numero_economico: 'DOS-2', poliza_vence: '2026-09-01', permiso_sict_vence: null, verificacion_vence: null },
+      ]);
+      tablas.respuestas.set('operador', []);
+      tablas.respuestas.set('flota_poliza', []);
+      tablas.respuestas.set('aviso_vigencia', []);
+      await avisarVencimientos(new Date(AHORA.getTime() + h * 3_600_000));
+      const textos = (sendText.mock.calls as unknown as Array<[string, string]>).map((c) => c[1]);
+      expect(textos).toHaveLength(2);
+      primeros.add(textos[0].includes('UNO-1') ? 't1' : 't2');
+    }
+    expect(primeros).toEqual(new Set(['t1', 't2']));
+  });
+
   it('BE-7: sin reloj (la Mac, esta suite) el barrido corre hasta el final', async () => {
     tablas.respuestas.set('unidad', [
       { id: 'u1', tenant_id: 't1', numero_economico: 'C2-08', poliza_vence: '2026-09-01', permiso_sict_vence: null, verificacion_vence: null },

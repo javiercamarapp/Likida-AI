@@ -37,6 +37,7 @@ import {
   type ReglaGuardada,
 } from './repo';
 import { evaluarFrecuencia } from './frecuencia';
+import { rotarGruposPorHora } from '../rotacion_barrido';
 
 export interface ResultadoVigilancia {
   reglas: number;
@@ -286,7 +287,13 @@ export async function vigilarReglas(
   opts: { venceEn?: number; excluirTenants?: ReadonlySet<string> } = {},
 ): Promise<ResultadoVigilancia> {
   // Las flotas con perfil (0770) no vigilan reglas: es un módulo en stand-by.
-  const reglas = (await reglasActivas()).filter((r) => !opts.excluirTenants?.has(r.tenantId));
+  // A37-S56-10: el arranque rota por hora entre flotas. Con el orden fijo por
+  // UUID, si el reloj del cron cortaba el barrido siempre quedaban fuera las
+  // mismas flotas y su vigilancia no corría jamás.
+  const reglas = rotarGruposPorHora(
+    (await reglasActivas()).filter((r) => !opts.excluirTenants?.has(r.tenantId)),
+    (r) => r.tenantId, ahora,
+  );
   const r: ResultadoVigilancia = { reglas: reglas.length, disparadas: 0, avisos: 0, fallos: 0, diferidas: 0, cortadasPorReloj: 0 };
   let intentadas = 0;
   for (const regla of reglas) {

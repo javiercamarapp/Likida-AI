@@ -9,6 +9,7 @@ import { anotarEventoIncidencia } from './asistencia_wa';
 import { hazmatDeclarado } from './perfil/preguntas';
 import { DIAS_AVISO } from './vigencias';
 import { hoyMx } from '@/lib/formato';
+import { rotarPorHora } from './rotacion_barrido';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOS RELOJES LEGALES (Fase 6 del plan de back office — etapa 14 del ciclo).
@@ -584,7 +585,10 @@ export async function avisarVencimientos(ahora: Date = new Date(), opts: Opcione
     (porTenant.get(c.tenantId) ?? porTenant.set(c.tenantId, []).get(c.tenantId)!).push(c);
   }
 
-  const flotas = [...porTenant.entries()];
+  // A37-S56-10: el arranque rota por hora. Si el reloj corta el barrido, la
+  // hora siguiente atiende primero a las flotas que ésta dejó al final (antes
+  // el orden era fijo y las mismas flotas quedaban fuera en cada pasada).
+  const flotas = rotarPorHora([...porTenant.entries()], ahora);
   for (const [n, [tenantId, items]] of flotas.entries()) {
     // BE-7 (auditoría 24): el reloj se mira ANTES de cada flota. Este barrido
     // sella DESPUÉS de mandar (patrón 0202): si Vercel mata la lambda entre
