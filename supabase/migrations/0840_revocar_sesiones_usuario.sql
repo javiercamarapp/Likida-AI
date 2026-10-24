@@ -2,13 +2,12 @@
 -- 0840 · FASE 1 SEGURIDAD — SEG-SESIONES: cerrar TODAS las sesiones de un
 -- usuario de un tiro (checklist 31 v2 #5, plan 32 Fase 1).
 --
--- *** ESTADO REAL (A37-S63-09, 24-oct-2026): YA ESTÁ APLICADA EN LA BASE REAL. Esta cabecera decía «SOLO LOCAL, NO
--- aplicar a remoto» porque nació en la pila de auditoría (rango 0840-0849 reservado para esta fase); después se
--- fusionó a master y la base real corre ya muy por encima de 0840 (docs/operacion/vigia-cliente.md y
--- orquestador.md dejan constancia: «base en 0840» verificada contra /api/health el 19-oct-2026; hoy la base está en
--- 0866+). El código de producción la invoca (src/lib/auth/usuarios_escritura.ts, src/app/dashboard/usuarios/page.tsx)
--- y docs/operacion/release-cinco-agentes-rollback.md la lista como parte del release. Si en algún entorno NO está
--- aplicada, el botón «Cerrar sesiones» falla con honestidad (`sesionesCerradas = false`). ***
+-- *** SOLO LOCAL (pila de auditoría `likida-auditoria`). NO aplicar a
+-- remoto — usa el rango 0840-0849 reservado para esta fase, por arriba del
+-- más alto visto en los worktrees `cinco-*` el 16-oct-2026 (cartaporte
+-- llega a 0839). Antes de fusionar a master, revalidar `ls supabase/
+-- migrations | tail -1` en los 9 worktrees `cinco-*` y renumerar si alguno
+-- ya ocupó este rango entretanto. ***
 --
 -- ── EL HUECO ───────────────────────────────────────────────────────────────
 -- `usuarios_escritura.ts` (0294) ya documentaba el límite: «el SDK no ofrece
