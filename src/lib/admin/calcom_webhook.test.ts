@@ -133,7 +133,7 @@ describe('procesarWebhookCalcom — correo ambiguo sin PII en el log', () => {
     const llamada = log.warn.mock.calls.find((c) => c[0] === 'calcom.webhook.correo_ambiguo');
     expect(llamada).toBeTruthy();
     const meta = llamada![1] as Record<string, unknown>;
-    expect(meta).toMatchObject({ coincidencias: 2, reserva: 'booking-contrato' });
+    expect(meta).toMatchObject({ coincidencias: 2, reserva: 'id:booking-contrato' });
     expect(JSON.stringify(meta)).not.toContain('lead@contrato.mx');
     expect(meta).not.toHaveProperty('correo');
   });
