@@ -582,6 +582,12 @@ export async function leerConfigConductor(tenantId: string): Promise<ConfigCondu
     // T-A5-64: la cohorte del piloto. Sin columna todavia (pide slot A5 0820-0829, ver preguntas-javier.md): la lectura es tolerante, asi que
     // una base con `cohorte_piloto` ya la usa y una sin ella (o con un valor fuera del catalogo) queda en «sin cohorte definida».
     ...(typeof f.cohorte_piloto === 'string' && (COHORTES_PILOTO as readonly string[]).includes(f.cohorte_piloto) ? { cohortePiloto: f.cohorte_piloto as CohortePiloto } : {}),
+    // 0870 (A37-P-08): la compuerta «unidad detenida» se lee de la flota. La base sin migrar no trae las columnas → apagada y en sus
+    // valores de partida (fail-closed: el comportamiento de siempre).
+    compuertaMovimientoActiva: f.compuerta_movimiento_activa === true,
+    detenidaMetros: f.detenida_metros === undefined || f.detenida_metros === null ? CONFIG_CONDUCTOR_DEFAULT.detenidaMetros : Number(f.detenida_metros),
+    detenidaVentanaMin: f.detenida_ventana_min === undefined || f.detenida_ventana_min === null ? CONFIG_CONDUCTOR_DEFAULT.detenidaVentanaMin : Number(f.detenida_ventana_min),
+    sinGpsPermite: f.sin_gps_permite === true,
     mostrarEstadosFrontera: f.mostrar_estados_frontera === true,
     aplicarSalidaDelTms: f.aplicar_salida_del_tms === true,
     lineaBaseLlamadasPorViaje: f.linea_base_llamadas_por_viaje === undefined || f.linea_base_llamadas_por_viaje === null ? null : Number(f.linea_base_llamadas_por_viaje),
@@ -945,10 +951,9 @@ export async function guardarConfigConductor(
   // T-A5-37 (y T-A5-36): estas llaves se validan y se leen, pero aún NO tienen columna (falta slot de migración). Guardar algo distinto
   // del valor de partida sería perderlo en silencio: se dice, como con las migraciones 0604/0635/0801.
   const sinColumna = c.poleoMin !== undefined || (c.poleoPorClaveMin !== undefined && Object.keys(c.poleoPorClaveMin).length > 0)
-    || c.detenidoAvisoMin !== CONFIG_CONDUCTOR_DEFAULT.detenidoAvisoMin || c.detenidaMetros !== CONFIG_CONDUCTOR_DEFAULT.detenidaMetros
-    || c.detenidaVentanaMin !== CONFIG_CONDUCTOR_DEFAULT.detenidaVentanaMin;
+    || c.detenidoAvisoMin !== CONFIG_CONDUCTOR_DEFAULT.detenidoAvisoMin;
   if (sinColumna) {
-    throw new Error('v1.conductor_config: el umbral de detención, la cadencia de poleo y la ventana/metros de unidad detenida aún no tienen columna (migración pendiente); no se guardan.');
+    throw new Error('v1.conductor_config: el umbral de detención y la cadencia de poleo aún no tienen columna (migración pendiente); no se guardan. (La compuerta y sus metros/ventana tienen columna desde la 0870.)');
   }
   const fila = {
     tenant_id: tenantId, activo: c.activo, solicitudes_min: c.solicitudesMin, escalar_tras_min: c.escalarTrasMin,
@@ -966,6 +971,14 @@ export async function guardarConfigConductor(
   // partida; si el dueño pidió algo distinto (aviso encendido, otro margen, detección apagada) se dice que falta la migración
   // en vez de callarlo. Cada grupo se retira solo cuando el error de la base nombra una de SUS columnas.
   const grupos: Array<{ mig: string; cols: Record<string, unknown>; esDePartida: boolean }> = [
+    {
+      // 0870 (A37-P-08): la compuerta «unidad detenida» por flota.
+      mig: '0870',
+      cols: { compuerta_movimiento_activa: c.compuertaMovimientoActiva === true, detenida_metros: c.detenidaMetros ?? CONFIG_CONDUCTOR_DEFAULT.detenidaMetros, detenida_ventana_min: c.detenidaVentanaMin ?? CONFIG_CONDUCTOR_DEFAULT.detenidaVentanaMin, sin_gps_permite: c.sinGpsPermite === true },
+      esDePartida: c.compuertaMovimientoActiva !== true && c.sinGpsPermite !== true
+        && (c.detenidaMetros ?? CONFIG_CONDUCTOR_DEFAULT.detenidaMetros) === CONFIG_CONDUCTOR_DEFAULT.detenidaMetros
+        && (c.detenidaVentanaMin ?? CONFIG_CONDUCTOR_DEFAULT.detenidaVentanaMin) === CONFIG_CONDUCTOR_DEFAULT.detenidaVentanaMin,
+    },
     {
       mig: '0801',
       cols: {
@@ -987,7 +1000,9 @@ export async function guardarConfigConductor(
     const faltante = error ? vigentes.find((g) => Object.keys(g.cols).some((col) => error!.message.includes(col))) : undefined;
     if (!faltante) break;
     if (!faltante.esDePartida) {
-      throw new Error(faltante.mig === '0801'
+      throw new Error(faltante.mig === '0870'
+        ? 'v1.conductor_config: la compuerta «unidad detenida» y sus metros/ventana necesitan la migración 0870 (aún no aplicada en esta base).'
+        : faltante.mig === '0801'
         ? 'v1.conductor_config: el perfil de seguimiento, los umbrales de señal de vida y las perillas de frontera y TMS necesitan la migración 0801 (aún no aplicada en esta base).'
         : faltante.mig === '0604'
         ? 'v1.conductor_config: el aviso por llegada sin confirmar y el margen de acercamiento necesitan la migración 0604 (aún no aplicada en esta base).'
