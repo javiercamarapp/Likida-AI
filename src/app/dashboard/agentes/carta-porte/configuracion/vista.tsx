@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { ArrowLeft, Settings2 } from 'lucide-react';
 import type { ConfigSalida } from '@/lib/likida/carta_porte_docs/salida_config';
 import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
+import { SeccionCcp, type AccionesCcp } from './seccion_ccp';
+import type { CcpRecibidoVista } from '@/lib/likida/carta_porte_docs/ccp_respuesta_repo';
 import { ROTULO_ARRANQUE, erroresEnLinea, frasePrevia, nombreDestinatario, textoDeConfig, type CamposTexto } from './formato';
 
 /**
@@ -65,6 +67,7 @@ function Formulario({ config, personas, conector, ver }: { config: ConfigSalida;
             <option value="api" disabled={apiBloqueado}>API (el agente la sube solo){apiBloqueado ? ' — todavía no disponible' : ''}</option>
           </select>
           {apiBloqueado && <p className="text-[11.5px] mt-1" style={{ color: 'var(--muted)' }}>El modo API se activa cuando haya una conexión probada con el sistema del cliente. Mientras tanto, la plantilla se descarga y se sube a mano.</p>}
+          {apiBloqueado && <p role="note" className="text-[11.5px] mt-1.5 px-3 py-2 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>La subida automática al sistema del cliente NO está disponible todavía: depende de la API que el cliente entregue. Hasta entonces todo envío es descarga y subida a mano, y la existencia del requerimiento en su sistema no se puede verificar («desconocido»).</p>}
         </div>
         <div>
           <label htmlFor="cs-plantilla" className={ETIQUETA}>Plantilla por defecto</label>
@@ -114,9 +117,12 @@ function Formulario({ config, personas, conector, ver }: { config: ConfigSalida;
   );
 }
 
-export function VistaConfiguracionSalida({ config, esArranque, personas, conector, sufijo = '', ver = {}, acciones }: {
+export function VistaConfiguracionSalida({ config, esArranque, personas, conector, sufijo = '', ver = {}, acciones, ccp, accionesCcp }: {
   config: ConfigSalida; esArranque: boolean; personas: PersonaVista[]; conector: { hay: boolean; puedeProbar: boolean };
   sufijo?: string; ver?: VerComo; acciones: AccionesConfiguracion;
+  /** A37-A3-01: los CCP timbrados recibidos (omitido = la sección no se pinta; `null` = no se pudo leer). */
+  ccp?: { activa: boolean | 'sin_migracion'; filas: CcpRecibidoVista[] | 'sin_migracion' } | null;
+  accionesCcp?: AccionesCcp;
 }) {
   return (
     <div className="space-y-6">
@@ -140,6 +146,10 @@ export function VistaConfiguracionSalida({ config, esArranque, personas, conecto
           <BotonEnvio variante="secundario" etiqueta="Probar conexión" pendiente="Probando…" />
         </FormaAccion>
       )}
+      {accionesCcp && ccp === null && (
+        <p role="alert" className="text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>No se pudieron leer los CCP timbrados recibidos. Recarga la pantalla; si sigue igual, avisa a soporte.</p>
+      )}
+      {accionesCcp && ccp && <SeccionCcp activa={ccp.activa} filas={ccp.filas} ver={ver} acciones={accionesCcp} />}
     </div>
   );
 }

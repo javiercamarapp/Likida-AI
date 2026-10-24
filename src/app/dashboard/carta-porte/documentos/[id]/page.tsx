@@ -215,7 +215,7 @@ export default async function PaginaRevision({
       if (intencion === 'subido_a_mano') {
         const d = await repo.leerDocumento(s.tenantId, id);
         if (!d) throw new DatoInvalido('Ese documento no está en tu flota, o alguien lo borró. Recarga la pantalla.');
-        const r = await marcarSubidoAMano(s.tenantId, d, version, actor);
+        const r = await marcarSubidoAMano(s.tenantId, d, version, actor, String(fd.get('referenciaTms') ?? ''));
         revalidatePath(ruta); revalidatePath(RUTA_PADRE);
         return r.ok
           ? { ok: true, mensaje: r.yaEstaba ? 'Ya estaba marcada como subida a mano.' : 'Listo: quedó registrado que la plantilla se subió a mano. Likida no la volverá a enviar.' }

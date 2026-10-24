@@ -1052,6 +1052,16 @@ export async function marcarEnvioSubidoAMano(tenantId: string, id: string, desde
   return ((exigir(r, 'cpdocs.envio_subido_a_mano') ?? []) as unknown[]).length > 0;
 }
 
+/**
+ * A37-A3-01: guarda la referencia que el sistema del cliente dio a esta carga (`referencia_tms`), la llave con la que después
+ * se casa el CCP timbrado. Solo si el envío es de la flota. `false` = no existe ese envío.
+ */
+export async function fijarReferenciaEnvio(tenantId: string, id: string, referencia: string): Promise<boolean> {
+  const r = await acotada(supabaseAdmin().from('cp_envio_tms').update({ referencia_tms: referencia.slice(0, 200), updated_at: new Date().toISOString() })
+    .eq('tenant_id', tenantId).eq('id', id).select('id'), 'cpdocs.envio_referencia');
+  return ((exigir(r, 'cpdocs.envio_referencia') ?? []) as unknown[]).length > 0;
+}
+
 /** El estado del envío más reciente (no descartado) de cada documento, para la lista de la bandeja. Sin envío = sin clave. */
 export async function estadoEnvioPorDocumento(tenantId: string, documentoIds: string[]): Promise<Record<string, EstadoEnvioTms>> {
   if (documentoIds.length === 0) return {};

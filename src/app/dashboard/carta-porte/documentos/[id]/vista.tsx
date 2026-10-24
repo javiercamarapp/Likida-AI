@@ -365,7 +365,14 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
                           <Download width={14} height={14} strokeWidth={1.75} />Descargar plantilla del TMS
                         </a>
                         {envio?.estado !== 'subido_a_mano' && (
-                          <BotonEnvio variante="secundario" intencion="subido_a_mano" etiqueta="Ya la subí a mano" pendiente="Marcando…" icono={<Check width={14} height={14} strokeWidth={1.75} />} />
+                          <>
+                            <div>
+                              <label htmlFor="referenciaTms" className={ETIQUETA}>Referencia que te dio el sistema del cliente (opcional)</label>
+                              <input id="referenciaTms" name="referenciaTms" maxLength={200} autoComplete="off" spellCheck={false} className={CAMPO} style={{ background: 'var(--surface)' }} />
+                              <p className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>Con ella Likida reconoce el aviso del CCP timbrado de esta carga; sin ella el aviso se rechaza.</p>
+                            </div>
+                            <BotonEnvio variante="secundario" intencion="subido_a_mano" etiqueta="Ya la subí a mano" pendiente="Marcando…" icono={<Check width={14} height={14} strokeWidth={1.75} />} />
+                          </>
                         )}
                       </div>
                       <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
