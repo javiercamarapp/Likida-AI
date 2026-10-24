@@ -26,6 +26,7 @@ import { exigir } from '@/lib/likida/pg';
 import { acotada } from '@/lib/likida/presupuesto';
 import { crearViaje, type NuevoViaje } from '@/lib/likida/operacion';
 import { validarIngreso } from '@/lib/likida/ingreso_viaje';
+import { DatoInvalido } from '@/lib/likida/errores';
 import { abrir, leerPagina, leerCursor, codificarCursor, sobre, fallo, errorApi, type Cursor, type Pagina } from '../_comun';
 import {
   leerCuerpo, leerLlaveIdempotencia, validar, escribir, huella,
@@ -253,11 +254,21 @@ function normalizarViaje(cuerpo: Record<string, unknown>): NuevoViaje & { folio:
 
   // El ingreso NO se valida aquí: se delega en el motor que ya distingue VACÍO
   // de CERO (`validarIngreso`). Un `ingresoFlete` ausente sale `null`, jamás 0.
-  const ingreso = validarIngreso({
-    clienteId: uuid(cuerpo, 'clienteId') ?? '',
-    ingresoFlete: crudoNumerico(cuerpo, 'ingresoFlete'),
-    kmRecorridos: crudoNumerico(cuerpo, 'kmRecorridos'),
-  });
+  let ingreso: ReturnType<typeof validarIngreso>;
+  try {
+    ingreso = validarIngreso({
+      clienteId: uuid(cuerpo, 'clienteId') ?? '',
+      ingresoFlete: crudoNumerico(cuerpo, 'ingresoFlete'),
+      kmRecorridos: crudoNumerico(cuerpo, 'kmRecorridos'),
+    });
+  } catch (e) {
+    // A37-P-03: `validarIngreso` ya rechaza km 0/decimal/≥20000 con un mensaje de pantalla; la API conserva su contrato (400 que
+    // NOMBRA el campo `kmRecorridos`).
+    if (e instanceof DatoInvalido && e.message.startsWith('Los kilómetros')) {
+      throw new CampoInvalido('kmRecorridos', '`kmRecorridos` tiene que ser un número entero entre 1 y 19999 (omítelo o mándalo null si no lo conoces).');
+    }
+    throw e;
+  }
 
   // A37-S11-01. `validarIngreso` acepta 0, decimales y 20000 (su tope es de
   // cordura y sirve también al formulario y al importador), pero la columna
