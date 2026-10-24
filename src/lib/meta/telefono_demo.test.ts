@@ -106,7 +106,7 @@ describe('A37-L-02 — destinatario anonimizado por ARCO o sin forma de teléfon
     const r1 = await enviarTexto(anon, 'hola');
     const r2 = await enviarBotones(anon, 'hola', [{ id: 'a', titulo: 'A' }]);
     const r3 = await enviarSolicitudUbicacion(anon, 'dónde estás');
-    const r4 = await sendTemplate(anon, 'plantilla', 'es_MX', []);
+    const r4 = await sendTemplate(anon, 'plantilla', { idioma: 'es_MX' });
     const r5 = await enviarRespuestaArco(anon, 'respuesta');
     for (const r of [r1, r2, r3, r4, r5]) expect(r.ok).toBe(false);
     expect(fetchSpy).not.toHaveBeenCalled();
