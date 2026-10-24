@@ -274,6 +274,17 @@ export async function guardarPriceDePlan(
   if (!precio.recurrente) {
     throw new DatoInvalido('Ese price es de pago único, no de suscripción. Cobraría una vez y la flota se quedaría con el plan activo para siempre.');
   }
+  // A37-S61-04: `precio_mensual` alimenta la pantalla y `emitirMensualidad`. Un
+  // price anual de $24,000 se guardaba como mensual y se cobraba/imprimía $24,000
+  // cada mes. No se normaliza a mensual (dividir es una decisión de precio del
+  // negocio, no de este código): se pide un price mensual.
+  if (!precio.cobraCadaMes) {
+    throw new DatoInvalido(
+      `Ese price cobra ${precio.periodicidad ?? 'con otra periodicidad'}, no cada mes. El plan guarda el precio MENSUAL ` +
+      'y de ahí salen la pantalla del cliente y la mensualidad que se emite: un price anual, semanal o cada varios ' +
+      'meses se imprimiría y se cobraría como mensual. Crea en Stripe un price mensual (interval month, cada 1).',
+    );
+  }
   if (!precio.activo) {
     throw new DatoInvalido('Ese price está archivado en Stripe: no se puede cobrar con él.');
   }

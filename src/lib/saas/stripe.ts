@@ -199,6 +199,10 @@ export interface PrecioStripe {
   montoMensual: number;
   moneda: string;
   recurrente: boolean;
+  /** A37-S61-04: el price cobra EXACTAMENTE cada mes (`interval: 'month'`, `interval_count` 1). */
+  cobraCadaMes: boolean;
+  /** Para el mensaje de rechazo: «year ×1», «month ×3»… (`null` si no es recurrente). */
+  periodicidad: string | null;
   activo: boolean;
   /**
    * ¿`montoMensual` ya trae el IVA?
@@ -234,7 +238,7 @@ export async function leerPrecio(priceId: string): Promise<PrecioStripe> {
     unit_amount: number | null;
     currency: string;
     active: boolean;
-    recurring: { interval: string } | null;
+    recurring: { interval: string; interval_count?: number | null } | null;
     tax_behavior?: string | null;
   }>(`/prices/${encodeURIComponent(priceId)}`, { metodo: 'GET' });
 
@@ -243,6 +247,10 @@ export async function leerPrecio(priceId: string): Promise<PrecioStripe> {
     montoMensual: (p.unit_amount ?? 0) / 100,
     moneda: p.currency.toUpperCase(),
     recurrente: p.recurring !== null,
+    // Un `interval_count` ausente es 1 (el default de Stripe). Cualquier otra
+    // periodicidad NO es «mensual»: dividir el monto no es una decisión de este código.
+    cobraCadaMes: p.recurring !== null && p.recurring.interval === 'month' && (p.recurring.interval_count ?? 1) === 1,
+    periodicidad: p.recurring === null ? null : `${p.recurring.interval} ×${p.recurring.interval_count ?? 1}`,
     activo: p.active,
     // Cualquier valor que no sea uno de los dos explícitos cae en `null`. Un
     // `tax_behavior` nuevo de Stripe que aquí se leyera como "exclusive" por
