@@ -87,8 +87,9 @@ describe('barridoVigia · pasada de avisos', () => {
     entregar.mockResolvedValue({ estado: 'enviado', via: 'plantilla' });
     const { deps } = armar([f1, f2]);
     const r = await barridoVigia(deps, { mantenimiento: true });
-    expect(r).toMatchObject({ avisosConError: true, avisosCreados: 1, avisosEnviados: 1 });
-    expect(f1.aprobados).not.toHaveBeenCalled();
+    // A37-INN-A4-09: generar que lanza NO frena la entrega de lo ya confirmado de esa misma flota.
+    expect(r).toMatchObject({ avisosConError: true, avisosCreados: 1, avisosEnviados: 3 });
+    expect(f1.aprobados).toHaveBeenCalled();
 
     generar.mockResolvedValue(gen());
     entregar.mockReset();
