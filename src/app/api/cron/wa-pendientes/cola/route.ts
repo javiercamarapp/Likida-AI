@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { Receiver } from '@upstash/qstash';
 import { logger } from '@/lib/logger';
+import { appUrl } from '@/lib/env';
 import { leerInterruptor } from '@/lib/likida/interruptores';
 import { drenarBandeja, MAX_VUELTAS_QSTASH } from '../drenado';
 import { leerTextoAcotado } from '@/lib/http/cuerpo_acotado';
@@ -42,7 +43,12 @@ export async function POST(req: NextRequest) {
   const raw = lectura.texto;
   try {
     const receiver = new Receiver({ currentSigningKey: currentKey, nextSigningKey: nextKey });
-    const valido = await receiver.verify({ signature: req.headers.get('upstash-signature') ?? '', body: raw });
+    // A37-S09-09: la firma se ata a la URL destino (misma base que usa quien publica).
+    const valido = await receiver.verify({
+      signature: req.headers.get('upstash-signature') ?? '',
+      body: raw,
+      url: `${appUrl() || new URL(req.url).origin}/api/cron/wa-pendientes/cola`,
+    });
     if (!valido) {
       logger.warn('qstash.wa_pendientes.firma_invalida', {});
       return NextResponse.json({ error: 'Firma inválida' }, { status: 401 });

@@ -536,10 +536,14 @@ function documento(servidor: string) {
     info: {
       title: 'Likida API v1',
       version: '1.0.0',
-      summary: 'Lectura de la operación de una flota de carga: viajes, contribución por viaje, unidades con sus vigencias de ley y cartera de clientes.',
+      summary: 'Lectura y escritura de la operación de una flota de carga: viajes, contribución por viaje, unidades con sus vigencias de ley, cartera de clientes y liquidaciones externas.',
       description: [
-        'Likida es una capa independiente encima del TMS que use la flota. Esta API es de SOLO LECTURA:',
-        'no crea ni modifica nada, así que conectarla no puede romper lo que ya opera.',
+        'Likida es una capa independiente encima del TMS que use la flota. Esta API tiene operaciones de LECTURA (GET)',
+        'y de ESCRITURA (POST/PUT): cada operación de escritura lo dice en su descripción y exige el área de la llave',
+        '(`administracion`). Una llave con esa área SÍ puede crear y modificar datos de la flota, y algunas',
+        'operaciones ENVÍAN MENSAJES A PERSONAS (por ejemplo, `POST /v1/viajes` avisa por WhatsApp al operador y',
+        '`POST /v1/liquidaciones-externas` entrega la liquidación al chofer). Haz las pruebas de integración contra una',
+        'flota sandbox, nunca contra una flota con choferes reales.',
         '',
         '## De qué flota habla una petición',
         '',
@@ -929,6 +933,7 @@ function documento(servidor: string) {
           summary: 'Da de alta un viaje.',
           description:
             'Requiere el área `administracion`. El viaje nace `abierto`.\n\n'
+            + 'ENVÍA UN MENSAJE A UNA PERSONA: si el viaje trae operador, se le avisa por WhatsApp en cuanto el viaje existe (best-effort). Prueba solo en una flota sandbox; un reintento de prueba contra una flota real crea un viaje real y le escribe al chofer.\n\n'
             + 'EL TENANT NO SE MANDA. Sale de la credencial y de ningún otro lado: un `tenantId` en el cuerpo se ignora, no da error — leerlo convertiría la llave de una flota en una puerta para escribir en otra.\n\n'
             + 'EL INGRESO DISTINGUE VACÍO DE CERO. `ingresoFlete` ausente se guarda `null` («todavía no se sabe cuánto dejó»), jamás 0 («no dejó nada»): son lecturas opuestas de la rentabilidad y el motor se niega a confundirlas. El `anticipo` es la única excepción declarada — su columna es NOT NULL, y un viaje sin anticipo es un viaje donde no se adelantó efectivo, que es lo que 0 mide de verdad.\n\n'
             + 'El `folio` es único por flota: repetirlo devuelve 200 con el viaje que ya existía, no un segundo viaje.',
@@ -1356,7 +1361,7 @@ function documento(servidor: string) {
           'x-likida-area': 'administracion',
           summary: 'Entrega al chofer, por WhatsApp, una liquidación que ya calculó tu SAP/TMS.',
           description:
-            'Requiere el área `administracion`: termina en el teléfono de una persona con la firma de su patrón.\n\n'
+            'Requiere el área `administracion`: termina en el teléfono de una persona con la firma de su patrón. Prueba solo en una flota sandbox: crea una liquidación real y la manda por WhatsApp al chofer.\n\n'
             + 'LIKIDA NO RECALCULA TU LIQUIDACIÓN. Es el modo opuesto al de fotos: aquí la cifra es tuya. Lo único que se verifica es que `total` sea la suma de tus conceptos; si no cuadra es 400 con la diferencia, porque un total que no coincide con los renglones que el chofer lee es exactamente el documento que genera una queja de nómina.\n\n'
             + 'IDEMPOTENCIA POR `claveExterna`. El mismo folio con el MISMO contenido es 200 `idempotente: true` (un reintento tras un timeout). El mismo folio con OTRO contenido es 409 `conflicto`: NO se sobrescribe, porque el chofer pudo haber visto la primera; una corrección se manda con una `claveExterna` nueva. `Idempotency-Key` es opcional aquí: si no la mandas se deriva de la clave externa.\n\n'
             + 'EL 201 SIGNIFICA «RECIBIDA», NO «ENTREGADA». La entrega es asíncrona (cola de WhatsApp con reintentos): consulta `estado` con GET, o míralo en el tablero de Liquidación del panel. Un fallo de entrega NO convierte la recepción en error.\n\n'
@@ -1929,6 +1934,10 @@ export async function GET(req: Request) {
       // ninguna flota, así que se puede cachear en el CDN sin riesgo de
       // servirle la respuesta de un tenant a otro.
       'Cache-Control': 'public, max-age=300, s-maxage=3600',
+      // A37-S11-10: la respuesta depende de la credencial (una flota con perfil recibe un documento
+      // recortado). Sin Vary, un CDN podía servirle a esa flota el documento completo cacheado por una
+      // petición anónima. Con Vary, anónimo y con-credencial se cachean por separado.
+      Vary: 'Authorization, Cookie',
     },
   });
 }

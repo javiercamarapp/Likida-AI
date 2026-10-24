@@ -564,6 +564,9 @@ describe('validación en el borde: un 400 que dice QUÉ campo', () => {
     ['kmRecorridos 0 (la base exige > 0)', { folio: 'F-1', operadorId: OPERADOR, kmRecorridos: 0 }, 'kmRecorridos'],
     ['kmRecorridos con decimal (la columna es int)', { folio: 'F-1', operadorId: OPERADOR, kmRecorridos: 842.3 }, 'kmRecorridos'],
     ['kmRecorridos 20000 exacto (la base exige < 20000)', { folio: 'F-1', operadorId: OPERADOR, kmRecorridos: 20000 }, 'kmRecorridos'],
+    // A37-S11-07: numeric(12,2) redondearía en silencio; el anticipo ya los rechazaba.
+    ['ingresoFlete con tres decimales (la base redondearía en silencio)', { folio: 'F-1', operadorId: OPERADOR, ingresoFlete: 38500.456 }, 'ingresoFlete'],
+    ['ingresoFlete texto con tres decimales', { folio: 'F-1', operadorId: OPERADOR, ingresoFlete: '38500.005' }, 'ingresoFlete'],
     ['kmRecorridos como texto con decimal', { folio: 'F-1', operadorId: OPERADOR, kmRecorridos: '842.5' }, 'kmRecorridos'],
   ];
 
@@ -591,6 +594,13 @@ describe('validación en el borde: un 400 que dice QUÉ campo', () => {
       fechaInicio: '2026-08-14', unidadId: UNIDAD, clienteId: cliente,
       ingresoFlete: 38_500, kmRecorridos: 780, anticipo: 5_000,
     });
+  });
+
+  it('A37-S11-07: ingresoFlete con dos decimales o menos pasa tal cual (sin falsos rechazos por binario)', async () => {
+    for (const ingreso of [38_500.45, 1234.56, 0.1, 0, '38,500.50']) {
+      const r = await postViaje(peticion('viajes', { cuerpo: viajeMinimo({ ingresoFlete: ingreso }) }));
+      expect(r.status, String(ingreso)).toBe(201);
+    }
   });
 
   it('A37-S11-01: los extremos válidos de kmRecorridos (1 y 19999) pasan; ausente/null sigue siendo null', async () => {
