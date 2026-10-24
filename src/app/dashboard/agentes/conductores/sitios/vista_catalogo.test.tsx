@@ -5,7 +5,7 @@ import { VistaSitios, type PropsVistaSitios } from './vista';
 const accion = async () => null;
 const props = (p: Partial<PropsVistaSitios> = {}): PropsVistaSitios => ({
   sufijo: '', sitios: [], hayMas: false, clientes: [], puedeEditar: true, editando: null, busqueda: '',
-  accionGuardar: accion, accionImportar: accion, accionEstado: async () => {}, accionCatalogo: accion, ...p,
+  accionGuardar: accion, accionImportar: accion, accionEstado: accion, accionCatalogo: accion, ...p,
 });
 const pintar = (p?: Partial<PropsVistaSitios>) => renderToStaticMarkup(<VistaSitios {...props(p)} />);
 

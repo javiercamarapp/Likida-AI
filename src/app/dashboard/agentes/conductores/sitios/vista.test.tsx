@@ -4,7 +4,7 @@ import type { SitioFila } from '@/lib/likida/conductor/repo_validacion';
 import { VistaSitios, type PropsVistaSitios } from './vista';
 
 const accion = async () => null;
-const accionEstado = async () => {};
+const accionEstado = accion;
 const S = (p: Partial<SitioFila> = {}): SitioFila => ({
   id: '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d001', nombre: 'Planta Zapopan', tipo: 'planta', codigo: 'PL-ZAP', direccion: null, lat: 20.72, lng: -103.39, radioM: 300,
   activa: true, fuente: 'csv', clienteId: 'c1', clienteNombre: 'Cliente A', padreId: null, ...p,
