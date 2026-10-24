@@ -88,6 +88,21 @@ jobs:
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::No se resolvió un SHA válido."; exit 1; }
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "Commit inmutable: \`$sha\`" >> "$GITHUB_STEP_SUMMARY"
+      - name: Exigir que el SHA descienda de origin/master
+        if: inputs.promote == true
+        env:
+          PROMOTE: ${{ inputs.promote }}
+        run: |
+          set -euo pipefail
+          # A37-S01-01: producción solo recibe código (y migraciones) que ya entró a master. Un SHA de una rama
+          # de trabajo con CI verde aplicaría SQL no revisado y un rollback de Vercel no lo revierte.
+          if [ "$PROMOTE" = "true" ]; then
+            git fetch --no-tags origin master:refs/remotes/origin/master
+            if ! git merge-base --is-ancestor "$(git rev-parse HEAD)" origin/master; then
+              echo "::error::La promoción exige un commit que ya esté en origin/master."
+              exit 1
+            fi
+          fi
       - name: Validar intención de producción
         env:
           PROMOTE: ${{ inputs.promote }}
@@ -105,21 +120,6 @@ jobs:
           if [ "$PROMOTE" = "true" ] && [ "$CONFIRM" != "APPLY_MIGRATIONS_AND_PROMOTE" ]; then
             echo "::error::La promoción exige la confirmación APPLY_MIGRATIONS_AND_PROMOTE."
             exit 1
-          fi
-      - name: Exigir que el SHA descienda de origin/master
-        if: inputs.promote == true
-        env:
-          PROMOTE: ${{ inputs.promote }}
-        run: |
-          set -euo pipefail
-          # A37-S01-01: producción solo recibe código (y migraciones) que ya entró a master. Un SHA de una rama
-          # de trabajo con CI verde aplicaría SQL no revisado y un rollback de Vercel no lo revierte.
-          if [ "$PROMOTE" = "true" ]; then
-            git fetch --no-tags origin master:refs/remotes/origin/master
-            if ! git merge-base --is-ancestor "$(git rev-parse HEAD)" origin/master; then
-              echo "::error::La promoción exige un commit que ya esté en origin/master."
-              exit 1
-            fi
           fi
 
   prepare_preview:
