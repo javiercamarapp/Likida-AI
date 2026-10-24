@@ -231,7 +231,12 @@ export async function tomarControlMesa(
     const quien = await quienLaTiene(tenantId, incidenciaId);
     return { error: quien };
   }
-  await anotarEventoIncidencia(tenantId, incidenciaId, 'control_tomado', { por: userId, desde: 'mesa' });
+  const anotado = await anotarEventoIncidencia(tenantId, incidenciaId, 'control_tomado', { por: userId, desde: 'mesa' });
+  // A37-S50-05: el retorno 'fallo' no lanza; afirmar «registrado» sin verificarlo
+  // deja a la mesa creyendo que existe una huella de auditoría que no existe.
+  if (anotado === 'fallo') {
+    return { ok: 'La incidencia es tuya y el escalamiento automático se detuvo, pero ojo: el evento NO se anotó en el expediente. Avisa a soporte o vuelve a intentarlo.' };
+  }
   return { ok: 'La incidencia es tuya: el escalamiento automático se detuvo y quedó registrado en el expediente.' };
 }
 
@@ -321,7 +326,10 @@ export async function reescalarDesdeMesa(
   if ((data ?? []).length === 0) {
     return { error: 'La incidencia ya está en ese nivel o más arriba (el nivel solo sube), o ya se resolvió.' };
   }
-  await anotarEventoIncidencia(tenantId, incidenciaId, 'reescalada_manual', { por: userId, nivel, desde: 'mesa' });
+  const anotado = await anotarEventoIncidencia(tenantId, incidenciaId, 'reescalada_manual', { por: userId, nivel, desde: 'mesa' });
+  if (anotado === 'fallo') {
+    return { ok: `Nivel de escalamiento subido a ${nivel}, pero ojo: el evento NO se anotó en el expediente. Avisa a soporte o déjalo asentado a mano.` };
+  }
   return { ok: `Nivel de escalamiento subido a ${nivel} y registrado en el expediente.` };
 }
 
