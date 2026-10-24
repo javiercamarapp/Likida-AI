@@ -17,8 +17,8 @@ vi.mock('@/lib/admin/salud', () => ({
 }));
 let interruptores: Record<string, 'encendido' | 'apagado' | 'ilegible'> = {};
 vi.mock('@/lib/likida/interruptores', () => ({ leerInterruptor: async (id: string) => interruptores[id] ?? 'encendido' }));
-const procesar = vi.fn(async (): Promise<Record<string, unknown>> => ({ tomadas: 2, en_cola: 1, enviadas: 1, reintentar: 0, fallidas: 0, sin_cambio: 0, avisos: { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 } }));
-vi.mock('@/lib/likida/liquidacion_externa/servicio', () => ({ procesarLiquidacionesExternas: () => procesar() }));
+const procesar = vi.fn(async (..._a: unknown[]): Promise<Record<string, unknown>> => ({ tomadas: 2, en_cola: 1, enviadas: 1, reintentar: 0, fallidas: 0, sin_cambio: 0, avisos: { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 } }));
+vi.mock('@/lib/likida/liquidacion_externa/servicio', () => ({ procesarLiquidacionesExternas: (...a: unknown[]) => procesar(...(a as [])) }));
 const alertarOperador = vi.fn(async (..._a: unknown[]) => {});
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]) => alertarOperador(...a) }));
 vi.mock('@/lib/observability/sentry', () => ({ codigoDeError: () => 'cod' }));
@@ -137,5 +137,33 @@ describe('la corrida', () => {
     expect(await j(r)).toMatchObject({ corrio: false, error: 'base caída' });
     expect(registrarLatido).toHaveBeenCalledWith('liquidaciones-externas', 'fallo', expect.objectContaining({ error: 'base caída' }));
     expect(alertarOperador).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe('A37-S09-02 — reloj de la corrida', () => {
+  it('le pasa un `venceEn` (instante futuro) a la pasada', async () => {
+    await llamar();
+    const venceEn = procesar.mock.calls[0][2] as number;
+    expect(venceEn).toBeGreaterThan(Date.now());
+    expect(venceEn).toBeLessThan(Date.now() + 60_000);
+  });
+  it('si la pasada devuelve `cortadoPorReloj`, el latido es parcial', async () => {
+    procesar.mockResolvedValueOnce({ tomadas: 5, en_cola: 2, enviadas: 0, reintentar: 0, fallidas: 0, sin_cambio: 0, avisos: { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 }, cortadoPorReloj: true });
+    await llamar();
+    expect(registrarLatido).toHaveBeenLastCalledWith('liquidaciones-externas', 'parcial', expect.objectContaining({ cortadoPorReloj: true }));
+  });
+  it('si la pasada se cuelga más allá del reloj duro, la ruta responde y late parcial', async () => {
+    vi.useFakeTimers();
+    try {
+      procesar.mockImplementationOnce(() => new Promise(() => {}));
+      const p = llamar();
+      await vi.advanceTimersByTimeAsync(55_000);
+      const r = await p;
+      expect(r.status).toBe(200);
+      expect(registrarLatido).toHaveBeenLastCalledWith('liquidaciones-externas', 'parcial', expect.objectContaining({ cortadoPorReloj: true }));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

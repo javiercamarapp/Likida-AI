@@ -128,3 +128,59 @@ describe('procesarLiquidacionesExternas: fases de pull y correo', () => {
     expect(await dependenciasPorOmision.lectoresPull()).toEqual([]);
   });
 });
+
+
+describe('A37-S09-02: reloj de la pasada', () => {
+  it('con el reloj agotado desde el inicio no se pide el pull ni el correo, y se avisa cortadoPorReloj', async () => {
+    const pullDeFlota = vi.fn(async () => pullOk());
+    const entregasCorreo = vi.fn(async () => correoOk);
+    const r = await procesarLiquidacionesExternas({
+      ...base, lectoresPull: async () => [{ tenantId: 't-1', lector }], pullDeFlota, entregasCorreo,
+    }, 10, Date.now() - 1);
+    expect(pullDeFlota).not.toHaveBeenCalled();
+    expect(entregasCorreo).not.toHaveBeenCalled();
+    expect(r.cortadoPorReloj).toBe(true);
+  });
+  it('le pasa el techo al pull de cada flota', async () => {
+    const pullDeFlota = vi.fn(async (_t: string, _l: unknown, o?: { venceEn?: number }) => { orden.push(`pull:vence=${o?.venceEn !== undefined}`); return pullOk(); });
+    await procesarLiquidacionesExternas({
+      ...base, lectoresPull: async () => [{ tenantId: 't-1', lector }], pullDeFlota, entregasCorreo: async () => correoOk,
+    }, 10, Date.now() + 60_000);
+    expect(orden).toContain('pull:vence=true');
+  });
+  it('un pull que se CUELGA no deja sin correr las entregas de WhatsApp (techo propio de 20 s)', async () => {
+    vi.useFakeTimers();
+    try {
+      trabajo = [];
+      const p = procesarLiquidacionesExternas({
+        ...base, lectoresPull: async () => [{ tenantId: 't-1', lector }],
+        pullDeFlota: () => new Promise<ResultadoPull>(() => {}), entregasCorreo: async () => correoOk,
+      }, 10, Date.now() + 40_000);
+      await vi.advanceTimersByTimeAsync(21_000);
+      const r = await p;
+      expect(orden).toContain('whatsapp');
+      expect(r.pull?.cortadasPorReloj).toBe(1);
+      expect(r.cortadoPorReloj).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('el pull corta las flotas restantes cuando el reloj se agota a la mitad', async () => {
+    const venceEn = Date.now() + 60_000;
+    let llamadas = 0;
+    const pullDeFlota = vi.fn(async () => { llamadas++; if (llamadas === 1) vi.setSystemTime(venceEn + 1); return pullOk(); });
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const r = await procesarLiquidacionesExternas({
+        ...base,
+        lectoresPull: async () => [{ tenantId: 't-1', lector }, { tenantId: 't-2', lector }, { tenantId: 't-3', lector }],
+        pullDeFlota, entregasCorreo: async () => correoOk,
+      }, 10, venceEn);
+      expect(pullDeFlota).toHaveBeenCalledTimes(1);
+      expect(r.pull?.cortadasPorReloj).toBe(2);
+      expect(r.cortadoPorReloj).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

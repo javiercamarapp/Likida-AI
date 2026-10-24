@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { procesarLiquidacionesExternas } from '@/lib/likida/liquidacion_externa/servicio';
+import { procesarLiquidacionesExternas, type ResumenPasada } from '@/lib/likida/liquidacion_externa/servicio';
+import { conRelojDuro } from '../_reloj_duro';
 import { leerInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
@@ -11,6 +12,16 @@ export const dynamic = 'force-dynamic';
 // Una pasada firma, encola y concilia un lote de 50 contra el outbox: segundos,
 // no minutos. No habla con Meta (eso es de `wa-outbox`).
 export const maxDuration = 60;
+
+/** A37-S09-02: el reloj SUAVE (las fases dejan de empezar trabajo) y el DURO (la ruta deja de esperar) — ambos con margen
+ *  para latir y responder dentro del `maxDuration`. */
+const MARGEN_SUAVE_MS = 20_000;
+const MARGEN_DURO_MS = 8_000;
+
+const RESUMEN_CORTADO = (): ResumenPasada => ({
+  tomadas: 0, en_cola: 0, enviadas: 0, reintentar: 0, fallidas: 0, sin_cambio: 0,
+  avisos: { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 }, cortadoPorReloj: true,
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CRON QUE ENTREGA Y CONCILIA LAS LIQUIDACIONES EXTERNAS (0370).
@@ -72,7 +83,14 @@ export async function GET(req: Request) {
   }
 
   try {
-    const r = await procesarLiquidacionesExternas();
+    const inicio = Date.now();
+    const venceEn = inicio + maxDuration * 1000 - MARGEN_SUAVE_MS;
+    const r = await conRelojDuro(
+      procesarLiquidacionesExternas(undefined, undefined, venceEn),
+      inicio + maxDuration * 1000 - MARGEN_DURO_MS,
+      RESUMEN_CORTADO,
+    );
+    if (r.cortadoPorReloj) logger.warn('cron.liquidaciones_externas.cortado_por_reloj', { tomadas: r.tomadas, enviadas: r.enviadas });
     logger.info('cron.liquidaciones_externas.ok', { ...r });
     // `fallidas` y `reintentar` son trabajo que NO terminó: ni «ok» ni «fallo»
     // total, que son las dos maneras de mentir aquí.
@@ -81,7 +99,7 @@ export async function GET(req: Request) {
     const c = r.correo;
     const correoSinTerminar = !!c && (c.fallidas > 0 || c.reintentar > 0 || c.sinConfigurar > 0 || c.sinConfirmar > 0 || c.errores > 0);
     const parcial = r.fallidas > 0 || r.reintentar > 0 || r.avisos.reintentar > 0 || r.avisos.fallidos > 0
-      || correoSinTerminar || (r.pull?.errores ?? 0) > 0 || (r.huerfanasCorreo?.confirmadas ?? 0) > 0;
+      || correoSinTerminar || r.cortadoPorReloj === true || (r.pull?.errores ?? 0) > 0 || (r.huerfanasCorreo?.confirmadas ?? 0) > 0;
     await registrarLatido('liquidaciones-externas', parcial ? 'parcial' : 'ok', { ...r });
     return NextResponse.json({ corrio: true, ...r });
   } catch (e) {
