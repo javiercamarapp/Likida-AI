@@ -368,8 +368,18 @@ export async function anotarAcceso(
   liga: { ligaId: string; tenantId: string },
   tipo: TipoAcceso,
   detalle?: Record<string, unknown>,
+  /** A37-S21-03: si ya hay una fila de este tipo para la liga dentro de la
+   *  ventana, no se escribe otra (los GET de bots no inflan la bitácora). */
+  opciones?: { unaVezCadaMs?: number },
 ): Promise<void> {
   try {
+    if (opciones?.unaVezCadaMs) {
+      const desde = new Date(Date.now() - opciones.unaVezCadaMs).toISOString();
+      const { data: previa, error: errPrevia } = await supabaseAdmin().from('portal_pago_acceso')
+        .select('id').eq('liga_id', liga.ligaId).eq('tenant_id', liga.tenantId).eq('tipo', tipo)
+        .gte('ocurrio_en', desde).order('id').limit(1);
+      if (!errPrevia && (previa ?? []).length > 0) return;
+    }
     const { error } = await supabaseAdmin().from('portal_pago_acceso').insert({
       tenant_id: liga.tenantId,
       liga_id: liga.ligaId,
