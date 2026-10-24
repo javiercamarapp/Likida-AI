@@ -202,6 +202,26 @@ interface CandidatoFolio {
   fuerte: boolean;
 }
 
+/** «viaje», «folio», «guía», «orden», «#»… justo antes del número. */
+const PALABRA_FOLIO = /(?:FOLIO|VIAJE|GU[ÍI]A|[ÓO]RDEN|TICKET|REMISI[ÓO]N|EMBARQUE|SERVICIO|ENV[ÍI]O|N[ÚU]MERO|NUM|NO)$/;
+function contextoFolio(antes: string): boolean {
+  if (/#\s*$/.test(antes)) return true;
+  const t = antes.replace(/[\s:#.]+$/, '').replace(/\sDE$/, '');
+  return PALABRA_FOLIO.test(t);
+}
+/** Una cantidad con unidad o de tiempo, justo después del número. */
+const CON_UNIDAD = /^\s*(?:CAJAS?|KGS?|KILOS?|TONS?|TONELADAS?|PIEZAS?|TARIMAS?|PALLETS?|UNIDADES|LITROS?|LTS?|PESOS|MXN|USD|KMS?|KIL[ÓO]METROS|METROS|BULTOS|PAQUETES|CARTONES|SACOS|HRS?|HORAS?|MIN|MINUTOS|D[ÍI]AS|MESES|A[ÑN]OS)(?![A-ZÁÉÍÓÚÜÑ])/;
+
+/** Palabras cortas del español que preceden a un número («las 1800», «de 2026») y no son parte de un folio. */
+const PALABRAS_COMUNES: ReadonlySet<string> = new Set(['A', 'AL', 'DE', 'DEL', 'EL', 'LA', 'LAS', 'LOS', 'EN', 'POR', 'PARA', 'CON', 'SIN', 'UN', 'UNA', 'MI', 'MIS', 'SU', 'SUS', 'TU', 'HACE', 'HAY', 'SON', 'ESE', 'ESTE', 'ESA', 'ESTA', 'MAS', 'MÁS', 'Y', 'O', 'SE', 'LE', 'LO', 'QUE', 'SOLO', 'CASI', 'UNOS']);
+
+/** Año suelto, parte de una fecha o cantidad con unidad: no es un folio. */
+function pareceCantidadOFecha(digitos: string, antes: string, despues: string): boolean {
+  if (CON_UNIDAD.test(despues)) return true;
+  if (/\d[/.-]$/.test(antes) || /^[/-]\d/.test(despues)) return true;
+  return /^(?:19|20)\d{2}$/.test(digitos) && !contextoFolio(antes);
+}
+
 /**
  * ¿Qué folios del texto del cliente parecen un folio? Letras opcionales + dígitos
  * («F-1042», «TR 2231», «1042»). Son CANDIDATOS: después se cruzan contra los
@@ -215,16 +235,23 @@ function extraerCandidatos(texto: string): CandidatoFolio[] {
     if (clave && !salida.has(clave)) salida.set(clave, fuerte);
     else if (clave && fuerte) salida.set(clave, true);
   };
-  for (const m of texto.toUpperCase().matchAll(/\b([A-Z]{1,4}-?\d{2,8}|[A-Z]{1,4} \d{3,8}|\d{3,8})\b/g)) {
+  const mayus = texto.toUpperCase();
+  for (const m of mayus.matchAll(/\b([A-Z]{1,4}-?\d{2,8}|[A-Z]{1,4} \d{3,8}|\d{3,8})\b/g)) {
     const crudo = m[1];
     const completo = folioNormalizado(crudo);
     const conEspacio = /^[A-Z]{1,4} \d/.test(crudo);
     const digitos = digitosDelFolio(completo);
+    const inicio = m.index ?? 0;
+    const antes = mayus.slice(Math.max(0, inicio - 24), inicio);
+    const despues = mayus.slice(inicio + crudo.length, inicio + crudo.length + 16);
     if (conEspacio) {
       agregar(completo, false);
-      agregar(digitos, digitos.length >= 4);
+      const prefijo = crudo.split(' ')[0];
+      agregar(digitos, digitos.length >= 4 && !PALABRAS_COMUNES.has(prefijo) && !pareceCantidadOFecha(digitos, antes, despues));
     } else if (/^\d+$/.test(crudo)) {
-      agregar(completo, completo.length >= 4);
+      // A37-S58-04: un número SOLO es folio fuerte con contexto de folio («viaje 88421»); un año, una hora o una cantidad con
+      // unidad («20/10/2026», «1500 cajas», «las 1800») no. Si de verdad es su folio, igual coincide contra sus viajes.
+      agregar(completo, completo.length >= 4 && contextoFolio(antes) && !CON_UNIDAD.test(despues));
     } else {
       agregar(completo, true);
     }

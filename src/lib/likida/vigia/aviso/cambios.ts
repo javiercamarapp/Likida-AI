@@ -45,6 +45,9 @@ export type TipoAvisoRegistro = 'inicial' | 'actualizacion' | 'cancelacion' | 'a
 type Valores = Partial<Record<CampoAviso, string | null>>;
 
 /** Estados en los que un aviso todavía no salió y puede cerrarse por una versión posterior. */
+/** Motivo con el que la pasada descarta una versión pendiente cuando el dato volvió a lo ya avisado. */
+const MOTIVO_REVERTIDO = 'el dato volvió a lo ya avisado';
+
 const SIN_ENVIAR: readonly EstadoAviso[] = ['borrador', 'pendiente_confirmacion', 'aprobado', 'fallido'];
 
 // ── Puertos ─────────────────────────────────────────────────────────────────
@@ -60,6 +63,8 @@ export interface AvisoRegistro {
   huella: string;
   datos: Record<string, unknown>;
   creadoEn: string;
+  /** Por qué se cerró (si se cerró). Solo lo usa la pasada para distinguir un descarte por reversión de uno humano. */
+  motivo?: string | null;
 }
 
 export interface FilaActual extends FilaDelPrograma {
@@ -248,7 +253,9 @@ export async function procesarCambios(tenantId: string, ahora: Date, deps: DepsC
 
   for (const [filaId, grupo] of porFila) {
     const versiones = grupo.filter(paraCliente);
-    const vigente = versiones[versiones.length - 1];
+    // A37-S58-05: una versión que la propia pasada descartó porque el dato volvió a lo ya avisado no es «la vigente»: si el valor
+    // vuelve a oscilar, la base de comparación sigue siendo lo último avisado y la versión nueva debe poder crearse.
+    const vigente = [...versiones].reverse().find((a) => !(a.estado === 'descartado' && a.motivo === MOTIVO_REVERTIDO));
     // Sin versión para el cliente, o una que ya no está viva (descartada, sin destinatario, reemplazada): no hay qué actualizar.
     if (!vigente || !(['enviado', ...SIN_ENVIAR] as EstadoAviso[]).includes(vigente.estado)) continue;
     r.revisadas++;
@@ -322,7 +329,7 @@ export async function procesarCambios(tenantId: string, ahora: Date, deps: DepsC
     if (valoresRecibidos && cambios.length === 0) {
       // Volvió a lo que el cliente ya tiene: lo pendiente ya no hace falta.
       for (const a of sinEnviar) {
-        if (await deps.cambios.cambiarEstado(tenantId, a.id, a.estado, 'descartado', 'el dato volvió a lo ya avisado')) r.revertidos++;
+        if (await deps.cambios.cambiarEstado(tenantId, a.id, a.estado, 'descartado', MOTIVO_REVERTIDO)) r.revertidos++;
         else r.carreras++;
       }
       continue;
@@ -404,7 +411,7 @@ function exigir(op: string, error: ErrorBase): void {
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
-const COLS_AVISO = 'id, fila_id, cliente_id, version, estado, canal, texto, huella, datos, creado_en';
+const COLS_AVISO = 'id, fila_id, cliente_id, version, estado, canal, texto, huella, datos, creado_en, motivo';
 const COLS_FILA = 'id, fecha, tipo, cliente, consignatario, caja, unidad, cita_en, cita_texto, transito, ccp, visible';
 const TOPE_CAMBIOS_LEIDOS = 5_000;
 
@@ -436,7 +443,7 @@ export function crearRepoCambios(): RepoCambios {
         estado: String(r.estado) as EstadoAviso, canal: r.canal === 'cliente_1a1' ? 'cliente_1a1' : 'ejecutivo_copia',
         texto: String(r.texto ?? ''), huella: String(r.huella ?? ''),
         datos: typeof r.datos === 'object' && r.datos !== null && !Array.isArray(r.datos) ? (r.datos as Record<string, unknown>) : {},
-        creadoEn: String(r.creado_en),
+        creadoEn: String(r.creado_en), motivo: str(r.motivo),
       }));
     },
 
@@ -474,9 +481,13 @@ export function crearRepoCambios(): RepoCambios {
     },
 
     async cambiarEstado(tenantId, avisoId, desde, hacia, motivo) {
-      const { data, error } = await acotada(supabaseAdmin().from('vigia_aviso')
+      // A37-S58-01: un aprobado con arriendo VIVO (reclamo_token + reclamo_expira_en futuro) ya lo lleva el cron a Meta;
+      // cerrarlo ahora diría «no se enviará» cuando el mensaje sale igual. Solo se cierra sin arriendo o con arriendo vencido.
+      let q = supabaseAdmin().from('vigia_aviso')
         .update({ estado: hacia, motivo: recorta(motivo, 200) })
-        .eq('tenant_id', tenantId).eq('id', avisoId).eq('estado', desde).select('id'), 'aviso.cambios.cambiar_estado');
+        .eq('tenant_id', tenantId).eq('id', avisoId).eq('estado', desde);
+      if (desde === 'aprobado') q = q.or(`reclamo_token.is.null,reclamo_expira_en.lte.${new Date().toISOString()}`);
+      const { data, error } = await acotada(q.select('id'), 'aviso.cambios.cambiar_estado');
       exigir('cambiar_estado', error);
       return Array.isArray(data) && data.length > 0;
     },

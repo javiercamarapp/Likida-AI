@@ -3,7 +3,7 @@ import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { puedeAdministrar } from '@/lib/auth/permisos';
-import { leerExportWhatsapp, salDeFlota, type MensajeHistorial } from './export_whatsapp';
+import { leerExportWhatsapp, MAX_MENSAJES_IMPORTACION, salDeFlota, type MensajeHistorial } from './export_whatsapp';
 import { esZip, textoDeZip } from './zip_lector';
 import { aprobarRespuestaRapida, borrarGrupo, crearGrupo, grupoDeFlota, guardarImportacion, marcarGrupoCritico, retirarRespuestaRapida } from './repo';
 import { validarRespuestaRapida } from '../respuestas_rapidas';
@@ -123,6 +123,11 @@ export async function importarHistorialPanel(ctx: ContextoGrupos, fd: FormData, 
     const lectura = leerExportWhatsapp(crudo, { equipo, sal: salDeFlota(ctx.tenantId) });
     if (lectura.mensajes.length === 0) {
       return { ok: false, error: 'No pude leer ningún mensaje en ese archivo. Revisa que sea el chat exportado de WhatsApp (en iPhone o Android) y no una captura ni otro documento.' };
+    }
+    // A37-S58-02: un chat más largo que el tope NO se guarda cortado (las FAQs, los tiempos de respuesta y los pendientes se
+    // calcularían sobre un periodo viejo y se presentarían como el chat completo).
+    if (lectura.truncado) {
+      return { ok: false, error: `Ese chat tiene más de ${MAX_MENSAJES_IMPORTACION} mensajes y no se guardó: se habría cortado y los números saldrían de un periodo viejo. Exporta un periodo más corto (por ejemplo los últimos meses) y súbelo.` };
     }
     const hayCliente = lectura.mensajes.some((m: MensajeHistorial) => m.rol === 'cliente');
     const hayEquipo = lectura.mensajes.some((m: MensajeHistorial) => m.rol === 'equipo');

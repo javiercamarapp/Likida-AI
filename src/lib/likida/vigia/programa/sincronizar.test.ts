@@ -19,7 +19,7 @@ const T2 = '22222222-2222-4222-8222-222222222222';
 interface FilaDb extends FilaGuardada { tenant: string; terminal: string; fecha: string; primeraVez: string; ultimaVez: string; comentarios: string | null; linea: string | null }
 
 function repoEnMemoria() {
-  const cargas = new Map<string, { id: string; tenant: string; nueva: NuevaCarga; orden: number }>();
+  const cargas = new Map<string, { id: string; tenant: string; nueva: NuevaCarga; orden: number; completa: boolean; creadaMs: number }>();
   const filas = new Map<string, FilaDb>();
   const cambios: Array<CambioParaGuardar & { tenant: string }> = [];
   const log = { escrituras: 0, lecturas: 0, descartes: 0, reabiertas: 0, restauradas: 0 };
@@ -31,7 +31,7 @@ function repoEnMemoria() {
       const k = `${tenantId}|${c.terminal}|${c.archivoSha256}`;
       if (cargas.has(k)) { await Promise.resolve(); return null; }
       const id = `carga-${++seq}`;
-      cargas.set(k, { id, tenant: tenantId, nueva: c, orden: ++seq });
+      cargas.set(k, { id, tenant: tenantId, nueva: c, orden: ++seq, completa: false, creadaMs: Date.now() });
       log.escrituras++;
       await Promise.resolve();
       return { id };
@@ -54,6 +54,16 @@ function repoEnMemoria() {
     async descartarCarga(tenantId, cargaId) {
       for (const [k, v] of cargas) if (v.tenant === tenantId && v.id === cargaId) cargas.delete(k);
       log.descartes++;
+    },
+    async cargaPrevia(tenantId, terminal, sha256) {
+      const c = cargas.get(`${tenantId}|${terminal}|${sha256}`);
+      return c ? { id: c.id, completa: c.completa, antiguedadMin: (Date.now() - c.creadaMs) / 60_000 } : null;
+    },
+    async completarCarga(tenantId, cargaId) {
+      for (const v of cargas.values()) if (v.tenant === tenantId && v.id === cargaId) v.completa = true;
+    },
+    async cambiosDeCarga(tenantId, cargaId) {
+      return new Set(cambios.filter((c) => c.tenant === tenantId && c.cargaId === cargaId).map((c) => `${c.filaId}|${c.campo}|${c.despues ?? ''}`));
     },
     async filasEnRango(tenantId, terminal, desde, hasta) {
       log.lecturas++;
@@ -456,5 +466,73 @@ describe('de punta a punta con el fixture sintético (lector → normalizador �
     expect(dom.every((f) => f.bloque !== null)).toBe(true);
     expect(l.filas.filter((f) => f.tipo === 'EXPORTACION').every((f) => f.bloque === null)).toBe(true);
     expect(l.origen).toBe('drive');
+  });
+});
+
+// A37-S59-05: la carga se sella como completa SOLO al final; una carga a medias se retoma al resubir el mismo archivo.
+describe('A37-S59-05 · carga a medias', () => {
+  const HACE_UNA_HORA = Date.now() - 3_600_000;
+  it('al terminar bien, la carga queda sellada como completa', async () => {
+    const m = repoEnMemoria();
+    await sincronizarPrograma(T1, 'GDL', lectura([fila(1), fila(2)], 'a'), { repo: m.repo, ahora: AHORA });
+    expect([...m.cargas.values()].every((c) => c.completa)).toBe(true);
+  });
+  it('un archivo con TODO escrito sigue diciendo «ya estaba cargado»', async () => {
+    const m = repoEnMemoria();
+    const l = lectura([fila(1), fila(2)], 'a');
+    await sincronizarPrograma(T1, 'GDL', l, { repo: m.repo, ahora: AHORA });
+    expect((await sincronizarPrograma(T1, 'GDL', l, { repo: m.repo, ahora: AHORA })).yaCargado).toBe(true);
+  });
+  it('una carga reclamada y nunca sellada (proceso muerto) se RETOMA al resubir: las filas faltantes entran', async () => {
+    const m = repoEnMemoria();
+    const l = lectura([fila(1), fila(2), fila(3)], 'a');
+    await sincronizarPrograma(T1, 'GDL', l, { repo: m.repo, ahora: AHORA });
+    // Simula la muerte a medias: quedó sin sellar, vieja, y la última fila no alcanzó a escribirse.
+    for (const c of m.cargas.values()) { c.completa = false; c.creadaMs = HACE_UNA_HORA; }
+    m.filas.delete([...m.filas.keys()].find((k) => k.endsWith('|3'))!);
+    const r = await sincronizarPrograma(T1, 'GDL', l, { repo: m.repo, ahora: AHORA });
+    expect(r).toMatchObject({ yaCargado: false, nuevas: 1, sinCambio: 2 });
+    expect(m.filas.size).toBe(3);
+    expect([...m.cargas.values()].every((c) => c.completa)).toBe(true);
+  });
+  it('retomar no repite las líneas de cambio que la carga ya había registrado', async () => {
+    const m = repoEnMemoria();
+    await sincronizarPrograma(T1, 'GDL', lectura([fila(1), fila(2)], 'a'), { repo: m.repo, ahora: AHORA });
+    const l = lectura([fila(1, { unidad: 'TC900' }), fila(2)], 'b');
+    await sincronizarPrograma(T1, 'GDL', l, { repo: m.repo, ahora: AHORA });
+    expect(m.cambios).toHaveLength(1);
+    for (const c of m.cargas.values()) if (c.nueva.archivoSha256 === l.sha256) { c.completa = false; c.creadaMs = HACE_UNA_HORA; }
+    // la fila 1 quedó con el valor viejo (no alcanzó a actualizarse)
+    const k1 = [...m.filas.keys()].find((k) => k.endsWith('|1'))!;
+    m.filas.set(k1, { ...m.filas.get(k1)!, unidad: 'TC1', huella: huellaDe({ caja: 'ZC1', unidad: 'TC1', ccp: 'listo', transito: 'patio_nld', cita_en: '2026-10-05T14:00:00.000Z', cita_texto: null, consignatario: 'CON-A', cliente: 'CLI-A' }) });
+    await sincronizarPrograma(T1, 'GDL', l, { repo: m.repo, ahora: AHORA });
+    expect(m.cambios).toHaveLength(1);
+  });
+  it('una carga sin sellar pero RECIENTE puede estar en curso en otra invocación: no se toca', async () => {
+    const m = repoEnMemoria();
+    const l = lectura([fila(1)], 'a');
+    await sincronizarPrograma(T1, 'GDL', l, { repo: m.repo, ahora: AHORA });
+    for (const c of m.cargas.values()) c.completa = false; // creada hace instantes
+    const antes = m.log.escrituras;
+    expect((await sincronizarPrograma(T1, 'GDL', l, { repo: m.repo, ahora: AHORA })).yaCargado).toBe(true);
+    expect(m.log.escrituras).toBe(antes);
+  });
+});
+
+// A37-S59-04: un archivo con solo algunas secciones no oculta las demás secciones de esas fechas.
+describe('A37-S59-04 · archivo parcial', () => {
+  it('si el archivo trae un día pero no uno de sus tipos, las filas de ese tipo NO se ocultan', async () => {
+    const m = repoEnMemoria();
+    await sincronizarPrograma(T1, 'GDL', lectura([fila(1, { tipo: 'EXPORTACION' }), fila(2, { tipo: 'IMPORTACION' })], 'a'), { repo: m.repo, ahora: AHORA });
+    const r = await sincronizarPrograma(T1, 'GDL', lectura([fila(1, { tipo: 'EXPORTACION' })], 'b'), { repo: m.repo, ahora: AHORA });
+    expect(r.desaparecidas).toBe(0);
+    expect([...m.filas.values()].every((f) => f.visible)).toBe(true);
+    expect(r.omitidasPorTipoAusente).toBe(1);
+  });
+  it('dentro de un tipo que sí viene, la fila que falta se sigue ocultando', async () => {
+    const m = repoEnMemoria();
+    await sincronizarPrograma(T1, 'GDL', lectura([fila(1), fila(2)], 'a'), { repo: m.repo, ahora: AHORA });
+    const r = await sincronizarPrograma(T1, 'GDL', lectura([fila(1)], 'b'), { repo: m.repo, ahora: AHORA });
+    expect(r.desaparecidas).toBe(1);
   });
 });

@@ -105,6 +105,15 @@ export interface CambioParaGuardar {
   cargaId: string;
 }
 
+/** Estado de una carga que ya existía (misma flota + terminal + sha256). */
+export interface CargaPrevia {
+  id: string;
+  /** `false` = se reclamó pero nadie la marcó completa (el proceso pudo morir a medias). Base sin la 0894 = `true` (se asume completa). */
+  completa: boolean;
+  /** Minutos desde que se reclamó. */
+  antiguedadMin: number;
+}
+
 export interface RepoPrograma {
   /** Reclama la carga (único por flota + terminal + sha256). `null` = ya existía: no se hace nada más. */
   registrarCarga(tenantId: string, carga: NuevaCarga): Promise<{ id: string } | null>;
@@ -128,6 +137,12 @@ export interface RepoPrograma {
   registrarCambios(tenantId: string, cambios: CambioParaGuardar[]): Promise<void>;
   /** Marca `visible = false` (no borra). */
   ocultarFilas(tenantId: string, ids: string[], cargaId: string): Promise<void>;
+  /** A37-S59-05 (0894). La carga que ya existía con ese sha256, o `null`. Opcional: un repo sin esto asume «completa». */
+  cargaPrevia?(tenantId: string, terminal: string, sha256: string): Promise<CargaPrevia | null>;
+  /** A37-S59-05 (0894). Sella la carga como completa: se llama SOLO al terminar de escribir todo. Base sin la 0894: no hace nada. */
+  completarCarga?(tenantId: string, cargaId: string): Promise<void>;
+  /** A37-S59-05. Los cambios que esa carga ya registró (`fila|campo|despues`), para no repetirlos al retomarla. */
+  cambiosDeCarga?(tenantId: string, cargaId: string): Promise<Set<string>>;
 }
 
 const COLS_FILA = 'id, tipo, fecha, clave_natural, cliente, consignatario, caja, unidad, cita_en, cita_texto, transito, ccp, huella, visible';
@@ -204,6 +219,39 @@ export function crearRepoPrograma(): RepoPrograma {
       const { error } = await acotada(supabaseAdmin().from('programa_despacho_carga')
         .update({ created_at: creadaAnterior }).eq('tenant_id', tenantId).eq('id', cargaId), 'programa.restaurar_carga');
       exigir('restaurar_carga', error);
+    },
+
+    async cargaPrevia(tenantId, terminal, sha256) {
+      const { data, error } = await acotada(supabaseAdmin().from('programa_despacho_carga')
+        .select('id, created_at, completada_en').eq('tenant_id', tenantId).eq('terminal', terminal).eq('archivo_sha256', sha256).maybeSingle(), 'programa.carga_previa');
+      // 42703 = columna inexistente (la 0894 aún no está): se comporta como antes, la carga cuenta como completa.
+      if (error?.code === '42703') return null;
+      exigir('carga_previa', error);
+      if (!data) return null;
+      const d = data as Record<string, unknown>;
+      const creada = Date.parse(String(d.created_at));
+      return {
+        id: String(d.id), completa: d.completada_en != null,
+        antiguedadMin: Number.isNaN(creada) ? 0 : (Date.now() - creada) / 60_000,
+      };
+    },
+
+    async completarCarga(tenantId, cargaId) {
+      const { error } = await acotada(supabaseAdmin().from('programa_despacho_carga')
+        .update({ completada_en: new Date().toISOString() }).eq('tenant_id', tenantId).eq('id', cargaId), 'programa.completar_carga');
+      if (error?.code === '42703') return;
+      exigir('completar_carga', error);
+    },
+
+    async cambiosDeCarga(tenantId, cargaId) {
+      const filas = await traerTodo<Record<string, unknown>>(async (d, h) => {
+        const r = await acotada(supabaseAdmin().from('programa_despacho_cambio')
+          .select('fila_id, campo, despues').eq('tenant_id', tenantId).eq('carga_id', cargaId)
+          .order('id').range(d, h), 'programa.cambios_de_carga');
+        exigir('cambios_de_carga', r.error);
+        return r as { data: Record<string, unknown>[] | null; error: { message: string } | null };
+      }, 'programa.cambios_de_carga');
+      return new Set(filas.map((c) => `${String(c.fila_id)}|${String(c.campo)}|${c.despues == null ? '' : String(c.despues)}`));
     },
 
     async filasEnRango(tenantId, terminal, desde, hasta) {

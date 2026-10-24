@@ -36,6 +36,8 @@ export interface ResultadoExport {
   /** Cuántos mensajes no pudieron leerse como fecha válida. */
   fechasInvalidas: number;
   formato: 'ios' | 'android' | 'desconocido';
+  /** `true` = el archivo traía más de MAX_MENSAJES_IMPORTACION mensajes y se dejó de leer: lo leído es solo el principio del chat. */
+  truncado: boolean;
 }
 
 export const MAX_MENSAJES_IMPORTACION = 50_000;
@@ -131,6 +133,7 @@ export function leerExportWhatsapp(crudo: string, opciones: { equipo: readonly s
   const mensajes: MensajeHistorial[] = [];
   const autores = new Set<string>();
   let descartados = 0; let fechasInvalidas = 0;
+  let truncado = false;
   let actual: { enviadoEn: string; autor: string; texto: string } | null = null;
 
   const cerrar = () => {
@@ -160,12 +163,13 @@ export function leerExportWhatsapp(crudo: string, opciones: { equipo: readonly s
       if (!p || !iso) { fechasInvalidas += 1; continue; }
       const dos = p.resto.indexOf(': ');
       if (dos <= 0 || dos > 80) { descartados += 1; continue; } // línea de sistema: no hay «Nombre: »
+      // A37-S58-02: llegó OTRO mensaje con el tope ya lleno: lo que sigue no se lee y el resultado lo declara.
+      if (mensajes.length >= MAX_MENSAJES_IMPORTACION) { truncado = true; break; }
       actual = { enviadoEn: iso, autor: p.resto.slice(0, dos).trim(), texto: p.resto.slice(dos + 2) };
     } else if (actual && l.length > 0) {
       actual.texto += `\n${l}`;
     }
-    if (mensajes.length >= MAX_MENSAJES_IMPORTACION) break;
   }
   cerrar();
-  return { mensajes, descartados, autores: autores.size, fechasInvalidas, formato };
+  return { mensajes, descartados, autores: autores.size, fechasInvalidas, formato, truncado };
 }

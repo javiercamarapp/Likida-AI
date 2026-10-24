@@ -185,3 +185,33 @@ describe('errores', () => {
     await expect(repo.ocultarFilas(T1, ['f'], CARGA)).rejects.toBeInstanceOf(ProgramaSinMigrar);
   });
 });
+
+describe('A37-S59-05 · estado de la carga (0894)', () => {
+  beforeEach(() => { llamadas = []; respuesta = () => ({ data: [], error: null }); });
+  it('cargaPrevia filtra por flota, terminal y sha, y reporta si está sellada', async () => {
+    respuesta = () => ({ data: [{ id: CARGA, created_at: new Date(Date.now() - 30 * 60_000).toISOString(), completada_en: null }], error: null });
+    const c = await crearRepoPrograma().cargaPrevia!(T1, 'GDL', 'a'.repeat(64));
+    expect(c).toMatchObject({ id: CARGA, completa: false });
+    expect(c!.antiguedadMin).toBeGreaterThan(29);
+    expect(tieneTenant(llamadas[0])).toBe(true);
+    expect(llamadas[0].filtros).toEqual(expect.arrayContaining([['eq', 'terminal', 'GDL'], ['eq', 'archivo_sha256', 'a'.repeat(64)]]));
+  });
+  it('sin la 0894 (columna inexistente) la carga se asume completa: se comporta como antes', async () => {
+    respuesta = () => ({ data: null, error: { message: 'column does not exist', code: '42703' } });
+    expect(await crearRepoPrograma().cargaPrevia!(T1, 'GDL', 'a'.repeat(64))).toBeNull();
+    await expect(crearRepoPrograma().completarCarga!(T1, CARGA)).resolves.toBeUndefined();
+  });
+  it('completarCarga sella con la hora y solo esa carga de esa flota', async () => {
+    await crearRepoPrograma().completarCarga!(T1, CARGA);
+    expect(llamadas[0].op).toBe('update');
+    expect(llamadas[0].valores).toMatchObject({ completada_en: expect.any(String) });
+    expect(tieneTenant(llamadas[0])).toBe(true);
+    expect(llamadas[0].filtros).toEqual(expect.arrayContaining([['eq', 'id', CARGA]]));
+  });
+  it('cambiosDeCarga lee los de ESA carga y los reporta como fila|campo|despues', async () => {
+    respuesta = (l) => ({ data: l.rango && l.rango[0] > 0 ? [] : [{ fila_id: 'f1', campo: 'unidad', despues: 'TC9' }], error: null });
+    const s = await crearRepoPrograma().cambiosDeCarga!(T1, CARGA);
+    expect([...s]).toEqual(['f1|unidad|TC9']);
+    expect(llamadas[0].filtros).toEqual(expect.arrayContaining([['eq', 'carga_id', CARGA]]));
+  });
+});

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { deflateRawSync } from 'node:zlib';
-import { leerExportWhatsapp, salDeFlota, taparDatosPersonales } from './export_whatsapp';
+import { leerExportWhatsapp, salDeFlota, taparDatosPersonales, MAX_MENSAJES_IMPORTACION } from './export_whatsapp';
 import { textoDeZip, esZip } from './zip_lector';
 import { analizarHistorial, esPregunta, pideDatosUnidad, semanaDe, temaDe } from './analisis';
 
@@ -232,5 +232,23 @@ describe('A37-S58-09 · sal del hash de autor', () => {
     const h = (sal: string) => leerExportWhatsapp('12/09/2026 10:00 - X: hola', { equipo: [], sal }).mensajes[0].autorHash;
     expect(h(con)).not.toBe(h('flota-1'));
     expect(salDeFlota('flota-2', 'un-secreto-de-servidor-largo')).not.toBe(con);
+  });
+});
+
+// A37-S58-02: pasar del tope ya no se corta en silencio.
+describe('A37-S58-02 tope de mensajes', () => {
+  const chat = (n: number) => Array.from({ length: n }, (_, i) => `12/09/2026 10:${String(i % 60).padStart(2, '0')} - ${i % 2 ? 'Ana Servicio' : 'Cliente Uno'}: mensaje ${i}`).join('\n');
+  it('un chat dentro del tope no se marca truncado', () => {
+    expect(leerExportWhatsapp(chat(10), OPC).truncado).toBe(false);
+  });
+  it('un chat que rebasa el tope se marca truncado', () => {
+    const r = leerExportWhatsapp(chat(MAX_MENSAJES_IMPORTACION + 5), OPC);
+    expect(r.truncado).toBe(true);
+    expect(r.mensajes).toHaveLength(MAX_MENSAJES_IMPORTACION);
+  });
+  it('un chat justo en el tope no se marca truncado', () => {
+    const r = leerExportWhatsapp(chat(MAX_MENSAJES_IMPORTACION), OPC);
+    expect(r.truncado).toBe(false);
+    expect(r.mensajes).toHaveLength(MAX_MENSAJES_IMPORTACION);
   });
 });
