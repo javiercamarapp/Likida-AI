@@ -3,7 +3,7 @@ import { comercio as fichaComercio } from './comercios';
 import { conectorDePortal } from '../conectores/portales_facturacion';
 import { guardarSesionPortal } from './sesion_portal';
 import { anotarVinculo, recortarEstadoAlPortal } from './vinculo_portal';
-import { pantallaDeLogin } from './vinculo_senales';
+import { paginaSinRenderizar, pantallaDeLogin } from './vinculo_senales';
 import type { InventarioPagina, PaginaConInventario } from './adaptadores/playwright_base';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -121,7 +121,10 @@ export async function vincularPortalAsistido(args: {
       continue;
     }
 
-    const login = pantallaDeLogin(inv, args.senaDeAdentro);
+    const login = pantallaDeLogin(inv, args.senaDeAdentro)
+      // Una SPA que aún no dibujó nada no es «dentro» (A37-S45-03): se sigue
+      // esperando y, si nunca dibuja, no se guarda.
+      ?? (paginaSinRenderizar(inv) ? 'la página todavía no dibuja nada (SPA sin renderizar): no se puede afirmar que la persona entró' : null);
     if (!login) { dentro = true; break; }
     ultimaEvidencia = login;
     if (ahora() - arranque >= tope) break;

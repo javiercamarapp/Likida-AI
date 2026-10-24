@@ -74,6 +74,27 @@ export function pantallaDeLogin(inv: InventarioPagina, senaDeAdentro?: string): 
   return null;
 }
 
+/**
+ * ¿La página todavía no dibujó NADA? Sin campos, sin botones y con (casi) nada
+ * de texto: el cascarón de una SPA que pinta su login con JavaScript.
+ *
+ * `pantallaDeLogin` dice «no hay login» tanto para una página en la que de
+ * verdad estamos dentro como para una que aún no renderiza; quien va a GUARDAR
+ * una sesión como «vinculado» no puede tratarlas igual (A37-S45-03). Una página
+ * con sesión viva siempre trae algo: un menú, un botón de salir, texto. Por
+ * eso este predicado NO se usa dentro de `pantallaDeLogin` (la usa también el
+ * camino de facturar, que decide otra cosa): lo usan solo los caminos que
+ * guardan sesión, y ante `true` esperan y vuelven a mirar; si al final sigue
+ * vacía, NO guardan.
+ */
+export function paginaSinRenderizar(inv: InventarioPagina): boolean {
+  const hayAlgo =
+    inv.campos.some((c) => c.visible) ||
+    inv.botones.some((b) => b.visible) ||
+    inv.texto.trim().length >= 20;
+  return !hayAlgo;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // LA GUARDA DE `type="password"` — UNA, y con UNA sola puerta.
 //
@@ -99,10 +120,18 @@ export function pantallaDeLogin(inv: InventarioPagina, senaDeAdentro?: string): 
 // campo de contraseña, y el `type` es lo único que no miente.
 // ═══════════════════════════════════════════════════════════════════════════
 
+/** Escapa `\\` y `"` para meter un valor dentro de `[atributo="…"]`. */
+export function escaparAtributoCss(v: string): string {
+  return v.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
 /** ¿El selector apunta a un campo que la PÁGINA declaró como contraseña? */
 export function esCampoDeContrasena(selector: string, inv: InventarioPagina): boolean {
+  // Se mira el valor crudo Y el escapado: un selector armado con
+  // `escaparAtributoCss` (id con comillas o barras) no debe esquivar la guarda.
+  const apunta = (v: string) => selector.includes(v) || selector.includes(escaparAtributoCss(v));
   return inv.campos.some(
-    (c) => c.type === 'password' && ((c.id && selector.includes(c.id)) || (c.name && selector.includes(c.name))),
+    (c) => c.type === 'password' && ((c.id && apunta(c.id)) || (c.name && apunta(c.name))),
   );
 }
 

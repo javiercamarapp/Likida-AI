@@ -575,6 +575,7 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 324;
 // `catalogo_selectores.ts` (nuevo, +2: clientes y geocercas completos por `traerTodo`; A37-S18-06) suman +6; `faq.ts` suma +1 (los tickets
 // que YA tienen pieza se excluyen en una consulta, A37-S27-04); y salen -4: las tres lecturas truncadas que estos módulos reemplazan
 // (`estadias.tsx` -2, `facturacion/page.tsx` -1) y la lectura de `reenviarAviso` (-1). Todo por `acotada`/`traerTodo` con `tenant_id`.
+// LOTE A37 b-sat-fiscal-02 (S45-07): +3 llamadas (2,284 → 2,287) en facturacion_escritura.ts: facturasQueAmparan (factura_viaje), borradorIdempotente (factura_emitida) y la lectura de ligas de marcarEmitida. Todas por `acotada`; 0 archivos nuevos.
 const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_287;
 // Auditoría 37, lote agentes-legal-ia (medido con el barrido real): +2 llamadas (2,264 → 2,266). `candidatos_redactor.ts` suma 3 `.from(` (prospecto, cola_aprobacion, prospecto_contacto) y `runner.ts` pierde la suya (+2 netas); `sdr.ts` pasa de 3 a 3 (la lectura por prospecto se volvió lectura en lote). Todo por `acotada`.
 // LOTE A37 peajes-liquidación-graves (migración 0865): +5 llamadas (2,264 → 2,269), 0 archivos nuevos, medido con el barrido real. `jornada/repo.ts` +1:
