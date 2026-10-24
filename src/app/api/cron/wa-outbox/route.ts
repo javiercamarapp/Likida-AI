@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { puertaCron, registrarLatido } from '@/lib/admin/salud';
 import { sanearPayloadWhatsApp } from '@/lib/meta/plantilla_payload';
-import { reclamarSalidasWhatsApp, finalizarSalidaWhatsApp, reconciliarReceiptsWhatsApp, purgarReceiptsWhatsApp } from '@/lib/likida/wa_outbox';
+import { reclamarSalidasWhatsApp, vencerSalidasWhatsApp, finalizarSalidaWhatsApp, reconciliarReceiptsWhatsApp, purgarReceiptsWhatsApp } from '@/lib/likida/wa_outbox';
 import { conPool } from '@/lib/likida/lotes';
 import { leerInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
@@ -139,6 +139,20 @@ export async function GET(req: Request) {
       const error = err instanceof Error ? err.message : String(err);
       fallosBackstop.push(`purga: ${error}`);
       logger.warn('wa.receipts.purga_fallo', { error });
+    }
+    // A37-L-05: ANTES de reclamar, lo que ya venció (token vencido un fin de semana, etc.) se entierra y se
+    // avisa — nunca sale de golpe, días tarde, con instrucciones caducas. Su fallo no tumba el drenado.
+    try {
+      const vencidas = await vencerSalidasWhatsApp();
+      if (vencidas !== null && vencidas.length > 0) {
+        logger.warn('cron.wa_outbox.vencidas', { n: vencidas.length });
+        await alertarOperador('cron.wa_outbox', {
+          error: `${vencidas.length} mensaje(s) de WhatsApp vencieron en la cola sin enviarse (instrucciones caducas): se marcaron muertos y NO se enviarán. La más antigua se creó el ${vencidas.map((v) => v.creadaEn).sort()[0]}.`,
+          codigo: 'salida_vencida',
+        });
+      }
+    } catch (e) {
+      logger.warn('cron.wa_outbox.vencer_fallo', { error: e instanceof Error ? e.message : String(e) });
     }
     const salidas = await reclamarSalidasWhatsApp();
     let enviadas = 0;
