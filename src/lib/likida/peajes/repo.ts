@@ -570,6 +570,9 @@ const filaParaEscribir = (tenantId: string, t: TarifaExistente) => ({
   confirmada: t.confirmada, confirmada_por: t.confirmadaPor,
 });
 
+/** exclusion_violation: el trigger `peaje_tarifa_sin_traslape` (0890) rechazó un traslape de vigencias. */
+const CODIGO_TRASLAPE = '23P01';
+
 export type ResultadoGuardarTarifa =
   | { ok: true; accion: 'creada' | 'actualizada' | 'sin_cambios'; confirmada: boolean }
   | { ok: false; motivo: string };
@@ -591,6 +594,10 @@ export async function guardarTarifa(tenantId: string, entrada: TarifaEntrada, or
     'peajes.guardar_tarifa',
   );
   if (error) {
+    // 0890 (A37-S62-06): la base rechaza el traslape que dos capturas simultáneas dejaron pasar a la aplicación.
+    if ((error as { code?: string }).code === CODIGO_TRASLAPE) {
+      return { ok: false, motivo: 'La vigencia se traslapa con otra tarifa de esta caseta y clase (otra captura se guardó al mismo tiempo). Revisa el tarifario.' };
+    }
     logger.error('peajes.guardar_tarifa', { tenant: tenantId, err: error.message });
     return { ok: false, motivo: 'No se pudo guardar la tarifa. Inténtalo de nuevo.' };
   }
@@ -669,6 +676,9 @@ export async function importarTarifasArchivo(
       'peajes.importar_tarifas',
     );
     if (error) {
+      if ((error as { code?: string }).code === CODIGO_TRASLAPE) {
+        return { ok: false, guardadas: 0, actualizadas: 0, rechazadas, error: 'Una vigencia del archivo se traslapa con una tarifa que se guardó al mismo tiempo y no se aplicó ninguna fila de este lote. Revisa el tarifario y vuelve a subir el archivo: es seguro repetirlo.' };
+      }
       logger.error('peajes.importar_tarifas', { tenant: tenantId, err: error.message });
       return { ok: false, guardadas: 0, actualizadas: 0, rechazadas, error: 'No se pudo guardar el tarifario y no se aplicó ninguna fila de este lote. Vuelve a subir el archivo: es seguro repetirlo.' };
     }
