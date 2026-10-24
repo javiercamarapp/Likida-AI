@@ -390,11 +390,14 @@ export async function timbrarViaje(
   // aparte deja el folio persistido en la reserva ANTES de arriesgar el resto.
   const puso = await acotada(admin.from('ccp_timbre')
     .update({ uuid_fiscal: r.uuid })
-    .eq('tenant_id', tenantId).eq('id', reservaId).eq('estado', 'pendiente'), 'timbre.sellar_uuid');
-  if (puso.error) {
-    logger.error('timbre.uuid_no_persistido', { viajeId, uuid: r.uuid, error: puso.error.message });
+    .eq('tenant_id', tenantId).eq('id', reservaId).eq('estado', 'pendiente').select('id'), 'timbre.sellar_uuid');
+  // A37-S33-10: 0 filas afectadas (la reserva ya no está 'pendiente' o desapareció) es tan huérfano como un error.
+  const sinFilaUuid = !puso.error && (!Array.isArray(puso.data) || puso.data.length === 0);
+  if (puso.error || sinFilaUuid) {
+    const causaUuid = puso.error ? puso.error.message : 'la reserva ya no está pendiente: no se afectó ninguna fila';
+    logger.error('timbre.uuid_no_persistido', { viajeId, uuid: r.uuid, error: causaUuid });
     await alertarOperador('timbre.uuid_huerfano', {
-      error: `Viaje ${viajeId}: el PAC timbró el uuid ${r.uuid} y ni siquiera se pudo guardar el folio en la reserva (${puso.error.message}).`,
+      error: `Viaje ${viajeId}: el PAC timbró el uuid ${r.uuid} y ni siquiera se pudo guardar el folio en la reserva (${causaUuid}).`,
       codigo: 'timbre_uuid_huerfano',
     });
   }
@@ -411,12 +414,15 @@ export async function timbrarViaje(
     logger.warn('timbre.fecha_sin_tfd', { viajeId, uuid: r.uuid, origen });
   }
 
-  const { error } = await acotada(admin.from('ccp_timbre').update({
+  const consolidado = await acotada(admin.from('ccp_timbre').update({
     estado: 'vigente',
     fecha_timbrado: fecha, fecha_timbrado_origen: origen,
     sello_sat: r.selloSat, no_certificado_sat: r.noCertificadoSat,
     xml: r.xmlTimbrado,
-  }).eq('tenant_id', tenantId).eq('id', reservaId).eq('estado', 'pendiente'), 'timbre.persistir');
+  }).eq('tenant_id', tenantId).eq('id', reservaId).eq('estado', 'pendiente').select('id'), 'timbre.persistir');
+  // A37-S33-10: un UPDATE sin error pero con 0 filas NO consolidó nada: no se responde éxito ni se anota 'ccp.timbrado'.
+  const error = consolidado.error ?? (Array.isArray(consolidado.data) && consolidado.data.length > 0
+    ? null : { message: 'la reserva ya no estaba pendiente: no se afectó ninguna fila' });
 
   if (error) {
     // Timbre emitido y NO consolidado: la peor combinación. El uuid YA está
