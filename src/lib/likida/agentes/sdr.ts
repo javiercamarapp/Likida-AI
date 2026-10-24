@@ -57,6 +57,13 @@ export interface ResultadoSdr {
   sinTurno: number;
 }
 
+/** Falló DESPUÉS de pagar la llamada al modelo: lleva el costo para que la corrida lo contabilice (A37-S28-04). */
+class SeguimientoFallido extends Error {
+  constructor(public causa: unknown, public costoUsd: number, public noMedido: boolean) {
+    super(causa instanceof Error ? causa.message : String(causa));
+  }
+}
+
 interface CandidatoSdr {
   id: string;
   empresa: string;
@@ -117,14 +124,14 @@ export async function candidatosDeSeguimiento(limite: number, venceEn?: number):
 
     const { data: hist, error: errHist } = await acotada(supabaseAdmin()
       .from('prospecto_contacto')
-      .select('prospecto_id, direccion, ocurrio_en')
+      .select('prospecto_id, direccion, canal, ocurrio_en')
       .in('prospecto_id', ids)
       .in('direccion', ['respuesta', 'salida'])
       .order('ocurrio_en', { ascending: true })
       .order('id', { ascending: true })
       .limit(TOPE_FILAS_HISTORIAL), 'sdr.historial');
     if (errHist) throw new Error(`candidatosDeSeguimiento.historial: ${errHist.message}`);
-    const filasHist = (hist ?? []) as Array<{ prospecto_id: string; direccion: string; ocurrio_en: string }>;
+    const filasHist = (hist ?? []) as Array<{ prospecto_id: string; direccion: string; canal?: string; ocurrio_en: string }>;
     if (filasHist.length >= TOPE_FILAS_HISTORIAL) {
       throw new Error('candidatosDeSeguimiento.historial: la lectura llegó al tope y pudo truncarse — no se decide la cadencia a ciegas');
     }
@@ -147,6 +154,10 @@ export async function candidatosDeSeguimiento(limite: number, venceEn?: number):
     const salidasDe = new Map<string, string[]>();
     for (const x of filasHist) {
       if (x.direccion !== 'salida') continue;
+      // A37-S28-06: solo cuenta una salida POR CORREO. Una llamada, un LinkedIn o una visita registrados como
+      // «salida» no son un correo enviado: el seguimiento haría referencia a un correo que nunca se mandó.
+      // (Las RESPUESTAS de cualquier canal sí detienen la cadencia: un humano ya está conversando.)
+      if (x.canal !== 'correo') continue;
       const l = salidasDe.get(x.prospecto_id);
       if (l) l.push(x.ocurrio_en); else salidasDe.set(x.prospecto_id, [x.ocurrio_en]);
     }
@@ -187,6 +198,21 @@ async function fabricarSeguimiento(c: CandidatoSdr): Promise<{ costoUsd: number;
   if (errPend) throw new DatoInvalido('No se pudo verificar la cola — reintenta.');
   if ((pend ?? []).length > 0) throw new DatoInvalido('Ya hay una pieza pendiente de este prospecto.');
 
+  // A37-S28-03: una pieza `correo_seguimiento` de ESTE paso que ya existe en cualquier estado (aprobada pero aún
+  // sin enviar por el tope/cadencia del Enviador, ya enviada, o RECHAZADA por un humano) bloquea una nueva: antes
+  // solo miraba `pendiente`, y un seguimiento aprobado-sin-enviar se fabricaba otra vez (salían dos), y uno
+  // rechazado se regeneraba en cada vuelta. La carrera de dos corridas la arbitra el índice único de la 0904.
+  const { data: previas, error: errPrevias } = await supabaseAdmin()
+    .from('cola_aprobacion').select('estado, fuentes')
+    .eq('prospecto_id', c.id).eq('tipo', 'correo_seguimiento')
+    .in('estado', ['pendiente', 'aprobado', 'rechazado'])
+    .order('id', { ascending: true })
+    .limit(20);
+  if (errPrevias) throw new DatoInvalido('No se pudo verificar los seguimientos previos — reintenta.');
+  const delPaso = ((previas ?? []) as Array<{ estado: string; fuentes: Record<string, unknown> | null }>)
+    .find((f) => Number(f.fuentes?.seguimiento) === c.numeroSeguimiento);
+  if (delPaso) throw new DatoInvalido(`Ya existe un seguimiento ${c.numeroSeguimiento} de este prospecto (${delPaso.estado}) — no se fabrica otro.`);
+
   const primerNombre = primerNombreDelContacto(c.contacto_nombre);
   const r = await generateResponse({
     role: 'back_office',
@@ -198,24 +224,30 @@ async function fabricarSeguimiento(c: CandidatoSdr): Promise<{ costoUsd: number;
     maxTokens: 400,
     temperature: 0.4,
   });
-  const asunto = r.text.match(/\*\*Asunto:\*\*\s*(.+)/i)?.[1]?.trim();
-  const cuerpo = r.text.split(/\*\*Asunto:\*\*.*\n/i)[1]?.trim();
-  if (!asunto || !cuerpo) throw new DatoInvalido('El SDR devolvió una salida ilegible — no se encoló nada.');
-  // c5-14: el verificador estructural corre sobre el TEXTO FINAL — asunto
-  // incluido (el del SDR sale tal cual) y DESPUÉS de sustituir el nombre: la
-  // verificación previa miraba solo el cuerpo crudo y un guion largo en el
-  // subject salía igual.
-  const tituloFinal = sustituirMarcador(asunto, primerNombre).slice(0, 120);
-  const cuerpoFinal = sustituirMarcador(cuerpo, primerNombre);
-  verificarFormatoCampana(tituloFinal);
-  verificarFormatoCampana(cuerpoFinal);
-  await encolarPieza({
-    tipo: 'correo_seguimiento', prioridad: 'normal', agente: 'sdr',
-    prospectoId: c.id,
-    titulo: tituloFinal,
-    cuerpo: cuerpoFinal,
-    fuentes: { seguimiento: c.numeroSeguimiento, de: CADENCIA_SDR_DIAS.length },
-  });
+  // A37-S28-04: desde aquí el modelo YA se cobró. Si la validación o el encolado fallan, el costo viaja en la
+  // excepción para que `correrSdr` lo sume: antes se perdía y el techo diario nunca se enteraba.
+  try {
+    const asunto = r.text.match(/\*\*Asunto:\*\*\s*(.+)/i)?.[1]?.trim();
+    const cuerpo = r.text.split(/\*\*Asunto:\*\*.*\n/i)[1]?.trim();
+    if (!asunto || !cuerpo) throw new DatoInvalido('El SDR devolvió una salida ilegible — no se encoló nada.');
+    // c5-14: el verificador estructural corre sobre el TEXTO FINAL — asunto
+    // incluido (el del SDR sale tal cual) y DESPUÉS de sustituir el nombre: la
+    // verificación previa miraba solo el cuerpo crudo y un guion largo en el
+    // subject salía igual.
+    const tituloFinal = sustituirMarcador(asunto, primerNombre).slice(0, 120);
+    const cuerpoFinal = sustituirMarcador(cuerpo, primerNombre);
+    verificarFormatoCampana(tituloFinal);
+    verificarFormatoCampana(cuerpoFinal);
+    await encolarPieza({
+      tipo: 'correo_seguimiento', prioridad: 'normal', agente: 'sdr',
+      prospectoId: c.id,
+      titulo: tituloFinal,
+      cuerpo: cuerpoFinal,
+      fuentes: { seguimiento: c.numeroSeguimiento, de: CADENCIA_SDR_DIAS.length },
+    });
+  } catch (e) {
+    throw new SeguimientoFallido(e, r.cost, Boolean(r.noMedido));
+  }
   return { costoUsd: r.cost, noMedido: Boolean(r.noMedido) };
 }
 
@@ -275,6 +307,11 @@ export async function correrSdr(
       }
     } catch (e) {
       saltados += 1;
+      if (e instanceof SeguimientoFallido) {
+        // A37-S28-04: la llamada se pagó aunque la pieza se descartara.
+        if (e.noMedido) costoUsd = null;
+        else if (costoUsd !== null) costoUsd = costoUsd + e.costoUsd;
+      }
       logger.info('sdr.saltado', { prospecto: c.id, motivo: e instanceof Error ? e.message.slice(0, 160) : String(e) });
     }
   }
