@@ -7,8 +7,9 @@
 #
 # Luego:  bash scripts/deploy-vercel.sh
 #
-# Empuja TODAS las variables de .env.local a Vercel (production + preview),
-# saltando las vacías (p. ej. WHATSAPP_* si aún no tienes las creds de Meta),
+# Empuja las variables de .env.local a Vercel SOLO a production (A37-L-10:
+# .env.local apunta a PRODUCCIÓN; empujarlo a Preview deshacía el aislamiento a
+# staging que arma scripts/ci/configure-preview.mjs), saltando las vacías (p. ej. WHATSAPP_* si aún no tienes las creds de Meta),
 # NEXT_PUBLIC_APP_URL (se fija al dominio CANÓNICO https://app.likida.ai, no a
 # la URL efímera del deployment — ver CLAUDE.md: la cookie de Supabase Auth se
 # escribe en el dominio que esta variable diga, y un subdominio aleatorio deja
@@ -17,6 +18,8 @@
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# shellcheck source=lib/parsear-env-linea.sh
+. scripts/lib/parsear-env-linea.sh
 
 command -v vercel >/dev/null || { echo "❌ Falta Vercel CLI:  npm i -g vercel"; exit 1; }
 [ -f .env.local ] || { echo "❌ Falta .env.local"; exit 1; }
@@ -37,19 +40,36 @@ push_env() {  # name value environment
   echo "  ✓ $name → $env"
 }
 
-echo "▸ Empujando variables de entorno…"
+echo "▸ Empujando variables de entorno (solo production; Preview lo arma configure-preview.mjs)…"
 while IFS= read -r line || [ -n "$line" ]; do
-  case "$line" in ''|\#*) continue ;; esac
-  name="${line%%=*}"
-  val="${line#*=}"
-  val="${val%%#*}"                                   # quita comentario inline
-  val="$(printf '%s' "$val" | sed 's/[[:space:]]*$//')"  # quita espacios finales
+  parsed="$(parsear_env_linea "$line")"
+  [ -z "$parsed" ] && continue
+  name="${parsed%%$'\t'*}"
+  val="${parsed#*$'\t'}"
   [ "$name" = "NEXT_PUBLIC_APP_URL" ] && continue     # se fija al dominio canónico abajo
   [ "$name" = "DASHBOARD_PASSCODE" ] && continue      # muerto (passcode borrado 5-ago)
   [ "$name" = "DASHBOARD_SECRET" ] && continue        # muerto (passcode borrado 5-ago)
   push_env "$name" "$val" production
-  push_env "$name" "$val" preview
+  esperadas="${esperadas:-}${name}:${#val}"$'\n'
 done < .env.local
+
+# Verificación de longitud tras empujar (mejor esfuerzo: las variables Sensitive
+# no se pueden leer de vuelta y se omiten).
+echo "▸ Verificando longitudes en production…"
+tmp="$(mktemp)"; chmod 600 "$tmp"
+if vercel env pull "$tmp" --environment=production --yes >/dev/null 2>&1; then
+  while IFS=: read -r n len; do
+    [ -z "$n" ] && continue
+    linea="$(grep -m1 "^${n}=" "$tmp" || true)"
+    [ -z "$linea" ] && continue
+    v="${linea#*=}"; v="${v#\"}"; v="${v%\"}"
+    [ -z "$v" ] && continue
+    [ "${#v}" -eq "$len" ] || echo "  ⚠ $n: longitud ${#v} en Vercel, ${len} esperada (¿se truncó?)"
+  done <<< "${esperadas:-}"
+else
+  echo "  (no se pudo leer de vuelta; verifica a mano)"
+fi
+rm -f "$tmp"
 
 echo "▸ Deploy a producción…"
 url="$(vercel --prod --yes)"

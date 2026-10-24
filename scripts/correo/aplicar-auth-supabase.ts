@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // DEJA EL CORREO DE ACCESO CONFIGURADO EN SUPABASE, POR API. Un solo comando.
 //
-//   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts
-//   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts --con-hook
-//   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts --afinar
+//   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts --ref=gngoqsvrxdguxvsizpbw
+//   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts --ref=gngoqsvrxdguxvsizpbw --con-hook
+//   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts --ref=gngoqsvrxdguxvsizpbw --afinar
 //
 // Sin bandera: sube las TRECE plantillas y sus asuntos (Authentication →
 // Emails): las seis con liga o código, y los siete avisos de seguridad. Es
@@ -32,6 +32,7 @@
 process.env.NEXT_PUBLIC_APP_URL = process.env.PLANTILLAS_BASE ?? 'https://app.likida.ai';
 
 import { readFileSync } from 'node:fs';
+import { validarRef } from './ref-produccion';
 import { armarHtml } from '../../src/lib/correo/plantilla';
 import {
   correoDeAuth, correoDeAvisoAuth, minutosDeCaducidad,
@@ -64,11 +65,14 @@ if (!token) {
 }
 
 const urlSupabase = process.env.NEXT_PUBLIC_SUPABASE_URL ?? deEnvLocal('NEXT_PUBLIC_SUPABASE_URL');
-const ref = urlSupabase?.match(/https:\/\/([a-z0-9]+)\.supabase\.co/)?.[1];
-if (!ref) {
-  console.error('No se pudo deducir el project ref de NEXT_PUBLIC_SUPABASE_URL.');
+const refDeducido = urlSupabase?.match(/https:\/\/([a-z0-9]+)\.supabase\.co/)?.[1];
+// A37-S02-07: `--ref=<ref de producción>` explícito; .env.local solo se coteja, no decide.
+const validacionRef = validarRef(process.argv, refDeducido);
+if (!validacionRef.ok) {
+  console.error(validacionRef.motivo);
   process.exit(1);
 }
+const ref = validacionRef.ref;
 
 const conHook = process.argv.includes('--con-hook');
 const secretoHook = process.env.SUPABASE_AUTH_HOOK_SECRET ?? deEnvLocal('SUPABASE_AUTH_HOOK_SECRET');

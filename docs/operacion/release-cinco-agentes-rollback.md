@@ -223,6 +223,14 @@ Hay dos palancas, y conviene usar la más pequeña que resuelva el problema.
 su agente en **cada corrida** y, si alguno está apagado, no procesan nada y dejan un latido `saltado`. No hay que
 retirar el cron del despliegue. Afecta a **todas** las flotas.
 
+**Alcance real de `global` (A37-L-13): no es un «apagar todo».** Gobierna los crons y los envíos **automáticos** de los
+agentes, que lo leen en cada corrida. **No** gobierna: (a) las acciones que dispara una **persona** desde el panel
+(rechazar una liquidación en `lib/likida/revision.ts`, asignar un viaje y avisar en `lib/likida/notificar.ts`), que
+siguen escribiendo al chofer por WhatsApp; ni (b) la capa `lib/meta/client.ts`, que no consulta ningún interruptor.
+Si el incidente exige que **nada** le escriba a choferes, además de `global` hay que pedir a la oficina que no use esas
+acciones, o retirar la credencial de Meta (`WHATSAPP_*`) del entorno. Un candado de último recurso en `meta/client`
+para envíos no humanos queda como decisión de producto (no está implementado).
+
 **Por flota** (`interruptor_tenant`, mig. 0297; lectura en `src/lib/likida/interruptor_tenant.ts`): apaga el pipeline
 del chofer de **una** flota sin tocar las demás. Reglas reales del código:
 

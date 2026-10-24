@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { calificar, extraerBloques, extraerMensaje, esRaiseDelPropioBloque } from './calificar-verificacion.mjs';
+import { calificar, extraerBloques, extraerMensaje, esRaiseDelPropioBloque, esReportePermitido } from './calificar-verificacion.mjs';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 24 · PRU-1 (CRÍTICO) — la batería SQL imprimía la fuga y contestaba
@@ -141,5 +141,26 @@ describe('PRU-ALTO1: el bloque 50 (candado del viaje) reprueba con sus valores m
     expect(r.falla?.map((f: { clave: string }) => f.clave).sort()).toEqual(
       ['candado-borrado-con-el-viaje', 'viaje_ingreso_no_negativo', 'viaje_km_sanos'].sort(),
     );
+  });
+});
+
+describe('A37-S02-06: un raise propio sin (esperado) solo pasa si es un reporte autorizado', () => {
+  it('un raise de aborto temprano NO es reporte permitido', () => {
+    const msg = 'CONFIG_ROTA  no existe la fila de prueba';
+    expect(calificar(msg).tipo).toBe('reporte');
+    expect(esReportePermitido(msg)).toBe(false);
+  });
+  it('los 4 informes conocidos sí', () => {
+    for (const m of ['FOTOS REPETIDAS  grupos=2', 'INDICE_FACTURACION  [reporte: x]', 'INDICES_PAGINACION  [reporte: x]', '46  plan-con-indice=1']) {
+      expect(esReportePermitido(m)).toBe(true);
+    }
+  });
+  it('todo raise sin (esperado de verificaciones.sql es un reporte autorizado, salvo las ramas de fallo (UNICIDAD), que ahora reprueban', () => {
+    const f = 'supabase/verificaciones.sql';
+    const sinEsperado = extraerBloques(readFileSync(f, 'utf8'), f).flatMap((b: { sql: string }) =>
+      [...b.sql.matchAll(/raise\s+exception\s+(E?'(?:[^']|'')*')/gi)].map((m) => m[1]).filter((t) => !/esperad/i.test(t)),
+    ).filter((t: string) => !t.includes('roto a proposito') && !t.includes('UNICIDAD  suscripcion-duplicada'));
+    expect(sinEsperado.length).toBeGreaterThan(0);
+    for (const t of sinEsperado) expect(esReportePermitido(t.replace(/^E?'/, ''))).toBe(true);
   });
 });

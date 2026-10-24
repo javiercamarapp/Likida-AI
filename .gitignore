@@ -109,6 +109,9 @@ zzz-*.mjs
 # kill switch APAGADO). Los scripts SÍ van al repo; el estado no — y el
 # registro trae títulos de bugs aún sin arreglar en un repo público.
 .mejora-diaria/
+# A37-S01-06: informe interno de salud del pipeline (dependencias atrasadas y su
+# «exposición real»): mismo motivo que .mejora-diaria/, repo público.
+.latido-salud
 
 # Cache del CLI de Supabase (project-ref, versiones) — local, no del repo.
 supabase/.temp/

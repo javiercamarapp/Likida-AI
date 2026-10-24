@@ -126,12 +126,9 @@ export function decidir({ asunto, codigo, prefijosCodigo = null, health }) {
     return bloquear(`no se pudo leer ${HEALTH_URL}: sin base cotejada no se despliega.`);
   }
   const m = health.migracion;
-  if (m === undefined) {
-    return {
-      construir: true, nivel: 'aviso',
-      motivo: 'el health desplegado no publica `migracion` (versión anterior a la auditoría 24): se construye esta vez; a partir del siguiente deploy la compuerta compara base y código.',
-    };
-  }
+  // A37-S02-05: `migracion` ausente YA NO deja construir. Esa salida existía solo para el arranque de la auditoría 24
+  // (el health desplegado aún no publicaba el campo); hoy producción lo publica, y cualquier JSON 200/503 sin el campo
+  // (CDN, página de mantenimiento) dejaba construir con la base atrás. `undefined` cae abajo y bloquea.
   if (!m || typeof m !== 'object' || typeof m.base !== 'string' || !/^\d{4}$/.test(m.base)) {
     return bloquear(`la base no se pudo cotejar (${(m && m.motivo) || 'sin motivo'}).`);
   }
