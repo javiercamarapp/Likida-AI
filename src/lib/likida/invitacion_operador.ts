@@ -146,24 +146,37 @@ async function reclamar(
     .map((f) => ({ id: String(f.id), nombre: String(f.nombre ?? ''), telefono: String(f.telefono ?? '') }));
 }
 
-async function marcarEnviada(tenantId: string, id: string, via: 'texto' | 'botones' | 'plantilla'): Promise<void> {
-  const { error } = await acotada(
-    supabaseAdmin().from('operador').update({ invitacion_via: via })
-      .eq('id', id).eq('tenant_id', tenantId).eq('invitacion_via', 'reclamada').select('id'),
-    'invitarOperadores.marcarEnviada',
-  );
-  // El mensaje YA salió: si la constancia no se pudo afinar, queda «reclamada»
-  // (que caduca a los 15 min y se podría reenviar). Se loguea para que se vea.
-  if (error) logger.warn('invitacion_operador.constancia_no_afinada', { tenantId, operadorId: id, err: error.message });
+/** Intentos de afinar la constancia: el mensaje YA salió, así que un parpadeo de red no debe dejarla sin afinar. */
+const INTENTOS_CONSTANCIA = 3;
+
+/**
+ * A37-S47-10: la MARCA del reclamo (`invitacion_enviada_en` = la hora de ESTA tanda, ver `reclamar`) es el token
+ * del reclamo. Marcar y soltar la EXIGEN: una tanda lenta, cuyo reclamo huérfano otra tanda ya recogió con su
+ * propia hora, no puede pisar ni liberar el reclamo ajeno.
+ */
+async function marcarEnviada(tenantId: string, id: string, via: 'texto' | 'botones' | 'plantilla', marca: string): Promise<void> {
+  let ultimoError = '';
+  for (let intento = 1; intento <= INTENTOS_CONSTANCIA; intento++) {
+    const { error } = await acotada(
+      supabaseAdmin().from('operador').update({ invitacion_via: via })
+        .eq('id', id).eq('tenant_id', tenantId).eq('invitacion_via', 'reclamada').eq('invitacion_enviada_en', marca).select('id'),
+      'invitarOperadores.marcarEnviada',
+    );
+    if (!error) return;
+    ultimoError = error.message;
+  }
+  // El mensaje YA salió y la constancia no se pudo afinar tras reintentar: queda «reclamada» (que caduca a los
+  // 15 min y se podría reenviar). Se loguea para que se vea.
+  logger.warn('invitacion_operador.constancia_no_afinada', { tenantId, operadorId: id, err: ultimoError });
 }
 
-async function soltarReclamo(tenantId: string, id: string, fallo: string | null): Promise<void> {
+async function soltarReclamo(tenantId: string, id: string, fallo: string | null, marca: string): Promise<void> {
   const cambios = fallo === null
     ? { invitacion_enviada_en: null, invitacion_via: null }
     : { invitacion_enviada_en: null, invitacion_via: null, invitacion_fallo: fallo, invitacion_fallo_en: new Date().toISOString() };
   const { error } = await acotada(
     supabaseAdmin().from('operador').update(cambios)
-      .eq('id', id).eq('tenant_id', tenantId).eq('invitacion_via', 'reclamada').select('id'),
+      .eq('id', id).eq('tenant_id', tenantId).eq('invitacion_via', 'reclamada').eq('invitacion_enviada_en', marca).select('id'),
     'invitarOperadores.soltar',
   );
   if (error) logger.warn('invitacion_operador.reclamo_no_soltado', { tenantId, operadorId: id, err: error.message });
@@ -255,6 +268,7 @@ export async function invitarOperadores(
     return { ...vacio, error: 'No pude preparar las invitaciones — no mandé ninguna. Vuelve a intentar.' };
   }
 
+  const marcaDelReclamo = ahora.toISOString();
   const resultado: ResultadoInvitacion = { ...vacio, saltadas: Math.max(0, pedidos - reclamadas.length) };
 
   await conConcurrencia(reclamadas, CONCURRENCIA, async (op) => {
@@ -268,18 +282,18 @@ export async function invitarOperadores(
         ahora,
       });
       if (r.ok) {
-        await marcarEnviada(tenantId, op.id, r.via);
+        await marcarEnviada(tenantId, op.id, r.via, marcaDelReclamo);
         resultado.enviadas += 1;
         return;
       }
       // Reintentable (429, bloqueo temporal, red): se suelta SIN marcar fallo, para
       // que el siguiente intento lo recoja. Permanente: queda el motivo en la ficha.
-      await soltarReclamo(tenantId, op.id, r.reintentable ? null : motivoCorto(r.mensaje));
+      await soltarReclamo(tenantId, op.id, r.reintentable ? null : motivoCorto(r.mensaje), marcaDelReclamo);
       resultado.fallidas.push({ operadorId: op.id, nombre: op.nombre, motivo: motivoCorto(r.mensaje) });
     } catch (e) {
       // `enviarConFallback` no lanza; esto es el cinturón (p. ej. un uuid de plantilla mal armado).
       logger.error('invitacion_operador.envio_lanzo', { tenantId, operadorId: op.id, err: e instanceof Error ? e.message : String(e) });
-      await soltarReclamo(tenantId, op.id, null);
+      await soltarReclamo(tenantId, op.id, null, marcaDelReclamo);
       resultado.fallidas.push({ operadorId: op.id, nombre: op.nombre, motivo: 'Error inesperado al enviar; vuelve a intentar.' });
     }
   });
