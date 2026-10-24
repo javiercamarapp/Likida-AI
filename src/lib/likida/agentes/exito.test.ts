@@ -457,17 +457,23 @@ describe('cobranza SaaS — la cadencia propone, nadie envía', () => {
   it('un hito ALCANZADO cuenta aunque su día exacto ya haya pasado (c6-14)', () => {
     // Antes del primer hito no hay nada que proponer.
     expect(toquesDeHoy([FACTURA], '2026-07-25')).toEqual([]);
-    // El día exacto de cada hito, ese hito y los anteriores.
+    // A37-S27-08: por factura solo el hito MÁS ALTO alcanzado (antes, hasta 5 piezas
+    // casi idénticas de golpe para una factura vieja).
     expect(toquesDeHoy([FACTURA], '2026-07-29').map((t) => t.hito)).toEqual([-3]);
-    expect(toquesDeHoy([FACTURA], '2026-08-01').map((t) => t.hito)).toEqual([-3, 0]);
-    // Y un día que no es hito de nadie YA NO se queda mudo: recupera los que
-    // se perdieron (el cron pudo no correr esos días).
-    expect(toquesDeHoy([FACTURA], '2026-08-05').map((t) => t.hito)).toEqual([-3, 0, 3]);
-    expect(toquesDeHoy([FACTURA], '2026-08-16').map((t) => t.hito)).toEqual([-3, 0, 3, 7, 15]);
+    expect(toquesDeHoy([FACTURA], '2026-08-01').map((t) => t.hito)).toEqual([0]);
+    // Y un día que no es hito de nadie YA NO se queda mudo: propone el último alcanzado.
+    expect(toquesDeHoy([FACTURA], '2026-08-05').map((t) => t.hito)).toEqual([3]);
+    expect(toquesDeHoy([FACTURA], '2026-08-16').map((t) => t.hito)).toEqual([15]);
+  });
+
+  it('A37-S27-08: una factura con 20 días vencida produce UNA propuesta (el hito más alto), no cinco', () => {
+    const t = toquesDeHoy([FACTURA], '2026-08-21');
+    expect(t).toHaveLength(1);
+    expect(t[0].hito).toBe(15);
   });
 
   it('el toque atrasado se marca y su texto habla del HOY real, no del hito', () => {
-    const tarde = toquesDeHoy([FACTURA], '2026-08-21').find((t) => t.hito === -3)!;
+    const tarde = { ...toquesDeHoy([FACTURA], '2026-08-21')[0], hito: -3 };
     expect(esToqueAtrasado(tarde)).toBe(true);
     expect(tarde.diasVsVencimiento).toBe(20);
     // Nada de "faltan 3 días para el corte" sobre una factura de 20 días.
@@ -723,10 +729,11 @@ describe('el reloj de la vuelta corta los motores de éxito, y lo DICE (c7-1)', 
   });
 
   it('cobranza SaaS: las propuestas ya encoladas QUEDAN, pero el parte del día no se sella con las cuentas a medias', async () => {
-    getPorCobrar.mockResolvedValue([FACTURA]);
-    // 2026-08-01 = dos hitos alcanzados (D−3 y D+0): dos toques, o sea una
+    const FACTURA_2 = { ...FACTURA, id: 'fs-2', referencia: 'LKBBBB202608' };
+    getPorCobrar.mockResolvedValue([FACTURA, FACTURA_2]);
+    // Dos facturas con un hito alcanzado cada una: dos toques, o sea una
     // lista de trabajo de verdad sobre la que se puede cortar A LA MITAD.
-    expect(toquesDeHoy([FACTURA], '2026-08-01')).toHaveLength(2);
+    expect(toquesDeHoy([FACTURA, FACTURA_2], '2026-08-01')).toHaveLength(2);
 
     // EL RELOJ QUE SE AGOTA A LA MITAD: arranca vivo y se vence en cuanto la
     // primera propuesta entra a la bandeja. Es la forma honesta de reproducir

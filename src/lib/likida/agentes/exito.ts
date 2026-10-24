@@ -1130,7 +1130,7 @@ export interface ToqueCobranza {
  * PARA SIEMPRE, en silencio. Una factura registrada con 9 días de vencida no
  * recibía −3, ni 0, ni +3, ni +7: su primera propuesta llegaba el día 15.
  *
- * Ahora se devuelven todos los hitos ALCANZADOS (`dias >= hito`). No duplica
+ * Ahora se evalúan los hitos ALCANZADOS (`dias >= hito`) y se devuelve solo el más alto por factura (A37-S27-08). No duplica
  * nada porque el árbitro ya existe y es una constraint: el título es
  * determinista por (factura, hito) y `piezaExistente` + el índice único de la
  * 0218 dejan pasar exactamente una propuesta por par, para siempre.
@@ -1143,9 +1143,13 @@ export function toquesDeHoy(facturas: FacturaPorCobrar[], hoy: string): ToqueCob
   const toques: ToqueCobranza[] = [];
   for (const f of facturas) {
     const dias = diasEntreDias(f.periodoInicio, hoy);
-    for (const hito of HITOS_COBRANZA) {
-      if (dias >= hito) toques.push({ factura: f, diasVsVencimiento: dias, hito });
-    }
+    // A37-S27-08: SOLO el hito más alto alcanzado. Antes se devolvían todos los
+    // alcanzados y una factura de 20 días generaba cinco piezas con el mismo
+    // texto (el cuerpo habla de los días reales) en la bandeja. Los hitos
+    // inferiores de una factura que ya pasó de largo no se proponen nunca.
+    const alcanzados = HITOS_COBRANZA.filter((hito) => dias >= hito);
+    if (alcanzados.length === 0) continue;
+    toques.push({ factura: f, diasVsVencimiento: dias, hito: Math.max(...alcanzados) });
   }
   return toques;
 }
