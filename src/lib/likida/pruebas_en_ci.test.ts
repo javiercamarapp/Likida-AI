@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fuentesDeProduccion, sinComentarios } from '@/lib/pruebas/codigo';
 import { readdirSync } from 'node:fs';
@@ -253,5 +254,25 @@ describe('retención 0332/0335: rollout concurrente y fail-closed', () => {
       expect(fuente).toContain("array['creado_en','id']");
     }
     expect(preflight.toLowerCase()).toContain('create index concurrently');
+  });
+});
+
+describe('A37-S01-02: el script manual de migraciones lleva las guardas del pipeline', () => {
+  const manual = readFileSync('scripts/aplicar-migraciones-y-humos.sh', 'utf8');
+  it('CLI fijado, sin --include-all por defecto, respaldo exigido y humos opt-in', () => {
+    expect(manual).not.toContain('supabase@latest');
+    expect(manual).toContain('SUPABASE_CLI_VERSION');
+    expect(manual).toContain('PERMITIR_INCLUDE_ALL');
+    expect(manual).toContain('supabase-preflight.mjs backup');
+    expect(manual).toContain('CORRER_HUMOS');
+    expect(manual).not.toMatch(/db push --db-url "\$SUPABASE_DB_URL" --include-all/);
+  });
+  it('un project-ref fuera de la lista autorizada se rechaza antes de tocar nada (exit 3)', () => {
+    const r = spawnSync('bash', ['scripts/aplicar-migraciones-y-humos.sh'], {
+      encoding: 'utf8',
+      env: { PATH: process.env.PATH ?? '', SUPABASE_DB_URL: 'postgresql://postgres:x@db.aaaaaaaaaaaaaaaaaaaa.supabase.co:5432/postgres' },
+    });
+    expect(r.status).toBe(3);
+    expect(r.stdout).toContain('lista autorizada');
   });
 });
