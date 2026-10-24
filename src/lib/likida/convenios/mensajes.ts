@@ -21,6 +21,10 @@ export const PLANTILLA_ACERCAMIENTO = 'convenio_instrucciones_acercamiento_v1';
 /** Un parámetro de plantilla de Meta cabe en ~1,024; se deja margen para el resto del cuerpo. */
 const MAX_PIEZA_PLANTILLA = 700;
 
+/** WhatsApp admite 4,096 caracteres por mensaje de texto; se deja margen. (A37-S39-07) */
+const MAX_TEXTO_WA = 4000;
+const PREGUNTA_TODO = '¿qué instrucciones tengo?';
+
 const una = (t: string): string => t.replace(/\s+/g, ' ').trim();
 
 /** Las instrucciones que tocan en este momento. Para el acercamiento solo las de la planta a la que se acerca. */
@@ -45,12 +49,34 @@ export function textoLista(ins: readonly Instruccion[], mostrarLado: boolean): s
   return [...grupos.entries()].map(([c, ts]) => `• ${ETIQUETA_CATEGORIA[c]}: ${ts.join('; ')}`).join('\n');
 }
 
+/**
+ * A37-S39-07: la lista cabe en `presupuesto` caracteres o se recorta por instrucciones COMPLETAS (nunca a media
+ * frase), y al final dice cuántas quedaron fuera y cómo pedirlas. Un mensaje que Meta rechaza por largo no se
+ * reintenta y el operador se quedaba sin ninguna instrucción de acceso o seguridad.
+ */
+export function textoListaAcotada(ins: readonly Instruccion[], mostrarLado: boolean, presupuesto: number, pista = `escríbeme «${PREGUNTA_TODO}» o avisa a tu jefe de tráfico`): string {
+  const completa = textoLista(ins, mostrarLado);
+  if (completa.length <= presupuesto) return completa;
+  const aviso = (faltan: number) => `\n… Faltan ${faltan} ${faltan === 1 ? 'instrucción' : 'instrucciones'} más: ${pista}.`;
+  let k = ins.length - 1;
+  while (k > 0 && textoLista(ins.slice(0, k), mostrarLado).length + aviso(ins.length - k).length > presupuesto) k--;
+  return `${k > 0 ? textoLista(ins.slice(0, k), mostrarLado) : ''}${aviso(ins.length - k)}`;
+}
+
 /** La misma lista en UNA línea, apta para un parámetro de plantilla (sin saltos). */
 export function piezaPlantilla(ins: readonly Instruccion[], mostrarLado: boolean): string {
-  const grupos = new Map<Categoria, string[]>();
-  for (const i of ins) grupos.set(i.categoria, [...(grupos.get(i.categoria) ?? []), una(conLado(i, mostrarLado))]);
-  const linea = [...grupos.entries()].map(([c, ts]) => `${ETIQUETA_CATEGORIA[c]}: ${ts.join('; ')}`).join(' · ');
-  return linea.length <= MAX_PIEZA_PLANTILLA ? linea : `${linea.slice(0, MAX_PIEZA_PLANTILLA - 1).trimEnd()}…`;
+  const linea = (xs: readonly Instruccion[]): string => {
+    const grupos = new Map<Categoria, string[]>();
+    for (const i of xs) grupos.set(i.categoria, [...(grupos.get(i.categoria) ?? []), una(conLado(i, mostrarLado))]);
+    return [...grupos.entries()].map(([c, ts]) => `${ETIQUETA_CATEGORIA[c]}: ${ts.join('; ')}`).join(' · ');
+  };
+  const completa = linea(ins);
+  if (completa.length <= MAX_PIEZA_PLANTILLA) return completa;
+  // A37-S39-07: el recorte se hace por instrucciones completas y AVISA que faltan (antes un '…' mudo podía comerse la parte de seguridad).
+  const aviso = (faltan: number) => ` · …y ${faltan} más: pregunta «${PREGUNTA_TODO}»`;
+  let k = ins.length - 1;
+  while (k > 0 && linea(ins.slice(0, k)).length + aviso(ins.length - k).length > MAX_PIEZA_PLANTILLA) k--;
+  return `${linea(ins.slice(0, k))}${aviso(ins.length - k)}`.slice(0, MAX_PIEZA_PLANTILLA);
 }
 
 const primerNombre = (n: string | null | undefined): string => {
@@ -81,9 +107,8 @@ export function armarMensajeDespacho(ctx: ContextoMensaje, foto: readonly Instru
   const encabezado = opciones.actualizado
     ? `Hola ${nombre}, actualizamos las instrucciones de tu viaje ${ctx.folio} (${ruta}). Estas son las vigentes:`
     : `Hola ${nombre}, estas son las instrucciones de tu viaje ${ctx.folio} (${ruta}):`;
-  const texto =
-    `${encabezado}\n${textoLista(ins, true)}\n` +
-    'Si tienes dudas, escríbeme «¿por dónde entro?» o avisa a tu jefe de tráfico.';
+  const pie = 'Si tienes dudas, escríbeme «¿por dónde entro?» o avisa a tu jefe de tráfico.';
+  const texto = `${encabezado}\n${textoListaAcotada(ins, true, MAX_TEXTO_WA - encabezado.length - pie.length - 2)}\n${pie}`;
   return {
     texto,
     plantilla: { nombre: PLANTILLA_DESPACHO, ...opcionesDeEnvio(PLANTILLA_DESPACHO, { cuerpo: [nombre, ctx.folio, ruta, piezaPlantilla(ins, true)] }) },
@@ -96,7 +121,8 @@ export function armarMensajeAcercamiento(ctx: ContextoMensaje, foto: readonly In
   if (ins.length === 0) return null;
   const nombre = primerNombre(ctx.operadorNombre);
   const planta = lado === 'origen' ? lugarCorto(ctx.origen, 'la planta de carga') : lugarCorto(ctx.destino, 'la planta de descarga');
-  const texto = `Hola ${nombre}, ya vas llegando a ${planta} (viaje ${ctx.folio}). Recuerda:\n${textoLista(ins, false)}`;
+  const encabezado = `Hola ${nombre}, ya vas llegando a ${planta} (viaje ${ctx.folio}). Recuerda:`;
+  const texto = `${encabezado}\n${textoListaAcotada(ins, false, MAX_TEXTO_WA - encabezado.length - 1)}`;
   return {
     texto,
     plantilla: { nombre: PLANTILLA_ACERCAMIENTO, ...opcionesDeEnvio(PLANTILLA_ACERCAMIENTO, { cuerpo: [nombre, planta, ctx.folio, piezaPlantilla(ins, false)] }) },
@@ -148,5 +174,5 @@ export function responderPerfil(foto: readonly Instruccion[], tema: TemaPregunta
       texto: `No tengo ${que} registradas para este viaje. Pregúntale a tu jefe de tráfico antes de entrar. 🙏`,
     };
   }
-  return { sinDatos: false, texto: textoLista(relevantes, !lado) };
+  return { sinDatos: false, texto: textoListaAcotada(relevantes, !lado, MAX_TEXTO_WA, 'pregunta por tema («¿por dónde entro?», «¿qué documentos llevo?», «¿con quién me reporto?», «¿qué horario?») o a tu jefe de tráfico') };
 }
