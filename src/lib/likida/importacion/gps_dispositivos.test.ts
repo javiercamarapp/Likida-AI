@@ -139,6 +139,39 @@ describe('aplicar', () => {
   });
 });
 
+describe('A37-S46-02 — atomicidad y reasignadas del mapeo masivo', () => {
+  it('una fila que va a fallar NO libera su dispositivo viejo para otra unidad', async () => {
+    base.tabla('unidad').push({ id: 'u5', tenant_id: T, numero_economico: 'ECO-5', activo: true, terminal_id: null, gps_proveedor: 'wialon', gps_device_id: '999', gps_visto_en: null });
+    // ECO-2 pide el 999 (de ECO-5, que no se mueve): su fila falla y NO suelta el 777; ECO-3 pidiendo 777 debe rechazarse.
+    const filas = interpretarFilasGps(M([['ECO-2', 'wialon', '999'], ['ECO-3', 'wialon', '777']])).filas;
+    const p = await planificarMapeoGps(T, filas, flota);
+    expect(p.aplicar).toEqual([]);
+    expect(p.errores.map((e) => e.fila).sort()).toEqual([2, 3]);
+  });
+  it('si el ligar de una unidad falla tras soltar, se le devuelve su dispositivo anterior y se dice', async () => {
+    const filas = interpretarFilasGps(M([['ECO-2', 'wialon', '12001'], ['ECO-3', 'wialon', '5']])).filas;
+    base.fallarProxima('unidad', 'update', { message: 'boom' }, 1); // 0 = soltar; 1 = ligar de ECO-2
+    const r = await aplicarMapeoGps(T, filas, flota);
+    expect(r.ligadas).toBe(1);
+    expect(dispositivoDe('u2')).toBe('777');
+    expect(dispositivoDe('u3')).toBe('5');
+    expect(r.errores[0].motivo).toMatch(/conserva su GPS anterior/);
+  });
+  it('si falla la 2.a tanda de soltar, la 1.a se restaura y el aviso no miente', async () => {
+    const muchas = Array.from({ length: 201 }, (_, i) => ({
+      id: `m${i}`, tenant_id: T, numero_economico: `MM-${i}`, activo: true, terminal_id: null,
+      gps_proveedor: 'wialon', gps_device_id: `old-${i}`, gps_visto_en: null,
+    }));
+    base.tabla('unidad').push(...muchas);
+    const filas = interpretarFilasGps(M(muchas.map((m, i) => [m.numero_economico, 'wialon', `new-${i}`]))).filas;
+    base.fallarProxima('unidad', 'update', { message: 'boom' }, 1); // tanda 1 ok, tanda 2 falla
+    const r = await aplicarMapeoGps(T, filas, flota);
+    expect(r.ligadas).toBe(0);
+    expect(base.tabla('unidad').filter((u) => String(u.id).startsWith('m')).every((u, i) => u.gps_device_id === `old-${i}`)).toBe(true);
+    expect(r.error).toMatch(/conservan su GPS anterior/);
+  });
+});
+
 describe('el panel: revisar y confirmar con huella', () => {
   const csv = (filas: string[][]) => new File(['﻿' + filas.map((f) => f.join(',')).join('\n')], 'gps.csv', { type: 'text/csv' });
   const fd = (archivo: File, extra: Record<string, string> = {}) => { const d = new FormData(); d.set('archivo', archivo); for (const [k, v] of Object.entries(extra)) d.set(k, v); return d; };
