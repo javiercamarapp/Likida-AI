@@ -288,6 +288,14 @@ describe('detalle de una bitácora', () => {
     }
   });
 
+  it('A37-A1-liquidaciones-13: un total calculado de los renglones se señala, no se presenta como «de tu sistema»', async () => {
+    const calculado = await panel({ estado: 'ok', detalle: detalleDe({ desglose: { ...cabecera(), totalOrigen: 'calculado' } }) });
+    expect(calculado).toContain('Neto calculado de los renglones');
+    expect(calculado).not.toContain('Neto (de tu sistema)');
+    const tms = await panel({ estado: 'ok', detalle: detalleDe() });
+    expect(tms).toContain('Neto (de tu sistema)');
+  });
+
   it('muestra los 4 destinos con su estado, el correo enmascarado y la hora', async () => {
     const html = await panel({ estado: 'ok', detalle: detalleDe() });
     for (const t of ['Operador', 'Coordinador', 'RH', 'Archivo', 'Entregado', 'Enviado', 'No se pudo entregar']) expect(html).toContain(t);

@@ -572,7 +572,7 @@ function EstadoCabecera({ d }: { d: DetalleDesglose }) {
       <div><dt className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Operador</dt><dd>{d.operador ?? '—'}</dd></div>
       <div><dt className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Periodo</dt><dd>{`${fechaCorta(d.periodoDesde)} – ${fechaCorta(d.periodoHasta)}`}</dd></div>
       <div><dt className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Terminal</dt><dd>{d.terminal ?? '—'}</dd></div>
-      <div><dt className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Neto (de tu sistema)</dt><dd className="cifra-mono font-semibold">{dinero(d.neto, d.moneda)}</dd></div>
+      <div><dt className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{d.totalOrigen === 'calculado' ? 'Neto calculado de los renglones' : 'Neto (de tu sistema)'}</dt><dd className="cifra-mono font-semibold">{dinero(d.neto, d.moneda)}</dd>{d.totalOrigen === 'calculado' && <dd className="text-[11px]" style={{ color: 'var(--muted)' }}>Tu sistema no mandó su propio neto: no hay con qué compararlo.</dd>}</div>
     </dl>
   );
 }

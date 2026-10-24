@@ -22,6 +22,7 @@ import { CampoInvalido } from '@/lib/http/campos_cuerpo';
 import { partirCsv, separadorDe } from '../conectores/tabla_propia/csv';
 import { leerNumero, llaveEncabezado } from '../conectores/tabla_propia/validar';
 import { matrizDeArchivoCatalogo } from '../peajes/archivo';
+import { decodificarTexto } from '../peajes/csv';
 import { fechaDeCelda } from './liquidacion_csv';
 import {
   TIPOS_OPERADOR, claveDeBitacora, validarDesgloseBitacora,
@@ -244,7 +245,7 @@ export async function importarDesglosesDeArchivo(
   let matriz: readonly (readonly string[])[]; let decimalComa = false;
   if (ext === 'csv' || ext === 'txt' || ext === '') {
     if (bytes.length === 0) return { ...base, error: 'El archivo está vacío.' };
-    const texto = new TextDecoder('utf-8').decode(bytes).replace(/^﻿/, '');
+    const texto = decodificarTexto(bytes);
     matriz = partirCsv(texto); decimalComa = separadorDe(texto) === ';';
   } else {
     const m = matrizDeArchivoCatalogo(nombre, bytes);

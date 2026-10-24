@@ -33,7 +33,7 @@ import { traerTodo, traerPorIds, conteo, type RespuestaPg } from '../pg';
 import { normalizarNombre, normalizarTag } from './formatos';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from '../conductor/geometria_datos';
 import { matrizDeArchivoCatalogo } from './archivo';
-import { sumarMeses, limitesDelMes, mesAnterior } from './periodo';
+import { sumarMeses, limitesDelMes, mesAnterior, validarPeriodoDeclarado } from './periodo';
 import { revisarDobleEntreArchivos, VENTANA_MESES_DEFAULT, type ArchivoPrevio, type ResultadoDobleEntreArchivos } from './doble_entre_archivos';
 import { parsearCasetasMatriz, coordenadaDeCelda, validarCoordenadasMexico, type CasetaCatalogo } from './casetas';
 import { parsearTarifasMatriz, planificarTarifa, type OrigenTarifa, type TarifaEntrada, type TarifaExistente } from './tarifario_archivo';
@@ -132,6 +132,43 @@ export async function listarTags(tenantId: string): Promise<TagVista[]> {
   });
 }
 
+/**
+ * Los ids de gasto (de `gastoIds`) que ya respaldan una línea `cuadra` de otro desglose VIGENTE de la flota, creado antes
+ * que este y con periodo traslapado con las fechas de sus líneas. Lanza ante error de base (un conjunto a medias dejaría
+ * respaldar dos veces el mismo comprobante).
+ */
+export async function gastosRespaldadosPorOtrosDesgloses(
+  tenantId: string, desgloseId: string, gastoIds: readonly string[], fechas: readonly string[],
+): Promise<Set<string>> {
+  const salida = new Set<string>();
+  if (gastoIds.length === 0 || fechas.length === 0) return salida;
+  const { data: yo, error: errYo } = await acotada(supabaseAdmin().from('desglose_peaje')
+    .select('creado_en').eq('tenant_id', tenantId).eq('id', desgloseId).maybeSingle(), 'desglose_peaje.cruce_propio');
+  if (errYo) throw new Error(`conciliarDesglose: ${errYo.message}`);
+  const creadoEn = yo?.creado_en;
+  if (typeof creadoEn !== 'string' || creadoEn === '') return salida;
+  const { data: otros, error: errOtros } = await acotada(supabaseAdmin().from('desglose_peaje')
+    .select('id').eq('tenant_id', tenantId).neq('id', desgloseId).is('anulado_en', null)
+    .lt('creado_en', creadoEn).lte('periodo_desde', fechas[fechas.length - 1]).gte('periodo_hasta', fechas[0])
+    .order('creado_en').order('id').limit(50), 'desglose_peaje.cruce_otros');
+  if (errOtros) throw new Error(`conciliarDesglose: ${errOtros.message}`);
+  const ids = (otros ?? []).map((o) => String(o.id));
+  if (ids.length === 0) return salida;
+  const buscados = new Set(gastoIds);
+  const lineasOtras = await traerTodo<{ detalle: unknown }>(
+    (d, h) => acotada(supabaseAdmin().from('desglose_peaje_linea')
+      .select('detalle', conteo(d))
+      .eq('tenant_id', tenantId).in('desglose_id', ids).eq('estatus', 'cuadra')
+      .order('desglose_id').order('indice').range(d, h), 'desglose_peaje.cruce_otras_lineas'),
+    'desglose_peaje.cruce_otras_lineas',
+  );
+  for (const l of lineasOtras) {
+    const g = (l.detalle as { gastoId?: unknown } | null)?.gastoId;
+    if (typeof g === 'string' && buscados.has(g)) salida.add(g);
+  }
+  return salida;
+}
+
 /** TAG normalizado → su baja registrada (`peaje_tag_baja`, 0776). */
 async function leerBajas(tenantId: string): Promise<Map<string, { bajaEn: string; motivo: string | null }>> {
   const filas = await traerTodo<{ tag: unknown; baja_en: unknown; motivo: unknown }>(
@@ -149,14 +186,19 @@ async function leerBajas(tenantId: string): Promise<Map<string, { bajaEn: string
  * unidad y uno POSTERIOR no. Lanza ante error de base (un mapa a medias daría «sin alta» falsos).
  */
 export async function cargarVigenciaTags(tenantId: string): Promise<Map<string, VigenciaTag>> {
-  const filas = await traerTodo<{ tag: unknown; unidad_id: unknown }>(
+  const filas = await traerTodo<{ tag: unknown; unidad_id: unknown; activo: unknown }>(
     (d, h) => acotada(supabaseAdmin()
-      .from('peaje_tag').select('tag, unidad_id', conteo(d))
+      .from('peaje_tag').select('tag, unidad_id, activo', conteo(d))
       .eq('tenant_id', tenantId).order('tag').range(d, h), 'peajes.vigencia_tags'),
     'peajes.vigencia_tags',
   );
   const bajas = await leerBajas(tenantId);
-  return new Map(filas.map((f) => [String(f.tag), { unidadId: String(f.unidad_id), bajaEn: bajas.get(String(f.tag))?.bajaEn ?? null }]));
+  // Un TAG apagado (`activo=false`) SIN registro de baja (alta/baja anteriores a la 0776) no tiene fecha desde la cual
+  // dejar de atribuir su unidad: se trata como dado de baja desde siempre (fail-closed), igual que `cargarMapaTags`.
+  return new Map(filas.map((f) => [String(f.tag), {
+    unidadId: String(f.unidad_id),
+    bajaEn: bajas.get(String(f.tag))?.bajaEn ?? (f.activo === false ? '0001-01-01' : null),
+  }]));
 }
 
 /** TAG normalizado → unidad, solo los activos. Lanza ante error de base: un mapa a medias dejaría líneas «sin unidad» falsas. */
@@ -1149,6 +1191,28 @@ export async function avisosPendientesPeajes(limite: number): Promise<Array<{ te
   return ((r.data ?? []) as Array<Record<string, unknown>>).map((f) => ({ tenantId: String(f.tenant_id), desgloseId: String(f.desglose_id) }));
 }
 
+/**
+ * A37-A2-12: declara (o corrige) el periodo OFICIAL de un desglose YA importado. Los canales automáticos (correo, SFTP, API,
+ * pull) solo traen el periodo si el NOMBRE del archivo lo dice («01 A 10 DE SEPT»); un `corte.xlsx` entra sin periodo, y sin él
+ * los extemporáneos, el doble entre archivos y el cierre mensual quedan apagados. Manda sobre el nombre (origen `declarado`).
+ * Condicional a «no anulado» y acotada a la flota.
+ */
+export async function declararPeriodoDesglose(
+  tenantId: string, desgloseId: string, desde: string, hasta: string,
+): Promise<{ ok: true } | { ok: false; motivo: string }> {
+  const v = validarPeriodoDeclarado(desde, hasta);
+  if (!v.ok) return { ok: false, motivo: v.motivo };
+  const { data, error } = await acotada(supabaseAdmin().from('desglose_peaje')
+    .update({ periodo_oficial_desde: v.periodo.desde, periodo_oficial_hasta: v.periodo.hasta, periodo_origen: 'declarado' })
+    .eq('tenant_id', tenantId).eq('id', desgloseId).is('anulado_en', null).select('id'), 'peajes.declarar_periodo');
+  if (error) {
+    logger.error('peajes.declarar_periodo', { tenant: tenantId, err: error.message });
+    return { ok: false, motivo: 'No se pudo guardar el periodo. Inténtalo de nuevo.' };
+  }
+  if ((data ?? []).length === 0) return { ok: false, motivo: 'Ese desglose no existe en tu flota o ya fue anulado.' };
+  return { ok: true };
+}
+
 export type ResultadoAnulacion = 'anulado' | 'ya_anulado' | 'no_encontrado';
 
 /**
@@ -1169,15 +1233,55 @@ export async function anularDesgloseDb(tenantId: string, desgloseId: string, mot
     return ex.data ? 'ya_anulado' : 'no_encontrado';
   }
   const arch = await acotada(supabaseAdmin().from('peaje_ingesta_archivo')
-    .select('id, huella').eq('tenant_id', tenantId).eq('desglose_id', desgloseId).order('id'), 'peajes.anular_archivos');
+    .select('id, huella, origen').eq('tenant_id', tenantId).eq('desglose_id', desgloseId).order('id'), 'peajes.anular_archivos');
   if (arch.error) throw new Error(`anularDesglose: ${arch.error.message}`);
-  for (const a of (arch.data ?? []) as Array<{ id: string; huella: string }>) {
-    const libre = createHash('sha256').update(`${a.huella}:anulada:${desgloseId}`).digest('hex');
-    const r = await acotada(supabaseAdmin().from('peaje_ingesta_archivo').update({ huella: libre })
-      .eq('tenant_id', tenantId).eq('id', a.id), 'peajes.anular_huella');
-    if (r.error) logger.error('peajes.anular_huella', { tenant: tenantId, err: r.error.message });
+  for (const a of (arch.data ?? []) as Array<{ id: string; huella: string; origen?: string }>) {
+    // A37-A2-08: lo que llega por CONSULTA PERIÓDICA (pull, SFTP) es el mismo archivo ciclo tras ciclo si el endpoint de la flota
+    // devuelve siempre el mismo: liberar su huella lo reimportaba, reconciliaba y volvía a avisar a la oficina solo, deshaciendo
+    // la anulación. Esas huellas se CONSERVAN (el siguiente ciclo lo ve como duplicado); la persona que quiera cargarlo de
+    // nuevo lo sube a mano desde el panel (`liberarHuellaDeAnulado`). Correo y API los manda una persona a propósito: se liberan.
+    if (a.origen === 'pull' || a.origen === 'sftp') continue;
+    await liberarHuellaArchivo(tenantId, a.id, a.huella, desgloseId);
   }
+  // A37-A2-07: los reclamos PREPARADOS (aún no enviados) de un desglose anulado dejan de contar como pendientes (plazo, KPI
+  // «por vencer», totales): pasan a `rechazado` con la causa, lo que además libera el único parcial por categoría para
+  // reclamar de nuevo con el archivo correcto. Los ya ENVIADOS al proveedor no se tocan: son hechos externos que una persona decide.
+  const rec = await acotada(supabaseAdmin().from('peaje_reclamo')
+    .update({ estado: 'rechazado', notas: 'Anulado: el desglose de origen se anuló (archivo subido por error).', actualizado_en: ahora })
+    .eq('tenant_id', tenantId).eq('desglose_id', desgloseId).eq('estado', 'preparado'), 'peajes.anular_reclamos');
+  if (rec.error) logger.error('peajes.anular_reclamos', { tenant: tenantId, err: rec.error.message });
   return 'anulado';
+}
+
+/** El estado de UN archivo de la cola (acotado a la flota): lo que la subida manual lee tras procesar en línea. */
+export async function estadoArchivoPeaje(tenantId: string, archivoId: string) {
+  return acotada(supabaseAdmin().from('peaje_ingesta_archivo')
+    .select('estado, desglose_id, ultimo_error').eq('tenant_id', tenantId).eq('id', archivoId).maybeSingle(), 'peajes.panel.estado');
+}
+
+/** Reemplaza la huella de un archivo de la cola por otra derivada (misma forma), para que el mismo contenido pueda volver a recibirse. */
+async function liberarHuellaArchivo(tenantId: string, archivoId: string, huella: string, desgloseId: string): Promise<void> {
+  const libre = createHash('sha256').update(`${huella}:anulada:${desgloseId}`).digest('hex');
+  const r = await acotada(supabaseAdmin().from('peaje_ingesta_archivo').update({ huella: libre })
+    .eq('tenant_id', tenantId).eq('id', archivoId), 'peajes.anular_huella');
+  if (r.error) logger.error('peajes.anular_huella', { tenant: tenantId, err: r.error.message });
+}
+
+/**
+ * Subida MANUAL de un archivo cuya huella se conservó al anular su desglose (entregado por pull/SFTP, A37-A2-08): si el archivo
+ * de la cola quedó ligado a un desglose ANULADO, se libera su huella para que la persona pueda cargarlo otra vez. `true` si se liberó.
+ */
+export async function liberarHuellaDeAnulado(tenantId: string, archivoId: string): Promise<boolean> {
+  const { data: a, error } = await acotada(supabaseAdmin().from('peaje_ingesta_archivo')
+    .select('id, huella, desglose_id').eq('tenant_id', tenantId).eq('id', archivoId).maybeSingle(), 'peajes.liberar_anulado_archivo');
+  if (error) throw new Error(`liberarHuellaDeAnulado: ${error.message}`);
+  if (!a || typeof a.desglose_id !== 'string') return false;
+  const { data: d, error: errD } = await acotada(supabaseAdmin().from('desglose_peaje')
+    .select('id, anulado_en').eq('tenant_id', tenantId).eq('id', a.desglose_id).maybeSingle(), 'peajes.liberar_anulado_desglose');
+  if (errD) throw new Error(`liberarHuellaDeAnulado: ${errD.message}`);
+  if (!d || !d.anulado_en) return false;
+  await liberarHuellaArchivo(tenantId, String(a.id), String(a.huella), String(a.desglose_id));
+  return true;
 }
 
 export interface ArchivoIngestaVista {

@@ -2,6 +2,7 @@ import { logger } from '@/lib/logger';
 import { CampoInvalido } from '@/lib/http/campos_cuerpo';
 import { cuerposDeLiquidacionesCsv } from './liquidacion_csv';
 import { matrizDeArchivoCatalogo } from '../peajes/archivo';
+import { decodificarTexto } from '../peajes/csv';
 import { validarLiquidacionExterna, huellaContenido, type LiquidacionExternaNormalizada } from './esquema';
 import { buscarPorClave, type LiquidacionExterna } from './repo';
 import { recibirLiquidacionExterna, intentarEntrega } from './servicio';
@@ -49,7 +50,7 @@ export function textoDeArchivoLiquidaciones(nombre: string, bytes: Uint8Array): 
   const ext = (/\.([a-z0-9]+)$/i.exec(nombre.trim())?.[1] ?? '').toLowerCase();
   if (ext === 'csv' || ext === 'txt' || ext === '') {
     if (bytes.length === 0) return { ok: false, motivo: 'El archivo está vacío.' };
-    return { ok: true, texto: new TextDecoder('utf-8').decode(bytes).replace(/^﻿/, '') };
+    return { ok: true, texto: decodificarTexto(bytes) };
   }
   const m = matrizDeArchivoCatalogo(nombre, bytes);
   if (!m.ok) return m;

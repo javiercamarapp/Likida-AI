@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { avisarDiscrepanciasDesglose, type DepsAvisoDiscrepancia } from './aviso_discrepancia';
+import { avisarDiscrepanciasDesglose, TOPE_AVISOS_DISCREPANCIA, type DepsAvisoDiscrepancia } from './aviso_discrepancia';
 import type { CandidatoCobro } from './reglas_cobro';
 import type { ReporteRevision } from './repo';
 import type { PosicionConocida } from './reporte_discrepancia';
@@ -135,5 +135,29 @@ describe('avisarDiscrepanciasDesglose', () => {
     expect(r.evaluados).toBe(2);
     expect(r.enviados).toBe(2);
     expect(avisar).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('A37-A2-14: tope de mensajes por desglose', () => {
+  it('cientos de candidatos críticos: máximo TOPE individuales + UN resumen, nunca uno por candidato', async () => {
+    const muchos = Array.from({ length: 300 }, (_, i) => critico({ indice: i }));
+    const avisar = vi.fn(async (_tel: string, _texto: string) => ({ ok: true, via: 'texto' as const, id: 'wamid-1' }));
+    const d = deps({ revisionDeDesglose: vi.fn(async () => reporteCon(muchos)), avisar: avisar as unknown as DepsAvisoDiscrepancia['avisar'] });
+    const r = await avisarDiscrepanciasDesglose(T, DES, d);
+    expect(r.evaluados).toBe(300);
+    expect(avisar).toHaveBeenCalledTimes(TOPE_AVISOS_DISCREPANCIA + 1);
+    expect(r.enviados).toBe(TOPE_AVISOS_DISCREPANCIA + 1);
+    const resumen = avisar.mock.calls[TOPE_AVISOS_DISCREPANCIA][1];
+    expect(resumen).toContain(String(300 - TOPE_AVISOS_DISCREPANCIA));
+  });
+
+  it('Meta rechaza: no sigue insistiendo candidato por candidato (corta al primer rechazo)', async () => {
+    const muchos = Array.from({ length: 50 }, (_, i) => critico({ indice: i }));
+    const avisar = vi.fn(async () => ({ ok: false, motivo: 'rechazado', codigo: 131047, fueraDeVentana: true, reintentable: false }));
+    const d = deps({ revisionDeDesglose: vi.fn(async () => reporteCon(muchos)), avisar: avisar as unknown as DepsAvisoDiscrepancia['avisar'] });
+    const r = await avisarDiscrepanciasDesglose(T, DES, d);
+    expect(avisar).toHaveBeenCalledTimes(1);
+    expect(r.enviados).toBe(0);
+    expect(r.pendientes).toBe(50);
   });
 });

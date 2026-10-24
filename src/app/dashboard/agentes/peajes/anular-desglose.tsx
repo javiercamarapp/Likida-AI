@@ -41,7 +41,7 @@ export function BotonAnular({ anular, desgloseId }: { anular: AccionAnular; desg
           <div className="space-y-2">
             <p>
               Deja de aparecer aquí, de contar en la bitácora RMF 9.1.8, de exportarse y de avisar a la oficina. No se borra:
-              queda de constancia con quién lo anuló y por qué. El archivo correcto (o este mismo, ya arreglado) puede volver a mandarse.
+              queda de constancia con quién lo anuló y por qué. El archivo correcto (o este mismo, ya arreglado) puede volver a mandarse; si había llegado por consulta automática (pull o SFTP), el sistema no lo vuelve a tomar solo: súbelo a mano para cargarlo otra vez.
             </p>
             <label className="block">
               <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Motivo (obligatorio, hasta 500 caracteres)</span>

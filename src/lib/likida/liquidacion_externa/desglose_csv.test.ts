@@ -173,6 +173,15 @@ describe('importarDesglosesDeArchivo', () => {
     expect(r.error).toBeUndefined();
   });
 
+  it('A37-A1-liquidaciones-19: CSV en Windows-1252 conserva los acentos del concepto', async () => {
+    const { recibir, vistos } = recibidor();
+    const ansi = Uint8Array.from(Array.from(CSV_TRES.replace('Sueldo', 'Vi\u00e1ticos'), (c) => c.charCodeAt(0)));
+    await importarDesglosesDeArchivo('t1', 'export.csv', ansi, { recibir });
+    const conceptos = vistos.flatMap((d) => [...d.percepciones, ...d.deducciones].map((r) => r.concepto));
+    expect(conceptos).toContain('Viáticos');
+    expect(conceptos.join('')).not.toContain('\uFFFD');
+  });
+
   it('Excel (.xlsx): fecha serial y montos numéricos', async () => {
     const hoja = XLSX.utils.aoa_to_sheet([
       ['Bitácora', 'Póliza', 'No. Empleado', 'Desde', 'Hasta', 'Tipo', 'Concepto', 'Monto'],

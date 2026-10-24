@@ -43,6 +43,12 @@ export interface DatosRevisionCobros {
   hayDesglose?: boolean;
   /** Los reclamos de TODA la flota; `null` = no se pudieron leer. */
   reclamos: ReclamoVista[] | null;
+  /**
+   * A37-A2-06: las decisiones por línea de ESTE desglose (`peaje_candidato_accion`). Con ellas, un reclamo hecho desde la tabla
+   * cubre SOLO las líneas que reclamó. `undefined` = el llamador no las pide (se conserva «un reclamo cubre su categoría»);
+   * `null` = no se pudieron leer.
+   */
+  decisiones?: ReadonlyArray<{ indice: number; categoria: string; accion: string; reclamoId: string | null }> | null;
   /** Cuántas tarifas hay configuradas; `null` = no se pudo leer. */
   tarifas: number | null;
   /** Los vínculos cruce-viaje del desglose abierto; `null` = no se pudieron leer. */
@@ -122,11 +128,23 @@ export function estadoRevisionCobros(d: DatosRevisionCobros): EstadoRevisionCobr
     const delArchivo = d.reclamos.filter((r) => r.desgloseId === reporte.desgloseId);
     const categorias = entradaDeCategorias(reporte, delArchivo);
 
+    if (d.decisiones === null) return { tipo: 'error' };
+    // A37-A2-06: un reclamo con decisiones ligadas (hecho desde la tabla) cubre SOLO esas líneas; uno sin ninguna
+    // (de categoría completa) cubre lo que cubra `lineasCubiertasPorReclamo`. A37-S15-03: solo cuenta lo ENVIADO.
+    const conDecision = new Set((d.decisiones ?? []).map((x) => x.reclamoId).filter((x): x is string => x !== null));
+    const enviadoPorId = new Set(delArchivo.filter((r) => ESTADOS_RECLAMO_ENVIADO.has(r.estado)).map((r) => r.id));
+    const reclamosCompletos = delArchivo.filter((r) => d.decisiones === undefined || !conDecision.has(r.id));
+    const lineasReclamadas = new Set((d.decisiones ?? [])
+      .filter((x) => x.accion === 'reclamado' && x.reclamoId !== null && enviadoPorId.has(x.reclamoId))
+      .map((x) => `${x.indice}|${x.categoria}`));
     const conFecha = reporte.revision.candidatos
       .filter((c): c is typeof c & { fecha: string } => typeof c.fecha === 'string' && c.fecha !== '');
-    const cubiertas = lineasCubiertasPorReclamo(conFecha, delArchivo);
+    const cubiertas = lineasCubiertasPorReclamo(conFecha, reclamosCompletos);
     const candidatosPlazo = conFecha
-      .map((c) => ({ lineaId: String(c.indice), desgloseId: reporte.desgloseId, fechaCruce: c.fecha, monto: c.monto, reclamado: cubiertas.has(c.indice) }));
+      .map((c) => ({
+        lineaId: String(c.indice), desgloseId: reporte.desgloseId, fechaCruce: c.fecha, monto: c.monto,
+        reclamado: cubiertas.has(c.indice) || lineasReclamadas.has(`${c.indice}|${c.categoria}`),
+      }));
     const hayCandidatos = reporte.revision.candidatos.length > 0;
     const porVencer = hayCandidatos && candidatosPlazo.length === 0
       ? null
