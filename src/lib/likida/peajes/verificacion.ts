@@ -105,7 +105,7 @@ export function clasificarVerificacion(e: EntradaVerificacion): Verificacion {
     return { estado: 'por_verificar', motivo: 'sin_fecha', explicacion: 'La línea no trae una fecha legible: no se puede buscar su gasto. No se afirma nada.' };
   }
   if (motivoCruce === 'contraparte_ya_reclamada') {
-    return { estado: 'por_verificar', motivo: 'contraparte_reclamada', explicacion: 'Su gasto ya respalda a otra línea idéntica del archivo: confirma si fueron dos cruces o un cobro duplicado.' };
+    return { estado: 'por_verificar', motivo: 'contraparte_reclamada', explicacion: 'Su gasto ya respalda a otra línea idéntica (de este archivo o de otro desglose vigente más antiguo): confirma si fueron dos cruces o un cobro duplicado.' };
   }
   const fondo = typeof e.detalle?.fondo_gastos === 'number' ? e.detalle.fondo_gastos : null;
   if (fondo === null || fondo === 0) {

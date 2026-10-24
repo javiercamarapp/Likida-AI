@@ -47,6 +47,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import * as XLSX from 'xlsx';
+import { createHash } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { traerTodo, traerPorIds, conteo } from '../pg';
@@ -782,6 +783,9 @@ export function cruzarLineasDesglose(
   /** `unidadId`: la unidad que `peaje_tag` casa con el TAG de la línea (null/ausente si el TAG no está dado de alta). */
   lineas: ReadonlyArray<{ fecha: string | null; monto: number; unidadId?: string | null }>,
   gastos: readonly GastoCaseta[],
+  /** A37-S47-02: gastos que YA respaldan una línea de OTRO desglose vigente y anterior. Entran como «usados» desde el inicio:
+   *  un mismo comprobante no respalda dos cobros, ni dentro de un archivo ni entre archivos traslapados. */
+  yaReclamados: ReadonlySet<string> = new Set(),
 ): CruceLinea[] {
   // ESCALA (T-A2-32): el barrido de TODOS los gastos por cada línea era O(líneas × gastos) — a 60 000
   // líneas y ~45 000 gastos, miles de millones de comparaciones. Los gastos se indexan por día (medianoche
@@ -801,7 +805,7 @@ export function cruzarLineasDesglose(
     if (lista) lista.push({ gasto: g, orden, dia: d });
     else porDia.set(d, [{ gasto: g, orden, dia: d }]);
   });
-  const usados = new Set<string>();
+  const usados = new Set<string>(yaReclamados);
   const resultados: CruceLinea[] = [];
 
   for (const linea of lineas) {
@@ -948,6 +952,32 @@ export type ResultadoImportar =
    *  `infraestructura` (la base no dejó guardar — reintentar sí puede). La cola de ingesta decide con esto. */
   | { ok: false; motivo: string; causa?: 'formato' | 'infraestructura' };
 
+/** ¿El error de la base es «esa columna no existe» (migración sin aplicar)? Postgres directo: 42703; PostgREST: PGRST204. */
+function esColumnaAusente(e: { code?: string; message?: string }): boolean {
+  return e.code === '42703' || e.code === 'PGRST204' || /archivo_sha256/.test(e.message ?? '') && /column|schema cache/i.test(e.message ?? '');
+}
+
+async function contarLineas(tenantId: string, desgloseId: string): Promise<number> {
+  const { count, error } = await acotada(supabaseAdmin()
+    .from('desglose_peaje_linea').select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId).eq('desglose_id', desgloseId), 'desglose_peaje.previo_lineas');
+  if (error) throw new Error(`importarDesglose: ${error.message}`);
+  return count ?? 0;
+}
+
+/**
+ * Un desglose ya existe para este archivo: con líneas = ya estaba importado (se devuelve ese resultado); sin líneas = el worker
+ * murió a medias, se borra la cáscara y se devuelve `null` para que el llamador rehaga la importación.
+ */
+async function yaImportadoOLimpiar(tenantId: string, desgloseId: string, aviso: string): Promise<ResultadoImportar | null> {
+  const total = await contarLineas(tenantId, desgloseId);
+  if (total > 0) return { ok: true, desgloseId, totalLineas: total, avisos: [aviso] };
+  const { error: errBorrar } = await acotada(supabaseAdmin()
+    .from('desglose_peaje').delete().eq('tenant_id', tenantId).eq('id', desgloseId), 'desglose_peaje.limpiar_cascara');
+  if (errBorrar) throw new Error(`importarDesglose: ${errBorrar.message}`);
+  return null;
+}
+
 /**
  * Importa el archivo del proveedor: parsea, mide el periodo (min/max real de
  * las fechas — nunca inventado) y guarda desglose + líneas. TODA línea nace
@@ -985,16 +1015,28 @@ export async function importarDesglose(
       .eq('tenant_id', tenantId).eq('ingesta_archivo_id', archivo.ingestaArchivoId).maybeSingle(), 'desglose_peaje.previo_ingesta');
     if (errPrevio) throw new Error(`importarDesglose: ${errPrevio.message}`);
     if (previo) {
-      const { count, error: errCuenta } = await acotada(supabaseAdmin()
-        .from('desglose_peaje_linea').select('id', { count: 'exact', head: true })
-        .eq('tenant_id', tenantId).eq('desglose_id', previo.id as string), 'desglose_peaje.previo_lineas');
-      if (errCuenta) throw new Error(`importarDesglose: ${errCuenta.message}`);
-      if ((count ?? 0) > 0) {
-        return { ok: true, desgloseId: String(previo.id), totalLineas: count ?? 0, avisos: ['Este archivo ya estaba importado; no se duplicó.'] };
-      }
-      const { error: errBorrar } = await acotada(supabaseAdmin()
-        .from('desglose_peaje').delete().eq('tenant_id', tenantId).eq('id', previo.id as string), 'desglose_peaje.limpiar_cascara');
-      if (errBorrar) throw new Error(`importarDesglose: ${errBorrar.message}`);
+      const yaEstaba = await yaImportadoOLimpiar(tenantId, String(previo.id), 'Este archivo ya estaba importado; no se duplicó.');
+      if (yaEstaba) return yaEstaba;
+    }
+  }
+
+  // A37-S47-02: LA SUBIDA MANUAL TAMBIÉN ES IDEMPOTENTE. Sin `ingestaArchivoId` nada impedía que el doble clic en «Subir», o el
+  // mismo Excel con otro nombre, creara un segundo desglose que cuadra los mismos gastos y produce su propia bitácora RMF 9.1.8
+  // (sumadas, el monto conciliado y el estímulo se duplican). La huella SHA-256 del contenido + el índice único parcial de la 0916
+  // lo cierran. Tolera que la migración aún no esté aplicada: sin la columna se importa como antes (y se avisa en el log).
+  const huella = createHash('sha256').update(archivo.buffer).digest('hex');
+  let usarHuella = true;
+  {
+    const { data: igual, error: errIgual } = await acotada(supabaseAdmin()
+      .from('desglose_peaje').select('id')
+      .eq('tenant_id', tenantId).eq('archivo_sha256', huella).is('anulado_en', null).maybeSingle(), 'desglose_peaje.previo_huella');
+    if (errIgual) {
+      if (!esColumnaAusente(errIgual)) throw new Error(`importarDesglose: ${errIgual.message}`);
+      usarHuella = false;
+      logger.warn('desglose_peaje.sin_migracion_0916', { tenant: tenantId });
+    } else if (igual) {
+      const yaEstaba = await yaImportadoOLimpiar(tenantId, String(igual.id), 'Este mismo archivo (mismo contenido) ya estaba importado; no se duplicó.');
+      if (yaEstaba) return yaEstaba;
     }
   }
 
@@ -1025,9 +1067,7 @@ export async function importarDesglose(
   if (!periodoOficial) {
     avisos.push('No pude saber el periodo del archivo (ni lo declaraste, ni el nombre lo dice, p. ej. «01 A 10 DE SEPT»): la revisión de cobros extemporáneos no se aplica hasta que lo declares.');
   }
-  const { data: fila, error: errDesglose } = await acotada(supabaseAdmin()
-    .from('desglose_peaje')
-    .insert({
+  const filaDesglose = {
       tenant_id: tenantId,
       proveedor: archivo.proveedor?.trim() || null,
       periodo_desde: fechas[0] ?? null,
@@ -1039,9 +1079,28 @@ export async function importarDesglose(
       periodo_origen: periodoOficial?.origen ?? null,
       no_periodo: parseo.calidad.noPeriodo,
       calidad: parseo.calidad,
-    })
+  };
+  const insertarDesglose = (conHuella: boolean) => acotada(supabaseAdmin()
+    .from('desglose_peaje')
+    .insert(conHuella ? { ...filaDesglose, archivo_sha256: huella } : filaDesglose)
     .select('id')
     .single(), 'desglose_peaje.insertar');
+  let { data: fila, error: errDesglose } = await insertarDesglose(usarHuella);
+  if (errDesglose && usarHuella && esColumnaAusente(errDesglose)) {
+    logger.warn('desglose_peaje.sin_migracion_0916', { tenant: tenantId });
+    usarHuella = false;
+    ({ data: fila, error: errDesglose } = await insertarDesglose(false));
+  }
+  // La carrera de dos clics: el segundo INSERT choca con el índice único de la huella (23505). No es un fallo: ya estaba.
+  if (errDesglose && usarHuella && errDesglose.code === '23505') {
+    const { data: ganador } = await acotada(supabaseAdmin()
+      .from('desglose_peaje').select('id')
+      .eq('tenant_id', tenantId).eq('archivo_sha256', huella).is('anulado_en', null).maybeSingle(), 'desglose_peaje.previo_huella_carrera');
+    if (ganador) {
+      const total = await contarLineas(tenantId, String(ganador.id));
+      return { ok: true, desgloseId: String(ganador.id), totalLineas: total, avisos: ['Este mismo archivo (mismo contenido) ya estaba importado; no se duplicó.'] };
+    }
+  }
   if (errDesglose || !fila) {
     logger.error('desglose_peaje.insertar_error', { tenant: tenantId, err: errDesglose?.message ?? 'sin id' });
     return { ok: false, motivo: 'No se pudo guardar el desglose. Inténtalo de nuevo.', causa: 'infraestructura' };
@@ -1157,6 +1216,46 @@ export async function conciliarDesglose(
   }
 }
 
+/**
+ * A37-S47-02: los gastos de caseta que ya respaldan una línea `cuadra` de otro desglose VIGENTE (no anulado) creado ANTES que éste,
+ * dentro del rango de fechas del fondo. Lanza ante un error de lectura: un conjunto a medias dejaría cuadrar dos veces el mismo
+ * comprobante, que es justo lo que esto evita.
+ */
+async function gastosReclamadosPorDesglosesAnteriores(tenantId: string, desgloseId: string, desde: string, hasta: string): Promise<Set<string>> {
+  const { data: yo, error: errYo } = await acotada(supabaseAdmin()
+    .from('desglose_peaje').select('id, creado_en')
+    .eq('tenant_id', tenantId).eq('id', desgloseId).maybeSingle(), 'desglose_peaje.reclamados_yo');
+  if (errYo) throw new Error(`conciliarDesglose: ${errYo.message}`);
+  const miCreado = (yo as { creado_en?: unknown } | null)?.creado_en;
+  if (typeof miCreado !== 'string' || miCreado === '') return new Set();
+
+  const anteriores = await traerTodo<{ id: unknown }>(
+    (d, h) => acotada(supabaseAdmin()
+      .from('desglose_peaje').select('id', conteo(d))
+      .eq('tenant_id', tenantId).is('anulado_en', null).lt('creado_en', miCreado)
+      .order('id').range(d, h), 'desglose_peaje.reclamados_anteriores'),
+    'desglose_peaje.reclamados_anteriores',
+  );
+  const ids = anteriores.map((a) => String(a.id)).filter((id) => id !== desgloseId);
+  const reclamados = new Set<string>();
+  for (let i = 0; i < ids.length; i += 50) {
+    const tanda = ids.slice(i, i + 50);
+    const lineas = await traerTodo<{ detalle: unknown }>(
+      (d, h) => acotada(supabaseAdmin()
+        .from('desglose_peaje_linea').select('detalle', conteo(d))
+        .eq('tenant_id', tenantId).eq('estatus', 'cuadra').in('desglose_id', tanda)
+        .gte('fecha', desde).lte('fecha', hasta)
+        .order('id').range(d, h), 'desglose_peaje.reclamados_lineas'),
+      'desglose_peaje.reclamados_lineas',
+    );
+    for (const l of lineas) {
+      const g = (l.detalle as Record<string, unknown> | null)?.gastoId;
+      if (typeof g === 'string' && g !== '') reclamados.add(g);
+    }
+  }
+  return reclamados;
+}
+
 async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): Promise<ResumenCruceDesglose> {
   // 1) Las líneas del desglose, en el orden del archivo. Error de lectura
   //    LANZA: "no hay líneas" y "no pude leer" llevan a acuses opuestos.
@@ -1251,8 +1350,14 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
     gastos = gastos.map((g) => ({ ...g, unidadId: unidadPorViajeGasto.get(g.viajeId) ?? null }));
   }
 
-  // 3) El cruce puro.
-  const cruces = cruzarLineasDesglose(lineas, gastos);
+  // 3) El cruce puro. A37-S47-02: el fondo excluye los gastos que ya respaldan una línea de OTRO desglose vigente y más antiguo
+  //    (archivos de periodos traslapados, o de dos proveedores): el primero que los reclamó los conserva. Sin esto, cada desglose
+  //    cuadraba los mismos gastos y producía su propia bitácora RMF con los mismos cruces — sumadas, se duplica el monto conciliado.
+  //    Re-correr un desglose es estable: solo cuentan los MÁS ANTIGUOS, así que el más viejo nunca pierde lo que ya tenía.
+  const yaReclamados = fechas.length > 0 && gastos.length > 0
+    ? await gastosReclamadosPorDesglosesAnteriores(tenantId, desgloseId, sumarDias(fechas[0], -VENTANA_DIAS_FECHA), sumarDias(fechas[fechas.length - 1], VENTANA_DIAS_FECHA))
+    : new Set<string>();
+  const cruces = cruzarLineasDesglose(lineas, gastos, yaReclamados);
 
   // 4) El cruce por CASETA con el GPS (0375/0376): la unidad a evaluar es la del
   //    TAG y, si el TAG no está dado de alta, la del viaje que cuadró. Sin
