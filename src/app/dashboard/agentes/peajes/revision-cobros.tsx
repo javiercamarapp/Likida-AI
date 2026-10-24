@@ -53,11 +53,21 @@ export interface DatosRevisionCobros {
 
 const SIN_RECLAMAR = 'Sin reclamar';
 
+/**
+ * A37-S15-03: «reclamado» es lo que de verdad LLEGÓ al proveedor. Un reclamo
+ * `preparado` (nadie lo envió al portal) no detiene el plazo de 3 meses, y uno
+ * `rechazado` ya no está en juego: ninguno de los dos puede apagar el aviso
+ * «por vencer» ni contar como atendido.
+ */
+const ESTADOS_RECLAMO_ENVIADO: ReadonlySet<string> = new Set(['enviado', 'acreditado_parcial', 'acreditado']);
+
 function entradaDeCategorias(reporte: ReporteRevision, reclamosDelArchivo: readonly ReclamoVista[]): EntradaCategoriaInsight[] {
   const { revision } = reporte;
   return CATEGORIAS_COBRO.map((categoria) => {
     const res = revision.porCategoria[categoria];
-    const reclamados = reclamosDelArchivo.filter((r) => r.categoria === categoria).reduce((s, r) => s + r.nCruces, 0);
+    const reclamados = reclamosDelArchivo
+      .filter((r) => r.categoria === categoria && ESTADOS_RECLAMO_ENVIADO.has(r.estado))
+      .reduce((s, r) => s + r.nCruces, 0);
     const justificados = revision.candidatos.filter((c) => c.categoria === categoria && c.justificacion).length;
     // Se atiende lo reclamado y lo justificado; el módulo de insights acota a `n`.
     return { categoria, n: res.n, monto: res.monto, atendidos: reclamados + justificados };
@@ -65,11 +75,42 @@ function entradaDeCategorias(reporte: ReporteRevision, reclamosDelArchivo: reado
 }
 
 /**
+ * Los candidatos que un reclamo ENVIADO de su categoría de verdad cubre. El
+ * reclamo guarda cuántos cruces traía (`nCruces`) y la fecha del más antiguo;
+ * no guarda cuáles. Por eso:
+ *  · un cruce ANTERIOR a esa fecha no pudo ir en el reclamo;
+ *  · del resto solo se cubren tantos como `nCruces` — y si sobran (cruces que
+ *    aparecieron después de crearlo) se dejan SIN cubrir los más viejos, que son
+ *    los urgentes: ante la duda el plazo avisa, no se calla.
+ */
+function lineasCubiertasPorReclamo(
+  candidatos: ReadonlyArray<{ indice: number; categoria: string; fecha: string }>,
+  reclamos: readonly ReclamoVista[],
+): Set<number> {
+  const cubiertas = new Set<number>();
+  for (const categoria of new Set(candidatos.map((c) => c.categoria))) {
+    const enviados = reclamos.filter((r) => r.categoria === categoria && ESTADOS_RECLAMO_ENVIADO.has(r.estado));
+    if (enviados.length === 0) continue;
+    const desde = enviados.map((r) => r.fechaCobroMasAntiguo).sort()[0];
+    let cupo = enviados.reduce((s, r) => s + r.nCruces, 0);
+    const elegibles = candidatos
+      .filter((c) => c.categoria === categoria && c.fecha >= desde)
+      .sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : b.indice - a.indice)); // los más nuevos primero
+    for (const c of elegibles) {
+      if (cupo <= 0) break;
+      cubiertas.add(c.indice);
+      cupo -= 1;
+    }
+  }
+  return cubiertas;
+}
+
+/**
  * De los datos de la base a lo que se pinta. Nunca lanza: un cálculo que truena es `error`.
  *
  * Rulings (T-A2-27): «cruces evaluados» = líneas con clase (lo que el sistema pudo validar de
- * punta a punta); «por vencer» solo cuenta candidatos de categorías SIN reclamo en este archivo
- * (un reclamo cubre todos los candidatos de su categoría); «atípicos nuevos» = cruces atípicos que el
+ * punta a punta); «por vencer» solo cuenta candidatos NO cubiertos por un reclamo ENVIADO de este archivo
+ * (ver `lineasCubiertasPorReclamo`: preparado y rechazado no cubren nada); «atípicos nuevos» = cruces atípicos que el
  * detector marca en este archivo en esta lectura.
  */
 export function estadoRevisionCobros(d: DatosRevisionCobros): EstadoRevisionCobros {
@@ -81,10 +122,11 @@ export function estadoRevisionCobros(d: DatosRevisionCobros): EstadoRevisionCobr
     const delArchivo = d.reclamos.filter((r) => r.desgloseId === reporte.desgloseId);
     const categorias = entradaDeCategorias(reporte, delArchivo);
 
-    const reclamadas = new Set(delArchivo.map((r) => r.categoria));
-    const candidatosPlazo = reporte.revision.candidatos
-      .filter((c): c is typeof c & { fecha: string } => typeof c.fecha === 'string' && c.fecha !== '')
-      .map((c) => ({ lineaId: String(c.indice), desgloseId: reporte.desgloseId, fechaCruce: c.fecha, monto: c.monto, reclamado: reclamadas.has(c.categoria) }));
+    const conFecha = reporte.revision.candidatos
+      .filter((c): c is typeof c & { fecha: string } => typeof c.fecha === 'string' && c.fecha !== '');
+    const cubiertas = lineasCubiertasPorReclamo(conFecha, delArchivo);
+    const candidatosPlazo = conFecha
+      .map((c) => ({ lineaId: String(c.indice), desgloseId: reporte.desgloseId, fechaCruce: c.fecha, monto: c.monto, reclamado: cubiertas.has(c.indice) }));
     const hayCandidatos = reporte.revision.candidatos.length > 0;
     const porVencer = hayCandidatos && candidatosPlazo.length === 0
       ? null
