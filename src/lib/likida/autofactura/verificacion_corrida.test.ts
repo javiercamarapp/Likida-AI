@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { correrPrevuelo, chequeosDe, renderizarReporte, entradaDeRegistro, sanearHtml, type PaginaVerificable } from './verificacion_corrida';
+import { correrPrevuelo, chequeosDe, renderizarReporte, entradaDeRegistro, sanearHtml, tiposDePiiEnHtml, type PaginaVerificable } from './verificacion_corrida';
 import { huellaDeGuion } from './verificacion';
 import type { GuionPortal } from '../facturacion/adaptadores/guion';
 
@@ -102,5 +102,17 @@ describe('sanearHtml: lo que llega a git no trae datos ni código', () => {
   it('un < o > suelto queda escapado como texto y un script sin cierre se descarta completo', () => {
     const s = sanearHtml('<p>1 < 2 > 0</p><script>var x="</p>');
     expect(s).toBe('<p>1 &lt; 2 &gt; 0</p>');
+  });
+});
+
+// A37-S05-09
+describe('A37-S05-09: tiposDePiiEnHtml', () => {
+  it('detecta correo, RFC y teléfono sin devolver el valor', () => {
+    expect(tiposDePiiEnHtml('<p>Contacto: persona@ejemplo.mx</p>')).toEqual(['correo']);
+    expect(tiposDePiiEnHtml('<p>RFC XAXX010101000</p>')).toContain('RFC');
+    expect(tiposDePiiEnHtml('<p>Tel 55 1234 5678</p>')).toContain('teléfono');
+  });
+  it('un formulario en blanco no dispara nada', () => {
+    expect(tiposDePiiEnHtml('<form><input id="rfc" placeholder="RFC"><button>Buscar</button></form>')).toEqual([]);
   });
 });

@@ -277,3 +277,19 @@ export function sanearHtml(html: string): string {
     .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '00000000-0000-4000-8000-000000000001')
     .replace(/\n{3,}/g, '\n\n');
 }
+
+/**
+ * A37-S05-09: revisión automática de datos personales sobre el DOM que va a git (repo público). Devuelve los
+ * TIPOS encontrados (nunca el valor, para no reimprimirlo): correo, RFC, CURP o teléfono de 10 dígitos.
+ * Es una red de seguridad, no sustituye la revisión humana del diff.
+ */
+export function tiposDePiiEnHtml(html: string): string[] {
+  const texto = html.replace(/<[^>]*>/g, ' ');
+  const reglas: Array<[string, RegExp]> = [
+    ['correo', /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i],
+    ['CURP', /\b[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d\b/i],
+    ['RFC', /\b[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}\b/i],
+    ['teléfono', /(?<![\d.])(?:\+?52[\s-]?)?\(?\d{2,3}\)?[\s-]?\d{3,4}[\s-]?\d{4}(?![\d.])/],
+  ];
+  return reglas.filter(([, r]) => r.test(texto)).map(([n]) => n);
+}

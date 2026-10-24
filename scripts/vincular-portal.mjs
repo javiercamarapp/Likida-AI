@@ -28,7 +28,15 @@ import process from 'node:process';
 const args = process.argv.slice(2);
 const opcion = (nombre) => { const i = args.indexOf(nombre); return i >= 0 ? args[i + 1] : undefined; };
 const codigo = opcion('--codigo');
-const base = (opcion('--url') ?? process.env.LIKIDA_URL ?? 'https://app.likida.ai').replace(/\/+$/, '');
+const { baseSeguraDeVinculacion } = await import('../src/lib/likida/facturacion/vinculacion_asistida.ts');
+let base;
+try {
+  base = baseSeguraDeVinculacion(opcion('--url') ?? process.env.LIKIDA_URL ?? 'https://app.likida.ai');
+} catch (e) {
+  console.error(`✗ ${e.message}`);
+  process.exit(2);
+}
+console.log(`Servidor de Likida: ${new URL(base).host}`);
 const [tenantId, claveLocal] = args.filter((a) => !a.startsWith('--') && a !== codigo && a !== opcion('--url'));
 
 if (!codigo && (!tenantId || !claveLocal)) {

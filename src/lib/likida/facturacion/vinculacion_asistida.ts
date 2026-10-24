@@ -172,3 +172,18 @@ export async function vincularPortalAsistido(args: {
   logger.info('vinculacion.asistida.ok', { tenant: args.tenantId, comercio: args.comercio, cookies });
   return { ok: true, comercio: args.comercio, cookies, capturadaEn };
 }
+
+/**
+ * A37-S05-07: la base a la que `vincular-portal.mjs` manda el código y las cookies del portal del cliente.
+ * Solo https (http únicamente hacia localhost/127.0.0.1/[::1]); sin credenciales ni ruta en la URL. Lanza si no.
+ */
+export function baseSeguraDeVinculacion(cruda: string): string {
+  let u: URL;
+  try { u = new URL(cruda); } catch { throw new Error('La URL de Likida no es válida.'); }
+  const local = ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname);
+  if (u.protocol !== 'https:' && !(u.protocol === 'http:' && local)) {
+    throw new Error(`Por seguridad solo se acepta https (o http hacia localhost); recibí ${u.protocol}//${u.hostname}.`);
+  }
+  if (u.username || u.password) throw new Error('La URL no debe llevar usuario ni contraseña.');
+  return u.origin;
+}
