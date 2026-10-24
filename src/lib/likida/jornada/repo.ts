@@ -184,13 +184,7 @@ export async function jornadaQueCierra(
   if (!data) return { jornada: null, error: null };
   const fila = data as { id: string; dia: string };
 
-  const marcas = await acotada(
-    supabaseAdmin().from('jornada_asiento').select('tipo, momento')
-      .eq('tenant_id', tenantId).eq('jornada_id', fila.id)
-      .in('tipo', ['inicio_jornada', 'fin_jornada'])
-      .is('anulado_en', null),
-    'jornada.dia.anterior.marcas',
-  );
+  const marcas = await marcasVivas(tenantId, fila.id, ['inicio_jornada', 'fin_jornada']);
   if (marcas.error) return { jornada: null, error: marcas.error.message };
 
   const vivos = (marcas.data ?? []) as Array<{ tipo: string; momento: string }>;
@@ -218,13 +212,20 @@ export async function jornadaQueCierra(
 export async function tieneMarcaViva(
   tenantId: string, jornadaId: string, tipo: 'inicio_jornada' | 'fin_jornada',
 ): Promise<{ viva: boolean; error: string | null }> {
-  const r = await acotada(
-    supabaseAdmin().from('jornada_asiento').select('id')
-      .eq('tenant_id', tenantId).eq('jornada_id', jornadaId).eq('tipo', tipo).is('anulado_en', null).limit(1),
-    'jornada.dia.marca_viva',
-  );
+  const r = await marcasVivas(tenantId, jornadaId, [tipo]);
   if (r.error) return { viva: false, error: r.error.message };
   return { viva: ((r.data ?? []) as unknown[]).length > 0, error: null };
+}
+
+/** Las marcas VIVAS (no anuladas) de un expediente, de los tipos pedidos. Anclado al tenant. UNA sola consulta para toda la lectura de «¿ya empezó / ya cerró?». */
+function marcasVivas(tenantId: string, jornadaId: string, tipos: readonly string[]) {
+  return acotada(
+    supabaseAdmin().from('jornada_asiento').select('tipo, momento')
+      .eq('tenant_id', tenantId).eq('jornada_id', jornadaId)
+      .in('tipo', [...tipos])
+      .is('anulado_en', null),
+    'jornada.dia.marcas_vivas',
+  );
 }
 
 /** El día natural anterior a un AAAA-MM-DD, o `null` si no es una fecha. */
