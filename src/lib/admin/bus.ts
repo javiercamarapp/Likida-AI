@@ -17,6 +17,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { DatoInvalido } from '@/lib/likida/errores';
 
 // ── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -239,6 +240,20 @@ export async function crearOrden(
 ): Promise<void> {
   const invalida = validarOrden(tipo, rutina, payload);
   if (invalida) throw new Error(invalida);
+  // A37-S08-03: una orden IDÉNTICA ya pendiente (mismo tipo y rutina) no se
+  // vuelve a encolar — un doble toque hacía correr la rutina dos veces (gasto
+  // de modelo / publicación duplicados). Verificación en app, no atómica: la
+  // ventana residual es de milisegundos y el botón del cliente también se
+  // deshabilita mientras corre; un índice único exigiría migración.
+  if (tipo === 'correr_ahora' || tipo === 'kill_switch_on' || tipo === 'kill_switch_off') {
+    let q = supabaseAdmin().from('bus_orden').select('id').eq('tipo', tipo).eq('estado', 'pendiente');
+    q = rutina ? q.eq('rutina', rutina) : q.is('rutina', null);
+    const { data: previas, error: errPrevia } = await q.order('id').limit(1);
+    if (errPrevia) throw new Error(`No se pudo comprobar si ya hay una orden pendiente: ${errPrevia.message}`);
+    if (previas && previas.length > 0) {
+      throw new DatoInvalido('Ya hay una orden idéntica esperando el latido de la Mac; no se encola otra.');
+    }
+  }
   const { error } = await supabaseAdmin()
     .from('bus_orden')
     .insert({ tipo, rutina, payload, creado_por: actorEmail });

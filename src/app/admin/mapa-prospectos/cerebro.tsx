@@ -33,6 +33,7 @@ import { fechaHoraMx, numero, hoyMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import { usePrefersReducedMotion } from '../ui/prefers-reduced-motion';
 import { useCountUp } from '../ui/use-count-up';
+import { celdaCsv, idsSinTextos } from './csv_prospectos';
 import { hrefWa, hrefCorreo, esperandoTextos } from './mensajes';
 import { arrancarLatido, visibilidadDelNavegador } from './latido';
 import { accionRegistrarExportacion } from './acciones-exportar';
@@ -129,7 +130,7 @@ function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: num
  *  CSV sigue saliendo con las mismas dieciocho columnas, completas. */
 function csvDe(lista: ProspectoMapa[], textos: ReadonlyMap<string, TextosProspecto>): string {
   const cab = ['empresa', 'giro', 'etapa', 'urgencia_pct', 'cierre_pct', 'similitud_icp_pct', 'necesidad_pct', 'num_unidades', 'contacto', 'telefono', 'correo', 'ciudad', 'entidad', 'vacante', 'fuente', 'lat', 'lng', 'notas'];
-  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const esc = celdaCsv;
   const filas = lista.map((p) => [
     p.empresa, NOMBRE_GIRO[p.giro], COLOR_EMBUDO[p.estado]?.nombre ?? p.estado, p.urgencia, p.cierre,
     p.similitudIcpPct, p.necesidadPct, p.numUnidades,
@@ -475,18 +476,21 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
   const ordenados = useMemo(() => ordenar(filtrados), [ordenar, filtrados]);
 
   const [exportando, setExportando] = useState(false);
+  const [errorExport, setErrorExport] = useState<string | null>(null);
   const exportarCsv = async () => {
     const lista = ordenados;
     setExportando(true);
+    setErrorExport(null);
     try {
       // ADM-8 (auditoría 24): la exportación no dejaba NINGÚN rastro — un
       // clic descargaba hasta 33k filas con teléfono/correo de decisores
       // sin una sola entrada en bitácora. Se registra ANTES de armar el
       // archivo (si el navegador se cierra a medio streaming, el intento ya
       // quedó firmado) con el conteo y los filtros elegidos — nunca los
-      // datos de los prospectos. Best-effort: un fallo aquí NO detiene la
-      // descarga (misma regla que el resto de la bitácora).
-      accionRegistrarExportacion(lista.length, {
+      // datos de los prospectos. A37-S06-05: FAIL-CLOSED — si el registro
+      // falla (sesión/MFA vencida, red) NO hay descarga: datos personales
+      // (LFPDPPP) sin rastro no salen.
+      await accionRegistrarExportacion(lista.length, {
         giros: filtros.giros ? [...filtros.giros] : null,
         etapas: filtros.etapas ? [...filtros.etapas] : null,
         fuentes: filtros.fuentes ? [...filtros.fuentes] : null,
@@ -496,11 +500,19 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         minSimilitud: filtros.minSimilitud, minNecesidad: filtros.minNecesidad,
         sinToqueDias: filtros.sinToqueDias, soloMensajeIA: filtros.soloMensajeIA, soloVacante: filtros.soloVacante,
         radioKm: filtros.radioKm,
-      }).catch(() => { /* la bitácora es best-effort: no bloquea la descarga */ });
+      });
       // La columna `notas` ya no viene en el listado: se pide para las filas
       // que se van a exportar (en tandas) ANTES de armar el archivo. El CSV
       // sale igual de completo que antes; lo que cambió es cuándo se paga.
-      await pedirTextos(lista.map((p) => p.id));
+      const ids = lista.map((p) => p.id);
+      await pedirTextos(ids);
+      // A37-S06-06: si algún lote de textos falló, el CSV saldría "completo"
+      // con la columna notas vacía: se aborta con aviso en vez de éxito falso.
+      const faltan = idsSinTextos(ids, textosRef.current);
+      if (faltan.length > 0) {
+        setErrorExport(`No se pudieron cargar las notas de ${faltan.length} prospectos; la exportación se canceló. Reintenta.`);
+        return;
+      }
       const blob = new Blob([csvDe(lista, textosRef.current)], { type: 'text/csv;charset=utf-8' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -509,6 +521,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
       a.download = `cerebro-prospectos-${hoyMx()}.csv`;
       a.click();
       URL.revokeObjectURL(a.href);
+    } catch {
+      setErrorExport('No se pudo registrar la exportación en la bitácora; la descarga se canceló. Reintenta (revisa tu sesión).');
     } finally {
       setExportando(false);
     }
@@ -991,6 +1005,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                 style={{ background: 'var(--ink)', color: 'var(--canvas)', opacity: exportando ? 0.6 : 1 }}>
                 {exportando ? 'preparando…' : `⬇ Exportar CSV (${numero(filtrados.length)})`}
               </button>
+              {errorExport && <p role="alert" className="text-[11px]" style={{ color: '#dc2626' }}>{errorExport}</p>}
             </div>
             <p className="text-[11px]" style={{ color: TENUE }}>
               {numero(filtrados.length)} de {numero(prospectos.length)} prospectos pasan el filtro.

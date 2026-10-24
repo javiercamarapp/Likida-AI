@@ -200,7 +200,18 @@ export async function GET(req: Request) {
     // «hora 3» lo ejecutaba ~12 veces; la ventana 03:00–03:04 de México es UNA sola corrida.
     let mantenimiento: Record<string, number | string> | undefined;
     if (esVentanaDeMantenimiento(Date.now()) && Date.now() < inicio + (maxDuration * 1000) - MARGEN_MS) {
-      mantenimiento = await correrMantenimientoConductor();
+      // A37-S09-01: un fallo del mantenimiento de privacidad (la anonimización
+      // devuelve «error: …» por valor, o la corrida lanza) ya NO deja el latido
+      // en 'ok': entra a `extras` y el estado pasa a 'parcial'.
+      try {
+        mantenimiento = await correrMantenimientoConductor();
+        for (const [nombre, valor] of Object.entries(mantenimiento)) {
+          if (typeof valor === 'string' && valor.startsWith('error')) extras.push(`mantenimiento ${nombre}: ${valor}`);
+        }
+      } catch (e) {
+        extras.push(`mantenimiento de privacidad: ${e instanceof Error ? e.message : String(e)}`);
+        logger.error('cron.conductor_hitos.mantenimiento_fallo', { error: e instanceof Error ? e.message : String(e) });
+      }
     }
 
     // T-A5-27: contadores sin PII y dos alarmas (en el log y en el estado del latido). Contar voluntarios es lectura: si la base no

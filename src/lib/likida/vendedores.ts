@@ -236,7 +236,7 @@ function opcional(crudo: string, campo: string, max: number): string | null {
 }
 
 /** La misma forma mínima que `validarCliente` — lineal, sin ReDoS. */
-const CORREO_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const CORREO_RE = /^[^\s@"'<>\\]+@[^\s@"'<>\\]+\.[^\s@"'<>\\]+$/;
 
 export function validarProspecto(p: ProspectoCrudo): ProspectoValido {
   // Lo ÚNICO obligatorio es la empresa: el censo trae filas con puros nombre

@@ -259,6 +259,16 @@ export async function costoIaDesde(desdeIso: string): Promise<{ n: number; costo
 }
 
 /**
+ * A37-S05-03: el costo de IA por día (UTC, SIN redondear) desde un instante —
+ * para el forecast, que necesita una ventana real y no el historial entero.
+ * LANZA si la base no responde.
+ */
+export async function costoIaPorDiaDesde(desdeIso: string): Promise<Array<{ dia: string; costoUsd: number }>> {
+  const r = await traerResumenCostoIa(desdeIso, null);
+  return r.porDia.map((d) => ({ dia: d.dia, costoUsd: d.costoUsd }));
+}
+
+/**
  * El costo de IA de UNA flota (histórico y 30 días) — para la ficha 360.
  * Reusa la agregación SQL global y toma la fila del tenant: dos llamadas al
  * RPC, cero recorridos de llm_costo por JS. LANZA si la base no responde.

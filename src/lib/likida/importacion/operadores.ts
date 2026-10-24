@@ -35,13 +35,14 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { rateLimit } from '@/lib/ratelimit';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { destinatarioWhatsApp } from '@/lib/meta/client';
 import { acotada } from '../presupuesto';
 import { variantesTelefono } from '../conv';
 import { DatoInvalido } from '../errores';
 import {
-  normalizarTelefonoOperador, normalizarRfcOperador, normalizarFechaLicencia,
+  normalizarTelefonoOperador, normalizarRfcOperador, normalizarFechaLicencia, TELEFONO_NO_DISPONIBLE,
 } from '../administracion';
 import { resolverTerminalDeFlota } from '../terminales';
 import { leerFechaImportada } from '../importar_viajes';
@@ -260,7 +261,7 @@ function clasificar(tenantId: string, f: OperadorImportado, existentes: FilaExis
     return { tipo: 'duplicado', d: { fila: f.fila, id: activa.id, telefono: f.telefono, motivo: `ya estaba, a nombre de ${activa.nombre}` } };
   }
   if (activa) {
-    return { tipo: 'error', e: { fila: f.fila, motivo: 'ese teléfono ya está registrado en OTRA flota; dos operadores con el mismo número anotarían sus comprobantes en la flota equivocada' } };
+    return { tipo: 'error', e: { fila: f.fila, motivo: TELEFONO_NO_DISPONIBLE.charAt(0).toLowerCase() + TELEFONO_NO_DISPONIBLE.slice(1).replace(/\.$/, '') } };
   }
   const propiaDeBaja = existentes.find((x) => x.tenant_id === tenantId);
   if (propiaDeBaja) {
@@ -305,6 +306,10 @@ export interface PlanOperadores {
 export async function planificarOperadores(tenantId: string, filas: OperadorImportado[]): Promise<PlanOperadores> {
   const plan: PlanOperadores = { nuevas: [], duplicados: [], errores: [] };
   if (!filas.length) return plan;
+  // A37-L-seguridad-tenant-02: tope por flota a las consultas de duplicado (acota el barrido de números por lotes).
+  if (!(await rateLimit(`tel-import:${tenantId}`, 60, 3_600_000))) {
+    return { ...plan, error: 'Demasiadas importaciones de operadores en la última hora — no importé nada. Espera un rato e inténtalo de nuevo.' };
+  }
   let existentes: Map<string, FilaExistente[]>;
   try {
     existentes = await buscarExistentes(filas.map((f) => f.telefono));

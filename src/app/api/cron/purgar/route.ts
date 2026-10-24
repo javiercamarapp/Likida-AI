@@ -10,6 +10,7 @@ import { purgarDocumentosVencidos } from '@/lib/likida/carta_porte_docs/retencio
 import { mantenerDatosAgentes } from '@/lib/likida/retencion_agentes';
 import { mantenerLedgers } from '@/lib/likida/retencion_ledgers';
 import { purgarRecepcionesVencidas } from '@/lib/likida/buzon/repo';
+import { fallosDePurgas } from '@/lib/likida/retencion_fallos';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -473,10 +474,17 @@ export async function GET(req: Request) {
     // usa el agregado legado, que es el fallback conservador.
     const productoEventoParcial = productoEvento?.parcial === true;
     const parcialGlobal = (otrasPurgasParcial ?? parcial) || retencionParcial || productoEventoParcial;
+    // A37-S09-01: las purgas complementarias (Storage, carta porte, buzón,
+    // ledgers, agentes, MCP, presupuesto) que fallan o lanzan ya NO dejan el
+    // latido en 'ok': pasan a 'parcial' y se avisa al operador una vez.
+    const purgasConFallo = fallosDePurgas({ storage, mcpOauth, llmPresupuesto, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal, ledgers });
+    if (purgasConFallo.length > 0) {
+      await alertarOperador('cron.purgar.purgas_con_fallo', { error: purgasConFallo.join(' · ').slice(0, 500) });
+    }
     const estado = erroresRetencion0104.length > 0 || productoEventoError !== null
       ? 'fallo'
-      : parcialGlobal ? 'parcial' : 'ok';
-    const detalleFinal = { ...data, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal, ledgers };
+      : (parcialGlobal || purgasConFallo.length > 0) ? 'parcial' : 'ok';
+    const detalleFinal = { ...data, vueltas, purgasConFallo, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal, ledgers };
     if (estado === 'fallo') logger.error('cron.purgar.retencion_0104_incompleta', detalleFinal);
     else if (estado === 'parcial') logger.warn('cron.purgar.incompleta', detalleFinal);
     else logger.info('cron.purgar.ok', detalleFinal);
@@ -487,9 +495,10 @@ export async function GET(req: Request) {
       retencion0104,
       productoEventoParcial,
       productoEventoError,
+      purgasConFallo,
     });
     return NextResponse.json(
-      { corrio: true, ...data, parcial: parcialGlobal, estado, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal, ledgers },
+      { corrio: true, ...data, parcial: parcialGlobal, estado, vueltas, purgasConFallo, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal, ledgers },
       { status: estado === 'fallo' ? 500 : 200 },
     );
   } catch (e) {

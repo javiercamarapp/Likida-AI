@@ -80,7 +80,7 @@ describe('operadores — idempotencia y carreras', () => {
     const filas = interpretarFilasOperadores(matrizOperadores(3)).filas;
     const r = await importarOperadores(T, filas, opciones);
     expect(r.creados).toHaveLength(2);
-    expect(r.errores).toEqual([{ fila: 3, motivo: expect.stringMatching(/OTRA flota/) }]);
+    expect(r.errores).toEqual([{ fila: 3, motivo: expect.stringMatching(/no se puede registrar en tu flota/) }]);
     expect(base.tabla('operador').filter((o) => o.tenant_id === T)).toHaveLength(2);
   });
 

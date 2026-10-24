@@ -112,3 +112,9 @@ it('hoy nadie ha gastado por propósito (filas vacías) lo dice explícito, dist
   const html = await renderizar();
   expect(html).toContain('Hoy nadie ha gastado todavía');
 });
+
+it('A37-S05-02: el costo por flota se rotula HISTÓRICO, no "ventana (7 días)"', async () => {
+  const html = await renderizar();
+  expect(html).toContain('costo de IA histórico');
+  expect(html).not.toContain('ventana (7 días)');
+});
