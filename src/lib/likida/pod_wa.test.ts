@@ -9,12 +9,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 let upserts: Array<{ payload: Record<string, unknown>; onConflict: string | undefined }>;
 let errorUpsert: { message: string } | null;
+let previo: { estado: string; storage_path: string | null } | null = null;
+let previoLanza = false;
 
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: (tabla: string) => {
       if (tabla !== 'pod') throw new Error(`pod_wa solo toca pod; pidió ${tabla}`);
+      const lectura: Record<string, unknown> = {};
+      lectura.eq = () => lectura;
+      lectura.maybeSingle = async () => {
+        if (previoLanza) throw new Error('red');
+        return { data: previo, error: null };
+      };
       return {
+        select: () => lectura,
         upsert: (fila: Record<string, unknown>, opts?: { onConflict?: string }) => {
           upserts.push({ payload: fila, onConflict: opts?.onConflict });
           return Promise.resolve({ error: errorUpsert });
@@ -34,6 +43,8 @@ const { esCaptionPod, guardarPodDelChofer, mensajePod } = await import('./pod_wa
 beforeEach(() => {
   upserts = [];
   errorUpsert = null;
+  previo = null;
+  previoLanza = false;
 });
 
 describe('esCaptionPod — el rótulo decide', () => {
@@ -83,6 +94,29 @@ describe('guardarPodDelChofer', () => {
       // La nota del rechazo anterior se limpia: describía OTRA foto.
       nota: null,
     });
+  });
+
+  it('A37-S54-05: una segunda foto sobre un POD YA SUBIDO conserva la ruta previa en la nota', async () => {
+    previo = { estado: 'subido', storage_path: 'comprobantes/t1/v1/buena.jpg' };
+    const r = await guardarPodDelChofer('t1', 'v1', 'o1', 'comprobantes/t1/v1/equivocada.jpg', AHORA);
+    expect(r).toBe('subido');
+    expect(upserts[0].payload.storage_path).toBe('comprobantes/t1/v1/equivocada.jpg');
+    expect(upserts[0].payload.nota).toContain('comprobantes/t1/v1/buena.jpg');
+  });
+
+  it('A37-S54-05: reenviar la MISMA ruta, o reemplazar un POD rechazado/pendiente, no deja nota', async () => {
+    previo = { estado: 'subido', storage_path: 'comprobantes/x.jpg' };
+    await guardarPodDelChofer('t1', 'v1', 'o1', 'comprobantes/x.jpg', AHORA);
+    previo = { estado: 'rechazado', storage_path: 'comprobantes/mala.jpg' };
+    await guardarPodDelChofer('t1', 'v1', 'o1', 'comprobantes/nueva.jpg', AHORA);
+    expect(upserts.map((u) => u.payload.nota)).toEqual([null, null]);
+  });
+
+  it('A37-S54-05: si la lectura previa falla, el POD se sella igual', async () => {
+    previoLanza = true;
+    const r = await guardarPodDelChofer('t1', 'v1', 'o1', 'comprobantes/y.jpg', AHORA);
+    expect(r).toBe('subido');
+    expect(upserts[0].payload.nota).toBeNull();
   });
 
   it('la base caída es "fallo", y el acuse lo dice — no un ✅ falso', async () => {

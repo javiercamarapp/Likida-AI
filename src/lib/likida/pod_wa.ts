@@ -66,6 +66,7 @@ export type ResultadoPod = 'subido' | 'fallo';
  * si ya había registro —pedido por la oficina, o un intento rechazado— esta
  * subida lo actualiza a 'subido'. La foto nueva REEMPLAZA a la rechazada y la
  * nota del rechazo se limpia: describía un papel que ya no es el que está.
+ * Si lo reemplazado era un POD ya SUBIDO, la nota guarda su ruta (A37-S54-05).
  *
  * `storagePath` es obligatorio y no negociable: el constraint
  * `pod_subido_tiene_archivo` (0047) rechaza un "subido" sin archivo, porque
@@ -78,6 +79,24 @@ export async function guardarPodDelChofer(
   storagePath: string,
   ahora: Date = new Date(),
 ): Promise<ResultadoPod> {
+  // A37-S54-05 — una segunda foto con caption «entrega» (equivocada) pisaba `storage_path` y la buena quedaba
+  // huérfana sin rastro. Si ya había un POD SUBIDO con otro archivo, la ruta previa se conserva en la `nota`
+  // (el archivo en Storage nunca se borra aquí). Es una lectura de cortesía: si falla, el sello sigue — peor
+  // que dejar al chofer sin acuse es no guardar la carta porte.
+  let nota: string | null = null;
+  try {
+    const { data: previo } = await acotada(supabaseAdmin()
+      .from('pod')
+      .select('estado, storage_path')
+      .eq('viaje_id', viajeId).eq('tenant_id', tenantId)
+      .maybeSingle(), 'guardarPodDelChofer.previo');
+    const p = previo as { estado?: unknown; storage_path?: unknown } | null;
+    if (p && p.estado === 'subido' && typeof p.storage_path === 'string' && p.storage_path && p.storage_path !== storagePath) {
+      nota = `Reemplaza la foto anterior del chofer (${p.storage_path}); el archivo previo sigue en Storage.`;
+    }
+  } catch (e) {
+    logger.warn('pod.previo_ilegible', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
+  }
   const { error } = await acotada(supabaseAdmin()
     .from('pod')
     .upsert({
@@ -87,7 +106,7 @@ export async function guardarPodDelChofer(
       estado: 'subido',
       storage_path: storagePath,
       capturado_en: ahora.toISOString(),
-      nota: null,
+      nota,
     }, { onConflict: 'viaje_id' }), 'guardarPodDelChofer');
   if (error) {
     logger.error('pod.subida_fallo', { viaje: viajeId, err: error.message });
