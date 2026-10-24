@@ -1,46 +1,15 @@
-import { revalidatePath } from 'next/cache';
 import { PlugZap } from 'lucide-react';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import { listarClientesPendientes, decidirCliente, type ClienteParaRevision } from '@/lib/mcp/oauth';
-import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
+import { listarClientesPendientes, type ClienteParaRevision } from '@/lib/mcp/oauth';
 import { logger } from '@/lib/logger';
 import { fechaHoraMx } from '@/lib/formato';
 import { BarraPagina } from '../../dashboard/resumen-visual';
 import { EstadoVacio, EstadoError } from '../ui/kit';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import { FormaRechazarCliente } from './forma-rechazar';
+import { decidirYAnotar } from './decidir';
 
 export const dynamic = 'force-dynamic';
-
-/** A NIVEL DE MÓDULO: un server action serializa lo que captura de su closure y
- *  una función no se serializa (server_actions_sin_closures.test.ts). */
-async function decidir(
-  decision: 'aprobado' | 'rechazado',
-  fd: FormData,
-): Promise<ResultadoAccion> {
-  const s = await requireSuperadmin();
-  const clientId = String(fd.get('cliente') ?? '');
-  const r = await decidirCliente(clientId, decision, s.userId);
-  if (!r.ok) return { error: r.detalle };
-  revalidatePath('/admin/mcp-clientes');
-  // Bitácora del superadmin: tenant ambiguo por diseño, se firma con el actor.
-  await anotarBitacora(
-    {
-      tenantId: s.tenantId ?? null,
-      actor: { id: s.userId },
-      accion: decision === 'aprobado' ? 'mcp.cliente_aprobado' : 'mcp.cliente_rechazado',
-      entidad: 'mcp_oauth_cliente',
-      entidadId: clientId,
-      detalle: { tokens_revocados: r.revocados },
-    },
-    { evento: 'mcp.bitacora' },
-  ).catch((e: unknown) => logger.warn('mcp.cliente_bitacora', { err: e instanceof Error ? e.message : String(e) }));
-  return {
-    ok: decision === 'aprobado'
-      ? 'Cliente aprobado: ya puede pedir consentimiento.'
-      : `Cliente rechazado. Tokens vivos revocados: ${r.revocados}.`,
-  };
-}
 
 /**
  * CLIENTES OAUTH DEL MCP PENDIENTES DE APROBACIÓN (0440).
@@ -61,11 +30,11 @@ export default async function McpClientesPage() {
 
   async function accionAprobar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    return decidir('aprobado', fd);
+    return decidirYAnotar('aprobado', fd);
   }
   async function accionRechazar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    return decidir('rechazado', fd);
+    return decidirYAnotar('rechazado', fd);
   }
 
   let pendientes: ClienteParaRevision[] | null = null;

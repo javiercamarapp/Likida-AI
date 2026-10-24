@@ -448,7 +448,18 @@ describe('validarAcceso', () => {
     // app_user coincide exactamente con la congelada en el token — los tests
     // de desalineación de abajo la desajustan a propósito.
     app_user: { tenant_id: 't-1', rol: 'contador' },
+    cliente: { estado: 'aprobado' },
     ...extra,
+  });
+
+  // A37-S07-02: un cliente rechazado no valida accesos aunque su token siga sin revocar.
+  it('A37-S07-02: el cliente rechazado, pendiente o sin embed → no_valido aunque el token siga vivo', async () => {
+    for (const cliente of [{ estado: 'rechazado' }, { estado: 'pendiente' }, null]) {
+      conTablas({ mcp_oauth_token: [OK(filaAcceso({ cliente }))] });
+      const r = await validarAcceso(ACCESO);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error).toBe('no_valido');
+    }
   });
 
   it('un acceso vivo resuelve tenant, usuario y rol', async () => {
@@ -688,10 +699,26 @@ describe('decidirCliente (el superadmin)', () => {
   it('rechazar revoca los tokens vivos y lo cuenta', async () => {
     conTablas({
       mcp_oauth_cliente: [OK([{ id: ID }])],
-      mcp_oauth_token: [OK([{ id: 't1' }, { id: 't2' }])],
+      mcp_oauth_token: [OK([{ id: 't1' }, { id: 't2' }]), OK([])],
     });
     const r = await decidirCliente(ID, 'rechazado', 'admin-1');
     expect(r).toEqual({ ok: true, revocados: 2 });
+  });
+  it('A37-S07-02: si falla la revocación NO se marca rechazado (sigue pendiente y reintentable)', async () => {
+    const llamadas: string[] = [];
+    sbMock.mockReturnValue({
+      from: (t: string) => { llamadas.push(t); return cadena(t === 'mcp_oauth_token' ? FALLA('boom') : OK([{ id: ID }])); },
+    });
+    const r = await decidirCliente(ID, 'rechazado', 'admin-1');
+    expect(!r.ok && r.error).toBe('no_disponible');
+    expect(llamadas).toEqual(['mcp_oauth_token']);
+  });
+  it('A37-S07-02: el barrido final cuenta los tokens de ambas pasadas', async () => {
+    conTablas({
+      mcp_oauth_cliente: [OK([{ id: ID }])],
+      mcp_oauth_token: [OK([{ id: 't1' }]), OK([{ id: 't2' }])],
+    });
+    expect(await decidirCliente(ID, 'rechazado', 'admin-1')).toEqual({ ok: true, revocados: 2 });
   });
   it('aprobar no toca tokens', async () => {
     const tablas: string[] = [];
