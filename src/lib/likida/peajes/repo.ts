@@ -132,6 +132,43 @@ export async function listarTags(tenantId: string): Promise<TagVista[]> {
   });
 }
 
+/**
+ * Los ids de gasto (de `gastoIds`) que ya respaldan una línea `cuadra` de otro desglose VIGENTE de la flota, creado antes
+ * que este y con periodo traslapado con las fechas de sus líneas. Lanza ante error de base (un conjunto a medias dejaría
+ * respaldar dos veces el mismo comprobante).
+ */
+export async function gastosRespaldadosPorOtrosDesgloses(
+  tenantId: string, desgloseId: string, gastoIds: readonly string[], fechas: readonly string[],
+): Promise<Set<string>> {
+  const salida = new Set<string>();
+  if (gastoIds.length === 0 || fechas.length === 0) return salida;
+  const { data: yo, error: errYo } = await acotada(supabaseAdmin().from('desglose_peaje')
+    .select('creado_en').eq('tenant_id', tenantId).eq('id', desgloseId).maybeSingle(), 'desglose_peaje.cruce_propio');
+  if (errYo) throw new Error(`conciliarDesglose: ${errYo.message}`);
+  const creadoEn = yo?.creado_en;
+  if (typeof creadoEn !== 'string' || creadoEn === '') return salida;
+  const { data: otros, error: errOtros } = await acotada(supabaseAdmin().from('desglose_peaje')
+    .select('id').eq('tenant_id', tenantId).neq('id', desgloseId).is('anulado_en', null)
+    .lt('creado_en', creadoEn).lte('periodo_desde', fechas[fechas.length - 1]).gte('periodo_hasta', fechas[0])
+    .order('creado_en').order('id').limit(50), 'desglose_peaje.cruce_otros');
+  if (errOtros) throw new Error(`conciliarDesglose: ${errOtros.message}`);
+  const ids = (otros ?? []).map((o) => String(o.id));
+  if (ids.length === 0) return salida;
+  const buscados = new Set(gastoIds);
+  const lineasOtras = await traerTodo<{ detalle: unknown }>(
+    (d, h) => acotada(supabaseAdmin().from('desglose_peaje_linea')
+      .select('detalle', conteo(d))
+      .eq('tenant_id', tenantId).in('desglose_id', ids).eq('estatus', 'cuadra')
+      .order('desglose_id').order('indice').range(d, h), 'desglose_peaje.cruce_otras_lineas'),
+    'desglose_peaje.cruce_otras_lineas',
+  );
+  for (const l of lineasOtras) {
+    const g = (l.detalle as { gastoId?: unknown } | null)?.gastoId;
+    if (typeof g === 'string' && buscados.has(g)) salida.add(g);
+  }
+  return salida;
+}
+
 /** TAG normalizado → su baja registrada (`peaje_tag_baja`, 0776). */
 async function leerBajas(tenantId: string): Promise<Map<string, { bajaEn: string; motivo: string | null }>> {
   const filas = await traerTodo<{ tag: unknown; baja_en: unknown; motivo: unknown }>(
@@ -1196,6 +1233,12 @@ export async function anularDesgloseDb(tenantId: string, desgloseId: string, mot
     .eq('tenant_id', tenantId).eq('desglose_id', desgloseId).eq('estado', 'preparado'), 'peajes.anular_reclamos');
   if (rec.error) logger.error('peajes.anular_reclamos', { tenant: tenantId, err: rec.error.message });
   return 'anulado';
+}
+
+/** El estado de UN archivo de la cola (acotado a la flota): lo que la subida manual lee tras procesar en línea. */
+export async function estadoArchivoPeaje(tenantId: string, archivoId: string) {
+  return acotada(supabaseAdmin().from('peaje_ingesta_archivo')
+    .select('estado, desglose_id, ultimo_error').eq('tenant_id', tenantId).eq('id', archivoId).maybeSingle(), 'peajes.panel.estado');
 }
 
 /** Reemplaza la huella de un archivo de la cola por otra derivada (misma forma), para que el mismo contenido pueda volver a recibirse. */

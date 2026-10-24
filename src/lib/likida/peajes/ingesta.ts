@@ -9,7 +9,7 @@ import { avisarDesgloseConciliado } from './aviso_oficina';
 import { revisarAtipicosDeDesglose } from './revision_atipicos';
 import { vincularDesglose } from './vinculos_conciliacion';
 import { avisarDiscrepanciasDesglose } from './aviso_discrepancia';
-import { declararPeriodoDesglose, liberarHuellaDeAnulado } from './repo';
+import { declararPeriodoDesglose, liberarHuellaDeAnulado, estadoArchivoPeaje } from './repo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA INGESTA AUTOMÁTICA DEL DESGLOSE DE PEAJE (0376).
@@ -510,8 +510,7 @@ export async function subirDesglosePorCola(
     logger.error('peajes.panel.proceso_en_linea', { tenant: tenantId, codigo: codigoDeError(e) });
   }
 
-  const { data: fila, error } = await acotada(supabaseAdmin().from('peaje_ingesta_archivo')
-    .select('estado, desglose_id, ultimo_error').eq('tenant_id', tenantId).eq('id', rec.id).maybeSingle(), 'peajes.panel.estado');
+  const { data: fila, error } = await estadoArchivoPeaje(tenantId, rec.id);
   if (error || !fila) return { ok: true, estado: 'en_cola', mensaje: 'Archivo recibido. Se procesa en el siguiente ciclo (hasta 15 min); lo verás en la lista de desgloses.' };
   if (fila.estado === 'fallida') {
     const motivo = typeof fila.ultimo_error === 'string' && fila.ultimo_error ? fila.ultimo_error : 'No se pudo leer el archivo.';

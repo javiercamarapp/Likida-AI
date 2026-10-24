@@ -570,7 +570,11 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 324;
 // Auditoría 37 (+4, 2264 → 2268): rfc_tenant.ts (+2 lecturas de tenant.rfc), ciclo.ts (+1, estatus del sello ya puesto, S57-04) y
 // transferencia.ts (+1, alargar la reserva del timbrado ante error ambiguo del PAC, S61-01).
 // INTEGRACIÓN ONDA 5 (23-oct-2026): el barrido real del árbol fusionado de las seis ramas mide 2,284 llamadas (techo = medido, sin holgura); las ramas declaraban techos parciales sobre la misma base de 2,264.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_284;
+// LOTE A37 M-D-peajes-liquidacion-02 (medido con el barrido real): +8 llamadas (2,284 → 2,292), 0 archivos nuevos, todas en `peajes/repo.ts` (que este guardia
+// NO exenta: solo exenta lib/likida/repo.ts y pg.ts) y todas por `acotada`: declararPeriodoDesglose (+1, A37-A2-12), estadoArchivoPeaje (+1) y
+// liberarHuellaDeAnulado (+2) de la subida manual por la cola (A37-A2-08/09), gastosRespaldadosPorOtrosDesgloses (+3, A37-A2-10) y el cierre de
+// reclamos preparados al anular (+1, A37-A2-07). `liberarHuellaArchivo` sustituye al UPDATE inline de la huella (0 netas).
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_292;
 // Auditoría 37, lote agentes-legal-ia (medido con el barrido real): +2 llamadas (2,264 → 2,266). `candidatos_redactor.ts` suma 3 `.from(` (prospecto, cola_aprobacion, prospecto_contacto) y `runner.ts` pierde la suya (+2 netas); `sdr.ts` pasa de 3 a 3 (la lectura por prospecto se volvió lectura en lote). Todo por `acotada`.
 // LOTE A37 peajes-liquidación-graves (migración 0865): +5 llamadas (2,264 → 2,269), 0 archivos nuevos, medido con el barrido real. `jornada/repo.ts` +1:
 // `.rpc('asentar_declaracion_jornada')` (A37-S48-01; la 0865 sustituye la marca derivada bajo el lock del expediente; el INSERT anterior se conserva
