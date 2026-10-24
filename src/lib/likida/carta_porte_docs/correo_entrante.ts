@@ -24,6 +24,7 @@ import { esTokenValido, generarToken } from '@/lib/correo/buzon';
 import { remitenteReconocido } from '@/lib/correo/remitente';
 import { estaApagado } from '../interruptores';
 import { aceptableSinExtension } from './contenido';
+import { ETIQUETA_HTML, quitarScriptYEstilo } from './html_quitar';
 import { nombreArchivoSeguro, procesarDocumento, recibirDocumento, type DepsServicio } from './servicio';
 import * as repo from './repo';
 
@@ -93,7 +94,7 @@ export interface DepsCorreo extends DepsServicio {
 export interface RespuestaCorreo { status: 200 | 503; cuerpo: Record<string, unknown> }
 
 function htmlATexto(html: string): string {
-  return html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<br\s*\/?>|<\/(p|div|tr|li)>/gi, '\n').replace(/<[^>]+>/g, ' ')
+  return quitarScriptYEstilo(html).replace(/<br\s*\/?>|<\/(p|div|tr|li)>/gi, '\n').replace(ETIQUETA_HTML, ' ')
     .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim();
 }
 

@@ -13,6 +13,7 @@
 import * as XLSX from 'xlsx';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { llaveTexto } from './catalogos';
+import { ETIQUETA_HTML, quitarScriptYEstilo } from './html_quitar';
 import { aBuffer, textoDeBase64, textoDeBytes, utf8DeLatin1 } from './bytes';
 
 export type FormatoDoc = 'pdf_texto' | 'pdf_escaneado' | 'imagen' | 'excel' | 'csv' | 'xml' | 'correo' | 'json';
@@ -377,12 +378,11 @@ function decodificarQp(s: string): string {
   return s.replace(/=\r?\n/g, '').replace(/=([0-9A-F]{2})/gi, (_, h: string) => String.fromCharCode(parseInt(h, 16)));
 }
 
-function htmlATexto(html: string): string {
-  return html
-    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
+export function htmlATexto(html: string): string {
+  return quitarScriptYEstilo(html)
     .replace(/<br\s*\/?>|<\/(p|div|tr|li|h\d)>/gi, '\n')
     .replace(/<\/t[dh]>/gi, ' | ')
-    .replace(/<[^>]+>/g, ' ')
+    .replace(ETIQUETA_HTML, ' ')
     .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
     .replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim();
 }
