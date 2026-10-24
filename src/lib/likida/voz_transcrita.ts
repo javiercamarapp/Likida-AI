@@ -36,14 +36,22 @@ export const RESPUESTA_NO_ENTENDI = 'No te entendí bien 🙏 ¿me lo escribes?'
 export const RESPUESTA_SIN_PRESUPUESTO =
   'No pude escuchar tu nota de voz ahora mismo 🙏 ¿me lo escribes?';
 
+export const RESPUESTA_AUDIO_LARGO =
+  'Tu nota de voz es muy larga para que la escuche 🙏 ¿me lo escribes?';
+
+/** Tope del audio que se manda al modelo (A37-S59-08). Una nota de voz de emergencia dura segundos: 2 MB
+ *  cubre minutos de audio opus y evita gastar el tope diario del tenant en un audio reenviado de ~16 MB. */
+export const MAX_AUDIO_BYTES = 2 * 1024 * 1024;
+
 export type ResultadoTranscripcion =
   | { ok: true; texto: string }
   /**
    * `ilegible`: el audio se escuchó y no se entendió (o no era habla).
    * `presupuesto`: el tope LLM del día del tenant no alcanza — no se cobró.
+   * `demasiado_largo`: el audio supera MAX_AUDIO_BYTES; no se mandó al modelo ni se cobró.
    * `fallo`: fallo NUESTRO (descarga, proveedor, timeout) — no del chofer.
    */
-  | { ok: false; motivo: 'ilegible' | 'presupuesto' | 'fallo' };
+  | { ok: false; motivo: 'ilegible' | 'presupuesto' | 'fallo' | 'demasiado_largo' };
 
 // El transcriptor NO redacta: schema de dos campos y temperatura 0 (models.ts).
 // `inteligible=false` es un resultado VÁLIDO y esperado — el modelo tiene
@@ -96,6 +104,12 @@ export async function transcribirNotaDeVoz(args: {
   const cabecera = dataUrl.slice(0, coma); // data:audio/ogg;base64
   const base64 = dataUrl.slice(coma + 1);
   if (!base64) return { ok: false, motivo: 'fallo' };
+  // Tamaño real decodificado (base64 → 3/4, menos el relleno «=»). Antes de gastar un solo token.
+  const bytes = Math.floor((base64.length * 3) / 4) - (base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0);
+  if (bytes > MAX_AUDIO_BYTES) {
+    logger.warn('voz.audio_demasiado_largo', { mediaId: args.mediaId, bytes });
+    return { ok: false, motivo: 'demasiado_largo' };
+  }
   const mime = cabecera.replace(/^data:/, '').replace(/;base64$/, '') || null;
 
   try {

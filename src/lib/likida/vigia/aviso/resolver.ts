@@ -145,13 +145,11 @@ function limpio(v: string | null | undefined): string | null {
 const mayus = (v: string) => v.trim().toUpperCase();
 
 function elegirContacto(contactos: readonly Contacto[], tenantId: string, clienteId: string): ContactoResuelto | null {
+  // A37-S58-10: sin consentimiento el envío falla cerrado (enviar.ts → sin_consentimiento); elegirlo solo
+  // fabricaba un destinatario «resuelto» no enviable. Sin consentimiento, el cliente queda sin_contacto.
   const elegibles = contactos
-    .filter((c) => c.tenantId === tenantId && c.clienteId === clienteId && c.estado === 'activo' && !c.optoutEn)
-    .sort((a, b) => {
-      const ca = a.consentimientoEn ? 0 : 1;
-      const cb = b.consentimientoEn ? 0 : 1;
-      return ca - cb || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-    });
+    .filter((c) => c.tenantId === tenantId && c.clienteId === clienteId && c.estado === 'activo' && !c.optoutEn && !!c.consentimientoEn)
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const c = elegibles[0];
   return c ? { id: c.id, telefono: c.telefono, nombre: c.nombre } : null;
 }

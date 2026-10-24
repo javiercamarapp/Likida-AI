@@ -326,6 +326,20 @@ describe('sincronizarPrograma · claves y datos incompletos', () => {
     expect(claves).toEqual(['2026-10-05|EXPORTACION||c:ZC9', '2026-10-05|EXPORTACION||u:TC9', '2026-10-05|EXPORTACION||l:77']);
   });
 
+  it('A37-S59-09: una caja, unidad o bloque larguísimos no revientan el límite de 300 caracteres de la clave', () => {
+    const largo = 'X'.repeat(900);
+    const { claves } = clavesNaturales([
+      fila(null, { caja: largo }), fila(null, { caja: largo + 'Y' }), fila(null, { caja: null, unidad: largo }),
+      fila(1, { tipo: 'DOMESTICO', bloque: largo }), fila(2, { tipo: 'DOMESTICO', bloque: largo }),
+    ]);
+    for (const c of claves) expect(c.length).toBeLessThanOrEqual(300);
+    expect(new Set(claves).size).toBe(5);
+    // determinista: el mismo archivo da las mismas claves
+    expect(clavesNaturales([fila(null, { caja: largo })]).claves[0]).toBe(claves[0]);
+    // una clave normal no cambia
+    expect(clavesNaturales([fila(1)]).claves[0]).toBe('2026-10-05|EXPORTACION||1');
+  });
+
   it('el bloque (ruta de Doméstico/Mov. vacío) separa claves iguales de secciones distintas', () => {
     const { claves } = clavesNaturales([fila(1, { tipo: 'DOMESTICO', bloque: 'GDL-MTY' }), fila(1, { tipo: 'DOMESTICO', bloque: 'GDL-QRO' })]);
     expect(new Set(claves).size).toBe(2);

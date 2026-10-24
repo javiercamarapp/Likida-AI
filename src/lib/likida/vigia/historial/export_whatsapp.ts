@@ -72,6 +72,16 @@ export function taparDatosPersonales(texto: string): string {
     .replace(/[\d+][\d\s().-]{6,}\d/g, (m) => (m.replace(/\D/g, '').length >= 7 && !/^\d{4}-\d{1,2}-\d{1,2}$/.test(m) ? '[tel]' : m));
 }
 
+/**
+ * Sal del hash de autor (A37-S58-09). Con `VIGIA_HISTORIAL_SAL` (secreto de servidor) el hash ya no se revierte por
+ * diccionario conociendo solo el id de la flota; sin el secreto cae a la sal anterior (el id de la flota) para no
+ * romper los hashes ya guardados. Nota: activar el secreto cambia el hash de los autores de importaciones NUEVAS.
+ */
+export function salDeFlota(tenantId: string, secreto: string | undefined = process.env.VIGIA_HISTORIAL_SAL): string {
+  const s = (secreto ?? '').trim();
+  return s.length >= 16 ? `${s}\u0000${tenantId}` : tenantId;
+}
+
 function hashAutor(sal: string, nombre: string): string {
   return createHash('sha256').update(`${sal}\u0000${nombre.trim().toLowerCase()}`).digest('hex').slice(0, 12);
 }
