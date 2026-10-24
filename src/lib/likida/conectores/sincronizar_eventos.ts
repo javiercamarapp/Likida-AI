@@ -732,9 +732,10 @@ export async function sincronizarEventosDeFlota(
       base.huerfanos += 1;
       const referenciaIncompleta = e.assetId === null;
       if (referenciaIncompleta) {
+        // A37-S38-04: la referencia sin asset queda opaca en cuarentena y se
+        // cuenta como métrica, pero NO congela el cursor: reaparecería en
+        // cada ventana y el tail y el backfill de la flota no avanzarían jamás.
         base.referenciasIrrecuperables = (base.referenciasIrrecuperables ?? 0) + 1;
-        base.backlog = true;
-        base.error ??= 'Samsara devolvió una referencia sin asset; la ventana no puede declararse completa.';
       }
       paraCuarentena.push({ evento: e, motivo: referenciaIncompleta ? 'referencia_incompleta' : 'unidad_sin_mapear' });
       continue;
@@ -981,7 +982,9 @@ export async function sincronizarEventosTodas(
       leidos: 0, guardados: 0, huerfanos: 0, disparos: 0,
       backlog: true,
     };
+    let historicoCorrio = false;
     if (tailCompleto && (opts.venceEn === undefined || ahora() < opts.venceEn)) {
+      historicoCorrio = true;
       historico = await sincronizarEventosDeFlota(
         c.tenantId, c.proveedor, c.valoresCifrados, http, new Date(hastaMs),
         { desdeIso, hastaIso, venceEn: opts.venceEn, ahoraMs: ahora, drenarPendientes: false },
@@ -990,7 +993,9 @@ export async function sincronizarEventosTodas(
     // Huérfanos y bloqueos de privacidad tienen una referencia mínima en
     // cuarentena; un payload malformado queda en DLQ con métrica. Ninguno
     // congela el cursor de ingesta ni oculta los eventos posteriores.
-    const completo = tailCompleto && !historico.error && !historico.sinTurno;
+    // A37-S38-03: un segmento histórico que NO se consultó (reloj agotado tras
+    // el tail) no es completo: el watermark no puede saltarlo.
+    const completo = tailCompleto && historicoCorrio && !historico.error && !historico.sinTurno;
     const medidas = [tail.ultimaMedidaEn, historico.ultimaMedidaEn]
       .filter((v): v is string => !!v).sort();
     const resultado: ResultadoSyncEventos = {

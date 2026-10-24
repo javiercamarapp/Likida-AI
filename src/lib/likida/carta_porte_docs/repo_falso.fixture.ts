@@ -175,7 +175,7 @@ export const api: typeof Real = {
   },
   async documentosConFolio(tenantId, folio, exceptoId) {
     return [...estado.docs.values()]
-      .filter((d) => d.tenantId === tenantId && d.id !== exceptoId && d.estado !== 'rechazado' && d.extraccion?.campos.folio_cliente?.valor === folio)
+      .filter((d) => d.tenantId === tenantId && d.id !== exceptoId && d.estado !== 'rechazado' && String(d.extraccion?.campos.folio_cliente?.valor ?? '').trim().toUpperCase() === folio.trim().toUpperCase())
       .map((d) => ({ id: d.id, estado: d.estado, nombreArchivo: d.nombreArchivo }));
   },
   async registrarEvento(tenantId, documentoId, tipo, actorId, detalle = {}) {
@@ -262,7 +262,7 @@ export const api: typeof Real = {
   },
   async borrarExportConfig(tenantId, id) { estado.exportConfigs = estado.exportConfigs.filter((c) => !(c.tenantId === tenantId && c.id === id)); },
 
-  async viajePorFolio(tenantId, folio) { const v = estado.viajes.find((x) => x.tenantId === tenantId && x.folio === folio); return v ? clon(v) : null; },
+  async viajePorFolio(tenantId, folio) { const v = estado.viajes.find((x) => x.tenantId === tenantId && (x.folio ?? '').trim().toUpperCase() === folio.trim().toUpperCase()); return v ? clon(v) : null; },
   async viajePorId(tenantId, id) { const v = estado.viajes.find((x) => x.tenantId === tenantId && x.id === id); return v ? clon(v) : null; },
   async operadoresDeFlota(tenantId) { return estado.operadores.filter((o) => o.tenantId === tenantId).map(({ tenantId: _t, ...o }) => o); },
   async unidadesPorPlacas(tenantId, placas) {
@@ -272,6 +272,7 @@ export const api: typeof Real = {
     const v = estado.viajes.find((x) => x.tenantId === tenantId && x.operadorId === operadorId && (x.estatus === 'abierto' || x.estatus === 'en_cuadre'));
     return v ? { id: v.id, folio: v.folio } : null;
   },
+  async unidadConViajeAbierto(tenantId, unidadId) { return estado.viajes.some((x) => x.tenantId === tenantId && x.unidadId === unidadId && (x.estatus === 'abierto' || x.estatus === 'en_cuadre')); },
   async clientePropio(tenantId, clienteId) { return estado.clientes.some((c) => c.tenantId === tenantId && c.id === clienteId); },
   async cargarCatalogoCliente(tenantId, clienteId): Promise<CatalogoCliente> {
     falla('cargarCatalogoCliente');
@@ -286,7 +287,7 @@ export const api: typeof Real = {
   async listarClientes(tenantId) { return estado.clientes.filter((c) => c.tenantId === tenantId).map(({ tenantId: _t, ...c }) => c); },
   async insertarViaje(tenantId, v) {
     falla('insertarViaje');
-    if (estado.viajes.some((x) => x.tenantId === tenantId && x.folio === v.folio)) return null;
+    if (estado.viajes.some((x) => x.tenantId === tenantId && (x.folio ?? '').toUpperCase() === v.folio.toUpperCase())) return null;
     if (estado.viajes.some((x) => x.tenantId === tenantId && x.operadorId === v.operadorId && x.estatus === 'abierto')) return null;
     const id = `viaje-${++estado.seq}`;
     estado.viajes.push({

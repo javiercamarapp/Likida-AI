@@ -240,10 +240,13 @@ export async function actualizarDocumento(
   return filas[0] ? aDocumento(filas[0]) : null;
 }
 
+/** Escapa `\`, `%` y `_` para usar un valor literal como patrón de `ilike` (igualdad sin distinguir mayúsculas). */
+const literalIlike = (v: string): string => v.trim().replace(/[\\%_]/g, (c) => `\\${c}`);
+
 /** Otros documentos de la flota con el mismo folio de cliente (posible duplicado lógico). */
 export async function documentosConFolio(tenantId: string, folio: string, exceptoId: string): Promise<Array<{ id: string; estado: EstadoDoc; nombreArchivo: string }>> {
   const r = await acotada(supabaseAdmin().from('cp_documento').select('id, estado, nombre_archivo')
-    .eq('tenant_id', tenantId).eq('extraccion->campos->folio_cliente->>valor', folio).neq('id', exceptoId)
+    .eq('tenant_id', tenantId).ilike('extraccion->campos->folio_cliente->>valor', literalIlike(folio)).neq('id', exceptoId)
     .neq('estado', 'rechazado').order('id').limit(5), 'cpdocs.folio_duplicado');
   return ((exigir(r, 'cpdocs.folio_duplicado') ?? []) as unknown as Fila[]).map((f) => ({ id: String(f.id), estado: f.estado as EstadoDoc, nombreArchivo: String(f.nombre_archivo) }));
 }
@@ -360,9 +363,23 @@ export async function listarPerfiles(tenantId: string): Promise<PerfilFila[]> {
     .select('id, clave, nombre, cliente_id, formato, firma, version_activa, created_at').eq('tenant_id', tenantId).order('updated_at', { ascending: false }).order('id').limit(200), 'cpdocs.perfiles');
   const perfiles = (exigir(p, 'cpdocs.perfiles') ?? []) as unknown as Fila[];
   if (perfiles.length === 0) return [];
-  const v = await acotada(supabaseAdmin().from('cp_perfil_version')
-    .select('perfil_id, version, mapeos, ejemplos, nota').eq('tenant_id', tenantId).in('perfil_id', perfiles.map((x) => String(x.id))).order('perfil_id').limit(5000), 'cpdocs.perfil_versiones');
-  const versiones = (exigir(v, 'cpdocs.perfil_versiones') ?? []) as unknown as Fila[];
+  // A37-S32-07: solo la versión ACTIVA de cada perfil (antes: TODAS las versiones con tope de 5000, y los perfiles de ids altos
+  // perdían la suya sin error). Se agrupa por número de versión activa: una consulta por cada versión distinta, con `perfil_id in (...)`.
+  const porVersion = new Map<number, string[]>();
+  for (const x of perfiles) {
+    const n = Number(x.version_activa);
+    porVersion.set(n, [...(porVersion.get(n) ?? []), String(x.id)]);
+  }
+  const versiones: Fila[] = [];
+  for (const [n, ids] of porVersion) {
+    const v = await acotada(supabaseAdmin().from('cp_perfil_version')
+      .select('perfil_id, version, mapeos, ejemplos, nota').eq('tenant_id', tenantId).eq('version', n).in('perfil_id', ids)
+      // orden-no-importa: (perfil_id, version) es único y `version` va fijo; a lo más una fila por perfil y ids ≤ 200 (tope de perfiles)
+      .limit(200), 'cpdocs.perfil_versiones');
+    versiones.push(...((exigir(v, 'cpdocs.perfil_versiones') ?? []) as unknown as Fila[]));
+  }
+  const sinActiva = perfiles.filter((x) => !versiones.some((y) => String(y.perfil_id) === String(x.id)));
+  if (sinActiva.length > 0) logger.warn('cpdocs.perfiles_sin_version_activa', { tenantId, n: sinActiva.length });
   return perfiles.flatMap((x) => {
     const act = versiones.find((y) => String(y.perfil_id) === String(x.id) && Number(y.version) === Number(x.version_activa));
     if (!act) return []; // un perfil sin su versión activa no se aplica
@@ -469,7 +486,8 @@ const aViaje = (f: Fila): ViajeMin => ({
 });
 
 export async function viajePorFolio(tenantId: string, folio: string): Promise<ViajeMin | null> {
-  const r = await acotada(supabaseAdmin().from('viaje').select(COL_VIAJE).eq('tenant_id', tenantId).eq('folio', folio).maybeSingle(), 'cpdocs.viaje_folio');
+  // A37-S33-04: la base unifica el folio SIN distinguir mayúsculas (`viaje_folio_upper_uidx` sobre `upper(folio)`): la búsqueda también.
+  const r = await acotada(supabaseAdmin().from('viaje').select(COL_VIAJE).eq('tenant_id', tenantId).ilike('folio', literalIlike(folio)).maybeSingle(), 'cpdocs.viaje_folio');
   const f = exigir(r, 'cpdocs.viaje_folio');
   return f ? aViaje(f as unknown as Fila) : null;
 }
@@ -496,6 +514,12 @@ export async function viajeAbiertoDeOperador(tenantId: string, operadorId: strin
   const r = await acotada(supabaseAdmin().from('viaje').select('id, folio').eq('tenant_id', tenantId).eq('operador_id', operadorId).in('estatus', ['abierto', 'en_cuadre']).order('id').limit(1), 'cpdocs.viaje_abierto');
   const f = ((exigir(r, 'cpdocs.viaje_abierto') ?? []) as unknown as Fila[])[0];
   return f ? { id: String(f.id), folio: s(f.folio) } : null;
+}
+
+/** ¿La unidad ya tiene un viaje abierto o en cuadre? (`uq_viaje_abierto_por_unidad`: un insert más chocaría con 23505). */
+export async function unidadConViajeAbierto(tenantId: string, unidadId: string): Promise<boolean> {
+  const r = await acotada(supabaseAdmin().from('viaje').select('id').eq('tenant_id', tenantId).eq('unidad_id', unidadId).in('estatus', ['abierto', 'en_cuadre']).order('id').limit(1), 'cpdocs.viaje_unidad_abierto');
+  return ((exigir(r, 'cpdocs.viaje_unidad_abierto') ?? []) as unknown[]).length > 0;
 }
 
 export async function clientePropio(tenantId: string, clienteId: string): Promise<boolean> {

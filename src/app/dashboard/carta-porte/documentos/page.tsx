@@ -116,6 +116,7 @@ export default async function PaginaDocumentos({
         canal: 'manual', nombre: archivo.name, bytes: new Uint8Array(await archivo.arrayBuffer()), clienteId: UUID.test(clienteId) ? clienteId : null, actorId: s.userId,
       });
       if (!r.ok) return { ok: false, error: r.mensaje };
+      if (r.duplicado && r.archivoPurgado) { revalidatePath(RUTA); return { ok: false, error: 'Ese archivo ya se había recibido y su archivo se purgó por retención, así que no se volvió a leer. Captura el viaje a mano o pide cargarlo de nuevo.' }; }
       if (r.duplicado) { revalidatePath(RUTA); return { ok: true, mensaje: 'Ese archivo ya estaba en la bandeja: no se duplicó.' }; }
       const p = r.estado === 'recibido' ? await procesarDocumento(s.tenantId, r.documentoId, {}) : null;
       revalidatePath(RUTA);

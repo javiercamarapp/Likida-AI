@@ -91,6 +91,9 @@ interface Cruda {
   despacho_ref?: string; deviceId: string; lat: number; lng: number; medidaEn: string; velocidad?: number; rumbo?: number;
 }
 
+/** A37-S39-03: el cursor retrocede este tramo del máximo leído para no perder lo que un dispositivo con buffer sube tarde. La idempotencia la da `posicion_sin_duplicado`. */
+export const SOLAPE_CURSOR_POSICIONES_MS = 10 * 60_000;
+
 const mayorInstante = (a: string, b: string): string => (Date.parse(b) > Date.parse(a) ? b : a);
 
 /**
@@ -106,9 +109,13 @@ export async function leerPosiciones(
 
   const filas: PosicionTms[] = [];
   let descartadasPorCoordenada = 0;
+  let descartadasPorFuturo = 0;
+  const topeMs = Date.parse(ventana.hasta);
   let maxima: string | undefined;
   for (const m of base.filas) {
     const c = m.fila;
+    // A37-S39-03: una marca de tiempo posterior al fin de la ventana (reloj adelantado del GPS) no se acepta: adelantaría el cursor al futuro.
+    if (Number.isFinite(topeMs) && Date.parse(c.medidaEn) > topeMs) { descartadasPorFuturo += 1; continue; }
     if (!coordenadaValida(c.lat, c.lng)) { descartadasPorCoordenada += 1; continue; }
     const p: PosicionTms = {
       deviceId: c.deviceId, lat: c.lat, lng: c.lng, medidaEn: c.medidaEn,
@@ -123,7 +130,9 @@ export async function leerPosiciones(
   if (descartadasPorCoordenada > 0) avisos.push(`${descartadasPorCoordenada} posición(es) con coordenadas inválidas se descartaron.`);
   // El cursor solo avanza con una lectura completa: si quedó trabajo, las páginas sin leer pueden traer
   // instantes anteriores al máximo ya visto y adelantar el cursor las perdería.
-  const cursor = base.completa && maxima !== undefined ? mayorInstante(ventana.desde, maxima) : ventana.desde;
+  if (descartadasPorFuturo > 0) avisos.push(`${descartadasPorFuturo} posición(es) con fecha posterior a la ventana se descartaron.`);
+  const maximaConSolape = maxima === undefined || Number.isNaN(Date.parse(maxima)) ? undefined : new Date(Date.parse(maxima) - SOLAPE_CURSOR_POSICIONES_MS).toISOString();
+  const cursor = base.completa && maximaConSolape !== undefined ? mayorInstante(ventana.desde, maximaConSolape) : ventana.desde;
   const lectura: LecturaPosiciones = {
     filas, rechazadas: base.rechazadas, descartadasPorCoordenada, cursor,
     completa: base.completa, backlog: base.backlog, reanudar: base.reanudar, avisos,
