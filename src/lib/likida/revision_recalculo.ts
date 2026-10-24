@@ -10,6 +10,7 @@ import { getDatosFiscales } from '@/lib/saas/fiscal';
 import { rutasPdfVersionadas, rutaPdfOperador } from './liquidacion/rutas_pdf';
 import { estadiasParaLiquidacion } from './conductor/servicios';
 import { logger } from '@/lib/logger';
+import { DatoInvalido } from './errores';
 import type { Gasto, Liquidacion } from '@/types/likida';
 
 export interface AjustePedido { gastoId: string; montoNuevo: number }
@@ -55,6 +56,24 @@ export async function recalcularParaAjuste(
   for (const a of ajustes) {
     if (!porId.has(a.gastoId)) {
       throw new Error(`recalcularParaAjuste: el comprobante ${a.gastoId} no es de este viaje`);
+    }
+  }
+  // A37-S56-01: un comprobante con CFDI/XML verificado trae su IVA, IEPS y
+  // subtotal DEL XML. Cambiarle el monto dejaba esas cifras intactas: la
+  // liquidación quedaba `ajustada` con un IVA acreditable que ya no
+  // correspondía al monto, sin diferencia marcada. Prorratearlas a mano sería
+  // inventar cifras fiscales (ante la duda no se adivina), así que se VETA: o
+  // se rechaza la liquidación para que el chofer mande el comprobante correcto,
+  // o se ajusta otro comprobante.
+  for (const a of ajustes) {
+    const g = porId.get(a.gastoId)!;
+    const conCfdi = g.xmlVerificado === true || Boolean(g.cfdiUuid);
+    if (conCfdi && Math.abs(Number(g.monto) - a.montoNuevo) >= 0.005) {
+      throw new DatoInvalido(
+        'Ese comprobante tiene CFDI verificado: su monto, IVA e IEPS salen del XML y no se pueden ajustar a mano '
+        + '(el IVA acreditable quedaría con la cifra del XML y no con la ajustada). Rechaza la liquidación para que '
+        + 'se corrija el comprobante, o ajusta otro.',
+      );
     }
   }
   const nuevos = new Map(ajustes.map((a) => [a.gastoId, a.montoNuevo]));

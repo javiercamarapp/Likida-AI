@@ -207,7 +207,13 @@ export function conciliarLineas(lineas: CfdiLineaXml[], gastosDisponibles: Gasto
     }
 
     const dia = linea.fecha.slice(0, 10);
+    // A37-S46-01: una línea ECC12 es una CARGA DE COMBUSTIBLE. Cruzarla solo por
+    // monto y fecha le sellaba `xml_verificado`, la clave de diésel y los litros
+    // a cualquier gasto (una comida de $850.40) que fuera el único candidato.
+    // Solo gastos de combustible son candidatos de una línea ECC12.
+    const soloCombustible = linea.fuente === 'ecc12';
     const candidatos = disponibles.filter((g) =>
+      (!soloCombustible || g.concepto === 'diesel') &&
       g.fecha != null &&
       Math.abs(g.monto - linea.monto) <= TOLERANCIA_MONTO_MXN &&
       diasDeDiferencia(g.fecha.slice(0, 10), dia) <= VENTANA_DIAS_FECHA);

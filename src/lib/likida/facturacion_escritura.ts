@@ -156,6 +156,12 @@ export function validarFactura(c: FacturaCruda): FacturaValida {
   // FIS-M3 (mig. 0351): retención del 4% de IVA, opcional — sin ella (el
   // caso de hoy) el cálculo es idéntico al de siempre.
   const retencion = montoTecleado(c.retencion ?? '', 'La retención', { obligatorio: false }) ?? 0;
+  // Una retención de IVA nunca excede el IVA trasladado (4 % del subtotal contra
+  // 16 %; 2/3 del IVA en servicios de personal): si lo supera, se tecleó en el
+  // campo equivocado, y un total menor al real no se adivina.
+  if (retencion > iva) {
+    throw new DatoInvalido('La retención de IVA no puede ser mayor que el IVA de la factura. Revisa las cifras del CFDI.');
+  }
   // Redondeo a centavos ANTES de sumar: 0.1 + 0.2 en binario no es 0.30, y el
   // constraint `factura_total_cuadra` tolera un centavo, no una cola binaria.
   const total = Math.round((subtotal + iva - retencion) * 100) / 100;

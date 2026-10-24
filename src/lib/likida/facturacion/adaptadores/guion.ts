@@ -692,14 +692,33 @@ export class AdaptadorDeclarativo implements AdaptadorPortal {
       }
 
       // ── 7. BAJAR EL XML. Se baja, no se fabrica ────────────────────────
+      //
+      // A37-S42-01: el UUID YA está confirmado, así que el CFDI existe. Bajar el
+      // XML es MEJOR ESFUERZO: si el clic expira (el botón era un enlace, el
+      // portal tardó) NO se devuelve `ok:false`/`emisionSinConfirmar` —eso
+      // tiraba el UUID y dejaba el gasto bloqueado sin folio aunque el CFDI
+      // existe—. Se prueban TODOS los candidatos del botón y, si ninguno baja,
+      // se devuelve el UUID con un aviso.
       let xmlRuta: string | undefined;
+      let aviso: string | undefined;
       if (this.g.xml) {
-        const selXml = primerCandidato(this.g.xml.boton);
-        const ruta = await descargarXml(pagina, selXml, { ...contexto, topeMs: this.esperaXmlMs });
-        if (ruta) xmlRuta = ruta;
+        const candidatos = typeof this.g.xml.boton === 'string' ? [this.g.xml.boton] : [...this.g.xml.boton];
+        const fallos: string[] = [];
+        for (const selXml of candidatos) {
+          try {
+            const ruta = await descargarXml(pagina, selXml, { ...contexto, topeMs: this.esperaXmlMs });
+            if (ruta) { xmlRuta = ruta; break; }
+          } catch (e) {
+            fallos.push(textoDeError(e));
+          }
+        }
+        if (!xmlRuta) {
+          aviso = `El CFDI ${uuid} SÍ se emitió, pero no se pudo descargar su XML de ${this.portal}${fallos.length ? ` (${fallos.join('; ')})` : ''}. Descárgalo a mano del portal.`;
+          logger.warn('portal.guion.xml_sin_bajar', { comercio: this.comercio, modo });
+        }
       }
 
-      return { modo, ok: true, capturado, captura, cfdiUuid: uuid, ...(xmlRuta ? { xmlRuta } : {}) };
+      return { modo, ok: true, capturado, captura, cfdiUuid: uuid, ...(xmlRuta ? { xmlRuta } : {}), ...(aviso ? { aviso } : {}) };
     } catch (e) {
       const detalle = e instanceof FalloDePortal ? e.message : `Falló ${this.portal}: ${textoDeError(e)}`;
       const error = seApreto

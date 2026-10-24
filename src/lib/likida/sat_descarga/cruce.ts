@@ -76,6 +76,15 @@ export interface LineaEccRef {
   fecha?: string;
 }
 
+/** ¿Las dos fechas (AAAA-MM-DD…) existen y distan a lo más un día? */
+function fechaCercana(a: string | undefined, b: string | undefined): boolean {
+  if (!a || !b) return false;
+  const ta = Date.parse(`${a.slice(0, 10)}T00:00:00Z`);
+  const tb = Date.parse(`${b.slice(0, 10)}T00:00:00Z`);
+  if (!Number.isFinite(ta) || !Number.isFinite(tb)) return false;
+  return Math.abs(ta - tb) <= 86_400_000;
+}
+
 function candidatoDe(g: Gasto): CandidatoCruce {
   return { gastoId: g.id, monto: g.monto, fecha: g.fecha ?? null, concepto: g.concepto };
 }
@@ -142,7 +151,18 @@ export function decidirCruce(
   // exigir candidato único y desempatar por día. Aquí solo se le entrega el
   // fondo correcto.
   const elegido = emparejarXmlConTicket({ total: cfdi.total, fecha: cfdi.fecha }, [...fondo]);
-  if (elegido !== null) return { destino: 'casado', gastoId: elegido.id };
+  if (elegido !== null) {
+    // A37-S57-03: con UN solo candidato por monto, `emparejarXmlConTicket` lo
+    // devuelve sin mirar fecha ni RFC. En el barrido masivo (miles de CFDI de
+    // un mes contra los tickets sin factura) eso pega la factura de otra
+    // operación. Para LIGAR solo hace falta evidencia independiente del
+    // monto: el RFC del ticket (conocido e igual) o la misma fecha (±1 día).
+    // Sin ella no se adivina: queda en la bandeja con el gasto sugerido.
+    const rfcGasto = elegido.rfcEmisor?.trim().toUpperCase() ?? '';
+    const rfcCoincide = rfcCfdi !== '' && rfcGasto === rfcCfdi;
+    if (rfcCoincide || fechaCercana(cfdi.fecha, elegido.fecha)) return { destino: 'casado', gastoId: elegido.id };
+    return { destino: 'ambiguo', candidatos: [candidatoDe(elegido)] };
+  }
 
   // No hubo único. Distinguir "ninguno" de "varios" es la diferencia entre un
   // hallazgo y una tarea: se recalcula el empate SOLO para reportarlo.

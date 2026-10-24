@@ -54,6 +54,19 @@ describe('validarFactura — el total no se teclea, se calcula', () => {
     expect(f.total).toBe(11600);
   });
 
+  it('A37-S18-02: la retención mayor que el IVA se rechaza (campo equivocado)', () => {
+    expect(() => validarFactura({ ...FACTURA_OK, retencion: '1700' })).toThrow(DatoInvalido);
+  });
+
+  it('A37-S18-02: la pantalla CAPTURA la retención y la pasa a validarFactura', () => {
+    // Antes la pantalla no tenía el campo: el total salía inflado en silencio
+    // (11,600 en vez de 11,200) y el saldo de 400 nunca se saldaba.
+    const forma = readFileSync('src/app/dashboard/facturacion/forma.tsx', 'utf8');
+    const pagina = readFileSync('src/app/dashboard/facturacion/page.tsx', 'utf8');
+    expect(forma).toMatch(/name="retencion"/);
+    expect(pagina).toMatch(/retencion:\s*String\(fd\.get\('retencion'\)/);
+  });
+
   it('FIS-M3: con retención del 4%, el total la descuenta', () => {
     const f = validarFactura({ ...FACTURA_OK, retencion: '400' });
     expect(f.retencion).toBe(400);

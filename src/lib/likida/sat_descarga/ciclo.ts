@@ -31,6 +31,7 @@ import { saveCfdiXmlRaw } from '../repo';
 import { ligarGastoAutomatico } from './liga_campos';
 import { resolverDescargaSat, estadoDescargaSat } from './index';
 import { decidirCruce } from './cruce';
+import { rfcsFiscalesDeTenants, normalizarRfc } from './rfc_tenant';
 import type { ProveedorDescargaSat, TipoDescarga } from './tipos';
 
 /** Días por solicitud. El SAT admite rangos largos, pero un rango corto
@@ -163,6 +164,21 @@ export function rangoPendiente(
 }
 
 /**
+ * ¿Esta solicitud completada puede mover `ultima_descarga_hasta`? (A37-S57-02)
+ * Solo 'recibidos' y sin hueco: arranca a más tardar el día siguiente al
+ * calendario (o, si nunca se descargó, en la ventana inicial). PURA.
+ */
+export function avanzaCalendario(
+  tipo: string, desde: string, ultimaHasta: string | null, hoy: string,
+): boolean {
+  if (tipo !== 'recibidos') return false;
+  const primerDiaSinCubrir = ultimaHasta === null
+    ? sumarDias(hoy, -VENTANA_INICIAL_DIAS)
+    : sumarDias(ultimaHasta, 1);
+  return desde <= primerDiaSinCubrir;
+}
+
+/**
  * Los gastos de la flota que TODAVÍA no tienen comprobante — el fondo contra
  * el que se cruza. Se acota por fecha alrededor del rango bajado: cruzar
  * contra el histórico entero sería lento y no más correcto (el CFDI y su
@@ -273,7 +289,13 @@ async function ingerir(
   r: ResumenFlota,
   conteo: ConteoSolicitud,
   venceEn?: number,
+  tipo: TipoDescarga = 'recibidos',
 ): Promise<{ completo: boolean }> {
+  // A37-S57-04: un fallo al PERSISTIR (sello, XML crudo, estatus) no puede dar
+  // el paquete por bajado ni avanzar el calendario: la vuelta siguiente lo
+  // reintenta (el sello de dedup hace barato lo ya hecho).
+  let hayFallo = false;
+  const rfcBuzon = normalizarRfc(cfg.rfc);
   // REN-32C3-C1: este prólogo corría SIN reloj, 72 líneas por encima de la
   // lectura que `fc811a0` acotó, y en TODOS los paquetes —no solo en los que
   // traen consolidado—. El corte se traduce al contrato que este archivo ya
@@ -314,6 +336,18 @@ async function ingerir(
     }
     const uuid = cfdi.uuid.toLowerCase();
 
+    // ── A37-S57-01 / A37-S18-01: NADA AJENO ENTRA AL BUZÓN DE ESTA FLOTA ───
+    // Defensa en profundidad tras atar el RFC al tenant: un recibido tiene que
+    // venir a nombre del RFC del buzón (receptor); un emitido, de su emisor.
+    // Lo demás se descarta SIN sellar y se dice: jamás se guarda un CFDI de un
+    // tercero en el tenant que lo pidió.
+    const rfcDelLado = normalizarRfc(tipo === 'emitidos' ? cfdi.rfcEmisor : cfdi.rfcReceptor);
+    if (rfcDelLado !== rfcBuzon) {
+      r.errores.push(`El CFDI ${uuid} no es ${tipo === 'emitidos' ? 'emitido' : 'recibido'} por el RFC del buzón de esta flota y se descartó.`);
+      logger.error('sat.cfdi_ajeno_descartado', { tenantId: cfg.tenantId, solicitudId, tipo });
+      continue;
+    }
+
     // ── EL SELLO DE DEDUP, en la base ─────────────────────────────────────
     // El insert con `ignoreDuplicates` es la idempotencia: el mismo folio no
     // entra dos veces aunque dos rangos se traslapen o el cron se repita. Se
@@ -329,11 +363,14 @@ async function ingerir(
         total: cfdi.total ?? null,
         fecha: cfdi.fecha ? cfdi.fecha.slice(0, 10) : null,
         tipo_comprobante: cfdi.tipoComprobante ?? null,
-        estatus: 'disponible',
+        // A37-S57-02: un EMITIDO es un ingreso de la propia flota, no un
+        // comprobante de gasto: se sella como 'ignorado' y no entra al cruce.
+        estatus: tipo === 'emitidos' ? 'ignorado' : 'disponible',
       }, { onConflict: 'tenant_id,cfdi_uuid', ignoreDuplicates: true })
       .select('id'), 'sat_descarga.sello');
     if (errSello) {
       r.errores.push(`No se pudo registrar el CFDI ${uuid}: ${errSello.message}`);
+      hayFallo = true;
       continue;
     }
     // REN-C1 (auditoría 29): `yaDescargado` distingue "ya está en la tabla de
@@ -345,6 +382,10 @@ async function ingerir(
     const yaDescargado = (metido ?? []).length === 0;
     if (yaDescargado) { r.cfdisRepetidos++; conteo.repetidos++; }
     else { r.cfdisNuevos++; conteo.nuevos++; }
+
+    // A37-S57-02: los emitidos se sellan y listo; nunca se cruzan contra gastos
+    // (copiarían IVA y RFC de una factura de VENTA a un ticket de compra).
+    if (tipo === 'emitidos') continue;
 
     const decision = decidirCruce(cfdi, [...fondo.values()]);
 
@@ -375,9 +416,9 @@ async function ingerir(
         // El CONTADOR sí se queda adentro: `r.consolidados` cuenta los
         // consolidados nuevos de ESTA corrida, y sacarlo haría que un repetido
         // ya conciliado se recontara en cada pasada.
-        await marcar(cfg.tenantId, uuid, 'ignorado', null, {
+        if (!await marcar(cfg.tenantId, uuid, 'ignorado', null, {
           motivo: `CFDI de ${decision.emisor}: se concilió línea por línea (complemento ECC), no como comprobante único.`,
-        });
+        })) hayFallo = true;
         if (!yaDescargado) r.consolidados++;
       } catch (e) {
         r.errores.push(`El consolidado ${uuid} no se pudo conciliar: ${e instanceof Error ? e.message : String(e)}`);
@@ -385,14 +426,21 @@ async function ingerir(
       continue;
     }
 
-    if (yaDescargado) continue;
+    // A37-S57-04: un CFDI ya sellado NO se da por procesado a ciegas. Si la
+    // primera pasada murió entre el sello y el cruce (o falló al guardar el
+    // XML), sigue 'disponible' y se vuelve a procesar. Un 'disponible' legítimo
+    // (sin gasto que le corresponda) simplemente se reevalúa: es idempotente.
+    if (yaDescargado && !(await sigueSinProcesar(cfg.tenantId, uuid))) continue;
 
     if (decision.destino === 'casado') {
       const res = await ligar(cfg.tenantId, decision.gastoId, uuid, xml);
       if (res === 'ligado') {
         fondo.delete(decision.gastoId);
-        await saveCfdiXmlRaw(cfg.tenantId, uuid, decision.gastoId, xml);
-        await marcar(cfg.tenantId, uuid, 'casado', decision.gastoId, null);
+        if (!await saveCfdiXmlRaw(cfg.tenantId, uuid, decision.gastoId, xml)) {
+          hayFallo = true;
+          r.errores.push(`No se pudo guardar el XML del CFDI ${uuid} (ya ligado al gasto ${decision.gastoId}); se reintenta en la siguiente vuelta.`);
+        }
+        if (!await marcar(cfg.tenantId, uuid, 'casado', decision.gastoId, null)) hayFallo = true;
         r.casados++;
       } else if (res === 'fallo') {
         // A36-R03-02: un fallo de la base o de la red NO es «el gasto ya tenía
@@ -403,19 +451,20 @@ async function ingerir(
         // XML crudo) en vez de perderlo. Sin migración no hay estatus
         // 'pendiente_reintento'; este es el más cercano que la base acepta.
         const g = fondo.get(decision.gastoId);
-        await saveCfdiXmlRaw(cfg.tenantId, uuid, null, xml);
-        await marcar(cfg.tenantId, uuid, 'ambiguo', null, {
+        if (!await saveCfdiXmlRaw(cfg.tenantId, uuid, null, xml)) hayFallo = true;
+        if (!await marcar(cfg.tenantId, uuid, 'ambiguo', null, {
           motivo: 'No se pudo ligar automáticamente por un fallo temporal (no porque el gasto ya tuviera comprobante). Liga con un clic al gasto sugerido.',
           candidatos: [{ gastoId: decision.gastoId, monto: g?.monto ?? null, fecha: g?.fecha ?? null, concepto: g?.concepto ?? null }],
-        });
+        })) hayFallo = true;
         r.errores.push(`No se pudo ligar el CFDI ${uuid} al gasto ${decision.gastoId} por un fallo temporal; quedó en la bandeja para ligarlo a mano.`);
         r.ambiguos++;
       } else {
         // Perdió la carrera: alguien ya le pegó su comprobante a ese ticket.
         // Queda disponible y se dice — jamás se pisa un CFDI existente.
-        await marcar(cfg.tenantId, uuid, 'disponible', null, {
+        if (!await saveCfdiXmlRaw(cfg.tenantId, uuid, null, xml)) hayFallo = true;
+        if (!await marcar(cfg.tenantId, uuid, 'disponible', null, {
           motivo: 'El gasto que le correspondía ya tenía comprobante cuando se intentó ligar (llegó por otro camino).',
-        });
+        })) hayFallo = true;
         r.disponibles++;
       }
       continue;
@@ -424,17 +473,35 @@ async function ingerir(
     if (decision.destino === 'ambiguo') {
       // El XML crudo se conserva también aquí: si el contralor resuelve a mano,
       // `ligarComprobante` lo lee para copiar los campos fiscales (R04-fiscal-01).
-      await saveCfdiXmlRaw(cfg.tenantId, uuid, null, xml);
-      await marcar(cfg.tenantId, uuid, 'ambiguo', null, { candidatos: decision.candidatos });
+      if (!await saveCfdiXmlRaw(cfg.tenantId, uuid, null, xml)) hayFallo = true;
+      if (!await marcar(cfg.tenantId, uuid, 'ambiguo', null, { candidatos: decision.candidatos })) hayFallo = true;
       r.ambiguos++;
       continue;
     }
 
-    await saveCfdiXmlRaw(cfg.tenantId, uuid, null, xml);
-    await marcar(cfg.tenantId, uuid, 'disponible', null, { motivo: decision.motivo });
+    if (!await saveCfdiXmlRaw(cfg.tenantId, uuid, null, xml)) hayFallo = true;
+    if (!await marcar(cfg.tenantId, uuid, 'disponible', null, { motivo: decision.motivo })) hayFallo = true;
     r.disponibles++;
   }
+  if (hayFallo) {
+    r.errores.push('Hubo CFDI que no se pudieron guardar por completo; el paquete NO se da por bajado y se reintenta en la siguiente vuelta.');
+    return { completo: false };
+  }
   return { completo: true };
+}
+
+/** ¿El CFDI ya sellado quedó 'disponible' (nadie lo cruzó o su primera pasada murió)? Ante un
+ *  error de lectura se asume que SÍ: reprocesar es idempotente, saltarlo lo pierde (A37-S57-04). */
+async function sigueSinProcesar(tenantId: string, uuid: string): Promise<boolean> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('sat_cfdi_descargado')
+    .select('estatus')
+    .eq('tenant_id', tenantId)
+    .eq('cfdi_uuid', uuid)
+    .maybeSingle(), 'sat_descarga.estatus_sello');
+  if (error) return true;
+  const estatus = (data as { estatus?: unknown } | null)?.estatus;
+  return estatus === undefined || estatus === 'disponible';
 }
 
 async function marcar(
@@ -442,13 +509,16 @@ async function marcar(
   estatus: 'casado' | 'disponible' | 'ambiguo' | 'ignorado',
   gastoId: string | null,
   candidatos: Record<string, unknown> | null,
-): Promise<void> {
+): Promise<boolean> {
   const { error } = await acotada(supabaseAdmin()
     .from('sat_cfdi_descargado')
     .update({ estatus, gasto_id: gastoId, candidatos })
     .eq('tenant_id', tenantId)
     .eq('cfdi_uuid', uuid), 'sat_descarga.marcar');
   if (error) logger.warn('sat.marcar_fallo', { tenantId, err: error.message });
+  // A37-S57-04: el retorno se mira. Un estatus que no se escribió deja el CFDI
+  // 'disponible' para siempre aunque exista su gasto.
+  return !error;
 }
 
 /**
@@ -688,7 +758,7 @@ export async function correrFlota(
         continue;
       }
       const conteo: ConteoSolicitud = { nuevos: 0, repetidos: 0 };
-      const resultado = await ingerir(cfg, s.id as string, d.xmls, rango, r, conteo, venceEn);
+      const resultado = await ingerir(cfg, s.id as string, d.xmls, rango, r, conteo, venceEn, s.tipo === 'emitidos' ? 'emitidos' : 'recibidos');
       nuevosDeLaSolicitud += conteo.nuevos;
       repetidosDeLaSolicitud += conteo.repetidos;
 
@@ -744,7 +814,12 @@ export async function correrFlota(
       // El avance del calendario SOLO cuando el rango se bajó COMPLETO. Mover
       // `ultima_descarga_hasta` con un paquete a medias saltaría días para
       // siempre — el modo de falla silencioso que este producto no acepta.
-      if (rango.hasta > (cfg.ultimaHasta ?? '')) {
+      //
+      // A37-S57-02: SOLO una solicitud de RECIBIDOS contigua al calendario lo
+      // mueve. Una descarga manual de «emitidos» —o un rango manual reciente
+      // que deja un hueco— lo saltaba por encima de días de recibidos nunca
+      // pedidos, y ese calendario no retrocede.
+      if (rango.hasta > (cfg.ultimaHasta ?? '') && avanzaCalendario(s.tipo as string, rango.desde, cfg.ultimaHasta, hoy)) {
         await acotada(supabaseAdmin().from('sat_descarga_config')
           .update({ ultima_descarga_hasta: rango.hasta, actualizado_en: new Date().toISOString() })
           .eq('tenant_id', cfg.tenantId), 'sat_descarga.avanzar');
@@ -899,6 +974,12 @@ export async function correrDescargaSat(
   const lista = saltarFlotas && saltarFlotas.size > 0
     ? (configs ?? []).filter((c) => !saltarFlotas.has(String(c.tenant_id)))
     : (configs ?? []);
+  // A37-S57-01 / A37-S18-01 (CRÍTICO): el barrido SOLO pide el buzón cuyo RFC
+  // es el fiscal verificado del tenant (`tenant.rfc`). Una fila con otro RFC
+  // —declarada antes del candado o por una vía que lo rodee— no se pide: se
+  // dice y la flota queda sin descargar, nunca descargando el buzón de otra.
+  // Si `tenant.rfc` no se puede leer, el barrido entero falla cerrado.
+  const rfcsFiscales = await rfcsFiscalesDeTenants(lista.map((c) => String(c.tenant_id)));
   let flotasSinTurno = 0;
   for (let i = 0; i < lista.length; i++) {
     const c = lista[i];
@@ -919,6 +1000,13 @@ export async function correrDescargaSat(
         pendientes: lista.slice(i).map((x) => x.tenant_id as string).slice(0, 20),
       });
       break;
+    }
+    if (rfcsFiscales.get(String(c.tenant_id)) !== normalizarRfc(c.rfc)) {
+      const r = vacio(String(c.tenant_id));
+      r.errores.push('El RFC del buzón no coincide con el RFC fiscal verificado de la flota: no se descarga. Un contacto de Likida debe revisarlo.');
+      resumenes.push(r);
+      logger.error('sat.rfc_buzon_no_es_del_tenant', { tenantId: String(c.tenant_id) });
+      continue;
     }
     const cfg: ConfigFlota = {
       tenantId: c.tenant_id as string,

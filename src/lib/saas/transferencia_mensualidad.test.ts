@@ -186,3 +186,25 @@ describe('timbrarFactura — el CFDI que no se puede deshacer', () => {
     expect(timbrarMensualidad).not.toHaveBeenCalled();
   });
 });
+
+
+describe('A37-S61-01 · un error AMBIGUO del PAC no suelta la reserva', () => {
+  it('timeout/5xx: la reserva se alarga (no se pone en null) y el mensaje manda a comprobar el panel', async () => {
+    TABLAS.factura_saas = [FACTURA_PAGADA];
+    timbrarMensualidad.mockRejectedValueOnce(Object.assign(new Error('Facturapi /invoices: sin respuesta'), { ambiguo: true }));
+    await expect(timbrarFactura('fact-1')).rejects.toThrow(/NO se sabe si el CFDI se creó/);
+    const soltadas = escrituras.filter((e) => e.valores.timbrando_en === null);
+    expect(soltadas).toHaveLength(0);
+    const alargada = escrituras.filter((e) => typeof e.valores.timbrando_en === 'string');
+    // La reserva inicial + la que se alarga a 24 h.
+    expect(alargada.length).toBeGreaterThanOrEqual(2);
+    expect(Date.parse(alargada[alargada.length - 1].valores.timbrando_en as string)).toBeGreaterThan(Date.now() + 23 * 3_600_000);
+  });
+
+  it('un rechazo DEFINITIVO del PAC sí suelta la reserva (comportamiento de siempre)', async () => {
+    TABLAS.factura_saas = [FACTURA_PAGADA];
+    timbrarMensualidad.mockRejectedValueOnce(new Error('Facturapi: rechazo'));
+    await expect(timbrarFactura('fact-1')).rejects.toThrow(/rechazo/);
+    expect(escrituras.some((e) => e.valores.timbrando_en === null)).toBe(true);
+  });
+});

@@ -84,6 +84,8 @@ beforeEach(() => {
   respuestas.clear();
   bitacoras.length = 0;
   motivoNoConfigurado = 'La descarga masiva no está configurada.';
+  // A37-S57-01: el RFC fiscal verificado del tenant (`tenant.rfc`).
+  respuestas.set('tenant#select', { data: { rfc: 'AAA010101AB1' }, error: null });
   proveedor = {
     nombre: 'sw',
     solicitar: vi.fn(async () => ({ ok: true, requestId: 'req-1' })),
@@ -101,6 +103,30 @@ describe('guardarConfigDescarga', () => {
     const l = llamadas.find((x) => x.tabla === 'sat_descarga_config' && x.op === 'upsert');
     expect(l?.fila).toMatchObject({ tenant_id: TENANT, rfc: 'AAA010101AB1', modo: 'webservice', activa: true });
     expect(bitacoras).toHaveLength(1);
+  });
+
+  it('A37-S57-01: un RFC AJENO (de otra flota) se rechaza y NO se escribe nada', async () => {
+    // El RFC es público (sale en cada CFDI): la forma no prueba pertenencia.
+    await expect(guardarConfigDescarga(TENANT, { ...datosValidos, rfc: 'BBB020202BB2' }))
+      .rejects.toThrow(DatoInvalido);
+    expect(llamadas.some((x) => x.tabla === 'sat_descarga_config')).toBe(false);
+  });
+
+  it('A37-S57-01: el RFC en minúsculas y con espacios igual coincide con el fiscal', async () => {
+    await guardarConfigDescarga(TENANT, { ...datosValidos, rfc: ' aaa010101ab1 ' });
+    expect(llamadas.some((x) => x.tabla === 'sat_descarga_config' && x.op === 'upsert')).toBe(true);
+  });
+
+  it('A37-S57-01: sin tenant.rfc verificado no se declara ningún buzón (fail-closed)', async () => {
+    respuestas.set('tenant#select', { data: { rfc: null }, error: null });
+    await expect(guardarConfigDescarga(TENANT, datosValidos)).rejects.toThrow(/no tiene verificado/);
+    expect(llamadas.some((x) => x.tabla === 'sat_descarga_config')).toBe(false);
+  });
+
+  it('A37-S57-01: si la lectura de tenant.rfc falla, se propaga (no se adivina)', async () => {
+    respuestas.set('tenant#select', { data: null, error: { message: 'timeout' } });
+    await expect(guardarConfigDescarga(TENANT, datosValidos)).rejects.toThrow('timeout');
+    expect(llamadas.some((x) => x.tabla === 'sat_descarga_config')).toBe(false);
   });
 
   it('RFC sin forma de RFC — DatoInvalido, sin tocar la base', async () => {
@@ -146,6 +172,14 @@ describe('verificarCredencial', () => {
     expect(upd?.fila).toMatchObject({ certificado_numero: 'cert-1', certificado_vence_en: '2027-01-01' });
     expect(upd?.eq).toContainEqual(['tenant_id', TENANT]);
     expect(bitacoras).toHaveLength(1);
+  });
+
+  it('A37-S18-01: una fila con RFC AJENO no pregunta por la e.firma de ese RFC', async () => {
+    respuestas.set('sat_descarga_config#select', { data: { rfc: 'BBB020202BB2' }, error: null });
+    const r = await verificarCredencial(TENANT);
+    expect(r.ok).toBe(false);
+    expect(proveedor!.credencial).not.toHaveBeenCalled();
+    expect(bitacoras).toHaveLength(0);
   });
 
   it('el proveedor dice que no hay e.firma en su bóveda: el mensaje TAL CUAL, y se limpia el certificado', async () => {
@@ -195,6 +229,14 @@ describe('pedirRangoManual', () => {
     const r = await pedirRangoManual(TENANT, rango);
     expect(r.ok).toBe(false);
     expect(r.mensaje).toMatch(/pausada/);
+    expect(llamadas.some((x) => x.tabla === 'sat_descarga_solicitud')).toBe(false);
+    expect(proveedor!.solicitar).not.toHaveBeenCalled();
+  });
+
+  it('A37-S18-01: una fila con RFC AJENO no reserva ni pide nada al SAT', async () => {
+    respuestas.set('sat_descarga_config#select', { data: { rfc: 'BBB020202BB2', activa: true }, error: null });
+    const r = await pedirRangoManual(TENANT, rango);
+    expect(r.ok).toBe(false);
     expect(llamadas.some((x) => x.tabla === 'sat_descarga_solicitud')).toBe(false);
     expect(proveedor!.solicitar).not.toHaveBeenCalled();
   });

@@ -359,15 +359,18 @@ export function mensajeCorregir(marcado = false): string {
   // gasto queda marcado (`ocr_extra.montoDisputado`) y el texto lo dice…
   // solo si de verdad se marcó: si la marca no se pudo escribir, se le pide
   // lo único que entonces SÍ funciona.
-  const cabeza = marcado
-    ? 'Anotado: ese monto no está bien 👍. Lo marqué para que tu oficina lo revise.\n\n'
-    : 'Anotado: ese monto no está bien 👍.\n\n';
+  // A37-S45-01: NINGÚN panel ni proceso lee todavía `ocr_extra.montoDisputado`
+  // (ni existe una acción que corrija el monto), así que prometer «lo marqué
+  // para que tu oficina lo revise» era un éxito falso con dinero del chofer. El
+  // texto ya no promete nada que nadie vaya a hacer: la ÚNICA ruta que hoy
+  // funciona es que el chofer enseñe el papel a su oficina.
+  // (`marcado` solo distingue si quedó la marca en la base; no cambia la promesa.)
+  void marcado;
+  const cabeza = 'Anotado: ese monto no está bien 👍.\n\n';
   return cabeza +
     'Todavía no puedo cambiarlo desde aquí, y *no me mandes otra foto de ese mismo ticket* — ' +
     'entraría como un gasto aparte y se te contaría dos veces.\n\n' +
-    (marcado
-      ? 'Guarda el papel: tu oficina lo va a comparar contra tu liquidación. 🙏'
-      : 'Guarda el papel y enséñaselo a tu oficina para que lo revisen contra tu liquidación. 🙏');
+    '*Tu oficina no se entera sola de esta corrección.* Guarda el papel y enséñaselo para que lo revisen contra tu liquidación antes de que se cierre. 🙏';
 }
 
 /** Lo que se contesta cuando aprieta "Sí, está bien". */

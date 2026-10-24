@@ -41,6 +41,7 @@ import {
 } from '@/lib/admin/negocio';
 import { getPorCobrar } from '@/lib/saas/transferencia';
 import { getPlanes } from '@/lib/saas/suscripcion';
+import { desglosarPrecio } from '@/lib/saas/iva';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { encolarPieza } from './cola';
 import { registrarCorrida, type DisparoCorrida } from './corridas';
@@ -521,7 +522,16 @@ async function correrAnalistaMetricas(disparo: DisparoCorrida, hoy: string): Pro
       leerSuscripcionesActivas(), getPlanes(), contarPipeline(), getConteosPlataforma(),
       getResumenNegocio(hoy), getPorCobrar(),
     ]);
-    const precioPorPlan = new Map(planes.map((p) => [p.clave, p.precioMensual]));
+    // A37-S27-01: el MRR es ingreso SIN IVA. `precioMensual` puede traer el IVA
+    // (`precioIvaIncluido === true`) o no (`false`); si nadie lo declaró (null) NO se
+    // adivina: el plan cuenta como «sin precio» y el MRR se declara incompleto.
+    const precioPorPlan = new Map(planes.map((p) => {
+      const crudo = p.precioMensual;
+      const criterio = (p as { precioIvaIncluido?: boolean | null }).precioIvaIncluido;
+      const neto = crudo === null || crudo === undefined || typeof criterio !== 'boolean'
+        ? null : desglosarPrecio(crudo, criterio).subtotal;
+      return [p.clave, neto] as const;
+    }));
     let mrr = 0; let sinPrecio = 0;
     for (const s of activasFilas) {
       const precio = precioPorPlan.get(s.plan_clave) ?? null;
@@ -639,10 +649,10 @@ export function armarParteTesoreria(c: CifrasTesoreria, lunes: string): { cuerpo
 /** Facturas SaaS COBRADAS (pagada + pagada_en) dentro de la ventana; también
  *  cuenta las `pagada` SIN fecha — conciliación incompleta que el cierre
  *  lista aparte, jamás como cobrado. */
-async function cobradoVentana(desdeIso: string, hastaIso: string): Promise<{ totalMxn: number; n: number; sinFecha: number; porTenant: Map<string, number> }> {
+async function cobradoVentana(desdeIso: string, hastaIso: string): Promise<{ totalMxn: number; n: number; sinFecha: number; sinDesglose: number; porTenant: Map<string, number> }> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('factura_saas')
-    .select('tenant_id, monto, pagada_en')
+    .select('tenant_id, monto, subtotal, pagada_en')
     .eq('estado', 'pagada')
     .gte('pagada_en', desdeIso)
     .lt('pagada_en', hastaIso)
@@ -651,21 +661,28 @@ async function cobradoVentana(desdeIso: string, hastaIso: string): Promise<{ tot
     // día se recorta, el conteo de abajo contra `length` lo delataría.
     .limit(1000), 'finanzas.cobrado');
   if (error) throw new Error(`cobradoVentana: ${error.message}`);
-  const filas = (data ?? []) as Array<{ tenant_id: string; monto: unknown }>;
+  const filas = (data ?? []) as Array<{ tenant_id: string; monto: unknown; subtotal?: unknown }>;
   const porTenant = new Map<string, number>();
   let total = 0;
+  let sinDesglose = 0;
   for (const f of filas) {
-    const m = Number(f.monto);
+    // A37-S27-01: `monto` es el total CON IVA (transferencia.ts); el ingreso es
+    // el SUBTOTAL. Una fila sin subtotal no se adivina (¿÷1.16?): se excluye y se
+    // cuenta en `sinDesglose` para que el cierre la declare.
+    const bruto = f.subtotal;
+    const m = bruto === null || bruto === undefined || bruto === '' ? NaN : Number(bruto);
+    if (!Number.isFinite(m)) { sinDesglose += 1; continue; }
     total += m;
     porTenant.set(f.tenant_id, (porTenant.get(f.tenant_id) ?? 0) + m);
   }
+  if (sinDesglose > 0) logger.warn('finanzas.cobrado_sin_desglose', { sinDesglose });
   const { count, error: errSinFecha } = await acotada(supabaseAdmin()
     .from('factura_saas')
     .select('id', { count: 'exact', head: true })
     .eq('estado', 'pagada')
     .is('pagada_en', null), 'finanzas.cobrado_sin_fecha');
   if (errSinFecha) throw new Error(`cobradoVentana(sin fecha): ${errSinFecha.message}`);
-  return { totalMxn: round2(total), n: filas.length, sinFecha: typeof count === 'number' ? count : 0, porTenant };
+  return { totalMxn: round2(total), n: filas.length, sinFecha: typeof count === 'number' ? count : 0, sinDesglose, porTenant };
 }
 
 async function correrTesoreria(disparo: DisparoCorrida, hoy: string): Promise<ResultadoFinanciero> {
@@ -738,6 +755,8 @@ export interface CifrasCierre {
   cobradoMxn: number;
   cobradasN: number;
   pagadasSinFecha: number;
+  /** Pagadas en la ventana SIN subtotal: no se suman (no se adivina el IVA). */
+  pagadasSinDesglose?: number;
   pendientes: number;
   pendientesMonto: number;
   costoIaMesUsd: number;
@@ -750,6 +769,7 @@ export interface CifrasCierre {
 
 export function armarCierreMensual(c: CifrasCierre): string {
   const noCerrado: string[] = [];
+  if ((c.pagadasSinDesglose ?? 0) > 0) noCerrado.push(`${numero(c.pagadasSinDesglose ?? 0)} facturas pagadas SIN subtotal (desglose de IVA) — no se suman al cobrado (el cobrado es SIN IVA)`);
   if (c.pagadasSinFecha > 0) noCerrado.push(`${numero(c.pagadasSinFecha)} facturas marcadas pagadas SIN pagada_en — conciliación incompleta; no cuentan como cobrado`);
   if (c.fijosMxn === null) noCerrado.push('costos fijos sin declarar (finanzas_config.fijos_mxn) — el neto sale sin ellos');
   if (c.tipoCambio === null) noCerrado.push('tipo de cambio sin declarar — el COGS queda en USD, sin fundir con el cobrado MXN');
@@ -848,6 +868,7 @@ async function correrCierreMensual(disparo: DisparoCorrida, hoy: string): Promis
       cobradoMxn: cobrado.totalMxn,
       cobradasN: cobrado.n,
       pagadasSinFecha: cobrado.sinFecha,
+      pagadasSinDesglose: cobrado.sinDesglose,
       pendientes: porCobrar.length,
       pendientesMonto: round2(porCobrar.reduce((s, f) => s + f.monto, 0)),
       costoIaMesUsd: costo.totales.costoUsd,

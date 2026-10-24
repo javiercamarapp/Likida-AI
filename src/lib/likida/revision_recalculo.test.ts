@@ -84,7 +84,8 @@ function gasto(over: Partial<Record<string, unknown>> = {}) {
 
 describe('recalcularParaAjuste', () => {
   it('reemplaza SOLO el monto del comprobante ajustado — sub_total/iva_traslado (el hecho del CFDI) viajan intactos al motor', async () => {
-    getGastos.mockResolvedValueOnce([gasto(), gasto({ id: U(4), monto: 500, subTotal: null, ivaTraslado: null })]);
+    // (sin CFDI verificado: con CFDI el ajuste se veta, A37-S56-01)
+    getGastos.mockResolvedValueOnce([gasto({ cfdiUuid: undefined, xmlVerificado: false }), gasto({ id: U(4), monto: 500, subTotal: null, ivaTraslado: null })]);
     cuadrarDesdeDB.mockResolvedValueOnce({
       viajeId: U(9), totalComprobado: 8500, totalAnticipo: 9000, diferencia: 500, estatus: 'con_diferencias',
       diferencias: [], gastos: [], totalDeducible: 0, totalNoDeducible: 0, totalPorConfirmar: 0,
@@ -105,8 +106,20 @@ describe('recalcularParaAjuste', () => {
     });
   });
 
+  it('A37-S56-01: ajustar el monto de un comprobante con CFDI verificado se VETA (IVA/IEPS/subtotal salen del XML)', async () => {
+    getGastos.mockResolvedValueOnce([gasto({ monto: 5800, ivaTraslado: 800, subTotal: 5000 })]);
+    await expect(recalcularParaAjuste('t1', U(9), [{ gastoId: U(3), montoNuevo: 2900 }]))
+      .rejects.toThrow(/CFDI verificado/);
+    expect(cuadrarDesdeDB).not.toHaveBeenCalled();
+  });
+
+  it('A37-S56-01: con cfdiUuid aunque xmlVerificado sea falso también se veta; un monto igual no cambia nada', async () => {
+    getGastos.mockResolvedValueOnce([gasto({ xmlVerificado: false, monto: 5800 })]);
+    await expect(recalcularParaAjuste('t1', U(9), [{ gastoId: U(3), montoNuevo: 2900 }])).rejects.toThrow(/CFDI verificado/);
+  });
+
   it('litrosDieselAcreditables ausente/null se manda como 0 — nunca `undefined` en el jsonb que ve la RPC', async () => {
-    getGastos.mockResolvedValueOnce([gasto()]);
+    getGastos.mockResolvedValueOnce([gasto({ cfdiUuid: undefined, xmlVerificado: false })]);
     cuadrarDesdeDB.mockResolvedValueOnce({
       viajeId: U(9), totalComprobado: 8000, totalAnticipo: 9000, diferencia: 1000, estatus: 'cuadrada',
       diferencias: [], gastos: [], totalDeducible: 0, totalNoDeducible: 0, totalPorConfirmar: 0,
@@ -198,7 +211,7 @@ describe('A2: el recálculo de un ajuste no aplica retroactivamente la regla de 
     iepsAcreditable: 0, litrosDieselAcreditables: 200, ivaAcreditable: 0, peajeAcreditable: 0,
   };
   it('recalcularParaAjuste le pasa al motor la fecha de cierre de la liquidación', async () => {
-    getGastos.mockResolvedValueOnce([gasto()]);
+    getGastos.mockResolvedValueOnce([gasto({ cfdiUuid: undefined, xmlVerificado: false })]);
     cuadrarDesdeDB.mockResolvedValueOnce(CUADRE_A2);
     await recalcularParaAjuste('t1', U(9), [{ gastoId: U(3), montoNuevo: 8000 }], '2026-09-20T12:00:00Z');
     expect(cuadrarDesdeDB.mock.calls[0][3]).toEqual({ cerradaEn: '2026-09-20T12:00:00Z' });

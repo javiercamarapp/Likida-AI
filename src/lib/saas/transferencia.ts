@@ -397,6 +397,26 @@ export async function timbrarFactura(facturaId: string): Promise<{ uuid: string 
       referencia: (f.referencia as string) ?? undefined,
     });
   } catch (e) {
+    // A37-S61-01: si el PAC NO contestó de forma definitiva (timeout, red, 5xx,
+    // respuesta ilegible) el CFDI PUDO crearse. Soltar la reserva dejaba que el
+    // siguiente clic timbrara OTRO: dos CFDI reales de la misma mensualidad, y
+    // uno hay que cancelarlo ante el SAT. La reserva se CONSERVA y se alarga a
+    // 24 h: ese tiempo es para comprobar en el panel del PAC, por la referencia
+    // (`external_id`), si el CFDI existe. Si existe, hay que ligar su UUID a
+    // mano; si no, la reserva caduca y se puede volver a timbrar.
+    if ((e as { ambiguo?: boolean } | null)?.ambiguo === true) {
+      const retenida = new Date(Date.now() + 24 * 3_600_000).toISOString();
+      const r = await admin.from('factura_saas').update({ timbrando_en: retenida }).eq('id', facturaId);
+      if (r.error) logger.warn('facturapi.reserva_ambigua_sin_alargar', { facturaId, err: r.error.message });
+      logger.error('facturapi.timbrado_ambiguo', {
+        facturaId, referencia: (f.referencia as string) ?? null, err: e instanceof Error ? e.message : String(e),
+      });
+      throw new DatoInvalido(
+        'El PAC no contestó y NO se sabe si el CFDI se creó. Se bloquea un segundo timbrado para no emitir dos CFDI '
+        + `reales de la misma mensualidad. Busca en el panel de Facturapi la referencia ${(f.referencia as string) ?? facturaId}: `
+        + 'si existe, liga su UUID a mano; si no existe, el bloqueo se libera solo en 24 horas.',
+      );
+    }
     // El PAC dijo que no: NO hay CFDI, así que la reserva se suelta para que el
     // siguiente intento (con el dato corregido) pueda entrar sin esperar los 10
     // minutos. Si soltarla falla, no se tapa el error del PAC —que es el que
