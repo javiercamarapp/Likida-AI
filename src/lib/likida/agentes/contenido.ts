@@ -368,6 +368,7 @@ export async function correrContenidoFiscal(
 
     let redactado: string | null = null;
     let motivoSinModelo: string | null = null;
+    let respondio = false;
     try {
       // Modo PLATAFORMA (el gasto es de LIKIDA, tenant null): sin ledger
       // por-tenant. El techo lo vigila el runner contra el gasto MEDIDO del
@@ -378,6 +379,7 @@ export async function correrContenidoFiscal(
         messages: [{ role: 'user', content: contexto }],
         maxTokens: 1_400, temperature: 0.5,
       });
+      respondio = true;
       // c7-11: `noMedido` significa que el proveedor omitió `usage` y el
       // `cost` que viene es la RESERVA (una cota), no lo medido. Anotarlo como
       // cifra —o peor, como el 0 que llega en modo plataforma, donde no hay
@@ -408,6 +410,9 @@ export async function correrContenidoFiscal(
       redactado = g.texto;
       motivoSinModelo = g.motivo;
     } catch (e) {
+      // A37-S26-10: si la excepción salió de la llamada al modelo, el proveedor pudo haber cobrado ya: el gasto es
+      // DESCONOCIDO (NULL), no 0 — un 0 dejaba al techo diario ciego. Si salió después de medir, el costo ya es el medido.
+      if (!respondio) costoUsd = null;
       motivoSinModelo = 'el modelo no respondió';
       logger.info('contenido.modelo_fallo', { tema: candidato.tema, err: e instanceof Error ? e.message.slice(0, 160) : String(e) });
     }
