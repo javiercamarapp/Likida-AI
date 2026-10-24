@@ -7,7 +7,7 @@ import type { NuevoAviso, PuertosConductor } from './ejecutor';
 import { puertosReales } from './ejecutor';
 import { acuseResultadoDescarga, preguntaResultadoDescarga, type OpcionResultadoDescarga, type Salida } from './mensajes';
 import type { EventoPatioFila, ViajeContexto } from './repo';
-import { leerEventosResultadoDescarga, registrarEvento } from './repo';
+import { leerEventosResultadoDescarga, registrarEventoConfirmado } from './repo';
 import type { MensajeSaliente } from './solicitudes';
 import { PREFIJO_BOTON, estaResuelto, type HitoFila } from './tipos';
 
@@ -52,7 +52,7 @@ export interface PuertosResultado extends Pick<PuertosConductor, 'reclamar' | 'c
 }
 
 export function puertosResultadoReales(): PuertosResultado {
-  return { ...puertosReales(), eventos: leerEventosResultadoDescarga, guardar: registrarEvento };
+  return { ...puertosReales(), eventos: leerEventosResultadoDescarga, guardar: registrarEventoConfirmado };
 }
 
 /** Escribe un renglón y dice si quedó: el estado «respondido» y la bandera de caja cargada NO se acusan como anotados si se perdieron. */

@@ -283,10 +283,10 @@ export type EventoHito =
   | 'validacion' | 'evidencia' | 'captura_manual' | 'alerta_estadia' | 'alerta_llegada_sin_confirmar';
 
 /**
- * Best-effort: perder un renglón de bitácora no puede romper el registro del hito. SIN datos personales en `detalle`.
- * Devuelve si quedó guardado (A37-S36-03): quien PERSISTE un estado que luego acusa al chofer («Anotado») debe mirarlo.
+ * Como `registrarEvento`, pero devuelve si quedó guardado (A37-S36-03): quien PERSISTE un estado que luego acusa al chofer («Anotado»)
+ * debe mirarlo. SIN datos personales en `detalle`.
  */
-export async function registrarEvento(
+export async function registrarEventoConfirmado(
   h: Pick<HitoFila, 'id' | 'tenantId' | 'viajeId' | 'tipo'>, evento: EventoHito, detalle: Record<string, string | number | boolean | null> = {},
 ): Promise<boolean> {
   try {
@@ -299,6 +299,13 @@ export async function registrarEvento(
     logger.warn('conductor.evento_no_guardado', { evento, hito: h.id, err: e instanceof Error ? e.message : String(e) });
     return false;
   }
+}
+
+/** Best-effort: perder un renglón de bitácora no puede romper el registro del hito. SIN datos personales en `detalle`. */
+export async function registrarEvento(
+  h: Pick<HitoFila, 'id' | 'tenantId' | 'viajeId' | 'tipo'>, evento: EventoHito, detalle: Record<string, string | number | boolean | null> = {},
+): Promise<void> {
+  await registrarEventoConfirmado(h, evento, detalle);
 }
 
 // ── Escrituras de estado ────────────────────────────────────────────────────

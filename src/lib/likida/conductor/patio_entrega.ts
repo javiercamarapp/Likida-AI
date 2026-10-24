@@ -4,7 +4,7 @@ import type { NuevoAviso, PuertosConductor } from './ejecutor';
 import { puertosReales } from './ejecutor';
 import type { Salida } from './mensajes';
 import type { EventoPatioFila, ViajeContexto } from './repo';
-import { leerEventosPatio, registrarEvento } from './repo';
+import { leerEventosPatio, registrarEventoConfirmado } from './repo';
 import { limpiarComoDescarga } from './interprete';
 import { listarSitios } from './repo_validacion';
 import {
@@ -76,7 +76,7 @@ export function puertosPatioReales(): PuertosPatio {
       return sitios.filter((s) => s.activa).map((s) => ({ id: s.id, nombre: s.nombre }));
     },
     eventos: leerEventosPatio,
-    guardar: registrarEvento,
+    guardar: registrarEventoConfirmado,
   };
 }
 
