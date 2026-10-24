@@ -276,3 +276,19 @@ describe('A37-S01-02: el script manual de migraciones lleva las guardas del pipe
     expect(r.stdout).toContain('lista autorizada');
   });
 });
+
+describe('A37-S01-03 / A37-S02-04: las siembras sintéticas no usan teléfonos plausibles ni corren sin declararse', () => {
+  for (const f of ['scripts/carga-15k.sql', 'scripts/demo-5k.sql', 'scripts/carga-15k-medir.sql']) {
+    it(`${f}: nada del rango 5215559… (móvil CDMX plausible)`, () => {
+      expect(readFileSync(f, 'utf8')).not.toMatch(/52155?59\d/);
+    });
+  }
+  for (const f of ['scripts/carga-15k.sql', 'scripts/demo-5k.sql']) {
+    it(`${f}: aborta si la sesión no declara base efímera o staging`, () => {
+      const t = readFileSync(f, 'utf8');
+      expect(t).toContain("current_setting('likida.permitir_siembra', true)");
+      expect(t.indexOf('likida.permitir_siembra')).toBeLessThan(t.indexOf('insert into tenant'));
+      expect(t).toContain("'521550000'");
+    });
+  }
+});

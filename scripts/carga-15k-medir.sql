@@ -134,14 +134,14 @@ select v.id from viaje v
 where v.tenant_id = 'aaaaaaaa-0000-4000-8000-000000015000'
   and v.operador_id = (select id from operador
                        where tenant_id = 'aaaaaaaa-0000-4000-8000-000000015000'
-                       and telefono = '5215559000007')
+                       and telefono = '5215500000007')
   and v.estatus in ('abierto', 'en_cuadre')
 order by v.created_at desc limit 1;
 
 -- [W2] resolver operador por teléfono (conv.ts:101) — idx_operador_tel.
 explain (analyze, buffers)
 select id, tenant_id, nombre, telefono from operador
-where telefono in ('5215559000007', '525559000007') and activo = true limit 2;
+where telefono in ('5215500000007', '525500000007') and activo = true limit 2;
 
 -- [W3] dedup de foto por hash (repo.ts:213) — uq_gasto_img_hash parcial.
 explain (analyze, buffers)

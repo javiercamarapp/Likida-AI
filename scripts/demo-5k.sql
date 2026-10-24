@@ -5,8 +5,8 @@
 -- BLOQUE 4 por qué no 70,000: techo de traerTodo).
 -- Modelo: la documentación interna · Uso y limpieza: la documentación interna
 --
--- Todo ficticio: RFC/placas/teléfonos inventados (teléfonos del rango falso
--- 5215559xxxxxx). Tenant con id FIJO (lo usa demo-5k-limpiar.sql).
+-- Todo ficticio: RFC/placas/teléfonos inventados (teléfonos NO asignables
+-- 521550000xxxx: el abonado empieza en 0; correr antes `set likida.permitir_siembra = 'si';` solo en base efímera/staging). Tenant con id FIJO (lo usa demo-5k-limpiar.sql).
 --
 -- CÓMO CORRERLO: cada bloque `do $$ … $$` es una transacción independiente;
 -- se pueden pegar uno por uno en el SQL editor de Supabase (corre como
@@ -32,6 +32,11 @@ declare
   cli text[] := array['Abarrotes del Norte','Súper Peninsular','Panificadora Central','Bebidas del Golfo','Autopartes Bajío','Ensambladora Saltillo','Aceros Monterrey','Cementos del Pacífico','Frutas de Sinaloa','Granos del Bajío','Paquetería Express MX','Farmacéutica Azteca','Lácteos de Jalisco','Vidriería Potosina','Papelera del Centro','Plásticos Industriales de Querétaro','Electrodomésticos del Bajío','Cervecería del Sureste','Textiles de Puebla','Químicos de Coatzacoalcos','Maderas de Durango','Pesquera del Pacífico','Cárnicos de Sonora','Avícola del Centro','Muebles de Ocotlán','Calzado León','Hortalizas de Sinaloa','Fertilizantes del Golfo','Llantas Nacionales','Distribuidora Ferretera MX','Azucarera de Veracruz','Mineral de Zacatecas','Cartón Corrugado del Norte','Refrescos de Occidente','Aceites Comestibles del Bajío','Tiendas La Esquina','Mayorista Tuxtla','Arroz de Morelos','Cementos de Yucatán','Acero Laminado de Coahuila'];
   i int;
 begin
+  -- A37-S01-03 / A37-S02-04: nunca sobre una base viva. Hay que declarar a mano, en la MISMA sesión,
+  -- que esta base es efímera o de staging:  set likida.permitir_siembra = 'si';
+  if coalesce(current_setting('likida.permitir_siembra', true), '') <> 'si' then
+    raise exception 'Siembra sintética abortada: corre antes «set likida.permitir_siembra = ''si'';» y SOLO en una base efímera o de staging.';
+  end if;
   if exists (select 1 from tenant where id = t) then
     raise exception 'TPS ya existe: corre scripts/demo-5k-limpiar.sql primero';
   end if;
@@ -89,7 +94,7 @@ begin
             'C' || upper(substr(md5(cli[i]), 1, 2)) || lpad((150101 + i * 317)::text, 6, '0') || chr(65 + i % 26) || (i % 10)::text,
             (array['Lic. Mariana Solís','Ing. Roberto Ayala','C.P. Lucía Treviño','Lic. Gerardo Ponce','Ing. Daniela Robles'])[1 + i % 5],
             'logistica' || i || '@' || lower(regexp_replace(split_part(cli[i], ' ', 1), '[^A-Za-z]', '', 'g')) || '-demo.mx',
-            '5215559' || lpad((900000 + i)::text, 6, '0'), (array[15, 30, 30, 45, 60])[1 + i % 5], true);
+            '521550000' || lpad((9000 + i)::text, 4, '0'), (array[15, 30, 30, 45, 60])[1 + i % 5], true);
     -- tarifa por km por cliente ($28–$42/km)
     insert into tarifa (tenant_id, cliente_id, modo, precio, moneda, vigente_desde, activa)
     values (t, ('dddddddd-0002-4000-8000-' || lpad(i::text, 12, '0'))::uuid, 'por_km',
@@ -111,7 +116,7 @@ begin
     ('dddddddd-0003-4000-8000-' || lpad(i::text, 12, '0'))::uuid, t,
     ('dddddddd-0001-4000-8000-' || lpad((1 + (i * 7) % 25)::text, 12, '0'))::uuid,
     nom[1 + (i * 13) % 60] || ' ' || ap[1 + (i * 31) % 85] || ' ' || ap[1 + (i * 17 + 5) % 85],
-    '5215559' || lpad(i::text, 6, '0'),
+    '521550000' || lpad(i::text, 4, '0'),
     'OP-' || lpad(i::text, 5, '0'),
     (i % 25) <> 0,                                  -- 96 % activos
     'E' || lpad((31000000 + i * 53)::text, 8, '0'), 'E',
