@@ -197,14 +197,12 @@ export async function procesarCcpTimbrado(deps: DepsCcp, e: EntradaCcp): Promise
   const activa = await deps.respuestaActiva(e.tenantId);
   if (activa === 'sin_migracion') return falla('sin_migracion', 'La función aún no está disponible en esta cuenta.');
 
-  // ¿Ya lo teníamos? (el TMS reintenta). Solo un `error_envio` vuelve a intentar el correo.
+  // ¿Ya lo teníamos? (el TMS reintenta). Nunca se reenvía el correo desde aquí.
   const previa = await deps.buscarPorUuid(e.tenantId, ccp.uuid);
   if (previa) {
     if (previa.envioId !== envio.envioId) return falla('no_encontrado', 'No hay un envío de tu flota con esa referencia.');
-    if (previa.estado === 'error_envio' && activa && previa.destinoCorreo) {
-      const r = await responder(deps, previa, previa.destinoCorreo, e.xml, e.pdf, ccp.folio);
-      return { ok: true, duplicado: true, estado: r.estado, respondido: r.respondido };
-    }
+    // A37-S31-08: un `error_envio` NO se reenvía solo. Si el proveedor aceptó el correo y la respuesta se perdió, un
+    // reintento pasada su ventana de idempotencia duplicaría PDF y XML al cliente; lo decide una persona (`confirmarYResponder`).
     return { ok: true, duplicado: true, estado: previa.estado, respondido: previa.estado === 'respondido' };
   }
 
