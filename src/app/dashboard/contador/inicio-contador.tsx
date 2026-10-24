@@ -11,7 +11,7 @@ import { contarHuerfanosPendientes } from '@/lib/likida/repo';
 import { getConfig, type LikidaConfig } from '@/lib/likida/config';
 import {
   resolverPeriodo, getGastosFiscales, getGastosFiscalesSeries,
-  resumirPerdidas, resumirFiscal, opcionesDe, opcionesFiscalesDelPeriodo, ventanaLitrosElegibles,
+  resumirPerdidas, resumirFiscal, opcionesFiscalesConPerfil, opcionesFiscalesDelPeriodo, ventanaLitrosElegibles,
   type GastoFiscal, type ResumenPerdidas, type ResumenFiscal, type GastosFiscalesSeries,
   type Periodo,
 } from '@/lib/likida/fiscal';
@@ -117,17 +117,19 @@ export async function InicioContador({
   // `.then` sobre promesas YA lanzadas: no añade espera, solo dice qué hacer
   // cuando lleguen.
   const pResumenPerdidas: Promise<ResumenPerdidas | null> =
-    Promise.all([pCfgFiscal, pGastosFiscales]).then(([cfg, gastos]) =>
-      cfg && gastos ? resumirPerdidas(gastos, opcionesDe(cfg)) : null);
+    Promise.all([pCfgFiscal, pGastosFiscales]).then(async ([cfg, gastos]) =>
+      // A37-S45-06: con el perfil, igual que el chat y el MCP.
+      cfg && gastos ? resumirPerdidas(gastos, await opcionesFiscalesConPerfil(tenantId, cfg)) : null);
   const pResumenPerdidasSeries: Promise<Record<'semanal' | 'mensual' | 'historico', ResumenPerdidas> | null> =
-    Promise.all([pCfgFiscal, pGastosFiscalesSeries]).then(([cfg, series]) =>
-      cfg && series
-        ? {
-          semanal: resumirPerdidas(series.semanal, opcionesDe(cfg)),
-          mensual: resumirPerdidas(series.mensual, opcionesDe(cfg)),
-          historico: resumirPerdidas(series.historico, opcionesDe(cfg)),
-        }
-        : null);
+    Promise.all([pCfgFiscal, pGastosFiscalesSeries]).then(async ([cfg, series]) => {
+      if (!cfg || !series) return null;
+      const opciones = await opcionesFiscalesConPerfil(tenantId, cfg);
+      return {
+        semanal: resumirPerdidas(series.semanal, opciones),
+        mensual: resumirPerdidas(series.mensual, opciones),
+        historico: resumirPerdidas(series.historico, opciones),
+      };
+    });
   // AUDITORÍA 25, FIS-C1/FIS-C2 (CRÍTICO): `resumirFiscal` necesita el
   // acumulado REAL del ejercicio (`combustibleEjercicio`) para partir el IVA
   // del diésel en efectivo igual que el motor — `opcionesDe(cfg)` solo trae
