@@ -68,6 +68,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
+const { reiniciarCachePerfil } = await import('@/lib/auth/perfil_tenant');
 const Pagina = (await import('./page')).default;
 const { VistaConfiguracionAviso, TEXTO_COLORES } = await import('./configuracion');
 const { generarAvisos } = await import('@/lib/likida/vigia/aviso/generar');
@@ -272,6 +273,7 @@ describe('validación en el servidor', () => {
 
 describe('guardado, permisos y bitácora', () => {
   it('guarda en la flota de la SESIÓN y no lee un tenant_id del formulario', async () => {
+    sesionComo('flota_admin'); // A37-S15-05: encender/modo/canal son de la dueña
     const r = await guardar([...forma({ horas_antes: '12', ventana_desde: '07:30', ventana_hasta: '21:00', max_reenvios: '5' }), ['tenant_id', 't-otra'], ['tenantId', 't-otra']]);
     expect(r).toMatchObject({ ok: true });
     expect(tablas.datos.vigia_aviso_config).toHaveLength(1);
@@ -284,11 +286,13 @@ describe('guardado, permisos y bitácora', () => {
     expect(revalidatePath).toHaveBeenCalledWith('/dashboard/agentes/vigia/avisos');
   });
   it('un horario vacío se guarda como «sin restricción» y las horas vacías como null', async () => {
+    sesionComo('flota_admin'); // A37-S15-05: encender/modo/canal son de la dueña
     await guardar(forma({ horas_antes: '9' }));
     await guardar(forma({ horas_antes: '' }));
     expect(filaConfig()).toMatchObject({ horas_antes_cita: null, ventana_envio: {} });
   });
   it('es idempotente: la segunda vez no escribe ni anota nada', async () => {
+    sesionComo('flota_admin'); // A37-S15-05: encender/modo/canal son de la dueña
     const campos = forma({ debounce_min: '20' });
     expect(await guardar(campos)).toMatchObject({ ok: true, mensaje: expect.stringContaining('Configuración guardada') });
     const n = tablas.escrituras.length;
@@ -305,6 +309,7 @@ describe('guardado, permisos y bitácora', () => {
     expect(tablas.escrituras).toEqual([]);
   });
   it('cada cambio deja bitácora con quién, rol y antes/después; sin datos personales', async () => {
+    sesionComo('flota_admin'); // A37-S15-05: encender/modo/canal son de la dueña
     await guardar(forma({ modo: 'autonomo', max_reenvios: '5' }));
     expect(anotarBitacora).toHaveBeenCalledTimes(1);
     const [entrada, opciones] = anotarBitacora.mock.calls[0] as unknown as [Record<string, unknown>, Record<string, unknown>];
@@ -312,7 +317,7 @@ describe('guardado, permisos y bitácora', () => {
       tenantId: 't-sesion', actor: { id: 'u-sesion' }, accion: 'vigia_aviso_config.cambiar', entidad: 'vigia_aviso_config', entidadId: 't-sesion',
     });
     const detalle = entrada.detalle as { rol: string; cambios: Array<{ campo: string; antes: string; despues: string }> };
-    expect(detalle.rol).toBe('encargado');
+    expect(detalle.rol).toBe('flota_admin');
     expect(detalle.cambios).toEqual(expect.arrayContaining([
       { campo: 'habilitado', antes: 'no', despues: 'sí' }, { campo: 'modo', antes: 'confirmar', despues: 'autonomo' }, { campo: 'max_reenvios', antes: '3', despues: '5' },
     ]));
@@ -320,6 +325,7 @@ describe('guardado, permisos y bitácora', () => {
     expect(opciones).toMatchObject({ evento: expect.any(String) });
   });
   it('un segundo cambio anota el antes que dejó el primero', async () => {
+    sesionComo('flota_admin'); // A37-S15-05: encender/modo/canal son de la dueña
     await guardar(forma({ max_reenvios: '5' }));
     await guardar(forma({ max_reenvios: '2' }));
     const detalle = (anotarBitacora.mock.calls[1] as unknown as [{ detalle: { cambios: Array<Record<string, string>> } }])[0].detalle;
@@ -335,6 +341,7 @@ describe('guardado, permisos y bitácora', () => {
     expect(tablas.escrituras).toEqual([]);
   });
   it('un fallo de la base se dice en llano y no deja bitácora de lo que no se guardó', async () => {
+    sesionComo('flota_admin'); // A37-S15-05: encender/modo/canal son de la dueña
     tablas.fallan.add('vigia_aviso_config:upsert');
     const r = await guardar(forma());
     expect(r).toEqual({ ok: false, error: 'No se pudo guardar la configuración' });
@@ -350,6 +357,49 @@ describe('guardado, permisos y bitácora', () => {
   });
 });
 
+describe('A37-S15-05: encender, modo y canal son de la dueña', () => {
+  const PERFIL = (perfil: string) => { tablas.datos.tenant_perfil = [{ tenant_id: 't-sesion', perfil }]; };
+  beforeEach(() => { reiniciarCachePerfil(); });
+
+  it('el encargado NO enciende el aviso ni elige modo autónomo ni WhatsApp directo: se rechaza y no se guarda nada', async () => {
+    for (const cambios of [{ habilitado: '1' }, { modo: 'autonomo' }, { canal: 'cliente_1a1' }]) {
+      tablas.datos.vigia_aviso_config = [];
+      const r = await guardar(forma({ habilitado: null, ...cambios }));
+      expect(r, JSON.stringify(cambios)).toMatchObject({ ok: false, error: expect.stringContaining('dueña') });
+      expect(tablas.escrituras).toEqual([]);
+    }
+    expect(anotarBitacora).not.toHaveBeenCalled();
+  });
+  it('el encargado sí ajusta lo demás cuando ya está encendido (los tres valores viajan iguales a lo guardado)', async () => {
+    tablas.datos.vigia_aviso_config = [{ tenant_id: 't-sesion', habilitado: true, modo: 'confirmar', canal_default: 'cliente_1a1', ccp_listos: ['listo', 'despachado'], secciones: ['IMPORTACION', 'EXPORTACION'], max_reenvios: 3, debounce_min: 10, ventana_envio: {} }];
+    const r = await guardar(forma({ canal: 'cliente_1a1', max_reenvios: '5' }));
+    expect(r).toMatchObject({ ok: true });
+    expect(filaConfig()).toMatchObject({ habilitado: true, canal_default: 'cliente_1a1', max_reenvios: 5 });
+  });
+  it('la dueña sí; pero bajo el perfil cinco_agentes el modo autónomo no se enciende', async () => {
+    sesionComo('flota_admin');
+    PERFIL('cinco_agentes');
+    const r = await guardar(forma({ modo: 'autonomo' }));
+    expect(r).toMatchObject({ ok: false, error: expect.stringContaining('no está disponible en tu plan') });
+    expect(tablas.escrituras).toEqual([]);
+    // confirmar sigue permitido bajo ese perfil
+    expect(await guardar(forma({ modo: 'confirmar' }))).toMatchObject({ ok: true });
+  });
+  it('sin perfil, la dueña enciende el modo autónomo', async () => {
+    sesionComo('flota_admin');
+    expect(await guardar(forma({ modo: 'autonomo' }))).toMatchObject({ ok: true });
+    expect(filaConfig()).toMatchObject({ modo: 'autonomo' });
+  });
+  it('la pantalla del encargado muestra los tres controles sin poder cambiarlos y los manda ocultos con su valor actual', async () => {
+    const p = await props();
+    const h = renderToStaticMarkup(<VistaConfiguracionAviso {...p} config={{ ...p.config!, habilitado: true, modo: 'confirmar', canalDefault: 'cliente_1a1' }} puedeEditarEnvio={false} />);
+    expect(h).toContain('Solo la dueña de la flota enciende o apaga el aviso');
+    expect(h).toMatch(/<input[^>]*type="hidden"[^>]*name="habilitado"[^>]*value="1"/);
+    expect(h).toMatch(/<input[^>]*type="hidden"[^>]*name="canal"[^>]*value="cliente_1a1"/);
+    expect(h).toMatch(/<input[^>]*type="hidden"[^>]*name="modo"[^>]*value="confirmar"/);
+  });
+});
+
 describe('datos personales del operador (E6): solo la dueña', () => {
   it('el encargado que manda los controles de privacidad (petición armada a mano) es rechazado y no se guarda NADA', async () => {
     const r = await guardar([...forma(), ['op_licencia', '1']]);
@@ -362,7 +412,7 @@ describe('datos personales del operador (E6): solo la dueña', () => {
   });
   it('el encargado guarda lo demás sin tocar la política del operador', async () => {
     tablas.datos.vigia_politica_datos = [{ id: 'p1', tenant_id: 't-sesion', cliente_id: null, campo: 'telefono', visible: true }];
-    const r = await guardar(forma({ max_reenvios: '6' }));
+    const r = await guardar(forma({ habilitado: null, max_reenvios: '6' }));
     expect(r).toMatchObject({ ok: true });
     expect(tablas.datos.vigia_politica_datos).toEqual([{ id: 'p1', tenant_id: 't-sesion', cliente_id: null, campo: 'telefono', visible: true }]);
   });
@@ -452,6 +502,7 @@ describe('el valor nuevo rige en el siguiente generarAvisos', () => {
     expect(despues.creados[0].estado).toBe('pendiente_confirmacion');
   });
   it('apagar el aviso lo apaga en la siguiente pasada; encenderlo lo vuelve a armar', async () => {
+    sesionComo('flota_admin'); // A37-S15-05: encender/modo/canal son de la dueña
     await guardar(forma());
     const encendido = repoConConfigReal([fila()]);
     expect((await generarAvisos(T, AHORA, { repo: encendido.repo, resolver: resolver() })).creados).toBe(1);
@@ -460,6 +511,7 @@ describe('el valor nuevo rige en el siguiente generarAvisos', () => {
     expect(await generarAvisos(T, AHORA, { repo: apagado.repo, resolver: resolver() })).toMatchObject({ estado: 'apagado', creados: 0 });
   });
   it('las horas antes de la cita cambian cuándo se arma el aviso', async () => {
+    sesionComo('flota_admin'); // A37-S15-05: encender/modo/canal son de la dueña
     await guardar(forma({ horas_antes: '2' }));
     const temprano = repoConConfigReal([fila()]); // la cita es en 6 h
     expect(await generarAvisos(T, AHORA, { repo: temprano.repo, resolver: resolver() })).toMatchObject({ muyTemprano: 1, creados: 0 });
@@ -468,6 +520,7 @@ describe('el valor nuevo rige en el siguiente generarAvisos', () => {
     expect(await generarAvisos(T, AHORA, { repo: a_tiempo.repo, resolver: resolver() })).toMatchObject({ muyTemprano: 0, creados: 1 });
   });
   it('el modo y el canal guardados llegan al aviso: con «confirmar» nada queda aprobado solo', async () => {
+    sesionComo('flota_admin'); // A37-S15-05: encender/modo/canal son de la dueña
     await guardar(forma({ canal: 'cliente_1a1', modo: 'confirmar' }));
     const { repo, creados } = repoConConfigReal([fila()]);
     await generarAvisos(T, AHORA, { repo, resolver: resolver() });

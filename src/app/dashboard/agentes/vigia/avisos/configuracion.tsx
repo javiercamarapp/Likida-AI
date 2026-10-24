@@ -107,7 +107,7 @@ function Casillas({ nombre, opciones, marcadas, deshabilitado }: { nombre: strin
 }
 
 export function VistaConfiguracionAviso({
-  sufijo, config, opciones, puedeEditar, puedeEditarPrivacidad, ventanaIlegible, errorLectura, sinMigrar, accion,
+  sufijo, config, opciones, puedeEditar, puedeEditarPrivacidad, puedeEditarEnvio, ventanaIlegible, errorLectura, sinMigrar, accion,
 }: {
   sufijo: string;
   /** `null` cuando no se pudo leer (error o migración pendiente). */
@@ -117,6 +117,10 @@ export function VistaConfiguracionAviso({
   puedeEditar: boolean;
   /** Solo la dueña de la flota (`flota_admin`) cambia qué datos del operador salen al cliente. */
   puedeEditarPrivacidad: boolean;
+  /** A37-S15-05: encender/apagar el aviso y elegir modo y canal es de la dueña (`flota_admin`), como en la configuración
+   *  del Vigía. Sin este permiso los tres controles se muestran sin poder cambiarlos y viajan ocultos con su valor actual
+   *  (un control `disabled` no se envía: sin esto, guardar apagaría el aviso). Por defecto = `puedeEditarPrivacidad`. */
+  puedeEditarEnvio?: boolean;
   /** La ventana de envío guardada no se puede leer: mientras tanto el aviso NO sale. */
   ventanaIlegible: boolean;
   errorLectura: string | null;
@@ -127,6 +131,7 @@ export function VistaConfiguracionAviso({
   const base = `/dashboard/agentes/vigia/avisos${sufijo}`;
   const lim = opciones.limites;
   const sd = !puedeEditar;
+  const sdEnvio = sd || !(puedeEditarEnvio ?? puedeEditarPrivacidad);
   return (
     <main className="h-full">
       <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
@@ -155,21 +160,29 @@ export function VistaConfiguracionAviso({
 
               <Seccion id="cfg-envio" titulo="Envío">
                 <label className="inline-flex items-center gap-2 text-[13px] font-medium">
-                  <input type="checkbox" name="habilitado" value="1" defaultChecked={config.habilitado} disabled={sd} />
+                  <input type="checkbox" name="habilitado" value="1" defaultChecked={config.habilitado} disabled={sdEnvio} />
                   Aviso de viaje encendido
                 </label>
+                {sdEnvio && !sd ? (
+                  <>
+                    {config.habilitado ? <input type="hidden" name="habilitado" value="1" /> : null}
+                    <input type="hidden" name="modo" value={config.modo} />
+                    <input type="hidden" name="canal" value={config.canalDefault} />
+                    <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Solo la dueña de la flota enciende o apaga el aviso y cambia el modo y el canal. Tú ajustas el resto.</p>
+                  </>
+                ) : null}
                 <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Apagado: no se arma ni se envía ningún aviso. Cada aviso nuevo espera tu confirmación mientras el modo sea «confirmar».</p>
                 <div className="grid sm:grid-cols-2 gap-3">
                   <div>
                     <label className={ETIQUETA} htmlFor="cfg-modo">Modo</label>
-                    <select id="cfg-modo" name="modo" defaultValue={config.modo} disabled={sd} className={CAMPO}>
+                    <select id="cfg-modo" name={sdEnvio ? undefined : 'modo'} defaultValue={config.modo} disabled={sdEnvio} className={CAMPO}>
                       <option value="confirmar">Confirmar cada aviso (recomendado)</option>
                       <option value="autonomo">Autónomo (solo clientes con avisos confirmados sin cambios)</option>
                     </select>
                   </div>
                   <div>
                     <label className={ETIQUETA} htmlFor="cfg-canal">Canal por defecto</label>
-                    <select id="cfg-canal" name="canal" defaultValue={config.canalDefault} disabled={sd} className={CAMPO}>
+                    <select id="cfg-canal" name={sdEnvio ? undefined : 'canal'} defaultValue={config.canalDefault} disabled={sdEnvio} className={CAMPO}>
                       <option value="ejecutivo_copia">Copia para el ejecutivo (tú lo mandas)</option>
                       <option value="cliente_1a1">WhatsApp directo al cliente</option>
                     </select>
