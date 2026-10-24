@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
-import type { OpcionesContpaqi, PerfilSapB1 } from './formatos';
+import { ENCABEZADO_CONTPAQI, SAP_B1_BASE, type OpcionesContpaqi, type PerfilSapB1 } from './formatos';
 
 export type PerfilExportacionErp =
   | { sistema: 'contpaqi'; confirmadoEn: string; opciones: OpcionesContpaqi }
@@ -27,6 +27,15 @@ export function interpretarPerfilExportacion(sistema: unknown, plantilla: unknow
     const separador = p.separador === ',' || p.separador === '\t' || p.separador === '|' ? p.separador : null;
     const encabezado = columnas(p.encabezado, 9);
     if (!tipo || !Number.isInteger(numero) || numero < 1 || !separador || !encabezado || encabezado.length !== 9) return null;
+    // A37-S39-05: el export escribe los valores en posiciones fijas. Un nombre
+    // estándar en otra posición (p. ej. Importe antes de TipoMovimiento) delata
+    // una plantilla que cargaría cargos bajo la columna equivocada.
+    const estandar = ENCABEZADO_CONTPAQI.map((n) => n.toLowerCase());
+    const desalineado = encabezado.some((c, i) => {
+      const k = estandar.indexOf(c.toLowerCase());
+      return k !== -1 && k !== i;
+    });
+    if (desalineado) return null;
     return { sistema: 'contpaqi', confirmadoEn, opciones: { tipo, numero, separador, encabezado } };
   }
   if (sistema === 'sap_b1') {
@@ -35,6 +44,10 @@ export function interpretarPerfilExportacion(sistema: unknown, plantilla: unknow
     const lineasTecnica = columnas(p.lineasTecnica, 7);
     const lineasVisible = columnas(p.lineasVisible, 7);
     if (!cabeceraTecnica || !cabeceraVisible || !lineasTecnica || !lineasVisible || cabeceraTecnica.length !== cabeceraVisible.length || lineasTecnica.length !== lineasVisible.length) return null;
+    // A37-S39-05: las cabeceras técnicas deben ser EXACTAMENTE las que el export
+    // escribe, en su orden y largo; las filas visibles solo deben tener el mismo largo.
+    const igual = (a: string[], b: readonly string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+    if (!igual(cabeceraTecnica, SAP_B1_BASE.cabeceraTecnica) || !igual(lineasTecnica, SAP_B1_BASE.lineasTecnica)) return null;
     return { sistema: 'sap_b1', confirmadoEn, plantilla: { cabeceraTecnica, cabeceraVisible, lineasTecnica, lineasVisible } };
   }
   return null;
