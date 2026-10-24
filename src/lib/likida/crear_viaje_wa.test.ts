@@ -288,7 +288,7 @@ describe('el anticipo: se lee exacto o no se lee', () => {
       'nuevo viaje para Juan Perez, Puebla a Monterrey, folio 55 anticipo ocho mil',
     ]) {
       const r = interpretarPeticionViaje(texto);
-      expect(r.tipo, texto).toBe('incompleto');
+      expect(r?.tipo, texto).toBe('incompleto');
       expect((r as { falta: string[] }).falta).toContain('anticipo');
       expect((r as { parcial: { anticipo: number | null } }).parcial.anticipo).toBeNull();
     }

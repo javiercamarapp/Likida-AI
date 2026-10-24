@@ -318,7 +318,14 @@ const MONTO = `(?:\\$\\s*)?(?:${NUM})${SUF}`;
 // pegaba al nombre de la ciudad ("Guadalajara con").
 const RE_ANTICIPO_DESPUES = new RegExp(String.raw`(?:\b(?:con|y|mas)\s+)?\banticipo\b\s*(?:de|por|:|=)?\s*(${MONTO})`);
 const RE_ANTICIPO_ANTES = new RegExp(String.raw`(?:\b(?:con|y|mas)\s+)?(${MONTO})\s*(?:de\s+)?anticipo\b`);
-const RE_ANTES_ES_IDENTIFICADOR = /\b(?:unidad(?:es)?|economico|eco|folio|ticket|remolque|placas?|hora|las)\s*(?:#|num\.?|numero|no\.?)?\s*$/;
+const PALABRAS_IDENTIFICADOR = ['unidad', 'unidades', 'economico', 'eco', 'folio', 'ticket', 'remolque', 'placa', 'placas', 'hora', 'las'];
+/** ¿Lo que precede al número termina en «unidad», «eco», «folio»… (con o sin «#»/«num»/«no.»)? Sin regex anidada. */
+function antesEsIdentificador(antes: string): boolean {
+  const palabras = antes.trim().split(/\s+/);
+  let ult = palabras.pop() ?? '';
+  if (['#', 'num', 'num.', 'numero', 'no', 'no.'].includes(ult)) ult = palabras.pop() ?? '';
+  return PALABRAS_IDENTIFICADOR.includes(ult);
+}
 const RE_PESOS = new RegExp(`\\$\\s*(?:${NUM})${SUF}`, 'g');
 const RE_MENCION_ANTICIPO = /\banticipo\b/g;
 
@@ -410,7 +417,7 @@ function leerAnticipo(plano: string, tope: number): LecturaAnticipo {
     if (m && !despues) {
       const ini = m.index + m[0].indexOf(m[1]);
       const antes = plano.slice(0, ini);
-      if (RE_ANTES_ES_IDENTIFICADOR.test(antes) || /[a-z0-9-]$/.test(antes)) {
+      if (antesEsIdentificador(antes) || /[a-z0-9-]$/.test(antes)) {
         return { valor: null, dudoso: true, plano };
       }
     }
