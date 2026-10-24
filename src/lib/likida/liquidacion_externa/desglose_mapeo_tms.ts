@@ -184,15 +184,24 @@ function procesarRenglon(
     const det = listaEn(nodo, m.detalleViaticos, `${donde}.detalleViaticos`);
     if (det.length > 0) {
       const sub: Candidato[] = [];
+      let sumaDetalleCentavos = 0;
       det.forEach((d, i) => {
         const dd = `${donde}.detalleViaticos[${i}]`;
         const mm = montoTms(leerRuta(d, m.monto ?? 'monto'), `${dd}.monto`);
+        sumaDetalleCentavos += Math.round(mm * 100);
         if (mm === 0) { ignorados.push({ donde: dd, motivo: 'monto en cero o vacío' }); return; }
         const desc = textoOpt(leerRuta(d, m.descripcion), `${dd}.descripcion`);
         if (desc === undefined) throw new CampoInvalido(`${dd}.descripcion`, `\`${dd}\` no trae descripción del concepto.`);
         sub.push({ tipo: 'percepcion', renglon: { concepto: desc, monto: Math.round(mm * 100) / 100 } });
       });
-      return sub;
+      // A37-S48-07: el detalle SUSTITUYE al renglón padre solo si lo concilia al centavo. Si no suma lo mismo (falta un
+      // renglón, uno en cero se ignora), se conserva el monto del padre —lo que el TMS dijo que pagó— y la diferencia
+      // queda anotada: perder dinero del operador en silencio es peor que perder el desglose fino.
+      if (sumaDetalleCentavos === Math.round(montoNum * 100)) return sub;
+      ignorados.push({
+        donde: `${donde}.detalleViaticos`,
+        motivo: `el detalle suma ${(sumaDetalleCentavos / 100).toFixed(2)} y el renglón ${montoNum.toFixed(2)}: no concilia, se conservó el monto del renglón`,
+      });
     }
   }
   // Renglón tipo V/UV: su descripción específica manda sobre `desglose` si este solo dice «viáticos».
