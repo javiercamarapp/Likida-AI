@@ -326,6 +326,32 @@ describe('DAT-24 · el cobro fallido no vale $0', () => {
   });
 });
 
+describe('A37-S61-03 · el desglose de IVA que Stripe itemizó llega a la factura', () => {
+  it('invoice.paid con IVA itemizado que cuadra: subtotal e iva viajan a aplicarFactura', async () => {
+    await POST(req({
+      id: 'evt-iva', type: 'invoice.paid',
+      data: { object: { id: 'in-iva', customer: 'cus-1', currency: 'mxn', amount_paid: 1160000, total: 1160000, tax: 160000, subtotal: 1000000, total_excluding_tax: 1000000 } },
+    }));
+    expect(aplicarFactura).toHaveBeenCalledWith(expect.objectContaining({ monto: 11600, subtotal: 10000, iva: 1600 }));
+  });
+
+  it('sin `tax` NO se inventa desglose: va null y la factura sigue sin poder timbrarse a ciegas', async () => {
+    await POST(req({
+      id: 'evt-sin-iva', type: 'invoice.paid',
+      data: { object: { id: 'in-si', customer: 'cus-1', currency: 'mxn', amount_paid: 1160000, total: 1160000 } },
+    }));
+    expect(aplicarFactura).toHaveBeenCalledWith(expect.objectContaining({ subtotal: null, iva: null }));
+  });
+
+  it('el cobro fallido no lleva desglose (no hay nada que timbrar)', async () => {
+    await POST(req({
+      id: 'evt-pf-iva', type: 'invoice.payment_failed',
+      data: { object: { id: 'in-pfi', customer: 'cus-1', currency: 'mxn', amount_due: 1160000, amount_paid: 0, total: 1160000, tax: 160000, total_excluding_tax: 1000000 } },
+    }));
+    expect(aplicarFactura).toHaveBeenCalledWith(expect.objectContaining({ pagada: false, subtotal: null, iva: null }));
+  });
+});
+
 describe('DAT-32 · un evento de otro modo (test/live) no toca la base', () => {
   it('contesta 400, NO marca el evento y NO aplica nada', async () => {
     modoCoincide.mockReturnValueOnce(false);
