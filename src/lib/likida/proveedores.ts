@@ -328,12 +328,33 @@ export async function listarFacturasProveedor(
       .select(columnas)
       .eq('tenant_id', tenantId);
     if (estado) consulta = consulta.eq('estado', estado);
-    return acotada(consulta.order('created_at', { ascending: false }).limit(limite), 'proveedores.listar');
+    return acotada(consulta.order('created_at', { ascending: false }).order('id', { ascending: false }).limit(limite), 'proveedores.listar');
   };
   let r = await leer(COLUMNAS_FACTURA);
   if (columnaFaltante(r.error)) r = await leer(COLUMNAS_FACTURA_ANTERIOR); // base sin migrar (0530/0531)
   if (r.error) throw new Error(`listarFacturasProveedor: ${r.error.message}`);
   return ((r.data ?? []) as unknown as Record<string, unknown>[]).map(aFactura);
+}
+
+/**
+ * La bandeja de la pantalla: las `topeRecientes` más recientes MÁS todas las
+ * pendientes (hasta `topePendientes`), sin duplicados y de la más nueva a la más
+ * vieja. A37-S15-02: con solo las 100 más recientes, una pendiente antigua salía
+ * del corte y NINGUNA pantalla permitía aprobarla o rechazarla (y los KPIs
+ * subcontaban). LANZA si cualquiera de las dos lecturas falla.
+ */
+export async function listarBandejaProveedor(
+  tenantId: string,
+  topeRecientes = 100,
+  topePendientes = 500,
+): Promise<FacturaProveedor[]> {
+  const [recientes, pendientes] = await Promise.all([
+    listarFacturasProveedor(tenantId, topeRecientes),
+    listarFacturasProveedor(tenantId, topePendientes, 'pendiente'),
+  ]);
+  const porId = new Map<string, FacturaProveedor>();
+  for (const f of [...recientes, ...pendientes]) porId.set(f.id, f);
+  return [...porId.values()].sort((a, b) => (a.creadoEn < b.creadoEn ? 1 : a.creadoEn > b.creadoEn ? -1 : (a.id < b.id ? 1 : -1)));
 }
 
 /**
