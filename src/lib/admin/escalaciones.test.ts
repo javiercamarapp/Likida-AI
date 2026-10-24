@@ -393,6 +393,36 @@ describe('getBandejaEscalaciones — las corridas en fallo se juntan en rachas',
     expect(items[0].titulo).toContain('2 corridas desde 2026-08-14');
   });
 
+  // A37-S22-01 (ALTO): la ruptura de la racha se calculaba por AGENTE, sin flota. Si el mismo agente
+  // salía ok en la flota B DESPUÉS de fallar en la flota A, el incidente de A desaparecía de la bandeja.
+  it('A37-S22-01: un ok del mismo agente en OTRA flota no rompe la racha de fallos de esta', async () => {
+    respuestas.set('agente_corrida', {
+      data: [
+        fila('peajes', 'fallo', '2026-08-14T10:00:00Z', ERR_401, 't1'),
+        fila('peajes', 'fallo', '2026-08-14T06:00:00Z', ERR_401, 't1'),
+        fila('peajes', 'ok', '2026-08-14T12:00:00Z', null, 't2'),
+      ],
+      error: null,
+    });
+    const items = await corridas();
+    expect(items).toHaveLength(1);
+    expect(items[0].titulo).toContain('agente peajes (2 corridas desde 2026-08-14)');
+  });
+
+  it('A37-S22-01: el ok de la MISMA flota sí rompe su racha', async () => {
+    respuestas.set('agente_corrida', {
+      data: [
+        fila('peajes', 'fallo', '2026-08-14T06:00:00Z', ERR_401, 't1'),
+        fila('peajes', 'ok', '2026-08-14T12:00:00Z', null, 't1'),
+        fila('peajes', 'fallo', '2026-08-14T10:00:00Z', ERR_401, 't2'),
+      ],
+      error: null,
+    });
+    const items = await corridas();
+    expect(items).toHaveLength(1);
+    expect(items[0].titulo).toContain('agente peajes (1 corrida');
+  });
+
   it('agentes o flotas distintos NO se mezclan', async () => {
     respuestas.set('agente_corrida', {
       data: [

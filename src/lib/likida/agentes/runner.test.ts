@@ -83,6 +83,16 @@ vi.mock('../interruptores', () => ({
 
 const redactar = vi.fn(async (..._a: unknown[]) => ({ piezaId: 'p', asunto: 'x', aviso: null, costoUsd: 0.001 }));
 vi.mock('./redactor', () => ({ redactarCorreoFrio: (...a: unknown[]) => redactar(...a) }));
+// A37-S28-01: la selección de candidatos del lote vive en `candidatos_redactor.ts` (su prueba propia usa una
+// base en memoria). Aquí se conserva el contrato del runner con la cola de respuestas de `prospecto`.
+vi.mock('./candidatos_redactor', () => ({
+  candidatosDelRedactor: async () => {
+    const cola = respuestas.get('prospecto');
+    const r = cola && cola.length > 0 ? cola.shift()! : { data: [], error: null };
+    if (r.error) throw new Error(`loteRedactor.candidatos: ${r.error.message}`);
+    return (r.data ?? []) as Array<{ id: string; vendedor: { nombre?: string } | null }>;
+  },
+}));
 
 // El motor de dirección (0216) se despacha por import dinámico; el mock
 // aplica igual y evita arrastrar los lectores reales de /admin. La constante
@@ -775,7 +785,7 @@ describe('el reloj adentro del lote', () => {
   // ── LA SOBRE-LECTURA ×4 ──────────────────────────────────────────────────
   it('el overfetch es ×2, no ×4: 10 candidatos para 5 piezas', () => {
     const fuente = readFileSync('src/lib/likida/agentes/runner.ts', 'utf8');
-    expect(fuente).toMatch(/\.limit\(tope \* 2\), 'runner\.candidatos'/);
+    expect(fuente).toMatch(/candidatosDelRedactor\(tope \* 2\)/);
     expect(fuente).not.toMatch(/\.limit\(tope \* 4\)/);
   });
 });

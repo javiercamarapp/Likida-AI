@@ -194,6 +194,14 @@ export function pasaCompuertaIcp(p: { scian: string | null; fuente: string; simi
   return false;
 }
 
+/** A37-S28-01: la MISMA compuerta de ICP, pero como filtro PostgREST (`or=`) para aplicarla EN LA CONSULTA del
+ *  lote y que la ventana de candidatos avance hacia los que sí califican. Debe decir lo mismo que
+ *  `pasaCompuertaIcp` (hay una prueba que lo ata); esa función sigue siendo la compuerta final dentro de
+ *  `redactarCorreoFrio`. */
+export function filtroIcpPostgrest(): string {
+  return `scian.like.48*,scian.like.49*,fuente.in.(${FUENTES_ICP_VETADAS.join(',')}),similitud_icp_pct.gte.${UMBRAL_SIMILITUD_ICP}`;
+}
+
 /** El nombre de pila del contacto — lo único que se sustituye de vuelta, y
  *  SOLO fuera del modelo (ver la nota de AUDITORÍA 19 legal C2 en el
  *  dossier). `null` si no hay contacto capturado: sin nombre no hay nada
