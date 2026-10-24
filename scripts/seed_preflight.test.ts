@@ -10,8 +10,9 @@ afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: tru
 
 function run(options: { failPreflight?: boolean; schema?: boolean; tenant?: string } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'seed-preflight-')); dirs.push(dir);
-  for (const sub of ['scripts/ci', 'supabase/migrations', 'bin']) mkdirSync(join(dir, sub), { recursive: true });
+  for (const sub of ['scripts/ci', 'scripts/perfil', 'supabase/migrations', 'bin']) mkdirSync(join(dir, sub), { recursive: true });
   writeFileSync(join(dir, 'scripts/seed.sh'), readFileSync('scripts/seed.sh'));
+  writeFileSync(join(dir, 'scripts/perfil/_comun-cinco-agentes.sh'), readFileSync('scripts/perfil/_comun-cinco-agentes.sh')); // A37-S04-08: seed.sh la reutiliza
   for (const name of ['0001_init.sql', '0331_capacidad.sql', '0332_db_retencion_producto.sql', '0347_revision.sql']) {
     writeFileSync(join(dir, 'supabase/migrations', name), '-- fixture');
   }
