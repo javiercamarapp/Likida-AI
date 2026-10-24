@@ -111,6 +111,19 @@ describe('armar: urlTicket se filtra contra el dominio del comercio ya identific
     expect(t.urlTicket).toBeNull();
   });
 
+  it('A37-S43-10: el log del dominio ajeno trae SOLO el hostname, nunca la URL cruda (lleva códigos de facturación en la ruta)', async () => {
+    const { logger } = await import('@/lib/logger');
+    armar({
+      ...base,
+      rfc_emisor: 'CCO8605231N4',
+      ocr_extra: { urlFacturacion: 'https://cuenta-oxxo-segura.phishing-example.net/login?codigo=SECRETO123' },
+    }, '2026-08-04');
+    const llamada = (logger.warn as unknown as { mock: { calls: Array<[string, Record<string, unknown>]> } }).mock.calls
+      .find(([evento]) => evento === 'facturacion.liga_ticket_dominio_ajeno');
+    expect(llamada?.[1]).toMatchObject({ hostnameTicket: 'cuenta-oxxo-segura.phishing-example.net' });
+    expect(JSON.stringify(llamada?.[1])).not.toContain('SECRETO123');
+  });
+
   it('(b) MISMO dominio o subdominio del comercio: se respeta, el caso legítimo sigue funcionando', () => {
     const t = armar({
       ...base,
