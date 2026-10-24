@@ -30,6 +30,9 @@ vi.mock('@/lib/admin/qa-storage', () => ({
   guardarCorrida: (...a: unknown[]) => guardarCorrida(...(a as [])),
   leerManifiesto: async () => ({ ok: true, datos: [{ id: 'foto-1' }] }),
 }));
+let rlPermitido = true;
+const rateLimit = vi.fn(async (..._a: unknown[]) => rlPermitido);
+vi.mock('@/lib/ratelimit', () => ({ rateLimit: (...a: unknown[]) => rateLimit(...a) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({}) }));
 vi.mock('next/server', async (orig) => {
@@ -49,6 +52,7 @@ const LANZAR = { escenario: 'x', params: { fotoIds: ['foto-1'] }, carril: 'rapid
 
 beforeEach(() => {
   sesion = { userId: 'u-1', tenantId: 't-1', rol: 'superadmin' };
+  rlPermitido = true; rateLimit.mockClear();
   crearCorrida.mockClear(); guardarCorrida.mockClear(); ejecutarCorridaRapida.mockClear();
 });
 
@@ -63,6 +67,16 @@ describe('la puerta de origen (auditoría 21, BAJO-MEDIO)', () => {
     const r = await postear(LANZAR, { 'sec-fetch-site': 'same-origin' });
     expect(r.status).toBe(200);
     expect(guardarCorrida).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('A37-S08-04 — freno por usuario contra el doble clic', () => {
+  it('un segundo lanzamiento inmediato del mismo usuario: 429 y no se registra otra corrida', async () => {
+    rlPermitido = false;
+    const r = await postear(LANZAR, { 'sec-fetch-site': 'same-origin' });
+    expect(r.status).toBe(429);
+    expect(guardarCorrida).not.toHaveBeenCalled();
+    expect(rateLimit).toHaveBeenCalledWith('qa-lanzar:u-1', 1, 10_000);
   });
 });
 
