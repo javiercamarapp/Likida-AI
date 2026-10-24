@@ -163,6 +163,7 @@ it.each(['contador', 'vendedor'])('la puerta compartida gate() rechaza a %s en l
 });
 
 it('A37-S16-07: gate() no es una server action (ni endpoint invocable): vive a nivel de módulo, sin \'use server\'', () => {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- lee la fuente del propio repo; la ruta es constante.
   const fuente = readFileSync(new URL('./page.tsx', import.meta.url), 'utf8');
   expect(fuente).not.toMatch(/function gate\([^)]*\)[^{]*\{\s*'use server'/);
   expect(fuente).toMatch(/^async function gate\(/m);

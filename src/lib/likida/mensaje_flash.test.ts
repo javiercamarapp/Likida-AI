@@ -58,6 +58,7 @@ describe('mensaje_flash', () => {
 });
 
 describe('guarda: las pantallas no pintan texto de la URL como mensaje del sistema', () => {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- lee fuentes del propio repo; las rutas son constantes de esta prueba.
   const lee = (p: string) => readFileSync(join(process.cwd(), p), 'utf8');
   const PAGINAS = [
     'src/app/dashboard/agentes/liquidacion/configuracion/page.tsx',
