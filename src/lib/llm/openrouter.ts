@@ -929,6 +929,9 @@ export class PartialExecutionError extends Error {
   }
 }
 
+/** A37-L-11: roles que mueven dinero cuyo respaldo (otro proveedor, sin medir en política fiscal) NO puede escribir. */
+const ROLES_RESPALDO_SOLO_LECTURA: ReadonlySet<string> = new Set(['cuadre']);
+
 // Prefijos de tools que SOLO LEEN, para poder cachear su resultado dentro de un
 // turno. `cuadrar_` está aquí porque `cuadrar_viaje` calcula y no escribe nada —
 // caía entre dos rejillas: no matcheaba ningún prefijo y tampoco es `isMutation`,
@@ -1210,12 +1213,18 @@ export async function generateWithTools(opts: {
     }
   };
 
+  // A37-L-11: tras caer al respaldo de un rol de dinero, solo se ofrecen las tools de lectura/cuadre.
+  let soloLectura = false;
+  const herramientasActivas = () => (soloLectura
+    ? opts.tools.filter((t) => t.type === 'function' && esLectura(t.function.name))
+    : opts.tools);
+
   const complete = async (msgs: OpenAI.Chat.ChatCompletionMessageParam[]) => {
     const body = () => ({
       model: activeModel,
       messages: msgs,
-      tools: opts.tools.length ? opts.tools : undefined,
-      tool_choice: opts.tools.length ? ('auto' as const) : undefined,
+      tools: herramientasActivas().length ? herramientasActivas() : undefined,
+      tool_choice: herramientasActivas().length ? ('auto' as const) : undefined,
       // El MISMO techo que las respuestas estructuradas, y por la misma razón
       // (ver DEFAULT_MAX_TOKENS): con `reasoning: 'high'` —que es como corre el
       // rol `cuadre`— el razonamiento invisible y la respuesta comparten este
@@ -1234,6 +1243,17 @@ export async function generateWithTools(opts: {
       if (fallback && activeModel === model && !opts.signal?.aborted && isTransientError(err)) {
         logger.warn('llm.fallback', { fn: 'generateWithTools', from: model, to: fallback });
         activeModel = fallback;
+        // A37-L-11: el respaldo del cuadre es otro proveedor y NO está medido
+        // en política fiscal. Con él no se cierran liquidaciones: solo lectura
+        // y cuadre (las mutaciones se quitan del catálogo, no se confía en que
+        // el modelo se abstenga) y se le dice que el cierre queda pendiente.
+        if (ROLES_RESPALDO_SOLO_LECTURA.has(opts.role)) {
+          soloLectura = true;
+          convo.push({
+            role: 'system',
+            content: 'MODO DE RESPALDO: el modelo principal no está disponible y tú no tienes las herramientas que guardan o cierran. NO afirmes haber guardado ni cerrado una liquidación: puedes consultar y cuadrar, y debes decir que el cierre queda pendiente hasta que el sistema principal vuelva.',
+          });
+        }
         return await completion(body(), signalOpt);
       }
       throw err;
