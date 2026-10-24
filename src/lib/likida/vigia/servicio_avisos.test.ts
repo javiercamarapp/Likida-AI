@@ -19,7 +19,7 @@ vi.mock('./aviso/entrega', () => ({ entregarAviso: (...a: unknown[]) => entregar
 
 const gen = (o: Partial<ResultadoGeneracion> = {}): ResultadoGeneracion => ({
   estado: 'ok', leidas: 0, yaTenian: 0, noListas: 0, muyTemprano: 0, citaPasada: 0, creados: 0, pendientesConfirmacion: 0,
-  aprobados: 0, sinDestinatario: 0, duplicados: 0, omitidas: 0, acotada: false, ...o,
+  aprobados: 0, sinDestinatario: 0, duplicados: 0, omitidas: 0, repetidasPorClave: 0, acotada: false, ...o,
 });
 const aviso = (tenantId: string, n: number): AvisoParaEntrega => ({
   id: `a-${tenantId.slice(-1)}-${n}`, tenantId, filaId: `f-${n}`, clienteId: null, version: 1, estado: 'aprobado',
