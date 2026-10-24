@@ -605,6 +605,7 @@ export function pidioCerrar(texto: string | undefined): boolean {
   // «a una cuadra» (sustantivo). Se quitan antes del regex ancho para no habilitar la única
   // tool irreversible con un reporte de avance; todo lo demás se queda como estaba.
   const t = texto
+    // eslint-disable-next-line security/detect-unsafe-regex -- sin cuantificadores anidados sobre el mismo texto; la entrada es un mensaje corto de chat.
     .replace(/(?<!\p{L})(?:ya\s+)?(?:acab|termin)[éeoóa]\p{L}*\s+de\s+\p{L}+/giu, ' ')
     .replace(/(?<!\p{L})ci[ée]rr\p{L}*\s+(?:la|el|las|los)\s+(?:caseta|carretera|autopista|puente|aduana|gasolinera|bomba|vialidad|paso|circulaci[óo]n|accesos?|port[oó]n)/giu, ' ')
     .replace(/(?<!\p{L})(?:una|la|otra|esa|esta|las|dos|tres|cuatro|\d+)\s+cuadras?(?!\p{L})/giu, ' ');

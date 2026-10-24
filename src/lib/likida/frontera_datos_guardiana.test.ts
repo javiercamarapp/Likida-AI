@@ -576,11 +576,10 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 324;
 // que YA tienen pieza se excluyen en una consulta, A37-S27-04); y salen -4: las tres lecturas truncadas que estos módulos reemplazan
 // (`estadias.tsx` -2, `facturacion/page.tsx` -1) y la lectura de `reenviarAviso` (-1). Todo por `acotada`/`traerTodo` con `tenant_id`.
 // LOTE A37 b-sat-fiscal-02 (S45-07): +3 llamadas (2,284 → 2,287) en facturacion_escritura.ts: facturasQueAmparan (factura_viaje), borradorIdempotente (factura_emitida) y la lectura de ligas de marcarEmitida. Todas por `acotada`; 0 archivos nuevos.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_287;
+// INTEGRACION G1 (24-oct-2026, PRs #665-#679): el barrido real del arbol fusionado mide 2,315 llamadas (2,284 en master 6922916: +31 de las 15 ramas, techo = medido, sin holgura).
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_315;
 // A37-S27-10 (lote b-sat-fiscal-05): +1 (2,284 → 2,285), en `agentes/insumos.ts` (`crearInsumoArchivo`): `storage.from('agente-insumos').remove`
 // para no dejar huérfano el objeto subido cuando falla el insert.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_285;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_287;
 // LOTE A37 B-sat-fiscal-06 (migración 0876): +3 llamadas (2,284 → 2,287), 0 archivos nuevos, medido con el barrido real. `gasto_correccion.ts` +2: el RPC
 // `gasto_mezclar_ocr_extra` (merge atómico de ocr_extra, A37-S45-10; el UPDATE de respaldo se conserva mientras la base no tenga la 0876) y la relectura
 // que distingue «borrado» de «llegó el XML» cuando el RPC toca 0 filas. `intake/consolidado.ts` +1: la lectura del sello del gasto en el reintento idempotente
@@ -589,16 +588,12 @@ const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_287;
 // `regla_disparo.evidencia`, S56-06), storage_borrado.ts (+1, `storage.from(bucket).exists` para confirmar la ausencia antes de sellar, S57-07) y
 // transferencia.ts (+1, blindar la reserva con centinela cuando el UUID del CFDI no se guardó, S61-02; el guardado con reintentos reemplaza al anterior, +0).
 // A37 lote M-D-peajes-liquidacion-04 (+3 medidas): repo_correo.ts +1 (correosEnUsoPorOtros, A37-S48-06) y +1 (adelantar entregas al activar el envío, A37-S49-01); peajes/repo.ts +1 (agotarIntentosAviso, A37-S51-03). Todas por `acotada`, ancladas a tenant_id.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_287;
 // LOTE A37 M-D-peajes-liquidacion-02 (medido con el barrido real): +8 llamadas (2,284 → 2,292), 0 archivos nuevos, todas en `peajes/repo.ts` (que este guardia
 // NO exenta: solo exenta lib/likida/repo.ts y pg.ts) y todas por `acotada`: declararPeriodoDesglose (+1, A37-A2-12), estadoArchivoPeaje (+1) y
 // liberarHuellaDeAnulado (+2) de la subida manual por la cola (A37-A2-08/09), gastosRespaldadosPorOtrosDesgloses (+3, A37-A2-10) y el cierre de
 // reclamos preparados al anular (+1, A37-A2-07). `liberarHuellaArchivo` sustituye al UPDATE inline de la huella (0 netas).
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_292;
 // Auditoría 37, lote D-peajes-liquidacion-05 (+2, 2284 → 2286): peajes/repo.ts (+1 lectura de peaje_tag_baja antes de importar TAGs, S53-02; +1 lectura de desgloses anulados en listarReclamos, S53-03); ambas acotadas con `acotada` y por lotes.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_286;
 // A37-TRANSVERSAL-08 (+1): la lectura de `tms_sincronizacion` que rota el turno del cron `tms` (conectores/tms/sincronizar.ts, filtrada por tenant). Medido: 2,285.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_285;
 // Auditoría 37, lote agentes-legal-ia (medido con el barrido real): +2 llamadas (2,264 → 2,266). `candidatos_redactor.ts` suma 3 `.from(` (prospecto, cola_aprobacion, prospecto_contacto) y `runner.ts` pierde la suya (+2 netas); `sdr.ts` pasa de 3 a 3 (la lectura por prospecto se volvió lectura en lote). Todo por `acotada`.
 // LOTE A37 peajes-liquidación-graves (migración 0865): +5 llamadas (2,264 → 2,269), 0 archivos nuevos, medido con el barrido real. `jornada/repo.ts` +1:
 // `.rpc('asentar_declaracion_jornada')` (A37-S48-01; la 0865 sustituye la marca derivada bajo el lock del expediente; el INSERT anterior se conserva

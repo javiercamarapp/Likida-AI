@@ -171,7 +171,7 @@ describe('estadoRevisionCobros (de los datos de la base a lo que se pinta)', () 
   });
 
   it('A37-A2-06: un reclamo de categoría completa (sin decisiones ligadas) sí cubre todos sus candidatos', () => {
-    const entero = reclamo({ id: 'r-ent', categoria: 'extemporaneo', nCruces: 2, montoReclamado: 500, montoAcreditado: 0 });
+    const entero = reclamo({ id: 'r-ent', categoria: 'extemporaneo', nCruces: 2, montoReclamado: 500, montoAcreditado: 0, fechaCobroMasAntiguo: '2026-06-20' });
     const e = estadoRevisionCobros(datos({ hoy: '2026-09-01', reclamos: [entero], decisiones: [] }));
     if (e.tipo !== 'ok') throw new Error('esperaba ok');
     expect(e.insights.kpis.porVencer.valor).toBe(0);

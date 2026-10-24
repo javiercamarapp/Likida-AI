@@ -27,7 +27,7 @@ const campo = <T,>(valor: T) => ({ valor, procedencia: 'declarado' });
 const PERFIL_VIEJO = {
   rfcEmpresa: campo(RFC_OK),
   razonSocial: campo('RAZON VIEJA SA'),
-  regimenSat: campo('612'),
+  regimenSat: campo('626'),
   codigoPostalFiscal: campo('01000'),
 };
 vi.mock('../repo', () => ({
@@ -70,9 +70,9 @@ describe('A36-R15-01 — un turno sin datos fiscales no toca la fila fiscal', ()
   });
 
   it('un turno que declara SOLO el régimen conserva uso CFDI, domicilio, email y razón del tenant', async () => {
-    hechosDelTurno = { regimenSat: '612' };
+    hechosDelTurno = { regimenSat: '626' };
     await turno();
-    expect(fila.regimen_fiscal).toBe('612');
+    expect(fila.regimen_fiscal).toBe('626');
     expect(fila.razon_social).toBe('RAZON NUEVA SA');
     expect(fila.codigo_postal_fiscal).toBe('97000');
     expect(fila.uso_cfdi).toBe('G01');
@@ -82,9 +82,9 @@ describe('A36-R15-01 — un turno sin datos fiscales no toca la fila fiscal', ()
 
   it('con el tenant vacío, el chat completa lo faltante desde el perfil (uso G03 por defecto)', async () => {
     fila = { rfc: null, razon_social: null, regimen_fiscal: null, codigo_postal_fiscal: null, uso_cfdi: null, email_facturacion: null, domicilio_fiscal: null };
-    hechosDelTurno = { regimenSat: '612' };
+    hechosDelTurno = { regimenSat: '626' };
     await turno();
-    expect(fila).toMatchObject({ rfc: RFC_OK, razon_social: 'RAZON VIEJA SA', regimen_fiscal: '612', codigo_postal_fiscal: '01000', uso_cfdi: 'G03' });
+    expect(fila).toMatchObject({ rfc: RFC_OK, razon_social: 'RAZON VIEJA SA', regimen_fiscal: '626', codigo_postal_fiscal: '01000', uso_cfdi: 'G03' });
   });
 });
 
