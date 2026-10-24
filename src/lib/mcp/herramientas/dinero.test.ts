@@ -36,6 +36,7 @@ const opcionesFiscalesDelPeriodo = vi.fn();
 const resolverPeriodo = vi.fn();
 const getConfig = vi.fn();
 const getKpis = vi.fn();
+const getPerfilCrudo = vi.fn();
 
 vi.mock('./viajes', () => ({
   resolverViaje: (...a: unknown[]) => resolverViaje(...a),
@@ -60,6 +61,7 @@ vi.mock('@/lib/likida/fiscal', () => ({
   opcionesFiscalesDelPeriodo: (...a: unknown[]) => opcionesFiscalesDelPeriodo(...a),
   resolverPeriodo: (...a: unknown[]) => resolverPeriodo(...a),
 }));
+vi.mock('@/lib/likida/repo', () => ({ getPerfilCrudo: (...a: unknown[]) => getPerfilCrudo(...a) }));
 vi.mock('@/lib/likida/config', () => ({ getConfig: (...a: unknown[]) => getConfig(...a) }));
 vi.mock('@/lib/likida/analytics', () => ({ getKpis: (...a: unknown[]) => getKpis(...a) }));
 
@@ -367,6 +369,7 @@ describe('herramientaResumenFiscal.ejecutar', () => {
   beforeEach(() => {
     resolverPeriodo.mockReturnValue({ clave: 'ejercicio', desde: null, hasta: null, etiqueta: 'el ejercicio 2026' });
     opcionesDe.mockReturnValue({});
+    getPerfilCrudo.mockResolvedValue({});
     opcionesFiscalesDelPeriodo.mockResolvedValue({});
     getGastosFiscales.mockResolvedValue([]);
   });
@@ -413,6 +416,28 @@ describe('herramientaResumenFiscal.ejecutar', () => {
     resumirPerdidas.mockReturnValue(perdidasBase());
     const r = await herramientaResumenFiscal.ejecutar('t1', {}, { alcanza: () => true });
     expect(r.texto).toContain('puede no coincidir con lo que ya firmó una liquidación vieja');
+  });
+
+  // A37-S60-03: el perfil es la fuente de la elegibilidad del 15 %. Si no se pudo leer, la cifra de IVA se calculó con
+  // la config legada y NO debe presentarse como si fuera la del panel.
+  it('A37-S60-03: si el perfil no se pudo leer, el texto y lo estructurado lo DECLARAN (cifra aproximada)', async () => {
+    getPerfilCrudo.mockRejectedValue(new Error('base caída'));
+    resumirFiscal.mockReturnValue({ ...resumenFiscalBase(), n: 3, ivaAcreditable: 500 });
+    resumirPerdidas.mockReturnValue(perdidasBase());
+    const r = await herramientaResumenFiscal.ejecutar('t1', {}, { alcanza: () => true });
+    expect(r.texto).toMatch(/no se pudo leer el perfil fiscal/i);
+    expect(r.texto).toMatch(/aproximad/i);
+    expect(r.estructurado).toMatchObject({ perfilNoLeido: true });
+    // se calculó con la degradación documentada (sin perfil), no se inventó otro perfil
+    expect(opcionesDe).toHaveBeenCalledWith(undefined, undefined);
+  });
+
+  it('A37-S60-03: con el perfil leído NO aparece ningún aviso de aproximación', async () => {
+    resumirFiscal.mockReturnValue({ ...resumenFiscalBase(), n: 3, ivaAcreditable: 500 });
+    resumirPerdidas.mockReturnValue(perdidasBase());
+    const r = await herramientaResumenFiscal.ejecutar('t1', {}, { alcanza: () => true });
+    expect(r.texto).not.toMatch(/aproximad/i);
+    expect(r.estructurado).not.toHaveProperty('perfilNoLeido', true);
   });
 
   it('sin esa deriva, NO agrega el aviso del 15%', async () => {
