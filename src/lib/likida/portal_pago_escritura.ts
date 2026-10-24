@@ -7,6 +7,7 @@ import { anotarBitacora, type EntidadBitacora } from './bitacora_escritura';
 import { DatoInvalido, AbonoYaRegistrado } from './errores';
 import { esUuidValido } from './intake/cfdi';
 import { parseRepXml } from './intake/rep';
+import { abonoEquivalente } from './portal_pago_duplicado';
 import { registrarPago } from './facturacion_escritura';
 import { expiracionDesde, generarTokenPortal, diasDeVigencia, montoTecleado } from './portal_pago';
 
@@ -253,6 +254,17 @@ export async function conciliarPropuesta(
 
   const monto = Number(fila.monto);
   const facturaId = String(fila.factura_id);
+
+  // A37-S54-02: la idempotencia de abajo es por `propuestaId`; no ve un abono hermano de OTRA propuesta (o capturado a mano) del
+  // mismo depósito. Antes de crear dinero se pregunta, FAIL-CLOSED: si no se puede preguntar, no se concilia.
+  const hermano = await abonoEquivalente(tenantId, {
+    facturaId, fecha: String(fila.fecha), monto, referencia: String(fila.referencia ?? ''),
+  }, propuestaId);
+  if (hermano !== null) {
+    throw new DatoInvalido(
+      'Esta factura ya tiene un abono con la misma fecha, el mismo monto y una referencia equivalente: conciliar este registro lo contaría dos veces. Si es el mismo depósito, descártalo; si de verdad son dos pagos distintos, corrige primero la referencia.',
+    );
+  }
 
   // El abono, con la propuesta como llave de idempotencia. Si otra sesión ya lo
   // creó, `registrarPago` lanza `AbonoYaRegistrado` en vez de duplicarlo.

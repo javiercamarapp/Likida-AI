@@ -627,3 +627,49 @@ describe('sellarRepEntregado — el sello no puede negar el documento', () => {
     expect(sbMock).toHaveBeenCalled();
   });
 });
+
+// ── A37-S54-02: un depósito ya conciliado no se re-propone ni se concilia dos veces ─────────────────────────────────────────
+describe('A37-S54-02 — el mismo depósito no genera un segundo abono', () => {
+  const V = { fecha: '2026-08-20', monto: 5000, referencia: 'SPEI-8891', metodo: 'transferencia' };
+  const ABONO_PREVIO = { id: 'pago-previo', referencia: 'spei 8891 ', propuesta_id: 'otra-propuesta' };
+
+  it('registrar: si ya hay un abono con la misma fecha, monto y referencia (otra ortografía), contesta «repetida» y NO inserta otra pendiente', async () => {
+    conTablas({ pago_recibido: [OK([ABONO_PREVIO])], portal_pago_propuesta: [OK({ id: 'p-9' })] });
+    const r = await registrarPropuesta(LIGA, V);
+    expect(r).toEqual({ ok: true, id: null, repetida: true });
+    expect(anotarBitacora).not.toHaveBeenCalled();
+  });
+
+  it('registrar: otra referencia (otro depósito) sí entra', async () => {
+    conTablas({ pago_recibido: [OK([{ ...ABONO_PREVIO, referencia: 'SPEI-0001' }])], portal_pago_propuesta: [OK({ id: 'p-9' })] });
+    expect(await registrarPropuesta(LIGA, V)).toEqual({ ok: true, id: 'p-9', repetida: false });
+  });
+
+  it('registrar: si no se puede preguntar por el abono, NO se bloquea al cliente', async () => {
+    conTablas({ pago_recibido: [FALLA('sin red')], portal_pago_propuesta: [OK({ id: 'p-9' })] });
+    expect(await registrarPropuesta(LIGA, V)).toEqual({ ok: true, id: 'p-9', repetida: false });
+  });
+
+  const FILA = { id: PROPUESTA, factura_id: FACTURA, fecha: '2026-08-20', monto: 5000, referencia: 'SPEI-8891', metodo: 'transferencia', estado: 'pendiente' };
+
+  it('conciliar: un abono hermano (de OTRA propuesta) con el mismo depósito bloquea, sin llamar a registrarPago', async () => {
+    conTablas({ portal_pago_propuesta: [OK(FILA)], pago_recibido: [OK([ABONO_PREVIO])] });
+    await expect(conciliarPropuesta(T, PROPUESTA)).rejects.toThrow(/lo contaría dos veces/i);
+    expect(registrarPago).not.toHaveBeenCalled();
+  });
+
+  it('conciliar: el abono de ESTA misma propuesta (rescate de una conciliación a medias) no cuenta como duplicado', async () => {
+    conTablas({
+      portal_pago_propuesta: [OK(FILA), OK([{ id: PROPUESTA }])],
+      pago_recibido: [OK([{ ...ABONO_PREVIO, propuesta_id: PROPUESTA }])],
+    });
+    await conciliarPropuesta(T, PROPUESTA).catch(() => undefined);
+    expect(registrarPago).toHaveBeenCalled();
+  });
+
+  it('conciliar: si no se puede preguntar por duplicados, FALLA CERRADO (no se crea dinero)', async () => {
+    conTablas({ portal_pago_propuesta: [OK(FILA)], pago_recibido: [FALLA('sin red')] });
+    await expect(conciliarPropuesta(T, PROPUESTA)).rejects.toThrow(/abonoEquivalente/);
+    expect(registrarPago).not.toHaveBeenCalled();
+  });
+});

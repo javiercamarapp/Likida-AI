@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { acotada } from '@/lib/likida/presupuesto';
 import { anotarBitacora } from './bitacora_escritura';
 import type { PropuestaValida } from './portal_pago';
+import { abonoEquivalente } from './portal_pago_duplicado';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL ÚNICO VERBO QUE ALCANZA UNA PETICIÓN ANÓNIMA.
@@ -67,6 +68,18 @@ export async function registrarPropuesta(
   v: PropuestaValida,
 ): Promise<ResultadoPropuesta> {
   try {
+    // A37-S54-02: el índice único solo cubre las PENDIENTES. Si ese depósito (misma fecha, monto y referencia equivalente) ya
+    // tiene su abono —conciliado o capturado a mano—, no entra otra pendiente que acabe en un segundo abono real: se contesta
+    // lo mismo que al segundo clic. Si no se puede preguntar NO se bloquea al cliente (queda el índice y la revisión del
+    // contralor, y `conciliarPropuesta` repite esta pregunta fail-closed antes de crear dinero).
+    try {
+      if (await abonoEquivalente(liga.tenantId, { facturaId: liga.facturaId, fecha: v.fecha, monto: v.monto, referencia: v.referencia })) {
+        logger.info('portal_pago.propuesta_ya_conciliada', { factura: liga.facturaId });
+        return { ok: true, id: null, repetida: true };
+      }
+    } catch (e) {
+      logger.warn('portal_pago.propuesta_duplicado_no_comprobado', { err: e instanceof Error ? e.message : String(e) });
+    }
     const { data, error } = await acotada(supabaseAdmin().from('portal_pago_propuesta').insert({
       tenant_id: liga.tenantId,
       liga_id: liga.ligaId,
