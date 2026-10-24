@@ -97,6 +97,13 @@ export function normalizar(texto: string): string {
   return texto.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
+/** ¿La palabra aparece como PALABRA (con límite), admitiendo plural simple? A37-S27-07: con `includes`,
+ *  «no se activa mi cuenta» contenía «iva» y «marco» contenía «arco». */
+export function contienePalabra(texto: string, palabra: string): boolean {
+  const esc = palabra.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-z0-9])${esc}(s|es)?(?![a-z0-9])`).test(texto);
+}
+
 export interface Coincidencia { tema: TemaNormativo; palabras: string[] }
 
 /**
@@ -109,7 +116,7 @@ export function temaDelTicket(asunto: string, descripcion: string | null): Coinc
   const texto = normalizar(`${asunto} ${descripcion ?? ''}`);
   let mejor: Coincidencia | null = null;
   for (const tema of TEMAS_NORMATIVOS) {
-    const palabras = PALABRAS_POR_TEMA[tema].filter((p) => texto.includes(p));
+    const palabras = PALABRAS_POR_TEMA[tema].filter((p) => contienePalabra(texto, p));
     if (palabras.length === 0) continue;
     if (mejor === null || palabras.length > mejor.palabras.length) mejor = { tema, palabras: [...palabras] };
   }

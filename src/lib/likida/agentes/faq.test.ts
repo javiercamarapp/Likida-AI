@@ -383,3 +383,19 @@ describe('el reloj de la vuelta corta el lote del FAQ, y lo DICE (c7-1)', () => 
     expect(r.sinTurno).toBeUndefined();
   });
 });
+
+describe('A37-S27-07 coincidencia por palabra, no por subcadena', () => {
+  it('«no se activa mi cuenta» NO cae en IVA acreditable', async () => {
+    const { temaDelTicket } = await import('./faq');
+    expect(temaDelTicket('no se activa mi cuenta', null)?.tema).not.toBe('iva_acreditable');
+  });
+  it('«marco» no dispara privacidad (arco)', async () => {
+    const { temaDelTicket } = await import('./faq');
+    expect(temaDelTicket('Cómo cambio el marco de la pantalla', null)).toBeNull();
+  });
+  it('las palabras reales y su plural siguen funcionando', async () => {
+    const { temaDelTicket } = await import('./faq');
+    expect(temaDelTicket('duda con el IVA', null)?.tema).toBe('iva_acreditable');
+    expect(temaDelTicket('mis facturas salen mal', null)?.tema).toBe('cfdi_y_facturacion');
+  });
+});
