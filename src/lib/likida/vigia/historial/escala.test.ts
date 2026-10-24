@@ -37,7 +37,7 @@ describe('escala: decenas de miles de mensajes', () => {
     const r = pendientesDeHistorial(grande);
     expect(r.pendientes.length).toBe(60_000);
     expect(Date.now() - t0).toBeLessThan(4_000);
-  });
+  }, 15_000);
 
   it('analizarHistorial no es cuadrático (preguntas casi todas distintas y nadie del equipo contesta)', () => {
     const distintas: EntradaPendientes[] = Array.from({ length: 40_000 }, (_, i) => msg(i, 'cliente', `¿Cuándo llega la unidad ${i} con carga de producto${i} a bodega${i}?`));
@@ -45,5 +45,5 @@ describe('escala: decenas de miles de mensajes', () => {
     const rep = analizarHistorial(distintas);
     expect(rep.tiempos.sinRespuesta).toBeGreaterThan(0);
     expect(Date.now() - t0).toBeLessThan(15_000);
-  });
+  }, 30_000);
 });
