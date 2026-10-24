@@ -24,6 +24,7 @@
 // las de las demás flotas.
 // ═══════════════════════════════════════════════════════════════════════════
 import { enviarConFallback } from '@/lib/meta/enviar_con_fallback';
+import { avisoQuedoEnCola } from '@/lib/meta/aviso_en_cola';
 import { PLANTILLA, parametrosReglaAviso } from '@/lib/meta/plantillas_catalogo';
 import { appUrl } from '@/lib/env';
 import { telefonoJefeDe, telefonoParaDineroDe } from '../contactos';
@@ -207,7 +208,12 @@ async function correrRegla(regla: ReglaGuardada, ahora: Date): Promise<Resultado
     await liberarDisparos(regla.tenantId, regla.id, token);
     throw e;
   }
-  if (!envio.ok) {
+  // A37-S56-02: un rechazo transitorio que el cliente de Meta YA dejó en `wa_outbox` NO es «no salió»: el
+  // mensaje se entregará solo. Liberar y reintentar duplicaba el aviso al jefe hasta una vez por hora.
+  // Se trata como enviado (se confirma/sella) y se deja a la vista en el log.
+  const enCola = avisoQuedoEnCola(envio);
+  if (enCola) logger.warn('reglas.aviso_en_cola', { regla: regla.id, tenant: regla.tenantId, casos });
+  if (!envio.ok && !enCola) {
     // Sin sello: se reintenta a la siguiente corrida. Es exactamente el
     // contrato de `avisarVencimientos`. El intento fallido SÍ queda en el
     // historial (no cuenta para el tope: no llegó nada al jefe).
@@ -234,7 +240,7 @@ async function correrRegla(regla: ReglaGuardada, ahora: Date): Promise<Resultado
     await sellarDisparos(regla.tenantId, regla.id, aMandar);
   }
   await registrarAviso(regla.tenantId, regla.id, {
-    resultado: 'enviado', casos, via: envio.via, motivo: envio.motivo, enviadoEn: ahora,
+    resultado: 'enviado', casos, via: envio.ok ? envio.via : null, motivo: envio.motivo, enviadoEn: ahora,
   });
   await anotarCorrida(regla.tenantId, regla.id, ahora, aMandar.length);
   logger.info('reglas.disparo', {

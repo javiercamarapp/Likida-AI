@@ -198,6 +198,17 @@ describe('lo que NO se sella', () => {
     expect(r.avisos).toBe(0);
   });
 
+  it('A37-S56-02: si el aviso quedó ENCOLADO en wa_outbox, la regla se CONFIRMA (no se libera ni se reintenta)', async () => {
+    reglasActivas.mockResolvedValue([REGLA_DINERO]);
+    evaluar.mockResolvedValue([DISPARO]);
+    enviarConFallback.mockResolvedValue({ ...KO_ENVIO, motivo: 'error_red', reintentable: true, encolado: true, fueraDeVentana: false });
+    const r = await vigilarReglas(AHORA);
+    expect(liberarDisparos).not.toHaveBeenCalled();
+    expect(confirmarDisparos).toHaveBeenCalled();
+    expect(r.fallos).toBe(0);
+    expect(r.avisos).toBe(1);
+  });
+
   it('sin teléfono registrado tampoco se sella: cuando lo capturen, el aviso sale', async () => {
     reglasActivas.mockResolvedValue([REGLA_DINERO]);
     evaluar.mockResolvedValue([DISPARO]);

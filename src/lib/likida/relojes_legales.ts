@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { traerTodo, traerPorIds, conteo } from './pg';
 import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina';
+import { avisoQuedoEnCola } from '@/lib/meta/aviso_en_cola';
 import { appUrl } from '@/lib/env';
 import { telefonoJefeDe, telefonoParaDineroDe } from './contactos';
 import { anotarEventoIncidencia } from './asistencia_wa';
@@ -318,7 +319,8 @@ async function avisarRelojesDeIncidencia(
       parametros: parametrosAvisoOficina('Likida', 'plazo legal de un siniestro por atender', `${appUrl()}/dashboard/asistencia`),
       contexto: { agente: 'relojes_legales.dinero', tenantId: inc.tenantId, incidencia: inc.id },
     }) : null;
-    if (envio?.ok) dineroEnviadoAhora = true;
+    // A37-S56-02: encolado en wa_outbox = ya va en camino; no se reenvía (ni se queda sin sello).
+    if (envio?.ok || avisoQuedoEnCola(envio)) dineroEnviadoAhora = true;
     else logger.warn('relojes.dinero_sin_destinatario', { incidencia: inc.id, tenia_telefono: Boolean(tel) });
   }
   let operacionEnviadoAhora = false;
@@ -328,7 +330,7 @@ async function avisarRelojesDeIncidencia(
       parametros: parametrosAvisoOficina('Likida', 'plazo legal de un siniestro por atender', `${appUrl()}/dashboard/asistencia`),
       contexto: { agente: 'relojes_legales.operacion', tenantId: inc.tenantId, incidencia: inc.id },
     }) : null;
-    if (envio?.ok) operacionEnviadoAhora = true;
+    if (envio?.ok || avisoQuedoEnCola(envio)) operacionEnviadoAhora = true;
     else logger.warn('relojes.operacion_sin_destinatario', { incidencia: inc.id, tenia_telefono: Boolean(tel) });
   }
 
@@ -617,7 +619,7 @@ export async function avisarVencimientos(ahora: Date = new Date(), opts: Opcione
         parametros: parametrosAvisoOficina('Likida', 'papeles de la flota por vencer', `${appUrl()}/dashboard`),
         contexto: { agente: 'vencimientos', tenantId },
       });
-      if (!enviado.ok) {
+      if (!enviado.ok && !avisoQuedoEnCola(enviado)) {
         r.fallos++;
         logger.warn('vencimientos.no_enviado', { tenant: tenantId });
         continue; // sin sello: se reintenta a la siguiente corrida
