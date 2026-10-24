@@ -40,7 +40,10 @@ describe('puertaCron', () => {
     const r = await puertaCron('purgar', new Request('http://x', { headers: { authorization: 'Bearer otro' } }), '');
     expect(r?.status).toBe(401);
     expect(await r?.text()).toBe('');
-    expect(logger.error).toHaveBeenCalledWith('cron.purgar.no_autorizado', { codigo: 'cron_401' });
+    // A37-L-11: info (solo stdout), NO error/warn: esos niveles se replican a Sentry y la URL es pública.
+    expect(logger.info).toHaveBeenCalledWith('cron.purgar.no_autorizado', { codigo: 'cron_401' });
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it('secreto correcto: null, sin ruido', async () => {

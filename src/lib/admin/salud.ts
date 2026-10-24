@@ -136,7 +136,9 @@ export async function puertaCron(cron: CronId, req: Request, sinSecreto: string)
     // Sin cuerpo: a quien no está autorizado no se le dice qué hay detrás.
     // Pero SÍ se loguea (antes no): un secreto desfasado entre Vercel y el
     // proyecto se veía como un cron que nunca corre.
-    logger.error(`cron.${cron}.no_autorizado`, { codigo: 'cron_401' });
+    // A37-L-11: `info`, no `error`: las URLs de cron son públicas y error/warn se replican a Sentry sin tope (un bucle
+    // anónimo agotaría la cuota y enterraría errores reales). El rastro sigue en los logs de Vercel con el mismo código.
+    logger.info(`cron.${cron}.no_autorizado`, { codigo: 'cron_401' });
     return new NextResponse(null, { status: 401 });
   }
   // E1-A: el cronómetro de la corrida arranca AQUÍ (los 18+ crons pasan por esta puerta) y `registrarLatido` lo lee al
