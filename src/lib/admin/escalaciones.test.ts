@@ -72,8 +72,10 @@ function crearBuilder(tabla: string) {
   return b;
 }
 
+// A37-P-06: la RPC `corridas_fallidas_por_grupo` (0870). Por omisión «no existe todavía» → la bandeja cae a la ventana global.
+let rpcGrupo: { data: unknown; error: { message: string } | null } = { data: null, error: { message: 'function public.corridas_fallidas_por_grupo does not exist' } };
 vi.mock('@/lib/supabase/admin', () => ({
-  supabaseAdmin: () => ({ from: (t: string) => crearBuilder(t) }),
+  supabaseAdmin: () => ({ from: (t: string) => crearBuilder(t), rpc: () => Promise.resolve(rpcGrupo) }),
 }));
 
 const {
@@ -421,6 +423,26 @@ describe('getBandejaEscalaciones — las corridas en fallo se juntan en rachas',
     const items = await corridas();
     expect(items).toHaveLength(1);
     expect(items[0].titulo).toContain('agente peajes (1 corrida');
+  });
+
+  // A37-P-06: con la 0870 la ventana es POR agente+flota. La RPC entrega, de cada grupo, sus fallos vigentes y su última corrida ok.
+  it('A37-P-06: con la RPC por grupo, la flota ruidosa no esconde el fallo de otra (la ventana global de 200 sí lo hacía)', async () => {
+    const ruido = Array.from({ length: 5 }, (_, i) => ({
+      agente: 'peajes', estado: 'fallo', disparo: 'cron', inicio: `2026-08-14T1${i}:00:00Z`, fin: null,
+      tareas_hechas: null, tareas_total: null, tenant_id: 't1', tenant_nombre: 'Flota Uno', error: ERR_401, ultimo_sin_fallo: null,
+    }));
+    const otra = {
+      agente: 'peajes', estado: 'fallo', disparo: 'cron', inicio: '2026-08-10T08:00:00Z', fin: null,
+      tareas_hechas: null, tareas_total: null, tenant_id: 't2', tenant_nombre: 'Flota Dos', error: ERR_401, ultimo_sin_fallo: null,
+    };
+    rpcGrupo = { data: [...ruido, otra], error: null };
+    try {
+      const items = await corridas();
+      expect(items).toHaveLength(2);
+      expect(items.map((i) => i.tenantNombre).sort()).toEqual(['Flota Dos', 'Flota Uno']);
+    } finally {
+      rpcGrupo = { data: null, error: { message: 'function public.corridas_fallidas_por_grupo does not exist' } };
+    }
   });
 
   it('agentes o flotas distintos NO se mezclan', async () => {

@@ -5,6 +5,7 @@ import { CheckCircle2, PencilLine, XCircle, ShieldCheck } from 'lucide-react';
 import { Aviso, ESTILO_CONTROL, type ResultadoAccion } from '@/app/admin/ui/forma';
 import { mxn, fechaMx } from '@/lib/formato';
 import type { AccionRevision, RevisionDetalle } from '@/lib/likida/revision';
+import type { DisputaDeMonto } from '@/lib/likida/gasto_disputa';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA FIRMA HUMANA, EN PANTALLA (auditoría 24, bloqueante 6 — mig. 0299).
@@ -28,16 +29,23 @@ import type { AccionRevision, RevisionDetalle } from '@/lib/likida/revision';
 // dos veces (además la base lo rebota con LR010, pero eso es el cinturón).
 // ═══════════════════════════════════════════════════════════════════════════
 
-export interface GastoAjustable { id: string; etiqueta: string; monto: number }
+export interface GastoAjustable {
+  id: string; etiqueta: string; monto: number;
+  /** A37-P-01: el operador dijo que este monto está mal (`ocr_extra.montoDisputado`) y nadie lo ha corregido. */
+  disputa?: DisputaDeMonto | null;
+}
 
-export function PanelRevision({ estado, gastos, accion, folio }: {
+export function PanelRevision({ estado, gastos, accion, folio, corregir = null }: {
   estado: RevisionDetalle;
   /** Los comprobantes con id — los únicos que se pueden ajustar. */
   gastos: GastoAjustable[];
   /** `null` = el rol puede VER la firma pero no ponerla. */
   accion: ((previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>) | null;
   folio: string;
+  /** A37-P-01: corrige el monto de un comprobante disputado (solo cuando la liquidación ya no está vigente). `null` = sin permiso. */
+  corregir?: ((previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>) | null;
 }) {
+  const disputados = gastos.filter((g) => g.disputa);
   return (
     <section className="card p-4">
       <div className="flex items-center gap-2 mb-1">
@@ -46,6 +54,10 @@ export function PanelRevision({ estado, gastos, accion, folio }: {
       </div>
 
       <FirmaActual estado={estado} />
+
+      {disputados.length > 0 && (
+        <Disputas gastos={disputados} firmable={estado.firmable} corregir={estado.firmable ? null : corregir} />
+      )}
 
       {accion && estado.firmable && (
         <Forma accion={accion} gastos={gastos} folio={folio} yaFirmadaPorElMotor={estado.revision !== 'pendiente'} />
@@ -62,6 +74,65 @@ export function PanelRevision({ estado, gastos, accion, folio }: {
         </p>
       )}
     </section>
+  );
+}
+
+/**
+ * A37-P-01 (S45-01): el operador apretó «No, corregir» sobre un monto mal leído. Hasta ahora la marca no la leía nadie y la oficina no
+ * se enteraba. Mientras la liquidación esté vigente el camino es «Ajustar montos» (recalcula el cuadre con tu firma); si ya se
+ * rechazó y el viaje volvió a cuadre, aquí se corrige el monto directo (`corregirMontoGasto`: motivo y firma obligatorios, historial).
+ */
+function Disputas({ gastos, firmable, corregir }: {
+  gastos: GastoAjustable[];
+  firmable: boolean;
+  corregir: ((previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>) | null;
+}) {
+  return (
+    <div className="mb-3 rounded-lg p-3 text-[12.5px]" style={{ ...ESTILO_CONTROL }} role="alert">
+      <p className="m-0 font-semibold" style={{ color: 'var(--ink)' }}>
+        El operador dice que {gastos.length === 1 ? 'este monto está mal' : 'estos montos están mal'}
+      </p>
+      <ul className="m-0 mt-1 p-0 list-none flex flex-col gap-2">
+        {gastos.map((g) => (
+          <li key={g.id}>
+            {g.etiqueta}: se leyó <span className="cifra-mono">{mxn(g.disputa!.montoLeido)}</span>
+            {g.disputa!.dijo ? <> · dijo: «{g.disputa!.dijo}»</> : <> · no dijo cuál es el correcto</>}
+            {g.disputa!.en ? <> · {fechaMx(g.disputa!.en)}</> : null}
+            {corregir && <CorregirMonto accion={corregir} gasto={g} />}
+          </li>
+        ))}
+      </ul>
+      {firmable && (
+        <p className="m-0 mt-2" style={{ color: 'var(--muted)' }}>
+          Corrígelo con «Ajustar montos» (si el comprobante tiene CFDI verificado no se puede ajustar: rechaza la liquidación para que se
+          mande el comprobante correcto).
+        </p>
+      )}
+    </div>
+  );
+}
+
+function CorregirMonto({ accion, gasto }: {
+  accion: (previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
+  gasto: GastoAjustable;
+}) {
+  const [resultado, enviar, pendiente] = useActionState<ResultadoAccion, FormData>(accion, null);
+  return (
+    <form action={enviar} className="flex flex-wrap items-center gap-2 mt-1">
+      <input type="hidden" name="gastoId" value={gasto.id} />
+      <input type="text" inputMode="decimal" name="monto" required placeholder="monto correcto"
+        aria-label={`Monto correcto de ${gasto.etiqueta}`}
+        className="text-[12.5px] rounded-lg px-2 py-1 w-32 text-right cifra-mono" style={ESTILO_CONTROL} />
+      <input type="text" name="motivo" required placeholder="motivo (queda en la bitácora)"
+        aria-label={`Motivo de la corrección de ${gasto.etiqueta}`}
+        className="text-[12.5px] rounded-lg px-2 py-1 flex-1 min-w-40" style={ESTILO_CONTROL} />
+      <button type="submit" disabled={pendiente}
+        className="text-[12.5px] font-medium rounded-lg px-3 py-1.5 disabled:opacity-60"
+        style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
+        {pendiente ? 'Corrigiendo…' : 'Corregir monto'}
+      </button>
+      <Aviso estado={resultado} />
+    </form>
   );
 }
 

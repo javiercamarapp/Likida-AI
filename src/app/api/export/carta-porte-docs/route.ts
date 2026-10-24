@@ -9,6 +9,7 @@ import { aXlsxPlantillaTms, configEstandar, exportarDocumentos, MIME_XLSX, valid
 import { construirPlantilla, faltantesBloqueantes } from '@/lib/likida/carta_porte_docs/plantilla_tms';
 import { leerConfigSalida } from '@/lib/likida/carta_porte_docs/salida_config';
 import * as repo from '@/lib/likida/carta_porte_docs/repo';
+import { descargarCcp } from '@/lib/likida/carta_porte_docs/ccp_respuesta_repo';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -26,6 +27,7 @@ const MAX_DOCS = 500;
  *   ?config=estandar | <uuid de cp_export_config>   (por omisión, el estándar de Likida)
  *   ?formato=csv|json|xlsx                            (por omisión, el de la configuración)
  *   ?ids=<uuid>,<uuid>…                               (por omisión, los aprobados que aún no se exportaron)
+ *   ?ccp=<uuid de cp_ccp_timbrado>&archivo=pdf|xml    (A37-P-04: el PDF o XML guardados de un CCP timbrado recibido; 404 si no es de tu flota)
  *   ?formato=plantilla_tms&documento=<uuid>           (la plantilla multi-hoja del TMS de UN documento aprobado: 404 si no es de tu flota, 409 si no está aprobado)
  *
  * Solo salen documentos APROBADOS; el resto se reporta en el encabezado `X-Omitidos`. No timbra ni emite nada.
@@ -49,6 +51,8 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
+  const ccpParam = url.searchParams.get('ccp')?.trim();
+  if (ccpParam !== undefined) return ccpGuardado(t.tenantId, t.rol, ccpParam, url.searchParams.get('archivo')?.trim() ?? '');
   const configParam = url.searchParams.get('config')?.trim() || 'estandar';
   const formatoParam = url.searchParams.get('formato')?.trim();
   if (formatoParam === 'plantilla_tms') return plantillaTms(t.tenantId, t.rol, url.searchParams.get('documento')?.trim() ?? '');
@@ -101,6 +105,28 @@ export async function GET(req: Request) {
   } catch (e) {
     logger.error('export.cp_docs_fallo', { error: e instanceof Error ? e.message : String(e) });
     return new NextResponse('No se pudo generar el archivo. Intenta de nuevo.', { status: 500 });
+  }
+}
+
+/** A37-P-04: el PDF o el XML guardados de un CCP timbrado, solo de la flota de la sesión. */
+async function ccpGuardado(tenantId: string, rol: string, ccpId: string, archivo: string): Promise<NextResponse> {
+  if (!UUID.test(ccpId)) return new NextResponse('«ccp» es el id de un CCP timbrado.', { status: 400 });
+  if (archivo !== 'pdf' && archivo !== 'xml') return new NextResponse('«archivo» es pdf o xml.', { status: 400 });
+  try {
+    const r = await descargarCcp(tenantId, ccpId, archivo);
+    if (!r) return new NextResponse('Ese CCP no existe en tu flota.', { status: 404 });
+    logger.info('export.cp_docs_ccp_descargado', { rol, archivo });
+    return new NextResponse(new Blob([r.bytes as BlobPart], { type: r.mime }), {
+      headers: {
+        'Content-Type': r.mime,
+        'Content-Disposition': `attachment; filename="${r.nombre.replace(/[^A-Za-z0-9._-]/g, '_')}"`,
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
+  } catch (e) {
+    logger.error('export.cp_docs_ccp_fallo', { error: e instanceof Error ? e.message : String(e) });
+    return new NextResponse('No se pudo descargar el archivo. Intenta de nuevo.', { status: 500 });
   }
 }
 

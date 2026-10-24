@@ -127,6 +127,18 @@ export async function listarCcpRecibidos(tenantId: string, limite = 50): Promise
 }
 
 /**
+ * A37-P-04 (A3-01): el PDF o el XML guardados de un CCP timbrado, SOLO si la fila es de la flota (el id solo no basta: se filtra por
+ * tenant). `null` = no existe en esta flota. Lanza si no se puede leer o descargar (un «no pude» no se vuelve «no hay»).
+ */
+export async function descargarCcp(tenantId: string, id: string, tipo: 'pdf' | 'xml'): Promise<{ bytes: Uint8Array; nombre: string; mime: string } | null> {
+  const fila = await leerPorId(tenantId, id);
+  if (!fila) return null;
+  const ruta = tipo === 'pdf' ? fila.pdfRuta : fila.xmlRuta;
+  const bytes = await descargarArchivo(ruta);
+  return { bytes, nombre: `ccp-${fila.uuid}.${tipo}`, mime: tipo === 'pdf' ? 'application/pdf' : 'application/xml' };
+}
+
+/**
  * A37-A3-01: enciende/apaga «responder al cliente con el CCP timbrado» (`cp_salida_config.responder_ccp`, 0794). Crea la fila
  * de configuración con sus valores de arranque si no existía. `sin_migracion` si la 0794 no está aplicada.
  */

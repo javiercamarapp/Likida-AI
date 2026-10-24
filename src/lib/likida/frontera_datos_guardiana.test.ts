@@ -612,6 +612,7 @@ const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_336;
 // Lote M-E-cartaporte-vigia-04 (A37-S58-03 y A37-S59-05): +5 llamadas (2,284 → 2,289), 0 archivos nuevos. `vigia/historial/repo.ts` (+2: lectura de la
 // importación previa y conteo de sus mensajes para rehacer una importación a medias) y `vigia/programa/repo.ts` (+3: `cargaPrevia`, `completarCarga` y
 // `cambiosDeCarga`, estado de la carga de la 0894). Funcionalidad nueva; cubiertas por `historial/repo.test.ts` y `programa/repo.test.ts`.
+// Auditoría 37, lote parciales (A37-P-06, medido con el barrido real): +1 llamada (2,284 → 2,285), `admin/negocio.ts`: `.rpc('corridas_fallidas_por_grupo')` (0870), la ventana de fallos por agente+flota; service_role, sin tenant porque es la consola cruzada del superadmin (cae a la lectura anterior si la función no existe).
 // Auditoría 37, lote agentes-legal-ia (medido con el barrido real): +2 llamadas (2,264 → 2,266). `candidatos_redactor.ts` suma 3 `.from(` (prospecto, cola_aprobacion, prospecto_contacto) y `runner.ts` pierde la suya (+2 netas); `sdr.ts` pasa de 3 a 3 (la lectura por prospecto se volvió lectura en lote). Todo por `acotada`.
 // LOTE A37 peajes-liquidación-graves (migración 0865): +5 llamadas (2,264 → 2,269), 0 archivos nuevos, medido con el barrido real. `jornada/repo.ts` +1:
 // `.rpc('asentar_declaracion_jornada')` (A37-S48-01; la 0865 sustituye la marca derivada bajo el lock del expediente; el INSERT anterior se conserva

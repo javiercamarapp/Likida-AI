@@ -74,6 +74,13 @@ export function SeccionCcp({ activa, filas, ver, acciones }: {
                   {f.destinoCorreo ? ` · cliente ${f.destinoCorreo}` : ' · sin correo del cliente'}
                   {f.respondidoEn ? ` · respondido ${fechaHoraMx(f.respondidoEn)}` : ''}
                 </p>
+                {/* A37-P-04: el PDF y el XML guardados, por la ruta autenticada y filtrada por flota (nunca una URL pública). */}
+                <p className="text-[12px] flex flex-wrap gap-3">
+                  {(['pdf', 'xml'] as const).map((tipo) => (
+                    <a key={tipo} className="underline" href={`/api/export/carta-porte-docs?ccp=${encodeURIComponent(f.id)}&archivo=${tipo}${ver.tenant ? `&tenant=${encodeURIComponent(ver.tenant)}` : ''}`}
+                      download aria-label={`Descargar el ${tipo.toUpperCase()} del CCP ${f.uuid}`}>Descargar {tipo.toUpperCase()}</a>
+                  ))}
+                </p>
                 {(f.estado === 'pendiente_confirmacion' || f.estado === 'error_envio') && (
                   <FormaAccion accion={acciones.confirmar} className="space-y-2">
                     {oculto}

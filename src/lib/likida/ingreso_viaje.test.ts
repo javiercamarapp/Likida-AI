@@ -25,7 +25,14 @@ describe('VACÍO NO ES CERO — la regla que sostiene todo el módulo', () => {
   it('un CERO TECLEADO sí es cero — es una medición', () => {
     // Un viaje de cortesía, o el tramo de regreso que se factura aparte.
     expect(V({ ingresoFlete: '0' }).ingresoFlete).toBe(0);
-    expect(V({ kmRecorridos: '0' }).kmRecorridos).toBe(0);
+  });
+
+  it('A37-P-03: km 0 o con decimales se rechaza con mensaje claro (la base exige entero 1..19999)', () => {
+    expect(() => V({ kmRecorridos: '0' })).toThrow(/entero entre 1 y 19,999/);
+    expect(() => V({ kmRecorridos: '12.5' })).toThrow(/entero entre 1 y 19,999/);
+    expect(() => V({ kmRecorridos: '20000' })).toThrow(DatoInvalido);
+    expect(V({ kmRecorridos: '1' }).kmRecorridos).toBe(1);
+    expect(V({ kmRecorridos: '19999' }).kmRecorridos).toBe(19999);
   });
 });
 
