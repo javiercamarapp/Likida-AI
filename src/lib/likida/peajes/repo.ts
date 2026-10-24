@@ -1159,6 +1159,13 @@ export async function anularDesgloseDb(tenantId: string, desgloseId: string, mot
       .eq('tenant_id', tenantId).eq('id', a.id), 'peajes.anular_huella');
     if (r.error) logger.error('peajes.anular_huella', { tenant: tenantId, err: r.error.message });
   }
+  // A37-A2-07: los reclamos PREPARADOS (aún no enviados) de un desglose anulado dejan de contar como pendientes (plazo, KPI
+  // «por vencer», totales): pasan a `rechazado` con la causa, lo que además libera el único parcial por categoría para
+  // reclamar de nuevo con el archivo correcto. Los ya ENVIADOS al proveedor no se tocan: son hechos externos que una persona decide.
+  const rec = await acotada(supabaseAdmin().from('peaje_reclamo')
+    .update({ estado: 'rechazado', notas: 'Anulado: el desglose de origen se anuló (archivo subido por error).', actualizado_en: ahora })
+    .eq('tenant_id', tenantId).eq('desglose_id', desgloseId).eq('estado', 'preparado'), 'peajes.anular_reclamos');
+  if (rec.error) logger.error('peajes.anular_reclamos', { tenant: tenantId, err: rec.error.message });
   return 'anulado';
 }
 

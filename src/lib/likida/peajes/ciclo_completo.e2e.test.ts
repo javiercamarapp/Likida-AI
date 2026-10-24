@@ -370,6 +370,28 @@ describe('DUPLICADO', () => {
   });
 });
 
+describe('A37-A2-07: anular un desglose cierra sus reclamos preparados', () => {
+  it('los preparados (nunca enviados) pasan a rechazado con la causa; los ya enviados no se tocan; los de otro desglose tampoco', async () => {
+    await atenderCorreoPeajes(TOKEN, correo('e1', [['corte.csv', 'adj1']]), deps);
+    await procesar();
+    const id = idDesglose();
+    const base = { tenant_id: T, categoria: 'doble_cobro', n_cruces: 2, monto_reclamado: 100, monto_acreditado: 0, fecha_cobro_mas_antiguo: '2026-08-05' };
+    db.tablas.peaje_reclamo = [
+      { ...base, id: 'r-prep', desglose_id: id, estado: 'preparado' },
+      { ...base, id: 'r-env', desglose_id: id, estado: 'enviado', enviado_en: '2026-09-01' },
+      { ...base, id: 'r-otro', desglose_id: 'otro-desglose', estado: 'preparado' },
+      { ...base, id: 'r-ajeno', tenant_id: 'otra-flota', desglose_id: id, estado: 'preparado' },
+    ];
+    await datos.anularDesgloseDb(T, id, 'archivo equivocado', 'ana');
+    const por = (rid: string) => db.tablas.peaje_reclamo.find((r) => r.id === rid)!;
+    expect(por('r-prep').estado).toBe('rechazado');
+    expect(String(por('r-prep').notas)).toMatch(/desglose.*anul/i);
+    expect(por('r-env').estado).toBe('enviado');
+    expect(por('r-otro').estado).toBe('preparado');
+    expect(por('r-ajeno').estado).toBe('preparado');
+  });
+});
+
 describe('FUERA DE ORDEN', () => {
   it('anulan el desglose ANTES de que salga el aviso pendiente: el barrido ya no avisa', async () => {
     telefonoDinero = { [T]: null };
