@@ -127,7 +127,11 @@ export function leerCifraImportada(v: unknown, esDinero = true): number | null |
     : limpio.replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.');
   // A37-L-07: solo dígitos con punto decimal (nada de '1e4' ni '0x10') y, si es DINERO, a lo más dos
   // decimales: '1.234' (¿mil doscientos treinta y cuatro o 1.23?) es ambiguo y no se adivina ni se redondea.
-  if (!(esDinero ? /^\d+(\.\d{1,2})?$/ : /^\d+(\.\d+)?$/).test(normal)) return 'ilegible';
+  // eslint-disable-next-line security/detect-unsafe-regex -- celda de una hoja, acotada; sin cuantificadores anidados sobre los mismos caracteres
+  const SOLO_DINERO = /^\d+(\.\d{1,2})?$/;
+  // eslint-disable-next-line security/detect-unsafe-regex -- idem
+  const SOLO_NUMERO = /^\d+(\.\d+)?$/;
+  if (!(esDinero ? SOLO_DINERO : SOLO_NUMERO).test(normal)) return 'ilegible';
   const n = Number(normal);
   return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : 'ilegible';
 }

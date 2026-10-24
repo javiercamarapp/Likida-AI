@@ -80,6 +80,7 @@ function opcional(crudo: string, campo: string, tope: number, esDinero = false):
   const limpio = t.replace(/\s/g, '').replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.');
   // A37-L-05: solo dígitos con punto decimal opcional (y signo, para dar el mensaje de «negativo»).
   // `Number()` pelado aceptaba '1e4' ($10,000), '0x10' ($16) y 'Infinity'.
+  // eslint-disable-next-line security/detect-unsafe-regex -- entrada acotada por el campo de texto y sin cuantificadores anidados sobre los mismos caracteres
   if (!/^-?\d+(\.\d+)?$/.test(limpio)) throw new DatoInvalido(`${campo} tiene que ser un número.`);
   const n = Number(limpio);
 
