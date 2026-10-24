@@ -169,7 +169,7 @@ describe('leerPosiciones', () => {
     if (!completa.ok) throw new Error(completa.motivo);
     expect(completa.completa).toBe(true);
     // A37-S39-03: el cursor retrocede un solape fijo del máximo leído.
-    expect(completa.cursor).toBe(new Date(Date.parse(todas[29].fecha) - SOLAPE_CURSOR_POSICIONES_MS).toISOString());
+    expect(completa.cursor).toBe(new Date(Date.parse(String(todas[29].fecha)) - SOLAPE_CURSOR_POSICIONES_MS).toISOString());
 
     const parcial = await leerPosiciones(sesionDe(origen(todas, 10).http), VENTANA, { paginacion: { tipo: 'pagina', tamano: 10 }, maxPaginas: 1 });
     if (!parcial.ok) throw new Error(parcial.motivo);
