@@ -203,7 +203,12 @@ interface CandidatoFolio {
 }
 
 /** «viaje», «folio», «guía», «orden», «#»… justo antes del número. */
-const CONTEXTO_FOLIO = /(?:FOLIO|VIAJE|GU[ÍI]A|[ÓO]RDEN|TICKET|REMISI[ÓO]N|EMBARQUE|SERVICIO|ENV[ÍI]O|N[ÚU]MERO|NUM\.?|NO\.?|#)\s*(?:DE\s+)?[:#.]?\s*$/;
+const PALABRA_FOLIO = /(?:FOLIO|VIAJE|GU[ÍI]A|[ÓO]RDEN|TICKET|REMISI[ÓO]N|EMBARQUE|SERVICIO|ENV[ÍI]O|N[ÚU]MERO|NUM|NO)$/;
+function contextoFolio(antes: string): boolean {
+  if (/#\s*$/.test(antes)) return true;
+  const t = antes.replace(/[\s:#.]+$/, '').replace(/\sDE$/, '');
+  return PALABRA_FOLIO.test(t);
+}
 /** Una cantidad con unidad o de tiempo, justo después del número. */
 const CON_UNIDAD = /^\s*(?:CAJAS?|KGS?|KILOS?|TONS?|TONELADAS?|PIEZAS?|TARIMAS?|PALLETS?|UNIDADES|LITROS?|LTS?|PESOS|MXN|USD|KMS?|KIL[ÓO]METROS|METROS|BULTOS|PAQUETES|CARTONES|SACOS|HRS?|HORAS?|MIN|MINUTOS|D[ÍI]AS|MESES|A[ÑN]OS)(?![A-ZÁÉÍÓÚÜÑ])/;
 
@@ -214,7 +219,7 @@ const PALABRAS_COMUNES: ReadonlySet<string> = new Set(['A', 'AL', 'DE', 'DEL', '
 function pareceCantidadOFecha(digitos: string, antes: string, despues: string): boolean {
   if (CON_UNIDAD.test(despues)) return true;
   if (/\d[/.-]$/.test(antes) || /^[/-]\d/.test(despues)) return true;
-  return /^(?:19|20)\d{2}$/.test(digitos) && !CONTEXTO_FOLIO.test(antes);
+  return /^(?:19|20)\d{2}$/.test(digitos) && !contextoFolio(antes);
 }
 
 /**
@@ -246,7 +251,7 @@ function extraerCandidatos(texto: string): CandidatoFolio[] {
     } else if (/^\d+$/.test(crudo)) {
       // A37-S58-04: un número SOLO es folio fuerte con contexto de folio («viaje 88421»); un año, una hora o una cantidad con
       // unidad («20/10/2026», «1500 cajas», «las 1800») no. Si de verdad es su folio, igual coincide contra sus viajes.
-      agregar(completo, completo.length >= 4 && CONTEXTO_FOLIO.test(antes) && !CON_UNIDAD.test(despues));
+      agregar(completo, completo.length >= 4 && contextoFolio(antes) && !CON_UNIDAD.test(despues));
     } else {
       agregar(completo, true);
     }
