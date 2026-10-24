@@ -33,6 +33,8 @@ export interface DatosControl {
   lotes: LotePantalla[] | null;
   portales: PortalControlPantalla[];
   minimoParaAutonoma: number;
+  /** A37-S13-09: encender, cambiar límites y promover son del dueño; sin esto (contador) esos controles no se pintan. */
+  esDueno: boolean;
 }
 
 const VERIF: Record<PortalControlPantalla['verificacion'], string> = {
@@ -57,18 +59,20 @@ function Boton({ children, pendiente, peligro }: { children: React.ReactNode; pe
   );
 }
 
-function Interruptor({ encendida }: { encendida: boolean }) {
+function Interruptor({ encendida, esDueno }: { encendida: boolean; esDueno: boolean }) {
   const [rEn, encender, pEn] = useActionState(accionEncenderEmision, null);
   const [rAp, apagar, pAp] = useActionState(accionApagarEmision, null);
   useRespuesta(rEn); useRespuesta(rAp);
   return encendida ? (
     <form action={apagar}><Boton pendiente={pAp} peligro><ShieldOff width={12} height={12} className="inline mr-1 -mt-0.5" />Apagar la emisión real</Boton></form>
-  ) : (
+  ) : esDueno ? (
     <form action={encender}><Boton pendiente={pEn}><ShieldCheck width={12} height={12} className="inline mr-1 -mt-0.5" />Encender la emisión real</Boton></form>
+  ) : (
+    <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>La emisión real la enciende el dueño de la flota.</p>
   );
 }
 
-function Limites({ c }: { c: ControlPantalla | 'sin_fila' }) {
+function Limites({ c, esDueno }: { c: ControlPantalla | 'sin_fila'; esDueno: boolean }) {
   const [r, guardar, p] = useActionState(accionCambiarLimites, null);
   useRespuesta(r);
   const v = c === 'sin_fila' ? { maxMontoTicket: 1500, maxTicketsLote: 5, maxTicketsDia: 20, maxMontoDia: 20000 } : c;
@@ -77,6 +81,13 @@ function Limites({ c }: { c: ControlPantalla | 'sin_fila' }) {
       <input name={name} defaultValue={valor} inputMode="decimal" className="rounded border px-2 py-1 text-[12px] w-28" style={{ borderColor: 'var(--line2)', color: 'var(--ink)' }} />
     </label>
   );
+  if (!esDueno) {
+    return (
+      <p className="text-[11.5px] mt-3" style={{ color: 'var(--muted)' }}>
+        Límites: {mxn(v.maxMontoTicket)} por ticket · {v.maxTicketsLote} tickets por lote · {v.maxTicketsDia} por día · {mxn(v.maxMontoDia)} por día. Los cambia el dueño de la flota.
+      </p>
+    );
+  }
   return (
     <form action={guardar} className="flex flex-wrap items-end gap-3 mt-3">
       {campo('maxMontoTicket', 'Monto máx. por ticket', v.maxMontoTicket)}
@@ -108,7 +119,7 @@ function FilaLote({ l }: { l: LotePantalla }) {
   );
 }
 
-function FilaPortalControl({ f, minimo }: { f: PortalControlPantalla; minimo: number }) {
+function FilaPortalControl({ f, minimo, esDueno }: { f: PortalControlPantalla; minimo: number; esDueno: boolean }) {
   const [rP, promover, pP] = useActionState(accionPromoverPortal, null);
   const [rD, devolver, pD] = useActionState(accionDevolverPortal, null);
   useRespuesta(rP); useRespuesta(rD);
@@ -121,6 +132,8 @@ function FilaPortalControl({ f, minimo }: { f: PortalControlPantalla; minimo: nu
       </span>
       {f.fase === 'autonoma' ? (
         <form action={devolver}><input type="hidden" name="comercio" value={f.clave} /><Boton pendiente={pD}>Volver a supervisado</Boton></form>
+      ) : !esDueno ? (
+        <span className="text-[11px]" style={{ color: 'var(--faint)' }}>Un portal lo pasa a autónomo el dueño de la flota.</span>
       ) : (
         <form action={promover} className="flex items-center gap-2">
           <input type="hidden" name="comercio" value={f.clave} />
@@ -133,7 +146,7 @@ function FilaPortalControl({ f, minimo }: { f: PortalControlPantalla; minimo: nu
 }
 
 export function SeccionControlEmision({ datos }: { datos: DatosControl }) {
-  const { control, lotes, portales, minimoParaAutonoma } = datos;
+  const { control, lotes, portales, minimoParaAutonoma, esDueno } = datos;
   const encendida = control !== null && control !== 'sin_fila' && control.emisionReal;
   return (
     <section className="card p-4" aria-label="Control de la emisión real">
@@ -149,8 +162,8 @@ export function SeccionControlEmision({ datos }: { datos: DatosControl }) {
           <p className="text-[13px] mt-3">
             Estado: <strong style={{ color: encendida ? 'var(--ok)' : 'var(--muted)' }}>{encendida ? 'Emisión real ENCENDIDA' : 'Ensayo (llena el portal y no emite)'}</strong>
           </p>
-          <div className="mt-2"><Interruptor encendida={encendida} /></div>
-          <Limites c={control} />
+          <div className="mt-2"><Interruptor encendida={encendida} esDueno={esDueno} /></div>
+          <Limites c={control} esDueno={esDueno} />
         </>
       )}
       <h3 className="text-[12.5px] font-medium mt-4">Lotes por confirmar</h3>
@@ -165,7 +178,7 @@ export function SeccionControlEmision({ datos }: { datos: DatosControl }) {
       {portales.length === 0 ? (
         <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Ningún portal ha emitido todavía.</p>
       ) : (
-        <ul>{portales.map((f) => <FilaPortalControl key={f.clave} f={f} minimo={minimoParaAutonoma} />)}</ul>
+        <ul>{portales.map((f) => <FilaPortalControl key={f.clave} f={f} minimo={minimoParaAutonoma} esDueno={esDueno} />)}</ul>
       )}
     </section>
   );

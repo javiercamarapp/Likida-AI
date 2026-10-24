@@ -13,7 +13,7 @@ const BASE = { maxMontoTicket: 1500, maxTicketsLote: 5, maxTicketsDia: 20, maxMo
 const lote = { id: 'l1', comercio: 'enerser', nombre: 'Enerser', tickets: 3, montoTotal: 1200, estado: 'propuesto', propuestoEn: '2026-10-02T10:00:00Z', expiraEn: '2026-10-04T10:00:00Z' };
 const portal = (o = {}) => ({ clave: 'enerser', nombre: 'Enerser', verificacion: 'verificado' as const, fase: 'supervisada' as const, emisionesConfirmadas: 1, ...o });
 const render = (o: Partial<Parameters<typeof SeccionControlEmision>[0]['datos']> = {}) =>
-  renderToStaticMarkup(<SeccionControlEmision datos={{ control: { emisionReal: false, ...BASE }, lotes: [], portales: [], minimoParaAutonoma: 3, ...o }} />);
+  renderToStaticMarkup(<SeccionControlEmision datos={{ control: { emisionReal: false, ...BASE }, lotes: [], portales: [], minimoParaAutonoma: 3, esDueno: true, ...o }} />);
 
 describe('SeccionControlEmision (0542)', () => {
   it('apagada: dice ensayo y ofrece ENCENDER (nunca «apagar»)', () => {
@@ -54,5 +54,17 @@ describe('SeccionControlEmision (0542)', () => {
   it('portal autónomo: ofrece volver a supervisado; un mapeo obsoleto se avisa', () => {
     const h = render({ portales: [portal({ fase: 'autonoma', emisionesConfirmadas: 4, verificacion: 'obsoleto' })] });
     expect(h).toContain('Volver a supervisado'); expect(h).toContain('hay que volver a verificarlo');
+  });
+  it('A37-S13-09: para el contador no hay Encender, Guardar límites ni Pasar a autónomo; sí Apagar, Confirmar, Rechazar y Volver a supervisado', () => {
+    const apagada = render({ esDueno: false, lotes: [lote], portales: [portal()] });
+    expect(apagada).not.toContain('Encender la emisión real');
+    expect(apagada).not.toContain('Guardar límites');
+    expect(apagada).not.toContain('Pasar a autónomo');
+    expect(apagada).toContain('Confirmar lote');
+    const encendida = render({ esDueno: false, control: { emisionReal: true, ...BASE }, portales: [portal({ fase: 'autonoma', emisionesConfirmadas: 4 })] });
+    expect(encendida).toContain('Apagar la emisión real');
+    expect(encendida).toContain('Volver a supervisado');
+    expect(encendida).not.toContain('Guardar límites');
+    expect(apagada).toContain('dueño');
   });
 });

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireSessionTenant } from '@/lib/auth/guard';
-import { puedeVerArea } from '@/lib/auth/visibilidad';
+import { puedeVerArea, esDuenoDeFlota } from '@/lib/auth/visibilidad';
 import {
   encenderEmisionReal, apagarEmisionReal, cambiarLimites, decidirLote, promoverPortal, devolverASupervisada,
   type ResultadoOp,
@@ -19,13 +19,19 @@ async function sesion() {
   const s = await requireSessionTenant(RUTA);
   return puedeVerArea(s.rol, 'dinero') ? s : null;
 }
+/** A37-S13-09: encender la emisión, cambiar límites y promover un portal son del DUEÑO (la base lo exige: `flota_admin`). Apagar, decidir un lote y devolver a supervisada admiten también al contador. */
+async function sesionDueno() {
+  const s = await sesion();
+  return s && esDuenoDeFlota(s.rol) ? s : null;
+}
 const clave = (fd: FormData, campo: string) => String(fd.get(campo) ?? '').trim().slice(0, 64);
 const numero = (fd: FormData, campo: string) => Number(String(fd.get(campo) ?? '').replace(/[,\s$]/g, ''));
 const responder = (r: ResultadoOp): RespuestaControl => { revalidatePath(RUTA); return r.ok ? { ok: r.mensaje } : { error: r.motivo }; };
 const SIN_PERMISO: RespuestaControl = { error: 'Tu rol no puede decidir sobre la emisión de facturas de la flota.' };
+const SOLO_DUENO: RespuestaControl = { error: 'Solo el dueño de la flota hace esto: encender la emisión real, cambiar los límites o pasar un portal a autónomo.' };
 
 export async function accionEncenderEmision(_p: RespuestaControl | null, _fd: FormData): Promise<RespuestaControl> {
-  const s = await sesion(); if (!s) return SIN_PERMISO;
+  const s = await sesionDueno(); if (!s) return SOLO_DUENO;
   return responder(await encenderEmisionReal(s.tenantId, s.userId));
 }
 export async function accionApagarEmision(_p: RespuestaControl | null, _fd: FormData): Promise<RespuestaControl> {
@@ -33,7 +39,7 @@ export async function accionApagarEmision(_p: RespuestaControl | null, _fd: Form
   return responder(await apagarEmisionReal(s.tenantId, s.userId));
 }
 export async function accionCambiarLimites(_p: RespuestaControl | null, fd: FormData): Promise<RespuestaControl> {
-  const s = await sesion(); if (!s) return SIN_PERMISO;
+  const s = await sesionDueno(); if (!s) return SOLO_DUENO;
   return responder(await cambiarLimites(s.tenantId, s.userId, {
     maxMontoTicket: numero(fd, 'maxMontoTicket'), maxTicketsLote: numero(fd, 'maxTicketsLote'),
     maxTicketsDia: numero(fd, 'maxTicketsDia'), maxMontoDia: numero(fd, 'maxMontoDia'),
@@ -46,7 +52,7 @@ export async function accionDecidirLote(_p: RespuestaControl | null, fd: FormDat
   return responder(await decidirLote(s.tenantId, s.userId, id, clave(fd, 'decision') === 'confirmar', clave(fd, 'motivo') || undefined));
 }
 export async function accionPromoverPortal(_p: RespuestaControl | null, fd: FormData): Promise<RespuestaControl> {
-  const s = await sesion(); if (!s) return SIN_PERMISO;
+  const s = await sesionDueno(); if (!s) return SOLO_DUENO;
   const c = clave(fd, 'comercio'); if (!c) return { error: 'Falta el portal.' };
   return responder(await promoverPortal(s.tenantId, s.userId, c));
 }
