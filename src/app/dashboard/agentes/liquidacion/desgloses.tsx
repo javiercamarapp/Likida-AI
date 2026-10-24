@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Mail, AlertTriangle, Route } from 'lucide-react';
-import { fechaCorta, numero, hoyMx, fechaHoraMx } from '@/lib/formato';
+import { fechaCorta, numero, hoyMx, inicioDiaMx, fechaHoraMx } from '@/lib/formato';
 import { EstadoVacio } from '@/app/admin/ui/kit';
 import { ESTILO_CONTROL } from '@/app/admin/ui/forma';
 import { dinero } from '@/lib/likida/liquidacion_externa/presentacion';
@@ -219,6 +219,8 @@ const ROTULO_FILTRO: Record<FiltroDesglose, string> = {
 
 // ── La sección ─────────────────────────────────────────────────────────────
 
+const AYUDA_VENTANA = ' Al abrirla, la lista se limita a esos 30 días.';
+
 const CLASE_CONTROL = 'text-[12.5px] rounded-lg px-2 py-1.5 min-w-[9rem]';
 
 function query(contexto: Array<[string, string]>, extra: Array<[string, string]> = []): string {
@@ -254,6 +256,8 @@ export async function SeccionDesgloses(p: DesglosesProps) {
 
   const { fichas, filas, sinPoliza, siguiente, sinPolizaTruncada } = lectura;
   const hoy = hoyMx();
+  // A37-S14-04: las fichas de entregas cuentan los últimos 30 días (hoy y los 29 anteriores, como `fichasDesgloses`): el enlace abre la lista de esa MISMA ventana.
+  const desde30 = hoyMx(new Date(Date.parse(inicioDiaMx(hoy)) - 29 * 24 * 3600 * 1000));
   const filtrando = !!(p.filtro || p.desde || p.hasta);
   const verSinPoliza = p.filtro === 'sin_poliza';
 
@@ -273,12 +277,12 @@ export async function SeccionDesgloses(p: DesglosesProps) {
 
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-2 mb-3">
         <Ficha etiqueta="Recibidos hoy" valor={fichas.recibidosHoy} ayuda="Desgloses que llegaron hoy del sistema de tu empresa." href={query(p.contexto)} />
-        <Ficha etiqueta="Enviados" valor={fichas.enviados} ayuda="Correos que ya salieron y esperan confirmación de entrega."
-          href={query(p.contexto, [['des_estado', 'enviado']])} />
-        <Ficha etiqueta="Entregados" valor={fichas.entregados} ayuda="Correos que el buzón de destino ya recibió."
-          href={query(p.contexto, [['des_estado', 'entregado']])} />
-        <Ficha etiqueta="Rebotados" valor={fichas.rebotados} tono="bad" ayuda="Correos que no llegaron. Corrige la dirección y reenvía."
-          href={query(p.contexto, [['des_estado', 'rebotado']])} />
+        <Ficha etiqueta="Enviados · 30 días" valor={fichas.enviados} ayuda={`Correos que salieron en los últimos 30 días y esperan confirmación de entrega. Se cuenta un correo por destinatario; la lista de abajo cuenta desgloses.${AYUDA_VENTANA}`}
+          href={query(p.contexto, [['des_estado', 'enviado'], ['des_desde', desde30]])} />
+        <Ficha etiqueta="Entregados · 30 días" valor={fichas.entregados} ayuda={`Correos de los últimos 30 días que el buzón de destino ya recibió. Se cuenta un correo por destinatario; la lista de abajo cuenta desgloses.${AYUDA_VENTANA}`}
+          href={query(p.contexto, [['des_estado', 'entregado'], ['des_desde', desde30]])} />
+        <Ficha etiqueta="Rebotados · 30 días" valor={fichas.rebotados} tono="bad" ayuda={`Correos de los últimos 30 días que no llegaron. Corrige la dirección y reenvía. Se cuenta un correo por destinatario; la lista de abajo cuenta desgloses.${AYUDA_VENTANA}`}
+          href={query(p.contexto, [['des_estado', 'rebotado'], ['des_desde', desde30]])} />
         <Ficha etiqueta="Retenidos" valor={fichas.retenidos} tono="bad" ayuda="Desgloses detenidos antes de enviarse (por ejemplo, neto negativo)."
           href={query(p.contexto, [['des_estado', 'retenido']])} />
         <Ficha etiqueta="Sin póliza" valor={fichas.sinPoliza} tono="bad" ayuda="Bitácoras que esperan su póliza para poder enviarse."

@@ -53,6 +53,15 @@ export function puedeVerArea(rol: string, area: Area): boolean {
 }
 
 /**
+ * ¿Es el dueño de la flota (o el superadmin que la administra)? Lo que la base reserva a `flota_admin` (encender la emisión
+ * real de facturas, cambiar sus límites, pasar un portal a autónomo) se OFRECE solo a este rol: el contador ve dinero, pero
+ * un botón que la base va a rechazar es ruido y deja intentos fallidos en la bitácora (A37-S13-09).
+ */
+export function esDuenoDeFlota(rol: string): boolean {
+  return rol === 'flota_admin' || rol === 'superadmin';
+}
+
+/**
  * A qué área pertenece cada ruta de /dashboard.
  *
  * Explícito y no por prefijo a propósito: una ruta nueva que nadie clasifique

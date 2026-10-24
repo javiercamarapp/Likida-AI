@@ -33,7 +33,9 @@ vi.mock('@/lib/likida/mesa_control', async (importar) => ({
   reescalarDesdeMesa: dobles.reescalarDesdeMesa,
 }));
 
+import { readFileSync } from 'node:fs';
 import { FormaConAviso } from '../../admin/ui/forma';
+import { BotonAccionMesa } from './boton-accion';
 import PaginaMesaControl from './page';
 
 function formularios(nodo: ReactNode, salida: Elemento[] = []): Elemento[] {
@@ -50,6 +52,15 @@ function formasConAviso(nodo: ReactNode, salida: Elemento[] = []): Elemento[] {
   formasConAviso(nodo.props.children as ReactNode, salida);
   return salida;
 }
+
+function botonesMesa(nodo: ReactNode, salida: Elemento[] = []): Elemento[] {
+  if (Array.isArray(nodo)) { for (const hijo of nodo) botonesMesa(hijo, salida); return salida; }
+  if (!isValidElement<Record<string, unknown>>(nodo)) return salida;
+  if (nodo.type === BotonAccionMesa) salida.push(nodo);
+  botonesMesa(nodo.props.children as ReactNode, salida);
+  return salida;
+}
+type Accion = (previo: unknown, fd: FormData) => Promise<{ ok?: string; error?: string } | null>;
 
 const SP = Promise.resolve({});
 const fd = (campos: Record<string, string>) => { const f = new FormData(); for (const [k, v] of Object.entries(campos)) f.set(k, v); return f; };
@@ -75,6 +86,7 @@ it('una lectura caída no ofrece botones de intervención — no se decide sobre
   dobles.listarMesaAsistencia.mockRejectedValueOnce(new Error('caída'));
   const pagina = await PaginaMesaControl({ searchParams: SP });
   expect(formularios(pagina)).toHaveLength(0);
+  expect(botonesMesa(pagina)).toHaveLength(0);
   expect(formasConAviso(pagina)).toHaveLength(0);
 });
 
@@ -82,18 +94,34 @@ it('tomar el control: manda tenant/usuario de la SESIÓN, id por el form', async
   dobles.listarMesaAsistencia.mockResolvedValue([INC]);
   dobles.tomarControlMesa.mockResolvedValue({ ok: true });
   const pagina = await PaginaMesaControl({ searchParams: SP });
-  const [tomarControl] = formularios(pagina);
-  await (tomarControl.props.action as (fd: FormData) => Promise<void>)(fd({ id: 'i-1', tenantId: 'OTRO' }));
+  const [tomarControl] = botonesMesa(pagina);
+  await (tomarControl.props.accion as Accion)(null, fd({ id: 'i-1', tenantId: 'OTRO' }));
   expect(dobles.tomarControlMesa).toHaveBeenCalledWith('t-1', 'i-1', 'u-1');
   expect(dobles.revalidatePath).toHaveBeenCalledWith('/dashboard/asistencia');
+});
+
+it('A37-S16-06: si la mesa rechaza tomar el control (ya lo tiene otra persona, o falla la base), el error LLEGA a la pantalla', async () => {
+  dobles.listarMesaAsistencia.mockResolvedValue([INC]);
+  dobles.tomarControlMesa.mockResolvedValue({ error: 'Ya la tomó otra persona.' });
+  const pagina = await PaginaMesaControl({ searchParams: SP });
+  const [tomarControl] = botonesMesa(pagina);
+  expect(await (tomarControl.props.accion as Accion)(null, fd({ id: 'i-1' }))).toEqual({ error: 'Ya la tomó otra persona.' });
+});
+
+it('A37-S16-06: lo mismo al subir de nivel', async () => {
+  dobles.listarMesaAsistencia.mockResolvedValue([INC]);
+  dobles.reescalarDesdeMesa.mockResolvedValue({ error: 'No se pudo subir el nivel.' });
+  const pagina = await PaginaMesaControl({ searchParams: SP });
+  const [, reescalar] = botonesMesa(pagina);
+  expect(await (reescalar.props.accion as Accion)(null, fd({ id: 'i-1', nivel: '2' }))).toEqual({ error: 'No se pudo subir el nivel.' });
 });
 
 it('reescalar: manda tenant/usuario de la SESIÓN, id y nivel por el form', async () => {
   dobles.listarMesaAsistencia.mockResolvedValue([INC]);
   dobles.reescalarDesdeMesa.mockResolvedValue({ ok: true });
   const pagina = await PaginaMesaControl({ searchParams: SP });
-  const [, reescalar] = formularios(pagina);
-  await (reescalar.props.action as (fd: FormData) => Promise<void>)(fd({ id: 'i-1', nivel: '2', tenantId: 'OTRO' }));
+  const [, reescalar] = botonesMesa(pagina);
+  await (reescalar.props.accion as Accion)(null, fd({ id: 'i-1', nivel: '2', tenantId: 'OTRO' }));
   expect(dobles.reescalarDesdeMesa).toHaveBeenCalledWith('t-1', 'i-1', 'u-1', 2);
 });
 
@@ -129,16 +157,23 @@ it('cerrar con nota: un error de la mesa (p. ej. sin control tomado) llega verba
 it.each(['contador', 'vendedor'])('la puerta compartida gate() rechaza a %s en las tres acciones, aunque se invoquen directo', async (rol) => {
   dobles.listarMesaAsistencia.mockResolvedValue([INC]);
   const pagina = await PaginaMesaControl({ searchParams: SP });
-  const [tomarControl, reescalar] = formularios(pagina);
+  const [tomarControl, reescalar] = botonesMesa(pagina);
   const [cerrar] = formasConAviso(pagina);
   sesion = { tenantId: 't-1', rol, userId: 'u-1' };
 
-  await (tomarControl.props.action as (fd: FormData) => Promise<void>)(fd({ id: 'i-1' }));
-  await (reescalar.props.action as (fd: FormData) => Promise<void>)(fd({ id: 'i-1', nivel: '2' }));
+  expect(await (tomarControl.props.accion as Accion)(null, fd({ id: 'i-1' }))).toEqual({ error: 'Tu rol no puede intervenir desde la mesa de control.' });
+  expect(await (reescalar.props.accion as Accion)(null, fd({ id: 'i-1', nivel: '2' }))).toEqual({ error: 'Tu rol no puede intervenir desde la mesa de control.' });
   const r = await (cerrar.props.accion as (previo: unknown, fd: FormData) => Promise<{ error?: string }>)(null, fd({ id: 'i-1', nota: 'x' }));
 
   expect(r).toEqual({ error: 'Tu rol no puede intervenir desde la mesa de control.' });
   expect(dobles.tomarControlMesa).not.toHaveBeenCalled();
   expect(dobles.reescalarDesdeMesa).not.toHaveBeenCalled();
   expect(dobles.resolverDesdeMesa).not.toHaveBeenCalled();
+});
+
+it('A37-S16-07: gate() no es una server action (ni endpoint invocable): vive a nivel de módulo, sin \'use server\'', () => {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- lee la fuente del propio repo; la ruta es constante.
+  const fuente = readFileSync(new URL('./page.tsx', import.meta.url), 'utf8');
+  expect(fuente).not.toMatch(/function gate\([^)]*\)[^{]*\{\s*'use server'/);
+  expect(fuente).toMatch(/^async function gate\(/m);
 });

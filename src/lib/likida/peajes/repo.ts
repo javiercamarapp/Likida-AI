@@ -1001,6 +1001,11 @@ export function validarUrlPull(crudo: string): { ok: true; url: string } | { ok:
   return { ok: true, url: t };
 }
 
+/** `host:puerto` de una URL (minúsculas), o `null` si no se puede leer: dos `null` NO cuentan como el mismo host. */
+function hostDe(url: string): string | null {
+  try { return new URL(url).host.toLowerCase(); } catch { return null; }
+}
+
 /**
  * Configura (y enciende) el pull. El token, si se da, se guarda CIFRADO con el cofre;
  * sin `LIKIDA_COFRE_LLAVE` NO se guarda nada (un token en claro no es una opción).
@@ -1018,6 +1023,18 @@ export async function guardarPullPeajes(
     pull_url: v.url, pull_intervalo_min: entrada.intervaloMin, pull_activo: true, pull_proximo_en: new Date().toISOString(), pull_ultimo_error: null,
   };
   const token = entrada.token?.trim();
+  if (!token) {
+    // A37-S14-09: «sin token» significa CONSERVAR el que ya hay, pero solo mientras el destino sea el mismo host: con otro host se
+    // mandaría el Bearer anterior a un tercero. Ante duda (no se pudo leer lo vigente) tampoco se arriesga.
+    let actual: ConfigEntradas | null;
+    try { actual = await leerConfigEntradas(tenantId); } catch (e) {
+      logger.error('peajes.guardar_pull_lectura', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+      return { ok: false, motivo: 'No se pudo comprobar la configuración vigente. Inténtalo de nuevo.' };
+    }
+    if (actual?.pullConCredencial && actual.pullUrl && hostDe(actual.pullUrl) !== hostDe(v.url)) {
+      return { ok: false, motivo: 'Cambiaste el servidor de la consulta: el token guardado era del anterior y no se reutiliza. Escribe el token del servidor nuevo (o bórralo antes).' };
+    }
+  }
   if (token) {
     if (token.length > 500 || /[\r\n]/.test(token)) return { ok: false, motivo: 'El token no es válido (sin saltos de línea, hasta 500 caracteres).' };
     if (!cofreConfigurado()) return { ok: false, motivo: 'El cofre de credenciales no está configurado (LIKIDA_COFRE_LLAVE): no se puede guardar el token de forma segura.' };

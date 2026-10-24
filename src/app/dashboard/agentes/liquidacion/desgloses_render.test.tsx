@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
   SeccionDesgloses, destinosDe, cumpleFiltro, leerFiltroDesglose, leerDia, rotuloDestino, ayudaDestino,
@@ -139,6 +139,23 @@ describe('tres estados mezclados', () => {
 });
 
 describe('las fichas', () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('A37-S14-04: Enviados/Entregados/Rebotados rotulan su ventana de 30 días y su enlace abre la lista de esa misma ventana', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-15T18:00:00Z'));
+    const html = await pintar(ok([fila()]));
+    for (const t of ['Enviados · 30 días', 'Entregados · 30 días', 'Rebotados · 30 días']) expect(html).toContain(t);
+    // Retenidos / Sin póliza / Recibidos hoy no son de 30 días: no llevan el rótulo.
+    expect(html).not.toContain('Retenidos · 30');
+    expect(html).not.toContain('Sin póliza · 30');
+    // La ventana de la ficha (hoy y los 29 días anteriores) es la misma del filtro de la lista.
+    for (const estado of ['enviado', 'entregado', 'rebotado']) {
+      expect(html).toContain(`des_estado=${estado}&amp;des_desde=2026-09-16`);
+    }
+    expect(html).not.toMatch(/des_estado=retenido&amp;des_desde/);
+  });
+
   it('con números de verdad los pinta, con los seis rótulos', async () => {
     const html = await pintar(ok([fila()]));
     for (const t of ['Recibidos hoy', 'Enviados', 'Entregados', 'Rebotados', 'Retenidos', 'Sin póliza']) expect(html).toContain(t);
