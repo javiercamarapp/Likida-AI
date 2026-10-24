@@ -44,7 +44,7 @@ describe('normasPorTema', () => {
 
   it('lo sin_verificar sale declarado como NO afirmable, no escondido', () => {
     for (const tema of TEMAS_NORMATIVOS) {
-      for (const n of normasPorTema(tema)) {
+      for (const n of normasPorTema(tema, new Date('2026-06-01T12:00:00Z'))) {
         expect(n.afirmable).toBe(n.estado !== 'sin_verificar');
       }
     }
@@ -78,5 +78,30 @@ describe('normasPorTema', () => {
 
   it('un tema desconocido LANZA — vacío se leería como "no hay norma"', () => {
     expect(() => normasPorTema('tema_inventado')).toThrow(/tema desconocido/);
+  });
+});
+
+// A37-S50-04 — `exigibleHasta` lo lee alguien: la RFA 2026 vence el 2026-12-31.
+describe('normasPorTema — vencimiento (exigibleHasta)', () => {
+  const rfa = (hoy: string) => normasPorTema('viaticos_y_efectivo', new Date(hoy)).find((n) => n.norma_id === 'rfa-2026-2.2')!;
+
+  it('dentro del ejercicio: afirmable, no vencida, y expone ambas fechas', () => {
+    const n = rfa('2026-12-31T12:00:00Z');
+    expect(n.vencida).toBe(false);
+    expect(n.afirmable).toBe(true);
+    expect(n.exigible_desde).toBe('2026-02-18');
+    expect(n.exigible_hasta).toBe('2026-12-31');
+  });
+
+  it('el 1-ene-2027 (hora de México) la RFA 2026 ya NO es afirmable ni vigente', () => {
+    const n = rfa('2027-01-01T18:00:00Z');
+    expect(n.vencida).toBe(true);
+    expect(n.afirmable).toBe(false);
+  });
+
+  it('una norma sin exigibleHasta nunca vence', () => {
+    const l = normasPorTema('viaticos_y_efectivo', new Date('2031-01-01T12:00:00Z')).find((n) => n.norma_id === 'lisr-27-fr-III')!;
+    expect(l.vencida).toBe(false);
+    expect(l.exigible_hasta).toBeNull();
   });
 });

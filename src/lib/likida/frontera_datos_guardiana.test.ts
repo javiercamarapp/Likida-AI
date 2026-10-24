@@ -617,6 +617,7 @@ const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_336;
 // A37-S06-10 (+1, 2284 → 2285): evals/page.tsx lee `corrida_id` del resultado en la base en vez de confiar en el formulario.
 // +5 (lote a37 c-seguridad-auth-02): carta-porte-xml/route.ts +2 (leer/fijar el IdCCP del viaje, A37-S10-05), el pool de
 // descargas de correo/entrante (`Array.from(`, A37-S09-04) y 2 más que mide el patrón en los repos del lote.
+// A37-S50-06 (+1): `avisarAlChofer` reclama `avisado_en` antes de enviar (UPDATE condicional) y lo devuelve si no sale: 2 `.from` donde había 1.
 // Auditoría 37, lote agentes-legal-ia (medido con el barrido real): +2 llamadas (2,264 → 2,266). `candidatos_redactor.ts` suma 3 `.from(` (prospecto, cola_aprobacion, prospecto_contacto) y `runner.ts` pierde la suya (+2 netas); `sdr.ts` pasa de 3 a 3 (la lectura por prospecto se volvió lectura en lote). Todo por `acotada`.
 // LOTE A37 peajes-liquidación-graves (migración 0865): +5 llamadas (2,264 → 2,269), 0 archivos nuevos, medido con el barrido real. `jornada/repo.ts` +1:
 // `.rpc('asentar_declaracion_jornada')` (A37-S48-01; la 0865 sustituye la marca derivada bajo el lock del expediente; el INSERT anterior se conserva

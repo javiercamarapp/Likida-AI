@@ -126,8 +126,26 @@ function redact(v: unknown): unknown {
   if (typeof v === 'string') return redactarTexto(v);
   if (v && typeof v === 'object') {
     // try/catch: objetos circulares o no-serializables NO deben romper el log. ME-10.
+    //
+    // A37-S60-01: se redacta VALOR POR VALOR (cadenas y llaves) mediante el
+    // reemplazador de JSON.stringify, no sobre el JSON ya serializado: sobre el
+    // texto, un número sin comillas de 10/16/18 dígitos (epoch en segundos,
+    // bytes, un decimal largo) se volvía `[TEL]` dentro del JSON, JSON.parse
+    // lanzaba y se perdía TODO el meta. Los `number` no son dato personal.
     try {
-      return JSON.parse(redact(JSON.stringify(v)) as string);
+      return JSON.parse(
+        JSON.stringify(v, function (_k, val: unknown) {
+          if (typeof val === 'string') return redactarTexto(val);
+          if (val && typeof val === 'object' && !Array.isArray(val)) {
+            const out: Record<string, unknown> = {};
+            for (const [k, x] of Object.entries(val as Record<string, unknown>)) {
+              out[redactarTexto(k)] = x;
+            }
+            return out;
+          }
+          return val;
+        }),
+      );
     } catch {
       return '[unserializable]';
     }

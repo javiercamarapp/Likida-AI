@@ -34,6 +34,8 @@ export interface CuadreInput {
   gastos: Gasto[];
   politica: PoliticaGasto[];
   ruta?: string;
+  /** Origen del viaje: junto con `ruta` (destino) permite casar políticas «origen - destino». */
+  rutaOrigen?: string;
   /** Umbral de confianza de OCR bajo el cual se marca "revisar". Default 0.85. */
   umbralConfianza?: number;
   /** RFC de la empresa: el receptor de cada CFDI debe coincidir (no el chofer). */
@@ -114,11 +116,37 @@ export interface CuadreInput {
   anioEjercicio?: string;
 }
 
-function politicaPara(concepto: string, ruta: string | undefined, pol: PoliticaGasto[]): PoliticaGasto | undefined {
+/** Plaza comparable: sin acentos/mayúsculas/espacios de más y SIN el «, Estado» final. */
+function plazaClave(s: string | undefined): string {
+  const t = strip_accents((s ?? '').toLowerCase()).replace(/\s+/g, ' ').trim();
+  return t.replace(/,\s*[^,]+$/, '').trim();
+}
+
+/**
+ * A37-S40-04: la ruta de una política y la del viaje no tenían un formato común
+ * (la UI muestra «CDMX - Nuevo Laredo, Tamaulipas»; el motor recibía solo el
+ * destino y comparaba con `===`, sin normalizar), así que una regla por ruta se
+ * ignoraba en silencio. Coincide si, normalizada, la ruta de la regla es: el
+ * destino solo, o «origen<sep>destino» con ambas plazas iguales a las del viaje.
+ * Lo que no se reconoce NO coincide (cae a la regla general): jamás se aplica un
+ * tope de otra ruta por parecido.
+ */
+function rutaCoincide(regla: string, origen: string | undefined, destino: string | undefined): boolean {
+  if (!destino) return false;
+  const d = plazaClave(destino);
+  if (!d) return false;
+  if (plazaClave(regla) === d) return true;
+  const partes = regla.split(/\s+(?:-|–|—|→|->|>|\|)\s+|\s*(?:→|->|\|)\s*/);
+  if (partes.length !== 2 || !origen) return false;
+  const o = plazaClave(origen);
+  return o !== '' && plazaClave(partes[0]) === o && plazaClave(partes[1]) === d;
+}
+
+function politicaPara(concepto: string, ruta: string | undefined, pol: PoliticaGasto[], origen?: string): PoliticaGasto | undefined {
   const c = strip_accents(concepto.toLowerCase());
   // Preferir una política específica de la ruta; si no, la general del concepto.
   const dela = pol.filter((p) => strip_accents(p.concepto.toLowerCase()) === c);
-  return dela.find((p) => p.ruta && ruta && p.ruta === ruta) ?? dela.find((p) => !p.ruta);
+  return dela.find((p) => p.ruta && ruta && (p.ruta === ruta || rutaCoincide(p.ruta, origen, ruta))) ?? dela.find((p) => !p.ruta);
 }
 
 /** Conceptos que la ley trata como viático (LISR 28-V / RLISR 57). */
@@ -1215,7 +1243,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       diferencias.push({ tipo: 'folio_verificar', concepto: g.concepto, monto: 0, nota: `El folio del ticket de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} (${sanitizarFolio(g.folio)}) se leyó con baja confianza — verifícalo antes de facturarlo en el portal de la gasolinera.`, gastoId: g.id });
     }
 
-    const pol = politicaPara(g.concepto, input.ruta, input.politica);
+    const pol = politicaPara(g.concepto, input.ruta, input.politica, input.rutaOrigen);
     if (pol?.topeMonto != null && g.monto > pol.topeMonto) {
       diferencias.push({
         tipo: 'sobre_politica', concepto: g.concepto, esperado: pol.topeMonto, real: g.monto,

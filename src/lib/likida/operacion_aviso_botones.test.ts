@@ -24,8 +24,8 @@ vi.mock('@/lib/supabase/admin', () => ({
       },
       update: (v: Record<string, unknown>) => {
         const nodo: Record<string, unknown> = {};
-        nodo.eq = () => nodo; nodo.is = () => nodo;
-        nodo.then = (r: (x: unknown) => unknown) => { actualizado.push(v); return Promise.resolve({ error: null }).then(r); };
+        nodo.eq = () => nodo; nodo.is = () => nodo; nodo.select = () => nodo;
+        nodo.then = (r: (x: unknown) => unknown) => { actualizado.push(v); return Promise.resolve({ data: [{ id: 'v-1' }], error: null }).then(r); };
         return nodo;
       },
     }),
@@ -74,6 +74,7 @@ describe('avisarAlChofer — N01 solo con la perilla', () => {
     CONFIG = { asignacionBotonesActiva: true };
     notificarAsignacionConBotones.mockResolvedValue({ enviado: false, motivo: 'plantilla en revisión' });
     await avisarAlChofer('t-1', 'o-1', 'v-1');
-    expect(actualizado).toEqual([]);
+    // A37-S50-06: se reclama antes de enviar y, al no salir, se DEVUELVE (avisado_en = null).
+    expect(actualizado.at(-1)).toMatchObject({ avisado_en: null });
   });
 });

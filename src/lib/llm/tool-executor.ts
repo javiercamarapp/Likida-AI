@@ -302,6 +302,18 @@ export async function executeTool(
         catch (e) { logger.error('tool.idempotencia_fallo', { name, err: e instanceof Error ? e.message : String(e) }); }
       }
     }
+    // A37-S60-04: una mutación cuyo plazo venció pero cuyo handler SIGUE vivo
+    // puede confirmarse después. Decirle al modelo «aborted due to timeout» lo
+    // lleva a afirmar que no se hizo y a que el operador repita (otro run, otra
+    // llave: segundo cierre concurrente). Estado explícito: en proceso.
+    if (tool.isMutation && toolSignal?.aborted && !handlerSettled) {
+      return {
+        success: false,
+        result: null,
+        error: 'la operación sigue en proceso y puede terminar en unos segundos; NO la repitas ni le digas al operador que falló: dile que se está procesando y que confirme en un minuto',
+        durationMs: Date.now() - started,
+      };
+    }
     return {
       success: false,
       result: null,

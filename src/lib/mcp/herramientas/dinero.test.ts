@@ -295,6 +295,17 @@ describe('herramientaPorFacturar.ejecutar', () => {
     expect(r.texto).toContain(`${numero(1)} comprobante sin factura por ${mxn(500)} en total.`);
   });
 
+  it('A37-S60-02: no afirma que el IVA de lo vencido ya no es acreditable (el derecho legal vive el ejercicio)', async () => {
+    getPorFacturar.mockResolvedValue([ticket({
+      caducidad: { diasRestantes: -3, vencido: true, urgente: false, desconocido: false },
+    })]);
+    const r = await herramientaPorFacturar.ejecutar('t1', {}, { alcanza: () => true });
+    expect(r.texto).not.toMatch(/ya no se va a poder acreditar/);
+    expect(r.texto).toContain('el portal del comercio ya no los factura');
+    expect(r.texto).toContain('durante el ejercicio');
+    expect(r.texto).toContain(`Vencidos: ${numero(1)} (${mxn(500)} de gasto`);
+  });
+
   it('con un ticket urgente a 1 día, usa el singular "1 día" y no "1 días"', async () => {
     getPorFacturar.mockResolvedValue([ticket({
       caducidad: { diasRestantes: 1, vencido: false, urgente: true, desconocido: false },

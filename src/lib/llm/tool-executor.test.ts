@@ -43,6 +43,40 @@ describe('makeExecutor — idempotencia de mutaciones (1.5)', () => {
   });
 });
 
+describe('A37-S60-04: timeout de una mutación cuyo handler sigue vivo', () => {
+  afterEach(() => { delete process.env.LIKIDA_TOOL_MUTATION_TIMEOUT_MS; });
+
+  it('el modelo recibe "en proceso, no repitas ni digas que falló", no el abort crudo', async () => {
+    process.env.LIKIDA_TOOL_MUTATION_TIMEOUT_MS = '30';
+    registerTool('test_mut_lenta', {
+      isMutation: true, schema: schema('test_mut_lenta'),
+      // ignora la señal a propósito: termina después del deadline
+      handler: () => new Promise((resolve) => setTimeout(() => resolve({ ok: true }), 150)),
+    });
+    const exec = makeExecutor({ tenantId: 't', runId: 'run-lenta' });
+    const r = await exec('test_mut_lenta', {});
+    expect(r.success).toBe(false);
+    expect(r.error).not.toMatch(/aborted|timeout/i);
+    expect(r.error).toMatch(/sigue en proceso/);
+    expect(r.error).toMatch(/NO la repitas/);
+    await new Promise((res) => setTimeout(res, 200));
+  });
+
+  it('un read-only que vence el plazo conserva el mensaje de siempre', async () => {
+    process.env.LIKIDA_TOOL_TIMEOUT_MS = '30';
+    registerTool('test_ro_lenta', {
+      schema: schema('test_ro_lenta'),
+      handler: () => new Promise((resolve) => setTimeout(() => resolve({ ok: true }), 150)),
+    });
+    const exec = makeExecutor({ tenantId: 't', runId: 'run-ro' });
+    const r = await exec('test_ro_lenta', {});
+    delete process.env.LIKIDA_TOOL_TIMEOUT_MS;
+    expect(r.success).toBe(false);
+    expect(r.error).not.toMatch(/sigue en proceso/);
+    await new Promise((res) => setTimeout(res, 200));
+  });
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 4 · ALTO — la llave de la dedup describía la LLAMADA, no el EFECTO.
 //
