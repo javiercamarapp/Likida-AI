@@ -108,3 +108,46 @@ describe('PanelRevision', () => {
     expect(fuente).toMatch(/RECALCULA el cuadre/);
   });
 });
+
+describe('A37-P-01: la disputa de monto del operador llega a la oficina', () => {
+  const DISPUTA = { montoLeido: 800, por: 'operador-1', dijo: 'son 8000', en: '2026-10-20T10:00:00Z' };
+  const conDisputa = [{ id: 'g-1', etiqueta: 'Diésel', monto: 800, disputa: DISPUTA }];
+
+  it('sin disputa no pinta el aviso', () => {
+    expect(pintar(estado())).not.toContain('El operador dice');
+  });
+
+  it('con la liquidación vigente avisa y manda a «Ajustar montos» (no ofrece la corrección directa)', () => {
+    const html = renderToStaticMarkup(
+      <PanelRevision estado={estado()} gastos={conDisputa} accion={(async () => null) as never} folio="V-1041"
+        corregir={(async () => null) as never} />,
+    );
+    expect(html).toContain('El operador dice que este monto está mal');
+    expect(html).toContain('son 8000');
+    expect(html).toContain('$800.00');
+    expect(html).toContain('Ajustar montos');
+    expect(html).not.toContain('Corregir monto');
+  });
+
+  it('rechazada (el viaje volvió a cuadre) ofrece corregir el monto directo; sin permiso, no', () => {
+    const rechazada = estado({ revision: 'rechazada', firmable: false });
+    const con = renderToStaticMarkup(
+      <PanelRevision estado={rechazada} gastos={conDisputa} accion={null} folio="V-1041" corregir={(async () => null) as never} />,
+    );
+    expect(con).toContain('Corregir monto');
+    expect(con).toContain('name="gastoId"');
+    const sin = renderToStaticMarkup(
+      <PanelRevision estado={rechazada} gastos={conDisputa} accion={null} folio="V-1041" corregir={null} />,
+    );
+    expect(sin).toContain('El operador dice');
+    expect(sin).not.toContain('Corregir monto');
+  });
+
+  it('el texto libre del operador se pinta escapado', () => {
+    const html = renderToStaticMarkup(
+      <PanelRevision estado={estado()} gastos={[{ ...conDisputa[0], disputa: { ...DISPUTA, dijo: '<img src=x onerror=alert(1)>' } }]}
+        accion={null} folio="V-1" />,
+    );
+    expect(html).not.toContain('<img');
+  });
+});

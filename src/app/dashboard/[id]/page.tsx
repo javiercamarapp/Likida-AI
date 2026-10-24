@@ -23,6 +23,8 @@ import {
 import { mxn } from '@/lib/formato';
 import { reintentarPdfAjustado } from '@/lib/likida/revision_recalculo';
 import { logger } from '@/lib/logger';
+import { corregirMontoGasto } from '@/lib/likida/gasto_correccion';
+import { disputaPendiente } from '@/lib/likida/gasto_disputa';
 
 export const dynamic = 'force-dynamic';
 
@@ -302,6 +304,44 @@ export default async function Detalle({
     }
   }
 
+  /**
+   * A37-P-01 (S45-01): corrige el monto de un comprobante que el operador disputó. Mismo permiso que firmar. `corregirMontoGasto`
+   * exige actor y motivo, deja el historial en `ocr_extra` y la bitácora, y el trigger de la base rechaza un viaje con liquidación
+   * vigente (CU001) o un gasto con CFDI verificado (CU017): ahí se dice el camino correcto en vez de un «no se pudo».
+   */
+  async function corregirMontoDisputado(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    const s = await requireSessionTenant(`/dashboard/${id}`, sp);
+    if (!puedeVerArea(s.rol, 'dinero') || !puedeFirmarLiquidacion(s.rol)) {
+      return { error: 'Tu rol no corrige montos. Pídeselo al dueño de la flota o a tu contador.' };
+    }
+    let t = s.tenantId;
+    if (s.rol === 'superadmin' && sp?.tenant) t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
+    const gastoId = String(fd.get('gastoId') ?? '');
+    // El gasto tiene que ser de ESTA liquidación y seguir disputado: el id del formulario no se acepta a ciegas.
+    const det = await getLiquidacionDetalle(id, t);
+    const g = det?.gastos.find((x) => x.id === gastoId);
+    if (!g || !disputaPendiente(g.ocrExtra)) return { error: 'Ese comprobante ya no tiene una disputa pendiente en esta liquidación.' };
+    const crudo = String(fd.get('monto') ?? '').replace(/\s/g, '').replace(/,/g, '');
+    const monto = /^\d+(\.\d{1,2})?$/.test(crudo) ? Number(crudo) : NaN;
+    if (!Number.isFinite(monto) || monto <= 0) return { error: 'Escribe el monto correcto en pesos, con hasta dos decimales.' };
+    const r = await corregirMontoGasto({
+      tenantId: t, gastoId, montoNuevo: monto,
+      actor: { id: s.userId }, motivo: String(fd.get('motivo') ?? ''),
+    });
+    revalidatePath(`/dashboard/${id}`);
+    if (r.ok) return { ok: `Monto corregido: ${mxn(r.antes)} → ${mxn(r.despues)}.` };
+    const MOTIVOS: Record<string, string> = {
+      monto_invalido: 'Ese monto no es válido (de $0.01 a $1,000,000).',
+      sin_motivo: 'Escribe el motivo de la corrección.',
+      sin_actor: 'No se pudo identificar quién corrige.',
+      no_existe: 'El comprobante ya no existe.',
+      liquidado: 'La liquidación sigue vigente: usa «Ajustar montos» (o rechaza la liquidación para que el viaje vuelva a cuadre).',
+      xml_verificado: 'Ese comprobante tiene CFDI verificado: su monto sale del XML y no se corrige a mano. Rechaza la liquidación para que el operador mande el comprobante correcto.',
+    };
+    return { error: MOTIVOS[r.motivo] ?? 'No se pudo corregir el monto. Inténtalo de nuevo.' };
+  }
+
   async function reintentarPdf(_previo: ResultadoAccion, _fd: FormData): Promise<ResultadoAccion> {
     'use server';
     const s = await requireSessionTenant(`/dashboard/${id}`, sp);
@@ -355,8 +395,10 @@ export default async function Detalle({
         // fila apuntarle, y la RPC lo rebotaría (LR017).
         gastos: d.gastos.filter((g) => g.id).map((g) => ({
           id: g.id as string, etiqueta: etiquetaGasto(g), monto: g.monto,
+          disputa: disputaPendiente(g.ocrExtra),
         })),
         accion: puedeFirmar ? revisar : null,
+        corregir: puedeFirmar ? corregirMontoDisputado : null,
       } : null}
     />
   );
