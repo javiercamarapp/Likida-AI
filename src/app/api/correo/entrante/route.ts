@@ -4,7 +4,7 @@ import { cuerpoAcotado } from '../_cuerpo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { httpsPublico } from '@/lib/http/https_publico';
 import { verificarFirma, mensajeDeRechazo } from '@/lib/correo/firma_entrante';
-import { tokenDeDestinatarios, dominioBuzon } from '@/lib/correo/buzon';
+import { tokenDeDestinatarios, tokensDeDestinatarios, dominioBuzon } from '@/lib/correo/buzon';
 import { atenderCorreoCartaPorte, tokenCpDeDestinatarios } from '@/lib/likida/carta_porte_docs/correo_entrante';
 import { atenderCorreoPeajes, tokenPjDeDestinatarios } from '@/lib/likida/peajes/correo_entrante';
 import { descargadorResend } from '@/lib/likida/carta_porte_docs/resend';
@@ -261,6 +261,14 @@ export async function POST(req: Request) {
     }
     // No se registra el correo del remitente: es un dato personal y este log no
     // es el lugar. El `email_id` alcanza para rastrearlo en Resend.
+    // A37-S09-07: «dos buzones de flota en To/CC» (ambiguo) no es lo mismo que «ningún
+    // buzón»: el primero es una factura que se perdió de una flota real y hay que
+    // poder buscarla. No se adivina a cuál iba (siguen sin entrar a ninguna).
+    const nBuzones = tokensDeDestinatarios(destinatarios).length;
+    if (nBuzones > 1) {
+      logger.warn('correo_entrante.buzon_ambiguo', { emailId, buzones: nBuzones });
+      return NextResponse.json({ ok: true, ignorado: 'sin_buzon' });
+    }
     logger.warn('correo_entrante.sin_buzon', { emailId });
     return NextResponse.json({ ok: true, ignorado: 'sin_buzon' });
   }

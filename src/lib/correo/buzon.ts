@@ -120,11 +120,17 @@ export function tokenDeDireccion(direccion: string): string | null {
  * correo, se devuelve `null`: no se adivina a cuál de las dos flotas iba.
  */
 export function tokenDeDestinatarios(direcciones: readonly string[]): string | null {
+  const encontrados = tokensDeDestinatarios(direcciones);
+  if (encontrados.length !== 1) return null;
+  return encontrados[0];
+}
+
+/** Todos los tokens de buzón DISTINTOS de la lista (A37-S09-07: distinguir «ninguno» de «ambiguo»). */
+export function tokensDeDestinatarios(direcciones: readonly string[]): string[] {
   const encontrados = new Set<string>();
   for (const d of direcciones) {
     const t = tokenDeDireccion(d);
     if (t) encontrados.add(t);
   }
-  if (encontrados.size !== 1) return null;
-  return [...encontrados][0];
+  return [...encontrados];
 }
