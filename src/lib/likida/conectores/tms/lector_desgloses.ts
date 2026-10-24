@@ -101,7 +101,7 @@ export function crearLectorDesglosesTms(o: OpcionesLectorTms): LectorDesglosesPu
       const desde = p.reLeerDesde ?? p.cursor?.desde ?? new Date(ahora - cfg.ventanaInicialDias * DIA_MS).toISOString();
       const leidas = await leerVentana(desde, new Date(ahora).toISOString());
       // A37-S38-08: una fila SIN fecha utilizable no tiene lugar en el cursor: no entra en la secuencia (jamás lo lleva a 1970);
-      // se reporta como rechazada, en la última página de toda lectura sin cursor (también en la relectura, A37-A1-liquidaciones-18).
+      // se reporta como rechazada, en la última página de toda lectura sin cursor y de toda relectura, A37-A1-liquidaciones-18).
       const todas = leidas.filter((e) => e.sinInstante !== true).sort(orden);
       let candidatas = todas;
       if (p.reLeerDesde !== undefined) {
@@ -114,7 +114,7 @@ export function crearLectorDesglosesTms(o: OpcionesLectorTms): LectorDesglosesPu
       const pagina = candidatas.slice(0, p.limite);
       const ultima = pagina[pagina.length - 1];
       const hayMas = candidatas.length > pagina.length;
-      const sinFecha = !hayMas && !p.cursor ? leidas.filter((e) => e.sinInstante === true) : [];
+      const sinFecha = !hayMas && (!p.cursor || p.reLeerDesde !== undefined) ? leidas.filter((e) => e.sinInstante === true) : [];
       return {
         items: pagina.flatMap((e) => (e.desglose ? [e.desglose] : [])),
         rechazadas: [...pagina, ...sinFecha].flatMap((e) => (e.rechazada ? [e.rechazada] : [])),

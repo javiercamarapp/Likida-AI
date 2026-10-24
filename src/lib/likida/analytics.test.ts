@@ -195,7 +195,7 @@ describe('los renglones del panel son los mismos que los del PDF', () => {
       data: { id: 'liq-1', viaje_id: 'v1', estatus: 'cuadrada', total_comprobado: 9400, total_anticipo: 10000, diferencia: 600, created_at: '2026-07-31T02:00:00Z', viaje: { folio: 'F-1', estatus: 'liquidado' } },
       error: null,
     });
-    const d = await getLiquidacionDetalle('liq-1', TENANT);
+    const d = await getLiquidacionDetalle('00000000-0000-4000-8000-0000000000a2', TENANT);
     expect(d!.estatus).toBe('cuadrada');
     expect(d!.viaje.estatus).toBe('liquidado');
   });
@@ -618,7 +618,7 @@ describe('A37-S29-09 — reconstruir() ya no traga la excepción del motor en si
       error: null,
     });
     cuadrarDesdeDB.mockRejectedValue(new Error('boom del motor'));
-    const d = await getLiquidacionDetalle('liq-9', TENANT);
+    const d = await getLiquidacionDetalle('00000000-0000-4000-8000-0000000000a9', TENANT);
     expect(d?.comprobantesCuadran).toBe(false);
     expect(logger.warn).toHaveBeenCalledWith(
       'analytics.reconstruir_fallo',
@@ -638,7 +638,7 @@ describe('A37-S29-09 — reconstruir() ya no traga la excepción del motor en si
       error: null,
     });
     cuadrarDesdeDB.mockResolvedValue({ totalComprobado: 999, diferencias: [], gastos: [] });
-    const d = await getLiquidacionDetalle('liq-9', TENANT);
+    const d = await getLiquidacionDetalle('00000000-0000-4000-8000-0000000000a9', TENANT);
     expect(d?.comprobantesCuadran).toBe(false);
     expect(logger.warn).not.toHaveBeenCalledWith('analytics.reconstruir_fallo', expect.anything());
   });

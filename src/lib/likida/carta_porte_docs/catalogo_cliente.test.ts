@@ -315,7 +315,7 @@ describe('A37-A3-09 — el catálogo no vuelve «No» un «Sí» peligroso del d
     const r = enriquecer(e, cat({ productos: [producto('SKU-PX-205', { materialPeligroso: false })] }), ctx);
     const campo = r.extraccion.mercancias[0].material_peligroso;
     expect(campo).toMatchObject({ valor: 'true', origen: 'llm' });
-    expect(campo.notas?.join(' ')).toMatch(/catálogo dice «false».*Confírmalo/);
+    expect(campo.notas?.join(' ')).toMatch(/catálogo del cliente dice «no peligroso».*Confírmalo/);
     const h = validarExtraccion(r.extraccion).hallazgos.filter((x) => x.campo === 'material_peligroso');
     expect(h.map((x) => x.codigo)).toContain('normalizacion_dudosa');
   });

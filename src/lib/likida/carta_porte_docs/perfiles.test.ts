@@ -315,7 +315,7 @@ describe('A37-S32-02: los ejemplos del perfil no guardan datos de personas', () 
     expect(guardado).not.toContain('Persona Sintetica Uno');
     expect(guardado).not.toContain('LIC-SINT-0001');
     expect(r.ejemplos[0].campos.operador_nombre).toBeUndefined();
-    expect(r.ejemplos[0].evidencias.find((e) => e.campo === 'operador_nombre')?.linea).toBe('Operador: «valor»');
+    expect(r.ejemplos[0].evidencias.find((e) => e.campo === 'operador_nombre')?.linea).toBe('columna «Operador»');
     // el resto del ejemplo sí enseña (folio y descripción)
     expect(r.ejemplos[0].campos.folio_cliente).toBe('F1');
   });
