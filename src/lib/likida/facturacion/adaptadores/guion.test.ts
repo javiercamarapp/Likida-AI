@@ -221,6 +221,60 @@ describe('la política de no emitir con un mapeo sin verificar', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+// A37-S42-05 · LOS CAMPOS QUE SOLO EXISTEN TRAS BUSCAR SE PRE-VUELAN DESPUÉS.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('A37-S42-05: pre-vuelo por etapas', () => {
+  const EN_DOS: GuionPortal = {
+    ...GUION_MEDIDO,
+    // `#rfc` y `#correo` los declara `buscar.esperar` como lo que aparece TRAS buscar.
+    buscar: { boton: '#buscar', que: 'el botón de buscar', esperar: '#rfc, #correo' },
+  };
+
+  /** Un portal donde #rfc, #correo y #emitir existen solo después de apretar #buscar. */
+  class PaginaEnDos extends PaginaDoble {
+    vivos = new Set(['#folio', '#total', '#fecha', '#buscar']);
+    constructor() {
+      super({ textos: { '#rfc, #correo': 'listo', '.uuid': 'B0800A68-1111-2222-3333-444455556666' } });
+      this.existe = async (s) => this.vivos.has(s);
+    }
+    async escribir(sel: string, valor: string) {
+      if (!this.vivos.has(sel)) throw new Error(`no existe ${sel}`);
+      this.escritos.push({ sel, valor });
+    }
+    async hacerClic(sel: string) {
+      if (!this.vivos.has(sel)) throw new Error(`no existe ${sel}`);
+      this.clics.push(sel);
+      if (sel === '#buscar') ['#rfc', '#correo', '#emitir'].forEach((x) => this.vivos.add(x));
+    }
+  }
+
+  it('el ensayo NO da portalCambio por campos que aún no existen, y los escribe después de buscar', async () => {
+    const p = new PaginaEnDos();
+    const r = await armar(EN_DOS, p).facturar(CAMPOS, 'ensayo');
+
+    expect(r.portalCambio).toBeUndefined();
+    expect(r.ok).toBe(true);
+    const orden = p.escritos.map((e) => e.sel);
+    expect(orden.indexOf('#rfc')).toBeGreaterThan(orden.indexOf('#total'));
+    expect(orden).toEqual(expect.arrayContaining(['#folio', '#total', '#fecha', '#rfc', '#correo']));
+    expect(p.clics).toEqual(['#buscar']);
+  });
+
+  it('si DESPUÉS de buscar el campo tampoco aparece, sí es portalCambio (y no se emite)', async () => {
+    const p = new PaginaEnDos();
+    p.hacerClic = async (sel: string) => { p.clics.push(sel); if (sel === '#buscar') p.vivos.add('#rfc'); };
+    p.leerTexto = async () => 'listo';
+    const r = await armar(EN_DOS, p).facturar(CAMPOS, 'emitir');
+
+    expect(r.ok).toBe(false);
+    expect(r.portalCambio).toBe(true);
+    expect(r.error).toMatch(/DESPUÉS de buscar/);
+    expect(p.clics).toEqual(['#buscar']);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // 2 · EL CAPTCHA NO SE RODEA.
 // ═══════════════════════════════════════════════════════════════════════════
 

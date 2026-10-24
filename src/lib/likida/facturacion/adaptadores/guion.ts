@@ -334,6 +334,19 @@ interface Escritura {
   selector: string | readonly string[];
   valor: string;
   como?: 'escribir' | 'seleccionar';
+  /**
+   * A37-S42-05: `despues` = el campo aparece SOLO después de buscar (su selector
+   * está entre los que `buscar.esperar` declara como «lo que aparece tras
+   * buscar»). Se pre-vuela y se escribe en la segunda etapa; pre-volarlo en el
+   * formulario en blanco daba `portalCambio` en cada ensayo de un portal que
+   * nunca falló.
+   */
+  etapa?: 'antes' | 'despues';
+}
+
+/** Los selectores que un guion declara en `buscar.esperar` (lista separada por comas). */
+function selectoresTrasBuscar(g: GuionPortal): Set<string> {
+  return new Set((g.buscar?.esperar ?? '').split(',').map((x) => x.trim()).filter(Boolean));
 }
 
 /**
@@ -539,6 +552,7 @@ export class AdaptadorDeclarativo implements AdaptadorPortal {
     // ── Los valores, ya formateados para ESTE portal ──────────────────────
     const aEscribir: Escritura[] = [];
 
+    const tras = selectoresTrasBuscar(this.g);
     for (const [dato, campo] of Object.entries(this.g.receptor ?? {}) as Array<[DatoReceptor, CampoGuion]>) {
       const crudo = this.receptor[dato];
       const valor = aplicarFormato(crudo ?? null, campo.formato);
@@ -548,9 +562,11 @@ export class AdaptadorDeclarativo implements AdaptadorPortal {
         // a nombre de nadie. Se dice cuál falta y se para.
         return this.fallo(modo, `Los datos fiscales de esta flota no sirven para facturar en ${this.comercio}: falta "${dato}" (el guion lo declara como campo del portal). No se abrió el portal.`);
       }
+      const candidatos = typeof campo.selector === 'string' ? [campo.selector] : [...campo.selector];
       aEscribir.push({
         llave: dato, etiqueta: dato, frase: `el dato fiscal "${dato}"`,
         selector: campo.selector, valor, como: campo.como,
+        etapa: candidatos.some((c) => tras.has(c.trim())) ? 'despues' : 'antes',
       });
     }
 
@@ -615,13 +631,19 @@ export class AdaptadorDeclarativo implements AdaptadorPortal {
       }
 
       // ── 3. EL PRE-VUELO: TODOS LOS SELECTORES, JUNTOS ──────────────────
-      const revisar: SelectorAVerificar[] = aEscribir.map((e) => ({ que: e.frase, sel: e.selector }));
+      // A37-S42-05: DOS ETAPAS cuando el guion declara campos que solo aparecen
+      // tras buscar. La primera pre-vuela lo que existe en el formulario en
+      // blanco; la segunda, lo que aparece después (y el botón de emitir, que en
+      // esos portales también vive en el paso fiscal).
+      const antes = aEscribir.filter((e) => e.etapa !== 'despues');
+      const despues = aEscribir.filter((e) => e.etapa === 'despues');
+      const revisar: SelectorAVerificar[] = antes.map((e) => ({ que: e.frase, sel: e.selector }));
       if (this.g.buscar) revisar.push({ que: this.g.buscar.que, sel: this.g.buscar.boton });
       // El botón de emitir entra A PROPÓSITO aunque el ensayo no lo apriete: es
       // el único selector cuyo fallo no se puede probar de otra forma sin
       // emitir. Quedan fuera el del UUID y el del cuadro de error, que
       // legítimamente no existen todavía con el formulario en blanco.
-      revisar.push({ que: 'el botón de emitir', sel: this.g.botonEmitir });
+      if (despues.length === 0) revisar.push({ que: 'el botón de emitir', sel: this.g.botonEmitir });
 
       const vuelo = await preVuelo(pagina, revisar);
       if (vuelo.faltan.length > 0) {
@@ -635,7 +657,7 @@ export class AdaptadorDeclarativo implements AdaptadorPortal {
       }
 
       // ── 4. LLENAR ──────────────────────────────────────────────────────
-      for (const e of aEscribir) {
+      for (const e of antes) {
         // El candidato que el pre-vuelo confirmó; si no hubo pre-vuelo (página
         // sin `existe`), el primero declarado — y si ese no está, `escribirCampo`
         // falla diciendo cuál era.
@@ -661,6 +683,26 @@ export class AdaptadorDeclarativo implements AdaptadorPortal {
                 : `Se apretó ${this.g.buscar.que} en ${this.portal} y el resultado (\`${this.g.buscar.esperar}\`) ${aparecio ? `apareció y siguió VACÍO tras ~${this.esperaUuidMs} ms` : `no apareció en ~${this.esperaUuidMs} ms`}. O el ticket no está en el portal, o la tabla del guion está vieja.`,
             );
           }
+        }
+      }
+
+      // ── 5b. SEGUNDA ETAPA: lo que solo existe tras buscar ──────────────
+      if (despues.length > 0) {
+        const segunda = await preVuelo(pagina, [
+          ...despues.map((e) => ({ que: e.frase, sel: e.selector })),
+          { que: 'el botón de emitir', sel: this.g.botonEmitir },
+        ]);
+        if (segunda.faltan.length > 0) {
+          return this.fallo(modo, `${mensajeSelectoresIdos(this.portal, this.comercio, segunda.faltan)} Faltaron DESPUÉS de buscar el ticket. La sesión sigue viva: esto NO se arregla volviendo a entrar, lo corrige Likida rehaciendo la tabla del guion.`, {
+            portalCambio: true,
+            captura: await capturaSegura(pagina, this.comercio),
+          });
+        }
+        for (const [k, v] of segunda.resueltos) vuelo.resueltos.set(k, v);
+        for (const e of despues) {
+          const selector = vuelo.resueltos.get(e.frase) ?? primerCandidato(e.selector);
+          await escribirCampo(pagina, { selector, valor: e.valor, que: e.etiqueta, como: e.como }, contexto);
+          capturado[e.llave] = e.valor;
         }
       }
 
