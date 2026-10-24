@@ -340,6 +340,16 @@ const primerCandidato = (s: string | readonly string[]): string => (typeof s ===
 
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * El UUID de un CFDI dentro de un texto leído del portal, o `null`. Acepta el
+ * UUID rodeado de etiquetas («Folio fiscal: …»), pero exige el formato 8-4-4-4-12
+ * hexadecimal. A37-S42-03.
+ */
+export function uuidDelTexto(texto: string): string | null {
+  const m = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i.exec(texto);
+  return m ? m[0] : null;
+}
+
 export class AdaptadorDeclarativo implements AdaptadorPortal {
   readonly comercio: string;
   readonly portal: string;
@@ -675,9 +685,15 @@ export class AdaptadorDeclarativo implements AdaptadorPortal {
       captura = (await capturaSegura(pagina, this.comercio)) ?? captura;
 
       const rechazoPost = await leerRechazo(pagina, this.g.error);
-      const { valor: uuid, aparecio } = this.g.uuid
+      const { valor: textoUuid, aparecio } = this.g.uuid
         ? await esperarTexto(pagina, this.g.uuid, this.espera())
         : { valor: null, aparecio: false };
+      // A37-S42-03: lo que el selector trae es TEXTO, no necesariamente un UUID
+      // (`[class*="folio-fiscal" i]` casa con una etiqueta «Folio fiscal»). Se
+      // extrae el UUID por su forma y, si no hay ninguno, se trata como emisión
+      // sin confirmar: nunca se guarda texto basura como folio.
+      const uuid = textoUuid ? uuidDelTexto(textoUuid) : null;
+      const textoSinUuid = Boolean(textoUuid) && !uuid;
 
       if (!uuid) {
         // NO se vuelve a intentar y se dice por qué. El CFDI puede existir: lo
@@ -685,6 +701,8 @@ export class AdaptadorDeclarativo implements AdaptadorPortal {
         // CFDI que después hay que cancelar.
         const porQue = !this.g.uuid
           ? 'el guion no declara dónde vive el UUID en este portal'
+          : textoSinUuid
+            ? `el contenedor del UUID (\`${this.g.uuid}\`) trajo un texto que NO tiene forma de UUID ("${(textoUuid ?? '').slice(0, 60)}")`
           : aparecio
             ? `el contenedor del UUID (\`${this.g.uuid}\`) apareció y siguió VACÍO tras ~${this.esperaUuidMs} ms`
             : `el contenedor del UUID (\`${this.g.uuid}\`) no apareció en ~${this.esperaUuidMs} ms`;
