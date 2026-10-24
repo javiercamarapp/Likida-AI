@@ -107,6 +107,9 @@ function normalizarEncabezado(v: unknown): string {
     .trim();
 }
 
+/** Tope de cordura del anticipo importado: el mismo que `POST /v1/viajes` (1,000,000). */
+const TOPE_ANTICIPO_IMPORTADO = 1_000_000;
+
 /** "$8,000.50" / "8000,50" / 8000 → número, o null si no se puede leer con
  *  seguridad. La regla de siempre: una cifra dudosa no se adivina. */
 export function leerCifraImportada(v: unknown): number | null | 'ilegible' {
@@ -114,6 +117,9 @@ export function leerCifraImportada(v: unknown): number | null | 'ilegible' {
   if (typeof v === 'number') return Number.isFinite(v) && v >= 0 ? Math.round(v * 100) / 100 : 'ilegible';
   const limpio = String(v).replace(/[$\s]/g, '');
   if (!limpio) return null;
+  // A37-L-03: `Number()` acepta notación científica y hexadecimal ('1e6' = 1,000,000; '0x10' = 16): en una cifra de
+  // dinero o de km eso es un dedazo (o una celda de otro tipo), no un número. Solo dígitos y separadores.
+  if (!/^[0-9.,]+$/.test(limpio)) return 'ilegible';
   // "1.234,56" europeo vs "1,234.56": si hay coma Y punto, el ÚLTIMO es el decimal.
   // Con coma SOLA se aplica la regla de `ingreso_viaje.ts`: la coma seguida de
   // exactamente tres dígitos es separador de MILLARES ("1,240" son mil
@@ -125,6 +131,9 @@ export function leerCifraImportada(v: unknown): number | null | 'ilegible' {
       ? limpio.replace(/\./g, '').replace(',', '.')
       : limpio.replace(/,/g, ''))
     : limpio.replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.');
+  // A37-L-03: más de 2 decimales no es una cifra de pesos: «12.500» puede ser doce mil quinientos (punto de millares) o
+  // doce con cincuenta, y adivinarlo entra como $12.50 una cifra plausible pero falsa. Se rechaza y se dice.
+  if (/\.\d{3,}$/.test(normal)) return 'ilegible';
   const n = Number(normal);
   return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : 'ilegible';
 }
@@ -246,6 +255,8 @@ export function interpretarFilasViajes(
 
     const anticipo = leerCifraImportada(celda('anticipo'));
     if (anticipo === 'ilegible') { descartadas.push({ fila: f + 1, motivo: `anticipo ilegible (${folio})` }); continue; }
+    // A37-L-03: el mismo tope de cordura que la API v1 (`TOPE_ANTICIPO`): un anticipo de más de un millón es un cero de más.
+    if (anticipo !== null && anticipo > TOPE_ANTICIPO_IMPORTADO) { descartadas.push({ fila: f + 1, motivo: `anticipo fuera de rango (${folio})` }); continue; }
     const fecha = leerFechaImportada(celda('fecha'));
     if (fecha === 'ilegible') { descartadas.push({ fila: f + 1, motivo: `fecha ilegible (${folio})` }); continue; }
 

@@ -15,6 +15,8 @@ on:
 
 permissions:
   contents: read
+  # A37-L-02 (operabilidad): el rojo del respaldo tiene dueño (un issue), no solo un correo que se aprende a ignorar.
+  issues: write
 
 concurrency:
   group: storage-backup-production
@@ -65,3 +67,29 @@ jobs:
           echo '- Resultado: **OK**' >> "$GITHUB_STEP_SUMMARY"
           echo '- Manifiesto y SHA-256 sincronizados al destino remoto configurado.' >> "$GITHUB_STEP_SUMMARY"
           echo '- El contenido de Storage no se publica como artifact de GitHub.' >> "$GITHUB_STEP_SUMMARY"
+
+      # A37-L-02 (operabilidad): un respaldo nocturno que falla en rojo cada noche solo dejaba un correo de GitHub (el mismo
+      # patrón de las 40 corridas rojas del pulso que nadie atendió). Ahora el PRIMER rojo abre un issue con etiqueta propia
+      # (sin duplicar mientras siga abierto) y la primera corrida verde lo cierra.
+      - name: Abrir issue si el respaldo falló
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -u
+          abierto=$(gh issue list --label respaldo-fallido --state open --json number --jq '.[0].number // empty')
+          if [ -n "$abierto" ]; then echo "Ya hay un issue abierto (#$abierto); no se duplica."; exit 0; fi
+          gh label create respaldo-fallido --color D93F0B --description 'El respaldo nocturno de Storage falló: no hay copia fresca' --force >/dev/null 2>&1 || true
+          gh issue create --title 'El respaldo nocturno de Storage falló (sin copia fresca)' --label respaldo-fallido --body "$(printf 'El respaldo de Storage terminó en rojo: mientras no vuelva a verde NO hay copia fresca de la evidencia fiscal.\n\nCorrida: %s\n\nCausas probables: credencial S3 vencida (AWS_SESSION_TOKEN temporal), cambio de política del bucket o el job pasó de 45 min. Este issue se cierra solo cuando una corrida vuelva a salir verde.\n' "$RUN_URL")"
+
+      - name: Cerrar el issue cuando el respaldo vuelve a verde
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -u
+          for n in $(gh issue list --label respaldo-fallido --state open --json number --jq '.[].number'); do
+            gh issue close "$n" --comment "El respaldo volvió a salir verde: $RUN_URL"
+          done

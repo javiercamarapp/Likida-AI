@@ -64,6 +64,9 @@ Verificado contra el texto vigente en `normas/lfpdppp-2-XII-XX.yaml`.
 | 6a | └ Amazon Web Services (SES) | Lo mismo, en las dos direcciones: Resend entrega Y recibe por SES | Comprobado en el DNS de `mail.likida.ai`: `v=spf1 include:amazonses.com` y `feedback-smtp.us-east-1.amazonses.com` (el MX de recepción es el mismo eslabón) |
 | 7 | **Stripe** | El correo y los datos de pago de quien contrata el servicio, y los eventos de su suscripción (alta, cobro, cancelación) | `src/lib/saas/stripe.ts` (`api.stripe.com`), webhook en `/api/stripe/webhook` — ya declarada como encargada en `/privacidad` (LEG-10, auditoría 24) pero faltaba en esta cadena |
 | 8 | **Cal.com** | El **nombre, correo y las respuestas libres** que el prospecto escribe al agendar una demo — el `payload` completo del proveedor, sin filtrar | `src/lib/admin/calcom.ts` (`api.cal.com`), webhook `src/app/api/webhook/calcom/route.ts:71` (`registrarEventoComercial({ payload: input.payload })`, sin filtro) |
+| 9 | **Upstash — Redis** (límite de tasa distribuido) | La **llave de cada contador** del límite de tasa; entre ellas `wa:<teléfono>` (el teléfono del operador que escribe por WhatsApp) y las llaves por IP. Solo el contador y su TTL, no el contenido de los mensajes | `src/lib/ratelimit.ts` (REST de Upstash, `UPSTASH_REDIS_REST_URL`), `rateLimit(\`wa:${m.from}\`)` en `src/app/api/webhook/whatsapp/route.ts` |
+| 10 | **Upstash — QStash** (cola de facturación) | El **lote de tickets** que el cron de facturación encola: `rfc_emisor`, `folio`, `monto`, `fecha`, `cfdi_uuid` y el `ocr_extra` del ticket de cada gasto del lote | `src/app/api/cron/facturar/route.ts` (`q.publishJSON({ url: …/cola, body: { lote } })`), receptor `src/app/api/cron/facturar/cola/route.ts` (`@upstash/qstash`) |
+| 11 | **Amazon Web Services (S3)** — bucket del respaldo nocturno | **Copia de Storage**: las fotos y comprobantes de los operadores y los CFDI/evidencia fiscal, con su manifiesto y SHA-256. Se sincroniza **sin `--delete`**: lo que se suprime en Supabase NO se borra de esta copia por sí solo (ver el pendiente de retención) | `scripts/respaldo-storage.sh` (`aws s3 sync … "$RESPALDO_S3_DESTINO"`), `.github/workflows/backup-storage.yml` |
 
 **Sobre Resend (dado de alta el 14-ago-2026).** Entra a la cadena porque los
 avisos por correo salen de `avisos@mail.likida.ai`. Lo que viaja es el correo de
@@ -195,6 +198,13 @@ Ninguna recibía un solo byte. Cinco se quitaron el 28-jul-2026
 (`@upstash/redis`, `@upstash/qstash`, `facturapi`, `@anthropic-ai/sdk`,
 `axios`). La sexta, `@sentry/nextjs`, **se cableó ese mismo día** y por eso ya
 figura en la tabla de arriba.
+
+**Corrección (A37-L-07, 24-oct-2026).** Ese párrafo ya no es cierto para Upstash:
+`@upstash/qstash` volvió a `package.json` y se usa (`cron/facturar/route.ts`,
+`cola/route.ts`), y el límite de tasa habla con el REST de Redis de Upstash
+(`ratelimit.ts`). Por eso Upstash figura ahora en los renglones 9 y 10, y el
+bucket S3 del respaldo en el 11. Lo que SIGUE sin usarse: `facturapi`,
+`@anthropic-ai/sdk` y `axios`.
 
 Comprobable con `command grep -rl "<paquete>" src/ | wc -l` — con `command`
 delante: en esta máquina `grep` es una función de shell que envuelve `ugrep -I` y

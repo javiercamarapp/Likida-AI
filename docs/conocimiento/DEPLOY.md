@@ -392,7 +392,7 @@ Ahora hay tres piezas que lo atan:
 El procedimiento, entonces:
 
 ```bash
-bash scripts/aplicar-migraciones-y-humos.sh   # 1. migraciones a producción
+RESPALDO_VERIFICADO=1 bash scripts/aplicar-migraciones-y-humos.sh   # 1. migraciones a producción (dry-run + CLI fijada; A37-L-09: confirma el respaldo antes)
 curl -s https://app.likida.ai/api/health | grep -o '"migracion":{[^}]*}'   # 2. atras:0, adelante:0
 git commit -m 'fix(x): … [deploy]' && git push   # 3. ahora sí construye
 # 4. COMPROBAR QUE CONSTRUYÓ — este paso no es opcional (ver más abajo)

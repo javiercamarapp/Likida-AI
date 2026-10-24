@@ -43,10 +43,13 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
   const soloExcepciones = sp.vista === 'excepciones';
   const tablero = armarTableroViajes({ ...entrada, filtros: { terminalId: terminalId || null, clienteId: clienteId || null, soloExcepciones } });
   // Se pide de más y se filtra por rol: una tarea de dinero no la lee quien no ve dinero (y el recorte a 20 va DESPUÉS).
-  const tareas = await fuentes().escalacionesAbiertas(tenantId, 60).then((l) => l && l.filter((t) => rolPuedeLeerTarea(rol, t)).slice(0, 20)).catch((e) => {
-    logger.warn('viajes_en_vivo.tareas_sin_leer', { tenantId, err: e instanceof Error ? e.message : String(e) });
-    return null;
-  });
+  // A37-L-docs-ux-calidad-01: un fallo de lectura NO es «base sin la 0650» (`null`): se distingue y se dice en pantalla.
+  const { tareas, conError: tareasConError } = await fuentes().escalacionesAbiertas(tenantId, 60)
+    .then((l) => ({ tareas: l && l.filter((t) => rolPuedeLeerTarea(rol, t)).slice(0, 20), conError: false }))
+    .catch((e) => {
+      logger.warn('viajes_en_vivo.tareas_sin_leer', { tenantId, err: e instanceof Error ? e.message : String(e) });
+      return { tareas: null, conError: true };
+    });
 
   const ocultos: Record<string, string> = {};
   if (sp.tenant) ocultos.tenant = sp.tenant;
@@ -74,7 +77,7 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
         ocultos={ocultos}
         hrefMapa="/dashboard/mapa"
         pregunta={<PreguntaAlAsistente tenantParam={sp.tenant ?? null} />}
-        tareas={<TareasAbiertas tareas={tareas} accion={puedeAtender ? atender : null} ocultos={ocultos} />}
+        tareas={<TareasAbiertas tareas={tareas} errorLectura={tareasConError} accion={puedeAtender ? atender : null} ocultos={ocultos} />}
         // A quién le llega el aviso de una tarea nueva (apagado por defecto): solo el dueño decide quién recibe los correos de la flota.
         notificaciones={puedeAdministrar(rol) ? (
           <Bloque mensaje="No se pudo leer la configuración de avisos." esqueleto={<EsqTabla filas={4} />}>
