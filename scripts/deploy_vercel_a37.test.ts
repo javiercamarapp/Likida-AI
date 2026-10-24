@@ -64,3 +64,21 @@ describe('deploy-vercel.sh', () => {
     expect(i).toBeLessThan(log.indexOf('--prod'));
   });
 });
+
+describe('encender-emision-vercel.sh (A37-S03-04)', () => {
+  const correr = (confirmo?: string) => spawnSync('bash', ['scripts/encender-emision-vercel.sh'], {
+    encoding: 'utf8', env: { PATH: '/usr/bin:/bin', ...(confirmo ? { CONFIRMO_EMISION_REAL: confirmo } : {}) },
+  });
+  it('sin confirmación escrita no toca nada (exit 1, ni siquiera llama a vercel)', () => {
+    const r = correr();
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain('TODAS las flotas');
+  });
+  it('una confirmación distinta tampoco sirve', () => {
+    expect(correr('si').status).toBe(1);
+  });
+  it('agrega antes de borrar', () => {
+    const t = readFileSync('scripts/encender-emision-vercel.sh', 'utf8');
+    expect(t.indexOf('env add')).toBeLessThan(t.indexOf('env rm'));
+  });
+});
