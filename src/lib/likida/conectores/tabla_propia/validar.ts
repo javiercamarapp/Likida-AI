@@ -26,12 +26,18 @@ export function dentroDeMexico(lat: number, lon: number): boolean {
   return lat >= 14 && lat <= 33.2 && lon >= -118.8 && lon <= -86;
 }
 
-/** Mensaje de rechazo para unas coordenadas, o null si son aceptables. NO «arregla» nada. */
-export function motivoCoordenadas(lat: number | null, lon: number | null): string | null {
+/** Caja de las rutas transfronterizas (México + EE. UU. continental hasta la frontera con Canadá): A37-S38-10. */
+export function dentroDeNorteamerica(lat: number, lon: number): boolean {
+  return lat >= 14 && lat <= 50 && lon >= -125 && lon <= -66;
+}
+
+/** Mensaje de rechazo para unas coordenadas, o null si son aceptables. NO «arregla» nada.
+ *  `transfronterizo`: las POSICIONES de una unidad pueden estar en EE. UU. (Memphis, Chicago…): se acepta la caja de Norteamérica. */
+export function motivoCoordenadas(lat: number | null, lon: number | null, opciones: { transfronterizo?: boolean } = {}): string | null {
   if (lat === null || lon === null) return 'latitud o longitud ilegible';
   if (dentroDeMexico(lon, lat)) return 'parece latitud y longitud intercambiadas (no se corrige solo)';
   if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return 'coordenadas fuera de rango';
-  if (!dentroDeMexico(lat, lon)) return 'fuera de México';
+  if (!(opciones.transfronterizo ? dentroDeNorteamerica(lat, lon) : dentroDeMexico(lat, lon))) return 'fuera de México';
   return null;
 }
 

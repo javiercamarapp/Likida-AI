@@ -502,6 +502,21 @@ describe('armarRespuesta · saldo', () => {
     expect(t).toContain(pesos(2200));
   });
 
+  it('A37-S39-09: el ruido de coma flotante no inventa «Te faltan $0.00» ni «Comprobaste $0.00 más»: vas justo', () => {
+    const suma = 200.10 + 300.20; // 500.29999999999995
+    expect(suma).not.toBe(500.30);
+    const justo = armarRespuesta('saldo', { ...ESTADO, anticipo: 500.30, comprobado: suma });
+    expect(justo).toContain('Vas justo');
+    expect(justo).not.toMatch(/Te faltan|más que el anticipo/);
+    const arriba = armarRespuesta('saldo', { ...ESTADO, anticipo: suma, comprobado: 500.30 });
+    expect(arriba).toContain('Vas justo');
+    expect(armarRespuesta('faltantes', { ...ESTADO, anticipo: 500.30, comprobado: suma })).not.toMatch(/Te faltan/);
+  });
+
+  it('un centavo de diferencia SÍ se dice', () => {
+    expect(armarRespuesta('saldo', { ...ESTADO, anticipo: 500.31, comprobado: 500.30 })).toContain('Te faltan');
+  });
+
   it('anticipo en 0 NO se imprime como cifra: se dice que no hay dato', () => {
     // Un 0 en `viaje.anticipo` puede ser "no le dieron nada" o "nadie lo
     // capturó", y las dos se ven igual. Restarle lo comprobado daría un

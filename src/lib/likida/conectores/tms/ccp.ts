@@ -51,6 +51,7 @@ export interface AlmacenCcp {
   marcarAlertada(huellaPlantilla: string): void | Promise<void>;
 }
 
+/** SOLO para pruebas y modo ensayo: no sobrevive a la invocación, así que `cargarCcp` en modo real ya no lo usa por omisión. */
 export function almacenCcpEnMemoria(): AlmacenCcp {
   const subidas = new Set<string>();
   const alertadas = new Set<string>();
@@ -85,6 +86,7 @@ export const INTENTOS_CCP_POR_OMISION = 3;
 export type ResultadoCarga =
   | { estado: 'no_especificado'; motivo: string }
   | { estado: 'bandera_apagada'; motivo: string }
+  | { estado: 'sin_almacen'; motivo: string }
   | { estado: 'ensayo'; payload: { ruta: string; metodo: 'POST'; cuerpo: Record<string, unknown> }; huella: string }
   | { estado: 'ya_subida'; huella: string }
   | { estado: 'reque_pendiente'; motivo: string; huella: string }
@@ -157,7 +159,12 @@ export async function cargarCcp(
     return { estado: 'bandera_apagada', motivo: 'La carga al sistema de transporte está apagada para esta flota (tms_escritura_habilitada).' };
   }
 
-  const almacen = opciones.almacen ?? almacenCcpEnMemoria();
+  // A37-S38-09: en modo real la idempotencia necesita un almacén PERSISTENTE inyectado; el de memoria arranca vacío en cada
+  // invocación serverless y subiría la misma plantilla otra vez. Sin almacén: cero red (fail-closed).
+  const almacen = opciones.almacen;
+  if (!almacen) {
+    return { estado: 'sin_almacen', motivo: 'La carga real exige un almacén persistente de huellas (idempotencia); sin él no se sube nada.' };
+  }
   if (await almacen.subida(h)) return { estado: 'ya_subida', huella: h };
 
   const alertar = async (mensaje: string): Promise<boolean> => {

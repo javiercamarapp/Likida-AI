@@ -217,11 +217,13 @@ function Tarjeta({ t, accion, puedeDecidir }: { t: TarjetaAviso; accion: AccionA
   );
 }
 
-export function VistaAvisosVigia({ sufijo, grupos, total, soloPendientes, puedeDecidir, avisoEncendido, errorLectura, sinMigrar, accion }: {
+export function VistaAvisosVigia({ sufijo, grupos, total, hayMas = false, soloPendientes, puedeDecidir, avisoEncendido, errorLectura, sinMigrar, accion }: {
   sufijo: string;
   grupos: GrupoDia[];
   /** Cuántos avisos hay en la lista que se está viendo. */
   total: number;
+  /** La lista llegó al tope de la bandeja: puede haber avisos más viejos que no se muestran (A37-S58-07). */
+  hayMas?: boolean;
   soloPendientes: boolean;
   /** Solo el dueño y el encargado deciden; el resto mira (sin botones y sin teléfonos completos). */
   puedeDecidir: boolean;
@@ -269,6 +271,12 @@ export function VistaAvisosVigia({ sufijo, grupos, total, soloPendientes, puedeD
 
           {!sinMigrar && !errorLectura && total === 0 ? (
             <p className="text-[12.5px]" style={{ color: 'var(--muted)' }} data-testid="vacio">{soloPendientes ? VACIO_PENDIENTES : VACIO_TODOS}</p>
+          ) : null}
+
+          {hayMas ? (
+            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }} data-testid="hay-mas">
+              Se muestran los {total} avisos más recientes; puede haber más antiguos. {soloPendientes ? 'Resuelve los pendientes para ver el resto.' : 'Usa «Solo pendientes» para ver lo que falta por resolver.'}
+            </p>
           ) : null}
 
           {grupos.map((g) => (

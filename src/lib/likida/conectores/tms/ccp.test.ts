@@ -82,6 +82,13 @@ describe('cargarCcp', () => {
     expect(peticion.mock.calls[0][0].metodo).toBe('POST');
   });
 
+  it('A37-S38-09: modo real sin almacén persistente inyectado → sin_almacen y cero red (no usa un Set por invocación)', async () => {
+    const { sesion, peticion } = sesionFalsa(() => ok(201));
+    const r = await cargarCcp(sesion, PLANTILLA, { especificacion: ESPEC, modo: 'real', bandera: habilitada, esperar: sinEspera });
+    expect(r.estado).toBe('sin_almacen');
+    expect(peticion).not.toHaveBeenCalled();
+  });
+
   it('la huella no depende del orden de las llaves y distingue plantillas distintas', () => {
     expect(huellaPlantilla({ a: 1, b: 2 })).toBe(huellaPlantilla({ b: 2, a: 1 }));
     expect(huellaPlantilla({ a: 1 })).not.toBe(huellaPlantilla({ a: 2 }));
@@ -103,7 +110,7 @@ describe('cargarCcp', () => {
   it('reque existente → verifica y luego sube', async () => {
     const { sesion, llamadas } = sesionFalsa((p) => (p.ruta === '/api/reque' ? ok(200, { data: { con_complemento: false } }) : ok(201)));
     const r = await cargarCcp(sesion, PLANTILLA, {
-      especificacion: ESPEC, modo: 'real', bandera: habilitada, refReque: 'RQ-2', esperar: sinEspera,
+      especificacion: ESPEC, modo: 'real', bandera: habilitada, almacen: almacenCcpEnMemoria(), refReque: 'RQ-2', esperar: sinEspera,
     });
     expect(r.estado).toBe('subida');
     expect(llamadas.map((p) => p.ruta)).toEqual(['/api/reque', '/api/ccp/cargar']);
@@ -124,7 +131,7 @@ describe('cargarCcp', () => {
   it('el tope de intentos es configurable', async () => {
     const { sesion, peticion } = sesionFalsa(() => ok(500));
     const r = await cargarCcp(sesion, PLANTILLA, {
-      especificacion: ESPEC, modo: 'real', bandera: habilitada, intentos: 2, esperar: sinEspera,
+      especificacion: ESPEC, modo: 'real', bandera: habilitada, almacen: almacenCcpEnMemoria(), intentos: 2, esperar: sinEspera,
     });
     expect(r).toMatchObject({ estado: 'fallo', intentos: 2 });
     expect(peticion).toHaveBeenCalledTimes(2);
@@ -133,14 +140,14 @@ describe('cargarCcp', () => {
   it('un fallo seguido de éxito sube y no alerta', async () => {
     const { sesion } = sesionFalsa([() => fallo(), () => ok(201)]);
     const alertar = vi.fn();
-    const r = await cargarCcp(sesion, PLANTILLA, { especificacion: ESPEC, modo: 'real', bandera: habilitada, alertar, esperar: sinEspera });
+    const r = await cargarCcp(sesion, PLANTILLA, { especificacion: ESPEC, modo: 'real', bandera: habilitada, almacen: almacenCcpEnMemoria(), alertar, esperar: sinEspera });
     expect(r).toMatchObject({ estado: 'subida', intentos: 2 });
     expect(alertar).not.toHaveBeenCalled();
   });
 
   it('credencial rechazada no se reintenta (no bloquear la cuenta)', async () => {
     const { sesion, peticion } = sesionFalsa(() => ({ ok: false, motivo: 'usuario o contraseña', falla: 'credencial' }));
-    const r = await cargarCcp(sesion, PLANTILLA, { especificacion: ESPEC, modo: 'real', bandera: habilitada, esperar: sinEspera });
+    const r = await cargarCcp(sesion, PLANTILLA, { especificacion: ESPEC, modo: 'real', bandera: habilitada, almacen: almacenCcpEnMemoria(), esperar: sinEspera });
     expect(r).toMatchObject({ estado: 'fallo', intentos: 1 });
     expect(peticion).toHaveBeenCalledTimes(1);
   });
@@ -149,7 +156,7 @@ describe('cargarCcp', () => {
     const { sesion } = sesionFalsa(() => fallo());
     const esperas: number[] = [];
     await cargarCcp(sesion, PLANTILLA, {
-      especificacion: ESPEC, modo: 'real', bandera: habilitada, esperar: async (ms) => { esperas.push(ms); },
+      especificacion: ESPEC, modo: 'real', bandera: habilitada, almacen: almacenCcpEnMemoria(), esperar: async (ms) => { esperas.push(ms); },
     });
     expect(esperas).toEqual([1_000, 2_000]);
   });
