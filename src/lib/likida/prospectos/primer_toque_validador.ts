@@ -13,7 +13,7 @@ export const CIFRAS_CANONICAS: ReadonlySet<number> = new Set([35, 38, 31.25, 105
 
 export interface PrimerToque { mensaje_wa: string; correo_asunto: string; correo_cuerpo: string }
 
-const MONTO = /\$\s*(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s*(?:pesos|mxn)\b/gi;
+const MONTO = /\$\s*(\d[\d,.]*)|(\d[\d,.]*)\s*(?:pesos|mxn)\b/gi;
 const CLIENTES = /nuestr[oa]s\s+(?:clientes|usuarios\s+actuales)|\bya\s+(?:trabajamos|tenemos\s+clientes)/i;
 const DIESEL_O_ESTIMULO = /di[eé]sel|est[ií]mulo/i;
 const PESOS = /\$|\bpesos\b|\bmxn\b/i;
@@ -24,7 +24,7 @@ export function violacionesPrimerToque(t: PrimerToque): string[] {
   for (const [campo, texto] of Object.entries(t) as Array<[keyof PrimerToque, string]>) {
     if (CLIENTES.test(texto)) out.push(`${campo}: habla de «nuestros clientes» (Likida aún no tiene)`);
     for (const m of texto.matchAll(MONTO)) {
-      const n = Number((m[1] ?? m[2]).replace(/,/g, ''));
+      const n = Number((m[1] ?? m[2]).replace(/,/g, '').replace(/\.$/, ''));
       if (!CIFRAS_CANONICAS.has(n)) out.push(`${campo}: cifra no canónica ${m[0].trim()}`);
     }
     // El diésel/estímulo solo se habla en litros: ninguna frase que lo mencione

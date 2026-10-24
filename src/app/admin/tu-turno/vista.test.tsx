@@ -18,6 +18,8 @@ it('Apagar/Encender todas no son submit directo: abren un diálogo que dice qué
   );
   expect(html).toContain('Sí, apagar todas');
   expect(html).toContain('Sí, encender todas');
-  expect(html).toMatch(/<button type="button"[^>]*>(<svg[\s\S]*?<\/svg>)?Apagar todas/);
-  expect(html).toMatch(/<button type="button"[^>]*>(<svg[\s\S]*?<\/svg>)?Encender todas/);
+  for (const etiqueta of ['Apagar todas', 'Encender todas']) {
+    const abre = html.lastIndexOf('<button', html.indexOf(`${etiqueta}</button>`));
+    expect(html.slice(abre, abre + 40)).toContain('type="button"');
+  }
 });
