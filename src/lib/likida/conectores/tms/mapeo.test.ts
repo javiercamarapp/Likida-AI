@@ -92,6 +92,18 @@ describe('validarMapeo', () => {
     expect(validarMapeo(base({ obligatorios: ['nada'] })).join(' ')).toMatch(/no es un campo/);
     expect(validarMapeo(base({ params: { desde: 'a', hasta: 'b', pagina: 'p', cursor: 'c' } })).join(' ')).toMatch(/no ambas/);
   });
+  it('A37-TRANSVERSAL-04: en liquidaciones y peajes, cargo, abono e importe exigen transformar «numero» (un «1,234.50» sin transformar se perdía en silencio)', () => {
+    for (const recurso of ['liquidaciones', 'peajes'] as const) {
+      for (const dest of ['cargo', 'abono', 'importe']) {
+        expect(validarMapeo(base({ obligatorios: [], recurso, campos: { folio: 'id', [dest]: 'Cargo' } })).join(' '), `${recurso}.${dest} sin transformar`).toMatch(new RegExp(`«${dest}».*numero`));
+        expect(validarMapeo(base({ obligatorios: [], recurso, campos: { folio: 'id', [dest]: { fuente: 'Cargo', transformar: 'texto' } } })).join(' '), `${recurso}.${dest} texto`).toMatch(/numero/);
+        expect(validarMapeo(base({ obligatorios: [], recurso, campos: { folio: 'id', [dest]: { fuente: 'Cargo', transformar: 'numero' } } })), `${recurso}.${dest} numero`).toEqual([]);
+      }
+    }
+    // otros recursos y otros campos no se tocan
+    expect(validarMapeo(base({ obligatorios: [], recurso: 'viajes', campos: { folio: 'id', importe: 'x' } }))).toEqual([]);
+    expect(validarMapeo(base({ obligatorios: [], recurso: 'liquidaciones', campos: { folio: 'id', desglose: 'x' } }))).toEqual([]);
+  });
   it('no es un objeto', () => expect(validarMapeo(null)).toEqual(['el mapeo debe ser un objeto']));
 });
 

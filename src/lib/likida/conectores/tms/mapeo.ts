@@ -201,6 +201,8 @@ function aTexto(v: unknown): Resultado {
 }
 
 // ── Validación del mapeo ─────────────────────────────────────────────────
+/** Destinos de dinero de liquidaciones y peajes: deben convertirse a número. */
+const CAMPOS_DINERO: ReadonlySet<string> = new Set(['cargo', 'abono', 'importe']);
 const NOMBRE_PARAM = /^[A-Za-z_][A-Za-z0-9_.-]{0,40}$/;
 
 /** Devuelve los problemas del mapeo en lenguaje llano; lista vacía = válido. */
@@ -236,6 +238,10 @@ export function validarMapeo(m: unknown): string[] {
       const f = parsearRuta(det.fuente);
       if (typeof f === 'string') e.push(`campo «${dest}»: ${f}`);
       if (det.transformar !== undefined && !(TRANSFORMACIONES as readonly string[]).includes(det.transformar)) e.push(`campo «${dest}»: transformación desconocida «${String(det.transformar).slice(0, 20)}»`);
+      // A37-TRANSVERSAL-04: sin «numero», un «1,234.50» llega como texto y el renglón se omitía sin aviso (NaN > 0 es falso).
+      if ((x.recurso === 'liquidaciones' || x.recurso === 'peajes') && CAMPOS_DINERO.has(dest) && det.transformar !== 'numero') {
+        e.push(`campo «${dest}»: en ${x.recurso} un importe debe llevar transformar «numero» (con separador de miles llegaría como texto y se omitiría)`);
+      }
       if (det.transformar !== 'fecha_local' && (det.zona !== undefined || det.formato !== undefined)) e.push(`campo «${dest}»: «zona» y «formato» solo aplican a fecha_local`);
       if (det.zona !== undefined && (typeof det.zona !== 'string' || !zonaValida(det.zona))) e.push(`campo «${dest}»: zona horaria desconocida`);
       if (det.formato !== undefined) {
