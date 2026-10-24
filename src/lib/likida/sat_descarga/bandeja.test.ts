@@ -45,7 +45,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 
 const {
-  leerBandeja, buscarGastosParaLigar, candidatosAnotados, motivoAnotado,
+  leerBandeja, buscarGastosParaLigar, candidatosAnotados, motivoAnotado, interpretarImporteBusqueda,
   paginaPedida, POR_PAGINA, PAGINA_MAX, MAX_BUSQUEDA_GASTOS, esEstatusCfdi,
 } = await import('./bandeja');
 
@@ -387,5 +387,20 @@ describe('buscarGastosParaLigar — un buscador, no una lista de todo', () => {
     expect(or.split(',')).toHaveLength(2);
     expect(or.split('%')).toHaveLength(5);
     expect(or).not.toMatch(/[()]/);
+  });
+});
+
+// A37-S17-05: el importe del buscador se interpreta con parsearImporteMx; lo ambiguo NO se convierte en 1 ni quita el filtro.
+describe('interpretarImporteBusqueda', () => {
+  it.each([['1,250.50', 1250.5], ['$1,250.50', 1250.5], ['1250.5', 1250.5], ['1.250,50', 1250.5]])('«%s» es %d', (t, n) => {
+    expect(interpretarImporteBusqueda(t)).toEqual({ importe: n, error: null });
+  });
+  it('vacío = sin filtro de importe (sin error)', () => {
+    expect(interpretarImporteBusqueda('  ')).toEqual({ importe: null, error: null });
+  });
+  it.each(['50,000', '1.234', 'abc', '12 pesos', '-5'])('«%s» no se adivina: error, NO un importe', (t) => {
+    const r = interpretarImporteBusqueda(t);
+    expect(r.importe).toBeNull();
+    expect(r.error).toMatch(/importe/i);
   });
 });
