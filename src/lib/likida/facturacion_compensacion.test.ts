@@ -48,9 +48,10 @@ vi.mock('@/lib/supabase/admin', () => ({
       return {
         // `cliente` trae sus días de crédito (de ahí sale `vence_en`) y
         // `viaje` contesta que el viaje marcado sí es de la flota.
+        // `factura_viaje` (A37-S64-07): el viaje aún no tiene ligas previas con otra factura.
         select: () => (tabla === 'cliente'
           ? cadena({ id: 'cli-1', dias_credito: 30 }, [])
-          : cadena(null, [{ id: VIAJE }])),
+          : tabla === 'factura_viaje' ? cadena(null, []) : cadena(null, [{ id: VIAJE }])),
         insert(datos: Fila) {
           llamadas.push({ tabla, op: 'insert', datos });
           if (tabla === 'factura_viaje' && ligasFallan) {
