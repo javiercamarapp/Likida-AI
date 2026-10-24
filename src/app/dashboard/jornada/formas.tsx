@@ -267,8 +267,9 @@ function FormaCaptura({
           </select>
         </label>
         <label>
-          <span className={ETIQUETA}>Cuándo</span>
-          <input type="datetime-local" name="momento" required defaultValue={`${dia}T08:00`} className={CAMPO} />
+          <span className={ETIQUETA}>Cuándo (expediente del {dia})</span>
+          {/* A37-S19-02: SIN hora precargada. Una hora por omisión firmada sin mirar es una cifra inventada. */}
+          <input type="datetime-local" name="momento" required className={CAMPO} />
         </label>
         {/* LA OTRA MITAD DE LA CORRECCIÓN. Anular deja el motivo y la firma;
             esto deja el VÍNCULO — `corrige_a` — que dice cuál de las marcas
@@ -289,8 +290,8 @@ function FormaCaptura({
           </label>
         )}
         <label className="flex-1 min-w-[220px]">
-          <span className={ETIQUETA}>Nota (de dónde sacaste la hora)</span>
-          <input name="nota" className={CAMPO} placeholder="Ej.: me lo dijo por teléfono a las 8:05" />
+          <span className={ETIQUETA}>Nota (de dónde sacaste la hora, obligatoria)</span>
+          <input name="nota" required minLength={5} className={CAMPO} placeholder="Ej.: me lo dijo por teléfono a las 8:05" />
         </label>
         <Boton texto="Capturar" cargando="Guardando…" icono={<Plus width={14} height={14} strokeWidth={1.75} />} />
       </div>

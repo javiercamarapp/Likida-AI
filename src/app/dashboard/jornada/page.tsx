@@ -6,14 +6,15 @@ import { puedeAdministrar, puedeEditarCatalogoOperativo } from '@/lib/auth/permi
 import { alcanceDePatio, dentroDelAlcance, exigirDentroDelAlcance, type AlcancePatio } from '@/lib/auth/patio';
 import { terminalDeJornada, terminalesDeRegistros } from '@/lib/likida/terminales';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
-import { hoyMx, OFFSET_MX } from '@/lib/formato';
+import { hoyMx } from '@/lib/formato';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 import {
   leerJornadas, leerPolitica, nombresDeOperadores, catalogoDeOperadores,
-  anularAsiento, cerrarDia, asentarMarca, guardarPolitica,
+  anularAsiento, cerrarDia, asentarMarca, guardarPolitica, diaDeJornada, asientosDeJornada,
   JornadaIlegible,
 } from '@/lib/likida/jornada/repo';
+import { validarCapturaMarca } from '@/lib/likida/jornada/captura';
 import { correoDelUsuario } from '@/lib/likida/jornada/firma';
 import { alertasDeJornadas, guardarConfigAlerta, leerConfigAlerta, type AlertaDeJornada } from '@/lib/likida/jornada/alerta_tope_datos';
 import { componerJornada, type TipoAsiento } from '@/lib/likida/jornada/modelo';
@@ -295,13 +296,17 @@ export default async function PaginaJornada({
 
     if (!jornadaId) return { ok: false, error: 'Falta el día al que va la marca.' };
     if (!TIPOS_VALIDOS.includes(tipo)) return { ok: false, error: 'Ese tipo de marca no existe.' };
-    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(cuando)) {
-      return { ok: false, error: 'Captura la fecha y la hora completas.' };
-    }
-    const momento = new Date(`${cuando}:00${OFFSET_MX}`);
-    if (!Number.isFinite(momento.getTime())) return { ok: false, error: 'Esa fecha y hora no se entienden.' };
-
-    const corrigeA = String(fd.get('corrigeA') ?? '').trim() || null;
+    // A37-S19-01/02: la hora debe existir, caer en el día del expediente (leído
+    // de la base, no del formulario), llevar su fuente, y `corrigeA` ser una
+    // marca anulada de ESTA jornada. Cualquier lectura caída falla cerrado.
+    const diaExp = await diaDeJornada(p.tenantId, jornadaId);
+    if (diaExp === null) return { ok: false, error: 'No pude leer el día del expediente — no se anotó nada. Vuelve a intentarlo.' };
+    const corrigeSolicitado = String(fd.get('corrigeA') ?? '').trim() || null;
+    const asientosExp = corrigeSolicitado ? await asientosDeJornada(p.tenantId, jornadaId) : [];
+    if (asientosExp === null) return { ok: false, error: 'No pude leer las marcas del día — no se anotó nada. Vuelve a intentarlo.' };
+    const v = validarCapturaMarca({ cuando, dia: diaExp, nota, corrigeA: corrigeSolicitado, asientos: asientosExp });
+    if (!v.ok) return { ok: false, error: v.error };
+    const { momento, corrigeA } = v;
     const res = await asentarMarca({
       jornadaId,
       tenantId: p.tenantId,
@@ -310,7 +315,7 @@ export default async function PaginaJornada({
       procedencia: 'capturado_contralor',
       registradoPor: f.id,
       registradoPorEmail: f.email,
-      nota: nota || null,
+      nota: v.nota,
       corrigeA,
     });
     if (res === 'fallo') return { ok: false, error: 'No se pudo guardar la marca. Intenta de nuevo en un momento.' };
