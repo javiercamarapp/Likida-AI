@@ -6,6 +6,7 @@
 // para que la pantalla diga «falta aplicar la migración» en vez de un vacío que parezca «no hay grupos».
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { logger } from '@/lib/logger';
 import { acotada } from '../../presupuesto';
 import type { MensajeHistorial } from './export_whatsapp';
 
@@ -95,11 +96,32 @@ export interface EntradaImportacion {
 
 const LOTE = 500;
 
+/** Una importación a medias más reciente que esto puede ser una subida en curso de otra persona: no se toca. */
+const MIN_PARA_DAR_POR_ABANDONADA = 15;
+
+/** Borra una importación (los mensajes caen en cascada). Reintenta una vez; devuelve el error si no pudo. */
+async function borrarImportacion(db: ReturnType<typeof supabaseAdmin>, tenantId: string, id: string): Promise<string | null> {
+  let ultimo = 'desconocido';
+  for (let intento = 0; intento < 2; intento++) {
+    try {
+      const r = await acotada(db.from('vigia_historial_import').delete().eq('tenant_id', tenantId).eq('id', id), 'vigia.import_deshacer');
+      if (!r.error) return null;
+      ultimo = r.error.message;
+    } catch (e) { ultimo = e instanceof Error ? e.message : String(e); }
+  }
+  return ultimo;
+}
+
 /**
  * Guarda una exportación. La huella sha256 (única por grupo) hace que subir DOS veces el mismo archivo no duplique nada.
  * Si falla a la mitad, se borra la importación (los mensajes caen en cascada): nunca queda un histórico a medias.
+ *
+ * A37-S58-03: el borrado del rollback se COMPRUEBA (supabase-js reporta el error por valor; antes un `.catch(() => {})` lo
+ * dejaba pasar). Si tampoco se pudo deshacer, se grita con el id y el fallo lo dice. Y como la huella dejaría la importación a
+ * medias marcada como «ya subida» para siempre, al resubir el mismo archivo se compara lo declarado contra lo realmente guardado:
+ * si faltan mensajes (y no es una subida en curso) se rehace.
  */
-export async function guardarImportacion(tenantId: string, e: EntradaImportacion): Promise<{ ok: true; id: string } | { ok: false; duplicada: true }> {
+export async function guardarImportacion(tenantId: string, e: EntradaImportacion, yaReintentada = false): Promise<{ ok: true; id: string } | { ok: false; duplicada: true }> {
   const db = supabaseAdmin();
   const ordenados = [...e.mensajes].sort((a, b) => (a.enviadoEn < b.enviadoEn ? -1 : 1));
   const imp = await acotada(db.from('vigia_historial_import').insert({
@@ -107,8 +129,23 @@ export async function guardarImportacion(tenantId: string, e: EntradaImportacion
     desde: ordenados[0]?.enviadoEn ?? null, hasta: ordenados[ordenados.length - 1]?.enviadoEn ?? null, creado_por: e.usuarioId,
   }).select('id').single(), 'vigia.import_insert');
   if (imp.error) {
-    if (imp.error.code === '23505') return { ok: false, duplicada: true };
-    throw new Error(`vigia.import_insert: ${imp.error.message}`);
+    if (imp.error.code !== '23505') throw new Error(`vigia.import_insert: ${imp.error.message}`);
+    if (yaReintentada) return { ok: false, duplicada: true };
+    const previa = await acotada(db.from('vigia_historial_import').select('id, mensajes, created_at')
+      .eq('tenant_id', tenantId).eq('grupo_id', e.grupoId).eq('sha256', e.sha256).maybeSingle(), 'vigia.import_previa');
+    if (previa.error) throw new Error(`vigia.import_previa: ${previa.error.message}`);
+    const p = previa.data as Fila | null;
+    if (!p) return { ok: false, duplicada: true };
+    const guardados = await acotada(db.from('vigia_historial_mensaje').select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId).eq('import_id', String(p.id)), 'vigia.import_conteo');
+    if (guardados.error) throw new Error(`vigia.import_conteo: ${guardados.error.message}`);
+    const declarados = Number(p.mensajes ?? 0);
+    const edadMin = (Date.now() - Date.parse(String(p.created_at))) / 60_000;
+    if ((guardados.count ?? 0) >= declarados || !(edadMin >= MIN_PARA_DAR_POR_ABANDONADA)) return { ok: false, duplicada: true };
+    logger.warn('vigia.import_a_medias_rehecha', { import: String(p.id), declarados, guardados: guardados.count ?? 0 });
+    const fallo = await borrarImportacion(db, tenantId, String(p.id));
+    if (fallo) throw new Error(`vigia.import_a_medias: no se pudo limpiar la importación anterior (${String(p.id)}): ${fallo}`);
+    return guardarImportacion(tenantId, e, true);
   }
   const id = String((imp.data as Fila).id);
   try {
@@ -119,7 +156,11 @@ export async function guardarImportacion(tenantId: string, e: EntradaImportacion
       if (r.error) throw new Error(`vigia.import_mensajes: ${r.error.message}`);
     }
   } catch (err) {
-    await acotada(db.from('vigia_historial_import').delete().eq('tenant_id', tenantId).eq('id', id), 'vigia.import_deshacer').catch(() => {});
+    const fallo = await borrarImportacion(db, tenantId, id);
+    if (fallo) {
+      logger.error('vigia.import_deshacer_fallo', { import: id, err: fallo });
+      throw new Error(`${err instanceof Error ? err.message : String(err)} (la importación ${id} quedó a medias y no se pudo deshacer: al resubir el mismo archivo se rehará)`);
+    }
     throw err;
   }
   return { ok: true, id };
