@@ -105,3 +105,12 @@ describe('#26: la reserva ambigua del PAC y la duración de la ruta', () => {
     expect(pagina).toMatch(/^export const maxDuration = 60;$/m);
   });
 });
+
+describe('A37-A3-21: guardarReceptor usa el cliente del viaje, no el del formulario', () => {
+  it('la acción no lee clienteId del FormData', () => {
+    const accion = FUENTE.match(/async function guardarReceptor[\s\S]*?revalidatePath/)?.[0] ?? '';
+    expect(accion).not.toBe('');
+    expect(accion).not.toMatch(/fd\.get\('clienteId'\)/);
+    expect(accion).toContain('ctx.clienteId');
+  });
+});

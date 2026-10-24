@@ -169,7 +169,9 @@ export async function SeccionTimbrado({ v, searchParams }: {
     if (!puedeTimbrar(s.rol)) {
       return { error: 'Tu rol no puede capturar los datos fiscales del cliente: van dentro del CFDI.' };
     }
-    const clienteId = t(fd.get('clienteId'));
+    // A37-A3-21: el cliente es el DEL VIAJE (leído en servidor), nunca el que mande el formulario: otro cliente de la
+    // flota no se edita desde la pantalla de este viaje.
+    const clienteId = ctx.clienteId;
     if (clienteId === null) return { error: 'El viaje no tiene cliente asignado — asígnalo antes de capturar sus datos fiscales.' };
     try {
       await guardarReceptorFiscal(s.tenantId, clienteId, {
