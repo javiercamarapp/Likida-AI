@@ -58,6 +58,16 @@ export function armarFilasEstadias(
   return { filas, resumen: resumirEstadias(filas), truncada: datos.truncada };
 }
 
+/** El `desde` por omisión (6 días antes de `hasta`, mediodía de México). A37-S13-05:
+ *  `hasta` puede tener forma válida pero no existir («2026-99-99»); `toISOString()` de una
+ *  fecha inválida LANZA RangeError. Aquí nunca lanza: devuelve `hasta` tal cual y
+ *  `rangoDeDias` lo rechaza con su mensaje «Alguna fecha no existe.». */
+export function desdePorOmision(hasta: string): string {
+  const t = new Date(`${hasta}T12:00:00-06:00`).getTime();
+  if (Number.isNaN(t)) return hasta;
+  return new Date(t - 6 * 86_400_000).toISOString().slice(0, 10);
+}
+
 /** ¿«AAAA-MM-DD» es un día REAL del calendario? (A37-S11-04: V8 acepta `2026-02-30` y lo corre al 2 de marzo.) */
 export function diaReal(dia: string): boolean {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dia);

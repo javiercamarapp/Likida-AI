@@ -10,7 +10,9 @@
 #   NEXT_PUBLIC_SUPABASE_URL       URL del proyecto (obligatoria)
 #   SUPABASE_SERVICE_ROLE_KEY      llave de respaldo (obligatoria)
 #   RESPALDO_BUCKETS               buckets separados por espacios; si no se define,
-#                                  se usa la lista única scripts/respaldo-buckets.txt
+#                                  se usa la lista única scripts/respaldo-buckets.txt.
+#                                  Si se define y OMITE alguno de la lista única, falla
+#                                  (A37-S04-10) salvo RESPALDO_PERMITIR_PARCIAL=true
 #   RESPALDO_S3_DESTINO             s3://.../prefijo
 #   RESPALDO_ALLOW_EMPTY=true      permite explícitamente un respaldo vacío
 #   RESPALDO_REQUIRE_REMOTE=true   exige destino remoto (CI)
@@ -31,9 +33,23 @@ case "$DESTINO" in /*) ;; *) DESTINO="$ORIGEN_PWD/$DESTINO" ;; esac
 # Lista única de buckets (auditoría 35, R09-01): una prueba la cruza contra las
 # migraciones. RESPALDO_BUCKETS, si se define, la sustituye por completo.
 LISTA_BUCKETS="scripts/respaldo-buckets.txt" # ya estamos en la raíz del repo (cd de arriba)
+[ -f "$LISTA_BUCKETS" ] || { echo "ERROR: falta $LISTA_BUCKETS." >&2; exit 2; }
+LISTA_UNICA="$(sed 's/#.*//' "$LISTA_BUCKETS" | tr -s ' \t\n' ' ')"
 if [ -z "${RESPALDO_BUCKETS:-}" ]; then
-  [ -f "$LISTA_BUCKETS" ] || { echo "ERROR: falta $LISTA_BUCKETS." >&2; exit 2; }
-  RESPALDO_BUCKETS="$(sed 's/#.*//' "$LISTA_BUCKETS" | tr -s ' \t\n' ' ')"
+  RESPALDO_BUCKETS="$LISTA_UNICA"
+elif [ "${RESPALDO_PERMITIR_PARCIAL:-false}" != "true" ]; then
+  # A37-S04-10: una variable vieja (p. ej. la de GitHub con solo cuatro buckets) sustituía la lista única EN SILENCIO
+  # y dejaba la evidencia fiscal fuera del respaldo. Una sustitución que omite algún bucket de la lista única es un
+  # error; un respaldo parcial a propósito se declara con RESPALDO_PERMITIR_PARCIAL=true.
+  OMITIDOS=""
+  for b in $LISTA_UNICA; do
+    case " $RESPALDO_BUCKETS " in *" $b "*) ;; *) OMITIDOS="$OMITIDOS $b" ;; esac
+  done
+  if [ -n "$OMITIDOS" ]; then
+    echo "ERROR: RESPALDO_BUCKETS omite buckets de $LISTA_BUCKETS:$OMITIDOS." >&2
+    echo "       Quita la variable (se usa la lista única) o declara el respaldo parcial con RESPALDO_PERMITIR_PARCIAL=true." >&2
+    exit 2
+  fi
 fi
 BUCKETS="$RESPALDO_BUCKETS"
 REQUIRE_REMOTE="${RESPALDO_REQUIRE_REMOTE:-false}"

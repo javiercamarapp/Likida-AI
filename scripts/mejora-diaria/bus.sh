@@ -45,6 +45,9 @@ fi
 
 CMD="${1:-}"; shift || true
 
+# json_rutina <rutina> → {"rutina": …} bien escapado (A37-S04-07: nada de interpolar a mano).
+json_rutina() { python3 -c 'import json,sys; print(json.dumps({"rutina": sys.argv[1]}))' "$1"; }
+
 # wapi <accion> <json>  → POST a la API de workers; imprime el cuerpo.
 wapi() {
   curl -sS -m 30 -X POST "$APP_URL/api/worker/bus/$1" \
@@ -64,11 +67,11 @@ case "$CMD" in
 corrida-inicio)
   RUTINA="${1:?rutina}"
   if [ "$BUS_MODO" = "worker" ]; then
-    wapi corrida-inicio "{\"rutina\":\"$RUTINA\"}" | python3 -c "import json,sys
+    wapi corrida-inicio "$(json_rutina "$RUTINA")" | python3 -c "import json,sys
 try: print(json.load(sys.stdin)['id'])
 except Exception: pass" 2>/dev/null
   else
-    api POST "bus_corrida" "{\"rutina\":\"$RUTINA\"}" "return=representation" \
+    api POST "bus_corrida" "$(json_rutina "$RUTINA")" "return=representation" \
       | python3 -c "import json,sys
 try: print(json.load(sys.stdin)[0]['id'])
 except Exception: pass" 2>/dev/null
@@ -247,7 +250,7 @@ PY
 
 ordenes)
   python3 - <<'PY'
-import json, os, subprocess, pathlib, urllib.request, datetime
+import json, os, subprocess, pathlib, urllib.request, datetime, sys, time, re
 MODO = os.environ.get("BUS_MODO", "legacy")
 REPO = pathlib.Path(os.environ["REPO"])
 APAGADO = REPO / ".mejora-diaria" / "APAGADO"
@@ -263,7 +266,7 @@ if MODO == "worker":
             headers={"x-worker-key": os.environ["WORKER_KEY"], "Content-Type": "application/json"})
         crudo = urllib.request.urlopen(req, timeout=30).read()
         return json.loads(crudo) if crudo else {}
-    pendientes = wapi("ordenes").get("ordenes", [])
+    pendientes = lambda: wapi("ordenes").get("ordenes", [])
     tomar = lambda oid: wapi("ordenes-claim", {"id": oid}).get("tomada", False)
     resolver = lambda oid, ok, res: wapi("ordenes-resolver", {"id": oid, "ok": ok, "resultado": res})
 else:
@@ -276,31 +279,63 @@ else:
                                      method=metodo, headers=h)
         crudo = urllib.request.urlopen(req, timeout=30).read()
         return json.loads(crudo) if crudo else None
-    pendientes = pedir("GET", "bus_orden?estado=eq.pendiente&order=creado_en&limit=10") or []
+    pendientes = lambda: pedir("GET", "bus_orden?estado=eq.pendiente&order=creado_en&limit=10") or []
     tomar = lambda oid: bool(pedir("PATCH", f"bus_orden?id=eq.{oid}&estado=eq.pendiente",
                                    {"estado": "tomada", "tomada_en": ahora()}, "return=representation"))
     resolver = lambda oid, ok, res: pedir("PATCH", f"bus_orden?id=eq.{oid}",
                                           {"estado": "hecha" if ok else "fallida", "resuelta_en": ahora(),
                                            "resultado": res or ("hecha" if ok else "falló sin decir por qué")})
 
+# A37-S04-07: ninguna llamada de red queda fuera de un try. Un corte entre «tomar» y
+# «resolver» ya no aborta el script con un traceback: se reintenta y, si no hay forma,
+# se dice. El servidor (ordenes) barre las tomadas sin resolver tras el vencimiento.
+def avisar(msg): print(f"[bus] {msg}", file=sys.stderr)
+
+try:
+    pendientes = pendientes()
+except Exception as e_red:
+    avisar(f"no se pudo leer la lista de órdenes: {str(e_red)[:150]}")
+    sys.exit(1)
+
+def resolver_seguro(oid, ok, res):
+    espera = float(os.environ.get("BUS_REINTENTO_ESPERA", "2"))
+    for intento in (1, 2, 3):
+        try:
+            resolver(oid, ok, res)
+            return True
+        except Exception as e_res:
+            if intento == 3:
+                avisar(f"no se pudo resolver la orden {oid}: {str(e_res)[:150]} — queda tomada sin resolver")
+            else:
+                time.sleep(espera * intento)
+    return False
+
 for o in pendientes:
     # Claim anclado a pendiente (mismo patrón que wa_pendientes): si otra
     # instancia la tomó entre el GET y el claim, aquí viene False.
-    if not tomar(o["id"]): continue
+    try:
+        if not tomar(o["id"]): continue
+    except Exception as e_claim:
+        avisar(f"no se pudo tomar la orden {o.get('id')}: {str(e_claim)[:150]} — sigue pendiente")
+        continue
     tipo, rutina = o["tipo"], o.get("rutina")
     payload = o.get("payload") or {}
     ok, resultado = False, ""
     try:
         if tipo == "correr_ahora":
-            plist = pathlib.Path(f"{REPO}/scripts/mejora-diaria/com.likida.{rutina}.plist")
-            if not plist.is_file():
-                resultado = f"no existe com.likida.{rutina}"
+            # A37-S04-07: la rutina entra a una ruta y a un argumento de launchctl; mismo saneo que editar_encargo.
+            if not isinstance(rutina, str) or not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", rutina):
+                resultado = "rutina inválida (solo minúsculas, dígitos y guiones)"
             else:
-                uid = os.getuid()
-                r = subprocess.run(["launchctl", "kickstart", "-k", f"gui/{uid}/com.likida.{rutina}"],
-                                   capture_output=True, text=True, timeout=30)
-                ok = r.returncode == 0
-                resultado = "corrida disparada" if ok else (r.stderr.strip()[:200] or f"launchctl exit {r.returncode}")
+                plist = pathlib.Path(f"{REPO}/scripts/mejora-diaria/com.likida.{rutina}.plist")
+                if not plist.is_file():
+                    resultado = f"no existe com.likida.{rutina}"
+                else:
+                    uid = os.getuid()
+                    r = subprocess.run(["launchctl", "kickstart", "-k", f"gui/{uid}/com.likida.{rutina}"],
+                                       capture_output=True, text=True, timeout=30)
+                    ok = r.returncode == 0
+                    resultado = "corrida disparada" if ok else (r.stderr.strip()[:200] or f"launchctl exit {r.returncode}")
         elif tipo == "kill_switch_on":
             APAGADO.parent.mkdir(parents=True, exist_ok=True); APAGADO.touch()
             ok, resultado = True, "APAGADO puesto — todas las rutinas del repo se detienen"
@@ -370,7 +405,7 @@ for o in pendientes:
             resultado = f"tipo desconocido: {tipo}"
     except Exception as e:
         resultado = str(e)[:200]
-    resolver(o["id"], ok, resultado)
+    resolver_seguro(o["id"], ok, resultado)
     print(f"[bus] orden {tipo}{' · ' + rutina if rutina else ''}: {'✓' if ok else '✗'} {resultado}")
 print(f"[bus] órdenes atendidas: {len(pendientes)}")
 PY

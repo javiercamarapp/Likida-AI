@@ -113,13 +113,15 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
     return r;
   }
 
-  async function accionEstado(fd: FormData): Promise<void> {
+  async function accionEstado(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
     const s = await resolverTenantAtado(RUTA, sp, tenantId);
-    if (!s) return;
-    if (!puedeVerRuta(s.rol, RUTA)) return;
-    await archivarSitioDelPanel({ tenantId: s.tenantId, rol: s.rol }, String(fd.get('id') ?? ''), fd.get('activa') === 'si');
-    revalidatePath(RUTA);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico editan el catálogo.' };
+    // A37-S13-06: el resultado se DEVUELVE (antes se descartaba): un fallo o «ya no existe» tiene que verse.
+    const r = aResultado(await archivarSitioDelPanel({ tenantId: s.tenantId, rol: s.rol }, String(fd.get('id') ?? ''), fd.get('activa') === 'si'));
+    if (r?.ok) revalidatePath(RUTA);
+    return r;
   }
 
   return (

@@ -311,7 +311,8 @@ import { join, relative } from 'node:path';
 // Auditoría 37, S57-01/S18-01: +1 archivo (322 → 323), `sat_descarga/rfc_tenant.ts` — lee `tenant.rfc` (el RFC fiscal verificado) para atar el buzón del SAT al tenant; todo por `acotada`.
 // Auditoría 37, A37-S28-01 (lote del Redactor, 23-oct-2026): +1 archivo (322 → 323), `agentes/candidatos_redactor.ts` — la selección de candidatos que antes vivía en `runner.ts`; todo por `acotada`.
 // INTEGRACIÓN ONDA 5 (23-oct-2026, #651–#656): cada rama medía su techo sola; el barrido real del árbol fusionado mide 324 archivos (323 de la oleada 4 + sat/rfc_tenant.ts + agentes/candidatos_redactor.ts, +1 que ninguna rama veía por separado). Techo = medido, sin holgura.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 324;
+// Auditoría 37, lote M-Z-resto-10 (A37-S07-06): +1 archivo (324 → 325), `lib/perfil/avatar_huerfanos.ts` — borra del bucket público `avatares` las extensiones viejas del MISMO usuario tras guardar el avatar nuevo; solo Storage (`storage.from('avatares').remove`), cero tablas.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 325;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -588,6 +589,7 @@ const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_357;
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.
 // 2,315 → 2,318 (+3, lote A37 M-Z-resto-11, medido con el barrido completo del guardia): `liquidacion_externa/repo.ts` suma `leerVersionFormato` (+1) y el guardado del formato
 // con control de versión de A37-S14-10 (+2: insert si no había fila, update condicional por `actualizado_en`); el upsert de siempre se conserva para los llamadores sin versión.
+// Auditoría 37, lote M-Z-resto-10: +3 llamadas (2,315 → 2,318): `avatar_huerfanos.ts` +1 (Storage `avatares`, A37-S07-06), `marketing/estudio.ts` +1 (Storage: descarta el objeto huérfano si falla el guardado, A37-S07-06) y `api/worker/bus/[accion]/route.ts` +1 (barrido de órdenes `tomada` vencidas a `fallida`, A37-S04-07; anclado a estado=tomada).
 // A37-S27-10 (lote b-sat-fiscal-05): +1 (2,284 → 2,285), en `agentes/insumos.ts` (`crearInsumoArchivo`): `storage.from('agente-insumos').remove`
 // para no dejar huérfano el objeto subido cuando falla el insert.
 // LOTE A37 B-sat-fiscal-06 (migración 0876): +3 llamadas (2,284 → 2,287), 0 archivos nuevos, medido con el barrido real. `gasto_correccion.ts` +2: el RPC

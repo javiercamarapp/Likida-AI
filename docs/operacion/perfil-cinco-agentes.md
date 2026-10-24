@@ -109,8 +109,10 @@ nota en la app en menos de un minuto (caché de 30 s).
 
 Seguridad de los scripts de cambio (`aplicar-` y `revertir-`):
 
-- Contra un host que no sea local (`127.0.0.1`, `localhost`, `::1`) se **niegan**, salvo con `--produccion` y una
-  confirmación interactiva (escribir el UUID de la flota).
+- Contra una base que no sea la pila local se **niegan**, salvo con `--produccion` y una confirmación interactiva
+  (escribir el UUID de la flota). «Local» es host `127.0.0.1`, `localhost` o `::1` **y** puerto `54322` (el de la pila
+  local de Supabase): un túnel `ssh -L` a producción también se ve como `localhost`, por eso el nombre solo no basta.
+  Otro puerto local se declara a propósito con `PERFIL_PUERTOS_LOCALES="54322 5433"`.
 - Antes de cambiar nada escriben el estado previo de la flota en `~/likida-respaldos/perfil/<fecha>-<tenant>.json`
   e imprimen al final el comando exacto de reversa. No imprimen la URL de la base (solo el host).
 - `--env-file <ruta>` lee `DATABASE_URL` de un archivo sin ejecutarlo ni imprimirlo.

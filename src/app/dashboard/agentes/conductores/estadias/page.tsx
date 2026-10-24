@@ -4,7 +4,7 @@ import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { diaEnZona, TZ_MX } from '@/lib/formato';
 import { logger } from '@/lib/logger';
 import { zonaOCdmx } from '@/lib/likida/conductor/config';
-import { armarFilasEstadias, rangoDeDias } from '@/lib/likida/conductor/estadias_lectura';
+import { armarFilasEstadias, desdePorOmision, rangoDeDias } from '@/lib/likida/conductor/estadias_lectura';
 import { leerCatalogosFiltro, leerDatosEstadias } from '@/lib/likida/conductor/repo_validacion';
 import { getZonaHorariaTenant } from '@/lib/likida/repo';
 import { sufijoTenant } from '../../../sufijo';
@@ -32,7 +32,7 @@ export default async function PaginaEstadias({ searchParams }: {
   const zonaLeida = await getZonaHorariaTenant(tenantId).then(zonaOCdmx).catch(() => null);
   const zona = zonaLeida ?? TZ_MX; // solo para pintar los filtros: sin zona leída NO se consulta nada (abajo)
   const hasta = sp.hasta && FECHA.test(sp.hasta) ? sp.hasta : diaEnZona(new Date(), zona);
-  const desde = sp.desde && FECHA.test(sp.desde) ? sp.desde : new Date(new Date(`${hasta}T12:00:00-06:00`).getTime() - 6 * 86_400_000).toISOString().slice(0, 10);
+  const desde = sp.desde && FECHA.test(sp.desde) ? sp.desde : desdePorOmision(hasta);
   const uuidONada = (v: string | undefined) => (v && UUID.test(v) ? v.toLowerCase() : '');
   const filtros = { desde, hasta, terminalId: uuidONada(sp.terminal), clienteId: uuidONada(sp.cliente), operadorId: uuidONada(sp.chofer) };
   const rango = rangoDeDias(desde, hasta, 93, zona);

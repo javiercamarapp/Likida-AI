@@ -24,6 +24,10 @@ const CAP_POR_ACCION: Record<string, CapacidadWorker> = {
   'ordenes-resolver': 'bus.ordenes',
 };
 
+/** Cuánto puede estar una orden `tomada` sin resolverse antes de darla por perdida. `editar_encargo`
+ *  (fetch + push + `gh pr` con reintento) es la más lenta y cabe de sobra en 30 min. */
+const LEASE_ORDEN_MS = 30 * 60_000;
+
 /** 3 MiB: base64 y metadatos deben caber en el transporte HTTP; un video no cabe aquí a
  *  propósito (la Mac sube el preview, no el master). */
 const TOPE_MEDIA = 3 * 1024 * 1024;
@@ -170,6 +174,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ accion: string
         return NextResponse.json({ ok: true, sembradas: filas.length });
       }
       case 'ordenes': {
+        // A37-S04-07: lease. Una orden `tomada` cuyo worker murió antes de resolver (corte de red,
+        // Mac dormida) quedaba así para siempre. NO se re-ofrece (editar_encargo abre un PR, correr_ahora
+        // lanza una corrida: ejecutarla dos veces es peor que no ejecutarla); se cierra como `fallida` con
+        // motivo para que /admin la muestre y Javier decida si la emite otra vez. Best-effort: si el barrido
+        // falla, la lista de pendientes se entrega igual.
+        try {
+          const limite = new Date(Date.now() - LEASE_ORDEN_MS).toISOString();
+          const { error: errBarrido } = await admin.from('bus_orden').update({
+            estado: 'fallida',
+            resuelta_en: new Date().toISOString(),
+            resultado: 'La orden se tomó y el worker no la resolvió a tiempo (¿corte de red o Mac apagada?). No se reintenta sola: emítela otra vez si sigue haciendo falta.',
+          }).eq('estado', 'tomada').lt('tomada_en', limite);
+          if (errBarrido) logger.warn('worker.bus.barrido_tomadas_fallo', { worker: quien.nombre, err: errBarrido.message });
+        } catch (e) {
+          logger.warn('worker.bus.barrido_tomadas_fallo', { worker: quien.nombre, err: e instanceof Error ? e.message : String(e) });
+        }
         const { data, error } = await admin.from('bus_orden')
           .select('id, tipo, rutina, payload, creado_en')
           .eq('estado', 'pendiente').order('creado_en').limit(10);

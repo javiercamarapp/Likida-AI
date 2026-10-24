@@ -4,6 +4,7 @@
 //     --muestras "<carpeta con las muestras reales>" \
 //     --llave-archivo "<ruta de un archivo chmod 600 con la llave del modelo>" \
 //     [--ccp-timbrados "<carpeta con los CCP timbrados .xml>"] \
+//     [--tope-usd 5]                   # tope de gasto de la corrida (por omisión US$ 5; se revisa entre archivos)
 //     [--asignar "archivo.pdf=M3" …]   # compara contra la matriz de 08 §2 (conjunto dorado) y lista discrepancias
 //     --salida "<archivo .md fuera del repo>"
 //
@@ -32,6 +33,8 @@ import type { IdMuestra } from '../src/lib/likida/carta_porte_docs/evaluacion/do
 
 export const RAIZ_REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_EMBARQUES_A_MEDIR = 3;
+/** Tope de gasto por corrida si no se pasa --tope-usd. Se revisa ENTRE archivos (un archivo en curso termina). */
+export const TOPE_USD_POR_CORRIDA = 5;
 
 // ── Argumentos ──────────────────────────────────────────────────────────────
 
@@ -40,12 +43,14 @@ export interface Argumentos {
   ccpTimbrados: string | null;
   llaveArchivo: string | null;
   salida: string;
+  /** Tope de gasto de la corrida en US$ (A37-S04-04); `null` = el de por omisión (`TOPE_USD_POR_CORRIDA`). */
+  topeUsd: number | null;
   /** nombre de archivo → muestra del conjunto dorado, para comparar contra 08 §2. */
   asignar: Record<string, IdMuestra>;
 }
 
 export function leerArgumentos(argv: string[]): Argumentos {
-  const a: Argumentos = { muestras: '', ccpTimbrados: null, llaveArchivo: null, salida: '', asignar: {} };
+  const a: Argumentos = { muestras: '', ccpTimbrados: null, llaveArchivo: null, salida: '', topeUsd: null, asignar: {} };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const v = argv[i + 1];
@@ -54,6 +59,11 @@ export function leerArgumentos(argv: string[]): Argumentos {
     else if (k === '--ccp-timbrados') a.ccpTimbrados = necesita();
     else if (k === '--llave-archivo') a.llaveArchivo = necesita();
     else if (k === '--salida') a.salida = necesita();
+    else if (k === '--tope-usd') {
+      const n = Number(necesita());
+      if (!Number.isFinite(n) || n <= 0) throw new Error('--tope-usd espera un número de dólares mayor que 0.');
+      a.topeUsd = n;
+    }
     else if (k === '--asignar') {
       const [archivo, id] = necesita().split('=');
       if (!archivo || !/^M[1-5]$/.test(id ?? '')) throw new Error('--asignar espera «archivo=M1..M5».');
@@ -98,9 +108,17 @@ export function leerLlave(ruta: string): string {
 
 // ── Sin PII ─────────────────────────────────────────────────────────────────
 
-/** Los motivos de `evaluar` citan lo leído entre «»: se reduce a «…». Las notas del modelo (texto libre) no se copian. */
+/**
+ * Los motivos de `evaluar` citan lo leído entre «»: se reduce a «…». Las notas del modelo (texto libre) no se copian.
+ * A37-S04-04: además (1) el valor CONVERTIDO que `evaluar` escribe tras la flecha («conversión: «evidencia» → valor»)
+ * sale en claro y se redacta; (2) la nota es lo ÚLTIMO del motivo y puede traer «;», así que se recorta hasta el final
+ * (antes `[^;]*` dejaba pasar lo que seguía al primer «;»).
+ */
 export function sinValores(texto: string): string {
-  return texto.replace(/«[^»]*»/g, '«…»').replace(/nota: [^;]*/g, 'nota: (ver el visor)');
+  return texto
+    .replace(/«[^»]*»/g, '«…»')
+    .replace(/→ .*?(?=; nota: |$)/g, '→ …')
+    .replace(/nota: .*$/g, 'nota: (ver el visor)');
 }
 
 // ── Medición ────────────────────────────────────────────────────────────────
@@ -295,6 +313,8 @@ export interface OpcionesCarpeta extends OpcionesMedicion {
   ccpTimbrados?: string | null;
   salida: string;
   raizRepo?: string;
+  /** Tope de gasto en US$ (A37-S04-04). Al alcanzarlo, los archivos restantes se omiten sin llamar al modelo. */
+  topeUsd?: number | null;
 }
 
 export async function evaluarCarpeta(op: OpcionesCarpeta): Promise<{ informes: InformeMuestra[]; texto: string }> {
@@ -305,8 +325,16 @@ export async function evaluarCarpeta(op: OpcionesCarpeta): Promise<{ informes: I
   const ccpPorFolio = op.ccpTimbrados ? cargarCcpTimbrados(op.ccpTimbrados) : undefined;
   const archivos = readdirSync(op.muestras).filter((f) => !f.startsWith('.') && statSync(join(op.muestras, f)).isFile()).sort();
   const informes: InformeMuestra[] = [];
+  const tope = op.topeUsd ?? TOPE_USD_POR_CORRIDA;
+  let gastado = 0;
   for (const f of archivos) {
-    informes.push(await medirArchivo(f, new Uint8Array(readFileSync(join(op.muestras, f))), { ...op, ccpPorFolio }));
+    if (gastado >= tope) {
+      informes.push({ archivo: f, formato: 'omitida', embarques: 0, embarquesMedidos: [], error: `omitida: se alcanzó el tope de gasto (US$ ${tope.toFixed(2)})` });
+      continue;
+    }
+    const inf = await medirArchivo(f, new Uint8Array(readFileSync(join(op.muestras, f))), { ...op, ccpPorFolio });
+    gastado += inf.embarquesMedidos.reduce((s, e) => s + e.costoUsd, 0);
+    informes.push(inf);
   }
   const texto = reporte(informes, op.ahora ?? new Date(), { conCcp: !!ccpPorFolio });
   mkdirSync(dirname(resolve(op.salida)), { recursive: true });
@@ -339,7 +367,7 @@ async function principal(): Promise<void> {
     });
     return { ...r.data, modelo: r.model, tokensIn: r.tokensIn, tokensOut: r.tokensOut, costoUsd: r.cost };
   };
-  const { informes, texto } = await evaluarCarpeta({ muestras: a.muestras, ccpTimbrados: a.ccpTimbrados, salida: a.salida, llm, asignar: a.asignar });
+  const { informes, texto } = await evaluarCarpeta({ muestras: a.muestras, ccpTimbrados: a.ccpTimbrados, salida: a.salida, llm, asignar: a.asignar, topeUsd: a.topeUsd });
   process.stdout.write(texto);
   const errores = informes.filter((i) => i.error).length;
   process.stdout.write(`\nEscrito en ${a.salida}\n`);

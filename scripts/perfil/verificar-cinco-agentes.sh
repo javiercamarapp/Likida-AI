@@ -41,13 +41,16 @@ case "$ESPERADO" in con|sin) ;; *) perfil_uso_error "❌ --esperado es «con» o
 [ -n "$TENANT" ] || perfil_uso_error "Uso: DATABASE_URL=... $0 [--esperado con|sin] [--produccion] [--env-file RUTA] [--base-url URL --cookie C] <UUID-del-tenant>"
 perfil_validar_uuid "$TENANT"
 if [ -n "$ENV_FILE" ]; then perfil_cargar_env_file "$ENV_FILE"; fi
+# A37-S04-05: sin cookie las rutas redirigen al login sea cual sea el perfil: la sección no prueba nada y NO puede
+# terminar en «VERIFICACIÓN OK». Se rechaza el uso (exit 2) en vez de imprimir códigos que parecen una prueba.
+if [ -n "$BASE_URL" ] && [ -z "$COOKIE" ]; then perfil_uso_error "❌ --base-url exige --cookie: sin sesión de un usuario de la flota las rutas solo redirigen al login y no prueban el perfil."; fi
 perfil_requerir_db
 
 HOST="$(perfil_host)"
-case "$HOST" in
-  127.0.0.1|localhost|::1) ;;
-  *) if [ "$PRODUCCION" != "1" ]; then echo "❌ El host '$HOST' no es local; para leer una base remota pasa --produccion." >&2; exit 4; fi ;;
-esac
+# A37-S04-08: «local» = loopback Y puerto de la pila local (ver perfil_es_local); un túnel a producción en localhost no pasa.
+if ! perfil_es_local && [ "$PRODUCCION" != "1" ]; then
+  echo "❌ El host '$HOST:$(perfil_puerto)' no es local; para leer una base remota pasa --produccion." >&2; exit 4
+fi
 echo "Base: $HOST · flota: $TENANT · esperado: $ESPERADO perfil"
 
 EXISTE="$(psql "$DB" -X -v ON_ERROR_STOP=1 -v tenant="$TENANT" -tA <<'SQL'
@@ -97,8 +100,13 @@ if [ -n "$BASE_URL" ]; then
       salida="$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "${BASE_URL%/}$ruta" || echo 'error')"
     fi
     echo "  $ruta -> $salida"
+    # Con perfil, cada ruta restringida tiene que NEGARSE (3xx a /dashboard o 403) y cuenta en FALLAS. Sin perfil
+    # («sin») no se exige nada por ruta: un rol puede ser redirigido por otras razones; solo se imprime.
+    if [ "$ESPERADO" = "con" ]; then
+      codigo_http="${salida%% *}"; destino_http=""; case "$salida" in *" "*) destino_http="${salida#* }" ;; esac
+      if perfil_ruta_negada "$codigo_http" "$destino_http"; then chequear "$ruta está cerrada para el perfil" 1; else chequear "$ruta está cerrada para el perfil (respondió: $salida)" 0; fi
+    fi
   done
-  [ -n "$COOKIE" ] || echo "  (sin --cookie: sin sesión todas redirigen al login; no prueba el perfil)"
 fi
 
 echo "── RESUMEN"
