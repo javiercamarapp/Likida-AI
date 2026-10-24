@@ -43,12 +43,14 @@ function Boton() {
  * El guardado RE-VALIDA en el servidor. Lo de aquí solo alimenta la vista
  * previa y los avisos tempranos — nunca es la autoridad.
  */
-export function FormaAjustes({ inicial, ejemploKm, guardar, catalogo }: {
+export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guardar, catalogo }: {
   inicial: AjustesCrudos;
   /** Los km de un viaje REAL de la flota, para que la vista previa hable de
    *  su operación y no de un viaje inventado. null = todavía no hay viajes
    *  con km capturados, y entonces se dice, no se rellena con un número. */
   ejemploKm: number | null;
+  /** A37-S17-08: la lectura del viaje de ejemplo falló (distinto de «no hay viajes con km»). */
+  ejemploIlegible?: boolean;
   guardar: AccionGuardar;
   /** AUDITORÍA 24, ARQ-3: si la flota declaró su catálogo o no. El textarea ya
    *  NO se prellena con las cuentas de la demo (`600-001`…), así que hay que
@@ -246,7 +248,9 @@ export function FormaAjustes({ inicial, ejemploKm, guardar, catalogo }: {
             <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
               {!revision.ok
                 ? 'Corrige lo de la izquierda para ver el efecto.'
-                : 'Todavía no hay un viaje con kilómetros capturados con el cual enseñar el efecto. En cuanto exista, aquí se ve.'}
+                : ejemploIlegible
+                  ? 'No se pudo leer un viaje de tu flota para enseñar el efecto. No es que no haya viajes: la lectura falló. Recarga; si sigue, es cosa nuestra.'
+                  : 'Todavía no hay un viaje con kilómetros capturados con el cual enseñar el efecto. En cuanto exista, aquí se ve.'}
             </p>
           ) : (
             <>

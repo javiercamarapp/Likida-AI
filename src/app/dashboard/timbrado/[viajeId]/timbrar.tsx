@@ -285,7 +285,6 @@ export async function SeccionTimbrado({ v, searchParams }: {
           <summary className="text-[12.5px] font-medium cursor-pointer">Datos fiscales del cliente (receptor)</summary>
           <div className="pt-2">
             <FormaConAviso accion={guardarReceptor} boton="Guardar datos del cliente" columnas="md:grid-cols-2">
-              <input type="hidden" name="clienteId" value={ctx.clienteId} />
               <Campo nombre="razonSocial" etiqueta="Razón social (exacta a SU constancia)" valorInicial={ctx.receptor.razonSocial ?? ''} />
               <Campo nombre="regimenFiscal" etiqueta="Régimen fiscal (clave)" valorInicial={ctx.receptor.regimenFiscal ?? ''} placeholder="601" />
               <Campo nombre="usoCfdi" etiqueta="Uso CFDI" valorInicial={ctx.receptor.usoCfdi ?? ''} placeholder="S01 o G03" />

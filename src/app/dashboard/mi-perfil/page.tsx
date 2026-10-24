@@ -6,6 +6,7 @@ import { requireSessionTenant } from '@/lib/auth/guard';
 import { rateLimit } from '@/lib/ratelimit';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { logger } from '@/lib/logger';
 import { ROL_LABEL, type RolAppUser } from '@/lib/auth/provisionar';
 import {
   listarMisClientesMcp, revocarSesionesMcp, type ClienteMcpConectado,
@@ -194,6 +195,17 @@ export default async function MiPerfilFlota({
     const { error: errUpdate } = await admin.from('app_user')
       .update({ avatar_url: `${pub.publicUrl}?t=${Date.now()}` }).eq('id', userId);
     if (errUpdate) redirect(volverAMiPerfil(sufijo, 'error=avatar'));
+    // A37-S19-06: el bucket es PÚBLICO y la ruta lleva la extensión; al cambiar de
+    // formato la foto anterior (dato personal) seguía con URL estable. Se borran
+    // las otras extensiones DESPUÉS de que `avatar_url` ya apunta a la nueva (si
+    // esto falla, la foto vieja queda accesible pero no se pierde la nueva: se avisa al log).
+    const otras = ['png', 'webp', 'jpg'].filter((e) => e !== ext).map((e) => `${userId}/avatar.${e}`);
+    try {
+      const { error: errBorrar } = await admin.storage.from('avatares').remove(otras);
+      if (errBorrar) logger.warn('mi_perfil.avatar_anterior_no_borrado', { err: errBorrar.message });
+    } catch (e) {
+      logger.warn('mi_perfil.avatar_anterior_no_borrado', { err: e instanceof Error ? e.message : String(e) });
+    }
     redirect(volverAMiPerfil(sufijo, 'ok=avatar'));
   }
 

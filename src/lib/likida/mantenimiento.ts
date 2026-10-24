@@ -377,6 +377,14 @@ export async function crearRutina(tenantId: string, r: NuevaRutina, creadaPor: s
   }
 }
 
+/** La rutina ya tiene una orden abierta para esa unidad: el doble clic que pierde la carrera (benigno). */
+export class OrdenYaAbierta extends DatoInvalido {
+  constructor() {
+    super('Esa rutina ya tiene una orden abierta para esa unidad — ciérrala antes de abrir otra.');
+    this.name = 'OrdenYaAbierta';
+  }
+}
+
 /**
  * Abre la orden PROGRAMADA que una propuesta ofreció — la decisión del humano.
  * El candado real contra el doble clic es la unique parcial de la 0209 (una
@@ -400,7 +408,7 @@ export async function abrirOrdenProgramada(
   }), 'mantenimiento.abrir_programada');
   if (error) {
     if (error.code === '23505' || /mantenimiento_rutina_abierta_unica/.test(error.message)) {
-      throw new DatoInvalido('Esa rutina ya tiene una orden abierta para esa unidad — ciérrala antes de abrir otra.');
+      throw new OrdenYaAbierta();
     }
     // La FK compuesta de la 0145 rechaza una unidad ajena con foreign key.
     if (error.code === '23503') throw new DatoInvalido('Esa unidad no existe en tu flota.');
