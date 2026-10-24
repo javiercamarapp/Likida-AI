@@ -266,6 +266,14 @@ function normalizarViaje(cuerpo: Record<string, unknown>): NuevoViaje & { folio:
   // intentar» que su TMS reintentaba para siempre. Es un error determinista de
   // SU dato: 400 que nombra el campo. 0 NO se reinterpreta como «desconocido»
   // (vacío ≠ cero): para no declararlo, se omite o se manda null.
+  // A37-S11-07. `ingreso_flete` es numeric(12,2): con más de dos decimales la base redondea en
+  // silencio (38500.456 -> 38500.46) y el reporte del contralor difiere por centavos de lo que
+  // mandó el TMS. Mismo criterio y tolerancia que `monto()` (anticipo): se rechaza, no se redondea.
+  const flete = ingreso.ingresoFlete;
+  if (flete !== null && Math.abs(flete * 100 - Math.round(flete * 100)) > 1e-6) {
+    throw new CampoInvalido('ingresoFlete', '`ingresoFlete` no puede traer más de dos decimales.');
+  }
+
   const km = ingreso.kmRecorridos;
   if (km !== null && (!Number.isInteger(km) || km < 1 || km > 19_999)) {
     throw new CampoInvalido('kmRecorridos', '`kmRecorridos` tiene que ser un número entero entre 1 y 19999 (omítelo o mándalo null si no lo conoces).');
