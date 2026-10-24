@@ -86,12 +86,31 @@ export async function borrarStorageMarcado(): Promise<ResultadoBorradoStorage> {
       continue;
     }
 
-    // `remove` devuelve SOLO lo que borró de verdad. Un archivo que ya no
-    // existía no viene en la respuesta, y ése también hay que sellarlo: sigue
-    // sin estar en el bucket, que es lo que la cola pregunta.
+    // `remove` devuelve SOLO lo que borró de verdad. Un nombre que NO viene en la respuesta
+    // puede ser (a) un archivo que ya no existía —hay que sellarlo: sigue sin estar en el
+    // bucket, que es lo que la cola pregunta— o (b) uno que SIGUE ahí y no se borró.
+    // A37-L-05: antes se sellaba TODO el lote si la respuesta venía vacía (sellaba
+    // sin confirmar) y, en un lote mixto, los inexistentes quedaban «fallidos» para
+    // siempre (con >=200 atascaban la cola de ARCO). Ahora cada nombre sin confirmar se
+    // comprueba con `exists`: solo `false` SIN error cuenta como «ya no existe».
     const confirmados = new Set((data ?? []).map((o) => o.name));
-    const aSellar = nombres.filter((n) => confirmados.has(n) || confirmados.size === 0);
+    const aSellar = nombres.filter((n) => confirmados.has(n));
+    for (const n of nombres) {
+      if (confirmados.has(n)) continue;
+      let ausente = false;
+      try {
+        const ex = await db.storage.from(bucket).exists(n);
+        ausente = ex.error === null && ex.data === false;
+      } catch (e) {
+        logger.warn('storage.exists_fallo', { bucket, err: e instanceof Error ? e.message : String(e) });
+      }
+      if (ausente) aSellar.push(n);
+    }
 
+    if (aSellar.length === 0) {
+      fallidos += nombres.length;
+      continue;
+    }
     const { error: errSello } = await acotada(
       db.from('storage_huerfano_candidato')
         .update({ borrado_en: new Date().toISOString() })
