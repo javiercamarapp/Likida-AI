@@ -143,15 +143,18 @@ export function pareceSpa(html: string): boolean {
   return false;
 }
 
-/** ¿El error de `fetch` dice que el nombre no existe? */
+/**
+ * ¿El error de `fetch` dice que el nombre NO EXISTE? Solo ENOTFOUND lo afirma.
+ * EAI_AGAIN es «el resolutor no contestó»: falla temporal NUESTRA (A37-S45-08),
+ * y acusarla de DNS muerto manda un correo con todo el catálogo «roto».
+ */
 function esDnsMuerto(e: unknown): boolean {
-  // Node mete el código en `cause`; el mensaje se mira como red por si el
-  // runtime cambia la forma. Los dos casos que importan son ENOTFOUND (no
-  // existe) y EAI_AGAIN (el resolutor no contestó).
   const causa = (e as { cause?: { code?: string } })?.cause?.code;
-  if (causa === 'ENOTFOUND' || causa === 'EAI_AGAIN') return true;
+  if (causa === 'EAI_AGAIN') return false;
+  if (causa === 'ENOTFOUND') return true;
   const msg = e instanceof Error ? e.message : String(e);
-  return /ENOTFOUND|EAI_AGAIN|getaddrinfo/i.test(msg);
+  if (/EAI_AGAIN/i.test(msg)) return false;
+  return /ENOTFOUND/i.test(msg);
 }
 
 /**
