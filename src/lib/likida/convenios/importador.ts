@@ -161,10 +161,12 @@ export function parsearMatrizConvenios(matriz: unknown[][], opciones: { puedeVer
   }
 
   const crudo = (fila: unknown[], c: Col): unknown => (idx[c] === undefined ? undefined : fila[idx[c] as number]);
-  const texto = (fila: unknown[], c: Col, max: number): string => celdaTexto(crudo(fila, c), max);
+  // El `'` que la exportación antepone a lo que parece fórmula (seguraParaExcel) se quita al volver a subir el CSV (A37-S39-08).
+  const sinApostrofoAntiFormula = (t: string): string => (/^'[=+\-@\t\r]/.test(t) ? t.slice(1) : t);
+  const texto = (fila: unknown[], c: Col, max: number): string => sinApostrofoAntiFormula(celdaTexto(crudo(fila, c), max));
 
   const porLlave = new Map<string, ConvenioImportado>();
-  const vistasInstruccion = new Set<string>();
+  const vistasInstruccion = new Map<string, { fila: number; momento: string; lugar: string }>();
 
   for (let i = 1; i < matriz.length; i++) {
     const fila = matriz[i];
@@ -239,8 +241,16 @@ export function parsearMatrizConvenios(matriz: unknown[][], opciones: { puedeVer
     const ordenNum = ordenCrudo === undefined || String(ordenCrudo).trim() === '' ? conv.instrucciones.length : Number(ordenCrudo);
     if (!Number.isInteger(ordenNum) || ordenNum < 0 || ordenNum > 999) { errores.push({ fila: n, motivo: 'El orden es un entero de 0 a 999.' }); continue; }
     const dup = `${k}|${categoria}|${textoIns}`;
-    if (vistasInstruccion.has(dup)) continue; // la misma instrucción dos veces es una (como la llave única de la base)
-    vistasInstruccion.add(dup);
+    const previa = vistasInstruccion.get(dup);
+    if (previa) {
+      // La misma instrucción idéntica dos veces es una (como la llave única de la base: convenio, tema y texto). Pero si cambia el
+      // lugar o el momento NO se descarta en silencio: la base solo admite una por tema y texto, así que se avisa (A37-S39-08).
+      if (previa.momento !== momento || previa.lugar !== lugar) {
+        errores.push({ fila: n, motivo: `Repite la instrucción de la fila ${previa.fila} con otro ${previa.lugar !== lugar ? 'lugar' : 'momento'}; solo se admite una por tema y texto. Usa «ambos» o escribe el texto distinto.` });
+      }
+      continue;
+    }
+    vistasInstruccion.set(dup, { fila: n, momento, lugar });
     if (conv.instrucciones.length >= MAX_INSTRUCCIONES_POR_CONVENIO) { errores.push({ fila: n, motivo: `Un convenio admite hasta ${MAX_INSTRUCCIONES_POR_CONVENIO} instrucciones.` }); continue; }
     conv.instrucciones.push({ categoria, texto: textoIns, momento, lugar, orden: ordenNum });
   }

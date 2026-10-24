@@ -86,7 +86,7 @@ export interface RepoBandeja {
   listar(tenantId: string, desdeIso: string, soloPendientes: boolean): Promise<AvisoBandeja[]>;
   /** Un aviso de ESTA flota, o `null`. */
   obtener(tenantId: string, id: string): Promise<AvisoBandeja | null>;
-  /** Cuántos avisos esperan a una persona. */
+  /** Cuántos avisos siguen pendientes (los mismos estados que `ESTADOS_PENDIENTES`, o sea los de «Solo pendientes»). */
   contarPendientes(tenantId: string): Promise<number>;
   /** `desde` → `aprobado` con quién y cuándo; condicional al estado leído (`false` = ya cambió). `canal` solo para la copia manual. */
   aprobar(tenantId: string, id: string, desde: EstadoAviso, userId: string, ahoraIso: string, canal?: CanalAviso): Promise<boolean>;
@@ -121,7 +121,7 @@ export function crearRepoBandeja(): RepoBandeja {
     async contarPendientes(tenantId) {
       const { count, error } = await acotada(supabaseAdmin().from('vigia_aviso')
         .select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId)
-        .in('estado', ['pendiente_confirmacion', 'sin_destinatario', 'fallido']), 'bandeja.contar');
+        .in('estado', [...ESTADOS_PENDIENTES]), 'bandeja.contar'); // A37-S58-07: el MISMO conjunto que «Solo pendientes»
       exigir('contar', error);
       return count ?? 0;
     },

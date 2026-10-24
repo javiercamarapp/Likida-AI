@@ -116,10 +116,10 @@ describe('la lista', () => {
     const [a] = await crearRepoBandeja().listar(T1, AHORA, false);
     expect(a).toMatchObject({ id: AV, version: 2, estado: 'fallido', canal: 'cliente_1a1', datos: {}, clienteId: null, error: 'e' });
   });
-  it('contar: solo los que esperan a una persona; sin cuenta = 0', async () => {
+  it('contar: los mismos estados que «Solo pendientes» (incluye aprobado: A37-S58-07); sin cuenta = 0', async () => {
     respuesta = () => ({ data: null, error: null, count: 4 });
     expect(await crearRepoBandeja().contarPendientes(T1)).toBe(4);
-    expect(llamadas[0].filtros.find(([o]) => o === 'in')?.[2]).toEqual(['pendiente_confirmacion', 'sin_destinatario', 'fallido']);
+    expect(llamadas[0].filtros.find(([o]) => o === 'in')?.[2]).toEqual(['pendiente_confirmacion', 'sin_destinatario', 'fallido', 'aprobado']);
     expect(llamadas[0].opciones).toEqual({ count: 'exact', head: true });
     respuesta = () => ({ data: null, error: null });
     expect(await crearRepoBandeja().contarPendientes(T1)).toBe(0);

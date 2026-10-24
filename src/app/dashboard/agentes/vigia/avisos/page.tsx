@@ -13,7 +13,7 @@ import { AvisoSinMigrar, crearRepoAviso, type EstadoAviso } from '@/lib/likida/v
 import { crearRepoCambios, type FilaActual } from '@/lib/likida/vigia/aviso/cambios';
 import { entregarAviso } from '@/lib/likida/vigia/aviso/entrega';
 import {
-  agruparPorDia, armarTarjeta, crearDepsCopia, crearRepoBandeja, DIAS_BANDEJA, MAX_TEXTO_AVISO, paraEntrega, validarDatoManual,
+  agruparPorDia, armarTarjeta, crearDepsCopia, crearRepoBandeja, DIAS_BANDEJA, MAX_TEXTO_AVISO, TOPE_AVISOS_BANDEJA, paraEntrega, validarDatoManual,
   type AvisoBandeja,
 } from '@/lib/likida/vigia/aviso/bandeja';
 import { sufijoTenant } from '../../../sufijo';
@@ -467,6 +467,7 @@ export default async function PaginaAvisosVigia({ searchParams }: { searchParams
       sufijo={sufijoTenant(sp)}
       grupos={agruparPorDia(tarjetas)}
       total={tarjetas.length}
+      hayMas={avisos.length >= TOPE_AVISOS_BANDEJA}
       soloPendientes={soloPendientes}
       puedeDecidir={puedeDecidir}
       avisoEncendido={avisoEncendido}

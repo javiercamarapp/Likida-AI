@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { archivarConvenioDelPanel, bytesParaLector, corregirConvenioDelViajeDelPanel, guardarConvenioDelPanel, importarArchivoDelPanel, type DepsConvenios, type DepsGuardarConvenio } from './acciones';
+import { archivarConvenioDelPanel, bytesParaLector, corregirConvenioDelViajeDelPanel, guardarConvenioDelPanel, importarArchivoDelPanel, MAX_REENVIOS_POR_ACCION, type DepsConvenios, type DepsGuardarConvenio } from './acciones';
 import type { EntradaConvenio } from './edicion';
 import { ConveniosNoDisponibles, EdicionNoDisponible } from './repo';
 
@@ -261,6 +261,15 @@ describe('guardarConvenioDelPanel (alta y edición en pantalla)', () => {
     expect(d.enviar).toHaveBeenCalledTimes(1);
     expect(d.enviar).toHaveBeenCalledWith('flota-1', V1);
     expect(r).toEqual({ ok: true, mensaje: expect.stringMatching(/actualizaron las instrucciones de 2 viajes en curso.*mandar a 1 operador/) });
+  });
+
+  it('A37-S39-10: un convenio con cientos de viajes reenvía un lote acotado por acción y dice cuántos quedaron pendientes (no se cuelga ni se pierde la cuenta)', async () => {
+    const muchos = Array.from({ length: 100 }, (_, i) => ({ viajeId: `4f1f6e2e-95c1-4c52-9f9e-${String(i).padStart(12, '0')}`, reenviar: true }));
+    const d = dg({ refrescar: vi.fn(async () => muchos) });
+    const r = await guardarConvenioDelPanel(ctx, EDITA({ llevarAViajes: true, reenviar: true }), d);
+    expect(d.enviar).toHaveBeenCalledTimes(MAX_REENVIOS_POR_ACCION);
+    expect(MAX_REENVIOS_POR_ACCION).toBeLessThan(100);
+    expect(r).toEqual({ ok: true, mensaje: expect.stringContaining(`${100 - MAX_REENVIOS_POR_ACCION} viajes quedaron pendientes de reenviar`) });
   });
 
   it('llevar a los viajes SIN reenviar: se actualiza la foto y no se manda ningún mensaje', async () => {

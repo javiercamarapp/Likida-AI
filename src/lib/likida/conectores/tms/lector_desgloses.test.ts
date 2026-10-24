@@ -21,6 +21,24 @@ function lector(filas: LiquidacionSintetica[], config?: import('../../liquidacio
   return crearLectorDesglosesTms({ sesion, ahora: () => AHORA, ...(config ? { config } : {}) });
 }
 
+/** Como `lector`, pero el TMS además devuelve `n` filas crudas SIN fecha de cursor utilizable (el servidor falso las filtra por fecha). */
+function lectorConSinFecha(filas: LiquidacionSintetica[], n: number) {
+  const s = crearServidorTmsFalso({ datos: { liquidaciones: filas, peajes: [], viajes: [], posiciones: [] }, reloj: () => AHORA, vigenciaTokenMs: 3_600_000 });
+  const base = comoHttpDeConector(s);
+  const http: typeof base = async (pet) => {
+    const r = await base(pet);
+    if (!pet.url.includes('/api/liquidaciones')) return r;
+    const cuerpo = JSON.parse(r.cuerpo) as { data: { items: unknown[] } };
+    for (let i = 1; i <= n; i++) cuerpo.data.items.push({ bitacora: `X-${i}`, terminal: 'T1', de: 'sin fecha' });
+    return { ...r, cuerpo: JSON.stringify(cuerpo) };
+  };
+  const sesion = new SesionTms({
+    http, base: 'https://tms.ejemplo.test', login: { ruta: '/api/login', cuerpo: { usuario: '{usuario}', clave: '{clave}' }, campo_token: 'token' },
+    credenciales: { usuario: 'usuario-sintetico', clave: 'clave-sintetica' }, reloj: { ahora: () => AHORA, dormir: async () => undefined },
+  });
+  return crearLectorDesglosesTms({ sesion, ahora: () => AHORA });
+}
+
 describe('lector de desgloses sobre el TMS', () => {
   it('primer arranque sin cursor: solo la ventana inicial, no el historial', async () => {
     const l = lector([fila('B-1', '2026-09-01T08:00:00.000Z'), fila('B-2', '2026-10-14T08:00:00.000Z')]);
@@ -60,6 +78,23 @@ describe('lector de desgloses sobre el TMS', () => {
     const filas = ['B-1', 'B-2', 'B-3', 'B-4', 'B-5'].map((b, i) => fila(b, `2026-10-14T0${i + 1}:00:00.000Z`));
     const l = lector(filas, { ...CONFIG_API_DESGLOSE, tamano: 2, rutaTotalPaginas: 'data.no_existe', maxPaginas: 2 });
     await expect(l.listar({ tenantId: 't', cursor: null, limite: 10 })).rejects.toThrow();
+  });
+
+  it('A37-S38-08: una fila sin fecha utilizable NO mueve el cursor (ni a 1970): el cursor queda en la última fila CON fecha', async () => {
+    const l = lectorConSinFecha([fila('B-1', '2026-10-14T08:00:00.000Z')], 2);
+    const p = await l.listar({ tenantId: 't', cursor: null, limite: 10 });
+    expect(p.items.map((d) => d.bitacora)).toEqual(['B-1']);
+    expect(p.siguiente).toEqual({ desde: '2026-10-14T08:00:00.000Z', despuesDe: 'BIT-T1-B-1' });
+    expect(p.rechazadas).toHaveLength(2); // siguen siendo visibles
+  });
+
+  it('A37-S38-08: las filas sin fecha no ocupan páginas ni mandan el cursor a 1970; se reportan en la última página', async () => {
+    const l = lectorConSinFecha([fila('B-1', '2026-10-14T08:00:00.000Z')], 3);
+    const p = await l.listar({ tenantId: 't', cursor: null, limite: 2 });
+    expect(p.items.map((d) => d.bitacora)).toEqual(['B-1']);
+    expect(p.rechazadas).toHaveLength(3);
+    expect(p.siguiente).toEqual({ desde: '2026-10-14T08:00:00.000Z', despuesDe: 'BIT-T1-B-1' });
+    expect(p.hayMas).toBe(false);
   });
 
   it('credencial mala: lanza TmsCredenciales y no filtra la clave', async () => {

@@ -32,6 +32,14 @@ function pintar(avisos: AvisoBandeja[], p: Partial<Props> = {}): string {
   );
 }
 
+describe('A37-S58-07: la bandeja avisa cuando llegó al tope', () => {
+  it('con hayMas dice «se muestran los N más recientes»; sin él no dice nada', () => {
+    expect(pintar([aviso()], { hayMas: true })).toContain('data-testid="hay-mas"');
+    expect(pintar([aviso()], { hayMas: true })).toContain('puede haber más antiguos');
+    expect(pintar([aviso()])).not.toContain('hay-mas');
+  });
+});
+
 describe('estados vacíos y errores llanos', () => {
   it('sin avisos: lo dice y explica cuándo aparecerán', () => {
     const html = pintar([]);

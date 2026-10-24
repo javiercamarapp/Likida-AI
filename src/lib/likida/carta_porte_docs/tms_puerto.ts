@@ -105,3 +105,14 @@ export const SIN_TMS: SalidaTms = {
     };
   },
 };
+
+/** El proveedor del puerto FALLÓ (p. ej. no se pudieron leer las credenciales): NO es «sin conector». El worker suelta el envío
+ *  sin cambiarle el estado y sin avisar «listo para subir a mano» (A37-S33-09). Jamás sube nada (fail-closed). */
+export const SALIDA_NO_DISPONIBLE: SalidaTms = {
+  async cargarPlantilla(): Promise<ResultadoCarga> {
+    return { ok: false, clase: 'transitorio', mensajeLlano: 'El sistema del cliente no está disponible por ahora: se reintenta en unos minutos.', errores: [] };
+  },
+};
+
+/** ¿Esta salida NO puede subir nada ahora (sin conector, o el proveedor falló)? Para las pantallas: ambas bloquean activar el modo API. */
+export function sinConexionUtil(p: SalidaTms): boolean { return p === SIN_TMS || p === SALIDA_NO_DISPONIBLE; }
