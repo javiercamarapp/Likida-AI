@@ -43,6 +43,12 @@ export interface DatosRevisionCobros {
   hayDesglose?: boolean;
   /** Los reclamos de TODA la flota; `null` = no se pudieron leer. */
   reclamos: ReclamoVista[] | null;
+  /**
+   * A37-A2-06: las decisiones por línea de ESTE desglose (`peaje_candidato_accion`). Con ellas, un reclamo hecho desde la tabla
+   * cubre SOLO las líneas que reclamó. `undefined` = el llamador no las pide (se conserva «un reclamo cubre su categoría»);
+   * `null` = no se pudieron leer.
+   */
+  decisiones?: ReadonlyArray<{ indice: number; categoria: string; accion: string; reclamoId: string | null }> | null;
   /** Cuántas tarifas hay configuradas; `null` = no se pudo leer. */
   tarifas: number | null;
   /** Los vínculos cruce-viaje del desglose abierto; `null` = no se pudieron leer. */
@@ -81,10 +87,17 @@ export function estadoRevisionCobros(d: DatosRevisionCobros): EstadoRevisionCobr
     const delArchivo = d.reclamos.filter((r) => r.desgloseId === reporte.desgloseId);
     const categorias = entradaDeCategorias(reporte, delArchivo);
 
-    const reclamadas = new Set(delArchivo.map((r) => r.categoria));
+    if (d.decisiones === null) return { tipo: 'error' };
+    // Un reclamo con decisiones ligadas (hecho desde la tabla) cubre SOLO esas líneas; uno sin ninguna (de categoría completa) cubre todas.
+    const conDecision = new Set((d.decisiones ?? []).map((x) => x.reclamoId).filter((x): x is string => x !== null));
+    const reclamadas = new Set(delArchivo.filter((r) => d.decisiones === undefined || !conDecision.has(r.id)).map((r) => r.categoria));
+    const lineasReclamadas = new Set((d.decisiones ?? []).filter((x) => x.accion === 'reclamado' && x.reclamoId !== null).map((x) => `${x.indice}|${x.categoria}`));
     const candidatosPlazo = reporte.revision.candidatos
       .filter((c): c is typeof c & { fecha: string } => typeof c.fecha === 'string' && c.fecha !== '')
-      .map((c) => ({ lineaId: String(c.indice), desgloseId: reporte.desgloseId, fechaCruce: c.fecha, monto: c.monto, reclamado: reclamadas.has(c.categoria) }));
+      .map((c) => ({
+        lineaId: String(c.indice), desgloseId: reporte.desgloseId, fechaCruce: c.fecha, monto: c.monto,
+        reclamado: reclamadas.has(c.categoria) || lineasReclamadas.has(`${c.indice}|${c.categoria}`),
+      }));
     const hayCandidatos = reporte.revision.candidatos.length > 0;
     const porVencer = hayCandidatos && candidatosPlazo.length === 0
       ? null

@@ -12,7 +12,7 @@ import {
 } from '@/lib/likida/intake/desglose_peaje';
 import { evidenciaGpsDeDesglose } from '@/lib/likida/peajes/evidencia_gps';
 import { anularDesgloseDb, vinculosDeDesglose, listarTarifas } from '@/lib/likida/peajes/datos';
-import { revisionDeDesglose, listarReclamos } from '@/lib/likida/peajes/revision_cobros';
+import { revisionDeDesglose, listarReclamos, listarDecisionesCandidatos } from '@/lib/likida/peajes/revision_cobros';
 import { validarPeriodoDeclarado } from '@/lib/likida/peajes/periodo';
 import { bitacoraConciliada } from '@/lib/likida/peajes/bitacora_conciliada';
 import { logger } from '@/lib/logger';
@@ -88,7 +88,7 @@ export default async function PaginaAgentePeajes({
   // FE-33: las dos lecturas de abajo solo dependen de `desgloseSel` — nada
   // de la segunda depende del resultado de la primera —, así que van en
   // paralelo en vez de en serie.
-  const [detalleSel, evidenciaSel, verificacionSel, reporteCobros, reclamosFlota, tarifasFlota, vinculosSel] = desgloseSel
+  const [detalleSel, evidenciaSel, verificacionSel, reporteCobros, reclamosFlota, tarifasFlota, vinculosSel, decisionesSel] = desgloseSel
     ? await Promise.all([
         safe(() => detalleDesglose(tenantId, desgloseSel.desgloseId)),
         // La evidencia GPS del desglose seleccionado (post-plan-maestro #1).
@@ -112,11 +112,13 @@ export default async function PaginaAgentePeajes({
         safe(async () => (await listarReclamos(tenantId, hoyMx())).reclamos),
         safe(async () => (await listarTarifas(tenantId)).length),
         safe(() => vinculosDeDesglose(tenantId, desgloseSel.desgloseId)),
+        // A37-A2-06: qué líneas ya se reclamaron (el reclamo desde la tabla cubre solo las suyas).
+        safe(() => listarDecisionesCandidatos(tenantId, desgloseSel.desgloseId)),
       ])
-    : [null, null, null, null, null, null, null];
+    : [null, null, null, null, null, null, null, null];
   const revisionCobros = estadoRevisionCobros({
     reporte: reporteCobros, hayDesglose: desgloseSel !== null,
-    reclamos: reclamosFlota, tarifas: tarifasFlota, vinculos: vinculosSel, hoy: hoyMx(),
+    reclamos: reclamosFlota, tarifas: tarifasFlota, vinculos: vinculosSel, decisiones: decisionesSel, hoy: hoyMx(),
   });
 
   async function subirDesglose(
