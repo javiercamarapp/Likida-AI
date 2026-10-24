@@ -122,7 +122,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ accion: string
               // Mismo nombre: se compara el contenido; si no se puede leer el anterior, se asume cambiado (fail-closed).
               try {
                 const previo = await admin.storage.from('bus').download(objeto);
-                reabrir = previo.error != null || !previo.data || !Buffer.from(await previo.data.arrayBuffer()).equals(media);
+                reabrir = previo.error != null || !previo.data || !media.equals(new Uint8Array(await previo.data.arrayBuffer()));
               } catch { reabrir = true; }
             }
           }
