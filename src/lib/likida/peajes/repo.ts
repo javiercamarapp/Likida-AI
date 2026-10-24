@@ -301,8 +301,26 @@ export async function importarTagsArchivo(tenantId: string, nombre: string, buff
     logger.error('peajes.importar_tags_lectura', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
     return falla('No se pudo leer el catálogo actual. Inténtalo de nuevo.');
   }
-  const { altas, rechazadas } = resolverUnidadesDeTags(lectura.tags, unidades);
-  const todasRechazadas = [...lectura.rechazadas, ...rechazadas].sort((a, b) => a.fila - b.fila);
+  const { altas: altasResueltas, rechazadas } = resolverUnidadesDeTags(lectura.tags, unidades);
+  // A37-S53-02: el importador NO reactiva en silencio un TAG dado de baja (borraría la baja y los cobros
+  // posteriores dejarían de ser candidatos). Se rechaza con motivo; reactivar es un alta manual explícita.
+  let conBaja: Set<string>;
+  try {
+    conBaja = new Set<string>();
+    for (const lote of lotes(altasResueltas.map((a) => a.tag))) {
+      const { data, error } = await acotada(
+        supabaseAdmin().from('peaje_tag_baja').select('tag').eq('tenant_id', tenantId).in('tag', lote), 'peajes.importar_tags_bajas');
+      if (error) throw new Error(error.message);
+      for (const f of (data ?? []) as Array<{ tag: unknown }>) conBaja.add(String(f.tag));
+    }
+  } catch (e) {
+    logger.error('peajes.importar_tags_bajas', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    return falla('No se pudo comprobar qué TAGs están dados de baja. Inténtalo de nuevo.');
+  }
+  const altas = altasResueltas.filter((a) => !conBaja.has(a.tag));
+  const rechazadasPorBaja = altasResueltas.filter((a) => conBaja.has(a.tag))
+    .map((a) => ({ fila: a.fila, motivo: 'Este TAG está dado de baja: no se reactiva desde el archivo. Si de verdad volvió a operar, dalo de alta a mano en el catálogo.' }));
+  const todasRechazadas = [...lectura.rechazadas, ...rechazadas, ...rechazadasPorBaja].sort((a, b) => a.fila - b.fila);
   if (altas.length === 0) return { ok: true, guardadas: 0, actualizadas: 0, rechazadas: todasRechazadas };
 
   let guardadas = 0;
@@ -2454,6 +2472,8 @@ export async function cierreMensualDeFlota(tenantId: string, mes: string): Promi
 
 export interface ReclamoVista {
   id: string;
+  /** A37-S53-03: el desglose que lo sustenta fue anulado: no se cuenta en el seguimiento y no debe enviarse. */
+  desgloseAnulado?: boolean;
   desgloseId: string | null;
   proveedor: string | null;
   categoria: string;
@@ -2475,6 +2495,15 @@ export async function listarReclamos(tenantId: string, hoy: string): Promise<{ r
       .eq('tenant_id', tenantId).order('fecha_cobro_mas_antiguo').order('id').range(d, h), 'revision_cobros.listar_reclamos'),
     'revision_cobros.listar_reclamos',
   );
+  // A37-S53-03: un reclamo cuyo desglose se anuló no suma en el seguimiento ni se presenta como vigente.
+  const anulados = new Set<string>();
+  const idsDesglose = [...new Set(filas.map((f) => f.desglose_id).filter((x): x is string => typeof x === 'string'))];
+  for (const lote of lotes(idsDesglose)) {
+    const { data, error } = await acotada(supabaseAdmin().from('desglose_peaje')
+      .select('id').eq('tenant_id', tenantId).in('id', lote).not('anulado_en', 'is', null), 'revision_cobros.reclamos_anulados');
+    if (error) throw new Error(`revision_cobros.reclamos_anulados: ${error.message}`);
+    for (const d of (data ?? []) as Array<{ id: unknown }>) anulados.add(String(d.id));
+  }
   const reclamos: ReclamoVista[] = filas.map((f) => {
     const base = {
       id: String(f.id), estado: String(f.estado) as EstadoReclamo,
@@ -2484,11 +2513,14 @@ export async function listarReclamos(tenantId: string, hoy: string): Promise<{ r
     return {
       ...base, desgloseId: (f.desglose_id as string | null) ?? null, proveedor: (f.proveedor as string | null) ?? null,
       categoria: String(f.categoria), nCruces: Number(f.n_cruces), enviadoEn: f.enviado_en ? String(f.enviado_en).slice(0, 10) : null,
-      referenciaPortal: (f.referencia_portal as string | null) ?? null, notas: (f.notas as string | null) ?? null,
+      referenciaPortal: (f.referencia_portal as string | null) ?? null,
+      ...(typeof f.desglose_id === 'string' && anulados.has(f.desglose_id)
+        ? { desgloseAnulado: true, notas: `DESGLOSE ANULADO: no envíes ni cuentes este reclamo. ${(f.notas as string | null) ?? ''}`.trim() }
+        : { notas: (f.notas as string | null) ?? null }),
       evaluacion: evaluarReclamo(base, hoy),
     };
   });
-  return { reclamos, resumen: resumirSeguimiento(reclamos, hoy) };
+  return { reclamos, resumen: resumirSeguimiento(reclamos.filter((r) => r.desgloseAnulado !== true), hoy) };
 }
 
 /**

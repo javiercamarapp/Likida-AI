@@ -192,6 +192,20 @@ describe('el seguimiento de reclamos de punta a punta', () => {
     expect(reclamos[0].evaluacion.fechaLimite).toBe(`2026-${masAntiguo.slice(5, 7) === '03' ? '06' : '05'}-${masAntiguo.slice(8)}`);
   }, 60_000);
 
+  it('A37-S53-03: anular el desglose marca sus reclamos y los saca de las sumas del seguimiento', async () => {
+    const { id } = await subir('01 A 10 DE MARZO.xlsx', { filas: 500, inicio: '2026-03-01', extemporaneos: 5 });
+    await R.crearReclamoDeCategoria(T, { desgloseId: id, categoria: 'extemporaneo' });
+    const vivo = await R.listarReclamos(T, '2026-03-12');
+    expect(vivo.reclamos[0].desgloseAnulado).not.toBe(true);
+    expect(vivo.resumen.montoReclamado).toBeGreaterThan(0);
+    db.tablas.desglose_peaje[0].anulado_en = '2026-03-12T00:00:00Z';
+    const r = await R.listarReclamos(T, '2026-03-12');
+    expect(r.reclamos).toHaveLength(1);
+    expect(r.reclamos[0].desgloseAnulado).toBe(true);
+    expect(r.reclamos[0].notas).toMatch(/DESGLOSE ANULADO/);
+    expect(r.resumen.montoReclamado).toBe(0);
+  }, 60_000);
+
   it('un reclamo preparado que nadie envía vence a los 3 meses del cobro más antiguo', async () => {
     const { id } = await subir('01 A 10 DE MARZO.xlsx', { filas: 500, inicio: '2026-03-01', extemporaneos: 5 });
     await R.crearReclamoDeCategoria(T, { desgloseId: id, categoria: 'extemporaneo' });

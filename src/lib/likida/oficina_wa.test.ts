@@ -39,6 +39,14 @@ describe('bloquesATextoWa — los bloques del panel en texto de chat', () => {
     expect(t).toContain('· Ruta GDL-MTY: 5,200');
     expect(t).toContain('panel');
   });
+  it('A37-S51-08: una tabla de más de 10 filas dice cuántas faltan', () => {
+    const filas = Array.from({ length: 35 }, (_, i) => [`Unidad ${i}`, i] as [string, number]);
+    const t = bloquesATextoWa([{ tipo: 'tabla', filas }]);
+    expect(t).toContain('· Unidad 9: 9');
+    expect(t).not.toContain('Unidad 10:');
+    expect(t).toContain('+25 filas más');
+    expect(bloquesATextoWa([{ tipo: 'tabla', filas: filas.slice(0, 10) }])).not.toContain('filas más');
+  });
   it('litros salen como litros, no como pesos', () => {
     expect(bloquesATextoWa([{ tipo: 'cifra', valor: 1200, formato: 'litros' }])).toContain('1,200 L');
   });

@@ -136,6 +136,16 @@ describe('avisarDiscrepanciasDesglose', () => {
     expect(r.enviados).toBe(2);
     expect(avisar).toHaveBeenCalledTimes(2);
   });
+
+  it('A37-S51-05: bajo el tope no hay resumen extra', async () => {
+    const avisar = vi.fn(async (_tel: string, _texto: string) => ({ ok: true, via: 'texto' as const, id: 'w' }));
+    const d = deps({
+      revisionDeDesglose: vi.fn(async () => reporteCon([critico({ indice: 0 }), critico({ indice: 1 })])),
+      avisar: avisar as unknown as DepsAvisoDiscrepancia['avisar'],
+    });
+    await avisarDiscrepanciasDesglose(T, DES, d);
+    expect(avisar).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('A37-A2-14: tope de mensajes por desglose', () => {

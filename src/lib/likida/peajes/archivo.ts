@@ -4,6 +4,8 @@ import type { Celda } from './formatos';
 
 /** Tope de bytes de un archivo de catálogo (casetas, TAGs): un CSV de miles de filas pesa decenas de KB. */
 export const MAX_CATALOGO_BYTES = 4 * 1024 * 1024;
+/** Columnas máximas que se conservan por fila de un catálogo. */
+export const TOPE_COLUMNAS_CATALOGO = 64;
 
 /**
  * Filas FÍSICAS máximas que se leen de una hoja (A37-A2-15). Los catálogos topan en 5,000 filas y una liquidación en
@@ -29,7 +31,7 @@ export function matrizDeArchivoCatalogo(nombre: string, buffer: Uint8Array): { o
       if (!hoja) return { ok: false, motivo: 'El archivo no trae ninguna hoja con datos.' };
       // `!fullref` lo pone la librería solo si `sheetRows` truncó la hoja: trae demasiadas filas para ser un catálogo.
       if ('!fullref' in hoja) return { ok: false, motivo: `La hoja trae demasiadas filas (más de ${MAX_FILAS_LECTURA_CATALOGO.toLocaleString('es-MX')}). Revisa que sea el archivo correcto o pártelo.` };
-      return { ok: true, matriz: XLSX.utils.sheet_to_json<Celda[]>(hoja, { header: 1, raw: true, defval: '' }) };
+      return { ok: true, matriz: XLSX.utils.sheet_to_json<Celda[]>(hoja, { header: 1, raw: true, defval: '' }).map((f) => (f.length > TOPE_COLUMNAS_CATALOGO ? f.slice(0, TOPE_COLUMNAS_CATALOGO) : f)) };
     }
     return { ok: false, motivo: `No sé leer un archivo .${ext}. Sube un CSV o un Excel.` };
   } catch {

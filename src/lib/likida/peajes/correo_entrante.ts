@@ -29,8 +29,8 @@ import { reclamarCorreo, finalizarCorreo } from '../carta_porte_docs/repo';
 import { remitenteReconocido } from '@/lib/correo/remitente';
 import type { CorreoEntrante, DescargaAdjunto } from '../carta_porte_docs/correo_entrante';
 import { buzonCorreoPeajesPorToken } from './datos';
-import { recibirArchivoPeaje, MAX_ARCHIVO_INGESTA_BYTES } from './ingesta';
 import { registrarCorrida } from '../agentes/corridas';
+import { recibirArchivoPeaje, MAX_ARCHIVO_INGESTA_BYTES } from './ingesta';
 
 export const PREFIJO_PJ = 'pj-';
 export const MAX_ADJUNTOS_PEAJES = 5;
