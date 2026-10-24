@@ -411,11 +411,13 @@ export async function timbrarFactura(facturaId: string): Promise<{ uuid: string 
       logger.error('facturapi.timbrado_ambiguo', {
         facturaId, referencia: (f.referencia as string) ?? null, err: e instanceof Error ? e.message : String(e),
       });
-      throw new DatoInvalido(
+      // A37-L-03: la marca `ambiguo` viaja para que la pantalla NO diga «el CFDI NO se
+      // timbró» (puede que sí): ver `accionConciliar`.
+      throw Object.assign(new DatoInvalido(
         'El PAC no contestó y NO se sabe si el CFDI se creó. Se bloquea un segundo timbrado para no emitir dos CFDI '
         + `reales de la misma mensualidad. Busca en el panel de Facturapi la referencia ${(f.referencia as string) ?? facturaId}: `
         + 'si existe, liga su UUID a mano; si no existe, el bloqueo se libera solo en 24 horas.',
-      );
+      ), { ambiguo: true as const });
     }
     // El PAC dijo que no: NO hay CFDI, así que la reserva se suelta para que el
     // siguiente intento (con el dato corregido) pueda entrar sin esperar los 10
