@@ -51,6 +51,7 @@ const ARCHIVOS: Record<string, Clase> = {
   'agentes/conductores/sitios/page.tsx': 'permitido',
   'agentes/carta-porte/catalogo/actions.ts': 'permitido',  // importación CSV del catálogo por cliente (A3, T-A3-21)
   'agentes/carta-porte/configuracion/actions.ts': 'permitido',  // configuración de la salida al TMS (A3, T-A3-32)
+  'agentes/carta-porte/configuracion/ccp_actions.ts': 'permitido',  // responder al cliente con el CCP timbrado (A3, A37-A3-01); misma ruta del agente Carta Porte
   'carta-porte/documentos/[id]/page.tsx': 'permitido',
   'carta-porte/documentos/page.tsx': 'permitido',
   'carta-porte/page.tsx': 'permitido',
