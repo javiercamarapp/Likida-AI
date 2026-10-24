@@ -489,3 +489,23 @@ describe('configuración', () => {
     expect(await gastoMod.guardarConfigGasto(A, { tiersGasto: [1, 1] })).toHaveProperty('error');
   });
 });
+
+describe('A37-S26-09: la retención de 180 días no borra la historia de un gasto aún pendiente', () => {
+  it('conserva los contactos viejos de un gasto de un viaje vivo (no re-cobra el tier alto) y purga los de gastos que ya no se cobran', async () => {
+    nuevaBase({
+      agente_cobranza_config: [config(A)],
+      viaje: [viaje(A, 'v1', JUAN)],
+      gasto: [gasto(A, 'g1', 'v1')],
+      cobranza_gasto_contacto: [
+        { id: 'c-vivo', tenant_id: A, gasto_id: 'g1', tier: 7, motivo: 'sin_cfdi', lote_id: 'l1', enviado: true, created_at: hace(200) },
+        { id: 'c-muerto', tenant_id: A, gasto_id: 'g-viejo', tier: 1, motivo: 'sin_cfdi', lote_id: 'l2', enviado: true, created_at: hace(200) },
+      ],
+    });
+    await gastoMod.ejecutarCobranzaGastos(A, AHORA);
+    const ids = contactos().map((c) => c.id);
+    expect(ids).toContain('c-vivo');
+    expect(ids).not.toContain('c-muerto');
+    // Y el tier ya contactado NO se reclama de nuevo: el siguiente es el que sigue, no el más alto otra vez.
+    expect(contactos().filter((c) => c.gasto_id === 'g1' && c.tier === 7)).toHaveLength(1);
+  });
+});
