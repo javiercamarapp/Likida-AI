@@ -49,6 +49,11 @@ export interface MetricasAgente {
   costoUsdTotal: number;
   costoUsdPorDocumento: number | null;
   porOrigen: Record<string, { documentos: number; sinCorreccion: number }>;
+  /**
+   * A37-A3-14: presente SOLO si la ventana tiene más documentos que los que se leyeron (tope de la consulta): todas las cifras de
+   * arriba son de los `leidos` más recientes, no de los `total`. La vista lo dice; jamás rotula «90 días» sobre una muestra.
+   */
+  parcial?: { leidos: number; total: number };
 }
 
 const r1 = (x: number): number => Math.round(x * 10) / 10;
@@ -59,7 +64,7 @@ export function origenDeLectura(d: Pick<DocumentoFila, 'nivelModelo' | 'perfilId
   return d.perfilId === null ? 'llm' : 'perfil+llm';
 }
 
-export function calcularMetricas(todos: DocumentoFila[], correcciones: Map<string, number>): MetricasAgente {
+export function calcularMetricas(todos: DocumentoFila[], correcciones: Map<string, number>, totalVentana?: number): MetricasAgente {
   // Un archivo que se partió en embarques (0670) es la constancia de lo que llegó, no un documento por revisar ni un
   // embarque: lo que se mide es cada embarque (sus hijos). Contarlo inflaría «recibidos» y diluiría el costo por documento.
   const docs = todos.filter((d) => d.estado !== 'dividido');
@@ -98,6 +103,7 @@ export function calcularMetricas(todos: DocumentoFila[], correcciones: Map<strin
     costoUsdTotal: Math.round(costo * 1e6) / 1e6,
     costoUsdPorDocumento: docs.length === 0 ? null : Math.round((costo / docs.length) * 1e6) / 1e6,
     porOrigen,
+    ...(totalVentana !== undefined && totalVentana > todos.length ? { parcial: { leidos: todos.length, total: totalVentana } } : {}),
   };
 }
 
@@ -170,6 +176,8 @@ export interface InsightsAgente {
     causasNoLiga: { reque: number; cliente: number | null; caja: number | null; otra: number };
   };
   tarjetas: TarjetaInsight[];
+  /** A37-A3-14: la ventana tiene más documentos que los leídos; las cifras son de los `leidos` más recientes. */
+  parcial?: { leidos: number; total: number };
 }
 
 export interface EntradaInsights {
@@ -184,6 +192,8 @@ export interface EntradaInsights {
   /** id de cliente → nombre, solo para redactar las tarjetas. */
   nombresCliente?: Map<string, string>;
   ahora: Date;
+  /** Documentos que de verdad hay en la ventana (conteo exacto). Mayor que `docs.length` = la lectura se topó (A37-A3-14). */
+  totalVentana?: number;
 }
 
 const SIN_CLIENTE = 'sin_cliente';
@@ -273,6 +283,7 @@ export function calcularInsights(e: EntradaInsights): InsightsAgente {
     aprobados: aprobados.length,
     pctSinTocar: aprobados.length === 0 ? null : pct(sin, aprobados.length),
     porFormato, porCliente, topCamposCorregidos, causasRechazo, rechazadosSinCausa, envios, tarjetas: [],
+    ...(e.totalVentana !== undefined && e.totalVentana > e.docs.length ? { parcial: { leidos: e.docs.length, total: e.totalVentana } } : {}),
   };
   out.tarjetas = tarjetasDe(out, e, pend);
   return out;

@@ -33,6 +33,18 @@ const datos = (filas: DocumentoFila[] = [], over: Partial<DatosDocumentos> = {})
   filas, total: filas.length, metricas: calcularMetricas(filas, new Map()), perfiles: [], clientes: [{ id: 'c1', nombre: 'Grupo Boreal' }], buzon: null, configs: [], ...over,
 });
 
+describe('A37-A3-14 · métricas parciales y documentos viejos pendientes', () => {
+  it('con métricas calculadas sobre una muestra, la tarjeta lo dice con las cifras (no rotula el periodo completo)', () => {
+    const base = Array.from({ length: 3 }, (_, i) => doc({ id: `m${i}`, estado: 'aprobado' }));
+    const h = html(<VistaDocumentos datos={datos(base, { metricas: calcularMetricas(base, new Map(), 10) })} acciones={todas} />);
+    expect(h).toMatch(/Cifras de los 3 más recientes de 10/);
+  });
+  it('sin muestra parcial no aparece esa advertencia', () => {
+    const base = [doc({ id: 'x1' })];
+    expect(html(<VistaDocumentos datos={datos(base)} acciones={todas} />)).not.toMatch(/Cifras de los/);
+  });
+});
+
 describe('VistaDocumentos', () => {
   it('base caída: un error visible, NUNCA una bandeja vacía', () => {
     const h = html(<VistaDocumentos datos={null} acciones={todas} />);

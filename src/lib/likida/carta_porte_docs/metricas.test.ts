@@ -10,6 +10,18 @@ const doc = (id: string, over: Partial<DocumentoFila> = {}): DocumentoFila => ({
   aprobadoPor: null, aprobadoEn: 'x', rechazoMotivo: null, tiempoRevisionSeg: null, exportadoEn: null, retenerHasta: '', purgadoEn: null, createdAt: '', updatedAt: '', ...over,
 });
 
+describe('A37-A3-14 — las métricas dicen cuando son de una muestra', () => {
+  const mk = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `d${i}`, estado: 'aprobado', costoUsd: 0, tiempoRevisionSeg: null, nivelModelo: 1, perfilId: null } as unknown as Parameters<typeof calcularMetricas>[0][number]));
+  it('con más documentos en la ventana que los leídos: `parcial` trae leídos y total', () => {
+    const m = calcularMetricas(mk(500), new Map(), 900);
+    expect(m.parcial).toEqual({ leidos: 500, total: 900 });
+  });
+  it('si se leyó todo (o no se pasa el total), no hay `parcial`', () => {
+    expect(calcularMetricas(mk(3), new Map(), 3).parcial).toBeUndefined();
+    expect(calcularMetricas(mk(3), new Map()).parcial).toBeUndefined();
+  });
+});
+
 describe('calcularMetricas', () => {
   it('sin documentos NO hay porcentajes inventados: todo es null', () => {
     const m = calcularMetricas([], new Map());

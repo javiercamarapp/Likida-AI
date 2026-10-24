@@ -281,6 +281,11 @@ function InsightsDelAgente({ insights, nombresCliente, diasVentana }: { insights
   return (
     <section className="space-y-3" aria-label="Cómo le va al agente">
       <h2 className="font-display text-[15px] font-semibold">Cómo le va al agente <span className="text-[12px] font-normal" style={{ color: 'var(--muted)' }}>· últimos {diasVentana} días</span></h2>
+      {i.parcial && (
+        <p className="text-[12px]" role="note" style={{ color: 'var(--warn)' }}>
+          Cifras de los {numero(i.parcial.leidos)} documentos más recientes de {numero(i.parcial.total)} de los últimos {diasVentana} días: son parciales.
+        </p>
+      )}
       {!hayAlgo ? (
         <EstadoVacio>Todavía no hay resultados que medir. Cuando se aprueben documentos y salgan envíos, aquí verás cuántos pasaron sin tocar, por qué se rechazaron y qué falta enviar.</EstadoVacio>
       ) : (
