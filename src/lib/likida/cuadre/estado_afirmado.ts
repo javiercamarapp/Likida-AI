@@ -49,14 +49,18 @@
 // ("cierro", "voy a cerrar", "cierre") es el PRETÉRITO, no un adverbio opcional
 // que puede o no estar. "ya" se deja como prefijo OPCIONAL, nunca requerido.
 const AFIRMA_CIERRE: RegExp[] = [
-  // "quedó cerrada", "ya está liquidado", "quedó lista tu liquidación"
-  /\b(?:ya\s+)?(?:qued[óo]|est[áa]|dej[ée])[^.!?]{0,40}(?:cerrad|liquidad|list)/i,
+  // "quedó cerrada", "ya está liquidado"
+  /\b(?:ya\s+)?(?:qued[óo]|est[áa]|dej[ée])[^.!?]{0,40}(?:cerrad|liquidad)/i,
+  // "quedó lista tu liquidación" — A37-S41-08: «lista» SOLA es ruido ("tu foto quedó lista, mándame la siguiente"):
+  // exige liquidación, viaje o cuadre en la misma oración.
+  /\b(?:qued[óo]|est[áa]|dej[ée])[^.!?]{0,40}list[oa]s?(?![\wáéíóúñ])[^.!?]{0,40}(?:liquidaci[óo]n|viaje|cuadre)/i,
   // "cerré", "ya te lo cerré", "la cerramos", "liquidé", "liquidó" — pretérito,
   // con o sin "ya". NO casa con "cierro"/"cierre" (presente/subjuntivo: raíz
   // "cier-", no "cerr-") ni con "cerrar" (infinitivo: termina en "-ar").
   /\b(?:ya\s+)?(?:te\s+|le\s+)?(?:lo\s+|la\s+)?(?:cerr|liquid)(?:é|ó|amos|aron)(?![\wáéíóúñ])/i,
   // "tu viaje está liquidado" / "tu liquidación ya está lista"
-  /(?:viaje|liquidaci[óo]n)[^.!?]{0,30}(?:ya\s+)?est[áa][^.!?]{0,20}(?:cerrad|liquidad|list)/i,
+  // (también «tu liquidación quedó lista»)
+  /(?:viaje|liquidaci[óo]n|cuadre)[^.!?]{0,30}(?:ya\s+)?(?:est[áa]|qued[óo])[^.!?]{0,20}(?:cerrad|liquidad|list)/i,
   // "no tienes nada pendiente" — afirma el estado final por la puerta de atrás
   /\bno\s+tienes\s+nada\s+pendiente/i,
 ];

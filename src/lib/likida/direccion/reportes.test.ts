@@ -395,6 +395,31 @@ describe('el reloj y el sello mandan sobre la corrida', () => {
     expect(enviar).not.toHaveBeenCalled();
   });
 
+  it('A37-S41-07: un fallo de red PREVIO a la conexión (DNS) libera la reserva: la siguiente pasada reintenta', async () => {
+    enviar.mockResolvedValue({ ok: false, motivo: 'red', detalle: 'fetch failed', previoAConexion: true } as never);
+    respuestas.set('reporte_direccion', [
+      { data: [], error: null },
+      { data: [], error: null },
+      { data: null, error: null },            // insert de la RESERVA
+      { data: null, error: null },            // delete de la reserva
+    ]);
+    await correrAgenteDireccion('kpi_whatsapp', MARTES_10AM);
+    expect(deletes).toContain('reporte_direccion');
+  });
+
+  it('A37-S41-07: si el sello de «enviado» falla una vez, se reintenta (el correo ya salió)', async () => {
+    enviar.mockResolvedValue({ ok: true, id: 'c1' } as never);
+    respuestas.set('reporte_direccion', [
+      { data: [], error: null },
+      { data: [], error: null },
+      { data: null, error: null },            // insert de la RESERVA
+      { data: null, error: { message: 'base ocupada' } }, // 1.er sello falla
+      { data: null, error: null },            // 2.º sello
+    ]);
+    await correrAgenteDireccion('kpi_whatsapp', MARTES_10AM);
+    expect(updates.filter((u) => u.tabla === 'reporte_direccion')).toHaveLength(2);
+  });
+
   it('el rechazo DEFINITIVO del canal libera la reserva: la siguiente pasada reintenta', async () => {
     enviar.mockResolvedValue({ ok: false, motivo: 'rechazado', detalle: 'HTTP 422' } as never);
     respuestas.set('reporte_direccion', [

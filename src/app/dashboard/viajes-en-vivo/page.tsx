@@ -30,7 +30,7 @@ const RUTA = '/dashboard/viajes-en-vivo';
  * Es el mismo modelo (`armarTableroViajes`) que lee la herramienta `tablero_viajes` del asistente.
  */
 export default async function PaginaViajesEnVivo({ searchParams }: {
-  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; terminal?: string; cliente?: string }>;
+  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; terminal?: string; cliente?: string; atencion?: string }>;
 }) {
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
@@ -63,8 +63,20 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAsignar(s.rol)) return;
     const id = String(fd.get('id') ?? '');
     if (!UUID.test(id)) return;
-    await fuentes().atenderEscalacion(s.tenantId, id, { usuarioId: s.userId, nota: limpiarResumen(String(fd.get('nota') ?? '')) || null });
+    // A37-S21-05: el rol se aplica a LA FILA (no solo al pintar la lista) y el resultado se le dice a quien pulsó:
+    // si otra persona ya la cerró, su nota no se pierde en silencio.
+    const abiertas = await fuentes().escalacionesAbiertas(s.tenantId, 200).catch(() => null);
+    const fila = abiertas?.find((t) => t.id === id);
+    let motivo: string | null = null;
+    if (!abiertas) motivo = 'no_se_pudo';
+    else if (!fila) motivo = 'ya_atendida';
+    else if (!rolPuedeLeerTarea(s.rol, fila)) motivo = 'sin_permiso';
+    else {
+      const ok = await fuentes().atenderEscalacion(s.tenantId, id, { usuarioId: s.userId, nota: limpiarResumen(String(fd.get('nota') ?? '')) || null });
+      if (!ok) motivo = 'ya_atendida';
+    }
     revalidatePath(RUTA);
+    if (motivo) redirect(`${RUTA}?${new URLSearchParams({ ...ocultos, atencion: motivo }).toString()}`);
   }
 
   return (
@@ -77,7 +89,7 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
         ocultos={ocultos}
         hrefMapa="/dashboard/mapa"
         pregunta={<PreguntaAlAsistente tenantParam={sp.tenant ?? null} />}
-        tareas={<TareasAbiertas tareas={tareas} errorLectura={tareasConError} accion={puedeAtender ? atender : null} ocultos={ocultos} />}
+        tareas={<TareasAbiertas tareas={tareas} errorLectura={tareasConError} aviso={sp.atencion ?? null} accion={puedeAtender ? atender : null} ocultos={ocultos} />}
         // A quién le llega el aviso de una tarea nueva (apagado por defecto): solo el dueño decide quién recibe los correos de la flota.
         notificaciones={puedeAdministrar(rol) ? (
           <Bloque mensaje="No se pudo leer la configuración de avisos." esqueleto={<EsqTabla filas={4} />}>

@@ -593,6 +593,7 @@ const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_357;
 // LOTE A37 M-Z-resto-14: +3 llamadas (2,315 → 2,318), medido con el barrido real, 0 archivos nuevos; todas por `acotada` con `tenant_id`:
 // `pod_wa.ts` +1 (lee el POD previo antes de reemplazarlo, S54-05), `portal_pago_propuesta.ts` +1 (cuenta los pendientes de la factura
 // antes de aceptar otro, S54-04) y `portal_pago_escritura.ts` +1 (relee la liga por hash tras un error del insert, S54-07).
+// A37 lote M-Z-resto-13: 2,315 → 2,316 (+1): `purgarRetencion` de cobranza_gasto lee (select paginado) los contactos viejos antes de borrar solo los desprotegidos (A37-S26-09).
 // A37-S27-10 (lote b-sat-fiscal-05): +1 (2,284 → 2,285), en `agentes/insumos.ts` (`crearInsumoArchivo`): `storage.from('agente-insumos').remove`
 // para no dejar huérfano el objeto subido cuando falla el insert.
 // LOTE A37 B-sat-fiscal-06 (migración 0876): +3 llamadas (2,284 → 2,287), 0 archivos nuevos, medido con el barrido real. `gasto_correccion.ts` +2: el RPC

@@ -444,6 +444,14 @@ describe('c7-11 · un costo NO MEDIDO se anota como desconocido, jamás como $0'
     expect(registrar.mock.calls.at(-1)?.[2]).toMatchObject({ estado: 'ok', costoUsd: null });
   });
 
+  it('A37-S26-10: si el modelo LANZA (el proveedor pudo haber cobrado), la corrida anota costo NULL, no cero', async () => {
+    colaAprobacion({});
+    generar.mockRejectedValue(new Error('timeout del proveedor'));
+    const r = await correrContenidoFiscal('cron', HOY);
+    expect(r.costoUsd, 'una llamada que lanzó no es gratis: es desconocida').toBeNull();
+    expect(registrar.mock.calls.at(-1)?.[2]).toMatchObject({ costoUsd: null });
+  });
+
   it('medido: se anota el número, y un 0 medido sigue siendo un 0', async () => {
     colaAprobacion({});
     generar.mockResolvedValue({ text: 'Texto.', cost: 0, noMedido: false });

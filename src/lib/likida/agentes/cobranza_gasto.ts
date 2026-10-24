@@ -192,6 +192,30 @@ async function tiersPrevios(tenantId: string, gastoIds: string[]): Promise<Map<s
   return mapa;
 }
 
+/** Borra los contactos de más de `DIAS_RETENCION_GASTO` días cuyo gasto ya no está en juego. Nunca lanza. */
+async function purgarRetencion(tenantId: string, ahora: Date, protegidos: Set<string>): Promise<void> {
+  try {
+    const corte = new Date(ahora.getTime() - DIAS_RETENCION_GASTO * 86_400_000).toISOString();
+    const viejos = await traerTodo<{ id: string; gasto_id: string }>(
+      (d, h) => supabaseAdmin()
+        .from('cobranza_gasto_contacto')
+        .select('id, gasto_id', conteo(d))
+        .eq('tenant_id', tenantId)
+        .lt('created_at', corte)
+        .order('id').range(d, h),
+      'cobranza_gasto.retencion_viejos',
+    );
+    const borrar = viejos.filter((f) => !protegidos.has(f.gasto_id)).map((f) => f.id);
+    for (let i = 0; i < borrar.length; i += 100) {
+      const { error } = await supabaseAdmin().from('cobranza_gasto_contacto')
+        .delete().eq('tenant_id', tenantId).in('id', borrar.slice(i, i + 100));
+      if (error) { logger.warn('cobranza_gasto.retencion_fallo', { tenantId, err: error.message }); return; }
+    }
+  } catch (e) {
+    logger.warn('cobranza_gasto.retencion_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
+  }
+}
+
 /** La cola honesta por gasto (lo que la página enseña y lo que `ejecutarCobranzaGastos` va a intentar). */
 export async function colaPorGasto(tenantId: string, ahora: Date = new Date()): Promise<{ plan: PlanCobroGasto; config: ConfigGasto }> {
   const config = await leerConfigGasto(tenantId);
@@ -379,13 +403,6 @@ export async function ejecutarCobranzaGastos(
   const admin = supabaseAdmin();
   const r = resultadoGastoVacio();
 
-  // Retención por flota (anclada por tenant): lo de más de 180 días se va. Best-effort.
-  await admin.from('cobranza_gasto_contacto')
-    .delete()
-    .eq('tenant_id', tenantId)
-    .lt('created_at', new Date(ahora.getTime() - DIAS_RETENCION_GASTO * 86_400_000).toISOString())
-    .then(({ error }) => { if (error) logger.warn('cobranza_gasto.retencion_fallo', { tenantId, err: error.message }); });
-
   // RESCATE DE CLAIMS HUÉRFANOS: un crash entre el claim y el envío deja filas enviado=false SIN detalle.
   // Una fila así de más de 1 hora es un crash probado: se borra y el tier queda libre.
   await admin.from('cobranza_gasto_contacto')
@@ -403,6 +420,11 @@ export async function ejecutarCobranzaGastos(
   const candidatos = gastos.filter((g) => motivoFaltante(g, config) !== null).map((g) => g.id);
   const previos = await tiersPrevios(tenantId, candidatos);
   const plan = planearCobroGasto(gastos, config, previos, ahora);
+
+  // Retención por flota (anclada por tenant): lo de más de 180 días se va — salvo la historia de un gasto de un viaje
+  // todavía vivo (A37-S26-09): sin ella `tiersPrevios` queda vacío y se reclamaría de nuevo el tier más alto.
+  // Best-effort.
+  await purgarRetencion(tenantId, ahora, new Set(gastos.map((g) => g.id)));
 
   r.pendientes = plan.pendientes.length;
   r.sinTelefono = plan.sinTelefono.reduce((n, g) => n + g.items.length, 0);

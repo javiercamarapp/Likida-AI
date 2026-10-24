@@ -623,7 +623,7 @@ export async function extraerComprobante(
     if (fiscal.uuid) uuid = fiscal.uuid;
     if (fiscal.rfcEmisor) rfc = fiscal.rfcEmisor;
     if (fiscal.rfcReceptor) rfcReceptor = fiscal.rfcReceptor; // para validar RFC=empresa
-    if (fiscal.total != null) montoCodigo = fiscal.total;
+    if (fiscal.total != null && Number.isFinite(fiscal.total)) montoCodigo = fiscal.total;
     qrFiscalParseado = true; // QR presente y parseado = CFDI VERIFICABLE (todavía no verificado: ver más abajo)
   }
   // QR de ticket (no fiscal): la liga del portal del emisor, y en varios
@@ -635,7 +635,7 @@ export async function extraerComprobante(
     if (portal.urlFacturacion && !esEnlaceWhatsApp(portal.urlFacturacion)) {
       urlFacturacion = portal.urlFacturacion;
     }
-    if (montoCodigo === undefined && portal.totalPortal != null) montoCodigo = portal.totalPortal;
+    if (montoCodigo === undefined && portal.totalPortal != null && Number.isFinite(portal.totalPortal)) montoCodigo = portal.totalPortal;
   }
   if (montoCodigo != null) monto = montoCodigo;
   urlFacturacion ??= normalizarUrl(data.url_facturacion);

@@ -60,4 +60,14 @@ describe('enviarCorreo tiene techo', () => {
     // Mismo camino que una red caída: el llamador no distingue, y no lanza.
     expect(r).toMatchObject({ ok: false, motivo: 'red' });
   });
+
+  it('A37-S41-07: un DNS caído se declara previo a la conexión (el correo no salió); un timeout NO', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ENOTFOUND' } }); }));
+    const { enviarCorreo } = await import('./enviar');
+    expect(await enviarCorreo('javier@likida.ai', correo)).toMatchObject({ ok: false, motivo: 'red', previoAConexion: true });
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new DOMException('The operation was aborted.', 'TimeoutError'); }));
+    const r = await enviarCorreo('javier@likida.ai', correo);
+    expect(r).toMatchObject({ ok: false, motivo: 'red' });
+    expect(r).not.toHaveProperty('previoAConexion');
+  });
 });

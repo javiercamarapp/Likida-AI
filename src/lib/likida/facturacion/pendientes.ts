@@ -276,8 +276,12 @@ export function armar(g: FilaGasto, hoy: string): TicketPorFacturar {
   // el jefe teclea RFC, correo y credenciales. Si el comercio no se identificó, no hay catálogo contra el cual dar fe de la liga.
   let urlTicket = urlTicketCrudo;
   if (urlTicket && (!c || !hostnameDeConfianza(urlTicket, c.reconocer.dominios ?? []))) {
+    // A37-S43-10: SOLO el hostname. La URL cruda viene de un QR que cualquiera fotografía y puede traer
+    // códigos de facturación en la ruta o el query: no va a los logs.
+    let hostnameTicket = 'ilegible';
+    try { hostnameTicket = new URL(urlTicket).hostname; } catch { /* liga mal formada: se registra como ilegible */ }
     logger.warn('facturacion.liga_ticket_dominio_ajeno', {
-      gastoId: g.id, comercio: c?.clave ?? null, urlTicket,
+      gastoId: g.id, comercio: c?.clave ?? null, hostnameTicket,
     });
     urlTicket = null;
   }
