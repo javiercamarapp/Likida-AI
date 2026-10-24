@@ -147,7 +147,7 @@ describe('crearFlota', () => {
       tabla === 'tenant' ? { insert } : { insert: () => Promise.resolve({ error: null }) });
 
     await crearFlota({
-      nombre: 'Fletes Doña Chuy', rfc: 'GMX0902279I1', razonSocial: 'FLOTA SA DE CV',
+      nombre: 'Fletes Doña Chuy', rfc: 'PEPA900101ABA', razonSocial: 'FLOTA SA DE CV',
       regimenFiscal: '612', codigoPostalFiscal: '36100', usoCfdi: 'G03',
       dedicacionExclusivaCarga: true,
     });
