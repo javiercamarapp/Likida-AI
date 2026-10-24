@@ -59,6 +59,7 @@ const ARCHIVOS: Record<string, Clase> = {
   'despacho/page.tsx': 'permitido',
   'inicio-contenido.tsx': 'permitido',                      // el Resumen de siempre: bajo el perfil no se monta
   'legal/page.tsx': 'permitido',
+  'arco/page.tsx': 'permitido',                              // A37-TRANSVERSAL-06: obligación legal de la flota, no módulo comercial
   'mi-perfil/page.tsx': 'permitido',
   'operadores/page.tsx': 'permitido',
   'soporte/page.tsx': 'permitido',
@@ -75,7 +76,6 @@ const ARCHIVOS: Record<string, Clase> = {
   'agentes/facturas/acciones-vinculacion.ts': 'standby',
   'agentes/facturas/page.tsx': 'standby',
   'agentes/proveedores/page.tsx': 'standby',
-  'arco/page.tsx': 'standby',
   'asistencia/page.tsx': 'standby',
   'clientes/page.tsx': 'standby',
   'combustible-casetas/page.tsx': 'standby',
