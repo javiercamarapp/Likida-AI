@@ -15,7 +15,7 @@ const HITO: Record<TipoHito, string> = {
   llegada_carga: 'llegada a carga', salida_carga: 'salida de carga', llegada_descarga: 'llegada a descarga', salida_descarga: 'salida de descarga', regreso: 'regreso',
 };
 const ESTADO: Record<EstadoConstanciaOperador, string> = {
-  completo: 'Completo', con_faltantes: 'Con faltantes', en_curso: 'En curso', sin_dato: 'Sin dato',
+  completo: 'Completo', completo_con_apoyo: 'Completo con apoyo de oficina o sistema', con_faltantes: 'Con faltantes', en_curso: 'En curso', sin_dato: 'Sin dato',
 };
 
 export function ConstanciaReportes({ constancia, dias, hayMas }: { constancia: Constancia; dias: number; hayMas: boolean }) {
@@ -41,6 +41,11 @@ export function ConstanciaReportes({ constancia, dias, hayMas }: { constancia: C
                 <span style={{ color: 'var(--muted)' }}>{ESTADO[o.estado]}</span>
                 {o.estado !== 'sin_dato' && (
                   <span><span className="cifra-mono">{numero(o.reportados)} de {numero(o.esperados)}</span> hitos reportados en {numero(o.viajes)} {o.viajes === 1 ? 'viaje' : 'viajes'}</span>
+                )}
+                {o.estado !== 'sin_dato' && (
+                  <span style={{ color: 'var(--muted)' }}>
+                    {numero(o.reportadosPorOperador)} por el operador · {numero(o.cubiertosPorOficinaOSistema)} {o.cubiertosPorOficinaOSistema === 1 ? 'cubierto' : 'cubiertos'} por oficina o sistema
+                  </span>
                 )}
                 {o.pendientes > 0 && <span style={{ color: 'var(--muted)' }}>{numero(o.pendientes)} pendientes (viaje en curso)</span>}
               </div>

@@ -34,4 +34,17 @@ describe('<ConstanciaReportes /> (T-A5-67)', () => {
     const c = armarConstancia({ tenantId: 't1', periodo: PERIODO, viajes: [viaje], hitos: [hitoVacio({ id: 'h1', viajeId: '1', tipo: 'regreso' })] });
     expect(renderToStaticMarkup(<ConstanciaReportes constancia={c} dias={7} hayMas />)).toContain('más viajes');
   });
+
+  it('A37-S35-10: enseña por separado lo reportado por el operador y lo cubierto por oficina o sistema', () => {
+    const c = armarConstancia({
+      tenantId: 't1', periodo: PERIODO, viajes: [viaje],
+      hitos: [
+        hitoVacio({ id: 'h1', viajeId: '1', tipo: 'llegada_carga', estado: 'recibido', fuente: 'oficina', mensajeEn: '2026-10-03T15:30:00.000Z', recibidoEn: '2026-10-03T15:30:00.000Z' }),
+      ],
+    });
+    const html = renderToStaticMarkup(<ConstanciaReportes constancia={c} dias={7} hayMas={false} />);
+    expect(html).toContain('0 por el operador');
+    expect(html).toContain('1 cubierto por oficina o sistema');
+    expect(html).not.toContain('>Completo<');
+  });
 });
