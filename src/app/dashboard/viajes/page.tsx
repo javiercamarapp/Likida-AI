@@ -132,6 +132,7 @@ export default async function PaginaViajes({
         sinOperador: r.sinOperador,
         operadorOcupado: r.operadorOcupado,
         unidadOcupada: r.unidadOcupada ?? [],
+        rechazadasPorBase: r.rechazadasPorBase ?? [],
         unidadesSinAmarrar: r.unidadesSinAmarrar,
         sinUnidad: r.sinUnidad,
         clientesSinAmarrar: r.clientesSinAmarrar,

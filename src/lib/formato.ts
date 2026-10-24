@@ -466,6 +466,17 @@ export function instanteRFC3339(valor: unknown): string | null {
 }
 
 /**
+ * A37-S64-02: ¿el importe trae más de dos decimales? Es dinero con centavos: `numeric(12,2)` redondearía en silencio, y «38.500»
+ * (miles con punto, como exporta Excel con configuración es-ES) se leería como 38.50 — por eso un TEXTO se mira por sus dígitos
+ * (el «.500» son tres decimales aunque valga 0.5), no por su valor. Un número usa tolerancia de ruido binario (1234.56*100 no es
+ * entero exacto), mil veces menor que el centavo. El texto debe venir YA normalizado con punto decimal.
+ */
+export function masDeDosDecimales(x: number | string): boolean {
+  if (typeof x === 'string') return /\.\d{3,}/.test(x);
+  return Number.isFinite(x) && Math.abs(x * 100 - Math.round(x * 100)) > 1e-6;
+}
+
+/**
  * Importe tecleado a mano (A36-R01-02). Es dinero: lo ambiguo se RECHAZA (NaN),
  * no se adivina. `Number('50,000'.replace(',', '.'))` daba 50.
  *

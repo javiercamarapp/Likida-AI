@@ -168,3 +168,29 @@ describe('FE-15 — un archivo más largo que el tope lo DICE en las descartadas
     expect(r.error).toBeUndefined();
   });
 });
+
+
+// A37-S64-01: fecha inexistente o anticipo fuera de rango descartan SOLO esa fila (no tumban el lote de 100 con 22008/22003).
+describe('A37-S64-01: fechas imposibles y anticipos fuera de rango', () => {
+  it('31/04/2026, 2026-02-30 y 30/02/2024 son ilegibles; 29/02/2024 (bisiesto) y 31/03/2026 pasan', () => {
+    expect(leerFechaImportada('31/04/2026')).toBe('ilegible');
+    expect(leerFechaImportada('2026-02-30')).toBe('ilegible');
+    expect(leerFechaImportada('30/02/2024')).toBe('ilegible');
+    expect(leerFechaImportada('29/02/2024')).toBe('2024-02-29');
+    expect(leerFechaImportada('29/02/2026')).toBe('ilegible');
+    expect(leerFechaImportada('31/03/2026')).toBe('2026-03-31');
+    expect(leerFechaImportada('2026-08-14T10:00:00')).toBe('2026-08-14');
+  });
+  it('un anticipo de 1E+15 (o sobre el tope) descarta la fila con su motivo', () => {
+    const matriz = [
+      ['folio', 'origen', 'destino', 'fecha', 'anticipo'],
+      ['V-1', 'A', 'B', '14/08/2026', 1e15],
+      ['V-2', 'A', 'B', '14/08/2026', 1_000_000],
+      ['V-3', 'A', 'B', '14/08/2026', 1_000_000.01],
+    ];
+    const r = interpretarFilasViajes(matriz);
+    expect(r.viajes.map((v) => v.folio)).toEqual(['V-2']);
+    expect(r.descartadas.map((d) => d.fila)).toEqual([2, 4]);
+    expect(r.descartadas[0].motivo).toMatch(/^anticipo (ilegible|fuera de rango)/);
+  });
+});

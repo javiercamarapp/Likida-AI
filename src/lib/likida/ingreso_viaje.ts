@@ -4,7 +4,7 @@ import { DatoInvalido } from './errores';
 // primera versión con un `toLocaleString` en el mensaje de error: el guardia
 // no distingue un mensaje de una pantalla, y hace bien — una cifra que se lee
 // distinto en dos lados se lee como dos cálculos.
-import { numero } from '@/lib/formato';
+import { numero, masDeDosDecimales } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL INGRESO DEL VIAJE — lo que por fin cierra el ciclo del dinero.
@@ -82,6 +82,11 @@ function opcional(crudo: string, campo: string, tope: number): number | null {
 
   if (!Number.isFinite(n)) throw new DatoInvalido(`${campo} tiene que ser un número.`);
   if (n < 0) throw new DatoInvalido(`${campo} no puede ser negativo.`);
+  // A37-S64-02: más de dos decimales NO se redondea en silencio. «38.500» (miles con punto, como exporta Excel con configuración
+  // es-ES) se guardaba como 38.50 y «1.240» km como 1.24: cifras plausibles que nadie cuestiona. Se pide reescribirla sin ambigüedad.
+  if (masDeDosDecimales(limpio)) {
+    throw new DatoInvalido(`${campo} no puede traer más de dos decimales. Si «${t}» lleva el punto como separador de miles, escríbelo sin él (por ejemplo 38500 o 38,500.00).`);
+  }
   if (n > tope) {
     throw new DatoInvalido(
       `${campo} pasa de ${numero(tope)} y eso casi siempre es un cero de más. Si es correcto, avísanos.`,

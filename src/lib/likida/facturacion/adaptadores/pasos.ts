@@ -1,4 +1,5 @@
 import { logger } from '@/lib/logger';
+import { masDeDosDecimales } from '@/lib/formato';
 import { pantallaDeLogin } from '../vinculo_senales';
 import type { InventarioPagina, PaginaConInventario, PaginaPortal } from './playwright_base';
 
@@ -339,6 +340,8 @@ export function aplicarFormato(valor: string | null, formato: FormatoCampo = 'te
     }
     case 'monto':
     case 'monto_entero': {
+      // A37-S64-02: un monto NEGATIVO no es un monto que se teclee en un portal de facturación: el signo se perdía («-500» → 500.00).
+      if (/^[^\d]*-\s*\d/.test(v)) return null;
       // Se quita todo menos dígitos, punto y coma; después la coma de millares.
       const limpio = v.replace(/[^\d.,]/g, '').replace(/(?<!\b0),(?=\d{3}\b)/g, '');
       // EL GUARDA QUE PARECE DE MÁS Y NO LO ES: sin él, `Number('')` es 0 —no
@@ -349,6 +352,9 @@ export function aplicarFormato(valor: string | null, formato: FormatoCampo = 'te
       if (!/\d/.test(limpio)) return null;
       const n = Number(limpio.replace(/,/g, '.'));
       if (!Number.isFinite(n)) return null;
+      // A37-S64-02: más de dos decimales ('1.234' que pudo ser mil doscientos treinta y cuatro) no se redondea a '1.23' en un
+      // documento fiscal: se declara no legible y el flujo lo manda a revisión.
+      if (masDeDosDecimales(limpio.replace(/,/g, '.'))) return null;
       return formato === 'monto_entero' ? String(Math.trunc(n)) : n.toFixed(2);
     }
     case 'fecha_iso': {

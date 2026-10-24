@@ -4,7 +4,7 @@ import { acotada } from './presupuesto';
 import { traerPorIds, traerTodo } from './pg';
 import { elegirOperadorPorNombre, OperadorNombreAmbiguo } from './crear_viaje_wa';
 import { validarIngreso } from './ingreso_viaje';
-import { numero } from '@/lib/formato';
+import { numero, masDeDosDecimales } from '@/lib/formato';
 import { DatoInvalido } from './errores';
 import { aceptarViajesImportados } from './conductor/repo';
 import { localAUtc, normalizarFechaLocal, ZONA_POR_OMISION } from './conectores/tabla_propia/tiempo';
@@ -107,11 +107,16 @@ function normalizarEncabezado(v: unknown): string {
     .trim();
 }
 
+/** Tope de cordura del anticipo por viaje en la importación (mismo que `api/v1/viajes`). */
+export const TOPE_ANTICIPO_IMPORTACION = 1_000_000;
+
 /** "$8,000.50" / "8000,50" / 8000 → número, o null si no se puede leer con
  *  seguridad. La regla de siempre: una cifra dudosa no se adivina. */
 export function leerCifraImportada(v: unknown): number | null | 'ilegible' {
   if (v === null || v === undefined || v === '') return null;
-  if (typeof v === 'number') return Number.isFinite(v) && v >= 0 ? Math.round(v * 100) / 100 : 'ilegible';
+  // A37-S64-02: más de dos decimales ya NO se redondea a centavos: «38.500» (miles con punto, export es-ES) entraba como 38.50 y
+  // «1.240» km como 1.24 — cifras plausibles. Ante la duda la fila se descarta CON su motivo y se corrige en el archivo.
+  if (typeof v === 'number') return Number.isFinite(v) && v >= 0 && !masDeDosDecimales(v) ? Math.round(v * 100) / 100 : 'ilegible';
   const limpio = String(v).replace(/[$\s]/g, '');
   if (!limpio) return null;
   // "1.234,56" europeo vs "1,234.56": si hay coma Y punto, el ÚLTIMO es el decimal.
@@ -126,7 +131,7 @@ export function leerCifraImportada(v: unknown): number | null | 'ilegible' {
       : limpio.replace(/,/g, ''))
     : limpio.replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.');
   const n = Number(normal);
-  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : 'ilegible';
+  return Number.isFinite(n) && n >= 0 && !masDeDosDecimales(normal) ? Math.round(n * 100) / 100 : 'ilegible';
 }
 
 /** dd/mm/aaaa, aaaa-mm-dd o serial de Excel → ISO. null = vacía; 'ilegible'
@@ -141,14 +146,22 @@ export function leerFechaImportada(v: unknown): string | null | 'ilegible' {
   }
   const t = String(v).trim();
   let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
-  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  if (m) return esDiaReal(Number(m[1]), Number(m[2]), Number(m[3])) ? `${m[1]}-${m[2]}-${m[3]}` : 'ilegible';
   m = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(t);
   if (m) {
     const dia = Number(m[1]), mes = Number(m[2]);
-    if (mes > 12 || dia > 31 || mes < 1 || dia < 1) return 'ilegible';
+    if (!esDiaReal(Number(m[3]), mes, dia)) return 'ilegible';
     return `${m[3]}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
   }
   return 'ilegible';
+}
+
+/** A37-S64-02/S64-01: el día EXISTE en el calendario (round-trip por UTC): «31/04» y «2026-02-30» no pasan. `fecha_inicio` es `date`:
+ *  Postgres rechazaría la fila con 22008 y tumbaba el lote entero de 100. */
+function esDiaReal(a: number, mes: number, dia: number): boolean {
+  if (!Number.isInteger(a) || !Number.isInteger(mes) || !Number.isInteger(dia) || mes < 1 || mes > 12 || dia < 1 || a < 1900 || a > 2200) return false;
+  const d = new Date(Date.UTC(a, mes - 1, dia));
+  return d.getUTCFullYear() === a && d.getUTCMonth() === mes - 1 && d.getUTCDate() === dia;
 }
 
 /** ¿El archivo trae columnas de cita? Solo entonces hace falta conocer la zona de la flota (T-A5-05). */
@@ -246,6 +259,11 @@ export function interpretarFilasViajes(
 
     const anticipo = leerCifraImportada(celda('anticipo'));
     if (anticipo === 'ilegible') { descartadas.push({ fila: f + 1, motivo: `anticipo ilegible (${folio})` }); continue; }
+    // A37-S64-01: tope de cordura del anticipo (el mismo que la API v1). Un «1E+15» pasaba a la lista y Postgres rechazaba el
+    // lote entero de 100 con 22003 (`numeric(12,2)`); ahora se descarta SOLO la fila, con su motivo.
+    if (anticipo !== null && anticipo > TOPE_ANTICIPO_IMPORTACION) {
+      descartadas.push({ fila: f + 1, motivo: `anticipo fuera de rango, pasa de ${numero(TOPE_ANTICIPO_IMPORTACION)} (${folio})` }); continue;
+    }
     const fecha = leerFechaImportada(celda('fecha'));
     if (fecha === 'ilegible') { descartadas.push({ fila: f + 1, motivo: `fecha ilegible (${folio})` }); continue; }
 
@@ -348,6 +366,10 @@ export interface ResultadoImportacion {
    *  archivo, o porque la carrera con otro request la ocupó entre la lectura y
    *  el insert. Ausente si no hubo ninguno (los acuses sin choque no cambian). */
   unidadOcupada?: string[];
+  /** A37-S64-01: folios que la BASE rechazó por dato inválido (SQLSTATE clase 22: fecha o importe fuera de rango) aun después de las
+   *  validaciones del archivo. Solo esa fila se descarta (con su código); antes tumbaba el lote entero de 100 y el mensaje no decía cuál.
+   *  Ausente si no hubo ninguno. */
+  rechazadasPorBase?: Array<{ folio: string; codigo: string }>;
   /** Números económicos del archivo que no existen en `unidad` (o que el
    *  catálogo no distingue). Sus filas NO se crean: importar un viaje con la
    *  unidad descartada en silencio dejaría el archivo diciendo una cosa y el
@@ -623,6 +645,7 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
     for (const r of data ?? []) unidadesOcupadas.add(String(r.unidad_id));
   }
   const unidadOcupada: string[] = [];
+  const rechazadasPorBase: Array<{ folio: string; codigo: string }> = [];
   const listas: typeof operadorLibres = [];
   for (const f of operadorLibres) {
     if (f.unidadId) {
@@ -631,8 +654,10 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
     }
     listas.push(f);
   }
-  const campoUnidadOcupada = (): Pick<ResultadoImportacion, 'unidadOcupada'> =>
-    unidadOcupada.length > 0 ? { unidadOcupada: [...unidadOcupada] } : {};
+  const campoUnidadOcupada = (): Pick<ResultadoImportacion, 'unidadOcupada' | 'rechazadasPorBase'> => ({
+    ...(unidadOcupada.length > 0 ? { unidadOcupada: [...unidadOcupada] } : {}),
+    ...(rechazadasPorBase.length > 0 ? { rechazadasPorBase: [...rechazadasPorBase] } : {}),
+  });
 
   let creados = 0;
   // Seguimiento del agente (T-A5-04): se activa por lote, solo para lo recién creado. Falla ABIERTO para el import
@@ -700,6 +725,26 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
       data = filasOk as typeof data;
       error = otroError;
     }
+    // A37-S64-01: un dato que la base rechaza (clase 22: 22008 fecha fuera de rango, 22003 importe fuera de rango…) es UNA fila, no el
+    // lote. Se reintenta fila por fila: solo la inválida se rechaza (con su folio y código); las demás entran y los lotes siguientes
+    // también. Cualquier otro error conserva el camino de siempre (el lote falla y se dice dónde).
+    if (error && /^22/.test(String((error as { code?: string }).code ?? ''))) {
+      const filasOk: Array<{ id?: unknown; folio?: unknown }> = [];
+      let otroError: typeof error | null = null;
+      for (const unica of lote) {
+        const r1 = await insertar([unica]);
+        if (r1.error && esChoqueUnidadAbierta(r1.error)) { unidadOcupada.push(unica.folio); continue; }
+        if (r1.error && /^22/.test(String((r1.error as { code?: string }).code ?? ''))) {
+          rechazadasPorBase.push({ folio: unica.folio, codigo: String((r1.error as { code?: string }).code) });
+          logger.warn('importar_viajes.fila_rechazada_por_base', { tenantId, folio: unica.folio, codigo: (r1.error as { code?: string }).code });
+          continue;
+        }
+        if (r1.error) { otroError = r1.error; break; }
+        filasOk.push(...(r1.data ?? []));
+      }
+      data = filasOk as typeof data;
+      error = otroError;
+    }
     if (error) {
       logger.error('importar_viajes.lote_fallo', { tenantId, desde: i, err: error.message });
       return {
@@ -715,7 +760,7 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
     const insertados = new Set((data ?? []).map((v) => String(v.folio)));
     creados += insertados.size;
     for (const fila of lote) {
-      if (!insertados.has(fila.folio) && !unidadOcupada.includes(fila.folio)) saltados.push(fila.folio);
+      if (!insertados.has(fila.folio) && !unidadOcupada.includes(fila.folio) && !rechazadasPorBase.some((r) => r.folio === fila.folio)) saltados.push(fila.folio);
     }
     const idsNuevos = (data ?? []).map((v) => (v as { id?: unknown }).id).filter((x): x is string => typeof x === 'string' && x !== '');
     if (idsNuevos.length > 0 && !seg.noDisponible) {
