@@ -59,6 +59,20 @@ describe('los topes cazan el dedazo al capturar, no tres semanas después', () =
     expect(() => V({ kmRecorridos: '-1' })).toThrow(/no puede ser negativo/);
   });
 
+  // A37-L-05: Number() aceptaba notación científica, hexadecimal y centavos de más.
+  it('A37-L-05: rechaza notación científica y hexadecimal en el ingreso y los km', () => {
+    expect(() => V({ ingresoFlete: '1e4' })).toThrow(/número/);
+    expect(() => V({ ingresoFlete: '0x10' })).toThrow(/número/);
+    expect(() => V({ kmRecorridos: '1e3' })).toThrow(/número/);
+    expect(() => V({ ingresoFlete: 'Infinity' })).toThrow(/número/);
+  });
+
+  it('A37-L-05: el ingreso rechaza más de dos decimales en vez de redondear en silencio', () => {
+    expect(() => V({ ingresoFlete: '38500.005' })).toThrow(/dos decimales/);
+    expect(V({ ingresoFlete: '38500.05' }).ingresoFlete).toBe(38500.05);
+    expect(V({ ingresoFlete: '1234.56' }).ingresoFlete).toBe(1234.56);
+  });
+
   it('texto que no es número no se convierte en NaN silencioso', () => {
     expect(() => V({ ingresoFlete: 'mucho' })).toThrow(/número/);
   });

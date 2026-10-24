@@ -27,7 +27,8 @@ const pasos = (s: string) => aplicarFormato(s, 'monto');
 
 describe('cero a la izquierda + coma + 3 dígitos NO es separador de miles', () => {
   it('ingreso_viaje', () => {
-    expect(ingreso('0,125')).toBe(0.125);
+    // A37-L-05: 0.125 trae tres decimales: se rechaza por centavos, NO se lee como 125 ni se redondea.
+    expect(() => ingreso('0,125')).toThrow(DatoInvalido);
     expect(ingreso('0,5')).toBe(0.5);
     expect(ingreso('1,5')).toBe(1.5);
     expect(ingreso('12,5')).toBe(12.5);
@@ -44,7 +45,8 @@ describe('cero a la izquierda + coma + 3 dígitos NO es separador de miles', () 
     expect(() => pago('0,125')).toThrow(DatoInvalido);
   });
   it('importar_viajes (leerCifraImportada)', () => {
-    expect(leerCifraImportada('0,125')).toBe(0.13);
+    // A37-L-07: tres decimales en dinero = ambiguo, ilegible (ni 125 ni 0.13).
+    expect(leerCifraImportada('0,125')).toBe('ilegible');
     expect(leerCifraImportada('0,5')).toBe(0.5);
     expect(leerCifraImportada('12,5')).toBe(12.5);
   });

@@ -4,6 +4,17 @@ import { interpretarFilasViajes, leerCifraImportada, leerFechaImportada, TOPE_FI
 // Solo el motor PURO: la inserción por lotes y el dedup contra la base son
 // el patrón de siempre (folios existentes se consultan y se saltan).
 
+describe('A37-L-07 — más de dos decimales no se redondea en silencio', () => {
+  it('el dinero con tres decimales o notación rara es ilegible; los km siguen aceptando decimales', () => {
+    expect(leerCifraImportada('1.234')).toBe('ilegible');
+    expect(leerCifraImportada('1,234.567')).toBe('ilegible');
+    expect(leerCifraImportada('1e4')).toBe('ilegible');
+    expect(leerCifraImportada('0x10')).toBe('ilegible');
+    expect(leerCifraImportada('8000.50')).toBe(8000.5);
+    expect(leerCifraImportada('123.456', false)).toBe(123.46);
+  });
+});
+
 describe('leerCifraImportada — el dinero del TMS ajeno', () => {
   it('lee los formatos reales', () => {
     expect(leerCifraImportada(8000)).toBe(8000);

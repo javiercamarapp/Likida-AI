@@ -285,7 +285,9 @@ export function montoDeCelda(v: Celda): number | null {
     normal = s;
   }
   // eslint-disable-next-line security/detect-unsafe-regex -- entrada acotada (≤ 80 caracteres, validado arriba) y sin cuantificadores anidados sobre los mismos caracteres
-  if (!/^\d+(\.\d+)?$/.test(normal)) return null;
+  // A37-L-07: más de dos decimales es ambiguo («1.500» = ¿mil quinientos o 1.50?): no se redondea en silencio.
+  // eslint-disable-next-line security/detect-unsafe-regex -- entrada acotada (≤ 40 caracteres) y sin cuantificadores anidados
+  if (!/^\d+(\.\d{1,2})?$/.test(normal)) return null;
   const n = Number(normal);
   if (!Number.isFinite(n)) return null;
   return round2(negativo ? -n : n);

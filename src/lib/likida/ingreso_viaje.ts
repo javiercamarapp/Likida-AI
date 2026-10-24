@@ -71,13 +71,16 @@ const TOPES = {
  * Devuelve `null` cuando está VACÍO —que es "no capturado"— y un número cuando
  * hay algo tecleado, incluido el 0.
  */
-function opcional(crudo: string, campo: string, tope: number): number | null {
+function opcional(crudo: string, campo: string, tope: number, esDinero = false): number | null {
   const t = crudo.trim();
   if (t === '') return null;
 
   // La coma decimal es como se teclea en México; el separador de millares
   // también se pega desde un Excel ("38,500.00"), así que se quita.
   const limpio = t.replace(/\s/g, '').replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.');
+  // A37-L-05: solo dígitos con punto decimal opcional (y signo, para dar el mensaje de «negativo»).
+  // `Number()` pelado aceptaba '1e4' ($10,000), '0x10' ($16) y 'Infinity'.
+  if (!/^-?\d+(\.\d+)?$/.test(limpio)) throw new DatoInvalido(`${campo} tiene que ser un número.`);
   const n = Number(limpio);
 
   if (!Number.isFinite(n)) throw new DatoInvalido(`${campo} tiene que ser un número.`);
@@ -87,11 +90,16 @@ function opcional(crudo: string, campo: string, tope: number): number | null {
       `${campo} pasa de ${numero(tope)} y eso casi siempre es un cero de más. Si es correcto, avísanos.`,
     );
   }
+  // Dinero: los centavos se rechazan, no se redondean (`numeric(12,2)` los redondearía en silencio y el
+  // CFDI diría otra cifra). Con tolerancia: 1234.56 * 100 es 123455.99999999999 en binario.
+  if (esDinero && Math.abs(n * 100 - Math.round(n * 100)) > 1e-6) {
+    throw new DatoInvalido(`${campo} no puede traer más de dos decimales: la base guarda centavos y redondear en silencio cambiaría la cifra.`);
+  }
   return n;
 }
 
 export function validarIngreso(c: IngresoCrudo): IngresoValido {
-  const ingresoFlete = opcional(c.ingresoFlete, 'El ingreso del flete', TOPES.ingreso);
+  const ingresoFlete = opcional(c.ingresoFlete, 'El ingreso del flete', TOPES.ingreso, true);
   const kmRecorridos = opcional(c.kmRecorridos, 'Los kilómetros', TOPES.km);
   const clienteId = c.clienteId.trim() || null;
 
