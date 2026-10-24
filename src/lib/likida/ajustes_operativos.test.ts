@@ -140,6 +140,23 @@ describe('parsearCuentas — el contador pega su Excel', () => {
   });
 });
 
+describe('A37-S17-02: flota sin catálogo declarado puede guardar el tabulador sin inventar cuentas', () => {
+  it('con permitirCatalogoVacio, cuentas vacías no impiden guardar el tabulador y devuelve {} (no se escribe nada)', () => {
+    const r = validarAjustes({ ...BUENOS, cuentas: '' }, { permitirCatalogoVacio: true });
+    expect(r.catalogoCuentas).toEqual({});
+    expect(r.tabulador.rendimientoPorDefecto).toBeGreaterThan(0);
+  });
+
+  it('con permitirCatalogoVacio y cuentas capturadas, las cuentas se validan y se guardan igual', () => {
+    expect(validarAjustes({ ...BUENOS, cuentas: 'diesel=600-001' }, { permitirCatalogoVacio: true }).catalogoCuentas).toEqual({ diesel: '600-001' });
+    expect(() => validarAjustes({ ...BUENOS, cuentas: 'sin igual' }, { permitirCatalogoVacio: true })).toThrow(/falta el "="/);
+  });
+
+  it('sin la opción (flota con catálogo declarado, o ilegible) VACIAR sigue rechazado', () => {
+    expect(() => validarAjustes({ ...BUENOS, cuentas: '' })).toThrow(/no puede quedar vacío/);
+  });
+});
+
 describe('formatearCuentas — el viaje de regreso', () => {
   it('ordena alfabéticamente para que el textarea no baile entre cargas', () => {
     expect(formatearCuentas({ diesel: '600-001', caseta: '600-002' }))

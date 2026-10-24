@@ -93,6 +93,7 @@ export interface AjustesCrudos {
 
 export interface AjustesValidos {
   tabulador: LikidaConfig['tabulador'];
+  /** `{}` = no hay cuentas que guardar (solo con `permitirCatalogoVacio`): NO se escribe la llave. */
   catalogoCuentas: Record<string, string>;
   salida: FormatoSalida;
 }
@@ -188,7 +189,7 @@ export function esFormato(v: string): v is FormatoSalida {
  * podría guardar 15 donde el motor espera 0.15 y marcaría CERO desviaciones
  * en vez de todas, sin un solo error en el log.
  */
-export function validarAjustes(c: AjustesCrudos): AjustesValidos {
+export function validarAjustes(c: AjustesCrudos, opciones: { permitirCatalogoVacio?: boolean } = {}): AjustesValidos {
   const rendimientoPorDefecto = numero(c.rendimientoPorDefecto, 'El rendimiento por defecto (km/L)', RANGOS.rendimiento);
   const factorCarga = numero(c.factorCarga, 'El factor de carga', RANGOS.factorCarga);
   const precioDieselPorDefecto = numero(c.precioDieselPorDefecto, 'El precio del diésel', RANGOS.precioDiesel);
@@ -204,9 +205,13 @@ export function validarAjustes(c: AjustesCrudos): AjustesValidos {
   }
 
   const catalogoCuentas = parsearCuentas(c.cuentas);
-  if (Object.keys(catalogoCuentas).length === 0) {
+  if (Object.keys(catalogoCuentas).length === 0 && !opciones.permitirCatalogoVacio) {
     // Un catálogo vacío deja al export sin cuenta contable en cada renglón, y
     // el archivo llega al ERP para rebotar completo.
+    //
+    // A37-S17-02: el rechazo es al VACIAR un catálogo que existe (o que no se pudo leer). Una flota que NUNCA declaró
+    // catálogo (`permitirCatalogoVacio`) puede guardar solo su tabulador/formato: `catalogoCuentas` sale `{}` y NO se
+    // escribe (ver `guardarAjustesOperativos`), en vez de obligarla a inventar cuentas que el export usaría en asientos reales.
     throw new DatoInvalido('El catálogo de cuentas no puede quedar vacío.');
   }
 

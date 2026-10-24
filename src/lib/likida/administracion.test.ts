@@ -478,6 +478,14 @@ describe('guardarAjustesOperativos', () => {
   });
 });
 
+describe('A37-S17-02: guardarAjustesOperativos con catálogo vacío', () => {
+  it('si no hay cuentas que guardar NO escribe catalogoCuentas (no declara un catálogo vacío ni borra uno)', async () => {
+    from.mockImplementation(() => ({ insert: () => Promise.resolve({ error: null }) }));
+    await guardarAjustesOperativos('t-1', { tabulador: { rendimientoPorDefecto: 2.4 }, catalogoCuentas: {}, salida: 'csv' } as never);
+    expect(Object.keys((rpc.mock.calls[0][1] as { p_parcial: object }).p_parcial).sort()).toEqual(['salida', 'tabulador']);
+  });
+});
+
 describe('reabrirViaje', () => {
   /** El `from` de siempre: el viaje se busca por folio, y el resto es plomería. */
   const baseFrom = (viaje: unknown = { data: { id: 'v-1', estatus: 'liquidado' }, error: null }) => {
