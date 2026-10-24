@@ -30,6 +30,17 @@ const MAX_BYTES_SUBIDA = 9 * 1024 * 1024;
 const mensajeDeDivision = (n: number): string =>
   `El archivo trae ${n} embarques: lo separé en ${n} documentos, uno por embarque. Se van leyendo y los verás en la bandeja para revisar; el archivo original queda como constancia.`;
 
+const LIMITE_BANDEJA = 200;
+/** Tope de por_revisar + fallidos que la bandeja carga siempre (repo.listarDocumentos corta en 500). */
+const LIMITE_PENDIENTES = 500;
+const LIMITE_METRICAS = 500;
+
+/** Las `base` más las `extra` que no estén ya (por id), de lo más reciente a lo más antiguo. */
+function unirSinRepetir<T extends { id: string; createdAt: string }>(base: T[], extra: T[]): T[] {
+  const vistos = new Set(base.map((d) => d.id));
+  return [...base, ...extra.filter((d) => !vistos.has(d.id))].sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -64,14 +75,18 @@ async function cargarAsignacion(tenantId: string, ids: string[]): Promise<Pick<D
 async function cargarDatos(tenantId: string): Promise<DatosDocumentos | null> {
   try {
     const desde = new Date(Date.now() - DIAS_VENTANA * 86_400_000).toISOString();
-    const [lista, perfiles, clientes, buzon, configs] = await Promise.all([
-      repo.listarDocumentos(tenantId, { limite: 200 }),
+    const [recientesLista, pendientes, perfiles, clientes, buzon, configs] = await Promise.all([
+      repo.listarDocumentos(tenantId, { limite: LIMITE_BANDEJA }),
+      // A37-S16-02: lo que espera a una persona (por revisar) o falló NUNCA se corta con los 200 más recientes.
+      repo.listarDocumentos(tenantId, { estados: ['por_revisar', 'fallido'], limite: LIMITE_PENDIENTES }),
       repo.listarPerfiles(tenantId),
       repo.listarClientes(tenantId),
       repo.buzonDeFlota(tenantId),
       repo.listarExportConfigs(tenantId),
     ]);
-    const recientes = (await repo.listarDocumentos(tenantId, { desde, limite: 500 })).filas;
+    const lista = { total: recientesLista.total, filas: unirSinRepetir(recientesLista.filas, pendientes.filas) };
+    const ventana = await repo.listarDocumentos(tenantId, { desde, limite: LIMITE_METRICAS });
+    const recientes = ventana.filas;
     const correcciones = await repo.contarCorreccionesPorDocumento(tenantId, recientes.filter((d) => d.estado === 'aprobado').map((d) => d.id));
     const versiones = await Promise.all(perfiles.map((p) => repo.listarVersionesPerfil(tenantId, p.id)));
     const dominio = dominioBuzon();
@@ -80,6 +95,8 @@ async function cargarDatos(tenantId: string): Promise<DatosDocumentos | null> {
     const asignacion = await cargarAsignacion(tenantId, lista.filas.map((d) => d.id));
     return {
       filas: lista.filas, total: lista.total, envios, ...asignacion,
+      // A37-S16-01: las métricas «90 días» se calculan sobre a lo más LIMITE_METRICAS documentos; si hay más, se dice.
+      ...(ventana.total > recientes.length ? { metricasMuestra: { usados: recientes.length, total: ventana.total } } : {}),
       linaje: Object.fromEntries([...linaje].map(([id, l]) => [id, { rol: l.rol, indice: l.indice, total: l.total, clave: l.clave }])), metricas: calcularMetricas(recientes, correcciones), clientes,
       perfiles: perfiles.map((p, i) => ({ id: p.id, nombre: p.nombre, formato: p.formato, versionActiva: p.versionActiva, mapeos: p.activa.mapeos.length, versiones: versiones[i].map((v) => ({ version: v.version, nota: v.nota, mapeos: v.mapeos })) })),
       buzon: buzon ? { direccion: direccionCp(buzon.token, dominio), activo: buzon.activo, remitentes: buzon.remitentesPermitidos, dominioConfigurado: dominio !== null } : null,

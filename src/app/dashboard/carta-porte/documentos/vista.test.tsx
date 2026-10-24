@@ -40,6 +40,12 @@ describe('VistaDocumentos', () => {
     expect(h).not.toMatch(/Bandeja de revisión/);
   });
 
+  it('A37-S16-01: si las métricas se calcularon sobre una muestra lo dice; sin muestra no hay aviso', () => {
+    const con = html(<VistaDocumentos datos={datos([], { metricasMuestra: { usados: 500, total: 731 } })} acciones={todas} />);
+    expect(con).toMatch(/Hubo 731 documentos en los últimos 90 días; estas cifras se calcularon solo con los 500 más recientes/);
+    expect(html(<VistaDocumentos datos={datos()} acciones={todas} />)).not.toMatch(/se calcularon solo con/);
+  });
+
   it('sin documentos: estado vacío honesto y métricas sin cifras inventadas', () => {
     const h = html(<VistaDocumentos datos={datos()} acciones={todas} />);
     expect(h).toMatch(/Todavía no ha llegado ningún documento/);
