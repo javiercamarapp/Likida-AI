@@ -372,6 +372,38 @@ describe('crearFactura — la serie viaja con el folio (RES-22)', () => {
   });
 });
 
+describe('crearFactura — un viaje, una factura viva (A37-S64-07)', () => {
+  const V1 = '99999999-aaaa-bbbb-cccc-000000000001';
+  it('rechaza ligar un viaje que ya ampara otra factura NO cancelada, sin escribir nada', async () => {
+    respuestas.set('cliente', [{ data: { id: CLIENTE, dias_credito: null }, error: null }]);
+    respuestas.set('viaje', [{ data: [{ id: V1 }], error: null }]);
+    respuestas.set('factura_viaje', [{ data: [{ factura_id: 'f-previa', viaje_id: V1 }], error: null }]);
+    respuestas.set('factura_emitida', [{ data: [{ id: 'f-previa', estatus: 'emitida' }], error: null }]);
+    const err = await crearFactura(T, factura({ viajeIds: [V1] })).catch((e) => e);
+    expect(err).toBeInstanceOf(DatoInvalido);
+    expect(err.message).toMatch(/ya está amparado por otra factura/);
+    expect(escrituras).toHaveLength(0);
+  });
+
+  it('si la factura previa del viaje está cancelada, se puede refacturar', async () => {
+    respuestas.set('cliente', [{ data: { id: CLIENTE, dias_credito: null }, error: null }]);
+    respuestas.set('viaje', [{ data: [{ id: V1 }], error: null }]);
+    respuestas.set('factura_viaje', [{ data: [{ factura_id: 'f-cancelada', viaje_id: V1 }], error: null }]);
+    // la consulta de facturas VIVAS no devuelve la cancelada; luego el INSERT
+    respuestas.set('factura_emitida', [{ data: [], error: null }, { data: { id: FACTURA }, error: null }]);
+    await crearFactura(T, factura({ viajeIds: [V1] }));
+    expect(escribioEn('factura_emitida')).toHaveLength(1);
+  });
+
+  it('si no se puede comprobar (error de base), no crea la factura', async () => {
+    respuestas.set('cliente', [{ data: { id: CLIENTE, dias_credito: null }, error: null }]);
+    respuestas.set('viaje', [{ data: [{ id: V1 }], error: null }]);
+    respuestas.set('factura_viaje', [{ data: null, error: { message: 'caída' } }]);
+    await expect(crearFactura(T, factura({ viajeIds: [V1] }))).rejects.toThrow(/comprobar/);
+    expect(escrituras).toHaveLength(0);
+  });
+});
+
 describe('marcarEmitida — la serie sólo se toca si de verdad viene', () => {
   it('sin serie en el sello, el UPDATE no la nombra: no borra la del borrador', async () => {
     respuestas.set('factura_emitida', [{ data: [{ id: FACTURA }], error: null }]);

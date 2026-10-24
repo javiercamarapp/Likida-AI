@@ -141,7 +141,7 @@ entorno), `RESPALDO_BUCKETS` (si no se define, usa la lista única
 `scripts/respaldo-buckets.txt`: los 9 buckets que crean las migraciones, incluidos
 `buzon-facturas`, `cartaporte-docs` y `agente-insumos`; una prueba la cruza contra
 `supabase/migrations`) y
-`RESPALDO_S3_DESTINO`. **No hay cron que lo llame**: corre contra producción
+`RESPALDO_S3_DESTINO`. **No hay cron de Vercel que lo llame**, pero desde el 23-oct-2026 el workflow `.github/workflows/backup-storage.yml` lo corre cada noche (`17 3 * * *` UTC; ver su cabecera) y también se puede lanzar a mano (A37-L-15): corre contra producción
 con la service role, y esa tecla es consciente. Cadencia recomendada mientras
 no haya PITR: **semanal**, y a mano antes de cualquier migración que borre.
 

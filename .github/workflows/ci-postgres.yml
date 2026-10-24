@@ -359,6 +359,9 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0865_jornada_declaracion_sustituye_derivada.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0866_reclamar_polls_rondas.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0863_sembrar_hitos_perfil_con_compuerta.sql
+          # A37-L-docs-ux-calidad-06: existían y ninguna corrida las ejecutaba. Ambas hacen rollback y usan datos sintéticos.
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0793_cp_sat_catalogo.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0794_cp_ccp_timbrado_recibido.sql
 
       # ── Capa 0: contratos de leases/fencing en Postgres real ───────────
       # Este archivo no es informativo: pg_prove interpreta el TAP y falla
@@ -366,6 +369,8 @@ jobs:
       - name: Capa 0 — pgTAP leases y fencing de WhatsApp/tools
         run: |
           pg_prove --dbname="$DATABASE_URL" --verbose supabase/tests/wa_leases_fencing.sql
+          # A37-L-docs-ux-calidad-06: aislamiento y bitácora de tenant_perfil (pgTAP; necesita la extensión, así que va ANTES del drop).
+          pg_prove --dbname="$DATABASE_URL" --verbose supabase/tests/0770_tenant_perfil_aislamiento.sql
           # pgTAP instala dos vistas auxiliares en `public`. No pertenecen al
           # esquema desplegable y harían que la auditoría auto-descubriente de
           # la Capa 1 las confundiera con vistas del producto sin

@@ -120,6 +120,17 @@ describe('aInstanteMx — hora local de México → UTC', () => {
   });
 });
 
+describe('A37-L-07 montoDeCelda — más de dos decimales no se redondea en silencio', () => {
+  it('«1.500» y «1,234.567» son ambiguos: null, no 1.50 ni 1234.57', () => {
+    expect(montoDeCelda('1.500')).toBeNull();
+    expect(montoDeCelda('1.234')).toBeNull();
+    expect(montoDeCelda('1,234.567')).toBeNull();
+    expect(montoDeCelda('1.50')).toBe(1.5);
+    expect(montoDeCelda('1.234,56')).toBe(1234.56);
+    expect(montoDeCelda('1.234.567')).toBe(1234567);
+  });
+});
+
 describe('montoDeCelda — el dinero no se adivina', () => {
   it('formatos comunes', () => {
     expect(montoDeCelda('$1,234.56')).toBe(1234.56);

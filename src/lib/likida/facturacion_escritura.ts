@@ -423,6 +423,32 @@ export async function crearFactura(
     if (propios.size !== f.viajeIds.length) {
       throw new DatoInvalido('Uno de los viajes marcados ya no está en tu flota. Recarga la pantalla.');
     }
+
+    // A37-S64-07: un viaje solo puede estar amparado por UNA factura viva. La PK de `factura_viaje`
+    // es (factura, viaje) y un borrador sin folio no choca con `factura_folio_unico`: sin esta
+    // comprobación un doble clic o un reproceso cuenta el ingreso del viaje dos veces. Refacturar
+    // tras una cancelación sigue permitido (0049: «un viaje puede refacturarse tras una cancelación»).
+    // `factura_viaje` no trae tenant_id (hereda el de su factura): las facturas se filtran por tenant.
+    const { data: ligas, error: errL } = await acotada(
+      supabaseAdmin().from('factura_viaje').select('factura_id, viaje_id').in('viaje_id', f.viajeIds),
+      'crearFactura.ligas_previas',
+    );
+    if (errL) throw new Error(`crearFactura: no se pudo comprobar si los viajes ya tienen factura: ${errL.message}`);
+    const previas = [...new Set((ligas ?? []).map((l) => String((l as { factura_id: unknown }).factura_id)))];
+    if (previas.length > 0) {
+      const { data: vivas, error: errF } = await acotada(
+        supabaseAdmin().from('factura_emitida').select('id').eq('tenant_id', tenantId)
+          .in('id', previas).in('estatus', ['borrador', 'emitida', 'pagada']),
+        'crearFactura.facturas_previas',
+      );
+      if (errF) throw new Error(`crearFactura: no se pudo comprobar si los viajes ya tienen factura: ${errF.message}`);
+      if ((vivas ?? []).length > 0) {
+        throw new DatoInvalido(
+          'Uno de los viajes marcados ya está amparado por otra factura vigente. Cancela esa factura primero ' +
+          '(o quita el viaje de esta): si no, su ingreso se contaría dos veces.',
+        );
+      }
+    }
   }
 
   const { data, error } = await acotada(

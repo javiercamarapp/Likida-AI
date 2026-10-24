@@ -29,7 +29,15 @@ En repos **públicos** es gratis. En **privados** de cuenta personal necesita Gi
 Advanced Security. CodeQL sí aporta algo que `npm audit` no puede: analiza el código
 propio, no las dependencias.
 
-## 3. Protección de `master` — hoy NO EXISTE, y es lo más urgente
+## 3. Protección de `master`
+
+> **ACTUALIZADO 24-oct-2026 (A37-L-15).** El repositorio volvió a ser **público** y `master` ya tiene un *ruleset* activo
+> («master protegido», sin actores que lo salten): impide borrar la rama y los empujes no fast-forward, y exige los checks
+> `verificar` y `Migraciones + aislamiento (Postgres efímero)`. Lo que sigue es el texto original del 23-ago-2026, conservado
+> como historia de por qué se hizo; ya no describe el estado actual. Pendiente real: el ruleset no marca *«Require branches to
+> be up to date»* (`strict_required_status_checks_policy: false`) ni exige PR; confirma si se quiere endurecer.
+
+### Texto original (23-ago-2026)
 
 `PUT /repos/.../branches/master/protection` responde **403: "Upgrade to GitHub Pro or
 make this repository public to enable this feature."**

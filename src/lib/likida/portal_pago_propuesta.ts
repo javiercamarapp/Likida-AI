@@ -53,7 +53,12 @@ export type ResultadoPropuesta =
   /** La misma fecha, monto y referencia ya estaban. No es un error: es el
    *  segundo clic, o el cliente comprobando que sí quedó. */
   | { ok: true; id: null; repetida: true }
-  | { ok: false; motivo: string };
+  /** `limite: true` = se rebasó el tope de propuestas por hora (A37-L-06): la ruta contesta 429, no 503. */
+  | { ok: false; motivo: string; limite?: true };
+
+/** A37-L-06: tope de propuestas por LIGA y por FLOTA en la última hora (cada una manda un correo al contralor). */
+export const TOPE_PROPUESTAS_LIGA_HORA = 5;
+export const TOPE_PROPUESTAS_FLOTA_HORA = 60;
 
 /**
  * Guarda lo que el cliente dice que pagó.
@@ -67,6 +72,22 @@ export async function registrarPropuesta(
   v: PropuestaValida,
 ): Promise<ResultadoPropuesta> {
   try {
+    // El tope va ANTES del insert y del correo. Sin poder contar, no se registra (falla cerrado):
+    // el cliente reintenta; lo que no se permite es un correo al contralor sin tope.
+    const desde = new Date(Date.now() - 3_600_000).toISOString();
+    const reciente = await acotada(supabaseAdmin().from('portal_pago_propuesta').select('liga_id')
+      .eq('tenant_id', liga.tenantId).gte('registrada_en', desde).order('id').limit(TOPE_PROPUESTAS_FLOTA_HORA + 1), 'registrarPropuesta.tope');
+    if (reciente.error) {
+      logger.error('portal_pago.propuesta_tope', { err: reciente.error.message });
+      return { ok: false, motivo: 'No pudimos registrar tu pago en este momento. Vuelve a intentarlo en unos minutos.' };
+    }
+    const filas = Array.isArray(reciente.data) ? (reciente.data as Array<{ liga_id?: unknown }>) : [];
+    const deLaLiga = filas.filter((f) => String(f.liga_id) === liga.ligaId).length;
+    if (deLaLiga >= TOPE_PROPUESTAS_LIGA_HORA || filas.length >= TOPE_PROPUESTAS_FLOTA_HORA) {
+      logger.warn('portal_pago.propuesta_tope_rebasado', { tenant: liga.tenantId, deLaLiga, deLaFlota: filas.length });
+      return { ok: false, limite: true, motivo: 'Ya hay varios pagos registrados por confirmar en esta factura. Espera a que quien te la emitió los revise, o escríbele directamente.' };
+    }
+
     const { data, error } = await acotada(supabaseAdmin().from('portal_pago_propuesta').insert({
       tenant_id: liga.tenantId,
       liga_id: liga.ligaId,
