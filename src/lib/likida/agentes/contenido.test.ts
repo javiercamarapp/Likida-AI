@@ -183,7 +183,7 @@ describe('las tres guardias tiran el texto ENTERO, jamás lo remiendan', () => {
   it('nombrar a las flotas sin la frase honesta tira la pieza', () => {
     const g = guardarBorrador('Grupo GAL ya lo usa todos los días.', fichas, contexto);
     expect(g.texto).toBeNull();
-    expect(g.motivo).toContain('se leen como clientes');
+    expect(g.motivo).toContain('no autorizado');   // A37-S26-06: la misma lista que veta el correo
   });
 
   it('una cifra que ninguna ficha respalda tira la pieza', () => {
