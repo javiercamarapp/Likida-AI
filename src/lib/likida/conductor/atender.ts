@@ -1018,7 +1018,7 @@ export async function registrarHitoDesdeFoto(e: EntradaFotoComoHito, deps: DepsA
         : mensajeEvidencia('sin_hito', e.tipo) }] };
     }
 
-    const efectos: { pedirUbicacion: boolean; preguntaPatio?: Salida | null } = { pedirUbicacion: false };
+    const efectos: { pedirUbicacion: boolean; preguntaPatio?: Salida | null; preguntaResultado?: Salida | null; preguntaDocumentos?: Salida | null } = { pedirUbicacion: false };
     const interp: Interpretacion = { intencion, contacto: null, via: 'foto', confianza: 1 };
     const aplicado = await aplicar(decision, {
       deps, e: { tenantId: e.tenantId, operadorId: e.operadorId, telefono: e.telefono, viajeAbiertoId: viaje.id, texto: '', waMessageId: e.waMessageId ?? null }, viaje, hitos,
@@ -1045,7 +1045,9 @@ export async function registrarHitoDesdeFoto(e: EntradaFotoComoHito, deps: DepsA
     // Si la foto no se pudo colgar (raro: el hito acaba de registrarse), el chofer lo sabe; el hito sí quedó.
     const aviso = evidencia && !/Recibí la foto/.test(evidencia) ? [{ texto: evidencia }] : [];
     // Con la confirmación apagada el hito queda en silencio, pero lo que falló de la foto sí se dice.
-    const pregunta = efectos.preguntaPatio ? [efectos.preguntaPatio] : [];
+    // A37-S34-02: `aplicar` ya dejó «preguntado» (resultado) y las filas pendientes (documentos) en la base; sin entregar esos mensajes el chofer
+    // nunca los ve y el reintento ya no los regenera. Mismo orden que el camino de texto (línea ~370).
+    const pregunta = [efectos.preguntaPatio, efectos.preguntaResultado, efectos.preguntaDocumentos].filter((x): x is Salida => Boolean(x));
     if (!config.confirmarAlChofer) return { mensajes: [...aviso, ...pregunta], ...pedir };
     return { mensajes: [{ ...acuse, texto: conFoto }, ...aviso, ...pregunta], ...pedir };
   } catch (err) {
