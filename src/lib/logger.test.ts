@@ -180,6 +180,32 @@ describe('logger — lo que sí es dato personal se borra entero', () => {
     expect(salida).not.toContain('[RFC]');
   });
 
+  // A37-L-12: teléfonos en texto libre con separadores y con lada internacional.
+  it.each([
+    ['+1 956 555 0100', '956 555 0100'],
+    ['+52 55 1234 5678', '55 1234 5678'],
+    ['55 1234 5678', '1234 5678'],
+    ['956-555-0100', '555-0100'],
+    ['(956) 555-0100', '555-0100'],
+    ['+1.956.555.0100', '555.0100'],
+  ])('A37-L-12 · «%s» en un texto libre se redacta', (tel, resto) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    logger.error('wa.texto', { texto: `llámame al ${tel} gracias` });
+    const salida = ultimaLinea(spy);
+    expect(salida).toContain('[TEL]');
+    expect(salida).not.toContain(resto);
+    expect(salida).not.toMatch(/id:[0-9a-f]{12}/); // nunca una huella del teléfono (sería reversible)
+  });
+
+  it('A37-L-12 · fechas, horas, importes y versiones NO se redactan como teléfono', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    logger.info('ok', { f: '2026-10-24', h: '2026-10-24T12:30:00Z', imp: '1,234,567.89', v: '1.2.3', ip: '192.168.1.10' });
+    const salida = ultimaLinea(spy);
+    expect(salida).not.toContain('[TEL]');
+    expect(salida).toContain('2026-10-24');
+    expect(salida).toContain('1,234,567.89');
+  });
+
   it('un epoch en milisegundos NO se confunde con un teléfono', () => {
     // Falso positivo caro: si `Date.now()` sale como [TEL] se pierde la hora,
     // que es justo lo único con lo que hoy se cruzan las líneas (t va vacío).

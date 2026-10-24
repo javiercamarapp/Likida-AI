@@ -178,7 +178,7 @@ export async function procesarWebhookCalcom(req: Request): Promise<Response> {
   try {
     // Lookup is inside the retryable path too: a transient CRM read failure
     // must be a loud 500, never an unhandled rejection or a false 2xx.
-    const vinculo = await encontrarProspecto(participante.email);
+    const vinculo = await encontrarProspecto(participante.email, actual.canonica);
     // 0323: ledger, orden, vínculo de booking y cambio de embudo viven en UNA
     // transacción PostgreSQL. Un error/rollback nunca queda sellado como 200 y
     // un duplicado concurrente espera a saber si el dueño hizo COMMIT.
@@ -222,7 +222,7 @@ export async function procesarWebhookCalcom(req: Request): Promise<Response> {
   }
 }
 
-async function encontrarProspecto(email: string | null): Promise<VinculoProspecto> {
+async function encontrarProspecto(email: string | null, reservaUid: string): Promise<VinculoProspecto> {
   const correo = email?.trim().toLowerCase() || null;
   if (!correo) return { prospecto: null, correo: null, error: 'sin_correo' };
   // Dos filas bastan para distinguir 0/1/ambiguo. Nunca se decide por
@@ -235,7 +235,8 @@ async function encontrarProspecto(email: string | null): Promise<VinculoProspect
   const filas = (data ?? []) as ProspectoActual[];
   if (filas.length === 1) return { prospecto: filas[0], correo, error: null };
   if (filas.length > 1) {
-    logger.warn('calcom.webhook.correo_ambiguo', { correo, coincidencias: filas.length });
+    // A37-S22-06: sin el correo del contacto (PII innecesaria): bastan la reserva y el conteo.
+    logger.warn('calcom.webhook.correo_ambiguo', { reserva: reservaUid, coincidencias: filas.length });
     return { prospecto: null, correo, error: 'correo_ambiguo' };
   }
   return { prospecto: null, correo, error: 'sin_prospecto' };

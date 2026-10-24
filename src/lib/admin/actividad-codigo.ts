@@ -10,7 +10,8 @@
 // reintento en la mano del usuario.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const REPO = 'javiercamarapp/likida.ai';
+/** A37-S22-08: la misma variable (y el mismo valor por omisión) que `bus.ts` y `github.ts`. */
+const repo = (): string => process.env.GITHUB_REPO || 'javiercamarapp/likida.ai';
 
 export interface SemanaActividad {
   /** Epoch (segundos) del domingo que abre la semana. */
@@ -44,8 +45,8 @@ export async function getActividadCodigo(): Promise<ActividadCodigo> {
 
   try {
     const [actividad, commits] = await Promise.all([
-      fetch(`https://api.github.com/repos/${REPO}/stats/commit_activity`, { headers, signal: AbortSignal.timeout(20_000), cache: 'no-store' }),
-      fetch(`https://api.github.com/repos/${REPO}/commits?per_page=10`, { headers, signal: AbortSignal.timeout(20_000), cache: 'no-store' }),
+      fetch(`https://api.github.com/repos/${repo()}/stats/commit_activity`, { headers, signal: AbortSignal.timeout(20_000), cache: 'no-store' }),
+      fetch(`https://api.github.com/repos/${repo()}/commits?per_page=10`, { headers, signal: AbortSignal.timeout(20_000), cache: 'no-store' }),
     ]);
     if (actividad.status === 202) return { estado: 'calculando' };
     if (!actividad.ok) return { estado: 'error', detalle: `GitHub contestó ${actividad.status} al pedir la actividad.` };

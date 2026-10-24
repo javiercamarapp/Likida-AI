@@ -37,11 +37,23 @@ export const MODELOS_SIN_ESQUEMA_ESTRICTO: ReadonlySet<string> = new Set([
   'google/gemini-3.8-flash',
 ]);
 
-const aprendidos = new Set<string>();
+/** A37-L-10: cuánto dura lo aprendido de un 400. Un 400 genérico («Provider returned error») puede ser transitorio; sin
+ *  caducidad apagaba el esquema estricto de ese modelo en TODO el proceso hasta el siguiente cold start. La lista medida
+ *  (arriba) no caduca; lo aprendido sí: pasado el plazo se reintenta el modo estricto y, si el 400 era real, se re-aprende. */
+export const VIGENCIA_APRENDIDO_MS = 10 * 60 * 1000;
+
+/** modelo → instante (ms) en que lo aprendido caduca. */
+const aprendidos = new Map<string, number>();
 const contadores = new Map<string, number>();
 
-export const usaEsquemaEstricto = (modelo: string): boolean => !MODELOS_SIN_ESQUEMA_ESTRICTO.has(modelo) && !aprendidos.has(modelo);
-export const aprenderSinEsquemaEstricto = (modelo: string): void => { aprendidos.add(modelo); };
+export const usaEsquemaEstricto = (modelo: string): boolean => {
+  if (MODELOS_SIN_ESQUEMA_ESTRICTO.has(modelo)) return false;
+  const vence = aprendidos.get(modelo);
+  if (vence === undefined) return true;
+  if (Date.now() >= vence) { aprendidos.delete(modelo); return true; }
+  return false;
+};
+export const aprenderSinEsquemaEstricto = (modelo: string): void => { aprendidos.set(modelo, Date.now() + VIGENCIA_APRENDIDO_MS); };
 
 /** ¿El proveedor rechazó el ESQUEMA (400 de argumento inválido) y no la autenticación ni el contenido? */
 export function esErrorEsquemaRechazado(err: unknown): boolean {

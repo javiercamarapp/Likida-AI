@@ -156,11 +156,15 @@ const esquemaFiscal = z.object({
 
 async function ejecutarFiscal(tenantId: string, args: z.infer<typeof esquemaFiscal>): Promise<ResultadoHerramienta> {
   const periodo = resolverPeriodo(args.periodo, hoyMx());
+  // A37-S60-03: el perfil es la fuente de la elegibilidad del 15 % del combustible. Si su lectura falla, el cálculo se
+  // degrada a `tenant.config` (comportamiento documentado de `opcionesDe`) y esa cifra puede NO coincidir con el
+  // panel del contador ni con el PDF: no se traga en silencio, se marca en el texto y en lo estructurado.
+  let perfilNoLeido = false;
   const [cfg, perfilCrudo] = await Promise.all([
     getConfig(tenantId),
     // AUDITORÍA 28, FIS-A3: misma fuente única que el motor y el panel —
     // best-effort, esta tool nunca liquida (solo informa).
-    getPerfilCrudo(tenantId).catch(() => ({})),
+    getPerfilCrudo(tenantId).catch(() => { perfilNoLeido = true; return undefined; }),
   ]);
   const opciones = opcionesDe(cfg, perfilCrudo);
   const gastos = await getGastosFiscales(tenantId, periodo, hoyMx(), opciones);
@@ -171,13 +175,15 @@ async function ejecutarFiscal(tenantId: string, args: z.infer<typeof esquemaFisc
   // divergencia «ya la puede dictar un agente»).
   const r = resumirFiscal(gastos, await opcionesFiscalesDelPeriodo(tenantId, periodo, cfg));
   const perdidas = resumirPerdidas(gastos, opciones);
+  const avisoPerfil = 'ATENCIÓN: no se pudo leer el perfil fiscal de la flota. La elegibilidad del 15 % del combustible se calculó con la configuración anterior, así que las cifras de IVA son APROXIMADAS y pueden no coincidir con el panel del contador ni con el PDF: no las dictes como definitivas; vuelve a consultar en un momento.';
   if (r.n === 0) {
     return {
       texto: `No hay comprobantes leídos en el periodo «${periodo.etiqueta}». Sin comprobantes no hay nada fiscal que afirmar.`,
-      estructurado: { periodo: periodo.etiqueta, resumen: r },
+      estructurado: { periodo: periodo.etiqueta, resumen: r, ...(perfilNoLeido ? { perfilNoLeido: true } : {}) },
     };
   }
   const texto = [
+    ...(perfilNoLeido ? [avisoPerfil] : []),
     `Estado fiscal — ${periodo.etiqueta}:`,
     `• ${numero(r.n)} comprobantes por ${mxn(r.gastoTotal)} de gasto total.`,
     `• Con CFDI: ${numero(r.conCfdi)} · Sin CFDI: ${numero(r.sinCfdi)}.`,
@@ -207,6 +213,7 @@ async function ejecutarFiscal(tenantId: string, args: z.infer<typeof esquemaFisc
     estructurado: {
       periodo: periodo.etiqueta,
       resumen: r,
+      ...(perfilNoLeido ? { perfilNoLeido: true } : {}),
       perdidas: {
         montoTotal: perdidas.montoTotal,
         montoPerdido: perdidas.montoPerdido,
