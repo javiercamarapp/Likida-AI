@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { puedeAdministrar } from '@/lib/auth/permisos';
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
@@ -35,9 +36,14 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * La sesión y el área, DE NUEVO, dentro de cada acción. A nivel de módulo a propósito: una función declarada en el
  * cuerpo del componente y usada dentro de un `'use server'` se captura por closure y Next no puede serializarla.
  */
-async function sesionDeAccion(sp: { tenant?: string; rol?: string; vista?: string }): Promise<{ tenantId: string; userId: string } | { error: string }> {
+async function sesionDeAccion(
+  sp: { tenant?: string; rol?: string; vista?: string }, opts: { configuracion?: boolean } = {},
+): Promise<{ tenantId: string; userId: string } | { error: string }> {
   const s = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede administrar los documentos de Carta Porte.' };
+  // A37-S16-03: la configuración (buzón, remitentes, formatos de exportación, versión del perfil que lee los documentos de cada
+  // cliente) es del dueño de la cuenta, no de quien solo ve la ruta (el encargado). Mismo criterio que /dashboard/arco.
+  if (opts.configuracion && !puedeAdministrar(s.rol)) return { error: 'Configurar los documentos de Carta Porte es del dueño de la flota.' };
   return { tenantId: s.tenantId, userId: s.userId };
 }
 
@@ -147,7 +153,7 @@ export default async function PaginaDocumentos({
 
   async function activarBuzon(): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp);
+    const s = await sesionDeAccion(sp, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       await repo.crearBuzon(s.tenantId, generarTokenCp());
@@ -160,7 +166,7 @@ export default async function PaginaDocumentos({
 
   async function guardarRemitentes(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp);
+    const s = await sesionDeAccion(sp, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const lista = String(fd.get('remitentes') ?? '').split(/\r?\n/).map((x) => x.trim().toLowerCase()).filter(Boolean);
@@ -177,7 +183,7 @@ export default async function PaginaDocumentos({
 
   async function guardarExport(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp);
+    const s = await sesionDeAccion(sp, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const nombre = String(fd.get('nombre') ?? '').trim();
@@ -198,7 +204,7 @@ export default async function PaginaDocumentos({
 
   async function borrarExport(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp);
+    const s = await sesionDeAccion(sp, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const id = String(fd.get('id') ?? '');
@@ -213,7 +219,7 @@ export default async function PaginaDocumentos({
 
   async function volverVersion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp);
+    const s = await sesionDeAccion(sp, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const perfilId = String(fd.get('perfilId') ?? '');

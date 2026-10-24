@@ -113,6 +113,22 @@ it.each(['contador', 'vendedor'])('TODAS las acciones rechazan a %s aunque se in
   expect(estado.buzones.size).toBe(0);
 });
 
+// A37-S16-03: configurar el buzón, los formatos de exportación y la versión del perfil es de quien administra la cuenta.
+it('A37-S16-03: el encargado sube y lee documentos, pero NO configura (cinco acciones de configuración rechazadas)', async () => {
+  await repo.crearBuzon('t-1', 'abcdefghjkmnpqrstvwxyz23');
+  await repo.guardarExportConfig('t-1', { nombre: 'Cliente demo', formato: 'csv', config: { columnas: [{ encabezado: 'Folio', campo: 'folio_cliente' }] } });
+  const p = await pagina();
+  sesion = { ...sesion, rol: 'encargado' };
+  const forma = fd({ remitentes: '', nombre: 'x', formato: 'csv', config: JSON.stringify({ columnas: [{ encabezado: 'Folio', campo: 'folio_cliente' }] }), id: estado.exportConfigs[0].id, perfilId: U, version: '1' });
+  for (const nombre of ['activarBuzon', 'guardarRemitentes', 'guardarExport', 'borrarExport', 'volverVersion'] as const) {
+    expect(await p.props.acciones[nombre](null, forma), nombre).toEqual({ ok: false, error: 'Configurar los documentos de Carta Porte es del dueño de la flota.' });
+  }
+  expect(estado.exportConfigs).toHaveLength(1);
+  expect(estado.buzones.get('t-1')!.remitentesPermitidos).toEqual([]);
+  // Lo operativo sigue abierto al encargado.
+  expect(await p.props.acciones.subir(null, fd({ archivo: new File([new Uint8Array([1])], 'a.pdf') }))).toMatchObject({ ok: true });
+});
+
 it('procesar: solo documentos de LA flota y con uuid', async () => {
   const p = await pagina();
   expect(await p.props.acciones.procesar(null, fd({ documentoId: 'no-uuid' }))).toMatchObject({ ok: false });
