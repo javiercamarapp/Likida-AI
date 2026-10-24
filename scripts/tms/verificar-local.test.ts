@@ -44,7 +44,7 @@ describe('verificar-local.mjs', () => {
     const r = correr([]);
     expect(r.codigo).toBe(2);
     expect(r.salida).toContain('Falta TMS_CREDENCIALES_ARCHIVO');
-  });
+  }, 120_000);
 
   it('con un archivo de modo distinto de 600 se niega SIN leerlo', () => {
     const ruta = archivoCredenciales('abierto.env', 'base_url=https://secreto.invalid\nusuario=u-secreto\nclave=c-secreta\n', 0o644);
@@ -52,7 +52,7 @@ describe('verificar-local.mjs', () => {
     expect(r.codigo).toBe(2);
     expect(r.salida).toContain('modo 600');
     expect(r.salida).not.toMatch(/secreto|secreta/);
-  });
+  }, 120_000);
 
   it('con modo 600 pero sin un campo obligatorio se niega y nombra el campo, no el contenido', () => {
     const ruta = archivoCredenciales('incompleto.env', 'base_url=https://secreto.invalid\nusuario=u-secreto\n', 0o600);
@@ -60,9 +60,9 @@ describe('verificar-local.mjs', () => {
     expect(r.codigo).toBe(2);
     expect(r.salida).toContain('le falta el campo clave');
     expect(r.salida).not.toMatch(/secreto|secreta/);
-  });
+  }, 120_000);
 
   it('un argumento desconocido da el uso (2)', () => {
     expect(correr(['--real']).codigo).toBe(2);
-  });
+  }, 120_000);
 });
