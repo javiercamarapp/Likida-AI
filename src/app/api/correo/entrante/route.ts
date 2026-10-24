@@ -10,6 +10,7 @@ import { atenderCorreoPeajes, tokenPjDeDestinatarios } from '@/lib/likida/peajes
 import { descargadorResend } from '@/lib/likida/carta_porte_docs/resend';
 import { direccionDeCampana, esRespuestaACampana, procesarRespuestaCampana } from '@/lib/correo/respuesta_campana';
 import { atenderAdjuntosBuzon, type AdjuntoBuzon } from '@/lib/likida/buzon/servicio';
+import { perfilRestringido } from '@/lib/auth/perfil_tenant';
 import { estaApagado } from '@/lib/likida/interruptores';
 import { registrarCorrida } from '@/lib/likida/agentes/corridas';
 import { sanitizarTexto } from '@/lib/likida/intake/sanitizar';
@@ -286,6 +287,16 @@ export async function POST(req: Request) {
     // Un humano contestando "gracias" al hilo. No es un error.
     logger.info('correo_entrante.sin_adjuntos', { emailId, tenantId: flota.id });
     return NextResponse.json({ ok: true, ignorado: 'sin_adjuntos' });
+  }
+
+  // ── EL PERFIL DE LA FLOTA (0770), ANTES DE CONSUMIR EL CORREO (A37-TRANSVERSAL-05) ──
+  // «Proveedores» está en stand-by bajo `cinco_agentes`: una flota que ya tenía buzón al aplicarle el perfil lo conserva, y sin esta
+  // puerta el correo seguiría guardándose como gasto/factura en tablas del módulo apagado. Se contesta 200 (no 503): reintentar no
+  // lo arregla y no se consume el claim, así que si se quita el perfil el proveedor puede reenviar. Falla cerrado si el perfil
+  // no se pudo leer (ver `perfilDeTenant`).
+  if (await perfilRestringido(flota.id)) {
+    logger.warn('correo_entrante.modulo_no_incluido', { emailId, tenantId: flota.id });
+    return NextResponse.json({ ok: true, ignorado: 'modulo_no_incluido' });
   }
 
   // ── EL KILL SWITCH (0110), ANTES DE CONSUMIR EL CORREO ──────────────────

@@ -25,6 +25,11 @@ describe('clasificación de rutas', () => {
     expect(sinClasificar).toEqual([]);
   });
 
+  it('A37-TRANSVERSAL-06: las solicitudes ARCO son una obligación legal de la flota: permitidas bajo el perfil, junto a /dashboard/legal', () => {
+    expect(rutaPermitidaEnPerfil('cinco_agentes', '/dashboard/arco')).toBe(true);
+    expect(RUTAS_STAND_BY_PERFIL_CINCO_AGENTES).not.toContain('/dashboard/arco');
+  });
+
   it('ninguna ruta está a la vez permitida y en stand-by', () => {
     expect(permitidas.filter((r) => RUTAS_STAND_BY_PERFIL_CINCO_AGENTES.includes(r))).toEqual([]);
   });

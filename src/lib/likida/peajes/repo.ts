@@ -53,7 +53,7 @@ import { partirUrlSftp, leerHuellas, normalizarLlave } from '../conectores/tabla
 import type { HallazgoAtipico, ConfigAtipicos } from './atipicos';
 import { validarConfigAvisos, configAvisosEfectiva, type ConfigAvisos } from './config_avisos';
 import { validarMargenLejos, margenLejosEfectivo } from './gps_umbral';
-import { validarConfigAtipicos, configAtipicosEfectiva, esEstadoAtipico, puedeCambiarEstado, exigeRevisor, type EstadoAtipico } from './atipicos_config';
+import { validarConfigAtipicos, configAtipicosEfectiva, umbralesDePantalla, sinSenalesApagadas, esEstadoAtipico, puedeCambiarEstado, exigeRevisor, type EstadoAtipico } from './atipicos_config';
 import { matrizDeCsv } from './csv';
 import { detectarAtipicos, type ResultadoAtipicos, type UmbralesAtipicos } from './cruces_atipicos';
 import { cierreMensual, type ArchivoCierre, type CierreMensual } from './cierre_mensual';
@@ -2254,7 +2254,7 @@ export function lineaCobroDeFila(f: Record<string, unknown>): LineaCobro {
 
 /** `null` si el desglose no existe en la flota (o está anulado). */
 export async function revisionDeDesglose(
-  tenantId: string, desgloseId: string, umbrales: Partial<UmbralesAtipicos> = {}, ventanaMeses: number = VENTANA_MESES_DEFAULT,
+  tenantId: string, desgloseId: string, umbrales?: Partial<UmbralesAtipicos>, ventanaMeses: number = VENTANA_MESES_DEFAULT,
 ): Promise<ReporteRevision | null> {
   const { data: d, error } = await acotada(supabaseAdmin().from('desglose_peaje')
     .select('id, proveedor, archivo_nombre, periodo_desde, periodo_hasta, periodo_oficial_desde, periodo_oficial_hasta, periodo_origen, no_periodo, calidad')
@@ -2275,7 +2275,19 @@ export async function revisionDeDesglose(
   });
   const revision = revisarCobros(lineas, reglasDesdeConfig(casetas, bajas, periodoOficialDesde, excepciones, justificados, [], inmovilizadas));
   const conCoords = casetas.filter((c) => c.lat !== null && c.lng !== null).map((c) => ({ nombre: c.nombre, lat: c.lat as number, lng: c.lng as number }));
-  const atipicos = detectarAtipicos(lineas, conCoords, umbrales);
+  // A37-A2-17: sin umbrales explícitos, la pantalla usa los que la flota guardó en Configuración (los mismos del aviso). Si no se pueden leer, los de partida.
+  let umbralesFlota: Partial<UmbralesAtipicos> = umbrales ?? {};
+  let apagadas: ReturnType<typeof umbralesDePantalla>['apagadas'] = [];
+  if (umbrales === undefined) {
+    try {
+      const traducido = umbralesDePantalla((await leerConfigAtipicos(tenantId)).umbrales);
+      umbralesFlota = traducido.umbrales;
+      apagadas = traducido.apagadas;
+    } catch (e) {
+      logger.warn('peajes.revision_config_atipicos', { tenant: tenantId, codigo: codigoDeError(e) }); // sin el mensaje de la base: puede traer TAG/unidad/importe
+    }
+  }
+  const atipicos = sinSenalesApagadas(detectarAtipicos(lineas, conCoords, umbralesFlota), apagadas);
   // Solo se leen los desgloses previos si hay periodo y al menos un extemporáneo que buscar.
   const hayExtemporaneos = periodoOficialDesde !== null && lineas.some((l) => l.fecha !== null && l.fecha < periodoOficialDesde);
   const previos = hayExtemporaneos && periodoOficialDesde !== null

@@ -4,7 +4,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error('esta prueba no toca la base'); } }));
 vi.mock('@/lib/meta/client', () => ({ enviarSolicitudUbicacion: vi.fn(async () => ({ ok: true })) }));
 
-const { atenderConductor } = await import('./atender');
+const { atenderConductor, registrarHitoDesdeFoto } = await import('./atender');
 const { crearMemoria, viajeBase } = await import('./memoria.fixture');
 const { leerBotonConductor, PREFIJO_BOTON } = await import('./tipos');
 const { leerTextoResultadoDescarga } = await import('./interprete');
@@ -130,6 +130,16 @@ describe('cableado: salida de descarga → pregunta → respuesta', () => {
     expect(pu.evs.filter((e) => e.detalle.estado === 'preguntado')).toHaveLength(1);
     const otra = await dice('ya terminé de descargar');
     expect(textos(otra)).not.toMatch(/Cómo terminó/);
+  });
+
+  it('A37-S34-02: la FOTO que actúa como aviso de salida también entrega la pregunta de resultado al chofer (no solo la deja «preguntado» en la bitácora)', async () => {
+    const { m, pu } = await escenario({}, { fotoRegistraHito: true });
+    const r = await registrarHitoDesdeFoto({
+      tenantId: 't1', operadorId: 'o1', telefono: base.telefono, viajeId: V1, tipo: 'recibido', ruta: `t1/${V1}/ev.jpg`, sha256: 'e'.repeat(64), waMessageId: 'wamid.foto', ahora: AHORA,
+    }, m.deps);
+    expect(estadoDe(m, 'salida_descarga')).toBe('recibido');
+    expect(pu.evs.filter((e) => e.detalle.estado === 'preguntado')).toHaveLength(1);
+    expect(r.mensajes.some((x) => x.botones?.some((b) => b.id.startsWith(`${PREFIJO_BOTON.resultadoDescarga}:${V1}:`)))).toBe(true);
   });
 
   it('«completa»: acuse, sin aviso y el ciclo sigue normal (el regreso sigue pendiente y se registra después)', async () => {

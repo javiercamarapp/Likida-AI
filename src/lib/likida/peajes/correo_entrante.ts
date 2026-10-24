@@ -30,6 +30,7 @@ import { remitenteReconocido } from '@/lib/correo/remitente';
 import type { CorreoEntrante, DescargaAdjunto } from '../carta_porte_docs/correo_entrante';
 import { buzonCorreoPeajesPorToken } from './datos';
 import { recibirArchivoPeaje, MAX_ARCHIVO_INGESTA_BYTES } from './ingesta';
+import { registrarCorrida } from '../agentes/corridas';
 
 export const PREFIJO_PJ = 'pj-';
 export const MAX_ADJUNTOS_PEAJES = 5;
@@ -111,12 +112,24 @@ export async function atenderCorreoPeajes(token: string, correo: CorreoEntrante,
   if (claim.resultado === 'applied') return { status: 200, cuerpo: { ok: true, ignorado: 'ya_procesado' } };
   if (claim.resultado === 'busy') return { status: 503, cuerpo: { error: 'correo en proceso' } };
 
+  const inicio = new Date();
   let recibidos = 0; let duplicados = 0; let ignorados = 0; let transitorios = 0;
+  // A37-A2-16: lo que NO se recibe se anota con su nombre y motivo (la oficina no abre los logs).
+  const descartados: string[] = [];
   try {
     for (const a of adjuntos) {
       const d = await deps.descargar(correo.emailId, a.id as string);
-      if (!d.ok) { if (d.transitorio) transitorios++; else ignorados++; continue; }
-      if (d.bytes.length === 0 || d.bytes.length > MAX_ARCHIVO_INGESTA_BYTES) { ignorados++; continue; }
+      if (!d.ok) {
+        if (d.transitorio) transitorios++;
+        else { ignorados++; descartados.push(`«${nombreAdjuntoSeguro(a.filename)}» no se pudo descargar del correo`); }
+        continue;
+      }
+      if (d.bytes.length === 0) { ignorados++; descartados.push(`«${nombreAdjuntoSeguro(a.filename)}» venía vacío`); continue; }
+      if (d.bytes.length > MAX_ARCHIVO_INGESTA_BYTES) {
+        ignorados++;
+        descartados.push(`«${nombreAdjuntoSeguro(a.filename)}» pasa de ${MAX_ARCHIVO_INGESTA_BYTES / 1024 / 1024} MB`);
+        continue;
+      }
       const r = await recibirArchivoPeaje(tenantId, { nombre: nombreAdjuntoSeguro(a.filename), proveedor: null, contenido: Buffer.from(d.bytes) }, 'correo');
       if (r.ok) { if (r.duplicado) duplicados++; else recibidos++; continue; }
       // Cola llena o la base no contestó: reintentable (la huella evita duplicar lo ya guardado).
@@ -134,6 +147,14 @@ export async function atenderCorreoPeajes(token: string, correo: CorreoEntrante,
     return { status: 503, cuerpo: { error: 'no se pudieron recibir todos los adjuntos' } };
   }
   if (!(await finalizarCorreo(correo.emailId, claim.token, true))) return { status: 503, cuerpo: { error: 'no se pudo finalizar el correo' } };
+  if (descartados.length > 0) {
+    // Solo tras finalizar: si el correo se reintenta, la corrida no se duplica. Sin responder al remitente (fail-closed: es una dirección sin verificar).
+    await registrarCorrida(tenantId, 'peajes', {
+      inicio, fin: new Date(), estado: 'parcial', disparo: 'correo',
+      resumen: { recibidos, duplicados, ignorados },
+      error: `Correo con archivos que no se recibieron: ${descartados.join('; ')}. Pídele al proveedor que lo divida en archivos de hasta ${MAX_ARCHIVO_INGESTA_BYTES / 1024 / 1024} MB.`.slice(0, 500),
+    });
+  }
   logger.info('peajes_correo.procesado', { emailId: correo.emailId, tenantId, recibidos, duplicados, ignorados });
   return { status: 200, cuerpo: { ok: true, recibidos, duplicados, ignorados } };
 }
