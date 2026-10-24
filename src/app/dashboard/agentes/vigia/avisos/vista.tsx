@@ -193,6 +193,14 @@ function Tarjeta({ t, accion, puedeDecidir }: { t: TarjetaAviso; accion: AccionA
                   <label><span className={ETIQUETA}>Vigencia de la licencia (no se envía)</span><input name="licenciaVence" type="date" className={CAMPO} /></label>
                   <label><span className={ETIQUETA}>Teléfono del operador (no se envía)</span><input name="telefono" inputMode="tel" maxLength={16} className={CAMPO} autoComplete="off" /></label>
                 </div>
+                <fieldset className="text-[11.5px]" data-testid="borrar-datos">
+                  <legend className={ETIQUETA}>Quitar un dato mal escrito (déjalo vacío arriba y márcalo aquí)</legend>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    {([['operadorNombre', 'Operador'], ['placasUnidad', 'Placas unidad'], ['placasCaja', 'Placas caja'], ['estadoCaja', 'Estado caja'], ['licencia', 'Licencia'], ['licenciaVence', 'Vigencia'], ['telefono', 'Teléfono']] as const).map(([v, r]) => (
+                      <label key={v} className="inline-flex items-center gap-1"><input type="checkbox" name="borrar" value={v} />{r}</label>
+                    ))}
+                  </div>
+                </fieldset>
                 <p className="text-[11.5px]" style={{ color: 'var(--muted)' }} data-testid="privacidad">{POLITICA_PRIVACIDAD}</p>
                 <Boton accion="capturar"><Truck width={14} height={14} strokeWidth={1.75} aria-hidden />Guardar los datos</Boton>
               </form>
@@ -217,11 +225,13 @@ function Tarjeta({ t, accion, puedeDecidir }: { t: TarjetaAviso; accion: AccionA
   );
 }
 
-export function VistaAvisosVigia({ sufijo, grupos, total, soloPendientes, puedeDecidir, avisoEncendido, errorLectura, sinMigrar, accion }: {
+export function VistaAvisosVigia({ sufijo, grupos, total, hayMas = false, soloPendientes, puedeDecidir, avisoEncendido, errorLectura, sinMigrar, accion }: {
   sufijo: string;
   grupos: GrupoDia[];
   /** Cuántos avisos hay en la lista que se está viendo. */
   total: number;
+  /** La lista llegó al tope de la bandeja: puede haber avisos más viejos que no se muestran (A37-S58-07). */
+  hayMas?: boolean;
   soloPendientes: boolean;
   /** Solo el dueño y el encargado deciden; el resto mira (sin botones y sin teléfonos completos). */
   puedeDecidir: boolean;
@@ -269,6 +279,12 @@ export function VistaAvisosVigia({ sufijo, grupos, total, soloPendientes, puedeD
 
           {!sinMigrar && !errorLectura && total === 0 ? (
             <p className="text-[12.5px]" style={{ color: 'var(--muted)' }} data-testid="vacio">{soloPendientes ? VACIO_PENDIENTES : VACIO_TODOS}</p>
+          ) : null}
+
+          {hayMas ? (
+            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }} data-testid="hay-mas">
+              Se muestran los {total} avisos más recientes; puede haber más antiguos. {soloPendientes ? 'Resuelve los pendientes para ver el resto.' : 'Usa «Solo pendientes» para ver lo que falta por resolver.'}
+            </p>
           ) : null}
 
           {grupos.map((g) => (

@@ -518,6 +518,29 @@ describe('eliminar un documento (cancelación ARCO / subido por error)', () => {
     expect(JSON.stringify(llamada)).not.toMatch(/Hernandez|Boreal/);
   });
 
+  it('A37-A3-13: borra también el PDF/XML del CCP timbrado ANTES de la cascada y deja el UUID fiscal en la bitácora', async () => {
+    const { id } = await documentoBoreal();
+    const uuid = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+    const pdf = `${A}/ccp/${uuid}.pdf`; const xml = `${A}/ccp/${uuid}.xml`;
+    estado.archivos.set(pdf, new Uint8Array([1])); estado.archivos.set(xml, new Uint8Array([2]));
+    estado.ccp.push({ tenantId: A, documentoId: id, uuid, pdfRuta: pdf, xmlRuta: xml });
+    await eliminarDocumento(A, id, ACTOR);
+    expect(estado.archivos.has(pdf)).toBe(false);
+    expect(estado.archivos.has(xml)).toBe(false);
+    const llamada = bitacora.anotarBitacora.mock.calls.map((c) => c[0] as { accion: string; detalle?: Record<string, unknown> }).find((x) => x.accion === 'ccp.documento_eliminado');
+    expect(llamada?.detalle).toMatchObject({ documentoId: id, ccpUuidsEliminados: [uuid] });
+  });
+
+  it('A37-A3-13: si Storage no borra el CCP, la fila NO se borra (no se pierde el registro fiscal con archivos huérfanos)', async () => {
+    const { id } = await documentoBoreal();
+    const uuid = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+    const pdf = `${A}/ccp/${uuid}.pdf`;
+    estado.ccp.push({ tenantId: A, documentoId: id, uuid, pdfRuta: pdf, xmlRuta: `${A}/ccp/${uuid}.xml` });
+    estado.fallar.set('borrarArchivo', new Error('storage caído'));
+    await expect(eliminarDocumento(A, id, ACTOR)).rejects.toThrow(/storage/);
+    expect(estado.docs.has(id)).toBe(true);
+  });
+
   it('si Storage no borra el archivo, la fila se queda (no se declara eliminado lo que sigue ahí)', async () => {
     const { id } = await documentoBoreal();
     estado.fallar.set('borrarArchivo', new Error('storage caído'));

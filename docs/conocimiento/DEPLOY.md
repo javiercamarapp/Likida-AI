@@ -275,9 +275,11 @@ La pantalla Mi perfil es la única exenta, así que una cuenta sin factor puede
 inscribirlo sin abrir primero datos de una flota. La secuencia, en este orden:
 
 1. **Habilita TOTP en el proyecto de producción**: Supabase → Authentication →
-   Multi-Factor → *TOTP: enabled*. (En local es `[auth.mfa.totp]
-   enroll_enabled = true` / `verify_enabled = true` en `supabase/config.toml`;
-   hoy están en `false`, que es por lo que este paso no se puede saltar.)
+   Multi-Factor → *TOTP: enabled*. (En `supabase/config.toml` están en `true`
+   —`[auth.mfa.totp] enroll_enabled` / `verify_enabled`— pero ese archivo es
+   SOLO de la pila local de pruebas y NO configura producción: el valor real
+   vive en el panel de Supabase y hay que confirmarlo ahí, por eso este paso
+   no se puede saltar. Ver «`supabase/config.toml` es solo local».)
 2. **Inscribe tu factor** en `https://app.likida.ai/dashboard/mi-perfil` →
    *Seguridad — segundo factor* → «Inscribir». Guarda el secreto en el gestor
    de contraseñas, no solo en el teléfono.
@@ -298,6 +300,21 @@ contesta, también rebota: fallar cerrado.
 retirarse en cuanto se recupere el factor; dejarla puesta es un hallazgo de
 seguridad. La cuenta no queda bloqueada en la base: la exigencia vive en el
 código (`src/lib/auth/guard.ts`).
+
+### `supabase/config.toml` es solo local: NUNCA `supabase config push`
+
+El `config.toml` del repo describe la pila de pruebas local (`supabase start`),
+no producción: `site_url = "http://localhost:3000"`, `enable_signup = true`,
+`enable_confirmations = false`, `email_sent = 360` (cuota de correos por hora
+puesta alta para que la suite no se bloquee) y MFA TOTP encendido. Si alguien
+corre `supabase config push` contra el proyecto vinculado, esos valores
+SOBRESCRIBEN la configuración de Auth de producción: registro abierto, enlaces
+mágicos que aterrizan en `localhost`, sin la cuota de correo real y con
+confirmaciones apagadas. El único candado que quedaría contra el registro
+abierto es `shouldCreateUser: false` del `signInWithOtp` del cliente
+(R02-05), que es del cliente y no de la base. La configuración de Auth de
+producción se cambia SOLO desde el panel de Supabase. `supabase db push` y
+`supabase db query` no tocan la configuración de Auth; `config push` sí.
 
 ### Dar de baja a alguien de una flota (SEG-1)
 

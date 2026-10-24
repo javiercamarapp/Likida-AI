@@ -27,6 +27,15 @@
 > archivo existe para que ninguna de las dos cosas dependa de que alguien se
 > acuerde — la próxima vez que haya migraciones pendientes, vuelve a aplicar.
 
+> **No uses `supabase config push` contra producción.** El `supabase/config.toml`
+> es solo de la pila local de pruebas (`site_url` localhost, `enable_signup = true`,
+> confirmaciones apagadas, `email_sent = 360`, MFA TOTP encendido). Empujarlo
+> sobrescribe la configuración de Auth del proyecto real: registro abierto,
+> enlaces mágicos a `localhost` y sin la cuota de correo de producción. Las
+> migraciones se aplican con `supabase db push` (o el job de aplicar
+> migraciones); la configuración de Auth se cambia solo desde el panel de
+> Supabase. Ver `docs/conocimiento/DEPLOY.md` → «`supabase/config.toml` es solo local».
+
 ## La regla corta
 
 ```bash

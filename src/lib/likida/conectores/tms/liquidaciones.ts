@@ -177,7 +177,15 @@ export async function leerLiquidaciones(
     salida.rechazadas.push({ tabla: 'liquidacion', ref: `bitácora ${g.bitacora} póliza ${g.poliza}`, motivo });
   };
 
+  // A37-S38-07: el saneo de aClave puede juntar dos pólizas distintas en la MISMA clave externa; ninguna se entrega (cuál ganaría es adivinar).
+  const gruposPorClave = new Map<string, number>();
+  for (const g of grupos.values()) { const k = aClave(g.bitacora, g.poliza); gruposPorClave.set(k, (gruposPorClave.get(k) ?? 0) + 1); }
+
   for (const g of grupos.values()) {
+    if ((gruposPorClave.get(aClave(g.bitacora, g.poliza)) ?? 0) > 1) {
+      rechazar(g, 'su clave externa coincide con la de otra póliza tras sanear el texto; no se entrega ninguna de las dos hasta aclararlo en el origen');
+      continue;
+    }
     const operadorIds = new Set(g.renglones.map((r) => r.operador_id));
     if (operadorIds.size !== 1) { rechazar(g, 'los renglones de la póliza traen más de un operador'); continue; }
     const op = operadores.get(g.renglones[0].operador_id);

@@ -224,7 +224,10 @@ export function leerBol(c: ContenidoDoc): ResultadoLector {
   if (total && pt) {
     const escrita = pt.unidad ?? (rotuloPeso ? 'lb' : null);
     const kg = escrita !== null && esUnidadKg(escrita);
-    const cv = campoLeido('peso_bruto_total', false, pt.numero, { confianza: escrita === null ? CONF_UNIDAD_SUPUESTA : CONF_ROTULO, evidencia: total.linea, miles });
+    // A37-S32-09: una unidad que no es libra ni kilo («14 tons») no se convierte como libras: se deja sin leer y se dice.
+    const rara = escrita !== null && !kg && !esUnidadLb(escrita);
+    if (rara) incidencias.push({ codigo: 'renglon_no_leido', campo: 'peso_bruto_total', renglon: null, detalle: `La unidad del peso total «${escrita}» no es libra ni kilo: no se convirtió ni se supuso nada.` });
+    const cv = rara ? null : campoLeido('peso_bruto_total', false, pt.numero, { confianza: escrita === null ? CONF_UNIDAD_SUPUESTA : CONF_ROTULO, evidencia: total.linea, miles });
     if (cv) {
       if (!kg) {
         const n = Number(cv.valor);

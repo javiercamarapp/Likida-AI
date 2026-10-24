@@ -15,6 +15,9 @@ import type { FuenteHito, HitoFila, TipoHito } from './tipos';
 //    del origen, y el origen va en cada fila para que RH juzgue (botón, GPS, texto, foto, oficina).
 //  · Un hito sin reportar en un viaje que SIGUE ABIERTO es «pendiente», no «faltante»: todavía no es tarde. «Faltante» solo en viajes
 //    cerrados. Un operador cuyos viajes no tienen ningún hito esperado queda «sin dato», nunca «completo».
+//  · A37-S35-10: «reportó el operador» = fuente botón, texto, foto o ubicación compartida. Lo cubierto por oficina, por el sistema
+//    (geocerca/GPS, TMS) o sin fuente se cuenta APARTE: el resumen enseña ambos contadores y el estado es «completo» solo si todo
+//    lo esperado lo reportó el operador (si no, `completo_con_apoyo`). No decide ningún pago: eso sigue siendo de RH.
 //  · El periodo se toma por la fecha de creación del viaje, [desde, hasta). Los hitos de otra flota no entran.
 //  · Horas en America/Mexico_City; el CSV no lleva teléfono ni coordenadas, solo operador, folio, hito, estado, hora y origen.
 //  · Nace apagada (`config.constanciaReportesActiva`) hasta la decisión D-2 (macros) y la de RH.
@@ -38,7 +41,9 @@ export interface PeriodoConstancia {
 }
 
 export type OrigenReporte = 'botón' | 'GPS' | 'texto' | 'foto' | 'oficina' | 'sistema';
-export type EstadoConstanciaOperador = 'completo' | 'con_faltantes' | 'en_curso' | 'sin_dato';
+/** `completo_con_apoyo` (A37-S35-10): nada falta ni está pendiente, pero parte de lo esperado lo cubrió la oficina o el sistema, no el operador. */
+export type EstadoConstanciaOperador = 'completo' | 'completo_con_apoyo' | 'con_faltantes' | 'en_curso' | 'sin_dato';
+export type QuienReporto = 'operador' | 'oficina_o_sistema';
 
 export interface ReporteConstancia {
   viajeId: string;
@@ -47,6 +52,8 @@ export interface ReporteConstancia {
   /** ISO de la hora del mensaje (o de recepción si no hay). */
   en: string | null;
   origen: OrigenReporte | null;
+  /** A37-S35-10: quién lo reportó de verdad (el operador, o la oficina/el sistema por él). */
+  quien: QuienReporto;
 }
 
 export interface SinReporteConstancia {
@@ -61,6 +68,10 @@ export interface ConstanciaOperador {
   viajes: number;
   esperados: number;
   reportados: number;
+  /** De los `reportados`, los que escribió el operador (botón, texto, foto, ubicación compartida). A37-S35-10. */
+  reportadosPorOperador: number;
+  /** De los `reportados`, los que cubrió la oficina o el sistema (geocerca/GPS, TMS) o no tienen fuente. A37-S35-10. */
+  cubiertosPorOficinaOSistema: number;
   /** Sin reportar en viajes ya cerrados. */
   faltantes: number;
   /** Sin reportar en viajes que siguen abiertos. */
@@ -93,6 +104,10 @@ export function origenDeHito(h: Pick<HitoFila, 'fuente' | 'validadoPor'>): Orige
   return null;
 }
 
+const FUENTES_DEL_OPERADOR: ReadonlySet<FuenteHito> = new Set<FuenteHito>(['boton', 'texto', 'foto', 'ubicacion']);
+/** Fail-closed: una fuente ausente o desconocida NO se le atribuye al operador. */
+export const quienReporto = (h: Pick<HitoFila, 'fuente'>): QuienReporto => (h.fuente && FUENTES_DEL_OPERADOR.has(h.fuente) ? 'operador' : 'oficina_o_sistema');
+
 const reportado = (h: Pick<HitoFila, 'estado'>): boolean => h.estado === 'recibido' || h.estado === 'validado';
 
 /** Por operador y periodo: hitos reportados (hora, hito, origen) frente a esperados. Pura. */
@@ -115,7 +130,7 @@ export function armarConstancia(x: {
   for (const [viajeId, hs] of hitosPorViaje) {
     const v = viajes.get(viajeId)!;
     const o = porOperador.get(v.operadorId) ?? {
-      operadorId: v.operadorId, operadorNombre: v.operadorNombre, viajes: 0, esperados: 0, reportados: 0, faltantes: 0, pendientes: 0,
+      operadorId: v.operadorId, operadorNombre: v.operadorNombre, viajes: 0, esperados: 0, reportados: 0, reportadosPorOperador: 0, cubiertosPorOficinaOSistema: 0, faltantes: 0, pendientes: 0,
       omitidos: 0, estado: 'sin_dato' as EstadoConstanciaOperador, reportes: [], faltantesLista: [], pendientesLista: [],
     };
     o.viajes += 1;
@@ -124,7 +139,9 @@ export function armarConstancia(x: {
       o.esperados += 1;
       if (reportado(h)) {
         o.reportados += 1;
-        o.reportes.push({ viajeId, folio: v.folio, tipo: h.tipo, en: h.mensajeEn ?? h.recibidoEn, origen: origenDeHito(h) });
+        const quien = quienReporto(h);
+        if (quien === 'operador') o.reportadosPorOperador += 1; else o.cubiertosPorOficinaOSistema += 1;
+        o.reportes.push({ viajeId, folio: v.folio, tipo: h.tipo, en: h.mensajeEn ?? h.recibidoEn, origen: origenDeHito(h), quien });
       } else if (VIVO.has(v.estatus)) {
         o.pendientes += 1;
         o.pendientesLista.push({ viajeId, folio: v.folio, tipo: h.tipo });
@@ -137,14 +154,15 @@ export function armarConstancia(x: {
   }
   const operadores = [...porOperador.values()].map((o) => ({
     ...o,
-    estado: (o.esperados === 0 ? 'sin_dato' : o.faltantes > 0 ? 'con_faltantes' : o.pendientes > 0 ? 'en_curso' : 'completo') as EstadoConstanciaOperador,
+    estado: (o.esperados === 0 ? 'sin_dato' : o.faltantes > 0 ? 'con_faltantes' : o.pendientes > 0 ? 'en_curso'
+      : o.cubiertosPorOficinaOSistema > 0 ? 'completo_con_apoyo' : 'completo') as EstadoConstanciaOperador,
   })).sort((a, b) => (a.operadorNombre ?? '').localeCompare(b.operadorNombre ?? '', 'es-MX') || a.operadorId.localeCompare(b.operadorId));
   return { periodo: x.periodo, operadores, vacio: operadores.length === 0 };
 }
 
 // ── El CSV para monitoreo y RH ───────────────────────────────────────────────
 
-export const COLUMNAS_CSV_CONSTANCIA = ['operador', 'folio', 'hito', 'estado', 'fecha_hora_mx', 'origen'] as const;
+export const COLUMNAS_CSV_CONSTANCIA = ['operador', 'folio', 'hito', 'estado', 'fecha_hora_mx', 'origen', 'quien_reporto'] as const;
 
 const TEXTO_HITO: Record<TipoHito, string> = {
   llegada_carga: 'llegada a carga', salida_carga: 'salida de carga', llegada_descarga: 'llegada a descarga', salida_descarga: 'salida de descarga', regreso: 'regreso',
@@ -154,13 +172,13 @@ const TEXTO_HITO: Record<TipoHito, string> = {
 export function csvConstancia(c: Constancia): string {
   const lineas: string[] = [COLUMNAS_CSV_CONSTANCIA.join(',')];
   for (const o of c.operadores) {
-    const filas: Array<{ folio: string | null; tipo: TipoHito; estado: string; en: string | null; origen: string | null }> = [
-      ...o.reportes.map((r) => ({ folio: r.folio, tipo: r.tipo, estado: 'reportado', en: r.en, origen: r.origen })),
-      ...o.faltantesLista.map((f) => ({ folio: f.folio, tipo: f.tipo, estado: 'faltante', en: null, origen: null })),
-      ...o.pendientesLista.map((f) => ({ folio: f.folio, tipo: f.tipo, estado: 'pendiente', en: null, origen: null })),
+    const filas: Array<{ folio: string | null; tipo: TipoHito; estado: string; en: string | null; origen: string | null; quien: QuienReporto | null }> = [
+      ...o.reportes.map((r) => ({ folio: r.folio, tipo: r.tipo, estado: 'reportado', en: r.en, origen: r.origen, quien: r.quien as QuienReporto | null })),
+      ...o.faltantesLista.map((f) => ({ folio: f.folio, tipo: f.tipo, estado: 'faltante', en: null, origen: null, quien: null })),
+      ...o.pendientesLista.map((f) => ({ folio: f.folio, tipo: f.tipo, estado: 'pendiente', en: null, origen: null, quien: null })),
     ].sort((a, b) => (a.folio ?? '').localeCompare(b.folio ?? '', 'es-MX') || ORDEN[a.tipo] - ORDEN[b.tipo]);
     for (const f of filas) {
-      const valores: Array<string | number | null> = [o.operadorNombre, f.folio, TEXTO_HITO[f.tipo], f.estado, horaExactaMx(f.en), f.origen];
+      const valores: Array<string | number | null> = [o.operadorNombre, f.folio, TEXTO_HITO[f.tipo], f.estado, horaExactaMx(f.en), f.origen, f.quien];
       lineas.push(valores.map(celdaCsv).join(','));
     }
   }

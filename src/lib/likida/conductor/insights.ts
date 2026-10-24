@@ -20,7 +20,7 @@ import type { FuenteHito, HitoFila } from './tipos';
 //      CHOFER = recibido_en − mensaje_en: el retraso de ENTREGA del mensaje.
 //               NO es telemetría del evento físico: el chofer pudo llegar antes de escribir (regla del 0380).
 //    Un retraso negativo (reloj desordenado) se descarta y se cuenta, nunca se promedia.
-//  • LLAMADAS EVITADAS = hitos sin intervención × consultas por hito de la línea base.
+//  • LLAMADAS EVITADAS = viajes con algún hito sin intervención × llamadas POR VIAJE de la línea base (A37-S35-03).
 //    Es una ESTIMACIÓN y solo existe si hay línea base positiva; sin ella es `null`
 //    y se muestra el mensaje que la pide. Nunca se inventa un porcentaje de ahorro.
 //
@@ -60,7 +60,7 @@ export interface EpisodioParaInsights {
 }
 
 export interface LineaBase {
-  /** Llamadas/consultas por viaje (u hito) que se hacían antes. Debe ser > 0. */
+  /** Llamadas por VIAJE que se hacían antes. Debe ser > 0. */
   llamadasPorViaje: number | null;
   /** Fecha (AAAA-MM-DD) en que el cliente la dio. */
   registradaEn: string | null;
@@ -294,7 +294,9 @@ export function calcularInsights(e: EntradaInsights): InsightsConductor {
   const hayBase = !!base && typeof base.llamadasPorViaje === 'number' && Number.isFinite(base.llamadasPorViaje) && base.llamadasPorViaje > 0;
   const llamadas: InsightsConductor['llamadasEvitadas'] = hayBase
     ? {
-        valor: sinInt.length * (base!.llamadasPorViaje as number),
+        // A37-S35-03: la base es POR VIAJE, así que se multiplica por viajes distintos con al menos un hito sin
+        // intervención (no por hitos: salía hasta ~5 veces inflada). Un hito sin viajeId no se cuenta (se subestima, no se infla).
+        valor: new Set(sinInt.flatMap((h) => (h.viajeId ? [h.viajeId] : []))).size * (base!.llamadasPorViaje as number),
         fuente: 'viaje_hito.fuente × agente_conductor_config.linea_base_llamadas_por_viaje',
         rotulo: 'estimación',
         mensaje: `Estimación con tu línea base de ${fechaLegible(base!.registradaEn)}`,

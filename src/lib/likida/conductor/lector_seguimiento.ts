@@ -22,6 +22,8 @@ export interface DetencionSeguimiento extends PuntoSeguimiento {
 
 /** Lo que el sistema de seguimiento dice de un viaje asignado. */
 export interface AsignacionSeguimiento {
+  /** A37-S35-08: la flota a la que pertenece la lectura. Una lectura de otra flota se descarta (fail-closed). */
+  tenantId: string;
   /** Referencia del viaje en el sistema del cliente (no se asume que coincida con nuestro folio). */
   viajeRef: string;
   instrucciones: string[];
@@ -35,7 +37,7 @@ export interface AsignacionSeguimiento {
 
 export interface LectorSeguimiento {
   /** Asignación del viaje, o `null` si el sistema no tiene nada. Solo lectura. */
-  leer(viajeRef: string, ahora: Date): Promise<AsignacionSeguimiento | null>;
+  leer(tenantId: string, viajeRef: string, ahora: Date): Promise<AsignacionSeguimiento | null>;
 }
 
 /** Minutos que una asignación leída sigue valiendo; pasado esto se descarta. Recalibrar con la cadencia real del sistema. */
@@ -56,8 +58,11 @@ const soloPunto = (p: PuntoSeguimiento): PuntoSeguimiento => ({ lat: p.lat, lng:
  * Copia limpia de la asignación, o `null` si no vale (sin hora, vieja, futura o sin referencia de viaje). Devuelve estructuras
  * nuevas: quien la reciba no puede mutar la fuente. Detenciones ordenadas por `orden`; lo que el sistema no trae queda vacío o null.
  */
-export function normalizarAsignacion(a: AsignacionSeguimiento | null | undefined, ahora: Date): AsignacionSeguimiento | null {
+export function normalizarAsignacion(a: AsignacionSeguimiento | null | undefined, ahora: Date, tenantId: string): AsignacionSeguimiento | null {
+  if (typeof tenantId !== 'string' || tenantId.trim() === '') return null;
   if (!a || typeof a.viajeRef !== 'string' || a.viajeRef.trim() === '' || !(a.leidaEn instanceof Date)) return null;
+  // A37-S35-08: la lectura debe declarar la MISMA flota que la pidió; si no, es de otra flota (o no se sabe) y no vale.
+  if (a.tenantId !== tenantId) return null;
   const edadMin = (ahora.getTime() - a.leidaEn.getTime()) / 60_000;
   if (!Number.isFinite(edadMin) || edadMin > VIGENCIA_ASIGNACION_MIN || edadMin < -FUTURO_TOLERADO_ASIGNACION_MIN) return null;
 
@@ -69,16 +74,16 @@ export function normalizarAsignacion(a: AsignacionSeguimiento | null | undefined
     .map((d) => ({ orden: d.orden, nombre: d.nombre.trim(), ...soloPunto(d) }))
     .sort((x, y) => x.orden - y.orden);
   const destino = coordenadaValida(a.destino) ? soloPunto(a.destino) : null;
-  return { viajeRef: a.viajeRef, instrucciones, ruta, detenciones, destino, leidaEn: new Date(a.leidaEn.getTime()) };
+  return { tenantId: a.tenantId, viajeRef: a.viajeRef, instrucciones, ruta, detenciones, destino, leidaEn: new Date(a.leidaEn.getTime()) };
 }
 
 /** Lee del puerto y normaliza, sin lanzar nunca: puerto ausente, referencia vacía, fallo del sistema o lectura inservible → `null`. */
 export async function leerAsignacionSeguimiento(
-  puerto: LectorSeguimiento | null | undefined, viajeRef: string, ahora: Date,
+  puerto: LectorSeguimiento | null | undefined, tenantId: string, viajeRef: string, ahora: Date,
 ): Promise<AsignacionSeguimiento | null> {
-  if (!puerto || typeof viajeRef !== 'string' || viajeRef.trim() === '') return null;
+  if (!puerto || typeof tenantId !== 'string' || tenantId.trim() === '' || typeof viajeRef !== 'string' || viajeRef.trim() === '') return null;
   try {
-    return normalizarAsignacion(await puerto.leer(viajeRef, ahora), ahora);
+    return normalizarAsignacion(await puerto.leer(tenantId, viajeRef, ahora), ahora, tenantId);
   } catch {
     return null;
   }
@@ -87,7 +92,7 @@ export async function leerAsignacionSeguimiento(
 /** Puerto por omisión (nace apagado): ningún sistema conectado → sin asignación. */
 export const lectorSeguimientoApagado: LectorSeguimiento = { leer: async () => null };
 
-/** Doble de prueba: asignaciones sintéticas por referencia de viaje; una desconocida devuelve `null`. */
-export function crearDobleSeguimiento(porViaje: Readonly<Record<string, AsignacionSeguimiento>>): LectorSeguimiento {
-  return { leer: async (viajeRef) => porViaje[viajeRef] ?? null };
+/** Doble de prueba: asignaciones sintéticas por flota y referencia de viaje; una desconocida devuelve `null`. */
+export function crearDobleSeguimiento(porTenant: Readonly<Record<string, Readonly<Record<string, AsignacionSeguimiento>>>>): LectorSeguimiento {
+  return { leer: async (tenantId, viajeRef) => porTenant[tenantId]?.[viajeRef] ?? null };
 }

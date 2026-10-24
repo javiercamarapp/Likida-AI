@@ -116,10 +116,10 @@ describe('la lista', () => {
     const [a] = await crearRepoBandeja().listar(T1, AHORA, false);
     expect(a).toMatchObject({ id: AV, version: 2, estado: 'fallido', canal: 'cliente_1a1', datos: {}, clienteId: null, error: 'e' });
   });
-  it('contar: solo los que esperan a una persona; sin cuenta = 0', async () => {
+  it('contar: los mismos estados que «Solo pendientes» (incluye aprobado: A37-S58-07); sin cuenta = 0', async () => {
     respuesta = () => ({ data: null, error: null, count: 4 });
     expect(await crearRepoBandeja().contarPendientes(T1)).toBe(4);
-    expect(llamadas[0].filtros.find(([o]) => o === 'in')?.[2]).toEqual(['pendiente_confirmacion', 'sin_destinatario', 'fallido']);
+    expect(llamadas[0].filtros.find(([o]) => o === 'in')?.[2]).toEqual(['pendiente_confirmacion', 'sin_destinatario', 'fallido', 'aprobado']);
     expect(llamadas[0].opciones).toEqual({ count: 'exact', head: true });
     respuesta = () => ({ data: null, error: null });
     expect(await crearRepoBandeja().contarPendientes(T1)).toBe(0);
@@ -156,16 +156,24 @@ describe('las escrituras', () => {
     expect(await crearRepoBandeja().guardarDatoManual(T1, FILA, U1, { placasCaja: 'ABC-123' })).toBe('fila_ajena');
     expect(llamadas.some((l) => l.op === 'upsert')).toBe(false);
   });
-  it('la captura manual mezcla con lo que ya había: lo vacío no borra', async () => {
-    respuesta = (l) => {
-      if (l.tabla === 'programa_despacho_fila') return { data: [{ id: FILA }], error: null };
-      if (l.op === 'select') return { data: [{ operador_nombre: 'Previo', licencia: 'L-1', licencia_vence: null, telefono: null, placas_unidad: 'OLD-111', placas_caja: null, estado_caja: null }], error: null };
-      return { data: null, error: null };
-    };
-    expect(await crearRepoBandeja().guardarDatoManual(T1, FILA, U1, { placasCaja: 'ABC-123', placasUnidad: '' })).toBe('guardado');
+  it('A37-A4-08: la captura manual NO lee-mezcla-escribe: el upsert lleva solo las columnas tocadas', async () => {
+    respuesta = (l) => (l.tabla === 'programa_despacho_fila' ? { data: [{ id: FILA }], error: null } : { data: null, error: null });
+    expect(await crearRepoBandeja().guardarDatoManual(T1, FILA, U1, { placasCaja: 'ABC-123' })).toBe('guardado');
+    expect(llamadas.some((l) => l.tabla === 'vigia_dato_viaje_manual' && l.op === 'select')).toBe(false);
     const up = llamadas.find((l) => l.op === 'upsert');
-    expect(up?.valores).toMatchObject({ tenant_id: T1, fila_id: FILA, operador_nombre: 'Previo', licencia: 'L-1', placas_unidad: 'OLD-111', placas_caja: 'ABC-123', editado_por: U1 });
+    expect(up?.valores).toMatchObject({ tenant_id: T1, fila_id: FILA, placas_caja: 'ABC-123', editado_por: U1 });
+    expect(Object.keys(up?.valores as object)).not.toContain('operador_nombre');
     expect(up?.opciones).toEqual({ onConflict: 'tenant_id,fila_id' });
+  });
+  it('A37-A4-08: borrar es explícito (null) y lo vacío no borra', async () => {
+    expect(validarDatoManual({ placasCaja: '', telefono: '' })).toMatchObject({ ok: false });
+    const v = validarDatoManual({ placasCaja: 'ABC-123', borrar: ['telefono'] });
+    expect(v).toMatchObject({ ok: true, valor: { placasCaja: 'ABC-123', telefono: null } });
+    expect(validarDatoManual({ telefono: '5512345678', borrar: ['telefono'] })).toMatchObject({ ok: false });
+    expect(validarDatoManual({ borrar: ['tenant_id'] })).toMatchObject({ ok: false });
+    respuesta = (l) => (l.tabla === 'programa_despacho_fila' ? { data: [{ id: FILA }], error: null } : { data: null, error: null });
+    await crearRepoBandeja().guardarDatoManual(T1, FILA, U1, { telefono: null });
+    expect(llamadas.find((l) => l.op === 'upsert')?.valores).toMatchObject({ telefono: null });
   });
 });
 

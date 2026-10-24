@@ -97,6 +97,16 @@ describe('documentoDeCaption', () => {
     expect(documentoDeCaption(caption, pendientes)).toBeNull();
   });
 
+  it('A37-S35-07: un documento dado de alta con 61-80 caracteres SÍ se clasifica por su pie de foto exacto', () => {
+    const nombre = 'Carta porte original firmada y sellada por el receptor con folio del cliente';
+    expect(nombre.length).toBeGreaterThan(60);
+    expect(nombre.length).toBeLessThanOrEqual(80);
+    const pend = [{ documentoRequeridoId: 'd9', nombreSolicitado: nombre }];
+    expect(documentoDeCaption(nombre, pend)).toBe('d9');
+    // El tope sigue siendo el del alta: nada más largo que un nombre válido se clasifica.
+    expect(documentoDeCaption(`${nombre} ${'x'.repeat(10)}`, pend)).toBeNull();
+  });
+
   it('un documento ya recibido (no viene en `pendientes`) no se vuelve a clasificar', () => {
     expect(documentoDeCaption('Pedimento', [pendientes[0]])).toBeNull();
   });

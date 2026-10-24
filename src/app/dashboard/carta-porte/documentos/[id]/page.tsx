@@ -6,7 +6,7 @@ import { puedeAdministrar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
 import { DatoInvalido, mensajeParaPantalla } from '@/lib/likida/errores';
 import { aprobarDocumento, abrirRevision, corregirCampos, crearViajeDeDocumento, eliminarDocumento, quitarRenglon, rechazarDocumento, reabrirDocumento, reintentarLectura } from '@/lib/likida/carta_porte_docs/bandeja';
-import { flotaBajoPerfil, marcarSubidoAMano, MENSAJE_FUNCION_NO_DISPONIBLE } from '@/lib/likida/carta_porte_docs/envio';
+import { flotaBajoPerfil, marcarSubidoAMano, prepararEnvioTms, MENSAJE_FUNCION_NO_DISPONIBLE } from '@/lib/likida/carta_porte_docs/envio';
 import { esFlotaSimulada } from '@/lib/likida/carta_porte_docs/salida_simulada';
 import { puertoSupabase } from '@/lib/likida/carta_porte_docs/catalogo_puerto';
 import { proponerCatalogo, propuestaVacia, registrosDePropuesta, type LadoParte } from '@/lib/likida/carta_porte_docs/catalogo_pantalla';
@@ -220,6 +220,16 @@ export default async function PaginaRevision({
         return r.ok
           ? { ok: true, mensaje: r.yaEstaba ? 'Ya estaba marcada como subida a mano.' : 'Listo: quedó registrado que la plantilla se subió a mano. Likida no la volverá a enviar.' }
           : { ok: false, error: r.mensaje };
+      }
+      if (intencion === 'preparar_envio') {
+        // A37-A3-18: un fallo de base entre aprobar y preparar el envío dejaba el documento aprobado sin envío y sin acción.
+        if (!restringidoAccion) return { ok: false, error: MENSAJE_FUNCION_NO_DISPONIBLE };
+        const d = await repo.leerDocumento(s.tenantId, id);
+        if (!d) throw new DatoInvalido('Ese documento no está en tu flota, o alguien lo borró. Recarga la pantalla.');
+        if (d.version !== version) return { ok: false, error: 'Otra persona cambió este documento mientras lo revisabas. Recarga la pantalla y vuelve a intentarlo.' };
+        const r = await prepararEnvioTms(s.tenantId, d, actor);
+        revalidatePath(ruta); revalidatePath(RUTA_PADRE);
+        return r.ok ? { ok: true, mensaje: r.creado ? 'Envío preparado: el sistema lo enviará al TMS.' : 'El envío ya estaba preparado.' } : { ok: false, error: r.mensaje };
       }
       if (intencion === 'guardar_catalogo') {
         // Se recalcula con lo que hay en la base (no con lo que dice el navegador): del formulario solo salen qué filas se

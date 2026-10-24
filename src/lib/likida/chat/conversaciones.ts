@@ -76,7 +76,11 @@ export async function traerConversacion(
     supabaseAdmin().from('chat_mensaje')
       .select('rol, texto, bloques')
       .eq('conversacion_id', id)
-      .order('created_at', { ascending: true })
+      // Los ÚLTIMOS 200 (A37-S33-08): descendente + limit y se invierte abajo. `rol` asc desempata el intercambio (pregunta y
+      // respuesta comparten created_at): al invertir queda usuario → asistente.
+      .order('created_at', { ascending: false })
+      .order('rol', { ascending: true })
+      .order('id')
       .limit(200),
     'chat.traer_mensajes');
   if (errMsjs) throw new Error(`traerConversacion.mensajes: ${errMsjs.message}`);
@@ -84,7 +88,7 @@ export async function traerConversacion(
   return {
     id: conv.id as string,
     titulo: conv.titulo as string,
-    mensajes: (msjs ?? []).map((m) => ({
+    mensajes: [...(msjs ?? [])].reverse().map((m) => ({
       rol: m.rol as 'usuario' | 'asistente',
       texto: m.texto as string,
       bloques: Array.isArray(m.bloques) ? (m.bloques as Array<Record<string, unknown>>) : null,

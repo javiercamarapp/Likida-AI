@@ -278,3 +278,24 @@ describe('lectorLiquidaciones (contrato LectorTms)', () => {
     await expect(lectorLiquidaciones(sesionDe(caido)).leer(VENTANA.desde, VENTANA.hasta)).rejects.toThrow();
   });
 });
+
+describe('A37-S38-07: dos pólizas distintas con la misma clave externa saneada', () => {
+  const tablas = (bitacoras: string[]): Tablas => ({
+    operadores: bitacoras.map((_, i) => ({ ID: 500 + i, NumeroEmpleado: `E-90${i}` })),
+    conceptos: [{ ID: 1, Clave: 'C001', Descripcion: 'Sueldo sintetico', Oculto: 'no' }],
+    nomina: bitacoras.map((b, i) => ({ ID: i + 1, Poliza: 'P1', Bitacora: b, OperadorID: 500 + i, FechaInicio: '2026-01-05 00:00:00', FechaFin: '2026-01-06 23:59:59', ConceptoID: 1, Cargo: 100.5, Abono: 0 })),
+  });
+
+  it("las bitácoras 'A B' y 'A_B' (misma póliza) NO entregan dos cuerpos con la misma claveExterna: se rechazan ambas con motivo", async () => {
+    const r = ok(await leer(tablas(['A B', 'A_B'])));
+    expect(r.cuerpos).toEqual([]);
+    expect(r.rechazadas).toHaveLength(2);
+    expect(r.rechazadas.every((x) => x.motivo.includes('clave externa'))).toBe(true);
+  });
+
+  it('bitácoras que no chocan siguen pasando', async () => {
+    const r = ok(await leer(tablas(['A1', 'A2'])));
+    expect(r.cuerpos.map((c) => c.clave).sort()).toEqual(['A1-P1', 'A2-P1']);
+    expect(r.rechazadas).toEqual([]);
+  });
+});

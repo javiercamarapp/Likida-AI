@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { mxn } from '@/lib/formato';
+import { mxn, round2 } from '@/lib/formato';
 import { acotada } from './presupuesto';
 import { copiasDeComprobante } from './cuadre/engine';
 import type { ConceptoGasto } from '@/types/likida';
@@ -204,7 +204,7 @@ export async function estadoDelViaje(tenantId: string, viajeId: string): Promise
   const copias = copiasDeComprobante(gastos);
   // Misma regla que `totalComprobado` en engine.ts: ni copias ni montos <= 0.
   const originales = gastos.filter((g) => !copias.has(g.id) && g.monto > 0);
-  const comprobado = originales.reduce((s, g) => s + g.monto, 0);
+  const comprobado = round2(originales.reduce((s, g) => s + g.monto, 0));
   // El orden de la consulta es ascendente (lo exige copiasDeComprobante), así
   // que "el último" es el ÚLTIMO elemento de la lista completa, no el primero
   // — y se busca sobre TODOS los gastos (no solo `originales`): una copia
@@ -234,7 +234,8 @@ export async function estadoDelViaje(tenantId: string, viajeId: string): Promise
 export function armarRespuesta(tipo: TipoConsulta, e: EstadoViaje | null): string {
   if (!e) return 'Todavía no tienes un viaje abierto. En cuanto te asignen uno te aviso.';
 
-  const falta = e.anticipo - e.comprobado;
+  // A37-S39-09: a centavos ANTES de comparar; el ruido de coma flotante (500.29999999999995) no debe leerse como un faltante.
+  const falta = round2(round2(e.anticipo) - round2(e.comprobado));
 
   switch (tipo) {
     case 'saldo': {

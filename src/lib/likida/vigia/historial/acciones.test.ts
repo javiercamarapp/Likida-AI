@@ -69,6 +69,15 @@ describe('permiso y entradas', () => {
 });
 
 describe('importarHistorialPanel', () => {
+  // A37-S58-02
+  it('un chat que rebasa el tope de mensajes se rechaza sin guardar nada (no se corta en silencio)', async () => {
+    const d = deps();
+    const lineas = Array.from({ length: 50_002 }, (_, i) => `12/09/2026 10:00 - ${i % 2 ? 'Ana Servicio' : 'Cliente Uno'}: m${i}`).join('\n');
+    const r = await importarHistorialPanel(dueno, fd({ grupoId: G, equipo: 'Ana Servicio' }), archivo(lineas), d);
+    expect(r).toMatchObject({ ok: false, error: expect.stringContaining('más de 50000 mensajes') });
+    expect(d.guardarImportacion).not.toHaveBeenCalled();
+  });
+
   it('guarda lo leído SIN teléfonos ni nombres, con la sal de la flota, y la bitácora solo lleva conteos', async () => {
     const d = deps();
     const r = await importarHistorialPanel(dueno, fd({ grupoId: G, equipo: 'Ana Servicio' }), archivo(CHAT), d);
@@ -78,6 +87,9 @@ describe('importarHistorialPanel', () => {
     expect(entrada.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(entrada.mensajes.map((m: { rol: string }) => m.rol)).toEqual(['cliente', 'equipo']);
     expect(JSON.stringify(entrada)).not.toMatch(/Cliente Uno|Ana Servicio|1234 5678/);
+    // A37-S58-09: el aviso no afirma lo falso; admite que el texto conserva lo dicho en el chat.
+    expect((r as { mensaje: string }).mensaje).not.toMatch(/nombres de autores no se guardaron/);
+    expect((r as { mensaje: string }).mensaje).toMatch(/nombres, placas o licencias/);
     const b = d.bitacora.mock.calls[0][0];
     expect(b).toMatchObject({ accion: 'vigia.historial_importado', entidadId: 'imp-1' });
     expect(JSON.stringify(b)).not.toMatch(/Querétaro|Cliente Uno/);

@@ -25,7 +25,7 @@ export interface DbFalsa {
   tablas: Record<string, Fila[]>;
   llamadas: Llamada[];
   /** Hace fallar `tabla.op` (select/insert/update/delete/upsert/rpc:nombre) con ese mensaje. */
-  fallar: (clave: string, mensaje: string) => void;
+  fallar: (clave: string, mensaje: string, codigo?: string) => void;
   cliente: { from: (t: string) => unknown; rpc: (n: string, a?: unknown, o?: unknown) => unknown };
 }
 
@@ -38,6 +38,7 @@ export function crearDbFalsa(
   const tablas: Record<string, Fila[]> = Object.fromEntries(Object.entries(inicial).map(([k, v]) => [k, v.map((f) => ({ ...f }))]));
   const llamadas: Llamada[] = [];
   const fallos = new Map<string, string>();
+  const codigos = new Map<string, string>();
 
   class Q implements PromiseLike<Resp> {
     private filtros: Array<[string, string, unknown]> = [];
@@ -116,7 +117,7 @@ export function crearDbFalsa(
       const clave = this.clave ?? `${this.tabla}.${this.op}`;
       llamadas.push({ tabla: this.tabla, op: this.clave ? 'rpc' : this.op, filtros: this.filtros, payload: this.payload });
       const falla = fallos.get(clave) ?? fallos.get(`${this.tabla}.*`);
-      if (falla) return { data: null, error: { message: falla } };
+      if (falla) return { data: null, error: { message: falla, ...(codigos.get(clave) ? { code: codigos.get(clave) } : {}) } as { message: string } };
 
       if (this.fuente) {
         const resultado = this.fuente();
@@ -192,5 +193,5 @@ export function crearDbFalsa(
       return new Q(`rpc:${n}`, () => (f ? f(args as Record<string, unknown>) : []), `rpc:${n}`);
     },
   };
-  return { tablas, llamadas, fallar: (k, m) => { fallos.set(k, m); }, cliente };
+  return { tablas, llamadas, fallar: (k, m, c) => { fallos.set(k, m); if (c) codigos.set(k, c); else codigos.delete(k); }, cliente };
 }

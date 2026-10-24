@@ -147,7 +147,12 @@ export function puedeEscribirAlChofer(e: EntradaCompuerta): ResultadoCompuerta {
   }
   const ultima = ventana[ventana.length - 1];
 
-  const v = e.senalExtra?.velocidadKmh;
+  // A37-A5-10: la ignición y la velocidad que la propia muestra de posición ya trae rellenan lo que el proveedor no reporta (el
+  // proveedor manda). Antes las reglas 3 y 7 solo veían `senalExtra`, que hoy llega vacío: un camión atascado con el motor
+  // prendido salía «detenida».
+  const ignicionEf = e.senalExtra?.ignicion ?? ultima.ignicion ?? null;
+  const vMuestra = typeof ultima.velocidadKmh === 'number' && Number.isFinite(ultima.velocidadKmh) ? ultima.velocidadKmh : null;
+  const v = e.senalExtra?.velocidadKmh ?? vMuestra;
   if (typeof v === 'number' && Number.isFinite(v) && v > VELOCIDAD_MARCHA_KMH) return { permitido: false, razon: 'conduciendo' };
 
   const margen = positivo(e.config.toleranciaUbicacionM, 0);
@@ -156,7 +161,7 @@ export function puedeEscribirAlChofer(e: EntradaCompuerta): ResultadoCompuerta {
 
   if (ventana.some((m) => haversineM(m, ultima) > metros)) return { permitido: false, razon: 'en_movimiento' };
   if (ventana.length < requisito.muestras) return { permitido: false, razon: 'pocas_muestras' };
-  if (e.senalExtra?.ignicion === true) return { permitido: false, razon: 'ignicion_encendida' };
+  if (ignicionEf === true) return { permitido: false, razon: 'ignicion_encendida' };
   return { permitido: true, razon: 'detenida' };
 }
 

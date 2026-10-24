@@ -167,6 +167,15 @@ describe('leerEtaMin — el ETA es el que DIJO, o null', () => {
     ['2 horas o 3', null],
     // Y el precio después de la unidad NO es una segunda lectura de ETA.
     ['llego en 40 min, cobro $1,500', 40],
+    // A37-S29-02: rangos con guion, «entre X y Y», h:mm y «1 h 30 min»
+    // se anulan (antes leían 40, 40, 30 y 1800); «2 horas y media» = 150.
+    ['30-40 min, 1,500', null],
+    ['30 - 40 minutos', null],
+    ['entre 30 y 40 minutos', null],
+    ['1:30 hrs', null],
+    ['1 h 30 min', null],
+    ['1 hora 30 minutos', null],
+    ['2 horas y media', 150],
   ])('«%s» → %s', (texto, esperado) => {
     expect(leerEtaMin(texto)).toBe(esperado);
   });
@@ -336,10 +345,12 @@ describe('atenderMensajeProveedor', () => {
     sendButtons.mockResolvedValue('wamid.BTN');
     await atenderMensajeProveedor('5299911122233', 'bueno, ¿quién habla?');
     expect(sendText).toHaveBeenCalledWith('5299911122233', 'EL MENSAJE PREPARADO');
-    // Y avanzó: contactado primero, cotizada con su texto después.
+    // A37-S29-03: avanzó a contactado, pero el saludo que abrió la ventana
+    // NO es cotización: no hay claim 'cotizada' ni botones al jefe.
     const claims = escrituras.filter((e) => e.clave === 'coordinacion_proveedor.claim');
+    expect(claims).toHaveLength(1);
     expect((claims[0].payload as { estado: string }).estado).toBe('contactado');
-    expect((claims[1].payload as { estado: string }).estado).toBe('cotizada');
+    expect(sendButtons).not.toHaveBeenCalled();
   });
 
   it('c4-2/c4-3: la gestión de una incidencia YA RESUELTA no captura al número — se cierra y el processor sigue', async () => {
@@ -372,6 +383,42 @@ describe('atenderMensajeProveedor', () => {
     expect(await atenderMedioProveedorSinTexto('5215559999999', 'audio')).toBeNull();
   });
 
+  it('A37-S29-04: el mismo gruero en DOS flotas: el texto NO se reenvía a ningún jefe ni a ninguna bitácora de flota', async () => {
+    respuestas[SEL_ACTIVAS] = {
+      data: [
+        { id: COO, tenant_id: 't1', incidencia_id: INC, estado: 'contactado', proveedor_nombre: 'Grúas El Güero', mensaje_preparado: 'a' },
+        { id: 'c2', tenant_id: 't2', incidencia_id: 'i2', estado: 'contactado', proveedor_nombre: 'Grúas El Güero', mensaje_preparado: 'b' },
+      ],
+      error: null,
+    };
+    telefonoJefeDe.mockResolvedValue('5215550000009');
+    sendText.mockResolvedValue('wamid.TXT');
+    const secreto = 'ya voy por la unidad 12 de Transportes Beta, km 45';
+    const r = await atenderMensajeProveedor('5299911122233', secreto);
+    expect(r).toContain('más de una solicitud activa');
+    for (const [, texto] of sendText.mock.calls as unknown as Array<[string, string]>) expect(texto).not.toContain('unidad 12');
+    expect(sendText).toHaveBeenCalledTimes(2); // un aviso SIN contenido por flota
+    for (const [, , , datos] of anotarEventoIncidencia.mock.calls as unknown as Array<[string, string, string, Record<string, unknown>]>) {
+      expect(JSON.stringify(datos)).not.toContain('unidad 12');
+      expect(datos.sinTexto).toBe(true);
+    }
+  });
+
+  it('dos gestiones vivas de la MISMA flota: el texto va a la bitácora y al jefe UNA sola vez', async () => {
+    respuestas[SEL_ACTIVAS] = {
+      data: [
+        { id: COO, tenant_id: 't1', incidencia_id: INC, estado: 'contactado', proveedor_nombre: 'Grúas El Güero', mensaje_preparado: 'a' },
+        { id: 'c2', tenant_id: 't1', incidencia_id: 'i2', estado: 'contactado', proveedor_nombre: 'Grúas El Güero', mensaje_preparado: 'b' },
+      ],
+      error: null,
+    };
+    telefonoJefeDe.mockResolvedValue('5215550000009');
+    sendText.mockResolvedValue('wamid.TXT');
+    await atenderMensajeProveedor('5299911122233', 'llego en 40 min');
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(anotarEventoIncidencia).toHaveBeenCalledTimes(2);
+  });
+
   it('dos gestiones vivas con el mismo teléfono: no se adivina — bitácora y jefe de CADA una', async () => {
     respuestas[SEL_ACTIVAS] = {
       data: [
@@ -384,6 +431,7 @@ describe('atenderMensajeProveedor', () => {
     sendText.mockResolvedValue('wamid.TXT');
     const r = await atenderMensajeProveedor('5299911122233', 'llego en 40 min');
     expect(r).toContain('más de una solicitud activa');
+    // misma flota o no, el contenido no se multiplica; aquí son flotas distintas (t1, t2): ver la prueba de A37-S29-04
     expect(anotarEventoIncidencia).toHaveBeenCalledTimes(2);
     // NADA se cotizó: la atribución es del humano.
     expect(escrituras.filter((e) => e.clave === 'coordinacion_proveedor.claim')).toHaveLength(0);

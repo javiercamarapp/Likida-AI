@@ -692,3 +692,24 @@ describe('observabilidad mínima de la salida (T-A3-38)', () => {
     expect(sinPII('envío d0000000 intentos 3')).toBe('envío d0000000 intentos 3');
   });
 });
+
+describe('A37-S33-09: el proveedor del puerto falla ≠ la flota no tiene conector', () => {
+  it('con el proveedor caído el envío se suelta SIN cambiar de estado, sin alerta de «listo manual» y con un reintento corto', async () => {
+    const { SALIDA_NO_DISPONIBLE } = await import('./tms_puerto');
+    config = { ...config, destinatarioAlertaCorreo: 'oficina@flota.test' };
+    const e = sembrar(A, 1);
+    const r = await pasada(deps({ salida: async () => SALIDA_NO_DISPONIBLE }));
+    expect(r).toMatchObject({ soltados: 1, enEsperaManual: 0, alertas: 0, enviados: 0 });
+    expect(alertasEnvio).toHaveLength(0);
+    const f = await leer(A, e.id);
+    expect(f.estado).toBe('pendiente_prechequeo');
+    expect(f.intentos).toBe(0); // el reclamo no gasta un intento
+    expect(Date.parse(f.proximaRevision as string) - ahoraMs).toBeLessThan(30 * MIN);
+    expect(Date.parse(f.proximaRevision as string) - ahoraMs).toBeGreaterThan(0);
+    // Y cuando el proveedor se recupera, la siguiente pasada lo procesa normal (no esperó 6 h).
+    avanzar(31 * MIN);
+    const tms = puerto('ok'); puertos.set(A, tms);
+    const r2 = await pasada();
+    expect(r2).toMatchObject({ enviados: 1 });
+  });
+});

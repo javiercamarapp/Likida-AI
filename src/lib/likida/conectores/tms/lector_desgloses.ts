@@ -84,9 +84,10 @@ export function crearLectorDesglosesTms(o: OpcionesLectorTms): LectorDesglosesPu
       if (!Array.isArray(items)) throw new TmsNoDisponible('La respuesta del sistema de transporte no trae la lista esperada');
       crudas.push(...items);
       const total = Number(cuerpo ? leerRuta(cuerpo, cfg.rutaTotalPaginas) : undefined);
-      if (!Number.isFinite(total) || pagina >= total || items.length === 0) {
-        return crudas.map((c) => aEntrada(c, cfg));
-      }
+      // A37-S38-06: sin total numérico NO se da por completa la primera página; se sigue hasta una página
+      // vacía o más corta que el tamaño pedido (o el tope de páginas, que lanza).
+      const fin = items.length === 0 || (Number.isFinite(total) && total >= 1 ? pagina >= total : items.length < cfg.tamano);
+      if (fin) return crudas.map((c) => aEntrada(c, cfg));
     }
     // Más páginas que el tope: no se declara completa una lectura que no lo es (el cursor no avanza).
     throw new TmsNoDisponible('La lectura excedió el tope de páginas');
@@ -98,24 +99,27 @@ export function crearLectorDesglosesTms(o: OpcionesLectorTms): LectorDesglosesPu
       if (!Number.isInteger(p.limite) || p.limite < 1) throw new RangeError('limite debe ser un entero >= 1');
       const ahora = o.ahora();
       const desde = p.reLeerDesde ?? p.cursor?.desde ?? new Date(ahora - cfg.ventanaInicialDias * DIA_MS).toISOString();
-      const todas = (await leerVentana(desde, new Date(ahora).toISOString())).sort(orden);
+      const leidas = await leerVentana(desde, new Date(ahora).toISOString());
+      // A37-S38-08: una fila SIN fecha utilizable no tiene lugar en el cursor: no entra en la secuencia (jamás lo lleva a 1970);
+      // se reporta como rechazada, en la última página de toda lectura sin cursor y de toda relectura, A37-A1-liquidaciones-18).
+      const todas = leidas.filter((e) => e.sinInstante !== true).sort(orden);
       let candidatas = todas;
       if (p.reLeerDesde !== undefined) {
         const t = Date.parse(p.reLeerDesde);
-        // A37-A1-liquidaciones-18: la fila sin instante utilizable (época 0) no puede caer fuera de la ventana: se sigue reportando
-        // (excepción visible) en cada relectura hasta que el origen la corrija, en vez de desaparecer tras la primera corrida.
-        candidatas = todas.filter((e) => e.sinInstante === true || Date.parse(e.desde) >= t);
+        candidatas = todas.filter((e) => Date.parse(e.desde) >= t);
       } else if (p.cursor) {
         const c: Entrada = { desde: p.cursor.desde, id: p.cursor.despuesDe };
         candidatas = todas.filter((e) => orden(e, c) > 0);
       }
       const pagina = candidatas.slice(0, p.limite);
       const ultima = pagina[pagina.length - 1];
+      const hayMas = candidatas.length > pagina.length;
+      const sinFecha = !hayMas && (!p.cursor || p.reLeerDesde !== undefined) ? leidas.filter((e) => e.sinInstante === true) : [];
       return {
         items: pagina.flatMap((e) => (e.desglose ? [e.desglose] : [])),
-        rechazadas: pagina.flatMap((e) => (e.rechazada ? [e.rechazada] : [])),
+        rechazadas: [...pagina, ...sinFecha].flatMap((e) => (e.rechazada ? [e.rechazada] : [])),
         siguiente: ultima ? { desde: ultima.desde, despuesDe: ultima.id } : p.cursor,
-        hayMas: candidatas.length > pagina.length,
+        hayMas,
       };
     },
   };

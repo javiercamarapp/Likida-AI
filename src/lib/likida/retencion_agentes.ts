@@ -36,16 +36,24 @@ export interface ResultadoPurgaAgente {
 }
 
 export const PLAZOS_AGENTES = {
+  /** A37-A4-07: datos personales del Vigía (captura manual, texto de avisos, comentarios) tras la cita. PROPUESTO: lo fija el aviso de privacidad de cada flota. */
+  vigiaDatosPersonalesDias: 90,
   waVentanaDias: 7,
   waEnvioRegistroDias: 90,
   liquidacionExternaMeses: 60,
   peajeFallidosDias: 30,
   liquidacionEntregaCorreoMeses: 13,
+  /** Programa de despacho (0890, A37-S62-07): historia de cambios, cargas y comentarios libres. Piso de la función: 6. */
+  programaDespachoMeses: 12,
   /** Tope por purga y corrida. */
   limite: 5000,
 } as const;
 
-export type Llamada = { nombre: string; rpc: string; args: Record<string, unknown>; leer: (d: unknown) => { filas: number | null; parcial: boolean } };
+export type Llamada = {
+  nombre: string; rpc: string; args: Record<string, unknown>; leer: (d: unknown) => { filas: number | null; parcial: boolean };
+  /** La función puede no estar aplicada aún en la base (migración pendiente): se avisa y no cuenta como fallo. */
+  toleraAusencia?: boolean;
+};
 
 export const numero = (v: unknown): number | null => (typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : null);
 
@@ -75,7 +83,38 @@ const LLAMADAS = (ahora: string): Llamada[] => [
     args: { p_meses: PLAZOS_AGENTES.liquidacionEntregaCorreoMeses, p_limite: 500, p_ahora: ahora },
     leer: (d) => ({ filas: numero((d as { purgadas?: unknown } | null)?.purgadas), parcial: (d as { parcial?: unknown } | null)?.parcial === true }),
   },
+  {
+    // 0890 (A37-S62-08): lo que la 0788 deja (pedido_por, ultimo_error) y la entrega atascada más de `meses`.
+    nombre: 'liquidacion_entrega_correo_residuos', rpc: 'purgar_liquidacion_entrega_correo_residuos',
+    args: { p_meses: PLAZOS_AGENTES.liquidacionEntregaCorreoMeses, p_limite: 500, p_ahora: ahora },
+    leer: (d) => {
+      const o = d as { limpiadas?: unknown; atascadasCerradas?: unknown; parcial?: unknown } | null;
+      const a = numero(o?.limpiadas);
+      const b = numero(o?.atascadasCerradas);
+      return { filas: a === null || b === null ? null : a + b, parcial: o?.parcial === true };
+    },
+  },
+  {
+    // 0890 (A37-S62-07): historia de cambios y cargas viejas; comentarios libres de filas viejas.
+    nombre: 'programa_despacho', rpc: 'purgar_programa_despacho',
+    args: { p_meses: PLAZOS_AGENTES.programaDespachoMeses, p_limite: 1000, p_ahora: ahora },
+    leer: (d) => {
+      const o = d as { cambios?: unknown; comentariosVaciados?: unknown; cargas?: unknown; parcial?: unknown } | null;
+      const partes = [numero(o?.cambios), numero(o?.comentariosVaciados), numero(o?.cargas)];
+      return { filas: partes.some((x) => x === null) ? null : (partes as number[]).reduce((x, y) => x + y, 0), parcial: o?.parcial === true };
+    },
+  },
+  {
+    // 0892 (A37-A4-07): cada una de las tres tablas topa en `limite`; llegar a 3× el tope nunca pasa de 15,000 filas.
+    nombre: 'vigia_datos_personales', rpc: 'purgar_vigia_datos_personales',
+    args: { p_dias: PLAZOS_AGENTES.vigiaDatosPersonalesDias, p_limite: PLAZOS_AGENTES.limite },
+    leer: (d) => ({ filas: numero(d), parcial: numero(d) !== null && (numero(d) as number) >= PLAZOS_AGENTES.limite }),
+    toleraAusencia: true,
+  },
 ];
+
+/** PostgREST PGRST202 / Postgres 42883: la función aún no existe en la base. */
+const AUSENTE = new Set(['PGRST202', '42883']);
 
 /** Corre una lista de purgas, una tras otra. Nunca lanza: cada una devuelve su propio resultado. */
 export async function correrPurgas(llamadas: Llamada[], clavesLog = 'agentes'): Promise<ResultadoPurgaAgente[]> {
@@ -83,6 +122,11 @@ export async function correrPurgas(llamadas: Llamada[], clavesLog = 'agentes'): 
   for (const l of llamadas) {
     try {
       const r = await supabaseAdmin().rpc(l.rpc, l.args);
+      if (r.error && l.toleraAusencia && AUSENTE.has((r.error as { code?: string }).code ?? '')) {
+        logger.warn(`cron.purgar.${clavesLog}_sin_migrar`, { purga: l.nombre });
+        salida.push({ nombre: l.nombre, ok: true, filas: 0, parcial: false, error: null });
+        continue;
+      }
       if (r.error) {
         logger.error(`cron.purgar.${clavesLog}_fallo`, { purga: l.nombre, err: r.error.message });
         salida.push({ nombre: l.nombre, ok: false, filas: null, parcial: false, error: r.error.message });
@@ -104,7 +148,7 @@ export async function correrPurgas(llamadas: Llamada[], clavesLog = 'agentes'): 
   return salida;
 }
 
-/** Corre las cinco purgas. Nunca lanza. */
+/** Corre las purgas de los agentes (ocho). Nunca lanza. */
 export async function mantenerDatosAgentes(ahora: Date = new Date()): Promise<ResultadoPurgaAgente[]> {
   return correrPurgas(LLAMADAS(ahora.toISOString()), 'agentes');
 }

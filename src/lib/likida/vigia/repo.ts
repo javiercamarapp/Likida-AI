@@ -21,6 +21,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { envPuesta } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
+import { IDS_POR_TANDA } from '../pg';
 import { telefonoDeUsuario, telefonoJefeDe } from '../contactos';
 import { normalizarTelefonoWa } from '../wa_ventana';
 import { hashTelefono } from './servicio';
@@ -837,8 +838,15 @@ export function crearRepoVigia(): RepoVigia {
       }
       if (convs.length === 0) return [];
       const tenants = [...new Set(convs.map((c) => c.tenantId))];
-      const contactos = (exigir('en_espera_contactos', await acotada(db.from('vigia_contacto')
-        .select(COLS_CONTACTO).in('tenant_id', tenants).in('id', convs.map((c) => c.contactoId)), 'vigia.en_espera_contactos')) as Fila[] | null ?? []).map(aContacto);
+      // A37-S59-03: los ids viajan en la URL; con ~250 hilos un solo `.in()` pasaba de 11 KB, la consulta fallaba y el barrido entero
+      // quedaba sin escalar nada (el backlog nunca se drenaba). Por tandas de `IDS_POR_TANDA`, como el resto del repo.
+      const idsContacto = [...new Set(convs.map((c) => c.contactoId))];
+      const contactos: Contacto[] = [];
+      for (let i = 0; i < idsContacto.length; i += IDS_POR_TANDA) {
+        const tanda = (exigir('en_espera_contactos', await acotada(db.from('vigia_contacto')
+          .select(COLS_CONTACTO).in('tenant_id', tenants).in('id', idsContacto.slice(i, i + IDS_POR_TANDA)), 'vigia.en_espera_contactos')) as Fila[] | null ?? []).map(aContacto);
+        contactos.push(...tanda);
+      }
       const criticos = await clientesCriticos(tenants);
       const candidatas: FilaEnEspera[] = [];
       for (const conversacion of convs) {

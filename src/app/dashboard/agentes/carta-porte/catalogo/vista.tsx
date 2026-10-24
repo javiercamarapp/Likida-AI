@@ -214,7 +214,7 @@ function Importador({ ver, importar }: { ver: VerComo; importar: AccionesCatalog
             </select>
           </div>
           <div className="grow min-w-[220px]">
-            <label htmlFor="cat-imp-archivo" className={ETIQUETA}>Archivo CSV (hasta 5 MB)</label>
+            <label htmlFor="cat-imp-archivo" className={ETIQUETA}>Archivo CSV (hasta 4 MB)</label>
             <input id="cat-imp-archivo" type="file" accept=".csv,text/csv" onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} className="text-[12.5px]" />
             {archivo && <p className="text-[11px] pt-1" style={{ color: 'var(--faint)' }}>Archivo elegido: {archivo.name}</p>}
           </div>

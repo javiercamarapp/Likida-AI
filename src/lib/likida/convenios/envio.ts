@@ -125,6 +125,9 @@ async function enviarInstrucciones(
     // Soltar el sello aqui lo manda DOS veces: lo entrega el drenado del outbox y lo vuelve a mandar la
     // pasada siguiente del cron. Solo se libera cuando el rechazo no quedo encolado. (A33-03)
     if (r.bloqueadoPorCompuerta || (r.reintentable && !r.encolado)) await p.liberar(tenantId, viajeId, cual);
+    // A37-S39-01: encolado = el outbox es dueño de la entrega. El reclamo caduca a los CLAIM_CADUCA_MIN y el cron lo volvía a reclamar y
+    // a encolar (N copias al operador); se congela igual que un rechazo definitivo (sin sellar `enviado_en`: aún no se entregó).
+    else if (r.encolado && p.congelar) await p.congelar(tenantId, viajeId, cual, ahora);
     else if (cual !== 'despacho' && !r.reintentable && !r.encolado && p.congelar) await p.congelar(tenantId, viajeId, cual, ahora); // A37-A5-01
     logger.warn('convenios.envio_rechazado', { viajeId, cual, motivo: r.motivo, reintentable: r.reintentable });
     return { estado: 'rechazado', motivo: r.mensaje, reintentable: r.reintentable };

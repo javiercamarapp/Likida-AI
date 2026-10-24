@@ -433,11 +433,29 @@ export async function guardarEvidenciaDocumentoCierre(e: {
   }
   const evidenciaId = s((ins.data as Fila | null)?.id);
   const estado: EstadoDocumentoCierre = estadoDeAccion(e.accion);
-  const upd = await acotada(supabaseAdmin().from('viaje_documento_cierre').update({
+  // A37-S36-08: el UPDATE es lo que cierra el documento en el tablero. Se reintenta UNA vez (es idempotente: mismos valores) y, si
+  // sigue fallando, NO se responde «recibí tu documento» con la fila aún pendiente: se devuelve 'fallo' para que el chofer reenvíe.
+  let upd = await actualizarEstadoDocumentoCierre(e, estado, evidenciaId);
+  if (upd.error) upd = await actualizarEstadoDocumentoCierre(e, estado, evidenciaId);
+  if (upd.error) {
+    logger.error('conductor.documento_cierre_estado_no_anotado', { documento: e.documentoCierreId, err: upd.error.message });
+    // Se retira la evidencia de este intento: el reenvío de la MISMA foto toparía con el UNIQUE (viaje_hito_id, ciclo, sha256) y se
+    // contestaría «ya tenía esa foto» con el documento todavía pendiente, para siempre. La imagen sigue en el almacenamiento.
+    if (evidenciaId) {
+      const del = await acotada(supabaseAdmin().from('viaje_hito_evidencia').delete().eq('id', evidenciaId).eq('tenant_id', e.tenantId), 'conductor.documento_cierre_evidencia_retirar');
+      if (del.error) logger.error('conductor.documento_cierre_evidencia_no_retirada', { documento: e.documentoCierreId, err: del.error.message });
+    }
+    return 'fallo';
+  }
+  return 'ok';
+}
+
+async function actualizarEstadoDocumentoCierre(
+  e: { tenantId: string; documentoCierreId: string; intentos: number; ahora: Date }, estado: EstadoDocumentoCierre, evidenciaId: string | null,
+) {
+  return acotada(supabaseAdmin().from('viaje_documento_cierre').update({
     estado, intentos_legibilidad: e.intentos, recibido_en: estado === 'pendiente' ? null : e.ahora.toISOString(), viaje_hito_evidencia_id: evidenciaId,
   }).eq('id', e.documentoCierreId).eq('tenant_id', e.tenantId), 'conductor.documento_cierre_estado_actualizar');
-  if (upd.error) logger.warn('conductor.documento_cierre_estado_no_anotado', { documento: e.documentoCierreId, err: upd.error.message });
-  return 'ok';
 }
 
 /** La foto llegó, pero su caption no nombró a ninguno de los documentos pendientes: se guarda igual (nunca se pierde), sin marcar ningún documento. */

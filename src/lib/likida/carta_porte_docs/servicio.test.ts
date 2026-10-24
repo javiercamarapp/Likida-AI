@@ -49,6 +49,17 @@ describe('recibirDocumento', () => {
     expect(tipos(a.documentoId)).toEqual(['recibido', 'duplicado_recibido']);
   });
 
+  it('A37-S33-05: reenviar un archivo cuyo documento ya se purgó NO deja un archivo huérfano y lo dice', async () => {
+    const bytes = await pdfBoreal();
+    const a = await subir(A, bytes, 'a.pdf', { canal: 'manual' });
+    const ruta = estado.docs.get(a.documentoId)!.storageRuta!;
+    await repo.marcarPurgado(A, a.documentoId); // retención: deja storageRuta en null
+    estado.archivos.delete(ruta);
+    const b = await recibirDocumento(A, { canal: 'whatsapp', nombre: 'otra-vez.pdf', bytes }, sinAgenteApagado);
+    expect(b).toMatchObject({ ok: true, duplicado: true, documentoId: a.documentoId, archivoPurgado: true });
+    expect(estado.archivos.has(ruta)).toBe(false);
+  });
+
   it('el mismo archivo en OTRA flota es otro documento (aislamiento entre tenants)', async () => {
     const bytes = await pdfBoreal();
     const a = await subir(A, bytes);
@@ -75,6 +86,18 @@ describe('recibirDocumento', () => {
     const r = await recibirDocumento(A, { canal: 'manual', nombre: 'x.pdf', bytes: await pdfBoreal() }, { apagado: async () => true });
     expect(r).toMatchObject({ ok: false, motivo: 'agente_apagado' });
     expect(estado.docs.size).toBe(0);
+  });
+
+  it('A37-A3-17: el reenvío de un documento ya purgado no deja el archivo huérfano en Storage', async () => {
+    const bytes = await pdfBoreal();
+    const r1 = await recibirDocumento(A, { canal: 'manual', nombre: 'x.pdf', bytes }, sinAgenteApagado);
+    if (!r1.ok) throw new Error('no recibió');
+    const d = estado.docs.get(r1.documentoId)!;
+    estado.archivos.delete(d.storageRuta!); // la purga borró el archivo y la referencia
+    d.storageRuta = null; d.purgadoEn = new Date().toISOString();
+    const r2 = await recibirDocumento(A, { canal: 'manual', nombre: 'x.pdf', bytes }, sinAgenteApagado);
+    expect(r2).toMatchObject({ ok: true, duplicado: true });
+    expect(estado.archivos.size).toBe(0);
   });
 
   it('un cliente de otra flota se rechaza', async () => {
@@ -126,13 +149,16 @@ describe('procesarDocumento', () => {
     expect(d.ultimoError).toBeNull();
   });
 
-  it('el nombre del archivo llega al extractor: EXPO deduce el régimen y deja el pedimento vacío (T-A3-46)', async () => {
+  it('el nombre del archivo llega al extractor: EXPO deduce el régimen pero NO borra el pedimento ni el RFC leídos: avisa del conflicto (T-A3-46, A37-S31-06)', async () => {
     const llm = llmFalso((e) => salida(e.nivel, { folio_cliente: ['EX-200', 0.97, 'Folio: EX-200'] }, [{ descripcion: ['Piezas de plastico', 0.97, null], bienes_transp: ['24121500', 0.97, null], cantidad: ['10', 0.97, null], clave_unidad: ['H87', 0.97, null], peso_kg: ['100', 0.97, null], pedimento: ['26 47 1234 5670001', 0.97, null], rfc_importador: [RFC.atlas, 0.97, null] }]));
     const { documentoId } = await subirYProcesar(A, Buffer.from('Folio: EX-200\nMercancia: Piezas de plastico\n'), llm, 'CCP Transportes-Cliente EXPO TX4471 15-10-26.txt');
     const f = estado.docs.get(documentoId)!.extraccion!.mercancias[0];
     expect(f.regimen_aduanero).toMatchObject({ valor: 'EXD', origen: 'derivado' });
-    expect(f.pedimento.valor).toBeNull();
-    expect(f.rfc_importador.valor).toBeNull();
+    expect(f.pedimento.valor).toBe('26 47 1234 5670001');
+    expect(f.rfc_importador.valor).toBe(RFC.atlas);
+    expect(f.pedimento.notas?.join(' ')).toContain('confirma si es importación o exportación');
+    // y la validación avisa del conflicto en lugar de omitir en silencio.
+    expect(estado.docs.get(documentoId)!.validacion?.hallazgos.filter((h) => h.codigo === 'regimen_de_nombre_con_datos_de_importacion').map((h) => h.campo).sort()).toEqual(['pedimento', 'rfc_importador']);
   });
 
   it('un PDF escaneado y una foto van al modelo como imagen', async () => {
@@ -191,6 +217,14 @@ describe('procesarDocumento', () => {
     expect(d.ultimoError).toMatch(/PDF está dañado/);
     expect(await procesarDocumento(A, r.documentoId, { ...sinAgenteApagado, llm: () => llmBoreal() })).toMatchObject({ ok: false, motivo: 'no_reclamable' });
     expect(tipos(r.documentoId)).toContain('extraccion_fallida');
+  });
+
+  it('A37-A3-06: una respuesta truncada del modelo dice «demasiados renglones» y no se reintenta sola (daría lo mismo)', async () => {
+    const r = await subir(A, await pdfBoreal());
+    const truncado = llmFalso(() => { const e = new Error('Respuesta truncada: se agotaron los 16000 tokens de salida (usó 16000) antes de cerrar el JSON'); e.name = 'TruncatedError'; throw e; });
+    const p = await procesarDocumento(A, r.documentoId, { ...sinAgenteApagado, llm: () => truncado });
+    expect(p).toMatchObject({ ok: false, motivo: 'modelo', permanente: true });
+    expect(estado.docs.get(r.documentoId)?.ultimoError).toMatch(/demasiados renglones/);
   });
 
   it('si el modelo falla, queda fallido REINTENTABLE y el reintento funciona', async () => {

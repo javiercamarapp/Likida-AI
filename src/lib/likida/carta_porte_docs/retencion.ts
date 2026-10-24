@@ -3,8 +3,8 @@
 //
 // Contienen datos personales de terceros (nombre, licencia y RFC del operador, RFC
 // de remitente y destinatario). `retener_hasta` manda; al vencer se borra el archivo
-// de Storage y el texto, y la fila queda como constancia (huella, quién, cuándo,
-// a qué viaje llegó) con `purgado_en`. Va colgada del cron `/api/cron/purgar`.
+// de Storage, el texto, la extracción, la validación, el remitente, el asunto y los valores de las correcciones, y la
+// fila queda como constancia (huella, estado, conteos, a qué viaje llegó) con `purgado_en`. Va colgada del cron `/api/cron/purgar`.
 //
 // Falla cerrado hacia ADELANTE: si el archivo no se pudo borrar, la fila NO se marca
 // purgada y la corrida siguiente lo reintenta; marcar sin borrar sería declarar
@@ -22,6 +22,8 @@ export async function purgarDocumentosVencidos(limite = 100): Promise<ResultadoP
   for (const v of vencidos) {
     try {
       if (v.storageRuta) await repo.borrarArchivo(v.storageRuta);
+      // Antes de marcar: si esto falla la fila NO queda purgada y la corrida siguiente lo reintenta (A37-A3-11).
+      await repo.anonimizarCorrecciones(v.tenantId, v.id);
       if (await repo.marcarPurgado(v.tenantId, v.id)) {
         purgados++;
         await repo.registrarEvento(v.tenantId, v.id, 'purgado', null, {});

@@ -66,7 +66,7 @@ vi.mock('./wa_ventana', () => ({
   registrarDecisionEnvio: async () => {},
 }));
 vi.mock('./operacion', () => ({ avisarAlChofer }));
-vi.mock('./contactos', () => ({ telefonosJefe }));
+vi.mock('./contactos', () => ({ telefonosJefe, resolverJefes: async (ids: string[]) => { const m = await telefonosJefe(ids); return (t: string) => m[t] ?? null; } }));
 // El motor de avisos se mockea ENTERO: desde que el escalado emite su propio
 // aviso (`conductores:escalado`), estas pruebas necesitan VER las llamadas —
 // a quién, con qué magnitud y con qué folios — sin arrastrar la base que el

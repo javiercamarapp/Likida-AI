@@ -33,6 +33,14 @@ export const maxDuration = 60;
 /** Margen para el latido y la respuesta dentro del `maxDuration`. */
 const MARGEN_MS = 12_000;
 
+/**
+ * A37-A5-11: el motor de mensajes (envíos de 1-2 s cada uno) se llevaba TODO el reloj y dejaba sin correr el ciclo por geocerca, la
+ * validación y la señal de vida. Cada fase tiene ahora su tope: el motor corta a los 20 s; las fases intermedias dejan una reserva
+ * para la señal de vida (la que importa si un camión se perdió), que conserva el vencimiento global completo.
+ */
+const PRESUPUESTO_MOTOR_MS = 20_000;
+const RESERVA_SENAL_VIDA_MS = 10_000;
+
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CRON DEL AGENTE 5 «CONDUCTOR» (0380): pide, persigue y escala los hitos.
 //
@@ -94,7 +102,10 @@ export async function GET(req: Request) {
     const venceEn = inicio + (maxDuration * 1000) - MARGEN_MS;
     // El Conductor (A5) se encendió para las flotas con perfil el 18-oct-2026: ninguna flota se excluye ya por tener perfil.
     const saltar: ReadonlySet<string> = new Set();
-    const r = await correrConductor(sinFlotasEnViajes(puertosReales(), saltar), { venceEn });
+    const venceMotor = Math.min(venceEn, inicio + PRESUPUESTO_MOTOR_MS);
+    // Las fases intermedias no pueden comerse la reserva de la señal de vida.
+    const venceIntermedias = venceEn - RESERVA_SENAL_VIDA_MS;
+    const r = await correrConductor(sinFlotasEnViajes(puertosReales(), saltar), { venceEn: venceMotor });
 
     // 0385: las dos pasadas nuevas. Cada una aislada: si una revienta, la otra corre y el latido sale `parcial`
     // con el motivo (un `try` global las haría caer juntas y taparía cuál falló).
@@ -112,21 +123,21 @@ export async function GET(req: Request) {
     // (el GPS entra o sale del sitio y el hito se registra solo). Van ANTES de la validación y de los avisos de llegada: una llegada
     // que el GPS acaba de dar por hecha no debe avisar como «sin confirmar». Aislados como los demás.
     try {
-      sitios = await barridoSitioDerivado({ candidatos: sinFlotasEnCandidatos(leerCandidatosSitioDerivado, saltar), catalogo: leerCatalogoSitios, equivalencias: (t) => leerEquivalenciasSitio(t), asignar: asignarSitioDerivado, marcarSinSitio: (t, v, l, a) => marcarSinSitioPorDecision(t, v, l, a) }, new Date(), venceEn);
+      sitios = await barridoSitioDerivado({ candidatos: sinFlotasEnCandidatos(leerCandidatosSitioDerivado, saltar), catalogo: leerCatalogoSitios, equivalencias: (t) => leerEquivalenciasSitio(t), asignar: asignarSitioDerivado, marcarSinSitio: (t, v, l, a) => marcarSinSitioPorDecision(t, v, l, a) }, new Date(), venceIntermedias);
       if (sitios.fallos > 0) extras.push(`sitio derivado: ${sitios.fallos} viajes con fallo`);
     } catch (e) {
       extras.push(`sitio derivado: ${e instanceof Error ? e.message : String(e)}`);
       logger.error('cron.conductor_hitos.sitio_derivado_fallo', { error: e instanceof Error ? e.message : String(e) });
     }
     try {
-      ciclo = await barridoCicloGps(sinFlotasEnViajes(puertosCicloGpsReales(), saltar), new Date(), venceEn);
+      ciclo = await barridoCicloGps(sinFlotasEnViajes(puertosCicloGpsReales(), saltar), new Date(), venceIntermedias);
       extras.push(...ciclo.fallos);
     } catch (e) {
       extras.push(`ciclo por geocerca: ${e instanceof Error ? e.message : String(e)}`);
       logger.error('cron.conductor_hitos.ciclo_gps_fallo', { error: e instanceof Error ? e.message : String(e) });
     }
     try {
-      alertas = await correrAlertasEstadia(sinFlotasEnViajes(puertosReales(), saltar), { venceEn });
+      alertas = await correrAlertasEstadia(sinFlotasEnViajes(puertosReales(), saltar), { venceEn: venceIntermedias });
       extras.push(...alertas.fallos);
     } catch (e) {
       extras.push(`alertas de estadía: ${e instanceof Error ? e.message : String(e)}`);
@@ -134,7 +145,7 @@ export async function GET(req: Request) {
     }
     // T-A5-43: «¿con quién te reportaste?» y la rampa (apagado por flota por omisión; pasa por la compuerta de unidad detenida). Aislado como los demás.
     try {
-      reporte = await correrReporteLlegada(sinFlotasEnViajes(puertosReporteReales(), saltar), { venceEn });
+      reporte = await correrReporteLlegada(sinFlotasEnViajes(puertosReporteReales(), saltar), { venceEn: venceIntermedias });
       extras.push(...reporte.fallos);
     } catch (e) {
       extras.push(`reporte de llegada: ${e instanceof Error ? e.message : String(e)}`);
@@ -142,14 +153,14 @@ export async function GET(req: Request) {
     }
     // T-A5-39: «detención sin aviso» — una pregunta al chofer por episodio (apagado por flota por omisión; con la unidad detenida y por la compuerta). Aislado como los demás.
     try {
-      detencion = await correrDeteccionParada(sinFlotasEnViajes(puertosDetencionReales(), saltar), { venceEn });
+      detencion = await correrDeteccionParada(sinFlotasEnViajes(puertosDetencionReales(), saltar), { venceEn: venceIntermedias });
       extras.push(...detencion.fallos);
     } catch (e) {
       extras.push(`detención sin aviso: ${e instanceof Error ? e.message : String(e)}`);
       logger.error('cron.conductor_hitos.deteccion_parada_fallo', { error: e instanceof Error ? e.message : String(e) });
     }
     try {
-      validacion = await barridoValidacion({ candidatos: sinFlotasEnValidacion(leerCandidatosValidacion, saltar), configDe: leerConfigConductor, deps: depsValidacionReales }, new Date(), venceEn);
+      validacion = await barridoValidacion({ candidatos: sinFlotasEnValidacion(leerCandidatosValidacion, saltar), configDe: leerConfigConductor, deps: depsValidacionReales }, new Date(), venceIntermedias);
       if (validacion.fallos > 0) extras.push(`validación: ${validacion.fallos} hito(s) sin poder validar`);
     } catch (e) {
       extras.push(`validación de ubicación: ${e instanceof Error ? e.message : String(e)}`);
@@ -158,7 +169,7 @@ export async function GET(req: Request) {
     // 0604: el aviso al jefe de tráfico por «ya llegué» sin confirmar (apagado por flota por omisión). Va DESPUÉS de la validación (una llegada que el barrido acaba de confirmar no debe avisar). Aislado como los demás;
     // una base sin la 0604/0385 no trae la perilla encendida en ninguna flota, así que no hay nada que avisar.
     try {
-      llegadas = await correrAlertasLlegadaSinConfirmar(sinFlotasEnViajes(puertosAlertaLlegadaReales(), saltar), { venceEn });
+      llegadas = await correrAlertasLlegadaSinConfirmar(sinFlotasEnViajes(puertosAlertaLlegadaReales(), saltar), { venceEn: venceIntermedias });
       extras.push(...llegadas.fallos);
     } catch (e) {
       extras.push(`llegada sin confirmar: ${e instanceof Error ? e.message : String(e)}`);
@@ -167,7 +178,7 @@ export async function GET(req: Request) {
     // 0580: el aviso de acercamiento a la planta (las instrucciones del convenio). Aislado como los otros dos: un fallo aquí
     // no frena el resto. La base sin migrar (sin tablas de convenios) no es un fallo: no hay nada que avisar.
     try {
-      acercamiento = await barridoAcercamiento({ ...puertosAcercamientoReales, candidatos: sinFlotasEnCandidatos(puertosAcercamientoReales.candidatos, saltar) }, new Date(), venceEn);
+      acercamiento = await barridoAcercamiento({ ...puertosAcercamientoReales, candidatos: sinFlotasEnCandidatos(puertosAcercamientoReales.candidatos, saltar) }, new Date(), venceIntermedias);
       if (acercamiento.fallos > 0) extras.push(`acercamiento: ${acercamiento.fallos} aviso(s) con fallo`);
     } catch (e) {
       if (!(e instanceof ConveniosNoDisponibles)) {

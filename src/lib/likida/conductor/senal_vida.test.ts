@@ -271,7 +271,7 @@ function mundo(o: {
   const viajes = o.viajes ?? [viajeBase({ id: 'v1', unidadId: 'u1' })];
   let episodio: EpisodioFila | null = o.episodio ?? null;
   const enviados: Env[] = [];
-  const llamadas = { abrir: 0, niveles: [] as number[], cerrados: [] as string[], fallos: [] as string[] };
+  const llamadas = { abrir: 0, niveles: [] as number[], cerrados: [] as string[], fallos: [] as string[], liberados: [] as number[] };
   const puertos: PuertosSenalVida = {
     viajes: async () => viajes,
     hitosDe: async (ids) => (o.hitosViaje ?? TRANSITO).filter((h) => ids.includes(h.viajeId)),
@@ -291,6 +291,7 @@ function mundo(o: {
     reclamarNivel: async (_e, nivel) => { llamadas.niveles.push(nivel); return o.reclamar ?? 'ganado'; },
     cerrar: async (_e, motivo) => { llamadas.cerrados.push(motivo); },
     anotarFallo: async (_e, t) => { llamadas.fallos.push(t); },
+    liberarNivel: async (_e, n) => { llamadas.liberados.push(n); },
     enviar: async (telefono, m, contexto) => {
       const e = { telefono, texto: m.texto, plantilla: m.plantilla.nombre, botones: m.botones.map((b) => b.id), contexto };
       const r = o.envio ? o.envio(e) : { ok: true as const };
@@ -372,6 +373,8 @@ describe('barridoSenalVida', () => {
     expect(r.sinDestinatario).toBe(1);
     expect(r.fallos[0]).toMatch(/a quién escalar/);
     expect(w.llamadas.fallos).toEqual(['sin_destinatario']);
+    // A37-S36-05: no queda «escalado»: el nivel 3 se suelta para reintentar cuando haya a quién avisar
+    expect(w.llamadas.liberados).toEqual([3]);
   });
 
   it('el que pierde el claim del nivel no manda nada (dos corridas solapadas no duplican el aviso)', async () => {

@@ -1446,7 +1446,6 @@ export async function senalGpsFlota(tenantId: string): Promise<SenalGps> {
 export async function getDatosResponsable(
   tenantId: string,
 ): Promise<DatosIntegral | null> {
-  const gpsPromise = senalGpsFlota(tenantId);
   const { data, error } = await acotada(supabaseAdmin()
     .from('tenant')
     // `contacto_privacidad` (0034) es el art. 29 y solo lo usa el aviso
@@ -1459,6 +1458,9 @@ export async function getDatosResponsable(
     .maybeSingle(), 'getDatosResponsable');
   if (error) throw new Error(`getDatosResponsable: ${error.message}`);
   if (!data) return null;
+  // A37-S12-09: la señal de GPS (consultas con service role) se mide SOLO si la flota existe; un id inventado en /aviso/<uuid>
+  // ya no cuesta dos consultas por petición.
+  const gpsPromise = senalGpsFlota(tenantId);
   // AUDITORÍA 28, LEG-A2 [ALTO]: `url_aviso_privacidad` no tiene un solo
   // escritor (ninguna pantalla de /admin ni /dashboard la captura), así que
   // con la columna vacía el simplificado cerraba en "la empresa aún no lo

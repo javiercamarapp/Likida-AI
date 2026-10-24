@@ -3,7 +3,7 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import * as repo from '@/lib/likida/carta_porte_docs/repo';
 import { CONFIG_SALIDA_ARRANQUE } from '@/lib/likida/carta_porte_docs/salida_config';
-import { SIN_TMS } from '@/lib/likida/carta_porte_docs/tms_puerto';
+import { sinConexionUtil } from '@/lib/likida/carta_porte_docs/tms_puerto';
 import { salidaDeFlota } from '@/lib/likida/carta_porte_docs/worker_envios_deps';
 import { sufijoTenant } from '../../../sufijo';
 import { listarCcpRecibidos, respuestaActiva } from '@/lib/likida/carta_porte_docs/ccp_respuesta_repo';
@@ -33,8 +33,8 @@ export default async function PaginaConfiguracionSalida({
 
   const fila = await repo.leerSalidaConfig(tenantId);
   const personas = await repo.usuariosRevisores(tenantId);
-  const puerto = await salidaDeFlota(tenantId); // nunca lanza: sin conector es SIN_TMS
-  const hayConector = puerto !== SIN_TMS;
+  const puerto = await salidaDeFlota(tenantId); // nunca lanza: sin conector es SIN_TMS, proveedor caído es SALIDA_NO_DISPONIBLE
+  const hayConector = !sinConexionUtil(puerto);
 
   // A37-A3-01: los CCP timbrados recibidos y el interruptor de la respuesta. Si no se pueden leer, la pantalla de configuración
   // sigue viva y la sección lo DICE (no finge «no ha llegado ninguno»).

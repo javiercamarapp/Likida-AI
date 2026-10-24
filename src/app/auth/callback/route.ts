@@ -4,6 +4,7 @@
 // la deja en las cookies (mismo cliente/cookies que supabaseServer() usa en
 // el resto del panel).
 import { NextResponse, type NextRequest } from 'next/server';
+import { logger } from '@/lib/logger';
 import { supabaseServer } from '@/lib/supabase/server';
 import { getSessionTenant } from '@/lib/auth/session';
 import { puertaDeEntrada } from '@/lib/auth/visibilidad';
@@ -50,7 +51,8 @@ export async function GET(req: NextRequest) {
         }
         return NextResponse.redirect(new URL(dest, req.url));
       }
-    } catch {
+    } catch (e) {
+      logger.warn('auth.callback.intercambio_fallo', { error: e instanceof Error ? e.message : String(e) });
       // Fallo inesperado del SDK o supabaseServer() — cae al mismo fallback
       // para evitar que un error raro se vuelva un 500 genérico en la pantalla
       // de login más importante
@@ -71,7 +73,8 @@ export async function GET(req: NextRequest) {
       if (reenvio === 'reciente') {
         return NextResponse.redirect(new URL('/login?error=caducado_reciente', req.url));
       }
-    } catch {
+    } catch (e) {
+      logger.warn('auth.callback.reenvio_fallo', { error: e instanceof Error ? e.message : String(e) });
       // sin red ni Supabase no hay reenvío — el mensaje de caducado basta
     }
   }
