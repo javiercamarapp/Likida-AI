@@ -657,7 +657,7 @@ export async function generateStructured<T>(opts: {
   budget?: LlmBudget;
   /** T-A3-68: se avisa de cada caída (modo `json_object` o modelo de respaldo) para dejarla en el rastro del documento. */
   onCaida?: (c: CaidaLlm) => void;
-}): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number; costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }>; /** ms en el proveedor, SUMA de todos los intentos del turno (E1-A). */ ms: number }> {
+}): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number; costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }>; /** ms en el proveedor, SUMA de todos los intentos del turno (E1-A). */ ms: number; /** A37-S60-05: el proveedor omitió `usage` en algún intento; `cost` es la RESERVA (cota), no lo medido. */ noMedido?: true }> {
   const model = modelFor(opts.role);
   const fallback = FALLBACK_POR_ROL[opts.role] ?? FALLBACK[model] ?? null;
   const jsonSchema = z.toJSONSchema(opts.schema, { target: 'draft-7' }) as Record<string, unknown>;
@@ -712,6 +712,8 @@ export async function generateStructured<T>(opts: {
   const costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }> = {};
   // E1-A: ms acumulados en el proveedor a lo largo de los intentos del turno (lo que el usuario esperó, sin contar la reserva).
   let msAcumulados = 0;
+  // A37-S60-05: algún intento volvió sin `usage` (ver `attempt`).
+  let sinMedir = false;
   const cobrar = (u: { model: string; tokensIn: number; tokensOut: number; cost: number }) => {
     gastado.tokensIn += u.tokensIn;
     gastado.tokensOut += u.tokensOut;
@@ -720,7 +722,7 @@ export async function generateStructured<T>(opts: {
     costoPorModelo[u.model] = { tokensIn: prev.tokensIn + u.tokensIn, tokensOut: prev.tokensOut + u.tokensOut, cost: prev.cost + u.cost };
   };
 
-  const attempt = async (m: string, note?: string, tope?: number): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number; costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }>; ms: number }> => {
+  const attempt = async (m: string, note?: string, tope?: number): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number; costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }>; ms: number; noMedido?: true }> => {
     // Si el presupuesto ya se agotó, no se paga una llamada que se va a cortar a
     // media respuesta.
     opts.signal?.throwIfAborted();
@@ -789,6 +791,14 @@ export async function generateStructured<T>(opts: {
     const tokOut = res.usage?.completion_tokens ?? 0;
     const usage = { model: res.model || m, tokensIn: tokIn, tokensOut: tokOut, cost: costoReal(res.usage as { cost?: number } | undefined, m, tokIn, tokOut) };
     const usageValido = Boolean(res.usage && (tokIn > 0 || tokOut > 0 || typeof (res.usage as { cost?: unknown }).cost === 'number'));
+    // A37-S60-05: sin `usage` del proveedor el ledger ya conserva la RESERVA; el costo que se
+    // devuelve (y que el llamador escribe en `llm_costo`) debe decir lo mismo y llevar la marca
+    // `noMedido`, no un $0 con cara de medición (mismo patrón que `generateResponse`).
+    if (!usageValido) {
+      sinMedir = true;
+      if (reservation) usage.cost = reservation.amountUsd;
+      logger.warn('llm.usage_omitido', { fn: 'generateStructured', model: usage.model, reserva: reservation?.amountUsd ?? null });
+    }
     await settle(usageValido ? usage.cost : reservation?.amountUsd ?? usage.cost);
     // Se cobra AQUÍ, antes de cualquier salida: pase lo que pase debajo —
     // truncado, JSON roto, schema inválido— esta llamada ya se pagó.
@@ -818,7 +828,7 @@ export async function generateStructured<T>(opts: {
     // Se devuelve el ACUMULADO del turno, no el de este intento: el llamador
     // quiere saber qué costó extraer este comprobante, no qué costó el último
     // reintento.
-    return { data: v.data, raw, model: usage.model, ...gastado, costoPorModelo, ms: msAcumulados };
+    return { data: v.data, raw, model: usage.model, ...gastado, costoPorModelo, ms: msAcumulados, ...(sinMedir ? { noMedido: true as const } : {}) };
   };
 
   /**
@@ -1042,6 +1052,8 @@ export async function generateWithTools(opts: {
   tokensIn: number;
   tokensOut: number;
   cost: number;
+  /** A37-S60-05: alguna ronda volvió sin `usage`; su costo es la RESERVA (cota conservadora), no lo medido. */
+  noMedido?: true;
   /**
    * El mismo total de `cost`, pero partido por el modelo que de verdad
    * respondió cada ronda. `model`/`cost` arriba son el resumen de UNA fila para
@@ -1080,6 +1092,9 @@ export async function generateWithTools(opts: {
     const prev = costoPorModelo[m] ?? { tokensIn: 0, tokensOut: 0, cost: 0 };
     costoPorModelo[m] = { tokensIn: prev.tokensIn + tIn, tokensOut: prev.tokensOut + tOut, cost: prev.cost + c };
   };
+  // A37-S60-05: qué pasó con el `usage` de la ÚLTIMA completion (lo escribe `completion`, lo lee el bucle).
+  let ultimaRonda: { medida: boolean; reservaUsd: number | null } = { medida: true, reservaUsd: null };
+  let sinMedir = false;
   let activeModel = model; // cambia a fallback si el primario cae (persiste el resto del ciclo)
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -1168,18 +1183,21 @@ export async function generateWithTools(opts: {
         options?: { signal?: AbortSignal },
       ) => PromiseLike<OpenAI.Chat.ChatCompletion>;
       const response = await create(body, signalOpt);
+      const usageDeLaRonda = response.usage as (typeof response.usage & { cost?: number }) | undefined;
+      const usageCompletaRonda = Boolean(usageDeLaRonda
+        && Number.isFinite(usageDeLaRonda.prompt_tokens)
+        && Number.isFinite(usageDeLaRonda.completion_tokens)
+        && (usageDeLaRonda.prompt_tokens > 0 || usageDeLaRonda.completion_tokens > 0 || typeof usageDeLaRonda.cost === 'number'));
+      ultimaRonda = { medida: usageCompletaRonda, reservaUsd: reservation?.amountUsd ?? null };
       if (reservation) {
         try {
-          const usage = response.usage as (typeof response.usage & { cost?: number }) | undefined;
-          const usageCompleta = usage
-            && Number.isFinite(usage.prompt_tokens)
-            && Number.isFinite(usage.completion_tokens)
-            && (usage.prompt_tokens > 0 || usage.completion_tokens > 0 || typeof usage.cost === 'number');
+          const usage = usageDeLaRonda;
+          const usageCompleta = usageCompletaRonda;
           // Si el proveedor omite usage no conocemos el costo real. Conservar
           // la reserva es la única opción segura: liquidar a cero abriría la
           // puerta a que el siguiente completion rebase el tope duro.
           const costo = usageCompleta
-            ? costoReal(usage as { cost?: number }, activeModel, usage.prompt_tokens, usage.completion_tokens)
+            ? costoReal(usage as { cost?: number }, activeModel, usage!.prompt_tokens, usage!.completion_tokens)
             : reservation.amountUsd;
           // RENDIMIENTO-19C2-1: mismo motivo que `reservarCompletion` — la
           // RPC de liquidación hereda la señal en vez de poder seguir
@@ -1253,7 +1271,13 @@ export async function generateWithTools(opts: {
       tokOut += rOut;
       // `activeModel` ya refleja quién respondió ESTA ronda: `complete` lo mueve
       // al fallback antes de devolver.
-      const costoRonda = costoReal(res.usage as { cost?: number } | undefined, activeModel, rIn, rOut);
+      let costoRonda = costoReal(res.usage as { cost?: number } | undefined, activeModel, rIn, rOut);
+      if (!ultimaRonda.medida) {
+        // A37-S60-05: sin `usage` el ledger conserva la reserva; el costo devuelto dice lo mismo y lo marca.
+        sinMedir = true;
+        if (ultimaRonda.reservaUsd !== null) costoRonda = ultimaRonda.reservaUsd;
+        logger.warn('llm.usage_omitido', { fn: 'generateWithTools', model: activeModel, reserva: ultimaRonda.reservaUsd });
+      }
       costo += costoRonda;
       acumularCosto(activeModel, rIn, rOut, costoRonda);
       used = res.model || activeModel;
@@ -1287,7 +1311,7 @@ export async function generateWithTools(opts: {
         // que la respondió. (Antes se precificaba aquí, de una vez, con el
         // modelo activo al final: correcto solo si el ciclo entero corrió en el
         // mismo modelo.)
-        return { finalText: choice?.message?.content ?? '', toolCalls: executed, model: used, tokensIn: tokIn, tokensOut: tokOut, cost: costo, costoPorModelo };
+        return { finalText: choice?.message?.content ?? '', toolCalls: executed, model: used, tokensIn: tokIn, tokensOut: tokOut, cost: costo, costoPorModelo, ...(sinMedir ? { noMedido: true as const } : {}) };
       }
 
       // LOOP-GUARD: CORTAR ANTES DE GASTAR LA RONDA, NO DESPUÉS.
