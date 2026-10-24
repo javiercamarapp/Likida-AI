@@ -34,6 +34,9 @@ describe('T-A5-58 · detección (lista configurable, sin falsos positivos)', () 
     'ya llegué a la rampa 4',
     'panicoso el tráfico',
     'despanico',
+    // A37-A5-12: una frase de angustia con «pánico» NO es una clave: pasa al reconocedor de asistencia.
+    'siento pánico, hay gente rara rondando el camión',
+    'me da panico manejar de noche',
     'hay amago de lluvia',
     'el mago de oz',
     'clave de la caja 4567',

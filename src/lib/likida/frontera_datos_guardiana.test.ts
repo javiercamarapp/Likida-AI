@@ -594,6 +594,7 @@ const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_315;
 // reclamos preparados al anular (+1, A37-A2-07). `liberarHuellaArchivo` sustituye al UPDATE inline de la huella (0 netas).
 // Auditoría 37, lote D-peajes-liquidacion-05 (+2, 2284 → 2286): peajes/repo.ts (+1 lectura de peaje_tag_baja antes de importar TAGs, S53-02; +1 lectura de desgloses anulados en listarReclamos, S53-03); ambas acotadas con `acotada` y por lotes.
 // A37-TRANSVERSAL-08 (+1): la lectura de `tms_sincronizacion` que rota el turno del cron `tms` (conectores/tms/sincronizar.ts, filtrada por tenant). Medido: 2,285.
+// Auditoría 37, A37-S12-06 (+2, 2,284 → 2,286): ruta del bus de workers (`api/worker/bus/[accion]`): lectura previa de `bus_pieza` por carpeta y descarga de la media anterior para comparar. Tablas del bus (sin tenant).
 // Auditoría 37, lote agentes-legal-ia (medido con el barrido real): +2 llamadas (2,264 → 2,266). `candidatos_redactor.ts` suma 3 `.from(` (prospecto, cola_aprobacion, prospecto_contacto) y `runner.ts` pierde la suya (+2 netas); `sdr.ts` pasa de 3 a 3 (la lectura por prospecto se volvió lectura en lote). Todo por `acotada`.
 // LOTE A37 peajes-liquidación-graves (migración 0865): +5 llamadas (2,264 → 2,269), 0 archivos nuevos, medido con el barrido real. `jornada/repo.ts` +1:
 // `.rpc('asentar_declaracion_jornada')` (A37-S48-01; la 0865 sustituye la marca derivada bajo el lock del expediente; el INSERT anterior se conserva

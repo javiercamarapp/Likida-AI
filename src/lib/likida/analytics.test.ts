@@ -181,6 +181,16 @@ describe('los renglones del panel son los mismos que los del PDF', () => {
     expect(cuadrarDesdeDB.mock.calls[0][3]).toEqual({ cerradaEn: '2026-07-31T02:00:00Z' });
   });
 
+  it('A37-S12-02: el detalle expone el estatus del VIAJE (el de la liquidación no sirve para «Reabrir»)', async () => {
+    respuestas.set('liquidacion', {
+      data: { id: 'liq-1', viaje_id: 'v1', estatus: 'cuadrada', total_comprobado: 9400, total_anticipo: 10000, diferencia: 600, created_at: '2026-07-31T02:00:00Z', viaje: { folio: 'F-1', estatus: 'liquidado' } },
+      error: null,
+    });
+    const d = await getLiquidacionDetalle('liq-1', TENANT);
+    expect(d!.estatus).toBe('cuadrada');
+    expect(d!.viaje.estatus).toBe('liquidado');
+  });
+
   it('la suma de los renglones es EXACTAMENTE el total comprobado', async () => {
     const d = await getLiquidacionDetalle('liq-1', TENANT);
     const suma = d!.gastos.reduce((s, g) => s + g.monto, 0);

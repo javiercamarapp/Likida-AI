@@ -82,7 +82,7 @@ const SINIESTRO =
 const VIA_BLOQUEADA = /\b(bloqueo|bloqueada|bloqueado)\b/;
 const EMERGENCIA_SUELTA = /\b911\b/;
 const AMBAR =
-  /\b(varado|varados|varada)\b|\bno (arranca|enciende|prende)\b|\bse salio del camino\b|\bse me fue el freno\b|\bsin frenos\b|\bhumo\b|\bse (sobre)?calento\b/;
+  /\b(varado|varados|varada)\b|\bno (arranca|enciende|prende)\b|\bse salio del camino\b|\bse me fue el freno\b|\bsin frenos\b|\bhumo\b|\bse (sobre)?calento\b|\bpanico\b/;
 
 /** ¿El texto trae violencia activa? El retén cuenta salvo que el propio
  *  mensaje diga que ya quedó atrás. */

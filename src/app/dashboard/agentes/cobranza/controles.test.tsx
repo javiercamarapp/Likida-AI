@@ -79,3 +79,10 @@ describe('BotonPausa — pausar y reanudar', () => {
     expect(html).not.toContain('style="color:var(--bad)"');
   });
 });
+
+describe('A37-S12-04 · BotonPausa manda el estado deseado', () => {
+  it('activo → el form pide «pausado»; pausado → pide «activo»', () => {
+    expect(renderToStaticMarkup(<BotonPausa alternarPausa={accionSimple} activo={true} />)).toMatch(/name="deseado"[^>]*value="pausado"|value="pausado"[^>]*name="deseado"/);
+    expect(renderToStaticMarkup(<BotonPausa alternarPausa={accionSimple} activo={false} />)).toMatch(/name="deseado"[^>]*value="activo"|value="activo"[^>]*name="deseado"/);
+  });
+});

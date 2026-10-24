@@ -96,6 +96,20 @@ describe('POST /api/worker/bus/[accion]', () => {
     expect(j.mediaPath).toBe('piezas/reel-1/.._.._etc_passwd');
   });
 
+  it('A37-S12-06: re-subir con otro copy una pieza ya aprobada la devuelve a pendiente y limpia la firma', async () => {
+    filasSelect = [{ id: 'p1', estado: 'aprobada', copy_md: 'copy viejo', media_path: null }];
+    await pedir('pieza', { rutina: 'marketing', carpeta: 'reel-9', titulo: 'R', tipo: 'copy', copyMd: 'copy NUEVO' });
+    const up = escrituras.find((e) => e.op === 'upsert');
+    expect(up?.valores).toMatchObject({ estado: 'pendiente', resuelto_en: null, resuelto_por: null });
+  });
+
+  it('A37-S12-06: re-subir exactamente lo mismo NO reabre la pieza aprobada', async () => {
+    filasSelect = [{ id: 'p1', estado: 'aprobada', copy_md: 'igual', media_path: null }];
+    await pedir('pieza', { rutina: 'marketing', carpeta: 'reel-9', titulo: 'R', tipo: 'copy', copyMd: 'igual' });
+    const up = escrituras.find((e) => e.op === 'upsert');
+    expect(up?.valores).not.toHaveProperty('estado');
+  });
+
   it('un error de la base es 500 con mensaje neutro (nada de Postgres al worker)', async () => {
     errorDb = { message: 'duplicate key value violates unique constraint' };
     const r = await pedir('corrida-fin', { id: UUID, exitCode: 0 });

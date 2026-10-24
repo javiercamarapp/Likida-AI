@@ -18,12 +18,26 @@ export const TERMINOS_SEGURIDAD: readonly string[] = [
   'boton de panico', 'boton panico', 'clave de panico', 'panico',
 ];
 
+/**
+ * A37-A5-12: «pánico» a secas es un dato sensible SOLO cuando el mensaje es esa palabra (o casi): «siento pánico, hay gente rara
+ * rondando el camión» es una frase de angustia, no una clave, y cortarla con «repórtala a monitoreo» dejaba al chofer sin que nadie
+ * se enterara. Esas frases siguen su camino hacia el reconocedor de asistencia (`interpretarAsistencia`).
+ */
+const TERMINOS_SOLO_SI_CORTOS: readonly string[] = ['panico'];
+const MAX_PALABRAS_TERMINO_SUELTO = 2;
+
 export const TEXTO_CLAVE_NO_AQUI = 'Esa clave no se manda por aquí; repórtala a monitoreo. 🙏';
 
 export function contieneDatoDeSeguridad(texto: string | null | undefined, terminos: readonly string[] = TERMINOS_SEGURIDAD): boolean {
   if (typeof texto !== 'string' || !texto) return false;
-  const t = ` ${normalizar(texto)} `;
-  return terminos.some((x) => t.includes(` ${normalizar(x)} `));
+  const limpio = normalizar(texto);
+  const t = ` ${limpio} `;
+  const palabras = limpio.split(' ').filter(Boolean).length;
+  return terminos.some((x) => {
+    const n = normalizar(x);
+    if (!t.includes(` ${n} `)) return false;
+    return !TERMINOS_SOLO_SI_CORTOS.includes(n) || palabras <= MAX_PALABRAS_TERMINO_SUELTO;
+  });
 }
 
 /** `null` = el texto no es sensible. Si lo es, la salida al chofer (sin repetir nada de lo que escribió). */
