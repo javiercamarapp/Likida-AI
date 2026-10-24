@@ -201,7 +201,7 @@ async function fabricarSeguimiento(c: CandidatoSdr): Promise<{ costoUsd: number;
   // A37-S28-03: una pieza `correo_seguimiento` de ESTE paso que ya existe en cualquier estado (aprobada pero aún
   // sin enviar por el tope/cadencia del Enviador, ya enviada, o RECHAZADA por un humano) bloquea una nueva: antes
   // solo miraba `pendiente`, y un seguimiento aprobado-sin-enviar se fabricaba otra vez (salían dos), y uno
-  // rechazado se regeneraba en cada vuelta. La carrera de dos corridas la arbitra el índice único de la 0904.
+  // rechazado se regeneraba en cada vuelta. La carrera de dos corridas SOLAPADAS sigue abierta hasta que exista un índice único parcial (ver el SQL propuesto en el PR de A37-S28-03).
   const { data: previas, error: errPrevias } = await supabaseAdmin()
     .from('cola_aprobacion').select('estado, fuentes')
     .eq('prospecto_id', c.id).eq('tipo', 'correo_seguimiento')

@@ -11,7 +11,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { DatoInvalido } from './errores';
-import { parsearImporteMx } from '@/lib/formato';
+import { parsearImporteMx, hoyMx } from '@/lib/formato';
 import { esUuidValido } from './intake/cfdi';
 import { acotada } from './presupuesto';
 import { getPerfilCrudo } from './repo';
@@ -100,7 +100,7 @@ const SELECT_CCP =
   'cliente:cliente_id (nombre, rfc), ' +
   'mercancias:viaje_mercancia (id, descripcion, bienes_transp, cantidad, clave_unidad, peso_kg, material_peligroso)';
 
-function filaAViajeCcp(f: unknown, materiaExcluida: boolean): ViajeCcp {
+export function filaAViajeCcp(f: unknown, materiaExcluida: boolean): ViajeCcp {
   const v = f as Record<string, unknown>;
   // PostgREST devuelve el embed como objeto (FK simple) — y como con todo
   // lo demás, ausencia es null, jamás un objeto vacío que finja datos.
@@ -111,20 +111,6 @@ function filaAViajeCcp(f: unknown, materiaExcluida: boolean): ViajeCcp {
   const declarado = {
     pisaFederal: typeof v.ccp_pisa_federal === 'boolean' ? v.ccp_pisa_federal : null,
     radioKm: num(v.ccp_radio_federal_km),
-  };
-
-  const decision = necesitaCartaPorte({
-    pisaTramoFederal: declarado.pisaFederal,
-    configVehicular: txt(u?.config_vehicular ?? null),
-    radioFederalKm: declarado.radioKm,
-    materiaExcluida,
-  });
-
-  const datosCliente: DatosClienteCcp = {
-    origenCp: txt(v.ccp_origen_cp), destinoCp: txt(v.ccp_destino_cp),
-    origenEstado: txt(v.ccp_origen_estado), destinoEstado: txt(v.ccp_destino_estado),
-    rfcDestinatario: txt(v.ccp_rfc_destinatario),
-    transpInternac: typeof v.ccp_transp_internac === 'boolean' ? v.ccp_transp_internac : null,
   };
 
   const mercancias: MercanciaFila[] = (Array.isArray(v.mercancias) ? v.mercancias : []).map((fila) => {
@@ -139,6 +125,24 @@ function filaAViajeCcp(f: unknown, materiaExcluida: boolean): ViajeCcp {
       materialPeligroso: typeof m.material_peligroso === 'boolean' ? m.material_peligroso : null,
     };
   });
+
+  // A37-S30-07: un renglón con material peligroso DECLARADO vuelve obligatorio el complemento igual que el hazmat
+  // del perfil (materia excluida): antes solo el perfil contaba y el viaje salía «no necesita» (traslado local)
+  // pese a la declaración del renglón.
+  const hayPeligrosoEnRenglon = mercancias.some((m) => m.materialPeligroso === true);
+  const decision = necesitaCartaPorte({
+    pisaTramoFederal: declarado.pisaFederal,
+    configVehicular: txt(u?.config_vehicular ?? null),
+    radioFederalKm: declarado.radioKm,
+    materiaExcluida: materiaExcluida || hayPeligrosoEnRenglon,
+  });
+
+  const datosCliente: DatosClienteCcp = {
+    origenCp: txt(v.ccp_origen_cp), destinoCp: txt(v.ccp_destino_cp),
+    origenEstado: txt(v.ccp_origen_estado), destinoEstado: txt(v.ccp_destino_estado),
+    rfcDestinatario: txt(v.ccp_rfc_destinatario),
+    transpInternac: typeof v.ccp_transp_internac === 'boolean' ? v.ccp_transp_internac : null,
+  };
 
   const datos: DatosChecklist = {
     viaje: {
@@ -179,19 +183,25 @@ function filaAViajeCcp(f: unknown, materiaExcluida: boolean): ViajeCcp {
 }
 
 export async function getEstadoCartaPorte(tenantId: string): Promise<EstadoCartaPorte> {
-  const [{ data, error, count }, perfil] = await Promise.all([
-    acotada(
-      supabaseAdmin().from('viaje')
-        .select(SELECT_CCP, { count: 'exact' })
-        .eq('tenant_id', tenantId)
-        .in('estatus', ['abierto', 'en_cuadre'])
-        .order('fecha_inicio', { ascending: true, nullsFirst: false })
-        .limit(LIMITE_CCP),
-      'getEstadoCartaPorte',
-    ),
+  // A37-S30-08: «los 50 más viejos» dejaba fuera los viajes que SALEN HOY cuando había abiertos estancados de fecha
+  // vieja. Ahora primero los próximos a salir (fecha de hoy en adelante, el más cercano primero) y, con lo que
+  // sobre del tope, los anteriores o sin fecha (el más reciente primero). `total` cuenta ambos grupos.
+  const hoy = hoyMx();
+  const base = () => supabaseAdmin().from('viaje')
+    .select(SELECT_CCP, { count: 'exact' })
+    .eq('tenant_id', tenantId)
+    .in('estatus', ['abierto', 'en_cuadre']);
+  const [proximos, anteriores, perfil] = await Promise.all([
+    acotada(base().gte('fecha_inicio', hoy)
+      .order('fecha_inicio', { ascending: true }).order('id', { ascending: true }).limit(LIMITE_CCP), 'getEstadoCartaPorte.proximos'),
+    acotada(base().or(`fecha_inicio.lt.${hoy},fecha_inicio.is.null`)
+      .order('fecha_inicio', { ascending: false, nullsFirst: false }).order('id', { ascending: true }).limit(LIMITE_CCP), 'getEstadoCartaPorte.anteriores'),
     getPerfilCrudo(tenantId),
   ]);
-  if (error) throw new Error(`getEstadoCartaPorte: ${error.message}`);
+  if (proximos.error) throw new Error(`getEstadoCartaPorte: ${proximos.error.message}`);
+  if (anteriores.error) throw new Error(`getEstadoCartaPorte: ${anteriores.error.message}`);
+  const data = [...(proximos.data ?? []), ...(anteriores.data ?? [])].slice(0, LIMITE_CCP);
+  const count = (proximos.count ?? (proximos.data ?? []).length) + (anteriores.count ?? (anteriores.data ?? []).length);
 
   // Hazmat DECLARADO en el perfil = materia excluida: el complemento es
   // obligatorio siempre y ninguna facilidad aplica (2.7.7.2.1 cuarto párrafo).
