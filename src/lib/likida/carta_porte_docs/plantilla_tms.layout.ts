@@ -149,9 +149,9 @@ const COLUMNAS_MERCANCIAS: ColumnaTabla[] = [
   t('L', 'Material Peligroso', 'mercancia.material_peligroso', true, { transformacion: 'si_no' }),
   t('M', 'Clave Material Peligroso', 'mercancia.clave_material_peligroso', true, { defecto: 'N/A' }),
   t('N', 'Tipo de Materia', 'mercancia.tipo_materia', false),
-  // Sin `campo`: la extracción no tiene «RFC del importador» (distinto del agente aduanal). Solo se escribe el encabezado;
-  // la celda queda vacía hasta que exista el campo (la columna es opcional en el TMS).
-  { columna: 'O', encabezado: 'RFC Importador', obligatorio: false, texto: true },
+  // A37-S32-04: la columna O («RFC Importador») sí tiene campo (`rfc_importador`, ya lo pide la validación y lo lee el lector);
+  // antes quedaba vacía y el RFC confirmado de una importación se perdía sin aviso. Opcional: en exportación sale vacío.
+  t('O', 'RFC Importador', 'mercancia.rfc_importador', false),
 ];
 
 export const LAYOUT_NORMAL: LayoutPlantilla = {

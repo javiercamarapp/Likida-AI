@@ -24,6 +24,7 @@ import { esTokenValido, generarToken } from '@/lib/correo/buzon';
 import { remitenteReconocido } from '@/lib/correo/remitente';
 import { estaApagado } from '../interruptores';
 import { aceptableSinExtension } from './contenido';
+import { ETIQUETA_HTML, quitarScriptYEstilo } from './html_quitar';
 import { nombreArchivoSeguro, procesarDocumento, recibirDocumento, type DepsServicio } from './servicio';
 import * as repo from './repo';
 
@@ -93,7 +94,7 @@ export interface DepsCorreo extends DepsServicio {
 export interface RespuestaCorreo { status: 200 | 503; cuerpo: Record<string, unknown> }
 
 function htmlATexto(html: string): string {
-  return html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<br\s*\/?>|<\/(p|div|tr|li)>/gi, '\n').replace(/<[^>]+>/g, ' ')
+  return quitarScriptYEstilo(html).replace(/<br\s*\/?>|<\/(p|div|tr|li)>/gi, '\n').replace(ETIQUETA_HTML, ' ')
     .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim();
 }
 
@@ -111,7 +112,10 @@ export async function atenderCorreoCartaPorte(token: string, correo: CorreoEntra
 
   // Con extensión conocida, entra; sin extensión, entra como CANDIDATO y se decide por los bytes al bajarlo (T-A3-58);
   // con una extensión que no es de documento (.exe, .zip, .docx) no se descarga.
-  const adjuntos = (correo.attachments ?? []).filter((a) => a.id && (EXT_ADJUNTO.test(a.filename ?? '') || sinExtension(a.filename))).slice(0, MAX_ADJUNTOS);
+  const candidatos = (correo.attachments ?? []).filter((a) => a.id && (EXT_ADJUNTO.test(a.filename ?? '') || sinExtension(a.filename)));
+  const adjuntos = candidatos.slice(0, MAX_ADJUNTOS);
+  // A37-S31-03: lo que pasa de MAX_ADJUNTOS o de MAX_ADJUNTO_BYTES no se lee; eso se DICE (evento a la oficina), no se calla.
+  const sobrantes = candidatos.length - adjuntos.length;
   const cuerpoTexto = (correo.text && correo.text.trim().length > 0 ? correo.text : htmlATexto(correo.html ?? '')).trim();
   const hayCuerpo = cuerpoTexto.length >= MIN_CUERPO_CHARS;
   if (adjuntos.length === 0 && !hayCuerpo) {
@@ -133,7 +137,8 @@ export async function atenderCorreoCartaPorte(token: string, correo: CorreoEntra
   if (claim.resultado === 'busy') return { status: 503, cuerpo: { error: 'correo en proceso' } };
 
   const reconocido = remitenteReconocido(correo.from, buzon.remitentesPermitidos);
-  let caidas = 0; let ignorados = 0; let recibidos = 0; let duplicados = 0;
+  let caidas = 0; let ignorados = 0; let recibidos = 0; let duplicados = 0; let demasiadoGrandes = 0;
+  const ref: { documentoId: string | null } = { documentoId: null };
   const porProcesar: string[] = [];
   const recibir = async (nombre: string, bytes: Uint8Array, forzado?: 'correo'): Promise<void> => {
     const r = await recibirDocumento(tenantId, {
@@ -145,6 +150,7 @@ export async function atenderCorreoCartaPorte(token: string, correo: CorreoEntra
       logger.info('cp_correo.rechazado', { emailId: correo.emailId, motivo: r.motivo });
       return;
     }
+    ref.documentoId = r.documentoId;
     if (r.duplicado) { duplicados++; return; }
     recibidos++;
     if (r.estado === 'recibido') porProcesar.push(r.documentoId);
@@ -154,7 +160,7 @@ export async function atenderCorreoCartaPorte(token: string, correo: CorreoEntra
     for (const a of adjuntos) {
       const d = await deps.descargar(correo.emailId, a.id as string);
       if (!d.ok) { if (d.transitorio) caidas++; else ignorados++; continue; }
-      if (d.bytes.length > MAX_ADJUNTO_BYTES) { ignorados++; continue; }
+      if (d.bytes.length > MAX_ADJUNTO_BYTES) { ignorados++; demasiadoGrandes++; continue; }
       if (!EXT_ADJUNTO.test(a.filename ?? '') && !aceptableSinExtension(d.bytes, a.content_type)) { ignorados++; continue; }
       await recibir(nombreArchivoSeguro(a.filename), d.bytes);
     }
@@ -174,6 +180,18 @@ export async function atenderCorreoCartaPorte(token: string, correo: CorreoEntra
     return { status: 503, cuerpo: { error: 'no se pudieron descargar todos los adjuntos' } };
   }
 
+  if (sobrantes > 0 || demasiadoGrandes > 0) {
+    const detalle = { motivo: 'adjuntos_omitidos', sobrantes, demasiado_grandes: demasiadoGrandes, max_adjuntos: MAX_ADJUNTOS, max_mb: MAX_ADJUNTO_BYTES / (1024 * 1024) };
+    logger.warn('cp_correo.adjuntos_omitidos', { emailId: correo.emailId, tenantId, ...detalle });
+    try {
+      // El evento cuelga de un documento de ESTE correo; si ninguno entró no hay dónde colgarlo y queda el log de error.
+      if (ref.documentoId) await repo.registrarEvento(tenantId, ref.documentoId, 'aviso_oficina', null, detalle);
+      else logger.error('cp_correo.adjuntos_omitidos_sin_documento', { emailId: correo.emailId, tenantId, ...detalle });
+    } catch (e) {
+      logger.error('cp_correo.adjuntos_omitidos_evento_fallo', { emailId: correo.emailId, err: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
   // Extraer lo que alcance en el reloj de ESTA petición; lo demás queda «recibido» y lo procesa el cron `carta-porte-docs`
   // (0640: lo reclama pasada la gracia, reintenta los fallos con espera y avisa a la oficina de las dudas).
   let procesados = 0;
@@ -191,5 +209,5 @@ export async function atenderCorreoCartaPorte(token: string, correo: CorreoEntra
     return { status: 503, cuerpo: { error: 'no se pudo finalizar el correo' } };
   }
   logger.info('cp_correo.procesado', { emailId: correo.emailId, tenantId, recibidos, duplicados, ignorados, procesados });
-  return { status: 200, cuerpo: { ok: true, recibidos, duplicados, ignorados, procesados, pendientes: porProcesar.length - procesados } };
+  return { status: 200, cuerpo: { ok: true, recibidos, duplicados, ignorados, procesados, pendientes: porProcesar.length - procesados, omitidos: sobrantes + demasiadoGrandes } };
 }

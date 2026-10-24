@@ -379,6 +379,7 @@ export const api: typeof Real = {
 
   // ── El worker (0640-0642): la MISMA regla que las RPC de la 0641 ──────────
   TOPE_INTENTOS_DOC: 5,
+  TOPE_SALIDAS_SIN_CCP: 20_000,
   GRACIA_RECIBIDO_SEG: 120,
   esperaFallidoMin: (intentos) => 15 * 2 ** Math.max(Math.min(intentos, 6) - 1, 0),
   tablaAusente: (e) => Boolean(e && (e.code === 'PGRST205' || e.code === '42P01')),
@@ -622,7 +623,7 @@ export const api: typeof Real = {
     return m;
   },
   DIAS_SALIDAS_SIN_CCP: 45,
-  async leerSalidasParaSinCcp() { falla('leerSalidasParaSinCcp'); return { viajes: [], conCcp: new Set<string>() }; },
+  async leerSalidasParaSinCcp() { falla('leerSalidasParaSinCcp'); return { viajes: [], conCcp: new Set<string>(), truncado: false }; },
   async enviosParaInsights(tenantId) {
     return estado.envios.filter((e) => e.tenantId === tenantId).map((e) => ({ documentoId: e.documentoId, estado: e.estado, createdAt: new Date().toISOString(), enviadoEn: null, causaPendiente: null }));
   },

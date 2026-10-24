@@ -19,10 +19,10 @@ const T2 = '22222222-2222-4222-8222-222222222222';
 interface FilaDb extends FilaGuardada { tenant: string; terminal: string; fecha: string; primeraVez: string; ultimaVez: string; comentarios: string | null; linea: string | null }
 
 function repoEnMemoria() {
-  const cargas = new Map<string, { id: string; tenant: string; nueva: NuevaCarga }>();
+  const cargas = new Map<string, { id: string; tenant: string; nueva: NuevaCarga; orden: number }>();
   const filas = new Map<string, FilaDb>();
   const cambios: Array<CambioParaGuardar & { tenant: string }> = [];
-  const log = { escrituras: 0, lecturas: 0, descartes: 0 };
+  const log = { escrituras: 0, lecturas: 0, descartes: 0, reabiertas: 0, restauradas: 0 };
   let seq = 0;
   let fallarEn: 'insertar' | 'actualizar' | null = null;
 
@@ -31,10 +31,25 @@ function repoEnMemoria() {
       const k = `${tenantId}|${c.terminal}|${c.archivoSha256}`;
       if (cargas.has(k)) { await Promise.resolve(); return null; }
       const id = `carga-${++seq}`;
-      cargas.set(k, { id, tenant: tenantId, nueva: c });
+      cargas.set(k, { id, tenant: tenantId, nueva: c, orden: ++seq });
       log.escrituras++;
       await Promise.resolve();
       return { id };
+    },
+    async reabrirCargaSiNoEsUltima(tenantId, terminal, sha) {
+      const deTerminal = [...cargas.values()].filter((v) => v.tenant === tenantId && v.nueva.terminal === terminal)
+        .sort((a, b) => b.orden - a.orden);
+      const propia = deTerminal.find((v) => v.nueva.archivoSha256 === sha);
+      if (!propia || deTerminal[0] === propia) return null;
+      const creadaAnterior = `orden-${propia.orden}`;
+      propia.orden = ++seq;
+      log.reabiertas++;
+      return { id: propia.id, creadaAnterior };
+    },
+    async restaurarCarga(tenantId, cargaId, creadaAnterior) {
+      const v = [...cargas.values()].find((c) => c.tenant === tenantId && c.id === cargaId);
+      if (v) v.orden = Number(creadaAnterior.replace('orden-', ''));
+      log.restauradas++;
     },
     async descartarCarga(tenantId, cargaId) {
       for (const [k, v] of cargas) if (v.tenant === tenantId && v.id === cargaId) cargas.delete(k);
@@ -114,6 +129,36 @@ describe('sincronizarPrograma · primera carga y repetición', () => {
     expect(r).toMatchObject({ yaCargado: true, nuevas: 0, cambiadas: 0, sinCambio: 0, desaparecidas: 0 });
     expect(m.log.escrituras).toBe(antes.escrituras);
     expect(m.log.lecturas).toBe(antes.lecturas);
+  });
+
+  it('A37-A4-01: A → B → A (mismo sha que una carga vieja) SÍ se aplica y registra el regreso', async () => {
+    const m = repoEnMemoria();
+    const a = lectura([fila(1, { caja: 'ZCA' })], 'a');
+    const b = lectura([fila(1, { caja: 'ZCB' })], 'b');
+    await sincronizarPrograma(T1, 'GDL', a, { repo: m.repo, ahora: AHORA });
+    await sincronizarPrograma(T1, 'GDL', b, { repo: m.repo, ahora: AHORA });
+    const r = await sincronizarPrograma(T1, 'GDL', a, { repo: m.repo, ahora: AHORA });
+    expect(r).toMatchObject({ yaCargado: false, cambiadas: 1 });
+    expect([...m.filas.values()][0].caja).toBe('ZCA');
+    expect(m.cambios.at(-1)).toMatchObject({ campo: 'caja', antes: 'ZCB', despues: 'ZCA' });
+    // y repetirlo ahora sí es «ya cargado»: A es otra vez la última.
+    const otra = await sincronizarPrograma(T1, 'GDL', a, { repo: m.repo, ahora: AHORA });
+    expect(otra.yaCargado).toBe(true);
+  });
+
+  it('A37-A4-01: si la reapertura falla a medias se restaura la carga (no se borra ni queda «última»)', async () => {
+    const m = repoEnMemoria();
+    const a = lectura([fila(1, { caja: 'ZCA' })], 'a');
+    const b = lectura([fila(1, { caja: 'ZCB' })], 'b');
+    await sincronizarPrograma(T1, 'GDL', a, { repo: m.repo, ahora: AHORA });
+    await sincronizarPrograma(T1, 'GDL', b, { repo: m.repo, ahora: AHORA });
+    m.fallar('actualizar');
+    await expect(sincronizarPrograma(T1, 'GDL', a, { repo: m.repo, ahora: AHORA })).rejects.toThrow('base caída');
+    expect(m.log.restauradas).toBe(1);
+    expect(m.log.descartes).toBe(0);
+    m.fallar(null);
+    const reintento = await sincronizarPrograma(T1, 'GDL', a, { repo: m.repo, ahora: AHORA });
+    expect(reintento.yaCargado).toBe(false);
   });
 
   it('el mismo sha en otra terminal o en otra flota SÍ entra', async () => {

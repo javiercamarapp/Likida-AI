@@ -36,6 +36,8 @@ export interface ResultadoPurgaAgente {
 }
 
 export const PLAZOS_AGENTES = {
+  /** A37-A4-07: datos personales del Vigía (captura manual, texto de avisos, comentarios) tras la cita. PROPUESTO: lo fija el aviso de privacidad de cada flota. */
+  vigiaDatosPersonalesDias: 90,
   waVentanaDias: 7,
   waEnvioRegistroDias: 90,
   liquidacionExternaMeses: 60,
@@ -47,7 +49,11 @@ export const PLAZOS_AGENTES = {
   limite: 5000,
 } as const;
 
-export type Llamada = { nombre: string; rpc: string; args: Record<string, unknown>; leer: (d: unknown) => { filas: number | null; parcial: boolean } };
+export type Llamada = {
+  nombre: string; rpc: string; args: Record<string, unknown>; leer: (d: unknown) => { filas: number | null; parcial: boolean };
+  /** La función puede no estar aplicada aún en la base (migración pendiente): se avisa y no cuenta como fallo. */
+  toleraAusencia?: boolean;
+};
 
 export const numero = (v: unknown): number | null => (typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : null);
 
@@ -98,7 +104,17 @@ const LLAMADAS = (ahora: string): Llamada[] => [
       return { filas: partes.some((x) => x === null) ? null : (partes as number[]).reduce((x, y) => x + y, 0), parcial: o?.parcial === true };
     },
   },
+  {
+    // 0892 (A37-A4-07): cada una de las tres tablas topa en `limite`; llegar a 3× el tope nunca pasa de 15,000 filas.
+    nombre: 'vigia_datos_personales', rpc: 'purgar_vigia_datos_personales',
+    args: { p_dias: PLAZOS_AGENTES.vigiaDatosPersonalesDias, p_limite: PLAZOS_AGENTES.limite },
+    leer: (d) => ({ filas: numero(d), parcial: numero(d) !== null && (numero(d) as number) >= PLAZOS_AGENTES.limite }),
+    toleraAusencia: true,
+  },
 ];
+
+/** PostgREST PGRST202 / Postgres 42883: la función aún no existe en la base. */
+const AUSENTE = new Set(['PGRST202', '42883']);
 
 /** Corre una lista de purgas, una tras otra. Nunca lanza: cada una devuelve su propio resultado. */
 export async function correrPurgas(llamadas: Llamada[], clavesLog = 'agentes'): Promise<ResultadoPurgaAgente[]> {
@@ -106,6 +122,11 @@ export async function correrPurgas(llamadas: Llamada[], clavesLog = 'agentes'): 
   for (const l of llamadas) {
     try {
       const r = await supabaseAdmin().rpc(l.rpc, l.args);
+      if (r.error && l.toleraAusencia && AUSENTE.has((r.error as { code?: string }).code ?? '')) {
+        logger.warn(`cron.purgar.${clavesLog}_sin_migrar`, { purga: l.nombre });
+        salida.push({ nombre: l.nombre, ok: true, filas: 0, parcial: false, error: null });
+        continue;
+      }
       if (r.error) {
         logger.error(`cron.purgar.${clavesLog}_fallo`, { purga: l.nombre, err: r.error.message });
         salida.push({ nombre: l.nombre, ok: false, filas: null, parcial: false, error: r.error.message });
@@ -127,7 +148,7 @@ export async function correrPurgas(llamadas: Llamada[], clavesLog = 'agentes'): 
   return salida;
 }
 
-/** Corre las purgas de los agentes (siete). Nunca lanza. */
+/** Corre las purgas de los agentes (ocho). Nunca lanza. */
 export async function mantenerDatosAgentes(ahora: Date = new Date()): Promise<ResultadoPurgaAgente[]> {
   return correrPurgas(LLAMADAS(ahora.toISOString()), 'agentes');
 }

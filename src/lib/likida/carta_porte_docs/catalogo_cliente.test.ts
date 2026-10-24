@@ -48,6 +48,18 @@ describe('enriquecer · producto por SKU', () => {
     expect(r.ambiguos).toEqual([]);
   });
 
+  it('A37-S31-02: un «peligroso» leído del documento con baja confianza NO se cede a un «no peligroso» del catálogo; queda con aviso', () => {
+    const e = sinSat();
+    e.mercancias[0].material_peligroso = { valor: 'true', confianza: 0.6, evidencia: 'UN1203', origen: 'texto' } as never;
+    const r = enriquecer(e, cat({ productos: [producto('SKU-PX-205', { materialPeligroso: false })] }), ctx);
+    const m = r.extraccion.mercancias[0];
+    expect(m.material_peligroso.valor).toBe('true');
+    expect(m.material_peligroso.notas?.join(' ')).toContain('Confírmalo');
+    expect(r.aplicados).not.toContain('mercancias.0.material_peligroso');
+    // el resto del catálogo sí se aplica
+    expect(m.bienes_transp).toMatchObject({ valor: '25172500', origen: 'catalogo' });
+  });
+
   it('no muta la extracción original', () => {
     const e = sinSat();
     const copia = JSON.parse(JSON.stringify(e));

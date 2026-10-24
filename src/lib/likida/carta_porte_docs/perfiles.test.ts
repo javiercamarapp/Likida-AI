@@ -273,12 +273,51 @@ describe('orden de fecha por perfil (MM/DD)', () => {
     expect(b.cambios).toEqual([]);
   });
 
+  it('A37-S32-03: una fecha igual en ambos órdenes (12/12/2026) no borra el mdy aprendido ni cuenta como cambio; 03/04/2026 sigue leyéndose mes/día', async () => {
+    const c1 = await contenido(csvFecha('10/14/2026'));
+    const a = aprender({ contenido: c1, final: finalFecha('2026-10-14'), previa: null, riesgoInyeccion: false });
+    const c2 = await contenido(csvFecha('12/12/2026'));
+    const b = aprender({ contenido: c2, final: finalFecha('2026-12-12'), previa: { version: 1, mapeos: a.mapeos, ejemplos: a.ejemplos }, riesgoInyeccion: false });
+    expect(b.mapeos.find((x) => x.campo === 'fecha_salida')?.ordenFecha).toBe('mdy');
+    expect(b.cambios).toEqual([]);
+    const c3 = await contenido(csvFecha('03/04/2026'));
+    expect(fechaDe(aplicarPerfil(perfilCon(c3, b.mapeos), c3))).toBe('2026-03-04');
+  });
+
+  it('A37-S32-03: una fecha que SOLO cuadra día/mes (15/10/2026) es prueba en contra: no hereda el mdy', async () => {
+    const c1 = await contenido(csvFecha('10/14/2026'));
+    const a = aprender({ contenido: c1, final: finalFecha('2026-10-14'), previa: null, riesgoInyeccion: false });
+    const c2 = await contenido(csvFecha('15/10/2026'));
+    const b = aprender({ contenido: c2, final: finalFecha('2026-10-15'), previa: { version: 1, mapeos: a.mapeos, ejemplos: a.ejemplos }, riesgoInyeccion: false });
+    expect(b.mapeos.find((x) => x.campo === 'fecha_salida')?.ordenFecha).toBeUndefined();
+    expect(b.cambios.join(' ')).toMatch(/Corregido: fecha_salida/);
+  });
+
   it('cambiar el orden de un mapeo cuenta como cambio (mapeoIgual compara ordenFecha)', async () => {
     const c = await contenido(csvFecha('10/14/2026'));
     const previa: Mapeo[] = [{ campo: 'fecha_salida', mercancia: false, fuente: { tipo: 'columna', encabezado: 'Fecha Salida' } }];
     const b = aprender({ contenido: c, final: finalFecha('2026-10-14'), previa: { version: 1, mapeos: previa, ejemplos: [] }, riesgoInyeccion: false });
     expect(b.cambios.join(' ')).toMatch(/Corregido: fecha_salida/);
     expect(b.mapeos.find((x) => x.campo === 'fecha_salida')?.ordenFecha).toBe('mdy');
+  });
+});
+
+describe('A37-S32-02: los ejemplos del perfil no guardan datos de personas', () => {
+  it('operador_* y contacto_* se aprenden como columna pero NO su valor (ni en campos ni en la evidencia)', async () => {
+    const c = await contenido(Buffer.from('Folio,Operador,Licencia,Descripcion,Cantidad\nF1,Persona Sintetica Uno,LIC-SINT-0001,Cemento,5\n'));
+    const final: Extraccion = {
+      campos: { folio_cliente: cv('F1', 1, 'humano'), operador_nombre: cv('Persona Sintetica Uno', 1, 'humano'), operador_licencia: cv('LIC-SINT-0001', 1, 'humano') },
+      mercancias: [{ descripcion: cv('Cemento', 1, 'humano') }],
+    };
+    const r = aprender({ contenido: c, final, previa: null, riesgoInyeccion: false });
+    expect(r.mapeos.find((m) => m.campo === 'operador_nombre')?.fuente).toEqual({ tipo: 'columna', encabezado: 'Operador' });
+    const guardado = JSON.stringify(r.ejemplos);
+    expect(guardado).not.toContain('Persona Sintetica Uno');
+    expect(guardado).not.toContain('LIC-SINT-0001');
+    expect(r.ejemplos[0].campos.operador_nombre).toBeUndefined();
+    expect(r.ejemplos[0].evidencias.find((e) => e.campo === 'operador_nombre')?.linea).toBe('Operador: «valor»');
+    // el resto del ejemplo sí enseña (folio y descripción)
+    expect(r.ejemplos[0].campos.folio_cliente).toBe('F1');
   });
 });
 

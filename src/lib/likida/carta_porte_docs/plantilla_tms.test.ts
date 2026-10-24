@@ -70,9 +70,9 @@ describe('construirPlantilla', () => {
     expect(me.I22.valor).toBe(14130);
     expect(me.K22.valor).toBe('24 16 3456 4000123'); // pedimento
     expect(me.N22.valor).toBe('05'); // tipo de materia
-    // O = «RFC Importador»: la extracción aún no trae ese dato (no es el RFC del agente aduanal): la celda queda vacía y NO es faltante.
+    // O = «RFC Importador» (A37-S32-04): sin dato (exportación) la celda queda vacía y NO es faltante.
     expect(me.O21.valor).toBe('RFC Importador');
-    expect(me.O22).toBeUndefined();
+    expect(me.O22.valor).toBeNull();
     expect(r.faltantes).toEqual([]);
     expect(hoja(r, 'Error')).toEqual({});
   });
@@ -366,6 +366,28 @@ describe('LAYOUT_NORMAL contra la forma real de la plantilla (T-A3-43)', () => {
       }
       expect(me[`A${22 + n}`]).toBeUndefined();
     }
+  });
+
+  it('A37-S32-04: el RFC del importador confirmado se escribe en la columna O (antes el libro salía con la O vacía)', () => {
+    const r = construirPlantilla(extraccion({}, { rfc_importador: 'BBB020202BB2' }), ctx); // grep-limpio:ok
+    expect(r.hojas.Mercancias.O22.valor).toBe('BBB020202BB2'); // grep-limpio:ok
+    expect(r.faltantes).toEqual([]);
+  });
+
+  it('A37-S32-05: más de 100 mercancías es un faltante BLOQUEANTE (no se sube un libro recortado) y las 100 primeras sí se llenan', () => {
+    const e = extraccion();
+    for (let i = 1; i < 130; i++) e.mercancias.push({ ...e.mercancias[0], descripcion: cv(`Mercancia ${i + 1}`) });
+    const r = construirPlantilla(e, ctx);
+    const bloqueantes = faltantesBloqueantes(r);
+    expect(bloqueantes).toHaveLength(1);
+    expect(bloqueantes[0]).toMatchObject({ campo: 'mercancias', bloqueante: true });
+    expect(bloqueantes[0].mensaje).toContain('130');
+    expect(r.hojas.Mercancias.C121.valor).toBe('Mercancia 100');
+    expect(r.hojas.Mercancias.C122).toBeUndefined();
+    // exactamente 100 sigue siendo válido
+    const justo = extraccion();
+    for (let i = 1; i < 100; i++) justo.mercancias.push({ ...justo.mercancias[0] });
+    expect(faltantesBloqueantes(construirPlantilla(justo, ctx))).toEqual([]);
   });
 
   it('relectura celda a celda: el libro generado sobre la plantilla en blanco da lo esperado y conserva notas y comentarios', () => {

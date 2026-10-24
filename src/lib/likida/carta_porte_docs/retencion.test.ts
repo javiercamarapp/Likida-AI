@@ -41,6 +41,19 @@ describe('purgarDocumentosVencidos', () => {
     expect(cs[0]).toMatchObject({ valorAntes: null, valorDespues: null, campo: 'operador_nombre' });
   });
 
+  it('A37-S32-01: la purga también vacía extracción, validación, remitente y asunto, y quita los valores de las correcciones', async () => {
+    const a = await subir(A, await pdfBoreal({ folio: 'P-1' }));
+    const d = estado.docs.get(a.documentoId)!;
+    d.retenerHasta = new Date(Date.now() - 1000).toISOString();
+    d.extraccion = { campos: { operador_nombre: { valor: 'Persona Sintetica' } } } as never;
+    d.validacion = { hallazgos: [] } as never;
+    d.remitente = 'alguien@ejemplo.test'; d.asunto = 'Embarque de prueba';
+    estado.correcciones.push({ tenantId: A, documentoId: a.documentoId, campo: 'operador_nombre', renglon: null, valorAntes: 'Persona A', valorDespues: 'Persona B' });
+    await purgarDocumentosVencidos();
+    expect(d).toMatchObject({ extraccion: null, validacion: null, remitente: null, asunto: null });
+    expect(estado.correcciones).toEqual([{ tenantId: A, documentoId: a.documentoId, campo: 'operador_nombre', renglon: null, valorAntes: null, valorDespues: null }]);
+  });
+
   it('es idempotente: una segunda corrida no vuelve a tocar lo ya purgado', async () => {
     const a = await subir(A, await pdfBoreal());
     estado.docs.get(a.documentoId)!.retenerHasta = new Date(Date.now() - 1000).toISOString();

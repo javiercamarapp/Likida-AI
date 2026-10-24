@@ -211,7 +211,14 @@ export function enriquecer(extraccion: Extraccion, catalogo: CatalogoCliente | n
       en('embalaje', p.embalaje);
       en('fraccion_arancelaria', p.fraccion);
       en('tipo_materia', p.tipoMateria);
-      en('material_peligroso', p.materialPeligroso ? 'true' : 'false');
+      // A37-S31-02: un «peligroso» leído del documento nunca se cede a un «no peligroso» del catálogo (dato fiscal por omisión).
+      const leido = fila.material_peligroso;
+      if (!p.materialPeligroso && !vacio(leido) && (leido as CampoValor).valor === 'true') {
+        const l = leido as CampoValor;
+        if (l.origen !== 'humano') {
+          fila.material_peligroso = { ...l, notas: [...(l.notas ?? []), 'El catálogo del cliente dice «no peligroso», el documento dice «peligroso». Confírmalo.'] };
+        }
+      } else en('material_peligroso', p.materialPeligroso ? 'true' : 'false');
       en('clave_material_peligroso', p.claveMaterialPeligroso);
     });
   }

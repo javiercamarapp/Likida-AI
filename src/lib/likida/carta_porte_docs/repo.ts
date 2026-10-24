@@ -15,7 +15,8 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
-import { exigir, traerPorIds } from '../pg';
+import { conteo, exigir, traerPorIds } from '../pg';
+import { leerConTope } from './lectura_paginada';
 import { logger } from '@/lib/logger';
 import { aBuffer } from './bytes';
 import type { Extraccion } from './campos';
@@ -546,14 +547,17 @@ export function tablaAusente(error: { message?: string; code?: string } | null |
  * filtra por tenant Y cliente. Sin la 0792 aplicada devuelve el catálogo vacío (sin catálogo = no-op) y lo registra.
  */
 export async function cargarCatalogoCliente(tenantId: string, clienteId: string): Promise<CatalogoCliente> {
+  // A37-S31-01: `.limit(5000)` lo recortaba PostgREST a max_rows (1,000) sin avisar; se pagina con range() y el tope es real.
+  const COLS_PRODUCTO = 'sku, descripcion_patron, bienes_transp, clave_unidad, embalaje, fraccion, tipo_materia, material_peligroso, clave_material_peligroso';
+  const COLS_PARTE = 'rol, alias, razon_social, rfc, id_fiscal_extranjero, calle, num_ext, num_int, colonia_clave, colonia, cp, localidad_clave, localidad, municipio_clave, municipio, estado, pais, contacto, telefono, correo';
   const [n, p, q] = await Promise.all([
     acotada(supabaseAdmin().from('cp_cliente_numero').select('numero_interno, numero_pagador, activo').eq('tenant_id', tenantId).eq('cliente_id', clienteId).maybeSingle(), 'cpdocs.catalogo_numero'),
-    acotada(supabaseAdmin().from('cp_catalogo_producto')
-      .select('sku, descripcion_patron, bienes_transp, clave_unidad, embalaje, fraccion, tipo_materia, material_peligroso, clave_material_peligroso')
-      .eq('tenant_id', tenantId).eq('cliente_id', clienteId).order('sku').order('id').limit(TOPE_FILAS_CATALOGO), 'cpdocs.catalogo_productos'),
-    acotada(supabaseAdmin().from('cp_catalogo_parte')
-      .select('rol, alias, razon_social, rfc, id_fiscal_extranjero, calle, num_ext, num_int, colonia_clave, colonia, cp, localidad_clave, localidad, municipio_clave, municipio, estado, pais, contacto, telefono, correo')
-      .eq('tenant_id', tenantId).eq('cliente_id', clienteId).order('rol').order('alias').order('id').limit(TOPE_FILAS_CATALOGO), 'cpdocs.catalogo_partes'),
+    leerConTope<Fila>((d, h, primera) => acotada(supabaseAdmin().from('cp_catalogo_producto')
+      .select(COLS_PRODUCTO, conteo(primera ? 0 : 1))
+      .eq('tenant_id', tenantId).eq('cliente_id', clienteId).order('sku').order('id').range(d, h), 'cpdocs.catalogo_productos') as never, TOPE_FILAS_CATALOGO),
+    leerConTope<Fila>((d, h, primera) => acotada(supabaseAdmin().from('cp_catalogo_parte')
+      .select(COLS_PARTE, conteo(primera ? 0 : 1))
+      .eq('tenant_id', tenantId).eq('cliente_id', clienteId).order('rol').order('alias').order('id').range(d, h), 'cpdocs.catalogo_partes') as never, TOPE_FILAS_CATALOGO),
   ]);
   if (tablaAusente(n.error) || tablaAusente(p.error) || tablaAusente(q.error)) {
     logger.warn('cartaporte_docs.catalogo_sin_migracion', { tenantId });
@@ -570,7 +574,7 @@ export async function cargarCatalogoCliente(tenantId: string, clienteId: string)
     localidadClave: s(f.localidad_clave), localidad: s(f.localidad), municipioClave: s(f.municipio_clave), municipio: s(f.municipio),
     estado: s(f.estado), pais: s(f.pais), contacto: s(f.contacto), telefono: s(f.telefono), correo: s(f.correo),
   }));
-  const truncado = productos.length >= TOPE_FILAS_CATALOGO || partes.length >= TOPE_FILAS_CATALOGO;
+  const truncado = p.truncado || q.truncado;
   if (truncado) logger.warn('cartaporte_docs.catalogo_truncado', { tenantId, productos: productos.length, partes: partes.length });
   return {
     numero: num ? { tenantId, clienteId, numeroInterno: String(num.numero_interno), numeroPagador: s(num.numero_pagador), activo: num.activo !== false } : null,
@@ -689,6 +693,10 @@ export async function documentosVencidos(limite = 100): Promise<Array<{ id: stri
  * Condicional a que NO se haya purgado ya.
  */
 export async function marcarPurgado(tenantId: string, id: string): Promise<boolean> {
+  // Primero las correcciones: si algo falla después, el reintento (purgado_en sigue null) las vuelve a vaciar sin daño.
+  const c = await acotada(supabaseAdmin().from('cp_correccion').update({ valor_antes: null, valor_despues: null })
+    .eq('tenant_id', tenantId).eq('documento_id', id), 'cpdocs.purgar_correcciones');
+  if (c.error) throw new Error(`cartaporte_docs purgar correcciones: ${c.error.message}`);
   const r = await acotada(supabaseAdmin().from('cp_documento')
     .update({
       storage_ruta: null, texto_extracto: null, extraccion: null, validacion: null, remitente: null, asunto: null,
@@ -1185,19 +1193,25 @@ export const DIAS_SALIDAS_SIN_CCP = 45;
  * Viajes con salida registrada (hito `salida_carga` recibido o validado) y los ids de los que ya tienen un complemento
  * APROBADO ligado (`cp_documento.viaje_id`). SOLO LECTURA; si algo falla LANZA (la pantalla dice «no se pudo leer», no «sin pendientes»).
  */
-export async function leerSalidasParaSinCcp(tenantId: string, ahora: Date = new Date()): Promise<{ viajes: ViajeSalido[]; conCcp: Set<string> }> {
+/** Tope de salidas que se leen (≈ 45 días de una flota de varios cientos de unidades); pasar de esto se DICE (`truncado`). */
+export const TOPE_SALIDAS_SIN_CCP = 20_000;
+
+export async function leerSalidasParaSinCcp(tenantId: string, ahora: Date = new Date()): Promise<{ viajes: ViajeSalido[]; conCcp: Set<string>; truncado: boolean }> {
   const desde = new Date(ahora.getTime() - DIAS_SALIDAS_SIN_CCP * 86_400_000).toISOString();
-  const rh = await acotada(supabaseAdmin().from('viaje_hito').select('viaje_id, mensaje_en, recibido_en')
+  // A37-S32-06: `.limit(2000)` recortaba en silencio (y PostgREST ya corta a 1,000): los viajes más viejos sin CCP desaparecían de la
+  // pantalla. Se pagina con range() y, si aun así hay más que el tope, se devuelve `truncado` para que la vista lo diga.
+  const rh = await leerConTope<Fila>((d, h, primera) => acotada(supabaseAdmin().from('viaje_hito').select('viaje_id, mensaje_en, recibido_en', conteo(primera ? 0 : 1))
     .eq('tenant_id', tenantId).eq('tipo', 'salida_carga').in('estado', ['recibido', 'validado'])
-    .gte('recibido_en', desde).order('recibido_en', { ascending: false }).limit(2000), 'cpdocs.sin_ccp_hitos');
+    .gte('recibido_en', desde).order('recibido_en', { ascending: false }).order('id').range(d, h), 'cpdocs.sin_ccp_hitos') as never, TOPE_SALIDAS_SIN_CCP);
   const hitos = (exigir(rh, 'cpdocs.sin_ccp_hitos') ?? []) as unknown as Fila[];
+  const truncado = rh.truncado;
   const salidaPorViaje = new Map<string, string>();
   for (const h of hitos) {
     const id = s(h.viaje_id); const t = s(h.mensaje_en) ?? s(h.recibido_en);
     if (id && t && !salidaPorViaje.has(id)) salidaPorViaje.set(id, t);
   }
   const ids = [...salidaPorViaje.keys()];
-  if (ids.length === 0) return { viajes: [], conCcp: new Set() };
+  if (ids.length === 0) return { viajes: [], conCcp: new Set(), truncado };
   const [filas, docs] = await Promise.all([
     traerPorIds<Fila>(ids, (t) => acotada(supabaseAdmin().from('viaje').select('id, folio, cliente_id, cliente:cliente_id (nombre)')
       .eq('tenant_id', tenantId).in('id', t), 'cpdocs.sin_ccp_viajes') as never, 'cpdocs.sin_ccp_viajes'),
@@ -1211,5 +1225,5 @@ export async function leerSalidasParaSinCcp(tenantId: string, ahora: Date = new 
   });
   const conCcp = new Set<string>();
   for (const d of docs) { const id = s(d.viaje_id); if (id) conCcp.add(id); }
-  return { viajes, conCcp };
+  return { viajes, conCcp, truncado };
 }

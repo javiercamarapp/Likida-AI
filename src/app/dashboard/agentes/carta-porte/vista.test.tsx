@@ -147,6 +147,16 @@ describe('Agente de Carta Porte: «Viajes salidos sin Carta Porte» (T-A3-66)', 
     expect(caido).not.toContain('No hay viajes salidos');
   });
 
+  it('A37-S32-06: una lista truncada lo dice y nunca afirma «no hay viajes» (aunque no quede ninguno visible)', () => {
+    const recortada = pintarSin({ ...listado, truncado: true });
+    expect(recortada).toContain('La lista está incompleta');
+    expect(recortada).toContain('F-1');
+    const vaciaRecortada = pintarSin({ vacio: true, total: 0, grupos: [], truncado: true });
+    expect(vaciaRecortada).toContain('La lista está incompleta');
+    expect(vaciaRecortada).not.toContain('No hay viajes salidos');
+    expect(pintarSin(listado)).not.toContain('La lista está incompleta');
+  });
+
   it('sin la prop no pinta el bloque', () => {
     expect(pintarSin()).not.toContain('Viajes salidos sin Carta Porte');
   });

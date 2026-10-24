@@ -29,7 +29,8 @@ function puertoFalso(): Falso {
     async aplicarLote(_t, tipo, registros) {
       if (f.fallarEnLote !== undefined && f.lotes.length === f.fallarEnLote) throw new Error('boom');
       f.lotes.push(registros.length);
-      for (const r of registros) f.almacen.set(`${tipo}#${claveDeRegistro(tipo, r)}`, { ...r });
+      // Como el upsert real: solo se escriben las columnas que el registro trae; las demás conservan lo guardado.
+      for (const r of registros) { const k = `${tipo}#${claveDeRegistro(tipo, r)}`; f.almacen.set(k, { ...(f.almacen.get(k) ?? {}), ...r }); }
     },
   };
   return f;
@@ -94,6 +95,35 @@ describe('importar productos', () => {
     expect(p.almacen.size).toBe(3);
     const peligroso = [...p.almacen.values()].find((v) => v.cliente_id === C2);
     expect(peligroso).toMatchObject({ sku: 'SKU-A', material_peligroso: true, clave_unidad: 'KGM', embalaje: null });
+  });
+
+  it('A37-S31-02: un CSV sin las columnas opcionales NO pisa material_peligroso, embalaje ni fracción de un SKU existente', async () => {
+    const completo = [CAB_PROD, 'Cliente Uno,SKU-A,Pieza A,10000001,KGM,CAJ,39269099,01,si,1203'].join('\r\n');
+    await importarCatalogo(entrada(completo, true), p);
+    const corto = ['cliente,sku,bienes_transp,clave_unidad', 'Cliente Uno,SKU-A,10000009,H87'].join('\r\n');
+    const previa = await importarCatalogo(entrada(corto, false), p);
+    // La vista previa dice QUÉ columnas cambian (solo las que el archivo trae y difieren).
+    expect(previa).toMatchObject({ ok: true, cambian: 1, camposQueCambian: ['bienes_transp', 'clave_unidad'] });
+    expect(previa.mensaje).toContain('bienes_transp, clave_unidad');
+    await importarCatalogo(entrada(corto, true), p);
+    const guardado = [...p.almacen.values()].find((v) => v.sku === 'SKU-A');
+    expect(guardado).toMatchObject({ bienes_transp: '10000009', clave_unidad: 'H87', material_peligroso: true, embalaje: 'CAJ', fraccion: '39269099', clave_material_peligroso: '1203' });
+  });
+
+  it('A37-S31-02: el mismo CSV corto reimportado sin diferencias en lo que trae es «sin cambio» (no un cambio falso por columnas ausentes)', async () => {
+    const completo = [CAB_PROD, 'Cliente Uno,SKU-A,Pieza A,10000001,KGM,CAJ,39269099,01,si,1203'].join('\r\n');
+    await importarCatalogo(entrada(completo, true), p);
+    const corto = ['cliente,sku,bienes_transp,clave_unidad', 'Cliente Uno,SKU-A,10000001,KGM'].join('\r\n');
+    expect(await importarCatalogo(entrada(corto, false), p)).toMatchObject({ nuevas: 0, cambian: 0, sinCambio: 1 });
+  });
+
+  it('A37-S31-02: una clave de material peligroso sin la columna es válida para un SKU existente pero error para uno nuevo', async () => {
+    await importarCatalogo(entrada([CAB_PROD, 'Cliente Uno,SKU-A,Pieza A,10000001,KGM,,,,si,1203'].join('\r\n'), true), p);
+    const cab = 'cliente,sku,bienes_transp,clave_unidad,clave_material_peligroso';
+    const existente = await importarCatalogo(entrada([cab, 'Cliente Uno,SKU-A,10000001,KGM,1204'].join('\r\n'), false), p);
+    expect(existente).toMatchObject({ conError: 0, cambian: 1 });
+    const nuevo = await importarCatalogo(entrada([cab, 'Cliente Uno,SKU-NUEVO,10000001,KGM,1204'].join('\r\n'), false), p);
+    expect(nuevo.conError).toBe(1);
   });
 
   it('reimportar el mismo archivo: 0 nuevas, 0 cambian y no se vuelve a escribir', async () => {
