@@ -116,7 +116,7 @@ export function leerCifraImportada(v: unknown, esDinero = true): number | null |
   if (v === null || v === undefined || v === '') return null;
   // A37-S64-02: más de dos decimales ya NO se redondea a centavos: «38.500» (miles con punto, export es-ES) entraba como 38.50 y
   // «1.240» km como 1.24 — cifras plausibles. Ante la duda la fila se descarta CON su motivo y se corrige en el archivo.
-  if (typeof v === 'number') return Number.isFinite(v) && v >= 0 && !masDeDosDecimales(v) ? Math.round(v * 100) / 100 : 'ilegible';
+  if (typeof v === 'number') return Number.isFinite(v) && v >= 0 && !(esDinero && masDeDosDecimales(v)) ? Math.round(v * 100) / 100 : 'ilegible';
   const limpio = String(v).replace(/[$\s]/g, '');
   if (!limpio) return null;
   // A37-L-03: `Number()` acepta notación científica y hexadecimal ('1e6' = 1,000,000; '0x10' = 16): en una cifra de
@@ -141,7 +141,7 @@ export function leerCifraImportada(v: unknown, esDinero = true): number | null |
   const SOLO_NUMERO = /^\d+(\.\d+)?$/;
   if (!(esDinero ? SOLO_DINERO : SOLO_NUMERO).test(normal)) return 'ilegible';
   const n = Number(normal);
-  return Number.isFinite(n) && n >= 0 && !masDeDosDecimales(normal) ? Math.round(n * 100) / 100 : 'ilegible';
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : 'ilegible';
 }
 
 /** dd/mm/aaaa, aaaa-mm-dd o serial de Excel → ISO. null = vacía; 'ilegible'

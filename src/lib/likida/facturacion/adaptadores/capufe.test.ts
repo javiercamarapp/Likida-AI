@@ -747,7 +747,7 @@ describe('A37-S41-04/05: no verificable bloquea y la tabla se concilia antes de 
         { clave: 'monto', etiqueta: 'Monto', valor: 'N/D', requerido: false },
       ] as CampoListo[], 'emitir');
     expect(r.ok).toBe(false);
-    expect(r.error).toMatch(/no se pudo cotejar/);
+    expect(r.error).toMatch(/no se pudieron cotejar/);
     expect(m.primera().emitido).toBe(false);
   });
 
@@ -756,7 +756,7 @@ describe('A37-S41-04/05: no verificable bloquea y la tabla se concilia antes de 
     const bloqueado = montar({ respuestas: resp, uuid: UUID });
     const r1 = await bloqueado.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
     expect(r1.ok).toBe(false);
-    expect(r1.error).toMatch(/no se pudo cotejar/);
+    expect(r1.error).toMatch(/no se pudieron cotejar/);
     expect(bloqueado.primera().emitido).toBe(false);
 
     const libre = montar({ respuestas: resp, uuid: UUID, emitirAunConDiscrepancia: true });
@@ -769,7 +769,7 @@ describe('A37-S41-04/05: no verificable bloquea y la tabla se concilia antes de 
       respuestas: { [CODIGO_B]: { agrega: false, tardia: true } },
       uuid: UUID,
     });
-    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }, { codigo: CODIGO_B }], 'emitir');
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }, { codigo: CODIGO_B, montoEsperado: 180 }], 'emitir');
     expect(r.codigos[1].estado).toBe('rechazado');
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/no coincide/);
@@ -779,7 +779,7 @@ describe('A37-S41-04/05: no verificable bloquea y la tabla se concilia antes de 
 
   it('CONTROL — con la tabla igual a lo agregado, emite normal', async () => {
     const m = montar({ uuid: UUID });
-    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }, { codigo: CODIGO_B }], 'emitir');
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }, { codigo: CODIGO_B, montoEsperado: 180 }], 'emitir');
     expect(r.ok).toBe(true);
   });
 });

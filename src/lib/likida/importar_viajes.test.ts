@@ -64,7 +64,7 @@ describe('A37-L-03 — la cifra dudosa no se adivina', () => {
     ]);
     expect(r.viajes.map((v) => v.folio)).toEqual(['V-4']);
     expect(r.descartadas).toEqual([
-      { fila: 2, motivo: 'anticipo fuera de rango (V-1)' },
+      { fila: 2, motivo: 'anticipo fuera de rango, pasa de 1,000,000 (V-1)' },
       { fila: 3, motivo: 'anticipo ilegible (V-2)' },
       { fila: 4, motivo: 'anticipo ilegible (V-3)' },
     ]);

@@ -17,7 +17,7 @@ describe('A37-S07-06 — avatares huérfanos al cambiar de extensión', () => {
     expect(remove).toHaveBeenCalledWith(['u1/avatar.jpg', 'u1/avatar.png']);
   });
 
-  for (const ruta of ['../../app/admin/mi-perfil/page.tsx', '../../app/dashboard/mi-perfil/page.tsx']) {
+  for (const ruta of ['../../app/admin/mi-perfil/page.tsx']) { // el dashboard lo cubre page.test.tsx (A37-S19-06)
     it(`${ruta.split('/')[3]}: tras guardar avatar_url (no antes) retira los avatares viejos`, () => {
       const src = readFileSync(new URL(ruta, import.meta.url), 'utf8');
       const iUpdate = src.search(/avatar_url: `\$\{pub\.publicUrl\}/);

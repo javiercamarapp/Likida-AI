@@ -248,7 +248,7 @@ describe('registrarPropuesta — el único verbo del cliente, y nunca lanza', ()
   });
 
   it('EL CHOQUE 23505 NO ES UN ERROR: es el segundo clic', async () => {
-    conTablas({ portal_pago_propuesta: [OK([]), CHOQUE()] }); // 1.ª: el conteo del tope (A37-L-06); 2.ª: el insert
+    conTablas({ portal_pago_propuesta: [OK([]), { data: null, error: null, count: 0 } as unknown as Resultado, CHOQUE()] }); // 1.ª: el tope por hora (A37-L-06); 2.ª: el conteo de pendientes (A37-S54-04); 3.ª: el insert
     const r = await registrarPropuesta(LIGA, {
       fecha: '2026-08-20', monto: 1160, referencia: 'REF-1', metodo: 'transferencia',
     });
@@ -259,7 +259,7 @@ describe('registrarPropuesta — el único verbo del cliente, y nunca lanza', ()
 
   it('A37-S54-04: una factura con demasiados pagos PENDIENTES ya no acepta más (cada uno dispara un correo)', async () => {
     conTablas({
-      portal_pago_propuesta: [{ data: null, error: null, count: TOPE_PENDIENTES_POR_FACTURA } as unknown as Resultado, OK({ id: 'p-1' })],
+      portal_pago_propuesta: [OK([]), { data: null, error: null, count: TOPE_PENDIENTES_POR_FACTURA } as unknown as Resultado, OK({ id: 'p-1' })],
     });
     const r = await registrarPropuesta(LIGA, {
       fecha: '2026-08-20', monto: 1160, referencia: 'REF-1', metodo: 'transferencia',
@@ -270,7 +270,7 @@ describe('registrarPropuesta — el único verbo del cliente, y nunca lanza', ()
 
   it('A37-S54-04: por debajo del tope se registra normal', async () => {
     conTablas({
-      portal_pago_propuesta: [{ data: null, error: null, count: TOPE_PENDIENTES_POR_FACTURA - 1 } as unknown as Resultado, OK({ id: 'p-1' })],
+      portal_pago_propuesta: [OK([]), { data: null, error: null, count: TOPE_PENDIENTES_POR_FACTURA - 1 } as unknown as Resultado, OK({ id: 'p-1' })],
     });
     const r = await registrarPropuesta(LIGA, {
       fecha: '2026-08-20', monto: 1160, referencia: 'REF-1', metodo: 'transferencia',

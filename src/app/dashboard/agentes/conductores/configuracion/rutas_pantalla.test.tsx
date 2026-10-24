@@ -15,7 +15,12 @@ const marcarRevisada = vi.hoisted(() => vi.fn());
 
 vi.mock('next/navigation', () => ({ redirect: vi.fn() }));
 vi.mock('next/cache', () => ({ revalidatePath: revalidar }));
-vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: vi.fn(async () => ({ ...sesion })) }));
+vi.mock('@/lib/auth/tenant-efectivo', () => ({
+  resolverTenantEfectivo: vi.fn(async () => ({ ...sesion })),
+  // A37: las acciones se atan a la flota renderizada (misma flota de la sesión en estas pruebas).
+  resolverTenantAtado: vi.fn(async (_d: string, _sp: unknown, tenantRenderizado: string) => (sesion.tenantId === tenantRenderizado ? { ...sesion } : null)),
+  MENSAJE_FLOTA_CAMBIO: 'La flota cambió',
+}));
 vi.mock('@/lib/auth/visibilidad', () => ({ puedeVerRuta: vi.fn(() => true) }));
 vi.mock('@/lib/likida/conductor/repo', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/likida/conductor/repo')>()),

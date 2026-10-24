@@ -10,11 +10,18 @@ const d = vi.hoisted(() => ({
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => d.sesion }));
 vi.mock('@/lib/likida/errores', () => ({ mensajeParaPantalla: (e: Error, op: string) => `FALLA ${op}: ${e.message}` }));
+// A37-S20-01: el alcance de patio (flota completa para estos roles) sale de la base; aquí, flota sin patios asignados.
+vi.mock('@/lib/likida/terminales', () => ({
+  terminalDeUsuario: async () => null,
+  terminalDeRegistro: async () => ({ encontrado: true, terminalId: null }),
+  terminalesDeRegistros: async (_t: string, _tenant: string, ids: string[]) => new Map(ids.map((i) => [i, null])),
+}));
 vi.mock('@/lib/likida/mantenimiento', () => ({
   getTaller: async () => ({
     ordenesAbiertas: [], rutinas: [{ id: 'r-1' }],
     propuestas: [{ rutinaId: 'r-1', unidadId: 'u-9', unidadEco: 'T-9', rutinaNombre: 'Motor', motivo: 'vencida_por_dias', diasDesdeServicio: 200, kmDesdeServicio: null }],
   }),
+  unidadDeOrden: async () => null,
   validarRutina: vi.fn(), crearRutina: vi.fn(), cerrarOrden: vi.fn(),
   abrirOrdenProgramada: (...a: unknown[]) => d.abrir(...a),
   OrdenYaAbierta: d.OrdenYaAbierta,

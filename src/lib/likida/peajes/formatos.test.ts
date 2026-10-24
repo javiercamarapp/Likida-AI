@@ -154,7 +154,7 @@ describe('montoDeCelda — el dinero no se adivina', () => {
     expect(montoDeCelda('$ 12.500')).toBeNull();
     expect(montoDeCelda('234.50')).toBe(234.5);
     expect(montoDeCelda('1234.5')).toBe(1234.5);
-    expect(montoDeCelda('1234.567')).toBe(1234.57); // 4 enteros: no puede ser miles
+    expect(montoDeCelda('1234.567')).toBeNull(); // 4 enteros: no es millar, pero A37-L-07: más de dos decimales no se redondea en silencio
   });
   it('paréntesis = negativo contable', () => {
     expect(montoDeCelda('(189.00)')).toBe(-189);

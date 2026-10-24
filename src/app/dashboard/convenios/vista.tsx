@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Handshake } from 'lucide-react';
 import { BarraPagina } from '../resumen-visual';
-import { fechaMx, mxn } from '@/lib/formato';
+import { fechaMx, mxn, numero } from '@/lib/formato';
 import { ETIQUETA_CATEGORIA } from '@/lib/likida/convenios/tipos';
 import { textoParaSistemaDeLaFlota } from '@/lib/likida/convenios/importador';
 import type { ConvenioFila, ViajeConvenioFila } from '@/lib/likida/convenios/repo';
@@ -43,7 +43,6 @@ export interface PropsVistaConvenios {
 /** Cuántos convenios se pintan por página. */
 export const CONVENIOS_POR_PAGINA = 50;
 
-const numeroDe = (n: number): string => n.toLocaleString('es-MX');
 
 const vigencia = (c: ConvenioFila): string => {
   if (!c.vigenteDesde && !c.vigenteHasta) return 'sin vencimiento';
@@ -164,7 +163,7 @@ export function VistaConvenios(p: PropsVistaConvenios) {
               )}
               {paginas > 1 && (
                 <nav aria-label="Páginas de convenios" className="flex items-center gap-3 text-[12.5px]">
-                  <span style={{ color: 'var(--muted)' }}>Convenios {numeroDe((pagina - 1) * CONVENIOS_POR_PAGINA + 1)}–{numeroDe(Math.min(pagina * CONVENIOS_POR_PAGINA, lista.length))} de {numeroDe(lista.length)}</span>
+                  <span style={{ color: 'var(--muted)' }}>Convenios {numero((pagina - 1) * CONVENIOS_POR_PAGINA + 1)}–{numero(Math.min(pagina * CONVENIOS_POR_PAGINA, lista.length))} de {numero(lista.length)}</span>
                   {pagina > 1 && <Link href={href({ pag: pagina - 1 > 1 ? String(pagina - 1) : null, editar: null })} className="underline">Anterior</Link>}
                   {pagina < paginas && <Link href={href({ pag: String(pagina + 1), editar: null })} className="underline">Siguiente</Link>}
                 </nav>
