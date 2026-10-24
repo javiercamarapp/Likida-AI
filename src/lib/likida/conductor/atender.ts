@@ -221,10 +221,14 @@ export const TEXTO_PEDIR_UBICACION =
 
 const FALLO: Salida = { texto: 'No pude anotarlo ahorita — mándamelo de nuevo en un momento. 🙏' };
 
-/** Lo que ve el chofer tras «Tengo un problema», según cómo terminó el aviso al jefe de tráfico. */
+/**
+ * Lo que ve el chofer tras «Tengo un problema», según cómo terminó el aviso al jefe de tráfico.
+ * A37-S35-06: el claim del aviso vive todo el tramo (horas), así que «ya avisado» NO afirma cuándo se avisó: un
+ * incidente nuevo del mismo tramo no genera un segundo aviso y se le pide al chofer marcar directo.
+ */
 export function textoAvisoDeProblema(r: 'ok' | 'reintentable' | 'sin_envio' | 'ya_avisado'): string {
   if (r === 'ok') return 'Gracias por avisar. Ya le avisé a tu jefe de tráfico para que te contacte. 🙏';
-  if (r === 'ya_avisado') return 'Ya le había avisado a tu jefe de tráfico hace un momento. Si es urgente, márcale directo. 🙏';
+  if (r === 'ya_avisado') return 'Ya le había avisado a tu jefe de tráfico de un problema en este tramo. Si es un problema nuevo o es urgente, márcale directo ahorita. 🙏';
   if (r === 'reintentable') return 'Tu aviso quedó en cola y todavía NO llega a tu jefe de tráfico. Si es urgente, márcale directo ahorita. 🙏';
   return 'NO pude avisarle a tu jefe de tráfico. Márcale directo ahorita o llama a monitoreo. 🙏';
 }

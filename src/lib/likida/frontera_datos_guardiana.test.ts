@@ -596,6 +596,8 @@ const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_315;
 // A37-TRANSVERSAL-08 (+1): la lectura de `tms_sincronizacion` que rota el turno del cron `tms` (conectores/tms/sincronizar.ts, filtrada por tenant). Medido: 2,285.
 // Auditoría 37, A37-S12-06 (+2, 2,284 → 2,286): ruta del bus de workers (`api/worker/bus/[accion]`): lectura previa de `bus_pieza` por carpeta y descarga de la media anterior para comparar. Tablas del bus (sin tenant).
 // A37-S12-07 (+1): `pendienteYaSellado` en wa_pendientes.ts (distingue «ya procesada» de «la lleva otra invocación»). Medido: 2,285.
+// Lote A-conductor-A5-04 (+1, 2284 → 2285): `conductor/repo_validacion.ts` retira la evidencia recién insertada (`viaje_hito_evidencia`, por id y tenant)
+// cuando el UPDATE de estado del documento de cierre falla dos veces, para que el reenvío del chofer no tope con el UNIQUE por sha (A37-S36-08).
 // Auditoría 37, lote agentes-legal-ia (medido con el barrido real): +2 llamadas (2,264 → 2,266). `candidatos_redactor.ts` suma 3 `.from(` (prospecto, cola_aprobacion, prospecto_contacto) y `runner.ts` pierde la suya (+2 netas); `sdr.ts` pasa de 3 a 3 (la lectura por prospecto se volvió lectura en lote). Todo por `acotada`.
 // LOTE A37 peajes-liquidación-graves (migración 0865): +5 llamadas (2,264 → 2,269), 0 archivos nuevos, medido con el barrido real. `jornada/repo.ts` +1:
 // `.rpc('asentar_declaracion_jornada')` (A37-S48-01; la 0865 sustituye la marca derivada bajo el lock del expediente; el INSERT anterior se conserva

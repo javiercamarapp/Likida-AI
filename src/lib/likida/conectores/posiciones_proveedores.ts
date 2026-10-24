@@ -245,6 +245,9 @@ export async function leerPosicionesGeotab(
 // zona horaria DEL USUARIO (la respuesta trae `user_time` en esa zona). Se
 // convierte a UTC con el desfase entre `user_time` y el reloj de Likida,
 // redondeado a 15 min; un desfase fuera de ±14 h descarta la lectura.
+// A37-S37-07: SIN `user_time` no hay desfase que calcular y NO se asume UTC (la hora local de México tomada como UTC dejaba
+// la posición 6 h en el pasado): falla «formato». Y una marca más adelantada que el reloj (más una tolerancia) se descarta.
+const NAVIXY_FUTURO_TOLERADO_MS = 5 * 60_000;
 const NAVIXY_LOTE = 500;
 
 function utcDeNavixy(texto: unknown, desfaseMs: number): string | null {
@@ -311,13 +314,13 @@ export async function leerPosicionesNavixy(
     paginas += 1;
     const userTime = typeof rg.d.user_time === 'string' ? rg.d.user_time : null;
     let desfase = 0;
-    if (userTime) {
-      const bruto = utcDeNavixy(userTime, 0);
-      if (bruto) {
-        const cuarto = 15 * 60_000;
-        desfase = Math.round((Date.parse(bruto) - reloj.ahora()) / cuarto) * cuarto;
-        if (Math.abs(desfase) > 14 * 3_600_000) { invalidas += Object.keys(states).length; continue; }
-      }
+    const bruto = userTime ? utcDeNavixy(userTime, 0) : null;
+    if (bruto) {
+      const cuarto = 15 * 60_000;
+      desfase = Math.round((Date.parse(bruto) - reloj.ahora()) / cuarto) * cuarto;
+      if (Math.abs(desfase) > 14 * 3_600_000) { invalidas += Object.keys(states).length; continue; }
+    } else if (Object.keys(states).length > 0) {
+      return { ok: false, motivo: 'Navixy contestó tracker/get_states sin `user_time` legible: no se puede fijar la zona horaria de las posiciones.', falla: 'formato', paginas };
     }
     for (const [id, st] of Object.entries(states as Record<string, { gps?: Record<string, unknown>; ignition?: unknown }>)) {
       const gps = st?.gps;
@@ -325,6 +328,7 @@ export async function leerPosicionesNavixy(
       const loc = gps.location as { lat?: unknown; lng?: unknown } | undefined;
       const medidaEn = utcDeNavixy(gps.updated, desfase);
       if (!medidaEn || !loc || !coordenadaValida(loc.lat, loc.lng)) { invalidas += 1; continue; }
+      if (Date.parse(medidaEn) > reloj.ahora() + NAVIXY_FUTURO_TOLERADO_MS) { invalidas += 1; continue; }
       const v = aNumero(gps.speed);
       posiciones.push({
         deviceId: id, lat: loc.lat as number, lng: loc.lng as number, medidaEn,

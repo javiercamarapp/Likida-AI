@@ -237,6 +237,20 @@ describe('Navixy — tracker/list + tracker/get_states', () => {
     expect(llamadas.filter((l) => ruta(l) === 'tracker/get_states')).toHaveLength(3);
   });
 
+  it('A37-S37-07: sin user_time NO se asume UTC: falla «formato» en vez de dejar posiciones 6 h corridas', async () => {
+    const estados = '{"success":true,"states":{"501":{"gps":{"updated":"2026-10-01 09:29:30","location":{"lat":19.4,"lng":-99.1},"heading":270,"speed":64}}}}';
+    const { http } = enrutado((p) => ruta(p) === 'tracker/list' ? ok(fx('navixy_tracker_list.json')) : ok(estados));
+    expect(await leerPosicionesNavixy(V, http, { ahora })).toMatchObject({ ok: false, falla: 'formato' });
+  });
+
+  it('A37-S37-07: una posición con hora MÁS ADELANTE que el reloj (más una tolerancia) se descarta como inválida', async () => {
+    // user_time 09:30:00 = UTC-6 ⇒ la marca 10:30:00 local es 16:30Z, una hora en el futuro del reloj (15:30:10Z).
+    const estados = '{"success":true,"user_time":"2026-10-01 09:30:00","states":{"501":{"gps":{"updated":"2026-10-01 10:30:00","location":{"lat":19.4,"lng":-99.1},"heading":270,"speed":64}}}}';
+    const { http } = enrutado((p) => ruta(p) === 'tracker/list' ? ok(fx('navixy_tracker_list.json')) : ok(estados));
+    const r = await leerPosicionesNavixy(V, http, { ahora });
+    expect(r).toMatchObject({ ok: true, posiciones: [], invalidas: 1 });
+  });
+
   it('sin servidor regional no hay lectura (no hay host global)', async () => {
     expect(await leerPosicionesNavixy({ api_key: 'K' }, enrutado(() => ok('{}')).http)).toMatchObject({ ok: false });
   });

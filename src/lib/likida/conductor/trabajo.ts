@@ -224,25 +224,31 @@ export async function contarEnviadosPorChofer(operadorIds: string[], desde: Date
  * ancla a él. Solo viajes abiertos.
  */
 export async function leerCandidatosValidacion(desde: Date, limite: number): Promise<Array<{ hito: HitoFila; viaje: ViajeContexto; resultadoPrevio: 'sin_coincidencia' | null }>> {
-  const res = await acotada(supabaseAdmin()
-    .from('viaje_hito').select(COLUMNAS_HITO)
-    .in('tipo', ['llegada_carga', 'llegada_descarga']).eq('estado', 'recibido').gte('recibido_en', desde.toISOString())
-    .order('recibido_en', { ascending: false }).order('id').limit(limite * 2), 'conductor.candidatos_validacion');
-  const hitos = ((exigir(res as never, 'conductor.candidatos_validacion') ?? []) as unknown as Fila[]).map(filaAHito);
-  if (hitos.length === 0) return [];
-
+  // A37-S37-08: se recorre la ventana (de la más reciente a la más vieja) en páginas HASTA juntar `limite` pendientes, en vez de
+  // tomar solo las `limite*2` más recientes y descartar las ya resueltas en JS: con muchas validadas, las llegadas más viejas aún
+  // «sin dato» / «sin coincidencia» nunca llegaban a reintentarse. El tope de páginas acota el costo del cron.
+  const tamPagina = limite * 2;
+  const MAX_PAGINAS = 10;
   const vistos = new Map<string, { ciclo: number; resultado: string; motivo: string | null }>();
-  for (const ids of trozos(hitos.map((h) => h.id), 150)) {
-    const rv = await acotada(supabaseAdmin()
-      .from('viaje_hito_validacion').select('viaje_hito_id, ciclo, resultado, motivo').in('viaje_hito_id', ids), 'conductor.candidatos_veredictos');
-    for (const f of (exigir(rv as never, 'conductor.candidatos_veredictos') ?? []) as unknown as Fila[]) {
-      vistos.set(`${f.viaje_hito_id}|${f.ciclo}`, { ciclo: Number(f.ciclo), resultado: String(f.resultado), motivo: typeof f.motivo === 'string' ? f.motivo : null });
+  const pendientes: HitoFila[] = [];
+  for (let pagina = 0; pagina < MAX_PAGINAS && pendientes.length < limite; pagina++) {
+    const res = await acotada(supabaseAdmin()
+      .from('viaje_hito').select(COLUMNAS_HITO)
+      .in('tipo', ['llegada_carga', 'llegada_descarga']).eq('estado', 'recibido').gte('recibido_en', desde.toISOString())
+      .order('recibido_en', { ascending: false }).order('id').range(pagina * tamPagina, (pagina + 1) * tamPagina - 1), 'conductor.candidatos_validacion');
+    const filas = (exigir(res as never, 'conductor.candidatos_validacion') ?? []) as unknown as Fila[];
+    const hitos = filas.map(filaAHito);
+    for (const ids of trozos(hitos.map((h) => h.id), 150)) {
+      const rv = await acotada(supabaseAdmin()
+        .from('viaje_hito_validacion').select('viaje_hito_id, ciclo, resultado, motivo').in('viaje_hito_id', ids), 'conductor.candidatos_veredictos');
+      for (const f of (exigir(rv as never, 'conductor.candidatos_veredictos') ?? []) as unknown as Fila[]) {
+        vistos.set(`${f.viaje_hito_id}|${f.ciclo}`, { ciclo: Number(f.ciclo), resultado: String(f.resultado), motivo: typeof f.motivo === 'string' ? f.motivo : null });
+      }
     }
+    pendientes.push(...hitos.filter((h) => debeReintentarseValidacion(vistos.get(`${h.id}|${h.ciclo}`))));
+    if (filas.length < tamPagina) break; // la ventana se acabó
   }
-  const pendientes = hitos.filter((h) => {
-    const v = vistos.get(`${h.id}|${h.ciclo}`);
-    return debeReintentarseValidacion(v);
-  }).slice(0, limite);
+  pendientes.length = Math.min(pendientes.length, limite);
   if (pendientes.length === 0) return [];
 
   const viajes = new Map<string, ViajeContexto>();

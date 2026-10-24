@@ -27,6 +27,8 @@ const ERROR_RED = { message: 'TypeError: fetch failed (ENOTFOUND db.supabase.co)
 /** Qué tablas se leyeron POR FILAS — para comprobar que las que se agregan en
  *  SQL (mig. 0064) ya no se recorren. */
 const tablasLeidas: string[] = [];
+/** Filtros `.neq()` aplicados, por tabla (A37-S29-10). */
+const neqs: Array<{ tabla: string; col: string; val: unknown }> = [];
 
 /** Imita el query builder de postgrest-js: encadenable y "thenable". */
 function crearBuilder(tabla: string) {
@@ -41,6 +43,7 @@ function crearBuilder(tabla: string) {
   const self = () => b;
   for (const m of ['select', 'eq', 'order', 'limit', 'range', 'in', 'gte', 'lte', 'is']) b[m] = self;
   b.not = () => { sufijo = ':not'; return b; };
+  b.neq = (col: string, val: unknown) => { neqs.push({ tabla, col, val }); return b; };
   b.maybeSingle = () => Promise.resolve(resp());
   b.single = () => Promise.resolve(resp());
   b.then = (ok: (v: Resp) => unknown, fail?: (e: unknown) => unknown) => Promise.resolve(resp()).then(ok, fail);
@@ -87,6 +90,7 @@ beforeEach(() => {
   rpcs.clear();
   llamadasRpc.length = 0;
   tablasLeidas.length = 0;
+  neqs.length = 0;
   cuadrarDesdeDB.mockReset();
   cuadrarDesdeDB.mockRejectedValue(new Error('viaje no encontrado'));
 });
@@ -597,3 +601,55 @@ describe('getLineasPorConciliar — la cola, con el folio del viaje de cada cand
 function round2Ref(n: number): number {
   return Math.sign(n) * Math.round((Math.abs(n) + Number.EPSILON) * 100) / 100;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Lote A-conductor-A5-04, frente S29.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('A37-S29-09 — reconstruir() ya no traga la excepción del motor en silencio', () => {
+  it('una excepción de cuadrarDesdeDB deja un warn con tenant, viaje y causa, y el detalle sale degradado', async () => {
+    const { logger } = await import('@/lib/logger');
+    (logger.warn as ReturnType<typeof vi.fn>).mockClear();
+    respuestas.set('liquidacion', {
+      data: {
+        id: 'liq-9', viaje_id: 'viaje-9', estatus: 'cuadrada', created_at: '2026-08-01T00:00:00Z',
+        total_comprobado: 100, total_anticipo: 0, diferencia: 0, diferencias: [],
+        viaje: { folio: 'VJ-1' },
+      },
+      error: null,
+    });
+    cuadrarDesdeDB.mockRejectedValue(new Error('boom del motor'));
+    const d = await getLiquidacionDetalle('liq-9', TENANT);
+    expect(d?.comprobantesCuadran).toBe(false);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'analytics.reconstruir_fallo',
+      expect.objectContaining({ tenantId: TENANT, viajeId: 'viaje-9', err: expect.stringContaining('boom del motor') }),
+    );
+  });
+
+  it('el portón que no cuadra (esperado) NO se registra como fallo', async () => {
+    const { logger } = await import('@/lib/logger');
+    (logger.warn as ReturnType<typeof vi.fn>).mockClear();
+    respuestas.set('liquidacion', {
+      data: {
+        id: 'liq-9', viaje_id: 'viaje-9', estatus: 'cuadrada', created_at: '2026-08-01T00:00:00Z',
+        total_comprobado: 100, total_anticipo: 0, diferencia: 0, diferencias: [],
+        viaje: { folio: 'VJ-1' },
+      },
+      error: null,
+    });
+    cuadrarDesdeDB.mockResolvedValue({ totalComprobado: 999, diferencias: [], gastos: [] });
+    const d = await getLiquidacionDetalle('liq-9', TENANT);
+    expect(d?.comprobantesCuadran).toBe(false);
+    expect(logger.warn).not.toHaveBeenCalledWith('analytics.reconstruir_fallo', expect.anything());
+  });
+});
+
+describe('A37-S29-10 — liquidaciones cerradas excluye las rechazadas, como el resto de las métricas', () => {
+  it('el conteo de liquidacion filtra revision <> rechazada; los huérfanos no', async () => {
+    rpcs.set('resumen_documentos_tenant', { data: { procesados: 1, porMes: [] }, error: null });
+    respuestas.set('liquidacion', { data: null, error: null, count: 3 });
+    respuestas.set('comprobante_huerfano', { data: null, error: null, count: 2 });
+    await getValorAhorro(TENANT);
+    expect(neqs).toEqual([{ tabla: 'liquidacion', col: 'revision', val: 'rechazada' }]);
+  });
+});

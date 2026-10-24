@@ -4,7 +4,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error('esta prueba no toca la base'); } }));
 vi.mock('@/lib/meta/client', () => ({ enviarSolicitudUbicacion: vi.fn(async () => ({ ok: true })) }));
 
-const { atenderConductor, atenderAcuseJefe, textoRespuestaSenalVida } = await import('./atender');
+const { atenderConductor, atenderAcuseJefe, textoRespuestaSenalVida, textoAvisoDeProblema } = await import('./atender');
 const { crearMemoria, viajeBase } = await import('./memoria.fixture');
 type Memoria = ReturnType<typeof import('./memoria.fixture').crearMemoria>;
 
@@ -494,5 +494,14 @@ describe('P2: los botones del «¿sigues bien?» (sin señal de vida)', () => {
     };
     expect(await atenderAcuseJefe('5219990000099', `jefe_atiendo:${V1}`, AHORA, deps)).toContain('lo marqué como atendido');
     expect(cerrados).toEqual([V1]);
+  });
+});
+
+describe('A37-S35-06: «ya avisado» no afirma cuándo se avisó', () => {
+  it('el texto no dice «hace un momento» (el claim dura todo el tramo) y manda a marcar directo si es un problema nuevo', () => {
+    const t = textoAvisoDeProblema('ya_avisado');
+    expect(t).not.toMatch(/hace un momento/i);
+    expect(t).toMatch(/nuevo|otro/i);
+    expect(t).toContain('márcale directo');
   });
 });

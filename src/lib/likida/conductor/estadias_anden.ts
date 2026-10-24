@@ -1,7 +1,7 @@
 import { calcularDetencion, resolverPolitica, type Detencion, type OrigenPolitica, type PoliticaDetencion } from '../estadias/motor';
 import { estaResuelto, type HitoFila, type Lugar, type TipoHito } from './tipos';
 import type { ResultadoValidacion } from './validacion';
-import { hoyMx, TZ_MX } from '@/lib/formato';
+import { diaEnZona, TZ_MX } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ESTADÍAS EN ANDÉN — cuánto tiempo estuvo la unidad en cada parada. Puro.
@@ -227,17 +227,20 @@ export const COLUMNAS_CSV_ESTADIAS = [
   'minutos_en_anden', 'horas_libres_pactadas', 'minutos_excedentes', 'horas_cobrables', 'monto_propuesto', 'moneda', 'motivo_sin_monto', 'pacto_aplicado',
 ] as const;
 
-/** La hora de México legible y exacta (con segundos): es la que el cliente va a cruzar contra su caseta. */
-export function horaExactaMx(iso: string | null): string {
+/**
+ * La hora legible y exacta (con segundos) en la zona de la flota (por omisión México): es la que el cliente va a cruzar
+ * contra su caseta. A37-S35-09: la zona es parámetro porque cada flota tiene la suya (`config.zonaHoraria`).
+ */
+export function horaExactaMx(iso: string | null, zonaHoraria: string = TZ_MX): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   // El día sale de `hoyMx` (un solo sitio deletrea la zona); la hora, de las partes de la misma zona.
   const p = new Intl.DateTimeFormat('en-US', {
-    timeZone: TZ_MX, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    timeZone: zonaHoraria, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
   }).formatToParts(d);
   const g = (t: string) => p.find((x) => x.type === t)?.value ?? '';
-  return `${hoyMx(d)} ${g('hour') === '24' ? '00' : g('hour')}:${g('minute')}:${g('second')}`;
+  return `${diaEnZona(d, zonaHoraria)} ${g('hour') === '24' ? '00' : g('hour')}:${g('minute')}:${g('second')}`;
 }
 
 /** Neutraliza la inyección de fórmulas de hoja de cálculo (=, +, -, @, tab, CR al inicio) y escapa para CSV. */
@@ -252,15 +255,17 @@ export function celdaCsv(v: string | number | null): string {
 const VALIDACION_TEXTO: Record<ResultadoValidacion, string> = { validado: 'validada', sin_coincidencia: 'sin coincidencia', sin_dato: 'sin dato' };
 
 /** El CSV para cobro de estadías. UTF-8 con BOM para que Excel lea los acentos. */
-export function csvEstadias(filas: readonly FilaEstadia[]): string {
-  const lineas = [COLUMNAS_CSV_ESTADIAS.join(',')];
+export function csvEstadias(filas: readonly FilaEstadia[], zonaHoraria: string = TZ_MX): string {
+  // Con la zona de México los rótulos son los de siempre (`*_hora_mx`); con otra, el rótulo dice cuál es (A37-S35-09).
+  const rotulo = (c: string) => (zonaHoraria === TZ_MX ? c : c.replace('_hora_mx', `_hora_${zonaHoraria}`));
+  const lineas = [COLUMNAS_CSV_ESTADIAS.map(rotulo).join(',')];
   for (const f of filas) {
     const { estancia: e, viaje: v, detencion: d } = f;
     const valores: Array<string | number | null> = [
       v.folio, v.id, v.operadorNombre, v.clienteNombre, v.terminalNombre, e.lugar, f.sitio, FASE_TEXTO[e.fase],
-      horaExactaMx(e.llegada?.en ?? null), e.llegada ? FUENTE_TEXTO[e.llegada.fuente] : null,
+      horaExactaMx(e.llegada?.en ?? null, zonaHoraria), e.llegada ? FUENTE_TEXTO[e.llegada.fuente] : null,
       e.llegada?.validacion ? VALIDACION_TEXTO[e.llegada.validacion] : e.llegada ? 'sin veredicto' : null, e.llegada?.evidencias ?? null,
-      horaExactaMx(e.salida?.en ?? null), e.salida ? FUENTE_TEXTO[e.salida.fuente] : null, e.salida?.evidencias ?? null,
+      horaExactaMx(e.salida?.en ?? null, zonaHoraria), e.salida ? FUENTE_TEXTO[e.salida.fuente] : null, e.salida?.evidencias ?? null,
       e.minutos, d.horasLibres, d.minutosExcedentes, d.horasCobrables,
       // Una parada que sigue corriendo no es un cobro: el monto queda en blanco hasta que cierre.
       e.fase === 'cerrada' ? d.monto : null, e.fase === 'cerrada' ? d.moneda : null,

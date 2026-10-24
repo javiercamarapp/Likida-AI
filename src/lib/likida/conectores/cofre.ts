@@ -109,6 +109,9 @@ export function descifrar(guardado: string, contexto?: string): ValoresCredencia
   return JSON.parse(plano) as ValoresCredencial;
 }
 
+/** Largo mínimo del secreto para enseñar sus últimos 4 caracteres. */
+const UMBRAL_PISTA_SECRETO = 16;
+
 /**
  * Las PISTAS: lo único que vuelve al panel.
  *
@@ -118,8 +121,9 @@ export function descifrar(guardado: string, contexto?: string): ValoresCredencia
  * lea como un recorte y no como el valor.
  *
  * Cuatro caracteres alcanzan para que una persona confirme que tecleó la
- * correcta y no alcanzan para reconstruir nada. Un secreto de menos de 8
- * caracteres se tapa ENTERO: enseñar 4 de 6 sería regalar dos tercios.
+ * correcta y no alcanzan para reconstruir nada. Un secreto de menos de 16
+ * caracteres se tapa ENTERO: enseñar 4 de 8 sería regalar la mitad (A37-S37-06;
+ * antes el umbral era 8). Con 16 o más, los 4 últimos son una cuarta parte o menos.
  */
 /** A37-S37-05: `url`, `base_url`, ... (la misma convención de `credenciales.ts`). */
 function esClaveUrl(clave: string): boolean {
@@ -141,7 +145,7 @@ export function pistasDe(campos: readonly CampoCredencial[], valores: ValoresCre
     const v = valores[campo.clave];
     if (v === undefined || v === '') continue;
     if (campo.forma === 'secreto') {
-      pistas[campo.clave] = v.length >= 8 ? `…${v.slice(-4)}` : '…';
+      pistas[campo.clave] = v.length >= UMBRAL_PISTA_SECRETO ? `…${v.slice(-4)}` : '…';
     } else {
       pistas[campo.clave] = esClaveUrl(campo.clave) ? sinParametrosDeUrl(v) : v;
     }
