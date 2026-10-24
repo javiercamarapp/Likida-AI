@@ -1721,3 +1721,31 @@ describe('AUDITORÍA 15 — el contador caído no puede afirmar "excedente contr
     expect(d.nota).not.toContain('NO se deduce');
   });
 });
+
+// A37-S40-04 — la política por ruta debe casar con el formato que muestra la UI.
+describe('políticas por ruta (A37-S40-04)', () => {
+  const pol: PoliticaGasto[] = [
+    { concepto: 'caseta', topeMonto: 1500 },
+    { concepto: 'caseta', ruta: 'CDMX - Nuevo Laredo, Tamaulipas', topeMonto: 2200 },
+  ];
+  const caseta = [g({ concepto: 'caseta', monto: 1800, folio: 'C1' })];
+  const sobre = (r: ReturnType<typeof cuadrarViaje>) => r.diferencias.filter((d) => d.tipo === 'sobre_politica');
+
+  it('«origen - destino, Estado» casa con origen y destino del viaje (normalizados)', () => {
+    const r = cuadrarViaje({ viajeId: 'v1', anticipo: 1800, politica: pol, gastos: caseta, ruta: 'Nuevo Laredo', rutaOrigen: 'cdmx' });
+    expect(sobre(r)).toHaveLength(0); // aplica el tope de 2200 de la ruta
+  });
+  it('acentos y mayúsculas no importan', () => {
+    const p2: PoliticaGasto[] = [{ concepto: 'caseta', topeMonto: 1500 }, { concepto: 'caseta', ruta: 'Mérida', topeMonto: 2200 }];
+    const r = cuadrarViaje({ viajeId: 'v1', anticipo: 1800, politica: p2, gastos: caseta, ruta: 'MERIDA' });
+    expect(sobre(r)).toHaveLength(0);
+  });
+  it('otra ruta NO hereda el tope de la regla: cae a la general', () => {
+    const r = cuadrarViaje({ viajeId: 'v1', anticipo: 1800, politica: pol, gastos: caseta, ruta: 'Monterrey', rutaOrigen: 'cdmx' });
+    expect(sobre(r)).toHaveLength(1);
+  });
+  it('mismo destino pero otro origen tampoco casa', () => {
+    const r = cuadrarViaje({ viajeId: 'v1', anticipo: 1800, politica: pol, gastos: caseta, ruta: 'Nuevo Laredo', rutaOrigen: 'Guadalajara' });
+    expect(sobre(r)).toHaveLength(1);
+  });
+});
