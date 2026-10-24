@@ -36,7 +36,11 @@ function sanear(valor: unknown, maxLargo: number): string {
 // A37-S08-05: el nombre de evento lo controla quien llama. Solo se aceptan
 // identificadores con punto (`app.global_error`), cortos; cualquier otra forma
 // cae a un nombre fijo para no inflar la cardinalidad de logs/Sentry.
-const EVENTO_VALIDO = /^[a-z][a-z0-9_]{0,39}(\.[a-z0-9_]{1,39}){0,3}$/i;
+const SEGMENTO_EVENTO = /^[a-z][a-z0-9_]{0,39}$/i;
+function eventoValido(nombre: string): boolean {
+  const partes = nombre.split('.');
+  return partes.length <= 4 && partes.every((p) => SEGMENTO_EVENTO.test(p));
+}
 const MAX_CLAVES_META = 16;
 const MAX_LARGO_VALOR = 200;
 
@@ -78,7 +82,7 @@ export async function POST(req: Request) {
   };
   const nivel = NIVELES.has(level as string) ? (level as 'warn' | 'error') : 'error';
   const nombre = sanear(msg, 80);
-  const evento = `client.${nombre ? (EVENTO_VALIDO.test(nombre) ? nombre : 'evento_no_reconocido') : 'sin_evento'}`;
+  const evento = `client.${nombre ? (eventoValido(nombre) ? nombre : 'evento_no_reconocido') : 'sin_evento'}`;
   const detalle = meta && typeof meta === 'object' && !Array.isArray(meta)
     ? acotarMeta(meta as Record<string, unknown>)
     : {};
