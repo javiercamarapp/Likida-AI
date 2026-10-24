@@ -575,7 +575,7 @@ export type ResultadoGuardarTarifa =
   | { ok: false; motivo: string };
 
 /** Guarda (crea o actualiza por caseta+clase+inicio) UNA tarifa. `origen` por omisión: «declarada» (nunca nace confirmada). */
-export async function guardarTarifa(tenantId: string, entrada: TarifaEntrada, origen: OrigenTarifa = 'declarada'): Promise<ResultadoGuardarTarifa> {
+export async function guardarTarifa(tenantId: string, entrada: TarifaEntrada, origen: OrigenTarifa = 'declarada', quienConfirma: string | null = null): Promise<ResultadoGuardarTarifa> {
   let existentes: TarifaVista[];
   try {
     existentes = await listarTarifas(tenantId, { caseta: entrada.caseta, clase: entrada.clase });
@@ -583,7 +583,7 @@ export async function guardarTarifa(tenantId: string, entrada: TarifaEntrada, or
     logger.error('peajes.guardar_tarifa_lectura', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
     return { ok: false, motivo: 'No se pudo leer el tarifario actual. Inténtalo de nuevo.' };
   }
-  const plan = planificarTarifa(existentes, entrada, origen);
+  const plan = planificarTarifa(existentes, entrada, origen, quienConfirma);
   if (plan.tipo === 'rechazada') return { ok: false, motivo: plan.motivo };
   if (plan.tipo === 'igual') return { ok: true, accion: 'sin_cambios', confirmada: plan.fila.confirmada };
   const { error } = await acotada(
@@ -631,9 +631,11 @@ export async function confirmarTarifa(tenantId: string, tarifaId: string, por: s
  * vigencia empieza hoy (hora de México). Repetirlo es seguro.
  */
 export async function importarTarifasArchivo(
-  tenantId: string, nombre: string, buffer: Uint8Array, origen: OrigenTarifa = 'declarada',
+  tenantId: string, nombre: string, buffer: Uint8Array, origen: OrigenTarifa = 'declarada', quienConfirma: string | null = null,
 ): Promise<ResultadoImportacionCatalogo> {
   const falla = (error: string): ResultadoImportacionCatalogo => ({ ok: false, guardadas: 0, actualizadas: 0, rechazadas: [], error });
+  // A37-A2-26: una carga «proveedor» nace confirmada; sin el nombre de quien confirma no se guarda nada.
+  if (origen === 'proveedor' && !quienConfirma?.trim()) return falla('Una carga con origen «proveedor» nace confirmada: indica quién la confirma.');
   const m = matrizDeArchivoCatalogo(nombre, buffer);
   if (!m.ok) return falla(m.motivo);
   const lectura = parsearTarifasMatriz(m.matriz, { desdePorDefecto: hoyMx() });
@@ -653,7 +655,7 @@ export async function importarTarifasArchivo(
   let actualizadas = 0;
   for (const t of lectura.tarifas) {
     // Se planifica contra lo guardado MÁS lo ya aceptado de este mismo archivo.
-    const plan = planificarTarifa(vigentes, t, origen);
+    const plan = planificarTarifa(vigentes, t, origen, quienConfirma);
     if (plan.tipo === 'rechazada') { rechazadas.push({ fila: t.fila, motivo: plan.motivo }); continue; }
     guardadas++;
     if (plan.tipo === 'actualizar') actualizadas++;

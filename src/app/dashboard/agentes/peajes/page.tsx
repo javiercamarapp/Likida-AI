@@ -19,6 +19,7 @@ import { bitacoraConciliada } from '@/lib/likida/peajes/bitacora_conciliada';
 import { logger } from '@/lib/logger';
 import { sufijoTenant, querystringCompleto } from '../../sufijo';
 import { avisoAgentePeajesApagado } from './apagado';
+import { actorDePanel } from '@/lib/likida/peajes/actor_panel';
 import { superficiePeajesDeTenant, MOTIVO_STAND_BY_PERFIL } from '@/lib/likida/peajes/superficie_perfil';
 import { VistaAgentePeajes } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
@@ -274,7 +275,7 @@ export default async function PaginaAgentePeajes({
     if (!motivo) return { error: 'Escribe el motivo: una anulación sin porqué no se puede defender después.' };
     if (motivo.length > 500) return { error: 'El motivo pasa de 500 caracteres.' };
     try {
-      const r = await anularDesgloseDb(tenantId, desgloseId.toLowerCase(), motivo, `panel:${sesion.rol}`);
+      const r = await anularDesgloseDb(tenantId, desgloseId.toLowerCase(), motivo, actorDePanel(sesion));
       if (r === 'no_encontrado') return { error: 'No encontré ese desglose en tu flota.' };
       logger.info('peajes.desglose_anulado', { tenantId, desglose: desgloseId, resultado: r });
       return { ok: r === 'ya_anulado' ? 'Ese desglose ya estaba anulado.' : 'Desglose anulado: ya no cuenta. El archivo correcto puede volver a mandarse.' };

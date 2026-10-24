@@ -189,6 +189,25 @@ describe('conciliarDesglose: tag↔unidad, caseta y GPS', () => {
     expect(linea('l3')).toMatchObject({ gps_veredicto: 'sin_datos', gps_detalle: { motivo: 'sin_unidad', unidad_origen: null } });
   });
 
+  it('A37-S53-01: una baja con fecha conserva la unidad de los cruces ANTERIORES (archivo tardío) y no atribuye los posteriores', async () => {
+    // l1 = 5-ago, l2 = 6-ago, l3 = 7-ago. La baja rige desde el 6-ago (ya vencida: activo=false, como la deja bajaTag).
+    db.tablas.peaje_tag[0].activo = false;
+    db.tablas.peaje_tag_baja = [{ id: 'b1', tenant_id: T, tag: 'IMDM10000001', baja_en: '2026-08-06', motivo: 'x' }];
+    await conciliarDesglose(T, 'd1', 'cron');
+    expect(linea('l1').unidad_id).toBe('u1'); // anterior a la baja: conserva la unidad por TAG
+    expect(linea('l2').unidad_id).toBe('u1'); // el mismo día de la baja todavía cuenta
+    expect(linea('l3').unidad_id).toBeNull(); // posterior: no se le atribuye
+    expect(linea('l1').gps_detalle).toMatchObject({ unidad_origen: 'tag' });
+  });
+
+  it('A37-S53-01: una baja programada a futuro (activo=true) deja de atribuir después de su fecha, sin barrido', async () => {
+    db.tablas.peaje_tag_baja = [{ id: 'b1', tenant_id: T, tag: 'IMDM10000001', baja_en: '2026-08-05', motivo: 'x' }];
+    await conciliarDesglose(T, 'd1', 'cron');
+    expect(linea('l1').unidad_id).toBe('u1');
+    expect(linea('l2').unidad_id).toBeNull();
+    expect(linea('l3').unidad_id).toBeNull();
+  });
+
   it('sin catálogo de casetas: todas «sin_caseta», ninguna acusación', async () => {
     db.tablas.peaje_caseta = [];
     const r = await conciliarDesglose(T, 'd1');
