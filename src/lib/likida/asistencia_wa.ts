@@ -73,7 +73,29 @@ const RETEN = /\breten\b/;
 const RETEN_LIBRADO =
   /\b(ya )?(pasamos|pase|cruzamos|libramos|salimos)\b.*\breten\b|\breten\b.*\bsin (problema|problemas|novedad|pedo|bronca)\b/;
 const LESIONADOS =
-  /\b(lesionado|lesionados|herido|heridos|sangre|muerto|muertos|murio|murieron|fallecio|fallecieron)\b/;
+  /\b(lesionado|lesionados|herido|heridos|sangre|fallecio|fallecieron)\b/;
+// A37-S29-05: «murió/muerto» NO es lesionado por sí solo: «se me murió la batería» es un varado, no una emergencia médica (y el dueño no
+// debe recibir el contacto de emergencia del operador por eso). Cuenta como lesionado con contexto HUMANO; sin humano ni objeto es
+// ambiguo (sigue siendo ROJO por la asimetría «mejor falso positivo», pero sin fijar hay_lesionados ni mostrar al tercero); con objeto
+// y sin humano no es emergencia.
+const MUERTE = /\b(murio|murieron|muerto|muertos)\b/;
+const MUERTE_HUMANA =
+  /\b(señor|senor|senora|persona|personas|gente|companero|compañero|chofer|operador|conductor|ayudante|hombre|mujer|nino|nina|joven|alguien|peaton|pasajero|ciclista|motociclista|muchacho|muchacha|viejito|viejita|otro chofer|cristiano)\b/;
+const MUERTE_DE_OBJETO =
+  /\b(bateria|pila|motor|unidad|camion|trailer|tracto|torton|llanta|llantas|celular|telefono|radio|gps|luz|luces|alternador|turbo|bomba|equipo|caja|termo|refrigeracion|frio|marcha|computadora|tablero|freno|frenos|direccion|aire)\b/;
+function muerteDe(t: string): 'humana' | 'ambigua' | null {
+  if (!MUERTE.test(t)) return null;
+  if (MUERTE_HUMANA.test(t)) return 'humana';
+  return MUERTE_DE_OBJETO.test(t) ? null : 'ambigua';
+}
+/** Lesionados con certeza razonable (fija `hay_lesionados` y puede mostrar el contacto de emergencia). */
+function hayLesionadosFuerte(t: string): boolean {
+  return LESIONADOS.test(t) || muerteDe(t) === 'humana';
+}
+/** Lo anterior o una «muerte» ambigua: basta para el ROJO y el tipo de emergencia médica, no para el parte médico. */
+function hayLesionadosPosible(t: string): boolean {
+  return hayLesionadosFuerte(t) || muerteDe(t) === 'ambigua';
+}
 // "accidente"/"volteo" pueden ser de un tercero o una maniobra — el falso
 // positivo aquí es un 🚨 que el jefe descarta; el negativo, una emergencia
 // tratada como charla. La asimetría del manifiesto manda: entran.
@@ -109,7 +131,7 @@ export function interpretarAsistencia(texto: string | undefined): Asistencia | n
   if (typeof texto !== 'string' || !texto.trim()) return null;
   const t = limpiar(texto);
   if (esViolencia(t)) return { nivel: 'rojo', modoMudo: true };
-  if (LESIONADOS.test(t) || SINIESTRO.test(t) || VIA_BLOQUEADA.test(t) || EMERGENCIA_SUELTA.test(t)) {
+  if (hayLesionadosPosible(t) || SINIESTRO.test(t) || VIA_BLOQUEADA.test(t) || EMERGENCIA_SUELTA.test(t)) {
     return { nivel: 'rojo', modoMudo: false };
   }
   if (AMBAR.test(t)) return { nivel: 'ambar', modoMudo: false };
@@ -131,7 +153,7 @@ export function tipoDeAsistencia(texto: string, nivel: NivelAsistencia): TipoAsi
   if (nivel === 'ambar') return 'varado';
   if (esViolencia(t)) return 'robo';
   if (SINIESTRO.test(t)) return 'siniestro';
-  if (LESIONADOS.test(t) || EMERGENCIA_SUELTA.test(t)) return 'emergencia_medica';
+  if (hayLesionadosPosible(t) || EMERGENCIA_SUELTA.test(t)) return 'emergencia_medica';
   if (VIA_BLOQUEADA.test(t)) return 'bloqueo';
   // Inalcanzable si `nivel` vino de interpretarAsistencia; el fallback dice
   // la verdad más conservadora en severidad.
@@ -155,7 +177,7 @@ export const RANGO_TIPO: Record<TipoAsistencia, number> = {
 /** `true` SOLO si el texto lo dice; si no, NULL (no preguntado). JAMÁS false:
  *  un false es un parte médico que solo el chofer puede dar. */
 export function lesionadosSegunTexto(texto: string): true | null {
-  return LESIONADOS.test(limpiar(texto)) ? true : null;
+  return hayLesionadosFuerte(limpiar(texto)) ? true : null;
 }
 
 // ── La bitácora por incidencia (0198) — best-effort, con idempotencia ──────

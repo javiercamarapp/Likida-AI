@@ -580,10 +580,11 @@ export function episodiosVista(eps: readonly EpisodioTablero[]): EpisodioVista[]
     const pasos: EpisodioVista['pasos'] = [];
     if (e.aviso1En) pasos.push({ texto: 'Primer aviso al chofer', en: e.aviso1En });
     if (e.aviso2En) pasos.push({ texto: 'Segundo aviso al chofer', en: e.aviso2En });
-    if (e.escaladoEn) pasos.push({ texto: 'Aviso al jefe de tráfico', en: e.escaladoEn });
+    if (e.escaladoEn) pasos.push({ texto: e.sinAvisarAlJefe ? 'Aviso al jefe de tráfico: NO llegó' : 'Aviso al jefe de tráfico', en: e.escaladoEn });
     let estado: string;
     if (abierto) {
-      estado = e.nivelEnviado === 3 ? 'Escalado al jefe de tráfico, sigue sin atenderse'
+      estado = e.nivelEnviado === 3 && e.sinAvisarAlJefe ? 'Se intentó avisar al jefe de tráfico y NO llegó: nadie lo ha avisado'
+        : e.nivelEnviado === 3 ? 'Escalado al jefe de tráfico, sigue sin atenderse'
         : e.nivelEnviado === 2 ? 'Segundo aviso mandado, sin respuesta del chofer'
         : e.nivelEnviado === 1 ? 'Primer aviso mandado, sin respuesta del chofer'
         : 'Detectado, falta mandar el primer aviso (o la flota lo tiene apagado)';

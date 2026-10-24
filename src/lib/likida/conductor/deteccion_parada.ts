@@ -137,7 +137,8 @@ export function estadoDetencionDeEventos(eventos: readonly EventoDetencionFila[]
     } else if (d.tipo === 'escalada') {
       st.escalada = true;
     } else if (d.tipo === 'cierre') {
-      st.abierto = false;
+      // A37-S35-04: al cerrarse el episodio, el aviso de apoyo ya no vale para el siguiente: un botón viejo no puede contestar «ya le avisé» sin avisar.
+      st.abierto = false; st.apoyoAvisado = false;
     }
   }
   return st;
@@ -444,12 +445,14 @@ async function preguntar(p: PuertosDetencion, v: ViajeContexto, ancla: HitoFila,
 
 async function escalar(p: PuertosDetencion, v: ViajeContexto, ancla: HitoFila, estado: EstadoDetencion, config: ConfigConductor, ahora: Date, r: ResultadoDeteccionParada): Promise<void> {
   const etiqueta = v.folio ?? v.id;
-  // La marca ANTES del aviso: un fallo a medias nunca produce un segundo aviso al supervisor por el mismo episodio.
-  if (!await p.guardarEventoDetencion(ancla, { tipo: 'escalada' })) { r.fallos.push(`detención ${etiqueta}: no se pudo anotar la escalada`); return; }
   const minutos = estado.preguntadoEn ? Math.max(0, Math.round((ahora.getTime() - Date.parse(estado.preguntadoEn)) / 60_000)) + avisoMinDe(config) : avisoMinDe(config);
+  // A37-S35-05: la marca «escalada» se escribe DESPUÉS del aviso y solo si el supervisor se enteró (entregado/en cola) o Meta lo rechazó de
+  // forma definitiva (no se insiste). Sin destinatario, o con una excepción de la base, NO se marca: la pasada siguiente reintenta en vez de
+  // perder el aviso de todo el episodio.
   const res = await avisarSupervisor(p, v, armarAvisoDetencion(v, 'sin_respuesta', minutos, ahora, config.zonaHoraria), 'conductor.deteccion_parada_sin_respuesta', ahora);
-  if (res === 'entregado' || res === 'en_cola') { r.escaladas++; return; }
   if (res === 'sin_destinatario') { r.sinDestinatario++; r.fallos.push(`${etiqueta}: no hay a quién avisar la detención sin respuesta`); return; }
+  if (!await p.guardarEventoDetencion(ancla, { tipo: 'escalada' })) r.fallos.push(`detención ${etiqueta}: el aviso salió pero no se pudo anotar la escalada`);
+  if (res === 'entregado' || res === 'en_cola') { r.escaladas++; return; }
   r.fallos.push(`detención ${etiqueta}: el aviso al supervisor fue rechazado`);
 }
 

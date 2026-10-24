@@ -25,6 +25,12 @@ const entrada = (p: Partial<EntradaInsights> = {}): EntradaInsights => ({
   ...dataset(), episodios: [], viajesSinSitio: null, lineaBase: null, ...p,
 });
 
+/** El dataset con 3 hitos por viaje: los 18 sin intervención caen en 6 viajes distintos (A37-S35-03). */
+const entradaConViajes = (p: Partial<EntradaInsights> = {}): EntradaInsights => {
+  const e = entrada(p);
+  return { ...e, hitos: e.hitos.map((h, i) => ({ ...h, viajeId: `v${Math.floor(i / 3)}` })) };
+};
+
 describe('insights del Conductor (T-A5-31)', () => {
   it('sin intervención = 18 de 20 (90 %): los hitos de oficina NO cuentan', () => {
     const r = calcularInsights(entrada());
@@ -72,9 +78,16 @@ describe('insights del Conductor (T-A5-31)', () => {
     }
   });
 
-  it('con línea base de 2 llamadas por hito: 36, rotulada estimación con su fecha', () => {
-    const r = calcularInsights(entrada({ lineaBase: { llamadasPorViaje: 2, registradaEn: '2026-03-01' } }));
-    expect(r.llamadasEvitadas.valor).toBe(36);
+  it('A37-S35-03: la línea base es POR VIAJE: 18 hitos sin intervención en 6 viajes × 2 = 12, no 36', () => {
+    const r = calcularInsights(entradaConViajes({ lineaBase: { llamadasPorViaje: 2, registradaEn: '2026-03-01' } }));
+    expect(r.llamadasEvitadas.valor).toBe(12);
+    // sin viajeId no se puede agrupar por viaje: se subestima (0), nunca se infla por hito
+    expect(calcularInsights(entrada({ lineaBase: { llamadasPorViaje: 2, registradaEn: '2026-03-01' } })).llamadasEvitadas.valor).toBe(0);
+  });
+
+  it('con línea base de 2 llamadas por viaje: rotulada estimación con su fecha', () => {
+    const r = calcularInsights(entradaConViajes({ lineaBase: { llamadasPorViaje: 2, registradaEn: '2026-03-01' } }));
+    expect(r.llamadasEvitadas.valor).toBe(12);
     expect(r.llamadasEvitadas.rotulo).toBe('estimación');
     expect(r.llamadasEvitadas.mensaje).toBe('Estimación con tu línea base de 2026-03-01');
     expect(r.llamadasEvitadas.fuente).toContain('linea_base_llamadas_por_viaje');
@@ -186,9 +199,9 @@ describe('KPIs del piloto (T-A5-61): con línea base declarada o «sin dato», n
   });
 
   it('mensajes del supervisor evitados: es la estimación de llamadas evitadas, solo con su línea base', () => {
-    const r = calcularInsights(entrada({ lineaBase: { llamadasPorViaje: 2, registradaEn: '2026-03-01' } }));
+    const r = calcularInsights(entradaConViajes({ lineaBase: { llamadasPorViaje: 2, registradaEn: '2026-03-01' } }));
     const k = kpi(r, 'mensajes_supervisor_evitados');
-    expect(k.valor).toBe(36);
+    expect(k.valor).toBe(12);
     expect(k.rotulo).toBe('estimación');
     expect(k.contraBase).toEqual({ lineaBase: 2, diferencia: null, mejoraPct: null, mejor: null });
   });

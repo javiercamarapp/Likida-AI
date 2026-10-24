@@ -198,6 +198,29 @@ describe('cableado: salida de descarga → pregunta → respuesta', () => {
     expect(pu.enviados).toHaveLength(1);
   });
 
+  it('A37-S36-03: si el renglón «respondido» no se guarda el chofer lo sabe (no «anotado») y el reintento SÍ avisa', async () => {
+    const { pu, dice } = await escenario();
+    await dice('ya terminé de descargar');
+    let falla = true;
+    pu.p.guardar = async (h, evento, d) => { if (falla) return false; await pu.p.evento(h, evento, d); return true; };
+    expect(textos(await dice(boton('caja_cargada')))).toMatch(/No pude anotarlo/);
+    expect(pu.enviados).toHaveLength(0);
+    falla = false;
+    await dice(boton('caja_cargada'));
+    expect(pu.enviados).toHaveLength(1);
+    expect(pu.evs.some((e) => e.detalle.estado === 'respondido')).toBe(true);
+  });
+
+  it('A37-S36-03: «respondido» ya guardado pero sin «alertado» (el aviso se perdió): el siguiente toque completa el aviso', async () => {
+    const { pu, dice } = await escenario();
+    await dice('ya terminé de descargar');
+    await dice(boton('caja_cargada'));
+    expect(pu.enviados).toHaveLength(1);
+    pu.evs.splice(0, pu.evs.length, ...pu.evs.filter((e) => e.detalle.estado !== 'alertado'));
+    await dice(boton('caja_cargada'));
+    expect(pu.enviados).toHaveLength(2);
+  });
+
   it('claim perdido (otro ya avisó): no manda otro y el chofer igual queda atendido', async () => {
     const { m, pu, dice } = await escenario({ reclamoPerdido: true });
     await dice('ya terminé de descargar');

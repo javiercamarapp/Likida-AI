@@ -43,7 +43,11 @@ export async function accionDecidirLote(_p: RespuestaControl | null, fd: FormDat
   const s = await sesion(); if (!s) return SIN_PERMISO;
   const id = clave(fd, 'loteId');
   if (!id) return { error: 'Falta el lote.' };
-  return responder(await decidirLote(s.tenantId, s.userId, id, clave(fd, 'decision') === 'confirmar', clave(fd, 'motivo') || undefined));
+  // A37-S29-06: la huella de lo que la persona vio (tickets y monto del lote en pantalla); sin ella confirmar se rechaza.
+  const tickets = Number(clave(fd, 'vistoTickets'));
+  const monto = Number(clave(fd, 'vistoMonto'));
+  const visto = clave(fd, 'vistoTickets') && clave(fd, 'vistoMonto') && Number.isFinite(tickets) && Number.isFinite(monto) ? { tickets, monto } : null;
+  return responder(await decidirLote(s.tenantId, s.userId, id, clave(fd, 'decision') === 'confirmar', clave(fd, 'motivo') || undefined, visto));
 }
 export async function accionPromoverPortal(_p: RespuestaControl | null, fd: FormData): Promise<RespuestaControl> {
   const s = await sesion(); if (!s) return SIN_PERMISO;

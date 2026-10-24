@@ -1816,6 +1816,8 @@ export interface DesgloseRecibido {
   porConciliar: number;
   sinMatch: number;
   monto: number;
+  /** A37-S29-07: la ventana de 1,000 líneas se llenó y este consolidado cae en su borde: sus cifras (líneas, monto, conciliadas…) son un MÍNIMO, no el total. */
+  parcial: boolean;
 }
 
 /** Los consolidados recibidos, agrupados desde sus líneas. Ventana de las
@@ -1828,6 +1830,7 @@ export interface DesgloseRecibido {
  *  las que Postgres quisiera — la bitácora podía enseñar consolidados viejos
  *  y callarse los recién recibidos. El límite se declara como lo que es y el
  *  orden garantiza que lo que entra a la ventana es lo último. */
+const VENTANA_DESGLOSES = 1000;
 export async function getDesglosesRecibidos(tenantId: string, limite = 8): Promise<DesgloseRecibido[]> {
   const res = await acotada(
     supabaseAdmin()
@@ -1836,7 +1839,7 @@ export async function getDesglosesRecibidos(tenantId: string, limite = 8): Promi
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
-    .limit(1000),
+    .limit(VENTANA_DESGLOSES),
     'getDesglosesRecibidos',
   );
   const filas = exigir(res, 'getDesglosesRecibidos') ?? [];
@@ -1849,7 +1852,7 @@ export async function getDesglosesRecibidos(tenantId: string, limite = 8): Promi
       cfdiXmlId: id,
       uuidCorto: (cfdi?.cfdi_uuid ?? id).slice(0, 8).toUpperCase(),
       recibido: cfdi?.created_at ?? null,
-      lineas: 0, conciliadas: 0, porConciliar: 0, sinMatch: 0, monto: 0,
+      lineas: 0, conciliadas: 0, porConciliar: 0, sinMatch: 0, monto: 0, parcial: false,
     };
     d.lineas += 1;
     d.monto += Number(f.monto ?? 0);
@@ -1857,6 +1860,12 @@ export async function getDesglosesRecibidos(tenantId: string, limite = 8): Promi
     else if (f.estatus === 'sin_match') d.sinMatch += 1;
     else d.porConciliar += 1;
     porCfdi.set(id, d);
+  }
+  // A37-S29-07: si la consulta llenó la ventana, el consolidado de la línea MÁS VIEJA que entró pudo quedar cortado: se marca parcial en vez
+  // de presentar una suma truncada como el total de ese estado de cuenta.
+  if (filas.length >= VENTANA_DESGLOSES && filas.length > 0) {
+    const borde = porCfdi.get(filas[filas.length - 1].cfdi_xml_id as string);
+    if (borde) borde.parcial = true;
   }
   return [...porCfdi.values()]
     .map((d) => ({ ...d, monto: round2(d.monto) }))

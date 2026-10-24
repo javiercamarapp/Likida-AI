@@ -2,7 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { getZonaHorariaTenant } from '../repo';
 import { acotada } from '../presupuesto';
-import { exigir, traerPorIds } from '../pg';
+import { IDS_POR_TANDA, exigir, traerPorIds, traerTodoPorLlave, type RespuestaPg } from '../pg';
 import {
   TIPOS_HITO, MINUTOS_SILENCIO_JEFE, MINUTOS_SILENCIO_RECUPERADA,
   type Contacto, type FuenteHito, type HitoFila, type InterpretacionHito, type TipoHito,
@@ -14,7 +14,7 @@ import { contieneDatoDeSeguridad } from './guardia_seguridad';
 import { aHitoApi, type EventoApi, type FiltrosHitos, type HitoApi, type CambioCitas } from './lectura';
 import type { AvisoReclamado } from './planificador';
 import type { ContactoTrafico } from './escalamiento';
-import type { EpisodioFila } from './senal_vida';
+import { avisosFallidosAlChofer, type EpisodioFila } from './senal_vida';
 import type { EstadoTransito } from './estados_transito';
 import type { MotivoSenalVida } from './solicitudes';
 import { esMotivoParada, type MotivoParada, type ParadaFila } from './paradas';
@@ -283,18 +283,30 @@ export type EventoHito =
   | 'solicitado' | 'recibido' | 'validado' | 'omitido' | 'escalado' | 'corregido' | 'pospuesto' | 'atendido' | 'contacto'
   | 'validacion' | 'evidencia' | 'captura_manual' | 'alerta_estadia' | 'alerta_llegada_sin_confirmar';
 
-/** Best-effort: perder un renglón de bitácora no puede romper el registro del hito. SIN datos personales en `detalle`. */
-export async function registrarEvento(
+/**
+ * Como `registrarEvento`, pero devuelve si quedó guardado (A37-S36-03): quien PERSISTE un estado que luego acusa al chofer («Anotado»)
+ * debe mirarlo. SIN datos personales en `detalle`.
+ */
+export async function registrarEventoConfirmado(
   h: Pick<HitoFila, 'id' | 'tenantId' | 'viajeId' | 'tipo'>, evento: EventoHito, detalle: Record<string, string | number | boolean | null> = {},
-): Promise<void> {
+): Promise<boolean> {
   try {
     const { error } = await acotada(supabaseAdmin().from('viaje_hito_evento').insert({
       tenant_id: h.tenantId, viaje_id: h.viajeId, viaje_hito_id: h.id, tipo_hito: h.tipo, evento, detalle,
     }), 'conductor.evento');
-    if (error) logger.warn('conductor.evento_no_guardado', { evento, hito: h.id, err: error.message });
+    if (error) { logger.warn('conductor.evento_no_guardado', { evento, hito: h.id, err: error.message }); return false; }
+    return true;
   } catch (e) {
     logger.warn('conductor.evento_no_guardado', { evento, hito: h.id, err: e instanceof Error ? e.message : String(e) });
+    return false;
   }
+}
+
+/** Best-effort: perder un renglón de bitácora no puede romper el registro del hito. SIN datos personales en `detalle`. */
+export async function registrarEvento(
+  h: Pick<HitoFila, 'id' | 'tenantId' | 'viajeId' | 'tipo'>, evento: EventoHito, detalle: Record<string, string | number | boolean | null> = {},
+): Promise<void> {
+  await registrarEventoConfirmado(h, evento, detalle);
 }
 
 // ── Escrituras de estado ────────────────────────────────────────────────────
@@ -794,14 +806,32 @@ export interface EventoPatioFila {
   creadoEn: string;
 }
 
+
+/**
+ * A37-S36-01: lee por `viaje_id` SIN mandar todos los ids en una sola URL (~200 UUID, 7.5 KB, es el techo del proxy: con más, la lectura
+ * entera rebotaba y el módulo que la usaba dejaba de funcionar para esa flota sin alerta) y SIN el techo silencioso de `max_rows`
+ * (la ventana `limit(2000)` ascendente descartaba los eventos MÁS NUEVOS al crecer la bitácora). Tandas de `IDS_POR_TANDA` y, dentro de
+ * cada una, cursor por `id` hasta agotarla. El resultado vuelve ordenado por `id` ascendente (del más viejo al más nuevo). Lanza si la base falla.
+ */
+async function leerPorViajeIds<K extends string | number>(
+  viajeIds: string[], pagina: (tanda: string[], despuesDe: K | null) => PromiseLike<RespuestaPg<Fila[]>>, comoLlave: (f: Fila) => K, consulta: string,
+): Promise<Fila[]> {
+  const todas: Fila[] = [];
+  for (let i = 0; i < viajeIds.length; i += IDS_POR_TANDA) {
+    const tanda = viajeIds.slice(i, i + IDS_POR_TANDA);
+    todas.push(...await traerTodoPorLlave<Fila, K>((d) => pagina(tanda, d), comoLlave, consulta));
+  }
+  return todas.sort((a, b) => (comoLlave(a) < comoLlave(b) ? -1 : comoLlave(a) > comoLlave(b) ? 1 : 0));
+}
+
 /** T-A5-44: la bitácora del patio de entrega de esos viajes DE ESA FLOTA, del más viejo al más nuevo. Lanza si la base falla. */
 export async function leerEventosPatio(tenantId: string, viajeIds: string[]): Promise<EventoPatioFila[]> {
   if (viajeIds.length === 0) return [];
-  const res = await acotada(supabaseAdmin().from('viaje_hito_evento')
+  const filas = await leerPorViajeIds<number>(viajeIds, (tanda, despues) => acotada(supabaseAdmin().from('viaje_hito_evento')
     .select('id, viaje_id, viaje_hito_id, evento, detalle, created_at')
-    .eq('tenant_id', tenantId).in('viaje_id', viajeIds).in('evento', ['validacion', 'atendido'])
-    .eq('detalle->>clase', 'patio_entrega').order('id', { ascending: true }).limit(2000), 'conductor.patio_eventos');
-  return ((exigir(res as never, 'conductor.patio_eventos') ?? []) as unknown as Fila[]).map((f) => ({
+    .eq('tenant_id', tenantId).in('viaje_id', tanda).in('evento', ['validacion', 'atendido']).gt('id', despues ?? 0)
+    .eq('detalle->>clase', 'patio_entrega').order('id', { ascending: true }).limit(1000), 'conductor.patio_eventos') as never, (f) => Number(f.id), 'conductor.patio_eventos');
+  return filas.map((f) => ({
     id: Number(f.id), viajeId: String(f.viaje_id), hitoId: String(f.viaje_hito_id), evento: f.evento === 'atendido' ? 'atendido' as const : 'validacion' as const,
     detalle: (f.detalle ?? {}) as Record<string, unknown>, creadoEn: String(f.created_at),
   }));
@@ -810,11 +840,11 @@ export async function leerEventosPatio(tenantId: string, viajeIds: string[]): Pr
 /** T-A5-46: la bitácora del resultado de la descarga de esos viajes DE ESA FLOTA (mismo formato que la del patio), del más viejo al más nuevo. Lanza si la base falla. */
 export async function leerEventosResultadoDescarga(tenantId: string, viajeIds: string[]): Promise<EventoPatioFila[]> {
   if (viajeIds.length === 0) return [];
-  const res = await acotada(supabaseAdmin().from('viaje_hito_evento')
+  const filas = await leerPorViajeIds<number>(viajeIds, (tanda, despues) => acotada(supabaseAdmin().from('viaje_hito_evento')
     .select('id, viaje_id, viaje_hito_id, evento, detalle, created_at')
-    .eq('tenant_id', tenantId).in('viaje_id', viajeIds).eq('evento', 'validacion')
-    .eq('detalle->>clase', 'resultado_descarga').order('id', { ascending: true }).limit(2000), 'conductor.resultado_descarga_eventos');
-  return ((exigir(res as never, 'conductor.resultado_descarga_eventos') ?? []) as unknown as Fila[]).map((f) => ({
+    .eq('tenant_id', tenantId).in('viaje_id', tanda).eq('evento', 'validacion').gt('id', despues ?? 0)
+    .eq('detalle->>clase', 'resultado_descarga').order('id', { ascending: true }).limit(1000), 'conductor.resultado_descarga_eventos') as never, (f) => Number(f.id), 'conductor.resultado_descarga_eventos');
+  return filas.map((f) => ({
     id: Number(f.id), viajeId: String(f.viaje_id), hitoId: String(f.viaje_hito_id), evento: 'validacion' as const,
     detalle: (f.detalle ?? {}) as Record<string, unknown>, creadoEn: String(f.created_at),
   }));
@@ -839,11 +869,11 @@ export interface EventoReporteFila {
 /** La bitácora del reporte de llegada de esos viajes DE ESA FLOTA, del más viejo al más nuevo. Lanza si la base falla. */
 export async function leerEventosReporte(tenantId: string, viajeIds: string[]): Promise<EventoReporteFila[]> {
   if (viajeIds.length === 0) return [];
-  const res = await acotada(supabaseAdmin().from('viaje_hito_evento')
+  const filas = await leerPorViajeIds<number>(viajeIds, (tanda, despues) => acotada(supabaseAdmin().from('viaje_hito_evento')
     .select('id, viaje_id, viaje_hito_id, detalle, created_at')
-    .eq('tenant_id', tenantId).in('viaje_id', viajeIds).eq('evento', 'validacion')
-    .eq('detalle->>clase', 'reporte_llegada').order('id', { ascending: true }).limit(2000), 'conductor.reporte_eventos');
-  return ((exigir(res as never, 'conductor.reporte_eventos') ?? []) as unknown as Fila[]).map((f) => ({
+    .eq('tenant_id', tenantId).in('viaje_id', tanda).eq('evento', 'validacion').gt('id', despues ?? 0)
+    .eq('detalle->>clase', 'reporte_llegada').order('id', { ascending: true }).limit(1000), 'conductor.reporte_eventos') as never, (f) => Number(f.id), 'conductor.reporte_eventos');
+  return filas.map((f) => ({
     id: Number(f.id), viajeId: String(f.viaje_id), hitoId: String(f.viaje_hito_id),
     detalle: (f.detalle ?? {}) as Record<string, unknown>, creadoEn: String(f.created_at),
   }));
@@ -887,11 +917,11 @@ export interface EventoDetencionFila {
 /** La bitácora de detención sin aviso de esos viajes DE ESA FLOTA, del más viejo al más nuevo. Lanza si la base falla. */
 export async function leerEventosDetencion(tenantId: string, viajeIds: string[]): Promise<EventoDetencionFila[]> {
   if (viajeIds.length === 0) return [];
-  const res = await acotada(supabaseAdmin().from('viaje_hito_evento')
+  const filas = await leerPorViajeIds<number>(viajeIds, (tanda, despues) => acotada(supabaseAdmin().from('viaje_hito_evento')
     .select('id, viaje_id, viaje_hito_id, detalle, created_at')
-    .eq('tenant_id', tenantId).in('viaje_id', viajeIds).eq('evento', 'validacion')
-    .eq('detalle->>clase', 'deteccion_parada').order('id', { ascending: true }).limit(2000), 'conductor.detencion_eventos');
-  return ((exigir(res as never, 'conductor.detencion_eventos') ?? []) as unknown as Fila[]).map((f) => ({
+    .eq('tenant_id', tenantId).in('viaje_id', tanda).eq('evento', 'validacion').gt('id', despues ?? 0)
+    .eq('detalle->>clase', 'deteccion_parada').order('id', { ascending: true }).limit(1000), 'conductor.detencion_eventos') as never, (f) => Number(f.id), 'conductor.detencion_eventos');
+  return filas.map((f) => ({
     id: Number(f.id), viajeId: String(f.viaje_id), hitoId: String(f.viaje_hito_id),
     detalle: (f.detalle ?? {}) as Record<string, unknown>, creadoEn: String(f.created_at),
   }));
@@ -920,13 +950,15 @@ export async function guardarEventoDetencion(
  */
 export async function leerParadasRecientes(tenantId: string, viajeIds: string[], desde: Date): Promise<ParadaFila[]> {
   if (viajeIds.length === 0) return [];
-  const { data, error } = await acotada(supabaseAdmin().from('viaje_parada').select(COLUMNAS_PARADA)
-    .eq('tenant_id', tenantId).in('viaje_id', viajeIds).or(`fin.is.null,fin.gte.${desde.toISOString()}`).limit(2000), 'conductor.parada_recientes');
-  if (error) {
-    if (faltaEsquema(error, /viaje_parada/i)) return [];
-    throw new Error(`conductor.parada_recientes: ${error.message}`);
-  }
-  return ((data ?? []) as unknown as Fila[]).map(filaAParada).filter((p): p is ParadaFila => p !== null);
+  const filas = await leerPorViajeIds<string>(viajeIds, async (tanda, despues) => {
+    const res = await acotada(supabaseAdmin().from('viaje_parada').select(COLUMNAS_PARADA)
+      .eq('tenant_id', tenantId).in('viaje_id', tanda).or(`fin.is.null,fin.gte.${desde.toISOString()}`).gt('id', despues ?? '00000000-0000-0000-0000-000000000000')
+      .order('id', { ascending: true }).limit(1000), 'conductor.parada_recientes');
+    // La 0806 aún no está en la base: no hay paradas (no es un fallo).
+    if (res.error && faltaEsquema(res.error, /viaje_parada/i)) return { data: [], error: null } as never;
+    return res as never;
+  }, (f) => String(f.id), 'conductor.parada_recientes');
+  return filas.map(filaAParada).filter((p): p is ParadaFila => p !== null);
 }
 
 /** Guarda las citas del viaje DE ESA FLOTA. `no_encontrado` = no existe o es de otra flota (misma respuesta). */
@@ -1331,6 +1363,13 @@ export async function cerrarEpisodioSenalVida(
   if (error) logger.warn('conductor.senal_cerrar_fallo', { episodio: ep.id, err: error.message });
 }
 
+/** A37-S36-05: deshace el reclamo del nivel 3 (sin destinatario): vuelve a `nivel_enviado = 2` y sin `escalado_en`. Solo si sigue en 3 y abierto. */
+export async function liberarNivelSenalVida(ep: Pick<EpisodioFila, 'id' | 'tenantId'>, nivel: 3): Promise<void> {
+  const { error } = await acotada(supabaseAdmin().from('viaje_senal_vida').update({ nivel_enviado: nivel - 1, escalado_en: null })
+    .eq('id', ep.id).eq('tenant_id', ep.tenantId).eq('nivel_enviado', nivel).is('cerrado_en', null), 'conductor.senal_nivel_liberar');
+  if (error) logger.warn('conductor.senal_nivel_liberar_fallo', { episodio: ep.id, err: error.message });
+}
+
 export async function anotarFalloSenalVida(ep: Pick<EpisodioFila, 'id' | 'tenantId'>, texto: string): Promise<void> {
   const { error } = await acotada(supabaseAdmin().from('viaje_senal_vida').update({ ultimo_error: texto.slice(0, 200) }).eq('id', ep.id).eq('tenant_id', ep.tenantId), 'conductor.senal_error');
   if (error) logger.warn('conductor.senal_error_fallo', { episodio: ep.id, err: error.message });
@@ -1391,6 +1430,8 @@ export interface EpisodioTablero {
   aviso1En: string | null;
   aviso2En: string | null;
   escaladoEn: string | null;
+  /** A37-S36-05: el nivel 3 quedó tomado pero el aviso al jefe NO llegó (el episodio guarda el error). */
+  sinAvisarAlJefe?: boolean;
   cerradoEn: string | null;
   cierreMotivo: 'respondio' | 'senal_recuperada' | 'viaje_cerrado' | 'atendido_por_jefe' | null;
   respuesta: 'estoy' | 'voy_a_cargar' | 'estoy_bien' | null;
@@ -1422,7 +1463,7 @@ export async function leerEpisodiosParaTablero(
     recortadoPorViajes = viajeIds.length > TOPE_VIAJES_FILTRO;
   }
   let q = supabaseAdmin().from('viaje_senal_vida')
-    .select('id, viaje_id, motivo, abierto_en, nivel_enviado, aviso_1_en, aviso_2_en, escalado_en, cerrado_en, cierre_motivo, respuesta')
+    .select('id, viaje_id, motivo, abierto_en, nivel_enviado, aviso_1_en, aviso_2_en, escalado_en, cerrado_en, cierre_motivo, respuesta, ultimo_error')
     .eq('tenant_id', tenantId).gte('abierto_en', desde.toISOString());
   if (viajeIds) q = q.in('viaje_id', viajeIds.slice(0, TOPE_VIAJES_FILTRO));
   const r = await acotada(q.order('abierto_en', { ascending: false }).order('id').limit(limite + 1), 'tablero.episodios');
@@ -1454,6 +1495,8 @@ export async function leerEpisodiosParaTablero(
         motivo: x.motivo === 'gps_detenido' ? 'gps_detenido' : 'gps_obsoleto',
         abiertoEn: String(x.abierto_en), nivelEnviado: (nivel === 1 || nivel === 2 || nivel === 3 ? nivel : 0),
         aviso1En: str(x.aviso_1_en), aviso2En: str(x.aviso_2_en), escaladoEn: str(x.escalado_en), cerradoEn: str(x.cerrado_en),
+        // A37-S36-05: en el nivel 3, un `ultimo_error` que no es la marca de un aviso fallido al CHOFER es que el aviso al jefe no salió.
+        sinAvisarAlJefe: nivel === 3 && typeof x.ultimo_error === 'string' && x.ultimo_error !== '' && avisosFallidosAlChofer(x.ultimo_error) === 0,
         cierreMotivo: (['respondio', 'senal_recuperada', 'viaje_cerrado', 'atendido_por_jefe'] as const).find((c) => c === x.cierre_motivo) ?? null,
         respuesta: (['estoy', 'voy_a_cargar', 'estoy_bien'] as const).find((c) => c === x.respuesta) ?? null,
       };

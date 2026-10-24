@@ -383,6 +383,42 @@ describe('atenderMensajeProveedor', () => {
     expect(await atenderMedioProveedorSinTexto('5215559999999', 'audio')).toBeNull();
   });
 
+  it('A37-S29-04: el mismo gruero en DOS flotas: el texto NO se reenvía a ningún jefe ni a ninguna bitácora de flota', async () => {
+    respuestas[SEL_ACTIVAS] = {
+      data: [
+        { id: COO, tenant_id: 't1', incidencia_id: INC, estado: 'contactado', proveedor_nombre: 'Grúas El Güero', mensaje_preparado: 'a' },
+        { id: 'c2', tenant_id: 't2', incidencia_id: 'i2', estado: 'contactado', proveedor_nombre: 'Grúas El Güero', mensaje_preparado: 'b' },
+      ],
+      error: null,
+    };
+    telefonoJefeDe.mockResolvedValue('5215550000009');
+    sendText.mockResolvedValue('wamid.TXT');
+    const secreto = 'ya voy por la unidad 12 de Transportes Beta, km 45';
+    const r = await atenderMensajeProveedor('5299911122233', secreto);
+    expect(r).toContain('más de una solicitud activa');
+    for (const [, texto] of sendText.mock.calls as unknown as Array<[string, string]>) expect(texto).not.toContain('unidad 12');
+    expect(sendText).toHaveBeenCalledTimes(2); // un aviso SIN contenido por flota
+    for (const [, , , datos] of anotarEventoIncidencia.mock.calls as unknown as Array<[string, string, string, Record<string, unknown>]>) {
+      expect(JSON.stringify(datos)).not.toContain('unidad 12');
+      expect(datos.sinTexto).toBe(true);
+    }
+  });
+
+  it('dos gestiones vivas de la MISMA flota: el texto va a la bitácora y al jefe UNA sola vez', async () => {
+    respuestas[SEL_ACTIVAS] = {
+      data: [
+        { id: COO, tenant_id: 't1', incidencia_id: INC, estado: 'contactado', proveedor_nombre: 'Grúas El Güero', mensaje_preparado: 'a' },
+        { id: 'c2', tenant_id: 't1', incidencia_id: 'i2', estado: 'contactado', proveedor_nombre: 'Grúas El Güero', mensaje_preparado: 'b' },
+      ],
+      error: null,
+    };
+    telefonoJefeDe.mockResolvedValue('5215550000009');
+    sendText.mockResolvedValue('wamid.TXT');
+    await atenderMensajeProveedor('5299911122233', 'llego en 40 min');
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(anotarEventoIncidencia).toHaveBeenCalledTimes(2);
+  });
+
   it('dos gestiones vivas con el mismo teléfono: no se adivina — bitácora y jefe de CADA una', async () => {
     respuestas[SEL_ACTIVAS] = {
       data: [
@@ -395,6 +431,7 @@ describe('atenderMensajeProveedor', () => {
     sendText.mockResolvedValue('wamid.TXT');
     const r = await atenderMensajeProveedor('5299911122233', 'llego en 40 min');
     expect(r).toContain('más de una solicitud activa');
+    // misma flota o no, el contenido no se multiplica; aquí son flotas distintas (t1, t2): ver la prueba de A37-S29-04
     expect(anotarEventoIncidencia).toHaveBeenCalledTimes(2);
     // NADA se cotizó: la atribución es del humano.
     expect(escrituras.filter((e) => e.clave === 'coordinacion_proveedor.claim')).toHaveLength(0);
