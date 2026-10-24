@@ -162,7 +162,10 @@ export async function leerTicketsSinRespuesta(limite: number, venceEnVuelta?: nu
     const filas = (data ?? []) as Array<Record<string, unknown>>;
     if (filas.length === 0) break;
 
-    const conPieza = await titulosConPieza(filas.map((f) => tituloFaq(String(f.id))));
+    const conPieza = await titulosConPieza(
+      filas.map((f) => tituloFaq(String(f.id))),
+      [...new Set(filas.map((f) => String(f.tenant_id)))],
+    );
     const cortada = await candidatosDePagina(filas.filter((f) => !conPieza.has(tituloFaq(String(f.id)))), limite, salida, venceEnVuelta);
     if (cortada) break;
     if (filas.length < TAM_PAGINA) break; // última página
@@ -177,12 +180,13 @@ export function tituloFaq(ticketId: string): string {
 
 /** De estos títulos, cuáles YA tienen pieza en la bandeja (cualquier estado).
  *  LANZA ante error: sin poder saberlo no se adivina. */
-async function titulosConPieza(titulos: string[]): Promise<Set<string>> {
+async function titulosConPieza(titulos: string[], tenantIds: string[]): Promise<Set<string>> {
   if (titulos.length === 0) return new Set();
   const { data, error } = await acotada(supabaseAdmin()
     .from('cola_aprobacion')
     .select('titulo')
     .eq('agente', 'atencion_faq')
+    .in('tenant_id', tenantIds)
     .in('titulo', titulos), 'faq.titulos_con_pieza');
   if (error) throw new Error(`leerTicketsSinRespuesta(piezas): ${error.message}`);
   if (!Array.isArray(data)) throw new Error('leerTicketsSinRespuesta(piezas): PostgREST no devolvió las piezas.');
