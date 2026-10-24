@@ -41,8 +41,19 @@ export function leerLeidas(): Set<string> {
   return set;
 }
 
+// A37-S07-07: tope del set (las claves cargan el texto de la alerta, y cada
+// texto distinto deja una clave muerta). Se podan las MÁS VIEJAS (orden de
+// inserción del Set); mismo criterio que dashboard/notificaciones-leidas.ts.
+const MAX_LEIDAS = 500;
+
 function guardarLeidas(leidas: Set<string>) {
-  window.localStorage.setItem(CLAVE_STORAGE, JSON.stringify([...leidas]));
+  const acotadas = leidas.size > MAX_LEIDAS ? new Set([...leidas].slice(-MAX_LEIDAS)) : leidas;
+  try {
+    window.localStorage.setItem(CLAVE_STORAGE, JSON.stringify([...acotadas]));
+  } catch {
+    // Cuota llena o almacenamiento bloqueado: el descarte se pierde al recargar
+    // (la alerta reaparece, el lado seguro). Mejor eso que lanzar en el clic.
+  }
   // `storage` solo dispara en OTRAS pestañas — la campana del sidebar y la
   // lista de /admin/notificaciones viven en la MISMA pestaña (mismo
   // layout persistente), así que un evento propio es lo que de verdad las
@@ -51,13 +62,13 @@ function guardarLeidas(leidas: Set<string>) {
 }
 
 export function marcarLeida(clave: string) {
-  const leidas = leerLeidas();
+  const leidas = new Set(leerLeidas());
   leidas.add(clave);
   guardarLeidas(leidas);
 }
 
 export function marcarTodasLeidas(claves: string[]) {
-  const leidas = leerLeidas();
+  const leidas = new Set(leerLeidas());
   claves.forEach((c) => leidas.add(c));
   guardarLeidas(leidas);
 }
