@@ -22,6 +22,15 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+describe('A37-S51-10: sin respuesta al AUTENTICAR no es ambiguo (no se envió ningún XML)', () => {
+  it('timeout al autenticar: clase auth (reintentable), nunca red, y no se llama a /issue', async () => {
+    fetchMock.mockRejectedValueOnce(new Error('timeout'));
+    const r = await crearProveedorSw(CFG).timbrar('<cfdi/>');
+    expect(r).toMatchObject({ ok: false, clase: 'auth' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('PRU-11: la autenticación (sin token en caché) trata un no-2xx como auth y NO timbra', () => {
   it('401 con {message} en la PRIMERA autenticación: clase auth, el mensaje del PAC, y NUNCA se llama a /issue', async () => {
     fetchMock.mockResolvedValueOnce(

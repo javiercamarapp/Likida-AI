@@ -58,10 +58,9 @@ async function autenticar(cfg: ConfigSw): Promise<string | { error: ResultadoTim
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch (e) {
-    // Sin respuesta del PAC ni para autenticar: ambiguo NO — autenticar no
-    // timbra nada, así que es 'red' pero seguro de reintentar; la clase la
-    // decide el llamador del timbre, aquí solo se reporta.
-    return { error: { ok: false, clase: 'red', codigo: null, mensaje: `Sin respuesta del PAC al autenticar: ${e instanceof Error ? e.message : String(e)}` } };
+    // A37-S51-10: sin respuesta del PAC ni para autenticar NO es ambiguo: autenticar no timbra ni cancela nada, así que NO hay
+    // timbre que verificar. Se clasifica 'auth' (no 'red'): quien timbra suelta la reserva y reintenta en vez de bloquear el viaje.
+    return { error: { ok: false, clase: 'auth', codigo: null, mensaje: `Sin respuesta del PAC al autenticar: ${e instanceof Error ? e.message : String(e)}` } };
   }
   let cuerpo: unknown = null;
   try { cuerpo = await res.json(); } catch { /* cuerpo no-JSON: se trata abajo */ }

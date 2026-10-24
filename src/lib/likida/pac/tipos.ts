@@ -17,7 +17,8 @@
 //                        ciegas: se verifica en el panel del PAC primero
 //                        (lección c5-3 del enviador, el mismo patrón).
 //   · 'auth'           — credenciales malas/vencidas tras reintentar el
-//                        token una vez. Es configuración, no el XML.
+//                        token una vez, o sin respuesta al AUTENTICAR (nada se envió: no hay
+//                        timbre que verificar, es seguro reintentar). No es el XML.
 //   · 'no_configurado' — no hay PAC en las variables de entorno. Jamás se
 //                        simula un timbre (regla de la casa: un uuid
 //                        inventado es una falsificación).
