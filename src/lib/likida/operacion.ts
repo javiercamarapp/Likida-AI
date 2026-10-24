@@ -831,7 +831,7 @@ export async function avisarAlChofer(tenantId: string, operadorId: string, viaje
     }
     if (!ganado || ganado.length === 0) {
       logger.info('viaje.aviso_ya_reclamado', { viajeId });
-      return;
+      return true; // otra invocación lo reclamó y es la que lo manda: no se duplica ni se reporta como «no salió»
     }
     reclamo = marca;
   }

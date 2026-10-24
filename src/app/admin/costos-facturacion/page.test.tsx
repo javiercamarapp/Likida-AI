@@ -255,7 +255,7 @@ it('accionConciliar: un PAC caído NO deshace el pago ya registrado — se dice 
 });
 
 it('A37-L-03: un timbrado AMBIGUO (el PAC no contestó) NO dice «NO se timbró» ni invita a timbrar a mano', async () => {
-  dobles.getPorCobrar.mockResolvedValue([{ id: 'f-1', tenantNombre: 'ACME', periodoInicio: '2026-01-01', periodoFin: '2026-01-31', referencia: 'R', monto: 2784, subtotal: 2400, iva: 384 }]);
+  dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [{ id: 'f-1', tenantNombre: 'ACME', periodoInicio: '2026-01-01', periodoFin: '2026-01-31', referencia: 'R', monto: 2784, subtotal: 2400, iva: 384 }], total: 1 });
   dobles.conciliar.mockResolvedValue(undefined);
   dobles.timbrarFactura.mockRejectedValue(Object.assign(new DatoInvalido('El PAC no contestó y NO se sabe si el CFDI se creó. Busca en el panel de Facturapi la referencia R'), { ambiguo: true }));
   const pagina = await CostosFacturacionPage();
