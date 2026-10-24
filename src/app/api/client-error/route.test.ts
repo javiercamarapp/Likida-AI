@@ -98,3 +98,29 @@ describe('POST /api/client-error — el rastro de un fallo solo-de-cliente', () 
     expect(logger.error).not.toHaveBeenCalled();
   });
 });
+
+describe('A37-S08-05 — el contenido controlado por el cliente está acotado', () => {
+  it('no registra la IP del visitante', async () => {
+    await POST(peticion({ level: 'error', msg: 'app.x', meta: { digest: 'd' } }));
+    const [, meta] = logger.error.mock.calls[0] as [string, Record<string, unknown>];
+    expect(JSON.stringify(meta)).not.toContain('203.0.113.5');
+    expect(meta).not.toHaveProperty('ip');
+  });
+
+  it('un nombre de evento con forma arbitraria cae a un nombre fijo (cardinalidad acotada)', async () => {
+    await POST(peticion({ level: 'error', msg: 'Error: usuario 12345 falló en /ruta?x=1', meta: {} }));
+    expect(logger.error).toHaveBeenCalledWith('client.evento_no_reconocido', expect.anything());
+  });
+
+  it('meta: máx. 16 claves, valores escalares acotados y sin anidar', async () => {
+    const meta: Record<string, unknown> = { anidado: { a: 1 }, lista: [1], largo: 'x'.repeat(1500) };
+    for (let i = 0; i < 40; i++) meta[`k${i}`] = i;
+    await POST(peticion({ level: 'error', msg: 'app.y', meta }));
+    const [, enviado] = logger.error.mock.calls[0] as [string, Record<string, unknown>];
+    const claves = Object.keys(enviado).filter((k) => k !== 'origen');
+    expect(claves.length).toBeLessThanOrEqual(16);
+    expect(enviado).not.toHaveProperty('anidado');
+    expect(enviado).not.toHaveProperty('lista');
+    expect(String(enviado.largo).length).toBeLessThanOrEqual(200);
+  });
+});
