@@ -176,13 +176,21 @@ export async function BloqueEstadias({
         horasLibres: perilla(fd.get('horasLibres')),
         tarifaHora: perilla(fd.get('tarifaHora')),
       }, s.userId);
-      // El sitio se vincula en el mismo envío porque es el mismo gesto de
-      // configuración; '' = no tocar el vínculo, 'ninguno' = desvincular.
-      const sitio = String(fd.get('geocercaId') ?? '');
-      if (sitio === 'ninguno') await vincularSitioCliente(s.tenantId, clienteId, null);
-      else if (sitio !== '') await vincularSitioCliente(s.tenantId, clienteId, sitio);
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'pactar la detención del cliente') };
+    }
+    // A37-S18-08: el pacto YA quedó escrito. El sitio se vincula en el mismo
+    // envío (mismo gesto de configuración; '' = no tocar, 'ninguno' = desvincular),
+    // pero si el vínculo falla no se debe decir que el pacto no se guardó.
+    const sitio = String(fd.get('geocercaId') ?? '');
+    if (sitio !== '') {
+      try {
+        await vincularSitioCliente(s.tenantId, clienteId, sitio === 'ninguno' ? null : sitio);
+      } catch (e) {
+        revalidatePath(RUTA);
+        const motivo = mensajeParaPantalla(e, 'vincular el sitio del cliente');
+        return { error: `El pacto del cliente sí se guardó, pero el sitio no se pudo vincular: ${motivo}` };
+      }
     }
     revalidatePath(RUTA);
     return { ok: 'Pacto del cliente guardado — gana sobre el de flota.' };
