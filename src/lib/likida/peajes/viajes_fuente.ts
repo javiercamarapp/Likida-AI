@@ -128,7 +128,9 @@ export async function desdeTablaViajeLocal(
   const filas = await traerTodo<Record<string, unknown>>(
     (d, h) => acotada(supabaseAdmin()
       .from('viaje').select('id, folio, unidad_id, fecha_inicio, fecha_fin, origen, destino', conteo(d))
-      .eq('tenant_id', tenantId).lte('fecha_inicio', rango.hasta).order('id').range(d, h), 'peajes.viajes_fuente'),
+      .eq('tenant_id', tenantId).lte('fecha_inicio', rango.hasta)
+      // A37-S53-09: cota inferior en la base (mismo criterio que el filtro de abajo: abierto, o terminó desde `desde`).
+      .or(`fecha_fin.is.null,fecha_fin.gte.${rango.desde}`).order('id').range(d, h), 'peajes.viajes_fuente'),
     'peajes.viajes_fuente',
   );
   const tocan = filas.filter((f) => {
@@ -139,10 +141,12 @@ export async function desdeTablaViajeLocal(
   });
   const ids = [...new Set(tocan.map((f) => f.unidad_id).filter((x): x is string => typeof x === 'string'))];
   const numeros = new Map<string, string>();
-  if (ids.length > 0) {
+  // A37-S53-09: solo las unidades de los viajes que tocan el rango (tandas de 100 ids: la URL de PostgREST tiene tope).
+  for (let i = 0; i < ids.length; i += 100) {
+    const tanda = ids.slice(i, i + 100);
     const us = await traerTodo<{ id: unknown; numero_economico: unknown }>(
       (d, h) => acotada(supabaseAdmin()
-        .from('unidad').select('id, numero_economico', conteo(d)).eq('tenant_id', tenantId).order('id').range(d, h), 'peajes.viajes_fuente_unidades'),
+        .from('unidad').select('id, numero_economico', conteo(d)).eq('tenant_id', tenantId).in('id', tanda).order('id').range(d, h), 'peajes.viajes_fuente_unidades'),
       'peajes.viajes_fuente_unidades',
     );
     for (const u of us) if (typeof u.id === 'string' && typeof u.numero_economico === 'string') numeros.set(u.id, u.numero_economico);

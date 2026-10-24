@@ -76,6 +76,8 @@ export function crearDbFalsa(
     not(c: string, o: string, v: unknown) { this.filtros.push([c, o === 'is' ? 'nis' : o, v]); return this; }
     lt(c: string, v: unknown) { this.filtros.push([c, 'lt', v]); return this; }
     neq(c: string, v: unknown) { this.filtros.push([c, 'neq', v]); return this; }
+    /** `.or('col.is.null,col.gte.X')`: solo las formas `is.null`, `gte`, `lte`, `eq` (lo que usa el código). */
+    or(expr: string) { this.filtros.push([expr, 'or', null]); return this; }
     order(c: string, o?: { ascending?: boolean }) { this.orden.push([c, o?.ascending !== false]); return this; }
     range(d: number, h: number) { this.desde = d; this.hasta = h; return this; }
     limit(n: number) { this.desde = 0; this.hasta = n - 1; return this; }
@@ -84,6 +86,18 @@ export function crearDbFalsa(
 
     private coincide(f: Fila): boolean {
       return this.filtros.every(([c, o, v]) => {
+        if (o === 'or') {
+          return c.split(',').some((alt) => {
+            const [col, op, ...resto] = alt.split('.');
+            const val = resto.join('.');
+            const y = f[col!];
+            if (op === 'is' && val === 'null') return y === null || y === undefined;
+            if (y === null || y === undefined) return false;
+            if (op === 'gte') return (y as string) >= val;
+            if (op === 'lte') return (y as string) <= val;
+            return op === 'eq' && String(y) === val;
+          });
+        }
         const x = f[c];
         if (o === 'eq') return x === v;
         if (o === 'in') return (v as Set<unknown>).has(x);

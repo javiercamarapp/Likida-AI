@@ -475,15 +475,18 @@ export async function importarCasetasArchivo(tenantId: string, nombre: string, b
     // borrar las coordenadas que la flota ya había cargado de esa caseta.
     const fila = (c: (typeof lote)[number]) => ({
       tenant_id: tenantId, nombre: c.nombre, nombre_norm: c.nombreNorm, alias: c.alias,
-      radio_m: c.radioM, activa: true, fuente: c.fuente ?? fuenteDefault,
+      radio_m: c.radioM, fuente: c.fuente ?? fuenteDefault,
+      // A37-S53-10: una caseta NUEVA nace activa (default de la columna); una que ya existe conserva su
+      // `activa`: re-subir el catálogo no debe reactivar en silencio las que la flota desactivó.
+      ...(porNorm.has(c.nombreNorm) ? {} : { activa: true }),
       ...(c.lat !== null && c.lng !== null ? { lat: c.lat, lng: c.lng } : {}),
       ...(c.porPasada === undefined ? {} : { por_pasada: c.porPasada }),
     });
     let error = null as { message: string } | null;
-    // Se agrupan por forma (con/sin coordenadas, con/sin por_pasada) para que cada upsert lleve las mismas columnas.
+    // Se agrupan por forma (con/sin coordenadas, con/sin por_pasada, existente/nueva) para que cada upsert lleve las mismas columnas.
     const grupos = new Map<string, typeof lote>();
     for (const c of lote) {
-      const k = `${c.lat !== null ? 'c' : 's'}${c.porPasada === undefined ? 'n' : 'p'}`;
+      const k = `${c.lat !== null ? 'c' : 's'}${c.porPasada === undefined ? 'n' : 'p'}${porNorm.has(c.nombreNorm) ? 'e' : 'x'}`;
       grupos.set(k, [...(grupos.get(k) ?? []), c]);
     }
     for (const grupo of grupos.values()) {
@@ -504,9 +507,10 @@ export async function importarCasetasArchivo(tenantId: string, nombre: string, b
 }
 
 export async function cambiarEstadoCaseta(tenantId: string, casetaId: string, activa: boolean): Promise<boolean> {
-  const { error } = await acotada(supabaseAdmin().from('peaje_caseta').update({ activa }).eq('tenant_id', tenantId).eq('id', casetaId), 'peajes.estado_caseta');
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_caseta').update({ activa }).eq('tenant_id', tenantId).eq('id', casetaId).select('id'), 'peajes.estado_caseta');
   if (error) logger.error('peajes.estado_caseta', { tenant: tenantId, err: error.message });
-  return !error;
+  // A37-S53-08: sin fila afectada (id ajeno o inexistente) NO es éxito.
+  return !error && (data ?? []).length > 0;
 }
 
 // ── Tarifario por caseta y clase (migración 0811) ───────────────────────────
@@ -728,9 +732,10 @@ export async function guardarGeocerca(
 }
 
 export async function cambiarEstadoGeocerca(tenantId: string, id: string, activa: boolean): Promise<boolean> {
-  const { error } = await acotada(supabaseAdmin().from('geocerca').update({ activa }).eq('tenant_id', tenantId).eq('catalogo', 'peajes').eq('id', id), 'peajes.estado_geocerca');
+  const { data, error } = await acotada(supabaseAdmin().from('geocerca').update({ activa }).eq('tenant_id', tenantId).eq('catalogo', 'peajes').eq('id', id).select('id'), 'peajes.estado_geocerca');
   if (error) logger.error('peajes.estado_geocerca', { tenant: tenantId, err: error.message });
-  return !error;
+  // A37-S53-08: sin fila afectada (id ajeno, de otro catálogo o inexistente) NO es éxito.
+  return !error && (data ?? []).length > 0;
 }
 
 // ── Mapeo de columnas por proveedor ─────────────────────────────────────────
@@ -1587,12 +1592,14 @@ export async function marcarAtipico(
   if (nota !== null) parche.nota = nota;
   if (cambio.estado === 'avisado' && !previa.avisado_en) parche.avisado_en = ahora;
   if (exigeRevisor(cambio.estado)) { parche.revisado_en = ahora; parche.revisado_por = por; if (!previa.avisado_en) parche.avisado_en = ahora; }
-  const { error: e2 } = await acotada(supabaseAdmin().from('peaje_atipico')
-    .update(parche).eq('tenant_id', tenantId).eq('id', id).eq('estado', actual), 'peajes.marcar_atipico');
+  const { data: cambiadas, error: e2 } = await acotada(supabaseAdmin().from('peaje_atipico')
+    .update(parche).eq('tenant_id', tenantId).eq('id', id).eq('estado', actual).select('id'), 'peajes.marcar_atipico');
   if (e2) {
     logger.error('peajes.marcar_atipico', { tenant: tenantId, err: e2.message });
     return { ok: false, motivo: 'No se pudo guardar el cambio. Intenta de nuevo.' };
   }
+  // A37-S53-08: si otra pestaña lo cambió entre la lectura y el UPDATE, 0 filas coinciden: no es éxito.
+  if ((cambiadas ?? []).length === 0) return { ok: false, motivo: 'El hallazgo cambió de estado mientras lo revisabas: recarga la lista.' };
   return { ok: true, estado: cambio.estado };
 }
 
