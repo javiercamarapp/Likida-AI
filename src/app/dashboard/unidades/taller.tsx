@@ -3,9 +3,11 @@ import { Wrench } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAsignar, puedeAdministrar } from '@/lib/auth/permisos';
+import { alcanceDePatio, dentroDelAlcance, exigirDentroDelAlcance } from '@/lib/auth/patio';
+import { terminalDeRegistro, terminalesDeRegistros } from '@/lib/likida/terminales';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import {
-  getTaller, validarRutina, crearRutina, abrirOrdenProgramada, cerrarOrden,
+  getTaller, validarRutina, crearRutina, abrirOrdenProgramada, cerrarOrden, unidadDeOrden,
   type OrdenTaller, type PropuestaRutina,
 } from '@/lib/likida/mantenimiento';
 import { fechaHoraMx, numero } from '@/lib/formato';
@@ -50,7 +52,7 @@ export async function BloqueTaller({
 }: {
   sp: { tenant?: string; rol?: string; vista?: string };
 }) {
-  const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
+  const { tenantId, rol, userId } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) return null;
 
   // SIN catch (el criterio de la página): una sección que existe para avisar
@@ -59,6 +61,21 @@ export async function BloqueTaller({
   const taller = await getTaller(tenantId);
   const opera = puedeAsignar(rol);
   const administra = puedeAdministrar(rol);
+
+  // A37-S20-01: el patio del jefe de tráfico acota el taller igual que las
+  // unidades. Si no se pudo leer el alcance o el patio de las unidades, no se
+  // ofrece nada que escriba (el servidor lo vuelve a comprobar en cada action).
+  const alcance = opera ? await alcanceDePatio(tenantId, userId, rol) : null;
+  let patioPorUnidad: Map<string, string | null> | null = null;
+  if (alcance && alcance.tipo === 'patio') {
+    try {
+      patioPorUnidad = await terminalesDeRegistros('unidad', tenantId, [
+        ...taller.ordenesAbiertas.map((o) => o.unidadId), ...taller.propuestas.map((p) => p.unidadId),
+      ]);
+    } catch { /* sin patio legible no se ofrece escribir */ }
+  }
+  const dentro = (unidadId: string): boolean =>
+    alcance?.tipo === 'flota' || (patioPorUnidad !== null && dentroDelAlcance(alcance, patioPorUnidad.get(unidadId) ?? null));
 
   async function accionCrearRutina(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
@@ -84,7 +101,12 @@ export async function BloqueTaller({
     const s = await resolverTenantEfectivo(RUTA, sp);
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAsignar(s.rol)) return;
     try {
-      await abrirOrdenProgramada(s.tenantId, String(fd.get('rutinaId') ?? ''), String(fd.get('unidadId') ?? ''));
+      // A37-S20-01: el patio de la unidad sale de la BASE; fuera del alcance no se abre.
+      const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);
+      const unidadId = String(fd.get('unidadId') ?? '');
+      const actual = await terminalDeRegistro('unidad', s.tenantId, unidadId);
+      if (!alcanceAccion || !actual.encontrado || !dentroDelAlcance(alcanceAccion, actual.terminalId)) return;
+      await abrirOrdenProgramada(s.tenantId, String(fd.get('rutinaId') ?? ''), unidadId);
     } catch {
       // El candado real es la unique de la 0209; el doble clic que pierde la
       // carrera simplemente ve la orden ya abierta al revalidar.
@@ -98,10 +120,20 @@ export async function BloqueTaller({
     if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede ver las unidades.' };
     if (!puedeAsignar(s.rol)) return { error: 'Cerrar órdenes de taller es del encargado o del dueño.' };
     try {
+      // A37-S20-01: la unidad de la orden y su patio salen de la BASE, no del
+      // formulario; un POST con la orden de otro patio rebota antes de cerrarla.
+      const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);
+      if (!alcanceAccion) return { error: 'No pude comprobar tu patio — no se cerró nada. Vuelve a intentar.' };
+      const ordenId = String(fd.get('ordenId') ?? '');
+      const unidadId = await unidadDeOrden(s.tenantId, ordenId);
+      if (!unidadId) return { error: 'Esa orden no existe en tu flota. Recarga la pantalla.' };
+      const actual = await terminalDeRegistro('unidad', s.tenantId, unidadId);
+      if (!actual.encontrado) return { error: 'No se encontró la unidad de esa orden en tu flota. Recarga la pantalla.' };
+      exigirDentroDelAlcance(alcanceAccion, actual.terminalId);
       const kmCrudo = String(fd.get('kmServicio') ?? '').trim();
       const km = kmCrudo === '' ? null : Number(kmCrudo);
       if (km !== null && !Number.isFinite(km)) return { error: 'El kilometraje tiene que ser un número (o déjalo vacío si no se sabe).' };
-      await cerrarOrden(s.tenantId, String(fd.get('ordenId') ?? ''), km === null ? null : Math.trunc(km));
+      await cerrarOrden(s.tenantId, ordenId, km === null ? null : Math.trunc(km));
       revalidatePath(RUTA);
       return { ok: 'Orden cerrada.' };
     } catch (e) {
@@ -138,7 +170,7 @@ export async function BloqueTaller({
               </summary>
               <div className="mt-2.5 flex flex-col gap-2 text-xs" style={{ color: 'var(--muted)' }}>
                 {o.descripcion && <span>{o.descripcion}</span>}
-                {opera && (
+                {opera && dentro(o.unidadId) && (
                   <FormaConAviso accion={accionCerrarOrden} boton="Cerrar orden" columnas="md:grid-cols-2">
                     <input type="hidden" name="ordenId" value={o.id} />
                     <Campo
@@ -178,7 +210,7 @@ export async function BloqueTaller({
               </span>
               {/* Los motivos de dato faltante piden capturar el dato, no abrir
                   una orden que nadie sabe si toca. */}
-              {opera && p.motivo !== 'sin_odometro' && p.motivo !== 'odometro_desactualizado' && (
+              {opera && dentro(p.unidadId) && p.motivo !== 'sin_odometro' && p.motivo !== 'odometro_desactualizado' && (
                 <form action={accionAbrirOrden} className="ml-auto">
                   <input type="hidden" name="rutinaId" value={p.rutinaId} />
                   <input type="hidden" name="unidadId" value={p.unidadId} />
