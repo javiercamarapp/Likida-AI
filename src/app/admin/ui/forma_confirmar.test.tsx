@@ -12,7 +12,7 @@ describe('FormaConAviso con confirmación', () => {
         <input type="hidden" name="solicitudId" value="s-1" />
       </FormaConAviso>,
     );
-    const botones = [...html.matchAll(/<button[^>]*>[^<]*(?:<[^b/][^>]*>[^<]*)*<\/button>/g)].map((m) => m[0]);
+    const botones = html.split('<button').slice(1).map((t) => `<button${t.slice(0, t.indexOf('</button>'))}`);
     const disparador = botones.find((b) => b.includes('Ejecutar cancelación'))!;
     expect(disparador).toContain('type="button"');
     expect(html).toContain('<dialog');

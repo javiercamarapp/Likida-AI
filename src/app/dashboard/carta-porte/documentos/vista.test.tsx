@@ -207,7 +207,9 @@ describe('VistaRevision', () => {
 
   it('A37-S16-04: eliminar el documento pide confirmación con el alcance; el submit vive dentro del diálogo', () => {
     const h = montar(doc(), { puedeEliminar: true });
-    expect(h).toMatch(/<button type="button"[^>]*>(?:<[^>]+>)*Eliminar documento y archivo/);
+    const iDisparador = h.indexOf('Eliminar documento y archivo');
+    expect(iDisparador).toBeGreaterThan(-1);
+    expect(h.slice(h.lastIndexOf('<button', iDisparador), iDisparador)).toContain('type="button"');
     expect(h).toContain('Se borra el archivo y todo lo leído de él');
     expect(conIntencion(h, 'eliminar')).toBe(true);
     const confirmar = /<button type="submit"[^>]*>Sí, eliminar<\/button>/.exec(h)![0];
