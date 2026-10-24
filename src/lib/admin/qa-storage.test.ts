@@ -588,6 +588,49 @@ describe('las corridas (el ledger en tablas, mig. 0185)', () => {
     }
   });
 
+  // A37-S23-02: pasos y fotos se leían con .in() sin paginar → PostgREST recorta a 1,000
+  // filas EN SILENCIO y el avance salía con fotos «sin turno» que sí se procesaron.
+  it('A37-S23-02: con más de 1,000 pasos/fotos en el historial NO se trunca ni se pinta un avance falso', async () => {
+    const db = dbFalsa();
+    const fotoIds = Array.from({ length: 91 }, (_, i) => `foto-${i}`);
+    const N = 12; // 12 × 95 pasos = 1,140 y 12 × 91 fotos = 1,092: ambos pasan de 1,000
+    for (let c = 0; c < N; c++) {
+      const id = `comp-${String(c).padStart(2, '0')}`;
+      await guardarCorrida(db, corrida({
+        id, carril: 'completo', creadaEn: `2026-09-${String(10 + c).padStart(2, '0')}T10:00:00Z`,
+        parametros: { ...corrida({}).parametros, fotoIds },
+        pasos: Array.from({ length: 95 }, (_, k) => ({ n: k + 1, nombre: `p${k}`, estado: 'ok' as const, costoUsd: 0 })),
+      }));
+      for (let k = 0; k < 91; k++) {
+        tablas.qa_corrida_foto ??= [];
+        tablas.qa_corrida_foto.push({
+          corrida_id: id, foto_id: fotoIds[k], n: k + 1, estado: 'ok', pasada: 1,
+          detalle: null, costo_usd: null, inicio: '2026-09-10T10:00:00Z', fin: null,
+        });
+      }
+    }
+    const r = await listarCorridas(db, 60);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.datos).toHaveLength(N);
+    for (const c of r.datos) {
+      expect(c.pasos, c.id).toHaveLength(95);
+      expect(c.avance?.sinTurno, c.id).toBe(0);
+      expect(c.avance?.ok, c.id).toBe(91);
+    }
+    // y la lectura de UNA corrida (leerCorrida) sigue completa
+    const una = await leerCorrida(db, 'comp-00');
+    expect(una.ok && una.datos?.pasos).toHaveLength(95);
+  });
+
+  it('A37-S23-02: si el conteo exacto no se puede demostrar, el historial FALLA cerrado (no un avance corto)', async () => {
+    const db = dbFalsa();
+    await guardarCorrida(db, corrida({ id: 'x1', carril: 'completo' }));
+    errorTabla = { message: 'canceling statement due to statement timeout', code: '57014' };
+    const r = await listarCorridas(db, 60);
+    expect(r.ok).toBe(false);
+  });
+
   it('gastoHoyUsd suma SOLO las corridas del día de México, redondeado a 4 decimales', async () => {
     const db = dbFalsa();
     await guardarCorrida(db, corrida({ id: 'hoy-1', costoUsdTotal: 0.03211 }));
