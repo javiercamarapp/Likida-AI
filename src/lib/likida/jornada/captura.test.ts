@@ -9,7 +9,7 @@ import type { Asiento } from './modelo';
 
 function asiento(p: Partial<Asiento>): Asiento {
   return {
-    id: 'a1', tipo: 'inicio_jornada', momento: '2026-03-10T14:00:00Z', procedencia: 'whatsapp',
+    id: 'a1', tipo: 'inicio_jornada', momento: '2026-03-10T14:00:00Z', procedencia: 'declarado_operador',
     origenRef: null, waMessageId: null, viajeId: null, registradoPorEmail: null, nota: null,
     corrigeA: null, anuladoEn: null, anuladoPorEmail: null, anuladoMotivo: null, ...p,
   };
