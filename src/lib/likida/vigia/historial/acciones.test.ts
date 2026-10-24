@@ -78,6 +78,9 @@ describe('importarHistorialPanel', () => {
     expect(entrada.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(entrada.mensajes.map((m: { rol: string }) => m.rol)).toEqual(['cliente', 'equipo']);
     expect(JSON.stringify(entrada)).not.toMatch(/Cliente Uno|Ana Servicio|1234 5678/);
+    // A37-S58-09: el aviso no afirma lo falso; admite que el texto conserva lo dicho en el chat.
+    expect((r as { mensaje: string }).mensaje).not.toMatch(/nombres de autores no se guardaron/);
+    expect((r as { mensaje: string }).mensaje).toMatch(/nombres, placas o licencias/);
     const b = d.bitacora.mock.calls[0][0];
     expect(b).toMatchObject({ accion: 'vigia.historial_importado', entidadId: 'imp-1' });
     expect(JSON.stringify(b)).not.toMatch(/Querétaro|Cliente Uno/);
