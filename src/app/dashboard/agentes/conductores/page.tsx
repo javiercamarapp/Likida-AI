@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantEfectivo, resolverTenantAtado, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { contarEscalados, getEventosConductores, getTiempoAceptacionChofer } from '@/lib/likida/analytics';
 import { viajesEsperandoAceptarPaginados } from '@/lib/likida/repo_paginado';
@@ -252,7 +252,8 @@ export default async function PaginaAgenteConductores({
 
   async function accionOficina(_previo: ResultadoOficina, fd: FormData): Promise<ResultadoOficina> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/agentes/conductores', sp);
+    const s = await resolverTenantAtado('/dashboard/agentes/conductores', sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     // Dos candados: la ruta (¿puede ver esta pantalla?) y la acción (¿puede mover un hito?). El segundo también vive
     // dentro de `ejecutarAccionOficina`: una acción de servidor es un endpoint, no un botón.
     if (!puedeVerRuta(s.rol, '/dashboard/agentes/conductores') || !puedeAsignar(s.rol)) {
@@ -268,7 +269,8 @@ export default async function PaginaAgenteConductores({
 
   async function accionSitios(_previo: ResultadoOficina, fd: FormData): Promise<ResultadoOficina> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/agentes/conductores', sp);
+    const s = await resolverTenantAtado('/dashboard/agentes/conductores', sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, '/dashboard/agentes/conductores')) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico pueden hacer esto.' };
     const r = await asignarSitiosDelPanel({ tenantId: s.tenantId, rol: s.rol }, fd);
     if (r.ok) revalidatePath('/dashboard/agentes/conductores');
@@ -277,7 +279,8 @@ export default async function PaginaAgenteConductores({
 
   async function guardarEstrategia(_previo: ResultadoEstrategia, fd: FormData): Promise<ResultadoEstrategia> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/agentes/conductores', sp);
+    const s = await resolverTenantAtado('/dashboard/agentes/conductores', sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, '/dashboard/agentes/conductores') || !puedeAdministrar(s.rol)) {
       return { ok: false, error: 'Solo el dueño de la flota cambia la estrategia del agente.' };
     }

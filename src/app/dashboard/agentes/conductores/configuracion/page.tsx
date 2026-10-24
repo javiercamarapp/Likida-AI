@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantEfectivo, resolverTenantAtado, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar, puedeAsignar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
@@ -27,8 +27,9 @@ const RUTA = '/dashboard/agentes/conductores/configuracion';
 type ParametrosPagina = { vista?: string; tenant?: string; rol?: string; q?: string };
 
 /** A nivel de módulo (no dentro del componente): una acción `'use server'` no puede cerrar sobre funciones locales. */
-async function ejecutarVoluntario(cual: 'alta' | 'baja', sp: ParametrosPagina, fd: FormData): Promise<ResultadoConfig> {
-  const s = await resolverTenantEfectivo(RUTA, sp);
+async function ejecutarVoluntario(cual: 'alta' | 'baja', sp: ParametrosPagina, tenantRenderizado: string, fd: FormData): Promise<ResultadoConfig> {
+  const s = await resolverTenantAtado(RUTA, sp, tenantRenderizado);
+  if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
   if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'No tienes acceso a esta configuración.' };
   const email = await emailDeUsuario(s.userId).catch(() => null);
   const ctx = { tenantId: s.tenantId, rol: s.rol, usuarioId: s.userId, email };
@@ -38,8 +39,9 @@ async function ejecutarVoluntario(cual: 'alta' | 'baja', sp: ParametrosPagina, f
 }
 
 /** T-A5-48: importar rutas autorizadas (CSV). A nivel de módulo por la misma razón. El permiso y el tenant salen de la SESIÓN. */
-async function ejecutarImportarRutas(sp: ParametrosPagina, fd: FormData): Promise<ResultadoSitio> {
-  const s = await resolverTenantEfectivo(RUTA, sp);
+async function ejecutarImportarRutas(sp: ParametrosPagina, tenantRenderizado: string, fd: FormData): Promise<ResultadoSitio> {
+  const s = await resolverTenantAtado(RUTA, sp, tenantRenderizado);
+  if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
   if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'No tienes acceso a esta configuración.' };
   const archivo = fd.get('archivo');
   let texto = '';
@@ -53,8 +55,9 @@ async function ejecutarImportarRutas(sp: ParametrosPagina, fd: FormData): Promis
 }
 
 /** T-A5-50: «Revisada». A nivel de módulo por la misma razón; el permiso y el tenant salen de la SESIÓN. */
-async function ejecutarRutaRevisada(sp: ParametrosPagina, fd: FormData): Promise<ResultadoSitio> {
-  const s = await resolverTenantEfectivo(RUTA, sp);
+async function ejecutarRutaRevisada(sp: ParametrosPagina, tenantRenderizado: string, fd: FormData): Promise<ResultadoSitio> {
+  const s = await resolverTenantAtado(RUTA, sp, tenantRenderizado);
+  if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
   if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'No tienes acceso a esta configuración.' };
   const id = fd.get('id');
   const r = await marcarRutaRevisadaDelPanel({ tenantId: s.tenantId, rol: s.rol }, { id: typeof id === 'string' ? id : '' });
@@ -63,8 +66,9 @@ async function ejecutarRutaRevisada(sp: ParametrosPagina, fd: FormData): Promise
 }
 
 /** T-A5-52: alta de un documento del catálogo de un cliente. A nivel de módulo por la misma razón; el permiso y el tenant salen de la SESIÓN. */
-async function ejecutarAltaDocumento(sp: ParametrosPagina, fd: FormData): Promise<ResultadoSitio> {
-  const s = await resolverTenantEfectivo(RUTA, sp);
+async function ejecutarAltaDocumento(sp: ParametrosPagina, tenantRenderizado: string, fd: FormData): Promise<ResultadoSitio> {
+  const s = await resolverTenantAtado(RUTA, sp, tenantRenderizado);
+  if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
   if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'No tienes acceso a esta configuración.' };
   const r = await altaDocumentoDelPanel({ tenantId: s.tenantId, rol: s.rol }, {
     clienteId: fd.get('clienteId'), nombre: fd.get('nombre'), tipo: fd.get('tipo'), requiereFirma: fd.get('requiereFirma'), requiereSello: fd.get('requiereSello'),
@@ -74,8 +78,9 @@ async function ejecutarAltaDocumento(sp: ParametrosPagina, fd: FormData): Promis
 }
 
 /** T-A5-52: baja de un documento del catálogo. A nivel de módulo por la misma razón; el permiso y el tenant salen de la SESIÓN. */
-async function ejecutarBajaDocumento(sp: ParametrosPagina, fd: FormData): Promise<ResultadoSitio> {
-  const s = await resolverTenantEfectivo(RUTA, sp);
+async function ejecutarBajaDocumento(sp: ParametrosPagina, tenantRenderizado: string, fd: FormData): Promise<ResultadoSitio> {
+  const s = await resolverTenantAtado(RUTA, sp, tenantRenderizado);
+  if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
   if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'No tienes acceso a esta configuración.' };
   const id = fd.get('id');
   const r = await bajaDocumentoDelPanel({ tenantId: s.tenantId, rol: s.rol }, { id: typeof id === 'string' ? id : '' });
@@ -112,7 +117,8 @@ export default async function PaginaConfigConductor({ searchParams }: { searchPa
 
   async function accionGuardar(_previo: ResultadoConfig, fd: FormData): Promise<ResultadoConfig> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtado(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'No tienes acceso a esta configuración.' };
     const email = await emailDeUsuario(s.userId).catch(() => null);
     const r = await guardarConfigDelPanel({ tenantId: s.tenantId, rol: s.rol, usuarioId: s.userId, email }, fd);
@@ -122,11 +128,11 @@ export default async function PaginaConfigConductor({ searchParams }: { searchPa
 
   async function accionAlta(_previo: ResultadoConfig, fd: FormData): Promise<ResultadoConfig> {
     'use server';
-    return ejecutarVoluntario('alta', sp, fd);
+    return ejecutarVoluntario('alta', sp, tenantId, fd);
   }
   async function accionBaja(_previo: ResultadoConfig, fd: FormData): Promise<ResultadoConfig> {
     'use server';
-    return ejecutarVoluntario('baja', sp, fd);
+    return ejecutarVoluntario('baja', sp, tenantId, fd);
   }
 
   // T-A5-50: la lista de rutas sin revisar. Solo se lee si el usuario puede importar rutas (es quien las mantiene). `null` = no se pudo leer.
@@ -139,7 +145,7 @@ export default async function PaginaConfigConductor({ searchParams }: { searchPa
 
   async function accionRutaRevisada(_previo: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
-    return ejecutarRutaRevisada(sp, fd);
+    return ejecutarRutaRevisada(sp, tenantId, fd);
   }
 
   // T-A5-52: los documentos que pide cada cliente. Solo se leen si el usuario puede editarlos. `null` = no se pudo leer.
@@ -149,16 +155,16 @@ export default async function PaginaConfigConductor({ searchParams }: { searchPa
 
   async function accionAltaDocumento(_previo: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
-    return ejecutarAltaDocumento(sp, fd);
+    return ejecutarAltaDocumento(sp, tenantId, fd);
   }
   async function accionBajaDocumento(_previo: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
-    return ejecutarBajaDocumento(sp, fd);
+    return ejecutarBajaDocumento(sp, tenantId, fd);
   }
 
   async function accionImportarRutas(_previo: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
-    return ejecutarImportarRutas(sp, fd);
+    return ejecutarImportarRutas(sp, tenantId, fd);
   }
 
   return (

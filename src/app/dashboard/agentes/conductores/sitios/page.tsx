@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantEfectivo, resolverTenantAtado, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
@@ -44,7 +44,8 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionGuardar(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtado(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico editan el catálogo.' };
     const r = aResultado(await guardarSitioDelPanel({ tenantId: s.tenantId, rol: s.rol }, fd));
     if (r?.ok) revalidatePath(RUTA);
@@ -53,7 +54,8 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionImportar(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtado(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico importan sitios.' };
     const archivo = fd.get('archivo');
     let texto = '';
@@ -69,7 +71,8 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionImportarEquivalencias(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtado(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico importan equivalencias.' };
     const archivo = fd.get('archivo');
     let texto = '';
@@ -84,7 +87,8 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionCatalogo(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtado(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico importan el catálogo.' };
     const archivo = fd.get('archivo');
     if (!(archivo instanceof File) || archivo.size === 0) return { ok: false, error: 'Elige el archivo del catálogo.' };
@@ -101,7 +105,8 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionAsignarEquivalencia(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtado(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico editan las equivalencias.' };
     const r = aResultado(await asignarEquivalenciaDelPanel({ tenantId: s.tenantId, rol: s.rol }, fd));
     if (r?.ok) revalidatePath(RUTA);
@@ -110,7 +115,8 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionEstado(fd: FormData): Promise<void> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtado(RUTA, sp, tenantId);
+    if (!s) return;
     if (!puedeVerRuta(s.rol, RUTA)) return;
     await archivarSitioDelPanel({ tenantId: s.tenantId, rol: s.rol }, String(fd.get('id') ?? ''), fd.get('activa') === 'si');
     revalidatePath(RUTA);
