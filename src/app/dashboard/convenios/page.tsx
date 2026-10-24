@@ -20,7 +20,7 @@ const RUTA = '/dashboard/convenios';
  * las instrucciones para que la flota las escriba en SU sistema. La tarifa y los requisitos de cobro solo se leen (y se
  * pintan) para quien ve el área de dinero: para los demás ni siquiera se consultan.
  */
-export default async function PaginaConvenios({ searchParams }: { searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }> }) {
+export default async function PaginaConvenios({ searchParams }: { searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; editar?: string; pag?: string }> }) {
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -110,6 +110,8 @@ export default async function PaginaConvenios({ searchParams }: { searchParams: 
       sufijo={sufijoTenant(sp)} convenios={convenios} estado={estado} puedeEditar={puedeAsignar(rol)} verDinero={verDinero}
       puedeExportar={puedeExportar(rol)} accionImportar={accionImportar} accionEstado={accionEstado}
       viajes={viajes} accionCorregir={accionCorregir} catalogos={catalogos} accionGuardar={accionGuardar}
+      editarId={typeof sp.editar === 'string' && /^[0-9a-f-]{36}$/i.test(sp.editar) ? sp.editar.toLowerCase() : null}
+      pagina={Number.parseInt(sp.pag ?? '1', 10) || 1}
     />
   );
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ConvenioFila, ViajeConvenioFila } from '@/lib/likida/convenios/repo';
-import { VistaConvenios, type PropsVistaConvenios } from './vista';
+import { VistaConvenios, CONVENIOS_POR_PAGINA, type PropsVistaConvenios } from './vista';
 
 const accion = async () => null;
 const accionEstado = async () => {};
@@ -117,11 +117,11 @@ describe('el alta y la edición en pantalla', () => {
   const con = (p: Partial<PropsVistaConvenios> = {}) => pintar({ catalogos, accionGuardar: accion, ...p });
 
   it('ofrece «Nuevo convenio» (con cliente y sitios del catálogo) y «Editar» en cada convenio, con su versión escondida', () => {
-    const html = con();
+    const html = con({ editarId: C().id });
     expect(html).toContain('aria-label="Nuevo convenio"');
     expect(html).toContain('Elige un cliente…');
     expect(html).toContain('CEDIS Tlaquepaque (CED-1)');
-    expect(html).toContain('Editar convenio e instrucciones');
+    expect(con()).toContain('Editar convenio e instrucciones');
     expect(html).toContain('name="version" value="3"');
     expect(html).toContain('name="convenioId"');
     expect(html).toContain('Llevar este cambio a los viajes en curso');
@@ -153,5 +153,33 @@ describe('el alta y la edición en pantalla', () => {
 
   it('el pie ya no promete que editar nunca toca a los viajes: dice cómo llevarlo a los viajes en curso', () => {
     expect(con()).toContain('salvo que marques «llevar este cambio a los viajes en curso»');
+  });
+});
+
+describe('A37-S17-04: lista grande de convenios', () => {
+  const catalogos = { clientes: [{ id: '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0c1', nombre: 'Cliente Uno' }], sitios: Array.from({ length: 30 }, (_, i) => ({ id: `g${i}`, nombre: `Sitio ${i}`, codigo: `S-${i}` })) };
+  const muchos = Array.from({ length: 120 }, (_, i) => C({ id: `4f1f6e2e-95c1-4c52-9f9e-${String(i).padStart(12, '0')}`, nombre: `Ruta ${i}` }));
+  const con = (p: Partial<PropsVistaConvenios> = {}) => pintar({ convenios: muchos, catalogos, accionGuardar: accion, ...p });
+
+  it('pinta una página (no los 120) con «de N» y enlaces de navegación', () => {
+    const html = con();
+    expect(html).toContain('Ruta 0<');
+    expect(html).toContain(`Ruta ${CONVENIOS_POR_PAGINA - 1}<`);
+    expect(html).not.toContain(`Ruta ${CONVENIOS_POR_PAGINA}<`);
+    expect(html).toContain(`Convenios 1–${CONVENIOS_POR_PAGINA} de 120`);
+    expect(html).toContain('pag=2');
+    expect(con({ pagina: 3 })).toContain(`Ruta ${CONVENIOS_POR_PAGINA * 2}<`);
+  });
+
+  it('el formulario de edición (con todos los sitios) se monta solo para UN convenio, no para cada uno', () => {
+    const html = con({ editarId: muchos[3].id });
+    expect(html.match(/name="convenioId"/g)).toHaveLength(1);
+    // «Nuevo convenio» + el editado: cada uno trae el catálogo de sitios 2 veces (origen y destino).
+    expect(html.match(/Sitio 7 \(S-7\)/g)).toHaveLength(4);
+    expect(con().match(/Sitio 7 \(S-7\)/g)).toHaveLength(2);
+  });
+
+  it('con pocos convenios no hay navegación', () => {
+    expect(pintar()).not.toContain('Páginas de convenios');
   });
 });
