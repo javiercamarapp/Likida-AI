@@ -12,8 +12,8 @@ export const dynamic = 'force-dynamic';
  * vacío por avería no puede parecer un país sin prospectos.
  */
 export default async function PaginaMapaProspectos() {
-  await requireSuperadmin();
-  const datos = await getDatosMapa();
+  const { userId } = await requireSuperadmin();
+  const datos = await getDatosMapa({ auditoria: { actorId: userId } });
   return (
     <div>
       {datos.fallo && (

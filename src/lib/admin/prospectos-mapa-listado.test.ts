@@ -113,10 +113,12 @@ function consulta() {
 
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: () => consulta() }) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+const anotarBitacora = vi.fn(async (..._a: unknown[]) => true);
+vi.mock('@/lib/likida/bitacora_escritura', () => ({ anotarBitacora: (...a: unknown[]) => anotarBitacora(...a) }));
 
 const { getDatosMapa, getTextosProspectos, desempacar } = await import('./prospectos-mapa');
 
-beforeEach(() => { espia.columnas = []; espia.gt = []; espia.conteos = 0; espia.ids = []; });
+beforeEach(() => { anotarBitacora.mockClear(); espia.columnas = []; espia.gt = []; espia.conteos = 0; espia.ids = []; });
 
 describe('la carga inicial es LIGERA — los textos largos no viajan', () => {
   it('el select del listado no pide los mensajes redactados (7.5 MB) pero sí `notas` (la usan los scores)', async () => {
@@ -214,5 +216,28 @@ describe('los textos largos se piden por id', () => {
   it('sin ids no se toca la red', async () => {
     expect(await getTextosProspectos([])).toEqual([]);
     expect(espia.ids).toEqual([]);
+  });
+});
+
+// A37-S22-04: la entrega de la cartera con PII debe dejar rastro en el servidor.
+describe('A37-S22-04 — auditar la entrega en getDatosMapa', () => {
+  it('con `auditoria`, la carga completa registra prospectos.entregados con el n que contó el servidor', async () => {
+    const datos = await getDatosMapa({ auditoria: { actorId: 'u-1' } });
+    expect(datos.fallo).toBe(false);
+    expect(anotarBitacora).toHaveBeenCalledTimes(1);
+    const [entrada] = anotarBitacora.mock.calls[0] as [{ accion: string; actor: unknown; detalle: { n: number; delta: boolean } }];
+    expect(entrada.accion).toBe('prospectos.entregados');
+    expect(entrada.actor).toEqual({ id: 'u-1' });
+    expect(entrada.detalle).toEqual({ n: datos.filas.length, delta: false });
+  });
+
+  it('sin `auditoria` (compatibilidad) no escribe nada', async () => {
+    await getDatosMapa();
+    expect(anotarBitacora).not.toHaveBeenCalled();
+  });
+
+  it('un delta SIN filas (el latido en reposo) no llena la bitácora', async () => {
+    await getDatosMapa({ desde: '2999-01-01T00:00:00.000Z', auditoria: { actorId: 'u-1' } });
+    expect(anotarBitacora).not.toHaveBeenCalled();
   });
 });
