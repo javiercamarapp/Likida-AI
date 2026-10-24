@@ -53,7 +53,7 @@ describe('avisarDiscrepanciasDesglose', () => {
     // El texto es el del protocolo (T-A2-37): qué pasó / evidencia / qué hacer, con la unidad y el TAG.
     expect(texto).toMatch(/Qué pasó:.*Evidencia:.*Qué hacer:/s);
     expect(texto).toContain('U-01');
-    expect(texto).toContain('TAGEJEMPLO01');
+    expect(texto).toContain('…LO01');
     expect(texto).toMatch(/seguridad/);
   });
 
