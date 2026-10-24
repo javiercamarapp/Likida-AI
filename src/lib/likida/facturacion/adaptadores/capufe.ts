@@ -318,6 +318,20 @@ export type EstadoCodigo =
   /** La sesión se cayó antes de llegar a él. */
   | 'no_intentado';
 
+/**
+ * A37-S64-03: el monto del ticket (texto del OCR/portal) como número, tolerante a miles: «1,234.50» → 1234.5. `Number('1,234.50')`
+ * era NaN y el monto esperado quedaba `null`: sin monto no hay discrepancia detectable, y el CFDI —irreversible— se emitía sin
+ * cotejar. Misma regla de miles que el resto de las lecturas de dinero (coma + 3 dígitos); más de dos decimales o basura = `null`
+ * (no se cotejó), nunca un número inventado.
+ */
+export function montoDeTicket(bruto: string | null | undefined): number | null {
+  if (bruto === null || bruto === undefined) return null;
+  const limpio = String(bruto).replace(/[$\s]/g, '').replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.');
+  if (!/^\d+(\.\d{1,2})?$/.test(limpio)) return null;
+  const n = Number(limpio);
+  return Number.isFinite(n) ? n : null;
+}
+
 export interface ResultadoCodigo {
   codigo: string;
   estado: EstadoCodigo;
@@ -495,10 +509,10 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
     }
 
     const bruto = campos.find((c) => c.clave === 'monto' && c.valor)?.valor;
-    const monto = bruto === undefined || bruto === null ? NaN : Number(bruto);
+    const monto = montoDeTicket(bruto);
 
     return this.facturarVarios(
-      [{ codigo: campoCodigo.valor, montoEsperado: Number.isFinite(monto) ? monto : null }],
+      [{ codigo: campoCodigo.valor, montoEsperado: monto }],
       m,
     );
   }
@@ -536,10 +550,10 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
         continue;
       }
       const bruto = t.campos.find((c) => c.clave === 'monto' && c.valor)?.valor;
-      const monto = bruto === undefined || bruto === null ? NaN : Number(bruto);
+      const monto = montoDeTicket(bruto);
       paraElPortal.push({
         codigo,
-        montoEsperado: Number.isFinite(monto) ? monto : null,
+        montoEsperado: monto,
         gastoId: t.gastoId,
       });
     }
@@ -713,6 +727,18 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
           ...base,
           ok: false,
           error: `NO SE EMITIÓ: el costo que devolvió CAPUFE no cuadra con el del ticket en ${discrepancias.length} de ${agregados.length} códigos (${discrepancias.map((d) => `${d.codigo}: portal ${d.costoPortal} vs ticket ${d.montoEsperado}`).join('; ')}). El portal es la fuente de verdad, así que la diferencia significa que el código puede ser de otro ticket. Un CFDI equivocado ante el SAT no se deshace: revísalo y, si la diferencia es legítima, vuelve a correr con \`emitirAunConDiscrepancia\`.`,
+        };
+      }
+
+      // A37-S64-03: SIN monto del ticket, o con el costo del portal ilegible, no hay con qué cotejar: la «discrepancia» no es
+      // detectable y el CFDI —que no se deshace— incluiría esos códigos sin verificar, contra la promesa de que si no coincide
+      // no se emite. En modo emitir se bloquea (mismo permiso que la discrepancia: `emitirAunConDiscrepancia`).
+      const sinCotejo = agregados.filter((r) => r.costoIlegible === true || r.montoEsperado === undefined);
+      if (sinCotejo.length > 0 && !this.emitirAunConDiscrepancia) {
+        return {
+          ...base,
+          ok: false,
+          error: `NO SE EMITIÓ: ${sinCotejo.length} de ${agregados.length} códigos no se pudieron cotejar contra el ticket (${sinCotejo.map((d) => `${d.codigo}: ${d.costoIlegible ? 'el costo del portal no se pudo leer' : 'el ticket no trae un monto legible'}`).join('; ')}). Un CFDI equivocado ante el SAT no se deshace: captura el monto del ticket (o corrige la lectura) y vuelve a correr, o corre con \`emitirAunConDiscrepancia\` si lo revisaste a mano.`,
         };
       }
 
