@@ -624,6 +624,9 @@ const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_336;
 // A37 lote F-agentes-legal-ia-08 (+2, 2284 → 2286): mcp/oauth.ts (+1 rpc contar_tokens_mcp_vivos, A37-S60-09: UN conteo agrupado; el conteo por cliente queda solo de respaldo) y cron/purgar/route.ts (+1 rpc mantener_agente_idempotencia, A37-S60-07).
 // Lote M-F-agentes-legal-ia-06 (+3, 2284 → 2287): admin/qa-motor.ts (+2: borrar y contar las filas wa_outbox del interceptor, A37-S23-09) y
 // agentes/leads.ts (+1: leer en bloque los títulos de fichas ya en la bandeja en vez de una consulta por empresa, A37-S28-08).
+// Lote M-F-agentes-legal-ia-07 (A37, +3, 2,284 → 2,287): cotizador/lector.ts (+2, A37-S40-09: viajes ya enlazados a otra cotización y
+// cotizaciones iguales decidiéndose, ambas lecturas de solo-lectura acotadas) y mesa_control.ts (+1, A37-S50-08: lectura de la incidencia
+// con tenant y estado antes de anotar). Cubiertas por cotizador/lector.test.ts y mesa_control.test.ts.
 // Auditoría 37, lote agentes-legal-ia (medido con el barrido real): +2 llamadas (2,264 → 2,266). `candidatos_redactor.ts` suma 3 `.from(` (prospecto, cola_aprobacion, prospecto_contacto) y `runner.ts` pierde la suya (+2 netas); `sdr.ts` pasa de 3 a 3 (la lectura por prospecto se volvió lectura en lote). Todo por `acotada`.
 // LOTE A37 peajes-liquidación-graves (migración 0865): +5 llamadas (2,264 → 2,269), 0 archivos nuevos, medido con el barrido real. `jornada/repo.ts` +1:
 // `.rpc('asentar_declaracion_jornada')` (A37-S48-01; la 0865 sustituye la marca derivada bajo el lock del expediente; el INSERT anterior se conserva

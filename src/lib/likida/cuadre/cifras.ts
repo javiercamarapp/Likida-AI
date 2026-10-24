@@ -240,12 +240,27 @@ const MONEY_G = /\$\s?(\d[\d,]*(?:\.\d+)?)|((?<![\w-])\d[\d,]*(?:\.\d+)?(?![\w-]
 /** Centavo de tolerancia: el motor redondea y el modelo formatea. */
 const TOL = 0.011;
 
+/**
+ * A37-S40-10: campos de un resultado de tool que NUNCA son un monto: ids, fechas,
+ * litros, conteos, confianza OCR, folios, kilómetros. Antes `numerosDe` recorría
+ * TODO el objeto, así que «te sobran 120» pasaba como respaldado porque 120 eran
+ * los litros, y «te faltan 1500» porque 1500 era el monto de un gasto suelto. La
+ * guardia cotejaba existencia, no significado. Se descartan por NOMBRE de campo;
+ * lo desconocido se sigue contando (ante la duda, respaldado = comportamiento
+ * anterior), así que esto solo ENDURECE el cotejo con campos que se saben ajenos.
+ */
+const CAMPO_NO_MONETARIO =
+  /^(?:id|uuid|n|comprobantes|copias_excluidas|cantidad|estatus|estado|cfdi_orden|orden|version)$|(?:^|_)(?:id|uuid|ids)$|[a-z]Id$|^(?:fecha|folio|litros|confianza|ocr|km|kilometros|dias|n_)|(?:_|^)(?:fecha|folio|litros|confianza|km|dias)(?:_|$)/i;
+
+/** UUID y fechas ISO embebidos en un texto: sus dígitos no son dinero. */
+const UUID_O_FECHA = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b|\b\d{4}-\d{2}-\d{2}\b/gi;
+
 function numerosDe(valor: unknown, acc: number[], profundidad = 0): number[] {
   if (profundidad > 8 || acc.length > 5000) return acc;   // cota dura: los resultados de tool son datos ajenos
   if (typeof valor === 'number') { if (Number.isFinite(valor)) acc.push(valor); return acc; }
   if (typeof valor === 'string') {
     // Un string puede ser "750.00" o traer cifras embebidas en una nota.
-    for (const m of valor.matchAll(/\d[\d,]*(?:\.\d+)?/g)) {
+    for (const m of valor.replace(UUID_O_FECHA, ' ').matchAll(/\d[\d,]*(?:\.\d+)?/g)) {
       const n = Number(m[0].replace(/,/g, ''));
       if (Number.isFinite(n)) acc.push(n);
     }
@@ -253,7 +268,10 @@ function numerosDe(valor: unknown, acc: number[], profundidad = 0): number[] {
   }
   if (Array.isArray(valor)) { for (const v of valor) numerosDe(v, acc, profundidad + 1); return acc; }
   if (valor && typeof valor === 'object') {
-    for (const v of Object.values(valor as Record<string, unknown>)) numerosDe(v, acc, profundidad + 1);
+    for (const [k, v] of Object.entries(valor as Record<string, unknown>)) {
+      if (CAMPO_NO_MONETARIO.test(k)) continue;
+      numerosDe(v, acc, profundidad + 1);
+    }
   }
   return acc;
 }

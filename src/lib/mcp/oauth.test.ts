@@ -199,6 +199,27 @@ describe('canjearCodigo', () => {
     expect(updates).toContain('revocar');
   });
 
+  // A37-S60-08: con solo el código (visible en la URL de redirección) no se puede tumbar
+  // la sesión viva de otra persona.
+  it('A37-S60-08: reuso SIN el verifier correcto o con otro cliente NO revoca la familia', async () => {
+    for (const [cliente, verifier] of [['cli-1', 'x'.repeat(50)], ['cli-ajeno', VERIFIER_RFC]] as const) {
+      const updates: string[] = [];
+      sbMock.mockReturnValue({
+        from(tabla: string) {
+          if (tabla === 'mcp_oauth_codigo') return cadena(OK(filaCodigo({ usado_en: PASADO })));
+          if (tabla === 'mcp_oauth_token') {
+            updates.push('revocar');
+            return cadena(OK([]));
+          }
+          return cadena(OK([]));
+        },
+      });
+      const r = await canjearCodigo(CODIGO, cliente, 'https://claude.ai/api/mcp/auth_callback', verifier);
+      expect(r.ok).toBe(false);
+      expect(updates, `${cliente}/${verifier.slice(0, 4)}`).not.toContain('revocar');
+    }
+  });
+
   it('la CARRERA (dos canjes simultáneos): el que no marcó la fila se niega', async () => {
     conTablas({
       // La lectura ve el código libre… pero el UPDATE condicionado no

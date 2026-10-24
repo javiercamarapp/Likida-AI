@@ -32,11 +32,12 @@ vi.mock('./asistencia_escalamiento', () => ({ NIVEL_MAXIMO: 4 }));
 const tablas = vi.hoisted(() => ({
   incidencias: [] as Array<Record<string, unknown>>,
   eventos: [] as Array<Record<string, unknown>>,
+  consultasEventos: 0,
 }));
 vi.mock('./pg', () => ({
   traerTodo: async (_c: unknown, etiqueta: string) => {
     if (etiqueta === 'mesa.incidencias') return tablas.incidencias;
-    if (etiqueta === 'mesa.eventos') return tablas.eventos;
+    if (etiqueta === 'mesa.eventos') { tablas.consultasEventos += 1; return tablas.eventos; }
     return [];
   },
 }));
@@ -94,6 +95,7 @@ function fila(sobre: Partial<Record<string, unknown>>): Record<string, unknown> 
 beforeEach(() => {
   tablas.incidencias = [];
   tablas.eventos = [];
+  tablas.consultasEventos = 0;
   updates.incidencia = [];
   updates.filas = [{ id: 'inc-1' }];
   selects.incidencia = [];
@@ -164,6 +166,17 @@ describe('tomarControlMesa — el claim de la mesa', () => {
   });
 });
 
+describe('A37-S50-07 — muchas incidencias vivas no tumban la mesa', () => {
+  it('los eventos se piden en lotes de ≤100 ids, no en un solo .in() gigante', async () => {
+    tablas.incidencias = Array.from({ length: 250 }, (_, i) => fila({ id: `inc-${i}` }));
+    tablas.eventos = [];
+    tablas.consultasEventos = 0;
+    const r = await listarMesaAsistencia('t1');
+    expect(r).toHaveLength(250);
+    expect(tablas.consultasEventos).toBe(3);
+  });
+})
+
 describe('resolverDesdeMesa — sin nota no hay cierre', () => {
   it('una nota vacía o de puro aire se rechaza SIN tocar la base', async () => {
     const r = await resolverDesdeMesa('t1', 'inc-1', 'u-yo', '   ok  ');
@@ -173,6 +186,7 @@ describe('resolverDesdeMesa — sin nota no hay cierre', () => {
   });
 
   it('con nota real cierra, la nota queda en el expediente y las coordinaciones se cierran (c4-2)', async () => {
+    selects.incidencia = [{ estado: 'abierta' }];
     const r = await resolverDesdeMesa('t1', 'inc-1', 'u-yo', 'Grúa de López llegó, unidad en el taller.');
     expect('ok' in r).toBe(true);
     expect(updates.incidencia[0].estado).toBe('resuelta');
@@ -184,6 +198,7 @@ describe('resolverDesdeMesa — sin nota no hay cierre', () => {
 
   it('la que ya estaba resuelta lo dice — no finge un segundo cierre', async () => {
     updates.filas = [];
+    selects.incidencia = [{ estado: 'abierta' }]; // pierde la carrera DESPUÉS de la lectura previa
     const r = await resolverDesdeMesa('t1', 'inc-1', 'u-yo', 'Nota perfectamente válida.');
     expect('error' in r && /ya estaba resuelta/.test(r.error)).toBe(true);
     // La nota SÍ quedó (va antes del cierre desde c4-8): una nota de más es
@@ -192,7 +207,24 @@ describe('resolverDesdeMesa — sin nota no hay cierre', () => {
     expect(cerrarCoordinacionesDeIncidencia).not.toHaveBeenCalled();
   });
 
+  // A37-S50-08: nada se anota contra una incidencia ajena, inexistente o ya resuelta.
+  it('A37-S50-08: incidencia inexistente o de otro tenant (0 filas): no se anota nada', async () => {
+    selects.incidencia = [];
+    const r = await resolverDesdeMesa('t1', 'inc-ajena', 'u-yo', 'Nota perfectamente válida.');
+    expect('error' in r && /ya no existe/.test(r.error)).toBe(true);
+    expect(anotarEventoIncidencia).not.toHaveBeenCalled();
+    expect(updates.incidencia).toHaveLength(0);
+  });
+
+  it('A37-S50-08: incidencia ya resuelta: se dice y no se anota', async () => {
+    selects.incidencia = [{ estado: 'resuelta' }];
+    const r = await resolverDesdeMesa('t1', 'inc-1', 'u-yo', 'Nota perfectamente válida.');
+    expect('error' in r && /ya estaba resuelta/.test(r.error)).toBe(true);
+    expect(anotarEventoIncidencia).not.toHaveBeenCalled();
+  });
+
   it('c4-8: si la nota NO se puede escribir, la incidencia NO se cierra — y se dice', async () => {
+    selects.incidencia = [{ estado: 'abierta' }];
     anotarEventoIncidencia.mockResolvedValueOnce('fallo' as never);
     const r = await resolverDesdeMesa('t1', 'inc-1', 'u-yo', 'Nota perfectamente válida.');
     expect('error' in r && /sigue abierta/.test(r.error)).toBe(true);
