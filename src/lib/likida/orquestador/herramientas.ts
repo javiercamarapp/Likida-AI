@@ -89,11 +89,22 @@ function vistaFila(f: FilaViaje) {
   };
 }
 
+/** A37-S51-07: topes con que `leerCatalogosFiltro` (conductor/repo_validacion.ts) recorta los catálogos; con tantos o más, «no existe» no es concluyente. */
+const TOPE_CATALOGO_TERMINALES = 300;
+const TOPE_CATALOGO_CLIENTES = 500;
+
 async function tablero(args: Record<string, unknown>, tenantId: string): Promise<{ t: TableroViajes } | { aclarar: unknown }> {
   const entrada = await fuentes().entradaTablero(tenantId, ahora());
   const term = resolverNombre(args.terminal, entrada.terminales);
   const cli = resolverNombre(args.cliente, entrada.clientes);
   for (const [campo, r] of [['terminal', term], ['cliente', cli]] as const) {
+    if (r.tipo === 'no_encontrado') {
+      const lista = campo === 'terminal' ? entrada.terminales : entrada.clientes;
+      const tope = campo === 'terminal' ? TOPE_CATALOGO_TERMINALES : TOPE_CATALOGO_CLIENTES;
+      if (lista.length >= tope) {
+        return { aclarar: { error: 'catalogo_recortado', campo, motivo: `el catálogo de ${campo === 'terminal' ? 'terminales' : 'clientes'} de la flota es muy grande y solo se consultó una parte: NO afirmes que no existe`, instruccion: 'Dile a la persona que no se pudo confirmar ese nombre y que lo revise en el panel de viajes en vivo; no adivines.' } };
+      }
+    }
     if (r.tipo === 'ambiguo' || r.tipo === 'no_encontrado') {
       return { aclarar: { error: 'filtro_sin_resolver', campo, motivo: r.tipo === 'ambiguo' ? 'hay varias coincidencias' : 'no existe en el catálogo de la flota', opciones: r.opciones, instruccion: 'Pregúntale a la persona cuál de las opciones quiere; no adivines.' } };
     }
@@ -140,6 +151,10 @@ registrar('detalle_viaje',
     const entrada = await fuentes().entradaTablero(ctx.tenantId, ahora());
     const t = armarTableroViajes(entrada);
     const f = t.filas.find((x) => x.folio !== null && x.folio.toLowerCase() === folio.toLowerCase());
+    if (!f && t.hayMas) {
+      // A37-S51-07: con más viajes activos que el tope, el tablero recorta los MÁS NUEVOS; no encontrarlo no prueba que no exista.
+      return { encontrado: null, folio, nota: 'La flota tiene más viajes en curso de los que esta consulta alcanza a revisar, así que NO se pudo confirmar ese folio. NO digas que no existe ni inventes su estado; indícale que lo revise en el panel de viajes en vivo.', ver: '/dashboard/viajes-en-vivo' };
+    }
     if (!f) return { encontrado: false, folio, nota: 'No hay un viaje EN CURSO con ese folio (puede estar liquidado, cancelado o no ser de esta flota). No inventes su estado.' };
     return {
       encontrado: true, gpsDisponible: t.gpsDisponible, ...vistaFila(f),
