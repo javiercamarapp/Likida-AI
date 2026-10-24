@@ -56,4 +56,17 @@ describe('REN-M1/TC-M5 — el analista pide su presupuesto en el carril interact
     expect(proposito).toBe('interactivo');
     expect(proposito).not.toBe('fondo');
   });
+
+  // A37-S03-09: el examen (scripts/evals/correr-analista.ts) corre el analista
+  // contra DEMO_TENANT_ID; con 'interactivo' gastaba la reserva del chofer.
+  it("A37-S03-09: con presupuesto 'fondo' explícito (examen) pide el carril de fondo", async () => {
+    createLlmBudget.mockClear();
+    await ejecutarAnalista({
+      tenantId: 't-1', nombreFlota: 'Flota',
+      presupuesto: 'fondo',
+      mensajes: [{ rol: 'usuario', texto: 'hola' }],
+    });
+    const [, , proposito] = createLlmBudget.mock.calls[0];
+    expect(proposito).toBe('fondo');
+  });
 });

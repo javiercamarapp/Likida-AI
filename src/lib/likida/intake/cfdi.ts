@@ -93,7 +93,8 @@ export function parseCfdiQr(qrText: string): CfdiQrData {
     if (rr && esRfcValido(rr)) out.rfcReceptor = rr.toUpperCase();
     if (tt) {
       const n = parseFloat(tt);
-      if (!Number.isNaN(n)) out.total = n;
+      // A37-S47-07: `Number.isFinite`, no `!isNaN`: `tt=1e999` / `Infinity` parsean a Infinity y se volvían el monto.
+      if (Number.isFinite(n)) out.total = n;
     }
     if (fe) out.sello = fe;
   } catch {

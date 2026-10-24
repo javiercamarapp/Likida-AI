@@ -54,7 +54,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 const logs = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger: logs }));
 
-const { resolverTenantEfectivo } = await import('./tenant-efectivo');
+const { resolverTenantEfectivo, resolverTenantAtado, MENSAJE_FLOTA_CAMBIO } = await import('./tenant-efectivo');
 const { inicioDe } = await import('./visibilidad');
 
 const CHOFER = { userId: 'u-9', tenantId: 't-1', rol: 'operador', nombre: 'Juan', operadorId: 'o-9', avatarUrl: null };
@@ -438,5 +438,28 @@ describe('ADM-11 · `?rol=` sobre una flota elegida sigue siendo esa flota, con 
     expect(r.tenantNombre).toBe('Fletes del Golfo');
     expect(r.rol).toBe('contador');
     expect(de('bitacora_auditoria')).toHaveLength(1);
+  });
+});
+
+
+describe('A37-S13-02 · resolverTenantAtado: la acción solo escribe en la flota que la pantalla pintó', () => {
+  const DUENO = { userId: 'u-1', tenantId: 't-1', rol: 'flota_admin', nombre: 'Ana', operadorId: null, avatarUrl: null };
+  const SUPER = { userId: 'u-s', tenantId: 't-Y', rol: 'superadmin', nombre: 'Soporte', operadorId: null, avatarUrl: null };
+
+  it('misma flota: devuelve la sesión resuelta', async () => {
+    requireSessionTenant.mockResolvedValue(DUENO);
+    const s = await resolverTenantAtado('/dashboard/agentes/conductores', undefined, 't-1');
+    expect(s?.tenantId).toBe('t-1');
+  });
+
+  it('un superadmin cuya cookie de selección cambió a otra flota (otra pestaña): null, no escribe en Y', async () => {
+    // La pantalla se pintó para la flota X; al enviar, la cookie ya apunta a Y.
+    requireSessionTenant.mockResolvedValue(SUPER);
+    const s = await resolverTenantAtado('/dashboard/agentes/conductores', undefined, 't-X');
+    expect(s).toBeNull();
+  });
+
+  it('el mensaje al usuario dice que no se guardó nada', () => {
+    expect(MENSAJE_FLOTA_CAMBIO).toContain('No se guardó nada');
   });
 });

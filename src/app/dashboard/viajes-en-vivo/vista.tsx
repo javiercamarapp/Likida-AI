@@ -139,15 +139,34 @@ function FilaTabla({ f, gpsDisponible }: { f: FilaViaje; gpsDisponible: boolean 
   );
 }
 
-export function TareasAbiertas({ tareas, accion, ocultos }: {
+const AVISO_ATENCION: Record<string, string> = {
+  ya_atendida: 'Esa tarea ya estaba cerrada (otra persona se te adelantó): tu nota no se guardó.',
+  sin_permiso: 'Tu rol no puede atender esa tarea.',
+  no_se_pudo: 'No pude confirmar la tarea; intenta de nuevo.',
+};
+
+export function TareasAbiertas({ tareas, accion, ocultos, aviso = null, errorLectura = false }: {
   tareas: TareaAbierta[] | null;
+  aviso?: string | null;
   accion: ((fd: FormData) => Promise<void>) | null;
   ocultos: Record<string, string>;
+  /** A37-L-docs-ux-calidad-01: la LECTURA falló (timeout/5xx). Distinto de `null` (base sin la 0650): aquí hay un error que
+   *  decir, no una pantalla vacía que parezca «sin pendientes» cuando puede haber una escalación de dinero abierta. */
+  errorLectura?: boolean;
 }) {
+  if (errorLectura) {
+    return (
+      <section aria-label="Tareas que el asistente dejó para una persona" className="card p-4 space-y-2.5">
+        <div className="flex items-center gap-2"><Radio size={15} aria-hidden /><h2 className="text-[13px] font-medium">Tareas del asistente</h2></div>
+        <p role="alert" className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No pude leer las tareas abiertas; recarga la página. Esto no significa que no haya pendientes.</p>
+      </section>
+    );
+  }
   if (tareas === null) return null; // base sin la 0650: el asistente avisa por chat que no puede escalar
   return (
     <section aria-label="Tareas que el asistente dejó para una persona" className="card p-4 space-y-2.5">
       <div className="flex items-center gap-2"><Radio size={15} aria-hidden /><h2 className="text-[13px] font-medium">Tareas del asistente</h2></div>
+      {aviso && AVISO_ATENCION[aviso] && <p role="status" className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{AVISO_ATENCION[aviso]}</p>}
       {tareas.length === 0
         ? <p className="text-[12.5px]" style={{ color: 'var(--faint)' }}>No hay tareas abiertas. Cuando el asistente derive algo delicado a una persona, aparece aquí.</p>
         : (

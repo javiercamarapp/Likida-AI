@@ -35,6 +35,33 @@ perfil_host() {
   printf '%s' "$h"
 }
 
+# Puerto de la URL (el de la pila local de Supabase por defecto no es el 5432): postgres://u:p@HOST:54322/db -> 54322
+perfil_puerto() {
+  local h="${DB#*://}" resto
+  h="${h#*@}"; h="${h%%/*}"; h="${h%%\?*}"
+  case "$h" in
+    \[*\]:*) resto="${h##*\]:}" ;;
+    \[*\]) resto="" ;;
+    *:*) resto="${h##*:}" ;;
+    *) resto="" ;;
+  esac
+  printf '%s' "${resto:-5432}"
+}
+
+# A37-S04-08: «local» ya no es solo el NOMBRE del host. Un túnel `ssh -L 5432:produccion:5432` hace que producción
+# se vea como localhost; por eso, además de un host de loopback, el puerto tiene que ser el de la pila local de
+# Supabase (54322) o uno declarado a propósito en PERFIL_PUERTOS_LOCALES (lista separada por espacios).
+# Cualquier otra cosa cae en la ruta «remota»: --produccion y confirmación con el UUID de la flota.
+perfil_es_local() {
+  local host puerto p
+  host="$(perfil_host)"; puerto="$(perfil_puerto)"
+  case "$host" in 127.0.0.1|localhost|::1) ;; *) return 1 ;; esac
+  for p in ${PERFIL_PUERTOS_LOCALES:-54322}; do
+    [ "$puerto" = "$p" ] && return 0
+  done
+  return 1
+}
+
 # Rehúsa (exit 4) toda URL cuyo host real pueda diferir del que lee perfil_host: libpq deja que host=, hostaddr= y service=
 # en la query manden sobre el authority, y que el authority lleve varios hosts separados por coma. Solo se acepta
 # postgres:// o postgresql:// (una cadena `clave=valor` tampoco se interpreta aquí).
@@ -65,11 +92,9 @@ perfil_rechazar_url_ambigua() {
 perfil_guardia_host() {
   local produccion="$1" tenant="$2" accion="$3" host respuesta
   host="$(perfil_host)"
-  case "$host" in
-    127.0.0.1|localhost|::1) echo "Base LOCAL ($host): $accion sin confirmación extra."; return 0 ;;
-  esac
+  if perfil_es_local; then echo "Base LOCAL ($host:$(perfil_puerto)): $accion sin confirmación extra."; return 0; fi
   if [ "$produccion" != "1" ]; then
-    echo "❌ El host '$host' no es local. Este script rehúsa $accion contra una base remota sin --produccion." >&2
+    echo "❌ El host '$host:$(perfil_puerto)' no se reconoce como la pila local (127.0.0.1/localhost en el puerto 54322, o uno de PERFIL_PUERTOS_LOCALES). Este script rehúsa $accion contra una base que podría ser remota sin --produccion." >&2
     exit 4
   fi
   if [ ! -t 0 ]; then
@@ -120,4 +145,18 @@ select md5(
                      from public.liquidacion_correo_config where tenant_id = :'tenant'::uuid), '') end)
 );
 SQL
+}
+
+# A37-S04-05: ¿esta respuesta de curl es una NEGACIÓN del perfil? $1 = código HTTP, $2 = redirect_url. El perfil niega
+# redirigiendo a /dashboard (3xx cuyo destino, sin host ni query, es /dashboard) o con 403. Cualquier otra cosa
+# (200, redirección a otro lado, «error» de curl) NO prueba que la ruta esté cerrada.
+perfil_ruta_negada() {
+  local codigo="$1" destino="${2:-}" ruta
+  case "$codigo" in
+    403) return 0 ;;
+    3[0-9][0-9])
+      ruta="${destino#*://}"; ruta="/${ruta#*/}"; ruta="${ruta%%[?#]*}"; ruta="${ruta%/}"
+      [ "$ruta" = "/dashboard" ] && return 0 ;;
+  esac
+  return 1
 }

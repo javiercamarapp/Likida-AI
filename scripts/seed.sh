@@ -123,6 +123,12 @@ for arg in "$@"; do
   esac
 done
 
+# A37-S04-08: host=/hostaddr=/service= en la query mandan sobre el host de la URL en libpq y evadían el rechazo de
+# abajo (localhost/db?host=<prod>). Se reutiliza la misma guarda que los scripts de perfil (exit 4).
+# shellcheck source=scripts/perfil/_comun-cinco-agentes.sh
+. scripts/perfil/_comun-cinco-agentes.sh
+perfil_rechazar_url_ambigua
+
 # host, sin esquema, sin credenciales, sin puerto ni ruta
 HOST=$(printf '%s' "$DB" | sed -E 's#^[a-zA-Z+]+://##; s#^[^@/]*@##; s#[:/?].*$##')
 
@@ -134,7 +140,8 @@ case "$HOST" in
       echo "   En una flota real eso apaga o desvía la validación de receptor de CFDI."
       echo ""
       echo "   Si de verdad es lo que quieres, dilo a mano:"
-      echo "     DATABASE_URL=\"$DB\" npm run seed -- --produccion"
+      # A37-S04-09: NUNCA imprimir $DB (lleva la contraseña): quedaría en el scrollback o en logs de CI.
+      echo "     DATABASE_URL=\"<tu-url>\" npm run seed -- --produccion"
       exit 1
     fi
     echo "⚠️  Sembrando contra «${HOST}» con --produccion. Sobrescribe el tenant demo si existe."

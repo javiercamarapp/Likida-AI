@@ -4,7 +4,7 @@ import type { SitioFila } from '@/lib/likida/conductor/repo_validacion';
 import { VistaSitios, type PropsVistaSitios } from './vista';
 
 const accion = async () => null;
-const accionEstado = async () => {};
+const accionEstado = accion;
 const S = (p: Partial<SitioFila> = {}): SitioFila => ({
   id: '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d001', nombre: 'Planta Zapopan', tipo: 'planta', codigo: 'PL-ZAP', direccion: null, lat: 20.72, lng: -103.39, radioM: 300,
   activa: true, fuente: 'csv', clienteId: 'c1', clienteNombre: 'Cliente A', padreId: null, ...p,
@@ -27,6 +27,13 @@ describe('el catálogo de sitios', () => {
   });
   it('declara que NINGUNA coordenada se inventa', () => {
     expect(pintar()).toContain('Ninguna coordenada se calcula ni se inventa');
+  });
+  it('A37-S13-03: los selectores usan la lista completa de activos (no la de la tabla filtrada) y avisan si es una muestra', () => {
+    const otro = { id: '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d002', nombre: 'Anden Tardío' };
+    const html = pintar({ sitios: [S()], selectorSitios: [{ id: S().id, nombre: S().nombre }, otro], selectorHayMas: true });
+    expect(html).toContain('Anden Tardío');
+    expect(html).toContain('Hay más sitios activos de los que caben en el selector');
+    expect(pintar({ selectorSitios: [otro], selectorHayMas: false })).not.toContain('Hay más sitios activos');
   });
   it('un sitio capturado a mano lo dice', () => {
     expect(pintar({ sitios: [S({ fuente: 'manual' })] })).toContain('captura manual');

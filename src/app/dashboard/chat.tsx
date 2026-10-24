@@ -102,10 +102,67 @@ function respuestaDeBloques(bloques: Array<Record<string, unknown>>): Respuesta 
   return { texto: textos.join(' ') || 'Listo.', visuales: visuales.length > 0 ? visuales : undefined };
 }
 
+/** El catálogo de Consulta, por CATEGORÍA y formal (pedido del 12-ago:
+ *  al ancho de la caja y con muchas más opciones). SIEMPRE completo: las
+ *  respuestas ya degradan con honestidad cuando falta el dato ("todavía
+ *  no hay..."), así que esconder categorías solo empobrecía el menú.
+ *  Cada frase conserva una palabra clave que `responder` entiende —
+ *  verificadas contra sus ramas una por una
+ *  en `chat_respondedor_catalogo.test.ts` (A37-S16-09). */
+export const CATALOGO_CONSULTA: Array<{ categoria: string; preguntas: string[] }> = [
+  {
+    categoria: 'Cuadre y liquidaciones',
+    preguntas: [
+      'Muéstrame el desglose de lo comprobado a la fecha',
+      'Estado de las liquidaciones con diferencia o por revisar',
+      '¿Cuántos viajes están por revisar?',
+      'Monto observado por el motor en las liquidaciones',
+    ],
+  },
+  {
+    categoria: 'Salud del cuadre',
+    preguntas: [
+      'Tasa de cuadre del periodo',
+      '¿Cuántas liquidaciones cerraron sin diferencias?',
+      '¿Cuánto llevo comprobado?',
+    ],
+  },
+  {
+    categoria: 'Fiscal y acreditables',
+    preguntas: [
+      'Desglose de acreditables del periodo',
+      'IVA acreditable del periodo',
+      'Peaje acreditable del periodo',
+      'Litros de diésel elegibles para el estímulo',
+    ],
+  },
+];
+
 export function responder(pregunta: string, kpis: DashboardKpis | null, acred: Acreditables | null): Respuesta {
   const q = pregunta.toLowerCase();
   const sinLiq = { texto: 'Todavía no hay liquidaciones para calcular esto.' };
-  if (q.includes('comprobad') || q.includes('monto')) {
+  // A37-S16-09: «observado» es el monto que el motor detectó fuera de regla o duplicado, NO lo comprobado (antes caía en la rama «monto»).
+  if (q.includes('observad')) {
+    if (!kpis) return sinLiq;
+    return {
+      texto: `El motor observa ${mxn(kpis.diferenciaDetectada)} fuera de regla o duplicados en ${kpis.viajesLiquidados} viaje${kpis.viajesLiquidados === 1 ? '' : 's'} liquidado${kpis.viajesLiquidados === 1 ? '' : 's'}.`,
+      visual: {
+        tipo: 'tabla',
+        filas: [
+          ['Fuera de regla o duplicado', mxn(kpis.diferenciaDetectada)],
+          ['Con diferencias', numero(kpis.conDiferencias)],
+          ['Por revisar', numero(kpis.porRevisar)],
+        ],
+      },
+    };
+  }
+  // «cerraron sin diferencias» pregunta por las LIMPIAS, no por las que sí tienen diferencia.
+  if (q.includes('sin diferencia')) {
+    if (!kpis) return sinLiq;
+    const limpias = Math.max(0, kpis.viajesLiquidados - kpis.conDiferencias - kpis.porRevisar);
+    return { texto: `${limpias} de ${kpis.viajesLiquidados} liquidaciones cerraron sin diferencias.` };
+  }
+  if (q.includes('comprobad') || /\bmonto/.test(q)) {
     if (!kpis) return sinLiq;
     return {
       texto: `Llevas ${mxn(kpis.montoComprobado)} comprobados en ${kpis.viajesLiquidados} viaje${kpis.viajesLiquidados === 1 ? '' : 's'}.`,
@@ -155,10 +212,10 @@ export function responder(pregunta: string, kpis: DashboardKpis | null, acred: A
         : undefined,
     };
   }
-  if (q.includes('iva') || q.includes('peaje') || q.includes('caseta') || q.includes('acreditable')) {
+  if (/\biva\b/.test(q) || q.includes('peaje') || q.includes('caseta') || q.includes('acreditable')) {
     if (!acred) return { texto: 'Todavía no hay datos de acreditables este periodo.' };
     return {
-      texto: q.includes('iva')
+      texto: /\biva\b/.test(q)
         ? `${mxn(acred.iva)} de IVA acreditable este periodo (LIVA, Art. 5).`
         : q.includes('peaje') || q.includes('caseta')
           ? `${mxn(acred.peaje)} de peaje acreditable (50%) este periodo — sujeto a elegibilidad.`
@@ -391,40 +448,6 @@ export default function ChatFlota({
     }
   }
 
-  /** El catálogo de Consulta, por CATEGORÍA y formal (pedido del 12-ago:
-   *  al ancho de la caja y con muchas más opciones). SIEMPRE completo: las
-   *  respuestas ya degradan con honestidad cuando falta el dato ("todavía
-   *  no hay..."), así que esconder categorías solo empobrecía el menú.
-   *  Cada frase conserva una palabra clave que `responder` entiende —
-   *  verificadas contra sus ramas una por una. */
-  const CATALOGO_CONSULTA: Array<{ categoria: string; preguntas: string[] }> = [
-    {
-      categoria: 'Cuadre y liquidaciones',
-      preguntas: [
-        'Muéstrame el desglose de lo comprobado a la fecha',
-        'Estado de las liquidaciones con diferencia o por revisar',
-        '¿Cuántos viajes están por revisar?',
-        'Monto observado por el motor en las liquidaciones',
-      ],
-    },
-    {
-      categoria: 'Salud del cuadre',
-      preguntas: [
-        'Tasa de cuadre del periodo',
-        '¿Cuántas liquidaciones cerraron sin diferencias?',
-        '¿Cuánto llevo comprobado?',
-      ],
-    },
-    {
-      categoria: 'Fiscal y acreditables',
-      preguntas: [
-        'Desglose de acreditables del periodo',
-        'IVA acreditable del periodo',
-        'Peaje acreditable del periodo',
-        'Litros de diésel elegibles para el estímulo',
-      ],
-    },
-  ];
 
   const spChat = useSearchParams();
 

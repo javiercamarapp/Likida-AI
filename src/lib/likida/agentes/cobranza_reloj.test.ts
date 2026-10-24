@@ -23,6 +23,9 @@ const VIAJES = [
 
 const claims: unknown[] = [];
 const updates: { tabla: string; fila: unknown }[] = [];
+/** A37-S26-03: las marcas «enviando» previas al envío (no son resultados). */
+const marcas: { tabla: string; fila: unknown }[] = [];
+const esMarca = (fila: unknown) => String((fila as { detalle?: unknown } | null)?.detalle ?? '').startsWith('enviando');
 /** Cada `.delete()` sobre `cobranza_contacto` (RES-1: liberar el tier). */
 const borrados: string[] = [];
 
@@ -36,7 +39,7 @@ vi.mock('@/lib/supabase/admin', () => ({
         delete: () => { borrados.push(tabla); return b; },
         is: chain, lt: chain,
         insert: (fila: unknown) => { claims.push(fila); return b; },
-        update: (fila: unknown) => { updates.push({ tabla, fila }); return b; },
+        update: (fila: unknown) => { (esMarca(fila) ? marcas : updates).push({ tabla, fila }); return b; },
         maybeSingle: async () => ({ data: null, error: null }),
         // `traerTodo` pagina con `.range(d, h)`: el mock rebana como lo haría
         // el servidor — la página más allá del final llega vacía y cierra.
@@ -85,6 +88,7 @@ const AHORA = new Date('2026-08-14T17:00:00Z');
 beforeEach(() => {
   claims.length = 0;
   updates.length = 0;
+  marcas.length = 0;
   borrados.length = 0;
   sendText.mockReset();
   sendText.mockResolvedValue('wamid.OK');
@@ -115,6 +119,17 @@ describe('ejecutarCobranza — el reloj corta ANTES del claim (REND-C2)', () => 
     const r = await ejecutarCobranza('t1', AHORA, { ignorarVentana: true });
     expect(r.contactados).toBe(2);
     expect(r.cortadosPorReloj).toBe(0);
+  });
+});
+
+describe('A37-S26-03 — el claim se marca «enviando» ANTES de llamar a WhatsApp', () => {
+  it('cada claim recibe su marca antes del envío (el rescate de huérfanos no la borra)', async () => {
+    sendText.mockImplementation(async () => {
+      expect(marcas.filter((m) => m.tabla === 'cobranza_contacto').length).toBeGreaterThan(0);
+      return { messages: [{ id: 'w1' }] } as never;
+    });
+    await ejecutarCobranza('t1', AHORA, { ignorarVentana: true });
+    expect(marcas.filter((m) => m.tabla === 'cobranza_contacto')).toHaveLength(2);
   });
 });
 

@@ -141,7 +141,7 @@ entorno), `RESPALDO_BUCKETS` (si no se define, usa la lista única
 `scripts/respaldo-buckets.txt`: los 9 buckets que crean las migraciones, incluidos
 `buzon-facturas`, `cartaporte-docs` y `agente-insumos`; una prueba la cruza contra
 `supabase/migrations`) y
-`RESPALDO_S3_DESTINO`. **No hay cron que lo llame**: corre contra producción
+`RESPALDO_S3_DESTINO`. **No hay cron de Vercel que lo llame**, pero desde el 23-oct-2026 el workflow `.github/workflows/backup-storage.yml` lo corre cada noche (`17 3 * * *` UTC; ver su cabecera) y también se puede lanzar a mano (A37-L-15): corre contra producción
 con la service role, y esa tecla es consciente. Cadencia recomendada mientras
 no haya PITR: **semanal**, y a mano antes de cualquier migración que borre.
 
@@ -172,7 +172,7 @@ nueva, jamás contra producción**:
    ```bash
    psql "$URL_RESTAURO" -v ON_ERROR_STOP=1 -f supabase/pruebas-aislamiento/andamio_ci.sql
    for f in supabase/migrations/*.sql; do psql "$URL_RESTAURO" -v ON_ERROR_STOP=1 -q -f "$f"; done
-   psql "$URL_RESTAURO" -v ON_ERROR_STOP=1 -f ~/Desktop/likida-respaldos/likida-AAAA-MM-DD_HHMM.sql
+   psql "$URL_RESTAURO" -v ON_ERROR_STOP=1 -f ~/likida-respaldos/base/likida-AAAA-MM-DD_HHMM.sql
    ```
 3. **Cotejar contra el manifiesto**, que es la parte que se salta todo el
    mundo: por cada `pdf_url` de `liquidacion` y cada `imagen_url` de `gasto`,
@@ -345,8 +345,10 @@ vercel --prod
 ```
 
 Para un entorno nuevo desde cero, `bash scripts/deploy-vercel.sh` vincula el
-proyecto, empuja las envs de `.env.local` a production + preview (salta las
-`WHATSAPP_*` vacías) y fija `NEXT_PUBLIC_APP_URL` al dominio real.
+proyecto, fija `NEXT_PUBLIC_APP_URL` al dominio real ANTES del build, empuja las envs de
+`.env.local` solo a production (salta las vacías; respeta comillas y no trunca `#` dentro del
+valor) y las de `.env.preview`, si existe, a preview (los secretos de producción nunca van a
+Preview). Aborta si el proyecto ya tiene deployments (A37-S03-02): no es para entornos vivos.
 
 **No** copies solo "las envs de `.env.example` que tengan valor": ese atajo fue
 el que dejó fuera el tenant del demo. El inventario de arriba es el que manda.
@@ -397,9 +399,9 @@ Ahora hay tres piezas que lo atan:
    commit, la última `supabase/migrations/NNNN_*.sql` del repo y
    `migracion.base` del health de producción. Con `[deploy]` y base atrás
    **no construye**. Health caído o base ilegible tampoco construyen (un cotejo
-   que no se hizo no es verde). La única excepción de arranque: si el health
-   desplegado todavía no publica `migracion` (versión anterior), construye esa
-   vez con aviso. `[deploy:forzar]` en el asunto salta la compuerta a la vista.
+   que no se hizo no es verde). Un health sin el campo `migracion` (CDN, página de
+   mantenimiento, versión vieja) tampoco construye (A37-S02-05: la salida de
+   arranque de la auditoría 24 se retiró). `[deploy:forzar]` en el asunto salta la compuerta a la vista.
 3. **El mismo veredicto en rojo, en Actions.** `salud-produccion.yml` corre la
    compuerta en cada push con `[deploy]` (el `ignoreCommand` es mudo; esto no),
    y por `schedule` comprueba además que producción corra el último commit con
@@ -409,7 +411,7 @@ Ahora hay tres piezas que lo atan:
 El procedimiento, entonces:
 
 ```bash
-bash scripts/aplicar-migraciones-y-humos.sh   # 1. migraciones a producción
+RESPALDO_VERIFICADO=1 bash scripts/aplicar-migraciones-y-humos.sh   # 1. migraciones a producción (dry-run + CLI fijada; A37-L-09: confirma el respaldo antes)
 curl -s https://app.likida.ai/api/health | grep -o '"migracion":{[^}]*}'   # 2. atras:0, adelante:0
 git commit -m 'fix(x): … [deploy]' && git push   # 3. ahora sí construye
 # 4. COMPROBAR QUE CONSTRUYÓ — este paso no es opcional (ver más abajo)

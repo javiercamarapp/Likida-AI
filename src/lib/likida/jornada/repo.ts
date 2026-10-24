@@ -142,6 +142,21 @@ export async function idDeJornada(tenantId: string, operadorId: string, dia: str
   return data ? String(data.id) : null;
 }
 
+/** El día (AAAA-MM-DD) de un expediente, anclado al tenant. `null` si no existe
+ *  o la base no contestó: quien llama FALLA CERRADO (A37-S19-01). */
+export async function diaDeJornada(tenantId: string, jornadaId: string): Promise<string | null> {
+  const { data, error } = await acotada(
+    supabaseAdmin().from('jornada_dia').select('dia')
+      .eq('tenant_id', tenantId).eq('id', jornadaId).maybeSingle(),
+    'jornada.dia.por_id',
+  );
+  if (error) {
+    logger.error('jornada.dia_por_id_ilegible', { tenant: tenantId, jornada: jornadaId, err: error.message });
+    return null;
+  }
+  return data ? String(data.dia) : null;
+}
+
 /** Cuántas horas puede quedar abierta una jornada antes de que una marca de
  *  madrugada deje de poder atribuírsele. Más de 24 h no es una jornada larga:
  *  es una marca del día equivocado, y colgársela sería inventar la atribución. */
@@ -499,14 +514,20 @@ export async function nombresDeOperadores(
 ): Promise<Map<string, { nombre: string; numeroEmpleado: string | null }>> {
   const mapa = new Map<string, { nombre: string; numeroEmpleado: string | null }>();
   if (ids.length === 0) return mapa;
-  const { data, error } = await acotada(
-    supabaseAdmin().from('operador').select('id, nombre, numero_empleado')
-      .eq('tenant_id', tenantId).in('id', [...new Set(ids)]),
-    'jornada.operadores',
-  );
-  if (error) throw new JornadaIlegible(`nombres de operadores: ${error.message}`);
-  for (const o of (data ?? []) as Array<{ id: string; nombre: string; numero_empleado: string | null }>) {
-    mapa.set(String(o.id), { nombre: String(o.nombre), numeroEmpleado: o.numero_empleado });
+  // A37-S19-04: en lotes de 150 ids (como `alertasDeJornadas`): con una flota
+  // grande un solo `.in()` de cientos de uuids lleva la query string al límite
+  // del gateway y tumbaba toda la pantalla de jornada.
+  const unicos = [...new Set(ids)];
+  for (let i = 0; i < unicos.length; i += 150) {
+    const { data, error } = await acotada(
+      supabaseAdmin().from('operador').select('id, nombre, numero_empleado')
+        .eq('tenant_id', tenantId).in('id', unicos.slice(i, i + 150)),
+      'jornada.operadores',
+    );
+    if (error) throw new JornadaIlegible(`nombres de operadores: ${error.message}`);
+    for (const o of (data ?? []) as Array<{ id: string; nombre: string; numero_empleado: string | null }>) {
+      mapa.set(String(o.id), { nombre: String(o.nombre), numeroEmpleado: o.numero_empleado });
+    }
   }
   return mapa;
 }

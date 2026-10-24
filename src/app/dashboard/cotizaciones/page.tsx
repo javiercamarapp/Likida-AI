@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache';
 import { Calculator, TriangleAlert } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { puedeAsignar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { parsearImporteMx, mxn, porcentaje, fechaHoraMx, fechaMx, numero } from '@/lib/formato';
@@ -136,7 +137,10 @@ export default async function PaginaCotizaciones({
   async function accionConvertir(_prev: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
     const s = await resolverTenantEfectivo(RUTA, sp);
-    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede crear viajes desde aquí.' };
+    // A37-S17-10: crear un viaje es una escritura OPERATIVA (aparece en «viajes
+    // sin asignar» del tráfico): lleva el mismo permiso que despachar, no solo el
+    // área dinero con la que se ve el cotizador.
+    if (!puedeVerRuta(s.rol, RUTA) || !puedeAsignar(s.rol)) return { error: 'Tu rol no puede crear viajes desde aquí.' };
     try {
       await convertirEnViaje(s.tenantId, String(fd.get('id') ?? ''), s.userId ?? null);
     } catch (e) {
@@ -222,7 +226,7 @@ export default async function PaginaCotizaciones({
               </p>
             )}
             <ul className="space-y-3">
-              {panel.cotizaciones.map((q) => <Fila key={q.id} q={q} enviada={accionEnviada} perdida={accionPerdida} convertir={accionConvertir} />)}
+              {panel.cotizaciones.map((q) => <Fila key={q.id} q={q} puedeCrearViaje={puedeAsignar(rol)} enviada={accionEnviada} perdida={accionPerdida} convertir={accionConvertir} />)}
             </ul>
           </section>
         </>
@@ -232,12 +236,13 @@ export default async function PaginaCotizaciones({
 }
 
 function Fila({
-  q, enviada, perdida, convertir,
+  q, puedeCrearViaje, enviada, perdida, convertir,
 }: {
   q: CotizacionRow;
   enviada: AccionDeForma;
   perdida: AccionDeForma;
   convertir: AccionDeForma;
+  puedeCrearViaje: boolean;
 }) {
   const viva = q.estado === 'borrador' || q.estado === 'enviada';
   // EL NÚMERO QUE EL TÍTULO DE ESTA PANTALLA PROMETE. `null` = todavía no se
@@ -326,7 +331,7 @@ function Fila({
         {viva && (
           <span className="ml-auto">
             <FilaAccionesCotizacion
-              id={q.id} puedeEnviar={q.estado === 'borrador'} precio={q.precio}
+              id={q.id} puedeEnviar={q.estado === 'borrador'} puedeCrearViaje={puedeCrearViaje} precio={q.precio}
               enviada={enviada} convertir={convertir} perdida={perdida}
             />
           </span>

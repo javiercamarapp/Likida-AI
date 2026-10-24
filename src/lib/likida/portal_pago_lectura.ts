@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { mismoHash } from '@/lib/auth/llave-api';
 import { estadoLiga, hashDeToken, prefijoDeToken, type EstadoLiga } from './portal_pago';
+import { traerPorIds } from './pg';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LO QUE LA PÁGINA PÚBLICA PUEDE VER — Y NADA MÁS.
@@ -368,8 +369,18 @@ export async function anotarAcceso(
   liga: { ligaId: string; tenantId: string },
   tipo: TipoAcceso,
   detalle?: Record<string, unknown>,
+  /** A37-S21-03: si ya hay una fila de este tipo para la liga dentro de la
+   *  ventana, no se escribe otra (los GET de bots no inflan la bitácora). */
+  opciones?: { unaVezCadaMs?: number },
 ): Promise<void> {
   try {
+    if (opciones?.unaVezCadaMs) {
+      const desde = new Date(Date.now() - opciones.unaVezCadaMs).toISOString();
+      const { data: previa, error: errPrevia } = await supabaseAdmin().from('portal_pago_acceso')
+        .select('id').eq('liga_id', liga.ligaId).eq('tenant_id', liga.tenantId).eq('tipo', tipo)
+        .gte('ocurrio_en', desde).order('id').limit(1);
+      if (!errPrevia && (previa ?? []).length > 0) return;
+    }
     const { error } = await supabaseAdmin().from('portal_pago_acceso').insert({
       tenant_id: liga.tenantId,
       liga_id: liga.ligaId,
@@ -472,8 +483,13 @@ export interface RepEnPanel {
 export interface PanelPortal {
   pendientes: PropuestaEnBandeja[];
   ligasVivas: LigaEnPanel[];
+  /** `true` si hay más pendientes de los que cupieron: las más nuevas NO se ven y la pantalla lo dice (A37-S54-04). */
+  pendientesTruncados: boolean;
   /** Facturas emitidas sin liga viva: las candidatas a generar enlace. */
   facturasSinLiga: Array<{ id: string; factura: string; cliente: string; saldo: number | null }>;
+  /** A37-S54-01: `true` si la lista de candidatas NO es completa (se leyeron solo las 300 facturas más recientes, o hubo más de
+   *  50 con saldo): la pantalla lo DICE, porque una lista recortada en silencio parece «ya no hay más». */
+  facturasTruncadas: boolean;
   /** Los últimos REPs registrados por esta flota, del más nuevo al más viejo. */
   reps: RepEnPanel[];
   /** `true` si hay más REPs de los que cupieron: un tope callado es una cifra
@@ -481,8 +497,15 @@ export interface PanelPortal {
   repsTruncados: boolean;
 }
 
+/** Cuántas propuestas pendientes trae el panel. Se pide UNA más para saber si hay más (A37-S54-04). */
+export const TOPE_PENDIENTES_PANEL = 200;
+
 /** Cuántos REPs trae el panel. Se declara para poder decir "hay más". */
 export const TOPE_REPS_PANEL = 50;
+/** Facturas recientes que se leen como candidatas a enlace (A37-S54-01: si se llena el tope, el panel lo dice). */
+export const TOPE_FACTURAS_PANEL = 300;
+/** Candidatas que se ofrecen en el selector. */
+export const TOPE_CANDIDATAS_PANEL = 50;
 
 /**
  * Todo lo del portal para UNA flota. Falla POR VALOR hacia arriba (lanza), como
@@ -492,11 +515,11 @@ export const TOPE_REPS_PANEL = 50;
 export async function panelDelPortal(tenantId: string): Promise<PanelPortal> {
   const sb = supabaseAdmin();
 
-  const [prop, ligas, facturas, saldos, reps] = await Promise.all([
+  const [prop, ligas, facturas, reps] = await Promise.all([
     sb.from('portal_pago_propuesta')
       .select('id, factura_id, fecha, monto, referencia, metodo, registrada_en')
       .eq('tenant_id', tenantId).eq('estado', 'pendiente')
-      .order('registrada_en', { ascending: true }).limit(200),
+      .order('registrada_en', { ascending: true }).limit(TOPE_PENDIENTES_PANEL + 1),
     sb.from('portal_pago_liga')
       .select('id, factura_id, token_prefijo, expira_en, ultimo_acceso_en')
       .eq('tenant_id', tenantId).is('revocada_en', null)
@@ -504,10 +527,7 @@ export async function panelDelPortal(tenantId: string): Promise<PanelPortal> {
     sb.from('factura_emitida')
       .select('id, serie, folio, cfdi_uuid, cliente_id, estatus')
       .eq('tenant_id', tenantId).in('estatus', ['emitida', 'pagada'])
-      .order('fecha', { ascending: false }).limit(300),
-    sb.from('factura_saldo')
-      .select('factura_id, saldo')
-      .eq('tenant_id', tenantId).limit(1000),
+      .order('fecha', { ascending: false }).order('id').limit(TOPE_FACTURAS_PANEL),
     // NO se selecciona `xml`: son 50 blobs de CFDI que la lista no pinta.
     // Se pide UNO más que el tope para saber si hay más sin traerlos todos.
     // `.order()` va SIEMPRE con `.limit()` — un tope sin orden alimentando una
@@ -526,9 +546,6 @@ export async function panelDelPortal(tenantId: string): Promise<PanelPortal> {
   // caída se leería como «no hemos emitido ninguno», que es justo la
   // conclusión que haría emitir uno repetido.
   if (reps.error) throw new Error(`panelDelPortal: reps: ${reps.error.message}`);
-  // El saldo se degrada: sin él la bandeja sigue sirviendo, y cada renglón
-  // dirá «sin dato» en vez de un cero que invitaría a conciliar a ciegas.
-  if (saldos.error) logger.error('portal_pago.panel_saldos', { err: saldos.error.message });
 
   // ── LAS FACTURAS QUE LA PRIMERA LECTURA NO ALCANZÓ (`c7-23`) ─────────────
   //
@@ -586,16 +603,49 @@ export async function panelDelPortal(tenantId: string): Promise<PanelPortal> {
     });
   }
 
+  // A37-S54-01: el saldo se pide POR ID de las facturas que de verdad se pintan (las candidatas y las de la bandeja), por tandas.
+  // Antes era `factura_saldo.limit(1000)` sin filtro ni orden: con más de 1,000 filas las propuestas pendientes salían con saldo
+  // `null` («concilia a ciegas») y las pagadas sin dato entraban como candidatas a enlace. Se degrada, no se lanza: sin el saldo
+  // la bandeja sigue sirviendo y cada renglón dirá «sin dato» en vez de un cero que invitaría a conciliar a ciegas.
   const saldoDe = new Map<string, number | null>();
-  for (const s of saldos.data ?? []) {
-    const r = s as { factura_id: unknown; saldo: unknown };
-    saldoDe.set(String(r.factura_id), numeroONull(r.saldo));
+  const idsParaSaldo = [...new Set([
+    ...(facturas.data ?? []).map((f) => String((f as { id: unknown }).id)),
+    ...(prop.data ?? []).map((p) => String((p as { factura_id: unknown }).factura_id)),
+  ])];
+  if (idsParaSaldo.length > 0) {
+    try {
+      const saldos = await traerPorIds<{ factura_id: unknown; saldo: unknown }>(
+        idsParaSaldo,
+        (tanda) => sb.from('factura_saldo').select('factura_id, saldo').eq('tenant_id', tenantId).in('factura_id', tanda),
+        'portal_pago.panel_saldos',
+      );
+      for (const r of saldos) saldoDe.set(String(r.factura_id), numeroONull(r.saldo));
+    } catch (e) {
+      logger.error('portal_pago.panel_saldos', { err: e instanceof Error ? e.message : String(e) });
+    }
   }
 
   const conLiga = new Set((ligas.data ?? []).map((l) => String((l as { factura_id: unknown }).factura_id)));
+  const candidatas = (facturas.data ?? [])
+    .filter((f) => !conLiga.has(String((f as { id: unknown }).id)))
+    .map((f) => {
+      const r = f as Record<string, unknown>;
+      const fid = String(r.id);
+      return {
+        id: fid,
+        factura: rotuloFactura(r),
+        cliente: clientes.get(String(r.cliente_id)) ?? 'Cliente',
+        saldo: saldoDe.get(fid) ?? null,
+      };
+    })
+    // Solo las que todavía deben algo: un enlace de pago sobre una factura
+    // saldada no tiene para qué existir. Las de saldo desconocido SÍ entran —
+    // «no sé» no es «ya pagó».
+    .filter((f) => f.saldo === null || f.saldo > 0.01);
 
   return {
-    pendientes: (prop.data ?? []).map((p) => {
+    pendientesTruncados: (prop.data ?? []).length > TOPE_PENDIENTES_PANEL,
+    pendientes: (prop.data ?? []).slice(0, TOPE_PENDIENTES_PANEL).map((p) => {
       const r = p as Record<string, unknown>;
       const fid = String(r.factura_id);
       const meta = porFactura.get(fid);
@@ -628,23 +678,8 @@ export async function panelDelPortal(tenantId: string): Promise<PanelPortal> {
         ultimoAccesoEn: (r.ultimo_acceso_en as string | null) ?? null,
       };
     }),
-    facturasSinLiga: (facturas.data ?? [])
-      .filter((f) => !conLiga.has(String((f as { id: unknown }).id)))
-      .map((f) => {
-        const r = f as Record<string, unknown>;
-        const fid = String(r.id);
-        return {
-          id: fid,
-          factura: rotuloFactura(r),
-          cliente: clientes.get(String(r.cliente_id)) ?? 'Cliente',
-          saldo: saldoDe.get(fid) ?? null,
-        };
-      })
-      // Solo las que todavía deben algo: un enlace de pago sobre una factura
-      // saldada no tiene para qué existir. Las de saldo desconocido SÍ entran —
-      // «no sé» no es «ya pagó».
-      .filter((f) => f.saldo === null || f.saldo > 0.01)
-      .slice(0, 50),
+    facturasSinLiga: candidatas.slice(0, TOPE_CANDIDATAS_PANEL),
+    facturasTruncadas: (facturas.data ?? []).length >= TOPE_FACTURAS_PANEL || candidatas.length > TOPE_CANDIDATAS_PANEL,
     reps: (reps.data ?? []).slice(0, TOPE_REPS_PANEL).map((f) => {
       const r = f as Record<string, unknown>;
       const fid = String(r.factura_id);

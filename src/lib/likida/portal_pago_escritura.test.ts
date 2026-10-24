@@ -38,7 +38,7 @@ import {
   crearLigaPago, revocarLigaPago,
   conciliarPropuesta, descartarPropuesta, registrarRepEmitido, sellarRepEntregado,
 } from './portal_pago_escritura';
-import { registrarPropuesta } from './portal_pago_propuesta';
+import { registrarPropuesta, TOPE_PENDIENTES_POR_FACTURA } from './portal_pago_propuesta';
 // `AbonoYaRegistrado` se importa del módulo REAL de errores y no del mock de
 // `facturacion_escritura`: la clase vive en `errores.ts` justo para que quien
 // necesita reconocerla no tenga que arrastrar la cadena de facturación. Si
@@ -159,6 +159,26 @@ describe('crearLigaPago — sobre qué factura SÍ y sobre cuál no', () => {
     await expect(crearLigaPago(T, FACTURA)).rejects.toThrow(/ya tiene un enlace vigente/i);
   });
 
+  // ── A37-S54-07 · el tope de `acotada` devuelve error aunque la escritura pueda haberse completado ─────────────
+  it('A37-S54-07: si el insert da timeout pero la liga SÍ quedó (mismo hash), se devuelve esa liga — no «ya tiene enlace» en el reintento', async () => {
+    conTablas({
+      factura_emitida: [OK({ id: FACTURA, estatus: 'emitida' })],
+      // 1 = limpieza de caducadas; 2 = el insert (tope agotado); 3 = la relectura por hash: la fila existe.
+      portal_pago_liga: [OK([]), FALLA('sin respuesta en 12000 ms (tope de consulta)'), OK({ id: 'liga-huerfana' })],
+    });
+    const l = await crearLigaPago(T, FACTURA);
+    expect(l.id).toBe('liga-huerfana');
+    expect(l.url).toMatch(/\/pago\/pgo_[A-Za-z0-9_-]+$/);
+  });
+
+  it('A37-S54-07: si el insert da timeout y la relectura no halla la liga, el error original sube', async () => {
+    conTablas({
+      factura_emitida: [OK({ id: FACTURA, estatus: 'emitida' })],
+      portal_pago_liga: [OK([]), FALLA('sin respuesta en 12000 ms (tope de consulta)'), OK(null)],
+    });
+    await expect(crearLigaPago(T, FACTURA)).rejects.toThrow(/sin respuesta/);
+  });
+
   it('un error que NO es choque no se disfraza de dato inválido', async () => {
     conTablas({
       factura_emitida: [OK({ id: FACTURA, estatus: 'emitida' })],
@@ -228,13 +248,34 @@ describe('registrarPropuesta — el único verbo del cliente, y nunca lanza', ()
   });
 
   it('EL CHOQUE 23505 NO ES UN ERROR: es el segundo clic', async () => {
-    conTablas({ portal_pago_propuesta: [CHOQUE()] });
+    conTablas({ portal_pago_propuesta: [OK([]), { data: null, error: null, count: 0 } as unknown as Resultado, CHOQUE()] }); // 1.ª: el tope por hora (A37-L-06); 2.ª: el conteo de pendientes (A37-S54-04); 3.ª: el insert
     const r = await registrarPropuesta(LIGA, {
       fecha: '2026-08-20', monto: 1160, referencia: 'REF-1', metodo: 'transferencia',
     });
     expect(r).toEqual({ ok: true, id: null, repetida: true });
     // Y no se anota como hecho nuevo.
     expect(anotarBitacora).not.toHaveBeenCalled();
+  });
+
+  it('A37-S54-04: una factura con demasiados pagos PENDIENTES ya no acepta más (cada uno dispara un correo)', async () => {
+    conTablas({
+      portal_pago_propuesta: [OK([]), { data: null, error: null, count: TOPE_PENDIENTES_POR_FACTURA } as unknown as Resultado, OK({ id: 'p-1' })],
+    });
+    const r = await registrarPropuesta(LIGA, {
+      fecha: '2026-08-20', monto: 1160, referencia: 'REF-1', metodo: 'transferencia',
+    });
+    expect(r.ok).toBe(false);
+    expect(anotarBitacora).not.toHaveBeenCalled();
+  });
+
+  it('A37-S54-04: por debajo del tope se registra normal', async () => {
+    conTablas({
+      portal_pago_propuesta: [OK([]), { data: null, error: null, count: TOPE_PENDIENTES_POR_FACTURA - 1 } as unknown as Resultado, OK({ id: 'p-1' })],
+    });
+    const r = await registrarPropuesta(LIGA, {
+      fecha: '2026-08-20', monto: 1160, referencia: 'REF-1', metodo: 'transferencia',
+    });
+    expect(r).toEqual({ ok: true, id: 'p-1', repetida: false });
   });
 
   it('cualquier otro error contesta `ok: false` — no lanza contra la página pública', async () => {
@@ -251,6 +292,36 @@ describe('registrarPropuesta — el único verbo del cliente, y nunca lanza', ()
       fecha: '2026-08-20', monto: 1160, referencia: 'REF-1', metodo: 'transferencia',
     });
     expect(r.ok).toBe(false);
+  });
+
+  // A37-L-06: quien tenga la liga (90 días) no puede llenar la bandeja y el buzón del contralor rotando referencia e IP.
+  it('A37-L-06: topa las propuestas por liga en la última hora, sin insertar ni avisar', async () => {
+    const hace = Array.from({ length: 5 }, () => ({ liga_id: LIGA.ligaId }));
+    conTablas({ portal_pago_propuesta: [OK(hace)] });
+    const r = await registrarPropuesta(LIGA, { fecha: '2026-08-20', monto: 10, referencia: 'REF-NUEVA', metodo: 'transferencia' });
+    expect(r).toMatchObject({ ok: false, limite: true });
+    expect(anotarBitacora).not.toHaveBeenCalled();
+  });
+
+  it('A37-L-06: topa también las propuestas de TODA la flota por hora', async () => {
+    const hace = Array.from({ length: 60 }, (_, i) => ({ liga_id: `otra-${i}` }));
+    conTablas({ portal_pago_propuesta: [OK(hace)] });
+    const r = await registrarPropuesta(LIGA, { fecha: '2026-08-20', monto: 10, referencia: 'REF-NUEVA', metodo: 'transferencia' });
+    expect(r).toMatchObject({ ok: false, limite: true });
+  });
+
+  it('A37-L-06: si no se puede contar, no se registra (falla cerrado: nadie recibe un correo sin tope)', async () => {
+    conTablas({ portal_pago_propuesta: [FALLA('sin red')] });
+    const r = await registrarPropuesta(LIGA, { fecha: '2026-08-20', monto: 10, referencia: 'REF-1', metodo: 'transferencia' });
+    expect(r.ok).toBe(false);
+    expect(anotarBitacora).not.toHaveBeenCalled();
+  });
+
+  it('A37-L-06: por debajo del tope se registra normal', async () => {
+    const hace = Array.from({ length: 2 }, () => ({ liga_id: LIGA.ligaId }));
+    conTablas({ portal_pago_propuesta: [OK(hace), OK({ id: 'p-9' })] });
+    const r = await registrarPropuesta(LIGA, { fecha: '2026-08-20', monto: 10, referencia: 'REF-OK', metodo: 'transferencia' });
+    expect(r).toEqual({ ok: true, id: 'p-9', repetida: false });
   });
 
   it('el actor de la bitácora es `sistema`: no hay cuenta detrás, hay un token', async () => {
@@ -527,16 +598,17 @@ describe('registrarRepEmitido — Likida no timbra, solo registra', () => {
 
   // ── A37-S18-07 · EL XML REGISTRADO TIENE QUE SER EL DEL COMPLEMENTO ─────────
   const UUID_REP = 'aaaaaaaa-bbbb-4ccc-8ddd-000000000001';
+  const UUID_FAC_XML = 'cccccccc-dddd-4eee-8fff-000000000009';
   const xmlRep = (o: { tipo?: string; uuid?: string; fecha?: string; monto?: string; sinPagos?: boolean } = {}) => `<?xml version="1.0"?>
 <cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:pago20="http://www.sat.gob.mx/Pagos20" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="4.0" TipoDeComprobante="${o.tipo ?? 'P'}" SubTotal="0" Total="0" Moneda="XXX" Fecha="2026-08-21T10:00:00">
   <cfdi:Complemento>
-    ${o.sinPagos ? '' : `<pago20:Pagos Version="2.0"><pago20:Pago FechaPago="${o.fecha ?? '2026-08-20'}T12:00:00" FormaDePagoP="03" MonedaP="MXN" Monto="${o.monto ?? '11600.00'}"><pago20:DoctoRelacionado IdDocumento="X" ImpPagado="${o.monto ?? '11600.00'}"/></pago20:Pago></pago20:Pagos>`}
+    ${o.sinPagos ? '' : `<pago20:Pagos Version="2.0"><pago20:Pago FechaPago="${o.fecha ?? '2026-08-20'}T12:00:00" FormaDePagoP="03" MonedaP="MXN" Monto="${o.monto ?? '11600.00'}"><pago20:DoctoRelacionado IdDocumento="${UUID_FAC_XML}" ImpPagado="${o.monto ?? '11600.00'}"/></pago20:Pago></pago20:Pagos>`}
     <tfd:TimbreFiscalDigital UUID="${(o.uuid ?? UUID_REP).toUpperCase()}"/>
   </cfdi:Complemento>
 </cfdi:Comprobante>`;
 
-  it('un XML que SÍ es el complemento (tipo P, mismo folio, fecha e importe) se guarda', async () => {
-    conTablas({ pago_recibido: [ABONO], rep_emitido: [OK({ id: 'rep-1' })] });
+  it('un XML que SÍ es el complemento (tipo P, mismo folio, fecha e importe, de esta factura) se guarda', async () => {
+    conTablas({ pago_recibido: [ABONO], factura_emitida: [OK({ id: FACTURA, cfdi_uuid: UUID_FAC_XML, cliente: { rfc: null } })], rep_emitido: [OK({ id: 'rep-1' })] });
     await expect(registrarRepEmitido(T, { ...BASE, xml: xmlRep() })).resolves.toBe('rep-1');
   });
 
@@ -558,6 +630,51 @@ describe('registrarRepEmitido — Likida no timbra, solo registra', () => {
     await expect(registrarRepEmitido(T, { ...BASE, facturaId: 'x' })).rejects.toThrow(DatoInvalido);
     await expect(registrarRepEmitido(T, { ...BASE, pagoId: 'x' })).rejects.toThrow(DatoInvalido);
     expect(sbMock).not.toHaveBeenCalled();
+  });
+});
+
+// ── A37-S54-03: el XML se coteja antes de guardarse y de ofrecerse al cliente ─────────────────────────────────────────────
+describe('registrarRepEmitido — el XML tiene que ser de ESTA factura y de ESTE abono (A37-S54-03)', () => {
+  const UUID_REP = 'aaaaaaaa-bbbb-4ccc-8ddd-000000000001';
+  const UUID_FAC = 'cccccccc-dddd-4eee-8fff-000000000009';
+  const xmlRep = (o: { uuid?: string; doc?: string; imp?: string; receptor?: string } = {}) => `<?xml version="1.0"?>
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:pago20="http://www.sat.gob.mx/Pagos20" Version="4.0" TipoDeComprobante="P" Fecha="2026-08-21T10:00:00">
+  <cfdi:Emisor Rfc="AAA010101AAA"/><cfdi:Receptor Rfc="${o.receptor ?? 'BBB020202BB2'}"/>
+  <cfdi:Complemento>
+    <pago20:Pagos Version="2.0"><pago20:Pago FechaPago="2026-08-20T12:00:00" FormaDePagoP="03">
+      <pago20:DoctoRelacionado IdDocumento="${o.doc ?? UUID_FAC}" ImpPagado="${o.imp ?? '11600.00'}" ImpSaldoInsoluto="0" NumParcialidad="1"/>
+    </pago20:Pago></pago20:Pagos>
+    <tfd:TimbreFiscalDigital xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" UUID="${o.uuid ?? UUID_REP}"/>
+  </cfdi:Complemento>
+</cfdi:Comprobante>`;
+  const BASE = { facturaId: FACTURA, pagoId: PAGO, cfdiUuid: UUID_REP, fechaPago: '2026-08-20', impPagado: '11,600.00', formaPago: '03' };
+  const ABONO = OK({ id: PAGO, factura_id: FACTURA, monto: 11600 });
+  const FAC = OK({ id: FACTURA, cfdi_uuid: UUID_FAC, cliente: { rfc: 'BBB020202BB2' } });
+  const tablas = (fac: Resultado = FAC) => conTablas({ pago_recibido: [ABONO], factura_emitida: [fac], rep_emitido: [OK({ id: 'rep-1' })] });
+
+  it('el XML bueno (timbre, factura, importe y receptor) se registra', async () => {
+    tablas();
+    await expect(registrarRepEmitido(T, { ...BASE, xml: xmlRep() })).resolves.toBe('rep-1');
+  });
+
+  it('un XML que ampara OTRA factura se rechaza', async () => {
+    tablas();
+    await expect(registrarRepEmitido(T, { ...BASE, xml: xmlRep({ doc: 'eeeeeeee-0000-4000-8000-000000000002' }) })).rejects.toThrow(/no ampara esta factura/i);
+  });
+
+  it('un XML de otro cliente (receptor distinto) se rechaza', async () => {
+    tablas();
+    await expect(registrarRepEmitido(T, { ...BASE, xml: xmlRep({ receptor: 'ZZZ030303ZZ3' }) })).rejects.toThrow(/receptor/i);
+  });
+
+  it('con XML pero factura sin UUID: no hay con qué cotejar, se rechaza', async () => {
+    tablas(OK({ id: FACTURA, cfdi_uuid: null, cliente: { rfc: 'BBB020202BB2' } }));
+    await expect(registrarRepEmitido(T, { ...BASE, xml: xmlRep() })).rejects.toThrow(/aún no tiene UUID/i);
+  });
+
+  it('sin XML nada se coteja (el portal ya dice que el archivo hay que pedirlo)', async () => {
+    tablas(OK(null));
+    await expect(registrarRepEmitido(T, { ...BASE, xml: '' })).resolves.toBe('rep-1');
   });
 });
 
@@ -591,5 +708,51 @@ describe('sellarRepEntregado — el sello no puede negar el documento', () => {
     await expect(sellarRepEntregado(T, FACTURA, [UUID.toUpperCase(), ' ', UUID]))
       .resolves.toBeUndefined();
     expect(sbMock).toHaveBeenCalled();
+  });
+});
+
+// ── A37-S54-02: un depósito ya conciliado no se re-propone ni se concilia dos veces ─────────────────────────────────────────
+describe('A37-S54-02 — el mismo depósito no genera un segundo abono', () => {
+  const V = { fecha: '2026-08-20', monto: 5000, referencia: 'SPEI-8891', metodo: 'transferencia' as const };
+  const ABONO_PREVIO = { id: 'pago-previo', referencia: 'spei 8891 ', propuesta_id: 'otra-propuesta' };
+
+  it('registrar: si ya hay un abono con la misma fecha, monto y referencia (otra ortografía), contesta «repetida» y NO inserta otra pendiente', async () => {
+    conTablas({ pago_recibido: [OK([ABONO_PREVIO])], portal_pago_propuesta: [OK({ id: 'p-9' })] });
+    const r = await registrarPropuesta(LIGA, V);
+    expect(r).toEqual({ ok: true, id: null, repetida: true });
+    expect(anotarBitacora).not.toHaveBeenCalled();
+  });
+
+  it('registrar: otra referencia (otro depósito) sí entra', async () => {
+    conTablas({ pago_recibido: [OK([{ ...ABONO_PREVIO, referencia: 'SPEI-0001' }])], portal_pago_propuesta: [OK({ id: 'p-9' })] });
+    expect(await registrarPropuesta(LIGA, V)).toEqual({ ok: true, id: 'p-9', repetida: false });
+  });
+
+  it('registrar: si no se puede preguntar por el abono, NO se bloquea al cliente', async () => {
+    conTablas({ pago_recibido: [FALLA('sin red')], portal_pago_propuesta: [OK({ id: 'p-9' })] });
+    expect(await registrarPropuesta(LIGA, V)).toEqual({ ok: true, id: 'p-9', repetida: false });
+  });
+
+  const FILA = { id: PROPUESTA, factura_id: FACTURA, fecha: '2026-08-20', monto: 5000, referencia: 'SPEI-8891', metodo: 'transferencia', estado: 'pendiente' };
+
+  it('conciliar: un abono hermano (de OTRA propuesta) con el mismo depósito bloquea, sin llamar a registrarPago', async () => {
+    conTablas({ portal_pago_propuesta: [OK(FILA)], pago_recibido: [OK([ABONO_PREVIO])] });
+    await expect(conciliarPropuesta(T, PROPUESTA)).rejects.toThrow(/lo contaría dos veces/i);
+    expect(registrarPago).not.toHaveBeenCalled();
+  });
+
+  it('conciliar: el abono de ESTA misma propuesta (rescate de una conciliación a medias) no cuenta como duplicado', async () => {
+    conTablas({
+      portal_pago_propuesta: [OK(FILA), OK([{ id: PROPUESTA }])],
+      pago_recibido: [OK([{ ...ABONO_PREVIO, propuesta_id: PROPUESTA }])],
+    });
+    await conciliarPropuesta(T, PROPUESTA).catch(() => undefined);
+    expect(registrarPago).toHaveBeenCalled();
+  });
+
+  it('conciliar: si no se puede preguntar por duplicados, FALLA CERRADO (no se crea dinero)', async () => {
+    conTablas({ portal_pago_propuesta: [OK(FILA)], pago_recibido: [FALLA('sin red')] });
+    await expect(conciliarPropuesta(T, PROPUESTA)).rejects.toThrow(/abonoEquivalente/);
+    expect(registrarPago).not.toHaveBeenCalled();
   });
 });

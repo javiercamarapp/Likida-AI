@@ -106,6 +106,9 @@ describe('scripts/seed.sh — detecta una pila LOCAL y deja .env.local listo', (
     mkdirSync(join(dir, 'fakebin'));
     writeFileSync(join(dir, 'scripts', 'seed.sh'), readFileSync('scripts/seed.sh'));
     chmodSync(join(dir, 'scripts', 'seed.sh'), 0o755);
+    // A37-S04-08: seed.sh reutiliza la guarda de URL ambigua de los scripts de perfil.
+    mkdirSync(join(dir, 'scripts', 'perfil'));
+    writeFileSync(join(dir, 'scripts', 'perfil', '_comun-cinco-agentes.sh'), readFileSync('scripts/perfil/_comun-cinco-agentes.sh'));
     writeFileSync(
       join(dir, '.env.example'),
       'NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co\n'

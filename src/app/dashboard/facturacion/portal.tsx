@@ -190,6 +190,12 @@ function Bandeja({ panel, conciliar, descartar }: {
       <p className="text-xs font-medium">
         {panel.pendientes.length} pago(s) por conciliar — dichos de tu cliente, todavía fuera de la cartera
       </p>
+      {panel.pendientesTruncados && (
+        <p className="text-xs" style={{ color: 'var(--muted)' }}>
+          Hay más pagos pendientes de los que caben aquí: se muestran los {panel.pendientes.length} más antiguos.
+          Concilia o descarta estos para ver los siguientes.
+        </p>
+      )}
       {panel.pendientes.map((p) => (
         <details key={p.id} className="rounded-xl hairline px-3.5 py-2.5">
           <summary className="cursor-pointer flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
@@ -290,6 +296,11 @@ function Enlaces({ panel, generar, revocar }: {
                 ]}
               />
             </FormaConAviso>
+          )}
+          {panel.facturasTruncadas && (
+            <p className="mt-1.5 text-xs" style={{ color: 'var(--muted)' }}>
+              La lista está recortada: solo se revisan las facturas más recientes. Si no ves una factura con saldo, genera su enlace desde su detalle.
+            </p>
           )}
         </div>
 

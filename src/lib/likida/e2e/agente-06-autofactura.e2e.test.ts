@@ -543,7 +543,8 @@ describe('Agente 6 · OTRO TENANT: bandera, lote, cupo, credenciales y vinculaci
     expect(portal.llamadas).toHaveLength(0);
     expect(memoria.lotes.filter((l) => l.tenantId === B)).toHaveLength(1);
     expect(memoria.lotes.find((l) => l.tenantId === A)?.estado).toBe('confirmado');
-    expect(memoria.cupos.has(`${B}|${memoria.hoy}`)).toBe(false);
+    // A37-L-09: se reserva antes de consumir el lote y se devuelve lo no confirmado: el neto de B es cero (nada se emitió).
+    expect(memoria.cupos.get(`${B}|${memoria.hoy}`) ?? { tickets: 0, monto: 0 }).toEqual({ tickets: 0, monto: 0 });
   });
 
   it('pedir a la flota B el gasto de A: «no existe en esta flota», no se sella ni se toca la fila de A', async () => {

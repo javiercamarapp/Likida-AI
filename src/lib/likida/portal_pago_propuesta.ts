@@ -48,12 +48,24 @@ import type { PropuestaValida } from './portal_pago';
 /** El código que Postgres devuelve al chocar contra un índice único. */
 const CHOQUE_UNICO = '23505';
 
+/**
+ * A37-S54-04: cuántas propuestas PENDIENTES admite una misma factura. Cada propuesta dispara un correo a la flota y
+ * el único freno era el límite por IP: con IPs distintas, una liga filtrada inundaba la bandeja. Pasado el tope no se
+ * acepta otra hasta que la flota concilie o descarte (no es un dato fiscal: es el freno de un canal público).
+ */
+export const TOPE_PENDIENTES_POR_FACTURA = 25;
+
 export type ResultadoPropuesta =
   | { ok: true; id: string; repetida: false }
   /** La misma fecha, monto y referencia ya estaban. No es un error: es el
    *  segundo clic, o el cliente comprobando que sí quedó. */
   | { ok: true; id: null; repetida: true }
-  | { ok: false; motivo: string };
+  /** `limite: true` = se rebasó el tope de propuestas por hora (A37-L-06): la ruta contesta 429, no 503. */
+  | { ok: false; motivo: string; limite?: true };
+
+/** A37-L-06: tope de propuestas por LIGA y por FLOTA en la última hora (cada una manda un correo al contralor). */
+export const TOPE_PROPUESTAS_LIGA_HORA = 5;
+export const TOPE_PROPUESTAS_FLOTA_HORA = 60;
 
 /**
  * Guarda lo que el cliente dice que pagó.
@@ -67,6 +79,48 @@ export async function registrarPropuesta(
   v: PropuestaValida,
 ): Promise<ResultadoPropuesta> {
   try {
+    // El tope va ANTES del insert y del correo. Sin poder contar, no se registra (falla cerrado):
+    // el cliente reintenta; lo que no se permite es un correo al contralor sin tope.
+    const desde = new Date(Date.now() - 3_600_000).toISOString();
+    const reciente = await acotada(supabaseAdmin().from('portal_pago_propuesta').select('liga_id')
+      .eq('tenant_id', liga.tenantId).gte('registrada_en', desde).order('id').limit(TOPE_PROPUESTAS_FLOTA_HORA + 1), 'registrarPropuesta.tope');
+    if (reciente.error) {
+      logger.error('portal_pago.propuesta_tope', { err: reciente.error.message });
+      return { ok: false, motivo: 'No pudimos registrar tu pago en este momento. Vuelve a intentarlo en unos minutos.' };
+    }
+    const filas = Array.isArray(reciente.data) ? (reciente.data as Array<{ liga_id?: unknown }>) : [];
+    const deLaLiga = filas.filter((f) => String(f.liga_id) === liga.ligaId).length;
+    if (deLaLiga >= TOPE_PROPUESTAS_LIGA_HORA || filas.length >= TOPE_PROPUESTAS_FLOTA_HORA) {
+      logger.warn('portal_pago.propuesta_tope_rebasado', { tenant: liga.tenantId, deLaLiga, deLaFlota: filas.length });
+      return { ok: false, limite: true, motivo: 'Ya hay varios pagos registrados por confirmar en esta factura. Espera a que quien te la emitió los revise, o escríbele directamente.' };
+    }
+
+    // A37-S54-02: el índice único solo cubre las PENDIENTES. Si ese depósito (misma fecha, monto y referencia equivalente) ya
+    // tiene su abono —conciliado o capturado a mano—, no entra otra pendiente que acabe en un segundo abono real: se contesta
+    // lo mismo que al segundo clic. Si no se puede preguntar NO se bloquea al cliente (queda el índice y la revisión del
+    // contralor, y `conciliarPropuesta` repite esta pregunta fail-closed antes de crear dinero).
+    try {
+      if (await abonoEquivalente(liga.tenantId, { facturaId: liga.facturaId, fecha: v.fecha, monto: v.monto, referencia: v.referencia })) {
+        logger.info('portal_pago.propuesta_ya_conciliada', { factura: liga.facturaId });
+        return { ok: true, id: null, repetida: true };
+      }
+    } catch (e) {
+      logger.warn('portal_pago.propuesta_duplicado_no_comprobado', { err: e instanceof Error ? e.message : String(e) });
+    }
+    // La lectura del tope es de cortesía: si no se puede hacer NO se bloquea al cliente (el insert de abajo dirá si la
+    // base está caída); lo que sí se rechaza es pasarse del tope CONOCIDO.
+    try {
+      const { count, error: errTope } = await acotada(supabaseAdmin().from('portal_pago_propuesta')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_id', liga.tenantId).eq('factura_id', liga.facturaId).eq('estado', 'pendiente'),
+      'registrarPropuesta.tope');
+      if (!errTope && typeof count === 'number' && count >= TOPE_PENDIENTES_POR_FACTURA) {
+        logger.warn('portal_pago.propuesta_tope', { facturaId: liga.facturaId, pendientes: count });
+        return { ok: false, motivo: 'Esta factura ya tiene varios pagos registrados por conciliar. Avísale a tu contacto en la empresa para que los revise.' };
+      }
+    } catch (e) {
+      logger.warn('portal_pago.propuesta_tope_ilegible', { err: e instanceof Error ? e.message : String(e) });
+    }
     const { data, error } = await acotada(supabaseAdmin().from('portal_pago_propuesta').insert({
       tenant_id: liga.tenantId,
       liga_id: liga.ligaId,
@@ -107,4 +161,54 @@ export async function registrarPropuesta(
     logger.error('portal_pago.propuesta', { err: e instanceof Error ? e.message : String(e) });
     return { ok: false, motivo: 'No pudimos registrar tu pago en este momento. Vuelve a intentarlo en unos minutos.' };
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A37-S54-02 — «ESE DEPÓSITO YA ESTÁ CONCILIADO».
+//
+// El índice único de la bandeja (0237, `portal_pago_propuesta_unica_pendiente`) es PARCIAL sobre las PENDIENTES a propósito: una
+// propuesta descartada no debe impedir que el cliente vuelva a registrar su depósito. El costo es que una propuesta ya
+// CONCILIADA tampoco compite: el cliente (o un segundo clic horas después, o la misma referencia con otra ortografía) registra
+// de nuevo la misma fecha, monto y referencia, entra otra pendiente, y el contralor genera un segundo abono REAL — la
+// idempotencia de `conciliarPropuesta` es solo por `propuestaId`.
+//
+// Este módulo responde UNA pregunta: ¿ya existe, en `pago_recibido` de ESTA factura, un abono con la misma fecha, el mismo monto
+// y una referencia equivalente? Toda propuesta conciliada tiene su abono (`pago_id`), así que mirar el abono cubre también a las
+// propuestas conciliadas y a los abonos capturados a mano. Vive aquí, en el módulo ligero de la ruta pública (solo
+// `supabaseAdmin`): no debe arrastrar la cadena de facturación, y `portal_pago_escritura.ts` lo importa de aquí para conciliar.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * La referencia bancaria reducida a lo que identifica el movimiento: mayúsculas y solo letras y dígitos. «spei-8891 »,
+ * «SPEI 8891» y «Spei8891» son el mismo depósito. Vacío = no hay con qué comparar (nunca coincide).
+ */
+export function referenciaNormalizada(r: string | null | undefined): string {
+  return (r ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+/**
+ * El id del abono equivalente que ya existe en la factura, o `null`. LANZA si no pudo preguntar: cada llamador decide si ese
+ * silencio es fail-open (la ruta pública, que tiene detrás el índice y la revisión humana) o fail-closed (conciliar dinero).
+ *
+ * `excluirPropuestaId`: el abono de ESA propuesta no cuenta como duplicado (el rescate de una conciliación que murió entre crear
+ * el abono y sellar la propuesta tiene que poder terminar).
+ */
+export async function abonoEquivalente(
+  tenantId: string,
+  p: { facturaId: string; fecha: string; monto: number; referencia: string },
+  excluirPropuestaId?: string,
+): Promise<string | null> {
+  const ref = referenciaNormalizada(p.referencia);
+  if (ref === '') return null;
+  const { data, error } = await acotada(supabaseAdmin().from('pago_recibido')
+    .select('id, referencia, propuesta_id')
+    .eq('tenant_id', tenantId).eq('factura_id', p.facturaId)
+    .eq('fecha', p.fecha).eq('monto', p.monto)
+    .order('id').limit(50), 'portal_pago.abono_equivalente');
+  if (error) throw new Error(`abonoEquivalente: ${error.message}`);
+  for (const f of (Array.isArray(data) ? data : []) as Array<{ id?: unknown; referencia?: unknown; propuesta_id?: unknown }>) {
+    if (excluirPropuestaId && String(f.propuesta_id ?? '') === excluirPropuestaId) continue;
+    if (referenciaNormalizada(typeof f.referencia === 'string' ? f.referencia : null) === ref) return String(f.id);
+  }
+  return null;
 }

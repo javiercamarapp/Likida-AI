@@ -34,6 +34,12 @@ describe('SubirReferencia — estado inicial honesto', () => {
     expect(html).toContain('image/jpeg,image/png,image/webp');
   });
 
+  it('A37-S07-04: trae la casilla de consentimiento del personaje', () => {
+    const html = renderToStaticMarkup(<SubirReferencia accion={accionOk} />);
+    expect(html).toContain('name="consentimiento"');
+    expect(html).toContain('consentimiento para usar su');
+  });
+
   it('sin resultado todavía, no pinta ni error ni éxito', () => {
     const html = renderToStaticMarkup(<SubirReferencia accion={accionOk} />);
     expect(html).not.toContain('Guardado.');

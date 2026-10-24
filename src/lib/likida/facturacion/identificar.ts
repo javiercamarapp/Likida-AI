@@ -48,7 +48,18 @@ export function identificarComercio(señales: SeñalesTicket): Comercio | null {
       .map((c) => ({ c, d: masLargo((c.reconocer.dominios ?? []).filter((d) => url.includes(d.toLowerCase()))) }))
       .filter((x): x is { c: Comercio; d: string } => x.d !== null)
       .sort((a, b) => b.d.length - a.d.length)[0];
-    if (porDominio) return porDominio.c;
+    if (porDominio) {
+      // A37-S43-04: dominio y RFC no pueden contradecirse. Una plataforma
+      // compartida o una liga ajena impresa en el papel no debe ganarle al RFC
+      // del emisor: si apuntan a comercios distintos no se adivina (sin
+      // respuesta única → sin comercio → va con una persona).
+      const rfcDelEmisor = señales.rfcEmisor?.trim().toUpperCase() ?? '';
+      const delRfc = rfcDelEmisor
+        ? COMERCIOS.find((c) => c.reconocer.rfc?.some((r) => r.toUpperCase() === rfcDelEmisor))
+        : undefined;
+      if (delRfc && delRfc.clave !== porDominio.c.clave) return null;
+      return porDominio.c;
+    }
   }
 
   const rfc = señales.rfcEmisor?.trim().toUpperCase() ?? '';

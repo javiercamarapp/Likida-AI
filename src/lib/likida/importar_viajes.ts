@@ -4,7 +4,7 @@ import { acotada } from './presupuesto';
 import { traerPorIds, traerTodo } from './pg';
 import { elegirOperadorPorNombre, OperadorNombreAmbiguo } from './crear_viaje_wa';
 import { validarIngreso } from './ingreso_viaje';
-import { numero } from '@/lib/formato';
+import { numero, masDeDosDecimales } from '@/lib/formato';
 import { DatoInvalido } from './errores';
 import { aceptarViajesImportados } from './conductor/repo';
 import { localAUtc, normalizarFechaLocal, ZONA_POR_OMISION } from './conectores/tabla_propia/tiempo';
@@ -107,13 +107,21 @@ function normalizarEncabezado(v: unknown): string {
     .trim();
 }
 
+/** Tope de cordura del anticipo por viaje en la importación (mismo que `api/v1/viajes`). */
+export const TOPE_ANTICIPO_IMPORTACION = 1_000_000;
+
 /** "$8,000.50" / "8000,50" / 8000 → número, o null si no se puede leer con
  *  seguridad. La regla de siempre: una cifra dudosa no se adivina. */
-export function leerCifraImportada(v: unknown): number | null | 'ilegible' {
+export function leerCifraImportada(v: unknown, esDinero = true): number | null | 'ilegible' {
   if (v === null || v === undefined || v === '') return null;
-  if (typeof v === 'number') return Number.isFinite(v) && v >= 0 ? Math.round(v * 100) / 100 : 'ilegible';
+  // A37-S64-02: más de dos decimales ya NO se redondea a centavos: «38.500» (miles con punto, export es-ES) entraba como 38.50 y
+  // «1.240» km como 1.24 — cifras plausibles. Ante la duda la fila se descarta CON su motivo y se corrige en el archivo.
+  if (typeof v === 'number') return Number.isFinite(v) && v >= 0 && !(esDinero && masDeDosDecimales(v)) ? Math.round(v * 100) / 100 : 'ilegible';
   const limpio = String(v).replace(/[$\s]/g, '');
   if (!limpio) return null;
+  // A37-L-03: `Number()` acepta notación científica y hexadecimal ('1e6' = 1,000,000; '0x10' = 16): en una cifra de
+  // dinero o de km eso es un dedazo (o una celda de otro tipo), no un número. Solo dígitos y separadores.
+  if (!/^[0-9.,]+$/.test(limpio)) return 'ilegible';
   // "1.234,56" europeo vs "1,234.56": si hay coma Y punto, el ÚLTIMO es el decimal.
   // Con coma SOLA se aplica la regla de `ingreso_viaje.ts`: la coma seguida de
   // exactamente tres dígitos es separador de MILLARES ("1,240" son mil
@@ -125,6 +133,13 @@ export function leerCifraImportada(v: unknown): number | null | 'ilegible' {
       ? limpio.replace(/\./g, '').replace(',', '.')
       : limpio.replace(/,/g, ''))
     : limpio.replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.');
+  // A37-L-07: solo dígitos con punto decimal (nada de '1e4' ni '0x10') y, si es DINERO, a lo más dos
+  // decimales: '1.234' (¿mil doscientos treinta y cuatro o 1.23?) es ambiguo y no se adivina ni se redondea.
+  // eslint-disable-next-line security/detect-unsafe-regex -- celda de una hoja, acotada; sin cuantificadores anidados sobre los mismos caracteres
+  const SOLO_DINERO = /^\d+(\.\d{1,2})?$/;
+  // eslint-disable-next-line security/detect-unsafe-regex -- idem
+  const SOLO_NUMERO = /^\d+(\.\d+)?$/;
+  if (!(esDinero ? SOLO_DINERO : SOLO_NUMERO).test(normal)) return 'ilegible';
   const n = Number(normal);
   return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : 'ilegible';
 }
@@ -249,12 +264,17 @@ export function interpretarFilasViajes(
 
     const anticipo = leerCifraImportada(celda('anticipo'));
     if (anticipo === 'ilegible') { descartadas.push({ fila: f + 1, motivo: `anticipo ilegible (${folio})` }); continue; }
+    // A37-S64-01: tope de cordura del anticipo (el mismo que la API v1). Un «1E+15» pasaba a la lista y Postgres rechazaba el
+    // lote entero de 100 con 22003 (`numeric(12,2)`); ahora se descarta SOLO la fila, con su motivo.
+    if (anticipo !== null && anticipo > TOPE_ANTICIPO_IMPORTACION) {
+      descartadas.push({ fila: f + 1, motivo: `anticipo fuera de rango, pasa de ${numero(TOPE_ANTICIPO_IMPORTACION)} (${folio})` }); continue;
+    }
     const fecha = leerFechaImportada(celda('fecha'));
     if (fecha === 'ilegible') { descartadas.push({ fila: f + 1, motivo: `fecha ilegible (${folio})` }); continue; }
 
     const ingreso = leerCifraImportada(celda('ingreso'));
     if (ingreso === 'ilegible') { descartadas.push({ fila: f + 1, motivo: `ingreso ilegible (${folio})` }); continue; }
-    const km = leerCifraImportada(celda('km'));
+    const km = leerCifraImportada(celda('km'), false);
     if (km === 'ilegible') { descartadas.push({ fila: f + 1, motivo: `km ilegibles (${folio})` }); continue; }
 
     // Los topes de cordura son los MISMOS que el formulario ($5,000,000 / 20,000
@@ -351,6 +371,10 @@ export interface ResultadoImportacion {
    *  archivo, o porque la carrera con otro request la ocupó entre la lectura y
    *  el insert. Ausente si no hubo ninguno (los acuses sin choque no cambian). */
   unidadOcupada?: string[];
+  /** A37-S64-01: folios que la BASE rechazó por dato inválido (SQLSTATE clase 22: fecha o importe fuera de rango) aun después de las
+   *  validaciones del archivo. Solo esa fila se descarta (con su código); antes tumbaba el lote entero de 100 y el mensaje no decía cuál.
+   *  Ausente si no hubo ninguno. */
+  rechazadasPorBase?: Array<{ folio: string; codigo: string }>;
   /** Números económicos del archivo que no existen en `unidad` (o que el
    *  catálogo no distingue). Sus filas NO se crean: importar un viaje con la
    *  unidad descartada en silencio dejaría el archivo diciendo una cosa y el
@@ -626,6 +650,7 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
     for (const r of data ?? []) unidadesOcupadas.add(String(r.unidad_id));
   }
   const unidadOcupada: string[] = [];
+  const rechazadasPorBase: Array<{ folio: string; codigo: string }> = [];
   const listas: typeof operadorLibres = [];
   for (const f of operadorLibres) {
     if (f.unidadId) {
@@ -634,8 +659,10 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
     }
     listas.push(f);
   }
-  const campoUnidadOcupada = (): Pick<ResultadoImportacion, 'unidadOcupada'> =>
-    unidadOcupada.length > 0 ? { unidadOcupada: [...unidadOcupada] } : {};
+  const campoUnidadOcupada = (): Pick<ResultadoImportacion, 'unidadOcupada' | 'rechazadasPorBase'> => ({
+    ...(unidadOcupada.length > 0 ? { unidadOcupada: [...unidadOcupada] } : {}),
+    ...(rechazadasPorBase.length > 0 ? { rechazadasPorBase: [...rechazadasPorBase] } : {}),
+  });
 
   let creados = 0;
   // Seguimiento del agente (T-A5-04): se activa por lote, solo para lo recién creado. Falla ABIERTO para el import
@@ -703,6 +730,26 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
       data = filasOk as typeof data;
       error = otroError;
     }
+    // A37-S64-01: un dato que la base rechaza (clase 22: 22008 fecha fuera de rango, 22003 importe fuera de rango…) es UNA fila, no el
+    // lote. Se reintenta fila por fila: solo la inválida se rechaza (con su folio y código); las demás entran y los lotes siguientes
+    // también. Cualquier otro error conserva el camino de siempre (el lote falla y se dice dónde).
+    if (error && /^22/.test(String((error as { code?: string }).code ?? ''))) {
+      const filasOk: Array<{ id?: unknown; folio?: unknown }> = [];
+      let otroError: typeof error | null = null;
+      for (const unica of lote) {
+        const r1 = await insertar([unica]);
+        if (r1.error && esChoqueUnidadAbierta(r1.error)) { unidadOcupada.push(unica.folio); continue; }
+        if (r1.error && /^22/.test(String((r1.error as { code?: string }).code ?? ''))) {
+          rechazadasPorBase.push({ folio: unica.folio, codigo: String((r1.error as { code?: string }).code) });
+          logger.warn('importar_viajes.fila_rechazada_por_base', { tenantId, folio: unica.folio, codigo: (r1.error as { code?: string }).code });
+          continue;
+        }
+        if (r1.error) { otroError = r1.error; break; }
+        filasOk.push(...(r1.data ?? []));
+      }
+      data = filasOk as typeof data;
+      error = otroError;
+    }
     // A37-S46-04: lo que YA entró (en bloque o fila por fila) se cuenta y se le activa
     // el seguimiento ANTES de decidir si el lote falló: si otra fila rebota por otra
     // causa, las anteriores existen en la base y el acuse no puede ignorarlas.
@@ -732,7 +779,7 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
       };
     }
     for (const fila of lote) {
-      if (!insertados.has(fila.folio) && !unidadOcupada.includes(fila.folio)) saltados.push(fila.folio);
+      if (!insertados.has(fila.folio) && !unidadOcupada.includes(fila.folio) && !rechazadasPorBase.some((r) => r.folio === fila.folio)) saltados.push(fila.folio);
     }
   }
 

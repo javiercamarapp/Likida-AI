@@ -113,8 +113,10 @@ begin
        -- quien pregunta, sesión anónima incluida.
        select 1 from pg_policies pol
         where pol.schemaname = 'public'
-          and (coalesce(pol.qual, '') ilike '%' || p.proname || '%'
-               or coalesce(pol.with_check, '') ilike '%' || p.proname || '%')
+          -- A37-S63-05: por PALABRA COMPLETA (\m…\M), no por subcadena: `ve_op` quedaba exenta si cualquier política
+          -- nombraba `ve_operacion`.
+          and (coalesce(pol.qual, '') ~ ('\m' || p.proname || '\M')
+               or coalesce(pol.with_check, '') ~ ('\m' || p.proname || '\M'))
      );
 
   if n > 0 then
@@ -122,6 +124,62 @@ begin
   end if;
 
   raise exception E'DEFINER_ANON  abiertas_sin_exencion=%   (esperado 0)', n;
+end $$;
+
+-- ── B2. (A37-S63-05) Lo mismo para `authenticated`: una función SECURITY DEFINER con `revoke` a public y anon pero
+--       `grant` a authenticated deja a CUALQUIER sesión llamarla con el tenant de otra flota (el tenant llega por
+--       parámetro, no por sesión) y el bloque B salía en verde. Se exceptúan solo los ayudantes que una política RLS
+--       nombra (por palabra completa): ésos tienen que poder correr bajo el rol de quien pregunta ─────────────────
+do $$
+declare
+  abiertas text;
+  n int;
+begin
+  select coalesce(string_agg(p.proname, ', ' order by p.proname), '—'), count(*)
+    into abiertas, n
+    from pg_proc p
+    join pg_namespace nsp on nsp.oid = p.pronamespace
+   where nsp.nspname = 'public'
+     and p.prosecdef
+     and has_function_privilege('authenticated', p.oid, 'EXECUTE')
+     and not exists (
+       select 1 from pg_policies pol
+        where pol.schemaname = 'public'
+          and (coalesce(pol.qual, '') ~ ('\m' || p.proname || '\M')
+               or coalesce(pol.with_check, '') ~ ('\m' || p.proname || '\M'))
+     );
+
+  if n > 0 then
+    raise notice 'SECURITY DEFINER abiertas a authenticated y sin usar en ninguna política: %', abiertas;
+  end if;
+
+  raise exception E'DEFINER_AUTHENTICATED  abiertas_sin_exencion=%   (esperado 0)', n;
+end $$;
+
+-- ── B3. (A37-S63-05) Toda política de ESCRITURA (`for all`, insert, update, delete) de `public` está en la lista
+--       blanca, por nombre exacto. Una policy `for all` nueva —como la de la 0805— abre la escritura directa por
+--       PostgREST con el JWT del usuario, sin pasar por la app ni por la bitácora, y hasta hoy nada la vigilaba.
+--       Para añadir una a propósito: ponerla aquí, con la razón en la migración que la crea ─────────────────────────
+do $$
+declare
+  fuera text;
+  n int;
+begin
+  select coalesce(string_agg(pol.tablename || '.' || pol.policyname, ', ' order by pol.tablename, pol.policyname), '—'), count(*)
+    into fuera, n
+    from pg_policies pol
+   where pol.schemaname = 'public'
+     and pol.cmd in ('ALL', 'INSERT', 'UPDATE', 'DELETE')
+     and (pol.tablename, pol.policyname) not in (
+       ('insight_linea_base', 'administra_flota'),  -- 0805: el administrador recaptura su línea base (decisión de diseño)
+       ('ticket_mensaje', 'hilo_escritura')         -- 0268: el cliente responde en su propio hilo de soporte
+     );
+
+  if n > 0 then
+    raise notice 'políticas de escritura fuera de la lista blanca: %', fuera;
+  end if;
+
+  raise exception E'POLITICAS_ESCRITURA  fuera_de_lista_blanca=%   (esperado 0)', n;
 end $$;
 
 -- ── C. Toda tabla con `tenant_id` y AL MENOS una política tiene, entre sus

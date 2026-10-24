@@ -70,6 +70,7 @@ export type MotivoFalla =
   | 'gasto_no_encontrado'
   | 'gasto_ya_tiene_cfdi'
   | 'total_no_coincide'
+  | 'cfdi_no_ligable'
   | 'gasto_de_viaje_liquidado'
   | 'nada_que_revertir'
   | 'sin_firma'
@@ -256,7 +257,7 @@ export async function ligarComprobante(
   // de devolver un 23503 que no le dice nada a nadie.
   const { data: gasto, error: errGasto } = await acotada(supabaseAdmin()
     .from('gasto')
-    .select('id, cfdi_uuid, monto')
+    .select('id, cfdi_uuid, monto, rfc_emisor')
     .eq('tenant_id', tenantId)
     .eq('id', gastoId)
     .maybeSingle(), 'sat_descarga.leer_gasto_a_ligar');
@@ -320,6 +321,30 @@ export async function ligarComprobante(
   const xmlCrudo = typeof (xmlFila as { xml?: unknown } | null)?.xml === 'string'
     ? ((xmlFila as { xml: string }).xml) : null;
   const { campos, motivo: motivoSinCampos } = camposFiscalesDeXml(xmlCrudo, cfdi.cfdiUuid);
+
+  // A37-L-01: ligar marca el gasto «facturado y verificado» y la cuadratura lo
+  // cuenta como deducible solo por tener folio. Una NOTA DE CRÉDITO (resta una
+  // deducción) o un CONSOLIDADO (se concilia línea por línea) nunca respalda 1:1
+  // un gasto, y un XML de OTRO emisor tampoco respalda ese ticket. Antes caían
+  // a la liga «de siempre» y dejaban el gasto deducible; ahora se rechazan
+  // ANTES del RPC (nada se escribe). El mismo RFC que la 0858 compara, pero
+  // aquí es compuerta y no solo «no copiar campos».
+  if (motivoSinCampos === 'nota_de_credito' || motivoSinCampos === 'consolidado') {
+    return {
+      ok: false, motivo: 'cfdi_no_ligable',
+      mensaje: motivoSinCampos === 'nota_de_credito'
+        ? 'Ese comprobante es una nota de crédito (egreso): resta una deducción, no respalda un gasto. No se ligó; archívalo si no corresponde a ninguno.'
+        : 'Ese comprobante es un consolidado: se concilia línea por línea, no 1:1 contra un gasto. No se ligó.',
+    };
+  }
+  const rfcGasto = String((gasto as { rfc_emisor?: unknown }).rfc_emisor ?? '').trim().toUpperCase();
+  const rfcXml = typeof campos?.rfc_emisor === 'string' ? campos.rfc_emisor.trim().toUpperCase() : '';
+  if (rfcGasto !== '' && rfcXml !== '' && rfcGasto !== rfcXml) {
+    return {
+      ok: false, motivo: 'cfdi_no_ligable',
+      mensaje: `El RFC del emisor del comprobante (${rfcXml}) no es el del ticket (${rfcGasto}), así que no se ligó. Elige el gasto correcto, o corrige primero el RFC del ticket si el comprobante es el bueno.`,
+    };
+  }
 
   const argsBase = {
     p_tenant: tenantId,

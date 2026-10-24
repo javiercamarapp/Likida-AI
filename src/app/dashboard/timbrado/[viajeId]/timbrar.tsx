@@ -57,7 +57,6 @@ export async function SeccionTimbrado({ v, searchParams }: {
   // timbre a ciegas es peor que no pintar la sección.
   const ctx = await leerContextoTimbre(tenantId, v.viajeId);
   if (ctx === null) return null;
-  const clienteDelViaje = ctx.clienteId; // A37-A3-21: lo lee el servidor, no el formulario
 
   const rutaActual = `${RUTA}/${v.viajeId}`;
   const puedeEmitir = puedeTimbrar(rol);
@@ -170,9 +169,14 @@ export async function SeccionTimbrado({ v, searchParams }: {
     if (!puedeTimbrar(s.rol)) {
       return { error: 'Tu rol no puede capturar los datos fiscales del cliente: van dentro del CFDI.' };
     }
-    // A37-A3-21: el cliente es el DEL VIAJE (leído en servidor), nunca el que mande el formulario: otro cliente de la
-    // flota no se edita desde la pantalla de este viaje.
-    const clienteId = clienteDelViaje;
+    // A37-A3-21 / A37-S20-07: el cliente sale del VIAJE (leído aquí, anclado al tenant), nunca del formulario:
+    // un POST con el clienteId de otro cliente de la flota reescribiría sus datos fiscales.
+    let clienteId: string | null;
+    try {
+      clienteId = (await leerContextoTimbre(s.tenantId, v.viajeId))?.clienteId ?? null;
+    } catch (e) {
+      return { error: mensajeParaPantalla(e, 'leer el cliente del viaje') };
+    }
     if (clienteId === null) return { error: 'El viaje no tiene cliente asignado — asígnalo antes de capturar sus datos fiscales.' };
     try {
       await guardarReceptorFiscal(s.tenantId, clienteId, {
@@ -285,7 +289,6 @@ export async function SeccionTimbrado({ v, searchParams }: {
           <summary className="text-[12.5px] font-medium cursor-pointer">Datos fiscales del cliente (receptor)</summary>
           <div className="pt-2">
             <FormaConAviso accion={guardarReceptor} boton="Guardar datos del cliente" columnas="md:grid-cols-2">
-              <input type="hidden" name="clienteId" value={ctx.clienteId} />
               <Campo nombre="razonSocial" etiqueta="Razón social (exacta a SU constancia)" valorInicial={ctx.receptor.razonSocial ?? ''} />
               <Campo nombre="regimenFiscal" etiqueta="Régimen fiscal (clave)" valorInicial={ctx.receptor.regimenFiscal ?? ''} placeholder="601" />
               <Campo nombre="usoCfdi" etiqueta="Uso CFDI" valorInicial={ctx.receptor.usoCfdi ?? ''} placeholder="S01 o G03" />

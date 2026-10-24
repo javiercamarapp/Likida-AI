@@ -11,7 +11,8 @@
 #  mismo cotejo por CONJUNTO que ya usa la compuerta de Vercel:
 #  `scripts/ci/verificar-migraciones-aplicadas.mjs`.)
 #
-# Uso: SUPABASE_DB_URL='postgresql://...' bash scripts/aplicar-migraciones-y-humos.sh
+# Uso: RESPALDO_VERIFICADO=1 SUPABASE_DB_URL='postgresql://...' bash scripts/aplicar-migraciones-y-humos.sh
+#      (A37-L-09: RESPALDO_VERIFICADO=1 confirma el respaldo; INCLUIR_TODAS=1 añade --include-all; PERMITIR_OTRA_BASE=1 si no es producción)
 #
 # Qué hace, en orden, parándose en el primer fallo:
 #  1. `db push` de TODAS las migraciones pendientes según `supabase/migrations/`
@@ -49,6 +50,28 @@ if [ -z "${SUPABASE_DB_URL:-}" ]; then
   exit 2
 fi
 
+# A37-S01-02: las mismas guardas del pipeline (deploy-preview-promote.yml), porque este script
+# apunta a una base REAL con credenciales de quien lo corre.
+#  · CLI fijado a la versión del pipeline (nada de @latest).
+#  · El project-ref sale de la propia URL de conexión y tiene que estar en la lista autorizada.
+#  · En producción se exige el respaldo SQL verificado (supabase-preflight.mjs backup) ANTES de migrar.
+#  · Nada de --include-all (migraciones fuera de orden) salvo INCLUIR_TODAS=1 (ver abajo).
+SUPABASE_CLI_VERSION="${SUPABASE_CLI_VERSION:-2.115.0}"
+REF_STAGING="dmhhygwzgudwgcbixuwp"
+REF_PRODUCCION="gngoqsvrxdguxvsizpbw"
+REF_URL_CONEXION="$(printf '%s' "$SUPABASE_DB_URL" | sed -nE 's#.*(db\.|postgres\.)([a-z]{20})([.@:/].*)?$#\2#p' | head -1)"
+if [ "$REF_URL_CONEXION" != "$REF_STAGING" ] && [ "$REF_URL_CONEXION" != "$REF_PRODUCCION" ]; then
+  echo "El project-ref de SUPABASE_DB_URL no está en la lista autorizada (staging/producción). No se migra."
+  exit 3
+fi
+if [ "$REF_URL_CONEXION" = "$REF_PRODUCCION" ]; then
+  if [ -z "${SUPABASE_ACCESS_TOKEN:-}" ]; then
+    echo "Producción exige SUPABASE_ACCESS_TOKEN para verificar el respaldo SQL reciente antes de migrar."
+    exit 4
+  fi
+  SUPABASE_PROJECT_REF="$REF_URL_CONEXION" node scripts/ci/supabase-preflight.mjs backup || { echo "Sin respaldo SQL verificado: no se migra producción."; exit 4; }
+fi
+
 # El preflight de la 0335 crea (CONCURRENTLY, fuera de la transacción de `db
 # push`) dos índices que la migración 0332 exige YA VÁLIDOS al aplicarse — no
 # es opcional para cualquier base que todavía no tenga 0332 aplicada (una base
@@ -70,8 +93,25 @@ else
   echo "instala psql y vuelve a correr, o corre a mano scripts/ci/0335_preflight_retencion_indices.sql."
 fi
 
-echo "═══ 1/3 · Aplicando migraciones pendientes (project: $REF) ═══"
-npx --yes supabase@latest db push --db-url "$SUPABASE_DB_URL" --include-all
+# A37-L-09 (operabilidad): esto migra PRODUCCIÓN. Antes corría la CLI sin versión fija (una CLI nueva cambia comportamiento sin
+# aviso) con `--include-all` (aplica un prefijo MENOR que redefine una función ya endurecida), sin dry-run, sin comprobar
+# la base y sin pedir el respaldo. Ahora: CLI fijada a la MISMA versión que el workflow de despliegue, base comprobada,
+# respaldo confirmado a mano, dry-run antes del push y `--include-all` solo si se pide.
+if [ "${RESPALDO_VERIFICADO:-}" != "1" ]; then
+  echo "Esto migra la base real. Confirma primero que hay un respaldo fresco (node scripts/ci/supabase-preflight.mjs backup, o el"
+  echo "respaldo nocturno verificado) y repite con RESPALDO_VERIFICADO=1."
+  exit 2
+fi
+INCLUIR=()
+if [ "${INCLUIR_TODAS:-}" = "1" ]; then
+  echo "AVISO: INCLUIR_TODAS=1 — se aplicarán también migraciones con prefijo MENOR al último aplicado."
+  INCLUIR=(--include-all)
+fi
+
+echo "═══ 1/3 · Aplicando migraciones pendientes (project: $REF, CLI $SUPABASE_CLI_VERSION) ═══"
+echo "--- dry-run: esto es lo que se aplicaría ---"
+npx --yes "supabase@${SUPABASE_CLI_VERSION}" db push --db-url "$SUPABASE_DB_URL" ${INCLUIR[@]+"${INCLUIR[@]}"} --dry-run
+npx --yes "supabase@${SUPABASE_CLI_VERSION}" db push --db-url "$SUPABASE_DB_URL" ${INCLUIR[@]+"${INCLUIR[@]}"}
 
 echo "═══ 2/3 · Verificando el CONJUNTO completo contra migraciones_aplicadas() ═══"
 SALIDA_VERIFICADOR="$(node scripts/ci/verificar-migraciones-aplicadas.mjs)" || { echo "$SALIDA_VERIFICADOR"; exit 1; }
@@ -103,7 +143,10 @@ process.stdin.on('data', d => s += d).on('end', () => {
 fi
 
 echo "═══ 3/3 · Humos de la app ═══"
-if ls pruebas-manuales/humo-*.prueba.ts >/dev/null 2>&1; then
+# A37-S01-02: los humos leen el .env.local que haya y pueden ESCRIBIR; solo corren con confirmación explícita.
+if [ "${CORRER_HUMOS:-}" != "si" ]; then
+  echo "(humos omitidos: usan el .env.local de esta máquina y pueden escribir en esa base. Corre con CORRER_HUMOS=si tras revisar a qué base apunta.)"
+elif ls pruebas-manuales/humo-*.prueba.ts >/dev/null 2>&1; then
   npx vitest run --config vitest.manual.config.ts pruebas-manuales/humo-*.prueba.ts 2>/dev/null \
     || npx vitest run pruebas-manuales/humo-*.prueba.ts
 else

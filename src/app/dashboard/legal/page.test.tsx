@@ -164,6 +164,18 @@ describe('/dashboard/legal', () => {
     }, { id: 'u-dueno' });
   });
 
+  it('A37-S19-07: sin cambios no promete reenvío; con datos vacíos avisa que el aviso saldrá incompleto', async () => {
+    const accion = accionDe(await PaginaLegal(sp), 'Guardar datos del responsable');
+    d.guardarDatos.mockResolvedValue({ ok: true, sinCambios: true });
+    const sinCambios = (await accion!(null, new FormData())).ok ?? '';
+    expect(sinCambios).toMatch(/No hubo cambios/);
+    expect(sinCambios).not.toMatch(/se les reenvía/);
+    d.guardarDatos.mockResolvedValue({ ok: true, vacios: ['domicilio', 'contactoPrivacidad'] });
+    const vacio = (await accion!(null, new FormData())).ok ?? '';
+    expect(vacio).toMatch(/falta el domicilio, el contacto de privacidad/);
+    expect(vacio).toMatch(/art\. 15/);
+  });
+
   it('guardar datos: el rechazo de validación llega a la pantalla; un contador no puede', async () => {
     const accion = accionDe(await PaginaLegal(sp), 'Guardar datos del responsable');
     d.guardarDatos.mockResolvedValue({ ok: false, error: 'El contacto de privacidad debe ser un correo o un teléfono de al menos 10 dígitos.' });

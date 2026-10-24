@@ -7,6 +7,8 @@ import { anotarBitacora, type EntidadBitacora } from './bitacora_escritura';
 import { DatoInvalido, AbonoYaRegistrado } from './errores';
 import { esUuidValido } from './intake/cfdi';
 import { parseCfdiXml, leerPagosRep } from './intake/cfdi_xml';
+import { parseRepXml } from './intake/rep';
+import { abonoEquivalente } from './portal_pago_propuesta';
 import { registrarPago } from './facturacion_escritura';
 import { expiracionDesde, generarTokenPortal, diasDeVigencia, montoTecleado } from './portal_pago';
 
@@ -146,13 +148,19 @@ export async function crearLigaPago(
     creada_por: actor?.id ?? null,
   }).select('id').single(), 'crearLigaPago');
 
+  let idInsertado = (data as { id?: unknown } | null)?.id;
   if (error) {
     if (error.code === CHOQUE_UNICO) {
       throw new DatoInvalido('Esa factura ya tiene un enlace vigente. Revócalo antes de generar uno nuevo — así no quedan dos enlaces vivos y solo uno a la vista.');
     }
-    throw new Error(`crearLigaPago: ${error.message}`);
+    // A37-S54-07: un timeout (`acotada`) o un corte de red NO prueba que el insert no ocurrió. Si la liga existe con
+    // NUESTRO hash, el insert sí se completó y el token en claro lo tenemos: se devuelve esa liga. Si no, o si la
+    // relectura también falla, sube el error original (nunca se inventa un éxito).
+    idInsertado = await ligaYaInsertada(tenantId, facturaId, token.hash);
+    if (!idInsertado) throw new Error(`crearLigaPago: ${error.message}`);
+    logger.warn('portal_pago.liga_insert_recuperada', { facturaId, err: error.message });
   }
-  const id = (data as { id?: unknown } | null)?.id;
+  const id = idInsertado;
   if (!id) throw new Error('crearLigaPago: el insert no devolvió id');
 
   await anotar(tenantId, 'portal_pago.liga_creada', 'portal_pago_liga', String(id), {
@@ -165,6 +173,21 @@ export async function crearLigaPago(
     prefijo: token.prefijo,
     expiraEn,
   };
+}
+
+/** ¿Quedó escrita la liga con este hash a pesar del error del insert? Su id, o `null` si no (o si no se pudo leer). */
+async function ligaYaInsertada(tenantId: string, facturaId: string, tokenHash: string): Promise<string | null> {
+  try {
+    const { data, error } = await acotada(supabaseAdmin().from('portal_pago_liga')
+      .select('id')
+      .eq('tenant_id', tenantId).eq('factura_id', facturaId).eq('token_hash', tokenHash)
+      .is('revocada_en', null).maybeSingle(), 'crearLigaPago.relectura');
+    if (error) return null;
+    const id = (data as { id?: unknown } | null)?.id;
+    return id ? String(id) : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -253,6 +276,17 @@ export async function conciliarPropuesta(
 
   const monto = Number(fila.monto);
   const facturaId = String(fila.factura_id);
+
+  // A37-S54-02: la idempotencia de abajo es por `propuestaId`; no ve un abono hermano de OTRA propuesta (o capturado a mano) del
+  // mismo depósito. Antes de crear dinero se pregunta, FAIL-CLOSED: si no se puede preguntar, no se concilia.
+  const hermano = await abonoEquivalente(tenantId, {
+    facturaId, fecha: String(fila.fecha), monto, referencia: String(fila.referencia ?? ''),
+  }, propuestaId);
+  if (hermano !== null) {
+    throw new DatoInvalido(
+      'Esta factura ya tiene un abono con la misma fecha, el mismo monto y una referencia equivalente: conciliar este registro lo contaría dos veces. Si es el mismo depósito, descártalo; si de verdad son dos pagos distintos, corrige primero la referencia.',
+    );
+  }
 
   // El abono, con la propuesta como llave de idempotencia. Si otra sesión ya lo
   // creó, `registrarPago` lanza `AbonoYaRegistrado` en vez de duplicarlo.
@@ -496,6 +530,33 @@ export async function registrarRepEmitido(
   }
   if (Math.abs(montoPago - imp) > TOLERANCIA_ABONO_MXN) {
     throw new DatoInvalido(`El importe del complemento (${mxn(imp)}) no cuadra con el abono que dice amparar (${mxn(montoPago)}). Si el complemento cubre varias parcialidades, regístralo contra el abono que le corresponde; si el que está mal es el abono, corrígelo primero.`);
+  }
+
+  // ── A37-S54-03: EL XML TIENE QUE SER DE ESTA FACTURA Y DE SU CLIENTE ─────────────────────────────────────────────────────
+  // `verificarXmlDeRep` (A37-S18-07, arriba) ya comprobó que es un REP tipo P, que su timbre es el UUID tecleado y que fecha e importe
+  // coinciden. Falta lo que ata el archivo a ESTA factura: un REP de otro pago —con la misma fecha e importe— se guardaba y el portal
+  // PÚBLICO se lo ofrecía al cliente como «el complemento» de esta factura. Se coteja que uno de sus documentos relacionados sea el
+  // UUID de la factura (el importe ya lo comprobó `verificarXmlDeRep`) y, si ambos dicen RFC del receptor, que sea el del cliente de la factura.
+  if (xml !== '') {
+    const rep = parseRepXml(xml);
+    const { data: fac, error: errFac } = await acotada(supabaseAdmin().from('factura_emitida')
+      .select('id, cfdi_uuid, cliente:cliente_id(rfc)')
+      .eq('id', c.facturaId).eq('tenant_id', tenantId).maybeSingle(), 'registrarRepEmitido.factura');
+    if (errFac) throw new Error(`registrarRepEmitido: no se pudo leer la factura para cotejar el XML: ${errFac.message}`);
+    const filaFac = fac as { cfdi_uuid?: unknown; cliente?: { rfc?: unknown } | Array<{ rfc?: unknown }> | null } | null;
+    const uuidFactura = typeof filaFac?.cfdi_uuid === 'string' ? filaFac.cfdi_uuid.trim().toLowerCase() : '';
+    if (uuidFactura === '') {
+      throw new DatoInvalido('La factura aún no tiene UUID registrado, así que no hay con qué cotejar el XML del complemento. Registra el complemento sin archivo, o captura primero el UUID de la factura.');
+    }
+    const amparaEsta = (rep?.pagos ?? []).flatMap((p) => p.doctos).filter((d) => d.idDocumento === uuidFactura);
+    if (amparaEsta.length === 0) {
+      throw new DatoInvalido('Ese XML no ampara esta factura: ninguno de sus documentos relacionados trae el UUID de la factura. Es probable que sea el complemento de otro pago.');
+    }
+    const cliente = Array.isArray(filaFac?.cliente) ? filaFac?.cliente[0] : filaFac?.cliente;
+    const rfcCliente = typeof cliente?.rfc === 'string' ? cliente.rfc.trim().toUpperCase() : '';
+    if (rep?.rfcReceptor && rfcCliente !== '' && rep.rfcReceptor !== rfcCliente) {
+      throw new DatoInvalido(`El receptor del XML (${rep.rfcReceptor}) no es el RFC del cliente de esta factura (${rfcCliente}). No se publica un complemento que es de otro cliente.`);
+    }
   }
 
   const { data, error } = await acotada(supabaseAdmin().from('rep_emitido').insert({

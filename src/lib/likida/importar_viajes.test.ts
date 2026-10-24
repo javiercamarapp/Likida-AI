@@ -4,6 +4,17 @@ import { interpretarFilasViajes, leerCifraImportada, leerFechaImportada, TOPE_FI
 // Solo el motor PURO: la inserción por lotes y el dedup contra la base son
 // el patrón de siempre (folios existentes se consultan y se saltan).
 
+describe('A37-L-07 — más de dos decimales no se redondea en silencio', () => {
+  it('el dinero con tres decimales o notación rara es ilegible; los km siguen aceptando decimales', () => {
+    expect(leerCifraImportada('1.234')).toBe('ilegible');
+    expect(leerCifraImportada('1,234.567')).toBe('ilegible');
+    expect(leerCifraImportada('1e4')).toBe('ilegible');
+    expect(leerCifraImportada('0x10')).toBe('ilegible');
+    expect(leerCifraImportada('8000.50')).toBe(8000.5);
+    expect(leerCifraImportada('123.456', false)).toBe(123.46);
+  });
+});
+
 describe('leerCifraImportada — el dinero del TMS ajeno', () => {
   it('lee los formatos reales', () => {
     expect(leerCifraImportada(8000)).toBe(8000);
@@ -25,6 +36,38 @@ describe('leerCifraImportada — el dinero del TMS ajeno', () => {
     expect(leerCifraImportada(null)).toBeNull();
     expect(leerCifraImportada('ocho mil')).toBe('ilegible');
     expect(leerCifraImportada(-100)).toBe('ilegible');
+  });
+});
+
+describe('A37-L-03 — la cifra dudosa no se adivina', () => {
+  it('notación científica y hexadecimal son ilegibles (antes «1e6» entraba como 1,000,000)', () => {
+    expect(leerCifraImportada('1e6')).toBe('ilegible');
+    expect(leerCifraImportada('0x10')).toBe('ilegible');
+    expect(leerCifraImportada('12e3')).toBe('ilegible');
+  });
+
+  it('más de 2 decimales es ilegible: «12.500» NO entra como $12.50', () => {
+    expect(leerCifraImportada('12.500')).toBe('ilegible');
+    expect(leerCifraImportada('1.234.567')).toBe('ilegible');
+    expect(leerCifraImportada('12.50')).toBe(12.5);
+    expect(leerCifraImportada('12.5')).toBe(12.5);
+  });
+
+  it('un anticipo de más de un millón se descarta con su motivo; uno de $10,600 pasa', () => {
+    const ENC = ['Folio', 'Origen', 'Destino', 'Fecha inicio', 'Anticipo', 'Operador'];
+    const r = interpretarFilasViajes([
+      ENC,
+      ['V-1', 'GDL', 'MTY', '', '1250000', ''],
+      ['V-2', 'GDL', 'MTY', '', '1e6', ''],
+      ['V-3', 'GDL', 'MTY', '', '12.500', ''],
+      ['V-4', 'GDL', 'MTY', '', '10600', ''],
+    ]);
+    expect(r.viajes.map((v) => v.folio)).toEqual(['V-4']);
+    expect(r.descartadas).toEqual([
+      { fila: 2, motivo: 'anticipo fuera de rango, pasa de 1,000,000 (V-1)' },
+      { fila: 3, motivo: 'anticipo ilegible (V-2)' },
+      { fila: 4, motivo: 'anticipo ilegible (V-3)' },
+    ]);
   });
 });
 
@@ -172,5 +215,31 @@ describe('FE-15 — un archivo más largo que el tope lo DICE en las descartadas
     expect(r.viajes).toHaveLength(TOPE_FILAS_IMPORT);
     expect(r.descartadas).toHaveLength(0);
     expect(r.error).toBeUndefined();
+  });
+});
+
+
+// A37-S64-01: fecha inexistente o anticipo fuera de rango descartan SOLO esa fila (no tumban el lote de 100 con 22008/22003).
+describe('A37-S64-01: fechas imposibles y anticipos fuera de rango', () => {
+  it('31/04/2026, 2026-02-30 y 30/02/2024 son ilegibles; 29/02/2024 (bisiesto) y 31/03/2026 pasan', () => {
+    expect(leerFechaImportada('31/04/2026')).toBe('ilegible');
+    expect(leerFechaImportada('2026-02-30')).toBe('ilegible');
+    expect(leerFechaImportada('30/02/2024')).toBe('ilegible');
+    expect(leerFechaImportada('29/02/2024')).toBe('2024-02-29');
+    expect(leerFechaImportada('29/02/2026')).toBe('ilegible');
+    expect(leerFechaImportada('31/03/2026')).toBe('2026-03-31');
+    expect(leerFechaImportada('2026-08-14T10:00:00')).toBe('2026-08-14');
+  });
+  it('un anticipo de 1E+15 (o sobre el tope) descarta la fila con su motivo', () => {
+    const matriz = [
+      ['folio', 'origen', 'destino', 'fecha', 'anticipo'],
+      ['V-1', 'A', 'B', '14/08/2026', 1e15],
+      ['V-2', 'A', 'B', '14/08/2026', 1_000_000],
+      ['V-3', 'A', 'B', '14/08/2026', 1_000_000.01],
+    ];
+    const r = interpretarFilasViajes(matriz);
+    expect(r.viajes.map((v) => v.folio)).toEqual(['V-2']);
+    expect(r.descartadas.map((d) => d.fila)).toEqual([2, 4]);
+    expect(r.descartadas[0].motivo).toMatch(/^anticipo (ilegible|fuera de rango)/);
   });
 });

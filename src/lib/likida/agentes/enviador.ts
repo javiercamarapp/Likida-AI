@@ -251,7 +251,14 @@ export async function correrEnviador(
     .or(filtroCandidatas)
     .in('tipo', [...TIPOS_CAMPANA])
     .not('prospecto.correo', 'is', null)
+    // A37-S26-01: las piezas sin intento fallido van PRIMERO. Una aprobada cuyo
+    // prospecto rebotó o pidió BAJA (fallo permanente) queda con `envio_error`,
+    // y por ser la más vieja ocupaba los N turnos de cada vuelta para siempre;
+    // las que rebotaron en un candado transitorio se siguen retomando, pero ya
+    // no hacen cola delante de las frescas.
+    .order('envio_error', { ascending: true, nullsFirst: true })
     .order('creado_en', { ascending: true })
+    .order('id', { ascending: true })
     .limit(Math.min(limite, topeCorreoFrioDia())), 'enviador.candidatas');
   if (error) throw new Error(`correrEnviador: ${error.message}`);
   const candidatas = (data ?? []) as unknown as PiezaCandidata[];

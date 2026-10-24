@@ -46,6 +46,9 @@ export const TOPE_RECHAZOS_META_GASTO = 5;
  *  que comparten el MISMO freno. Ver la cabecera de `TTL_FRENO_RECHAZO_MASIVO_
  *  WHATSAPP_MS` en cobranza.ts y la del freno en interruptores.ts. */
 export const TTL_FRENO_RECHAZO_MASIVO_WHATSAPP_MS = 5 * 60_000;
+
+/** Marca del claim cuyo envío ya se intentó (o está en curso): el rescate de huérfanos NO la borra (A37-S26-03). */
+export const DETALLE_ENVIANDO = 'enviando — intento de envío en curso o ambiguo (no se reenvía solo)';
 /** Cuánto atrás mide la efectividad. */
 export const DIAS_EFECTIVIDAD = 30;
 /** Retención de la bitácora por gasto: igual que `cobranza_contacto` (0332). */
@@ -190,6 +193,30 @@ async function tiersPrevios(tenantId: string, gastoIds: string[]): Promise<Map<s
     mapa.set(f.gasto_id, lista);
   }
   return mapa;
+}
+
+/** Borra los contactos de más de `DIAS_RETENCION_GASTO` días cuyo gasto ya no está en juego. Nunca lanza. */
+async function purgarRetencion(tenantId: string, ahora: Date, protegidos: Set<string>): Promise<void> {
+  try {
+    const corte = new Date(ahora.getTime() - DIAS_RETENCION_GASTO * 86_400_000).toISOString();
+    const viejos = await traerTodo<{ id: string; gasto_id: string }>(
+      (d, h) => supabaseAdmin()
+        .from('cobranza_gasto_contacto')
+        .select('id, gasto_id', conteo(d))
+        .eq('tenant_id', tenantId)
+        .lt('created_at', corte)
+        .order('id').range(d, h),
+      'cobranza_gasto.retencion_viejos',
+    );
+    const borrar = viejos.filter((f) => !protegidos.has(f.gasto_id)).map((f) => f.id);
+    for (let i = 0; i < borrar.length; i += 100) {
+      const { error } = await supabaseAdmin().from('cobranza_gasto_contacto')
+        .delete().eq('tenant_id', tenantId).in('id', borrar.slice(i, i + 100));
+      if (error) { logger.warn('cobranza_gasto.retencion_fallo', { tenantId, err: error.message }); return; }
+    }
+  } catch (e) {
+    logger.warn('cobranza_gasto.retencion_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
+  }
 }
 
 /** La cola honesta por gasto (lo que la página enseña y lo que `ejecutarCobranzaGastos` va a intentar). */
@@ -379,13 +406,6 @@ export async function ejecutarCobranzaGastos(
   const admin = supabaseAdmin();
   const r = resultadoGastoVacio();
 
-  // Retención por flota (anclada por tenant): lo de más de 180 días se va. Best-effort.
-  await admin.from('cobranza_gasto_contacto')
-    .delete()
-    .eq('tenant_id', tenantId)
-    .lt('created_at', new Date(ahora.getTime() - DIAS_RETENCION_GASTO * 86_400_000).toISOString())
-    .then(({ error }) => { if (error) logger.warn('cobranza_gasto.retencion_fallo', { tenantId, err: error.message }); });
-
   // RESCATE DE CLAIMS HUÉRFANOS: un crash entre el claim y el envío deja filas enviado=false SIN detalle.
   // Una fila así de más de 1 hora es un crash probado: se borra y el tier queda libre.
   await admin.from('cobranza_gasto_contacto')
@@ -404,9 +424,20 @@ export async function ejecutarCobranzaGastos(
   const previos = await tiersPrevios(tenantId, candidatos);
   const plan = planearCobroGasto(gastos, config, previos, ahora);
 
+  // Retención por flota (anclada por tenant): lo de más de 180 días se va — salvo la historia de un gasto de un viaje
+  // todavía vivo (A37-S26-09): sin ella `tiersPrevios` queda vacío y se reclamaría de nuevo el tier más alto.
+  // Best-effort.
+  await purgarRetencion(tenantId, ahora, new Set(gastos.map((g) => g.id)));
+
   r.pendientes = plan.pendientes.length;
   r.sinTelefono = plan.sinTelefono.reduce((n, g) => n + g.items.length, 0);
-  r.viajesConGastoPendiente = [...new Set(plan.pendientes.map((i) => i.viajeId))];
+  // A37-S26-05: un viaje solo se aparta de la cobranza por viaje mientras su gasto TODAVÍA tiene aviso por
+  // darse (en cola, o entre dos tiers). Cuando el gasto ya agotó toda su escalera (el último tier ya se
+  // consumió), no cobra nada más: dejar su viaje fuera lo dejaba sin un solo aviso aunque siguiera abierto.
+  // El «ya se le escribió hoy» lo cubre `telefonosHoy`.
+  const ultimoTier = Math.max(0, ...config.tiersGasto);
+  const agotado = (gastoId: string) => (previos.get(gastoId) ?? []).some((t) => t >= ultimoTier);
+  r.viajesConGastoPendiente = [...new Set(plan.pendientes.filter((i) => !agotado(i.gastoId)).map((i) => i.viajeId))];
 
   // Los sin teléfono TAMBIÉN quedan en bitácora (enviado=false, con el motivo): el tablero los enseña y
   // el tier no se reintenta cada hora contra el mismo hueco.
@@ -420,11 +451,15 @@ export async function ejecutarCobranzaGastos(
     if (error && error.code !== '23505') logger.warn('cobranza_gasto.sin_telefono_sin_anotar', { tenantId, err: error.message });
   }
 
-  const enviadosHoy = await mensajesDeHoy(tenantId, plan.paraContactar.map((g) => g.operador.operadorId), ahora);
+  // A37-S26-05: el «ya se le escribió hoy» cubre a TODO chofer con gasto pendiente (también si su gasto ya
+  // no tiene tier por avisar), porque ese viaje ya no se aparta de la cobranza por viaje y no debe duplicarle el día.
+  const operadoresPendientes = new Map<string, OperadorCobro>();
+  for (const g of gastos) if (motivoFaltante(g, config) !== null) operadoresPendientes.set(g.operador.operadorId, g.operador);
+  const enviadosHoy = await mensajesDeHoy(tenantId, [...operadoresPendientes.keys()], ahora);
   const telefonosHoy = new Set<string>();
   // Quien ya recibió hoy (en una corrida anterior) cuenta para que la cobranza por viaje no le duplique el día.
-  for (const g of plan.paraContactar) {
-    if ((enviadosHoy.get(g.operador.operadorId) ?? 0) > 0 && g.operador.telefono) telefonosHoy.add(g.operador.telefono);
+  for (const op of operadoresPendientes.values()) {
+    if ((enviadosHoy.get(op.operadorId) ?? 0) > 0 && op.telefono) telefonosHoy.add(op.telefono);
   }
   let rechazosSeguidos = 0;
 
@@ -456,6 +491,21 @@ export async function ejecutarCobranzaGastos(
     );
     if (errClaim) {
       if (errClaim.code !== '23505') r.fallos.push(`reclamar ${grupo.operador.nombre ?? grupo.operador.operadorId}: ${errClaim.message}`);
+      continue;
+    }
+
+    // A37-S26-03: igual que cobranza.ts — el lote se marca «enviando» ANTES de llamar a WhatsApp, y el
+    // rescate de huérfanos (arriba) solo borra los de `detalle` null. Un lote «enviando» viejo es ambiguo
+    // (el mensaje pudo salir) y queda consumido: no se reenvía el lote completo a una persona real. Si ni
+    // la marca se puede escribir, no se manda y el claim se libera (nada salió).
+    const { error: errMarca } = await admin.from('cobranza_gasto_contacto')
+      .update({ detalle: DETALLE_ENVIANDO })
+      .eq('tenant_id', tenantId).eq('lote_id', lote);
+    if (errMarca) {
+      await admin.from('cobranza_gasto_contacto')
+        .delete().eq('tenant_id', tenantId).eq('lote_id', lote)
+        .then(({ error }) => { if (error) logger.error('cobranza_gasto.claim_no_liberado', { tenantId, lote, err: error.message }); });
+      r.fallos.push(`marcar envío ${grupo.operador.nombre ?? grupo.operador.operadorId}: ${errMarca.message}`);
       continue;
     }
 

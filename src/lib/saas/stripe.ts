@@ -345,7 +345,8 @@ export async function crearSuscripcionPorTransferencia(opciones: {
     const c = await pedir<{ id: string }>('/customers', {
       cuerpo: {
         name: fiscales.razonSocial,
-        email: fiscales.email,
+        // A37-S20-05: sin correo no se manda una cadena vacía (`aplanar` omite undefined).
+        email: fiscales.email || undefined,
         address: { postal_code: fiscales.codigoPostal, country: 'MX' },
         // `mx_rfc` es el tipo de tax id que Stripe usa para México: hace que su
         // propia factura salga con el RFC del receptor.

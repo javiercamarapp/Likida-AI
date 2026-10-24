@@ -44,6 +44,7 @@ import {
   type CategoriaCobro, type LineaCobro, type MotivoInmovilizada, type ReglasCobro, type ResultadoRevision, type TipoUnidadPeaje, type VentanaInmovilizada,
 } from './reglas_cobro';
 import { validarMapeo, type ConfigMapeo } from './mapeo';
+import { evaluarContraTarifa } from './reglas_tarifa';
 import { planificarGps, evaluarCruceGps, VENTANA_GPS_MIN, type LineaParaGps, type VeredictoGps, type Muestra } from './cruce_gps';
 import { createHash } from 'node:crypto';
 import { generarToken, esTokenValido } from '@/lib/correo/buzon';
@@ -72,6 +73,7 @@ import {
 } from './verificacion';
 import { vincularPorIcident, type CruceIcident } from './vincular_viaje';
 import { desdeTablaViajeLocal, type ViajeFuente, type PosicionConViaje, type RangoFechas } from './viajes_fuente';
+import { esFechaReal } from './fecha_real';
 
 // ─────────────────────────────────────────────────────────────────────────
 // De `datos.ts` — catálogos (TAGs, casetas, geocercas, mapeos, buzón, pull,
@@ -828,14 +830,25 @@ export async function leerConfigBuzon(tenantId: string): Promise<ConfigBuzon | n
   return data ? { activa: data.activa !== false, rotacion: Number(data.rotacion) } : null;
 }
 
-/** Activa el buzón (o lo reactiva conservando la rotación vigente). */
+/**
+ * Activa el buzón (o lo reactiva). A37-S64-04: SOLO cambia `activa`; jamás reescribe `rotacion`
+ * (un upsert con la rotación leída antes devolvía a servir una llave ya rotada tras una fuga).
+ * Sin fila previa la crea con la rotación 1 (`ignoreDuplicates`: si otro la creó en medio, no pisa).
+ */
 export async function activarBuzon(tenantId: string): Promise<boolean> {
-  const actual = await leerConfigBuzon(tenantId);
-  const { error } = await acotada(supabaseAdmin().from('peaje_ingesta_config').upsert({
-    tenant_id: tenantId, rotacion: actual?.rotacion ?? 1, activa: true, updated_at: new Date().toISOString(),
-  }, { onConflict: 'tenant_id' }), 'peajes.activar_buzon');
-  if (error) logger.error('peajes.activar_buzon', { tenant: tenantId, err: error.message });
-  return !error;
+  const ahora = new Date().toISOString();
+  const activar = () => acotada(supabaseAdmin().from('peaje_ingesta_config')
+    .update({ activa: true, updated_at: ahora }).eq('tenant_id', tenantId).select('tenant_id'), 'peajes.activar_buzon');
+  const a = await activar();
+  if (a.error) { logger.error('peajes.activar_buzon', { tenant: tenantId, err: a.error.message }); return false; }
+  if ((a.data ?? []).length > 0) return true;
+  const ins = await acotada(supabaseAdmin().from('peaje_ingesta_config')
+    .upsert({ tenant_id: tenantId, rotacion: 1, activa: true, updated_at: ahora }, { onConflict: 'tenant_id', ignoreDuplicates: true }), 'peajes.activar_buzon_crear');
+  if (ins.error) { logger.error('peajes.activar_buzon', { tenant: tenantId, err: ins.error.message }); return false; }
+  // Si otra sesión creó la fila en medio, `ignoreDuplicates` no la tocó: se activa ahora, sin tocar la rotación.
+  const b = await activar();
+  if (b.error) { logger.error('peajes.activar_buzon', { tenant: tenantId, err: b.error.message }); return false; }
+  return (b.data ?? []).length > 0;
 }
 
 export async function desactivarBuzon(tenantId: string): Promise<boolean> {
@@ -849,11 +862,13 @@ export async function desactivarBuzon(tenantId: string): Promise<boolean> {
 export async function rotarLlaveBuzon(tenantId: string): Promise<boolean> {
   const actual = await leerConfigBuzon(tenantId);
   if (!actual) return false;
-  const { error } = await acotada(supabaseAdmin().from('peaje_ingesta_config')
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_ingesta_config')
     .update({ rotacion: actual.rotacion + 1, updated_at: new Date().toISOString() })
-    .eq('tenant_id', tenantId).eq('rotacion', actual.rotacion), 'peajes.rotar_llave');
-  if (error) logger.error('peajes.rotar_llave', { tenant: tenantId, err: error.message });
-  return !error;
+    .eq('tenant_id', tenantId).eq('rotacion', actual.rotacion).select('tenant_id'), 'peajes.rotar_llave');
+  if (error) { logger.error('peajes.rotar_llave', { tenant: tenantId, err: error.message }); return false; }
+  // A37-S64-04: el CAS que no encuentra la rotación leída (otra sesión rotó en medio) NO es éxito.
+  if ((data ?? []).length === 0) { logger.warn('peajes.rotar_llave_cas_perdido', { tenant: tenantId }); return false; }
+  return true;
 }
 
 // ── Los canales de entrada nuevos (0563): correo y pull ─────────────────────
@@ -987,6 +1002,11 @@ export function validarUrlPull(crudo: string): { ok: true; url: string } | { ok:
   return { ok: true, url: t };
 }
 
+/** `host:puerto` de una URL (minúsculas), o `null` si no se puede leer: dos `null` NO cuentan como el mismo host. */
+function hostDe(url: string): string | null {
+  try { return new URL(url).host.toLowerCase(); } catch { return null; }
+}
+
 /**
  * Configura (y enciende) el pull. El token, si se da, se guarda CIFRADO con el cofre;
  * sin `LIKIDA_COFRE_LLAVE` NO se guarda nada (un token en claro no es una opción).
@@ -1004,6 +1024,18 @@ export async function guardarPullPeajes(
     pull_url: v.url, pull_intervalo_min: entrada.intervaloMin, pull_activo: true, pull_proximo_en: new Date().toISOString(), pull_ultimo_error: null,
   };
   const token = entrada.token?.trim();
+  if (!token) {
+    // A37-S14-09: «sin token» significa CONSERVAR el que ya hay, pero solo mientras el destino sea el mismo host: con otro host se
+    // mandaría el Bearer anterior a un tercero. Ante duda (no se pudo leer lo vigente) tampoco se arriesga.
+    let actual: ConfigEntradas | null;
+    try { actual = await leerConfigEntradas(tenantId); } catch (e) {
+      logger.error('peajes.guardar_pull_lectura', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+      return { ok: false, motivo: 'No se pudo comprobar la configuración vigente. Inténtalo de nuevo.' };
+    }
+    if (actual?.pullConCredencial && actual.pullUrl && hostDe(actual.pullUrl) !== hostDe(v.url)) {
+      return { ok: false, motivo: 'Cambiaste el servidor de la consulta: el token guardado era del anterior y no se reutiliza. Escribe el token del servidor nuevo (o bórralo antes).' };
+    }
+  }
   if (token) {
     if (token.length > 500 || /[\r\n]/.test(token)) return { ok: false, motivo: 'El token no es válido (sin saltos de línea, hasta 500 caracteres).' };
     if (!cofreConfigurado()) return { ok: false, motivo: 'El cofre de credenciales no está configurado (LIKIDA_COFRE_LLAVE): no se puede guardar el token de forma segura.' };
@@ -2189,7 +2221,7 @@ export async function altaBajaDeTag(
 ): Promise<Resultado> {
   const tag = normalizarTag(entrada.tag);
   if (!tag) return { ok: false, motivo: 'El TAG no es válido (4 a 40 letras o dígitos).' };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(entrada.bajaEn) || Number.isNaN(Date.parse(`${entrada.bajaEn}T00:00:00Z`))) {
+  if (!esFechaReal(entrada.bajaEn)) {
     return { ok: false, motivo: 'La fecha de baja debe ser AAAA-MM-DD.' };
   }
   const { error } = await acotada(supabaseAdmin().from('peaje_tag_baja').upsert({
@@ -2394,6 +2426,22 @@ export async function lineasDeDesglose(tenantId: string, desgloseId: string) {
   );
 }
 
+/**
+ * A37-L-02: cuánto se puede RECLAMAR de verdad por cada cruce de «clase distinta de 3 y 5». El cobro del cruce
+ * completo no es lo reclamable: lo es la diferencia contra la tarifa de la clase correcta, y solo si esa tarifa está
+ * CONFIRMADA (una inferida de los propios archivos es un candidato, no una cifra para el proveedor). `null` = no hay
+ * tarifa confirmada, o no hay exceso: sin monto defendible NO se arma reclamo (ante la duda no se adivina).
+ * Lanza si no se pudo leer (el llamador falla cerrado).
+ */
+export async function montosReclamablesDeClase(tenantId: string, desgloseId: string): Promise<Map<number, number | null>> {
+  const [filas, tarifas, casetas] = await Promise.all([
+    lineasDeDesglose(tenantId, desgloseId), listarTarifas(tenantId), listarReglasCasetas(tenantId),
+  ]);
+  const excepcionesClase = new Map(casetas.filter((c) => c.clasesPermitidas.length > 0).map((c) => [c.nombreNorm, c.clasesPermitidas]));
+  const evaluadas = evaluarContraTarifa(filas.map(lineaCobroDeFila), tarifas.filter((t) => t.confirmada), { excepcionesClase });
+  return new Map(evaluadas.map((e) => [e.indice, e.importeEsperado !== null && e.montoReclamable > 0 ? e.montoReclamable : null]));
+}
+
 /** Una fila de la base → la línea que entienden las reglas. La unidad es la que declara el archivo. */
 export function lineaCobroDeFila(f: Record<string, unknown>): LineaCobro {
   return {
@@ -2573,13 +2621,25 @@ export async function crearReclamoDeCategoria(
     return { ok: false, motivo: `«${ETIQUETA_CATEGORIA_COBRO[entrada.categoria]}» es un asunto interno de la flota, no un cobro del proveedor: no se registra como reclamo.` };
   }
   const decididos = new Set((await listarDecisionesCandidatos(tenantId, entrada.desgloseId)).map((d) => `${d.indice}|${d.categoria}`));
-  const cands = reporte.revision.candidatos.filter((c) => c.categoria === entrada.categoria && !c.justificacion && !decididos.has(`${c.indice}|${c.categoria}`));
+  let cands = reporte.revision.candidatos.filter((c) => c.categoria === entrada.categoria && !c.justificacion && !decididos.has(`${c.indice}|${c.categoria}`));
   if (cands.length === 0) return { ok: false, motivo: `No hay candidatos pendientes de «${ETIQUETA_CATEGORIA_COBRO[entrada.categoria]}» en ese desglose (los que había ya se descartaron, justificaron o reclamaron).` };
+  // A37-L-02: en «clase distinta de 3 y 5» el monto del reclamo es el EXCESO contra la tarifa confirmada, no el cruce completo.
+  let montosClase: Map<number, number | null> | null = null;
+  if (entrada.categoria === 'clase_fuera_de_3_5') {
+    try {
+      montosClase = await montosReclamablesDeClase(tenantId, entrada.desgloseId);
+    } catch (err) {
+      logger.error('revision_cobros.crear_reclamo_tarifas', { tenant: tenantId, err: err instanceof Error ? err.message : String(err) });
+      return { ok: false, motivo: 'No se pudo leer el tarifario para calcular el monto reclamable. No se creó nada: inténtalo de nuevo.' };
+    }
+    cands = cands.filter((c) => montosClase!.get(c.indice) != null);
+    if (cands.length === 0) return { ok: false, motivo: 'Ningún cruce de esta categoría tiene una tarifa confirmada con exceso: sin ella no hay monto defendible que reclamar. Confirma la tarifa de la caseta y vuelve a intentarlo.' };
+  }
   const fechas = cands.map((c) => c.fecha).filter((f): f is string => f !== null).sort();
   if (fechas.length === 0) return { ok: false, motivo: 'Los candidatos no traen fecha de cobro: no se puede calcular el plazo de reclamo.' };
   const enviado = entrada.enviadoEn?.trim() || null;
-  if (enviado && !/^\d{4}-\d{2}-\d{2}$/.test(enviado)) return { ok: false, motivo: 'La fecha de envío debe ser AAAA-MM-DD.' };
-  const monto = Math.round(cands.reduce((s, c) => s + c.monto, 0) * 100) / 100;
+  if (enviado && !esFechaReal(enviado)) return { ok: false, motivo: 'La fecha de envío debe ser AAAA-MM-DD.' };
+  const monto = Math.round(cands.reduce((s, c) => s + (montosClase?.get(c.indice) ?? c.monto), 0) * 100) / 100;
   const { data, error } = await acotada(supabaseAdmin().from('peaje_reclamo').insert({
     tenant_id: tenantId, desglose_id: entrada.desgloseId, proveedor: reporte.proveedor, categoria: entrada.categoria,
     estado: enviado ? 'enviado' : 'preparado', n_cruces: cands.length, monto_reclamado: monto, monto_acreditado: 0,
@@ -2598,7 +2658,7 @@ export async function crearReclamoDeCategoria(
 
 /** Marca un reclamo preparado como enviado. */
 export async function marcarReclamoEnviado(tenantId: string, id: string, enviadoEn: string, referenciaPortal?: string | null): Promise<Resultado> {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(enviadoEn)) return { ok: false, motivo: 'La fecha de envío debe ser AAAA-MM-DD.' };
+  if (!esFechaReal(enviadoEn)) return { ok: false, motivo: 'La fecha de envío debe ser AAAA-MM-DD.' };
   const { data, error } = await acotada(supabaseAdmin().from('peaje_reclamo')
     .update({ estado: 'enviado', enviado_en: enviadoEn, referencia_portal: referenciaPortal?.trim().slice(0, 120) || null, actualizado_en: new Date().toISOString() })
     .eq('tenant_id', tenantId).eq('id', id).eq('estado', 'preparado').select('id'), 'revision_cobros.marcar_enviado');
@@ -2619,7 +2679,7 @@ export async function registrarNotaDeCredito(
   tenantId: string, entrada: { reclamoId: string; monto: number; fecha: string; referencia?: string | null; versionVista?: string | null },
 ): Promise<Resultado> {
   if (!Number.isFinite(entrada.monto) || entrada.monto <= 0 || entrada.monto > 1e9) return { ok: false, motivo: 'El monto de la nota de crédito debe ser mayor a cero.' };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(entrada.fecha)) return { ok: false, motivo: 'La fecha de la nota debe ser AAAA-MM-DD.' };
+  if (!esFechaReal(entrada.fecha)) return { ok: false, motivo: 'La fecha de la nota debe ser AAAA-MM-DD.' };
 
   // A33-06 (migración 0860): camino ATÓMICO e IDEMPOTENTE en la base (candado de fila + clave por reclamo). La clave junta el reclamo, lo que
   // la pantalla VIO (`versionVista`: estado y total acreditado al pintar el formulario) y el contenido de la nota: un doble clic o dos pestañas

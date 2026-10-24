@@ -98,6 +98,16 @@ export function enrutar(t: TicketPorFacturar, sabeOperarlo: boolean, cuentaCompa
     return { via: 'incompleto', falta };
   }
 
+  // A37-S43-06: el TAG de peaje se factura MENSUAL contra la cuenta, no ticket
+  // por ticket: no hay formulario que llenar ni "campos por leer". Decirlo así
+  // (y no «no se han leído los campos») evita que el ticket quede para siempre
+  // como un pendiente que nadie puede resolver; `avisar.ts` lo excluye del
+  // conteo de «comprobantes sin factura».
+  if (t.comercio.noAutomatizable?.razon === 'factura_mensual_por_cuenta') {
+    falta.push(`${t.comercio.nombre} factura de forma mensual contra la cuenta, no ticket por ticket`);
+    return { via: 'incompleto', falta };
+  }
+
   if (t.camposPendientes) {
     falta.push('no se han leído los campos que pide ese portal');
     return { via: 'incompleto', falta };
@@ -141,6 +151,20 @@ export function enrutar(t: TicketPorFacturar, sabeOperarlo: boolean, cuentaCompa
       motivo: 'bloqueado',
       campos: t.campos,
       detalle: t.bloqueo.motivo,
+    };
+  }
+
+  // A37-S43-06: portales que NUNCA se automatizan por una razón medida. Siguen
+  // el camino `sin_robot` (lo hace una persona), pero con la explicación VERDADERA
+  // en lugar de «todavía no lo sé llenar solo», y —para `sin_tls`— con la
+  // advertencia de seguridad que la ficha promete.
+  const na = t.comercio.noAutomatizable;
+  if (na && (na.razon === 'sin_tls' || na.razon === 'muro_anti_bot')) {
+    return {
+      via: 'mensaje', portal: t.comercio.portal, motivo: 'sin_robot', campos: t.campos,
+      detalle: na.razon === 'sin_tls'
+        ? 'Ese portal NO usa conexión segura (http): lo que teclees ahí, contraseña incluida, viaja sin cifrar. Hazlo desde una red de confianza (no wifi público) o pásaselo a quien lo capture por ti.'
+        : 'Ese portal bloquea a los robots a propósito, por eso no se llena solo. Hay que capturarlo a mano con la liga y los datos de arriba.',
     };
   }
 
@@ -203,7 +227,7 @@ export function mensajeParaEncargado(t: TicketPorFacturar, ruta: Extract<Ruta, {
       : ruta.motivo === 'sin_robot'
         // SE DICE QUE EL HUECO ES NUESTRO. «No se pudo» a secas manda al
         // encargado a buscar qué hizo mal, y no hizo nada mal.
-        ? 'Ese portal todavía no lo sé llenar solo. Con la liga y los datos de arriba se hace en un minuto.'
+        ? (ruta.detalle ?? 'Ese portal todavía no lo sé llenar solo. Con la liga y los datos de arriba se hace en un minuto.')
         : `Se intentó solo y no se pudo: ${ruta.detalle ?? 'el portal lo bloqueó'}. Reintentarlo daría lo mismo, por eso te llega a ti.`,
   );
   return lineas.join('\n');

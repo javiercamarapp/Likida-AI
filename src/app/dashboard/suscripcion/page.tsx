@@ -3,10 +3,8 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { CreditCard, ExternalLink, TriangleAlert, FileText, Landmark } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { resolverTenantPedido } from '@/lib/auth/tenant-api';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import {
   getPlanes, getSuscripcion, getFacturasSaas, getUso, cambiarPlan, LIMITE_FACTURAS_SAAS,
@@ -38,12 +36,14 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
  * Components". Por eso recibe `tenantPedido` como parámetro en vez de
  * cerrarlo del render.
  */
-async function tenantDelAction(tenantPedido?: string): Promise<{ t: string; email: string | null; rol: string }> {
-  const s = await requireSessionTenant('/dashboard/suscripcion');
-  let t = s.tenantId;
-  if (s.rol === 'superadmin' && tenantPedido) {
-    t = await resolverTenantPedido(supabaseAdmin(), t, tenantPedido);
-  }
+async function tenantDelAction(
+  sp?: { vista?: string; tenant?: string; rol?: string },
+): Promise<{ t: string; email: string | null; rol: string }> {
+  // A37-S20-02: el MISMO resolutor que la página (con `sp`), no la sesión
+  // sola: con `?vista=demo` la página enseñaba la demo y la action contrataba
+  // plan o guardaba datos fiscales en la flota de la cookie del selector.
+  const s = await resolverTenantEfectivo('/dashboard/suscripcion', sp);
+  const t = s.tenantId;
   // H26 (auditoría 24): sin comprobar `error`, una lectura caída de
   // `app_user` se veía IGUAL que un usuario sin correo — y `accionContratar`
   // manda ese correo a Stripe como el destinatario del CFDI de la mensualidad.
@@ -152,7 +152,7 @@ export default async function SuscripcionPage({
     try {
       // H26: `tenantDelAction` ahora lanza si falla la lectura del correo —
       // dentro del try se convierte en un aviso, no en la pantalla caída.
-      const { t, email, rol: r } = await tenantDelAction(sp?.tenant);
+      const { t, email, rol: r } = await tenantDelAction(sp);
       if (!puedeAdministrar(r)) return { error: 'Solo el dueño de la flota puede contratar o cambiar de plan.' };
       const f = await getDatosFiscales(t);
       if (!estanCompletos(f)) {
@@ -170,7 +170,11 @@ export default async function SuscripcionPage({
         suscripcionActual: s,
         fiscales: {
           rfc: f!.rfc!, razonSocial: f!.razonSocial!, regimenFiscal: f!.regimenFiscal!,
-          codigoPostal: f!.codigoPostal!, email: email ?? '',
+          codigoPostal: f!.codigoPostal!,
+          // A37-S20-05: el correo que la flota declaró para su factura gobierna al customer de
+          // Stripe; el de quien hace clic (p. ej. un superadmin que contrata por la flota) es
+          // solo el respaldo.
+          email: f!.email ?? email ?? '',
         },
       });
       destino = r2.urlFactura;
@@ -196,7 +200,7 @@ export default async function SuscripcionPage({
   /** Guarda con qué datos se le va a facturar a esta flota. */
   async function accionFiscales(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const { t, rol: r } = await tenantDelAction(sp?.tenant);
+    const { t, rol: r } = await tenantDelAction(sp);
     if (!puedeAdministrar(r)) return { error: 'Solo el dueño de la flota puede cambiar los datos fiscales.' };
     try {
       await guardarDatosFiscales(t, {
@@ -225,7 +229,7 @@ export default async function SuscripcionPage({
 
   async function accionPortal(): Promise<ResultadoAccion> {
     'use server';
-    const { t, rol: r } = await tenantDelAction(sp?.tenant);
+    const { t, rol: r } = await tenantDelAction(sp);
     if (!puedeAdministrar(r)) return { error: 'Solo el dueño de la flota puede administrar el cobro.' };
 
     let destino: string;
@@ -303,7 +307,8 @@ export default async function SuscripcionPage({
               <div className="mt-3">
                 <InstruccionesTransferencia
                   beneficiario={banco.beneficiario} banco={banco.banco} clabe={banco.clabe}
-                  monto={porPagar.monto} moneda={porPagar.moneda} referencia={porPagar.referencia}
+                  monto={porPagar.monto} subtotal={porPagar.subtotal} iva={porPagar.iva}
+                  moneda={porPagar.moneda} referencia={porPagar.referencia}
                 />
                 <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
                   Un banco no nos avisa cuando entra un depósito, así que tu factura pasa a &quot;pagada&quot; en

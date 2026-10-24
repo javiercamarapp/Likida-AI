@@ -340,6 +340,8 @@ export function aplicarFormato(valor: string | null, formato: FormatoCampo = 'te
     }
     case 'monto':
     case 'monto_entero': {
+      // A37-S64-02: un monto NEGATIVO no es un monto que se teclee en un portal de facturación: el signo se perdía («-500» → 500.00).
+      if (/^[^\d]*-\s*\d/.test(v)) return null;
       // Se quita todo menos dígitos, punto y coma; después la coma de millares.
       const limpio = v.replace(/[^\d.,]/g, '').replace(/(?<!\b0),(?=\d{3}\b)/g, '');
       // EL GUARDA QUE PARECE DE MÁS Y NO LO ES: sin él, `Number('')` es 0 —no

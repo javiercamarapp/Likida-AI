@@ -255,3 +255,28 @@ export async function resolverTenantEfectivo(
 
   return { ...sesion, tenantId, tenantNombre, tenantExiste };
 }
+
+
+/** Lo que una pantalla le dice a quien guarda después de que la flota cambió bajo sus pies. */
+export const MENSAJE_FLOTA_CAMBIO =
+  'La flota que estás viendo cambió desde que abriste esta pantalla (otra pestaña eligió otra flota). No se guardó nada: recarga la página y vuelve a intentarlo.';
+
+/**
+ * A37-S13-02 — para las ACCIONES de servidor de una pantalla: igual que
+ * `resolverTenantEfectivo`, pero ATADA a la flota que esa pantalla pintó.
+ *
+ * Una acción vuelve a resolver la flota al enviarse el formulario; para un
+ * superadmin SIN `?tenant=` eso es la cookie de selección, que es compartida
+ * entre pestañas: elegir la flota Y en otra pestaña hacía que «Guardar» en la
+ * pestaña de la flota X escribiera sobre Y. `tenantRenderizado` es el que la
+ * página resolvió al pintar (viaja por closure, nunca del cliente). Si no
+ * coincide devuelve `null` y la acción debe negarse con `MENSAJE_FLOTA_CAMBIO`.
+ */
+export async function resolverTenantAtado(
+  destino: string,
+  sp: { vista?: string; tenant?: string; rol?: string } | undefined,
+  tenantRenderizado: string,
+): Promise<TenantEfectivo | null> {
+  const s = await resolverTenantEfectivo(destino, sp);
+  return s.tenantId === tenantRenderizado ? s : null;
+}

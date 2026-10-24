@@ -53,6 +53,7 @@ import { normasPorTema, TEMAS_NORMATIVOS, type NormaConsultada, type TemaNormati
 import { guardiaFundamento } from '../normas/fundamento';
 import { cifrasRespaldadas, extraerNumeros } from '@/lib/agents/analista';
 import { ARTICULOS, revisarReglasEditoriales } from '../marketing/articulos';
+import { FRASE_TRACCION } from '../traccion';
 import { type DisparoCorrida } from './corridas';
 import {
   anotarCorrida, encolarPiezaCrecimiento, piezaExistente, type ResultadoCrecimiento,
@@ -144,7 +145,7 @@ LA REGLA ÚNICA: solo puedes usar lo que viene en el bloque FUENTES. Si algo no 
 - Si las FUENTES no alcanzan para escribir la pieza, escribe exactamente: "No alcanza el corpus para escribir esto."
 
 LAS REGLAS DE LA MARCA, QUE SON CANDADOS Y NO SUGERENCIAS:
-- PROHIBIDO escribir "clientes reales" o dar a entender que alguna empresa ya firmó. Likida NO tiene clientes. La única frase permitida sobre tracción es: "en pláticas con transportistas como Grupo GAL".
+- PROHIBIDO escribir "clientes reales" o dar a entender que alguna empresa ya firmó. Likida NO tiene clientes. La única frase permitida sobre tracción es: "${FRASE_TRACCION}". NO nombres a ninguna empresa en concreto.
 - PROHIBIDO "hasta un X%" y cualquier techo sin fuente.
 - PROHIBIDO el guion largo (—). Usa punto, coma o dos puntos.
 - PROHIBIDO prometer que Likida recupera dinero o garantizar un resultado. Quien acredita es el contador; Likida entrega el dato y la bitácora.
@@ -368,6 +369,7 @@ export async function correrContenidoFiscal(
 
     let redactado: string | null = null;
     let motivoSinModelo: string | null = null;
+    let respondio = false;
     try {
       // Modo PLATAFORMA (el gasto es de LIKIDA, tenant null): sin ledger
       // por-tenant. El techo lo vigila el runner contra el gasto MEDIDO del
@@ -378,6 +380,7 @@ export async function correrContenidoFiscal(
         messages: [{ role: 'user', content: contexto }],
         maxTokens: 1_400, temperature: 0.5,
       });
+      respondio = true;
       // c7-11: `noMedido` significa que el proveedor omitió `usage` y el
       // `cost` que viene es la RESERVA (una cota), no lo medido. Anotarlo como
       // cifra —o peor, como el 0 que llega en modo plataforma, donde no hay
@@ -408,6 +411,9 @@ export async function correrContenidoFiscal(
       redactado = g.texto;
       motivoSinModelo = g.motivo;
     } catch (e) {
+      // A37-S26-10: si la excepción salió de la llamada al modelo, el proveedor pudo haber cobrado ya: el gasto es
+      // DESCONOCIDO (NULL), no 0 — un 0 dejaba al techo diario ciego. Si salió después de medir, el costo ya es el medido.
+      if (!respondio) costoUsd = null;
       motivoSinModelo = 'el modelo no respondió';
       logger.info('contenido.modelo_fallo', { tema: candidato.tema, err: e instanceof Error ? e.message.slice(0, 160) : String(e) });
     }

@@ -31,13 +31,13 @@ const IND = indicadoresVista({
   llegadasValidables: 22, validacionDegradada: 2,
 });
 
-function pintar(datos: DatosTablero, o: { puedeActuar?: boolean; ind?: ReturnType<typeof indicadoresVista> | null; filtros?: FiltrosVista; episodios?: ReturnType<typeof episodiosVista> | null } = {}) {
+function pintar(datos: DatosTablero, o: { puedeActuar?: boolean; ind?: ReturnType<typeof indicadoresVista> | null; filtros?: FiltrosVista; episodios?: ReturnType<typeof episodiosVista> | null; sitiosHayMas?: boolean } = {}) {
   return renderToStaticMarkup(
     <TableroHitos
       tablero={armarTablero(datos, cfg, AHORA)} indicadores={o.ind === undefined ? IND : o.ind} dias={7} filtros={o.filtros ?? FILTROS}
       catalogos={{ terminales: [{ id: 'tm1', nombre: 'Tlaquepaque' }], clientes: [{ id: 'c1', nombre: 'Cliente A' }], operadores: [{ id: 'o1', nombre: 'Chofer 1' }] }}
       ocultos={{ tenant: 't-9' }} accionUrl="/dashboard/agentes/conductores" puedeActuar={o.puedeActuar ?? true} accion={accion}
-      accionSitios={accion} sitios={[{ id: 's1', nombre: 'Planta Zapopan', tipo: 'planta' }]} episodios={o.episodios}
+      accionSitios={accion} sitios={[{ id: 's1', nombre: 'Planta Zapopan', tipo: 'planta' }]} sitiosHayMas={o.sitiosHayMas} episodios={o.episodios}
     />,
   );
 }
@@ -183,6 +183,11 @@ describe('el tablero de hitos — lo que ve el jefe de tráfico', () => {
     expect(html).toContain('Sitio de carga');
     expect(html).toContain('Planta Zapopan');
     expect(html).toContain('Quitar el sitio');
+  });
+
+  it('A37-S13-03: si el catálogo tiene más sitios que el selector, la forma lo DICE; si no, calla', () => {
+    expect(pintar(datos([V('1')], H('1', {})), { sitiosHayMas: true })).toContain('Hay más sitios activos de los que caben en esta lista');
+    expect(pintar(datos([V('1')], H('1', {})))).not.toContain('Hay más sitios activos');
   });
 
   it('SIN permiso de actuar tampoco se ofrece asignar sitios', () => {

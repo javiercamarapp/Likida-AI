@@ -352,6 +352,10 @@ export async function ejecutarAnalista(opts: {
   mensajes: Array<{ rol: 'usuario' | 'asistente'; texto: string }>;
   timeoutMs?: number;
   signal?: AbortSignal;
+  /** Carril del presupuesto de IA. Por omisión 'interactivo' (hay una persona
+   *  esperando en el chat). Los exámenes/evals sin persona (A37-S03-09) pasan
+   *  'fondo' para no gastar la reserva interactiva del chofer del tenant. */
+  presupuesto?: 'interactivo' | 'fondo';
   /** Aviso EN VIVO de cada tool que el agente ejecuta — la secuencia de
    *  pensamiento del chat (13-ago). Pasos REALES del ciclo, jamás una
    *  animación inventada. */
@@ -365,7 +369,7 @@ export async function ejecutarAnalista(opts: {
   // los agentes de back office (runner/redactor) y podía quedarse sin
   // servicio por un lote de fondo ajeno; con 'interactivo' comparte la
   // reserva del chofer, que es lo correcto.
-  const budget = createLlmBudget(opts.tenantId, runId, 'interactivo');
+  const budget = createLlmBudget(opts.tenantId, runId, opts.presupuesto ?? 'interactivo');
   // El rol viene de la SESIÓN (jamás del cuerpo): decide qué herramientas se OFRECEN y cuáles se niegan.
   const rol = opts.usuario?.rol;
   const ctx: ToolContext = { tenantId: opts.tenantId, conversationId: runId, runId, rol, usuarioId: opts.usuario?.id };

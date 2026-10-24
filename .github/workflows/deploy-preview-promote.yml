@@ -79,6 +79,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.ref }}
+          fetch-depth: 0
       - id: resolve
         name: Fijar el ref a un SHA inmutable
         run: |
@@ -87,6 +88,17 @@ jobs:
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::No se resolvió un SHA válido."; exit 1; }
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "Commit inmutable: \`$sha\`" >> "$GITHUB_STEP_SUMMARY"
+      - name: Exigir que el SHA a producción pertenezca a master
+        # A37-S64-10: sin esto, escribir la confirmación bastaba para promover
+        # (con migraciones reales) el SHA de una rama sin revisar.
+        env:
+          PROMOTE: ${{ inputs.promote }}
+          SHA: ${{ steps.resolve.outputs.sha }}
+        run: |
+          set -euo pipefail
+          [ "$PROMOTE" = "true" ] || exit 0
+          git fetch --no-tags origin master:refs/remotes/origin/master
+          git merge-base --is-ancestor "$SHA" refs/remotes/origin/master || { echo "::error::El SHA $SHA no es ancestro de master: producción solo se promueve desde commits revisados en master."; exit 1; }
       - name: Validar intención de producción
         env:
           PROMOTE: ${{ inputs.promote }}

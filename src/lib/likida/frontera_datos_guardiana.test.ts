@@ -311,7 +311,10 @@ import { join, relative } from 'node:path';
 // Auditoría 37, S57-01/S18-01: +1 archivo (322 → 323), `sat_descarga/rfc_tenant.ts` — lee `tenant.rfc` (el RFC fiscal verificado) para atar el buzón del SAT al tenant; todo por `acotada`.
 // Auditoría 37, A37-S28-01 (lote del Redactor, 23-oct-2026): +1 archivo (322 → 323), `agentes/candidatos_redactor.ts` — la selección de candidatos que antes vivía en `runner.ts`; todo por `acotada`.
 // INTEGRACIÓN ONDA 5 (23-oct-2026, #651–#656): cada rama medía su techo sola; el barrido real del árbol fusionado mide 324 archivos (323 de la oleada 4 + sat/rfc_tenant.ts + agentes/candidatos_redactor.ts, +1 que ninguna rama veía por separado). Techo = medido, sin holgura.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 324;
+// Auditoría 37, lote M-Z-resto-10 (A37-S07-06): +1 archivo (324 → 325), `lib/perfil/avatar_huerfanos.ts` — borra del bucket público `avatares` las extensiones viejas del MISMO usuario tras guardar el avatar nuevo; solo Storage (`storage.from('avatares').remove`), cero tablas.
+// LOTE A37 M-Z-resto-06 (A37-S43-07): +1 archivo (324 → 325), `facturacion/avisar.ts` — lee la bitácora de avisos del día (`bitacora_auditoria`, filtrada por `tenant_id`, `acotada`, con `.order('id')`) para no reenviar el mismo aviso.
+// INTEGRACION G4 (24-oct-2026, PRs #705-#724): z-resto-10 (avatar_huerfanos.ts) y z-resto-06 (facturacion/avisar.ts) declaraban cada una 324 → 325 sobre la misma base; el barrido real del arbol fusionado mide 326 archivos (techo = medido).
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 326;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -579,7 +582,23 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 324;
 // INTEGRACION G1 (24-oct-2026, PRs #665-#679): el barrido real del arbol fusionado mide 2,315 llamadas (2,284 en master 6922916: +31 de las 15 ramas, techo = medido, sin holgura).
 // INTEGRACION G2 (24-oct-2026, PRs #680-#691): el barrido real del arbol fusionado mide 2,336 llamadas (2,315 en master 5135a0c: +21 de las 12 ramas, techo = medido, sin holgura).
 // INTEGRACION G3 (24-oct-2026, PRs #664, #692-#703): el barrido real del arbol fusionado mide 2,357 llamadas (2,336 en master 20900cdd2: +21 de las 13 ramas, techo = medido, sin holgura).
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_357;
+// LOTE A37 M-Z-resto-03 (A37-S07-04): +3 llamadas (2,284 → 2,287), 0 archivos nuevos, medido con el barrido real. `marketing/estudio.ts`
+// `borrarReferencia` (baja de la foto de un personaje): lectura de la ruta (`marketing_referencia`), borrado del objeto (`storage.from`, que este
+// guardia cuenta como `.from(`) y borrado de la fila. Cubierta por `estudio.borrar.test.ts`. Si otro lote toca este techo, sumar el incremento al integrar.
+// INTEGRACION G4 (24-oct-2026, PRs #705-#724): el barrido real del arbol fusionado mide 2,386 llamadas (2,357 en master 5169fd72b: +29 de las 15 ramas, techo = medido, sin holgura).
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_386;
+// Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
+// `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
+// LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.
+// 2,315 → 2,318 (+3, lote A37 M-Z-resto-11, medido con el barrido completo del guardia): `liquidacion_externa/repo.ts` suma `leerVersionFormato` (+1) y el guardado del formato
+// con control de versión de A37-S14-10 (+2: insert si no había fila, update condicional por `actualizado_en`); el upsert de siempre se conserva para los llamadores sin versión.
+// Auditoría 37, lote M-Z-resto-10: +3 llamadas (2,315 → 2,318): `avatar_huerfanos.ts` +1 (Storage `avatares`, A37-S07-06), `marketing/estudio.ts` +1 (Storage: descarta el objeto huérfano si falla el guardado, A37-S07-06) y `api/worker/bus/[accion]/route.ts` +1 (barrido de órdenes `tomada` vencidas a `fallida`, A37-S04-07; anclado a estado=tomada).
+// LOTE A37 M-Z-resto-14: +3 llamadas (2,315 → 2,318), medido con el barrido real, 0 archivos nuevos; todas por `acotada` con `tenant_id`:
+// `pod_wa.ts` +1 (lee el POD previo antes de reemplazarlo, S54-05), `portal_pago_propuesta.ts` +1 (cuenta los pendientes de la factura
+// antes de aceptar otro, S54-04) y `portal_pago_escritura.ts` +1 (relee la liga por hash tras un error del insert, S54-07).
+// A37 lote M-Z-resto-13: 2,315 → 2,316 (+1): `purgarRetencion` de cobranza_gasto lee (select paginado) los contactos viejos antes de borrar solo los desprotegidos (A37-S26-09).
+// LOTE A37 z-resto-05: +7 llamadas (2,336 → 2,343): lotes de operadores/terminales (S19-04), claims y piezas de campaña, ventana del parte de emergencia (S26-02); todas con tenant_id.
+// LOTE A37 M-Z-resto-06: +2 llamadas (2,336 → 2,338): `avisar.ts` +1 (bitácora de avisos del día, S43-07) y `pendientes.ts` +1 (gastos SIN fecha legible por cursor de `id`, S43-05; `traerTodoDesdeId`, `tenant_id`). Medido, sin holgura.
 // A37-S27-10 (lote b-sat-fiscal-05): +1 (2,284 → 2,285), en `agentes/insumos.ts` (`crearInsumoArchivo`): `storage.from('agente-insumos').remove`
 // para no dejar huérfano el objeto subido cuando falla el insert.
 // LOTE A37 B-sat-fiscal-06 (migración 0876): +3 llamadas (2,284 → 2,287), 0 archivos nuevos, medido con el barrido real. `gasto_correccion.ts` +2: el RPC
@@ -630,6 +649,10 @@ const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_357;
 // con tenant y estado antes de anotar). Cubiertas por cotizador/lector.test.ts y mesa_control.test.ts.
 // Lote M-F-agentes-legal-ia-05 (A37-S23-05): +1 llamada (2,284 → 2,285), en `admin/qa-storage.ts`: la 2.ª lectura de `qa_corrida` de
 // `gastoHoyUsd` (corridas vivas que cruzan la medianoche cuentan contra el tope de hoy). 0 archivos nuevos; cubierta por `qa-storage.test.ts`.
+// Auditoría 37, lote z-resto-04 (+1, 2284 → 2285): orquestador/fuentes_reales.ts filtra las escalaciones de dinero en la consulta (A37-S17-03); acotada, con .order('id').
+// Auditoría 37, lote M-Z-resto-08 (medido con el barrido real: 2,284 → 2,288, +4): `facturacion_escritura.ts` +2 (S64-07: ligas previas del viaje y
+// facturas vivas, ambas por `acotada`), `portal_pago_propuesta.ts` +1 (L-06: conteo del tope de propuestas por hora) y `peajes/repo.ts` +1 (S64-04:
+// `activarBuzon` pasa de un upsert a update + alta con `ignoreDuplicates`). Cubiertas por sus pruebas rojas→verdes.
 // Auditoría 37, lote agentes-legal-ia (medido con el barrido real): +2 llamadas (2,264 → 2,266). `candidatos_redactor.ts` suma 3 `.from(` (prospecto, cola_aprobacion, prospecto_contacto) y `runner.ts` pierde la suya (+2 netas); `sdr.ts` pasa de 3 a 3 (la lectura por prospecto se volvió lectura en lote). Todo por `acotada`.
 // LOTE A37 peajes-liquidación-graves (migración 0865): +5 llamadas (2,264 → 2,269), 0 archivos nuevos, medido con el barrido real. `jornada/repo.ts` +1:
 // `.rpc('asentar_declaracion_jornada')` (A37-S48-01; la 0865 sustituye la marca derivada bajo el lock del expediente; el INSERT anterior se conserva

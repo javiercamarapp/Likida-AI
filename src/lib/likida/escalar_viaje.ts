@@ -135,10 +135,16 @@ export interface ViajeSinAceptar {
  * su propio tope, así que las demás SIEMPRE llegan a aparecer aquí si tienen
  * algún candidato dentro del lote crudo.
  */
-export async function viajesSinAceptar(ahora: Date = new Date(), horas: number = HORAS_PARA_ESCALAR): Promise<ViajeSinAceptar[]> {
+export async function viajesSinAceptar(
+  ahora: Date = new Date(), horas: number = HORAS_PARA_ESCALAR, excluirTenants: ReadonlySet<string> = new Set(),
+): Promise<ViajeSinAceptar[]> {
   const limite = new Date(ahora.getTime() - horas * 3_600_000).toISOString();
+  // A37-S41-10: las flotas excluidas (perfil `cinco_agentes`) se sacan EN LA CONSULTA: si solo se filtraban después, sus
+  // viajes viejos —que nunca sellan `escalado_en`— llenaban el lote crudo de 1,000 y dejaban sin escalar a las demás.
+  // Los ids son uuid de la base; se descarta cualquier carácter que rompa la lista de PostgREST. Tope de 200 (largo de URL).
+  const excluidas = [...excluirTenants].map((t) => t.replace(/[^\w-]/g, '')).filter((t) => t !== '').slice(0, 200);
 
-  const { data, error } = await acotada(supabaseAdmin()
+  const base = supabaseAdmin()
     .from('viaje')
     // `operador:operador_id` y no `operador` a secas: viaje tiene MÁS de una
     // relación con operador y PostgREST rechaza el embed ambiguo — este cron
@@ -155,7 +161,10 @@ export async function viajesSinAceptar(ahora: Date = new Date(), horas: number =
     // cinco horas después, perdiendo que SÍ contestó y dijo que no.
     .is('rechazado_en', null)
     .not('avisado_en', 'is', null)
-    .lte('avisado_en', limite)
+    .lte('avisado_en', limite);
+  const filtrada = excluidas.length > 0 ? base.not('tenant_id', 'in', `(${excluidas.join(',')})`) : base;
+
+  const { data, error } = await acotada(filtrada
     // MÁS VIEJO PRIMERO (auditoría de escala 15k): sin `.order()`, Postgres
     // devuelve las filas en el orden que quiera — con más vencidos que el
     // cupo entre corridas, un viaje concreto podía quedarse fuera del lote
@@ -169,6 +178,7 @@ export async function viajesSinAceptar(ahora: Date = new Date(), horas: number =
     // flota, se aplica ABAJO sobre las filas ya traídas; ver el comentario
     // largo junto a esas constantes.
     .order('avisado_en', { ascending: true })
+    .order('id')
     .limit(CUPO_CRUDO_VIAJES_SIN_ACEPTAR), 'viajesSinAceptar');
 
   if (error) throw new Error(`viajesSinAceptar: ${error.message}`);
@@ -304,7 +314,7 @@ export async function escalarViajesSinAceptar(args: {
   // no se pudo consultar es escalar con los datos equivocados (el criterio de
   // getConfig)— y se grita en el log; la corrida de la siguiente hora los
   // levanta.
-  const todos = await viajesSinAceptar(args.ahora, HORAS_MINIMAS_ESCALACION);
+  const todos = await viajesSinAceptar(args.ahora, HORAS_MINIMAS_ESCALACION, args.excluirTenants);
   const candidatos = args.excluirTenants && args.excluirTenants.size > 0 ? todos.filter((v) => !args.excluirTenants!.has(v.tenantId)) : todos;
   const ahoraMs = (args.ahora ?? new Date()).getTime();
   const horasPorTenant = new Map<string, number | null>();

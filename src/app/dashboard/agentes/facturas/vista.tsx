@@ -171,8 +171,8 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
               {extra.conCfdi !== null && (
                 <p className="text-[12.5px] mb-2">
                   <span className="cifra-mono text-[20px] font-medium block">{numero(extra.conCfdi)}</span>
-                  <span style={{ color: 'var(--faint)' }}>tickets con factura ya amarrada — emitida sola o pescada
-                    del XML que mandaron, histórico.</span>
+                  <span style={{ color: 'var(--faint)' }}>tickets con factura ya amarrada — emitida sola, pescada
+                    del XML que mandaron o capturada a mano (el folio tecleado solo se valida de forma, no contra el SAT), histórico.</span>
                 </p>
               )}
               {bloqueados.length > 0 && (

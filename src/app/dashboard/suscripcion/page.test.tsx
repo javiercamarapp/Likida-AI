@@ -1,4 +1,5 @@
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -27,6 +28,7 @@ const dobles = vi.hoisted(() => ({
   guardarDatosFiscales: vi.fn(),
   estanCompletos: vi.fn(),
   resolverTenantPedido: vi.fn(),
+  resolverTenantEfectivo: vi.fn(),
   revalidatePath: vi.fn(),
   redirect: vi.fn((url: string) => { throw new Error(`REDIRECT:${url}`); }),
 }));
@@ -34,7 +36,9 @@ const dobles = vi.hoisted(() => ({
 let sesion: { tenantId: string; rol: string; userId: string } = { tenantId: 't-1', rol: 'flota_admin', userId: 'u-1' };
 let correoCuenta: { email: string | null } | null = { email: 'duena@flota.com' };
 
-vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => sesion }));
+vi.mock('@/lib/auth/tenant-efectivo', () => ({
+  resolverTenantEfectivo: async (...a: unknown[]) => { dobles.resolverTenantEfectivo(...a); return sesion; },
+}));
 vi.mock('@/lib/auth/guard', () => ({ requireSessionTenant: async () => sesion }));
 vi.mock('@/lib/auth/tenant-api', () => ({ resolverTenantPedido: dobles.resolverTenantPedido }));
 vi.mock('next/navigation', () => ({ redirect: dobles.redirect }));
@@ -162,15 +166,15 @@ it('contratar: con URL de factura, redirige — el redirect NO se atrapa como er
   await expect(accion(null, fd({ plan: 'pro' }))).rejects.toThrow('REDIRECT:https://stripe.com/factura/x');
 });
 
-it('contratar: superadmin viendo-como otra flota (?tenant=) factura a ESA flota, no a la suya', async () => {
-  sesion = { tenantId: 't-super', rol: 'superadmin', userId: 'u-1' };
-  dobles.resolverTenantPedido.mockResolvedValue('t-vista-como');
+it('A37-S20-02 contratar: la action resuelve la flota con el MISMO resolutor y el mismo sp que la página (?vista=demo no escribe en la flota del selector)', async () => {
+  sesion = { tenantId: 't-demo', rol: 'superadmin', userId: 'u-1' }; // lo que resolverTenantEfectivo devuelve para ?vista=demo
   dobles.cambiarPlan.mockResolvedValue({ urlFactura: null, huboCambioDePrice: false });
-  const pagina = await SuscripcionPage({ searchParams: Promise.resolve({ tenant: 't-vista-como' }) });
+  const pagina = await SuscripcionPage({ searchParams: Promise.resolve({ vista: 'demo' }) });
   const accion = accionDelBoton(pagina, /Contratar por transferencia/);
+  dobles.resolverTenantEfectivo.mockClear();
   await accion(null, fd({ plan: 'pro' }));
-  expect(dobles.resolverTenantPedido).toHaveBeenCalledWith(expect.anything(), 't-super', 't-vista-como');
-  expect(dobles.cambiarPlan).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 't-vista-como' }));
+  expect(dobles.resolverTenantEfectivo).toHaveBeenCalledWith('/dashboard/suscripcion', { vista: 'demo' });
+  expect(dobles.cambiarPlan).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 't-demo' }));
 });
 
 it('guardar datos fiscales: contador queda rechazado por la server action', async () => {
@@ -223,4 +227,26 @@ it('portal de cobro: redirige al portal real de Stripe del tenant de la SESIÓN'
   const accion = accionDelBoton(pagina, /Administrar cobro y tarjeta/);
   await expect(accion(null, new FormData())).rejects.toThrow('REDIRECT:https://billing.stripe.com/session/x');
   expect(dobles.crearPortal).toHaveBeenCalledWith('cus_1', 'https://app.likida.ai/dashboard/suscripcion');
+});
+
+it('A37-S20-05: el correo de facturación declarado por la flota gobierna al customer de Stripe, no el de quien hace clic', async () => {
+  dobles.getDatosFiscales.mockResolvedValue({ ...FISCALES_OK, email: 'facturas@flota.com' });
+  dobles.cambiarPlan.mockResolvedValue({ urlFactura: null, huboCambioDePrice: false });
+  const pagina = await SuscripcionPage({ searchParams: SP });
+  const accion = accionDelBoton(pagina, /Contratar por transferencia/);
+  await accion(null, fd({ plan: 'pro' }));
+  expect(dobles.cambiarPlan).toHaveBeenCalledWith(expect.objectContaining({
+    fiscales: expect.objectContaining({ email: 'facturas@flota.com' }),
+  }));
+});
+
+it('A37-S20-08: la pantalla de pago pasa el desglose de IVA a las instrucciones de transferencia', async () => {
+  dobles.datosBancarios.mockReturnValue({ beneficiario: 'LIKIDA SA', banco: 'BANCO X', clabe: 'CLABE-DE-PRUEBA' });
+  dobles.getFacturasSaas.mockResolvedValue([{
+    id: 'f-1', periodoInicio: '2026-10-01', periodoFin: '2026-10-31', monto: 1158.84, subtotal: 999, iva: 159.84,
+    moneda: 'MXN', estado: 'pendiente', pagadaEn: null, urlPago: null, cfdiUuid: null, referencia: 'REF-123',
+  }]);
+  const html = renderToStaticMarkup(await SuscripcionPage({ searchParams: SP }) as ReactElement);
+  expect(html).toContain('Se desglosa como');
+  expect(html).toContain('de IVA');
 });

@@ -56,3 +56,23 @@ it('usa el TOTAL real de conversaciones (FE-9), no la longitud de la página de 
   await NotificacionesPage();
   expect(dobles.calcularAlertas).toHaveBeenCalledWith(expect.anything(), expect.any(Array), expect.anything(), 153);
 });
+
+// A37-S07-07 — una fuente caída tumbaba la página entera (Promise.all sin
+// catch). Ahora cada fuente degrada por separado y se AVISA que está ciega.
+it('A37-S07-07: si getResumenNegocio falla, la página no cae: calcula con null y avisa la fuente ciega', async () => {
+  dobles.getResumenNegocio.mockRejectedValue(new Error('resumen_negocio: timeout'));
+  const tree = (await NotificacionesPage()) as unknown as { props: { children: unknown } };
+  expect(tree).toBeTruthy();
+  expect(dobles.calcularAlertas).toHaveBeenCalledWith(null, [{ id: 'c-1' }], { alto: 2 }, 37);
+  const props = JSON.stringify(tree, (_k, v) => (typeof v === 'function' ? undefined : v));
+  expect(props).toMatch(/No se pudo leer/);
+  expect(props).toMatch(/resumen del negocio/);
+});
+
+it('A37-S07-07: si la lista de conversaciones falla, sigue con [] y lo dice', async () => {
+  dobles.getConversacionesActivas.mockRejectedValue(new Error('boom'));
+  dobles.contarConversacionesActivas.mockResolvedValue(null);
+  const tree = await NotificacionesPage();
+  expect(dobles.calcularAlertas).toHaveBeenCalledWith({ costoHoyUsd: 1 }, [], { alto: 2 }, null);
+  expect(JSON.stringify(tree)).toMatch(/conversaciones/);
+});

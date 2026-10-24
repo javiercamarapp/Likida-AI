@@ -183,7 +183,7 @@ describe('las tres guardias tiran el texto ENTERO, jamás lo remiendan', () => {
   it('nombrar a las flotas sin la frase honesta tira la pieza', () => {
     const g = guardarBorrador('Grupo GAL ya lo usa todos los días.', fichas, contexto);
     expect(g.texto).toBeNull();
-    expect(g.motivo).toContain('se leen como clientes');
+    expect(g.motivo).toContain('no autorizado');   // A37-S26-06: la misma lista que veta el correo
   });
 
   it('una cifra que ninguna ficha respalda tira la pieza', () => {
@@ -442,6 +442,14 @@ describe('c7-11 · un costo NO MEDIDO se anota como desconocido, jamás como $0'
 
     expect(r.costoUsd, 'un costo desconocido no es cero').toBeNull();
     expect(registrar.mock.calls.at(-1)?.[2]).toMatchObject({ estado: 'ok', costoUsd: null });
+  });
+
+  it('A37-S26-10: si el modelo LANZA (el proveedor pudo haber cobrado), la corrida anota costo NULL, no cero', async () => {
+    colaAprobacion({});
+    generar.mockRejectedValue(new Error('timeout del proveedor'));
+    const r = await correrContenidoFiscal('cron', HOY);
+    expect(r.costoUsd, 'una llamada que lanzó no es gratis: es desconocida').toBeNull();
+    expect(registrar.mock.calls.at(-1)?.[2]).toMatchObject({ costoUsd: null });
   });
 
   it('medido: se anota el número, y un 0 medido sigue siendo un 0', async () => {

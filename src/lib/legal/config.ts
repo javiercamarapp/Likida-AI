@@ -46,7 +46,7 @@ export const LEGAL_PLACEHOLDERS = {
 
 /**
  * QUIÉN ES LA ENTIDAD. Sin esto no se puede publicar un aviso de privacidad ni
- * unos términos: son los datos que la ley obliga a exhibir. Bloquean el build.
+ * unos términos: son los datos que la ley obliga a exhibir. Son BLOQUEANTES, pero OJO (A37-S21-01): la compuerta corre en cada render del layout raíz, NO en el build — el build pasa y, en producción, todas las páginas con layout responden 500 hasta que se definan.
  */
 const REQUISITOS_ENTIDAD: Array<[keyof typeof LEGAL_CONFIG, string]> = [
   ['razonSocial', 'LEGAL_ENTITY_NAME'],

@@ -11,10 +11,13 @@
 // (frontera de dominio: lib/likida no depende de lib/admin).
 //
 // MISMO CONTRATO que el interruptor global: SIN FILA = ENCENDIDO. Fallo de
-// lectura = ENCENDIDO (a diferencia del kill switch global): esta palanca es
-// operativa, no de incidente — una base intermitente no debe dejar sin
-// servicio de WhatsApp a una flota que nadie apagó a propósito. El grito va
-// al log, no a bloquear el turno.
+// lectura = el ÚLTIMO VALOR CONOCIDO (A37-S47-09); sin valor previo, ENCENDIDO
+// (a diferencia del kill switch global): esta palanca es operativa — una base
+// intermitente no debe dejar sin servicio de WhatsApp a una flota que nadie
+// apagó a propósito. PERO el apagado de una flota es justo el caso de
+// incidente (mensajes erróneos a choferes reales): si se leyó «apagado» y la
+// lectura siguiente falla, SIGUE apagado — igual que `perfilDeTenant`. El
+// grito va al log, no a bloquear el turno.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -23,6 +26,14 @@ import { logger } from '@/lib/logger';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 
 export type PipelineChofer = 'whatsapp' | 'ocr' | 'cuadre';
+
+/** Último valor LEÍDO con éxito por (flota, pipeline). Solo se consulta cuando la lectura falla. */
+const ultimoConocido = new Map<string, boolean>();
+
+/** Solo para pruebas. */
+export function reiniciarCacheInterruptorTenant(): void {
+  ultimoConocido.clear();
+}
 
 export async function pipelineTenantApagado(tenantId: string, pipeline: PipelineChofer): Promise<boolean> {
   // EL PERFIL DE LA FLOTA (0770) APAGA POR CÓDIGO la lectura de comprobantes (`ocr`) y el cierre/cuadre por
@@ -43,6 +54,7 @@ export async function pipelineTenantApagado(tenantId: string, pipeline: Pipeline
   // implementan cada tabla/consulta — un doble incompleto no puede tumbar
   // un turno que no tiene nada que ver con esta palanca. Fallo de lectura
   // (medido o por excepción) = ENCENDIDO, igual en los dos casos.
+  const clave = `${tenantId}|${pipeline}`;
   try {
     const { data, error } = await acotada(supabaseAdmin()
       .from('interruptor_tenant')
@@ -52,11 +64,13 @@ export async function pipelineTenantApagado(tenantId: string, pipeline: Pipeline
       .maybeSingle(), 'pipelineTenantApagado');
     if (error) {
       logger.warn('interruptor_tenant.ilegible', { tenantId, pipeline, err: error.message });
-      return false;
+      return ultimoConocido.get(clave) ?? false;
     }
-    return data?.apagado === true;
+    const apagado = data?.apagado === true;
+    ultimoConocido.set(clave, apagado);
+    return apagado;
   } catch (e) {
     logger.warn('interruptor_tenant.ilegible', { tenantId, pipeline, err: e instanceof Error ? e.message : String(e) });
-    return false;
+    return ultimoConocido.get(clave) ?? false;
   }
 }

@@ -109,7 +109,8 @@ const ARCHIVOS: Record<string, Clase> = {
 };
 
 const RAIZ = join(process.cwd(), 'src/app/dashboard');
-const PUERTA = /\b(resolverTenantEfectivo|requireSessionTenant|exigirVerRuta)\(\s*([^,)]+)/g;
+// `resolverTenantAtado` (A37-S13-02) ES `resolverTenantEfectivo` + el cotejo con la flota que la pantalla pintó: misma puerta con perfil.
+const PUERTA = /\b(resolverTenantEfectivo|resolverTenantAtado|requireSessionTenant|exigirVerRuta)\(\s*([^,)]+)/g;
 
 function conUseServer(dir: string, salida: string[] = []): string[] {
   for (const ent of readdirSync(dir, { withFileTypes: true })) {

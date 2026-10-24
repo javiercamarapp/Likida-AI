@@ -86,6 +86,15 @@ describe('asignarTerminalJefe — solo a usuarios con rol encargado de ESTA flot
 });
 
 describe('eliminarTerminal contra la base', () => {
+  it('A37-S20-03: un jefe DADO DE BAJA que conserva el patio también bloquea el borrado', async () => {
+    base.tabla('app_user').push({ id: 'ffffffff-ffff-4fff-8fff-ffffffffffff', tenant_id: T, rol: 'encargado', terminal_id: NORTE, activo: false });
+    base.rpcRespuesta('terminales_conteos_tenant', () => ({
+      data: [{ terminal_id: NORTE, operadores: 0, unidades: 0, jefes: 0 }], error: null,
+    }));
+    await expect(eliminarTerminal(T, NORTE)).rejects.toThrow(/dado de baja/);
+    expect(base.tabla('terminal').some((t) => t.id === NORTE)).toBe(true);
+  });
+
   it('con jefes asignados NO se borra, y el patio sigue ahí', async () => {
     base.rpcRespuesta('terminales_conteos_tenant', () => ({
       data: [{ terminal_id: NORTE, operadores: 0, unidades: 0, jefes: 1 }, { terminal_id: SUR, operadores: 1, unidades: 0, jefes: 0 }], error: null,

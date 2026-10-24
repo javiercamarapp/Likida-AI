@@ -67,7 +67,9 @@ const arr = (a) => `array[${a.map(q).join(',')}]::text[]`;
 psql(`insert into liquidacion_formato_flota (tenant_id, formato, nombre_muestra, copia_telefonos, discrepancia_telefonos, actualizado_en, actualizado_por)
 values ('${T}', ${q(JSON.stringify(derivado.formato))}::jsonb, ${q(NOMBRE_MUESTRA)}, ${arr(COPIA)}, ${arr(DISCREPANCIA)}, ${q(ancla)}::timestamptz, 'demo')
 on conflict (tenant_id) do update set formato = excluded.formato, nombre_muestra = excluded.nombre_muestra, copia_telefonos = excluded.copia_telefonos,
-  discrepancia_telefonos = excluded.discrepancia_telefonos, actualizado_en = excluded.actualizado_en, actualizado_por = excluded.actualizado_por;`);
+  discrepancia_telefonos = excluded.discrepancia_telefonos, actualizado_en = excluded.actualizado_en, actualizado_por = excluded.actualizado_por
+  -- A37-S03-07: solo se re-siembra sobre lo que sembró el demo; el formato y los teléfonos que el cliente cargó (actualizado_por <> 'demo') se respetan.
+  where liquidacion_formato_flota.actualizado_por = 'demo';`);
 
 // ── 2. Vigía: grupos críticos + histórico exportado + respuestas rápidas aprobadas ───────────────────────────────
 const EQUIPO = ['Despacho Demo', 'Servicio a Cliente Demo A', 'Servicio a Cliente Demo B', 'Servicio a Cliente Demo C'];

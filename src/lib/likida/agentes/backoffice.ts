@@ -866,7 +866,7 @@ export function armarParteLegal(d: DatosLegal): { cuerpo: string; vencidas: numb
     lineas.push('  Completos: entidad y los cuatro documentos tienen versión declarada.');
   } else {
     if (d.entidad.faltantesEntidad.length > 0) {
-      lineas.push(`  BLOQUEANTE — faltan datos de la ENTIDAD: ${d.entidad.faltantesEntidad.join(', ')}. Sin ellos el aviso publicado sale con marcadores 🔴 y el build de producción se detiene (exigirLegalEnProduccion).`);
+      lineas.push(`  BLOQUEANTE — faltan datos de la ENTIDAD: ${d.entidad.faltantesEntidad.join(', ')}. Sin ellos el aviso publicado sale con marcadores 🔴 y en producción TODAS las páginas responden 500 (exigirLegalEnProduccion corre en el layout raíz, no en el build: el despliegue pasa y el sitio cae).`);
     }
     if (d.entidad.faltantesDocumentos.length > 0) {
       lineas.push(`  Sin versión declarada (no bloquean el deploy, sí la venta enterprise): ${d.entidad.faltantesDocumentos.join(', ')}.`);

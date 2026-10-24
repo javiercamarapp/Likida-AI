@@ -170,6 +170,17 @@ describe('cron descarga-sat — la corrida', () => {
       expect.objectContaining({ configAusente: true }));
   });
 
+  it('A37-L-05: sin configurar Y el aviso de peaje falla → alerta al operador y NO es config_ausente', async () => {
+    correrDescargaSat.mockResolvedValueOnce({
+      corrio: false, motivo: 'La descarga masiva no está configurada…', configurado: false, flotas: 0, resumenes: [], sinTurno: 0,
+    });
+    avisarCierrePeaje.mockRejectedValueOnce(new Error('whatsapp caído'));
+    await GET(new Request(URL_CRON, CON_SECRETO));
+    expect(alertarOperador).toHaveBeenCalledWith('cron.descarga-sat.peaje', expect.objectContaining({ error: 'whatsapp caído' }));
+    expect(registrarLatido).toHaveBeenCalledWith('descarga-sat', 'parcial',
+      expect.objectContaining({ configAusente: false }));
+  });
+
   // ── EL RELOJ ENTRA TAMBIÉN A LA DESCARGA (c7-1; deuda del fork del #160) ──
   //
   // Antes, `venceEn` se calculaba en esta ruta y SOLO se le pasaba a

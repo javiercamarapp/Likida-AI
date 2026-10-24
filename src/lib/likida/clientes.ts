@@ -51,7 +51,7 @@ import { acotada } from './presupuesto';
 import { leerCarteraRpc, armarCartera, type ClienteRow } from './comercial';
 import { DatoInvalido } from './errores';
 import { esRfcValido, esUuidValido, rfcChecksumOk } from './intake/cfdi';
-import { round2, hoyMx } from '@/lib/formato';
+import { round2, hoyMx, masDeDosDecimales } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PARTE PURA — sin una sola consulta. Es la que se prueba y la que corre
@@ -284,6 +284,8 @@ export function validarTarifa(t: TarifaCruda): TarifaValida {
   // precio pegado desde Excel llega como "28,500.00" y `Number` daría NaN.
   const precio = Number(crudoPrecio.replace(/\s/g, '').replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.'));
   if (!Number.isFinite(precio)) throw new DatoInvalido('El precio tiene que ser un número.');
+  // A37-S64-02: `precio` es numeric(12,2): más de dos decimales se redondearían en silencio («28.500» → 28.50).
+  if (masDeDosDecimales(crudoPrecio.replace(/\s/g, '').replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.'))) throw new DatoInvalido('El precio no puede traer más de dos decimales. Si el punto es separador de miles, escríbelo sin él (28500 o 28,500.00).');
   // Espeja `tarifa_precio_positivo`. Un precio de 0 no es una tarifa barata:
   // es una tarifa que cotizaría el flete gratis y se vería como una medición.
   if (precio <= 0) throw new DatoInvalido('El precio tiene que ser mayor que cero.');

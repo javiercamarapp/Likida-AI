@@ -24,6 +24,7 @@ import { MAX_INTENTOS_AVISO, REINTENTO_AVISO_MIN, TOPE_AVISOS_POR_FLOTA_Y_CORRID
 import { NOTA_RESUELTO_SOLO, PREFIJO_BARRIDO, type DepsBarrido } from './barrido_salud';
 import type { PuertoCicloVivo } from './ciclo_cron';
 import { posicionesDeGps } from './tablero_viajes';
+import { DESTINOS_DE_DINERO, MOTIVOS_DE_DINERO } from './permisos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS FUENTES REALES — solo COMPONEN los lectores que cada agente ya tiene (con su
@@ -228,9 +229,11 @@ export function crearFuentesReales(): Fuentes {
       }
     },
 
-    async escalacionesAbiertas(tenantId, limite = 20) {
-      const r = await acotada(supabaseAdmin().from('orquestador_escalacion').select(FILA_ESCALACION)
-        .eq('tenant_id', tenantId).eq('estado', 'abierta').order('creada_en', { ascending: false }).order('id').limit(limite), 'orquestador.abiertas');
+    async escalacionesAbiertas(tenantId, limite = 20, filtro = {}) {
+      let q = supabaseAdmin().from('orquestador_escalacion').select(FILA_ESCALACION).eq('tenant_id', tenantId).eq('estado', 'abierta');
+      // A37-S17-03: las tareas de dinero se filtran en la consulta (mismo criterio que `tareaEsDeDinero`), no después del límite.
+      if (filtro.soloDinero) q = q.or(`destino.in.(${[...DESTINOS_DE_DINERO].join(',')}),motivo.in.(${[...MOTIVOS_DE_DINERO].join(',')})`);
+      const r = await acotada(q.order('creada_en', { ascending: false }).order('id').limit(limite), 'orquestador.abiertas');
       if (esSinTabla(r.error)) return null;
       if (r.error) throw new Error(`orquestador.abiertas: ${r.error.message}`);
       return ((r.data ?? []) as Array<Record<string, unknown>>).map(aTarea);
