@@ -143,13 +143,16 @@ describe('correrAlertasLlegadaSinConfirmar', () => {
     expect(enviados).toHaveLength(0);
   });
 
-  it('sin a quién avisar: cierra el claim con el motivo y lo reporta, sin reintentar cada pasada', async () => {
+  it('A37-S34-09: sin a quién avisar: lo reporta y NO quema el claim (al cargar el contacto, el aviso sale)', async () => {
     const { puertos, enviados } = armar({ hitos: hitos('v1', hace(30)), destinatarios: () => [] });
     const r = await correrAlertasLlegadaSinConfirmar(puertos, { ahora: AHORA });
     expect(r).toMatchObject({ avisos: 0, sinDestinatario: 1 });
     expect(r.fallos[0]).toMatch(/no hay a quién avisar/);
-    expect(await correrAlertasLlegadaSinConfirmar(puertos, { ahora: AHORA })).toMatchObject({ yaReclamados: 1, sinDestinatario: 0 });
     expect(enviados).toHaveLength(0);
+    // Se configura el contacto: la siguiente pasada SÍ avisa.
+    puertos.destinatarios = async () => [{ telefono: '5215512345678', nombre: 'Jefe' } as never];
+    expect(await correrAlertasLlegadaSinConfirmar(puertos, { ahora: AHORA })).toMatchObject({ avisos: 1, sinDestinatario: 0 });
+    expect(enviados).toHaveLength(1);
   });
 
   it('un rechazo reintentable YA dejó el texto en el outbox: el claim se cierra y la corrida siguiente NO manda un segundo aviso; uno definitivo lo cierra con el motivo', async () => {
