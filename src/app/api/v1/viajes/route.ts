@@ -267,6 +267,11 @@ function normalizarViaje(cuerpo: Record<string, unknown>): NuevoViaje & { folio:
     if (e instanceof DatoInvalido && e.message.startsWith('Los kilómetros')) {
       throw new CampoInvalido('kmRecorridos', '`kmRecorridos` tiene que ser un número entero entre 1 y 19999 (omítelo o mándalo null si no lo conoces).');
     }
+    // A37-S11-07 + A37-S64-02: `validarIngreso` ya rechaza más de dos decimales en el ingreso con un mensaje de pantalla; la API
+    // conserva su contrato (400 que NOMBRA el campo `ingresoFlete`).
+    if (e instanceof DatoInvalido && e.message.includes('no puede traer más de dos decimales')) {
+      throw new CampoInvalido('ingresoFlete', '`ingresoFlete` no puede traer más de dos decimales.');
+    }
     throw e;
   }
 

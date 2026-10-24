@@ -229,8 +229,11 @@ export const REPORTES_PERMITIDOS = [
 
 /** ¿Este mensaje sin `(esperado` es uno de los reportes autorizados? */
 export function esReportePermitido(mensaje) {
-  const m = String(mensaje).trimStart();
-  return REPORTES_PERMITIDOS.some((p) => m.startsWith(p));
+  // Los espacios se normalizan: `psql` entrega el mensaje con los espacios colapsados («46 plan-con-indice=») aunque el
+  // `raise` del bloque escriba dos («46  plan-con-indice=»), y la comparación literal marcaba como falla un reporte legítimo.
+  const normaliza = (t) => String(t).replace(/\s+/g, ' ').trimStart();
+  const m = normaliza(mensaje);
+  return REPORTES_PERMITIDOS.some((p) => m.startsWith(normaliza(p)));
 }
 
 /**

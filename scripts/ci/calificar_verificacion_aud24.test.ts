@@ -155,6 +155,11 @@ describe('A37-S02-06: un raise propio sin (esperado) solo pasa si es un reporte 
       expect(esReportePermitido(m)).toBe(true);
     }
   });
+  it('los espacios no cuentan: psql entrega «46 plan-con-indice=» con un solo espacio y sigue siendo el reporte autorizado', () => {
+    expect(esReportePermitido('46 plan-con-indice=llm_costo_liquidacion_id_idx FK-de-padre-numeroso-sin-indice=—')).toBe(true);
+    expect(esReportePermitido('FOTOS   REPETIDAS grupos=2')).toBe(true);
+    expect(esReportePermitido('47 otro bloque abortado')).toBe(false);
+  });
   it('todo raise sin (esperado de verificaciones.sql es un reporte autorizado, salvo las ramas de fallo (UNICIDAD), que ahora reprueban', () => {
     const f = 'supabase/verificaciones.sql';
     const sinEsperado = extraerBloques(readFileSync(f, 'utf8'), f).flatMap((b: { sql: string }) =>
