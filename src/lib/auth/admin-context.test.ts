@@ -125,4 +125,13 @@ describe('destinoSeguro — el next del selector no es un open redirect', () => 
       expect(destinoSeguro(malo)).toBe('/dashboard');
     }
   });
+
+  // A37-S24-05: el navegador quita TAB/CR/LF al seguir el Location, así que
+  // `/<TAB>/evil.com` termina siendo `//evil.com`.
+  it('A37-S24-05: caracteres de control o espacios disfrazan un // (open redirect)', () => {
+    for (const malo of ['/\t/evil.com', '/\n/evil.com', '/\r/evil.com', '/ /evil.com', '/\u0000x', '/dash\u007fboard']) {
+      expect(destinoSeguro(malo)).toBe('/dashboard');
+    }
+    expect(destinoSeguro('/dashboard/viajes?x=1')).toBe('/dashboard/viajes?x=1');
+  });
 });
