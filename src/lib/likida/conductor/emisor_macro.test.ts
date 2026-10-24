@@ -8,7 +8,7 @@ import {
 const AHORA = new Date('2026-10-02T14:30:00.000Z');
 const hace = (min: number): Date => new Date(AHORA.getTime() - min * 60_000);
 const evento = (extra: Partial<EventoMacro> = {}): EventoMacro => ({
-  eventoId: 'EV-SINT-001', viajeRef: 'VJ-SINT-001', tipo: 'detencion', ocurridoEn: hace(1), motivo: 'Fila en caseta sintética', ...extra,
+  tenantId: 'T-SINT-A', eventoId: 'EV-SINT-001', viajeRef: 'VJ-SINT-001', tipo: 'detencion', ocurridoEn: hace(1), motivo: 'Fila en caseta sintética', ...extra,
 });
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -16,9 +16,9 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe('doble de pruebas del emisor de macros', () => {
   it('recibe la macro esperada por evento (tipo, viaje y hora) y la deja en su registro', async () => {
     const doble = crearDobleEmisorMacro();
-    expect(await emitirMacro(doble, evento(), AHORA, { habilitado: true })).toEqual({ estado: 'enviada', clave: 'VJ-SINT-001|detencion|EV-SINT-001' });
+    expect(await emitirMacro(doble, evento(), AHORA, { habilitado: true })).toEqual({ estado: 'enviada', clave: 'T-SINT-A|VJ-SINT-001|detencion|EV-SINT-001' });
     expect(doble.recibidas).toEqual([{
-      clave: 'VJ-SINT-001|detencion|EV-SINT-001', viajeRef: 'VJ-SINT-001', tipo: 'detencion', ocurridoEn: hace(1), motivo: 'Fila en caseta sintética',
+      clave: 'T-SINT-A|VJ-SINT-001|detencion|EV-SINT-001', tenantId: 'T-SINT-A', viajeRef: 'VJ-SINT-001', tipo: 'detencion', ocurridoEn: hace(1), motivo: 'Fila en caseta sintética',
     }]);
   });
 
@@ -53,6 +53,17 @@ describe('doble de pruebas del emisor de macros', () => {
   });
 });
 
+describe('A37-S35-08: el contrato lleva la flota', () => {
+  it('dos flotas con el MISMO viajeRef y eventoId no colisionan: ninguna macro se descarta como «duplicada»', async () => {
+    const doble = crearDobleEmisorMacro();
+    const a = await emitirMacro(doble, evento({ tenantId: 'T-SINT-A', viajeRef: '1001', eventoId: 'E1' }), AHORA, { habilitado: true });
+    const b = await emitirMacro(doble, evento({ tenantId: 'T-SINT-B', viajeRef: '1001', eventoId: 'E1' }), AHORA, { habilitado: true });
+    expect([a.estado, b.estado]).toEqual(['enviada', 'enviada']);
+    expect(a.clave).not.toBe(b.clave);
+    expect(doble.recibidas.map((m) => m.tenantId)).toEqual(['T-SINT-A', 'T-SINT-B']);
+  });
+});
+
 describe('nace apagado', () => {
   it('con la perilla apagada (por omisión) no emite nada aunque el puerto exista', async () => {
     const doble = crearDobleEmisorMacro();
@@ -72,7 +83,7 @@ describe('lo dudoso se descarta, no se inventa', () => {
   it('rechaza evento sin id, sin viaje, tipo desconocido, sin hora, hora inválida o del futuro', async () => {
     const doble = crearDobleEmisorMacro();
     const malos: unknown[] = [
-      evento({ eventoId: '  ' }), evento({ viajeRef: '' }), { ...evento(), tipo: 'promocion' },
+      evento({ eventoId: '  ' }), evento({ viajeRef: '' }), evento({ tenantId: '  ' }), { ...evento(), tenantId: undefined }, { ...evento(), tipo: 'promocion' },
       { ...evento(), ocurridoEn: null }, evento({ ocurridoEn: new Date('x') }), evento({ ocurridoEn: new Date(AHORA.getTime() + 10 * 60_000) }),
       null, undefined,
     ];
@@ -81,11 +92,11 @@ describe('lo dudoso se descarta, no se inventa', () => {
   });
 
   it('normaliza: recorta espacios, deja el motivo vacío como ausente y copia la fecha', () => {
-    const fuente = evento({ eventoId: ' EV-1 ', viajeRef: ' VJ-1 ', motivo: '   ' });
+    const fuente = evento({ tenantId: ' T-1 ', eventoId: ' EV-1 ', viajeRef: ' VJ-1 ', motivo: '   ' });
     const n = normalizarEventoMacro(fuente, AHORA);
-    expect(n).toEqual({ eventoId: 'EV-1', viajeRef: 'VJ-1', tipo: 'detencion', ocurridoEn: hace(1), motivo: undefined });
+    expect(n).toEqual({ tenantId: 'T-1', eventoId: 'EV-1', viajeRef: 'VJ-1', tipo: 'detencion', ocurridoEn: hace(1), motivo: undefined });
     expect(n?.ocurridoEn).not.toBe(fuente.ocurridoEn);
-    expect(claveMacro(n!)).toBe('VJ-1|detencion|EV-1');
+    expect(claveMacro(n!)).toBe('T-1|VJ-1|detencion|EV-1');
   });
 
   it('un fallo del proveedor da «fallo» y no lanza: nunca tumba al llamador', async () => {
