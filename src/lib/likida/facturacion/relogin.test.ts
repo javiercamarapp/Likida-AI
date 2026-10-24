@@ -206,6 +206,44 @@ describe('con opt-in y sesión caducada — reconecta y guarda', () => {
     expect(pagina.escrito).toEqual([]);
   });
 
+  describe('A37-S45-03: una SPA que aún no dibuja nada NO es «ya estamos dentro»', () => {
+    const VACIA = INV({ texto: '' });
+    /** Reloj que avanza con `dormir`, para que el tope se pueda cumplir. */
+    function conReloj(guion: InventarioPagina[]) {
+      const { pagina, args } = entorno(guion);
+      let t = Date.parse('2026-08-27T21:00:00.000Z');
+      return { pagina, args: { ...args, ahora: () => t, dormir: async (ms: number) => { t += ms; } } };
+    }
+
+    it('si nunca dibuja, NO guarda la sesión anónima ni anota «vinculado»', async () => {
+      permisoDeRelogin.mockResolvedValue(permitido());
+      const { args } = conReloj([VACIA]);
+      const r = await reconectarPortal({ tenantId: TENANT, comercio: CLAVE, entorno: args, topeMs: 3000, intervaloMs: 1000 });
+      expect(r.ok).toBe(false);
+      expect(r.ok === false && r.clase).toBe('portal_no_contesto');
+      expect(guardarSesionPortal).not.toHaveBeenCalled();
+      expect(anotarVinculo).not.toHaveBeenCalled();
+      expect(contrasenaDePortal).not.toHaveBeenCalled();
+    });
+
+    it('si luego dibuja el login, lo reconoce y reconecta', async () => {
+      permisoDeRelogin.mockResolvedValue(permitido());
+      const { pagina, args } = conReloj([VACIA, LOGIN, DENTRO]);
+      const r = await reconectarPortal({ tenantId: TENANT, comercio: CLAVE, entorno: args, topeMs: 5000, intervaloMs: 1000 });
+      expect(r.ok).toBe(true);
+      expect(pagina.escrito.length).toBe(2);
+    });
+
+    it('si luego dibuja contenido de adentro, guarda', async () => {
+      permisoDeRelogin.mockResolvedValue(permitido());
+      const { pagina, args } = conReloj([VACIA, DENTRO]);
+      const r = await reconectarPortal({ tenantId: TENANT, comercio: CLAVE, entorno: args, topeMs: 5000, intervaloMs: 1000 });
+      expect(r.ok).toBe(true);
+      expect(pagina.escrito).toEqual([]);
+      expect(guardarSesionPortal).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('autorizado pero sin contraseña guardada: se dice, y no se teclea nada', async () => {
     permisoDeRelogin.mockResolvedValue(permitido());
     contrasenaDePortal.mockResolvedValue(null);

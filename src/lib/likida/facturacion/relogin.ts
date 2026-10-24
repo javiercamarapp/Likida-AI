@@ -3,7 +3,7 @@ import { comercio as fichaComercio } from './comercios';
 import { conectorDePortal } from '../conectores/portales_facturacion';
 import { guardarSesionPortal } from './sesion_portal';
 import { anotarVinculo, recortarEstadoAlPortal } from './vinculo_portal';
-import { escrituraPermitida, pantallaDeLogin } from './vinculo_senales';
+import { escrituraPermitida, paginaSinRenderizar, pantallaDeLogin } from './vinculo_senales';
 import {
   camposDeEntrada, corteDuro, credencialRechazada, type ClaseDeCorte,
 } from './relogin_cortes';
@@ -211,6 +211,28 @@ async function entrar(a: {
   // ── 3. ¿YA ESTAMOS DENTRO? Puede pasar: otra corrida reconectó, o la
   // caducidad fue un falso positivo del pre-cheque de edad. Se guarda lo que
   // hay y se sale SIN abrir el cofre. Es la rama idempotente.
+  // A37-S45-03: «no veo login» no es «estoy dentro» si la página aún no dibuja
+  // NADA (SPA con el login pintado por JavaScript): se espera a que dibuje y se
+  // vuelve a mirar. Si nunca dibuja, NO se guarda una sesión anónima como
+  // «vinculado».
+  if (!pantallaDeLogin(inv, a.senaDeAdentro) && paginaSinRenderizar(inv)) {
+    const arranqueEspera = a.ahora();
+    while (paginaSinRenderizar(inv) && !pantallaDeLogin(inv, a.senaDeAdentro)) {
+      if (a.ahora() - arranqueEspera >= a.tope) {
+        const motivo = `${ficha.nombre} no terminó de dibujar su pantalla en ${Math.round(a.tope / 1000)} s, así que no se puede afirmar que estemos dentro ni que sea la de entrar. No se guardó ninguna sesión.`;
+        await registrarResultado({ tenantId, comercio, ok: false, clase: 'portal_no_contesto', motivo, ahora: sello() });
+        return no(comercio, 'portal_no_contesto', motivo, true, true);
+      }
+      await a.dormir(a.intervalo);
+      try {
+        inv = await entorno.pagina.inventario();
+      } catch {
+        // Mirar es diagnóstico: un inventario que revienta a media navegación
+        // no cancela la espera; el tope la acota.
+      }
+    }
+  }
+
   if (!pantallaDeLogin(inv, a.senaDeAdentro)) {
     logger.info('relogin.ya_dentro', { tenant: tenantId, comercio });
     return await guardar({ tenantId, comercio, ficha, entorno, sello: sello() });
@@ -295,7 +317,9 @@ async function entrar(a: {
     const despues = corteDuro(inv);
     if (despues) return await cortar(a, despues);
 
-    if (!pantallaDeLogin(inv, a.senaDeAdentro)) {
+    // Una página que aún no dibuja nada no es «dentro» (A37-S45-03): se sigue
+    // sondeando hasta el tope.
+    if (!pantallaDeLogin(inv, a.senaDeAdentro) && !paginaSinRenderizar(inv)) {
       logger.info('relogin.dentro', { tenant: tenantId, comercio });
       return await guardar({ tenantId, comercio, ficha, entorno, sello: sello() });
     }
