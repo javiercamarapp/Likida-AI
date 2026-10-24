@@ -461,6 +461,22 @@ export async function suscripcionesDeCustomer(customerId: string): Promise<Suscr
 }
 
 /**
+ * A37-S10-03: la FACTURA a la que pertenece un cobro. En la API 2025-03-31 (basil) en adelante, `Charge.invoice`
+ * deja de venir en el objeto y la relación cobro → factura vive en `InvoicePayment` (`GET /v1/invoice_payments`).
+ * `null` = Stripe contestó y ese pago NO es de una factura (un cargo suelto). LANZA si Stripe no contesta: quien
+ * lo llama es el webhook, que debe devolver 5xx para que Stripe reintente en vez de dar el reembolso por irrelevante.
+ */
+export async function facturaDePaymentIntent(paymentIntentId: string): Promise<string | null> {
+  const r = await pedir<{ data?: Array<{ invoice?: string | { id?: string } | null }> }>('/invoice_payments', {
+    metodo: 'GET',
+    cuerpo: { payment: { type: 'payment_intent', payment_intent: paymentIntentId }, limit: 1 },
+  });
+  const inv = r.data?.[0]?.invoice;
+  const id = typeof inv === 'string' ? inv : inv?.id;
+  return id ? id : null;
+}
+
+/**
  * CAMBIA EL PRICE DE UNA SUSCRIPCIÓN QUE YA EXISTE, en vez de crear una nueva.
  *
  * ES EL CAMINO CANÓNICO PARA "CAMBIAR DE PLAN" (auditoría 2, hallazgo real).

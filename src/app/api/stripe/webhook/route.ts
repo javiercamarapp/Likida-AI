@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verificarFirmaStripe, webhookConfigurado, eventoEnModoDeLaLlave } from '@/lib/saas/stripe';
+import { verificarFirmaStripe, webhookConfigurado, eventoEnModoDeLaLlave, facturaDePaymentIntent } from '@/lib/saas/stripe';
 import {
   marcarEvento, sellarEventoAplicado, aplicarSuscripcion, aplicarFactura, estadoDesdeStripe,
   tenantDeCustomer, planDePrice, cancelarFacturaDeStripe,
@@ -299,7 +299,13 @@ async function aplicar(evt: EventoStripe): Promise<void> {
     }
 
     case 'charge.refunded': {
-      const invoiceId = obj.invoice as string | null;
+      let invoiceId = (typeof obj.invoice === 'string' ? obj.invoice : (obj.invoice as { id?: string } | null)?.id) ?? null;
+      if (!invoiceId && typeof obj.payment_intent === 'string') {
+        // A37-S10-03: desde la API 2025-03-31 (basil) el cargo ya no trae `invoice`; sin esta consulta TODO reembolso
+        // de una mensualidad se leía como «cargo suelto», la factura seguía «pagada» con su CFDI vivo y Stripe daba el
+        // evento por entregado. Si Stripe no contesta, `facturaDePaymentIntent` LANZA → 5xx → Stripe reintenta.
+        invoiceId = await facturaDePaymentIntent(obj.payment_intent);
+      }
       if (!invoiceId) {
         // Un cargo suelto (fuera de suscripción) no tiene factura nuestra.
         logger.info('stripe.reembolso_sin_factura', { evt: evt.id });
