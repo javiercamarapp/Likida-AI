@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect, vi } from 'vitest';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -133,12 +134,27 @@ describe('el contrato de las 14 tools del copiloto', () => {
     }
   });
 
-  it('metrica_negocio declara el MRR $0 como verdad medida, no como hueco', async () => {
+  it('A37-S24-01: metrica_negocio NO inventa un MRR $0 «verificado» — es null / no medido', async () => {
     const r = await executeTool('metrica_negocio', {}, { tenantId: 'likida' });
-    const c = r.result as { mrrUsd: number; nota_mrr: string; costoIaUsd: number };
-    expect(c.mrrUsd).toBe(0);
-    expect(c.nota_mrr).toMatch(/[Cc]ero clientes/);
+    const c = r.result as { mrrUsd: number | null; nota_mrr: string; costoIaUsd: number };
+    expect(c.mrrUsd).toBeNull();
+    expect(c.nota_mrr).toMatch(/no medido/i);
+    expect(c.nota_mrr).not.toMatch(/verificado|cero clientes/i);
     expect(c.costoIaUsd).toBe(1.23); // redondeado a centavos, no el crudo
+  });
+
+  it('A37-S24-01: cobranza_saas con cero facturas por cobrar NO afirma que no hay clientes de pago', async () => {
+    const r = await executeTool('cobranza_saas', {}, { tenantId: 'likida' });
+    const c = r.result as { facturasPorCobrar: number; nota?: string };
+    expect(c.facturasPorCobrar).toBe(0);
+    expect(c.nota ?? '').not.toMatch(/cero clientes|no hay clientes/i);
+    expect(c.nota ?? '').toMatch(/no mide|no indica|no implica/i);
+  });
+
+  it('A37-S24-01: ni las descripciones de las tools ni el prompt del copiloto llevan «$0 MRR»/«cero clientes de pago» como hecho', () => {
+    const fuente = readFileSync(new URL('./copiloto-tools.ts', import.meta.url), 'utf8')
+      + readFileSync(new URL('./copiloto.ts', import.meta.url), 'utf8');
+    expect(fuente).not.toMatch(/cero clientes de pago|\$0 MRR real|MRR hoy es \$0/i);
   });
 
   it('bandeja DICE sus fuentes ciegas por nombre — null ≠ 0', async () => {
