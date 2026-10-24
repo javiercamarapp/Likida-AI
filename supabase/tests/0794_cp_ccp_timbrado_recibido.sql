@@ -28,8 +28,8 @@ do $$
 declare ta uuid := gen_random_uuid(); tb uuid := gen_random_uuid(); da uuid; db uuid; ea uuid; eb uuid;
 begin
   insert into public.tenant (id, nombre) values (ta, 'Flota sintetica A'), (tb, 'Flota sintetica B');
-  insert into public.cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256) values (ta, 'correo', 'pdf', 'a.pdf', 1, repeat('a', 64)) returning id into da;
-  insert into public.cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256) values (tb, 'correo', 'pdf', 'b.pdf', 1, repeat('b', 64)) returning id into db;
+  insert into public.cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256) values (ta, 'correo', 'pdf_texto', 'a.pdf', 1, repeat('a', 64)) returning id into da;
+  insert into public.cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256) values (tb, 'correo', 'pdf_texto', 'b.pdf', 1, repeat('b', 64)) returning id into db;
   insert into public.cp_envio_tms (tenant_id, documento_id, version_doc, idempotency_key) values (ta, da, 1, 'llave-sintetica-a') returning id into ea;
   insert into public.cp_envio_tms (tenant_id, documento_id, version_doc, idempotency_key) values (tb, db, 1, 'llave-sintetica-b') returning id into eb;
   create temp table datos_0794 on commit drop as select ta, tb, da, db, ea, eb;
