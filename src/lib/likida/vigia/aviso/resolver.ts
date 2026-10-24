@@ -8,7 +8,7 @@
 //    el catálogo → `unidad_no_registrada`. Cada hueco queda en `faltantes`.
 //  - El `clienteId` sale de la tabla de alias de ESTA flota (`deps.aliasDe`), nunca del texto. Toda fila que regrese una
 //    dependencia con otra `tenantId` se descarta (un cliente, contacto, unidad u operador de otra flota «no existe»).
-//  - Operador (A37-INN-A4-05): primero lo CAPTURADO A MANO para la fila (completado con el catálogo si trae `operadorId`); el del
+//  - Operador (A37-A4-05): primero lo CAPTURADO A MANO para la fila (completado con el catálogo si trae `operadorId`); el del
 //    viaje abierto de la unidad (sistema) solo si ese viaje corresponde al SERVICIO de la fila (mismo REQUE, o misma fecha si
 //    no hay REQUE). Cada dato lleva su `fuente`.
 //  - Caja: el número sale de la fila; placas y estado, de lo capturado a mano para la fila y si no del catálogo de cajas.
@@ -55,7 +55,7 @@ export interface OperadorDato {
   /** 52 + 10 dígitos. */
   telefono: string | null;
   /**
-   * A37-INN-A4-05: de QUÉ servicio es el viaje abierto de la unidad (su fecha AAAA-MM-DD y su REQUE). Sin esto el operador del
+   * A37-A4-05: de QUÉ servicio es el viaje abierto de la unidad (su fecha AAAA-MM-DD y su REQUE). Sin esto el operador del
    * sistema NO se usa: una unidad hace un servicio distinto cada día y el aviso del servicio B no puede nombrar al operador
    * del servicio A. El implementador del conector debe llenarlo con los datos del despacho/viaje que ya trae.
    */

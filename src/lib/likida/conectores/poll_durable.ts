@@ -88,7 +88,7 @@ export async function procesarPollsEnPool<R>(
       await correr(reclamadas[0]);
     }
   };
-  const obreros = await Promise.allSettled(Array.from({ length: ancho }, obrero));
+  const obreros = await Promise.allSettled(new Array(ancho).fill(0).map(() => obrero()));
   const caida = obreros.find((o): o is PromiseRejectedResult => o.status === 'rejected');
   if (caida && salida.length === 0 && !degradado) throw caida.reason;
   if (caida) logger.error('poll.reclamo_fallo', { recurso, error: caida.reason instanceof Error ? caida.reason.message : String(caida.reason) });

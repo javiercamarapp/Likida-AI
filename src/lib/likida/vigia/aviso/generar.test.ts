@@ -130,7 +130,7 @@ describe('generarAvisos · fila lista', () => {
     expect(a.motivo).toContain('proxy');
   });
 
-  it('A37-INN-A4-05: el operador del viaje abierto de la unidad de OTRO día no se nombra en el aviso de este servicio', async () => {
+  it('A37-A4-05: el operador del viaje abierto de la unidad de OTRO día no se nombra en el aviso de este servicio', async () => {
     const m = armar([fila({ fecha: '2026-10-06' })]);
     await generarAvisos(T1, AHORA, m.deps);
     expect(m.avisos[0].texto).not.toContain('Operador Sintético');

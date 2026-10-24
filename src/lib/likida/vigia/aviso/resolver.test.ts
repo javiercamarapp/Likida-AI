@@ -205,7 +205,7 @@ describe('resolverFila — caja', () => {
 });
 
 describe('resolverFila — operador', () => {
-  it('A37-INN-A4-05: lo capturado a mano para la fila GANA sobre el viaje abierto de la unidad', async () => {
+  it('A37-A4-05: lo capturado a mano para la fila GANA sobre el viaje abierto de la unidad', async () => {
     const r = await resolverFila(fila(), deps({
       unidades: [unidad()], operadores: { 'u-1': opSistema }, manual: [manual({ operadorNombre: 'Otro Operador' })],
     }));
@@ -215,7 +215,7 @@ describe('resolverFila — operador', () => {
     const r = await resolverFila(fila(), deps({ unidades: [unidad()], operadores: { 'u-1': opSistema } }));
     expect(r.operador).toMatchObject({ nombre: 'Operador Sintético', fuente: 'sistema' });
   });
-  it('A37-INN-A4-05: el viaje abierto de OTRO servicio (otro REQUE o otra fecha, o sin dato de servicio) NO se nombra', async () => {
+  it('A37-A4-05: el viaje abierto de OTRO servicio (otro REQUE o otra fecha, o sin dato de servicio) NO se nombra', async () => {
     for (const servicio of [{ fecha: '2026-10-05', reque: 'RQ-999' }, { fecha: '2026-10-04', reque: null }, undefined]) {
       const r = await resolverFila(fila(), deps({ unidades: [unidad()], operadores: { 'u-1': { ...opSistema, servicio } } }));
       expect(r.operador).toBeNull();
