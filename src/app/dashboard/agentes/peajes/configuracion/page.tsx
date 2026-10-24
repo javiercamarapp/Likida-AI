@@ -33,7 +33,7 @@ import { secretoMaestro, claveDeFlota, reintentarArchivoPeaje } from '@/lib/liki
 import { cofreConfigurado } from '@/lib/likida/conectores/cofre';
 import { direccionPj } from '@/lib/likida/peajes/correo_entrante';
 import { dominioBuzon } from '@/lib/correo/buzon';
-import { parsearImporteMx } from '@/lib/formato';
+import { parsearImporteMx, parsearCoordenadaMx } from '@/lib/formato';
 import { superficiePeajesDeTenant, MOTIVO_STAND_BY_PERFIL } from '@/lib/likida/peajes/superficie_perfil';
 import { VistaConfiguracionPeajes } from './vista';
 
@@ -267,10 +267,13 @@ export default async function PaginaConfiguracionPeajes({
     'use server';
     const no = await puertaStandBy(tenantId, 'gps');
     if (no) volverConfig(sufijo, `error:${no}`);
+    // La coordenada va con SIGNO (México entero está en longitud negativa), así que no
+    // puede leerse con el parser de dinero; el radio en metros sí es un número sin signo.
+    const coord = (k: string) => parsearCoordenadaMx(String(fd.get(k) ?? ''));
     const num = (k: string) => parsearImporteMx(String(fd.get(k) ?? ''));
     const r = await guardarGeocerca(tenantId, {
       nombre: String(fd.get('nombre') ?? ''), tipo: String(fd.get('tipo') ?? ''),
-      lat: num('lat'), lng: num('lng'), radioM: num('radio_m'),
+      lat: coord('lat'), lng: coord('lng'), radioM: num('radio_m'),
     });
     volverConfig(sufijo, r.ok ? 'Geocerca guardada.' : `error:${r.motivo}`);
   }

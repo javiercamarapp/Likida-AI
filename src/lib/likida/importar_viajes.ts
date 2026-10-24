@@ -700,6 +700,26 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
       data = filasOk as typeof data;
       error = otroError;
     }
+    // A35-BE-07: lo que YA entró se cuenta y se le activa el seguimiento ANTES de
+    // decidir si el lote falló. En el reintento fila por fila de arriba una fila
+    // puede tronar por OTRA causa con viajes ya insertados: el `return` de abajo
+    // salía con `creados` sin ellos —el acuse decía «Se crearon 0» con viajes en
+    // la base— y sin avisarle a ningún chofer. El comentario del reintento ya
+    // prometía esta conducta; el orden de las líneas la desmentía. En el camino
+    // de error de siempre `data` viene vacío, así que esto suma 0 y no toca nada.
+    const insertados = new Set((data ?? []).map((v) => String(v.folio)));
+    creados += insertados.size;
+    const idsNuevos = (data ?? []).map((v) => (v as { id?: unknown }).id).filter((x): x is string => typeof x === 'string' && x !== '');
+    if (idsNuevos.length > 0 && !seg.noDisponible) {
+      seg.intentado = true;
+      const acepto = await aceptarViajesImportados(tenantId, idsNuevos);
+      if (acepto.ok) {
+        seg.activados += acepto.aceptados;
+        seg.omitidos += idsNuevos.length - acepto.aceptados;
+      } else {
+        seg.noDisponible = true;
+      }
+    }
     if (error) {
       logger.error('importar_viajes.lote_fallo', { tenantId, desde: i, err: error.message });
       return {
@@ -712,21 +732,8 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
         error: `Se crearon ${creados} y el lote que empieza en la fila ${i + 1} falló — revisa y vuelve a subir el archivo: los ya creados se saltan solos.`,
       };
     }
-    const insertados = new Set((data ?? []).map((v) => String(v.folio)));
-    creados += insertados.size;
     for (const fila of lote) {
       if (!insertados.has(fila.folio) && !unidadOcupada.includes(fila.folio)) saltados.push(fila.folio);
-    }
-    const idsNuevos = (data ?? []).map((v) => (v as { id?: unknown }).id).filter((x): x is string => typeof x === 'string' && x !== '');
-    if (idsNuevos.length > 0 && !seg.noDisponible) {
-      seg.intentado = true;
-      const acepto = await aceptarViajesImportados(tenantId, idsNuevos);
-      if (acepto.ok) {
-        seg.activados += acepto.aceptados;
-        seg.omitidos += idsNuevos.length - acepto.aceptados;
-      } else {
-        seg.noDisponible = true;
-      }
     }
   }
 

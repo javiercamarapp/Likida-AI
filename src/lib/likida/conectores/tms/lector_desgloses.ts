@@ -62,8 +62,19 @@ export function crearLectorDesglosesTms(o: OpcionesLectorTms): LectorDesglosesPu
       if (!Array.isArray(items)) throw new TmsNoDisponible('La respuesta del sistema de transporte no trae la lista esperada');
       crudas.push(...items);
       const total = Number(cuerpo ? leerRuta(cuerpo, cfg.rutaTotalPaginas) : undefined);
-      if (!Number.isFinite(total) || pagina >= total || items.length === 0) {
+      if (items.length === 0 || (Number.isFinite(total) && pagina >= total)) {
         return crudas.map((c) => aEntrada(c, cfg));
+      }
+      // A35-BE-02: sin `total_paginas`, `Number(undefined)` es NaN. Antes esa NaN
+      // caía en el `return` de arriba y declaraba COMPLETA la lectura de la página
+      // 1: el pull avanzaba el cursor por encima de lo que nunca leyó y el cron
+      // reportaba `ok`, así que una flota con más de `cfg.tamano` nóminas en la
+      // ventana perdía el resto EN SILENCIO. Una página CORTA sí es el final (el
+      // TMS no tiene más que dar); una página LLENA sin total no se puede declarar
+      // completa, y se falla cerrado igual que el tope de páginas de abajo.
+      if (!Number.isFinite(total)) {
+        if (items.length < cfg.tamano) return crudas.map((c) => aEntrada(c, cfg));
+        throw new TmsNoDisponible('La respuesta del sistema de transporte no trae el total de páginas');
       }
     }
     // Más páginas que el tope: no se declara completa una lectura que no lo es (el cursor no avanza).

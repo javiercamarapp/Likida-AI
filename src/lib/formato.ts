@@ -513,3 +513,25 @@ export function parsearImporteMx(texto: string): number {
   const n = Number(normal);
   return Number.isFinite(n) ? n : NaN;
 }
+
+/**
+ * Una COORDENADA tecleada: el mismo rigor que un importe, pero con signo.
+ *
+ * `parsearImporteMx` rechaza el `-` a propósito —es un parser de dinero, y su
+ * contrato lo dice: «Sin signo»— y eso es correcto para dinero. Pero México
+ * entero está al oeste de Greenwich: toda longitud del país es NEGATIVA. Leer
+ * `lat`/`lng` con el parser de dinero devuelve NaN para cualquier coordenada
+ * mexicana, y el formulario que la captura se vuelve imposible de guardar.
+ *
+ * Acepta un `-` al frente y delega el resto en `parsearImporteMx`, para que la
+ * magnitud se lea con exactamente las mismas reglas (y la misma negativa a
+ * adivinar lo ambiguo). Devuelve NaN si no es un número claro; quien llama ya
+ * rechaza NaN y acota el rango.
+ */
+export function parsearCoordenadaMx(texto: string): number {
+  const t = String(texto).trim();
+  const negativa = t.startsWith('-');
+  const magnitud = parsearImporteMx(negativa ? t.slice(1) : t);
+  if (!Number.isFinite(magnitud)) return NaN;
+  return negativa ? -magnitud : magnitud;
+}

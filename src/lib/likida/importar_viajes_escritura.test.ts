@@ -41,6 +41,10 @@ let paginasLectura: Array<Array<{ folio: string }>>;
 let catalogoUnidades: Array<{ id: string; numero_economico: string }>;
 let catalogoClientes: Array<{ id: string; nombre: string }>;
 let catalogoError: { message: string } | null;
+/** A35-BE-07: un folio que truena por OTRA causa (no el índice de la unidad)
+ *  — p.ej. un corte de conexión — para ejercer el reintento fila por fila
+ *  cuando YA entraron viajes. */
+let folioErrorOtro: string | null;
 /** El catálogo de OPERADORES, que desde FE-15 se lee UNA vez por corrida.
  *  Va aparte de unidad/cliente porque su error es otro caso: sin operadores
  *  legibles no se importa NADA, aunque el archivo no traiga unidad ni cliente. */
@@ -145,18 +149,27 @@ function fromViaje() {
         select: () => {
           llamadasUpsert++;
           lotesUpsert.push(lote);
-          if (lote.some((f) => f.operador_id == null)) {
-            return Promise.resolve({
-              data: null,
-              error: { code: '23502', message: 'null value in column "operador_id" of relation "viaje" violates not-null constraint' },
-            });
-          }
-          const choque = lote.find((f) => f.unidad_id && unidadesOcupadasEnCarrera.has(f.unidad_id));
-          if (choque) {
-            return Promise.resolve({
-              data: null,
-              error: { code: '23505', message: 'duplicate key value violates unique constraint "uq_viaje_abierto_por_unidad"' },
-            });
+          // Como Postgres: la PRIMERA fila ofensora EN EL ORDEN del lote decide qué
+          // restricción truena. Antes el NOT NULL se evaluaba sobre el lote entero
+          // primero, y eso volvía irreproducible el caso de A35-BE-07 (el lote choca
+          // con el índice de la unidad y SOLO DESPUÉS, fila por fila, otra fila
+          // truena por otra causa).
+          for (const f of lote) {
+            if (f.operador_id == null) {
+              return Promise.resolve({
+                data: null,
+                error: { code: '23502', message: 'null value in column "operador_id" of relation "viaje" violates not-null constraint' },
+              });
+            }
+            if (f.unidad_id && unidadesOcupadasEnCarrera.has(f.unidad_id)) {
+              return Promise.resolve({
+                data: null,
+                error: { code: '23505', message: 'duplicate key value violates unique constraint "uq_viaje_abierto_por_unidad"' },
+              });
+            }
+            if (folioErrorOtro && f.folio === folioErrorOtro) {
+              return Promise.resolve({ data: null, error: { code: '08006', message: 'connection failure' } });
+            }
           }
           const insertadas = lote.filter((f) => !enBase.has(f.folio));
           insertadas.forEach((f) => enBase.add(f.folio));
@@ -213,6 +226,7 @@ beforeEach(() => {
   rpcError = null;
   rpc.mockClear();
   resolver.mockClear();
+  folioErrorOtro = null;
   logger.error.mockClear();
 });
 
@@ -335,6 +349,21 @@ describe('DAT-34-2: uq_viaje_abierto_por_unidad (0851) rechaza UNA fila, no el l
     expect(r.unidadOcupada).toEqual(['V-1']);
     expect(r.saltados).toEqual([]); // no es «el folio ya existía»
     expect([...enBase].sort()).toEqual(['V-2', 'V-3']);
+  });
+
+  it('A35-BE-07: si otra fila truena por otra causa, el acuse cuenta los viajes que SÍ entraron', async () => {
+    // El lote choca con `uq_viaje_abierto_por_unidad` (V-1) → reintento fila por
+    // fila: V-2 entra y V-3 truena por otra causa (conexión). Antes, el `return`
+    // del lote fallido salía con `creados` SIN contar a V-2: el acuse decía
+    // «Se crearon 0» con un viaje ya en la base y sin activarle el seguimiento,
+    // justo lo contrario de lo que promete el comentario del propio reintento.
+    unidadesOcupadasEnCarrera = new Set(['u-1']);
+    folioErrorOtro = 'V-3';
+    const r = await importarViajes('t1', [conUnidad('V-1', 'T-1'), conUnidad('V-2', 'T-2'), fila('V-3')]);
+    expect([...enBase]).toEqual(['V-2']);       // V-2 está en la base de verdad
+    expect(r.creados).toBe(1);                   // y el acuse lo cuenta
+    expect(r.error).toMatch(/Se crearon 1\b/);  // la cifra que lee el contralor
+    expect(r.unidadOcupada).toEqual(['V-1']);
   });
 
   it('solo el 23505 del índice de la unidad cuenta como choque de unidad: el folio, el operador y otros códigos siguen siendo falla del lote', async () => {
