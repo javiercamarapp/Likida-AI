@@ -92,7 +92,18 @@ describe('getPorFacturar — cursor (fecha, id), no offset (ronda 16)', () => {
     expect(r).toHaveLength(2_600);
     expect(new Set(r.map((t) => t.gastoId)).size).toBe(2_600);
     expect(offsets, 'ningún range(desde>0)').toEqual([]);
-    expect(paginasServidas).toBe(3);
+    // 3 páginas por (fecha, id) + 1 consulta aparte de los gastos SIN fecha legible (A37-S43-05).
+    expect(paginasServidas).toBe(4);
+  });
+
+  it('A37-S43-05: un gasto con fecha ilegible (NULL) SÍ aparece, marcado «desconocido», en vez de desaparecer', async () => {
+    tabla.push(gasto(5, { fecha: '2026-08-12' }), gasto(6, { fecha: null, created_at: '2026-08-20' }),
+      gasto(7, { fecha: null, created_at: '2026-01-01' }));   // este entró fuera de la ventana: no cuenta
+    const r = await getPorFacturar('t1', '2026-08-22');
+    expect(r).toHaveLength(2);
+    const sin = r.filter((t) => t.fecha === null);
+    expect(sin).toHaveLength(1);
+    expect(sin[0].caducidad.desconocido).toBe(true);
   });
 
   it('conserva el orden de la pantalla: fecha ascendente y, a igual fecha, por id', async () => {

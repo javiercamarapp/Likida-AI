@@ -97,12 +97,16 @@ export function armarAviso(
   const paraPersona = [
     ...mensajes.map((x) => x.t),
     ...incompletos.filter((x) => !x.t.caducidad.vencido && !x.t.caducidad.desconocido).map((x) => x.t),
-  ];
+  // A37-S43-06: lo que se factura MENSUAL contra la cuenta (TAG de peaje) no es un
+  // comprobante «sin factura» que la persona pueda resolver: inflaba el conteo.
+  ].filter((t) => t.comercio?.noAutomatizable?.razon !== 'factura_mensual_por_cuenta');
 
   if (paraPersona.length === 0) return { texto: '', cuantos: 0, ids: [] };
 
   // Lo que vence primero, arriba. Es lo único con remedio.
-  const orden = [...paraPersona].sort((a, b) => a.caducidad.diasRestantes - b.caducidad.diasRestantes);
+  // Los de fecha ilegible no tienen plazo que correr: van al final (A37-S43-05).
+  const urgencia = (t: TicketPorFacturar) => (t.caducidad.desconocido ? Number.POSITIVE_INFINITY : t.caducidad.diasRestantes);
+  const orden = [...paraPersona].sort((a, b) => urgencia(a) - urgencia(b));
 
   const urgentes = orden.filter((t) => t.caducidad.urgente);
   const lineas: string[] = [];
@@ -123,7 +127,9 @@ export function armarAviso(
       lineas.push(mensajeParaEncargado(t, r));
     } else {
       const falta = r.via === 'incompleto' ? r.falta.join('; ') : '';
-      const dias = t.caducidad.urgente
+      const dias = t.caducidad.desconocido
+        ? 'sin fecha legible'
+        : t.caducidad.urgente
         ? (t.caducidad.diasRestantes === 0 ? '⚠️ VENCE HOY' : `⚠️ ${t.caducidad.diasRestantes} día(s)`)
         : `${t.caducidad.diasRestantes} días`;
       lineas.push(`${t.concepto} — ${dias}${falta ? ` · falta: ${falta}` : ''}`);

@@ -1,10 +1,10 @@
-import { traerTodoPorLlave, llaveFechaId, despuesDeFechaId, PAGINA, type LlaveFechaId } from '../pg';
+import { traerTodoPorLlave, traerTodoDesdeId, llaveFechaId, despuesDeFechaId, PAGINA, type LlaveFechaId } from '../pg';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { hoyMx } from '@/lib/formato';
 import { identificarComercio, hostnameDeConfianza } from './identificar';
 import { calcularCaducidad, type Caducidad } from './caducidad';
-import type { Comercio, ClaveCampo } from './comercios';
+import type { Comercio, ClaveCampo, RestriccionCampo, RazonNoAutomatizable } from './comercios';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // QUÉ TICKETS FALTAN POR FACTURAR, Y CUÁNTO LES QUEDA.
@@ -53,6 +53,10 @@ export interface TicketPorFacturar {
      *  `enrutar` tiene que devolverlo como incompleto ANTES de meter ese
      *  vacío en un mensaje de WhatsApp o en `pagina.abrir()`. */
     portalPendiente?: true;
+    /** A37-S43-06: la ficha dice por qué la máquina NUNCA lo va a operar
+     *  (`sin_tls`, `muro_anti_bot`, `factura_mensual_por_cuenta`). `enrutar`
+     *  y el aviso lo leen para no dar una explicación falsa. */
+    noAutomatizable?: { razon: RazonNoAutomatizable; nota: string };
   } | null;
   /** Los campos que ese portal pide, ya con su valor. */
   campos: CampoListo[];
@@ -101,6 +105,20 @@ function valorDe(clave: ClaveCampo, g: FilaGasto): string | null {
       return null;
     default: return null;
   }
+}
+
+/** Las claves que, antes, salían todas del mismo `gasto.folio`. */
+const CLAVES_DE_FOLIO: ReadonlySet<string> = new Set(['folio', 'numeroTicket', 'referencia', 'codigo', 'transaccion']);
+
+/** ¿El valor cabe en el campo del portal? (largo, solo dígitos, patrón). */
+export function cumpleRestriccion(valor: string, r: RestriccionCampo): boolean {
+  if (r.largoMin !== undefined && valor.length < r.largoMin) return false;
+  if (r.largoMax !== undefined && valor.length > r.largoMax) return false;
+  if (r.soloDigitos && !/^\d+$/.test(valor)) return false;
+  if (r.patron) {
+    try { if (!new RegExp(r.patron).test(valor)) return false; } catch { /* patrón roto en el catálogo: no se impone */ }
+  }
+  return true;
 }
 
 interface FilaGasto {
@@ -190,7 +208,31 @@ export async function getPorFacturar(
     (f) => llaveFechaId({ fecha: f.fecha, id: f.id }),
     'getPorFacturar',
   );
-  return filas.map((g) => armar(g, hoy));
+  // A37-S43-05: los gastos SIN fecha legible (el OCR no la leyó) no entran a la
+  // consulta de arriba —`.gte('fecha', …)` excluye NULL— y desaparecían de la
+  // pantalla, del aviso y del resumen: nadie los veía y el ticket se perdía en
+  // silencio. Se leen aparte (cursor por `id`, acotados por la fecha en que
+  // entraron) y `armar` los marca `caducidad.desconocido`, el estado que hasta
+  // hoy era código muerto.
+  const sinFecha = await traerTodoDesdeId<FilaGasto>(
+    (despuesDe) => {
+      let q = supabaseAdmin()
+        .from('gasto')
+        .select(
+          'id, concepto, monto, fecha, folio, rfc_emisor, cfdi_uuid, ocr_extra, autofactura_bloqueada_en, autofactura_bloqueo',
+          despuesDe === null ? { count: 'exact' as const } : {},
+        )
+        .eq('tenant_id', tenantId)
+        .is('cfdi_uuid', null)
+        .is('fecha', null)
+        .gte('created_at', fechaMinima)
+        .neq('concepto', 'factura');
+      if (despuesDe !== null) q = q.gt('id', despuesDe);
+      return q.order('id', { ascending: true }).limit(PAGINA);
+    },
+    'getPorFacturar.sin_fecha',
+  );
+  return [...filas, ...sinFecha].map((g) => armar(g, hoy));
 }
 
 /** El folio fiscal (UUID) de un CFDI, como lo imprime el portal: 36
@@ -287,12 +329,28 @@ export function armar(g: FilaGasto, hoy: string): TicketPorFacturar {
     hoy,
   });
 
-  const campos: CampoListo[] = (c?.campos ?? []).map((campo) => ({
-    clave: campo.clave,
-    etiqueta: campo.etiquetaPortal,
-    valor: valorDe(campo.clave, g),
-    requerido: campo.requerido,
-  }));
+  // A37-S43-03: UN folio alimenta UNA sola clave por comercio (la primera que
+  // el catálogo declara). Antes `folio`, `numeroTicket`, `referencia`, `codigo`
+  // y `transaccion` salían todas del mismo `g.folio`: un ticket OXXO con un
+  // solo folio quedaba «completo» y el encargado recibía «ID de venta: <folio>»,
+  // un dato inventado. Las demás claves solo se llenan si el OCR las extrajo
+  // aparte (`ocr_extra[clave]`); si no, quedan vacías y el ticket se dice
+  // incompleto en vez de teclear un valor que el portal va a rechazar.
+  let folioUsado = false;
+  const campos: CampoListo[] = (c?.campos ?? []).map((campo) => {
+    let valor: string | null;
+    if (CLAVES_DE_FOLIO.has(campo.clave)) {
+      const propio = extra[campo.clave];
+      if (!folioUsado) { valor = valorDe(campo.clave, g); folioUsado = true; }
+      else valor = propio === null || propio === undefined || propio === '' ? null : String(propio);
+    } else {
+      valor = valorDe(campo.clave, g);
+    }
+    // A37-S43-03: la restricción del portal (largo, solo dígitos, patrón) es un
+    // validador gratis; un valor que no cabe en el campo no se manda.
+    if (valor !== null && campo.restriccion && !cumpleRestriccion(valor, campo.restriccion)) valor = null;
+    return { clave: campo.clave, etiqueta: campo.etiquetaPortal, valor, requerido: campo.requerido };
+  });
 
   return {
     gastoId: g.id,
@@ -305,6 +363,7 @@ export function armar(g: FilaGasto, hoy: string): TicketPorFacturar {
       ? {
           clave: c.clave, nombre: c.nombre, portal: c.portal, requiereCuenta: c.requiereCuenta,
           ...(c.portalPendiente ? { portalPendiente: true as const } : {}),
+          ...(c.noAutomatizable ? { noAutomatizable: { razon: c.noAutomatizable.razon, nota: c.noAutomatizable.nota } } : {}),
         }
       : null,
     campos,
