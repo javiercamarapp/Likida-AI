@@ -53,6 +53,7 @@ function constructor(tabla: string) {
     lte: () => b,
     is: () => b,
     not: () => b,
+    neq: () => b,
     rpc: (r: string): Promise<{ data: unknown; error: null }> => r.startsWith('resumen_documentos')
       ? Promise.resolve({ data: { procesados: 2, porMes: [{ mes: '2026-08', n: 2 }] }, error: null })
       : Promise.resolve({ data: null, error: null }),
