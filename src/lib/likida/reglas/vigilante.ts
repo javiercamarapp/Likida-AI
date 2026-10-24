@@ -136,6 +136,33 @@ async function correrRegla(regla: ReglaGuardada, ahora: Date): Promise<Resultado
     return { avisados: 0, diferida: true };
   }
 
+  // ── LO QUE ES DE LIKIDA NO SE LE MANDA A LA FLOTA (A37-S56-09) ─────────────
+  // Una plantilla `soloAdmin` (hoy `costo_ia_dia_mayor_a`) mide cifras INTERNAS
+  // de la plataforma —el gasto de modelo es de Likida—. `telefonoParaDineroDe`
+  // resuelve al dueño o contador de la flota CLIENTE: mandarle ahí el desglose
+  // por fase en USD expone costos de plataforma. Fail-closed: nunca se toca el
+  // teléfono de la flota; el aviso va a la alerta interna del operador de
+  // Likida y solo se sella si esa alerta SALIÓ (si no, se reintenta a la hora
+  // siguiente; el piso de una hora por evento evita el ruido).
+  if (plantilla.soloAdmin) {
+    const { alertarOperador } = await import('@/lib/observability/alerta');
+    const salio = await alertarOperador(`reglas.${regla.plantilla}`, {
+      flota: regla.tenantId,
+      regla: regla.id,
+      casos: nuevos.length,
+      detalle: mensajeDeRegla(regla.frase, nuevos.map((d) => d.evidencia)),
+    });
+    if (!salio) {
+      logger.warn('reglas.solo_admin_sin_alerta', { regla: regla.id, tenant: regla.tenantId, plantilla: regla.plantilla, casos: nuevos.length });
+      await anotarCorrida(regla.tenantId, regla.id, ahora, 0);
+      return { avisados: 0, diferida: true };
+    }
+    await sellarDisparos(regla.tenantId, regla.id, nuevos);
+    await anotarCorrida(regla.tenantId, regla.id, ahora, nuevos.length);
+    logger.info('reglas.disparo_interno', { regla: regla.id, tenant: regla.tenantId, plantilla: regla.plantilla, casos: nuevos.length });
+    return { avisados: nuevos.length, diferida: false };
+  }
+
   const telefono = plantilla.canal === 'dinero'
     ? await telefonoParaDineroDe(regla.tenantId)
     : await telefonoJefeDe(regla.tenantId);
