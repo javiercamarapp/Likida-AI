@@ -63,7 +63,7 @@ const contacto: Contacto = {
   id: 'ct-1', tenantId: T1, clienteId: C1, telefono: '5252899900001', nombre: 'Contacto Uno', gerenteUserId: null,
   estado: 'activo', consentimientoEn: '2026-09-01T00:00:00Z', optoutEn: null, avisoPrivacidadEn: null,
 };
-const operador: OperadorDato = { tenantId: T1, nombre: 'Operador Sintético', licencia: 'LIC-0001', licenciaVence: '2027-03-01', telefono: '5252899900009' };
+const operador: OperadorDato = { tenantId: T1, nombre: 'Operador Sintético', licencia: 'LIC-0001', licenciaVence: '2027-03-01', telefono: '5252899900009', servicio: { fecha: '2026-10-05', reque: null } };
 
 function resolver(o: { conCliente?: boolean; tenantId?: string } = {}): DepsResolver {
   const conCliente = o.conCliente ?? true;
@@ -128,6 +128,12 @@ describe('generarAvisos · fila lista', () => {
     expect(a.texto).toContain('Operador: Operador Sintético');
     expect(a.huella).toMatch(/^[0-9a-f]{64}$/);
     expect(a.motivo).toContain('proxy');
+  });
+
+  it('A37-INN-A4-05: el operador del viaje abierto de la unidad de OTRO día no se nombra en el aviso de este servicio', async () => {
+    const m = armar([fila({ fecha: '2026-10-06' })]);
+    await generarAvisos(T1, AHORA, m.deps);
+    expect(m.avisos[0].texto).not.toContain('Operador Sintético');
   });
 
   it('licencia y teléfono del operador no entran al texto ni a los datos (política por defecto)', async () => {

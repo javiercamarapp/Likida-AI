@@ -111,6 +111,7 @@ function mundo(opciones: { config?: Partial<ConfigAviso> | null; params?: Parame
     cajaPorNumero: async (num) => ({ tenantId: T1, numero: num, placas: 'BBB-222', estado: 'cargada' }),
     operadorDeUnidad: async (): Promise<OperadorDato> => ({
       tenantId: T1, nombre: operadorNombre, licencia: 'LIC-0001', licenciaVence: '2027-03-01', telefono: '5252899900009',
+      servicio: { fecha: '2026-10-05', reque: null },
     }),
     datoManual: async () => null,
   });
