@@ -64,6 +64,8 @@ let saturaPorPath: Map<string, number>;
  *  para ejercitar los sitios `…t2` de `processInbound`. Se apaga sola tras
  *  el primer uso: sólo el PRIMER «listo» de la corrida falla. */
 let simularReintentoCierre: boolean;
+/** A37-S23-04: tabla cuyo INSERT debe fallar (siembra a medias). */
+let fallaInsertEn: string | null = null;
 
 /** Las restricciones que la 0185 y la 0240 declaran, respetadas por el doble. */
 const UNICO: Record<string, string[]> = {
@@ -87,6 +89,7 @@ const llaveDe = (tabla: string, f: Fila) => (UNICO[tabla] ?? ['id']).map((c) => 
 type Insercion = { error: ErrPg; fila: Fila | null };
 
 function insertarFila(tabla: string, f: Fila): Insercion {
+  if (fallaInsertEn === tabla) return { error: { message: `fallo simulado en ${tabla}` }, fila: null };
   const fila = { ...f };
   if (fila.id === undefined && !UNICO[tabla]) fila.id = `${tabla}-${++seq}`;
   if (tabla === 'qa_corrida') {
@@ -398,6 +401,7 @@ beforeEach(() => {
   clientesPedidos = 0;
   saturaPorPath = new Map();
   simularReintentoCierre = false;
+  fallaInsertEn = null;
 });
 
 afterEach(() => {
@@ -541,6 +545,35 @@ describe('91 fotos, un reloj que no alcanza: corta, cuenta, guarda y CONTINÚA',
     expect(extra.corrio).toBe(false);
     expect(extra.motivo).toContain('ya terminó');
     expect(enviados).toHaveLength(envios);   // ni un envío más
+  });
+});
+
+describe('A37-S23-04 — una siembra a medias no deja un tenant ZZZ huérfano', () => {
+  test('si falla un paso posterior al tenant (la unidad), la corrida RECUERDA el tenant y la limpieza lo borra', async () => {
+    const { corrida } = await nacer(2);
+    fallaInsertEn = 'unidad';
+    const r = await ejecutarPasada(corrida.id, Date.now() + 200_000);
+    expect(r.ok).toBe(true);
+
+    const leida = await leerCorrida(dbFalsa(), corrida.id);
+    expect(leida.ok).toBe(true);
+    if (!leida.ok || !leida.datos) return;
+    expect(leida.datos.estado).toBe('fallo');
+    expect(leida.datos.motivo).toMatch(/la siembra falló/);
+    // Antes: tenantId null y limpieza «sin tenant que limpiar (la siembra no llegó a crear uno)» — falso.
+    expect(leida.datos.tenantId).not.toBeNull();
+    expect(leida.datos.limpieza ?? '').not.toMatch(/sin tenant que limpiar/);
+    // y el tenant sintético ya no está en la base (modo borrar en el camino de fallo)
+    expect((tablas.tenant ?? []).filter((t) => String(t.nombre).startsWith('ZZZ '))).toHaveLength(0);
+  });
+
+  test('si falla el INSERT del propio tenant NO hay tenant que limpiar y se dice (eso sí es verdad)', async () => {
+    const { corrida } = await nacer(2);
+    fallaInsertEn = 'tenant';
+    await ejecutarPasada(corrida.id, Date.now() + 200_000);
+    const leida = await leerCorrida(dbFalsa(), corrida.id);
+    expect(leida.ok && leida.datos?.tenantId).toBeNull();
+    expect(leida.ok && leida.datos?.limpieza).toMatch(/sin tenant que limpiar/);
   });
 });
 

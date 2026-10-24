@@ -315,6 +315,11 @@ async function sembrarTenant(db: SupabaseClient, corrida: CorridaQA): Promise<{
     config: { politica: p.politica },
   });
   if (ins.error) throw new Error(`no se pudo sembrar el tenant QA: ${ins.error.message}`);
+  // A37-S23-04: el tenant YA existe en la base. Si un paso posterior (operador,
+  // aviso, unidad, viaje) truena, el llamador limpia por `corrida.tenantId`; con
+  // él en null la limpieza decía «la siembra no llegó a crear uno» (falso) y
+  // quedaba un tenant ZZZ huérfano que el panel de negocio oculta por el prefijo.
+  corrida.tenantId = tenantId;
 
   const chofer1 = await sembrarChofer(db, tenantId, corrida, 0);
 
