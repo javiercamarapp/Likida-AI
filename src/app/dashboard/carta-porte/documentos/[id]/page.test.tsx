@@ -270,3 +270,16 @@ it('sin perfil la página no cambia: perfilRestringido falso y «viaje» sigue f
   const props = (await montar()).props as unknown as { perfilRestringido: boolean };
   expect(props.perfilRestringido).toBe(false);
 });
+
+it('A37-A3-18: un documento aprobado SIN envío se puede preparar desde su pantalla (e idempotente)', async () => {
+  sembrarDoc({ estado: 'aprobado', aprobadoEn: '2026-10-02T00:00:00.000Z', version: 5 });
+  fijarGuardiaPerfil(async () => true);
+  const p = await montar();
+  expect(p.props.envio).toBeNull();
+  expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: '4', intencion: 'preparar_envio' }))).toMatchObject({ ok: false, error: expect.stringMatching(/Otra persona cambió/) });
+  expect(estado.envios).toHaveLength(0);
+  expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: '5', intencion: 'preparar_envio' }))).toMatchObject({ ok: true, mensaje: expect.stringMatching(/Envío preparado/) });
+  expect(estado.envios).toHaveLength(1);
+  expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: '5', intencion: 'preparar_envio' }))).toMatchObject({ ok: true, mensaje: expect.stringMatching(/ya estaba/) });
+  expect(estado.envios).toHaveLength(1);
+});
