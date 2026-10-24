@@ -45,6 +45,8 @@ vi.mock('@/lib/likida/liquidacion_externa/repo', () => ({
 }));
 vi.mock('@/lib/likida/liquidacion_externa/servicio', () => ({
   reintentarLiquidacionExterna: async () => 'reintentada', reenviarCopiaAJefe: async () => ({ estado: 'enviada' }), reavisarDiscrepancia: async () => 'reavisada',
+  // A37-S14-02: la página usa LA MISMA función de canal que la entrega; aquí lee la configuración simulada (sin perfil cinco_agentes).
+  canalDeEntregaPorOmision: async () => { const c = await m.leerConfigCorreo(); return c.ok ? c.valor.canal : 'whatsapp'; },
 }));
 vi.mock('@/lib/likida/liquidacion_externa/reenvio_correo', () => ({ reenviarDesglose: async () => ({ estado: 'reenviado' }) }));
 vi.mock('@/lib/likida/liquidacion_externa/importar_archivo', () => ({ importarLiquidacionesDeArchivo: async () => ({}) }));
