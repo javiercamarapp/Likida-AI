@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // chofer en un parte médico.
 // ═══════════════════════════════════════════════════════════════════════════
 
+const excluidos: Array<[string, string, unknown]> = [];
 const respuestas = new Map<string, Array<{ data?: unknown; error?: { message: string } | null; count?: number }>>();
 function builder(tabla: string) {
   const responder = () => {
@@ -18,7 +19,7 @@ function builder(tabla: string) {
   };
   const b: Record<string, unknown> = {};
   Object.assign(b, {
-    select: () => b, eq: () => b, is: () => b, neq: () => b, not: () => b,
+    select: () => b, eq: () => b, is: () => b, neq: (c: string, v: unknown) => { excluidos.push([tabla, c, v]); return b; }, not: () => b,
     in: () => b, gte: () => b, lt: () => b, order: () => b, limit: () => b, range: () => b,
     maybeSingle: () => b,
     then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) =>
@@ -69,6 +70,7 @@ const LATIDOS_OK = {
 
 beforeEach(() => {
   respuestas.clear();
+  excluidos.length = 0;
   encolar.mockClear();
   encolar.mockResolvedValue('pieza-1');
   registrar.mockClear();
@@ -448,6 +450,29 @@ describe('fundraising: las cifras reales, y la lista de las que no existen', () 
     await correrAgenteDireccionBandeja('fundraising', 'cron', HOY);
     expect(ultimoTitulo()).toBe('Fundraising — parte de 2026-08');
     expect(encolar.mock.calls.at(-1)?.[0]).toMatchObject({ fuentes: expect.objectContaining({ mrr_indeterminado: true }) });
+  });
+
+  it('A37-S26-07: ni las flotas, ni las liquidaciones, ni las suscripciones cuentan la flota demo', async () => {
+    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    respuestas.set('tenant', [{ count: 3, error: null }]);
+    respuestas.set('liquidacion', [{ count: 0, error: null }]);
+    respuestas.set('suscripcion', [{ data: [], error: null }]);
+    respuestas.set('factura_saas', [{ data: [], error: null }]);
+    respuestas.set('prospecto', [{ data: [], error: null }]);
+    await correrAgenteDireccionBandeja('fundraising', 'cron', HOY);
+    const demo = '11111111-1111-1111-1111-111111111111';
+    expect(excluidos).toEqual(expect.arrayContaining([['tenant', 'id', demo], ['liquidacion', 'tenant_id', demo], ['suscripcion', 'tenant_id', demo]]));
+  });
+
+  it('A37-S26-07: unas suscripciones recortadas por PostgREST (más en la base que las leídas) marcan el parte como truncado', async () => {
+    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    respuestas.set('tenant', [{ count: 3, error: null }]);
+    respuestas.set('liquidacion', [{ count: 0, error: null }]);
+    respuestas.set('suscripcion', [{ data: [{ estado: 'activa', plan_clave: 'flota', plan: { precio_mensual: 100 } }], error: null, count: 1500 }]);
+    respuestas.set('factura_saas', [{ data: [], error: null }]);
+    respuestas.set('prospecto', [{ data: [], error: null }]);
+    await correrAgenteDireccionBandeja('fundraising', 'cron', HOY);
+    expect((encolar.mock.calls.at(-1)?.[0] as { cuerpo: string }).cuerpo).toContain('SE TRUNCÓ');
   });
 
   it('un conteo que PostgREST no devuelve es fail-closed, no un cero', async () => {

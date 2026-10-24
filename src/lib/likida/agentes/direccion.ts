@@ -48,6 +48,7 @@ import { INTERRUPTORES } from '../interruptores';
 import { encolarPieza } from './cola';
 import { registrarCorrida, type DisparoCorrida } from './corridas';
 import { logger } from '@/lib/logger';
+import { tenantDemo } from '@/lib/auth/tenant-demo';
 
 export const AGENTES_DIRECCION_BANDEJA = [
   'automejora', 'especialistas_incidente', 'fundraising',
@@ -953,10 +954,12 @@ export function armarParteFundraising(c: CifrasFundraising, mrr: Mrr, mes: strin
 
 /** Conteo exacto de una tabla. LANZA si PostgREST no devuelve el número: un
  *  `?? 0` pintaría un cero que nadie midió. */
-async function contar(tabla: string, etiqueta: string): Promise<number> {
+async function contar(tabla: string, etiqueta: string, columnaTenant: string): Promise<number> {
+  // A37-S26-07: la flota demo (plan demo, sin precio) no es un cliente: no entra al conteo que ve un inversionista.
   const { count, error } = await acotada(supabaseAdmin()
     .from(tabla)
-    .select('id', { count: 'exact', head: true }), etiqueta);
+    .select('id', { count: 'exact', head: true })
+    .neq(columnaTenant, tenantDemo()), etiqueta);
   if (error) throw new Error(`${etiqueta}: ${error.message}`);
   if (typeof count !== 'number') throw new Error(`${etiqueta}: PostgREST no devolvió el conteo — no se afirma un 0 que nadie midió.`);
   return count;
@@ -964,27 +967,32 @@ async function contar(tabla: string, etiqueta: string): Promise<number> {
 
 async function leerCifras(): Promise<CifrasFundraising> {
   const [flotas, liquidaciones, suscripciones, facturas, pipeline] = await Promise.all([
-    contar('tenant', 'direccion.fundraising.flotas'),
-    contar('liquidacion', 'direccion.fundraising.liquidaciones'),
+    contar('tenant', 'direccion.fundraising.flotas', 'id'),
+    contar('liquidacion', 'direccion.fundraising.liquidaciones', 'tenant_id'),
     leerSuscripciones(),
     leerFacturas(),
     leerPipeline(),
   ]);
   return {
-    flotas, liquidaciones, suscripciones,
+    flotas, liquidaciones, suscripciones: suscripciones.suscripciones,
     facturasPagadas: facturas.n, cobradoMxn: facturas.total,
     pipeline: pipeline.etapas,
-    truncado: facturas.truncado || pipeline.truncado,
+    truncado: facturas.truncado || pipeline.truncado || suscripciones.truncado,
   };
 }
 
-async function leerSuscripciones(): Promise<Suscripciones> {
-  const { data, error } = await acotada(supabaseAdmin()
+async function leerSuscripciones(): Promise<{ suscripciones: Suscripciones; truncado: boolean }> {
+  // A37-S26-07: sin la flota demo, y con conteo exacto: PostgREST recorta a `max_rows` sin bandera y un MRR a medias
+  // se cita como si fuera el total.
+  const { data, error, count } = await acotada(supabaseAdmin()
     .from('suscripcion')
-    .select('estado, plan_clave, plan:plan_clave(precio_mensual)')
+    .select('estado, plan_clave, plan:plan_clave(precio_mensual)', { count: 'exact' })
+    .neq('tenant_id', tenantDemo())
+    .order('id')
     .limit(2_000), 'direccion.fundraising.suscripciones');
   if (error) throw new Error(`leerSuscripciones: ${error.message}`);
   const filas = (data ?? []) as Array<Record<string, unknown>>;
+  const truncado = typeof count === 'number' ? count > filas.length : filas.length >= 2_000;
   const porEstado = new Map<string, number>();
   const activas: Array<{ plan: string; precio: number | null }> = [];
   for (const f of filas) {
@@ -1001,9 +1009,12 @@ async function leerSuscripciones(): Promise<Suscripciones> {
     }
   }
   return {
-    porEstado: [...porEstado.entries()].map(([estado, n]) => ({ estado, n }))
-      .sort((a, b) => b.n - a.n || a.estado.localeCompare(b.estado)),
-    activas,
+    suscripciones: {
+      porEstado: [...porEstado.entries()].map(([estado, n]) => ({ estado, n }))
+        .sort((a, b) => b.n - a.n || a.estado.localeCompare(b.estado)),
+      activas,
+    },
+    truncado,
   };
 }
 
