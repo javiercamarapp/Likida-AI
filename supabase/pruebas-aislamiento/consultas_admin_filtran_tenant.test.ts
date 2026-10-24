@@ -303,6 +303,8 @@ const VIGIA_CONTACTO_POR_TELEFONO = ".from('vigia_contacto').select(COLS_CONTACT
 const VIGIA_EN_ESPERA = ".from('vigia_conversacion').select(colsConv()).eq('estado', 'activa').not('sin_respuesta_desde', 'is', null).lt('escalamiento_nivel', 2).or(alcance).order('sin_respuesta_desde', { ascending: true }).order('id').range(pagina * tamano, (pagina + 1) * tamano - 1)"; // R09-1 (ronda 18): por páginas hasta agotar, en vez de un corte único en limite*3
 // Exención por cadena exacta de «Mis reglas» (Agente 13, 0520): la purga de retención del historial de avisos.
 const REGLAS_PURGA_AVISOS = ".from('regla_aviso').delete().lt('enviado_en', corte).select('id')";
+// A37-S56-06: la retención de `regla_disparo.evidencia` (365 días) reescribe el TEXTO de las filas vencidas de TODAS las flotas, igual que la purga de regla_aviso de arriba; conserva la fila (el sello anti-repetición).
+const REGLAS_RETENER_EVIDENCIA = ".from('regla_disparo').update({ evidencia: EVIDENCIA_RETENIDA }).lt('disparado_en', corte).neq('evidencia', EVIDENCIA_RETENIDA).select('id')";
 // Exención por cadena exacta del buzón (Agente 9, 0531): la lista de trabajo del cron de entrega al contador.
 const BUZON_LOTES_PARA_ENVIAR = ".from('buzon_entrega').select(COLUMNAS_ENTREGA).or(`and(estado.eq.pendiente,proximo_intento_en.lte.${iso}),and(estado.eq.enviando,lease_hasta.lt.${iso})`).order('proximo_intento_en', { ascending: true }).order('id', { ascending: true }).limit(limite)";
 // E1-B (P0-7): las dos lecturas de /admin/cobranza sobre la bandeja y las corridas del agente `cobranza_saas` (el dunning de las mensualidades DE LIKIDA).
@@ -336,6 +338,9 @@ const EXENCIONES_CONSULTA = [{
 }, {
   archivo: 'src/lib/likida/reglas/repo.ts', tabla: 'regla_aviso', cadena: REGLAS_PURGA_AVISOS,
   razon: 'Retención por EDAD (365 días) de una bitácora de operación: el DELETE barre las filas vencidas de TODAS las flotas a la vez, igual que las purgas de wa_mensaje_procesado y llm_costo del cron purgar. No lee ni devuelve datos a ninguna pantalla, solo cuenta cuántas borró; lo llama únicamente vigilarReglas (cron escalar, tras puertaCron y la palanca global). El resto de repo.ts, incluido todo lo que lee o escribe el historial por flota, sigue vigilado por esta prueba.',
+}, {
+  archivo: 'src/lib/likida/reglas/repo.ts', tabla: 'regla_disparo', cadena: REGLAS_RETENER_EVIDENCIA,
+  razon: 'Retención por EDAD (365 días, A37-S56-06) de una bitácora de operación: el UPDATE sustituye el texto de evidencia de las filas vencidas de TODAS las flotas a la vez (la evidencia cita nombres de operadores), igual que la purga hermana de regla_aviso. No lee ni devuelve datos a ninguna pantalla y NO borra la fila (es el sello anti-repetición); lo llama únicamente vigilarReglas (cron escalar, tras puertaCron y la palanca global). El resto de repo.ts sigue vigilado por esta prueba.',
 }, {
   archivo: 'src/lib/likida/vigia/repo.ts', tabla: 'vigia_contacto', cadena: VIGIA_CONTACTO_POR_TELEFONO,
   razon: 'El webhook de WhatsApp solo trae el número del cliente: no existe todavía un tenant por el cual anclar. Un número ACTIVO pertenece a UNA sola flota (índice único parcial de la 0400) y el resto de la atención usa el tenantId del contacto que vuelve de aquí. Solo lo llama processor.ts tras la firma del webhook; no devuelve datos a ninguna pantalla.',

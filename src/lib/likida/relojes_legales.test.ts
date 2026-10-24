@@ -213,6 +213,32 @@ describe('avisarVencimientos — un aviso por umbral, sellado después de mandar
     expect(llamadasAviso[0].contexto).toMatchObject({ agente: 'vencimientos', tenantId: 't1' });
   });
 
+  it('A37-S56-05: con 60 vencimientos el texto muestra 10 líneas y «y N más», y sella los 60', async () => {
+    tablas.respuestas.set('unidad', Array.from({ length: 60 }, (_, i) => (
+      { id: `u${i}`, tenant_id: 't1', numero_economico: `ECO-${i}`, poliza_vence: '2026-09-01', permiso_sict_vence: null, verificacion_vence: null }
+    )));
+    tablas.respuestas.set('operador', []);
+    tablas.respuestas.set('flota_poliza', []);
+    tablas.respuestas.set('aviso_vigencia', []);
+    const r = await avisarVencimientos(AHORA);
+    expect(r.avisados).toBe(60);
+    const texto = (sendText.mock.calls[0] as unknown as [string, string])[1];
+    expect(texto.split('\n').filter((l) => l.startsWith('· '))).toHaveLength(10);
+    expect(texto).toContain('50 más');
+    expect(texto.length).toBeLessThan(4_096);
+    const sello = tablas.upserts.find((u) => u.tabla === 'aviso_vigencia');
+    expect((sello?.filas as unknown[]).length).toBe(60);
+  });
+
+  it('A37-S56-05: la lectura de operadores excluye a los dados de baja', async () => {
+    tablas.respuestas.set('unidad', []);
+    tablas.respuestas.set('operador', []);
+    tablas.respuestas.set('flota_poliza', []);
+    await avisarVencimientos(AHORA);
+    const filtroOperador = tablas.llamadas.filter((c) => c.tabla === 'operador' && c.metodo === 'eq');
+    expect(filtroOperador.some((c) => c.args[0] === 'activo' && c.args[1] === true)).toBe(true);
+  });
+
   it('lo ya sellado NO se re-avisa', async () => {
     tablas.respuestas.set('unidad', [
       { id: 'u1', tenant_id: 't1', numero_economico: 'C2-08', poliza_vence: '2026-09-01', permiso_sict_vence: null, verificacion_vence: null },

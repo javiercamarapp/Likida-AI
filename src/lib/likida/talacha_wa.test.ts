@@ -65,6 +65,15 @@ vi.mock('@/lib/meta/client', () => ({
   sendButtons: (...a: unknown[]) => sendButtons(...a),
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+// El mutex por viaje (A37-S57-08): por omisión SIEMPRE se obtiene; la prueba de
+// concurrencia lo reemplaza por uno que de verdad serializa.
+const intentarLockViaje = vi.fn(async (..._a: unknown[]) => 'obtenido' as 'obtenido' | 'ocupado' | 'indeterminado');
+const releaseViajeLock = vi.fn(async (..._a: unknown[]) => undefined);
+vi.mock('./conv', () => ({
+  intentarLockViaje: (...a: unknown[]) => intentarLockViaje(...a),
+  releaseViajeLock: (...a: unknown[]) => releaseViajeLock(...a),
+  nuevoTokenDeLock: () => 'tok-1',
+}));
 
 const {
   interpretarTalacha, extraerMonto, atenderTalachaChofer, atenderAutorizacionTalacha,
@@ -153,6 +162,65 @@ describe('extraerMonto — el número solo cuenta amarrado a dinero', () => {
 });
 
 // ── El lado del chofer ─────────────────────────────────────────────────────
+
+describe('atenderTalachaChofer — un solo pendiente por viaje bajo concurrencia (A37-S57-08)', () => {
+  beforeEach(() => {
+    intentarLockViaje.mockReset().mockResolvedValue('obtenido');
+    releaseViajeLock.mockReset().mockResolvedValue(undefined);
+    crearIncidencia.mockReset();
+    sendButtons.mockReset(); sendText.mockReset(); telefonoJefeDe.mockReset();
+    baseFeliz();
+  });
+
+  it('texto y foto casi simultáneos crean UNA incidencia y UN aviso al jefe (el segundo completa el pendiente)', async () => {
+    // Mutex que de verdad serializa por viaje.
+    let cola: Promise<void> = Promise.resolve();
+    const liberar: Array<() => void> = [];
+    intentarLockViaje.mockImplementation(async () => {
+      const previa = cola;
+      let suelta!: () => void;
+      cola = new Promise<void>((r) => { suelta = r; });
+      liberar.push(suelta);
+      await previa;
+      return 'obtenido';
+    });
+    releaseViajeLock.mockImplementation(async () => { liberar.shift()?.(); });
+    // Tras crear la primera, el SELECT del pendiente ya la ve.
+    crearIncidencia.mockImplementation(async () => {
+      await new Promise((r) => setTimeout(r, 5));
+      respuestas['incidencia.select:id, monto_estimado, evidencia_path, gasto_id, avisada_jefe_en'] = {
+        data: [{ id: INC, monto_estimado: 800, evidencia_path: null, gasto_id: null, avisada_jefe_en: '2026-08-14T17:00:00Z' }], error: null,
+      };
+      return INC;
+    });
+    respuestas['incidencia.update'] = { error: null };
+    const [a, b] = await Promise.all([
+      atenderTalachaChofer({ ...CHOFER, texto: 'se ponchó una llanta, la talacha cobra 800', monto: 800 }),
+      atenderTalachaChofer({ ...CHOFER, texto: 'se ponchó una llanta, la talacha cobra 800', monto: 800, evidenciaPath: 'nota.jpg', gastoId: 'g-1' }),
+    ]);
+    expect(crearIncidencia).toHaveBeenCalledTimes(1);
+    expect(sendButtons.mock.calls.length + sendText.mock.calls.length).toBeLessThanOrEqual(2);
+    expect(typeof a).toBe('string');
+    expect(typeof b).toBe('string');
+    expect(releaseViajeLock).toHaveBeenCalledTimes(2);
+  });
+
+  it('sin poder tomar el candado (ocupado o indeterminado) NO crea nada y pide reintentar', async () => {
+    for (const resultado of ['ocupado', 'indeterminado'] as const) {
+      intentarLockViaje.mockResolvedValue(resultado);
+      const r = await atenderTalachaChofer({ ...CHOFER, texto: 'se ponchó una llanta', monto: 800 });
+      expect(r).toContain('No pude anotar la avería');
+    }
+    expect(crearIncidencia).not.toHaveBeenCalled();
+    expect(sendButtons).not.toHaveBeenCalled();
+  });
+
+  it('suelta el candado con su token aunque la atención lance', async () => {
+    crearIncidencia.mockRejectedValue(new Error('base caída'));
+    await atenderTalachaChofer({ ...CHOFER, texto: 'se ponchó una llanta', monto: 800 });
+    expect(releaseViajeLock).toHaveBeenCalledWith('v1', 'tok-1');
+  });
+});
 
 describe('atenderTalachaChofer — abrir la solicitud', () => {
   it('abre la incidencia pendiente con monto y le manda al jefe los botones', async () => {

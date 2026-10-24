@@ -50,11 +50,45 @@ function uuidCfdi(u: string | null | undefined): string | null {
  * para que un acuse explícito no prometa persistencia cuando falló.
  */
 export async function saveCfdiXmlRaw(tenantId: string, cfdiUuid: string, gastoId: string | null, xml: string): Promise<boolean> {
-  const { error } = await acotada(supabaseAdmin()
+  // A37-S56-07: el PRIMER XML que llega con ese UUID es el que se conserva
+  // (`ignoreDuplicates`: ON CONFLICT DO NOTHING). Antes el upsert sobrescribía:
+  // un reenvío con `gasto_id=null` desligaba el CFDI de su gasto y un XML con
+  // el mismo UUID y contenido distinto reemplazaba al original, incluido el que
+  // bajó del SAT — la evidencia del CFF art. 30 pasaba a ser «la última escritura».
+  const uuid = uuidCfdi(cfdiUuid);
+  const { data: nuevo, error } = await acotada(supabaseAdmin()
     .from('cfdi_xml')
-    .upsert({ tenant_id: tenantId, cfdi_uuid: uuidCfdi(cfdiUuid), gasto_id: gastoId, xml }, { onConflict: 'tenant_id,cfdi_uuid' }), 'saveCfdiXmlRaw');
-  if (error) logger.warn('cfdi_xml.save', { err: error.message });
-  return !error;
+    .upsert({ tenant_id: tenantId, cfdi_uuid: uuid, gasto_id: gastoId, xml }, { onConflict: 'tenant_id,cfdi_uuid', ignoreDuplicates: true })
+    .select('id'), 'saveCfdiXmlRaw');
+  if (error) { logger.warn('cfdi_xml.save', { err: error.message }); return false; }
+  if (((nuevo ?? []) as unknown[]).length > 0) return true;
+
+  // Ya existía una fila con ese UUID: se compara, no se pisa.
+  const { data: previo, error: errLee } = await acotada(supabaseAdmin()
+    .from('cfdi_xml').select('xml, gasto_id').eq('tenant_id', tenantId).eq('cfdi_uuid', uuid as string).maybeSingle(),
+    'saveCfdiXmlRaw.previo');
+  if (errLee) { logger.warn('cfdi_xml.save', { err: errLee.message }); return false; }
+  if (!previo) return true; // se borró entre medias: no hay nada que proteger
+  const p = previo as { xml: string; gasto_id: string | null };
+  if (p.xml.trim() !== xml.trim()) {
+    // Se registra el intento SIN el contenido (puede traer datos fiscales).
+    logger.error('cfdi_xml.contenido_distinto', { tenant: tenantId, uuid, largoConservado: p.xml.length, largoNuevo: xml.length });
+    // `true`, no `false`: el original SIGUE conservado (lo que prometen los
+    // acuses), y `false` es para fallos REINTENTABLES — en el ciclo del SAT
+    // (`ciclo.ts`) un `false` deja el paquete sin dar por bajado y lo reintenta
+    // en cada vuelta: una discrepancia permanente bloquearía la descarga de la
+    // flota entera. La anomalía queda en el log de error, que es lo que se vigila.
+    return true;
+  }
+  // Mismo contenido: solo se completa el vínculo si la fila no tenía gasto, y
+  // nunca se sustituye uno existente ni se escribe null.
+  if (gastoId && !p.gasto_id) {
+    const { error: errLiga } = await acotada(supabaseAdmin()
+      .from('cfdi_xml').update({ gasto_id: gastoId }).eq('tenant_id', tenantId).eq('cfdi_uuid', uuid as string).is('gasto_id', null),
+      'saveCfdiXmlRaw.ligar');
+    if (errLiga) logger.warn('cfdi_xml.ligar', { err: errLiga.message });
+  }
+  return true;
 }
 
 // `getPolitica` VIVÍA AQUÍ y no la llamaba nadie. Leía `politica_gasto`, una
@@ -251,26 +285,31 @@ export function sanearCatalogo(q: string | undefined | null): string {
 }
 
 /**
- * Ids de unidades con viaje ABIERTO en este tenant (hallazgo ALTO: ver
- * `uq_viaje_abierto_por_unidad`, 0849). `asignarUnidad`/`crearViaje`
- * (operacion.ts) ya tienen su propio candado de servidor contra esto, pero
- * eso solo evita que un POST directo lo logre — sin esto, el COMBO de
- * `/dashboard/despacho` seguía OFRECIENDO esas unidades, así que el jefe de
- * tráfico podía intentarlo (y chocar con el candado) cuando la pantalla
- * debía habérselo quitado de enfrente desde antes.
+ * De estos ids de unidad, cuáles tienen un viaje ABIERTO o en cuadre (hallazgo
+ * ALTO: ver `uq_viaje_abierto_por_unidad`, 0849). `asignarUnidad`/`crearViaje`
+ * (operacion.ts) ya tienen su propio candado de servidor contra esto, pero eso
+ * solo evita que un POST directo lo logre — sin esto, el COMBO de
+ * `/dashboard/despacho` seguía OFRECIENDO esas unidades.
  *
- * Acotado igual que el resto del catálogo: una flota con más unidades
- * abiertas que `MAX_PAGINAS` páginas necesita filtrar en SQL, no aquí — pero
- * eso excede lo que un combo de 20 opciones resuelve.
+ * A37-S56-08: antes releía TODOS los viajes abiertos de la flota en cada tecla
+ * y armaba `.not('id','in',(todos los ocupados))`: con 250 camiones casi todos
+ * ocupados la URL pasaba de 9 KB. Ahora recibe SOLO los ids de la página que
+ * se está mirando (≤ `UNIDADES_POR_PAGINA`), así la lista de la URL no crece
+ * con la flota. Las filas de respuesta son a lo más una por unidad más sus
+ * viajes en cuadre, muy por debajo del recorte de 1,000 de PostgREST.
  */
-async function unidadesConViajeAbierto(tenantId: string): Promise<string[]> {
-  const filas = await traerTodo<{ unidad_id: unknown }>(
-    (d, h) => acotada(supabaseAdmin().from('viaje').select('unidad_id', conteo(d))
-      .eq('tenant_id', tenantId).in('estatus', ['abierto', 'en_cuadre']).not('unidad_id', 'is', null)
-      .order('unidad_id').range(d, h), 'unidadesConViajeAbierto'),
-    'unidadesConViajeAbierto',
-  );
-  return [...new Set(filas.map((f) => f.unidad_id).filter((id): id is string => typeof id === 'string'))];
+const UNIDADES_POR_PAGINA = 100;
+/** 50 × 100 = 5,000 unidades revisadas como máximo por tecla del combo. */
+const MAX_PAGINAS_UNIDADES = 50;
+
+async function unidadesOcupadasEntre(tenantId: string, ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const { data, error } = await acotada(supabaseAdmin().from('viaje').select('id, unidad_id')
+    .eq('tenant_id', tenantId).in('estatus', ['abierto', 'en_cuadre']).in('unidad_id', ids)
+    .order('id').limit(1_000), 'unidadesOcupadasEntre');
+  if (error) throw new Error(`unidadesOcupadasEntre: ${error.message}`);
+  return new Set(((data ?? []) as Array<{ unidad_id: unknown }>)
+    .map((f) => f.unidad_id).filter((id): id is string => typeof id === 'string'));
 }
 
 /**
@@ -293,21 +332,41 @@ export async function buscarCatalogo(
   const texto = sanearCatalogo(q);
   const tope = Math.max(1, Math.min(TOPE_CATALOGO, limite));
 
-  let consulta = supabaseAdmin()
-    .from(cat.tabla)
-    .select(cat.pista ? `id, ${cat.columna}, ${cat.pista}` : `id, ${cat.columna}`)
-    .eq('tenant_id', tenantId)
-    .eq('activo', true);
-  if (texto) consulta = consulta.ilike(cat.columna, `%${texto}%`);
-  // HALLAZGO ALTO: el combo de unidades no debe ni OFRECER una unidad que ya
-  // está en otro viaje abierto — ver `unidadesConViajeAbierto` arriba.
-  if (tipo === 'unidad') {
-    const ocupadas = await unidadesConViajeAbierto(tenantId);
-    if (ocupadas.length > 0) consulta = consulta.not('id', 'in', `(${ocupadas.join(',')})`);
-  }
+  const base = () => {
+    let c = supabaseAdmin()
+      .from(cat.tabla)
+      .select(cat.pista ? `id, ${cat.columna}, ${cat.pista}` : `id, ${cat.columna}`)
+      .eq('tenant_id', tenantId)
+      .eq('activo', true);
+    if (texto) c = c.ilike(cat.columna, `%${texto}%`);
+    return c;
+  };
 
-  const { data, error } = await acotada(consulta.order(cat.columna).limit(tope), `buscarCatalogo:${tipo}`);
-  if (error) throw new Error(`buscarCatalogo:${tipo}: ${error.message}`);
+  let data: unknown[] | null;
+  if (tipo === 'unidad') {
+    // HALLAZGO ALTO: el combo de unidades no debe ni OFRECER una unidad que ya
+    // está en otro viaje abierto. A37-S56-08: se pagina el catálogo y, por
+    // página, se pregunta cuáles de ESOS ids están ocupadas — sin listas de
+    // ids que crezcan con la flota en la URL.
+    const libres: unknown[] = [];
+    for (let pagina = 0; pagina < MAX_PAGINAS_UNIDADES && libres.length < tope; pagina++) {
+      const desde = pagina * UNIDADES_POR_PAGINA;
+      const { data: filas, error: errPag } = await acotada(
+        base().order(cat.columna).order('id').range(desde, desde + UNIDADES_POR_PAGINA - 1), `buscarCatalogo:${tipo}`);
+      if (errPag) throw new Error(`buscarCatalogo:${tipo}: ${errPag.message}`);
+      const pag = (filas ?? []) as unknown as Array<Record<string, unknown>>;
+      const ocupadas = await unidadesOcupadasEntre(tenantId, pag.map((f) => f.id as string));
+      for (const f of pag) {
+        if (libres.length < tope && !ocupadas.has(f.id as string)) libres.push(f);
+      }
+      if (pag.length < UNIDADES_POR_PAGINA) break;
+    }
+    data = libres;
+  } else {
+    const r = await acotada(base().order(cat.columna).limit(tope), `buscarCatalogo:${tipo}`);
+    if (r.error) throw new Error(`buscarCatalogo:${tipo}: ${r.error.message}`);
+    data = r.data as unknown[] | null;
+  }
   // `as unknown as` y no un cast directo: el `.select()` se arma con la
   // columna en runtime, así que el tipo derivado de postgrest-js es un
   // `ParserError`, no una fila. La FORMA se comprueba abajo, que es lo que
@@ -1920,7 +1979,7 @@ export async function ejecutarOposicionArco(
 
 export async function ejecutarCancelacionArco(
   tenantId: string, solicitudId: string,
-): Promise<{ ok: boolean; motivo?: string; avisada: boolean; errorAviso?: string; errorAuth?: string; errorEntregas?: string }> {
+): Promise<{ ok: boolean; motivo?: string; avisada: boolean; errorAviso?: string; errorAuth?: string; errorEntregas?: string; errorEvidencia?: string }> {
   const { data: sol, error: errLee } = await acotada(supabaseAdmin()
     .from('solicitud_arco').select('titular_ref, tipo, titular_user_id, operador_id').eq('id', solicitudId).eq('tenant_id', tenantId).maybeSingle(),
     'ejecutarCancelacionArco.leer');
@@ -1929,6 +1988,21 @@ export async function ejecutarCancelacionArco(
   const telefono = (sol.titular_ref as string | null) ?? null;
   const titularUserId = (sol.titular_user_id as string | null) ?? null;
   const operadorId = (sol.operador_id as string | null) ?? null;
+
+  // A37-S56-06: el nombre HAY que leerlo antes de la RPC (que lo seudonimiza)
+  // para poder encontrar en `regla_disparo.evidencia` el texto que lo cita.
+  let nombreOperador: string | null = null;
+  if (operadorId) {
+    try {
+      const { data: op } = await acotada(supabaseAdmin()
+        .from('operador').select('nombre').eq('id', operadorId).eq('tenant_id', tenantId).maybeSingle(),
+        'ejecutarCancelacionArco.nombre');
+      const n = ((op as { nombre?: unknown } | null)?.nombre);
+      nombreOperador = typeof n === 'string' && n.trim().length >= 3 ? n.trim() : null;
+    } catch (e) {
+      logger.warn('arco.nombre_operador_no_leido', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    }
+  }
 
   const { data, error } = await acotada(supabaseAdmin().rpc('ejecutar_arco_cancelacion', {
     p_tenant: tenantId,
@@ -1952,7 +2026,16 @@ export async function ejecutarCancelacionArco(
     errorEntregas = await omitirEntregasCorreoDeOperador(tenantId, operadorId);
     if (errorEntregas) logger.error('arco.entregas_correo_no_omitidas', { tenant: tenantId, err: errorEntregas });
   }
-  const conEntregas = errorEntregas ? { errorEntregas } : {};
+  // A37-S56-06: la evidencia de «Mis reglas» cita al operador por nombre.
+  let errorEvidencia: string | undefined;
+  if (operadorId) {
+    errorEvidencia = await anonimizarEvidenciaReglasDeOperador(tenantId, operadorId, nombreOperador);
+    if (errorEvidencia) logger.error('arco.evidencia_reglas_no_anonimizada', { tenant: tenantId, err: errorEvidencia });
+  }
+  const conEntregas = {
+    ...(errorEntregas ? { errorEntregas } : {}),
+    ...(errorEvidencia ? { errorEvidencia } : {}),
+  };
 
   // 0442 (cuenta de oficina): la RPC ya seudonimizó la fila y la dio de baja; el
   // LOGIN vive en Supabase Auth y solo se borra desde aquí. Se hace ANTES del
@@ -2005,6 +2088,39 @@ export async function ejecutarCancelacionArco(
     return aviso.ok ? { ok: true, avisada: true, ...conEntregas } : { ok: true, avisada: false, errorAviso: aviso.error, ...conEntregas };
   } catch (e) {
     return { ok: true, avisada: false, errorAviso: e instanceof Error ? e.message : String(e), ...conEntregas };
+  }
+}
+
+/** Texto que sustituye la evidencia de una regla que citaba a un operador cancelado. */
+const EVIDENCIA_ANONIMIZADA = 'Evidencia anonimizada: el operador ejerció su derecho de cancelación (ARCO).';
+
+/**
+ * A37-S56-06: `regla_disparo.evidencia` conserva «<nombre> lleva N viajes sin
+ * liquidar» sin plazo, y la RPC de cancelación no la toca. Se reemplaza el
+ * TEXTO (nunca se borra la fila: el sello evita que la regla re-avise) de (a)
+ * las filas cuyo objeto ES el operador y (b) las que citan su nombre. Devuelve
+ * el mensaje de error si algo falló, o `undefined` si quedó hecho.
+ */
+async function anonimizarEvidenciaReglasDeOperador(
+  tenantId: string, operadorId: string, nombre: string | null,
+): Promise<string | undefined> {
+  try {
+    const { error: e1 } = await acotada(supabaseAdmin()
+      .from('regla_disparo').update({ evidencia: EVIDENCIA_ANONIMIZADA })
+      .eq('tenant_id', tenantId).eq('objeto', 'operador').eq('objeto_id', operadorId)
+      .select('id'), 'ejecutarCancelacionArco.evidencia_objeto');
+    if (e1) return e1.message;
+    if (nombre) {
+      const patron = `%${nombre.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+      const { error: e2 } = await acotada(supabaseAdmin()
+        .from('regla_disparo').update({ evidencia: EVIDENCIA_ANONIMIZADA })
+        .eq('tenant_id', tenantId).neq('evidencia', EVIDENCIA_ANONIMIZADA).ilike('evidencia', patron)
+        .select('id'), 'ejecutarCancelacionArco.evidencia_nombre');
+      if (e2) return e2.message;
+    }
+    return undefined;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
   }
 }
 

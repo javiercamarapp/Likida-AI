@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { DatoInvalido } from '@/lib/likida/errores';
 import { logger } from '@/lib/logger';
+import { alertarOperador } from '@/lib/observability/alerta';
 import { facturapiConfigurado, timbrarMensualidad, enviarPorCorreo } from './facturapi';
 import { getDatosFiscales, estanCompletos } from './fiscal';
 import { desglosarPrecio, desgloseCuadra } from './iva';
@@ -433,25 +434,36 @@ export async function timbrarFactura(facturaId: string): Promise<{ uuid: string 
     throw e;
   }
 
-  // El CFDI YA EXISTE ante el SAT en este punto. Si guardarlo falla, se loguea
-  // fuerte y se devuelve igual: perder el UUID en nuestra base es un problema
-  // de registro; volver a timbrar sería un problema fiscal del cliente.
-  const { error: errGuardar } = await admin
-    .from('factura_saas')
-    .update({
-      cfdi_uuid: cfdi.uuid,
-      cfdi_xml_url: cfdi.urlXml,
-      // El id del PAC y la liga de verificación (0163, DAT-33): sin el primero
-      // no se puede CANCELAR el papel si el cobro se reembolsa, y la segunda es
-      // lo que el contador del cliente pide para comprobarlo contra el SAT.
-      cfdi_proveedor_id: cfdi.id,
-      cfdi_verificacion_url: cfdi.urlVerificacion,
-      timbrada_en: new Date().toISOString(),
-      timbrando_en: null,
-    })
-    .eq('id', facturaId);
-  if (errGuardar) {
-    logger.error('facturapi.uuid_sin_guardar', { facturaId, uuid: cfdi.uuid, err: errGuardar.message });
+  // El CFDI YA EXISTE ante el SAT en este punto. Volver a timbrar sería un
+  // problema fiscal del cliente; perder el UUID en nuestra base, uno de registro.
+  //
+  // A37-S61-02: si el guardado falla, `timbrando_en` seguía puesto pero la
+  // reserva CADUCA a los 10 min y exige `cfdi_uuid is null`: pasados 10 min la
+  // factura volvía a mostrarse «pagada sin timbrar» y un clic creaba un SEGUNDO
+  // CFDI. Ahora (1) el guardado se reintenta; (2) si no se logra, la reserva se
+  // deja con un valor centinela SIN caducidad práctica; (3) se alerta con el
+  // UUID, para ligarlo a mano.
+  const guardado = await guardarCfdiTimbrado(admin, facturaId, {
+    cfdi_uuid: cfdi.uuid,
+    cfdi_xml_url: cfdi.urlXml,
+    // El id del PAC y la liga de verificación (0163, DAT-33): sin el primero
+    // no se puede CANCELAR el papel si el cobro se reembolsa, y la segunda es
+    // lo que el contador del cliente pide para comprobarlo contra el SAT.
+    cfdi_proveedor_id: cfdi.id,
+    cfdi_verificacion_url: cfdi.urlVerificacion,
+    timbrada_en: new Date().toISOString(),
+    timbrando_en: null,
+  });
+  if (!guardado.ok) {
+    logger.error('facturapi.uuid_sin_guardar', { facturaId, uuid: cfdi.uuid, err: guardado.error });
+    // Centinela: ~10 años. Mientras la fila no tenga UUID, la reserva NO caduca.
+    const centinela = new Date(Date.now() + 3650 * 86_400_000).toISOString();
+    const r = await admin.from('factura_saas').update({ timbrando_en: centinela }).eq('id', facturaId);
+    if (r.error) logger.error('facturapi.reserva_sin_blindar', { facturaId, uuid: cfdi.uuid, err: r.error.message });
+    await alertarOperador('timbre.uuid_sin_guardar', {
+      facturaId, uuid: cfdi.uuid, referencia: (f.referencia as string) ?? null,
+      accion: 'Liga este UUID a la factura a mano; el CFDI YA existe ante el SAT y la reserva quedó sin caducidad para impedir un segundo timbrado.',
+    });
   }
 
   // Se manda al correo DE LA FLOTA, explícito. Antes iba sin destinatario y
@@ -461,6 +473,27 @@ export async function timbrarFactura(facturaId: string): Promise<{ uuid: string 
     logger.error('facturapi.cfdi_sin_entregar', { facturaId, uuid: cfdi.uuid, hayCorreo: Boolean(fiscales!.email) });
   }
   return { uuid: cfdi.uuid };
+}
+
+/**
+ * Guarda el resultado del timbrado con hasta 3 intentos (0 / 150 / 450 ms de
+ * espera): el fallo típico es un timeout del pooler que no se repite. Nunca lanza.
+ */
+async function guardarCfdiTimbrado(
+  admin: ReturnType<typeof supabaseAdmin>, facturaId: string, valores: Record<string, unknown>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  let ultimo = '';
+  for (const espera of [0, 150, 450]) {
+    if (espera > 0) await new Promise((r) => setTimeout(r, espera));
+    try {
+      const { error } = await admin.from('factura_saas').update(valores).eq('id', facturaId);
+      if (!error) return { ok: true };
+      ultimo = error.message;
+    } catch (e) {
+      ultimo = e instanceof Error ? e.message : String(e);
+    }
+  }
+  return { ok: false, error: ultimo };
 }
 
 /** Techo de filas de la lectura «completa» para los totales de la pantalla.

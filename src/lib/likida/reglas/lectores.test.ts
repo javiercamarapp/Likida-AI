@@ -19,7 +19,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 interface Consulta { tabla: string; metodo: string; args: unknown[] }
 
 const tablas = vi.hoisted(() => ({
-  respuestas: new Map<string, unknown[]>(),
+  respuestas: new Map<string, unknown[] | ((q: Record<string, unknown[]>) => unknown[])>(),
   errores: new Map<string, string>(),
   consultas: [] as Array<{ tabla: string; metodo: string; args: unknown[] }>,
 }));
@@ -32,15 +32,19 @@ vi.mock('@/lib/supabase/admin', () => ({
       // Builder encadenable y thenable, como el de relojes_legales.test.ts:
       // cada método queda registrado para poder afirmar los FILTROS (que son
       // la mitad de la corrección de un lector) sin fingir un PostgREST.
+      const mia: Record<string, unknown[]> = {};
       const api: Record<string, unknown> = {
         then: (res: (v: unknown) => unknown) => Promise.resolve(
           tablas.errores.has(tabla)
             ? { data: null, error: { message: tablas.errores.get(tabla) } }
-            : { data: tablas.respuestas.get(tabla) ?? [], error: null },
+            : { data: (() => {
+              const r = tablas.respuestas.get(tabla) ?? [];
+              return typeof r === 'function' ? r(mia) : r;
+            })(), error: null },
         ).then(res),
       };
-      for (const m of ['select', 'eq', 'neq', 'in', 'gt', 'gte', 'lte', 'is', 'not', 'order', 'limit']) {
-        api[m] = (...args: unknown[]) => { tablas.consultas.push({ tabla, metodo: m, args }); return api; };
+      for (const m of ['select', 'eq', 'neq', 'in', 'gt', 'gte', 'lte', 'is', 'not', 'order', 'limit', 'range']) {
+        api[m] = (...args: unknown[]) => { mia[m] = args; tablas.consultas.push({ tabla, metodo: m, args }); return api; };
       }
       return api;
     },
@@ -53,7 +57,7 @@ const TENANT = 't-1';
 /** 27-ago-2026, 18:00 UTC → hoyMx = 2026-08-27. */
 const AHORA = new Date('2026-08-27T18:00:00Z');
 
-function pon(tabla: string, filas: unknown[]) { tablas.respuestas.set(tabla, filas); }
+function pon(tabla: string, filas: unknown[] | ((q: Record<string, unknown[]>) => unknown[])) { tablas.respuestas.set(tabla, filas); }
 function filtros(tabla: string, metodo: string): unknown[][] {
   return tablas.consultas.filter((c: Consulta) => c.tabla === tabla && c.metodo === metodo).map((c) => c.args);
 }
@@ -362,6 +366,42 @@ describe('viaje_abierto_sin_comprobantes_mas_de', () => {
     expect(r[0].evidencia).toContain('Beto');
   });
 
+  it('A37-S56-03: la lectura de gastos va en tandas chicas y un viaje con gastos fuera de una tanda llena NO sale como CERO', async () => {
+    const ids = Array.from({ length: 150 }, (_, i) => `v-${i}`);
+    pon('viaje', ids.map((id) => ({ id, folio: id, fecha_inicio: '2026-08-15', anticipo: '1000', operador: { nombre: 'Beto' } })));
+    // Cada viaje tiene 20 gastos; PostgREST corta en 1,000 filas, como el real.
+    pon('gasto', (q) => {
+      const pedidos = (q.in?.[1] as string[]) ?? [];
+      return pedidos.flatMap((id) => Array.from({ length: 20 }, () => ({ viaje_id: id }))).slice(0, 1_000);
+    });
+    const r = await evaluar('viaje_abierto_sin_comprobantes_mas_de', { dias: 5 }, TENANT, AHORA);
+    expect(r).toHaveLength(0);
+    const listas = filtros('gasto', 'in').map((a) => (a[1] as string[]).length);
+    expect(Math.max(...listas)).toBeLessThanOrEqual(50);
+  });
+
+  it('A37-S56-03: un viaje de verdad sin gastos sí sale, aunque la tanda de sus vecinos se llene', async () => {
+    const ids = Array.from({ length: 60 }, (_, i) => `v-${i}`);
+    pon('viaje', ids.map((id) => ({ id, folio: id, fecha_inicio: '2026-08-15', anticipo: '1000', operador: { nombre: 'Beto' } })));
+    pon('gasto', (q) => {
+      const pedidos = ((q.in?.[1] as string[]) ?? []).filter((id) => id !== 'v-7');
+      return pedidos.flatMap((id) => Array.from({ length: 40 }, () => ({ viaje_id: id }))).slice(0, 1_000);
+    });
+    const r = await evaluar('viaje_abierto_sin_comprobantes_mas_de', { dias: 5 }, TENANT, AHORA);
+    expect(r.map((d) => d.objetoId)).toEqual(['v-7']);
+  });
+
+  it('A37-S56-04: más de TOPE_CANDIDATOS viajes se leen completos (paginados), no se recortan en silencio', async () => {
+    const todos = Array.from({ length: 1_250 }, (_, i) => ({
+      id: `v-${String(i).padStart(4, '0')}`, folio: `F${i}`, fecha_inicio: '2026-08-15', anticipo: '1', operador: { nombre: 'Beto' },
+    }));
+    pon('viaje', (q) => { const [d, h] = (q.range as number[]) ?? [0, 999]; return todos.slice(d, h + 1); });
+    pon('gasto', []);
+    const r = await evaluar('viaje_abierto_sin_comprobantes_mas_de', { dias: 5 }, TENANT, AHORA);
+    expect(r).toHaveLength(1_250);
+    expect(TOPE_CANDIDATOS).toBe(400);
+  });
+
   it('sin viajes candidatos no consulta gastos — una consulta que no hace falta no se hace', async () => {
     pon('viaje', []);
     const r = await evaluar('viaje_abierto_sin_comprobantes_mas_de', { dias: 5 }, TENANT, AHORA);
@@ -371,6 +411,14 @@ describe('viaje_abierto_sin_comprobantes_mas_de', () => {
 });
 
 describe('costo_ia_dia_mayor_a — el único de la plataforma', () => {
+  it('A37-S56-04: suma TODAS las llamadas del día, no solo las primeras 1,000', async () => {
+    const filas = Array.from({ length: 2_300 }, () => ({ costo_usd: '0.01', fase: 'ocr' }));
+    pon('llm_costo', (q) => { const [d, h] = (q.range as number[]) ?? [0, 999]; return filas.slice(d, h + 1); });
+    const r = await evaluar('costo_ia_dia_mayor_a', { usd: 20 }, TENANT, AHORA);
+    expect(r).toHaveLength(1);
+    expect(r[0].evidencia).toContain('23.00');
+  });
+
   it('suma el día de México, corta por el techo y desglosa por fase', async () => {
     pon('llm_costo', [
       { costo_usd: '3.5', fase: 'ocr' }, { costo_usd: '2.0', fase: 'cuadre' }, { costo_usd: null, fase: 'chat' },

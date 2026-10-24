@@ -5,6 +5,7 @@ import { strip_accents } from './cuadre/util';
 import { crearIncidencia } from './operacion';
 import { abrirOrdenPorAveria } from './mantenimiento';
 import { telefonoJefeDe } from './contactos';
+import { intentarLockViaje, releaseViajeLock, nuevoTokenDeLock } from './conv';
 import type { RolOficina } from './contactos';
 import { sendText, sendButtons } from '@/lib/meta/client';
 import { puedeAsignar } from '@/lib/auth/permisos';
@@ -232,6 +233,43 @@ function acuseChofer(monto: number | null, conEvidencia: boolean): string {
  * llegó, se le reenvía al jefe la solicitud ya con cifra.
  */
 export async function atenderTalachaChofer(args: {
+  tenantId: string;
+  viajeId: string;
+  operadorId: string;
+  /** El texto del chofer tal cual — es la descripción que el jefe lee. */
+  texto: string;
+  monto: number | null;
+  evidenciaPath?: string | null;
+  gastoId?: string | null;
+}): Promise<string> {
+  // A37-S57-08: comprobar-y-crear SIN candado. El texto «se ponchó una llanta,
+  // son 800» y la foto de la nota llegan a los pocos segundos y se procesan en
+  // paralelo: los dos leían «sin pendiente» y creaban DOS incidencias «alta»
+  // (dos solicitudes de $800 al jefe, dos órdenes de taller si autoriza ambas).
+  // Se serializa por viaje con el mismo mutex de la base (`try_lock_viaje`) que
+  // usan el XML y el cierre; tomado el candado, el segundo mensaje ya ve el
+  // pendiente del primero y lo COMPLETA. Fail-closed: sin candado no se crea
+  // nada (crear a ciegas es justo el duplicado) y se pide reintentar.
+  const token = nuevoTokenDeLock();
+  let candado: Awaited<ReturnType<typeof intentarLockViaje>>;
+  try {
+    candado = await intentarLockViaje(args.viajeId, { ttlMs: 30_000, maxWaitMs: 8_000, token });
+  } catch (e) {
+    logger.error('talacha.candado_fallo', { viaje: args.viajeId, err: e instanceof Error ? e.message : String(e) });
+    candado = 'indeterminado';
+  }
+  if (candado !== 'obtenido') {
+    logger.warn('talacha.candado_no_obtenido', { viaje: args.viajeId, resultado: candado });
+    return 'No pude anotar la avería ahorita 😕 — mándamelo de nuevo en un momento. Si es urgente, márcale directo a tu jefe.';
+  }
+  try {
+    return await atenderTalachaChoferConCandado(args);
+  } finally {
+    await releaseViajeLock(args.viajeId, token).catch(() => undefined);
+  }
+}
+
+async function atenderTalachaChoferConCandado(args: {
   tenantId: string;
   viajeId: string;
   operadorId: string;

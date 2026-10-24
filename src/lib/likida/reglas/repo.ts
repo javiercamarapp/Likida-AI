@@ -633,6 +633,8 @@ export async function registrarAviso(tenantId: string, reglaId: string, a: Nuevo
 /** Retención: el historial de avisos de más de 365 días se borra en el mismo
  *  barrido que lo escribe. Best-effort: no tumba la corrida. */
 export const DIAS_RETENCION_AVISOS = 365;
+/** Texto que sustituye la evidencia de un sello pasado el plazo de retención. */
+export const EVIDENCIA_RETENIDA = 'Evidencia retirada por el plazo de retención (365 días).';
 export async function purgarAvisosViejos(ahora: Date): Promise<number> {
   const corte = new Date(ahora.getTime() - DIAS_RETENCION_AVISOS * 86_400_000).toISOString();
   const { data, error } = await acotada(supabaseAdmin()
@@ -640,6 +642,20 @@ export async function purgarAvisosViejos(ahora: Date): Promise<number> {
     .delete()
     .lt('enviado_en', corte)
     .select('id'), 'reglas.purgar_avisos');
+  // A37-S56-06: `regla_disparo.evidencia` cita nombres de operadores y el sello
+  // es permanente. Pasado el mismo plazo se BORRA EL TEXTO, no la fila: el sello
+  // (objeto, clave) sigue impidiendo que la regla re-avise.
+  try {
+    const { error: errEv } = await acotada(supabaseAdmin()
+      .from('regla_disparo')
+      .update({ evidencia: EVIDENCIA_RETENIDA })
+      .lt('disparado_en', corte)
+      .neq('evidencia', EVIDENCIA_RETENIDA)
+      .select('id'), 'reglas.retener_evidencia');
+    if (errEv) logger.warn('reglas.retencion_evidencia_fallo', { err: errEv.message });
+  } catch (e) {
+    logger.warn('reglas.retencion_evidencia_fallo', { err: e instanceof Error ? e.message : String(e) });
+  }
   if (error) {
     logger.warn('reglas.purga_avisos_fallo', { err: error.message });
     return 0;
