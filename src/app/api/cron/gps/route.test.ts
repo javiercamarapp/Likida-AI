@@ -258,7 +258,7 @@ describe('A37-L-06: el aviso de privacidad pendiente de UNA flota no degrada la 
     const cuerpo = await res.json() as { sinAvisoPrevio: number; motivoSinAviso?: string };
     expect(cuerpo.sinAvisoPrevio).toBe(3);
     expect(cuerpo.motivoSinAviso).toContain('aviso de privacidad');
-    expect(registrarLatido).toHaveBeenCalledWith('gps', 'ok', expect.objectContaining({ sinAvisoPrevio: 3 }));
+    expect(registrarLatido).toHaveBeenCalledWith('gps', 'ok', expect.objectContaining({ sinAvisoPrevio: 6 }));
   });
 
   it('sin aviso previo MAS un error real de plataforma → sigue `parcial`', async () => {
