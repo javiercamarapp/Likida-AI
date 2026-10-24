@@ -207,6 +207,11 @@ function BotonProbar() {
  * Desactivar un acceso, con el diálogo de confirmación ÚNICO del panel (W2): dice
  * que lo guardado no se borra y que para volver a usarlo se captura de nuevo.
  */
+/** A37-S17-06: lo que la confirmación promete debe ser lo que hace `desactivarCredencial` (destruye el secreto). */
+export function descripcionDesactivar(nombre: string): string {
+  return `El acceso a ${nombre} deja de estar disponible para conectar. El secreto se destruye al desactivar; queda solo el registro (fecha y últimos 4). Para volver a usarlo, captúralo de nuevo.`;
+}
+
 export function FormaDesactivar({ conectorId, nombre, desactivar }: {
   conectorId: string;
   nombre: string;
@@ -219,7 +224,7 @@ export function FormaDesactivar({ conectorId, nombre, desactivar }: {
       <BotonConfirmar
         etiqueta="Desactivar" tono="peligro" etiquetaConfirmar="Sí, desactivar este acceso"
         titulo={`Desactivar el acceso a ${nombre}`}
-        descripcion={`El acceso a ${nombre} deja de estar disponible para conectar. Lo guardado no se borra —queda cifrado para la auditoría—; para volver a usarlo se captura de nuevo.`}
+        descripcion={descripcionDesactivar(nombre)}
         className="text-[12px] font-medium select-none inline-flex items-center gap-1 hover:opacity-70 transition-opacity"
         style={{ color: 'var(--bad)' }}
       />
