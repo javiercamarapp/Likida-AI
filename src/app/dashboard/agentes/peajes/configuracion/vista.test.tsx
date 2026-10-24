@@ -82,6 +82,12 @@ describe('archivos recibidos', () => {
     expect(html).toContain('desglose=d7');
     expect(html).toContain('falló');
   });
+  it('A37-A2-01: un fallido sin proveedor (correo/SFTP) deja declararlo al reintentar; con proveedor no pide nada', () => {
+    const sin = pintar({ archivos: [{ ...base, proveedor: null, estado: 'fallida', reintentable: true }] });
+    expect(sin).toContain('name="proveedor"');
+    const con = pintar({ archivos: [{ ...base, estado: 'fallida', reintentable: true }] });
+    expect(con).not.toContain('name="proveedor"');
+  });
   it('el texto del error del proveedor se escapa (no es HTML)', () => {
     const html = pintar({ archivos: [{ ...base, estado: 'fallida', reintentable: true, ultimoError: '<img src=x onerror=alert(1)>' }] });
     expect(html).not.toContain('<img src=x');

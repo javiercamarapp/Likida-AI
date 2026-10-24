@@ -446,10 +446,19 @@ export async function procesarColaPeajes(
   return r;
 }
 
-/** Devuelve a la cola un archivo fallido (p. ej. tras declarar el mapeo de columnas). */
-export async function reintentarArchivoPeaje(tenantId: string, archivoId: string): Promise<boolean> {
+/**
+ * Devuelve a la cola un archivo fallido (p. ej. tras declarar el mapeo de columnas). A37-A2-01: los archivos de correo
+ * y SFTP entran con proveedor null y su mapeo se busca POR proveedor, así que sin poder declararlo aquí fallaban igual
+ * en cada reintento; `proveedor` (opcional) lo fija antes de reencolar. Vacío o ausente = se conserva el que tenía.
+ */
+export async function reintentarArchivoPeaje(tenantId: string, archivoId: string, proveedor?: string | null): Promise<boolean> {
+  const prov = typeof proveedor === 'string' ? proveedor.trim().replace(/\s+/g, ' ') : '';
+  if (prov.length > 60) return false;
   const res = await acotada(supabaseAdmin().from('peaje_ingesta_archivo')
-    .update({ estado: 'pendiente', intentos: 0, proximo_intento_en: new Date().toISOString(), ultimo_error: null, reclamo: null, reclamado_hasta: null })
+    .update({
+      estado: 'pendiente', intentos: 0, proximo_intento_en: new Date().toISOString(), ultimo_error: null, reclamo: null, reclamado_hasta: null,
+      ...(prov ? { proveedor: prov } : {}),
+    })
     .eq('tenant_id', tenantId).eq('id', archivoId).eq('estado', 'fallida').not('contenido', 'is', null).select('id'), 'peajes.cola.reintentar');
   if (res.error) {
     logger.error('peajes.cola.reintentar', { tenant: tenantId, err: res.error.message });

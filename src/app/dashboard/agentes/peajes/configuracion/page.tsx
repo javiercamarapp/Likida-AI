@@ -165,7 +165,7 @@ export default async function PaginaConfiguracionPeajes({
     const no = await puertaConfig(tenantId);
     if (no) volverConfig(sufijo, `error:${no}`);
     const id = String(fd.get('archivo') ?? '');
-    volverConfig(sufijo, (await reintentarArchivoPeaje(tenantId, id)) ? 'El archivo volvió a la cola: el siguiente ciclo (≤ 15 min) lo procesa.' : 'error:Ese archivo no se puede reintentar (solo los fallidos que conservan su contenido).');
+    volverConfig(sufijo, (await reintentarArchivoPeaje(tenantId, id, String(fd.get('proveedor') ?? ''))) ? 'El archivo volvió a la cola: el siguiente ciclo (≤ 15 min) lo procesa.' : 'error:Ese archivo no se puede reintentar (solo los fallidos que conservan su contenido).');
   }
 
   // ── Recepción por correo y pull (0563) ──

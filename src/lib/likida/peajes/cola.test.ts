@@ -247,6 +247,25 @@ describe('fallos', () => {
     expect(db.tablas.desglose_peaje_linea[0]).toMatchObject({ monto: 189.5, hora: '10:30:00' });
   });
 
+  it('A37-A2-01: un archivo de correo/SFTP (proveedor null) se reintenta declarando el proveedor y usa su mapeo', async () => {
+    const raro = 'x1;x2;x3;x4\n05/08/2026;10:30;Caseta Ejemplo Norte;189,50\n';
+    db.tablas.peaje_ingesta_archivo = [archivo({ contenido: byteaDeBuffer(buf(raro)), nombre: 'raro.csv', proveedor: null, origen: 'correo' })];
+    await procesarColaPeajes();
+    expect(db.tablas.peaje_ingesta_archivo[0].estado).toBe('fallida');
+    db.tablas.peaje_mapeo_columnas = [{ id: 'm', tenant_id: T, proveedor_norm: 'pase', proveedor: 'PASE', activo: true, columnas: { fecha: 'A', hora: 'B', caseta: 'C', monto: 'D' } }];
+    // Sin proveedor el reintento vuelve a fallar para siempre; con proveedor declarado, no.
+    expect(await reintentarArchivoPeaje(T, 'a1', 'PASE')).toBe(true);
+    expect(db.tablas.peaje_ingesta_archivo[0]).toMatchObject({ estado: 'pendiente', proveedor: 'PASE' });
+    expect((await procesarColaPeajes()).procesados).toBe(1);
+    expect(db.tablas.desglose_peaje[0]).toMatchObject({ proveedor: 'PASE' });
+  });
+
+  it('A37-A2-01: un proveedor de más de 60 caracteres no se acepta al reintentar', async () => {
+    db.tablas.peaje_ingesta_archivo = [archivo({ id: 'f1', estado: 'fallida', proveedor: null })];
+    expect(await reintentarArchivoPeaje(T, 'f1', 'P'.repeat(61))).toBe(false);
+    expect(db.tablas.peaje_ingesta_archivo[0]).toMatchObject({ estado: 'fallida', proveedor: null });
+  });
+
   it('reintentar: solo fallidas, solo de la flota, solo con contenido', async () => {
     db.tablas.peaje_ingesta_archivo = [
       archivo({ id: 'f1', estado: 'fallida', huella: 'h1' }),
