@@ -3,6 +3,7 @@ import type { DatosTablero } from '../conductor/repo_validacion';
 import { configApagada } from '../vigia/tipos';
 import type { EscalacionValida, TareaAbierta } from './escalamiento';
 import { llaveDedupe } from './escalamiento';
+import { tareaEsDeDinero } from './permisos';
 import type { EntradaTableroConCatalogos, Fuentes, ResultadoCrearEscalacion } from './fuentes';
 import type { PosicionUnidad } from './tablero_viajes';
 
@@ -89,7 +90,14 @@ export function crearFuentesEnMemoria(mundos: Record<string, MundoFlota>) {
     async liquidacionExterna(t) { return mundo('liquidacionExterna', t).liquidacionExterna ?? null; },
     async reclamacionPeajes(t) { return mundo('reclamacionPeajes', t).reclamacionPeajes ?? null; },
     async jornada(t) { return mundo('jornada', t).jornada ?? null; },
-    async escalacionesAbiertas(t) { return (tareas.get(t) ?? []).map(({ dedupe: _d, tenantId: _t, usuarioId: _u, ...x }) => x); },
+    async escalacionesAbiertas(t, limite, filtro) {
+      // Como la base (A37-S17-03): el filtro de dinero se aplica ANTES del límite, de la más reciente a la más antigua.
+      // Sin límite ni filtro se conserva el orden de inserción de siempre.
+      let l = (tareas.get(t) ?? []).map(({ dedupe: _d, tenantId: _t, usuarioId: _u, ...x }) => x);
+      if (filtro?.soloDinero) l = l.filter(tareaEsDeDinero);
+      if (limite !== undefined && filtro?.soloDinero) l = [...l].sort((a, b) => (a.creadaEn < b.creadaEn ? 1 : a.creadaEn > b.creadaEn ? -1 : 0)).slice(0, limite);
+      return l;
+    },
   };
   return { fuentes, llamadas, tareas };
 }

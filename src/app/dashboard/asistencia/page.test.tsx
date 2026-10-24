@@ -1,5 +1,6 @@
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // /dashboard/asistencia (Mesa de control) — CERO cobertura de la PÁGINA
@@ -94,6 +95,14 @@ it('reescalar: manda tenant/usuario de la SESIÓN, id y nivel por el form', asyn
   const [, reescalar] = formularios(pagina);
   await (reescalar.props.action as (fd: FormData) => Promise<void>)(fd({ id: 'i-1', nivel: '2', tenantId: 'OTRO' }));
   expect(dobles.reescalarDesdeMesa).toHaveBeenCalledWith('t-1', 'i-1', 'u-1', 2);
+});
+
+it('A37-S16-05: «subir de nivel» dice con texto VISIBLE que registra y no avisa a nadie', async () => {
+  dobles.listarMesaAsistencia.mockResolvedValue([INC]);
+  const html = renderToStaticMarkup((await PaginaMesaControl({ searchParams: SP })) as ReactElement);
+  expect(html).toContain('Registrar nivel 2 (no avisa)');
+  expect(html).not.toContain('Subir a nivel');
+  expect(html).toMatch(/no manda ningún aviso/);
 });
 
 it('cerrar con nota: manda tenant/usuario de la SESIÓN, nota obligatoria por el form', async () => {

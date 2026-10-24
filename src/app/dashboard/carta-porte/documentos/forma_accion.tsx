@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { TriangleAlert, CheckCircle2 } from 'lucide-react';
+import { BotonConfirmar } from '@/app/admin/ui/confirmar';
 
 export type ResultadoAccion = { ok: true; mensaje: string; detalles?: string[] } | { ok: false; error: string } | null;
 export type AccionDoc = (previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
@@ -42,11 +43,24 @@ const COLOR: Record<string, { bg: string; fg: string }> = {
 };
 
 /** Un botón de envío; `intencion` viaja como `name="intencion"` para que UNA acción atienda varios botones. */
-export function BotonEnvio({ etiqueta, pendiente = 'Procesando…', intencion, variante = 'primario', icono }: {
+export function BotonEnvio({ etiqueta, pendiente = 'Procesando…', intencion, variante = 'primario', icono, confirmar }: {
   etiqueta: string; pendiente?: string; intencion?: string; variante?: 'primario' | 'secundario' | 'peligro'; icono?: ReactNode;
+  /** A37-S16-04: para lo irreversible. El botón abre un diálogo con el alcance; el envío (con `intencion`) es el botón del diálogo. */
+  confirmar?: { titulo: string; descripcion: ReactNode; etiquetaConfirmar: string };
 }) {
   const { pending } = useFormStatus();
   const c = COLOR[variante];
+  if (confirmar) {
+    return (
+      <BotonConfirmar
+        etiqueta={pending ? pendiente : etiqueta} deshabilitado={pending} icono={icono}
+        titulo={confirmar.titulo} descripcion={confirmar.descripcion} etiquetaConfirmar={confirmar.etiquetaConfirmar}
+        nombreConfirmar={intencion ? 'intencion' : undefined} valorConfirmar={intencion}
+        className={`h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50 ${variante === 'primario' ? '' : 'hairline'}`}
+        style={{ background: c.bg, color: c.fg }}
+      />
+    );
+  }
   return (
     <button type="submit" name={intencion ? 'intencion' : undefined} value={intencion} disabled={pending}
       className={`h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50 ${variante === 'primario' ? '' : 'hairline'}`}

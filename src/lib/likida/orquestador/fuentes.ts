@@ -70,7 +70,8 @@ export interface Fuentes {
     tenantId: string, e: EscalacionValida,
     quien: { rol: string; usuarioId: string | null },
   ): Promise<ResultadoCrearEscalacion>;
-  escalacionesAbiertas(tenantId: string, limite?: number): Promise<TareaAbierta[] | null>;
+  /** `filtro.soloDinero`: el filtro de destino/motivo de dinero se aplica EN LA CONSULTA, antes del límite (A37-S17-03). */
+  escalacionesAbiertas(tenantId: string, limite?: number, filtro?: { soloDinero?: boolean }): Promise<TareaAbierta[] | null>;
   /** Convenio e instrucciones de un viaje ABIERTO por su folio. `null` = la base no tiene los convenios (0580); `'sin_viaje'` = ningún viaje abierto con ese folio. */
   convenioDeViaje(tenantId: string, folio: string): Promise<ConvenioDeViaje | 'sin_viaje' | null>;
   /** Entrega de la liquidación externa. `null` = la base no la tiene (0370). */

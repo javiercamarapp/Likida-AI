@@ -1,10 +1,8 @@
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { sufijoTenant } from '../sufijo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
-import { fuentes } from '@/lib/likida/orquestador/fuentes';
 import '@/lib/likida/orquestador/fuentes_reales';
-import { rolPuedeLeerTarea, tareaEsDeDinero } from '@/lib/likida/orquestador/permisos';
-import { logger } from '@/lib/logger';
+import { leerTareasDeDinero, TOPE_TAREAS_DINERO } from '@/lib/likida/orquestador/tareas_de_dinero';
 import { TareasAbiertas } from '../viajes-en-vivo/vista';
 import { InicioContador } from './inicio-contador';
 
@@ -43,15 +41,14 @@ export default async function PanelContadorPage({
 
   // Las tareas de dinero que el asistente derivó (liquidación, contador): su dueño es quien ve `dinero`, y el contador no
   // entra a /dashboard/viajes-en-vivo (es de operación), así que las lee aquí. Solo lectura: atenderlas es de quien asigna.
-  // A37-L-docs-ux-calidad-01: un fallo de lectura (timeout/5xx) NO es «sin pendientes»: se avisa en vez de pintar nada.
-  const lectura = await fuentes().escalacionesAbiertas(tenantId, 60)
-    .then((l) => ({ tareas: l && l.filter((t) => tareaEsDeDinero(t) && rolPuedeLeerTarea(rol, t)).slice(0, 20), conError: false }))
-    .catch((e) => {
-      logger.warn('contador.tareas_sin_leer', { tenantId, err: e instanceof Error ? e.message : String(e) });
-      return { tareas: null, conError: true };
-    });
-  const { tareas, conError: tareasConError } = lectura;
-  const hayTareas = puedeVerRuta(rol, '/dashboard/contador') && ((tareas !== null && tareas.length > 0) || tareasConError);
+  // A37-S17-03: el filtro de dinero va en la consulta (no después de un límite), se avisa si hay más de las que se pintan y un
+  // fallo de lectura se dice (no se confunde con «no hay tareas»).
+  const lectura = await leerTareasDeDinero(tenantId, rol);
+  const veLaRuta = puedeVerRuta(rol, '/dashboard/contador');
+  const tareas = lectura.estado === 'ok' ? lectura.tareas : null;
+  const tareasConError = lectura.estado === 'error';
+  const hayTareas = veLaRuta && ((tareas !== null && tareas.length > 0) || tareasConError);
+  const hayMas = lectura.estado === 'ok' && lectura.hayMas;
 
   return (
     <>
@@ -63,7 +60,12 @@ export default async function PanelContadorPage({
       sufijo={sufijo}
       searchParams={sp}
     />
-    {hayTareas && <main className="px-4 md:px-6 pb-6"><TareasAbiertas tareas={tareas} errorLectura={tareasConError} accion={null} ocultos={{}} /></main>}
+    {hayTareas && (
+      <main className="px-4 md:px-6 pb-6 space-y-2">
+        <TareasAbiertas tareas={tareas} errorLectura={tareasConError} accion={null} ocultos={{}} />
+        {hayMas && <p className="text-[12px]" role="status" style={{ color: 'var(--muted)' }}>Hay más de {TOPE_TAREAS_DINERO} tareas de dinero abiertas: se muestran las {TOPE_TAREAS_DINERO} más recientes.</p>}
+      </main>
+    )}
     </>
   );
 }

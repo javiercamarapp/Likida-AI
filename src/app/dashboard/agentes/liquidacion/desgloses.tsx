@@ -74,7 +74,9 @@ export type LecturaDesgloses =
   | { ok: false }
   | { ok: true; fichas: FichasDesgloses; filas: FilaDesglose[]; sinPoliza: FilaSinPoliza[]; siguiente: string | null;
       /** Insights ya calculados con más datos que las fichas; sin ellos se calculan de las fichas. */
-      insights?: InsightA1[] };
+      insights?: InsightA1[];
+      /** A37-S14-03: la lista «sin póliza» se cortó en el tope; hay más de las que se pintan. */
+      sinPolizaTruncada?: boolean };
 
 export interface DesglosesProps {
   lectura: Promise<LecturaDesgloses>;
@@ -102,6 +104,11 @@ export interface PanelDetalleProps {
   /** El filtro y las fechas vigentes de la lista, para que «Cerrar» no los pierda. */
   params: Array<[string, string]>;
 }
+
+/** Cuántas excepciones se pintan; la página pide una más para saber si hay otras sin mostrar (A37-S14-03). */
+export const TOPE_EXCEPCIONES = 50;
+/** Cuántas bitácoras «sin póliza» se pintan en su lista; la página pide una más (A37-S14-03). */
+export const TOPE_SIN_POLIZA = 200;
 
 export interface SeccionExcepcionesProps {
   /** `null` = no se pudo leer. */
@@ -245,7 +252,7 @@ export async function SeccionDesgloses(p: DesglosesProps) {
     );
   }
 
-  const { fichas, filas, sinPoliza, siguiente } = lectura;
+  const { fichas, filas, sinPoliza, siguiente, sinPolizaTruncada } = lectura;
   const hoy = hoyMx();
   const filtrando = !!(p.filtro || p.desde || p.hasta);
   const verSinPoliza = p.filtro === 'sin_poliza';
@@ -322,6 +329,9 @@ export async function SeccionDesgloses(p: DesglosesProps) {
                 ))}
               </tbody>
             </table>
+            {sinPolizaTruncada && (
+              <p className="text-[12px] mt-2" role="status" style={{ color: 'var(--bad)' }}>Se muestran las {sinPoliza.length} más recientes: hay más bitácoras sin póliza que no caben en esta lista.</p>
+            )}
             <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>Estas bitácoras no se enviarán hasta tener póliza: revísalas en el sistema de tu empresa.</p>
           </div>
         )
@@ -719,7 +729,9 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
 
 /** Lo que pide a una persona, de toda la flota: sin póliza, operador sin alta o sin correo, retenidos y correcciones pendientes. */
 export async function SeccionExcepciones(p: SeccionExcepcionesProps) {
-  const lista = await p.excepciones;
+  const todas = await p.excepciones;
+  const lista = todas === null ? null : todas.slice(0, TOPE_EXCEPCIONES);
+  const hayMas = todas !== null && todas.length > TOPE_EXCEPCIONES;
   if (lista === null) {
     return (
       <section className="card p-4" id="excepciones" role="alert">
@@ -738,6 +750,10 @@ export async function SeccionExcepciones(p: SeccionExcepcionesProps) {
       {lista.length === 0 ? (
         <EstadoVacio icono={<Mail width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>Sin excepciones abiertas.</EstadoVacio>
       ) : (
+        <>
+        {hayMas && (
+          <p className="text-[12px] mb-2" role="status" style={{ color: 'var(--bad)' }}>Se muestran las {TOPE_EXCEPCIONES} más recientes: hay más excepciones abiertas que no caben en esta lista. Resuelve las visibles para ver el resto.</p>
+        )}
         <ul className="space-y-2">
           {lista.map((x) => {
             const bitacora = typeof x.detalle.bitacora === 'string' ? x.detalle.bitacora : x.claveExterna;
@@ -751,6 +767,7 @@ export async function SeccionExcepciones(p: SeccionExcepcionesProps) {
             );
           })}
         </ul>
+        </>
       )}
     </section>
   );

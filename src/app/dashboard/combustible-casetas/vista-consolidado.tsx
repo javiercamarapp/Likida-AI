@@ -64,13 +64,16 @@ export function LineasPorConciliar({
 
           <form action={accion} className="flex items-center gap-2 flex-wrap mt-1">
             <input type="hidden" name="lineaId" value={l.id} />
+            {/* A37-S17-01: con VARIOS candidatos empatados no se adivina cuál: nada viene preseleccionado y hay que elegir. */}
             <select
               name="eleccion"
               aria-label="Con qué gasto ligar esta línea"
-              defaultValue={l.candidatos.length > 0 ? l.candidatos[0].gastoId : NINGUNO_VALOR}
+              required
+              defaultValue={l.candidatos.length === 0 ? NINGUNO_VALOR : l.candidatos.length === 1 ? l.candidatos[0].gastoId : ''}
               className="text-sm rounded-lg px-2.5 py-1.5 max-w-xs"
               style={CONTROL}
             >
+              {l.candidatos.length > 1 && <option value="" disabled>Elige con qué gasto ligar…</option>}
               {l.candidatos.map((c) => (
                 <option key={c.gastoId} value={c.gastoId}>
                   Viaje {c.viajeFolio ?? '(sin folio)'} — {mxn(c.monto)}, {c.fecha ? fechaMx(c.fecha) : 'sin fecha'}

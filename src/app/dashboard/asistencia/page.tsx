@@ -183,9 +183,13 @@ export default async function PaginaMesaControl({
                 <form action={reescalar}>
                   <input type="hidden" name="id" value={inc.id} />
                   <input type="hidden" name="nivel" value={inc.nivelEscalado + 1} />
-                  <button type="submit" className={BTN_CHICO} title="Sube un nivel el escalamiento (solo sube — bajar re-armaría avisos ya mandados). No manda WhatsApp: tú ya estás viendo esto.">
-                    Subir a nivel {inc.nivelEscalado + 1}
+                  {/* A37-S16-05: el aviso NO puede ir solo en el `title` (en celular no existe). Se rotula con texto visible. */}
+                  <button type="submit" className={BTN_CHICO} title="Registra el nivel en el expediente (solo sube — bajar re-armaría avisos ya mandados). No manda WhatsApp: tú ya estás viendo esto.">
+                    Registrar nivel {inc.nivelEscalado + 1} (no avisa)
                   </button>
+                  <span className="block text-[11px] mt-1 max-w-[16rem]" style={{ color: 'var(--muted)' }}>
+                    Solo lo anota: no manda ningún aviso a la dirección y el cron ya no repite los niveles anteriores.
+                  </span>
                 </form>
               )}
             </span>

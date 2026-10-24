@@ -260,7 +260,14 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
                             {/* La cancelación NO se resuelve con prosa: se
                                 EJECUTA sobre datos concretos. El botón dice
                                 lo que hace antes de que alguien lo apriete. */}
-                            <FormaConAviso accion={accionEjecutarCancelacion} boton="Ejecutar cancelación" columnas="auto">
+                            <FormaConAviso
+                              accion={accionEjecutarCancelacion} boton="Ejecutar cancelación" columnas="auto"
+                              confirmar={{
+                                titulo: 'Ejecutar la cancelación',
+                                descripcion: `Se sustituyen nombre y teléfono de ${s.operadorNombre ?? 'este titular'} (${s.titularRef}) y se eliminan sus conversaciones. Si es una cuenta de oficina, también se da de baja y se borra su acceso. No se puede deshacer.`,
+                                etiquetaConfirmar: 'Sí, ejecutar cancelación',
+                              }}
+                            >
                               <input type="hidden" name="solicitudId" value={s.id} />
                             </FormaConAviso>
                             <span className="text-xs" style={{ color: 'var(--muted)' }}>
