@@ -133,7 +133,9 @@ export function finDiaMx(dia: string): string {
  * corrige sobre el valor absoluto y se restaura el signo al final.
  */
 export function round2(n: number): number {
-  return Math.sign(n) * Math.round((Math.abs(n) + Number.EPSILON) * 100) / 100;
+  // `+ 0`: un negativo que redondea a cero daba -0 (A37-S25-08) y `mxn(-0)`
+  // imprime «-$0.00»; -0 + 0 es +0 y no altera ningún otro valor.
+  return Math.sign(n) * Math.round((Math.abs(n) + Number.EPSILON) * 100) / 100 + 0;
 }
 
 /**
@@ -181,6 +183,10 @@ export function pctCambio(actual: number, base: number | null): number | null {
 
 /** Pesos mexicanos como los espera un contador: `$1,234.56`. */
 export function mxn(n: number): string {
+  // A37-S25-08: -0 y las diferencias menores a medio centavo (que Intl
+  // redondea a cero conservando el signo) se pintaban «-$0.00», que parece un
+  // saldo negativo. Se normalizan a cero antes de formatear.
+  if (Math.abs(n) < 0.005) n = 0;
   return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 }
 

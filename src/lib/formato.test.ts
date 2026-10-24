@@ -565,3 +565,21 @@ describe('los sitios de captura usan el parser estricto (A36-R01-02)', () => {
     });
   }
 });
+
+// A37-S25-08 — el cero negativo no se imprime como «-$0.00».
+describe('A37-S25-08: sin cero negativo', () => {
+  it('round2 de un negativo que redondea a cero devuelve +0, no -0', () => {
+    expect(Object.is(round2(-0.001), 0)).toBe(true);
+    expect(Object.is(round2(-0), 0)).toBe(true);
+    expect(round2(-1.005)).toBe(-1.01);
+  });
+  it('mxn no pinta «-$0.00» para -0 ni para una diferencia menor a medio centavo', () => {
+    expect(mxn(-0)).toBe('$0.00');
+    expect(mxn(-0.004)).toBe('$0.00');
+    expect(mxn(round2(-0.001))).toBe('$0.00');
+  });
+  it('mxn conserva el signo de los negativos reales', () => {
+    expect(mxn(-0.005)).toBe('-$0.01');
+    expect(mxn(-12.5)).toBe('-$12.50');
+  });
+});
