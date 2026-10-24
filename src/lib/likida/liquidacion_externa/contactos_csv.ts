@@ -52,7 +52,7 @@ export interface LecturaContactos {
   filas: ContactoImportado[];
   /** Filas que no se pueden aplicar (forma de correo, nombre sin correo, repetida, sin datos). */
   invalidas: Descartada[];
-  /** Avisos que no frenan nada (p. ej. dos operadores del archivo comparten buzón). */
+  /** Avisos que no frenan nada. */
   advertencias: string[];
   /** Solo cuando NO se pudo leer nada útil (archivo vacío, sin columnas) o el archivo rebasa el tope. */
   error?: string;
@@ -136,10 +136,24 @@ export function interpretarContactos(matriz: unknown[][]): LecturaContactos {
     filas.push({ fila: numero, numeroEmpleado, correo, coordinadorNombre: coordNombre || null, coordinadorCorreo });
   }
 
+  // A37-S48-06: dos operadores del archivo con el MISMO correo es casi siempre un copiar/pegar mal hecho, y el desglose
+  // lleva sueldo y deducciones (LFPDPPP). Fail-closed: ninguna de esas filas se aplica; se reportan para corregirlas.
+  const choque = new Set<number>();
   for (const filasDelBuzon of correosVistos.values()) {
     if (filasDelBuzon.length > 1) {
-      advertencias.push(`las filas ${filasDelBuzon.join(', ')} comparten el mismo correo de operador: ese buzón recibirá el desglose de todos ellos`);
+      for (const n of filasDelBuzon) {
+        choque.add(n);
+        invalidas.push({
+          fila: n,
+          motivo: `comparte el correo del operador con las filas ${filasDelBuzon.filter((o) => o !== n).join(', ')}: ese buzón recibiría el desglose de todos; corrige el archivo`,
+        });
+      }
     }
+  }
+  if (choque.size) {
+    const aplicables = filas.filter((f) => !choque.has(f.fila));
+    filas.length = 0;
+    filas.push(...aplicables);
   }
 
   const tope = avisoDeTope(matriz);
@@ -205,10 +219,9 @@ export async function aplicarContactos(lectura: LecturaContactos, puerto: Puerto
   if (!lectura.filas.length) return informe;
 
   const encontrados = await puerto.buscarOperadores(lectura.filas.map((f) => f.numeroEmpleado));
-  const coordinadores = new Map<string, string>(); // correo → id, para no pedirlo dos veces en la misma corrida
-  const tocados: string[] = [];
-  const correosAsignados: string[] = [];
 
+  // Primera pasada: qué filas tienen operador único. Nada se escribe todavía.
+  let aplicables: Array<{ f: ContactoImportado; op: OperadorContacto }> = [];
   for (const f of lectura.filas) {
     const candidatos = encontrados.get(f.numeroEmpleado) ?? [];
     if (candidatos.length === 0) {
@@ -219,8 +232,31 @@ export async function aplicarContactos(lectura: LecturaContactos, puerto: Puerto
       informe.ambiguos.push({ fila: f.fila, motivo: 'ese número de empleado lo tienen varios operadores de la flota; corrígelo en el registro antes de importar su correo' });
       continue;
     }
-    const op = candidatos[0];
+    aplicables.push({ f, op: candidatos[0] });
+  }
 
+  // A37-S48-06: los choques con correos de OTROS operadores se calculan ANTES de escribir y esas filas no se aplican:
+  // avisar después de guardar dejaba salir el desglose de nómina al buzón equivocado. Si la consulta falla, lanza y no
+  // se escribe nada (fail-closed).
+  if (puerto.correosEnUsoPorOtros) {
+    const conCorreo = aplicables.filter(({ f }) => f.correo !== null);
+    if (conCorreo.length) {
+      const ocupados = await puerto.correosEnUsoPorOtros(
+        [...new Set(conCorreo.map(({ f }) => f.correo as string))],
+        conCorreo.map(({ op }) => op.id),
+      );
+      if (ocupados.size > 0) {
+        aplicables = aplicables.filter(({ f }) => {
+          if (f.correo === null || !ocupados.has(f.correo)) return true;
+          informe.invalidas.push({ fila: f.fila, motivo: 'el correo del operador ya lo usa otro operador de la flota: no se aplicó para que no le llegue su desglose a otra persona; corrígelo o quita ese correo al otro operador' });
+          return false;
+        });
+      }
+    }
+  }
+
+  const coordinadores = new Map<string, string>(); // correo → id, para no pedirlo dos veces en la misma corrida
+  for (const { f, op } of aplicables) {
     let coordinadorId: string | undefined;
     if (f.coordinadorCorreo) {
       let id = coordinadores.get(f.coordinadorCorreo);
@@ -237,20 +273,9 @@ export async function aplicarContactos(lectura: LecturaContactos, puerto: Puerto
     if (f.correo !== null && f.correo !== (op.correo ?? '').toLowerCase()) cambios.correo = f.correo;
     if (coordinadorId !== undefined && coordinadorId !== op.coordinadorId) cambios.coordinadorId = coordinadorId;
 
-    if (f.correo !== null) { tocados.push(op.id); correosAsignados.push(f.correo); }
     if (Object.keys(cambios).length === 0) { informe.sinCambios++; continue; }
     await puerto.guardarContacto(op.id, cambios);
     informe.actualizados++;
-  }
-
-  if (puerto.correosEnUsoPorOtros && correosAsignados.length) {
-    const ocupados = await puerto.correosEnUsoPorOtros([...new Set(correosAsignados)], tocados);
-    if (ocupados.size > 0) {
-      const filasEnChoque = lectura.filas.filter((f) => f.correo !== null && ocupados.has(f.correo)).map((f) => f.fila);
-      if (filasEnChoque.length) {
-        informe.advertencias.push(`las filas ${filasEnChoque.join(', ')} usan un correo que ya tiene otro operador de la flota: comparten buzón`);
-      }
-    }
   }
   return informe;
 }
