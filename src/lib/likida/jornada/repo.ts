@@ -476,14 +476,20 @@ export async function nombresDeOperadores(
 ): Promise<Map<string, { nombre: string; numeroEmpleado: string | null }>> {
   const mapa = new Map<string, { nombre: string; numeroEmpleado: string | null }>();
   if (ids.length === 0) return mapa;
-  const { data, error } = await acotada(
-    supabaseAdmin().from('operador').select('id, nombre, numero_empleado')
-      .eq('tenant_id', tenantId).in('id', [...new Set(ids)]),
-    'jornada.operadores',
-  );
-  if (error) throw new JornadaIlegible(`nombres de operadores: ${error.message}`);
-  for (const o of (data ?? []) as Array<{ id: string; nombre: string; numero_empleado: string | null }>) {
-    mapa.set(String(o.id), { nombre: String(o.nombre), numeroEmpleado: o.numero_empleado });
+  // A37-S19-04: en lotes de 150 ids (como `alertasDeJornadas`): con una flota
+  // grande un solo `.in()` de cientos de uuids lleva la query string al límite
+  // del gateway y tumbaba toda la pantalla de jornada.
+  const unicos = [...new Set(ids)];
+  for (let i = 0; i < unicos.length; i += 150) {
+    const { data, error } = await acotada(
+      supabaseAdmin().from('operador').select('id, nombre, numero_empleado')
+        .eq('tenant_id', tenantId).in('id', unicos.slice(i, i + 150)),
+      'jornada.operadores',
+    );
+    if (error) throw new JornadaIlegible(`nombres de operadores: ${error.message}`);
+    for (const o of (data ?? []) as Array<{ id: string; nombre: string; numero_empleado: string | null }>) {
+      mapa.set(String(o.id), { nombre: String(o.nombre), numeroEmpleado: o.numero_empleado });
+    }
   }
   return mapa;
 }

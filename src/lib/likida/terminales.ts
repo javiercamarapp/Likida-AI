@@ -295,13 +295,17 @@ export async function terminalesDeRegistros(
   const validos = [...new Set(ids.filter(esUuidValido))];
   const salida = new Map<string, string | null>();
   if (validos.length === 0) return salida;
-  const { data, error } = await acotada(
-    supabaseAdmin().from(tabla).select('id, terminal_id').eq('tenant_id', tenantId).in('id', validos),
-    `terminalesDeRegistros.${tabla}`,
-  );
-  if (error) throw new Error(`terminalesDeRegistros(${tabla}): ${error.message}`);
-  for (const f of (data ?? []) as Array<{ id: unknown; terminal_id: unknown }>) {
-    salida.set(String(f.id), typeof f.terminal_id === 'string' && f.terminal_id ? f.terminal_id : null);
+  // A37-S19-04: en lotes de 150 ids; un `.in()` de cientos de uuids rebasa el
+  // límite de URL del gateway y el jefe de patio se quedaba sin poder corregir.
+  for (let i = 0; i < validos.length; i += 150) {
+    const { data, error } = await acotada(
+      supabaseAdmin().from(tabla).select('id, terminal_id').eq('tenant_id', tenantId).in('id', validos.slice(i, i + 150)),
+      `terminalesDeRegistros.${tabla}`,
+    );
+    if (error) throw new Error(`terminalesDeRegistros(${tabla}): ${error.message}`);
+    for (const f of (data ?? []) as Array<{ id: unknown; terminal_id: unknown }>) {
+      salida.set(String(f.id), typeof f.terminal_id === 'string' && f.terminal_id ? f.terminal_id : null);
+    }
   }
   return salida;
 }
