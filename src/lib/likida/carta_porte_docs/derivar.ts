@@ -9,7 +9,7 @@
 import { campoDoc, campoMercancia, type CampoValor, type Extraccion, type Origen } from './campos';
 import { FACTOR_A_KG, claveUnidadDeTexto } from './catalogos';
 import { PEDIMENTO_PARCIAL, limpiarTexto, normalizarNumero, normalizarValor, type OrdenFecha } from './normalizar';
-import { tipoOperacion } from './validacion';
+import { NOTA_REGIMEN_DE_NOMBRE, regimenSoloDeNombre, tipoOperacion } from './validacion';
 
 const num = (c: CampoValor | undefined): number | null => (c?.valor != null ? normalizarNumero(c.valor).valor : null);
 /** Nota fija (y por eso idempotente) cuando solo hay peso neto o «peso por embalaje» y se usa como bruto. */
@@ -34,16 +34,8 @@ export function metadatosNombreArchivo(nombre: string | null | undefined): { ope
 }
 
 const REGIMEN_DE_OPERACION = { importacion: 'IMD', exportacion: 'EXD' } as const;
-const NOTA_REGIMEN_DE_NOMBRE = 'Se dedujo del nombre del archivo';
 /** A37-S31-06 · Nota fija (idempotente) cuando el nombre sugiere exportación pero el documento trae pedimento / RFC del importador. */
 export const NOTA_CONFLICTO_NOMBRE_EXPO = 'El documento trae pedimento o RFC del importador, pero el régimen salió solo del nombre del archivo (EXPO): confirma si es importación o exportación. No se omitió ningún dato.';
-
-/** ¿El régimen de las mercancías es solo una pista del nombre del archivo (no lo dice el documento)? */
-function regimenSoloDeNombre(e: Extraccion): boolean {
-  if (e.campos.regimen_aduanero?.valor) return false;
-  const filas = e.mercancias.filter((f) => f.regimen_aduanero?.valor);
-  return filas.length > 0 && filas.every((f) => f.regimen_aduanero.origen === 'derivado' && (f.regimen_aduanero.notas ?? []).some((n) => n.startsWith(NOTA_REGIMEN_DE_NOMBRE)));
-}
 
 /** Régimen, pedimento y caja a partir del contexto. Nunca pisa lo que un humano dejó ni inventa un pedimento. */
 function derivarAduana(e: Extraccion, ctx: ContextoDerivar): void {

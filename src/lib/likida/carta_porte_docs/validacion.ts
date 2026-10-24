@@ -563,6 +563,16 @@ export function tipoOperacion(e: Extraccion): TipoOperacion {
   return 'desconocida';
 }
 
+/** Prefijo de la nota con que `derivar.ts` marca un régimen que SOLO salió del nombre del archivo (una pista, no un hecho). */
+export const NOTA_REGIMEN_DE_NOMBRE = 'Se dedujo del nombre del archivo';
+
+/** A37-S31-06 · ¿El régimen de las mercancías es solo una pista del nombre del archivo (el documento no lo dice)? */
+export function regimenSoloDeNombre(e: Extraccion): boolean {
+  if (texto(e.campos.regimen_aduanero)) return false;
+  const filas = e.mercancias.filter((f) => texto(f.regimen_aduanero));
+  return filas.length > 0 && filas.every((f) => f.regimen_aduanero.origen === 'derivado' && (f.regimen_aduanero.notas ?? []).some((n) => n.startsWith(NOTA_REGIMEN_DE_NOMBRE)));
+}
+
 /** Prefijo de la nota que deja la regla del tramo mexicano cuando el extremo elegido no es el del documento (T-A3-50). */
 export const MARCA_TRAMO_DISTINTO = 'Tramo mexicano:';
 
@@ -628,8 +638,16 @@ export function reglaPedimentoSoloImportacion(e: Extraccion): Hallazgo[] {
   const op = tipoOperacion(e);
   if (op !== 'exportacion' && op !== 'nacional') return [];
   const quien = op === 'exportacion' ? 'una exportación' : 'un transporte nacional';
+  const soloPista = op === 'exportacion' && regimenSoloDeNombre(e);
   return porRenglon(e, (fila, i) => {
     const sobran = ['pedimento', CLAVES_RFC_IMPORTADOR].filter((k) => hay(fila[k]));
+    // A37-S31-06: si «exportación» es solo la pista del nombre del archivo, lo que el documento SÍ trae no se omite: se avisa del conflicto.
+    if (soloPista) {
+      return sobran.map((campo): Hallazgo => ({
+        campo, renglon: i, severidad: 'aviso', codigo: 'regimen_de_nombre_con_datos_de_importacion',
+        mensaje: `${etiquetaCampo(campo, i)}: el documento lo trae, pero la exportación salió solo del nombre del archivo (EXPO). Confirma si es importación o exportación; no se omitió ningún dato.`,
+      }));
+    }
     return sobran.map((campo): Hallazgo => ({
       campo, renglon: i, severidad: 'aviso', codigo: campo === 'pedimento' ? 'guia_pedimento_sin_importacion' : 'guia_rfc_importador_sin_importacion',
       mensaje: `${etiquetaCampo(campo, i)}: en ${quien} la Guía de llenado lo deja vacío; saldrá vacío en el libro del TMS.`,
@@ -748,7 +766,7 @@ export function aplicarReglasGuia(e: Extraccion, reglas: Partial<ReglasGuia> | f
     if (r.embalajeSoloPeligroso && !mercanciaPeligrosa(fila)) {
       for (const k of ['embalaje', 'embalaje_descripcion']) if (hay(fila[k])) { vaciar(fila, k); anotar('Se omitió el embalaje y su descripción porque la mercancía no es material peligroso', donde); }
     }
-    if (r.pedimentoSoloImportacion && (op === 'exportacion' || op === 'nacional')) {
+    if (r.pedimentoSoloImportacion && (op === 'exportacion' || op === 'nacional') && !(op === 'exportacion' && regimenSoloDeNombre(e))) {
       for (const k of ['pedimento', CLAVES_RFC_IMPORTADOR]) if (hay(fila[k])) { vaciar(fila, k); anotar(`Se omitió el pedimento y el RFC del importador porque es ${op === 'exportacion' ? 'una exportación' : 'un transporte nacional'}`, donde); }
     }
     if (r.descripcionSinEspeciales && hay(fila.descripcion)) {

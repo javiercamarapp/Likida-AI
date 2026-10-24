@@ -5,6 +5,7 @@ import { campoDoc, campoMercancia } from './campos';
 import { detectarFormato, prepararContenido, type ContenidoDoc } from './contenido';
 import { NOTA_CONFLICTO_NOMBRE_EXPO, completarDerivados, metadatosNombreArchivo } from './derivar';
 import { extraerDocumento } from './extractor';
+import { aplicarReglasGuia, reglaPedimentoSoloImportacion } from './validacion';
 import { normalizarClavePeligroso, normalizarPedimento, normalizarRegimen, normalizarValor } from './normalizar';
 import { RFC, cv } from './documentos_sinteticos.fixture';
 import { llmFalso, salida, type Fila } from './llm_falso.fixture';
@@ -224,6 +225,15 @@ describe('exportación: el pedimento queda vacío', () => {
     expect(f.pedimento.valor).toBe(PED);
     expect(f.rfc_importador.valor).toBe(RFC.atlas);
     expect(f.pedimento.notas?.filter((n) => n === NOTA_CONFLICTO_NOMBRE_EXPO)).toHaveLength(1);
+  });
+
+  it('A37-S31-06: la regla de la Guía no vacía lo leído cuando «exportación» es solo la pista del nombre', () => {
+    const e = { campos: {}, mercancias: [{ pedimento: cv(PED), rfc_importador: cv(RFC.atlas) }] };
+    completarDerivados(e, { nombreArchivo: 'CCP Transportes-Cliente EXPO TX4471 15-10-26.pdf' });
+    const { extraccion } = aplicarReglasGuia(e, undefined);
+    expect(extraccion.mercancias[0].pedimento.valor).toBe(PED);
+    expect(extraccion.mercancias[0].rfc_importador.valor).toBe(RFC.atlas);
+    expect(reglaPedimentoSoloImportacion(e).map((h) => h.codigo)).toEqual(['regimen_de_nombre_con_datos_de_importacion', 'regimen_de_nombre_con_datos_de_importacion']);
   });
 
   it('A37-S31-06: si el DOCUMENTO dice exportación (régimen leído), sí se vacían como siempre', () => {
