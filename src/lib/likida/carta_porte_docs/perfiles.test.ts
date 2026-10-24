@@ -285,6 +285,25 @@ describe('orden de fecha por perfil (MM/DD)', () => {
   });
 });
 
+describe('A37-S32-02: los ejemplos del perfil no guardan datos de personas', () => {
+  it('operador_* y contacto_* se aprenden como columna pero NO su valor (ni en campos ni en la evidencia)', async () => {
+    const c = await contenido(Buffer.from('Folio,Operador,Licencia,Descripcion,Cantidad\nF1,Persona Sintetica Uno,LIC-SINT-0001,Cemento,5\n'));
+    const final: Extraccion = {
+      campos: { folio_cliente: cv('F1', 1, 'humano'), operador_nombre: cv('Persona Sintetica Uno', 1, 'humano'), operador_licencia: cv('LIC-SINT-0001', 1, 'humano') },
+      mercancias: [{ descripcion: cv('Cemento', 1, 'humano') }],
+    };
+    const r = aprender({ contenido: c, final, previa: null, riesgoInyeccion: false });
+    expect(r.mapeos.find((m) => m.campo === 'operador_nombre')?.fuente).toEqual({ tipo: 'columna', encabezado: 'Operador' });
+    const guardado = JSON.stringify(r.ejemplos);
+    expect(guardado).not.toContain('Persona Sintetica Uno');
+    expect(guardado).not.toContain('LIC-SINT-0001');
+    expect(r.ejemplos[0].campos.operador_nombre).toBeUndefined();
+    expect(r.ejemplos[0].evidencias.find((e) => e.campo === 'operador_nombre')?.linea).toBe('Operador: «valor»');
+    // el resto del ejemplo sí enseña (folio y descripción)
+    expect(r.ejemplos[0].campos.folio_cliente).toBe('F1');
+  });
+});
+
 describe('aplicar un perfil', () => {
   const colMapeos = (...pares: Array<[string, string, boolean?]>): Mapeo[] =>
     pares.map(([campo, encabezado, mercancia]) => ({ campo, mercancia: !!mercancia, fuente: { tipo: 'columna', encabezado } }));

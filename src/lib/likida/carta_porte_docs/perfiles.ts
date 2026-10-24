@@ -664,6 +664,12 @@ function inferirRuta(arbol: unknown, final: string, igual: Igualdad): string | n
   return rutas.length === 1 ? rutas[0] : null;
 }
 
+/**
+ * A37-S32-02 · Datos de una PERSONA (operador, contacto en destino): el perfil guarda la forma en que el cliente los escribe
+ * (clave y etiqueta), nunca su valor. Los ejemplos son inmutables, sin purga y viajan al modelo como referencia de formato.
+ */
+export const esCampoPersonal = (clave: string): boolean => /^(operador_|contacto_)/.test(clave);
+
 export interface EntradaAprendizaje {
   contenido: ContenidoDoc;
   /** Lo que el humano dejó aprobado (valores finales). */
@@ -724,6 +730,7 @@ export function aprender(inp: EntradaAprendizaje): ResultadoAprendizaje {
       if (r) { fuente = { tipo: 'etiqueta', etiqueta: r.etiqueta }; miles = r.miles; celdaCruda = r.celda; linea = r.linea; }
     }
     if (!fuente) return;
+    if (esCampoPersonal(campo)) linea = `${fuente.tipo === 'columna' ? fuente.encabezado : fuente.tipo === 'etiqueta' ? fuente.etiqueta : fuente.tipo === 'ruta' ? fuente.ruta : campo}: «valor»`;
     const orden = celdaCruda ? ordenDeFecha(mercancia ? campoMercancia(campo) : campoDoc(campo), celdaCruda, finalV) : undefined;
     if (orden) ordenes.set(claveMapeo({ campo, mercancia }), orden);
     else if (celdaCruda && fechaNeutra(mercancia ? campoMercancia(campo) : campoDoc(campo), celdaCruda, finalV)) neutras.add(claveMapeo({ campo, mercancia }));
@@ -733,13 +740,13 @@ export function aprender(inp: EntradaAprendizaje): ResultadoAprendizaje {
 
   for (const def of CAMPOS_DOC) {
     const v = inp.final.campos[def.clave]?.valor;
-    if (typeof v === 'string' && v !== '') { camposFinales[def.clave] = v; intentar(def.clave, false, v, null); }
+    if (typeof v === 'string' && v !== '') { if (!esCampoPersonal(def.clave)) camposFinales[def.clave] = v; intentar(def.clave, false, v, null); }
   }
   inp.final.mercancias.forEach((fila, idx) => {
     for (const def of CAMPOS_MERCANCIA) {
       const v = fila[def.clave]?.valor;
       if (typeof v !== 'string' || v === '') continue;
-      if (idx === 0) camposFinales[`mercancia.${def.clave}`] = v;
+      if (idx === 0 && !esCampoPersonal(def.clave)) camposFinales[`mercancia.${def.clave}`] = v;
       // Para texto/XML solo el primer renglón puede enseñar la etiqueta (el resto repite).
       if (c.tabla || idx === 0) intentar(def.clave, true, v, idx);
     }
