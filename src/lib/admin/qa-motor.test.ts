@@ -345,7 +345,7 @@ vi.mock('./qa-oraculos', () => ({
 import {
   crearCorrida, ejecutarPasada, ejecutarCorridaRapida, mezclarEventos,
   patronesDeFallo, fraseFallosMismaFirma, MIN_FALLOS_MISMA_FIRMA,
-  instalarInterceptorSalidaMeta, contextoQa, limpiarTenant,
+  instalarInterceptorSalidaMeta, contextoQa, limpiarTenant, marcaOutboxQa,
 } from './qa-motor';
 import { guardarCorrida, leerCorrida, leerFotosDeCorrida } from './qa-storage';
 import { reservaPorFotoMs, TECHO_PASADA_MS, type ParametrosCorrida, type CorridaQA } from './qa-tipos';
@@ -1114,7 +1114,11 @@ describe('AUD28 · DAT-M2: limpiarTenant en modo borrar respeta el orden', () =>
       const yo = () => b as never;
       b.select = (_c?: unknown, o?: { head?: boolean }) => { if (o?.head) cabeza = true; return yo(); };
       b.eq = (c: string, v: unknown) => { preds.push((f) => f[c] === v); return yo(); };
-      b.like = () => yo();
+      b.like = (c: string, patron: string) => {
+        const re = new RegExp(`^${patron.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*')}$`);
+        preds.push((f) => typeof f[c] === 'string' && re.test(f[c] as string));
+        return yo();
+      };
       b.delete = () => { modo = 'delete'; return yo(); };
       b.maybeSingle = async () => {
         const filtradas = (filas[tabla] ?? []).filter((f) => preds.every((p) => p(f)));
@@ -1169,7 +1173,42 @@ describe('AUD28 · DAT-M2: limpiarTenant en modo borrar respeta el orden', () =>
       'storage.comprobantes.list',
       'storage.liquidaciones.list',
       'wa_mensaje_procesado.delete',
+      'wa_outbox.delete',
     ]);
+  });
+
+  // A37-S23-09: el interceptor deja filas wa_outbox 'dead' SIN tenant; la
+  // limpieza las borra por la marca de SU corrida (y solo esas) y las cuenta.
+  test('A37-S23-09: borra las filas wa_outbox del interceptor de ESTA corrida y deja las demás', async () => {
+    const orden: string[] = [];
+    const corrida = corridaDePrueba();
+    const db = dbLimpieza({
+      filas: {
+        wa_outbox: [
+          { id: 'o1', ultimo_error: `${marcaOutboxQa(corrida.id)} — interceptado, nunca se mandó a Meta` },
+          { id: 'o2', ultimo_error: 'QA: corrida 00000000-0000-4000-8000-000000000000 — interceptado, nunca se mandó a Meta' },
+          { id: 'o3', ultimo_error: 'fallo real de Meta' },
+        ],
+      },
+      orden,
+    });
+    const mensaje = await limpiarTenant(db, corrida);
+    expect(mensaje).toMatch(/^✅/);
+    expect(orden).toContain('wa_outbox.delete');
+    const restantes = await (db.from('wa_outbox') as unknown as PromiseLike<{ data: Fila[] }>);
+    expect(restantes.data.map((f) => f.id)).toEqual(['o2', 'o3']);
+  });
+
+  test('A37-S23-09: si las filas del interceptor sobreviven al DELETE, se nombran en las sobras', async () => {
+    const corrida = corridaDePrueba();
+    const db = dbLimpieza({
+      filas: { wa_outbox: [{ id: 'o1', ultimo_error: `${marcaOutboxQa(corrida.id)} — interceptado, nunca se mandó a Meta` }] },
+      noBorrarEnDelete: new Set(['wa_outbox']),
+      orden: [],
+    });
+    const mensaje = await limpiarTenant(db, corrida);
+    expect(mensaje).toMatch(/^⚠️/);
+    expect(mensaje).toContain('wa_outbox: 1 filas');
   });
 
   test('si el DELETE del tenant falla, Storage NO se toca (la evidencia se conserva)', async () => {
