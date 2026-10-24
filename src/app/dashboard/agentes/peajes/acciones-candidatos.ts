@@ -130,8 +130,15 @@ export async function aplicarAccionCandidatos(tenantId: string, e: EntradaAccion
     if (e.accion === 'reclamado' && efectivas.length > 0) {
       const porCategoria = new Map<string, FilaCandidato[]>();
       for (const f of efectivas) porCategoria.set(f.categoria, [...(porCategoria.get(f.categoria) ?? []), f]);
+      // A37-S14-01: los ids de cada categoría se calculan ANTES; si una falla, se retiran las suyas y las de TODAS las que
+      // aún no se procesaron (antes quedaban «reclamado» sin reclamo_id: fuera del seguimiento y con reintento = ya_decidido).
+      const idsPorCategoria = new Map<string, string[]>();
       for (const [categoria, grupo] of porCategoria) {
-        const idsGrupo = insertadas.filter((i) => i.categoria === categoria && grupo.some((f) => f.indice === i.indice)).map((i) => i.id);
+        idsPorCategoria.set(categoria, insertadas.filter((i) => i.categoria === categoria && grupo.some((f) => f.indice === i.indice)).map((i) => i.id));
+      }
+      const pendientes = [...porCategoria.keys()];
+      for (const [categoria, grupo] of porCategoria) {
+        const idsGrupo = idsPorCategoria.get(categoria) ?? [];
         try {
           const fechas = grupo.map((f) => f.fecha).filter((x): x is string => x !== null).sort();
           const reclamoId = await crearReclamoDeCandidatos(tenantId, {
@@ -140,18 +147,32 @@ export async function aplicarAccionCandidatos(tenantId: string, e: EntradaAccion
           });
           await ligarDecisionesAReclamo(tenantId, idsGrupo, reclamoId);
           reclamos++;
+          pendientes.shift();
         } catch (err) {
-          // Sin reclamo no hay «reclamado»: se retira lo de este grupo para que pueda reintentarse.
-          await retirarDecisionesCandidatos(tenantId, idsGrupo).catch(() => undefined);
+          // Sin reclamo no hay «reclamado»: se retira lo de este grupo y lo de los que faltaban, para que pueda reintentarse.
+          const sinReclamo = pendientes.flatMap((c) => idsPorCategoria.get(c) ?? []);
+          await retirarDecisionesCandidatos(tenantId, sinReclamo).catch((eRetiro) => {
+            logger.error('peajes.candidatos_retiro_fallo', { tenant: tenantId, n: sinReclamo.length, err: eRetiro instanceof Error ? eRetiro.message : String(eRetiro) });
+          });
           logger.error('peajes.candidatos_reclamo_fallo', { tenant: tenantId, err: err instanceof Error ? err.message : String(err) });
-          return { ok: false, error: `No se pudo registrar el reclamo de «${categoria}»${reclamos > 0 ? ` (los ${reclamos} anteriores sí quedaron)` : ''}. No se marcó nada de ese grupo: inténtalo de nuevo.` };
+          return { ok: false, error: `No se pudo registrar el reclamo de «${categoria}»${reclamos > 0 ? ` (los ${reclamos} anteriores sí quedaron)` : ''}. No se marcó nada de ese grupo ni de los que faltaban: inténtalo de nuevo.` };
         }
       }
     }
     if (e.accion === 'justificado') {
       // Las casetas que no deben cruzarse se justifican también donde la regla las lee (misma tabla que «Justificar este cruce»).
       const prohibidas = efectivas.filter((f) => f.categoria === 'caseta_no_debe_cruzarse').map((f) => ({ indice: f.indice, motivo: m.motivo ?? '' }));
-      if (prohibidas.length > 0) await guardarJustificacionesDeCruces(tenantId, desgloseId, prohibidas);
+      if (prohibidas.length > 0) {
+        try {
+          await guardarJustificacionesDeCruces(tenantId, desgloseId, prohibidas);
+        } catch (errJust) {
+          // A37-S14-01: si la regla no pudo leer la justificación, la decisión no se queda guardada a medias: se retira y se reintenta.
+          await retirarDecisionesCandidatos(tenantId, insertadas.map((i) => i.id)).catch((eRetiro) => {
+            logger.error('peajes.candidatos_retiro_fallo', { tenant: tenantId, n: insertadas.length, err: eRetiro instanceof Error ? eRetiro.message : String(eRetiro) });
+          });
+          throw errJust;
+        }
+      }
     }
 
     logger.info('peajes.candidatos_decididos', {
