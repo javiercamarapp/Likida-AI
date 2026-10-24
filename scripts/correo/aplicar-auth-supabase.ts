@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // DEJA EL CORREO DE ACCESO CONFIGURADO EN SUPABASE, POR API. Un solo comando.
 //
-//   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts
-//   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts --con-hook
-//   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts --afinar
+//   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts --ref=gngoqsvrxdguxvsizpbw
+//   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts --ref=gngoqsvrxdguxvsizpbw --con-hook
+//   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts --ref=gngoqsvrxdguxvsizpbw --afinar
 //
 // Sin bandera: sube las TRECE plantillas y sus asuntos (Authentication →
 // Emails): las seis con liga o código, y los siete avisos de seguridad. Es
