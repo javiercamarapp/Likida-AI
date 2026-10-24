@@ -214,6 +214,26 @@ export function comparaDesigualdad(actual, esperado) {
 }
 
 /**
+ * A37-S02-06: los ÚNICOS bloques que pueden terminar en un `raise exception` sin `(esperado …)` — son informes (el
+ * dato depende del volumen o del planeador, o lista filas para revisar a mano), no afirmaciones. Antes cualquier
+ * mensaje sin `(esperado` contaba como «reporte» y pasaba: un bloque que abortaba temprano con su propio `raise`
+ * quedaba verde. Un reporte nuevo se agrega AQUÍ a propósito (con su prueba); si no está, es falla.
+ * Se compara por el INICIO del mensaje.
+ */
+export const REPORTES_PERMITIDOS = [
+  'FOTOS REPETIDAS',
+  'INDICE_FACTURACION',
+  'INDICES_PAGINACION',
+  '46  plan-con-indice=',
+];
+
+/** ¿Este mensaje sin `(esperado` es uno de los reportes autorizados? */
+export function esReportePermitido(mensaje) {
+  const m = String(mensaje).trimStart();
+  return REPORTES_PERMITIDOS.some((p) => m.startsWith(p));
+}
+
+/**
  * El veredicto de UN mensaje: `{tipo:'reporte'}`, `{tipo:'sin_calificar', razon}`,
  * `{tipo:'ok', detalle}` o `{tipo:'falla', detalle, falla}`.
  */
