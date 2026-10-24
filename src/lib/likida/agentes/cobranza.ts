@@ -11,7 +11,7 @@ import {
   CONFIG_COBRANZA_DEFAULT, validarConfigCobranza, dentroDeVentana,
   tierPendiente, armarMensajeCobranza, type ConfigCobranza,
 } from './cobranza_pura';
-import { ejecutarCobranzaGastos, resultadoGastoVacio, type ResultadoCobranzaGasto } from './cobranza_gasto';
+import { ejecutarCobranzaGastos, resultadoGastoVacio, DETALLE_ENVIANDO, type ResultadoCobranzaGasto } from './cobranza_gasto';
 import { getPerfilCrudo } from '../repo';
 import { ventanaCobranzaDeclarada } from '../perfil/preguntas';
 import { estaApagado, frenoTemporalActivo, marcarFrenoTemporal } from '../interruptores';
@@ -396,6 +396,24 @@ export async function ejecutarCobranza(
       .insert({ tenant_id: tenantId, viaje_id: v.viajeId, tier: v.tier, enviado: false });
     if (errClaim) {
       if (errClaim.code !== '23505') r.fallos.push(`reclamar ${v.folio ?? v.viajeId}: ${errClaim.message}`);
+      continue;
+    }
+
+    // A37-S26-03: ANTES de llamar a WhatsApp el claim se marca «enviando». El
+    // rescate de huérfanos solo borra filas con `detalle` null (crash entre el
+    // claim y este punto: nada salió); una fila «enviando» vieja es AMBIGUA (el
+    // mensaje pudo salir y el proceso morir, o fallar la anotación del resultado)
+    // y se trata como consumida: mejor un aviso menos que reenviar el mismo
+    // recordatorio a una persona real. Si ni esta marca se puede escribir, no se
+    // manda (fail-closed) y el claim se libera: nada salió.
+    const { error: errMarca } = await admin.from('cobranza_contacto')
+      .update({ detalle: DETALLE_ENVIANDO })
+      .eq('viaje_id', v.viajeId).eq('tier', v.tier).eq('tenant_id', tenantId);
+    if (errMarca) {
+      await admin.from('cobranza_contacto').delete()
+        .eq('tenant_id', tenantId).eq('viaje_id', v.viajeId).eq('tier', v.tier)
+        .then(({ error }) => { if (error) logger.error('cobranza.claim_no_liberado', { viaje: v.viajeId, err: error.message }); });
+      r.fallos.push(`marcar envío ${v.folio ?? v.viajeId}: ${errMarca.message}`);
       continue;
     }
 

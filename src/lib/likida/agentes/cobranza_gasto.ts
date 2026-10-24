@@ -46,6 +46,9 @@ export const TOPE_RECHAZOS_META_GASTO = 5;
  *  que comparten el MISMO freno. Ver la cabecera de `TTL_FRENO_RECHAZO_MASIVO_
  *  WHATSAPP_MS` en cobranza.ts y la del freno en interruptores.ts. */
 export const TTL_FRENO_RECHAZO_MASIVO_WHATSAPP_MS = 5 * 60_000;
+
+/** Marca del claim cuyo envío ya se intentó (o está en curso): el rescate de huérfanos NO la borra (A37-S26-03). */
+export const DETALLE_ENVIANDO = 'enviando — intento de envío en curso o ambiguo (no se reenvía solo)';
 /** Cuánto atrás mide la efectividad. */
 export const DIAS_EFECTIVIDAD = 30;
 /** Retención de la bitácora por gasto: igual que `cobranza_contacto` (0332). */
@@ -456,6 +459,21 @@ export async function ejecutarCobranzaGastos(
     );
     if (errClaim) {
       if (errClaim.code !== '23505') r.fallos.push(`reclamar ${grupo.operador.nombre ?? grupo.operador.operadorId}: ${errClaim.message}`);
+      continue;
+    }
+
+    // A37-S26-03: igual que cobranza.ts — el lote se marca «enviando» ANTES de llamar a WhatsApp, y el
+    // rescate de huérfanos (arriba) solo borra los de `detalle` null. Un lote «enviando» viejo es ambiguo
+    // (el mensaje pudo salir) y queda consumido: no se reenvía el lote completo a una persona real. Si ni
+    // la marca se puede escribir, no se manda y el claim se libera (nada salió).
+    const { error: errMarca } = await admin.from('cobranza_gasto_contacto')
+      .update({ detalle: DETALLE_ENVIANDO })
+      .eq('tenant_id', tenantId).eq('lote_id', lote);
+    if (errMarca) {
+      await admin.from('cobranza_gasto_contacto')
+        .delete().eq('tenant_id', tenantId).eq('lote_id', lote)
+        .then(({ error }) => { if (error) logger.error('cobranza_gasto.claim_no_liberado', { tenantId, lote, err: error.message }); });
+      r.fallos.push(`marcar envío ${grupo.operador.nombre ?? grupo.operador.operadorId}: ${errMarca.message}`);
       continue;
     }
 
