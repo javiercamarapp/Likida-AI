@@ -4,7 +4,7 @@ vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error(
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 
 const { estatusViaje, estadiasDelPeriodo, estadiasDeViaje, evidenciaJornadaDeViaje } = await import('./servicios');
-const { armarFilasEstadias, rangoDeDias } = await import('./estadias_lectura');
+const { armarFilasEstadias, rangoDeDias, desdePorOmision } = await import('./estadias_lectura');
 const { construirEstatus } = await import('./estatus_viaje');
 const { evidenciaJornadaDeHitos } = await import('./jornada_hitos');
 const { CONFIG_CONDUCTOR_DEFAULT } = await import('./config');
@@ -220,6 +220,18 @@ describe('estadías: periodo, viaje y liquidación', () => {
     expect(rangoDeDias('2026-01-01', '2026-12-31')).toMatchObject({ error: expect.stringMatching(/máximo/) });
     expect(rangoDeDias('ayer', 'hoy')).toHaveProperty('error');
     expect(rangoDeDias('2026-02-31', '2026-03-01')).toBeDefined();
+  });
+});
+
+describe('A37-S13-05: desdePorOmision nunca lanza con una fecha de forma válida pero inexistente', () => {
+  it('hasta válida → 6 días antes (hora de México)', () => {
+    expect(desdePorOmision('2026-10-08')).toBe('2026-10-02');
+  });
+  it('hasta inexistente (2026-99-99, 2026-13-01) no lanza RangeError: devuelve la misma fecha y rangoDeDias la rechaza con mensaje', () => {
+    for (const h of ['2026-99-99', '2026-13-01']) {
+      expect(() => desdePorOmision(h)).not.toThrow();
+      expect(rangoDeDias(desdePorOmision(h), h)).toMatchObject({ error: expect.stringMatching(/no existe/) });
+    }
   });
 });
 

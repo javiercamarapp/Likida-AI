@@ -3,7 +3,7 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { hoyMx } from '@/lib/formato';
 import { logger } from '@/lib/logger';
-import { armarFilasEstadias, rangoDeDias } from '@/lib/likida/conductor/estadias_lectura';
+import { armarFilasEstadias, desdePorOmision, rangoDeDias } from '@/lib/likida/conductor/estadias_lectura';
 import { leerCatalogosFiltro, leerDatosEstadias } from '@/lib/likida/conductor/repo_validacion';
 import { sufijoTenant } from '../../../sufijo';
 import { VistaEstadias } from './vista';
@@ -27,7 +27,7 @@ export default async function PaginaEstadias({ searchParams }: {
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
 
   const hasta = sp.hasta && FECHA.test(sp.hasta) ? sp.hasta : hoyMx();
-  const desde = sp.desde && FECHA.test(sp.desde) ? sp.desde : new Date(new Date(`${hasta}T12:00:00-06:00`).getTime() - 6 * 86_400_000).toISOString().slice(0, 10);
+  const desde = sp.desde && FECHA.test(sp.desde) ? sp.desde : desdePorOmision(hasta);
   const uuidONada = (v: string | undefined) => (v && UUID.test(v) ? v.toLowerCase() : '');
   const filtros = { desde, hasta, terminalId: uuidONada(sp.terminal), clienteId: uuidONada(sp.cliente), operadorId: uuidONada(sp.chofer) };
   const rango = rangoDeDias(desde, hasta);
