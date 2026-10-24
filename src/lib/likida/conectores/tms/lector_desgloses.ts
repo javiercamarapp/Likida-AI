@@ -21,6 +21,7 @@ import {
   type FilaDesgloseRechazada, type LectorDesglosesPuerto, type ListarDesglosesParams, type PaginaDesgloses,
 } from '../../liquidacion_externa/desglose_puerto';
 import type { CanalEntrega } from '../../liquidacion_externa/repo_correo';
+import { aInstanteMx } from '../../peajes/formatos';
 import { jsonObjeto } from '../posiciones_comun';
 import type { Http, ValoresCredencial } from '../tipos';
 import { SesionTms } from './sesion';
@@ -28,7 +29,28 @@ import { loginDe, urlBaseHttps, CONECTOR_TMS } from './sincronizar';
 
 const DIA_MS = 86_400_000;
 
-interface Entrada { desde: string; id: string; desglose?: DesgloseBitacora; rechazada?: FilaDesgloseRechazada }
+interface Entrada {
+  desde: string; id: string; desglose?: DesgloseBitacora; rechazada?: FilaDesgloseRechazada;
+  /** La fila no trae instante de cursor utilizable: su `desde` es la época 0 y NO cuenta para la ventana de relectura. */
+  sinInstante?: true;
+}
+
+/**
+ * A37-A1-liquidaciones-16: el instante del campo de cursor. Con zona (`Z`/`±hh:mm`) se respeta; SIN zona es hora de México (la del
+ * origen), nunca la del servidor donde corre esto. Solo fecha ⇒ medianoche de México. Ilegible ⇒ null (la fila se rechaza visible).
+ */
+export function instanteDeCursor(campo: unknown): string | null {
+  if (typeof campo !== 'string') return null;
+  const t = campo.trim();
+  // eslint-disable-next-line security/detect-unsafe-regex -- patrón anclado de formato fijo, sin cuantificadores anidados ni retroceso exponencial; la entrada es un valor corto de un campo
+  const sinZona = /^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2})(?::(\d{2})(?:\.\d+)?)?)?$/.exec(t);
+  if (sinZona) {
+    const iso = aInstanteMx(sinZona[1], `${sinZona[2] ?? '00:00'}:${sinZona[3] ?? '00'}`);
+    return iso;
+  }
+  const ms = Date.parse(t);
+  return Number.isNaN(ms) ? null : new Date(ms).toISOString();
+}
 
 const orden = (a: Entrada, b: Entrada): number => {
   const ta = Date.parse(a.desde); const tb = Date.parse(b.desde);
@@ -80,7 +102,9 @@ export function crearLectorDesglosesTms(o: OpcionesLectorTms): LectorDesglosesPu
       let candidatas = todas;
       if (p.reLeerDesde !== undefined) {
         const t = Date.parse(p.reLeerDesde);
-        candidatas = todas.filter((e) => Date.parse(e.desde) >= t);
+        // A37-A1-liquidaciones-18: la fila sin instante utilizable (época 0) no puede caer fuera de la ventana: se sigue reportando
+        // (excepción visible) en cada relectura hasta que el origen la corrija, en vez de desaparecer tras la primera corrida.
+        candidatas = todas.filter((e) => e.sinInstante === true || Date.parse(e.desde) >= t);
       } else if (p.cursor) {
         const c: Entrada = { desde: p.cursor.desde, id: p.cursor.despuesDe };
         candidatas = todas.filter((e) => orden(e, c) > 0);
@@ -104,8 +128,8 @@ function aEntrada(cruda: unknown, cfg: ConfigApiDesglose): Entrada {
   const term = m.terminal ? leerRuta(cruda, m.terminal) : undefined;
   const clave = typeof bit === 'string' && bit !== '' ? claveDeBitacora(typeof term === 'string' ? term : undefined, bit) : 'BIT-DESCONOCIDA';
   // Sin instante utilizable no hay dónde colocarla en el cursor: se rechaza (visible) en vez de inventar una fecha.
-  const desde = typeof campo === 'string' && !Number.isNaN(Date.parse(campo)) ? new Date(campo).toISOString() : null;
-  if (desde === null) return { desde: new Date(0).toISOString(), id: clave, rechazada: { clave, campo: cfg.campoCursor } };
+  const desde = instanteDeCursor(campo);
+  if (desde === null) return { desde: new Date(0).toISOString(), id: clave, sinInstante: true, rechazada: { clave, campo: cfg.campoCursor } };
   try {
     const { desglose } = mapearBitacoraTms(cruda, m);
     return { desde, id: claveDeBitacora(desglose.terminal, desglose.bitacora), desglose };
