@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "total": 193,
+  "total": 192,
   "porArchivo": {
     "src/app/admin/agentes/contenido.tsx": 1,
     "src/app/admin/evals/page.tsx": 1,
@@ -71,7 +71,6 @@
     "src/lib/likida/intake/consolidado.ts": 1,
     "src/lib/likida/intake/desglose_peaje.ts": 2,
     "src/lib/likida/intake/rep.ts": 1,
-    "src/lib/likida/jornada/repo.ts": 1,
     "src/lib/likida/mesa_control.ts": 2,
     "src/lib/likida/portal_pago_escritura.ts": 1,
     "src/lib/likida/portal_pago_lectura.ts": 12,
