@@ -29,10 +29,13 @@ let RESULTADO_UPDATE: { data: unknown; error: { message: string } | null } = { d
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
+const lecturaIs: Array<[string, unknown]> = [];
+
 function nodoLectura() {
   const nodo: Record<string, unknown> = {};
   const paso = () => nodo;
-  nodo.eq = paso; nodo.is = paso; nodo.not = paso; nodo.order = paso; nodo.in = paso;
+  nodo.is = (c: string, v: unknown) => { lecturaIs.push([c, v]); return nodo; };
+  nodo.eq = paso; nodo.not = paso; nodo.order = paso; nodo.in = paso;
   nodo.limit = () => Promise.resolve(LISTA);
   return nodo;
 }
@@ -98,7 +101,7 @@ vi.mock('./conductor/repo', async (importOriginal) => {
   return { ...actual, cargarViajeContexto };
 });
 
-const { marcarAceptado, marcarRechazados, aceptarPorActividad, atenderConfirmacion } = await import('./confirmar_viaje');
+const { viajesPorConfirmar, marcarAceptado, marcarRechazados, aceptarPorActividad, atenderConfirmacion } = await import('./confirmar_viaje');
 
 /** Los nombres de columna por los que se acotó el UPDATE. */
 const columnas = (e: Escritura) => e.filtros.map(([c]) => c);
@@ -153,6 +156,15 @@ describe('marcarAceptado · el UPDATE se acota también por chofer', () => {
       expect(escrituras[0].filtros).toContainEqual(['aceptado_en', null]);
       expect(Object.keys(escrituras[0].valores)).toEqual(['aceptado_en']);
     });
+  });
+});
+
+describe('A37-S39-04: un viaje rechazado no se vuelve a ofrecer', () => {
+  it('viajesPorConfirmar excluye los viajes con rechazado_en', async () => {
+    lecturaIs.length = 0;
+    await viajesPorConfirmar('t-1', 'op-1');
+    expect(lecturaIs).toContainEqual(['rechazado_en', null]);
+    expect(lecturaIs).toContainEqual(['aceptado_en', null]);
   });
 });
 
