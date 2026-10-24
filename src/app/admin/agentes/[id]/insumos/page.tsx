@@ -5,7 +5,7 @@ import { requireSuperadmin } from '@/lib/auth/guard';
 import { listarAgentes, DEPARTAMENTOS } from '@/lib/likida/agentes/definiciones';
 import {
   tiposAceptadosPorAgente, listarInsumosDeAgente, contarInsumosDeAgente, urlsFirmadasInsumos,
-  crearInsumoArchivo, crearInsumoTexto, subirArchivoInsumo,
+  crearInsumoArchivo, crearInsumoTexto, subirArchivoInsumo, validarTipoAceptado,
   esTipoInsumo, TIPOS_ARCHIVO, TIPOS_TEXTO, type InsumoAgente,
 } from '@/lib/likida/agentes/insumos';
 import { DatoInvalido } from '@/lib/likida/errores';
@@ -52,6 +52,8 @@ export default async function PaginaInsumosAgente({ params }: { params: Promise<
       if (!esTipoInsumo(tipo) || !TIPOS_ARCHIVO.includes(tipo)) throw new DatoInvalido('Tipo de insumo inválido.');
       if (!titulo) throw new DatoInvalido('Ponle un título al insumo.');
       if (!(archivo instanceof File) || archivo.size === 0) throw new DatoInvalido('Elige un archivo para subir.');
+      // A37-S05-05: el tipo se valida ANTES de subir (si no, un tipo no aceptado dejaba el archivo huérfano).
+      validarTipoAceptado(id, departamento, tipo as 'documento' | 'imagen' | 'video');
       const ruta = await subirArchivoInsumo(id, archivo, tipo as 'documento' | 'imagen' | 'video');
       await crearInsumoArchivo({
         agente: id, departamento, titulo, tipo: tipo as 'documento' | 'imagen' | 'video',

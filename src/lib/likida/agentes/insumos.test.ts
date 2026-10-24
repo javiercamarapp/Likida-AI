@@ -57,7 +57,7 @@ vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
 const {
   TIPOS_POR_AGENTE, TIPOS_POR_DEPARTAMENTO, tiposAceptadosPorAgente,
   aceptaArchivoInsumo, subirArchivoInsumo,
-  crearInsumoArchivo, crearInsumoTexto,
+  crearInsumoArchivo, crearInsumoTexto, validarTipoAceptado, validarContenidoInsumo,
   listarInsumosDeAgente, insumosPendientes, marcarInsumosProcesados,
   contarPendientesPorAgente, urlFirmadaInsumo, urlsFirmadasInsumos,
 } = await import('./insumos');
@@ -237,5 +237,30 @@ describe('urlFirmadaInsumo / urlsFirmadasInsumos', () => {
     const m = await urlsFirmadasInsumos([]);
     expect(m.size).toBe(0);
     expect(storageCreateSignedUrls).not.toHaveBeenCalled();
+  });
+});
+
+// A37-S05-05
+describe('A37-S05-05: validación del servidor en insumos', () => {
+  it('validarTipoAceptado se puede llamar antes de subir y lanza DatoInvalido', () => {
+    expect(() => validarTipoAceptado('control_costos', 'back_office', 'video')).toThrow(DatoInvalido);
+  });
+  it('un link debe ser https sin credenciales ni esquema arbitrario', () => {
+    expect(() => validarContenidoInsumo('link', 't', 'javascript:alert(1)')).toThrow(DatoInvalido);
+    expect(() => validarContenidoInsumo('link', 't', 'http://x.com')).toThrow(DatoInvalido);
+    expect(() => validarContenidoInsumo('link', 't', 'https://u:p@x.com')).toThrow(DatoInvalido);
+    expect(() => validarContenidoInsumo('link', 't', 'https://x.com/a')).not.toThrow();
+  });
+  it('topes de longitud en texto, link y título', () => {
+    expect(() => validarContenidoInsumo('texto', 't', 'a'.repeat(20_001))).toThrow(DatoInvalido);
+    expect(() => validarContenidoInsumo('texto', 'a'.repeat(201), 'ok')).toThrow(DatoInvalido);
+    expect(() => validarContenidoInsumo('link', 't', `https://x.com/${'a'.repeat(2_100)}`)).toThrow(DatoInvalido);
+  });
+  it('crearInsumoTexto no inserta un texto gigante', async () => {
+    llamadas.length = 0;
+    await expect(crearInsumoTexto({
+      agente: 'scorer', departamento: 'leads', titulo: 'idea', tipo: 'texto', contenido: 'x'.repeat(20_001), subidoPor: 'u1',
+    })).rejects.toThrow(DatoInvalido);
+    expect(llamadas).toHaveLength(0);
   });
 });
