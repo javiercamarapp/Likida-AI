@@ -548,15 +548,42 @@ export const API_PROXIMAMENTE_PERFIL: Readonly<Record<'v1' | 'export' | 'dashboa
  * (Rentabilidad y Cobranza). Se niega por patrón de la ruta completa.
  */
 const API_PERFIL_SUBRUTAS_NEGADAS: readonly RegExp[] = [
-  /^\/api\/v1\/viajes\/[^/?#]+\/contribucion(?:[/?#]|$)/,
+  // A37-S24-04: se evalúa sobre la ruta NORMALIZADA; `.+` cubre un id con `/` decodificado (%2F).
+  /^\/api\/v1\/viajes\/.+\/contribucion(?:\/|$)/i,
 ];
+
+/**
+ * A37-S24-04: la lista negra era un regex sobre el pathname CRUDO, y `new URL(...).pathname` no decodifica `%6F`.
+ * Aquí se lleva a forma canónica ANTES de evaluar: sin query/hash, `%XX` decodificado (hasta estabilizar), `\` como `/`,
+ * sin `;params` por segmento, sin `//`, `.` ni `..`. Un escape malformado o que no se estabiliza → `null` (se niega).
+ */
+export function normalizarPathnameApi(pathname: string): string | null {
+  let ruta = pathname.split(/[?#]/, 1)[0];
+  for (let pasada = 0; ; pasada++) {
+    let decodificada: string;
+    try { decodificada = decodeURIComponent(ruta); } catch { return null; }
+    if (decodificada === ruta) break;
+    if (pasada >= 3) return null;
+    ruta = decodificada;
+  }
+  const segmentos: string[] = [];
+  for (const crudo of ruta.replace(/\\/g, '/').split('/')) {
+    const seg = crudo.split(';', 1)[0];
+    if (seg === '' || seg === '.') continue;
+    if (seg === '..') { segmentos.pop(); continue; }
+    segmentos.push(seg);
+  }
+  return `/${segmentos.join('/')}`;
+}
 
 /** ¿Esta ruta de API (`/api/v1/...`, `/api/export/...`, `/api/dashboard/...`) sigue viva bajo el perfil? */
 export function apiPermitidaEnPerfil(perfil: PerfilTenant | string, pathname: string): boolean {
   if (perfil !== 'cinco_agentes') return false;
-  const m = /^\/api\/(v1|export|dashboard)\/([^/?#]+)/.exec(pathname);
+  const ruta = normalizarPathnameApi(pathname);
+  if (ruta === null) return false;
+  const m = /^\/api\/(v1|export|dashboard)\/([^/]+)/.exec(ruta);
   if (!m) return false;
-  if (API_PERFIL_SUBRUTAS_NEGADAS.some((re) => re.test(pathname))) return false;
+  if (API_PERFIL_SUBRUTAS_NEGADAS.some((re) => re.test(ruta))) return false;
   return API_PERFIL_CINCO_AGENTES[m[1] as 'v1' | 'export' | 'dashboard'].includes(m[2]);
 }
 
