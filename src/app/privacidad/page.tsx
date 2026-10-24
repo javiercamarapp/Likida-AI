@@ -1,3 +1,4 @@
+import { VIGENTE_DESDE_AVISO_PRIVACIDAD } from '@/lib/legal/documentos';
 import { PaginaLegal, FaltaDato, type SeccionLegal } from '../legal/marco';
 import { estadoLegalProduccion, LEGAL_CONFIG } from '@/lib/legal/config';
 
@@ -191,7 +192,7 @@ export default function Privacidad() {
       // LEG-12: fecha del último cambio SUSTANTIVO del texto (LEG-10,
       // auditoría 24: se agregó Stripe a la lista de encargadas), no la
       // fecha en que alguien abre la página.
-      vigenteDesde="2026-09-01"
+      vigenteDesde={VIGENTE_DESDE_AVISO_PRIVACIDAD}
       secciones={SECCIONES}
       aviso={estado.faltantesEntidad.length > 0 ? (
         // AUDITORÍA 19-c2 (A6): el rótulo era una instrucción interna al

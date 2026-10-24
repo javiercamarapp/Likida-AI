@@ -2,7 +2,7 @@ import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { getAdquisicion } from '@/lib/admin/adquisicion';
-import { listarCampanas, estadoIntegracionAds } from '@/lib/admin/campanas';
+import { listarCampanasConTotal, estadoIntegracionAds } from '@/lib/admin/campanas';
 import { ControlCampanas } from './campanas';
 import { accionPausarCampana, accionRefrescarGasto } from './acciones';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
@@ -49,7 +49,7 @@ export default async function CrecimientoPage() {
     // cae por su lado a null y se DICE.
     getAdquisicion(ahoraMs()).catch(() => null),
     // El control de campañas (0123, §4) — leer y pausar; jamás crear ni subir.
-    listarCampanas().catch(() => null),
+    listarCampanasConTotal().catch(() => null),
     // La mitad de PRODUCTO del funnel (0251): altas → activadas → de pago,
     // contada en la base sobre tenant/liquidacion/suscripcion. null = no se
     // pudo leer, y se dice.
@@ -217,7 +217,7 @@ export default async function CrecimientoPage() {
                   </p>
                 ) : (
                   <ControlCampanas
-                    campanas={campanas}
+                    campanas={campanas.campanas}
                     integracion={integracionAds}
                     leadsAds={adquisicion.porFuente
                       .filter((f) => f.fuente === 'ads' || f.fuente === 'ads-meta' || f.fuente === 'ads-google')
@@ -225,6 +225,11 @@ export default async function CrecimientoPage() {
                     pausar={accionPausarCampana}
                     refrescar={accionRefrescarGasto}
                   />
+                )}
+                {campanas !== null && campanas.total > campanas.campanas.length && (
+                  <p className="text-xs mt-2 m-0" style={{ color: 'var(--warn)' }}>
+                    Se muestran las {campanas.campanas.length} campañas más recientes de {campanas.total}. «Medir gasto» sí cubre todas las de Meta.
+                  </p>
                 )}
               </div>
             </>

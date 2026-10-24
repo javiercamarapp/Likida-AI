@@ -854,11 +854,35 @@ const COLS_CORRIDA =
 const COLS_PASO = 'corrida_id, n, nombre, estado, costo_usd, detalle, inicio, fin';
 const COLS_FOTO_CORRIDA = 'corrida_id, foto_id, n, estado, pasada, detalle, costo_usd, inicio, fin';
 
+/**
+ * A37-S23-02: ANTES un `.in('corrida_id', ids)` suelto — PostgREST recorta a
+ * 1,000 filas EN SILENCIO y cada corrida completa deja ~95 pasos y 91 fotos:
+ * con ~11 en el historial el avance salía con fotos «sin turno» que sí se
+ * procesaron. Ahora se pagina con orden TOTAL (la llave primaria) demostrando
+ * el conteo exacto; si no se puede demostrar, se devuelve el error (fail-closed).
+ */
+async function leerPaginado<T>(
+  construir: (d: number, h: number) => PromiseLike<{ data: T[] | null; error: { message: string; code?: string } | null; count?: number | null }>,
+  consulta: string,
+  mensaje: string,
+): Promise<Resultado<T[]>> {
+  try {
+    return { ok: true, datos: await traerTodo<T>(construir, consulta) };
+  } catch (e) {
+    if (e instanceof LecturaIncompleta) return { ok: false, error: `${mensaje}: ${e.message}` };
+    const err = e as { code?: string; message?: string } | null;
+    if (err && (err.code || err.message)) return { ok: false, error: `${mensaje}: ${err.message ?? err.code}` };
+    return { ok: false, error: mensaje };
+  }
+}
+
 async function pasosDe(db: SupabaseClient, ids: string[]): Promise<Resultado<FilaPaso[]>> {
   if (ids.length === 0) return { ok: true, datos: [] };
-  const { data, error } = await db.from('qa_corrida_paso').select(COLS_PASO).in('corrida_id', ids);
-  if (error) return { ok: false, error: tabla(error, 'no se pudieron leer los pasos') };
-  return { ok: true, datos: (data ?? []) as FilaPaso[] };
+  return leerPaginado<FilaPaso>(
+    (d, h) => db.from('qa_corrida_paso').select(COLS_PASO, conteo(d)).in('corrida_id', ids)
+      .order('corrida_id', { ascending: true }).order('n', { ascending: true }).range(d, h),
+    'qa.pasos', 'no se pudieron leer los pasos',
+  );
 }
 
 /** Las filas de avance (`qa_corrida_foto`) de las corridas dadas. Un fallo se
@@ -867,9 +891,11 @@ async function pasosDe(db: SupabaseClient, ids: string[]): Promise<Resultado<Fil
  *  en la 47. */
 async function fotosDe(db: SupabaseClient, ids: string[]): Promise<Resultado<FilaFotoCorrida[]>> {
   if (ids.length === 0) return { ok: true, datos: [] };
-  const { data, error } = await db.from('qa_corrida_foto').select(COLS_FOTO_CORRIDA).in('corrida_id', ids);
-  if (error) return { ok: false, error: tabla(error, 'no se pudo leer el avance foto por foto') };
-  return { ok: true, datos: (data ?? []) as FilaFotoCorrida[] };
+  return leerPaginado<FilaFotoCorrida>(
+    (d, h) => db.from('qa_corrida_foto').select(COLS_FOTO_CORRIDA, conteo(d)).in('corrida_id', ids)
+      .order('corrida_id', { ascending: true }).order('foto_id', { ascending: true }).range(d, h),
+    'qa.avance_fotos', 'no se pudo leer el avance foto por foto',
+  );
 }
 
 export async function leerCorrida(db: SupabaseClient, id: string): Promise<Resultado<CorridaQA | null>> {
