@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import {
   getResumenNegocio, getConversacionesActivas, contarConversacionesActivas, TOPE_CONVERSACIONES,
 } from '@/lib/admin/negocio';
@@ -21,6 +22,8 @@ const ICONO_KPI = { width: 15, height: 15, strokeWidth: 1.75 } as const;
  * cero filas en `llm_costo` para la fase es cero gasto real, no un relleno.
  */
 export default async function AgenteWhatsappPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   const [r, conversaciones, total] = await Promise.all([
     getResumenNegocio(), getConversacionesActivas(), contarConversacionesActivas(),
   ]);

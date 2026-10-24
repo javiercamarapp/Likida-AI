@@ -949,7 +949,7 @@ function documento(servidor: string) {
                     unidadId: { type: 'string', format: 'uuid', nullable: true },
                     clienteId: { type: 'string', format: 'uuid', nullable: true, description: 'De quién es el flete. Sin él no hay a quién facturarle.' },
                     ingresoFlete: { type: 'number', nullable: true, description: 'Lo que la flota COBRA por el viaje, en MXN. Ausente = `null`, nunca 0.' },
-                    kmRecorridos: { type: 'number', nullable: true },
+                    kmRecorridos: { type: 'integer', minimum: 1, maximum: 19999, nullable: true, description: 'Kilómetros enteros, 1 a 19999. Ausente o null = no se conoce (0 se rechaza: la base exige km > 0).' },
                     anticipo: { type: 'number', minimum: 0, default: 0, description: 'Efectivo adelantado al operador, MXN. Ausente = 0, y esto sí es una medición.' },
                   },
                   required: ['folio', 'operadorId'],

@@ -559,6 +559,12 @@ describe('validación en el borde: un 400 que dice QUÉ campo', () => {
     ['anticipo que es texto', { folio: 'F-1', operadorId: OPERADOR, anticipo: 'mucho' }, 'anticipo'],
     ['anticipo booleano', { folio: 'F-1', operadorId: OPERADOR, anticipo: true }, 'anticipo'],
     ['ingresoFlete booleano', { folio: 'F-1', operadorId: OPERADOR, ingresoFlete: true }, 'ingresoFlete'],
+    // A37-S11-01: lo que la base rechaza (int + viaje_km_sanos: 0 < km < 20000)
+    // es un 400 aquí, no un 500 «vuelve a intentar» que el TMS reintenta para siempre.
+    ['kmRecorridos 0 (la base exige > 0)', { folio: 'F-1', operadorId: OPERADOR, kmRecorridos: 0 }, 'kmRecorridos'],
+    ['kmRecorridos con decimal (la columna es int)', { folio: 'F-1', operadorId: OPERADOR, kmRecorridos: 842.3 }, 'kmRecorridos'],
+    ['kmRecorridos 20000 exacto (la base exige < 20000)', { folio: 'F-1', operadorId: OPERADOR, kmRecorridos: 20000 }, 'kmRecorridos'],
+    ['kmRecorridos como texto con decimal', { folio: 'F-1', operadorId: OPERADOR, kmRecorridos: '842.5' }, 'kmRecorridos'],
   ];
 
   for (const [nombre, cuerpo, campo] of malos) {
@@ -585,6 +591,16 @@ describe('validación en el borde: un 400 que dice QUÉ campo', () => {
       fechaInicio: '2026-08-14', unidadId: UNIDAD, clienteId: cliente,
       ingresoFlete: 38_500, kmRecorridos: 780, anticipo: 5_000,
     });
+  });
+
+  it('A37-S11-01: los extremos válidos de kmRecorridos (1 y 19999) pasan; ausente/null sigue siendo null', async () => {
+    for (const km of [1, 19_999]) {
+      const r = await postViaje(peticion('viajes', { cuerpo: viajeMinimo({ kmRecorridos: km }) }));
+      expect(r.status).toBe(201);
+      expect(argsViaje().v.kmRecorridos).toBe(km);
+    }
+    await postViaje(peticion('viajes', { cuerpo: viajeMinimo({ kmRecorridos: null }) }));
+    expect(argsViaje().v.kmRecorridos).toBeNull();
   });
 
   it('un folio numérico se acepta y se normaliza a texto (un TMS manda las dos formas)', async () => {

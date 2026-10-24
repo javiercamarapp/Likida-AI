@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import { Gauge } from 'lucide-react';
 import { getTechosIa, TECHO_IA_MAX_USD, TECHO_IA_MIN_USD, type FilaTechoIa, type TechosIa } from '@/lib/admin/techo_ia';
 import { usd } from '@/lib/utils';
@@ -26,6 +27,8 @@ const MENSAJE_OK: Record<string, string> = {
 };
 
 export default async function TechoIaPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string }> }) {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   const sp = await searchParams;
   let datos: TechosIa | null = null;
   try {

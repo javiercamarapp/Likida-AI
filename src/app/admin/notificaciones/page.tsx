@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, getConversacionesActivas, contarConversacionesActivas } from '@/lib/admin/negocio';
 import { getBandejaEscalaciones } from '@/lib/admin/escalaciones';
 import { ahoraMs } from '@/lib/saludo';
@@ -17,6 +18,8 @@ export const dynamic = 'force-dynamic';
  * leído/marcar todas, swipe en móvil) vive en `lista.tsx` (client).
  */
 export default async function NotificacionesPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   // La bandeja de escalaciones alimenta la campana con los MISMOS conteos
   // que pinta /admin/escalaciones (nunca lanza: una fuente ilegible llega
   // como null y calcularAlertas la reporta como fuente ciega).

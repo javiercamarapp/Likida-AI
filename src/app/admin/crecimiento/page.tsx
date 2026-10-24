@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { getAdquisicion } from '@/lib/admin/adquisicion';
@@ -32,6 +33,8 @@ export const dynamic = 'force-dynamic';
  * tesis de la página — solo cambian de glass-panel a tarjeta.
  */
 export default async function CrecimientoPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   // FE-14 (22-ago-2026): las cuatro se pedían EN SERIE —cuatro viajes a la
   // base sumados en el reloj de la página— sin que ninguna dependiera de la
   // anterior. Salen juntas; cada una conserva su propio catch, o sea su

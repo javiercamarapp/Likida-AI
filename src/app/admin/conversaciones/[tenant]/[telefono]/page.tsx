@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, MessageCircle } from 'lucide-react';
@@ -23,6 +24,8 @@ export default async function ConversacionPage({
 }: {
   params: Promise<{ tenant: string; telefono: string }>;
 }) {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   const { tenant, telefono: telefonoParam } = await params;
   const telefono = decodeURIComponent(telefonoParam);
   if (!UUID.test(tenant)) notFound();

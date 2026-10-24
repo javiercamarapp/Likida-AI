@@ -356,15 +356,37 @@ export async function correrEnviador(
  *  webhook que la llama: perder un evento de entrega por no poder anotar la
  *  baja sería peor; se grita en el log. */
 export async function suprimirCorreo(correo: string, motivo: string): Promise<void> {
+  await suprimirCorreoConfirmado(correo, motivo);
+}
+
+/** Resultado de intentar registrar una supresión. */
+export type ResultadoSupresion = { ok: true } | { ok: false; reintentable: boolean; motivo: string };
+
+/**
+ * A37-S08-01. Igual que `suprimirCorreo` pero DICE si la fila quedó guardada
+ * (insert bueno o duplicado 23505 = ok). Es lo que necesita quien responde a
+ * una persona que pidió la baja (la liga de un clic): afirmar «Listo» sin que
+ * la supresión exista es seguir escribiéndole a quien dijo que no (LFPDPPP
+ * art. 16 fr. II). Nunca lanza; un formato roto no es reintentable (reintentar
+ * no lo arregla), un fallo de la base sí.
+ */
+export async function suprimirCorreoConfirmado(correo: string, motivo: string): Promise<ResultadoSupresion> {
   const c = correo.trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(c)) return;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(c)) {
+    logger.error('enviador.baja_no_registrada', { motivo, err: 'correo con formato inválido' });
+    return { ok: false, reintentable: false, motivo: 'correo con formato inválido' };
+  }
   try {
     const { error } = await supabaseAdmin().from('correo_suprimido')
       .insert({ correo: c, motivo: motivo.trim() || 'sin motivo declarado' });
     if (error && error.code !== '23505') {
       logger.error('enviador.baja_no_registrada', { motivo, err: error.message });
+      return { ok: false, reintentable: true, motivo: error.message };
     }
+    return { ok: true };
   } catch (e) {
-    logger.error('enviador.baja_no_registrada', { motivo, err: e instanceof Error ? e.message : String(e) });
+    const m = e instanceof Error ? e.message : String(e);
+    logger.error('enviador.baja_no_registrada', { motivo, err: m });
+    return { ok: false, reintentable: true, motivo: m };
   }
 }

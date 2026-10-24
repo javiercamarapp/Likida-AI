@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import { Cpu, DollarSign, Bot, Activity } from 'lucide-react';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { getConsumoPorAgente, getPresupuestoPorProposito, type Insight, type GastoProposito } from '@/lib/admin/consumo';
@@ -26,6 +27,8 @@ const PILL_TIPO: Record<Insight['tipo'], { estado: Estado; rotulo: string }> = {
 };
 
 export default async function ConsumoPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
   // Resiliencia POR SECCIÓN: el gasto del producto (llm_costo) y el del back
   // office (agente_corrida.costo_usd, 0123) caen por su lado — con la 0123

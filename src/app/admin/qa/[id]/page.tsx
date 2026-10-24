@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import { notFound } from 'next/navigation';
 import { Bug } from 'lucide-react';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -18,6 +19,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * La puerta la puso el layout de /admin.
  */
 export default async function CorridaQaPage({ params }: { params: Promise<{ id: string }> }) {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   const { id } = await params;
   if (!UUID.test(id)) notFound();
 

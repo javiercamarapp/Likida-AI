@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { Settings } from 'lucide-react';
 import { EstadoVacio } from '../ui/kit';
@@ -13,6 +14,8 @@ export const dynamic = 'force-dynamic';
  * sistema de billing.
  */
 export default async function ConfiguracionPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   const r = await getResumenNegocio();
 
   return (

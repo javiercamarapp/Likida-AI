@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { Megaphone } from 'lucide-react';
 import { BarraPagina } from '../../dashboard/resumen-visual';
@@ -19,7 +20,9 @@ export const dynamic = 'force-dynamic';
  * con el ícono de `rutas.ts` — el mismo chrome que el resto de /admin. El
  * mensaje honesto es el mismo de antes, ni una palabra cambiada.
  */
-export default function ComunicacionPage() {
+export default async function ComunicacionPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   return (
     <main className="h-full">
       <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>

@@ -1,5 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
+// A37-S05-01/S06-01: la página ahora llama su propia puerta; aquí la sesión es de superadmin.
+vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: vi.fn(async () => ({ rol: 'superadmin', tenantId: null, nombre: 'Prueba' })) }));
 
 // ═══════════════════════════════════════════════════════════════════════════
 // /admin/comunicacion — CERO cobertura. Página síncrona, sin datos ni server
@@ -11,14 +13,14 @@ import { expect, it } from 'vitest';
 
 import ComunicacionPage from './page';
 
-it('declara honestamente que no hay sistema de comunicación masiva interna', () => {
-  const html = renderToStaticMarkup(ComunicacionPage());
+it('declara honestamente que no hay sistema de comunicación masiva interna', async () => {
+  const html = renderToStaticMarkup(await ComunicacionPage());
   expect(html).toContain('Likida no tiene un sistema de comunicación masiva INTERNA hoy');
   expect(html).toContain('bot de WhatsApp conversando 1 a 1');
 });
 
-it('distingue este dominio del estudio de marketing (crecimiento hacia afuera), con su liga', () => {
-  const html = renderToStaticMarkup(ComunicacionPage());
+it('distingue este dominio del estudio de marketing (crecimiento hacia afuera), con su liga', async () => {
+  const html = renderToStaticMarkup(await ComunicacionPage());
   expect(html).toContain('href="/admin/marketing"');
   expect(html).toContain('un dominio distinto');
 });

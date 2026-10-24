@@ -211,15 +211,17 @@ export async function resolverProspectoPorCorreo(correo: string): Promise<Prospe
 /**
  * La misma baja real de `borrarDatosPersonaPorBaja`, pero para el camino que
  * solo tiene un correo (la liga de un clic, `api/correo/baja/route.ts`) y no
- * pasó ya por `resolverProspectoPorCorreo`. Mejor esfuerzo: nunca lanza — un
- * prospecto no encontrado o un error de lectura no debe romper la
- * confirmación de baja en pantalla, que depende solo de `suprimirCorreo`.
+ * pasó ya por `resolverProspectoPorCorreo`. Un prospecto que no existe no es
+ * error (no hay nada que borrar). A37-S08-01: si la LECTURA falla no se sabe
+ * si había datos que borrar, así que LANZA — la liga responde 500 y el cliente
+ * de correo reintenta (la supresión es idempotente), en vez de decir «Listo»
+ * con los datos intactos.
  */
 export async function borrarDatosPersonaPorBajaPorCorreo(correo: string): Promise<void> {
   const r = await resolverProspectoPorCorreo(correo);
   if ('error' in r) {
     logger.error('campania.baja_prospecto_no_resuelto', { err: r.error });
-    return;
+    throw new Error(r.error);
   }
   if (r.prospectoId) await borrarDatosPersonaPorBaja(r.prospectoId, correo, r.esContactoPrincipal);
 }

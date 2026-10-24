@@ -121,7 +121,26 @@ async function resolverAuthExistentePorCorreo(
 ): Promise<{ id: string } | null> {
   const { data, error } = await admin.auth.admin.generateLink({ type: 'recovery', email });
   if (error || !data.user) return null;
-  return { id: data.user.id };
+
+  // A37-L-seguridad-tenant-01 (PRE-SECUESTRO DE CUENTA). Que el usuario de Auth
+  // exista NO prueba que su dueño sea quien va a recibir la invitación: con
+  // `enable_signup` abierto, un atacante que conoce el correo se registra antes
+  // con SU contraseña (POST /auth/v1/signup) y, si se enlazara aquí, entraría
+  // con el rol invitado. Solo se adopta lo que prueba el control del correo: el
+  // correo confirmado y todas sus identidades de Google (un OAuth de Google
+  // devuelve el correo ya verificado). Cualquier otro origen —identidad `email`
+  // (contraseña), sin confirmar, sin identidades o ilegible— se rechaza
+  // (fail-closed): el llamador conserva el error neutro de «ya registrado».
+  const { data: leido, error: errLeer } = await admin.auth.admin.getUserById(data.user.id);
+  const u = leido?.user;
+  if (errLeer || !u) return null;
+  const identidades = u.identities ?? [];
+  const soloGoogle = identidades.length > 0 && identidades.every((i) => i.provider === 'google');
+  if (!u.email_confirmed_at || !soloGoogle) {
+    logger.warn('provisionar.huerfano_no_adoptado', { userId: u.id, confirmado: Boolean(u.email_confirmed_at), soloGoogle });
+    return null;
+  }
+  return { id: u.id };
 }
 
 export async function provisionarUsuario(
