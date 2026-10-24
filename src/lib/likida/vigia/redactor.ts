@@ -377,8 +377,34 @@ export function redactarBorrador(e: EntradaRedaccion): Borrador {
   // La liga no se corta: el tope se aplica al cuerpo y la liga se agrega entera (igual que el pie).
   const cola = ligaPortal + pie;
   let texto = `${cuerpo}${cola}`;
-  if (texto.length > MAX_RESPUESTA + cola.length) texto = `${cuerpo.slice(0, MAX_RESPUESTA - 1)}…${cola}`;
+  if (texto.length > MAX_RESPUESTA + cola.length) {
+    // A37-S59-06: el recorte es por secciones completas y nunca parte una liga (una URL de Maps cortada sigue siendo válida pero
+    // apunta a otro lugar). Y un borrador recortado ya no es de riesgo bajo: no sale sin que una persona lo vea.
+    texto = `${recortarSinPartirLigas(cuerpo, MAX_RESPUESTA)}${cola}`;
+    if (riesgo === 'bajo') riesgo = 'medio';
+    respaldo.recortada = true;
+  }
   return { texto, faltantes, tareas, riesgo, adjuntos, requiereHumano, respaldo, origen };
+}
+
+/**
+ * Recorta `cuerpo` a `max` caracteres: primero quita secciones completas del final (separadas por línea en blanco); si aun así una
+ * sola sección pasa del tope, corta ahí pero NUNCA dentro de una URL (se corta antes de ella). Termina con «…».
+ */
+export function recortarSinPartirLigas(cuerpo: string, max: number): string {
+  if (cuerpo.length <= max) return cuerpo;
+  const secciones = cuerpo.split('\n\n');
+  while (secciones.length > 1 && secciones.join('\n\n').length + 2 > max) secciones.pop();
+  const resto = secciones.join('\n\n');
+  // Si el texto termina en una URL, la «…» va separada: pegada, pasaría a ser parte de la liga.
+  const cierra = (t: string) => (/https?:\/\/\S*$/.test(t) ? `${t} …` : `${t}…`);
+  if (resto.length + 2 <= max) return cierra(resto);
+  let corte = max - 2;
+  for (const m of resto.matchAll(new RegExp(LIGA.source, 'g'))) {
+    const ini = m.index ?? 0;
+    if (ini < corte && ini + m[0].length > corte) { corte = ini; break; }
+  }
+  return cierra(resto.slice(0, corte).replace(/[\s:(]+$/, ''));
 }
 
 // ── PULIR CON MODELO: opcional, y guardado ───────────────────────────────────

@@ -466,3 +466,24 @@ describe('estatus de ubicación «va por…, le faltan…» (T-A4-39)', () => {
     expect(b.texto).not.toMatch(/Tramo\n/);
   });
 });
+
+// A37-S59-06: el tope de 700 caracteres no puede cortar la liga de Maps: una URL truncada sigue siendo válida pero apunta a otro lugar.
+describe('A37-S59-06 el recorte no parte la liga de ubicación', () => {
+  const LIGA_COMPLETA = 'maps.google.com/?q=21.16190,-101.69210';
+  it('con cualquier largo de ruta, toda liga que sale está completa', () => {
+    for (let n = 0; n <= 700; n += 3) {
+      const e = estatus({ origen: 'O'.repeat(n), destino: 'Monterrey' });
+      const b = redactarBorrador(base({
+        clasificacion: { intencion: 'ubicacion', secundarias: ['eta', 'documentos', 'factura_pod'], senales: [] },
+        viaje: { tipo: 'uno', estatus: e },
+      }));
+      const ligas = b.texto.match(/maps\.google\.com\/\?q=\S*/g) ?? [];
+      for (const l of ligas) expect(l, `n=${n}`).toBe(LIGA_COMPLETA);
+    }
+  });
+  it('si hubo recorte, el borrador deja de ser de riesgo bajo (no sale sin aprobación)', () => {
+    const e = estatus({ origen: 'O'.repeat(900) });
+    const b = redactarBorrador(base({ viaje: { tipo: 'uno', estatus: e } }));
+    expect(b.riesgo).not.toBe('bajo');
+  });
+});
