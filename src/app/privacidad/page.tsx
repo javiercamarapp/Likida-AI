@@ -128,7 +128,7 @@ const SECCIONES: SeccionLegal[] = [
       // y esta cláusula (art. 35) tiene que nombrarlo, como nombra a los
       // demás.
       `Y si tu empresa paga la mensualidad de Likida con tarjeta, el cobro lo procesa **Stripe**: le llegan los datos fiscales de facturación de tu empresa (razón social, RFC, código postal, régimen fiscal, correo) y los datos de la tarjeta, que Likida nunca ve completos. También es persona encargada, no alguien que use tus datos por su cuenta.`,
-      `El detalle de esos subencargados está en la documentación del producto y se actualiza cuando cambia.`,
+      `La lista de subencargados de tu empresa se te entrega por escrito cuando la pides a **${RESPONSABLE.contacto}**; se actualiza cuando cambia.`,
       `**Si algún día quisiéramos transferir tus datos para algo distinto, te lo pediríamos antes.** No hacer nada al leer esto no cuenta como haber aceptado.`,
     ],
   },

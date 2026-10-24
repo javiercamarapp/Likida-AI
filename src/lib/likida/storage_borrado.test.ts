@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 let colaDevuelta: Array<{ bucket: string; nombre: string; motivo: string }> = [];
+let existeEnBucket = new Set<string>();
 let removeDevuelve: { data: Array<{ name: string }> | null; error: { message: string } | null } = { data: [], error: null };
 const sellados: Array<{ bucket: string; nombres: string[] }> = [];
 
@@ -38,7 +39,10 @@ vi.mock('@/lib/supabase/admin', () => ({
       }),
     }),
     storage: {
-      from: () => ({ remove: () => Promise.resolve(removeDevuelve) }),
+      from: () => ({
+        remove: () => Promise.resolve(removeDevuelve),
+        exists: (n: string) => Promise.resolve({ data: existeEnBucket.has(n), error: null }),
+      }),
     },
   }),
 }));
@@ -47,7 +51,7 @@ vi.mock('./presupuesto', () => ({ acotada: <T>(p: T) => p }));
 
 const { borrarStorageMarcado } = await import('./storage_borrado');
 
-beforeEach(() => { sellados.length = 0; });
+beforeEach(() => { sellados.length = 0; existeEnBucket = new Set(); });
 
 describe('El borrado de Storage sella solo lo que de verdad se borró', () => {
   it('cola vacía: no llama a la API ni sella nada', async () => {
@@ -83,11 +87,36 @@ describe('El borrado de Storage sella solo lo que de verdad se borró', () => {
       { bucket: 'comprobantes', nombre: 'a.jpg', motivo: 'arco' },
       { bucket: 'comprobantes', nombre: 'b.jpg', motivo: 'arco' },
     ];
-    // La API borró uno y calló sobre el otro.
+    // La API borró uno y calló sobre el otro, que SIGUE en el bucket.
     removeDevuelve = { data: [{ name: 'a.jpg' }], error: null };
+    existeEnBucket = new Set(['b.jpg']);
     const r = await borrarStorageMarcado();
     expect(sellados[0].nombres).toEqual(['a.jpg']);
     expect(r.borrados).toBe(1);
+    expect(r.fallidos).toBe(1);
+  });
+
+  it('A37-L-05: respuesta VACÍA con archivos que SIGUEN en el bucket NO sella nada', async () => {
+    colaDevuelta = [{ bucket: 'comprobantes', nombre: 'a.jpg', motivo: 'arco' }, { bucket: 'comprobantes', nombre: 'b.jpg', motivo: 'arco' }];
+    removeDevuelve = { data: [], error: null };
+    existeEnBucket = new Set(['a.jpg', 'b.jpg']);
+    const r = await borrarStorageMarcado();
+    expect(sellados).toHaveLength(0);
+    expect(r.borrados).toBe(0);
+    expect(r.fallidos).toBe(2);
+  });
+
+  it('A37-L-05: lote MIXTO — lo borrado y lo que ya no existía se sellan; lo que sigue ahí queda para reintento', async () => {
+    colaDevuelta = [
+      { bucket: 'comprobantes', nombre: 'borrado.jpg', motivo: 'arco' },
+      { bucket: 'comprobantes', nombre: 'ya-no-existia.jpg', motivo: 'arco' },
+      { bucket: 'comprobantes', nombre: 'sigue.jpg', motivo: 'arco' },
+    ];
+    removeDevuelve = { data: [{ name: 'borrado.jpg' }], error: null };
+    existeEnBucket = new Set(['sigue.jpg']);
+    const r = await borrarStorageMarcado();
+    expect(sellados[0].nombres.sort()).toEqual(['borrado.jpg', 'ya-no-existia.jpg']);
+    expect(r.borrados).toBe(2);
     expect(r.fallidos).toBe(1);
   });
 });

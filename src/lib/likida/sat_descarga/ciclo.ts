@@ -44,6 +44,13 @@ export const VENTANA_MAX_DIAS = 31;
  *  no "todo"— es justamente lo que la pantalla declara. */
 export const VENTANA_INICIAL_DIAS = 90;
 
+/** A37-L-02: el SAT registra un CFDI hasta ~72 h después de emitido (plazo legal del
+ *  PAC). Pedir «hasta hoy» y marcar el día como descargado dejaba fuera para siempre
+ *  lo publicado tarde (el calendario no retrocede). Se pide hasta `hoy − SOLAPE_DIAS`:
+ *  el borde reciente se descarga cuando ya asentó. El sello unique(tenant_id, cfdi_uuid)
+ *  absorbe cualquier traslape manual. */
+export const SOLAPE_DIAS = 3;
+
 /** Cuántas solicitudes vivas se verifican por flota en una corrida. */
 const MAX_VERIFICAR = 10;
 
@@ -158,9 +165,10 @@ export function rangoPendiente(
   // NULL significa NUNCA SE HA DESCARGADO — no "desde el principio". Se abre
   // una ventana acotada y declarada, jamás un rango abierto.
   const desde = ultimaHasta === null ? sumarDias(hoy, -ventanaInicial) : sumarDias(ultimaHasta, 1);
-  if (desde > hoy) return null; // ya está al día
+  const limite = sumarDias(hoy, -SOLAPE_DIAS); // A37-L-02: no se pide lo que el SAT aún no asentó
+  if (desde > limite) return null; // ya está al día
   const tope = sumarDias(desde, ventanaMax - 1);
-  return { desde, hasta: tope < hoy ? tope : hoy };
+  return { desde, hasta: tope < limite ? tope : limite };
 }
 
 /**

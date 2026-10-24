@@ -53,8 +53,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   errTenant = null;
   configs = [
-    { tenant_id: A, rfc: 'AAA010101AB1', ultima_descarga_hasta: '2026-10-22' },
-    { tenant_id: B, rfc: 'AAA010101AB1', ultima_descarga_hasta: '2026-10-22' }, // declara el RFC de A
+    { tenant_id: A, rfc: 'AAA010101AB1', ultima_descarga_hasta: '2026-10-18' },
+    { tenant_id: B, rfc: 'AAA010101AB1', ultima_descarga_hasta: '2026-10-18' }, // declara el RFC de A
   ];
   tenants = [{ id: A, rfc: 'AAA010101AB1' }, { id: B, rfc: 'BBB020202BB2' }];
 });

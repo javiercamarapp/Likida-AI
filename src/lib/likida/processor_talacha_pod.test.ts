@@ -287,10 +287,24 @@ describe('ARCO sin datos del responsable', () => {
     vi.spyOn(conv, 'buscarOperadorPorTelefono').mockResolvedValue({ tenantId: 't1', operadorId: 'op1' });
     vi.mocked(repo.getDatosResponsable).mockResolvedValueOnce(null);
     vi.mocked(repo.registrarSolicitudArco).mockClear();
+    vi.mocked(repo.registrarSolicitudArco).mockResolvedValueOnce(true);
     await processInbound({ from: '5219993700779', type: 'text', text: 'quiero ejercer mis derechos ARCO y que borren mis datos', waMessageId: 'wa-arco' });
     expect(repo.registrarSolicitudArco).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 't1', operadorId: 'op1', titularRef: '5219993700779', canal: 'whatsapp' }));
     // Y se le dice que quedó registrada, no solo "déjame checarlo".
     expect(sendText.mock.calls.some((c) => String(c[1]).includes('quedó registrada'))).toBe(true);
+  });
+
+  it('A37-L-01 (legal): si el registro FALLÓ (false) no se le dice «quedó registrada» (ni sin datos del responsable)', async () => {
+    const repo = await import('@/lib/likida/repo');
+    const conv = await import('@/lib/likida/conv');
+    vi.spyOn(conv, 'buscarOperadorPorTelefono').mockResolvedValue({ tenantId: 't1', operadorId: 'op1' });
+    vi.mocked(repo.getDatosResponsable).mockResolvedValueOnce(null);
+    vi.mocked(repo.registrarSolicitudArco).mockClear();
+    vi.mocked(repo.registrarSolicitudArco).mockResolvedValue(false);
+    sendText.mockClear();
+    await processInbound({ from: '5219993700779', type: 'text', text: 'quiero ejercer mis derechos ARCO y que borren mis datos', waMessageId: 'wa-arco-falla' });
+    vi.mocked(repo.registrarSolicitudArco).mockReset();
+    expect(sendText.mock.calls.some((c) => String(c[1]).includes('quedó registrada'))).toBe(false);
   });
 
   it('AUDITORÍA OLA 1 #46: una cuenta de OFICINA que escribe PRIVACIDAD deja la solicitud con su userId como titular', async () => {

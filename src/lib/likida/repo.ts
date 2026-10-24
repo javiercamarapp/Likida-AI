@@ -1827,7 +1827,9 @@ export async function resolverSolicitudArco(
 
   // Envío best-effort: si el titular está fuera de la ventana de 24h o el
   // número no está whitelisted, el texto no sale — la flota lo entrega aparte.
-  const telefono = (sol.titular_ref as string | null) ?? (sol.operador_id as string | null) ?? null;
+  // A37-L-02: antes caía a `operador_id` (un UUID) como «teléfono»: sus dígitos se volvían
+  // un destinatario falso. Sin titular_ref no hay a quién escribirle.
+  const telefono = (sol.titular_ref as string | null) ?? null;
   if (!telefono) return { enviada: false, error: 'sin teléfono del titular' };
   try {
     // AUDITORÍA 16, MEDIO: la plantilla lleva {{1}} = razón social REAL de la

@@ -376,10 +376,15 @@ export async function timbrarViaje(
       });
       return { ok: false, motivo: `SIN RESPUESTA DEL PAC — el timbre PUDO haberse emitido. Este viaje queda BLOQUEADO a propósito: verifica en el panel del PAC si el CFDI existe; si existe, avisa a soporte para registrarlo; si no, soporte libera el bloqueo y se reintenta. Detalle: ${r.mensaje}` };
     }
+    // 'auth_red' (A37-L-04): la red falló al AUTENTICAR; el XML jamás salió. No hay
+    // timbre posible: se suelta la reserva y se avisa que es seguro reintentar.
     // Rechazo/auth: el PAC contestó que NO, así que no hay timbre — la
     // reserva se suelta y el humano corrige y vuelve. El mensaje del PAC tal
     // cual, que es lo accionable.
-    await soltarReserva(`el PAC contestó ${r.clase}`);
+    await soltarReserva(r.clase === 'auth_red' ? 'no hubo red al autenticar (el XML no salió)' : `el PAC contestó ${r.clase}`);
+    if (r.clase === 'auth_red') {
+      return { ok: false, motivo: `No se pudo conectar con el PAC para autenticar; el CFDI NO se envió (no hay nada que verificar). Es seguro reintentar en unos minutos. Detalle: ${r.mensaje}` };
+    }
     return { ok: false, motivo: r.mensaje, faltantes: r.codigo === null ? undefined : [`Código del PAC: ${r.codigo}`] };
   }
 
