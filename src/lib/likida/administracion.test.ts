@@ -284,7 +284,7 @@ describe('crearOperador', () => {
     }));
 
     await expect(crearOperador('t-1', { nombre: 'Juan Pérez', telefono: '9993700779' }))
-      .rejects.toThrow(/OTRA flota/i);
+      .rejects.toThrow(/no se puede registrar en tu flota/i);
   });
 
   it('FALLA CERRADO: si no se puede comprobar el duplicado, no da de alta', async () => {
