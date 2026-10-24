@@ -339,24 +339,27 @@ async function atenderPrivacidad(tenantId: string, operadorId: string | null, te
     // no puede dejar al titular sin respuesta, pero sí queda gritado.
     const { tipoDeSolicitudArco } = await import('@/lib/likida/privacidad');
     const tipo = tipoDeSolicitudArco(texto);
+    // A37-L-01: `registrarSolicitudArco` DEVUELVE false cuando el insert falla (no
+    // lanza); tomarlo por éxito dejaba al titular con una constancia falsa, sin fila
+    // en /dashboard/arco y sin que corriera el plazo del art. 31. Se usa el valor
+    // devuelto: un reintento inmediato y, si tampoco, se le dice la verdad y se avisa.
     let registrada = false;
-    try {
-      await registrarSolicitudArco({
-        tenantId,
-        operadorId,
-        titularUserId,
-        titularRef: telefono,
-        tipo,
-        canal: 'whatsapp',
-      });
-      registrada = true;
-    } catch (e) {
-      logger.error('arco.solicitud_no_registrada', { tenantId, tipo, err: e instanceof Error ? e.message : String(e) });
+    const argsArco = { tenantId, operadorId, titularUserId, titularRef: telefono, tipo, canal: 'whatsapp' };
+    for (let intento = 0; intento < 2 && !registrada; intento++) {
+      try {
+        registrada = await registrarSolicitudArco(argsArco) === true;
+      } catch (e) {
+        logger.error('arco.solicitud_no_registrada', { tenantId, tipo, err: e instanceof Error ? e.message : String(e) });
+      }
+    }
+    if (!registrada) {
+      logger.error('arco.solicitud_no_registrada_definitiva', { tenantId, tipo });
+      await alertarOperador('arco.no_registrada', { tenantId, tipo, canal: 'whatsapp', error: 'No se pudo registrar una solicitud ARCO: el titular fue informado de que NO quedó registrada. Atenderla a mano.' });
     }
 
     const datos = await getDatosResponsable(tenantId);
     if (datos) {
-      await sendText(telefono, respuestaPrivacidad(datos));
+      await sendText(telefono, respuestaPrivacidad(datos, registrada));
       // ── E1 (auditoría 4): la oposición ENCIENDE algo, no solo se archiva ──
       // Hasta hoy, oponerse insertaba la fila de arriba y no ocurría nada más:
       // el aviso prometía "que la revise alguien" y el pipeline seguía

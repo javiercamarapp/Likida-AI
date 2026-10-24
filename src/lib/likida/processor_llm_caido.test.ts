@@ -69,6 +69,7 @@ vi.mock('@/lib/agents/run', () => ({ runAgent: (...a: unknown[]) => runAgent(...
 vi.mock('@/lib/likida/conv', async (original) => ({
   ...(await original<Record<string, unknown>>()),
   resolveOperador: vi.fn(async () => ({ tenantId: 't1', operadorId: 'o1' })),
+  buscarOperadorPorTelefono: vi.fn(async () => ({ tenantId: 't1', operadorId: 'o1' })),
   getOpenViaje: (t: string, o: string) => getOpenViaje(t, o),
   getTenantContext: vi.fn(async () => ({ nombre: 'Flota' })),
   loadConversation: (...a: unknown[]) => loadConversation(...(a as [])),
@@ -102,6 +103,7 @@ vi.mock('@/lib/likida/repo', () => ({
   getOperador: vi.fn(async () => ({ id: 'o1', nombre: 'Operador', telefono: '5219993700779' })),
   saveLiquidacion: vi.fn(async () => 'L1'),
   getAcumuladoCombustible: vi.fn(async () => { throw new Error('sin base en pruebas'); }),
+  registrarSolicitudArco: (...a: unknown[]) => registrarSolicitudArco(...a),
 }));
 vi.mock('@/lib/likida/costos', () => ({
   registrarCosto: vi.fn(), registrarCostoWhatsApp: vi.fn(),
@@ -130,6 +132,7 @@ vi.mock('@/lib/likida/intake/cfdi_xml', () => ({
   esConsolidado: (xml: { lineas: unknown[] }) => xml.lineas.length > 1,
 }));
 
+const registrarSolicitudArco = vi.fn(async (..._a: unknown[]) => true);
 const alertarOperador = vi.fn(async (..._a: unknown[]) => true);
 vi.mock('@/lib/observability/alerta', async (original) => ({
   ...(await original<Record<string, unknown>>()),
@@ -312,5 +315,28 @@ describe('RES-15 — el LLM caído no puede dejar al operador sin su cuadre', ()
     runAgent.mockRejectedValue(new TypeError('x is undefined'));
     await processInbound(listo);
     expect(alertarOperador).not.toHaveBeenCalledWith('agente.credencial', expect.anything());
+  });
+
+  // A37-L-01 (legal): registrarSolicitudArco devuelve false en error y NO lanza.
+  describe('solicitud ARCO por WhatsApp (A37-L-01 legal)', () => {
+    const privacidad = { ...listo, text: 'PRIVACIDAD', waMessageId: 'wa-priv' };
+    beforeEach(() => { registrarSolicitudArco.mockReset(); alertarOperador.mockClear(); });
+
+    it('si el insert falla (false) NO afirma «queda registrada»: reintenta, avisa y se lo dice', async () => {
+      registrarSolicitudArco.mockResolvedValue(false);
+      await processInbound(privacidad);
+      expect(registrarSolicitudArco).toHaveBeenCalledTimes(2);
+      const dichos = textos().join(' | ');
+      expect(dichos).not.toContain('Queda registrada');
+      expect(dichos).toContain('No alcancé a dejar registrada');
+      expect(alertarOperador).toHaveBeenCalledWith('arco.no_registrada', expect.objectContaining({ tipo: expect.any(String) }));
+    });
+
+    it('si el reintento sí registra, dice «queda registrada» y no alerta', async () => {
+      registrarSolicitudArco.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+      await processInbound({ ...privacidad, waMessageId: 'wa-priv2' });
+      expect(textos().join(' | ')).toContain('Queda registrada');
+      expect(alertarOperador).not.toHaveBeenCalledWith('arco.no_registrada', expect.anything());
+    });
   });
 });
