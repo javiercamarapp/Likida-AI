@@ -1,36 +1,52 @@
----
-fecha_corrida: 2026-09-20 (domingo)
+fecha_corrida: 2026-10-24 (sábado)
 ultimo_dia_barrido: 2026-09-10
-rango_pendiente: 2026-09-11 — 2026-09-19 (9 días, incluye 3 viernes:
-  11, 18-sep, y el 12 previamente reportado) sin barrer. Sigue
-  arrancando en 09-11 para la próxima corrida.
+rango_pendiente: 2026-09-11 — 2026-10-23 (43 días, incluye 7 viernes de
+  cuota de diésel: 11, 18, 25-sep, 02, 09, 16, 23-oct) sin barrer. Sigue
+  arrancando en 2026-09-11 para la próxima corrida — no se avanzó nada
+  desde el latido anterior (2026-09-20).
 notas_revisadas: 0 — ningún endpoint respondió.
 anti_silencio: no_evaluable — sin acceso a notas/ ni a diarios/porFecha
   no hay con qué cruzar.
 fichas_disparadas: 0 — no evaluable, no confirmado "sin cambios".
 cuota_diesel: no_evaluable_hoy — hoy no es viernes, y las cuotas de los
-  viernes 11 y 18-sep tampoco se pudieron verificar (mismo bloqueo).
-  Sigue sin verificar desde el 05-sep.
-etag_sat: no_aplica_hoy — no es lunes.
-deriva_ley_check: no_aplica — no es día 1 de trimestre (próxima: 01-oct-2026)
+  7 viernes del rango pendiente (11, 18, 25-sep, 02, 09, 16, 23-oct)
+  tampoco se pudieron verificar (mismo bloqueo). Sin verificar desde el
+  05-sep-2026 — casi 7 semanas.
+etag_sat: no_aplica_hoy — no es lunes. Sigue sin poder leerse desde
+  hace semanas (mismo bloqueo de egreso cubre sat.gob.mx).
+deriva_ley_check: no_aplica_hoy — no es día 1 de trimestre (próxima:
+  01-ene-2027). La ventana del 01-oct-2026 pasó SIN POder verificarse
+  (mismo bloqueo; probado ahora: www.diputados.gob.mx también 403).
 estado: >
-  INFRA — TERCERA corrida consecutiva bloqueada (12-sep y 15-sep
-  reportaron el mismo corte; ver latido anterior). Probado con dos rutas
-  de red independientes: curl directo por HTTPS_PROXY y la herramienta
-  WebFetch (infraestructura propia de Anthropic, no el proxy de la
-  sesión) — AMBAS devuelven bloqueo de política de egreso, no timeout ni
-  reset. curl: "CONNECT tunnel failed, response 403" contra
-  sidofqa.segob.gob.mx (notas y diarios/porFecha) y www.google.com como
-  control (también 403 — confirma que el bloqueo cubre dominios no
-  permitidos en general, no que el sitio del SIDOF esté caído). WebFetch:
-  {"error_type":"EGRESS_BLOCKED","domain":"sidofqa.segob.gob.mx"} contra
-  el mismo endpoint. /root/.ccr/__agentproxy/status muestra
-  recentRelayFailures vacío, o sea no es una caída de conexión sino un
-  rechazo de política. Per README del proxy: un 403 de política no se
-  reintenta ni se rodea, se reporta. No se leyó ninguna nota del DOF en
-  esta corrida ni en las dos anteriores. No se tocó ninguna ficha de
-  normas/. El rango sin verificar ya cubre 9 días hábiles y 3 viernes de
-  cuota de diésel. Requiere intervención humana: permitir
-  sidofqa.segob.gob.mx (y el resto de references/fuentes.md) en la
-  política de egreso de este entorno programado, o correr esta rutina
-  desde un entorno con esos dominios permitidos.
+  INFRA — CUARTA corrida consecutiva bloqueada (ver latidos previos de
+  12-sep, 15-sep y 20-sep: mismo corte). Entre el latido anterior
+  (20-sep) y esta corrida (24-oct) pasó más de un mes sin que la rutina
+  avanzara nada — el rango sin verificar casi se cuadruplicó, de 9 a 43
+  días. Probado en esta corrida con tres rutas independientes: curl
+  directo por HTTPS_PROXY, WebFetch (infraestructura propia de
+  Anthropic, no el proxy de sesión) y una ronda de control contra 4
+  hosts. TODOS los dominios de references/fuentes.md devuelven
+  bloqueo de política de egreso, no timeout ni reset:
+  - curl → sidofqa.segob.gob.mx: "CONNECT tunnel failed, response 403"
+  - curl → www.google.com (control): también 403 — confirma que el
+    bloqueo es un allowlist general, no algo específico del SIDOF
+  - curl → dof.gob.mx, www.sat.gob.mx, www.diputados.gob.mx: los tres
+    403 idéntico
+  - WebFetch → sidofqa.segob.gob.mx: "getaddrinfo ENOTFOUND" (ni
+    siquiera resuelve DNS — bloqueo a otro nivel que el proxy HTTPS)
+  - control positivo: api.anthropic.com SÍ responde (404, pero
+    resuelve y conecta) — confirma que la sesión tiene salida a
+    internet, solo no a los dominios .gob.mx
+  /root/.ccr/__agentproxy/status confirma: `noProxy` lista dominios
+  permitidos (npm, pypi, anthropic, etc.) y NINGUNO de .gob.mx está
+  ahí; `recentRelayFailures` muestra los dos 403 de esta corrida como
+  `connect_rejected` ("gateway answered 403 to CONNECT — policy denial").
+  No es una caída de conexión, es un rechazo de política que persiste
+  desde hace semanas. No se leyó ninguna nota del DOF en esta corrida
+  ni en las tres anteriores. No se tocó ninguna ficha de normas/.
+  REQUIERE INTERVENCIÓN HUMANA: permitir sidofqa.segob.gob.mx, dof.gob.mx,
+  www.sat.gob.mx y www.diputados.gob.mx (todo references/fuentes.md) en
+  la política de egreso de este entorno programado, o mover esta rutina
+  a un entorno con esos dominios permitidos. Sin eso, cada corrida
+  futura seguirá reportando lo mismo y el rango pendiente seguirá
+  creciendo sin tope.
