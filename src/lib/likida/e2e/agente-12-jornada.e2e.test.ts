@@ -2,6 +2,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { crearDbMemoria, type DbMemoria, type Fila } from './db_memoria.fixture';
 import './reloj_adelantado.fixture';
 
+// A37-A5-05: el aviso AL OPERADOR pasa por la compuerta del chofer (Agente 5 habilitado, ventana, sin emergencia). Este archivo prueba el ciclo
+// de la alerta, no la compuerta (ver alerta_tope_entrada.test.ts): se abre con la ventana de 24 h para no depender del reloj.
+vi.mock('../conductor/repo', async (orig) => {
+  const real = await orig<typeof import('../conductor/repo')>();
+  const { CONFIG_CONDUCTOR_DEFAULT } = await import('../conductor/config');
+  return {
+    ...real,
+    leerAgenteChoferHabilitado: vi.fn(async () => ({ habilitado: true, razon: 'habilitado' })),
+    leerConfigConductor: vi.fn(async () => ({ ...CONFIG_CONDUCTOR_DEFAULT, horaInicio: 0, horaFin: 24, diasSemana: [1, 2, 3, 4, 5, 6, 7] })),
+  };
+});
+vi.mock('../conductor/trabajo', async (orig) => ({ ...(await orig<typeof import('../conductor/trabajo')>()), hayEmergenciaDeTelefono: vi.fn(async () => false) }));
+
 // ═══════════════════════════════════════════════════════════════════════════
 // E2E AGENTE 12 — JORNADA: la alerta saliente de tope (cinco casos del criterio g).
 //

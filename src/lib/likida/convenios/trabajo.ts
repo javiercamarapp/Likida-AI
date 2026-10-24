@@ -2,11 +2,11 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { exigir, traerTodo } from '../pg';
 import { logger } from '@/lib/logger';
-import { leerConfigConductor } from '../conductor/repo';
+import { leerAgenteChoferHabilitado, leerConfigConductor } from '../conductor/repo';
 import { CONFIG_CONDUCTOR_DEFAULT } from '../conductor/config';
 import type { GeocercaGeom } from '../conductor/geo';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from '../conductor/geometria_datos';
-import type { CandidatoAcercamiento, PosicionUnidad } from './acercamiento';
+import type { CandidatoAcercamiento, PermisoFlota, PosicionUnidad } from './acercamiento';
 import { traducirFaltaDeEsquema } from './repo';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -123,6 +123,24 @@ export async function leerMargenesAcercamiento(tenantIds: string[]): Promise<Map
     } catch (e) {
       salida.set(t, CONFIG_CONDUCTOR_DEFAULT.margenAcercamientoM);
       logger.warn('convenios.margen_config_ilegible', { tenant: t, err: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return salida;
+}
+
+/**
+ * A37-A5-01: por flota, si el Agente 5 está habilitado (compuerta 0859, FAIL-CLOSED) y su config (ventana, unidad detenida). Una flota cuya
+ * config no se pueda leer queda SIN permiso: ante la duda, silencio. Nunca lanza.
+ */
+export async function leerPermisosAcercamiento(tenantIds: string[]): Promise<Map<string, PermisoFlota>> {
+  const salida = new Map<string, PermisoFlota>();
+  for (const t of tenantIds) {
+    try {
+      const [h, config] = await Promise.all([leerAgenteChoferHabilitado(t), leerConfigConductor(t)]);
+      salida.set(t, { habilitado: h.habilitado, config });
+    } catch (e) {
+      salida.set(t, { habilitado: false, config: null });
+      logger.warn('convenios.permiso_ilegible', { tenant: t, err: e instanceof Error ? e.message : String(e) });
     }
   }
   return salida;

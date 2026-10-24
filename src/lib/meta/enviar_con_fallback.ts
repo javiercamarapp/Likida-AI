@@ -111,6 +111,8 @@ export type ResultadoEnvioConFallback =
     /** El cliente de Meta YA dejó este mensaje en `wa_outbox` (reintentable o token vencido 190/401, que no es
      *  «vuelve más tarde» pero sí se encola). Quien reclama un «una sola vez» NO debe soltar el reclamo ni reenviar. */
     encolado?: boolean;
+    /** A37-A5-04: lo detuvo una compuerta de SEGURIDAD propia (agente apagado, compuerta ilegible, emergencia abierta); nunca llegó a Meta. No es un aviso entregado ni un intento: quien reclamó debe soltar el reclamo. */
+    bloqueadoPorCompuerta?: boolean;
     ventana: EstadoVentana;
   };
 

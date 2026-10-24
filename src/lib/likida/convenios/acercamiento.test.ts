@@ -9,11 +9,22 @@ vi.mock('@/lib/meta/enviar_con_fallback', () => ({
     return { ok: true, via: 'texto', id: 'w', motivo: 'ventana_abierta', ventana: 'abierta' };
   }),
 }));
+// A37-A5-01: la compuerta 0859 y la de emergencias se prueban aquí con interruptores; el resto del archivo corre con ambas abiertas.
+const compuerta = { habilitado: true, emergencia: false };
+vi.mock('../conductor/repo', async (orig) => ({
+  ...(await orig<typeof import('../conductor/repo')>()),
+  leerAgenteChoferHabilitado: vi.fn(async () => (compuerta.habilitado ? { habilitado: true, razon: 'habilitado' } : { habilitado: false, razon: 'apagado' })),
+}));
+vi.mock('../conductor/trabajo', async (orig) => ({
+  ...(await orig<typeof import('../conductor/trabajo')>()),
+  hayEmergenciaDeTelefono: vi.fn(async () => compuerta.emergencia),
+}));
 let mundo = new Mundo();
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => mundo.admin() }));
 
 const { barridoAcercamiento, estaCerca, MARGEN_ACERCAMIENTO_M } = await import('./acercamiento');
 const { despacharInstrucciones } = await import('./envio');
+const { CONFIG_CONDUCTOR_DEFAULT: CONFIG_DEFAULT } = await import('../conductor/config');
 const { reiniciarMemoriaPoligono } = await import('../conductor/geometria_datos');
 const { importarConvenios } = await import('./repo');
 const { parsearMatrizConvenios } = await import('./importador');
@@ -33,6 +44,7 @@ const hito = (tipo: string, estado = 'recibido') => mundo.poner('viaje_hito', { 
 beforeEach(async () => {
   mundo = new Mundo();
   enviadosWa.length = 0;
+  compuerta.habilitado = true; compuerta.emergencia = false;
   const cliente = mundo.poner('cliente', { tenant_id: A, nombre: 'Cliente Uno' });
   const op = mundo.poner('operador', { tenant_id: A, nombre: 'Juan Pérez', telefono: '5213312345678' });
   unidadId = String(mundo.poner('unidad', { tenant_id: A, numero_economico: 'T-12' }).id);
@@ -162,6 +174,7 @@ describe('barridoAcercamiento — de punta a punta con la base en memoria', () =
         { tenantId: A, viajeId: 'v2', unidadId: 'u2', lado: 'origen' as const, sitio: { ...ORIGEN, radioM: 300 } },
       ],
       margenes: async () => new Map<string, number>(),
+      permisos: async () => new Map([[A, { habilitado: true, config: CONFIG_DEFAULT }]]),
       posiciones: async () => new Map([['u1', { ...ORIGEN, medidaEn: AHORA }], ['u2', { ...ORIGEN, medidaEn: AHORA }]]),
       enviar: vi.fn(async (_t: string, v: string) => (v === 'v1' ? { estado: 'fallo' as const, motivo: 'boom' } : { estado: 'enviado' as const, canal: 'texto' as const })),
     };
@@ -218,5 +231,57 @@ describe('base sin la 0580', () => {
     const { ConveniosNoDisponibles } = await import('./repo');
     mundo.ausentes.add('viaje_convenio');
     await expect(barridoAcercamiento(undefined, AHORA)).rejects.toBeInstanceOf(ConveniosNoDisponibles);
+  });
+});
+
+
+describe('A37-A5-01: el aviso de acercamiento pasa por las compuertas de seguridad del chofer', () => {
+  const cerca = () => posicion({ lat: ORIGEN.lat, lng: ORIGEN.lng });
+
+  it('con el Agente 5 NO habilitado (0859) no se envía nada ni se reclama', async () => {
+    compuerta.habilitado = false;
+    cerca();
+    const r = await barridoAcercamiento(undefined, AHORA);
+    expect(r).toMatchObject({ candidatos: 1, enviados: 0, apagados: 1 });
+    expect(enviadosWa).toHaveLength(0);
+  });
+
+  it('de madrugada (fuera de la ventana de la flota) no se envía', async () => {
+    cerca();
+    const r = await barridoAcercamiento(undefined, new Date('2026-10-10T09:10:00Z')); // 03:10 en México
+    expect(r).toMatchObject({ enviados: 0, fueraDeVentana: 1 });
+    expect(enviadosWa).toHaveLength(0);
+  });
+
+  it('con la compuerta de unidad detenida encendida y una sola muestra en ruta, no se envía', async () => {
+    const enviar = vi.fn(async () => ({ estado: 'enviado' as const, canal: 'texto' as const }));
+    const puertos = {
+      candidatos: async () => [{ tenantId: A, viajeId: 'v1', unidadId: 'u1', lado: 'origen' as const, sitio: { ...ORIGEN, radioM: 300 } }],
+      margenes: async () => new Map<string, number>(),
+      permisos: async () => new Map([[A, { habilitado: true, config: { ...CONFIG_DEFAULT, compuertaMovimientoActiva: true } }]]),
+      posiciones: async () => new Map([['u1', { lat: ORIGEN.lat + 0.03, lng: ORIGEN.lng, medidaEn: AHORA }]]), // ~3 km, rodando
+      enviar,
+    };
+    expect(await barridoAcercamiento(puertos, AHORA)).toMatchObject({ enviados: 0, compuertaMovimiento: 1 });
+    expect(enviar).not.toHaveBeenCalled();
+  });
+
+  it('con una emergencia abierta del chofer, el puerto de envío lo detiene y suelta el reclamo (nada se sella)', async () => {
+    compuerta.emergencia = true;
+    cerca();
+    const r = await barridoAcercamiento(undefined, AHORA);
+    expect(r).toMatchObject({ enviados: 0, rechazados: 1 });
+    expect(enviadosWa).toHaveLength(0);
+    const fila = mundo.tablas.viaje_convenio[0];
+    expect(fila.acercamiento_origen_enviado_en ?? null).toBeNull();
+    expect(fila.acercamiento_origen_reclamado_en ?? null).toBeNull();
+  });
+
+  it('un operador dado de baja no recibe el aviso aunque su viaje siga abierto', async () => {
+    const op = mundo.tablas.operador[0]; op.activo = false;
+    cerca();
+    const r = await barridoAcercamiento(undefined, AHORA);
+    expect(r.enviados).toBe(0);
+    expect(enviadosWa).toHaveLength(0);
   });
 });
