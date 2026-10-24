@@ -112,6 +112,8 @@ export interface ResultadoImportacion {
   sinCambio: number;
   conError: number;
   errores: ErrorFila[];
+  /** Columnas que cambian en las filas existentes (vacío si ninguna cambia). */
+  camposQueCambian?: string[];
 }
 
 /** Lo único que la importación necesita de la base. Siempre acotado al tenant que se le pasa. */
@@ -302,7 +304,9 @@ export function validarFilas(
 
     const registro: Registro = { cliente_id: clienteId };
     for (const col of COLUMNAS[tipo]) {
-      if (!cab.includes(col.clave)) { registro[col.clave] = defecto(tipo, col.clave); continue; }
+      // A37-S31-02: una columna que el CSV no trae NO se escribe (antes quedaba en false/null y el upsert pisaba lo guardado
+      // —p. ej. material_peligroso—). Los altas toman el valor por omisión de la base.
+      if (!cab.includes(col.clave)) continue;
       const crudo = leer(col.clave);
       if (col.req && crudo === '') { problemas.push(`Falta «${col.clave}».`); continue; }
       if (col.tipo === 'bool') {
@@ -326,7 +330,7 @@ export function validarFilas(
       if (valor.length > col.max) { problemas.push(`«${col.clave}» pasa de ${col.max} caracteres.`); continue; }
       registro[col.clave] = valor;
     }
-    if (tipo === 'producto' && registro.material_peligroso !== true && registro.clave_material_peligroso) {
+    if (tipo === 'producto' && 'material_peligroso' in registro && registro.material_peligroso !== true && registro.clave_material_peligroso) {
       problemas.push('Hay una clave de material peligroso, pero el producto no está marcado como peligroso.');
     }
 
@@ -347,15 +351,13 @@ export function validarFilas(
 /** El SKU distingue mayúsculas (la clave de la base también); el alias y el rol no importan en mayúsculas igual. */
 const llaveClave = (columna: string, v: string): string => (columna === 'sku' ? v : llaveTexto(v));
 
-function defecto(tipo: TipoPlantilla, clave: string): Valor {
-  if (tipo === 'producto' && clave === 'material_peligroso') return false;
-  if (tipo === 'cliente_numero' && clave === 'activo') return true;
-  return null;
-}
-
 // ── Comparar con lo que ya hay ──────────────────────────────────────────────
 
-export interface Plan { nuevas: Registro[]; cambian: Registro[]; sinCambio: number }
+export interface Plan {
+  nuevas: Registro[]; cambian: Registro[]; sinCambio: number;
+  /** A37-S31-02: columnas que de verdad cambian en alguna fila existente (las que el CSV trae y difieren). */
+  camposQueCambian: string[];
+}
 
 export function claveDeRegistro(tipo: TipoPlantilla, r: Registro): string {
   return [String(r.cliente_id), ...CLAVE_NATURAL[tipo].map((c) => llaveClave(c, String(r[c] ?? '')))].join('|');
@@ -365,13 +367,17 @@ export function claveDeRegistro(tipo: TipoPlantilla, r: Registro): string {
 export function planificar(tipo: TipoPlantilla, validos: Registro[], existentes: Registro[]): Plan {
   const previo = new Map(existentes.map((e) => [claveDeRegistro(tipo, e), e]));
   const columnas = COLUMNAS[tipo].map((c) => c.clave);
-  const plan: Plan = { nuevas: [], cambian: [], sinCambio: 0 };
+  const plan: Plan = { nuevas: [], cambian: [], sinCambio: 0, camposQueCambian: [] };
+  const cambiados = new Set<string>();
   for (const r of validos) {
     const e = previo.get(claveDeRegistro(tipo, r));
-    if (!e) plan.nuevas.push(r);
-    else if (columnas.every((c) => igual(r[c], e[c]))) plan.sinCambio++;
-    else plan.cambian.push(r);
+    if (!e) { plan.nuevas.push(r); continue; }
+    // Solo se comparan las columnas que el archivo trae: las ausentes no se escriben, así que no son «cambio».
+    const distintas = columnas.filter((c) => c in r && !igual(r[c], e[c]));
+    if (distintas.length === 0) plan.sinCambio++;
+    else { plan.cambian.push(r); distintas.forEach((c) => cambiados.add(c)); }
   }
+  plan.camposQueCambian = columnas.filter((c) => cambiados.has(c));
   return plan;
 }
 
@@ -410,18 +416,28 @@ export async function importarCatalogo(e: EntradaImportacion, puerto: PuertoImpo
 
   const ids = [...new Set(v.validas.map((x) => String(x.registro.cliente_id)))];
   const existentes = ids.length > 0 ? await puerto.existentes(e.tenantId, e.tipo, ids) : [];
+  if (e.tipo === 'producto') {
+    // Sin la columna material_peligroso, un SKU NUEVO nace «no peligroso» y la base rechazaría su clave de material peligroso.
+    const yaHay = new Set(existentes.map((x) => claveDeRegistro(e.tipo, x)));
+    for (const { fila, registro } of v.validas) {
+      if (!('material_peligroso' in registro) && registro.clave_material_peligroso && !yaHay.has(claveDeRegistro(e.tipo, registro))) {
+        v.errores.push({ fila, mensaje: 'Hay una clave de material peligroso, pero el archivo no trae la columna «material_peligroso» y el producto es nuevo.' });
+      }
+    }
+  }
   const plan = planificar(e.tipo, v.validas.map((x) => x.registro), existentes);
 
   const base = {
     nuevas: plan.nuevas.length, cambian: plan.cambian.length, sinCambio: plan.sinCambio,
-    conError: v.errores.length, errores: v.errores.slice(0, TOPE_ERRORES_VISIBLES),
+    conError: v.errores.length, errores: v.errores.slice(0, TOPE_ERRORES_VISIBLES), camposQueCambian: plan.camposQueCambian,
   };
+  const quienCambia = plan.camposQueCambian.length > 0 ? ` Cambian estas columnas: ${plan.camposQueCambian.join(', ')}.` : '';
   const resumen = `${plural(base.nuevas, 'nueva', 'nuevas')}, ${base.cambian} ${base.cambian === 1 ? 'cambia' : 'cambian'}, ${plural(base.conError, 'fila con error', 'filas con error')}`;
 
   if (!e.confirmar) {
     return {
       ok: true, aplicado: false, ...base,
-      mensaje: `Vista previa: ${resumen}${base.sinCambio > 0 ? ` (${base.sinCambio} sin cambio)` : ''}. ${base.conError > 0 ? 'Corrige las filas con error y vuelve a subir el archivo para poder aplicarlo.' : 'Nada se ha guardado todavía: confirma para aplicarlo.'}`,
+      mensaje: `Vista previa: ${resumen}${base.sinCambio > 0 ? ` (${base.sinCambio} sin cambio)` : ''}.${quienCambia} ${base.conError > 0 ? 'Corrige las filas con error y vuelve a subir el archivo para poder aplicarlo.' : 'Nada se ha guardado todavía: confirma para aplicarlo.'}`,
     };
   }
   if (base.conError > 0) {
