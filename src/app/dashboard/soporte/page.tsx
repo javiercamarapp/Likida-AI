@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
 import { LifeBuoy, AlertTriangle, Timer, Plus, MessagesSquare } from 'lucide-react';
-import { exigirVerRuta } from '@/lib/auth/guard';
+import { exigirVerRuta, requireSessionTenant } from '@/lib/auth/guard';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { getTickets, abrirTicket, CATEGORIAS_TICKET, PRIORIDADES_TICKET, type TicketRow } from '@/lib/likida/comercial';
 import {
@@ -90,10 +90,14 @@ export default async function SoportePage({
   async function accionAbrirTicket(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
     const sesion = await resolverTenantEfectivo('/dashboard/soporte', sp);
+    // A37-S20-06: la convención de la señal (abierto_por NULL = lo abrió Likida) se decide con
+    // el rol REAL de la sesión: con `?rol=flota_admin` el rol efectivo es el previsualizado y un
+    // ticket del superadmin contaría como queja del cliente.
+    const real = await requireSessionTenant('/dashboard/soporte', sp);
     try {
       await abrirTicket(
         sesion.tenantId,
-        sesion.rol === 'superadmin' ? null : sesion.userId,
+        real.rol === 'superadmin' ? null : sesion.userId,
         {
           asunto: String(fd.get('asunto') ?? ''),
           descripcion: String(fd.get('descripcion') ?? ''),
