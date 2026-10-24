@@ -86,4 +86,9 @@ describe('las tareas del asistente', () => {
     expect(renderToStaticMarkup(<TareasAbiertas tareas={[]} accion={null} ocultos={{}} />)).toContain('No hay tareas abiertas');
     expect(renderToStaticMarkup(<TareasAbiertas tareas={null} accion={null} ocultos={{}} />)).toBe('');
   });
+  it('A37-L-docs-ux-calidad-01: un fallo de LECTURA no se pinta como «sin pendientes»: avisa que se recargue', () => {
+    const html = renderToStaticMarkup(<TareasAbiertas tareas={null} errorLectura accion={null} ocultos={{}} />);
+    expect(html).toContain('No pude leer las tareas abiertas');
+    expect(html).not.toContain('No hay tareas abiertas');
+  });
 });

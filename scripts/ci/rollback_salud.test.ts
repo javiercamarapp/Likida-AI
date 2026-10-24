@@ -37,3 +37,20 @@ describe('rollback-production: verificación de salud', () => {
     expect(acepta({ error: 'x' })).toBe(false);
   });
 });
+
+// A37-L-01 (operabilidad): el runner no tiene `.vercel/`; sin proyecto enlazado y con otra CLI, el único rollback automatizado
+// no existía cuando hacía falta. Misma CLI y mismos IDs que el despliegue.
+describe('rollback-production: proyecto enlazado y CLI fijada', () => {
+  const deploy = readFileSync('.github/workflows/deploy-preview-promote.yml', 'utf8');
+  const delDeploy = (k: string) => new RegExp(`^\\s+${k}: ['"]?([^'"\\s]+)['"]?\\s*$`, 'm').exec(deploy)?.[1] ?? null;
+  it('declara la organización y el proyecto de Vercel, los mismos que el despliegue', () => {
+    expect(delDeploy('VERCEL_ORG_ID')).not.toBeNull();
+    expect(workflow).toContain(`VERCEL_ORG_ID: ${delDeploy('VERCEL_ORG_ID')}`);
+    expect(workflow).toContain(`VERCEL_PROJECT_ID: ${delDeploy('VERCEL_PROJECT_ID')}`);
+    expect(workflow).toMatch(/rollback "\$URL" --scope "\$VERCEL_ORG_ID"/);
+  });
+  it('usa la versión de la CLI fijada en el despliegue (no una vieja)', () => {
+    expect(workflow).toContain(`VERCEL_CLI_VERSION: '${delDeploy('VERCEL_CLI_VERSION')}'`);
+    expect(workflow).not.toContain('vercel@41');
+  });
+});

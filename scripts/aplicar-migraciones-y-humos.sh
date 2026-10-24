@@ -11,7 +11,8 @@
 #  mismo cotejo por CONJUNTO que ya usa la compuerta de Vercel:
 #  `scripts/ci/verificar-migraciones-aplicadas.mjs`.)
 #
-# Uso: SUPABASE_DB_URL='postgresql://...' bash scripts/aplicar-migraciones-y-humos.sh
+# Uso: RESPALDO_VERIFICADO=1 SUPABASE_DB_URL='postgresql://...' bash scripts/aplicar-migraciones-y-humos.sh
+#      (A37-L-09: RESPALDO_VERIFICADO=1 confirma el respaldo; INCLUIR_TODAS=1 añade --include-all; PERMITIR_OTRA_BASE=1 si no es producción)
 #
 # Qué hace, en orden, parándose en el primer fallo:
 #  1. `db push` de TODAS las migraciones pendientes según `supabase/migrations/`
@@ -70,8 +71,31 @@ else
   echo "instala psql y vuelve a correr, o corre a mano scripts/ci/0335_preflight_retencion_indices.sql."
 fi
 
-echo "═══ 1/3 · Aplicando migraciones pendientes (project: $REF) ═══"
-npx --yes supabase@latest db push --db-url "$SUPABASE_DB_URL" --include-all
+# A37-L-09 (operabilidad): esto migra PRODUCCIÓN. Antes corría la CLI sin versión fija (una CLI nueva cambia comportamiento sin
+# aviso) con `--include-all` (aplica un prefijo MENOR que redefine una función ya endurecida), sin dry-run, sin comprobar
+# la base y sin pedir el respaldo. Ahora: CLI fijada a la MISMA versión que el workflow de despliegue, base comprobada,
+# respaldo confirmado a mano, dry-run antes del push y `--include-all` solo si se pide.
+SUPABASE_CLI_VERSION="${SUPABASE_CLI_VERSION:-2.115.0}"
+REF_PRODUCCION="gngoqsvrxdguxvsizpbw"
+if printf '%s' "$REF" | grep -Eq '^[a-z0-9]{20}$' && [ "$REF" != "$REF_PRODUCCION" ] && [ "${PERMITIR_OTRA_BASE:-}" != "1" ]; then
+  echo "La base apunta a '$REF', que NO es la de producción autorizada ($REF_PRODUCCION). Si de verdad es otra base, repite con PERMITIR_OTRA_BASE=1."
+  exit 2
+fi
+if [ "${RESPALDO_VERIFICADO:-}" != "1" ]; then
+  echo "Esto migra la base real. Confirma primero que hay un respaldo fresco (node scripts/ci/supabase-preflight.mjs backup, o el"
+  echo "respaldo nocturno verificado) y repite con RESPALDO_VERIFICADO=1."
+  exit 2
+fi
+INCLUIR=()
+if [ "${INCLUIR_TODAS:-}" = "1" ]; then
+  echo "AVISO: INCLUIR_TODAS=1 — se aplicarán también migraciones con prefijo MENOR al último aplicado."
+  INCLUIR=(--include-all)
+fi
+
+echo "═══ 1/3 · Aplicando migraciones pendientes (project: $REF, CLI $SUPABASE_CLI_VERSION) ═══"
+echo "--- dry-run: esto es lo que se aplicaría ---"
+npx --yes "supabase@${SUPABASE_CLI_VERSION}" db push --db-url "$SUPABASE_DB_URL" ${INCLUIR[@]+"${INCLUIR[@]}"} --dry-run
+npx --yes "supabase@${SUPABASE_CLI_VERSION}" db push --db-url "$SUPABASE_DB_URL" ${INCLUIR[@]+"${INCLUIR[@]}"}
 
 echo "═══ 2/3 · Verificando el CONJUNTO completo contra migraciones_aplicadas() ═══"
 SALIDA_VERIFICADOR="$(node scripts/ci/verificar-migraciones-aplicadas.mjs)" || { echo "$SALIDA_VERIFICADOR"; exit 1; }
