@@ -147,3 +147,28 @@ describe('propiedad: Σperc − Σded no cambia (200 combinaciones, semilla fija
     }
   });
 });
+
+
+describe('A37-A1-liquidaciones-11: los renombres no distinguen acentos ni la forma Unicode', () => {
+  const crudo = [{ concepto: 'DIESEL', monto: 100 }, { concepto: 'Sueldo', monto: 500 }];
+  // Así los guarda la pantalla de configuración: texto escapado, flag «i», tal cual lo escribió el contralor.
+  const regla = (patron: string): Renombre => ({ patron: new RegExp(patron, 'i'), a: 'Otros' });
+
+  it('«Diésel → Otros» (con acento) renombra «DIESEL» que manda el TMS', () => {
+    const r = aplicarRenombres(crudo, [regla('Diésel')]);
+    expect(r[0]).toMatchObject({ concepto: 'Otros', monto: 100 });
+    expect(r[1]).toMatchObject({ concepto: 'Sueldo' });
+  });
+  it('y a la inversa: regla sin acento contra concepto con acento', () => {
+    expect(aplicarRenombres([{ concepto: 'Diésel premium', monto: 10 }], [regla('diesel')])[0]?.concepto).toBe('Otros');
+  });
+  it('forma Unicode distinta (é compuesta vs e + acento combinado) también coincide', () => {
+    const descompuesto = 'Die\u0301sel';
+    expect(aplicarRenombres([{ concepto: descompuesto, monto: 10 }], [regla('Diésel')])[0]?.concepto).toBe('Otros');
+    expect(aplicarRenombres([{ concepto: 'Diésel', monto: 10 }], [regla('Die\u0301sel')])[0]?.concepto).toBe('Otros');
+  });
+  it('no cambia lo que no coincide ni el neto', () => {
+    const r = aplicarRenombres([{ concepto: 'Sueldo', monto: 500 }], [regla('Diésel')]);
+    expect(r).toEqual([{ concepto: 'Sueldo', monto: 500 }]);
+  });
+});
