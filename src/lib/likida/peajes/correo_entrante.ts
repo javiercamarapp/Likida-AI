@@ -152,7 +152,7 @@ export async function atenderCorreoPeajes(token: string, correo: CorreoEntrante,
     await registrarCorrida(tenantId, 'peajes', {
       inicio, fin: new Date(), estado: 'parcial', disparo: 'correo',
       resumen: { recibidos, duplicados, ignorados },
-      error: `Correo con archivos que no se recibieron: ${descartados.join('; ')}. Pídele al proveedor que lo divida en archivos de hasta ${MAX_ARCHIVO_INGESTA_BYTES / 1024 / 1024} MB, o súbelo a mano.`.slice(0, 500),
+      error: `Correo con archivos que no se recibieron: ${descartados.join('; ')}. Pídele al proveedor que lo divida en archivos de hasta ${MAX_ARCHIVO_INGESTA_BYTES / 1024 / 1024} MB.`.slice(0, 500),
     });
   }
   logger.info('peajes_correo.procesado', { emailId: correo.emailId, tenantId, recibidos, duplicados, ignorados });
