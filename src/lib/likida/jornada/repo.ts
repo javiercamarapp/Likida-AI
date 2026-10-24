@@ -232,6 +232,10 @@ export interface MarcaNueva {
   corrigeA?: string | null;
 }
 
+/** La función no existe en la base (migración sin aplicar): PostgREST la reporta como PGRST202 / 42883. */
+const funcionAusente = (e: { code?: string; message?: string }): boolean =>
+  e.code === 'PGRST202' || e.code === '42883' || /Could not find the function|does not exist/i.test(e.message ?? '');
+
 /**
  * Asienta una marca.
  *
@@ -269,6 +273,37 @@ export async function asentarMarca(m: MarcaNueva): Promise<ResultadoAsiento> {
       err: error?.message ?? `resultado inesperado: ${String(resultado)}`,
     });
     return 'fallo';
+  }
+
+  // A37-S48-01: la DECLARACIÓN del chofer de un extremo (inicio/fin) no puede rebotar contra la marca derivada viva: el índice único
+  // de extremos vivos la mandaba a «ya estaba» y la declaración (la prueba plena) no se guardaba. La RPC 0865 sustituye la derivada
+  // (append-only) bajo el lock del expediente y no pisa una marca humana. Si la base aún no la tiene, cae al INSERT de siempre.
+  if (m.procedencia === 'declarado_operador' && m.waMessageId
+      && (m.tipo === 'inicio_jornada' || m.tipo === 'fin_jornada')) {
+    const { data, error } = await acotada(
+      supabaseAdmin().rpc('asentar_declaracion_jornada', {
+        p_jornada_id: m.jornadaId,
+        p_tenant_id: m.tenantId,
+        p_tipo: m.tipo,
+        p_momento: m.momento.toISOString(),
+        p_wa_message_id: m.waMessageId,
+        p_viaje_id: m.viajeId ?? null,
+        p_detalle: m.detalle ?? null,
+      }),
+      'jornada.asiento.declaracion',
+    );
+    const resultado = Array.isArray(data) ? data[0] : data;
+    if (!error && resultado === 'asentado') return 'asentado';
+    if (!error && resultado === 'ya_estaba') return 'ya_estaba';
+    if (error && funcionAusente(error)) {
+      logger.warn('jornada.declaracion_sin_rpc', { motivo: 'la base no tiene la migracion 0865; se usa el INSERT anterior' });
+    } else {
+      logger.error('jornada.asiento_no_escrito', {
+        jornada: m.jornadaId, tipo: m.tipo, procedencia: m.procedencia,
+        err: error?.message ?? `resultado inesperado: ${String(resultado)}`,
+      });
+      return 'fallo';
+    }
   }
 
   const { data, error } = await acotada(

@@ -52,6 +52,8 @@ interface Banco {
   entregas: NuevaEntrega[];
   excepciones: Array<{ clave: string; tipo: string; detalle: Record<string, unknown> }>;
   eventos: string[];
+  detallesEvento: Array<Record<string, unknown>>;
+  resueltas: string[];
   subidas: Array<{ ruta: string; bytes: Uint8Array }>;
   orden: string[];
 }
@@ -63,7 +65,7 @@ function banco(opciones: {
   coordinador?: { correo: string; activo: boolean } | null;
   fallaStorage?: boolean;
 } = {}): Banco {
-  const b: Banco = { deps: null as unknown as Deps, liquidaciones: [], desgloses: [], entregas: [], excepciones: [], eventos: [], subidas: [], orden: [] };
+  const b: Banco = { deps: null as unknown as Deps, liquidaciones: [], desgloses: [], entregas: [], excepciones: [], eventos: [], detallesEvento: [], resueltas: [], subidas: [], orden: [] };
   const correoOperador = opciones.correoOperador === undefined ? 'operador@ejemplo.test' : opciones.correoOperador;
   const coordinador = opciones.coordinador === undefined ? { correo: 'coordinador@ejemplo.test', activo: true } : opciones.coordinador;
   b.deps = {
@@ -100,7 +102,12 @@ function banco(opciones: {
       b.excepciones.push({ clave, tipo, detalle });
       return { id: b.excepciones.length, nueva: true };
     },
-    registrarEvento: async (_t, _id, tipo) => { b.eventos.push(tipo); },
+    registrarEvento: async (_t, _id, tipo, detalle) => { b.eventos.push(tipo); b.detallesEvento.push(detalle ?? {}); },
+    resolverExcepciones: async (_t, clave, tipo) => {
+      const antes = b.resueltas.length;
+      b.resueltas.push(`${clave}|${tipo}`);
+      return b.resueltas.length - antes;
+    },
   };
   return b;
 }
@@ -170,6 +177,50 @@ describe('recibirDesglose: idempotencia y correcciones', () => {
     expect(b.subidas).toHaveLength(1);
     expect(b.excepciones).toHaveLength(1);
     expect(b.excepciones[0]).toMatchObject({ tipo: 'correccion_pendiente', detalle: { bitacora: 'B-0001', netoAntes: 4850, netoDespues: 4000 } });
+  });
+
+  it('A37-A1-02: quien administra decide mandar la corrección => liquidación NUEVA «-R1», xlsx y entregas nuevas, la original intacta y la pendiente se cierra', async () => {
+    const b = banco();
+    await recibirDesglose(TENANT, desglose(), b.deps);
+    const original = { ...b.liquidaciones[0] };
+    const distinto = desglose({ neto: 4000, percepciones: [{ concepto: 'Sueldo', monto: 9000 }], deducciones: [{ concepto: 'Retención uno', monto: 5000 }] });
+    const r = await recibirDesglose(TENANT, distinto, b.deps, { correccion: { motivo: 'nómina corregida en origen', actor: 'llave:administracion' } });
+    expect(r).toMatchObject({ estado: 'creada', claveExterna: 'BIT-T1-B-0001-R1', correccionDe: 'BIT-T1-B-0001', retenida: false });
+    expect(b.liquidaciones).toHaveLength(2);
+    expect(b.liquidaciones[0]).toEqual(original); // nunca se sobrescribe
+    expect(b.liquidaciones[1]).toMatchObject({ claveExterna: 'BIT-T1-B-0001-R1', total: 4000 });
+    expect(b.subidas).toHaveLength(2); // xlsx nuevo
+    expect(b.entregas.filter((e) => e.liquidacionExternaId === 'liq-2')).toHaveLength(4);
+    expect(b.resueltas).toEqual(['BIT-T1-B-0001|correccion_pendiente']);
+    expect(b.detallesEvento[1]).toMatchObject({ correccion_de: 'BIT-T1-B-0001', motivo_correccion: 'nómina corregida en origen', actor: 'llave:administracion' });
+    expect(b.excepciones.filter((e) => e.tipo === 'correccion_pendiente')).toHaveLength(0);
+  });
+
+  it('A37-A1-02: reintentar la MISMA corrección es idempotente; otra distinta es «-R2»', async () => {
+    const b = banco();
+    await recibirDesglose(TENANT, desglose(), b.deps);
+    const c1 = desglose({ neto: 4000, percepciones: [{ concepto: 'Sueldo', monto: 9000 }], deducciones: [{ concepto: 'Retención uno', monto: 5000 }] });
+    const c2 = desglose({ neto: 3000, percepciones: [{ concepto: 'Sueldo', monto: 8000 }], deducciones: [{ concepto: 'Retención uno', monto: 5000 }] });
+    const op = { correccion: { motivo: 'otra vez', actor: 'a' } };
+    await recibirDesglose(TENANT, c1, b.deps, op);
+    const entregasAntes = b.entregas.length;
+    const otra = await recibirDesglose(TENANT, c1, b.deps, op);
+    expect(otra).toMatchObject({ estado: 'idempotente', claveExterna: 'BIT-T1-B-0001-R1' });
+    expect(b.entregas).toHaveLength(entregasAntes);
+    const r2 = await recibirDesglose(TENANT, c2, b.deps, op);
+    expect(r2).toMatchObject({ estado: 'creada', claveExterna: 'BIT-T1-B-0001-R2' });
+    expect(b.liquidaciones).toHaveLength(3);
+  });
+
+  it('A37-A1-02: sin la decisión de la persona la corrección sigue SIN enviarse (solo la excepción), y una bitácora nueva con «correccion» entra normal', async () => {
+    const b = banco();
+    await recibirDesglose(TENANT, desglose(), b.deps);
+    const r = await recibirDesglose(TENANT, desglose({ neto: 4000, percepciones: [{ concepto: 'Sueldo', monto: 9000 }], deducciones: [{ concepto: 'Retención uno', monto: 5000 }] }), b.deps);
+    expect(r.estado).toBe('correccion_pendiente');
+    const b2 = banco();
+    const nueva = await recibirDesglose(TENANT, desglose(), b2.deps, { correccion: { motivo: 'por si acaso', actor: 'a' } });
+    expect(nueva).toMatchObject({ estado: 'creada', claveExterna: 'BIT-T1-B-0001' });
+    expect((nueva as { correccionDe?: string }).correccionDe).toBeUndefined();
   });
 
   it('la huella que se guarda es la del contrato (no la del Excel renombrado)', async () => {

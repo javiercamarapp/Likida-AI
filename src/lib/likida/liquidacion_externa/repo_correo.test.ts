@@ -94,6 +94,9 @@ describe('configuración de la flota', () => {
     await expect(r.guardarConfigCorreo(T, { ...r.CONFIG_CORREO_POR_DEFECTO, rhCorreos: ['a@e.test', 'b@e.test', 'c@e.test', 'd@e.test'] }, null)).rejects.toBeInstanceOf(DatoInvalido);
     await expect(r.guardarConfigCorreo(T, { ...r.CONFIG_CORREO_POR_DEFECTO, archivoCorreo: 'sin-arroba' }, null)).rejects.toBeInstanceOf(DatoInvalido);
     await expect(r.guardarConfigCorreo(T, { ...r.CONFIG_CORREO_POR_DEFECTO, enviarDesdeHora: 24 }, null)).rejects.toBeInstanceOf(DatoInvalido);
+    // A37-A1-04: no se activa el envío por correo sin «Responder a» (las respuestas del operador caerían en el buzón de campañas)
+    await expect(r.guardarConfigCorreo(T, { ...r.CONFIG_CORREO_POR_DEFECTO, canal: 'correo', activa: true, responderA: null }, null)).rejects.toThrow(/responder_a/);
+    await expect(r.guardarConfigCorreo(T, { ...r.CONFIG_CORREO_POR_DEFECTO, canal: 'ambos', activa: true, responderA: '  ' }, null)).rejects.toBeInstanceOf(DatoInvalido);
   });
 
   it('guardar contra una base sin migraciones LANZA y nombra la migración (nunca finge haber guardado)', async () => {
@@ -588,5 +591,54 @@ describe('recepción atómica del desglose (RPC 0857, hallazgo A35-A1-01)', () =
     expect(await r.desgloseIncompleto(T, LIQ)).toBe(false);
     comportamiento = () => ausente;
     expect(await r.desgloseIncompleto(T, LIQ)).toBe(false);
+  });
+});
+
+
+describe('A37-A1-01: carga de contactos y guardia de activar', () => {
+  beforeEach(() => { llamadas.length = 0; respuestas = []; comportamiento = null; });
+
+  it('contarOperadoresConCorreo cuenta solo los de la flota que tienen correo', async () => {
+    respuestas = [{ data: null, error: null, count: 3 }];
+    expect(await r.contarOperadoresConCorreo(T)).toBe(3);
+    expect(llamadas[0].tabla).toBe('operador');
+    expect(llamadas[0].ops).toContainEqual(['eq', 'tenant_id', T]);
+    expect(llamadas[0].ops).toContainEqual(['not', 'correo', 'is', null]);
+  });
+
+  it('activar el envío por correo sin ningún correo de operador cargado se rechaza con el camino para cargarlos', async () => {
+    respuestas = [{ data: null, error: null, count: 0 }];
+    await expect(r.exigirContactosParaActivar(T, { activa: true, canal: 'correo' })).rejects.toThrow(/contactos/);
+    respuestas = [{ data: null, error: null, count: 12 }];
+    await expect(r.exigirContactosParaActivar(T, { activa: true, canal: 'ambos' })).resolves.toBeUndefined();
+  });
+
+  it('no consulta nada si el envío sigue apagado o el canal es WhatsApp', async () => {
+    await r.exigirContactosParaActivar(T, { activa: false, canal: 'correo' });
+    await r.exigirContactosParaActivar(T, { activa: true, canal: 'whatsapp' });
+    expect(llamadas).toHaveLength(0);
+  });
+
+  it('el puerto real busca operadores solo de la flota y por tandas, y nunca toca el teléfono', async () => {
+    respuestas = [{ data: [{ id: 'op-1', numero_empleado: 'E-1', correo: null, coordinador_id: null }], error: null }];
+    const mapa = await r.puertoContactosReal(T).buscarOperadores(['E-1']);
+    expect(mapa.get('E-1')).toEqual([{ id: 'op-1', correo: null, coordinadorId: null }]);
+    expect(llamadas[0].ops).toContainEqual(['eq', 'tenant_id', T]);
+
+    llamadas.length = 0; respuestas = [{ data: [{ id: 'op-1' }], error: null }];
+    await r.puertoContactosReal(T).guardarContacto('op-1', { correo: 'op@ejemplo.test' });
+    const set = llamadas[0].ops.find((o) => o[0] === 'update')![1] as Record<string, unknown>;
+    expect(set).toMatchObject({ correo: 'op@ejemplo.test', correo_rebotado_en: null });
+    expect(Object.keys(set)).not.toContain('telefono');
+  });
+
+  it('asegurarCoordinador reutiliza el que ya existe por correo y crea el que no', async () => {
+    respuestas = [{ data: { id: 'c-1', nombre: 'Ya Tenía' }, error: null }];
+    expect(await r.puertoContactosReal(T).asegurarCoordinador({ correo: 'Coord@Ejemplo.test', nombre: null })).toEqual({ id: 'c-1', creado: false });
+    expect(llamadas[0].ops).toContainEqual(['eq', 'correo', 'coord@ejemplo.test']);
+
+    llamadas.length = 0;
+    respuestas = [{ data: null, error: null }, { data: { id: 'c-2', nombre: 'Nuevo', correo: 'n@ejemplo.test', activo: true }, error: null }];
+    expect(await r.puertoContactosReal(T).asegurarCoordinador({ correo: 'n@ejemplo.test', nombre: 'Nuevo' })).toEqual({ id: 'c-2', creado: true });
   });
 });

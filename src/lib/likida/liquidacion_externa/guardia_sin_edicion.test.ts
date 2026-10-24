@@ -137,7 +137,7 @@ describe('guardia: enumeración de rutas y acciones de servidor', () => {
 
   it('hay rutas /api/v1/liquidaciones-externas/* y ninguna expone PUT, PATCH ni DELETE', () => {
     expect(rutas.map((r) => relative('src/app/api/v1/liquidaciones-externas', r.ruta)).sort()).toEqual([
-      'acuses/confirmar/route.ts', 'acuses/route.ts', 'desgloses/route.ts', 'exportacion/route.ts', 'route.ts',
+      'acuses/confirmar/route.ts', 'acuses/route.ts', 'contactos/route.ts', 'desgloses/route.ts', 'exportacion/route.ts', 'route.ts', // contactos (A37-A1-01): solo correos, no toca montos ni liquidaciones
     ]);
     for (const r of rutas) {
       const verbos = [...r.texto.matchAll(/export\s+(?:async\s+)?(?:function|const)\s+(GET|POST|PUT|PATCH|DELETE)\b/g)].map((m) => m[1]);

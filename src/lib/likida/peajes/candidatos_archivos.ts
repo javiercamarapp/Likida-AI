@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import {
-  ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO, type CandidatoCobro, type CategoriaCobro, type ResultadoRevision,
+  ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO, esCategoriaInterna, type CandidatoCobro, type CategoriaCobro, type ResultadoRevision,
 } from './reglas_cobro';
 import { ETIQUETA_CATEGORIA_TARIFA, type CategoriaTarifa, type EvaluacionTarifa } from './reglas_tarifa';
 
@@ -62,6 +62,10 @@ export interface ReporteCandidatos {
   periodoHasta: string | null;
   /** Categorías que se dejaron fuera porque ya tienen un reclamo registrado. */
   categoriasExcluidas: CategoriaArchivo[];
+  /** A37-A2-05: cruces de categorías INTERNAS de la flota que no se incluyen (no son un reclamo al proveedor). */
+  internasOmitidas: number;
+  /** A37-A2-05: cruces que una persona descartó o justificó y por eso no se incluyen. */
+  decididosOmitidos: number;
   filas: FilaCandidato[];
 }
 
@@ -87,6 +91,11 @@ export interface EntradaCandidatos {
   evaluadas?: readonly LineaEvaluadaArchivo[];
   /** Categorías con un reclamo ya registrado: se omiten. */
   excluir?: ReadonlySet<CategoriaArchivo>;
+  /**
+   * A37-A2-05: renglones que una persona ya descartó o justificó, como `${indice}|${categoria}`. No se suben al proveedor
+   * (antes el monto del archivo los incluía).
+   */
+  decididos?: ReadonlySet<string>;
 }
 
 const centavos = (n: number): number => Math.round((n + Number.EPSILON) * 100);
@@ -107,10 +116,17 @@ function montoDeCategoria(c: CandidatoCobro, t: EvaluacionTarifa | undefined): n
 export function armarCandidatos(e: EntradaCandidatos): ReporteCandidatos {
   const excluir = e.excluir ?? new Set<CategoriaArchivo>();
   const evaluadas = new Map((e.evaluadas ?? []).map((l) => [l.indice, l]));
+  const decididos = e.decididos ?? new Set<string>();
   const filas: FilaCandidato[] = [];
+  let internasOmitidas = 0;
+  let decididosOmitidos = 0;
 
   for (const c of e.revision.candidatos) {
     if (excluir.has(c.categoria)) continue;
+    // A37-A2-05: lo interno de la flota no sale hacia el proveedor.
+    if (esCategoriaInterna(c.categoria)) { internasOmitidas++; continue; }
+    // Un cruce justificado o descartado por una persona tampoco se reclama.
+    if (c.justificacion || decididos.has(`${c.indice}|${c.categoria}`)) { decididosOmitidos++; continue; }
     const t = evaluadas.get(c.indice);
     filas.push({
       categoria: c.categoria, indice: c.indice, tag: c.tag, unidad: c.unidad, fecha: c.fecha, hora: c.hora, clase: c.clase, caseta: c.caseta, importe: c.monto,
@@ -122,6 +138,7 @@ export function armarCandidatos(e: EntradaCandidatos): ReporteCandidatos {
   if (!excluir.has('importe_sobre_tarifa')) {
     for (const l of evaluadas.values()) {
       if (l.categoriaTarifa !== 'importe_sobre_tarifa') continue;
+      if (decididos.has(`${l.indice}|importe_sobre_tarifa`)) { decididosOmitidos++; continue; }
       filas.push({
         categoria: 'importe_sobre_tarifa', indice: l.indice, tag: l.tag ?? null, unidad: l.unidad ?? null, fecha: l.fecha, hora: l.hora ? l.hora.slice(0, 8) : null,
         clase: l.clase ?? null, caseta: l.caseta, importe: l.monto, claseEsperada: l.claseEsperada, importeEsperado: l.importeEsperado,
@@ -135,7 +152,7 @@ export function armarCandidatos(e: EntradaCandidatos): ReporteCandidatos {
   filas.sort((a, b) => ((orden.get(a.categoria) ?? 0) - (orden.get(b.categoria) ?? 0)) || (a.indice - b.indice));
   return {
     proveedor: e.proveedor, archivoNombre: e.archivoNombre, periodoDesde: e.periodoDesde, periodoHasta: e.periodoHasta,
-    categoriasExcluidas: CATEGORIAS_ARCHIVO.filter((c) => excluir.has(c)), filas,
+    categoriasExcluidas: CATEGORIAS_ARCHIVO.filter((c) => excluir.has(c)), internasOmitidas, decididosOmitidos, filas,
   };
 }
 
@@ -235,6 +252,12 @@ export function candidatosAExcel(r: ReporteCandidatos): Uint8Array {
     [`Archivo: ${texto(r.archivoNombre) || 'sin nombre'} · Proveedor: ${texto(r.proveedor) || 'no declarado'} · Periodo: ${periodoTexto(r)}`],
     ...(r.categoriasExcluidas.length > 0
       ? [[`No incluye las categorías que ya tienen reclamo registrado: ${r.categoriasExcluidas.map((c) => ETIQUETA_CATEGORIA_ARCHIVO[c]).join(', ')}.`]] as Fila[]
+      : []),
+    ...(r.internasOmitidas > 0
+      ? [[`No incluye ${r.internasOmitidas} cruce(s) de categorías internas de la flota (caseta que no debe cruzarse, unidad inmovilizada): no son un reclamo al proveedor.`]] as Fila[]
+      : []),
+    ...(r.decididosOmitidos > 0
+      ? [[`No incluye ${r.decididosOmitidos} cruce(s) que una persona descartó o justificó.`]] as Fila[]
       : []),
     [],
     ['Categoría', 'Renglones', 'Monto a reclamar (MXN)', 'Sin monto calculable'],

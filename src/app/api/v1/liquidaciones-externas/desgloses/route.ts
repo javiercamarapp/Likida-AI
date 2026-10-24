@@ -9,7 +9,9 @@
 //
 // Cada desglose pasa por `recibirDesglose` (el mismo servicio del conector):
 //   · misma clave + mismo contenido → idempotente (no inserta ni reenvía nada);
-//   · misma clave + otro contenido  → NO sobrescribe: excepción `correccion_pendiente`;
+//   · misma clave + otro contenido  → NO sobrescribe: excepción `correccion_pendiente`. Con `"correccion": { "motivo": "…" }` en el
+//     sobre (A37-A1-02) quien administra DECIDE mandarla como corrección: entra como `<clave>-R<n>` (xlsx nuevo; el operador la
+//     recibe rotulada «CORRECCIÓN») y la original queda como constancia. Idempotente: reintentar la misma corrección no crea otra;
 //   · una guarda que retiene        → queda pendiente, sin entregas, con su excepción;
 //   · operador que no existe        → excepción `operador_no_encontrado`.
 //
@@ -49,13 +51,14 @@ export interface RespuestaDesgloses {
   excepciones: Array<{ clave: string; motivo: string }>;
 }
 
-type Preparado = { ok: true; desgloses: DesgloseBitacora[] } | { ok: false; respuesta: NextResponse };
+type Preparado = { ok: true; desgloses: DesgloseBitacora[]; correccion: { motivo: string } | null } | { ok: false; respuesta: NextResponse };
 
 /** Extrae y valida TODOS los desgloses del cuerpo; el primero que no cumpla el contrato corta la petición con su índice. */
 function preparar(cuerpo: Record<string, unknown>): Preparado {
   let crudos: unknown[];
+  let correccion: { motivo: string } | null = null;
   if ('desgloses' in cuerpo) {
-    const otros = Object.keys(cuerpo).filter((k) => k !== 'desgloses');
+    const otros = Object.keys(cuerpo).filter((k) => k !== 'desgloses' && k !== 'correccion');
     if (otros.length > 0) {
       return { ok: false, respuesta: errorApi('parametro_invalido', `El cuerpo trae campos que el contrato no tiene: ${otros.map((s) => `\`${s}\``).join(', ')}.`) };
     }
@@ -63,6 +66,16 @@ function preparar(cuerpo: Record<string, unknown>): Preparado {
       return { ok: false, respuesta: errorApi('parametro_invalido', '`desgloses` tiene que ser una lista de desgloses.') };
     }
     crudos = cuerpo.desgloses;
+    // A37-A1-02: `correccion: { motivo }` = quien administra DECIDIÓ mandar estas bitácoras como corrección de las ya recibidas.
+    if ('correccion' in cuerpo) {
+      const c = cuerpo.correccion;
+      const motivo = c !== null && typeof c === 'object' && !Array.isArray(c) ? (c as Record<string, unknown>).motivo : undefined;
+      const extra = c !== null && typeof c === 'object' && !Array.isArray(c) ? Object.keys(c as object).filter((k) => k !== 'motivo') : ['?'];
+      if (typeof motivo !== 'string' || motivo.trim().length < 3 || motivo.trim().length > 300 || extra.length > 0) {
+        return { ok: false, respuesta: errorApi('parametro_invalido', '`correccion` tiene que ser `{ "motivo": "…" }` con el motivo de la corrección (3 a 300 caracteres).') };
+      }
+      correccion = { motivo: motivo.trim() };
+    }
   } else {
     crudos = [cuerpo];
   }
@@ -88,7 +101,7 @@ function preparar(cuerpo: Record<string, unknown>): Preparado {
       throw e;
     }
   }
-  return { ok: true, desgloses: validos };
+  return { ok: true, desgloses: validos, correccion };
 }
 
 export async function POST(req: Request) {
@@ -109,7 +122,10 @@ export async function POST(req: Request) {
   const salida: RespuestaDesgloses = { recibidas: 0, idempotentes: 0, retenidas: 0, excepciones: [] };
   try {
     for (const d of preparado.desgloses) {
-      const r = await recibirDesglose(acceso.tenantId, d, undefined, { sistemaOrigen: SISTEMA_ORIGEN });
+      const r = await recibirDesglose(acceso.tenantId, d, undefined, {
+        sistemaOrigen: SISTEMA_ORIGEN,
+        ...(preparado.correccion ? { correccion: { motivo: preparado.correccion.motivo, actor: String(acceso.rol) } } : {}),
+      });
       switch (r.estado) {
         case 'creada':
           if (r.retenida) salida.retenidas += 1;

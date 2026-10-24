@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import {
   revisionDeDesglose, lineasDeDesglose, lineaCobroDeFila, listarReglasCasetas, listarReclamos,
 } from '@/lib/likida/peajes/revision_cobros';
-import { listarTarifas } from '@/lib/likida/peajes/datos';
+import { listarTarifas, listarDecisionesCandidatos } from '@/lib/likida/peajes/datos';
 import { evaluarContraTarifa, tarifasDesdeInferidas } from '@/lib/likida/peajes/reglas_tarifa';
 import { inferirTarifas } from '@/lib/likida/peajes/tarifario_inferido';
 import {
@@ -79,10 +79,16 @@ export async function GET(req: Request) {
       }
     }
 
+    // A37-A2-05: lo que una persona descartó o justificó no se sube al proveedor; lo ya reclamado solo con `excluirReclamados`.
+    const decisiones = await listarDecisionesCandidatos(t.tenantId, desgloseId);
+    const decididos = new Set(decisiones
+      .filter((d) => d.accion === 'descartado' || d.accion === 'justificado' || (excluirReclamados && d.accion === 'reclamado'))
+      .map((d) => `${d.indice}|${d.categoria}`));
+
     const reporte = armarCandidatos({
       proveedor: rev.proveedor, archivoNombre: rev.archivoNombre,
       periodoDesde: rev.periodoOficialDesde, periodoHasta: rev.periodoOficialHasta,
-      revision: rev.revision, evaluadas, excluir,
+      revision: rev.revision, evaluadas, excluir, decididos,
     });
     const cabeceras = { 'Cache-Control': 'no-store' } as const;
     if (formato === 'csv') {

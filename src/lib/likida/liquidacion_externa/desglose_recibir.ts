@@ -38,7 +38,7 @@ import {
 } from './repo';
 import {
   leerConfigCorreo, leerContactoOperador, listarCoordinadores, insertarDesglose, insertarEntregas, abrirExcepcion, subirXlsx,
-  recibirDesgloseAtomico, desgloseIncompleto, CONFIG_CORREO_POR_DEFECTO,
+  recibirDesgloseAtomico, desgloseIncompleto, listarExcepciones, resolverExcepcion, CONFIG_CORREO_POR_DEFECTO,
   type PedidoRecepcionAtomica, type RecepcionAtomica, type Lectura, type ConfigCorreo, type ContactoOperador, type Coordinador, type MetaDesglose, type NuevaEntrega, type TipoExcepcion,
 } from './repo_correo';
 
@@ -61,6 +61,8 @@ export interface DependenciasDesglose {
     tenantId: string, claveExterna: string, tipo: TipoExcepcion, detalle: Record<string, unknown>, ahora: Date,
   ) => Promise<{ id: number; nueva: boolean }>;
   registrarEvento: (tenantId: string, liquidacionId: string, tipo: TipoEvento, detalle?: Record<string, unknown>) => Promise<void>;
+  /** Cierra las excepciones abiertas de esa clave y tipo (la corrección ya se mandó). Opcional: sin ella se deja para resolver a mano. */
+  resolverExcepciones?: (tenantId: string, claveExterna: string, tipo: TipoExcepcion, ahora: Date) => Promise<number>;
   /**
    * RPC 0857: liquidación + encabezado + evento + entregas en UNA transacción (y repara lo que quedó a medias). Opcional: si no
    * se da, o la base aún no tiene la 0857 (`no_disponible`), se usa el camino anterior, no atómico, y se avisa en el log.
@@ -94,6 +96,13 @@ export const dependenciasDesglosePorOmision: DependenciasDesglose = {
   insertarEntregas,
   abrirExcepcion,
   registrarEvento,
+  resolverExcepciones: async (t, clave, tipo, ahora) => {
+    const l = await listarExcepciones(t, { clave, tipo });
+    if (!l.ok) return 0;
+    let n = 0;
+    for (const e of l.valor) if (await resolverExcepcion(t, e.id, ahora)) n += 1;
+    return n;
+  },
   recibirAtomico: recibirDesgloseAtomico,
   desgloseIncompleto,
 };
@@ -102,7 +111,7 @@ export const dependenciasDesglosePorOmision: DependenciasDesglose = {
 
 export type ResultadoDesglose =
   /** Se guardó. `retenida`: quedó pendiente de decisión humana, sin entregas. */
-  | { estado: 'creada'; liquidacionId: string; claveExterna: string; entregas: number; retenida: boolean; motivos: MotivoRetencion[]; excepciones: TipoExcepcion[] }
+  | { estado: 'creada'; liquidacionId: string; claveExterna: string; entregas: number; retenida: boolean; motivos: MotivoRetencion[]; excepciones: TipoExcepcion[]; /** Clave de la liquidación que esta corrige (A37-A1-02). */ correccionDe?: string }
   /** Misma clave y mismo contenido: no se hizo nada. */
   | { estado: 'idempotente'; liquidacionId: string; claveExterna: string }
   /** Misma clave, otro contenido: nada se sobrescribió ni se envió; hay una excepción abierta. */
@@ -112,7 +121,17 @@ export type ResultadoDesglose =
 export interface OpcionesDesglose {
   /** `sistema_origen` que queda en la liquidación. */
   sistemaOrigen?: string;
+  /**
+   * A37-A1-02: la persona que administra DECIDIÓ mandar la corrección. Si la bitácora ya existe con otro contenido, en vez de
+   * quedarse en `correccion_pendiente` se crea una liquidación NUEVA con la clave `<clave>-R<n>` (xlsx nuevo, llave de entrega
+   * nueva) que el operador recibe rotulada «CORRECCIÓN»; la original queda como constancia (nunca se sobrescribe). Es idempotente:
+   * reintentar la misma corrección no crea otra. Sin `existente` no hace nada especial (se recibe como una bitácora nueva).
+   */
+  correccion?: { motivo: string; actor: string };
 }
+
+/** Tope de correcciones encadenadas de una misma bitácora (`-R1`…`-R20`): más allá es un error de integración, no una corrección. */
+export const MAX_CORRECCIONES = 20;
 
 const SISTEMA_ORIGEN_DEFECTO = 'desglose-bitacora';
 
@@ -200,9 +219,9 @@ export async function recibirDesglose(
     }
     throw e;
   }
-  const liq = conversion.liquidacion;
-  const claveExterna = liq.claveExterna;
-  const huella = huellaContenido(liq);
+  let liq = conversion.liquidacion;
+  let claveExterna = liq.claveExterna;
+  let huella = huellaContenido(liq);
   const ahora = deps.ahora();
 
   // (2) idempotencia / corrección
@@ -219,6 +238,26 @@ export async function recibirDesglose(
       rescate = existente;
       existente = null;
     }
+  }
+  // A37-A1-02: una persona que administra decidió mandar la corrección → liquidación nueva `<clave>-R<n>`, idempotente.
+  let correccionDe: string | null = null;
+  if (existente && opciones.correccion) {
+    const base = claveExterna;
+    let n = 1;
+    for (; n <= MAX_CORRECCIONES; n++) {
+      const claveR = `${base}-R${n}`;
+      const previa = await deps.buscarPorClave(tenantId, claveR);
+      if (!previa) break;
+      if (previa.huella === huellaContenido({ ...liq, claveExterna: claveR })) {
+        return { estado: 'idempotente', liquidacionId: previa.id, claveExterna: claveR };
+      }
+    }
+    if (n > MAX_CORRECCIONES) throw new DatoInvalido(`Esta bitácora ya tiene ${MAX_CORRECCIONES} correcciones: revisa la integración, algo la está reenviando distinta cada vez.`);
+    correccionDe = base;
+    claveExterna = `${base}-R${n}`;
+    liq = { ...liq, claveExterna };
+    huella = huellaContenido(liq);
+    existente = null;
   }
   if (existente) {
     await deps.abrirExcepcion(tenantId, claveExterna, 'correccion_pendiente', {
@@ -248,7 +287,7 @@ export async function recibirDesglose(
   const bytes = generarDesgloseXlsx({
     operador: operador.nombre,
     ...(d.unidad !== undefined ? { unidad: d.unidad } : {}),
-    bitacora: d.bitacoras !== undefined ? liq.viajes.join(', ') : d.bitacora,
+    bitacora: `${d.bitacoras !== undefined ? liq.viajes.join(', ') : d.bitacora}${correccionDe ? ' — CORRECCIÓN' : ''}`,
     ...(d.numeroLiquidacion !== undefined ? { numeroLiquidacion: d.numeroLiquidacion } : {}),
     ...(d.numeroPago !== undefined ? { numeroPago: d.numeroPago } : {}),
     desde: d.desde, hasta: d.hasta, dias: conversion.dias,
@@ -292,6 +331,9 @@ export async function recibirDesglose(
   };
   const detalleEvento = {
     origen: liq.sistemaOrigen, canal: 'correo', renglones: liq.conceptos.length, retenida, viajesEnLikida: viajeIds.length,
+    ...(correccionDe && opciones.correccion
+      ? { correccion_de: correccionDe, motivo_correccion: opciones.correccion.motivo.slice(0, 300), actor: opciones.correccion.actor.slice(0, 120) }
+      : {}),
   };
 
   // (7) fila + encabezado + evento + entregas: UNA transacción (RPC 0857). Sin ella, el camino anterior (no atómico).
@@ -314,6 +356,13 @@ export async function recibirDesglose(
     entregas = await deps.insertarEntregas(tenantId, entregasPedidas.map((e) => ({ liquidacionExternaId: liquidacionId, ...e })));
   }
 
+  // La corrección ya salió (o quedó retenida con su excepción): la pendiente de la original se cierra.
+  if (correccionDe && deps.resolverExcepciones) {
+    try { await deps.resolverExcepciones(tenantId, correccionDe, 'correccion_pendiente', ahora); } catch (e) {
+      logger.warn('liqcorreo.correccion_no_resolvio_excepcion', { clave: correccionDe, err: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
   const excepciones: TipoExcepcion[] = [];
   const abrir = async (tipo: TipoExcepcion, detalle: Record<string, unknown>) => {
     await deps.abrirExcepcion(tenantId, claveExterna, tipo, { bitacora: d.bitacora, ...detalle }, ahora);
@@ -323,10 +372,10 @@ export async function recibirDesglose(
   // retenida: sin entregas, una excepción por motivo
   if (retenida) {
     for (const m of decision.motivos) await abrir(MOTIVO_A_EXCEPCION[m], { motivo: m });
-    return { estado: 'creada', liquidacionId, claveExterna, entregas: 0, retenida: true, motivos: decision.motivos, excepciones };
+    return { estado: 'creada', liquidacionId, claveExterna, entregas: 0, retenida: true, motivos: decision.motivos, excepciones, ...(correccionDe ? { correccionDe } : {}) };
   }
 
   for (const f of faltantes) await abrir(FALTANTE_A_EXCEPCION[f.motivo], { rol: f.rol, motivo: f.motivo });
 
-  return { estado: 'creada', liquidacionId, claveExterna, entregas, retenida: false, motivos: [], excepciones };
+  return { estado: 'creada', liquidacionId, claveExterna, entregas, retenida: false, motivos: [], excepciones, ...(correccionDe ? { correccionDe } : {}) };
 }

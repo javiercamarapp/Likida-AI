@@ -243,7 +243,7 @@ async function pasada(opts: { marcar?: boolean } = {}) {
   return procesarLiquidacionesExternas(deps, 25);
 }
 
-const ACTIVA: ConfigCorreo = { ...CONFIG_CORREO_POR_DEFECTO, canal: 'correo', activa: true, rhCorreos: ['rh@ejemplo.test'], archivoCorreo: 'archivo@ejemplo.test' };
+const ACTIVA: ConfigCorreo = { ...CONFIG_CORREO_POR_DEFECTO, canal: 'correo', activa: true, responderA: 'nomina@ejemplo.test', rhCorreos: ['rh@ejemplo.test'], archivoCorreo: 'archivo@ejemplo.test' };
 const liqDe = (t: string, clave: string) => bd.liquidaciones.find((l) => l.tenantId === t && l.claveExterna === clave);
 const entregasDe = (t: string) => bd.entregas.filter((e) => e.tenantId === t);
 

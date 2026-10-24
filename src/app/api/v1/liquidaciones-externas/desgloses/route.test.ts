@@ -208,3 +208,25 @@ describe('fallas de infraestructura', () => {
     expect(txt).not.toMatch(/relation|violates|secreto-interno/);
   });
 });
+
+
+describe('A37-A1-02: la corrección decidida por quien administra', () => {
+  it('`correccion.motivo` llega al servicio con el actor de la credencial', async () => {
+    const r = await postear({ desgloses: [DESGLOSE()], correccion: { motivo: 'nómina corregida en origen' } });
+    expect(r.status).toBe(201);
+    expect(recibir.mock.calls[0][3]).toMatchObject({ correccion: { motivo: 'nómina corregida en origen', actor: 'llave:administracion' } });
+  });
+
+  it('sin `correccion` el servicio no recibe ninguna: el comportamiento de siempre', async () => {
+    await postear({ desgloses: [DESGLOSE()] });
+    expect((recibir.mock.calls[0][3] as Record<string, unknown>).correccion).toBeUndefined();
+  });
+
+  it.each([
+    [{ motivo: '' }], [{ motivo: 'ab' }], [{}], ['texto'], [null], [{ motivo: 'bien', extra: 1 }], [{ motivo: 'x'.repeat(301) }],
+  ])('una `correccion` inválida (%j) es 400 y no se escribe nada', async (correccion) => {
+    const r = await postear({ desgloses: [DESGLOSE()], correccion });
+    expect(r.status).toBe(400);
+    expect(recibir).not.toHaveBeenCalled();
+  });
+});

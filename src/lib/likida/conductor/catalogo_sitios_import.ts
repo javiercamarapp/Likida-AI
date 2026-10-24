@@ -249,11 +249,13 @@ export interface ResumenCatalogo {
   filasEnDuplicados: number;
   gruposDuplicados: number;
   extranjeras: number;
+  /** A37-S34-01: filas listas cuyo nombre se repetía en el archivo y se desambiguaron con su código para poder guardarlas. */
+  nombresDesambiguados: number;
 }
 
 export interface AnalisisCatalogo {
   resumen: ResumenCatalogo;
-  /** Filas con coordenadas confiables, ACTIVAS y sin candidato a duplicado dudoso de coordenadas, listas para importar. */
+  /** Filas con coordenadas confiables y ACTIVAS, listas para importar (los duplicados no se fusionan; los nombres repetidos se desambiguan con el código). */
   listas: SitioCsv[];
   porValidar: Array<{ linea: number; nombre: string; motivos: string[] }>;
   duplicados: GrupoDuplicado[];
@@ -286,6 +288,9 @@ class UnionFind {
   find(x: number): number { while (this.p[x] !== x) { this.p[x] = this.p[this.p[x]!]!; x = this.p[x]!; } return x; }
   union(a: number, b: number): void { const ra = this.find(a); const rb = this.find(b); if (ra !== rb) this.p[Math.max(ra, rb)] = Math.min(ra, rb); }
 }
+
+/** Largo máximo del nombre de un sitio al desambiguarlo (el sufijo con el código cabe dentro). */
+const MAX_NOMBRE_SITIO = 200;
 
 /** Grados de latitud que miden la distancia de duplicado; la celda de la rejilla es de ese tamaño en latitud (≈111 m). */
 const CELDA_GRADOS = 0.001;
@@ -375,6 +380,20 @@ export function analizarCatalogo(filas: readonly FilaCatalogo[], opciones: Opcio
     });
   }
 
+  // A37-S34-01: el nombre del sitio es ÚNICO por flota en la base (`geocerca_nombre_unico`, 0050) y la RPC rechaza un nombre ya
+  // tomado por otro código. Dos filas del archivo con el MISMO nombre (ids distintos) hacían fallar el lote o la reimportación para
+  // siempre. Nada se fusiona ni se descarta: a las filas de nombre repetido se les agrega su código estable al nombre. Es
+  // determinista (mismo archivo, mismos nombres), así que reimportar no duplica ni vuelve a chocar.
+  const vecesNombre = new Map<string, number>();
+  for (const l of listas) vecesNombre.set(l.nombre.trim(), (vecesNombre.get(l.nombre.trim()) ?? 0) + 1);
+  let nombresDesambiguados = 0;
+  for (const l of listas) {
+    if ((vecesNombre.get(l.nombre.trim()) ?? 0) < 2) continue;
+    const sufijo = ` (${l.codigo})`;
+    l.nombre = `${l.nombre.trim().slice(0, Math.max(1, MAX_NOMBRE_SITIO - sufijo.length))}${sufijo}`;
+    nombresDesambiguados++;
+  }
+
   // ── Lista de validación por terminal con cupo diario ──
   const porTerminal = new Map<string, ItemValidacion[][]>(); // [por_validar, duplicado, rutina]
   for (let i = 0; i < n; i++) {
@@ -403,7 +422,7 @@ export function analizarCatalogo(filas: readonly FilaCatalogo[], opciones: Opcio
   return {
     resumen: {
       total: n, activas, inactivas: n - activas, listas: listas.length, porValidar: porValidar.length,
-      filasEnDuplicados: enDuplicado.size, gruposDuplicados: duplicados.length, extranjeras,
+      filasEnDuplicados: enDuplicado.size, gruposDuplicados: duplicados.length, extranjeras, nombresDesambiguados,
     },
     listas, porValidar, duplicados, validacion, cupoDiario, radioPorDefectoM,
   };

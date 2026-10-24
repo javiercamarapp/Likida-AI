@@ -69,6 +69,21 @@ describe('estadoRevisionCobros (de los datos de la base a lo que se pinta)', () 
     expect(e.insights.kpis.pctRevisado.valor).toBe(75);
   });
 
+  it('A37-A2-04: los KPI Reclamado y Pendiente son de ESTE archivo y sin preparados ni rechazados', () => {
+    const e = estadoRevisionCobros(datos({
+      reclamos: [
+        reclamo({ id: 'e1', estado: 'enviado', montoReclamado: 200, montoAcreditado: 50 }),
+        reclamo({ id: 'p1', estado: 'preparado', montoReclamado: 40000, montoAcreditado: 0 }),
+        reclamo({ id: 'x1', estado: 'rechazado', montoReclamado: 25000, montoAcreditado: 0 }),
+        reclamo({ id: 'o1', desgloseId: 'otro', estado: 'enviado', montoReclamado: 9000, montoAcreditado: 0 }),
+      ],
+    }));
+    if (e.tipo !== 'ok') throw new Error('esperaba ok');
+    expect(e.insights.kpis.reclamado.valor).toBe(200);
+    expect(e.insights.kpis.acreditado.valor).toBe(50);
+    expect(e.insights.kpis.pendiente.valor).toBe(150);
+  });
+
   it('un reclamo de OTRO desglose no cuenta como revisado', () => {
     const e = estadoRevisionCobros(datos({ reclamos: [reclamo({ desgloseId: 'otro' })] }));
     if (e.tipo !== 'ok') throw new Error('esperaba ok');
@@ -82,12 +97,12 @@ describe('estadoRevisionCobros (de los datos de la base a lo que se pinta)', () 
     expect(e.estadoReclamo.extemporaneo).toBe('Sin reclamar');
   });
 
-  it('reclamado vs acreditado vs pendiente sale de TODOS los reclamos de la flota', () => {
+  it('reclamado vs acreditado vs pendiente sale de los reclamos de ESTE archivo (A37-A2-04: no mezcla otros archivos)', () => {
     const e = estadoRevisionCobros(datos({ reclamos: [reclamo(), reclamo({ id: 'r2', desgloseId: 'otro', montoReclamado: 100, montoAcreditado: 0 })] }));
     if (e.tipo !== 'ok') throw new Error('esperaba ok');
-    expect(e.insights.kpis.reclamado.valor).toBe(300);
+    expect(e.insights.kpis.reclamado.valor).toBe(200);
     expect(e.insights.kpis.acreditado.valor).toBe(50);
-    expect(e.insights.kpis.pendiente.valor).toBe(250);
+    expect(e.insights.kpis.pendiente.valor).toBe(150);
   });
 
   it('por vencer: solo candidatos de categorias SIN reclamar y con plazo de 3 meses corriendo desde la fecha del cruce', () => {

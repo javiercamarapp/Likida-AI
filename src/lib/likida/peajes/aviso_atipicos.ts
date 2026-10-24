@@ -35,6 +35,8 @@ import type { ReglaAtipica } from './atipicos';
 export const MAX_INTENTOS_AVISO_ATIPICOS = 5;
 const MAX_UNIDADES_EN_TEXTO = 5;
 const LOTE_BARRIDO = 200;
+/** Tope de páginas del barrido (200 hallazgos cada una): acota el costo de una corrida del cron. */
+const MAX_PAGINAS_BARRIDO = 10;
 
 export type ResultadoAvisoAtipicos =
   | 'enviado' | 'no_requerido' | 'anulado' | 'no_existe' | 'agotado' | 'ocupado' | 'sin_destinatario' | 'rechazado';
@@ -153,17 +155,29 @@ export const almacenAvisoAtipicos: AlmacenAvisoAtipicos = {
   },
 
   async desglosesPendientes(limite) {
-    const { data, error } = await acotada(supabaseAdmin().from('peaje_atipico')
-      .select('tenant_id, desglose_id, detalle')
-      .eq('estado', 'nuevo').is('avisado_en', null).not('desglose_id', 'is', null)
-      .order('creado_en').order('id').limit(LOTE_BARRIDO), 'peajes.atipicos_aviso_barrido');
-    if (error) throw new Error(`avisoAtipicos.desglosesPendientes: ${error.message}`);
+    // A37-S51-01: antes se tomaban los 200 hallazgos más viejos y se cortaba a `limite` desgloses: una flota sin teléfono (o con los
+    // intentos agotados) acumulaba los mismos primeros desgloses en cada corrida y las demás flotas nunca llegaban. Ahora se PAGINA y
+    // se saltan las flotas sin destinatario (su caso se ve en pantalla; si luego configuran uno, vuelven a entrar solas) y los hallazgos
+    // agotados, hasta juntar `limite` desgloses que SÍ se pueden avisar o agotar las páginas.
     const vistos = new Map<string, { tenantId: string; desgloseId: string }>();
-    for (const f of (data ?? []) as Array<Record<string, unknown>>) {
-      if (intentosDe(comoDetalle(f.detalle)) >= MAX_INTENTOS_AVISO_ATIPICOS) continue;
-      const k = `${f.tenant_id}|${f.desglose_id}`;
-      if (!vistos.has(k)) vistos.set(k, { tenantId: String(f.tenant_id), desgloseId: String(f.desglose_id) });
-      if (vistos.size >= limite) break;
+    const conDestinatario = new Map<string, boolean>();
+    for (let pagina = 0; pagina < MAX_PAGINAS_BARRIDO && vistos.size < limite; pagina++) {
+      const { data, error } = await acotada(supabaseAdmin().from('peaje_atipico')
+        .select('id, tenant_id, desglose_id, detalle')
+        .eq('estado', 'nuevo').is('avisado_en', null).not('desglose_id', 'is', null)
+        .order('creado_en').order('id').range(pagina * LOTE_BARRIDO, (pagina + 1) * LOTE_BARRIDO - 1), 'peajes.atipicos_aviso_barrido');
+      if (error) throw new Error(`avisoAtipicos.desglosesPendientes: ${error.message}`);
+      const filas = (data ?? []) as Array<Record<string, unknown>>;
+      for (const f of filas) {
+        if (intentosDe(comoDetalle(f.detalle)) >= MAX_INTENTOS_AVISO_ATIPICOS) continue;
+        const tenantId = String(f.tenant_id);
+        if (!conDestinatario.has(tenantId)) conDestinatario.set(tenantId, (await almacenAvisoAtipicos.destinatario(tenantId)) !== null);
+        if (!conDestinatario.get(tenantId)) continue;
+        const k = `${tenantId}|${f.desglose_id}`;
+        if (!vistos.has(k)) vistos.set(k, { tenantId, desgloseId: String(f.desglose_id) });
+        if (vistos.size >= limite) break;
+      }
+      if (filas.length < LOTE_BARRIDO) break;
     }
     return [...vistos.values()];
   },

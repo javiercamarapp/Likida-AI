@@ -26,6 +26,7 @@ import { DatoInvalido } from '../errores';
 import { rutaPdfExterno, rutaExcelExterno } from './almacen';
 import { subirArchivoExterno, firmarPdfExterno, leerPorId, TIPO_XLSX, type NuevaLiquidacionExterna } from './repo';
 import type { CursorDesglose } from './desglose_puerto';
+import type { PuertoContactos, OperadorContacto } from './contactos_csv';
 import type { RolDestinatario } from './correo_destinatarios';
 
 // ── Tipos públicos ──────────────────────────────────────────────────────────
@@ -205,6 +206,10 @@ export async function guardarConfigCorreo(tenantId: string, c: ConfigCorreo, por
   if (c.enviarDesdeHora != null && !(Number.isInteger(c.enviarDesdeHora) && c.enviarDesdeHora >= 0 && c.enviarDesdeHora <= 23)) {
     throw new DatoInvalido('enviar_desde_hora: debe ser un entero de 0 a 23');
   }
+  // A37-A1-04: el correo promete «responde a este correo»; sin «Responder a» la respuesta cae en el buzón de campañas y se pierde.
+  if (c.activa && c.canal !== 'whatsapp' && !normalizarCorreo(c.responderA, 'responder_a')) {
+    throw new DatoInvalido('responder_a: es obligatorio para activar el envío por correo (ahí llegan las respuestas del operador)');
+  }
   const fila = {
     tenant_id: tenantId,
     canal: c.canal,
@@ -295,6 +300,79 @@ export async function guardarCoordinador(
   const fila = exigirEscritura(r, 'liqcorreo.coordinador_guardar');
   if (!fila) throw new DatoInvalido('No encontré a ese coordinador en la flota');
   return aCoordinador(fila);
+}
+
+// ── Carga de contactos (A37-A1-01) ──────────────────────────────────────────
+
+/** Cuántos operadores de la flota tienen correo cargado: sin ninguno, activar el envío abriría una excepción por cada desglose. */
+export async function contarOperadoresConCorreo(tenantId: string): Promise<number> {
+  const res = await acotada(supabaseAdmin().from('operador')
+    .select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).not('correo', 'is', null), 'liqcorreo.operadores_con_correo');
+  const r = res as unknown as { count: number | null; error: ErrorPg };
+  if (r.error) throw new Error(`liqcorreo.operadores_con_correo: ${r.error.message ?? 'error'}`);
+  return r.count ?? 0;
+}
+
+/**
+ * Guardia de ACTIVAR el envío por correo (A37-A1-01): con ningún correo de operador cargado, cada desglose abriría
+ * `operador_sin_correo` y solo recibirían RH y archivo. Lanza `DatoInvalido` con el camino para cargarlos.
+ */
+export async function exigirContactosParaActivar(tenantId: string, c: Pick<ConfigCorreo, 'activa' | 'canal'>): Promise<void> {
+  if (!c.activa || c.canal === 'whatsapp') return;
+  if ((await contarOperadoresConCorreo(tenantId)) === 0) {
+    throw new DatoInvalido('Antes de activar el envío por correo carga los correos de los operadores (POST /v1/liquidaciones-externas/contactos): hoy ninguno tiene correo y cada desglose quedaría como excepción «operador sin correo».');
+  }
+}
+
+/** El adaptador real de `aplicarContactos` sobre este repo: todo acotado a la flota, sin tocar `telefono`. */
+export function puertoContactosReal(tenantId: string): PuertoContactos {
+  return {
+    async buscarOperadores(numeros) {
+      const salida = new Map<string, OperadorContacto[]>();
+      const unicos = [...new Set(numeros)];
+      for (let i = 0; i < unicos.length; i += 200) {
+        const res = await acotada(supabaseAdmin().from('operador')
+          .select('id, numero_empleado, correo, coordinador_id').eq('tenant_id', tenantId).in('numero_empleado', unicos.slice(i, i + 200))
+          .order('id').limit(1000), 'liqcorreo.contactos_buscar');
+        const r = res as unknown as { data: Fila[] | null; error: ErrorPg };
+        for (const f of exigirEscritura(r, 'liqcorreo.contactos_buscar') ?? []) {
+          const k = String(f.numero_empleado);
+          salida.set(k, [...(salida.get(k) ?? []), {
+            id: String(f.id), correo: (f.correo as string | null) ?? null, coordinadorId: (f.coordinador_id as string | null) ?? null,
+          }]);
+        }
+      }
+      return salida;
+    },
+    async asegurarCoordinador({ correo, nombre }) {
+      const c = normalizarCorreo(correo, 'correo');
+      if (!c) throw new DatoInvalido('correo: el coordinador necesita un correo');
+      const buscar = async (): Promise<Fila | null> => {
+        const res = await acotada(supabaseAdmin().from('liquidacion_coordinador')
+          .select('id, nombre').eq('tenant_id', tenantId).eq('correo', c).maybeSingle(), 'liqcorreo.coordinador_buscar');
+        return exigirEscritura(res as unknown as { data: Fila | null; error: ErrorPg }, 'liqcorreo.coordinador_buscar');
+      };
+      const previo = await buscar();
+      if (previo) {
+        if (nombre && !previo.nombre) {
+          await acotada(supabaseAdmin().from('liquidacion_coordinador').update({ nombre }).eq('tenant_id', tenantId).eq('id', String(previo.id)), 'liqcorreo.coordinador_nombre');
+        }
+        return { id: String(previo.id), creado: false };
+      }
+      try {
+        const nuevo = await guardarCoordinador(tenantId, { nombre, correo: c });
+        return { id: nuevo.id, creado: true };
+      } catch (e) {
+        // La carrera de dos cargas: el otro proceso lo creó entre la lectura y la inserción.
+        const ya = await buscar();
+        if (ya) return { id: String(ya.id), creado: false };
+        throw e;
+      }
+    },
+    async guardarContacto(operadorId, cambios) {
+      await guardarContactoOperador(tenantId, operadorId, cambios);
+    },
+  };
 }
 
 // ── Encabezado del desglose ─────────────────────────────────────────────────

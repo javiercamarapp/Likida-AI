@@ -94,8 +94,9 @@ export function estadoRevisionCobros(d: DatosRevisionCobros): EstadoRevisionCobr
         })();
 
     const total = reporte.revision.lineasRevisadas;
+    // A37-A2-04: SOLO los reclamos de ESTE archivo (antes sumaba los de toda la flota bajo un tablero del archivo).
     const acreditacion = resumirAcreditacion(
-      d.reclamos.map((r) => ({ id: r.id, estado: r.estado, fechaCobroMasAntiguo: r.fechaCobroMasAntiguo, montoReclamado: r.montoReclamado, montoAcreditado: r.montoAcreditado })),
+      delArchivo.map((r) => ({ id: r.id, estado: r.estado, fechaCobroMasAntiguo: r.fechaCobroMasAntiguo, montoReclamado: r.montoReclamado, montoAcreditado: r.montoAcreditado })),
       d.hoy,
     );
     const sinViajes = !d.vinculos || d.vinculos.length === 0;
@@ -103,7 +104,7 @@ export function estadoRevisionCobros(d: DatosRevisionCobros): EstadoRevisionCobr
     const insights = insightsDeCobros({
       cruces: { total, evaluados: Math.max(0, total - reporte.revision.sinClase) },
       categorias,
-      acreditacion: { reclamado: acreditacion.reclamado, acreditado: acreditacion.acreditado, diferencia: acreditacion.diferencia },
+      acreditacion: { reclamado: acreditacion.reclamado, acreditado: acreditacion.acreditado, diferencia: acreditacion.diferencia, pendiente: acreditacion.pendiente },
       porVencer,
       atipicosNuevos: reporte.atipicos.atipicos.length,
       sinViaje: sinViajes ? null : (d.vinculos ?? []).filter((v) => v.estado === 'sin_viaje').length,

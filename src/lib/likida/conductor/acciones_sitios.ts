@@ -220,6 +220,7 @@ export async function importarCatalogoDelPanel(ctx: ContextoSitios, entrada: Ent
   for (const e of lectura.errores.slice(0, 10)) detalles.push(`Línea ${e.linea}: ${e.mensaje}`);
   for (const t of a.validacion) detalles.push(`${t.terminal}: ${t.total} por revisar en ${t.dias.length} día${t.dias.length === 1 ? '' : 's'} (${a.cupoDiario} al día).`);
   const base = `${r.total} filas: ${r.activas} activas y ${r.inactivas} inactivas; ${r.porValidar} por validar; ${r.gruposDuplicados} grupo${r.gruposDuplicados === 1 ? '' : 's'} de posibles duplicados (${r.filasEnDuplicados} filas, ninguno se fusionó)`
+    + `${r.nombresDesambiguados > 0 ? `; ${r.nombresDesambiguados} fila${r.nombresDesambiguados === 1 ? '' : 's'} con nombre repetido ${r.nombresDesambiguados === 1 ? 'recibió' : 'recibieron'} su código al final del nombre (el nombre es único por flota)` : ''}`
     + `${lectura.errores.length > 0 ? `; ${lectura.errores.length} ilegible${lectura.errores.length === 1 ? '' : 's'}` : ''}.`;
   if (entrada.modo === 'analizar') return { ok: true, mensaje: `Análisis sin guardar nada. ${base}`, detalles: detalles.slice(0, MAX_DETALLES) };
 
@@ -231,7 +232,7 @@ export async function importarCatalogoDelPanel(ctx: ContextoSitios, entrada: Ent
       const res = await d.importar(ctx.tenantId, lote);
       if (!res.ok) {
         return {
-          ok: false, error: `Se detuvo: la base rechazó un lote (${guardadas} filas ya guardadas; vuelve a subir el archivo, no duplica).`,
+          ok: false, error: `Se detuvo: la base rechazó un lote (${guardadas} filas ya guardadas; corrige lo que dice el detalle y vuelve a subir el archivo: lo ya guardado se actualiza, no se duplica).`,
           detalles: res.errores.slice(0, MAX_DETALLES).map((e) => `Línea ${e.linea}: ${e.mensaje}`),
         };
       }

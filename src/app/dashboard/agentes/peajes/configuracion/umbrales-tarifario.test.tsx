@@ -29,6 +29,14 @@ describe('umbrales y avisos', () => {
     expect(html).toContain('aún no está confirmado por escrito');
   });
 
+  it('A37-A2-03: dice a la vista que los avisos de plazo y el recordatorio NO están conectados y no deja encenderlos', () => {
+    const html = renderToStaticMarkup(<SeccionUmbralesAvisos datos={{ config, puedeAdministrar: true, acciones: accionesU }} />);
+    expect(html).toContain('aún NO están conectados');
+    expect(html).toMatch(/<input[^>]*disabled[^>]*name="aviso_plazo"/);
+    expect(html).toMatch(/<input[^>]*disabled[^>]*name="recordatorio_archivo"/);
+    expect(html).not.toContain('Necesita un destinatario');
+  });
+
   it('muestra los valores por omisión: plazo de 3 meses, avisos 30 y 7, N=4, H=6, 130 km/h', () => {
     const html = renderToStaticMarkup(<SeccionUmbralesAvisos datos={{ config, puedeAdministrar: true, acciones: accionesU }} />);
     expect(html).toMatch(/name="plazo_meses"[^>]*value="3"/);

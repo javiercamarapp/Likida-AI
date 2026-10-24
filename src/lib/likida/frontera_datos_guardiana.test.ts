@@ -570,6 +570,11 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 323;
 // transferencia.ts (+1, alargar la reserva del timbrado ante error ambiguo del PAC, S61-01).
 const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_268;
 // Auditoría 37, lote agentes-legal-ia (medido con el barrido real): +2 llamadas (2,264 → 2,266). `candidatos_redactor.ts` suma 3 `.from(` (prospecto, cola_aprobacion, prospecto_contacto) y `runner.ts` pierde la suya (+2 netas); `sdr.ts` pasa de 3 a 3 (la lectura por prospecto se volvió lectura en lote). Todo por `acotada`.
+// LOTE A37 peajes-liquidación-graves (migración 0865): +5 llamadas (2,264 → 2,269), 0 archivos nuevos, medido con el barrido real. `jornada/repo.ts` +1:
+// `.rpc('asentar_declaracion_jornada')` (A37-S48-01; la 0865 sustituye la marca derivada bajo el lock del expediente; el INSERT anterior se conserva
+// mientras la base no la tenga). `liquidacion_externa/repo_correo.ts` +4 (A37-A1-01, carga de contactos de operadores y coordinadores): conteo de
+// operadores con correo (guardia de activar el envío), búsqueda de operadores por número de empleado, búsqueda y UPDATE de nombre del coordinador; todas
+// con `tenant_id`. Cubiertas por `jornada/repo_declaracion_rpc.test.ts` y `liquidacion_externa/repo_correo.test.ts`.
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`
