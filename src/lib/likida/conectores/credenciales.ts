@@ -83,6 +83,10 @@ export function validarUrlDeCredencial(clave: string, valor: string): void {
   if (u.username || u.password) {
     throw new DatoInvalido(`El campo ${clave} no debe incluir usuario ni contraseña en la URL.`);
   }
+  // A37-S37-05: una llave pegada en `?key=...` o `#...` terminaría en las pistas y en el estado de la prueba, que se pintan en claro.
+  if (u.search || u.hash) {
+    throw new DatoInvalido(`El campo ${clave} no debe llevar parámetros (?...) ni fragmento (#...): si el proveedor pide una llave, captúrala en el campo de la llave, no en la dirección.`);
+  }
   if (hostNoPublico(u.hostname)) {
     throw new DatoInvalido(`El campo ${clave} apunta a una dirección de red interna (${u.hostname}). Se espera el portal público de tu proveedor.`);
   }

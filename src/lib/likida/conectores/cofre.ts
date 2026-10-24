@@ -100,6 +100,20 @@ export function descifrar(guardado: string): ValoresCredencial {
  * correcta y no alcanzan para reconstruir nada. Un secreto de menos de 8
  * caracteres se tapa ENTERO: enseñar 4 de 6 sería regalar dos tercios.
  */
+/** A37-S37-05: `url`, `base_url`, ... (la misma convención de `credenciales.ts`). */
+function esClaveUrl(clave: string): boolean {
+  return clave === 'url' || clave.endsWith('_url');
+}
+
+/** Quita query y fragmento de una dirección (donde suele pegarse una llave) antes de mostrarla. Si no es URL, queda como está. */
+export function sinParametrosDeUrl(valor: string): string {
+  try {
+    const u = new URL(valor);
+    if (!u.search && !u.hash) return valor;
+    return `${u.origin}${u.pathname}`;
+  } catch { return valor; }
+}
+
 export function pistasDe(campos: readonly CampoCredencial[], valores: ValoresCredencial): Record<string, string> {
   const pistas: Record<string, string> = {};
   for (const campo of campos) {
@@ -108,7 +122,7 @@ export function pistasDe(campos: readonly CampoCredencial[], valores: ValoresCre
     if (campo.forma === 'secreto') {
       pistas[campo.clave] = v.length >= 8 ? `…${v.slice(-4)}` : '…';
     } else {
-      pistas[campo.clave] = v;
+      pistas[campo.clave] = esClaveUrl(campo.clave) ? sinParametrosDeUrl(v) : v;
     }
   }
   return pistas;

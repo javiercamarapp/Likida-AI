@@ -127,6 +127,13 @@ describe('guardarCredencial — los candados antes de la base', () => {
     expect(toquesDeCredencial()).toHaveLength(0);
   });
 
+  it('A37-S37-05: una dirección con query o fragmento (donde se pega una llave) se rechaza antes de cifrar', async () => {
+    for (const base_url of ['https://sap.cliente.mx/api?key=SECRETO', 'https://sap.cliente.mx/api#token=SECRETO']) {
+      await expect(guardarCredencial(TENANT, 'sap_b1', { ...VALORES_SAP, base_url })).rejects.toThrow(/no debe llevar parámetros/);
+    }
+    expect(toquesDeCredencial()).toHaveLength(0);
+  });
+
   it('las requeridas faltantes lanzan con sus RÓTULOS, antes de cifrar nada', async () => {
     await expect(guardarCredencial(TENANT, 'sap_b1', { base_url: 'https://sap.cliente.mx' }))
       .rejects.toThrow(/Faltan datos para guardar SAP Business One/);
