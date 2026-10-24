@@ -848,6 +848,13 @@ export async function barrerPorConciliar(
     .select('id, cfdi_xml_id, indice, fuente, fecha, monto, descripcion, estacion_rfc, estacion_clave, folio_operacion, candidatos, litros, clave_prod_serv')
     .eq('tenant_id', tenantId)
     .eq('estatus', 'por_conciliar')
+    // A37-S46-07: una línea SIN fecha nace por_conciliar sin candidatos y el barrido
+    // jamás la puede ligar (conciliarLineas no intenta match sin fecha): miles de
+    // ellas (un CFDI de TAG sin fechas) ocupaban el corte de 1,000 y dejaban fuera a
+    // las ECC12 con fecha cuyo gasto llegó después. Se excluyen; se resuelven a mano
+    // con `sin_match`. Orden determinista por id para que el corte sea estable.
+    .not('fecha', 'is', null)
+    .order('id')
     .limit(1000), 'barrido.lineas_pendientes');
   if (errFilas) throw new Error(`barrerPorConciliar: ${errFilas.message}`);
 
