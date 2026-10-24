@@ -487,8 +487,9 @@ export async function operadoresDeFlota(tenantId: string): Promise<OperadorMin[]
   return ((exigir(r, 'cpdocs.operadores') ?? []) as unknown as Fila[]).map((f) => ({ id: String(f.id), nombre: String(f.nombre), activo: f.activo !== false }));
 }
 
+// ilike SOLO para ignorar mayúsculas: los comodines (% _ \) de las placas del documento se escapan (A37-S33-07).
 export async function unidadesPorPlacas(tenantId: string, placas: string): Promise<Array<{ id: string; activo: boolean }>> {
-  const r = await acotada(supabaseAdmin().from('unidad').select('id, activo').eq('tenant_id', tenantId).ilike('placas', placas).order('id').limit(3), 'cpdocs.unidad_placas');
+  const r = await acotada(supabaseAdmin().from('unidad').select('id, activo').eq('tenant_id', tenantId).ilike('placas', placas.replace(/[\\%_]/g, (c) => `\\${c}`)).order('id').limit(3), 'cpdocs.unidad_placas');
   return ((exigir(r, 'cpdocs.unidad_placas') ?? []) as unknown as Fila[]).map((f) => ({ id: String(f.id), activo: f.activo !== false }));
 }
 
