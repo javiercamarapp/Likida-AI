@@ -194,7 +194,7 @@ describe('crearFlota', () => {
 });
 
 describe('crearOperador', () => {
-  it('RECHAZA un teléfono que ya existe en OTRA flota', async () => {
+  it('RECHAZA un teléfono que ya existe en OTRA flota — con mensaje NEUTRO (A37-L-seguridad-tenant-02)', async () => {
     // Es la fuga entre tenants: `resolveOperador` busca por teléfono sin
     // filtrar por tenant, así que con el número repetido el gasto se anota en
     // la flota que salga primero.
@@ -204,7 +204,10 @@ describe('crearOperador', () => {
     from.mockImplementation(() => cadena({ data: [{ id: 'o-9', tenant_id: 'OTRA', nombre: 'Pedro', activo: true }], error: null }));
 
     await expect(crearOperador('t-1', { nombre: 'Juan Pérez', telefono: '9993700779' }))
-      .rejects.toThrow(/OTRA flota/i);
+      .rejects.toThrow(/no se puede registrar en tu flota/i);
+    // El mensaje no delata de quién es ni en qué flota está (oráculo de membresía entre flotas).
+    await expect(crearOperador('t-1', { nombre: 'Juan Pérez', telefono: '9993700779' }))
+      .rejects.not.toThrow(/otra flota|Pedro/i);
   });
 
   it('y también si ya está en LA MISMA flota, con un mensaje distinto', async () => {
