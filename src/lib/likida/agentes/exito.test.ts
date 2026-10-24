@@ -62,7 +62,7 @@ const {
   PASOS_ONBOARDING, casillaHecha, detectarAtoros, avisosDeHoy, armarParteOnboarding,
   enSilencio, armarParteSilencio, armarReporteValor, tocaReporteMensual,
   evaluarGatillos, armarParteRetencion,
-  toquesDeHoy, esToqueAtrasado, tituloToque, textoDelToque, armarPropuestaCobranza, armarParteCobranzaSaas,
+  toquesDeHoy, toquesParaProponer, esToqueAtrasado, tituloToque, textoDelToque, armarPropuestaCobranza, armarParteCobranzaSaas,
   semaforoTicket, armarParteSoporte,
   esAgenteExito, correrAgenteExito, AGENTES_EXITO, leerFlotas, leerValorDelMes,
 } = await import('./exito');
@@ -466,6 +466,13 @@ describe('cobranza SaaS — la cadencia propone, nadie envía', () => {
     expect(toquesDeHoy([FACTURA], '2026-08-16').map((t) => t.hito)).toEqual([-3, 0, 3, 7, 15]);
   });
 
+  it('A37-S27-08: una factura con 20 días vencida produce UNA propuesta (el hito más alto), no cinco', () => {
+    const t = toquesParaProponer([FACTURA], '2026-08-21');
+    expect(t).toHaveLength(1);
+    expect(t[0].hito).toBe(15);
+    expect(toquesParaProponer([FACTURA], '2026-07-25')).toEqual([]);
+  });
+
   it('el toque atrasado se marca y su texto habla del HOY real, no del hito', () => {
     const tarde = toquesDeHoy([FACTURA], '2026-08-21').find((t) => t.hito === -3)!;
     expect(esToqueAtrasado(tarde)).toBe(true);
@@ -731,10 +738,11 @@ describe('el reloj de la vuelta corta los motores de éxito, y lo DICE (c7-1)', 
   });
 
   it('cobranza SaaS: las propuestas ya encoladas QUEDAN, pero el parte del día no se sella con las cuentas a medias', async () => {
-    getPorCobrar.mockResolvedValue([FACTURA]);
-    // 2026-08-01 = dos hitos alcanzados (D−3 y D+0): dos toques, o sea una
+    const FACTURA_2 = { ...FACTURA, id: 'fs-2', referencia: 'LKBBBB202608' };
+    getPorCobrar.mockResolvedValue([FACTURA, FACTURA_2]);
+    // Dos facturas con un hito alcanzado cada una: dos toques, o sea una
     // lista de trabajo de verdad sobre la que se puede cortar A LA MITAD.
-    expect(toquesDeHoy([FACTURA], '2026-08-01')).toHaveLength(2);
+    expect(toquesParaProponer([FACTURA, FACTURA_2], '2026-08-01')).toHaveLength(2);
 
     // EL RELOJ QUE SE AGOTA A LA MITAD: arranca vivo y se vence en cuanto la
     // primera propuesta entra a la bandeja. Es la forma honesta de reproducir
@@ -759,6 +767,8 @@ describe('el reloj de la vuelta corta los motores de éxito, y lo DICE (c7-1)', 
       expect(tipos).toEqual(['recordatorio_cobranza']);
       expect(tipos).not.toContain('parte_cobranza_saas');
       expect(r.piezas).toBe(1);
+      // A37-S27-09: cortada por reloj = 'parcial', no 'ok' 1/1.
+      expect(registrarCorrida).toHaveBeenCalledWith(null, 'cobranza_saas', expect.objectContaining({ estado: 'parcial' }));
     } finally {
       reloj.mockRestore();
     }

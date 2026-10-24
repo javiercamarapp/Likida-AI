@@ -965,8 +965,15 @@ export async function correrDescargaSat(
     .from('sat_descarga_config')
     .select('tenant_id, rfc, ultima_descarga_hasta')
     .eq('activa', true)
+    // A37-S18-09: sin orden, con más de 200 flotas activas las mismas quedaban
+    // fuera siempre. Las que llevan más tiempo sin descargar (o nunca) van primero.
+    .order('ultima_descarga_hasta', { ascending: true, nullsFirst: true })
+    .order('tenant_id')
     .limit(200), 'sat_descarga.configs');
   if (error) throw new Error(`correrDescargaSat: ${error.message}`);
+  if ((configs ?? []).length >= 200) {
+    logger.warn('sat.barrido.tope_de_flotas', { tope: 200, aviso: 'puede haber flotas activas fuera de este barrido' });
+  }
 
   const hoy = hoyMx(ahora);
   const resumenes: ResumenFlota[] = [];

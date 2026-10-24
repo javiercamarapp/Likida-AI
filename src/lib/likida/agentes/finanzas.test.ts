@@ -560,6 +560,29 @@ describe('las corridas — fail closed, idempotencia y el ROJO que no espera', (
     expect(pieza.cuerpo).not.toContain('5,800');
     expect(pieza.cuerpo).toMatch(/SIN subtotal/);
   });
+
+  it('A37-S27-09: si el conteo de «pagadas sin fecha» no es numérico, el cierre FALLA (no reporta un 0 que nadie midió)', async () => {
+    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    respuestas.set('finanzas_config', [{ data: null, error: null }]);
+    respuestas.set('factura_saas', [
+      { data: [{ tenant_id: 't-1', monto: 11020, subtotal: 9500, pagada_en: '2026-08-15' }], error: null },
+      { count: null, error: null },
+    ]);
+    respuestas.set('tenant', [{ data: [{ id: 't-1', nombre: 'Flota Uno' }], error: null }]);
+    await expect(correrAgenteFinanciero('cierre_mensual', 'cron', '2026-09-03')).rejects.toThrow(/conteo/);
+    expect(encolarPieza).not.toHaveBeenCalled();
+  });
+
+  it('A37-S27-09: una ventana con 1,000 filas (posible recorte silencioso) FALLA en vez de sumar a medias', async () => {
+    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    respuestas.set('finanzas_config', [{ data: null, error: null }]);
+    respuestas.set('factura_saas', [
+      { data: Array.from({ length: 1000 }, () => ({ tenant_id: 't-1', monto: 116, subtotal: 100, pagada_en: '2026-08-15' })), error: null },
+      { count: 0, error: null },
+    ]);
+    respuestas.set('tenant', [{ data: [{ id: 't-1', nombre: 'Flota Uno' }], error: null }]);
+    await expect(correrAgenteFinanciero('cierre_mensual', 'cron', '2026-09-03')).rejects.toThrow(/1,?000|recort/i);
+  });
 });
 
 describe('c5-8 — U1 mira una VENTANA de 7 días, no el histórico', () => {

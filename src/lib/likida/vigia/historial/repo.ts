@@ -127,7 +127,9 @@ export async function guardarImportacion(tenantId: string, e: EntradaImportacion
 
 const TOPE_ANALISIS = 50_000;
 
-/** Los mensajes importados de un grupo (o de todos), en orden, hasta el tope del análisis. `null` = base sin la 0484. */
+/** Los mensajes importados de un grupo (o de todos), en orden cronológico, hasta el tope del análisis. Si el histórico
+ *  lo rebasa (A37-S15-07) se conservan los MÁS RECIENTES —el reporte habla de «últimas 4 semanas»— y se avisa con `truncado`.
+ *  `null` = base sin la 0484. */
 export async function leerMensajesHistorial(tenantId: string, grupoId: string | null): Promise<{ mensajes: MensajeHistorial[]; truncado: boolean } | null> {
   const db = supabaseAdmin();
   const salida: MensajeHistorial[] = [];
@@ -135,16 +137,16 @@ export async function leerMensajesHistorial(tenantId: string, grupoId: string | 
   for (let desde = 0; desde < TOPE_ANALISIS; desde += PAGINA) {
     let q = db.from('vigia_historial_mensaje').select('enviado_en, rol, autor_hash, texto').eq('tenant_id', tenantId);
     if (grupoId) q = q.eq('grupo_id', grupoId);
-    const r = await acotada(q.order('enviado_en').order('id').range(desde, desde + PAGINA - 1), 'vigia.leer_historial');
+    const r = await acotada(q.order('enviado_en', { ascending: false }).order('id', { ascending: false }).range(desde, desde + PAGINA - 1), 'vigia.leer_historial');
     if (esSinTabla(r.error)) return null;
     if (r.error) throw new Error(`vigia.leer_historial: ${r.error.message}`);
     const filas = (r.data ?? []) as Fila[];
     for (const f of filas) {
       salida.push({ enviadoEn: String(f.enviado_en), rol: f.rol === 'equipo' ? 'equipo' : 'cliente', autorHash: String(f.autor_hash), texto: String(f.texto) });
     }
-    if (filas.length < PAGINA) return { mensajes: salida, truncado: false };
+    if (filas.length < PAGINA) return { mensajes: salida.reverse(), truncado: false };
   }
-  return { mensajes: salida, truncado: true };
+  return { mensajes: salida.reverse(), truncado: true };
 }
 
 /** Borra un grupo con todo su histórico (cascada). `false` = no existía en esta flota. */
