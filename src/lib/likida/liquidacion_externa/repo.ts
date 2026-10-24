@@ -213,13 +213,51 @@ export async function leerTelefonosFlota(tenantId: string): Promise<TelefonosFlo
   return f ? { copia: f.copia_telefonos ?? [], discrepancia: f.discrepancia_telefonos ?? [] } : null;
 }
 
-export async function guardarFormatoFlota(tenantId: string, c: ConfigFormatoFlota, por: string): Promise<void> {
-  const res = await acotada(supabaseAdmin().from('liquidacion_formato_flota').upsert({
-    tenant_id: tenantId, formato: c.formato, nombre_muestra: c.nombreMuestra,
+/**
+ * A37-S14-10: la versión de la fila (`actualizado_en`) que una pantalla lee ANTES de editar, para que el guardado detecte que otra
+ * persona cambió el formato o los teléfonos entretanto. `null` = no hay fila (o la base aún no trae la 0564). Un error de lectura LANZA.
+ */
+export async function leerVersionFormato(tenantId: string): Promise<string | null> {
+  const res = await acotada(supabaseAdmin().from('liquidacion_formato_flota')
+    .select('actualizado_en').eq('tenant_id', tenantId).maybeSingle(), 'liqext.formato_version');
+  if (res.error) {
+    if (tablaAusente(res.error)) return null;
+    throw new Error(`liquidacion_formato_flota leer versión: ${res.error.message}`);
+  }
+  const v = (res.data as { actualizado_en: string | null } | null)?.actualizado_en;
+  return typeof v === 'string' ? v : null;
+}
+
+const MENSAJE_CONFLICTO_FORMATO = 'Otra persona guardó el formato o los teléfonos mientras tú editabas, y tus cambios no se aplicaron para no pisar los suyos. Recarga la pantalla, revisa lo que quedó y vuelve a hacer tu cambio.';
+
+/**
+ * Guarda el formato (y los teléfonos que lo acompañan). `version` es lo que devolvió `leerVersionFormato` antes de editar:
+ * con ella el guardado es CONDICIONAL (la fila sigue en esa versión; `null` = seguía sin existir) y, si otra persona la cambió
+ * entre la lectura y el guardado, lanza `DatoInvalido` sin escribir. Sin `version` (`undefined`) se comporta como siempre.
+ */
+export async function guardarFormatoFlota(tenantId: string, c: ConfigFormatoFlota, por: string, version?: string | null): Promise<void> {
+  const fila = {
+    formato: c.formato, nombre_muestra: c.nombreMuestra,
     copia_telefonos: c.copiaTelefonos, discrepancia_telefonos: c.discrepanciaTelefonos,
     actualizado_en: new Date().toISOString(), actualizado_por: por.slice(0, 120),
-  }, { onConflict: 'tenant_id' }), 'liqext.formato_guardar');
-  if (res.error) throw new Error(`liquidacion_formato_flota guardar: ${res.error.message}`);
+  };
+  if (version === undefined) {
+    const res = await acotada(supabaseAdmin().from('liquidacion_formato_flota').upsert({ tenant_id: tenantId, ...fila }, { onConflict: 'tenant_id' }), 'liqext.formato_guardar');
+    if (res.error) throw new Error(`liquidacion_formato_flota guardar: ${res.error.message}`);
+    return;
+  }
+  if (version === null) {
+    const ins = await acotada(supabaseAdmin().from('liquidacion_formato_flota').insert({ tenant_id: tenantId, ...fila }), 'liqext.formato_crear');
+    if (ins.error) {
+      if (ins.error.code === '23505') throw new DatoInvalido(MENSAJE_CONFLICTO_FORMATO);
+      throw new Error(`liquidacion_formato_flota guardar: ${ins.error.message}`);
+    }
+    return;
+  }
+  const upd = await acotada(supabaseAdmin().from('liquidacion_formato_flota').update(fila)
+    .eq('tenant_id', tenantId).eq('actualizado_en', version).select('tenant_id'), 'liqext.formato_guardar');
+  if (upd.error) throw new Error(`liquidacion_formato_flota guardar: ${upd.error.message}`);
+  if ((upd.data ?? []).length === 0) throw new DatoInvalido(MENSAJE_CONFLICTO_FORMATO);
 }
 
 /**

@@ -5,12 +5,12 @@ import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { sufijoTenant } from '../../../sufijo';
 import { logger } from '@/lib/logger';
 import { dejarFlash, leerFlash } from '@/lib/likida/mensaje_flash';
-import { mensajeParaPantalla } from '@/lib/likida/errores';
+import { DatoInvalido, mensajeParaPantalla } from '@/lib/likida/errores';
 import { matrizDeArchivoCatalogo, MAX_CATALOGO_BYTES } from '@/lib/likida/peajes/archivo';
 import { derivarFormatoDeMatriz } from '@/lib/likida/liquidacion_externa/formato_flota';
 import { leerTelefonos, aplicarAjustes } from '@/lib/likida/liquidacion_externa/formato_form';
 import {
-  leerFormatoFlota, guardarFormatoFlota, borrarFormatoFlota, leerTelefonosFlota, guardarTelefonosFlota,
+  leerFormatoFlota, leerVersionFormato, guardarFormatoFlota, borrarFormatoFlota, leerTelefonosFlota, guardarTelefonosFlota,
   type ConfigFormatoFlota, type TelefonosFlota,
 } from '@/lib/likida/liquidacion_externa/repo';
 import { VistaFormatoLiquidacion } from './vista';
@@ -75,15 +75,17 @@ export default async function PaginaFormatoLiquidacion({
     if (!d.ok) return volver(sufijo, `error:${d.motivo}`);
     try {
       // Los teléfonos pueden existir SIN formato (0645): se leen aparte, o subir la muestra los borraría.
+      // A37-S14-10: la versión se lee ANTES que el resto; si otra persona guarda entretanto, el guardado se rechaza (no pisa).
+      const version = await leerVersionFormato(tenantId);
       const [previa, previos] = await Promise.all([leerFormatoFlota(tenantId), leerTelefonosFlota(tenantId)]);
       await guardarFormatoFlota(tenantId, {
         formato: { ...d.formato, salida: previa?.formato.salida ?? d.formato.salida },
         nombreMuestra: a.name.slice(0, 200),
         copiaTelefonos: previos?.copia ?? [], discrepanciaTelefonos: previos?.discrepancia ?? [],
-      }, p.por);
+      }, p.por, version);
     } catch (e) {
       logger.error('liqext.formato_subir', { err: e instanceof Error ? e.message : String(e) });
-      return volver(sufijo, 'error:No se pudo guardar el formato. Inténtalo de nuevo.');
+      return volver(sufijo, e instanceof DatoInvalido ? `error:${e.message}` : 'error:No se pudo guardar el formato. Inténtalo de nuevo.');
     }
     const notas = [
       d.sinMapear.length > 0 ? `No reconocí estas columnas y NO se imprimirán: ${d.sinMapear.join(', ')}.` : '',
@@ -97,7 +99,8 @@ export default async function PaginaFormatoLiquidacion({
     const p = await puerta(tenantId);
     if ('error' in p) return volver(sufijo, `error:${p.error}`);
     let actual: ConfigFormatoFlota | null = null;
-    try { actual = await leerFormatoFlota(tenantId); } catch (e) {
+    let version: string | null = null;
+    try { version = await leerVersionFormato(tenantId); actual = await leerFormatoFlota(tenantId); } catch (e) {
       return volver(sufijo, `error:${mensajeParaPantalla(e, 'leer el formato guardado')}`);
     }
     if (!actual) return volver(sufijo, 'error:Primero sube el Excel de muestra: sin formato no hay nada que ajustar.');
@@ -118,7 +121,7 @@ export default async function PaginaFormatoLiquidacion({
         formato, nombreMuestra: previo.nombreMuestra,
         copiaTelefonos: leerTelefonos(String(fd.get('copia') ?? ''), 'La copia al jefe de flota'),
         discrepanciaTelefonos: leerTelefonos(String(fd.get('discrepancia') ?? ''), 'El aviso de «No coincide»'),
-      }, p.por);
+      }, p.por, version);
     } catch (e) {
       return volver(sufijo, `error:${mensajeParaPantalla(e, 'guardar el formato')}`);
     }
