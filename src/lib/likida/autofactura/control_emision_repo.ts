@@ -94,7 +94,7 @@ export function crearDepsControl(): DepsControl {
 
 export type ResultadoOp = { ok: true; mensaje: string } | { ok: false; motivo: string };
 
-interface RespuestaRpc { ok?: boolean; motivo?: string }
+interface RespuestaRpc { ok?: boolean; motivo?: string; cambiados?: number }
 async function rpc(nombre: string, args: Record<string, unknown>): Promise<RespuestaRpc | null> {
   const { data, error } = await acotada(supabaseAdmin().rpc(nombre, args), `autofactura.${nombre}`);
   if (error) { logger.error('autofactura.rpc_fallo', { rpc: nombre, err: error.message }); return null; }
@@ -133,7 +133,10 @@ export async function promoverPortal(tenantId: string, userId: string, comercio:
 }
 export async function devolverASupervisada(tenantId: string, userId: string, comercio: string): Promise<ResultadoOp> {
   const r = await rpc('devolver_portal_a_supervisada', { p_tenant: tenantId, p_comercio: comercio, p_user: userId });
-  await anotarBitacora({ tenantId, actor: firma(userId), accion: 'autofactura.portal_devuelto_a_supervisada', entidad: 'autofactura', entidadId: comercio, detalle: { ok: r?.ok === true } }, { evento: 'autofactura.bitacora_no_escribio' });
+  await anotarBitacora({ tenantId, actor: firma(userId), accion: 'autofactura.portal_devuelto_a_supervisada', entidad: 'autofactura', entidadId: comercio, detalle: { ok: r?.ok === true, cambiados: typeof r?.cambiados === 'number' ? r.cambiados : null } }, { evento: 'autofactura.bitacora_no_escribio' });
+  // A37-S13-10: la RPC contesta ok aunque no haya cambiado ninguna fila (doble clic, dos pestañas, portal sin fase registrada): no se anuncia un cambio que no ocurrió.
+  // Una RPC que no informa `cambiados` (anterior a 0542) se sigue tomando como éxito.
+  if (r?.ok === true && r.cambiados === 0) return { ok: false, motivo: 'Ese portal ya estaba en fase supervisada (o no tiene fase registrada): no cambió nada.' };
   return traducir(r, 'Portal devuelto a fase supervisada.');
 }
 

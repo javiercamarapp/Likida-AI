@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
+import { dejarFlash, leerFlash } from '@/lib/likida/mensaje_flash';
 import {
   getKpis, getLiquidaciones, contarViajes, getLiquidacionesPorDia,
   getHechosSolos, getDineroObservadoPorTipo, getStatsPorOperador, getValorAhorro,
@@ -210,7 +211,7 @@ export default async function PaginaAgenteLiquidacion({
     terminal?: string; desde?: string; hasta?: string; cursor?: string;
     // La sección «Liquidaciones externas» (0370) tiene SUS parámetros, con
     // prefijo, para que su filtro no pise a los de la cola de arriba.
-    ext_estado?: string; ext_cursor?: string; ext_msg?: string; ext_imp?: string; ext_det?: string;
+    ext_estado?: string; ext_cursor?: string; ext_msg?: string; ext_imp?: string;
     // La lista de desgloses por correo (T-A1-28) tiene los suyos, con prefijo `des_`.
     des_estado?: string; des_desde?: string; des_hasta?: string; des_cursor?: string;
     // El detalle de un desglose (T-A1-29): solo su id y el código del resultado de la última acción; nunca cifras.
@@ -222,6 +223,7 @@ export default async function PaginaAgenteLiquidacion({
   if (!puedeVerRuta(rol, '/dashboard/agentes/liquidacion')) redirect('/dashboard');
 
   const base = sp.tenant ? `?tenant=${sp.tenant}` : sp.vista ? `?vista=${sp.vista}` : '';
+  const flash = await leerFlash('/dashboard/agentes/liquidacion');
   const sufijo = sp.rol ? `${base}${base ? '&' : '?'}rol=${sp.rol}` : base;
 
   // Lo que hay que conservar en cada link y en el submit del filtro: el mismo
@@ -424,20 +426,23 @@ export default async function PaginaAgenteLiquidacion({
     if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion') || !puedeVerArea(s.rol, 'administracion')) throw new Error('Solo el dueño de la flota sube liquidaciones.');
     const a = fd.get('archivo');
     const params: Array<[string, string]> = [...contexto];
+    // A37-S14-07: el detalle (texto) viaja en una cookie de servidor, no en la URL; en la URL solo quedan códigos validados.
+    let detalleImportacion: string | undefined;
     if (!(a instanceof File) || a.size === 0) {
-      params.push(['ext_msg', 'importacion_error'], ['ext_det', 'Elige el archivo de liquidaciones (CSV o Excel).']);
+      params.push(['ext_msg', 'importacion_error']); detalleImportacion = 'Elige el archivo de liquidaciones (CSV o Excel).';
     } else if (a.size > 4_000_000) {
-      params.push(['ext_msg', 'importacion_error'], ['ext_det', 'El archivo pesa demasiado (máximo 4 MB). Pártelo en varios.']);
+      params.push(['ext_msg', 'importacion_error']); detalleImportacion = 'El archivo pesa demasiado (máximo 4 MB). Pártelo en varios.';
     } else {
       try {
         const r = await importarLiquidacionesDeArchivo(s.tenantId, a.name, new Uint8Array(await a.arrayBuffer()));
         const detalle = (r.error ?? r.problemas.slice(0, 5).map((x) => `${x.clave ?? 'archivo'}: ${x.motivo}`).join(' · ')).slice(0, 700);
         params.push(['ext_msg', r.error ? 'importacion_error' : 'importada'], ['ext_imp', `${r.recibidas}.${r.repetidas}.${r.problemas.length}`]);
-        if (detalle) params.push(['ext_det', detalle]);
+        if (detalle) detalleImportacion = detalle;
       } catch {
-        params.push(['ext_msg', 'importacion_error'], ['ext_det', 'No se pudo procesar el archivo. Vuelve a intentarlo: repetirlo es seguro.']);
+        params.push(['ext_msg', 'importacion_error']); detalleImportacion = 'No se pudo procesar el archivo. Vuelve a intentarlo: repetirlo es seguro.';
       }
     }
+    await dejarFlash('/dashboard/agentes/liquidacion', { detalle: detalleImportacion });
     revalidatePath('/dashboard/agentes/liquidacion');
     redirect(`/dashboard/agentes/liquidacion?${new URLSearchParams(params).toString()}#liquidaciones-externas`);
   }
@@ -540,7 +545,7 @@ export default async function PaginaAgenteLiquidacion({
             puedeReintentar reintentar={reintentarExterna}
             formato={pFormato} reenviarCopia={reenviarCopiaExterna} avisos={pAvisos} reavisar={reavisarExterna}
             subirArchivo={puedeVerArea(rol, 'administracion') ? subirLiquidacionesExternas : undefined}
-            importacion={{ conteo: sp.ext_imp, detalle: sp.ext_det }}
+            importacion={{ conteo: sp.ext_imp, detalle: flash.detalle }}
           />
         </Bloque>
       }

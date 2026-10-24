@@ -977,6 +977,11 @@ export function validarUrlPull(crudo: string): { ok: true; url: string } | { ok:
   return { ok: true, url: t };
 }
 
+/** `host:puerto` de una URL (minúsculas), o `null` si no se puede leer: dos `null` NO cuentan como el mismo host. */
+function hostDe(url: string): string | null {
+  try { return new URL(url).host.toLowerCase(); } catch { return null; }
+}
+
 /**
  * Configura (y enciende) el pull. El token, si se da, se guarda CIFRADO con el cofre;
  * sin `LIKIDA_COFRE_LLAVE` NO se guarda nada (un token en claro no es una opción).
@@ -994,6 +999,18 @@ export async function guardarPullPeajes(
     pull_url: v.url, pull_intervalo_min: entrada.intervaloMin, pull_activo: true, pull_proximo_en: new Date().toISOString(), pull_ultimo_error: null,
   };
   const token = entrada.token?.trim();
+  if (!token) {
+    // A37-S14-09: «sin token» significa CONSERVAR el que ya hay, pero solo mientras el destino sea el mismo host: con otro host se
+    // mandaría el Bearer anterior a un tercero. Ante duda (no se pudo leer lo vigente) tampoco se arriesga.
+    let actual: ConfigEntradas | null;
+    try { actual = await leerConfigEntradas(tenantId); } catch (e) {
+      logger.error('peajes.guardar_pull_lectura', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+      return { ok: false, motivo: 'No se pudo comprobar la configuración vigente. Inténtalo de nuevo.' };
+    }
+    if (actual?.pullConCredencial && actual.pullUrl && hostDe(actual.pullUrl) !== hostDe(v.url)) {
+      return { ok: false, motivo: 'Cambiaste el servidor de la consulta: el token guardado era del anterior y no se reutiliza. Escribe el token del servidor nuevo (o bórralo antes).' };
+    }
+  }
   if (token) {
     if (token.length > 500 || /[\r\n]/.test(token)) return { ok: false, motivo: 'El token no es válido (sin saltos de línea, hasta 500 caracteres).' };
     if (!cofreConfigurado()) return { ok: false, motivo: 'El cofre de credenciales no está configurado (LIKIDA_COFRE_LLAVE): no se puede guardar el token de forma segura.' };
@@ -1255,8 +1272,29 @@ export async function anularDesgloseDb(tenantId: string, desgloseId: string, mot
   if ((upd.data ?? []).length === 0) {
     const ex = await acotada(supabaseAdmin().from('desglose_peaje').select('id').eq('tenant_id', tenantId).eq('id', desgloseId).maybeSingle(), 'peajes.anular_existe');
     if (ex.error) throw new Error(`anularDesglose: ${ex.error.message}`);
-    return ex.data ? 'ya_anulado' : 'no_encontrado';
+    if (!ex.data) return 'no_encontrado';
+    // A37-S14-05: un reintento sobre un desglose ya anulado completa la liberación que pudo fallar la primera vez.
+    await liberarHuellasDeDesglose(tenantId, desgloseId);
+    return 'ya_anulado';
   }
+  // A37-A2-07: los reclamos PREPARADOS (aún no enviados) de un desglose anulado dejan de contar como pendientes (plazo, KPI
+  // «por vencer», totales): pasan a `rechazado` con la causa, lo que además libera el único parcial por categoría para
+  // reclamar de nuevo con el archivo correcto. Los ya ENVIADOS al proveedor no se tocan: son hechos externos que una persona decide.
+  const rec = await acotada(supabaseAdmin().from('peaje_reclamo')
+    .update({ estado: 'rechazado', notas: 'Anulado: el desglose de origen se anuló (archivo subido por error).', actualizado_en: ahora })
+    .eq('tenant_id', tenantId).eq('desglose_id', desgloseId).eq('estado', 'preparado'), 'peajes.anular_reclamos');
+  if (rec.error) logger.error('peajes.anular_reclamos', { tenant: tenantId, err: rec.error.message });
+  // A37-S14-05: la liberación va al FINAL y si falla LANZA: la anulación ya quedó (y los reclamos ya se rechazaron), pero no se
+  // devuelve «anulado» prometiendo que el archivo corregido puede reenviarse cuando su huella sigue tomada.
+  await liberarHuellasDeDesglose(tenantId, desgloseId);
+  return 'anulado';
+}
+
+/**
+ * Libera las huellas de los archivos de la cola que generaron un desglose anulado (idempotente: reemplazar una huella ya liberada
+ * por otra derivada no la vuelve a tomar). LANZA si algún UPDATE falla.
+ */
+async function liberarHuellasDeDesglose(tenantId: string, desgloseId: string): Promise<void> {
   const arch = await acotada(supabaseAdmin().from('peaje_ingesta_archivo')
     .select('id, huella, origen').eq('tenant_id', tenantId).eq('desglose_id', desgloseId).order('id'), 'peajes.anular_archivos');
   if (arch.error) throw new Error(`anularDesglose: ${arch.error.message}`);
@@ -1266,16 +1304,10 @@ export async function anularDesgloseDb(tenantId: string, desgloseId: string, mot
     // la anulación. Esas huellas se CONSERVAN (el siguiente ciclo lo ve como duplicado); la persona que quiera cargarlo de
     // nuevo lo sube a mano desde el panel (`liberarHuellaDeAnulado`). Correo y API los manda una persona a propósito: se liberan.
     if (a.origen === 'pull' || a.origen === 'sftp') continue;
-    await liberarHuellaArchivo(tenantId, a.id, a.huella, desgloseId);
+    if (!(await liberarHuellaArchivo(tenantId, a.id, a.huella, desgloseId))) {
+      throw new Error('anularDesglose: no se pudo liberar la huella del archivo; el desglose quedó anulado, vuelve a intentar para completar la liberación');
+    }
   }
-  // A37-A2-07: los reclamos PREPARADOS (aún no enviados) de un desglose anulado dejan de contar como pendientes (plazo, KPI
-  // «por vencer», totales): pasan a `rechazado` con la causa, lo que además libera el único parcial por categoría para
-  // reclamar de nuevo con el archivo correcto. Los ya ENVIADOS al proveedor no se tocan: son hechos externos que una persona decide.
-  const rec = await acotada(supabaseAdmin().from('peaje_reclamo')
-    .update({ estado: 'rechazado', notas: 'Anulado: el desglose de origen se anuló (archivo subido por error).', actualizado_en: ahora })
-    .eq('tenant_id', tenantId).eq('desglose_id', desgloseId).eq('estado', 'preparado'), 'peajes.anular_reclamos');
-  if (rec.error) logger.error('peajes.anular_reclamos', { tenant: tenantId, err: rec.error.message });
-  return 'anulado';
 }
 
 /** El estado de UN archivo de la cola (acotado a la flota): lo que la subida manual lee tras procesar en línea. */
@@ -1285,11 +1317,12 @@ export async function estadoArchivoPeaje(tenantId: string, archivoId: string) {
 }
 
 /** Reemplaza la huella de un archivo de la cola por otra derivada (misma forma), para que el mismo contenido pueda volver a recibirse. */
-async function liberarHuellaArchivo(tenantId: string, archivoId: string, huella: string, desgloseId: string): Promise<void> {
+async function liberarHuellaArchivo(tenantId: string, archivoId: string, huella: string, desgloseId: string): Promise<boolean> {
   const libre = createHash('sha256').update(`${huella}:anulada:${desgloseId}`).digest('hex');
   const r = await acotada(supabaseAdmin().from('peaje_ingesta_archivo').update({ huella: libre })
     .eq('tenant_id', tenantId).eq('id', archivoId), 'peajes.anular_huella');
   if (r.error) logger.error('peajes.anular_huella', { tenant: tenantId, err: r.error.message });
+  return !r.error;
 }
 
 /**
@@ -1305,8 +1338,7 @@ export async function liberarHuellaDeAnulado(tenantId: string, archivoId: string
     .select('id, anulado_en').eq('tenant_id', tenantId).eq('id', a.desglose_id).maybeSingle(), 'peajes.liberar_anulado_desglose');
   if (errD) throw new Error(`liberarHuellaDeAnulado: ${errD.message}`);
   if (!d || !d.anulado_en) return false;
-  await liberarHuellaArchivo(tenantId, String(a.id), String(a.huella), String(a.desglose_id));
-  return true;
+  return liberarHuellaArchivo(tenantId, String(a.id), String(a.huella), String(a.desglose_id));
 }
 
 export interface ArchivoIngestaVista {

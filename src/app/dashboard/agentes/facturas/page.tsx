@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { sufijoTenant } from '../../sufijo';
 import { requireSessionTenant } from '@/lib/auth/guard';
-import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
+import { puedeVerRuta, puedeVerArea, esDuenoDeFlota } from '@/lib/auth/visibilidad';
 import { getPorFacturar, contarConCfdi, validarUuidCfdi } from '@/lib/likida/facturacion/pendientes';
 import { mandatoFiscalAceptado, modoEfectivo } from '@/lib/likida/facturacion/modo';
 import { mandatoFlotaVigente } from '@/lib/legal/aceptacion';
@@ -116,6 +116,7 @@ export default async function PaginaAgenteFacturas({
     lotes: lotes === null ? null : lotes.map((l) => ({ id: l.id, comercio: l.comercio, nombre: nombreDe(l.comercio), tickets: l.gastoIds.length, montoTotal: l.montoTotal, estado: l.estado, propuestoEn: l.propuestoEn, expiraEn: l.expiraEn })),
     portales: (fases ?? []).map((f) => ({ clave: f.comercio, nombre: nombreDe(f.comercio), verificacion: verificacionDeComercio(f.comercio), fase: f.fase, emisionesConfirmadas: f.emisionesConfirmadas })),
     minimoParaAutonoma: 3,
+    esDueno: esDuenoDeFlota(rol),
   };
 
   async function marcarFacturada(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {

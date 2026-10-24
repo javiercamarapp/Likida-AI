@@ -11,10 +11,22 @@ import { NIVEL_MAXIMO } from '@/lib/likida/asistencia_escalamiento';
 import { fechaHoraMx } from '../formato';
 import { logger } from '@/lib/logger';
 import { FormaConAviso, Campo, type ResultadoAccion } from '../../admin/ui/forma';
+import { BotonAccionMesa } from './boton-accion';
 
 export const dynamic = 'force-dynamic';
 
 const RUTA = '/dashboard/asistencia';
+
+/**
+ * La puerta compartida de las tres acciones: re-gatea ADENTRO (el rol del render no es el de la llamada). A nivel de módulo y SIN
+ * 'use server' a propósito (A37-S16-07): declarada dentro del componente con 'use server' era un endpoint invocable por POST
+ * directo que devolvía el tenantId y el userId de la sesión; así es solo una función interna de las acciones.
+ */
+async function gate(sp: { tenant?: string; rol?: string; vista?: string }): Promise<{ tenantId: string; userId: string } | { error: string }> {
+  const s = await resolverTenantEfectivo(RUTA, sp);
+  if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede intervenir desde la mesa de control.' };
+  return { tenantId: s.tenantId, userId: s.userId };
+}
 
 /**
  * MESA DE CONTROL (Capa F del agente de ayuda en ruta).
@@ -53,36 +65,31 @@ export default async function PaginaMesaControl({
   // ── Server actions — re-gateo ADENTRO (el rol del render no es el de la
   //    llamada, y una action es alcanzable sin pasar por la página) ─────────
 
-  async function gate(): Promise<{ tenantId: string; userId: string } | { error: string }> {
+  async function tomarControl(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
-    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede intervenir desde la mesa de control.' };
-    return { tenantId: s.tenantId, userId: s.userId };
-  }
-
-  async function tomarControl(fd: FormData): Promise<void> {
-    'use server';
-    const g = await gate();
-    if ('error' in g) return;
+    const g = await gate(sp);
+    if ('error' in g) return { error: g.error };
     const r = await tomarControlMesa(g.tenantId, String(fd.get('id') ?? ''), g.userId);
-    if ('error' in r) logger.warn('mesa.tomar_control', { detalle: r.error });
+    if ('error' in r) { logger.warn('mesa.tomar_control', { detalle: r.error }); return { error: r.error }; }
     revalidatePath(RUTA);
+    return { ok: 'Tomaste el control: el escalamiento automático quedó detenido.' };
   }
 
-  async function reescalar(fd: FormData): Promise<void> {
+  async function reescalar(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const g = await gate();
-    if ('error' in g) return;
+    const g = await gate(sp);
+    if ('error' in g) return { error: g.error };
     const r = await reescalarDesdeMesa(
       g.tenantId, String(fd.get('id') ?? ''), g.userId, Number(fd.get('nivel')),
     );
-    if ('error' in r) logger.warn('mesa.reescalar', { detalle: r.error });
+    if ('error' in r) { logger.warn('mesa.reescalar', { detalle: r.error }); return { error: r.error }; }
     revalidatePath(RUTA);
+    return { ok: 'Nivel de escalamiento subido.' };
   }
 
   async function resolver(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const g = await gate();
+    const g = await gate(sp);
     if ('error' in g) return { error: g.error };
     const r = await resolverDesdeMesa(
       g.tenantId, String(fd.get('id') ?? ''), g.userId, String(fd.get('nota') ?? ''),
@@ -172,21 +179,16 @@ export default async function PaginaMesaControl({
             </div>
             <span className="ml-auto flex gap-1.5 items-start shrink-0">
               {!inc.reconocidaEn && (
-                <form action={tomarControl}>
-                  <input type="hidden" name="id" value={inc.id} />
-                  <button type="submit" className={BTN_CHICO} title="Reconocerla desde la mesa: detiene el escalamiento automático y queda a tu nombre">
-                    Tomar el control
-                  </button>
-                </form>
+                <BotonAccionMesa
+                  accion={tomarControl} campos={{ id: inc.id }} etiqueta="Tomar el control" clase={BTN_CHICO}
+                  titulo="Reconocerla desde la mesa: detiene el escalamiento automático y queda a tu nombre"
+                />
               )}
               {inc.nivelEscalado < NIVEL_MAXIMO && (
-                <form action={reescalar}>
-                  <input type="hidden" name="id" value={inc.id} />
-                  <input type="hidden" name="nivel" value={inc.nivelEscalado + 1} />
-                  <button type="submit" className={BTN_CHICO} title="Sube un nivel el escalamiento (solo sube — bajar re-armaría avisos ya mandados). No manda WhatsApp: tú ya estás viendo esto.">
-                    Subir a nivel {inc.nivelEscalado + 1}
-                  </button>
-                </form>
+                <BotonAccionMesa
+                  accion={reescalar} campos={{ id: inc.id, nivel: inc.nivelEscalado + 1 }} etiqueta={`Subir a nivel ${inc.nivelEscalado + 1}`} clase={BTN_CHICO}
+                  titulo="Sube un nivel el escalamiento (solo sube — bajar re-armaría avisos ya mandados). No manda WhatsApp: tú ya estás viendo esto."
+                />
               )}
             </span>
           </div>
