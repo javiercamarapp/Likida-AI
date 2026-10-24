@@ -318,6 +318,7 @@ const MONTO = `(?:\\$\\s*)?(?:${NUM})${SUF}`;
 // pegaba al nombre de la ciudad ("Guadalajara con").
 const RE_ANTICIPO_DESPUES = new RegExp(String.raw`(?:\b(?:con|y|mas)\s+)?\banticipo\b\s*(?:de|por|:|=)?\s*(${MONTO})`);
 const RE_ANTICIPO_ANTES = new RegExp(String.raw`(?:\b(?:con|y|mas)\s+)?(${MONTO})\s*(?:de\s+)?anticipo\b`);
+const RE_ANTES_ES_IDENTIFICADOR = /\b(?:unidad(?:es)?|economico|eco|folio|ticket|remolque|placas?|hora|las)\s*(?:#|num\.?|numero|no\.?)?\s*$/;
 const RE_PESOS = new RegExp(`\\$\\s*(?:${NUM})${SUF}`, 'g');
 const RE_MENCION_ANTICIPO = /\banticipo\b/g;
 
@@ -399,7 +400,20 @@ function leerAnticipo(plano: string, tope: number): LecturaAnticipo {
   if (menciones > 1) return { valor: null, dudoso: true, plano };
 
   if (menciones === 1) {
-    const m = RE_ANTICIPO_DESPUES.exec(plano) ?? RE_ANTICIPO_ANTES.exec(plano);
+    const despues = RE_ANTICIPO_DESPUES.exec(plano);
+    const m = despues ?? RE_ANTICIPO_ANTES.exec(plano);
+    // A37-S40-02: el número a la IZQUIERDA de «anticipo» solo vale como monto si
+    // no es parte de un identificador: «unidad 7 anticipo mil quinientos» no
+    // tiene cifra a la derecha legible, y el 7 de la unidad se leía como $7.
+    // Si lo que precede al número es unidad/eco/folio/#/hora, o va pegado a un
+    // token (T-102), no es dinero: se pregunta.
+    if (m && !despues) {
+      const ini = m.index + m[0].indexOf(m[1]);
+      const antes = plano.slice(0, ini);
+      if (RE_ANTES_ES_IDENTIFICADOR.test(antes) || /[a-z0-9-]$/.test(antes)) {
+        return { valor: null, dudoso: true, plano };
+      }
+    }
     // Dijo "anticipo" y no hay número legible ni detrás ni delante ("anticipo
     // ocho mil quinientos", que no se parsea; "anticipo -500", que no es un
     // monto). Se pregunta, no se deja en `null`: dejarlo en `null` crearía el

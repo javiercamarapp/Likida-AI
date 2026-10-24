@@ -280,6 +280,20 @@ describe('el anticipo: se lee exacto o no se lee', () => {
       });
   });
 
+  it('A37-S40-02: un número pegado a «anticipo» que es la unidad/folio no se toma por monto', () => {
+    for (const texto of [
+      'nuevo viaje para Juan Perez, Puebla a Monterrey, unidad 7 anticipo mil quinientos',
+      'nuevo viaje para Juan Perez, Puebla a Monterrey, unidad 7 anticipo ocho mil',
+      'nuevo viaje para Juan Perez, Puebla a Monterrey, eco T-102 anticipo ocho mil',
+      'nuevo viaje para Juan Perez, Puebla a Monterrey, folio 55 anticipo ocho mil',
+    ]) {
+      const r = interpretarPeticionViaje(texto);
+      expect(r.tipo, texto).toBe('incompleto');
+      expect((r as { falta: string[] }).falta).toContain('anticipo');
+      expect((r as { parcial: { anticipo: number | null } }).parcial.anticipo).toBeNull();
+    }
+  });
+
   it('«unidad disponible» no inventa un número económico', () => {
     // Sin la condición de que el token traiga un dígito, `unidad` salía como
     // "disponible" — un económico que no existe en la tabla `unidad`.
