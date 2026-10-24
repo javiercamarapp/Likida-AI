@@ -239,7 +239,11 @@ export default async function PaginaAgenteConductores({
     return { episodios: episodiosVista(r?.episodios ?? []), hayMas: r?.hayMas ?? false };
   });
   // Los sitios que se pueden asignar a un viaje (solo los activos; hasta 500). Sin lectura, la forma de asignar no ofrece nada.
-  const pSitios = safe(async () => (await listarSitios(tenantId, { limite: 500 })).sitios.filter((x) => x.activa).map((x) => ({ id: x.id, nombre: x.nombre, tipo: x.tipo })));
+  // A37-S13-03: `hayMas` viaja hasta la forma: con un catálogo de miles, el selector es una MUESTRA (500 por nombre) y debe decirlo.
+  const pSitios = safe(async () => {
+    const r = await listarSitios(tenantId, { limite: 500, soloActivas: true });
+    return { opciones: r.sitios.map((x) => ({ id: x.id, nombre: x.nombre, tipo: x.tipo })), hayMas: r.hayMas };
+  });
   // T-A5-25: «¿está lista la flota?». `null` = no se pudo leer → no se pinta nada (el detalle vive en la configuración).
   const pPreflight = safe(() => leerDatosPreflight(tenantId).then(evaluarPreflight));
   const ocultos: Record<string, string> = {};
@@ -361,7 +365,7 @@ async function BloqueTableroHitos({ pTablero, pIndicadores, pCatalogos, pSitios,
   pTablero: Promise<ReturnType<typeof armarTablero>>;
   pIndicadores: Promise<ReturnType<typeof indicadoresVista> | null>;
   pCatalogos: Promise<Awaited<ReturnType<typeof leerCatalogosFiltro>> | null>;
-  pSitios: Promise<Array<{ id: string; nombre: string; tipo: string }> | null>;
+  pSitios: Promise<{ opciones: Array<{ id: string; nombre: string; tipo: string }>; hayMas: boolean } | null>;
   pEpisodios: Promise<{ episodios: EpisodioVista[]; hayMas: boolean } | null>;
   filtros: FiltrosVista; ocultos: Record<string, string>; accionUrl: string; puedeActuar: boolean;
   accion: (previo: ResultadoOficina, fd: FormData) => Promise<ResultadoOficina>;
@@ -370,7 +374,7 @@ async function BloqueTableroHitos({ pTablero, pIndicadores, pCatalogos, pSitios,
   const [tablero, indicadores, catalogos, sitios, episodios] = await Promise.all([pTablero, pIndicadores, pCatalogos, pSitios, pEpisodios]);
   return (
     <TableroHitos tablero={tablero} indicadores={indicadores} dias={filtros.dias} filtros={filtros} catalogos={catalogos}
-      ocultos={ocultos} accionUrl={accionUrl} puedeActuar={puedeActuar} accion={accion} accionSitios={accionSitios} sitios={sitios ?? []}
+      ocultos={ocultos} accionUrl={accionUrl} puedeActuar={puedeActuar} accion={accion} accionSitios={accionSitios} sitios={sitios?.opciones ?? []} sitiosHayMas={sitios?.hayMas ?? false}
       episodios={episodios === null ? null : episodios.episodios} hayMasEpisodios={episodios?.hayMas ?? false} />
   );
 }

@@ -29,10 +29,12 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
   const puedeEditar = puedeAsignar(rol);
   const busqueda = (sp.q ?? '').slice(0, 60);
 
-  const [lista, catalogos, sinSitio] = await Promise.all([
+  const [lista, catalogos, sinSitio, selector] = await Promise.all([
     listarSitios(tenantId, { busqueda }).catch((e) => { logger.warn('sitios.no_leidos', { tenantId, err: e instanceof Error ? e.message : String(e) }); return null; }),
     leerCatalogosFiltro(tenantId).catch(() => null),
     leerTextosSinSitio(tenantId, new Date()).catch((e) => { logger.warn('equivalencias.textos_no_leidos', { tenantId, err: e instanceof Error ? e.message : String(e) }); return null; }),
+    // A37-S13-03: los selectores (padre, «Textos sin sitio») NO deben heredar el tope de 200 ni el filtro ?q de la tabla.
+    listarSitios(tenantId, { limite: 500, soloActivas: true }).catch(() => null),
   ]);
   const descargaCsv = sinSitio && sinSitio.textos.length > 0 ? `data:text/csv;charset=utf-8,${encodeURIComponent(csvTextosSinSitio(sinSitio.textos))}` : null;
   const editarId = sp.editar && UUID.test(sp.editar) ? sp.editar.toLowerCase() : null;
@@ -116,7 +118,7 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   return (
     <VistaSitios
-      sufijo={sufijoTenant(sp)} sitios={lista?.sitios ?? null} hayMas={lista?.hayMas ?? false} clientes={catalogos?.clientes ?? []}
+      sufijo={sufijoTenant(sp)} sitios={lista?.sitios ?? null} hayMas={lista?.hayMas ?? false} selectorSitios={selector ? selector.sitios.map((x) => ({ id: x.id, nombre: x.nombre })) : undefined} selectorHayMas={selector?.hayMas ?? false} clientes={catalogos?.clientes ?? []}
       puedeEditar={puedeEditar} editando={editando} busqueda={busqueda}
       accionGuardar={accionGuardar} accionImportar={accionImportar} accionEstado={accionEstado}
       textosSinSitio={sinSitio?.textos ?? null} textosTruncado={sinSitio?.truncado ?? false} descargaCsv={descargaCsv}
