@@ -345,10 +345,12 @@ describe('atenderMensajeProveedor', () => {
     sendButtons.mockResolvedValue('wamid.BTN');
     await atenderMensajeProveedor('5299911122233', 'bueno, ¿quién habla?');
     expect(sendText).toHaveBeenCalledWith('5299911122233', 'EL MENSAJE PREPARADO');
-    // Y avanzó: contactado primero, cotizada con su texto después.
+    // A37-S29-03: avanzó a contactado, pero el saludo que abrió la ventana
+    // NO es cotización: no hay claim 'cotizada' ni botones al jefe.
     const claims = escrituras.filter((e) => e.clave === 'coordinacion_proveedor.claim');
+    expect(claims).toHaveLength(1);
     expect((claims[0].payload as { estado: string }).estado).toBe('contactado');
-    expect((claims[1].payload as { estado: string }).estado).toBe('cotizada');
+    expect(sendButtons).not.toHaveBeenCalled();
   });
 
   it('c4-2/c4-3: la gestión de una incidencia YA RESUELTA no captura al número — se cierra y el processor sigue', async () => {

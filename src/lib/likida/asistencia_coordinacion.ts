@@ -631,6 +631,7 @@ export async function atenderMensajeProveedor(
   // La ventana ACABA de abrirse: si el contacto seguía pendiente de
   // plantilla, el mensaje preparado sale AHORA — el circuito se autorrepara
   // en cuanto el proveedor nos escribe.
+  let abrioLaVentana = false;
   if (c.estado === 'pendiente_plantilla') {
     const enviado = await sendText(from, c.mensajePreparado);
     if (enviado) {
@@ -644,7 +645,18 @@ export async function atenderMensajeProveedor(
         coordinacionId: c.id, proveedor: c.proveedorNombre, via: 'ventana_abierta_por_proveedor',
       });
       c.estado = 'contactado';
+      abrioLaVentana = true;
     }
+  }
+
+  // A37-S29-03: el mensaje que ABRIÓ la ventana ("¿quién habla?") no responde
+  // a nuestra solicitud: se anota, pero NO se toma como cotización ni se
+  // firma nada sobre él. La cotización es el SIGUIENTE mensaje.
+  if (abrioLaVentana) {
+    await anotarEventoIncidencia(c.tenantId, c.incidenciaId, 'proveedor_mensaje', {
+      coordinacionId: c.id, texto: texto.slice(0, 500), apertura_ventana: true,
+    });
+    return 'Quedo atento a su tiempo de llegada y su precio. 🙏';
   }
 
   if (c.estado === 'contactado') {
