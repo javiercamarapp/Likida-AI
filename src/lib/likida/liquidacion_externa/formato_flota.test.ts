@@ -202,4 +202,13 @@ describe('el PDF en el formato de la flota', () => {
     const doc = await PDFDocument.load(await generarPdfFormato(formatoDerivado(), muchos));
     expect(doc.getPageCount()).toBeGreaterThan(1);
   });
+
+  it('A37-S49-10: en «Concepto | Cantidad | Precio | Importe» el importe es la columna Importe, no Cantidad', () => {
+    const r = derivarFormatoDeMatriz([['Concepto', 'Cantidad', 'Precio', 'Importe'], ['Sueldo', 1, 500, 500]] as never);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.formato.columnas.find((c) => c.campo === 'monto')?.encabezado).toBe('Importe');
+    expect(r.sinMapear).toEqual(expect.arrayContaining(['Cantidad', 'Precio']));
+    expect(r.advertencias.join(' ')).not.toMatch(/repite el campo/);
+  });
 });
