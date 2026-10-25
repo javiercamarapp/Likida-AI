@@ -136,5 +136,7 @@ describe('esCorreoYaRegistrado / mensajeAltaNeutro', () => {
     expect(m).toMatch(/Si .* no tenía cuenta/);
     expect(m).toMatch(/Si ya la tenía/);
     expect(m).not.toMatch(/ya tiene una cuenta registrada/);
+    // A39-S21-01: no manda a mirar la lista «Tu equipo» ni a avisar a Likida si falta: eso es un oráculo.
+    expect(m).not.toMatch(/aparece|tu equipo|aqu[ií] abajo|av[ií]sale/i);
   });
 });
