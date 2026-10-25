@@ -377,6 +377,19 @@ describe('barridoSenalVida', () => {
     expect(w.llamadas.liberados).toEqual([3]);
   });
 
+  it('A37-O7-07: si una pasada posterior SÍ escala, se borra la marca vieja «sin_destinatario» (el tablero no dice «NO llegó»)', async () => {
+    const w = mundo({ muestras: [M(100)], episodio: ep({ nivelEnviado: 2, aviso2En: hace(25).toISOString(), ultimoError: 'sin_destinatario' }) });
+    const r = await barridoSenalVida(w.puertos, AHORA);
+    expect(r.escalaciones).toBe(1);
+    expect(w.llamadas.fallos).toEqual(['']);
+  });
+
+  it('A37-O7-07: la marca de avisos fallidos al chofer NO se borra al escalar con éxito', async () => {
+    const w = mundo({ muestras: [M(100)], episodio: ep({ nivelEnviado: 2, aviso2En: hace(25).toISOString(), ultimoError: 'aviso_chofer_fallido:1|132001' }) });
+    await barridoSenalVida(w.puertos, AHORA);
+    expect(w.llamadas.fallos).toEqual([]);
+  });
+
   it('el que pierde el claim del nivel no manda nada (dos corridas solapadas no duplican el aviso)', async () => {
     const w = mundo({ muestras: [M(100)], reclamar: 'perdido' });
     const r = await barridoSenalVida(w.puertos, AHORA);
