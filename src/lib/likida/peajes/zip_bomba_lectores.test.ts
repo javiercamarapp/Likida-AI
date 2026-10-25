@@ -39,7 +39,7 @@ describe('A37-O7-05: los lectores de .xlsx de peajes y Vigía rechazan una bomba
     if (!r.ok) expect(r.motivo).toMatch(/descomprimir/);
   });
   it('programa del Vigía', () => {
-    expect(() => leerProgramaXlsx(zipBomba(), {})).toThrow(ErrorLectorPrograma);
-    expect(() => leerProgramaXlsx(zipBomba(), {})).toThrow(/descomprimir/);
+    expect(() => leerProgramaXlsx(zipBomba(), { terminal: 'T1' })).toThrow(ErrorLectorPrograma);
+    expect(() => leerProgramaXlsx(zipBomba(), { terminal: 'T1' })).toThrow(/descomprimir/);
   });
 });
