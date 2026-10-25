@@ -651,7 +651,7 @@ export async function purgarAvisosViejos(ahora: Date): Promise<number> {
       .update({ evidencia: EVIDENCIA_RETENIDA })
       .lt('disparado_en', corte)
       .neq('evidencia', EVIDENCIA_RETENIDA)
-      .select('id'), 'reglas.retener_evidencia');
+      .select('regla_id'), 'reglas.retener_evidencia');
     if (errEv) logger.warn('reglas.retencion_evidencia_fallo', { err: errEv.message });
   } catch (e) {
     logger.warn('reglas.retencion_evidencia_fallo', { err: e instanceof Error ? e.message : String(e) });

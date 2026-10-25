@@ -2130,14 +2130,14 @@ async function anonimizarEvidenciaReglasDeOperador(
     const { error: e1 } = await acotada(supabaseAdmin()
       .from('regla_disparo').update({ evidencia: EVIDENCIA_ANONIMIZADA })
       .eq('tenant_id', tenantId).eq('objeto', 'operador').eq('objeto_id', operadorId)
-      .select('id'), 'ejecutarCancelacionArco.evidencia_objeto');
+      .select('regla_id'), 'ejecutarCancelacionArco.evidencia_objeto');
     if (e1) return e1.message;
     if (nombre) {
       const patron = `%${nombre.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
       const { error: e2 } = await acotada(supabaseAdmin()
         .from('regla_disparo').update({ evidencia: EVIDENCIA_ANONIMIZADA })
         .eq('tenant_id', tenantId).neq('evidencia', EVIDENCIA_ANONIMIZADA).ilike('evidencia', patron)
-        .select('id'), 'ejecutarCancelacionArco.evidencia_nombre');
+        .select('regla_id'), 'ejecutarCancelacionArco.evidencia_nombre');
       if (e2) return e2.message;
     }
     return undefined;
