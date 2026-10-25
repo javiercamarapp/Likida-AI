@@ -29,6 +29,56 @@ describe('calificaEstimuloPeaje — FASE 3', () => {
     expect(calificaEstimuloPeaje(declarado(1_000_000, true))).toEqual({ elegible: false });
   });
 
+  // ═════════════════════════════════════════════════════════════════════════
+  // FIS-34-1 (ALTO, abierto desde la auditoría 34) — un «no» declarado a la
+  // Red Nacional se preguntaba, se guardaba y NO LO LEÍA NADIE.
+  //
+  // `casetasRedNacional` se pregunta en la entrevista (`entrevista.ts:252`), se
+  // guarda en el perfil (`preguntas.ts:297`) y se imprime en el resumen
+  // (`entrevista.ts:992`), pero `calificaEstimuloPeaje` nunca lo miraba: una
+  // flota que contesta «no» salía `elegible: true` y el PDF le imprimía
+  // «Estímulo de peaje 50% … $250.00» sobre una caseta de $500.00, pidiéndole
+  // confirmar la condición que ya había negado.
+  //
+  // La LIF 2026 art. 20-A fr. I concede el estímulo por el uso de la Red
+  // Nacional de Autopistas de Cuota. Likida no VERIFICA que lo sean —la propia
+  // pregunta lo dice— pero una declaración negativa del cliente no es falta de
+  // dato: es un hecho que cierra. Falta de declaración (`undefined`) se sigue
+  // tratando como antes, porque ahí sí no hay nada que leer.
+  // ═════════════════════════════════════════════════════════════════════════
+  it('FIS-34-1: un «no» declarado a la Red Nacional cierra el estímulo, aunque lo demás califique', () => {
+    expect(calificaEstimuloPeaje({
+      ...declarado(50_000_000, false),
+      casetasRedNacional: { valor: false, procedencia: 'declarado' },
+    })).toEqual({ elegible: false });
+  });
+
+  it('FIS-34-1: un «no» a la Red Nacional cierra incluso sin las otras dos declaraciones', () => {
+    // Es lo contrario de adivinar: no se afirma elegibilidad, se niega con el
+    // único hecho declarado que hay, que basta para negar.
+    expect(calificaEstimuloPeaje({
+      casetasRedNacional: { valor: false, procedencia: 'declarado' },
+    })).toEqual({ elegible: false });
+  });
+
+  it('FIS-34-1: un «sí» a la Red Nacional no cambia nada (no es el candado que falta)', () => {
+    expect(calificaEstimuloPeaje({
+      ...declarado(50_000_000, false),
+      casetasRedNacional: { valor: true, procedencia: 'declarado' },
+    })).toEqual({ elegible: true });
+  });
+
+  it('FIS-34-1: EL CANDADO también aquí — un «no» inferido NO cierra, solo el declarado', () => {
+    expect(calificaEstimuloPeaje({
+      ...declarado(50_000_000, false),
+      casetasRedNacional: { valor: false, procedencia: 'inferido' },
+    })).toEqual({ elegible: true });
+  });
+
+  it('FIS-34-1: sin declarar la Red Nacional, la conducta es la de siempre', () => {
+    expect(calificaEstimuloPeaje(declarado(50_000_000, false))).toEqual({ elegible: true });
+  });
+
   it('solo un campo declarado (falta el otro) → elegible null, no se adivina el que falta', () => {
     expect(calificaEstimuloPeaje({ ingresosAnualesMxn: { valor: 1_000_000, procedencia: 'declarado' } })).toEqual({ elegible: null });
     expect(calificaEstimuloPeaje({ parteRelacionada: { valor: false, procedencia: 'declarado' } })).toEqual({ elegible: null });
