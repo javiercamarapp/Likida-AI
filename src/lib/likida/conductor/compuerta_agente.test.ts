@@ -126,3 +126,36 @@ describe('A37-A5-02: la emergencia abierta del chofer detiene todo envío proact
     expect(consulta).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('A39-A5-02: última barrera del puerto de envío — voluntario vigente', () => {
+  beforeEach(() => { avisos.length = 0; });
+  const armar = (voluntario: () => Promise<boolean>) => {
+    const enviar = vi.fn(async () => OK);
+    return { enviar, gate: conCompuertaAlChofer(enviar as never, async () => ({ habilitado: true, razon: 'habilitado' }), { voluntario }) };
+  };
+  it('voluntario vigente: envía', async () => {
+    const { enviar, gate } = armar(async () => true);
+    expect(await gate('5215500000000', MSG, 'conductor.solicitud', 't1', new Date())).toBe(OK);
+    expect(enviar).toHaveBeenCalledOnce();
+  });
+  it('dado de baja o nunca voluntario: NO envía, no reintentable', async () => {
+    const { enviar, gate } = armar(async () => false);
+    const r = await gate('5215500000000', MSG, 'conductor.recordatorio', 't1', new Date());
+    expect(enviar).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ ok: false, reintentable: false, bloqueadoPorCompuerta: true });
+    expect(avisos[0][0]).toBe('conductor.envio_bloqueado_no_voluntario');
+  });
+  it('si no se puede leer: silencio', async () => {
+    const { enviar, gate } = armar(async () => { throw new Error('caída'); });
+    expect((await gate('5215500000000', MSG, 'conductor.senal_vida_n1', 't1', new Date())).ok).toBe(false);
+    expect(enviar).not.toHaveBeenCalled();
+  });
+  it('lo que no va al chofer (escalaciones) no consulta el voluntariado', async () => {
+    const voluntario = vi.fn(async () => false);
+    const enviar = vi.fn(async () => OK);
+    const gate = conCompuertaAlChofer(enviar as never, async () => ({ habilitado: true, razon: 'habilitado' }), { voluntario });
+    await gate('5215500000000', MSG, 'conductor.escalacion_n1', 't1', new Date());
+    expect(voluntario).not.toHaveBeenCalled();
+    expect(enviar).toHaveBeenCalledOnce();
+  });
+});

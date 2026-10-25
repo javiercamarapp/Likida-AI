@@ -18,6 +18,7 @@ vi.mock('../conductor/repo', async (orig) => ({
 vi.mock('../conductor/trabajo', async (orig) => ({
   ...(await orig<typeof import('../conductor/trabajo')>()),
   hayEmergenciaDeTelefono: vi.fn(async () => compuerta.emergencia),
+  esVoluntarioDePiloto: vi.fn(async () => true), // A39-A5-02: el chofer es voluntario vigente
 }));
 let mundo = new Mundo();
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => mundo.admin() }));

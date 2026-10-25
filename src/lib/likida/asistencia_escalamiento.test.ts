@@ -197,8 +197,16 @@ describe('escalarAsistenciasPendientes — claim, destinatarios y ventana', () =
     expect(anotarEvento).toHaveBeenCalledWith('t-1', 'inc-1', 'escalada', expect.objectContaining({ nivel: 1 }));
   });
 
-  it('una flota con perfil (0770) se SALTA: ni claim ni aviso; las de otra flota siguen', async () => {
-    filasPendientes.mockReturnValue([fila(), fila({ id: 'inc-2', tenant_id: 't-2' })]);
+  it('A39-S09-01: una incidencia CRÍTICA de una flota con perfil (p. ej. un siniestro abierto por la cámara) SÍ se escala', async () => {
+    filasPendientes.mockReturnValue([fila()]); // prioridad crítica, flota t-1 con perfil
+    const r = await escalarAsistenciasPendientes(AHORA, { excluirTenants: new Set(['t-1']) });
+    expect(r.revisadas).toBe(1);
+    expect(r.escaladas).toBe(1);
+    expect(telefonoJefeDe).toHaveBeenCalledWith('t-1');
+  });
+
+  it('una flota con perfil (0770) se SALTA lo no crítico: ni claim ni aviso; las de otra flota siguen', async () => {
+    filasPendientes.mockReturnValue([fila({ prioridad: 'alta', abierta_en: abiertaHace(RELOJ_AMBAR_MS + 60_000), notificar_desde: null }), fila({ id: 'inc-2', tenant_id: 't-2' })]);
     const r = await escalarAsistenciasPendientes(AHORA, { excluirTenants: new Set(['t-1']) });
     expect(r.revisadas).toBe(1);
     expect(r.escaladas).toBe(1);

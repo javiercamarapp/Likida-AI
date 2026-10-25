@@ -122,8 +122,10 @@ const CONFUSION = [
  *
  * "ese no" trae las dos cosas: "ese" (que confirma) y "no" (que niega). Quien
  * revise el orden va a ver que se pierden confirmaciones legítimas —"sí, no hay
- * bronca" se lee como un NO— y eso está medido y aceptado: el costo de esa
- * lectura es UN mensaje de más. El costo de la lectura contraria es abrir el
+ * bronca" se lee como `niega`—. Eso costaba UN mensaje de más hasta que el rechazo
+ * empezó a PERSISTIR y a avisar al jefe (A37-S39-04): desde A39-S39-02 una
+ * negación mezclada con una afirmación fuerte (`afirmaTambien`) se repregunta en
+ * `decidirInicio` sin marcar nada. El costo de la lectura contraria es abrir el
  * viaje equivocado.
  *
  * Por la misma razón un número junto a una negación ("el 1 no") tampoco elige:
@@ -245,6 +247,22 @@ export function numeroElegido(texto: string): number | null {
   }
 
   return encontrados.size === 1 ? [...encontrados][0] : null;
+}
+
+/**
+ * A39-S39-02: ¿el texto trae UNA AFIRMACIÓN EXPLÍCITA además de la negación que lo hizo `niega`? ("sí, no hay problema", "claro, no hay bronca").
+ * Solo cuentan las afirmaciones fuertes (emoji, «sí» acentuado, ok/claro/dale…, frases): las débiles ("va", "ya", "ese") aparecen dentro de
+ * negaciones genuinas ("ya no puedo", "ese no"), y tratarlas como mezcla repreguntaría un NO claro una y otra vez. Una mezcla NO se toma por
+ * rechazo: rechazar marca el viaje, avisa al jefe y ya no se vuelve a ofrecer (A37-S39-04), y eso no se deshace con un «sí» después.
+ */
+export function afirmaTambien(texto: string): boolean {
+  const crudo = String(texto ?? '');
+  const conAcentos = limpiar(crudo);
+  const sinAcentos = strip_accents(conAcentos);
+  return tieneEmoji(crudo, EMOJI_SI) ||
+    tieneToken(conAcentos, AFIRMA_ACENTUADO) ||
+    tieneToken(sinAcentos, AFIRMA_FUERTE.map(strip_accents)) ||
+    tieneFrase(sinAcentos, AFIRMA_FRASES.map(strip_accents));
 }
 
 /**
@@ -386,6 +404,13 @@ export function decidirInicio(args: ArgsInicio): DecisionInicio {
   // es la verdad operativa —no hay viaje abierto—, que es lo que protege la
   // liquidación: sin viaje abierto, ningún gasto se carga a nadie.
   if (leido === 'niega') {
+    // A39-S39-02: un «no» DENTRO de una frase afirmativa ("sí, no hay problema") no es un rechazo: se repregunta SIN marcar nada. El estado
+    // `ambiguo` no persiste ni avisa al jefe; el «no» claro de la siguiente respuesta sí rechaza y el «sí» confirma.
+    if (afirmaTambien(respuesta)) {
+      if (intento >= 2) return dudar(viajes, enumerados, unoSolo, intento, 'no_entendido');
+      const p = preguntar(viajes, enumerados, unoSolo);
+      return { estado: 'ambiguo', mensaje: 'Me llegó un sí y un no juntos, y prefiero no equivocarme.\n\n' + p.mensaje };
+    }
     return {
       estado: 'sin_viaje',
       mensaje: unoSolo

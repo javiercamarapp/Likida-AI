@@ -57,6 +57,8 @@ export function conCompuertaAlChofer(
     ttlMs?: number; reloj?: () => number;
     /** A37-A5-02: ¿el chofer de este teléfono tiene una emergencia abierta? Lanzar = no se pudo saber = NO se envía. Sin él no se comprueba (pruebas). */
     emergencia?: (tenantId: string, telefono: string) => Promise<boolean>;
+    /** A39-A5-02: ¿el chofer de este teléfono es voluntario vigente del piloto? `false` o lanzar = NO se envía. Sin él no se comprueba (pruebas). */
+    voluntario?: (tenantId: string, telefono: string) => Promise<boolean>;
   } = {},
 ): Enviar {
   const ttl = opts.ttlMs ?? 30_000;
@@ -82,6 +84,19 @@ export function conCompuertaAlChofer(
             mensaje: razon === 'emergencia_abierta'
               ? 'No se envió: el chofer tiene una emergencia abierta y no se le escribe hasta que se cierre.'
               : 'No se envió: no se pudo comprobar si el chofer tiene una emergencia abierta.',
+          };
+        }
+      }
+      if (opts.voluntario) {
+        let razon: 'no_voluntario' | 'voluntario_ilegible' | null = null;
+        try { if (!(await opts.voluntario(tenantId, telefono))) razon = 'no_voluntario'; } catch { razon = 'voluntario_ilegible'; }
+        if (razon) {
+          logger.warn('conductor.envio_bloqueado_no_voluntario', { tenant: tenantId, contexto, razon });
+          return {
+            ok: false, motivo: 'rechazo_no_ventana', fueraDeVentana: false, reintentable: false, ventana: 'desconocida', bloqueadoPorCompuerta: true,
+            mensaje: razon === 'no_voluntario'
+              ? 'No se envió: el chofer no es voluntario vigente del piloto (o se dio de baja).'
+              : 'No se envió: no se pudo comprobar si el chofer es voluntario vigente del piloto.',
           };
         }
       }

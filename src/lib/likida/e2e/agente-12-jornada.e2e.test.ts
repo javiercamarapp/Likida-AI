@@ -13,7 +13,14 @@ vi.mock('../conductor/repo', async (orig) => {
     leerConfigConductor: vi.fn(async () => ({ ...CONFIG_CONDUCTOR_DEFAULT, horaInicio: 0, horaFin: 24, diasSemana: [1, 2, 3, 4, 5, 6, 7] })),
   };
 });
-vi.mock('../conductor/trabajo', async (orig) => ({ ...(await orig<typeof import('../conductor/trabajo')>()), hayEmergenciaDeTelefono: vi.fn(async () => false) }));
+// A39-A5-03: el aviso al operador exige además voluntario vigente del piloto y unidad detenida. Este archivo prueba el ciclo de la alerta, no
+// esa compuerta (su lógica se prueba en conductor/compuerta_operador.test.ts y jornada/alerta_operador_compuerta.test.ts): aquí se abre.
+vi.mock('../conductor/trabajo', async (orig) => ({
+  ...(await orig<typeof import('../conductor/trabajo')>()),
+  hayEmergenciaDeTelefono: vi.fn(async () => false),
+  esVoluntarioDePiloto: vi.fn(async () => true),
+}));
+vi.mock('../conductor/compuerta_operador', () => ({ operadorConUnidadDetenida: vi.fn(async () => ({ permitido: true, razon: 'detenida' })) }));
 
 // ═══════════════════════════════════════════════════════════════════════════
 // E2E AGENTE 12 — JORNADA: la alerta saliente de tope (cinco casos del criterio g).

@@ -32,7 +32,7 @@ vi.mock('../conductor/repo', async (orig) => ({
   ...(await orig<typeof import('../conductor/repo')>()),
   leerAgenteChoferHabilitado: vi.fn(async () => ({ habilitado: true, razon: 'habilitado' })),
 }));
-vi.mock('../conductor/trabajo', async (orig) => ({ ...(await orig<typeof import('../conductor/trabajo')>()), hayEmergenciaDeTelefono: vi.fn(async () => false) }));
+vi.mock('../conductor/trabajo', async (orig) => ({ ...(await orig<typeof import('../conductor/trabajo')>()), hayEmergenciaDeTelefono: vi.fn(async () => false), esVoluntarioDePiloto: vi.fn(async () => true) }));
 let mundo = new Mundo();
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => mundo.admin() }));
 

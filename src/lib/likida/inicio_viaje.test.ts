@@ -3,6 +3,7 @@ import {
   interpretarRespuesta,
   numeroElegido,
   decidirInicio,
+  afirmaTambien,
   señaViaje,
   SIN_SEÑAS,
   MAX_EN_CUERPO,
@@ -509,5 +510,41 @@ describe('decidirInicio · la conversación completa', () => {
     const no = decidirInicio({ viajesAsignados: viajes, respuesta: 'ese no' });
     expect(no.estado).toBe('sin_viaje');
     expect(no.viajeElegido).toBeUndefined();
+  });
+});
+
+// A39-S39-02 (regresión de A37-S39-04): un «no» DENTRO de una frase afirmativa no es un rechazo. Rechazar marca el viaje, avisa al jefe y
+// ya no se vuelve a ofrecer, así que una mezcla se repregunta sin marcar nada.
+describe('A39-S39-02 · negación mezclada con afirmación', () => {
+  it.each(['sí, no hay problema', 'claro, no hay bronca', 'ok no pasa nada', 'simón, no te preocupes', 'sí 👍 no hay falla'])(
+    '«%s» NO es un rechazo: se repregunta (ambiguo) y no se manda con el encargado',
+    (respuesta) => {
+      const d = decidirInicio({ viajesAsignados: [V1], respuesta });
+      expect(d.estado).toBe('ambiguo');
+      expect(d.viajeElegido).toBeUndefined();
+      expect(d.mensaje).toContain('un sí y un no juntos');
+      expect(d.mensaje).toContain('V-1042');
+    },
+  );
+  it('con varios viajes repregunta la lista completa', () => {
+    const d = decidirInicio({ viajesAsignados: [V1, V2], respuesta: 'sí, no hay problema' });
+    expect(d.estado).toBe('ambiguo');
+    expect(d.mensaje).toContain('V-1043');
+  });
+  it('en el segundo intento ya no insiste: manda con el encargado, sin marcar rechazo', () => {
+    const d = decidirInicio({ viajesAsignados: [V1], respuesta: 'sí, no hay problema', intento: 2 });
+    expect(d.estado).toBe('ambiguo');
+    expect(d.mensaje).toContain('Márcale a tu encargado');
+  });
+  it.each(['no', 'nel', 'ese no', 'otro', 'ahorita no', 'ya no puedo', 'va otro, ese no es', 'no, ya no va'])(
+    'un «no» claro («%s», con partículas débiles incluidas) SIGUE siendo rechazo',
+    (respuesta) => {
+      expect(decidirInicio({ viajesAsignados: [V1], respuesta }).estado).toBe('sin_viaje');
+    },
+  );
+  it('afirmaTambien solo cuenta afirmaciones fuertes', () => {
+    expect(afirmaTambien('sí, no hay problema')).toBe(true);
+    expect(afirmaTambien('ya no puedo')).toBe(false);
+    expect(afirmaTambien('ese no')).toBe(false);
   });
 });

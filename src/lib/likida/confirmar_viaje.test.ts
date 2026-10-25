@@ -281,6 +281,18 @@ describe('A8 ESCALACIÓN · caso "NO" — rastro en la base + aviso inmediato al
     expect(llamadasAvisoOficina[0].texto).toMatch(/VJ-7/);
   });
 
+  it('A39-S39-02: «sí, no hay problema» NO rechaza el viaje: no escribe rechazado_en ni avisa al jefe, y repregunta', async () => {
+    LISTA = { data: [{ id: 'v-7', folio: 'VJ-7', origen: 'GDL', destino: 'MTY' }], error: null };
+    RESULTADO_UPDATE = { data: [{ id: 'v-7' }], error: null };
+
+    const r = await atenderConfirmacion({ tenantId: 't-1', operadorId: 'op-9', texto: 'sí, no hay problema' });
+
+    expect(r.estado).toBe('ambiguo');
+    expect(r.mensaje).toContain('un sí y un no juntos');
+    expect(escrituras).toHaveLength(0);
+    expect(avisarOficina).not.toHaveBeenCalled();
+  });
+
   it('un segundo "no" sobre un viaje YA rechazado no manda un segundo aviso al jefe', async () => {
     LISTA = { data: [{ id: 'v-7', folio: 'VJ-7' }], error: null };
     RESULTADO_UPDATE = { data: [], error: null }; // marcarRechazados: 0 filas, ya estaba rechazado

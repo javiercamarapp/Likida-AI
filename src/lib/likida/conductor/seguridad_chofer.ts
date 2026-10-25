@@ -61,13 +61,16 @@ export interface ViajesAvisables {
   /** Los que se quitaron y por qué (solo conteos: sin datos personales). */
   enEmergencia: number;
   operadorNoAvisable: number;
+  /** A39-A5-02: el operador no es voluntario del piloto (nunca lo fue o se dio de baja). */
+  noVoluntario: number;
 }
 
-/** Quita de la lista de trabajo los viajes a cuyo chofer NO se le debe escribir (emergencia abierta, baja u oposición). */
+/** Quita de la lista de trabajo los viajes a cuyo chofer NO se le debe escribir (emergencia abierta, baja, oposición o no voluntario del piloto). */
 export function filtrarViajesAvisables(viajes: readonly ViajeContexto[], em: EmergenciasPorFlota): ViajesAvisables {
-  const salida: ViajesAvisables = { viajes: [], enEmergencia: 0, operadorNoAvisable: 0 };
+  const salida: ViajesAvisables = { viajes: [], enEmergencia: 0, operadorNoAvisable: 0, noVoluntario: 0 };
   for (const v of viajes) {
     if (v.operadorAvisable === false) { salida.operadorNoAvisable++; continue; }
+    if (v.operadorVoluntario === false) { salida.noVoluntario++; continue; }
     if (viajeEnEmergencia(v, em)) { salida.enEmergencia++; continue; }
     salida.viajes.push(v);
   }
