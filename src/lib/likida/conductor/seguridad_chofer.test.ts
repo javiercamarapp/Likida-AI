@@ -28,3 +28,26 @@ describe('A37-A5-03: operador de baja u oposición', () => {
     expect(fila({ activo: true, oposicion_automatizada: null }).operadorAvisable).toBe(true);
   });
 });
+
+describe('A39-A5-02: solo los voluntarios vigentes del piloto reciben mensajes proactivos', () => {
+  const fila = (op: Record<string, unknown>) => filaAViajeCtx({ id: 'v1', tenant_id: 't1', operador_id: 'o1', estatus: 'abierto', operador: { nombre: 'X', telefono: '1', activo: true, ...op } });
+  it('agente_voluntario = true → voluntario; false, null o columna ausente → NO (fail-closed)', () => {
+    expect(fila({ agente_voluntario: true }).operadorVoluntario).toBe(true);
+    expect(fila({ agente_voluntario: false }).operadorVoluntario).toBe(false);
+    expect(fila({ agente_voluntario: null }).operadorVoluntario).toBe(false);
+    expect(fila({}).operadorVoluntario).toBe(false);
+  });
+  it('el viaje aceptado por actividad de un no voluntario (o de uno dado de baja) sale de la lista de trabajo', () => {
+    const em = agruparEmergencias([]);
+    const lista = [
+      fila({ agente_voluntario: true }),
+      { ...fila({ agente_voluntario: false }), id: 'v2' }, // aceptado por el chofer / la oficina, pero sin voluntariado vigente
+    ];
+    const r = filtrarViajesAvisables(lista, em);
+    expect(r.viajes.map((x) => x.id)).toEqual(['v1']);
+    expect(r.noVoluntario).toBe(1);
+  });
+  it('un doble sin la marca (undefined) no se quita: solo el false explícito', () => {
+    expect(filtrarViajesAvisables([v()], agruparEmergencias([])).viajes).toHaveLength(1);
+  });
+});

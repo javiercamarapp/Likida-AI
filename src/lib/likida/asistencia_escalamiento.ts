@@ -231,7 +231,7 @@ export async function escalarAsistenciasPendientes(
   ahora: Date = new Date(),
   opts: {
     venceEn?: number;
-    /** Flotas con perfil (0770) que este barrido SALTA: la mesa de asistencia es un módulo en stand-by. */
+    /** Flotas con perfil (0770) que este barrido SALTA: la mesa de asistencia es un módulo en stand-by. Las incidencias CRÍTICAS no se saltan (A39-S09-01). */
     excluirTenants?: ReadonlySet<string>;
   } = {},
 ): Promise<ResultadoEscalamiento> {
@@ -257,8 +257,11 @@ export async function escalarAsistenciasPendientes(
       .range(desde, hasta),
     'asistencia.pendientes',
   );
+  // A39-S09-01: el stand-by de las flotas con perfil NO cubre lo CRÍTICO. El cron `gps` (permitido al perfil) sigue abriendo siniestros
+  // críticos por eventos de cámara en esas flotas, y si este barrido los saltaba nadie los escalaba nunca: un choque real sin segundo aviso.
+  // Lo no crítico (la mesa de asistencia en stand-by) sí se salta.
   const filas = opts.excluirTenants && opts.excluirTenants.size > 0
-    ? todasLasFilas.filter((f) => !opts.excluirTenants!.has(String(f.tenant_id)))
+    ? todasLasFilas.filter((f) => f.prioridad === 'critica' || !opts.excluirTenants!.has(String(f.tenant_id)))
     : todasLasFilas;
 
   for (const f of filas) {

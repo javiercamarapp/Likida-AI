@@ -200,6 +200,12 @@ const LLAVES_CONFIG: readonly (keyof ConfigConductor)[] = [
   'perfilSeguimiento', 'gpsObsoletoMin', 'detenidoMin', 'segundoAvisoMin', 'escalarSenalMin', 'silencioRespuestaMin',
   'detenidaMetros', 'detenidaVentanaMin', 'detenidoAvisoMin', 'poleoMin', 'poleoPorClaveMin',
   'mostrarEstadosFrontera', 'aplicarSalidaDelTms', 'lineaBaseLlamadasPorViaje', 'lineaBaseRegistradaEn',
+  // A39-A5-01/04/06 (0927 y 0870): la compuerta de movimiento y las perillas de la fase 2, antes sin camino soportado. NO está aquí
+  // `agenteChoferHabilitado` (0859): habilitar al Agente 5 es decisión del dueño con aviso de privacidad, no un campo de este PUT.
+  'compuertaMovimientoActiva', 'sinGpsPermite', 'cohortePiloto',
+  'exigirSelloInicio', 'patioEntregaActivo', 'patioQueManda', 'estadiaDescargaInteractiva', 'estadiaDescargaMinPorCliente', 'estadiaDescargaSinRespuestaMin',
+  'reporteLlegadaActivo', 'constanciaReportesActiva', 'resultadoDescargaActivo', 'pedirDocumentosCierreActivo', 'asignacionBotonesActiva',
+  'gastosEtcActiva', 'deteccionParadaActiva', 'detencionEscalaSinRespuestaMin',
 ];
 
 export const MAX_CONTACTOS_TRAFICO = 20;
