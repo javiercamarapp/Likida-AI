@@ -69,9 +69,10 @@ beforeEach(() => {
 });
 
 it('accionCrearFlota: no-superadmin — requireSuperadmin ya redirige (guard.test.ts la prueba); confirmamos que se invoca antes de crear', async () => {
-  dobles.requireSuperadmin.mockRejectedValueOnce(new Error('REDIRECT:/dashboard'));
   const pagina = await FlotasPage();
   const accion = accionDelBoton(pagina, /Dar de alta/);
+  // La página ya pasó su propia puerta (A39-S05-01); ahora es la ACCIÓN la que rebota al no-superadmin.
+  dobles.requireSuperadmin.mockRejectedValueOnce(new Error('REDIRECT:/dashboard'));
   await expect(accion(null, fd({ nombre: 'Nueva', emailAdmin: 'x@x.com', nombreAdmin: 'X' }))).rejects.toThrow('REDIRECT:/dashboard');
   expect(dobles.crearFlota).not.toHaveBeenCalled();
 });
