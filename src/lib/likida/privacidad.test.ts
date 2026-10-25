@@ -372,6 +372,24 @@ describe('pideAtencionPrivacidad', () => {
       expect(pideAtencionPrivacidad(t), t).toBe(false);
   });
 
+  // A39-S54-01: «arco» suelto es el pórtico de peaje y «Arco Norte» una ruta de carga real.
+  it('A39-S54-01: «arco» como lugar NO dispara el flujo ARCO (ni se traga una emergencia)', () => {
+    for (const t of [
+      'choque en el Arco Norte, hay un herido',
+      'me cobraron doble en el arco',
+      'caseta arco norte',
+      'pasé por el arco sur y el arco poniente',
+      'llegando al arco oriente',
+      'estoy en el arco de la caseta',
+      'del arco ya salí',
+    ]) expect(pideAtencionPrivacidad(t), t).toBe(false);
+  });
+
+  it('A39-S54-01: «arco» sigue valiendo como mensaje completo o como derechos/solicitud/ejercer', () => {
+    for (const t of ['arco', 'ARCO!', '¿arco?', 'derechos ARCO', 'quiero ejercer mis derechos arco', 'solicitud arco', 'ejercer arco', 'derechos de arco'])
+      expect(pideAtencionPrivacidad(t), t).toBe(true);
+  });
+
   // ═════════════════════════════════════════════════════════════════════════
   // El aviso ANUNCIA la oposición del art. 26 fr. II —"tienes derecho a
   // oponerte a que se decida así y a pedir que la revise alguien"— y el
