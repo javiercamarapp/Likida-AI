@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
-import { exigir, traerPorIds, traerTodo } from '../pg';
+import { exigir, traerHastaTope, traerPorIds, traerTodo } from '../pg';
 import { COLUMNAS_HITO, cargarContactosTrafico, filaAHito, leerEventosPatio, type TransitoViaje } from './repo';
 import { excepcionesPatio, type ExcepcionPatio } from './patio_regla';
 import type { NivelSinDestino } from './escalamiento';
@@ -825,12 +825,15 @@ export interface DatosEstadias {
 
 /** Los viajes con una llegada (carga o descarga) cuyo MENSAJE cae en [desde, hasta). */
 export async function leerDatosEstadias(tenantId: string, desde: Date, hasta: Date, f: FiltrosTablero = {}): Promise<DatosEstadias> {
-  const rl = await acotada(supabaseAdmin()
+  // A39-S36-01: `.limit(3001)` contra max_rows=1000 devolvía 1000 filas SIN avisar y `truncada` nunca se encendía: el CSV para
+  // cobrar omitía viajes diciendo que estaba completo. Se pagina hasta el tope real.
+  const consultaLlegadas = supabaseAdmin()
     .from('viaje_hito').select('viaje_id')
     .eq('tenant_id', tenantId).in('tipo', ['llegada_carga', 'llegada_descarga']).in('estado', ['recibido', 'validado'])
     .gte('mensaje_en', desde.toISOString()).lt('mensaje_en', hasta.toISOString())
-    .order('mensaje_en', { ascending: true }).order('id').limit(TOPE_VIAJES_ESTADIAS * 2 + 1), 'estadias.llegadas');
-  const llegadas = (exigir(rl as never, 'estadias.llegadas') ?? []) as unknown as Fila[];
+    .order('mensaje_en', { ascending: true }).order('id');
+  const llegadas = await traerHastaTope<Fila>(
+    (d, h) => acotada(consultaLlegadas.range(d, h), 'estadias.llegadas') as never, TOPE_VIAJES_ESTADIAS * 2 + 1, 'estadias.llegadas');
   const todos = [...new Set(llegadas.map((x) => String(x.viaje_id)))];
   const truncada = todos.length > TOPE_VIAJES_ESTADIAS || llegadas.length > TOPE_VIAJES_ESTADIAS * 2;
   const ids = todos.slice(0, TOPE_VIAJES_ESTADIAS);
@@ -847,13 +850,19 @@ export async function leerDatosEstadias(tenantId: string, desde: Date, hasta: Da
   const hitosCrudos = idsFiltrados.length === 0 ? [] : await traerPorIds<Fila>(idsFiltrados, (t) => acotada(supabaseAdmin()
     .from('viaje_hito').select(COLUMNAS_HITO).eq('tenant_id', tenantId).in('viaje_id', t), 'estadias.hitos') as never, 'estadias.hitos');
   const [veredictos, evidencias] = await Promise.all([leerVeredictos(tenantId, idsFiltrados), leerEvidencias(tenantId, idsFiltrados)]);
+  const sitios = await leerNombresSitiosDeViajes(tenantId, viajes);
+  return { viajes, hitos: hitosCrudos.map(filaAHito), veredictos, evidencias, sitios, truncada };
+}
+
+/** Los nombres de los sitios (origen/destino) de estos viajes, de ESA flota. A39-S36-02: lo comparten el periodo y el anexo de la liquidación. */
+export async function leerNombresSitiosDeViajes(tenantId: string, viajes: ReadonlyArray<Pick<ViajeTablero, 'origenSitioId' | 'destinoSitioId'>>): Promise<Map<string, string>> {
   const sitioIds = [...new Set(viajes.flatMap((v) => [v.origenSitioId, v.destinoSitioId]).filter((x): x is string => !!x))];
   const sitios = new Map<string, string>();
   if (sitioIds.length > 0) {
     const rs = await traerPorIds<Fila>(sitioIds, (t) => acotada(supabaseAdmin().from('geocerca').select('id, nombre').eq('tenant_id', tenantId).in('id', t), 'estadias.sitios') as never, 'estadias.sitios');
     for (const g of rs) sitios.set(String(g.id), String(g.nombre));
   }
-  return { viajes, hitos: hitosCrudos.map(filaAHito), veredictos, evidencias, sitios, truncada };
+  return sitios;
 }
 
 /** Para `estatusViaje`: un viaje de ESA flota (activo o no) con sus hitos. */
@@ -979,9 +988,11 @@ export const TOPE_VIAJES_TEXTOS = 5000;
  */
 export async function leerTextosSinSitio(tenantId: string, ahora: Date): Promise<{ textos: TextoSinSitio[]; truncado: boolean }> {
   const desde = new Date(ahora.getTime() - DIAS_TEXTOS_SIN_SITIO * 86_400_000).toISOString();
-  const rv = await acotada(supabaseAdmin().from('viaje').select('origen, destino, origen_geocerca_id, destino_geocerca_id')
-    .eq('tenant_id', tenantId).eq('estatus', 'abierto').gte('created_at', desde).order('created_at', { ascending: false }).order('id').limit(TOPE_VIAJES_TEXTOS + 1), 'equivalencias.viajes');
-  const filas = (exigir(rv as never, 'equivalencias.viajes') ?? []) as unknown as Fila[];
+  // A39-S36-01: el tope (5,000) pasa de max_rows (1,000): se pagina, o `truncado` nunca se enciende.
+  const consultaViajes = supabaseAdmin().from('viaje').select('origen, destino, origen_geocerca_id, destino_geocerca_id')
+    .eq('tenant_id', tenantId).eq('estatus', 'abierto').gte('created_at', desde).order('created_at', { ascending: false }).order('id');
+  const filas = await traerHastaTope<Fila>(
+    (d, h) => acotada(consultaViajes.range(d, h), 'equivalencias.viajes') as never, TOPE_VIAJES_TEXTOS + 1, 'equivalencias.viajes');
   const viajes: ViajeParaTextos[] = filas.slice(0, TOPE_VIAJES_TEXTOS).map((f) => ({
     origen: s(f.origen), destino: s(f.destino), origenSitioId: s(f.origen_geocerca_id), destinoSitioId: s(f.destino_geocerca_id),
   }));

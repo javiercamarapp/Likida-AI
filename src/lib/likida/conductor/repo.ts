@@ -2,7 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { getZonaHorariaTenant } from '../repo';
 import { acotada } from '../presupuesto';
-import { IDS_POR_TANDA, exigir, traerPorIds, traerTodoPorLlave, type RespuestaPg } from '../pg';
+import { IDS_POR_TANDA, exigir, traerHastaTope, traerPorIds, traerTodoPorLlave, type RespuestaPg } from '../pg';
 import {
   TIPOS_HITO, MINUTOS_SILENCIO_JEFE, MINUTOS_SILENCIO_RECUPERADA,
   type Contacto, type FuenteHito, type HitoFila, type InterpretacionHito, type TipoHito,
@@ -1479,8 +1479,9 @@ export async function leerEpisodiosParaTablero(
     if (f.terminalId && UUID_FILTRO.test(f.terminalId)) q = q.eq('terminal_id', f.terminalId);
     if (f.clienteId && UUID_FILTRO.test(f.clienteId)) q = q.eq('cliente_id', f.clienteId);
     if (f.operadorId && UUID_FILTRO.test(f.operadorId)) q = q.eq('operador_id', f.operadorId);
-    const rv = await acotada(q.gte('created_at', new Date(desde.getTime() - 45 * 86_400_000).toISOString()).order('id').limit(2000), 'tablero.episodios_viajes');
-    viajeIds = ((exigir(rv as never, 'tablero.episodios_viajes') ?? []) as unknown as Fila[]).map((x) => String(x.id));
+    // A39-S36-01: `.limit(2000)` contra max_rows=1000 recortaba a 1000 y `recortadoPorViajes` nunca era true.
+    const qv = q.gte('created_at', new Date(desde.getTime() - 45 * 86_400_000).toISOString()).order('id');
+    viajeIds = (await traerHastaTope<Fila>((d, h) => acotada(qv.range(d, h), 'tablero.episodios_viajes') as never, TOPE_VIAJES_FILTRO + 1, 'tablero.episodios_viajes')).map((x) => String(x.id));
     if (viajeIds.length === 0) return { episodios: [], hayMas: false };
     recortadoPorViajes = viajeIds.length > TOPE_VIAJES_FILTRO;
   }
@@ -1542,8 +1543,8 @@ export async function leerEntradaInsights(
     if (f.terminalId && UUID_FILTRO.test(f.terminalId)) q = q.eq('terminal_id', f.terminalId);
     if (f.clienteId && UUID_FILTRO.test(f.clienteId)) q = q.eq('cliente_id', f.clienteId);
     if (f.operadorId && UUID_FILTRO.test(f.operadorId)) q = q.eq('operador_id', f.operadorId);
-    const rv = await acotada(q.gte('created_at', new Date(desde.getTime() - 45 * 86_400_000).toISOString()).order('id').limit(2000), 'insights.viajes');
-    const todos = ((exigir(rv as never, 'insights.viajes') ?? []) as unknown as Fila[]).map((x) => String(x.id));
+    const qv = q.gte('created_at', new Date(desde.getTime() - 45 * 86_400_000).toISOString()).order('id');
+    const todos = (await traerHastaTope<Fila>((d, h) => acotada(qv.range(d, h), 'insights.viajes') as never, TOPE_VIAJES_FILTRO + 1, 'insights.viajes')).map((x) => String(x.id));
     recortadoPorViajes = todos.length > TOPE_VIAJES_FILTRO;
     viajeIds = todos.slice(0, TOPE_VIAJES_FILTRO);
     if (viajeIds.length === 0) return { hitos: [], cruces: [], episodios: [], hayMas: false };
@@ -1551,16 +1552,20 @@ export async function leerEntradaInsights(
   let qh = supabaseAdmin().from('viaje_hito').select(COLUMNAS_HITO).eq('tenant_id', tenantId).gte('updated_at', desde.toISOString());
   let qc = supabaseAdmin().from('viaje_cruce_geocerca').select('detectado_en, registrado_en').eq('tenant_id', tenantId).gte('registrado_en', desde.toISOString());
   if (viajeIds) { qh = qh.in('viaje_id', viajeIds); qc = qc.in('viaje_id', viajeIds); }
-  const [rh, rc, ep] = await Promise.all([
-    acotada(qh.order('updated_at', { ascending: false }).order('id').limit(TOPE_INSIGHTS + 1), 'insights.hitos'),
-    acotada(qc.order('registrado_en', { ascending: false }).order('id').limit(TOPE_INSIGHTS + 1), 'insights.cruces'),
+  // A39-S36-01: TOPE_INSIGHTS+1 (5,001) pasa de max_rows (1,000): se pagina para que `hayMas` y los porcentajes sean reales.
+  const qho = qh.order('updated_at', { ascending: false }).order('id');
+  const qco = qc.order('registrado_en', { ascending: false }).order('id');
+  const [filasH, filasCruces, ep] = await Promise.all([
+    traerHastaTope<Fila>((d, h) => acotada(qho.range(d, h), 'insights.hitos') as never, TOPE_INSIGHTS + 1, 'insights.hitos'),
+    traerHastaTope<Fila>((d, h) => acotada(qco.range(d, h), 'insights.cruces') as never, TOPE_INSIGHTS + 1, 'insights.cruces')
+      .then((x) => ({ filas: x, error: null as Error | null }), (e: unknown) => ({ filas: [] as Fila[], error: e instanceof Error ? e : new Error(String(e)) })),
     leerEpisodiosParaTablero(tenantId, desde, f, 500),
   ]);
-  const filasH = (exigir(rh as never, 'insights.hitos') ?? []) as unknown as Fila[];
   let filasC: Fila[] = [];
-  if (rc.error) {
-    if (!faltaEsquema(rc.error, /viaje_cruce_geocerca/i)) throw new Error(`insights.cruces: ${rc.error.message}`);
-  } else filasC = (rc.data ?? []) as unknown as Fila[];
+  if (filasCruces.error) {
+    // Sin la 0 de `viaje_cruce_geocerca` (tabla ausente) no hay cruces; cualquier otro fallo sube.
+    if (!faltaEsquema({ message: filasCruces.error.message.replace(/^insights\.cruces: /, '') }, /viaje_cruce_geocerca/i)) throw filasCruces.error;
+  } else filasC = filasCruces.filas;
   const hayMas = filasH.length > TOPE_INSIGHTS || filasC.length > TOPE_INSIGHTS || (ep?.hayMas ?? false) || recortadoPorViajes;
   return {
     hitos: filasH.slice(0, TOPE_INSIGHTS).map(filaAHito),
@@ -1578,12 +1583,10 @@ const TOPE_VIAJES_CONSTANCIA = 2000;
 export async function leerDatosConstancia(
   tenantId: string, desde: Date, hasta: Date,
 ): Promise<{ viajes: ViajeConstancia[]; hitos: HitoFila[]; hayMas: boolean }> {
-  const rv = await acotada(
-    supabaseAdmin().from('viaje').select('id, folio, estatus, operador_id, created_at, operador:operador_id(nombre)').eq('tenant_id', tenantId)
-      .gte('created_at', desde.toISOString()).lt('created_at', hasta.toISOString()).order('created_at', { ascending: false }).order('id').limit(TOPE_VIAJES_CONSTANCIA + 1),
-    'constancia.viajes',
-  );
-  const filas = (exigir(rv as never, 'constancia.viajes') ?? []) as unknown as Fila[];
+  // A39-S36-01: el tope (2,001) pasa de max_rows (1,000): se pagina, o `hayMas` nunca se enciende.
+  const consultaViajes = supabaseAdmin().from('viaje').select('id, folio, estatus, operador_id, created_at, operador:operador_id(nombre)').eq('tenant_id', tenantId)
+    .gte('created_at', desde.toISOString()).lt('created_at', hasta.toISOString()).order('created_at', { ascending: false }).order('id');
+  const filas = await traerHastaTope<Fila>((d, h) => acotada(consultaViajes.range(d, h), 'constancia.viajes') as never, TOPE_VIAJES_CONSTANCIA + 1, 'constancia.viajes');
   const hayMas = filas.length > TOPE_VIAJES_CONSTANCIA;
   const viajes: ViajeConstancia[] = filas.slice(0, TOPE_VIAJES_CONSTANCIA).map((f) => {
     const rel = Array.isArray(f.operador) ? f.operador[0] : f.operador;

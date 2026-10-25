@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error('esta prueba no toca la base'); } }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 
-const { estatusViaje, estadiasDelPeriodo, estadiasDeViaje, evidenciaJornadaDeViaje } = await import('./servicios');
+const { estatusViaje, estadiasDelPeriodo, estadiasDeViaje, estadiasParaLiquidacion, evidenciaJornadaDeViaje } = await import('./servicios');
 const { armarFilasEstadias, rangoDeDias, desdePorOmision } = await import('./estadias_lectura');
 const { construirEstatus } = await import('./estatus_viaje');
 const { evidenciaJornadaDeHitos } = await import('./jornada_hitos');
@@ -199,11 +199,35 @@ describe('estadías: periodo, viaje y liquidación', () => {
     expect(f.estancia.salida?.evidencias).toBe(1);
   });
 
+  const lecturasLiq: Partial<Deps> = { veredictos: async () => [], evidencias: async () => [], sitios: async () => new Map() };
+
   it('la liquidación: las estancias de UN viaje de ESA flota', async () => {
     const hs = hitos(V1, { llegada_descarga: hace(300), salida_descarga: hace(120) }); // 180 min
-    const r = await estadiasDeViaje('t1', V1, AHORA, deps({ viajeConHitos: async () => ({ viaje: viaje(), hitos: hs }), politicas: async () => pacto }));
+    const r = await estadiasDeViaje('t1', V1, AHORA, deps({ ...lecturasLiq, viajeConHitos: async () => ({ viaje: viaje(), hitos: hs }), politicas: async () => pacto }));
     expect(r?.filas).toHaveLength(1);
     expect(r?.filas[0].detencion).toMatchObject({ minutosExcedentes: 60, horasCobrables: 1, monto: 500 });
+  });
+
+  it('A39-S36-02: el anexo de la liquidación lleva las FOTOS, el veredicto de ubicación y el sitio que sí existen', async () => {
+    const hs = hitos(V1, { llegada_descarga: hace(300), salida_descarga: hace(120) });
+    const llegada = hs.find((h) => h.tipo === 'llegada_descarga')!;
+    const r = await estadiasDeViaje('t1', V1, AHORA, deps({
+      viajeConHitos: async () => ({ viaje: viaje(V1, { destinoSitioId: 'g1' }), hitos: hs }), politicas: async () => pacto,
+      veredictos: async () => [{ hitoId: llegada.id, ciclo: llegada.ciclo, resultado: 'dentro', motivo: null, fuente: 'gps', distanciaM: 10, radioM: 100, toleranciaM: 0, sitioId: 'g1', medidaEn: hace(299) }] as never,
+      evidencias: async () => [1, 2, 3].map((i) => ({ id: `e${i}`, hitoId: llegada.id, ciclo: llegada.ciclo, tipo: 'sello' as const, ruta: `t1/f${i}.jpg`, creadaEn: hace(299), reusoTenant: false })),
+      sitios: async () => new Map([['g1', 'Planta Norte']]),
+    }));
+    const f = r!.filas[0];
+    expect(f.estancia.llegada?.evidencias).toBe(3);
+    expect(f.estancia.llegada?.validacion).toBe('dentro');
+    expect(f.sitio).toBe('Planta Norte');
+  });
+
+  it('A39-S36-02: si no se pueden leer fotos/veredictos, NO se afirma «sin fotos»: sin anexo (null)', async () => {
+    const hs = hitos(V1, { llegada_descarga: hace(300), salida_descarga: hace(120) });
+    const roto = deps({ ...lecturasLiq, evidencias: async () => { throw new Error('base caída'); }, viajeConHitos: async () => ({ viaje: viaje(), hitos: hs }), politicas: async () => pacto });
+    await expect(estadiasDeViaje('t1', V1, AHORA, roto)).rejects.toThrow('base caída');
+    expect(await estadiasParaLiquidacion('t1', V1, AHORA, roto)).toBeNull();
   });
 
   it('un viaje que no es de esa flota (o con id raro) no devuelve nada', async () => {
