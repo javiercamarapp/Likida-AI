@@ -43,6 +43,10 @@ import { hoyMx, inicioDiaMx, finDiaMx } from '@/lib/formato';
 import { cargarDetalle, leerIdDetalle } from './detalle_desglose';
 
 export const dynamic = 'force-dynamic';
+// A37-O7-06: las Server Actions de esta página corren bajo el límite de la página. La subida manual de desgloses y la importación
+// de liquidaciones usan presupuestos de 45 s (el aviso controlado «faltan N» depende de que la plataforma NO corte antes): se
+// declara el literal (Next lo lee en build) con margen sobre ese presupuesto. Ver scripts/ci/max_duration_acciones_o7_06.test.ts.
+export const maxDuration = 60;
 
 /** Sección secundaria que no se pudo leer → null → su leyenda honesta.
  *  Mismo patrón `safe` que inicio-contenido: una gráfica caída no tumba la

@@ -125,12 +125,20 @@ describe('leerLiquidaciones: póliza, conceptos y neto', () => {
     expect(r.cuerpos).toHaveLength(20);
   });
 
-  it('A37-TRANSVERSAL-04: un mapeo de nómina cuyo «cargo» no se convierte a número NO entrega una liquidación sin esos renglones: la lectura falla', async () => {
+  it('A37-TRANSVERSAL-04 / A37-O7-03: un mapeo de nómina guardado SIN transformar en «cargo» se lee como número (con miles) y no omite renglones', async () => {
     const t = tablasSinteticas();
     t.nomina.forEach((f) => { if (Number(f.Cargo) > 999) f.Cargo = String(f.Cargo).replace(/(\d)(\d{3})$/, '$1,$2') + '.50'; });
     const sinNumero = { ...MAPEO_LIQUIDACIONES_SUPUESTO, nomina: { ...MAPEO_LIQUIDACIONES_SUPUESTO.nomina, campos: { ...MAPEO_LIQUIDACIONES_SUPUESTO.nomina.campos, cargo: 'Cargo' } } };
     const { http } = origen(t);
     const r = await leerLiquidaciones(sesionDe(http), sinNumero, VENTANA, {});
+    expect(r.ok).toBe(true);
+  });
+
+  it('A37-TRANSVERSAL-04: un «cargo» con transformación que no es numero (texto) sigue rechazándose: la lectura falla', async () => {
+    const t = tablasSinteticas();
+    const comoTexto = { ...MAPEO_LIQUIDACIONES_SUPUESTO, nomina: { ...MAPEO_LIQUIDACIONES_SUPUESTO.nomina, campos: { ...MAPEO_LIQUIDACIONES_SUPUESTO.nomina.campos, cargo: { fuente: 'Cargo', transformar: 'texto' as const } } } };
+    const { http } = origen(t);
+    const r = await leerLiquidaciones(sesionDe(http), comoTexto, VENTANA, {});
     expect(r.ok).toBe(false);
     if (!r.ok) { expect(r.motivo).toMatch(/importe debe llevar transformar/); expect(r.parcial.cuerpos).toHaveLength(0); }
   });
