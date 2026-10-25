@@ -54,14 +54,24 @@ export const puertosAlertaReales: PuertosAlerta = {
   politica: leerPolitica,
   async datosDelOperador(tenantId, operadorId) {
     const { data, error } = await acotada(
-      supabaseAdmin().from('operador').select('nombre, telefono, terminal_id, activo')
+      supabaseAdmin().from('operador').select('nombre, telefono, terminal_id, activo, oposicion_automatizada')
         .eq('tenant_id', tenantId).eq('id', operadorId).maybeSingle(),
       'jornada.alerta.operador',
     );
     if (error) throw new Error(`jornada.alerta.operador: ${error.message}`);
     if (!data) return null;
-    // Un operador dado de baja no recibe avisos (pero su expediente sigue siendo evaluable).
-    return { nombre: String(data.nombre ?? ''), telefono: data.activo === false ? null : (data.telefono as string | null) ?? null, terminalId: (data.terminal_id as string | null) ?? null };
+    // A38-SEG-01: un operador dado de baja NI UNO CON OPOSICIÓN ARCO VIGENTE
+    // (`operador.oposicion_automatizada`, mig. 0100) recibe avisos; su
+    // expediente sigue siendo evaluable y el encargado sigue recibiendo su
+    // escalación. Sin teléfono no hay envío proactivo, que es como ya se
+    // trataba la baja. Mismo predicado que los otros dos emisores que honran
+    // la regla de oro —`conductor/repo.ts:184` y `convenios/repo.ts:656`—:
+    // antes este `select` no pedía la columna, así que la regla era
+    // indecidible por construcción y el chofer que ejerció su oposición no
+    // recibía la solicitud del Agente 5 pero sí este aviso, el mismo día y al
+    // mismo teléfono.
+    const avisable = data.activo !== false && !data.oposicion_automatizada;
+    return { nombre: String(data.nombre ?? ''), telefono: avisable ? (data.telefono as string | null) ?? null : null, terminalId: (data.terminal_id as string | null) ?? null };
   },
   encargados: (tenantId, terminalId) => destinatariosEscalacion(tenantId, terminalId, 1),
   async reclamar(a) {
