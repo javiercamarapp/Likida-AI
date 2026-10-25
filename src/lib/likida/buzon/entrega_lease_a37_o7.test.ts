@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { Entrega } from './entrega_pura';
+import type { Entrega } from './entrega_repo';
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 const { enviarLote } = await import('./entrega');
