@@ -294,10 +294,18 @@ async function clasificar(
   }
   const salida = new Map<string, EstadoFila>();
   for (const it of items) {
-    // Una clave repetida dentro de la misma tanda: la primera gana.
-    salida.set(it.clave, salida.has(it.clave) ? 'omitida' : estadoDeFila(previas, it.clave, it.huella));
+    // Una clave repetida dentro de la misma tanda: la PRIMERA gana y conserva su estado (A39-S39-01: antes la repetida sobrescribía a
+    // 'omitida' el estado de TODAS las filas de esa clave, la primera incluida, y ninguna se entregaba). Las repetidas las descarta
+    // `primerasPorClave` al armar lo que se entrega.
+    if (!salida.has(it.clave)) salida.set(it.clave, estadoDeFila(previas, it.clave, it.huella));
   }
   return salida;
+}
+
+/** A39-S39-01: de varias filas con la misma clave solo la primera cuenta (las demás se omiten); conserva el orden. */
+export function primerasPorClave<T>(filas: readonly T[], claveDe: (f: T) => string): T[] {
+  const vistas = new Set<string>();
+  return filas.filter((f) => { const k = claveDe(f); if (vistas.has(k)) return false; vistas.add(k); return true; });
 }
 
 // ── Una flota ───────────────────────────────────────────────────────────────
@@ -421,8 +429,14 @@ async function sincronizarRecurso(
       // A37-TRANSVERSAL-03: un folio ya entregado que cambió en el origen (unidad, destino, fecha) NO lo aplica la puerta
       // (el folio existente se salta). No se marca como entregado con la huella nueva: se cuenta como corrección sin aplicar,
       // la corrida queda `parcial` y se dice, en vez de perderse.
-      const cambiados = base.filas.filter((f) => estados.get(f.folio) === 'actualizada');
-      const porEntregar = base.filas.filter((f) => estados.get(f.folio) === 'nueva');
+      const unicas = primerasPorClave(base.filas, (f) => f.folio);
+      const cambiados = unicas.filter((f) => estados.get(f.folio) === 'actualizada');
+      const porEntregar = unicas.filter((f) => estados.get(f.folio) === 'nueva');
+      // A39-S39-01: las advertencias del lector (mismo Icident en varias filas) llegan al resumen y a la alarma, no se pierden.
+      if (base.advertencias.length > 0) {
+        const adv = limpiarFrase(base.advertencias.slice(0, 3).join(' '));
+        r.aviso = r.aviso ? `${r.aviso} ${adv}` : adv;
+      }
       r.omitidas = base.filas.length - porEntregar.length - cambiados.length; r.nuevas = porEntregar.length;
       if (porEntregar.length > 0) {
         const e = await deps.entregas.viajes(flota.tenantId, porEntregar);
@@ -447,7 +461,7 @@ async function sincronizarRecurso(
       const base = l.ok ? l : l.parcial;
       r.leidas = base.filas.length; r.rechazadas = base.rechazadas.length;
       const estados = await clasificar(deps, flota.tenantId, 'peajes', base.filas.map((f) => ({ clave: f.clave, huella: f.huella })));
-      const porEntregar = base.filas.filter((f) => estados.get(f.clave) !== 'omitida');
+      const porEntregar = primerasPorClave(base.filas, (f) => f.clave).filter((f) => estados.get(f.clave) !== 'omitida');
       r.omitidas = base.filas.length - porEntregar.length; r.nuevas = porEntregar.length;
       if (porEntregar.length > 0) {
         const e = await deps.entregas.peajes(flota.tenantId, porEntregar, { desde, hasta });
@@ -466,7 +480,7 @@ async function sincronizarRecurso(
       const base = l.ok ? l : l.parcial;
       r.leidas = base.cuerpos.length; r.rechazadas = base.rechazadas.length;
       const estados = await clasificar(deps, flota.tenantId, 'liquidaciones', base.cuerpos.map((c) => ({ clave: c.clave, huella: c.huella })));
-      const porEntregar = base.cuerpos.filter((c) => estados.get(c.clave) !== 'omitida');
+      const porEntregar = primerasPorClave(base.cuerpos, (c) => c.clave).filter((c) => estados.get(c.clave) !== 'omitida');
       r.omitidas = base.cuerpos.length - porEntregar.length; r.nuevas = porEntregar.length;
       if (porEntregar.length > 0) {
         const e = await deps.entregas.liquidaciones(flota.tenantId, porEntregar);
