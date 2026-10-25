@@ -586,7 +586,9 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 326;
 // `borrarReferencia` (baja de la foto de un personaje): lectura de la ruta (`marketing_referencia`), borrado del objeto (`storage.from`, que este
 // guardia cuenta como `.from(`) y borrado de la fila. Cubierta por `estudio.borrar.test.ts`. Si otro lote toca este techo, sumar el incremento al integrar.
 // INTEGRACION G4 (24-oct-2026, PRs #705-#724): el barrido real del arbol fusionado mide 2,386 llamadas (2,357 en master 5169fd72b: +29 de las 15 ramas, techo = medido, sin holgura).
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_386;
+// LOTE A39 OLA 8 O8-1 (A39-S57-01): +1 llamada (2,386 → 2,387), medida con el barrido real. `crearFlota` (administracion.ts) fija `tenant.rfc_sat_verificado`
+// en un update aparte del insert (tolera que la migración 0925 aún no esté aplicada). Cubierta por administracion.test.ts. Si otro lote toca este techo, sumar el incremento al integrar.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_387;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.
