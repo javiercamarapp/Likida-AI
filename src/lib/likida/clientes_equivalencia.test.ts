@@ -164,6 +164,17 @@ describe('EQUIVALENCIA getPanelClientes — la reducción JS vieja vs cartera_te
     expect(sinFecha.fecha).toBeNull();
   });
 
+  it('A39-S30-02: `viaje.fecha_inicio` es `date` — el día 1 de la tarifa nueva cuenta el 1, no el 31 del mes anterior', async () => {
+    const v2 = doble.base.viaje.find((v) => v.id === 'v-2') as Record<string, unknown>;
+    Object.assign(v2, { origen: 'Saltillo', destino: 'Guadalajara', fecha_inicio: '2026-08-01' });
+    const tar = (id: string, precio: number, desde: string, hasta: string | null) => ({
+      id, cliente_id: null, origen: 'Saltillo', destino: 'Guadalajara', modo: 'por_viaje', precio, moneda: 'MXN', vigente_desde: desde, vigente_hasta: hasta, activa: true, creada_en: '2026-01-01T00:00:00Z',
+    });
+    doble.base.tarifa = [tar('t-viejo', 18000, '2026-01-01', '2026-07-31'), tar('t-nuevo', 21000, '2026-08-01', null)];
+    const panel = await getPanelClientes('t-1', '2026-09-10');
+    expect(panel.sinIngreso.find((x) => x.id === 'v-2')!.sugerencia?.tarifa.precio).toBe(21000);
+  });
+
   it('si la cartera no se puede leer, LANZA — no devuelve "esta flota no tiene clientes"', async () => {
     doble.error = { message: 'base caída' };
     await expect(getPanelClientes('t-1', HOY)).rejects.toThrow('base caída');
