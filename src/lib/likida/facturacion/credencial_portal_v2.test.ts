@@ -15,6 +15,11 @@ function consulta() {
   const q = {
     select() { return q; },
     update(c: Partial<Fila>) { accion = 'update'; cambios = c; return q; },
+    upsert(r: Fila) {
+      const i = filas.findIndex((x) => x.tenant_id === r.tenant_id && x.conector_id === r.conector_id);
+      if (i >= 0) filas[i] = r; else filas.push(r);
+      return { select: () => ({ single: () => Promise.resolve({ data: { id: 'fila-1' }, error: null }) }) };
+    },
     eq(c: keyof Fila, v: unknown) { f.push((r) => r[c] === v); return q; },
     like(c: keyof Fila, v: string) { const p = v.replace('%', ''); f.push((r) => String(r[c]).startsWith(p)); return q; },
     maybeSingle() { return Promise.resolve({ data: filas.find((r) => f.every((x) => x(r))) ?? null, error: null }); },
@@ -36,6 +41,7 @@ vi.mock('../bitacora_escritura', () => ({ anotarBitacora: vi.fn(async () => {}) 
 process.env.LIKIDA_COFRE_LLAVE = 'una-llave-de-prueba-de-al-menos-32-caracteres!!';
 
 const { cifrar } = await import('../conectores/cofre');
+const { guardarCredencial } = await import('../conectores/credenciales');
 const { contextoCredencial } = await import('../conectores/contexto_credencial');
 const { conectorDePortal } = await import('../conectores/portales_facturacion');
 const { credencialesDePortales, credencialDePortal } = await import('./cuentas');
@@ -43,7 +49,7 @@ const { contrasenaDePortal, borrarContrasenaGuardada } = await import('./relogin
 const { COMERCIOS } = await import('./comercios');
 
 const TENANT = '66666666-6666-6666-6666-666666666666';
-const COMERCIO = Object.keys(COMERCIOS)[0];
+const COMERCIO = COMERCIOS.find((c: { requiereCuenta?: boolean }) => c.requiereCuenta)!.clave;
 const CONECTOR = conectorDePortal(COMERCIO);
 
 beforeEach(() => { filas.length = 0; });
@@ -56,6 +62,15 @@ describe('credencial de portal guardada como v2 (A37-O7-01)', () => {
   const guardarV1 = () => filas.push({
     tenant_id: TENANT, conector_id: CONECTOR, activo: true,
     valores_cifrados: cifrar({ usuario: 'u@flota.mx', contrasena: 'viejo' }),
+  });
+
+  it('guardado por la ruta REAL (guardarCredencial) se lee por los tres lectores de portales', async () => {
+    await guardarCredencial(TENANT, CONECTOR, { usuario: 'u@flota.mx', contrasena: 's3creto' });
+    expect(filas[0].valores_cifrados.startsWith('v2.')).toBe(true);
+    const esperado = { usuario: 'u@flota.mx', contrasena: 's3creto' };
+    expect(await credencialDePortal(TENANT, COMERCIO)).toEqual(esperado);
+    expect((await credencialesDePortales(TENANT)).get(COMERCIO)).toEqual(esperado);
+    expect(await contrasenaDePortal(TENANT, COMERCIO)).toEqual(esperado);
   });
 
   it('credencialDePortal abre la v2', async () => {
