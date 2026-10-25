@@ -709,7 +709,25 @@ export async function resolverLineaAMano(
   const claveFila = (fila.clave_prod_serv as string | null) ?? null;
   const diesel = litrosFila != null && litrosFila > 0 && claveFila ? { litros: litrosFila, claveProdServ: claveFila } : undefined;
   const ligado = await ligarLineaAGasto(tenantId, filaXml.cfdi_uuid as string, fila.indice as number, resolucion.gastoId, diesel);
-  if (!ligado) return { ok: false, motivo: 'gasto_ya_no_disponible' };
+  if (!ligado) {
+    // A37-S46-08: si un corte de red cayó ENTRE el UPDATE del gasto y el de la
+    // línea, el gasto quedó sellado y el guardia `.is('cfdi_uuid', null)` hace
+    // que el reintento devuelva `false`: la línea quedaba atascada y su único
+    // cierre (`sin_match`) era FALSO. Un gasto sellado con ESTE uuid y ESTE
+    // orden ya es de esta línea —uuid+orden la identifican—, así que se
+    // continúa y se cierra. Cualquier otro sello es de otra línea: se niega.
+    const { data: sello, error: errSello } = await acotada(supabaseAdmin()
+      .from('gasto')
+      .select('cfdi_uuid, cfdi_orden')
+      .eq('id', resolucion.gastoId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle(), 'consolidado.leer_sello_reintento');
+    const esSuyo = !errSello && !!sello
+      && (sello as { cfdi_uuid?: unknown }).cfdi_uuid === filaXml.cfdi_uuid
+      && Number((sello as { cfdi_orden?: unknown }).cfdi_orden) === (fila.indice as number);
+    if (!esSuyo) return { ok: false, motivo: 'gasto_ya_no_disponible' };
+    logger.warn('consolidado.resolver_a_mano_reintento_idempotente', { tenant: tenantId, linea: lineaId, gasto: resolucion.gastoId });
+  }
 
   const { data: actualizado, error: errUpdate } = await acotada(supabaseAdmin()
     .from('cfdi_consolidado_linea')
@@ -848,6 +866,13 @@ export async function barrerPorConciliar(
     .select('id, cfdi_xml_id, indice, fuente, fecha, monto, descripcion, estacion_rfc, estacion_clave, folio_operacion, candidatos, litros, clave_prod_serv')
     .eq('tenant_id', tenantId)
     .eq('estatus', 'por_conciliar')
+    // A37-S46-07: una línea SIN fecha nace por_conciliar sin candidatos y el barrido
+    // jamás la puede ligar (conciliarLineas no intenta match sin fecha): miles de
+    // ellas (un CFDI de TAG sin fechas) ocupaban el corte de 1,000 y dejaban fuera a
+    // las ECC12 con fecha cuyo gasto llegó después. Se excluyen; se resuelven a mano
+    // con `sin_match`. Orden determinista por id para que el corte sea estable.
+    .not('fecha', 'is', null)
+    .order('id')
     .limit(1000), 'barrido.lineas_pendientes');
   if (errFilas) throw new Error(`barrerPorConciliar: ${errFilas.message}`);
 

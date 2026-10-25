@@ -113,10 +113,12 @@ function consulta() {
 
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: () => consulta() }) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+const anotarBitacora = vi.fn(async (..._a: unknown[]) => true);
+vi.mock('@/lib/likida/bitacora_escritura', () => ({ anotarBitacora: (...a: unknown[]) => anotarBitacora(...a) }));
 
 const { getDatosMapa, getTextosProspectos, desempacar } = await import('./prospectos-mapa');
 
-beforeEach(() => { espia.columnas = []; espia.gt = []; espia.conteos = 0; espia.ids = []; });
+beforeEach(() => { anotarBitacora.mockClear(); espia.columnas = []; espia.gt = []; espia.conteos = 0; espia.ids = []; });
 
 describe('la carga inicial es LIGERA — los textos largos no viajan', () => {
   it('el select del listado no pide los mensajes redactados (7.5 MB) pero sí `notas` (la usan los scores)', async () => {
@@ -166,12 +168,25 @@ describe('la carga inicial es LIGERA — los textos largos no viajan', () => {
 describe('el refresco es un DELTA — solo lo que cambió desde la marca', () => {
   it('pregunta por updated_at > desde y devuelve únicamente eso', async () => {
     const datos = await getDatosMapa({ desde: '2026-08-21T23:00:00.000Z' });
-    expect(espia.gt).toEqual([{ col: 'updated_at', val: '2026-08-21T23:00:00.000Z' }]);
+    // A37-S22-05: la marca se SOLAPA 5 min hacia atrás (ver `SOLAPE_DELTA_MS`).
+    expect(espia.gt).toEqual([{ col: 'updated_at', val: '2026-08-21T22:55:00.000Z' }]);
     expect(datos.delta).toBe(true);
     // La fila del 21 no cambió: no viaja. La del 22 sí; el duplicado del 22
     // tampoco sale del mapa pero empuja la marca.
     expect(datos.filas.map((f) => f[0])).toEqual([FILAS[1].id]);
     expect(datos.marca).toBe('2026-08-22T11:00:00.000Z');
+  });
+
+  it('A37-S22-05 · una fila que hizo commit tarde (updated_at menor que la marca, dentro del solape) SÍ se entrega', async () => {
+    // Marca = 22-ago 09:03. La fila de las 09:00 (3 min antes) pudo haber hecho commit después del
+    // poll que fijó la marca: con `updated_at > marca` exacto nunca llegaba.
+    const datos = await getDatosMapa({ desde: '2026-08-22T09:03:00.000Z' });
+    expect(datos.filas.map((f) => f[0])).toEqual([FILAS[1].id]);
+  });
+
+  it('A37-S22-05 · fuera del solape no se re-entrega nada (reposo sigue en cero)', async () => {
+    const datos = await getDatosMapa({ desde: '2026-08-22T09:06:00.000Z' });
+    expect(datos.filas).toEqual([]);
   });
 
   it('una cartera en reposo contesta CERO filas — no el universo', async () => {
@@ -214,5 +229,28 @@ describe('los textos largos se piden por id', () => {
   it('sin ids no se toca la red', async () => {
     expect(await getTextosProspectos([])).toEqual([]);
     expect(espia.ids).toEqual([]);
+  });
+});
+
+// A37-S22-04: la entrega de la cartera con PII debe dejar rastro en el servidor.
+describe('A37-S22-04 — auditar la entrega en getDatosMapa', () => {
+  it('con `auditoria`, la carga completa registra prospectos.entregados con el n que contó el servidor', async () => {
+    const datos = await getDatosMapa({ auditoria: { actorId: 'u-1' } });
+    expect(datos.fallo).toBe(false);
+    expect(anotarBitacora).toHaveBeenCalledTimes(1);
+    const [entrada] = anotarBitacora.mock.calls[0] as [{ accion: string; actor: unknown; detalle: { n: number; delta: boolean } }];
+    expect(entrada.accion).toBe('prospectos.entregados');
+    expect(entrada.actor).toEqual({ id: 'u-1' });
+    expect(entrada.detalle).toEqual({ n: datos.filas.length, delta: false });
+  });
+
+  it('sin `auditoria` (compatibilidad) no escribe nada', async () => {
+    await getDatosMapa();
+    expect(anotarBitacora).not.toHaveBeenCalled();
+  });
+
+  it('un delta SIN filas (el latido en reposo) no llena la bitácora', async () => {
+    await getDatosMapa({ desde: '2999-01-01T00:00:00.000Z', auditoria: { actorId: 'u-1' } });
+    expect(anotarBitacora).not.toHaveBeenCalled();
   });
 });

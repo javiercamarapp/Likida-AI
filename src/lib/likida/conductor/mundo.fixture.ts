@@ -178,6 +178,7 @@ export function crearMundo(o: OpcionesMundo) {
     },
     cerrar: async (ep, motivo, ahora) => { const e = episodios.get(ep.id); if (e && !e.cerradoEn) Object.assign(e, { cerradoEn: ahora.toISOString(), cierre: motivo }); },
     anotarFallo: async () => {},
+    liberarNivel: async (ep) => { const e = episodios.get(ep.id); if (e && !e.cerradoEn && e.nivelEnviado === 3) { e.nivelEnviado = 2; e.escaladoEn = null; } },
     enviar: o.enviar, destinatarios: puertos.destinatarios, ubicacion: puertos.ubicacion,
   };
 

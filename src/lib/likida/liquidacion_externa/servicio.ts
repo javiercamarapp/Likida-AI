@@ -71,7 +71,7 @@ export interface Dependencias {
    *  La real lee el TMS por el conector (`lector_desgloses.ts`); la forma de la API es SUPUESTO-API (`desglose_tms_supuesto.ts`). */
   lectoresPull?: () => Promise<Array<{ tenantId: string; lector: LectorDesglosesPuerto }>>;
   /** Una pasada de pull para una flota. Opcional: sin ella, `pullDesgloses`. */
-  pullDeFlota?: (tenantId: string, lector: LectorDesglosesPuerto) => Promise<ResultadoPull>;
+  pullDeFlota?: (tenantId: string, lector: LectorDesglosesPuerto, opciones?: { venceEn?: number }) => Promise<ResultadoPull>;
   /** Una pasada de entregas por correo (≤ `limite`). Opcional: sin ella la fase `correo` no corre. */
   entregasCorreo?: (limite: number) => Promise<ResumenEntregasCorreo>;
 }
@@ -108,7 +108,7 @@ const canalRecordado = new Map<string, { canal: CanalEntrega; hasta: number }>()
  * flota que SÍ se confirmó `cinco_agentes` alguna vez sigue protegida: `perfilDeTenant` recuerda ese último valor y
  * lo devuelve aunque la lectura de ahora falle.
  */
-async function canalDeEntregaPorOmision(tenantId: string): Promise<CanalEntrega> {
+export async function canalDeEntregaPorOmision(tenantId: string): Promise<CanalEntrega> {
   const ahora = Date.now();
   const r = canalRecordado.get(tenantId);
   if (r && r.hasta > ahora) return r.canal;
@@ -144,7 +144,7 @@ export const dependenciasPorOmision: Required<Dependencias> = {
   // Import dinámico (evita el ciclo con el conector). Solo lee flotas con `activa=true` + canal correo + credencial TMS probada.
   lectoresPull: async () => (await import('../conectores/tms/lector_desgloses')).lectoresDesglosesTmsPorOmision(),
   // Import dinámico: estos módulos arrastran la base y el proveedor de correo; solo se cargan cuando la fase corre.
-  pullDeFlota: async (t, l) => (await import('./pull_desglose')).pullDesgloses(t, l),
+  pullDeFlota: async (t, l, o) => (await import('./pull_desglose')).pullDesgloses(t, l, undefined, o),
   entregasCorreo: async (limite) => (await import('./entrega_correo')).procesarEntregasCorreo(undefined, limite),
 };
 
@@ -226,6 +226,9 @@ function esperaMs(intentos: number): number {
   return Math.min(2 ** intentos, 30) * 60_000;
 }
 
+/** Cuánto se aparta del lote de WhatsApp una liquidación de desglose (sin PDF) en una flota `ambos`. */
+const APARTADA_SIN_PDF_MS = 6 * 3_600_000;
+
 export type ResultadoEntrega = 'en_cola' | 'enviada' | 'reintentar' | 'fallida' | 'sin_cambio';
 
 /**
@@ -250,6 +253,15 @@ export async function intentarEntrega(
       return 'sin_cambio';
     }
     if (canal === 'correo') return 'sin_cambio';
+    if (!liq.pdfRuta && canal === 'ambos') {
+      // A37-S49-03: una liquidación SIN PDF solo nace del flujo de desgloses (`desglose_recibir`), que es únicamente correo:
+      // WhatsApp no tiene qué mandar. Lanzar aquí la dejaba 'fallida' en ~30 min aunque el correo saliera después. Se aparta
+      // del lote de WhatsApp (sin gastar intento) y la entrega por correo la cierra sola.
+      await transicionar(tenantId, liq.id, ['pendiente'], {
+        proximo_intento_en: new Date(deps.ahora().getTime() + APARTADA_SIN_PDF_MS).toISOString(),
+      });
+      return 'sin_cambio';
+    }
     if (!liq.pdfRuta) throw new Error('la liquidación no tiene PDF en Storage');
     if (!liq.operadorTelefono) throw new Error('el operador no tiene teléfono');
 
@@ -373,10 +385,18 @@ async function copiarSinTumbar(liq: LiquidacionExterna, doc: DocumentoEntrega, d
  */
 export async function reenviarCopiaAJefe(
   tenantId: string, id: string, deps: Dependencias = dependenciasPorOmision,
-): Promise<ResultadoCopia | { estado: 'no_encontrada' } | { estado: 'no_aplica' }> {
+): Promise<ResultadoCopia | { estado: 'no_encontrada' } | { estado: 'no_aplica' } | { estado: 'canal_correo' }> {
   const liq = await leerPorId(tenantId, id);
   if (!liq) return { estado: 'no_encontrada' };
   if (!liq.pdfRuta || liq.estado === 'pendiente') return { estado: 'no_aplica' };
+  // A37-S14-02: la copia sale por WhatsApp (con liga al PDF con cifras). Misma compuerta que `intentarEntrega`: flota por
+  // correo ⇒ no se manda; canal ilegible ⇒ fail-closed (no se manda nada a personas).
+  try {
+    if ((await (deps.canalDeEntrega ?? canalDeEntregaPorOmision)(tenantId)) === 'correo') return { estado: 'canal_correo' };
+  } catch (e) {
+    logger.warn('liqext.canal_no_leido', { id, err: e instanceof Error ? e.message : String(e) });
+    return { estado: 'no_aplica' };
+  }
   const base = `liquidacion-${liq.claveExterna.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 60)}`;
   const doc = await documentoDeEntrega(liq, base, deps);
   return deps.copiarAJefe(liq, { url: doc.url, nombre: doc.nombre });
@@ -393,6 +413,8 @@ export interface ResumenPasada {
   pull?: ResumenPull;
   /** La fase de entregas por correo (T-A1-16). Ausente si la pasada no tiene esa fase; con `errores: 1` si la fase lanzó. */
   correo?: ResumenEntregasCorreo;
+  /** A37-S09-02: la pasada se cortó por el reloj de la corrida; lo que faltó lo retoma la siguiente (el cron late `parcial`). */
+  cortadoPorReloj?: boolean;
   /** Liquidaciones huérfanas de correo (hallazgo MEDIO, oct-2026): `pendiente`, canal `correo`, sin fila de desglose. */
   huerfanasCorreo?: ResumenHuerfanasCorreo;
 }
@@ -416,13 +438,19 @@ export interface ResumenPull {
   errores: number;
   /** Clase del primer error, sin datos personales. */
   error?: string;
+  /** A37-A1-liquidaciones-06: flotas cuyo pull falla y no tiene un éxito reciente (o nunca lo tuvo): el cron avisa al operador de Likida. */
+  flotasAtascadas?: string[];
+  /** A37-S09-02: flotas que NO se leyeron porque el reloj de la corrida se agotó (la siguiente pasada las retoma). */
+  cortadasPorReloj?: number;
 }
 
 const CORREO_VACIO = (): ResumenEntregasCorreo => ({
   reclamadas: 0, enviadas: 0, reintentar: 0, fallidas: 0, sinConfigurar: 0, fueraDeVentana: 0, apagada: 0, sinConfirmar: 0, errores: 0,
 });
 
-async function faseDePull(deps: Dependencias): Promise<ResumenPull | undefined> {
+const relojAgotado = (venceEn: number | undefined) => venceEn !== undefined && Date.now() >= venceEn;
+
+async function faseDePull(deps: Dependencias, venceEn?: number): Promise<ResumenPull | undefined> {
   if (!deps.lectoresPull) return undefined;
   const r: ResumenPull = { flotas: 0, leidas: 0, importadas: 0, excepciones: 0, errores: 0 };
   const falla = (clase: string) => { r.errores++; r.error ??= clase; };
@@ -436,11 +464,16 @@ async function faseDePull(deps: Dependencias): Promise<ResumenPull | undefined> 
   }
   const pull = deps.pullDeFlota ?? dependenciasPorOmision.pullDeFlota;
   for (const { tenantId, lector } of lectores) {
+    if (relojAgotado(venceEn)) { r.cortadasPorReloj = (r.cortadasPorReloj ?? 0) + 1; continue; }
     r.flotas++;
     try {
-      const p = await pull(tenantId, lector);
+      const p = await pull(tenantId, lector, { venceEn });
       r.leidas += p.leidas; r.importadas += p.importadas; r.excepciones += p.excepciones;
       if (p.estado === 'error') falla(p.error ?? 'error');
+      if (p.atascado) {
+        (r.flotasAtascadas ??= []).push(tenantId);
+        logger.error('liqext.pull_atascado', { tenantId, err: p.error ?? 'error' });
+      }
     } catch (e) {
       logger.error('liqext.pull_fallo', { tenantId, err: e instanceof Error ? e.name : 'error' });
       falla(e instanceof Error ? e.name : 'error');
@@ -513,18 +546,49 @@ async function faseDeHuerfanasCorreo(deps: Dependencias, ahoraIso: string): Prom
   return { candidatas: candidatas.length, confirmadas: 0, tenants: [] };
 }
 
+/** A37-S09-02: lo máximo que se le concede al pull del TMS (lento y de terceros) dentro de una pasada. Lo que no cabe lo
+ *  retoma la siguiente (el cursor se guarda página a página). El resto del reloj es de las entregas que PAGAN a los choferes. */
+const PRESUPUESTO_PULL_MS = 20_000;
+
+/** El pull con techo DURO: si un lector se cuelga sin tope propio, la pasada deja de esperarlo (no lo cancela) y sigue con
+ *  las entregas. Mismo patrón que `conRelojDuro` de los crons, local porque `lib` no importa de `app`. */
+async function pullConTecho(deps: Dependencias, venceEn: number | undefined): Promise<ResumenPull | undefined> {
+  const tope = Math.min(venceEn ?? Infinity, Date.now() + PRESUPUESTO_PULL_MS);
+  if (tope === Infinity) return faseDePull(deps, undefined);
+  let temporizador: ReturnType<typeof setTimeout> | undefined;
+  const CORTE = Symbol('corte');
+  try {
+    const r = await Promise.race<ResumenPull | undefined | typeof CORTE>([
+      faseDePull(deps, tope),
+      new Promise<typeof CORTE>((res) => { temporizador = setTimeout(() => res(CORTE), Math.max(0, tope - Date.now())); }),
+    ]);
+    if (r === CORTE) {
+      logger.warn('liqext.pull_cortado_por_techo', {});
+      return { flotas: 0, leidas: 0, importadas: 0, excepciones: 0, errores: 0, cortadasPorReloj: 1 };
+    }
+    return r;
+  } finally {
+    clearTimeout(temporizador);
+  }
+}
+
 export async function procesarLiquidacionesExternas(
-  deps: Dependencias = dependenciasPorOmision, limite = LOTE_CRON,
+  deps: Dependencias = dependenciasPorOmision, limite = LOTE_CRON, venceEn?: number,
 ): Promise<ResumenPasada> {
-  // Orden: (1) pull de desgloses, (2) entregas por correo, (3) lo de WhatsApp de siempre. Cada fase aislada: una que lanza no tumba a las demás.
-  const pull = await faseDePull(deps);
-  const correo = await faseDeCorreo(deps, limite);
+  // Orden: (1) pull de desgloses (con techo propio, A37-S09-02), (2) entregas por correo, (3) lo de WhatsApp de siempre.
+  // Cada fase aislada: una que lanza no tumba a las demás. Si el reloj de la corrida (`venceEn`) se agota, las fases que
+  // no empezaron se omiten y la pasada lo declara (`cortadoPorReloj`): el cron late `parcial` y la siguiente retoma.
+  const pull = await pullConTecho(deps, venceEn);
+  const correo = relojAgotado(venceEn) ? undefined : await faseDeCorreo(deps, limite);
   const trabajo = await trabajoPendiente(limite, deps.ahora().toISOString());
   const resumen: ResumenPasada = {
     tomadas: trabajo.length, en_cola: 0, enviadas: 0, reintentar: 0, fallidas: 0, sin_cambio: 0,
     avisos: { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 },
     ...(pull ? { pull } : {}), ...(correo ? { correo } : {}),
   };
+  const cortar = () => { resumen.cortadoPorReloj = true; };
+  if (pull?.cortadasPorReloj) cortar();
+  if (!correo && deps.entregasCorreo && relojAgotado(venceEn)) cortar();
   // Mejor esfuerzo: un fallo de esta fase NO tumba la entrega de WhatsApp ni la de correo.
   try {
     resumen.huerfanasCorreo = await faseDeHuerfanasCorreo(deps, deps.ahora().toISOString());
@@ -532,6 +596,7 @@ export async function procesarLiquidacionesExternas(
     logger.error('liqext.huerfanas_pasada_fallo', { err: e instanceof Error ? e.message : String(e) });
   }
   await conPool(trabajo, 4, async (liq) => {
+    if (relojAgotado(venceEn)) { cortar(); return; }
     const r = await intentarEntrega(liq, deps);
     if (r === 'enviada') resumen.enviadas++;
     else if (r === 'en_cola') resumen.en_cola++;
@@ -540,10 +605,13 @@ export async function procesarLiquidacionesExternas(
     else resumen.sin_cambio++;
   });
   // La red del aviso de «No coincide»: lo que no llegó a la oficina se reintenta aquí. Un fallo de esta fase NO tumba la entrega.
-  try {
-    resumen.avisos = await procesarAvisosDiscrepancia(deps, limite);
-  } catch (e) {
-    logger.error('liqext.avisos_pasada_fallo', { err: e instanceof Error ? e.message : String(e) });
+  if (relojAgotado(venceEn)) cortar();
+  else {
+    try {
+      resumen.avisos = await procesarAvisosDiscrepancia(deps, limite);
+    } catch (e) {
+      logger.error('liqext.avisos_pasada_fallo', { err: e instanceof Error ? e.message : String(e) });
+    }
   }
   return resumen;
 }
@@ -707,7 +775,7 @@ async function descartarAviso(a: AvisoDiscrepancia, deps: Pick<Dependencias, 'ah
   }
 }
 
-export type ResultadoReaviso = 'reavisada' | 'parcial' | 'pendiente' | 'ya_enviado' | 'en_curso' | 'no_aplica' | 'no_encontrada';
+export type ResultadoReaviso = 'canal_correo' | 'reavisada' | 'parcial' | 'pendiente' | 'ya_enviado' | 'en_curso' | 'no_aplica' | 'no_encontrada';
 
 /**
  * «Reavisar» (el panel): rearma el aviso de discrepancia fallido o pendiente y lo intenta ya. No repite a quien ya lo recibió.
@@ -719,6 +787,13 @@ export async function reavisarDiscrepancia(
   const liq = await leerPorId(tenantId, id);
   if (!liq) return 'no_encontrada';
   if (liq.acuseTipo !== 'no_coincide') return 'no_aplica';
+  // A37-S14-02: el aviso sale por WhatsApp; misma compuerta de canal que `intentarEntrega` (fail-closed si no se lee).
+  try {
+    if ((await (deps.canalDeEntrega ?? canalDeEntregaPorOmision)(tenantId)) === 'correo') return 'canal_correo';
+  } catch (e) {
+    logger.warn('liqext.canal_no_leido', { id, err: e instanceof Error ? e.message : String(e) });
+    return 'no_aplica';
+  }
   const r = await rearmarAvisoDiscrepancia(tenantId, id, deps.ahora().toISOString());
   const ciclo = r === 'sin_rpc' ? null : r.ciclo;
   if (r !== 'sin_rpc' && ciclo === null) return 'ya_enviado';
@@ -802,9 +877,11 @@ export const MAX_IDS_CONFIRMACION = 200;
 
 export async function confirmarAcusesLeidos(
   tenantId: string, ids: string[], actor: string, deps: Pick<Dependencias, 'ahora'> = dependenciasPorOmision,
+  /** A37-S11-02: id → `respuestaEn` que el integrador leyó. Un id con entrada solo se confirma si ese acuse sigue vigente. */
+  leidos?: ReadonlyMap<string, string>,
 ): Promise<ResultadoConfirmacion> {
   const unicos = [...new Set(ids)];
-  const r = await confirmarAcuses(tenantId, unicos, deps.ahora().toISOString());
+  const r = await confirmarAcuses(tenantId, unicos, deps.ahora().toISOString(), leidos);
   for (const id of r.confirmadas) await registrarEvento(tenantId, id, 'acuse_confirmado', { actor });
   return r;
 }

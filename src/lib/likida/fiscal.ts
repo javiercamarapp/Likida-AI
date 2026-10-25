@@ -509,6 +509,17 @@ export async function combustibleEjercicioDe(
   }
 }
 
+/**
+ * `opcionesDe(cfg)` CON el perfil de la flota (best-effort). A37-S45-06: las
+ * pantallas Inicio y Contador juzgaban «perdido / en riesgo» con `opcionesDe(cfg)`
+ * a secas, y el chat y el MCP con el perfil: la misma flota veía dos cifras
+ * para el mismo comprobante cuando la facilidad del 15% estaba declarada solo
+ * en el perfil. Todo cálculo de pérdidas por pantalla pasa por aquí.
+ */
+export async function opcionesFiscalesConPerfil(tenantId: string, cfg: LikidaConfig): Promise<OpcionesFiscales> {
+  return opcionesDe(cfg, await perfilBestEffort(tenantId));
+}
+
 /** `opcionesDe(cfg)` más el acumulado del ejercicio (ver `combustibleEjercicioDe`). */
 export async function opcionesFiscalesDelPeriodo(
   tenantId: string,

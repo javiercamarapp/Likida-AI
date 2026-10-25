@@ -173,6 +173,26 @@ describe('importarDesglosesDeArchivo', () => {
     expect(r.error).toBeUndefined();
   });
 
+  it('A37-A1-liquidaciones-19: CSV en Windows-1252 conserva los acentos del concepto', async () => {
+    const { recibir, vistos } = recibidor();
+    const ansi = Uint8Array.from(Array.from(CSV_TRES.replace('Sueldo', 'Vi\u00e1ticos'), (c) => c.charCodeAt(0)));
+    await importarDesglosesDeArchivo('t1', 'export.csv', ansi, { recibir });
+    const conceptos = vistos.flatMap((d) => [...d.percepciones, ...d.deducciones].map((r) => r.concepto));
+    expect(conceptos).toContain('Viáticos');
+    expect(conceptos.join('')).not.toContain('\uFFFD');
+  });
+
+  it('A37-S48-09: un CSV en Windows-1252 («Pensión» con ó = 0xF3) no se corrompe a «Pensi�n»', async () => {
+    const csv = [ENC, 'T1;B-100;P-1;E-1;U-10;2026-09-01;2026-09-06;6;percepcion;Sueldo;1000,00;;;foraneo', 'T1;B-100;P-1;E-1;U-10;2026-09-01;2026-09-06;6;deduccion;Pensión;100,00;;;foraneo'].join('\n');
+    // Windows-1252: cada carácter ≤ 0xFF es un byte.
+    const w1252 = Uint8Array.from([...csv].map((c) => c.charCodeAt(0)));
+    const { recibir, vistos } = recibidor();
+    await importarDesglosesDeArchivo('t1', 'export.csv', w1252, { recibir });
+    const json = JSON.stringify(vistos);
+    expect(json).not.toContain('\uFFFD');
+    expect(json).toContain('Pensión');
+  });
+
   it('Excel (.xlsx): fecha serial y montos numéricos', async () => {
     const hoja = XLSX.utils.aoa_to_sheet([
       ['Bitácora', 'Póliza', 'No. Empleado', 'Desde', 'Hasta', 'Tipo', 'Concepto', 'Monto'],

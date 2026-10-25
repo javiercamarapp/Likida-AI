@@ -240,6 +240,26 @@ describe('escalarAsistenciasPendientes — claim, destinatarios y ventana', () =
     expect((sendButtons.mock.calls[0] as unknown as [string])[0]).toBe('5210000000001');
   });
 
+  it('A37-S18-03: si la lectura de la póliza falla UNA vez, se reintenta y el nivel 3 sale con el 800', async () => {
+    polizaVigenteDe.mockRejectedValueOnce(new Error('base caída'));
+    polizaVigenteDe.mockResolvedValueOnce({ aseguradora: 'Qualitas', numeroPoliza: 'P-99', telefonoSiniestros: '8002888500', vigenciaHasta: null });
+    filasPendientes.mockReturnValue([fila({ nivel_escalado: 2, abierta_en: abiertaHace(16 * 60_000) })]);
+    await escalarAsistenciasPendientes(AHORA);
+    const texto = (sendButtons.mock.calls[0] as unknown as [string, string])[1];
+    expect(texto).toContain('8002888500');
+    expect(texto).not.toContain('NO tiene póliza');
+  });
+
+  it('A37-S18-03: si la lectura de la póliza sigue fallando, el aviso sale igual pero NO afirma que no hay póliza', async () => {
+    polizaVigenteDe.mockRejectedValue(new Error('base caída'));
+    filasPendientes.mockReturnValue([fila({ nivel_escalado: 2, abierta_en: abiertaHace(16 * 60_000) })]);
+    await escalarAsistenciasPendientes(AHORA);
+    expect(sendButtons).toHaveBeenCalledTimes(1);
+    const texto = (sendButtons.mock.calls[0] as unknown as [string, string])[1];
+    expect(texto).toContain('No pude consultar la póliza');
+    expect(texto).not.toContain('NO tiene póliza');
+  });
+
   it('lesionados: el salto 0→2 va en UN claim y UN aviso, con el contacto de emergencia en el texto', async () => {
     contactoSiLesionadosDe.mockResolvedValue({ nombre: 'María', telefono: '5219999999999', parentesco: 'esposa' });
     filasPendientes.mockReturnValue([fila({ hay_lesionados: true, abierta_en: abiertaHace(6 * 60_000) })]);
@@ -344,6 +364,31 @@ describe('textoEscalada — lo que cada nivel dice', () => {
 
     const sin = textoEscalada({ nivel: 3, tipo: 'siniestro', descripcion: 'x', poliza: null, contactoLesionados: null });
     expect(sin).toContain('NO tiene póliza capturada');
+  });
+
+  it('A37-S18-03: una lectura FALLIDA de la póliza NO se dice como «no tiene póliza»: dice que no se pudo consultar', () => {
+    const t = textoEscalada({ nivel: 3, tipo: 'siniestro', descripcion: 'x', poliza: null, polizaIlegible: true, contactoLesionados: null });
+    expect(t).toContain('No pude consultar la póliza');
+    expect(t).not.toContain('NO tiene póliza capturada');
+    expect(t).toContain('aseguradora');
+  });
+
+  it('A37-S18-03: una póliza con la vigencia pasada se rotula VENCIDA con su fecha — pero el 800 sigue en la mano', () => {
+    const t = textoEscalada({
+      nivel: 3, tipo: 'siniestro', descripcion: 'x', hoy: '2026-08-26',
+      poliza: { aseguradora: 'Qualitas', numeroPoliza: 'P-99', telefonoSiniestros: '8002888500', vigenciaHasta: '2026-08-01' },
+      contactoLesionados: null,
+    });
+    expect(t).toContain('VENCIDA');
+    expect(t).toContain('8002888500');
+  });
+
+  it('A37-S18-03: vigente, o sin vigencia capturada, no lleva el rótulo de vencida', () => {
+    const base = { nivel: 3, tipo: 'siniestro', descripcion: 'x', hoy: '2026-08-26', contactoLesionados: null };
+    const vigente = textoEscalada({ ...base, poliza: { aseguradora: 'Qualitas', numeroPoliza: 'P-99', telefonoSiniestros: '8002888500', vigenciaHasta: '2026-08-26' } });
+    expect(vigente).not.toContain('VENCIDA'); // el último día cuenta como vigente
+    const sinFecha = textoEscalada({ ...base, poliza: { aseguradora: 'Qualitas', numeroPoliza: 'P-99', telefonoSiniestros: '8002888500', vigenciaHasta: null } });
+    expect(sinFecha).not.toContain('VENCIDA');
   });
 
   it('robo lleva SIEMPRE la advertencia de no marcarle al chofer', () => {

@@ -14,8 +14,9 @@ const registrarCorrida = vi.fn(async (..._a: unknown[]) => {});
 vi.mock('../agentes/corridas', () => ({ registrarCorrida: (...a: unknown[]) => registrarCorrida(...a) }));
 
 const {
-  recibirArchivoPeaje, procesarColaPeajes, reintentarArchivoPeaje, huellaDe, byteaDeBuffer, MAX_PENDIENTES_POR_FLOTA, MAX_INTENTOS,
+  recibirArchivoPeaje, procesarColaPeajes, reintentarArchivoPeaje, subirDesglosePorCola, huellaDe, byteaDeBuffer, MAX_PENDIENTES_POR_FLOTA, MAX_INTENTOS,
 } = await import('./ingesta');
+const { anularDesgloseDb } = await import('./repo');
 
 const T = 'flota-1';
 const CSV = 'Fecha de cobro;Hora;Plaza;Importe;No. TAG\n05/08/2026;10:30:00;Caseta Ejemplo Norte;189,50;IMDM 10000001\n';
@@ -168,6 +169,91 @@ describe('procesarColaPeajes — el camino feliz', () => {
   });
 });
 
+describe('A37-A2-09: la subida manual del panel pasa por la huella y por el procesador del cron', () => {
+  const avisar = vi.fn(async () => 'ok');
+  const avisarDiscrepancias = vi.fn(async () => ({ evaluados: 0, enviados: 0, sinDestinatario: 0, pendientes: 0 }));
+  const procesar = (o: Parameters<typeof procesarColaPeajes>[0] = {}) => procesarColaPeajes({ ...o, avisar, avisarDiscrepancias });
+  beforeEach(() => { avisar.mockClear(); avisarDiscrepancias.mockClear(); });
+
+  it('el archivo se encola, se procesa en línea y dispara el aviso a la oficina y el protocolo de discrepancia', async () => {
+    const r = await subirDesglosePorCola(T, { nombre: 'pase.csv', buffer: buf(CSV), proveedor: 'PASE' }, { procesar });
+    expect(r).toMatchObject({ ok: true, estado: 'procesado', totalLineas: 1 });
+    expect(db.tablas.peaje_ingesta_archivo[0]).toMatchObject({ origen: 'panel', estado: 'procesada', contenido: null });
+    expect(db.tablas.desglose_peaje).toHaveLength(1);
+    expect(avisar).toHaveBeenCalledWith(T, db.tablas.desglose_peaje[0].id);
+    expect(avisarDiscrepancias).toHaveBeenCalledWith(T, db.tablas.desglose_peaje[0].id);
+  });
+
+  it('el MISMO archivo subido dos veces, o a mano y luego por otro canal, NO crea un segundo desglose vigente', async () => {
+    await subirDesglosePorCola(T, { nombre: 'pase.csv', buffer: buf(CSV), proveedor: 'PASE' }, { procesar });
+    const otra = await subirDesglosePorCola(T, { nombre: 'copia.csv', buffer: buf(CSV) }, { procesar });
+    expect(otra).toMatchObject({ ok: false, motivo: expect.stringMatching(/ya se recibió/i) });
+    const porCorreo = await recibirArchivoPeaje(T, { nombre: 'x.csv', proveedor: null, contenido: buf(CSV) }, 'correo');
+    expect(porCorreo).toMatchObject({ ok: true, duplicado: true, estado: 'procesada' });
+    expect(db.tablas.desglose_peaje).toHaveLength(1);
+  });
+
+  it('el periodo declarado se aplica al desglose creado', async () => {
+    await subirDesglosePorCola(T, { nombre: 'pase.csv', buffer: buf(CSV), periodo: { desde: '2026-08-01', hasta: '2026-08-10' } }, { procesar });
+    expect(db.tablas.desglose_peaje[0]).toMatchObject({ periodo_oficial_desde: '2026-08-01', periodo_oficial_hasta: '2026-08-10', periodo_origen: 'declarado' });
+  });
+
+  it('un archivo ilegible devuelve el motivo y queda fallida en la cola (reintentable), sin desglose', async () => {
+    const r = await subirDesglosePorCola(T, { nombre: 'raro.csv', buffer: buf('x1;x2;x3\n1;2;3\n') }, { procesar });
+    expect(r).toMatchObject({ ok: false, motivo: expect.stringMatching(/Encabezados leídos/) });
+    expect(db.tablas.peaje_ingesta_archivo[0]).toMatchObject({ estado: 'fallida' });
+    expect(db.tablas.desglose_peaje ?? []).toHaveLength(0);
+  });
+
+  it('si el proceso en línea no alcanza (otros archivos primero), queda en cola y lo dice', async () => {
+    const r = await subirDesglosePorCola(T, { nombre: 'pase.csv', buffer: buf(CSV) }, { procesar: async () => ({ tomados: 0, procesados: 0, fallidos: 0, reintentar: 0, claimPerdido: 0 }) });
+    expect(r).toMatchObject({ ok: true, estado: 'en_cola' });
+    expect(db.tablas.peaje_ingesta_archivo[0]).toMatchObject({ estado: 'pendiente' });
+  });
+
+  it('extensión no aceptada, vacío o cola llena: se rechaza sin tocar la cola', async () => {
+    expect(await subirDesglosePorCola(T, { nombre: 'x.exe', buffer: buf('a') }, { procesar })).toMatchObject({ ok: false });
+    expect(await subirDesglosePorCola(T, { nombre: 'x.csv', buffer: buf('') }, { procesar })).toMatchObject({ ok: false });
+    expect(db.tablas.peaje_ingesta_archivo).toHaveLength(0);
+    db.tablas.peaje_ingesta_archivo = Array.from({ length: MAX_PENDIENTES_POR_FLOTA }, (_, i) => archivo({ id: `p${i}`, huella: `h${i}` }));
+    expect(await subirDesglosePorCola(T, { nombre: 'x.csv', buffer: buf('otro,1\n') }, { procesar })).toMatchObject({ ok: false, motivo: expect.stringMatching(/pendientes/) });
+  });
+});
+
+describe('A37-A2-08: anular un desglose entregado por pull/SFTP no se deshace solo', () => {
+  const avisar = vi.fn(async () => 'ok');
+  const avisarDiscrepancias = vi.fn(async () => ({ evaluados: 0, enviados: 0, sinDestinatario: 0, pendientes: 0 }));
+  const procesar = (o: Parameters<typeof procesarColaPeajes>[0] = {}) => procesarColaPeajes({ ...o, avisar, avisarDiscrepancias });
+
+  it('el endpoint de la flota devuelve SIEMPRE el mismo archivo: tras anular su desglose, el siguiente pull es duplicado (no se reimporta ni se vuelve a avisar)', async () => {
+    const r1 = await recibirArchivoPeaje(T, { nombre: 'corte.csv', proveedor: 'PASE', contenido: buf(CSV) }, 'pull');
+    expect(r1).toMatchObject({ ok: true, duplicado: false });
+    await procesar();
+    expect(db.tablas.desglose_peaje).toHaveLength(1);
+    expect(await anularDesgloseDb(T, String(db.tablas.desglose_peaje[0].id), 'archivo equivocado', 'ana')).toBe('anulado');
+    const r2 = await recibirArchivoPeaje(T, { nombre: 'corte.csv', proveedor: 'PASE', contenido: buf(CSV) }, 'pull');
+    expect(r2).toMatchObject({ ok: true, duplicado: true });
+    await procesar();
+    expect(db.tablas.desglose_peaje).toHaveLength(1);
+  });
+
+  it('un archivo entregado por CORREO o API sí puede volver a mandarse tras anular (la persona lo manda a propósito)', async () => {
+    await recibirArchivoPeaje(T, { nombre: 'corte.csv', proveedor: 'PASE', contenido: buf(CSV) }, 'correo');
+    await procesar();
+    await anularDesgloseDb(T, String(db.tablas.desglose_peaje[0].id), 'error', 'ana');
+    expect(await recibirArchivoPeaje(T, { nombre: 'corte.csv', proveedor: 'PASE', contenido: buf(CSV) }, 'correo')).toMatchObject({ ok: true, duplicado: false });
+  });
+
+  it('pero la persona SÍ puede volver a subir ese mismo archivo a mano desde el panel: se libera la huella del anulado', async () => {
+    await recibirArchivoPeaje(T, { nombre: 'corte.csv', proveedor: 'PASE', contenido: buf(CSV) }, 'pull');
+    await procesar();
+    await anularDesgloseDb(T, String(db.tablas.desglose_peaje[0].id), 'error', 'ana');
+    const r = await subirDesglosePorCola(T, { nombre: 'corte.csv', buffer: buf(CSV), proveedor: 'PASE' }, { procesar });
+    expect(r).toMatchObject({ ok: true, estado: 'procesado' });
+    expect(db.tablas.desglose_peaje.filter((d) => d.anulado_en == null)).toHaveLength(1);
+  });
+});
+
 describe('claim anti-duplicado', () => {
   it('dos corridas SEGUIDAS no toman el mismo archivo: la segunda ve el lease vigente', async () => {
     db.tablas.peaje_ingesta_archivo = [archivo(), archivo({ id: 'a2', huella: 'h2' })];
@@ -245,6 +331,25 @@ describe('fallos', () => {
     const r = await procesarColaPeajes();
     expect(r.procesados).toBe(1);
     expect(db.tablas.desglose_peaje_linea[0]).toMatchObject({ monto: 189.5, hora: '10:30:00' });
+  });
+
+  it('A37-A2-01: un archivo de correo/SFTP (proveedor null) se reintenta declarando el proveedor y usa su mapeo', async () => {
+    const raro = 'x1;x2;x3;x4\n05/08/2026;10:30;Caseta Ejemplo Norte;189,50\n';
+    db.tablas.peaje_ingesta_archivo = [archivo({ contenido: byteaDeBuffer(buf(raro)), nombre: 'raro.csv', proveedor: null, origen: 'correo' })];
+    await procesarColaPeajes();
+    expect(db.tablas.peaje_ingesta_archivo[0].estado).toBe('fallida');
+    db.tablas.peaje_mapeo_columnas = [{ id: 'm', tenant_id: T, proveedor_norm: 'pase', proveedor: 'PASE', activo: true, columnas: { fecha: 'A', hora: 'B', caseta: 'C', monto: 'D' } }];
+    // Sin proveedor el reintento vuelve a fallar para siempre; con proveedor declarado, no.
+    expect(await reintentarArchivoPeaje(T, 'a1', 'PASE')).toBe(true);
+    expect(db.tablas.peaje_ingesta_archivo[0]).toMatchObject({ estado: 'pendiente', proveedor: 'PASE' });
+    expect((await procesarColaPeajes()).procesados).toBe(1);
+    expect(db.tablas.desglose_peaje[0]).toMatchObject({ proveedor: 'PASE' });
+  });
+
+  it('A37-A2-01: un proveedor de más de 60 caracteres no se acepta al reintentar', async () => {
+    db.tablas.peaje_ingesta_archivo = [archivo({ id: 'f1', estado: 'fallida', proveedor: null })];
+    expect(await reintentarArchivoPeaje(T, 'f1', 'P'.repeat(61))).toBe(false);
+    expect(db.tablas.peaje_ingesta_archivo[0]).toMatchObject({ estado: 'fallida', proveedor: null });
   });
 
   it('reintentar: solo fallidas, solo de la flota, solo con contenido', async () => {

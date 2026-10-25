@@ -188,17 +188,89 @@ describe('la política de no emitir con un mapeo sin verificar', () => {
   });
 
   it('el guion MEDIDO sí emite, y confirma el UUID', async () => {
-    const p = new PaginaDoble({ textos: { '.uuid': 'A1B2-C3D4' } });
+    const p = new PaginaDoble({ textos: { '.uuid': 'B0800A68-1111-2222-3333-444455556666' } });
     const r = await armar(GUION_MEDIDO, p).facturar(CAMPOS, 'emitir');
 
     expect(r.ok).toBe(true);
-    expect(r.cfdiUuid).toBe('A1B2-C3D4');
+    expect(r.cfdiUuid).toBe('B0800A68-1111-2222-3333-444455556666');
     expect(p.clics).toEqual(['#emitir']);
+  });
+
+  it('A37-S42-03: una etiqueta «Folio fiscal» NO es un UUID: emisión sin confirmar, no folio basura', async () => {
+    const p = new PaginaDoble({ textos: { '.uuid': 'Folio fiscal' } });
+    const r = await armar(GUION_MEDIDO, p).facturar(CAMPOS, 'emitir');
+
+    expect(r.ok).toBe(false);
+    expect(r.cfdiUuid).toBeUndefined();
+    expect(r.emisionSinConfirmar).toBe(true);
+    expect(r.error).toMatch(/NO tiene forma de UUID/);
+  });
+
+  it('A37-S42-03: el UUID rodeado de etiquetas se extrae limpio', async () => {
+    const p = new PaginaDoble({ textos: { '.uuid': 'Folio fiscal: b0800a68-1111-2222-3333-444455556666 (timbrado)' } });
+    const r = await armar(GUION_MEDIDO, p).facturar(CAMPOS, 'emitir');
+
+    expect(r.ok).toBe(true);
+    expect(r.cfdiUuid).toBe('b0800a68-1111-2222-3333-444455556666');
   });
 
   it('el motivo dice a dónde ir, no solo que no se puede', () => {
     expect(motivoSinVerificar(GUION)).toContain('scripts/verificar-portal.mjs');
     expect(motivoSinVerificar(GUION)).toContain('portal.prueba.mx');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A37-S42-05 · LOS CAMPOS QUE SOLO EXISTEN TRAS BUSCAR SE PRE-VUELAN DESPUÉS.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('A37-S42-05: pre-vuelo por etapas', () => {
+  const EN_DOS: GuionPortal = {
+    ...GUION_MEDIDO,
+    // `#rfc` y `#correo` los declara `buscar.esperar` como lo que aparece TRAS buscar.
+    buscar: { boton: '#buscar', que: 'el botón de buscar', esperar: '#rfc, #correo' },
+  };
+
+  /** Un portal donde #rfc, #correo y #emitir existen solo después de apretar #buscar. */
+  class PaginaEnDos extends PaginaDoble {
+    vivos = new Set(['#folio', '#total', '#fecha', '#buscar']);
+    constructor() {
+      super({ textos: { '#rfc, #correo': 'listo', '.uuid': 'B0800A68-1111-2222-3333-444455556666' } });
+      this.existe = async (s) => this.vivos.has(s);
+    }
+    async escribir(sel: string, valor: string) {
+      if (!this.vivos.has(sel)) throw new Error(`no existe ${sel}`);
+      this.escritos.push({ sel, valor });
+    }
+    async hacerClic(sel: string) {
+      if (!this.vivos.has(sel)) throw new Error(`no existe ${sel}`);
+      this.clics.push(sel);
+      if (sel === '#buscar') ['#rfc', '#correo', '#emitir'].forEach((x) => this.vivos.add(x));
+    }
+  }
+
+  it('el ensayo NO da portalCambio por campos que aún no existen, y los escribe después de buscar', async () => {
+    const p = new PaginaEnDos();
+    const r = await armar(EN_DOS, p).facturar(CAMPOS, 'ensayo');
+
+    expect(r.portalCambio).toBeUndefined();
+    expect(r.ok).toBe(true);
+    const orden = p.escritos.map((e) => e.sel);
+    expect(orden.indexOf('#rfc')).toBeGreaterThan(orden.indexOf('#total'));
+    expect(orden).toEqual(expect.arrayContaining(['#folio', '#total', '#fecha', '#rfc', '#correo']));
+    expect(p.clics).toEqual(['#buscar']);
+  });
+
+  it('si DESPUÉS de buscar el campo tampoco aparece, sí es portalCambio (y no se emite)', async () => {
+    const p = new PaginaEnDos();
+    p.hacerClic = async (sel: string) => { p.clics.push(sel); if (sel === '#buscar') p.vivos.add('#rfc'); };
+    p.leerTexto = async () => 'listo';
+    const r = await armar(EN_DOS, p).facturar(CAMPOS, 'emitir');
+
+    expect(r.ok).toBe(false);
+    expect(r.portalCambio).toBe(true);
+    expect(r.error).toMatch(/DESPUÉS de buscar/);
+    expect(p.clics).toEqual(['#buscar']);
   });
 });
 
@@ -241,11 +313,11 @@ describe('captcha', () => {
     // `.grecaptcha-badge` está deliberadamente FUERA de la lista. Si estuviera,
     // el motor no facturaría nunca.
     expect(SELECTORES_CAPTCHA_COMUNES).not.toContain('.grecaptcha-badge');
-    const p = new PaginaDoble({ presentes: [...TODOS, '.grecaptcha-badge'], textos: { '.uuid': 'OK-1' } });
+    const p = new PaginaDoble({ presentes: [...TODOS, '.grecaptcha-badge'], textos: { '.uuid': 'B0800A68-1111-2222-3333-444455556666' } });
     const r = await armar(GUION_MEDIDO, p).facturar(CAMPOS, 'emitir');
 
     expect(r.requiereCaptcha).toBeUndefined();
-    expect(r.cfdiUuid).toBe('OK-1');
+    expect(r.cfdiUuid).toBe('B0800A68-1111-2222-3333-444455556666');
   });
 });
 
@@ -295,7 +367,7 @@ describe('cuando el portal cambia de plantilla', () => {
       ...GUION_MEDIDO,
       campos: { ...GUION_MEDIDO.campos, folio: { selector: ['#viejo', '#folio'] } },
     };
-    const p = new PaginaDoble({ textos: { '.uuid': 'OK-2' } });
+    const p = new PaginaDoble({ textos: { '.uuid': 'B0800A68-1111-2222-3333-444455556667' } });
     const r = await armar(conCandidatos, p).facturar(CAMPOS, 'emitir');
 
     expect(r.ok).toBe(true);
@@ -326,7 +398,7 @@ describe('el reloj del lote (PR #152)', () => {
   ];
 
   it('los que no caben salen POR SU NOMBRE como no intentados', async () => {
-    const p = new PaginaDoble({ textos: { '.uuid': 'OK' } });
+    const p = new PaginaDoble({ textos: { '.uuid': 'B0800A68-1111-2222-3333-444455556666' } });
     // El reloj avanza 100 ms por consulta; con `venceEn` a 250 y margen de 100,
     // el tercer ticket ya no cabe.
     let t = 0;
@@ -345,7 +417,7 @@ describe('el reloj del lote (PR #152)', () => {
   });
 
   it('sin `venceEn` no corta nada: es el caso de las pruebas y de una llamada a mano', async () => {
-    const p = new PaginaDoble({ textos: { '.uuid': 'OK' } });
+    const p = new PaginaDoble({ textos: { '.uuid': 'B0800A68-1111-2222-3333-444455556666' } });
     const r = await armar(GUION_MEDIDO, p).facturarLote(tickets, 'ensayo');
 
     expect(r.porGasto).toHaveLength(3);
@@ -353,10 +425,27 @@ describe('el reloj del lote (PR #152)', () => {
     expect(r.aviso).toBeUndefined();
   });
 
+  it('A37-S42-06: si al llegar al botón ya no cabe la emisión, NO aprieta y NO queda ambiguo', async () => {
+    const p = new PaginaDoble({ textos: { '.uuid': 'B0800A68-1111-2222-3333-444455556666' } });
+    // Arranca con margen de sobra (venceEn lejano en el primer vistazo), pero el
+    // reloj salta mientras se llena el formulario: al llegar al botón ya no cabe.
+    let t = 0;
+    const a = armar(GUION_MEDIDO, p, {
+      esperaUuidMs: 10_000, venceEn: 20_000, margenTicketMs: 1_000,
+      ahora: () => { t += 5_000; return t; },
+    });
+    const r = await a.facturar(CAMPOS, 'emitir');
+
+    expect(p.clics).toEqual([]);
+    expect(r.ok).toBe(false);
+    expect(r.emisionSinConfirmar).toBeUndefined();
+    expect(r.error).toMatch(/NO se apretó emitir/);
+  });
+
   it('en `emitir` el margen reserva la espera del UUID completa', async () => {
     // Un ticket que arranca con 200 ms por delante muere a media emisión, y esa
     // muerte es AMBIGUA: es como se acaba con dos CFDI por el mismo consumo.
-    const p = new PaginaDoble({ textos: { '.uuid': 'OK' } });
+    const p = new PaginaDoble({ textos: { '.uuid': 'B0800A68-1111-2222-3333-444455556666' } });
     // `esperaUuidMs` 10 000 → margen por default 15 000. Con `venceEn` a 5 000,
     // NINGÚN ticket cabe aunque el reloj esté en cero.
     const a = armar(GUION_MEDIDO, p, { esperaUuidMs: 10_000, venceEn: 5_000, ahora: () => 0 });
@@ -380,11 +469,11 @@ describe('el reloj del lote (PR #152)', () => {
   });
 
   it('un lote de un portal sano reparte un resultado por gasto, sin faltar ninguno', async () => {
-    const p = new PaginaDoble({ textos: { '.uuid': 'UUID-X' } });
+    const p = new PaginaDoble({ textos: { '.uuid': 'B0800A68-1111-2222-3333-444455556666' } });
     const r = await armar(GUION_MEDIDO, p).facturarLote(tickets, 'emitir');
 
     expect(r.porGasto.map((g) => g.gastoId)).toEqual(['g1', 'g2', 'g3']);
-    expect(r.porGasto.every((g) => g.cfdiUuid === 'UUID-X')).toBe(true);
+    expect(r.porGasto.every((g) => g.cfdiUuid === 'B0800A68-1111-2222-3333-444455556666')).toBe(true);
     // UNA sesión de navegador, TRES pestañas: es lo que convierte ocho casetas
     // de ~128 s en ~48 s.
     expect(p.abiertas).toHaveLength(3);
@@ -410,6 +499,19 @@ describe('los formatos', () => {
     expect(aplicarFormato('   ', 'monto')).toBeNull();
   });
 
+  it('A37-S42-08: monto_entero NO trunca centavos y monto rechaza el punto de miles ambiguo', () => {
+    // 99.99 escrito como «99» era un monto fiscal distinto del real.
+    expect(aplicarFormato('99.99', 'monto_entero')).toBeNull();
+    expect(aplicarFormato('1,234.90', 'monto_entero')).toBeNull();
+    expect(aplicarFormato('99.00', 'monto_entero')).toBe('99');
+    expect(aplicarFormato('850', 'monto_entero')).toBe('850');
+    // «12.345» puede ser 12 345 (miles europeos) o 12.35: no se adivina.
+    expect(aplicarFormato('12.345', 'monto')).toBeNull();
+    expect(aplicarFormato('1.234,50', 'monto')).toBeNull();
+    // el redondeo a centavos usa round2 (1.0050001 -> 1.01)
+    expect(aplicarFormato('1.0050001', 'monto')).toBe('1.01');
+  });
+
   it('la fecha se pasa al formato del portal, y una que no es fecha devuelve null', () => {
     expect(aplicarFormato('2026-08-04', 'fecha_dmy')).toBe('04/08/2026');
     expect(aplicarFormato('2026-08-04', 'fecha_dmy_guion')).toBe('04-08-2026');
@@ -424,7 +526,7 @@ describe('los formatos', () => {
     expect(aplicarFormato('AB-12 34', 'solo_digitos')).toBe('1234');
     expect(aplicarFormato('sin-numeros', 'solo_digitos')).toBeNull();
     expect(aplicarFormato(' hola ')).toBe('hola');
-    expect(aplicarFormato('1,234.90', 'monto_entero')).toBe('1234');
+    expect(aplicarFormato('1,234.00', 'monto_entero')).toBe('1234');
   });
 
   it('un valor del ticket que no se puede formatear DECLARA el fallo, no lo disimula', async () => {
@@ -475,7 +577,7 @@ describe('la puerta del portal', () => {
 
   it('un portal que NO declara `requiereSesion` no mira la puerta', async () => {
     const p = new PaginaDoble({
-      textos: { '.uuid': 'OK' },
+      textos: { '.uuid': 'B0800A68-1111-2222-3333-444455556666' },
       inventario: { campos: [{ tag: 'input', type: 'password', id: 'p', name: '', placeholder: '', etiqueta: '', visible: true, opciones: [] }] },
     });
     const r = await armar(GUION_MEDIDO, p).facturar(CAMPOS, 'emitir');
@@ -489,7 +591,7 @@ describe('el XML', () => {
   const conXml: GuionPortal = { ...GUION_MEDIDO, xml: { boton: '#xml' } };
 
   it('se BAJA del portal y se devuelve su ruta', async () => {
-    const p = new PaginaDoble({ presentes: [...TODOS, '#xml'], textos: { '.uuid': 'U-1' }, xmlRuta: '/tmp/cfdi.xml' });
+    const p = new PaginaDoble({ presentes: [...TODOS, '#xml'], textos: { '.uuid': 'B0800A68-1111-2222-3333-444455556666' }, xmlRuta: '/tmp/cfdi.xml' });
     const r = await armar(conXml, p).facturar(CAMPOS, 'emitir');
 
     expect(r.xmlRuta).toBe('/tmp/cfdi.xml');
@@ -497,13 +599,13 @@ describe('el XML', () => {
   });
 
   it('A37-S42-01: si el portal no entrega el archivo, el UUID CONFIRMADO se conserva (ok:true + aviso)', async () => {
-    const p = new PaginaDoble({ presentes: [...TODOS, '#xml'], textos: { '.uuid': 'U-1' }, descargaRevienta: true });
+    const p = new PaginaDoble({ presentes: [...TODOS, '#xml'], textos: { '.uuid': 'B0800A68-1111-2222-3333-444455556666' }, descargaRevienta: true });
     const r = await armar(conXml, p).facturar(CAMPOS, 'emitir');
 
     // Antes: ok:false + emisionSinConfirmar y SIN cfdiUuid — el gasto quedaba
     // bloqueado sin folio aunque el CFDI existía.
     expect(r.ok).toBe(true);
-    expect(r.cfdiUuid).toBe('U-1');
+    expect(r.cfdiUuid).toBe('B0800A68-1111-2222-3333-444455556666');
     expect(r.emisionSinConfirmar).toBeUndefined();
     expect(r.xmlRuta).toBeUndefined();
     expect(r.aviso).toMatch(/SÍ se emitió/);
@@ -511,7 +613,7 @@ describe('el XML', () => {
 
   it('A37-S42-01: se prueban TODOS los candidatos del botón del XML', async () => {
     const dosBotones: GuionPortal = { ...GUION_MEDIDO, xml: { boton: ['button:has-text("XML")', 'a#xml'] } };
-    const p = new PaginaDoble({ presentes: [...TODOS], textos: { '.uuid': 'U-1' }, xmlRuta: '/tmp/cfdi.xml' });
+    const p = new PaginaDoble({ presentes: [...TODOS], textos: { '.uuid': 'B0800A68-1111-2222-3333-444455556666' }, xmlRuta: '/tmp/cfdi.xml' });
     const original = p.descargar!;
     p.descargar = async (sel: string) => {
       if (sel.startsWith('button')) { p.descargas.push(sel); throw new Error('expiró'); }
@@ -526,11 +628,11 @@ describe('el XML', () => {
   it('una plataforma que no sabe descargar no tumba una emisión buena', async () => {
     // El CFDI ya existe y el UUID ya se confirmó: quedarse sin XML es un hueco
     // de plataforma, no un fallo del portal.
-    const p = new PaginaDoble({ presentes: [...TODOS, '#xml'], textos: { '.uuid': 'U-1' } });
+    const p = new PaginaDoble({ presentes: [...TODOS, '#xml'], textos: { '.uuid': 'B0800A68-1111-2222-3333-444455556666' } });
     const r = await armar(conXml, p).facturar(CAMPOS, 'emitir');
 
     expect(r.ok).toBe(true);
-    expect(r.cfdiUuid).toBe('U-1');
+    expect(r.cfdiUuid).toBe('B0800A68-1111-2222-3333-444455556666');
     expect(r.xmlRuta).toBeUndefined();
   });
 });

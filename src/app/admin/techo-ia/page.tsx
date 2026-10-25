@@ -26,6 +26,15 @@ const MENSAJE_OK: Record<string, string> = {
   quitado: 'Declaración quitada: la flota vuelve al techo de su plan (o al piso).',
 };
 
+// A37-S08-07: códigos cerrados (como `ok`); el texto de `?error=` ya no se pinta tal cual.
+const MENSAJE_ERROR: Record<string, string> = {
+  formato: 'Escribe un monto en dólares, por ejemplo 25 o 25.50.',
+  rango: `El techo diario va de ${TECHO_IA_MIN_USD.toFixed(2)} a ${TECHO_IA_MAX_USD} USD. Para apagar la IA de una flota usa el interruptor, no un techo de cero.`,
+  flota: 'Flota inválida.',
+  inexistente: 'Esa flota ya no existe.',
+  guardar: 'No se pudo guardar el techo. Recarga e inténtalo de nuevo; si persiste, avisa a soporte.',
+};
+
 export default async function TechoIaPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string }> }) {
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
@@ -52,8 +61,8 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
           {sp.ok && MENSAJE_OK[sp.ok] && (
             <p role="status" className="text-sm rounded-xl px-4 py-2.5 m-0" style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>{MENSAJE_OK[sp.ok]}</p>
           )}
-          {sp.error && (
-            <p role="alert" className="text-sm rounded-xl px-4 py-2.5 m-0" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>{sp.error}</p>
+          {sp.error && MENSAJE_ERROR[sp.error] && (
+            <p role="alert" className="text-sm rounded-xl px-4 py-2.5 m-0" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>{MENSAJE_ERROR[sp.error]}</p>
           )}
 
           <div className="card p-4">

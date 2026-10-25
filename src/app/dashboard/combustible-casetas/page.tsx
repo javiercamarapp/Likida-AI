@@ -35,6 +35,7 @@ const MOTIVO_ERROR: Record<string, string> = {
   ya_resuelta: 'Alguien más ya la resolvió — revisa el estado actual.',
   candidato_no_ofrecido: 'Ese candidato no es uno de los que el sistema ofreció.',
   gasto_ya_no_disponible: 'El gasto elegido ya quedó ligado a otra línea mientras revisabas.',
+  sin_eleccion: 'Elige con qué gasto ligar la línea (o «Ninguno de estos»): con varios candidatos no se adivina cuál.',
   error_bd: 'No se pudo guardar — intenta de nuevo.',
 };
 
@@ -160,12 +161,20 @@ export default async function CombustibleCasetasPage({
     const { tenantId: t, userId } = await tenantYUsuarioDelAction(sufijo, sp);
     const lineaId = String(formData.get('lineaId') ?? '');
     const eleccion = String(formData.get('eleccion') ?? '');
-    if (!lineaId || !eleccion) redirect(`/dashboard/combustible-casetas${sufijo}`);
+    const volver = (ok: string): never => redirect(`/dashboard/combustible-casetas${sufijo ? `${sufijo}&` : '?'}ok=${ok}`);
+    if (!lineaId) redirect(`/dashboard/combustible-casetas${sufijo}`);
+    // A37-S17-01: sin elección explícita (p. ej. un POST a mano con el valor vacío) NO se liga nada ni se adivina un candidato.
+    if (!eleccion) volver('error_sin_eleccion');
 
     const resolucion: ResolucionLineaManual = eleccion === NINGUNO_VALOR
       ? { tipo: 'sin_match' }
       : { tipo: 'ligar', gastoId: eleccion };
-    const r = await resolverLineaAMano(t, lineaId, resolucion, userId);
+    let r: Awaited<ReturnType<typeof resolverLineaAMano>>;
+    try {
+      r = await resolverLineaAMano(t, lineaId, resolucion, userId);
+    } catch {
+      return volver('error_error_bd');
+    }
 
     revalidatePath('/dashboard/combustible-casetas');
     const ok = r.ok ? 'resuelta' : `error_${r.motivo ?? 'error_bd'}`;

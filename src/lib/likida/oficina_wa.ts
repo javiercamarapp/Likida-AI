@@ -178,6 +178,8 @@ export function rolConAnalista(rol: RolOficina): boolean {
   return rol === 'flota_admin' || rol === 'contador';
 }
 
+const MAX_FILAS_TABLA_WA = 10;
+
 /** Bloques del analista → texto plano de WhatsApp. Sin tablas dibujadas ni
  *  gráficas: filas como líneas, y la gráfica se declara como del panel. */
 export function bloquesATextoWa(bloques: Bloque[]): string {
@@ -188,7 +190,9 @@ export function bloquesATextoWa(bloques: Bloque[]): string {
       const v = b.formato === 'mxn' ? mxn(b.valor) : b.formato === 'litros' ? `${numero(b.valor)} L` : numero(b.valor);
       lineas.push(b.nota ? `*${v}* — ${b.nota}` : `*${v}*`);
     } else if (b.tipo === 'tabla') {
-      for (const [k, v] of b.filas.slice(0, 10)) lineas.push(`· ${k}: ${typeof v === 'number' ? numero(v) : v}`);
+      for (const [k, v] of b.filas.slice(0, MAX_FILAS_TABLA_WA)) lineas.push(`· ${k}: ${typeof v === 'number' ? numero(v) : v}`);
+      // A37-S51-08: un recorte nunca se presenta como el total.
+      if (b.filas.length > MAX_FILAS_TABLA_WA) lineas.push(`(+${b.filas.length - MAX_FILAS_TABLA_WA} filas más — ver el detalle completo en tu panel)`);
     } else {
       lineas.push('(la gráfica de esto está en tu panel)');
     }

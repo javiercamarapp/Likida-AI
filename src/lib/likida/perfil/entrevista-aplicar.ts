@@ -70,8 +70,12 @@ export async function aplicarTurnoEntrevista(opts: {
     };
   }
 
+  // A37-S53-05: operadoresAlta/unidadesAlta se marcan como «declarados» SOLO si la creación salió bien.
+  // Antes se guardaban primero y, si la alta fallaba (p. ej. teléfono de otra flota), el chat ya no
+  // volvía a preguntar y afirmaba que los choferes podían usar WhatsApp.
+  const { operadoresAlta, unidadesAlta, ...hechosBase } = hechos as Partial<DatosOnboarding>;
   const patch = {
-    ...declararHechos(hechos as Partial<DatosOnboarding>),
+    ...declararHechos(hechosBase),
     ...(skip.length ? declararAusente(skip) : {}),
   };
   const perfilNuevo = await marcar('guardar_perfil', async () => {
@@ -88,14 +92,27 @@ export async function aplicarTurnoEntrevista(opts: {
     return leido;
   });
 
-  const extras = await marcar('nutrir_operacion', () =>
+  const resultadoNutrir = await marcar('nutrir_operacion', () =>
     nutrirDesdeHechos(opts.tenantId, hechos, perfilNuevo, opts.userId));
+  const extras = resultadoNutrir.notas;
 
-  const estado = estadoEntrevista(perfilNuevo);
+  const hechosOk: Partial<DatosOnboarding> = { ...hechosBase };
+  const patchAltas: Partial<DatosOnboarding> = {};
+  if (operadoresAlta && resultadoNutrir.operadoresOk) { patchAltas.operadoresAlta = operadoresAlta; hechosOk.operadoresAlta = operadoresAlta; }
+  if (unidadesAlta && resultadoNutrir.unidadesOk) { patchAltas.unidadesAlta = unidadesAlta; hechosOk.unidadesAlta = unidadesAlta; }
+  let perfilFinal = perfilNuevo;
+  if (patchAltas.operadoresAlta || patchAltas.unidadesAlta) {
+    perfilFinal = await marcar('guardar_perfil', async () => {
+      await guardarPerfilPatch(opts.tenantId, declararHechos(patchAltas), opts.userId);
+      return getPerfilCrudo(opts.tenantId);
+    });
+  }
+
+  const estado = estadoEntrevista(perfilFinal);
   const texto = await marcar('armar_respuesta', () => [
     skip.length ? 'Quedó pendiente (no se inventó un no).' : '',
     extras.length ? extras.join('\n') : '',
-    Object.keys(hechos).length ? mensajeConfirmacion(hechos, estado) : (estado.siguiente
+    Object.keys(hechosOk).length ? mensajeConfirmacion(hechosOk, estado) : (estado.siguiente
       ? `\n${textoPregunta(estado.siguiente)}`
       : 'No queda nada pendiente de declarar.'),
   ].filter(Boolean).join('\n'));
@@ -125,8 +142,10 @@ async function nutrirDesdeHechos(
   hechos: Partial<DatosOnboarding>,
   perfil: unknown,
   userId: string | null,
-): Promise<string[]> {
+): Promise<{ notas: string[]; operadoresOk: boolean; unidadesOk: boolean }> {
   const notas: string[] = [];
+  let operadoresOk = true;
+  let unidadesOk = true;
   const actor = userId ? { id: userId } : undefined;
   // A36-R15-01: el tenant (CFDI + aviso de privacidad) solo se toca si ESTE
   // turno declaró algún dato fiscal, y se mezcla sobre la fila viva: el perfil
@@ -164,8 +183,11 @@ async function nutrirDesdeHechos(
       const t = hechos.topesPolitica;
       const cfg = await getConfig(tenantId);
       const porRuta = cfg.politica.filter((p) => p.ruta);
-      const tope = (concepto: string, n: number | undefined) =>
-        n != null ? { concepto, topeMonto: n } : cfg.politica.find((p) => p.concepto === concepto && !p.ruta);
+      // A37-S53-07: se mezcla sobre el renglón existente (conserva requiereCfdi y notas); solo cambia el tope.
+      const tope = (concepto: string, n: number | undefined) => {
+        const existente = cfg.politica.find((p) => p.concepto === concepto && !p.ruta);
+        return n != null ? { ...(existente ?? {}), concepto, topeMonto: n } : existente;
+      };
       const politica = [
         tope('diesel', t.diesel),
         tope('caseta', t.caseta),
@@ -188,19 +210,21 @@ async function nutrirDesdeHechos(
       notas.push(`Operador listo para WhatsApp: ${o.nombre}.`);
     } catch (e) {
       logger.error('entrevista.operador_alta', { tenantId, err: e instanceof Error ? e.message : String(e) });
+      operadoresOk = false;
       notas.push(e instanceof Error ? e.message : `No pude dar de alta a ${o.nombre}.`);
     }
   }
 
   for (const u of hechos.unidadesAlta ?? []) {
     try {
-      await crearUnidad(tenantId, { numeroEconomico: u.economico, placas: u.placas ?? null });
+      await crearUnidad(tenantId, { numeroEconomico: u.economico, placas: u.placas ?? null }, actor);
       notas.push(`Unidad ${u.economico} dada de alta.`);
     } catch (e) {
       logger.error('entrevista.unidad_alta', { tenantId, err: e instanceof Error ? e.message : String(e) });
+      unidadesOk = false;
       notas.push(e instanceof Error ? `Unidad ${u.economico}: ${e.message}` : `No pude dar de alta ${u.economico}.`);
     }
   }
 
-  return notas;
+  return { notas, operadoresOk, unidadesOk };
 }

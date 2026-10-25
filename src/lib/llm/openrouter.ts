@@ -19,6 +19,7 @@ import { reserveLlmBudget, settleLlmBudget, type LlmBudget, type LlmBudgetReserv
 // `instanceof` sobre el envoltorio, que era `false` en producción.
 export { esErrorDePresupuesto } from './budget';
 import { runWithToolSignal } from './runtime-signal';
+import { breakerVerificar, conBreaker, CircuitoLlmAbiertoError, esTimeoutDeProveedor } from './breaker';
 import { aprenderSinEsquemaEstricto, esErrorEsquemaRechazado, registrarCaida, usaEsquemaEstricto, type CaidaLlm } from './caidas';
 
 let _client: OpenAI | null = null;
@@ -176,6 +177,17 @@ export function resumenCausa(err: unknown, profundidad = 3): string {
   return txt || 'sin detalle de causa';
 }
 
+/** 401/402/403 del proveedor: llave rota, saldo agotado o sin permiso (A37-L-01). */
+export function esFalloDeCredencial(err: unknown): boolean {
+  let cur: unknown = err;
+  for (let i = 0; i < 4 && cur && typeof cur === 'object'; i++) {
+    const st = (cur as { status?: unknown }).status;
+    if (st === 401 || st === 402 || st === 403) return true;
+    cur = (cur as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
 export function isTransientError(err: unknown): boolean {
   // POR TIPO ANTES QUE POR TEXTO. El SDK de OpenAI aplasta CUALQUIER fallo de
   // conexión —DNS, TCP rechazado, TLS, `fetch failed` de undici— en un
@@ -184,6 +196,8 @@ export function isTransientError(err: unknown): boolean {
   // el caso para el que existe el fallback: el proveedor caído. Los 503 sí
   // pasaban, y por eso los tests no lo vieron.
   const e = err as { name?: unknown; status?: unknown; cause?: unknown } | null;
+  // A37-L-06: el breaker abierto es transitorio — el llamador degrada de inmediato.
+  if (err instanceof CircuitoLlmAbiertoError) return true;
   if (e && typeof e === 'object') {
     if (typeof e.name === 'string' && /^APIConnection(Timeout)?Error$/.test(e.name)) return true;
     if (typeof e.status === 'number' && (e.status >= 500 || e.status === 429 || e.status === 408)) return true;
@@ -391,6 +405,7 @@ export async function generateResponse(opts: {
 
   const once = async (m: string) => {
     opts.signal?.throwIfAborted();
+    breakerVerificar(opts.role); // A37-L-06: abierto = falla ya, antes de reservar presupuesto
     // CACHÉ DE PROMPT — la misma palanca (y el mismo razonamiento medido) que
     // en `generateWithTools`: si el modelo es de Anthropic, el SYSTEM se marca
     // con el breakpoint y las llamadas siguientes con el mismo prefijo pagan
@@ -423,7 +438,7 @@ export async function generateResponse(opts: {
     let res: OpenAI.Chat.ChatCompletion;
     const t0Llamada = Date.now();
     try {
-      res = await getClient().chat.completions.create(body, opts.signal ? { signal: opts.signal } : undefined);
+      res = await conBreaker(opts.role, () => getClient().chat.completions.create(body, opts.signal ? { signal: opts.signal } : undefined));
     } catch (e) {
       // BACKEND-19C2-1: antes se liquidaba aquí al monto RESERVADO (el
       // estimado, no lo que de verdad se gastó) — una racha de
@@ -657,7 +672,7 @@ export async function generateStructured<T>(opts: {
   budget?: LlmBudget;
   /** T-A3-68: se avisa de cada caída (modo `json_object` o modelo de respaldo) para dejarla en el rastro del documento. */
   onCaida?: (c: CaidaLlm) => void;
-}): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number; costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }>; /** ms en el proveedor, SUMA de todos los intentos del turno (E1-A). */ ms: number }> {
+}): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number; costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }>; /** ms en el proveedor, SUMA de todos los intentos del turno (E1-A). */ ms: number; /** A37-S60-05: el proveedor omitió `usage` en algún intento; `cost` es la RESERVA (cota), no lo medido. */ noMedido?: true }> {
   const model = modelFor(opts.role);
   const fallback = FALLBACK_POR_ROL[opts.role] ?? FALLBACK[model] ?? null;
   const jsonSchema = z.toJSONSchema(opts.schema, { target: 'draft-7' }) as Record<string, unknown>;
@@ -712,6 +727,8 @@ export async function generateStructured<T>(opts: {
   const costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }> = {};
   // E1-A: ms acumulados en el proveedor a lo largo de los intentos del turno (lo que el usuario esperó, sin contar la reserva).
   let msAcumulados = 0;
+  // A37-S60-05: algún intento volvió sin `usage` (ver `attempt`).
+  let sinMedir = false;
   const cobrar = (u: { model: string; tokensIn: number; tokensOut: number; cost: number }) => {
     gastado.tokensIn += u.tokensIn;
     gastado.tokensOut += u.tokensOut;
@@ -720,10 +737,11 @@ export async function generateStructured<T>(opts: {
     costoPorModelo[u.model] = { tokensIn: prev.tokensIn + u.tokensIn, tokensOut: prev.tokensOut + u.tokensOut, cost: prev.cost + u.cost };
   };
 
-  const attempt = async (m: string, note?: string, tope?: number): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number; costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }>; ms: number }> => {
+  const attempt = async (m: string, note?: string, tope?: number): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number; costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }>; ms: number; noMedido?: true }> => {
     // Si el presupuesto ya se agotó, no se paga una llamada que se va a cortar a
     // media respuesta.
     opts.signal?.throwIfAborted();
+    breakerVerificar(opts.role); // A37-L-06
     const msgs = note
       ? [{ role: 'system' as const, content: `${opts.system}\n\n${note}` }, ...built.slice(1)]
       : built;
@@ -765,13 +783,13 @@ export async function generateStructured<T>(opts: {
     const t0Llamada = Date.now();
     try {
       try {
-        res = await getClient().chat.completions.create(body, opts.signal ? { signal: opts.signal } : undefined);
+        res = await conBreaker(opts.role, () => getClient().chat.completions.create(body, opts.signal ? { signal: opts.signal } : undefined));
       } catch (e0) {
         // Un 400 del esquema estricto no es transitorio ni se arregla con el respaldo: se repite UNA vez con `json_object`.
         if (!estrictoInicial || !esErrorEsquemaRechazado(e0)) throw e0;
         aprenderSinEsquemaEstricto(m);
         avisarCaida({ tipo: 'modo_json', rol: opts.role, de: m, a: m, motivo: 'esquema_estricto_rechazado', detalle: resumenCausa(e0).slice(0, 160) });
-        res = await getClient().chat.completions.create(armarBody(false), opts.signal ? { signal: opts.signal } : undefined);
+        res = await conBreaker(opts.role, () => getClient().chat.completions.create(armarBody(false), opts.signal ? { signal: opts.signal } : undefined));
       }
     } catch (e) {
       msAcumulados += Date.now() - t0Llamada;
@@ -789,6 +807,14 @@ export async function generateStructured<T>(opts: {
     const tokOut = res.usage?.completion_tokens ?? 0;
     const usage = { model: res.model || m, tokensIn: tokIn, tokensOut: tokOut, cost: costoReal(res.usage as { cost?: number } | undefined, m, tokIn, tokOut) };
     const usageValido = Boolean(res.usage && (tokIn > 0 || tokOut > 0 || typeof (res.usage as { cost?: unknown }).cost === 'number'));
+    // A37-S60-05: sin `usage` del proveedor el ledger ya conserva la RESERVA; el costo que se
+    // devuelve (y que el llamador escribe en `llm_costo`) debe decir lo mismo y llevar la marca
+    // `noMedido`, no un $0 con cara de medición (mismo patrón que `generateResponse`).
+    if (!usageValido) {
+      sinMedir = true;
+      if (reservation) usage.cost = reservation.amountUsd;
+      logger.warn('llm.usage_omitido', { fn: 'generateStructured', model: usage.model, reserva: reservation?.amountUsd ?? null });
+    }
     await settle(usageValido ? usage.cost : reservation?.amountUsd ?? usage.cost);
     // Se cobra AQUÍ, antes de cualquier salida: pase lo que pase debajo —
     // truncado, JSON roto, schema inválido— esta llamada ya se pagó.
@@ -818,7 +844,7 @@ export async function generateStructured<T>(opts: {
     // Se devuelve el ACUMULADO del turno, no el de este intento: el llamador
     // quiere saber qué costó extraer este comprobante, no qué costó el último
     // reintento.
-    return { data: v.data, raw, model: usage.model, ...gastado, costoPorModelo, ms: msAcumulados };
+    return { data: v.data, raw, model: usage.model, ...gastado, costoPorModelo, ms: msAcumulados, ...(sinMedir ? { noMedido: true as const } : {}) };
   };
 
   /**
@@ -842,6 +868,10 @@ export async function generateStructured<T>(opts: {
   try {
     return await attempt(model);
   } catch (e1) {
+    // A37-L-01: 401/402/403 (llave rota, saldo agotado, sin permiso) NO se arreglan
+    // repitiendo la llamada ni con otro modelo del mismo gateway: se rinde ya, con
+    // el error intacto para que el llamador alerte y degrade.
+    if (esFalloDeCredencial(e1)) throw conGastado(e1, 'Falló generación estructurada (credencial/saldo)');
     // Truncamiento: reintentar con la nota NO sirve — el modelo ya estaba
     // respondiendo JSON, se quedó sin presupuesto a media escritura. Lo único
     // que falta es techo, así que el reintento sube el tope en vez de regañarlo.
@@ -858,9 +888,13 @@ export async function generateStructured<T>(opts: {
       }
     }
     // Reintento con el MISMO modelo + nota (típicamente errores de formato JSON).
+    // A37-L-06: tras un TIMEOUT/caída del proveedor la nota no ayuda y otro intento
+    // al mismo modelo apila otros 30 s: se pasa directo al respaldo.
     try {
+      if (esTimeoutDeProveedor(e1)) throw e1;
       return await attempt(model, note);
     } catch (e2) {
+      if (esFalloDeCredencial(e2)) throw conGastado(e2, 'Falló generación estructurada (credencial/saldo)');
       // CR-5: si el fallo es transient (provider caído/429/timeout) y hay
       // fallback cross-provider, intentar con OTRO proveedor antes de rendirse.
       if (fallback && (isTransientError(e1) || isTransientError(e2))) {
@@ -928,6 +962,9 @@ export class PartialExecutionError extends Error {
     this.name = 'PartialExecutionError';
   }
 }
+
+/** A37-L-11: roles que mueven dinero cuyo respaldo (otro proveedor, sin medir en política fiscal) NO puede escribir. */
+const ROLES_RESPALDO_SOLO_LECTURA: ReadonlySet<string> = new Set(['cuadre']);
 
 // Prefijos de tools que SOLO LEEN, para poder cachear su resultado dentro de un
 // turno. `cuadrar_` está aquí porque `cuadrar_viaje` calcula y no escribe nada —
@@ -1042,6 +1079,8 @@ export async function generateWithTools(opts: {
   tokensIn: number;
   tokensOut: number;
   cost: number;
+  /** A37-S60-05: alguna ronda volvió sin `usage`; su costo es la RESERVA (cota conservadora), no lo medido. */
+  noMedido?: true;
   /**
    * El mismo total de `cost`, pero partido por el modelo que de verdad
    * respondió cada ronda. `model`/`cost` arriba son el resumen de UNA fila para
@@ -1080,6 +1119,9 @@ export async function generateWithTools(opts: {
     const prev = costoPorModelo[m] ?? { tokensIn: 0, tokensOut: 0, cost: 0 };
     costoPorModelo[m] = { tokensIn: prev.tokensIn + tIn, tokensOut: prev.tokensOut + tOut, cost: prev.cost + c };
   };
+  // A37-S60-05: qué pasó con el `usage` de la ÚLTIMA completion (lo escribe `completion`, lo lee el bucle).
+  let ultimaRonda: { medida: boolean; reservaUsd: number | null } = { medida: true, reservaUsd: null };
+  let sinMedir = false;
   let activeModel = model; // cambia a fallback si el primario cae (persiste el resto del ciclo)
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -1149,6 +1191,7 @@ export async function generateWithTools(opts: {
   };
 
   const completion = async (body: Record<string, unknown>, signalOpt: { signal: AbortSignal } | undefined) => {
+    breakerVerificar(opts.role); // A37-L-06
     const reservation = await reservarCompletion(body, activeModel);
     try {
       // AUDITORÍA prod 25-ago-2026, CRÍTICO: extraer `create` sin `.bind()`
@@ -1167,19 +1210,22 @@ export async function generateWithTools(opts: {
         request: Record<string, unknown>,
         options?: { signal?: AbortSignal },
       ) => PromiseLike<OpenAI.Chat.ChatCompletion>;
-      const response = await create(body, signalOpt);
+      const response = await conBreaker(opts.role, () => create(body, signalOpt));
+      const usageDeLaRonda = response.usage as (typeof response.usage & { cost?: number }) | undefined;
+      const usageCompletaRonda = Boolean(usageDeLaRonda
+        && Number.isFinite(usageDeLaRonda.prompt_tokens)
+        && Number.isFinite(usageDeLaRonda.completion_tokens)
+        && (usageDeLaRonda.prompt_tokens > 0 || usageDeLaRonda.completion_tokens > 0 || typeof usageDeLaRonda.cost === 'number'));
+      ultimaRonda = { medida: usageCompletaRonda, reservaUsd: reservation?.amountUsd ?? null };
       if (reservation) {
         try {
-          const usage = response.usage as (typeof response.usage & { cost?: number }) | undefined;
-          const usageCompleta = usage
-            && Number.isFinite(usage.prompt_tokens)
-            && Number.isFinite(usage.completion_tokens)
-            && (usage.prompt_tokens > 0 || usage.completion_tokens > 0 || typeof usage.cost === 'number');
+          const usage = usageDeLaRonda;
+          const usageCompleta = usageCompletaRonda;
           // Si el proveedor omite usage no conocemos el costo real. Conservar
           // la reserva es la única opción segura: liquidar a cero abriría la
           // puerta a que el siguiente completion rebase el tope duro.
           const costo = usageCompleta
-            ? costoReal(usage as { cost?: number }, activeModel, usage.prompt_tokens, usage.completion_tokens)
+            ? costoReal(usage as { cost?: number }, activeModel, usage!.prompt_tokens, usage!.completion_tokens)
             : reservation.amountUsd;
           // RENDIMIENTO-19C2-1: mismo motivo que `reservarCompletion` — la
           // RPC de liquidación hereda la señal en vez de poder seguir
@@ -1210,12 +1256,18 @@ export async function generateWithTools(opts: {
     }
   };
 
+  // A37-L-11: tras caer al respaldo de un rol de dinero, solo se ofrecen las tools de lectura/cuadre.
+  let soloLectura = false;
+  const herramientasActivas = () => (soloLectura
+    ? opts.tools.filter((t) => t.type === 'function' && esLectura(t.function.name))
+    : opts.tools);
+
   const complete = async (msgs: OpenAI.Chat.ChatCompletionMessageParam[]) => {
     const body = () => ({
       model: activeModel,
       messages: msgs,
-      tools: opts.tools.length ? opts.tools : undefined,
-      tool_choice: opts.tools.length ? ('auto' as const) : undefined,
+      tools: herramientasActivas().length ? herramientasActivas() : undefined,
+      tool_choice: herramientasActivas().length ? ('auto' as const) : undefined,
       // El MISMO techo que las respuestas estructuradas, y por la misma razón
       // (ver DEFAULT_MAX_TOKENS): con `reasoning: 'high'` —que es como corre el
       // rol `cuadre`— el razonamiento invisible y la respuesta comparten este
@@ -1234,6 +1286,17 @@ export async function generateWithTools(opts: {
       if (fallback && activeModel === model && !opts.signal?.aborted && isTransientError(err)) {
         logger.warn('llm.fallback', { fn: 'generateWithTools', from: model, to: fallback });
         activeModel = fallback;
+        // A37-L-11: el respaldo del cuadre es otro proveedor y NO está medido
+        // en política fiscal. Con él no se cierran liquidaciones: solo lectura
+        // y cuadre (las mutaciones se quitan del catálogo, no se confía en que
+        // el modelo se abstenga) y se le dice que el cierre queda pendiente.
+        if (ROLES_RESPALDO_SOLO_LECTURA.has(opts.role)) {
+          soloLectura = true;
+          convo.push({
+            role: 'system',
+            content: 'MODO DE RESPALDO: el modelo principal no está disponible y tú no tienes las herramientas que guardan o cierran. NO afirmes haber guardado ni cerrado una liquidación: puedes consultar y cuadrar, y debes decir que el cierre queda pendiente hasta que el sistema principal vuelva.',
+          });
+        }
         return await completion(body(), signalOpt);
       }
       throw err;
@@ -1253,7 +1316,13 @@ export async function generateWithTools(opts: {
       tokOut += rOut;
       // `activeModel` ya refleja quién respondió ESTA ronda: `complete` lo mueve
       // al fallback antes de devolver.
-      const costoRonda = costoReal(res.usage as { cost?: number } | undefined, activeModel, rIn, rOut);
+      let costoRonda = costoReal(res.usage as { cost?: number } | undefined, activeModel, rIn, rOut);
+      if (!ultimaRonda.medida) {
+        // A37-S60-05: sin `usage` el ledger conserva la reserva; el costo devuelto dice lo mismo y lo marca.
+        sinMedir = true;
+        if (ultimaRonda.reservaUsd !== null) costoRonda = ultimaRonda.reservaUsd;
+        logger.warn('llm.usage_omitido', { fn: 'generateWithTools', model: activeModel, reserva: ultimaRonda.reservaUsd });
+      }
       costo += costoRonda;
       acumularCosto(activeModel, rIn, rOut, costoRonda);
       used = res.model || activeModel;
@@ -1287,7 +1356,7 @@ export async function generateWithTools(opts: {
         // que la respondió. (Antes se precificaba aquí, de una vez, con el
         // modelo activo al final: correcto solo si el ciclo entero corrió en el
         // mismo modelo.)
-        return { finalText: choice?.message?.content ?? '', toolCalls: executed, model: used, tokensIn: tokIn, tokensOut: tokOut, cost: costo, costoPorModelo };
+        return { finalText: choice?.message?.content ?? '', toolCalls: executed, model: used, tokensIn: tokIn, tokensOut: tokOut, cost: costo, costoPorModelo, ...(sinMedir ? { noMedido: true as const } : {}) };
       }
 
       // LOOP-GUARD: CORTAR ANTES DE GASTAR LA RONDA, NO DESPUÉS.
@@ -1328,6 +1397,15 @@ export async function generateWithTools(opts: {
           } catch {
             executed.push({ toolName: call.function.name, args: {}, result: null, durationMs: 0, error: 'args_parse' });
             return { role: 'tool' as const, tool_call_id: call.id, content: JSON.stringify({ error: 'argumentos JSON inválidos' }) };
+          }
+          // A37-O7-12: la restricción de solo lectura del respaldo se aplica
+          // también AL EJECUTAR, no solo al catálogo anunciado: un modelo que
+          // alucine o sea inducido a llamar una herramienta que no está en el
+          // conjunto activo no la dispara (fail-closed).
+          if (!herramientasActivas().some((t) => t.type === 'function' && t.function.name === call.function.name)) {
+            logger.warn('llm.tool_fuera_del_catalogo_activo', { fn: 'generateWithTools', tool: call.function.name, soloLectura });
+            executed.push({ toolName: call.function.name, args, result: null, durationMs: 0, error: 'tool_no_disponible' });
+            return { role: 'tool' as const, tool_call_id: call.id, content: JSON.stringify({ error: 'herramienta no disponible en este modo' }) };
           }
           const key = llave(call.function.name, args);
           if (esLectura(call.function.name) && crossRound.has(key)) {

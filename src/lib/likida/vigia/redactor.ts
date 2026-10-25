@@ -135,6 +135,9 @@ function frasesAvance(e: EstatusViaje, minPosicion: number, respaldo: Record<str
   return `${va}${resto} a ${e.destino} (estimado por GPS, no es hora de llegada).`;
 }
 
+/** Etapas en las que la unidad ya descargó: su posición deja de ser información del cliente. */
+const ETAPAS_SIN_POSICION: ReadonlySet<string> = new Set(['descargando', 'entregado', 'regresando', 'cerrado']);
+
 function seccionUbicacion(e: EstatusViaje, ahora: Date, faltantes: string[], respaldo: Record<string, unknown>): string {
   const partes: string[] = [`${etiquetaViaje(e)}: ${ETAPAS[e.etapa]}.`];
   if (e.ultimoHito) {
@@ -147,7 +150,10 @@ function seccionUbicacion(e: EstatusViaje, ahora: Date, faltantes: string[], res
     partes.push(e.enAnden.desde ? `Sigue en ${donde} desde las ${fechaHoraMx(e.enAnden.desde)}.` : `Sigue en ${donde}.`);
     respaldo.enAnden = e.enAnden;
   }
-  if (e.posicion) {
+  if (e.posicion && ETAPAS_SIN_POSICION.has(e.etapa)) {
+    // A37-S59-07: tras la descarga la unidad ya puede ir con la carga de otro cliente; su posición en vivo ya no es de este viaje.
+    partes.push('Como la unidad ya no va en camino con tu carga, no comparto la ubicación de la unidad.');
+  } else if (e.posicion) {
     const min = minutosDesde(e.posicion.medidaEn, ahora);
     const liga = `https://maps.google.com/?q=${e.posicion.lat.toFixed(5)},${e.posicion.lng.toFixed(5)}`;
     respaldo.posicion = e.posicion;
@@ -377,8 +383,34 @@ export function redactarBorrador(e: EntradaRedaccion): Borrador {
   // La liga no se corta: el tope se aplica al cuerpo y la liga se agrega entera (igual que el pie).
   const cola = ligaPortal + pie;
   let texto = `${cuerpo}${cola}`;
-  if (texto.length > MAX_RESPUESTA + cola.length) texto = `${cuerpo.slice(0, MAX_RESPUESTA - 1)}…${cola}`;
+  if (texto.length > MAX_RESPUESTA + cola.length) {
+    // A37-S59-06: el recorte es por secciones completas y nunca parte una liga (una URL de Maps cortada sigue siendo válida pero
+    // apunta a otro lugar). Y un borrador recortado ya no es de riesgo bajo: no sale sin que una persona lo vea.
+    texto = `${recortarSinPartirLigas(cuerpo, MAX_RESPUESTA)}${cola}`;
+    if (riesgo === 'bajo') riesgo = 'medio';
+    respaldo.recortada = true;
+  }
   return { texto, faltantes, tareas, riesgo, adjuntos, requiereHumano, respaldo, origen };
+}
+
+/**
+ * Recorta `cuerpo` a `max` caracteres: primero quita secciones completas del final (separadas por línea en blanco); si aun así una
+ * sola sección pasa del tope, corta ahí pero NUNCA dentro de una URL (se corta antes de ella). Termina con «…».
+ */
+export function recortarSinPartirLigas(cuerpo: string, max: number): string {
+  if (cuerpo.length <= max) return cuerpo;
+  const secciones = cuerpo.split('\n\n');
+  while (secciones.length > 1 && secciones.join('\n\n').length + 2 > max) secciones.pop();
+  const resto = secciones.join('\n\n');
+  // Si el texto termina en una URL, la «…» va separada: pegada, pasaría a ser parte de la liga.
+  const cierra = (t: string) => (/https?:\/\/\S*$/.test(t) ? `${t} …` : `${t}…`);
+  if (resto.length + 2 <= max) return cierra(resto);
+  let corte = max - 2;
+  for (const m of resto.matchAll(new RegExp(LIGA.source, 'g'))) {
+    const ini = m.index ?? 0;
+    if (ini < corte && ini + m[0].length > corte) { corte = ini; break; }
+  }
+  return cierra(resto.slice(0, corte).replace(/[\s:(]+$/, ''));
 }
 
 // ── PULIR CON MODELO: opcional, y guardado ───────────────────────────────────

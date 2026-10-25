@@ -125,7 +125,15 @@ describe('resolverFila — contacto', () => {
     expect(r.contacto).toBeNull();
     expect(r.faltantes).toContain('sin_contacto');
   });
-  it('prefiere el que tiene consentimiento; a igualdad, el de menor id (determinista)', async () => {
+  it('A37-S58-10: un contacto sin consentimiento no es destinatario: queda sin_contacto', async () => {
+    const r = await resolverFila(fila(), deps({
+      ...base,
+      contactos: [contacto({ id: 'sin-consent', consentimientoEn: null })],
+    }));
+    expect(r.contacto).toBeNull();
+    expect(r.faltantes).toContain('sin_contacto');
+  });
+  it('solo elige entre los que tienen consentimiento; a igualdad, el de menor id (determinista)', async () => {
     const r = await resolverFila(fila(), deps({
       ...base,
       contactos: [contacto({ id: 'z', consentimientoEn: null }), contacto({ id: 'y' }), contacto({ id: 'x' })],

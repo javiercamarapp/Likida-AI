@@ -40,7 +40,7 @@ const HOST = new URL(PORTAL).hostname;
 
 const INV = (p: Partial<InventarioPagina> = {}): InventarioPagina => ({
   url: PORTAL, titulo: 'Facturación', campos: [], botones: [], captcha: [],
-  texto: 'Bienvenido', ...p,
+  texto: 'Bienvenido a tu portal de facturación', ...p,
 });
 
 const LOGIN = INV({
@@ -77,6 +77,18 @@ function reloj() {
 beforeEach(() => { guardarSesionPortal.mockClear(); anotarVinculo.mockClear(); });
 
 describe('vincularPortalAsistido', () => {
+  it('A37-S45-03: una SPA que nunca dibuja NO se guarda como «vinculado»', async () => {
+    const { ahora, dormir } = reloj();
+    const r = await vincularPortalAsistido({
+      tenantId: TENANT, comercio: CLAVE, senaDeAdentro: undefined,
+      entorno: { pagina: paginaFalsa([INV({ texto: '' })]), estadoDeSesion: async () => estado(), ahora, dormir },
+      topeMs: 3000, intervaloMs: 1000,
+    });
+    expect(r.ok).toBe(false);
+    expect(guardarSesionPortal).not.toHaveBeenCalled();
+    expect(anotarVinculo).not.toHaveBeenCalled();
+  });
+
   it('espera a que la persona entre y guarda la sesión cifrada, recortada al portal', async () => {
     // Dos vueltas en el login (la persona está resolviendo el reCAPTCHA) y a la
     // tercera ya está dentro.
@@ -150,5 +162,22 @@ describe('vincularPortalAsistido', () => {
     });
     expect(r.ok).toBe(false);
     expect(p.abrir).not.toHaveBeenCalled();
+  });
+});
+
+// A37-S05-07
+describe('A37-S05-07: baseSeguraDeVinculacion', async () => {
+  const { baseSeguraDeVinculacion } = await import('./vinculacion_asistida');
+  it('acepta https y normaliza al origen', () => {
+    expect(baseSeguraDeVinculacion('https://app.likida.ai/')).toBe('https://app.likida.ai');
+  });
+  it('acepta http solo hacia localhost', () => {
+    expect(baseSeguraDeVinculacion('http://localhost:3000')).toBe('http://localhost:3000');
+    expect(() => baseSeguraDeVinculacion('http://app.ejemplo.com')).toThrow(/https/);
+  });
+  it('rechaza esquemas raros, credenciales y basura', () => {
+    expect(() => baseSeguraDeVinculacion('ftp://x.com')).toThrow();
+    expect(() => baseSeguraDeVinculacion('https://u:p@x.com')).toThrow(/usuario/);
+    expect(() => baseSeguraDeVinculacion('no es url')).toThrow();
   });
 });

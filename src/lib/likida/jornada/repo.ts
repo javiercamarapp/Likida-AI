@@ -142,6 +142,21 @@ export async function idDeJornada(tenantId: string, operadorId: string, dia: str
   return data ? String(data.id) : null;
 }
 
+/** El día (AAAA-MM-DD) de un expediente, anclado al tenant. `null` si no existe
+ *  o la base no contestó: quien llama FALLA CERRADO (A37-S19-01). */
+export async function diaDeJornada(tenantId: string, jornadaId: string): Promise<string | null> {
+  const { data, error } = await acotada(
+    supabaseAdmin().from('jornada_dia').select('dia')
+      .eq('tenant_id', tenantId).eq('id', jornadaId).maybeSingle(),
+    'jornada.dia.por_id',
+  );
+  if (error) {
+    logger.error('jornada.dia_por_id_ilegible', { tenant: tenantId, jornada: jornadaId, err: error.message });
+    return null;
+  }
+  return data ? String(data.dia) : null;
+}
+
 /** Cuántas horas puede quedar abierta una jornada antes de que una marca de
  *  madrugada deje de poder atribuírsele. Más de 24 h no es una jornada larga:
  *  es una marca del día equivocado, y colgársela sería inventar la atribución. */
@@ -184,13 +199,7 @@ export async function jornadaQueCierra(
   if (!data) return { jornada: null, error: null };
   const fila = data as { id: string; dia: string };
 
-  const marcas = await acotada(
-    supabaseAdmin().from('jornada_asiento').select('tipo, momento')
-      .eq('tenant_id', tenantId).eq('jornada_id', fila.id)
-      .in('tipo', ['inicio_jornada', 'fin_jornada'])
-      .is('anulado_en', null),
-    'jornada.dia.anterior.marcas',
-  );
+  const marcas = await marcasVivas(tenantId, fila.id, ['inicio_jornada', 'fin_jornada']);
   if (marcas.error) return { jornada: null, error: marcas.error.message };
 
   const vivos = (marcas.data ?? []) as Array<{ tipo: string; momento: string }>;
@@ -202,7 +211,36 @@ export async function jornadaQueCierra(
   if (!Number.isFinite(horas) || horas < 0 || horas > MAX_HORAS_JORNADA_ABIERTA) {
     return { jornada: null, error: null };
   }
+
+  // A37-S48-03: si el día del mensaje YA tiene su propio inicio vivo, este cierre es de HOY: el operador olvidó cerrar ayer, pero hoy
+  // empezó otra jornada y el fin de hoy le pertenece. Atribuirlo a ayer fabricaría una jornada de ~20 h (con señal de exceso) y dejaría la de hoy sin fin.
+  const hoy = await idDeJornada(tenantId, operadorId, diaDelMensaje);
+  if (hoy) {
+    const inicioHoy = await tieneMarcaViva(tenantId, hoy, 'inicio_jornada');
+    if (inicioHoy.error) return { jornada: null, error: inicioHoy.error };
+    if (inicioHoy.viva) return { jornada: null, error: null };
+  }
   return { jornada: { id: String(fila.id), dia: String(fila.dia) }, error: null };
+}
+
+/** ¿El expediente tiene una marca VIVA (no anulada) de ese tipo? `error` = la base no contestó (no se lee como «no hay»). */
+export async function tieneMarcaViva(
+  tenantId: string, jornadaId: string, tipo: 'inicio_jornada' | 'fin_jornada',
+): Promise<{ viva: boolean; error: string | null }> {
+  const r = await marcasVivas(tenantId, jornadaId, [tipo]);
+  if (r.error) return { viva: false, error: r.error.message };
+  return { viva: ((r.data ?? []) as unknown[]).length > 0, error: null };
+}
+
+/** Las marcas VIVAS (no anuladas) de un expediente, de los tipos pedidos. Anclado al tenant. UNA sola consulta para toda la lectura de «¿ya empezó / ya cerró?». */
+function marcasVivas(tenantId: string, jornadaId: string, tipos: readonly string[]) {
+  return acotada(
+    supabaseAdmin().from('jornada_asiento').select('tipo, momento')
+      .eq('tenant_id', tenantId).eq('jornada_id', jornadaId)
+      .in('tipo', [...tipos])
+      .is('anulado_en', null),
+    'jornada.dia.marcas_vivas',
+  );
 }
 
 /** El día natural anterior a un AAAA-MM-DD, o `null` si no es una fecha. */
@@ -340,6 +378,12 @@ export async function asentarMarca(m: MarcaNueva): Promise<ResultadoAsiento> {
  *  en analytics.ts): pedir menos del tope y comprobar el borde es lo que
  *  permite DECIR que la ventana no cupo en vez de enseñar media lista. */
 export const TOPE_EXPEDIENTES = 900;
+/** A37-S10-06: el tope de la EXPORTACIÓN (el registro que se enseña en una inspección): paginada, no de una sola lectura. */
+export const TOPE_EXPEDIENTES_EXPORTACION = 5000;
+/** A37-S10-06: expedientes por página y ids por consulta de asientos. 100 uuid son ~3.7 KB de URL: lejos del techo
+ *  de un gateway (el `.in()` de 900 uuid medía ~33 KB). */
+const PAGINA_EXPEDIENTES = 500;
+const IDS_POR_CONSULTA = 100;
 
 export interface LecturaJornadas {
   dias: FilaJornadaDia[];
@@ -363,26 +407,38 @@ export async function leerJornadas(
   desde: string,
   hasta: string,
   operadorId?: string | null,
+  opciones: { tope?: number } = {},
 ): Promise<LecturaJornadas> {
   const admin = supabaseAdmin();
-  let q = admin.from('jornada_dia')
-    .select('id, operador_id, dia, estado, cerrado_en, cerrado_por_email, conforme_operador_en, conforme_wa_message_id')
-    .eq('tenant_id', tenantId)
-    .gte('dia', desde)
-    .lte('dia', hasta)
-    .order('dia', { ascending: true })
-    .limit(TOPE_EXPEDIENTES);
-  if (operadorId) q = q.eq('operador_id', operadorId);
-
-  const { data, error } = await acotada(q, 'jornada.leer');
-  if (error) throw new JornadaIlegible(error.message);
+  const tope = opciones.tope ?? TOPE_EXPEDIENTES;
 
   type Fila = {
     id: string; operador_id: string; dia: string; estado: string;
     cerrado_en: string | null; cerrado_por_email: string | null;
     conforme_operador_en: string | null; conforme_wa_message_id: string | null;
   };
-  const filas = (data ?? []) as unknown as Fila[];
+  // A37-S10-06 — EXPEDIENTES PAGINADOS, no `.limit(900)`: una flota de 40+ operadores pidiendo un mes pasa de 900
+  // expedientes operador-día y el reporte salía truncado PERDIENDO LOS DÍAS MÁS RECIENTES. Se pagina por posición con
+  // un orden ÚNICO (dia, id) hasta el nuevo tope; se pide una fila de más para DEMOSTRAR si hubo más de lo que cupo.
+  const filas: Fila[] = [];
+  let truncada = false;
+  for (let desdePos = 0; ; desdePos += PAGINA_EXPEDIENTES) {
+    let q = admin.from('jornada_dia')
+      .select('id, operador_id, dia, estado, cerrado_en, cerrado_por_email, conforme_operador_en, conforme_wa_message_id')
+      .eq('tenant_id', tenantId)
+      .gte('dia', desde)
+      .lte('dia', hasta)
+      .order('dia', { ascending: true })
+      .order('id', { ascending: true })
+      .range(desdePos, desdePos + PAGINA_EXPEDIENTES - 1);
+    if (operadorId) q = q.eq('operador_id', operadorId);
+    const { data, error } = await acotada(q, 'jornada.leer');
+    if (error) throw new JornadaIlegible(error.message);
+    const pagina = (data ?? []) as unknown as Fila[];
+    filas.push(...pagina);
+    if (filas.length > tope) { truncada = true; filas.length = tope; break; }
+    if (pagina.length < PAGINA_EXPEDIENTES) break;
+  }
   if (filas.length === 0) return { dias: [], truncada: false };
 
   const ids = filas.map((f) => String(f.id));
@@ -398,24 +454,29 @@ export async function leerJornadas(
   // `traerTodo` pagina con `count` y LANZA `LecturaIncompleta` si no puede
   // demostrar que leyó todo — que es justo lo que este módulo necesita, porque
   // ya falla cerrado con `JornadaIlegible`.
-  let asientosFilas: Array<Record<string, unknown>>;
+  // A37-S10-06: los ids van en LOTES de IDS_POR_CONSULTA (un solo `.in()` de 900 uuid medía ~33 KB de URL y podía
+  // rebotar en el gateway con un 500 en lugar del archivo); cada lote pagina con `traerTodo`.
+  const asientosFilas: Array<Record<string, unknown>> = [];
   try {
-    asientosFilas = await traerTodo<Record<string, unknown>>(
-      (desde, hasta) => admin.from('jornada_asiento')
-        .select(`jornada_id, ${CAMPOS_ASIENTO}`, { count: 'exact' })
-        .eq('tenant_id', tenantId).in('jornada_id', ids)
-        // REN-9 (auditoría 24): `.order('momento')` solo no es un orden
-        // ÚNICO — dos marcas con el mismo `momento` (dos sellos en el mismo
-        // milisegundo, no imposible en un flujo de WhatsApp) podían caer en
-        // páginas distintas de `.range()` en cualquier orden, duplicándose o
-        // saltándose entre vueltas. El desempate por `id` (contrato de
-        // `pg.ts`: `traerTodo` necesita un orden determinista) lo vuelve
-        // reproducible.
-        .order('momento', { ascending: true })
-        .order('id', { ascending: true })
-        .range(desde, hasta),
-      'jornada.leer.asientos',
-    );
+    for (let i = 0; i < ids.length; i += IDS_POR_CONSULTA) {
+      const lote = ids.slice(i, i + IDS_POR_CONSULTA);
+      asientosFilas.push(...await traerTodo<Record<string, unknown>>(
+        (desde, hasta) => admin.from('jornada_asiento')
+          .select(`jornada_id, ${CAMPOS_ASIENTO}`, { count: 'exact' })
+          .eq('tenant_id', tenantId).in('jornada_id', lote)
+          // REN-9 (auditoría 24): `.order('momento')` solo no es un orden
+          // ÚNICO — dos marcas con el mismo `momento` (dos sellos en el mismo
+          // milisegundo, no imposible en un flujo de WhatsApp) podían caer en
+          // páginas distintas de `.range()` en cualquier orden, duplicándose o
+          // saltándose entre vueltas. El desempate por `id` (contrato de
+          // `pg.ts`: `traerTodo` necesita un orden determinista) lo vuelve
+          // reproducible.
+          .order('momento', { ascending: true })
+          .order('id', { ascending: true })
+          .range(desde, hasta),
+        'jornada.leer.asientos',
+      ));
+    }
   } catch (e) {
     throw new JornadaIlegible(e instanceof Error ? e.message : String(e));
   }
@@ -440,7 +501,7 @@ export async function leerJornadas(
       conformeWaMessageId: f.conforme_wa_message_id,
       asientos: porJornada.get(String(f.id)) ?? [],
     })),
-    truncada: filas.length >= TOPE_EXPEDIENTES,
+    truncada,
   };
 }
 
@@ -453,14 +514,20 @@ export async function nombresDeOperadores(
 ): Promise<Map<string, { nombre: string; numeroEmpleado: string | null }>> {
   const mapa = new Map<string, { nombre: string; numeroEmpleado: string | null }>();
   if (ids.length === 0) return mapa;
-  const { data, error } = await acotada(
-    supabaseAdmin().from('operador').select('id, nombre, numero_empleado')
-      .eq('tenant_id', tenantId).in('id', [...new Set(ids)]),
-    'jornada.operadores',
-  );
-  if (error) throw new JornadaIlegible(`nombres de operadores: ${error.message}`);
-  for (const o of (data ?? []) as Array<{ id: string; nombre: string; numero_empleado: string | null }>) {
-    mapa.set(String(o.id), { nombre: String(o.nombre), numeroEmpleado: o.numero_empleado });
+  // A37-S19-04: en lotes de 150 ids (como `alertasDeJornadas`): con una flota
+  // grande un solo `.in()` de cientos de uuids lleva la query string al límite
+  // del gateway y tumbaba toda la pantalla de jornada.
+  const unicos = [...new Set(ids)];
+  for (let i = 0; i < unicos.length; i += 150) {
+    const { data, error } = await acotada(
+      supabaseAdmin().from('operador').select('id, nombre, numero_empleado')
+        .eq('tenant_id', tenantId).in('id', unicos.slice(i, i + 150)),
+      'jornada.operadores',
+    );
+    if (error) throw new JornadaIlegible(`nombres de operadores: ${error.message}`);
+    for (const o of (data ?? []) as Array<{ id: string; nombre: string; numero_empleado: string | null }>) {
+      mapa.set(String(o.id), { nombre: String(o.nombre), numeroEmpleado: o.numero_empleado });
+    }
   }
   return mapa;
 }

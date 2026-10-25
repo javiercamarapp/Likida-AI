@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { avisarDiscrepanciasDesglose, type DepsAvisoDiscrepancia } from './aviso_discrepancia';
+import { avisarDiscrepanciasDesglose, TOPE_AVISOS_DISCREPANCIA, type DepsAvisoDiscrepancia } from './aviso_discrepancia';
 import type { CandidatoCobro } from './reglas_cobro';
 import type { ReporteRevision } from './repo';
 import type { PosicionConocida } from './reporte_discrepancia';
@@ -53,8 +53,15 @@ describe('avisarDiscrepanciasDesglose', () => {
     // El texto es el del protocolo (T-A2-37): qué pasó / evidencia / qué hacer, con la unidad y el TAG.
     expect(texto).toMatch(/Qué pasó:.*Evidencia:.*Qué hacer:/s);
     expect(texto).toContain('U-01');
-    expect(texto).toContain('TAGEJEMPLO01');
+    expect(texto).toContain('…LO01');
     expect(texto).toMatch(/seguridad/);
+  });
+
+  it('A37-S51-04: un envío no-ok pero ENCOLADO en el outbox cuenta como enviado (no pendiente)', async () => {
+    const avisar = vi.fn(async (_tel: string, _texto: string) => ({ ok: false as const, motivo: 'token vencido', codigo: 190, fueraDeVentana: false, reintentable: false, encolado: true }));
+    const r = await avisarDiscrepanciasDesglose(T, DES, deps({ avisar: avisar as unknown as DepsAvisoDiscrepancia['avisar'] }));
+    expect(r.enviados).toBe(1);
+    expect(r.pendientes).toBe(0);
   });
 
   it('usa el MISMO destinatario configurado para los avisos de atípicos (T-A2-14)', async () => {
@@ -128,5 +135,39 @@ describe('avisarDiscrepanciasDesglose', () => {
     expect(r.evaluados).toBe(2);
     expect(r.enviados).toBe(2);
     expect(avisar).toHaveBeenCalledTimes(2);
+  });
+
+  it('A37-S51-05: bajo el tope no hay resumen extra', async () => {
+    const avisar = vi.fn(async (_tel: string, _texto: string) => ({ ok: true, via: 'texto' as const, id: 'w' }));
+    const d = deps({
+      revisionDeDesglose: vi.fn(async () => reporteCon([critico({ indice: 0 }), critico({ indice: 1 })])),
+      avisar: avisar as unknown as DepsAvisoDiscrepancia['avisar'],
+    });
+    await avisarDiscrepanciasDesglose(T, DES, d);
+    expect(avisar).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('A37-A2-14: tope de mensajes por desglose', () => {
+  it('cientos de candidatos críticos: máximo TOPE individuales + UN resumen, nunca uno por candidato', async () => {
+    const muchos = Array.from({ length: 300 }, (_, i) => critico({ indice: i }));
+    const avisar = vi.fn(async (_tel: string, _texto: string) => ({ ok: true, via: 'texto' as const, id: 'wamid-1' }));
+    const d = deps({ revisionDeDesglose: vi.fn(async () => reporteCon(muchos)), avisar: avisar as unknown as DepsAvisoDiscrepancia['avisar'] });
+    const r = await avisarDiscrepanciasDesglose(T, DES, d);
+    expect(r.evaluados).toBe(300);
+    expect(avisar).toHaveBeenCalledTimes(TOPE_AVISOS_DISCREPANCIA + 1);
+    expect(r.enviados).toBe(TOPE_AVISOS_DISCREPANCIA + 1);
+    const resumen = avisar.mock.calls[TOPE_AVISOS_DISCREPANCIA][1];
+    expect(resumen).toContain(String(300 - TOPE_AVISOS_DISCREPANCIA));
+  });
+
+  it('Meta rechaza: no sigue insistiendo candidato por candidato (corta al primer rechazo)', async () => {
+    const muchos = Array.from({ length: 50 }, (_, i) => critico({ indice: i }));
+    const avisar = vi.fn(async () => ({ ok: false, motivo: 'rechazado', codigo: 131047, fueraDeVentana: true, reintentable: false }));
+    const d = deps({ revisionDeDesglose: vi.fn(async () => reporteCon(muchos)), avisar: avisar as unknown as DepsAvisoDiscrepancia['avisar'] });
+    const r = await avisarDiscrepanciasDesglose(T, DES, d);
+    expect(avisar).toHaveBeenCalledTimes(1);
+    expect(r.enviados).toBe(0);
+    expect(r.pendientes).toBe(50);
   });
 });

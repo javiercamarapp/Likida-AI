@@ -478,6 +478,44 @@ describe('legal: los relojes de Likida-empresa', () => {
   });
 });
 
+describe('A37-S25-06: el reloj ARCO corre en cada pasada', () => {
+  it('con el parte semanal YA en la bandeja, un plazo vencido igual alerta', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ status: 200 }) as Response));
+    encolarRespuesta('solicitud_arco', {
+      data: [{ id: 'aaaaaaaa-1111-2222-3333-444444444444', tipo: 'acceso', estado: 'recibida', recibida_en: '2026-07-01T00:00:00Z', vence_en: '2026-08-01' }],
+      count: 1, error: null,
+    });
+    encolarRespuesta('cola_aprobacion', { count: 1, error: null }); // el parte ya existe
+    const r = await correrAgenteBackOffice('legal_compliance', 'cron', '2026-08-27');
+    expect(r.piezas).toBe(0);
+    expect(alertarOperador).toHaveBeenCalledTimes(1);
+    expect(String((alertarOperador.mock.calls[0][1] as Record<string, unknown>).error)).toContain('VENCIDO');
+  });
+
+  it('una solicitud que vence en 2 días alerta antes de vencer', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ status: 200 }) as Response));
+    encolarRespuesta('solicitud_arco', {
+      data: [{ id: 'bbbbbbbb-1111-2222-3333-444444444444', tipo: 'acceso', estado: 'recibida', recibida_en: '2026-08-20T00:00:00Z', vence_en: '2026-08-29' }],
+      count: 1, error: null,
+    });
+    encolarRespuesta('cola_aprobacion', { count: 1, error: null });
+    await correrAgenteBackOffice('legal_compliance', 'cron', '2026-08-27');
+    expect((alertarOperador.mock.calls[0][1] as Record<string, unknown>).codigo).toBe('legal_arco_por_vencer');
+  });
+
+  it('el parte declara cuando la lista está truncada', () => {
+    const { cuerpo } = armarParteLegal({
+      hoy: '2026-08-27', lunes: '2026-08-24',
+      publicaciones: { valor: [], error: null },
+      entidad: { listo: true, faltantes: [], faltantesEntidad: [], faltantesDocumentos: [], bloqueado: false },
+      arco: { valor: [{ id: 'cccccccc-1', tipo: 'acceso', estado: 'recibida', recibidaEn: '2026-08-20T00:00:00Z', venceEn: '2026-09-20' }], error: null },
+      arcoTotal: 250,
+      societarios: { valor: [], error: null },
+    });
+    expect(cuerpo).toContain('250 solicitudes pendientes');
+  });
+});
+
 // ── 4 · Talento ───────────────────────────────────────────────────────────
 
 const correlerTalento = () => correrAgenteBackOffice('talento', 'cron', '2026-08-27');
@@ -586,13 +624,14 @@ describe('talento: el registro y la criba', () => {
     encolarRespuesta('cola_aprobacion', { count: 1, error: null });  // el parte YA existe
 
     const r = await correlerTalento();
-    // Cero piezas (el parte ya estaba) pero UNA criba escrita: antes de c6-6
-    // la corrida se cortaba antes y Ana se quedaba en 'recibido' una semana.
-    expect(r.piezas).toBe(0);
+    // A37-S25-05: la criba se escribe Y sus cribados salen en un parte de
+    // actualización (antes: «entran al parte de la semana que viene» = nunca).
+    expect(r.piezas).toBe(1);
     expect(updates).toHaveLength(1);
     expect(updates[0].fila.estado).toBe('cribado');
-    expect(r.motivo).toContain('se cribaron 1 candidato(s) nuevo(s)');
-    // Y la corrida NO se anota como trabajo vacío: hizo 1 de 1.
+    const pieza = encolarPieza.mock.calls[0][0] as Record<string, unknown>;
+    expect(pieza.titulo).toMatch(/^Talento — semana del 2026-08-24 — actualización /);
+    expect(String(pieza.cuerpo)).toContain('Ana');
     const anotada = registrarCorrida.mock.calls[0][2] as Record<string, unknown>;
     expect(anotada.tareasHechas).toBe(1);
     expect(anotada.tareasTotal).toBe(1);
@@ -682,5 +721,18 @@ describe('el reloj de la vuelta corta la criba de talento, y lo DICE (c7-1)', ()
     expect(r.piezas).toBe(1);
     expect(r.sinTurno).toBeUndefined();
     expect(updates).toHaveLength(1);
+  });
+});
+
+describe('A37-S25-05: sin parte vacío que selle la semana', () => {
+  it('sin candidatos nuevos no se encola ningún parte', async () => {
+    encolarRespuesta('vacante', {
+      data: [{ id: 'v1', clave: 'contador', titulo: 'Contador', requisitos: { obligatorios: ['SAT'], deseables: [] } }],
+      error: null,
+    });
+    encolarRespuesta('candidato', { data: [], error: null });
+    const r = await correrAgenteBackOffice('talento', 'cron', '2026-08-27');
+    expect(r.piezas).toBe(0);
+    expect(encolarPieza).not.toHaveBeenCalled();
   });
 });

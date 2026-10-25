@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verificarFirmaStripe, webhookConfigurado, eventoEnModoDeLaLlave } from '@/lib/saas/stripe';
+import { verificarFirmaStripe, webhookConfigurado, eventoEnModoDeLaLlave, facturaDePaymentIntent } from '@/lib/saas/stripe';
 import {
   marcarEvento, sellarEventoAplicado, aplicarSuscripcion, aplicarFactura, estadoDesdeStripe,
   tenantDeCustomer, planDePrice, cancelarFacturaDeStripe,
@@ -8,6 +8,7 @@ import { leerTextoAcotado } from '@/lib/http/cuerpo_acotado';
 import { logger } from '@/lib/logger';
 import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
 import { hoyMx } from '@/lib/formato';
+import { desgloseDeFacturaStripe } from '@/lib/saas/iva';
 
 // ── EL TECHO DEL CUERPO (auditoría prod, DAT-40) ──────────────────────────
 //
@@ -258,6 +259,10 @@ async function aplicar(evt: EventoStripe): Promise<void> {
           ? Number(obj.amount_paid ?? obj.amount_due ?? 0) / 100
           : Number(obj.amount_remaining ?? obj.amount_due ?? obj.total ?? 0) / 100,
         moneda: String(obj.currency ?? 'mxn').toUpperCase(),
+        // A37-S61-03: el IVA que STRIPE itemizó y que cuadra al centavo (16%, cobro
+        // completo). Sin él `timbrarFactura` se niega y la factura cobrada no podía
+        // emitirse nunca. Si Stripe no lo itemizó, va `null` — no se adivina.
+        ...(evt.type === 'invoice.paid' ? (desgloseDeFacturaStripe(obj) ?? { subtotal: null, iva: null }) : { subtotal: null, iva: null }),
         pagada: evt.type === 'invoice.paid',
         // CUÁNDO se pagó lo sabe Stripe, no el reloj de este proceso (DAT-23).
         // Un webhook reintentado horas después —o una carga de eventos vieja—
@@ -299,7 +304,13 @@ async function aplicar(evt: EventoStripe): Promise<void> {
     }
 
     case 'charge.refunded': {
-      const invoiceId = obj.invoice as string | null;
+      let invoiceId = (typeof obj.invoice === 'string' ? obj.invoice : (obj.invoice as { id?: string } | null)?.id) ?? null;
+      if (!invoiceId && typeof obj.payment_intent === 'string') {
+        // A37-S10-03: desde la API 2025-03-31 (basil) el cargo ya no trae `invoice`; sin esta consulta TODO reembolso
+        // de una mensualidad se leía como «cargo suelto», la factura seguía «pagada» con su CFDI vivo y Stripe daba el
+        // evento por entregado. Si Stripe no contesta, `facturaDePaymentIntent` LANZA → 5xx → Stripe reintenta.
+        invoiceId = await facturaDePaymentIntent(obj.payment_intent);
+      }
       if (!invoiceId) {
         // Un cargo suelto (fuera de suscripción) no tiene factura nuestra.
         logger.info('stripe.reembolso_sin_factura', { evt: evt.id });

@@ -21,6 +21,7 @@ import {
   type FilaDesgloseRechazada, type LectorDesglosesPuerto, type ListarDesglosesParams, type PaginaDesgloses,
 } from '../../liquidacion_externa/desglose_puerto';
 import type { CanalEntrega } from '../../liquidacion_externa/repo_correo';
+import { aInstanteMx } from '../../peajes/formatos';
 import { jsonObjeto } from '../posiciones_comun';
 import type { Http, ValoresCredencial } from '../tipos';
 import { SesionTms } from './sesion';
@@ -28,7 +29,28 @@ import { loginDe, urlBaseHttps, CONECTOR_TMS } from './sincronizar';
 
 const DIA_MS = 86_400_000;
 
-interface Entrada { desde: string; id: string; desglose?: DesgloseBitacora; rechazada?: FilaDesgloseRechazada }
+interface Entrada {
+  desde: string; id: string; desglose?: DesgloseBitacora; rechazada?: FilaDesgloseRechazada;
+  /** La fila no trae instante de cursor utilizable: su `desde` es la época 0 y NO cuenta para la ventana de relectura. */
+  sinInstante?: true;
+}
+
+/**
+ * A37-A1-liquidaciones-16: el instante del campo de cursor. Con zona (`Z`/`±hh:mm`) se respeta; SIN zona es hora de México (la del
+ * origen), nunca la del servidor donde corre esto. Solo fecha ⇒ medianoche de México. Ilegible ⇒ null (la fila se rechaza visible).
+ */
+export function instanteDeCursor(campo: unknown): string | null {
+  if (typeof campo !== 'string') return null;
+  const t = campo.trim();
+  // eslint-disable-next-line security/detect-unsafe-regex -- patrón anclado de formato fijo, sin cuantificadores anidados ni retroceso exponencial; la entrada es un valor corto de un campo
+  const sinZona = /^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2})(?::(\d{2})(?:\.\d+)?)?)?$/.exec(t);
+  if (sinZona) {
+    const iso = aInstanteMx(sinZona[1], `${sinZona[2] ?? '00:00'}:${sinZona[3] ?? '00'}`);
+    return iso;
+  }
+  const ms = Date.parse(t);
+  return Number.isNaN(ms) ? null : new Date(ms).toISOString();
+}
 
 const orden = (a: Entrada, b: Entrada): number => {
   const ta = Date.parse(a.desde); const tb = Date.parse(b.desde);
@@ -62,20 +84,10 @@ export function crearLectorDesglosesTms(o: OpcionesLectorTms): LectorDesglosesPu
       if (!Array.isArray(items)) throw new TmsNoDisponible('La respuesta del sistema de transporte no trae la lista esperada');
       crudas.push(...items);
       const total = Number(cuerpo ? leerRuta(cuerpo, cfg.rutaTotalPaginas) : undefined);
-      if (items.length === 0 || (Number.isFinite(total) && pagina >= total)) {
-        return crudas.map((c) => aEntrada(c, cfg));
-      }
-      // A35-BE-02: sin `total_paginas`, `Number(undefined)` es NaN. Antes esa NaN
-      // caía en el `return` de arriba y declaraba COMPLETA la lectura de la página
-      // 1: el pull avanzaba el cursor por encima de lo que nunca leyó y el cron
-      // reportaba `ok`, así que una flota con más de `cfg.tamano` nóminas en la
-      // ventana perdía el resto EN SILENCIO. Una página CORTA sí es el final (el
-      // TMS no tiene más que dar); una página LLENA sin total no se puede declarar
-      // completa, y se falla cerrado igual que el tope de páginas de abajo.
-      if (!Number.isFinite(total)) {
-        if (items.length < cfg.tamano) return crudas.map((c) => aEntrada(c, cfg));
-        throw new TmsNoDisponible('La respuesta del sistema de transporte no trae el total de páginas');
-      }
+      // A37-S38-06: sin total numérico NO se da por completa la primera página; se sigue hasta una página
+      // vacía o más corta que el tamaño pedido (o el tope de páginas, que lanza).
+      const fin = items.length === 0 || (Number.isFinite(total) && total >= 1 ? pagina >= total : items.length < cfg.tamano);
+      if (fin) return crudas.map((c) => aEntrada(c, cfg));
     }
     // Más páginas que el tope: no se declara completa una lectura que no lo es (el cursor no avanza).
     throw new TmsNoDisponible('La lectura excedió el tope de páginas');
@@ -87,7 +99,11 @@ export function crearLectorDesglosesTms(o: OpcionesLectorTms): LectorDesglosesPu
       if (!Number.isInteger(p.limite) || p.limite < 1) throw new RangeError('limite debe ser un entero >= 1');
       const ahora = o.ahora();
       const desde = p.reLeerDesde ?? p.cursor?.desde ?? new Date(ahora - cfg.ventanaInicialDias * DIA_MS).toISOString();
-      const todas = (await leerVentana(desde, new Date(ahora).toISOString())).sort(orden);
+      const leidas = await leerVentana(desde, new Date(ahora).toISOString());
+      // A37-S38-08: una fila SIN fecha utilizable no tiene lugar en el cursor: no entra en la secuencia (jamás lo lleva a 1970);
+      // se reporta como rechazada, en la PRIMERA página de toda lectura sin cursor y de toda relectura (A37-A1-liquidaciones-18;
+      // A37-O7-04: antes solo con !hayMas, y las páginas siguientes ya no traen reLeerDesde: con más de una página se perdían).
+      const todas = leidas.filter((e) => e.sinInstante !== true).sort(orden);
       let candidatas = todas;
       if (p.reLeerDesde !== undefined) {
         const t = Date.parse(p.reLeerDesde);
@@ -98,11 +114,13 @@ export function crearLectorDesglosesTms(o: OpcionesLectorTms): LectorDesglosesPu
       }
       const pagina = candidatas.slice(0, p.limite);
       const ultima = pagina[pagina.length - 1];
+      const hayMas = candidatas.length > pagina.length;
+      const sinFecha = (!p.cursor || p.reLeerDesde !== undefined) ? leidas.filter((e) => e.sinInstante === true) : [];
       return {
         items: pagina.flatMap((e) => (e.desglose ? [e.desglose] : [])),
-        rechazadas: pagina.flatMap((e) => (e.rechazada ? [e.rechazada] : [])),
+        rechazadas: [...pagina, ...sinFecha].flatMap((e) => (e.rechazada ? [e.rechazada] : [])),
         siguiente: ultima ? { desde: ultima.desde, despuesDe: ultima.id } : p.cursor,
-        hayMas: candidatas.length > pagina.length,
+        hayMas,
       };
     },
   };
@@ -115,8 +133,8 @@ function aEntrada(cruda: unknown, cfg: ConfigApiDesglose): Entrada {
   const term = m.terminal ? leerRuta(cruda, m.terminal) : undefined;
   const clave = typeof bit === 'string' && bit !== '' ? claveDeBitacora(typeof term === 'string' ? term : undefined, bit) : 'BIT-DESCONOCIDA';
   // Sin instante utilizable no hay dónde colocarla en el cursor: se rechaza (visible) en vez de inventar una fecha.
-  const desde = typeof campo === 'string' && !Number.isNaN(Date.parse(campo)) ? new Date(campo).toISOString() : null;
-  if (desde === null) return { desde: new Date(0).toISOString(), id: clave, rechazada: { clave, campo: cfg.campoCursor } };
+  const desde = instanteDeCursor(campo);
+  if (desde === null) return { desde: new Date(0).toISOString(), id: clave, sinInstante: true, rechazada: { clave, campo: cfg.campoCursor } };
   try {
     const { desglose } = mapearBitacoraTms(cruda, m);
     return { desde, id: claveDeBitacora(desglose.terminal, desglose.bitacora), desglose };

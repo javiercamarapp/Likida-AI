@@ -397,6 +397,42 @@ describe('evaluarRiesgoSemana', () => {
     expect(r.diasSinDato[0]).toBe('2026-08-25');
   });
 
+  // A37-S48-02: el día con punta derivada del GPS dice «dato insuficiente»; la semana no puede decir «sin señal» con esos mismos días.
+  describe('A37-S48-02 — la semana no ignora las cotas derivadas ni los descansos del art. 64', () => {
+    const diasConfig = (n: number, o: { procedencia?: Procedencia; descanso?: [string, string]; fin?: string }) =>
+      Array.from({ length: n }, (_, i) => {
+        const f = masDias('2026-08-24', i);
+        return { dia: f, jornada: dia('06:00', o.fin ?? '14:00', { fecha: f, procedencia: o.procedencia, descanso: o.descanso }) };
+      });
+
+    it('con inicios derivados del GPS y horas dentro del tope: dato_insuficiente (no «sin señal de exceso»)', () => {
+      const r = evaluarRiesgoSemana(diasConfig(5, { procedencia: 'gps' }), null);
+      expect(r.veredicto).toBe('dato_insuficiente');
+      expect(r.senales.some((s) => s.clase === 'cota_inferior_derivada')).toBe(true);
+      expect(r.horasMedidas).toBe(40);
+    });
+
+    it('con puntas derivadas pero exceso ya probado por la cota, sigue siendo exceso', () => {
+      const r = evaluarRiesgoSemana(diasConfig(6, { procedencia: 'gps', fin: '16:30' }), null);   // 6 × 10.5 h = 63 h
+      expect(r.veredicto).toBe('exceso');
+      expect(r.senales.some((s) => s.clase === 'cota_inferior_derivada')).toBe(false);
+    });
+
+    it('lo declarado por el operador no se degrada', () => {
+      expect(evaluarRiesgoSemana(diasConfig(5, {}), null).veredicto).toBe('sin_senal_de_exceso');
+    });
+
+    it('si con horas efectivas no rebasa pero con horas brutas (descansos adentro) sí, se dice la señal del art. 64 sin declarar exceso', () => {
+      const r = evaluarRiesgoSemana(diasConfig(6, { fin: '14:30', descanso: ['10:00', '11:00'] }), null);   // efectivas 6 × 7.5 = 45; brutas 6 × 8.5 = 51
+      expect(r.horasMedidas).toBe(45);
+      const s = r.senales.find((x) => x.clase === 'descanso_pudo_contar_lft_64');
+      expect(s).toBeDefined();
+      expect(s!.esExceso).toBe(false);
+      expect(s!.fundamento).toContain('art. 64');
+      expect(r.veredicto).toBe('sin_senal_de_exceso');
+    });
+  });
+
   it('una ventana vacía tampoco concluye', () => {
     const r = evaluarRiesgoSemana([], null);
     expect(r.horasMedidas).toBeNull();

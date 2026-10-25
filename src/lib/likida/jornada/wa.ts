@@ -3,7 +3,7 @@ import { logger } from '@/lib/logger';
 import { strip_accents } from '../cuadre/util';
 import { componerJornada, aHoras, type Asiento, type TipoAsiento } from './modelo';
 import {
-  asegurarDiaJornada, asentarMarca, diaMxDe, idDeJornada, jornadaQueCierra, sellarConformidad,
+  asegurarDiaJornada, asentarMarca, diaMxDe, idDeJornada, jornadaQueCierra, sellarConformidad, tieneMarcaViva,
   type ResultadoAsiento,
 } from './repo';
 
@@ -307,7 +307,7 @@ export async function atenderConformidadJornada(args: {
   operadorId: string;
   momento: Date;
   waMessageId: string | null;
-}): Promise<{ resultado: 'sellada' | 'ya_estaba' | 'fallo' | 'sin_dia'; respuesta: string }> {
+}): Promise<{ resultado: 'sellada' | 'ya_estaba' | 'fallo' | 'sin_dia' | 'sin_cierre'; respuesta: string }> {
   // Sin id de mensaje no hay evidencia del acuerdo, y sin evidencia no se
   // sella: es exactamente lo que el constraint de la 0241 exige. Falla cerrado
   // y se le dice al operador en vez de fingir que quedó.
@@ -332,6 +332,20 @@ export async function atenderConformidadJornada(args: {
     return {
       resultado: 'sin_dia',
       respuesta: 'Todavía no tengo un registro de jornada tuyo que confirmar. Mándame «inicio jornada» cuando arranques. 👍',
+    };
+  }
+
+  // A37-S48-03: no se confirma lo que no está cerrado. Un expediente sin `fin_jornada` vivo no tiene un resumen que el operador haya visto,
+  // y la «prueba plena» se sellaría sobre un día incompleto. Si la base no contesta, falla cerrado (no se sella).
+  const fin = await tieneMarcaViva(args.tenantId, objetivo, 'fin_jornada');
+  if (fin.error) {
+    logger.error('jornada.conformidad_fin_ilegible', { operador: args.operadorId, err: fin.error });
+    return { resultado: 'fallo', respuesta: 'No pude registrar tu confirmación ahorita — mándamela otra vez en un momento. 🙏' };
+  }
+  if (!fin.viva) {
+    return {
+      resultado: 'sin_cierre',
+      respuesta: 'Todavía no tengo el fin de esa jornada. Mándame «fin jornada» cuando termines y luego confirma el resumen. 👍',
     };
   }
 

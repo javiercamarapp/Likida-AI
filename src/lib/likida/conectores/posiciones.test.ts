@@ -182,6 +182,13 @@ describe('los fallos se dicen, no se tragan', () => {
     expect(r.motivo).toContain('no es JSON');
   });
 
+  it.each(['null', '[]', '42'])('A37-S37-09: un 200 con cuerpo JSON %s (no objeto) es falla «formato», no un TypeError', async (cuerpo) => {
+    const r = await leerPosicionesSamsara({ token: 't' }, httpQueDevuelve(200, cuerpo));
+    if (r.ok) throw new Error('no debería');
+    expect(r.falla).toBe('formato');
+    expect(r.motivo).toContain('no es un objeto JSON');
+  });
+
   it('sin token ni se llama a la red', async () => {
     let llamado = false;
     const http: Http = async () => { llamado = true; return { estado: 200, cuerpo: '{}' }; };

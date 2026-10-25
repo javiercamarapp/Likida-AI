@@ -59,6 +59,22 @@ describe('T-A5-39 · la bitácora de detención sin aviso (repo real, base simul
     expect(ops).toContainEqual(['eq', 'detalle->>clase', 'deteccion_parada']);
   });
 
+  it('A37-S36-01: con más de 200 viajes NO manda todos los ids en una URL: tandas de ≤200, y la bitácora vuelve ordenada por id', async () => {
+    const ids = Array.from({ length: 450 }, (_, i) => `v${i}`);
+    const fila = (id: number, v: string) => ({ id, viaje_id: v, viaje_hito_id: 'h', detalle: { clase: 'deteccion_parada', tipo: 'pregunta' }, created_at: '2026-10-02T18:00:00.000Z' });
+    // por tanda: una página con datos y luego la vacía que la cierra
+    respuestas = [
+      { data: [fila(5, 'v0')], error: null }, { data: [], error: null },
+      { data: [fila(2, 'v250')], error: null }, { data: [], error: null },
+      { data: [fila(9, 'v449')], error: null }, { data: [], error: null },
+    ];
+    const evs = await repo.leerEventosDetencion('t1', ids);
+    const tamanos = registros.map((r) => (r.ops.find(([o, c]) => o === 'in' && c === 'viaje_id') as [string, string, string[]])[2].length);
+    expect(Math.max(...tamanos)).toBeLessThanOrEqual(200);
+    expect(tamanos.filter((n) => n > 0).reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(450);
+    expect(evs.map((e) => e.id)).toEqual([2, 5, 9]);
+  });
+
   it('sin viajes no lee; una base caída lanza (no es «nadie preguntó nada»)', async () => {
     expect(await repo.leerEventosDetencion('t1', [])).toEqual([]);
     expect(registros).toHaveLength(0);

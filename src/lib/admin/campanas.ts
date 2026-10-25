@@ -17,6 +17,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { acotada } from '@/lib/likida/presupuesto';
 import { DatoInvalido } from '@/lib/likida/errores';
+import { traerTodo } from '@/lib/likida/pg';
 
 export interface Campana {
   id: string;
@@ -49,12 +50,33 @@ function desdeFila(f: Record<string, unknown>): Campana {
   };
 }
 
+/** Cuántas campañas muestra la pantalla de control (las más recientes). */
+export const TOPE_CAMPANAS_PANTALLA = 100;
+
+/**
+ * UNA sola consulta de campañas (orden total: `creado_en` y `id` de desempate)
+ * para la pantalla (`range` 0..99) y para el refresco de gasto (paginado
+ * completo, solo Meta vivas).
+ */
+function consultaCampanas(desde: number, hasta: number, soloMetaVivas: boolean) {
+  let q = supabaseAdmin().from('campana').select('*', { count: 'exact' });
+  if (soloMetaVivas) q = q.eq('canal', 'meta').neq('estado', 'terminada').not('id_externo', 'is', null);
+  return acotada(q.order('creado_en', { ascending: false }).order('id').range(desde, hasta), 'campanas.listar');
+}
+
+/** LANZA si la base no responde — cero campañas y base caída no son lo mismo.
+ *  A37-S22-03: `total` es el conteo exacto; si supera `campanas.length` la
+ *  pantalla debe decirlo (solo se muestran las más recientes). */
+export async function listarCampanasConTotal(): Promise<{ campanas: Campana[]; total: number }> {
+  const res = await consultaCampanas(0, TOPE_CAMPANAS_PANTALLA - 1, false);
+  if (res.error) throw new Error(`listarCampanas: ${res.error.message}`);
+  const filas = (res.data ?? []) as Array<Record<string, unknown>>;
+  return { campanas: filas.map(desdeFila), total: typeof res.count === 'number' ? res.count : filas.length };
+}
+
 /** LANZA si la base no responde — cero campañas y base caída no son lo mismo. */
 export async function listarCampanas(): Promise<Campana[]> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('campana').select('*').order('creado_en', { ascending: false }).limit(100), 'campanas.listar');
-  if (error) throw new Error(`listarCampanas: ${error.message}`);
-  return ((data ?? []) as Array<Record<string, unknown>>).map(desdeFila);
+  return (await listarCampanasConTotal()).campanas;
 }
 
 export interface ResultadoPausa {
@@ -158,37 +180,93 @@ export interface ResultadoRefresco {
   fallidas: Array<{ nombre: string; motivo: string }>;
   /** `false` = no había token: no se midió nada y SE DICE. */
   configurada: boolean;
+  /** A37-S22-03: campañas que NO se alcanzaron a medir porque se agotó el
+   *  presupuesto de tiempo. No están en `fallidas` ni en `medidas`. */
+  pendientes: number;
+}
+
+/** Presupuesto total de la acción: debajo del `maxDuration` de la plataforma. */
+const PRESUPUESTO_REFRESCO_MS = 45_000;
+const TIMEOUT_POR_CAMPANA_MS = 15_000;
+const CONCURRENCIA_REFRESCO = 5;
+
+/** `spend` de Meta es un string decimal: vacío, no numérico o negativo no es una medición. */
+function gastoValido(spend: unknown): number | null {
+  if (typeof spend !== 'string' && typeof spend !== 'number') return null;
+  if (typeof spend === 'string' && spend.trim() === '') return null;
+  const n = Number(spend);
+  return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
 /**
  * Refresca el gasto REAL desde Meta (lifetime spend por campaña). Sin token
  * no finge: regresa `configurada: false`. Cada campaña falla por su lado.
+ *
+ * A37-S22-02: `gasto_real_usd` solo se escribe si la cuenta reporta
+ * `account_currency` = USD y `spend` es un número válido; una cuenta en otra
+ * moneda se rechaza con su motivo (no se inventa un tipo de cambio) y un valor
+ * inválido nunca pisa la medición previa con NaN/null.
+ * A37-S22-03: todas las campañas de Meta (lectura paginada, no las 100 de la
+ * pantalla), 5 a la vez, con presupuesto total de tiempo, y el token en el
+ * header `Authorization`, no en la URL.
  */
-export async function refrescarGastoMeta(): Promise<ResultadoRefresco> {
+export async function refrescarGastoMeta(
+  opts: { presupuestoMs?: number } = {},
+): Promise<ResultadoRefresco> {
   const token = process.env.META_ADS_TOKEN;
-  if (!token) return { medidas: 0, fallidas: [], configurada: false };
+  if (!token) return { medidas: 0, fallidas: [], configurada: false, pendientes: 0 };
 
-  const campanas = (await listarCampanas()).filter((c) => c.canal === 'meta' && c.idExterno && c.estado !== 'terminada');
+  const venceEn = Date.now() + (opts.presupuestoMs ?? PRESUPUESTO_REFRESCO_MS);
+  const filas = await traerTodo<Record<string, unknown>>(
+    (d, h) => consultaCampanas(d, h, true) as unknown as PromiseLike<{ data: Record<string, unknown>[] | null; error: { message: string } | null; count?: number | null }>,
+    'campanas.refrescar',
+  );
+  const campanas = filas.map(desdeFila).filter((c) => c.canal === 'meta' && c.idExterno && c.estado !== 'terminada');
   let medidas = 0;
+  let siguiente = 0;
   const fallidas: Array<{ nombre: string; motivo: string }> = [];
-  for (const c of campanas) {
+
+  const medir = async (c: Campana): Promise<void> => {
     try {
       const resp = await fetch(
-        `https://graph.facebook.com/v21.0/${encodeURIComponent(c.idExterno!)}/insights?fields=spend&date_preset=maximum&access_token=${encodeURIComponent(token)}`,
-        { signal: AbortSignal.timeout(15_000) },
+        `https://graph.facebook.com/v21.0/${encodeURIComponent(c.idExterno!)}/insights?fields=spend,account_currency&date_preset=maximum`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(Math.max(1, Math.min(TIMEOUT_POR_CAMPANA_MS, venceEn - Date.now()))),
+        },
       );
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const cuerpo = await resp.json() as { data?: Array<{ spend?: string }> };
-      const spend = cuerpo.data?.[0]?.spend;
-      if (spend === undefined) throw new Error('la respuesta no trae spend');
+      const cuerpo = await resp.json() as { data?: Array<{ spend?: unknown; account_currency?: unknown }> };
+      const fila = cuerpo.data?.[0];
+      if (fila?.spend === undefined) throw new Error('la respuesta no trae spend');
+      const moneda = typeof fila.account_currency === 'string' ? fila.account_currency.toUpperCase() : null;
+      if (moneda !== 'USD') {
+        throw new Error(moneda ? `la cuenta reporta en ${moneda}, no USD — no se convierte` : 'la respuesta no trae la moneda de la cuenta');
+      }
+      const gasto = gastoValido(fila.spend);
+      if (gasto === null) throw new Error('spend no es un número válido');
       const { error } = await supabaseAdmin().from('campana')
-        .update({ gasto_real_usd: Number(spend), gasto_medido_en: new Date().toISOString(), actualizado_en: new Date().toISOString() })
+        .update({ gasto_real_usd: gasto, gasto_medido_en: new Date().toISOString(), actualizado_en: new Date().toISOString() })
         .eq('id', c.id);
       if (error) throw new Error(error.message);
       medidas += 1;
     } catch (e) {
       fallidas.push({ nombre: c.nombre, motivo: e instanceof Error ? e.message.slice(0, 120) : 'red' });
     }
-  }
-  return { medidas, fallidas, configurada: true };
+  };
+
+  const obrero = async (): Promise<void> => {
+    for (;;) {
+      if (Date.now() >= venceEn) return;
+      const i = siguiente++;
+      if (i >= campanas.length) return;
+      await medir(campanas[i]);
+    }
+  };
+  const obreros: Array<Promise<void>> = [];
+  for (let k = 0; k < Math.min(CONCURRENCIA_REFRESCO, campanas.length); k++) obreros.push(obrero());
+  await Promise.all(obreros);
+
+  const pendientes = Math.max(0, campanas.length - Math.min(siguiente, campanas.length));
+  return { medidas, fallidas, configurada: true, pendientes };
 }

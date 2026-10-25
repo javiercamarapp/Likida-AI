@@ -48,8 +48,9 @@ vi.mock('@/lib/observability/alerta', () => ({
 // OPERABILIDAD-19C2-3: permitido por default en todas las pruebas de este
 // archivo — el rate limit tiene su propio caso dedicado abajo.
 let permitido = true;
+const llamadasRateLimit: unknown[][] = [];
 vi.mock('@/lib/ratelimit', () => ({
-  rateLimit: async () => permitido,
+  rateLimit: async (...a: unknown[]) => { llamadasRateLimit.push(a); return permitido; },
   clientIp: () => '203.0.113.5',
 }));
 
@@ -488,5 +489,14 @@ describe('health: cada hueco conserva correlación técnica en Sentry', () => {
     ]);
     expect(eventos.map((e) => e.extra?.ruta).sort()).toEqual(['/api/cron/descarga-sat', '/api/cron/gps']);
     expect(JSON.stringify(eventos)).not.toMatch(/canary@example\.invalid|motivo|crons/);
+  });
+});
+
+describe('A37-L-12: un parpadeo de Redis no pinta rojo el pulso', () => {
+  it('el rate limit del health degrada al Map local (fallaCerrado:false), no niega', async () => {
+    llamadasRateLimit.length = 0;
+    await GET(peticion());
+    expect(llamadasRateLimit).toHaveLength(1);
+    expect(llamadasRateLimit[0][3]).toEqual({ fallaCerrado: false });
   });
 });

@@ -83,6 +83,8 @@ test.describe('ARCO: alcance explícito de la cancelación sintética', () => {
       await vista.goto('/dashboard/arco');
       const otraFila = vista.locator('tr', { hasText: NOMBRE });
       await otraFila.getByRole('button', { name: 'Ejecutar cancelación', exact: true }).click();
+      // A37-S16-04: la cancelación es irreversible y ahora pide confirmación; el envío es el botón del diálogo.
+      await otraFila.getByRole('button', { name: 'Sí, ejecutar cancelación', exact: true }).click();
       await expect(otraFila).toContainText('Tu rol no puede responder solicitudes ARCO');
       expect(await solicitud()).toEqual(antes);
     } finally { await encargado.close(); }
@@ -99,6 +101,7 @@ test.describe('ARCO: alcance explícito de la cancelación sintética', () => {
     });
     const respuesta = page.waitForResponse(r => r.request().method() === 'POST' && r.url() === objetivo);
     await fila.getByRole('button', { name: 'Ejecutar cancelación', exact: true }).click();
+    await fila.getByRole('button', { name: 'Sí, ejecutar cancelación', exact: true }).click();
     const post = await respuesta;
     expect(post.status()).toBe(200);
     expect(cuerpoCapturado).toBeDefined();

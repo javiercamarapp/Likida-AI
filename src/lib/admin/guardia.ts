@@ -216,6 +216,9 @@ export interface DecisionGuardia {
   /** `true` si la base estaba inalcanzable en la pasada anterior y ahora se leyó. */
   baseVolvio: boolean;
   estado: EstadoGuardia;
+  /** A37-S22-07: hay más urgentes vigentes que el tope del estado. `marca` es la huella AGREGADA del excedente (se persiste
+   *  en `vistos`); `hayNuevos` = en esta pasada entró algo nuevo al excedente (si el aviso no sale, esa marca se retira). */
+  desborde: { marca: string; cuantos: number; hayNuevos: boolean } | null;
 }
 
 /** La huella que se persiste de un incidente: lleva su FUENTE (`fuente~hash`) para poder conservarla si esa fuente queda ciega (B1). */
@@ -229,7 +232,17 @@ export function decidirAvisos(c: ClasificacionGuardia, previo: EstadoGuardia): D
   const visto = (i: { fuente: string; titulo: string; flota: string; desde: string; huella?: string }) =>
     previo.vistos.includes(huellaDeItem(i)) || previo.vistos.includes(huellaDeClave(claveDeItem(i))) || previo.vistos.includes(claveDeItem(i));
   const urgentes = c.items.filter((i) => i.severidad === 'S1' || i.severidad === 'S2');
-  const nuevos = urgentes.filter((i) => !visto(i));
+  // A37-S22-07: el estado persistido tiene tope (`TOPE_VISTOS`). Con más urgentes vigentes que el tope, los que
+  // quedaban fuera nunca figuraban en `vistos` y volvían a salir como NUEVOS en cada pasada (hasta que el piso de 1 h
+  // frenaba el envío). Ahora, en un orden determinista (por huella), los primeros `TOPE_VISTOS - 1` se siguen uno a uno
+  // y el EXCEDENTE se sigue por una sola huella agregada: se reavisa solo si el conjunto del excedente CAMBIA.
+  const conHuella = urgentes.map((i) => ({ i, h: huellaDeItem(i) })).sort((a, b) => (a.h < b.h ? -1 : a.h > b.h ? 1 : 0));
+  const dentro = conHuella.slice(0, TOPE_VISTOS - 1);
+  const fuera = conHuella.slice(TOPE_VISTOS - 1);
+  const marcaDesborde = fuera.length > 0 ? `desborde~${huellaDeClave(fuera.map((x) => x.h).join('|'))}` : null;
+  const enDesborde = new Set(fuera.map((x) => x.i));
+  const desbordeVisto = marcaDesborde !== null && previo.vistos.includes(marcaDesborde);
+  const nuevos = urgentes.filter((i) => !visto(i) && !(enDesborde.has(i) && desbordeVisto));
   const vistoCiega = (fuente: string) => previo.vistos.includes(huellaDeClave(`ciega|${fuente}`)) || previo.vistos.includes(`ciega|${fuente}`);
   const ciegasNuevas = c.fuentesCiegas.filter((f) => !vistoCiega(f.fuente));
   // B1 (ronda 19): una fuente CIEGA no ve sus items, pero lo que ya se avisó de ella NO se olvida: si no, al volver la
@@ -239,9 +252,16 @@ export function decidirAvisos(c: ClasificacionGuardia, previo: EstadoGuardia): D
   return {
     urgentes, nuevos, ciegasNuevas,
     baseVolvio: previo.baseCaidaDesde !== null,
+    desborde: marcaDesborde !== null
+      ? { marca: marcaDesborde, cuantos: fuera.length, hayNuevos: nuevos.some((i) => enDesborde.has(i)) }
+      : null,
     estado: {
       ...previo,
-      vistos: [...new Set([...urgentes.map(huellaDeItem), ...c.fuentesCiegas.map((f) => huellaDeClave(`ciega|${f.fuente}`)), ...deFuentesCiegas])].slice(0, TOPE_VISTOS),
+      // La marca agregada va PRIMERO: si algo se recorta por el tope, que no sea ella.
+      vistos: [...new Set([
+        ...(marcaDesborde ? [marcaDesborde] : []),
+        ...dentro.map((x) => x.h), ...c.fuentesCiegas.map((f) => huellaDeClave(`ciega|${f.fuente}`)), ...deFuentesCiegas,
+      ])].slice(0, TOPE_VISTOS),
       baseCaidaDesde: null,
     },
   };
@@ -257,6 +277,8 @@ export function estadoTrasAviso(d: DecisionGuardia, avisoSalio: boolean): Estado
   const sinAvisar = new Set([
     ...d.nuevos.map(huellaDeItem),
     ...d.ciegasNuevas.map((f) => huellaDeClave(`ciega|${f.fuente}`)),
+    // A37-S22-07: si lo nuevo incluía excedente y el aviso no salió, la marca agregada tampoco se anota.
+    ...(d.desborde?.hayNuevos ? [d.desborde.marca] : []),
   ]);
   return { ...d.estado, vistos: d.estado.vistos.filter((h) => !sinAvisar.has(h)) };
 }
@@ -268,8 +290,10 @@ export function decidirBaseCaida(previo: EstadoGuardia, ahoraIso: string): { avi
 }
 
 /** Las líneas del aviso (sin canal): el script de la Mac las une para WhatsApp; el cron las manda como datos del correo. */
-export function lineasDeAviso(d: Pick<DecisionGuardia, 'nuevos' | 'ciegasNuevas'>): string[] {
+export function lineasDeAviso(d: Pick<DecisionGuardia, 'nuevos' | 'ciegasNuevas'> & { desborde?: DecisionGuardia['desborde'] }): string[] {
   return [
+    // A37-S22-07: el excedente del tope se sigue como conjunto; se dice que existe en vez de callarlo.
+    ...(d.desborde?.hayNuevos ? [`[S2] Hay ${d.desborde.cuantos} urgentes vigentes por encima del tope de seguimiento (${TOPE_VISTOS}): se siguen como conjunto, revisa la bandeja.`] : []),
     ...d.nuevos.map((i) => `[${i.severidad}] ${i.titulo} — ${i.flota} (${i.fuente}, regla: ${i.regla})${i.vence ? ` · vence ${i.vence}` : ''}`),
     ...d.ciegasNuevas.map((f) => `[S2] Fuente CIEGA: ${f.fuente}${f.error ? ` — ${f.error.slice(0, 80)}` : ''}`),
   ];

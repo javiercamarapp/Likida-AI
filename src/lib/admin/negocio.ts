@@ -259,6 +259,16 @@ export async function costoIaDesde(desdeIso: string): Promise<{ n: number; costo
 }
 
 /**
+ * A37-S05-03: el costo de IA por día (UTC, SIN redondear) desde un instante —
+ * para el forecast, que necesita una ventana real y no el historial entero.
+ * LANZA si la base no responde.
+ */
+export async function costoIaPorDiaDesde(desdeIso: string): Promise<Array<{ dia: string; costoUsd: number }>> {
+  const r = await traerResumenCostoIa(desdeIso, null);
+  return r.porDia.map((d) => ({ dia: d.dia, costoUsd: d.costoUsd }));
+}
+
+/**
  * El costo de IA de UNA flota (histórico y 30 días) — para la ficha 360.
  * Reusa la agregación SQL global y toma la fila del tenant: dos llamadas al
  * RPC, cero recorridos de llm_costo por JS. LANZA si la base no responde.
@@ -940,6 +950,51 @@ export async function getCorridasFallidas(limite = TOPE_CORRIDAS_FALLIDAS): Prom
       ...(typeof r.error === 'string' && r.error.trim() ? { error: r.error } : {}),
     };
   });
+}
+
+/**
+ * A37-P-06 (S22-01): los fallos VIGENTES por agente+flota, con ventana POR GRUPO (0870, `corridas_fallidas_por_grupo`). La ventana
+ * global de N filas dejaba que una flota ruidosa empujara fuera los fallos de otra. Cada fila trae además la última corrida que salió
+ * bien de su grupo, así que el mapa de rupturas sale de la misma lectura (sin una consulta por par).
+ *
+ * Devuelve `null` si la función no existe todavía (base sin la 0870) o falla la lectura: el llamador cae a la ruta anterior y lo
+ * avisa — peor ventana, pero nunca «sin fallos» sobre una base caída.
+ */
+export async function getFallosVigentesPorGrupo(
+  porGrupo = 50, max = 2000,
+): Promise<{ fallos: CorridaReciente[]; ultimoSinFallo: Map<string, string> } | null> {
+  let resp: { data: unknown; error: { message: string } | null };
+  try {
+    resp = await acotada(supabaseAdmin()
+      .rpc('corridas_fallidas_por_grupo', { p_por_grupo: porGrupo, p_max: max }), 'getFallosVigentesPorGrupo') as typeof resp;
+  } catch (e) {
+    logger.warn('getFallosVigentesPorGrupo', { err: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
+  const { data, error } = resp;
+  if (error) {
+    logger.warn('getFallosVigentesPorGrupo', { err: error.message });
+    return null;
+  }
+  const ultimoSinFallo = new Map<string, string>();
+  const fallos = ((data ?? []) as Array<Record<string, unknown>>).map((r) => {
+    const tenantId = (r.tenant_id as string | null) ?? null;
+    const agente = String(r.agente);
+    if (typeof r.ultimo_sin_fallo === 'string') ultimoSinFallo.set(llaveRacha(agente, tenantId), r.ultimo_sin_fallo);
+    return {
+      agente,
+      estado: r.estado as EstadoCorrida,
+      disparo: r.disparo as 'cron' | 'manual',
+      inicio: r.inicio as string,
+      fin: (r.fin as string | null) ?? null,
+      tareasHechas: (r.tareas_hechas as number | null) ?? null,
+      tareasTotal: (r.tareas_total as number | null) ?? null,
+      tenantId,
+      tenantNombre: tenantId === null ? 'Likida (negocio)' : ((r.tenant_nombre as string | null) ?? '—'),
+      ...(typeof r.error === 'string' && r.error.trim() ? { error: r.error } : {}),
+    } satisfies CorridaReciente;
+  });
+  return { fallos, ultimoSinFallo };
 }
 
 /** La llave de una racha: agente + flota (`''` = corrida sin flota, p. ej. `ventas`). A37-S22-01. */

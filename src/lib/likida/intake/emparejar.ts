@@ -25,6 +25,14 @@ const TOLERANCIA = 0.01;
  */
 const TOLERANCIA_RELATIVA = 0.02;
 
+/** Días de calendario entre dos fechas ISO (`Infinity` si alguna no se puede leer: ante la duda, no es el mismo día). */
+function diasEntre(a: string, b: string): number {
+  const ta = Date.parse(`${a}T00:00:00Z`);
+  const tb = Date.parse(`${b}T00:00:00Z`);
+  if (Number.isNaN(ta) || Number.isNaN(tb)) return Infinity;
+  return Math.abs(ta - tb) / 86_400_000;
+}
+
 /**
  * Devuelve el gasto al que pertenece un acercamiento, o `null` si no hay una
  * respuesta única.
@@ -126,14 +134,28 @@ export function emparejarPendiente(monto: number, bandeja: CodigoPendiente[]): C
 export function emparejarXmlConTicket(
   xml: { total?: number; fecha?: string },
   gastos: Gasto[],
+  opciones: {
+    /** true = el candidato único por monto NO se descarta por día lejano. Solo para quien decide la liga con su propia evidencia
+     *  adicional (el barrido del SAT, `decidirCruce`: RFC igual o fecha ±1, y si no, solo SUGIERE — no escribe nada). */
+    diaLibre?: boolean;
+  } = {},
 ): Gasto | null {
   if (!(xml.total != null && xml.total > 0)) return null; // sin monto no se adivina
   // Solo tickets SIN timbrar: los que ya tienen UUID son facturas y se emparejan
   // por UUID antes de llegar aquí.
   const sinTimbrar = gastos.filter((g) => !g.cfdiUuid);
   const candidatos = sinTimbrar.filter((g) => Math.abs(g.monto - xml.total!) <= TOLERANCIA);
-  if (candidatos.length === 1) return candidatos[0];
   const dia = xml.fecha ? xml.fecha.slice(0, 10) : null;
+  if (candidatos.length === 1) {
+    // A37-S47-04: el monto exacto NO basta aunque el candidato sea único. `updateGastoCfdiXml` reescribe monto, fecha, UUID y
+    // RFC del gasto con los del XML: pegarle una llanta de $1,160.00 a una caseta de $1,160.00 de OTRO día deja un gasto
+    // «xml_verificado» con datos de otra compra, en silencio. Si AMBOS traen día, deben distar a lo más un día (huso/corte
+    // de la noche); si no, no se empareja y el XML queda como gasto aparte, visible y corregible. Un gasto sin fecha (la
+    // lectura se descartó) sí puede emparejar: el XML llena ese hueco.
+    const unico = candidatos[0];
+    if (!opciones.diaLibre && dia && unico.fecha && diasEntre(dia, unico.fecha.slice(0, 10)) > 1) return null;
+    return unico;
+  }
   if (candidatos.length > 1) {
     // Varios del mismo monto: la fecha desempata (dos cargas iguales en días
     // distintos es plausible en un viaje largo).

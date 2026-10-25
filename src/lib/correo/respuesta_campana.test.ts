@@ -11,6 +11,7 @@ const respuestas = new Map<string, Array<{ data: unknown; error: { message: stri
 const inserts: Array<{ tabla: string; payload: Record<string, unknown> }> = [];
 const updates: Array<{ tabla: string; payload: Record<string, unknown>; filtros: Record<string, unknown> }> = [];
 const deletes: Array<{ tabla: string; filtros: Record<string, unknown> }> = [];
+const ilikes: Array<{ tabla: string; col: string; patron: unknown }> = [];
 
 function builder(tabla: string) {
   const responder = () => {
@@ -24,7 +25,7 @@ function builder(tabla: string) {
   Object.assign(b, {
     select: () => b,
     eq: (k: string, v: unknown) => { filtros[k] = v; return b; },
-    ilike: (k: string, v: unknown) => { filtros[k] = v; return b; },
+    ilike: (k: string, v: unknown) => { filtros[k] = v; ilikes.push({ tabla, col: k, patron: v }); return b; },
     is: (k: string, v: unknown) => { filtros[k] = v; return b; },
     or: () => b,
     limit: () => b,
@@ -53,7 +54,7 @@ const {
 } = await import('./respuesta_campana');
 
 beforeEach(() => {
-  respuestas.clear(); inserts.length = 0; updates.length = 0; deletes.length = 0;
+  respuestas.clear(); inserts.length = 0; updates.length = 0; deletes.length = 0; ilikes.length = 0;
   alertas.length = 0; suprimir.mockClear();
 });
 
@@ -205,7 +206,7 @@ describe('procesarRespuestaCampana', () => {
     respuestas.set('cola_aprobacion', [{ data: null, error: { message: 'base caída' } }]);
     respuestas.set('prospecto_dossier', [{ data: null, error: { message: 'base caída' } }]);
     respuestas.set('prospecto_toque', [{ data: null, error: { message: 'base caída' } }]);
-    await expect(borrarDatosPersonaPorBaja('pr-1', 'x@y.mx', true)).resolves.toBeUndefined();
+    await expect(borrarDatosPersonaPorBaja('pr-1', 'x@y.mx', true)).resolves.toBe(false);
   });
 
   it('una respuesta que NO pide baja no borra ni anonimiza nada', async () => {
@@ -218,7 +219,11 @@ describe('procesarRespuestaCampana', () => {
 
   it('borrarDatosPersonaPorBaja nunca lanza aunque una tabla truene — mejor esfuerzo', async () => {
     respuestas.set('prospecto_persona', [{ data: null, error: { message: 'base caída' } }]);
-    await expect(borrarDatosPersonaPorBaja('pr-1', 'x@y.mx', true)).resolves.toBeUndefined();
+    await expect(borrarDatosPersonaPorBaja('pr-1', 'x@y.mx', true)).resolves.toBe(false);
+  });
+
+  it('A37-S25-03: sin fallos devuelve true (todo borró)', async () => {
+    await expect(borrarDatosPersonaPorBaja('pr-1', 'x@y.mx', true)).resolves.toBe(true);
   });
 
   it('A37-S08-01: borrarDatosPersonaPorBajaPorCorreo LANZA si no puede resolver al prospecto (lectura caída), para que la liga responda 500', async () => {
@@ -231,5 +236,46 @@ describe('procesarRespuestaCampana', () => {
     await borrarDatosPersonaPorBajaPorCorreo('otra@empresa.mx');
     const anonimiza = updates.find((u) => u.tabla === 'prospecto');
     expect(anonimiza?.filtros).toMatchObject({ id: 'pr-9' });
+  });
+
+  // ── A37-S25-02: _ y % son comodines de ilike ──────────────────────────────
+  it('A37-S25-02: el correo con _ o % llega ESCAPADO a todo ilike (no es comodín)', async () => {
+    respuestas.set('prospecto', [{ data: [{ id: 'pr-1' }], error: null }]);
+    respuestas.set('prospecto_contacto', [{ data: null, error: null }]);
+    await procesarRespuestaCampana({ from: 'juan_perez@x.com', subject: 'BAJA', text: '' });
+    expect(ilikes.length).toBeGreaterThan(0);
+    for (const i of ilikes) expect(i.patron).toBe('juan\\_perez@x.com');
+    // prospecto (resolución), prospecto_persona y prospecto_correo
+    expect(new Set(ilikes.map((i) => i.tabla))).toEqual(new Set(['prospecto', 'prospecto_persona', 'prospecto_correo']));
+  });
+
+  it('A37-S25-02: un remitente «%@dominio.com» no casa a todo el dominio', async () => {
+    respuestas.set('prospecto', [{ data: [], error: null }]);
+    respuestas.set('prospecto_correo', [{ data: [], error: null }]);
+    await procesarRespuestaCampana({ from: '%@dominio.com', subject: 'BAJA', text: '' });
+    for (const i of ilikes) expect(i.patron).toBe('\\%@dominio.com');
+  });
+
+  // ── A37-S25-03: éxito falso sobre una promesa legal ───────────────────────
+  it('A37-S25-03: si una tabla del borrado falla, procesarRespuestaCampana devuelve ok:false (503) y NO escribe el historial que reinicia el reloj de purga', async () => {
+    respuestas.set('prospecto', [{ data: [{ id: 'pr-1' }], error: null }]);
+    respuestas.set('prospecto_persona', [{ data: null, error: { message: 'timeout' } }]);
+    const r = await procesarRespuestaCampana({ from: 'g@empresa.mx', subject: 'BAJA', text: '' });
+    expect(r.ok).toBe(false);
+    expect(suprimir).toHaveBeenCalled();
+    expect(inserts.find((i) => i.tabla === 'prospecto_contacto')).toBeUndefined();
+  });
+
+  it('A37-S25-03: un fallo en cola_aprobacion (contacto principal) también hace ok:false', async () => {
+    respuestas.set('prospecto', [{ data: [{ id: 'pr-1' }], error: null }]);
+    respuestas.set('cola_aprobacion', [{ data: null, error: { message: 'timeout' } }]);
+    const r = await procesarRespuestaCampana({ from: 'g@empresa.mx', subject: 'BAJA', text: '' });
+    expect(r.ok).toBe(false);
+  });
+
+  it('A37-S25-03: la liga de un clic LANZA si el borrado quedó incompleto (500 y el cliente reintenta)', async () => {
+    respuestas.set('prospecto', [{ data: [{ id: 'pr-9' }], error: null }]);
+    respuestas.set('prospecto_toque', [{ data: null, error: { message: 'timeout' } }]);
+    await expect(borrarDatosPersonaPorBajaPorCorreo('otra@empresa.mx')).rejects.toThrow(/borrado incompleto/);
   });
 });

@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // DEJA EL CORREO DE ACCESO CONFIGURADO EN SUPABASE, POR API. Un solo comando.
 //
-//   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts
-//   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts --con-hook
-//   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts --afinar
+//   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts --ref=gngoqsvrxdguxvsizpbw
+//   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts --ref=gngoqsvrxdguxvsizpbw --con-hook
+//   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts --ref=gngoqsvrxdguxvsizpbw --afinar
 //
 // Sin bandera: sube las TRECE plantillas y sus asuntos (Authentication →
 // Emails): las seis con liga o código, y los siete avisos de seguridad. Es
@@ -32,6 +32,7 @@
 process.env.NEXT_PUBLIC_APP_URL = process.env.PLANTILLAS_BASE ?? 'https://app.likida.ai';
 
 import { readFileSync } from 'node:fs';
+import { validarRef } from './ref-produccion';
 import { armarHtml } from '../../src/lib/correo/plantilla';
 import {
   correoDeAuth, correoDeAvisoAuth, minutosDeCaducidad,
@@ -64,11 +65,14 @@ if (!token) {
 }
 
 const urlSupabase = process.env.NEXT_PUBLIC_SUPABASE_URL ?? deEnvLocal('NEXT_PUBLIC_SUPABASE_URL');
-const ref = urlSupabase?.match(/https:\/\/([a-z0-9]+)\.supabase\.co/)?.[1];
-if (!ref) {
-  console.error('No se pudo deducir el project ref de NEXT_PUBLIC_SUPABASE_URL.');
+const refDeducido = urlSupabase?.match(/https:\/\/([a-z0-9]+)\.supabase\.co/)?.[1];
+// A37-S02-07: `--ref=<ref de producción>` explícito; .env.local solo se coteja, no decide.
+const validacionRef = validarRef(process.argv, refDeducido);
+if (!validacionRef.ok) {
+  console.error(validacionRef.motivo);
   process.exit(1);
 }
+const ref = validacionRef.ref;
 
 const conHook = process.argv.includes('--con-hook');
 const secretoHook = process.env.SUPABASE_AUTH_HOOK_SECRET ?? deEnvLocal('SUPABASE_AUTH_HOOK_SECRET');
@@ -228,18 +232,32 @@ if (!secretoHook) {
   process.exit(1);
 }
 
-// EL CANDADO: 401 = el deployment tiene el secreto y verifica firmas. 500 =
-// la variable no llegó al build, y encender el hook dejaría a todos fuera.
+// EL CANDADO (A37-S02-03): una sonda SIN firma recibe 401 tanto con el secreto correcto como con uno
+// distinto, así que no prueba nada. Se manda una sonda FIRMADA con el secreto que se le va a dar a
+// Supabase contra el modo dry-run del endpoint: solo un 200 {dry_run:true} demuestra que el deployment
+// verifica con ESE secreto. 401 = el secreto no coincide (todo magic link fallaría); 500 = no llegó al build.
+const { createHmac, randomUUID } = await import('node:crypto');
+const cuerpoSonda = JSON.stringify({ likida_dry_run: true });
+const idSonda = `sonda_${randomUUID()}`;
+const tsSonda = String(Math.floor(Date.now() / 1000));
+const llaveSonda = Buffer.from(secretoHook.replace(/^v1,/, '').replace(/^whsec_/, ''), 'base64');
+const firmaSonda = createHmac('sha256', llaveSonda).update(`${idSonda}.${tsSonda}.${cuerpoSonda}`, 'utf8').digest('base64');
 const sonda = await fetch(ENDPOINT, {
-  method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+  method: 'POST',
+  headers: {
+    'content-type': 'application/json',
+    'webhook-id': idSonda, 'webhook-timestamp': tsSonda, 'webhook-signature': `v1,${firmaSonda}`,
+  },
+  body: cuerpoSonda,
 });
-if (sonda.status !== 401) {
-  console.error(`\n✗ ${ENDPOINT} contestó ${sonda.status}, no 401.`);
-  console.error('  401 = desplegado y con el secreto. 500 = falta la variable en el build.');
+const respSonda = (await sonda.json().catch(() => null)) as { dry_run?: boolean } | null;
+if (sonda.status !== 200 || respSonda?.dry_run !== true) {
+  console.error(`\n✗ ${ENDPOINT} contestó ${sonda.status} a la sonda firmada, no 200 dry_run.`);
+  console.error('  401 = el secreto del deployment NO coincide con SUPABASE_AUTH_HOOK_SECRET. 500 = falta la variable en el build.');
   console.error('  NO se enciende el hook: con el endpoint así, nadie podría entrar.');
   process.exit(1);
 }
-console.log(`\n✓ ${ENDPOINT} contesta 401 sin firma: desplegado y con secreto.`);
+console.log(`\n✓ ${ENDPOINT} verificó la sonda firmada con este secreto: desplegado y coincide.`);
 
 await api('PATCH', {
   hook_send_email_enabled: true,

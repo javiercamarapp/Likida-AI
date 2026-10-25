@@ -386,6 +386,23 @@ export function evaluarRiesgoSemana(
     });
   }
 
+  // ── EL ART. 64 EN LA SEMANA (A37-S48-02) ────────────────────────────────
+  // Lo medido arriba son horas EFECTIVAS (con los descansos declarados descontados), igual que el día. Si con ellas no se rebasa el tope pero
+  // de punta a punta sí, se dice —con el artículo— en vez de esconderlo: si el operador no podía salir, esos descansos cuentan y la semana está excedida.
+  const minutosBrutos = dias.reduce((s, d) => s + (d.jornada.minutosBrutos ?? 0), 0);
+  const horasBrutas = HORAS(minutosBrutos);
+  if (horasMedidas <= tope.ordinaria && horasBrutas > tope.ordinaria) {
+    senales.push({
+      clase: 'descanso_pudo_contar_lft_64',
+      esExceso: false,
+      dice:
+        `Descontando los descansos la semana suma ${horasMedidas} h y no rebasa las ${tope.ordinaria} h ordinarias de ${anio}; ` +
+        `de punta a punta son ${horasBrutas} h y sí las rebasaría. ` +
+        'Si el operador no podía salir durante esos descansos, cuentan como jornada efectiva y la semana está excedida.',
+      fundamento: 'LFT art. 64: cuando el trabajador no pueda salir del lugar donde presta sus servicios durante las horas de reposo o de comidas, el tiempo correspondiente le será computado como tiempo efectivo de la jornada.',
+    });
+  }
+
   // ── EL DÍA DE DESCANSO DEL ART. 69 ──────────────────────────────────────
   // Solo se concluye si TODOS los días de la ventana se pudieron medir — y a
   // este punto ya sabemos que sí, porque arriba se devolvió si había huecos.
@@ -415,13 +432,30 @@ export function evaluarRiesgoSemana(
     }
   }
 
+  // ── UNA COTA INFERIOR PRUEBA EL EXCESO Y NO LO DESCARTA (también en la semana) ──
+  // Mismo criterio que el día: si algún día trae una punta derivada del GPS o de un hito de viaje y NO hay exceso probado, la semana no puede
+  // salir «sin señal de exceso» — la jornada real pudo ser más larga que la cota.
+  const hayExceso = senales.some((s) => s.esExceso);
+  const hayDerivadas = dias.some((d) => [d.jornada.inicio, d.jornada.fin].some((a) => a !== null && (a.procedencia === 'gps' || a.procedencia === 'hito_viaje')));
+  if (hayDerivadas && !hayExceso) {
+    senales.push({
+      clase: 'cota_inferior_derivada',
+      esExceso: false,
+      dice:
+        'El inicio o el fin de al menos un día de esta semana no lo declaró el operador: se derivó del GPS o de un hito del viaje, y eso solo acota ' +
+        'la jornada por abajo. Con esos datos se puede demostrar un exceso, pero no descartarlo. Pídele al operador que declare sus horas, o captúralas aquí.',
+      fundamento: null,
+    });
+    return { anio, topeOrdinariaHoras: tope.ordinaria, horasMedidas, diasSinDato, senales, veredicto: 'dato_insuficiente' };
+  }
+
   return {
     anio,
     topeOrdinariaHoras: tope.ordinaria,
     horasMedidas,
     diasSinDato,
     senales,
-    veredicto: senales.some((s) => s.esExceso) ? 'exceso' : 'sin_senal_de_exceso',
+    veredicto: hayExceso ? 'exceso' : 'sin_senal_de_exceso',
   };
 }
 

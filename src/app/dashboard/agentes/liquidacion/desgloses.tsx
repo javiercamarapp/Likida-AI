@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Mail, AlertTriangle, Route } from 'lucide-react';
-import { fechaCorta, numero, hoyMx, fechaHoraMx } from '@/lib/formato';
+import { fechaCorta, numero, hoyMx, inicioDiaMx, fechaHoraMx } from '@/lib/formato';
 import { EstadoVacio } from '@/app/admin/ui/kit';
 import { ESTILO_CONTROL } from '@/app/admin/ui/forma';
 import { dinero } from '@/lib/likida/liquidacion_externa/presentacion';
@@ -74,7 +74,9 @@ export type LecturaDesgloses =
   | { ok: false }
   | { ok: true; fichas: FichasDesgloses; filas: FilaDesglose[]; sinPoliza: FilaSinPoliza[]; siguiente: string | null;
       /** Insights ya calculados con más datos que las fichas; sin ellos se calculan de las fichas. */
-      insights?: InsightA1[] };
+      insights?: InsightA1[];
+      /** A37-S14-03: la lista «sin póliza» se cortó en el tope; hay más de las que se pintan. */
+      sinPolizaTruncada?: boolean };
 
 export interface DesglosesProps {
   lectura: Promise<LecturaDesgloses>;
@@ -102,6 +104,11 @@ export interface PanelDetalleProps {
   /** El filtro y las fechas vigentes de la lista, para que «Cerrar» no los pierda. */
   params: Array<[string, string]>;
 }
+
+/** Cuántas excepciones se pintan; la página pide una más para saber si hay otras sin mostrar (A37-S14-03). */
+export const TOPE_EXCEPCIONES = 50;
+/** Cuántas bitácoras «sin póliza» se pintan en su lista; la página pide una más (A37-S14-03). */
+export const TOPE_SIN_POLIZA = 200;
 
 export interface SeccionExcepcionesProps {
   /** `null` = no se pudo leer. */
@@ -212,6 +219,8 @@ const ROTULO_FILTRO: Record<FiltroDesglose, string> = {
 
 // ── La sección ─────────────────────────────────────────────────────────────
 
+const AYUDA_VENTANA = ' Al abrirla, la lista se limita a esos 30 días.';
+
 const CLASE_CONTROL = 'text-[12.5px] rounded-lg px-2 py-1.5 min-w-[9rem]';
 
 function query(contexto: Array<[string, string]>, extra: Array<[string, string]> = []): string {
@@ -245,8 +254,10 @@ export async function SeccionDesgloses(p: DesglosesProps) {
     );
   }
 
-  const { fichas, filas, sinPoliza, siguiente } = lectura;
+  const { fichas, filas, sinPoliza, siguiente, sinPolizaTruncada } = lectura;
   const hoy = hoyMx();
+  // A37-S14-04: las fichas de entregas cuentan los últimos 30 días (hoy y los 29 anteriores, como `fichasDesgloses`): el enlace abre la lista de esa MISMA ventana.
+  const desde30 = hoyMx(new Date(Date.parse(inicioDiaMx(hoy)) - 29 * 24 * 3600 * 1000));
   const filtrando = !!(p.filtro || p.desde || p.hasta);
   const verSinPoliza = p.filtro === 'sin_poliza';
 
@@ -266,12 +277,12 @@ export async function SeccionDesgloses(p: DesglosesProps) {
 
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-2 mb-3">
         <Ficha etiqueta="Recibidos hoy" valor={fichas.recibidosHoy} ayuda="Desgloses que llegaron hoy del sistema de tu empresa." href={query(p.contexto)} />
-        <Ficha etiqueta="Enviados" valor={fichas.enviados} ayuda="Correos que ya salieron y esperan confirmación de entrega."
-          href={query(p.contexto, [['des_estado', 'enviado']])} />
-        <Ficha etiqueta="Entregados" valor={fichas.entregados} ayuda="Correos que el buzón de destino ya recibió."
-          href={query(p.contexto, [['des_estado', 'entregado']])} />
-        <Ficha etiqueta="Rebotados" valor={fichas.rebotados} tono="bad" ayuda="Correos que no llegaron. Corrige la dirección y reenvía."
-          href={query(p.contexto, [['des_estado', 'rebotado']])} />
+        <Ficha etiqueta="Enviados · 30 días" valor={fichas.enviados} ayuda={`Correos que salieron en los últimos 30 días y esperan confirmación de entrega. Se cuenta un correo por destinatario; la lista de abajo cuenta desgloses.${AYUDA_VENTANA}`}
+          href={query(p.contexto, [['des_estado', 'enviado'], ['des_desde', desde30]])} />
+        <Ficha etiqueta="Entregados · 30 días" valor={fichas.entregados} ayuda={`Correos de los últimos 30 días que el buzón de destino ya recibió. Se cuenta un correo por destinatario; la lista de abajo cuenta desgloses.${AYUDA_VENTANA}`}
+          href={query(p.contexto, [['des_estado', 'entregado'], ['des_desde', desde30]])} />
+        <Ficha etiqueta="Rebotados · 30 días" valor={fichas.rebotados} tono="bad" ayuda={`Correos de los últimos 30 días que no llegaron. Corrige la dirección y reenvía. Se cuenta un correo por destinatario; la lista de abajo cuenta desgloses.${AYUDA_VENTANA}`}
+          href={query(p.contexto, [['des_estado', 'rebotado'], ['des_desde', desde30]])} />
         <Ficha etiqueta="Retenidos" valor={fichas.retenidos} tono="bad" ayuda="Desgloses detenidos antes de enviarse (por ejemplo, neto negativo)."
           href={query(p.contexto, [['des_estado', 'retenido']])} />
         <Ficha etiqueta="Sin póliza" valor={fichas.sinPoliza} tono="bad" ayuda="Bitácoras que esperan su póliza para poder enviarse."
@@ -322,6 +333,9 @@ export async function SeccionDesgloses(p: DesglosesProps) {
                 ))}
               </tbody>
             </table>
+            {sinPolizaTruncada && (
+              <p className="text-[12px] mt-2" role="status" style={{ color: 'var(--bad)' }}>Se muestran las {sinPoliza.length} más recientes: hay más bitácoras sin póliza que no caben en esta lista.</p>
+            )}
             <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>Estas bitácoras no se enviarán hasta tener póliza: revísalas en el sistema de tu empresa.</p>
           </div>
         )
@@ -572,7 +586,7 @@ function EstadoCabecera({ d }: { d: DetalleDesglose }) {
       <div><dt className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Operador</dt><dd>{d.operador ?? '—'}</dd></div>
       <div><dt className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Periodo</dt><dd>{`${fechaCorta(d.periodoDesde)} – ${fechaCorta(d.periodoHasta)}`}</dd></div>
       <div><dt className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Terminal</dt><dd>{d.terminal ?? '—'}</dd></div>
-      <div><dt className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Neto (de tu sistema)</dt><dd className="cifra-mono font-semibold">{dinero(d.neto, d.moneda)}</dd></div>
+      <div><dt className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{d.totalOrigen === 'calculado' ? 'Neto calculado de los renglones' : 'Neto (de tu sistema)'}</dt><dd className="cifra-mono font-semibold">{dinero(d.neto, d.moneda)}</dd>{d.totalOrigen === 'calculado' && <dd className="text-[11px]" style={{ color: 'var(--muted)' }}>Tu sistema no mandó su propio neto: no hay con qué compararlo.</dd>}</div>
     </dl>
   );
 }
@@ -719,7 +733,9 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
 
 /** Lo que pide a una persona, de toda la flota: sin póliza, operador sin alta o sin correo, retenidos y correcciones pendientes. */
 export async function SeccionExcepciones(p: SeccionExcepcionesProps) {
-  const lista = await p.excepciones;
+  const todas = await p.excepciones;
+  const lista = todas === null ? null : todas.slice(0, TOPE_EXCEPCIONES);
+  const hayMas = todas !== null && todas.length > TOPE_EXCEPCIONES;
   if (lista === null) {
     return (
       <section className="card p-4" id="excepciones" role="alert">
@@ -738,6 +754,10 @@ export async function SeccionExcepciones(p: SeccionExcepcionesProps) {
       {lista.length === 0 ? (
         <EstadoVacio icono={<Mail width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>Sin excepciones abiertas.</EstadoVacio>
       ) : (
+        <>
+        {hayMas && (
+          <p className="text-[12px] mb-2" role="status" style={{ color: 'var(--bad)' }}>Se muestran las {TOPE_EXCEPCIONES} más recientes: hay más excepciones abiertas que no caben en esta lista. Resuelve las visibles para ver el resto.</p>
+        )}
         <ul className="space-y-2">
           {lista.map((x) => {
             const bitacora = typeof x.detalle.bitacora === 'string' ? x.detalle.bitacora : x.claveExterna;
@@ -751,6 +771,7 @@ export async function SeccionExcepciones(p: SeccionExcepcionesProps) {
             );
           })}
         </ul>
+        </>
       )}
     </section>
   );

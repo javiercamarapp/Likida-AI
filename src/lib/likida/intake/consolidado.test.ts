@@ -360,6 +360,28 @@ describe('resolverLineaAMano — la pantalla que faltaba, contra Supabase mockea
     expect(filtrosVistos.some((f) => f.tabla === 'cfdi_consolidado_linea' && f.op === 'update')).toBe(false);
   });
 
+  it('A37-S46-08: reintento tras un corte entre los dos UPDATE — el gasto YA sellado con ESTE uuid+orden cierra la línea', async () => {
+    // Primer intento: el gasto quedó sellado y el UPDATE de la línea falló por red.
+    // Reintento: el guardia `.is('cfdi_uuid', null)` no encuentra fila (ya está sellado),
+    // pero el sello es de esta misma línea (uuid + orden) → se cierra, no se deja atascada.
+    respGastoEscritura = { data: [], error: null };
+    respGastoLectura = { data: { cfdi_uuid: 'uuid-abc', cfdi_orden: 2 }, error: null };
+    const r = await resolverLineaAMano('t1', 'linea-1', { tipo: 'ligar', gastoId: 'g1' }, 'user-1');
+    expect(r).toEqual({ ok: true });
+    const cierre = updatesVistos.find((u) => u.tabla === 'cfdi_consolidado_linea');
+    expect(cierre?.payload).toMatchObject({ estatus: 'conciliada', gasto_id: 'g1' });
+  });
+
+  it('A37-S46-08: un gasto sellado con OTRO uuid u otro orden sigue siendo gasto_ya_no_disponible', async () => {
+    respGastoEscritura = { data: [], error: null };
+    respGastoLectura = { data: { cfdi_uuid: 'uuid-ajeno', cfdi_orden: 2 }, error: null };
+    expect(await resolverLineaAMano('t1', 'linea-1', { tipo: 'ligar', gastoId: 'g1' }, 'user-1'))
+      .toEqual({ ok: false, motivo: 'gasto_ya_no_disponible' });
+    respGastoLectura = { data: { cfdi_uuid: 'uuid-abc', cfdi_orden: 7 }, error: null };
+    expect(await resolverLineaAMano('t1', 'linea-1', { tipo: 'ligar', gastoId: 'g1' }, 'user-1'))
+      .toEqual({ ok: false, motivo: 'gasto_ya_no_disponible' });
+  });
+
   it('el gasto SÍ se ligó pero el cierre de la línea perdió la carrera → ya_resuelta, y se deja rastro en el log', async () => {
     respLineaEscritura = { data: [], error: null };
     const r = await resolverLineaAMano('t1', 'linea-1', { tipo: 'ligar', gastoId: 'g1' }, 'user-1');

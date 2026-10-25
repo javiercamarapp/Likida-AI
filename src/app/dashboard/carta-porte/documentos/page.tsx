@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { puedeAdministrar } from '@/lib/auth/permisos';
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
@@ -35,9 +36,14 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * La sesión y el área, DE NUEVO, dentro de cada acción. A nivel de módulo a propósito: una función declarada en el
  * cuerpo del componente y usada dentro de un `'use server'` se captura por closure y Next no puede serializarla.
  */
-async function sesionDeAccion(sp: { tenant?: string; rol?: string; vista?: string }): Promise<{ tenantId: string; userId: string } | { error: string }> {
+async function sesionDeAccion(
+  sp: { tenant?: string; rol?: string; vista?: string }, opts: { configuracion?: boolean } = {},
+): Promise<{ tenantId: string; userId: string } | { error: string }> {
   const s = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede administrar los documentos de Carta Porte.' };
+  // A37-S16-03: la configuración (buzón, remitentes, formatos de exportación, versión del perfil que lee los documentos de cada
+  // cliente) es del dueño de la cuenta, no de quien solo ve la ruta (el encargado). Mismo criterio que /dashboard/arco.
+  if (opts.configuracion && !puedeAdministrar(s.rol)) return { error: 'Configurar los documentos de Carta Porte es del dueño de la flota.' };
   return { tenantId: s.tenantId, userId: s.userId };
 }
 
@@ -58,14 +64,22 @@ async function cargarAsignacion(tenantId: string, ids: string[]): Promise<Pick<D
 async function cargarDatos(tenantId: string): Promise<DatosDocumentos | null> {
   try {
     const desde = new Date(Date.now() - DIAS_VENTANA * 86_400_000).toISOString();
-    const [lista, perfiles, clientes, buzon, configs] = await Promise.all([
+    const [lista0, pendientesViejos, perfiles, clientes, buzon, configs] = await Promise.all([
       repo.listarDocumentos(tenantId, { limite: 200 }),
+      // A37-A3-14: lo que sigue esperando a una persona (por revisar, sin poder leer) se muestra SIEMPRE, sin importar su antigüedad.
+      repo.listarDocumentos(tenantId, { estados: ['por_revisar', 'fallido'], limite: 500 }),
       repo.listarPerfiles(tenantId),
       repo.listarClientes(tenantId),
       repo.buzonDeFlota(tenantId),
       repo.listarExportConfigs(tenantId),
     ]);
-    const recientes = (await repo.listarDocumentos(tenantId, { desde, limite: 500 })).filas;
+    const ventana = await repo.listarDocumentos(tenantId, { desde, limite: 500 });
+    const recientes = ventana.filas;
+    const vistos = new Set(lista0.filas.map((d) => d.id));
+    const lista = {
+      total: lista0.total,
+      filas: [...lista0.filas, ...pendientesViejos.filas.filter((d) => !vistos.has(d.id))].sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0)),
+    };
     const correcciones = await repo.contarCorreccionesPorDocumento(tenantId, recientes.filter((d) => d.estado === 'aprobado').map((d) => d.id));
     const versiones = await Promise.all(perfiles.map((p) => repo.listarVersionesPerfil(tenantId, p.id)));
     const dominio = dominioBuzon();
@@ -74,7 +88,7 @@ async function cargarDatos(tenantId: string): Promise<DatosDocumentos | null> {
     const asignacion = await cargarAsignacion(tenantId, lista.filas.map((d) => d.id));
     return {
       filas: lista.filas, total: lista.total, envios, ...asignacion,
-      linaje: Object.fromEntries([...linaje].map(([id, l]) => [id, { rol: l.rol, indice: l.indice, total: l.total, clave: l.clave }])), metricas: calcularMetricas(recientes, correcciones), clientes,
+      linaje: Object.fromEntries([...linaje].map(([id, l]) => [id, { rol: l.rol, indice: l.indice, total: l.total, clave: l.clave }])), metricas: calcularMetricas(recientes, correcciones, ventana.total), clientes,
       perfiles: perfiles.map((p, i) => ({ id: p.id, nombre: p.nombre, formato: p.formato, versionActiva: p.versionActiva, mapeos: p.activa.mapeos.length, versiones: versiones[i].map((v) => ({ version: v.version, nota: v.nota, mapeos: v.mapeos })) })),
       buzon: buzon ? { direccion: direccionCp(buzon.token, dominio), activo: buzon.activo, remitentes: buzon.remitentesPermitidos, dominioConfigurado: dominio !== null } : null,
       configs: configs.map((c) => ({ id: c.id, nombre: c.nombre, formato: c.formato, config: c.config })),
@@ -116,6 +130,7 @@ export default async function PaginaDocumentos({
         canal: 'manual', nombre: archivo.name, bytes: new Uint8Array(await archivo.arrayBuffer()), clienteId: UUID.test(clienteId) ? clienteId : null, actorId: s.userId,
       });
       if (!r.ok) return { ok: false, error: r.mensaje };
+      if (r.duplicado && r.archivoPurgado) { revalidatePath(RUTA); return { ok: false, error: 'Ese archivo ya se había recibido y su archivo se purgó por retención, así que no se volvió a leer. Captura el viaje a mano o pide cargarlo de nuevo.' }; }
       if (r.duplicado) { revalidatePath(RUTA); return { ok: true, mensaje: 'Ese archivo ya estaba en la bandeja: no se duplicó.' }; }
       const p = r.estado === 'recibido' ? await procesarDocumento(s.tenantId, r.documentoId, {}) : null;
       revalidatePath(RUTA);
@@ -147,7 +162,7 @@ export default async function PaginaDocumentos({
 
   async function activarBuzon(): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp);
+    const s = await sesionDeAccion(sp, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       await repo.crearBuzon(s.tenantId, generarTokenCp());
@@ -160,7 +175,7 @@ export default async function PaginaDocumentos({
 
   async function guardarRemitentes(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp);
+    const s = await sesionDeAccion(sp, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const lista = String(fd.get('remitentes') ?? '').split(/\r?\n/).map((x) => x.trim().toLowerCase()).filter(Boolean);
@@ -177,7 +192,7 @@ export default async function PaginaDocumentos({
 
   async function guardarExport(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp);
+    const s = await sesionDeAccion(sp, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const nombre = String(fd.get('nombre') ?? '').trim();
@@ -198,7 +213,7 @@ export default async function PaginaDocumentos({
 
   async function borrarExport(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp);
+    const s = await sesionDeAccion(sp, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const id = String(fd.get('id') ?? '');
@@ -213,7 +228,7 @@ export default async function PaginaDocumentos({
 
   async function volverVersion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp);
+    const s = await sesionDeAccion(sp, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const perfilId = String(fd.get('perfilId') ?? '');

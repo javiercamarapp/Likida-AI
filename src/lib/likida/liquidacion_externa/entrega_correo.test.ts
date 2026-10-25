@@ -228,6 +228,31 @@ describe('procesarEntregasCorreo — interruptor «Activar el envío» (A35-A1-0
     expect(e.reprogramadas[0]?.proximo.getTime()).toBeGreaterThan(AHORA.getTime());
   });
 
+  it('A37-S49-01: la flota apagada espera HORAS (no 15 min) para no acaparar la cola global', async () => {
+    const { e, deps } = montar({ ok: true, id: 'x' }, { activa: false });
+    await procesarEntregasCorreo(deps, 10);
+    expect(e.reprogramadas[0]?.proximo.getTime()).toBeGreaterThanOrEqual(AHORA.getTime() + 3_600_000);
+  });
+
+  it('A37-S49-02: las esperas no renuevan el reloj de la llave de idempotencia (se mide desde el primer ambiguo)', async () => {
+    // Ambiguo a las 10:00 de ayer; la flota apagó el envío y `proximo_intento_en` se renovó hace 15 min.
+    const ya = entrega({ ultimoError: 'ambiguo: [desde 2026-10-13T16:00:00.000Z] timeout', proximoIntentoEn: '2026-10-14T18:15:00.000Z' });
+    const { e, deps } = montar({ ok: true, id: 'x' }, {}, [ya]);
+    const r = await procesarEntregasCorreo(deps, 10);
+    expect(e.llamadasEnviar).toEqual([]);
+    expect(r.sinConfirmar).toBe(1);
+  });
+
+  it('A37-S49-02: un primer ambiguo graba su instante y un fallo posterior lo conserva', async () => {
+    const { e, deps } = montar({ ok: false, motivo: 'red', detalle: 'timeout' });
+    await procesarEntregasCorreo(deps, 10);
+    const err = e.reprogramadas[0]?.error ?? '';
+    expect(err).toBe(`ambiguo: [desde ${AHORA.toISOString()}] timeout`);
+    const { e: e2, deps: d2 } = montar({ ok: false, motivo: 'rechazado', detalle: 'HTTP 503', status: 503 }, {}, [entrega({ ultimoError: err, intentos: 1 })]);
+    await procesarEntregasCorreo(d2, 10);
+    expect(e2.reprogramadas[0]?.error).toBe(`ambiguo: [desde ${AHORA.toISOString()}] HTTP 503`);
+  });
+
   it('activa=true ⇒ sigue enviando igual (el interruptor encendido no cambia nada)', async () => {
     const { e, deps } = montar({ ok: true, id: 're_ok' }, { activa: true });
     const r = await procesarEntregasCorreo(deps, 10);
@@ -274,6 +299,30 @@ describe('procesarEntregasCorreo — idempotencia y concurrencia', () => {
     expect(llaves[0]).toBe(`liqcorreo:${LIQ}:g1:operador`);
     expect(llaveIdempotencia({ liquidacionExternaId: LIQ, generacion: 2, rol: 'operador' })).not.toBe(llaves[0]);
     expect(llaveIdempotencia({ liquidacionExternaId: LIQ, generacion: 1, rol: 'rh' })).not.toBe(llaves[0]);
+  });
+
+  it('A37-A1-liquidaciones-05: los varios correos de RH NO comparten la Idempotency-Key (hash del correo), el operador conserva la suya', () => {
+    const base = { liquidacionExternaId: LIQ, generacion: 1, rol: 'rh' as const };
+    const a = llaveIdempotencia({ ...base, correo: 'rh1@ejemplo.test' });
+    const b = llaveIdempotencia({ ...base, correo: 'rh2@ejemplo.test' });
+    expect(a).not.toBe(b);
+    // Mayúsculas y espacios no cambian el destinatario.
+    expect(llaveIdempotencia({ ...base, correo: ' RH1@ejemplo.test ' })).toBe(a);
+    // Sin el correo en la llave, ni un rastro del correo completo.
+    expect(a).not.toContain('rh1@');
+    // El operador (un solo correo por generación) mantiene exactamente la llave de siempre: un reintento en vuelo no cambia de llave.
+    expect(llaveIdempotencia({ liquidacionExternaId: LIQ, generacion: 1, rol: 'operador', correo: 'ana.prueba@ejemplo.test' })).toBe(`liqcorreo:${LIQ}:g1:operador`);
+  });
+
+  it('A37-A1-liquidaciones-05: dos filas de RH de la misma generación salen con llaves distintas', async () => {
+    const { e, deps } = montar({ ok: true, id: 're_1' }, {}, [
+      entrega({ id: 'rh-1', rol: 'rh', correo: 'rh1@ejemplo.test' }),
+      entrega({ id: 'rh-2', rol: 'rh', correo: 'rh2@ejemplo.test', claimToken: 'tok-2' }),
+    ]);
+    await procesarEntregasCorreo(deps, 10);
+    const llaves = e.llamadasEnviar.map((l) => l.op.idempotencyKey);
+    expect(llaves).toHaveLength(2);
+    expect(new Set(llaves).size).toBe(2);
   });
 
   it('claim vencido que YA trae resend_id ⇒ NO reenvía: fallida «sin confirmar» para decisión humana', async () => {
@@ -435,5 +484,34 @@ describe('A37-A1-02: el correo de una corrección se rotula CORRECCIÓN', () => 
     const n = armarCorreoDesglose({ claveExterna: 'BIT-T01-1228', periodoDesde: '2026-10-09', periodoHasta: '2026-10-14' }).correo;
     expect(n.asunto).not.toMatch(/CORRECCIÓN/);
     expect(n.parrafos.join(' ')).not.toMatch(/CORRECCIÓN/);
+  });
+});
+
+describe('A37-A1-liquidaciones-10: la bitácora del asunto sale del desglose, no de una regex sobre la clave', () => {
+  const periodo = { periodoDesde: '2026-10-09', periodoHasta: '2026-10-14' };
+  it('bitácora «A-123» sin terminal ⇒ «A-123» (la regex la dejaba en «123»)', () => {
+    // Clave real que produce `claveDeBitacora(undefined, 'A-123')`: «BIT-A-123».
+    const { correo, nombreAdjunto } = armarCorreoDesglose({ claveExterna: 'BIT-A-123', bitacora: 'A-123', ...periodo });
+    expect(correo.asunto).toContain('bitácora A-123');
+    expect(correo.parrafos.join(' ')).toContain('bitácora A-123');
+    expect(nombreAdjunto).toBe('desglose-A-123.xlsx');
+  });
+  it('terminal «NLD-1» con bitácora «55» ⇒ «55» (la regex daba «1-55»)', () => {
+    const { correo } = armarCorreoDesglose({ claveExterna: 'BIT-NLD-1-55', bitacora: '55', ...periodo });
+    expect(correo.asunto).toContain('bitácora 55 —');
+    expect(correo.asunto).not.toContain('1-55');
+  });
+  it('clave «LIQ-…» ⇒ la bitácora real, no la clave completa', () => {
+    const { correo } = armarCorreoDesglose({ claveExterna: 'LIQ-T01-9001', bitacora: '1228', ...periodo });
+    expect(correo.asunto).toContain('bitácora 1228');
+    expect(correo.asunto).not.toContain('LIQ-');
+  });
+  it('una corrección sigue rotulada CORRECCIÓN y muestra la bitácora real', () => {
+    const { correo } = armarCorreoDesglose({ claveExterna: 'BIT-T01-1228-R1', bitacora: '1228', ...periodo });
+    expect(correo.asunto).toMatch(/^CORRECCIÓN — Desglose de pago — bitácora 1228 —/);
+  });
+  it('sin la bitácora del desglose (dato no disponible) cae a la regex anterior', () => {
+    const { correo } = armarCorreoDesglose({ claveExterna: 'BIT-T01-1228', ...periodo });
+    expect(correo.asunto).toContain('bitácora 1228');
   });
 });

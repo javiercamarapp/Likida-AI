@@ -31,6 +31,8 @@ let rpcProductoRespuesta: { data: unknown; error: { message: string; code?: stri
 let rpcMcpOauthRespuesta: { data: unknown; error: { message: string; code?: string } | null };
 /** Lo que contesta la RPC hermana `mantener_llm_presupuesto` (0441). */
 let rpcLlmPresupuestoRespuesta: { data: unknown; error: { message: string; code?: string } | null };
+/** Lo que contesta la RPC hermana `mantener_agente_idempotencia` (0909, A37-S60-07). */
+let rpcAgenteIdemRespuesta: { data: unknown; error: { message: string; code?: string } | null };
 type RespuestaRpc = { data: unknown; error: { message: string; code?: string } | null };
 let rpcConversacionRespuestas: RespuestaRpc[];
 let rpcCodigoRespuestas: RespuestaRpc[];
@@ -40,6 +42,8 @@ const rpc = vi.fn(async (nombre?: unknown) => {
   if (nombre === 'mantener_producto_evento') return rpcProductoRespuesta;
   if (nombre === 'mantener_mcp_oauth') return rpcMcpOauthRespuesta;
   if (nombre === 'mantener_llm_presupuesto') return rpcLlmPresupuestoRespuesta;
+  if (nombre === 'purgar_vinculacion_portal') return { data: 0, error: null };
+  if (nombre === 'mantener_agente_idempotencia') return rpcAgenteIdemRespuesta;
   if (nombre === 'purgar_wa_conversacion') return rpcConversacionRespuestas.shift() ?? rpcConversacionDefault;
   if (nombre === 'purgar_codigo_pendiente') return rpcCodigoRespuestas.shift() ?? rpcCodigoDefault;
   return rpcRespuesta;
@@ -77,6 +81,12 @@ vi.mock('@/lib/likida/retencion_agentes', () => ({ mantenerDatosAgentes: (a?: Da
 const purgaLedgers = vi.fn(async (_ahora?: Date, _vence?: Date | null): Promise<PurgaAgente[]> => [{ nombre: 'evento_seguridad', ok: true, filas: 0, parcial: false, error: null }]);
 vi.mock('@/lib/likida/retencion_ledgers', () => ({ mantenerLedgers: (a?: Date, v?: Date | null) => purgaLedgers(a, v) }));
 
+// A37-S09-01: Storage y buzón se mockean para que la corrida sana sea de verdad sana.
+const borrarStorage = vi.fn(async () => ({ revisados: 0, borrados: 0, fallidos: 0 }));
+vi.mock('@/lib/likida/storage_borrado', () => ({ borrarStorageMarcado: () => borrarStorage() }));
+const purgaBuzon = vi.fn(async (_a?: Date) => 0);
+vi.mock('@/lib/likida/buzon/repo', () => ({ purgarRecepcionesVencidas: (a?: Date) => purgaBuzon(a) }));
+
 process.env.CRON_SECRET = 'secreto-de-prueba';
 const { GET } = await import('./route');
 
@@ -98,11 +108,14 @@ beforeEach(() => {
   rpcProductoRespuesta = { data: { mesesConsolidados: 0, detalleBorrado: 0, parcial: false }, error: null };
   rpcMcpOauthRespuesta = { data: { tokensBorrados: 0, codigosBorrados: 0, clientesBorrados: 0, parcial: false }, error: null };
   rpcLlmPresupuestoRespuesta = { data: { liquidadasBorradas: 0, vencidasBorradas: 0, parcial: false }, error: null };
+  rpcAgenteIdemRespuesta = { data: { borradas: 0, parcial: false }, error: null };
   rpcConversacionRespuestas = [];
   rpcCodigoRespuestas = [];
   rpcConversacionDefault = { data: { borradas: 0, parcial: false, agotado: true }, error: null };
   rpcCodigoDefault = { data: { borradas: 0, parcial: false, agotado: true }, error: null };
   rpc.mockClear();
+  borrarStorage.mockClear();
+  purgaBuzon.mockClear();
   alertarOperador.mockClear();
   registrarLatido.mockClear();
   estaApagado.mockReset().mockResolvedValue(false);
@@ -181,6 +194,29 @@ describe('la corrida', () => {
     expect(res.status).toBe(200);
     expect(cuerpo.llmPresupuesto).toBeNull();
     expect(alertarOperador).toHaveBeenCalledWith('cron.purgar.llm_presupuesto', expect.objectContaining({ error: 'no existe' }));
+  });
+
+  it('A37-S60-07: purga la idempotencia de las tools de agentes (90 días) y la reporta; su fallo real se alerta, la migración ausente solo se avisa', async () => {
+    rpcAgenteIdemRespuesta = { data: { borradas: 7, parcial: false }, error: null };
+    let res = await GET(peticion('Bearer secreto-de-prueba'));
+    let cuerpo = await res.json();
+    expect(rpc).toHaveBeenCalledWith('mantener_agente_idempotencia', expect.objectContaining({ p_dias: 90 }));
+    expect(cuerpo.agenteIdempotencia).toEqual({ borradas: 7, parcial: false });
+
+    alertarOperador.mockClear();
+    rpcAgenteIdemRespuesta = { data: null, error: { message: 'no existe', code: '42883' } };
+    res = await GET(peticion('Bearer secreto-de-prueba'));
+    cuerpo = await res.json();
+    expect(res.status).toBe(200);
+    expect(cuerpo.agenteIdempotencia).toBeNull();
+    expect(alertarOperador).not.toHaveBeenCalledWith('cron.purgar.agente_idempotencia', expect.anything());
+
+    rpcAgenteIdemRespuesta = { data: null, error: { message: 'boom', code: '57014' } };
+    res = await GET(peticion('Bearer secreto-de-prueba'));
+    cuerpo = await res.json();
+    expect(res.status).toBe(200);
+    expect(cuerpo.agenteIdempotencia).toBeNull();
+    expect(alertarOperador).toHaveBeenCalledWith('cron.purgar.agente_idempotencia', expect.objectContaining({ error: 'boom' }));
   });
 
   it('si producto_evento falla, responde 500, late fallo y conserva la causa', async () => {
@@ -516,5 +552,66 @@ describe('la retención de los ledgers y de la autofactura (0680 + 0542)', () =>
     estaApagado.mockResolvedValue(true);
     await GET(peticion('Bearer secreto-de-prueba'));
     expect(purgaLedgers).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('A37-S09-01 — las purgas complementarias que fallan ya no dejan el latido en ok', () => {
+  beforeEach(() => {
+    purgaCartaPorte.mockReset().mockResolvedValue({ revisados: 0, purgados: 0, fallidos: 0 });
+    purgaAgentes.mockReset().mockResolvedValue([{ nombre: 'wa_ventana_contacto', ok: true, filas: 0, parcial: false, error: null }]);
+    purgaLedgers.mockReset().mockResolvedValue([{ nombre: 'evento_seguridad', ok: true, filas: 0, parcial: false, error: null }]);
+  });
+  it('Storage con archivos sin borrar: latido parcial, alerta y la causa viaja en el cuerpo', async () => {
+    borrarStorage.mockResolvedValueOnce({ revisados: 3, borrados: 1, fallidos: 2 });
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    const cuerpo = await res.json();
+    expect(cuerpo.estado).toBe('parcial');
+    expect(cuerpo.purgasConFallo).toEqual(['storage: 2 archivo(s) sin borrar']);
+    expect(alertarOperador).toHaveBeenCalledWith('cron.purgar.purgas_con_fallo', expect.objectContaining({ error: expect.stringContaining('storage') }));
+    expect(registrarLatido).toHaveBeenLastCalledWith('purgar', 'parcial', expect.objectContaining({ purgasConFallo: ['storage: 2 archivo(s) sin borrar'] }));
+  });
+  it('Storage que lanza, carta porte que lanza y buzón que lanza: parcial, no ok', async () => {
+    borrarStorage.mockRejectedValueOnce(new Error('bucket caído'));
+    purgaCartaPorte.mockRejectedValueOnce(new Error('x'));
+    purgaBuzon.mockRejectedValueOnce(new Error('y'));
+    const cuerpo = await (await GET(peticion('Bearer secreto-de-prueba'))).json();
+    expect(cuerpo.estado).toBe('parcial');
+    expect(cuerpo.purgasConFallo).toEqual(expect.arrayContaining(['storage: la corrida lanzó', 'carta_porte_docs: la corrida lanzó', 'buzon_recepcion: no se pudo']));
+  });
+  // A37-L-06 (lote legal-ia-01): cobertura de las demás purgas de datos personales; el estado es 'parcial' (mecanismo S09-01).
+  it('control: todo sano = latido ok y sin purgasConFallo', async () => {
+    const cuerpo = await (await GET(peticion('Bearer secreto-de-prueba'))).json();
+    expect(cuerpo.estado).toBe('ok');
+    expect(cuerpo.purgasConFallo).toEqual([]);
+  });
+  it('una purga de agentes (GPS/ventana) que devuelve ok:false: parcial y nombra la tabla', async () => {
+    purgaAgentes.mockResolvedValue([{ nombre: 'gps_posicion', ok: false, filas: null, parcial: false, error: 'timeout' }]);
+    const cuerpo = await (await GET(peticion('Bearer secreto-de-prueba'))).json();
+    expect(cuerpo.estado).toBe('parcial');
+    expect(String(cuerpo.purgasConFallo)).toContain('gps_posicion');
+  });
+  it('un ledger que falla: parcial', async () => {
+    purgaLedgers.mockResolvedValue([{ nombre: 'evento_seguridad', ok: false, filas: null, parcial: false, error: 'x' }]);
+    const cuerpo = await (await GET(peticion('Bearer secreto-de-prueba'))).json();
+    expect(cuerpo.estado).toBe('parcial');
+    expect(String(cuerpo.purgasConFallo)).toContain('evento_seguridad');
+  });
+  it('mcp_oauth y llm_presupuesto con error de RPC: parcial', async () => {
+    rpcMcpOauthRespuesta = { data: null, error: { message: 'boom', code: '57014' } };
+    const a = await (await GET(peticion('Bearer secreto-de-prueba'))).json();
+    expect(a.estado).toBe('parcial');
+    expect(String(a.purgasConFallo)).toContain('mcp_oauth');
+    rpcMcpOauthRespuesta = { data: { parcial: false }, error: null };
+    rpcLlmPresupuestoRespuesta = { data: null, error: { message: 'boom' } };
+    const b = await (await GET(peticion('Bearer secreto-de-prueba'))).json();
+    expect(String(b.purgasConFallo)).toContain('llm_presupuesto');
+    rpcLlmPresupuestoRespuesta = { data: { parcial: false }, error: null };
+  });
+  it('`fallos` que devuelve mantenimiento_de_datos también cuentan', async () => {
+    rpcRespuesta = { data: { ...(rpcRespuesta.data as object), fallos: ['gps_posicion: statement timeout'] }, error: null };
+    const cuerpo = await (await GET(peticion('Bearer secreto-de-prueba'))).json();
+    expect(cuerpo.estado).toBe('parcial');
+    expect(String(cuerpo.purgasConFallo)).toContain('gps_posicion');
   });
 });

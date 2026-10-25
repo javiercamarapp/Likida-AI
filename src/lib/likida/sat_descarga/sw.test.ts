@@ -12,6 +12,13 @@ vi.mock('@/lib/logger', () => ({
 // alerta permanente en rojo por un valor inventado es la forma más eficaz de
 // que la siguiente alerta REAL se ignore. Mismo espíritu que la constante
 // `SECRETO` de `conectores/credenciales.test.ts`.
+// A37-L-08: el paquete se baja por `httpsPublico` (anti-SSRF + tope de bytes),
+// no por `fetch`; el resto de las llamadas al PAC siguen siendo `fetch`.
+const httpsPublicoMock = vi.fn();
+vi.mock('@/lib/http/https_publico', () => ({
+  httpsPublico: (...a: unknown[]) => httpsPublicoMock(...a),
+}));
+
 const CLAVE_FALSA = ['no', 'es', 'un', 'secreto'].join('-');
 const CLAVE_FALSA_2 = ['tampoco', 'es', 'un', 'secreto'].join('-');
 
@@ -22,6 +29,7 @@ let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   _limpiarTokenSat();
   fetchMock = vi.fn();
+  httpsPublicoMock.mockReset();
   vi.stubGlobal('fetch', fetchMock);
 });
 afterEach(() => {
@@ -31,6 +39,10 @@ afterEach(() => {
 
 const json = (cuerpo: unknown, status = 200): Response =>
   new Response(JSON.stringify(cuerpo), { status, headers: { 'content-type': 'application/json' } });
+
+/** La respuesta de `httpsPublico` para el paquete. */
+const paquete = (estado: number, bytes: Uint8Array = new Uint8Array()) =>
+  ({ estado, cuerpo: '', bytes, encabezados: {} });
 
 const respAuth = (token = 'tok-1'): Response => json({ data: { token }, status: 'success' });
 
@@ -189,16 +201,32 @@ describe('descargar', () => {
   it('pide la URL firmada, baja el ZIP y devuelve los XML', async () => {
     const xml = '<cfdi:Comprobante Total="1160.00"/>';
     fetchMock.mockResolvedValueOnce(respAuth())
-      .mockResolvedValueOnce(json({ status: 'success', data: { url: 'https://s3.prueba/firmada?sig=abc' } }))
-      .mockResolvedValueOnce(new Response(new Uint8Array(zipCon(xml)), { status: 200 }));
+      .mockResolvedValueOnce(json({ status: 'success', data: { url: 'https://s3.prueba/firmada?sig=abc' } }));
+    httpsPublicoMock.mockResolvedValueOnce(paquete(200, new Uint8Array(zipCon(xml))));
     const r = await crearProveedorSatSw(CFG).descargar('s3/uno');
     expect(r).toEqual({ ok: true, xmls: [xml] });
+    // A37-L-08: la URL del proveedor pasa por el wrapper anti-SSRF con TOPE de bytes.
+    const [peticion] = httpsPublicoMock.mock.calls[0];
+    expect(peticion).toMatchObject({ url: 'https://s3.prueba/firmada?sig=abc', metodo: 'GET' });
+    expect(peticion.maxBytesAbsoluto).toBeGreaterThan(8 * 1024 * 1024);
+    expect(peticion.maxBytesAbsoluto).toBeLessThanOrEqual(256 * 1024 * 1024);
+  });
+
+  it('A37-L-08: una URL que httpsPublico rechaza (no pública / excede el tope) NO se ingiere y se avisa', async () => {
+    fetchMock.mockResolvedValueOnce(respAuth())
+      .mockResolvedValueOnce(json({ status: 'success', data: 'http://169.254.169.254/paquete' }));
+    httpsPublicoMock.mockRejectedValueOnce(new Error('El proveedor debe usar una dirección HTTPS pública sin credenciales en la URL.'));
+    const r = await crearProveedorSatSw(CFG).descargar('s3/uno');
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.mensaje).toMatch(/No se pudo bajar el paquete/);
+    expect(r.mensaje).toMatch(/HTTPS pública/);
   });
 
   it('un 403 del paquete explica las 72 horas y las 2 descargas del SAT', async () => {
     fetchMock.mockResolvedValueOnce(respAuth())
-      .mockResolvedValueOnce(json({ status: 'success', data: 'https://s3.prueba/x' }))
-      .mockResolvedValueOnce(new Response(null, { status: 403 }));
+      .mockResolvedValueOnce(json({ status: 'success', data: 'https://s3.prueba/x' }));
+    httpsPublicoMock.mockResolvedValueOnce(paquete(403));
     const r = await crearProveedorSatSw(CFG).descargar('s3/uno');
     expect(r.ok).toBe(false);
     if (r.ok) return;
@@ -208,8 +236,8 @@ describe('descargar', () => {
 
   it('un ZIP que bajó pero no traía XML NO se lee como paquete vacío', async () => {
     fetchMock.mockResolvedValueOnce(respAuth())
-      .mockResolvedValueOnce(json({ status: 'success', data: 'https://s3.prueba/x' }))
-      .mockResolvedValueOnce(new Response(new Uint8Array(Buffer.from('no soy un zip')), { status: 200 }));
+      .mockResolvedValueOnce(json({ status: 'success', data: 'https://s3.prueba/x' }));
+    httpsPublicoMock.mockResolvedValueOnce(paquete(200, new Uint8Array(Buffer.from('no soy un zip'))));
     const r = await crearProveedorSatSw(CFG).descargar('s3/uno');
     expect(r.ok).toBe(false);
     if (r.ok) return;

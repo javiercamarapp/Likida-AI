@@ -5,11 +5,12 @@ import type { EntregaWhatsApp } from './entrega';
 // Gate por canal en `intentarEntrega` (T-A1-17): con canal `correo` el camino WhatsApp no corre; con `whatsapp`/`ambos` sí.
 
 const transicionar = vi.fn(async (..._a: unknown[]) => true);
+const leerPorId = vi.fn(async (..._a: unknown[]): Promise<unknown> => null);
 vi.mock('./repo', async (orig) => ({
   ...(await orig<typeof import('./repo')>()),
   transicionar: (...a: unknown[]) => transicionar(...a),
   registrarEvento: vi.fn(async () => undefined),
-  leerPorId: vi.fn(async () => null),
+  leerPorId: (...a: unknown[]) => leerPorId(...a),
   firmarPdfExterno: vi.fn(async () => 'https://firmada'),
 }));
 vi.mock('./trabajo', () => ({
@@ -20,7 +21,7 @@ vi.mock('./trabajo', () => ({
 vi.mock('../presupuesto', async (orig) => ({ ...(await orig<typeof import('../presupuesto')>()), acotada: (q: unknown) => q }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
-const { intentarEntrega, procesarLiquidacionesExternas } = await import('./servicio');
+const { intentarEntrega, procesarLiquidacionesExternas, reenviarCopiaAJefe, reavisarDiscrepancia } = await import('./servicio');
 
 let trabajo: LiquidacionExterna[] = [];
 const liq = (p: Partial<LiquidacionExterna> = {}): LiquidacionExterna => ({
@@ -71,6 +72,22 @@ describe('intentarEntrega: gate por canal', () => {
     expect(enviar).toHaveBeenCalledTimes(1);
   });
 
+  it('A37-S49-03: canal ambos y SIN PDF (flujo de desgloses) ⇒ no lanza «no tiene PDF»: se aparta sin gastar intento', async () => {
+    const r = await intentarEntrega(liq({ pdfRuta: null }), depsCon(async () => 'ambos'));
+    expect(r).toBe('sin_cambio');
+    expect(enviar).not.toHaveBeenCalled();
+    expect(transicionar).toHaveBeenCalledTimes(1);
+    const cambios = transicionar.mock.calls[0][3] as Record<string, unknown>;
+    expect(cambios).toHaveProperty('proximo_intento_en');
+    expect(cambios).not.toHaveProperty('intentos');
+    expect(cambios).not.toHaveProperty('estado');
+  });
+
+  it('canal whatsapp y SIN PDF sigue siendo un error real (se reintenta y termina fallida)', async () => {
+    const r = await intentarEntrega(liq({ pdfRuta: null }), depsCon(async () => 'whatsapp'));
+    expect(r).toBe('reintentar');
+  });
+
   it('si el canal no se puede leer ⇒ no se manda nada y no se gasta intento', async () => {
     const r = await intentarEntrega(liq(), depsCon(async () => { throw new Error('base caída'); }));
     expect(r).toBe('sin_cambio');
@@ -84,5 +101,39 @@ describe('intentarEntrega: gate por canal', () => {
     expect(r).toMatchObject({ tomadas: 2, en_cola: 1, sin_cambio: 1 });
     expect(enviar).toHaveBeenCalledTimes(1);
     expect((enviar.mock.calls[0][0] as { liquidacionId: string }).liquidacionId).toBe('l-w');
+  });
+});
+
+// A37-S14-02: las acciones del panel que mandan WhatsApp respetan el canal efectivo igual que `intentarEntrega`.
+describe('A37-S14-02: copia al jefe y reavisar respetan el canal', () => {
+  it('copia al jefe con canal correo ⇒ no se manda nada por WhatsApp', async () => {
+    leerPorId.mockResolvedValueOnce(liq({ estado: 'enviada' }));
+    const deps = depsCon(async () => 'correo');
+    const r = await reenviarCopiaAJefe('t-1', 'l-1', deps);
+    expect(r).toEqual({ estado: 'canal_correo' });
+    expect(deps.copiarAJefe).not.toHaveBeenCalled();
+  });
+
+  it('copia al jefe con canal whatsapp ⇒ el camino de siempre', async () => {
+    leerPorId.mockResolvedValueOnce(liq({ estado: 'enviada' }));
+    const deps = depsCon(async () => 'whatsapp');
+    await reenviarCopiaAJefe('t-1', 'l-1', deps);
+    expect(deps.copiarAJefe).toHaveBeenCalledTimes(1);
+  });
+
+  it('copia al jefe y el canal no se puede leer ⇒ fail-closed, no se manda', async () => {
+    leerPorId.mockResolvedValueOnce(liq({ estado: 'enviada' }));
+    const deps = depsCon(async () => { throw new Error('base caída'); });
+    const r = await reenviarCopiaAJefe('t-1', 'l-1', deps);
+    expect(r).toEqual({ estado: 'no_aplica' });
+    expect(deps.copiarAJefe).not.toHaveBeenCalled();
+  });
+
+  it('reavisar con canal correo ⇒ no se rearma ni se avisa por WhatsApp', async () => {
+    leerPorId.mockResolvedValueOnce(liq({ estado: 'acusada', acuseTipo: 'no_coincide' }));
+    const deps = depsCon(async () => 'correo');
+    const r = await reavisarDiscrepancia('t-1', 'l-1', 'u-1', deps);
+    expect(r).toBe('canal_correo');
+    expect(deps.avisarNoCoincide).not.toHaveBeenCalled();
   });
 });

@@ -97,8 +97,8 @@ it('M4: las piezas se piden por los títulos de los toques de las facturas (no �
     titulos.map((titulo) => ({ titulo, estado: 'pendiente', enviadoEn: null, creadoEn: '2026-09-01T00:00:00Z' })));
   const h = await html();
   const titulos = dobles.getPiezasDunningPlataforma.mock.calls[0][0] as string[];
-  expect(titulos).toContain('Cobranza SaaS — LK0 — D-3');
-  expect(titulos).toContain('Cobranza SaaS — LK1 — D+15');
+  expect(titulos).toContain('Cobranza SaaS — LK0 — f0 — D-3');
+  expect(titulos).toContain('Cobranza SaaS — LK1 — f1 — D+15');
   expect(h).not.toContain('· sin propuesta');
   expect(h).toContain('propuesta pendiente');
 });

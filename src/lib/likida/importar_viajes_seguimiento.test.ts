@@ -31,6 +31,9 @@ let modoRpc: 'ok' | 'sin_funcion' | 'fallo';
 let llamadasRpc: Array<{ nombre: string; args: Record<string, unknown> }>;
 let envios: string[];
 let n: number;
+/** A37-S46-04: con `choqueEnLote` el INSERT en bloque rebota por unidad (23505) y, fila por fila, `folioQueFalla` rebota por otra causa. */
+let choqueEnLote = false;
+let folioQueFalla: string | null = null;
 
 const ORDEN_ESQUEMA = 'Could not find the function public.aceptar_viajes_importados(p_tenant, p_viaje_ids) in the schema cache';
 
@@ -76,6 +79,12 @@ vi.mock('@/lib/supabase/admin', () => ({
         },
         upsert: (lote: Array<{ tenant_id: string; folio: string; operador_id: string }>) => ({
           select: () => {
+            if (choqueEnLote && lote.length > 1) {
+              return Promise.resolve({ data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "uq_viaje_abierto_por_unidad"' } });
+            }
+            if (folioQueFalla && lote.some((f) => f.folio === folioQueFalla)) {
+              return Promise.resolve({ data: null, error: { code: '57014', message: 'canceling statement due to statement timeout' } });
+            }
             const nuevos: ViajeBd[] = [];
             for (const f of lote) {
               if (viajes.some((v) => v.tenant_id === f.tenant_id && v.folio === f.folio)) continue; // viaje_folio_unico
@@ -112,6 +121,8 @@ beforeEach(() => {
   llamadasRpc = [];
   envios = [];
   n = 0;
+  choqueEnLote = false;
+  folioQueFalla = null;
   resolver.mockImplementation((nombre: string) => ({ operadorId: `op-${nombre}` }));
   logger.warn.mockClear();
 });
@@ -242,5 +253,18 @@ describe('frasesSeguimiento — lenguaje llano', () => {
   });
   it('sin intento de seguimiento no hay frase', () => {
     expect(frasesSeguimiento({ creados: 0 })).toEqual([]);
+  });
+});
+
+describe('A37-S46-04 — filas que entraron fila por fila cuentan aunque otra falle', () => {
+  it('fila 1-2 entran, la 3 falla por otra causa: se cuentan y la voluntaria queda en seguimiento', async () => {
+    choqueEnLote = true;
+    folioQueFalla = 'SIN-0003';
+    const r = await importarViajes('t1', [fila('SIN-0001', 'OPERADOR A'), fila('SIN-0002', 'OPERADOR B'), fila('SIN-0003', 'OPERADOR C')]);
+    expect(viajes.map((v) => v.folio)).toEqual(['SIN-0001', 'SIN-0002']);
+    expect(r.error).toBeDefined();
+    expect(r.creados).toBe(2);
+    expect(r.seguimientoActivado).toBe(1);
+    expect(viajes.find((v) => v.folio === 'SIN-0001')?.aceptado_en).not.toBeNull();
   });
 });

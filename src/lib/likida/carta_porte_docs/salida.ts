@@ -125,7 +125,7 @@ export function operadorPorNombre(operadores: OperadorMin[], nombre: string | nu
   return hits.length === 1 ? hits[0] : null;
 }
 
-export type MotivoSinViaje = 'falta_operador' | 'operador_ocupado' | 'operador_invalido' | 'datos_invalidos' | 'carrera';
+export type MotivoSinViaje = 'falta_operador' | 'operador_ocupado' | 'operador_invalido' | 'datos_invalidos' | 'carrera' | 'folio_de_otro_cliente';
 
 export interface BorradorCcp {
   armado: boolean;
@@ -192,6 +192,11 @@ export async function aplicarSalidaViaje(
   const completar = async (viajeId: string): Promise<ResultadoSalida> => {
     const existente = await repo.viajePorId(tenantId, viajeId);
     if (!existente) return { ok: false, motivo: 'carrera', mensaje: 'El viaje desapareció mientras se completaba. Vuelve a intentarlo.' };
+    // A37-S33-06: el folio es único por flota, no por cliente. Un viaje de OTRO cliente con el mismo folio NO se completa con datos de este
+    // documento (contaminaría su cuadre y su Carta Porte): se detiene y una persona decide. Otras discrepancias siguen como advertencia.
+    if (doc.clienteId && existente.clienteId && doc.clienteId !== existente.clienteId) {
+      return { ok: false, motivo: 'folio_de_otro_cliente', folio: plan.folio, mensaje: `Ya existe un viaje con el folio ${plan.folio} de OTRO cliente. No se completó con los datos de este documento: revisa el folio o captura el viaje a mano.` };
+    }
     const huecos: Record<string, unknown> = {};
     const poner = (col: string, actual: unknown, nuevo: unknown, rotulo: string): void => {
       if (nuevo === null || nuevo === undefined) return;
@@ -241,6 +246,12 @@ export async function aplicarSalidaViaje(
     if (ocupado) {
       return { ok: false, motivo: 'operador_ocupado', folio: plan.folio, mensaje: `${operador.nombre} ya tiene un viaje abierto${ocupado.folio ? ` (${ocupado.folio})` : ''}. Un operador solo puede tener uno: ciérralo o elige otro operador.` };
     }
+    // A37-S33-04: una unidad con otro viaje abierto chocaría con `uq_viaje_abierto_por_unidad` (23505) y se leería como «carrera».
+    // Como con las placas ambiguas, el viaje se crea sin unidad y se dice.
+    if (unidadId && (await repo.unidadConViajeAbierto(tenantId, unidadId))) {
+      advertencias.push(`La unidad de las placas ${plan.placas} ya tiene otro viaje abierto: este viaje queda sin unidad.`);
+      unidadId = null;
+    }
     const id = await repo.insertarViaje(tenantId, {
       folio: plan.folio, origen: plan.origen, destino: plan.destino, fechaInicio: plan.fechaInicio, kmRecorridos: plan.kmRecorridos,
       operadorId: operador.id, unidadId, clienteId: doc.clienteId, ccp: plan.ccp,
@@ -249,7 +260,10 @@ export async function aplicarSalidaViaje(
     if (id === null) {
       const ahora = await repo.viajePorFolio(tenantId, plan.folio);
       if (ahora) resultado = await completar(ahora.id);
-      else return { ok: false, motivo: 'carrera', mensaje: 'Otro viaje se abrió para ese operador mientras se creaba este. Vuelve a intentarlo.', folio: plan.folio };
+      else if (await repo.viajeAbiertoDeOperador(tenantId, operador.id)) {
+        // A37-S33-04: el 23505 fue por el operador (otro viaje abierto), no por el folio: se dice la causa real.
+        return { ok: false, motivo: 'operador_ocupado', folio: plan.folio, mensaje: `${operador.nombre} acaba de abrir otro viaje. Un operador solo puede tener uno: ciérralo o elige otro operador.` };
+      } else return { ok: false, motivo: 'carrera', mensaje: 'Otro viaje se abrió para ese operador mientras se creaba este. Vuelve a intentarlo.', folio: plan.folio };
     } else {
       const mercancias = await repo.reemplazarMercanciasDeDocumento(tenantId, id, doc.id, plan.mercancias);
       resultado = { ok: true, accion: 'creado', viajeId: id, folio: plan.folio, mercancias, columnasCompletadas: 0, advertencias, borrador: null };

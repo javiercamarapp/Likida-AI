@@ -117,7 +117,7 @@ jobs:
       - name: Los GRANT que el Supabase local no trae de fábrica
         run: |
           PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres \
-            -v ON_ERROR_STOP=1 -f scripts/ci/e2e/grants-locales.sql
+            -v ON_ERROR_STOP=1 -v es_local=si -f scripts/ci/e2e/grants-locales.sql
 
       # Los usuarios de Auth (@likida.test), la Flota E2E B y el PDF del
       # bucket — lo que seed.sql no puede sembrar. Ver la cabecera del script.

@@ -83,7 +83,8 @@ export function decidirEnvioAviso(e: EntradaPoliticaAviso): DecisionAviso {
     }
   }
 
-  const minimo = Number.isFinite(e.config.autonomoMinConfirmaciones) ? Math.max(0, e.config.autonomoMinConfirmaciones) : Infinity;
+  // A37-S58-08: el mínimo efectivo es 1 — jamás se autoaprueba sin al menos una confirmación humana, aunque la base traiga 0.
+  const minimo = Number.isFinite(e.config.autonomoMinConfirmaciones) ? Math.max(1, e.config.autonomoMinConfirmaciones) : Infinity;
   if (!(e.aprobacionesSinEditar >= minimo)) return { accion: 'confirmar', motivo: 'aun_no_validado' };
   return { accion: 'autoaprobar', motivo: 'autonomo_validado' };
 }

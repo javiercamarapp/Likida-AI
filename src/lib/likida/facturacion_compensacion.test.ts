@@ -28,14 +28,18 @@ const VIAJE = '99999999-2222-3333-4444-555555555555';
 /** Lo mínimo de PostgREST que `crearFactura` encadena, sin más ceremonia. */
 interface Cadena {
   eq: () => Cadena;
-  in: () => Promise<{ data: unknown; error: null }>;
+  in: () => Cadena;
   maybeSingle: () => Promise<{ data: unknown; error: null }>;
+  then: (res: (v: { data: unknown; error: null }) => unknown, rej?: (e: unknown) => unknown) => Promise<unknown>;
 }
+// A37-S45-07: `crearFactura` ahora encadena `.in().eq().in()` (facturas que ya
+// amparan los viajes), así que la cadena es encadenable Y esperable.
 const cadena = (fila: unknown, lista: unknown[]): Cadena => {
   const c: Cadena = {
     eq: () => c,
-    in: async () => ({ data: lista, error: null }),
+    in: () => c,
     maybeSingle: async () => ({ data: fila, error: null }),
+    then: (res, rej) => Promise.resolve({ data: lista, error: null }).then(res, rej),
   };
   return c;
 };
@@ -48,9 +52,10 @@ vi.mock('@/lib/supabase/admin', () => ({
       return {
         // `cliente` trae sus días de crédito (de ahí sale `vence_en`) y
         // `viaje` contesta que el viaje marcado sí es de la flota.
+        // `factura_viaje` (A37-S64-07): el viaje aún no tiene ligas previas con otra factura.
         select: () => (tabla === 'cliente'
           ? cadena({ id: 'cli-1', dias_credito: 30 }, [])
-          : cadena(null, [{ id: VIAJE }])),
+          : tabla === 'factura_viaje' ? cadena(null, []) : cadena(null, [{ id: VIAJE }])),
         insert(datos: Fila) {
           llamadas.push({ tabla, op: 'insert', datos });
           if (tabla === 'factura_viaje' && ligasFallan) {

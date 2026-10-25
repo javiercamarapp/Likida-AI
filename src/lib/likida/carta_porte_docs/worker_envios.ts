@@ -45,7 +45,7 @@ import { construirPlantilla, faltantesBloqueantes } from './plantilla_tms';
 import type { DocumentoFila, EstadoEnvioTms, TipoEvento } from './repo';
 import type { CambiosEnvio, EnvioDetalle, EnvioReclamado, ResultadoReclamo } from './repo_envios';
 import type { ConfigSalida } from './salida_config';
-import { SIN_TMS, type EntradaCarga, type ResultadoCarga, type SalidaTms } from './tms_puerto';
+import { SALIDA_NO_DISPONIBLE, SIN_TMS, type EntradaCarga, type ResultadoCarga, type SalidaTms } from './tms_puerto';
 import type { Hallazgo } from './validacion';
 
 /** Envíos que toma una pasada (la subida de cada uno es una llamada de red: pocos y bien hechos). */
@@ -58,6 +58,8 @@ export const MARGEN_ENVIO_MS = 25_000;
 export const TIMEOUT_CARGA_MS = 20_000;
 /** Cada cuánto se vuelve a mirar un envío `listo` que espera la subida manual (6 h): no ocupa el reclamo de cada pasada. */
 export const ESPERA_LISTO_MANUAL_MIN = 360;
+/** Si el proveedor del puerto falló en la pasada: el envío se suelta tal cual y se reintenta pronto (A37-S33-09). */
+export const REINTENTO_PROVEEDOR_MIN = 5;
 /** «Nadie lo reclama más»: el reclamo de la base trata `proxima_revision` NULA como «ya le toca», así que lo agotado se aparta con una fecha lejana. */
 export const SIN_MAS_REVISIONES = '9999-12-31T00:00:00.000Z';
 
@@ -234,6 +236,11 @@ async function procesarEnvio(ctx: Contexto, rec: EnvioReclamado): Promise<void> 
 
   const config = await configDe(ctx, tenantId);
   const salida = await puertoDe(ctx, tenantId);
+  if (salida === SALIDA_NO_DISPONIBLE) {
+    // Caída del proveedor ≠ flota sin conector: ni estado nuevo ni aviso de «listo manual»; se devuelve el intento del reclamo.
+    await soltar(ctx, envio, envio.estado, Math.max(0, envio.intentos - 1), iso(deps.ahora() + REINTENTO_PROVEEDOR_MIN * 60_000));
+    return;
+  }
   const manual = config.modo === 'descarga' || salida === SIN_TMS;
   const ahora = new Date(deps.ahora());
   const intentosFase = Math.max(0, envio.intentos - 1);

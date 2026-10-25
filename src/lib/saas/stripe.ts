@@ -199,6 +199,10 @@ export interface PrecioStripe {
   montoMensual: number;
   moneda: string;
   recurrente: boolean;
+  /** A37-S61-04: el price cobra EXACTAMENTE cada mes (`interval: 'month'`, `interval_count` 1). */
+  cobraCadaMes: boolean;
+  /** Para el mensaje de rechazo: «year ×1», «month ×3»… (`null` si no es recurrente). */
+  periodicidad: string | null;
   activo: boolean;
   /**
    * ¿`montoMensual` ya trae el IVA?
@@ -234,7 +238,7 @@ export async function leerPrecio(priceId: string): Promise<PrecioStripe> {
     unit_amount: number | null;
     currency: string;
     active: boolean;
-    recurring: { interval: string } | null;
+    recurring: { interval: string; interval_count?: number | null } | null;
     tax_behavior?: string | null;
   }>(`/prices/${encodeURIComponent(priceId)}`, { metodo: 'GET' });
 
@@ -243,6 +247,10 @@ export async function leerPrecio(priceId: string): Promise<PrecioStripe> {
     montoMensual: (p.unit_amount ?? 0) / 100,
     moneda: p.currency.toUpperCase(),
     recurrente: p.recurring !== null,
+    // Un `interval_count` ausente es 1 (el default de Stripe). Cualquier otra
+    // periodicidad NO es «mensual»: dividir el monto no es una decisión de este código.
+    cobraCadaMes: p.recurring !== null && p.recurring.interval === 'month' && (p.recurring.interval_count ?? 1) === 1,
+    periodicidad: p.recurring === null ? null : `${p.recurring.interval} ×${p.recurring.interval_count ?? 1}`,
     activo: p.active,
     // Cualquier valor que no sea uno de los dos explícitos cae en `null`. Un
     // `tax_behavior` nuevo de Stripe que aquí se leyera como "exclusive" por
@@ -337,7 +345,8 @@ export async function crearSuscripcionPorTransferencia(opciones: {
     const c = await pedir<{ id: string }>('/customers', {
       cuerpo: {
         name: fiscales.razonSocial,
-        email: fiscales.email,
+        // A37-S20-05: sin correo no se manda una cadena vacía (`aplanar` omite undefined).
+        email: fiscales.email || undefined,
         address: { postal_code: fiscales.codigoPostal, country: 'MX' },
         // `mx_rfc` es el tipo de tax id que Stripe usa para México: hace que su
         // propia factura salga con el RFC del receptor.
@@ -359,6 +368,7 @@ export async function crearSuscripcionPorTransferencia(opciones: {
 
   const s = await pedir<{
     id: string;
+    status?: string;
     latest_invoice: { hosted_invoice_url?: string | null } | string | null;
   }>('/subscriptions', {
     cuerpo: {
@@ -402,6 +412,20 @@ export async function crearSuscripcionPorTransferencia(opciones: {
     }
     throw e;
   });
+
+  // A37-S61-05: la clave dura 24 h en Stripe. Si la flota canceló y recontrata
+  // con los mismos datos dentro de ese plazo, Stripe devuelve la respuesta
+  // GUARDADA —la suscripción ya cancelada— sin crear nada ni cobrar. Antes la
+  // pantalla decía "creada". Se verifica que lo devuelto esté vivo; no se
+  // reintenta con otra clave (ante la duda no se arriesga un doble cobro).
+  if (s.status === 'canceled' || s.status === 'incomplete_expired') {
+    logger.error('stripe.suscripcion_devuelta_muerta', { sub: s.id, status: s.status, tenantId: opciones.tenantId });
+    throw new DatoInvalido(
+      'Stripe devolvió la suscripción anterior de esta flota, que está cancelada, en lugar de crear una nueva ' +
+      '(pasa si se cancela y se vuelve a contratar en menos de 24 horas). No se creó ni se cobró nada. ' +
+      'Inténtalo de nuevo más tarde o escríbele a Likida.',
+    );
+  }
 
   const inv = s.latest_invoice;
   const urlFactura = inv && typeof inv === 'object' ? (inv.hosted_invoice_url ?? null) : null;
@@ -461,6 +485,22 @@ export async function suscripcionesDeCustomer(customerId: string): Promise<Suscr
 }
 
 /**
+ * A37-S10-03: la FACTURA a la que pertenece un cobro. En la API 2025-03-31 (basil) en adelante, `Charge.invoice`
+ * deja de venir en el objeto y la relación cobro → factura vive en `InvoicePayment` (`GET /v1/invoice_payments`).
+ * `null` = Stripe contestó y ese pago NO es de una factura (un cargo suelto). LANZA si Stripe no contesta: quien
+ * lo llama es el webhook, que debe devolver 5xx para que Stripe reintente en vez de dar el reembolso por irrelevante.
+ */
+export async function facturaDePaymentIntent(paymentIntentId: string): Promise<string | null> {
+  const r = await pedir<{ data?: Array<{ invoice?: string | { id?: string } | null }> }>('/invoice_payments', {
+    metodo: 'GET',
+    cuerpo: { payment: { type: 'payment_intent', payment_intent: paymentIntentId }, limit: 1 },
+  });
+  const inv = r.data?.[0]?.invoice;
+  const id = typeof inv === 'string' ? inv : inv?.id;
+  return id ? id : null;
+}
+
+/**
  * CAMBIA EL PRICE DE UNA SUSCRIPCIÓN QUE YA EXISTE, en vez de crear una nueva.
  *
  * ES EL CAMINO CANÓNICO PARA "CAMBIAR DE PLAN" (auditoría 2, hallazgo real).
@@ -485,23 +525,46 @@ export async function cambiarPriceDeSuscripcion(opciones: {
   subscriptionId: string;
   priceId: string;
 }): Promise<{ subscriptionId: string }> {
-  const actual = await pedir<{ id: string; items: { data: Array<{ id: string }> } }>(
+  type ItemStripe = { id: string; price?: { id?: string } };
+  const actual = await pedir<{ id: string; items: { data: ItemStripe[] } }>(
     `/subscriptions/${encodeURIComponent(opciones.subscriptionId)}`,
     { metodo: 'GET' },
   );
 
-  const itemId = actual.items?.data?.[0]?.id;
+  const item = actual.items?.data?.[0];
+  const itemId = item?.id;
   if (!itemId) {
     throw new Error(`Stripe subscriptions/${opciones.subscriptionId}: no tiene ningún item que reemplazar.`);
   }
 
-  const s = await pedir<{ id: string }>(`/subscriptions/${encodeURIComponent(opciones.subscriptionId)}`, {
-    cuerpo: { items: [{ id: itemId, price: opciones.priceId }] },
-    // Sin esto, un reintento de red mandaría el mismo cambio dos veces — inofensivo
-    // aquí porque es idempotente por naturaleza (fija el price, no lo acumula),
-    // pero la misma disciplina que el resto del archivo.
-    idempotencia: `sub-update-${opciones.subscriptionId}-${opciones.priceId}`,
-  });
+  // Ya está en el price pedido: no hay nada que mandar (y así tampoco se choca
+  // con una respuesta guardada).
+  if (item.price?.id === opciones.priceId) return { subscriptionId: actual.id };
+
+  // A37-S61-05: la clave de Stripe dura 24 h. Con `sub-update-<sub>-<price>`, un
+  // A->B->A->B repetía exactamente la clave del primer cambio y Stripe
+  // devolvía su respuesta guardada SIN ejecutar, y la acción decía ok. Ahora la
+  // clave lleva el price de origen y el minuto: el reintento de red del mismo
+  // clic (segundos) sigue siendo la misma clave; un cambio deliberado
+  // posterior no.
+  const desde = item.price?.id ?? 'sin-price';
+  const minuto = Math.floor(Date.now() / 60_000);
+  const s = await pedir<{ id: string; items?: { data: ItemStripe[] } }>(
+    `/subscriptions/${encodeURIComponent(opciones.subscriptionId)}`,
+    {
+      cuerpo: { items: [{ id: itemId, price: opciones.priceId }] },
+      idempotencia: `sub-update-${opciones.subscriptionId}-${desde}-${opciones.priceId}-${minuto}`,
+    },
+  );
+
+  // Y se verifica lo que Stripe contesta: si no quedó en el price pedido (p. ej.
+  // una respuesta guardada), NO se reporta éxito.
+  const quedo = s.items?.data?.[0]?.price?.id;
+  if (quedo !== opciones.priceId) {
+    throw new Error(
+      `Stripe subscriptions/${opciones.subscriptionId}: el cambio no quedó aplicado (price actual ${quedo ?? 'desconocido'}, pedido ${opciones.priceId}).`,
+    );
+  }
 
   return { subscriptionId: s.id };
 }

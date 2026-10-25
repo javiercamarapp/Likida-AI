@@ -37,6 +37,20 @@ describe('guardarTarifa / listarTarifas', () => {
     expect(db.tablas.peaje_tarifa).toHaveLength(1);
   });
 
+  it('A37-S62-06: si la base rechaza el traslape (23P01, captura simultánea) se dice con motivo claro y no como falla genérica', async () => {
+    db.fallar('peaje_tarifa.upsert', 'peaje_tarifa: la vigencia se traslapa con otra tarifa de la misma caseta y clase', '23P01');
+    const r = await D.guardarTarifa(T, base);
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.motivo).toMatch(/se traslapa/);
+    db.fallar('peaje_tarifa.upsert', 'otra cosa');
+    const g = await D.guardarTarifa(T, base);
+    expect(!g.ok && g.motivo).toMatch(/No se pudo guardar la tarifa/);
+    db.fallar('peaje_tarifa.upsert', 'traslape', '23P01');
+    const i = await D.importarTarifasArchivo(T, 'tarifas.csv', bytes('caseta;clase;importe;desde\nCaseta Ejemplo Norte;5;300;2026-01-01\n'));
+    expect(i.ok).toBe(false);
+    expect(!i.ok && i.error).toMatch(/se traslapa/);
+  });
+
   it('un importe negativo se rechaza sin tocar la base', async () => {
     const r = await D.guardarTarifa(T, { ...base, importe: -5 });
     expect(r).toEqual({ ok: false, motivo: 'el importe no puede ser negativo' });
@@ -130,8 +144,12 @@ describe('importarTarifasArchivo', () => {
   });
 
   it('solo una carga declarada «proveedor» deja las tarifas confirmadas', async () => {
-    await D.importarTarifasArchivo(T, 'p.csv', bytes('caseta;clase;importe;desde\nCaseta Ejemplo Norte;5;300;2026-01-01\n'), 'proveedor');
-    expect((await D.listarTarifas(T))[0]).toMatchObject({ confirmada: true, origen: 'proveedor', confirmadaPor: null });
+    await D.importarTarifasArchivo(T, 'p.csv', bytes('caseta;clase;importe;desde\nCaseta Ejemplo Norte;5;300;2026-01-01\n'), 'proveedor', 'Ana Ejemplo');
+    expect((await D.listarTarifas(T))[0]).toMatchObject({ confirmada: true, origen: 'proveedor', confirmadaPor: 'Ana Ejemplo' });
+    // A37-A2-26: sin nombre de quien confirma no se guarda nada.
+    const sin = await D.importarTarifasArchivo(OTRA, 'q.csv', bytes('caseta;clase;importe;desde\nCaseta Ejemplo Norte;5;300;2026-01-01\n'), 'proveedor');
+    expect(sin).toMatchObject({ ok: false, guardadas: 0 });
+    expect(await D.listarTarifas(OTRA)).toHaveLength(0);
     await D.importarTarifasArchivo(OTRA, 'i.csv', bytes('caseta;clase;importe;desde\nCaseta Ejemplo Norte;5;300;2026-01-01\n'), 'inferida');
     expect((await D.listarTarifas(OTRA))[0]).toMatchObject({ confirmada: false, origen: 'inferida' });
   });

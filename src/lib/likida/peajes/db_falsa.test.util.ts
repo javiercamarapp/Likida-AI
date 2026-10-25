@@ -25,7 +25,7 @@ export interface DbFalsa {
   tablas: Record<string, Fila[]>;
   llamadas: Llamada[];
   /** Hace fallar `tabla.op` (select/insert/update/delete/upsert/rpc:nombre) con ese mensaje. */
-  fallar: (clave: string, mensaje: string) => void;
+  fallar: (clave: string, mensaje: string, codigo?: string) => void;
   cliente: { from: (t: string) => unknown; rpc: (n: string, a?: unknown, o?: unknown) => unknown };
 }
 
@@ -38,6 +38,7 @@ export function crearDbFalsa(
   const tablas: Record<string, Fila[]> = Object.fromEntries(Object.entries(inicial).map(([k, v]) => [k, v.map((f) => ({ ...f }))]));
   const llamadas: Llamada[] = [];
   const fallos = new Map<string, string>();
+  const codigos = new Map<string, string>();
 
   class Q implements PromiseLike<Resp> {
     private filtros: Array<[string, string, unknown]> = [];
@@ -75,6 +76,9 @@ export function crearDbFalsa(
     is(c: string, v: unknown) { this.filtros.push([c, 'is', v]); return this; }
     not(c: string, o: string, v: unknown) { this.filtros.push([c, o === 'is' ? 'nis' : o, v]); return this; }
     lt(c: string, v: unknown) { this.filtros.push([c, 'lt', v]); return this; }
+    neq(c: string, v: unknown) { this.filtros.push([c, 'neq', v]); return this; }
+    /** `.or('col.is.null,col.gte.X')`: solo las formas `is.null`, `gte`, `lte`, `eq` (lo que usa el código). */
+    or(expr: string) { this.filtros.push([expr, 'or', null]); return this; }
     order(c: string, o?: { ascending?: boolean }) { this.orden.push([c, o?.ascending !== false]); return this; }
     range(d: number, h: number) { this.desde = d; this.hasta = h; return this; }
     limit(n: number) { this.desde = 0; this.hasta = n - 1; return this; }
@@ -83,10 +87,23 @@ export function crearDbFalsa(
 
     private coincide(f: Fila): boolean {
       return this.filtros.every(([c, o, v]) => {
+        if (o === 'or') {
+          return c.split(',').some((alt) => {
+            const [col, op, ...resto] = alt.split('.');
+            const val = resto.join('.');
+            const y = f[col!];
+            if (op === 'is' && val === 'null') return y === null || y === undefined;
+            if (y === null || y === undefined) return false;
+            if (op === 'gte') return (y as string) >= val;
+            if (op === 'lte') return (y as string) <= val;
+            return op === 'eq' && String(y) === val;
+          });
+        }
         const x = f[c];
         if (o === 'eq') return x === v;
         if (o === 'in') return (v as Set<unknown>).has(x);
         if (o === 'is') return v === null ? x === null || x === undefined : x === v;
+        if (o === 'neq') return x !== v;
         if (o === 'nis') return v === null ? x !== null && x !== undefined : x !== v;
         if (x === null || x === undefined) return false;
         if (o === 'gte') return (x as string | number) >= (v as string | number);
@@ -100,7 +117,7 @@ export function crearDbFalsa(
       const clave = this.clave ?? `${this.tabla}.${this.op}`;
       llamadas.push({ tabla: this.tabla, op: this.clave ? 'rpc' : this.op, filtros: this.filtros, payload: this.payload });
       const falla = fallos.get(clave) ?? fallos.get(`${this.tabla}.*`);
-      if (falla) return { data: null, error: { message: falla } };
+      if (falla) return { data: null, error: { message: falla, ...(codigos.get(clave) ? { code: codigos.get(clave) } : {}) } as { message: string } };
 
       if (this.fuente) {
         const resultado = this.fuente();
@@ -176,5 +193,5 @@ export function crearDbFalsa(
       return new Q(`rpc:${n}`, () => (f ? f(args as Record<string, unknown>) : []), `rpc:${n}`);
     },
   };
-  return { tablas, llamadas, fallar: (k, m) => { fallos.set(k, m); }, cliente };
+  return { tablas, llamadas, fallar: (k, m, c) => { fallos.set(k, m); if (c) codigos.set(k, c); else codigos.delete(k); }, cliente };
 }

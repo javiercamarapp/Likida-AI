@@ -35,7 +35,8 @@ vi.mock('@/lib/likida/terminales', () => ({
   terminalDeJornada: async (_t: string, ref: { jornadaId?: string; asientoId?: string }) => {
     const mapa = ref.asientoId ? m.patioDeAsiento : m.patioDeJornada;
     const id = (ref.asientoId ?? ref.jornadaId) as string;
-    return id in mapa ? { encontrado: true, terminalId: mapa[id] } : { encontrado: false, terminalId: null };
+    const jornadaId = ref.asientoId ? (id === A_NORTE ? J_NORTE : id === A_SUR ? J_SUR : null) : id;
+    return id in mapa ? { encontrado: true, terminalId: mapa[id], jornadaId } : { encontrado: false, terminalId: null, jornadaId: null };
   },
   terminalesDeRegistros: async (_t: string, _tenant: string, ids: string[]) => new Map(ids.map((i) => [i, i === OP_NORTE ? NORTE : i === OP_SUR ? SUR : null])),
 }));
@@ -43,6 +44,8 @@ vi.mock('@/lib/likida/bitacora_escritura', () => ({ anotarBitacora: (...a: unkno
 vi.mock('@/lib/likida/jornada/firma', () => ({ correoDelUsuario: async () => 'jefe@flota.mx' }));
 vi.mock('@/lib/likida/jornada/repo', () => ({
   JornadaIlegible: class extends Error {},
+  diaDeJornada: async () => '2026-10-01',
+  asientosDeJornada: async () => [],
   leerJornadas: async () => ({
     truncada: false,
     dias: [
@@ -111,6 +114,13 @@ describe('anularMarca', () => {
     expect(m.bitacora).toHaveBeenCalledWith(expect.objectContaining({ accion: 'jornada.marca_anulada', actor: { id: 'u-jefe', email: 'jefe@flota.mx' } }), expect.anything());
   });
 
+  it('A37-S19-05: la bitácora cuelga de la jornada REAL del asiento, no del jornadaId que mande el formulario', async () => {
+    m.patioJefe = NORTE;
+    const p = await props();
+    await p.anularMarca({ ok: false }, fd({ asientoId: A_NORTE, motivo: MOTIVO, jornadaId: J_SUR }));
+    expect(m.bitacora).toHaveBeenCalledWith(expect.objectContaining({ entidad: 'jornada_dia', entidadId: J_NORTE }), expect.anything());
+  });
+
   it('NO anula una marca de OTRO patio, aunque mande el id a mano: el patio sale de la base', async () => {
     m.patioJefe = NORTE;
     const p = await props();
@@ -140,7 +150,7 @@ describe('anularMarca', () => {
 });
 
 describe('capturarMarca y cerrarElDia', () => {
-  const MARCA = { tipo: 'inicio_jornada', momento: '2026-10-01T06:00' };
+  const MARCA = { tipo: 'inicio_jornada', momento: '2026-10-01T06:00', nota: 'me lo dijo por teléfono' };
   it('capturar: del patio del jefe sí; de otro patio no', async () => {
     m.patioJefe = NORTE;
     const p = await props();
@@ -148,6 +158,15 @@ describe('capturarMarca y cerrarElDia', () => {
     expect(m.asentar).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 't1', jornadaId: J_NORTE, procedencia: 'capturado_contralor', registradoPor: 'u-jefe' }));
     expect(await p.capturarMarca({ ok: false }, fd({ jornadaId: J_SUR, ...MARCA }))).toMatchObject({ ok: false, error: expect.stringMatching(/no es de tu patio/) });
     expect(m.asentar).toHaveBeenCalledTimes(1);
+  });
+
+  it('A37-S19-01/02: sin nota o con una hora de otro mes no se asienta nada', async () => {
+    m.patioJefe = NORTE;
+    const p = await props();
+    expect(await p.capturarMarca({ ok: false }, fd({ jornadaId: J_NORTE, ...MARCA, nota: '' }))).toMatchObject({ ok: false });
+    expect(await p.capturarMarca({ ok: false }, fd({ jornadaId: J_NORTE, ...MARCA, momento: '2026-11-01T06:00' }))).toMatchObject({ ok: false });
+    expect(await p.capturarMarca({ ok: false }, fd({ jornadaId: J_NORTE, ...MARCA, momento: '2026-02-30T06:00' }))).toMatchObject({ ok: false });
+    expect(m.asentar).not.toHaveBeenCalled();
   });
 
   it('cerrar el día: del patio sí; de otro no', async () => {

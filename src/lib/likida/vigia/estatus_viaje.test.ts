@@ -79,6 +79,25 @@ describe('resolverViaje — SOLO entre los viajes del propio cliente', () => {
   it('un número suelto que no parece folio (2, 30) no dispara «folio no encontrado»', () => {
     expect(resolverViaje('llevo 2 horas esperando, 30 minutos más', [v1], null)).toEqual({ tipo: 'uno', viajeId: VIAJE_1 });
   });
+  // A37-S58-04: un año, una hora o una cantidad con unidad no es un folio ajeno.
+  it('un año, una fecha o una cantidad con unidad NO se toman por folio ajeno', () => {
+    for (const t of [
+      '¿ya salió la unidad para el 20/10/2026?',
+      'llevan 1500 cajas, ¿a qué hora llega?',
+      'mi carga de 2000 kg, ¿dónde va?',
+      '¿llega antes de las 1800?',
+      'desde 2026 trabajamos con ustedes, ¿dónde va mi unidad?',
+    ]) expect(resolverViaje(t, [v1], null), t).toEqual({ tipo: 'uno', viajeId: VIAJE_1 });
+  });
+  it('con contexto de folio o prefijo de letras sigue siendo un folio ajeno', () => {
+    expect(resolverViaje('dime del folio 2026', [v1], null)).toEqual({ tipo: 'folio_no_encontrado' });
+    expect(resolverViaje('mi guía número 77123', [v1], null)).toEqual({ tipo: 'folio_no_encontrado' });
+    expect(resolverViaje('el TR 2231', [v1], null)).toEqual({ tipo: 'folio_no_encontrado' });
+  });
+  it('un número suelto que SÍ es el folio de su viaje se sigue reconociendo', () => {
+    const num = { ...v1, folio: '5530' };
+    expect(resolverViaje('¿dónde va el 5530?', [num, v2], null)).toEqual({ tipo: 'uno', viajeId: VIAJE_1 });
+  });
   it('mezcla un folio propio con uno ajeno: contesta SOLO del propio', () => {
     expect(resolverViaje('F-1042 y también F-9999', [v1, v2], null)).toEqual({ tipo: 'uno', viajeId: VIAJE_1 });
   });

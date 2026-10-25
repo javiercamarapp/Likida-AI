@@ -29,7 +29,7 @@ const j = async (r: Response) => (await r.json()) as Record<string, unknown>;
 
 const resumen = (extra: Record<string, unknown> = {}) => ({
   flotas: [], filasPorRecurso: { liquidaciones: 0, peajes: 0, viajes: 0, posiciones: 0 },
-  peticiones: 0, renovados401: 0, conError: 0, parciales: 0, sinTurno: 0, alarmas: 0, ...extra,
+  peticiones: 0, renovados401: 0, conError: 0, parciales: 0, sinTurno: 0, alarmas: 0, atrasadas: [], ...extra,
 });
 
 beforeEach(() => {
@@ -140,5 +140,18 @@ describe('la corrida', () => {
     const opciones = sincronizar.mock.calls[0][1] as { venceEn: number };
     expect(opciones.venceEn).toBeGreaterThan(Date.now());
     expect(opciones.venceEn).toBeLessThan(Date.now() + 120_000);
+  });
+});
+
+describe('A37-TRANSVERSAL-08: flota atrasada', () => {
+  it('avisa al operador (solo ids) cuando una flota se queda sin turno y lleva horas sin lectura exitosa', async () => {
+    sincronizar.mockResolvedValue(resumen({ sinTurno: 1, atrasadas: ['flota-sintetica-9'] }));
+    const r = await llamar();
+    expect((await j(r)).flotasAtrasadas).toBe(1);
+    expect(alertarOperador).toHaveBeenCalledWith('cron.tms.flota_atrasada', { flotas: ['flota-sintetica-9'], total: 1 });
+  });
+  it('sin flotas atrasadas no avisa', async () => {
+    await llamar();
+    expect(alertarOperador).not.toHaveBeenCalled();
   });
 });

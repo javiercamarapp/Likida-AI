@@ -282,11 +282,16 @@ async function reclamarEmision(tenantId: string, efectoId: string): Promise<Recl
  *  candado sobre un clic que no pasó. */
 async function sellarEmision(
   tenantId: string, efectoId: string, reclamo: { token: string; protegido: boolean },
-  resultado: { ok: true } | { ok: false; error: string },
+  resultado: { ok: true } | { ok: 'ambiguo'; error: string } | { ok: false; error: string },
 ): Promise<void> {
   if (!reclamo.protegido) return;   // nada que sellar: nunca se reclamó de verdad.
   try {
-    if (resultado.ok) await completeMutation(tenantId, efectoId, reclamo.token, { clicado: true });
+    if (resultado.ok === true) await completeMutation(tenantId, efectoId, reclamo.token, { clicado: true });
+    // A37-S41-03: un error del clic NO prueba que no ocurrió (un timeout
+    // después de enviar el formulario es lo habitual). Se sella como
+    // AMBIGUO —no se reabre el candado—: un reintento automático podría
+    // timbrar un segundo CFDI; es mejor que lo resuelva una persona.
+    else if (resultado.ok === 'ambiguo') await completeMutation(tenantId, efectoId, reclamo.token, { clicado: 'ambiguo', error: resultado.error });
     else await failMutation(tenantId, efectoId, reclamo.token, resultado.error);
   } catch (e) {
     logger.error('facturacion.computer_use.sello_fallido', { err: e instanceof Error ? e.message : String(e) });
@@ -378,18 +383,34 @@ export class AdaptadorComputerUse implements AdaptadorPortal {
       // `emitir` — TC-CANDADO-CLIC-BYPASS) volvía a apretarlo tal cual.
       // Compartida entre `case 'emitir'` y el bypass de `case 'clic'`: el
       // candado protege el CLIC FÍSICO, no el nombre de la tool que lo pidió.
+      let emisionClicada = false;
       const clicDeEmision = async (selector: string): Promise<string> => {
+        // A37-S41-01: en ENSAYO nunca se aprieta el botón que emite — la tool
+        // `emitir` no existe, pero `clic` sobre ese mismo botón llegaba aquí y
+        // timbraba un CFDI real en un ensayo (y quemaba el candado).
+        if (modo !== 'emitir') {
+          return 'ENSAYO: ese botón EMITE el CFDI y en ensayo no se aprieta. Deja el formulario completo y termina.';
+        }
         const reclamo = await reclamarEmision(this.op.tenantId, efectoId);
         if (reclamo.kind === 'detenido') return reclamo.mensaje;
         try {
           await p.hacerClic(selector);
         } catch (e) {
-          await sellarEmision(this.op.tenantId, efectoId, reclamo, { ok: false, error: e instanceof Error ? e.message : String(e) });
+          emisionClicada = true;   // puede haber ocurrido: no se descarta.
+          await sellarEmision(this.op.tenantId, efectoId, reclamo, { ok: 'ambiguo', error: e instanceof Error ? e.message : String(e) });
           throw e;
         }
-        const inv = await verInventario();
+        // A37-S41-03: se sella ANTES de leer el inventario. El submit navega y
+        // `evaluate` puede lanzar «Execution context was destroyed»; con el
+        // sello al final, el lease vencía y otro intento volvía a apretar.
+        emisionClicada = true;
         await sellarEmision(this.op.tenantId, efectoId, reclamo, { ok: true });
-        return `EMITIDO. Inventario nuevo: ${JSON.stringify(inv)}`;
+        try {
+          const inv = await verInventario();
+          return `EMITIDO. Inventario nuevo: ${JSON.stringify(inv)}`;
+        } catch (e) {
+          return `EMITIDO (clic hecho). No se pudo leer el inventario nuevo: ${e instanceof Error ? e.message : String(e)}`;
+        }
       };
 
       const ejecutar = async (nombre: string, args: Record<string, unknown>): Promise<string> => {
@@ -465,10 +486,15 @@ Inventario inicial: ${JSON.stringify(await verInventario())}`,
         budget: this.op.budget,
       });
 
-      // El UUID se busca en lo que el modelo leyó Y en la página, no solo en su
-      // resumen: un modelo que "cree" haber emitido sin UUID es exactamente el
-      // caso que `emitidoSinConfirmar` existe para no repetir.
-      uuid = extraerUuid(r.finalText) ?? extraerUuid(JSON.stringify(await verInventario())) ?? undefined;
+      // A37-S41-02: el UUID sale SOLO del texto visible del portal DESPUÉS de
+      // un clic de emisión confirmado. Nunca del resumen del modelo
+      // (`finalText`, alucinable) ni del valor de un campo (un `webId` con
+      // forma de UUID): un folio fiscal falso queda facturado para siempre.
+      // En ensayo no se emitió nada, así que no hay UUID que devolver.
+      if (modo === 'emitir' && emisionClicada) {
+        const postClic = await verInventario().catch(() => null);
+        uuid = (postClic && extraerUuid(postClic.texto)) || undefined;
+      }
 
       const captura = await p.captura().catch(() => undefined);
       logger.info('portal.computer_use', {

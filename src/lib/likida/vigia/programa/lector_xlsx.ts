@@ -12,6 +12,7 @@
 // Función pura sobre un Buffer/Uint8Array: sin red ni base.
 
 import { read as leerLibro, SSF } from 'xlsx';
+import { ArchivoPeligroso, validarZipDeLibro } from '../../importacion/zip_seguro';
 import type { CellObject, WorkSheet } from 'xlsx';
 import {
   COLUMNA_LATERAL_PROGRAMA,
@@ -203,8 +204,10 @@ export function leerProgramaXlsx(
 
   let libro;
   try {
+    validarZipDeLibro(bytes); // A37-O7-05: bomba de descompresión antes de que SheetJS descomprima
     libro = leerLibro(bytes, { type: 'array', cellStyles: true, cellDates: false });
-  } catch {
+  } catch (e) {
+    if (e instanceof ArchivoPeligroso) throw new ErrorLectorPrograma(e.message);
     throw new ErrorLectorPrograma('No se pudo abrir el archivo: no parece un Excel (.xlsx) válido.');
   }
   const nombreHoja = opciones.hoja ?? libro.SheetNames[0];

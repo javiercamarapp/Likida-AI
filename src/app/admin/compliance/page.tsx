@@ -41,7 +41,7 @@ export default async function CompliancePage() {
     const solicitudId = String(fd.get('solicitudId') ?? '');
     const resolucion = String(fd.get('resolucion') ?? '').trim();
     if (!solicitudId) return { error: 'Falta la solicitud.' };
-    if (resolucion.length < 5) return { error: 'Escribe la resolución (a quién se respondió y qué).' };
+    if (resolucion.length < 5) return { error: 'Escribe la respuesta que se entrega al titular (qué se resolvió y cómo).' };
     // El tenant: la solicitud se resuelve bajo la flota responsable. Se busca
     // el tenant de la solicitud para no depender del orden del listado.
     //
@@ -53,13 +53,18 @@ export default async function CompliancePage() {
     const { data: sol, error: errSol } = await supabaseAdmin().from('solicitud_arco').select('tenant_id').eq('id', solicitudId).maybeSingle();
     if (errSol) return { error: `No se pudo leer la solicitud — ${errSol.message}. Intenta de nuevo.` };
     if (!sol?.tenant_id) return { error: 'La solicitud no existe.' };
+    let r: { enviada: boolean; error?: string };
     try {
-      await resolverSolicitudArco(sol.tenant_id as string, solicitudId, resolucion);
+      r = await resolverSolicitudArco(sol.tenant_id as string, solicitudId, resolucion);
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'resolver la solicitud') };
     }
     revalidatePath('/admin/compliance');
-    return { ok: 'Solicitud marcada como resuelta. La respuesta se intentó enviar al titular por WhatsApp (texto libre o plantilla); si no salió, entrégala por el canal que la flota defina.' };
+    // A37-S05-04: el resultado del envío NO se descarta — la pantalla no
+    // afirma un WhatsApp que no salió (mismo texto que /dashboard/arco).
+    return r.enviada
+      ? { ok: 'Solicitud resuelta y la respuesta se envió al titular por WhatsApp.' }
+      : { ok: `Solicitud resuelta. La respuesta NO se pudo enviar por WhatsApp${r.error ? ` (${r.error})` : ''} — entrégala al titular por otro canal.` };
   }
 
   const { solicitudes, pendientesVencen } = await datosDeCompliance();
@@ -129,10 +134,17 @@ export default async function CompliancePage() {
                           <td className="px-3 py-2.5">
                             {s.estado === 'resuelta' || s.estado === 'improcedente' ? (
                               <span className="text-xs" style={{ color: 'var(--muted)' }}>{s.resolucion ?? '—'}</span>
+                            ) : s.tipo === 'cancelacion' || s.tipo === 'oposicion' ? (
+                              // A37-S05-04: una cancelación se EJECUTA (anonimiza al
+                              // titular) y una oposición lleva su RPC; ninguna se cierra
+                              // con texto. La ejecución real vive en /dashboard/arco.
+                              <a href={`/dashboard/arco?tenant=${encodeURIComponent(s.tenantId)}`} className="text-xs underline">
+                                {s.tipo === 'cancelacion' ? 'Ejecutar cancelación en la bandeja ARCO' : 'Atender la oposición en la bandeja ARCO'}
+                              </a>
                             ) : (
                               <FormaConAviso accion={accionResolver} boton="Responder" columnas="220px auto">
                                 <input type="hidden" name="solicitudId" value={s.id} />
-                                <input name="resolucion" placeholder="A quién se respondió y qué" style={{ width: 220 }} />
+                                <input name="resolucion" placeholder="Texto que recibe el titular por WhatsApp" aria-label="Respuesta al titular (se envía tal cual por WhatsApp)" style={{ width: 220 }} />
                               </FormaConAviso>
                             )}
                           </td>
@@ -161,7 +173,7 @@ export default async function CompliancePage() {
 interface SolicitudArcoPanel {
   id: string; tipo: string; estado: string; titularRef: string; recibidaEn: string;
   venceEn: string; resueltaEn: string | null; resolucion: string | null;
-  operadorNombre: string | null; flotaNombre: string;
+  operadorNombre: string | null; flotaNombre: string; tenantId: string;
 }
 
 async function datosDeCompliance(): Promise<{ solicitudes: SolicitudArcoPanel[]; pendientesVencen: number }> {
@@ -194,6 +206,7 @@ async function datosDeCompliance(): Promise<{ solicitudes: SolicitudArcoPanel[];
     resolucion: (f.resolucion as string | null) ?? null,
     operadorNombre: ((f.operador as { nombre?: string } | null)?.nombre) ?? null,
     flotaNombre: ((f.flota as { nombre?: string } | null)?.nombre) ?? '—',
+    tenantId: (f.tenant_id as string | null) ?? '',
   }));
   // DAT-08 (auditoría prod): el corte era el día UTC. De 18:00 a 24:00 hora de
   // México el "dentro de 5 días" era en realidad dentro de 6, y el plazo del

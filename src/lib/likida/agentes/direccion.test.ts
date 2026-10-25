@@ -10,7 +10,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // chofer en un parte médico.
 // ═══════════════════════════════════════════════════════════════════════════
 
+const excluidos: Array<[string, string, unknown]> = [];
 const respuestas = new Map<string, Array<{ data?: unknown; error?: { message: string } | null; count?: number }>>();
+const ordenes: Array<{ tabla: string; args: unknown[] }> = [];
 function builder(tabla: string) {
   const responder = () => {
     const cola = respuestas.get(tabla);
@@ -18,8 +20,8 @@ function builder(tabla: string) {
   };
   const b: Record<string, unknown> = {};
   Object.assign(b, {
-    select: () => b, eq: () => b, is: () => b, neq: () => b, not: () => b,
-    in: () => b, gte: () => b, lt: () => b, order: () => b, limit: () => b,
+    select: () => b, eq: () => b, is: () => b, neq: (c: string, v: unknown) => { excluidos.push([tabla, c, v]); return b; }, not: () => b,
+    in: () => b, gte: () => b, lt: () => b, order: (...a: unknown[]) => { ordenes.push({ tabla, args: a }); return b; }, limit: () => b, range: () => b,
     maybeSingle: () => b,
     then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) =>
       Promise.resolve().then(responder).then(res, rej),
@@ -69,6 +71,7 @@ const LATIDOS_OK = {
 
 beforeEach(() => {
   respuestas.clear();
+  excluidos.length = 0;
   encolar.mockClear();
   encolar.mockResolvedValue('pieza-1');
   registrar.mockClear();
@@ -180,6 +183,29 @@ describe('automejora: la telemetría, con NULL que no se vuelve cero', () => {
     const r = await correrAgenteDireccionBandeja('automejora', 'cron', HOY);
     expect(r).toMatchObject({ resultado: 'corrio', piezas: 1, costoUsd: 0 });
     expect(ultimoTitulo()).toBe(`Automejora — semana del ${masDias(LUNES, -DIAS_TELEMETRIA)}`);
+  });
+
+  // A37-S26-08: PostgREST recorta a max_rows (1,000) aunque se pida más: el conteo de piezas se pagina, no se trunca en silencio.
+  it('A37-S26-08: las piezas se leen por páginas: un agente con piezas en la 2.ª página NO sale como «no dejó ni una»', async () => {
+    const pagina1 = Array.from({ length: 1000 }, () => ({ agente: 'a' }));
+    respuestas.set('cola_aprobacion', [{ count: 0, error: null }, { data: pagina1, error: null }, { data: [{ agente: 'b' }], error: null }]);
+    respuestas.set('agente_corrida', [{ data: [
+      { agente: 'a', estado: 'ok', costo_usd: 0, error: null }, { agente: 'b', estado: 'ok', costo_usd: 0, error: null },
+    ], error: null, count: 2 }]);
+    respuestas.set('interruptor', [{ data: [], error: null }]);
+    await correrAgenteDireccionBandeja('automejora', 'cron', HOY);
+    const cuerpo = (encolar.mock.calls.at(-1)?.[0] as { cuerpo: string }).cuerpo;
+    expect(cuerpo).toContain('TODOS LOS QUE CORRIERON SIN FALLAR DEJARON AL MENOS UNA PIEZA');
+  });
+
+  it('A37-S26-08: una corrida «parcial» no se pinta como «ok» en la lista de los que no dejaron piezas', () => {
+    const s = saludPorAgente([
+      { agente: 'vigia', estado: 'parcial', costoUsd: 0, error: null },
+      { agente: 'vigia', estado: 'ok', costoUsd: 0, error: null },
+    ], new Map());
+    expect(s[0]).toMatchObject({ corridas: 2, parciales: 1 });
+    const c = armarParteAutomejora(s, [], LATIDOS_OK as never, [], '2026-08-17', '2026-08-23', 2, false);
+    expect(c).toContain('1 parcial');
   });
 
   it('la telemetría ilegible LANZA en vez de afirmar que no falló nada', async () => {
@@ -312,6 +338,14 @@ describe('especialistas_incidente: ni un teléfono que no esté en la base', () 
     expect(encolar).not.toHaveBeenCalled();
   });
 
+  it('A37-S26-02: la ventana de incidentes trae los más NUEVOS primero (no se llena de viejos ya atendidos)', async () => {
+    ordenes.length = 0;
+    respuestas.set('incidencia', [{ data: [], error: null }]);
+    await correrAgenteDireccionBandeja('especialistas_incidente', 'cron', HOY);
+    const o = ordenes.find((x) => x.tabla === 'incidencia')!;
+    expect(o.args).toEqual(['abierta_en', { ascending: false }]);
+  });
+
   it('sin incidentes abiertos no fabrica nada y lo llama estado normal', async () => {
     respuestas.set('incidencia', [{ data: [], error: null }]);
     const r = await correrAgenteDireccionBandeja('especialistas_incidente', 'cron', HOY);
@@ -425,6 +459,29 @@ describe('fundraising: las cifras reales, y la lista de las que no existen', () 
     await correrAgenteDireccionBandeja('fundraising', 'cron', HOY);
     expect(ultimoTitulo()).toBe('Fundraising — parte de 2026-08');
     expect(encolar.mock.calls.at(-1)?.[0]).toMatchObject({ fuentes: expect.objectContaining({ mrr_indeterminado: true }) });
+  });
+
+  it('A37-S26-07: ni las flotas, ni las liquidaciones, ni las suscripciones cuentan la flota demo', async () => {
+    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    respuestas.set('tenant', [{ count: 3, error: null }]);
+    respuestas.set('liquidacion', [{ count: 0, error: null }]);
+    respuestas.set('suscripcion', [{ data: [], error: null }]);
+    respuestas.set('factura_saas', [{ data: [], error: null }]);
+    respuestas.set('prospecto', [{ data: [], error: null }]);
+    await correrAgenteDireccionBandeja('fundraising', 'cron', HOY);
+    const demo = '11111111-1111-1111-1111-111111111111';
+    expect(excluidos).toEqual(expect.arrayContaining([['tenant', 'id', demo], ['liquidacion', 'tenant_id', demo], ['suscripcion', 'tenant_id', demo]]));
+  });
+
+  it('A37-S26-07: unas suscripciones recortadas por PostgREST (más en la base que las leídas) marcan el parte como truncado', async () => {
+    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    respuestas.set('tenant', [{ count: 3, error: null }]);
+    respuestas.set('liquidacion', [{ count: 0, error: null }]);
+    respuestas.set('suscripcion', [{ data: [{ estado: 'activa', plan_clave: 'flota', plan: { precio_mensual: 100 } }], error: null, count: 1500 }]);
+    respuestas.set('factura_saas', [{ data: [], error: null }]);
+    respuestas.set('prospecto', [{ data: [], error: null }]);
+    await correrAgenteDireccionBandeja('fundraising', 'cron', HOY);
+    expect((encolar.mock.calls.at(-1)?.[0] as { cuerpo: string }).cuerpo).toContain('SE TRUNCÓ');
   });
 
   it('un conteo que PostgREST no devuelve es fail-closed, no un cero', async () => {

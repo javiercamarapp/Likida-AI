@@ -610,6 +610,7 @@ export async function extraerComprobante(
   let rfcReceptor: string | undefined;
   let monto = data.monto ?? 0;
   let cfdiValido: boolean | undefined;
+  let qrFiscalParseado = false;
 
   // Lo que venga de un código gana sobre lo leído por visión: no pasó por OCR.
   // (El OCR confunde caracteres — se le vio devolver PER/PEX/PTE donde decía PEC.)
@@ -622,8 +623,8 @@ export async function extraerComprobante(
     if (fiscal.uuid) uuid = fiscal.uuid;
     if (fiscal.rfcEmisor) rfc = fiscal.rfcEmisor;
     if (fiscal.rfcReceptor) rfcReceptor = fiscal.rfcReceptor; // para validar RFC=empresa
-    if (fiscal.total != null) montoCodigo = fiscal.total;
-    cfdiValido = true; // QR presente y parseado = CFDI verificable
+    if (fiscal.total != null && Number.isFinite(fiscal.total)) montoCodigo = fiscal.total;
+    qrFiscalParseado = true; // QR presente y parseado = CFDI VERIFICABLE (todavía no verificado: ver más abajo)
   }
   // QR de ticket (no fiscal): la liga del portal del emisor, y en varios
   // portales el folio y el total viajan codificados DENTRO de esa liga.
@@ -634,7 +635,7 @@ export async function extraerComprobante(
     if (portal.urlFacturacion && !esEnlaceWhatsApp(portal.urlFacturacion)) {
       urlFacturacion = portal.urlFacturacion;
     }
-    if (montoCodigo === undefined && portal.totalPortal != null) montoCodigo = portal.totalPortal;
+    if (montoCodigo === undefined && portal.totalPortal != null && Number.isFinite(portal.totalPortal)) montoCodigo = portal.totalPortal;
   }
   if (montoCodigo != null) monto = montoCodigo;
   urlFacturacion ??= normalizarUrl(data.url_facturacion);
@@ -663,6 +664,10 @@ export async function extraerComprobante(
     efos = sat.efos;
     efosRevisar = sat.efosDesconocido;
   }
+  // A37-S47-08: parsear el QR NO verifica nada (un QR con uuid/RFC de forma válida se imprime en un minuto). `cfdiValido` es la
+  // única verificación INDEPENDIENTE del monto que consume el cruce de peajes: solo vale si el SAT lo declara vigente. Con
+  // `no_encontrado`, `cancelado` o SAT caído (`pendiente`) se queda sin afirmar y el cruce sí marca la línea para revisión.
+  if (qrFiscalParseado && estadoSat === 'vigente') cfdiValido = true;
 
   // Forma de pago leída → c_FormaPago (para la regla de combustible en efectivo).
   // OJO (E1-B, P0-6): 'tarjeta' → '04' es una PISTA del papel, no una prueba. Ni la

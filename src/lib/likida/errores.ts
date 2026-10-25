@@ -19,6 +19,14 @@ export class DatoInvalido extends Error {
   }
 }
 
+/** El operador existe pero está de baja (A37-A1-liquidaciones-12): distinto de «no existe» aunque se muestre igual al capturista. */
+export class OperadorDeBaja extends DatoInvalido {
+  constructor(mensaje: string) {
+    super(mensaje);
+    this.name = 'OperadorDeBaja';
+  }
+}
+
 /**
  * El abono de ESA propuesta del portal de pago ya estaba registrado.
  *

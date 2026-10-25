@@ -11,11 +11,11 @@ function constructor(tabla: string) {
   const l: Llamada = { tabla, op: 'select', filtros: [] };
   const b: Record<string, unknown> = {};
   const encadenar = (nombre: string) => (...a: unknown[]) => {
-    if (['eq', 'in', 'gte', 'lte'].includes(nombre)) l.filtros.push([nombre, String(a[0]), a[1]]);
+    if (['eq', 'in', 'gte', 'lte', 'or'].includes(nombre)) l.filtros.push([nombre, String(a[0]), a[1]]);
     if (nombre === 'select' && l.op === 'select') l.columnas = String(a[0]);
     return b;
   };
-  for (const m of ['select', 'eq', 'in', 'gte', 'lte', 'order', 'range']) b[m] = encadenar(m);
+  for (const m of ['select', 'eq', 'in', 'gte', 'lte', 'or', 'order', 'range']) b[m] = encadenar(m);
   b.update = (v: unknown) => { l.op = 'update'; l.valores = v; return b; };
   b.maybeSingle = () => { llamadas.push(l); const r = respuesta(l); return Promise.resolve({ ...r, data: Array.isArray(r.data) ? (r.data[0] ?? null) : r.data }); };
   b.then = (ok: (v: unknown) => unknown, ko?: (e: unknown) => unknown) => { llamadas.push(l); return Promise.resolve(respuesta(l)).then(ok, ko); };
@@ -92,7 +92,7 @@ function mundo(opciones: { config?: Partial<ConfigAviso> | null; params?: Parame
       if (!a || a.estado !== desde) return false;
       if (['enviado', 'descartado', 'reemplazado'].includes(a.estado)) throw new Error('trigger: aviso es historia');
       cierres.push({ id, desde, hacia });
-      a.estado = hacia; a.datos = { ...a.datos, cierre: motivo };
+      a.estado = hacia; a.motivo = motivo; a.datos = { ...a.datos, cierre: motivo };
       return true;
     },
   };
@@ -225,6 +225,23 @@ describe('procesarCambios · cambio de lo que el cliente ve', () => {
     // El enviado jamás se edita ni se cierra.
     expect(JSON.stringify(v1)).toBe(antesV1);
     expect(m.cierres).toHaveLength(0);
+  });
+
+  it('A37-S62-02: volver a un valor ya avisado (U-101 → U-205 → U-101 → U-205) genera cada versión; ninguna se pierde como duplicado', async () => {
+    const m = mundo();
+    const { f } = await avisada(m);
+    for (const [i, unidad] of ['U-205', 'U-101', 'U-205'].entries()) {
+      m.avanzar(30 * MIN);
+      m.cambiar(f, 'unidad', unidad);
+      m.avanzar(11 * MIN);
+      const r = await m.pasar();
+      expect(r.duplicados, `paso ${i + 2}`).toBe(0);
+      expect(r.reenvios, `paso ${i + 2}`).toBe(1);
+      m.marcarEnviado(m.avisos.find((a) => a.version === i + 2)!);
+    }
+    const v4 = m.avisos.find((a) => a.version === 4)!;
+    expect(v4.texto).toContain('cambió la unidad: U-101 → U-205');
+    expect(new Set(m.avisos.map((a) => a.huella)).size).toBe(4);
   });
 
   it('cambio de operador (viene del catálogo, no del programa) también reenvía', async () => {
@@ -371,6 +388,38 @@ describe('procesarCambios · anti-ruido', () => {
     expect(m.avisos).toHaveLength(5);
   });
 
+  it('A37-A4-06: el tope cuenta versiones ENVIADAS; los cambios que nadie confirmó no lo agotan y el aviso vigente se actualiza', async () => {
+    const m = mundo(); // max_reenvios = 3, modo confirmar: nadie confirma ni envía nada
+    const f = m.agregarFila();
+    await m.generar(); // v1 pendiente, jamás enviada
+    for (const u of ['U-201', 'U-202', 'U-203', 'U-204']) {
+      m.avanzar(30 * MIN); m.cambiar(f, 'unidad', u); m.avanzar(11 * MIN);
+      const r = await m.pasar();
+      expect(r).toMatchObject({ reenvios: 1, excedidos: 0, alertas: [] });
+    }
+    const ultima = m.avisos[m.avisos.length - 1];
+    expect(ultima.texto).toContain('U-204');
+    expect(m.avisos.filter((a) => ['pendiente_confirmacion', 'aprobado'].includes(a.estado))).toHaveLength(1); // solo la vigente, con la caja/unidad actual
+    expect(m.avisos.filter((a) => a.estado === 'reemplazado').length).toBe(m.avisos.length - 1);
+  });
+
+  it('A37-A4-06: al exceder el tope, el aviso pendiente (con datos viejos) se cierra: ya no queda un «confirmar» activo', async () => {
+    const m = mundo(); // max_reenvios = 3
+    const { f } = await avisada(m);
+    for (const u of ['U-201', 'U-202', 'U-203']) {
+      m.avanzar(30 * MIN); m.cambiar(f, 'unidad', u); m.avanzar(11 * MIN);
+      await m.pasar();
+      m.marcarEnviado(m.avisos[m.avisos.length - 1]);
+    }
+    const v4 = m.avisos[3];
+    m.avisos.push({ ...v4, id: 'a-pend', version: 5, huella: 'h-pend', estado: 'pendiente_confirmacion' });
+    m.avanzar(30 * MIN); m.cambiar(f, 'unidad', 'U-205'); m.avanzar(11 * MIN);
+    const r = await m.pasar();
+    expect(r).toMatchObject({ reenvios: 0, excedidos: 1 });
+    expect(m.avisos.find((a) => a.id === 'a-pend')?.estado).toBe('descartado');
+    expect(m.avisos.some((a) => a.estado === 'pendiente_confirmacion' || a.estado === 'aprobado')).toBe(false);
+  });
+
   it('max_reenvios = 0 no reenvía nunca', async () => {
     const m = mundo({ params: { maxReenvios: 0, debounceMin: 0 } });
     const { f } = await avisada(m);
@@ -419,6 +468,35 @@ describe('procesarCambios · anti-ruido', () => {
     const r = await m.pasar();
     expect(r).toMatchObject({ reenvios: 0, revertidos: 1 });
     expect(m.avisos[1].estado).toBe('descartado');
+  });
+
+  // A37-S58-05: A → B → A → B repetía el texto de la v2 descartada; la huella solo-contenido lo tomaba por duplicado.
+  it('A → B → A → B: la tercera versión SÍ se crea aunque repita el texto de la v2 descartada', async () => {
+    const m = mundo();
+    const { f } = await avisada(m);
+    m.avanzar(30 * MIN); m.cambiar(f, 'unidad', 'U-205'); m.avanzar(11 * MIN);
+    await m.pasar(); // v2 (U-101 → U-205)
+    m.avanzar(5 * MIN); m.cambiar(f, 'unidad', 'U-101'); m.avanzar(11 * MIN);
+    await m.pasar(); // v2 descartada
+    m.avanzar(5 * MIN); m.cambiar(f, 'unidad', 'U-205'); m.avanzar(11 * MIN);
+    const r = await m.pasar();
+    expect(r).toMatchObject({ reenvios: 1, duplicados: 0 });
+    const v3 = m.avisos.find((a) => a.version === 3)!;
+    expect(v3.texto).toContain('U-101 → U-205');
+    expect(v3.estado).toBe('pendiente_confirmacion');
+  });
+
+  it('con v1 SIN enviar, A → B → A deja la última versión (A) vigente y no la B obsoleta', async () => {
+    const m = mundo();
+    const f = m.agregarFila();
+    await m.generar(); // v1 (U-101) nunca enviada
+    m.avanzar(30 * MIN); m.cambiar(f, 'unidad', 'U-205'); m.avanzar(11 * MIN);
+    await m.pasar(); // v2 (B), v1 reemplazada
+    m.avanzar(5 * MIN); m.cambiar(f, 'unidad', 'U-101'); m.avanzar(11 * MIN);
+    const r = await m.pasar();
+    expect(r.duplicados).toBe(0);
+    expect(m.avisos.find((a) => a.version === 2)!.estado).toBe('reemplazado');
+    expect(m.avisos.find((a) => a.version === 3)!.texto).not.toContain('U-205');
   });
 
   it('una nueva modificación con v2 sin enviar lo reemplaza y el «antes» sigue siendo lo enviado', async () => {
@@ -614,6 +692,17 @@ describe('crearRepoCambios · acceso a datos', () => {
     expect(l.valores).toMatchObject({ estado: 'descartado' });
     respuesta = () => ({ data: [], error: null });
     expect(await crearRepoCambios().cambiarEstado(T1, 'a-1', 'pendiente_confirmacion', 'descartado', 'm')).toBe(false);
+  });
+
+  // A37-S58-01: un aprobado con arriendo VIVO ya lo lleva el cron a Meta; descartarlo o reemplazarlo no frena el mensaje.
+  it('descartar/reemplazar un aprobado exige que no tenga arriendo vivo', async () => {
+    respuesta = () => ({ data: [{ id: 'a-1' }], error: null });
+    await crearRepoCambios().cambiarEstado(T1, 'a-1', 'aprobado', 'descartado', 'm');
+    const o = llamadas[0].filtros.find((f) => f[0] === 'or');
+    expect(o?.[1]).toMatch(/^reclamo_token\.is\.null,reclamo_expira_en\.lte\./);
+    llamadas = [];
+    await crearRepoCambios().cambiarEstado(T1, 'a-1', 'pendiente_confirmacion', 'descartado', 'm');
+    expect(llamadas[0].filtros.find((f) => f[0] === 'or')).toBeUndefined();
   });
 
   it('un error de la base lanza y la tabla sin migrar se traduce', async () => {

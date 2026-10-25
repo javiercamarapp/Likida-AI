@@ -194,6 +194,12 @@ const PALABRA_NUMERO: Record<string, number> = {
   tres: 3, tercero: 3, tercer: 3, tercera: 3,
 };
 
+// A37-S46-05: los ORDINALES (primero, segundo, tercera…) son palabras de uso común
+// ("dame un segundo", "primero voy a cargar"): solo eligen cuando son casi toda la
+// respuesta ("el segundo", "la primera"), y nunca tras «un/unos» (= espera).
+const ORDINALES = new Set(['primero', 'primer', 'primera', 'segundo', 'segunda', 'tercero', 'tercer', 'tercera']);
+const MAX_PALABRAS_ORDINAL = 2;
+
 const EMOJI_NUMERO: ReadonlyArray<readonly [string, number]> = [
   ['1️⃣', 1], ['2️⃣', 2], ['3️⃣', 3],
 ];
@@ -229,10 +235,13 @@ export function numeroElegido(texto: string): number | null {
 
   const palabras = strip_accents(limpiar(crudo)).split(' ').filter(Boolean);
   if (palabras.length <= MAX_PALABRAS_NUMERO) {
-    for (const p of palabras) {
+    palabras.forEach((p, i) => {
       if (/^[1-9]$/.test(p)) encontrados.add(Number(p));
-      else if (PALABRA_NUMERO[p] != null) encontrados.add(PALABRA_NUMERO[p]);
-    }
+      else if (PALABRA_NUMERO[p] != null) {
+        if (ORDINALES.has(p) && (palabras.length > MAX_PALABRAS_ORDINAL || /^(un|unos)$/.test(palabras[i - 1] ?? ''))) return;
+        encontrados.add(PALABRA_NUMERO[p]);
+      }
+    });
   }
 
   return encontrados.size === 1 ? [...encontrados][0] : null;

@@ -24,6 +24,10 @@ const CAP_POR_ACCION: Record<string, CapacidadWorker> = {
   'ordenes-resolver': 'bus.ordenes',
 };
 
+/** Cuánto puede estar una orden `tomada` sin resolverse antes de darla por perdida. `editar_encargo`
+ *  (fetch + push + `gh pr` con reintento) es la más lenta y cabe de sobra en 30 min. */
+const LEASE_ORDEN_MS = 30 * 60_000;
+
 /** 3 MiB: base64 y metadatos deben caber en el transporte HTTP; un video no cabe aquí a
  *  propósito (la Mac sube el preview, no el master). */
 const TOPE_MEDIA = 3 * 1024 * 1024;
@@ -93,16 +97,41 @@ export async function POST(req: Request, ctx: { params: Promise<{ accion: string
         const carpeta = typeof cuerpo?.carpeta === 'string' ? cuerpo.carpeta.slice(0, 300) : '';
         if (!carpeta) return NextResponse.json({ error: 'Falta carpeta.' }, { status: 400 });
         let mediaPath: string | null = null;
+        let media: Buffer | null = null;
+        let objeto: string | null = null;
         const b64 = typeof cuerpo?.mediaBase64 === 'string' ? cuerpo.mediaBase64 : null;
         if (b64) {
           if (b64.length > 4 * Math.ceil(TOPE_MEDIA / 3)) return NextResponse.json({ error: 'La vista previa pasa de 3 MB. Reduce la imagen.' }, { status: 413 });
-          const media = Buffer.from(b64, 'base64');
+          media = Buffer.from(b64, 'base64');
           if (media.toString('base64') !== b64) return NextResponse.json({ error: 'La media no es base64 válido.' }, { status: 400 });
           if (media.length > TOPE_MEDIA) return NextResponse.json({ error: 'La vista previa pasa de 3 MB. Reduce la imagen.' }, { status: 413 });
           // El path lo arma el SERVIDOR con la carpeta declarada — el nombre
           // se sanea: un ../ aquí escribiría fuera de piezas/.
           const nombre = String(cuerpo?.mediaNombre ?? 'preview.png').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120);
-          const objeto = `piezas/${carpeta.replace(/\.\./g, '_')}/${nombre}`;
+          objeto = `piezas/${carpeta.replace(/\.\./g, '_')}/${nombre}`;
+        }
+        const copyNuevo = typeof cuerpo?.copyMd === 'string' ? cuerpo.copyMd.slice(0, 4000) : null;
+        // A37-S12-06: si la pieza YA fue resuelta (aprobada/descartada/publicada) y llega con otro copy u otra imagen, vuelve a
+        // `pendiente` y se limpia la firma — el tap de publicar no debe actuar sobre contenido que nadie revisó.
+        const { data: previas, error: errPrevia } = await admin.from('bus_pieza')
+          .select('id, estado, copy_md, media_path').eq('carpeta', carpeta).order('id').limit(1);
+        if (errPrevia) throw new Error(errPrevia.message);
+        const previa = (previas as Array<{ estado?: string; copy_md?: string | null; media_path?: string | null }> | null)?.[0];
+        let reabrir = false;
+        if (previa && previa.estado !== 'pendiente') {
+          reabrir = copyNuevo !== (previa.copy_md ?? null);
+          if (!reabrir && media && objeto) {
+            if (previa.media_path !== objeto) reabrir = true;
+            else {
+              // Mismo nombre: se compara el contenido; si no se puede leer el anterior, se asume cambiado (fail-closed).
+              try {
+                const previo = await admin.storage.from('bus').download(objeto);
+                reabrir = previo.error != null || !previo.data || !media.equals(new Uint8Array(await previo.data.arrayBuffer()));
+              } catch { reabrir = true; }
+            }
+          }
+        }
+        if (media && objeto) {
           const up = await admin.storage.from('bus').upload(objeto, media, {
             contentType: typeof cuerpo?.mediaMime === 'string' ? cuerpo.mediaMime : 'application/octet-stream',
             upsert: true,
@@ -110,13 +139,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ accion: string
           if (!up.error) mediaPath = objeto;
           else logger.warn('worker.pieza_media', { err: up.error.message });
         }
+        if (reabrir) logger.warn('worker.pieza_reabierta', { carpeta, estadoPrevio: previa?.estado });
         const { error } = await admin.from('bus_pieza').upsert({
           rutina: String(cuerpo?.rutina ?? '').slice(0, 80),
           carpeta,
           titulo: String(cuerpo?.titulo ?? carpeta).slice(0, 200),
           tipo: String(cuerpo?.tipo ?? 'otro').slice(0, 30),
-          copy_md: typeof cuerpo?.copyMd === 'string' ? cuerpo.copyMd.slice(0, 4000) : null,
+          copy_md: copyNuevo,
           ...(mediaPath ? { media_path: mediaPath } : {}),
+          ...(reabrir ? { estado: 'pendiente', resuelto_en: null, resuelto_por: null } : {}),
         }, { onConflict: 'carpeta' });
         if (error) throw new Error(error.message);
         return NextResponse.json({ ok: true, mediaPath });
@@ -143,6 +174,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ accion: string
         return NextResponse.json({ ok: true, sembradas: filas.length });
       }
       case 'ordenes': {
+        // A37-S04-07: lease. Una orden `tomada` cuyo worker murió antes de resolver (corte de red,
+        // Mac dormida) quedaba así para siempre. NO se re-ofrece (editar_encargo abre un PR, correr_ahora
+        // lanza una corrida: ejecutarla dos veces es peor que no ejecutarla); se cierra como `fallida` con
+        // motivo para que /admin la muestre y Javier decida si la emite otra vez. Best-effort: si el barrido
+        // falla, la lista de pendientes se entrega igual.
+        try {
+          const limite = new Date(Date.now() - LEASE_ORDEN_MS).toISOString();
+          const { error: errBarrido } = await admin.from('bus_orden').update({
+            estado: 'fallida',
+            resuelta_en: new Date().toISOString(),
+            resultado: 'La orden se tomó y el worker no la resolvió a tiempo (¿corte de red o Mac apagada?). No se reintenta sola: emítela otra vez si sigue haciendo falta.',
+          }).eq('estado', 'tomada').lt('tomada_en', limite);
+          if (errBarrido) logger.warn('worker.bus.barrido_tomadas_fallo', { worker: quien.nombre, err: errBarrido.message });
+        } catch (e) {
+          logger.warn('worker.bus.barrido_tomadas_fallo', { worker: quien.nombre, err: e instanceof Error ? e.message : String(e) });
+        }
         const { data, error } = await admin.from('bus_orden')
           .select('id, tipo, rutina, payload, creado_en')
           .eq('estado', 'pendiente').order('creado_en').limit(10);

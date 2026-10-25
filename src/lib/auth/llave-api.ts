@@ -116,6 +116,9 @@ export function mismoHash(a: string, b: string): boolean {
   return timingSafeEqual(ba, bb);
 }
 
+/** Cada cuánto se renueva `ultimo_uso_en` como máximo (A37-S24-09). */
+const SELLO_USO_REFRESCO_MS = 5 * 60_000;
+
 export type ResultadoLlave =
   | { ok: true; tenantId: string; area: string; llaveId: string }
   | { ok: false; status: 401 | 503; motivo: string };
@@ -139,7 +142,7 @@ export async function resolverLlave(enClaro: string): Promise<ResultadoLlave> {
 
   const { data, error } = await supabaseAdmin()
     .from('tenant_api_key')
-    .select('id, tenant_id, area, hash, expira_en')
+    .select('id, tenant_id, area, hash, expira_en, ultimo_uso_en')
     .eq('prefijo', prefijo)
     .is('revocada_en', null)
     .limit(20);
@@ -152,12 +155,13 @@ export async function resolverLlave(enClaro: string): Promise<ResultadoLlave> {
   const esperado = hashDeLlave(enClaro);
   // Se recorren TODAS las candidatas del prefijo aunque la primera cuadre: salir
   // temprano volvería medible cuántas comparten prefijo.
-  let hallada: { id: string; tenant_id: string; area: string; expira_en: string | null } | null = null;
+  let hallada: { id: string; tenant_id: string; area: string; expira_en: string | null; ultimo_uso_en: string | null } | null = null;
   for (const fila of data ?? []) {
     if (mismoHash(String(fila.hash), esperado)) {
       hallada = {
         id: String(fila.id), tenant_id: String(fila.tenant_id), area: String(fila.area),
         expira_en: fila.expira_en == null ? null : String(fila.expira_en),
+        ultimo_uso_en: fila.ultimo_uso_en == null ? null : String(fila.ultimo_uso_en),
       };
     }
   }
@@ -180,10 +184,22 @@ export async function resolverLlave(enClaro: string): Promise<ResultadoLlave> {
   // pero si la escritura falla NO se cae la petición — el cliente ya se
   // autenticó y negarle la lectura por no poder anotar la fecha sería el peor
   // intercambio.
-  void supabaseAdmin().from('tenant_api_key')
-    .update({ ultimo_uso_en: new Date().toISOString() })
-    .eq('id', hallada.id)
-    .then(({ error: e }) => { if (e) logger.warn('llave_api.sello', { err: e.message }); });
+  //
+  // A37-S24-09: solo se renueva si el sello guardado tiene más de
+  // SELLO_USO_REFRESCO_MS (un TMS que sondea cada segundo escribía la misma fila
+  // cada segundo) y se ESPERA la escritura (try/catch): sin `await`, en
+  // serverless la promesa podía morir con la invocación y perder el sello.
+  const previo = hallada.ultimo_uso_en ? Date.parse(hallada.ultimo_uso_en) : NaN;
+  if (!Number.isFinite(previo) || Date.now() - previo >= SELLO_USO_REFRESCO_MS) {
+    try {
+      const { error: e } = await supabaseAdmin().from('tenant_api_key')
+        .update({ ultimo_uso_en: new Date().toISOString() })
+        .eq('id', hallada.id);
+      if (e) logger.warn('llave_api.sello', { err: e.message });
+    } catch (e) {
+      logger.warn('llave_api.sello', { err: e instanceof Error ? e.message : String(e) });
+    }
+  }
 
   return { ok: true, tenantId: hallada.tenant_id, area: hallada.area, llaveId: hallada.id };
 }

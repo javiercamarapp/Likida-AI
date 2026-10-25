@@ -44,9 +44,13 @@ export async function accionRefrescarGasto(): Promise<AccionCampana> {
       const fallo = r.fallidas.length > 0
         ? ` · fallaron: ${r.fallidas.map((f) => `${f.nombre} (${f.motivo})`).join(', ')}`
         : '';
+      // A37-S22-03: las que no alcanzaron en el presupuesto de tiempo se DICEN.
+      const faltan = r.pendientes > 0
+        ? ` · ${r.pendientes} sin medir por tiempo — vuelve a pulsar para continuar`
+        : '';
       return {
         ok: true,
-        mensaje: `Gasto medido en ${r.medidas} campaña${r.medidas === 1 ? '' : 's'}${fallo}.`,
+        mensaje: `Gasto medido en ${r.medidas} campaña${r.medidas === 1 ? '' : 's'}${fallo}${faltan}.`,
       };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'medir el gasto') };

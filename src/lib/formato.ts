@@ -103,6 +103,36 @@ export function inicioDiaMx(dia: string): string {
 }
 
 /**
+ * El PRIMER instante de un día de calendario `AAAA-MM-DD` en una zona IANA cualquiera (la de LA FLOTA, `config.zonaHoraria`).
+ *
+ * A37-S35-09 / S36-10: los periodos de estadías y el «día» de la evidencia de jornada se armaban con `-06:00` fijo, que solo es
+ * cierto para México. Una flota de frontera con el horario de verano de EE. UU. (America/Tijuana, por ejemplo) quedaba
+ * desfasada 1 h en los bordes. Con `TZ_MX` el resultado es idéntico a `inicioDiaMx` (UTC−6 todo el año).
+ *
+ * Resuelve el desfase real de ESE día (dos pasadas, por si el día del cambio de hora mueve el offset). Un día que no existe
+ * (`2026-02-31`) o con otro formato devuelve `Invalid Date`, nunca un día vecino.
+ */
+export function inicioDiaEnZona(dia: string, zonaHoraria: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dia);
+  if (!m) return new Date(NaN);
+  const [anio, mes, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const medianocheUtc = Date.UTC(anio, mes - 1, d);
+  const volvio = new Date(medianocheUtc);
+  if (volvio.getUTCFullYear() !== anio || volvio.getUTCMonth() !== mes - 1 || volvio.getUTCDate() !== d) return new Date(NaN);
+  const formato = new Intl.DateTimeFormat('en-CA', {
+    timeZone: zonaHoraria, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  });
+  // Cuánto se adelanta la hora de pared de la zona respecto a UTC en el instante `t` (negativo al oeste de Greenwich).
+  const desfase = (t: number): number => {
+    const partes = formato.formatToParts(new Date(t));
+    const v = (tipo: Intl.DateTimeFormatPartTypes) => Number(partes.find((p) => p.type === tipo)?.value);
+    return Date.UTC(v('year'), v('month') - 1, v('day'), v('hour'), v('minute'), v('second')) - Math.floor(t / 1000) * 1000;
+  };
+  const primera = medianocheUtc - desfase(medianocheUtc);
+  return new Date(medianocheUtc - desfase(primera));
+}
+
+/**
  * El ÚLTIMO instante representable de un día de México:
  * `'2026-12-31'` → `'2026-12-31T23:59:59.999-06:00'`.
  *
@@ -133,7 +163,9 @@ export function finDiaMx(dia: string): string {
  * corrige sobre el valor absoluto y se restaura el signo al final.
  */
 export function round2(n: number): number {
-  return Math.sign(n) * Math.round((Math.abs(n) + Number.EPSILON) * 100) / 100;
+  // `+ 0`: un negativo que redondea a cero daba -0 (A37-S25-08) y `mxn(-0)`
+  // imprime «-$0.00»; -0 + 0 es +0 y no altera ningún otro valor.
+  return Math.sign(n) * Math.round((Math.abs(n) + Number.EPSILON) * 100) / 100 + 0;
 }
 
 /**
@@ -181,6 +213,10 @@ export function pctCambio(actual: number, base: number | null): number | null {
 
 /** Pesos mexicanos como los espera un contador: `$1,234.56`. */
 export function mxn(n: number): string {
+  // A37-S25-08: -0 y las diferencias menores a medio centavo (que Intl
+  // redondea a cero conservando el signo) se pintaban «-$0.00», que parece un
+  // saldo negativo. Se normalizan a cero antes de formatear.
+  if (Math.abs(n) < 0.005) n = 0;
   return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 }
 
@@ -463,6 +499,17 @@ export function instanteRFC3339(valor: unknown): string | null {
   if (zona !== 'Z' && (Number(zona.slice(1, 3)) > 23 || Number(zona.slice(4)) > 59)) return null;
   const ms = Date.parse(valor);
   return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
+
+/**
+ * A37-S64-02: ¿el importe trae más de dos decimales? Es dinero con centavos: `numeric(12,2)` redondearía en silencio, y «38.500»
+ * (miles con punto, como exporta Excel con configuración es-ES) se leería como 38.50 — por eso un TEXTO se mira por sus dígitos
+ * (el «.500» son tres decimales aunque valga 0.5), no por su valor. Un número usa tolerancia de ruido binario (1234.56*100 no es
+ * entero exacto), mil veces menor que el centavo. El texto debe venir YA normalizado con punto decimal.
+ */
+export function masDeDosDecimales(x: number | string): boolean {
+  if (typeof x === 'string') return /\.\d{3,}/.test(x);
+  return Number.isFinite(x) && Math.abs(x * 100 - Math.round(x * 100)) > 1e-6;
 }
 
 /**

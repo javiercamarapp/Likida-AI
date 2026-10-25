@@ -1,4 +1,5 @@
 import { logger } from '@/lib/logger';
+import { round2 } from '@/lib/formato';
 import { pantallaDeLogin } from '../vinculo_senales';
 import type { InventarioPagina, PaginaConInventario, PaginaPortal } from './playwright_base';
 
@@ -297,7 +298,7 @@ export async function mirarLogin(
  *   · `mayusculas`  — para los campos que el portal valida en mayúsculas.
  *   · `monto`       — solo dígitos y UN punto decimal: `$ 1,234.50` → `1234.50`.
  *                     El símbolo y las comas rebotan en más de un portal.
- *   · `monto_entero`— la parte entera: los portales que piden «pesos» sin centavos.
+ *   · `monto_entero`— pesos sin centavos; con centavos reales da null (no se trunca).
  *   · `fecha_dmy`   — `2026-08-27` → `27/08/2026`.
  *   · `fecha_dmy_guion` — `2026-08-27` → `27-08-2026`.
  *   · `solo_digitos`— se quitan guiones y espacios de folios y referencias.
@@ -339,6 +340,8 @@ export function aplicarFormato(valor: string | null, formato: FormatoCampo = 'te
     }
     case 'monto':
     case 'monto_entero': {
+      // A37-S64-02: un monto NEGATIVO no es un monto que se teclee en un portal de facturación: el signo se perdía («-500» → 500.00).
+      if (/^[^\d]*-\s*\d/.test(v)) return null;
       // Se quita todo menos dígitos, punto y coma; después la coma de millares.
       const limpio = v.replace(/[^\d.,]/g, '').replace(/(?<!\b0),(?=\d{3}\b)/g, '');
       // EL GUARDA QUE PARECE DE MÁS Y NO LO ES: sin él, `Number('')` es 0 —no
@@ -347,9 +350,19 @@ export function aplicarFormato(valor: string | null, formato: FormatoCampo = 'te
       // NO es un monto de cero pesos, y ponerlo en un documento fiscal es peor
       // que no poner nada: el CFDI sale mal y no se deshace.
       if (!/\d/.test(limpio)) return null;
+      // A37-S42-08: «12.345» es ambiguo (12.35, o 12 345 con punto de miles):
+      // en un documento fiscal no se adivina. («0.125» sí es un decimal: los
+      // miles nunca empiezan con cero.)
+      if (/^[1-9]\d{0,2}\.\d{3}$/.test(limpio)) return null;
       const n = Number(limpio.replace(/,/g, '.'));
       if (!Number.isFinite(n)) return null;
-      return formato === 'monto_entero' ? String(Math.trunc(n)) : n.toFixed(2);
+      const centavos = round2(n);
+      if (formato === 'monto_entero') {
+        // Pesos sin centavos: truncar «99.99» a «99» escribía OTRO monto.
+        // Con centavos reales no hay forma exacta: null (el paso declara el fallo).
+        return Number.isInteger(centavos) ? String(centavos) : null;
+      }
+      return centavos.toFixed(2);
     }
     case 'fecha_iso': {
       const m = RE_FECHA_ISO.exec(v);

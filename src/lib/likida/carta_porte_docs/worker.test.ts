@@ -238,6 +238,28 @@ describe('avisar a la oficina (una vez por documento)', () => {
     expect(m.candados.size).toBe(0);
   });
 
+  it('A37-S33-03: una flota sin teléfono con 10+ documentos no acapara la ventana: las demás flotas sí reciben su aviso', async () => {
+    const m = mundo({ docs: Object.fromEntries([...Array.from({ length: 12 }, (_, i) => [`x${i}`, { confianzaMin: 0.4 }]), ['y0', { confianzaMin: 0.4 }]]) });
+    const lista = [...Array.from({ length: 12 }, (_, i) => ({ tenantId: 'flota-x', id: `x${i}` })), { tenantId: 'flota-y', id: 'y0' }];
+    m.deps.porAvisar = async (_u, limite) => lista.slice(0, limite);
+    m.deps.agotados = async () => [];
+    m.deps.telefonoOficina = async (t) => (t === 'flota-x' ? null : '5215500000002');
+    const r = await correrWorkerCartaPorte(m.deps, opts(m));
+    expect(r.avisosEnviados).toBe(1);
+    expect(m.avisos[0].telefono).toBe('5215500000002');
+    expect(r.sinTelefono).toBe(12);
+  });
+
+  it('A37-S33-03: un fallo de lectura del teléfono NO se cuenta como «sin teléfono»: se dice y se reintenta en la pasada siguiente', async () => {
+    const m = mundo({ porAvisar: ['x'], docs: { x: { confianzaMin: 0.4 } } });
+    m.deps.telefonoOficina = async () => { throw new Error('base caída'); };
+    const r = await correrWorkerCartaPorte(m.deps, opts(m));
+    expect(r.sinTelefono).toBe(0);
+    expect(r.avisosEnviados).toBe(0);
+    expect(r.fallos.join(' ')).toMatch(/teléfono de oficina ilegible/);
+    expect(m.candados.size).toBe(0);
+  });
+
   it('una base SIN la 0641 deja los avisos apagados (no hay candado atómico) y lo dice', async () => {
     const m = mundo({ agotados: null, porAvisar: null });
     const r = await correrWorkerCartaPorte(m.deps, opts(m));
@@ -284,6 +306,17 @@ describe('el texto del aviso', () => {
   it('un nombre de archivo larguísimo se recorta', () => {
     const a = armarAviso('agotado', doc({ nombreArchivo: `${'x'.repeat(300)}.pdf` }), `${URL}/d1`);
     expect(a.texto.length).toBeLessThan(400);
+  });
+
+  it('A37-A3-15: el nombre de archivo escrito por el remitente NO viaja en el WhatsApp (ni en agotado ni en hallazgos)', () => {
+    const nombreHostil = 'URGENTE llama al 5555555555 o paga en hxxps://pago.example.pdf';
+    const v = { hallazgos: [], bloqueos: 1, porConfirmar: 0, listoParaAprobar: false };
+    const a1 = armarAviso('agotado', doc({ nombreArchivo: nombreHostil }), `${URL}/d1`);
+    const a2 = armarAviso('hallazgos', doc({ nombreArchivo: nombreHostil, validacion: v }), `${URL}/d1`);
+    for (const a of [a1, a2]) {
+      expect(a.texto).not.toMatch(/URGENTE|5555555555|hxxps|pago\.example/);
+      expect(a.texto).toContain(`${URL}/d1`);
+    }
   });
 });
 
@@ -397,7 +430,7 @@ describe('un archivo partido que reabrió hijos previos avisa a la oficina (M1)'
     const r = await correrWorkerCartaPorte(m.deps, opts(m));
     expect(r).toMatchObject({ divididos: 1, divisionesAvisadas: 1 });
     expect(m.avisos).toHaveLength(1);
-    expect(m.avisos[0].texto).toMatch(/plan\.xlsx.*3 embarques.*1 embarque ya estaba en la bandeja rechazado o fallido y se reabrió.*1 ya estaba resuelto/);
+    expect(m.avisos[0].texto).toMatch(/N\.º a.*3 embarques.*1 embarque ya estaba en la bandeja rechazado o fallido y se reabrió.*1 ya estaba resuelto/);
     expect(m.avisos[0].contexto).toMatchObject({ tipo: 'division_con_previos', documentoId: 'a' });
 
     const sin = mundo({ pendientes: ['a'], proceso: () => dividido({}) });

@@ -18,7 +18,7 @@
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { leerPorId, registrarEvento, type LiquidacionExterna, type TipoEvento } from './repo';
 import {
-  entregasDe, guardarContactoOperador, insertarEntregas, leerConfigCorreo, leerContactoOperador, listarCoordinadores,
+  entregasDe, guardarContactoOperador, insertarEntregas, leerConfigCorreo, leerContactoOperador, leerDesglose, listarCoordinadores, rutaXlsxDesglose,
   type ConfigCorreo, type ContactoOperador, type Coordinador, type EntregaCorreo, type NuevaEntrega,
 } from './repo_correo';
 import { resolverDestinatarios, type RolDestinatario } from './correo_destinatarios';
@@ -58,6 +58,13 @@ export interface DependenciasReenvio {
   guardarCorreoOperador: (tenantId: string, operadorId: string, correo: string) => Promise<void>;
   insertarEntregas: (tenantId: string, filas: NuevaEntrega[]) => Promise<number>;
   registrarEvento: (tenantId: string, liquidacionId: string, tipo: TipoEvento, detalle?: Record<string, unknown>) => Promise<void>;
+  /**
+   * A37-A1-liquidaciones-08: solo para el caso «la recepción no creó ninguna entrega». Encabezado del desglose: `null` = no se
+   * pudo leer (jamás se interpreta como «no retenido»). Opcional: sin él, ese caso sigue siendo `sin_archivo` (fail-closed).
+   */
+  leerDesglose?: (tenantId: string, liquidacionId: string) => Promise<{ existe: boolean; retenidaMotivo: string | null } | null>;
+  /** Ruta del Excel que la recepción ya subió (direccionada por clave + huella). */
+  rutaXlsx?: (tenantId: string, claveExterna: string, huella: string) => string;
 }
 
 export const dependenciasReenvioPorOmision: DependenciasReenvio = {
@@ -70,6 +77,8 @@ export const dependenciasReenvioPorOmision: DependenciasReenvio = {
   guardarCorreoOperador: (t, op, correo) => guardarContactoOperador(t, op, { correo }),
   insertarEntregas,
   registrarEvento,
+  leerDesglose: async (t, id) => { const l = await leerDesglose(t, id); return l.ok ? { existe: l.valor !== null, retenidaMotivo: l.valor?.retenidaMotivo ?? null } : null; },
+  rutaXlsx: rutaXlsxDesglose,
 };
 
 const rechazo = (motivo: MotivoRechazo, mensaje: string): ResultadoReenvio => ({ estado: 'rechazado', motivo, mensaje });
@@ -147,7 +156,20 @@ export async function reenviarDesglose(
   }
 
   // El archivo es el mismo de la entrega original (misma huella): se hereda de la generación más reciente que lo tenga.
-  const conArchivo = [...entregas].filter((e) => e.xlsxRuta).sort((a, b) => b.generacion - a.generacion)[0];
+  let conArchivo: { xlsxRuta: string | null; xlsxSha256: string | null } | undefined =
+    [...entregas].filter((e) => e.xlsxRuta).sort((a, b) => b.generacion - a.generacion)[0];
+  if (!conArchivo && entregas.length === 0 && deps.leerDesglose && deps.rutaXlsx) {
+    // A37-A1-liquidaciones-08: la recepción no creó NINGUNA entrega (p. ej. primer día sin RH, archivo ni correos) y no hay de
+    // dónde heredar el archivo. Es el mismo Excel que `recibirDesglose` ya subió: su ruta sale de la clave y la huella, como en
+    // `liberar_envio.ts`. Un desglose RETENIDO no entra por aquí (lo decide `liberarEnvio`); si no se puede leer el encabezado
+    // no se adivina que no esté retenido.
+    const cab = await deps.leerDesglose(tenantId, liquidacionId);
+    if (cab === null) return rechazo('no_disponible', 'No pude leer el estado de este desglose. Intenta de nuevo en unos minutos.');
+    if (cab.existe && cab.retenidaMotivo) {
+      return rechazo('no_disponible', 'Este desglose está retenido: decide enviarlo con «Liberar envío» en lugar de reenviarlo.');
+    }
+    if (cab.existe) conArchivo = { xlsxRuta: deps.rutaXlsx(tenantId, liq.claveExterna, liq.huella), xlsxSha256: null };
+  }
   if (!conArchivo) return rechazo('sin_archivo', 'Este desglose no tiene archivo para reenviar.');
 
   // Desde aquí se escribe: primero el correo corregido, luego las entregas.

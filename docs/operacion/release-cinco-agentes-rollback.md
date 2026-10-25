@@ -28,7 +28,7 @@ y no deben reutilizarse; ver [NUMERACION-SALTADA.md](../../supabase/migrations/N
 4. **Respaldo primero, siempre que haya datos de la flota.** El proyecto de base no tiene respaldo automático
    verificado; el procedimiento es:
    ```bash
-   ./scripts/respaldo.sh            # guarda en ~/Desktop/likida-respaldos/likida-<fecha>.sql
+   ./scripts/respaldo.sh            # guarda en ~/likida-respaldos/base/likida-<fecha>.sql
    ```
    Verifica que el archivo no pese 0 bytes y que se pueda leer antes de continuar. Si el respaldo no sale, no se
    revierte nada.
@@ -222,6 +222,14 @@ Hay dos palancas, y conviene usar la más pequeña que resuelva el problema.
 `agente:carta_porte_salida_tms` o `global` desde la consola de Likida. Los crons leen `global` más el interruptor de
 su agente en **cada corrida** y, si alguno está apagado, no procesan nada y dejan un latido `saltado`. No hay que
 retirar el cron del despliegue. Afecta a **todas** las flotas.
+
+**Alcance real de `global` (A37-L-13): no es un «apagar todo».** Gobierna los crons y los envíos **automáticos** de los
+agentes, que lo leen en cada corrida. **No** gobierna: (a) las acciones que dispara una **persona** desde el panel
+(rechazar una liquidación en `lib/likida/revision.ts`, asignar un viaje y avisar en `lib/likida/notificar.ts`), que
+siguen escribiendo al chofer por WhatsApp; ni (b) la capa `lib/meta/client.ts`, que no consulta ningún interruptor.
+Si el incidente exige que **nada** le escriba a choferes, además de `global` hay que pedir a la oficina que no use esas
+acciones, o retirar la credencial de Meta (`WHATSAPP_*`) del entorno. Un candado de último recurso en `meta/client`
+para envíos no humanos queda como decisión de producto (no está implementado).
 
 **Por flota** (`interruptor_tenant`, mig. 0297; lectura en `src/lib/likida/interruptor_tenant.ts`): apaga el pipeline
 del chofer de **una** flota sin tocar las demás. Reglas reales del código:

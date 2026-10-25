@@ -96,6 +96,21 @@ export function cuerposDeLiquidacionesCsv(texto: string, sistemaOrigen = 'SAP (d
     const p = g.filas[0].c;
     const err = (motivo: string, fila: number | null = g.filas[0].fila) => problemas.push({ clave, fila, motivo });
     const empleado = (p[ix.empleado] ?? '').trim(); const desde = fechaDeCelda(p[ix.desde] ?? ''); const hasta = fechaDeCelda(p[ix.hasta] ?? '');
+    // A37-S49-06: solo mandaba la primera fila del grupo. Si otra fila de la MISMA clave trae otro empleado, periodo, total,
+    // moneda o folios, es un archivo contradictorio: no se entrega a ciegas (una celda vacía no contradice).
+    const discrepa = (campo: string, leer: (c: string[]) => string): boolean => {
+      const valores = new Set(g.filas.map(({ c }) => leer(c)).filter((v) => v !== ''));
+      if (valores.size > 1) { err(`las filas de esta clave_externa no coinciden en ${campo}: no se sabe cuál es el correcto`); return true; }
+      return false;
+    };
+    const celdaDe = (k: string, c: string[]) => (ix[k] >= 0 ? (c[ix[k]] ?? '').trim() : '');
+    const numTotal = (c: string[]) => { const n = leerNumero(celdaDe('total', c), decimalComa); return n === null ? celdaDe('total', c) : String(centavos(n)); };
+    if (discrepa('numero_empleado', (c) => celdaDe('empleado', c).toLowerCase())
+      || discrepa('el periodo (desde)', (c) => fechaDeCelda(celdaDe('desde', c)))
+      || discrepa('el periodo (hasta)', (c) => fechaDeCelda(celdaDe('hasta', c)))
+      || discrepa('el total del sistema', numTotal)
+      || discrepa('la moneda', (c) => celdaDe('moneda', c).toUpperCase())
+      || discrepa('los folios de viaje', (c) => celdaDe('folios', c).split('|').map((x) => x.trim()).filter(Boolean).join('|'))) continue;
     if (!empleado) { err('sin numero_empleado'); continue; }
     if (!FECHA.test(desde) || !FECHA.test(hasta) || desde > hasta) { err('periodo ilegible o incoherente (se espera AAAA-MM-DD, o una fecha de Excel, y desde ≤ hasta)'); continue; }
     const total = leerNumero(p[ix.total] ?? '', decimalComa);
@@ -113,7 +128,13 @@ export function cuerposDeLiquidacionesCsv(texto: string, sistemaOrigen = 'SAP (d
     if (!ok) continue;
     const suma = conceptos.reduce((s, x) => s + (x.tipo === 'percepcion' ? centavos(x.monto) : -centavos(x.monto)), 0);
     if (suma !== centavos(total)) { err(`el total del sistema (${total.toFixed(2)}) no es la suma de sus renglones (${(suma / 100).toFixed(2)}): no se entrega a ciegas`); continue; }
-    const moneda = ix.moneda >= 0 && (p[ix.moneda] ?? '').trim().toUpperCase() === 'USD' ? 'USD' : 'MXN';
+    // A37-S49-06: una moneda que no es MXN ni USD («US$», «Dólares», «EUR») ya no pasa a MXN en silencio: se rechaza.
+    // Vacía (o sin la columna) sigue siendo MXN, como siempre.
+    const monedaCruda = g.filas.map(({ c }) => celdaDe('moneda', c).toUpperCase()).find((v) => v !== '') ?? '';
+    if (monedaCruda !== '' && monedaCruda !== 'MXN' && monedaCruda !== 'USD') {
+      err(`moneda «${monedaCruda.slice(0, 12)}» no reconocida (se espera MXN o USD): no se entrega rotulada con otra moneda`); continue;
+    }
+    const moneda = monedaCruda === 'USD' ? 'USD' : 'MXN';
     const folios = ix.folios >= 0 ? (p[ix.folios] ?? '').split('|').map((s) => s.trim()).filter(Boolean) : [];
     cuerpos.push({ claveExterna: clave, sistemaOrigen, operador: { numeroEmpleado: empleado }, viajes: folios, periodo: { desde, hasta }, conceptos, total, moneda });
   }

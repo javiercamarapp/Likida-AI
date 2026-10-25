@@ -84,6 +84,9 @@ const MARGEN_RELOJ_MS = margenUnidadAtomicaMs({ consultas: 11, envios: 0 });
 // ═══════════════════════════════════════════════════════════════════════════
 
 export async function GET(req: Request) {
+  // A37-S09-06: el reloj arranca ANTES del prólogo (puerta, interruptores): `maxDuration` corre desde que Vercel
+  // invoca, no desde que termina la lectura de la base.
+  const entrada = Date.now();
   const puerta = await puertaCron('gps', req, 'El GPS no se sincroniza sin él.');
   if (puerta) return puerta;
 
@@ -108,7 +111,7 @@ export async function GET(req: Request) {
   // El reloj de ESTA invocación, uno solo para las dos fases (molde de
   // `descarga-sat`). Se cuenta desde aquí y no desde dentro del motor:
   // `maxDuration` corre desde que Vercel invoca.
-  const venceEn = Date.now() + maxDuration * 1000 - MARGEN_RELOJ_MS;
+  const venceEn = entrada + maxDuration * 1000 - MARGEN_RELOJ_MS;
 
   try {
     // Los EVENTOS DE SEGURIDAD de las cámaras del cliente van en la MISMA
@@ -221,7 +224,9 @@ export async function GET(req: Request) {
     // hay camiones que esta corrida NO sincronizó, y un «ok» lo taparía.
     const incompleta = recortadas > 0 || backlog > 0 || eventosBacklog > 0 ||
       enCuarentena > 0 || outboxPendientes > 0 || avisosPendientes > 0 || eventosMuertos > 0 ||
-      sinAvisoPrevio > 0 || eventosSinAvisoPrevio > 0 || eventosFaseError !== undefined;
+      eventosFaseError !== undefined;
+    // A37-L-06: unidades sin aviso de privacidad = condición esperada y legal de UNA flota; no es
+    // `parcial` de plataforma (degradaría health y /estado para todos). Viaja en el detalle y el cuerpo.
     if (eventosMuertos > 0) {
       const afectados = eventos.filter((r) =>
         (r.eventosCuarentenaMuertos ?? 0) + (r.eventosOutboxMuertos ?? 0) + (r.avisosMuertos ?? 0) > 0)
@@ -242,7 +247,10 @@ export async function GET(req: Request) {
       });
     } else {
       logger.info('cron.gps.ok', cuerpo);
-      await registrarLatido('gps', 'ok', { flotas: resultados.length, guardadas, disparos, geocercasConError: geocercas.conError });
+      await registrarLatido('gps', 'ok', {
+        flotas: resultados.length, guardadas, disparos, geocercasConError: geocercas.conError,
+        sinAvisoPrevio: sinAvisoPrevio + eventosSinAvisoPrevio,
+      });
     }
     return NextResponse.json(cuerpo);
   } catch (e) {

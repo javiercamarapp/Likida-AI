@@ -396,6 +396,74 @@ export function filaFacturaEmitida(
   };
 }
 
+const VENTANA_IDEMPOTENCIA_MS = 60_000;
+
+/** El borrador idéntico recién creado, si lo hay (ver `crearFactura`). */
+async function borradorIdempotente(
+  tenantId: string,
+  f: FacturaValida,
+  borradores: Array<{ facturaId: string; viajeId: string }>,
+): Promise<string | null> {
+  const ids = [...new Set(borradores.map((b) => b.facturaId))];
+  if (ids.length === 0) return null;
+  const { data, error } = await acotada(
+    supabaseAdmin().from('factura_emitida')
+      .select('id, cliente_id, fecha, subtotal, iva, retencion_iva, total, serie, folio, cfdi_uuid, estatus, creada_en')
+      .eq('tenant_id', tenantId).in('id', ids),
+    'crearFactura.borrador_previo',
+  );
+  if (error) throw new Error(`crearFactura: no se pudo verificar el borrador previo: ${error.message}`);
+  const pedidos = new Set(f.viajeIds);
+  for (const fila of (data ?? []) as Array<Record<string, unknown>>) {
+    const id = String(fila.id);
+    const ligados = new Set(borradores.filter((b) => b.facturaId === id).map((b) => b.viajeId));
+    const mismosViajes = ligados.size === pedidos.size && [...pedidos].every((v) => ligados.has(v));
+    const reciente = Date.now() - Date.parse(String(fila.creada_en ?? '')) < VENTANA_IDEMPOTENCIA_MS;
+    const mismo = fila.estatus === 'borrador'
+      && String(fila.cliente_id) === f.clienteId
+      && String(fila.fecha) === f.fecha
+      && Number(fila.subtotal) === f.subtotal && Number(fila.iva) === f.iva
+      && Number(fila.retencion_iva ?? 0) === f.retencion && Number(fila.total) === f.total
+      && (fila.serie ?? null) === f.serie && (fila.folio ?? null) === f.folio;
+    if (mismo && mismosViajes && reciente) return id;
+  }
+  return null;
+}
+
+/**
+ * A37-S45-07 · QUÉ VIAJES YA ESTÁN AMPARADOS POR OTRA FACTURA. Devuelve, por
+ * viaje, las facturas del tenant que lo ligan y su estatus (sin las canceladas:
+ * «un viaje puede refacturarse tras una cancelación», 0049). El filtro de flota
+ * va por la factura —`factura_viaje` no tiene `tenant_id`— con `!inner`, así que
+ * una liga a una factura ajena nunca aparece.
+ */
+async function facturasQueAmparan(
+  tenantId: string,
+  viajeIds: string[],
+  etiqueta: string,
+): Promise<Array<{ facturaId: string; viajeId: string; estatus: string }>> {
+  const { data, error } = await acotada(
+    supabaseAdmin().from('factura_viaje')
+      .select('factura_id, viaje_id, factura_emitida!inner(tenant_id, estatus)')
+      .in('viaje_id', viajeIds)
+      .eq('factura_emitida.tenant_id', tenantId)
+      .in('factura_emitida.estatus', ['borrador', 'emitida', 'pagada']),
+    etiqueta,
+  );
+  if (error) throw new Error(`${etiqueta}: no se pudieron verificar las facturas de los viajes: ${error.message}`);
+  const filas = (data ?? []) as unknown as Array<{
+    factura_id: unknown; viaje_id: unknown; factura_emitida: { estatus?: unknown } | Array<{ estatus?: unknown }> | null;
+  }>;
+  return filas.map((f) => {
+    const fe = Array.isArray(f.factura_emitida) ? f.factura_emitida[0] : f.factura_emitida;
+    return { facturaId: String(f.factura_id), viajeId: String(f.viaje_id), estatus: String(fe?.estatus ?? '') };
+  });
+}
+
+/** Una factura VIVA (emitida o pagada) ampara el viaje: facturarlo otra vez duplica el ingreso. */
+const MENSAJE_VIAJE_YA_FACTURADO =
+  'Uno de los viajes marcados ya está amparado por otra factura emitida. Un viaje se factura una sola vez: cancela esa factura primero si hay que rehacerla.';
+
 export async function crearFactura(
   tenantId: string,
   f: FacturaValida,
@@ -415,13 +483,39 @@ export async function crearFactura(
   // ── Los viajes amparados son de esta flota ───────────────────────────────
   if (f.viajeIds.length > 0) {
     const { data: viajes, error: errV } = await acotada(
-      supabaseAdmin().from('viaje').select('id').eq('tenant_id', tenantId).in('id', f.viajeIds),
+      supabaseAdmin().from('viaje').select('id, cliente_id').eq('tenant_id', tenantId).in('id', f.viajeIds),
       'crearFactura.viajes',
     );
     if (errV) throw new Error(`crearFactura: no se pudieron verificar los viajes: ${errV.message}`);
     const propios = new Set((viajes ?? []).map((v) => String((v as { id: unknown }).id)));
-    if (propios.size !== f.viajeIds.length) {
+    if (propios.size !== new Set(f.viajeIds).size) {
       throw new DatoInvalido('Uno de los viajes marcados ya no está en tu flota. Recarga la pantalla.');
+    }
+    // A37-S45-07: un viaje de OTRO cliente no se liga a esta factura. Un viaje
+    // sin cliente asignado no prueba nada en contra y se deja pasar.
+    const ajeno = (viajes ?? []).some((v) => {
+      const c = (v as { cliente_id?: unknown }).cliente_id;
+      return c != null && String(c) !== f.clienteId;
+    });
+    if (ajeno) {
+      throw new DatoInvalido('Uno de los viajes marcados es de otro cliente. Una factura solo ampara viajes de su cliente: revisa la selección.');
+    }
+
+    // A37-S45-07: ni un viaje que otra factura VIVA ya ampara, ni un doble clic.
+    const previas = await facturasQueAmparan(tenantId, f.viajeIds, 'crearFactura.facturas_previas');
+    if (previas.some((p) => p.estatus === 'emitida' || p.estatus === 'pagada')) {
+      throw new DatoInvalido(MENSAJE_VIAJE_YA_FACTURADO);
+    }
+    // IDEMPOTENCIA del borrador: el mismo borrador (cliente, fecha, importes,
+    // serie/folio y EXACTAMENTE los mismos viajes) creado hace menos de un
+    // minuto es el doble clic o el reintento de red del mismo envío: se
+    // devuelve ese id en vez de insertar un segundo juego de ligas.
+    if (f.estatus === 'borrador' && previas.length > 0) {
+      const igual = await borradorIdempotente(tenantId, f, previas.filter((p) => p.estatus === 'borrador'));
+      if (igual) {
+        logger.warn('facturacion.crear_idempotente', { tenantId, facturaId: igual });
+        return igual;
+      }
     }
   }
 
@@ -514,6 +608,24 @@ export async function marcarEmitida(
   // intacta; una cadena vacía la BORRA a propósito, para la flota que timbró
   // sin serie un borrador que sí la traía.
   const serie = sello.serie === undefined ? undefined : normalizarSerie(sello.serie);
+
+  // A37-S45-07: sellar un borrador cuyo viaje ya ampara OTRA factura viva
+  // facturaría el viaje dos veces (el doble borrador de un doble clic queda
+  // aquí). Fail-closed: si no se puede verificar, no se sella.
+  const { data: ligas, error: errLigas } = await acotada(
+    supabaseAdmin().from('factura_viaje')
+      .select('viaje_id, factura_emitida!inner(tenant_id)')
+      .eq('factura_id', facturaId).eq('factura_emitida.tenant_id', tenantId),
+    'marcarEmitida.viajes',
+  );
+  if (errLigas) throw new Error(`marcarEmitida: no se pudieron leer los viajes de la factura: ${errLigas.message}`);
+  const suyos = ((ligas ?? []) as Array<{ viaje_id: unknown }>).map((l) => String(l.viaje_id));
+  if (suyos.length > 0) {
+    const otras = await facturasQueAmparan(tenantId, suyos, 'marcarEmitida.facturas_previas');
+    if (otras.some((o) => o.facturaId !== facturaId && (o.estatus === 'emitida' || o.estatus === 'pagada'))) {
+      throw new DatoInvalido(MENSAJE_VIAJE_YA_FACTURADO);
+    }
+  }
 
   const { data, error } = await acotada(supabaseAdmin().from('factura_emitida').update({
     cfdi_uuid: uuid,

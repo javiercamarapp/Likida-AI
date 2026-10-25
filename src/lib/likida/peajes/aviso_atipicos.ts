@@ -26,6 +26,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { logger } from '@/lib/logger';
+import { quedoEnCola } from './aviso_en_cola';
 import { appUrl } from '@/lib/env';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina';
@@ -239,6 +240,11 @@ export async function avisarAtipicosDesglose(
       parametros: parametrosAvisoOficina('Peajes: cruces inusuales', `${plural(mios.length, 'caso inusual', 'casos inusuales')} en ${plural(unidades, 'unidad', 'unidades')}`, liga()),
       contexto: { tenantId, agente: 'peajes', desglose: desgloseId },
     });
+    // A37-S51-04: en cola del outbox = enviado (la reserva NO se libera: saldrá solo y otro barrido lo duplicaría).
+    if (quedoEnCola(r)) {
+      logger.warn('peajes.atipicos_aviso_en_cola', { tenant: tenantId, desglose: desgloseId, motivo: r.ok ? null : r.motivo, codigo: r.ok ? null : r.codigo });
+      return 'enviado';
+    }
     if (!r.ok) {
       logger.error('peajes.atipicos_aviso_fallo', { tenant: tenantId, desglose: desgloseId, motivo: r.motivo, codigo: r.codigo });
       await almacen.liberar(tenantId, mios.map((h) => h.id), String(r.motivo ?? 'envío rechazado'));

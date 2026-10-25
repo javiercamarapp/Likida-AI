@@ -305,12 +305,13 @@ describe('sincronizarEventosDeFlota', () => {
     expect(estado.cuarentena.some((q) => q.motivo === 'payload_invalido')).toBe(true);
   });
 
-  it('una referencia sin asset es irrecuperable: queda opaca y la ventana NO se declara completa', async () => {
+  it('una referencia sin asset es irrecuperable: queda opaca en cuarentena y NO congela la ventana (A37-S38-04)', async () => {
     const sinAsset = { ...CHOQUE, id: 'evt-sin-asset', asset: undefined };
     const r = await sincronizarEventosDeFlota('t-1', 'samsara', CRED, samsaraCon([sinAsset]), AHORA);
 
-    expect(r).toMatchObject({ guardados: 0, referenciasIrrecuperables: 1, backlog: true });
-    expect(r.error).toMatch(/referencia.*asset/i);
+    expect(r).toMatchObject({ guardados: 0, referenciasIrrecuperables: 1 });
+    expect(r.error).toBeUndefined();
+    expect(r.backlog).toBeFalsy();
     const q = estado.cuarentena.find((fila) => fila.motivo === 'referencia_incompleta');
     expect(q?.evento_id_externo).not.toBe('evt-sin-asset');
     expect(q?.evento_id_externo).toMatch(/^sha256:[0-9a-f]{64}$/);

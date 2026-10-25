@@ -115,7 +115,7 @@ async function parque(tenantId: string): Promise<Unidad[]> {
 
 export interface PlanGps {
   /** Se ligarían (o cambiarían). */
-  aplicar: Array<FilaGps & { unidadId: string; cambiaDe: string | null }>;
+  aplicar: Array<FilaGps & { unidadId: string; cambiaDe: string | null; previo?: { proveedor: string; dispositivo: string } | null }>;
   /** Ya estaban ligadas exactamente así. */
   yaEstaban: Array<FilaGps & { unidadId: string }>;
   errores: Array<{ fila: number; motivo: string }>;
@@ -142,6 +142,19 @@ export async function planificarMapeoGps(tenantId: string, filas: readonly FilaG
     const u = porEco.get(f.numeroEconomico.toLowerCase());
     if (u && valida(u) && !(u.gps_proveedor === f.proveedor && u.gps_device_id === f.dispositivo)) reasignadas.add(u.id);
   }
+  // A37-S46-02: «reasignada» solo vale si su fila PASA el chequeo del dispositivo ajeno. Si la
+  // fila de A va a fallar porque su dispositivo nuevo es de otra unidad que no se mueve, A NO suelta
+  // su dispositivo viejo: contarla libraba un dispositivo que sigue ocupado y el ligar de la unidad B
+  // chocaba con uq_unidad_gps dejándola sin GPS. Se quitan hasta punto fijo (quitar una puede tumbar otra).
+  for (let cambio = true; cambio;) {
+    cambio = false;
+    for (const f of filas) {
+      const u = porEco.get(f.numeroEconomico.toLowerCase());
+      if (!u || !reasignadas.has(u.id)) continue;
+      const otro = dueno.get(`${f.proveedor}|${f.dispositivo}`);
+      if (otro && otro.id !== u.id && !reasignadas.has(otro.id)) { reasignadas.delete(u.id); cambio = true; }
+    }
+  }
 
   for (const f of filas) {
     const u = porEco.get(f.numeroEconomico.toLowerCase());
@@ -155,7 +168,10 @@ export async function planificarMapeoGps(tenantId: string, filas: readonly FilaG
       plan.errores.push({ fila: f.fila, motivo: `el dispositivo ${f.dispositivo} de ${f.proveedor} ya es de la unidad ${otro.numero_economico}; un GPS es de una sola unidad` }); continue;
     }
     if (u.gps_proveedor === f.proveedor && u.gps_device_id === f.dispositivo) { plan.yaEstaban.push({ ...f, unidadId: u.id }); continue; }
-    plan.aplicar.push({ ...f, unidadId: u.id, cambiaDe: u.gps_device_id ? `${u.gps_proveedor}:${u.gps_device_id}` : null });
+    plan.aplicar.push({
+      ...f, unidadId: u.id, cambiaDe: u.gps_device_id ? `${u.gps_proveedor}:${u.gps_device_id}` : null,
+      previo: u.gps_device_id && u.gps_proveedor ? { proveedor: u.gps_proveedor, dispositivo: u.gps_device_id } : null,
+    });
   }
   return plan;
 }
@@ -172,13 +188,40 @@ export async function aplicarMapeoGps(
   // Para evitar chocar con `uq_unidad_gps` a media escritura, primero se SUELTAN
   // los dispositivos de las unidades que cambian, luego se ligan los nuevos.
   const cambian = plan.aplicar.filter((a) => a.cambiaDe !== null);
-  for (const tanda of enTandas(cambian.map((c) => c.unidadId), 200)) {
+  // A37-S46-02: sin transacción (son varias sentencias), lo que se soltó se RESTAURA si una
+  // tanda posterior falla; y se dice la verdad de lo que quedó. `restaurar` es de mejor esfuerzo
+  // y devuelve cuántas unidades NO pudo devolver a su dispositivo anterior.
+  const restaurar = async (unidades: typeof cambian): Promise<number> => {
+    const r = await conPool(unidades, 8, async (a) => {
+      const { error } = await acotada(
+        supabaseAdmin().from('unidad')
+          .update({ gps_proveedor: a.previo?.proveedor ?? null, gps_device_id: a.previo?.dispositivo ?? null, gps_visto_en: null })
+          .eq('tenant_id', tenantId).eq('id', a.unidadId),
+        'mapeoGps.restaurar',
+      );
+      return error ?? null;
+    });
+    return r.filter((x) => !('error' in x) ? !!x.ok : true).length;
+  };
+  const soltadas: typeof cambian = [];
+  for (const tanda of enTandas(cambian, 200)) {
     const { error } = await acotada(
       supabaseAdmin().from('unidad').update({ gps_proveedor: null, gps_device_id: null, gps_visto_en: null })
-        .eq('tenant_id', tenantId).in('id', tanda),
+        .eq('tenant_id', tenantId).in('id', tanda.map((c) => c.unidadId)),
       'mapeoGps.soltar',
     );
-    if (error) { logger.error('mapeo_gps.soltar_fallo', { tenantId, err: error.message }); return { ligadas: 0, errores, error: 'No se pudo actualizar la base; no se ligó nada. Vuelve a subir el archivo.' }; }
+    if (error) {
+      logger.error('mapeo_gps.soltar_fallo', { tenantId, err: error.message });
+      // La tanda que falló también se restaura (un timeout puede haberla aplicado).
+      const sinRestaurar = await restaurar([...soltadas, ...tanda]);
+      return {
+        ligadas: 0, errores,
+        error: sinRestaurar === 0
+          ? 'No se pudo actualizar la base; no se ligó nada y las unidades conservan su GPS anterior. Vuelve a subir el archivo.'
+          : `No se pudo actualizar la base y ${sinRestaurar} unidad(es) NO pudieron recuperar su GPS anterior: revisa el mapeo de GPS de tu flota antes de volver a subir el archivo.`,
+      };
+    }
+    soltadas.push(...tanda);
   }
   const resultados = await conPool(plan.aplicar, 8, async (a) => {
     const { data, error } = await acotada(
@@ -194,11 +237,32 @@ export async function aplicarMapeoGps(
     return null;
   });
   const ligadasOk: typeof plan.aplicar = [];
+  const fallidas: typeof plan.aplicar = [];
   resultados.forEach((r, i) => {
-    if ('error' in r) errores.push({ fila: plan.aplicar[i].fila, motivo: 'no se pudo guardar; vuelve a subir el archivo' });
-    else if (r.ok) errores.push(r.ok);
+    if ('error' in r) { errores.push({ fila: plan.aplicar[i].fila, motivo: 'no se pudo guardar; vuelve a subir el archivo' }); fallidas.push(plan.aplicar[i]); }
+    else if (r.ok) { errores.push(r.ok); fallidas.push(plan.aplicar[i]); }
     else ligadasOk.push(plan.aplicar[i]);
   });
+  // A37-S46-02: la unidad cuyo dispositivo viejo ya se soltó pero cuyo ligar falló NO se queda
+  // sin GPS en silencio: se le devuelve el anterior; si ni eso se puede, la fila lo dice.
+  const aDevolver = fallidas.filter((a) => a.cambiaDe !== null);
+  if (aDevolver.length > 0) {
+    const r = await conPool(aDevolver, 8, async (a) => {
+      const { error } = await acotada(
+        supabaseAdmin().from('unidad')
+          .update({ gps_proveedor: a.previo?.proveedor ?? null, gps_device_id: a.previo?.dispositivo ?? null, gps_visto_en: null })
+          .eq('tenant_id', tenantId).eq('id', a.unidadId),
+        'mapeoGps.restaurar_ligar',
+      );
+      return !error;
+    });
+    aDevolver.forEach((a, i) => {
+      const e = errores.find((x) => x.fila === a.fila);
+      if (!e) return;
+      const devuelto = 'ok' in r[i] && (r[i] as { ok: boolean }).ok;
+      e.motivo += devuelto ? ` — la unidad ${a.numeroEconomico} conserva su GPS anterior` : ` — la unidad ${a.numeroEconomico} QUEDÓ SIN GPS: ligarla a mano`;
+    });
+  }
   // Ya no son huérfanos: se limpian de la lista (best effort; la lista se filtra también al leer).
   const porProveedor = new Map<string, string[]>();
   for (const a of ligadasOk) porProveedor.set(a.proveedor, [...(porProveedor.get(a.proveedor) ?? []), a.dispositivo]);

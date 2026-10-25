@@ -33,7 +33,7 @@ import { traerTodo, traerPorIds, conteo, type RespuestaPg } from '../pg';
 import { normalizarNombre, normalizarTag } from './formatos';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from '../conductor/geometria_datos';
 import { matrizDeArchivoCatalogo } from './archivo';
-import { sumarMeses, limitesDelMes, mesAnterior } from './periodo';
+import { sumarMeses, limitesDelMes, mesAnterior, validarPeriodoDeclarado } from './periodo';
 import { revisarDobleEntreArchivos, VENTANA_MESES_DEFAULT, type ArchivoPrevio, type ResultadoDobleEntreArchivos } from './doble_entre_archivos';
 import { parsearCasetasMatriz, coordenadaDeCelda, validarCoordenadasMexico, type CasetaCatalogo } from './casetas';
 import { parsearTarifasMatriz, planificarTarifa, type OrigenTarifa, type TarifaEntrada, type TarifaExistente } from './tarifario_archivo';
@@ -44,6 +44,7 @@ import {
   type CategoriaCobro, type LineaCobro, type MotivoInmovilizada, type ReglasCobro, type ResultadoRevision, type TipoUnidadPeaje, type VentanaInmovilizada,
 } from './reglas_cobro';
 import { validarMapeo, type ConfigMapeo } from './mapeo';
+import { evaluarContraTarifa } from './reglas_tarifa';
 import { planificarGps, evaluarCruceGps, VENTANA_GPS_MIN, type LineaParaGps, type VeredictoGps, type Muestra } from './cruce_gps';
 import { createHash } from 'node:crypto';
 import { generarToken, esTokenValido } from '@/lib/correo/buzon';
@@ -53,7 +54,7 @@ import { partirUrlSftp, leerHuellas, normalizarLlave } from '../conectores/tabla
 import type { HallazgoAtipico, ConfigAtipicos } from './atipicos';
 import { validarConfigAvisos, configAvisosEfectiva, type ConfigAvisos } from './config_avisos';
 import { validarMargenLejos, margenLejosEfectivo } from './gps_umbral';
-import { validarConfigAtipicos, configAtipicosEfectiva, esEstadoAtipico, puedeCambiarEstado, exigeRevisor, type EstadoAtipico } from './atipicos_config';
+import { validarConfigAtipicos, configAtipicosEfectiva, umbralesDePantalla, sinSenalesApagadas, esEstadoAtipico, puedeCambiarEstado, exigeRevisor, type EstadoAtipico } from './atipicos_config';
 import { matrizDeCsv } from './csv';
 import { detectarAtipicos, type ResultadoAtipicos, type UmbralesAtipicos } from './cruces_atipicos';
 import { cierreMensual, type ArchivoCierre, type CierreMensual } from './cierre_mensual';
@@ -72,6 +73,7 @@ import {
 } from './verificacion';
 import { vincularPorIcident, type CruceIcident } from './vincular_viaje';
 import { desdeTablaViajeLocal, type ViajeFuente, type PosicionConViaje, type RangoFechas } from './viajes_fuente';
+import { esFechaReal } from './fecha_real';
 
 // ─────────────────────────────────────────────────────────────────────────
 // De `datos.ts` — catálogos (TAGs, casetas, geocercas, mapeos, buzón, pull,
@@ -132,6 +134,43 @@ export async function listarTags(tenantId: string): Promise<TagVista[]> {
   });
 }
 
+/**
+ * Los ids de gasto (de `gastoIds`) que ya respaldan una línea `cuadra` de otro desglose VIGENTE de la flota, creado antes
+ * que este y con periodo traslapado con las fechas de sus líneas. Lanza ante error de base (un conjunto a medias dejaría
+ * respaldar dos veces el mismo comprobante).
+ */
+export async function gastosRespaldadosPorOtrosDesgloses(
+  tenantId: string, desgloseId: string, gastoIds: readonly string[], fechas: readonly string[],
+): Promise<Set<string>> {
+  const salida = new Set<string>();
+  if (gastoIds.length === 0 || fechas.length === 0) return salida;
+  const { data: yo, error: errYo } = await acotada(supabaseAdmin().from('desglose_peaje')
+    .select('creado_en').eq('tenant_id', tenantId).eq('id', desgloseId).maybeSingle(), 'desglose_peaje.cruce_propio');
+  if (errYo) throw new Error(`conciliarDesglose: ${errYo.message}`);
+  const creadoEn = yo?.creado_en;
+  if (typeof creadoEn !== 'string' || creadoEn === '') return salida;
+  const { data: otros, error: errOtros } = await acotada(supabaseAdmin().from('desglose_peaje')
+    .select('id').eq('tenant_id', tenantId).neq('id', desgloseId).is('anulado_en', null)
+    .lt('creado_en', creadoEn).lte('periodo_desde', fechas[fechas.length - 1]).gte('periodo_hasta', fechas[0])
+    .order('creado_en').order('id').limit(50), 'desglose_peaje.cruce_otros');
+  if (errOtros) throw new Error(`conciliarDesglose: ${errOtros.message}`);
+  const ids = (otros ?? []).map((o) => String(o.id));
+  if (ids.length === 0) return salida;
+  const buscados = new Set(gastoIds);
+  const lineasOtras = await traerTodo<{ detalle: unknown }>(
+    (d, h) => acotada(supabaseAdmin().from('desglose_peaje_linea')
+      .select('detalle', conteo(d))
+      .eq('tenant_id', tenantId).in('desglose_id', ids).eq('estatus', 'cuadra')
+      .order('desglose_id').order('indice').range(d, h), 'desglose_peaje.cruce_otras_lineas'),
+    'desglose_peaje.cruce_otras_lineas',
+  );
+  for (const l of lineasOtras) {
+    const g = (l.detalle as { gastoId?: unknown } | null)?.gastoId;
+    if (typeof g === 'string' && buscados.has(g)) salida.add(g);
+  }
+  return salida;
+}
+
 /** TAG normalizado → su baja registrada (`peaje_tag_baja`, 0776). */
 async function leerBajas(tenantId: string): Promise<Map<string, { bajaEn: string; motivo: string | null }>> {
   const filas = await traerTodo<{ tag: unknown; baja_en: unknown; motivo: unknown }>(
@@ -149,14 +188,19 @@ async function leerBajas(tenantId: string): Promise<Map<string, { bajaEn: string
  * unidad y uno POSTERIOR no. Lanza ante error de base (un mapa a medias daría «sin alta» falsos).
  */
 export async function cargarVigenciaTags(tenantId: string): Promise<Map<string, VigenciaTag>> {
-  const filas = await traerTodo<{ tag: unknown; unidad_id: unknown }>(
+  const filas = await traerTodo<{ tag: unknown; unidad_id: unknown; activo: unknown }>(
     (d, h) => acotada(supabaseAdmin()
-      .from('peaje_tag').select('tag, unidad_id', conteo(d))
+      .from('peaje_tag').select('tag, unidad_id, activo', conteo(d))
       .eq('tenant_id', tenantId).order('tag').range(d, h), 'peajes.vigencia_tags'),
     'peajes.vigencia_tags',
   );
   const bajas = await leerBajas(tenantId);
-  return new Map(filas.map((f) => [String(f.tag), { unidadId: String(f.unidad_id), bajaEn: bajas.get(String(f.tag))?.bajaEn ?? null }]));
+  // Un TAG apagado (`activo=false`) SIN registro de baja (alta/baja anteriores a la 0776) no tiene fecha desde la cual
+  // dejar de atribuir su unidad: se trata como dado de baja desde siempre (fail-closed), igual que `cargarMapaTags`.
+  return new Map(filas.map((f) => [String(f.tag), {
+    unidadId: String(f.unidad_id),
+    bajaEn: bajas.get(String(f.tag))?.bajaEn ?? (f.activo === false ? '0001-01-01' : null),
+  }]));
 }
 
 /** TAG normalizado → unidad, solo los activos. Lanza ante error de base: un mapa a medias dejaría líneas «sin unidad» falsas. */
@@ -259,8 +303,26 @@ export async function importarTagsArchivo(tenantId: string, nombre: string, buff
     logger.error('peajes.importar_tags_lectura', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
     return falla('No se pudo leer el catálogo actual. Inténtalo de nuevo.');
   }
-  const { altas, rechazadas } = resolverUnidadesDeTags(lectura.tags, unidades);
-  const todasRechazadas = [...lectura.rechazadas, ...rechazadas].sort((a, b) => a.fila - b.fila);
+  const { altas: altasResueltas, rechazadas } = resolverUnidadesDeTags(lectura.tags, unidades);
+  // A37-S53-02: el importador NO reactiva en silencio un TAG dado de baja (borraría la baja y los cobros
+  // posteriores dejarían de ser candidatos). Se rechaza con motivo; reactivar es un alta manual explícita.
+  let conBaja: Set<string>;
+  try {
+    conBaja = new Set<string>();
+    for (const lote of lotes(altasResueltas.map((a) => a.tag))) {
+      const { data, error } = await acotada(
+        supabaseAdmin().from('peaje_tag_baja').select('tag').eq('tenant_id', tenantId).in('tag', lote), 'peajes.importar_tags_bajas');
+      if (error) throw new Error(error.message);
+      for (const f of (data ?? []) as Array<{ tag: unknown }>) conBaja.add(String(f.tag));
+    }
+  } catch (e) {
+    logger.error('peajes.importar_tags_bajas', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    return falla('No se pudo comprobar qué TAGs están dados de baja. Inténtalo de nuevo.');
+  }
+  const altas = altasResueltas.filter((a) => !conBaja.has(a.tag));
+  const rechazadasPorBaja = altasResueltas.filter((a) => conBaja.has(a.tag))
+    .map((a) => ({ fila: a.fila, motivo: 'Este TAG está dado de baja: no se reactiva desde el archivo. Si de verdad volvió a operar, dalo de alta a mano en el catálogo.' }));
+  const todasRechazadas = [...lectura.rechazadas, ...rechazadas, ...rechazadasPorBaja].sort((a, b) => a.fila - b.fila);
   if (altas.length === 0) return { ok: true, guardadas: 0, actualizadas: 0, rechazadas: todasRechazadas };
 
   let guardadas = 0;
@@ -433,15 +495,18 @@ export async function importarCasetasArchivo(tenantId: string, nombre: string, b
     // borrar las coordenadas que la flota ya había cargado de esa caseta.
     const fila = (c: (typeof lote)[number]) => ({
       tenant_id: tenantId, nombre: c.nombre, nombre_norm: c.nombreNorm, alias: c.alias,
-      radio_m: c.radioM, activa: true, fuente: c.fuente ?? fuenteDefault,
+      radio_m: c.radioM, fuente: c.fuente ?? fuenteDefault,
+      // A37-S53-10: una caseta NUEVA nace activa (default de la columna); una que ya existe conserva su
+      // `activa`: re-subir el catálogo no debe reactivar en silencio las que la flota desactivó.
+      ...(porNorm.has(c.nombreNorm) ? {} : { activa: true }),
       ...(c.lat !== null && c.lng !== null ? { lat: c.lat, lng: c.lng } : {}),
       ...(c.porPasada === undefined ? {} : { por_pasada: c.porPasada }),
     });
     let error = null as { message: string } | null;
-    // Se agrupan por forma (con/sin coordenadas, con/sin por_pasada) para que cada upsert lleve las mismas columnas.
+    // Se agrupan por forma (con/sin coordenadas, con/sin por_pasada, existente/nueva) para que cada upsert lleve las mismas columnas.
     const grupos = new Map<string, typeof lote>();
     for (const c of lote) {
-      const k = `${c.lat !== null ? 'c' : 's'}${c.porPasada === undefined ? 'n' : 'p'}`;
+      const k = `${c.lat !== null ? 'c' : 's'}${c.porPasada === undefined ? 'n' : 'p'}${porNorm.has(c.nombreNorm) ? 'e' : 'x'}`;
       grupos.set(k, [...(grupos.get(k) ?? []), c]);
     }
     for (const grupo of grupos.values()) {
@@ -462,9 +527,10 @@ export async function importarCasetasArchivo(tenantId: string, nombre: string, b
 }
 
 export async function cambiarEstadoCaseta(tenantId: string, casetaId: string, activa: boolean): Promise<boolean> {
-  const { error } = await acotada(supabaseAdmin().from('peaje_caseta').update({ activa }).eq('tenant_id', tenantId).eq('id', casetaId), 'peajes.estado_caseta');
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_caseta').update({ activa }).eq('tenant_id', tenantId).eq('id', casetaId).select('id'), 'peajes.estado_caseta');
   if (error) logger.error('peajes.estado_caseta', { tenant: tenantId, err: error.message });
-  return !error;
+  // A37-S53-08: sin fila afectada (id ajeno o inexistente) NO es éxito.
+  return !error && (data ?? []).length > 0;
 }
 
 // ── Tarifario por caseta y clase (migración 0811) ───────────────────────────
@@ -506,12 +572,15 @@ const filaParaEscribir = (tenantId: string, t: TarifaExistente) => ({
   confirmada: t.confirmada, confirmada_por: t.confirmadaPor,
 });
 
+/** exclusion_violation: el trigger `peaje_tarifa_sin_traslape` (0890) rechazó un traslape de vigencias. */
+const CODIGO_TRASLAPE = '23P01';
+
 export type ResultadoGuardarTarifa =
   | { ok: true; accion: 'creada' | 'actualizada' | 'sin_cambios'; confirmada: boolean }
   | { ok: false; motivo: string };
 
 /** Guarda (crea o actualiza por caseta+clase+inicio) UNA tarifa. `origen` por omisión: «declarada» (nunca nace confirmada). */
-export async function guardarTarifa(tenantId: string, entrada: TarifaEntrada, origen: OrigenTarifa = 'declarada'): Promise<ResultadoGuardarTarifa> {
+export async function guardarTarifa(tenantId: string, entrada: TarifaEntrada, origen: OrigenTarifa = 'declarada', quienConfirma: string | null = null): Promise<ResultadoGuardarTarifa> {
   let existentes: TarifaVista[];
   try {
     existentes = await listarTarifas(tenantId, { caseta: entrada.caseta, clase: entrada.clase });
@@ -519,7 +588,7 @@ export async function guardarTarifa(tenantId: string, entrada: TarifaEntrada, or
     logger.error('peajes.guardar_tarifa_lectura', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
     return { ok: false, motivo: 'No se pudo leer el tarifario actual. Inténtalo de nuevo.' };
   }
-  const plan = planificarTarifa(existentes, entrada, origen);
+  const plan = planificarTarifa(existentes, entrada, origen, quienConfirma);
   if (plan.tipo === 'rechazada') return { ok: false, motivo: plan.motivo };
   if (plan.tipo === 'igual') return { ok: true, accion: 'sin_cambios', confirmada: plan.fila.confirmada };
   const { error } = await acotada(
@@ -527,6 +596,10 @@ export async function guardarTarifa(tenantId: string, entrada: TarifaEntrada, or
     'peajes.guardar_tarifa',
   );
   if (error) {
+    // 0890 (A37-S62-06): la base rechaza el traslape que dos capturas simultáneas dejaron pasar a la aplicación.
+    if ((error as { code?: string }).code === CODIGO_TRASLAPE) {
+      return { ok: false, motivo: 'La vigencia se traslapa con otra tarifa de esta caseta y clase (otra captura se guardó al mismo tiempo). Revisa el tarifario.' };
+    }
     logger.error('peajes.guardar_tarifa', { tenant: tenantId, err: error.message });
     return { ok: false, motivo: 'No se pudo guardar la tarifa. Inténtalo de nuevo.' };
   }
@@ -567,9 +640,11 @@ export async function confirmarTarifa(tenantId: string, tarifaId: string, por: s
  * vigencia empieza hoy (hora de México). Repetirlo es seguro.
  */
 export async function importarTarifasArchivo(
-  tenantId: string, nombre: string, buffer: Uint8Array, origen: OrigenTarifa = 'declarada',
+  tenantId: string, nombre: string, buffer: Uint8Array, origen: OrigenTarifa = 'declarada', quienConfirma: string | null = null,
 ): Promise<ResultadoImportacionCatalogo> {
   const falla = (error: string): ResultadoImportacionCatalogo => ({ ok: false, guardadas: 0, actualizadas: 0, rechazadas: [], error });
+  // A37-A2-26: una carga «proveedor» nace confirmada; sin el nombre de quien confirma no se guarda nada.
+  if (origen === 'proveedor' && !quienConfirma?.trim()) return falla('Una carga con origen «proveedor» nace confirmada: indica quién la confirma.');
   const m = matrizDeArchivoCatalogo(nombre, buffer);
   if (!m.ok) return falla(m.motivo);
   const lectura = parsearTarifasMatriz(m.matriz, { desdePorDefecto: hoyMx() });
@@ -589,7 +664,7 @@ export async function importarTarifasArchivo(
   let actualizadas = 0;
   for (const t of lectura.tarifas) {
     // Se planifica contra lo guardado MÁS lo ya aceptado de este mismo archivo.
-    const plan = planificarTarifa(vigentes, t, origen);
+    const plan = planificarTarifa(vigentes, t, origen, quienConfirma);
     if (plan.tipo === 'rechazada') { rechazadas.push({ fila: t.fila, motivo: plan.motivo }); continue; }
     guardadas++;
     if (plan.tipo === 'actualizar') actualizadas++;
@@ -603,6 +678,9 @@ export async function importarTarifasArchivo(
       'peajes.importar_tarifas',
     );
     if (error) {
+      if ((error as { code?: string }).code === CODIGO_TRASLAPE) {
+        return { ok: false, guardadas: 0, actualizadas: 0, rechazadas, error: 'Una vigencia del archivo se traslapa con una tarifa que se guardó al mismo tiempo y no se aplicó ninguna fila de este lote. Revisa el tarifario y vuelve a subir el archivo: es seguro repetirlo.' };
+      }
       logger.error('peajes.importar_tarifas', { tenant: tenantId, err: error.message });
       return { ok: false, guardadas: 0, actualizadas: 0, rechazadas, error: 'No se pudo guardar el tarifario y no se aplicó ninguna fila de este lote. Vuelve a subir el archivo: es seguro repetirlo.' };
     }
@@ -686,9 +764,10 @@ export async function guardarGeocerca(
 }
 
 export async function cambiarEstadoGeocerca(tenantId: string, id: string, activa: boolean): Promise<boolean> {
-  const { error } = await acotada(supabaseAdmin().from('geocerca').update({ activa }).eq('tenant_id', tenantId).eq('catalogo', 'peajes').eq('id', id), 'peajes.estado_geocerca');
+  const { data, error } = await acotada(supabaseAdmin().from('geocerca').update({ activa }).eq('tenant_id', tenantId).eq('catalogo', 'peajes').eq('id', id).select('id'), 'peajes.estado_geocerca');
   if (error) logger.error('peajes.estado_geocerca', { tenant: tenantId, err: error.message });
-  return !error;
+  // A37-S53-08: sin fila afectada (id ajeno, de otro catálogo o inexistente) NO es éxito.
+  return !error && (data ?? []).length > 0;
 }
 
 // ── Mapeo de columnas por proveedor ─────────────────────────────────────────
@@ -751,14 +830,25 @@ export async function leerConfigBuzon(tenantId: string): Promise<ConfigBuzon | n
   return data ? { activa: data.activa !== false, rotacion: Number(data.rotacion) } : null;
 }
 
-/** Activa el buzón (o lo reactiva conservando la rotación vigente). */
+/**
+ * Activa el buzón (o lo reactiva). A37-S64-04: SOLO cambia `activa`; jamás reescribe `rotacion`
+ * (un upsert con la rotación leída antes devolvía a servir una llave ya rotada tras una fuga).
+ * Sin fila previa la crea con la rotación 1 (`ignoreDuplicates`: si otro la creó en medio, no pisa).
+ */
 export async function activarBuzon(tenantId: string): Promise<boolean> {
-  const actual = await leerConfigBuzon(tenantId);
-  const { error } = await acotada(supabaseAdmin().from('peaje_ingesta_config').upsert({
-    tenant_id: tenantId, rotacion: actual?.rotacion ?? 1, activa: true, updated_at: new Date().toISOString(),
-  }, { onConflict: 'tenant_id' }), 'peajes.activar_buzon');
-  if (error) logger.error('peajes.activar_buzon', { tenant: tenantId, err: error.message });
-  return !error;
+  const ahora = new Date().toISOString();
+  const activar = () => acotada(supabaseAdmin().from('peaje_ingesta_config')
+    .update({ activa: true, updated_at: ahora }).eq('tenant_id', tenantId).select('tenant_id'), 'peajes.activar_buzon');
+  const a = await activar();
+  if (a.error) { logger.error('peajes.activar_buzon', { tenant: tenantId, err: a.error.message }); return false; }
+  if ((a.data ?? []).length > 0) return true;
+  const ins = await acotada(supabaseAdmin().from('peaje_ingesta_config')
+    .upsert({ tenant_id: tenantId, rotacion: 1, activa: true, updated_at: ahora }, { onConflict: 'tenant_id', ignoreDuplicates: true }), 'peajes.activar_buzon_crear');
+  if (ins.error) { logger.error('peajes.activar_buzon', { tenant: tenantId, err: ins.error.message }); return false; }
+  // Si otra sesión creó la fila en medio, `ignoreDuplicates` no la tocó: se activa ahora, sin tocar la rotación.
+  const b = await activar();
+  if (b.error) { logger.error('peajes.activar_buzon', { tenant: tenantId, err: b.error.message }); return false; }
+  return (b.data ?? []).length > 0;
 }
 
 export async function desactivarBuzon(tenantId: string): Promise<boolean> {
@@ -772,11 +862,13 @@ export async function desactivarBuzon(tenantId: string): Promise<boolean> {
 export async function rotarLlaveBuzon(tenantId: string): Promise<boolean> {
   const actual = await leerConfigBuzon(tenantId);
   if (!actual) return false;
-  const { error } = await acotada(supabaseAdmin().from('peaje_ingesta_config')
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_ingesta_config')
     .update({ rotacion: actual.rotacion + 1, updated_at: new Date().toISOString() })
-    .eq('tenant_id', tenantId).eq('rotacion', actual.rotacion), 'peajes.rotar_llave');
-  if (error) logger.error('peajes.rotar_llave', { tenant: tenantId, err: error.message });
-  return !error;
+    .eq('tenant_id', tenantId).eq('rotacion', actual.rotacion).select('tenant_id'), 'peajes.rotar_llave');
+  if (error) { logger.error('peajes.rotar_llave', { tenant: tenantId, err: error.message }); return false; }
+  // A37-S64-04: el CAS que no encuentra la rotación leída (otra sesión rotó en medio) NO es éxito.
+  if ((data ?? []).length === 0) { logger.warn('peajes.rotar_llave_cas_perdido', { tenant: tenantId }); return false; }
+  return true;
 }
 
 // ── Los canales de entrada nuevos (0563): correo y pull ─────────────────────
@@ -910,6 +1002,11 @@ export function validarUrlPull(crudo: string): { ok: true; url: string } | { ok:
   return { ok: true, url: t };
 }
 
+/** `host:puerto` de una URL (minúsculas), o `null` si no se puede leer: dos `null` NO cuentan como el mismo host. */
+function hostDe(url: string): string | null {
+  try { return new URL(url).host.toLowerCase(); } catch { return null; }
+}
+
 /**
  * Configura (y enciende) el pull. El token, si se da, se guarda CIFRADO con el cofre;
  * sin `LIKIDA_COFRE_LLAVE` NO se guarda nada (un token en claro no es una opción).
@@ -927,6 +1024,18 @@ export async function guardarPullPeajes(
     pull_url: v.url, pull_intervalo_min: entrada.intervaloMin, pull_activo: true, pull_proximo_en: new Date().toISOString(), pull_ultimo_error: null,
   };
   const token = entrada.token?.trim();
+  if (!token) {
+    // A37-S14-09: «sin token» significa CONSERVAR el que ya hay, pero solo mientras el destino sea el mismo host: con otro host se
+    // mandaría el Bearer anterior a un tercero. Ante duda (no se pudo leer lo vigente) tampoco se arriesga.
+    let actual: ConfigEntradas | null;
+    try { actual = await leerConfigEntradas(tenantId); } catch (e) {
+      logger.error('peajes.guardar_pull_lectura', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+      return { ok: false, motivo: 'No se pudo comprobar la configuración vigente. Inténtalo de nuevo.' };
+    }
+    if (actual?.pullConCredencial && actual.pullUrl && hostDe(actual.pullUrl) !== hostDe(v.url)) {
+      return { ok: false, motivo: 'Cambiaste el servidor de la consulta: el token guardado era del anterior y no se reutiliza. Escribe el token del servidor nuevo (o bórralo antes).' };
+    }
+  }
   if (token) {
     if (token.length > 500 || /[\r\n]/.test(token)) return { ok: false, motivo: 'El token no es válido (sin saltos de línea, hasta 500 caracteres).' };
     if (!cofreConfigurado()) return { ok: false, motivo: 'El cofre de credenciales no está configurado (LIKIDA_COFRE_LLAVE): no se puede guardar el token de forma segura.' };
@@ -1118,10 +1227,28 @@ export async function reclamarIntentoAviso(tenantId: string, desgloseId: string,
   return (data ?? []).length > 0;
 }
 
-export async function marcarAvisoEnviado(tenantId: string, desgloseId: string): Promise<void> {
-  const { error } = await acotada(supabaseAdmin().from('desglose_peaje')
-    .update({ aviso_oficina_en: new Date().toISOString() }).eq('tenant_id', tenantId).eq('id', desgloseId).is('aviso_oficina_en', null), 'peajes.marcar_aviso');
-  if (error) logger.error('peajes.marcar_aviso', { tenant: tenantId, err: error.message });
+export async function marcarAvisoEnviado(tenantId: string, desgloseId: string): Promise<boolean> {
+  try {
+    const { error } = await acotada(supabaseAdmin().from('desglose_peaje')
+      .update({ aviso_oficina_en: new Date().toISOString() }).eq('tenant_id', tenantId).eq('id', desgloseId).is('aviso_oficina_en', null), 'peajes.marcar_aviso');
+    if (error) { logger.error('peajes.marcar_aviso', { tenant: tenantId, err: error.message }); return false; }
+    return true;
+  } catch (e) {
+    logger.error('peajes.marcar_aviso', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    return false;
+  }
+}
+
+/** A37-S51-03: el aviso YA salió pero no se pudo sellar `aviso_oficina_en`. Se agotan sus intentos para que el barrido no
+ *  lo reenvíe al dueño (un duplicado es peor que perder un reintento de un aviso que ya llegó). `false` si tampoco se pudo. */
+export async function agotarIntentosAviso(tenantId: string, desgloseId: string, maximo: number): Promise<boolean> {
+  try {
+    const { error } = await acotada(supabaseAdmin().from('desglose_peaje')
+      .update({ aviso_intentos: maximo }).eq('tenant_id', tenantId).eq('id', desgloseId).is('aviso_oficina_en', null), 'peajes.agotar_aviso');
+    return !error;
+  } catch {
+    return false;
+  }
 }
 
 /** Los desgloses con aviso por enviar, de todas las flotas (barrido del cron; solo ids). */
@@ -1129,6 +1256,28 @@ export async function avisosPendientesPeajes(limite: number): Promise<Array<{ te
   const r = await acotada(supabaseAdmin().rpc('peaje_avisos_pendientes', { p_limite: limite, p_max_intentos: MAX_INTENTOS_AVISO }), 'peajes.avisos_pendientes');
   if (r.error) throw new Error(`peajes.avisos_pendientes: ${r.error.message}`);
   return ((r.data ?? []) as Array<Record<string, unknown>>).map((f) => ({ tenantId: String(f.tenant_id), desgloseId: String(f.desglose_id) }));
+}
+
+/**
+ * A37-A2-12: declara (o corrige) el periodo OFICIAL de un desglose YA importado. Los canales automáticos (correo, SFTP, API,
+ * pull) solo traen el periodo si el NOMBRE del archivo lo dice («01 A 10 DE SEPT»); un `corte.xlsx` entra sin periodo, y sin él
+ * los extemporáneos, el doble entre archivos y el cierre mensual quedan apagados. Manda sobre el nombre (origen `declarado`).
+ * Condicional a «no anulado» y acotada a la flota.
+ */
+export async function declararPeriodoDesglose(
+  tenantId: string, desgloseId: string, desde: string, hasta: string,
+): Promise<{ ok: true } | { ok: false; motivo: string }> {
+  const v = validarPeriodoDeclarado(desde, hasta);
+  if (!v.ok) return { ok: false, motivo: v.motivo };
+  const { data, error } = await acotada(supabaseAdmin().from('desglose_peaje')
+    .update({ periodo_oficial_desde: v.periodo.desde, periodo_oficial_hasta: v.periodo.hasta, periodo_origen: 'declarado' })
+    .eq('tenant_id', tenantId).eq('id', desgloseId).is('anulado_en', null).select('id'), 'peajes.declarar_periodo');
+  if (error) {
+    logger.error('peajes.declarar_periodo', { tenant: tenantId, err: error.message });
+    return { ok: false, motivo: 'No se pudo guardar el periodo. Inténtalo de nuevo.' };
+  }
+  if ((data ?? []).length === 0) return { ok: false, motivo: 'Ese desglose no existe en tu flota o ya fue anulado.' };
+  return { ok: true };
 }
 
 export type ResultadoAnulacion = 'anulado' | 'ya_anulado' | 'no_encontrado';
@@ -1148,18 +1297,71 @@ export async function anularDesgloseDb(tenantId: string, desgloseId: string, mot
   if ((upd.data ?? []).length === 0) {
     const ex = await acotada(supabaseAdmin().from('desglose_peaje').select('id').eq('tenant_id', tenantId).eq('id', desgloseId).maybeSingle(), 'peajes.anular_existe');
     if (ex.error) throw new Error(`anularDesglose: ${ex.error.message}`);
-    return ex.data ? 'ya_anulado' : 'no_encontrado';
+    if (!ex.data) return 'no_encontrado';
+    // A37-S11-05: el desglose ya estaba anulado, pero una anulación anterior pudo cortarse entre el UPDATE
+    // de `anulado_en` y el de la huella: reintentar REPARA liberando las huellas aún pendientes (idempotente).
+    await liberarHuellasDeDesglose(tenantId, desgloseId);
+    return 'ya_anulado';
   }
-  const arch = await acotada(supabaseAdmin().from('peaje_ingesta_archivo')
-    .select('id, huella').eq('tenant_id', tenantId).eq('desglose_id', desgloseId).order('id'), 'peajes.anular_archivos');
-  if (arch.error) throw new Error(`anularDesglose: ${arch.error.message}`);
-  for (const a of (arch.data ?? []) as Array<{ id: string; huella: string }>) {
-    const libre = createHash('sha256').update(`${a.huella}:anulada:${desgloseId}`).digest('hex');
-    const r = await acotada(supabaseAdmin().from('peaje_ingesta_archivo').update({ huella: libre })
-      .eq('tenant_id', tenantId).eq('id', a.id), 'peajes.anular_huella');
-    if (r.error) logger.error('peajes.anular_huella', { tenant: tenantId, err: r.error.message });
-  }
+  await liberarHuellasDeDesglose(tenantId, desgloseId);
+  // A37-A2-07: los reclamos PREPARADOS (aún no enviados) de un desglose anulado dejan de contar como pendientes (plazo, KPI
+  // «por vencer», totales): pasan a `rechazado` con la causa, lo que además libera el único parcial por categoría para
+  // reclamar de nuevo con el archivo correcto. Los ya ENVIADOS al proveedor no se tocan: son hechos externos que una persona decide.
+  const rec = await acotada(supabaseAdmin().from('peaje_reclamo')
+    .update({ estado: 'rechazado', notas: 'Anulado: el desglose de origen se anuló (archivo subido por error).', actualizado_en: ahora })
+    .eq('tenant_id', tenantId).eq('desglose_id', desgloseId).eq('estado', 'preparado'), 'peajes.anular_reclamos');
+  if (rec.error) logger.error('peajes.anular_reclamos', { tenant: tenantId, err: rec.error.message });
   return 'anulado';
+}
+
+/**
+ * Libera la huella de los archivos de la cola que generaron este desglose anulado. Idempotente: repetirla solo
+ * vuelve a derivar otra huella igualmente libre. Si una escritura falla LANZA (la API contesta error y el
+ * integrador reintenta, que cae en `ya_anulado` y repara) en vez de prometer «anulado» con el archivo bloqueado.
+ */
+async function liberarHuellasDeDesglose(tenantId: string, desgloseId: string): Promise<void> {
+  const arch = await acotada(supabaseAdmin().from('peaje_ingesta_archivo')
+    .select('id, huella, origen').eq('tenant_id', tenantId).eq('desglose_id', desgloseId).order('id'), 'peajes.anular_archivos');
+  if (arch.error) throw new Error(`anularDesglose: ${arch.error.message}`);
+  for (const a of (arch.data ?? []) as Array<{ id: string; huella: string; origen?: string }>) {
+    // A37-A2-08: lo que llega por CONSULTA PERIÓDICA (pull, SFTP) es el mismo archivo ciclo tras ciclo si el endpoint de la flota
+    // devuelve siempre el mismo: liberar su huella lo reimportaba, reconciliaba y volvía a avisar a la oficina solo, deshaciendo
+    // la anulación. Esas huellas se CONSERVAN (el siguiente ciclo lo ve como duplicado); la persona que quiera cargarlo de
+    // nuevo lo sube a mano desde el panel (`liberarHuellaDeAnulado`). Correo y API los manda una persona a propósito: se liberan.
+    if (a.origen === 'pull' || a.origen === 'sftp') continue;
+    await liberarHuellaArchivo(tenantId, a.id, a.huella, desgloseId);
+  }
+}
+
+/** El estado de UN archivo de la cola (acotado a la flota): lo que la subida manual lee tras procesar en línea. */
+export async function estadoArchivoPeaje(tenantId: string, archivoId: string) {
+  return acotada(supabaseAdmin().from('peaje_ingesta_archivo')
+    .select('estado, desglose_id, ultimo_error').eq('tenant_id', tenantId).eq('id', archivoId).maybeSingle(), 'peajes.panel.estado');
+}
+
+/** Reemplaza la huella de un archivo de la cola por otra derivada (misma forma), para que el mismo contenido pueda volver a recibirse. */
+async function liberarHuellaArchivo(tenantId: string, archivoId: string, huella: string, desgloseId: string): Promise<void> {
+  const libre = createHash('sha256').update(`${huella}:anulada:${desgloseId}`).digest('hex');
+  const r = await acotada(supabaseAdmin().from('peaje_ingesta_archivo').update({ huella: libre })
+    .eq('tenant_id', tenantId).eq('id', archivoId), 'peajes.anular_huella');
+  if (r.error) throw new Error(`anularDesglose: huella: ${r.error.message}`);
+}
+
+/**
+ * Subida MANUAL de un archivo cuya huella se conservó al anular su desglose (entregado por pull/SFTP, A37-A2-08): si el archivo
+ * de la cola quedó ligado a un desglose ANULADO, se libera su huella para que la persona pueda cargarlo otra vez. `true` si se liberó.
+ */
+export async function liberarHuellaDeAnulado(tenantId: string, archivoId: string): Promise<boolean> {
+  const { data: a, error } = await acotada(supabaseAdmin().from('peaje_ingesta_archivo')
+    .select('id, huella, desglose_id').eq('tenant_id', tenantId).eq('id', archivoId).maybeSingle(), 'peajes.liberar_anulado_archivo');
+  if (error) throw new Error(`liberarHuellaDeAnulado: ${error.message}`);
+  if (!a || typeof a.desglose_id !== 'string') return false;
+  const { data: d, error: errD } = await acotada(supabaseAdmin().from('desglose_peaje')
+    .select('id, anulado_en').eq('tenant_id', tenantId).eq('id', a.desglose_id).maybeSingle(), 'peajes.liberar_anulado_desglose');
+  if (errD) throw new Error(`liberarHuellaDeAnulado: ${errD.message}`);
+  if (!d || !d.anulado_en) return false;
+  await liberarHuellaArchivo(tenantId, String(a.id), String(a.huella), String(a.desglose_id));
+  return true;
 }
 
 export interface ArchivoIngestaVista {
@@ -1465,12 +1667,14 @@ export async function marcarAtipico(
   if (nota !== null) parche.nota = nota;
   if (cambio.estado === 'avisado' && !previa.avisado_en) parche.avisado_en = ahora;
   if (exigeRevisor(cambio.estado)) { parche.revisado_en = ahora; parche.revisado_por = por; if (!previa.avisado_en) parche.avisado_en = ahora; }
-  const { error: e2 } = await acotada(supabaseAdmin().from('peaje_atipico')
-    .update(parche).eq('tenant_id', tenantId).eq('id', id).eq('estado', actual), 'peajes.marcar_atipico');
+  const { data: cambiadas, error: e2 } = await acotada(supabaseAdmin().from('peaje_atipico')
+    .update(parche).eq('tenant_id', tenantId).eq('id', id).eq('estado', actual).select('id'), 'peajes.marcar_atipico');
   if (e2) {
     logger.error('peajes.marcar_atipico', { tenant: tenantId, err: e2.message });
     return { ok: false, motivo: 'No se pudo guardar el cambio. Intenta de nuevo.' };
   }
+  // A37-S53-08: si otra pestaña lo cambió entre la lectura y el UPDATE, 0 filas coinciden: no es éxito.
+  if ((cambiadas ?? []).length === 0) return { ok: false, motivo: 'El hallazgo cambió de estado mientras lo revisabas: recarga la lista.' };
   return { ok: true, estado: cambio.estado };
 }
 
@@ -2017,7 +2221,7 @@ export async function altaBajaDeTag(
 ): Promise<Resultado> {
   const tag = normalizarTag(entrada.tag);
   if (!tag) return { ok: false, motivo: 'El TAG no es válido (4 a 40 letras o dígitos).' };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(entrada.bajaEn) || Number.isNaN(Date.parse(`${entrada.bajaEn}T00:00:00Z`))) {
+  if (!esFechaReal(entrada.bajaEn)) {
     return { ok: false, motivo: 'La fecha de baja debe ser AAAA-MM-DD.' };
   }
   const { error } = await acotada(supabaseAdmin().from('peaje_tag_baja').upsert({
@@ -2222,6 +2426,22 @@ export async function lineasDeDesglose(tenantId: string, desgloseId: string) {
   );
 }
 
+/**
+ * A37-L-02: cuánto se puede RECLAMAR de verdad por cada cruce de «clase distinta de 3 y 5». El cobro del cruce
+ * completo no es lo reclamable: lo es la diferencia contra la tarifa de la clase correcta, y solo si esa tarifa está
+ * CONFIRMADA (una inferida de los propios archivos es un candidato, no una cifra para el proveedor). `null` = no hay
+ * tarifa confirmada, o no hay exceso: sin monto defendible NO se arma reclamo (ante la duda no se adivina).
+ * Lanza si no se pudo leer (el llamador falla cerrado).
+ */
+export async function montosReclamablesDeClase(tenantId: string, desgloseId: string): Promise<Map<number, number | null>> {
+  const [filas, tarifas, casetas] = await Promise.all([
+    lineasDeDesglose(tenantId, desgloseId), listarTarifas(tenantId), listarReglasCasetas(tenantId),
+  ]);
+  const excepcionesClase = new Map(casetas.filter((c) => c.clasesPermitidas.length > 0).map((c) => [c.nombreNorm, c.clasesPermitidas]));
+  const evaluadas = evaluarContraTarifa(filas.map(lineaCobroDeFila), tarifas.filter((t) => t.confirmada), { excepcionesClase });
+  return new Map(evaluadas.map((e) => [e.indice, e.importeEsperado !== null && e.montoReclamable > 0 ? e.montoReclamable : null]));
+}
+
 /** Una fila de la base → la línea que entienden las reglas. La unidad es la que declara el archivo. */
 export function lineaCobroDeFila(f: Record<string, unknown>): LineaCobro {
   return {
@@ -2236,7 +2456,7 @@ export function lineaCobroDeFila(f: Record<string, unknown>): LineaCobro {
 
 /** `null` si el desglose no existe en la flota (o está anulado). */
 export async function revisionDeDesglose(
-  tenantId: string, desgloseId: string, umbrales: Partial<UmbralesAtipicos> = {}, ventanaMeses: number = VENTANA_MESES_DEFAULT,
+  tenantId: string, desgloseId: string, umbrales?: Partial<UmbralesAtipicos>, ventanaMeses: number = VENTANA_MESES_DEFAULT,
 ): Promise<ReporteRevision | null> {
   const { data: d, error } = await acotada(supabaseAdmin().from('desglose_peaje')
     .select('id, proveedor, archivo_nombre, periodo_desde, periodo_hasta, periodo_oficial_desde, periodo_oficial_hasta, periodo_origen, no_periodo, calidad')
@@ -2257,7 +2477,19 @@ export async function revisionDeDesglose(
   });
   const revision = revisarCobros(lineas, reglasDesdeConfig(casetas, bajas, periodoOficialDesde, excepciones, justificados, [], inmovilizadas));
   const conCoords = casetas.filter((c) => c.lat !== null && c.lng !== null).map((c) => ({ nombre: c.nombre, lat: c.lat as number, lng: c.lng as number }));
-  const atipicos = detectarAtipicos(lineas, conCoords, umbrales);
+  // A37-A2-17: sin umbrales explícitos, la pantalla usa los que la flota guardó en Configuración (los mismos del aviso). Si no se pueden leer, los de partida.
+  let umbralesFlota: Partial<UmbralesAtipicos> = umbrales ?? {};
+  let apagadas: ReturnType<typeof umbralesDePantalla>['apagadas'] = [];
+  if (umbrales === undefined) {
+    try {
+      const traducido = umbralesDePantalla((await leerConfigAtipicos(tenantId)).umbrales);
+      umbralesFlota = traducido.umbrales;
+      apagadas = traducido.apagadas;
+    } catch (e) {
+      logger.warn('peajes.revision_config_atipicos', { tenant: tenantId, codigo: codigoDeError(e) }); // sin el mensaje de la base: puede traer TAG/unidad/importe
+    }
+  }
+  const atipicos = sinSenalesApagadas(detectarAtipicos(lineas, conCoords, umbralesFlota), apagadas);
   // Solo se leen los desgloses previos si hay periodo y al menos un extemporáneo que buscar.
   const hayExtemporaneos = periodoOficialDesde !== null && lineas.some((l) => l.fecha !== null && l.fecha < periodoOficialDesde);
   const previos = hayExtemporaneos && periodoOficialDesde !== null
@@ -2313,6 +2545,8 @@ export async function cierreMensualDeFlota(tenantId: string, mes: string): Promi
 
 export interface ReclamoVista {
   id: string;
+  /** A37-S53-03: el desglose que lo sustenta fue anulado: no se cuenta en el seguimiento y no debe enviarse. */
+  desgloseAnulado?: boolean;
   desgloseId: string | null;
   proveedor: string | null;
   categoria: string;
@@ -2334,6 +2568,15 @@ export async function listarReclamos(tenantId: string, hoy: string): Promise<{ r
       .eq('tenant_id', tenantId).order('fecha_cobro_mas_antiguo').order('id').range(d, h), 'revision_cobros.listar_reclamos'),
     'revision_cobros.listar_reclamos',
   );
+  // A37-S53-03: un reclamo cuyo desglose se anuló no suma en el seguimiento ni se presenta como vigente.
+  const anulados = new Set<string>();
+  const idsDesglose = [...new Set(filas.map((f) => f.desglose_id).filter((x): x is string => typeof x === 'string'))];
+  for (const lote of lotes(idsDesglose)) {
+    const { data, error } = await acotada(supabaseAdmin().from('desglose_peaje')
+      .select('id').eq('tenant_id', tenantId).in('id', lote).not('anulado_en', 'is', null), 'revision_cobros.reclamos_anulados');
+    if (error) throw new Error(`revision_cobros.reclamos_anulados: ${error.message}`);
+    for (const d of (data ?? []) as Array<{ id: unknown }>) anulados.add(String(d.id));
+  }
   const reclamos: ReclamoVista[] = filas.map((f) => {
     const base = {
       id: String(f.id), estado: String(f.estado) as EstadoReclamo,
@@ -2343,11 +2586,14 @@ export async function listarReclamos(tenantId: string, hoy: string): Promise<{ r
     return {
       ...base, desgloseId: (f.desglose_id as string | null) ?? null, proveedor: (f.proveedor as string | null) ?? null,
       categoria: String(f.categoria), nCruces: Number(f.n_cruces), enviadoEn: f.enviado_en ? String(f.enviado_en).slice(0, 10) : null,
-      referenciaPortal: (f.referencia_portal as string | null) ?? null, notas: (f.notas as string | null) ?? null,
+      referenciaPortal: (f.referencia_portal as string | null) ?? null,
+      ...(typeof f.desglose_id === 'string' && anulados.has(f.desglose_id)
+        ? { desgloseAnulado: true, notas: `DESGLOSE ANULADO: no envíes ni cuentes este reclamo. ${(f.notas as string | null) ?? ''}`.trim() }
+        : { notas: (f.notas as string | null) ?? null }),
       evaluacion: evaluarReclamo(base, hoy),
     };
   });
-  return { reclamos, resumen: resumirSeguimiento(reclamos, hoy) };
+  return { reclamos, resumen: resumirSeguimiento(reclamos.filter((r) => r.desgloseAnulado !== true), hoy) };
 }
 
 /**
@@ -2375,13 +2621,25 @@ export async function crearReclamoDeCategoria(
     return { ok: false, motivo: `«${ETIQUETA_CATEGORIA_COBRO[entrada.categoria]}» es un asunto interno de la flota, no un cobro del proveedor: no se registra como reclamo.` };
   }
   const decididos = new Set((await listarDecisionesCandidatos(tenantId, entrada.desgloseId)).map((d) => `${d.indice}|${d.categoria}`));
-  const cands = reporte.revision.candidatos.filter((c) => c.categoria === entrada.categoria && !c.justificacion && !decididos.has(`${c.indice}|${c.categoria}`));
+  let cands = reporte.revision.candidatos.filter((c) => c.categoria === entrada.categoria && !c.justificacion && !decididos.has(`${c.indice}|${c.categoria}`));
   if (cands.length === 0) return { ok: false, motivo: `No hay candidatos pendientes de «${ETIQUETA_CATEGORIA_COBRO[entrada.categoria]}» en ese desglose (los que había ya se descartaron, justificaron o reclamaron).` };
+  // A37-L-02: en «clase distinta de 3 y 5» el monto del reclamo es el EXCESO contra la tarifa confirmada, no el cruce completo.
+  let montosClase: Map<number, number | null> | null = null;
+  if (entrada.categoria === 'clase_fuera_de_3_5') {
+    try {
+      montosClase = await montosReclamablesDeClase(tenantId, entrada.desgloseId);
+    } catch (err) {
+      logger.error('revision_cobros.crear_reclamo_tarifas', { tenant: tenantId, err: err instanceof Error ? err.message : String(err) });
+      return { ok: false, motivo: 'No se pudo leer el tarifario para calcular el monto reclamable. No se creó nada: inténtalo de nuevo.' };
+    }
+    cands = cands.filter((c) => montosClase!.get(c.indice) != null);
+    if (cands.length === 0) return { ok: false, motivo: 'Ningún cruce de esta categoría tiene una tarifa confirmada con exceso: sin ella no hay monto defendible que reclamar. Confirma la tarifa de la caseta y vuelve a intentarlo.' };
+  }
   const fechas = cands.map((c) => c.fecha).filter((f): f is string => f !== null).sort();
   if (fechas.length === 0) return { ok: false, motivo: 'Los candidatos no traen fecha de cobro: no se puede calcular el plazo de reclamo.' };
   const enviado = entrada.enviadoEn?.trim() || null;
-  if (enviado && !/^\d{4}-\d{2}-\d{2}$/.test(enviado)) return { ok: false, motivo: 'La fecha de envío debe ser AAAA-MM-DD.' };
-  const monto = Math.round(cands.reduce((s, c) => s + c.monto, 0) * 100) / 100;
+  if (enviado && !esFechaReal(enviado)) return { ok: false, motivo: 'La fecha de envío debe ser AAAA-MM-DD.' };
+  const monto = Math.round(cands.reduce((s, c) => s + (montosClase?.get(c.indice) ?? c.monto), 0) * 100) / 100;
   const { data, error } = await acotada(supabaseAdmin().from('peaje_reclamo').insert({
     tenant_id: tenantId, desglose_id: entrada.desgloseId, proveedor: reporte.proveedor, categoria: entrada.categoria,
     estado: enviado ? 'enviado' : 'preparado', n_cruces: cands.length, monto_reclamado: monto, monto_acreditado: 0,
@@ -2400,7 +2658,7 @@ export async function crearReclamoDeCategoria(
 
 /** Marca un reclamo preparado como enviado. */
 export async function marcarReclamoEnviado(tenantId: string, id: string, enviadoEn: string, referenciaPortal?: string | null): Promise<Resultado> {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(enviadoEn)) return { ok: false, motivo: 'La fecha de envío debe ser AAAA-MM-DD.' };
+  if (!esFechaReal(enviadoEn)) return { ok: false, motivo: 'La fecha de envío debe ser AAAA-MM-DD.' };
   const { data, error } = await acotada(supabaseAdmin().from('peaje_reclamo')
     .update({ estado: 'enviado', enviado_en: enviadoEn, referencia_portal: referenciaPortal?.trim().slice(0, 120) || null, actualizado_en: new Date().toISOString() })
     .eq('tenant_id', tenantId).eq('id', id).eq('estado', 'preparado').select('id'), 'revision_cobros.marcar_enviado');
@@ -2421,7 +2679,7 @@ export async function registrarNotaDeCredito(
   tenantId: string, entrada: { reclamoId: string; monto: number; fecha: string; referencia?: string | null; versionVista?: string | null },
 ): Promise<Resultado> {
   if (!Number.isFinite(entrada.monto) || entrada.monto <= 0 || entrada.monto > 1e9) return { ok: false, motivo: 'El monto de la nota de crédito debe ser mayor a cero.' };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(entrada.fecha)) return { ok: false, motivo: 'La fecha de la nota debe ser AAAA-MM-DD.' };
+  if (!esFechaReal(entrada.fecha)) return { ok: false, motivo: 'La fecha de la nota debe ser AAAA-MM-DD.' };
 
   // A33-06 (migración 0860): camino ATÓMICO e IDEMPOTENTE en la base (candado de fila + clave por reclamo). La clave junta el reclamo, lo que
   // la pantalla VIO (`versionVista`: estado y total acreditado al pintar el formulario) y el contenido de la nota: un doble clic o dos pestañas
@@ -2502,12 +2760,23 @@ export async function registrarNotaDeCredito(
   return { ok: true };
 }
 
-export async function marcarReclamoRechazado(tenantId: string, id: string): Promise<boolean> {
-  const { error } = await acotada(supabaseAdmin().from('peaje_reclamo')
+/**
+ * «El proveedor lo rechazó». A37-S15-04: devolvía `!error`, así que una pestaña
+ * vieja (reclamo ya acreditado o ya rechazado) o un id ajeno —0 filas
+ * afectadas— se contaba como éxito y la pantalla decía «Reclamo marcado como
+ * rechazado» sin que nada cambiara. Ahora se exige al menos una fila:
+ *  · `'rechazado'`  — se cambió el estado;
+ *  · `'sin_cambio'` — ninguna fila cumplía (no existe, es de otra flota, o ya no
+ *    está enviado/acreditado en parte);
+ *  · `'error'`      — la base falló.
+ */
+export async function marcarReclamoRechazado(tenantId: string, id: string): Promise<'rechazado' | 'sin_cambio' | 'error'> {
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_reclamo')
     .update({ estado: 'rechazado', actualizado_en: new Date().toISOString() })
-    .eq('tenant_id', tenantId).eq('id', id).in('estado', ['enviado', 'acreditado_parcial']), 'revision_cobros.rechazar');
-  if (error) logger.error('revision_cobros.rechazar', { tenant: tenantId, err: error.message });
-  return !error;
+    .eq('tenant_id', tenantId).eq('id', id).in('estado', ['enviado', 'acreditado_parcial'])
+    .select('id'), 'revision_cobros.rechazar');
+  if (error) { logger.error('revision_cobros.rechazar', { tenant: tenantId, err: error.message }); return 'error'; }
+  return Array.isArray(data) && data.length > 0 ? 'rechazado' : 'sin_cambio';
 }
 
 export { ESTADOS_RECLAMO };

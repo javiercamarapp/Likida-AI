@@ -297,3 +297,86 @@ describe('pullDesgloses: rendimiento', () => {
     expect(ms).toBeLessThan(2000);
   });
 });
+
+describe('A37-A1-liquidaciones-17: más de 300 ítems releídos NO dejan el pull fallando para siempre', () => {
+  it('360 ítems ya procesados dentro de la ventana de 24 h + 3 nuevos: la pasada termina ok, importa los nuevos y el cursor avanza', async () => {
+    const b = banco();
+    const viejas = Array.from({ length: 360 }, (_, i) => ({
+      modificadoEn: new Date(Date.UTC(2026, 9, 14, 0, 0, i)).toISOString(), desglose: bitacora(i + 1),
+    }));
+    for (let i = 1; i <= 360; i++) b.recibidos.set(clave(i), 900); // ya recibidas: la relectura las absorbe como idempotentes
+    b.estado.cursor = { desde: '2026-10-14T10:00:00.000Z', despuesDe: clave(360) };
+    const nuevas = [361, 362, 363].map((n, i) => ({ modificadoEn: new Date(Date.UTC(2026, 9, 14, 11, 0, i)).toISOString(), desglose: bitacora(n) }));
+    const r = await pullDesgloses(TENANT, lectorEnMemoria([...viejas, ...nuevas]), b.deps);
+    expect(r.estado).toBe('ok');
+    expect(r.error).toBeUndefined();
+    expect(r.importadas).toBe(3);
+    expect(b.estado.cursor?.despuesDe).toBe(clave(363));
+    expect(b.estado.ultimoError).toBeNull();
+  });
+
+  it('un cursor antiguo tras una caída (ventana enorme de ya procesados) tampoco lo atasca', async () => {
+    const b = banco();
+    const todas = Array.from({ length: 450 }, (_, i) => ({
+      modificadoEn: new Date(Date.UTC(2026, 9, 14, 0, 0, i)).toISOString(), desglose: bitacora(i + 1),
+    }));
+    for (let i = 1; i <= 400; i++) b.recibidos.set(clave(i), 900);
+    b.estado.cursor = { desde: new Date(Date.UTC(2026, 9, 14, 0, 0, 399)).toISOString(), despuesDe: clave(400) };
+    const r = await pullDesgloses(TENANT, lectorEnMemoria(todas), b.deps);
+    expect(r.estado).toBe('ok');
+    expect(r.importadas).toBe(50);
+    expect(r.relecturaTruncada).toBe(true);
+    // Lo releído está acotado: no recorre toda la ventana (400 ya procesados) para llegar a lo nuevo.
+    expect(b.llamadasRecibir.length).toBeLessThan(400 + 50);
+  });
+});
+
+describe('A37-A1-liquidaciones-07: un error de DATOS de un ítem no congela el pull', () => {
+  it('la recepción choca con el índice único de la bitácora (misma bitácora, otra clave): excepción visible y SIGUE con los demás', async () => {
+    const { DesgloseEnConflicto } = await import('./repo_correo');
+    const b = banco();
+    const recibir = b.deps.recibir;
+    b.deps.recibir = async (t, d) => {
+      if (d.bitacora === 'B-0002') throw new DesgloseEnConflicto('bitácora duplicada');
+      return recibir(t, d);
+    };
+    const r = await pullDesgloses(TENANT, lectorEnMemoria([fila(1), fila(2), fila(3)]), b.deps);
+    expect(r.estado).toBe('ok');
+    expect(r.importadas).toBe(2);
+    expect(abiertas(b, 'mapeo_invalido').map((e) => e.clave)).toEqual([clave(2)]);
+    expect(b.estado.cursor?.despuesDe).toBe(clave(3)); // el cursor pasó por encima del ítem en conflicto, que ya es visible
+    expect(b.estado.ultimoError).toBeNull();
+  });
+  it('un error de infraestructura (storage caído) SIGUE deteniendo la pasada con el cursor intacto', async () => {
+    const b = banco({ falla: (n) => n === 2 });
+    const r = await pullDesgloses(TENANT, lectorEnMemoria([fila(1), fila(2), fila(3)]), b.deps);
+    expect(r.estado).toBe('error');
+    expect(b.llamadasRecibir).not.toContain(clave(3));
+  });
+});
+
+describe('A37-A1-liquidaciones-06: un pull que no avanza se hace notar', () => {
+  it('error con el último éxito de hace más de 6 h ⇒ atascado', async () => {
+    const b = banco({ falla: () => true });
+    b.estado.ultimoExito = '2026-10-15T01:00:00.000Z'; // AHORA = 12:00Z
+    const r = await pullDesgloses(TENANT, lectorEnMemoria([fila(1)]), b.deps);
+    expect(r).toMatchObject({ estado: 'error', atascado: true });
+  });
+  it('error reciente (último éxito hace 1 h) ⇒ aún no es atasco', async () => {
+    const b = banco({ falla: () => true });
+    b.estado.ultimoExito = '2026-10-15T11:00:00.000Z';
+    const r = await pullDesgloses(TENANT, lectorEnMemoria([fila(1)]), b.deps);
+    expect(r.estado).toBe('error');
+    expect(r.atascado).toBeUndefined();
+  });
+  it('nunca ha tenido éxito y falla ⇒ atascado (credencial mala, etc.)', async () => {
+    const b = banco({ falla: () => true });
+    const r = await pullDesgloses(TENANT, lectorEnMemoria([fila(1)]), b.deps);
+    expect(r).toMatchObject({ estado: 'error', atascado: true });
+  });
+  it('una pasada ok jamás es atasco', async () => {
+    const b = banco();
+    b.estado.ultimoExito = '2026-10-01T00:00:00.000Z';
+    expect((await pullDesgloses(TENANT, lectorEnMemoria([fila(1)]), b.deps)).atascado).toBeUndefined();
+  });
+});

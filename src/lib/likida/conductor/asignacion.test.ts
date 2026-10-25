@@ -29,6 +29,8 @@ interface Opc {
   via?: 'texto' | 'botones' | 'plantilla';
   destinos?: Array<{ nombre: string; telefono: string }>;
   reclamoPerdido?: boolean;
+  /** Cómo terminó el aviso del primer toque cuando el claim ya existe: true salió/en cola, false falló, null sigue en camino, undefined no hay registro. */
+  avisoPrevio?: boolean | null;
 }
 
 function puertos(o: Opc = {}) {
@@ -53,6 +55,7 @@ function puertos(o: Opc = {}) {
     },
     convenio: async (_t, viajeId) => { convenios.push(viajeId); },
     reclamar: async (a) => { claims.push({ clase: a.clase, nivel: a.nivel, hitoId: a.hitoId }); return o.reclamoPerdido ? 'perdido' : 'ganado'; },
+    avisosDe: async (ids) => (o.reclamoPerdido && o.avisoPrevio !== undefined ? ids.map((hitoId) => ({ hitoId, clase: 'escalacion' as const, nivel: NIVEL_AVISO_RECHAZO, ciclo: 1, ok: o.avisoPrevio })) : []),
     cerrarAviso: async (_a, c) => { cierres.push({ ok: c.ok, motivo: c.motivo }); },
     destinatarios: async () => o.destinos ?? [{ nombre: 'Despachador', telefono: '5219990009999' }],
     enviar: async (tel, m, contexto) => {
@@ -254,10 +257,23 @@ describe('rechazar con el botón', () => {
   });
 
   it('tocar dos veces no duplica el aviso (el claim ya está ganado por la primera)', async () => {
-    const { pu, toca } = escenario({ reclamoPerdido: true });
+    const { pu, toca } = escenario({ reclamoPerdido: true, avisoPrevio: true });
     const r = await toca('viaje_rechazo');
     expect(pu.enviados).toEqual([]);
     expect(textos(r)).toMatch(/Ya le avisé al despachador/);
+  });
+
+  it('A37-S34-03: si el claim previo cerró con fallo (nunca salió el aviso), el segundo toque NO dice «ya le avisé»', async () => {
+    const { pu, toca } = escenario({ reclamoPerdido: true, avisoPrevio: false });
+    const r = await toca('viaje_rechazo');
+    expect(pu.enviados).toEqual([]);
+    expect(textos(r)).not.toMatch(/Ya le avisé/);
+    expect(textos(r)).toMatch(/no pude avisarle al despachador/);
+  });
+
+  it('A37-S34-03: claim previo aún en camino (sin resultado) o sin registro legible: lo primero cuenta como avisado, lo segundo no', async () => {
+    expect(textos(await escenario({ reclamoPerdido: true, avisoPrevio: null }).toca('viaje_rechazo'))).toMatch(/Ya le avisé/);
+    expect(textos(await escenario({ reclamoPerdido: true }).toca('viaje_rechazo'))).toMatch(/no pude avisarle/);
   });
 
   it('sin destinatario no es silencio: el claim queda cerrado con el motivo y al chofer se le dice que avise directo', async () => {

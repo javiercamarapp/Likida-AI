@@ -117,9 +117,9 @@ export const ORDEN_AVISO: RolOficina[] = ['encargado', 'flota_admin'];
 const ROLES_OFICINA_CONSULTA: RolOficina[] = ['encargado', 'flota_admin', 'contador'];
 
 /** E.164 sin `+`. `null` si esa flota no tiene a quién escribirle. */
-export async function telefonoJefeDe(tenantId: string): Promise<string | null> {
-  const mapa = await telefonosJefe([tenantId]);
-  return mapa[tenantId] ?? null;
+export async function telefonoJefeDe(tenantId: string, terminalId?: string | null): Promise<string | null> {
+  const jefe = await resolverJefes([tenantId]);
+  return jefe(tenantId, terminalId);
 }
 
 /**
@@ -189,6 +189,35 @@ export async function telefonoParaDineroDe(tenantId: string): Promise<string | n
 export async function telefonosJefe(tenantIds: string[]): Promise<Record<string, string>> {
   const ids = [...new Set(tenantIds)].filter(Boolean);
   if (ids.length === 0) return {};
+  const jefe = await resolverJefes(ids);
+  const mapa: Record<string, string> = {};
+  for (const tenantId of ids) {
+    const tel = jefe(tenantId);
+    if (tel) mapa[tenantId] = tel;
+  }
+  return mapa;
+}
+
+/** Quién recibe el aviso de operación de una flota; con `terminalId` (el patio
+ *  del viaje) prefiere al encargado de ESE patio. `null` = no hay a quién avisar. */
+export type ResolverJefe = (tenantId: string, terminalId?: string | null) => string | null;
+
+/**
+ * A37-S39-06: la misma lectura de `telefonosJefe`, pero devolviendo un
+ * resolvedor por patio. Dentro de cada rol del orden de aviso se prefiere, en
+ * este orden: (1) quien tiene el `terminal_id` del viaje, (2) quien no está
+ * atado a ningún patio. Si el rol solo tiene gente de OTROS patios se pasa al
+ * siguiente rol; solo si ningún rol sirve y el viaje trae patio se cae a la
+ * selección anterior (cualquiera de la flota), para no perder el aviso.
+ *
+ * FAIL-CLOSED: si el perfil de la flota (que declara a quién avisar y a quién
+ * NO) no se pudo leer ni tras un reintento, esa flota queda SIN destinatario —
+ * antes caía al orden por omisión y avisaba al encargado aunque la flota
+ * hubiera declarado enviar solo al dueño o al contador.
+ */
+export async function resolverJefes(tenantIds: string[]): Promise<ResolverJefe> {
+  const ids = [...new Set(tenantIds)].filter(Boolean);
+  if (ids.length === 0) return () => null;
 
   // AUDITORÍA 18, ALTO (A23): con techo — `telefonoJefeDe` corre en el cierre.
   // AUDITORÍA 25, CRÍTICO (AGEN-C1): `activo`, por la misma razón que arriba.
@@ -203,10 +232,10 @@ export async function telefonosJefe(tenantIds: string[]): Promise<Record<string,
   // el lote, PostgREST recorta EN SILENCIO y las flotas fuera del corte
   // salían del mapa como si no tuvieran contacto. `traerTodo` pagina y LANZA
   // si no puede demostrar que trajo todo, en vez de devolver el recorte.
-  const data = await traerTodo<{ tenant_id: string; rol: string; telefono: string; activo: boolean | null }>(
+  const data = await traerTodo<{ tenant_id: string; rol: string; telefono: string; activo: boolean | null; terminal_id?: string | null }>(
     (desde, hasta) => acotada(supabaseAdmin()
       .from('app_user')
-      .select('tenant_id, rol, telefono, activo')
+      .select('tenant_id, rol, telefono, activo, terminal_id')
       .in('tenant_id', ids)
       .in('rol', ROLES_OFICINA_CONSULTA)
       .or('activo.is.null,activo.eq.true')
@@ -216,19 +245,29 @@ export async function telefonosJefe(tenantIds: string[]): Promise<Record<string,
     'telefonosJefe',
   );
 
-  const ordenPorTenant = await ordenesAvisoDe(ids);
+  const { ordenes: ordenPorTenant, ilegibles } = await ordenesAvisoDe(ids);
 
-  const mapa: Record<string, string> = {};
-  // Se recorre en el orden de preferencia, no en el que devolvió la base: sin
-  // esto, qué persona recibe el aviso dependería del orden de inserción.
-  for (const tenantId of ids) {
+  return (tenantId, terminalId = null) => {
+    if (ilegibles.has(tenantId)) return null;
     const orden = ordenPorTenant[tenantId] ?? ORDEN_AVISO;
+    const vivos = (data ?? []).filter((f) => f.tenant_id === tenantId && f.telefono && f.activo !== false);
+    // Se recorre en el orden de preferencia, no en el que devolvió la base: sin
+    // esto, qué persona recibe el aviso dependería del orden de inserción.
     for (const rol of orden) {
-      const u = (data ?? []).find((f) => f.tenant_id === tenantId && f.rol === rol && f.telefono && f.activo !== false);
-      if (u) { mapa[tenantId] = u.telefono as string; break; }
+      const delRol = vivos.filter((f) => f.rol === rol);
+      const elegido = terminalId
+        ? (delRol.find((f) => f.terminal_id === terminalId) ?? delRol.find((f) => !f.terminal_id))
+        : delRol[0];
+      if (elegido) return elegido.telefono as string;
     }
-  }
-  return mapa;
+    if (terminalId) {
+      for (const rol of orden) {
+        const u = vivos.find((f) => f.rol === rol);
+        if (u) return u.telefono as string;
+      }
+    }
+    return null;
+  };
 }
 
 /**
@@ -260,25 +299,32 @@ export async function telefonoDeUsuario(userId: string, tenantId: string): Promi
   return f.telefono;
 }
 
-/** Perfil por flota. Best-effort: si no se puede leer, cada flota cae al
- *  default. Un fallo aquí no puede silenciar un aviso de operación. */
-async function ordenesAvisoDe(ids: string[]): Promise<Record<string, RolAviso[]>> {
-  try {
-    const { data, error } = await acotada(
-      supabaseAdmin().from('tenant').select('id, perfil').in('id', ids),
-      'telefonosJefe.perfil',
-    );
-    if (error || !data) return {};
-    const out: Record<string, RolAviso[]> = {};
-    for (const t of data as Array<{ id: unknown; perfil: unknown }>) {
-      const id = typeof t.id === 'string' ? t.id : null;
-      if (!id) continue;
-      const orden = ordenAvisoDeclarado(t.perfil);
-      if (orden) out[id] = orden;
+/**
+ * Perfil por flota. Una lectura fallida se reintenta una vez; si sigue
+ * fallando, las flotas quedan en `ilegibles` y NO se les avisa (A37-S39-06):
+ * el perfil es quien dice a quién NO se le manda, y usar el orden por omisión
+ * a ciegas filtraría avisos con nombre de chofer y viaje al rol equivocado.
+ */
+async function ordenesAvisoDe(ids: string[]): Promise<{ ordenes: Record<string, RolAviso[]>; ilegibles: Set<string> }> {
+  for (let intento = 0; intento < 2; intento++) {
+    try {
+      const { data, error } = await acotada(
+        supabaseAdmin().from('tenant').select('id, perfil').in('id', ids),
+        'telefonosJefe.perfil',
+      );
+      if (error || !data) throw new Error(error?.message ?? 'sin datos');
+      const ordenes: Record<string, RolAviso[]> = {};
+      for (const t of data as Array<{ id: unknown; perfil: unknown }>) {
+        const id = typeof t.id === 'string' ? t.id : null;
+        if (!id) continue;
+        const orden = ordenAvisoDeclarado(t.perfil);
+        if (orden) ordenes[id] = orden;
+      }
+      return { ordenes, ilegibles: new Set() };
+    } catch (e) {
+      logger.warn('contactos.orden_aviso_perfil', { intento, err: e instanceof Error ? e.message : String(e) });
     }
-    return out;
-  } catch (e) {
-    logger.warn('contactos.orden_aviso_perfil', { err: e instanceof Error ? e.message : String(e) });
-    return {};
   }
+  logger.error('contactos.orden_aviso_perfil_ilegible', { flotas: ids.length });
+  return { ordenes: {}, ilegibles: new Set(ids) };
 }

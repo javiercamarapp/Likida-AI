@@ -2,6 +2,7 @@ import { haversineM, coordenadasValidas } from './geo';
 import { dentroDeGeocerca } from '../conductor/geo';
 import type { Muestra } from './cruce_gps';
 import { numero } from '@/lib/formato';
+import { normalizarTag } from './formatos';
 import { evaluarCurso, type CursoAplicable, type EvaluacionCurso } from './cursos';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -256,8 +257,10 @@ export function construirReclamacion(
   const duplicadoDe = new Map<number, number>(); // índice de la línea duplicada → línea (1-based) del primer cobro
   const grupos = new Map<string, LineaReclamable[]>();
   for (const l of lineas) {
-    if (!l.tag || l.cruceMs === null) continue;
-    const k = `${l.tag}|${normCaseta(l)}`;
+    // A37-A2-19: la llave usa el TAG normalizado (igual que reglas_cobro); un valor que no es TAG no agrupa.
+    const tagNorm = l.tag ? normalizarTag(l.tag) : null;
+    if (!tagNorm || l.cruceMs === null) continue;
+    const k = `${tagNorm}|${normCaseta(l)}`;
     const g = grupos.get(k) ?? [];
     g.push(l);
     grupos.set(k, g);

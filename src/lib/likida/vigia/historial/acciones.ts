@@ -3,7 +3,7 @@ import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { puedeAdministrar } from '@/lib/auth/permisos';
-import { leerExportWhatsapp, type MensajeHistorial } from './export_whatsapp';
+import { leerExportWhatsapp, MAX_MENSAJES_IMPORTACION, salDeFlota, type MensajeHistorial } from './export_whatsapp';
 import { esZip, textoDeZip } from './zip_lector';
 import { aprobarRespuestaRapida, borrarGrupo, crearGrupo, grupoDeFlota, guardarImportacion, marcarGrupoCritico, retirarRespuestaRapida } from './repo';
 import { validarRespuestaRapida } from '../respuestas_rapidas';
@@ -120,9 +120,14 @@ export async function importarHistorialPanel(ctx: ContextoGrupos, fd: FormData, 
   try {
     const grupo = await d.grupoDeFlota(ctx.tenantId, grupoId);
     if (!grupo) return { ok: false, error: 'No encuentro ese grupo en tu flota.' };
-    const lectura = leerExportWhatsapp(crudo, { equipo, sal: ctx.tenantId });
+    const lectura = leerExportWhatsapp(crudo, { equipo, sal: salDeFlota(ctx.tenantId) });
     if (lectura.mensajes.length === 0) {
       return { ok: false, error: 'No pude leer ningún mensaje en ese archivo. Revisa que sea el chat exportado de WhatsApp (en iPhone o Android) y no una captura ni otro documento.' };
+    }
+    // A37-S58-02: un chat más largo que el tope NO se guarda cortado (las FAQs, los tiempos de respuesta y los pendientes se
+    // calcularían sobre un periodo viejo y se presentarían como el chat completo).
+    if (lectura.truncado) {
+      return { ok: false, error: `Ese chat tiene más de ${MAX_MENSAJES_IMPORTACION} mensajes y no se guardó: se habría cortado y los números saldrían de un periodo viejo. Exporta un periodo más corto (por ejemplo los últimos meses) y súbelo.` };
     }
     const hayCliente = lectura.mensajes.some((m: MensajeHistorial) => m.rol === 'cliente');
     const hayEquipo = lectura.mensajes.some((m: MensajeHistorial) => m.rol === 'equipo');
@@ -141,7 +146,7 @@ export async function importarHistorialPanel(ctx: ContextoGrupos, fd: FormData, 
     const notas = [`${lectura.mensajes.length} mensajes de ${lectura.autores} personas`];
     if (lectura.descartados > 0) notas.push(`${lectura.descartados} líneas de sistema o multimedia omitidas`);
     if (lectura.fechasInvalidas > 0) notas.push(`${lectura.fechasInvalidas} con fecha ilegible`);
-    return { ok: true, mensaje: `Histórico guardado en «${grupo.nombre}»: ${notas.join(' · ')}. Teléfonos, correos y nombres de autores no se guardaron.` };
+    return { ok: true, mensaje: `Histórico guardado en «${grupo.nombre}»: ${notas.join(' · ')}. Se tapan teléfonos y correos y el nombre de cada autor se guarda solo como huella; pero el texto de los mensajes se conserva tal cual, así que puede incluir nombres, placas o licencias que se hayan dicho en el chat (se purga a los 180 días).` };
   } catch (e) {
     logger.error('vigia.historial_importar_fallo', { err: e instanceof Error ? e.message : String(e) });
     return { ok: false, error: mensajeParaPantalla(e, 'guardar el histórico') };

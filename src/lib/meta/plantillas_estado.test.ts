@@ -152,6 +152,21 @@ describe('crearPlantillaMeta', () => {
     expect(init!.method).toBe('POST');
     expect(JSON.parse(String(init!.body))).toMatchObject({ name: 'conductor_recordatorio_1_v1', category: 'UTILITY', language: 'es_MX' });
   });
+  it('A37-S61-09: encabezado de medios SIN handle no hace POST (Meta lo rechaza): dice cómo crearla', async () => {
+    const f = vi.fn<FetchLike>().mockResolvedValue(respuesta({ id: '1' }));
+    const r = await crearPlantillaMeta(CRED, plantillaDeCatalogo('liquidacion_externa_v1')!, f);
+    expect(f).not.toHaveBeenCalled();
+    expect(r.ok).toBe(false);
+    expect(JSON.stringify(r)).toMatch(/header_handle/);
+    expect(JSON.stringify(r)).toMatch(/a mano|WhatsApp Manager/i);
+  });
+  it('A37-S61-09: con handle de Resumable Upload, el HEADER lleva example.header_handle', async () => {
+    const f = vi.fn<FetchLike>().mockResolvedValue(respuesta({ id: '777' }));
+    const r = await crearPlantillaMeta(CRED, plantillaDeCatalogo('liquidacion_externa_v1')!, f, { headerHandle: '4::aW1hZ2U' });
+    expect(r).toEqual({ ok: true, id: '777' });
+    const cuerpo = JSON.parse(String(f.mock.calls[0][1]!.body)) as { components: Array<Record<string, unknown>> };
+    expect(cuerpo.components[0]).toEqual({ type: 'HEADER', format: 'DOCUMENT', example: { header_handle: ['4::aW1hZ2U'] } });
+  });
   it('rechazo de Meta: devuelve el error sin el token', async () => {
     const f = vi.fn<FetchLike>().mockResolvedValue(respuesta(`{"error":{"message":"x ${CRED.token}"}}`, 400));
     const r = await crearPlantillaMeta(CRED, plantillaDeCatalogo('plazo_factura')!, f);

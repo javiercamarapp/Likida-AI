@@ -25,7 +25,14 @@ describe('VACÍO NO ES CERO — la regla que sostiene todo el módulo', () => {
   it('un CERO TECLEADO sí es cero — es una medición', () => {
     // Un viaje de cortesía, o el tramo de regreso que se factura aparte.
     expect(V({ ingresoFlete: '0' }).ingresoFlete).toBe(0);
-    expect(V({ kmRecorridos: '0' }).kmRecorridos).toBe(0);
+  });
+
+  it('A37-P-03: km 0 o con decimales se rechaza con mensaje claro (la base exige entero 1..19999)', () => {
+    expect(() => V({ kmRecorridos: '0' })).toThrow(/entero entre 1 y 19,999/);
+    expect(() => V({ kmRecorridos: '12.5' })).toThrow(/entero entre 1 y 19,999/);
+    expect(() => V({ kmRecorridos: '20000' })).toThrow(DatoInvalido);
+    expect(V({ kmRecorridos: '1' }).kmRecorridos).toBe(1);
+    expect(V({ kmRecorridos: '19999' }).kmRecorridos).toBe(19999);
   });
 });
 
@@ -57,6 +64,20 @@ describe('los topes cazan el dedazo al capturar, no tres semanas después', () =
   it('un valor negativo no pasa', () => {
     expect(() => V({ ingresoFlete: '-100' })).toThrow(/no puede ser negativo/);
     expect(() => V({ kmRecorridos: '-1' })).toThrow(/no puede ser negativo/);
+  });
+
+  // A37-L-05: Number() aceptaba notación científica, hexadecimal y centavos de más.
+  it('A37-L-05: rechaza notación científica y hexadecimal en el ingreso y los km', () => {
+    expect(() => V({ ingresoFlete: '1e4' })).toThrow(/número/);
+    expect(() => V({ ingresoFlete: '0x10' })).toThrow(/número/);
+    expect(() => V({ kmRecorridos: '1e3' })).toThrow(/número/);
+    expect(() => V({ ingresoFlete: 'Infinity' })).toThrow(/número/);
+  });
+
+  it('A37-L-05: el ingreso rechaza más de dos decimales en vez de redondear en silencio', () => {
+    expect(() => V({ ingresoFlete: '38500.005' })).toThrow(/dos decimales/);
+    expect(V({ ingresoFlete: '38500.05' }).ingresoFlete).toBe(38500.05);
+    expect(V({ ingresoFlete: '1234.56' }).ingresoFlete).toBe(1234.56);
   });
 
   it('texto que no es número no se convierte en NaN silencioso', () => {

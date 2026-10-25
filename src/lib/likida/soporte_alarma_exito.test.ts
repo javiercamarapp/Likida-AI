@@ -50,7 +50,7 @@ vi.mock('./agentes/cola', () => ({ encolarPieza: vi.fn(async () => 'pieza-1') })
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: vi.fn(async () => undefined) }));
 vi.mock('./contactos', () => ({ telefonosJefe: vi.fn(async () => ({})) }));
 vi.mock('@/lib/admin/onboarding', () => ({ getOnboardingFlotas: vi.fn(async () => new Map()) }));
-vi.mock('@/lib/saas/transferencia', () => ({ getPorCobrar: vi.fn(async () => []) }));
+vi.mock('@/lib/saas/transferencia', () => ({ getPorCobrarCompleto: vi.fn(async () => []) }));
 
 const { responderTicket } = await import('./soporte');
 const { cuentaComoRespuesta } = await import('./agentes/exito');

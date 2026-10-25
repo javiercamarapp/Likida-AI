@@ -21,8 +21,9 @@
 
 import { createHash } from 'node:crypto';
 import { logger } from '@/lib/logger';
-import { DatoInvalido } from '../errores';
-import { huellaContenido } from './esquema';
+import { DatoInvalido, OperadorDeBaja } from '../errores';
+import { huellaContenido, huellaDesglose } from './esquema';
+import type { LiquidacionExternaNormalizada } from './esquema';
 import {
   aLiquidacionExterna, claveDeBitacora, claveDeLiquidacion, UnidadesMezcladas, type DesgloseBitacora, type RenglonBitacora,
 } from './desglose_contrato';
@@ -134,6 +135,18 @@ export interface OpcionesDesglose {
 export const MAX_CORRECCIONES = 20;
 
 const SISTEMA_ORIGEN_DEFECTO = 'desglose-bitacora';
+/** Los orígenes con que se han guardado desgloses (pull/por omisión y POST): sus huellas ANTERIORES siguen reconociéndose. */
+const ORIGENES_CON_HUELLA_ANTERIOR = [SISTEMA_ORIGEN_DEFECTO, 'desglose-bitacora-api'];
+
+/**
+ * A37-A1-liquidaciones-09: ¿la huella guardada es la de este mismo contenido? La actual es canónica (sin orden de renglones ni
+ * origen); las filas guardadas ANTES llevan `huellaContenido` (con el orden recibido y el `sistemaOrigen`), que se reconoce con el
+ * origen de esta lectura y con los orígenes conocidos. Un contenido realmente distinto no coincide con ninguna.
+ */
+function mismaHuella(guardada: string, liq: LiquidacionExternaNormalizada): boolean {
+  if (guardada === huellaDesglose(liq)) return true;
+  return [liq.sistemaOrigen, ...ORIGENES_CON_HUELLA_ANTERIOR].some((o) => guardada === huellaContenido({ ...liq, sistemaOrigen: o }));
+}
 
 // ── Utilidades ──────────────────────────────────────────────────────────────
 
@@ -221,7 +234,7 @@ export async function recibirDesglose(
   }
   let liq = conversion.liquidacion;
   let claveExterna = liq.claveExterna;
-  let huella = huellaContenido(liq);
+  let huella = huellaDesglose(liq);
   const ahora = deps.ahora();
 
   // (2) idempotencia / corrección
@@ -230,7 +243,7 @@ export async function recibirDesglose(
   // hay que completarla. `rescate` guarda esa fila y el resto del flujo la completa en vez de insertar otra.
   let rescate: LiquidacionExterna | null = null;
   if (existente) {
-    if (existente.huella === huella) {
+    if (mismaHuella(existente.huella, liq)) {
       if (!deps.desgloseIncompleto || !(await deps.desgloseIncompleto(tenantId, existente.id))) {
         return { estado: 'idempotente', liquidacionId: existente.id, claveExterna };
       }
@@ -248,7 +261,7 @@ export async function recibirDesglose(
       const claveR = `${base}-R${n}`;
       const previa = await deps.buscarPorClave(tenantId, claveR);
       if (!previa) break;
-      if (previa.huella === huellaContenido({ ...liq, claveExterna: claveR })) {
+      if (mismaHuella(previa.huella, { ...liq, claveExterna: claveR })) {
         return { estado: 'idempotente', liquidacionId: previa.id, claveExterna: claveR };
       }
     }
@@ -256,12 +269,14 @@ export async function recibirDesglose(
     correccionDe = base;
     claveExterna = `${base}-R${n}`;
     liq = { ...liq, claveExterna };
-    huella = huellaContenido(liq);
+    huella = huellaDesglose(liq);
     existente = null;
   }
   if (existente) {
+    // A37-A1-liquidaciones-15: el detalle de la excepción NO guarda importes (la migración 0786 promete «ids y motivos»; esta tabla
+    // no tiene purga): la persona compara contra el origen. Solo se anota QUÉ cambió y que cambió el importe, sin la cifra.
     await deps.abrirExcepcion(tenantId, claveExterna, 'correccion_pendiente', {
-      bitacora: d.bitacora, netoAntes: existente.total, netoDespues: liq.total,
+      bitacora: d.bitacora, cambioElNeto: existente.total !== liq.total,
     }, ahora);
     logger.warn('liqcorreo.correccion_pendiente', { clave: claveExterna });
     return { estado: 'correccion_pendiente', liquidacionId: existente.id, claveExterna };
@@ -273,7 +288,10 @@ export async function recibirDesglose(
     operador = await deps.resolverOperador(tenantId, d.operador.numeroEmpleado);
   } catch (e) {
     if (!(e instanceof DatoInvalido)) throw e;
-    await deps.abrirExcepcion(tenantId, claveExterna, 'operador_no_encontrado', { bitacora: d.bitacora }, ahora);
+    // A37-A1-liquidaciones-12: la excepción distingue al operador DE BAJA (finiquito, reactivar) del que no existe (dar de alta).
+    await deps.abrirExcepcion(tenantId, claveExterna, 'operador_no_encontrado', {
+      bitacora: d.bitacora, motivo: e instanceof OperadorDeBaja ? 'baja' : 'no_existe',
+    }, ahora);
     return { estado: 'operador_no_encontrado', claveExterna };
   }
 

@@ -372,6 +372,79 @@ describe('crearFactura — la serie viaja con el folio (RES-22)', () => {
   });
 });
 
+describe('A37-S45-07 — crearFactura valida viajes contra cliente y facturas vivas', () => {
+  const V1 = 'aaaaaaaa-0000-4000-8000-000000000001';
+  const V2 = 'aaaaaaaa-0000-4000-8000-000000000002';
+  const OTRA = 'bbbbbbbb-0000-4000-8000-000000000009';
+  const cliente = () => respuestas.set('cliente', [{ data: { id: CLIENTE, dias_credito: null }, error: null }]);
+
+  it('un viaje de OTRO cliente se rechaza sin insertar nada', async () => {
+    cliente();
+    respuestas.set('viaje', [{ data: [{ id: V1, cliente_id: CLIENTE }, { id: V2, cliente_id: 'otro-cliente' }], error: null }]);
+    const err = await crearFactura(T, factura({ viajeIds: [V1, V2] })).catch((e) => e);
+    expect(err).toBeInstanceOf(DatoInvalido);
+    expect(err.message).toMatch(/otro cliente/);
+    expect(escrituras).toEqual([]);
+  });
+
+  it('un viaje que ya ampara una factura EMITIDA se rechaza sin insertar nada', async () => {
+    cliente();
+    respuestas.set('viaje', [{ data: [{ id: V1, cliente_id: CLIENTE }], error: null }]);
+    respuestas.set('factura_viaje', [{ data: [{ factura_id: OTRA, viaje_id: V1, factura_emitida: { estatus: 'emitida' } }], error: null }]);
+    const err = await crearFactura(T, factura({ viajeIds: [V1] })).catch((e) => e);
+    expect(err).toBeInstanceOf(DatoInvalido);
+    expect(err.message).toMatch(/ya está amparado por otra factura/);
+    expect(escrituras).toEqual([]);
+  });
+
+  it('el doble clic: el mismo borrador reciente devuelve el id existente, sin segundo juego de ligas', async () => {
+    cliente();
+    respuestas.set('viaje', [{ data: [{ id: V1, cliente_id: CLIENTE }], error: null }]);
+    respuestas.set('factura_viaje', [{ data: [{ factura_id: OTRA, viaje_id: V1, factura_emitida: { estatus: 'borrador' } }], error: null }]);
+    respuestas.set('factura_emitida', [{
+      data: [{
+        id: OTRA, cliente_id: CLIENTE, fecha: '2026-01-02', subtotal: 10000, iva: 1600, retencion_iva: 0,
+        total: 11600, serie: 'A', folio: '1', cfdi_uuid: null, estatus: 'borrador', creada_en: new Date().toISOString(),
+      }],
+      error: null,
+    }]);
+    const id = await crearFactura(T, factura({ viajeIds: [V1] }));
+    expect(id).toBe(OTRA);
+    expect(escrituras).toEqual([]);
+  });
+
+  it('un borrador distinto (otro importe) para el mismo viaje NO se confunde con el doble clic', async () => {
+    cliente();
+    respuestas.set('viaje', [{ data: [{ id: V1, cliente_id: CLIENTE }], error: null }]);
+    respuestas.set('factura_viaje', [{ data: [{ factura_id: OTRA, viaje_id: V1, factura_emitida: { estatus: 'borrador' } }], error: null }]);
+    respuestas.set('factura_emitida', [
+      {
+        data: [{
+          id: OTRA, cliente_id: CLIENTE, fecha: '2026-01-02', subtotal: 5000, iva: 800, retencion_iva: 0,
+          total: 5800, serie: 'A', folio: '1', cfdi_uuid: null, estatus: 'borrador', creada_en: new Date().toISOString(),
+        }],
+        error: null,
+      },
+      { data: { id: FACTURA }, error: null },
+    ]);
+    const id = await crearFactura(T, factura({ viajeIds: [V1] }));
+    expect(id).toBe(FACTURA);
+  });
+});
+
+describe('A37-S45-07 — marcarEmitida no sella un borrador cuyo viaje ya está facturado', () => {
+  it('rechaza sin UPDATE', async () => {
+    const V1 = 'aaaaaaaa-0000-4000-8000-000000000001';
+    respuestas.set('factura_viaje', [
+      { data: [{ viaje_id: V1 }], error: null },
+      { data: [{ factura_id: 'bbbbbbbb-0000-4000-8000-000000000009', viaje_id: V1, factura_emitida: { estatus: 'emitida' } }], error: null },
+    ]);
+    const err = await marcarEmitida(T, FACTURA, { folio: '1', cfdiUuid: FACTURA }).catch((e) => e);
+    expect(err).toBeInstanceOf(DatoInvalido);
+    expect(escribioEn('factura_emitida')).toEqual([]);
+  });
+});
+
 describe('marcarEmitida — la serie sólo se toca si de verdad viene', () => {
   it('sin serie en el sello, el UPDATE no la nombra: no borra la del borrador', async () => {
     respuestas.set('factura_emitida', [{ data: [{ id: FACTURA }], error: null }]);

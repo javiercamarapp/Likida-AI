@@ -19,9 +19,10 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { validarLanzar } from '@/lib/admin/qa-tipos';
 import { crearCorrida, ejecutarCorridaRapida, TOPE_DIA_USD } from '@/lib/admin/qa-motor';
-import { gastoHoyUsd, guardarCorrida, leerManifiesto } from '@/lib/admin/qa-storage';
+import { gastoTotalHoyUsd, guardarCorrida, leerManifiesto } from '@/lib/admin/qa-storage';
 import { sesionSuperadmin } from '../puerta';
 import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
+import { rateLimit } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -43,6 +44,14 @@ export async function POST(req: Request) {
   const { error, sesion } = await sesionSuperadmin();
   if (error) return error;
 
+  // A37-S08-04: el tope diario se LEE y luego se actúa (sin reserva): un doble
+  // clic o dos pestañas leen el mismo gasto previo. Un freno por usuario (1 cada
+  // 10 s) cierra esa ventana sin tocar el ledger; la fuente de verdad del gasto
+  // sigue siendo `gastoHoyUsd`.
+  if (!(await rateLimit(`qa-lanzar:${sesion.userId ?? 'sin-id'}`, 1, 10_000))) {
+    return NextResponse.json({ error: 'ya hay un lanzamiento reciente — espera unos segundos' }, { status: 429 });
+  }
+
   const lecturaCuerpo = await leerTextoAcotado(req, MAX_BODY);
   if (!lecturaCuerpo.ok) return NextResponse.json({ error: lecturaCuerpo.motivo === 'demasiado_grande' ? 'payload muy grande' : 'JSON inválido' },
     { status: lecturaCuerpo.motivo === 'demasiado_grande' ? 413 : 400 });
@@ -61,7 +70,7 @@ export async function POST(req: Request) {
 
   // El freno del día, re-chequeado en el servidor (la UI también lo enseña,
   // pero la restricción de interfaz no es el candado).
-  const gasto = await gastoHoyUsd(db);
+  const gasto = await gastoTotalHoyUsd(db);
   if (!gasto.ok) {
     return NextResponse.json({ error: `no se pudo leer el gasto del día (${gasto.error}) — no se lanza a ciegas` }, { status: 502 });
   }

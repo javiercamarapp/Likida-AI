@@ -59,6 +59,7 @@ const ARCHIVOS: Record<string, Clase> = {
   'despacho/page.tsx': 'permitido',
   'inicio-contenido.tsx': 'permitido',                      // el Resumen de siempre: bajo el perfil no se monta
   'legal/page.tsx': 'permitido',
+  'arco/page.tsx': 'permitido',                              // A37-TRANSVERSAL-06: obligación legal de la flota, no módulo comercial
   'mi-perfil/page.tsx': 'permitido',
   'operadores/page.tsx': 'permitido',
   'soporte/page.tsx': 'permitido',
@@ -75,7 +76,6 @@ const ARCHIVOS: Record<string, Clase> = {
   'agentes/facturas/acciones-vinculacion.ts': 'standby',
   'agentes/facturas/page.tsx': 'standby',
   'agentes/proveedores/page.tsx': 'standby',
-  'arco/page.tsx': 'standby',
   'asistencia/page.tsx': 'standby',
   'clientes/page.tsx': 'standby',
   'combustible-casetas/page.tsx': 'standby',
@@ -109,7 +109,8 @@ const ARCHIVOS: Record<string, Clase> = {
 };
 
 const RAIZ = join(process.cwd(), 'src/app/dashboard');
-const PUERTA = /\b(resolverTenantEfectivo|requireSessionTenant|exigirVerRuta)\(\s*([^,)]+)/g;
+// `resolverTenantAtado` (A37-S13-02) ES `resolverTenantEfectivo` + el cotejo con la flota que la pantalla pintó: misma puerta con perfil.
+const PUERTA = /\b(resolverTenantEfectivo|resolverTenantAtado|requireSessionTenant|exigirVerRuta)\(\s*([^,)]+)/g;
 
 function conUseServer(dir: string, salida: string[] = []): string[] {
   for (const ent of readdirSync(dir, { withFileTypes: true })) {

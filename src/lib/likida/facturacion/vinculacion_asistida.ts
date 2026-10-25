@@ -3,7 +3,7 @@ import { comercio as fichaComercio } from './comercios';
 import { conectorDePortal } from '../conectores/portales_facturacion';
 import { guardarSesionPortal } from './sesion_portal';
 import { anotarVinculo, recortarEstadoAlPortal } from './vinculo_portal';
-import { pantallaDeLogin } from './vinculo_senales';
+import { paginaSinRenderizar, pantallaDeLogin } from './vinculo_senales';
 import type { InventarioPagina, PaginaConInventario } from './adaptadores/playwright_base';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -121,7 +121,10 @@ export async function vincularPortalAsistido(args: {
       continue;
     }
 
-    const login = pantallaDeLogin(inv, args.senaDeAdentro);
+    const login = pantallaDeLogin(inv, args.senaDeAdentro)
+      // Una SPA que aún no dibujó nada no es «dentro» (A37-S45-03): se sigue
+      // esperando y, si nunca dibuja, no se guarda.
+      ?? (paginaSinRenderizar(inv) ? 'la página todavía no dibuja nada (SPA sin renderizar): no se puede afirmar que la persona entró' : null);
     if (!login) { dentro = true; break; }
     ultimaEvidencia = login;
     if (ahora() - arranque >= tope) break;
@@ -171,4 +174,19 @@ export async function vincularPortalAsistido(args: {
   const cookies = (JSON.parse(recortado) as { cookies: unknown[] }).cookies.length;
   logger.info('vinculacion.asistida.ok', { tenant: args.tenantId, comercio: args.comercio, cookies });
   return { ok: true, comercio: args.comercio, cookies, capturadaEn };
+}
+
+/**
+ * A37-S05-07: la base a la que `vincular-portal.mjs` manda el código y las cookies del portal del cliente.
+ * Solo https (http únicamente hacia localhost/127.0.0.1/[::1]); sin credenciales ni ruta en la URL. Lanza si no.
+ */
+export function baseSeguraDeVinculacion(cruda: string): string {
+  let u: URL;
+  try { u = new URL(cruda); } catch { throw new Error('La URL de Likida no es válida.'); }
+  const local = ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname);
+  if (u.protocol !== 'https:' && !(u.protocol === 'http:' && local)) {
+    throw new Error(`Por seguridad solo se acepta https (o http hacia localhost); recibí ${u.protocol}//${u.hostname}.`);
+  }
+  if (u.username || u.password) throw new Error('La URL no debe llevar usuario ni contraseña.');
+  return u.origin;
 }

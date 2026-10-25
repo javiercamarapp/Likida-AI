@@ -29,9 +29,10 @@ const aplicarFactura = vi.fn(async () => {});
 const tenantDeCustomer = vi.fn(async (): Promise<string | null> => 't-1');
 const planDePrice = vi.fn(async (): Promise<string | null> => 'basico');
 const cancelarFacturaDeStripe = vi.fn(async () => 'cancelada' as const);
+const facturaDePaymentIntent = vi.fn(async (_pi: string): Promise<string | null> => null);
 
 vi.mock('@/lib/saas/stripe', () => ({
-  verificarFirmaStripe: firmaValida, webhookConfigurado: configurado, eventoEnModoDeLaLlave: modoCoincide,
+  verificarFirmaStripe: firmaValida, webhookConfigurado: configurado, eventoEnModoDeLaLlave: modoCoincide, facturaDePaymentIntent,
 }));
 vi.mock('@/lib/saas/suscripcion', () => ({
   marcarEvento: marcar, sellarEventoAplicado: sellar, aplicarSuscripcion, aplicarFactura,
@@ -326,6 +327,32 @@ describe('DAT-24 · el cobro fallido no vale $0', () => {
   });
 });
 
+describe('A37-S61-03 · el desglose de IVA que Stripe itemizó llega a la factura', () => {
+  it('invoice.paid con IVA itemizado que cuadra: subtotal e iva viajan a aplicarFactura', async () => {
+    await POST(req({
+      id: 'evt-iva', type: 'invoice.paid',
+      data: { object: { id: 'in-iva', customer: 'cus-1', currency: 'mxn', amount_paid: 1160000, total: 1160000, tax: 160000, subtotal: 1000000, total_excluding_tax: 1000000 } },
+    }));
+    expect(aplicarFactura).toHaveBeenCalledWith(expect.objectContaining({ monto: 11600, subtotal: 10000, iva: 1600 }));
+  });
+
+  it('sin `tax` NO se inventa desglose: va null y la factura sigue sin poder timbrarse a ciegas', async () => {
+    await POST(req({
+      id: 'evt-sin-iva', type: 'invoice.paid',
+      data: { object: { id: 'in-si', customer: 'cus-1', currency: 'mxn', amount_paid: 1160000, total: 1160000 } },
+    }));
+    expect(aplicarFactura).toHaveBeenCalledWith(expect.objectContaining({ subtotal: null, iva: null }));
+  });
+
+  it('el cobro fallido no lleva desglose (no hay nada que timbrar)', async () => {
+    await POST(req({
+      id: 'evt-pf-iva', type: 'invoice.payment_failed',
+      data: { object: { id: 'in-pfi', customer: 'cus-1', currency: 'mxn', amount_due: 1160000, amount_paid: 0, total: 1160000, tax: 160000, total_excluding_tax: 1000000 } },
+    }));
+    expect(aplicarFactura).toHaveBeenCalledWith(expect.objectContaining({ pagada: false, subtotal: null, iva: null }));
+  });
+});
+
 describe('DAT-32 · un evento de otro modo (test/live) no toca la base', () => {
   it('contesta 400, NO marca el evento y NO aplica nada', async () => {
     modoCoincide.mockReturnValueOnce(false);
@@ -388,6 +415,37 @@ describe('DAT-33 · lo que se devuelve o se anula deja de estar cobrado', () => 
       data: { object: { id: 'ch-2', invoice: null, amount_refunded: 5000 } },
     }));
     expect(r.status).toBe(200);
+    expect(cancelarFacturaDeStripe).not.toHaveBeenCalled();
+  });
+
+  it('A37-S10-03: charge.refunded SIN `invoice` (API basil) resuelve la factura por payment_intent y cancela', async () => {
+    facturaDePaymentIntent.mockResolvedValueOnce('in-basil');
+    const r = await POST(req({
+      id: 'evt-b1', type: 'charge.refunded',
+      data: { object: { id: 'ch-b', payment_intent: 'pi-1', amount: 1160000, amount_refunded: 1160000 } },
+    }));
+    expect(r.status).toBe(200);
+    expect(facturaDePaymentIntent).toHaveBeenCalledWith('pi-1');
+    expect(cancelarFacturaDeStripe).toHaveBeenCalledWith('in-basil', '02', 11600, undefined);
+  });
+
+  it('A37-S10-03: sin `invoice` y Stripe dice que el pago no es de una factura → cargo suelto, 200 sin cancelar', async () => {
+    facturaDePaymentIntent.mockResolvedValueOnce(null);
+    const r = await POST(req({
+      id: 'evt-b2', type: 'charge.refunded',
+      data: { object: { id: 'ch-b2', payment_intent: 'pi-2', amount_refunded: 5000 } },
+    }));
+    expect(r.status).toBe(200);
+    expect(cancelarFacturaDeStripe).not.toHaveBeenCalled();
+  });
+
+  it('A37-S10-03: si la consulta a Stripe FALLA, 500 para que Stripe reintente (no se da el reembolso por ignorado)', async () => {
+    facturaDePaymentIntent.mockRejectedValueOnce(new Error('Stripe caído'));
+    const r = await POST(req({
+      id: 'evt-b3', type: 'charge.refunded',
+      data: { object: { id: 'ch-b3', payment_intent: 'pi-3', amount_refunded: 1000 } },
+    }));
+    expect(r.status).toBe(500);
     expect(cancelarFacturaDeStripe).not.toHaveBeenCalled();
   });
 

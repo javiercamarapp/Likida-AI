@@ -51,12 +51,48 @@ it('una lectura caída pasa `datos: null` (nunca una bandeja vacía)', async () 
   roto.mockRestore();
 });
 
+it('A37-A3-14: un documento VIEJO por revisar o fallido no se pierde detrás de los 200 más recientes de la bandeja', async () => {
+  const fila = (id: string, estadoDoc: string, creado: string) => ({ id, estado: estadoDoc, createdAt: creado, tenantId: 't-1' }) as never;
+  const original = repo.listarDocumentos;
+  const espia = vi.spyOn(repo, 'listarDocumentos').mockImplementation(async (t, f = {}) => {
+    if (f.estados?.length) return { filas: [fila('viejo-por-revisar', 'por_revisar', '2026-01-02T00:00:00Z'), fila('reciente-1', 'por_revisar', '2026-10-20T00:00:00Z')], total: 2 };
+    if (f.desde) return original(t, f);
+    return { filas: [fila('reciente-1', 'por_revisar', '2026-10-20T00:00:00Z'), fila('reciente-2', 'aprobado', '2026-10-19T00:00:00Z')], total: 450 };
+  });
+  const p = await pagina();
+  const ids = (p.props.datos?.filas as Array<{ id: string }>).map((d) => d.id);
+  expect(ids).toEqual(['reciente-1', 'reciente-2', 'viejo-por-revisar']); // sin duplicados, de lo más nuevo a lo más viejo
+  espia.mockRestore();
+});
+
 it('con la base sana arma datos, métricas en null y el buzón con su dirección', async () => {
   await repo.crearBuzon('t-1', 'abcdefghjkmnpqrstvwxyz23');
   const p = await pagina();
   expect(p.props.datos?.filas).toEqual([]);
   expect(p.props.datos?.metricas).toMatchObject({ pctSinCorreccion: null, minutosAhorradosPorEmbarque: null });
   expect(p.props.datos?.buzon).toMatchObject({ direccion: 'cp-abcdefghjkmnpqrstvwxyz23@mail.likida.test', activo: true });
+});
+
+/** Siembra `n` documentos del tenant con el estado y el día dados (el más viejo primero en el reloj: `i` crece hacia atrás). */
+async function sembrar(n: number, estadoDoc: 'aprobado' | 'por_revisar' | 'fallido', desdeIndice: number, hoy = Date.now()) {
+  const base = await repo.insertarDocumento('t-1', {
+    id: U, canal: 'manual', formato: 'pdf_texto', nombreArchivo: 'base.pdf', mime: 'application/pdf', bytes: 1, sha256: 'h-base', storageRuta: 't-1/x',
+    clienteId: null, remitente: null, asunto: null, remitenteReconocido: null, retenerHasta: '2030-01-01',
+  } as never);
+  estado.docs.delete(U);
+  for (let i = 0; i < n; i++) {
+    const id = `00000000-0000-4000-8000-${String(desdeIndice + i).padStart(12, '0')}`;
+    estado.docs.set(id, { ...base.documento, id, sha256: `h-${id}`, estado: estadoDoc, createdAt: new Date(hoy - (desdeIndice + i) * 60_000).toISOString() });
+  }
+}
+
+it('A37-S16-02: un por_revisar viejo (fuera de los 200 más recientes) sigue en la bandeja', async () => {
+  await sembrar(204, 'aprobado', 1);
+  await sembrar(1, 'por_revisar', 5000);
+  const filas = (await pagina()).props.datos!.filas as Array<{ id: string; estado: string }>;
+  expect(filas.some((f) => f.estado === 'por_revisar')).toBe(true);
+  expect(new Set(filas.map((f) => f.id)).size).toBe(filas.length);
+  expect(filas.length).toBeLessThanOrEqual(205);
 });
 
 it('subir: usa el tenant y el usuario de la SESIÓN (no los de la forma), lee el documento y avisa', async () => {
@@ -111,6 +147,22 @@ it.each(['contador', 'vendedor'])('TODAS las acciones rechazan a %s aunque se in
   }
   expect(dobles.recibirDocumento).not.toHaveBeenCalled();
   expect(estado.buzones.size).toBe(0);
+});
+
+// A37-S16-03: configurar el buzón, los formatos de exportación y la versión del perfil es de quien administra la cuenta.
+it('A37-S16-03: el encargado sube y lee documentos, pero NO configura (cinco acciones de configuración rechazadas)', async () => {
+  await repo.crearBuzon('t-1', 'abcdefghjkmnpqrstvwxyz23');
+  await repo.guardarExportConfig('t-1', { nombre: 'Cliente demo', formato: 'csv', config: { columnas: [{ encabezado: 'Folio', campo: 'folio_cliente' }] } });
+  const p = await pagina();
+  sesion = { ...sesion, rol: 'encargado' };
+  const forma = fd({ remitentes: '', nombre: 'x', formato: 'csv', config: JSON.stringify({ columnas: [{ encabezado: 'Folio', campo: 'folio_cliente' }] }), id: estado.exportConfigs[0].id, perfilId: U, version: '1' });
+  for (const nombre of ['activarBuzon', 'guardarRemitentes', 'guardarExport', 'borrarExport', 'volverVersion'] as const) {
+    expect(await p.props.acciones[nombre](null, forma), nombre).toEqual({ ok: false, error: 'Configurar los documentos de Carta Porte es del dueño de la flota.' });
+  }
+  expect(estado.exportConfigs).toHaveLength(1);
+  expect(estado.buzones.get('t-1')!.remitentesPermitidos).toEqual([]);
+  // Lo operativo sigue abierto al encargado.
+  expect(await p.props.acciones.subir(null, fd({ archivo: new File([new Uint8Array([1])], 'a.pdf') }))).toMatchObject({ ok: true });
 });
 
 it('procesar: solo documentos de LA flota y con uuid', async () => {

@@ -32,6 +32,13 @@ export function SubirReferencia({ accion }: { accion: (previo: ResultadoReferenc
         className="w-full text-[12.5px] px-3 py-1.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }} />
       <input type="file" name="foto" accept="image/jpeg,image/png,image/webp" required disabled={pendiente}
         className="text-[12.5px] w-full" />
+      <label className="flex items-start gap-2 text-[12px]" style={{ color: 'var(--muted)' }}>
+        <input type="checkbox" name="consentimiento" disabled={pendiente} className="mt-0.5" />
+        <span>
+          Si es un personaje (una persona real, p. ej. un chofer): confirmo que dio su consentimiento para usar su
+          imagen en material publicitario y que puede pedir su baja (se borra desde su tarjeta).
+        </span>
+      </label>
       {estado && 'error' in estado && <p className="text-[12px] m-0" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
       {estado && 'ok' in estado && <p className="text-[12px] m-0" style={{ color: 'var(--ok)' }}>Guardado.</p>}
       <button type="submit" disabled={pendiente}

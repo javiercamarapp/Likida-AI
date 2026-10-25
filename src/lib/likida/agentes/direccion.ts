@@ -48,6 +48,7 @@ import { INTERRUPTORES } from '../interruptores';
 import { encolarPieza } from './cola';
 import { registrarCorrida, type DisparoCorrida } from './corridas';
 import { logger } from '@/lib/logger';
+import { tenantDemo } from '@/lib/auth/tenant-demo';
 
 export const AGENTES_DIRECCION_BANDEJA = [
   'automejora', 'especialistas_incidente', 'fundraising',
@@ -187,6 +188,10 @@ export const DIAS_TELEMETRIA = 7;
 /** Corridas que una ventana lee como máximo. Si se llena, el parte lo DICE. */
 export const TOPE_CORRIDAS = 5_000;
 
+/** Piezas por página al contarlas por agente (= `max_rows` de PostgREST) y páginas máximas. */
+const PAGINA_PIEZAS = 1_000;
+const PAGINAS_PIEZAS_MAX = 30;
+
 export interface FilaCorrida {
   agente: string;
   estado: string;
@@ -208,15 +213,18 @@ export interface SaludAgente {
   ultimoError: string | null;
   /** Piezas que dejó en la bandeja en la ventana. MEDIDO. */
   piezas: number;
+  /** Corridas que terminaron `parcial` (ni `ok` ni `fallo`): no cuentan como fallo, pero tampoco se pintan como «ok». */
+  parciales: number;
 }
 
 /** La salud por agente, PURA. Ordenada por fallos descendente y, en empate,
  *  por nombre — determinista para que la misma semana produzca el mismo texto. */
 export function saludPorAgente(corridas: FilaCorrida[], piezasPorAgente: Map<string, number>): SaludAgente[] {
-  const acc = new Map<string, { corridas: number; fallos: number; costo: number; medidas: number; sinMedir: number; ultimoError: string | null }>();
+  const acc = new Map<string, { corridas: number; fallos: number; parciales: number; costo: number; medidas: number; sinMedir: number; ultimoError: string | null }>();
   for (const c of corridas) {
-    const a = acc.get(c.agente) ?? { corridas: 0, fallos: 0, costo: 0, medidas: 0, sinMedir: 0, ultimoError: null };
+    const a = acc.get(c.agente) ?? { corridas: 0, fallos: 0, parciales: 0, costo: 0, medidas: 0, sinMedir: 0, ultimoError: null };
     a.corridas += 1;
+    if (c.estado === 'parcial') a.parciales += 1;
     if (c.estado === 'fallo') {
       a.fallos += 1;
       if (a.ultimoError === null && c.error) a.ultimoError = c.error;
@@ -229,6 +237,7 @@ export function saludPorAgente(corridas: FilaCorrida[], piezasPorAgente: Map<str
     agente,
     corridas: a.corridas,
     fallos: a.fallos,
+    parciales: a.parciales,
     costoUsd: a.medidas === 0 ? null : Math.round(a.costo * 10_000) / 10_000,
     sinMedir: a.sinMedir,
     ultimoError: a.ultimoError,
@@ -300,7 +309,7 @@ export function armarParteAutomejora(
     } else {
       l.push('CORRIERON SIN FALLAR Y NO DEJARON NI UNA PIEZA (esto es una PREGUNTA, no una acusación):');
       for (const s of mudos.slice(0, 20)) {
-        l.push(`  · ${s.agente} — ${numero(s.corridas)} corrida(s) 'ok', 0 piezas en la bandeja.`);
+        l.push(`  · ${s.agente} — ${numero(s.corridas)} corrida(s)${s.parciales > 0 ? ` (${numero(s.parciales)} parcial)` : " 'ok'"}, 0 piezas en la bandeja.`);
       }
       if (mudos.length > 20) l.push(`  … y ${numero(mudos.length - 20)} más.`);
       l.push('  POR QUÉ ES UNA PREGUNTA: para varios agentes esto es el comportamiento CORRECTO — un vigía sin señales, un cazador sin celdas nuevas o un preparador de demos sin demos agendadas no tienen nada que fabricar, y fabricar algo para no salir en esta lista sería peor. La pregunta que este parte deja es si alguno de estos debería haber producido y su guarda lo está frenando de más.');
@@ -393,17 +402,23 @@ async function leerCorridas(desdeIso: string, hastaIso: string): Promise<{ filas
  *  pondría a TODOS los agentes en «corrió y no produjo». */
 async function leerPiezasPorAgente(desdeIso: string, hastaIso: string): Promise<Map<string, number>> {
   const mapa = new Map<string, number>();
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('cola_aprobacion')
-    .select('agente')
-    .gte('creado_en', desdeIso)
-    .lt('creado_en', hastaIso)
-    .limit(TOPE_CORRIDAS), 'direccion.automejora.piezas');
-  if (error) throw new Error(`leerPiezasPorAgente: ${error.message}`);
-  for (const f of (data ?? []) as Array<{ agente: string }>) {
-    mapa.set(f.agente, (mapa.get(f.agente) ?? 0) + 1);
+  // A37-S26-08: PostgREST recorta a `max_rows` (1,000) aunque se pida más y no avisa. Se pagina de 1,000 en 1,000 con
+  // desempate por llave; si la ventana rebasa el tope de páginas se LANZA (un conteo a medias pondría a agentes que
+  // sí produjeron en «corrieron y no dejaron ni una pieza»).
+  for (let pagina = 0; pagina < PAGINAS_PIEZAS_MAX; pagina++) {
+    const { data, error } = await acotada(supabaseAdmin()
+      .from('cola_aprobacion')
+      .select('agente')
+      .gte('creado_en', desdeIso)
+      .lt('creado_en', hastaIso)
+      .order('id')
+      .range(pagina * PAGINA_PIEZAS, pagina * PAGINA_PIEZAS + PAGINA_PIEZAS - 1), 'direccion.automejora.piezas');
+    if (error) throw new Error(`leerPiezasPorAgente: ${error.message}`);
+    const filas = (data ?? []) as Array<{ agente: string }>;
+    for (const f of filas) mapa.set(f.agente, (mapa.get(f.agente) ?? 0) + 1);
+    if (filas.length < PAGINA_PIEZAS) return mapa;
   }
-  return mapa;
+  throw new Error(`leerPiezasPorAgente: la ventana rebasa ${PAGINAS_PIEZAS_MAX * PAGINA_PIEZAS} piezas — no se afirma un conteo a medias.`);
 }
 
 /** Los interruptores ya apagados. LANZA ante error: proponer apagar algo que
@@ -671,7 +686,13 @@ async function incidenteSinParte(venceEn?: number): Promise<{ incidente: Inciden
     .select('id, tenant_id, tipo, prioridad, estado, descripcion, abierta_en, hay_lesionados, unidad_movible, reconocida_en, nivel_escalado, operador_id, operador:operador_id(nombre), unidad:unidad_id(numero_economico), flota:tenant_id(nombre)')
     .in('tipo', TIPOS_EMERGENCIA)
     .neq('estado', 'resuelta')
-    .order('abierta_en', { ascending: true })
+    // A37-S26-02: las MÁS NUEVAS primero. Con las más viejas primero, 30 emergencias
+    // antiguas que nadie cerró (y que ya tienen parte) llenaban la ventana y un robo
+    // o siniestro nuevo no entraba nunca: el agente decía «ningún incidente abierto
+    // sin parte». Cada parte es único por expediente, así que los viejos sin parte
+    // se atienden cuando los nuevos ya tienen el suyo.
+    .order('abierta_en', { ascending: false })
+    .order('id', { ascending: true })
     .limit(30), 'direccion.incidente.abiertos');
   if (error) throw new Error(`incidenteSinParte: ${error.message}`);
   const filas = (data ?? []) as Array<Record<string, unknown>>;
@@ -939,10 +960,12 @@ export function armarParteFundraising(c: CifrasFundraising, mrr: Mrr, mes: strin
 
 /** Conteo exacto de una tabla. LANZA si PostgREST no devuelve el número: un
  *  `?? 0` pintaría un cero que nadie midió. */
-async function contar(tabla: string, etiqueta: string): Promise<number> {
+async function contar(tabla: string, etiqueta: string, columnaTenant: string): Promise<number> {
+  // A37-S26-07: la flota demo (plan demo, sin precio) no es un cliente: no entra al conteo que ve un inversionista.
   const { count, error } = await acotada(supabaseAdmin()
     .from(tabla)
-    .select('id', { count: 'exact', head: true }), etiqueta);
+    .select('id', { count: 'exact', head: true })
+    .neq(columnaTenant, tenantDemo()), etiqueta);
   if (error) throw new Error(`${etiqueta}: ${error.message}`);
   if (typeof count !== 'number') throw new Error(`${etiqueta}: PostgREST no devolvió el conteo — no se afirma un 0 que nadie midió.`);
   return count;
@@ -950,27 +973,32 @@ async function contar(tabla: string, etiqueta: string): Promise<number> {
 
 async function leerCifras(): Promise<CifrasFundraising> {
   const [flotas, liquidaciones, suscripciones, facturas, pipeline] = await Promise.all([
-    contar('tenant', 'direccion.fundraising.flotas'),
-    contar('liquidacion', 'direccion.fundraising.liquidaciones'),
+    contar('tenant', 'direccion.fundraising.flotas', 'id'),
+    contar('liquidacion', 'direccion.fundraising.liquidaciones', 'tenant_id'),
     leerSuscripciones(),
     leerFacturas(),
     leerPipeline(),
   ]);
   return {
-    flotas, liquidaciones, suscripciones,
+    flotas, liquidaciones, suscripciones: suscripciones.suscripciones,
     facturasPagadas: facturas.n, cobradoMxn: facturas.total,
     pipeline: pipeline.etapas,
-    truncado: facturas.truncado || pipeline.truncado,
+    truncado: facturas.truncado || pipeline.truncado || suscripciones.truncado,
   };
 }
 
-async function leerSuscripciones(): Promise<Suscripciones> {
-  const { data, error } = await acotada(supabaseAdmin()
+async function leerSuscripciones(): Promise<{ suscripciones: Suscripciones; truncado: boolean }> {
+  // A37-S26-07: sin la flota demo, y con conteo exacto: PostgREST recorta a `max_rows` sin bandera y un MRR a medias
+  // se cita como si fuera el total.
+  const { data, error, count } = await acotada(supabaseAdmin()
     .from('suscripcion')
-    .select('estado, plan_clave, plan:plan_clave(precio_mensual)')
+    .select('estado, plan_clave, plan:plan_clave(precio_mensual)', { count: 'exact' })
+    .neq('tenant_id', tenantDemo())
+    .order('id')
     .limit(2_000), 'direccion.fundraising.suscripciones');
   if (error) throw new Error(`leerSuscripciones: ${error.message}`);
   const filas = (data ?? []) as Array<Record<string, unknown>>;
+  const truncado = typeof count === 'number' ? count > filas.length : filas.length >= 2_000;
   const porEstado = new Map<string, number>();
   const activas: Array<{ plan: string; precio: number | null }> = [];
   for (const f of filas) {
@@ -987,9 +1015,12 @@ async function leerSuscripciones(): Promise<Suscripciones> {
     }
   }
   return {
-    porEstado: [...porEstado.entries()].map(([estado, n]) => ({ estado, n }))
-      .sort((a, b) => b.n - a.n || a.estado.localeCompare(b.estado)),
-    activas,
+    suscripciones: {
+      porEstado: [...porEstado.entries()].map(([estado, n]) => ({ estado, n }))
+        .sort((a, b) => b.n - a.n || a.estado.localeCompare(b.estado)),
+      activas,
+    },
+    truncado,
   };
 }
 

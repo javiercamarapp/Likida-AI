@@ -93,7 +93,9 @@ export async function contarInsumosDeAgente(agenteId: string): Promise<number> {
     .select('id', { count: 'exact', head: true })
     .eq('agente', agenteId), 'insumos.contar');
   if (error) throw new Error(`contarInsumosDeAgente(${agenteId}): ${error.message}`);
-  return count ?? 0;
+  // A37-S27-09: sin conteo no se afirma un 0 que nadie midió.
+  if (typeof count !== 'number') throw new Error(`contarInsumosDeAgente(${agenteId}): PostgREST no devolvió el conteo.`);
+  return count;
 }
 
 /**
@@ -223,14 +225,44 @@ export function aceptaArchivoInsumo(tipo: 'documento' | 'imagen' | 'video', arch
   return null;
 }
 
+/** A37-S27-10: el `type` del archivo lo manda el cliente y se puede falsificar. Se comprueba la FIRMA de los primeros
+ *  bytes contra el tipo declarado (el CSV no tiene firma: solo se exige que no sea binario). */
+export function firmaCoincide(mime: string, b: Uint8Array): boolean {
+  const empieza = (...h: number[]) => h.every((v, i) => b[i] === v);
+  const ascii = (desde: number, t: string) => [...t].every((c, i) => b[desde + i] === c.charCodeAt(0));
+  switch (mime) {
+    case 'application/pdf': return ascii(0, '%PDF');
+    case 'image/png': return empieza(0x89, 0x50, 0x4e, 0x47);
+    case 'image/jpeg': return empieza(0xff, 0xd8, 0xff);
+    case 'image/webp': return ascii(0, 'RIFF') && ascii(8, 'WEBP');
+    case 'video/mp4': case 'video/quicktime': return ascii(4, 'ftyp');
+    case 'video/webm': return empieza(0x1a, 0x45, 0xdf, 0xa3);
+    case 'application/vnd.ms-excel': case 'application/msword': return empieza(0xd0, 0xcf, 0x11, 0xe0);
+    case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+    case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': return empieza(0x50, 0x4b, 0x03, 0x04);
+    case 'text/csv': return !b.subarray(0, 512).includes(0);
+    default: return false;
+  }
+}
+
+export const MAX_TITULO_INSUMO = 200;
+export const MAX_CONTENIDO_INSUMO = 20_000;
+
 /** Sube el archivo al bucket privado `agente-insumos` bajo `{agente}/` y
  *  devuelve la ruta. LANZA `DatoInvalido` si no pasa `aceptaArchivoInsumo`;
  *  cualquier otro error es de Storage. */
-export async function subirArchivoInsumo(agenteId: string, archivo: File, tipo: 'documento' | 'imagen' | 'video'): Promise<string> {
+export async function subirArchivoInsumo(
+  agenteId: string, archivo: File, tipo: 'documento' | 'imagen' | 'video',
+  /** A37-S27-10: con el departamento, el tipo se valida contra lo que el agente acepta ANTES de subir (si no, un tipo
+   *  no aceptado dejaba un objeto huérfano en Storage al fallar el insert). */
+  departamento?: string,
+): Promise<string> {
   const rechazo = aceptaArchivoInsumo(tipo, archivo);
   if (rechazo) throw new DatoInvalido(rechazo);
-  const ruta = `${agenteId}/${crypto.randomUUID()}.${EXT_POR_MIME[archivo.type] ?? 'bin'}`;
+  if (departamento !== undefined) validarTipoAceptado(agenteId, departamento, tipo);
   const buf = Buffer.from(await archivo.arrayBuffer());
+  if (!firmaCoincide(archivo.type, buf)) throw new DatoInvalido('El contenido del archivo no corresponde a su tipo.');
+  const ruta = `${agenteId}/${crypto.randomUUID()}.${EXT_POR_MIME[archivo.type] ?? 'bin'}`;
   const { error } = await acotada(
     supabaseAdmin().storage.from('agente-insumos').upload(ruta, buf, { contentType: archivo.type, upsert: false }),
     'insumos.subir_archivo',
@@ -239,7 +271,7 @@ export async function subirArchivoInsumo(agenteId: string, archivo: File, tipo: 
   return ruta;
 }
 
-function validarTipoAceptado(agente: string, departamento: string, tipo: TipoInsumo): void {
+export function validarTipoAceptado(agente: string, departamento: string, tipo: TipoInsumo): void {
   const aceptados = tiposAceptadosPorAgente(agente, departamento);
   if (!aceptados.includes(tipo)) {
     throw new DatoInvalido(`Este agente no recibe insumos de tipo "${tipo}" — acepta: ${aceptados.join(', ')}.`);
@@ -252,6 +284,7 @@ function validarTipoAceptado(agente: string, departamento: string, tipo: TipoIns
  *  el tipo no aceptado; cualquier otro error es de la base. */
 export async function crearInsumoArchivo(a: AltaInsumoArchivo): Promise<string> {
   validarTipoAceptado(a.agente, a.departamento, a.tipo);
+  if (a.titulo.length > MAX_TITULO_INSUMO) throw new DatoInvalido(`El título pasa de ${MAX_TITULO_INSUMO} caracteres.`);
   const { data, error } = await supabaseAdmin()
     .from('agente_insumo')
     .insert({
@@ -260,13 +293,35 @@ export async function crearInsumoArchivo(a: AltaInsumoArchivo): Promise<string> 
     })
     .select('id')
     .single();
-  if (error) throw new Error(`crearInsumoArchivo: ${error.message}`);
+  if (error) {
+    // A37-S27-10: sin fila, el objeto ya subido quedaría huérfano: se borra (mejor esfuerzo).
+    try { await supabaseAdmin().storage.from('agente-insumos').remove([a.storagePath]); } catch { /* huérfano: se barre aparte */ }
+    throw new Error(`crearInsumoArchivo: ${error.message}`);
+  }
   return String((data as { id: string }).id);
+}
+
+/** A37-S05-05: tope del link (los de título y contenido son MAX_TITULO_INSUMO / MAX_CONTENIDO_INSUMO, arriba). */
+export const MAX_LINK_INSUMO = 2_048;
+
+/** A37-S05-05: valida EN EL SERVIDOR título y contenido de un insumo de texto/link (el `type=url` del
+ *  formulario es solo del cliente). El link debe ser una URL https sin credenciales. */
+export function validarContenidoInsumo(tipo: TipoInsumo, titulo: string, contenido: string): void {
+  if (titulo.length > MAX_TITULO_INSUMO) throw new DatoInvalido(`El título pasa de ${MAX_TITULO_INSUMO} caracteres.`);
+  if (tipo === 'link') {
+    if (contenido.length > MAX_LINK_INSUMO) throw new DatoInvalido(`El link pasa de ${MAX_LINK_INSUMO} caracteres.`);
+    let u: URL;
+    try { u = new URL(contenido); } catch { throw new DatoInvalido('El link no es una URL válida.'); }
+    if (u.protocol !== 'https:' || u.username || u.password) throw new DatoInvalido('El link debe ser https y sin usuario ni contraseña.');
+  } else if (contenido.length > MAX_CONTENIDO_INSUMO) {
+    throw new DatoInvalido(`El texto pasa de ${MAX_CONTENIDO_INSUMO} caracteres.`);
+  }
 }
 
 /** Inserta un insumo de link o texto libre — sin Storage de por medio. */
 export async function crearInsumoTexto(a: AltaInsumoTexto): Promise<string> {
   validarTipoAceptado(a.agente, a.departamento, a.tipo);
+  validarContenidoInsumo(a.tipo, a.titulo, a.contenido);
   const { data, error } = await supabaseAdmin()
     .from('agente_insumo')
     .insert({

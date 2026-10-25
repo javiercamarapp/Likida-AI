@@ -95,9 +95,19 @@ function consultaGasto() {
 
 const insertBitacora = vi.fn(async () => ({ error: null }));
 
+/** La bitácora: escribe (`insert`) y —A37-S43-07— se lee para no repetir el aviso del día (vacía aquí). */
+function bitacora() {
+  const b: Record<string, unknown> = {
+    insert: insertBitacora,
+    select: () => b, eq: () => b, gte: () => b, order: () => b,
+    limit: () => Promise.resolve({ data: [], error: null }),
+  };
+  return b;
+}
+
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
-    from: (t: string) => (t === 'gasto' ? consultaGasto() : { insert: insertBitacora }),
+    from: (t: string) => (t === 'gasto' ? consultaGasto() : bitacora()),
   }),
 }));
 vi.mock('@/lib/logger', () => ({ logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
@@ -106,6 +116,14 @@ const sendText = vi.fn();
 const sendTemplate = vi.fn();
 vi.mock('@/lib/meta/client', () => ({
   sendText: (...a: unknown[]) => sendText(...a),
+  // A37-S43-07: `avisarPorFacturar` manda con `enviarTexto` (resultado de Meta); aquí se
+  // traduce al mismo doble `sendText` para que las aserciones sigan leyendo lo enviado.
+  enviarTexto: async (...a: unknown[]) => {
+    const id = await sendText(...a);
+    return id ? { ok: true, id } : { ok: false, codigo: 131047, status: 400 };
+  },
+  esReintentableMeta: (c?: number, st?: number) => c === 130429 || (st !== undefined && st >= 500),
+  esTokenMetaInvalido: (c?: number) => c === 190,
   sendTemplate: (...a: unknown[]) => sendTemplate(...a),
   motivoDeFalloWhatsApp: () => 'la plantilla no está aprobada (prueba)',
 }));
@@ -182,7 +200,10 @@ describe('Agente 6 · SIN ADAPTADOR (0844): facturarAlVuelo → anotarBloqueo (l
     expect(telefono).toBe('5219990000002');
     expect(texto).toContain('megasur.com.mx:8029');
     expect(texto).toContain('WID-900');
-    expect(texto).toMatch(/todavía no lo sé llenar solo/i);
+    // A37-S43-06: megasur es `sin_tls` (medido): el mensaje dice la VERDAD y
+    // advierte que la liga es http, en vez de «todavía no lo sé llenar solo».
+    expect(texto).toMatch(/NO usa conexión segura/);
+    expect(texto).not.toMatch(/todavía no lo sé llenar solo/i);
     expect(texto).not.toMatch(/pide cuenta/i);
     expect(texto).not.toMatch(/se intentó solo y no se pudo/i);
   });

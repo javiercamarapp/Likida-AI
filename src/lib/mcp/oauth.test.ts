@@ -199,6 +199,27 @@ describe('canjearCodigo', () => {
     expect(updates).toContain('revocar');
   });
 
+  // A37-S60-08: con solo el código (visible en la URL de redirección) no se puede tumbar
+  // la sesión viva de otra persona.
+  it('A37-S60-08: reuso SIN el verifier correcto o con otro cliente NO revoca la familia', async () => {
+    for (const [cliente, verifier] of [['cli-1', 'x'.repeat(50)], ['cli-ajeno', VERIFIER_RFC]] as const) {
+      const updates: string[] = [];
+      sbMock.mockReturnValue({
+        from(tabla: string) {
+          if (tabla === 'mcp_oauth_codigo') return cadena(OK(filaCodigo({ usado_en: PASADO })));
+          if (tabla === 'mcp_oauth_token') {
+            updates.push('revocar');
+            return cadena(OK([]));
+          }
+          return cadena(OK([]));
+        },
+      });
+      const r = await canjearCodigo(CODIGO, cliente, 'https://claude.ai/api/mcp/auth_callback', verifier);
+      expect(r.ok).toBe(false);
+      expect(updates, `${cliente}/${verifier.slice(0, 4)}`).not.toContain('revocar');
+    }
+  });
+
   it('la CARRERA (dos canjes simultáneos): el que no marcó la fila se niega', async () => {
     conTablas({
       // La lectura ve el código libre… pero el UPDATE condicionado no
@@ -448,7 +469,18 @@ describe('validarAcceso', () => {
     // app_user coincide exactamente con la congelada en el token — los tests
     // de desalineación de abajo la desajustan a propósito.
     app_user: { tenant_id: 't-1', rol: 'contador' },
+    cliente: { estado: 'aprobado' },
     ...extra,
+  });
+
+  // A37-S07-02: un cliente rechazado no valida accesos aunque su token siga sin revocar.
+  it('A37-S07-02: el cliente rechazado, pendiente o sin embed → no_valido aunque el token siga vivo', async () => {
+    for (const cliente of [{ estado: 'rechazado' }, { estado: 'pendiente' }, null]) {
+      conTablas({ mcp_oauth_token: [OK(filaAcceso({ cliente }))] });
+      const r = await validarAcceso(ACCESO);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error).toBe('no_valido');
+    }
   });
 
   it('un acceso vivo resuelve tenant, usuario y rol', async () => {
@@ -688,10 +720,26 @@ describe('decidirCliente (el superadmin)', () => {
   it('rechazar revoca los tokens vivos y lo cuenta', async () => {
     conTablas({
       mcp_oauth_cliente: [OK([{ id: ID }])],
-      mcp_oauth_token: [OK([{ id: 't1' }, { id: 't2' }])],
+      mcp_oauth_token: [OK([{ id: 't1' }, { id: 't2' }]), OK([])],
     });
     const r = await decidirCliente(ID, 'rechazado', 'admin-1');
     expect(r).toEqual({ ok: true, revocados: 2 });
+  });
+  it('A37-S07-02: si falla la revocación NO se marca rechazado (sigue pendiente y reintentable)', async () => {
+    const llamadas: string[] = [];
+    sbMock.mockReturnValue({
+      from: (t: string) => { llamadas.push(t); return cadena(t === 'mcp_oauth_token' ? FALLA('boom') : OK([{ id: ID }])); },
+    });
+    const r = await decidirCliente(ID, 'rechazado', 'admin-1');
+    expect(!r.ok && r.error).toBe('no_disponible');
+    expect(llamadas).toEqual(['mcp_oauth_token']);
+  });
+  it('A37-S07-02: el barrido final cuenta los tokens de ambas pasadas', async () => {
+    conTablas({
+      mcp_oauth_cliente: [OK([{ id: ID }])],
+      mcp_oauth_token: [OK([{ id: 't1' }]), OK([{ id: 't2' }])],
+    });
+    expect(await decidirCliente(ID, 'rechazado', 'admin-1')).toEqual({ ok: true, revocados: 2 });
   });
   it('aprobar no toca tokens', async () => {
     const tablas: string[] = [];
@@ -721,22 +769,67 @@ describe('decidirCliente (el superadmin)', () => {
 });
 
 describe('listarClientesPendientes', () => {
-  it('lista con sus anfitriones y sus tokens vivos; la base caída LANZA (no devuelve vacío)', async () => {
-    conTablas({
-      mcp_oauth_cliente: [OK([{ id: 'a', nombre: 'Claude', redirect_uris: ['https://atacante.tld/cb'], estado: 'pendiente', creado_en: PASADO }])],
-      mcp_oauth_token: [CONTEO(3)],
-    });
+  const CLI = (id: string) => ({ id, nombre: 'Claude', redirect_uris: ['https://atacante.tld/cb'], estado: 'pendiente', creado_en: PASADO });
+  it('lista con sus anfitriones y sus tokens vivos (UN conteo agrupado, A37-S60-09); la base caída LANZA (no devuelve vacío)', async () => {
+    conTablas(
+      { mcp_oauth_cliente: [OK([CLI('a'), CLI('b')])] },
+      { contar_tokens_mcp_vivos: [OK([{ cliente_id: 'a', vivos: 3 }])] },
+    );
     const l = await listarClientesPendientes();
     expect(l[0].anfitriones).toEqual(['atacante.tld']);
     expect(l[0].tokensVivos).toBe(3);
+    expect(l[1].tokensVivos).toBe(0); // sin fila en el agrupado = 0 medido por la base
     conTablas({ mcp_oauth_cliente: [FALLA()] });
     await expect(listarClientesPendientes()).rejects.toThrow();
   });
-  it('si no se puede contar los tokens vivos de un cliente, LANZA — no afirma un 0 que nadie midió', async () => {
-    conTablas({
-      mcp_oauth_cliente: [OK([{ id: 'a', nombre: 'Claude', redirect_uris: [], estado: 'pendiente', creado_en: PASADO }])],
-      mcp_oauth_token: [FALLA('boom')],
+  it('A37-S60-09: no dispara un conteo por cliente — una sola llamada a la base para los tokens, y la página tope es 50', async () => {
+    const filas = Array.from({ length: 80 }, (_, i) => CLI(`c${i}`));
+    const desdeTabla: string[] = [];
+    const llamadasRpc: Array<[string, unknown]> = [];
+    let limiteVisto: unknown;
+    sbMock.mockReturnValue({
+      from(tabla: string) {
+        desdeTabla.push(tabla);
+        const resultado = tabla === 'mcp_oauth_cliente' ? OK(filas.slice(0, 50)) : CONTEO(1);
+        const p = Promise.resolve(resultado);
+        const proxy: unknown = new Proxy({}, { get(_t, prop) {
+          if (prop === 'then') return p.then.bind(p);
+          if (typeof prop === 'symbol') return undefined;
+          if (prop === 'limit') return (n: number) => { limiteVisto = n; return proxy; };
+          return () => proxy;
+        } });
+        return proxy;
+      },
+      rpc(fn: string, args: unknown) { llamadasRpc.push([fn, args]); return cadena(OK([])); },
     });
+    const l = await listarClientesPendientes(500);
+    expect(limiteVisto).toBe(50);
+    expect(l).toHaveLength(50);
+    expect(desdeTabla.filter((t) => t === 'mcp_oauth_token')).toHaveLength(0);
+    expect(llamadasRpc.filter(([fn]) => fn === 'contar_tokens_mcp_vivos')).toHaveLength(1);
+  });
+  it('si el conteo agrupado falla por otra razón, LANZA — no afirma un 0 que nadie midió', async () => {
+    conTablas(
+      { mcp_oauth_cliente: [OK([CLI('a')])] },
+      { contar_tokens_mcp_vivos: [FALLA('boom')] },
+    );
+    await expect(listarClientesPendientes()).rejects.toThrow();
+  });
+  it('mientras la migración 0909 no esté aplicada (RPC inexistente) cae al conteo por cliente de antes, con tope de concurrencia', async () => {
+    const faltante: Resultado = { data: null, error: { message: 'no existe', code: 'PGRST202' } as { message: string } };
+    conTablas(
+      { mcp_oauth_cliente: [OK([CLI('a')])], mcp_oauth_token: [CONTEO(3)] },
+      { contar_tokens_mcp_vivos: [faltante] },
+    );
+    const l = await listarClientesPendientes();
+    expect(l[0].tokensVivos).toBe(3);
+  });
+  it('si ni siquiera el conteo de respaldo puede medirse, LANZA', async () => {
+    const faltante: Resultado = { data: null, error: { message: 'no existe', code: '42883' } as { message: string } };
+    conTablas(
+      { mcp_oauth_cliente: [OK([CLI('a')])], mcp_oauth_token: [FALLA('boom')] },
+      { contar_tokens_mcp_vivos: [faltante] },
+    );
     await expect(listarClientesPendientes()).rejects.toThrow();
   });
 });

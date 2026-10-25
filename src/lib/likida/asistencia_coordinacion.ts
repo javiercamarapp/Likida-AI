@@ -61,6 +61,15 @@ function limpiar(texto: string): string {
  */
 export function leerEtaMin(texto: string): number | null {
   const t = limpiar(texto);
+  // A37-S29-02: `limpiar` borra «-» y «:», así que el rango «30-40 min» y la
+  // hora «1:30 hrs» se leían como cifras sueltas (40 y 30 «min»). Se detectan
+  // sobre el texto sin limpiar, y dos cantidades con unidad pegadas
+  // («1 h 30 min», «entre 30 y 40 minutos») también anulan la lectura.
+  const crudo = strip_accents(texto.toLowerCase());
+  if (/\b\d{1,3}\s*[-–—]\s*\d{1,3}\s*(?:min|mins|minutos|horas?|hrs?|hr|h)\b/.test(crudo)) return null;
+  if (/\b\d{1,2}:\d{2}\b/.test(crudo)) return null;
+  if (/\b\d{1,3} y \d{1,3} (?:min|mins|minutos|horas?|hrs?|hr)\b/.test(t)) return null;
+  if (/\b\d{1,2} (?:h|hr|hrs|hora|horas) \d{1,2} (?:min|mins|minutos)\b/.test(t)) return null;
   // AUDITORÍA FABLE CICLO 4 (c4-7): el rango y la alternativa son AMBIGUOS
   // por definición — "de 40 a 50 minutos" no es 50, y "1 hora si acaso 2" no
   // es 60. Antes solo el número pegado a la unidad contaba y el otro se
@@ -80,11 +89,12 @@ export function leerEtaMin(texto: string): number | null {
     const n = Number(m[1]);
     if (n > 0) vistos.add(n);
   }
-  for (const m of t.matchAll(/\b(\d{1,2})\s*(?:horas?|hrs?|hr)\b/g)) {
+  for (const m of t.matchAll(/\b(\d{1,2})\s*(?:horas?|hrs?|hr)\b(?! y media)/g)) {
     const n = Number(m[1]);
     if (n > 0) vistos.add(n * 60);
   }
   if (/\bhora y media\b/.test(t)) vistos.add(90);
+  for (const m of t.matchAll(/\b(\d{1,2}) horas y media\b/g)) vistos.add(Number(m[1]) * 60 + 30);
   if (/\bmedia hora\b/.test(t)) vistos.add(30);
   // "una hora" sin dígito — solo si ningún dígito ya lo dijo distinto.
   if (/\b(una|1) hora\b/.test(t)) vistos.add(60);
@@ -599,20 +609,39 @@ export async function atenderMensajeProveedor(
   if (activas.length === 0) return null;
 
   if (activas.length > 1) {
-    // Dos gestiones vivas con el mismo teléfono (dos emergencias, o dos
-    // flotas con el mismo gruero): no se adivina a cuál contesta. El texto
-    // crudo va a la bitácora y al jefe de CADA una — que el humano atribuya.
+    // Dos gestiones vivas con el mismo teléfono: no se adivina a cuál contesta.
+    // A37-S29-04: si son de la MISMA flota (dos emergencias) el texto crudo va a la bitácora y al jefe de esa flota UNA vez, que atribuya
+    // el humano. Si son de FLOTAS DISTINTAS (el mismo gruero en dos directorios) el texto puede traer la unidad, el lugar o el cliente de
+    // una de ellas: NO se reenvía a ninguna ni se guarda en su bitácora (fuga entre flotas con el proveedor como canal); cada jefe solo
+    // sabe que escribió, sin contenido, y el texto queda en el registro interno de Likida.
+    const flotas = [...new Set(activas.map((c) => c.tenantId))];
+    if (flotas.length > 1) {
+      logger.warn('coordinacion.mensaje_ambiguo_entre_flotas', { flotas: flotas.length, gestiones: activas.length, telefono_ult4: from.slice(-4), texto: texto.replace(/\s+/g, ' ').trim().slice(0, 300) });
+      for (const c of activas) {
+        await anotarEventoIncidencia(c.tenantId, c.incidenciaId, 'proveedor_mensaje', {
+          coordinacionId: c.id, sinTexto: true, atribucion: 'ambigua_entre_flotas',
+        });
+      }
+      for (const tenantId of flotas) {
+        const c = activas.find((x) => x.tenantId === tenantId)!;
+        try {
+          const jefe = await telefonoJefeDe(tenantId);
+          if (jefe) await sendText(jefe, `${c.proveedorNombre} escribió, pero tenemos más de una gestión activa con su número y no podemos atribuir el mensaje a tu solicitud. Contáctalo directo si lo necesitas.`);
+        } catch { /* best-effort declarado: la bitácora ya lo tiene */ }
+      }
+      return 'Gracias — tenemos más de una solicitud activa con este número. ¿Nos dices a qué empresa o folio se refiere tu mensaje? El equipo le da seguimiento directo.';
+    }
     for (const c of activas) {
       await anotarEventoIncidencia(c.tenantId, c.incidenciaId, 'proveedor_mensaje', {
         coordinacionId: c.id, texto: texto.slice(0, 500), atribucion: 'ambigua',
       });
-      try {
-        const jefe = await telefonoJefeDe(c.tenantId);
-        if (jefe) {
-          await sendText(jefe, `${c.proveedorNombre} escribió (tenemos más de una gestión activa con su número — atribúyelo tú):\n«${texto.replace(/\s+/g, ' ').trim().slice(0, 220)}»`);
-        }
-      } catch { /* best-effort declarado: la bitácora ya lo tiene */ }
     }
+    try {
+      const jefe = await telefonoJefeDe(flotas[0]);
+      if (jefe) {
+        await sendText(jefe, `${activas[0].proveedorNombre} escribió (tenemos más de una gestión activa con su número — atribúyelo tú):\n«${texto.replace(/\s+/g, ' ').trim().slice(0, 220)}»`);
+      }
+    } catch { /* best-effort declarado: la bitácora ya lo tiene */ }
     return 'Gracias — tenemos más de una solicitud activa con este número, así que el jefe de tráfico le da seguimiento directo.';
   }
 
@@ -621,6 +650,7 @@ export async function atenderMensajeProveedor(
   // La ventana ACABA de abrirse: si el contacto seguía pendiente de
   // plantilla, el mensaje preparado sale AHORA — el circuito se autorrepara
   // en cuanto el proveedor nos escribe.
+  let abrioLaVentana = false;
   if (c.estado === 'pendiente_plantilla') {
     const enviado = await sendText(from, c.mensajePreparado);
     if (enviado) {
@@ -634,7 +664,18 @@ export async function atenderMensajeProveedor(
         coordinacionId: c.id, proveedor: c.proveedorNombre, via: 'ventana_abierta_por_proveedor',
       });
       c.estado = 'contactado';
+      abrioLaVentana = true;
     }
+  }
+
+  // A37-S29-03: el mensaje que ABRIÓ la ventana ("¿quién habla?") no responde
+  // a nuestra solicitud: se anota, pero NO se toma como cotización ni se
+  // firma nada sobre él. La cotización es el SIGUIENTE mensaje.
+  if (abrioLaVentana) {
+    await anotarEventoIncidencia(c.tenantId, c.incidenciaId, 'proveedor_mensaje', {
+      coordinacionId: c.id, texto: texto.slice(0, 500), apertura_ventana: true,
+    });
+    return 'Quedo atento a su tiempo de llegada y su precio. 🙏';
   }
 
   if (c.estado === 'contactado') {

@@ -14,7 +14,7 @@ vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error(
 
 const { ponerFuentes } = await import('@/lib/likida/orquestador/fuentes');
 const { crearFuentesEnMemoria, datosVacios, hitosDe, viajeTablero } = await import('@/lib/likida/orquestador/fuentes.fixture');
-const { VistaViajesEnVivo } = await import('./vista');
+const { VistaViajesEnVivo, TareasAbiertas } = await import('./vista');
 const { default: Pagina } = await import('./page');
 
 const T1 = '11111111-1111-4111-8111-111111111111';
@@ -75,4 +75,35 @@ it('la sección de Notificaciones del asistente aparece solo para quien puede ad
   sesion = { tenantId: 't-1', rol: 'flota_admin', userId: 'u-3' };
   const paraDueno = await Pagina({ searchParams: Promise.resolve({}) });
   expect(buscar(paraDueno, VistaViajesEnVivo)[0].props.notificaciones).not.toBeNull();
+});
+
+// A37-S21-05: «Marcar atendida» aplica el rol a LA FILA y le dice a quien pulsó si la tarea ya estaba cerrada.
+const TAREA_DINERO = '44444444-4444-4444-8444-444444444444';
+const TAREA_OPERACION = '55555555-5555-4555-8555-555555555555';
+function sembrarTareas() {
+  const base = { creadaEn: '2026-10-02T18:00:00.000Z', viajeFolio: null, resumen: 'x', pedidaPorRol: 'encargado', dedupe: 'd', tenantId: 't-1', usuarioId: null };
+  m.tareas.set('t-1', [
+    { ...base, id: TAREA_DINERO, destino: 'liquidacion', motivo: 'diferencia_liquidacion', dedupe: 'd1' },
+    { ...base, id: TAREA_OPERACION, destino: 'jefe_de_trafico', motivo: 'otro', dedupe: 'd2' },
+  ] as never);
+}
+async function pulsar(id: string): Promise<string> {
+  const pagina = await Pagina({ searchParams: Promise.resolve({}) });
+  const tareasEl = buscar(pagina, VistaViajesEnVivo)[0].props.tareas as Elemento;
+  expect(tareasEl.type).toBe(TareasAbiertas);
+  const accion = tareasEl.props.accion as (fd: FormData) => Promise<void>;
+  const fd = new FormData(); fd.set('id', id);
+  try { await accion(fd); return 'ok'; } catch (e) { return (e as Error).message; }
+}
+
+it('A37-S21-05: un rol sin dinero no cierra una tarea de dinero aunque tenga su id', async () => {
+  sembrarTareas();
+  expect(await pulsar(TAREA_DINERO)).toContain('atencion=sin_permiso');
+  expect(m.tareas.get('t-1')!.map((t) => t.id)).toContain(TAREA_DINERO);
+});
+
+it('A37-S21-05: la tarea operativa se cierra y la segunda persona que pulsa se entera de que ya estaba cerrada', async () => {
+  sembrarTareas();
+  expect(await pulsar(TAREA_OPERACION)).toBe('ok');
+  expect(await pulsar(TAREA_OPERACION)).toContain('atencion=ya_atendida');
 });

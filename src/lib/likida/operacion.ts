@@ -366,10 +366,12 @@ export async function marcarPodPedido(tenantId: string, viajeId: string, operado
  * chofer mandó, y borrarlo dejaría la discusión sin prueba.
  */
 export async function rechazarPod(tenantId: string, podId: string, nota: string | null): Promise<void> {
-  const { error } = await acotada(supabaseAdmin().from('pod')
+  // A37-S51-10: `.select('id')` para saber si tocó una fila; un id de otra flota no «tiene éxito» sin tocar nada.
+  const { data, error } = await acotada(supabaseAdmin().from('pod')
     .update({ estado: 'rechazado', nota })
-    .eq('id', podId).eq('tenant_id', tenantId), 'rechazarPod');
+    .eq('id', podId).eq('tenant_id', tenantId).select('id'), 'rechazarPod');
   if (error) throw new Error(`rechazarPod: ${error.message}`);
+  if ((data ?? []).length === 0) throw new Error('rechazarPod: el POD no existe en esta flota');
 }
 
 // ── Tablero de operación ───────────────────────────────────────────────────
@@ -741,8 +743,12 @@ async function asignacionConBotones(tenantId: string): Promise<boolean> {
 /**
  * Le manda al chofer el aviso de su viaje. Resuelve el teléfono aquí para que
  * quien llame no tenga que conocer la tabla `operador`.
+ *
+ * Devuelve `true` si el WhatsApp SALIÓ y `false` si no pudo salir (sin teléfono, viaje
+ * ajeno o rechazo de Meta): A37-S18-04, el despacho necesita saberlo para no decir «avisado»
+ * ni contar un reaviso que no ocurrió. Las fallas de lectura siguen LANZANDO.
  */
-export async function avisarAlChofer(tenantId: string, operadorId: string, viajeId: string): Promise<void> {
+export async function avisarAlChofer(tenantId: string, operadorId: string, viajeId: string): Promise<boolean> {
   const admin = supabaseAdmin();
   // SILENCIOSA POR PARTIDA DOBLE, hasta hoy. Estas dos lecturas desestructuraban
   // solo `data`, así que un fallo de Supabase se volvía `op = null` → `!op?.
@@ -758,7 +764,7 @@ export async function avisarAlChofer(tenantId: string, operadorId: string, viaje
   // B le manda a un chofer de la flota A el anticipo de un viaje ajeno.
   const [{ data: op, error: errOp }, { data: viaje, error: errViaje }] = await Promise.all([
     acotada(admin.from('operador').select('telefono, nombre').eq('id', operadorId).eq('tenant_id', tenantId).maybeSingle(), 'avisarAlChofer.operador'),
-    acotada(admin.from('viaje').select('folio, origen, destino, fecha_inicio, anticipo, unidad_id, cita_origen_en')
+    acotada(admin.from('viaje').select('folio, origen, destino, fecha_inicio, anticipo, unidad_id, cita_origen_en, avisado_en, avisos_enviados')
       .eq('tenant_id', tenantId).eq('id', viajeId).maybeSingle(), 'avisarAlChofer.viaje'),
   ]);
   const errLectura = errOp ?? errViaje;
@@ -775,7 +781,7 @@ export async function avisarAlChofer(tenantId: string, operadorId: string, viaje
     // es de esta flota. No es un error del sistema, pero tampoco puede pasar sin
     // rastro — este viaje tampoco va a escalar solo.
     logger.warn('viaje.aviso_sin_destinatario', { viajeId, operadorId, hayViaje: !!viaje, hayTelefono: !!op?.telefono, escalaSolo: false });
-    return;
+    return false;
   }
 
   let unidad: string | null = null;
@@ -802,33 +808,70 @@ export async function avisarAlChofer(tenantId: string, operadorId: string, viaje
     anticipo: viaje.anticipo === null ? null : Number(viaje.anticipo),
     unidad,
   };
+  // A37-S50-06: el PRIMER aviso (avisado_en nulo) se RECLAMA antes de enviar con
+  // un UPDATE condicional: un doble clic o un reintento concurrente ya no mandan
+  // dos plantillas (con dos botones «aceptar») a un chofer real ni cobran dos
+  // envíos. Si el envío no sale, se devuelve el reclamo para que el viaje siga
+  // visible como no avisado. Un reaviso deliberado (avisado_en ya puesto: botón
+  // «Reavisar», escalación) no reclama nada y reenvía como siempre; el primer
+  // aviso manda: un reaviso no reinicia el plazo.
+  let reclamo: string | null = null;
+  if (!viaje.avisado_en) {
+    const marca = new Date().toISOString();
+    const { data: ganado, error: errReclamo } = await acotada(admin
+      .from('viaje')
+      .update({ avisado_en: marca, avisos_enviados: 1 })
+      .eq('id', viajeId)
+      .eq('tenant_id', tenantId)
+      .is('avisado_en', null)
+      .select('id'), 'avisarAlChofer.reclamar');
+    if (errReclamo) {
+      logger.error('viaje.aviso_reclamo_fallo', { viajeId, err: errReclamo.message, escalaSolo: false });
+      throw new Error(`avisarAlChofer: no se pudo reclamar el aviso — ${errReclamo.message}`);
+    }
+    if (!ganado || ganado.length === 0) {
+      logger.info('viaje.aviso_ya_reclamado', { viajeId });
+      return true; // otra invocación lo reclamó y es la que lo manda: no se duplica ni se reporta como «no salió»
+    }
+    reclamo = marca;
+  }
+  const devolverReclamo = async () => {
+    if (!reclamo) return;
+    const { error: errDev } = await acotada(admin
+      .from('viaje')
+      .update({ avisado_en: null, avisos_enviados: (viaje.avisos_enviados as number | null) ?? 0 })
+      .eq('id', viajeId)
+      .eq('tenant_id', tenantId)
+      .eq('avisado_en', reclamo), 'avisarAlChofer.devolver');
+    if (errDev) logger.error('viaje.aviso_reclamo_no_devuelto', { viajeId, err: errDev.message });
+  };
+
   // T-A5-47: en la flota con la perilla encendida la asignación sale con botones (N01) en vez de `viaje_asignado`.
-  const r = (await asignacionConBotones(tenantId))
-    ? await notificarAsignacionConBotones({
-      telefono: op.telefono as string,
-      tenantId,
-      viaje: { ...datosViaje, viajeId, operadorNombre: (op.nombre as string | null) ?? null, citaEn: (viaje.cita_origen_en as string | null) ?? null },
-    })
-    : await notificarAsignacion({ telefono: op.telefono as string, tenantId, viaje: datosViaje });
+  let r: Awaited<ReturnType<typeof notificarAsignacion>>;
+  try {
+    r = (await asignacionConBotones(tenantId))
+      ? await notificarAsignacionConBotones({
+        telefono: op.telefono as string,
+        tenantId,
+        viaje: { ...datosViaje, viajeId, operadorNombre: (op.nombre as string | null) ?? null, citaEn: (viaje.cita_origen_en as string | null) ?? null },
+      })
+      : await notificarAsignacion({ telefono: op.telefono as string, tenantId, viaje: datosViaje });
+  } catch (e) {
+    await devolverReclamo();
+    throw e;
+  }
   if (!r.enviado) {
     // ERROR, no WARN, y la razón importa: `avisado_en` es lo ÚNICO que hace
     // visible este viaje para la escalación de las 5 h. Si el aviso no salió, no
     // se marca —el reloj mide "desde que se le dijo al chofer", y nadie le
     // dijo—, así que este viaje NO va a escalar solo. Queda en el panel y en
     // este log, que es de donde alguien lo tiene que sacar.
+    await devolverReclamo();
     logger.error('viaje.aviso_no_salio', { viajeId, motivo: r.motivo, escalaSolo: false });
-    return;
+    return false;
   }
-
-  // Marca el arranque del reloj. Sin esto, `viajesSinAceptar()` no lo ve nunca:
-  // filtra por `avisado_en no es null`.
-  const { error } = await acotada(admin
-    .from('viaje')
-    .update({ avisado_en: new Date().toISOString(), avisos_enviados: 1 })
-    .eq('id', viajeId)
-    .eq('tenant_id', tenantId)
-    .is('avisado_en', null), 'avisarAlChofer.marcar'); // el primer aviso manda: un reaviso no reinicia el plazo
-  if (error) logger.warn('viaje.avisado_en_no_se_marcó', { viajeId, err: error.message });
+  // El reclamo de arriba YA marcó `avisado_en` (A37-S50-06); un reaviso no reinicia el plazo.
+  return true; // el mensaje SALIÓ
 }
 
 /**
@@ -871,7 +914,7 @@ export async function asignarUnidad(tenantId: string, viajeId: string, unidadId:
     throw new Error(`asignarUnidad: ${error.message}`);
   }
   if (!Array.isArray(data) || data.length === 0) {
-    throw new Error('asignarUnidad: el viaje no existe en esta flota');
+    throw new DatoInvalido('Ese viaje no existe en tu flota. Recarga la pantalla.');
   }
 }
 
@@ -1343,8 +1386,9 @@ export async function crearIncidencia(tenantId: string, i: NuevaIncidencia): Pro
 export async function cambiarEstadoIncidencia(
   tenantId: string, incidenciaId: string, estado: string, ahora = new Date(),
 ): Promise<void> {
-  const { error } = await acotada(supabaseAdmin().from('incidencia')
+  const { data, error } = await acotada(supabaseAdmin().from('incidencia')
     .update({ estado, resuelta_en: estado === 'resuelta' ? ahora.toISOString() : null })
-    .eq('id', incidenciaId).eq('tenant_id', tenantId), 'cambiarEstadoIncidencia');
+    .eq('id', incidenciaId).eq('tenant_id', tenantId).select('id'), 'cambiarEstadoIncidencia');
   if (error) throw new Error(`cambiarEstadoIncidencia: ${error.message}`);
+  if ((data ?? []).length === 0) throw new Error('cambiarEstadoIncidencia: la incidencia no existe en esta flota');
 }

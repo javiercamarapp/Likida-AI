@@ -77,6 +77,9 @@ export async function trabajoPendiente(limite: number, ahoraIso: string): Promis
 // como «retenidas». Lo que sobra son candidatas: `servicio.ts` todavía filtra
 // por el CANAL REAL de cada tenant (perfil + config), porque esta tabla no lo sabe.
 
+/** Páginas máximas por pasada al buscar huérfanas entre muchos desgloses retenidos. */
+const MAX_PAGINAS_HUERFANAS = 10;
+
 export interface CandidataHuerfanaCorreo { id: string; tenantId: string; claveExterna: string; creadaEn: string }
 
 /** `pendiente`, creadas antes de `antesIso`, sin fila en `liquidacion_desglose`. Acotado a un lote.
@@ -84,28 +87,41 @@ export interface CandidataHuerfanaCorreo { id: string; tenantId: string; claveEx
  *  modo de falla que esta consulta existe para cerrar. Sin la migración 0786 (tabla `liquidacion_desglose` ausente):
  *  NINGUNA liquidación pudo venir por `/desgloses`, así que todas las `pendiente` viejas son candidatas. */
 export async function candidatasHuerfanaCorreo(limite: number, antesIso: string): Promise<CandidataHuerfanaCorreo[]> {
-  const res = await acotada(supabaseAdmin().from('liquidacion_externa')
-    .select('id, tenant_id, clave_externa, created_at')
-    .eq('estado', 'pendiente').lte('created_at', antesIso)
-    .order('created_at', { ascending: true }).order('id').limit(limite), 'liqext.huerfanas_candidatas');
-  const filas = (exigir(res, 'liqext.huerfanas_candidatas') ?? []) as unknown as
-    Array<{ id: string; tenant_id: string; clave_externa: string; created_at: string }>;
-  if (filas.length === 0) return [];
+  // A37-S49-04: los desgloses RETENIDOS se quedan `pendiente` por diseño; si se tomaran las N más viejas y solo después se
+  // descartaran, N retenidas viejas taparían para siempre a una huérfana real. Se pagina por (created_at, id) y se descarta
+  // página a página hasta juntar `limite` candidatas o agotar la tabla (tope de páginas: la lectura sigue acotada).
+  const candidatas: CandidataHuerfanaCorreo[] = [];
+  let cursor: { creada: string; id: string } | null = null;
+  for (let pagina = 0; pagina < MAX_PAGINAS_HUERFANAS && candidatas.length < limite; pagina++) {
+    let consulta = supabaseAdmin().from('liquidacion_externa')
+      .select('id, tenant_id, clave_externa, created_at')
+      .eq('estado', 'pendiente').lte('created_at', antesIso);
+    if (cursor) consulta = consulta.or(`created_at.gt.${cursor.creada},and(created_at.eq.${cursor.creada},id.gt.${cursor.id})`);
+    const res = await acotada(consulta.order('created_at', { ascending: true }).order('id').limit(limite), 'liqext.huerfanas_candidatas');
+    const filas = (exigir(res, 'liqext.huerfanas_candidatas') ?? []) as unknown as
+      Array<{ id: string; tenant_id: string; clave_externa: string; created_at: string }>;
+    if (filas.length === 0) break;
+    const ultima = filas[filas.length - 1];
+    cursor = { creada: ultima.created_at, id: ultima.id };
 
-  const ids = filas.map((f) => f.id);
-  const desg = await acotada(supabaseAdmin().from('liquidacion_desglose')
-    .select('liquidacion_externa_id').in('liquidacion_externa_id', ids), 'liqext.huerfanas_desgloses');
-  let conDesglose = new Set<string>();
-  if (desg.error) {
-    const ausente = desg.error.code === '42P01' || desg.error.code === 'PGRST205'
-      || /does not exist|schema cache/i.test(desg.error.message ?? '');
-    if (!ausente) throw new Error(`liqext.huerfanas_desgloses: ${desg.error.message}`);
-    // Tabla ausente ⇒ ninguna liquidación tiene desglose: todas las `pendiente` viejas quedan como candidatas.
-  } else {
-    conDesglose = new Set((desg.data ?? []).map((d) => String((d as { liquidacion_externa_id: unknown }).liquidacion_externa_id)));
+    const ids = filas.map((f) => f.id);
+    const desg = await acotada(supabaseAdmin().from('liquidacion_desglose')
+      .select('liquidacion_externa_id').in('liquidacion_externa_id', ids), 'liqext.huerfanas_desgloses');
+    let conDesglose = new Set<string>();
+    if (desg.error) {
+      const ausente = desg.error.code === '42P01' || desg.error.code === 'PGRST205'
+        || /does not exist|schema cache/i.test(desg.error.message ?? '');
+      if (!ausente) throw new Error(`liqext.huerfanas_desgloses: ${desg.error.message}`);
+      // Tabla ausente ⇒ ninguna liquidación tiene desglose: todas las `pendiente` viejas quedan como candidatas.
+    } else {
+      conDesglose = new Set((desg.data ?? []).map((d) => String((d as { liquidacion_externa_id: unknown }).liquidacion_externa_id)));
+    }
+    for (const f of filas) {
+      if (!conDesglose.has(f.id)) candidatas.push({ id: f.id, tenantId: f.tenant_id, claveExterna: f.clave_externa, creadaEn: f.created_at });
+    }
+    if (filas.length < limite) break; // última página
   }
-  return filas.filter((f) => !conDesglose.has(f.id))
-    .map((f) => ({ id: f.id, tenantId: f.tenant_id, claveExterna: f.clave_externa, creadaEn: f.created_at }));
+  return candidatas.slice(0, limite);
 }
 
 /** Los avisos de discrepancia que el cron tiene que mover (0643): pendientes cuyo reintento ya toca y los que quedaron

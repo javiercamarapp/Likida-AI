@@ -279,7 +279,8 @@ export function candidatosAExcel(r: ReporteCandidatos): Uint8Array {
 }
 
 const celdaCsv = (v: unknown): string => {
-  const s = v === null || v === undefined ? '' : String(v);
+  // A37-A2-18: todo TEXTO (también fecha/hora del archivo del proveedor) pasa por `texto()`; los números no se tocan (un importe negativo es número, no fórmula).
+  const s = v === null || v === undefined ? '' : typeof v === 'string' ? texto(v) : String(v);
   return /[",\n\r;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 

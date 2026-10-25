@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { Siren, ShieldCheck, PhoneCall, HeartHandshake } from 'lucide-react';
-import { fechaMx } from '@/lib/formato';
+import { fechaMx, hoyMx } from '@/lib/formato';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -215,7 +215,7 @@ export default async function PaginaEmergencias({
                 <p className="text-sm font-medium">Póliza de la flota</p>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
                   {poliza
-                    ? `${poliza.aseguradora} · póliza ${poliza.numeroPoliza} · siniestros ${poliza.telefonoSiniestros}${poliza.vigenciaHasta ? ` · vigente hasta ${fechaMx(poliza.vigenciaHasta)}` : ''}. Guardar de nuevo la reemplaza (la anterior queda en la historia).`
+                    ? `${poliza.aseguradora} · póliza ${poliza.numeroPoliza} · siniestros ${poliza.telefonoSiniestros}${poliza.vigenciaHasta ? (poliza.vigenciaHasta < hoyMx() ? ` · VENCIDA el ${fechaMx(poliza.vigenciaHasta)} — si ya la renovaste, reemplázala aquí; el aviso de emergencia la rotula vencida mientras tanto` : ` · vigente hasta ${fechaMx(poliza.vigenciaHasta)}`) : ''}. Guardar de nuevo la reemplaza (la anterior queda en la historia).`
                     : 'Sin póliza capturada. El 800 de siniestros es EL dato de un siniestro — sin él, el tercer nivel de escalamiento solo puede decir que falta.'}
                 </p>
               </div>

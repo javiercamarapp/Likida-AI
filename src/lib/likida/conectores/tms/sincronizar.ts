@@ -93,7 +93,16 @@ export interface FlotaTms {
   valores: ValoresCredencial;
   /** Mapeo activo por recurso (JSON tal como está en `tms_mapeo`). Sin mapeo, el recurso no se sincroniza. */
   mapeos: Partial<Record<RecursoSincronizable, unknown>>;
+  /**
+   * La lectura exitosa más antigua entre sus recursos sincronizados (ISO), o `null` si alguno nunca terminó o no hay estado.
+   * Sirve para ROTAR el turno (la flota que lleva más sin sincronizar va primero) y para avisar cuando una flota se queda
+   * sin turno por mucho tiempo (A37-TRANSVERSAL-08). Opcional: las pruebas con listas a mano no lo traen.
+   */
+  ultimaOkEn?: string | null;
 }
+
+/** Una flota que se queda «sin turno» y lleva más de esto sin una lectura exitosa se avisa al operador. */
+export const ATRASO_ALERTA_MS = 2 * 60 * 60 * 1000;
 
 export interface EstadoSync {
   desde: string | null;
@@ -184,6 +193,8 @@ export interface ResumenSincronizacion {
   parciales: number;
   sinTurno: number;
   alarmas: number;
+  /** Flotas que se quedaron sin turno de reloj y llevan más de `ATRASO_ALERTA_MS` sin una lectura exitosa (A37-TRANSVERSAL-08). */
+  atrasadas: string[];
 }
 
 export interface OpcionesSincronizar {
@@ -571,10 +582,17 @@ export async function sincronizarTms(deps: DepsSincronizacion, opciones: Opcione
   const flotas = await deps.listarFlotas();
   const total: ResumenSincronizacion = {
     flotas: [], filasPorRecurso: { liquidaciones: 0, peajes: 0, viajes: 0, posiciones: 0 },
-    peticiones: 0, renovados401: 0, conError: 0, parciales: 0, sinTurno: 0, alarmas: 0,
+    peticiones: 0, renovados401: 0, conError: 0, parciales: 0, sinTurno: 0, alarmas: 0, atrasadas: [],
+  };
+  // ¿Esta flota que no alcanzó turno ya lleva demasiado sin una lectura exitosa? (sin dato = nunca terminó una = sí)
+  const marcarAtrasada = (flota: FlotaTms): void => {
+    const ult = flota.ultimaOkEn === undefined ? undefined : flota.ultimaOkEn === null ? null : Date.parse(flota.ultimaOkEn);
+    if (ult === undefined) return;
+    if (ult === null || !Number.isFinite(ult) || deps.ahora() - ult > ATRASO_ALERTA_MS) total.atrasadas.push(flota.tenantId);
   };
   for (const flota of flotas) {
     if (opciones.venceEn !== undefined && deps.ahora() >= opciones.venceEn) {
+      marcarAtrasada(flota);
       total.sinTurno += 1;
       total.flotas.push({ tenantId: flota.tenantId, recursos: [], peticiones: 0, renovados401: 0, credencialRechazada: false, sinTurno: true });
       continue;
@@ -590,7 +608,7 @@ export async function sincronizarTms(deps: DepsSincronizacion, opciones: Opcione
     total.flotas.push(f);
     total.peticiones += f.peticiones; total.renovados401 += f.renovados401;
     if (f.credencialRechazada) total.alarmas += 1;
-    if (f.sinTurno) total.sinTurno += 1;
+    if (f.sinTurno) { total.sinTurno += 1; marcarAtrasada(flota); }
     for (const rr of f.recursos) {
       total.filasPorRecurso[rr.recurso] += rr.leidas;
       if (rr.estado === 'error') total.conError += 1;
@@ -615,8 +633,33 @@ async function listarFlotasReales(): Promise<FlotaTms[]> {
   const cred = await acotada(admin.from('conector_credencial').select('tenant_id')
     .eq('conector_id', CONECTOR_TMS).eq('activo', true).not('probada_en', 'is', null).is('ultimo_error', null), 'tms.sincronizar.credenciales');
   if (cred.error) throw new Error(`tms.sincronizar.credenciales: ${cred.error.message}`);
-  const tenants = [...new Set((cred.data ?? []).map((f) => String((f as { tenant_id: unknown }).tenant_id)))];
+  const tenants = [...new Set((cred.data ?? []).map((f) => String((f as { tenant_id: unknown }).tenant_id)))].sort();
   if (tenants.length === 0) return [];
+
+  // A37-TRANSVERSAL-08: el turno ROTA. La base devolvía las flotas siempre en el mismo orden y la primera con páginas lentas
+  // agotaba el reloj en cada corrida; ahora va primero la que lleva más tiempo sin una lectura exitosa. Si la lectura falla,
+  // se queda el orden estable por id (nunca se corta la corrida por esto).
+  const ultimaOk = new Map<string, string | null>();
+  try {
+    const est = await acotada(admin.from('tms_sincronizacion').select('tenant_id, ultima_ok_en').in('tenant_id', tenants), 'tms.sincronizar.rotacion');
+    if (est.error) throw new Error(est.error.message);
+    for (const f of (est.data ?? []) as Array<{ tenant_id: unknown; ultima_ok_en: unknown }>) {
+      const t = String(f.tenant_id);
+      const u = typeof f.ultima_ok_en === 'string' && Number.isFinite(Date.parse(f.ultima_ok_en)) ? f.ultima_ok_en : null;
+      const previa = ultimaOk.get(t);
+      if (previa === undefined) ultimaOk.set(t, u);
+      else if (previa === null || u === null) ultimaOk.set(t, null);
+      else if (Date.parse(u) < Date.parse(previa)) ultimaOk.set(t, u);
+    }
+  } catch (e) {
+    ultimaOk.clear();
+    logger.warn('tms.sincronizar.rotacion_ilegible', { error: e instanceof Error ? e.message : String(e) });
+  }
+  const claveRotacion = (t: string): number => {
+    const u = ultimaOk.get(t);
+    return u === undefined || u === null ? Number.NEGATIVE_INFINITY : Date.parse(u); // sin estado o con un recurso sin éxito: primero
+  };
+  tenants.sort((a, b) => (claveRotacion(a) === claveRotacion(b) ? (a < b ? -1 : a > b ? 1 : 0) : claveRotacion(a) < claveRotacion(b) ? -1 : 1));
 
   const map = await acotada(admin.from('tms_mapeo').select('tenant_id, recurso, mapeo').in('tenant_id', tenants).eq('activo', true), 'tms.sincronizar.mapeos');
   if (map.error) throw new Error(`tms.sincronizar.mapeos: ${map.error.message}`);
@@ -634,7 +677,7 @@ async function listarFlotasReales(): Promise<FlotaTms[]> {
     if (!mapeos || Object.keys(mapeos).length === 0) continue; // sin mapeo activo no hay nada que leer
     const valores = await leerCredencial(tenantId, CONECTOR_TMS);
     if (valores === null) continue;
-    flotas.push({ tenantId, valores, mapeos });
+    flotas.push({ tenantId, valores, mapeos, ...(ultimaOk.size > 0 ? { ultimaOkEn: ultimaOk.get(tenantId) ?? null } : {}) });
   }
   return flotas;
 }

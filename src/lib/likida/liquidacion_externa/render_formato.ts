@@ -75,6 +75,14 @@ function textoRenglon(campo: CampoRenglon, c: ConceptoExterno): string {
   return v;
 }
 
+/** A37-S49-05: una tabla con «Importe» (`monto`) pero SIN columna `tipo` (ni `montoFirmado`) imprimía las deducciones como
+ *  importes positivos y el total no era la suma que se veía. Esa columna se dibuja con signo (deducción en negativo). */
+function conSigno(f: FormatoFlota): FormatoFlota {
+  const campos = f.columnas.map((c) => c.campo);
+  if (!campos.includes('monto') || campos.includes('tipo') || campos.includes('montoFirmado')) return f;
+  return { ...f, columnas: f.columnas.map((c) => (c.campo === 'monto' ? { ...c, campo: 'montoFirmado' as const } : c)) };
+}
+
 const tituloDe = (f: FormatoFlota, d: DatosFormato) => f.titulo ?? (d.razonSocial?.trim() ? `Liquidación — ${d.razonSocial.trim()}` : 'Liquidación');
 
 const pieDe = (d: DatosFormato) => {
@@ -84,7 +92,8 @@ const pieDe = (d: DatosFormato) => {
 
 // ── EXCEL ───────────────────────────────────────────────────────────────────
 
-export function generarExcelFormato(f: FormatoFlota, d: DatosFormato): Uint8Array {
+export function generarExcelFormato(formato: FormatoFlota, d: DatosFormato): Uint8Array {
+  const f = conSigno(formato);
   const filas: Array<Array<string | number | null>> = [];
   filas.push([tituloDe(f, d)]);
   filas.push([]);
@@ -98,9 +107,9 @@ export function generarExcelFormato(f: FormatoFlota, d: DatosFormato): Uint8Arra
   let filaTotal = -1;
   if (f.total.mostrar) {
     // El total ES el que mandó el cliente, escrito como número (no una fórmula
-    // que lo recalcule): en la columna de cifra principal, o la última.
-    const idxMonto = f.columnas.findIndex((c) => c.campo === 'monto' || c.campo === 'montoFirmado');
-    const idx = idxMonto >= 0 ? idxMonto : f.columnas.length - 1;
+    // que lo recalcule): bajo la columna de cifra principal; si la tabla es de Percepciones | Deducciones no hay una
+    // columna que sea «el total» (A37-S49-05: caía bajo «Deducciones»), así que va en SU celda, junto a su etiqueta.
+    const idx = f.columnas.findIndex((c) => c.campo === 'monto' || c.campo === 'montoFirmado');
     const fila: Array<string | number | null> = f.columnas.map(() => null);
     fila[0] = f.total.etiqueta;
     if (idx > 0) fila[idx] = d.total; else fila[1] = d.total;
@@ -145,7 +154,8 @@ const PISO = 70;
 
 const PESO_COLUMNA: Record<CampoRenglon, number> = { clave: 1.1, descripcion: 3.4, tipo: 1.2, monto: 1.5, montoFirmado: 1.5, percepcion: 1.5, deduccion: 1.5 };
 
-export async function generarPdfFormato(f: FormatoFlota, d: DatosFormato): Promise<Uint8Array> {
+export async function generarPdfFormato(formato: FormatoFlota, d: DatosFormato): Promise<Uint8Array> {
+  const f = conSigno(formato);
   const doc = await PDFDocument.create();
   doc.setTitle(wa(`Liquidación ${d.claveExterna}`));
   doc.setProducer('Likida');

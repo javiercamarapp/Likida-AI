@@ -8,7 +8,8 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
-import { exigir } from '@/lib/likida/pg';
+import { conteo, exigir } from '@/lib/likida/pg';
+import { leerConTope } from './lectura_paginada';
 import { logger } from '@/lib/logger';
 import { tablaAusente } from './repo';
 import { CONFLICTO_DISTANCIA, TABLA_DISTANCIA, type PuertoDistancias, type RegistroDistancia, type RutaDistancia } from './catalogo_distancias';
@@ -52,16 +53,17 @@ export function puertoDistanciasSupabase(): PuertoDistancias {
 
 /** Las rutas de UN cliente de UNA flota. Filtra por tenant Y cliente. Sin la 0830 aplicada devuelve `[]` y lo registra. */
 export async function cargarDistanciasCliente(tenantId: string, clienteId: string): Promise<RutaDistancia[]> {
-  const r = await acotada(
-    supabaseAdmin().from(TABLA_DISTANCIA).select(COLUMNAS).eq('tenant_id', tenantId).eq('cliente_id', clienteId)
-      .order('tipo').order('origen').order('destino').limit(TOPE_RUTAS_CLIENTE),
+  // A37-S31-01: paginado con range(): `.limit(20000)` lo recortaba PostgREST a max_rows (1,000) sin que el aviso de truncado se disparara.
+  const r = await leerConTope<Fila>((d, h, primera) => acotada(
+    supabaseAdmin().from(TABLA_DISTANCIA).select(COLUMNAS, conteo(primera ? 0 : 1)).eq('tenant_id', tenantId).eq('cliente_id', clienteId)
+      .order('tipo').order('origen').order('destino').order('id').range(d, h),
     'cpdist.cargar',
-  );
+  ) as never, TOPE_RUTAS_CLIENTE);
   if (tablaAusente(r.error)) {
     logger.warn('cartaporte_docs.distancias_sin_migracion', { tenantId });
     return [];
   }
   const filas = (exigir(r, 'cpdist.cargar') ?? []) as unknown as Fila[];
-  if (filas.length >= TOPE_RUTAS_CLIENTE) logger.warn('cartaporte_docs.distancias_truncado', { tenantId, filas: filas.length });
+  if (r.truncado) logger.warn('cartaporte_docs.distancias_truncado', { tenantId, filas: filas.length });
   return filas.map((f): RutaDistancia => ({ tenantId, clienteId, tipo: f.tipo === 'municipio' ? 'municipio' : 'cp', origen: String(f.origen), destino: String(f.destino), km: Number(f.km) }));
 }

@@ -5,6 +5,7 @@ import {
   SELECTORES_CAPUFE,
   URL_CAPUFE_SIN_REGISTRO,
   parsearCosto,
+  montoDeTicket,
   pideCaptcha,
   registrarCapufe,
   revisarReceptor,
@@ -71,7 +72,8 @@ interface Fila { codigo: string; plaza: string; fecha: string; costo: string }
 
 type Respuesta =
   | { agrega: true; plaza?: string; fecha?: string; costo?: string }
-  | { agrega: false; aviso?: string; captcha?: string[] };
+  /** `tardia`: la fila NO está al leerla pero se pinta enseguida (portal lento). */
+  | { agrega: false; aviso?: string; captcha?: string[]; tardia?: boolean };
 
 interface OpcDoble {
   /** Qué selectores existen. Default: los nueve del pre-vuelo. */
@@ -126,6 +128,7 @@ class PortalDoble implements PaginaCapufe {
 
   private aviso: string | null;
   private ultimoCodigo = '';
+  private tardias: Fila[] = [];
   private readonly presentes: string[];
 
   existe?: (selector: string) => Promise<boolean>;
@@ -219,6 +222,7 @@ class PortalDoble implements PaginaCapufe {
       return;
     }
     this.aviso = r.aviso ?? null;
+    if (r.tardia) this.tardias.push({ codigo: this.ultimoCodigo, plaza: 'Palmillas', fecha: '2026-08-03', costo: '$180.00' });
     for (const c of r.captcha ?? []) if (!this.presentes.includes(c)) this.presentes.push(c);
   }
 
@@ -229,7 +233,12 @@ class PortalDoble implements PaginaCapufe {
     const m = /^(.*) tbody tr:nth-child\((\d+)\) td:nth-child\((\d+)\)$/.exec(sel);
     if (m && m[1] === S.tabla) {
       const fila = this.filas[Number(m[2]) - 1];
-      if (!fila) return null; // se acabaron las filas
+      if (!fila) {
+        // El portal lento pinta la fila DESPUÉS de que el código la buscó: esta
+        // lectura (fin de tabla) ya dice «no está»; las siguientes sí la ven.
+        this.filas.push(...this.tardias); this.tardias = [];
+        return null; // se acabaron las filas
+      }
       return [fila.codigo, fila.plaza, fila.fecha, fila.costo][Number(m[3]) - 1] ?? null;
     }
     return null;
@@ -310,10 +319,10 @@ describe('#cb1 — el checkbox que NO son términos y condiciones', () => {
     await ensayo.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'ensayo');
 
     const emitir = montar({ uuid: 'AA11BB22-3333-4444-5555-666677778888' });
-    await emitir.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+    await emitir.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
 
     const rechazo = montar({ respuestas: { [CODIGO_A]: { agrega: false, aviso: 'Código no encontrado' } } });
-    await rechazo.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+    await rechazo.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
 
     for (const m of [ensayo, emitir, rechazo]) {
       expect(m.primera().clics).not.toContain(S.complementoPartidos);
@@ -330,7 +339,7 @@ describe('#cb1 — el checkbox que NO son términos y condiciones', () => {
       selectores: { botonValidar: S.complementoPartidos },
       presentes: [...TODOS, S.complementoPartidos],
     });
-    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
 
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/partidos pol[ií]ticos/i);
@@ -477,7 +486,7 @@ describe('un código que el portal rechaza', () => {
       },
       uuid: 'AA11BB22-3333-4444-5555-666677778888',
     });
-    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }, { codigo: CODIGO_B }], 'emitir');
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }, { codigo: CODIGO_B, montoEsperado: 180 }], 'emitir');
 
     expect(r.ok).toBe(false);
     expect(m.primera().emitido).toBe(false);
@@ -487,7 +496,7 @@ describe('un código que el portal rechaza', () => {
 
   it('un código que no mide 18 se rechaza SIN abrir el navegador', async () => {
     const m = montar();
-    const r = await m.adaptador.facturarVarios([{ codigo: 'CAP123' }], 'emitir');
+    const r = await m.adaptador.facturarVarios([{ codigo: 'CAP123', montoEsperado: 180 }], 'emitir');
 
     expect(r.ok).toBe(false);
     expect(m.abrirPagina).not.toHaveBeenCalled();
@@ -543,7 +552,7 @@ describe('los <select> que se pueblan por AJAX', () => {
     // escribirle el valor no dispara el handler del framework. Sin verificar,
     // el CFDI sale con el régimen anterior y el receptor no lo puede deducir.
     const m = montar({ seleccionNoPrende: true });
-    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
 
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/qued[óo] ""/);
@@ -577,7 +586,7 @@ describe('los <select> que se pueblan por AJAX', () => {
       seleccionNoPrende: true,
       presentes: [...TODOS, S.buscadorRegimen, S.buscadorUso, opcion, S.opcionDelBuscador('G03')],
     });
-    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
 
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/Régimen Fiscal/);
@@ -589,7 +598,7 @@ describe('los <select> que se pueblan por AJAX', () => {
 describe('CAPTCHA — "no se puede", que no es "no pude"', () => {
   it('lo detecta al abrir, aborta sin escribir un carácter y lo dice con la frase', async () => {
     const m = montar({ presentes: [...TODOS, '.g-recaptcha'] });
-    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
 
     expect(r.ok).toBe(false);
     expect(r.requiereCaptcha).toBe(true);
@@ -609,7 +618,7 @@ describe('CAPTCHA — "no se puede", que no es "no pude"', () => {
       respuestas: { [CODIGO_A]: { agrega: false, captcha: ['iframe[src*="recaptcha/api2/bframe"]'] } },
       uuid: 'AA11BB22-3333-4444-5555-666677778888',
     });
-    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }, { codigo: CODIGO_B }], 'emitir');
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }, { codigo: CODIGO_B, montoEsperado: 180 }], 'emitir');
 
     expect(r.requiereCaptcha).toBe(true);
     expect(r.error).toContain(MENSAJE_CAPTCHA);
@@ -715,10 +724,71 @@ describe('el costo lo dice el portal, no el OCR', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+describe('A37-S41-04/05: no verificable bloquea y la tabla se concilia antes de emitir', () => {
+  const UUID = 'AA11BB22-3333-4444-5555-666677778888';
+
+  it('A37-S41-04: un monto de ticket con coma de millares ("1,234.50") se cotea de verdad y detecta la discrepancia', async () => {
+    const m = montar({ respuestas: { [CODIGO_A]: { agrega: true, costo: '$246.00' } }, uuid: UUID });
+    const r = await m.adaptador.facturar(
+      [
+        { clave: 'codigo', etiqueta: 'Código', valor: CODIGO_A, requerido: true },
+        { clave: 'monto', etiqueta: 'Monto', valor: '1,234.50', requerido: false },
+      ] as CampoListo[], 'emitir');
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/NO SE EMITIÓ/);
+    expect(m.primera().emitido).toBe(false);
+  });
+
+  it('A37-S41-04: un monto ilegible ("N/D") en el ticket NO deja pasar el timbrado sin cotejo', async () => {
+    const m = montar({ uuid: UUID });
+    const r = await m.adaptador.facturar(
+      [
+        { clave: 'codigo', etiqueta: 'Código', valor: CODIGO_A, requerido: true },
+        { clave: 'monto', etiqueta: 'Monto', valor: 'N/D', requerido: false },
+      ] as CampoListo[], 'emitir');
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/no se pudieron cotejar/);
+    expect(m.primera().emitido).toBe(false);
+  });
+
+  it('A37-S41-04: un costo ilegible del portal bloquea la emisión; con la bandera explícita sí emite', async () => {
+    const resp = { [CODIGO_A]: { agrega: true as const, costo: 'N/D' } };
+    const bloqueado = montar({ respuestas: resp, uuid: UUID });
+    const r1 = await bloqueado.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
+    expect(r1.ok).toBe(false);
+    expect(r1.error).toMatch(/no se pudieron cotejar/);
+    expect(bloqueado.primera().emitido).toBe(false);
+
+    const libre = montar({ respuestas: resp, uuid: UUID, emitirAunConDiscrepancia: true });
+    const r2 = await libre.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
+    expect(r2.ok).toBe(true);
+  });
+
+  it('A37-S41-05: un código "rechazado" que SÍ quedó en la tabla (fila lenta) frena la emisión', async () => {
+    const m = montar({
+      respuestas: { [CODIGO_B]: { agrega: false, tardia: true } },
+      uuid: UUID,
+    });
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }, { codigo: CODIGO_B, montoEsperado: 180 }], 'emitir');
+    expect(r.codigos[1].estado).toBe('rechazado');
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/no coincide/);
+    expect(r.error).toContain(CODIGO_B);
+    expect(m.primera().emitido).toBe(false);
+  });
+
+  it('CONTROL — con la tabla igual a lo agregado, emite normal', async () => {
+    const m = montar({ uuid: UUID });
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }, { codigo: CODIGO_B, montoEsperado: 180 }], 'emitir');
+    expect(r.ok).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 describe('modo emitir', () => {
   it('aprieta una sola vez al final y devuelve el UUID del CFDI', async () => {
     const m = montar({ uuid: '  B0800A68-1F2E-4C3A-9D77-0A1B2C3D4E5F  ' });
-    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }, { codigo: CODIGO_B }], 'emitir');
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }, { codigo: CODIGO_B, montoEsperado: 180 }], 'emitir');
 
     expect(r.ok).toBe(true);
     expect(r.cfdiUuid).toBe('B0800A68-1F2E-4C3A-9D77-0A1B2C3D4E5F');
@@ -728,7 +798,7 @@ describe('modo emitir', () => {
 
   it('sin UUID confirmado no dice que salió bien, avisa del CFDI y NO reintenta', async () => {
     const m = montar({ uuid: undefined });
-    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
 
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/PUEDE QUE EL CFDI YA EXISTA/);
@@ -738,7 +808,7 @@ describe('modo emitir', () => {
 
   it('si el botón de emitir revienta, dice que se apretó y que puede haber CFDI', async () => {
     const m = montar({ presentes: TODOS.filter((s) => s !== S.botonEmitir), sinPreVuelo: true });
-    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
 
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/SE APRETÓ EMITIR/);
@@ -762,7 +832,7 @@ describe('el UUID se SONDEA, no se lee una vez', () => {
       uuid: 'AA11BB22-3333-4444-5555-666677778888',
     });
 
-    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
 
     expect(r.ok).toBe(true);
     expect(r.cfdiUuid).toBe('AA11BB22-3333-4444-5555-666677778888');
@@ -775,7 +845,7 @@ describe('el UUID se SONDEA, no se lee una vez', () => {
 
   it('lo mismo sin pre-pintar: el contenedor aparece tarde y el folio se confirma igual', async () => {
     const m = montar({ uuidVueltas: 2, uuid: 'B0800A68-1F2E-4C3A-9D77-0A1B2C3D4E5F' });
-    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
 
     expect(r.ok).toBe(true);
     expect(r.cfdiUuid).toBe('B0800A68-1F2E-4C3A-9D77-0A1B2C3D4E5F');
@@ -785,7 +855,7 @@ describe('el UUID se SONDEA, no se lee una vez', () => {
     // No apareció → o el portal no llegó a su pantalla de resultado, o `.uuid`
     // ya no es el selector: se mira el mapeo.
     const ausente = montar({ uuid: undefined });
-    const a = await ausente.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+    const a = await ausente.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
     expect(a.ok).toBe(false);
     expect(a.error).toMatch(/no apareció/);
     expect(a.error).toMatch(/PUEDE QUE EL CFDI YA EXISTA/);
@@ -793,7 +863,7 @@ describe('el UUID se SONDEA, no se lee una vez', () => {
     // Apareció vacío → el contenedor está bien, el timbrado no volvió. Mandar a
     // revisar el mapeo aquí es perder el tiempo.
     const vacio = montar({ uuid: undefined, uuidPrepintado: true });
-    const v = await vacio.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+    const v = await vacio.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
     expect(v.ok).toBe(false);
     expect(v.error).toMatch(/siguió VACÍO/);
     expect(v.error).toMatch(/PUEDE QUE EL CFDI YA EXISTA/);
@@ -808,7 +878,7 @@ describe('el UUID se SONDEA, no se lee una vez', () => {
     // portal que nunca pinta el folio se lleva la invocación entera y con ella el
     // resto del lote.
     const m = montar({ uuid: undefined, uuidPrepintado: true, esperaUuidMs: 6 });
-    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
 
     expect(r.ok).toBe(false);
     expect(m.primera().vecesQueLeyoUuid).toBe(6);
@@ -816,7 +886,7 @@ describe('el UUID se SONDEA, no se lee una vez', () => {
 
   it('un folio con espacios alrededor se recorta, igual que antes', async () => {
     const m = montar({ uuidPrepintado: true, uuidVueltas: 1, uuid: '  B0800A68-1F2E-4C3A-9D77-0A1B2C3D4E5F  ' });
-    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
     expect(r.cfdiUuid).toBe('B0800A68-1F2E-4C3A-9D77-0A1B2C3D4E5F');
   });
 });
@@ -869,7 +939,7 @@ describe('pre-vuelo de selectores', () => {
 describe('los datos fiscales de la flota', () => {
   it('un RFC que no pasa el dígito verificador no abre el navegador', async () => {
     const m = montar({ receptor: { ...RECEPTOR, rfc: 'GMX0902279I9' } });
-    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
 
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/d[ií]gito verificador/);
@@ -1025,3 +1095,59 @@ describe('registro en el agente', () => {
 function campos(codigo: string): CampoListo[] {
   return [{ clave: 'codigo', etiqueta: 'código del ticket', valor: codigo, requerido: true }];
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A37-S64-03: sin monto del ticket, o con el costo del portal ilegible, NO se emite (no hay con qué cotejar).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('A37-S64-03: lo que no se pudo cotejar no se emite', () => {
+  const UUID_CFDI = 'AA11BB22-3333-4444-5555-666677778888';
+
+  it('montoDeTicket entiende los miles («1,234.50») y NO inventa lo ilegible', () => {
+    expect(montoDeTicket('1,234.50')).toBe(1234.5);
+    expect(montoDeTicket('$ 180.00')).toBe(180);
+    expect(montoDeTicket('180,50')).toBe(180.5);
+    expect(montoDeTicket('abc')).toBeNull();
+    expect(montoDeTicket('1.234')).toBeNull(); // tres decimales: ni millar ni centavos
+    expect(montoDeTicket('')).toBeNull();
+    expect(montoDeTicket(null)).toBeNull();
+  });
+
+  it('en `emitir`, un código SIN monto esperado bloquea la emisión y lo dice', async () => {
+    const m = montar({ respuestas: { [CODIGO_A]: { agrega: true, costo: '$180.00' } }, uuid: UUID_CFDI });
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+    expect(r.ok).toBe(false);
+    expect(m.primera().emitido).toBe(false);
+    expect(r.error).toMatch(/NO SE EMITIÓ/);
+    expect(r.error).toMatch(/no trae un monto legible/);
+  });
+
+  it('en `emitir`, un costo ilegible del portal bloquea aunque el ticket traiga monto', async () => {
+    const m = montar({ respuestas: { [CODIGO_A]: { agrega: true, costo: 'N/D' } }, uuid: UUID_CFDI });
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
+    expect(r.ok).toBe(false);
+    expect(m.primera().emitido).toBe(false);
+    expect(r.error).toMatch(/costo del portal no se pudo leer/);
+  });
+
+  it('con `emitirAunConDiscrepancia` (decisión humana) sí emite', async () => {
+    const m = montar({ respuestas: { [CODIGO_A]: { agrega: true, costo: '$180.00' } }, uuid: UUID_CFDI, emitirAunConDiscrepancia: true });
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+    expect(r.ok).toBe(true);
+  });
+
+  it('el ensayo no se bloquea (no emite nada): sigue avisando', async () => {
+    const m = montar({ respuestas: { [CODIGO_A]: { agrega: true, costo: '$180.00' } } });
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'ensayo');
+    expect(r.ok).toBe(true);
+  });
+
+  it('facturar(): un monto con coma de millares («1,234.50») llega como monto esperado, no como null', async () => {
+    const m = montar({ respuestas: { [CODIGO_A]: { agrega: true, costo: '$1,234.50' } }, uuid: UUID_CFDI });
+    const r = await m.adaptador.facturar(
+      [{ clave: 'codigo', etiqueta: 'código', valor: CODIGO_A, requerido: true }, { clave: 'monto', etiqueta: 'monto', valor: '1,234.50', requerido: false }],
+      'emitir',
+    );
+    expect(r.ok).toBe(true);
+    expect(r.codigos[0]).toMatchObject({ montoEsperado: 1234.5, costoPortal: 1234.5 });
+  });
+});

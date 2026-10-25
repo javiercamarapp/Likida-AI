@@ -39,7 +39,7 @@ export function registroAPosicion(
   if (unidad === '') return rech('unidad vacía');
   if (unidad.length > 80) return rech('unidad demasiado larga');
   const lat = leerNumero(r.lat, opciones.decimalComa); const lon = leerNumero(r.lon, opciones.decimalComa);
-  const mc = motivoCoordenadas(lat, lon);
+  const mc = motivoCoordenadas(lat, lon, { transfronterizo: true }); // A37-S38-10: un tractor puede cruzar a EE. UU.
   if (mc) return rech(mc);
   const f = normalizarFechaLocal(r.fecha_hora instanceof Date ? r.fecha_hora.toISOString() : str(r.fecha_hora), opciones.zona ?? ZONA_POR_OMISION);
   if ('error' in f) return rech(f.error);

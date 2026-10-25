@@ -4,6 +4,7 @@ import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { sufijoTenant } from '../../../sufijo';
 import { logger } from '@/lib/logger';
+import { dejarFlash, leerFlash } from '@/lib/likida/mensaje_flash';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import {
   leerConfigCorreo, guardarConfigCorreo, exigirContactosParaActivar, CONFIG_CORREO_POR_DEFECTO, type ConfigCorreo,
@@ -23,9 +24,10 @@ async function puerta(tenantId: string): Promise<{ por: string } | { error: stri
   return { por: sesion.userId };
 }
 
-function volver(sufijo: string, msg: string): never {
-  const param = msg.startsWith('error:') ? `error=${encodeURIComponent(msg.slice(6))}` : `aviso=${encodeURIComponent(msg)}`;
-  redirect(`${RUTA}${sufijo}${sufijo ? '&' : '?'}${param}`);
+async function volver(sufijo: string, msg: string): Promise<never> {
+  // A37-S13-08 / A37-S14-07: el mensaje viaja en una cookie de servidor, no como texto libre en la URL.
+  await dejarFlash(RUTA, msg.startsWith('error:') ? { error: msg.slice(6) } : { aviso: msg });
+  redirect(`${RUTA}${sufijo}`);
 }
 
 /** Nombres de los campos que cambiaron (jamás sus valores: llevan correos). Para la bitácora de auditoría. */
@@ -42,13 +44,14 @@ function camposCambiados(antes: ConfigCorreo, despues: ConfigCorreo): string[] {
 export default async function PaginaConfiguracionLiquidacion({
   searchParams,
 }: {
-  searchParams: Promise<{ tenant?: string; rol?: string; aviso?: string; error?: string }>;
+  searchParams: Promise<{ tenant?: string; rol?: string }>;
 }) {
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
   const sufijo = sufijoTenant(sp);
   const puedeAdministrar = puedeVerArea(rol, 'administracion');
+  const flash = await leerFlash(RUTA);
 
   // Primaria (sin `safe` mudo): si no se pudo leer, la pantalla lo dice; jamás muestra el defecto como si fuera lo guardado.
   let config: ConfigCorreo = { ...CONFIG_CORREO_POR_DEFECTO };
@@ -67,13 +70,13 @@ export default async function PaginaConfiguracionLiquidacion({
   async function accionGuardar(fd: FormData) {
     'use server';
     const p = await puerta(tenantId);
-    if ('error' in p) volver(sufijo, `error:${p.error}`);
+    if ('error' in p) return volver(sufijo, `error:${p.error}`);
     const f = leerFormularioConfig(fd);
-    if (!f.ok) volver(sufijo, `error:${f.error}`);
+    if (!f.ok) return volver(sufijo, `error:${f.error}`);
     let cambios: string[] = [];
     try {
       const previa = await leerConfigCorreo(tenantId);
-      if (!previa.ok) volver(sufijo, 'error:La configuración de la entrega por correo todavía no está disponible en esta base.');
+      if (!previa.ok) return volver(sufijo, 'error:La configuración de la entrega por correo todavía no está disponible en esta base.');
       cambios = camposCambiados(previa.valor, f.config);
       await exigirContactosParaActivar(tenantId, f.config);
       await guardarConfigCorreo(tenantId, f.config, p.por);
@@ -81,17 +84,17 @@ export default async function PaginaConfiguracionLiquidacion({
       // `redirect` lanza: se deja pasar. Lo demás se dice llano, sin correos ni detalles de base.
       if (e instanceof Error && e.message === 'NEXT_REDIRECT') throw e;
       if (typeof e === 'object' && e !== null && 'digest' in e && String((e as { digest: unknown }).digest).startsWith('NEXT_REDIRECT')) throw e;
-      volver(sufijo, `error:${mensajeParaPantalla(e, 'guardar la configuración')}`);
+      return volver(sufijo, `error:${mensajeParaPantalla(e, 'guardar la configuración')}`);
     }
     logger.info('liqext.config_correo_guardada', { tenantId, por: p.por, campos: cambios, activa: f.config.activa, canal: f.config.canal });
-    volver(sufijo, f.config.activa
+    return volver(sufijo, f.config.activa
       ? 'Configuración guardada. El envío por correo está ACTIVO: los desgloses nuevos saldrán según estas reglas.'
       : 'Configuración guardada. El envío por correo sigue apagado: no sale ningún correo hasta que lo actives.');
   }
 
   return (
     <VistaConfiguracionLiquidacion
-      sufijo={sufijo} aviso={sp.aviso ?? null} error={sp.error ?? errorLectura}
+      sufijo={sufijo} aviso={flash.aviso ?? null} error={flash.error ?? errorLectura}
       config={config} hayFila={hayFila} disponible={disponible} puedeAdministrar={puedeAdministrar}
       acciones={{ guardar: accionGuardar }}
     />

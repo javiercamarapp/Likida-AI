@@ -177,7 +177,15 @@ export async function leerLiquidaciones(
     salida.rechazadas.push({ tabla: 'liquidacion', ref: `bitácora ${g.bitacora} póliza ${g.poliza}`, motivo });
   };
 
+  // A37-S38-07: el saneo de aClave puede juntar dos pólizas distintas en la MISMA clave externa; ninguna se entrega (cuál ganaría es adivinar).
+  const gruposPorClave = new Map<string, number>();
+  for (const g of grupos.values()) { const k = aClave(g.bitacora, g.poliza); gruposPorClave.set(k, (gruposPorClave.get(k) ?? 0) + 1); }
+
   for (const g of grupos.values()) {
+    if ((gruposPorClave.get(aClave(g.bitacora, g.poliza)) ?? 0) > 1) {
+      rechazar(g, 'su clave externa coincide con la de otra póliza tras sanear el texto; no se entrega ninguna de las dos hasta aclararlo en el origen');
+      continue;
+    }
     const operadorIds = new Set(g.renglones.map((r) => r.operador_id));
     if (operadorIds.size !== 1) { rechazar(g, 'los renglones de la póliza traen más de un operador'); continue; }
     const op = operadores.get(g.renglones[0].operador_id);
@@ -192,6 +200,10 @@ export async function leerLiquidaciones(
     const ocultos: string[] = []; const sinCatalogar: string[] = []; const advertencias: string[] = [];
     let netoCentavos = 0; let malo: string | undefined;
     for (const r of g.renglones) {
+      // Defensa en profundidad (A37-TRANSVERSAL-04): un importe que no llegó como número NO se omite ni se interpreta; la póliza se rechaza.
+      if ((r.cargo !== undefined && typeof r.cargo !== 'number') || (r.abono !== undefined && typeof r.abono !== 'number')) {
+        malo = `el concepto ${r.concepto_id} trae un importe que no es numérico; no se interpreta`; break;
+      }
       const cargo = r.cargo ?? 0; const abono = r.abono ?? 0;
       if (cargo < 0 || abono < 0) { malo = `el concepto ${r.concepto_id} trae un importe negativo; no se corrige ni se invierte`; break; }
       const cat = conceptos.get(r.concepto_id);

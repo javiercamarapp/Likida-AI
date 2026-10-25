@@ -42,6 +42,15 @@ export function pendientesDeHistorial(entrada: readonly EntradaPendientes[], opc
   const ventana = opciones.ventanaMin ?? VENTANA_RESPUESTA_MIN;
   const msgs = [...entrada].sort((a, b) => (a.enviadoEn < b.enviadoEn ? -1 : a.enviadoEn > b.enviadoEn ? 1 : 0));
   if (msgs.length === 0) return { pendientes: [], ignorados: 0, fotoEn: null };
+  const tiempos = msgs.map((x) => Date.parse(x.enviadoEn));
+  const ventanaMs = ventana * 60_000;
+  // Para cada posición, el instante de la primera respuesta del equipo que viene DESPUÉS (Infinity si no hay).
+  const siguienteEquipoMs: number[] = new Array(msgs.length);
+  let proximo = Infinity;
+  for (let k = msgs.length - 1; k >= 0; k--) {
+    siguienteEquipoMs[k] = proximo;
+    if (msgs[k].rol === 'equipo') proximo = tiempos[k];
+  }
   const fotoEn = msgs[msgs.length - 1].enviadoEn;
   const fotoMs = Date.parse(fotoEn);
 
@@ -51,9 +60,9 @@ export function pendientesDeHistorial(entrada: readonly EntradaPendientes[], opc
     if (m.rol !== 'cliente') return;
     const p = prioridadDe(m.texto);
     if (p.nivel === 0) { ignorados += 1; return; }
-    const ms = Date.parse(m.enviadoEn);
-    const respondido = msgs.slice(i + 1).some((r) => r.rol === 'equipo' && (Date.parse(r.enviadoEn) - ms) / 60_000 <= ventana);
-    if (respondido) return;
+    const ms = tiempos[i];
+    // `msgs` va ordenado: la respuesta más cercana es la primera del equipo después de este mensaje (lineal, no cuadrático).
+    if (siguienteEquipoMs[i] - ms <= ventanaMs) return;
     pendientes.push({
       texto: m.texto.replace(/\s+/g, ' ').trim().slice(0, MAX_TEXTO_PENDIENTE),
       nivel: p.nivel,

@@ -99,10 +99,10 @@ describe('DAT-04 · antes de crear, se le pregunta a Stripe', () => {
         return respuesta({ data: [{ id: 'sub_huerfana', status: 'active', items: { data: [{ price: { id: 'price_viejo' } }] } }] });
       }
       if (l.metodo === 'GET' && l.url.endsWith('/subscriptions/sub_huerfana')) {
-        return respuesta({ id: 'sub_huerfana', items: { data: [{ id: 'si_1' }] } });
+        return respuesta({ id: 'sub_huerfana', items: { data: [{ id: 'si_1', price: { id: 'price_viejo' } }] } });
       }
       if (l.metodo === 'POST' && l.url.endsWith('/subscriptions/sub_huerfana')) {
-        return respuesta({ id: 'sub_huerfana' });
+        return respuesta({ id: 'sub_huerfana', items: { data: [{ id: 'si_1', price: { id: 'price_nuevo' } }] } });
       }
       throw new Error(`llamada inesperada: ${l.metodo} ${l.url}`);
     });

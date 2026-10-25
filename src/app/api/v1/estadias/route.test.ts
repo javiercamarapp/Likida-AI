@@ -21,6 +21,10 @@ vi.mock('@/lib/likida/conductor/repo_validacion', () => ({
   listarSitios: (...a: unknown[]) => listarSitios(...a), asignarSitiosViaje: (...a: unknown[]) => asignarSitiosViaje(...a),
 }));
 
+// A37-S35-09: la zona de la flota (por omisión México; cada prueba puede cambiarla).
+const getZonaHorariaTenant = vi.fn(async (..._a: unknown[]): Promise<string | null> => 'America/Mexico_City');
+vi.mock('@/lib/likida/repo', () => ({ getZonaHorariaTenant: (...a: unknown[]) => getZonaHorariaTenant(...a) }));
+
 const estadias = await import('./route');
 const sitios = await import('../sitios/route');
 const sitiosViaje = await import('../viajes/[id]/sitios/route');
@@ -36,7 +40,26 @@ const put = (id: string, cuerpo: unknown) => sitiosViaje.PUT(
 
 beforeEach(() => {
   abrir.mockReset(); abrir.mockResolvedValue({ ok: true, tenantId: 't-1', rol: 'llave:dinero' });
+  getZonaHorariaTenant.mockReset(); getZonaHorariaTenant.mockResolvedValue('America/Mexico_City');
   estadiasDelPeriodo.mockClear(); listarSitios.mockClear(); asignarSitiosViaje.mockClear();
+});
+
+describe('GET /v1/estadias — zona de la flota (A37-S35-09)', () => {
+  it('una flota de Tijuana en verano: el periodo y el CSV salen en SU hora, no en -06:00 fijo', async () => {
+    getZonaHorariaTenant.mockResolvedValue('America/Tijuana');
+    const r = await estadias.GET(new Request(`${BASE}/estadias?desde=2026-07-01&hasta=2026-07-31&formato=csv`));
+    expect(r.status).toBe(200);
+    expect(getZonaHorariaTenant.mock.calls[0][0]).toBe('t-1');
+    expect(estadiasDelPeriodo.mock.calls[0][1]).toEqual(new Date('2026-07-01T07:00:00.000Z'));
+    expect(estadiasDelPeriodo.mock.calls[0][2]).toEqual(new Date('2026-08-01T07:00:00.000Z'));
+    expect(await r.text()).toContain('llegada_hora_America/Tijuana');
+  });
+  it('si la base no contesta la zona NO se adivina: falla y no consulta estadías', async () => {
+    getZonaHorariaTenant.mockRejectedValue(new Error('sin base'));
+    const r = await estadias.GET(new Request(`${BASE}/estadias?desde=2026-07-01&hasta=2026-07-31`));
+    expect(r.status).toBeGreaterThanOrEqual(500);
+    expect(estadiasDelPeriodo).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET /v1/estadias', () => {
@@ -62,6 +85,10 @@ describe('GET /v1/estadias', () => {
     ['periodo de un año', 'desde=2026-01-01&hasta=2026-12-31'],
     ['formato desconocido', 'desde=2026-10-01&hasta=2026-10-02&formato=xml'],
     ['uuid inválido en el filtro', 'desde=2026-10-01&hasta=2026-10-02&clienteId=no-uuid'],
+    ['A37-S11-04: día inexistente en hasta (31 de febrero)', 'desde=2026-02-01&hasta=2026-02-31'],
+    ['A37-S11-04: día inexistente en desde (31 de abril)', 'desde=2026-04-31&hasta=2026-05-02'],
+    ['A37-S11-04: hasta inválido SIN desde (antes reventaba con un 500 sin cuerpo)', 'hasta=foo'],
+    ['A37-S11-04: hasta con mes 13 sin desde', 'hasta=2026-13-01'],
     ['inyección en el filtro', "desde=2026-10-01&hasta=2026-10-02&operadorId=' or 1=1"],
   ])('400 en palabras: %s', async (_n, qs) => {
     const r = await estadias.GET(new Request(`${BASE}/estadias?${qs}`));

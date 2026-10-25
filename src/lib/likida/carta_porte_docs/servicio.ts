@@ -76,7 +76,7 @@ export interface EntradaDocumento {
 }
 
 export type ResultadoRecepcion =
-  | { ok: true; documentoId: string; duplicado: boolean; estado: repo.EstadoDoc; formato: FormatoDoc; /** A37-A3-04: el archivo era de un documento fallido/rechazado y volvió a la cola. */ reabierto?: boolean }
+  | { ok: true; documentoId: string; duplicado: boolean; estado: repo.EstadoDoc; formato: FormatoDoc; /** A37-A3-04: el archivo era de un documento fallido/rechazado y volvió a la cola. */ reabierto?: boolean; /** A37-S33-05: el documento previo ya se purgó por retención; el archivo recién subido se borró y NO se reabre solo. */ archivoPurgado?: boolean }
   | { ok: false; motivo: 'agente_apagado' | 'formato' | 'cliente'; mensaje: string };
 
 export async function recibirDocumento(tenantId: string, e: EntradaDocumento, deps: DepsServicio = {}): Promise<ResultadoRecepcion> {
@@ -100,8 +100,19 @@ export async function recibirDocumento(tenantId: string, e: EntradaDocumento, de
     storageRuta: ruta, clienteId: e.clienteId ?? null, remitente: e.remitente?.slice(0, 320) ?? null, asunto: e.asunto?.slice(0, 300) ?? null,
     remitenteReconocido: e.remitenteReconocido ?? null, retenerHasta: diasDespues(ahora, DIAS_RETENCION.recibido),
   });
+  // A37-A3-17: el duplicado de un documento ya purgado (sin storage_ruta) no vuelve a guardar el archivo: lo recién subido
+  // quedaría sin referencia y ningún barrido lo borraría. Se retira (mejor esfuerzo; si falla se avisa, no se rompe la recepción).
+  if (duplicado && !documento.storageRuta) {
+    try { await repo.borrarArchivo(ruta); } catch (err) { logger.warn('cpdocs.huerfano_no_borrado', { tenantId, error: err instanceof Error ? err.message : String(err) }); }
+  }
   await repo.registrarEvento(tenantId, documento.id, duplicado ? 'duplicado_recibido' : 'recibido', e.actorId ?? null,
     duplicado ? { canal: e.canal } : { canal: e.canal, formato, bytes: e.bytes.length });
+  // A37-S33-05: el documento previo con esa huella ya se purgó (sin archivo): el archivo recién subido no tiene dueño ni entra a la purga
+  // por retención. Se borra y se dice la verdad; reabrir el embarque (que pudo estar aprobado) lo decide una persona.
+  if (duplicado && !documento.storageRuta) {
+    try { await repo.borrarArchivo(ruta); } catch (err) { logger.warn('carta_porte_docs.duplicado_huerfano_no_borrado', { tenantId, documentoId: documento.id, err: resumenError(err) }); }
+    return { ok: true, documentoId: documento.id, duplicado: true, estado: documento.estado, formato: documento.formato, archivoPurgado: true };
+  }
   // A37-A3-04: reenviar el MISMO archivo de un documento fallido (o rechazado) lo reabre, en vez de contestar «ya estaba».
   if (duplicado && (documento.estado === 'fallido' || documento.estado === 'rechazado') && documento.storageRuta) {
     const r = await reintentarDocumento(tenantId, documento, e.actorId ?? null, `reenvío del mismo archivo (${e.canal})`, ahora);
@@ -397,6 +408,12 @@ export async function procesarDocumento(
           return await fallar('presupuesto', 'Este documento rebasó el tope de IA por documento al escalar de nivel (suele ser un archivo muy grande o ilegible). Se reintenta unas veces más y, si sigue igual, captúralo a mano.', false, alcance);
         }
         return await fallar('presupuesto', 'El presupuesto de IA de hoy se agotó. El documento queda en la bandeja y se puede reintentar mañana o cuando se amplíe el techo.', false, alcance);
+      }
+      // A37-A3-06: la respuesta del modelo no cupo en su tope de salida (estimado: ~40 renglones o más). Reintentar da lo
+      // mismo (temperatura 0, ya se probó con el doble de tope) y cada intento paga varias llamadas: se cierra aquí, con el
+      // motivo claro, para que la oficina divida el documento o lo capture a mano.
+      if (e instanceof Error && e.name === 'TruncatedError') {
+        return await fallar('modelo', 'El documento trae demasiados renglones para leerse de una sola vez (la respuesta del modelo se truncó). Divídelo en documentos más cortos o captura el viaje a mano.', true);
       }
       return await fallar('modelo', `El modelo no pudo leer el documento: ${resumenError(e)}`, false);
     }

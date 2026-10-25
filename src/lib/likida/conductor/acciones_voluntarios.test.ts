@@ -10,7 +10,7 @@ const OP = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')
 const ctx = (rol = 'flota_admin', tenantId = 't1') => ({ tenantId, rol, usuarioId: 'u1', email: 'dueno@flota.test' });
 const fd = (operadorId: string) => ({ get: (k: string) => (k === 'operadorId' ? operadorId : null) });
 
-interface OpFalso { id: string; tenant: string; nombre: string; telefono: string; activo: boolean; voluntario: boolean }
+interface OpFalso { id: string; tenant: string; nombre: string; telefono: string; activo: boolean; voluntario: boolean; desde?: string }
 interface ViajeFalso { id: string; operadorId: string; abierto: boolean; aceptadoOrigen: 'importacion' | 'chofer' | null; aceptadoEn: string | null }
 
 /** Un mundo en memoria con el mismo contrato que `repo.ts`/0800: todo acotado por flota, `retirar` revierte solo lo importado y abierto. */
@@ -23,10 +23,13 @@ function mundo(ops: OpFalso[], viajes: ViajeFalso[] = [], tope = 6) {
     },
     contar: async (t) => ops.filter((o) => o.tenant === t && o.voluntario).length,
     tope: async () => tope,
-    marcar: async (t, id) => {
+    listar: async (t) => ops.filter((o) => o.tenant === t && o.voluntario)
+      .map((o) => ({ id: o.id, nombre: o.nombre, telefono: o.telefono, activo: o.activo, voluntario: true, voluntarioDesde: o.desde ?? null })),
+    marcar: async (t, id, _por, cuando) => {
       const o = ops.find((x) => x.id === id && x.tenant === t && x.activo && !x.voluntario);
       if (!o) return false;
       o.voluntario = true;
+      o.desde = cuando.toISOString();
       return true;
     },
     retirar: async (t, id) => {
@@ -72,6 +75,38 @@ describe('alta de voluntarios del piloto', () => {
     expect(r).toEqual({ ok: false, error: errorTopeVoluntarios(1) });
     expect(m.ops[0].voluntario).toBe(false);
     expect(m.bitacora).not.toHaveBeenCalled();
+  });
+
+  it('A37-S34-08: dos altas simultáneas con un solo cupo libre: entra la que marcó primero, no se deshacen las dos', async () => {
+    const m = mundo([op(1), op(2)], [], 1);
+    const marcarReal = m.deps.marcar;
+    // La alta del operador 1 marca primero; antes de su segundo conteo, la del operador 2 también marca (más tarde).
+    m.deps.marcar = async (t, id, por, cuando) => {
+      const ok = await marcarReal(t, id, por, cuando);
+      await marcarReal(t, OP(2), por, new Date(cuando.getTime() + 5));
+      return ok;
+    };
+    const r1 = await altaVoluntarioDelPanel(ctx(), fd(OP(1)), m.deps, new Date('2026-10-23T10:00:00Z'));
+    expect(r1).toMatchObject({ ok: true });
+    expect(m.ops[0].voluntario).toBe(true);
+    // La alta del operador 2 (ya marcada por la carrera) ve que queda fuera del tope: se retira con el error del tope.
+    m.deps.marcar = marcarReal;
+    m.ops[1].voluntario = false; m.ops[1].desde = undefined;
+    const marcarTarde = async () => { m.ops[1].voluntario = true; m.ops[1].desde = '2026-10-23T10:00:00.005Z'; return true; };
+    m.deps.marcar = marcarTarde;
+    m.deps.tope = async () => 1;
+    expect(await altaVoluntarioDelPanel(ctx(), fd(OP(2)), { ...m.deps, contar: async () => 1 }, new Date())).toEqual({ ok: false, error: errorTopeVoluntarios(1) });
+  });
+
+  it('A37-S34-08: si el retiro de la segunda barrera falla, NO dice «no pude guardarlo»: avisa que quedó marcado por encima del tope', async () => {
+    const m = mundo([op(1), op(2)], [], 1);
+    const marcarReal = m.deps.marcar;
+    m.deps.marcar = async (t, id, por, cuando) => { m.ops[1].voluntario = true; m.ops[1].desde = '2000-01-01T00:00:00.000Z'; return marcarReal(t, id, por, cuando); };
+    m.deps.retirar = async () => { throw new Error('base caída'); };
+    const r = await altaVoluntarioDelPanel(ctx(), fd(OP(1)), m.deps);
+    expect(r).toMatchObject({ ok: false });
+    expect((r as { error: string }).error).toMatch(/quedó en el piloto por encima del tope/);
+    expect((r as { error: string }).error).not.toMatch(/No pude guardarlo/);
   });
 
   it('un operador de OTRA flota se rechaza como «no existe» y no se marca', async () => {

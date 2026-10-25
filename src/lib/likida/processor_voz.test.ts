@@ -88,7 +88,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 vi.mock('@/lib/logger', () => ({ logger }));
 
 const { processInbound } = await import('./processor');
-const { RESPUESTA_NO_ENTENDI, RESPUESTA_SIN_PRESUPUESTO } = await import('./voz_transcrita');
+const { RESPUESTA_NO_ENTENDI, RESPUESTA_SIN_PRESUPUESTO, RESPUESTA_AUDIO_LARGO } = await import('./voz_transcrita');
 
 const CHOFER_TEL = '5219993700779';
 let n = 0;
@@ -128,6 +128,15 @@ describe('la nota de voz del chofer (capa E1)', () => {
     expect(sendText).toHaveBeenCalledWith(CHOFER_TEL, 'Ya le avisé a tu jefe 🚨');
   });
 
+  it('A37-S55-08: la transcripción NO se escribe al log (datos de salud/terceros); solo su tamaño', async () => {
+    transcribirNotaDeVoz.mockResolvedValue({ ok: true, texto: 'chocamos, mi compañero Juan está herido' });
+    await processInbound(notaDeVoz());
+    const todo = JSON.stringify([...logger.info.mock.calls, ...logger.warn.mock.calls, ...logger.error.mock.calls]);
+    expect(todo).not.toContain('herido');
+    expect(todo).not.toContain('Juan');
+    expect(logger.info).toHaveBeenCalledWith('voz.transcrita', expect.objectContaining({ caracteres: 39 }));
+  });
+
   it('audio ininteligible → "¿me lo escribes?" y NINGÚN protocolo disparado', async () => {
     transcribirNotaDeVoz.mockResolvedValue({ ok: false, motivo: 'ilegible' });
     await processInbound(notaDeVoz());
@@ -139,6 +148,12 @@ describe('la nota de voz del chofer (capa E1)', () => {
     transcribirNotaDeVoz.mockResolvedValue({ ok: false, motivo: 'presupuesto' });
     await processInbound(notaDeVoz());
     expect(sendText).toHaveBeenCalledWith(CHOFER_TEL, RESPUESTA_SIN_PRESUPUESTO);
+  });
+
+  it('A37-S59-08: audio demasiado largo → «¿me lo escribes?» con su propio mensaje', async () => {
+    transcribirNotaDeVoz.mockResolvedValue({ ok: false, motivo: 'demasiado_largo' });
+    await processInbound(notaDeVoz());
+    expect(sendText).toHaveBeenCalledWith(CHOFER_TEL, RESPUESTA_AUDIO_LARGO);
   });
 
   it('audio sin mediaId (webhook raro) → también "¿me lo escribes?", jamás silencio', async () => {

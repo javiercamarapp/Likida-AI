@@ -32,6 +32,7 @@ function builder(tabla: string) {
 
 const storageUpload = vi.fn(async (..._a: unknown[]): Promise<{ data: { path: string } | null; error: { message: string } | null }> =>
   ({ data: { path: 'x' }, error: null }));
+const storageRemove = vi.fn(async (..._a: unknown[]) => ({ data: [], error: null }));
 const storageCreateSignedUrl = vi.fn(async (..._a: unknown[]): Promise<{ data: { signedUrl: string } | null; error: { message: string } | null }> =>
   ({ data: { signedUrl: 'https://firmado/x' }, error: null }));
 const storageCreateSignedUrls = vi.fn(async (rutas: string[]): Promise<{
@@ -46,6 +47,7 @@ vi.mock('@/lib/supabase/admin', () => ({
     storage: {
       from: () => ({
         upload: (...a: unknown[]) => storageUpload(...a),
+        remove: (...a: unknown[]) => storageRemove(...a),
         createSignedUrl: (...a: unknown[]) => storageCreateSignedUrl(...a),
         createSignedUrls: (...a: unknown[]) => storageCreateSignedUrls(a[0] as string[]),
       }),
@@ -57,7 +59,7 @@ vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
 const {
   TIPOS_POR_AGENTE, TIPOS_POR_DEPARTAMENTO, tiposAceptadosPorAgente,
   aceptaArchivoInsumo, subirArchivoInsumo,
-  crearInsumoArchivo, crearInsumoTexto,
+  crearInsumoArchivo, crearInsumoTexto, validarTipoAceptado, validarContenidoInsumo,
   listarInsumosDeAgente, insumosPendientes, marcarInsumosProcesados,
   contarPendientesPorAgente, urlFirmadaInsumo, urlsFirmadasInsumos,
 } = await import('./insumos');
@@ -105,8 +107,16 @@ describe('aceptaArchivoInsumo', () => {
   });
 });
 
-function archivoFalso(nombre: string, tipo: string, bytes = 100): File {
-  return new File([new Uint8Array(bytes)], nombre, { type: tipo });
+/** Firmas mínimas reales por tipo (A37-S27-10: el contenido se comprueba contra el tipo declarado). */
+const CABECERA: Record<string, number[]> = {
+  'application/pdf': [0x25, 0x50, 0x44, 0x46],
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': [0x50, 0x4b, 0x03, 0x04],
+  'image/png': [0x89, 0x50, 0x4e, 0x47],
+};
+function archivoFalso(nombre: string, tipo: string, bytes = 100, contenido?: number[]): File {
+  const buf = new Uint8Array(bytes);
+  if (bytes > 0) buf.set(contenido ?? CABECERA[tipo] ?? [], 0);
+  return new File([buf], nombre, { type: tipo });
 }
 
 describe('subirArchivoInsumo', () => {
@@ -127,6 +137,37 @@ describe('subirArchivoInsumo', () => {
     storageUpload.mockResolvedValueOnce({ data: null, error: { message: 'bucket caído' } });
     await expect(subirArchivoInsumo('control_costos', archivoFalso('x.pdf', 'application/pdf'), 'documento'))
       .rejects.toThrow(/bucket caído/);
+  });
+});
+
+describe('A37-S27-10 insumos: validar antes de subir, firma real, topes', () => {
+  it('con departamento, un tipo que el agente no acepta se rechaza ANTES de subir a Storage', async () => {
+    await expect(subirArchivoInsumo('control_costos', archivoFalso('v.mp4', 'video/mp4', 100, [0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70]), 'video', 'back_office'))
+      .rejects.toThrow(DatoInvalido);
+    expect(storageUpload).not.toHaveBeenCalled();
+  });
+
+  it('un MIME falsificado (PDF declarado, bytes de otra cosa) se rechaza antes de subir', async () => {
+    await expect(subirArchivoInsumo('control_costos', archivoFalso('x.pdf', 'application/pdf', 100, [0x4d, 0x5a]), 'documento'))
+      .rejects.toThrow(/no corresponde/);
+    expect(storageUpload).not.toHaveBeenCalled();
+  });
+
+  it('si el insert falla, el objeto ya subido se borra de Storage', async () => {
+    respuestas.set('agente_insumo', [{ data: null, error: { message: 'boom' } }]);
+    await expect(crearInsumoArchivo({
+      agente: 'control_costos', departamento: 'back_office', titulo: 'x', tipo: 'documento', storagePath: 'control_costos/a.pdf', subidoPor: 'u1',
+    })).rejects.toThrow(/boom/);
+    expect(storageRemove).toHaveBeenCalledWith(['control_costos/a.pdf']);
+  });
+
+  it('título y contenido tienen tope', async () => {
+    await expect(crearInsumoTexto({
+      agente: 'scorer', departamento: 'leads', titulo: 'x'.repeat(201), tipo: 'texto', contenido: 'ok', subidoPor: 'u1',
+    })).rejects.toThrow(DatoInvalido);
+    await expect(crearInsumoTexto({
+      agente: 'scorer', departamento: 'leads', titulo: 'x', tipo: 'texto', contenido: 'y'.repeat(20_001), subidoPor: 'u1',
+    })).rejects.toThrow(DatoInvalido);
   });
 });
 
@@ -237,5 +278,30 @@ describe('urlFirmadaInsumo / urlsFirmadasInsumos', () => {
     const m = await urlsFirmadasInsumos([]);
     expect(m.size).toBe(0);
     expect(storageCreateSignedUrls).not.toHaveBeenCalled();
+  });
+});
+
+// A37-S05-05
+describe('A37-S05-05: validación del servidor en insumos', () => {
+  it('validarTipoAceptado se puede llamar antes de subir y lanza DatoInvalido', () => {
+    expect(() => validarTipoAceptado('control_costos', 'back_office', 'video')).toThrow(DatoInvalido);
+  });
+  it('un link debe ser https sin credenciales ni esquema arbitrario', () => {
+    expect(() => validarContenidoInsumo('link', 't', 'javascript:alert(1)')).toThrow(DatoInvalido);
+    expect(() => validarContenidoInsumo('link', 't', 'http://x.com')).toThrow(DatoInvalido);
+    expect(() => validarContenidoInsumo('link', 't', 'https://u:p@x.com')).toThrow(DatoInvalido);
+    expect(() => validarContenidoInsumo('link', 't', 'https://x.com/a')).not.toThrow();
+  });
+  it('topes de longitud en texto, link y título', () => {
+    expect(() => validarContenidoInsumo('texto', 't', 'a'.repeat(20_001))).toThrow(DatoInvalido);
+    expect(() => validarContenidoInsumo('texto', 'a'.repeat(201), 'ok')).toThrow(DatoInvalido);
+    expect(() => validarContenidoInsumo('link', 't', `https://x.com/${'a'.repeat(2_100)}`)).toThrow(DatoInvalido);
+  });
+  it('crearInsumoTexto no inserta un texto gigante', async () => {
+    llamadas.length = 0;
+    await expect(crearInsumoTexto({
+      agente: 'scorer', departamento: 'leads', titulo: 'idea', tipo: 'texto', contenido: 'x'.repeat(20_001), subidoPor: 'u1',
+    })).rejects.toThrow(DatoInvalido);
+    expect(llamadas).toHaveLength(0);
   });
 });

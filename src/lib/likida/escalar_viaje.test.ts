@@ -66,7 +66,7 @@ vi.mock('./wa_ventana', () => ({
   registrarDecisionEnvio: async () => {},
 }));
 vi.mock('./operacion', () => ({ avisarAlChofer }));
-vi.mock('./contactos', () => ({ telefonosJefe }));
+vi.mock('./contactos', () => ({ telefonosJefe, resolverJefes: async (ids: string[]) => { const m = await telefonosJefe(ids); return (t: string) => m[t] ?? null; } }));
 // El motor de avisos se mockea ENTERO: desde que el escalado emite su propio
 // aviso (`conductores:escalado`), estas pruebas necesitan VER las llamadas —
 // a quién, con qué magnitud y con qué folios — sin arrastrar la base que el
@@ -229,6 +229,19 @@ describe('viajesSinAceptar', () => {
     // es 100 — es el cupo crudo, generoso. El tope de 100 por flota se aplica
     // después, en memoria (ver el describe de abajo).
     expect(args('limit')).toContainEqual([CUPO_CRUDO_VIAJES_SIN_ACEPTAR]);
+  });
+
+  it('A37-S41-10: las flotas excluidas se sacan EN LA CONSULTA, no después del limit(1000)', async () => {
+    await viajesSinAceptar(AHORA, 5, new Set(['t-cinco', 't-otra']));
+    expect(args('not')).toContainEqual(['tenant_id', 'in', '(t-cinco,t-otra)']);
+    filtros.length = 0;
+    await viajesSinAceptar(AHORA);
+    expect(args('not').some(([c]) => c === 'tenant_id')).toBe(false);
+  });
+
+  it('A37-S41-10: escalarViajesSinAceptar pasa sus exclusiones a la consulta', async () => {
+    await escalarViajesSinAceptar({ ahora: AHORA, excluirTenants: new Set(['t-cinco']) });
+    expect(args('not')).toContainEqual(['tenant_id', 'in', '(t-cinco)']);
   });
 
   it('el corte son 5 h EXACTAS contadas desde el `ahora` que se le pasa', async () => {

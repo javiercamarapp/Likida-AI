@@ -101,4 +101,14 @@ describe('csvDeProblemas', () => {
     expect(csv).toContain('4,"el patio «A, B» no existe"');
     expect(csv).toContain('5,"dice ""hola"""');
   });
+
+  // A37-S18-10: una celda que empieza con = + - @ (o tab/CR) se evalúa como fórmula en Excel.
+  it.each(['=HYPERLINK("http://x.test")', '+1+1', '-2+3', '@SUM(A1)', '\tcmd', '\rcmd'])(
+    'neutraliza la fórmula %j anteponiendo apóstrofo',
+    (motivo) => {
+      const csv = csvDeProblemas([{ fila: 2, motivo }]);
+      const cuerpo = csv.slice(csv.indexOf('\r\n') + 2).replace(/^2,/, '');
+      expect(cuerpo.replace(/^"/, '').startsWith("'")).toBe(true);
+    },
+  );
 });

@@ -1,10 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const d = vi.hoisted(() => ({ rpc: vi.fn(), filas: [] as unknown[], errorLectura: null as null | { message: string } }));
+const d = vi.hoisted(() => ({ rpc: vi.fn(), filas: [] as Array<Record<string, unknown>>, errorLectura: null as null | { message: string } }));
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => {
+  // Doble con cursor por `id` (A37-S25-07): sirve páginas de `limit` filas con
+  // `id > cursor` y el total exacto cuando se pide `count`.
+  let cursor: string | null = null;
+  let contar = false;
   const cadena: Record<string, unknown> = {
-    select: () => cadena, eq: () => cadena, order: () => cadena,
-    limit: async () => ({ data: d.filas, error: d.errorLectura }),
+    select: (_c?: string, o?: { count?: string }) => { contar = o?.count === 'exact'; return cadena; },
+    eq: () => cadena, order: () => cadena,
+    gt: (_c: string, v: string) => { cursor = v; return cadena; },
+    limit: async (n: number) => {
+      if (d.errorLectura) return { data: null, error: d.errorLectura };
+      const orden = [...d.filas].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+      const pag = orden.filter((f) => cursor === null || String(f.id) > cursor).slice(0, n);
+      return { data: pag, error: null, count: contar ? d.filas.length : null };
+    },
   };
   return { rpc: d.rpc, from: () => cadena };
 } }));
@@ -14,7 +25,7 @@ import {
   registrarAceptacion, revocarMandato, mandatoFlotaVigente, aceptacionesDeFlota,
   pendientesDeUsuario, mandatoDe, type AceptacionFila,
 } from './aceptacion';
-import { MANDATO_AUTOFACTURACION } from './documentos';
+import { MANDATO_AUTOFACTURACION, HUELLA_TERMINOS, VERSION_TERMINOS, VERSION_AVISO_PRIVACIDAD } from './documentos';
 
 beforeEach(() => { vi.clearAllMocks(); d.filas = []; d.errorLectura = null; delete process.env.VERCEL_GIT_COMMIT_SHA; });
 
@@ -33,7 +44,8 @@ describe('registrarAceptacion', () => {
     d.rpc.mockResolvedValue({ data: { ok: true, registrada: false, motivo: 'ya estaba aceptada' }, error: null });
     const r = await registrarAceptacion('t-1', 'u-1', 'terminos');
     expect(r).toEqual({ ok: true, registrada: false });
-    expect(d.rpc.mock.calls[0][1]).toMatchObject({ p_documento: 'terminos', p_hash: null, p_commit: null });
+    // A37-L-09: Términos y Aviso ya viajan con la huella SHA-256 del texto aceptado.
+    expect(d.rpc.mock.calls[0][1]).toMatchObject({ p_documento: 'terminos', p_hash: HUELLA_TERMINOS, p_commit: null });
   });
   it('un rechazo de la base se propaga con su motivo; un error de red, con mensaje genérico', async () => {
     d.rpc.mockResolvedValue({ data: { ok: false, motivo: 'solo el dueño de la flota (flota_admin) puede otorgar el mandato' }, error: null });
@@ -74,17 +86,32 @@ describe('revocarMandato', () => {
 
 describe('lectura y derivados (puros)', () => {
   const fila = (o: Partial<AceptacionFila>): AceptacionFila => ({
-    documento: 'terminos', version: '2026-10-01', aceptadoEn: '2026-10-02T00:00:00Z', userId: 'u-1', revocadoEn: null, ...o,
+    documento: 'terminos', version: VERSION_TERMINOS, aceptadoEn: '2026-10-02T00:00:00Z', userId: 'u-1', revocadoEn: null, ...o,
   });
   it('aceptacionesDeFlota traduce filas y LANZA si la lectura falla (no devuelve vacío)', async () => {
-    d.filas = [{ documento: 'terminos', version: '2026-10-01', aceptado_en: '2026-10-02T00:00:00Z', user_id: null, revocado_en: null }];
+    d.filas = [{ id: 'a1', documento: 'terminos', version: '2026-10-01', aceptado_en: '2026-10-02T00:00:00Z', user_id: null, revocado_en: null }];
     expect((await aceptacionesDeFlota('t-1'))[0]).toMatchObject({ documento: 'terminos', userId: null });
     d.errorLectura = { message: 'caída' };
     await expect(aceptacionesDeFlota('t-1')).rejects.toThrow();
   });
+  it('A37-S25-07: una flota con más de 200 aceptaciones NO pierde el mandato antiguo', async () => {
+    // 1,500 filas de Términos/Aviso por muchos usuarios y versiones, y el
+    // mandato —la MÁS antigua— al fondo: con `limit(200)` desaparecía.
+    d.filas = Array.from({ length: 1_500 }, (_, i) => ({
+      id: `f-${String(i).padStart(5, '0')}`, documento: 'terminos', version: '2020-01-01',
+      aceptado_en: new Date(Date.UTC(2026, 9, 2) - i * 60_000).toISOString(), user_id: `u-${i}`, revocado_en: null,
+    }));
+    d.filas.push({
+      id: 'f-99999', documento: 'mandato_autofacturacion', version: MANDATO_AUTOFACTURACION.version,
+      aceptado_en: '2025-01-01T00:00:00.000Z', user_id: 'u-dueno', revocado_en: null,
+    });
+    const filas = await aceptacionesDeFlota('t-1');
+    expect(filas).toHaveLength(1_501);
+    expect(mandatoDe(filas)?.userId).toBe('u-dueno');
+  });
   it('pendientesDeUsuario: faltan los dos si no hay nada; una versión vieja o revocada no cuenta', () => {
     expect(pendientesDeUsuario([], 'u-1')).toEqual(['terminos', 'aviso_privacidad']);
-    const ok = [fila({}), fila({ documento: 'aviso_privacidad' })];
+    const ok = [fila({}), fila({ documento: 'aviso_privacidad', version: VERSION_AVISO_PRIVACIDAD })];
     expect(pendientesDeUsuario(ok, 'u-1')).toEqual([]);
     expect(pendientesDeUsuario(ok, 'u-2')).toEqual(['terminos', 'aviso_privacidad']);
     expect(pendientesDeUsuario([fila({ version: '2020-01-01' }), fila({ documento: 'aviso_privacidad', revocadoEn: 'x' })], 'u-1')).toEqual(['terminos', 'aviso_privacidad']);

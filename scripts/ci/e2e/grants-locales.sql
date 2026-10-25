@@ -40,17 +40,24 @@
 -- `e2e-navegador.yml`), que si SÍ replica el resto del bootstrap de
 -- plataforma (RLS, políticas) y solo le falta este paso.
 --
--- NO-OP EN PRODUCCIÓN si alguna vez se corriera ahí por error: ya tiene
--- exactamente estos privilegios.
+-- A37-S02-01: ESTE ARCHIVO NO ES UN NO-OP EN PRODUCCIÓN (la cabecera anterior lo decía y era
+-- falso): otorgaría CRUD a anon/authenticated en tablas que allá están revocadas. Por eso exige
+-- la variable de psql `es_local` (`-v es_local=si`) y aborta sin ella.
 --
 -- Uso (local): tras `supabase start` (o `supabase db reset`):
 --   PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres \
---     -v ON_ERROR_STOP=1 -f scripts/ci/e2e/grants-locales.sql
+--     -v ON_ERROR_STOP=1 -v es_local=si -f scripts/ci/e2e/grants-locales.sql
 -- ═══════════════════════════════════════════════════════════════════════════
 
 -- ── service_role: nunca restringido en ninguna tabla ni función, regrant
 --    sin excepción (incluye las EXECUTE que 0017 y afines dejan sin volver
 --    a otorgar explícitamente, confiando en el bootstrap de plataforma) ───
+\if :{?es_local}
+\else
+  \echo 'ABORTADO: grants-locales.sql solo corre contra el Supabase LOCAL (psql -v es_local=si).'
+  select 1/0;
+\endif
+
 grant select, insert, update, delete on all tables in schema public to service_role;
 grant usage, select on all sequences in schema public to service_role;
 grant execute on all functions in schema public to service_role;
@@ -62,11 +69,35 @@ grant execute on all functions in schema public to service_role;
 do $$
 declare
   fila record;
+  -- Generada por `node scripts/ci/e2e/restringidas-desde-migraciones.mjs` (+ bitacora_auditoria, abajo);
+  -- una prueba (grants_locales_deriva.test.ts) falla si se desfasa de las migraciones.
   restringidas text[] := array[
-    'llm_costo_mensual', 'agente_mutacion_idempotencia', 'llm_presupuesto_reserva',
-    'cfdi_pago', 'proveedor_emergencia', 'qa_corrida_paso', 'viaje_mercancia',
-    'evento_seguridad_flota', 'portal_pago_propuesta', 'qa_foto_lectura',
-    'jornada_politica', 'aviso_vigencia', 'bitacora_auditoria'
+    'aceptacion_legal', 'agente_insumo', 'agente_mutacion_idempotencia', 'aliado_objetivo',
+    'aviso_vigencia', 'buzon_recepcion', 'calcom_sincronizacion_estado', 'candidato',
+    'ccp_timbre', 'cfdi_pago', 'cobranza_gasto_contacto', 'conector_poll_estado',
+    'contacto_emergencia', 'coordinacion_proveedor', 'correo_suprimido', 'cotizador_config',
+    'cp_ccp_timbrado', 'cp_cliente_referencia', 'cp_distancia', 'cp_documento_embarque',
+    'cp_documento_evento', 'cp_envio_tms', 'cp_salida_config', 'cp_sat_catalogo',
+    'cp_viaje_referencia', 'despliegue_visto', 'estado_dia', 'evento_seguridad_cuarentena',
+    'evento_seguridad_flota', 'finanzas_config', 'flota_fiscal', 'flota_poliza',
+    'gps_dispositivo_huerfano', 'gps_push_secreto', 'incidencia_evento', 'jornada_alerta',
+    'jornada_alerta_config', 'jornada_asiento', 'jornada_derivacion_invalida', 'jornada_derivacion_trabajo',
+    'jornada_dia', 'jornada_politica', 'jornada_revision_historial', 'latencia_muestra',
+    'liquidacion_aviso_discrepancia', 'liquidacion_copia_jefe', 'llm_costo_mensual', 'llm_presupuesto_reserva',
+    'marketing_hook', 'marketing_referencia', 'mcp_oauth_cliente', 'mcp_oauth_codigo',
+    'mcp_oauth_token', 'orquestador_barrido_estado', 'orquestador_escalacion', 'peaje_cierre_aviso',
+    'peaje_curso', 'peaje_curso_caseta', 'pendiente_societario', 'politica_detencion',
+    'portal_estado', 'portal_pago_acceso', 'portal_pago_liga', 'portal_pago_propuesta',
+    'portal_relogin', 'portal_vinculacion_solicitud', 'producto_evento', 'producto_evento_estado',
+    'producto_evento_mensual', 'prospecto_correo', 'prospecto_dossier', 'proveedor_emergencia',
+    'qa_corrida', 'qa_corrida_foto', 'qa_corrida_paso', 'qa_foto',
+    'qa_foto_lectura', 'regla_aviso', 'regla_disparo', 'regla_vigilancia',
+    'rep_emitido', 'reporte_direccion', 'rutina_mantenimiento', 'sat_cfdi_descargado',
+    'sat_cfdi_resolucion', 'sat_descarga_config', 'sat_descarga_solicitud', 'sitio_evento',
+    'tms_ingesta', 'tms_mapeo', 'tms_sincronizacion', 'vacante',
+    'viaje_lock', 'viaje_mercancia', 'wa_conversacion', 'wa_drenado_cadena',
+    'wa_meta_receipt', 'wa_outbox', 'wa_ventana_contacto',
+    'bitacora_auditoria'
   ];
 begin
   for fila in

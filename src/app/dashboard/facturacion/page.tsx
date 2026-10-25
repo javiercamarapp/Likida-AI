@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
-import { supabaseAdmin } from '@/lib/supabase/admin';
+import { clientesActivosCompletos } from '@/lib/likida/catalogo_selectores';
 import { getFacturacionClientes, type FacturacionClientes } from '@/lib/likida/facturacion_clientes';
 import { getAuditoriaCobranza, ventanaAuditor, type AuditoriaCobranza } from '@/lib/likida/auditor_cobranza';
 import { hoyMx } from '@/lib/formato';
@@ -86,19 +86,9 @@ export default async function PaginaFacturacion({
   // la única lectura de la pantalla que las mezclaba.
   let clientes: Array<{ id: string; nombre: string; diasCredito: number | null }> | null = null;
   try {
-    const { data, error } = await supabaseAdmin().from('cliente')
-      .select('id, nombre, dias_credito')
-      .eq('tenant_id', tenantId).eq('activo', true)
-      .order('nombre');
-    if (error) {
-      clientes = null;
-    } else {
-      clientes = (data ?? []).map((c) => ({
-        id: String((c as { id: unknown }).id),
-        nombre: String((c as { nombre: unknown }).nombre),
-        diasCredito: (c as { dias_credito: number | null }).dias_credito,
-      }));
-    }
+    // A37-S18-06: TODOS los clientes activos. Antes un select sin límite (PostgREST recorta a 1,000 en silencio): el cliente
+    // 1,001 no se podía elegir en el formulario y nada lo decía. Si la lectura no se puede completar, `clientes` queda `null`.
+    clientes = (await clientesActivosCompletos(tenantId)).map((c) => ({ id: c.id, nombre: c.nombre, diasCredito: c.diasCredito }));
   } catch {
     clientes = null;
   }

@@ -8,6 +8,7 @@ import { logger } from '@/lib/logger';
 import { emailDeUsuario } from '@/lib/likida/conductor/trabajo';
 import { crearRepoVigia } from '@/lib/likida/vigia/repo';
 import { analizarHistorial } from '@/lib/likida/vigia/historial/analisis';
+import { pendientesDeHistorial } from '@/lib/likida/vigia/historial/pendientes';
 import { leerClientesParaGrupo, leerGrupos, leerMensajesHistorial, leerRespuestasRapidas } from '@/lib/likida/vigia/historial/repo';
 import { altaGrupoPanel, aprobarRespuestaRapidaPanel, borrarGrupoPanel, criticoGrupoPanel, importarHistorialPanel, retirarRespuestaRapidaPanel } from '@/lib/likida/vigia/historial/acciones';
 import { sufijoTenant } from '../../../sufijo';
@@ -52,6 +53,10 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
   const umbralMin = config?.slaCriticoMin ?? 10;
   const datos = grupos === null ? null : await leerMensajesHistorial(tenantId, grupoElegido).catch((e) => { logger.warn('vigia.historial_no_leido', { err: e instanceof Error ? e.message : String(e) }); return null; });
   const reporte = datos ? analizarHistorial(datos.mensajes, { umbralMin }) : null;
+  // A37-S15-06: la sección «Pendientes de contestar» tenía vista y cálculo pero nadie la alimentaba.
+  // Solo con UN grupo elegido: los mensajes no traen el grupo, y mezclados la respuesta del equipo en un chat
+  // taparía el pendiente de otro.
+  const pendientes = datos && grupoElegido ? pendientesDeHistorial(datos.mensajes) : null;
 
   async function alta(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
     'use server';
@@ -108,7 +113,7 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
 
   return (
     <VistaHistorialVigia
-      sufijo={sufijoTenant(sp)} grupos={grupos} clientes={clientes} reporte={reporte} grupoElegido={grupoElegido} truncado={datos?.truncado ?? false}
+      sufijo={sufijoTenant(sp)} grupos={grupos} clientes={clientes} reporte={reporte} pendientes={pendientes} grupoElegido={grupoElegido} truncado={datos?.truncado ?? false}
       umbralMin={umbralMin} puedeEditar={puedeAdministrar(rol)} puedeAprobar={['superadmin', 'flota_admin', 'encargado'].includes(rol)} rapidas={rapidas} standby={standby}
       acciones={{ alta, critico, borrar, importar, aprobarRapida, retirarRapida }}
     />

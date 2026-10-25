@@ -4,7 +4,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error('esta prueba no toca la base'); } }));
 vi.mock('@/lib/meta/client', () => ({ enviarSolicitudUbicacion: vi.fn(async () => ({ ok: true })) }));
 
-const { atenderConductor } = await import('./atender');
+const { atenderConductor, registrarHitoDesdeFoto } = await import('./atender');
 const { crearMemoria, viajeBase } = await import('./memoria.fixture');
 const { leerBotonConductor, PREFIJO_BOTON } = await import('./tipos');
 const { leerTextoResultadoDescarga } = await import('./interprete');
@@ -132,6 +132,16 @@ describe('cableado: salida de descarga → pregunta → respuesta', () => {
     expect(textos(otra)).not.toMatch(/Cómo terminó/);
   });
 
+  it('A37-S34-02: la FOTO que actúa como aviso de salida también entrega la pregunta de resultado al chofer (no solo la deja «preguntado» en la bitácora)', async () => {
+    const { m, pu } = await escenario({}, { fotoRegistraHito: true });
+    const r = await registrarHitoDesdeFoto({
+      tenantId: 't1', operadorId: 'o1', telefono: base.telefono, viajeId: V1, tipo: 'recibido', ruta: `t1/${V1}/ev.jpg`, sha256: 'e'.repeat(64), waMessageId: 'wamid.foto', ahora: AHORA,
+    }, m.deps);
+    expect(estadoDe(m, 'salida_descarga')).toBe('recibido');
+    expect(pu.evs.filter((e) => e.detalle.estado === 'preguntado')).toHaveLength(1);
+    expect(r.mensajes.some((x) => x.botones?.some((b) => b.id.startsWith(`${PREFIJO_BOTON.resultadoDescarga}:${V1}:`)))).toBe(true);
+  });
+
   it('«completa»: acuse, sin aviso y el ciclo sigue normal (el regreso sigue pendiente y se registra después)', async () => {
     const { m, pu, dice } = await escenario();
     await dice('ya terminé de descargar');
@@ -186,6 +196,29 @@ describe('cableado: salida de descarga → pregunta → respuesta', () => {
     const dos = await dice(boton('no_recibida'));
     expect(textos(dos)).toMatch(/Ya tengo anotada tu respuesta/);
     expect(pu.enviados).toHaveLength(1);
+  });
+
+  it('A37-S36-03: si el renglón «respondido» no se guarda el chofer lo sabe (no «anotado») y el reintento SÍ avisa', async () => {
+    const { pu, dice } = await escenario();
+    await dice('ya terminé de descargar');
+    let falla = true;
+    pu.p.guardar = async (h, evento, d) => { if (falla) return false; await pu.p.evento(h, evento, d); return true; };
+    expect(textos(await dice(boton('caja_cargada')))).toMatch(/No pude anotarlo/);
+    expect(pu.enviados).toHaveLength(0);
+    falla = false;
+    await dice(boton('caja_cargada'));
+    expect(pu.enviados).toHaveLength(1);
+    expect(pu.evs.some((e) => e.detalle.estado === 'respondido')).toBe(true);
+  });
+
+  it('A37-S36-03: «respondido» ya guardado pero sin «alertado» (el aviso se perdió): el siguiente toque completa el aviso', async () => {
+    const { pu, dice } = await escenario();
+    await dice('ya terminé de descargar');
+    await dice(boton('caja_cargada'));
+    expect(pu.enviados).toHaveLength(1);
+    pu.evs.splice(0, pu.evs.length, ...pu.evs.filter((e) => e.detalle.estado !== 'alertado'));
+    await dice(boton('caja_cargada'));
+    expect(pu.enviados).toHaveLength(2);
   });
 
   it('claim perdido (otro ya avisó): no manda otro y el chofer igual queda atendido', async () => {

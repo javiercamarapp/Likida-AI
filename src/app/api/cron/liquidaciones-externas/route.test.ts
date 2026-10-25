@@ -17,8 +17,8 @@ vi.mock('@/lib/admin/salud', () => ({
 }));
 let interruptores: Record<string, 'encendido' | 'apagado' | 'ilegible'> = {};
 vi.mock('@/lib/likida/interruptores', () => ({ leerInterruptor: async (id: string) => interruptores[id] ?? 'encendido' }));
-const procesar = vi.fn(async (): Promise<Record<string, unknown>> => ({ tomadas: 2, en_cola: 1, enviadas: 1, reintentar: 0, fallidas: 0, sin_cambio: 0, avisos: { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 } }));
-vi.mock('@/lib/likida/liquidacion_externa/servicio', () => ({ procesarLiquidacionesExternas: () => procesar() }));
+const procesar = vi.fn(async (..._a: unknown[]): Promise<Record<string, unknown>> => ({ tomadas: 2, en_cola: 1, enviadas: 1, reintentar: 0, fallidas: 0, sin_cambio: 0, avisos: { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 } }));
+vi.mock('@/lib/likida/liquidacion_externa/servicio', () => ({ procesarLiquidacionesExternas: (...a: unknown[]) => procesar(...(a as [])) }));
 const alertarOperador = vi.fn(async (..._a: unknown[]) => {});
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]) => alertarOperador(...a) }));
 vi.mock('@/lib/observability/sentry', () => ({ codigoDeError: () => 'cod' }));
@@ -130,6 +130,24 @@ describe('la corrida', () => {
     expect(registrarLatido).toHaveBeenCalledWith('liquidaciones-externas', 'ok', expect.objectContaining({ correo: correoOk, pull: pullOk }));
   });
 
+  it('A37-A1-liquidaciones-06: un pull ATASCADO de alguna flota ALERTA al operador de Likida (además del latido parcial)', async () => {
+    const avisos = { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 };
+    const pull = { flotas: 1, leidas: 0, importadas: 0, excepciones: 0, errores: 1, error: 'TmsCredenciales: x', flotasAtascadas: ['t-1'] };
+    procesar.mockResolvedValueOnce({ tomadas: 0, en_cola: 0, enviadas: 0, reintentar: 0, fallidas: 0, sin_cambio: 0, avisos, pull });
+    const r = await llamar();
+    expect(r.status).toBe(200);
+    expect(registrarLatido).toHaveBeenCalledWith('liquidaciones-externas', 'parcial', expect.anything());
+    expect(alertarOperador).toHaveBeenCalledTimes(1);
+    expect(alertarOperador).toHaveBeenCalledWith('cron.liquidaciones_externas.pull_atascado', expect.objectContaining({ flotas: 1, error: 'TmsCredenciales: x' }));
+  });
+
+  it('un pull con error pero NO atascado no alerta', async () => {
+    const avisos = { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 };
+    procesar.mockResolvedValueOnce({ tomadas: 0, en_cola: 0, enviadas: 0, reintentar: 0, fallidas: 0, sin_cambio: 0, avisos, pull: { flotas: 1, leidas: 0, importadas: 0, excepciones: 0, errores: 1, error: 'TmsLimite: x' } });
+    await llamar();
+    expect(alertarOperador).not.toHaveBeenCalled();
+  });
+
   it('si el procesamiento lanza: 500, latido `fallo` y ALERTA al operador (no un cron verde que no hace nada)', async () => {
     procesar.mockRejectedValueOnce(new Error('base caída'));
     const r = await llamar();
@@ -137,5 +155,33 @@ describe('la corrida', () => {
     expect(await j(r)).toMatchObject({ corrio: false, error: 'base caída' });
     expect(registrarLatido).toHaveBeenCalledWith('liquidaciones-externas', 'fallo', expect.objectContaining({ error: 'base caída' }));
     expect(alertarOperador).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe('A37-S09-02 — reloj de la corrida', () => {
+  it('le pasa un `venceEn` (instante futuro) a la pasada', async () => {
+    await llamar();
+    const venceEn = procesar.mock.calls[0][2] as number;
+    expect(venceEn).toBeGreaterThan(Date.now());
+    expect(venceEn).toBeLessThan(Date.now() + 60_000);
+  });
+  it('si la pasada devuelve `cortadoPorReloj`, el latido es parcial', async () => {
+    procesar.mockResolvedValueOnce({ tomadas: 5, en_cola: 2, enviadas: 0, reintentar: 0, fallidas: 0, sin_cambio: 0, avisos: { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 }, cortadoPorReloj: true });
+    await llamar();
+    expect(registrarLatido).toHaveBeenLastCalledWith('liquidaciones-externas', 'parcial', expect.objectContaining({ cortadoPorReloj: true }));
+  });
+  it('si la pasada se cuelga más allá del reloj duro, la ruta responde y late parcial', async () => {
+    vi.useFakeTimers();
+    try {
+      procesar.mockImplementationOnce(() => new Promise(() => {}));
+      const p = llamar();
+      await vi.advanceTimersByTimeAsync(55_000);
+      const r = await p;
+      expect(r.status).toBe(200);
+      expect(registrarLatido).toHaveBeenLastCalledWith('liquidaciones-externas', 'parcial', expect.objectContaining({ cortadoPorReloj: true }));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

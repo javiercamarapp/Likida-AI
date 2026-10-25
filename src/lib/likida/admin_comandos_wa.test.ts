@@ -217,9 +217,22 @@ describe('atenderComandoAdmin — "aprobar <id>"', () => {
 
   it('si NO existe en ninguna de las dos colas, lo dice con honestidad', async () => {
     aprobarPieza.mockRejectedValueOnce(new DatoInvalido('no pendiente'));
-    resolverPieza.mockRejectedValueOnce(new Error('Esa pieza ya estaba resuelta.'));
+    resolverPieza.mockRejectedValueOnce(new DatoInvalido('Esa pieza ya estaba resuelta.'));
     const r = await atenderComandoAdmin(SUPERADMIN, '5215550000001', 'aprobar ghost-1');
     expect(r).toMatch(/no encontré una pieza pendiente/i);
+  });
+
+  it('A37-S25-10: un fallo REAL en la segunda cola (base caída) NO se reporta como «no encontré»', async () => {
+    aprobarPieza.mockRejectedValueOnce(new DatoInvalido('no pendiente'));
+    resolverPieza.mockRejectedValueOnce(new Error('No se pudo resolver la pieza: fetch failed'));
+    const r = await atenderComandoAdmin(SUPERADMIN, '5215550000001', 'aprobar bus-9');
+    expect(r).not.toMatch(/no encontré una pieza pendiente/i);
+    expect(r).toMatch(/no se pudo aprobar la pieza/i);
+    expect(anotarBitacora).toHaveBeenCalledWith(
+      expect.objectContaining({ accion: 'admin_wa.aprobar', entidadId: 'bus-9',
+        detalle: expect.objectContaining({ resultado: 'error' }) }),
+      expect.anything(),
+    );
   });
 
   it('un fallo REAL de cola_aprobacion (no "no encontrada") no dispara el segundo intento', async () => {

@@ -14,7 +14,7 @@ vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: vi.fn(async () => ({ rol
 const dobles = vi.hoisted(() => ({
   leerManifiesto: vi.fn(),
   listarCorridas: vi.fn(),
-  gastoHoyUsd: vi.fn(),
+  gastoTotalHoyUsd: vi.fn(),
   leerUltimasLecturas: vi.fn(),
   firmarRutas: vi.fn(),
 }));
@@ -24,7 +24,7 @@ vi.mock('@/lib/admin/qa-storage', async (importar) => ({
   ...(await importar<typeof import('@/lib/admin/qa-storage')>()),
   leerManifiesto: dobles.leerManifiesto,
   listarCorridas: dobles.listarCorridas,
-  gastoHoyUsd: dobles.gastoHoyUsd,
+  gastoTotalHoyUsd: dobles.gastoTotalHoyUsd,
   leerUltimasLecturas: dobles.leerUltimasLecturas,
   firmarRutas: dobles.firmarRutas,
 }));
@@ -44,14 +44,14 @@ beforeEach(() => {
   dobles.leerManifiesto.mockResolvedValue({ ok: true, datos: [] });
   dobles.firmarRutas.mockResolvedValue(new Map());
   dobles.listarCorridas.mockResolvedValue({ ok: true, datos: [] });
-  dobles.gastoHoyUsd.mockResolvedValue({ ok: true, datos: 0 });
+  dobles.gastoTotalHoyUsd.mockResolvedValue({ ok: true, datos: 0 });
   dobles.leerUltimasLecturas.mockResolvedValue({ ok: true, datos: new Map() });
 });
 
 it('las cuatro fuentes en verde: cero errores, datos reales llegan a la pantalla', async () => {
   dobles.leerManifiesto.mockResolvedValue({ ok: true, datos: [{ path: 'a.jpg' }] });
   dobles.firmarRutas.mockResolvedValue(new Map([['a.jpg', 'https://firmada/a.jpg']]));
-  dobles.gastoHoyUsd.mockResolvedValue({ ok: true, datos: 12.5 });
+  dobles.gastoTotalHoyUsd.mockResolvedValue({ ok: true, datos: 12.5 });
   const pagina = await QaPage() as unknown as { props: PropsQa };
   expect(pagina.props.fotos).toEqual([{ path: 'a.jpg', url: 'https://firmada/a.jpg' }]);
   expect(pagina.props.gastoHoy).toBe(12.5);
@@ -61,7 +61,7 @@ it('las cuatro fuentes en verde: cero errores, datos reales llegan a la pantalla
 it('el banco de fotos caído no vacía historial/gasto/lecturas — cada fuente es independiente', async () => {
   dobles.leerManifiesto.mockRejectedValueOnce(new Error('storage caído'));
   dobles.listarCorridas.mockResolvedValue({ ok: true, datos: [{ id: 'c-1' }] });
-  dobles.gastoHoyUsd.mockResolvedValue({ ok: true, datos: 5 });
+  dobles.gastoTotalHoyUsd.mockResolvedValue({ ok: true, datos: 5 });
   const pagina = await QaPage() as unknown as { props: PropsQa };
   expect(pagina.props.fotos).toEqual([]);
   expect(pagina.props.bancoError).toContain('storage caído');
@@ -70,8 +70,8 @@ it('el banco de fotos caído no vacía historial/gasto/lecturas — cada fuente 
   expect(dobles.firmarRutas).not.toHaveBeenCalled(); // sin manifiesto, nada que firmar
 });
 
-it('un `{ok:false}` propio de gastoHoyUsd se distingue de "$0 real" — nunca se confunden', async () => {
-  dobles.gastoHoyUsd.mockResolvedValue({ ok: false, error: 'no se pudo leer el gasto del día' });
+it('un `{ok:false}` propio de gastoTotalHoyUsd se distingue de "$0 real" — nunca se confunden', async () => {
+  dobles.gastoTotalHoyUsd.mockResolvedValue({ ok: false, error: 'no se pudo leer el gasto del día' });
   const pagina = await QaPage() as unknown as { props: PropsQa };
   expect(pagina.props.gastoHoy).toBeNull();
   expect(pagina.props.gastoError).toBe('no se pudo leer el gasto del día');

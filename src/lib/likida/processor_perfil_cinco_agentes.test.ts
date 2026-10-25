@@ -13,6 +13,8 @@ import { readFileSync } from 'node:fs';
 // ═══════════════════════════════════════════════════════════════════════════
 
 let tenantDelOperador = 't-con';
+let viajeAbierto: string | null = 'v1';
+const descargaTexto = vi.fn();
 const perfiles = new Map<string, string>([['t-con', 'cinco_agentes']]);
 let falla_tabla_perfil = false;
 const extraerComprobante = vi.fn();
@@ -49,7 +51,7 @@ vi.mock('@/lib/meta/client', () => ({
   sendText: (...a: unknown[]) => say(...a),
   sendDocument: vi.fn(),
   downloadMediaAsDataUrl: vi.fn(async () => 'data:image/jpeg;base64,AAAA'),
-  downloadMediaAsText: vi.fn(),
+  downloadMediaAsText: (...a: unknown[]) => descargaTexto(...a),
 }));
 vi.mock('@/lib/likida/intake/ocr', () => ({ extraerComprobante: (...a: unknown[]) => extraerComprobante(...a) }));
 vi.mock('@/lib/likida/repo', () => ({
@@ -66,7 +68,7 @@ vi.mock('@/lib/likida/repo', () => ({
 vi.mock('@/lib/likida/conv', async (original) => ({
   ...(await original<Record<string, unknown>>()),
   resolveOperador: vi.fn(async () => ({ tenantId: tenantDelOperador, operadorId: 'o1' })),
-  getOpenViaje: vi.fn(async () => 'v1'),
+  getOpenViaje: vi.fn(async () => viajeAbierto),
   getTenantContext: vi.fn(async () => ({ nombre: 'Flota' })),
   loadConversation: vi.fn(async () => ({ id: 'c1', turns: [] })),
   saveConversation: vi.fn(),
@@ -98,6 +100,8 @@ const dicho = () => say.mock.calls.map((c) => String(c[1])).join(' | ');
 beforeEach(() => {
   reiniciarCachePerfil();
   tenantDelOperador = 't-con';
+  viajeAbierto = 'v1';
+  descargaTexto.mockReset();
   falla_tabla_perfil = false;
   extraerComprobante.mockReset(); extraerComprobante.mockResolvedValue(OCR_OK);
   say.mockReset();
@@ -145,6 +149,31 @@ describe('T-PER-06 (c) · foto de comprobante de un chofer con perfil', () => {
   });
 });
 
+describe('A37-S55-06 · el XML (documento) también respeta el perfil', () => {
+  const doc = { from: '5219993700779', type: 'document' as const, mediaId: 'd1', waMessageId: 'wa-doc' };
+
+  it('con viaje abierto: no baja el XML, no toca la barrera y avisa que entregue en la oficina', async () => {
+    await processInbound(doc);
+    expect(descargaTexto).not.toHaveBeenCalled();
+    expect(intakeDelta).not.toHaveBeenCalled();
+    expect(dicho()).toMatch(/no recibe comprobantes/i);
+  });
+
+  it('sin viaje abierto: tampoco lo procesa', async () => {
+    viajeAbierto = null;
+    await processInbound(doc);
+    expect(descargaTexto).not.toHaveBeenCalled();
+    expect(dicho()).toMatch(/no recibe comprobantes/i);
+  });
+
+  it('control: la flota SIN perfil sí baja el XML', async () => {
+    tenantDelOperador = 't-sin';
+    viajeAbierto = null;   // el camino sin viaje baja el XML primero
+    await processInbound(doc);
+    expect(descargaTexto).toHaveBeenCalled();
+  });
+});
+
 describe('T-PER-06 (c) · contrato de orden en processor.ts', () => {
   const fuente = readFileSync('src/lib/likida/processor.ts', 'utf8');
 
@@ -155,12 +184,14 @@ describe('T-PER-06 (c) · contrato de orden en processor.ts', () => {
     expect(lock).toBeGreaterThan(puerta);
   });
 
-  it('las dos puertas de `ocr` (foto suelta y foto de viaje) van ANTES del lector de comprobantes que les sigue', () => {
+  it('las puertas de `ocr` (foto suelta, foto de viaje y los dos XML) van ANTES del lector de comprobantes que les sigue', () => {
     const puertas: number[] = [];
     let i = -1;
     while ((i = fuente.indexOf("pipelineTenantApagado(op.tenantId, 'ocr')", i + 1)) >= 0) puertas.push(i);
-    expect(puertas).toHaveLength(2);
-    for (const p of puertas) expect(fuente.indexOf('extraerComprobante(', p)).toBeGreaterThan(p);
+    expect(puertas).toHaveLength(4);
+    // Las de FOTO anteceden a su lector (al menos dos de las cuatro lo tienen después).
+    expect(puertas.filter((p) => fuente.indexOf('extraerComprobante(', p) > p).length).toBeGreaterThanOrEqual(2);
+    for (const p of puertas) expect(fuente.indexOf('MENSAJE_SIN_COMPROBANTES_POR_WA', p)).toBeGreaterThan(p);
   });
 
   it('el webhook no se salta el procesador: la ruta delega en processInbound', () => {

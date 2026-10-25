@@ -83,7 +83,7 @@ const ROTULO_ESTADO: Record<EstadoLiquidacionExterna, { rotulo: string; ayuda: s
 };
 
 export type MensajeExterno = 'reintentada' | 'no_aplica' | 'no_encontrada' | 'error' | 'copia_enviada' | 'copia_ya' | 'copia_fallo' | 'copia_sin_jefe' | 'importada' | 'importacion_error'
-  | 'reaviso_ok' | 'reaviso_parcial' | 'reaviso_pendiente' | 'reaviso_ya' | 'reaviso_en_curso';
+  | 'reaviso_ok' | 'reaviso_parcial' | 'reaviso_pendiente' | 'reaviso_ya' | 'reaviso_en_curso' | 'canal_correo';
 
 const MENSAJES: Record<MensajeExterno, { texto: string; tono: 'ok' | 'bad' }> = {
   reaviso_ok: { texto: 'Listo: el aviso salió hacia la persona responsable.', tono: 'ok' },
@@ -91,6 +91,7 @@ const MENSAJES: Record<MensajeExterno, { texto: string; tono: 'ok' | 'bad' }> = 
   reaviso_pendiente: { texto: 'WhatsApp no aceptó el aviso (¿la plantilla de avisos sigue sin aprobar?). Se reintenta solo; la tarea para una persona ya está abierta en el asistente.', tono: 'bad' },
   reaviso_ya: { texto: 'Ese aviso ya había salido: no se mandó otra vez.', tono: 'ok' },
   reaviso_en_curso: { texto: 'Otra persona o el cron lo está mandando en este momento. Revisa en un minuto.', tono: 'ok' },
+  canal_correo: { texto: 'Esta flota recibe las liquidaciones por correo: no se manda nada por WhatsApp desde aquí.', tono: 'bad' },
   copia_enviada: { texto: 'Listo: la copia salió hacia el jefe de flota.', tono: 'ok' },
   copia_ya: { texto: 'La copia ya se había enviado: no se mandó otra vez.', tono: 'ok' },
   copia_fallo: { texto: 'WhatsApp no aceptó la copia (¿la plantilla de avisos sigue sin aprobar?). La entrega al operador no se afectó. Vuelve a intentarlo más tarde.', tono: 'bad' },

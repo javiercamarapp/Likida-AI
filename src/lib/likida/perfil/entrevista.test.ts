@@ -134,6 +134,46 @@ Monto: $2,450.00`;
   });
 });
 
+describe('A37-S53-04/06/07 — texto libre fiscal y de catálogo, fail-closed', () => {
+  it('S53-04: «no fueron menores a 300 millones» NO declara ingresos menores', () => {
+    for (const frase of ['no fueron menores a $300 millones', 'no estoy seguro si somos menores a 300 millones', 'creo que menos de 300 millones']) {
+      const r = interpretarTurno({}, frase);
+      expect(r.hechos.ingresosMenoresA300M, frase).toBeUndefined();
+    }
+  });
+  it('S53-04: las formas afirmativas exactas siguen valiendo', () => {
+    expect(interpretarTurno({}, 'menores a 300 millones').hechos.ingresosMenoresA300M).toBe(true);
+    expect(interpretarTurno({}, 'no llegamos a 300 millones').hechos.ingresosMenoresA300M).toBe(true);
+    expect(interpretarTurno({}, 'mas de 300 millones').hechos.ingresosMenoresA300M).toBe(false);
+  });
+  it('S53-04: «no sé si somos parte relacionada» y las frases dudosas NO declaran parte relacionada', () => {
+    for (const frase of ['no sé si somos parte relacionada', 'no estoy seguro, creo que no somos parte relacionada']) {
+      const r = interpretarTurno(declararHechos({ ingresosMenoresA300M: true }), frase);
+      expect(r.hechos.parteRelacionada, frase).toBeUndefined();
+    }
+  });
+  it('S53-06: «no tengo» o «las cargo después» NO crean unidades', () => {
+    const cubierto = perfilHasta('unidadesAlta');
+    for (const frase of ['no tengo', 'las cargo después en unidades', 'ninguna por ahora']) {
+      expect(interpretarTurno(cubierto, frase).hechos.unidadesAlta, frase).toBeUndefined();
+    }
+    expect(interpretarTurno(cubierto, 'ECO-12 ABC-12-34, 305').hechos.unidadesAlta).toEqual([
+      { economico: 'ECO-12', placas: 'ABC-12-34' }, { economico: '305' },
+    ]);
+  });
+  it('S53-06: más de 20 unidades en un turno no se aceptan de golpe', () => {
+    const cubierto = perfilHasta('unidadesAlta');
+    const mucho = Array.from({ length: 25 }, (_, i) => `U-${i + 1}`).join(', ');
+    expect(interpretarTurno(cubierto, mucho).hechos.unidadesAlta).toBeUndefined();
+  });
+  it('S53-07: los topes aceptan separador de miles', () => {
+    const cubierto = perfilHasta('topesPolitica');
+    expect(interpretarTurno(cubierto, 'diésel 4,000, caseta 1,500, comida 800').hechos.topesPolitica)
+      .toEqual({ diesel: 4000, caseta: 1500, alimentacion: 800, hospedaje: undefined });
+    expect(interpretarTurno(cubierto, 'hotel 2.500').hechos.topesPolitica).toMatchObject({ hospedaje: 2500 });
+  });
+});
+
 function decl(v: unknown) { return { valor: v, procedencia: 'declarado' as const }; }
 
 function perfilHasta(hasta: string) {

@@ -1,12 +1,17 @@
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, getConversacionesActivas, contarConversacionesActivas } from '@/lib/admin/negocio';
-import { getBandejaEscalaciones } from '@/lib/admin/escalaciones';
+import { getBandejaEscalaciones, type ConteosEscalaciones } from '@/lib/admin/escalaciones';
 import { ahoraMs } from '@/lib/saludo';
 import { calcularAlertas } from '../calcular-alertas';
 import { Bell } from 'lucide-react';
 import NotificacionesLista from './lista';
 
 export const dynamic = 'force-dynamic';
+
+const CONTEOS_CIEGOS: ConteosEscalaciones = {
+  arco: null, corridasFallo: null, talachas: null, facturasProveedor: null,
+  ticketsAbiertos: null, ticketsVencidos: null, liquidacionesRevisar: null,
+};
 
 /**
  * Página real de notificaciones — la campana del sidebar ya no abre un
@@ -23,12 +28,27 @@ export default async function NotificacionesPage() {
   // La bandeja de escalaciones alimenta la campana con los MISMOS conteos
   // que pinta /admin/escalaciones (nunca lanza: una fuente ilegible llega
   // como null y calcularAlertas la reporta como fuente ciega).
-  const [r, conversaciones, bandeja, conversacionesTotal] = await Promise.all([
+  // A37-S07-07: cada fuente degrada POR SEPARADO. Un `Promise.all` sin catch
+  // tumbaba la página entera si cualquiera fallaba; ahora una fuente ilegible
+  // se dice en una alerta («No se pudo leer…») y el resto sigue.
+  const [rr, cr, br, tr] = await Promise.allSettled([
     getResumenNegocio(), getConversacionesActivas(), getBandejaEscalaciones(ahoraMs()),
     // FE-9: el total real, no el tamaño de la página de 20.
     contarConversacionesActivas(),
   ]);
-  const alertas = calcularAlertas(r, conversaciones, bandeja.conteos, conversacionesTotal);
+  const ciegas: string[] = [];
+  const r = rr.status === 'fulfilled' ? rr.value : null;
+  if (r === null) ciegas.push('resumen del negocio (costo de IA y flotas)');
+  const conversaciones = cr.status === 'fulfilled' ? cr.value : [];
+  const conversacionesTotal = tr.status === 'fulfilled' ? tr.value : null;
+  if (cr.status === 'rejected' || tr.status === 'rejected') ciegas.push('conversaciones de WhatsApp');
+  // Bandeja caída: todos los conteos en null → calcularAlertas ya emite su
+  // propia alerta «No se pudo leer: …» por cada fuente ciega.
+  const conteos = br.status === 'fulfilled' ? br.value.conteos : CONTEOS_CIEGOS;
+  const alertas = calcularAlertas(r, conversaciones, conteos, conversacionesTotal);
+  if (ciegas.length > 0) {
+    alertas.push({ tipo: 'atencion', texto: `No se pudo leer: ${ciegas.join(', ')} — las alertas de esta página pueden estar incompletas.` });
+  }
 
   return (
     <div className="flex flex-col gap-4">

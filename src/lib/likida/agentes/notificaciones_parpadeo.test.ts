@@ -31,6 +31,8 @@ interface FilaEstado {
 }
 
 let fila: FilaEstado | null = null;
+/** El `ahora` de la corrida en curso: el `now()` del INSERT cae justo después. */
+let relojDeLaCorrida = new Date(0);
 
 /** Los CHECK de la 0097. La base real rechazaría estas escrituras; la falsa
  *  también, para que una prueba no pase sobre un estado imposible. */
@@ -55,14 +57,15 @@ function tablaEstado() {
     // El upsert de `guardarMagnitud`. Desde AG-M3 (auditoría 28) SOLO escribe
     // `magnitud` — ni `actualizado_en` (reservada a `cerrarIncidente`) ni
     // `magnitud_avisada` (reservada a un envío REAL). Una fila NUEVA simula el
-    // `default now()` de Postgres con un sello fijo: `incidenteCerrado` nunca
-    // lo necesita en la primera vez (`ultimo` sale `null` sin correo previo).
+    // `default now()` de Postgres: el INSERT ocurre un instante DESPUÉS del
+    // `ahora` de la corrida (A37-S28-07: con un sello fijo en 1970 este doble
+    // ocultaba que `actualizado_en` nacía posterior a `avisado_en`).
     upsert: (p: Record<string, unknown>) => {
       const nueva: FilaEstado = {
         magnitud: (fila?.magnitud ?? 0),
         avisado_en: fila?.avisado_en ?? null,
         magnitud_avisada: fila?.magnitud_avisada ?? null,
-        actualizado_en: fila?.actualizado_en ?? '1970-01-01T00:00:00.000Z',
+        actualizado_en: fila?.actualizado_en ?? new Date(relojDeLaCorrida.getTime() + 25).toISOString(),
       };
       if ('magnitud' in p) nueva.magnitud = p.magnitud as number;
       if ('magnitud_avisada' in p) nueva.magnitud_avisada = p.magnitud_avisada as number;
@@ -162,7 +165,11 @@ vi.mock('@/lib/correo/enviar', () => ({
   enviarCorreo: (...a: unknown[]) => enviarCorreo(...(a as [])),
 }));
 
-const { avisarCorridaFallida, PISO_ENTRE_AVISOS_MS } = await import('./notificaciones');
+const { avisarCorridaFallida: avisarCorridaFallidaReal, PISO_ENTRE_AVISOS_MS } = await import('./notificaciones');
+const avisarCorridaFallida = (...a: Parameters<typeof avisarCorridaFallidaReal>) => {
+  relojDeLaCorrida = a[3] ?? new Date();
+  return avisarCorridaFallidaReal(...a);
+};
 
 const T0 = new Date('2026-08-14T06:00:00Z');
 const min = (n: number) => new Date(T0.getTime() + n * 60_000);
@@ -318,5 +325,25 @@ describe('AG-A5(b): un envío que rebota no consume el turno del incidente', () 
     const r2 = await avisarCorridaFallida('t-1', 'facturas', new Error('segundo intento'), min(1));
     expect(r2.avisado).toBe(true);
     expect(enviarCorreo).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A37-S28-07 — el PRIMER incidente de un (tenant, agente, evento) no es un
+// «incidente cerrado»: el INSERT de `guardarMagnitud` ponía `actualizado_en` =
+// now() de la base, posterior al `ahora` de JS que `reclamarAviso` graba en
+// `avisado_en`; con eso `actualizado_en > avisado_en` y, una hora después,
+// aún roto con racha 2-4, `debeAvisar` usaba solo el piso y mandaba un
+// SEGUNDO correo sin haber cruzado la marca 5.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('A37-S28-07: el primer incidente no se trata como cerrado', () => {
+  it('falla, correo, y una hora después SIGUE roto con racha baja: NO hay segundo correo', async () => {
+    const r1 = await avisarCorridaFallida('t-1', 'facturas', new Error('primer fallo'), T0);
+    expect(r1.avisado).toBe(true);
+    await avisarCorridaFallida('t-1', 'facturas', new Error('sigue'), min(30));
+    const r3 = await avisarCorridaFallida('t-1', 'facturas', new Error('sigue'), min(65));
+    expect(r3.magnitud).toBe(3); // bajo la marca 5
+    expect(r3.avisado).toBe(false);
+    expect(enviarCorreo).toHaveBeenCalledTimes(1);
   });
 });

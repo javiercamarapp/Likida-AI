@@ -67,6 +67,33 @@ describe('cierre mensual: 3 decenas de un mes', () => {
   });
 });
 
+describe('A37-A2-10: un mismo cobro en dos archivos del mes no se suma doble en silencio', () => {
+  it('mensual solapado con decenal: el cobro repetido se cuenta DOS veces en el total, así que el cierre NO es completo y lo dice con su importe', () => {
+    const repetido = lin({ fecha: '2026-03-05', hora: '08:15:30', monto: 777 });
+    const dec1 = archivo('dec1', '2026-03-01', '2026-03-10', [repetido, lin({ fecha: '2026-03-06', hora: '09:00:00', monto: 50 })]);
+    const dec2 = archivo('dec2', '2026-03-11', '2026-03-20', [lin({ fecha: '2026-03-12', hora: '10:00:00', monto: 60 })]);
+    const dec3 = archivo('dec3', '2026-03-21', '2026-03-31', [lin({ fecha: '2026-03-22', hora: '11:00:00', monto: 70 })]);
+    // Un mensual reemitido con otros bytes: trae el mismo cobro del 5 de marzo.
+    const mensual = archivo('mensual', '2026-03-01', '2026-03-31', [repetido]);
+    const c = cierreMensual('2026-03', [dec1, dec2, dec3, mensual]);
+    if ('error' in c) throw new Error(c.error);
+    expect(c.repetidosEntreArchivos).toHaveLength(1);
+    expect(c.dobleConteo).toEqual({ n: 1, monto: 777 });
+    expect(c.completo).toBe(false);
+    expect(c.avisos.join(' ')).toMatch(/dos veces|más de una vez/);
+  });
+
+  it('sin repetidos en el mes, el cierre completo sigue completo', () => {
+    const c = cierreMensual('2026-03', [
+      archivo('a', '2026-03-01', '2026-03-10', [lin({})]), archivo('b', '2026-03-11', '2026-03-20', [lin({ fecha: '2026-03-12', hora: '10:00:00' })]),
+      archivo('c', '2026-03-21', '2026-03-31', [lin({ fecha: '2026-03-22', hora: '11:00:00' })]),
+    ]);
+    if ('error' in c) throw new Error(c.error);
+    expect(c.dobleConteo).toEqual({ n: 0, monto: 0 });
+    expect(c.completo).toBe(true);
+  });
+});
+
 describe('un mes a medias NO se presenta como completo', () => {
   it('falta una decena: lo dice', () => {
     const c = cierreMensual('2026-03', [

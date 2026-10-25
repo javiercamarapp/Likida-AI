@@ -13,10 +13,11 @@ cliente piloto.
 
 `conductor/lector_seguimiento.ts`:
 
-- `LectorSeguimiento.leer(viajeRef, ahora)`: devuelve la `AsignacionSeguimiento` del viaje (instrucciones, ruta, detenciones con
+- `LectorSeguimiento.leer(tenantId, viajeRef, ahora)`: devuelve la `AsignacionSeguimiento` del viaje (instrucciones, ruta, detenciones con
   orden y nombre, coordenadas del destino, hora de lectura) o `null`. **Solo lectura.**
-- `leerAsignacionSeguimiento(puerto, viajeRef, ahora)`: lee y limpia; no lanza nunca. Puerto ausente, fallo del sistema, referencia
-  vacía o lectura inservible dan `null`.
+- `leerAsignacionSeguimiento(puerto, tenantId, viajeRef, ahora)`: lee y limpia; no lanza nunca. Puerto ausente, fallo del sistema, referencia
+  vacía, flota vacía o lectura inservible dan `null`. La asignación declara su `tenantId` y una lectura de otra flota se descarta
+  (A37-S35-08: el `viajeRef` es del cliente y dos flotas pueden repetirlo; el adaptador real debe resolver credenciales por flota).
 - `normalizarAsignacion`: descarta lecturas de más de 30 minutos, con hora futura o sin hora; descarta coordenadas fuera de rango o no
   finitas, detenciones sin nombre e instrucciones vacías; ordena las detenciones. Lo que el sistema no trae queda vacío o `null`: no
   se inventa.

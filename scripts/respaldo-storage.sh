@@ -10,7 +10,9 @@
 #   NEXT_PUBLIC_SUPABASE_URL       URL del proyecto (obligatoria)
 #   SUPABASE_SERVICE_ROLE_KEY      llave de respaldo (obligatoria)
 #   RESPALDO_BUCKETS               buckets separados por espacios; si no se define,
-#                                  se usa la lista única scripts/respaldo-buckets.txt
+#                                  se usa la lista única scripts/respaldo-buckets.txt.
+#                                  Si se define y OMITE alguno de la lista única, falla
+#                                  (A37-S04-10) salvo RESPALDO_PERMITIR_PARCIAL=true
 #   RESPALDO_S3_DESTINO             s3://.../prefijo
 #   RESPALDO_ALLOW_EMPTY=true      permite explícitamente un respaldo vacío
 #   RESPALDO_REQUIRE_REMOTE=true   exige destino remoto (CI)
@@ -19,15 +21,35 @@
 set -euo pipefail
 # RESPALDO_BUCKETS es configuración, no un patrón de archivos local.
 set -f
+ORIGEN_PWD="$(pwd -P)"
 cd "$(dirname "$0")/.."
+REPO_RAIZ="$(pwd -P)"
 
-DESTINO="${1:-${RESPALDO_ROOT:-./.backups/storage}}"
+# A37-S04-01: el respaldo trae CFDI, comprobantes y liquidaciones de TODAS las
+# flotas; el repo es PÚBLICO. Por omisión va FUERA del repo y un destino dentro
+# del repo se rechaza (exit 2). Una ruta relativa se lee desde donde se invocó.
+DESTINO="${1:-${RESPALDO_ROOT:-$HOME/likida-respaldos/storage}}"
+case "$DESTINO" in /*) ;; *) DESTINO="$ORIGEN_PWD/$DESTINO" ;; esac
 # Lista única de buckets (auditoría 35, R09-01): una prueba la cruza contra las
 # migraciones. RESPALDO_BUCKETS, si se define, la sustituye por completo.
 LISTA_BUCKETS="scripts/respaldo-buckets.txt" # ya estamos en la raíz del repo (cd de arriba)
+[ -f "$LISTA_BUCKETS" ] || { echo "ERROR: falta $LISTA_BUCKETS." >&2; exit 2; }
+LISTA_UNICA="$(sed 's/#.*//' "$LISTA_BUCKETS" | tr -s ' \t\n' ' ')"
 if [ -z "${RESPALDO_BUCKETS:-}" ]; then
-  [ -f "$LISTA_BUCKETS" ] || { echo "ERROR: falta $LISTA_BUCKETS." >&2; exit 2; }
-  RESPALDO_BUCKETS="$(sed 's/#.*//' "$LISTA_BUCKETS" | tr -s ' \t\n' ' ')"
+  RESPALDO_BUCKETS="$LISTA_UNICA"
+elif [ "${RESPALDO_PERMITIR_PARCIAL:-false}" != "true" ]; then
+  # A37-S04-10: una variable vieja (p. ej. la de GitHub con solo cuatro buckets) sustituía la lista única EN SILENCIO
+  # y dejaba la evidencia fiscal fuera del respaldo. Una sustitución que omite algún bucket de la lista única es un
+  # error; un respaldo parcial a propósito se declara con RESPALDO_PERMITIR_PARCIAL=true.
+  OMITIDOS=""
+  for b in $LISTA_UNICA; do
+    case " $RESPALDO_BUCKETS " in *" $b "*) ;; *) OMITIDOS="$OMITIDOS $b" ;; esac
+  done
+  if [ -n "$OMITIDOS" ]; then
+    echo "ERROR: RESPALDO_BUCKETS omite buckets de $LISTA_BUCKETS:$OMITIDOS." >&2
+    echo "       Quita la variable (se usa la lista única) o declara el respaldo parcial con RESPALDO_PERMITIR_PARCIAL=true." >&2
+    exit 2
+  fi
 fi
 BUCKETS="$RESPALDO_BUCKETS"
 REQUIRE_REMOTE="${RESPALDO_REQUIRE_REMOTE:-false}"
@@ -102,8 +124,23 @@ crear_directorio_confinado() {
 }
 
 URL="${URL%/}"
+destino_en_repo() {
+  local d="${1%/}"
+  [[ "$d" == "$REPO_RAIZ" || "$d" == "$REPO_RAIZ/"* ]]
+}
+# Antes de crear nada: rechazo léxico (incluye `..`).
+destino_lexico="$(cd "$(dirname "$DESTINO")" 2>/dev/null && pwd -P || true)/$(basename "$DESTINO")"
+if destino_en_repo "$destino_lexico" || destino_en_repo "$DESTINO"; then
+  echo "ERROR: el destino ($DESTINO) cae dentro del repo (público). Usa una ruta fuera de $REPO_RAIZ." >&2
+  exit 2
+fi
 mkdir -p "$DESTINO"
 DESTINO="$(cd "$DESTINO" && pwd -P)"
+# Y después de resolver symlinks.
+if destino_en_repo "$DESTINO"; then
+  echo "ERROR: el destino resuelto ($DESTINO) cae dentro del repo (público)." >&2
+  exit 2
+fi
 TMP_BASE="${TMPDIR:-/tmp}"
 TMP_DIR="$(mktemp -d "${TMP_BASE%/}/likida-respaldo.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT

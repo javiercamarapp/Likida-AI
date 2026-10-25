@@ -81,7 +81,11 @@ export async function leerDatosResponsable(tenantId: string): Promise<CamposResp
   };
 }
 
-export type ResultadoGuardado = { ok: true } | { ok: false; error: string };
+/**
+ * `sinCambios`: no se escribió nada (los tres datos ya eran esos). `vacios`: campos que
+ * quedaron SIN dato tras guardar (A37-S19-07) — el aviso de privacidad sale sin ellos.
+ */
+export type ResultadoGuardado = { ok: true; sinCambios?: true; vacios?: Array<keyof CamposResponsable> } | { ok: false; error: string };
 
 /**
  * Guarda los tres datos de UNA flota (el `tenantId` viene de la sesión, nunca del
@@ -97,7 +101,9 @@ export async function guardarDatosResponsable(
   if (!v.ok) return v;
   const antes = await leerDatosResponsable(tenantId);
   const cambios = (['razonSocial', 'domicilio', 'contactoPrivacidad'] as const).filter((c) => antes[c] !== v.valores[c]);
-  if (cambios.length === 0) return { ok: true };
+  const vacios = (['razonSocial', 'domicilio', 'contactoPrivacidad'] as const).filter((c) => v.valores[c] === null);
+  const extra = vacios.length > 0 ? { vacios } : {};
+  if (cambios.length === 0) return { ok: true, sinCambios: true, ...extra };
 
   const { error } = await acotada(supabaseAdmin().from('tenant').update({
     razon_social: v.valores.razonSocial,
@@ -112,5 +118,5 @@ export async function guardarDatosResponsable(
     { tenantId, actor, accion: 'tenant.datos_privacidad', entidad: 'tenant', entidadId: tenantId, detalle: { campos: cambios } },
     { evento: 'legal.bitacora_no_escribio' },
   );
-  return { ok: true };
+  return { ok: true, ...extra };
 }

@@ -14,6 +14,7 @@ import { BotonEjecutar, type AccionBarrer } from './controles';
 import { SubirDesgloseProveedor, type AccionImportar } from './subir-desglose';
 import { BotonConciliar, type AccionConciliar } from './conciliar-desglose';
 import { BotonAnular, type AccionAnular } from './anular-desglose';
+import { DeclararPeriodo, type AccionPeriodo } from './declarar-periodo';
 import { RevisionCobros, type EstadoRevisionCobros } from './revision-cobros';
 // SOLO tipo y constante pura: el módulo importa el perfil (servidor) y no debe entrar al bundle de la vista.
 import type { SuperficiePeajes } from '@/lib/likida/peajes/superficie_perfil';
@@ -49,7 +50,7 @@ const SUPERFICIE_TODA: SuperficiePeajes = { estimulo: true, cfdiYTickets: true, 
 export function VistaAgentePeajes({
   conciliacion, lineas, desgloses, peajeAcreditable, sufijo, subirDesglose, ejecutarAhora,
   desglosesProveedor, desgloseSeleccionado, detalleSeleccionado, evidenciaGps, verificacion, importarDesglose, conciliarDesglose,
-  anularDesglose, puedeAnular = false, notificaciones, revisionCobros, superficie = SUPERFICIE_TODA,
+  anularDesglose, puedeAnular = false, declararPeriodo, periodoOficial = null, notificaciones, revisionCobros, superficie = SUPERFICIE_TODA,
 }: {
   conciliacion: ConciliacionConsolidado | null;
   // FE-10: `ColaPorConciliar`, no `LineaPorConciliar[]` a secas — sin el
@@ -78,6 +79,9 @@ export function VistaAgentePeajes({
   /** Anular un desglose subido por error (0563). Solo se pinta si `puedeAnular` (área administración). */
   anularDesglose?: AccionAnular;
   puedeAnular?: boolean;
+  /** A37-A2-12: declarar/corregir el periodo oficial de un desglose ya importado, y el que tiene hoy. */
+  declararPeriodo?: AccionPeriodo;
+  periodoOficial?: { desde: string | null; hasta: string | null } | null;
   /** La sección de Notificaciones, ya renderizada en el servidor
    *  (`SeccionNotificaciones`). Entra como ReactNode y no como datos: esta
    *  vista no debe importar el motor de avisos, que trae `supabaseAdmin`. */
@@ -196,7 +200,13 @@ export function VistaAgentePeajes({
                     <div key={d.cfdiXmlId} className="flex items-center gap-2.5">
                       <span className="cifra-mono text-[11px] shrink-0" style={{ color: 'var(--faint)' }}>{d.uuidCorto}</span>
                       <span className="shrink-0" style={{ color: 'var(--muted)' }}>{d.recibido ? fechaCorta(d.recibido) : '—'}</span>
-                      <span className="ml-auto shrink-0 cifra-mono">{mxn(d.monto)}</span>
+                      {d.parcial && (
+                        <span className="ml-auto shrink-0 text-[10.5px] px-1.5 py-0.5 rounded border" style={{ color: 'var(--warn)', borderColor: 'var(--warn)' }}
+                          title="Este estado de cuenta rebasa la ventana de 1,000 líneas que se lee aquí: el importe y los conteos son un mínimo, no el total.">
+                          parcial
+                        </span>
+                      )}
+                      <span className={`${d.parcial ? '' : 'ml-auto '}shrink-0 cifra-mono`}>{d.parcial ? '≥ ' : ''}{mxn(d.monto)}</span>
                       <span className="shrink-0 inline-flex items-center gap-1 text-[11px]" style={{ color: 'var(--ok)' }}>
                         <CircleCheck width={11} height={11} strokeWidth={2} /> {numero(d.conciliadas)}
                       </span>
@@ -324,6 +334,12 @@ export function VistaAgentePeajes({
                         Revisión de cobros (candidatos)
                       </Link>
                     </div>
+                    {declararPeriodo && (
+                      <div className="mb-3">
+                        <DeclararPeriodo declarar={declararPeriodo} desgloseId={desgloseSeleccionado.desgloseId}
+                          desde={periodoOficial?.desde ?? null} hasta={periodoOficial?.hasta ?? null} />
+                      </div>
+                    )}
                     {superficie.gps && <EstadoConciliado v={verificacion} />}
                     {detalleSeleccionado === null ? (
                       <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
@@ -406,7 +422,7 @@ export function VistaAgentePeajes({
 const MOTIVO_LEGIBLE: Record<string, string> = {
   sin_fecha: 'sin fecha legible en el archivo',
   sin_gastos_en_ventana: 'ningún gasto de caseta a ±1 día',
-  contraparte_ya_reclamada: 'su contraparte ya la reclamó otra línea igual',
+  contraparte_ya_reclamada: 'su contraparte ya la reclamó otra línea igual (de este u otro archivo)',
   ambigua_monto_exacto: 'dos gastos igual de buenos — decide un humano',
   ambigua_en_tolerancia: 'dos gastos igual de buenos — decide un humano',
   monto_distinto: 'el monto no coincide',

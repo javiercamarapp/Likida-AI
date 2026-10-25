@@ -281,11 +281,16 @@ export function montoDeCelda(v: Celda): number | null {
     // eslint-disable-next-line security/detect-unsafe-regex -- entrada acotada (≤ 80 caracteres, validado arriba) y sin cuantificadores anidados sobre los mismos caracteres
     if (!/^\d{1,3}(\.\d{3})+$/.test(s)) return null; // «1.234.567» miles; otra cosa, ilegible
     normal = s.replace(/\./g, '');
+  } else if (puntos === 1 && /^\d{1,3}\.\d{3}$/.test(s)) {
+    // A37-S52-01: «1.234» es 1,234 con punto de miles (Excel regional) o 1.234 con tres decimales:
+    // ambiguo, y el error vale 1000×. No se adivina: ilegible (se cuenta y se avisa).
+    return null;
   } else {
     normal = s;
   }
+  // A37-L-07: más de dos decimales es ambiguo («1.500» = ¿mil quinientos o 1.50?): no se redondea en silencio.
   // eslint-disable-next-line security/detect-unsafe-regex -- entrada acotada (≤ 80 caracteres, validado arriba) y sin cuantificadores anidados sobre los mismos caracteres
-  if (!/^\d+(\.\d+)?$/.test(normal)) return null;
+  if (!/^\d+(\.\d{1,2})?$/.test(normal)) return null;
   const n = Number(normal);
   if (!Number.isFinite(n)) return null;
   return round2(negativo ? -n : n);

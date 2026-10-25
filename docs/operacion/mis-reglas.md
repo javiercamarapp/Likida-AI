@@ -64,7 +64,10 @@ ciegas).
 `regla_aviso`: una fila por intento (enviado/fallido, casos, canal `texto|botones|plantilla`,
 motivo del selector o error de Meta en palabras). La pantalla enseña los últimos 10 avisos
 y las últimas 10 evidencias de cada regla. **Retención: 365 días**, borrado en el mismo
-barrido que escribe (`purgarAvisosViejos`).
+barrido que escribe (`purgarAvisosViejos`). `regla_disparo.evidencia` (cita nombres de
+operadores) sigue la misma retención: a los 365 días se sustituye el TEXTO y la fila se conserva
+(es el sello anti-repetición); y la cancelación ARCO de un operador anonimiza la evidencia que
+lo cita (A37-S56-06).
 
 ## Pruebas
 

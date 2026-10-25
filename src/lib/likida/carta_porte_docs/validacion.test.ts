@@ -60,6 +60,13 @@ describe('campos críticos: ausentes bloquean, dudosos piden confirmación', () 
     const e = extraccionAtlasOk(); e.mercancias = [];
     expect(codigos(e)).toContain('bloqueo:sin_mercancias:mercancias');
   });
+  it('A37-S32-05: más de 100 mercancías bloquea (no se aprueba para enviarse recortado); 100 exactas no', () => {
+    const e = extraccionAtlasOk();
+    e.mercancias = Array.from({ length: 101 }, () => ({ ...extraccionAtlasOk().mercancias[0] }));
+    expect(codigos(e)).toContain('bloqueo:demasiadas_mercancias:mercancias');
+    e.mercancias = e.mercancias.slice(0, 100);
+    expect(codigos(e).some((c) => c.includes('demasiadas_mercancias'))).toBe(false);
+  });
   it('un campo crítico con baja confianza exige confirmar; un humano lo resuelve', () => {
     const e = extraccionAtlasOk(); e.campos.origen_cp = cv('44100', 0.7);
     expect(codigos(e)).toContain('confirmar:confianza_baja:origen_cp');

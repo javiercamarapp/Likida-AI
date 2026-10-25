@@ -64,3 +64,18 @@ describe('pendientes desde el chat exportado', () => {
     expect(r.pendientes[0].texto.length).toBe(240);
   });
 });
+
+describe('A37-S15-06/07 rendimiento y semántica de la ventana', () => {
+  it('50,000 mensajes sin respuesta se resuelven rápido (no cuadrático)', () => {
+    const base = Date.parse('2026-09-01T00:00:00Z');
+    const entrada = Array.from({ length: 50_000 }, (_, i) => m(new Date(base + i * 1000).toISOString(), 'cliente', '¿Ya salió mi carga?'));
+    const t0 = Date.now();
+    const r = pendientesDeHistorial(entrada);
+    expect(Date.now() - t0).toBeLessThan(3000);
+    expect(r.pendientes.length).toBeGreaterThan(0);
+  });
+  it('una respuesta del equipo fuera de la ventana de 60 min no cuenta', () => {
+    const r = pendientesDeHistorial([m('2026-09-01T10:00:00Z', 'cliente', '¿Ya salió mi carga?'), m('2026-09-01T11:30:00Z', 'equipo', 'Sí.')]);
+    expect(r.pendientes).toHaveLength(1);
+  });
+});

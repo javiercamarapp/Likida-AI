@@ -22,6 +22,8 @@ const getSessionTenant = vi.fn(async (): Promise<Sesion> => ({
 }));
 vi.mock('./session', () => ({ getSessionTenant }));
 vi.mock('./tenant-demo', () => ({ tenantDemo: () => 't-demo' }));
+const leerSeleccionFlota = vi.fn(async (): Promise<string | null> => null);
+vi.mock('./admin-context', () => ({ leerSeleccionFlota: () => leerSeleccionFlota() }));
 
 // AUDITORÍA 25, SEGURIDAD (ALTO, línea 166, REINCIDENTE): el mismo veredicto
 // de SEG-3 que gatea /admin — `mfaSuperadminObligatorio` se deja REAL para
@@ -39,6 +41,8 @@ beforeEach(() => {
   respuestas.clear();
   getSessionTenant.mockClear();
   veredictoMfa.mockClear();
+  leerSeleccionFlota.mockReset();
+  leerSeleccionFlota.mockResolvedValue(null);
   veredictoMfa.mockResolvedValue('ok');
   vi.unstubAllEnvs();
 });
@@ -77,6 +81,46 @@ describe('resolverTenantApi — la puerta del ?tenant= de las APIs', () => {
 
   it('resolverTenantPedido: sin pedido devuelve la sesión tal cual', async () => {
     expect(await resolverTenantPedido({ from: () => builder('tenant') } as never, 't-sesion', undefined)).toBe('t-sesion');
+  });
+});
+
+describe('resolverTenantApi — A37-S24-03: la flota elegida por cookie manda sobre la demo', () => {
+  const superSinFlota = (): Sesion => ({ tenantId: null, rol: 'superadmin', userId: 'u-1', nombre: 'Javier' });
+
+  it('superadmin sin tenant propio y SIN ?tenant= usa la flota de la cookie, no la demo', async () => {
+    getSessionTenant.mockResolvedValueOnce(superSinFlota());
+    leerSeleccionFlota.mockResolvedValue('t-elegida');
+    const r = await resolverTenantApi('https://x/api/export/poliza');
+    expect(r).toEqual({ ok: true, tenantId: 't-elegida', rol: 'superadmin' });
+  });
+
+  it('sin cookie sigue cayendo a la demo (comportamiento previo)', async () => {
+    getSessionTenant.mockResolvedValueOnce(superSinFlota());
+    const r = await resolverTenantApi('https://x/api/export/poliza');
+    expect(r.ok && r.tenantId).toBe('t-demo');
+  });
+
+  it('un ?tenant= válido sigue mandando sobre la cookie', async () => {
+    getSessionTenant.mockResolvedValueOnce(superSinFlota());
+    leerSeleccionFlota.mockResolvedValue('t-elegida');
+    respuestas.set('tenant', { data: { id: 't-otra' }, error: null });
+    const r = await resolverTenantApi('https://x/api?tenant=t-otra');
+    expect(r.ok && r.tenantId).toBe('t-otra');
+  });
+
+  it('si la cookie no se puede leer (fuera de petición) cae a la demo en vez de lanzar', async () => {
+    getSessionTenant.mockResolvedValueOnce(superSinFlota());
+    leerSeleccionFlota.mockRejectedValue(new Error('cookies() fuera de petición'));
+    const r = await resolverTenantApi('https://x/api/export/poliza');
+    expect(r.ok && r.tenantId).toBe('t-demo');
+  });
+
+  it('un usuario NO superadmin jamás usa la cookie de selección', async () => {
+    getSessionTenant.mockResolvedValueOnce({ tenantId: null, rol: 'contador', userId: 'u-2', nombre: null });
+    leerSeleccionFlota.mockResolvedValue('t-elegida');
+    const r = await resolverTenantApi('https://x/api/export/poliza');
+    expect(r.ok).toBe(false);
+    expect(leerSeleccionFlota).not.toHaveBeenCalled();
   });
 });
 

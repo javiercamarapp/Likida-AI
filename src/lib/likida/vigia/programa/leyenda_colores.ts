@@ -90,12 +90,18 @@ export function distanciaColor(a: ColorHex, b: ColorHex): number {
 }
 
 /**
+ * Tope de la tolerancia de color (distancia RGB; el máximo teórico es 441.67). Con valores altos cualquier
+ * relleno coincidiría con el color más cercano y la regla afirmaría un estado que el cliente no marcó (A37-S59-10).
+ */
+export const TOLERANCIA_MAXIMA = 60;
+
+/**
  * Valida y normaliza una configuración (p. ej. la que guarda la pantalla de T-A4-23).
  * Lanza ErrorLeyendaColores con un mensaje llano si algo no es válido.
  */
 export function validarConfigLeyenda(entrada: ConfigLeyendaColores): ConfigLeyendaColores {
-  if (!Number.isFinite(entrada.tolerancia) || entrada.tolerancia < 0 || entrada.tolerancia > 442) {
-    throw new ErrorLeyendaColores('La tolerancia de color debe ser un número entre 0 y 442.');
+  if (!Number.isFinite(entrada.tolerancia) || entrada.tolerancia < 0 || entrada.tolerancia > TOLERANCIA_MAXIMA) {
+    throw new ErrorLeyendaColores(`La tolerancia de color debe ser un número entre 0 y ${TOLERANCIA_MAXIMA}.`);
   }
   const mapas: MapaColoresConfigurado[] = entrada.mapas.map((mapa, i) => {
     const colores: MapaColores = {};
@@ -120,6 +126,25 @@ export function validarConfigLeyenda(entrada: ConfigLeyendaColores): ConfigLeyen
     };
   });
   return { tolerancia: entrada.tolerancia, mapas };
+}
+
+/**
+ * Avisos (no errores) para quien configura la leyenda: pares de colores de un mismo mapa que quedan a menos
+ * de la tolerancia entre sí; un relleno entre ambos se resolvería al más cercano y podría confundirse (A37-S59-10).
+ */
+export function avisosLeyenda(config: ConfigLeyendaColores): string[] {
+  const avisos: string[] = [];
+  config.mapas.forEach((mapa, i) => {
+    const hexes = Object.keys(mapa.colores).sort();
+    for (let a = 0; a < hexes.length; a++) {
+      for (let b = a + 1; b < hexes.length; b++) {
+        if (distanciaColor(hexes[a], hexes[b]) <= config.tolerancia) {
+          avisos.push(`En el mapa ${i + 1}, los colores ${hexes[a]} y ${hexes[b]} están dentro de la tolerancia entre sí: un tono intermedio se resolvería al más cercano.`);
+        }
+      }
+    }
+  });
+  return avisos;
 }
 
 function aplica(mapa: MapaColoresConfigurado, ctx: ContextoLeyenda): boolean {

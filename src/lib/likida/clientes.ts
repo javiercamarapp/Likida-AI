@@ -51,7 +51,7 @@ import { acotada } from './presupuesto';
 import { leerCarteraRpc, armarCartera, type ClienteRow } from './comercial';
 import { DatoInvalido } from './errores';
 import { esRfcValido, esUuidValido, rfcChecksumOk } from './intake/cfdi';
-import { round2, hoyMx } from '@/lib/formato';
+import { round2, hoyMx, masDeDosDecimales } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PARTE PURA — sin una sola consulta. Es la que se prueba y la que corre
@@ -284,6 +284,8 @@ export function validarTarifa(t: TarifaCruda): TarifaValida {
   // precio pegado desde Excel llega como "28,500.00" y `Number` daría NaN.
   const precio = Number(crudoPrecio.replace(/\s/g, '').replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.'));
   if (!Number.isFinite(precio)) throw new DatoInvalido('El precio tiene que ser un número.');
+  // A37-S64-02: `precio` es numeric(12,2): más de dos decimales se redondearían en silencio («28.500» → 28.50).
+  if (masDeDosDecimales(crudoPrecio.replace(/\s/g, '').replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.'))) throw new DatoInvalido('El precio no puede traer más de dos decimales. Si el punto es separador de miles, escríbelo sin él (28500 o 28,500.00).');
   // Espeja `tarifa_precio_positivo`. Un precio de 0 no es una tarifa barata:
   // es una tarifa que cotizaría el flete gratis y se vería como una medición.
   if (precio <= 0) throw new DatoInvalido('El precio tiene que ser mayor que cero.');
@@ -588,6 +590,13 @@ export interface PanelClientes {
   hoy: string;
 }
 
+/** El día (AAAA-MM-DD, zona de México) de un instante ISO; `null` si falta o no se lee. */
+function diaDelViaje(instante: unknown): string | null {
+  if (typeof instante !== 'string' || instante === '') return null;
+  const t = new Date(instante);
+  return Number.isNaN(t.getTime()) ? null : hoyMx(t);
+}
+
 /**
  * Todo lo que la pantalla de Clientes y tarifas necesita, en una llamada.
  *
@@ -691,7 +700,9 @@ export async function getPanelClientes(
         origen: (v.origen as string) ?? null,
         destino: (v.destino as string) ?? null,
         km,
-        fecha: hoy,
+        // A37-S34-06: la tarifa se juzga con el día DEL VIAJE (día de la flota), no con el de hoy: una tarifa nueva no reescribe el precio
+        // de un viaje de marzo. Sin fecha de inicio (o ilegible) no se inventa una: rige la de hoy, como siempre.
+        fecha: diaDelViaje(v.fecha_inicio) ?? hoy,
       }),
     };
   });

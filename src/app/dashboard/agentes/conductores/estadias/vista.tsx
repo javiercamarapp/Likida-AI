@@ -28,7 +28,9 @@ export function promedioCerradas(filas: readonly FilaEstadia[], lugar: 'carga' |
   return xs.length === 0 ? null : { promedio: Math.round(xs.reduce((a, b) => a + b, 0) / xs.length), n: xs.length };
 }
 
-export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, truncada, error, csvUrl, ocultos }: {
+export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, truncada, error, csvUrl, ocultos, zonaHoraria }: {
+  /** Zona de la flota para las horas exactas (México por omisión). */
+  zonaHoraria?: string;
   sufijo: string; filtros: FiltrosEstadias; catalogos: CatalogosFiltro | null;
   filas: FilaEstadia[]; resumen: ResumenEstadias; truncada: boolean; error: string | null;
   /** Solo si el rol ve dinero: el CSV de cobro (con horas libres, tarifa y monto propuesto). */
@@ -114,8 +116,8 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
                             <td className="py-1.5 pr-3 font-medium">{f.viaje.folio ?? 'sin folio'}<div className="text-[11px] font-normal" style={{ color: 'var(--faint)' }}>{f.viaje.clienteNombre ?? ''}</div></td>
                             <td className="pr-3">{f.viaje.operadorNombre ?? '—'}<div className="text-[11px]" style={{ color: 'var(--faint)' }}>{f.viaje.terminalNombre ?? ''}</div></td>
                             <td className="pr-3">{f.estancia.lugar === 'carga' ? 'Carga' : 'Descarga'}<div className="text-[11px]" style={{ color: 'var(--faint)' }}>{f.sitio ?? ''}</div></td>
-                            <td className="pr-3 cifra-mono">{horaExactaMx(f.estancia.llegada?.en ?? null) || '—'}<div className="text-[11px] font-sans" style={{ color: 'var(--faint)' }}>{f.estancia.llegada ? FUENTE[f.estancia.llegada.fuente] : ''}</div></td>
-                            <td className="pr-3 cifra-mono">{horaExactaMx(f.estancia.salida?.en ?? null) || '—'}<div className="text-[11px] font-sans" style={{ color: 'var(--faint)' }}>{f.estancia.salida ? FUENTE[f.estancia.salida.fuente] : ''}</div></td>
+                            <td className="pr-3 cifra-mono">{horaExactaMx(f.estancia.llegada?.en ?? null, zonaHoraria) || '—'}<div className="text-[11px] font-sans" style={{ color: 'var(--faint)' }}>{f.estancia.llegada ? FUENTE[f.estancia.llegada.fuente] : ''}</div></td>
+                            <td className="pr-3 cifra-mono">{horaExactaMx(f.estancia.salida?.en ?? null, zonaHoraria) || '—'}<div className="text-[11px] font-sans" style={{ color: 'var(--faint)' }}>{f.estancia.salida ? FUENTE[f.estancia.salida.fuente] : ''}</div></td>
                             <td className="pr-3 text-right cifra-mono">{minutos(f.estancia.minutos)}</td>
                             <td className="pr-3">{FASE[f.estancia.fase]}</td>
                             <td className="text-[11.5px]" style={{ color: 'var(--muted)' }}>

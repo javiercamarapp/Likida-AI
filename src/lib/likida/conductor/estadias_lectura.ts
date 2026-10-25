@@ -1,4 +1,5 @@
 import type { PoliticaDetencion } from '../estadias/motor';
+import { inicioDiaEnZona, TZ_MX } from '@/lib/formato';
 import {
   calcularEstancias, resumirEstadias, valorarEstancias, type FilaEstadia, type ResumenEstadias, type ViajeParaCobro,
 } from './estadias_anden';
@@ -57,14 +58,39 @@ export function armarFilasEstadias(
   return { filas, resumen: resumirEstadias(filas), truncada: datos.truncada };
 }
 
-/** Los días «AAAA-MM-DD» del periodo → el instante de inicio y de fin (exclusivo) en hora de México. */
-export function rangoDeDias(desde: string, hasta: string, maxDias = 93): { desde: Date; hasta: Date } | { error: string } {
+/** El `desde` por omisión (6 días antes de `hasta`, mediodía de México). A37-S13-05:
+ *  `hasta` puede tener forma válida pero no existir («2026-99-99»); `toISOString()` de una
+ *  fecha inválida LANZA RangeError. Aquí nunca lanza: devuelve `hasta` tal cual y
+ *  `rangoDeDias` lo rechaza con su mensaje «Alguna fecha no existe.». */
+export function desdePorOmision(hasta: string): string {
+  const t = new Date(`${hasta}T12:00:00-06:00`).getTime();
+  if (Number.isNaN(t)) return hasta;
+  return new Date(t - 6 * 86_400_000).toISOString().slice(0, 10);
+}
+
+/** ¿«AAAA-MM-DD» es un día REAL del calendario? (A37-S11-04: V8 acepta `2026-02-30` y lo corre al 2 de marzo.) */
+export function diaReal(dia: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dia);
+  if (!m) return false;
+  const [y, mes, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const f = new Date(Date.UTC(y, mes - 1, d));
+  return f.getUTCFullYear() === y && f.getUTCMonth() === mes - 1 && f.getUTCDate() === d;
+}
+
+/**
+ * Los días «AAAA-MM-DD» del periodo → el instante de inicio y de fin (exclusivo) en la hora de la FLOTA (por omisión México).
+ * A37-S35-09: antes era `-06:00` fijo; una flota con horario de verano (frontera) tenía los bordes corridos 1 h.
+ */
+export function rangoDeDias(desde: string, hasta: string, maxDias = 93, zonaHoraria: string = TZ_MX): { desde: Date; hasta: Date } | { error: string } {
   const re = /^\d{4}-\d{2}-\d{2}$/;
   if (!re.test(desde) || !re.test(hasta)) return { error: 'Las fechas van como AAAA-MM-DD.' };
-  const ini = new Date(`${desde}T00:00:00-06:00`);
-  const fin = new Date(new Date(`${hasta}T00:00:00-06:00`).getTime() + 86_400_000);
-  if (Number.isNaN(ini.getTime()) || Number.isNaN(fin.getTime())) return { error: 'Alguna fecha no existe.' };
-  if (ini.toISOString().slice(0, 10) > fin.toISOString().slice(0, 10) || fin <= ini) return { error: '`desde` no puede ser posterior a `hasta`.' };
+  if (!diaReal(desde) || !diaReal(hasta)) return { error: 'Alguna fecha no existe.' };
+  const ini = inicioDiaEnZona(desde, zonaHoraria);
+  // El fin es la medianoche LOCAL del día siguiente a `hasta` (un día con cambio de hora no mide 24 h).
+  const finDia = new Date(Date.UTC(Number(hasta.slice(0, 4)), Number(hasta.slice(5, 7)) - 1, Number(hasta.slice(8, 10)) + 1));
+  const fin = Number.isNaN(finDia.getTime()) ? new Date(NaN) : inicioDiaEnZona(finDia.toISOString().slice(0, 10), zonaHoraria);
+  if (Number.isNaN(ini.getTime()) || Number.isNaN(fin.getTime()) || Number.isNaN(inicioDiaEnZona(hasta, zonaHoraria).getTime())) return { error: 'Alguna fecha no existe.' };
+  if (fin <= ini) return { error: '`desde` no puede ser posterior a `hasta`.' };
   if ((fin.getTime() - ini.getTime()) / 86_400_000 > maxDias) return { error: `El periodo máximo es de ${maxDias} días.` };
   return { desde: ini, hasta: fin };
 }

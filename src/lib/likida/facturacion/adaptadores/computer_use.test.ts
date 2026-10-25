@@ -156,7 +156,7 @@ describe('el botón de emitir', () => {
 
   it('con UUID en la pantalla, se cobra como emitido', async () => {
     guion = [{ tool: 'emitir', args: { selector: '#facturar' } }];
-    textoFinal = 'Listo, UUID B0800A68-8565-47D9-90E0-CDA7803C50E4';
+    inventarioFalso = { campos: [], botones: [], texto: 'Folio fiscal B0800A68-8565-47D9-90E0-CDA7803C50E4' };
     const r = await armar().facturar(CAMPOS, 'emitir');
 
     expect(r.ok).toBe(true);
@@ -213,7 +213,7 @@ describe('emitir lleva el mismo candado de una-sola-vez que las demás tools de 
     expect(r.ok).toBe(false);
   });
 
-  it('si el clic falla, se sella como FALLO (no éxito) — no bloquea un reintento legítimo de este ticket', async () => {
+  it('A37-S41-03: si el clic lanza (timeout) se sella como AMBIGUO — NO se reabre el candado, un reintento podría timbrar otro CFDI', async () => {
     const pagina = paginaFalsa();
     pagina.hacerClic = vi.fn(async () => { throw new Error('timeout de red'); });
     guion = [{ tool: 'emitir', args: { selector: '#facturar' } }];
@@ -223,9 +223,9 @@ describe('emitir lleva el mismo candado de una-sola-vez que las demás tools de 
       receptor: RECEPTOR, abrirPagina: async () => pagina as never,
     }).facturar(CAMPOS, 'emitir');
 
-    expect(failMutation).toHaveBeenCalledTimes(1);
-    expect(failMutation).toHaveBeenCalledWith('t-1', expect.any(String), 'tok-1', expect.stringContaining('timeout de red'));
-    expect(completeMutation).not.toHaveBeenCalled();
+    expect(failMutation).not.toHaveBeenCalled();
+    expect(completeMutation).toHaveBeenCalledWith('t-1', expect.any(String), 'tok-1',
+      expect.objectContaining({ clicado: 'ambiguo', error: expect.stringContaining('timeout de red') }));
   });
 
   it('FAIL-CLOSED: si Postgres no puede confirmar el candado fuera de pruebas, NO se aprieta el botón', async () => {
@@ -442,5 +442,58 @@ describe('extraerUuid', () => {
   });
   it('sin UUID devuelve null en vez de inventar uno', () => {
     expect(extraerUuid('se emitió correctamente')).toBeNull();
+  });
+});
+
+
+describe('A37-S41-01/02/03: ensayo, UUID y sello del candado', () => {
+  it('A37-S41-01: en ENSAYO un `clic` sobre el botón de emisión NO se aprieta ni toca el candado', async () => {
+    guion = [{ tool: 'clic', args: { selector: '#facturar' } }];
+    const r = await armar().facturar(CAMPOS, 'ensayo');
+    expect(clicado).toEqual([]);
+    expect(claimMutation).not.toHaveBeenCalled();
+    expect(completeMutation).not.toHaveBeenCalled();
+    expect(r.cfdiUuid).toBeUndefined();
+  });
+
+  it('A37-S41-02: un UUID alucinado en el texto final del modelo NO se acepta como folio fiscal', async () => {
+    guion = [{ tool: 'emitir', args: { selector: '#facturar' } }];
+    textoFinal = 'Listo, UUID B0800A68-8565-47D9-90E0-CDA7803C50E4';
+    const r = await armar().facturar(CAMPOS, 'emitir');
+    expect(r.ok).toBe(false);
+    expect(r.cfdiUuid).toBeUndefined();
+    expect(r.emisionSinConfirmar).toBe(true);
+  });
+
+  it('A37-S41-02: un UUID en el VALOR de un campo (webId) no cuenta; solo el texto visible del portal', async () => {
+    guion = [{ tool: 'emitir', args: { selector: '#facturar' } }];
+    inventarioFalso = {
+      campos: [{ s: '#webId', valorActual: 'B0800A68-8565-47D9-90E0-CDA7803C50E4' }], botones: [], texto: 'Procesando',
+    };
+    const r = await armar().facturar(CAMPOS, 'emitir');
+    expect(r.cfdiUuid).toBeUndefined();
+    expect(r.emisionSinConfirmar).toBe(true);
+  });
+
+  it('A37-S41-02: en ensayo no se devuelve cfdiUuid aunque la página muestre uno', async () => {
+    inventarioFalso = { campos: [], botones: [], texto: 'Folio B0800A68-8565-47D9-90E0-CDA7803C50E4' };
+    const r = await armar().facturar(CAMPOS, 'ensayo');
+    expect(r.ok).toBe(true);
+    expect(r.cfdiUuid).toBeUndefined();
+  });
+
+  it('A37-S41-03: si el inventario posterior al clic lanza, el candado YA quedó sellado como clicado', async () => {
+    const pagina = paginaFalsa();
+    pagina.pagina.evaluate = vi.fn()
+      .mockResolvedValueOnce({ campos: [], botones: [], texto: '' })           // inventario inicial
+      .mockRejectedValue(new Error('Execution context was destroyed'));       // tras el submit
+    guion = [{ tool: 'emitir', args: { selector: '#facturar' } }];
+    const r = await new AdaptadorComputerUse({
+      tenantId: 't-1', comercio: 'megasur', portal: 'http://portal.example/',
+      receptor: RECEPTOR, abrirPagina: async () => pagina as never,
+    }).facturar(CAMPOS, 'emitir');
+    expect(completeMutation).toHaveBeenCalledWith('t-1', expect.any(String), 'tok-1', { clicado: true });
+    expect(failMutation).not.toHaveBeenCalled();
+    expect(r.emisionSinConfirmar).toBe(true);
   });
 });

@@ -41,10 +41,13 @@ function ilegible(interruptor: string) {
 
 const vacio = (): ResumenSincronizacion => ({
   flotas: [], filasPorRecurso: { liquidaciones: 0, peajes: 0, viajes: 0, posiciones: 0 },
-  peticiones: 0, renovados401: 0, conError: 1, parciales: 0, sinTurno: 0, alarmas: 0,
+  peticiones: 0, renovados401: 0, conError: 1, parciales: 0, sinTurno: 0, alarmas: 0, atrasadas: [],
 });
 
 export async function GET(req: Request) {
+  // A37-S09-06: el reloj arranca ANTES del prólogo (puerta, interruptores): `maxDuration` corre desde que Vercel
+  // invoca, no desde que termina la lectura de la base.
+  const entrada = Date.now();
   const puerta = await puertaCron('tms', req, 'El sincronizador del sistema de transporte no corre sin él.');
   if (puerta) return puerta;
 
@@ -60,7 +63,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const venceEn = Date.now() + maxDuration * 1000 - MARGEN_MS;
+    const venceEn = entrada + maxDuration * 1000 - MARGEN_MS;
     const r = await conRelojDuro(sincronizarTms(depsReales(), { venceEn }), venceEn, vacio);
 
     const cuerpo = {
@@ -73,6 +76,7 @@ export async function GET(req: Request) {
       parciales: r.parciales,
       sinTurnoPorReloj: r.sinTurno,
       alarmasDeCredencial: r.alarmas,
+      flotasAtrasadas: r.atrasadas.length,
       // Por flota y recurso, SIN ninguna credencial ni dato del cliente: solo conteos y frases nuestras.
       detalle: r.flotas.map((f) => ({
         tenantId: f.tenantId,
@@ -84,6 +88,9 @@ export async function GET(req: Request) {
       })),
     };
     // «Parcial» = trabajo que NO terminó o que falló: ni un «ok» limpio ni un «fallo» total (los dos mienten).
+    // A37-TRANSVERSAL-08: una flota que se queda sin turno y lleva horas sin una lectura exitosa se avisa (el turno ya rota, pero
+    // si una flota sigue sin avanzar alguien tiene que verlo). Sin credenciales ni datos del cliente: solo los ids.
+    if (r.atrasadas.length > 0) await alertarOperador('cron.tms.flota_atrasada', { flotas: r.atrasadas.slice(0, 20), total: r.atrasadas.length });
     const parcial = r.conError > 0 || r.parciales > 0 || r.sinTurno > 0 || r.alarmas > 0;
     if (parcial) logger.warn('cron.tms.parcial', cuerpo); else logger.info('cron.tms.ok', cuerpo);
     await registrarLatido('tms', parcial ? 'parcial' : 'ok', {

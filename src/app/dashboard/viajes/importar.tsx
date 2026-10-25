@@ -20,6 +20,8 @@ export interface ResultadoImportarUI {
     /** Folios saltados porque su operador ya trae un viaje abierto (0029). */
     operadorOcupado: string[];
     unidadOcupada?: string[];
+    /** A37-S64-01: filas que la base rechazó por dato inválido (fecha o importe fuera de rango). */
+    rechazadasPorBase?: Array<{ folio: string; codigo: string }>;
     /** Números económicos del archivo que no existen en Unidades. */
     unidadesSinAmarrar: string[];
     /** Folios NO creados porque su unidad no se pudo amarrar. */
@@ -104,6 +106,12 @@ export function ImportarViajes({ importar, verDinero = false }: { importar: Acci
             <p style={{ color: 'var(--warn)' }}>
               {r.unidadOcupada!.length === 1 ? '1 viaje saltado' : `${r.unidadOcupada!.length} viajes saltados`} porque
               su unidad ya tiene un viaje abierto ({r.unidadOcupada!.join(', ')}): ciérralo o reasígnalo antes de importar este.
+            </p>
+          )}
+          {(r.rechazadasPorBase?.length ?? 0) > 0 && (
+            <p style={{ color: 'var(--warn)' }}>
+              {r.rechazadasPorBase!.length === 1 ? '1 viaje NO se creó' : `${r.rechazadasPorBase!.length} viajes NO se crearon`} porque
+              la base rechazó su fecha o un importe ({r.rechazadasPorBase!.map((x) => x.folio).join(', ')}). Corrige esas filas y vuelve a subir el archivo: los ya creados se saltan solos.
             </p>
           )}
           {r.sinUnidad.length > 0 && (

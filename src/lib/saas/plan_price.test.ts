@@ -110,6 +110,30 @@ describe('DAT-40 · un plan de $0 no es un plan', () => {
   });
 });
 
+describe('A37-S61-04 · solo un price que cobra CADA MES entra como precio_mensual', () => {
+  const rechaza = async (recurring: unknown) => {
+    TABLAS.plan = [{ stripe_price_id: null }];
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(price({ unit_amount: 2400000, recurring }), { status: 200 })));
+    await expect(guardarPriceDePlan('flota', 'price_x')).rejects.toThrow(/cada mes|mensual/i);
+    expect(ops.some((o) => o.tabla === 'plan' || o.tabla === 'plan_price')).toBe(false);
+  };
+
+  it('rechaza un price ANUAL (guardaría $24,000 como precio mensual)', async () => { await rechaza({ interval: 'year', interval_count: 1 }); });
+  it('rechaza un price semanal o diario', async () => {
+    await rechaza({ interval: 'week', interval_count: 1 });
+    await rechaza({ interval: 'day', interval_count: 1 });
+  });
+  it('rechaza un price con intervalo múltiple (cada 3 meses)', async () => { await rechaza({ interval: 'month', interval_count: 3 }); });
+
+  it('acepta month × 1, y también cuando Stripe no manda interval_count (default 1)', async () => {
+    TABLAS.plan = [{ stripe_price_id: null }];
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(price({ recurring: { interval: 'month', interval_count: 1 } }), { status: 200 })));
+    await expect(guardarPriceDePlan('flota', 'price_ok')).resolves.toMatchObject({ montoMensual: 2400 });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(price({ recurring: { interval: 'month' } }), { status: 200 })));
+    await expect(guardarPriceDePlan('flota', 'price_ok2')).resolves.toMatchObject({ montoMensual: 2400 });
+  });
+});
+
 describe('DAT-12 · la factura de Stripe dice que es de Stripe', () => {
   it('`aplicarFactura` escribe metodo_cobro = stripe', async () => {
     await aplicarFactura({

@@ -3,7 +3,7 @@ import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 import { esTelefonoDemo } from '@/lib/meta/telefono_demo';
 import { normalizarTelefonoWa } from '@/lib/likida/wa_ventana';
-import { contarVoluntarios, leerOperadorPiloto, leerTopeVoluntarios, marcarVoluntario, retirarVoluntario } from './repo';
+import { contarVoluntarios, leerOperadorPiloto, listarVoluntarios, leerTopeVoluntarios, marcarVoluntario, retirarVoluntario } from './repo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ALTA Y BAJA DE LOS OPERADORES VOLUNTARIOS DEL PILOTO (Agente 5) — la lógica de las acciones de servidor, con puertos.
@@ -24,13 +24,14 @@ export type ResultadoVoluntario = { ok: true; mensaje: string } | { ok: false; e
 export interface DepsVoluntarios {
   operador: typeof leerOperadorPiloto;
   contar: typeof contarVoluntarios;
+  listar: typeof listarVoluntarios;
   tope: typeof leerTopeVoluntarios;
   marcar: typeof marcarVoluntario;
   retirar: typeof retirarVoluntario;
   bitacora: typeof anotarBitacora;
 }
 export const depsVoluntariosReales: DepsVoluntarios = {
-  operador: leerOperadorPiloto, contar: contarVoluntarios, tope: leerTopeVoluntarios, marcar: marcarVoluntario, retirar: retirarVoluntario, bitacora: anotarBitacora,
+  operador: leerOperadorPiloto, contar: contarVoluntarios, listar: listarVoluntarios, tope: leerTopeVoluntarios, marcar: marcarVoluntario, retirar: retirarVoluntario, bitacora: anotarBitacora,
 };
 
 export interface ContextoVoluntarios { tenantId: string; rol: string; usuarioId: string | null; email: string | null }
@@ -73,8 +74,27 @@ export async function altaVoluntarioDelPanel(
     // Segunda barrera: si otra alta simultánea ya llenó el cupo, esta se deshace (no hay viajes que revertir: acaba de entrar).
     const total = await d.contar(ctx.tenantId);
     if (total > tope) {
-      await d.retirar(ctx.tenantId, id);
-      return { ok: false, error: errorTopeVoluntarios(tope) };
+      // A37-S34-08: con dos altas simultáneas AMBAS veían `total > tope` y se retiraban las dos. Ahora se decide por orden de
+      // marca (desde, id): la que cae dentro de los primeros `tope` se queda; solo se retira la que sobra.
+      const lista = await d.listar(ctx.tenantId);
+      // Sin fecha de marca = el más antiguo (existía antes de que se guardara la fecha).
+      const orden = [...lista].sort((a, b) => {
+        const fa = a.voluntarioDesde ?? '';
+        const fb = b.voluntarioDesde ?? '';
+        if (fa !== fb) return fa < fb ? -1 : 1;
+        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      });
+      const posicion = orden.findIndex((o) => o.id === id);
+      if (posicion === -1 || posicion >= tope) {
+        try {
+          await d.retirar(ctx.tenantId, id);
+        } catch (e) {
+          // El retiro falló: el operador QUEDÓ marcado por encima del tope (consentimiento). No se disfraza de «no pude guardarlo».
+          logger.error('conductor.voluntario_retiro_tope_fallo', { err: e instanceof Error ? e.message : String(e), operadorId: id });
+          return { ok: false, error: 'Ese operador quedó en el piloto por encima del tope y no pude retirarlo. Retíralo a mano desde la lista.' };
+        }
+        return { ok: false, error: errorTopeVoluntarios(tope) };
+      }
     }
     await d.bitacora({
       tenantId: ctx.tenantId, actor: { id: ctx.usuarioId, email: ctx.email }, accion: 'conductor.voluntario_alta', entidad: 'operador', entidadId: id,

@@ -5,6 +5,7 @@ import { UserRound, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { ROL_LABEL, type RolAppUser } from '@/lib/auth/provisionar';
 import { BarraPagina } from '../../dashboard/resumen-visual';
 import AvatarUploader from './avatar-uploader';
+import { descartarAvataresViejos } from '@/lib/perfil/avatar_huerfanos';
 
 export const dynamic = 'force-dynamic';
 
@@ -82,6 +83,9 @@ export default async function MiPerfilPage({
     // "Foto de perfil actualizada."
     const { error: errAvatar } = await admin2.from('app_user').update({ avatar_url: `${pub.publicUrl}?t=${Date.now()}` }).eq('id', userId);
     if (errAvatar) redirect('/admin/mi-perfil?error=avatar_guardar');
+    // A37-S07-06: el bucket es público; si cambió la extensión, el avatar anterior
+    // quedaría servido sin referencia. Se retira SOLO tras guardar el nuevo.
+    await descartarAvataresViejos(admin2, userId, ext);
     redirect('/admin/mi-perfil?ok=avatar');
   }
 
@@ -105,6 +109,8 @@ export default async function MiPerfilPage({
               <div className="flex items-center gap-2 text-sm px-3.5 py-2.5 rounded-lg mb-5" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
                 <AlertTriangle width={15} height={15} strokeWidth={1.75} />
                 {sp.error === 'avatar' ? 'No se pudo subir la foto — intenta con otra imagen.'
+                  : sp.error === 'tipo' ? 'Solo se aceptan imágenes JPG, PNG o WebP.'
+                    : sp.error === 'peso' ? 'La imagen pasa de 2 MB — usa una más ligera.'
                   : sp.error === 'avatar_guardar' ? 'La foto se subió, pero no se pudo guardar en tu perfil — intenta de nuevo.'
                     : sp.error === 'nombre_guardar' ? 'No se pudo guardar el nombre — intenta de nuevo.'
                       : 'El nombre no puede quedar vacío.'}

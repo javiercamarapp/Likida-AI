@@ -17,6 +17,7 @@ import { nombreDeRol } from '@/lib/auth/roles';
 import { rateLimit } from '@/lib/ratelimit';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { logger } from '@/lib/logger';
+import { conPisoDeTiempo } from '../../login/respuesta_otp';
 import { VistaUsuarios, type UsuarioRow } from './vista';
 import type { ResultadoForma } from './forma';
 
@@ -65,13 +66,21 @@ async function contextoDeAcceso(s: TenantEfectivo): Promise<ContextoAcceso> {
 }
 
 /** Lo que se le dice al dueño sobre el correo — la verdad de `enviarCorreo`,
- *  nunca «le llegó» sin `ok`. */
+ *  nunca «le llegó» sin `ok`. (Reenviar acceso: ahí la cuenta ES de esta flota.) */
 function fraseCorreo(r: ResultadoCorreoAcceso, email: string): string {
   if (r.enviado) return `Le mandamos el correo de acceso a ${email}.`;
   if (r.motivo === 'sin_configurar') {
     return `No le llega correo (el canal de correo no está encendido en este ambiente): pásale tú la liga del panel, ${appUrl()}.`;
   }
   return `El correo de acceso NO salió: pásale tú la liga del panel, ${appUrl()}, o vuelve a intentar «Reenviar acceso».`;
+}
+
+/** A37-S21-02: la frase del ALTA es el MISMO texto salga el correo, falle, o no
+ *  se haya intentado (correo que ya tenía cuenta); cualquier diferencia
+ *  convertía el alta en un oráculo de qué correos ya son clientes. La verdad
+ *  del envío queda en el log. */
+function fraseAlta(email: string): string {
+  return `Si es una cuenta nueva, el correo de acceso le llega a ${email} en unos minutos; si no lo recibe, pásale tú la liga del panel, ${appUrl()}, o usa «Reenviar acceso».`;
 }
 
 /**
@@ -158,29 +167,38 @@ export default async function UsuariosPage({
       return { ok: false, error: mensajeParaPantalla(e, 'invitar al usuario') };
     }
 
-    try {
-      // El tenant es EL DE LA SESIÓN, por closure — jamás del formulario.
-      await provisionarUsuario(s.tenantId, v.email, v.nombre, v.rol, v.telefono);
-    } catch (e) {
-      // SEG-7: un correo que YA tiene cuenta contesta EXACTAMENTE igual que
-      // un alta buena (mismo texto neutro), sin correo de acceso. Decir
-      // «ese correo ya está registrado» le confirmaba a la flota A que el
-      // contralor de la flota B (su competencia) es cliente de Likida. El
-      // caso queda en el log —para Likida— y no en la pantalla.
-      if (esCorreoYaRegistrado(e)) {
-        logger.warn('invitar.correo_ya_registrado', { tenant: s.tenantId });
-        return { ok: true, mensaje: mensajeAltaNeutro(v.email) };
+    // A37-S21-02: las dos ramas (alta nueva con correo / correo que ya tenía
+    // cuenta, sin correo) contestan el MISMO texto y tardan al menos lo mismo
+    // (`conPisoDeTiempo`, como el login): ni el mensaje ni el reloj distinguen
+    // un correo que ya es cliente de otra flota.
+    type Resultado = { ok: true } | { ok: false; error: string };
+    const r: Resultado = await conPisoDeTiempo(async (): Promise<Resultado> => {
+      try {
+        // El tenant es EL DE LA SESIÓN, por closure — jamás del formulario.
+        await provisionarUsuario(s.tenantId, v.email, v.nombre, v.rol, v.telefono);
+      } catch (e) {
+        // SEG-7: un correo que YA tiene cuenta contesta EXACTAMENTE igual que
+        // un alta buena, sin correo de acceso. Decir «ese correo ya está
+        // registrado» le confirmaba a la flota A que el contralor de la flota
+        // B (su competencia) es cliente de Likida. El caso queda en el log
+        // —para Likida— y no en la pantalla.
+        if (esCorreoYaRegistrado(e)) {
+          logger.warn('invitar.correo_ya_registrado', { tenant: s.tenantId });
+          return { ok: true };
+        }
+        // Los otros errores de captura (WhatsApp repetido) sí se traducen y
+        // salen VERBATIM; el resto sigue el camino normal (log + genérico).
+        return { ok: false, error: mensajeParaPantalla(descifrarErrorProvision(e) ?? e, 'invitar al usuario') };
       }
-      // Los otros errores de captura (WhatsApp repetido) sí se traducen y
-      // salen VERBATIM; el resto sigue el camino normal (log + genérico).
-      return { ok: false, error: mensajeParaPantalla(descifrarErrorProvision(e) ?? e, 'invitar al usuario') };
-    }
-
-    // El correo de acceso (`avisoInvitacion`, que existía y nadie emitía):
-    // best-effort, DESPUÉS del alta, y se dice si salió o no.
-    const envio = await enviarCorreoDeAcceso(v.email, v.rol, await contextoDeAcceso(s));
+      // El correo de acceso: best-effort, DESPUÉS del alta. Si no salió, queda
+      // en el log (y el dueño tiene «Reenviar acceso»); la pantalla no lo dice.
+      const envio = await enviarCorreoDeAcceso(v.email, v.rol, await contextoDeAcceso(s));
+      if (!envio.enviado) logger.warn('invitar.correo_no_salio', { tenant: s.tenantId, motivo: envio.motivo });
+      return { ok: true };
+    });
+    if (!r.ok) return { ok: false, error: r.error };
     revalidatePath(RUTA);
-    return { ok: true, mensaje: `${mensajeAltaNeutro(v.email)} ${fraseCorreo(envio, v.email)}` };
+    return { ok: true, mensaje: `${mensajeAltaNeutro(v.email)} ${fraseAlta(v.email)}` };
   }
 
   async function cambiarRol(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {

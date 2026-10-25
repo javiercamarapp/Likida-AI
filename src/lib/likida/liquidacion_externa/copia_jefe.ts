@@ -93,7 +93,8 @@ export const copiarAJefePorOmision: CopiarAJefe = async (liq, doc) => {
       // Un rechazo transitorio (timeout, 429, 5xx) YA dejó el mensaje en `wa_outbox`, que lo entrega solo:
       // soltar el reclamo haría que un reintento (o «reenviar copia») lo mande otra vez y el jefe reciba dos
       // WhatsApp con el monto. Se cierra como aceptada (en cola) y no se vuelve a mandar.
-      const enCola = !r.ok && r.reintentable === true;
+      // A37-S48-08: también `encolado` (token vencido 190/401: no es reintentable pero igual se encola).
+      const enCola = !r.ok && (r.reintentable === true || r.encolado === true);
       if (r.ok || enCola) {
         nuevos.push(tel);
         if (enCola) logger.warn('liqext.copia_jefe_en_cola', { id: liq.id, motivo: r.motivo, codigo: r.codigo });
@@ -101,7 +102,12 @@ export const copiarAJefePorOmision: CopiarAJefe = async (liq, doc) => {
         fallidos.push(tel);
         logger.error('liqext.copia_jefe_fallo', { id: liq.id, motivo: r.motivo, codigo: r.codigo });
       }
-      if (reclamo !== 'sin_candado') await cerrarCopiaJefe(liq.tenantId, liq.id, liq.generacion, tel, reclamo, r.ok || enCola);
+      if (reclamo !== 'sin_candado') {
+        const cerrado = await cerrarCopiaJefe(liq.tenantId, liq.id, liq.generacion, tel, reclamo, r.ok || enCola);
+        // Si no se pudo cerrar, el lease de 5 min expira y otra invocación podría reenviar. Lo que protege al jefe de un
+        // duplicado es la bitácora (`telefonos_aceptados`, abajo): aquí solo se deja constancia ruidosa.
+        if (!cerrado) logger.error('liqext.copia_jefe_cierre_fallo', { id: liq.id, aceptada: r.ok || enCola });
+      }
     }
     // Nada que intentar por nuestra cuenta: otra invocación ya la manda o la mandó.
     if (nuevos.length === 0 && fallidos.length === 0) return { estado: 'ya_enviada' };

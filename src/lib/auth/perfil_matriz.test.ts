@@ -165,3 +165,47 @@ describe('páginas sin llave propia que gatean con una ruta siempre permitida (T
     expect((clasificar([{ superficie: 'página', id: otra, ruta: otra }], raiz) as Fila[])[0].veredicto).toBe(NO_CLASIFICADO);
   });
 });
+
+// A37-S04-06 — la matriz clasificaba el webhook de WhatsApp con una alternativa «|perfil» verdadera en cualquier
+// archivo con esa palabra, y las acciones 'use server' del dashboard solo por el nombre de su carpeta.
+describe('A37-S04-06: la evidencia de la matriz no es tautológica', () => {
+  const arbolRaiz = (archivos: Record<string, string>) => {
+    const raiz = mkdtempSync(join(tmpdir(), 'matriz-'));
+    for (const [ruta, fuente] of Object.entries(archivos)) {
+      mkdirSync(join(raiz, ruta, '..'), { recursive: true });
+      writeFileSync(join(raiz, ruta), fuente);
+    }
+    return raiz;
+  };
+  const WH = 'src/app/api/webhook/whatsapp/route.ts';
+  const fila = (raiz: string) => (clasificar([{ superficie: 'webhook', id: WH, archivo: WH }], raiz) as Fila[])[0];
+
+  it('webhook de WhatsApp: un processor que solo MENCIONA «perfil» en un comentario NO basta', () => {
+    const raiz = arbolRaiz({
+      'src/lib/likida/interruptor_tenant.ts': 'const p = await perfilDeTenant(t);',
+      'src/lib/likida/processor.ts': '// el perfil de la flota se revisa en otro lado\nexport {};',
+    });
+    expect(fila(raiz).veredicto).toBe(NO_CLASIFICADO);
+  });
+  it('webhook de WhatsApp: el processor que LLAMA moduloEnStandBy(…) sí lo demuestra', () => {
+    const raiz = arbolRaiz({
+      'src/lib/likida/interruptor_tenant.ts': 'const p = await perfilDeTenant(t);',
+      'src/lib/likida/processor.ts': "const x = await moduloEnStandBy(t, 'conductor');",
+    });
+    expect(fila(raiz).veredicto).toBe('permitido');
+  });
+
+  const ACC = 'src/app/dashboard/agentes/vigia/actions.ts';
+  const filaAccion = (fuente: string) => {
+    const raiz = arbolRaiz({ [ACC]: fuente });
+    return (clasificar([{ superficie: "'use server'", id: ACC, archivo: ACC }], raiz) as Fila[])[0];
+  };
+  it("acciones 'use server' del dashboard: un archivo SIN llamada a la puerta ya no se clasifica por su carpeta", () => {
+    const v = filaAccion("'use server';\nexport async function borrar() { return 1; }");
+    expect(v.veredicto).toBe(NO_CLASIFICADO);
+    expect(v.nota).toMatch(/puerta/);
+  });
+  it("acciones 'use server' del dashboard: con la puerta en el archivo se clasifica por su ruta", () => {
+    expect(filaAccion("'use server';\nexport async function borrar() { await resolverTenantEfectivo('/dashboard/agentes/vigia', sp); }").veredicto).not.toBe(NO_CLASIFICADO);
+  });
+});

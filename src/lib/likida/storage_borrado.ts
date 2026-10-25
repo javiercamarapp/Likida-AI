@@ -89,31 +89,53 @@ export async function borrarStorageMarcado(): Promise<ResultadoBorradoStorage> {
     // `remove` devuelve SOLO lo que borró de verdad. Un archivo que ya no
     // existía no viene en la respuesta, y ése también hay que sellarlo: sigue
     // sin estar en el bucket, que es lo que la cola pregunta.
+    //
+    // A37-S57-07: antes solo se sellaba lo confirmado, o TODO si no volvió nada.
+    // En un lote MIXTO (algunos existentes, otros ya borrados a mano) los
+    // inexistentes quedaban con `borrado_en` NULL y, siendo los más viejos,
+    // ocupaban siempre la cabeza del LIMIT: las solicitudes ARCO posteriores
+    // nunca se procesaban. Ahora, de lo que `remove` no devolvió, se CONFIRMA la
+    // ausencia con `exists`: ausente → se sella; presente o sin poder
+    // comprobarlo → NO (una constancia ARCO no afirma lo no comprobado).
     const confirmados = new Set((data ?? []).map((o) => o.name));
-    const aSellar = nombres.filter((n) => confirmados.has(n) || confirmados.size === 0);
+    const aSellar: string[] = nombres.filter((n) => confirmados.has(n));
+    for (const n of nombres) {
+      if (confirmados.has(n)) continue;
+      const { data: sigue, error: errExiste } = await db.storage.from(bucket).exists(n);
+      if (errExiste) {
+        logger.warn('storage.ausencia_sin_confirmar', { bucket, err: errExiste.message });
+        continue;
+      }
+      if (!sigue) aSellar.push(n);
+    }
 
-    const { error: errSello } = await acotada(
-      db.from('storage_huerfano_candidato')
-        .update({ borrado_en: new Date().toISOString() })
-        .eq('bucket', bucket)
-        .in('nombre', aSellar),
-      'storage.sellar_borrado',
-    );
-    if (errSello) {
-      // El archivo YA no está, pero la marca no se pudo poner: la corrida
-      // siguiente lo reintentará y la API devolverá "no existe", que este
-      // mismo camino trata como borrado. No se pierde nada; se repite.
-      logger.warn('storage.sello_fallo', { bucket, n: aSellar.length, err: errSello.message });
+    if (aSellar.length > 0) {
+      const { error: errSello } = await acotada(
+        db.from('storage_huerfano_candidato')
+          .update({ borrado_en: new Date().toISOString() })
+          .eq('bucket', bucket)
+          .in('nombre', aSellar),
+        'storage.sellar_borrado',
+      );
+      if (errSello) {
+        // El archivo YA no está, pero la marca no se pudo poner: la corrida
+        // siguiente lo reintentará y la API devolverá "no existe", que este
+        // mismo camino trata como borrado. No se pierde nada; se repite.
+        logger.warn('storage.sello_fallo', { bucket, n: aSellar.length, err: errSello.message });
+      }
     }
     borrados += aSellar.length;
     fallidos += nombres.length - aSellar.length;
   }
 
-  const { count } = await db.from('storage_huerfano_candidato')
+  const { count, error: errConteo } = await db.from('storage_huerfano_candidato')
     .select('nombre', { count: 'exact', head: true })
     .is('borrado_en', null)
     .eq('clase_retencion', 'operativa');
+  // A37-S57-07: antes el error del conteo se ignoraba y `pendientes` quedaba
+  // `null` sin explicación; ahora se dice (el llamador distingue 0 de «no se sabe»).
+  if (errConteo) logger.error('storage.pendientes_ilegible', { err: errConteo.message });
 
   logger.info('storage.borrado', { intentados: filas.length, borrados, fallidos, pendientes: count });
-  return { intentados: filas.length, borrados, fallidos, pendientes: count ?? null };
+  return { intentados: filas.length, borrados, fallidos, pendientes: errConteo ? null : (count ?? null) };
 }

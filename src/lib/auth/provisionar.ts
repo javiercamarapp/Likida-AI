@@ -145,7 +145,7 @@ async function resolverAuthExistentePorCorreo(
 
 export async function provisionarUsuario(
   tenantId: string | null,
-  email: string,
+  emailCrudo: string,
   nombre?: string,
   rol: RolAppUser = 'flota_admin',
   /** Opcional: el WhatsApp de esta persona de oficina, para que el bot la
@@ -155,6 +155,10 @@ export async function provisionarUsuario(
   // Se normaliza ANTES de crear el usuario de Auth: un teléfono inválido no
   // debe dejar a medias un alta (usuario de Auth creado, fila sin teléfono).
   const telefonoCanonico = telefono?.trim() ? normalizarTelefonoOficina(telefono) : null;
+  // A37-S24-06: Auth guarda el correo en minúsculas; si `app_user.email` queda
+  // con las mayúsculas de la captura, la búsqueda del huérfano (sensible a
+  // mayúsculas) y el UNIQUE dejan de coincidir con Auth.
+  const email = emailCrudo.trim().toLowerCase();
 
   const admin = supabaseAdmin();
   const { data, error } = await admin.auth.admin.createUser({ email, email_confirm: true });

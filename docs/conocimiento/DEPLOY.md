@@ -141,7 +141,7 @@ entorno), `RESPALDO_BUCKETS` (si no se define, usa la lista única
 `scripts/respaldo-buckets.txt`: los 9 buckets que crean las migraciones, incluidos
 `buzon-facturas`, `cartaporte-docs` y `agente-insumos`; una prueba la cruza contra
 `supabase/migrations`) y
-`RESPALDO_S3_DESTINO`. **No hay cron que lo llame**: corre contra producción
+`RESPALDO_S3_DESTINO`. **No hay cron de Vercel que lo llame**, pero desde el 23-oct-2026 el workflow `.github/workflows/backup-storage.yml` lo corre cada noche (`17 3 * * *` UTC; ver su cabecera) y también se puede lanzar a mano (A37-L-15): corre contra producción
 con la service role, y esa tecla es consciente. Cadencia recomendada mientras
 no haya PITR: **semanal**, y a mano antes de cualquier migración que borre.
 
@@ -172,7 +172,7 @@ nueva, jamás contra producción**:
    ```bash
    psql "$URL_RESTAURO" -v ON_ERROR_STOP=1 -f supabase/pruebas-aislamiento/andamio_ci.sql
    for f in supabase/migrations/*.sql; do psql "$URL_RESTAURO" -v ON_ERROR_STOP=1 -q -f "$f"; done
-   psql "$URL_RESTAURO" -v ON_ERROR_STOP=1 -f ~/Desktop/likida-respaldos/likida-AAAA-MM-DD_HHMM.sql
+   psql "$URL_RESTAURO" -v ON_ERROR_STOP=1 -f ~/likida-respaldos/base/likida-AAAA-MM-DD_HHMM.sql
    ```
 3. **Cotejar contra el manifiesto**, que es la parte que se salta todo el
    mundo: por cada `pdf_url` de `liquidacion` y cada `imagen_url` de `gasto`,
@@ -275,9 +275,11 @@ La pantalla Mi perfil es la única exenta, así que una cuenta sin factor puede
 inscribirlo sin abrir primero datos de una flota. La secuencia, en este orden:
 
 1. **Habilita TOTP en el proyecto de producción**: Supabase → Authentication →
-   Multi-Factor → *TOTP: enabled*. (En local es `[auth.mfa.totp]
-   enroll_enabled = true` / `verify_enabled = true` en `supabase/config.toml`;
-   hoy están en `false`, que es por lo que este paso no se puede saltar.)
+   Multi-Factor → *TOTP: enabled*. (En `supabase/config.toml` están en `true`
+   —`[auth.mfa.totp] enroll_enabled` / `verify_enabled`— pero ese archivo es
+   SOLO de la pila local de pruebas y NO configura producción: el valor real
+   vive en el panel de Supabase y hay que confirmarlo ahí, por eso este paso
+   no se puede saltar. Ver «`supabase/config.toml` es solo local».)
 2. **Inscribe tu factor** en `https://app.likida.ai/dashboard/mi-perfil` →
    *Seguridad — segundo factor* → «Inscribir». Guarda el secreto en el gestor
    de contraseñas, no solo en el teléfono.
@@ -298,6 +300,21 @@ contesta, también rebota: fallar cerrado.
 retirarse en cuanto se recupere el factor; dejarla puesta es un hallazgo de
 seguridad. La cuenta no queda bloqueada en la base: la exigencia vive en el
 código (`src/lib/auth/guard.ts`).
+
+### `supabase/config.toml` es solo local: NUNCA `supabase config push`
+
+El `config.toml` del repo describe la pila de pruebas local (`supabase start`),
+no producción: `site_url = "http://localhost:3000"`, `enable_signup = true`,
+`enable_confirmations = false`, `email_sent = 360` (cuota de correos por hora
+puesta alta para que la suite no se bloquee) y MFA TOTP encendido. Si alguien
+corre `supabase config push` contra el proyecto vinculado, esos valores
+SOBRESCRIBEN la configuración de Auth de producción: registro abierto, enlaces
+mágicos que aterrizan en `localhost`, sin la cuota de correo real y con
+confirmaciones apagadas. El único candado que quedaría contra el registro
+abierto es `shouldCreateUser: false` del `signInWithOtp` del cliente
+(R02-05), que es del cliente y no de la base. La configuración de Auth de
+producción se cambia SOLO desde el panel de Supabase. `supabase db push` y
+`supabase db query` no tocan la configuración de Auth; `config push` sí.
 
 ### Dar de baja a alguien de una flota (SEG-1)
 
@@ -328,8 +345,10 @@ vercel --prod
 ```
 
 Para un entorno nuevo desde cero, `bash scripts/deploy-vercel.sh` vincula el
-proyecto, empuja las envs de `.env.local` a production + preview (salta las
-`WHATSAPP_*` vacías) y fija `NEXT_PUBLIC_APP_URL` al dominio real.
+proyecto, fija `NEXT_PUBLIC_APP_URL` al dominio real ANTES del build, empuja las envs de
+`.env.local` solo a production (salta las vacías; respeta comillas y no trunca `#` dentro del
+valor) y las de `.env.preview`, si existe, a preview (los secretos de producción nunca van a
+Preview). Aborta si el proyecto ya tiene deployments (A37-S03-02): no es para entornos vivos.
 
 **No** copies solo "las envs de `.env.example` que tengan valor": ese atajo fue
 el que dejó fuera el tenant del demo. El inventario de arriba es el que manda.
@@ -380,9 +399,9 @@ Ahora hay tres piezas que lo atan:
    commit, la última `supabase/migrations/NNNN_*.sql` del repo y
    `migracion.base` del health de producción. Con `[deploy]` y base atrás
    **no construye**. Health caído o base ilegible tampoco construyen (un cotejo
-   que no se hizo no es verde). La única excepción de arranque: si el health
-   desplegado todavía no publica `migracion` (versión anterior), construye esa
-   vez con aviso. `[deploy:forzar]` en el asunto salta la compuerta a la vista.
+   que no se hizo no es verde). Un health sin el campo `migracion` (CDN, página de
+   mantenimiento, versión vieja) tampoco construye (A37-S02-05: la salida de
+   arranque de la auditoría 24 se retiró). `[deploy:forzar]` en el asunto salta la compuerta a la vista.
 3. **El mismo veredicto en rojo, en Actions.** `salud-produccion.yml` corre la
    compuerta en cada push con `[deploy]` (el `ignoreCommand` es mudo; esto no),
    y por `schedule` comprueba además que producción corra el último commit con
@@ -392,7 +411,7 @@ Ahora hay tres piezas que lo atan:
 El procedimiento, entonces:
 
 ```bash
-bash scripts/aplicar-migraciones-y-humos.sh   # 1. migraciones a producción
+RESPALDO_VERIFICADO=1 bash scripts/aplicar-migraciones-y-humos.sh   # 1. migraciones a producción (dry-run + CLI fijada; A37-L-09: confirma el respaldo antes)
 curl -s https://app.likida.ai/api/health | grep -o '"migracion":{[^}]*}'   # 2. atras:0, adelante:0
 git commit -m 'fix(x): … [deploy]' && git push   # 3. ahora sí construye
 # 4. COMPROBAR QUE CONSTRUYÓ — este paso no es opcional (ver más abajo)

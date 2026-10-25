@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import { Mundo } from './mundo.fixture';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -59,13 +59,11 @@ const ARCHIVO = [
 ].join('\n');
 
 let operadorId: string; let unidadId: string; let clienteId: string;
-// El reloj va CLAVADO, no es el de pared. A37-A5-01 le puso al aviso de acercamiento la ventana
-// horaria de la flota (`dentroDeVentana`, 06:00-22:00 por omisión en `config.ts`), así que con
-// `new Date()` este archivo daba verde de día y ROJO entre las 22:00 y las 06:00 de México —
-// ocho horas de cada veinticuatro, sobre código sano, y en runners UTC a cualquier hora de México.
-// La prueba unitaria hermana ya se había migrado a instante fijo (`acercamiento.test.ts:33`); esta
-// se quedó atrás. Mismo instante que la hermana: 12:00 en America/Mexico_City.
-const AHORA = new Date('2026-10-10T18:00:00Z');
+// Mediodía en CDMX (18:00 UTC), con el reloj simulado: el aviso de acercamiento respeta la ventana horaria de la flota
+// (A37-A5-01) y con el reloj real la prueba solo pasaba de día. Solo se simula Date: las promesas siguen en tiempo real.
+const AHORA = new Date('2026-10-26T18:00:00.000Z');
+beforeAll(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AHORA); });
+afterAll(() => { vi.useRealTimers(); });
 const posicion = (p: { lat: number; lng: number }, minAtras = 1) => mundo.poner('posicion', { tenant_id: T, unidad_id: unidadId, lat: p.lat, lng: p.lng, medida_en: new Date(AHORA.getTime() - minAtras * 60_000).toISOString() });
 
 beforeEach(() => {

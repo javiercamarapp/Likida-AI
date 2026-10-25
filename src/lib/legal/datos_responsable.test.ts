@@ -76,9 +76,13 @@ describe('guardarDatosResponsable', () => {
   });
   it('sin cambios no escribe ni anota (idempotente)', async () => {
     d.actual = { razon_social: OK.razonSocial, domicilio_fiscal: OK.domicilio, contacto_privacidad: OK.contactoPrivacidad };
-    expect(await guardarDatosResponsable('t-1', OK, { id: 'u-1' })).toEqual({ ok: true });
+    expect(await guardarDatosResponsable('t-1', OK, { id: 'u-1' })).toEqual({ ok: true, sinCambios: true });
     expect(d.updates).toHaveLength(0);
     expect(d.bitacora).not.toHaveBeenCalled();
+  });
+  it('A37-S19-07: al borrar un dato lo dice en `vacios` para que la pantalla avise', async () => {
+    const r = await guardarDatosResponsable('t-1', { ...OK, domicilio: '  ' }, { id: 'u-1' });
+    expect(r).toEqual({ ok: true, vacios: ['domicilio'] });
   });
   it('solo anota los campos que cambiaron', async () => {
     d.actual = { razon_social: OK.razonSocial, domicilio_fiscal: OK.domicilio, contacto_privacidad: null };

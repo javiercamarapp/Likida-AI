@@ -46,6 +46,7 @@
 // y la leyenda lo dice con todas sus letras.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { ArchivoPeligroso, validarZipDeLibro } from '../importacion/zip_seguro';
 import * as XLSX from 'xlsx';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
@@ -59,7 +60,8 @@ import { MARCA_TEXTO_SOSPECHOSO } from './ocr';
 import { VENTANA_DIAS_FECHA, TOLERANCIA_MONTO_MXN } from './consolidado';
 import { registrarCorrida } from '../agentes/corridas';
 import { contextoEvidenciaGps, llaveUnidadDia } from '../peajes/evidencia_gps';
-import { cargarMapaTags, cargarMapeo, listarCasetas, evaluarGpsDeLineas } from '../peajes/datos';
+import { resolverTagEnFecha } from '../peajes/tags';
+import { cargarVigenciaTags, gastosRespaldadosPorOtrosDesgloses, cargarMapeo, listarCasetas, evaluarGpsDeLineas } from '../peajes/datos';
 import { normalizarTag } from '../peajes/formatos';
 import { resolverPeriodo } from '../peajes/periodo';
 import { registrarNombresDeCasetas } from '../peajes/revision_cobros';
@@ -648,6 +650,7 @@ export async function parsearArchivoDesglose(nombre: string, buffer: Buffer, opc
       // filas en memoria ANTES de que `MAX_LINEAS_DESGLOSE` (abajo, en `importarDesglose`)
       // pudiera decir nada (auditoría ALTO: los otros 3 lectores de Excel del repo ya
       // acotan así; este era el único que leía la hoja entera).
+      validarZipDeLibro(buffer); // A37-O7-05: bomba de descompresión (lanza ArchivoPeligroso)
       const libro = XLSX.read(buffer, { type: 'buffer', sheets: 0, sheetRows: TOPE_LECTURA_HOJA_DESGLOSE });
       const hoja = libro.Sheets[libro.SheetNames[0]];
       if (!hoja) return { ok: false, motivo: 'El archivo no trae ninguna hoja con datos.' };
@@ -669,6 +672,7 @@ export async function parsearArchivoDesglose(nombre: string, buffer: Buffer, opc
       }
       return r;
     } catch (e) {
+      if (e instanceof ArchivoPeligroso) return { ok: false, motivo: e.message };
       logger.error('desglose_peaje.parseo_hoja', { err: e instanceof Error ? e.message : String(e) });
       return { ok: false, motivo: 'No pude abrir el archivo como Excel/CSV. Revisa que no esté dañado o protegido con contraseña.' };
     }
@@ -782,6 +786,8 @@ export function cruzarLineasDesglose(
   /** `unidadId`: la unidad que `peaje_tag` casa con el TAG de la línea (null/ausente si el TAG no está dado de alta). */
   lineas: ReadonlyArray<{ fecha: string | null; monto: number; unidadId?: string | null }>,
   gastos: readonly GastoCaseta[],
+  /** A37-A2-10: ids de gasto que ya respaldan líneas de OTROS desgloses vigentes: no pueden respaldar otra. */
+  yaRespaldados: ReadonlySet<string> = new Set(),
 ): CruceLinea[] {
   // ESCALA (T-A2-32): el barrido de TODOS los gastos por cada línea era O(líneas × gastos) — a 60 000
   // líneas y ~45 000 gastos, miles de millones de comparaciones. Los gastos se indexan por día (medianoche
@@ -801,7 +807,7 @@ export function cruzarLineasDesglose(
     if (lista) lista.push({ gasto: g, orden, dia: d });
     else porDia.set(d, [{ gasto: g, orden, dia: d }]);
   });
-  const usados = new Set<string>();
+  const usados = new Set<string>(yaRespaldados);
   const resultados: CruceLinea[] = [];
 
   for (const linea of lineas) {
@@ -1178,9 +1184,12 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
 
   // El TAG dado de alta → su unidad (0375). Lanza ante error de base: un mapa a
   // medias dejaría líneas «sin unidad» que sí la tienen.
-  const unidadPorTag = await cargarMapaTags(tenantId);
+  // A37-A2-11: con la VIGENCIA del TAG (alta + baja), no solo los activos de hoy: una baja con fecha pasada no le quita
+  // la unidad a las líneas ANTERIORES a ella al re-conciliar; solo las posteriores quedan sin unidad.
+  const vigenciaTags = await cargarVigenciaTags(tenantId);
   const lineas = filas.map((f) => {
     const tagNorm = normalizarTag(f.tag as string | null);
+    const res = resolverTagEnFecha(tagNorm, (f.fecha as string | null) ?? null, vigenciaTags);
     return {
       id: String(f.id),
       indice: Number(f.indice),
@@ -1188,7 +1197,7 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
       monto: Number(f.monto),
       caseta: (f.caseta as string | null) ?? null,
       cruceEn: (f.cruce_en as string | null) ?? null,
-      unidadId: tagNorm ? (unidadPorTag.get(tagNorm) ?? null) : null,
+      unidadId: res.estado === 'vigente' ? res.unidadId : null,
     };
   });
   const resumen: ResumenCruceDesglose = {
@@ -1251,8 +1260,13 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
     gastos = gastos.map((g) => ({ ...g, unidadId: unidadPorViajeGasto.get(g.viajeId) ?? null }));
   }
 
+  // 2b) A37-A2-10: un gasto ya respaldado por una línea de OTRO desglose vigente (un corte reemitido con otros bytes, un
+  //     mensual solapado con decenales) no respalda también esta. Gana el desglose más antiguo: así re-conciliar uno no
+  //     cambia lo que el otro ya tiene, y el orden es determinista.
+  const yaRespaldados = await gastosRespaldadosPorOtrosDesgloses(tenantId, desgloseId, gastos.map((g) => g.id), fechas);
+
   // 3) El cruce puro.
-  const cruces = cruzarLineasDesglose(lineas, gastos);
+  const cruces = cruzarLineasDesglose(lineas, gastos, yaRespaldados);
 
   // 4) El cruce por CASETA con el GPS (0375/0376): la unidad a evaluar es la del
   //    TAG y, si el TAG no está dado de alta, la del viaje que cuadró. Sin
@@ -1453,20 +1467,29 @@ export async function listarDesgloses(tenantId: string, limite = 8): Promise<Res
     .order('creado_en', { ascending: false })
     .limit(limite), 'desglose_peaje.listar');
   if (error) throw new Error(`listarDesgloses: ${error.message}`);
-  const out: ResumenDesglose[] = [];
-  for (const d of data ?? []) {
-    out.push({
-      desgloseId: String(d.id),
-      proveedor: (d.proveedor as string | null) ?? null,
-      archivoNombre: (d.archivo_nombre as string | null) ?? null,
-      periodoDesde: (d.periodo_desde as string | null) ?? null,
-      periodoHasta: (d.periodo_hasta as string | null) ?? null,
-      creadoEn: String(d.creado_en),
-      ...(await agregarEstatus(tenantId, String(d.id))),
-    });
+  // A37-S11-06: antes los conteos de cada desglose iban EN SERIE (4 por desglose, uno tras otro): con 200 desgloses eran
+  // ~800 consultas secuenciales contra un `maxDuration` de 30 s. Ahora de a CONCURRENCIA_RESUMEN desglose a la vez (cada
+  // uno con sus 4 conteos en paralelo) y se conserva el orden de la lista.
+  const filas = data ?? [];
+  const out: ResumenDesglose[] = new Array(filas.length);
+  for (let i = 0; i < filas.length; i += CONCURRENCIA_RESUMEN) {
+    await Promise.all(filas.slice(i, i + CONCURRENCIA_RESUMEN).map(async (d, j) => {
+      out[i + j] = {
+        desgloseId: String(d.id),
+        proveedor: (d.proveedor as string | null) ?? null,
+        archivoNombre: (d.archivo_nombre as string | null) ?? null,
+        periodoDesde: (d.periodo_desde as string | null) ?? null,
+        periodoHasta: (d.periodo_hasta as string | null) ?? null,
+        creadoEn: String(d.creado_en),
+        ...(await agregarEstatus(tenantId, String(d.id))),
+      };
+    }));
   }
   return out;
 }
+
+/** Desgloses cuyo resumen se mide a la vez en `listarDesgloses` (cada uno lanza 4 conteos en paralelo). */
+const CONCURRENCIA_RESUMEN = 5;
 
 export interface LineaDesgloseVista {
   id: string;
@@ -1566,6 +1589,9 @@ export interface FilaBitacora {
    *  contexto), viaje sin unidad o fecha ilegible. Jamás un 0 que se leería
    *  como "la unidad no se movió". */
   posicionesGpsDia: number | null;
+  /** A37-S47-01: la diferencia con signo (cobro del desglose − gasto comprobado) que el cruce ADMITIÓ por la tolerancia de
+   *  $0.01 a $1. Se escribe, no se esconde: 0 = exacto; null = el cruce no la registró. */
+  diferenciaAdmitida: number | null;
 }
 
 export interface BitacoraRmf918 {
@@ -1583,7 +1609,7 @@ export interface BitacoraRmf918 {
  * una celda vacía es honesta; una inventada invalida el documento completo.
  */
 export function filasBitacora(
-  lineasCuadra: ReadonlyArray<{ fecha: string | null; caseta: string | null; monto: number; tag: string | null; viajeId: string | null }>,
+  lineasCuadra: ReadonlyArray<{ fecha: string | null; caseta: string | null; monto: number; tag: string | null; viajeId: string | null; diferencia?: number | null }>,
   viajePorId: ReadonlyMap<string, { folio: string | null; origen: string | null; destino: string | null; unidadId?: string | null }>,
   /** `llaveUnidadDia(unidad, fecha)` → conteo (contextoEvidenciaGps). Sin el
    *  mapa, toda la columna sale `null` — "sin datos", no un cero. */
@@ -1604,6 +1630,7 @@ export function filasBitacora(
         tag: l.tag ?? '',
         montoConciliado: l.monto,
         posicionesGpsDia: n > 0 ? n : null,
+        diferenciaAdmitida: l.diferencia ?? null,
       };
     });
 }
@@ -1623,10 +1650,10 @@ export async function bitacoraRmf918(tenantId: string, desgloseId: string): Prom
   // `traerTodo` por lo mismo que `agregarEstatus`: la bitácora RMF 9.18 con
   // el `.limit(5000)` recortado a 1,000 salía INCOMPLETA — y es un documento
   // fiscal descargable, no una vista.
-  const filasCuadra = await traerTodo<{ fecha: unknown; caseta: unknown; monto: unknown; tag: unknown; viaje_id: unknown; detalle: unknown; gps_veredicto: unknown; gps_detalle: unknown }>(
+  const filasCuadra = await traerTodo<{ fecha: unknown; caseta: unknown; monto: unknown; tag: unknown; viaje_id: unknown; detalle: unknown; gps_veredicto: unknown; gps_detalle: unknown; diferencia: unknown }>(
     (d, h) => acotada(supabaseAdmin()
       .from('desglose_peaje_linea')
-      .select('fecha, caseta, monto, tag, viaje_id, detalle, gps_veredicto, gps_detalle', conteo(d))
+      .select('fecha, caseta, monto, tag, viaje_id, detalle, gps_veredicto, gps_detalle, diferencia', conteo(d))
       .eq('tenant_id', tenantId)
       .eq('desglose_id', desgloseId)
       .eq('estatus', 'cuadra')
@@ -1653,6 +1680,7 @@ export async function bitacoraRmf918(tenantId: string, desgloseId: string): Prom
     monto: Number(f.monto),
     tag: (f.tag as string | null) ?? null,
     viajeId: (f.viaje_id as string | null) ?? null,
+    diferencia: f.diferencia === null || f.diferencia === undefined ? null : Number(f.diferencia),
   }));
 
   const viajeIds = [...new Set(lineas.map((l) => l.viajeId).filter((v): v is string => !!v))];
@@ -1720,6 +1748,8 @@ export function bitacoraACsv(b: BitacoraRmf918): string {
       // «sin datos», no 0: un cero se leería como "la unidad no se movió",
       // que es más de lo que sabemos (ver leyenda).
       posiciones_gps_dia: f.posicionesGpsDia ?? 'sin datos',
+      // A37-S47-01: la tolerancia admitida (hasta $1 por línea) se rotula; vacío = el cruce no la registró.
+      diferencia_admitida: f.diferenciaAdmitida ?? '',
     })));
   return `${encabezado}\n${tabla}`;
 }

@@ -52,7 +52,7 @@ export default async function PaginaInsumosAgente({ params }: { params: Promise<
       if (!esTipoInsumo(tipo) || !TIPOS_ARCHIVO.includes(tipo)) throw new DatoInvalido('Tipo de insumo inválido.');
       if (!titulo) throw new DatoInvalido('Ponle un título al insumo.');
       if (!(archivo instanceof File) || archivo.size === 0) throw new DatoInvalido('Elige un archivo para subir.');
-      const ruta = await subirArchivoInsumo(id, archivo, tipo as 'documento' | 'imagen' | 'video');
+      const ruta = await subirArchivoInsumo(id, archivo, tipo as 'documento' | 'imagen' | 'video', departamento);
       await crearInsumoArchivo({
         agente: id, departamento, titulo, tipo: tipo as 'documento' | 'imagen' | 'video',
         storagePath: ruta, subidoPor: userId,

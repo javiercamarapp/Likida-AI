@@ -14,7 +14,7 @@ const OTRO = 'tenant-2';
 const DES = '00000000-0000-4000-8000-0000000000aa';
 const TEL = '5215500000000';
 
-type Resultado = { ok: boolean; motivo?: string; codigo?: number };
+type Resultado = { ok: boolean; motivo?: string; codigo?: number; reintentable?: boolean; encolado?: boolean };
 const avisarOk = vi.fn(async (..._a: unknown[]): Promise<Resultado> => ({ ok: true }));
 const deps = () => ({ almacen: A.almacenAvisoAtipicos, avisar: avisarOk as unknown as typeof import('@/lib/meta/aviso_oficina').avisarOficina });
 
@@ -139,6 +139,18 @@ describe('avisarAtipicosDesglose', () => {
     }
     expect(await A.avisarAtipicosDesglose(T, DES, deps())).toBe('agotado');
     expect(avisarOk).toHaveBeenCalledTimes(A.MAX_INTENTOS_AVISO_ATIPICOS);
+  });
+
+  it('A37-S51-04: un envío no-ok pero ENCOLADO en el outbox cuenta como enviado: no libera la reserva ni se reenvía', async () => {
+    for (const rechazo of [{ reintentable: true }, { reintentable: false, encolado: true }]) {
+      base();
+      avisarOk.mockReset();
+      avisarOk.mockResolvedValue({ ok: false, motivo: 'token vencido', codigo: 190, ...rechazo });
+      expect(await A.avisarAtipicosDesglose(T, DES, deps())).toBe('enviado');
+      expect(db.tablas.peaje_atipico![0]!.estado).toBe('avisado');
+      expect(await A.avisarAtipicosDesglose(T, DES, deps())).toBe('no_requerido');
+      expect(avisarOk).toHaveBeenCalledTimes(1);
+    }
   });
 
   it('tras un fallo, si el envío luego funciona avisa una sola vez', async () => {

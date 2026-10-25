@@ -166,8 +166,10 @@ describe('el ciclo feliz: qué comprobante falta de qué gasto, un mensaje por c
     expect(meta.sendTemplate).toHaveBeenCalledTimes(2);
     await ejecutarCobranza(A, mas(24 * 5));                 // día 7 → tier 7
     expect(meta.sendTemplate).toHaveBeenCalledTimes(3);
-    await ejecutarCobranza(A, mas(24 * 12));                // día 14: la cadencia se agotó
-    expect(meta.sendTemplate).toHaveBeenCalledTimes(3);
+    await ejecutarCobranza(A, mas(24 * 12));                // día 14: la cadencia DEL GASTO se agotó
+    // A37-S26-05: ya no hay aviso de gasto; el viaje vuelve a la cobranza por viaje (un solo recordatorio).
+    expect(meta.sendTemplate.mock.calls.filter((c) => c[1] === 'cobranza_gastos_v1')).toHaveLength(3);
+    expect(meta.sendTemplate.mock.calls.filter((c) => c[1] === 'recordatorio_cierre').length).toBeLessThanOrEqual(1);
   });
 
   it('EFECTIVIDAD: cuando llega el comprobante, el barrido lo marca resuelto y el tablero mide tasa y mediana', async () => {
@@ -407,6 +409,22 @@ describe('convivencia con la cobranza por viaje', () => {
     expect(r.contactados).toBe(2);
   });
 
+  it('A37-S26-05: un viaje cuyo gasto ya agotó sus avisos VUELVE a la cobranza por viaje (no queda sin cobranza para siempre)', async () => {
+    nuevaBase({
+      agente_cobranza_config: [config(A)],
+      viaje: [viaje(A, 'v1', JUAN, { fecha_inicio: '2026-10-01' })],
+      gasto: [gasto(A, 'g1', 'v1', { imagen_url: null, created_at: hace(20) })],
+      // Los tres avisos del gasto (1, 3 y 7 días) ya salieron en días anteriores.
+      cobranza_gasto_contacto: [1, 3, 7].map((tier, i) => ({
+        id: `c${tier}`, tenant_id: A, gasto_id: 'g1', operador_id: JUAN.id, tier, motivo: 'sin_foto',
+        lote_id: `l${tier}`, enviado: true, detalle: 'ok', created_at: hace(15 - i * 4),
+      })),
+    });
+    const r = await ejecutarCobranza(A, AHORA);
+    expect(r.gasto?.mensajes).toBe(0);
+    expect(meta.sendTemplate.mock.calls.map((c) => [c[0], c[1]])).toEqual([['5211111111', 'recordatorio_cierre']]);
+  });
+
   it('con por_gasto APAGADO (el default) la conducta de siempre no cambia: se cobra por viaje y nada por gasto', async () => {
     nuevaBase({
       agente_cobranza_config: [config(A, { por_gasto: false })],
@@ -487,5 +505,25 @@ describe('configuración', () => {
     expect(await gastoMod.guardarConfigGasto(A, { porGasto: true, tiersGasto: [2, 5], maxMensajesDia: 2 })).toEqual({});
     expect(await gastoMod.leerConfigGasto(A)).toMatchObject({ porGasto: true, tiersGasto: [2, 5], maxMensajesDia: 2 });
     expect(await gastoMod.guardarConfigGasto(A, { tiersGasto: [1, 1] })).toHaveProperty('error');
+  });
+});
+
+describe('A37-S26-09: la retención de 180 días no borra la historia de un gasto aún pendiente', () => {
+  it('conserva los contactos viejos de un gasto de un viaje vivo (no re-cobra el tier alto) y purga los de gastos que ya no se cobran', async () => {
+    nuevaBase({
+      agente_cobranza_config: [config(A)],
+      viaje: [viaje(A, 'v1', JUAN)],
+      gasto: [gasto(A, 'g1', 'v1')],
+      cobranza_gasto_contacto: [
+        { id: 'c-vivo', tenant_id: A, gasto_id: 'g1', tier: 7, motivo: 'sin_cfdi', lote_id: 'l1', enviado: true, created_at: hace(200) },
+        { id: 'c-muerto', tenant_id: A, gasto_id: 'g-viejo', tier: 1, motivo: 'sin_cfdi', lote_id: 'l2', enviado: true, created_at: hace(200) },
+      ],
+    });
+    await gastoMod.ejecutarCobranzaGastos(A, AHORA);
+    const ids = contactos().map((c) => c.id);
+    expect(ids).toContain('c-vivo');
+    expect(ids).not.toContain('c-muerto');
+    // Y el tier ya contactado NO se reclama de nuevo: el siguiente es el que sigue, no el más alto otra vez.
+    expect(contactos().filter((c) => c.gasto_id === 'g1' && c.tier === 7)).toHaveLength(1);
   });
 });

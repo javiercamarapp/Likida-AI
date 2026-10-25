@@ -536,10 +536,14 @@ function documento(servidor: string) {
     info: {
       title: 'Likida API v1',
       version: '1.0.0',
-      summary: 'Lectura de la operación de una flota de carga: viajes, contribución por viaje, unidades con sus vigencias de ley y cartera de clientes.',
+      summary: 'Lectura y escritura de la operación de una flota de carga: viajes, contribución por viaje, unidades con sus vigencias de ley, cartera de clientes y liquidaciones externas.',
       description: [
-        'Likida es una capa independiente encima del TMS que use la flota. Esta API es de SOLO LECTURA:',
-        'no crea ni modifica nada, así que conectarla no puede romper lo que ya opera.',
+        'Likida es una capa independiente encima del TMS que use la flota. Esta API tiene operaciones de LECTURA (GET)',
+        'y de ESCRITURA (POST/PUT): cada operación de escritura lo dice en su descripción y exige el área de la llave',
+        '(`administracion`). Una llave con esa área SÍ puede crear y modificar datos de la flota, y algunas',
+        'operaciones ENVÍAN MENSAJES A PERSONAS (por ejemplo, `POST /v1/viajes` avisa por WhatsApp al operador y',
+        '`POST /v1/liquidaciones-externas` entrega la liquidación al chofer). Haz las pruebas de integración contra una',
+        'flota sandbox, nunca contra una flota con choferes reales.',
         '',
         '## De qué flota habla una petición',
         '',
@@ -814,7 +818,7 @@ function documento(servidor: string) {
         },
         HitoEvento: {
           type: 'object',
-          description: 'Un evento del feed incremental. Sin datos personales: ids, estados y fuentes.',
+          description: 'Un evento del feed incremental. Sin datos personales: ids, estados y fuentes. Solo los 9 eventos del enum; `detalle` trae únicamente escalares de sistema (nivel, canal, fuente, conteos).',
           properties: {
             id: { type: 'integer', description: 'Solo crece. Guarda el último que procesaste y pídelo en `?despues=`.' },
             viajeId: { type: 'string', format: 'uuid' },
@@ -929,6 +933,7 @@ function documento(servidor: string) {
           summary: 'Da de alta un viaje.',
           description:
             'Requiere el área `administracion`. El viaje nace `abierto`.\n\n'
+            + 'ENVÍA UN MENSAJE A UNA PERSONA: si el viaje trae operador, se le avisa por WhatsApp en cuanto el viaje existe (best-effort). Prueba solo en una flota sandbox; un reintento de prueba contra una flota real crea un viaje real y le escribe al chofer.\n\n'
             + 'EL TENANT NO SE MANDA. Sale de la credencial y de ningún otro lado: un `tenantId` en el cuerpo se ignora, no da error — leerlo convertiría la llave de una flota en una puerta para escribir en otra.\n\n'
             + 'EL INGRESO DISTINGUE VACÍO DE CERO. `ingresoFlete` ausente se guarda `null` («todavía no se sabe cuánto dejó»), jamás 0 («no dejó nada»): son lecturas opuestas de la rentabilidad y el motor se niega a confundirlas. El `anticipo` es la única excepción declarada — su columna es NOT NULL, y un viaje sin anticipo es un viaje donde no se adelantó efectivo, que es lo que 0 mide de verdad.\n\n'
             + 'El `folio` es único por flota: repetirlo devuelve 200 con el viaje que ya existía, no un segundo viaje.',
@@ -1150,7 +1155,7 @@ function documento(servidor: string) {
             'Requiere el área `administracion`. Un chofer nuevo es una persona con contrato y su alta dispara el aviso de privacidad; por eso escribir es `administracion` aunque LEER el padrón sea `operacion`.\n\n'
             + 'EL TENANT NO SE MANDA: sale de la credencial, igual que en el resto de /v1.\n\n'
             + `DOS FORMAS DE CUERPO, la misma por dentro: los campos en la raíz (un chofer) o \`{ "operadores": [ … ] }\` (hasta ${FILAS_POR_TANDA} filas). Un padrón de 800 son cuatro POST, cada uno con su \`${CABECERA_IDEMPOTENCIA}\`.\n\n`
-            + 'EL TELÉFONO ES LA IDENTIDAD. Se normaliza a E.164 de México y es único por flota. Tres desenlaces, y los tres se dicen: si el número ya es de un chofer de TU flota, la fila sale en `duplicados` con el id del que ya estaba; si es de un chofer ACTIVO de OTRA flota, la fila sale en `errores` y no se escribe —dos flotas no pueden compartir la identidad de un chofer sin cruzar el dinero de las dos—; si es de uno tuyo dado de baja, la fila sale en `errores` pidiendo que lo reactives en vez de crear un segundo registro de la misma persona.\n\n'
+            + 'EL TELÉFONO ES LA IDENTIDAD. Se normaliza a E.164 de México y es único por flota. Tres desenlaces, y los tres se dicen: si el número ya es de un chofer de TU flota, la fila sale en `duplicados` con el id del que ya estaba; si el número no se puede registrar en tu flota (p. ej. ya está en uso por un chofer activo en otra; el mensaje es NEUTRO y no dice dónde), la fila sale en `errores` y no se escribe —dos flotas no pueden compartir la identidad de un chofer sin cruzar el dinero de las dos—; si es de uno tuyo dado de baja, la fila sale en `errores` pidiendo que lo reactives en vez de crear un segundo registro de la misma persona.\n\n'
             + 'UNA FILA MALA NO TIRA EL LOTE. Cada fila inválida sale en `errores` con su número de fila (empezando en 1) y el qué corregir. `creados + duplicados + errores` siempre suma `recibidas`. Si NINGUNA fila sirve, es 400 con el detalle en `error.filas` y no se escribe nada.\n\n'
             + 'EL AVISO DE PRIVACIDAD SE ENCOLA, NO SE DA POR ENTREGADO. `avisoPendiente` dice a cuántos de los recién creados les falta recibirlo; se les entrega en su primer contacto con el bot. Un alta masiva NO es un consentimiento masivo, y esta API no finge que lo sea.',
           tags: ['operadores'],
@@ -1356,7 +1361,7 @@ function documento(servidor: string) {
           'x-likida-area': 'administracion',
           summary: 'Entrega al chofer, por WhatsApp, una liquidación que ya calculó tu SAP/TMS.',
           description:
-            'Requiere el área `administracion`: termina en el teléfono de una persona con la firma de su patrón.\n\n'
+            'Requiere el área `administracion`: termina en el teléfono de una persona con la firma de su patrón. Prueba solo en una flota sandbox: crea una liquidación real y la manda por WhatsApp al chofer.\n\n'
             + 'LIKIDA NO RECALCULA TU LIQUIDACIÓN. Es el modo opuesto al de fotos: aquí la cifra es tuya. Lo único que se verifica es que `total` sea la suma de tus conceptos; si no cuadra es 400 con la diferencia, porque un total que no coincide con los renglones que el chofer lee es exactamente el documento que genera una queja de nómina.\n\n'
             + 'IDEMPOTENCIA POR `claveExterna`. El mismo folio con el MISMO contenido es 200 `idempotente: true` (un reintento tras un timeout). El mismo folio con OTRO contenido es 409 `conflicto`: NO se sobrescribe, porque el chofer pudo haber visto la primera; una corrección se manda con una `claveExterna` nueva. `Idempotency-Key` es opcional aquí: si no la mandas se deriva de la clave externa.\n\n'
             + 'EL 201 SIGNIFICA «RECIBIDA», NO «ENTREGADA». La entrega es asíncrona (cola de WhatsApp con reintentos): consulta `estado` con GET, o míralo en el tablero de Liquidación del panel. Un fallo de entrega NO convierte la recepción en error.\n\n'
@@ -1449,14 +1454,18 @@ function documento(servidor: string) {
           'x-likida-area': 'administracion',
           summary: 'Confirma que tu sistema ya leyó estos acuses (deja de devolverlos).',
           description:
-            'Área `administracion`. Cuerpo `{ "ids": [uuid, …] }` (1 a 200). IDEMPOTENTE: repetirlo deja las ya confirmadas en `yaConfirmadas`. `noAplican` agrupa lo que no existe en tu flota o aún no tiene acuse del chofer (no se distingue cuál para no revelar liquidaciones ajenas).',
+            'Área `administracion`. Cuerpo `{ "ids": [ … ] }` (1 a 200); cada elemento es `{ "id", "respuestaEn" }` tal como los devolvió `GET /v1/liquidaciones-externas/acuses` (RECOMENDADO: confirma SOLO el acuse que leíste; si el chofer cambió su respuesta entre tu lectura y esta llamada, el id sale en `cambiaron`, no se confirma y el acuse nuevo vuelve a salir en la siguiente lectura) o el uuid suelto (forma anterior: confirma el acuse que haya en ese momento). IDEMPOTENTE: repetirlo deja las ya confirmadas en `yaConfirmadas`. `noAplican` agrupa lo que no existe en tu flota o aún no tiene acuse del chofer (no se distingue cuál para no revelar liquidaciones ajenas).',
           tags: ['liquidaciones', 'dinero'],
-          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { ids: { type: 'array', minItems: 1, maxItems: 200, items: { type: 'string', format: 'uuid' } } }, required: ['ids'], additionalProperties: false } } } },
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { ids: { type: 'array', minItems: 1, maxItems: 200, items: { oneOf: [
+            { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, respuestaEn: { type: 'string', description: 'El `respuestaEn` del acuse que leíste, sin modificar.' } }, required: ['id', 'respuestaEn'], additionalProperties: false },
+            { type: 'string', format: 'uuid', description: 'Forma anterior: confirma el acuse vigente.' },
+          ] } } }, required: ['ids'], additionalProperties: false } } } },
           responses: {
             '200': { description: 'Qué pasó con cada id.', content: { 'application/json': { schema: { type: 'object', properties: { datos: { type: 'object', properties: {
               confirmadas: { type: 'array', items: { type: 'string', format: 'uuid' } },
               yaConfirmadas: { type: 'array', items: { type: 'string', format: 'uuid' } },
               noAplican: { type: 'array', items: { type: 'string', format: 'uuid' } },
+              cambiaron: { type: 'array', items: { type: 'string', format: 'uuid' }, description: 'El chofer cambió su respuesta después de tu lectura: NO se confirmaron; vuelven a salir en `GET …/acuses`.' },
             }, required: ['confirmadas', 'yaConfirmadas', 'noAplican'] } }, required: ['datos'] } } } },
             ...respuestasError,
           },
@@ -1563,7 +1572,7 @@ function documento(servidor: string) {
           summary: 'Los desgloses del proveedor de peaje de la flota y su conciliación medida.',
           description: 'Área `dinero`. Del más nuevo al más viejo; los ANULADOS no salen. Cada uno trae cuántas líneas cuadran, no cuadran o no tienen contraparte (conteos medidos, nunca un 0 inventado). El `id` es el que se pasa a `GET /v1/peajes/exportacion`. `limite` de 1 a 50; `desplazamiento` es 400.',
           tags: ['peajes', 'dinero'],
-          parameters: [parametrosPagina[0]],
+          parameters: [{ ...parametrosPagina[0], description: 'Cuántos desgloses devolver (1 a 50, defecto 50). Un valor mayor devuelve 400: cada desglose cuesta 4 conteos exactos.', schema: { type: 'integer', minimum: 1, maximum: 50, default: 50 } }],
           responses: {
             '200': {
               description: 'Desgloses vigentes.',
@@ -1929,6 +1938,10 @@ export async function GET(req: Request) {
       // ninguna flota, así que se puede cachear en el CDN sin riesgo de
       // servirle la respuesta de un tenant a otro.
       'Cache-Control': 'public, max-age=300, s-maxage=3600',
+      // A37-S11-10: la respuesta depende de la credencial (una flota con perfil recibe un documento
+      // recortado). Sin Vary, un CDN podía servirle a esa flota el documento completo cacheado por una
+      // petición anónima. Con Vary, anónimo y con-credencial se cachean por separado.
+      Vary: 'Authorization, Cookie',
     },
   });
 }

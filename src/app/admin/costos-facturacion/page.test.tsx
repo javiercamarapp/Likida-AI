@@ -1,3 +1,4 @@
+import { DatoInvalido } from '@/lib/likida/errores';
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, expect, it, vi } from 'vitest';
@@ -25,7 +26,7 @@ const dobles = vi.hoisted(() => ({
   emitirMensualidad: vi.fn(),
   conciliar: vi.fn(),
   timbrarFactura: vi.fn(),
-  getPorCobrar: vi.fn(),
+  getPorCobrarTodas: vi.fn(),
   facturapiConfigurado: vi.fn(),
   modoFacturapi: vi.fn(),
   revalidatePath: vi.fn(),
@@ -49,7 +50,7 @@ vi.mock('@/lib/saas/transferencia', async (importar) => ({
   emitirMensualidad: dobles.emitirMensualidad,
   conciliar: dobles.conciliar,
   timbrarFactura: dobles.timbrarFactura,
-  getPorCobrar: dobles.getPorCobrar,
+  getPorCobrarTodas: dobles.getPorCobrarTodas,
 }));
 vi.mock('@/lib/saas/facturapi', () => ({ facturapiConfigurado: dobles.facturapiConfigurado, modoFacturapi: dobles.modoFacturapi }));
 vi.mock('@/lib/formato', async (importar) => ({
@@ -102,7 +103,7 @@ beforeEach(() => {
   dobles.modoFacturapi.mockReturnValue('produccion');
   dobles.getPlanes.mockResolvedValue([]);
   dobles.datosBancarios.mockReturnValue(null);
-  dobles.getPorCobrar.mockResolvedValue([]);
+  dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [], total: 0 });
   dobles.hoyMx.mockReturnValue('2026-03-15');
 });
 
@@ -232,7 +233,7 @@ it('INTEGRACIÓN — cancelar NO ejecuta: el botón Cancelar es type="button" y 
 });
 
 it('accionConciliar: manda el userId de la SESIÓN al conciliar, y timbra DESPUÉS con su propio try', async () => {
-  dobles.getPorCobrar.mockResolvedValue([{ id: 'f-1', tenantNombre: 'ACME', periodoInicio: '2026-01-01', periodoFin: '2026-01-31', referencia: 'R', monto: 2784, subtotal: 2400, iva: 384 }]);
+  dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [{ id: 'f-1', tenantNombre: 'ACME', periodoInicio: '2026-01-01', periodoFin: '2026-01-31', referencia: 'R', monto: 2784, subtotal: 2400, iva: 384 }], total: 1 });
   dobles.conciliar.mockResolvedValue(undefined);
   dobles.timbrarFactura.mockResolvedValue({ uuid: 'uuid-real-12345678' });
   const pagina = await CostosFacturacionPage();
@@ -243,7 +244,7 @@ it('accionConciliar: manda el userId de la SESIÓN al conciliar, y timbra DESPU�
 });
 
 it('accionConciliar: un PAC caído NO deshace el pago ya registrado — se dice por separado', async () => {
-  dobles.getPorCobrar.mockResolvedValue([{ id: 'f-1', tenantNombre: 'ACME', periodoInicio: '2026-01-01', periodoFin: '2026-01-31', referencia: 'R', monto: 2784, subtotal: 2400, iva: 384 }]);
+  dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [{ id: 'f-1', tenantNombre: 'ACME', periodoInicio: '2026-01-01', periodoFin: '2026-01-31', referencia: 'R', monto: 2784, subtotal: 2400, iva: 384 }], total: 1 });
   dobles.conciliar.mockResolvedValue(undefined);
   dobles.timbrarFactura.mockRejectedValue(new Error('PAC caído'));
   const pagina = await CostosFacturacionPage();
@@ -253,9 +254,31 @@ it('accionConciliar: un PAC caído NO deshace el pago ya registrado — se dice 
   expect(r.ok).toContain('NO se timbró');
 });
 
+it('A37-L-03: un timbrado AMBIGUO (el PAC no contestó) NO dice «NO se timbró» ni invita a timbrar a mano', async () => {
+  dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [{ id: 'f-1', tenantNombre: 'ACME', periodoInicio: '2026-01-01', periodoFin: '2026-01-31', referencia: 'R', monto: 2784, subtotal: 2400, iva: 384 }], total: 1 });
+  dobles.conciliar.mockResolvedValue(undefined);
+  dobles.timbrarFactura.mockRejectedValue(Object.assign(new DatoInvalido('El PAC no contestó y NO se sabe si el CFDI se creó. Busca en el panel de Facturapi la referencia R'), { ambiguo: true }));
+  const pagina = await CostosFacturacionPage();
+  const accion = accionDelBoton(pagina, /Marcar pagada/);
+  const r = await accion(null, fd({ facturaId: 'f-1', referenciaBanco: 'MOV-999' }));
+  expect(r.ok).toContain('Factura marcada como pagada');
+  expect(r.ok).not.toContain('NO se timbró');
+  expect(r.ok).toContain('NO se sabe si el CFDI se emitió');
+});
+
 it('un "por cobrar" caído se DICE — nunca se confunde con "nada pendiente"', async () => {
-  dobles.getPorCobrar.mockRejectedValueOnce(new Error('caída'));
+  dobles.getPorCobrarTodas.mockRejectedValueOnce(new Error('caída'));
   const html = renderToStaticMarkup(await CostosFacturacionPage());
   expect(html).toContain('No se pudo leer lo que está por cobrarse');
   expect(html).not.toContain('Nada pendiente de cobro');
+});
+
+// A37-S06-07
+it('A37-S06-07 — si hay más facturas por cobrar que las mostradas, la tabla DICE que está recortada', async () => {
+  const f = { id: 'f-1', tenantNombre: 'ACME', periodoInicio: '2026-01-01', periodoFin: '2026-01-31', referencia: 'R', monto: 2784, subtotal: 2400, iva: 384 };
+  dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [f], total: 1200 });
+  const html = renderToStaticMarkup(await CostosFacturacionPage());
+  expect(html).toContain('Se muestran 1 de 1200 facturas por cobrar');
+  dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [f], total: 1 });
+  expect(renderToStaticMarkup(await CostosFacturacionPage())).not.toContain('recortada');
 });

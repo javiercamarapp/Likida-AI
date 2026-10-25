@@ -127,6 +127,13 @@ describe('guardarCredencial — los candados antes de la base', () => {
     expect(toquesDeCredencial()).toHaveLength(0);
   });
 
+  it('A37-S37-05: una dirección con query o fragmento (donde se pega una llave) se rechaza antes de cifrar', async () => {
+    for (const base_url of ['https://sap.cliente.mx/api?key=SECRETO', 'https://sap.cliente.mx/api#token=SECRETO']) {
+      await expect(guardarCredencial(TENANT, 'sap_b1', { ...VALORES_SAP, base_url })).rejects.toThrow(/no debe llevar parámetros/);
+    }
+    expect(toquesDeCredencial()).toHaveLength(0);
+  });
+
   it('las requeridas faltantes lanzan con sus RÓTULOS, antes de cifrar nada', async () => {
     await expect(guardarCredencial(TENANT, 'sap_b1', { base_url: 'https://sap.cliente.mx' }))
       .rejects.toThrow(/Faltan datos para guardar SAP Business One/);
@@ -169,9 +176,19 @@ describe('guardarCredencial — lo que viaja al UPSERT', () => {
     await guardarCredencial(TENANT, 'sap_b1', { ...VALORES_SAP, campo_colado: 'malicia' });
 
     const [up] = toquesDeCredencial();
-    const guardado = descifrar(String((up.payload as Record<string, unknown>).valores_cifrados));
+    const guardado = descifrar(String((up.payload as Record<string, unknown>).valores_cifrados), `${TENANT}:sap_b1`);
     expect(guardado).toEqual(VALORES_SAP);
     expect(guardado).not.toHaveProperty('campo_colado');
+  });
+
+  it('A37-TRANSVERSAL-09: lo guardado es v2, atado a (flota, conector): no abre en la fila de otra flota ni de otro conector', async () => {
+    respuestas.set('conector_credencial', { data: { id: 'cred-1' }, error: null });
+    await guardarCredencial(TENANT, 'sap_b1', VALORES_SAP);
+    const [up] = toquesDeCredencial();
+    const cifrado = String((up.payload as Record<string, unknown>).valores_cifrados);
+    expect(cifrado).toMatch(/^v2\./);
+    expect(() => descifrar(cifrado, 't-otra-flota:sap_b1')).toThrow();
+    expect(() => descifrar(cifrado, `${TENANT}:otro_conector`)).toThrow();
   });
 
   it('el secreto NO viaja a la bitácora ni al logger', async () => {
@@ -471,6 +488,16 @@ describe('probarCredencial — el ciclo completo, sin red', () => {
   // rojo, como si el cliente hubiera hecho algo mal.
   // ═════════════════════════════════════════════════════════════════════════
 
+  it('A37-S37-04: el sello se ancla a la versión probada; si la fila cambió mientras tanto, no se sella', async () => {
+    const cifrado = cifrar({ token: 'tok-samsara-largo' });
+    respuestasPorOp.set('conector_credencial:select', { data: { valores_cifrados: cifrado }, error: null });
+    respuestasPorOp.set('conector_credencial:update', { data: [], error: null }); // otro admin guardó un token nuevo
+    const { http } = httpFalso(200, '{"data":{"id":"org-1"}}');
+    await expect(probarCredencial(TENANT, 'samsara', undefined, http)).rejects.toThrow(/cambió mientras se probaba/);
+    const update = toquesDeCredencial().find((l) => l.op === 'update')!;
+    expect(update.eq).toContainEqual(['valores_cifrados', cifrado]);
+  });
+
   it('c7-12 · el 503 del proveedor NO toca la fila: `probada_en` conserva su fecha', async () => {
     respuestasPorOp.set('conector_credencial:select', { data: { valores_cifrados: cifrar({ token: 'tok-samsara-largo' }) }, error: null });
     respuestasPorOp.set('conector_credencial:update', { data: [{ id: 'cred-1' }], error: null });
@@ -575,7 +602,7 @@ describe('guardarCredencial — tabla_propia csv_sftp por sftp://', () => {
     const llavePem = '-----BEGIN ' + 'OPENSSH PRIVATE KEY-----\n' + 'QUJD'.repeat(20) + '\n-----END ' + 'OPENSSH PRIVATE KEY-----';
     await guardarCredencial(TENANT, 'tabla_propia', { ...SFTP, token: '', llave_privada: llavePem, frase_llave: 'frase' });
     const [up] = toquesDeCredencial();
-    const guardado = descifrar(String((up.payload as Record<string, unknown>).valores_cifrados));
+    const guardado = descifrar(String((up.payload as Record<string, unknown>).valores_cifrados), `${TENANT}:tabla_propia`);
     expect(guardado.huella_host).toBe(HUELLA);
     expect(guardado.llave_privada).toBe(llavePem);
     expect(guardado.frase_llave).toBe('frase');
@@ -648,7 +675,7 @@ describe('guardarCredencial — tabla_propia sql_solo_lectura', () => {
     const ca = `-----BEGIN CERTIFICATE-----\n${CUERPO_CA}\n-----END CERTIFICATE-----`;
     await expect(guardarCredencial(TENANT, 'tabla_propia', { ...SQL, sql_ca: ca })).resolves.toBe('cred-1');
     const [up] = toquesDeCredencial();
-    const guardado = descifrar(String((up.payload as Record<string, unknown>).valores_cifrados));
+    const guardado = descifrar(String((up.payload as Record<string, unknown>).valores_cifrados), `${TENANT}:tabla_propia`);
     expect(guardado.sql_ca).toBe(ca);
     expect(guardado.sql_clave).toBe('clave-sql-larga');
     expect(JSON.stringify((up.payload as Record<string, unknown>).pistas)).not.toContain(CUERPO_CA);

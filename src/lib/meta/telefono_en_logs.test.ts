@@ -16,15 +16,16 @@ import { redactarTexto } from '@/lib/logger';
 // ejerciendo sus derechos sobre ese mismo dato (LFPDPPP art. 21).
 // ═══════════════════════════════════════════════════════════════════════════
 
-describe('la premisa: el redactor NO cubre un teléfono con separadores', () => {
+describe('la premisa: el redactor cubre el teléfono pegado y, desde A37 (logger.ts), también el que lleva separadores', () => {
   it('pegado sí se redacta', () => {
     expect(redactarTexto('llamé al 9993700779')).toContain('[TEL]');
     expect(redactarTexto('llamé al 5219993700779')).toContain('[TEL]');
   });
 
-  it('con espacios o guiones NO — por eso hay que enmascarar antes', () => {
-    expect(redactarTexto('llamé al 999 370 0779')).toContain('999 370 0779');
-    expect(redactarTexto('llamé al +52 1 999-370-0779')).toContain('999-370-0779');
+  it('con espacios o guiones también se redacta (el enmascarado de abajo sigue siendo la primera defensa)', () => {
+    expect(redactarTexto('llamé al 999 370 0779')).not.toContain('999 370 0779');
+    expect(redactarTexto('llamé al +52 1 999-370-0779')).not.toContain('999-370-0779');
+    expect(redactarTexto('llamé al 999 370 0779')).toContain('[TEL]');
   });
 });
 

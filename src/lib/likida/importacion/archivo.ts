@@ -10,6 +10,7 @@
 
 import { read as leerLibro, utils as xlsxUtils } from 'xlsx';
 import { numero } from '@/lib/formato';
+import { validarZipDeLibro } from './zip_seguro';
 
 /** Cuántas filas de datos se leen de un archivo, COMO MÁXIMO. Mismo tope que
  *  el importador de viajes: por encima se DICE con la cifra y se pide partir
@@ -25,6 +26,9 @@ export const MAX_ARCHIVO_BYTES = 4 * 1024 * 1024;
  *  antes de que el tope de 2,000 filas de negocio pueda decir nada. Con él, el
  *  archivo gigante se lee hasta aquí y se rechaza DICIENDO que rebasa el tope. */
 export const FILAS_MAX_LECTURA = 10_001;
+
+/** Cuántas columnas se aceptan en una hoja. Las plantillas reales traen menos de 40. */
+export const COLUMNAS_MAX_LECTURA = 200;
 
 /** Cuántas filas se escriben por tanda. Una tanda es UN insert. */
 export const FILAS_POR_TANDA = 200;
@@ -45,9 +49,20 @@ export function normalizarEncabezado(v: unknown): string {
 /** La matriz cruda (fila 0 = encabezados) de un CSV o Excel. Lanza si el
  *  archivo no se puede leer — el llamador lo dice en palabras. */
 export function matrizDeArchivo(buffer: ArrayBuffer): unknown[][] {
+  // A37-S45-09: `sheetRows` no acota la descompresión de la hoja ni de las
+  // cadenas compartidas; el zip se mide ANTES de dárselo al parser.
+  validarZipDeLibro(buffer);
   const libro = leerLibro(buffer, { type: 'array', sheetRows: FILAS_MAX_LECTURA });
   const hoja = libro.Sheets[libro.SheetNames[0]];
   if (!hoja) return [];
+  // Y tampoco acota las COLUMNAS: una hoja de miles de columnas por 10,000
+  // filas se materializa entera en `sheet_to_json`.
+  if (hoja['!ref']) {
+    const r = xlsxUtils.decode_range(hoja['!ref']);
+    if (r.e.c - r.s.c + 1 > COLUMNAS_MAX_LECTURA) {
+      throw new Error(`La hoja trae más de ${COLUMNAS_MAX_LECTURA} columnas: no es una plantilla de importación.`);
+    }
+  }
   return xlsxUtils.sheet_to_json(hoja, { header: 1, raw: true }) as unknown[][];
 }
 

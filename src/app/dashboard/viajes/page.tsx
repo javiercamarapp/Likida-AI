@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation';
-import { read as leerLibro, utils as xlsxUtils } from 'xlsx';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
@@ -10,6 +9,8 @@ import { interpretarFilasViajes, importarViajes, archivoTraeCitas } from '@/lib/
 import { getZonaHorariaTenant } from '@/lib/likida/repo';
 import { zonaOCdmx } from '@/lib/likida/conductor/config';
 import { logger } from '@/lib/logger';
+import { rateLimit } from '@/lib/ratelimit';
+import { matrizDeArchivo } from '@/lib/likida/importacion/archivo';
 import { sufijoTenant, querystringCompleto } from '../sufijo';
 import { VistaViajes, type FiltroViajes, type FilaRegistroViaje } from './vista';
 import type { ResultadoImportarUI } from './importar';
@@ -101,15 +102,17 @@ export default async function PaginaViajes({
     if (!puedeAsignar(sesion.rol)) return { error: 'Tu rol no puede crear viajes.' };
     if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este registro no es de tu flota.' };
 
+    // A37-S21-06: importar es trabajo pesado (descomprime y recorre una hoja): tope por flota, y el doble clic no lo repite.
+    if (!(await rateLimit(`viajes-importar:${sesion.tenantId}`, 6, 60_000))) return { error: 'Demasiadas importaciones en poco tiempo. Espera un minuto.' };
+
     const archivo = fd.get('archivo');
     if (!(archivo instanceof File) || archivo.size === 0) return { error: 'Elige el CSV o Excel con los viajes.' };
     if (archivo.size > MAX_IMPORT_BYTES) return { error: MENSAJE_ARCHIVO_GRANDE };
 
     let matriz: unknown[][];
     try {
-      const libro = leerLibro(await archivo.arrayBuffer(), { type: 'array' });
-      const hoja = libro.Sheets[libro.SheetNames[0]];
-      matriz = xlsxUtils.sheet_to_json(hoja, { header: 1, raw: true }) as unknown[][];
+      // Lectura ACOTADA (filas, columnas y descompresión del zip) — la misma de los demás importadores (A37-S21-06).
+      matriz = matrizDeArchivo(await archivo.arrayBuffer());
     } catch {
       return { error: 'No pude leer el archivo — asegúrate de que sea CSV o Excel.' };
     }
@@ -132,6 +135,7 @@ export default async function PaginaViajes({
         sinOperador: r.sinOperador,
         operadorOcupado: r.operadorOcupado,
         unidadOcupada: r.unidadOcupada ?? [],
+        rechazadasPorBase: r.rechazadasPorBase ?? [],
         unidadesSinAmarrar: r.unidadesSinAmarrar,
         sinUnidad: r.sinUnidad,
         clientesSinAmarrar: r.clientesSinAmarrar,

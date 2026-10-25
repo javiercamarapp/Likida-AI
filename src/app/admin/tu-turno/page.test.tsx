@@ -110,7 +110,7 @@ it('crear orden: editar_encargo SÍ lleva el contenido en el payload', async () 
   let mensaje = '';
   try { await p.accionOrden(fd({ tipo: 'editar_encargo', contenido: 'nuevo texto del encargo' })); }
   catch (e) { mensaje = decodeURIComponent((e as Error).message); }
-  expect(mensaje).toContain('abre un PR chico');
+  expect(mensaje).toContain('aviso=encargo');
   expect(dobles.crearOrden).toHaveBeenCalledWith('editar_encargo', null, 'javier@likida.ai', { contenido: 'nuevo texto del encargo' });
 });
 
@@ -118,4 +118,18 @@ it('crear orden: un tipo que no existe en esOrdenUi no llega a crearOrden', asyn
   const p = await pagina();
   await expect(p.accionOrden(fd({ tipo: 'algo-inventado' }))).rejects.toThrow(/REDIRECT:\/admin\/tu-turno\?error=/);
   expect(dobles.crearOrden).not.toHaveBeenCalled();
+});
+
+// A37-S08-07
+it('A37-S08-07: la URL lleva códigos cerrados y un texto ajeno en ?aviso= / ?error= no se pinta', async () => {
+  const p = await pagina();
+  await expect(p.accionPieza(fd({ pieza: 'p-1', accion: 'cualquier-otra-cosa' }))).rejects.toThrow('REDIRECT:/admin/tu-turno?error=pieza');
+  const { default: Pagina } = await import('./page');
+  const el = await Pagina({ searchParams: Promise.resolve({ aviso: 'Llama ya al 555', error: 'Texto falso' }) });
+  const props = (el as { props: { aviso?: string; error?: string } }).props;
+  expect(props.aviso).toBeUndefined();
+  expect(props.error).toBeUndefined();
+  const ok = await Pagina({ searchParams: Promise.resolve({ aviso: 'pieza_aprobada', error: 'orden' }) });
+  expect((ok as { props: { aviso?: string } }).props.aviso).toContain('Pieza aprobada');
+  expect((ok as { props: { error?: string } }).props.error).toContain('No se pudo encolar');
 });

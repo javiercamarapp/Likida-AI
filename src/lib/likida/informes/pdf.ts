@@ -60,7 +60,7 @@ export async function generarInformePDF(inf: Informe): Promise<Uint8Array> {
 
   // El mismo saneador WinAnsi del canon: los datos pueden venir de OCR.
   const wa = (s: string): string =>
-    s.replace(/→/g, '-').replace(/[●○]/g, '•').replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/…/g, '...').replace(/[^ -ÿ–—•€]/g, '?');
+    s.replace(/→/g, '-').replace(/[●○]/g, '•').replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/…/g, '...').replace(/[^ -~\u00A0-ÿ–—•€]/g, '?');
 
   const text = (s: string, x: number, yy: number, size: number, f: PDFFont, color = INK) =>
     page.drawText(wa(s), { x, y: yy, size, font: f, color });

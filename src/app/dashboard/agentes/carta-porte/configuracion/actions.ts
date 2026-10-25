@@ -9,7 +9,7 @@ import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { DatoInvalido, mensajeParaPantalla } from '@/lib/likida/errores';
 import * as repo from '@/lib/likida/carta_porte_docs/repo';
 import { guardarConfigSalida, validarConfigSalida } from '@/lib/likida/carta_porte_docs/salida_config';
-import { SIN_TMS } from '@/lib/likida/carta_porte_docs/tms_puerto';
+import { sinConexionUtil } from '@/lib/likida/carta_porte_docs/tms_puerto';
 import { salidaDeFlota } from '@/lib/likida/carta_porte_docs/worker_envios_deps';
 import type { ResultadoAccion } from '@/app/dashboard/carta-porte/documentos/forma_accion';
 import { entradaDeTexto, esProbable, type CamposTexto } from './formato';
@@ -45,7 +45,7 @@ export async function guardarConfiguracionSalida(_previo: ResultadoAccion, fd: F
     const entrada = entradaDeTexto(texto);
     const valida = validarConfigSalida({ ...entrada });
     // El modo API solo se activa con un conector probado: sin él, la salida sigue siendo la descarga.
-    if (valida.modo === 'api' && (await salidaDeFlota(s.tenantId)) === SIN_TMS) {
+    if (valida.modo === 'api' && sinConexionUtil(await salidaDeFlota(s.tenantId))) {
       return { ok: false, error: 'El modo API todavía no se puede activar: no hay una conexión probada con el sistema del cliente. Deja «Descarga» y sube la plantilla a mano.' };
     }
     // Los destinatarios internos tienen que ser personas activas de ESTA flota.
@@ -70,7 +70,7 @@ export async function probarConexionSalida(_previo: ResultadoAccion, fd: FormDat
   try {
     if (!(await rateLimit(`cp-salida-probar:${s.tenantId}`, 6, 60_000))) return { ok: false, error: 'Demasiadas pruebas en poco tiempo. Espera un minuto.' };
     const puerto = await salidaDeFlota(s.tenantId);
-    if (puerto === SIN_TMS || !esProbable(puerto)) return { ok: false, error: 'Esta flota todavía no tiene conectado el sistema del cliente.' };
+    if (sinConexionUtil(puerto) || !esProbable(puerto)) return { ok: false, error: 'Esta flota todavía no tiene conectado el sistema del cliente.' };
     const r = await puerto.probar();
     await anotarBitacora(
       { tenantId: s.tenantId, actor: { id: s.userId }, accion: 'ccp.salida_conexion_probada', entidad: 'tenant', entidadId: s.tenantId, detalle: { ok: r.ok } },

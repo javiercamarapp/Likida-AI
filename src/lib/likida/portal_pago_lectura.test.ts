@@ -26,7 +26,7 @@ vi.mock('@/lib/logger', () => ({
 
 import { hashDeToken, generarTokenPortal } from './portal_pago';
 import {
-  resolverLiga, vistaDelPortal, anotarAcceso, sellarUltimoAcceso, xmlDelRep, panelDelPortal,
+  resolverLiga, vistaDelPortal, anotarAcceso, sellarUltimoAcceso, xmlDelRep, panelDelPortal, TOPE_PENDIENTES_PANEL,
   TOPE_REPS_PANEL,
 } from './portal_pago_lectura';
 
@@ -360,6 +360,37 @@ describe('xmlDelRep — el error de la base no se disfraza de «todavía no hay�
 
 // ── `c7-23` · LA BANDEJA NO INVENTA «sin folio · Cliente» ─────────────────
 
+describe('A37-S54-04 — la bandeja no corta en silencio', () => {
+  const una = (n: number) => ({
+    id: `p-${n}`, factura_id: 'f-1', fecha: '2026-08-20', monto: 100, referencia: `REF-${n}`,
+    metodo: 'transferencia', registrada_en: '2026-08-20T10:00:00Z',
+  });
+
+  it('con 201 pendientes enseña 200 y DICE que hay más', async () => {
+    conTablas({
+      portal_pago_propuesta: [OK(Array.from({ length: 201 }, (_, i) => una(i)))],
+      portal_pago_liga: [OK([])],
+      factura_emitida: [OK([{ id: 'f-1', serie: 'A', folio: '1', cfdi_uuid: null, cliente_id: 'c-1', estatus: 'emitida' }]), OK([])],
+      factura_saldo: [OK([])], cliente: [OK([{ id: 'c-1', nombre: 'Cemex', razon_social: null }])],
+    });
+    const panel = await panelDelPortal('t-1');
+    expect(panel.pendientes).toHaveLength(TOPE_PENDIENTES_PANEL);
+    expect(panel.pendientesTruncados).toBe(true);
+  });
+
+  it('con 200 o menos NO se marca truncado', async () => {
+    conTablas({
+      portal_pago_propuesta: [OK(Array.from({ length: 200 }, (_, i) => una(i)))],
+      portal_pago_liga: [OK([])],
+      factura_emitida: [OK([{ id: 'f-1', serie: 'A', folio: '1', cfdi_uuid: null, cliente_id: 'c-1', estatus: 'emitida' }]), OK([])],
+      factura_saldo: [OK([])], cliente: [OK([{ id: 'c-1', nombre: 'Cemex', razon_social: null }])],
+    });
+    const panel = await panelDelPortal('t-1');
+    expect(panel.pendientes).toHaveLength(200);
+    expect(panel.pendientesTruncados).toBe(false);
+  });
+});
+
 describe('panelDelPortal — una propuesta huérfana se DICE, no se rotula', () => {
   const PROPUESTA = {
     id: 'p-1', factura_id: 'f-vieja', fecha: '2026-08-20', monto: 5000,
@@ -543,5 +574,81 @@ describe('los sellos y la bitácora nunca tumban la página', () => {
     await expect(sellarUltimoAcceso(LIGA)).resolves.toBeUndefined();
     sbMock.mockImplementation(() => { throw new Error('sin red'); });
     await expect(sellarUltimoAcceso(LIGA)).resolves.toBeUndefined();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A37-S54-01: el saldo se pide POR ID (no `limit(1000)` sin filtro) y la lista de candidatas dice cuándo está recortada.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('panelDelPortal — saldos por id y candidatas truncadas (A37-S54-01)', () => {
+  /** Como `conTablas`, pero registra cada llamada de método por tabla para poder afirmar CÓMO se consultó. */
+  function conRegistro(porTabla: Record<string, Resultado[]>) {
+    const llamadas: Array<{ tabla: string; metodo: string; args: unknown[] }> = [];
+    const usados: Record<string, number> = {};
+    sbMock.mockReturnValue({
+      from(tabla: string) {
+        const r = porTabla[tabla];
+        const i = usados[tabla] ?? 0;
+        usados[tabla] = i + 1;
+        const resultado = r ? r[Math.min(i, r.length - 1)] : OK(null);
+        const p = Promise.resolve(resultado);
+        const proxy: unknown = new Proxy({}, {
+          get(_t, prop) {
+            if (typeof prop === 'symbol') return undefined;
+            if (prop === 'then') return p.then.bind(p);
+            if (prop === 'catch') return p.catch.bind(p);
+            if (prop === 'finally') return p.finally.bind(p);
+            return (...args: unknown[]) => { llamadas.push({ tabla, metodo: prop, args }); return proxy; };
+          },
+        });
+        return proxy;
+      },
+    });
+    return llamadas;
+  }
+
+  it('pide factura_saldo con .in(factura_id, ids) de las facturas que se pintan, sin .limit()', async () => {
+    const prop = { id: 'p-1', factura_id: 'f-vieja', fecha: '2026-08-20', monto: 5000, referencia: 'SPEI-1', metodo: null, registrada_en: '2026-08-21T10:00:00Z' };
+    const f = (id: string) => ({ id, serie: null, folio: id, cfdi_uuid: null, cliente_id: 'c-1', estatus: 'emitida' });
+    const llamadas = conRegistro({
+      portal_pago_propuesta: [OK([prop])], portal_pago_liga: [OK([])],
+      factura_emitida: [OK([f('f-1'), f('f-2')]), OK([f('f-vieja')])],
+      factura_saldo: [OK([{ factura_id: 'f-vieja', saldo: 4200 }, { factura_id: 'f-1', saldo: 0 }])],
+      cliente: [OK([{ id: 'c-1', nombre: 'Cliente', razon_social: null }])],
+      rep_emitido: [OK([])],
+    });
+    const panel = await panelDelPortal('t-1');
+    const saldo = llamadas.filter((l) => l.tabla === 'factura_saldo');
+    expect(saldo.some((l) => l.metodo === 'limit')).toBe(false);
+    const enIds = saldo.find((l) => l.metodo === 'in');
+    expect(enIds?.args[0]).toBe('factura_id');
+    expect(enIds?.args[1]).toEqual(expect.arrayContaining(['f-1', 'f-2', 'f-vieja']));
+    // La propuesta de una factura fuera de las recientes SÍ trae su saldo; una pagada (saldo 0) no es candidata.
+    expect(panel.pendientes[0].saldo).toBe(4200);
+    expect(panel.facturasSinLiga.map((x) => x.id)).toEqual(['f-2']);
+    expect(panel.facturasTruncadas).toBe(false);
+  });
+
+  it('con el tope de facturas lleno, el panel declara la lista truncada', async () => {
+    const f = (i: number) => ({ id: `f-${i}`, serie: null, folio: `${i}`, cfdi_uuid: null, cliente_id: 'c-1', estatus: 'emitida' });
+    conRegistro({
+      portal_pago_propuesta: [OK([])], portal_pago_liga: [OK([])],
+      factura_emitida: [OK(Array.from({ length: 300 }, (_, i) => f(i))), OK([])],
+      factura_saldo: [OK([])], cliente: [OK([])], rep_emitido: [OK([])],
+    });
+    const panel = await panelDelPortal('t-1');
+    expect(panel.facturasTruncadas).toBe(true);
+    expect(panel.facturasSinLiga).toHaveLength(50);
+  });
+
+  it('si el saldo no se puede leer, la bandeja sigue y el saldo queda en null (no 0)', async () => {
+    const prop = { id: 'p-1', factura_id: 'f-1', fecha: '2026-08-20', monto: 5000, referencia: 'SPEI-1', metodo: null, registrada_en: '2026-08-21T10:00:00Z' };
+    conRegistro({
+      portal_pago_propuesta: [OK([prop])], portal_pago_liga: [OK([])],
+      factura_emitida: [OK([{ id: 'f-1', serie: null, folio: '1', cfdi_uuid: null, cliente_id: 'c-1', estatus: 'emitida' }]), OK([])],
+      factura_saldo: [FALLA()], cliente: [OK([])], rep_emitido: [OK([])],
+    });
+    const panel = await panelDelPortal('t-1');
+    expect(panel.pendientes[0].saldo).toBeNull();
   });
 });

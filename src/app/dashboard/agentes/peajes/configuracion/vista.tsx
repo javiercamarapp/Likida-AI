@@ -212,6 +212,10 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo }: { buzon: BuzonVista
                   {a.reintentable && (
                     <form action={acciones.reintentarArchivo}>
                       <input type="hidden" name="archivo" value={a.id} />
+                      {/* A37-A2-01: los archivos de correo/SFTP llegan sin proveedor y su mapeo se busca por proveedor. */}
+                      {!a.proveedor && (
+                        <input name="proveedor" maxLength={60} placeholder="Proveedor (p. ej. IAVE)" aria-label="Proveedor del archivo" className="hairline rounded px-1.5 py-0.5 text-[11.5px] w-36 mr-1" />
+                      )}
                       <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>
                         <RefreshCw width={11} height={11} strokeWidth={2} className="inline mr-1" />Reintentar
                       </button>

@@ -17,6 +17,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
+import { hoyMx } from '@/lib/formato';
 import { DatoInvalido } from '../errores';
 import { resolverDescargaSat, estadoDescargaSat } from './index';
 import { VENTANA_MAX_DIAS } from './ciclo';
@@ -152,6 +153,18 @@ export async function pedirRangoManual(
   if (!FECHA.test(datos.desde) || !FECHA.test(datos.hasta)) {
     throw new DatoInvalido('Las fechas van en formato AAAA-MM-DD.');
   }
+  // A37-S18-09: la forma AAAA-MM-DD no basta: '2026-02-31' pasaba (Date.parse da
+  // NaN y NaN no supera el tope) y reventaba en la base. Se exige día real y
+  // que el rango no llegue al futuro (se pediría al SAT gastando el tope del RFC).
+  for (const f of [datos.desde, datos.hasta]) {
+    const d = new Date(`${f}T00:00:00Z`);
+    if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== f) {
+      throw new DatoInvalido(`«${f}» no es una fecha real del calendario.`);
+    }
+  }
+  if (datos.hasta > hoyMx()) {
+    throw new DatoInvalido('La fecha final no puede estar en el futuro.');
+  }
   if (datos.hasta < datos.desde) {
     throw new DatoInvalido('La fecha final no puede ser anterior a la inicial.');
   }
@@ -204,9 +217,10 @@ export async function pedirRangoManual(
     }
     const detalle = errIns?.message ?? 'la base no devolvió la fila reservada';
     logger.error('sat_descarga.reserva_manual_fallo', { tenantId, codigo, err: detalle });
+    // A37-S18-09: el texto de Postgres va al log, no a la pantalla.
     return {
       ok: false,
-      mensaje: `No se pudo registrar la solicitud, así que NO se pidió nada al SAT: ${detalle}`,
+      mensaje: 'No se pudo registrar la solicitud, así que NO se pidió nada al SAT. Inténtalo de nuevo en unos minutos; si sigue igual, avisa a Likida.',
     };
   }
 

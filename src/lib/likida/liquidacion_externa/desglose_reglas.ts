@@ -67,6 +67,9 @@ export function colapsarRenglonViaje(conceptos: readonly RenglonBitacora[], opci
 
 // ── Renombres del contralor ────────────────────────────────────────────────
 
+/** Sin acentos ni marcas combinadas (conserva mayúsculas y símbolos: sirve también para el TEXTO de una expresión regular). */
+const sinAcentos = (s: string): string => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+
 export interface Renombre {
   /** Se prueba contra el concepto tal cual llega (los flags g/y se ignoran). */
   patron: RegExp;
@@ -95,11 +98,17 @@ export function aplicarRenombres(
 ): RenglonBitacora[] {
   const copia = conceptos.map((c) => ({ ...c }));
   if (opciones.fuenteEntregoDesglose || renombres.length === 0) return copia;
-  const reglas = renombres.map((r) => ({ ...r, patron: new RegExp(r.patron.source, r.patron.flags.replace(/[gy]/g, '')) }));
+  // A37-A1-liquidaciones-11: «Diésel» escrito en la pantalla debe casar con «DIESEL» del TMS (y al revés, y con otra forma Unicode).
+  // Cada regla se prueba contra el concepto tal cual y contra el concepto sin acentos, esta última con el patrón también sin acentos.
+  const reglas = renombres.map((r) => {
+    const banderas = r.patron.flags.replace(/[gy]/g, '');
+    return { ...r, patron: new RegExp(r.patron.source, banderas), patronSinAcentos: new RegExp(sinAcentos(r.patron.source), banderas) };
+  });
   const resultado: RenglonBitacora[] = [];
   const posicionFusion = new Map<string, number>();
   for (const c of copia) {
-    const regla = reglas.find((r) => r.patron.test(c.concepto));
+    const sinAcento = sinAcentos(c.concepto);
+    const regla = reglas.find((r) => r.patron.test(c.concepto) || r.patronSinAcentos.test(sinAcento));
     if (!regla) {
       resultado.push(c);
       continue;

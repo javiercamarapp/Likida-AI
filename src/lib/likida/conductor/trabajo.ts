@@ -8,7 +8,7 @@ import type { HitoFila } from './tipos';
 import { debeReintentarseValidacion } from './validacion';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from './geometria_datos';
 import type { MuestraGps, SitioGps, SitiosViaje, UnidadDeViaje } from './ciclo_gps';
-import { normalizarNombre, type CandidatoSitio, type LadoViaje, type SitioCatalogo, type SitioEquivalencia } from './sitio_derivado';
+import { VENTANA_LECTURA_SITIO_DERIVADO, normalizarNombre, repartirCandidatosPorFlota, type CandidatoSitio, type LadoViaje, type SitioCatalogo, type SitioEquivalencia } from './sitio_derivado';
 import { faltaEsquema, filaAEpisodio } from './repo';
 import type { EstadoEpisodios } from './senal_vida';
 import { agruparEmergencias, filtrarViajesAvisables, HORAS_EMERGENCIA_VIGENTE, TIPOS_EMERGENCIA, type EmergenciasPorFlota, type FilaEmergencia } from './seguridad_chofer';
@@ -224,25 +224,31 @@ export async function contarEnviadosPorChofer(operadorIds: string[], desde: Date
  * ancla a él. Solo viajes abiertos.
  */
 export async function leerCandidatosValidacion(desde: Date, limite: number): Promise<Array<{ hito: HitoFila; viaje: ViajeContexto; resultadoPrevio: 'sin_coincidencia' | null }>> {
-  const res = await acotada(supabaseAdmin()
-    .from('viaje_hito').select(COLUMNAS_HITO)
-    .in('tipo', ['llegada_carga', 'llegada_descarga']).eq('estado', 'recibido').gte('recibido_en', desde.toISOString())
-    .order('recibido_en', { ascending: false }).order('id').limit(limite * 2), 'conductor.candidatos_validacion');
-  const hitos = ((exigir(res as never, 'conductor.candidatos_validacion') ?? []) as unknown as Fila[]).map(filaAHito);
-  if (hitos.length === 0) return [];
-
+  // A37-S37-08: se recorre la ventana (de la más reciente a la más vieja) en páginas HASTA juntar `limite` pendientes, en vez de
+  // tomar solo las `limite*2` más recientes y descartar las ya resueltas en JS: con muchas validadas, las llegadas más viejas aún
+  // «sin dato» / «sin coincidencia» nunca llegaban a reintentarse. El tope de páginas acota el costo del cron.
+  const tamPagina = limite * 2;
+  const MAX_PAGINAS = 10;
   const vistos = new Map<string, { ciclo: number; resultado: string; motivo: string | null }>();
-  for (const ids of trozos(hitos.map((h) => h.id), 150)) {
-    const rv = await acotada(supabaseAdmin()
-      .from('viaje_hito_validacion').select('viaje_hito_id, ciclo, resultado, motivo').in('viaje_hito_id', ids), 'conductor.candidatos_veredictos');
-    for (const f of (exigir(rv as never, 'conductor.candidatos_veredictos') ?? []) as unknown as Fila[]) {
-      vistos.set(`${f.viaje_hito_id}|${f.ciclo}`, { ciclo: Number(f.ciclo), resultado: String(f.resultado), motivo: typeof f.motivo === 'string' ? f.motivo : null });
+  const pendientes: HitoFila[] = [];
+  for (let pagina = 0; pagina < MAX_PAGINAS && pendientes.length < limite; pagina++) {
+    const res = await acotada(supabaseAdmin()
+      .from('viaje_hito').select(COLUMNAS_HITO)
+      .in('tipo', ['llegada_carga', 'llegada_descarga']).eq('estado', 'recibido').gte('recibido_en', desde.toISOString())
+      .order('recibido_en', { ascending: false }).order('id').range(pagina * tamPagina, (pagina + 1) * tamPagina - 1), 'conductor.candidatos_validacion');
+    const filas = (exigir(res as never, 'conductor.candidatos_validacion') ?? []) as unknown as Fila[];
+    const hitos = filas.map(filaAHito);
+    for (const ids of trozos(hitos.map((h) => h.id), 150)) {
+      const rv = await acotada(supabaseAdmin()
+        .from('viaje_hito_validacion').select('viaje_hito_id, ciclo, resultado, motivo').in('viaje_hito_id', ids), 'conductor.candidatos_veredictos');
+      for (const f of (exigir(rv as never, 'conductor.candidatos_veredictos') ?? []) as unknown as Fila[]) {
+        vistos.set(`${f.viaje_hito_id}|${f.ciclo}`, { ciclo: Number(f.ciclo), resultado: String(f.resultado), motivo: typeof f.motivo === 'string' ? f.motivo : null });
+      }
     }
+    pendientes.push(...hitos.filter((h) => debeReintentarseValidacion(vistos.get(`${h.id}|${h.ciclo}`))));
+    if (filas.length < tamPagina) break; // la ventana se acabó
   }
-  const pendientes = hitos.filter((h) => {
-    const v = vistos.get(`${h.id}|${h.ciclo}`);
-    return debeReintentarseValidacion(v);
-  }).slice(0, limite);
+  pendientes.length = Math.min(pendientes.length, limite);
   if (pendientes.length === 0) return [];
 
   const viajes = new Map<string, ViajeContexto>();
@@ -328,14 +334,22 @@ export async function leerMuestrasGps(unidades: UnidadDeViaje[], desde: Date): P
       .order('medida_en', { ascending: true }).order('id').range(d, h), 'conductor.ciclo_muestras') as never, 'conductor.ciclo_muestras');
     // La ignición (0500) sirve a la señal de vida y `despacho_ref` (0802) liga la muestra a su viaje; una base sin alguna de las
     // columnas sigue funcionando sin ella (sin `despacho_ref` todo cae a «unidad + ventana», como antes).
-    let filas: Fila[];
-    try { filas = await traer('tenant_id, unidad_id, lat, lng, medida_en, ignicion, despacho_ref, proveedor'); } catch (e) {
-      const m = e instanceof Error ? e.message : String(e);
-      if (!/ignicion|despacho_ref/i.test(m)) throw e;
-      try { filas = await traer('tenant_id, unidad_id, lat, lng, medida_en, ignicion, proveedor'); } catch (e2) {
-        if (!/ignicion/i.test(e2 instanceof Error ? e2.message : String(e2))) throw e2;
-        filas = await traer('tenant_id, unidad_id, lat, lng, medida_en, proveedor');
+    const sinVelocidad = async (): Promise<Fila[]> => {
+      try { return await traer('tenant_id, unidad_id, lat, lng, medida_en, ignicion, despacho_ref, proveedor'); } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        if (!/ignicion|despacho_ref/i.test(m)) throw e;
+        try { return await traer('tenant_id, unidad_id, lat, lng, medida_en, ignicion, proveedor'); } catch (e2) {
+          if (!/ignicion/i.test(e2 instanceof Error ? e2.message : String(e2))) throw e2;
+          return await traer('tenant_id, unidad_id, lat, lng, medida_en, proveedor');
+        }
       }
+    };
+    // A37-A5-10: la velocidad (km/h) de la muestra alimenta la regla «conduciendo» de la compuerta; si la columna no existiera,
+    // se cae a la lectura de siempre.
+    let filas: Fila[];
+    try { filas = await traer('tenant_id, unidad_id, lat, lng, medida_en, ignicion, despacho_ref, proveedor, velocidad'); } catch (eV) {
+      if (!/velocidad/i.test(eV instanceof Error ? eV.message : String(eV))) throw eV;
+      filas = await sinVelocidad();
     }
     for (const f of filas) {
       const llave = `${String(f.tenant_id)}|${String(f.unidad_id)}`;
@@ -344,6 +358,7 @@ export async function leerMuestrasGps(unidades: UnidadDeViaje[], desde: Date): P
         lat: Number(f.lat), lng: Number(f.lng), medidaEn: new Date(String(f.medida_en)), ignicion: typeof f.ignicion === 'boolean' ? f.ignicion : null,
         despachoRef: typeof f.despacho_ref === 'string' && f.despacho_ref !== '' ? f.despacho_ref : null,
         proveedor: typeof f.proveedor === 'string' && f.proveedor !== '' ? f.proveedor : null,
+        velocidadKmh: typeof f.velocidad === 'number' && Number.isFinite(f.velocidad) ? f.velocidad : null,
       }]);
     }
   }
@@ -379,9 +394,11 @@ export async function leerCandidatosSitioDerivado(limite: number): Promise<Candi
   const res = await acotada(supabaseAdmin().from('viaje')
     .select('id, tenant_id, origen, destino, cliente_id, origen_geocerca_id, destino_geocerca_id')
     .eq('estatus', 'abierto').not('aceptado_en', 'is', null).or('origen_geocerca_id.is.null,destino_geocerca_id.is.null')
-    .order('aceptado_en', { ascending: false }).order('id').limit(limite), 'conductor.sitio_derivado_viajes');
-  const viajes = (exigir(res as never, 'conductor.sitio_derivado_viajes') ?? []) as unknown as Fila[];
-  if (viajes.length === 0) return [];
+    .order('aceptado_en', { ascending: false }).order('id').limit(Math.max(limite, VENTANA_LECTURA_SITIO_DERIVADO)), 'conductor.sitio_derivado_viajes');
+  const leidos = (exigir(res as never, 'conductor.sitio_derivado_viajes') ?? []) as unknown as Fila[];
+  if (leidos.length === 0) return [];
+  // A37-S37-02: el tope se REPARTE entre flotas (rota cada 5 min) en vez de llenarse con la flota que tiene más viajes sin resolver.
+  const viajes = repartirCandidatosPorFlota(leidos.map((f) => ({ tenantId: String(f.tenant_id), f })), limite, Math.floor(Date.now() / VENTANA_ROTACION_MS)).map((x) => x.f);
 
   const derivados = new Map<string, Set<LadoViaje>>();
   for (const ids of trozos(viajes.map((v) => String(v.id)), 150)) {

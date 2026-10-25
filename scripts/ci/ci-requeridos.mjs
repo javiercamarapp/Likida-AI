@@ -12,6 +12,8 @@
 export const CHECKS_REQUERIDOS = [
   'Migraciones + aislamiento (Postgres efímero)',
   'Pila local + Playwright contra el producto',
+  // A37-S01-01: id del job de ci.yml (sin `name:`; GitHub nombra el check con el id): typecheck, lint y pruebas.
+  'verificar',
 ];
 
 /**

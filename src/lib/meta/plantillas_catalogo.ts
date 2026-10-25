@@ -771,12 +771,17 @@ export function textoRenderizado(nombre: string, cuerpo: string[]): string {
 }
 
 /** Cuerpo del POST /{waba}/message_templates para someter la plantilla a Meta. */
-export function cuerpoCreacionMeta(p: PlantillaCatalogo): Record<string, unknown> {
+export function cuerpoCreacionMeta(p: PlantillaCatalogo, opciones: { headerHandle?: string } = {}): Record<string, unknown> {
   const componentes: Record<string, unknown>[] = [];
   if (p.encabezado?.tipo === 'TEXT') {
     componentes.push({ type: 'HEADER', format: 'TEXT', text: p.encabezado.texto });
   } else if (p.encabezado) {
-    componentes.push({ type: 'HEADER', format: p.encabezado.tipo });
+    // A37-S61-09: Meta EXIGE `example.header_handle` (un handle de Resumable
+    // Upload) en los encabezados de medios (documento, imagen, video).
+    componentes.push({
+      type: 'HEADER', format: p.encabezado.tipo,
+      ...(opciones.headerHandle ? { example: { header_handle: [opciones.headerHandle] } } : {}),
+    });
   }
   componentes.push({
     type: 'BODY', text: p.cuerpo,

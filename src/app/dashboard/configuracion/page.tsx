@@ -41,7 +41,7 @@ export default async function ConfiguracionPage({
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId, rol, userId } = await resolverTenantEfectivo('/dashboard/configuracion', sp);
+  const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/configuracion', sp);
   if (!puedeVerRuta(rol, '/dashboard/configuracion')) redirect('/dashboard');
 
   let config;
@@ -53,13 +53,22 @@ export default async function ConfiguracionPage({
 
   // Un viaje REAL de la flota para la vista previa. Sin viajes con km
   // capturados NO se inventa uno: la pantalla lo dice y ya.
-  const { data: viajeEjemplo } = await supabaseAdmin()
-    .from('viaje').select('km_recorridos')
-    .eq('tenant_id', tenantId).not('km_recorridos', 'is', null)
-    .order('creado_en', { ascending: false }).limit(1).maybeSingle();
-  const ejemploKm = typeof viajeEjemplo?.km_recorridos === 'number' && viajeEjemplo.km_recorridos > 0
-    ? viajeEjemplo.km_recorridos
-    : null;
+  // A37-S17-08: fallar cerrado y decirlo — una lectura caída NO es «no hay viajes»,
+  // y una excepción aquí no debe tumbar toda la pantalla.
+  let ejemploKm: number | null = null;
+  let ejemploIlegible = false;
+  try {
+    const { data: viajeEjemplo, error: errViaje } = await supabaseAdmin()
+      .from('viaje').select('km_recorridos')
+      .eq('tenant_id', tenantId).not('km_recorridos', 'is', null)
+      .order('creado_en', { ascending: false }).limit(1).maybeSingle();
+    if (errViaje) throw new Error(errViaje.message);
+    ejemploKm = typeof viajeEjemplo?.km_recorridos === 'number' && viajeEjemplo.km_recorridos > 0
+      ? viajeEjemplo.km_recorridos
+      : null;
+  } catch {
+    ejemploIlegible = true;
+  }
 
   const unidades = config ? Object.entries(config.unidades) : [];
 
@@ -85,6 +94,10 @@ export default async function ConfiguracionPage({
       return { ok: false, error: 'Tu rol no puede cambiar la configuración de la flota.' };
     }
     try {
+      // A37-S17-02: vaciar el catálogo sigue prohibido, pero una flota que NUNCA lo declaró puede guardar su tabulador sin inventar
+      // cuentas. Se relee del tenant efectivo; si no se puede leer, fail-closed (se exige catálogo, como siempre).
+      let sinCatalogoDeclarado = false;
+      try { sinCatalogoDeclarado = (await cuentasDeclaradas(s.tenantId)) === null; } catch { sinCatalogoDeclarado = false; }
       // La validación del cliente es para avisar; ÉSTA es la que manda.
       const ajustes = validarAjustes({
         rendimientoPorDefecto: String(fd.get('rendimientoPorDefecto') ?? ''),
@@ -93,8 +106,8 @@ export default async function ConfiguracionPage({
         umbralDesviacionPct: String(fd.get('umbralDesviacionPct') ?? ''),
         salida: String(fd.get('salida') ?? ''),
         cuentas: String(fd.get('cuentas') ?? ''),
-      });
-      await guardarAjustesOperativos(s.tenantId, ajustes, { id: userId });
+      }, { permitirCatalogoVacio: sinCatalogoDeclarado });
+      await guardarAjustesOperativos(s.tenantId, ajustes, { id: s.userId });
       return { ok: true };
     } catch (e) {
       // Un DatoInvalido sale con su texto tal cual (es culpa de lo capturado);
@@ -125,7 +138,7 @@ export default async function ConfiguracionPage({
       // "adicional" el RFC principal de la que se está editando.
       const cfg = await getConfig(s.tenantId);
       const rfcs = parsearRfcsAdicionales(String(fd.get('rfcsAdicionales') ?? ''), cfg.empresa.rfc);
-      await guardarRfcsAdicionales(s.tenantId, rfcs, { id: userId });
+      await guardarRfcsAdicionales(s.tenantId, rfcs, { id: s.userId });
       revalidatePath('/dashboard/configuracion');
       return {
         ok: rfcs.length === 0
@@ -214,7 +227,7 @@ export default async function ConfiguracionPage({
             <h2 className="text-xs font-semibold uppercase tracking-wide mb-4" style={{ color: 'var(--muted)' }}>
               Ajustes de tu operación
             </h2>
-            <FormaAjustes inicial={inicial} ejemploKm={ejemploKm} guardar={guardar} catalogo={estadoCatalogo} />
+            <FormaAjustes inicial={inicial} ejemploKm={ejemploKm} ejemploIlegible={ejemploIlegible} guardar={guardar} catalogo={estadoCatalogo} />
           </section>
 
           <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>

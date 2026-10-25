@@ -147,29 +147,41 @@ export interface CorridaMin {
   resumen: Record<string, unknown> | null;
 }
 
-/** Las últimas corridas agrupadas por agente (hasta 3 por agente, la más
+/** Las últimas corridas de CADA agente dado (hasta 3 por agente, la más
  *  reciente primero). Lanza si la bitácora no se puede leer: un feed vacío
- *  sobre base caída afirmaría "nadie ha corrido". */
-async function ultimasCorridasPorAgente(): Promise<Map<string, CorridaMin[]>> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('agente_corrida')
-    .select('agente, estado, inicio, tareas_hechas, tareas_total, resumen')
-    .order('inicio', { ascending: false })
-    .limit(400), 'direccion.corridas');
-  if (error) throw new Error(`direccion.corridas: ${error.message}`);
+ *  sobre base caída afirmaría "nadie ha corrido".
+ *
+ *  A37-S41-06: una consulta POR AGENTE. Antes era una sola con `limit(400)`
+ *  global: `agente_corrida` recibe una fila por flota por pasada de cron, y los
+ *  agentes diarios/semanales quedaban fuera de la ventana, de modo que el parte
+ *  del lunes los acusaba de «NO HA CORRIDO nunca» sin que fuera cierto. */
+export async function ultimasCorridasPorAgente(ids: string[]): Promise<Map<string, CorridaMin[]>> {
   const porAgente = new Map<string, CorridaMin[]>();
-  for (const f of (data ?? []) as Array<Record<string, unknown>>) {
-    const agente = String(f.agente);
-    const lista = porAgente.get(agente) ?? [];
-    if (lista.length < 3) {
-      lista.push({
-        estado: f.estado as CorridaMin['estado'],
-        inicio: String(f.inicio),
-        tareasHechas: f.tareas_hechas === null ? null : Number(f.tareas_hechas),
-        tareasTotal: f.tareas_total === null ? null : Number(f.tareas_total),
-        resumen: (f.resumen as Record<string, unknown> | null) ?? null,
-      });
-      porAgente.set(agente, lista);
+  const filas = await Promise.all(ids.map(async (id) => {
+    const { data, error } = await acotada(supabaseAdmin()
+      .from('agente_corrida')
+      .select('agente, estado, inicio, tareas_hechas, tareas_total, resumen')
+      .eq('agente', id)
+      .order('inicio', { ascending: false })
+      .order('id')
+      .limit(3), 'direccion.corridas');
+    if (error) throw new Error(`direccion.corridas: ${error.message}`);
+    return (data ?? []) as Array<Record<string, unknown>>;
+  }));
+  for (const lote of filas) {
+    for (const f of lote) {
+      const agente = String(f.agente);
+      const lista = porAgente.get(agente) ?? [];
+      if (lista.length < 3) {
+        lista.push({
+          estado: f.estado as CorridaMin['estado'],
+          inicio: String(f.inicio),
+          tareasHechas: f.tareas_hechas === null ? null : Number(f.tareas_hechas),
+          tareasTotal: f.tareas_total === null ? null : Number(f.tareas_total),
+          resumen: (f.resumen as Record<string, unknown> | null) ?? null,
+        });
+        porAgente.set(agente, lista);
+      }
     }
   }
   return porAgente;
@@ -669,11 +681,17 @@ async function leerDatosCiclo(lunes: string): Promise<{ datos: DatosCiclo; ciega
 }
 
 async function leerDatosOperativo(lunes: string, ciclo: string): Promise<{ datos: DatosOperativo; ciegas: string[] }> {
+  // La bitácora se lee POR AGENTE (A37-S41-06), así que depende de la lista.
+  const agentesP = porValor('agentes del runner', () => agentesDelRunner());
+  const corridasP = agentesP.then((ag) => porValor('bitácora de corridas', async () => {
+    if (ag.valor === null) throw new Error('sin lista de agentes');
+    return ultimasCorridasPorAgente(ag.valor.map((a) => a.id));
+  }));
   const [latidos, interruptores, agentes, corridas, bandeja] = await Promise.all([
     porValor('latido de los crons', () => estadoLatidos()),
     porValor('interruptores', () => listarInterruptores()),
-    porValor('agentes del runner', () => agentesDelRunner()),
-    porValor('bitácora de corridas', () => ultimasCorridasPorAgente()),
+    agentesP,
+    corridasP,
     porValor('bandeja de escalaciones', () => getBandejaEscalaciones(Date.now())),
   ]);
   const datos: DatosOperativo = { lunes, latidos, interruptores, agentesRunner: agentes, corridas, bandeja, ciclo };
@@ -709,18 +727,25 @@ async function enviarReporte(asunto: string, titulo: string, cuerpo: string): Pr
   if (r.ok) return { ok: true };
   // 'red' incluye el timeout: AMBIGUO — el correo pudo haber salido con la
   // respuesta perdida (c5-15). El llamador NO reintenta un ambiguo: reenvía
-  // solo lo definitivamente no-enviado.
-  return { ok: false, motivo: `el correo no salió (${r.motivo})`, definitivo: r.motivo !== 'red' };
+  // solo lo definitivamente no-enviado. A37-S41-07: un DNS caído o una conexión
+  // rechazada es previo a hablar con el canal — ese NO es ambiguo y se reintenta.
+  const previo = r.motivo === 'red' && 'previoAConexion' in r && r.previoAConexion === true;
+  return { ok: false, motivo: `el correo no salió (${r.motivo})`, definitivo: r.motivo !== 'red' || previo };
 }
 
 /** Sella el envío de un reporte YA reservado (c5-15): el INSERT del periodo
  *  va ANTES del correo — la carrera de dos pasadas la gana una — y este
  *  UPDATE pone la fecha solo tras la aceptación del canal. */
 async function marcarReporteEnviado(agente: AgenteDireccion, periodo: string): Promise<void> {
-  const { error } = await supabaseAdmin().from('reporte_direccion')
-    .update({ enviado_en: new Date().toISOString() })
-    .eq('agente', agente).eq('periodo', periodo).is('enviado_en', null);
-  if (error) logger.error('direccion.sello_no_escrito', { agente, periodo, err: error.message });
+  // A37-S41-07: el correo YA salió; si el sello falla, el parte de mañana diría «ayer no salió». Un reintento inmediato
+  // cubre el fallo transitorio de la base antes de rendirse al log.
+  for (let intento = 1; intento <= 2; intento++) {
+    const { error } = await supabaseAdmin().from('reporte_direccion')
+      .update({ enviado_en: new Date().toISOString() })
+      .eq('agente', agente).eq('periodo', periodo).is('enviado_en', null);
+    if (!error) return;
+    if (intento === 2) logger.error('direccion.sello_no_escrito', { agente, periodo, err: error.message });
+  }
 }
 
 /** Borra la reserva de un periodo cuyo envío falló DEFINITIVAMENTE (el canal

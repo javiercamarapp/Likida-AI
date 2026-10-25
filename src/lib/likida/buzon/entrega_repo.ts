@@ -305,12 +305,12 @@ export async function listarLotes(tenantId: string, limite = 20): Promise<Entreg
 export async function confirmarPorResend(resendId: string, resultado: 'entregada' | 'rebotada'): Promise<'aplicada' | 'sin_lote' | 'ya_estaba'> {
   const { data: previo, error: e1 } = await acotada(supabaseAdmin().from('buzon_entrega')
     // orden-no-importa: resend_id es único (índice parcial buzon_entrega_resend_idx): a lo más una fila
-    .select('id, tenant_id, estado').eq('resend_id', resendId).limit(1), 'buzon_entrega.por_resend');
+    .select('id, tenant_id, estado, destinatarios').eq('resend_id', resendId).limit(1), 'buzon_entrega.por_resend');
   if (e1) {
     if (sinTabla(e1)) return 'sin_lote';
     throw new Error(`confirmarPorResend: ${e1.message}`);
   }
-  const fila = (previo ?? [])[0] as { id: string; tenant_id: string; estado: EstadoEntrega } | undefined;
+  const fila = (previo ?? [])[0] as { id: string; tenant_id: string; estado: EstadoEntrega; destinatarios?: string[] | null } | undefined;
   if (!fila) return 'sin_lote';
   // La mala noticia pisa a «entregada»; «entregada» solo escribe sobre «enviada».
   const permitidos: EstadoEntrega[] = resultado === 'entregada' ? ['enviada'] : ['enviada', 'entregada'];
@@ -320,8 +320,14 @@ export async function confirmarPorResend(resendId: string, resultado: 'entregada
     .eq('tenant_id', fila.tenant_id).eq('id', fila.id).in('estado', permitidos).select('id'), 'buzon_entrega.confirmar');
   if (error) throw new Error(`confirmarPorResend: ${error.message}`);
   if ((data ?? []).length === 0) return 'ya_estaba';
-  await anotarEvento(fila.tenant_id, fila.id, resultado);
-  if (resultado === 'rebotada') {
+  // A37-S30-04: UN correo con hasta 5 destinatarios comparte un solo resend_id. Si hay más de uno, el rebote de
+  // uno NO prueba que nadie recibió el lote: liberar las facturas lo reenviaría a TODOS (duplicando lo que los
+  // demás ya tienen). Se marca «rebotada» (visible) pero las facturas NO se sueltan sin una persona: revisa
+  // el destinatario y cancela el lote si de verdad nadie lo recibió (eso las libera).
+  const variosDestinatarios = Array.isArray(fila.destinatarios) && fila.destinatarios.length > 1;
+  await anotarEvento(fila.tenant_id, fila.id, resultado,
+    resultado === 'rebotada' && variosDestinatarios ? `rebote con ${fila.destinatarios!.length} destinatarios: las facturas NO se liberaron solas (pudieron llegar a los demás)` : undefined);
+  if (resultado === 'rebotada' && !variosDestinatarios) {
     const n = await liberarFacturas(fila.tenant_id, fila.id);
     await anotarEvento(fila.tenant_id, fila.id, 'liberada', `${n} factura(s) vuelven a la cola: revisa el correo del contador`);
   }

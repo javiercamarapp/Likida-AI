@@ -231,3 +231,27 @@ describe('el PDF imprime los acreditables con las cifras del motor', () => {
     expect(rs.some((r) => /ACREDITABLE \/ RECUPERABLE/.test(r.texto))).toBe(false);
   });
 });
+
+// A37-S48-05 — el pie de «pago pendiente» (≈930 pt a 7 pt) se dibujaba en UNA
+// línea y se salía de la hoja: la cita fiscal del final desaparecía del PDF.
+describe('A37-S48-05: el pie de «por confirmar» cabe en la hoja y conserva su cita', () => {
+  it('envuelve el pie: ninguna línea rebasa el margen y la cita final sigue impresa', async () => {
+    const { StandardFonts, PDFDocument } = await import('pdf-lib');
+    const fuente = await (await PDFDocument.create()).embedFont(StandardFonts.Helvetica);
+    const l: Liquidacion = {
+      ...LIQ,
+      gastos: [
+        { id: 'g1', concepto: 'diesel', monto: 4000, folio: 'A1', fecha: '2026-05-01', cfdiUuid: 'u1', formaPago: '99' },
+        { id: 'g2', concepto: 'hospedaje', monto: 812.5, folio: 'B2', fecha: '2026-05-01' },
+      ],
+    };
+    const rs = await delPdf(l);
+    const derechaMax = 595.28 - 48;
+    for (const r of rs) {
+      expect(r.x + fuente.widthOfTextAtSize(r.texto.replace(/[^\x20-\x7e]/g, 'a'), 7), r.texto).toBeLessThanOrEqual(derechaMax + 0.5);
+    }
+    const todo = rs.map((r) => r.texto).join(' ');
+    expect(todo).toContain('al pago efectivo');
+    expect(todo).toContain('Se puede recuperar');
+  });
+});

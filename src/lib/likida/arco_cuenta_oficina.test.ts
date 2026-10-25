@@ -12,10 +12,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const d = vi.hoisted(() => ({
   rpc: vi.fn(), enviar: vi.fn(), deleteUser: vi.fn(), updateUser: vi.fn(), insertados: [] as unknown[],
   solicitud: { titular_ref: '529999900001', tipo: 'cancelacion', titular_user_id: 'u-oficina' } as Record<string, unknown>,
+  /** Solicitudes ABIERTAS que ya existen para el mismo titular y tipo (A37-L-11). */
+  abiertas: [] as unknown[], filtros: [] as Array<[string, unknown]>,
 }));
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => {
   const cadena: Record<string, unknown> = {
-    select: () => cadena, eq: () => cadena,
+    select: () => cadena,
+    eq: (c: string, v: unknown) => { d.filtros.push([c, v]); return cadena; },
+    in: (c: string, v: unknown) => { d.filtros.push([c, v]); return cadena; },
+    order: () => cadena, limit: () => cadena,
+    then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
+      Promise.resolve({ data: d.abiertas, error: null }).then(res, rej),
     maybeSingle: async () => ({ data: d.solicitud, error: null }),
     insert: (fila: unknown) => { d.insertados.push(fila); return cadena; },
   };
@@ -32,6 +39,7 @@ import { ejecutarCancelacionArco, registrarSolicitudArco } from './repo';
 beforeEach(() => {
   vi.clearAllMocks();
   d.insertados.length = 0;
+  d.abiertas = []; d.filtros.length = 0;
   d.solicitud = { titular_ref: '529999900001', tipo: 'cancelacion', titular_user_id: 'u-oficina' };
   d.rpc.mockResolvedValue({ data: { ok: true, evidencia: {}, seudonimo: 'Usuario ABC123' }, error: null });
   d.enviar.mockResolvedValue({ ok: true });
@@ -100,3 +108,22 @@ describe('registrarSolicitudArco — quién es el titular', () => {
     expect(d.insertados[0]).toMatchObject({ operador_id: null, titular_user_id: null });
   });
 });
+
+// A37-L-11: tres mensajes «PRIVACIDAD» del mismo titular NO crean tres solicitudes.
+describe('registrarSolicitudArco — no duplica la solicitud abierta del mismo titular y tipo', () => {
+  const pedir = () => registrarSolicitudArco({ tenantId: 't-1', operadorId: 'op-1', titularRef: '5299', tipo: 'acceso', canal: 'whatsapp' });
+
+  it('si ya hay una abierta del mismo titular y tipo, no inserta otra (el plazo sigue siendo el de la primera)', async () => {
+    d.abiertas = [{ id: 'sol-previa' }];
+    await expect(pedir()).resolves.toBe(true);
+    expect(d.insertados).toHaveLength(0);
+    expect(d.filtros).toEqual(expect.arrayContaining([['tenant_id', 't-1'], ['titular_ref', '5299'], ['tipo', 'acceso']]));
+    expect(d.filtros).toEqual(expect.arrayContaining([['estado', ['recibida', 'en_proceso']]]));
+  });
+
+  it('sin abierta previa, inserta', async () => {
+    await pedir();
+    expect(d.insertados).toHaveLength(1);
+  });
+});
+

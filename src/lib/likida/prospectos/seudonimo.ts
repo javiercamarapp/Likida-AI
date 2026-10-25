@@ -37,9 +37,46 @@ export function nombreDePila(contacto: string): string {
   return partes[0] ?? '';
 }
 
-const CORREO = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
+// A37-S55-04: la clase era ASCII (\w): «josé.ñandú@correo.mx» no se tachaba completo.
+const CORREO = /[\p{L}\p{N}_.+-]+@[\p{L}\p{N}_-]+(?:\.[\p{L}\p{N}_-]+)+/gu;
 /** Secuencias de 7+ dígitos con separadores — teléfonos y celulares. */
 const TELEFONO = /(?:\+?\d[\d\s().-]{6,}\d)/g;
+
+/** Quita las marcas diacríticas de UN carácter («ñ» → «n», «é» → «e»); lo que no tiene marca queda igual. */
+function sinMarcas(ch: string): string {
+  return ch.normalize('NFD').replace(/\p{M}/gu, '');
+}
+
+/**
+ * Sustituye `nombre` por `marcador` en `texto` ignorando mayúsculas Y acentos/ñ («Ramón Treviño»
+ * == «ramon trevino»), conservando intactos los caracteres que no coinciden. Se compara sobre una
+ * copia plegada con un mapa de posiciones para reescribir el original (A37-S55-04).
+ */
+function reemplazarSinAcentos(texto: string, nombre: string, marcador: string): string {
+  let plegado = '';
+  const mapa: number[] = []; // índice del plegado → índice del original
+  for (let i = 0; i < texto.length;) {
+    const cp = texto.codePointAt(i)!;
+    const ch = String.fromCodePoint(cp);
+    for (const f of sinMarcas(ch)) { mapa.push(i); plegado += f; }
+    i += ch.length;
+  }
+  const objetivo = [...nombre].map(sinMarcas).join('');
+  if (objetivo.length < 3) return texto;
+  const re = new RegExp(`(?<![\\p{L}])${escaparRegex(objetivo)}(?![\\p{L}])`, 'giu');
+  const tramos: Array<[number, number]> = [];
+  for (const m of plegado.matchAll(re)) {
+    const ini = mapa[m.index!];
+    const ultimo = mapa[m.index! + m[0].length - 1];
+    // El fin incluye las marcas combinantes que siguen al último carácter base.
+    let fin = ultimo + 1;
+    while (fin < texto.length && /\p{M}/u.test(texto[fin])) fin++;
+    tramos.push([ini, fin]);
+  }
+  let salida = texto;
+  for (const [ini, fin] of tramos.reverse()) salida = salida.slice(0, ini) + marcador + salida.slice(fin);
+  return salida;
+}
 
 function escaparRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -71,7 +108,7 @@ export function notasSinPersona(
     // suelto de 3+ letras: "Treviño" a secas también identifica.
     for (const n of [tokens.join(' '), ...tokens]) {
       if (n.length < 3) continue;
-      t = t.replace(new RegExp(`(?<![\\p{L}])${escaparRegex(n)}(?![\\p{L}])`, 'giu'), marcador);
+      t = reemplazarSinAcentos(t, n, marcador);
     }
   }
   return t;

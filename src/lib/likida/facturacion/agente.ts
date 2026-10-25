@@ -290,7 +290,13 @@ export async function facturarLoteConAgente(args: {
     logger.error('agente.facturacion.lote.fallo', { tenant: args.tenantId, comercio: args.comercio, modo, error });
     // NO se reintenta, por lo mismo de siempre: en `emitir` un reintento tras un
     // fallo ambiguo es cómo se acaba con dos CFDI por el mismo consumo.
-    return completar({ modo, porGasto: [], capturado: {}, error }, args.tickets, modo);
+    // A37-S42-04: y en `emitir` un throw NO es «no se intentó»: el adaptador pudo
+    // reventar DESPUÉS de apretar emitir. Se marca como emisión sin confirmar
+    // (eso activa el bloqueo) y el motivo lo dice con verdad.
+    return completar(
+      { modo, porGasto: [], capturado: {}, error, ...(modo === 'emitir' ? { emisionSinConfirmar: true } : {}) },
+      args.tickets, modo,
+    );
   }
 }
 
@@ -385,9 +391,12 @@ function completar(
     porId.get(t.gastoId) ?? {
       gastoId: t.gastoId,
       incluido: false,
-      motivo: bruto.error
-        ? `No se llegó a intentar en el portal: ${bruto.error}`
-        : 'El adaptador no dijo qué pasó con este ticket, así que se cuenta como no facturado.',
+      motivo: bruto.emisionSinConfirmar
+        // A37-S42-04: «no se llegó a intentar» sería falso aquí.
+        ? `El adaptador falló en modo emitir y NO se sabe si el portal alcanzó a emitir${bruto.error ? ` (${bruto.error})` : ''}. No se reintenta: revisa el portal antes de volver a emitir este ticket.`
+        : bruto.error
+          ? `No se llegó a intentar en el portal: ${bruto.error}`
+          : 'El adaptador no dijo qué pasó con este ticket, así que se cuenta como no facturado.',
     },
   );
 
@@ -525,7 +534,14 @@ export async function facturarConAgente(args: {
     logger.error('agente.facturacion.fallo', { tenant: args.tenantId, comercio: args.comercio, modo, error });
     // NO se reintenta. En `emitir`, un reintento a ciegas después de un fallo
     // ambiguo —¿se envió antes de reventar?— es la forma de acabar con dos CFDI
-    // por el mismo ticket.
+    // por el mismo ticket. A37-S42-04: por eso en `emitir` el throw se declara
+    // emisión sin confirmar, para que se active el bloqueo y no salga otra.
+    if (modo === 'emitir') {
+      return {
+        modo, ok: false, capturado: {}, emisionSinConfirmar: true,
+        error: `El adaptador falló en modo emitir y NO se sabe si el portal alcanzó a emitir (${error}). Revisa el portal antes de volver a emitir.`,
+      };
+    }
     return { modo, ok: false, capturado: {}, error };
   }
 }

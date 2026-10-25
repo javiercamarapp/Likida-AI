@@ -146,18 +146,18 @@ export async function correrAlertasLlegadaSinConfirmar(
       r.revisadas++;
       if (!dentroDeVentana(config, ahora)) { r.fueraDeVentana++; continue; }
       try {
+        // A37-S34-09: destinatarios ANTES de reclamar (no se quema el aviso si todavía no hay jefe de tráfico configurado).
+        const destinos = await p.destinatarios(v.tenantId, v.terminalId, 1);
+        if (destinos.length === 0) {
+          r.sinDestinatario++;
+          r.fallos.push(`${v.folio ?? v.id}: no hay a quién avisar la llegada sin confirmar`);
+          continue;
+        }
         const claim = llave(v, h);
         const gano = await p.reclamar(claim);
         if (gano === 'perdido') { r.yaReclamados++; continue; }
         if (gano === 'fallo') { r.fallos.push(`reclamo llegada ${v.id}`); continue; }
 
-        const destinos = await p.destinatarios(v.tenantId, v.terminalId, 1);
-        if (destinos.length === 0) {
-          r.sinDestinatario++;
-          r.fallos.push(`${v.folio ?? v.id}: no hay a quién avisar la llegada sin confirmar`);
-          await p.cerrarAviso(claim, { ok: false, canal: 'ninguno', motivo: 'sin_destinatario', ult4: null });
-          continue;
-        }
         const msg = armarAvisoLlegadaSinConfirmar(v, h, motivo, ahora, config.zonaHoraria);
         let entregados = 0;
         let reintentables = 0;

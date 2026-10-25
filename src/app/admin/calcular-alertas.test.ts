@@ -63,3 +63,13 @@ describe('calcularAlertas — "solo el tenant demo" ya no se dispara con el prim
     expect(alertas.some((a) => a.texto.includes('solo el tenant demo'))).toBe(false);
   });
 });
+
+// A37-S07-07 — sin resumen legible (null) no se inventa ni «tendencia» ni «solo demo».
+import { calcularAlertas as calcularAlertasA37 } from './calcular-alertas';
+describe('A37-S07-07: calcularAlertas con resumen ilegible (null)', () => {
+  it('no lanza y omite las señales que dependen del resumen', () => {
+    const e = { arco: 0, corridasFallo: 0, talachas: 0, facturasProveedor: 0, ticketsAbiertos: 0, ticketsVencidos: 0, liquidacionesRevisar: 0 };
+    const alertas = calcularAlertasA37(null, [], e as never, 0);
+    expect(alertas.some((a) => /tenant demo|subió/.test(a.texto))).toBe(false);
+  });
+});

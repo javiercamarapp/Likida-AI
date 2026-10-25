@@ -489,6 +489,18 @@ describe('la corrida de migraciones', () => {
     expect(alertar).toHaveBeenCalled();
   });
 
+  it('A37-S27-06: con el parte de la semana ya sellado, un ROJO nuevo IGUAL alerta (solo el parte se sella)', async () => {
+    respuestas.set('cola_aprobacion', [{ data: [], error: null, count: 1 }]);
+    respuestas.set('agente_definicion', [{ data: CATALOGO_OK, error: null }]);
+    rpcs.set('migraciones_aplicadas', [{ data: { disponible: true, motivo: null, filas: [] }, error: null }]);
+    rpcs.set('contrato_de_esquema', [{ data: { interruptor_check: "ARRAY['agente:migraciones'::text]", tenant_sin_rls: ['tabla_nueva'], fks_simples_entre_tenantizadas: [], indices_unicos_parciales_cola: [] }, error: null }]);
+    rpcs.set('postura_seguridad', [{ data: POSTURA_CONTRATO(), error: null }]);
+    const r = await correrAgenteIngenieria('migraciones', 'cron', HOY);
+    expect(r).toMatchObject({ resultado: 'saltado', piezas: 0 });
+    expect(encolar).not.toHaveBeenCalled();
+    expect(alertar).toHaveBeenCalledTimes(1);
+  });
+
   it('el duplicado del índice único se lee como «ya existía», no como fallo', async () => {
     prepararOk();
     encolar.mockRejectedValueOnce(new Error('duplicate key value violates unique constraint "cola_parte_ingenieria_por_periodo"'));
@@ -581,6 +593,26 @@ describe('la corrida de seguridad', () => {
     await expect(correrAgenteIngenieria('seguridad', 'cron', HOY)).rejects.toThrow(/catálogo ciego/);
     expect(encolar).not.toHaveBeenCalled();
     expect(registrar.mock.calls.at(-1)?.[2]).toMatchObject({ estado: 'fallo' });
+  });
+
+  it('A37-S27-06: con el parte de la semana ya sellado, una tabla expuesta sin RLS IGUAL alerta y no encola otro parte', async () => {
+    respuestas.set('cola_aprobacion', [{ data: [], error: null, count: 1 }]);
+    rpcs.set('postura_seguridad', [{ data: {
+      ...POSTURA_LIMPIA,
+      tablas: [{ tabla: 'tabla_nueva', rls: false, politicas: 0, tiene_tenant_id: true, anon_lee: false, auth_lee: true, anon_escribe: false, auth_escribe: false }],
+    }, error: null }]);
+    const r = await correrAgenteIngenieria('seguridad', 'cron', HOY);
+    expect(r).toMatchObject({ resultado: 'saltado', piezas: 0 });
+    expect(encolar).not.toHaveBeenCalled();
+    expect(alertar).toHaveBeenCalledTimes(1);
+  });
+
+  it('A37-S27-06: con el parte sellado y el catálogo ciego no truena ni afirma nada: salta', async () => {
+    respuestas.set('cola_aprobacion', [{ data: [], error: null, count: 1 }]);
+    rpcs.set('postura_seguridad', [{ data: null, error: { message: 'base caída' } }]);
+    const r = await correrAgenteIngenieria('seguridad', 'cron', HOY);
+    expect(r).toMatchObject({ resultado: 'saltado', piezas: 0 });
+    expect(alertar).not.toHaveBeenCalled();
   });
 
   it('con postura legible, fabrica el parte y su título es el de la semana', async () => {

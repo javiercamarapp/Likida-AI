@@ -15,7 +15,7 @@ const T: TextoSinSitio[] = [
 ];
 const props = (p: Partial<PropsVistaSitios> = {}): PropsVistaSitios => ({
   sufijo: '', sitios: [S()], hayMas: false, clientes: [], puedeEditar: true, editando: null, busqueda: '',
-  accionGuardar: accion, accionImportar: accion, accionEstado: async () => {},
+  accionGuardar: accion, accionImportar: accion, accionEstado: accion,
   textosSinSitio: T, descargaCsv: 'data:text/csv;charset=utf-8,x', accionImportarEquivalencias: accion, accionAsignarEquivalencia: accion, ...p,
 });
 const pintar = (p?: Partial<PropsVistaSitios>) => renderToStaticMarkup(<VistaSitios {...props(p)} />);

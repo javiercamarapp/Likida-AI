@@ -26,7 +26,7 @@ function builder(tabla: string) {
   Object.assign(b, {
     select: encadenar('select'), eq: encadenar('eq'), is: encadenar('is'), in: encadenar('in'),
     lte: encadenar('lte'), or: encadenar('or'), not: encadenar('not'),
-    limit: () => b, order: () => b, update: () => b, insert: () => b,
+    limit: () => b, order: encadenar('order'), update: () => b, insert: () => b,
     then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) =>
       Promise.resolve().then(responder).then(res, rej),
   });
@@ -360,5 +360,16 @@ describe('AGB-3 — la consulta de candidatas excluye prospectos sin correo en l
     expect(select?.args[0]).toContain('prospecto:prospecto_id!inner(');
     const not = llamadas.find((l) => l.tabla === 'cola_aprobacion' && l.metodo === 'not');
     expect(not?.args).toEqual(['prospecto.correo', 'is', null]);
+  });
+});
+
+describe('A37-S26-01 — las piezas con fallo previo no hacen cola delante de las frescas', () => {
+  it('la consulta de candidatas ordena primero las SIN envio_error (nulls first), luego antigüedad', async () => {
+    respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
+    await correrEnviador();
+    const ordenes = llamadas.filter((l) => l.tabla === 'cola_aprobacion' && l.metodo === 'order');
+    expect(ordenes[0].args[0]).toBe('envio_error');
+    expect(ordenes[0].args[1]).toMatchObject({ ascending: true, nullsFirst: true });
+    expect(ordenes[1].args[0]).toBe('creado_en');
   });
 });

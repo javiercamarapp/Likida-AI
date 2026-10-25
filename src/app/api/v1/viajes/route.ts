@@ -26,6 +26,7 @@ import { exigir } from '@/lib/likida/pg';
 import { acotada } from '@/lib/likida/presupuesto';
 import { crearViaje, type NuevoViaje } from '@/lib/likida/operacion';
 import { validarIngreso } from '@/lib/likida/ingreso_viaje';
+import { DatoInvalido } from '@/lib/likida/errores';
 import { abrir, leerPagina, leerCursor, codificarCursor, sobre, fallo, errorApi, type Cursor, type Pagina } from '../_comun';
 import {
   leerCuerpo, leerLlaveIdempotencia, validar, escribir, huella,
@@ -253,11 +254,26 @@ function normalizarViaje(cuerpo: Record<string, unknown>): NuevoViaje & { folio:
 
   // El ingreso NO se valida aquí: se delega en el motor que ya distingue VACÍO
   // de CERO (`validarIngreso`). Un `ingresoFlete` ausente sale `null`, jamás 0.
-  const ingreso = validarIngreso({
-    clienteId: uuid(cuerpo, 'clienteId') ?? '',
-    ingresoFlete: crudoNumerico(cuerpo, 'ingresoFlete'),
-    kmRecorridos: crudoNumerico(cuerpo, 'kmRecorridos'),
-  });
+  let ingreso: ReturnType<typeof validarIngreso>;
+  try {
+    ingreso = validarIngreso({
+      clienteId: uuid(cuerpo, 'clienteId') ?? '',
+      ingresoFlete: crudoNumerico(cuerpo, 'ingresoFlete'),
+      kmRecorridos: crudoNumerico(cuerpo, 'kmRecorridos'),
+    });
+  } catch (e) {
+    // A37-P-03: `validarIngreso` ya rechaza km 0/decimal/≥20000 con un mensaje de pantalla; la API conserva su contrato (400 que
+    // NOMBRA el campo `kmRecorridos`).
+    if (e instanceof DatoInvalido && e.message.startsWith('Los kilómetros')) {
+      throw new CampoInvalido('kmRecorridos', '`kmRecorridos` tiene que ser un número entero entre 1 y 19999 (omítelo o mándalo null si no lo conoces).');
+    }
+    // A37-S11-07 + A37-S64-02: `validarIngreso` ya rechaza más de dos decimales en el ingreso con un mensaje de pantalla; la API
+    // conserva su contrato (400 que NOMBRA el campo `ingresoFlete`).
+    if (e instanceof DatoInvalido && e.message.includes('no puede traer más de dos decimales')) {
+      throw new CampoInvalido('ingresoFlete', '`ingresoFlete` no puede traer más de dos decimales.');
+    }
+    throw e;
+  }
 
   // A37-S11-01. `validarIngreso` acepta 0, decimales y 20000 (su tope es de
   // cordura y sirve también al formulario y al importador), pero la columna
@@ -266,6 +282,14 @@ function normalizarViaje(cuerpo: Record<string, unknown>): NuevoViaje & { folio:
   // intentar» que su TMS reintentaba para siempre. Es un error determinista de
   // SU dato: 400 que nombra el campo. 0 NO se reinterpreta como «desconocido»
   // (vacío ≠ cero): para no declararlo, se omite o se manda null.
+  // A37-S11-07. `ingreso_flete` es numeric(12,2): con más de dos decimales la base redondea en
+  // silencio (38500.456 -> 38500.46) y el reporte del contralor difiere por centavos de lo que
+  // mandó el TMS. Mismo criterio y tolerancia que `monto()` (anticipo): se rechaza, no se redondea.
+  const flete = ingreso.ingresoFlete;
+  if (flete !== null && Math.abs(flete * 100 - Math.round(flete * 100)) > 1e-6) {
+    throw new CampoInvalido('ingresoFlete', '`ingresoFlete` no puede traer más de dos decimales.');
+  }
+
   const km = ingreso.kmRecorridos;
   if (km !== null && (!Number.isInteger(km) || km < 1 || km > 19_999)) {
     throw new CampoInvalido('kmRecorridos', '`kmRecorridos` tiene que ser un número entero entre 1 y 19999 (omítelo o mándalo null si no lo conoces).');

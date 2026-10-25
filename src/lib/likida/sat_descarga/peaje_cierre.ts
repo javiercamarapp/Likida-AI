@@ -388,8 +388,16 @@ export async function avisarCierrePeaje(
           parametros: parametrosAvisoOficina('Likida', 'cierre de casetas del periodo', `${appUrl()}/dashboard`),
           contexto: { agente: 'peaje_cierre', tenantId, periodo, umbral },
         });
-        entregado = envio.ok;
-        if (!entregado) logger.warn('peaje_cierre.no_enviado', { tenantId, periodo, umbral });
+        // A37-S57-06: un rechazo TRANSITORIO (429, 5xx, token vencido) ya quedó en
+        // `wa_outbox`, que lo entrega solo. Soltar la reserva aquí hacía que la
+        // corrida siguiente reservara y mandara OTRO aviso (dos «HOY vence» en
+        // el canal del dinero, o más con las 4 corridas diarias): el outbox es
+        // dueño del envío, así que la reserva se queda. Solo un resultado
+        // definitivamente no entregable la suelta.
+        const encoladoEnOutbox = !envio.ok && (envio.encolado === true || envio.reintentable === true);
+        entregado = envio.ok || encoladoEnOutbox;
+        if (encoladoEnOutbox) logger.info('peaje_cierre.encolado', { tenantId, periodo, umbral, motivo: !envio.ok ? envio.motivo : null });
+        else if (!entregado) logger.warn('peaje_cierre.no_enviado', { tenantId, periodo, umbral });
       }
     } catch (e) {
       // El canal de una flota que truena NO puede costarle el aviso a las

@@ -84,6 +84,13 @@ describe('leerEventosSeguridadSamsara', () => {
     expect(r.motivo).toContain('Read Safety Events & Scores');
   });
 
+  it.each(['null', '[]', '42', '"texto"'])('A37-S37-09: un 200 con cuerpo JSON %s (no objeto) es falla de formato, no un TypeError', async (cuerpo) => {
+    const r = await leerEventosSeguridadSamsara(CRED, respuesta(200, cuerpo), '2026-08-26T17:30:00Z');
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.motivo).toContain('no es un objeto JSON');
+  });
+
   it('el 401 es credencial mala, no falta de scope', async () => {
     const r = await leerEventosSeguridadSamsara(CRED, respuesta(401, ''), '2026-08-26T17:30:00Z');
     expect(r.ok).toBe(false);

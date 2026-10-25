@@ -368,3 +368,33 @@ describe('SEG-2 — el lead público solo rellena huecos', () => {
     expect(larga.startsWith('[')).toBe(true);
   });
 });
+
+describe('A37-S10-10 — lead_clave no ensucia notas y el UPDATE reconcilia la unicidad', () => {
+  const PREVIO = {
+    id: 'p-1', estado: 'nuevo', empresa: 'Transportes GAL', contacto_nombre: 'Alejandro Vargas',
+    correo: 'a@gal.mx', telefono: '8112345678', unidades: '101-250', empleados: '4-10', urgencia: 'inmediata',
+    lead_clave: 'correo:a@gal.mx', notas: null,
+  };
+
+  it('(a) reenvío sin correo de una empresa que ya tenía correo: la clave distinta NO se anota como dato pisado', async () => {
+    respuestas.push({ data: [PREVIO], error: null }, { data: null, error: null });
+    await postear({ ...LEAD, correo: undefined });
+    expect(llamadas[0].op).toBe('update');
+    expect(String(llamadas[0].payload.notas ?? '')).not.toContain('lead_clave');
+    expect(llamadas[0].payload).not.toHaveProperty('lead_clave');
+  });
+
+  it('(b) fila legada sin clave que choca con la unicidad en el UPDATE: reconcilia contra la ganadora y contesta 200', async () => {
+    const legada = { ...PREVIO, id: 'p-legada', lead_clave: null, telefono: null };
+    const ganadora = { ...PREVIO, id: 'p-ganadora' };
+    respuestas.push(
+      { data: [legada], error: null },
+      { data: null, error: { message: 'duplicate key value violates unique constraint "prospecto_lead_clave_unica"' } },
+      { data: [ganadora], error: null },
+      { data: null, error: null },
+    );
+    const r = await postear(LEAD);
+    expect(r.status).toBe(200);
+    expect(llamadas.filter((l) => l.op === 'update')).toHaveLength(2);
+  });
+});

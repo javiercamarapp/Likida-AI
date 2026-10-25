@@ -38,7 +38,13 @@ alter table public.insight_linea_base enable row level security;
 drop policy if exists administra_flota on public.insight_linea_base;
 create policy administra_flota on public.insight_linea_base for all
   using ((tenant_id = any(public.get_user_tenant_ids()) and public.administra_flota()) or public.is_superadmin())
-  with check ((tenant_id = any(public.get_user_tenant_ids()) and public.administra_flota()) or public.is_superadmin());
+  -- NOTA 0890 (A37-S62-10): el with check lleva la cláusula de capturada_por que redefine la 0890 (mismo texto), para que reaplicar
+  -- el rango 0770-0809 no la borre (supabase/tests/0809_migraciones_reaplicables.sh).
+  with check (
+    (tenant_id = any(public.get_user_tenant_ids()) and public.administra_flota()
+      and (capturada_por is null or capturada_por = auth.uid()))
+    or public.is_superadmin()
+  );
 revoke all on table public.insight_linea_base from public, anon, authenticated;
 grant select, insert, update, delete on table public.insight_linea_base to authenticated;
 grant select, insert, update, delete on table public.insight_linea_base to service_role;

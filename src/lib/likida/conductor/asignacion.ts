@@ -127,7 +127,7 @@ export function armarAvisoRechazo(v: Pick<ViajeContexto, 'id' | 'folio' | 'opera
 
 // ── Con puertos ─────────────────────────────────────────────────────────────
 
-export interface PuertosAsignacion extends Pick<PuertosConductor, 'reclamar' | 'cerrarAviso' | 'enviar' | 'destinatarios'> {
+export interface PuertosAsignacion extends Pick<PuertosConductor, 'reclamar' | 'cerrarAviso' | 'enviar' | 'destinatarios' | 'avisosDe'> {
   aceptar(tenantId: string, viajeId: string, operadorId: string, ahora: Date): Promise<ResultadoAceptarPorBoton>;
   /** Los datos que el viaje todavía no trae (caja y rutas). Lanza si la base falla: quien llama manda las instrucciones con «por confirmar». */
   datos(viaje: ViajeContexto): Promise<DatosInstrucciones>;
@@ -172,7 +172,7 @@ const LECTOR_RUTAS_REAL: LectorRutasViaje = { rutas: leerRutasAutorizadas, codig
 export function puertosAsignacionReales(): PuertosAsignacion {
   const base = puertosReales();
   return {
-    reclamar: base.reclamar, cerrarAviso: base.cerrarAviso, enviar: base.enviar, destinatarios: base.destinatarios,
+    reclamar: base.reclamar, cerrarAviso: base.cerrarAviso, enviar: base.enviar, destinatarios: base.destinatarios, avisosDe: base.avisosDe,
     aceptar: aceptarPorBoton,
     // Caja del programa del Vigía y rutas del repositorio de rutas autorizadas (T-A5-49); cada una falla sola, sin tirar a la otra.
     datos: async (viaje) => {
@@ -251,7 +251,18 @@ async function avisarRechazo(p: PuertosAsignacion, v: ViajeContexto, hito: HitoF
   }
   const claim: NuevoAviso = { tenantId: v.tenantId, viajeId: v.id, hitoId: hito.id, operadorId: null, ciclo: hito.ciclo, clase: 'escalacion', nivel: NIVEL_AVISO_RECHAZO };
   const gano = await p.reclamar(claim);
-  if (gano !== 'ganado') return gano === 'perdido'; // un aviso previo ya salió (o va en camino)
+  if (gano !== 'ganado') {
+    if (gano !== 'perdido') return false;
+    // A37-S34-03: «perdido» solo dice que YA hay un claim, no que el aviso haya salido: el primer intento pudo cerrar con ok:false
+    // (sin destinatario, envío rechazado). Solo se le dice al chofer «ya le avisé» si ese aviso salió, quedó en cola o sigue en camino.
+    try {
+      const previo = (await p.avisosDe([hito.id])).find((a) => a.hitoId === hito.id && a.clase === claim.clase && a.nivel === claim.nivel && a.ciclo === claim.ciclo);
+      return previo !== undefined && previo.ok !== false;
+    } catch (err) {
+      logger.warn('conductor.asignacion_rechazo_estado_fallo', { viaje: v.id, err: err instanceof Error ? err.message : String(err) });
+      return false;
+    }
+  }
   try {
     const destinos = await p.destinatarios(v.tenantId, v.terminalId, 1);
     if (destinos.length === 0) {

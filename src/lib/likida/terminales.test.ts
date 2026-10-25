@@ -301,7 +301,10 @@ describe('editarTerminal', () => {
 describe('eliminarTerminal', () => {
   it('borra anclado al tenant y la bitácora guarda cuántos quedaron SIN patio', async () => {
     let borro = false;
-    from.mockImplementation(() => cadena({ data: [{ id: UUID, nombre: 'Patio Norte', ciudad: null }], error: null, count: 1 }, { alDelete: () => { borro = true; } }));
+    // A37-S20-03: la lectura de jefes dados de baja (app_user) no trae ninguno.
+    from.mockImplementation((t: string) => t === 'app_user'
+      ? cadena({ data: [], error: null })
+      : cadena({ data: [{ id: UUID, nombre: 'Patio Norte', ciudad: null }], error: null, count: 1 }, { alDelete: () => { borro = true; } }));
     rpc.mockResolvedValue({ data: [{ terminal_id: UUID, operadores: 5, unidades: 4, jefes: 0 }], error: null });
     // Las dos lecturas y el delete comparten el mismo falso: el `delete().select('id')` responde con una fila.
     const r = await eliminarTerminal('t-1', UUID, { id: 'u-1' });

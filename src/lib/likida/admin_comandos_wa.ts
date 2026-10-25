@@ -266,7 +266,16 @@ export async function atenderComandoAdmin(
         await resolverPieza(cmd.id, 'aprobada', cuenta.email);
         await registrar(cuenta, from, 'admin_wa.aprobar', cmd.id, { resultado: 'aprobada', cola: 'bus_pieza' });
         return `✅ Aprobé la pieza de rutina ${cmd.id}. La Mac la toma en su siguiente latido.`;
-      } catch {
+      } catch (eBus) {
+        // A37-S25-10: solo «no está pendiente / no existe» (DatoInvalido) es
+        // «no encontré»; una caída de la base se contesta como el fallo real,
+        // igual que la rama de la primera cola, para no mandar a revisar un id
+        // que está bien.
+        if (!(eBus instanceof DatoInvalido)) {
+          const msg = mensajeParaPantalla(eBus, 'aprobar la pieza');
+          await registrar(cuenta, from, 'admin_wa.aprobar', cmd.id, { resultado: 'error', err: msg });
+          return msg;
+        }
         await registrar(cuenta, from, 'admin_wa.aprobar', cmd.id, { resultado: 'no_encontrada' });
         return `No encontré una pieza pendiente con id "${cmd.id}" — ni en envíos ni en piezas de rutina. Revisa el id en el panel.`;
       }

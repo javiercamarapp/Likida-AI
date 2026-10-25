@@ -611,6 +611,38 @@ describe('depsReales: quién entra (opt-in) y cómo se guarda el avance', () => 
     expect(leerCredencial).toHaveBeenCalledWith('t-buena', 'tms_api_lectura');
   });
 
+  it('A37-TRANSVERSAL-08: el turno ROTA: va primero la flota que lleva más tiempo sin una lectura exitosa (o sin estado)', async () => {
+    tablas.conector_credencial = ['t-a', 't-b', 't-c', 't-d'].map((t) => cred(t));
+    tablas.tms_mapeo = ['t-a', 't-b', 't-c', 't-d'].map((t) => mapeo(t, 'viajes'));
+    tablas.tms_sincronizacion = [
+      { tenant_id: 't-a', recurso: 'viajes', ultima_ok_en: '2026-10-15T11:50:00.000Z' }, // la más reciente: al final
+      { tenant_id: 't-b', recurso: 'viajes', ultima_ok_en: '2026-10-15T08:00:00.000Z' }, // la más vieja con éxito
+      { tenant_id: 't-c', recurso: 'viajes', ultima_ok_en: null },                         // nunca terminó: primero
+      // t-d sin estado: también primero; el empate entre t-c y t-d se rompe por id
+    ];
+    leerCredencial.mockResolvedValue({ ...VALORES });
+    const flotas = await depsReales().listarFlotas();
+    expect(flotas.map((f) => f.tenantId)).toEqual(['t-c', 't-d', 't-b', 't-a']);
+    expect(flotas.find((f) => f.tenantId === 't-b')?.ultimaOkEn).toBe('2026-10-15T08:00:00.000Z');
+  });
+
+  it('A37-TRANSVERSAL-08: una flota sin turno de reloj y con horas sin lectura exitosa queda en `atrasadas`; la reciente no', async () => {
+    const reloj = { t: T0 };
+    const viejo = new Date(T0 - 3 * 60 * 60 * 1000).toISOString();
+    const reciente = new Date(T0 - 10 * 60 * 1000).toISOString();
+    const deps = {
+      ahora: () => reloj.t, listarFlotas: async () => [
+        { ...flotaCompleta(), tenantId: 't-vieja', ultimaOkEn: viejo },
+        { ...flotaCompleta(), tenantId: 't-reciente', ultimaOkEn: reciente },
+        { ...flotaCompleta(), tenantId: 't-nunca', ultimaOkEn: null },
+        { ...flotaCompleta(), tenantId: 't-sin-dato' },
+      ],
+    } as unknown as DepsSincronizacion;
+    const r = await sincronizarTms(deps, { venceEn: T0 - 1 }); // el reloj ya venció: ninguna flota alcanza turno
+    expect(r.sinTurno).toBe(4);
+    expect(r.atrasadas).toEqual(['t-vieja', 't-nunca']);
+  });
+
   it('sin ninguna credencial no consulta mapeos ni descifra nada', async () => {
     tablas.conector_credencial = [];
     expect(await depsReales().listarFlotas()).toEqual([]);

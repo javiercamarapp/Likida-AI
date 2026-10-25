@@ -152,7 +152,9 @@ describe('la salida al TMS: segunda pasada del mismo cron (T-A3-28)', () => {
     const [deps, opts] = envios.mock.calls[0] as [unknown, { venceEn: number }];
     expect(deps).toEqual({ dobleEnvios: true });
     const [, optsExtraccion] = motor.mock.calls[0] as [unknown, { venceEn: number }];
-    expect(opts.venceEn).toBe(optsExtraccion.venceEn);
+    // A37-A3-07: la extracción NO se come todo el reloj: deja una porción fija para la salida (sin ella, extracción y envíos
+    // cortaban en el mismo instante y, con trabajo de extracción, ningún envío salía).
+    expect(opts.venceEn - optsExtraccion.venceEn).toBeGreaterThanOrEqual(30_000);
     expect(opts.venceEn).toBeLessThan(antes + maxDuration * 1000);
     expect(r.envios).toMatchObject({ corrio: true, reclamados: 2, enviados: 2 });
     expect(registrarLatido).toHaveBeenCalledWith('carta-porte-docs', 'ok', expect.objectContaining({ envios: expect.objectContaining({ corrio: true, enviados: 2, fallos: 0 }) }));

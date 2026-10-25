@@ -18,6 +18,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 let RESPUESTAS: Record<string, { data: unknown; error: { message: string } | null }> = {};
 /** Filtros que recibió cada lectura, por tabla. */
 let FILTROS: Record<string, Array<[string, unknown]>> = {};
+let RECLAMO_GANADO = true;
 const actualizado: Array<{ tabla: string; valores: unknown; filtros: Array<[string, unknown]> }> = [];
 
 const notificarAsignacion = vi.fn();
@@ -47,9 +48,10 @@ vi.mock('@/lib/supabase/admin', () => ({
         const nodo: Record<string, unknown> = {};
         nodo.eq = (c: string, v: unknown) => { filtros.push([c, v]); return nodo; };
         nodo.is = (c: string, v: unknown) => { filtros.push([c, v]); return nodo; };
+        nodo.select = () => nodo;
         nodo.then = (r: (v: unknown) => unknown) => {
           actualizado.push({ tabla, valores, filtros });
-          return Promise.resolve({ error: null }).then(r);
+          return Promise.resolve({ data: RECLAMO_GANADO ? [{ id: 'v-1' }] : [], error: null }).then(r);
         };
         return nodo;
       },
@@ -65,7 +67,7 @@ const VIAJE_OK = { data: { folio: 'VJ-9', origen: 'GDL', destino: 'MTY', fecha_i
 const OPERADOR_OK = { data: { telefono: '+5219993700779' }, error: null };
 
 beforeEach(() => {
-  RESPUESTAS = {}; FILTROS = {}; actualizado.length = 0;
+  RESPUESTAS = {}; FILTROS = {}; actualizado.length = 0; RECLAMO_GANADO = true;
   notificarAsignacion.mockReset();
   notificarAsignacion.mockResolvedValue({ enviado: true });
   for (const f of Object.values(logger)) f.mockReset();
@@ -92,7 +94,8 @@ describe('avisarAlChofer — un fallo de lectura ya no se lee como "no hay chofe
   it('sin teléfono capturado NO lanza (es un dato, no un fallo) pero tampoco pasa sin rastro', async () => {
     RESPUESTAS.operador = { data: { telefono: null }, error: null };
     RESPUESTAS.viaje = VIAJE_OK;
-    await expect(avisarAlChofer('t-1', 'o-1', 'v-1')).resolves.toBeUndefined();
+    // A37-S18-04: devuelve `false` (no salió) para que el despacho no diga «avisado».
+    await expect(avisarAlChofer('t-1', 'o-1', 'v-1')).resolves.toBe(false);
     expect(logger.warn).toHaveBeenCalledWith('viaje.aviso_sin_destinatario',
       expect.objectContaining({ viajeId: 'v-1', escalaSolo: false }));
   });
@@ -112,7 +115,8 @@ describe('avisarAlChofer — un fallo de lectura ya no se lee como "no hay chofe
   it('control: con todo en orden avisa y marca `avisado_en`', async () => {
     RESPUESTAS.operador = OPERADOR_OK;
     RESPUESTAS.viaje = VIAJE_OK;
-    await avisarAlChofer('t-1', 'o-1', 'v-1');
+    // A37-S18-04: devuelve `true` cuando el WhatsApp SALIÓ.
+    await expect(avisarAlChofer('t-1', 'o-1', 'v-1')).resolves.toBe(true);
     expect(notificarAsignacion).toHaveBeenCalledWith(expect.objectContaining({ telefono: '+5219993700779', tenantId: 't-1' }));
     expect(actualizado).toHaveLength(1);
     expect(actualizado[0].valores).toMatchObject({ avisos_enviados: 1 });
@@ -143,5 +147,42 @@ describe('avisarAlChofer — aislamiento entre flotas', () => {
     RESPUESTAS.viaje = VIAJE_OK;
     await avisarAlChofer('t-1', 'o-1', 'v-1');
     expect(actualizado[0].filtros).toContainEqual(['tenant_id', 't-1']);
+  });
+});
+
+// A37-S50-06 — el primer aviso se RECLAMA antes de enviar.
+describe('avisarAlChofer — A37-S50-06: reclamar avisado_en antes del envío', () => {
+  it('si otro proceso ya ganó el reclamo (0 filas), NO envía la plantilla otra vez', async () => {
+    RESPUESTAS.operador = OPERADOR_OK;
+    RESPUESTAS.viaje = VIAJE_OK;
+    RECLAMO_GANADO = false;
+    await avisarAlChofer('t-1', 'o-1', 'v-1');
+    expect(notificarAsignacion).not.toHaveBeenCalled();
+  });
+
+  it('el reclamo ocurre ANTES del envío (un fallo posterior del marcado ya no duplica)', async () => {
+    RESPUESTAS.operador = OPERADOR_OK;
+    RESPUESTAS.viaje = VIAJE_OK;
+    let reclamosAlEnviar = -1;
+    notificarAsignacion.mockImplementation(async () => { reclamosAlEnviar = actualizado.length; return { enviado: true }; });
+    await avisarAlChofer('t-1', 'o-1', 'v-1');
+    expect(reclamosAlEnviar).toBe(1);
+  });
+
+  it('si Meta rechaza, devuelve el reclamo (avisado_en = null) para que el viaje siga visible como no avisado', async () => {
+    RESPUESTAS.operador = OPERADOR_OK;
+    RESPUESTAS.viaje = VIAJE_OK;
+    notificarAsignacion.mockResolvedValue({ enviado: false, motivo: 'rechazo' });
+    await avisarAlChofer('t-1', 'o-1', 'v-1');
+    expect(actualizado).toHaveLength(2);
+    expect(actualizado[1].valores).toMatchObject({ avisado_en: null });
+  });
+
+  it('un reaviso deliberado (avisado_en ya puesto) reenvía sin reclamar', async () => {
+    RESPUESTAS.operador = OPERADOR_OK;
+    RESPUESTAS.viaje = { data: { ...VIAJE_OK.data, avisado_en: '2026-10-01T00:00:00Z', avisos_enviados: 1 }, error: null };
+    await avisarAlChofer('t-1', 'o-1', 'v-1');
+    expect(notificarAsignacion).toHaveBeenCalledTimes(1);
+    expect(actualizado).toHaveLength(0);
   });
 });

@@ -117,6 +117,10 @@ export async function crearProveedorEmergencia(tenantId: string, p: {
   if ((p.lat != null && !Number.isFinite(p.lat)) || (p.lng != null && !Number.isFinite(p.lng))) {
     throw new Error('La posición no se ve como números — usa decimales, ej. 19.4326 y -99.1332.');
   }
+  // A37-S18-09: un radio negativo/cero/NaN/enorme desordenaba la cascada de proveedores.
+  if (p.radioKm != null && (!Number.isFinite(p.radioKm) || p.radioKm <= 0 || p.radioKm > 1000)) {
+    throw new Error('El radio de cobertura debe ser mayor a 0 y de máximo 1,000 km.');
+  }
   const conLat = p.lat != null;
   const conLng = p.lng != null;
   if (conLat !== conLng) throw new Error('La posición necesita latitud Y longitud (o ninguna de las dos).');

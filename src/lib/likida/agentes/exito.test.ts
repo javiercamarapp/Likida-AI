@@ -55,14 +55,14 @@ const getOnboardingFlotas = vi.fn(async (): Promise<Map<string, Ob>> => new Map(
 vi.mock('@/lib/admin/onboarding', () => ({ getOnboardingFlotas: () => getOnboardingFlotas() }));
 
 const getPorCobrar = vi.fn(async (): Promise<unknown[]> => []);
-vi.mock('@/lib/saas/transferencia', () => ({ getPorCobrar: () => getPorCobrar() }));
+vi.mock('@/lib/saas/transferencia', () => ({ getPorCobrarCompleto: () => getPorCobrar() }));
 
 const {
   lunesDeSemana, mesAnterior, diasEntreDias, diasEntreIso,
   PASOS_ONBOARDING, casillaHecha, detectarAtoros, avisosDeHoy, armarParteOnboarding,
   enSilencio, armarParteSilencio, armarReporteValor, tocaReporteMensual,
   evaluarGatillos, armarParteRetencion,
-  toquesDeHoy, esToqueAtrasado, tituloToque, textoDelToque, armarPropuestaCobranza, armarParteCobranzaSaas,
+  toquesDeHoy, toquesParaProponer, esToqueAtrasado, tituloToque, textoDelToque, armarPropuestaCobranza, armarParteCobranzaSaas,
   semaforoTicket, armarParteSoporte,
   esAgenteExito, correrAgenteExito, AGENTES_EXITO, leerFlotas, leerValorDelMes,
 } = await import('./exito');
@@ -466,6 +466,13 @@ describe('cobranza SaaS — la cadencia propone, nadie envía', () => {
     expect(toquesDeHoy([FACTURA], '2026-08-16').map((t) => t.hito)).toEqual([-3, 0, 3, 7, 15]);
   });
 
+  it('A37-S27-08: una factura con 20 días vencida produce UNA propuesta (el hito más alto), no cinco', () => {
+    const t = toquesParaProponer([FACTURA], '2026-08-21');
+    expect(t).toHaveLength(1);
+    expect(t[0].hito).toBe(15);
+    expect(toquesParaProponer([FACTURA], '2026-07-25')).toEqual([]);
+  });
+
   it('el toque atrasado se marca y su texto habla del HOY real, no del hito', () => {
     const tarde = toquesDeHoy([FACTURA], '2026-08-21').find((t) => t.hito === -3)!;
     expect(esToqueAtrasado(tarde)).toBe(true);
@@ -477,17 +484,25 @@ describe('cobranza SaaS — la cadencia propone, nadie envía', () => {
     expect(cuerpo).toContain('TOQUE ATRASADO');
     expect(cuerpo).toContain('lleva 20 días vencida');
     // El SELLO sigue siendo el del hito: una propuesta por (factura, hito).
-    expect(tituloToque(tarde)).toBe('Cobranza SaaS — LKAAAA202608 — D-3');
+    expect(tituloToque(tarde)).toBe(`Cobranza SaaS — LKAAAA202608 — ${FACTURA.id} — D-3`);
   });
 
   it('el título del toque es determinista por factura y hito', () => {
-    expect(tituloToque({ factura: FACTURA, diasVsVencimiento: 7, hito: 7 })).toBe('Cobranza SaaS — LKAAAA202608 — D+7');
-    expect(tituloToque({ factura: FACTURA, diasVsVencimiento: -3, hito: -3 })).toBe('Cobranza SaaS — LKAAAA202608 — D-3');
+    expect(tituloToque({ factura: FACTURA, diasVsVencimiento: 7, hito: 7 })).toBe(`Cobranza SaaS — LKAAAA202608 — ${FACTURA.id} — D+7`);
+    expect(tituloToque({ factura: FACTURA, diasVsVencimiento: -3, hito: -3 })).toBe(`Cobranza SaaS — LKAAAA202608 — ${FACTURA.id} — D-3`);
   });
 
-  it('sin referencia bancaria el título cae al id corto, nunca a un texto ambiguo', () => {
+  it('A37-S27-03: dos flotas con la MISMA referencia (4 hex del tenant) y el mismo mes NO comparten título', () => {
+    const otra = { ...FACTURA, id: 'eeeeeeee-1111-2222-3333-444444444444', tenantId: 'otra-flota' };
+    expect(otra.referencia).toBe(FACTURA.referencia);
+    const a = tituloToque({ factura: FACTURA, diasVsVencimiento: 0, hito: 0 });
+    const b = tituloToque({ factura: otra, diasVsVencimiento: 0, hito: 0 });
+    expect(a).not.toBe(b);
+  });
+
+  it('sin referencia bancaria el título lleva el id completo de la factura, nunca un texto ambiguo', () => {
     const sinRef = { ...FACTURA, referencia: null };
-    expect(tituloToque({ factura: sinRef, diasVsVencimiento: 0, hito: 0 })).toBe('Cobranza SaaS — ffffffff — D+0');
+    expect(tituloToque({ factura: sinRef, diasVsVencimiento: 0, hito: 0 })).toBe(`Cobranza SaaS — ${FACTURA.id} — D+0`);
   });
 
   it('el texto propuesto usa el monto de la factura y nunca amenaza con cortar el servicio', () => {
@@ -723,10 +738,11 @@ describe('el reloj de la vuelta corta los motores de éxito, y lo DICE (c7-1)', 
   });
 
   it('cobranza SaaS: las propuestas ya encoladas QUEDAN, pero el parte del día no se sella con las cuentas a medias', async () => {
-    getPorCobrar.mockResolvedValue([FACTURA]);
-    // 2026-08-01 = dos hitos alcanzados (D−3 y D+0): dos toques, o sea una
+    const FACTURA_2 = { ...FACTURA, id: 'fs-2', referencia: 'LKBBBB202608' };
+    getPorCobrar.mockResolvedValue([FACTURA, FACTURA_2]);
+    // Dos facturas con un hito alcanzado cada una: dos toques, o sea una
     // lista de trabajo de verdad sobre la que se puede cortar A LA MITAD.
-    expect(toquesDeHoy([FACTURA], '2026-08-01')).toHaveLength(2);
+    expect(toquesParaProponer([FACTURA, FACTURA_2], '2026-08-01')).toHaveLength(2);
 
     // EL RELOJ QUE SE AGOTA A LA MITAD: arranca vivo y se vence en cuanto la
     // primera propuesta entra a la bandeja. Es la forma honesta de reproducir
@@ -751,6 +767,8 @@ describe('el reloj de la vuelta corta los motores de éxito, y lo DICE (c7-1)', 
       expect(tipos).toEqual(['recordatorio_cobranza']);
       expect(tipos).not.toContain('parte_cobranza_saas');
       expect(r.piezas).toBe(1);
+      // A37-S27-09: cortada por reloj = 'parcial', no 'ok' 1/1.
+      expect(registrarCorrida).toHaveBeenCalledWith(null, 'cobranza_saas', expect.objectContaining({ estado: 'parcial' }));
     } finally {
       reloj.mockRestore();
     }

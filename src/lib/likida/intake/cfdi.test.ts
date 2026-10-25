@@ -2,6 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { parseCfdiQr, esRfcValido, esUuidValido } from './cfdi';
 
 describe('parseCfdiQr', () => {
+  it('A37-S47-07: un tt no finito (1e999, Infinity) no se vuelve el total', () => {
+    expect(parseCfdiQr('https://x?re=AAA010101AAA&tt=1e999').total).toBeUndefined();
+    expect(parseCfdiQr('https://x?re=AAA010101AAA&tt=Infinity').total).toBeUndefined();
+    expect(parseCfdiQr('https://x?re=AAA010101AAA&tt=100.5').total).toBe(100.5);
+  });
+
   it('extrae uuid/rfc/total del QR del SAT', () => {
     const qr = 'https://verificacfdi.facturaelectronica.sat.gob.mx/default.aspx?id=A1B2C3D4-E5F6-7890-ABCD-EF1234567890&re=AAA010101AAA&rr=BBB020202BB1&tt=1234.56&fe=abcdefgh';
     const r = parseCfdiQr(qr);

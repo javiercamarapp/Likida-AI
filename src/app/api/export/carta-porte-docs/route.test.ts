@@ -72,6 +72,41 @@ describe('el archivo', () => {
     expect((await GET(peticion(`?ids=${U1}`))).status).toBe(200);
   });
 
+  it('A37-L-03: ?todos=1 vuelve a bajar los aprobados aunque ya figuren exportados (descarga cortada); el 404 por omisión lo explica', async () => {
+    await GET(peticion());
+    const vacio = await GET(peticion());
+    expect(vacio.status).toBe(404);
+    expect(await vacio.text()).toContain('Volver a descargar');
+    const todos = await GET(peticion('?todos=1'));
+    expect(todos.status).toBe(200);
+    expect((await todos.text()).trim().split('\r\n')).toHaveLength(3); // encabezado + U1 + U3 (U2 por revisar, UB de otra flota)
+  });
+
+  it('A37-O7-11: ?todos=1&pagina=2 alcanza los aprobados más allá de los primeros 500, y lo declara', async () => {
+    for (let i = 0; i < 502; i++) {
+      const id = `aaaa${String(i).padStart(4, '0')}-1111-4111-8111-111111111111`;
+      doc(id, A, { createdAt: new Date(Date.UTC(2026, 0, 1) + i * 1000).toISOString() });
+    }
+    const p1 = await GET(peticion('?todos=1'));
+    expect(p1.status).toBe(200);
+    expect(p1.headers.get('x-pagina-siguiente')).toBe('2');
+    expect(Number(p1.headers.get('x-restantes'))).toBeGreaterThan(0);
+    const p2 = await GET(peticion('?todos=1&pagina=2'));
+    expect(p2.status).toBe(200);
+    expect(p2.headers.get('x-pagina-siguiente')).toBeNull();
+    expect(p2.headers.get('x-restantes')).toBe('0');
+    expect((await GET(peticion('?todos=1&pagina=0'))).status).toBe(400);
+    expect((await GET(peticion('?pagina=2'))).status).toBe(400);
+  });
+
+  it('A37-L-03: una navegación cross-site/same-site NO sella ni entrega (403); la mismo-origen y sin cabeceras pasan', async () => {
+    const r = await GET(new Request('https://app.likida.ai/api/export/carta-porte-docs', { headers: { 'sec-fetch-site': 'cross-site' } }));
+    expect(r.status).toBe(403);
+    expect(estado.docs.get(U1)!.exportadoEn).toBeNull();
+    expect(estado.eventos).toHaveLength(0);
+    expect((await GET(new Request('https://app.likida.ai/api/export/carta-porte-docs', { headers: { 'sec-fetch-site': 'same-origin' } }))).status).toBe(200);
+  });
+
   it('un ?ids= con documentos de OTRA flota no exporta nada de ella', async () => {
     const r = await GET(peticion(`?ids=${UB}`));
     expect(r.status).toBe(404);
@@ -208,5 +243,50 @@ describe('inyección de fórmulas en el archivo real', () => {
     const csv = await (await GET(peticion())).text();
     expect(csv).toContain(`"'=cmd|""/c calc""!A1"`);
     expect(csv).not.toMatch(/,=cmd/);
+  });
+});
+
+
+describe('A37-S10-01 — el filtro va en la consulta, no sobre las 500 más recientes', () => {
+  const uuidN = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+
+  it('un aprobado antiguo y sin exportar sale aunque haya más de 500 aprobados ya exportados y más recientes', async () => {
+    for (let n = 1; n <= 505; n++) doc(uuidN(n), A, { exportadoEn: '2026-10-04T00:00:00.000Z', createdAt: '2026-10-05T10:00:00.000Z' });
+    const r = await GET(peticion());
+    expect(r.status).toBe(200);
+    expect((await r.text()).trim().split('\r\n')).toHaveLength(2); // encabezado + el de U1
+    expect(estado.docs.get(U1)!.exportadoEn).not.toBeNull();
+  });
+
+  it('un ?ids= con un uuid fuera de las 500 más recientes también sale', async () => {
+    for (let n = 1; n <= 505; n++) doc(uuidN(n), A, { exportadoEn: '2026-10-04T00:00:00.000Z', createdAt: '2026-10-05T10:00:00.000Z' });
+    expect((await GET(peticion(`?ids=${U1}`))).status).toBe(200);
+  });
+
+  it('con más de 500 por exportar sale el lote más antiguo y X-Restantes dice cuántos faltan', async () => {
+    for (let n = 1; n <= 501; n++) doc(uuidN(n), A, { createdAt: '2026-10-05T10:00:00.000Z' });
+    const r = await GET(peticion());
+    expect(r.status).toBe(200);
+    expect(r.headers.get('x-restantes')).toBe('2'); // 502 sin exportar (U1 + 501) - 500
+    expect(estado.docs.get(U1)!.exportadoEn).not.toBeNull(); // el más antiguo va en el primer lote
+  });
+});
+
+describe('A37-S10-02 — el sello es un reclamo atómico y su fallo no se calla', () => {
+  it('dos descargas en paralelo NO reciben el mismo documento: una gana, la otra 409', async () => {
+    const [a, b] = await Promise.all([GET(peticion()), GET(peticion())]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    expect(estado.eventos.filter((e) => e.tipo === 'exportado' && e.documentoId === U1)).toHaveLength(1);
+  });
+
+  it('si el sello falla, el archivo sale pero con aviso DENTRO del csv y en cabeceras', async () => {
+    estado.fallar.set('reclamarExportacion', new Error('base caída'));
+    const r = await GET(peticion());
+    expect(r.status).toBe(200);
+    expect(r.headers.get('x-sello-fallo')).toBe('1');
+    expect(decodeURIComponent(r.headers.get('x-aviso') ?? '')).toMatch(/NO se pudo marcar/);
+    const csv = new TextDecoder('utf-8', { ignoreBOM: true }).decode(new Uint8Array(await r.arrayBuffer()));
+    expect(csv.startsWith('\uFEFF# AVISO:')).toBe(true);
+    expect(csv).toContain('Folio,FechaSalida');
   });
 });

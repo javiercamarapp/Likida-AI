@@ -146,9 +146,9 @@ describe('(a) bajo el perfil, cada página no permitida rebota y cada permitida 
   const proximamente = permitidasEnLista.filter((p) => rutaProximamenteEnPerfil('cinco_agentes', clave(p)));
   const abiertas = permitidasEnLista.filter((p) => !rutaProximamenteEnPerfil('cinco_agentes', clave(p)));
 
-  it('el reparto es el de la matriz de T-PER-01 con A4/A5 encendidos: 32 negadas, 37 abiertas (+2: el catálogo y la configuración del Agente de Carta Porte, A3) y 0 «Próximamente»', () => {
-    expect(negadas.length).toBe(32);
-    expect(abiertas.length).toBe(37);
+  it('el reparto es el de la matriz de T-PER-01 con A4/A5 encendidos: 31 negadas, 38 abiertas (ARCO pasó a base: A37-TRANSVERSAL-06) (+2: el catálogo y la configuración del Agente de Carta Porte, A3) y 0 «Próximamente»', () => {
+    expect(negadas.length).toBe(31);
+    expect(abiertas.length).toBe(38);
     expect(proximamente.length).toBe(0);
     expect(negadas.length + abiertas.length + proximamente.length + 1).toBe(70);
   });

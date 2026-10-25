@@ -135,6 +135,20 @@ describe('revisarPortal', () => {
     expect(r.campos, 'no se midió: null, no 0').toBeNull();
   });
 
+  it('A37-S45-08: EAI_AGAIN (el resolutor propio no contestó) es no_medido, no sin_dns', async () => {
+    const traer: Traer = async () => {
+      const e = new Error('getaddrinfo EAI_AGAIN facturacion.ejemplo.test');
+      (e as unknown as { cause: { code: string } }).cause = { code: 'EAI_AGAIN' };
+      throw e;
+    };
+    const r = await revisarPortal('gogas', 'https://x', traer);
+    expect(r.estado).toBe('no_medido');
+    expect(estaRoto(r)).toBe(false);
+    // Sin `cause`, solo por el mensaje, tampoco se acusa al portal.
+    const sinCausa: Traer = async () => { throw new Error('getaddrinfo EAI_AGAIN x.test'); };
+    expect((await revisarPortal('gogas', 'https://x', sinCausa)).estado).toBe('no_medido');
+  });
+
   it('un fallo NUESTRO es no_medido, y NO acusa al portal', async () => {
     // Sin esta rama, un tropiezo de red de la función serverless manda un
     // correo diciendo que TODO el catálogo está muerto.

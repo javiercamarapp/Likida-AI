@@ -88,6 +88,14 @@ describe('interpretarRespuesta · niega', () => {
   });
 });
 
+describe('A37-S46-05 · ordinales dentro de frases no eligen viaje', () => {
+  it.each(['dame un segundo', 'un segundo', 'espera un segundo por favor', 'primero voy a cargar', 'dame un tercer momento'])(
+    '«%s» no elige número', (t) => {
+      expect(numeroElegido(t)).toBeNull();
+      expect(interpretarRespuesta(t)).not.toBe('elige_numero');
+    });
+});
+
 describe('interpretarRespuesta · elige por número', () => {
   const NUMEROS: Array<[string, number]> = [
     ['1', 1], ['el 1', 1], ['la 1', 1], ['el uno', 1], ['uno', 1],

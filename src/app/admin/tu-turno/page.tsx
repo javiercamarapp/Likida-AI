@@ -30,6 +30,19 @@ export const dynamic = 'force-dynamic';
  * El cuerpo vive en vista.tsx (patrón de agentes/peajes): aquí solo auth,
  * lecturas y las dos server actions.
  */
+/** A37-S08-07: la URL lleva solo CÓDIGOS cerrados; el texto sale de aquí. Un enlace `?error=<texto>` ajeno ya no
+ *  se pinta con el estilo de alerta de la consola (suplantación de contenido). */
+const AVISOS: Record<string, string> = {
+  pieza_aprobada: 'Pieza aprobada — la Mac la ve al instante.',
+  pieza_descartada: 'Pieza descartada.',
+  encargo: 'Encargo encolado — la Mac abre un PR chico con el cambio (tú lo apruebas en GitHub).',
+  orden: 'Orden encolada — la Mac la toma en su siguiente latido (≤5 min).',
+};
+const ERRORES: Record<string, string> = {
+  pieza: 'No se pudo resolver la pieza. Revisa que siga pendiente y recarga; si persiste, mira los registros del servidor.',
+  orden: 'No se pudo encolar la orden. Revisa que el tipo sea válido y, en un encargo, que lleve contenido; si persiste, mira los registros del servidor.',
+};
+
 export default async function PaginaTuTurno({
   searchParams,
 }: {
@@ -64,9 +77,10 @@ export default async function PaginaTuTurno({
       await resolverPieza(id, accion, actor);
       revalidatePath('/admin/tu-turno');
     } catch (e) {
-      redirect(`/admin/tu-turno?error=${encodeURIComponent(mensajeParaPantalla(e, 'resolver la pieza'))}`);
+      mensajeParaPantalla(e, 'resolver la pieza'); // registra la falla del sistema; la URL lleva solo un código
+      redirect('/admin/tu-turno?error=pieza');
     }
-    redirect(`/admin/tu-turno?aviso=${encodeURIComponent(accion === 'aprobada' ? 'Pieza aprobada — la Mac la ve al instante.' : 'Pieza descartada.')}`);
+    redirect(`/admin/tu-turno?aviso=${accion === 'aprobada' ? 'pieza_aprobada' : 'pieza_descartada'}`);
   }
 
   async function accionOrden(fd: FormData) {
@@ -85,11 +99,10 @@ export default async function PaginaTuTurno({
       await crearOrden(tipo, rutina, actor, tipo === 'editar_encargo' ? { contenido } : {});
       revalidatePath('/admin/tu-turno');
     } catch (e) {
-      redirect(`/admin/tu-turno?error=${encodeURIComponent(mensajeParaPantalla(e, 'encolar la orden'))}`);
+      mensajeParaPantalla(e, 'encolar la orden');
+      redirect('/admin/tu-turno?error=orden');
     }
-    redirect(`/admin/tu-turno?aviso=${encodeURIComponent(tipo === 'editar_encargo'
-      ? 'Encargo encolado — la Mac abre un PR chico con el cambio (tú lo apruebas en GitHub).'
-      : 'Orden encolada — la Mac la toma en su siguiente latido (≤5 min).')}`);
+    redirect(`/admin/tu-turno?aviso=${tipo === 'editar_encargo' ? 'encargo' : 'orden'}`);
   }
 
   return (
@@ -99,8 +112,8 @@ export default async function PaginaTuTurno({
       envios={envios}
       prs={prs}
       ahora={ahora}
-      aviso={aviso}
-      error={error}
+      aviso={aviso ? AVISOS[aviso] : undefined}
+      error={error ? ERRORES[error] : undefined}
       sesionNombre={sesion.nombre ?? sesion.userId}
       accionPieza={accionPieza}
       accionOrden={accionOrden}

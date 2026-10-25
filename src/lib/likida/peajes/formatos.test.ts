@@ -120,6 +120,17 @@ describe('aInstanteMx — hora local de México → UTC', () => {
   });
 });
 
+describe('A37-L-07 montoDeCelda — más de dos decimales no se redondea en silencio', () => {
+  it('«1.500» y «1,234.567» son ambiguos: null, no 1.50 ni 1234.57', () => {
+    expect(montoDeCelda('1.500')).toBeNull();
+    expect(montoDeCelda('1.234')).toBeNull();
+    expect(montoDeCelda('1,234.567')).toBeNull();
+    expect(montoDeCelda('1.50')).toBe(1.5);
+    expect(montoDeCelda('1.234,56')).toBe(1234.56);
+    expect(montoDeCelda('1.234.567')).toBe(1234567);
+  });
+});
+
 describe('montoDeCelda — el dinero no se adivina', () => {
   it('formatos comunes', () => {
     expect(montoDeCelda('$1,234.56')).toBe(1234.56);
@@ -137,6 +148,13 @@ describe('montoDeCelda — el dinero no se adivina', () => {
     expect(montoDeCelda('1,234')).toBe(1234);
     expect(montoDeCelda('1,234,567')).toBe(1234567);
     expect(montoDeCelda('1.234.567')).toBe(1234567);
+  });
+  it('A37-S52-01: «1.234» (un punto, tres dígitos) es ambiguo: null, no 1.23', () => {
+    expect(montoDeCelda('1.234')).toBeNull();
+    expect(montoDeCelda('$ 12.500')).toBeNull();
+    expect(montoDeCelda('234.50')).toBe(234.5);
+    expect(montoDeCelda('1234.5')).toBe(1234.5);
+    expect(montoDeCelda('1234.567')).toBeNull(); // 4 enteros: no es millar, pero A37-L-07: más de dos decimales no se redondea en silencio
   });
   it('paréntesis = negativo contable', () => {
     expect(montoDeCelda('(189.00)')).toBe(-189);

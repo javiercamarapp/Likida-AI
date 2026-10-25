@@ -72,6 +72,15 @@ describe('detencionElegible — ambas cadencias en la misma tabla', () => {
     expect(POLEO_CONSERVADOR_MIN).toBe(15);
     expect(detencionElegible({ posiciones: [M(15), M(0)], sitioDelViaje: null, config: {}, ahora: AHORA }).elegible).toBe(true);
   });
+  it('A37-S34-05: sin poleo configurado (cadencia conservadora = aviso), dos muestras de hace 2 min NO bastan: es un semáforo, no una detención de 15 min', () => {
+    const r = detencionElegible({ posiciones: [M(2, 0), M(0, 10)], sitioDelViaje: null, config: {}, ahora: AHORA });
+    expect(r).toEqual({ elegible: false, razon: 'lapso_corto' });
+    // con poleo ≥ aviso explícito, igual
+    expect(detencionElegible({ posiciones: [M(2), M(0)], sitioDelViaje: null, config: { poleoMin: 20, detenidoAvisoMin: 15 }, ahora: AHORA }).razon).toBe('lapso_corto');
+    // la holgura está acotada a la mitad del aviso: con 7 min aún no, con 8 sí
+    expect(detencionElegible({ posiciones: [M(7), M(0)], sitioDelViaje: null, config: {}, ahora: AHORA }).razon).toBe('lapso_corto');
+    expect(detencionElegible({ posiciones: [M(8), M(0)], sitioDelViaje: null, config: {}, ahora: AHORA }).elegible).toBe(true);
+  });
   it('dentro de un sitio del viaje no es una detención por avisar', () => {
     const sitio = { id: 's', nombre: 's', lat: LAT, lng: LNG, radioM: 500 };
     const r = detencionElegible({ posiciones: cadencia(2, 30), sitioDelViaje: { origen: sitio, destino: null }, config: { poleoMin: 2 }, ahora: AHORA });
@@ -255,7 +264,7 @@ describe('configurable por el PUT de la flota (LLAVES_CONFIG, T-A5-37 y lección
 
 describe('persistencia honesta: sin columna no se pierde en silencio', () => {
   it('guardar una cadencia o un umbral distinto del default dice que falta la migración (no toca la base)', async () => {
-    for (const c of [{ poleoMin: 15 }, { poleoPorClaveMin: { lenta: 15 } }, { detenidoAvisoMin: 20 }, { detenidaVentanaMin: 10 }, { detenidaMetros: 200 }]) {
+    for (const c of [{ poleoMin: 15 }, { poleoPorClaveMin: { lenta: 15 } }, { detenidoAvisoMin: 20 }]) {  // detenidaVentanaMin/detenidaMetros ya tienen columna desde la 0870 (A37-P-08)
       await expect(guardarConfigConductor('t1', { ...CONFIG_CONDUCTOR_DEFAULT, ...c } as never, undefined), JSON.stringify(c)).rejects.toThrow(/migración pendiente/);
     }
   });

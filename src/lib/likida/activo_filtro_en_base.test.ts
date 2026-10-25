@@ -54,7 +54,8 @@ function cuerpoDeFuncion(fuente: string, nombreFuncion: string): string {
 const SITIOS: Array<{ archivo: string; funcion: string }> = [
   { archivo: 'src/lib/likida/contactos.ts', funcion: 'resolverCuentaOficina' },
   { archivo: 'src/lib/likida/contactos.ts', funcion: 'telefonoParaDineroDe' },
-  { archivo: 'src/lib/likida/contactos.ts', funcion: 'telefonosJefe' },
+  // A37-S39-06: la consulta de `telefonosJefe` vive ahora en `resolverJefes` (telefonosJefe solo la llama).
+  { archivo: 'src/lib/likida/contactos.ts', funcion: 'resolverJefes' },
   { archivo: 'src/lib/likida/asistencia_escalamiento.ts', funcion: 'telefonoDeRol' },
   { archivo: 'src/lib/likida/facturacion/flota_fiscal.ts', funcion: 'correoDeFacturacion' },
   { archivo: 'src/lib/likida/agentes/notificaciones.ts', funcion: 'usuariosAvisables' },

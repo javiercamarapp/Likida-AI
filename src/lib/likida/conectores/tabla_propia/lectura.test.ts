@@ -5,6 +5,7 @@ import { leerGeocercasCsv, leerPosicionesCsv, partirCsv } from './csv';
 import { leerConfigTablaPropia } from './config';
 import { ErrorTablaPropia } from './contrato';
 import { localAUtc, normalizarFechaLocal, utcALocal, zonaValida } from './tiempo';
+import { registroAPosicion } from './filas';
 import { leerIgnicion, leerNumero, leerPoligonoWkt, llaveEconomico, motivoCoordenadas } from './validar';
 
 const fx = (n: string) => readFileSync(new URL(`./fixtures/${n}`, import.meta.url), 'utf8');
@@ -49,6 +50,14 @@ describe('validación: nada se «arregla»', () => {
     expect(motivoCoordenadas(40.7, -74)).toBe('fuera de México');
     expect(motivoCoordenadas(95, -100)).toBe('coordenadas fuera de rango');
     expect(motivoCoordenadas(25.78, -100.19)).toBeNull();
+  });
+  it('A37-S38-10: una POSICIÓN de una ruta transfronteriza (Memphis, Chicago, Atlanta) se acepta; Europa o (0,0) siguen rechazadas', () => {
+    const pos = (lat: string, lon: string) => registroAPosicion({ unidad: 'U-1', lat, lon, fecha_hora: '2026-10-01 10:00:00' }, 2);
+    for (const [lat, lon] of [['35.15', '-90.05'], ['41.88', '-87.63'], ['33.75', '-84.39']]) expect(pos(lat, lon)).toHaveProperty('ok');
+    expect(pos('48.85', '2.35')).toEqual({ rechazo: { fila: 2, motivo: 'fuera de México' } });
+    expect(pos('0', '0')).toEqual({ rechazo: { fila: 2, motivo: 'fuera de México' } });
+    // La caja estricta de México NO cambia para geocercas/cursos.
+    expect(motivoCoordenadas(35.15, -90.05)).toBe('fuera de México');
   });
   it('números estrictos y económicos normalizados', () => {
     expect(leerNumero('20.5')).toBe(20.5);

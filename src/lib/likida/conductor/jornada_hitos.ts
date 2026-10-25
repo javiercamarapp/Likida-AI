@@ -30,7 +30,7 @@ export interface MarcaHito {
 }
 
 export interface EvidenciaJornada {
-  /** Día de México (AAAA-MM-DD). */
+  /** Día en la zona de la flota (México por omisión), AAAA-MM-DD. */
   dia: string;
   /** El primer hito del día: informativo, NO usable como inicio de jornada. */
   primerHito: MarcaHito | null;
@@ -45,11 +45,12 @@ const marca = (h: HitoFila, momento: string): MarcaHito => ({
 });
 
 /** La evidencia de UN día a partir de los hitos (de todos los viajes del chofer ese día). */
-export function evidenciaJornadaDeHitos(hitos: readonly HitoFila[], dia: string): EvidenciaJornada {
+/** `zonaHoraria`: la de la flota (A37-S35-09); por omisión México, que conserva el comportamiento de siempre. */
+export function evidenciaJornadaDeHitos(hitos: readonly HitoFila[], dia: string, zonaHoraria: string = TZ_MX): EvidenciaJornada {
   const delDia = hitos
     .filter((h) => estaResuelto(h) && (h.mensajeEn ?? h.recibidoEn))
     .map((h) => ({ h, momento: (h.mensajeEn ?? h.recibidoEn) as string }))
-    .filter((x) => !Number.isNaN(Date.parse(x.momento)) && diaEnZona(new Date(x.momento), TZ_MX) === dia)
+    .filter((x) => !Number.isNaN(Date.parse(x.momento)) && diaEnZona(new Date(x.momento), zonaHoraria) === dia)
     .sort((a, b) => Date.parse(a.momento) - Date.parse(b.momento));
   return {
     dia,

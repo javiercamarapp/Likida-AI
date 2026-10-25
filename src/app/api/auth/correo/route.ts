@@ -48,6 +48,8 @@ export const dynamic = 'force-dynamic';
 /** El payload de Supabase. Solo se declara lo que se usa: cualquier campo
  *  nuevo de una versión futura se ignora sin romper nada. */
 interface PayloadHook {
+  /** A37-S02-03: sonda FIRMADA del script de encendido; responde 200 sin armar ni mandar nada. */
+  likida_dry_run?: boolean;
   user?: { email?: string; new_email?: string };
   email_data?: {
     token?: string;
@@ -147,6 +149,11 @@ export async function POST(req: Request) {
   } catch {
     return fallo(400, 'JSON inválido.');
   }
+
+  // A37-S02-03: lo único que prueba que el secreto del deployment COINCIDE con el que se le dio a Supabase
+  // es una petición firmada que llegue a 200. Se atiende DESPUÉS de verificar la firma (sin ella, 401) y
+  // sin pasar por Resend: no sale ningún correo.
+  if (payload.likida_dry_run === true) return NextResponse.json({ dry_run: true });
 
   // UNA ACCIÓN QUE NO CONOCEMOS DEGRADA, NO TUMBA EL LOGIN.
   //

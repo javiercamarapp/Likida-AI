@@ -255,6 +255,13 @@ export const RESPIRO_TICKET_MS = 5_000;
 export const margenPorDefecto = (modo: ModoAgente, esperaUuidMs: number): number =>
   modo === 'emitir' ? esperaUuidMs + RESPIRO_TICKET_MS : RESPIRO_TICKET_MS;
 
+/** Cuánto se reserva para bajar el XML cuando el guion no fija `esperaXmlMs` (el tope de descarga de la página). */
+const ESPERA_XML_DEFECTO_MS = 30_000;
+
+/** El motivo cuando el tiempo se acabó DESPUÉS de llenar y ANTES de apretar emitir. */
+export const SIN_TURNO_ANTES_DE_EMITIR =
+  'no se emitió: el presupuesto de tiempo de esta corrida no alcanza para terminar una emisión y NO se apretó emitir (nada quedó timbrado). El ticket se recoge entero en la corrida siguiente.';
+
 /** El motivo con el que sale un ticket al que no le tocó turno. */
 export const SIN_TURNO =
   'no se intentó: se acabó el presupuesto de tiempo de esta corrida antes de llegar a este ticket. NO se abrió el portal y NO se marcó nada — se recoge entero en la corrida siguiente.';
@@ -327,6 +334,19 @@ interface Escritura {
   selector: string | readonly string[];
   valor: string;
   como?: 'escribir' | 'seleccionar';
+  /**
+   * A37-S42-05: `despues` = el campo aparece SOLO después de buscar (su selector
+   * está entre los que `buscar.esperar` declara como «lo que aparece tras
+   * buscar»). Se pre-vuela y se escribe en la segunda etapa; pre-volarlo en el
+   * formulario en blanco daba `portalCambio` en cada ensayo de un portal que
+   * nunca falló.
+   */
+  etapa?: 'antes' | 'despues';
+}
+
+/** Los selectores que un guion declara en `buscar.esperar` (lista separada por comas). */
+function selectoresTrasBuscar(g: GuionPortal): Set<string> {
+  return new Set((g.buscar?.esperar ?? '').split(',').map((x) => x.trim()).filter(Boolean));
 }
 
 /**
@@ -339,6 +359,16 @@ interface Escritura {
 const primerCandidato = (s: string | readonly string[]): string => (typeof s === 'string' ? s : s[0]);
 
 // ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * El UUID de un CFDI dentro de un texto leído del portal, o `null`. Acepta el
+ * UUID rodeado de etiquetas («Folio fiscal: …»), pero exige el formato 8-4-4-4-12
+ * hexadecimal. A37-S42-03.
+ */
+export function uuidDelTexto(texto: string): string | null {
+  const m = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i.exec(texto);
+  return m ? m[0] : null;
+}
 
 export class AdaptadorDeclarativo implements AdaptadorPortal {
   readonly comercio: string;
@@ -522,6 +552,7 @@ export class AdaptadorDeclarativo implements AdaptadorPortal {
     // ── Los valores, ya formateados para ESTE portal ──────────────────────
     const aEscribir: Escritura[] = [];
 
+    const tras = selectoresTrasBuscar(this.g);
     for (const [dato, campo] of Object.entries(this.g.receptor ?? {}) as Array<[DatoReceptor, CampoGuion]>) {
       const crudo = this.receptor[dato];
       const valor = aplicarFormato(crudo ?? null, campo.formato);
@@ -531,9 +562,11 @@ export class AdaptadorDeclarativo implements AdaptadorPortal {
         // a nombre de nadie. Se dice cuál falta y se para.
         return this.fallo(modo, `Los datos fiscales de esta flota no sirven para facturar en ${this.comercio}: falta "${dato}" (el guion lo declara como campo del portal). No se abrió el portal.`);
       }
+      const candidatos = typeof campo.selector === 'string' ? [campo.selector] : [...campo.selector];
       aEscribir.push({
         llave: dato, etiqueta: dato, frase: `el dato fiscal "${dato}"`,
         selector: campo.selector, valor, como: campo.como,
+        etapa: candidatos.some((c) => tras.has(c.trim())) ? 'despues' : 'antes',
       });
     }
 
@@ -598,13 +631,19 @@ export class AdaptadorDeclarativo implements AdaptadorPortal {
       }
 
       // ── 3. EL PRE-VUELO: TODOS LOS SELECTORES, JUNTOS ──────────────────
-      const revisar: SelectorAVerificar[] = aEscribir.map((e) => ({ que: e.frase, sel: e.selector }));
+      // A37-S42-05: DOS ETAPAS cuando el guion declara campos que solo aparecen
+      // tras buscar. La primera pre-vuela lo que existe en el formulario en
+      // blanco; la segunda, lo que aparece después (y el botón de emitir, que en
+      // esos portales también vive en el paso fiscal).
+      const antes = aEscribir.filter((e) => e.etapa !== 'despues');
+      const despues = aEscribir.filter((e) => e.etapa === 'despues');
+      const revisar: SelectorAVerificar[] = antes.map((e) => ({ que: e.frase, sel: e.selector }));
       if (this.g.buscar) revisar.push({ que: this.g.buscar.que, sel: this.g.buscar.boton });
       // El botón de emitir entra A PROPÓSITO aunque el ensayo no lo apriete: es
       // el único selector cuyo fallo no se puede probar de otra forma sin
       // emitir. Quedan fuera el del UUID y el del cuadro de error, que
       // legítimamente no existen todavía con el formulario en blanco.
-      revisar.push({ que: 'el botón de emitir', sel: this.g.botonEmitir });
+      if (despues.length === 0) revisar.push({ que: 'el botón de emitir', sel: this.g.botonEmitir });
 
       const vuelo = await preVuelo(pagina, revisar);
       if (vuelo.faltan.length > 0) {
@@ -617,8 +656,10 @@ export class AdaptadorDeclarativo implements AdaptadorPortal {
         });
       }
 
+      let emitirResuelto: string | undefined = vuelo.resueltos.get('el botón de emitir');
+
       // ── 4. LLENAR ──────────────────────────────────────────────────────
-      for (const e of aEscribir) {
+      for (const e of antes) {
         // El candidato que el pre-vuelo confirmó; si no hubo pre-vuelo (página
         // sin `existe`), el primero declarado — y si ese no está, `escribirCampo`
         // falla diciendo cuál era.
@@ -647,6 +688,26 @@ export class AdaptadorDeclarativo implements AdaptadorPortal {
         }
       }
 
+      // ── 5b. SEGUNDA ETAPA: lo que solo existe tras buscar ──────────────
+      if (despues.length > 0) {
+        const segunda = await preVuelo(pagina, [
+          ...despues.map((e) => ({ que: e.frase, sel: e.selector })),
+          { que: 'el botón de emitir', sel: this.g.botonEmitir },
+        ]);
+        if (segunda.faltan.length > 0) {
+          return this.fallo(modo, `${mensajeSelectoresIdos(this.portal, this.comercio, segunda.faltan)} Faltaron DESPUÉS de buscar el ticket. La sesión sigue viva: esto NO se arregla volviendo a entrar, lo corrige Likida rehaciendo la tabla del guion.`, {
+            portalCambio: true,
+            captura: await capturaSegura(pagina, this.comercio),
+          });
+        }
+        emitirResuelto = segunda.resueltos.get('el botón de emitir');
+        for (const e of despues) {
+          const selector = segunda.resueltos.get(e.frase) ?? primerCandidato(e.selector);
+          await escribirCampo(pagina, { selector, valor: e.valor, que: e.etiqueta, como: e.como }, contexto);
+          capturado[e.llave] = e.valor;
+        }
+      }
+
       // La captura se toma ANTES de mirar si el portal se quejó, para que el
       // rechazo venga con la pantalla que lo produjo: sin ella el mensaje del
       // portal se lee sin saber qué había en los campos.
@@ -668,16 +729,38 @@ export class AdaptadorDeclarativo implements AdaptadorPortal {
       // `seApreto` se marca ANTES del clic, no después: si `hacerClic` revienta
       // no se sabe si el formulario alcanzó a irse. Fallar cerrado aquí es
       // asumir que sí.
+      //
+      // A37-S42-06: EL PUNTO SIN RETORNO TAMBIÉN MIRA EL RELOJ. El margen de
+      // arranque por ticket no cubre lo que ya se gastó navegando, buscando y
+      // llenando; si a estas alturas ya no cabe la espera del UUID (y el XML,
+      // si el guion lo baja), apretar emitir sería arrancar una emisión que la
+      // función no alcanza a terminar: muerte AMBIGUA. Aquí todavía no se emitió
+      // nada, así que parar es LIMPIO (no es `emisionSinConfirmar`) y el ticket
+      // vuelve a la cola entero.
+      if (this.venceEn !== undefined) {
+        const necesario = this.esperaUuidMs + (this.g.xml ? (this.esperaXmlMs ?? ESPERA_XML_DEFECTO_MS) : 0) + RESPIRO_TICKET_MS;
+        if (this.ahora() + necesario >= this.venceEn) {
+          throw new FalloDePortal(
+            `${SIN_TURNO_ANTES_DE_EMITIR} Faltaban ~${Math.max(0, Math.round((this.venceEn - this.ahora()) / 1000))} s y emitir pide ~${Math.round(necesario / 1000)} s.`,
+          );
+        }
+      }
       seApreto = true;
-      const selEmitir = vuelo.resueltos.get('el botón de emitir') ?? primerCandidato(this.g.botonEmitir);
+      const selEmitir = emitirResuelto ?? primerCandidato(this.g.botonEmitir);
       await pagina.hacerClic(selEmitir);
 
       captura = (await capturaSegura(pagina, this.comercio)) ?? captura;
 
       const rechazoPost = await leerRechazo(pagina, this.g.error);
-      const { valor: uuid, aparecio } = this.g.uuid
+      const { valor: textoUuid, aparecio } = this.g.uuid
         ? await esperarTexto(pagina, this.g.uuid, this.espera())
         : { valor: null, aparecio: false };
+      // A37-S42-03: lo que el selector trae es TEXTO, no necesariamente un UUID
+      // (`[class*="folio-fiscal" i]` casa con una etiqueta «Folio fiscal»). Se
+      // extrae el UUID por su forma y, si no hay ninguno, se trata como emisión
+      // sin confirmar: nunca se guarda texto basura como folio.
+      const uuid = textoUuid ? uuidDelTexto(textoUuid) : null;
+      const textoSinUuid = Boolean(textoUuid) && !uuid;
 
       if (!uuid) {
         // NO se vuelve a intentar y se dice por qué. El CFDI puede existir: lo
@@ -685,6 +768,8 @@ export class AdaptadorDeclarativo implements AdaptadorPortal {
         // CFDI que después hay que cancelar.
         const porQue = !this.g.uuid
           ? 'el guion no declara dónde vive el UUID en este portal'
+          : textoSinUuid
+            ? `el contenedor del UUID (\`${this.g.uuid}\`) trajo un texto que NO tiene forma de UUID ("${(textoUuid ?? '').slice(0, 60)}")`
           : aparecio
             ? `el contenedor del UUID (\`${this.g.uuid}\`) apareció y siguió VACÍO tras ~${this.esperaUuidMs} ms`
             : `el contenedor del UUID (\`${this.g.uuid}\`) no apareció en ~${this.esperaUuidMs} ms`;

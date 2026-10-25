@@ -204,6 +204,8 @@ export async function leerEventosSeguridadSamsara(
       pagination?: { hasNextPage?: boolean; endCursor?: string | null };
     };
     try { json = JSON.parse(r.cuerpo); } catch { return { ok: false, motivo: 'Samsara contestó 200 con un cuerpo que no es JSON.' }; }
+    // A37-S37-09: `JSON.parse('null')` pasa el try; sin esta guarda `json.data` lanzaba un TypeError fuera de él.
+    if (typeof json !== 'object' || json === null || Array.isArray(json)) return { ok: false, motivo: 'Samsara contestó 200 con un cuerpo que no es un objeto JSON.' };
 
     for (const e of json.data ?? []) {
       // Sin id no hay idempotencia; sin fecha no hay reloj. Un evento así se

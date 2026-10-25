@@ -178,3 +178,29 @@ describe('importarUnidades', () => {
     expect(r.errores.filter((e) => /no se intentó/.test(e.motivo))).toHaveLength(50);
   });
 });
+
+describe('A37-S46-10: el número económico no distingue mayúsculas (igual que el mapeo GPS)', () => {
+  it('«t-042» y «T-042» en el mismo archivo son la misma unidad: la segunda se descarta con la fila', () => {
+    const r = interpretarFilasUnidades([
+      ENC,
+      ['t-042', 'AAA-111-1', '', '', '', '', '', ''],
+      ['T-042', 'BBB-222-2', '', '', '', '', '', ''],
+    ], HOY);
+    expect(r.filas.map((f) => f.numeroEconomico)).toEqual(['t-042']);
+    expect(r.descartadas).toEqual([{ fila: 3, motivo: 'número económico T-042 repetido en el archivo (ya viene en la fila 2)' }]);
+  });
+
+  it('«T-042» contra un «t-042» que ya está en la flota es duplicada: no crea otra unidad', async () => {
+    const filas = interpretarFilasUnidades([ENC, ['T-042', 'CCC-333-3', '', '', '', '', '', '']], HOY).filas;
+    let hizoUpsert = false;
+    resolver = (tabla, ops) => {
+      if (tabla !== 'unidad') return { data: null, error: null };
+      if (ops.some(([m]) => m === 'upsert')) { hizoUpsert = true; return { data: [], error: null }; }
+      return { data: [{ id: 'u-viejo', numero_economico: 't-042', placas: 'ZZZ-999-9' }], error: null, count: 1 };
+    };
+    const r = await importarUnidades('t-1', filas, { origen: 'panel' });
+    expect(hizoUpsert).toBe(false);
+    expect(r.creadas).toEqual([]);
+    expect(r.duplicadas).toEqual([{ fila: 2, id: 'u-viejo', numeroEconomico: 'T-042', motivo: 'ya estaba (mismo número económico); no se tocó lo que hay' }]);
+  });
+});

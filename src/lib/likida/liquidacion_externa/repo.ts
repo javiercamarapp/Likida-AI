@@ -13,7 +13,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { exigir } from '../pg';
-import { DatoInvalido } from '../errores';
+import { DatoInvalido, OperadorDeBaja } from '../errores';
 import { destinatarioWhatsApp } from '@/lib/meta/client';
 import { validarFormato, type FormatoFlota } from './formato_flota';
 import { PATRON_FOLIO } from '../orquestador/escalamiento';
@@ -213,13 +213,51 @@ export async function leerTelefonosFlota(tenantId: string): Promise<TelefonosFlo
   return f ? { copia: f.copia_telefonos ?? [], discrepancia: f.discrepancia_telefonos ?? [] } : null;
 }
 
-export async function guardarFormatoFlota(tenantId: string, c: ConfigFormatoFlota, por: string): Promise<void> {
-  const res = await acotada(supabaseAdmin().from('liquidacion_formato_flota').upsert({
-    tenant_id: tenantId, formato: c.formato, nombre_muestra: c.nombreMuestra,
+/**
+ * A37-S14-10: la versión de la fila (`actualizado_en`) que una pantalla lee ANTES de editar, para que el guardado detecte que otra
+ * persona cambió el formato o los teléfonos entretanto. `null` = no hay fila (o la base aún no trae la 0564). Un error de lectura LANZA.
+ */
+export async function leerVersionFormato(tenantId: string): Promise<string | null> {
+  const res = await acotada(supabaseAdmin().from('liquidacion_formato_flota')
+    .select('actualizado_en').eq('tenant_id', tenantId).maybeSingle(), 'liqext.formato_version');
+  if (res.error) {
+    if (tablaAusente(res.error)) return null;
+    throw new Error(`liquidacion_formato_flota leer versión: ${res.error.message}`);
+  }
+  const v = (res.data as { actualizado_en: string | null } | null)?.actualizado_en;
+  return typeof v === 'string' ? v : null;
+}
+
+const MENSAJE_CONFLICTO_FORMATO = 'Otra persona guardó el formato o los teléfonos mientras tú editabas, y tus cambios no se aplicaron para no pisar los suyos. Recarga la pantalla, revisa lo que quedó y vuelve a hacer tu cambio.';
+
+/**
+ * Guarda el formato (y los teléfonos que lo acompañan). `version` es lo que devolvió `leerVersionFormato` antes de editar:
+ * con ella el guardado es CONDICIONAL (la fila sigue en esa versión; `null` = seguía sin existir) y, si otra persona la cambió
+ * entre la lectura y el guardado, lanza `DatoInvalido` sin escribir. Sin `version` (`undefined`) se comporta como siempre.
+ */
+export async function guardarFormatoFlota(tenantId: string, c: ConfigFormatoFlota, por: string, version?: string | null): Promise<void> {
+  const fila = {
+    formato: c.formato, nombre_muestra: c.nombreMuestra,
     copia_telefonos: c.copiaTelefonos, discrepancia_telefonos: c.discrepanciaTelefonos,
     actualizado_en: new Date().toISOString(), actualizado_por: por.slice(0, 120),
-  }, { onConflict: 'tenant_id' }), 'liqext.formato_guardar');
-  if (res.error) throw new Error(`liquidacion_formato_flota guardar: ${res.error.message}`);
+  };
+  if (version === undefined) {
+    const res = await acotada(supabaseAdmin().from('liquidacion_formato_flota').upsert({ tenant_id: tenantId, ...fila }, { onConflict: 'tenant_id' }), 'liqext.formato_guardar');
+    if (res.error) throw new Error(`liquidacion_formato_flota guardar: ${res.error.message}`);
+    return;
+  }
+  if (version === null) {
+    const ins = await acotada(supabaseAdmin().from('liquidacion_formato_flota').insert({ tenant_id: tenantId, ...fila }), 'liqext.formato_crear');
+    if (ins.error) {
+      if (ins.error.code === '23505') throw new DatoInvalido(MENSAJE_CONFLICTO_FORMATO);
+      throw new Error(`liquidacion_formato_flota guardar: ${ins.error.message}`);
+    }
+    return;
+  }
+  const upd = await acotada(supabaseAdmin().from('liquidacion_formato_flota').update(fila)
+    .eq('tenant_id', tenantId).eq('actualizado_en', version).select('tenant_id'), 'liqext.formato_guardar');
+  if (upd.error) throw new Error(`liquidacion_formato_flota guardar: ${upd.error.message}`);
+  if ((upd.data ?? []).length === 0) throw new DatoInvalido(MENSAJE_CONFLICTO_FORMATO);
 }
 
 /**
@@ -333,7 +371,7 @@ export async function resolverOperadorDestino(
   const operador = resultados.flat().find((o) => o.id === comunes[0]);
   if (!operador) throw noEncontrado();
   if (!operador.activo) {
-    throw new DatoInvalido('Ese operador está dado de baja: no se le entrega una liquidación por WhatsApp. Reactívalo en Likida o corrige el operador.');
+    throw new OperadorDeBaja('Ese operador está dado de baja: no se le entrega una liquidación por WhatsApp. Reactívalo en Likida o corrige el operador.');
   }
   return operador;
 }
@@ -773,6 +811,9 @@ export interface ResultadoConfirmacion {
   yaConfirmadas: string[];
   /** No existen en esta flota o todavía no tienen acuse del chofer. */
   noAplican: string[];
+  /** A37-S11-02: el integrador leyó un acuse (`respuestaEn`) y el chofer ya lo cambió (o se le adelantó otra confirmación):
+   *  NO se confirmó; el acuse vigente vuelve a salir en la siguiente lectura. Vacío si no se mandó `respuestaEn`. */
+  cambiaron: string[];
 }
 
 /**
@@ -780,7 +821,9 @@ export interface ResultadoConfirmacion {
  * reintento deja las ya confirmadas en `yaConfirmadas` sin tocarlas. Un id de
  * OTRA flota o sin acuse cae en `noAplican` sin decir cuál de las dos cosas es.
  */
-export async function confirmarAcuses(tenantId: string, ids: string[], ahoraIso: string): Promise<ResultadoConfirmacion> {
+export async function confirmarAcuses(
+  tenantId: string, ids: string[], ahoraIso: string, leidos?: ReadonlyMap<string, string>,
+): Promise<ResultadoConfirmacion> {
   const leidas = await acotada(supabaseAdmin().from('liquidacion_externa')
     .select('id, acuse_en, acuse_confirmado_en').eq('tenant_id', tenantId).in('id', ids).order('id'), 'liqext.confirmar_leer');
   const filas = (exigir(leidas, 'liqext.confirmar_leer') ?? []) as Array<{ id: string; acuse_en: string | null; acuse_confirmado_en: string | null }>;
@@ -789,17 +832,31 @@ export async function confirmarAcuses(tenantId: string, ids: string[], ahoraIso:
   const yaConfirmadas = ids.filter((id) => porId.get(id)?.acuse_en && porId.get(id)?.acuse_confirmado_en);
   const porConfirmar = ids.filter((id) => porId.get(id)?.acuse_en && !porId.get(id)?.acuse_confirmado_en);
   const confirmadas: string[] = [];
-  if (porConfirmar.length > 0) {
+  const cambiaron: string[] = [];
+  // A37-S11-02: los ids con `respuestaEn` se confirman UNO A UNO y condicionados al acuse leído (`acuse_en = leído`): si el
+  // chofer cambió su respuesta (acuse_en nuevo, confirmado = null) entre la lectura del integrador y esta llamada, el UPDATE no
+  // coincide y el acuse nuevo NO se confirma sin haberse entregado. Los ids sueltos (forma anterior) siguen en lote.
+  const conLectura = porConfirmar.filter((id) => leidos?.has(id));
+  const sinLectura = porConfirmar.filter((id) => !leidos?.has(id));
+  for (const id of conLectura) {
+    const upd = await acotada(supabaseAdmin().from('liquidacion_externa')
+      .update({ acuse_confirmado_en: ahoraIso, updated_at: ahoraIso })
+      .eq('tenant_id', tenantId).eq('id', id).eq('acuse_en', leidos!.get(id)!).is('acuse_confirmado_en', null)
+      .select('id'), 'liqext.confirmar_leido');
+    if (upd.error) throw new Error(`liquidacion_externa confirmar acuses: ${upd.error.message}`);
+    if (((upd.data ?? []) as Array<{ id: string }>).length > 0) confirmadas.push(id); else cambiaron.push(id);
+  }
+  if (sinLectura.length > 0) {
     // Condicional a «sin confirmar»: dos confirmaciones simultáneas no cuentan dos veces.
     const upd = await acotada(supabaseAdmin().from('liquidacion_externa')
       .update({ acuse_confirmado_en: ahoraIso, updated_at: ahoraIso })
-      .eq('tenant_id', tenantId).in('id', porConfirmar).not('acuse_en', 'is', null).is('acuse_confirmado_en', null)
+      .eq('tenant_id', tenantId).in('id', sinLectura).not('acuse_en', 'is', null).is('acuse_confirmado_en', null)
       .select('id'), 'liqext.confirmar');
     if (upd.error) throw new Error(`liquidacion_externa confirmar acuses: ${upd.error.message}`);
     const ganadas = new Set(((upd.data ?? []) as Array<{ id: string }>).map((f) => f.id));
-    for (const id of porConfirmar) (ganadas.has(id) ? confirmadas : yaConfirmadas).push(id);
+    for (const id of sinLectura) (ganadas.has(id) ? confirmadas : yaConfirmadas).push(id);
   }
-  return { confirmadas, yaConfirmadas, noAplican };
+  return { confirmadas, yaConfirmadas, noAplican, cambiaron };
 }
 
 /** Las liquidaciones para exportar a SAP/CSV (mismos filtros que el listado),

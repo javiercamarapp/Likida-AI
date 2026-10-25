@@ -366,7 +366,15 @@ export async function generarLiquidacionPDF(
       // verde no puede sostener entera — el mismo requisito legal, junto al
       // número, no tres párrafos abajo donde nadie lo cruza). El de "no
       // deducible" repetiría lo que ya dice la sección de diferencias.
-      if ((f.tono === 'pendiente' || f.tono === 'condicionado') && f.pie) { text(f.pie, M + 22, y + 2, 7, font, MUTED); y -= 11; }
+      if ((f.tono === 'pendiente' || f.tono === 'condicionado') && f.pie) {
+        // A37-S48-05: el pie se ENVUELVE midiendo (el de «pago pendiente» mide
+        // ~930 pt y la hoja da ~525): en una sola línea se salía y se perdía la
+        // cita fiscal. La altura se reserva antes para no partir el bloque.
+        const lineasPie = envolverMedido(f.pie, cMonto - (M + 22), font, 7);
+        if (asegurar(lineasPie.length * 9 + 4)) { /* hoja nueva: el pie sigue a su renglón */ }
+        lineasPie.forEach((ln) => { text(ln, M + 22, y + 2, 7, font, MUTED); y -= 9; });
+        y -= 2;
+      }
     }
     y -= 3;
   }

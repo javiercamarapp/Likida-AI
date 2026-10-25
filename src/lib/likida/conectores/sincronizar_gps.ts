@@ -23,6 +23,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { descifrar } from './cofre';
+import { contextoCredencial } from './contexto_credencial';
 import { lectorDe, LECTORES_POSICION } from './posiciones';
 import { httpReal as crearHttpReal, type Http } from './tipos';
 import { llaveEconomico } from './tabla_propia/validar';
@@ -175,7 +176,7 @@ export async function sincronizarGpsDeFlota(
 
   let valores;
   try {
-    valores = descifrar(valoresCifrados);
+    valores = descifrar(valoresCifrados, contextoCredencial(tenantId, conectorId));
   } catch (e) {
     const detalle = e instanceof Error ? e.message : String(e);
     logger.error('gps.credencial_no_descifrada', { tenantId, proveedor: conectorId, err: detalle });

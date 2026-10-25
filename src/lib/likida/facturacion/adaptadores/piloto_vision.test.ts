@@ -91,6 +91,38 @@ function piloto(pagina: ReturnType<typeof paginaFalsa>, arrancoConSesion = false
 
 beforeEach(() => vi.clearAllMocks());
 
+// A37-S42-07 · con la sesión de la flota viva NO sale la captura ni el texto crudo.
+describe('piloto de visión · minimización con sesión activa', () => {
+  const INV_CUENTA: InventarioPagina = {
+    ...INVENTARIO,
+    texto: 'Mi cuenta: ana@flota.mx RFC XAXX010101000 CLABE 012345678901234567 Facturación electrónica',
+  };
+
+  it('con sesión: no se adjunta imagen y el texto sale enmascarado', async () => {
+    const p = paginaFalsa(INV_CUENTA);
+    decidirMock.mockResolvedValueOnce(accion({ tipo: 'terminado', motivo: 'listo' }));
+    await piloto(p, true).facturar(CAMPOS, 'ensayo');
+
+    const llamada = decidirMock.mock.calls[0][0] as { images?: string[]; messages: Array<{ content: string }> };
+    expect(llamada.images).toBeUndefined();
+    const usuario = llamada.messages[0].content;
+    expect(usuario).not.toContain('ana@flota.mx');
+    expect(usuario).not.toContain('XAXX010101000');
+    expect(usuario).not.toContain('012345678901234567');
+    expect(usuario).toContain('[correo]');
+    expect(usuario).toContain('NO se adjunta captura');
+  });
+
+  it('sin sesión (portal público): sigue adjuntando la captura como siempre', async () => {
+    const p = paginaFalsa(INVENTARIO);
+    decidirMock.mockResolvedValueOnce(accion({ tipo: 'terminado', motivo: 'listo' }));
+    await piloto(p, false).facturar(CAMPOS, 'ensayo');
+
+    const llamada = decidirMock.mock.calls[0][0] as { images?: string[] };
+    expect(llamada.images).toHaveLength(1);
+  });
+});
+
 describe('piloto de visión', () => {
   it('llena el formulario paso a paso y termina con la evidencia', async () => {
     const p = paginaFalsa();

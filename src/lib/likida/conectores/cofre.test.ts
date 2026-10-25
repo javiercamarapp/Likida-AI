@@ -120,10 +120,43 @@ describe('las pistas reconocen sin permitir usar', () => {
     expect(pistasDe(campos, { password: 'abc123' }).password).toBe('…');
   });
 
+  it('A37-S37-05: una dirección con llave en query o fragmento no la deja en la pista', () => {
+    const c = [campo('base_url', 'texto')];
+    expect(pistasDe(c, { base_url: 'https://api.proveedor.example/v1/vehiculos?key=SECRETO#frag' }).base_url).toBe('https://api.proveedor.example/v1/vehiculos');
+    expect(pistasDe(c, { base_url: 'https://api.proveedor.example/v1' }).base_url).toBe('https://api.proveedor.example/v1');
+  });
+
+  it('A37-S37-06: los últimos 4 solo salen si el secreto mide 16 o más (con 8 serían la mitad)', () => {
+    expect(pistasDe(campos, { password: '12345678' }).password).toBe('…');
+    expect(pistasDe(campos, { password: 'a'.repeat(15) }).password).toBe('…');
+    expect(pistasDe(campos, { password: `${'a'.repeat(12)}wxyz` }).password).toBe('…wxyz');
+  });
+
   it('un campo vacío o ausente no genera pista', () => {
     const p = pistasDe(campos, { host: '', usuario: 'likida' });
     expect(p.host).toBeUndefined();
     expect(p.password).toBeUndefined();
     expect(p.usuario).toBe('likida');
+  });
+});
+
+describe('A37-TRANSVERSAL-09: v2 ata la credencial a su flota y conector (AAD)', () => {
+  const v = { usuario: 'u-sintetico', clave: 'clave-sintetica-larga' };
+  it('con contexto produce v2 y solo abre con el MISMO contexto', () => {
+    const g = cifrar(v, 'flota-a:tms_api_lectura');
+    expect(g).toMatch(/^v2\./);
+    expect(descifrar(g, 'flota-a:tms_api_lectura')).toEqual(v);
+  });
+  it('copiar el texto cifrado a la fila de OTRA flota (o de otro conector) no abre', () => {
+    const g = cifrar(v, 'flota-a:tms_api_lectura');
+    expect(() => descifrar(g, 'flota-b:tms_api_lectura')).toThrow();
+    expect(() => descifrar(g, 'flota-a:otro_conector')).toThrow();
+    expect(() => descifrar(g)).toThrow(/contexto/);
+  });
+  it('lo v1 ya guardado se sigue leyendo (con o sin contexto) y sin contexto se sigue escribiendo v1', () => {
+    const viejo = cifrar(v);
+    expect(viejo).toMatch(/^v1\./);
+    expect(descifrar(viejo)).toEqual(v);
+    expect(descifrar(viejo, 'flota-a:tms_api_lectura')).toEqual(v);
   });
 });

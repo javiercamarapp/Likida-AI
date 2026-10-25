@@ -91,6 +91,52 @@ describe('sentry — opcional y silencioso', () => {
     expect(limpio.extra).toBeUndefined();
   });
 
+  // A37-S61-07: el saneador solo limpiaba `extra`, `request`, `spans` y
+  // `breadcrumbs[].data`; un evento que llega por una integración automática del
+  // SDK (unhandledRejection…) sin pasar por `reportarExcepcion` salía con el
+  // texto del error crudo.
+  it('A37-S61-07: redacta message, exception.values[].value, breadcrumbs[].message y los valores de tags', () => {
+    const limpio = sanitizarEventoSentry({
+      message: 'falló el alta de 5512345678',
+      exception: { values: [{ type: 'Error', value: 'duplicate key: Key (telefono)=(5219991234567) y rfc XAXX010101000', stacktrace: { frames: [] } }] },
+      breadcrumbs: [{ category: 'console', message: 'cliente 5512345678 reintentó', data: { a: 1 } }],
+      tags: { runtime: 'node', contacto: '5512345678', rfc: 'XAXX010101000' },
+    }) as {
+      message: string;
+      exception: { values: Array<{ type: string; value: string; stacktrace: unknown }> };
+      breadcrumbs: Array<{ message: string; data?: unknown }>;
+      tags: Record<string, string>;
+    };
+    const todo = JSON.stringify(limpio);
+    expect(todo).not.toContain('5512345678');
+    expect(todo).not.toContain('5219991234567');
+    expect(todo).not.toContain('XAXX010101000');
+    // Lo útil para depurar se conserva: tipo, forma del mensaje, claves de tags y su valor técnico.
+    expect(limpio.exception.values[0].type).toBe('Error');
+    expect(limpio.exception.values[0].value).toContain('duplicate key');
+    expect(limpio.tags.runtime).toBe('node');
+    expect(limpio.breadcrumbs[0].data).toBeUndefined();
+  });
+
+  it('A37-S61-07: message como objeto {formatted} y exception sin valores no revientan', () => {
+    const limpio = sanitizarEventoSentry({ message: { formatted: 'hola 5512345678', message: 'hola %s' }, exception: {} }) as { message: { formatted: string; message: string } };
+    expect(limpio.message.formatted).not.toContain('5512345678');
+  });
+
+  it('A37-S61-07: contexts distintos de los técnicos se descartan; trace se conserva sin data', () => {
+    const limpio = sanitizarEventoSentry({
+      contexts: {
+        trace: { trace_id: 'abc', data: { url: 'https://x/?token=1' } },
+        runtime: { name: 'node', version: '22' },
+        cliente: { nombre: 'Juan Pérez', telefono: '5512345678' },
+      },
+    }) as { contexts: Record<string, unknown> };
+    expect(limpio.contexts.cliente).toBeUndefined();
+    expect(limpio.contexts.runtime).toEqual({ name: 'node', version: '22' });
+    expect((limpio.contexts.trace as Record<string, unknown>).data).toBeUndefined();
+    expect((limpio.contexts.trace as Record<string, unknown>).trace_id).toBe('abc');
+  });
+
   it('LLAVES_EXTRA_SEGURAS no incluye llaves de texto libre (err/error/message/motivo)', () => {
     for (const libre of ['err', 'error', 'message', 'motivo']) {
       expect(LLAVES_EXTRA_SEGURAS.has(libre)).toBe(false);

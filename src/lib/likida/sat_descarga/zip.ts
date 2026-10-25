@@ -72,7 +72,9 @@ function buscarEocd(buf: Buffer): number | null {
 export function leerZip(
   datos: Buffer | Uint8Array,
   filtro: (nombre: string) => boolean = (n) => n.toLowerCase().endsWith('.xml'),
+  opciones: { maxDesinflado?: number } = {},
 ): LecturaZip {
+  const maxDesinflado = opciones.maxDesinflado ?? MAX_DESINFLADO;
   const buf = Buffer.isBuffer(datos) ? datos : Buffer.from(datos);
   const entradas: EntradaZip[] = [];
   let ilegibles = 0;
@@ -102,7 +104,7 @@ export function leerZip(
 
     if (!filtro(nombre)) continue;
 
-    if (entradas.length >= MAX_ENTRADAS || desinflado + tamCrudo > MAX_DESINFLADO) {
+    if (entradas.length >= MAX_ENTRADAS || desinflado + tamCrudo > maxDesinflado) {
       truncado = true;
       break;
     }
@@ -126,11 +128,18 @@ export function leerZip(
       // vez de devolver basura que parecería un CFDI.
       let contenido: Buffer;
       if (metodo === 0) contenido = Buffer.from(crudo);
-      else if (metodo === 8) contenido = inflateRawSync(crudo, { maxOutputLength: MAX_DESINFLADO });
+      // A37-L-08: el tamaño declarado en el encabezado (`tamCrudo`) lo escribe
+      // quien arma el paquete y puede mentir (0 declarado, GB reales). El tope
+      // por entrada es lo que QUEDA del presupuesto, medido sobre lo
+      // realmente desinflado.
+      else if (metodo === 8) contenido = inflateRawSync(crudo, { maxOutputLength: Math.max(1, maxDesinflado - desinflado) });
       else { ilegibles++; continue; }
+      if (desinflado + contenido.length > maxDesinflado) { truncado = true; break; }
       desinflado += contenido.length;
       entradas.push({ nombre, contenido: contenido.toString('utf8') });
-    } catch {
+    } catch (e) {
+      // Rebasar el presupuesto real es un corte DECLARADO, no un XML ilegible.
+      if ((e as { code?: string } | null)?.code === 'ERR_BUFFER_TOO_LARGE') { truncado = true; break; }
       ilegibles++;
     }
   }

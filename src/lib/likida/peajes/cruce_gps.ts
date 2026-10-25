@@ -83,9 +83,14 @@ export function evaluarCruceGps(cruceMs: number, caseta: CasetaGeo, muestrasCrud
   const distMuestra = muestras.map((m) => haversineM(m, caseta));
   const minMuestra = Math.min(...distMuestra);
 
-  // 1) Una posición dentro del radio confirma.
-  if (minMuestra <= radio) {
-    return { veredicto: 'confirma', distanciaM: redondear1(minMuestra), via: 'muestra', muestras: muestras.length };
+  // 1) Una posición dentro del radio, EN el tiempo del cobro (± holgura del reloj, A37-A2-22), confirma.
+  //    Una muestra a 18 min del cobro no lo confirma (el tramo ya exigía ±5 min); sigue contando como distancia medida.
+  let minCerca = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < muestras.length; i++) {
+    if (Math.abs(muestras[i].t - cruceMs) <= HOLGURA_RELOJ_MIN * MIN && distMuestra[i] < minCerca) minCerca = distMuestra[i];
+  }
+  if (minCerca <= radio) {
+    return { veredicto: 'confirma', distanciaM: redondear1(minCerca), via: 'muestra', muestras: muestras.length };
   }
 
   // 2) Un tramo entre dos posiciones cercanas en el tiempo que pase por el radio.

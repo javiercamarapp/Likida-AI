@@ -57,11 +57,46 @@ export const VENTANA_EVENTO_MS = 48 * 3_600_000;
  *  y lo NUEVO queda fuera sin que nadie lo declare. */
 const PISO_DIAS = 366;
 
-/** Tope de filas por consulta. PostgREST recorta a 1,000 EN SILENCIO: pedir
- *  menos que eso deja el corte del lado de este archivo, donde se puede leer.
- *  Si una flota tiene más de 400 candidatos vivos de una regla, el problema no
- *  es el aviso — es la regla, y el vigilante lo dice en el mensaje. */
+/** Tope de filas por consulta de los lectores que miran EVENTOS acotados por
+ *  ventana. PostgREST recorta a 1,000 EN SILENCIO: pedir menos que eso deja el
+ *  corte del lado de este archivo, donde se puede leer.
+ *  OJO (A37-S56-04): el vigilante NO avisa si se rebasa — no existe señal de
+ *  truncamiento. Por eso los lectores cuyo resultado se rompe con un recorte
+ *  (conteo por chofer, viajes sin comprobante, suma del costo de IA) NO usan
+ *  este tope: leen COMPLETO con `leerPaginado`. */
 export const TOPE_CANDIDATOS = 400;
+
+const PAGINA_LECTURA = 1_000;
+/** 30 páginas = 30,000 filas; más que eso LANZA (fail-closed) en vez de medir de menos. */
+const MAX_PAGINAS_LECTURA = 30;
+/** Ids por tanda en un `.in()`: 50 uuid ≈ 1.9 KB de URL (A37-S56-03). */
+const IDS_POR_TANDA = 50;
+
+type RespLectura<T> = { data: T[] | null; error: { message: string } | null };
+
+/**
+ * Lee TODAS las filas de una consulta ordenada, por páginas de 1,000 con
+ * `range`. La consulta debe traer un orden TOTAL (termina en `id`). Una fila
+ * repetida por un desplazamiento entre páginas se descarta por `id` si la fila
+ * lo trae; superar `MAX_PAGINAS_LECTURA` LANZA.
+ */
+async function leerPaginado<T extends { id?: string }>(
+  construir: (desde: number, hasta: number) => PromiseLike<RespLectura<T>>,
+  etiqueta: string,
+): Promise<T[]> {
+  const out: T[] = [];
+  const vistos = new Set<string>();
+  for (let pagina = 0; pagina < MAX_PAGINAS_LECTURA; pagina++) {
+    const desde = pagina * PAGINA_LECTURA;
+    const lote = exigirLectura(await acotada(construir(desde, desde + PAGINA_LECTURA - 1), `reglas.${etiqueta}`), etiqueta);
+    for (const f of lote) {
+      if (f.id !== undefined) { if (vistos.has(f.id)) continue; vistos.add(f.id); }
+      out.push(f);
+    }
+    if (lote.length < PAGINA_LECTURA) return out;
+  }
+  throw new Error(`reglas.${etiqueta}: más de ${MAX_PAGINAS_LECTURA * PAGINA_LECTURA} filas; lectura incompleta`);
+}
 
 function iso(fecha: Date): string {
   return fecha.toISOString();
@@ -184,15 +219,21 @@ async function gastosSobreTope(
 async function choferConViajes(
   tenantId: string, p: ParamsDe<'chofer_con_viajes_sin_liquidar'>,
 ): Promise<Disparo[]> {
-  const filas = exigirLectura(await acotada(supabaseAdmin()
+  // A37-S56-04: se leen TODOS los viajes sin liquidar. Con un tope de 400 por
+  // `created_at` ascendente, el operador cuyos viajes son todos recientes no
+  // entraba a la lectura y su regla jamás disparaba.
+  const filas = await leerPaginado<{
+    id: string; folio: string | null; operador_id: string; operador: { nombre?: string } | null;
+  }>((desde, hasta) => supabaseAdmin()
     .from('viaje')
     .select('id, folio, operador_id, operador:operador_id(nombre)')
     .eq('tenant_id', tenantId)
     .in('estatus', ['abierto', 'en_cuadre'])
     .order('created_at', { ascending: true })
-    .limit(TOPE_CANDIDATOS), 'reglas.viajes_sin_liquidar'), 'viajes_sin_liquidar') as Array<{
+    .order('id', { ascending: true })
+    .range(desde, hasta) as unknown as PromiseLike<RespLectura<{
       id: string; folio: string | null; operador_id: string; operador: { nombre?: string } | null;
-    }>;
+    }>>, 'viajes_sin_liquidar');
 
   const porOperador = new Map<string, { nombre: string; folios: string[]; idsAscenso: string[] }>();
   for (const v of filas) {
@@ -397,6 +438,42 @@ async function incidenciaAbierta(
   }));
 }
 
+/**
+ * Cuáles de estos viajes tienen AL MENOS un gasto. A37-S56-03: antes una sola
+ * consulta con hasta 400 uuid en la URL y `.limit(1_000)` sin orden; con ~10
+ * gastos por viaje, PostgREST cortaba y los viajes cuyos gastos quedaron fuera
+ * salían como «CERO comprobantes», sellados para siempre. Ahora va por tandas
+ * de `IDS_POR_TANDA`; si una tanda vuelve LLENA (pudo cortarse), se parte a la
+ * mitad hasta que cada mitad cabe, o queda un solo viaje (una fila basta).
+ */
+async function viajesConGasto(tenantId: string, ids: string[]): Promise<Set<string>> {
+  const tienen = new Set<string>();
+  const pendientes: string[][] = [];
+  for (let i = 0; i < ids.length; i += IDS_POR_TANDA) pendientes.push(ids.slice(i, i + IDS_POR_TANDA));
+  while (pendientes.length > 0) {
+    const tanda = pendientes.pop() as string[];
+    const filas = exigirLectura(await acotada(supabaseAdmin()
+      .from('gasto')
+      .select('id, viaje_id')
+      .eq('tenant_id', tenantId)
+      .in('viaje_id', tanda)
+      .order('id', { ascending: true })
+      .limit(PAGINA_LECTURA), 'reglas.viajes_con_gasto'), 'viajes_con_gasto') as Array<{ id: string; viaje_id: string }>;
+    for (const g of filas) tienen.add(g.viaje_id);
+    // Llena = pudo cortarse: los viajes de la tanda que aún no se vieron podrían
+    // tener gastos fuera de la lectura. Se reparten en mitades.
+    if (filas.length >= PAGINA_LECTURA) {
+      const faltan = tanda.filter((id) => !tienen.has(id));
+      if (faltan.length > 0) {
+        const mitad = Math.ceil(faltan.length / 2);
+        pendientes.push(faltan.slice(0, mitad));
+        if (faltan.length > mitad) pendientes.push(faltan.slice(mitad));
+      }
+    }
+  }
+  return tienen;
+}
+
 // ── 9. Viaje abierto y viejo, sin un solo comprobante ──────────────────────
 
 async function viajeSinComprobantes(
@@ -405,7 +482,13 @@ async function viajeSinComprobantes(
   const hoy = hoyMx(ahora);
   const corte = diaRelativo(hoy, -p.dias);
   const piso = diaRelativo(hoy, -90);
-  const filas = exigirLectura(await acotada(supabaseAdmin()
+  type FilaViaje = {
+    id: string; folio: string | null; fecha_inicio: string; anticipo: number | string;
+    operador: { nombre?: string } | null;
+  };
+  // A37-S56-04: TODOS los candidatos, no los 400 más viejos: los ya avisados
+  // (sellados) seguían ocupando plaza y los casos nuevos no llegaban al aviso.
+  const filas = await leerPaginado<FilaViaje>((desde, hasta) => supabaseAdmin()
     .from('viaje')
     .select('id, folio, fecha_inicio, anticipo, operador:operador_id(nombre)')
     .eq('tenant_id', tenantId)
@@ -413,21 +496,12 @@ async function viajeSinComprobantes(
     .lte('fecha_inicio', corte)
     .gte('fecha_inicio', piso)
     .order('fecha_inicio', { ascending: true })
-    .limit(TOPE_CANDIDATOS), 'reglas.viaje_sin_comprobantes'), 'viaje_sin_comprobantes') as Array<{
-      id: string; folio: string | null; fecha_inicio: string; anticipo: number | string;
-      operador: { nombre?: string } | null;
-    }>;
+    .order('id', { ascending: true })
+    .range(desde, hasta) as unknown as PromiseLike<RespLectura<FilaViaje>>, 'viaje_sin_comprobantes');
   if (filas.length === 0) return [];
 
-  // Qué viajes SÍ tienen comprobante. Una consulta por corrida, no una por
-  // viaje — y el `in` va acotado por el tope de arriba.
-  const conGasto = exigirLectura(await acotada(supabaseAdmin()
-    .from('gasto')
-    .select('viaje_id')
-    .eq('tenant_id', tenantId)
-    .in('viaje_id', filas.map((v) => v.id))
-    .limit(1_000), 'reglas.viajes_con_gasto'), 'viajes_con_gasto') as Array<{ viaje_id: string }>;
-  const tienen = new Set(conGasto.map((g) => g.viaje_id));
+  // Qué viajes SÍ tienen comprobante (A37-S56-03): por tandas de ids chicas.
+  const tienen = await viajesConGasto(tenantId, filas.map((v) => v.id));
 
   return filas.filter((v) => !tienen.has(v.id)).map((v) => {
     const dias = Math.round((Date.parse(`${hoy}T12:00:00Z`) - Date.parse(`${String(v.fecha_inicio).slice(0, 10)}T12:00:00Z`)) / 86_400_000);
@@ -449,12 +523,17 @@ async function costoIaDelDia(
   // el techo y la medición partieran el día en horas distintas, el aviso
   // saldría o no según el huso, que es la peor clase de intermitencia.
   const inicio = new Date(`${dia}T00:00:00-06:00`).toISOString();
-  const filas = exigirLectura(await acotada(supabaseAdmin()
+  // A37-S56-04: se suman TODAS las llamadas del día; con `.limit(1_000)` el
+  // total se subestimaba en cuanto había más de mil llamadas.
+  type FilaCosto = { id: string; costo_usd: number | string | null; fase: string };
+  const filas = await leerPaginado<FilaCosto>((desde, hasta) => supabaseAdmin()
     .from('llm_costo')
-    .select('costo_usd, fase')
+    .select('id, costo_usd, fase')
     .eq('tenant_id', tenantId)
     .gte('created_at', inicio)
-    .limit(1_000), 'reglas.costo_ia'), 'costo_ia') as Array<{ costo_usd: number | string | null; fase: string }>;
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
+    .range(desde, hasta) as unknown as PromiseLike<RespLectura<FilaCosto>>, 'costo_ia');
 
   const total = filas.reduce((s, f) => s + Number(f.costo_usd ?? 0), 0);
   if (!(total > p.usd)) return [];

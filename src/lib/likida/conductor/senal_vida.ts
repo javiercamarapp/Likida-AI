@@ -260,6 +260,11 @@ export interface PuertosSenalVida {
   reclamarNivel(ep: EpisodioFila, nivel: 1 | 2 | 3, ahora: Date): Promise<'ganado' | 'perdido' | 'fallo'>;
   cerrar(ep: EpisodioFila, motivo: 'senal_recuperada' | 'viaje_cerrado', ahora: Date): Promise<void>;
   anotarFallo(ep: EpisodioFila, texto: string): Promise<void>;
+  /**
+   * A37-S36-05: suelta el nivel 3 (`nivel_enviado` 3 → 2, sin `escalado_en`) cuando NADIE pudo recibir el aviso al jefe por falta de
+   * destinatario, para que la pasada siguiente reintente en cuanto haya a quién avisar. Opcional: sin él el nivel queda tomado (lo de antes).
+   */
+  liberarNivel?(ep: EpisodioFila, nivel: 3): Promise<void>;
   enviar(telefono: string, m: MensajeSaliente, contexto: string, tenantId: string, ahora: Date): Promise<ResultadoEnvioConFallback>;
   destinatarios(tenantId: string, terminalId: string | null, nivel: 1 | 2): Promise<Destino[]>;
   ubicacion(v: ViajeContexto, hs: readonly HitoFila[], ahora: Date): Promise<string>;
@@ -397,6 +402,8 @@ export async function barridoSenalVida(p: PuertosSenalVida, ahora: Date = new Da
           r.sinDestinatario++;
           r.fallos.push(`${v.folio ?? v.id}: no hay a quién escalar la señal de vida`);
           await p.anotarFallo(ep!, 'sin_destinatario');
+          // A37-S36-05: sin destinatario NO es «escalado»: se suelta el nivel (el tablero no lo muestra como avisado y se reintenta).
+          if (p.liberarNivel) await p.liberarNivel(ep!, 3);
           continue;
         }
         // Lo que se le dice al jefe es lo que PASÓ: si un aviso al chofer fue rechazado, «se le avisó dos veces» sería falso.
@@ -408,9 +415,13 @@ export async function barridoSenalVida(p: PuertosSenalVida, ahora: Date = new Da
           if (envio.ok) entregados++;
           else { ultimoError = envio.mensaje; if (envio.reintentable || envio.encolado) reintentables++; }
         }
-        if (entregados > 0) { r.escalaciones++; rechazosSeguidos = 0; }
+        // A37-O7-07: una pasada anterior sin destinatario dejó `sin_destinatario`; si ahora el aviso salió (o quedó en la cola), esa marca
+        // ya es falsa y el tablero diría «NO llegó». La marca de avisos fallidos al chofer NO se toca.
+        const limpiaMarcaVieja = async () => { if (ep!.ultimoError === 'sin_destinatario') await p.anotarFallo(ep!, ''); };
+        if (entregados > 0) { await limpiaMarcaVieja(); r.escalaciones++; rechazosSeguidos = 0; }
         else if (reintentables === destinos.length) {
           // Ya está en `wa_outbox`: el nivel quedó reclamado y no se reenvía.
+          await limpiaMarcaVieja();
           r.rechazosReintentables++; rechazosSeguidos++;
           r.fallos.push(`escalación señal de vida ${v.folio ?? v.id}: ${ultimoError} (queda en la cola de WhatsApp; no se reenvía)`);
         } else {

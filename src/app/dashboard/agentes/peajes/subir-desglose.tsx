@@ -14,7 +14,8 @@ export type ResumenImportado = {
   sinContraparte: number;
   avisos: string[];
 };
-export type EstadoImportar = { error?: string; resumen?: ResumenImportado } | null;
+/** `aviso`: el archivo se recibió pero todavía no se procesa (queda en cola para el siguiente ciclo). */
+export type EstadoImportar = { error?: string; aviso?: string; resumen?: ResumenImportado } | null;
 export type AccionImportar = (prev: EstadoImportar, fd: FormData) => Promise<EstadoImportar>;
 
 /**
@@ -29,7 +30,7 @@ export function SubirDesgloseProveedor({ importar }: { importar: AccionImportar 
   const router = useRouter();
 
   useEffect(() => {
-    if (estado?.resumen) router.refresh();
+    if (estado?.resumen || estado?.aviso) router.refresh();
   }, [estado, router]);
 
   const r = estado?.resumen;
@@ -61,6 +62,7 @@ export function SubirDesgloseProveedor({ importar }: { importar: AccionImportar 
         El periodo decide qué cobro es extemporáneo: si no lo declaras, se toma del nombre del archivo («01 A 10 DE SEPT»); si tampoco lo dice, esa revisión no se aplica y se avisa.
       </p>
       {estado?.error && <p className="text-[12px] mt-2" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
+      {estado?.aviso && <p className="text-[12px] mt-2" role="status" style={{ color: 'var(--muted)' }}>{estado.aviso}</p>}
       {r && (
         <div className="text-[12px] mt-2 space-y-0.5" style={{ color: 'var(--muted)' }}>
           <p>

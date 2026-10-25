@@ -61,6 +61,12 @@ describe('API: toda ruta está clasificada', () => {
     expect(leer(join('..', '..', 'lib', 'auth', 'tenant-api.ts'))).toMatch(/apiDenegadaPorPerfil\(/);
   });
 
+  it('A37-TRANSVERSAL-05: el webhook del buzón de facturas de proveedor (módulo en stand-by) aplica el perfil antes de consumir el correo', () => {
+    const f = leer(join('correo', 'entrante', 'route.ts'));
+    expect(f).toMatch(/perfilRestringido\(flota\.id\)/);
+    expect(f.indexOf('perfilRestringido(flota.id)')).toBeLessThan(f.indexOf("rpc('reclamar_correo'"));
+  });
+
   it('el MCP aplica el perfil en el endpoint, en el despacho y en la autorización', () => {
     expect(leer(join('mcp', 'route.ts'))).toMatch(/perfilRestringido\(/);
     expect(leer(join('..', '..', 'lib', 'mcp', 'herramientas.ts'))).toMatch(/perfilRestringido\(/);

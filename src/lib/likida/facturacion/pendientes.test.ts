@@ -111,6 +111,19 @@ describe('armar: urlTicket se filtra contra el dominio del comercio ya identific
     expect(t.urlTicket).toBeNull();
   });
 
+  it('A37-S43-10: el log del dominio ajeno trae SOLO el hostname, nunca la URL cruda (lleva códigos de facturación en la ruta)', async () => {
+    const { logger } = await import('@/lib/logger');
+    armar({
+      ...base,
+      rfc_emisor: 'CCO8605231N4',
+      ocr_extra: { urlFacturacion: 'https://cuenta-oxxo-segura.phishing-example.net/login?codigo=SECRETO123' },
+    }, '2026-08-04');
+    const llamada = (logger.warn as unknown as { mock: { calls: Array<[string, Record<string, unknown>]> } }).mock.calls
+      .find(([evento]) => evento === 'facturacion.liga_ticket_dominio_ajeno');
+    expect(llamada?.[1]).toMatchObject({ hostnameTicket: 'cuenta-oxxo-segura.phishing-example.net' });
+    expect(JSON.stringify(llamada?.[1])).not.toContain('SECRETO123');
+  });
+
   it('(b) MISMO dominio o subdominio del comercio: se respeta, el caso legítimo sigue funcionando', () => {
     const t = armar({
       ...base,
@@ -220,5 +233,13 @@ describe('getPorFacturar está acotado en periodo y concepto (ESC-12)', () => {
     expect(DIAS_VENTANA_POR_FACTURAR).toBeGreaterThanOrEqual(35);
     expect(desdeVentana('2026-03-01', 45)).toBe('2026-01-15');
     expect(desdeVentana('2026-01-10', 45)).toBe('2025-11-26');
+  });
+});
+
+describe('A37-S47-03: sin comercio identificado, la liga leída de una foto NO llega al botón «Abrir el portal»', () => {
+  it('un QR con dominio desconocido y ticket sin RFC ni emisor reconocible: urlTicket queda null', () => {
+    const t = armar({ ...base, rfc_emisor: null, ocr_extra: { urlFacturacion: 'https://portal-falso.example/facturar' } }, '2026-08-04');
+    expect(t.comercio).toBeNull();
+    expect(t.urlTicket).toBeNull();
   });
 });

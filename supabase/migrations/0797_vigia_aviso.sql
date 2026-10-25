@@ -142,6 +142,9 @@ comment on column public.vigia_aviso.reclamo_expira_en is '0797: hasta cuándo e
 comment on column public.vigia_aviso.intentos is '0797: cuántas veces se reclamó para enviar.';
 
 -- Transiciones válidas del estado + lo que NUNCA cambia. Un aviso enviado, descartado o reemplazado es historia: no se toca.
+-- NOTA 0892 (A37-A4-07): el cuerpo de abajo incluye el único añadido de la 0892 (la redacción por ARCO o retención, tras la variable
+-- likida.vigia_redactar). Es el MISMO cuerpo que redefine la 0892 en las bases que ya tenían la 0797: así reaplicar el rango 0770-0809
+-- (supabase/tests/0809_migraciones_reaplicables.sh) no borra esa guarda.
 create or replace function public.vigia_aviso_transicion()
 returns trigger
 language plpgsql
@@ -155,6 +158,11 @@ begin
   if old.estado in ('enviado', 'descartado', 'reemplazado') then
     -- única excepción: borrar al cliente suelta el vínculo (ON DELETE SET NULL de la llave foránea) sin tocar el contenido
     if new.cliente_id is null and old.cliente_id is not null and to_jsonb(new) - 'cliente_id' = to_jsonb(old) - 'cliente_id' then
+      return new;
+    end if;
+    -- 0892: redacción por ARCO o retención. Solo cambia `texto` (y la marca de actualización); nada más.
+    if coalesce(current_setting('likida.vigia_redactar', true), '') = '1'
+       and to_jsonb(new) - 'texto' - 'actualizado_en' = to_jsonb(old) - 'texto' - 'actualizado_en' then
       return new;
     end if;
     raise exception 'vigia_aviso: un aviso % es historia y no se edita', old.estado using errcode = '23514';

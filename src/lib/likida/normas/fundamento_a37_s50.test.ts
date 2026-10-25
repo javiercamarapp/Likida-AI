@@ -35,3 +35,35 @@ describe('A37-S50-01 — los números sueltos del mensaje sobreviven a la guardi
     expect(r.reply).not.toContain(nul);
   });
 });
+
+// A37-S50-02: frases de uso corriente en `citas` no son citas.
+describe('A37-S50-02 — «Carta Porte» y otras frases sin número no se borran', () => {
+  it('«el complemento Carta Porte» sobrevive sin consultar_normas', () => {
+    const r = guardiaFundamento('Te falta el complemento Carta Porte en este viaje.', []);
+    expect(r.forzado).toBe(false);
+    expect(r.reply).toBe('Te falta el complemento Carta Porte en este viaje.');
+  });
+  it('«salario base de cotización» y «Red Nacional de Autopistas de Cuota» tampoco', () => {
+    const t = 'Tu salario base de cotización y la Red Nacional de Autopistas de Cuota cambian el cálculo.';
+    const r = guardiaFundamento(t, []);
+    expect(r.reply).toBe(t);
+  });
+  it('una cita numérica inventada SIGUE quitándose', () => {
+    const r = guardiaFundamento('Según el artículo 27 de la LISR es deducible.', []);
+    expect(r.forzado).toBe(true);
+  });
+});
+
+// A37-S50-03: números económicos y folios no son citas desnudas.
+describe('A37-S50-03 — «unidad 21-B» y «caja 45-D» no se toman por cita desconocida', () => {
+  it('conserva el identificador de la unidad y de la caja', () => {
+    const t = 'La unidad 21-B y la caja 45-D salen mañana; folio 12-C pendiente.';
+    const r = guardiaFundamento(t, []);
+    expect(r.forzado).toBe(false);
+    expect(r.reply).toBe(t);
+  });
+  it('la cita desnuda con contexto jurídico se sigue detectando', () => {
+    const r = guardiaFundamento('Es deducible conforme al 27-III.', []);
+    expect(r.forzado).toBe(true);
+  });
+});

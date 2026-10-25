@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { desglosarPrecio, desgloseCuadra, etiquetaIva, FALTA_CRITERIO_IVA, TASA_IVA } from './iva';
+import { desglosarPrecio, desgloseCuadra, etiquetaIva, FALTA_CRITERIO_IVA, TASA_IVA, desgloseDeFacturaStripe } from './iva';
 import { DatoInvalido } from '@/lib/likida/errores';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -167,5 +167,47 @@ describe('etiquetaIva — lo que se enseña en pantalla junto al precio', () => 
   it('false → "+ IVA"', () => expect(etiquetaIva(false)).toBe('+ IVA'));
   it('null → "IVA sin declarar" (nunca se calla que falta declarar)', () => {
     expect(etiquetaIva(null)).toBe('IVA sin declarar');
+  });
+});
+
+describe('desgloseDeFacturaStripe — solo lo que Stripe itemizó y cuadra al centavo (A37-S61-03)', () => {
+  const ok = { currency: 'mxn', total: 1160000, amount_paid: 1160000, tax: 160000, subtotal: 1000000, total_excluding_tax: 1000000 };
+
+  it('IVA itemizado por Stripe: base y IVA en pesos exactos', () => {
+    expect(desgloseDeFacturaStripe(ok)).toEqual({ subtotal: 10000, iva: 1600 });
+  });
+
+  it('sin `tax` (precio con IVA incluido que Stripe no itemizó) NO se adivina: null', () => {
+    expect(desgloseDeFacturaStripe({ ...ok, tax: null })).toBeNull();
+    expect(desgloseDeFacturaStripe({ ...ok, tax: 0 })).toBeNull();
+    expect(desgloseDeFacturaStripe({ ...ok, tax: undefined })).toBeNull();
+  });
+
+  it('un impuesto que no es el 16% de la base (retención, otra tasa) no se toma por IVA', () => {
+    expect(desgloseDeFacturaStripe({ ...ok, total: 1100000, amount_paid: 1100000, tax: 100000 })).toBeNull();
+  });
+
+  it('si base + tax no es el total (descuento no reflejado, redondeo raro) o el cobro es parcial: null', () => {
+    expect(desgloseDeFacturaStripe({ ...ok, total_excluding_tax: undefined, subtotal: 1200000 })).toBeNull();
+    expect(desgloseDeFacturaStripe({ ...ok, amount_paid: 500000 })).toBeNull();
+  });
+
+  it('con descuento, la base es total_excluding_tax y cuadra', () => {
+    expect(desgloseDeFacturaStripe({ currency: 'mxn', subtotal: 1000000, total_excluding_tax: 900000, tax: 144000, total: 1044000, amount_paid: 1044000 }))
+      .toEqual({ subtotal: 9000, iva: 1440 });
+  });
+
+  it('otra moneda o cifras no enteras: null', () => {
+    expect(desgloseDeFacturaStripe({ ...ok, currency: 'usd' })).toBeNull();
+    expect(desgloseDeFacturaStripe({ ...ok, tax: 1600.5 })).toBeNull();
+  });
+
+  it('el desglose devuelto SIEMPRE pasa desgloseCuadra contra el total cobrado', () => {
+    for (const base of [100000, 123456, 99999, 1500050]) {
+      const tax = Math.round(base * TASA_IVA);
+      const d = desgloseDeFacturaStripe({ currency: 'mxn', total: base + tax, amount_paid: base + tax, tax, total_excluding_tax: base });
+      expect(d).not.toBeNull();
+      expect(desgloseCuadra((base + tax) / 100, d!.subtotal, d!.iva)).toBe(true);
+    }
   });
 });

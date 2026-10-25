@@ -27,7 +27,7 @@ import type { Correo } from '@/lib/correo/plantilla';
 import { aInstanteMx } from '../peajes/formatos';
 import { leerPorId, registrarEvento, transicionar, type TipoEvento } from './repo';
 import {
-  abrirExcepcion, firmarXlsx, leerConfigCorreo, marcarEnviada, marcarFallida, reclamarEntregas, reprogramarEntrega,
+  abrirExcepcion, firmarXlsx, leerConfigCorreo, leerDesglose, marcarEnviada, marcarFallida, reclamarEntregas, reprogramarEntrega,
   CONFIG_CORREO_POR_DEFECTO,
   type ConfigCorreo, type EntregaCorreo, type TipoExcepcion,
 } from './repo_correo';
@@ -44,6 +44,19 @@ const PRESUPUESTO_MS = 40_000;
 const VIGENCIA_LLAVE_MS = 23 * 3_600_000;
 const ESPERA_CONFIG_MS = 15 * 60_000;
 const MARCA_AMBIGUO = 'ambiguo:';
+/** A37-S49-01: una fila de una flota con el envío apagado (o sin «Responder a») espera HORAS, no 15 min: con 15 min vuelve a
+ *  vencer en cada pasada y, con más de ~75 filas, acapara la cola global y los correos de las flotas activas esperan detrás.
+ *  Al activar o corregir la configuración, `guardarConfigCorreo` adelanta esas filas a «ya». */
+const ESPERA_FLOTA_APAGADA_MS = 6 * 3_600_000;
+/** A37-S49-02: el instante del PRIMER intento ambiguo viaja dentro de `ultimo_error` (`ambiguo: [desde <ISO>] …`) y las
+ *  esperas no lo renuevan; `proximo_intento_en` sí se renueva en cada espera, por eso no sirve para medir las 23 h. */
+const RE_DESDE_AMBIGUO = /^ambiguo:\s*\[desde (\d{4}-\d{2}-\d{2}T[\d:.]+Z)\]/;
+const desdeAmbiguo = (ultimoError: string | null): Date | null => {
+  const m = RE_DESDE_AMBIGUO.exec(ultimoError ?? '');
+  if (!m) return null;
+  const d = new Date(m[1]);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
 const TIPO_XLSX_CORREO = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 // ── Puertos ─────────────────────────────────────────────────────────────────
@@ -51,7 +64,11 @@ const TIPO_XLSX_CORREO = 'application/vnd.openxmlformats-officedocument.spreadsh
 /** Quién envía de verdad. Por omisión Resend (`enviarCorreo`); T-A1-27 aporta SMTP/Graph del cliente. */
 export type EnvioCorreoPuerto = (para: string, correo: Correo, op: OpcionesEnvio) => Promise<ResultadoEnvio>;
 
-export interface ContextoLiquidacion { claveExterna: string; periodoDesde: string; periodoHasta: string }
+export interface ContextoLiquidacion {
+  claveExterna: string; periodoDesde: string; periodoHasta: string;
+  /** A37-A1-liquidaciones-10: la bitácora REAL del desglose (`liquidacion_desglose.bitacora`). Sin ella se infiere de la clave. */
+  bitacora?: string;
+}
 
 export interface DependenciasEntregaCorreo {
   ahora: () => Date;
@@ -113,9 +130,16 @@ export function sinCorreos(detalle: string): string {
   return detalle.replace(/[^\s@<>"',;:()\[\]]+@[^\s@<>"',;:()\[\]]+/g, (m) => enmascararCorreo(m));
 }
 
-/** La Idempotency-Key: estable entre reintentos, distinta por generación y por rol. */
-export function llaveIdempotencia(e: Pick<EntregaCorreo, 'liquidacionExternaId' | 'generacion' | 'rol'>): string {
-  return `liqcorreo:${e.liquidacionExternaId}:g${e.generacion}:${e.rol}`;
+/**
+ * La Idempotency-Key: estable entre reintentos, distinta por generación y por rol. A37-A1-liquidaciones-05: el rol `rh`
+ * admite varios buzones por generación; con la misma llave y otro destinatario Resend responde 409 (que aquí es
+ * reintentable) y los buzones siguientes quedaban `fallida`. Para `rh` la llave lleva la huella del correo (normalizado,
+ * nunca el correo). Los demás roles tienen UN correo por generación: su llave no cambia (un reintento en vuelo conserva la suya).
+ */
+export function llaveIdempotencia(e: Pick<EntregaCorreo, 'liquidacionExternaId' | 'generacion' | 'rol'> & { correo?: string }): string {
+  const base = `liqcorreo:${e.liquidacionExternaId}:g${e.generacion}:${e.rol}`;
+  if (e.rol !== 'rh' || !e.correo) return base;
+  return `${base}:${createHash('sha256').update(e.correo.trim().toLowerCase(), 'utf8').digest('hex').slice(0, 12)}`;
 }
 
 const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -142,7 +166,7 @@ export function bitacoraDeClave(clave: string): string {
 
 /** Asunto neutro y cuerpo de 3 líneas. NINGUNA cifra de dinero ni nombre de empresa: el dato va en el adjunto. */
 export function armarCorreoDesglose(ctx: ContextoLiquidacion): { correo: Correo; nombreAdjunto: string } {
-  const bitacora = bitacoraDeClave(ctx.claveExterna);
+  const bitacora = ctx.bitacora && ctx.bitacora.trim() !== '' ? ctx.bitacora.trim() : bitacoraDeClave(ctx.claveExterna);
   const rango = rangoCorto(ctx.periodoDesde, ctx.periodoHasta);
   // A37-A1-02: una clave terminada en `-R<n>` es la CORRECCIÓN de un desglose ya enviado: el operador debe saberlo de inmediato.
   const esCorreccion = /-R\d+$/.test(ctx.claveExterna);
@@ -192,7 +216,14 @@ export function dependenciasEntregaCorreo(): DependenciasEntregaCorreo {
     },
     leerContexto: async (tenantId, id) => {
       const l = await leerPorId(tenantId, id);
-      return l ? { claveExterna: l.claveExterna, periodoDesde: l.periodoDesde, periodoHasta: l.periodoHasta } : null;
+      if (!l) return null;
+      // A37-A1-liquidaciones-10: la bitácora sale del encabezado del desglose; si no se puede leer, se infiere de la clave.
+      let bitacora: string | undefined;
+      try {
+        const d = await leerDesglose(tenantId, id);
+        if (d.ok && d.valor?.bitacora) bitacora = d.valor.bitacora;
+      } catch { /* sin encabezado: se usa la clave */ }
+      return { claveExterna: l.claveExterna, periodoDesde: l.periodoDesde, periodoHasta: l.periodoHasta, ...(bitacora ? { bitacora } : {}) };
     },
     descargarXlsx: async (tenantId, ruta) => {
       // La URL firmada se pide con el módulo que valida que la ruta sea de la flota; se descarga con tope de tiempo.
@@ -205,7 +236,9 @@ export function dependenciasEntregaCorreo(): DependenciasEntregaCorreo {
     marcarFallida,
     reprogramar: reprogramarEntrega,
     liquidacionEnviada: (tenantId, id, ahora) =>
-      transicionar(tenantId, id, ['pendiente'], { estado: 'enviada', enviada_en: ahora.toISOString() }),
+      // A37-S49-03: también desde 'fallida' (liquidaciones de desglose que el camino WhatsApp marcó así antes de este arreglo):
+      // si el correo del operador salió, la verdad es 'enviada'.
+      transicionar(tenantId, id, ['pendiente', 'fallida'], { estado: 'enviada', enviada_en: ahora.toISOString() }),
     registrarEvento,
     abrirExcepcion,
   };
@@ -270,7 +303,9 @@ async function procesarUna(
     return;
   }
   const ambiguo = (e.ultimoError ?? '').startsWith(MARCA_AMBIGUO);
-  if (ambiguo && ahora.getTime() - new Date(e.proximoIntentoEn).getTime() > VIGENCIA_LLAVE_MS) {
+  // Marcas anteriores a A37-S49-02 no traen `[desde …]`: caen a `proximoIntentoEn`, como antes.
+  const desde = desdeAmbiguo(e.ultimoError) ?? new Date(e.proximoIntentoEn);
+  if (ambiguo && ahora.getTime() - desde.getTime() > VIGENCIA_LLAVE_MS) {
     await deps.marcarFallida(e.tenantId, e.id, token, 'sin confirmar: el intento anterior quedó ambiguo y la llave de idempotencia ya venció; decide una persona');
     resumen.sinConfirmar += 1;
     return;
@@ -285,7 +320,7 @@ async function procesarUna(
   // aquí, ANTES de descargar el Excel o llamar al proveedor. No se gasta intento ni se falla la fila: queda pendiente y
   // sale sola cuando alguien enciende el envío. (Sin fila de config el valor por defecto es `activa=false`: tampoco sale.)
   if (!config.activa) {
-    await deps.reprogramar(e.tenantId, e.id, token, e.intentos, new Date(ahora.getTime() + ESPERA_CONFIG_MS), e.ultimoError);
+    await deps.reprogramar(e.tenantId, e.id, token, e.intentos, new Date(ahora.getTime() + ESPERA_FLOTA_APAGADA_MS), e.ultimoError);
     resumen.apagada += 1;
     return;
   }
@@ -294,7 +329,7 @@ async function procesarUna(
   // manda un correo con una promesa falsa a una persona. Igual que apagada: no se gasta intento, la fila espera la configuración.
   if (!config.responderA) {
     logger.warn('liqcorreo.sin_responder_a', { tenant: e.tenantId, entrega: e.id });
-    await deps.reprogramar(e.tenantId, e.id, token, e.intentos, new Date(ahora.getTime() + ESPERA_CONFIG_MS), e.ultimoError);
+    await deps.reprogramar(e.tenantId, e.id, token, e.intentos, new Date(ahora.getTime() + ESPERA_FLOTA_APAGADA_MS), e.ultimoError);
     resumen.sinConfigurar += 1;
     return;
   }
@@ -406,7 +441,11 @@ async function falloReintentable(
   deps: DependenciasEntregaCorreo, resumen: ResumenEntregasCorreo,
 ): Promise<void> {
   const intentos = e.intentos + 1;
-  const texto = ambiguo && !detalle.startsWith(MARCA_AMBIGUO) ? `${MARCA_AMBIGUO} ${detalle}` : detalle;
+  // El primer intento ambiguo manda: un fallo posterior (aunque ya no sea ambiguo) conserva el instante, porque el POST
+  // original pudo haberse aceptado y la llave de idempotencia sigue siendo la misma.
+  const desde = desdeAmbiguo(e.ultimoError) ?? (ambiguo ? ahora : null);
+  const limpio = detalle.replace(/^ambiguo:\s*/, '');
+  const texto = desde ? `${MARCA_AMBIGUO} [desde ${desde.toISOString()}] ${limpio}` : detalle;
   if (intentos >= MAX_INTENTOS_CORREO) {
     await deps.marcarFallida(e.tenantId, e.id, token, `${texto} (agotó ${MAX_INTENTOS_CORREO} intentos)`);
     resumen.fallidas += 1;

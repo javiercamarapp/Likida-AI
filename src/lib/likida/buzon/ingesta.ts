@@ -5,7 +5,7 @@ import { guardarFacturaProveedor, estadoSatDeCfdi } from '../proveedores';
 import { leerZipSeguro, pareceZip } from './zip_seguro';
 import { leerCfdiSeguro } from './xml_seguro';
 import {
-  leerPdfFactura, esPdf, uuidsEnTexto, requiereRevision, MAX_PDF_BYTES, type PuertosPdf,
+  leerPdfFactura, esPdf, uuidsEnTexto, extraerDeTexto, candidatosDeTotal, requiereRevision, MAX_PDF_BYTES, type PuertosPdf,
 } from './pdf_factura';
 import { aBuffer } from './bytes';
 import * as repoBuzon from './repo';
@@ -222,6 +222,9 @@ export async function procesarCorreoBuzon(
       } else if (g.motivo === 'no_es_compra') {
         // A37-S15-01: nota de crédito, traslado o nómina — no es factura de compra.
         await anotar(h, 'xml', 'ignorada', { cfdiUuid: uuid, motivo: `CFDI de tipo ${cfdi.tipoComprobante ?? '?'}: no es una factura de compra (solo tipo I entra a la bandeja)` });
+      } else if (g.motivo === 'moneda_no_mxn') {
+        // A37-S55-02: la bandeja no guarda moneda ni tipo de cambio: un USD saldría como pesos en el export.
+        await anotar(h, 'xml', 'ignorada', { cfdiUuid: uuid, motivo: `CFDI en moneda ${cfdi.moneda ?? '?'}: la bandeja solo recibe facturas en MXN` });
       } else if (g.motivo === 'error' && cfdi.uuid && typeof cfdi.total === 'number') {
         // Con UUID y total es la base la que falló: transitorio.
         resumen.caidas++;
@@ -264,6 +267,23 @@ export async function procesarCorreoBuzon(
         if (ex) pareja = { uuid: uuidsPdf[0], facturaId: ex.id };
       }
       if (pareja?.facturaId) {
+        // A37-S30-05: un PDF sin autenticar NO se cuelga de una factura (y viaja al contador como SU PDF) solo por
+        // citar su UUID o llamarse igual: se coteja el total y el RFC emisor del texto contra la factura. Si
+        // contradicen, el PDF se guarda y va a revisión humana; no se adjunta.
+        const leido = extraerDeTexto(t.texto);
+        const cand = candidatosDeTotal(t.texto);
+        const fac = await deps.repo.facturaPorUuid(tenantId, pareja.uuid);
+        const totalFac = typeof fac?.total === 'number' ? fac.total : null;
+        const choqueTotal = totalFac !== null && cand.length > 0 && !cand.some((n) => Math.abs(n - totalFac) <= 0.01);
+        const choqueRfc = Boolean(leido.rfcEmisor && fac?.emisorRfc && leido.rfcEmisor.toUpperCase() !== fac.emisorRfc.toUpperCase());
+        if (choqueTotal || choqueRfc) {
+          const rutaRev = await deps.repo.subirPdf(tenantId, h.sha, h.bytes);
+          await anotar(h, 'pdf', 'revision', {
+            cfdiUuid: pareja.uuid, facturaId: pareja.facturaId, storageRuta: rutaRev,
+            motivo: `El PDF no cuadra con la factura ${pareja.uuid}${choqueTotal ? ' (el total del PDF es distinto)' : ''}${choqueRfc ? ' (el RFC emisor del PDF es distinto)' : ''}: no se adjuntó; revísalo a mano`,
+          });
+          continue;
+        }
         const ruta = await deps.repo.subirPdf(tenantId, h.sha, h.bytes);
         const colgado = await deps.repo.adjuntarPdfAFactura(tenantId, pareja.facturaId, { ruta, sha256: h.sha, nombre: h.nombre });
         await anotar(h, 'pdf', colgado ? 'procesada' : 'duplicada', {

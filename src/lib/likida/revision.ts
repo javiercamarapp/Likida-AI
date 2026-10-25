@@ -487,6 +487,8 @@ export async function revisarLiquidacion(p: PeticionRevision): Promise<Resultado
       throw new DatoInvalido('No se puede rechazar: el operador ya trae otro viaje abierto y un operador solo puede tener uno. Cierra ese viaje primero; esta liquidación no se tocó.');
     }
     if (codigo === 'LR002') throw new DatoInvalido('Esa liquidación no existe en esta flota.');
+    // CU017 (0870, A37-P-02): el candado en base del monto con XML verificado; el mismo mensaje que el veto de TypeScript.
+    if (codigo === 'CU017') throw new DatoInvalido('Ese comprobante tiene CFDI verificado: su monto, IVA e IEPS salen del XML y no se pueden ajustar a mano. Rechaza la liquidación para que se corrija el comprobante, o ajusta otro.');
     if (CODIGOS_PARA_PANTALLA.has(codigo)) throw new DatoInvalido(error.message);
     throw new Error(`revisarLiquidacion: ${error.message}`);
   }

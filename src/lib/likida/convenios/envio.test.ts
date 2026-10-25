@@ -79,6 +79,20 @@ describe('despacharInstrucciones', () => {
     expect(enviados).toHaveLength(1);
   });
 
+  it('A37-S39-01: un acercamiento ENCOLADO no se reclama otra vez al caducar el reclamo (10 min): no hay copias', async () => {
+    respuesta = { ok: false, motivo: 'rechazo_no_ventana', mensaje: 'limite de tasa', fueraDeVentana: false, reintentable: true, encolado: true, ventana: 'abierta' };
+    const t0 = new Date('2026-10-20T12:00:00Z');
+    await envio.despacharInstrucciones(A, viajeId, puertos(), t0); // liga y manda el despacho (encolado)
+    respuesta = { ok: false, motivo: 'rechazo_no_ventana', mensaje: 'limite de tasa', fueraDeVentana: false, reintentable: true, encolado: true, ventana: 'abierta' };
+    expect(await envio.acercarInstrucciones(A, viajeId, 'destino', puertos(), t0)).toMatchObject({ estado: 'rechazado' });
+    const antes = enviados.length;
+    for (const min of [11, 25, 60]) {
+      expect(await envio.acercarInstrucciones(A, viajeId, 'destino', puertos(), new Date(t0.getTime() + min * 60_000))).toEqual({ estado: 'perdido' });
+    }
+    expect(enviados).toHaveLength(antes);
+    expect(mundo.tablas.viaje_convenio[0].acercamiento_destino_enviado_en ?? null).toBeNull();
+  });
+
   it('un rechazo NO reintentable (plantilla sin aprobar) deja el reclamo: no se repite cada pasada', async () => {
     respuesta = { ok: false, motivo: 'plantilla_rechazada', mensaje: 'plantilla sin aprobar', fueraDeVentana: true, reintentable: false, ventana: 'cerrada' };
     expect(await envio.despacharInstrucciones(A, viajeId, puertos())).toMatchObject({ estado: 'rechazado', reintentable: false });

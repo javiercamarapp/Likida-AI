@@ -249,6 +249,24 @@ export async function eliminarTerminal(
       'Asígnales otro patio (o «toda la flota») antes de borrarlo: si no, pasarían a ver y corregir toda la flota sin que nadie lo decidiera.',
     );
   }
+  // A37-S20-03: los jefes DADOS DE BAJA conservan su patio, y `terminales_conteos_tenant`
+  // (0461) solo cuenta a los activos. Al borrar el patio su terminal_id pasa a NULL
+  // y, al reactivarlos, verían y corregirían toda la flota sin que nadie lo decidiera.
+  const { data: bajas, error: errBajas } = await acotada(
+    supabaseAdmin().from('app_user').select('id')
+      .eq('tenant_id', tenantId).eq('rol', 'encargado').eq('terminal_id', terminalId).eq('activo', false)
+      .order('id').limit(50),
+    'eliminarTerminal.jefes_de_baja',
+  );
+  if (errBajas) throw new Error(`eliminarTerminal: ${errBajas.message}`);
+  const nBajas = (bajas ?? []).length;
+  if (nBajas > 0) {
+    throw new DatoInvalido(
+      `El patio «${antes.nombre}» tiene ${nBajas} ${nBajas === 1 ? 'jefe de tráfico dado de baja' : 'jefes de tráfico dados de baja'} que lo conservan. ` +
+      'Si se borra, al reactivarlos pasarían a ver y corregir toda la flota sin que nadie lo decidiera. ' +
+      'Reactívalos y asígnales otro patio (o «toda la flota») antes de borrarlo.',
+    );
+  }
 
   const { data, error } = await acotada(
     supabaseAdmin().from('terminal').delete().eq('id', terminalId).eq('tenant_id', tenantId).select('id'),
@@ -295,13 +313,17 @@ export async function terminalesDeRegistros(
   const validos = [...new Set(ids.filter(esUuidValido))];
   const salida = new Map<string, string | null>();
   if (validos.length === 0) return salida;
-  const { data, error } = await acotada(
-    supabaseAdmin().from(tabla).select('id, terminal_id').eq('tenant_id', tenantId).in('id', validos),
-    `terminalesDeRegistros.${tabla}`,
-  );
-  if (error) throw new Error(`terminalesDeRegistros(${tabla}): ${error.message}`);
-  for (const f of (data ?? []) as Array<{ id: unknown; terminal_id: unknown }>) {
-    salida.set(String(f.id), typeof f.terminal_id === 'string' && f.terminal_id ? f.terminal_id : null);
+  // A37-S19-04: en lotes de 150 ids; un `.in()` de cientos de uuids rebasa el
+  // límite de URL del gateway y el jefe de patio se quedaba sin poder corregir.
+  for (let i = 0; i < validos.length; i += 150) {
+    const { data, error } = await acotada(
+      supabaseAdmin().from(tabla).select('id, terminal_id').eq('tenant_id', tenantId).in('id', validos.slice(i, i + 150)),
+      `terminalesDeRegistros.${tabla}`,
+    );
+    if (error) throw new Error(`terminalesDeRegistros(${tabla}): ${error.message}`);
+    for (const f of (data ?? []) as Array<{ id: unknown; terminal_id: unknown }>) {
+      salida.set(String(f.id), typeof f.terminal_id === 'string' && f.terminal_id ? f.terminal_id : null);
+    }
   }
   return salida;
 }
@@ -450,26 +472,27 @@ export async function asignarSinPatio(
 export async function terminalDeJornada(
   tenantId: string,
   ref: { jornadaId: string } | { asientoId: string },
-): Promise<{ encontrado: boolean; terminalId: string | null }> {
+): Promise<{ encontrado: boolean; terminalId: string | null; jornadaId: string | null }> {
   let jornadaId: string | null = 'jornadaId' in ref ? ref.jornadaId : null;
   if ('asientoId' in ref) {
-    if (!esUuidValido(ref.asientoId)) return { encontrado: false, terminalId: null };
+    if (!esUuidValido(ref.asientoId)) return { encontrado: false, terminalId: null, jornadaId: null };
     const { data, error } = await acotada(
       supabaseAdmin().from('jornada_asiento').select('jornada_id').eq('id', ref.asientoId).eq('tenant_id', tenantId).maybeSingle(),
       'terminalDeJornada.asiento',
     );
     if (error) throw new Error(`terminalDeJornada: ${error.message}`);
     const j = (data as { jornada_id?: unknown } | null)?.jornada_id;
-    if (typeof j !== 'string') return { encontrado: false, terminalId: null };
+    if (typeof j !== 'string') return { encontrado: false, terminalId: null, jornadaId: null };
     jornadaId = j;
   }
-  if (!jornadaId || !esUuidValido(jornadaId)) return { encontrado: false, terminalId: null };
+  if (!jornadaId || !esUuidValido(jornadaId)) return { encontrado: false, terminalId: null, jornadaId: null };
   const { data: dia, error: errDia } = await acotada(
     supabaseAdmin().from('jornada_dia').select('operador_id').eq('id', jornadaId).eq('tenant_id', tenantId).maybeSingle(),
     'terminalDeJornada.dia',
   );
   if (errDia) throw new Error(`terminalDeJornada: ${errDia.message}`);
   const operadorId = (dia as { operador_id?: unknown } | null)?.operador_id;
-  if (typeof operadorId !== 'string') return { encontrado: false, terminalId: null };
-  return terminalDeRegistro('operador', tenantId, operadorId);
+  if (typeof operadorId !== 'string') return { encontrado: false, terminalId: null, jornadaId: null };
+  // A37-S19-05: la jornada REAL (la del asiento, leída de la base) para anotar la bitácora.
+  return { ...(await terminalDeRegistro('operador', tenantId, operadorId)), jornadaId };
 }

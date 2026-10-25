@@ -5,10 +5,8 @@ import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { guardarPolitica, armarPolitica, mensajeParaPantalla } from '@/lib/likida/administracion';
 import { mxn } from '@/lib/utils';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { resolverTenantPedido } from '@/lib/auth/tenant-api';
 import { EstadoVacio, StatusPill } from '../../admin/ui/kit';
 import { FormaConAviso, type ResultadoAccion, ESTILO_CONTROL } from '../../admin/ui/forma';
 
@@ -88,27 +86,34 @@ export default async function PoliticasPage({
 
   async function accionGuardar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await requireSessionTenant('/dashboard/politicas');
+    // A37-S20-02: el MISMO resolutor que la página (con `sp`): `?vista=demo`,
+    // `?tenant=` y la cookie del selector se resuelven igual al pintar y al
+    // guardar. Antes la action leía solo la sesión y, con `?vista=demo`,
+    // escribía la política de la demo en la flota elegida en el selector.
+    const s = await resolverTenantEfectivo('/dashboard/politicas', sp);
     if (!puedeAdministrar(s.rol)) {
       return { error: 'Tu rol no puede editar la política de gastos.' };
     }
-    let t = s.tenantId;
-    if (s.rol === 'superadmin' && sp?.tenant) {
-      t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
-    }
+    const t = s.tenantId;
 
     // `armarPolitica` repone las reglas por ruta, que este formulario no edita
     // y que guardar sin ellas borraría. Vive en administracion.ts porque puede
     // perder datos y eso tiene que estar probado, no confiado a la vista.
     let completa;
+    let porRutaVigente: ReturnType<typeof armarPolitica> = [];
     try {
+      // A37-S20-02: las reglas por ruta se releen AQUÍ, de la flota que se va a
+      // escribir — la copia del render puede estar obsoleta si otra sesión las
+      // cambió, y guardar con ella las borraría o resucitaría en silencio.
+      const vigente = await getConfig(t);
+      porRutaVigente = vigente.politica.filter((p) => p.ruta);
       completa = armarPolitica(
         CONCEPTOS.map((c) => ({
           concepto: c,
           tope: String(fd.get(`tope_${c}`) ?? ''),
           exigeCfdi: fd.get(`cfdi_${c}`) === 'on',
         })),
-        porRuta,
+        porRutaVigente,
       );
       await guardarPolitica(t, completa);
     } catch (e) {
@@ -116,9 +121,9 @@ export default async function PoliticasPage({
     }
 
     revalidatePath('/dashboard/politicas');
-    const propios = completa.length - porRuta.length;
+    const propios = completa.length - porRutaVigente.length;
     return {
-      ok: `Política guardada: ${propios} concepto(s) con regla${porRuta.length > 0 ? `, más ${porRuta.length} por ruta que se conservaron` : ''}. El motor la aplica desde el próximo cuadre.`,
+      ok: `Política guardada: ${propios} concepto(s) con regla${porRutaVigente.length > 0 ? `, más ${porRutaVigente.length} por ruta que se conservaron` : ''}. El motor la aplica desde el próximo cuadre.`,
     };
   }
 

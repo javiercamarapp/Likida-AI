@@ -375,6 +375,8 @@ describe('convertirEnViaje — claim, viaje y compensación', () => {
     respuestas['cotizacion'] = [
       { data: { origen: 'A', destino: 'B', km: 100, precio: 500, cliente_id: null, estado: 'borrador' }, error: null },
       { data: [{ id: 'q1' }], error: null },   // claim
+      { data: [], error: null },               // ningún viaje candidato enlazado a otra cotización
+      { data: [], error: null },               // ninguna otra cotización igual decidiéndose
       { data: null, error: null },             // update a ganada
     ];
     respuestas['viaje'] = [{ data: [{ id: 'viaje-fantasma' }], error: null }];
@@ -382,6 +384,33 @@ describe('convertirEnViaje — claim, viaje y compensación', () => {
     await expect(convertirEnViaje('t1', 'q1', 'u1')).resolves.toBe('viaje-fantasma');
     const gana = escrituras.filter((e) => e.tabla === 'cotizacion' && e.op === 'update').at(-1);
     expect(gana?.payload).toMatchObject({ estado: 'ganada', viaje_id: 'viaje-fantasma' });
+  });
+
+  // A37-S40-09: ruta + precio + ventana no son identidad de la cotización.
+  it('A37-S40-09: el viaje que otra cotización YA tiene enlazado no se adopta', async () => {
+    respuestas['cotizacion'] = [
+      { data: { origen: 'A', destino: 'B', km: 100, precio: 500, cliente_id: null, estado: 'borrador' }, error: null },
+      { data: [{ id: 'qB' }], error: null },             // claim
+      { data: [{ viaje_id: 'viaje-de-A' }], error: null }, // el candidato ya es de la cotización A
+    ];
+    respuestas['viaje'] = [{ data: [{ id: 'viaje-de-A' }], error: null }];
+    crearViaje.mockRejectedValue(new Error('crearViaje: sin respuesta en 8000 ms (tope de consulta)'));
+    await expect(convertirEnViaje('t1', 'qB', 'u1')).rejects.toThrow(/No se pudo confirmar/);
+    const gana = escrituras.filter((e) => e.tabla === 'cotizacion' && e.op === 'update');
+    expect(gana).toHaveLength(1); // solo el claim: nunca «ganada» con el viaje ajeno
+  });
+
+  it('A37-S40-09: con otra cotización igual decidiéndose, un viaje libre es ambiguo y el claim se queda', async () => {
+    respuestas['cotizacion'] = [
+      { data: { origen: 'A', destino: 'B', km: 100, precio: 500, cliente_id: null, estado: 'borrador' }, error: null },
+      { data: [{ id: 'qB' }], error: null },   // claim
+      { data: [], error: null },               // el candidato no está enlazado todavía
+      { data: [{ id: 'qA' }], error: null },   // pero qA está decidiéndose con la misma ruta y precio
+    ];
+    respuestas['viaje'] = [{ data: [{ id: 'viaje-libre' }], error: null }];
+    crearViaje.mockRejectedValue(new Error('crearViaje: sin respuesta en 8000 ms (tope de consulta)'));
+    await expect(convertirEnViaje('t1', 'qB', 'u1')).rejects.toThrow(/No se pudo confirmar/);
+    expect(escrituras.filter((e) => e.tabla === 'cotizacion' && e.op === 'update')).toHaveLength(1);
   });
 
   it('la clasificación del fallo: pertenencia y constraint son definitivos; timeout no', () => {

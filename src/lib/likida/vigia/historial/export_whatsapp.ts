@@ -36,6 +36,8 @@ export interface ResultadoExport {
   /** Cuántos mensajes no pudieron leerse como fecha válida. */
   fechasInvalidas: number;
   formato: 'ios' | 'android' | 'desconocido';
+  /** `true` = el archivo traía más de MAX_MENSAJES_IMPORTACION mensajes y se dejó de leer: lo leído es solo el principio del chat. */
+  truncado: boolean;
 }
 
 export const MAX_MENSAJES_IMPORTACION = 50_000;
@@ -70,6 +72,16 @@ export function taparDatosPersonales(texto: string): string {
   return texto
     .replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, '[correo]')
     .replace(/[\d+][\d\s().-]{6,}\d/g, (m) => (m.replace(/\D/g, '').length >= 7 && !/^\d{4}-\d{1,2}-\d{1,2}$/.test(m) ? '[tel]' : m));
+}
+
+/**
+ * Sal del hash de autor (A37-S58-09). Con `VIGIA_HISTORIAL_SAL` (secreto de servidor) el hash ya no se revierte por
+ * diccionario conociendo solo el id de la flota; sin el secreto cae a la sal anterior (el id de la flota) para no
+ * romper los hashes ya guardados. Nota: activar el secreto cambia el hash de los autores de importaciones NUEVAS.
+ */
+export function salDeFlota(tenantId: string, secreto: string | undefined = process.env.VIGIA_HISTORIAL_SAL): string {
+  const s = (secreto ?? '').trim();
+  return s.length >= 16 ? `${s}\u0000${tenantId}` : tenantId;
 }
 
 function hashAutor(sal: string, nombre: string): string {
@@ -121,6 +133,7 @@ export function leerExportWhatsapp(crudo: string, opciones: { equipo: readonly s
   const mensajes: MensajeHistorial[] = [];
   const autores = new Set<string>();
   let descartados = 0; let fechasInvalidas = 0;
+  let truncado = false;
   let actual: { enviadoEn: string; autor: string; texto: string } | null = null;
 
   const cerrar = () => {
@@ -150,12 +163,13 @@ export function leerExportWhatsapp(crudo: string, opciones: { equipo: readonly s
       if (!p || !iso) { fechasInvalidas += 1; continue; }
       const dos = p.resto.indexOf(': ');
       if (dos <= 0 || dos > 80) { descartados += 1; continue; } // línea de sistema: no hay «Nombre: »
+      // A37-S58-02: llegó OTRO mensaje con el tope ya lleno: lo que sigue no se lee y el resultado lo declara.
+      if (mensajes.length >= MAX_MENSAJES_IMPORTACION) { truncado = true; break; }
       actual = { enviadoEn: iso, autor: p.resto.slice(0, dos).trim(), texto: p.resto.slice(dos + 2) };
     } else if (actual && l.length > 0) {
       actual.texto += `\n${l}`;
     }
-    if (mensajes.length >= MAX_MENSAJES_IMPORTACION) break;
   }
   cerrar();
-  return { mensajes, descartados, autores: autores.size, fechasInvalidas, formato };
+  return { mensajes, descartados, autores: autores.size, fechasInvalidas, formato, truncado };
 }

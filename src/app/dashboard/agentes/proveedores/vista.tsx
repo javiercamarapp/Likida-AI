@@ -9,6 +9,8 @@ import { BarraPagina } from '../../resumen-visual';
  *  porque es la vista la que tiene que confesarlo (FE-13). Si la página
  *  cambia su límite, este número cambia con él. */
 const TOPE_FACTURAS = 100;
+/** Tope de pendientes que la página lee APARTE de las recientes (A37-S15-02). */
+const TOPE_PENDIENTES = 500;
 import { BotonVerPdf } from './controles_buzon';
 import {
   SubirFactura, SubirFotoFactura, BotonesDecision, DireccionBuzon, GenerarBuzon, RotarBuzon,
@@ -90,8 +92,9 @@ export function VistaAgenteProveedores({
 
           {topeTocado && (
             <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
-              Los cuatro conteos se calculan sobre las {numero(TOPE_FACTURAS)} facturas más recientes del
-              buzón, que es lo que esta pantalla lee — hay más atrás.
+              Las aprobadas, rechazadas y el receptor ajeno se cuentan sobre las {numero(TOPE_FACTURAS)} facturas
+              más recientes del buzón — hay más atrás. Las pendientes se leen todas
+              {pendientes.length >= TOPE_PENDIENTES ? `, hasta ${numero(TOPE_PENDIENTES)}: hay más por decidir de las que caben aquí` : ''}.
             </p>
           )}
 

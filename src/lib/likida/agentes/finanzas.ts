@@ -39,7 +39,7 @@ import {
   costoIaMesActual, costoIaVentana,
   type ResumenNegocio, type CostoPorFaseModelo, type ConteosPlataforma,
 } from '@/lib/admin/negocio';
-import { getPorCobrar } from '@/lib/saas/transferencia';
+import { getPorCobrarCompleto } from '@/lib/saas/transferencia';
 import { getPlanes } from '@/lib/saas/suscripcion';
 import { desglosarPrecio } from '@/lib/saas/iva';
 import { alertarOperador } from '@/lib/observability/alerta';
@@ -436,8 +436,11 @@ async function leerSuscripcionesActivas(): Promise<SuscripcionActiva[]> {
     .select('plan_clave, tenant:tenant_id!inner(nombre)')
     .eq('estado', 'activa')
     .not('tenant.nombre', 'ilike', 'ZZZ QA %')
+    .order('id')
     .limit(1000), 'finanzas.suscripciones');
   if (error) throw new Error(`leerSuscripcionesActivas: ${error.message}`);
+  // A37-S27-09: con 1,000 filas el MRR podría estar recortado: se falla, no se reporta a medias.
+  if ((data ?? []).length >= 1000) throw new Error('leerSuscripcionesActivas: se alcanzó el tope de 1,000 suscripciones; el MRR podría estar recortado.');
   return (data ?? []) as SuscripcionActiva[];
 }
 
@@ -520,7 +523,7 @@ async function correrAnalistaMetricas(disparo: DisparoCorrida, hoy: string): Pro
 
     const [activasFilas, planes, pipeline, conteos, r, porCobrar] = await Promise.all([
       leerSuscripcionesActivas(), getPlanes(), contarPipeline(), getConteosPlataforma(),
-      getResumenNegocio(hoy), getPorCobrar(),
+      getResumenNegocio(hoy), getPorCobrarCompleto(),
     ]);
     // A37-S27-01: el MRR es ingreso SIN IVA. `precioMensual` puede traer el IVA
     // (`precioIvaIncluido === true`) o no (`false`); si nadie lo declaró (null) NO se
@@ -659,9 +662,13 @@ async function cobradoVentana(desdeIso: string, hastaIso: string): Promise<{ tot
     // 1,000 mensualidades en una ventana de un mes son >80 años de un
     // cliente o >80 clientes — muy por encima de la escala actual; si algún
     // día se recorta, el conteo de abajo contra `length` lo delataría.
+    .order('id')
     .limit(1000), 'finanzas.cobrado');
   if (error) throw new Error(`cobradoVentana: ${error.message}`);
   const filas = (data ?? []) as Array<{ tenant_id: string; monto: unknown; subtotal?: unknown }>;
+  // A37-S27-09: el tope de 1,000 ya no es silencioso. Si la ventana lo alcanza, el total podría estar
+  // recortado: se falla en vez de reportar una suma a medias como cobrado.
+  if (filas.length >= 1000) throw new Error('cobradoVentana: la ventana alcanzó el tope de 1,000 facturas; el total podría estar recortado.');
   const porTenant = new Map<string, number>();
   let total = 0;
   let sinDesglose = 0;
@@ -682,7 +689,8 @@ async function cobradoVentana(desdeIso: string, hastaIso: string): Promise<{ tot
     .eq('estado', 'pagada')
     .is('pagada_en', null), 'finanzas.cobrado_sin_fecha');
   if (errSinFecha) throw new Error(`cobradoVentana(sin fecha): ${errSinFecha.message}`);
-  return { totalMxn: round2(total), n: filas.length, sinFecha: typeof count === 'number' ? count : 0, sinDesglose, porTenant };
+  if (typeof count !== 'number') throw new Error('cobradoVentana(sin fecha): PostgREST no devolvió el conteo — no se afirma un 0 que nadie midió.');
+  return { totalMxn: round2(total), n: filas.length, sinFecha: count, sinDesglose, porTenant };
 }
 
 async function correrTesoreria(disparo: DisparoCorrida, hoy: string): Promise<ResultadoFinanciero> {
@@ -701,7 +709,7 @@ async function correrTesoreria(disparo: DisparoCorrida, hoy: string): Promise<Re
 
     const mesInicio = new Date(`${hoy.slice(0, 7)}-01T00:00:00-06:00`).toISOString();
     const [cfg, porCobrar, costoMes, cobrado] = await Promise.all([
-      leerConfigFinanzas(), getPorCobrar(), costoIaMesActual(),
+      leerConfigFinanzas(), getPorCobrarCompleto(), costoIaMesActual(),
       cobradoVentana(mesInicio, new Date().toISOString()),
     ]);
     const { cuerpo, semaforo, runwayMeses } = armarParteTesoreria({
@@ -842,7 +850,7 @@ async function correrCierreMensual(disparo: DisparoCorrida, hoy: string): Promis
     const desde = new Date(`${mes}-01T00:00:00-06:00`).toISOString();
     const hasta = new Date(`${hoy.slice(0, 7)}-01T00:00:00-06:00`).toISOString();
     const [cfg, cobrado, costo, porCobrar] = await Promise.all([
-      leerConfigFinanzas(), cobradoVentana(desde, hasta), costoIaVentana(desde, hasta), getPorCobrar(),
+      leerConfigFinanzas(), cobradoVentana(desde, hasta), costoIaVentana(desde, hasta), getPorCobrarCompleto(),
     ]);
 
     // Nombres de flota para el margen por cliente — cortesía de lectura; si

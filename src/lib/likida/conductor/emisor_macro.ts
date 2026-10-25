@@ -8,7 +8,7 @@
 // macro), su validación y un doble de pruebas. Qué hay que preguntar y qué decidir: `docs/operacion/puente-macros.md`.
 //
 // Garantías: nace apagado (perilla `habilitado` falsa por omisión y `emisorMacroApagado` no entrega nada); no hace red; idempotente
-// por `clave` (viaje|tipo|evento): reintentar el mismo evento nunca duplica la macro; lo dudoso (sin id, sin viaje, tipo
+// por `clave` (flota|viaje|tipo|evento): reintentar el mismo evento nunca duplica la macro; lo dudoso (sin id, sin viaje, tipo
 // desconocido, hora inválida o futura) se descarta y no se inventa; un fallo del proveedor jamás lanza hacia el llamador. No se
 // comunica como promoción: la capacitación al operador es presencial, no una plantilla. El adaptador real NO existe (bloqueo
 // externo: D-2 y acceso a la API) y nadie lo invoca aún desde el flujo del chofer.
@@ -19,6 +19,8 @@ const TIPOS_MACRO: readonly TipoMacro[] = ['detencion', 'llegada', 'salida'];
 
 /** Un evento que el chofer reportó por WhatsApp y que el proveedor espera como macro. */
 export interface EventoMacro {
+  /** A37-S35-08: la flota dueña del evento. Obligatorio: `viajeRef` es del proveedor y dos flotas pueden repetirlo (folios 1001). */
+  tenantId: string;
   /** Id estable del evento en el Conductor (el mismo evento reintentado trae el mismo id). */
   eventoId: string;
   /** Referencia del viaje en el sistema del proveedor (no se asume que coincida con nuestro folio). */
@@ -45,20 +47,21 @@ export interface ResultadoEmision { estado: EstadoEmision; clave?: string }
 /** Una hora más adelantada que esto respecto al reloj es de un reloj descompuesto y no prueba nada. */
 export const FUTURO_TOLERADO_MACRO_MIN = 2;
 
-/** Clave de idempotencia: viaje | tipo | evento. */
-export const claveMacro = (e: Pick<EventoMacro, 'viajeRef' | 'tipo' | 'eventoId'>): string => `${e.viajeRef}|${e.tipo}|${e.eventoId}`;
+/** Clave de idempotencia: flota | viaje | tipo | evento (A37-S35-08: sin la flota, dos tenants con el mismo `viajeRef` colisionan). */
+export const claveMacro = (e: Pick<EventoMacro, 'tenantId' | 'viajeRef' | 'tipo' | 'eventoId'>): string => `${e.tenantId}|${e.viajeRef}|${e.tipo}|${e.eventoId}`;
 
 /** Copia limpia del evento, o `null` si no vale. Devuelve estructuras nuevas (la fuente no se muta). */
 export function normalizarEventoMacro(e: EventoMacro | null | undefined, ahora: Date): EventoMacro | null {
-  if (!e || typeof e.eventoId !== 'string' || typeof e.viajeRef !== 'string') return null;
+  if (!e || typeof e.eventoId !== 'string' || typeof e.viajeRef !== 'string' || typeof e.tenantId !== 'string') return null;
   const eventoId = e.eventoId.trim();
   const viajeRef = e.viajeRef.trim();
-  if (eventoId === '' || viajeRef === '' || !TIPOS_MACRO.includes(e.tipo)) return null;
+  const tenantId = e.tenantId.trim();
+  if (tenantId === '' || eventoId === '' || viajeRef === '' || !TIPOS_MACRO.includes(e.tipo)) return null;
   if (!(e.ocurridoEn instanceof Date)) return null;
   const t = e.ocurridoEn.getTime();
   if (!Number.isFinite(t) || t > ahora.getTime() + FUTURO_TOLERADO_MACRO_MIN * 60_000) return null;
   const motivo = typeof e.motivo === 'string' && e.motivo.trim() !== '' ? e.motivo.trim() : undefined;
-  return { eventoId, viajeRef, tipo: e.tipo, ocurridoEn: new Date(t), motivo };
+  return { tenantId, eventoId, viajeRef, tipo: e.tipo, ocurridoEn: new Date(t), motivo };
 }
 
 /**

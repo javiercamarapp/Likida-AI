@@ -94,6 +94,12 @@ export function discrepanciaDeAtipico(h: HallazgoAtipico, tag: string | null = n
  * Arma el reporte. `ultimaPosicion` = última posición GPS conocida de la unidad (o `null`);
  * `telefonoDestino` = el configurado en T-A2-14 (o `null`/inválido = no se envía).
  */
+/** A37-A2-23: el TAG completo basta para teclearlo en una caseta; el texto solo lleva sus últimos 4 caracteres. */
+export function enmascararTag(tag: string): string {
+  const t = tag.trim();
+  return t.length <= 4 ? '****' : `…${t.slice(-4)}`;
+}
+
 export function armarReporteDiscrepancia(
   d: DiscrepanciaEntrada, ultimaPosicion: PosicionConocida | null, telefonoDestino: string | null,
 ): ReporteDiscrepancia {
@@ -106,13 +112,13 @@ export function armarReporteDiscrepancia(
 
   const evidencia: string[] = [
     `Unidad: ${d.unidad ?? 'sin identificar'}`,
-    `TAG: ${d.tag ?? 'no viene en el archivo'}`,
+    `TAG: ${d.tag ? enmascararTag(d.tag) : 'no viene en el archivo'}`,
     `Caseta: ${casetas}`,
     `Hora del cruce: ${d.cuando ?? 'sin fecha legible'} (hora de México)`,
     `Motivo del reporte: ${d.referencia}`,
   ];
   if (ultimaPosicion && coordValida(ultimaPosicion)) {
-    evidencia.push(`Última posición conocida de la unidad: ${ultimaPosicion.lat.toFixed(5)}, ${ultimaPosicion.lng.toFixed(5)} a las ${textoInstante(ultimaPosicion.t)} (hora de México)`);
+    evidencia.push(`Última posición conocida de la unidad (aproximada, ~1 km): ${ultimaPosicion.lat.toFixed(2)}, ${ultimaPosicion.lng.toFixed(2)} a las ${textoInstante(ultimaPosicion.t)} (hora de México)`);
   } else {
     evidencia.push('Última posición conocida de la unidad: sin posición GPS disponible; no se puede decir dónde estaba.');
   }
@@ -124,7 +130,9 @@ export function armarReporteDiscrepancia(
     'Si los datos estaban mal, corrígelos; si fue una salida de servicio, justifícala.',
   ];
 
-  const quePaso = `${d.quePaso} Es un cruce que no cuadra con lo que se sabe de ${unidad}.`;
+  // El «qué pasó» que armó el detector puede citar el TAG completo: se enmascara también ahí.
+  const quePasoSinTag = d.tag && d.tag.trim().length > 0 ? d.quePaso.split(d.tag.trim()).join(enmascararTag(d.tag)) : d.quePaso;
+  const quePaso = `${quePasoSinTag} Es un cruce que no cuadra con lo que se sabe de ${unidad}.`;
   const texto = [
     `⚠️ Peajes: discrepancia por revisar en ${unidad}.`,
     `Qué pasó: ${quePaso}`,

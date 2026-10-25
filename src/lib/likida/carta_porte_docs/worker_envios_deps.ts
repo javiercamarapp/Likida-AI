@@ -16,7 +16,7 @@ import * as repo from './repo';
 import { repoEnvios } from './repo_envios';
 import { leerConfigSalida } from './salida_config';
 import { esFlotaSimulada, salidaSimulada } from './salida_simulada';
-import { SIN_TMS, type SalidaTms } from './tms_puerto';
+import { SALIDA_NO_DISPONIBLE, SIN_TMS, type SalidaTms } from './tms_puerto';
 import type { DepsEnvios } from './worker_envios';
 import { DatoInvalido } from '../errores';
 
@@ -33,7 +33,8 @@ export function fijarProveedorSalida(p?: ProveedorSalida): void { proveedor = p 
 /** Un solo simulador por proceso: así recuerda las llaves vistas. */
 const salidaSimuladaUnica: SalidaTms = salidaSimulada();
 
-/** El puerto de la flota; `SIN_TMS` si no tiene conector o si el proveedor falla (lo prudente: no se sube nada, se descarga a mano). */
+/** El puerto de la flota; `SIN_TMS` si no tiene conector; `SALIDA_NO_DISPONIBLE` si el proveedor FALLA (no se sube nada, pero
+ *  tampoco se trata como modo manual: el worker reintenta pronto — A37-S33-09). */
 export async function salidaDeFlota(tenantId: string): Promise<SalidaTms> {
   // Una flota declarada sintética (SALIDA_TMS_SIMULADA, T-A3-42) sale por el simulador; ninguna otra.
   if (esFlotaSimulada(tenantId)) return salidaSimuladaUnica;
@@ -41,7 +42,7 @@ export async function salidaDeFlota(tenantId: string): Promise<SalidaTms> {
     return (await proveedor(tenantId)) ?? SIN_TMS;
   } catch (e) {
     logger.error('cp_envios.proveedor_salida_fallo', { tenantId, err: e instanceof Error ? e.message.slice(0, 200) : 'desconocido' });
-    return SIN_TMS;
+    return SALIDA_NO_DISPONIBLE;
   }
 }
 

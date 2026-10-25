@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { hoyMx } from '@/lib/formato';
 import { logger } from '@/lib/logger';
 import { llegoTarde, violaIndice } from '@/lib/likida/pg_errores';
+import { esUuidValido } from '../intake/cfdi';
 import { armar, type TicketPorFacturar } from './pendientes';
 import { enrutar } from './enrutar';
 import { cuentasCompartidas } from './cuentas';
@@ -43,9 +44,14 @@ import type { ClaseDeFallo } from './vinculo_senales';
 // queda al cliente en su contabilidad. Un OCR que leyó $420 donde decía $4,200
 // emitiría una factura equivocada por una foto borrosa.
 //
-// Por eso la máquina solo dispara cuando puede PROBAR lo que va a escribir:
-// portal sin cuenta, todos los campos requeridos presentes, confianza alta, y
-// —lo más fuerte— el monto salido de un CÓDIGO DE BARRAS y no de visión.
+// Por eso la máquina solo dispara cuando cumple lo que HOY se comprueba:
+// portal sin cuenta, todos los campos requeridos presentes y confianza global
+// del OCR >= 0.9 (la que el modelo da sobre monto y folio juntos).
+// A37-S43-02: este encabezado prometía además «el monto salido de un código de
+// barras»; eso NO se comprueba: el OCR no guarda la procedencia del monto ni una
+// confianza por campo, y el código de barras que se lee es el folio, no el
+// importe. Exigirlo exige guardar esa procedencia en el intake (decisión de
+// producto), así que aquí solo se deja de afirmarlo.
 // Lo que no cumpla se acumula en la pantalla de "por facturar" para una
 // persona. Es el mismo criterio de todo el repo: la máquina hace lo que puede
 // demostrar.
@@ -366,7 +372,7 @@ export async function facturarAlVuelo(args: {
   // intentarlo la hora que viene" es la respuesta equivocada de las dos maneras:
   // contra un CAPTCHA no cambia nada, y tras un emitir sin confirmar duplica el
   // CFDI.
-  const cerrar1 = (uuid: string | null, detalle?: string) => (control ? cerrarControl(args.tenantId, t.comercio!.clave, control, [{ gastoId: args.gastoId, monto: Number(data.monto), cfdiUuid: uuid, detalle }]) : Promise.resolve());
+  const cerrar1 = (uuid: string | null, detalle?: string) => (control ? cerrarControl(args.tenantId, t.comercio!.clave, control, [{ gastoId: args.gastoId, monto: Number(data.monto), cfdiUuid: uuid, detalle, sinConfirmar: r.emisionSinConfirmar === true }]) : Promise.resolve());
   const bloqueo = motivoDeBloqueo(r);
   if (bloqueo) {
     await cerrar1(null, `${bloqueo} ${r.error ?? ''}`);
@@ -611,7 +617,7 @@ export async function facturarLoteAlVuelo(args: {
     const propio = await guardarUno(admin, args, p, r.error, ordenPorUuid, bloqueoDelLote, modo === 'emitir');
     porGasto.push({ gastoId: p.gastoId, ...propio });
     if (propio.bloqueado) bloqueados.push({ gastoId: p.gastoId, motivo: propio.bloqueado });
-    paraControl.push({ gastoId: p.gastoId, monto: montoDe(p.gastoId), cfdiUuid: propio.cfdiUuid ?? null, detalle: `${propio.detalle ?? ''} ${propio.bloqueado ?? ''}`.trim() || undefined });
+    paraControl.push({ gastoId: p.gastoId, monto: montoDe(p.gastoId), cfdiUuid: propio.cfdiUuid ?? null, detalle: `${propio.detalle ?? ''} ${propio.bloqueado ?? ''}`.trim() || undefined, sinConfirmar: r.emisionSinConfirmar === true });
   }
   if (control) await cerrarControl(args.tenantId, args.comercio, control, paraControl);
 
@@ -727,6 +733,16 @@ async function escribirUuid(
   orden: number,
   ahora?: string,
 ): Promise<string | null> {
+  // A37-S42-03: ÚLTIMA BARRERA. Sea cual sea el adaptador, al gasto solo se le
+  // escribe un UUID con forma de UUID. Un texto basura quedaría como folio falso
+  // (y chocaría con `uq_gasto_cfdi_uuid` en el siguiente gasto). El CFDI pudo
+  // haberse emitido, así que se bloquea el gasto en vez de reintentar.
+  if (!esUuidValido(uuid)) {
+    logger.error('autofactura.uuid_invalido', { gastoId, orden });
+    return await bloquear(admin, gastoId, tenantId,
+      `el portal devolvió "${uuid.slice(0, 60)}" como folio fiscal y NO tiene forma de UUID. PUEDE QUE EL CFDI YA EXISTA: revisar el portal y pegarle el folio a mano antes de volver a emitir`,
+      ahora);
+  }
   const { error } = await admin
     .from('gasto')
     .update({ cfdi_uuid: uuid, cfdi_orden: orden })

@@ -9,6 +9,13 @@ function job(name: string) {
 }
 
 describe('promoción del artefacto Production probado', () => {
+  it('A37-S64-10: la promoción exige que el SHA sea ancestro de master (checkout completo)', () => {
+    const pre = job('preflight');
+    expect(pre).toContain('fetch-depth: 0');
+    expect(pre).toContain('git merge-base --is-ancestor "$SHA" refs/remotes/origin/master');
+    expect(pre.indexOf('merge-base --is-ancestor')).toBeLessThan(pre.indexOf('Validar intención de producción'));
+    expect(pre.indexOf('Fijar el ref a un SHA inmutable')).toBeLessThan(pre.indexOf('merge-base --is-ancestor'));
+  });
   it('prueba y construye los artefactos con el mismo major Node del runtime Vercel', () => {
     for (const name of ['quality', 'preview', 'production_candidate']) {
       expect(job(name)).toContain('node-version: 24');

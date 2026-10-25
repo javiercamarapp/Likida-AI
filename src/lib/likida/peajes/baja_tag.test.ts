@@ -139,6 +139,18 @@ describe('vigencia, historial y reactivación', () => {
     expect(db.tablas.peaje_tag_baja).toHaveLength(0);
     expect((await D.cargarMapaTags(T)).get(TAG)).toBe('u1');
   });
+  it('A37-S53-02: importar el catálogo maestro NO reactiva un TAG dado de baja ni borra su baja', async () => {
+    db = crearDbFalsa({ ...semilla(), unidad: [{ id: 'u1', tenant_id: T, numero_economico: 'TC9001', placas: 'XYZ-001' }] });
+    await D.bajaTag(T, 'tg1', { fecha: '2026-03-05' }, HOY);
+    const csv = new TextEncoder().encode('tag;unidad\nIMDM00000001;TC9001\n');
+    const r = await D.importarTagsArchivo(T, 'tags.csv', csv);
+    expect(r.ok).toBe(true);
+    expect(r.guardadas).toBe(0);
+    expect(r.rechazadas).toHaveLength(1);
+    expect(r.rechazadas[0].motivo).toMatch(/dado de baja/);
+    expect(db.tablas.peaje_tag_baja).toHaveLength(1);
+    expect(db.tablas.peaje_tag.find((f) => f.id === 'tg1')).toMatchObject({ activo: false });
+  });
   it('un alta normal (sin baja previa) no cambia su respuesta', async () => {
     expect(await D.altaTag(T, { tag: 'IMDM 00000077', unidadId: 'u1' })).toEqual({ ok: true });
   });

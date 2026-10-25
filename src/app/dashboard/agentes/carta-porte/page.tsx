@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { logger } from '@/lib/logger';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { getEstadoCartaPorte, type EstadoCartaPorte } from '@/lib/likida/carta_porte_datos';
@@ -36,10 +37,11 @@ async function leerInsights(tenantId: string): Promise<{ insights: InsightsAgent
     ]);
     const nombresCliente = new Map(clientes.map((c) => [c.id, c.nombre]));
     return {
-      insights: calcularInsights({ docs: lista.filas, correcciones, camposCorregidos: campos, causasRechazo: causas, envios, nombresCliente, ahora: new Date() }),
+      insights: calcularInsights({ docs: lista.filas, totalVentana: lista.total, correcciones, camposCorregidos: campos, causasRechazo: causas, envios, nombresCliente, ahora: new Date() }),
       nombres: Object.fromEntries(nombresCliente),
     };
-  } catch {
+  } catch (e) {
+    logger.warn('carta_porte.insights_no_leidos', { tenantId, error: e instanceof Error ? e.message : String(e) });
     return { insights: 'no_leido', nombres: {} };
   }
 }
@@ -48,9 +50,10 @@ async function leerInsights(tenantId: string): Promise<{ insights: InsightsAgent
 async function leerSinCcp(tenantId: string): Promise<ListadoSinCcp | 'no_leido'> {
   try {
     const ahora = new Date();
-    const { viajes, conCcp } = await repoDocs.leerSalidasParaSinCcp(tenantId, ahora);
-    return listarViajesSinCcp(viajes, conCcp, ahora);
-  } catch {
+    const { viajes, conCcp, truncado } = await repoDocs.leerSalidasParaSinCcp(tenantId, ahora);
+    return { ...listarViajesSinCcp(viajes, conCcp, ahora), ...(truncado ? { truncado: true } : {}) };
+  } catch (e) {
+    logger.warn('carta_porte.sin_ccp_no_leido', { tenantId, error: e instanceof Error ? e.message : String(e) });
     return 'no_leido';
   }
 }
@@ -76,7 +79,8 @@ export default async function PaginaAgenteCartaPorte({
   let datos: EstadoCartaPorte | null;
   try {
     datos = await getEstadoCartaPorte(tenantId);
-  } catch {
+  } catch (e) {
+    logger.warn('carta_porte.estado_no_leido', { tenantId, error: e instanceof Error ? e.message : String(e) });
     datos = null;
   }
 
@@ -86,7 +90,8 @@ export default async function PaginaAgenteCartaPorte({
     const fila = await repoDocs.buzonDeFlota(tenantId);
     const dominio = dominioBuzon();
     buzon = fila ? { direccion: direccionCp(fila.token, dominio), activo: fila.activo, remitentes: fila.remitentesPermitidos, dominioConfigurado: dominio !== null } : null;
-  } catch {
+  } catch (e) {
+    logger.warn('carta_porte.buzon_no_leido', { tenantId, error: e instanceof Error ? e.message : String(e) });
     buzon = 'no_leido';
   }
 

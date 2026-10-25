@@ -63,3 +63,29 @@ describe('los estados honestos', () => {
     expect(r.estado).toBe('error');
   });
 });
+
+// A37-S22-08: el heatmap sigue la misma variable de entorno que los PRs y el CI.
+describe('A37-S22-08 · GITHUB_REPO', () => {
+  const repoAntes = process.env.GITHUB_REPO;
+  afterEach(() => {
+    if (repoAntes === undefined) delete process.env.GITHUB_REPO;
+    else process.env.GITHUB_REPO = repoAntes;
+  });
+
+  it('consulta el repo de GITHUB_REPO cuando está puesta', async () => {
+    process.env.GITHUB_REPO = 'org-nueva/repo-movido';
+    fetchMock.mockResolvedValue({ status: 200, ok: true, json: async () => [] } as Response);
+    await getActividadCodigo();
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(urls.length).toBeGreaterThan(0);
+    for (const u of urls) expect(u).toContain('/repos/org-nueva/repo-movido/');
+  });
+
+  it('sin la variable conserva el repo por omisión de las demás funciones', async () => {
+    delete process.env.GITHUB_REPO;
+    fetchMock.mockResolvedValue({ status: 200, ok: true, json: async () => [] } as Response);
+    await getActividadCodigo();
+    for (const c of fetchMock.mock.calls) expect(String(c[0])).toContain('/repos/javiercamarapp/likida.ai/');
+  });
+});
+

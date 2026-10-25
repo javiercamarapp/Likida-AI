@@ -188,17 +188,15 @@ export function analizarHistorial(
   const respuestaDe = new Map<(typeof msgs)[number], (typeof msgs)[number] | null>();
   const esperas: number[] = [];
   let sinRespuesta = 0;
+  // A37-S58-06: el siguiente mensaje del equipo de cada posición, calculado de un solo recorrido (antes: un barrido por mensaje de cliente).
+  const siguienteEquipo = new Array<(typeof msgs)[number] | null>(msgs.length + 1).fill(null);
+  for (let i = msgs.length - 1; i >= 0; i--) siguienteEquipo[i] = msgs[i].rol === 'equipo' ? msgs[i] : siguienteEquipo[i + 1];
   msgs.forEach((m, i) => {
     if (m.rol !== 'cliente') return;
     // Los mensajes de saludo/agradecimiento no esperan respuesta: contarlos como «sin respuesta» inflaría el problema.
     const tema = temaPorMensaje.get(m)!;
     const sustantivo = !esTemaIgnorable(tema) && (tema !== 'otro' || esPregunta(m.texto));
-    let r: (typeof msgs)[number] | null = null;
-    for (let j = i + 1; j < msgs.length; j++) {
-      if (msgs[j].rol !== 'equipo') continue;
-      r = msgs[j];
-      break;
-    }
+    const r = siguienteEquipo[i + 1];
     const min = r ? (Date.parse(r.enviadoEn) - Date.parse(m.enviadoEn)) / 60_000 : null;
     respuestaDe.set(m, r && min !== null && min <= VENTANA_RESPUESTA_MIN ? r : null);
     if (!sustantivo) return;
@@ -215,6 +213,10 @@ export function analizarHistorial(
   };
 
   // ── FAQs: preguntas parecidas (Jaccard ≥ 0.5 sobre sus palabras con contenido) ──
+  // Tope de grupos abiertos a la vez: con 50 000 mensajes y casi todas las preguntas distintas la búsqueda lineal sería cuadrática.
+  // Al llenarse, el grupo de UN solo mensaje más antiguo cede su lugar al nuevo (un grupo con 2+ mensajes ya es una pregunta frecuente
+  // y no se desaloja); si todos son frecuentes, la pregunta nueva no abre grupo.
+  const MAX_GRUPOS_FAQ = 300;
   interface Grupo { fichas: Set<string>; miembros: Array<(typeof msgs)[number]> }
   const grupos: Grupo[] = [];
   for (const m of cliente) {
@@ -225,7 +227,14 @@ export function analizarHistorial(
     const f = new Set(fichas(m.texto));
     if (f.size < 2) continue;
     const g = grupos.find((x) => jaccard(x.fichas, f) >= 0.5);
-    if (g) { g.miembros.push(m); for (const t of f) g.fichas.add(t); } else grupos.push({ fichas: f, miembros: [m] });
+    if (g) { g.miembros.push(m); for (const t of f) g.fichas.add(t); } else {
+      if (grupos.length >= MAX_GRUPOS_FAQ) {
+        const suelto = grupos.findIndex((x) => x.miembros.length === 1);
+        if (suelto === -1) continue;
+        grupos.splice(suelto, 1);
+      }
+      grupos.push({ fichas: f, miembros: [m] });
+    }
   }
   const todasLasFaqs: FaqItem[] = grupos
     .filter((g) => g.miembros.length >= 2)

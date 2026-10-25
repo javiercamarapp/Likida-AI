@@ -73,3 +73,13 @@ describe('generarInformePDF — el motor genérico con el lenguaje del canon', (
     expect(t).toContain('Empresa 60'); // la última fila SÍ llegó — nada se trunca en silencio
   });
 });
+
+describe('A37-S46-09: controles C1 (U+007F-U+009F) no tiran el informe', () => {
+  it('un valor con mojibake de control se degrada a «?» y el PDF se genera', async () => {
+    const sucio = 'Ã\u0081 Ruta\u007f\u0085\u009f X';
+    const inf: Informe = { ...BASE, secciones: [{ titulo: 'Resumen', filas: [[sucio, '1']] }] };
+    const bytes = await generarInformePDF(inf);
+    expect(bytes.length).toBeGreaterThan(500);
+    expect(await textoDelPdf(bytes)).toContain('Ã? Ruta');
+  });
+});

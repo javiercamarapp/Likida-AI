@@ -55,6 +55,9 @@ describe('lo que NO es una afirmación de estado', () => {
     'Recibí tu foto 📸 ¿Te falta algún otro comprobante?',
     'Tu ticket de $714.75 quedó registrado.',
     'Si ya no tienes más comprobantes, dime *listo*.',
+    // A37-S41-08: «lista» de una FOTO no es el cierre de la liquidación.
+    'Tu foto quedó lista, mándame la siguiente.',
+    'El ticket está listo para revisión; envíame el que sigue.',
   ];
 
   for (const t of inocentes) {
@@ -149,6 +152,8 @@ describe('afirma el cierre sin decir "ya" (el caso que se le escapaba)', () => {
     'Cerré tu viaje, en un momento te llega el PDF.',
     'Liquidé tu viaje contra el anticipo.',
     'Tu liquidación está lista ✅',
+    'Tu liquidación quedó lista ✅',
+    'Quedó lista tu liquidación.',
   ];
 
   for (const m of mentirasSinYa) {

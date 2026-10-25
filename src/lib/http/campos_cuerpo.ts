@@ -56,6 +56,12 @@ export function texto(
   if (typeof v === 'number' && !Number.isFinite(v)) {
     throw new CampoInvalido(campo, `\`${campo}\` tiene que ser texto.`);
   }
+  // A37-S64-09: un entero mayor a 2^53 ya llegó redondeado al parsear el JSON
+  // (…789 y …790 son el mismo double): como folio dedupearía contra otro
+  // viaje sin avisar. Se pide mandarlo como texto, donde no se pierde nada.
+  if (typeof v === 'number' && Number.isInteger(v) && !Number.isSafeInteger(v)) {
+    throw new CampoInvalido(campo, `\`${campo}\` es un número demasiado grande para conservar todos sus dígitos: envíalo como texto (entre comillas).`);
+  }
   const t = String(v).trim();
   if (t.length > opciones.max) {
     // NO se recorta en silencio: un folio truncado dedupea contra el folio

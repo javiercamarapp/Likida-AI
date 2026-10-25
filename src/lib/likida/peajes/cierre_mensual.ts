@@ -75,6 +75,11 @@ export interface CierreMensual {
   repetidosEntreArchivos: Array<{ fecha: string; caseta: string | null; tag: string | null; monto: number; archivos: string[] }>;
   /** Mes anterior contra el que se compararon los tardíos: `true` si se cargó al menos un archivo suyo. */
   mesAnteriorCargado: boolean;
+  /**
+   * A37-A2-10: cobros que están en DOS o más archivos del propio mes (mensual solapado con decenales, o un corte reemitido
+   * con otros bytes) y que `cruces`/`monto` suman más de una vez: lo que sobra del total, sin quitarlo a ciegas.
+   */
+  dobleConteo: { n: number; monto: number };
   completo: boolean;
   avisos: string[];
 }
@@ -192,12 +197,35 @@ export function cierreMensual(mes: string, archivos: readonly ArchivoCierre[]): 
     avisos.push(`${repetidos.length} cobro(s) aparecen en más de un archivo (mismo TAG, segundo, caseta e importe): candidatos fuertes a cobro repetido. Si subiste dos veces el mismo archivo, anula uno.`);
   }
 
+  // Lo que el total del mes suma de más: por cada cobro presente en varios archivos DEL MES, todas las apariciones menos una.
+  const aparicionesEnMes = new Map<string, Array<{ archivo: string; monto: number }>>();
+  for (const a of delMes) {
+    for (const l of a.lineas) {
+      const k = llave(l);
+      if (!k) continue;
+      const arr = aparicionesEnMes.get(k) ?? [];
+      arr.push({ archivo: a.id, monto: l.monto });
+      aparicionesEnMes.set(k, arr);
+    }
+  }
+  let dobleN = 0;
+  let dobleMonto = 0;
+  for (const arr of aparicionesEnMes.values()) {
+    if (new Set(arr.map((x) => x.archivo)).size < 2) continue; // repetido dentro de UN archivo: son dos cobros reales
+    for (const x of arr.slice(1)) { dobleN++; dobleMonto += x.monto; }
+  }
+  const dobleConteo = { n: dobleN, monto: r2(dobleMonto) };
+  if (dobleN > 0) {
+    avisos.push(`${dobleN} cobro(s) por ${dobleConteo.monto.toFixed(2)} están en más de un archivo del mes y el total los suma dos veces: el cierre NO está completo hasta que anules el archivo repetido.`);
+  }
+
   return {
     mes, decenas, decenasFaltantes, archivosSinPeriodo,
     cruces, monto: r2(monto),
     tardios, tardiosMesAnterior: suma('mes_anterior'), tardiosDecenaAnterior: suma('decena_anterior'),
     repetidosEntreArchivos: repetidos, mesAnteriorCargado,
-    completo: decenasFaltantes.length === 0 && archivosSinPeriodo.length === 0,
+    dobleConteo,
+    completo: decenasFaltantes.length === 0 && archivosSinPeriodo.length === 0 && dobleN === 0,
     avisos,
   };
 }

@@ -24,6 +24,8 @@ export const estado = {
   archivos: new Map<string, Uint8Array>(),
   eventos: [] as Evento[],
   correcciones: [] as Correccion[],
+  /** `cp_ccp_timbrado` (0794): el CCP timbrado recibido de cada documento (sus archivos viven en Storage). */
+  ccp: [] as Array<{ tenantId: string; documentoId: string; uuid: string; pdfRuta: string; xmlRuta: string }>,
   buzones: new Map<string, { tenantId: string; token: string; activo: boolean; remitentesPermitidos: string[] }>(),
   perfiles: new Map<string, { id: string; tenantId: string; clave: string; nombre: string; clienteId: string | null; formato: string; firma: unknown; versionActiva: number; creadaEn: string }>(),
   versiones: [] as Version[],
@@ -70,7 +72,7 @@ export const estado = {
 };
 
 export function reset(): void {
-  estado.docs.clear(); estado.archivos.clear(); estado.eventos.length = 0; estado.correcciones.length = 0; estado.buzones.clear();
+  estado.docs.clear(); estado.archivos.clear(); estado.eventos.length = 0; estado.correcciones.length = 0; estado.ccp.length = 0; estado.buzones.clear();
   estado.perfiles.clear(); estado.versiones.length = 0; estado.exportConfigs.length = 0; estado.viajes.length = 0; estado.mercancias.length = 0;
   estado.catalogoNumeros.length = 0; estado.catalogoProductos.length = 0; estado.catalogoPartes.length = 0; estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.avisos.clear(); estado.embarques.length = 0; estado.sinMigracion = false; estado.sinDivision = false; estado.antesDeDividir = null; estado.fallar.clear(); estado.llamadas.length = 0; estado.salidaConfigs.clear(); estado.catalogosSat.clear(); estado.consultasCatalogoSat.length = 0; estado.envios.length = 0; estado.usuarios.length = 0; estado.revisores.clear(); estado.sinColumnaRevisor = false;
   estado.seq = 0; estado.reloj.ahora = () => new Date();
@@ -129,8 +131,11 @@ export const api: typeof Real = {
     let filas = [...estado.docs.values()].filter((d) => d.tenantId === tenantId);
     if (f.estados?.length) filas = filas.filter((d) => f.estados!.includes(d.estado));
     if (f.desde) filas = filas.filter((d) => d.createdAt >= f.desde!);
-    filas.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-    return { filas: filas.slice(0, f.limite ?? 100).map(clon), total: filas.length };
+    if (f.ids) filas = filas.filter((d) => f.ids!.includes(d.id));
+    if (f.sinExportar) filas = filas.filter((d) => d.exportadoEn === null);
+    filas.sort((a, b) => (a.createdAt === b.createdAt ? 0 : (a.createdAt < b.createdAt) === !!f.ascendente ? -1 : 1));
+    const d0 = f.desplazar ?? 0;
+    return { filas: filas.slice(d0, d0 + (f.limite ?? 100)).map(clon), total: filas.length };
   },
   async reclamarDocumento(tenantId, id, lease = 120) {
     falla('reclamarDocumento');
@@ -175,7 +180,7 @@ export const api: typeof Real = {
   },
   async documentosConFolio(tenantId, folio, exceptoId) {
     return [...estado.docs.values()]
-      .filter((d) => d.tenantId === tenantId && d.id !== exceptoId && d.estado !== 'rechazado' && d.extraccion?.campos.folio_cliente?.valor === folio)
+      .filter((d) => d.tenantId === tenantId && d.id !== exceptoId && d.estado !== 'rechazado' && String(d.extraccion?.campos.folio_cliente?.valor ?? '').trim().toUpperCase() === folio.trim().toUpperCase())
       .map((d) => ({ id: d.id, estado: d.estado, nombreArchivo: d.nombreArchivo }));
   },
   async registrarEvento(tenantId, documentoId, tipo, actorId, detalle = {}) {
@@ -262,7 +267,7 @@ export const api: typeof Real = {
   },
   async borrarExportConfig(tenantId, id) { estado.exportConfigs = estado.exportConfigs.filter((c) => !(c.tenantId === tenantId && c.id === id)); },
 
-  async viajePorFolio(tenantId, folio) { const v = estado.viajes.find((x) => x.tenantId === tenantId && x.folio === folio); return v ? clon(v) : null; },
+  async viajePorFolio(tenantId, folio) { const v = estado.viajes.find((x) => x.tenantId === tenantId && (x.folio ?? '').trim().toUpperCase() === folio.trim().toUpperCase()); return v ? clon(v) : null; },
   async viajePorId(tenantId, id) { const v = estado.viajes.find((x) => x.tenantId === tenantId && x.id === id); return v ? clon(v) : null; },
   async operadoresDeFlota(tenantId) { return estado.operadores.filter((o) => o.tenantId === tenantId).map(({ tenantId: _t, ...o }) => o); },
   async unidadesPorPlacas(tenantId, placas) {
@@ -272,6 +277,7 @@ export const api: typeof Real = {
     const v = estado.viajes.find((x) => x.tenantId === tenantId && x.operadorId === operadorId && (x.estatus === 'abierto' || x.estatus === 'en_cuadre'));
     return v ? { id: v.id, folio: v.folio } : null;
   },
+  async unidadConViajeAbierto(tenantId, unidadId) { return estado.viajes.some((x) => x.tenantId === tenantId && x.unidadId === unidadId && (x.estatus === 'abierto' || x.estatus === 'en_cuadre')); },
   async clientePropio(tenantId, clienteId) { return estado.clientes.some((c) => c.tenantId === tenantId && c.id === clienteId); },
   async cargarCatalogoCliente(tenantId, clienteId): Promise<CatalogoCliente> {
     falla('cargarCatalogoCliente');
@@ -286,7 +292,7 @@ export const api: typeof Real = {
   async listarClientes(tenantId) { return estado.clientes.filter((c) => c.tenantId === tenantId).map(({ tenantId: _t, ...c }) => c); },
   async insertarViaje(tenantId, v) {
     falla('insertarViaje');
-    if (estado.viajes.some((x) => x.tenantId === tenantId && x.folio === v.folio)) return null;
+    if (estado.viajes.some((x) => x.tenantId === tenantId && (x.folio ?? '').toUpperCase() === v.folio.toUpperCase())) return null;
     if (estado.viajes.some((x) => x.tenantId === tenantId && x.operadorId === v.operadorId && x.estatus === 'abierto')) return null;
     const id = `viaje-${++estado.seq}`;
     estado.viajes.push({
@@ -330,6 +336,16 @@ export const api: typeof Real = {
     return n;
   },
 
+  async reclamarExportacion(tenantId, ids, ahora = new Date()) {
+    falla('reclamarExportacion');
+    const ganados: string[] = [];
+    for (const id of ids) {
+      const d = estado.docs.get(id);
+      if (d && d.tenantId === tenantId && d.estado === 'aprobado' && d.exportadoEn === null) { d.exportadoEn = ahora.toISOString(); ganados.push(id); }
+    }
+    return ganados;
+  },
+
   async reclamarCorreo(emailId) {
     const c = estado.correos.get(emailId);
     if (c?.estado === 'applied') return { resultado: 'applied' };
@@ -357,18 +373,26 @@ export const api: typeof Real = {
     estado.docs.delete(id);
     estado.eventos = estado.eventos.filter((e) => e.documentoId !== id);
     estado.correcciones = estado.correcciones.filter((c) => c.documentoId !== id);
+    estado.ccp = estado.ccp.filter((c) => c.documentoId !== id); // la FK en cascada de la 0794
     estado.mercancias.forEach((m) => { if (m.documentoId === id) m.documentoId = null; });
     return true;
+  },
+  async ccpDeDocumento(tenantId, documentoId) {
+    return estado.ccp.filter((c) => c.tenantId === tenantId && c.documentoId === documentoId).map(({ uuid, pdfRuta, xmlRuta }) => ({ uuid, pdfRuta, xmlRuta }));
   },
   async marcarPurgado(tenantId, id) {
     const d = estado.docs.get(id);
     if (!d || d.tenantId !== tenantId || d.purgadoEn) return false;
-    d.storageRuta = null; d.textoExtracto = null; d.purgadoEn = ahoraIso();
+    d.storageRuta = null; d.textoExtracto = null; d.extraccion = null; d.validacion = null; d.remitente = null; d.asunto = null; d.purgadoEn = ahoraIso();
     return true;
+  },
+  async anonimizarCorrecciones(tenantId, documentoId) {
+    for (const c of estado.correcciones) if (c.tenantId === tenantId && c.documentoId === documentoId) { c.valorAntes = null; c.valorDespues = null; }
   },
 
   // ── El worker (0640-0642): la MISMA regla que las RPC de la 0641 ──────────
   TOPE_INTENTOS_DOC: 5,
+  TOPE_SALIDAS_SIN_CCP: 20_000,
   GRACIA_RECIBIDO_SEG: 120,
   esperaFallidoMin: (intentos) => 15 * 2 ** Math.max(Math.min(intentos, 6) - 1, 0),
   tablaAusente: (e) => Boolean(e && (e.code === 'PGRST205' || e.code === '42P01')),
@@ -545,11 +569,12 @@ export const api: typeof Real = {
     if (estado.sinColumnaRevisor) return [];
     return [...estado.revisores].filter(([id, r]) => r === userId && estado.docs.get(id)?.tenantId === tenantId).map(([id]) => id);
   },
-  async asignarRevisorDoc(tenantId, id, revisorId) {
+  async asignarRevisorDoc(tenantId, id, revisorId, soloSiVacio = false) {
     falla('asignarRevisorDoc');
     if (estado.sinColumnaRevisor) throw new Error('La asignación de revisor todavía no está disponible en esta base (falta la migración 0790).');
     const d = estado.docs.get(id);
     if (!d || d.tenantId !== tenantId) return false;
+    if (soloSiVacio && estado.revisores.has(id)) return false;
     if (revisorId === null) estado.revisores.delete(id); else estado.revisores.set(id, revisorId);
     return true;
   },
@@ -612,7 +637,7 @@ export const api: typeof Real = {
     return m;
   },
   DIAS_SALIDAS_SIN_CCP: 45,
-  async leerSalidasParaSinCcp() { falla('leerSalidasParaSinCcp'); return { viajes: [], conCcp: new Set<string>() }; },
+  async leerSalidasParaSinCcp() { falla('leerSalidasParaSinCcp'); return { viajes: [], conCcp: new Set<string>(), truncado: false }; },
   async enviosParaInsights(tenantId) {
     return estado.envios.filter((e) => e.tenantId === tenantId).map((e) => ({ documentoId: e.documentoId, estado: e.estado, createdAt: new Date().toISOString(), enviadoEn: null, causaPendiente: null }));
   },

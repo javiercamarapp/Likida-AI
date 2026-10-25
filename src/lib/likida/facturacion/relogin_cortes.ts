@@ -1,4 +1,5 @@
 import type { CampoInventariado, InventarioPagina } from './adaptadores/playwright_base';
+import { escaparAtributoCss } from './vinculo_senales';
 
 // ════════════════════════════════════════════════════════════════════════════
 // LOS CORTES DUROS DEL RE-LOGIN — dónde se para la máquina y empieza la
@@ -251,10 +252,17 @@ export interface CamposDeEntrada {
   boton: string | null;
 }
 
-/** `#id` si lo hay, `[name="…"]` si no, `null` si el campo no tiene ni uno. */
+/**
+ * `#id` si el id es un identificador CSS simple; `[id="…"]` (comillas y
+ * barras escapadas) si trae `:`, `$`, `.`, espacios… como los ids de JSF/ASP.NET
+ * (`formLogin:usuario`): `#formLogin:usuario` se parsea como pseudo-clase y
+ * Playwright lanza (A37-S45-05). `[name="…"]` si no hay id; `null` si ninguno.
+ */
 function selectorDe(c: { id: string; name: string }): string | null {
-  if (c.id) return `#${c.id}`;
-  if (c.name) return `[name="${c.name}"]`;
+  if (c.id) {
+    return /^[A-Za-z_][\w-]*$/.test(c.id) ? `#${c.id}` : `[id="${escaparAtributoCss(c.id)}"]`;
+  }
+  if (c.name) return `[name="${escaparAtributoCss(c.name)}"]`;
   return null;
 }
 

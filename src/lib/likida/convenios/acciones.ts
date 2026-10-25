@@ -35,6 +35,8 @@ export interface ContextoConvenios { tenantId: string; rol: string }
 const SIN_PERMISO = 'Solo el dueño de la flota o el jefe de tráfico editan los convenios.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_DETALLES = 30;
+/** Tope de reenvíos de WhatsApp (en serie) por acción de servidor: más allá se corta el lote y se avisa cuántos quedaron (A37-S39-10). */
+export const MAX_REENVIOS_POR_ACCION = 25;
 const NO_DISPONIBLE = 'Los convenios todavía no están disponibles en tu cuenta: falta aplicar la actualización de la base (0580). Avísanos.';
 
 /**
@@ -235,7 +237,11 @@ export async function guardarConvenioDelPanel(
   try {
     const cambiados = await d.refrescar(ctx.tenantId, guardado.id, entrada.reenviar);
     if (cambiados.length === 0) return { ok: true, mensaje: `${base} Ningún viaje en curso tenía instrucciones distintas: no hubo nada que actualizar.` };
-    const porReenviar = cambiados.filter((c) => c.reenviar);
+    const todosPorReenviar = cambiados.filter((c) => c.reenviar);
+    // Un lote acotado: una acción de servidor tiene duración máxima y cada envío es un viaje a WhatsApp. El resto queda con las
+    // instrucciones nuevas y se manda desde «Convenio ligado a cada viaje en curso» (el sello despacho_enviado_en evita repeticiones).
+    const porReenviar = todosPorReenviar.slice(0, MAX_REENVIOS_POR_ACCION);
+    const pendientesDeLote = todosPorReenviar.length - porReenviar.length;
     let enviados = 0;
     const sinMandar: string[] = [];
     for (const c of porReenviar) {
@@ -250,6 +256,7 @@ export async function guardarConvenioDelPanel(
       partes.push(porReenviar.length === 0
         ? 'Ninguno tenía un despacho que volver a mandar (los que no tienen operador no reciben mensajes): solo quedaron con las instrucciones nuevas.'
         : `Se volvieron a mandar a ${plural(enviados, 'operador', 'operadores')}.`);
+      if (pendientesDeLote > 0) partes.push(`${plural(pendientesDeLote, 'viaje quedó pendiente de reenviar', 'viajes quedaron pendientes de reenviar')} (se manda un lote de ${MAX_REENVIOS_POR_ACCION} por vez): ya tienen las instrucciones nuevas; mándalos desde «Convenio ligado a cada viaje en curso» (elige el mismo convenio y deja marcada la casilla de reenviar).`);
       if (sinMandar.length > 0) partes.push(`${plural(sinMandar.length, 'viaje no pudo recibirlas', 'viajes no pudieron recibirlas')} ahorita (sin teléfono, sin plantilla aprobada o WhatsApp caído): ya tienen las instrucciones nuevas, pero el mensaje no salió: mándalo desde «Convenio ligado a cada viaje en curso» (elige el mismo convenio y deja marcada la casilla de reenviar).`);
     }
     return { ok: true, mensaje: partes.join(' ') };

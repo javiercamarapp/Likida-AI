@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { ahoraMs } from '@/lib/saludo';
 import { logger } from '@/lib/logger';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -12,7 +13,7 @@ import { AvisoSinMigrar, crearRepoAviso, type EstadoAviso } from '@/lib/likida/v
 import { crearRepoCambios, type FilaActual } from '@/lib/likida/vigia/aviso/cambios';
 import { entregarAviso } from '@/lib/likida/vigia/aviso/entrega';
 import {
-  agruparPorDia, armarTarjeta, crearDepsCopia, crearRepoBandeja, DIAS_BANDEJA, MAX_TEXTO_AVISO, paraEntrega, validarDatoManual,
+  agruparPorDia, armarTarjeta, crearDepsCopia, crearRepoBandeja, DIAS_BANDEJA, MAX_TEXTO_AVISO, TOPE_AVISOS_BANDEJA, paraEntrega, validarDatoManual,
   type AvisoBandeja,
 } from '@/lib/likida/vigia/aviso/bandeja';
 import { sufijoTenant } from '../../../sufijo';
@@ -99,7 +100,9 @@ async function ejecutar(a: { tenantId: string; userId: string }, fd: FormData): 
   if (que === 'descartar') {
     if (!EDITABLES.includes(av.estado) && av.estado !== 'aprobado') return fallo('Este aviso ya no se puede descartar.');
     const ok = await crearRepoCambios().cambiarEstado(a.tenantId, id, av.estado, 'descartado', 'descartado por una persona');
-    return ok ? bien('Descartado: no se enviará.') : fallo(CARRERA);
+    if (ok) return bien('Descartado: no se enviará.');
+    // A37-S58-01: un aprobado que no se pudo cerrar suele ser porque el envío ya está en curso.
+    return fallo(av.estado === 'aprobado' ? 'Este aviso se está enviando en este momento y ya no se puede descartar. Recarga la pantalla.' : CARRERA);
   }
 
   if (que === 'capturar') {
@@ -107,6 +110,7 @@ async function ejecutar(a: { tenantId: string; userId: string }, fd: FormData): 
     const v = validarDatoManual({
       operadorNombre: texto(fd, 'operadorNombre'), licencia: texto(fd, 'licencia'), licenciaVence: texto(fd, 'licenciaVence'),
       telefono: texto(fd, 'telefono'), placasUnidad: texto(fd, 'placasUnidad'), placasCaja: texto(fd, 'placasCaja'), estadoCaja: texto(fd, 'estadoCaja'),
+      borrar: fd.getAll('borrar').map(String),
     });
     if (!v.ok) return fallo(v.error);
     const r = await repo.guardarDatoManual(a.tenantId, av.filaId, a.userId, v.valor);
@@ -333,6 +337,18 @@ async function ejecutarConfig(a: { tenantId: string; userId: string; rol: string
   const cambios = cambiosDeConfig(previo.config, previo.ventanaIlegible, nuevo);
   if (cambios.config.length === 0 && cambios.operador.length === 0) return bien('No hay cambios que guardar: la configuración ya estaba así.');
 
+  // ── A37-S15-05: ENCENDER, MODO Y CANAL SON DE LA DUEÑA ─────────────────────
+  // La configuración del Vigía (../page.tsx, `actor(sp, 'administra')`) exige `flota_admin` y le cierra el autoenvío al
+  // perfil `cinco_agentes`; aquí el encargado podía guardar modo autónomo + WhatsApp directo + encendido sin ese candado.
+  // Se relee el rol de la SESIÓN (nunca del formulario) y se compara contra lo ya guardado: el encargado sigue ajustando
+  // horarios, secciones y reenvíos, pero no estos tres. Autónomo, además, se cierra bajo el perfil restringido.
+  if (!esDuena && (nuevo.habilitado !== previo.config.habilitado || nuevo.modo !== previo.config.modo || nuevo.canalDefault !== previo.config.canalDefault)) {
+    return falloCfg('Solo la dueña de la flota enciende o apaga el aviso y cambia el modo o el canal de envío.');
+  }
+  if (nuevo.modo === 'autonomo' && previo.config.modo !== 'autonomo' && (await perfilDeTenant(a.tenantId)) === 'cinco_agentes') {
+    return falloCfg('El modo autónomo no está disponible en tu plan.');
+  }
+
   const hechos: CambioConfig[] = [];
   try {
     if (cambios.operador.length > 0) {
@@ -401,6 +417,7 @@ export default async function PaginaAvisosVigia({ searchParams }: { searchParams
         opciones={OPCIONES_CONFIG}
         puedeEditar={puedeDecidir}
         puedeEditarPrivacidad={rol === DUENA}
+        puedeEditarEnvio={rol === DUENA}
         ventanaIlegible={leida?.ventanaIlegible ?? false}
         errorLectura={errorCfg}
         sinMigrar={sinMigrarCfg}
@@ -452,6 +469,7 @@ export default async function PaginaAvisosVigia({ searchParams }: { searchParams
       sufijo={sufijoTenant(sp)}
       grupos={agruparPorDia(tarjetas)}
       total={tarjetas.length}
+      hayMas={avisos.length >= TOPE_AVISOS_BANDEJA}
       soloPendientes={soloPendientes}
       puedeDecidir={puedeDecidir}
       avisoEncendido={avisoEncendido}

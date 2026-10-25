@@ -11,6 +11,7 @@ import {
   guardarCursosLote, listarCasetas, listarConveniosPorNombre, listarUnidades,
   type CasetaVista, type CursoParaGuardar, type ResultadoGuardarCursos,
 } from './datos';
+import { decodificarTexto } from './csv';
 import { normalizarNombre } from './formatos';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -143,7 +144,7 @@ export async function importarCursosArchivo(tenantId: string, nombre: string, bu
   let leidos: ResultadoLectura<CursoTablaPropia>;
   try {
     const esCsv = /\.(csv|tsv|txt)$/i.test(nombre.trim()) || !/\.[a-z0-9]+$/i.test(nombre.trim());
-    leidos = esCsv ? leerCursosCsv(new TextDecoder('utf-8').decode(buffer)) : leerCursosMatriz(m.matriz);
+    leidos = esCsv ? leerCursosCsv(decodificarTexto(buffer)) : leerCursosMatriz(m.matriz);
   } catch (e) {
     if (e instanceof ErrorTablaPropia) return { ok: false, error: e.message };
     throw e;
