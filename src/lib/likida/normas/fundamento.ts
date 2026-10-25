@@ -431,7 +431,27 @@ export interface ResultadoFundamento {
 }
 
 /** La oración habla de la ficha en pasado / como ya no vigente. */
-const MARCA_DE_PASADO = /\b(?:venci\w*|rigi[óo]|rigieron|ya\s+no\s+(?:rige|aplica|est[áa]\s+vigente|es\s+exigible)|dej[óo]\s+de|expir\w*|no\s+(?:rige|est[áa]\s+vigente|aplica)|hasta\s+(?:el\s+)?(?:31\s+de\s+diciembre|2026-12-31))/i;
+// Una lista de regex simples (en vez de una sola con alternancias y grupos anidados) para no
+// disparar `security/detect-unsafe-regex`; el criterio es el mismo que el de la alternancia original.
+const MARCAS_DE_PASADO: RegExp[] = [
+  /\bvenci\w*/i,
+  /\brigi[óo]/i,
+  /\brigieron/i,
+  /\bya\s+no\s+rige/i,
+  /\bya\s+no\s+aplica/i,
+  /\bya\s+no\s+est[áa]\s+vigente/i,
+  /\bya\s+no\s+es\s+exigible/i,
+  /\bdej[óo]\s+de/i,
+  /\bexpir\w*/i,
+  /\bno\s+rige/i,
+  /\bno\s+est[áa]\s+vigente/i,
+  /\bno\s+aplica/i,
+  /\bhasta\s+31\s+de\s+diciembre/i,
+  /\bhasta\s+el\s+31\s+de\s+diciembre/i,
+  /\bhasta\s+2026-12-31/i,
+  /\bhasta\s+el\s+2026-12-31/i,
+];
+const MARCA_DE_PASADO = { test: (o: string): boolean => MARCAS_DE_PASADO.some((r) => r.test(o)) };
 
 function citaVencidaEnPresente(id: string, reply: string): boolean {
   return oracionesConCita(reply, patronesDe(id)).some((o) => !MARCA_DE_PASADO.test(o));
