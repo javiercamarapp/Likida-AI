@@ -98,7 +98,7 @@ export default function DashboardChrome({
           <div className="px-2 pb-2 pt-2" style={{ borderTop: '1px solid var(--line)' }}>
             <div className="hairline rounded-xl p-2 flex flex-col items-center lg:flex-row lg:justify-start gap-2 sb-centrable sb-user-card" style={{ background: 'var(--surface)' }}>
               <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[11px] font-semibold" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                {(nombre ?? 'F')[0].toUpperCase()}
+                {((nombre ?? '').trim() || 'F')[0].toUpperCase()}
               </div>
               <div className="hidden lg:block min-w-0 flex-1 sb-texto">
                 {/* H29 (auditoría 24): iba a `/cuenta` a secas — un superadmin
@@ -108,7 +108,7 @@ export default function DashboardChrome({
                     `useSearchParams()` — `layout.tsx` no recibe `searchParams`,
                     limitación de Next.js documentada ahí mismo). */}
                 <EnlaceCuenta rol={rol} className="block text-[13px] font-medium hover:opacity-70 transition-opacity truncate leading-tight">
-                  {nombre ?? 'Mi cuenta'}
+                  {(nombre ?? '').trim() || 'Mi cuenta'}
                 </EnlaceCuenta>
                 <div className="text-[10px] truncate" style={{ color: 'var(--faint)' }}>{ROL_BADGE[rol as RolAppUser] ?? rol.toUpperCase()}</div>
               </div>

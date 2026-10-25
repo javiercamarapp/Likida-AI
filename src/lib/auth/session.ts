@@ -106,7 +106,9 @@ export async function getSessionTenant(): Promise<SessionTenant | null> {
         // SIN FILA LEGIBLE NO HAY ROL. Ver `SIN_ROL`: el `?? 'flota_admin'` que
         // estaba aquí convertía una lectura fallida en el dueño de la flota.
         rol: (data?.rol as string) ?? SIN_ROL,
-        nombre: (data?.nombre as string) ?? null,
+        // A39-S16-01: '' o solo espacios = sin nombre. El marco del panel toma la
+        // inicial con `[0].toUpperCase()` y con '' rompía TODO /dashboard (TypeError).
+        nombre: typeof data?.nombre === 'string' && data.nombre.trim() !== '' ? data.nombre.trim() : null,
         operadorId: (data?.operador_id as string) ?? null,
         avatarUrl: (data?.avatar_url as string) ?? null,
       };

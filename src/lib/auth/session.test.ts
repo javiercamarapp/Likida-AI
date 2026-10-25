@@ -43,6 +43,16 @@ describe('getSessionTenant', () => {
     expect(r).toEqual({ userId: 'u-1', tenantId: 't-1', rol: 'flota_admin', nombre: 'Ana', operadorId: null, avatarUrl: null });
   });
 
+  it('A39-S16-01: un nombre vacío o de solo espacios sale como null (el marco no truena)', async () => {
+    getUser.mockResolvedValue({ data: { user: { id: 'u-1' } } });
+    for (const nombre of ['', '   ']) {
+      maybeSingle.mockResolvedValue({ data: { tenant_id: 't-1', rol: 'flota_admin', nombre } });
+      expect((await getSessionTenant())!.nombre).toBeNull();
+    }
+    maybeSingle.mockResolvedValue({ data: { tenant_id: 't-1', rol: 'flota_admin', nombre: '  Ana ' } });
+    expect((await getSessionTenant())!.nombre).toBe('Ana');
+  });
+
   // ── EL DEFAULT PRIVILEGIADO (4-ago-2026) ──────────────────────────────────
   //
   // `rol: (data?.rol as string) ?? 'flota_admin'`. Sin fila legible —RLS, un

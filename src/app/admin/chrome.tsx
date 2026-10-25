@@ -70,12 +70,12 @@ export default function AdminChrome({
                 <img src={avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
               ) : (
                 <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[11px] font-semibold" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                  {(nombre ?? 'J')[0].toUpperCase()}
+                  {((nombre ?? '').trim() || 'J')[0].toUpperCase()}
                 </div>
               )}
               <div className="hidden lg:block min-w-0 flex-1 sb-texto">
                 <Link href="/admin/mi-perfil" className="block text-[13px] font-medium hover:opacity-70 transition-opacity truncate leading-tight">
-                  {nombre ?? 'Mi cuenta'}
+                  {(nombre ?? '').trim() || 'Mi cuenta'}
                 </Link>
                 <div className="text-[10px] truncate" style={{ color: 'var(--faint)' }}>SUPERADMIN</div>
               </div>
