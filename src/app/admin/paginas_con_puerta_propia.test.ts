@@ -48,9 +48,15 @@ function cierre(t: string, desde: number): number {
  */
 export function cuerpoDelRender(fuente: string): string | null {
   const t = sinComentarios(fuente);
-  const m = /export\s+default\s+(?:async\s+)?function\s*\w*\s*\(/.exec(t);
-  if (!m) return null;
-  const abreParams = m.index + m[0].length - 1;
+  const d = /export\s+default\s+/.exec(t);
+  if (!d) return null;
+  let pos = d.index + d[0].length;
+  const asincrona = /^async\s+/.exec(t.slice(pos));
+  if (asincrona) pos += asincrona[0].length;
+  if (!/^function\b/.test(t.slice(pos))) return null;
+  // El primer «(» tras `function [nombre]` abre los parámetros (un identificador no lleva paréntesis).
+  const abreParams = t.indexOf('(', pos);
+  if (abreParams < 0) return null;
   const cierraParams = cierre(t, abreParams);
   if (cierraParams < 0) return null;
   const abreCuerpo = t.indexOf('{', cierraParams);
