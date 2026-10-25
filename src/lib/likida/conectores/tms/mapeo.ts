@@ -253,8 +253,9 @@ export function validarMapeo(m: unknown): string[] {
       if (typeof f === 'string') e.push(`campo «${dest}»: ${f}`);
       if (det.transformar !== undefined && !(TRANSFORMACIONES as readonly string[]).includes(det.transformar)) e.push(`campo «${dest}»: transformación desconocida «${String(det.transformar).slice(0, 20)}»`);
       // A37-TRANSVERSAL-04: sin «numero», un «1,234.50» llega como texto y el renglón se omitía sin aviso (NaN > 0 es falso).
-      if ((x.recurso === 'liquidaciones' || x.recurso === 'peajes') && CAMPOS_DINERO.has(dest) && det.transformar !== 'numero') {
-        e.push(`campo «${dest}»: en ${x.recurso} un importe debe llevar transformar «numero» (con separador de miles llegaría como texto y se omitiría)`);
+      if ((x.recurso === 'liquidaciones' || x.recurso === 'peajes') && CAMPOS_DINERO.has(dest) && det.transformar !== undefined && det.transformar !== 'numero') {
+        // A37-O7-03: sin transformar (mapeo guardado antes) SE ACEPTA: aplicarMapeo lo lee como «numero». Una transformación distinta (texto, fecha, sí/no) sí se rechaza.
+        e.push(`campo «${dest}»: en ${x.recurso} un importe debe llevar transformar «numero» (o ninguna: se lee como número); con otra transformación no sería un importe`);
       }
       if (det.transformar !== 'fecha_local' && (det.zona !== undefined || det.formato !== undefined)) e.push(`campo «${dest}»: «zona» y «formato» solo aplican a fecha_local`);
       if (det.decimal !== undefined && (det.transformar !== 'numero' || (det.decimal !== '.' && det.decimal !== ','))) e.push(`campo «${dest}»: «decimal» solo aplica a numero y vale «.» o «,»`);
@@ -298,7 +299,9 @@ export function aplicarMapeo<T = Record<string, unknown>>(mapeo: MapeoTms, respu
   if (lista.length > MAX_FILAS) return vacio(`la respuesta trae ${lista.length} filas (máximo ${MAX_FILAS} por lectura)`);
 
   const plan = Object.entries(mapeo.campos).map(([dest, spec]) => {
-    const det: CampoDetallado = typeof spec === 'string' ? { fuente: spec } : spec;
+    const base: CampoDetallado = typeof spec === 'string' ? { fuente: spec } : spec;
+    // A37-O7-03: un importe de liquidaciones/peajes guardado sin transformar se lee como «numero» (nunca como texto sin interpretar).
+    const det: CampoDetallado = (mapeo.recurso === 'liquidaciones' || mapeo.recurso === 'peajes') && CAMPOS_DINERO.has(dest) && base.transformar === undefined ? { ...base, transformar: 'numero' } : base;
     return { dest, destSegs: parsearRuta(dest) as Segmento[], fuenteSegs: parsearRuta(det.fuente) as Segmento[], det, fuente: det.fuente };
   });
   const obligatorios = new Set([...mapeo.obligatorios, ...mapeo.clave_externa]);

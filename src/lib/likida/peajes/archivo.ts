@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import { matrizDeCsv } from './csv';
 import type { Celda } from './formatos';
 import { numero } from '@/lib/formato';
+import { ArchivoPeligroso, validarZipDeLibro } from '../importacion/zip_seguro';
 
 /** Tope de bytes de un archivo de catálogo (casetas, TAGs): un CSV de miles de filas pesa decenas de KB. */
 export const MAX_CATALOGO_BYTES = 4 * 1024 * 1024;
@@ -27,6 +28,7 @@ export function matrizDeArchivoCatalogo(nombre: string, buffer: Uint8Array): { o
   try {
     if (ext === 'csv' || ext === 'tsv' || ext === 'txt' || ext === '') return { ok: true, matriz: matrizDeCsv(buffer) };
     if (ext === 'xlsx' || ext === 'xls' || ext === 'ods') {
+      validarZipDeLibro(buffer); // A37-O7-05: bomba de descompresión (lanza ArchivoPeligroso)
       const libro = XLSX.read(buffer, { type: 'array', sheets: 0, sheetRows: MAX_FILAS_LECTURA_CATALOGO });
       const hoja = libro.Sheets[libro.SheetNames[0]];
       if (!hoja) return { ok: false, motivo: 'El archivo no trae ninguna hoja con datos.' };
@@ -35,7 +37,8 @@ export function matrizDeArchivoCatalogo(nombre: string, buffer: Uint8Array): { o
       return { ok: true, matriz: XLSX.utils.sheet_to_json<Celda[]>(hoja, { header: 1, raw: true, defval: '' }).map((f) => (f.length > TOPE_COLUMNAS_CATALOGO ? f.slice(0, TOPE_COLUMNAS_CATALOGO) : f)) };
     }
     return { ok: false, motivo: `No sé leer un archivo .${ext}. Sube un CSV o un Excel.` };
-  } catch {
+  } catch (e) {
+    if (e instanceof ArchivoPeligroso) return { ok: false, motivo: e.message };
     return { ok: false, motivo: 'No pude abrir el archivo. Revisa que no esté dañado o protegido con contraseña.' };
   }
 }
