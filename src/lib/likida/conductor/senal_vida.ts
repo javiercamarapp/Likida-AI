@@ -415,9 +415,13 @@ export async function barridoSenalVida(p: PuertosSenalVida, ahora: Date = new Da
           if (envio.ok) entregados++;
           else { ultimoError = envio.mensaje; if (envio.reintentable || envio.encolado) reintentables++; }
         }
-        if (entregados > 0) { r.escalaciones++; rechazosSeguidos = 0; }
+        // A37-O7-07: una pasada anterior sin destinatario dejó `sin_destinatario`; si ahora el aviso salió (o quedó en la cola), esa marca
+        // ya es falsa y el tablero diría «NO llegó». La marca de avisos fallidos al chofer NO se toca.
+        const limpiaMarcaVieja = async () => { if (ep!.ultimoError === 'sin_destinatario') await p.anotarFallo(ep!, ''); };
+        if (entregados > 0) { await limpiaMarcaVieja(); r.escalaciones++; rechazosSeguidos = 0; }
         else if (reintentables === destinos.length) {
           // Ya está en `wa_outbox`: el nivel quedó reclamado y no se reenvía.
+          await limpiaMarcaVieja();
           r.rechazosReintentables++; rechazosSeguidos++;
           r.fallos.push(`escalación señal de vida ${v.folio ?? v.id}: ${ultimoError} (queda en la cola de WhatsApp; no se reenvía)`);
         } else {

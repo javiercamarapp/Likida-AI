@@ -572,4 +572,19 @@ describe('T-A5-39 · sin respuesta no escala por sí sola (opción de configurac
     expect(ok.escaladas).toBe(1);
     expect(a.enviados.filter((e) => e.telefono === SUPERVISOR)).toHaveLength(1);
   });
+
+  it('A37-O7-08: la marca «escalada» va ANTES del envío; si no se puede escribir, no se manda y la pasada siguiente sí avisa (sin doble aviso)', async () => {
+    const a = mundo({ config: { detencionEscalaSinRespuestaMin: 30 } });
+    a.gps.muestras = quieta(T0, 40);
+    await a.pasada();
+    a.gps.muestras = quieta(new Date(T0.getTime() + 35 * 60_000), 40);
+    const ahora = new Date(T0.getTime() + 35 * 60_000);
+    const guardar = a.cron.guardarEventoDetencion;
+    const falla = await correrDeteccionParada({ ...a.cron, guardarEventoDetencion: async (h, d) => (d.tipo === 'escalada' ? false : guardar(h, d)) }, { ahora });
+    expect(falla.escaladas).toBe(0);
+    expect(a.enviados.filter((e) => e.telefono === SUPERVISOR)).toHaveLength(0);
+    const ok = await correrDeteccionParada(a.cron, { ahora });
+    expect(ok.escaladas).toBe(1);
+    expect(a.enviados.filter((e) => e.telefono === SUPERVISOR)).toHaveLength(1);
+  });
 });
