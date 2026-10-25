@@ -418,8 +418,9 @@ describe('AUDITORÍA 10 — registrarCosto escribe UNA fila por modelo real del 
     expect(registrarCosto).toHaveBeenCalledTimes(2);
     expect(registrarCosto).toHaveBeenCalledWith(expect.objectContaining({ modelo: 'anthropic/claude-sonnet-5' }));
     expect(registrarCosto).toHaveBeenCalledWith(expect.objectContaining({ modelo: 'openai/gpt-5.6-terra' }));
-    // Y la cadena no se descarriló por la caída: cerró y salió el PDF.
-    expect(saveLiquidacion).toHaveBeenCalled();
+    // A37-O7-12: en el respaldo del cuadre NO se cierra (modelo sin medir en
+    // política fiscal): aunque pida guardar_liquidacion, no se ejecuta.
+    expect(saveLiquidacion).not.toHaveBeenCalled();
   });
 
   it('ciclo en un solo modelo: conserva la fila única (no-regresión)', async () => {
