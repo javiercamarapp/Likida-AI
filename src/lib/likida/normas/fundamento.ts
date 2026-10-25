@@ -21,6 +21,8 @@
 
 import type { ConceptoGasto } from '@/types/likida';
 import { NORMAS, IDS_NORMA, esVinculante } from './indice';
+import { exigibleVencida } from './consulta';
+import { hoyMx } from '@/lib/formato';
 
 /** Marca de una cita que parece normativa pero no está en el índice. */
 export const CITA_DESCONOCIDA = 'DESCONOCIDA';
@@ -428,6 +430,13 @@ export interface ResultadoFundamento {
   quitadas: string[];
 }
 
+/** La oración habla de la ficha en pasado / como ya no vigente. */
+const MARCA_DE_PASADO = /\b(?:venci\w*|rigi[óo]|rigieron|ya\s+no\s+(?:rige|aplica|est[áa]\s+vigente|es\s+exigible)|dej[óo]\s+de|expir\w*|no\s+(?:rige|est[áa]\s+vigente|aplica)|hasta\s+(?:el\s+)?(?:31\s+de\s+diciembre|2026-12-31))/i;
+
+function citaVencidaEnPresente(id: string, reply: string): boolean {
+  return oracionesConCita(reply, patronesDe(id)).some((o) => !MARCA_DE_PASADO.test(o));
+}
+
 /**
  * Quita del texto toda cita normativa que no venga de `permitidas` NI sea, por
  * su ORACIÓN, la misma afirmación que ya se entregó en `historial`.
@@ -436,7 +445,7 @@ export interface ResultadoFundamento {
  * @param historial texto de los turnos `assistant` previos de este viaje —
  *   fuente de la memoria por tema. Sin él, no hay memoria: solo `permitidas`.
  */
-export function guardiaFundamento(reply: string, permitidas: string[], historial = ''): ResultadoFundamento {
+export function guardiaFundamento(reply: string, permitidas: string[], historial = '', hoy: Date = new Date()): ResultadoFundamento {
   const ok = new Set(permitidas);
 
   // ── 1. ¿Se presenta como obligación algo que NO obliga? ───────────────────
@@ -455,6 +464,12 @@ export function guardiaFundamento(reply: string, permitidas: string[], historial
   // `citaEsMismoTema`.
   for (const id of citadas) {
     if (id !== CITA_DESCONOCIDA && !ok.has(id) && citaEsMismoTema(id, reply, historial)) ok.add(id);
+  }
+  // A39-S50-01: una ficha cuyo `exigibleHasta` ya pasó (RFA 2026 desde el 1-ene-2027) se puede NOMBRAR para decir que ya no rige,
+  // nunca para sostener una afirmación en presente. Una oración que la cita sin marca de pasado se trata como cita no autorizada.
+  const dia = hoyMx(hoy);
+  for (const id of citadas) {
+    if (ok.has(id) && exigibleVencida(NORMAS[id]?.exigibleHasta, dia) && citaVencidaEnPresente(id, reply)) ok.delete(id);
   }
   const sobran = citadas.filter((id) => !ok.has(id));
   if (sobran.length === 0 && !suavizar) return { reply, forzado: false, quitadas: [] };
