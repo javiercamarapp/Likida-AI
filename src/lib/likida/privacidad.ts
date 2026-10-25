@@ -524,6 +524,15 @@ const OBJETO_DE_PAPEL = /\b(ticket|folio|comprobante|recibo|factura|foto|imagen|
 const RECHAZA_AUTOMATIZADO = /\b(?:no\s+(?:el\s+|un\s+|confio\s+en\s+el\s+)?(?:programa|sistema|robot|bot)\b|en\s+vez\s+del?\s+(?:programa|sistema))/;
 
 /**
+ * A39-S54-01: «arco» suelto NO basta. Es el pórtico de peaje y «Arco Norte/Sur/Poniente» son
+ * rutas de carga reales: «choque en el Arco Norte, hay un herido» abría una solicitud ARCO,
+ * contestaba el texto de privacidad y se tragaba la emergencia. Solo cuenta como mensaje completo
+ * («ARCO») o nombrado como derecho/solicitud/ejercicio («derechos ARCO», «ejercer arco»).
+ */
+// eslint-disable-next-line security/detect-unsafe-regex -- alternancias acotadas sobre texto corto de WhatsApp, sin cuantificadores anidados
+const PIDE_ARCO = /^\W*arco\W*$|\b(?:derechos?|ejerc\w*|solicitud(?:es)?|tramite)\s+(?:de\s+)?(?:los\s+|mis\s+)?arco\b(?!\s+(?:norte|sur|poniente|oriente)\b)/;
+
+/**
  * ¿El operador está ejerciendo el medio que el aviso le prometió?
  *
  * Determinístico y ANTES del agente, a propósito. Un derecho ARCO no se deja a
@@ -542,7 +551,8 @@ export function pideAtencionPrivacidad(texto: string): boolean {
     .replace(/[̀-ͯ]/g, '')   // quita acentos
     .toLowerCase();
   return (
-    /\b(privacidad|arco|mis datos personales|dar de baja mis datos)\b/.test(t) ||
+    /\b(privacidad|mis datos personales|dar de baja mis datos)\b/.test(t) ||
+    PIDE_ARCO.test(t) ||
     OPOSICION.some((r) => r.test(t)) ||
     (OPOSICION_AMBIGUA.some((r) => r.test(t)) && (!OBJETO_DE_PAPEL.test(t) || RECHAZA_AUTOMATIZADO.test(t)))
   );

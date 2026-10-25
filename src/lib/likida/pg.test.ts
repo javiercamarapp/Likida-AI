@@ -471,3 +471,33 @@ describe('traerTodo — el reloj de la invocación corta la lectura (REN-32C3-C1
     expect(filas).toHaveLength(2_500);
   });
 });
+
+// A39-S36-01: PostgREST recorta a max_rows (1000) aunque el .limit() pida más.
+describe('traerHastaTope — lecturas con tope mayor que max_rows', () => {
+  const MAX_ROWS = 1000;
+  const tabla = Array.from({ length: 3500 }, (_, i) => ({ id: i }));
+  // Simula la base real: range(d, h) devuelve a lo más max_rows filas.
+  const base = (d: number, h: number) => Promise.resolve({ data: tabla.slice(d, Math.min(h + 1, d + MAX_ROWS)), error: null });
+
+  it('junta tope filas pidiendo páginas, no se queda en max_rows', async () => {
+    const { traerHastaTope } = await import('./pg');
+    const r = await traerHastaTope(base, 3001, 'x');
+    expect(r).toHaveLength(3001);
+    expect(r[3000]).toEqual({ id: 3000 });
+  });
+
+  it('con menos filas que el tope devuelve todas, sin pedir páginas de más', async () => {
+    const { traerHastaTope } = await import('./pg');
+    const corta = tabla.slice(0, 1200);
+    let llamadas = 0;
+    const r = await traerHastaTope((d, h) => { llamadas++; return Promise.resolve({ data: corta.slice(d, h + 1), error: null }); }, 5001, 'x');
+    expect(r).toHaveLength(1200);
+    expect(llamadas).toBe(2);   // 1000 + 200: la página corta demuestra el final
+  });
+
+  it('un error en cualquier página LANZA', async () => {
+    const { traerHastaTope } = await import('./pg');
+    let n = 0;
+    await expect(traerHastaTope(() => Promise.resolve(++n === 2 ? { data: null, error: { message: 'boom' } } : { data: tabla.slice(0, 1000), error: null }), 3001, 'x')).rejects.toThrow('x: boom');
+  });
+});

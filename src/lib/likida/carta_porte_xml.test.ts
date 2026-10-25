@@ -198,4 +198,10 @@ describe('escaparXml y fechaHoraSat — las dos herramientas del generador', () 
     expect(fechaHoraSat('2027-01-01T05:59:59Z')).toBe('2026-12-31T23:59:59');
     expect(fechaHoraSat('no es fecha')).toBeNull();
   });
+  it('A39-S30-02: una fecha sin hora (columna `date`) es el día LOCAL de México, no medianoche UTC', () => {
+    // `viaje.fecha_inicio` es `date`: «2026-10-25» no es un instante. Pasada por new Date() daba 2026-10-24T18:00:00.
+    expect(fechaHoraSat('2026-10-25')).toBe('2026-10-25T00:00:00');
+    expect(fechaHoraSat('2027-01-01')).toBe('2027-01-01T00:00:00');
+    expect(fechaHoraSat('2026-02-31')).toBeNull();   // fecha imposible: null, nunca se corrige en silencio
+  });
 });

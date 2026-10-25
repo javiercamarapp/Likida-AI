@@ -18,7 +18,16 @@ vi.mock('@/lib/supabase/admin', () => ({
       registros.push(reg);
       const proxy: unknown = new Proxy({}, {
         get: (_t, prop: string) => {
-          if (prop === 'then') return (res: (r: Respuesta) => unknown) => res(respuestas[tabla] ?? { data: [], error: null });
+          if (prop === 'then') return (res: (r: Respuesta) => unknown) => {
+            // Como PostgREST de verdad (A39-S36-01): respeta `range` y NUNCA devuelve más de max_rows = 1000 filas.
+            const r = respuestas[tabla] ?? { data: [], error: null };
+            if (!Array.isArray(r.data)) return res(r);
+            const rango = reg.ops.filter((o) => o[0] === 'range').pop() as [string, number, number] | undefined;
+            const lim = reg.ops.filter((o) => o[0] === 'limit').pop() as [string, number] | undefined;
+            const desde = rango ? rango[1] : 0;
+            const pedidas = rango ? rango[2] - rango[1] + 1 : lim ? lim[1] : 1000;
+            return res({ ...r, data: r.data.slice(desde, desde + Math.min(pedidas, 1000)) });
+          };
           return (...args: unknown[]) => { reg.ops.push([prop, ...args]); return proxy; };
         },
       });
@@ -78,6 +87,24 @@ describe('leerEpisodiosParaTablero', () => {
     registros.length = 0;
     respuestas = { viaje: { data: ids.slice(0, 1000) }, viaje_senal_vida: { data: [] } };
     expect((await leerEpisodiosParaTablero('t1', DESDE, { clienteId: UUID_C }))!.hayMas).toBe(false);
+  });
+
+  it('A39-S36-01: con más de 1000 hitos en insights se lee MÁS DE UNA página (max_rows=1000) y hayMas se enciende', async () => {
+    respuestas = { viaje_hito: { data: Array.from({ length: 5200 }, (_, i) => ({ id: `h${i}`, viaje_id: 'v1', tipo: 'llegada_carga', estado: 'recibido', ciclo: 1, fuente: 'boton' })) } };
+    const r = await leerEntradaInsights('t1', DESDE, {});
+    expect(r.hitos).toHaveLength(5000);
+    expect(r.hayMas).toBe(true);
+  });
+
+  it('A39-S36-01: el CSV de estadías declara truncada cuando hay más llegadas que el tope aunque max_rows recorte a 1000', async () => {
+    const { leerDatosEstadias } = await import('./repo_validacion');
+    // 3,200 llegadas de 3,200 viajes distintos: pasan del tope (1,500 viajes). Con `.limit(3001)` la base entregaba 1000 y truncada=false.
+    respuestas = { viaje_hito: { data: Array.from({ length: 3200 }, (_, i) => ({ viaje_id: `v${i}` })) } };
+    const d = await leerDatosEstadias('t1', DESDE, new Date(DESDE.getTime() + 86_400_000));
+    expect(d.truncada).toBe(true);
+    // Y con pocas llegadas no la declara.
+    respuestas = { viaje_hito: { data: Array.from({ length: 40 }, (_, i) => ({ viaje_id: `v${i}` })) } };
+    expect((await leerDatosEstadias('t1', DESDE, new Date(DESDE.getTime() + 86_400_000))).truncada).toBe(false);
   });
 
   it('A37-S36-10: los insights filtrados por un cliente de más de 1000 viajes también declaran el recorte', async () => {
