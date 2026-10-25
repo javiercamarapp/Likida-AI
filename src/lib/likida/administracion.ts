@@ -235,6 +235,20 @@ export async function crearFlota(
 
   await anotar(tenantId, 'flota.creada', 'tenant', tenantId, { nombre, rfc: rfc ?? null }, actor);
 
+  // A39-S57-01: el alta es acto de Likida (requireSuperadmin en el llamador) y
+  // fija el RFC que autoriza el buzón del SAT; la flota edita `rfc` en
+  // Suscripción, pero esta columna no. Va APARTE del insert para que un alta
+  // no se rompa si la migración 0925 aún no está aplicada: sin la columna el
+  // buzón del SAT queda cerrado (falla cerrado), que es lo seguro.
+  const rfcVerificado = filaFiscal?.rfc ?? rfc;
+  if (rfcVerificado) {
+    const { error: errVer } = await admin.from('tenant')
+      .update({ rfc_sat_verificado: rfcVerificado }).eq('id', tenantId);
+    if (errVer) {
+      logger.warn('flota.alta.rfc_sat_verificado_no_guardado', { tenantId, error: errVer.message });
+    }
+  }
+
   let userId: string | undefined;
   if (f.emailAdmin?.trim()) {
     const { provisionarUsuario } = await import('@/lib/auth/provisionar');

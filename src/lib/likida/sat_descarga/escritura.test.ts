@@ -84,8 +84,8 @@ beforeEach(() => {
   respuestas.clear();
   bitacoras.length = 0;
   motivoNoConfigurado = 'La descarga masiva no está configurada.';
-  // A37-S57-01: el RFC fiscal verificado del tenant (`tenant.rfc`).
-  respuestas.set('tenant#select', { data: { rfc: 'AAA010101AB1' }, error: null });
+  // A39-S57-01: el RFC verificado por Likida (`tenant.rfc_sat_verificado`), NO `tenant.rfc`.
+  respuestas.set('tenant#select', { data: { rfc_sat_verificado: 'AAA010101AB1' }, error: null });
   proveedor = {
     nombre: 'sw',
     solicitar: vi.fn(async () => ({ ok: true, requestId: 'req-1' })),
@@ -118,9 +118,16 @@ describe('guardarConfigDescarga', () => {
   });
 
   it('A37-S57-01: sin tenant.rfc verificado no se declara ningún buzón (fail-closed)', async () => {
-    respuestas.set('tenant#select', { data: { rfc: null }, error: null });
+    respuestas.set('tenant#select', { data: { rfc_sat_verificado: null }, error: null });
     await expect(guardarConfigDescarga(TENANT, datosValidos)).rejects.toThrow(/no tiene verificado/);
     expect(llamadas.some((x) => x.tabla === 'sat_descarga_config')).toBe(false);
+  });
+
+  it('A39-S57-01: el RFC que la flota escribió en Suscripción (tenant.rfc) NO autoriza un buzón', async () => {
+    // La flota dueña pone el RFC de OTRA en tenant.rfc (lo permite guardarDatosFiscales); el verificado sigue vacío.
+    respuestas.set('tenant#select', { data: { rfc: 'BBB020202BB2', rfc_sat_verificado: null }, error: null });
+    await expect(guardarConfigDescarga(TENANT, { ...datosValidos, rfc: 'BBB020202BB2' })).rejects.toThrow(DatoInvalido);
+    expect(llamadas.find((l) => l.op === 'upsert')).toBeUndefined();
   });
 
   it('A37-S57-01: si la lectura de tenant.rfc falla, se propaga (no se adivina)', async () => {

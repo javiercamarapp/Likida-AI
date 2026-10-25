@@ -154,9 +154,11 @@ export function esCorreoYaRegistrado(e: unknown): boolean {
  * no — dice lo que es verdad en los dos casos. Aquí y no inline en la página
  * para que la prueba lo fije junto con `esCorreoYaRegistrado`.
  */
+// A39-S21-01: el texto no manda a mirar la lista «Tu equipo» ni a avisar a Likida si falta: esa pista
+// enseñaba a usar la lista como oráculo (aparece = cuenta nueva; no aparece = ya era cliente de otra flota).
 export function mensajeAltaNeutro(email: string): string {
   return `Listo. Si ${email} no tenía cuenta en Likida, ya puede entrar con su correo (enlace mágico) y le mandamos un aviso. ` +
-    'Si ya la tenía, no se creó otra: pídele que entre con ese correo y, si no aparece en tu equipo aquí abajo, avísale a Likida.';
+    'Si ya la tenía, no se creó otra y esa persona sigue entrando con el acceso que ya tiene.';
 }
 
 export function descifrarErrorProvision(e: unknown): DatoInvalido | null {

@@ -156,12 +156,30 @@ describe('c5-4 — la compuerta de dominio: correos de terceros JAMÁS entran a 
     expect(ajenos.map((c) => c.correo)).toEqual(['webmaster@agenciadigital.com']);
   });
 
-  it('el dominio del correo PRINCIPAL también permite (pymes con gmail)', () => {
+  it('el dominio del correo PRINCIPAL también permite (dominio propio de la empresa)', () => {
     const { propios } = separarPorDominio(
-      [correo('otro@gmail.com')],
-      'https://www.empresa.mx', 'dueno@gmail.com',
+      [correo('compras@transportes.mx')],
+      'https://www.empresa.mx', 'dueno@transportes.mx',
     );
-    expect(propios.map((c) => c.correo)).toEqual(['otro@gmail.com']);
+    expect(propios.map((c) => c.correo)).toEqual(['compras@transportes.mx']);
+  });
+
+  it('A39-S28-03: un principal de gmail/hotmail NO convierte en propio a cualquier otro gmail del sitio', () => {
+    for (const principal of ['dueno@gmail.com', 'dueno@hotmail.com', 'Dueno@Yahoo.com.mx']) {
+      const dom = principal.split('@')[1].toLowerCase();
+      const { propios, ajenos } = separarPorDominio(
+        [correo(principal.toLowerCase()), correo(`agencia.web@${dom}`), correo('ventas@empresa.mx')],
+        'https://www.empresa.mx', principal,
+      );
+      expect(propios.map((c) => c.correo).sort(), principal).toEqual([principal.toLowerCase(), 'ventas@empresa.mx'].sort());
+      expect(ajenos.map((c) => c.correo), principal).toEqual([`agencia.web@${dom}`]);
+    }
+  });
+
+  it('A39-S28-03: sin principal de dominio propio, un gmail impreso en el sitio tampoco entra', () => {
+    const { propios, ajenos } = separarPorDominio([correo('x@gmail.com')], 'https://www.empresa.mx', 'dueno@empresa.mx');
+    expect(propios).toHaveLength(0);
+    expect(ajenos).toHaveLength(1);
   });
 
   it('sin sitio ni principal, TODO es ajeno — nada entra a ciegas', () => {

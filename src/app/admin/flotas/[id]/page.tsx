@@ -23,6 +23,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * y "no se pudo leer" son afirmaciones distintas.
  */
 export default async function PaginaFicha({ params }: { params: Promise<{ id: string }> }) {
+  // A39-S05-01/S06-01: puerta PROPIA en el render (el layout no se re-ejecuta en una petición RSC parcial).
+  await requireSuperadmin();
   const { id } = await params;
   if (!UUID.test(id)) notFound();
 

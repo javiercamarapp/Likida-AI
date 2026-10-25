@@ -87,6 +87,8 @@ const COLOR: Record<string, string> = { paso: 'var(--ok)', fallo: 'var(--bad)', 
 export default async function Evals({
   searchParams,
 }: { searchParams: Promise<{ error?: string }> }) {
+  // A39-S05-01/S06-01: puerta PROPIA en el render (el layout no se re-ejecuta en una petición RSC parcial).
+  await requireSuperadmin();
   const sp = await searchParams;
   const admin = supabaseAdmin();
   const secciones: Array<{ agente: AgenteExaminado; titulo: string; comando: string; estado: EstadoEvals | null; porCaso: PorCaso[] }> = [];

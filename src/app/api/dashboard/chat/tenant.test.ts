@@ -18,12 +18,16 @@ let respuesta: Respuesta = { data: null, error: null };
 // quiere la mayoría de las pruebas de abajo (una sola consulta).
 let respuestaSesion: Respuesta | null = null;
 let llamadaGlobal = 0;
+let ultimoEq: string | null = null;
+// A39-S10-01: la flota elegida por cookie (null = el superadmin no eligió ninguna).
+let seleccionCookie: string | null = null;
+vi.mock('@/lib/auth/admin-context', () => ({ leerSeleccionFlota: async () => seleccionCookie }));
 
 function builder() {
   const miLlamada = ++llamadaGlobal;
   const b: Record<string, unknown> = {};
   b.select = () => b;
-  b.eq = () => b;
+  b.eq = (_c: string, v: string) => { ultimoEq = v; return b; };
   b.maybeSingle = async () => (miLlamada === 2 && respuestaSesion) ? respuestaSesion : respuesta;
   return b;
 }
@@ -48,6 +52,8 @@ const SUPER = { userId: 'u-0', tenantId: null, rol: 'superadmin', nombre: 'Javie
 beforeEach(() => {
   respuesta = { data: null, error: null };
   respuestaSesion = null;
+  seleccionCookie = null;
+  ultimoEq = null;
   llamadaGlobal = 0;
   logger.error.mockClear();
   logger.warn.mockClear();
@@ -58,6 +64,23 @@ beforeEach(() => {
 });
 
 describe('tenantEfectivoChat', () => {
+  it('A39-S10-01: superadmin sin flota propia y SIN ?tenant= usa la flota elegida por cookie, no la demo', async () => {
+    seleccionCookie = 'flota-elegida';
+    respuesta = { data: { nombre: 'Flota Elegida' }, error: null };
+    expect(await tenantEfectivoChat(SUPER, null)).toEqual({ tenantId: 'flota-elegida', nombreFlota: 'Flota Elegida' });
+    expect(ultimoEq).toBe('flota-elegida');
+  });
+
+  it('A39-S10-01: sin flota elegida sigue cayendo a la demo (lo previo)', async () => {
+    respuesta = { data: { nombre: 'Demo' }, error: null };
+    expect(await tenantEfectivoChat(SUPER, null)).toEqual({ tenantId: 'demo-fija', nombreFlota: 'Demo' });
+  });
+
+  it('A39-S10-01: un usuario que NO es superadmin y no tiene flota sigue sin entrar aunque exista cookie', async () => {
+    seleccionCookie = 'flota-elegida';
+    expect(await tenantEfectivoChat({ ...SUPER, rol: 'contador' }, null)).toBeNull();
+  });
+
   it('lectura CAÍDA de `?tenant=`: devuelve null (quien llama corta) y lo deja en el log', async () => {
     respuesta = { data: null, error: { message: 'fetch failed' } };
     expect(await tenantEfectivoChat(SUPER, 't-b')).toBeNull();

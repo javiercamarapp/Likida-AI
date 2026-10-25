@@ -23,6 +23,7 @@
 // personalización permitida) y los correos van a `prospecto_correo`, que el
 // Enviador usa como lista de copias de la empresa.
 // ═══════════════════════════════════════════════════════════════════════════
+import { DOMINIOS_DE_CORREO_LIBRE } from './correo_libre';
 import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { hostNoPublico } from '@/lib/http/destino_publico';
@@ -278,11 +279,21 @@ export function separarPorDominio(
   if (sitio) {
     try { permitidos.add(dominioDe(new URL(sitio).hostname)); } catch { /* sitio ilegible: sin dominio que permitir */ }
   }
-  if (principal?.includes('@')) permitidos.add(dominioDe(principal));
+  // A39-S28-03: un principal de dominio LIBRE solo se autoriza a sí mismo (dirección exacta).
+  const exactos = new Set<string>();
+  if (principal?.includes('@')) {
+    const dom = dominioDe(principal);
+    if (DOMINIOS_DE_CORREO_LIBRE.has(dom)) exactos.add(principal.trim().toLowerCase());
+    else permitidos.add(dom);
+  }
   const propios: ExtraccionInvestigador['correos'] = [];
   const ajenos: ExtraccionInvestigador['correos'] = [];
   for (const c of correos) {
-    (permitidos.has(dominioDe(c.correo)) ? propios : ajenos).push(c);
+    const dom = dominioDe(c.correo);
+    const esPropio = DOMINIOS_DE_CORREO_LIBRE.has(dom)
+      ? exactos.has(c.correo.trim().toLowerCase())
+      : permitidos.has(dom);
+    (esPropio ? propios : ajenos).push(c);
   }
   return { propios, ajenos };
 }

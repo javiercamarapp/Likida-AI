@@ -145,6 +145,8 @@ function Casilla({ estado, texto, href, accion }: {
  * barra de 44px, así que encabeza la tarjeta de la tabla.
  */
 export default async function FlotasPage() {
+  // A39-S05-01/S06-01: puerta PROPIA en el render (el layout no se re-ejecuta en una petición RSC parcial).
+  await requireSuperadmin();
   const r = await getResumenNegocio();
   const flotasOrdenadas = [...r.flotas].sort((a, b) => b.costoIaUsd - a.costoIaUsd);
 
