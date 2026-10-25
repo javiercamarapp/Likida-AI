@@ -1398,6 +1398,15 @@ export async function generateWithTools(opts: {
             executed.push({ toolName: call.function.name, args: {}, result: null, durationMs: 0, error: 'args_parse' });
             return { role: 'tool' as const, tool_call_id: call.id, content: JSON.stringify({ error: 'argumentos JSON inválidos' }) };
           }
+          // A37-O7-12: la restricción de solo lectura del respaldo se aplica
+          // también AL EJECUTAR, no solo al catálogo anunciado: un modelo que
+          // alucine o sea inducido a llamar una herramienta que no está en el
+          // conjunto activo no la dispara (fail-closed).
+          if (!herramientasActivas().some((t) => t.type === 'function' && t.function.name === call.function.name)) {
+            logger.warn('llm.tool_fuera_del_catalogo_activo', { fn: 'generateWithTools', tool: call.function.name, soloLectura });
+            executed.push({ toolName: call.function.name, args, result: null, durationMs: 0, error: 'tool_no_disponible' });
+            return { role: 'tool' as const, tool_call_id: call.id, content: JSON.stringify({ error: 'herramienta no disponible en este modo' }) };
+          }
           const key = llave(call.function.name, args);
           if (esLectura(call.function.name) && crossRound.has(key)) {
             const c = crossRound.get(key)!;
