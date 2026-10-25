@@ -6,7 +6,7 @@ import { construirEstatus, type EstatusViaje } from './estatus_viaje';
 import { evidenciaJornadaDeHitos, type EvidenciaJornada } from './jornada_hitos';
 import { leerConfigConductor } from './repo';
 import {
-  leerDatosEstadias, leerHitosDeOperador, leerVeredictos, leerViajeConHitos, type DatosEstadias, type FiltrosTablero, type VeredictoFila, type ViajeTablero,
+  leerDatosEstadias, leerEvidencias, leerHitosDeOperador, leerNombresSitiosDeViajes, leerVeredictos, leerViajeConHitos, type DatosEstadias, type EvidenciaFila, type FiltrosTablero, type VeredictoFila, type ViajeTablero,
 } from './repo_validacion';
 import type { HitoFila } from './tipos';
 import { diaEnZona, inicioDiaEnZona, TZ_MX } from '@/lib/formato';
@@ -29,6 +29,9 @@ export interface DepsServicios {
   hitosDeOperador(tenantId: string, operadorId: string, desde: Date, hasta: Date): Promise<HitoFila[]>;
   /** Los veredictos de ubicación de UN viaje de esa flota (para saber qué llegadas siguen sin confirmar). Opcional: sin él, nada se da por confirmado. */
   veredictos?(tenantId: string, viajeId: string): Promise<VeredictoFila[]>;
+  /** A39-S36-02: las fotos de UN viaje de esa flota y los nombres de sus sitios, para el anexo de la liquidación. Opcionales: sin ellos NO se afirma «sin fotos» (el anexo se omite). */
+  evidencias?(tenantId: string, viajeId: string): Promise<EvidenciaFila[]>;
+  sitios?(tenantId: string, viaje: ViajeTablero): Promise<Map<string, string>>;
 }
 
 export const depsServiciosReales: DepsServicios = {
@@ -38,6 +41,8 @@ export const depsServiciosReales: DepsServicios = {
   politicas: politicasDetencion,
   hitosDeOperador: leerHitosDeOperador,
   veredictos: (tenantId, viajeId) => leerVeredictos(tenantId, [viajeId]),
+  evidencias: (tenantId, viajeId) => leerEvidencias(tenantId, [viajeId]),
+  sitios: (tenantId, viaje) => leerNombresSitiosDeViajes(tenantId, [viaje]),
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -71,10 +76,15 @@ export async function estadiasDeViaje(
   if (!UUID.test(viajeId)) return null;
   const datos = await d.viajeConHitos(tenantId, viajeId.toLowerCase());
   if (!datos || datos.viaje.id !== viajeId.toLowerCase()) return null;
-  const pol = await d.politicas(tenantId);
-  return armarFilasEstadias(
-    { viajes: [datos.viaje], hitos: datos.hitos, veredictos: [], evidencias: [], sitios: new Map(), truncada: false }, ahora, pol,
-  );
+  // A39-S36-02: antes se armaba con `veredictos: [], evidencias: [], sitios: new Map()` y el papel que se archiva decía SIEMPRE «sin fotos ·
+  // sin veredicto de ubicación». Se leen de verdad; si no se pueden leer, LANZA (estadiasParaLiquidacion lo convierte en «sin anexo»):
+  // afirmar «sin fotos» sin haber mirado es un documento archivado con respaldo falso.
+  if (!d.veredictos || !d.evidencias || !d.sitios) throw new Error('estadiasDeViaje: faltan las lecturas de veredictos/evidencias/sitios');
+  const id = viajeId.toLowerCase();
+  const [pol, veredictos, evidencias, sitios] = await Promise.all([
+    d.politicas(tenantId), d.veredictos(tenantId, id), d.evidencias(tenantId, id), d.sitios(tenantId, datos.viaje),
+  ]);
+  return armarFilasEstadias({ viajes: [datos.viaje], hitos: datos.hitos, veredictos, evidencias, sitios, truncada: false }, ahora, pol);
 }
 
 /**

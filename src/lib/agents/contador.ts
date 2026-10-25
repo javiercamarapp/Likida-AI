@@ -23,6 +23,8 @@ import { createHash } from 'node:crypto';
 import { generateResponse } from '@/lib/llm/openrouter';
 import type { LlmBudget } from '@/lib/llm/budget';
 import { FICHAS_TEXTO } from '@/lib/likida/normas/corpus_texto';
+import { exigibleVencida } from '@/lib/likida/normas/consulta';
+import { hoyMx } from '@/lib/formato';
 
 /** Las reglas de la casa — la parte del prompt que NO es corpus. */
 export const REGLAS_CONTADOR = `Eres el contador experto de Likida en fiscal del autotransporte terrestre de carga federal mexicano. Le respondes a un contralor o dueño de flota que va a tomar decisiones con dinero real sobre lo que digas.
@@ -44,15 +46,22 @@ FUNDAMENTO: las citas, cada una con su nivel (ley/reglamento/regla/criterio/pol�
 CERTEZA: AFIRMABLE, CON RESERVA (di cuál) o NO AFIRMABLE (di qué falta y el siguiente paso).`;
 
 /** El corpus tal cual viaja en el prompt: fichas separadas y nombradas. */
-export function corpusContador(): string {
+export function corpusContador(hoy: Date = new Date()): string {
+  const dia = hoyMx(hoy);
   return FICHAS_TEXTO
-    .map((f) => `───────── FICHA ${f.archivo} ─────────\n${f.texto.trim()}`)
+    .map((f) => {
+      // A39-S50-01: una ficha con `fecha_vigencia_hasta` ya pasada (la RFA 2026 desde el 1-ene-2027) NO es material afirmable como vigente.
+      // Antes del vencimiento el encabezado (y por tanto el hash del prompt) no cambia.
+      const hasta = /^fecha_vigencia_hasta:\s*"?(\d{4}-\d{2}-\d{2})/m.exec(f.texto)?.[1] ?? null;
+      const marca = exigibleVencida(hasta, dia) ? ` — VENCIDA el ${hasta}: NO la afirmes como vigente; solo di que ya no rige` : '';
+      return `───────── FICHA ${f.archivo}${marca} ─────────\n${f.texto.trim()}`;
+    })
     .join('\n\n');
 }
 
 /** El prompt COMPLETO del contador — reglas + corpus. Esto es lo que se hashea. */
-export function promptContador(): string {
-  return `${REGLAS_CONTADOR}\n\n═══════════ CORPUS DE FICHAS VERIFICADAS ═══════════\n\n${corpusContador()}`;
+export function promptContador(hoy: Date = new Date()): string {
+  return `${REGLAS_CONTADOR}\n\n═══════════ CORPUS DE FICHAS VERIFICADAS ═══════════\n\n${corpusContador(hoy)}`;
 }
 
 /**

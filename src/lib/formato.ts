@@ -451,6 +451,14 @@ export function fechaHoraMx(iso?: string | null): string {
  * error; jamás se inventa una fecha.
  */
 export function fechaHoraSat(iso: string): string | null {
+  // A39-S30-02: una fecha SIN hora (`viaje.fecha_inicio` es `date`) es un día del calendario local, no
+  // un instante UTC: pasada por `new Date()` caía el día anterior a las 18:00 en hora de México. Se toma
+  // como el inicio de ese día local; una fecha imposible (31-feb) es null, jamás se corrige en silencio.
+  const solo = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  if (solo) {
+    const u = new Date(`${solo[0]}T00:00:00Z`);
+    return !Number.isNaN(u.getTime()) && u.toISOString().slice(0, 10) === solo[0] ? `${solo[0]}T00:00:00` : null;
+  }
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
   const partes = Object.fromEntries(

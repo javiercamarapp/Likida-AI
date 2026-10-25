@@ -593,6 +593,12 @@ export interface PanelClientes {
 /** El día (AAAA-MM-DD, zona de México) de un instante ISO; `null` si falta o no se lee. */
 function diaDelViaje(instante: unknown): string | null {
   if (typeof instante !== 'string' || instante === '') return null;
+  // A39-S30-02: `viaje.fecha_inicio` es `date` (AAAA-MM-DD): YA es el día de la flota. Pasarlo por
+  // `new Date()` + `hoyMx` lo corría al día anterior (medianoche UTC = 18:00 del día previo en México).
+  if (/^\d{4}-\d{2}-\d{2}$/.test(instante)) {
+    const u = new Date(`${instante}T00:00:00Z`);
+    return !Number.isNaN(u.getTime()) && u.toISOString().slice(0, 10) === instante ? instante : null;
+  }
   const t = new Date(instante);
   return Number.isNaN(t.getTime()) ? null : hoyMx(t);
 }

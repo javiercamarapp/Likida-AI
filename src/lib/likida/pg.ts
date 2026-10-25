@@ -364,3 +364,29 @@ export async function traerTodoPorLlave<T, K>(
   logger.error('pg.lectura_incompleta', { consulta, leidas: filas.length, esperadas });
   throw new LecturaIncompleta(consulta, filas.length, esperadas);
 }
+
+/**
+ * Las primeras `tope` filas de una consulta ordenada por algo ÚNICO, aunque `tope` pase de `max_rows`.
+ *
+ * A39-S36-01: `.limit(3001)` contra `max_rows = 1000` (supabase/config.toml) devuelve 1000 filas SIN
+ * avisar, así que el «leí tope+1, luego hay más» de quien lo usaba nunca se encendía y un export para cobrar
+ * salía incompleto diciendo que estaba completo. Esto pide páginas por `range` de a lo más `PAGINA` filas
+ * hasta juntar `tope` o hasta una página corta. Contrato igual al de `.limit(tope)`: quien pidió `N + 1` para
+ * detectar «hay más» sigue viendo `length > N` cuando de verdad lo hay.
+ */
+export async function traerHastaTope<T>(
+  construir: (desde: number, hasta: number) => PromiseLike<RespuestaPg<T[]>>,
+  tope: number,
+  consulta: string,
+): Promise<T[]> {
+  const filas: T[] = [];
+  while (filas.length < tope) {
+    const n = Math.min(PAGINA, tope - filas.length);
+    const pag = (exigir(await construir(filas.length, filas.length + n - 1), consulta) ?? []).slice(0, n);
+    filas.push(...pag);
+    // Página corta = fin. Supone `max_rows >= PAGINA` (supabase/config.toml:38 = 1000), que es lo que garantiza que el servidor
+    // no recorte una página que pedimos de ≤ PAGINA filas; si alguien lo baja, hay que subir esta cuenta con `traerTodo`.
+    if (pag.length < n) break;
+  }
+  return filas;
+}
