@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { descifrar, cofreConfigurado } from '../conectores/cofre';
+import { contextoCredencial } from '../conectores/contexto_credencial';
 import { comercioDeConector, conectorDePortal } from '../conectores/portales_facturacion';
 import type { ValoresCredencial } from '../conectores/tipos';
 
@@ -84,7 +85,7 @@ export async function credencialesDePortales(tenantId: string): Promise<Map<stri
     const clave = comercioDeConector(String(fila.conector_id));
     if (!clave || !fila.valores_cifrados) continue;
     try {
-      vacio.set(clave, descifrar(String(fila.valores_cifrados)));
+      vacio.set(clave, descifrar(String(fila.valores_cifrados), contextoCredencial(tenantId, String(fila.conector_id))));
     } catch (e) {
       logger.error('facturacion.credencial_no_descifra', {
         tenant: tenantId, comercio: clave, err: e instanceof Error ? e.message : 'error',
@@ -123,7 +124,7 @@ export async function credencialDePortal(
   if (!data?.valores_cifrados) return null;
 
   try {
-    return descifrar(String(data.valores_cifrados));
+    return descifrar(String(data.valores_cifrados), contextoCredencial(tenantId, conectorDePortal(claveComercio)));
   } catch (e) {
     // Cofre rotado o fila corrupta. El arreglo es recapturar la credencial, y
     // eso se dice sin imprimir un byte del cifrado.
