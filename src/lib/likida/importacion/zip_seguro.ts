@@ -28,8 +28,9 @@ const PARTE_CHICA = 1024 * 1024;
 export class ArchivoPeligroso extends Error {}
 
 /** Lanza `ArchivoPeligroso` si el zip declara una expansión desmedida. */
-export function validarZipDeLibro(buffer: ArrayBuffer): void {
-  const v = new DataView(buffer);
+export function validarZipDeLibro(buffer: ArrayBuffer | Uint8Array): void {
+  // A37-O7-05: también acepta una vista (Buffer/Uint8Array) respetando su desplazamiento dentro del ArrayBuffer.
+  const v = buffer instanceof Uint8Array ? new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength) : new DataView(buffer);
   const n = buffer.byteLength;
   // Firma local de zip «PK\x03\x04». Si no es zip, no hay nada que validar aquí.
   if (n < 22 || v.getUint32(0, true) !== 0x04034b50) return;

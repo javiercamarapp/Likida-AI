@@ -319,12 +319,18 @@ describe('A37-A3-09 — el catálogo no vuelve «No» un «Sí» peligroso del d
     const h = validarExtraccion(r.extraccion).hallazgos.filter((x) => x.campo === 'material_peligroso');
     expect(h.map((x) => x.codigo)).toContain('normalizacion_dudosa');
   });
-  it('documento dice No (0.8) y el catálogo dice peligroso: tampoco se pisa; se pide confirmar', () => {
+  it('documento dice No con lectura firme (0.9) y el catálogo dice peligroso: tampoco se pisa; se pide confirmar', () => {
     const e = sinSat();
-    e.mercancias[0].material_peligroso = cv('false', 0.8, 'llm', 'NO PELIGROSO');
+    e.mercancias[0].material_peligroso = cv('false', 0.9, 'llm', 'NO PELIGROSO');
     const r = enriquecer(e, cat({ productos: [producto('SKU-PX-205', { materialPeligroso: true, claveMaterialPeligroso: '1203' })] }), ctx);
     expect(r.extraccion.mercancias[0].material_peligroso).toMatchObject({ valor: 'false', origen: 'llm' });
     expect(validarExtraccion(r.extraccion).hallazgos.map((x) => x.codigo)).toContain('normalizacion_dudosa');
+  });
+  it('A37-O7-10: lectura BAJA «false» y el catálogo dice peligroso: gana el catálogo (fail-closed)', () => {
+    const e = sinSat();
+    e.mercancias[0].material_peligroso = cv('false', 0.3, 'llm', 'borroso');
+    const r = enriquecer(e, cat({ productos: [producto('SKU-PX-205', { materialPeligroso: true, claveMaterialPeligroso: '1203' })] }), ctx);
+    expect(r.extraccion.mercancias[0].material_peligroso).toMatchObject({ valor: 'true', origen: 'catalogo' });
   });
   it('si el documento no dice nada, el catálogo sigue llenando el campo', () => {
     const r = enriquecer(sinSat(), cat({ productos: [producto('SKU-PX-205', { materialPeligroso: true, claveMaterialPeligroso: '1203' })] }), ctx);

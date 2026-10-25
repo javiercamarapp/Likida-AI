@@ -154,6 +154,14 @@ export async function pullDesgloses(
     let nuevos = 0;
     let releidos = 0;
     let primera = true;
+    // Filas que el lector ya no pudo mapear: excepción visible (solo el nombre del campo), nunca descarte silencioso.
+    const abrirRechazadas = async (pag: { rechazadas?: Array<{ clave: string; campo: string }> }): Promise<void> => {
+      for (const rech of pag.rechazadas ?? []) {
+        r.leidas += 1;
+        await deps.abrirExcepcion(tenantId, rech.clave, 'mapeo_invalido', { campo: rech.campo }, ahora);
+        r.excepciones += 1;
+      }
+    };
 
     while (nuevos < TOPE_ITEMS_POR_PASADA) {
       const limite = Math.min(tamano, TOPE_ITEMS_POR_PASADA - nuevos);
@@ -174,17 +182,14 @@ export async function pullDesgloses(
         saltoRelectura = true;
         r.relecturaTruncada = true;
         logger.warn('liqcorreo.pull_relectura_truncada', { releidos });
+        // A37-O7-04: las filas sin instante de cursor viajan en esta primera página; no se pierden por saltar la relectura.
+        await abrirRechazadas(pagina);
         lectura = cursorInicial;
         continue;
       }
 
       const porMarcar: string[] = [];
-      // Filas que el lector ya no pudo mapear: excepción visible (solo el nombre del campo), nunca descarte silencioso.
-      for (const rech of pagina.rechazadas ?? []) {
-        r.leidas += 1;
-        await deps.abrirExcepcion(tenantId, rech.clave, 'mapeo_invalido', { campo: rech.campo }, ahora);
-        r.excepciones += 1;
-      }
+      await abrirRechazadas(pagina);
       for (const crudo of pagina.items) {
         r.leidas += 1;
         const clave = claveDe(crudo);

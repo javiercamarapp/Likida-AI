@@ -51,3 +51,42 @@ describe('A37-L-11 · el respaldo del cuadre no recibe herramientas que escriben
     expect(nombresDe(create.mock.calls.length - 1)).toContain('guardar_liquidacion');
   });
 });
+
+describe('A37-O7-12 · la restriccion de solo lectura tambien se aplica al ejecutar', () => {
+  it('si el respaldo alucina guardar_liquidacion, el ejecutor NO la corre y el modelo recibe un error', async () => {
+    const { generateWithTools } = await import('./openrouter');
+    const ejecutor = vi.fn(async () => ({ success: true, result: { ok: true }, durationMs: 1 }));
+    const pide = (name: string) => ({
+      model: 'openai/gpt-5.6-terra',
+      choices: [{ message: { content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name, arguments: '{}' } }] }, finish_reason: 'tool_calls' }],
+      usage: { prompt_tokens: 10, completion_tokens: 5, cost: 0.001 },
+    });
+    create.mockRejectedValueOnce(caido())
+      .mockResolvedValueOnce(pide('guardar_liquidacion'))
+      .mockResolvedValueOnce(ok('openai/gpt-5.6-terra', 'pendiente'));
+    const r = await generateWithTools({
+      role: 'cuadre', system: 'SIS', messages: [{ role: 'user', content: 'cierra' }],
+      tools: TOOLS, toolExecutor: ejecutor,
+    });
+    expect(ejecutor).not.toHaveBeenCalled();
+    const ultimos = (create.mock.calls[create.mock.calls.length - 1][0] as { messages: Array<{ role: string; content: string }> }).messages;
+    expect(JSON.stringify(ultimos.filter((m) => m.role === 'tool'))).toMatch(/no disponible/i);
+    expect(r.model).toBe('openai/gpt-5.6-terra');
+  });
+
+  it('una lectura en modo respaldo sigue ejecutandose', async () => {
+    const { generateWithTools } = await import('./openrouter');
+    const ejecutor = vi.fn(async () => ({ success: true, result: { ok: true }, durationMs: 1 }));
+    create.mockRejectedValueOnce(caido())
+      .mockResolvedValueOnce({
+        model: 'x', choices: [{ message: { content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'cuadrar_viaje', arguments: '{}' } }] }, finish_reason: 'tool_calls' }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, cost: 0.001 },
+      })
+      .mockResolvedValueOnce(ok('x'));
+    await generateWithTools({
+      role: 'cuadre', system: 'SIS', messages: [{ role: 'user', content: 'cuadra' }],
+      tools: TOOLS, toolExecutor: ejecutor, readOnlyTools: ['cuadrar_viaje'],
+    });
+    expect(ejecutor).toHaveBeenCalledTimes(1);
+  });
+});

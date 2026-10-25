@@ -4,6 +4,7 @@ import { hoyMx } from '@/lib/formato';
 import { acotada } from '../presupuesto';
 import { anotarBitacora } from '../bitacora_escritura';
 import { cifrar, descifrar, cofreConfigurado } from '../conectores/cofre';
+import { contextoCredencial } from '../conectores/contexto_credencial';
 import { conectorDePortal } from '../conectores/portales_facturacion';
 import type { ClaseDeCorte } from './relogin_cortes';
 
@@ -405,7 +406,7 @@ export async function borrarContrasenaGuardada(tenantId: string, comercio: strin
 
   let restantes: Record<string, string>;
   try {
-    const v = descifrar(cifrado);
+    const v = descifrar(cifrado, contextoCredencial(tenantId, conectorId));
     if (v.contrasena === undefined) return false;
     restantes = {};
     for (const [k, valor] of Object.entries(v)) {
@@ -424,7 +425,7 @@ export async function borrarContrasenaGuardada(tenantId: string, comercio: strin
 
   const { error: errU } = await acotada(supabaseAdmin()
     .from('conector_credencial')
-    .update({ valores_cifrados: cifrar(restantes) })
+    .update({ valores_cifrados: cifrar(restantes, contextoCredencial(tenantId, conectorId)) })
     .eq('tenant_id', tenantId)
     .eq('conector_id', conectorId), 'borrarContrasenaGuardada.escribir');
 
@@ -598,7 +599,7 @@ export async function contrasenaDePortal(
   if (typeof cifrado !== 'string' || cifrado === '') return null;
 
   try {
-    const v = descifrar(cifrado);
+    const v = descifrar(cifrado, contextoCredencial(tenantId, conectorDePortal(comercio)));
     const usuario = v.usuario?.trim();
     const contrasena = v.contrasena;
     if (!usuario || !contrasena) return null;

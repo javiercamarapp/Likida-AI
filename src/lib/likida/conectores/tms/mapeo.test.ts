@@ -111,10 +111,18 @@ describe('validarMapeo', () => {
     expect(validarMapeo(base({ obligatorios: ['nada'] })).join(' ')).toMatch(/no es un campo/);
     expect(validarMapeo(base({ params: { desde: 'a', hasta: 'b', pagina: 'p', cursor: 'c' } })).join(' ')).toMatch(/no ambas/);
   });
+  it('A37-O7-03: un importe legado sin transformar se lee como numero (con miles) y uno no numérico se rechaza', () => {
+    const m = base({ obligatorios: [], recurso: 'peajes', raiz: '', clave_externa: ['folio'], campos: { folio: 'id', importe: 'monto' } });
+    expect(validarMapeo(m)).toEqual([]);
+    const r = aplicarMapeo(m, [{ id: 'a', monto: '1,234.50' }, { id: 'b', monto: 99.5 }, { id: 'c', monto: 'abc' }, { id: 'd', monto: '1.234' }]);
+    expect(r.filas.map((f) => (f.fila as { importe: number }).importe)).toEqual([1234.5, 99.5]);
+    expect(r.rechazadas.map((x) => x.indice)).toEqual([2, 3]);
+  });
   it('A37-TRANSVERSAL-04: en liquidaciones y peajes, cargo, abono e importe exigen transformar «numero» (un «1,234.50» sin transformar se perdía en silencio)', () => {
     for (const recurso of ['liquidaciones', 'peajes'] as const) {
       for (const dest of ['cargo', 'abono', 'importe']) {
-        expect(validarMapeo(base({ obligatorios: [], recurso, campos: { folio: 'id', [dest]: 'Cargo' } })).join(' '), `${recurso}.${dest} sin transformar`).toMatch(new RegExp(`«${dest}».*numero`));
+        // A37-O7-03: un mapeo guardado sin transformar sigue siendo válido (se lee como numero)
+        expect(validarMapeo(base({ obligatorios: [], recurso, campos: { folio: 'id', [dest]: 'Cargo' } })), `${recurso}.${dest} sin transformar (legado)`).toEqual([]);
         expect(validarMapeo(base({ obligatorios: [], recurso, campos: { folio: 'id', [dest]: { fuente: 'Cargo', transformar: 'texto' } } })).join(' '), `${recurso}.${dest} texto`).toMatch(/numero/);
         expect(validarMapeo(base({ obligatorios: [], recurso, campos: { folio: 'id', [dest]: { fuente: 'Cargo', transformar: 'numero' } } })), `${recurso}.${dest} numero`).toEqual([]);
       }

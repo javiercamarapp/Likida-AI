@@ -82,6 +82,23 @@ describe('el archivo', () => {
     expect((await todos.text()).trim().split('\r\n')).toHaveLength(3); // encabezado + U1 + U3 (U2 por revisar, UB de otra flota)
   });
 
+  it('A37-O7-11: ?todos=1&pagina=2 alcanza los aprobados más allá de los primeros 500, y lo declara', async () => {
+    for (let i = 0; i < 502; i++) {
+      const id = `aaaa${String(i).padStart(4, '0')}-1111-4111-8111-111111111111`;
+      doc(id, A, { createdAt: new Date(Date.UTC(2026, 0, 1) + i * 1000).toISOString() });
+    }
+    const p1 = await GET(peticion('?todos=1'));
+    expect(p1.status).toBe(200);
+    expect(p1.headers.get('x-pagina-siguiente')).toBe('2');
+    expect(Number(p1.headers.get('x-restantes'))).toBeGreaterThan(0);
+    const p2 = await GET(peticion('?todos=1&pagina=2'));
+    expect(p2.status).toBe(200);
+    expect(p2.headers.get('x-pagina-siguiente')).toBeNull();
+    expect(p2.headers.get('x-restantes')).toBe('0');
+    expect((await GET(peticion('?todos=1&pagina=0'))).status).toBe(400);
+    expect((await GET(peticion('?pagina=2'))).status).toBe(400);
+  });
+
   it('A37-L-03: una navegación cross-site/same-site NO sella ni entrega (403); la mismo-origen y sin cabeceras pasan', async () => {
     const r = await GET(new Request('https://app.likida.ai/api/export/carta-porte-docs', { headers: { 'sec-fetch-site': 'cross-site' } }));
     expect(r.status).toBe(403);

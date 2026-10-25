@@ -92,7 +92,9 @@ export async function enviarLote(deps: DepsEntrega, lote: Entrega, vencePorReloj
   // MISMOS bytes y Resend lo deduplica en vez de rechazarlo (o mandar una segunda copia).
   const creado = new Date(lote.creadoEn);
   const ahora = Number.isNaN(creado.getTime()) ? deps.ahora() : creado;
-  const tomado = await deps.repo.reclamarLote(lote, ahora);
+  // A37-O7-02: `ahora` (creación) fija SOLO el contenido; el claim y su lease usan el reloj REAL, o un lote creado
+  // hace más de LEASE_ENVIO_MS nacería con el lease vencido y otro proceso lo tomaría mientras se envía.
+  const tomado = await deps.repo.reclamarLote(lote, deps.ahora());
   if (!tomado) return { estado: 'no_tomado' };
   await deps.repo.anotarEvento(tomado.tenantId, tomado.id, 'intento', `intento ${tomado.intentos}`);
 

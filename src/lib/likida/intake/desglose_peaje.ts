@@ -46,6 +46,7 @@
 // y la leyenda lo dice con todas sus letras.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { ArchivoPeligroso, validarZipDeLibro } from '../importacion/zip_seguro';
 import * as XLSX from 'xlsx';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
@@ -649,6 +650,7 @@ export async function parsearArchivoDesglose(nombre: string, buffer: Buffer, opc
       // filas en memoria ANTES de que `MAX_LINEAS_DESGLOSE` (abajo, en `importarDesglose`)
       // pudiera decir nada (auditoría ALTO: los otros 3 lectores de Excel del repo ya
       // acotan así; este era el único que leía la hoja entera).
+      validarZipDeLibro(buffer); // A37-O7-05: bomba de descompresión (lanza ArchivoPeligroso)
       const libro = XLSX.read(buffer, { type: 'buffer', sheets: 0, sheetRows: TOPE_LECTURA_HOJA_DESGLOSE });
       const hoja = libro.Sheets[libro.SheetNames[0]];
       if (!hoja) return { ok: false, motivo: 'El archivo no trae ninguna hoja con datos.' };
@@ -670,6 +672,7 @@ export async function parsearArchivoDesglose(nombre: string, buffer: Buffer, opc
       }
       return r;
     } catch (e) {
+      if (e instanceof ArchivoPeligroso) return { ok: false, motivo: e.message };
       logger.error('desglose_peaje.parseo_hoja', { err: e instanceof Error ? e.message : String(e) });
       return { ok: false, motivo: 'No pude abrir el archivo como Excel/CSV. Revisa que no esté dañado o protegido con contraseña.' };
     }

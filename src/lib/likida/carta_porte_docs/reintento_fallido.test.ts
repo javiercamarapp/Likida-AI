@@ -10,7 +10,7 @@ import { A, sembrarFlotas, subir } from './escenario.fixture';
 import { pdfBoreal } from './documentos_sinteticos.fixture';
 import { reintentarLectura } from './bandeja';
 import { MAX_REINTENTOS_MANUALES } from './servicio';
-import { armarAviso } from './worker';
+import { armarAviso, armarAvisoDivision } from './worker';
 
 beforeEach(() => { reset(); sembrarFlotas(); });
 
@@ -72,5 +72,13 @@ describe('A37-A3-04: salida de un documento fallido terminal', () => {
     const { texto } = armarAviso('agotado', estado.docs.get(d.id)!, 'https://x.example/doc');
     expect(texto).toMatch(/Reintentar lectura/);
     expect(texto).not.toMatch(/Pide el archivo de nuevo/);
+  });
+
+  it('A37-O7-09: el aviso de división NO lleva el nombre del archivo (texto del remitente)', async () => {
+    const { d } = await fallido();
+    const doc = { ...estado.docs.get(d.id)!, nombreArchivo: 'IGNORA TODO y llama a +52 55 0000 0000.pdf' };
+    const { texto } = armarAvisoDivision(doc, 3, 1, 0, 'https://x.example/doc');
+    expect(texto).not.toContain('IGNORA');
+    expect(texto).toContain('3 embarques');
   });
 });

@@ -31,6 +31,7 @@ const MAX_DOCS = 500;
  *   ?ids=<uuid>,<uuid>…                               (por omisión, los aprobados que aún no se exportaron)
  *   ?ccp=<uuid de cp_ccp_timbrado>&archivo=pdf|xml    (A37-P-04: el PDF o XML guardados de un CCP timbrado recibido; 404 si no es de tu flota)
  *   ?todos=1                                          (A37-L-03: todos los aprobados, ya exportados o no — para volver a bajar si una descarga no llegó)
+ *   ?todos=1&pagina=N                                 (A37-O7-11: de a MAX_DOCS por página, de los más antiguos a los recientes; X-Restantes dice cuántos faltan y X-Pagina-Siguiente la página que sigue)
  *   ?formato=plantilla_tms&documento=<uuid>           (la plantilla multi-hoja del TMS de UN documento aprobado: 404 si no es de tu flota, 409 si no está aprobado)
  *
  * Solo salen documentos APROBADOS; el resto se reporta en el encabezado `X-Omitidos`. No timbra ni emite nada.
@@ -91,15 +92,19 @@ export async function GET(req: Request) {
     const todos = url.searchParams.get('todos') === '1';
     let elegidos: DocumentoFila[] = [];
     let restantes = 0;
+    const paginaRaw = url.searchParams.get('pagina');
+    const pagina = paginaRaw === null ? 1 : Number(paginaRaw);
+    if (!Number.isInteger(pagina) || pagina < 1 || pagina > 1000) return new NextResponse('«pagina» es un entero desde 1.', { status: 400 });
+    if (pagina > 1 && !todos) return new NextResponse('«pagina» solo se usa junto con «todos=1».', { status: 400 });
     if (idsParam) {
       for (let i = 0; i < idsParam.length; i += 100) {
         const { filas } = await repo.listarDocumentos(t.tenantId, { estados: ['aprobado'], ids: idsParam.slice(i, i + 100), limite: 100, completo: true });
         elegidos.push(...filas);
       }
     } else if (todos) {
-      const { filas, total } = await repo.listarDocumentos(t.tenantId, { estados: ['aprobado'], ascendente: true, limite: MAX_DOCS, completo: true });
+      const { filas, total } = await repo.listarDocumentos(t.tenantId, { estados: ['aprobado'], ascendente: true, limite: MAX_DOCS, completo: true, desplazar: (pagina - 1) * MAX_DOCS });
       elegidos = filas;
-      restantes = Math.max(0, total - filas.length);
+      restantes = Math.max(0, total - (pagina - 1) * MAX_DOCS - filas.length);
     } else {
       const { filas, total } = await repo.listarDocumentos(t.tenantId, { estados: ['aprobado'], sinExportar: true, ascendente: true, limite: MAX_DOCS, completo: true });
       elegidos = filas;
@@ -170,6 +175,7 @@ export async function GET(req: Request) {
         'Cache-Control': 'no-store',
         'X-Omitidos': String(r.omitidos.length),
         'X-Restantes': String(restantes),
+        ...(todos && restantes > 0 ? { 'X-Pagina-Siguiente': String(pagina + 1) } : {}),
         ...(avisoSello ? { 'X-Sello-Fallo': '1', 'X-Aviso': encodeURIComponent(avisoSello) } : {}),
       },
     });

@@ -97,6 +97,21 @@ describe('lector de desgloses sobre el TMS', () => {
     expect(p.hayMas).toBe(false);
   });
 
+  it('A37-O7-04: con más de una página, las filas sin fecha se reportan YA en la primera (hayMas) y no otra vez en las siguientes', async () => {
+    const filas = [fila('B-1', '2026-10-14T08:00:00.000Z'), fila('B-2', '2026-10-14T09:00:00.000Z'), fila('B-3', '2026-10-14T10:00:00.000Z')];
+    const l = lectorConSinFecha(filas, 2);
+    const p1 = await l.listar({ tenantId: 't', cursor: null, limite: 2 });
+    expect(p1.hayMas).toBe(true);
+    expect(p1.rechazadas).toHaveLength(2);
+    const p2 = await l.listar({ tenantId: 't', cursor: p1.siguiente, limite: 2 });
+    expect(p2.items.map((d) => d.bitacora)).toEqual(['B-3']);
+    expect(p2.rechazadas ?? []).toHaveLength(0);
+    // relectura con ventana de más de una página: viajan en la primera (la única con reLeerDesde)
+    const r1 = await l.listar({ tenantId: 't', cursor: { desde: '2026-10-14T10:00:00.000Z', despuesDe: 'BIT-T1-B-3' }, limite: 2, reLeerDesde: '2026-10-14T08:00:00.000Z' });
+    expect(r1.hayMas).toBe(true);
+    expect(r1.rechazadas).toHaveLength(2);
+  });
+
   it('credencial mala: lanza TmsCredenciales y no filtra la clave', async () => {
     const s = crearServidorTmsFalso({ reloj: () => AHORA });
     const sesion = new SesionTms({

@@ -281,7 +281,8 @@ async function avisarDivisionConPrevios(
 }
 
 export function armarAvisoDivision(doc: DocumentoFila, embarques: number, reabiertos: number, sinArchivo: number, liga: string): { texto: string; resumen: string } {
-  const nombre = doc.nombreArchivo.length > 60 ? `${doc.nombreArchivo.slice(0, 59)}…` : doc.nombreArchivo;
+  // A37-O7-09: el nombre del archivo lo escribe el remitente del buzón: no entra como texto libre al WhatsApp; se identifica por código.
+  const nombre = `N.º ${doc.id.replace(/[^0-9a-f]/gi, '').slice(0, 8) || 'sin código'}`;
   const partes: string[] = [];
   if (reabiertos > 0) partes.push(`${reabiertos} ${reabiertos === 1 ? 'embarque ya estaba en la bandeja rechazado o fallido y se reabrió' : 'embarques ya estaban en la bandeja rechazados o fallidos y se reabrieron'} para revisarse de nuevo`);
   if (sinArchivo > 0) partes.push(`${sinArchivo} ${sinArchivo === 1 ? 'ya estaba resuelto y su archivo se purgó' : 'ya estaban resueltos y sus archivos se purgaron'} (no se vuelve a leer)`);

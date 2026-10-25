@@ -35,6 +35,10 @@ import type { EstadoPeriodo } from './declarar-periodo';
 import { MAX_ARCHIVO_SUBIDA_BYTES, MENSAJE_ARCHIVO_GRANDE } from '@/lib/http/subidas_formulario';
 
 export const dynamic = 'force-dynamic';
+// A37-O7-06: las Server Actions de esta página corren bajo el límite de la página. La subida manual de desgloses y la importación
+// de liquidaciones usan presupuestos de 45 s (el aviso controlado «faltan N» depende de que la plataforma NO corte antes): se
+// declara el literal (Next lo lee en build) con margen sobre ese presupuesto. Ver scripts/ci/max_duration_acciones_o7_06.test.ts.
+export const maxDuration = 60;
 
 /** El estado de cuenta más grande que se acepta por pantalla. Un CFDI
  *  consolidado de un mes pesa decenas de KB; 4 MB es ya un archivo

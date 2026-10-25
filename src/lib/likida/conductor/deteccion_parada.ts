@@ -252,9 +252,12 @@ type PuertosAviso = Pick<PuertosConductor, 'destinatarios' | 'enviar'>;
 
 async function avisarSupervisor(
   p: PuertosAviso, v: ViajeContexto, msg: MensajeSaliente, contexto: string, ahora: Date,
-): Promise<'entregado' | 'en_cola' | 'sin_destinatario' | 'fallo'> {
+  /** A37-O7-08: se corre con destinatarios ya confirmados y ANTES de enviar; `false` = no se manda nada. */
+  antesDeEnviar?: () => Promise<boolean>,
+): Promise<'entregado' | 'en_cola' | 'sin_destinatario' | 'fallo' | 'no_enviado'> {
   const destinos = await p.destinatarios(v.tenantId, v.terminalId, 1);
   if (destinos.length === 0) return 'sin_destinatario';
+  if (antesDeEnviar && !await antesDeEnviar()) return 'no_enviado';
   let entregados = 0;
   let reintentables = 0;
   for (const d of destinos) {
@@ -446,12 +449,12 @@ async function preguntar(p: PuertosDetencion, v: ViajeContexto, ancla: HitoFila,
 async function escalar(p: PuertosDetencion, v: ViajeContexto, ancla: HitoFila, estado: EstadoDetencion, config: ConfigConductor, ahora: Date, r: ResultadoDeteccionParada): Promise<void> {
   const etiqueta = v.folio ?? v.id;
   const minutos = estado.preguntadoEn ? Math.max(0, Math.round((ahora.getTime() - Date.parse(estado.preguntadoEn)) / 60_000)) + avisoMinDe(config) : avisoMinDe(config);
-  // A37-S35-05: la marca «escalada» se escribe DESPUÉS del aviso y solo si el supervisor se enteró (entregado/en cola) o Meta lo rechazó de
-  // forma definitiva (no se insiste). Sin destinatario, o con una excepción de la base, NO se marca: la pasada siguiente reintenta en vez de
-  // perder el aviso de todo el episodio.
-  const res = await avisarSupervisor(p, v, armarAvisoDetencion(v, 'sin_respuesta', minutos, ahora, config.zonaHoraria), 'conductor.deteccion_parada_sin_respuesta', ahora);
+  // A37-S35-05 + A37-O7-08: la marca «escalada» se escribe CON destinatario confirmado y ANTES del envío: si la base falla tras enviar, la
+  // pasada siguiente no repite el aviso al jefe. Sin destinatario, o si la marca no se pudo escribir, NO se manda nada y se reintenta.
+  const res = await avisarSupervisor(p, v, armarAvisoDetencion(v, 'sin_respuesta', minutos, ahora, config.zonaHoraria), 'conductor.deteccion_parada_sin_respuesta', ahora,
+    () => p.guardarEventoDetencion(ancla, { tipo: 'escalada' }));
   if (res === 'sin_destinatario') { r.sinDestinatario++; r.fallos.push(`${etiqueta}: no hay a quién avisar la detención sin respuesta`); return; }
-  if (!await p.guardarEventoDetencion(ancla, { tipo: 'escalada' })) r.fallos.push(`detención ${etiqueta}: el aviso salió pero no se pudo anotar la escalada`);
+  if (res === 'no_enviado') { r.fallos.push(`detención ${etiqueta}: no se pudo anotar la escalada; no se avisó y se reintenta`); return; }
   if (res === 'entregado' || res === 'en_cola') { r.escaladas++; return; }
   r.fallos.push(`detención ${etiqueta}: el aviso al supervisor fue rechazado`);
 }

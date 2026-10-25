@@ -430,7 +430,7 @@ describe('un archivo partido que reabrió hijos previos avisa a la oficina (M1)'
     const r = await correrWorkerCartaPorte(m.deps, opts(m));
     expect(r).toMatchObject({ divididos: 1, divisionesAvisadas: 1 });
     expect(m.avisos).toHaveLength(1);
-    expect(m.avisos[0].texto).toMatch(/plan\.xlsx.*3 embarques.*1 embarque ya estaba en la bandeja rechazado o fallido y se reabrió.*1 ya estaba resuelto/);
+    expect(m.avisos[0].texto).toMatch(/N\.º a.*3 embarques.*1 embarque ya estaba en la bandeja rechazado o fallido y se reabrió.*1 ya estaba resuelto/);
     expect(m.avisos[0].contexto).toMatchObject({ tipo: 'division_con_previos', documentoId: 'a' });
 
     const sin = mundo({ pendientes: ['a'], proceso: () => dividido({}) });
