@@ -2,7 +2,7 @@ import { logger } from '@/lib/logger';
 import { enviarConFallback, type ResultadoEnvioConFallback } from '@/lib/meta/enviar_con_fallback';
 import { conCompuertaAlChofer } from '../conductor/compuerta_agente';
 import { leerAgenteChoferHabilitado } from '../conductor/repo';
-import { hayEmergenciaDeTelefono } from '../conductor/trabajo';
+import { esVoluntarioDePiloto, hayEmergenciaDeTelefono } from '../conductor/trabajo';
 import {
   cerrarEnvio, congelarEnvioRechazado, ConveniosNoDisponibles, leerContextoEnvio, leerLigado, ligarConvenioAViaje, liberarEnvio, reclamarEnvio, reiniciarEnvios,
   type ContextoEnvio, type Envio, type ResultadoLigar, type ViajeLigado,
@@ -60,7 +60,7 @@ export const puertosEnvioReales: PuertosEnvio = {
   enviar: (telefono, m, contexto, tenantId, ahora) => {
     enviarConCompuerta ??= conCompuertaAlChofer(
       (tel, msg, ctx, tid, a) => enviarConFallback(tel, { texto: msg.texto, plantilla: msg.plantilla, contexto: ctx, tenantId: tid, ahora: a }),
-      leerAgenteChoferHabilitado, { emergencia: hayEmergenciaDeTelefono },
+      leerAgenteChoferHabilitado, { emergencia: hayEmergenciaDeTelefono, voluntario: esVoluntarioDePiloto },
     );
     return enviarConCompuerta(telefono, m, contexto, tenantId, ahora);
   },

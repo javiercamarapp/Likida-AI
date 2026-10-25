@@ -132,6 +132,30 @@ export async function hayEmergenciaDeTelefono(tenantId: string, telefono: string
 }
 
 /**
+ * A39-A5-02: ¿el chofer con ESTE teléfono es voluntario VIGENTE del piloto (0800)? Última barrera del puerto de envío: la baja
+ * (`retirar_voluntario`) corta también los viajes que el chofer aceptó por su cuenta o por la oficina, no solo los de importación.
+ * Fail-closed: sin operador con ese teléfono, o ninguno voluntario, es `false`. Lanza si no se puede leer (quien llama NO envía).
+ */
+export async function esVoluntarioDePiloto(tenantId: string, telefono: string): Promise<boolean> {
+  const res = await acotada(supabaseAdmin().from('operador').select('id, agente_voluntario, activo').eq('tenant_id', tenantId).eq('telefono', telefono).order('id').limit(20), 'conductor.voluntario_operador');
+  const filas = (exigir(res as never, 'conductor.voluntario_operador') ?? []) as Array<{ agente_voluntario: boolean | null; activo: boolean | null }>;
+  return filas.some((f) => f.agente_voluntario === true && f.activo !== false);
+}
+
+/**
+ * A39-A5-03: los viajes ABIERTOS del operador con ESTE teléfono (de ESA flota), para decidir si va rodando antes de escribirle. Lanza si
+ * no se puede leer (quien llama NO envía). `[]` = ningún operador con ese teléfono o sin viaje abierto.
+ */
+export async function leerViajesAbiertosDeTelefono(tenantId: string, telefono: string): Promise<ViajeContexto[]> {
+  const op = await acotada(supabaseAdmin().from('operador').select('id').eq('tenant_id', tenantId).eq('telefono', telefono).order('id').limit(20), 'conductor.viajes_telefono_operador');
+  const ids = ((exigir(op as never, 'conductor.viajes_telefono_operador') ?? []) as Array<{ id: string }>).map((f) => f.id);
+  if (ids.length === 0) return [];
+  const res = await acotada(supabaseAdmin().from('viaje').select(COLUMNAS_VIAJE_CTX)
+    .eq('tenant_id', tenantId).in('operador_id', ids).eq('estatus', 'abierto').order('id').limit(50), 'conductor.viajes_telefono');
+  return ((exigir(res as never, 'conductor.viajes_telefono') ?? []) as unknown as Fila[]).map(filaAViajeCtx);
+}
+
+/**
  * Los viajes de `leerViajesActivos` a cuyo chofer SÍ se le puede escribir: sin emergencia abierta (A37-A5-02) y con el operador activo y
  * sin oposición (A37-A5-03). Es la lista de trabajo de todos los motores que le escriben al chofer o escalan «porque no contestó».
  * Lanza si no se pueden leer las emergencias.
@@ -141,7 +165,7 @@ export async function leerViajesAvisables(limite: number): Promise<ViajeContexto
   if (viajes.length === 0) return viajes;
   const em = await leerEmergenciasAbiertas([...new Set(viajes.map((v) => v.tenantId))]);
   const r = filtrarViajesAvisables(viajes, em);
-  if (r.enEmergencia > 0 || r.operadorNoAvisable > 0) logger.info('conductor.viajes_no_avisables', { enEmergencia: r.enEmergencia, operadorNoAvisable: r.operadorNoAvisable });
+  if (r.enEmergencia > 0 || r.operadorNoAvisable > 0 || r.noVoluntario > 0) logger.info('conductor.viajes_no_avisables', { enEmergencia: r.enEmergencia, operadorNoAvisable: r.operadorNoAvisable, noVoluntario: r.noVoluntario });
   return r.viajes;
 }
 

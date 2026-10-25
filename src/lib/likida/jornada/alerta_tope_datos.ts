@@ -7,8 +7,9 @@ import { enviarConFallback } from '@/lib/meta/enviar_con_fallback';
 import { enviarCorreo } from '@/lib/correo/enviar';
 import { destinatariosEscalacion } from '../conductor/escalamiento';
 import { dentroDeVentana } from '../conductor/config';
+import { operadorConUnidadDetenida } from '../conductor/compuerta_operador';
 import { leerAgenteChoferHabilitado, leerConfigConductor } from '../conductor/repo';
-import { hayEmergenciaDeTelefono } from '../conductor/trabajo';
+import { esVoluntarioDePiloto, hayEmergenciaDeTelefono } from '../conductor/trabajo';
 import { asientosDeJornada, leerPolitica } from './repo';
 import type {
   ConfigAlerta, PuertosAlerta, FilaCandidata, NivelAlerta, CanalEncargado, CanalOperador, EstadoDestino, ReclamoAlerta,
@@ -121,14 +122,22 @@ export const puertosAlertaReales: PuertosAlerta = {
     return data === true;
   },
   async enviarWa(telefono, msg, tenantId, ahora, contexto) {
-    // A37-A5-05: el aviso AL OPERADOR le escribe con la jornada en curso (conduciendo): misma compuerta que todo envío proactivo al chofer —
-    // Agente 5 habilitado (0859, fail-closed), ventana horaria de la flota y sin emergencia abierta—. El del encargado no pasa por aquí.
+    // A37-A5-05 y A39-A5-03: el aviso AL OPERADOR le escribe con la jornada en curso (conduciendo): misma compuerta que todo envío proactivo al
+    // chofer —Agente 5 habilitado (0859, fail-closed), ventana horaria de la flota, sin emergencia abierta, voluntario vigente y UNIDAD DETENIDA—.
+    // El del encargado no pasa por aquí.
     if (contexto === 'jornada.alerta_operador') {
       let motivo: string | null = null;
       try {
+        const config = await leerConfigConductor(tenantId);
         if (!(await leerAgenteChoferHabilitado(tenantId)).habilitado) motivo = 'el Agente 5 no está habilitado para esta flota (o no se pudo comprobar)';
-        else if (!dentroDeVentana(await leerConfigConductor(tenantId), ahora)) motivo = 'fuera de la ventana horaria de la flota';
+        else if (!dentroDeVentana(config, ahora)) motivo = 'fuera de la ventana horaria de la flota';
         else if (await hayEmergenciaDeTelefono(tenantId, telefono, ahora)) motivo = 'el operador tiene una emergencia abierta';
+        else if (!(await esVoluntarioDePiloto(tenantId, telefono))) motivo = 'el operador no es voluntario vigente del piloto';
+        else {
+          // A39-A5-03: este aviso sale al 80 % del tope, con la jornada EN CURSO: solo se escribe con la unidad detenida (misma compuerta que todo envío al chofer).
+          const g = await operadorConUnidadDetenida(tenantId, telefono, config, ahora);
+          if (!g.permitido) motivo = `la unidad del operador no está detenida o no se pudo comprobar (${g.razon})`;
+        }
       } catch { motivo = 'no se pudo comprobar la compuerta de seguridad del operador'; }
       if (motivo) {
         logger.warn('jornada.alerta_operador_bloqueada', { tenant: tenantId, motivo });

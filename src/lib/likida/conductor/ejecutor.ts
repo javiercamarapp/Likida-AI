@@ -10,7 +10,7 @@ import {
   leerCicloServicio, registrarEvento, type EventoHito, type ViajeContexto,
 } from './repo';
 import { cicloDelServicio, type CicloServicioFila } from './ciclo_servicio';
-import { cerrarHitosDeViajesVencidos, contarEnviadosPorChofer, leerAvisosDeHitos, leerHitosDeViajes, leerMuestrasGps, leerSitiosGeometriaDeViajes, hayEmergenciaDeTelefono, leerViajesAvisables, sembrarHitos } from './trabajo';
+import { cerrarHitosDeViajesVencidos, contarEnviadosPorChofer, leerAvisosDeHitos, leerHitosDeViajes, leerMuestrasGps, leerSitiosGeometriaDeViajes, hayEmergenciaDeTelefono, esVoluntarioDePiloto, leerViajesAvisables, sembrarHitos } from './trabajo';
 import type { MuestraGps, SitiosViaje, UnidadDeViaje } from './ciclo_gps';
 import { clavesPoleoDe, lapsoMaxCompuertaMin, puedeEscribirAlChofer } from './compuerta_movimiento';
 import { aplicarCompuertaAgente, conCompuertaAlChofer } from './compuerta_agente';
@@ -483,7 +483,7 @@ export function puertosReales(): PuertosConductor {
     marcarEscalado: marcarHitoEscalado,
     enviar: conCompuertaAlChofer((telefono, m, contexto, tenantId, ahora) => enviarConFallback(telefono, {
       texto: m.texto, botones: m.botones, plantilla: m.plantilla, contexto, tenantId, ahora,
-    }), leerAgenteChoferHabilitado, { emergencia: hayEmergenciaDeTelefono }),
+    }), leerAgenteChoferHabilitado, { emergencia: hayEmergenciaDeTelefono, voluntario: esVoluntarioDePiloto }),
     destinatarios: destinatariosEscalacion,
     ubicacion: ubicacionConocida,
     evento: (h, evento, detalle) => registrarEvento(h, evento, detalle),

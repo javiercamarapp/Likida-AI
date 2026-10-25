@@ -797,3 +797,31 @@ describe('A37-TRANSVERSAL-03: una corrección en el origen no se descarta en sil
     expect([...m.huellas.entries()].find(([k]) => k.endsWith('|IC-0001'))?.[1]).toBe(huellaAntes);
   });
 });
+
+describe('A39-S39-01: un Icident repetido en la misma tanda no descarta sus filas', () => {
+  it('la PRIMERA fila de un Icident repetido se entrega y las repetidas se omiten (antes caían TODAS a «omitida»)', async () => {
+    const reloj = nuevoReloj(); const datos = origenSintetico({ viajes: 3 });
+    datos.viajes[1] = { ...datos.viajes[1], Icident: datos.viajes[0].Icident, unidad: 'UNI-999' }; // segundo tramo del mismo despacho
+    const m = crearMundo(() => [flotaCompleta()], crearOrigen(datos, reloj), reloj);
+    const r = await sincronizarTms(m.deps);
+    expect(m.viajesEntregados).toEqual([datos.viajes[0].Icident, datos.viajes[2].Icident]);
+    expect(rec(r, 'viajes')).toMatchObject({ leidas: 3, nuevas: 2, omitidas: 1, entregadas: 2 });
+    expect(rec(r, 'viajes').aviso).toMatch(/aparece en 2 viajes/); // la advertencia del lector llega al resumen
+  });
+  it('una segunda corrida no vuelve a entregar nada y sigue avisando de la repetición', async () => {
+    const reloj = nuevoReloj(); const datos = origenSintetico({ viajes: 3 });
+    datos.viajes[1] = { ...datos.viajes[1], Icident: datos.viajes[0].Icident };
+    const m = crearMundo(() => [flotaCompleta()], crearOrigen(datos, reloj), reloj);
+    await sincronizarTms(m.deps);
+    const r2 = await sincronizarTms(m.deps);
+    expect(m.viajesEntregados).toHaveLength(2);
+    expect(rec(r2, 'viajes')).toMatchObject({ nuevas: 0, entregadas: 0 });
+  });
+  it('en peajes una clave repetida entrega una sola vez', async () => {
+    const reloj = nuevoReloj(); const datos = origenSintetico({ peajes: 4 });
+    datos.peajes[1] = { ...datos.peajes[0] }; // fila idéntica, misma clave
+    const m = crearMundo(() => [flotaCompleta()], crearOrigen(datos, reloj), reloj);
+    await sincronizarTms(m.deps);
+    expect(new Set(m.peajesEntregados).size).toBe(m.peajesEntregados.length);
+  });
+});
