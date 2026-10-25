@@ -134,7 +134,8 @@ export const api: typeof Real = {
     if (f.ids) filas = filas.filter((d) => f.ids!.includes(d.id));
     if (f.sinExportar) filas = filas.filter((d) => d.exportadoEn === null);
     filas.sort((a, b) => (a.createdAt === b.createdAt ? 0 : (a.createdAt < b.createdAt) === !!f.ascendente ? -1 : 1));
-    return { filas: filas.slice(0, f.limite ?? 100).map(clon), total: filas.length };
+    const d0 = f.desplazar ?? 0;
+    return { filas: filas.slice(d0, d0 + (f.limite ?? 100)).map(clon), total: filas.length };
   },
   async reclamarDocumento(tenantId, id, lease = 120) {
     falla('reclamarDocumento');

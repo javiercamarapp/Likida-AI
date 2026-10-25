@@ -216,6 +216,8 @@ export interface FiltroDocumentos {
   sinExportar?: boolean;
   /** A37-S10-01: de lo más antiguo a lo más reciente (para drenar una cola por lotes sin dejar atrás los viejos). */
   ascendente?: boolean;
+  /** A37-O7-11: cuántas filas saltar (paginar con el mismo orden estable `created_at, id`). */
+  desplazar?: number;
 }
 
 /** La bandeja: liviana por omisión (sin texto ni extracción), de lo más reciente a lo más antiguo. */
@@ -225,7 +227,10 @@ export async function listarDocumentos(tenantId: string, f: FiltroDocumentos = {
   if (f.desde) q = q.gte('created_at', f.desde);
   if (f.ids) q = q.in('id', f.ids.slice(0, 100));
   if (f.sinExportar) q = q.is('exportado_en', null);
-  const r = await acotada(q.order('created_at', { ascending: !!f.ascendente }).order('id').limit(Math.min(f.limite ?? 100, 500)), 'cpdocs.listar');
+  const tope = Math.min(f.limite ?? 100, 500);
+  const desde = Math.max(0, Math.floor(f.desplazar ?? 0));
+  const ordenada = q.order('created_at', { ascending: !!f.ascendente }).order('id');
+  const r = await acotada(ordenada.range(desde, desde + tope - 1), 'cpdocs.listar');
   const filas = (exigir(r, 'cpdocs.listar') ?? []) as unknown as Fila[];
   return { filas: filas.map(aDocumento), total: r.count ?? filas.length };
 }
