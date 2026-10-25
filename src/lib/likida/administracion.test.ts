@@ -78,11 +78,27 @@ describe('crearFlota', () => {
   it('acepta un RFC válido y crea el tenant', async () => {
     from.mockImplementation((tabla: string) =>
       tabla === 'tenant'
-        ? { insert: () => cadena({ data: { id: 't-1' }, error: null }) }
+        ? { insert: () => cadena({ data: { id: 't-1' }, error: null }), update: () => cadena({ error: null }) }
         : { insert: () => Promise.resolve({ error: null }) });
 
     const r = await crearFlota({ nombre: 'Transportes Prueba', rfc: 'GMX0902279I1' });
     expect(r.tenantId).toBe('t-1');
+  });
+
+  it('A39-S57-01: el alta de Likida fija rfc_sat_verificado, y si la columna aún no existe el alta NO se rompe', async () => {
+    const update = vi.fn((_fila: Record<string, unknown>) => cadena({ error: null }));
+    from.mockImplementation((tabla: string) =>
+      tabla === 'tenant'
+        ? { insert: () => cadena({ data: { id: 't-1' }, error: null }), update }
+        : { insert: () => Promise.resolve({ error: null }) });
+    await crearFlota({ nombre: 'Transportes Prueba', rfc: 'gmx0902279i1' });
+    expect(update).toHaveBeenCalledWith({ rfc_sat_verificado: 'GMX0902279I1' });
+
+    // Migración 0925 sin aplicar: el update falla, el alta sigue y queda avisado.
+    update.mockImplementation(() => cadena({ error: { message: 'column "rfc_sat_verificado" does not exist' } }));
+    const r = await crearFlota({ nombre: 'Transportes Prueba', rfc: 'gmx0902279i1' });
+    expect(r.tenantId).toBe('t-1');
+    expect(logger.warn).toHaveBeenCalledWith('flota.alta.rfc_sat_verificado_no_guardado', expect.anything());
   });
 
   it('un nombre de dos letras no pasa', async () => {
@@ -100,7 +116,7 @@ describe('crearFlota', () => {
   it('con los CINCO, el insert los lleva — la flota nace pudiendo facturar', async () => {
     const insert = vi.fn((_fila: Record<string, unknown>) => cadena({ data: { id: 't-1' }, error: null }));
     from.mockImplementation((tabla: string) =>
-      tabla === 'tenant' ? { insert } : { insert: () => Promise.resolve({ error: null }) });
+      tabla === 'tenant' ? { insert, update: () => cadena({ error: null }) } : { insert: () => Promise.resolve({ error: null }) });
 
     await crearFlota({
       nombre: 'Transportes Prueba', rfc: 'gmx0902279i1', razonSocial: '  FLOTA SA DE CV  ',
@@ -128,7 +144,7 @@ describe('crearFlota', () => {
   it('un régimen 601 NO es elegible para la facilidad del 15%: no es el Capítulo VII', async () => {
     const insert = vi.fn((_fila: Record<string, unknown>) => cadena({ data: { id: 't-1' }, error: null }));
     from.mockImplementation((tabla: string) =>
-      tabla === 'tenant' ? { insert } : { insert: () => Promise.resolve({ error: null }) });
+      tabla === 'tenant' ? { insert, update: () => cadena({ error: null }) } : { insert: () => Promise.resolve({ error: null }) });
 
     await crearFlota({
       nombre: 'Transportes del Bajío', rfc: 'GMX0902279I1', razonSocial: 'FLOTA SA DE CV',
@@ -144,7 +160,7 @@ describe('crearFlota', () => {
   it('una persona física 612 (Título IV Cap. II Secc. I) SÍ es elegible', async () => {
     const insert = vi.fn((_fila: Record<string, unknown>) => cadena({ data: { id: 't-1' }, error: null }));
     from.mockImplementation((tabla: string) =>
-      tabla === 'tenant' ? { insert } : { insert: () => Promise.resolve({ error: null }) });
+      tabla === 'tenant' ? { insert, update: () => cadena({ error: null }) } : { insert: () => Promise.resolve({ error: null }) });
 
     await crearFlota({
       nombre: 'Fletes Doña Chuy', rfc: 'PEPA900101ABA', razonSocial: 'FLOTA SA DE CV',
@@ -182,7 +198,7 @@ describe('crearFlota', () => {
     // Lo que ya no pasa es que se capture a medias y parezca completo.
     const insert = vi.fn((_fila: Record<string, unknown>) => cadena({ data: { id: 't-1' }, error: null }));
     from.mockImplementation((tabla: string) =>
-      tabla === 'tenant' ? { insert } : { insert: () => Promise.resolve({ error: null }) });
+      tabla === 'tenant' ? { insert, update: () => cadena({ error: null }) } : { insert: () => Promise.resolve({ error: null }) });
 
     await crearFlota({ nombre: 'Transportes Prueba', rfc: 'GMX0902279I1', razonSocial: 'FLOTA SA DE CV' });
 

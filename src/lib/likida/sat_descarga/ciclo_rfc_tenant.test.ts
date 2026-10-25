@@ -57,7 +57,7 @@ beforeEach(() => {
     { tenant_id: A, rfc: 'AAA010101AB1', ultima_descarga_hasta: '2026-10-18' },
     { tenant_id: B, rfc: 'AAA010101AB1', ultima_descarga_hasta: '2026-10-18' }, // declara el RFC de A
   ];
-  tenants = [{ id: A, rfc: 'AAA010101AB1' }, { id: B, rfc: 'BBB020202BB2' }];
+  tenants = [{ id: A, rfc_sat_verificado: 'AAA010101AB1' }, { id: B, rfc_sat_verificado: 'BBB020202BB2' }];
 });
 
 describe('A37-S18-09 · el barrido de 200 flotas tiene orden determinista', () => {
@@ -81,7 +81,13 @@ describe('correrDescargaSat · el RFC del buzón es el del tenant', () => {
   });
 
   it('un tenant SIN rfc fiscal tampoco descarga (fail-closed)', async () => {
-    tenants = [{ id: A, rfc: null }, { id: B, rfc: null }];
+    tenants = [{ id: A, rfc_sat_verificado: null }, { id: B, rfc_sat_verificado: null }];
+    await correrDescargaSat(new Date('2026-10-23T12:00:00Z'));
+    expect(solicitar).not.toHaveBeenCalled();
+  });
+
+  it('A39-S57-01: un tenant con tenant.rfc (editable por la flota) pero SIN rfc_sat_verificado no descarga', async () => {
+    tenants = [{ id: A, rfc: 'AAA010101AB1', rfc_sat_verificado: null }, { id: B, rfc: 'AAA010101AB1', rfc_sat_verificado: null }];
     await correrDescargaSat(new Date('2026-10-23T12:00:00Z'));
     expect(solicitar).not.toHaveBeenCalled();
   });
