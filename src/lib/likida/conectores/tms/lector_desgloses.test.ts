@@ -5,6 +5,7 @@ import type { LiquidacionSintetica } from './falso/datos';
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 const { crearLectorDesglosesTms, lectoresDesglosesTms } = await import('./lector_desgloses');
 const { SesionTms } = await import('./sesion');
+const { CONFIG_API_DESGLOSE } = await import('../../liquidacion_externa/desglose_tms_supuesto');
 
 const AHORA = Date.parse('2026-10-15T18:00:00.000Z');
 const fila = (n: string, de: string, extra: Partial<LiquidacionSintetica> = {}): LiquidacionSintetica => ({
@@ -181,5 +182,74 @@ describe('qué flotas leen', () => {
     expect(await base({ ...ok, ultimoError: 'x' })).toHaveLength(0);
     expect(await base({ ...ok, valores: { ...ok.valores, base_url: 'http://tms.ejemplo.test' } })).toHaveLength(0);
     expect(await base(ok, 'whatsapp')).toHaveLength(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A35-BE-02 (CRÍTICO, auditoría 35): sin `data.total_paginas` en la respuesta,
+// `Number(undefined)` es NaN, `!Number.isFinite(total)` da true y el lector
+// declaraba COMPLETA la lectura de la PRIMERA página. El pull avanza entonces
+// el cursor por encima de lo que nunca leyó y el cron reporta `ok`: nóminas
+// enteras se pierden EN SILENCIO.
+//
+// A39 (merge de la ola 7): la GARANTÍA se conserva, el MECANISMO cambió.
+// La A35-BE-02 fallaba cerrado de inmediato (lanzaba ante una página llena sin
+// total); A37-S38-06 la superó haciendo algo mejor: SIGUE PAGINANDO hasta una
+// página vacía o más corta que el tamaño pedido, y solo lanza al tope de
+// páginas (`maxPaginas`), que es el caso en que de verdad no se puede decidir
+// el fin. Las dos políticas prohíben lo mismo —dar por completa la primera
+// página y tirar el resto en silencio—; la de hoy además entrega las nóminas
+// en vez de rechazarlas. El tope que sí lanza está fijado arriba, en las dos
+// pruebas de A37-S38-06.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('A35-BE-02 — una respuesta sin `total_paginas` no declara completa una lectura que no lo es', () => {
+  const CFG_CHICA = { ...CONFIG_API_DESGLOSE, tamano: 2, maxPaginas: 50 };
+
+  /** Sesión de mentira: devuelve las páginas dadas, SIN `data.total_paginas`. */
+  function lectorSinTotal(paginas: unknown[][]) {
+    const pedidas: number[] = [];
+    const sesion = {
+      async peticion(p: { query?: Record<string, unknown> }) {
+        const n = Number(p.query?.pagina ?? 1);
+        pedidas.push(n);
+        return { ok: true as const, r: { estado: 200, cuerpo: JSON.stringify({ data: { items: paginas[n - 1] ?? [] } }) } };
+      },
+    };
+    return {
+      pedidas,
+      lector: crearLectorDesglosesTms({ sesion: sesion as unknown as InstanceType<typeof SesionTms>, ahora: () => AHORA, config: CFG_CHICA }),
+    };
+  }
+
+  const cruda = (n: string, de: string) => ({
+    bitacora: n, de, a: '2026-10-14T20:00:00.000Z', dias: 6, poliza: `P-${n}`, operador: 'Operador Ejemplo', operador_numero: 'E-1',
+    unidad: '526', tipo_operador: 'foraneo', terminal: 'T1', percepciones: [{ concepto: 'Sueldo', valor: 100 }], deducciones: [],
+    desglose: { texto: 'x', renglones: 1 }, enviado: false,
+  });
+
+  it('página LLENA sin total: NO se da por completa — B-3 no se pierde en silencio', async () => {
+    // Página 1 llena (2 de tam 2) y una página 2 con una bitácora más: sin el arreglo
+    // `leerVentana` regresa con 2 filas, el cursor las rebasa y B-3 se pierde para siempre.
+    // Con A37-S38-06 la página llena sin total NO es el final: pide la 2, ve que es corta
+    // (1 < 2) y ahí sí termina. La nómina de B-3 llega; eso es lo que protege esta prueba.
+    const { lector: l, pedidas } = lectorSinTotal([
+      [cruda('B-1', '2026-10-14T08:00:00.000Z'), cruda('B-2', '2026-10-14T09:00:00.000Z')],
+      [cruda('B-3', '2026-10-14T10:00:00.000Z')],
+    ]);
+    const p = await l.listar({ tenantId: 't', cursor: null, limite: 10 });
+    expect(p.items.map((d) => d.bitacora)).toEqual(['B-1', 'B-2', 'B-3']);
+    expect(pedidas).toEqual([1, 2]); // no declaró completa la primera
+  });
+
+  it('página CORTA sin total: sí es el final (el TMS no tiene más que dar) y se entrega lo leído', async () => {
+    const { lector: l } = lectorSinTotal([[cruda('B-1', '2026-10-14T08:00:00.000Z')]]);
+    const p = await l.listar({ tenantId: 't', cursor: null, limite: 10 });
+    expect(p.items.map((d) => d.bitacora)).toEqual(['B-1']);
+  });
+
+  it('respuesta vacía sin total: cero filas, sin lanzar', async () => {
+    const { lector: l } = lectorSinTotal([[]]);
+    const p = await l.listar({ tenantId: 't', cursor: null, limite: 10 });
+    expect(p.items).toEqual([]);
   });
 });
