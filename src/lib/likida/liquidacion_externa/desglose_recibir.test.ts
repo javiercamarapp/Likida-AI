@@ -11,7 +11,7 @@ import { CONFIG_CORREO_POR_DEFECTO, type ConfigCorreo, type NuevaEntrega } from 
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error('la base no debe tocarse en estas pruebas'); } }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
-const { recibirDesglose, renombresDeConfig } = await import('./desglose_recibir');
+const { recibirDesglose, renombresDeConfig, presentar } = await import('./desglose_recibir');
 type Deps = import('./desglose_recibir').DependenciasDesglose;
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -193,7 +193,7 @@ describe('recibirDesglose: idempotencia y correcciones', () => {
     expect(b.liquidaciones[1]).toMatchObject({ claveExterna: 'BIT-T1-B-0001-R1', total: 4000 });
     expect(b.subidas).toHaveLength(2); // xlsx nuevo
     expect(b.entregas.filter((e) => e.liquidacionExternaId === 'liq-2')).toHaveLength(4);
-    expect(b.resueltas).toEqual(['BIT-T1-B-0001|correccion_pendiente']);
+    expect(b.resueltas.filter((x) => x.endsWith('|correccion_pendiente'))).toEqual(['BIT-T1-B-0001|correccion_pendiente']);
     expect(b.detallesEvento[1]).toMatchObject({ correccion_de: 'BIT-T1-B-0001', motivo_correccion: 'nómina corregida en origen', actor: 'llave:administracion' });
     expect(b.excepciones.filter((e) => e.tipo === 'correccion_pendiente')).toHaveLength(0);
     // A39-A1-01: la corrección comparte bitácora, terminal y número con la original; los índices únicos de la base (0929) se
@@ -322,6 +322,34 @@ describe('recibirDesglose: guardas previas al envío', () => {
   });
 });
 
+describe('recibirDesglose: sin póliza no se envía (también por push/archivo)', () => {
+  it('poliza null => estado sin_poliza, excepción abierta y NADA guardado ni subido ni enviado', async () => {
+    const b = banco();
+    const r = await recibirDesglose(TENANT, desglose({ poliza: null }), b.deps);
+    expect(r).toEqual({ estado: 'sin_poliza', claveExterna: 'BIT-T1-B-0001' });
+    expect(b.liquidaciones).toHaveLength(0);
+    expect(b.subidas).toHaveLength(0);
+    expect(b.entregas).toHaveLength(0);
+    expect(b.excepciones).toEqual([{ clave: 'BIT-T1-B-0001', tipo: 'sin_poliza', detalle: { bitacora: 'B-0001', desde: f.desde } }]);
+  });
+
+  it('cuando la misma bitácora llega CON póliza entra normal (no queda «idempotente» contra una fila vacía) y cierra la excepción', async () => {
+    const b = banco();
+    await recibirDesglose(TENANT, desglose({ poliza: null }), b.deps);
+    const r = await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(r.estado).toBe('creada');
+    expect(b.entregas).toHaveLength(4);
+    expect(b.resueltas).toContain('BIT-T1-B-0001|sin_poliza');
+  });
+
+  it('con póliza vacía también se aparta; con póliza el flujo de siempre no cambia', async () => {
+    const b = banco();
+    const r = await recibirDesglose(TENANT, desglose({ poliza: '' }), b.deps);
+    expect(r.estado).toBe('sin_poliza');
+    expect(b.liquidaciones).toHaveLength(0);
+  });
+});
+
 describe('recibirDesglose: operador y destinatarios', () => {
   it('A37-A1-liquidaciones-12: operador de BAJA ⇒ misma excepción pero con motivo «baja» (no «no_existe»)', async () => {
     const b = banco();
@@ -442,7 +470,8 @@ beforeEach(() => { vi.clearAllMocks(); });
 type Pedido = import('./repo_correo').PedidoRecepcionAtomica;
 
 /** Agrega al banco una RPC atómica en memoria: o guarda todo junto, o no guarda nada (como la transacción real). */
-function conAtomica(b: Banco, modo: 'ok' | 'ausente' | 'falla'): { llamadas: Pedido[] } {
+/** `ok0933`: la RPC redefinida por la 0933 (una retenida admite SOLO la entrega al revisor); `ok`, la de la 0929. */
+function conAtomica(b: Banco, modo: 'ok' | 'ok0933' | 'ausente' | 'falla'): { llamadas: Pedido[] } {
   const llamadas: Pedido[] = [];
   b.deps.desgloseIncompleto = async (_t, id) => {
     const tiene = b.desgloses.some((x) => x.liquidacionExternaId === id);
@@ -466,7 +495,8 @@ function conAtomica(b: Banco, modo: 'ok' | 'ausente' | 'falla'): { llamadas: Ped
     if (faltaDesglose) { b.desgloses.push({ liquidacionExternaId: id, ...p.meta }); b.eventos.push('recibida'); }
     const hayEntregas = b.entregas.some((e) => e.liquidacionExternaId === id);
     let n = 0;
-    if (!p.meta.retenidaMotivo && !hayEntregas) { for (const e of p.entregas) b.entregas.push({ liquidacionExternaId: id, ...e }); n = p.entregas.length; }
+    const admitidas = p.meta.retenidaMotivo ? (modo === 'ok0933' ? p.entregas.filter((e) => e.rol === 'revisor') : []) : p.entregas;
+    if (!hayEntregas && admitidas.length > 0) { for (const e of admitidas) b.entregas.push({ liquidacionExternaId: id, ...e }); n = admitidas.length; }
     return { ok: true, valor: { liquidacionId: id, creada, reparada: !creada && (faltaDesglose || n > 0), entregas: n } };
   };
   return { llamadas };
@@ -595,5 +625,95 @@ describe('recibirDesglose: rescate de una recepción que quedó a medias', () =>
     const b = banco();
     aMedias(b);
     expect((await recibirDesglose(TENANT, desglose(), b.deps)).estado).toBe('idempotente');
+  });
+});
+
+describe('presentar: el renglón de viaje solo para foráneos (c3cc57d3 46:21)', () => {
+  const conViaje = (tipo: 'foraneo' | 'local' | 'permisionario' | undefined) => desglose({
+    tipoOperador: tipo,
+    percepciones: [{ concepto: 'Sueldo', monto: 1000 }, { concepto: 'Viáticos', monto: 500 }, { concepto: 'Complemento', monto: 200 }],
+  });
+  const cfg: ConfigCorreo = { ...CONFIG, agruparViaje: true };
+
+  it('foráneo: Sueldo + Viáticos se funden en «Pago de viaje»', () => {
+    const v = presentar(conViaje('foraneo'), cfg);
+    expect(v.percepciones.map((r) => r.concepto)).toEqual(['Pago de viaje', 'Complemento']);
+  });
+
+  it('local: conserva «Sueldo» y «Viáticos» sueltos aunque agrupar_viaje esté encendido', () => {
+    const v = presentar(conViaje('local'), cfg);
+    expect(v.percepciones.map((r) => r.concepto)).toEqual(['Sueldo', 'Viáticos', 'Complemento']);
+  });
+
+  it('agrupar_viaje apagado no cambia nada para nadie', () => {
+    expect(presentar(conViaje('foraneo'), { ...CONFIG, agruparViaje: false }).percepciones.map((r) => r.concepto)).toEqual(['Sueldo', 'Viáticos', 'Complemento']);
+  });
+});
+
+describe('recibirDesglose: modo primer mes — revisores por departamento (0933)', () => {
+  const REVISORES = [{ departamento: 'nomina', correo: 'nomina.rev@ejemplo.test' }, { departamento: 'rh', correo: 'rh.rev@ejemplo.test' }];
+  // El reloj del banco es 2026-10-15 (12:00 UTC ⇒ 15 de octubre en México).
+  const PRIMER_MES = { revisores: REVISORES, primerMesHasta: '2026-11-14' };
+  const retenible = () => desglose({ neto: -5, percepciones: [{ concepto: 'Sueldo', monto: 100 }], deducciones: [{ concepto: 'Anticipo', monto: 105 }] });
+
+  it('desglose que SE ENVÍA: además de los 4 destinatarios, un correo al revisor de cada departamento', async () => {
+    const b = banco({ config: PRIMER_MES });
+    const r = await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(b.entregas.map((e) => [e.rol, e.correo])).toEqual([
+      ['operador', 'operador@ejemplo.test'], ['coordinador', 'coordinador@ejemplo.test'], ['rh', 'rh@ejemplo.test'], ['archivo', 'archivo@ejemplo.test'],
+      ['revisor', 'nomina.rev@ejemplo.test'], ['revisor', 'rh.rev@ejemplo.test'],
+    ]);
+    expect(r).toMatchObject({ estado: 'creada', retenida: false, entregas: 6 });
+  });
+
+  it('desglose RETENIDO: al operador, coordinador, RH y archivo no sale nada, pero los revisores SÍ reciben su aviso', async () => {
+    const b = banco({ config: PRIMER_MES });
+    const r = await recibirDesglose(TENANT, retenible(), b.deps);
+    expect(r).toMatchObject({ estado: 'creada', retenida: true, entregas: 0 });
+    expect(b.entregas.map((e) => [e.rol, e.correo])).toEqual([['revisor', 'nomina.rev@ejemplo.test'], ['revisor', 'rh.rev@ejemplo.test']]);
+    expect(b.excepciones.map((e) => e.tipo)).toContain('neto_negativo');
+  });
+
+  it('con la RPC de la 0933, la retenida deja a los revisores en la MISMA transacción y no hay inserción suelta', async () => {
+    const b = banco({ config: PRIMER_MES });
+    const sueltas = vi.fn();
+    b.deps.insertarEntregas = sueltas;
+    const { llamadas } = conAtomica(b, 'ok0933');
+    await recibirDesglose(TENANT, retenible(), b.deps);
+    expect(llamadas[0].entregas.map((e) => e.rol)).toEqual(['revisor', 'revisor']);
+    expect(sueltas).not.toHaveBeenCalled();
+    expect(b.entregas.map((e) => e.rol)).toEqual(['revisor', 'revisor']);
+  });
+
+  it('con la RPC ANTERIOR (sin la 0933) ignora las entregas de una retenida: el aviso al revisor se inserta aparte, sin duplicar', async () => {
+    const b = banco({ config: PRIMER_MES });
+    conAtomica(b, 'ok');
+    await recibirDesglose(TENANT, retenible(), b.deps);
+    expect(b.entregas.map((e) => e.rol)).toEqual(['revisor', 'revisor']);
+  });
+
+  it('un buzón que ya recibe el desglose por otro rol no recibe además la copia de revisión', async () => {
+    const b = banco({ config: { ...PRIMER_MES, rhCorreos: ['nomina.rev@ejemplo.test'] } });
+    await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(b.entregas.filter((e) => e.correo === 'nomina.rev@ejemplo.test').map((e) => e.rol)).toEqual(['rh']);
+    expect(b.entregas.filter((e) => e.rol === 'revisor').map((e) => e.correo)).toEqual(['rh.rev@ejemplo.test']);
+  });
+
+  it('el modo se APAGA solo: después de «hasta» no hay revisores; y sin fecha o sin revisores, nunca', async () => {
+    for (const config of [
+      { revisores: REVISORES, primerMesHasta: '2026-10-14' },     // venció ayer
+      { revisores: REVISORES, primerMesHasta: null },              // nunca se activó
+      { revisores: [], primerMesHasta: '2026-11-14' },             // sin a quién mandar
+    ]) {
+      const b = banco({ config });
+      await recibirDesglose(TENANT, desglose(), b.deps);
+      expect(b.entregas.some((e) => e.rol === 'revisor'), JSON.stringify(config)).toBe(false);
+    }
+  });
+
+  it('el último día es inclusivo', async () => {
+    const b = banco({ config: { revisores: REVISORES, primerMesHasta: '2026-10-15' } });
+    await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(b.entregas.filter((e) => e.rol === 'revisor')).toHaveLength(2);
   });
 });

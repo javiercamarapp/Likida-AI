@@ -249,3 +249,97 @@ describe('importarDesglosesDeArchivo', () => {
     expect(recibir).not.toHaveBeenCalled();
   });
 });
+
+describe('desglosesDeCsv: número de liquidación, número de pago y agrupación por unidad', () => {
+  const ENC_L = 'terminal;bitacora;numero_liquidacion;numero_pago;poliza;numero_empleado;unidad;desde;hasta;tipo;concepto;monto';
+  const fila = (b: string, liq: string, pago: string, unidad: string, tipo: string, concepto: string, monto: string, desde = '2026-10-04', hasta = '2026-10-08') =>
+    `T1;${b};${liq};${pago};P-1;E-1;${unidad};${desde};${hasta};${tipo};${concepto};${monto}`;
+
+  it('trae numeroLiquidacion y numeroPago al encabezado y la clave pasa a ser la de la liquidación', () => {
+    const r = desglosesDeCsv([ENC_L, fila('B-1', '7', '1025', 'U-5', 'percepcion', 'Sueldo', '1000'), fila('B-1', '7', '1025', 'U-5', 'deduccion', 'Anticipo', '200')].join('\n'));
+    expect(r.problemas).toEqual([]);
+    expect(r.desgloses).toHaveLength(1);
+    expect(r.desgloses[0]).toMatchObject({ bitacora: 'B-1', numeroLiquidacion: '7', numeroPago: '1025', unidad: 'U-5' });
+    expect(r.desgloses[0].bitacoras).toBeUndefined();
+  });
+
+  it('dos bitácoras de la MISMA unidad y la misma liquidación salen como UN desglose con los renglones de ambas', () => {
+    const r = desglosesDeCsv([
+      ENC_L,
+      fila('B-1', '7', '1025', 'U-5', 'percepcion', 'Sueldo', '1000'),
+      fila('B-2', '7', '1025', 'U-5', 'percepcion', 'Sueldo', '800'),
+      fila('B-2', '7', '1025', 'U-5', 'deduccion', 'Anticipo', '300'),
+    ].join('\n'));
+    expect(r.problemas).toEqual([]);
+    expect(r.desgloses).toHaveLength(1);
+    const d = r.desgloses[0];
+    expect(d.bitacoras).toEqual(['B-1', 'B-2']);
+    expect(d.percepciones.map((p) => p.monto)).toEqual([1000, 800]);
+    expect(netoEnCentavos(d)).toBe(150000);
+    const liq = aLiquidacionExterna(d, { sistemaOrigen: 'prueba' }).liquidacion;
+    expect(liq.claveExterna).toBe('LIQ-T1-7');
+    expect([...liq.viajes].sort()).toEqual(['B-1', 'B-2']);
+  });
+
+  it('una celda de numero_liquidacion en blanco no saca a la fila de su liquidación', () => {
+    const r = desglosesDeCsv([
+      ENC_L,
+      fila('B-1', '7', '1025', 'U-5', 'percepcion', 'Sueldo', '1000'),
+      fila('B-1', '', '', 'U-5', 'deduccion', 'Anticipo', '200'),
+    ].join('\n'));
+    expect(r.problemas).toEqual([]);
+    expect(r.desgloses).toHaveLength(1);
+    expect(r.desgloses[0].deducciones).toHaveLength(1);
+  });
+
+  it('unidades distintas bajo la misma liquidación: no entra y se dice por qué (la liquidación es por unidad)', () => {
+    const r = desglosesDeCsv([
+      ENC_L,
+      fila('B-1', '7', '1025', 'U-5', 'percepcion', 'Sueldo', '1000'),
+      fila('B-2', '7', '1025', 'U-6', 'percepcion', 'Sueldo', '800'),
+    ].join('\n'));
+    expect(r.desgloses).toEqual([]);
+    expect(r.problemas).toHaveLength(1);
+    expect(r.problemas[0]).toMatchObject({ clave: 'LIQ-T1-7' });
+    expect(r.problemas[0].motivo).toMatch(/unidad/i);
+  });
+
+  it('sin numero_liquidacion todo sigue igual que antes: un desglose por bitácora', () => {
+    const r = desglosesDeCsv(CSV_TRES);
+    expect(r.desgloses.every((d) => d.numeroLiquidacion === undefined && d.bitacoras === undefined)).toBe(true);
+  });
+
+  it('dos números de liquidación para la misma bitácora: se reporta y no entra', () => {
+    const r = desglosesDeCsv([
+      ENC_L,
+      fila('B-1', '7', '1025', 'U-5', 'percepcion', 'Sueldo', '1000'),
+      fila('B-1', '8', '1025', 'U-5', 'deduccion', 'Anticipo', '200'),
+    ].join('\n'));
+    expect(r.desgloses).toEqual([]);
+    expect(r.problemas.length).toBeGreaterThan(0);
+  });
+});
+
+describe('importarDesglosesDeArchivo: presupuesto de tiempo (carga desde el panel)', () => {
+  const CSV = [
+    'terminal;bitacora;poliza;numero_empleado;desde;hasta;tipo;concepto;monto',
+    ...['B-1', 'B-2', 'B-3', 'B-4'].map((b) => `T1;${b};P-1;E-1;2026-09-01;2026-09-06;percepcion;Sueldo;1000`),
+  ].join('\n');
+
+  it('al acabarse el tiempo deja de recibir, dice cuántos faltan y lo ya recibido queda (repetir el archivo es seguro)', async () => {
+    const { recibir, vistos } = recibidor();
+    let reloj = 0;
+    const r = await importarDesglosesDeArchivo('t-1', 'x.csv', new TextEncoder().encode(CSV), { recibir }, { presupuestoMs: 100, ahoraMs: () => (reloj += 60) });
+    expect(vistos.length).toBeGreaterThan(0);
+    expect(vistos.length).toBeLessThan(4);
+    expect(r.recibidas).toBe(vistos.length);
+    expect(r.sinProcesar).toBe(4 - vistos.length);
+  });
+
+  it('con tiempo de sobra procesa todo y no marca «sinProcesar»', async () => {
+    const { recibir, vistos } = recibidor();
+    const r = await importarDesglosesDeArchivo('t-1', 'x.csv', new TextEncoder().encode(CSV), { recibir });
+    expect(vistos).toHaveLength(4);
+    expect(r.sinProcesar).toBeUndefined();
+  });
+});

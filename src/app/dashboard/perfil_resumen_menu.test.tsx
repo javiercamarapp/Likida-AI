@@ -21,10 +21,11 @@ const enlacesPermitidos = () => [...Object.keys(RUTAS_PERFIL_CINCO_AGENTES), ...
 
 const hrefsDe = (html: string) => [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
 const PROHIBIDAS = [
-  '/dashboard/chat', '/dashboard/facturacion', '/dashboard/clientes', '/dashboard/suscripcion', '/dashboard/llaves-api',
-  '/dashboard/sesiones-mcp', '/dashboard/usuarios', '/dashboard/agentes/facturas', '/dashboard/agentes/cobranza',
+  '/dashboard/chat', '/dashboard/facturacion', '/dashboard/clientes', '/dashboard/suscripcion',
+  '/dashboard/sesiones-mcp', '/dashboard/agentes/facturas', '/dashboard/agentes/cobranza',
   '/dashboard/agentes/proveedores', '/dashboard/timbrado', '/dashboard/descarga-sat', '/dashboard/configuracion',
-  '/dashboard/rentabilidad', '/dashboard/reglas', '/dashboard/convenios', '/dashboard/jornada', '/dashboard/patios',
+  '/dashboard/rentabilidad', '/dashboard/reglas', '/dashboard/convenios', '/dashboard/jornada',
+  // Ola 1 · A1: '/dashboard/llaves-api', '/dashboard/usuarios' y '/dashboard/patios' ya están en la lista cerrada del perfil (base).
 ];
 
 describe('sidebar', () => {

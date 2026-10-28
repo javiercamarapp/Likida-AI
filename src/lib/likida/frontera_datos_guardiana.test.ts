@@ -603,7 +603,12 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 326;
 // (la conformidad de un turno nocturno) y, para retirar la conformidad al anular/recapturar, `leerConformidad`, `retirarConformidad` y la lectura previa de
 // `anularAsiento` (+4; cubiertas por wa_dia_anterior.test.ts); `admin/negocio.ts` suma `fijarAgenteChoferHabilitado` (+1; negocio_agente_chofer.test.ts).
 // INTEGRACIÓN OLA 8b: techo = 2,390 + 4 (O8-6) + 3 (O8-4) + 1 (O8-5) + 5 (tanda 2) = 2,403 (medido con el barrido real tras la fusión).
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_403;
+// OLA 1 · A1 (liquidación por correo): +7 llamadas (2,403 → 2,410), medidas con el barrido real. importacion/operadores.ts +2 (buscarPorEmpleado y buscarPorCorreo: operadores
+// de la flota por número de empleado / correo, por `acotada`, con `tenant_id`; cubiertas por operadores_sin_telefono.test.ts); administracion.ts +3 (comprobarEmpleadoLibre y
+// comprobarCorreoLibre del alta sin teléfono, más la lectura del teléfono guardado al editar con el campo vacío; cubiertas por administracion_sin_telefono.test.ts);
+// liquidacion_externa/repo_correo.ts +2 (el respaldo sin las columnas de la 0933 al leer y al guardar la configuración; cubiertas por repo_correo_0933.test.ts).
+// Si otro lote toca este techo, sumar el incremento al integrar.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_410;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

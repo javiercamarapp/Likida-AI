@@ -70,6 +70,7 @@ import PaginaAgenteLiquidacion from './page';
 import { VistaAgenteLiquidacion } from './vista';
 import { VistaDesgloses, SeccionDesgloses } from './desgloses';
 import { SeccionExternas } from './externas';
+import { SeccionCargas } from './cargas';
 import type { ReactElement } from 'react';
 
 const pedir = async () => (await PaginaAgenteLiquidacion({ searchParams: Promise.resolve({}) })) as ReactElement<Record<string, unknown>>;
@@ -149,3 +150,21 @@ describe('A37-A1-liquidaciones-20: las acciones de WhatsApp de la pantalla exige
     expect(m.reintentar).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('Ola 1 · A1: las cargas por archivo viven solo en el canal correo', () => {
+  it.each(['correo', 'ambos'] as const)('con el canal «%s» la pantalla trae la sección de cargas con sus dos acciones, para el dueño', async (canal) => {
+    m.leerConfigCorreo.mockResolvedValue(config(canal));
+    const el = await pedir();
+    const cargas = el.props.cargas as ReactElement<{ acciones: Record<string, unknown>; puedeCargar: boolean }>;
+    expect(cargas.type).toBe(SeccionCargas);
+    expect(cargas.props.puedeCargar).toBe(true);
+    expect(typeof cargas.props.acciones.desgloses).toBe('function');
+    expect(typeof cargas.props.acciones.contactos).toBe('function');
+  });
+
+  it('con el canal WhatsApp la pantalla de siempre no cambia: no hay sección de cargas', async () => {
+    m.leerConfigCorreo.mockResolvedValue(config('whatsapp'));
+    expect((await pedir()).props).not.toHaveProperty('cargas');
+  });
+});
+

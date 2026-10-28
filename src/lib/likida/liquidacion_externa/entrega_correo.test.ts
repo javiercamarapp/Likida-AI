@@ -515,3 +515,96 @@ describe('A37-A1-liquidaciones-10: la bitácora del asunto sale del desglose, no
     expect(correo.asunto).toContain('bitácora 1228');
   });
 });
+
+describe('dirección de respuesta: «Responder a» o, si falta, el correo emisor de la flota (0933)', () => {
+  it('sin «Responder a» pero con correo emisor: SÍ sale, con el correo emisor como replyTo', async () => {
+    const { e, deps } = montar({ ok: true, id: 're_emisor' }, { responderA: null, remitenteCorreo: 'emisor@ejemplo.test' });
+    const r = await procesarEntregasCorreo(deps, 10);
+    expect(r).toMatchObject({ enviadas: 1, sinConfigurar: 0 });
+    expect(e.llamadasEnviar[0]?.op.replyTo).toBe('emisor@ejemplo.test');
+  });
+
+  it('el «Responder a» configurado manda sobre el correo emisor', async () => {
+    const { e, deps } = montar({ ok: true, id: 're_ra' }, { responderA: 'nomina@ejemplo.test', remitenteCorreo: 'emisor@ejemplo.test' });
+    await procesarEntregasCorreo(deps, 10);
+    expect(e.llamadasEnviar[0]?.op.replyTo).toBe('nomina@ejemplo.test');
+  });
+
+  it('FAIL-CERRADO: sin ninguno de los dos no se manda NADA, no se gasta intento y la fila espera horas', async () => {
+    const { e, deps } = montar({ ok: true, id: 're_x' }, { responderA: null, remitenteCorreo: null });
+    const r = await procesarEntregasCorreo(deps, 10);
+    expect(r).toMatchObject({ enviadas: 0, sinConfigurar: 1 });
+    expect(e.llamadasEnviar).toEqual([]);
+    expect(e.reprogramadas[0]).toMatchObject({ id: 'e-1', intentos: 0 });
+    expect(e.reprogramadas[0]?.proximo.getTime()).toBeGreaterThan(AHORA.getTime() + 60 * 60_000);
+  });
+
+  it('espacios en blanco no cuentan como dirección', async () => {
+    const { e, deps } = montar({ ok: true, id: 're_x' }, { responderA: '   ', remitenteCorreo: '  ' });
+    await procesarEntregasCorreo(deps, 10);
+    expect(e.llamadasEnviar).toEqual([]);
+  });
+});
+
+describe('rol «revisor» del modo primer mes (0933)', () => {
+  const ctx = { claveExterna: 'BIT-T01-1228', periodoDesde: '2026-10-09', periodoHasta: '2026-10-14', bitacora: '1228' };
+  const REVISORES = [{ departamento: 'nomina', correo: 'nomina.rev@ejemplo.test' }, { departamento: 'rh', correo: 'rh.rev@ejemplo.test' }];
+
+  it('copia de revisión (no retenido): asunto «[Revisión] …», dice el departamento y que se envía al operador; sin importes', () => {
+    const { correo } = armarCorreoDesglose(ctx, { departamento: 'nomina', retenidoMotivo: null });
+    expect(correo.asunto).toBe('[Revisión] Desglose de pago — bitácora 1228 — 9 al 14 oct');
+    const texto = correo.parrafos.join(' ');
+    expect(texto).toContain('se envía al operador');
+    expect(texto).toContain('(nomina)');
+    expect(texto).not.toMatch(/\$|\d{3,}\.\d{2}/);
+  });
+
+  it('copia de un desglose RETENIDO: asunto «RETENIDO», el motivo y que NO se envió al operador', () => {
+    const { correo } = armarCorreoDesglose(ctx, { departamento: 'rh', retenidoMotivo: 'El neto es negativo.' });
+    expect(correo.asunto).toBe('[Revisión] RETENIDO — Desglose de pago — bitácora 1228 — 9 al 14 oct');
+    const texto = correo.parrafos.join(' ');
+    expect(texto).toContain('NO se envió al operador');
+    expect(texto).toContain('El neto es negativo.');
+  });
+
+  it('sin «revision» el correo es exactamente el de siempre (el operador no ve nada del modo primer mes)', () => {
+    const { correo } = armarCorreoDesglose(ctx);
+    expect(correo.asunto).toBe('Desglose de pago — bitácora 1228 — 9 al 14 oct');
+    expect(correo.parrafos.join(' ')).not.toMatch(/revisi/i);
+  });
+
+  it('la entrega al revisor sale con el asunto de revisión y su departamento, y NO mueve la liquidación', async () => {
+    const { e, deps } = montar({ ok: true, id: 're_rev' }, { revisores: REVISORES }, [entrega({ rol: 'revisor', correo: 'nomina.rev@ejemplo.test' })]);
+    deps.leerContexto = async () => ({ ...ctx, retenidaMotivo: null });
+    await procesarEntregasCorreo(deps, 10);
+    expect(e.llamadasEnviar[0]?.asunto.startsWith('[Revisión] ')).toBe(true);
+    expect(e.llamadasEnviar[0]?.parrafos.join(' ')).toContain('(nomina)');
+    expect(e.enviadas).toHaveLength(1);
+    expect(e.liquidacionEnviada).toBe(0);
+  });
+
+  it('con el desglose retenido, el revisor recibe el aviso de «retenido»', async () => {
+    const { e, deps } = montar({ ok: true, id: 're_rev' }, { revisores: REVISORES }, [entrega({ rol: 'revisor', correo: 'rh.rev@ejemplo.test' })]);
+    deps.leerContexto = async () => ({ ...ctx, retenidaMotivo: 'El tipo de operador no viene en el desglose.' });
+    await procesarEntregasCorreo(deps, 10);
+    expect(e.llamadasEnviar[0]?.asunto).toContain('RETENIDO');
+    expect(e.llamadasEnviar[0]?.parrafos.join(' ')).toContain('NO se envió al operador');
+  });
+
+  it('un rebote del revisor NO abre una excepción del operador ni del coordinador: queda fallida y en el log', async () => {
+    const { e, deps } = montar({ ok: false, motivo: 'rechazado', detalle: 'Invalid to: rh.rev@ejemplo.test', status: 422 }, { revisores: REVISORES },
+      [entrega({ rol: 'revisor', correo: 'rh.rev@ejemplo.test' })]);
+    const r = await procesarEntregasCorreo(deps, 10);
+    expect(r.fallidas).toBe(1);
+    expect(e.excepciones).toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith('liqcorreo.revisor_rebotado', expect.not.objectContaining({ correo: 'rh.rev@ejemplo.test' }));
+  });
+
+  it('la llave de idempotencia distingue a cada revisor de la misma generación (como RH) y no filtra el correo', () => {
+    const a = llaveIdempotencia({ liquidacionExternaId: 'L1', generacion: 1, rol: 'revisor', correo: 'nomina.rev@ejemplo.test' });
+    const b = llaveIdempotencia({ liquidacionExternaId: 'L1', generacion: 1, rol: 'revisor', correo: 'rh.rev@ejemplo.test' });
+    expect(a).not.toBe(b);
+    expect(a).not.toContain('ejemplo');
+    expect(llaveIdempotencia({ liquidacionExternaId: 'L1', generacion: 1, rol: 'operador', correo: 'x@ejemplo.test' })).toBe('liqcorreo:L1:g1:operador');
+  });
+});

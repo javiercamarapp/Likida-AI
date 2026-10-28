@@ -45,6 +45,7 @@ import {
   normalizarTelefonoOperador, normalizarRfcOperador, normalizarFechaLicencia, TELEFONO_NO_DISPONIBLE,
 } from '../administracion';
 import { resolverTerminalDeFlota } from '../terminales';
+import { nuevoMarcadorSinTelefono, correoDeOperador, esMarcadorSinTelefono } from '../operador_sin_telefono';
 import { leerFechaImportada } from '../importar_viajes';
 import {
   type Descartada, TOPE_FILAS_IMPORTACION, detectarColumnas, filaVacia, celdaTexto,
@@ -64,7 +65,12 @@ export interface OperadorCrudo {
   /** El patio como lo escribió el archivo (W2). Se resuelve contra los patios
    *  de la flota en `asignarPatios` (patios.ts); aquí solo viaja el texto. */
   patio?: string | null;
+  /** Correo del operador (desglose por correo, 0785). Con teléfono es opcional; sin teléfono es obligatorio. */
+  correo?: string | null;
 }
+
+/** Opciones de validación: `sinTelefono` = la flota entrega por correo y admite altas sin WhatsApp (ver `operador_sin_telefono.ts`). */
+export interface OpcionesValidacionOperador { sinTelefono?: boolean }
 
 /** Una fila ya válida, lista para escribir. `fila` es el renglón del archivo
  *  (o el índice del lote) para poder decir «fila 14: …». */
@@ -83,23 +89,35 @@ export interface OperadorImportado {
   /** El patio YA resuelto contra la flota por `asignarPatios`. Si viene, manda
    *  sobre el `terminalId` general de `importarOperadores`. */
   terminalId?: string | null;
+  /** Correo normalizado, o null. */
+  correo?: string | null;
+  /** true = alta sin WhatsApp (migración 0932): `telefono` viene vacío y `importarOperadores` pone el marcador al escribir. */
+  sinTelefono?: boolean;
 }
 
 /**
  * De lo crudo a lo válido. PURA: lanza `DatoInvalido` con el QUÉ corregir.
  * Es la misma validación que `crearOperador`, y las dos puertas la comparten.
  */
-export function validarOperadorImportado(c: OperadorCrudo, fila: number): OperadorImportado {
+export function validarOperadorImportado(c: OperadorCrudo, fila: number, opciones: OpcionesValidacionOperador = {}): OperadorImportado {
   const nombre = (c.nombre ?? '').replace(/\s+/g, ' ').trim();
   if (nombre.length < 3) throw new DatoInvalido('el nombre necesita al menos 3 caracteres');
   if (nombre.length > 120) throw new DatoInvalido('el nombre no puede pasar de 120 caracteres');
-  if (!(c.telefono ?? '').trim()) throw new DatoInvalido('sin teléfono — es la identidad del chofer para el bot');
-  const telefono = normalizarTelefonoOperador(c.telefono);
+  const sinTelefono = !(c.telefono ?? '').trim();
+  if (sinTelefono && !opciones.sinTelefono) throw new DatoInvalido('sin teléfono — es la identidad del chofer para el bot');
+  const telefono = sinTelefono ? '' : normalizarTelefonoOperador(c.telefono);
   const numeroEmpleado = (c.numeroEmpleado ?? '').trim().slice(0, 40) || null;
+  const correo = correoDeOperador(c.correo);
+  if (correo === undefined) throw new DatoInvalido('el correo no tiene forma de correo (falta la @ o el dominio)');
+  if (sinTelefono && (!numeroEmpleado || !correo)) {
+    throw new DatoInvalido('sin teléfono: el operador necesita número de empleado y correo (es como se le encuentra y se le entrega el desglose)');
+  }
   const licencia = (c.licencia ?? '').trim().slice(0, 40) || null;
   const licenciaTipo = (c.licenciaTipo ?? '').trim().slice(0, 10) || null;
   return {
     fila, nombre, telefono, numeroEmpleado,
+    ...(correo ? { correo } : {}),
+    ...(sinTelefono ? { sinTelefono: true } : {}),
     rfc: normalizarRfcOperador(c.rfc),
     licencia, licenciaTipo,
     licenciaVence: normalizarFechaLicencia(c.licenciaVence),
@@ -119,6 +137,7 @@ export const COLUMNAS_OPERADOR = {
   licenciaTipo: ['tipo de licencia', 'tipo licencia', 'categoria', 'tipo'],
   licenciaVence: ['vence licencia', 'licencia vence', 'vencimiento licencia', 'vigencia licencia', 'vence', 'vigencia'],
   patio: ['patio', 'terminal', 'base', 'sucursal', 'patio terminal'],
+  correo: ['correo', 'correo electronico', 'email', 'e mail', 'mail', 'correo operador', 'correo del operador'],
 } as const;
 
 /** La plantilla que se descarga. El orden es el que se lee. */
@@ -144,20 +163,25 @@ export interface LecturaOperadores {
  * PURA. Sin columna de nombre o de teléfono no hay importación: son las dos
  * únicas obligatorias, y el teléfono es el dedup.
  */
-export function interpretarFilasOperadores(matriz: unknown[][]): LecturaOperadores {
+export function interpretarFilasOperadores(matriz: unknown[][], opciones: OpcionesValidacionOperador = {}): LecturaOperadores {
   if (!matriz.length) return { filas: [], descartadas: [], error: 'El archivo está vacío.' };
   const indice = detectarColumnas(matriz[0] ?? [], COLUMNAS_OPERADOR);
-  if (indice.nombre === undefined || indice.telefono === undefined) {
+  // Con la flota en canal correo el teléfono puede faltar: entonces la llave es el número de empleado y se necesita el correo.
+  const sinColumnaTelefonoPermitida = opciones.sinTelefono === true && indice.numeroEmpleado !== undefined && indice.correo !== undefined;
+  if (indice.nombre === undefined || (indice.telefono === undefined && !sinColumnaTelefonoPermitida)) {
     const falta = indice.nombre === undefined ? 'nombre' : 'teléfono';
     return {
       filas: [], descartadas: [],
-      error: `No encontré la columna de ${falta}. Encabezados leídos: ${encabezadosLeidos(matriz)}. Descarga la plantilla, o renombra la columna a «nombre» / «telefono» y vuelve a subirlo.`,
+      error: `No encontré la columna de ${falta}. Encabezados leídos: ${encabezadosLeidos(matriz)}. Descarga la plantilla, o renombra la columna a «nombre» / «telefono» y vuelve a subirlo.${
+        opciones.sinTelefono && indice.nombre !== undefined ? ' (Sin teléfono, el archivo necesita las columnas «numero de empleado» y «correo».)' : ''}`,
     };
   }
 
   const filas: OperadorImportado[] = [];
   const descartadas: Descartada[] = [];
   const telefonosVistos = new Map<string, number>();
+  const empleadosVistos = new Map<string, number>();
+  const correosVistos = new Map<string, number[]>();
 
   for (let f = 1; f < matriz.length && f <= TOPE_FILAS_IMPORTACION; f++) {
     const fila = matriz[f];
@@ -181,13 +205,24 @@ export function interpretarFilasOperadores(matriz: unknown[][]): LecturaOperador
         licenciaTipo: celda('licenciaTipo', 10),
         licenciaVence: vence,
         patio: celda('patio', 80),
-      }, numero);
-      const repetida = telefonosVistos.get(v.telefono);
-      if (repetida !== undefined) {
-        descartadas.push({ fila: numero, motivo: `teléfono repetido en el archivo (ya viene en la fila ${repetida})` });
-        continue;
+        correo: celda('correo', 400),
+      }, numero, opciones);
+      if (v.sinTelefono) {
+        const repetidoE = empleadosVistos.get((v.numeroEmpleado ?? '').toLowerCase());
+        if (repetidoE !== undefined) {
+          descartadas.push({ fila: numero, motivo: `número de empleado repetido en el archivo (ya viene en la fila ${repetidoE})` });
+          continue;
+        }
+        empleadosVistos.set((v.numeroEmpleado ?? '').toLowerCase(), numero);
+      } else {
+        const repetida = telefonosVistos.get(v.telefono);
+        if (repetida !== undefined) {
+          descartadas.push({ fila: numero, motivo: `teléfono repetido en el archivo (ya viene en la fila ${repetida})` });
+          continue;
+        }
+        telefonosVistos.set(v.telefono, numero);
       }
-      telefonosVistos.set(v.telefono, numero);
+      if (v.correo) correosVistos.set(v.correo, [...(correosVistos.get(v.correo) ?? []), numero]);
       filas.push(v);
     } catch (e) {
       if (e instanceof DatoInvalido) { descartadas.push({ fila: numero, motivo: e.message }); continue; }
@@ -195,12 +230,24 @@ export function interpretarFilasOperadores(matriz: unknown[][]): LecturaOperador
     }
   }
 
+  // Dos operadores del archivo con el MISMO correo es casi siempre un copiar/pegar mal hecho y el desglose lleva sueldo y
+  // deducciones (LFPDPPP; mismo criterio que `contactos_csv.ts`, A37-S48-06): ninguna de esas filas entra.
+  const choque = new Set<number>();
+  for (const numeros of correosVistos.values()) {
+    if (numeros.length < 2) continue;
+    for (const n of numeros) {
+      choque.add(n);
+      descartadas.push({ fila: n, motivo: `comparte el correo con las filas ${numeros.filter((o) => o !== n).join(', ')}: ese buzón recibiría el desglose de varios; corrige el archivo` });
+    }
+  }
+  const aceptadas = choque.size ? filas.filter((x) => !choque.has(x.fila)) : filas;
+
   const tope = avisoDeTope(matriz);
   if (tope) {
     descartadas.unshift(tope);
-    return { filas, descartadas, error: tope.motivo };
+    return { filas: aceptadas, descartadas, error: tope.motivo };
   }
-  return { filas, descartadas };
+  return { filas: aceptadas, descartadas };
 }
 
 // ── La escritura ───────────────────────────────────────────────────────────
@@ -228,6 +275,9 @@ type FilaExistente = { id: string; tenant_id: string; nombre: string; telefono: 
  *  la lista viaja en la URL. */
 const TELEFONOS_POR_CONSULTA = 40;
 
+/** La llave con que se casa lo que devolvió la base con la fila: el teléfono normalizado, o el marcador tal cual. */
+const claveDeTelefono = (t: string): string => (esMarcadorSinTelefono(t) ? t : destinatarioWhatsApp(t));
+
 /** Las fichas de CUALQUIER flota con alguno de estos teléfonos. Falla cerrado. */
 async function buscarExistentes(telefonos: string[]): Promise<Map<string, FilaExistente[]>> {
   const porTelefono = new Map<string, FilaExistente[]>();
@@ -247,6 +297,45 @@ async function buscarExistentes(telefonos: string[]): Promise<Map<string, FilaEx
   }
   return porTelefono;
 }
+
+type FilaPorEmpleado = { id: string; nombre: string; numero_empleado: string; activo: boolean };
+type FilaPorCorreo = { id: string; correo: string };
+
+/** Los operadores DE ESTA FLOTA con alguno de estos números de empleado (para las altas sin teléfono). Falla cerrado. */
+async function buscarPorEmpleado(tenantId: string, numeros: string[]): Promise<Map<string, FilaPorEmpleado[]>> {
+  const porNumero = new Map<string, FilaPorEmpleado[]>();
+  for (const tanda of enTandas(numeros, 100)) {
+    const { data, error } = await acotada(
+      supabaseAdmin().from('operador').select('id, nombre, numero_empleado, activo').eq('tenant_id', tenantId).in('numero_empleado', tanda),
+      'importarOperadores.por_empleado',
+    );
+    if (error) throw new Error(`importarOperadores: no se pudo comprobar los números de empleado — ${error.message}`);
+    for (const f of (data ?? []) as FilaPorEmpleado[]) {
+      const k = String(f.numero_empleado).toLowerCase();
+      porNumero.set(k, [...(porNumero.get(k) ?? []), f]);
+    }
+  }
+  return porNumero;
+}
+
+/** Los operadores DE ESTA FLOTA que ya usan alguno de estos correos (un buzón no recibe el desglose de dos personas). Falla cerrado. */
+async function buscarPorCorreo(tenantId: string, correos: string[]): Promise<Map<string, FilaPorCorreo[]>> {
+  const porCorreo = new Map<string, FilaPorCorreo[]>();
+  for (const tanda of enTandas(correos, 100)) {
+    const { data, error } = await acotada(
+      supabaseAdmin().from('operador').select('id, correo').eq('tenant_id', tenantId).in('correo', tanda),
+      'importarOperadores.por_correo',
+    );
+    if (error) throw new Error(`importarOperadores: no se pudo comprobar los correos — ${error.message}`);
+    for (const f of (data ?? []) as FilaPorCorreo[]) {
+      const k = String(f.correo).toLowerCase();
+      porCorreo.set(k, [...(porCorreo.get(k) ?? []), f]);
+    }
+  }
+  return porCorreo;
+}
+
+const MOTIVO_CORREO_EN_USO = 'ese correo ya lo usa otro operador de la flota: no se dio de alta para que el desglose no le llegue a otra persona; corrígelo o quítaselo al otro operador';
 
 /**
  * Clasifica una fila contra lo que ya hay. `null` = libre, se escribe.
@@ -277,6 +366,7 @@ function filaParaInsertar(tenantId: string, f: OperadorImportado, terminalGenera
     tenant_id: tenantId,
     nombre: f.nombre,
     telefono: f.telefono,
+    ...(f.correo ? { correo: f.correo } : {}),
     numero_empleado: f.numeroEmpleado,
     licencia: f.licencia,
     licencia_tipo: f.licenciaTipo,
@@ -306,19 +396,44 @@ export interface PlanOperadores {
 export async function planificarOperadores(tenantId: string, filas: OperadorImportado[]): Promise<PlanOperadores> {
   const plan: PlanOperadores = { nuevas: [], duplicados: [], errores: [] };
   if (!filas.length) return plan;
+  const conTelefono = filas.filter((f) => !f.sinTelefono);
+  const sinTelefono = filas.filter((f) => f.sinTelefono === true);
   // A37-L-seguridad-tenant-02: tope por flota a las consultas de duplicado (acota el barrido de números por lotes).
   if (!(await rateLimit(`tel-import:${tenantId}`, 60, 3_600_000))) {
     return { ...plan, error: 'Demasiadas importaciones de operadores en la última hora — no importé nada. Espera un rato e inténtalo de nuevo.' };
   }
-  let existentes: Map<string, FilaExistente[]>;
+  let existentes: Map<string, FilaExistente[]> = new Map();
+  let porEmpleado: Map<string, FilaPorEmpleado[]> = new Map();
+  let porCorreo: Map<string, FilaPorCorreo[]> = new Map();
   try {
-    existentes = await buscarExistentes(filas.map((f) => f.telefono));
+    if (conTelefono.length) existentes = await buscarExistentes(conTelefono.map((f) => f.telefono));
+    if (sinTelefono.length) porEmpleado = await buscarPorEmpleado(tenantId, sinTelefono.map((f) => f.numeroEmpleado ?? ''));
+    const correos = [...new Set(filas.map((f) => f.correo).filter((c): c is string => !!c))];
+    if (correos.length) porCorreo = await buscarPorCorreo(tenantId, correos);
   } catch (e) {
     logger.error('importar_operadores.catalogo_ilegible', { tenantId, err: e instanceof Error ? e.message : String(e) });
-    return { ...plan, error: 'No pude comprobar qué teléfonos ya existen — no importé nada. Vuelve a intentar.' };
+    return { ...plan, error: 'No pude comprobar qué operadores ya existen — no importé nada. Vuelve a intentar.' };
   }
   for (const f of filas) {
-    const c = clasificar(tenantId, f, existentes.get(f.telefono) ?? []);
+    let c: ReturnType<typeof clasificar>;
+    let idExistente: string | null = null;
+    if (f.sinTelefono) {
+      // La alta sin teléfono se encuentra por número de empleado, DENTRO de la flota (activo o de baja).
+      const ya = porEmpleado.get((f.numeroEmpleado ?? '').toLowerCase()) ?? [];
+      const activa = ya.find((x) => x.activo);
+      if (activa) { idExistente = activa.id; c = { tipo: 'duplicado', d: { fila: f.fila, id: activa.id, telefono: '', motivo: `ya estaba, a nombre de ${activa.nombre}` } }; }
+      else if (ya.length) c = { tipo: 'error', e: { fila: f.fila, motivo: `ese número de empleado es de ${ya[0].nombre}, dado de baja en tu flota: reactívalo desde Operadores en vez de darlo de alta otra vez` } };
+      else c = null;
+    } else {
+      const ex = existentes.get(f.telefono) ?? [];
+      c = clasificar(tenantId, f, ex);
+      if (c?.tipo === 'duplicado') idExistente = c.d.id;
+    }
+    // El correo nuevo no puede ser el de OTRO operador de la flota (el que ya estaba con ese teléfono/número sí es el mismo).
+    if (!c && f.correo) {
+      const otros = (porCorreo.get(f.correo) ?? []).filter((x) => x.id !== idExistente);
+      if (otros.length) c = { tipo: 'error', e: { fila: f.fila, motivo: MOTIVO_CORREO_EN_USO } };
+    }
     if (!c) plan.nuevas.push(f);
     else if (c.tipo === 'duplicado') plan.duplicados.push(c.d);
     else plan.errores.push(c.e);
@@ -326,7 +441,7 @@ export async function planificarOperadores(tenantId: string, filas: OperadorImpo
   return plan;
 }
 
-const RESTRICCIONES_TELEFONO = ['uq_operador_tenant_telefono_norm', 'uq_operador_telefono_activo', 'operador_tenant_id_telefono_key'];
+const RESTRICCIONES_TELEFONO = ['uq_operador_tenant_telefono_norm', 'uq_operador_telefono_activo', 'operador_tenant_id_telefono_key', 'uq_operador_tenant_numero_empleado_sin_tel'];
 
 /**
  * Escribe los operadores en tandas de `FILAS_POR_TANDA`. Anclado al tenant.
@@ -362,7 +477,8 @@ export async function importarOperadores(
   if (plan.error) return { ...salida, error: plan.error };
   salida.duplicados.push(...plan.duplicados);
   salida.errores.push(...plan.errores);
-  const porEscribir = plan.nuevas;
+  // El marcador «sin WhatsApp» (0932) se genera aquí, al escribir: nunca viaja en la vista previa ni en el informe.
+  const porEscribir = plan.nuevas.map((f) => (f.sinTelefono ? { ...f, telefono: nuevoMarcadorSinTelefono() } : f));
 
   const admin = supabaseAdmin();
   const tandas = enTandas(porEscribir);
@@ -378,10 +494,10 @@ export async function importarOperadores(
     );
     if (!error) {
       const idPorTelefono = new Map(((data ?? []) as Array<{ id: unknown; telefono: unknown }>)
-        .map((r) => [destinatarioWhatsApp(String(r.telefono)), String(r.id)] as const));
+        .map((r) => [claveDeTelefono(String(r.telefono)), String(r.id)] as const));
       for (const f of tanda) {
-        const id = idPorTelefono.get(f.telefono);
-        if (id) salida.creados.push({ fila: f.fila, id, telefono: f.telefono });
+        const id = idPorTelefono.get(claveDeTelefono(f.telefono));
+        if (id) salida.creados.push({ fila: f.fila, id, telefono: f.sinTelefono ? '' : f.telefono });
         else salida.errores.push({ fila: f.fila, motivo: 'la base no devolvió el id de esta fila' });
       }
       continue;
@@ -401,13 +517,18 @@ export async function importarOperadores(
       );
       if (!uno.error) {
         const id = (uno.data as { id?: unknown } | null)?.id;
-        if (id) salida.creados.push({ fila: f.fila, id: String(id), telefono: f.telefono });
+        if (id) salida.creados.push({ fila: f.fila, id: String(id), telefono: f.sinTelefono ? '' : f.telefono });
         else salida.errores.push({ fila: f.fila, motivo: 'la base no devolvió el id de esta fila' });
         continue;
       }
       if (RESTRICCIONES_TELEFONO.some((r) => chocaContra(uno.error.message, r))) {
-        const gano = await buscarOperadorPorTelefono(tenantId, f.telefono).catch(() => null);
-        if (gano) salida.duplicados.push({ fila: f.fila, id: gano.id, telefono: f.telefono, motivo: `ya estaba, a nombre de ${gano.nombre}` });
+        const gano = f.sinTelefono
+          ? await buscarPorEmpleado(tenantId, [f.numeroEmpleado ?? '']).then((m) => {
+            const o = m.get((f.numeroEmpleado ?? '').toLowerCase())?.[0];
+            return o ? { id: o.id, nombre: o.nombre } : null;
+          }).catch(() => null)
+          : await buscarOperadorPorTelefono(tenantId, f.telefono).catch(() => null);
+        if (gano) salida.duplicados.push({ fila: f.fila, id: gano.id, telefono: f.sinTelefono ? '' : f.telefono, motivo: `ya estaba, a nombre de ${gano.nombre}` });
         else salida.errores.push({ fila: f.fila, motivo: 'ese teléfono ya está registrado (en otra flota o dado de baja)' });
       } else {
         salida.errores.push({ fila: f.fila, motivo: 'no se pudo escribir en la base; vuelve a subir el archivo' });

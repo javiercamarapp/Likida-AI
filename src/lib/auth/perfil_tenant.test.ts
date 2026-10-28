@@ -113,7 +113,7 @@ describe('exigirRutaDePerfil (páginas y server actions)', () => {
   });
   it('con perfil: stand-by y rutas nuevas rebotan a /dashboard (que siempre está permitido: no hay bucle)', async () => {
     conPerfil();
-    for (const r of ['/dashboard/chat', '/dashboard/suscripcion', '/dashboard/llaves-api', '/dashboard/modulo-nuevo']) {
+    for (const r of ['/dashboard/chat', '/dashboard/suscripcion', '/dashboard/politicas', '/dashboard/modulo-nuevo']) {
       redirect.mockClear();
       await expect(m.exigirRutaDePerfil(CON, r)).rejects.toThrow('NEXT_REDIRECT');
       expect(redirect).toHaveBeenCalledWith('/dashboard');

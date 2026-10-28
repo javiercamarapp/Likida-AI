@@ -40,11 +40,23 @@ export type TipoExcepcion =
   | 'concepto_prohibido' | 'neto_negativo' | 'tipo_sin_regla' | 'correccion_pendiente' | 'mapeo_invalido'
   | 'unidades_mezcladas';
 
+/** Un revisor del «modo primer mes» (0933): una persona por departamento (nómina, RH…) que recibe copia de cada movimiento. */
+export interface Revisor { departamento: string; correo: string }
+
 export interface ConfigCorreo {
   canal: CanalEntrega;
   activa: boolean;
   remitenteNombre: string | null;
   responderA: string | null;
+  /**
+   * 0933: el correo emisor de la flota (el que da el cliente). Es la dirección de respuesta por omisión cuando `responderA` está
+   * vacío (`responderAEfectivo`) y el punto de extensión del transporte propio del cliente (M365/SMTP: `EnvioCorreoPuerto`).
+   */
+  remitenteCorreo: string | null;
+  /** 0933: revisores del modo primer mes (hasta 5, uno por departamento). */
+  revisores: Revisor[];
+  /** 0933: último día (AAAA-MM-DD, hora de México, inclusive) del modo primer mes; `null` = modo apagado. */
+  primerMesHasta: string | null;
   rhCorreos: string[];
   archivoCorreo: string | null;
   enviaCoordinador: boolean;
@@ -61,11 +73,31 @@ export interface ConfigCorreo {
 
 /** Lo que vale cuando la flota no tiene fila: el comportamiento de siempre (WhatsApp), sin enviar nada por correo. */
 export const CONFIG_CORREO_POR_DEFECTO: ConfigCorreo = {
-  canal: 'whatsapp', activa: false, remitenteNombre: null, responderA: null, rhCorreos: [], archivoCorreo: null,
+  canal: 'whatsapp', activa: false, remitenteNombre: null, responderA: null, remitenteCorreo: null, revisores: [], primerMesHasta: null,
+  rhCorreos: [], archivoCorreo: null,
   enviaCoordinador: true, enviaRh: true, etiquetaViaje: 'Pago de viaje', agruparViaje: false,
   conceptosViaje: ['Sueldo', 'Viáticos'], renombres: [], conceptosProhibidos: [], tiposQueReciben: ['foraneo', 'local'],
   netoNegativo: 'retener', enviarDesdeHora: null,
 };
+
+/**
+ * A quién le llegan las respuestas del operador (`Reply-To`): el «Responder a» configurado y, si falta, el correo emisor de la flota
+ * (0933). FAIL-CERRADO: sin ninguno de los dos no hay a dónde mandar «responde a este correo» y el envío espera (`null`).
+ */
+export function responderAEfectivo(c: Pick<ConfigCorreo, 'responderA' | 'remitenteCorreo'>): string | null {
+  const r = (c.responderA ?? '').trim();
+  if (r !== '') return r;
+  const e = (c.remitenteCorreo ?? '').trim();
+  return e !== '' ? e : null;
+}
+
+/**
+ * ¿Está vigente el «modo primer mes» para esta flota hoy? Hay revisores configurados y `hoy` (día de México, AAAA-MM-DD) no pasa de
+ * `primerMesHasta`. Apagado por omisión: sin fecha o sin revisores, `false`.
+ */
+export function modoPrimerMesVigente(c: Pick<ConfigCorreo, 'revisores' | 'primerMesHasta'>, hoy: string): boolean {
+  return c.primerMesHasta !== null && c.revisores.length > 0 && hoy <= c.primerMesHasta;
+}
 
 export interface ContactoOperador { operadorId: string; correo: string | null; correoRebotadoEn: string | null; coordinadorId: string | null }
 export interface Coordinador { id: string; nombre: string | null; correo: string; activo: boolean }
@@ -171,9 +203,24 @@ type Fila = Record<string, unknown>;
 
 // ── Configuración de la flota ───────────────────────────────────────────────
 
-const COLS_CONFIG =
+const COLS_CONFIG_BASE =
   'canal, activa, remitente_nombre, responder_a, rh_correos, archivo_correo, envia_coordinador, envia_rh, etiqueta_viaje, '
   + 'agrupar_viaje, conceptos_viaje, renombres, conceptos_prohibidos, tipos_que_reciben, neto_negativo, enviar_desde_hora';
+/** Las columnas de la migración 0933. Con una base que aún no la tiene se lee sin ellas (y se dice: `nuevasColumnas` en el log). */
+const COLS_CONFIG_0933 = 'remitente_correo, revisores, primer_mes_hasta';
+const COLS_CONFIG = `${COLS_CONFIG_BASE}, ${COLS_CONFIG_0933}`;
+const faltaColumna0933 = (e: ErrorPg): boolean => !!e && /remitente_correo|revisores|primer_mes_hasta/.test(e.message ?? '');
+
+function aRevisores(v: unknown): Revisor[] {
+  if (!Array.isArray(v)) return [];
+  const salida: Revisor[] = [];
+  for (const x of v) {
+    if (x && typeof x === 'object' && typeof (x as Revisor).departamento === 'string' && typeof (x as Revisor).correo === 'string') {
+      salida.push({ departamento: (x as Revisor).departamento, correo: (x as Revisor).correo });
+    }
+  }
+  return salida;
+}
 
 function aConfig(r: Fila): ConfigCorreo {
   const lista = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : []);
@@ -182,6 +229,9 @@ function aConfig(r: Fila): ConfigCorreo {
     activa: r.activa === true,
     remitenteNombre: (r.remitente_nombre as string | null) ?? null,
     responderA: (r.responder_a as string | null) ?? null,
+    remitenteCorreo: (r.remitente_correo as string | null | undefined) ?? null,
+    revisores: aRevisores(r.revisores),
+    primerMesHasta: typeof r.primer_mes_hasta === 'string' ? r.primer_mes_hasta.slice(0, 10) : null,
     rhCorreos: lista(r.rh_correos),
     archivoCorreo: (r.archivo_correo as string | null) ?? null,
     enviaCoordinador: r.envia_coordinador !== false,
@@ -199,8 +249,14 @@ function aConfig(r: Fila): ConfigCorreo {
 
 /** Sin fila ⇒ el defecto (WhatsApp, inactiva). Tabla ausente ⇒ `no_disponible`. Cualquier otro error LANZA. */
 export async function leerConfigCorreo(tenantId: string): Promise<Lectura<ConfigCorreo>> {
-  const res = await acotada(supabaseAdmin().from('liquidacion_correo_config')
+  let res = await acotada(supabaseAdmin().from('liquidacion_correo_config')
     .select(COLS_CONFIG).eq('tenant_id', tenantId).maybeSingle(), 'liqcorreo.config_leer');
+  // Una base sin la 0933 no tiene las columnas nuevas: se lee con las de siempre (el modo primer mes y el correo emisor quedan apagados).
+  if (faltaColumna0933((res as unknown as { error: ErrorPg }).error)) {
+    logger.warn('liqcorreo.config_sin_0933', {});
+    res = await acotada(supabaseAdmin().from('liquidacion_correo_config')
+      .select(COLS_CONFIG_BASE).eq('tenant_id', tenantId).maybeSingle(), 'liqcorreo.config_leer');
+  }
   const l = leer(res as unknown as { data: Fila | null; error: ErrorPg }, 'liqcorreo.config_leer');
   if (!l.ok) return l;
   return { ok: true, valor: l.valor ? aConfig(l.valor) : { ...CONFIG_CORREO_POR_DEFECTO } };
@@ -213,9 +269,23 @@ export async function guardarConfigCorreo(tenantId: string, c: ConfigCorreo, por
   if (c.enviarDesdeHora != null && !(Number.isInteger(c.enviarDesdeHora) && c.enviarDesdeHora >= 0 && c.enviarDesdeHora <= 23)) {
     throw new DatoInvalido('enviar_desde_hora: debe ser un entero de 0 a 23');
   }
-  // A37-A1-04: el correo promete «responde a este correo»; sin «Responder a» la respuesta cae en el buzón de campañas y se pierde.
-  if (c.activa && c.canal !== 'whatsapp' && !normalizarCorreo(c.responderA, 'responder_a')) {
-    throw new DatoInvalido('responder_a: es obligatorio para activar el envío por correo (ahí llegan las respuestas del operador)');
+  // 0933: correo emisor y modo primer mes (con sus formas, antes de tocar la base).
+  const remitenteCorreo = normalizarCorreo(c.remitenteCorreo, 'remitente_correo');
+  if (c.revisores.length > 5) throw new DatoInvalido('revisores: máximo 5 (uno por departamento)');
+  const revisores = c.revisores.map((r) => {
+    const departamento = (r.departamento ?? '').trim().toLowerCase();
+    if (!/^[a-z_]{2,30}$/.test(departamento)) throw new DatoInvalido('revisores: el departamento va en letras (por ejemplo nomina o rh), de 2 a 30 caracteres');
+    const correo = normalizarCorreo(r.correo, 'revisores');
+    if (correo === null) throw new DatoInvalido('revisores: cada revisor necesita su correo');
+    return { departamento, correo };
+  });
+  if (new Set(revisores.map((r) => r.departamento)).size !== revisores.length) throw new DatoInvalido('revisores: un solo revisor por departamento');
+  if (c.primerMesHasta !== null && !/^\d{4}-\d{2}-\d{2}$/.test(c.primerMesHasta)) throw new DatoInvalido('primer_mes_hasta: debe ser una fecha AAAA-MM-DD');
+  if (c.primerMesHasta !== null && revisores.length === 0) throw new DatoInvalido('primer_mes_hasta: el modo primer mes necesita al menos un revisor');
+  // A37-A1-04: el correo promete «responde a este correo»; sin dirección de respuesta la respuesta cae en el buzón de campañas y se pierde.
+  // 0933: la dirección de respuesta es el «Responder a» o, si falta, el correo emisor de la flota.
+  if (c.activa && c.canal !== 'whatsapp' && !normalizarCorreo(c.responderA, 'responder_a') && !remitenteCorreo) {
+    throw new DatoInvalido('responder_a: es obligatorio para activar el envío por correo (ahí llegan las respuestas del operador); si no lo pones, se usa el correo emisor de la flota, y tampoco hay');
   }
   const fila = {
     tenant_id: tenantId,
@@ -238,12 +308,21 @@ export async function guardarConfigCorreo(tenantId: string, c: ConfigCorreo, por
     actualizado_en: new Date().toISOString(),
     actualizado_por: por,
   };
-  const res = await acotada(supabaseAdmin().from('liquidacion_correo_config')
-    .upsert(fila, { onConflict: 'tenant_id' }).select('tenant_id'), 'liqcorreo.config_guardar');
+  const fila0933 = { remitente_correo: remitenteCorreo, revisores, primer_mes_hasta: c.primerMesHasta };
+  let res = await acotada(supabaseAdmin().from('liquidacion_correo_config')
+    .upsert({ ...fila, ...fila0933 }, { onConflict: 'tenant_id' }).select('tenant_id'), 'liqcorreo.config_guardar');
+  if (faltaColumna0933((res as unknown as { error: ErrorPg }).error)) {
+    // Base sin la 0933: sin valores nuevos que guardar se guarda como siempre; con ellos, se dice (nunca se finge haber guardado).
+    if (remitenteCorreo !== null || revisores.length > 0 || c.primerMesHasta !== null) {
+      throw new DatoInvalido('El correo emisor y el modo primer mes todavía no están disponibles en esta base (falta aplicar la migración 0933). No se guardó nada.');
+    }
+    res = await acotada(supabaseAdmin().from('liquidacion_correo_config')
+      .upsert(fila, { onConflict: 'tenant_id' }).select('tenant_id'), 'liqcorreo.config_guardar');
+  }
   exigirEscritura(res as unknown as { data: unknown; error: ErrorPg }, 'liqcorreo.config_guardar');
   // A37-S49-01: mientras el envío estaba apagado (o sin «Responder a») sus entregas esperaban horas para no acaparar la cola
   // global; al quedar la flota lista se adelantan a «ya». Es solo puntualidad: si falla, salen en su siguiente turno.
-  if (c.activa && c.canal !== 'whatsapp' && fila.responder_a) {
+  if (c.activa && c.canal !== 'whatsapp' && (fila.responder_a || remitenteCorreo)) {
     try {
       const ya = new Date().toISOString();
       await acotada(supabaseAdmin().from('liquidacion_entrega_correo')

@@ -33,12 +33,11 @@ exactos viven en [perfil-cinco-agentes.md](perfil-cinco-agentes.md); aquí solo 
 1. **Migraciones primero.** Aplicar en la base de destino las migraciones que el perfil y los agentes activos necesitan
    (la tabla de perfil y las de cada agente están en [indice-agentes.md](indice-agentes.md)). El código funciona contra
    una base sin su migración y lo dice; no inventa un estado.
-   **Llaves de API ANTES del perfil (A39-transversal-02).** `/dashboard/llaves-api` está en stand-by bajo el perfil (ni el dueño ni
-   el superadmin con `?tenant=` pueden emitir una llave una vez aplicado), pero el TMS del cliente necesita una llave `administracion`
-   para `POST /v1/liquidaciones-externas/contactos` y `POST /v1/ccp-timbrado`, y esos recursos `/v1` siguen vivos. Por eso: emitir
-   las llaves que el cliente necesite (y entregárselas por el canal acordado) ANTES del paso 3. Si hay que emitir una después,
-   quitar el perfil de esa flota un momento (rollback), emitirla y reaplicarlo. Abrir la pantalla bajo el perfil es una decisión de
-   producto pendiente.
+   **Llaves de API, usuarios y patios bajo el perfil (Ola 1 · A1).** `/dashboard/llaves-api`, `/dashboard/usuarios` y
+   `/dashboard/patios` están dentro de la lista cerrada del perfil (módulo `base`): el dueño de la flota (y el superadmin con
+   `?tenant=`) emite la llave `administracion` que el TMS del cliente necesita para `POST /v1/liquidaciones-externas/contactos`,
+   da de alta a quien reenvía desgloses y maneja los patios sin quitar el perfil. El contador y el encargado siguen sin verlas
+   (área `administracion`). Ya no hace falta emitir las llaves «antes del perfil».
 2. **Verificar sin escribir.** `scripts/perfil/aplicar-cinco-agentes.sh --verificar <UUID-de-la-flota>` solo lee y
    muestra qué tiene hoy la flota.
 3. **Aplicar el perfil.** El mismo script sin `--verificar`: una transacción, solo esa flota, sin borrar datos.

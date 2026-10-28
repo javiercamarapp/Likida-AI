@@ -146,9 +146,9 @@ describe('(a) bajo el perfil, cada página no permitida rebota y cada permitida 
   const proximamente = permitidasEnLista.filter((p) => rutaProximamenteEnPerfil('cinco_agentes', clave(p)));
   const abiertas = permitidasEnLista.filter((p) => !rutaProximamenteEnPerfil('cinco_agentes', clave(p)));
 
-  it('el reparto es el de la matriz de T-PER-01 con A4/A5 encendidos: 31 negadas, 38 abiertas (ARCO pasó a base: A37-TRANSVERSAL-06) (+2: el catálogo y la configuración del Agente de Carta Porte, A3) y 0 «Próximamente»', () => {
-    expect(negadas.length).toBe(31);
-    expect(abiertas.length).toBe(38);
+  it('el reparto es el de la matriz de T-PER-01 con A4/A5 encendidos: 28 negadas, 41 abiertas (+3: llaves-api, usuarios y patios, Ola 1 · A1) (ARCO pasó a base: A37-TRANSVERSAL-06) (+2: el catálogo y la configuración del Agente de Carta Porte, A3) y 0 «Próximamente»', () => {
+    expect(negadas.length).toBe(28);
+    expect(abiertas.length).toBe(41);
     expect(proximamente.length).toBe(0);
     expect(negadas.length + abiertas.length + proximamente.length + 1).toBe(70);
   });
@@ -212,7 +212,7 @@ describe('(b) ⌘K / paleta: TODAS_LAS_RUTAS', () => {
     expect(visibles.length).toBeGreaterThan(5);
     for (const h of visibles) expect(permitidas, h).toContain(h);
     for (const h of visibles) expect(RUTAS_STAND_BY_PERFIL_CINCO_AGENTES, h).not.toContain(h);
-    for (const prohibida of ['/dashboard/chat', '/dashboard/facturacion', '/dashboard/suscripcion', '/dashboard/llaves-api', '/dashboard/timbrado']) {
+    for (const prohibida of ['/dashboard/chat', '/dashboard/facturacion', '/dashboard/suscripcion', '/dashboard/timbrado']) {
       expect(visibles, prohibida).not.toContain(prohibida);
     }
   });

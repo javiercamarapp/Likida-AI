@@ -13,7 +13,7 @@ import type { LiquidacionExterna } from '@/lib/likida/liquidacion_externa/repo';
 import type { Desglose, EntregaCorreo, Excepcion, TipoExcepcion } from '@/lib/likida/liquidacion_externa/repo_correo';
 import type { DestinoVista, EstadoDestino } from './desgloses';
 
-export type RolDetalle = 'operador' | 'coordinador' | 'rh' | 'archivo';
+export type RolDetalle = 'operador' | 'coordinador' | 'rh' | 'archivo' | 'revisor';
 
 export interface DestinatarioDetalle {
   rol: RolDetalle;
@@ -66,7 +66,7 @@ export type LecturaDetalle =
   | { estado: 'ok'; detalle: DetalleDesglose };
 
 const EN_CURSO = new Set(['pendiente', 'enviando']);
-const ORDEN_ROL: Record<RolDetalle, number> = { operador: 0, coordinador: 1, rh: 2, archivo: 3 };
+const ORDEN_ROL: Record<RolDetalle, number> = { operador: 0, coordinador: 1, rh: 2, archivo: 3, revisor: 4 };
 const ESTADO_DE_ENTREGA: Record<EntregaCorreo['estado'], EstadoDestino> = {
   rebotada: 'no_entregado', queja: 'no_entregado', fallida: 'no_entregado', pendiente: 'pendiente', enviando: 'pendiente',
   enviada: 'enviado', entregada: 'entregado', omitida: 'omitido',
@@ -126,7 +126,7 @@ export function armarDetalle(e: EntradaDetalle): DetalleDesglose {
   const generaciones = [...porGen.values()].sort((a, b) => b.generacion - a.generacion);
 
   const enCurso = { operador: false, coordinador: false, rh: false };
-  for (const x of entregas) if (x.rol !== 'archivo' && EN_CURSO.has(x.estado)) enCurso[x.rol] = true;
+  for (const x of entregas) if (x.rol !== 'archivo' && x.rol !== 'revisor' && EN_CURSO.has(x.estado)) enCurso[x.rol] = true;
 
   const abiertas = e.excepciones.filter((x) => x.resueltaEn === null);
   const retenido = desglose.retenidaMotivo

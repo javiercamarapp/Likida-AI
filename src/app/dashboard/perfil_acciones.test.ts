@@ -59,6 +59,9 @@ const ARCHIVOS: Record<string, Clase> = {
   'despacho/page.tsx': 'permitido',
   'inicio-contenido.tsx': 'permitido',                      // el Resumen de siempre: bajo el perfil no se monta
   'legal/page.tsx': 'permitido',
+  'llaves-api/page.tsx': 'permitido',                        // Ola 1 · A1: el dueño emite la llave `administracion` del TMS bajo el perfil
+  'patios/page.tsx': 'permitido',                            // Ola 1 · A1: ídem (catálogo operativo)
+  'usuarios/page.tsx': 'permitido',                          // Ola 1 · A1: el dueño da de alta a nómina/RH que reenvían desgloses
   'arco/page.tsx': 'permitido',                              // A37-TRANSVERSAL-06: obligación legal de la flota, no módulo comercial
   'mi-perfil/page.tsx': 'permitido',
   'operadores/page.tsx': 'permitido',
@@ -93,15 +96,12 @@ const ARCHIVOS: Record<string, Clase> = {
   'facturacion/portal.tsx': 'standby',
   'huerfanos/page.tsx': 'standby',
   'jornada/page.tsx': 'standby',
-  'llaves-api/page.tsx': 'standby',
   'onboarding/page.tsx': 'standby',
-  'patios/page.tsx': 'standby',
   'politicas/page.tsx': 'standby',
   'reglas/page.tsx': 'standby',
   'sesiones-mcp/page.tsx': 'standby',
   'suscripcion/page.tsx': 'standby',
   'timbrado/[viajeId]/timbrar.tsx': 'standby',
-  'usuarios/page.tsx': 'standby',
 
   // ── Sin datos de ninguna flota ─────────────────────────────────────────
   // `cerrarSesion` solo cierra la sesión de quien la pide; no lee ni escribe datos del tenant.

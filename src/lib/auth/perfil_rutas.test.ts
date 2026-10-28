@@ -71,8 +71,8 @@ describe('clasificación de rutas', () => {
   it('la lista permitida cubre a los cinco agentes y no deja entrar nada de dinero fiscal', () => {
     const modulos = new Set(Object.values(RUTAS_PERFIL_CINCO_AGENTES));
     for (const m of ['liquidacion', 'peajes', 'carta_porte', 'vigia', 'conductor', 'base']) expect(modulos.has(m as never)).toBe(true);
-    for (const r of ['/dashboard/chat', '/dashboard/facturacion', '/dashboard/suscripcion', '/dashboard/llaves-api',
-      '/dashboard/sesiones-mcp', '/dashboard/usuarios', '/dashboard/timbrado', '/dashboard/descarga-sat']) {
+    for (const r of ['/dashboard/chat', '/dashboard/facturacion', '/dashboard/suscripcion',
+      '/dashboard/sesiones-mcp', '/dashboard/timbrado', '/dashboard/descarga-sat']) {
       expect(permitidas).not.toContain(r);
     }
   });
