@@ -9,8 +9,10 @@ vi.mock('next/navigation', () => ({
   redirect: (a: string) => redirect(a),
   useSearchParams: () => new URLSearchParams(),
   usePathname: () => '/dashboard',
+  useRouter: () => ({ push: () => {} }),
 }));
-vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => undefined }) }));
+let galletas: Record<string, string> = {};
+vi.mock('next/headers', () => ({ cookies: async () => ({ get: (n: string) => (n in galletas ? { value: galletas[n] } : undefined) }) }));
 vi.mock('@/lib/supabase/server', () => ({ supabaseServer: async () => ({ auth: { signOut: async () => {} } }) }));
 vi.mock('@/lib/auth/admin-context', () => ({ leerSeleccionFlota: async () => null }));
 vi.mock('@/app/api/dashboard/chat/tope', () => ({ topeDiaUsd: () => 0, gastoChatHoyUsd: async () => 0 }));
@@ -30,6 +32,7 @@ const pintar = async () => renderToStaticMarkup(await DashboardLayout({ children
 
 beforeEach(() => {
   vi.clearAllMocks();
+  galletas = {};
   getSessionTenant.mockResolvedValue({ userId: 'u1', tenantId: 't1', rol: 'flota_admin', nombre: 'Ana', operadorId: null, avatarUrl: null });
   perfilDeTenant.mockResolvedValue('cinco_agentes');
 });
@@ -73,5 +76,21 @@ describe('DashboardLayout: v1 o v2', () => {
     getSessionTenant.mockResolvedValue(null);
     await expect(pintar()).rejects.toThrow('NEXT_REDIRECT');
     expect(redirect).toHaveBeenCalledWith('/login?next=%2Fdashboard');
+  });
+
+  it('v2 con perfil: la insignia de Puesta en marcha sale de la cookie «listos/total» y solo de ella', async () => {
+    versionUi.mockResolvedValue('v2');
+    galletas = { likida_pem_t1: '2/6' };
+    expect(await pintar()).toContain('2/6');
+    galletas = { likida_pem_t1: '<script>x</script>' };
+    expect(await pintar()).not.toContain('<script>x');
+    galletas = { likida_pem_t1: '6/6' }; // completo: sin insignia
+    expect(await pintar()).not.toContain('rv-insignia');
+  });
+
+  it('v1 no recibe insignia ni recorrido aunque exista la cookie', async () => {
+    versionUi.mockResolvedValue('v1');
+    galletas = { likida_pem_t1: '2/6' };
+    expect(await pintar()).not.toContain('2/6');
   });
 });

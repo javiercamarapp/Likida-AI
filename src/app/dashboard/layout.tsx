@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { supabaseServer } from '@/lib/supabase/server';
 import { getSessionTenant } from '@/lib/auth/session';
-import { puedeVerArea } from '@/lib/auth/visibilidad';
+import { puedeVerArea, puedeVerRuta } from '@/lib/auth/visibilidad';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { versionUi } from '@/lib/auth/version_ui';
 import { leerSeleccionFlota } from '@/lib/auth/admin-context';
@@ -15,8 +15,12 @@ import DashboardChromeV2 from './shell/chrome-v2';
 import '../ui-v2/tokens.css';
 import '../ui-v2/fonts.css';
 import '../ui-v2/shell.css';
+import '../ui-v2/paginas.css';
 import { PulsoProducto } from './pulso-producto';
 import { AvisoLegalPendiente } from './aviso-legal';
+import { TourProvider } from '../ui-v2/movimiento/tour';
+import { RECORRIDOS_DASHBOARD, rutasDeRecorridos } from './recorridos/dueno';
+import { insigniaDeCookie, nombreCookieAvance } from './puesta-en-marcha/progreso';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,9 +50,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const tenantDelMenu = sesion.tenantId ?? (sesion.rol === 'superadmin' ? await leerSeleccionFlota() : null);
   // La versión de interfaz (`tenant_ui`; sin fila = v1) se lee en el MISMO Promise.all que el perfil. `versionUi` nunca lanza
   // y falla hacia v1: un bache de lectura deja el panel de siempre, no el nuevo.
+  const jarra = await cookies();
   const [perfil, ui] = await Promise.all([
     perfilDeTenant(tenantDelMenu),
-    versionUi(tenantDelMenu, sesion.rol, await cookies()),
+    versionUi(tenantDelMenu, sesion.rol, jarra),
   ]);
 
   let usoIa: { pct: number } | null | undefined;
@@ -72,14 +77,36 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // El chrome de siempre NO se toca; v2 es otro componente con el mismo contrato de props.
   const Chrome = ui === 'v2' ? DashboardChromeV2 : DashboardChrome;
 
-  return (
-    <Chrome nombre={sesion.nombre} rol={sesion.rol} cerrarSesion={cerrarSesion} usoIa={usoIa} perfil={perfil}>
+  // Solo v2: el avance de «Puesta en marcha» como insignia del menú (la pantalla del asistente deja en una cookie solo
+  // «listos/total»; `insigniaDeCookie` descarta cualquier otro valor) y el motor del recorrido guiado, que nunca se abre
+  // solo. Los pasos del recorrido se limitan a las rutas que ESTE rol ve en ESTE perfil.
+  const v2 = ui === 'v2';
+  const avance = v2 && perfil && tenantDelMenu ? insigniaDeCookie(jarra.get(nombreCookieAvance(tenantDelMenu))?.value) : null;
+  const rutasDelRecorrido = rutasDeRecorridos().filter((r) => puedeVerRuta(sesion.rol, r, perfil));
+  const contenido = (
+    <>
       {/* El pulso de producto (0251): un POST de fuego-y-olvido por cambio de
           ruta. El servidor decide tenant (sesión) y pantalla (catálogo
           cerrado); el superadmin en preview se descarta allá. */}
       <PulsoProducto />
       <AvisoLegalPendiente sesion={sesion} />
       {children}
+    </>
+  );
+
+  return (
+    <Chrome
+      nombre={sesion.nombre} rol={sesion.rol} cerrarSesion={cerrarSesion} usoIa={usoIa} perfil={perfil}
+      {...(v2 && avance ? { insignias: { '/dashboard/puesta-en-marcha': avance } } : {})}
+    >
+      {v2 && perfil ? (
+        <TourProvider
+          recorridos={RECORRIDOS_DASHBOARD} ambito={`${tenantDelMenu ?? 'sin'}:${sesion.userId}`}
+          soloLectura={sesion.rol === 'superadmin'} rutasPermitidas={rutasDelRecorrido}
+        >
+          {contenido}
+        </TourProvider>
+      ) : contenido}
     </Chrome>
   );
 }
