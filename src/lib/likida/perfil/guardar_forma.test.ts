@@ -41,6 +41,23 @@ describe('A39-S53-01 — el formulario coteja la facilidad del 15 % ANTES de esc
   });
 });
 
+describe('A39-S53-01 (residuo) — el cotejo se hace contra el régimen que quedará', () => {
+  it('el patch que declara 624 + régimen elegible coteja con 624, no con el régimen viejo del tenant', async () => {
+    exigirRegimenCompatibleConFacilidad15.mockClear();
+    const patch = declararOnboarding({ ingresosMenoresA300M: true, parteRelacionada: false, dedicacionExclusivaCarga: true, regimenSat: '624', regimenElegible: true });
+    await guardarPerfilFormulario('t-1', patch, 'u-1');
+    expect(exigirRegimenCompatibleConFacilidad15).toHaveBeenCalledWith('t-1', '624');
+    expect(actualizarFacilidad15).toHaveBeenCalledWith('t-1', true, true, 'u-1', '624');
+  });
+
+  it('sin régimen en el patch coteja contra el vigente (régimen pendiente null)', async () => {
+    exigirRegimenCompatibleConFacilidad15.mockClear();
+    const patch = declararOnboarding({ ingresosMenoresA300M: true, parteRelacionada: false, dedicacionExclusivaCarga: true, regimenElegible: true });
+    await guardarPerfilFormulario('t-1', patch, 'u-1');
+    expect(exigirRegimenCompatibleConFacilidad15).toHaveBeenCalledWith('t-1', null);
+  });
+});
+
 describe('A36-R15-02 — un solo camino para el régimen fiscal', () => {
   it('el formulario con 601 actualiza perfil, facilidad del 15 % Y el régimen del tenant, sin pisar uso/domicilio', async () => {
     const patch = declararOnboarding({ ingresosMenoresA300M: true, parteRelacionada: false, dedicacionExclusivaCarga: true, regimenSat: '601', regimenElegible: false });

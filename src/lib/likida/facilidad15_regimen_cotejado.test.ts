@@ -135,3 +135,23 @@ describe('FIS-C1 · la declaración manual del 15% se coteja contra la clave del
     expect(rpc).not.toHaveBeenCalled();
   });
 });
+
+// A39-S53-01 (residuo): el cotejo usa el régimen que QUEDARÁ (el del mismo envío), no el viejo del tenant.
+describe('A39-S53-01 · el cotejo usa el régimen pendiente del mismo envío', () => {
+  it('tenant en 601 que en el MISMO envío declara 612 + «Régimen: Sí» → pasa (antes: falso rechazo)', async () => {
+    from.mockImplementation(tenantConClave('601'));
+    await expect(actualizarFacilidad15('t-9', true, true, 'u', '612')).resolves.toBeUndefined();
+  });
+
+  it('tenant en 612 que en el mismo envío declara 601 + «Régimen: Sí» → se rechaza (la clave que queda lo niega) y no se escribe', async () => {
+    from.mockImplementation(tenantConClave('612'));
+    await expect(actualizarFacilidad15('t-9', true, true, 'u', '601')).rejects.toBeInstanceOf(DatoInvalido);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('sin régimen pendiente se coteja contra el vigente, y un error de lectura falla CERRADO', async () => {
+    from.mockImplementation(tenantConClave(null, { message: 'db down' }));
+    await expect(actualizarFacilidad15('t-9', true, true, 'u')).rejects.toThrow(/no se pudo leer el régimen/);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+});

@@ -1,6 +1,6 @@
 import { guardarPerfilPatch, actualizarFacilidad15, exigirRegimenCompatibleConFacilidad15 } from '../repo';
 import { guardarDatosFiscalesParciales, REGIMENES } from '@/lib/saas/fiscal';
-import { facilidad15Declarada, regimenElegibleDeclarado } from './preguntas';
+import { facilidad15Declarada, regimenElegibleDeclarado, regimenSatDeclarado } from './preguntas';
 import { DatoInvalido } from '../errores';
 import { logger } from '@/lib/logger';
 
@@ -31,13 +31,15 @@ export async function guardarPerfilFormulario(
   patch: Record<string, unknown>,
   userId: string | null,
 ): Promise<void> {
-  // A39-S53-01: se coteja con el régimen VIVO del tenant ANTES de escribir; después ya sería tarde (el perfil manda al leer).
-  if (regimenElegibleDeclarado(patch) === true) await exigirRegimenCompatibleConFacilidad15(tenantId);
+  // A39-S53-01: se coteja ANTES de escribir (después ya sería tarde: el perfil manda al leer) y contra el régimen que QUEDARÁ: el del
+  // patch si viene, si no el vigente del tenant.
+  const regimenPendiente = regimenSatDeclarado(patch) ?? null;
+  if (regimenElegibleDeclarado(patch) === true) await exigirRegimenCompatibleConFacilidad15(tenantId, regimenPendiente);
   await guardarPerfilPatch(tenantId, patch, userId);
   const f15 = facilidad15Declarada(patch);
   if (f15) {
     try {
-      await actualizarFacilidad15(tenantId, f15.dedicacionExclusivaCarga, f15.regimenElegible, userId);
+      await actualizarFacilidad15(tenantId, f15.dedicacionExclusivaCarga, f15.regimenElegible, userId, regimenPendiente);
     } catch (e) {
       logger.error('perfil.formulario_parcial', { tenantId, parte: 'facilidad15', err: e instanceof Error ? e.message : String(e) });
       throw new PerfilGuardadoParcial('la facilidad fiscal del 15 %');

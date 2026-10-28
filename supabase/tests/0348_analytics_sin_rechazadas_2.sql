@@ -42,10 +42,11 @@ do $$declare j jsonb; n int; begin
  if (j->0->>'viajes')::int <> 3 or (j->0->>'anticipoTotal')::numeric <> 900 then
   raise exception '0348 operadores_detalle_tenant tocó columnas de viaje que no debía: %',j;end if;
 
- -- 4. rentabilidad_tenant: costoComprobado 1480; ingreso (de viaje) sigue en 2000.
+ -- 4. rentabilidad_tenant: costoComprobado 980 (0931; antes 1480); ingreso (de viaje) sigue en 2000.
  j:=public.rentabilidad_tenant('34800000-0000-4000-8000-000000000001',null);
- if (j->>'costoComprobado')::numeric <> 1480 then
-  raise exception '0348 rentabilidad_tenant incluye la rechazada: %',j;end if;
+ -- 0931: el costo solo cuenta viajes con ingreso: 980 (viaje 1); los 500 del viaje 3 (ajustada, sin ingreso) ya no entran, y la rechazada tampoco.
+ if (j->>'costoComprobado')::numeric <> 980 then
+  raise exception '0348 rentabilidad_tenant incluye la rechazada o un viaje sin ingreso: %',j;end if;
  -- A39-S20-01 (0928): el universo es el de los viajes CON liquidación vigente: el viaje 2 (solo rechazada) sale a
  -- `viajesSinLiquidar`; el 3 (ajustada, sin ingreso) sigue contando como sin ingreso.
  if (j->>'ingreso')::numeric <> 2000 or (j->>'viajesConIngreso')::int <> 1 or (j->>'viajesSinIngreso')::int <> 1 or (j->>'viajesSinLiquidar')::int <> 1 then

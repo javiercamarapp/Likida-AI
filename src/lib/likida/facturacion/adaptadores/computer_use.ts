@@ -503,6 +503,15 @@ Inventario inicial: ${JSON.stringify(await verInventario())}`,
       });
 
       if (rendido) {
+        // A39-S41-01 (residuo): si el modelo se rinde (CAPTCHA u otra razón) DESPUÉS de apretar emitir y sin folio confirmado, el CFDI puede
+        // existir. Se declara `emisionSinConfirmar` (como capufe.ts) para que `motivoDeBloqueo` lo ponga por delante del captcha y nadie
+        // lo facture a mano duplicándolo.
+        if (modo === 'emitir' && emisionClicada && !uuid) {
+          return {
+            modo, ok: false, capturado, captura, requiereCaptcha: captcha || undefined, emisionSinConfirmar: true,
+            error: `${rendido}. SE APRETÓ EMITIR antes de rendirse y no se confirmó el UUID: PUEDE QUE EL CFDI YA EXISTA. Revisa el portal antes de facturarlo a mano.`,
+          };
+        }
         return { modo, ok: false, capturado, error: rendido, captura, requiereCaptcha: captcha || undefined };
       }
       // EMITIR SIN UUID CONFIRMADO ES LA SEÑAL CARA: el CFDI puede existir.

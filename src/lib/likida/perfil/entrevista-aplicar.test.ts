@@ -127,7 +127,7 @@ describe('A39-S53-01 — la facilidad del 15 % se coteja con el régimen del ten
     vi.mocked(repo.exigirRegimenCompatibleConFacilidad15).mockRejectedValueOnce(new Error('régimen 601 no elegible'));
     hechosDelTurno = { regimenSat: '612', regimenElegible: true };
     await expect(turno()).rejects.toThrow(/no elegible/);
-    expect(repo.exigirRegimenCompatibleConFacilidad15).toHaveBeenCalledWith('t-1');
+    expect(repo.exigirRegimenCompatibleConFacilidad15).toHaveBeenCalledWith('t-1', '612');
     const parches = vi.mocked(repo.guardarPerfilPatch).mock.calls.map((c) => c[1] as Record<string, unknown>);
     expect(parches.some((p) => 'regimenElegible' in p)).toBe(false);
   });

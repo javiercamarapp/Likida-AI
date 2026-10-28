@@ -319,6 +319,21 @@ function esEmergenciaRoja(texto: string): boolean {
 }
 
 /**
+ * A37-ola9-N1: la prioridad del ROJO sobre el ARCO solo vale si el remitente es alguien a quien el ROJO SÍ atiende más abajo (operador
+ * ACTIVO o cuenta de oficina con flota). Una baja, un cliente del Vigía o un número desconocido que escribe ARCO + palabras ROJO tiene que
+ * dejar su constancia ARCO (el plazo legal corre). Ante un fallo de lectura se responde falso: el camino ARCO es el que no pierde el derecho.
+ */
+async function rojoLoAtiendeOtroCamino(from: string): Promise<boolean> {
+  try {
+    if (await resolveOperador(from)) return true;
+  } catch { return false; }
+  try {
+    const cuenta = await resolverCuentaOficina(from);
+    return Boolean(cuenta?.tenantId);
+  } catch { return false; }
+}
+
+/**
  * Atiende el ejercicio del medio ARCO. Se llama ANTES del corte por "sin viaje
  * abierto": el derecho no depende de que la flota le haya asignado uno.
  *
@@ -1661,7 +1676,8 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // activo o no, dado de alta o no—, y por eso su comentario no tiene por
     // qué nombrar el inventario de escritores de `operador.activo`.
     // L-legal-01: una emergencia ROJA va ANTES que el trámite ARCO (el ROJO de más abajo la atiende y deja la constancia ARCO sin molestar).
-    if ((msg.type === 'text' || msg.type === 'image') && msg.text && pideAtencionPrivacidad(msg.text) && !esEmergenciaRoja(msg.text)) {
+    if ((msg.type === 'text' || msg.type === 'image') && msg.text && pideAtencionPrivacidad(msg.text)
+      && !(esEmergenciaRoja(msg.text) && await rojoLoAtiendeOtroCamino(msg.from))) {
       // AUDITORÍA 28, LEG-C1 (CRÍTICO): antes solo resolvía `tenantId` (vía
       // `buscarTenantPorTelefono`, que no trae el id del operador) y pasaba
       // `operadorId: null` fijo — ver el comentario de
@@ -1916,6 +1932,11 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // se ve afectado, no todo el canal de WhatsApp).
     if (await pipelineTenantApagado(op.tenantId, 'whatsapp')) {
       logger.warn('wa.pipeline_tenant_apagado', { tenant: op.tenantId, operador: op.operadorId });
+      // A37-ola9-N1: el ARCO + ROJO de un operador activo lo salta la rama ARCO temprana (el ROJO lo atendería más abajo); con el pipeline
+      // pausado ese camino no se alcanza, así que la constancia se deja aquí (en silencio).
+      if ((msg.type === 'text' || msg.type === 'image') && msg.text && pideAtencionPrivacidad(msg.text) && esEmergenciaRoja(msg.text)) {
+        await atenderPrivacidad(op.tenantId, op.operadorId, msg.from, msg.text, null, { soloRegistrar: true });
+      }
       await sendText(msg.from, 'Tu flota puso en pausa la recepción automática por WhatsApp ahorita. Guarda tu foto o mensaje y reenvíamelo más tarde, o contacta a tu oficina.');
       return;
     }

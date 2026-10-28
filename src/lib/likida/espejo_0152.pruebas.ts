@@ -76,7 +76,8 @@ export function rentabilidadSql(b: BaseSintetica, tenant: string, desde: string 
   const vigentes = b.liquidacion.filter((x) => x.tenant_id === tenant && x.revision !== 'rechazada');
   const viajesDelPeriodo = b.viaje.filter((x) => x.tenant_id === tenant && (!desde || creado(x) >= desde));
   const v = viajesDelPeriodo.filter((x) => vigentes.some((l) => l.viaje_id === x.id));
-  const l = vigentes.filter((x) => v.some((y) => y.id === x.viaje_id));
+  // 0931: el costo solo cuenta los viajes CON ingreso_flete (mismo universo que el ingreso).
+  const l = vigentes.filter((x) => v.some((y) => y.id === x.viaje_id && y.ingreso_flete != null));
   return {
     ingreso: v.reduce((s, x) => s + (x.ingreso_flete ?? 0), 0),
     viajesConIngreso: v.filter((x) => x.ingreso_flete != null).length,
