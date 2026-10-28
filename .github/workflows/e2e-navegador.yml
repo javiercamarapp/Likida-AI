@@ -193,6 +193,46 @@ jobs:
           SUPABASE_URL: ${{ env.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
 
+      # SEGUNDA PASADA con el rediseño forzado (UI v2, Fase 1 del plan). `LIKIDA_UI_V2_FORZAR=1` lo lee el servidor al
+      # atender cada petición (ignorado si VERCEL_ENV=production), así que se reinicia `next start` con la variable; eso
+      # además reinicia el límite de envíos del login (en memoria), que la primera pasada ya gastó. Escritorio y Pixel 7.
+      # En el teléfono, v2 NO tiene aside visible (una sola navegación a la vez): las dos pruebas de movil.nav.ts que
+      # buscan enlaces en `aside` se excluyen AQUÍ hasta que usen `abrirNavegacion` (pruebas-navegador/apoyo/navegacion.ts);
+      # la hoja «Más» la cubre ui-v2-movil.nav.ts. Quitar el --grep-invert cuando movil.nav.ts adopte el ayudante.
+      - name: Reiniciar el servidor con la UI v2 forzada
+        if: ${{ !cancelled() }}
+        run: |
+          if [ -f "$RUNNER_TEMP/likida-next.pid" ]; then kill "$(cat "$RUNNER_TEMP/likida-next.pid")" 2>/dev/null || true; fi
+          sleep 2
+          nohup env LIKIDA_UI_V2_FORZAR=1 npm run start -- --hostname localhost --port 3000 > "$RUNNER_TEMP/likida-next-v2.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/likida-next.pid"
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 2 http://localhost:3000/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/likida-next-v2.log"
+          exit 1
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ env.SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+          OPENROUTER_API_KEY: e2e-placeholder
+
+      - name: Suite de navegador con la UI v2 forzada (escritorio + Pixel 7)
+        if: ${{ !cancelled() }}
+        run: >
+          npx playwright test
+          --output=pruebas-navegador/.artefactos-v2
+          --grep-invert "con la navegación a mano|navegando con el dedo"
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          PLAYWRIGHT_HTML_REPORT: pruebas-navegador/.reporte-v2
+          LIKIDA_UI_V2_FORZAR: '1'
+          MAILPIT_URL: http://127.0.0.1:54324
+          SUPABASE_URL: ${{ env.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
+
       # Los artefactos de una corrida fallida O NO EXISTE la depuración desde
       # CI: reporte HTML, trazas y screenshots de Playwright, y el log del
       # servidor Next.
@@ -204,7 +244,10 @@ jobs:
           path: |
             pruebas-navegador/.reporte
             pruebas-navegador/.artefactos
+            pruebas-navegador/.reporte-v2
+            pruebas-navegador/.artefactos-v2
             ${{ runner.temp }}/likida-next.log
+            ${{ runner.temp }}/likida-next-v2.log
           if-no-files-found: warn
           retention-days: 7
           # `.reporte`/`.artefactos` son carpetas con punto — actions/upload-

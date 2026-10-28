@@ -137,3 +137,6 @@ __pycache__/
 # El script ya rechaza un destino dentro del repo; esto es la segunda red.
 .backups/
 likida-respaldos/
+
+pruebas-navegador/.reporte-v2/
+pruebas-navegador/.artefactos-v2/
