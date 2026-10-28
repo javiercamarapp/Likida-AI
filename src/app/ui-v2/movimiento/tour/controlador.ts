@@ -89,8 +89,10 @@ export class ControladorTour {
   }
   saltar(): void {
     if (this.fase !== 'activo') return;
-    this.cerrar('omitido');
+    // Se guarda ANTES de cerrar: `cerrar` avisa a los lanzadores y estos releen lo guardado; al revés se quedaban
+    // con «en curso» (un recorrido terminado ofrecía «Reanudar (paso 12 de 12)»).
     this.persistir('omitido');
+    this.cerrar('omitido');
   }
   masTarde(): void {
     if (this.fase !== 'activo') return;
@@ -99,8 +101,8 @@ export class ControladorTour {
   }
   terminar(): void {
     if (this.fase !== 'activo') return;
+    this.persistir('terminado'); // antes de cerrar: ver el comentario en saltar()
     this.cerrar('terminado');
-    this.persistir('terminado');
   }
   /** «Ver recorrido» otra vez: olvida lo guardado. */
   reiniciar(): void {

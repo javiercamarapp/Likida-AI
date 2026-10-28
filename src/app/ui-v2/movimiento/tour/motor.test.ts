@@ -173,6 +173,17 @@ describe('saltar, más tarde, reanudar', () => {
     expect(leerGuardado(host.almacen, 'u1', R)?.estado).toBe('omitido');
   });
 
+  it('al terminar o saltar, quien escucha ya lee el estado guardado (no «en curso»: ofrecería «Reanudar»)', () => {
+    for (const cierre of ['terminar', 'saltar'] as const) {
+      const { host, c } = montar();
+      c.iniciar();
+      const leido: Array<string | undefined> = [];
+      c.suscribir(() => { if (c.instantanea().fase !== 'activo') leido.push(leerGuardado(host.almacen, 'u1', R)?.estado); });
+      c[cierre]();
+      expect(leido).toEqual([cierre === 'terminar' ? 'terminado' : 'omitido']);
+    }
+  });
+
   it('Más tarde guarda el paso; un controlador nuevo reanuda donde se quedó', () => {
     const { host, c } = montar();
     host.ruta = '/dashboard/conexiones';
