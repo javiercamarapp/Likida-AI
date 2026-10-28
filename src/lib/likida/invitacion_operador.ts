@@ -286,6 +286,14 @@ export async function invitarOperadores(
         resultado.enviadas += 1;
         return;
       }
+      // A39-S47-01: Meta YA dejó el mensaje en `wa_outbox` (429/5xx, token vencido): se entregará solo. Soltar el reclamo haría
+      // que la siguiente tanda lo reclamara otra vez y mandara un SEGUNDO WhatsApp (con cobro). Se conserva la constancia
+      // como enviada por plantilla —la vía de la cola— y no cuenta como falla.
+      if (r.encolado) {
+        await marcarEnviada(tenantId, op.id, 'plantilla', marcaDelReclamo);
+        resultado.enviadas += 1;
+        return;
+      }
       // Reintentable (429, bloqueo temporal, red): se suelta SIN marcar fallo, para
       // que el siguiente intento lo recoja. Permanente: queda el motivo en la ficha.
       await soltarReclamo(tenantId, op.id, r.reintentable ? null : motivoCorto(r.mensaje), marcaDelReclamo);

@@ -213,6 +213,30 @@ describe('fallos: no bloquean a los demás', () => {
     expect(await contarPendientes(T, { tipo: 'flota' })).toBe(1);
   });
 
+  // A39-S47-01: Meta ya ENCOLÓ el mensaje (429/5xx/token vencido): se entregará solo. Soltar el reclamo mandaba un segundo WhatsApp.
+  it('A39-S47-01: un rechazo reintentable que Meta ya ENCOLÓ conserva la constancia y la siguiente tanda NO reenvía', async () => {
+    base.tabla('operador').push(op(1));
+    enviar.mockImplementation(async () => ({ ok: false, motivo: 'plantilla_rechazada', mensaje: 'Meta pide esperar.', reintentable: true, encolado: true, fueraDeVentana: true, ventana: 'cerrada' }));
+    const r = await invitarOperadores(T, flota);
+    expect(r.enviadas).toBe(1);
+    expect(r.fallidas).toHaveLength(0);
+    expect(base.tabla('operador')[0]).toMatchObject({ invitacion_via: 'plantilla', invitacion_fallo: null });
+    expect(base.tabla('operador')[0].invitacion_enviada_en).not.toBeNull();
+    expect(await contarPendientes(T, { tipo: 'flota' })).toBe(0);
+    enviar.mockClear();
+    const otra = await invitarOperadores(T, flota);
+    expect(otra.enviadas).toBe(0);
+    expect(enviar).not.toHaveBeenCalled();
+  });
+
+  it('A39-S47-01: encolado SIN ser reintentable (token vencido 190/401) tampoco se reenvía', async () => {
+    base.tabla('operador').push(op(1));
+    enviar.mockImplementation(async () => ({ ok: false, motivo: 'plantilla_rechazada', mensaje: 'Token vencido.', reintentable: false, encolado: true, fueraDeVentana: true, ventana: 'cerrada' }));
+    const r = await invitarOperadores(T, flota);
+    expect(r.enviadas).toBe(1);
+    expect(base.tabla('operador')[0]).toMatchObject({ invitacion_via: 'plantilla', invitacion_fallo: null });
+  });
+
   it('un lanzamiento inesperado del selector tampoco deja el reclamo colgado ni rompe a los demás', async () => {
     base.tabla('operador').push(op(1), op(2));
     enviar.mockImplementation(async (tel: string) => {
