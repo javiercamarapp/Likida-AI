@@ -2077,7 +2077,7 @@ export async function crearReclamoDeCandidatos(
   }
   for (let intento = 0; intento < INTENTOS_LOTE; intento++) {
     const { data, error } = await acotada(supabaseAdmin().from('peaje_reclamo')
-      .insert(lote === null ? fila : { ...fila, lote }).select('id').single(), 'peajes.crear_reclamo_candidatos');
+      .insert(lote === null ? fila : { ...fila, lote } as typeof fila).select('id').single(), 'peajes.crear_reclamo_candidatos');
     if (!error && data) return String(data.id);
     // Otra tanda tomó ese lote en este mismo instante: se prueba el siguiente (la base es la verdad, no esta lectura).
     if (lote !== null && error && /duplicate key|unique/i.test(error.message ?? '') && intento < INTENTOS_LOTE - 1) { lote += 1; continue; }

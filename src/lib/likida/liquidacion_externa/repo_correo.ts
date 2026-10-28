@@ -91,7 +91,7 @@ export interface MetaDesglose {
    */
   correccionN?: number;
 }
-export interface Desglose extends Required<Omit<MetaDesglose, 'retenidaMotivo' | 'numeroLiquidacion' | 'numeroPago' | 'bitacoras'>> {
+export interface Desglose extends Required<Omit<MetaDesglose, 'retenidaMotivo' | 'numeroLiquidacion' | 'numeroPago' | 'bitacoras' | 'correccionN'>> {
   numeroLiquidacion?: string | null;
   numeroPago?: string | null;
   bitacoras?: string[] | null;
