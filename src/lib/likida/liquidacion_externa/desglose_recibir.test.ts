@@ -470,7 +470,8 @@ beforeEach(() => { vi.clearAllMocks(); });
 type Pedido = import('./repo_correo').PedidoRecepcionAtomica;
 
 /** Agrega al banco una RPC atómica en memoria: o guarda todo junto, o no guarda nada (como la transacción real). */
-function conAtomica(b: Banco, modo: 'ok' | 'ausente' | 'falla'): { llamadas: Pedido[] } {
+/** `ok0933`: la RPC redefinida por la 0933 (una retenida admite SOLO la entrega al revisor); `ok`, la de la 0929. */
+function conAtomica(b: Banco, modo: 'ok' | 'ok0933' | 'ausente' | 'falla'): { llamadas: Pedido[] } {
   const llamadas: Pedido[] = [];
   b.deps.desgloseIncompleto = async (_t, id) => {
     const tiene = b.desgloses.some((x) => x.liquidacionExternaId === id);
@@ -494,7 +495,8 @@ function conAtomica(b: Banco, modo: 'ok' | 'ausente' | 'falla'): { llamadas: Ped
     if (faltaDesglose) { b.desgloses.push({ liquidacionExternaId: id, ...p.meta }); b.eventos.push('recibida'); }
     const hayEntregas = b.entregas.some((e) => e.liquidacionExternaId === id);
     let n = 0;
-    if (!p.meta.retenidaMotivo && !hayEntregas) { for (const e of p.entregas) b.entregas.push({ liquidacionExternaId: id, ...e }); n = p.entregas.length; }
+    const admitidas = p.meta.retenidaMotivo ? (modo === 'ok0933' ? p.entregas.filter((e) => e.rol === 'revisor') : []) : p.entregas;
+    if (!hayEntregas && admitidas.length > 0) { for (const e of admitidas) b.entregas.push({ liquidacionExternaId: id, ...e }); n = admitidas.length; }
     return { ok: true, valor: { liquidacionId: id, creada, reparada: !creada && (faltaDesglose || n > 0), entregas: n } };
   };
   return { llamadas };
@@ -645,5 +647,73 @@ describe('presentar: el renglón de viaje solo para foráneos (c3cc57d3 46:21)',
 
   it('agrupar_viaje apagado no cambia nada para nadie', () => {
     expect(presentar(conViaje('foraneo'), { ...CONFIG, agruparViaje: false }).percepciones.map((r) => r.concepto)).toEqual(['Sueldo', 'Viáticos', 'Complemento']);
+  });
+});
+
+describe('recibirDesglose: modo primer mes — revisores por departamento (0933)', () => {
+  const REVISORES = [{ departamento: 'nomina', correo: 'nomina.rev@ejemplo.test' }, { departamento: 'rh', correo: 'rh.rev@ejemplo.test' }];
+  // El reloj del banco es 2026-10-15 (12:00 UTC ⇒ 15 de octubre en México).
+  const PRIMER_MES = { revisores: REVISORES, primerMesHasta: '2026-11-14' };
+  const retenible = () => desglose({ neto: -5, percepciones: [{ concepto: 'Sueldo', monto: 100 }], deducciones: [{ concepto: 'Anticipo', monto: 105 }] });
+
+  it('desglose que SE ENVÍA: además de los 4 destinatarios, un correo al revisor de cada departamento', async () => {
+    const b = banco({ config: PRIMER_MES });
+    const r = await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(b.entregas.map((e) => [e.rol, e.correo])).toEqual([
+      ['operador', 'operador@ejemplo.test'], ['coordinador', 'coordinador@ejemplo.test'], ['rh', 'rh@ejemplo.test'], ['archivo', 'archivo@ejemplo.test'],
+      ['revisor', 'nomina.rev@ejemplo.test'], ['revisor', 'rh.rev@ejemplo.test'],
+    ]);
+    expect(r).toMatchObject({ estado: 'creada', retenida: false, entregas: 6 });
+  });
+
+  it('desglose RETENIDO: al operador, coordinador, RH y archivo no sale nada, pero los revisores SÍ reciben su aviso', async () => {
+    const b = banco({ config: PRIMER_MES });
+    const r = await recibirDesglose(TENANT, retenible(), b.deps);
+    expect(r).toMatchObject({ estado: 'creada', retenida: true, entregas: 0 });
+    expect(b.entregas.map((e) => [e.rol, e.correo])).toEqual([['revisor', 'nomina.rev@ejemplo.test'], ['revisor', 'rh.rev@ejemplo.test']]);
+    expect(b.excepciones.map((e) => e.tipo)).toContain('neto_negativo');
+  });
+
+  it('con la RPC de la 0933, la retenida deja a los revisores en la MISMA transacción y no hay inserción suelta', async () => {
+    const b = banco({ config: PRIMER_MES });
+    const sueltas = vi.fn();
+    b.deps.insertarEntregas = sueltas;
+    const { llamadas } = conAtomica(b, 'ok0933');
+    await recibirDesglose(TENANT, retenible(), b.deps);
+    expect(llamadas[0].entregas.map((e) => e.rol)).toEqual(['revisor', 'revisor']);
+    expect(sueltas).not.toHaveBeenCalled();
+    expect(b.entregas.map((e) => e.rol)).toEqual(['revisor', 'revisor']);
+  });
+
+  it('con la RPC ANTERIOR (sin la 0933) ignora las entregas de una retenida: el aviso al revisor se inserta aparte, sin duplicar', async () => {
+    const b = banco({ config: PRIMER_MES });
+    conAtomica(b, 'ok');
+    await recibirDesglose(TENANT, retenible(), b.deps);
+    expect(b.entregas.map((e) => e.rol)).toEqual(['revisor', 'revisor']);
+  });
+
+  it('un buzón que ya recibe el desglose por otro rol no recibe además la copia de revisión', async () => {
+    const b = banco({ config: { ...PRIMER_MES, rhCorreos: ['nomina.rev@ejemplo.test'] } });
+    await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(b.entregas.filter((e) => e.correo === 'nomina.rev@ejemplo.test').map((e) => e.rol)).toEqual(['rh']);
+    expect(b.entregas.filter((e) => e.rol === 'revisor').map((e) => e.correo)).toEqual(['rh.rev@ejemplo.test']);
+  });
+
+  it('el modo se APAGA solo: después de «hasta» no hay revisores; y sin fecha o sin revisores, nunca', async () => {
+    for (const config of [
+      { revisores: REVISORES, primerMesHasta: '2026-10-14' },     // venció ayer
+      { revisores: REVISORES, primerMesHasta: null },              // nunca se activó
+      { revisores: [], primerMesHasta: '2026-11-14' },             // sin a quién mandar
+    ]) {
+      const b = banco({ config });
+      await recibirDesglose(TENANT, desglose(), b.deps);
+      expect(b.entregas.some((e) => e.rol === 'revisor'), JSON.stringify(config)).toBe(false);
+    }
+  });
+
+  it('el último día es inclusivo', async () => {
+    const b = banco({ config: { revisores: REVISORES, primerMesHasta: '2026-10-15' } });
+    await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(b.entregas.filter((e) => e.rol === 'revisor')).toHaveLength(2);
   });
 });

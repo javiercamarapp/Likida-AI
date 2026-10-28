@@ -89,6 +89,14 @@ describe('liberarEnvio', () => {
     expect(log.liberada).toBe(1);
   });
 
+  it('0933: el aviso al revisor del primer mes que ya existe en la retenida NO cuenta como «ya se envió»: se crean las entregas del operador, coordinador y RH', async () => {
+    const aviso = { id: 'e-9', liquidacionExternaId: LIQ, generacion: 1, rol: 'revisor' } as unknown as EntregaCorreo;
+    const { log, deps } = montar({ entregas: [aviso] });
+    const r = await liberarEnvio(TENANT, LIQ, ADMIN, deps);
+    expect(r).toMatchObject({ estado: 'liberado', entregas: 3 });
+    expect(log.insertadas.map((e) => e.rol).sort()).toEqual(['coordinador', 'operador', 'rh']);
+  });
+
   it('concepto prohibido ⇒ no se libera desde aquí', async () => {
     const { log, deps } = montar({ excepciones: [excepcion(1, 'neto_negativo'), excepcion(2, 'concepto_prohibido')] });
     const r = await liberarEnvio(TENANT, LIQ, ADMIN, deps);

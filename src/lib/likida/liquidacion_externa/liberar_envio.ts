@@ -94,7 +94,8 @@ export async function liberarEnvio(
 
   let creadas = 0;
   let roles: string[] = [];
-  if (entregas.length === 0) {
+  // 0933: la copia al revisor del primer mes sí existe en una retenida; no cuenta como «ya se envió al operador».
+  if (entregas.filter((e) => e.rol !== 'revisor').length === 0) {
     const contacto = await deps.leerContacto(tenantId, liq.operadorId);
     const coordinador = contacto?.coordinadorId ? await deps.leerCoordinador(tenantId, contacto.coordinadorId) : null;
     const { destinos } = resolverDestinatarios({

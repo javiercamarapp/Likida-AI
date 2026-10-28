@@ -32,14 +32,15 @@ import {
   type ConfigGuardasEnvio, type MotivoRetencion, type Renombre,
 } from './desglose_reglas';
 import { generarDesgloseXlsx } from './desglose_xlsx';
-import { resolverDestinatarios, type MotivoFaltante } from './correo_destinatarios';
+import { resolverDestinatarios, resolverRevisores, type MotivoFaltante } from './correo_destinatarios';
+import { hoyMx } from '@/lib/formato';
 import {
   buscarPorClave, resolverOperadorDestino, resolverViajeIds, insertarLiquidacionExterna, registrarEvento,
   type LiquidacionExterna, type NuevaLiquidacionExterna, type OperadorDestino, type TipoEvento,
 } from './repo';
 import {
   leerConfigCorreo, leerContactoOperador, listarCoordinadores, insertarDesglose, insertarEntregas, abrirExcepcion, subirXlsx,
-  recibirDesgloseAtomico, desgloseIncompleto, listarExcepciones, resolverExcepcion, CONFIG_CORREO_POR_DEFECTO,
+  recibirDesgloseAtomico, desgloseIncompleto, listarExcepciones, resolverExcepcion, CONFIG_CORREO_POR_DEFECTO, modoPrimerMesVigente,
   type PedidoRecepcionAtomica, type RecepcionAtomica, type Lectura, type ConfigCorreo, type ContactoOperador, type Coordinador, type MetaDesglose, type NuevaEntrega, type TipoExcepcion,
 } from './repo_correo';
 
@@ -336,6 +337,9 @@ export async function recibirDesglose(
   // (6) destinatarios (solo LECTURAS, antes de escribir nada: un fallo aquí no deja medio desglose)
   let destinos: ReturnType<typeof resolverDestinatarios>['destinos'] = [];
   let faltantes: ReturnType<typeof resolverDestinatarios>['faltantes'] = [];
+  // 0933 · «modo primer mes»: el revisor de cada departamento recibe TODO movimiento, enviado o retenido. Un buzón que ya recibe el
+  // desglose por otro rol no se repite. En una retenida es la ÚNICA entrega (al operador, coordinador, RH y archivo no sale nada).
+  const revisoresVigentes = modoPrimerMesVigente(config, hoyMx(ahora));
   if (!retenida) {
     const contacto = await deps.leerContacto(tenantId, operador.id);
     const coordinador = contacto?.coordinadorId ? await deps.leerCoordinador(tenantId, contacto.coordinadorId) : null;
@@ -348,7 +352,8 @@ export async function recibirDesglose(
       },
     }));
   }
-  const entregasPedidas = destinos.map((x) => ({
+  const destinosRevisor = resolverRevisores(config.revisores, revisoresVigentes, new Set(destinos.map((x) => x.correo)));
+  const entregasPedidas = [...destinos, ...destinosRevisor].map((x) => ({
     rol: x.rol, correo: x.correo, xlsxRuta, xlsxSha256, disparo: 'auto' as const,
   }));
   const viajeIds = await deps.resolverViajeIds(tenantId, liq.viajes);
@@ -382,6 +387,14 @@ export async function recibirDesglose(
   if (atomica && atomica.ok) {
     liquidacionId = atomica.valor.liquidacionId;
     entregas = atomica.valor.entregas;
+    // Una base sin la 0933 ignora las entregas de una retenida: el aviso al revisor se inserta aparte (idempotente por el índice único).
+    if (retenida && destinosRevisor.length > 0 && atomica.valor.creada && entregas === 0) {
+      try {
+        await deps.insertarEntregas(tenantId, entregasPedidas.map((e) => ({ liquidacionExternaId: liquidacionId, ...e })));
+      } catch (err) {
+        logger.warn('liqcorreo.revisor_retenida_sin_0933', { clave: claveExterna, err: err instanceof Error ? err.message : String(err) });
+      }
+    }
     // Otra recepción concurrente ya lo guardó completo: no hay nada que abrir ni reenviar.
     if (!atomica.valor.creada && !atomica.valor.reparada) return { estado: 'idempotente', liquidacionId, claveExterna };
   } else {

@@ -269,7 +269,7 @@ export async function crearFlota(
 /** Falla CERRADO: sin poder leer, no se afirma que el número de empleado esté libre. */
 async function comprobarEmpleadoLibre(tenantId: string, numeroEmpleado: string): Promise<void> {
   const { data, error } = await supabaseAdmin().from('operador').select('id, nombre')
-    .eq('tenant_id', tenantId).eq('numero_empleado', numeroEmpleado).limit(1);
+    .eq('tenant_id', tenantId).eq('numero_empleado', numeroEmpleado).order('id').limit(1);
   if (error) throw new Error(`comprobarEmpleadoLibre: ${error.message}`);
   const ya = (data ?? [])[0] as { nombre?: string } | undefined;
   if (ya) throw new DatoInvalido(`Ya hay un operador con el número de empleado ${numeroEmpleado} en tu flota (${ya.nombre ?? 'sin nombre'}). Búscalo en el registro en vez de darlo de alta otra vez.`);
@@ -278,7 +278,7 @@ async function comprobarEmpleadoLibre(tenantId: string, numeroEmpleado: string):
 /** Un buzón no recibe el desglose de dos personas. Falla CERRADO. */
 async function comprobarCorreoLibre(tenantId: string, correo: string): Promise<void> {
   const { data, error } = await supabaseAdmin().from('operador').select('id')
-    .eq('tenant_id', tenantId).eq('correo', correo).limit(1);
+    .eq('tenant_id', tenantId).eq('correo', correo).order('id').limit(1);
   if (error) throw new Error(`comprobarCorreoLibre: ${error.message}`);
   if ((data ?? []).length > 0) throw new DatoInvalido('Ese correo ya lo usa otro operador de tu flota: el desglose le llegaría a otra persona. Corrígelo o quítaselo al otro operador.');
 }
