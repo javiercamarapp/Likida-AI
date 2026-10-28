@@ -122,7 +122,7 @@ export async function GET(req: Request) {
       venceEnExtraccion,
       (): ResultadoWorker => ({
         pendientes: 0, procesados: 0, divididos: 0, fallidos: 0, yaTomados: 0, errores: 1, cortadosPorReloj: 0, paradaPorPresupuesto: false, omitidosPorPresupuesto: 0,
-        paradaPorFallosSeguidos: false, agotados: 0, zombisCerrados: 0, divisionesAvisadas: 0, hallazgos: 0, avisosEnviados: 0, avisosEnCola: 0, avisosFallidos: 0,
+        paradaPorFallosSeguidos: false, agotados: 0, zombisCerrados: 0, divisionesAvisadas: 0, hallazgos: 0, avisosEnviados: 0, avisosPorCorreo: 0, avisosEnCola: 0, avisosFallidos: 0,
         avisosPerdidos: 0, sinTelefono: 0, avisosSinMigracion: false, fallos: ['el reloj duro cortó la pasada'],
       }),
     );

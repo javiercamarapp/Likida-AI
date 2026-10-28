@@ -76,6 +76,13 @@ export interface DepsWorker {
    * teléfono, o un error) deja el aviso de `hallazgos` donde siempre estuvo, en el jefe de tráfico.
    */
   telefonoRevisor?(tenantId: string, id: string): Promise<string | null>;
+  /**
+   * OLA1-A3: a quién le llega por CORREO el aviso de este documento (el segundo canal: el WhatsApp/Meta puede estar caído o sin
+   * verificar). Opcional: un doble sin él deja el aviso solo por WhatsApp, como siempre. Nunca debe lanzar.
+   */
+  correosAviso?(tenantId: string, id: string, tipo: TipoAvisoDoc): Promise<string[]>;
+  /** OLA1-A3: manda el aviso por correo a esos destinatarios. Opcional y de mejor esfuerzo. */
+  enviarCorreoAviso?(a: { tenantId: string; tipo: TipoAvisoDoc; doc: DocumentoFila; liga: string; para: string[] }): Promise<{ ok: boolean }>;
   avisar(telefono: string, texto: string, parametros: [string, string, string], contexto: Record<string, unknown>): Promise<ResultadoAvisoOficina>;
   /** Mejor esfuerzo: una base sin la 0642 no admite estos tipos de evento y eso no debe tumbar nada. */
   evento(tenantId: string, id: string, tipo: TipoEvento, detalle: Record<string, unknown>): Promise<void>;
@@ -116,6 +123,8 @@ export interface ResultadoWorker {
   divisionesAvisadas: number;
   hallazgos: number;
   avisosEnviados: number;
+  /** OLA1-A3: avisos que además (o en lugar de WhatsApp) salieron por correo. */
+  avisosPorCorreo: number;
   /** Rechazos reintentables: el aviso YA está en `wa_outbox` y el candado se quedó cerrado. NO se reenvía. */
   avisosEnCola: number;
   /** Rechazos definitivos: no salió nada y el candado se soltó para reintentar. */
@@ -129,7 +138,7 @@ export interface ResultadoWorker {
 
 const vacio = (): ResultadoWorker => ({
   pendientes: 0, procesados: 0, fallidos: 0, yaTomados: 0, divididos: 0, errores: 0, cortadosPorReloj: 0, paradaPorPresupuesto: false, omitidosPorPresupuesto: 0,
-  paradaPorFallosSeguidos: false, agotados: 0, zombisCerrados: 0, divisionesAvisadas: 0, hallazgos: 0, avisosEnviados: 0, avisosEnCola: 0, avisosFallidos: 0, avisosPerdidos: 0,
+  paradaPorFallosSeguidos: false, agotados: 0, zombisCerrados: 0, divisionesAvisadas: 0, hallazgos: 0, avisosEnviados: 0, avisosPorCorreo: 0, avisosEnCola: 0, avisosFallidos: 0, avisosPerdidos: 0,
   sinTelefono: 0, avisosSinMigracion: false, fallos: [],
 });
 
@@ -332,8 +341,10 @@ async function avisarOficinaDe(deps: DepsWorker, opts: OpcionesWorker, r: Result
       const telOficina = telRevisor ? null : await telefonoDe(d.tenantId);
       if (telOficina === 'error') continue;
       const tel = telRevisor ?? telOficina;
-      if (!tel) {
-        // Sin a quién avisar no se reclama el candado: cuando capturen el teléfono, el aviso sale.
+      // OLA1-A3: el correo es un canal propio; sin teléfono el aviso sale igual si hay a quién escribirle.
+      const correos = deps.correosAviso && deps.enviarCorreoAviso ? await deps.correosAviso(d.tenantId, d.id, tipo).catch(() => [] as string[]) : [];
+      if (!tel && correos.length === 0) {
+        // Sin a quién avisar no se reclama el candado: cuando capturen el teléfono o un correo, el aviso sale.
         r.sinTelefono++;
         if (!sinTelefonoAvisadas.has(d.tenantId)) {
           sinTelefonoAvisadas.add(d.tenantId);
@@ -349,29 +360,43 @@ async function avisarOficinaDe(deps: DepsWorker, opts: OpcionesWorker, r: Result
         if (claim === 'sin_migracion') { r.avisosSinMigracion = true; return; }
         presupuesto--;
 
-        const { texto, resumen } = armarAviso(tipo, doc, `${opts.urlBandeja}/${doc.id}`);
-        const envio = await deps.avisar(tel, texto, parametrosAvisoOficina('Carta Porte', resumen, `${opts.urlBandeja}/${doc.id}`), {
-          agente: 'carta_porte', tenantId: d.tenantId, documentoId: d.id, tipo,
-        });
+        const liga = `${opts.urlBandeja}/${doc.id}`;
+        const { texto, resumen } = armarAviso(tipo, doc, liga);
+        const envio = tel
+          ? await deps.avisar(tel, texto, parametrosAvisoOficina('Carta Porte', resumen, liga), { agente: 'carta_porte', tenantId: d.tenantId, documentoId: d.id, tipo })
+          : null;
+        let correoOk = false;
+        if (correos.length > 0 && deps.enviarCorreoAviso) {
+          correoOk = await deps.enviarCorreoAviso({ tenantId: d.tenantId, tipo, doc, liga, para: correos }).then((x) => x.ok, () => false);
+          if (correoOk) r.avisosPorCorreo++;
+        }
         if (tipo === 'agotado') r.agotados++; else r.hallazgos++;
+        const evento = tipo === 'agotado' ? 'reintentos_agotados' : 'aviso_oficina';
 
-        if (envio.ok) {
+        if (envio?.ok || (envio === null && correoOk)) {
           rechazadosSeguidos = 0;
           r.avisosEnviados++;
-          await deps.evento(d.tenantId, d.id, tipo === 'agotado' ? 'reintentos_agotados' : 'aviso_oficina', { tipo, via: envio.via }).catch(() => {});
-        } else if (envio.reintentable || envio.encolado) {
+          await deps.evento(d.tenantId, d.id, evento, { tipo, via: envio?.ok ? envio.via : 'correo', ...(correoOk && envio?.ok ? { tambien: 'correo' } : {}) }).catch(() => {});
+        } else if (envio && (envio.reintentable || envio.encolado)) {
           // YA está en `wa_outbox` (reintentable, o token vencido 190/401 que también se encola): el candado se queda
           // cerrado y NO se reenvía; cada pasada de 5 min lo encolaría otra vez y el outbox entregaría todas las copias.
           rechazadosSeguidos = 0;
           r.avisosEnCola++;
-          await deps.evento(d.tenantId, d.id, tipo === 'agotado' ? 'reintentos_agotados' : 'aviso_oficina', { tipo, via: 'en_cola_outbox' }).catch(() => {});
+          await deps.evento(d.tenantId, d.id, evento, { tipo, via: 'en_cola_outbox', ...(correoOk ? { tambien: 'correo' } : {}) }).catch(() => {});
           r.fallos.push(`aviso ${tipo}: ${envio.motivo.slice(0, 120)} (queda en la cola de WhatsApp; no se reenvía)`);
+        } else if (correoOk) {
+          // WhatsApp rechazó de forma definitiva (plantilla sin aprobar…) pero el correo SÍ salió: el aviso cuenta como dado.
+          // Soltar el candado lo reenviaría por correo en cada pasada.
+          rechazadosSeguidos = 0;
+          r.avisosEnviados++;
+          await deps.evento(d.tenantId, d.id, evento, { tipo, via: 'correo' }).catch(() => {});
+          if (envio) r.fallos.push(`aviso ${tipo}: ${envio.motivo.slice(0, 120)} (salió por correo)`);
         } else {
-          // Rechazo definitivo: no salió nada. Se suelta el candado para reintentar cuando se arregle (plantilla aprobada).
+          // Rechazo definitivo de TODOS los canales: no salió nada. Se suelta el candado para reintentar cuando se arregle (plantilla aprobada).
           rechazadosSeguidos++;
           r.avisosFallidos++;
           await deps.liberarAviso(d.tenantId, d.id, tipo);
-          r.fallos.push(`aviso ${tipo}: ${envio.motivo.slice(0, 120)}`);
+          r.fallos.push(`aviso ${tipo}: ${envio ? envio.motivo.slice(0, 120) : 'el correo no salió'}`);
         }
       } catch (e) {
         r.errores++;

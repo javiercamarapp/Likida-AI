@@ -8,7 +8,7 @@ import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 import { logger } from '@/lib/logger';
 import { aXlsxPlantillaTms, configEstandar, exportarDocumentos, MIME_XLSX, validarConfigExport, type ExportConfig, type FormatoExport } from '@/lib/likida/carta_porte_docs/exportacion';
 import { construirPlantilla, faltantesBloqueantes } from '@/lib/likida/carta_porte_docs/plantilla_tms';
-import { leerConfigSalida } from '@/lib/likida/carta_porte_docs/salida_config';
+import { leerConfigSalida, plantillaParaDocumento } from '@/lib/likida/carta_porte_docs/salida_config';
 import * as repo from '@/lib/likida/carta_porte_docs/repo';
 import { descargarCcp } from '@/lib/likida/carta_porte_docs/ccp_respuesta_repo';
 import type { DocumentoFila } from '@/lib/likida/carta_porte_docs/repo';
@@ -217,7 +217,9 @@ async function plantillaTms(tenantId: string, rol: string, documentoId: string):
       return new NextResponse('Solo se descarga la plantilla de un documento aprobado. Revísalo y apruébalo primero.', { status: 409 });
     }
     const config = await leerConfigSalida(tenantId);
-    const plantilla = construirPlantilla(doc.extraccion, { clienteInterno: null, plantilla: config.plantillaPorDefecto });
+    const nombrePlantilla = plantillaParaDocumento(config, doc.extraccion);
+    // La descarga es para subir a mano: la «nueva» (aún no verificada contra el TMS) sirve aquí, con su aviso; solo el envío automático la rechaza.
+    const plantilla = construirPlantilla(doc.extraccion, { clienteInterno: null, plantilla: nombrePlantilla, uso: 'descarga' });
     // Un faltante BLOQUEANTE (orígenes 2..N o destinos > 4 que la plantilla no lleva) significa que el libro saldría incompleto: no se
     // entrega ni se sella «exportado», para que nadie suba un CCP recortado creyéndolo válido (A35-A3-04).
     const bloqueantes = faltantesBloqueantes(plantilla);
@@ -229,7 +231,7 @@ async function plantillaTms(tenantId: string, rol: string, documentoId: string):
     const s = await getSessionTenant();
     try {
       await repo.marcarExportado(tenantId, [doc.id]);
-      await repo.registrarEvento(tenantId, doc.id, 'exportado', s?.userId ?? null, { formato: 'plantilla_tms', plantilla: config.plantillaPorDefecto });
+      await repo.registrarEvento(tenantId, doc.id, 'exportado', s?.userId ?? null, { formato: 'plantilla_tms', plantilla: nombrePlantilla });
     } catch (e) {
       logger.warn('export.cp_docs_sello_fallo', { error: e instanceof Error ? e.message : String(e) });
     }

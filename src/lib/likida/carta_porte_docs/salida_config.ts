@@ -16,6 +16,8 @@ import { anotarBitacora } from '../bitacora_escritura';
 import * as repo from './repo';
 import type { SalidaConfigFila } from './repo';
 import type { ContextoPlantilla } from './plantilla_tms';
+import { elegirPlantillaPorContenido } from './elegir_plantilla';
+import type { Extraccion } from './campos';
 
 export type ConfigSalida = SalidaConfigFila;
 
@@ -130,4 +132,14 @@ export function contextoPlantillaDeConfig(
 ): ContextoPlantilla {
   const e = elegirPlantilla(config, layoutConfig, opciones.perfilId ?? null);
   return { clienteInterno: opciones.clienteInterno ?? null, plantilla: e.plantilla, distanciaFormato: config.distanciaFormato, uso: opciones.uso, avisos: e.avisos };
+}
+
+/**
+ * OLA1-A3 · La plantilla de UN documento: la «nueva» si trae más de una razón social de embarcador (criterio provisional,
+ * `elegirPlantillaPorContenido`); si no, la que tenga configurada la flota. Antes un documento con varios embarcadores se
+ * armaba con la «normal» y quedaba bloqueado como «plantilla incompleta» aunque la «nueva» ya existe.
+ */
+export function plantillaParaDocumento(config: Pick<ConfigSalida, 'plantillaPorDefecto'>, extraccion: Extraccion | null | undefined): 'normal' | 'nueva' {
+  if (extraccion && elegirPlantillaPorContenido(extraccion).plantilla === 'nueva') return 'nueva';
+  return config.plantillaPorDefecto;
 }

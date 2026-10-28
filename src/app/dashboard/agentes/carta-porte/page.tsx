@@ -6,6 +6,7 @@ import { getEstadoCartaPorte, type EstadoCartaPorte } from '@/lib/likida/carta_p
 import { ultimasCorridas } from '@/lib/likida/agentes/corridas';
 import { dominioBuzon } from '@/lib/correo/buzon';
 import { direccionCp } from '@/lib/likida/carta_porte_docs/correo_entrante';
+import { flotaBajoPerfil } from '@/lib/likida/carta_porte_docs/envio';
 import * as repoDocs from '@/lib/likida/carta_porte_docs/repo';
 import { calcularInsights, type InsightsAgente } from '@/lib/likida/carta_porte_docs/metricas';
 import { listarViajesSinCcp, type ListadoSinCcp } from '@/lib/likida/carta_porte_docs/viajes_sin_ccp';
@@ -50,7 +51,7 @@ async function leerInsights(tenantId: string): Promise<{ insights: InsightsAgent
 async function leerSinCcp(tenantId: string): Promise<ListadoSinCcp | 'no_leido'> {
   try {
     const ahora = new Date();
-    const { viajes, conCcp, truncado } = await repoDocs.leerSalidasParaSinCcp(tenantId, ahora);
+    const { viajes, conCcp, truncado } = await repoDocs.leerSalidasParaSinCcp(tenantId, ahora, { viajesDelTms: await flotaBajoPerfil(tenantId) });
     return { ...listarViajesSinCcp(viajes, conCcp, ahora), ...(truncado ? { truncado: true } : {}) };
   } catch (e) {
     logger.warn('carta_porte.sin_ccp_no_leido', { tenantId, error: e instanceof Error ? e.message : String(e) });

@@ -42,6 +42,7 @@ import { hallazgoPlantillaIncompleta, hallazgoRepetido, traducirErroresTms } fro
 import { siguienteEstado, TOPE_TRANSITORIOS, type EnvioEnMaquina, type EventoEnvio, type MotivoAlerta, type Transicion } from './envio_estados';
 import { prechequear } from './prechequeo';
 import { construirPlantilla, faltantesBloqueantes } from './plantilla_tms';
+import { layoutDe, layoutPuedeEnviarse } from './plantilla_tms.layout';
 import type { DocumentoFila, EstadoEnvioTms, TipoEvento } from './repo';
 import type { CambiosEnvio, EnvioDetalle, EnvioReclamado, ResultadoReclamo } from './repo_envios';
 import type { ConfigSalida } from './salida_config';
@@ -241,7 +242,8 @@ async function procesarEnvio(ctx: Contexto, rec: EnvioReclamado): Promise<void> 
     await soltar(ctx, envio, envio.estado, Math.max(0, envio.intentos - 1), iso(deps.ahora() + REINTENTO_PROVEEDOR_MIN * 60_000));
     return;
   }
-  const manual = config.modo === 'descarga' || salida === SIN_TMS;
+  // La plantilla «nueva» no está verificada contra el TMS: no se sube sola; queda lista para descargar y subir a mano.
+  const manual = config.modo === 'descarga' || salida === SIN_TMS || (envio.plantilla === 'nueva' && !layoutPuedeEnviarse(layoutDe('nueva')));
   const ahora = new Date(deps.ahora());
   const intentosFase = Math.max(0, envio.intentos - 1);
   // Bloqueos abiertos: sin validación no se sabe, y lo que no se sabe no se envía.
@@ -260,7 +262,10 @@ async function procesarEnvio(ctx: Contexto, rec: EnvioReclamado): Promise<void> 
     let base = enMaquina(ya);
     let causa: string | null = null;
     if (manual) {
-      evento = ya === 'pendiente_prechequeo' ? { tipo: 'prechequeo', accion: 'enviar' } : { tipo: 'reque_aparecio' };
+      // OLA1-A3: también en modo manual se revisa lo local (cliente interno y caja): no se le entrega a una persona una plantilla que el TMS no va a ligar.
+      const pre = ya === 'pendiente_prechequeo' ? await prechequear(doc.extraccion, { tenantId, soloLocal: true }) : null;
+      if (pre && pre.accion === 'revisar') { evento = { tipo: 'prechequeo', accion: 'revisar', motivo: pre.motivo }; base = { ...base, estado: 'pendiente_prechequeo' }; }
+      else evento = ya === 'pendiente_prechequeo' ? { tipo: 'prechequeo', accion: 'enviar' } : { tipo: 'reque_aparecio' };
     } else {
       const pre = await prechequear(doc.extraccion, { tenantId, salida, siTmsDesconocido: config.siTmsDesconocido });
       if (pre.accion === 'enviar') evento = ya === 'pendiente_prechequeo' ? { tipo: 'prechequeo', accion: 'enviar' } : { tipo: 'reque_aparecio' };

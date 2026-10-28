@@ -11,6 +11,7 @@ import { acotada } from '@/lib/likida/presupuesto';
 import { conteo, exigir } from '@/lib/likida/pg';
 import { leerConTope } from './lectura_paginada';
 import { logger } from '@/lib/logger';
+import { hoyMx } from '@/lib/formato';
 import { tablaAusente } from './repo';
 import { leerReferencia, type ClienteRef, type ReglaReferencia, type ViajeReferencia } from './referencia_cliente';
 
@@ -21,7 +22,7 @@ const TABLA_REFERENCIA = 'cp_viaje_referencia';
 export interface InsumosReferencia { viajes: ViajeReferencia[]; reglas: ReglaReferencia[]; clientes: ClienteRef[]; /** A37-S32-06: hay más cargas que el tope: faltan las más viejas. */ truncado?: boolean }
 
 /** Lo que el tablero y la comparación necesitan, de UNA flota. Sin la 0832 aplicada devuelve todo vacío y lo registra. */
-export async function cargarInsumosReferencia(tenantId: string): Promise<InsumosReferencia> {
+export async function cargarInsumosReferencia(tenantId: string, opciones: { viajesDelTms?: boolean } = {}): Promise<InsumosReferencia> {
   const vacio: InsumosReferencia = { viajes: [], reglas: [], clientes: [] };
   const rReglas = await acotada(supabaseAdmin().from(TABLA_REGLA).select('cliente_id, exige_referencia').eq('tenant_id', tenantId).limit(5000), 'cpref.reglas');
   if (tablaAusente(rReglas.error)) {
@@ -41,7 +42,23 @@ export async function cargarInsumosReferencia(tenantId: string): Promise<Insumos
     'cpref.hitos',
   ) as never, TOPE_VIAJES);
   const hitos = (exigir(rHito, 'cpref.hitos') ?? []) as unknown as Array<{ viaje_id: string; recibido_en: string | null }>;
-  const truncado = rHito.truncado;
+  let truncado = rHito.truncado;
+  if (opciones.viajesDelTms) {
+    // OLA1-A3: bajo `cinco_agentes` no hay hito de carga (A5 apagado): la carga es el inicio del viaje en el TMS (día en hora de México).
+    const desde = hoyMx(new Date(Date.now() - 45 * 86_400_000));
+    const rv = await leerConTope<{ id: string; fecha_inicio: string | null }>((d, h, primera) => acotada(
+      supabaseAdmin().from('viaje').select('id, fecha_inicio', conteo(primera ? 0 : 1)).eq('tenant_id', tenantId).gte('fecha_inicio', desde)
+        .order('fecha_inicio', { ascending: false }).order('id').range(d, h),
+      'cpref.viajes_tms',
+    ) as never, TOPE_VIAJES);
+    const conHito = new Set(hitos.map((h) => String(h.viaje_id)));
+    for (const v of (exigir(rv, 'cpref.viajes_tms') ?? []) as unknown as Array<{ id: string; fecha_inicio: string | null }>) {
+      if (conHito.has(String(v.id)) || !v.fecha_inicio) continue;
+      const t = new Date(`${String(v.fecha_inicio).slice(0, 10)}T00:00:00-06:00`);
+      if (Number.isFinite(t.getTime())) hitos.push({ viaje_id: String(v.id), recibido_en: t.toISOString() });
+    }
+    truncado = truncado || rv.truncado;
+  }
   if (hitos.length === 0) return { viajes: [], reglas, clientes };
   if (truncado) logger.warn('cartaporte_docs.referencia_truncado', { tenantId, filas: hitos.length });
   const ids = hitos.map((h) => String(h.viaje_id));

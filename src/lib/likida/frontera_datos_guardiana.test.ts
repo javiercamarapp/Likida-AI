@@ -617,8 +617,12 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 326;
 // `intake/desglose_peaje.ts` (+1: reintento del lote de líneas sin `icident`). Cubiertas por fuente_despacho.test.ts, reglas_flota.test.ts, avisos_repo.test.ts,
 // inmovilizadas_carga.test.ts, plantillas_cliente.test.ts, periodo.test.ts y desglose_peaje_icident.test.ts.
 // Si otro lote (A1, A3) toca este techo, sumar el incremento al integrar.
-// INTEGRACION OLA 1: A1 (+7) + A2 (+17) sobre 2,403 = 2,427 (se re-mide tras integrar A3 y se fija al valor real).
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_427;
+// OLA1-A3 (Carta Porte): 2,403 → 2,410 (+7, medido con el barrido real; conteo leído del mensaje del propio guardián). Todas de solo lectura o upsert
+// de configuración, por `acotada`, con `tenant_id`: `carta_porte_docs/repo.ts` suma `clientesConCorreo` (reconocer al remitente → cliente), `leerPrimerMes`/`guardarPrimerMes`
+// (0938, modo primer mes) y, en `leerSalidasParaSinCcp`, los viajes por fecha de inicio y los folios de documentos aprobados y de cargas subidas (viajes sin CCP bajo
+// cinco_agentes); `referencia_cliente_puerto.ts` suma los viajes por fecha de inicio. Cubiertas por servicio.test.ts, primer_mes.test.ts y viajes_sin_ccp_repo.test.ts.
+// INTEGRACION OLA 1: A1 (+7) + A2 (+17) + A3 (+7) sobre 2,403 = 2,434 (sumado; se re-mide con el barrido real tras integrar y se fija al valor medido).
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_434;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

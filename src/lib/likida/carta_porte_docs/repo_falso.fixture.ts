@@ -34,7 +34,9 @@ export const estado = {
   mercancias: [] as Mercancia[],
   operadores: [] as Array<OperadorMin & { tenantId: string }>,
   unidades: [] as Array<{ tenantId: string; id: string; placas: string; activo: boolean }>,
-  clientes: [] as Array<{ tenantId: string; id: string; nombre: string }>,
+  clientes: [] as Array<{ tenantId: string; id: string; nombre: string; correo?: string | null }>,
+  /** 0938: modo primer mes por flota. */
+  primerMes: new Map<string, { hasta: string | null; revisores: Array<{ departamento: string; correo: string }> }>(),
   /** 0792: catálogo por cliente (cada fila trae su tenantId y clienteId). */
   catalogoNumeros: [] as NumeroClienteCat[],
   catalogoProductos: [] as ProductoCat[],
@@ -74,7 +76,7 @@ export const estado = {
 export function reset(): void {
   estado.docs.clear(); estado.archivos.clear(); estado.eventos.length = 0; estado.correcciones.length = 0; estado.ccp.length = 0; estado.buzones.clear();
   estado.perfiles.clear(); estado.versiones.length = 0; estado.exportConfigs.length = 0; estado.viajes.length = 0; estado.mercancias.length = 0;
-  estado.catalogoNumeros.length = 0; estado.catalogoProductos.length = 0; estado.catalogoPartes.length = 0; estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.avisos.clear(); estado.embarques.length = 0; estado.sinMigracion = false; estado.sinDivision = false; estado.antesDeDividir = null; estado.fallar.clear(); estado.llamadas.length = 0; estado.salidaConfigs.clear(); estado.catalogosSat.clear(); estado.consultasCatalogoSat.length = 0; estado.envios.length = 0; estado.usuarios.length = 0; estado.revisores.clear(); estado.sinColumnaRevisor = false;
+  estado.catalogoNumeros.length = 0; estado.catalogoProductos.length = 0; estado.catalogoPartes.length = 0; estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.avisos.clear(); estado.embarques.length = 0; estado.sinMigracion = false; estado.sinDivision = false; estado.antesDeDividir = null; estado.fallar.clear(); estado.llamadas.length = 0; estado.salidaConfigs.clear(); estado.catalogosSat.clear(); estado.consultasCatalogoSat.length = 0; estado.envios.length = 0; estado.usuarios.length = 0; estado.revisores.clear(); estado.sinColumnaRevisor = false; estado.primerMes.clear();
   estado.seq = 0; estado.reloj.ahora = () => new Date();
 }
 
@@ -156,7 +158,7 @@ export const api: typeof Real = {
       riesgo_inyeccion: 'riesgoInyeccion', extraccion: 'extraccion', validacion: 'validacion', confianza_min: 'confianzaMin', nivel_modelo: 'nivelModelo',
       modelo: 'modelo', tokens_in: 'tokensIn', tokens_out: 'tokensOut', costo_usd: 'costoUsd', procesando_hasta: 'procesandoHasta', ultimo_error: 'ultimoError',
       intentos: 'intentos', retener_hasta: 'retenerHasta', abierto_en: 'abiertoEn', revisado_por: 'revisadoPor', aprobado_por: 'aprobadoPor',
-      aprobado_en: 'aprobadoEn', rechazo_motivo: 'rechazoMotivo', rechazo_causa: 'rechazoCausa', tiempo_revision_seg: 'tiempoRevisionSeg', exportado_en: 'exportadoEn', viaje_id: 'viajeId',
+      aprobado_en: 'aprobadoEn', rechazo_motivo: 'rechazoMotivo', rechazo_causa: 'rechazoCausa', tiempo_revision_seg: 'tiempoRevisionSeg', exportado_en: 'exportadoEn', viaje_id: 'viajeId', cliente_id: 'clienteId',
     };
     for (const [k, v] of Object.entries(cambios)) {
       const campo = mapa[k];
@@ -289,6 +291,9 @@ export const api: typeof Real = {
       truncado: false,
     });
   },
+  async leerPrimerMes(tenantId) { return estado.primerMes.get(tenantId) ?? null; },
+  async guardarPrimerMes(tenantId, c) { estado.primerMes.set(tenantId, c); },
+  async clientesConCorreo(tenantId) { return estado.clientes.filter((c) => c.tenantId === tenantId && c.correo).map((c) => ({ id: c.id, correo: c.correo ?? null })); },
   async listarClientes(tenantId) { return estado.clientes.filter((c) => c.tenantId === tenantId).map(({ tenantId: _t, ...c }) => c); },
   async insertarViaje(tenantId, v) {
     falla('insertarViaje');

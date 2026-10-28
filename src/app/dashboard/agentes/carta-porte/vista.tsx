@@ -118,6 +118,10 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
             Lo que el agente aprende de cada cliente —productos, remitentes, destinatarios y su número interno— vive en el{' '}
             <Link href={`/dashboard/agentes/carta-porte/catalogo${sufijo}`} className="font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>catálogo del cliente →</Link>
           </p>
+          <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            Los clientes que necesitan su referencia para cobrar, y los viajes cargados que aún no la traen:{' '}
+            <Link href={`/dashboard/agentes/carta-porte/referencia${sufijo}`} className="font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>referencia del cliente →</Link>
+          </p>
 
           <section className="card p-4">
             <div className="flex items-center gap-2 mb-3">

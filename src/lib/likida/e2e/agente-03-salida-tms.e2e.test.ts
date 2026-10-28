@@ -341,6 +341,8 @@ describe('PDF M3 (forma de remisión de exportación)', () => {
       { campo: 'destino_rfc', renglon: null, valor: RFC_DORADO.m5DestinatarioFisica },
       { campo: 'destino_cp', renglon: null, valor: '76000' },
       { campo: 'peso_bruto_total', renglon: null, valor: total },
+      // OLA1-A3: el prechequeo también corre en modo manual y la caja es obligatoria en la plantilla: la remisión no la trae, la teclea una persona.
+      { campo: 'caja_numero', renglon: null, valor: 'CAJA-01' },
     ]);
     expect(rev.validacion, mensajes(r.documentoId)).toMatchObject({ bloqueos: 0, listoParaAprobar: true });
     const ap = await aprobar(A, r.documentoId);

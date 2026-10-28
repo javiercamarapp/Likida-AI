@@ -40,7 +40,9 @@ export interface DepsAlertaEnvio {
   telefonoDeUsuario(userId: string, tenantId: string): Promise<string | null>;
   /** El jefe de tráfico de la flota (el destino de siempre del aviso a la oficina). */
   telefonoJefe(tenantId: string): Promise<string | null>;
-  enviarCorreo(para: string, correo: Correo): Promise<ResultadoEnvio>;
+  enviarCorreo(para: string | string[], correo: Correo): Promise<ResultadoEnvio>;
+  /** OLA1-A3: en el primer mes de la flota, los revisores por departamento reciben copia de cada aviso. Opcional; nunca debe lanzar. */
+  revisoresPrimerMes?(tenantId: string): Promise<string[]>;
   avisar(telefono: string, texto: string, parametros: [string, string, string], contexto: Record<string, unknown>): Promise<ResultadoAvisoOficina>;
   alertarOperador(evento: string, detalle: Record<string, unknown>): Promise<unknown>;
   /** La liga base de la bandeja de Carta Porte (sin diagonal final); el visor es `<base>/<documentoId>`. */
@@ -108,7 +110,10 @@ export function crearAlertarEnvio(deps: DepsAlertaEnvio): (a: EntradaAlerta) => 
     const usuario = revision ? (config.destinatarioRevisionUsuario ?? config.destinatarioAlertaUsuario) : (config.destinatarioAlertaUsuario ?? config.destinatarioRevisionUsuario);
     const correoCfg = revision ? (config.destinatarioRevisionCorreo ?? config.destinatarioAlertaCorreo) : (config.destinatarioAlertaCorreo ?? config.destinatarioRevisionCorreo);
     const correoUsuario = usuario ? await deps.correoDeUsuario(usuario, tenantId).catch(() => null) : null;
-    const para = correoCfg ?? correoUsuario;
+    const principal = correoCfg ?? correoUsuario;
+    const copia = principal && deps.revisoresPrimerMes ? await deps.revisoresPrimerMes(tenantId).catch(() => [] as string[]) : [];
+    const extras = principal ? copia.filter((c) => c.toLowerCase() !== principal.toLowerCase()) : [];
+    const para: string | string[] | null = principal && extras.length > 0 ? [principal, ...extras] : principal;
     const telefono = (usuario ? await deps.telefonoDeUsuario(usuario, tenantId).catch(() => null) : null) ?? (await deps.telefonoJefe(tenantId).catch(() => null));
 
     const r: CanalesAlerta = { correo: 'sin_destino', whatsapp: 'sin_destino', operador: false };

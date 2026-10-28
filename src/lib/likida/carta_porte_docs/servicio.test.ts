@@ -19,6 +19,23 @@ beforeEach(() => { reset(); sembrarFlotas(); });
 
 const tipos = (docId: string) => estado.eventos.filter((e) => e.documentoId === docId).map((e) => e.tipo);
 
+describe('recibirDocumento · cliente por remitente (OLA1-A3)', () => {
+  it('un correo de un remitente reconocido queda ligado a su cliente; WhatsApp con De: también', async () => {
+    estado.clientes.push({ tenantId: A, id: 'cli-1', nombre: 'Acme', correo: 'ana@acme.example' });
+    const c = await recibirDocumento(A, { canal: 'correo', nombre: 'a.pdf', bytes: await pdfBoreal(), remitente: 'Ana <ana@acme.example>', remitenteReconocido: true }, sinAgenteApagado);
+    expect(estado.docs.get((c as { documentoId: string }).documentoId)!.clienteId).toBe('cli-1');
+    const w = await recibirDocumento(A, { canal: 'whatsapp', nombre: 't.txt', bytes: new TextEncoder().encode('De: ana@acme.example\nEmbarque 1'), remitente: 'WhatsApp · Pau', formatoForzado: 'correo' }, sinAgenteApagado);
+    expect(estado.docs.get((w as { documentoId: string }).documentoId)!.clienteId).toBe('cli-1');
+  });
+  it('remitente no reconocido por el buzón, sin coincidencia o de otra flota: sin cliente', async () => {
+    estado.clientes.push({ tenantId: A, id: 'cli-1', nombre: 'Acme', correo: 'ana@acme.example' });
+    const a = await recibirDocumento(A, { canal: 'correo', nombre: 'a.pdf', bytes: await pdfBoreal(), remitente: 'ana@acme.example', remitenteReconocido: false }, sinAgenteApagado);
+    expect(estado.docs.get((a as { documentoId: string }).documentoId)!.clienteId).toBeNull();
+    const b = await recibirDocumento(B, { canal: 'correo', nombre: 'b.xml', bytes: Buffer.from(xmlCartaPorte()), remitente: 'ana@acme.example' }, sinAgenteApagado);
+    expect(estado.docs.get((b as { documentoId: string }).documentoId)!.clienteId).toBeNull();
+  });
+});
+
 describe('recibirDocumento', () => {
   it.each([
     ['pdf_texto', async () => pdfBoreal()],
@@ -481,5 +498,36 @@ describe('procesarDocumento: catálogo del cliente (T-A3-20)', () => {
     const d = estado.docs.get(r.documentoId)!;
     expect(d.extraccion!.mercancias[0].clave_unidad.origen).not.toBe('catalogo');
     expect(d.validacion!.hallazgos.some((h) => h.campo === 'clave_unidad' && h.severidad === 'confirmar' && /El catálogo dice «KGM»/.test(h.mensaje))).toBe(true);
+  });
+});
+
+describe('procesarDocumento · cableado OLA1-A3', () => {
+  it('un Excel que ya es la plantilla del TMS se lee de sus celdas, sin llamar al modelo', async () => {
+    const { construirPlantilla } = await import('./plantilla_tms');
+    const { aXlsxPlantillaTms } = await import('./exportacion');
+    const bytes = aXlsxPlantillaTms(construirPlantilla(extraccionAtlasOk(), { clienteInterno: null, plantilla: 'normal', uso: 'descarga' }));
+    const llm = llmFalso(() => { throw new Error('no debió llamarse al modelo'); });
+    const r = await subirYProcesar(A, bytes, llm, 'plantilla.xlsx');
+    expect(llm.llamadas).toHaveLength(0);
+    const d = estado.docs.get(r.documentoId)!;
+    expect(d.estado).toBe('por_revisar');
+    expect(d.extraccion!.meta!.origen).toBe('perfil');
+    expect(d.extraccion!.meta!.avisos.join(' ')).toMatch(/leída de sus celdas/);
+  });
+
+  it('la distancia que el documento no trae sale del catálogo de distancias del cliente', async () => {
+    estado.clientes.push({ tenantId: A, id: 'cli-1', nombre: 'Acme' });
+    const lectura = lecturaAtlas();
+    lectura.campos = lectura.campos.filter((c) => c.clave !== 'distancia_km');
+    const val = (k: string) => String(lectura.campos.find((c) => c.clave === k)!.valor);
+    const e0 = await subir(A, await excelAtlas(), 'a.xlsx', { clienteId: 'cli-1' });
+    const { procesarDocumento } = await import('./servicio');
+    await procesarDocumento(A, e0.documentoId, {
+      ...sinAgenteApagado, llm: () => llmFalso(() => lectura),
+      rutasDistancia: async () => [{ tenantId: A, clienteId: 'cli-1', tipo: 'cp', origen: val('origen_cp'), destino: val('destino_cp'), km: 874.11 }],
+    });
+    const d = estado.docs.get(e0.documentoId)!;
+    expect(d.extraccion!.campos.distancia_km).toMatchObject({ valor: '874.11', origen: 'catalogo' });
+    expect(d.extraccion!.meta!.avisos.join(' ')).toMatch(/distancia salió del catálogo/);
   });
 });
