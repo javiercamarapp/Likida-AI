@@ -440,3 +440,16 @@ describe('los contadores de la salida al TMS en el panel de salud (T-A3-38)', ()
     expect(salidaTmsDeLatido({ envios: 'x' })).toBeNull();
   });
 });
+
+describe('OP40-01: esApagadoPorInterruptor', () => {
+  it('solo un `saltado` que nombra su palanca cuenta como apagado a propósito', async () => {
+    const { esApagadoPorInterruptor } = await import('./salud');
+    expect(esApagadoPorInterruptor('saltado', { interruptor: 'global' })).toBe(true);
+    expect(esApagadoPorInterruptor('saltado', { interruptor: 'agente:peajes' })).toBe(true);
+    expect(esApagadoPorInterruptor('saltado', { interruptor: '  ' })).toBe(false);
+    expect(esApagadoPorInterruptor('saltado', {})).toBe(false);
+    expect(esApagadoPorInterruptor('saltado', { motivo: 'sin adaptador' })).toBe(false);
+    expect(esApagadoPorInterruptor('fallo', { interruptor: 'global' })).toBe(false);
+    expect(esApagadoPorInterruptor('saltado', null)).toBe(false);
+  });
+});

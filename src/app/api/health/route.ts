@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
-import { detalleLatidos, esHuecoDeConfiguracion, type CronId } from '@/lib/admin/salud';
+import { detalleLatidos, esHuecoDeConfiguracion, esApagadoPorInterruptor, type CronId } from '@/lib/admin/salud';
 import { alertarOperador, alertarHuecoConfiguracion } from '@/lib/observability/alerta';
 import { logger } from '@/lib/logger';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
@@ -32,7 +32,9 @@ export const dynamic = 'force-dynamic';
 //    `sin_latido` mantiene el health degradado hasta que el cron haya probado
 //    que está vivo.
 //  · un latido no sano (`fallo`/`parcial`/`saltado`) SIEMPRE degrada el
-//    status público a 503 — eso no cambia. Lo que sí se distingue (auditoría
+//    status público a 503 — salvo un `saltado` con `{interruptor}` (apagado a
+//    propósito por `global` o `agente:*`, OP40-01): ese es estado neutro y se
+//    publica como `checks.crons='apagado'` sin tumbar nada. Lo que sí se distingue (auditoría
 //    prod 29-ago-2026) es A QUIÉN se lo dice y con qué urgencia: un hueco de
 //    configuración que el propio cron ya declaró en prosa (`descarga-sat` sin
 //    LIKIDA_SAT_PROVEEDOR, por ejemplo — `esHuecoDeConfiguracion`) manda a lo
@@ -94,13 +96,19 @@ async function manejarGET(req: NextRequest) {
   //
   // Se publica el tercer estado para que el watchdog pueda tratarlos distinto:
   // un hueco declarado se anota y no tumba el job; una regresión sí.
-  let cronCheck: 'ok' | 'degraded' | 'config_ausente' | 'unknown' = 'unknown';
+  let cronCheck: 'ok' | 'degraded' | 'config_ausente' | 'apagado' | 'unknown' = 'unknown';
   try {
     const latidos = await detalleLatidos();
     const ids = Object.keys(latidos) as CronId[];
     const vencidos = ids.filter((c) => latidos[c].estado === 'vencido');
     const sinLatido = ids.filter((c) => latidos[c].estado === 'sin_latido');
-    const noSanos = ids.filter((c) => latidos[c].estado === 'ok' && latidos[c].ultimoEstado !== 'ok');
+    const noOk = ids.filter((c) => latidos[c].estado === 'ok' && latidos[c].ultimoEstado !== 'ok');
+    // OP40-01 (cierre100, ola 10): lo apagado A PROPÓSITO por un interruptor
+    // (`global` o `agente:*`) es estado neutro: no tumba el status, no manda el
+    // correo «Urgente» y no esconde un cron muerto de verdad. Queda visible
+    // como `checks.crons='apagado'`.
+    const apagados = noOk.filter((c) => esApagadoPorInterruptor(latidos[c].ultimoEstado, latidos[c].detalle));
+    const noSanos = noOk.filter((c) => !apagados.includes(c));
 
     // ── AUDITORÍA 24, OP-P4 / OP-C2 (ALTO): EL QUE NUNCA LATIÓ SE JUZGA PRIMERO ──
     // `sinLatido` se consultaba en la TERCERA rama, después de `noSanos`: con
@@ -165,6 +173,9 @@ async function manejarGET(req: NextRequest) {
     } else if (muertos.length === 0) {
       cronCheck = 'ok';
     }
+    // Solo apagados (nada muerto, nada en regresión ni con hueco declarado):
+    // el estado visible es `apagado`, que NO degrada el status.
+    if (apagados.length > 0 && cronCheck === 'ok') cronCheck = 'apagado';
   } catch (e) {
     cronCheck = 'unknown';
     logger.warn('health.latidos_ilegibles', { err: e instanceof Error ? e.message : String(e) });

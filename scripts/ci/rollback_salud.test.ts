@@ -28,6 +28,10 @@ describe('rollback-production: verificación de salud', () => {
     // Deployment viejo anterior al campo `migracion`.
     expect(acepta({ status: 'ok', checks: { db: 'ok' } })).toBe(true);
   });
+  // OP40-01 (cierre100, ola 10): crons apagados a propósito por interruptor son neutros.
+  it.skipIf(!hayJq)('acepta crons=apagado (interruptor) junto a migraciones adelante', () => {
+    expect(acepta({ ...sano, status: 'degraded', migracion: { atras: 0, adelante: 2 }, checks: { db: 'ok', crons: 'apagado' } })).toBe(true);
+  });
   it.skipIf(!hayJq)('sigue fallando con db caída, base atrás, crons degradados o cuerpo ajeno', () => {
     expect(acepta({ ...sano, status: 'fail', checks: { db: 'fail', crons: 'ok' } })).toBe(false);
     expect(acepta({ ...sano, status: 'degraded', migracion: { atras: 2, adelante: 0 } })).toBe(false);

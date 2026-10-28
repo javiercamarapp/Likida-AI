@@ -500,3 +500,71 @@ describe('A37-L-12: un parpadeo de Redis no pinta rojo el pulso', () => {
     expect(llamadasRateLimit[0][3]).toEqual({ fallaCerrado: false });
   });
 });
+
+// OP40-01 (cierre100, ola 10): un cron apagado a propósito (latido `saltado`
+// con `{interruptor}`) es estado NEUTRO, no avería. Con A4/A5 apagados el rojo
+// era permanente y borraba la señal de un cron muerto de verdad.
+describe('OP40-01: cron apagado por interruptor no tumba el health', () => {
+  const ahora = () => new Date().toISOString();
+
+  it.each(['global', 'agente:conductores', 'agente:liquidacion'])(
+    'saltado por «%s» ⇒ 200, checks.crons=apagado y sin correo «Urgente»',
+    async (interruptor) => {
+      dbFalla = false; permitido = true;
+      alertarOperador.mockClear();
+      latidos = frescos({ id: 'conductor-hitos', ultimo_latido: ahora(), estado: 'saltado', detalle: { interruptor } });
+      const r = await GET(peticion());
+      expect(r.status).toBe(200);
+      const c = await r.json();
+      expect(c).toMatchObject({ ok: true, status: 'ok', checks: { db: 'ok', crons: 'apagado' } });
+      expect(alertarOperador).not.toHaveBeenCalled();
+    },
+  );
+
+  it('varios apagados por interruptor a la vez siguen siendo ok', async () => {
+    dbFalla = false; permitido = true;
+    alertarOperador.mockClear();
+    latidos = frescos(
+      { id: 'conductor-hitos', ultimo_latido: ahora(), estado: 'saltado', detalle: { interruptor: 'agente:conductores' } },
+      { id: 'peajes', ultimo_latido: ahora(), estado: 'saltado', detalle: { interruptor: 'agente:peajes' } },
+      { id: 'liquidaciones-externas', ultimo_latido: ahora(), estado: 'saltado', detalle: { interruptor: 'global' } },
+    );
+    const r = await GET(peticion());
+    expect(r.status).toBe(200);
+    expect((await r.json()).checks.crons).toBe('apagado');
+    expect(alertarOperador).not.toHaveBeenCalled();
+  });
+
+  it('un cron MUERTO de verdad sigue poniendo el health rojo aunque otro esté apagado', async () => {
+    dbFalla = false; permitido = true;
+    alertarOperador.mockClear();
+    const viejo = new Date(Date.now() - 3 * 86_400_000).toISOString();
+    latidos = frescos(
+      { id: 'conductor-hitos', ultimo_latido: ahora(), estado: 'saltado', detalle: { interruptor: 'agente:conductores' } },
+      { id: 'facturar', ultimo_latido: viejo, estado: 'ok' },
+    );
+    const r = await GET(peticion());
+    expect(r.status).toBe(503);
+    expect((await r.json()).checks.crons).toBe('degraded');
+    expect(alertarOperador).toHaveBeenCalledWith('cron.sin_latido', expect.objectContaining({ error: expect.stringContaining('facturar') }));
+  });
+
+  it('una regresión (fallo) junto a un apagado sigue siendo rojo', async () => {
+    dbFalla = false; permitido = true;
+    alertarOperador.mockClear();
+    latidos = frescos(
+      { id: 'conductor-hitos', ultimo_latido: ahora(), estado: 'saltado', detalle: { interruptor: 'global' } },
+      { id: 'gps', ultimo_latido: ahora(), estado: 'fallo' },
+    );
+    const r = await GET(peticion());
+    expect(r.status).toBe(503);
+    expect(alertarOperador).toHaveBeenCalledWith('cron.estado_no_ok', expect.objectContaining({ error: expect.stringContaining('gps') }));
+  });
+
+  it('un `saltado` SIN interruptor (sin explicación) sigue sin ser apagado a propósito', async () => {
+    dbFalla = false; permitido = true;
+    latidos = frescos({ id: 'gps', ultimo_latido: ahora(), estado: 'saltado', detalle: {} });
+    const r = await GET(peticion());
+    expect(r.status).toBe(503);
+  });
+});
