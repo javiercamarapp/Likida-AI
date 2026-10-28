@@ -149,7 +149,7 @@ describe('captura de las pantallas del carril C', () => {
         writeFileSync(archivo, html);
         for (const tema of ['claro', 'oscuro'] as const) {
           await page.goto('file://' + archivo);
-          await page.evaluate(async (t) => { document.documentElement.setAttribute('data-theme', t === 'claro' ? 'light' : 'dark'); await document.fonts.ready; }, tema);
+          await page.evaluate(async (t: string) => { document.documentElement.setAttribute('data-theme', t === 'claro' ? 'light' : 'dark'); await document.fonts.ready; }, tema);
           await page.waitForTimeout(40);
           await page.screenshot({ path: path.join(OUT, `${id}__${w}__${tema}.png`), fullPage: w === 412 });
         }
@@ -167,9 +167,9 @@ describe('captura de las pantallas del carril C', () => {
             const archivo = path.join(TRABAJO, 'vistas', `tour-${pasoId}.doc.html`);
             writeFileSync(archivo, doc(base));
             await page.goto('file://' + archivo);
-            await page.evaluate(async (t) => { document.documentElement.setAttribute('data-theme', t === 'claro' ? 'light' : 'dark'); await document.fonts.ready; }, tema);
+            await page.evaluate(async (t: string) => { document.documentElement.setAttribute('data-theme', t === 'claro' ? 'light' : 'dark'); await document.fonts.ready; }, tema);
             const rect: Rect | null = paso.ancla
-              ? await page.evaluate((a) => {
+              ? await page.evaluate((a: string) => {
                 const el = [...document.querySelectorAll(`[data-tour="${a}"]`)].find((e) => (e as HTMLElement).offsetParent !== null) as HTMLElement | undefined;
                 if (!el) return null;
                 const r = el.getBoundingClientRect();
@@ -191,10 +191,10 @@ describe('captura de las pantallas del carril C', () => {
                 </div>,
               );
             };
-            await page.evaluate((m) => document.body.insertAdjacentHTML('beforeend', m), armar({ w: 340, h: 260 }));
+            await page.evaluate((m: string) => document.body.insertAdjacentHTML('beforeend', m), armar({ w: 340, h: 260 }));
             const medido = await page.evaluate(() => { const g = document.querySelector('.rv-tour__globo')!.getBoundingClientRect(); return { w: g.width, h: g.height }; });
             await page.evaluate(() => document.querySelector('.rv-tour')!.remove());
-            await page.evaluate((m) => document.body.insertAdjacentHTML('beforeend', m), armar(medido));
+            await page.evaluate((m: string) => document.body.insertAdjacentHTML('beforeend', m), armar(medido));
             await page.waitForTimeout(40);
             await page.screenshot({ path: path.join(OUT, `tour-${String(i + 1).padStart(2, '0')}-${pasoId}__${w}__${tema}.png`) });
           }

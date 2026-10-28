@@ -165,32 +165,32 @@ function pasoEquipo(s: SenalesAsistente, d: Declaraciones): Borrador {
 
 function pasoTms(s: SenalesAsistente): Borrador {
   const archivo: EstadoAsistente = s.archivosRecibidos === null ? 'sin_dato' : s.archivosRecibidos > 0 ? 'listo' : 'pendiente';
-  let api: EstadoAsistente;
+  let viaApi: EstadoAsistente;
   let apiDetalle: string;
   let causa: string | null = null;
-  if (s.tms === null) { api = 'sin_dato'; apiDetalle = 'No pudimos revisar la conexión ahora. Vuelve a cargar en un minuto.'; }
-  else if (s.tms === 'sin_credencial') { api = 'en_espera'; apiDetalle = 'Todavía no hay acceso a la API de tu sistema. Es una mejora: mientras tanto sigues con archivos.'; }
-  else if (!s.tms.activa) { api = 'omitido'; apiDetalle = 'La credencial está desactivada.'; }
-  else if (s.tms.ultimoError) { api = 'atencion'; causa = s.tms.ultimoError; apiDetalle = 'La última prueba falló. Casi siempre es un tema de red o de permisos, no de tu cuenta.'; }
-  else if (s.tms.probadaEn) { api = 'listo'; apiDetalle = 'La prueba contra tu sistema salió bien.'; }
-  else { api = 'en_curso'; apiDetalle = 'Acceso guardado, pero sin probar contra tu sistema todavía.'; }
+  if (s.tms === null) { viaApi = 'sin_dato'; apiDetalle = 'No pudimos revisar la conexión ahora. Vuelve a cargar en un minuto.'; }
+  else if (s.tms === 'sin_credencial') { viaApi = 'en_espera'; apiDetalle = 'Todavía no hay acceso a la API de tu sistema. Es una mejora: mientras tanto sigues con archivos.'; }
+  else if (!s.tms.activa) { viaApi = 'omitido'; apiDetalle = 'La credencial está desactivada.'; }
+  else if (s.tms.ultimoError) { viaApi = 'atencion'; causa = s.tms.ultimoError; apiDetalle = 'La última prueba falló. Casi siempre es un tema de red o de permisos, no de tu cuenta.'; }
+  else if (s.tms.probadaEn) { viaApi = 'listo'; apiDetalle = 'La prueba contra tu sistema salió bien.'; }
+  else { viaApi = 'en_curso'; apiDetalle = 'Acceso guardado, pero sin probar contra tu sistema todavía.'; }
 
   const subpasos: Subpaso[] = [
     {
       id: 'archivo', titulo: 'Entregar archivo de muestra', estado: archivo,
       detalle: archivo === 'listo' ? 'Ya recibimos un archivo y lo estamos leyendo.' : archivo === 'sin_dato' ? 'No pudimos revisar si ya llegó un archivo.' : 'Un desglose de muestra exportado de tu sistema. Con eso arrancamos hoy mismo.',
     },
-    { id: 'api', titulo: 'Conexión directa a tu sistema (API)', estado: api, detalle: apiDetalle },
+    { id: 'api', titulo: 'Conexión directa a tu sistema (API)', estado: viaApi, detalle: apiDetalle },
   ];
 
   let estado: EstadoAsistente;
-  if (archivo === 'listo' || api === 'listo') estado = 'listo';
-  else if (api === 'atencion') estado = 'atencion';
-  else if (archivo === 'sin_dato' && api === 'sin_dato') estado = 'sin_dato';
-  else if (api === 'en_curso') estado = 'en_curso';
+  if (archivo === 'listo' || viaApi === 'listo') estado = 'listo';
+  else if (viaApi === 'atencion') estado = 'atencion';
+  else if (archivo === 'sin_dato' && viaApi === 'sin_dato') estado = 'sin_dato';
+  else if (viaApi === 'en_curso') estado = 'en_curso';
   else estado = 'pendiente';
 
-  const evid = archivo === 'listo' ? medido('Llegó al menos un archivo de muestra.') : api === 'listo' ? medido('La prueba de la conexión salió bien.') : ninguna();
+  const evid = archivo === 'listo' ? medido('Llegó al menos un archivo de muestra.') : viaApi === 'listo' ? medido('La prueba de la conexión salió bien.') : ninguna();
   return {
     id: 'tms', titulo: 'Tu sistema de transporte',
     resumen: 'De dónde salen los viajes: por archivo hoy, por conexión directa cuando tu área de sistemas la libere.',
@@ -206,7 +206,7 @@ function pasoCorreo(s: SenalesAsistente, d: Declaraciones): Borrador {
   let estado: EstadoAsistente;
   let responsable: ClaveResponsable = 'tu_lado';
   let ev = ninguna();
-  let resumen = 'Que los desgloses lleguen al correo de cada operador.';
+  const resumen = 'Que los desgloses lleguen al correo de cada operador.';
   const sub: Subpaso[] = [];
 
   const plataforma = s.correoPlataforma;
