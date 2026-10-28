@@ -19,6 +19,7 @@ import {
   guardarPullPeajes, apagarPullPeajes, borrarCredencialPull,
   listarTarifas, confirmarTarifa, importarTarifasArchivo,
   leerConfigPeajes, guardarUmbralesPeajes, guardarConfigAvisos,
+  leerVinculosActivo, guardarVinculosActivo, resumenFuenteViajes, vincularDesglose,
   type ResultadoImportacionCatalogo,
 } from '@/lib/likida/peajes/datos';
 import { ORIGENES_TARIFA, type OrigenTarifa } from '@/lib/likida/peajes/tarifario_archivo';
@@ -122,7 +123,9 @@ export default async function PaginaConfiguracionPeajes({
 
   const superficie = await superficiePeajesDeTenant(tenantId);
   const secreto = secretoMaestro();
-  const [tarifas, configPeajes, reglasCasetas, tagsBaja, excepcionesUnidad, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, buzon, archivos, entradas] = await Promise.all([
+  const [vinculosActivo, fuenteViajes, tarifas, configPeajes, reglasCasetas, tagsBaja, excepcionesUnidad, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, buzon, archivos, entradas] = await Promise.all([
+    safe(() => leerVinculosActivo(tenantId)),
+    safe(() => resumenFuenteViajes(tenantId)),
     safe(() => listarTarifas(tenantId)),
     safe(() => leerConfigPeajes(tenantId)),
     safe(() => listarReglasCasetas(tenantId)),
@@ -440,6 +443,24 @@ export default async function PaginaConfiguracionPeajes({
     return volverConfig(sufijo, r.ok ? (r.telefono ? 'Destinatario guardado.' : 'Sin destinatario: los avisos solo se verán en pantalla.') : `error:${r.motivo}`);
   }
 
+  // ── Cruce de cobros con viajes (T-A2-21): el interruptor por flota ──
+  async function accionGuardarCruceViajes(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId, 'administracion');
+    if (no) return volverConfig(sufijo, `error:${no}`);
+    const activo = String(fd.get('activo') ?? '') === '1';
+    if (!(await guardarVinculosActivo(tenantId, activo))) return volverConfig(sufijo, 'error:No se pudo guardar el interruptor. Inténtalo de nuevo.');
+    if (!activo) return volverConfig(sufijo, 'Cruce con viajes apagado: los archivos que se concilien no se ligan a viajes.');
+    // Al encenderlo se recalcula el último archivo, para no esperar al siguiente corte. No lanza; si falla, el interruptor ya quedó guardado.
+    let ultimo: Awaited<ReturnType<typeof listarDesgloses>> = [];
+    try { ultimo = await listarDesgloses(tenantId, 1); } catch { /* sin último archivo: solo se enciende */ }
+    const id = ultimo[0]?.desgloseId as string | undefined;
+    if (!id) return volverConfig(sufijo, 'Cruce con viajes encendido. Se aplica al siguiente archivo que se concilie.');
+    const r = await vincularDesglose(tenantId, id);
+    if (r.estado === 'ok') return volverConfig(sufijo, `Cruce con viajes encendido. Último archivo: ${r.ligados} ligado(s), ${r.ambiguos} ambiguo(s), ${r.conflictos} en conflicto, ${r.sinViaje} sin viaje, ${r.sinUnidad} sin unidad.`);
+    return volverConfig(sufijo, 'Cruce con viajes encendido, pero no se pudo recalcular el último archivo: se calculará con el siguiente corte.');
+  }
+
   // ── Mapeo de columnas ──
   async function accionGuardarMapeo(fd: FormData) {
     'use server';
@@ -493,6 +514,7 @@ export default async function PaginaConfiguracionPeajes({
           guardarExcepcionUnidad: accionGuardarExcepcionUnidad, quitarExcepcionUnidad: accionQuitarExcepcionUnidad,
         },
       }}
+      cruceViajes={{ activo: vinculosActivo, fuente: fuenteViajes, puedeAdministrar, acciones: { guardarCruceViajes: accionGuardarCruceViajes } }}
       tarifario={{ tarifas, acciones: { importarTarifas: accionImportarTarifas, confirmarTarifa: accionConfirmarTarifa, sugerirPasada: accionSugerirPasada } }}
       umbralesAvisos={{
         config: configPeajes, puedeAdministrar,

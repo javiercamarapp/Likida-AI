@@ -25,7 +25,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { hoyMx, mxn } from '@/lib/formato';
+import { hoyMx, mxn, OFFSET_MX } from '@/lib/formato';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { acotada } from '../presupuesto';
@@ -72,6 +72,7 @@ import {
   type EstadoConciliado, type MotivoVerificacion, type ResumenVerificacion,
 } from './verificacion';
 import { vincularPorIcident, type CruceIcident } from './vincular_viaje';
+import { posicionesConDespacho, type FilaPosicionDespacho } from './fuente_despacho';
 import { desdeTablaViajeLocal, type ViajeFuente, type PosicionConViaje, type RangoFechas } from './viajes_fuente';
 import { esFechaReal } from './fecha_real';
 
@@ -1884,6 +1885,21 @@ export async function guardarVinculosActivo(tenantId: string, activo: boolean): 
   return !error;
 }
 
+/** Lo que la flota ya tiene cargado y alimenta el cruce con viajes. Lanza ante error de base. */
+export async function resumenFuenteViajes(tenantId: string): Promise<{ viajes: number; viajesConDespacho: number; posicionesConDespacho: number }> {
+  const contar = async (consulta: string, q: PromiseLike<RespuestaPg<unknown[]>>): Promise<number> => {
+    const res = await q;
+    if (res.error) throw new Error(`resumenFuenteViajes(${consulta}): ${res.error.message}`);
+    return res.count ?? 0;
+  };
+  const [viajes, viajesConDespacho, posicionesConDespacho] = await Promise.all([
+    contar('viajes', acotada(supabaseAdmin().from('viaje').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId), 'peajes.fuente_viajes.viajes')),
+    contar('viajes_despacho', acotada(supabaseAdmin().from('viaje').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).not('despacho_ref', 'is', null), 'peajes.fuente_viajes.despacho')),
+    contar('posiciones_despacho', acotada(supabaseAdmin().from('posicion').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).not('despacho_ref', 'is', null), 'peajes.fuente_viajes.posiciones')),
+  ]);
+  return { viajes, viajesConDespacho, posicionesConDespacho };
+}
+
 export interface VinculoGuardado {
   lineaId: string;
   estado: 'ligado' | 'ambiguo' | 'sin_viaje' | 'sin_unidad' | 'conflicto';
@@ -3098,10 +3114,52 @@ export interface FuenteVinculos {
   cargar(tenantId: string, rango: RangoFechas): Promise<{ viajes: ViajeFuente[]; posiciones: PosicionConViaje[] }>;
 }
 
+/**
+ * Las posiciones locales que traen `despacho_ref` (0780) en el rango, como `PosicionConViaje`: el nombre de la
+ * caseta se deduce de las coordenadas del catálogo (ver `fuente_despacho.ts`). Sin posiciones con despacho, o sin
+ * casetas con coordenadas, devuelve `[]` y el cruce sigue por unidad + ventana. Solo lectura.
+ */
+export async function posicionesLocalesConDespacho(tenantId: string, rango: RangoFechas): Promise<PosicionConViaje[]> {
+  // Holgura de un día a cada lado: la hora local de México va 6 h detrás de UTC.
+  const desde = `${rango.desde}T00:00:00${OFFSET_MX}`;
+  const hasta = `${rango.hasta}T23:59:59${OFFSET_MX}`;
+  const filas = await traerTodo<Record<string, unknown>>(
+    (d, h) => acotada(supabaseAdmin().from('posicion')
+      .select('id, unidad_id, lat, lng, medida_en, despacho_ref', conteo(d))
+      .eq('tenant_id', tenantId).not('despacho_ref', 'is', null)
+      .gte('medida_en', desde).lte('medida_en', hasta).order('id').range(d, h), 'peajes.vinculos.posiciones'),
+    'peajes.vinculos.posiciones',
+  );
+  if (filas.length === 0) return [];
+  const casetas = (await listarCasetas(tenantId, true))
+    .filter((c) => c.lat !== null && c.lng !== null)
+    .map((c) => ({ nombre: c.nombre, lat: c.lat as number, lng: c.lng as number, radioM: c.radioM }));
+  if (casetas.length === 0) {
+    logger.warn('peajes.vinculos.posiciones_sin_casetas_con_coordenadas', { tenant: tenantId, posiciones: filas.length });
+    return [];
+  }
+  const unidadIds = [...new Set(filas.map((f) => f.unidad_id).filter((x): x is string => typeof x === 'string'))];
+  const numeros = new Map<string, string>();
+  const us = await traerPorIds<{ id: unknown; numero_economico: unknown }>(
+    unidadIds,
+    (tanda) => acotada(supabaseAdmin().from('unidad').select('id, numero_economico').eq('tenant_id', tenantId).in('id', tanda), 'peajes.vinculos.posiciones_unidades'),
+    'peajes.vinculos.posiciones_unidades',
+  );
+  for (const u of us) if (typeof u.id === 'string' && typeof u.numero_economico === 'string') numeros.set(u.id, u.numero_economico);
+  const normalizadas: FilaPosicionDespacho[] = filas.flatMap((f) => (
+    typeof f.unidad_id === 'string' && typeof f.despacho_ref === 'string' && typeof f.medida_en === 'string'
+      ? [{ unidadId: f.unidad_id, lat: Number(f.lat), lng: Number(f.lng), medidaEn: f.medida_en, despachoRef: f.despacho_ref }] : []
+  ));
+  const { posiciones, descartadas } = posicionesConDespacho(normalizadas, numeros, casetas);
+  if (posiciones.length < filas.length) logger.info('peajes.vinculos.posiciones_descartadas', { tenant: tenantId, ...descartadas });
+  return posiciones;
+}
+
 export const fuenteLocal: FuenteVinculos = {
   async cargar(tenantId, rango) {
     const { viajes } = await desdeTablaViajeLocal(tenantId, rango);
-    return { viajes, posiciones: [] };
+    const posiciones = await posicionesLocalesConDespacho(tenantId, rango);
+    return { viajes, posiciones };
   },
 };
 
@@ -3123,12 +3181,21 @@ export async function vincularDesglose(
   try {
     if (!(await leerVinculosActivo(tenantId))) return { estado: 'apagado' };
 
-    const lineas = await traerTodo<Record<string, unknown>>(
+    const leerLineas = (columnas: string) => traerTodo<Record<string, unknown>>(
       (d, h) => acotada(supabaseAdmin().from('desglose_peaje_linea')
-        .select('id, indice, fecha, caseta, hora, unidad_archivo', conteo(d))
+        .select(columnas, conteo(d))
         .eq('tenant_id', tenantId).eq('desglose_id', desgloseId).order('indice').range(d, h), 'peajes.vinculos.lineas'),
       'peajes.vinculos.lineas',
     );
+    // El Icident del cobro (0935). Si la migración aún no está aplicada, se liga como antes (unidad + ventana).
+    let lineas: Record<string, unknown>[];
+    try {
+      lineas = await leerLineas('id, indice, fecha, caseta, hora, unidad_archivo, icident');
+    } catch (e) {
+      if (!/icident/i.test(e instanceof Error ? e.message : String(e))) throw e;
+      logger.warn('peajes.vinculos.icident_sin_migracion', { tenant: tenantId, desglose: desgloseId });
+      lineas = await leerLineas('id, indice, fecha, caseta, hora, unidad_archivo');
+    }
     const resumen = { lineas: lineas.length, ligados: 0, ambiguos: 0, sinViaje: 0, sinUnidad: 0, conflictos: 0 };
     if (lineas.length === 0) return { estado: 'ok', ...resumen };
 
@@ -3138,6 +3205,7 @@ export async function vincularDesglose(
       fecha: typeof l.fecha === 'string' ? l.fecha.slice(0, 10) : '',
       caseta: typeof l.caseta === 'string' ? l.caseta : null,
       hora: typeof l.hora === 'string' ? l.hora : null,
+      icident: typeof l.icident === 'string' ? l.icident : null,
     }));
     const fechas = cruces.map((c) => c.fecha).filter((f) => FECHA.test(f)).sort();
     // Sin una sola fecha válida no hay rango que buscar: todas caen en «sin_viaje» con su motivo.
