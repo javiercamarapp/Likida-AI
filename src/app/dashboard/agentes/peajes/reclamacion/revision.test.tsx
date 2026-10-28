@@ -114,6 +114,14 @@ describe('el seguimiento de reclamos en pantalla', () => {
     expect(html).toContain('Folio P-123');
     expect(html).toContain('por acreditar $16,000.00');
   });
+  it('A39-peajes-01: un reclamo solo preparado no entra en «reclamado» ni «por acreditar»; se rotula aparte', () => {
+    const hoy = '2026-07-01';
+    const reclamos = [vista({ id: 'e', montoReclamado: 10_000 }, hoy), vista({ id: 'p', estado: 'preparado', montoReclamado: 50_000, enviadoEn: null }, hoy)];
+    const html = pintar(extras(null, { seguimiento: { reclamos, resumen: resumirSeguimiento(reclamos, hoy) } }), 'sin_desglose');
+    expect(html).toContain('por acreditar $10,000.00');
+    expect(html).toContain('1 preparados sin enviar');
+    expect(html).toContain('$50,000.00');
+  });
   it('un reclamo preparado ofrece marcarlo enviado; uno cerrado no ofrece nada', () => {
     const hoy = '2026-07-01';
     const html = pintar(extras(null, { seguimiento: { reclamos: [vista({ id: 'p', estado: 'preparado', enviadoEn: null }, hoy), vista({ id: 'c', estado: 'acreditado', montoAcreditado: 10_000 }, hoy)], resumen: resumirSeguimiento([], hoy) } }), 'sin_desglose');
