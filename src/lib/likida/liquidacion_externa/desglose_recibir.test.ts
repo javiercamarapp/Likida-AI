@@ -193,7 +193,7 @@ describe('recibirDesglose: idempotencia y correcciones', () => {
     expect(b.liquidaciones[1]).toMatchObject({ claveExterna: 'BIT-T1-B-0001-R1', total: 4000 });
     expect(b.subidas).toHaveLength(2); // xlsx nuevo
     expect(b.entregas.filter((e) => e.liquidacionExternaId === 'liq-2')).toHaveLength(4);
-    expect(b.resueltas).toEqual(['BIT-T1-B-0001|correccion_pendiente']);
+    expect(b.resueltas.filter((x) => x.endsWith('|correccion_pendiente'))).toEqual(['BIT-T1-B-0001|correccion_pendiente']);
     expect(b.detallesEvento[1]).toMatchObject({ correccion_de: 'BIT-T1-B-0001', motivo_correccion: 'nómina corregida en origen', actor: 'llave:administracion' });
     expect(b.excepciones.filter((e) => e.tipo === 'correccion_pendiente')).toHaveLength(0);
     // A39-A1-01: la corrección comparte bitácora, terminal y número con la original; los índices únicos de la base (0929) se
@@ -319,6 +319,34 @@ describe('recibirDesglose: guardas previas al envío', () => {
     await recibirDesglose(TENANT, desglose(), b.deps);
     expect(b.liquidaciones[0].total).toBe(4850);
     expect(b.entregas).toHaveLength(4);
+  });
+});
+
+describe('recibirDesglose: sin póliza no se envía (también por push/archivo)', () => {
+  it('poliza null => estado sin_poliza, excepción abierta y NADA guardado ni subido ni enviado', async () => {
+    const b = banco();
+    const r = await recibirDesglose(TENANT, desglose({ poliza: null }), b.deps);
+    expect(r).toEqual({ estado: 'sin_poliza', claveExterna: 'BIT-T1-B-0001' });
+    expect(b.liquidaciones).toHaveLength(0);
+    expect(b.subidas).toHaveLength(0);
+    expect(b.entregas).toHaveLength(0);
+    expect(b.excepciones).toEqual([{ clave: 'BIT-T1-B-0001', tipo: 'sin_poliza', detalle: { bitacora: 'B-0001', desde: f.desde } }]);
+  });
+
+  it('cuando la misma bitácora llega CON póliza entra normal (no queda «idempotente» contra una fila vacía) y cierra la excepción', async () => {
+    const b = banco();
+    await recibirDesglose(TENANT, desglose({ poliza: null }), b.deps);
+    const r = await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(r.estado).toBe('creada');
+    expect(b.entregas).toHaveLength(4);
+    expect(b.resueltas).toContain('BIT-T1-B-0001|sin_poliza');
+  });
+
+  it('con póliza vacía también se aparta; con póliza el flujo de siempre no cambia', async () => {
+    const b = banco();
+    const r = await recibirDesglose(TENANT, desglose({ poliza: '' }), b.deps);
+    expect(r.estado).toBe('sin_poliza');
+    expect(b.liquidaciones).toHaveLength(0);
   });
 });
 

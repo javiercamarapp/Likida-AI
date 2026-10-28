@@ -117,7 +117,12 @@ export type ResultadoDesglose =
   | { estado: 'idempotente'; liquidacionId: string; claveExterna: string }
   /** Misma clave, otro contenido: nada se sobrescribió ni se envió; hay una excepción abierta. */
   | { estado: 'correccion_pendiente'; liquidacionId: string; claveExterna: string }
-  | { estado: 'operador_no_encontrado'; claveExterna: string };
+  | { estado: 'operador_no_encontrado'; claveExterna: string }
+  /**
+   * Sin póliza no se envía (c3cc57d3 68:21), también por push/archivo: no se guarda NADA (así, cuando la póliza llegue, la
+   * misma clave entra normal) y queda abierta la excepción `sin_poliza`, que se cierra sola cuando llega con póliza.
+   */
+  | { estado: 'sin_poliza'; claveExterna: string };
 
 export interface OpcionesDesglose {
   /** `sistema_origen` que queda en la liquidación. */
@@ -284,6 +289,14 @@ export async function recibirDesglose(
     return { estado: 'correccion_pendiente', liquidacionId: existente.id, claveExterna };
   }
 
+  // (2b) sin póliza no se envía (misma regla que el pull). Nada se guarda: la póliza no entra en la huella, y una fila
+  // guardada ahora haría «idempotente» a la misma bitácora cuando la póliza llegue.
+  if (d.poliza === null || d.poliza === '') {
+    await deps.abrirExcepcion(tenantId, claveExterna, 'sin_poliza', { bitacora: d.bitacora, desde: d.desde }, ahora);
+    logger.warn('liqcorreo.sin_poliza', { clave: claveExterna });
+    return { estado: 'sin_poliza', claveExterna };
+  }
+
   // (3) operador
   let operador: OperadorDestino;
   try {
@@ -375,6 +388,13 @@ export async function recibirDesglose(
     await deps.insertarDesglose(tenantId, { liquidacionExternaId: liquidacionId, ...meta });
     if (!rescate) await deps.registrarEvento(tenantId, liquidacionId, 'recibida', detalleEvento);
     entregas = await deps.insertarEntregas(tenantId, entregasPedidas.map((e) => ({ liquidacionExternaId: liquidacionId, ...e })));
+  }
+
+  // La póliza ya llegó: la excepción `sin_poliza` de esta clave (si la hubo) se cierra sola.
+  if (deps.resolverExcepciones) {
+    try { await deps.resolverExcepciones(tenantId, claveExterna, 'sin_poliza', ahora); } catch (e) {
+      logger.warn('liqcorreo.sin_poliza_no_resolvio', { clave: claveExterna, err: e instanceof Error ? e.message : String(e) });
+    }
   }
 
   // La corrección ya salió (o quedó retenida con su excepción): la pendiente de la original se cierra.
