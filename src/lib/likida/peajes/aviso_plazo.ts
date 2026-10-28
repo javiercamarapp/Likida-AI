@@ -1,5 +1,5 @@
 import type { GrupoPorVencer, CandidatoPlazo, OpcionesPlazo } from './plazo_reclamo';
-import { clasificarPlazos } from './plazo_reclamo';
+import { clasificarPlazos, estadoPlazo } from './plazo_reclamo';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 
@@ -23,10 +23,13 @@ import { codigoDeError } from '@/lib/observability/sentry';
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface DepsAvisoPlazo {
-  /** Reserva el aviso (desglose, umbral). `false` si ya estaba reservado/enviado. */
-  reservar: (tenantId: string, desgloseId: string, umbral: number) => Promise<boolean>;
+  /**
+   * Reserva el aviso (desglose, umbral, grupo). `grupo` identifica QUÉ cobros tiene el grupo (A2P-02: el día límite más lejano):
+   * un grupo al que entran cruces nuevos tiene otro `grupo` y vuelve a avisar. `false` si ya estaba reservado/enviado.
+   */
+  reservar: (tenantId: string, desgloseId: string, umbral: number, grupo?: string) => Promise<boolean>;
   /** Devuelve la reserva cuando el envío falló, para reintentar. */
-  liberar: (tenantId: string, desgloseId: string, umbral: number) => Promise<void>;
+  liberar: (tenantId: string, desgloseId: string, umbral: number, grupo?: string) => Promise<void>;
   telefono: (tenantId: string) => Promise<string | null>;
   enviar: (telefono: string, texto: string) => Promise<boolean>;
   /** Liga de la pantalla de peajes. */
@@ -45,6 +48,22 @@ export interface ResumenAvisoPlazo {
 
 const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
 const dinero = (n: number) => `$${n.toFixed(2)}`;
+
+/** Huella corta (FNV-1a) de una lista de claves: identifica el CONJUNTO de cobros vencidos sin guardarlo. */
+function huella(claves: readonly string[]): string {
+  let h = 0x811c9dc5;
+  for (const c of [...claves].sort()) {
+    for (let i = 0; i < c.length; i++) { h ^= c.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+    h ^= 0x7c; h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
+/** El texto del aviso de lo que YA se venció (puro, para probarlo). */
+export function textoAvisoVencidos(v: { cruces: number; monto: number }, liga: string): string {
+  return `⏰ Peajes: se vencieron ${plural(v.cruces, 'cobro', 'cobros')} (${dinero(v.monto)} en total) sin reclamar: pasó el plazo de 3 meses del proveedor y ya no se pueden reclamar `
+    + `(aún sin confirmar por escrito con el proveedor). Es un resumen para que lo sepas, no afirma que el cobro fuera indebido. Revísalo: ${liga}`;
+}
 
 /** El texto del aviso (puro, para probarlo). */
 export function textoAvisoPlazo(g: Pick<GrupoPorVencer, 'cruces' | 'monto' | 'diasMinimos' | 'fechaLimiteMasProxima'>, liga: string): string {
@@ -67,25 +86,43 @@ export async function avisarPlazosReclamo(
   try { clase = clasificarPlazos(candidatos, hoy, opciones); } catch (e) { r.fallidos++; logger.error('cron.peajes.plazos_fallo', { tenant: tenantId, paso: 'clasificar', codigo: codigoDeError(e) }); return r; }
   r.vencidosCruces = clase.vencidos.cruces;
   r.vencidosMonto = clase.vencidos.monto;
-  if (clase.porVencer.length === 0) return r;
+  // A2P-02: el día límite más lejano de cada grupo identifica sus cobros: un cruce nuevo que entra al umbral lo mueve y el grupo vuelve a avisar.
+  const limiteDe = new Map<string, string>();
+  const vencidosClaves: string[] = [];
+  for (const c of candidatos) {
+    if (c.reclamado) continue;
+    const e = estadoPlazo(c.fechaCruce, hoy, opciones);
+    if (e.estado === 'vencido') { vencidosClaves.push(`${c.desgloseId}#${c.lineaId}`); continue; }
+    const k = `${c.desgloseId}\u0000${c.lineaId}`;
+    limiteDe.set(k, e.fechaLimite);
+  }
+  const tareas: Array<{ desgloseId: string; umbral: number; grupo: string; texto: string }> = [];
+  for (const g of clase.porVencer) {
+    const lejana = g.lineaIds.map((id) => limiteDe.get(`${g.desgloseId}\u0000${id}`) ?? '').sort().at(-1) ?? '';
+    tareas.push({ desgloseId: g.desgloseId, umbral: g.umbral, grupo: lejana, texto: textoAvisoPlazo(g, deps.liga()) });
+  }
+  if (clase.vencidos.cruces > 0) {
+    tareas.push({ desgloseId: 'vencidos', umbral: 0, grupo: huella(vencidosClaves), texto: textoAvisoVencidos(clase.vencidos, deps.liga()) });
+  }
+  if (tareas.length === 0) return r;
 
   let tel: string | null;
-  try { tel = await deps.telefono(tenantId); } catch (e) { r.fallidos += clase.porVencer.length; logger.error('cron.peajes.plazos_fallo', { tenant: tenantId, paso: 'destinatario', codigo: codigoDeError(e) }); return r; }
-  if (!tel) { r.sinDestinatario = clase.porVencer.length; return r; }
+  try { tel = await deps.telefono(tenantId); } catch (e) { r.fallidos += tareas.length; logger.error('cron.peajes.plazos_fallo', { tenant: tenantId, paso: 'destinatario', codigo: codigoDeError(e) }); return r; }
+  if (!tel) { r.sinDestinatario = tareas.length; return r; }
 
-  for (const g of clase.porVencer) {
+  for (const g of tareas) {
     let reservado = false;
     try {
-      reservado = await deps.reservar(tenantId, g.desgloseId, g.umbral);
+      reservado = await deps.reservar(tenantId, g.desgloseId, g.umbral, g.grupo);
       if (!reservado) { r.yaAvisados++; continue; }
-      const ok = await deps.enviar(tel, textoAvisoPlazo(g, deps.liga()));
+      const ok = await deps.enviar(tel, g.texto);
       if (ok) { r.enviados++; continue; }
       r.fallidos++;
-      await deps.liberar(tenantId, g.desgloseId, g.umbral);
+      await deps.liberar(tenantId, g.desgloseId, g.umbral, g.grupo);
     } catch (e) {
       r.fallidos++;
       logger.error('cron.peajes.plazos_fallo', { tenant: tenantId, paso: 'aviso', codigo: codigoDeError(e) });
-      if (reservado) { try { await deps.liberar(tenantId, g.desgloseId, g.umbral); } catch { /* el siguiente barrido lo recupera por vencimiento de la reserva */ } }
+      if (reservado) { try { await deps.liberar(tenantId, g.desgloseId, g.umbral, g.grupo); } catch { /* el siguiente barrido lo recupera por vencimiento de la reserva */ } }
     }
   }
   return r;

@@ -27,8 +27,11 @@ import type { CandidatoPlazo } from './plazo_reclamo';
 // Todo lo externo entra por `DepsBarrido` para probarlo sin base ni red. NUNCA lanza.
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Cuántos archivos recientes de una flota se revisan por corrida para el aviso de plazo (cada uno es una revisión completa). */
-export const MAX_DESGLOSES_PLAZO_POR_FLOTA = 6;
+/**
+ * Tope de archivos de una flota que se revisan por corrida para el aviso de plazo (cada uno es una revisión completa). Coincide con el
+ * tope de lectura del repositorio (40): la ventana de 3 meses trae ~9 decenas y TODAS deben evaluarse (A2P-01), de la más vieja a la más nueva.
+ */
+export const MAX_DESGLOSES_PLAZO_POR_FLOTA = 40;
 /** Cuántas flotas se atienden por corrida del cron. */
 export const MAX_FLOTAS_POR_CORRIDA = 5;
 
@@ -60,6 +63,8 @@ export interface ResumenBarridoAvisos {
   sinEvaluar: number;
   /** Cuántas flotas con avisos encendidos hay en total. */
   flotasConAvisos: number;
+  /** A2P-01: archivos de la ventana que ESTA corrida no alcanzó a evaluar para el aviso de plazo (tope o presupuesto de tiempo). */
+  desglosesSinEvaluar: number;
 }
 
 const vacioPlazo = (): ResumenAvisoPlazo => ({ enviados: 0, yaAvisados: 0, sinDestinatario: 0, fallidos: 0, vencidosCruces: 0, vencidosMonto: 0 });
@@ -87,8 +92,8 @@ export function rotarFlotas<T extends { tenantId: string }>(flotas: readonly T[]
   return [...base.slice(inicio), ...base.slice(0, inicio)];
 }
 
-export async function barrerAvisosPeajes(deps: DepsBarrido, opciones: { limiteFlotas?: number; venceEn?: number } = {}): Promise<ResumenBarridoAvisos> {
-  const r: ResumenBarridoAvisos = { flotas: 0, plazo: vacioPlazo(), recordatorios: { enviados: 0, sinDestinatario: 0, fallidos: 0, yaRecordados: 0 }, fallidas: 0, sinEvaluar: 0, flotasConAvisos: 0 };
+export async function barrerAvisosPeajes(deps: DepsBarrido, opciones: { limiteFlotas?: number; venceEn?: number; presupuestoPorDesgloseMs?: number } = {}): Promise<ResumenBarridoAvisos> {
+  const r: ResumenBarridoAvisos = { flotas: 0, plazo: vacioPlazo(), recordatorios: { enviados: 0, sinDestinatario: 0, fallidos: 0, yaRecordados: 0 }, fallidas: 0, sinEvaluar: 0, flotasConAvisos: 0, desglosesSinEvaluar: 0 };
   let flotas: FlotaConAvisos[];
   try { flotas = await deps.flotas(); } catch (e) {
     r.fallidas++;
@@ -134,13 +139,24 @@ export async function barrerAvisosPeajes(deps: DepsBarrido, opciones: { limiteFl
 
       if (f.avisos.interruptores.aviso_plazo && desgloses.length > 0) {
         const candidatos: CandidatoPlazo[] = [];
-        for (const d of desgloses.slice(0, MAX_DESGLOSES_PLAZO_POR_FLOTA)) {
+        // A2P-01: del MÁS VIEJO al más nuevo (el repositorio los entrega del más nuevo al más viejo): el plazo más cercano va primero.
+        const ordenados = [...desgloses].reverse();
+        let evaluados = 0;
+        for (const d of ordenados.slice(0, MAX_DESGLOSES_PLAZO_POR_FLOTA)) {
+          // Con el reloj vencido se corta, pero siempre se evalúa al menos el más viejo.
+          if (evaluados > 0 && opciones.venceEn !== undefined && Date.now() + (opciones.presupuestoPorDesgloseMs ?? 0) >= opciones.venceEn) break;
           candidatos.push(...await deps.candidatosDeDesglose(f.tenantId, d.id));
+          evaluados++;
+        }
+        const sin = ordenados.length - evaluados;
+        if (sin > 0) {
+          r.desglosesSinEvaluar += sin;
+          logger.warn('cron.peajes.avisos_desgloses_sin_evaluar', { tenant: f.tenantId, sinEvaluar: sin, total: ordenados.length });
         }
         let claveP = '';
         const depsP: DepsAvisoPlazo = {
-          reservar: (t, desgloseId, umbral) => { claveP = `${desgloseId}:${umbral}`; return deps.reservar(t, 'plazo', claveP); },
-          liberar: (t, desgloseId, umbral) => deps.liberar(t, 'plazo', `${desgloseId}:${umbral}`),
+          reservar: (t, desgloseId, umbral, grupo) => { claveP = clavePlazo(desgloseId, umbral, grupo); return deps.reservar(t, 'plazo', claveP); },
+          liberar: (t, desgloseId, umbral, grupo) => deps.liberar(t, 'plazo', clavePlazo(desgloseId, umbral, grupo)),
           telefono: destinatario,
           enviar: async (_tel, texto) => {
             const ok = (await enviarPorCanales(deps.canales, {
@@ -164,6 +180,9 @@ export async function barrerAvisosPeajes(deps: DepsBarrido, opciones: { limiteFl
   if (r.sinEvaluar > 0) logger.info('cron.peajes.avisos_barrido_sin_evaluar', { sinEvaluar: r.sinEvaluar, flotasConAvisos: r.flotasConAvisos });
   return r;
 }
+
+/** La clave del sello de un aviso de plazo: archivo, umbral y grupo (día límite más lejano): un grupo con cruces nuevos es otro aviso. */
+const clavePlazo = (desgloseId: string, umbral: number, grupo?: string): string => (grupo ? `${desgloseId}:${umbral}:${grupo}` : `${desgloseId}:${umbral}`);
 
 function contarRecordatorio(r: ResumenBarridoAvisos, estado: EstadoRecordatorio): void {
   if (estado === 'enviado') r.recordatorios.enviados++;
