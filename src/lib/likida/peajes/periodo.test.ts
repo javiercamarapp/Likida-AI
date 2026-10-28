@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  periodoDeNombreArchivo, periodoPorDecenaDominante, periodoPorNoPeriodo, esPeriodoInferido, rotuloOrigenPeriodo, resolverPeriodo, validarPeriodoDeclarado, limitesDelMes, mesAnterior, decenasDelMes, sumarMeses, diasEntre,
+  periodoDeNombreArchivo, UMBRAL_NO_PERIODO, periodoPorDecenaDominante, periodoPorNoPeriodo, esPeriodoInferido, rotuloOrigenPeriodo, resolverPeriodo, validarPeriodoDeclarado, limitesDelMes, mesAnterior, decenasDelMes, sumarMeses, diasEntre,
 } from './periodo';
 
 describe('periodoDeNombreArchivo: el rango ISO del conector del TMS (A2 ola 1)', () => {
@@ -94,6 +94,18 @@ describe('periodoPorDecenaDominante / periodoPorNoPeriodo / resolverPeriodo (inf
     expect(periodoPorNoPeriodo('746', null, dias(11, 20, 100))).toBeNull();
     expect(periodoPorNoPeriodo('abc', ancla, dias(11, 20, 100))).toBeNull();
     expect(periodoPorNoPeriodo(null, ancla, dias(11, 20, 100))).toBeNull();
+  });
+  it('M5 · el No. de periodo exige el MISMO umbral que la decena dominante (≥ 85 %), nunca 50 %: una coincidencia de casualidad no asigna periodo', () => {
+    expect(UMBRAL_NO_PERIODO).toBeGreaterThanOrEqual(0.85);
+    const ancla = { noPeriodo: 745, desde: '2026-09-01' };
+    const mezcla = (dentro: number, fuera: number) => [...dias(11, 20, dentro), ...dias(1, 10, fuera, '2026-10')];
+    expect(periodoPorNoPeriodo('746', ancla, mezcla(55, 45))).toBeNull();   // 55 %: antes (≥ 50 %) se aceptaba
+    expect(periodoPorNoPeriodo('746', ancla, mezcla(80, 20))).toBeNull();   // 80 %
+    expect(periodoPorNoPeriodo('746', ancla, mezcla(84, 16))).toBeNull();   // 84 %
+    expect(periodoPorNoPeriodo('746', ancla, mezcla(85, 15))).toMatchObject({ desde: '2026-09-11', hasta: '2026-09-20', origen: 'no_periodo' });
+    expect(esPeriodoInferido('no_periodo')).toBe(true);                     // y sigue marcado como inferido
+    // sin respaldo suficiente en fechas, resolverPeriodo cae a la decena dominante o a nada, nunca al número solo
+    expect(resolverPeriodo({ nombreArchivo: 'reporte.xlsx', fechas: mezcla(55, 45), noPeriodo: '746', ancla })).toBeNull();
   });
   it('resolverPeriodo: declarado > nombre > No. de periodo > decena dominante > nada; lo inferido se marca como tal', () => {
     const fechas = dias(11, 20, 100);

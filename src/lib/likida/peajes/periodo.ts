@@ -151,8 +151,8 @@ function dentroDe(fechas: readonly (string | null)[], desde: string, hasta: stri
 export const MIN_LINEAS_INFERENCIA = 30;
 /** Fracción de las fechas que debe caer en la decena para llamarla «dominante». */
 export const UMBRAL_DECENA_DOMINANTE = 0.85;
-/** Fracción mínima que debe cuadrar con la decena sacada del «No. de periodo» para aceptarla. */
-export const UMBRAL_NO_PERIODO = 0.5;
+/** Fracción mínima que debe cuadrar con la decena sacada del «No. de periodo» para aceptarla: la MISMA que la decena dominante (la numeración del proveedor no está confirmada; con 50 % una coincidencia de casualidad asignaría un periodo equivocado y movería la regla de extemporáneos y los plazos de reclamo). */
+export const UMBRAL_NO_PERIODO = UMBRAL_DECENA_DOMINANTE;
 
 /**
  * La decena donde cae casi todo el archivo (≥ 85 % de las fechas legibles, con al menos `MIN_LINEAS_INFERENCIA`). Un cobro
@@ -180,8 +180,8 @@ export interface AnclaPeriodo { noPeriodo: number; desde: string }
 
 /**
  * La decena que corresponde a un «No. de periodo» contando decenas desde un archivo ancla de la misma flota. El número es un
- * consecutivo del proveedor que NO se ha confirmado que avance una unidad por decena: por eso solo se acepta si al menos la mitad de las
- * fechas del archivo cae en la decena resultante; si no, `null`.
+ * consecutivo del proveedor que NO se ha confirmado que avance una unidad por decena: por eso solo se acepta si al menos el 85 % de las
+ * fechas del archivo cae en la decena resultante (`UMBRAL_NO_PERIODO`); si no, `null`. Siempre queda marcado como inferido.
  */
 export function periodoPorNoPeriodo(
   noPeriodo: string | null | undefined, ancla: AnclaPeriodo | null | undefined, fechas: readonly (string | null)[],
