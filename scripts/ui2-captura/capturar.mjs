@@ -4,7 +4,7 @@
 // v1        = CSS sin tokens.css, sin data-ui  (línea base)
 // v1-tokens = CSS CON tokens.css, sin data-ui  (invariancia: debe ser idéntico a v1)
 // v2        = CSS con tokens.css y data-ui="v2" puesto sobre el div .tema-neutro (lo que hará dashboard/layout.tsx)
-import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -39,13 +39,16 @@ const ANCHOS = [[1440, 900], [1024, 768], [412, 915]];
 const TEMAS = ['claro', 'oscuro'];
 mkdirSync(dest, { recursive: true });
 
+const cssTexto = readFileSync(path.join(OUT, css), 'utf8') + '\n' + readFileSync(path.join(OUT, 'fuentes.css'), 'utf8');
+const armarDoc = (cuerpo) => `<!doctype html><html lang="es-MX"><head><meta charset="utf-8"><style>${cssTexto}</style></head><body>${cuerpo}</body></html>`;
+
 const browser = await chromium.launch();
 let n = 0;
 for (const [w, h] of ANCHOS) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1, reducedMotion: 'reduce', locale: 'es-MX' });
   const page = await ctx.newPage();
   for (const v of vistas) {
-    const doc = join(OUT, v, css, modo);
+    const doc = armarDoc(readFileSync(path.join(OUT, 'vistas', `${v}.html`), 'utf8'));
     const archivo = path.join(OUT, 'vistas', `${v}.doc.html`);
     writeFileSync(archivo, doc);
     for (const tema of TEMAS) {

@@ -83,7 +83,7 @@ test('recorre todo el recorrido: Siguiente y la acción avanzan, navega de pági
     const paso = PASOS[i];
     await expect(globo(page).getByRole('heading', { name: paso.titulo }), `paso ${i + 1}: ${paso.id}`).toBeVisible();
     expect(await numeroDePaso(page)).toBe(i + 1);
-    if (paso.ruta) await expect(page, `paso ${i + 1} (${paso.id}) debe estar en su página`).toHaveURL(new RegExp(`${paso.ruta.replace(/\//g, '\\/')}(\\?.*)?$`));
+    if (paso.ruta) await expect(page, `paso ${i + 1} (${paso.id}) debe estar en su página`).toHaveURL(new RegExp(`${paso.ruta.replace(/[\\^$.*+?()[\]{}|/]/g, '\\$&')}(\\?.*)?$`));
     if (paso.ancla) await expect(ancla(page, paso.ancla), `ancla estable ${paso.ancla}`).toBeVisible();
 
     if (i === PASOS.length - 1) {

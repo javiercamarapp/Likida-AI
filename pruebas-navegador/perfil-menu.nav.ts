@@ -26,6 +26,9 @@
 import { test, expect, type Page } from './apoyo/fixture';
 import { CORREOS, entrar } from './apoyo/sesion';
 
+/** Escapa TODO metacaracter de regex (incluida la barra invertida) para armar un RegExp desde una ruta. */
+const escaparRegex = (t: string) => t.replace(/[\\^$.*+?()[\]{}|/]/g, '\\$&');
+
 const ROLES = [
   {
     nombre: 'dueño', correo: CORREOS.perfilDueno, ip: '10.77.0.1',
@@ -71,13 +74,13 @@ for (const rol of ROLES) {
         const enlace = page.locator(`aside a[href="${href}"]`).first();
         if (await enlace.isVisible().catch(() => false)) await enlace.click();
         else await page.goto(href);
-        await expect(page, `${rol.nombre}: ${href} rebotó`).toHaveURL(new RegExp(`${href.replace(/\//g, '\\/')}(\\?.*)?$`));
+        await expect(page, `${rol.nombre}: ${href} rebotó`).toHaveURL(new RegExp(`${escaparRegex(href)}(\\?.*)?$`));
         await sana(page);
       }
       for (const href of rol.negadas) {
         await page.goto(href);
         await expect(page, `${rol.nombre}: ${href} debía negarse`).toHaveURL(/\/dashboard(\?.*)?$|\/dashboard\/agentes\/[a-z-]+(\?.*)?$|\/dashboard\/contador(\?.*)?$/);
-        await expect(page).not.toHaveURL(new RegExp(`${href.replace(/\//g, '\\/')}$`));
+        await expect(page).not.toHaveURL(new RegExp(`${escaparRegex(href)}$`));
       }
       expect(errores).toEqual([]);
     } finally {
