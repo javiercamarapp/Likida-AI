@@ -17,7 +17,7 @@ vi.mock('./liquidacion_externa/repo_correo', () => ({ leerConfigCorreo: async ()
 function cadena(tabla: string) {
   const ops: Op[] = [];
   const nodo: Record<string, unknown> = {};
-  for (const m of ['select', 'eq', 'in', 'order', 'limit', 'insert', 'update', 'maybeSingle', 'single']) {
+  for (const m of ['select', 'eq', 'ilike', 'in', 'order', 'limit', 'insert', 'update', 'maybeSingle', 'single']) {
     nodo[m] = (...a: unknown[]) => { ops.push([m, a]); return nodo; };
   }
   nodo.then = (r: (v: unknown) => unknown, j?: (e: unknown) => unknown) => Promise.resolve().then(() => resolver(tabla, ops)).then(r, j);
@@ -71,6 +71,17 @@ describe('crearOperador sin teléfono', () => {
       return { data: [], error: null };
     };
     await expect(crearOperador(T, { nombre: 'Ana Torres', telefono: '', numeroEmpleado: 'E-1', correo: 'ana@ejemplo.test' })).rejects.toThrow(/número de empleado E-1/);
+  });
+
+  it('el correo ya usado se compara SIN distinguir mayúsculas y con los comodines escapados', async () => {
+    let patron: unknown = null;
+    resolver = (tabla, ops) => {
+      const il = ops.find((o) => o[0] === 'ilike' && o[1][0] === 'correo');
+      if (tabla === 'operador' && il) { patron = il[1][1]; return { data: [{ id: OP }], error: null }; }
+      return { data: [], error: null };
+    };
+    await expect(crearOperador(T, { nombre: 'Ana Torres', telefono: '', numeroEmpleado: 'E-9', correo: 'Ana_Torres@Ejemplo.test' })).rejects.toThrow(/correo ya lo usa/);
+    expect(patron).toBe('ana\\_torres@ejemplo.test');
   });
 
   it('con teléfono, todo igual que siempre (no consulta el canal ni escribe correo si no viene)', async () => {

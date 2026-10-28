@@ -277,8 +277,11 @@ async function comprobarEmpleadoLibre(tenantId: string, numeroEmpleado: string):
 
 /** Un buzón no recibe el desglose de dos personas. Falla CERRADO. */
 async function comprobarCorreoLibre(tenantId: string, correo: string): Promise<void> {
+  // Sin distinguir mayúsculas (un correo guardado en mayúsculas por otra vía también choca); `ilike` sin comodines: se escapan \\ % _
+  // (el guion bajo es común en un correo y, sin escapar, casaría con cualquier carácter).
+  const patron = correo.trim().replace(/[\\%_]/g, (c) => `\\${c}`);
   const { data, error } = await supabaseAdmin().from('operador').select('id')
-    .eq('tenant_id', tenantId).eq('correo', correo).order('id').limit(1);
+    .eq('tenant_id', tenantId).ilike('correo', patron).order('id').limit(1);
   if (error) throw new Error(`comprobarCorreoLibre: ${error.message}`);
   if ((data ?? []).length > 0) throw new DatoInvalido('Ese correo ya lo usa otro operador de tu flota: el desglose le llegaría a otra persona. Corrígelo o quítaselo al otro operador.');
 }
