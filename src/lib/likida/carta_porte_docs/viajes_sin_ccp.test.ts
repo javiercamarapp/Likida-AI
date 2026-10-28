@@ -78,10 +78,46 @@ describe('viajes salidos sin Carta Porte (T-A3-66)', () => {
   });
 });
 
-import { folioComparable, viajesLigadosPorFolio } from './viajes_sin_ccp';
-describe('viajesLigadosPorFolio (OLA1-A3)', () => {
+import { folioComparable, viajesLigadosPorFolio, evaluarDatosTms, HORAS_IMPORTACION_VIEJA } from './viajes_sin_ccp';
+describe('viajesLigadosPorFolio (OLA1-A3 + A3-02: la llave es cliente + folio)', () => {
+  const viaje = (viajeId: string, folio: string | null, clienteId: string | null) => ({ viajeId, folio, clienteId });
   it('liga por folio sin distinguir mayúsculas ni espacios, y un folio vacío no liga nada', () => {
-    const v = [{ viajeId: 'a', folio: ' f-1 ' }, { viajeId: 'b', folio: null }, { viajeId: 'c', folio: '' }, { viajeId: 'd', folio: 'F-9' }];
-    expect([...viajesLigadosPorFolio(v, new Set([folioComparable('F-1'), '']))]).toEqual(['a']);
+    const v = [viaje('a', ' f-1 ', 'c1'), viaje('b', null, 'c1'), viaje('c', '', 'c1'), viaje('d', 'F-9', 'c1')];
+    expect([...viajesLigadosPorFolio(v, [{ clienteId: 'c1', folio: 'F-1' }, { clienteId: 'c1', folio: '' }])]).toEqual(['a']);
+  });
+  it('A3-02: el folio de un documento del cliente A NO liga el viaje del cliente B', () => {
+    const v = [viaje('vB', '1234', 'cB')];
+    expect([...viajesLigadosPorFolio(v, [{ clienteId: 'cA', folio: '1234' }])]).toEqual([]);
+    expect([...viajesLigadosPorFolio(v, [{ clienteId: 'cB', folio: '1234' }])]).toEqual(['vB']);
+  });
+  it('A3-14/A3-02: un documento SIN cliente no liga el viaje de un cliente (no se completa el de otro)', () => {
+    expect([...viajesLigadosPorFolio([viaje('vB', '1234', 'cB')], [{ clienteId: null, folio: '1234' }])]).toEqual([]);
+  });
+  it('un viaje sin cliente liga solo si el folio es de un único cliente (si dos clientes lo usan, es ambiguo y no liga)', () => {
+    const v = [viaje('v1', '77', null)];
+    expect([...viajesLigadosPorFolio(v, [{ clienteId: 'cA', folio: '77' }])]).toEqual(['v1']);
+    expect([...viajesLigadosPorFolio(v, [{ clienteId: 'cA', folio: '77' }, { clienteId: 'cB', folio: '77' }])]).toEqual([]);
+  });
+});
+
+describe('A3-01: «sin datos del TMS» no es «cero pendientes»', () => {
+  const AHORA2 = new Date('2026-03-10T18:00:00Z');
+  const hace2 = (h: number) => new Date(AHORA2.getTime() - h * 3_600_000).toISOString();
+  it('sin viajes leídos en la ventana: sin_viajes, aunque haya fecha del último importado', () => {
+    expect(evaluarDatosTms({ viajesLeidos: 0, ultimoImportadoEn: null }, AHORA2)).toMatchObject({ motivo: 'sin_viajes', ultimoImportadoEn: null });
+    expect(evaluarDatosTms({ viajesLeidos: 0, ultimoImportadoEn: hace2(500) }, AHORA2)).toMatchObject({ motivo: 'sin_viajes' });
+  });
+  it('con viajes y una importación reciente: hay datos (null)', () => {
+    expect(evaluarDatosTms({ viajesLeidos: 3, ultimoImportadoEn: hace2(2) }, AHORA2)).toBeNull();
+  });
+  it('con viajes pero la última importación es vieja: importacion_vieja con las horas', () => {
+    const r = evaluarDatosTms({ viajesLeidos: 3, ultimoImportadoEn: hace2(HORAS_IMPORTACION_VIEJA + 5) }, AHORA2);
+    expect(r).toMatchObject({ motivo: 'importacion_vieja', horasDesdeImportacion: HORAS_IMPORTACION_VIEJA + 5 });
+  });
+  it('listarViajesSinCcp con sin_viajes marca el listado y el CSV dice «Sin datos del TMS» (nunca un CSV vacío que se lea como cero)', () => {
+    const sinDatosTms = evaluarDatosTms({ viajesLeidos: 0, ultimoImportadoEn: null }, AHORA2)!;
+    const l = listarViajesSinCcp([], new Set(), AHORA2, UMBRALES_POR_OMISION, { sinDatosTms });
+    expect(l.sinDatosTms?.motivo).toBe('sin_viajes');
+    expect(aCsvSinCcp(l)).toContain('Sin datos del TMS');
   });
 });
