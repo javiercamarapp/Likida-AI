@@ -11,7 +11,7 @@ insert into public.operador (id, tenant_id, nombre, telefono) values
   ('92800000-0000-4000-8000-0000000000a2', '92800000-0000-4000-8000-0000000000a1', 'Operador 0928', '529999909281'),
   ('92800000-0000-4000-8000-0000000000a3', '92800000-0000-4000-8000-0000000000a1', 'Operador 0928 b', '529999909282'),
   ('92800000-0000-4000-8000-0000000000a4', '92800000-0000-4000-8000-0000000000a1', 'Operador 0928 c', '529999909283');
--- A: liquidado con ingreso 10000 (costo 4000), liquidado SIN ingreso (costo 500), abierto con ingreso 8000 (sin liquidación),
+-- A: liquidado con ingreso 10000 (costo 4000), liquidado SIN ingreso (costo 500; desde la 0931 ese costo no entra al margen), abierto con ingreso 8000 (sin liquidación),
 --    en cuadre con ingreso 6000 cuya única liquidación fue rechazada (costo 9000 que NO cuenta).
 insert into public.viaje (id, tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo, ingreso_flete, created_at) values
   ('92800000-0000-4000-8000-000000000001', '92800000-0000-4000-8000-0000000000a1', '92800000-0000-4000-8000-0000000000a2', 'A928-1', 'liquidado', '2026-09-01', 0, 10000, '2026-09-01T12:00:00Z'),
@@ -32,7 +32,7 @@ begin
   -- Histórico: universo = viajes 1 y 2 (los únicos con liquidación vigente).
   j := public.rentabilidad_tenant('92800000-0000-4000-8000-0000000000a1', null);
   if (j->>'ingreso')::numeric <> 10000 then raise exception '0928: el ingreso incluye viajes sin liquidación vigente: %', j; end if;
-  if (j->>'costoComprobado')::numeric <> 4500 then raise exception '0928: el costo no es el de las liquidaciones vigentes: %', j; end if;
+  if (j->>'costoComprobado')::numeric <> 4000 then raise exception '0928: el costo no es el de las liquidaciones vigentes CON ingreso (0931 excluye el viaje sin ingreso, 500): %', j; end if;
   if (j->>'viajesConIngreso')::int <> 1 or (j->>'viajesSinIngreso')::int <> 1 then raise exception '0928: conteos de ingreso fuera del universo: %', j; end if;
   if (j->>'viajesSinLiquidar')::int <> 2 then raise exception '0928: viajesSinLiquidar debería ser 2 (el abierto y el de la rechazada): %', j; end if;
 

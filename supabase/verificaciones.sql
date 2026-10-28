@@ -6846,7 +6846,7 @@ begin
   --         (A1 y A2): 10,000 de ingreso (el null NO suma), 1 con y 1 sin ingreso; A3 y A4 no tienen liquidación.
   j := rentabilidad_tenant(ta, null);
   ok_rent := (j->>'ingreso')::numeric = 10000        -- si B contamina: +99,999; si entra el abierto A3: +5,000
-         and (j->>'costoComprobado')::numeric = 2200 -- si B contamina: +88,888
+         and (j->>'costoComprobado')::numeric = 1500 -- 0931: solo el viaje CON ingreso (A1); el costo de A2, sin ingreso, no entra. Si B contamina: +88,888
          and (j->>'viajesConIngreso')::int = 1
          and (j->>'viajesSinIngreso')::int = 1
          and (j->>'viajesSinLiquidar')::int = 2;
