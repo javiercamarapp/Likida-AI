@@ -502,6 +502,20 @@ describe('lo que nunca se envía', () => {
     expect(devueltos[0].motivo).toMatch(/bloqueos abiertos/);
   });
 
+  it('MODO MANUAL: sin número de cliente interno o sin caja el documento vuelve a revisión; con ambos queda listo (OLA1-A3)', async () => {
+    const sinCliente = sembrar(A, 1);
+    delete docs.get(`${A}:${sinCliente.documentoId}`)!.extraccion!.campos.numero_cliente_interno;
+    const sinCaja = sembrar(A, 2);
+    delete docs.get(`${A}:${sinCaja.documentoId}`)!.extraccion!.campos.caja_numero;
+    const bien = sembrar(A, 3);
+    await pasada();
+    expect((await leer(A, sinCliente.id)).estado).toBe('descartado');
+    expect((await leer(A, sinCaja.id)).estado).toBe('descartado');
+    expect((await leer(A, bien.id)).estado).toBe('listo');
+    expect(devueltos.map((d) => d.motivo).join(' ')).toMatch(/cliente interno/);
+    expect(devueltos.map((d) => d.motivo).join(' ')).toMatch(/número de caja/);
+  });
+
   it('un `listo` que gana bloqueos antes de subir tampoco se envía', async () => {
     const tms = puerto('ok'); puertos.set(A, tms);
     const e = sembrar(A, 1, 'listo', { bloqueos: 1 });
