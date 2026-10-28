@@ -574,6 +574,12 @@ export async function listarClientes(tenantId: string): Promise<Array<{ id: stri
   return ((exigir(r, 'cpdocs.clientes') ?? []) as unknown as Fila[]).map((f) => ({ id: String(f.id), nombre: String(f.nombre) }));
 }
 
+/** Los clientes ACTIVOS de la flota con su correo de contacto (para reconocer al remitente de un documento). Con tope; falla cerrado. */
+export async function clientesConCorreo(tenantId: string): Promise<Array<{ id: string; correo: string | null }>> {
+  const r = await acotada(supabaseAdmin().from('cliente').select('id, correo').eq('tenant_id', tenantId).eq('activo', true).not('correo', 'is', null).order('id').limit(1000), 'cpdocs.clientes_correo');
+  return ((exigir(r, 'cpdocs.clientes_correo') ?? []) as unknown as Fila[]).map((f) => ({ id: String(f.id), correo: s(f.correo) }));
+}
+
 // ── Catálogo por cliente (0792) ─────────────────────────────────────────────
 
 /** La tabla no existe todavía (la 0792 no se ha aplicado): PostgREST PGRST205 / Postgres 42P01. */

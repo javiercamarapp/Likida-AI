@@ -34,7 +34,7 @@ export const estado = {
   mercancias: [] as Mercancia[],
   operadores: [] as Array<OperadorMin & { tenantId: string }>,
   unidades: [] as Array<{ tenantId: string; id: string; placas: string; activo: boolean }>,
-  clientes: [] as Array<{ tenantId: string; id: string; nombre: string }>,
+  clientes: [] as Array<{ tenantId: string; id: string; nombre: string; correo?: string | null }>,
   /** 0792: catálogo por cliente (cada fila trae su tenantId y clienteId). */
   catalogoNumeros: [] as NumeroClienteCat[],
   catalogoProductos: [] as ProductoCat[],
@@ -289,6 +289,7 @@ export const api: typeof Real = {
       truncado: false,
     });
   },
+  async clientesConCorreo(tenantId) { return estado.clientes.filter((c) => c.tenantId === tenantId && c.correo).map((c) => ({ id: c.id, correo: c.correo ?? null })); },
   async listarClientes(tenantId) { return estado.clientes.filter((c) => c.tenantId === tenantId).map(({ tenantId: _t, ...c }) => c); },
   async insertarViaje(tenantId, v) {
     falla('insertarViaje');

@@ -19,6 +19,23 @@ beforeEach(() => { reset(); sembrarFlotas(); });
 
 const tipos = (docId: string) => estado.eventos.filter((e) => e.documentoId === docId).map((e) => e.tipo);
 
+describe('recibirDocumento · cliente por remitente (OLA1-A3)', () => {
+  it('un correo de un remitente reconocido queda ligado a su cliente; WhatsApp con De: también', async () => {
+    estado.clientes.push({ tenantId: A, id: 'cli-1', nombre: 'Acme', correo: 'ana@acme.example' });
+    const c = await recibirDocumento(A, { canal: 'correo', nombre: 'a.pdf', bytes: await pdfBoreal(), remitente: 'Ana <ana@acme.example>', remitenteReconocido: true }, sinAgenteApagado);
+    expect(estado.docs.get((c as { documentoId: string }).documentoId)!.clienteId).toBe('cli-1');
+    const w = await recibirDocumento(A, { canal: 'whatsapp', nombre: 't.txt', bytes: new TextEncoder().encode('De: ana@acme.example\nEmbarque 1'), remitente: 'WhatsApp · Pau', formatoForzado: 'correo' }, sinAgenteApagado);
+    expect(estado.docs.get((w as { documentoId: string }).documentoId)!.clienteId).toBe('cli-1');
+  });
+  it('remitente no reconocido por el buzón, sin coincidencia o de otra flota: sin cliente', async () => {
+    estado.clientes.push({ tenantId: A, id: 'cli-1', nombre: 'Acme', correo: 'ana@acme.example' });
+    const a = await recibirDocumento(A, { canal: 'correo', nombre: 'a.pdf', bytes: await pdfBoreal(), remitente: 'ana@acme.example', remitenteReconocido: false }, sinAgenteApagado);
+    expect(estado.docs.get((a as { documentoId: string }).documentoId)!.clienteId).toBeNull();
+    const b = await recibirDocumento(B, { canal: 'correo', nombre: 'b.xml', bytes: Buffer.from(xmlCartaPorte()), remitente: 'ana@acme.example' }, sinAgenteApagado);
+    expect(estado.docs.get((b as { documentoId: string }).documentoId)!.clienteId).toBeNull();
+  });
+});
+
 describe('recibirDocumento', () => {
   it.each([
     ['pdf_texto', async () => pdfBoreal()],

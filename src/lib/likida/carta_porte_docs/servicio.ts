@@ -28,6 +28,7 @@ import { clasificarFormato } from './registro_formatos';
 import type { VisionRemision } from './lectores/remision';
 import * as repo from './repo';
 import { asignarAlLlegarARevision } from './revisor';
+import { remitenteDeEncabezado, resolverClientePorRemitente, type ViaCliente } from './cliente_remitente';
 import type { CanalDoc, DocumentoFila, MetaExtraccion } from './repo';
 
 export const DIAS_RETENCION = { recibido: 180, aprobado: 365, cerrado: 90 } as const;
@@ -91,13 +92,23 @@ export async function recibirDocumento(tenantId: string, e: EntradaDocumento, de
   if (e.clienteId && !(await repo.clientePropio(tenantId, e.clienteId))) {
     return { ok: false, motivo: 'cliente', mensaje: 'Ese cliente no pertenece a tu flota.' };
   }
+  // OLA1-A3: el correo y el WhatsApp no traen cliente elegido: se reconoce por el remitente (si apunta a UNO solo).
+  let clienteId = e.clienteId ?? null;
+  let clienteVia: ViaCliente | null = null;
+  if (!clienteId && e.canal !== 'manual' && e.remitenteReconocido !== false) {
+    const quien = e.formatoForzado === 'correo' && e.canal === 'whatsapp' ? remitenteDeEncabezado(new TextDecoder().decode(e.bytes.slice(0, 4000))) : e.remitente;
+    try {
+      const res = quien ? resolverClientePorRemitente(quien, await repo.clientesConCorreo(tenantId)) : null;
+      if (res && res.clienteId) { clienteId = res.clienteId; clienteVia = res.via; }
+    } catch (err) { logger.warn('cpdocs.cliente_remitente_fallo', { tenantId, err: resumenError(err) }); }
+  }
   const sha256 = createHash('sha256').update(e.bytes).digest('hex');
   const ruta = `${tenantId}/${sha256}`;
   const formato = CLASE_A_FORMATO[d.clase];
   await repo.subirArchivo(ruta, e.bytes, d.mime);
   const { documento, duplicado } = await repo.insertarDocumento(tenantId, {
     id: randomUUID(), canal: e.canal, formato, nombreArchivo: nombreArchivoSeguro(e.nombre), mime: d.mime, bytes: e.bytes.length, sha256,
-    storageRuta: ruta, clienteId: e.clienteId ?? null, remitente: e.remitente?.slice(0, 320) ?? null, asunto: e.asunto?.slice(0, 300) ?? null,
+    storageRuta: ruta, clienteId, remitente: e.remitente?.slice(0, 320) ?? null, asunto: e.asunto?.slice(0, 300) ?? null,
     remitenteReconocido: e.remitenteReconocido ?? null, retenerHasta: diasDespues(ahora, DIAS_RETENCION.recibido),
   });
   // A37-A3-17: el duplicado de un documento ya purgado (sin storage_ruta) no vuelve a guardar el archivo: lo recién subido
@@ -106,7 +117,7 @@ export async function recibirDocumento(tenantId: string, e: EntradaDocumento, de
     try { await repo.borrarArchivo(ruta); } catch (err) { logger.warn('cpdocs.huerfano_no_borrado', { tenantId, error: err instanceof Error ? err.message : String(err) }); }
   }
   await repo.registrarEvento(tenantId, documento.id, duplicado ? 'duplicado_recibido' : 'recibido', e.actorId ?? null,
-    duplicado ? { canal: e.canal } : { canal: e.canal, formato, bytes: e.bytes.length });
+    duplicado ? { canal: e.canal } : { canal: e.canal, formato, bytes: e.bytes.length, ...(clienteVia ? { cliente_auto: clienteVia } : {}) });
   // A37-S33-05: el documento previo con esa huella ya se purgó (sin archivo): el archivo recién subido no tiene dueño ni entra a la purga
   // por retención. Se borra y se dice la verdad; reabrir el embarque (que pudo estar aprobado) lo decide una persona.
   if (duplicado && !documento.storageRuta) {
