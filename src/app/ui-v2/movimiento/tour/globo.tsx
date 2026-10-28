@@ -53,7 +53,7 @@ export function GloboTour({ snap, col, refGlobo, onSiguiente, onAtras, onSaltar,
       <div className="rv-tour__cab">
         <span className="rv-tour__paso etiqueta-mono">Paso {n} de {snap.total}</span>
         <ol className="rv-tour__marcas" aria-hidden="true">
-          {Array.from({ length: snap.total }, (_, i) => (
+          {[...Array(snap.total).keys()].map((i) => (
             <li key={i} data-estado={i < snap.indice ? 'hecho' : i === snap.indice ? 'actual' : 'pendiente'} />
           ))}
         </ol>
