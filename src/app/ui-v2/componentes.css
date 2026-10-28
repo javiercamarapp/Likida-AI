@@ -51,7 +51,7 @@
   display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 24px; padding: 2px 10px;
   border: 1px solid var(--line2, var(--line)); border-radius: 999px;
   background: var(--surface); color: var(--ink);
-  font: 500 12px/1.4 inherit; font-family: var(--font-sans-ui, inherit);
+  font-size: 12px; font-weight: 500; line-height: 1.4; font-family: var(--font-sans-ui, inherit);
   overflow-wrap: anywhere;
 }
 .rv-chip[data-tono="ok"] { background: var(--okbg, var(--canvas)); color: var(--ok, var(--ink)); border-color: transparent; }

@@ -35,20 +35,20 @@ export const RECORRIDO_DUENO: Recorrido = {
       id: 'sistema', ruta: ASISTENTE, ancla: 'asistente.paso-tms', lado: 'derecha',
       titulo: 'Empieza por tu sistema de transporte',
       texto: 'De ahí salen los viajes que Likida va a liquidar.',
-      accion: { verbo: 'Aprieta aquí', objetivo: 'Tu sistema de transporte' },
+      accion: { verbo: 'Aprieta', objetivo: 'Tu sistema de transporte' },
       avance: { tipo: 'accion', evento: 'click' },
     },
     {
       id: 'archivo', ruta: ASISTENTE, ancla: 'asistente.archivo', lado: 'izquierda',
       titulo: 'Un archivo de muestra basta para arrancar',
       texto: 'Es la vía más rápida: no tienes que esperar a que tu área de sistemas libere la conexión.',
-      accion: { verbo: 'Aprieta después', objetivo: 'Entregar archivo de muestra' },
+      accion: { verbo: 'Aprieta', objetivo: 'Entregar archivo de muestra' },
     },
     {
       id: 'conseguirlo', ruta: ASISTENTE, ancla: 'asistente.como-conseguirlo', lado: 'arriba',
       titulo: 'Los textos ya vienen escritos',
       texto: 'Copia la solicitud para sistemas y la carta para gerencia. La contraseña nunca va por correo.',
-      accion: { verbo: 'Aprieta aquí', objetivo: 'Cómo conseguirlo' },
+      accion: { verbo: 'Aprieta', objetivo: 'Cómo conseguirlo' },
     },
     {
       id: 'conexiones', ruta: '/dashboard/conexiones', ancla: 'conexiones.estado', lado: 'abajo', escena: 'conexion-tms',
@@ -59,7 +59,7 @@ export const RECORRIDO_DUENO: Recorrido = {
       id: 'credenciales', ruta: '/dashboard/conexiones', ancla: 'conexiones.credenciales', lado: 'arriba',
       titulo: 'Aquí se guarda el acceso',
       texto: 'Cuando tu área de sistemas te lo dé, se captura una vez y queda cifrado. Luego aprietas «Probar».',
-      accion: { verbo: 'Después aprieta', objetivo: 'Probar' },
+      accion: { verbo: 'Aprieta', objetivo: 'Probar' },
     },
     {
       id: 'liquidacion', ruta: '/dashboard/agentes/liquidacion', ancla: 'nav-agentes-liquidacion', lado: 'derecha', escena: 'desglose-correo',

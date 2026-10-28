@@ -113,6 +113,8 @@ const FUENTES_CSS = [
   ...[400, 500, 600, 700].map((w) => `@font-face{font-family:'Hanken Grotesk UI';font-weight:${w};font-style:normal;font-display:block;src:url('file://${F}/hankengrotesk-${w}.woff2') format('woff2')}`),
   ...[400, 500].map((w) => `@font-face{font-family:'IBM Plex Mono';font-weight:${w};font-style:normal;font-display:block;src:url('file://${F}/plexmono-${w}.woff2') format('woff2')}`),
   `html{--font-mono:'IBM Plex Mono'}`,
+  // Lo que declara ui-v2/fonts.css (en producción lo importa el layout; aquí las rutas son de archivo):
+  `[data-ui="v2"]{--font-sans-ui:'Hanken Grotesk UI',ui-sans-serif,system-ui,sans-serif;--font-display:'Hanken Grotesk UI',ui-sans-serif,system-ui,sans-serif}`,
 ].join('\n');
 
 const envolver = (cuerpo: ReactNode, ruta: string) => {

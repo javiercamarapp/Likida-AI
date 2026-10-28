@@ -76,7 +76,7 @@
 .rv-pem__sub-detalle { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
 
 .rv-pem__acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.rv-pem__enlace { align-self: flex-start; padding: 4px 0; border: 0; background: none; font: 500 13px/1.4 inherit; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.rv-pem__enlace { align-self: flex-start; padding: 4px 0; border: 0; background: none; font-family: inherit; font-size: 13px; font-weight: 500; line-height: 1.4; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .rv-pem__enlace:hover { color: var(--ink); }
 .rv-pem__enlace:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
 .rv-pem__omitir { margin: 0; font-size: 13px; color: var(--muted); }
