@@ -141,6 +141,8 @@ export interface LineaDesgloseParseada {
   clase?: number | null;
   /** «Importe al 100%» cuando el archivo trae además un importe facturado distinto. AUSENTE si no aplica. */
   importe100?: number | null;
+  /** El `Icident` (número de despacho del TMS) que trae el archivo. AUSENTE si no hay columna; `null` si la celda está vacía. */
+  icident?: string | null;
 }
 
 /**
@@ -213,6 +215,8 @@ const PATRON_CLASE = /^clase\b|\bclase de cobro\b|\bclase vehicular\b/;
 const PATRON_MONTO_FACTURADO = /facturad/;
 const PATRON_MONTO_AL_100 = /al 100/;
 // El número del periodo (decena) que declara el archivo.
+// El número de despacho del TMS («Icident»): liga el cobro con su viaje.
+const PATRON_ICIDENT = /\bicident\b|^despacho$|^(id|no\.?|numero) despacho$|^(id|no\.?|numero) de despacho$/;
 const PATRON_NO_PERIODO = /^no\.?\s*de periodo|^numero de periodo|^periodo$/;
 // Una columna de HORA propia (no «fecha y hora», que ya es la fecha).
 const PATRON_HORA = /\bhora\b|\bhorario\b/;
@@ -227,6 +231,8 @@ export interface ColumnasDetectadas {
   clase?: number;
   /** «Importe al 100%» cuando `monto` apunta a otra columna (la facturada). */
   importe100?: number;
+  /** El `Icident` (número de despacho del TMS). Ausente si no hay columna. */
+  icident?: number;
   /** «No. de periodo». */
   periodo?: number;
 }
@@ -236,7 +242,7 @@ export interface ColumnasDetectadas {
  * sin repetir una columna ya usada por un campo obligatorio. Se comparte entre la
  * detección por nombre y el mapeo declarado (que solo nombra lo básico).
  */
-function detectarOpcionales(encabezados: Celda[], usadas: ReadonlySet<number>): Pick<ColumnasDetectadas, 'unidad' | 'clase' | 'importe100' | 'periodo'> {
+function detectarOpcionales(encabezados: Celda[], usadas: ReadonlySet<number>): Pick<ColumnasDetectadas, 'unidad' | 'clase' | 'importe100' | 'periodo' | 'icident'> {
   const n = encabezados.map(normalizar);
   const primero = (patron: RegExp, excluir?: RegExp) =>
     n.findIndex((h, i) => h && !usadas.has(i) && patron.test(h) && !(excluir && excluir.test(h)));
@@ -244,11 +250,13 @@ function detectarOpcionales(encabezados: Celda[], usadas: ReadonlySet<number>): 
   const clase = primero(PATRON_CLASE);
   const importe100 = primero(PATRON_MONTO_AL_100, PATRON_MONTO_EXCLUIR);
   const periodo = primero(PATRON_NO_PERIODO);
+  const icident = primero(PATRON_ICIDENT);
   return {
     ...(unidad >= 0 ? { unidad } : {}),
     ...(clase >= 0 ? { clase } : {}),
     ...(importe100 >= 0 ? { importe100 } : {}),
     ...(periodo >= 0 ? { periodo } : {}),
+    ...(icident >= 0 ? { icident } : {}),
   };
 }
 
@@ -498,6 +506,9 @@ export function parsearDesgloseHoja(filas: Celda[][], opciones: OpcionesParseo =
       const m100 = montoDeCelda(fila[columnas.importe100]);
       if (m100 !== null && Math.abs(m100 - monto) > 0.004) { linea.importe100 = m100; lineasImporteDistinto++; }
     }
+    if (columnas.icident !== undefined) {
+      linea.icident = String(fila[columnas.icident] ?? '').trim().slice(0, 80) || null;
+    }
     if (columnas.periodo !== undefined) {
       const p = String(fila[columnas.periodo] ?? '').trim();
       if (p) periodos.set(p, (periodos.get(p) ?? 0) + 1);
@@ -515,6 +526,7 @@ export function parsearDesgloseHoja(filas: Celda[][], opciones: OpcionesParseo =
   if (columnas.clase !== undefined) camposPorColumna.set(columnas.clase, 'clase');
   if (columnas.importe100 !== undefined) camposPorColumna.set(columnas.importe100, 'importe_al_100');
   if (columnas.periodo !== undefined) camposPorColumna.set(columnas.periodo, 'no_periodo');
+  if (columnas.icident !== undefined) camposPorColumna.set(columnas.icident, 'icident');
   const columnasInfo: CalidadArchivo['columnas'] = [];
   for (let c = 0; c < ancho; c++) {
     const enc = String(encabezadoFila[c] ?? '').trim();
@@ -1069,12 +1081,24 @@ export async function importarDesglose(
     clase: l.clase ?? null,
     unidad_archivo: l.unidad ?? null,
     importe_100: l.importe100 ?? null,
+    // El Icident del TMS (0935). La clave solo viaja si el archivo trae la columna: un archivo sin ella (el Excel decenal de hoy) no la toca.
+    ...(l.icident !== undefined ? { icident: l.icident } : {}),
   }));
   const lotes: typeof filasLinea[] = [];
   for (let i = 0; i < filasLinea.length; i += LOTE_INSERCION_LINEAS) lotes.push(filasLinea.slice(i, i + LOTE_INSERCION_LINEAS));
   const escritos = await enLotes(lotes, 2, async (lote) => {
     const { error } = await acotada(supabaseAdmin().from('desglose_peaje_linea').insert(lote), 'desglose_peaje.insertar_lineas');
-    if (error) throw new Error(error.message);
+    if (error) {
+      // La migración 0935 aún no está aplicada: la columna no existe. El archivo no se pierde: entra sin Icident y se avisa en el log.
+      if (/icident/i.test(error.message) && lote.some((f) => 'icident' in f)) {
+        logger.warn('desglose_peaje.icident_sin_migracion', { tenant: tenantId, desglose: desgloseId });
+        const sinIcident = lote.map((f) => { const resto: Record<string, unknown> = { ...f }; delete resto.icident; return resto; });
+        const { error: error2 } = await acotada(supabaseAdmin().from('desglose_peaje_linea').insert(sinIcident), 'desglose_peaje.insertar_lineas');
+        if (error2) throw new Error(error2.message);
+        return;
+      }
+      throw new Error(error.message);
+    }
   });
   const fallo = escritos.find((r) => 'error' in r);
   if (fallo) {
