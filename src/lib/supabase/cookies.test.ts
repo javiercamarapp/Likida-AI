@@ -83,6 +83,8 @@ describe('la cookie de sesión no la lee el navegador', () => {
   it('los archivos exentos escriben SOLO su cookie propia, nunca la de sesión del SDK', () => {
     for (const [ruta, razon] of Object.entries(EXENTOS)) {
       expect(razon.length).toBeGreaterThan(20);
+      // Ruta fija de la tabla EXENTOS de arriba, no entrada externa.
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
       const t = readFileSync(join(RAIZ, ruta), 'utf8');
       expect(t, `${ruta}: pasa de largo la cookie de sesión`).not.toMatch(/sb-|auth-token|COOKIES_DE_SESION|createBrowserClient|js-cookie/);
       expect(t, `${ruta}: ya no escribe una cookie propia; quítalo de EXENTOS`).toMatch(/document\.cookie/);
