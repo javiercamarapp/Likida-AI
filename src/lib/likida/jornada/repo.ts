@@ -223,6 +223,44 @@ export async function jornadaQueCierra(
   return { jornada: { id: String(fila.id), dia: String(fila.dia) }, error: null };
 }
 
+/**
+ * A37-S48-01: el expediente de AYER ya CERRADO (con `fin_jornada` vivo) que un
+ * mensaje de conformidad de madrugada podría estar confirmando. Un turno
+ * nocturno cruza la medianoche: su «fin jornada» se asienta en el día del
+ * inicio (`jornadaQueCierra`), y la conformidad llega ya en el día MX siguiente,
+ * donde no hay expediente propio. Sin esto el operador de noche NUNCA podía
+ * sellar su día.
+ *
+ * Solo devuelve la jornada si el fin vivo cae a menos de 24 h del `momento`;
+ * más allá no es «el resumen que acaba de ver», y sellarlo sería adivinar.
+ * `error` ≠ null = la base no contestó (quien llama falla cerrado).
+ */
+export async function jornadaCerradaDeAyer(
+  tenantId: string,
+  operadorId: string,
+  diaDelMensaje: string,
+  momento: Date,
+): Promise<{ jornada: { id: string; dia: string } | null; error: string | null }> {
+  const ayer = diaAnterior(diaDelMensaje);
+  if (ayer === null) return { jornada: null, error: null };
+  const { data, error } = await acotada(
+    supabaseAdmin().from('jornada_dia').select('id, dia')
+      .eq('tenant_id', tenantId).eq('operador_id', operadorId).eq('dia', ayer).maybeSingle(),
+    'jornada.dia.cerrada_de_ayer',
+  );
+  if (error) return { jornada: null, error: error.message };
+  if (!data) return { jornada: null, error: null };
+  const fila = data as { id: string; dia: string };
+  const marcas = await marcasVivas(tenantId, fila.id, ['fin_jornada']);
+  if (marcas.error) return { jornada: null, error: marcas.error.message };
+  const fines = (marcas.data ?? []) as Array<{ tipo: string; momento: string }>;
+  const hayFinReciente = fines.some((a) => {
+    const horas = (momento.getTime() - Date.parse(a.momento)) / 3_600_000;
+    return Number.isFinite(horas) && horas >= 0 && horas <= MAX_HORAS_JORNADA_ABIERTA;
+  });
+  return { jornada: hayFinReciente ? { id: String(fila.id), dia: String(fila.dia) } : null, error: null };
+}
+
 /** ¿El expediente tiene una marca VIVA (no anulada) de ese tipo? `error` = la base no contestó (no se lee como «no hay»). */
 export async function tieneMarcaViva(
   tenantId: string, jornadaId: string, tipo: 'inicio_jornada' | 'fin_jornada',

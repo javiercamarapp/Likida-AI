@@ -87,3 +87,29 @@ describe('atenderConformidadJornada: no se sella sobre un expediente sin fin', (
     expect(db.tablas.jornada_dia.every((d) => d.conforme_operador_en === null)).toBe(true);
   });
 });
+
+describe('A37-S48-01: turno nocturno, la conformidad llega ya en el día MX siguiente', () => {
+  it('ayer CERRADA hace 2 h y hoy sin expediente: sella la de ayer, no responde «sin_dia»', async () => {
+    base({ hoyConInicio: false, ayerConFin: true });
+    db.tablas.jornada_asiento.find((a) => a.jornada_id === 'j-ayer' && a.tipo === 'fin_jornada')!.momento = `${HOY}T00:30:00-06:00`;
+    const r = await atenderConformidadJornada({ tenantId: T, operadorId: OP, momento: ahora('02:30'), waMessageId: 'wamid.n1' });
+    expect(r.resultado).toBe('sellada');
+    expect(db.tablas.jornada_dia.find((d) => d.id === 'j-ayer')!.conforme_operador_en).not.toBeNull();
+  });
+
+  it('ayer cerrada hace más de 24 h: no se adivina, queda sin_dia', async () => {
+    base({ hoyConInicio: false, ayerConFin: true });
+    db.tablas.jornada_asiento.find((a) => a.jornada_id === 'j-ayer' && a.tipo === 'fin_jornada')!.momento = `${AYER}T01:00:00-06:00`;
+    const r = await atenderConformidadJornada({ tenantId: T, operadorId: OP, momento: ahora('14:00'), waMessageId: 'wamid.n2' });
+    expect(r.resultado).toBe('sin_dia');
+    expect(db.tablas.jornada_dia.every((d) => d.conforme_operador_en === null)).toBe(true);
+  });
+
+  it('hoy ya tiene su inicio vivo: la ambigüedad es real, no se sella la de ayer', async () => {
+    base({ hoyConInicio: true, ayerConFin: true });
+    db.tablas.jornada_asiento.find((a) => a.jornada_id === 'j-ayer' && a.tipo === 'fin_jornada')!.momento = `${HOY}T00:30:00-06:00`;
+    const r = await atenderConformidadJornada({ tenantId: T, operadorId: OP, momento: ahora('07:00'), waMessageId: 'wamid.n3' });
+    expect(r.resultado).toBe('sin_cierre');
+    expect(db.tablas.jornada_dia.every((d) => d.conforme_operador_en === null)).toBe(true);
+  });
+});
