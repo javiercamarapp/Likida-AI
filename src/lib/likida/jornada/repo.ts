@@ -402,18 +402,25 @@ export async function asentarMarca(m: MarcaNueva): Promise<ResultadoAsiento> {
     'jornada.asiento.insert',
   );
 
-  if (!error && data) {
-    // A37-S48-03: una captura de la oficina cambia lo que el operador confirmó.
-    if (m.procedencia === 'capturado_contralor') {
-      const previa = await leerConformidad(m.tenantId, m.jornadaId);
-      if (previa.error || previa.sello) {
-        const fallo = previa.error ?? (await retirarConformidad(m.tenantId, m.jornadaId));
-        if (fallo) return 'fallo';
-      }
+  // A37-S48-03: una captura de la oficina cambia lo que el operador confirmó. Retirar la conformidad es idempotente.
+  const retirarSiHayConformidad = async (): Promise<boolean> => {
+    const previa = await leerConformidad(m.tenantId, m.jornadaId);
+    if (previa.error || previa.sello) {
+      const fallo = previa.error ?? (await retirarConformidad(m.tenantId, m.jornadaId));
+      if (fallo) return false;
     }
+    return true;
+  };
+  if (!error && data) {
+    if (m.procedencia === 'capturado_contralor' && !(await retirarSiHayConformidad())) return 'fallo';
     return 'asentado';
   }
-  if (error && (error as { code?: string }).code === UNIQUE_VIOLATION) return 'ya_estaba';
+  if (error && (error as { code?: string }).code === UNIQUE_VIOLATION) {
+    // A39-ola9: si la captura YA estaba insertada porque el intento anterior falló al retirar la conformidad, el reintento cae aquí
+    // como «ya estaba» y la conformidad seguiría viva sobre datos que la oficina ya cambió. Se reintenta el retiro (idempotente).
+    if (m.procedencia === 'capturado_contralor' && !(await retirarSiHayConformidad())) return 'fallo';
+    return 'ya_estaba';
+  }
   logger.error('jornada.asiento_no_escrito', {
     jornada: m.jornadaId, tipo: m.tipo, procedencia: m.procedencia,
     err: error?.message ?? 'insert sin fila ni error',
