@@ -33,6 +33,7 @@ const PERFIL_VIEJO = {
 vi.mock('../repo', () => ({
   guardarPerfilPatch: vi.fn(async () => undefined),
   actualizarFacilidad15: vi.fn(async () => undefined),
+  exigirRegimenCompatibleConFacilidad15: vi.fn(async () => undefined),
   getPerfilCrudo: vi.fn(async () => PERFIL_VIEJO),
 }));
 vi.mock('../agentes/cobranza', () => ({ guardarConfigCobranza: vi.fn(), leerConfigCobranza: vi.fn() }));
@@ -116,5 +117,23 @@ describe('A37-S53-07 — los topes por chat conservan requiereCfdi', () => {
     await turno();
     const llamada = vi.mocked(admin.guardarPolitica).mock.calls.at(-1)!;
     expect(llamada[1]).toContainEqual({ concepto: 'diesel', topeMonto: 4000, requiereCfdi: true });
+  });
+});
+
+describe('A39-S53-01 — la facilidad del 15 % se coteja con el régimen del tenant ANTES de persistir el perfil', () => {
+  beforeEach(() => { vi.mocked(repo.guardarPerfilPatch).mockClear(); vi.mocked(repo.exigirRegimenCompatibleConFacilidad15).mockClear(); });
+
+  it('si el tenant niega la facilidad (601), el perfil NO se escribe con regimenElegible', async () => {
+    vi.mocked(repo.exigirRegimenCompatibleConFacilidad15).mockRejectedValueOnce(new Error('régimen 601 no elegible'));
+    hechosDelTurno = { regimenSat: '612', regimenElegible: true };
+    await expect(turno()).rejects.toThrow(/no elegible/);
+    expect(repo.exigirRegimenCompatibleConFacilidad15).toHaveBeenCalledWith('t-1');
+    const parches = vi.mocked(repo.guardarPerfilPatch).mock.calls.map((c) => c[1] as Record<string, unknown>);
+    expect(parches.some((p) => 'regimenElegible' in p)).toBe(false);
+  });
+  it('si no se declara elegibilidad, no hay cotejo (no estorba otros turnos)', async () => {
+    hechosDelTurno = { rfcEmpresa: RFC_OK };
+    await turno();
+    expect(repo.exigirRegimenCompatibleConFacilidad15).not.toHaveBeenCalled();
   });
 });
