@@ -78,7 +78,8 @@
 [data-ui="v2"] .rv-icono-boton:focus-visible,
 [data-ui="v2"] .rv-skip:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
-[data-ui="v2"] .rv-chip,
+/* `.rv-chip` también es la etiqueta de B (componentes.css): aquí solo la del menú, para no heredar su margin-left:auto. */
+[data-ui="v2"] .rv-item .rv-chip,
 [data-ui="v2"] .rv-insignia {
   margin-left: auto; flex: none; padding: 2px 6px; border-radius: 999px;
   font-size: 11px; font-weight: 500; background: var(--canvas); color: var(--muted);
@@ -165,7 +166,7 @@
   [data-ui="v2"] .rv-sb .rv-item__txt,
   [data-ui="v2"] .rv-sb .rv-grupo__t,
   [data-ui="v2"] .rv-sb .rv-cuenta__txt,
-  [data-ui="v2"] .rv-sb .rv-chip,
+  [data-ui="v2"] .rv-sb .rv-item .rv-chip,
   [data-ui="v2"] .rv-sb .rv-insignia {
     position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
     clip-path: inset(50%); white-space: nowrap; border: 0;
