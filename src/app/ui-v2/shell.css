@@ -1,0 +1,183 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   UI v2 · SHELL (PLAN-MAESTRO §2.3) — sidebar 232 / riel 72 / cabecera móvil 56.
+
+   Las MEDIDAS repiten las de `src/app/marco-v2.ts`; `dashboard/shell/shell_css.test.ts` las cruza.
+   Todo cuelga de `.rv-*` DENTRO del div raíz `[data-ui="v2"]` (que solo existe con el chrome v2), así que v1 no ve nada de esto.
+
+   UNA SOLA NAVEGACIÓN VISIBLE (breakpoints DISJUNTOS, un único corte en 768):
+     <768        cabecera .rv-cab-movil + hoja .rv-hoja (el aside NO se ve)
+     768–1023    riel .rv-sb de 72 px, texto visualmente oculto (sigue en el árbol de accesibilidad)
+     ≥1024       sidebar .rv-sb de 232 px
+   `display: none` saca el elemento del árbol de accesibilidad; el texto del riel NO usa display:none sino recorte visual
+   (patrón sr-only) para que cada enlace conserve su nombre accesible.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+[data-ui="v2"].rv-app { background: var(--bg); color: var(--ink); }
+
+/* Saltar al contenido: invisible hasta recibir el foco */
+[data-ui="v2"] .rv-skip {
+  position: absolute; left: -9999px; top: 8px;
+  padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  background: var(--marca); color: var(--marca-fg); z-index: 70;
+}
+[data-ui="v2"] .rv-skip:focus { left: 12px; position: fixed; }
+
+[data-ui="v2"] .rv-fila { display: flex; align-items: flex-start; min-height: 100dvh; }
+[data-ui="v2"] .rv-col { flex: 1 1 0%; min-width: 0; }
+[data-ui="v2"] .rv-contenido { min-width: 0; }
+
+/* ── Móvil (<768): sin aside, documento que scrollea ──────────────────────── */
+[data-ui="v2"] .rv-sb { display: none; }
+[data-ui="v2"] .rv-cab-esc { display: none; }
+
+[data-ui="v2"] .rv-cab-movil {
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 40;
+  box-sizing: content-box; height: 56px;
+  padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
+  background: var(--surface); border-bottom: 1px solid var(--line);
+}
+[data-ui="v2"] .rv-cab-movil__logo { display: inline-flex; align-items: center; min-height: 44px; }
+[data-ui="v2"] .rv-cab-movil__acciones { display: flex; align-items: center; gap: 4px; }
+
+/* Botón de ícono: 44×44 de área táctil en móvil */
+[data-ui="v2"] .rv-icono-boton {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; border-radius: 8px; border: 0; background: transparent;
+  color: var(--ink2); cursor: pointer;
+}
+[data-ui="v2"] .rv-icono-boton:hover { background: var(--canvas); color: var(--ink); }
+
+/* ── Piezas de la navegación (compartidas por el aside y la hoja) ─────────── */
+[data-ui="v2"] .rv-lista { list-style: none; margin: 0; padding: 0; }
+[data-ui="v2"] .rv-grupo { margin-top: 14px; }
+[data-ui="v2"] .rv-grupo__t {
+  margin: 0; padding: 0 18px 6px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--faint);
+}
+[data-ui="v2"] .rv-item {
+  position: relative; display: flex; align-items: center; gap: 10px;
+  height: 32px; margin: 0 8px; padding: 0 10px; border-radius: 8px;
+  font-size: 13px; font-weight: 500; line-height: 1; text-decoration: none; white-space: nowrap;
+  color: var(--ink2);
+}
+[data-ui="v2"] .rv-item:hover { background: var(--canvas); color: var(--ink); }
+[data-ui="v2"] .rv-item__ico { flex: none; color: var(--muted); }
+[data-ui="v2"] .rv-item__txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Activo = pastilla de tinta + barra de señal de 3 px FUERA de la pastilla (sobre la superficie: ahí mide ≥3:1 en ambos temas) */
+[data-ui="v2"] .rv-item[aria-current="page"] { background: var(--marca); color: var(--marca-fg); }
+[data-ui="v2"] .rv-item[aria-current="page"]:hover { background: var(--marca-hover); }
+[data-ui="v2"] .rv-item[aria-current="page"] .rv-item__ico { color: var(--marca-fg); }
+[data-ui="v2"] .rv-item[aria-current="page"]::before {
+  content: ""; position: absolute; left: -8px; top: 6px; bottom: 6px; width: 3px;
+  border-radius: 0 3px 3px 0; background: var(--senal);
+}
+[data-ui="v2"] .rv-item:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+[data-ui="v2"] .rv-icono-boton:focus-visible,
+[data-ui="v2"] .rv-skip:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+[data-ui="v2"] .rv-chip,
+[data-ui="v2"] .rv-insignia {
+  margin-left: auto; flex: none; padding: 2px 6px; border-radius: 999px;
+  font-size: 11px; font-weight: 500; background: var(--canvas); color: var(--muted);
+}
+
+/* Tarjeta de cuenta */
+[data-ui="v2"] .rv-cuenta {
+  display: flex; align-items: center; gap: 8px; margin: 6px 8px 8px; padding: 8px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
+}
+[data-ui="v2"] .rv-avatar {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  background: var(--marca); color: var(--marca-fg);
+}
+[data-ui="v2"] .rv-cuenta__txt { min-width: 0; flex: 1 1 0%; }
+[data-ui="v2"] .rv-cuenta__nombre {
+  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 13px; font-weight: 500; color: var(--ink);
+}
+[data-ui="v2"] .rv-cuenta__rol { font-size: 11px; color: var(--faint); }
+[data-ui="v2"] .rv-cuenta__salir { flex: none; margin: 0; }
+[data-ui="v2"] .rv-cuenta__salir .rv-icono-boton { width: 32px; height: 32px; color: var(--bad); }
+[data-ui="v2"] .rv-tema { display: flex; justify-content: center; padding: 6px 8px 0; }
+[data-ui="v2"] .rv-uso { padding: 0 8px 6px; }
+
+/* ── Hoja «Más» (móvil) ───────────────────────────────────────────────────── */
+[data-ui="v2"] .rv-hoja {
+  margin: auto 0 0; padding: 0; width: 100%; max-width: none; max-height: 88dvh;
+  border: 0; border-radius: 16px 16px 0 0; background: var(--surface); color: var(--ink);
+  box-shadow: var(--shadow-pop);
+}
+[data-ui="v2"] .rv-hoja[open] { display: flex; flex-direction: column; }
+[data-ui="v2"] .rv-hoja::backdrop { background: var(--scrim, #0e0e1066); }
+[data-ui="v2"] .rv-hoja__cab {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 4px 8px 4px 18px; border-bottom: 1px solid var(--line); flex: none;
+}
+[data-ui="v2"] .rv-hoja__t { font-size: 13px; font-weight: 600; }
+[data-ui="v2"] .rv-hoja__nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px 0; overscroll-behavior: contain; }
+[data-ui="v2"] .rv-hoja__pie {
+  flex: none; border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+/* En la hoja los ítems tienen área táctil de 44 px */
+[data-ui="v2"] .rv-hoja .rv-item { height: 44px; font-size: 14px; }
+
+/* ── Transiciones sobrias (120 ms, curva única); sin ellas con movimiento reducido ── */
+@media (prefers-reduced-motion: no-preference) {
+  [data-ui="v2"] .rv-item,
+  [data-ui="v2"] .rv-icono-boton { transition: background-color 120ms cubic-bezier(0.22, 1, 0.36, 1), color 120ms cubic-bezier(0.22, 1, 0.36, 1); }
+}
+
+/* ── Desde 768: escritorio. El riel (72) y el sidebar completo (232) comparten estructura ── */
+@media (min-width: 768px) {
+  [data-ui="v2"] .rv-cab-movil { display: none; }
+
+  [data-ui="v2"] .rv-sb {
+    display: flex; flex-direction: column; flex: none;
+    position: sticky; top: 0; align-self: flex-start;
+    width: 72px; height: 100dvh;
+    background: var(--surface); border-right: 1px solid var(--line);
+  }
+  [data-ui="v2"] .rv-sb__marca { display: flex; align-items: center; height: 44px; padding: 0 18px; flex: none; }
+  [data-ui="v2"] .rv-sb__nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 4px 0 12px; }
+  [data-ui="v2"] .rv-sb__pie { flex: none; border-top: 1px solid var(--line); padding-top: 6px; }
+
+  /* La columna del contenido scrollea por dentro, como en v1 (las páginas que miden contra su contenedor siguen igual) */
+  [data-ui="v2"] .rv-col { display: flex; flex-direction: column; height: 100dvh; }
+  [data-ui="v2"] .rv-contenido { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+  [data-ui="v2"] .rv-cab-esc {
+    display: flex; align-items: center; justify-content: space-between; flex: none;
+    height: 44px; padding: 0 16px; background: var(--surface); border-bottom: 1px solid var(--line);
+  }
+  [data-ui="v2"] .rv-cab-esc__titulo { font-size: 13px; font-weight: 600; color: var(--ink); }
+  [data-ui="v2"] .rv-cab-esc .rv-icono-boton { width: 32px; height: 32px; }
+  [data-ui="v2"] .rv-item { height: 32px; }
+}
+
+/* ── 768–1023: riel de íconos. El texto se oculta VISUALMENTE (conserva el nombre accesible) ── */
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  [data-ui="v2"] .rv-sb .rv-item { justify-content: center; margin: 0 8px; padding: 0; }
+  [data-ui="v2"] .rv-sb .rv-item__txt,
+  [data-ui="v2"] .rv-sb .rv-grupo__t,
+  [data-ui="v2"] .rv-sb .rv-cuenta__txt,
+  [data-ui="v2"] .rv-sb .rv-chip,
+  [data-ui="v2"] .rv-sb .rv-insignia {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap; border: 0;
+  }
+  [data-ui="v2"] .rv-sb .rv-grupo { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+  [data-ui="v2"] .rv-sb .rv-sb__marca { justify-content: center; padding: 0; overflow: hidden; }
+  [data-ui="v2"] .rv-sb .rv-tema,
+  [data-ui="v2"] .rv-sb .rv-uso { display: none; }
+  [data-ui="v2"] .rv-sb .rv-cuenta { flex-direction: column; margin: 6px 8px 8px; padding: 6px 0; border: 0; background: transparent; }
+}
+
+/* ── Desde 1024: sidebar completo ─────────────────────────────────────────── */
+@media (min-width: 1024px) {
+  [data-ui="v2"] .rv-sb { width: 232px; }
+}

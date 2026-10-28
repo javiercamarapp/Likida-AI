@@ -25,7 +25,7 @@ const { versionUi, COOKIE_UI } = await import('./version_ui');
 const { reiniciarCacheUi, versionUiDeTenant, TTL_PERFIL_MS } = await import('./perfil_tenant');
 
 const jar = (v?: string) => ({ get: (n: string) => (n === COOKIE_UI && v ? { value: v } : undefined) });
-const SIN_ENV = {} as NodeJS.ProcessEnv;
+const SIN_ENV: Record<string, string | undefined> = {};
 
 beforeEach(() => { reiniciarCacheUi(); porTenant = new Map(); lecturas = 0; });
 
@@ -40,11 +40,11 @@ describe('versionUi', () => {
     expect(await versionUi('t-v2', 'flota_admin', jar(), SIN_ENV)).toBe('v2');
   });
   it('LIKIDA_UI_V2_FORZAR=1 fuerza v2 sin consultar la base', async () => {
-    expect(await versionUi('t1', 'flota_admin', jar(), { LIKIDA_UI_V2_FORZAR: '1' } as NodeJS.ProcessEnv)).toBe('v2');
+    expect(await versionUi('t1', 'flota_admin', jar(), { LIKIDA_UI_V2_FORZAR: '1' })).toBe('v2');
     expect(lecturas).toBe(0);
   });
   it('LIKIDA_UI_V2_FORZAR se ignora en producción', async () => {
-    const env = { LIKIDA_UI_V2_FORZAR: '1', VERCEL_ENV: 'production' } as NodeJS.ProcessEnv;
+    const env = { LIKIDA_UI_V2_FORZAR: '1', VERCEL_ENV: 'production' };
     expect(await versionUi('t1', 'flota_admin', jar(), env)).toBe('v1');
   });
   it('la cookie solo la honra el superadmin', async () => {

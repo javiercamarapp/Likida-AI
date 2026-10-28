@@ -23,7 +23,9 @@ export interface LectorCookies {
   get(nombre: string): { value: string } | undefined;
 }
 
-function forzadoPorEntorno(env: NodeJS.ProcessEnv): boolean {
+type Entorno = Readonly<Record<string, string | undefined>>;
+
+function forzadoPorEntorno(env: Entorno): boolean {
   return env.LIKIDA_UI_V2_FORZAR === '1' && env.VERCEL_ENV !== 'production';
 }
 
@@ -43,7 +45,7 @@ export async function versionUi(
   tenantId: string | null | undefined,
   rol: string,
   cookies?: LectorCookies | null,
-  env: NodeJS.ProcessEnv = process.env,
+  env: Entorno = process.env,
 ): Promise<VersionUi> {
   if (forzadoPorEntorno(env)) return 'v2';
   const preferida = dePreferenciaSuperadmin(rol, cookies);
