@@ -628,15 +628,31 @@ function parseEmail(t: string): string | undefined {
   return m ? m[0].toLowerCase() : undefined;
 }
 
+/**
+ * A39-S53-03: interpreta un monto de tope escrito a mano. Formas admitidas: entero («4000»), miles («4,000» / «4.000»),
+ * centavos («4000.00» / «2500,50») y miles con centavos («4,000.00» / «4.000,00»). Cualquier otra combinación es ambigua: undefined.
+ * Un tope tiene al menos 3 dígitos enteros (como antes) y a lo más 6.
+ */
+export function montoDeTope(crudo: string): number | undefined {
+  let n: number;
+  if (/^\d+$/.test(crudo)) n = Number(crudo);
+  else if (/^\d{1,3}([,.]\d{3})+$/.test(crudo) && new Set(crudo.replace(/\d/g, '')).size === 1) n = Number(crudo.replace(/[,.]/g, ''));
+  else if (/^\d{1,3}(,\d{3})*\.\d{1,2}$/.test(crudo)) n = Number(crudo.replace(/,/g, ''));
+  else if (/^\d{1,3}(\.\d{3})*,\d{1,2}$/.test(crudo)) n = Number(crudo.replace(/\./g, '').replace(',', '.'));
+  else if (/^\d+[.,]\d{1,2}$/.test(crudo)) n = Number(crudo.replace(',', '.'));
+  else return undefined;
+  if (!Number.isFinite(n) || Math.floor(n) < 100 || Math.floor(n) > 999_999) return undefined;
+  return Math.round(n * 100) / 100;
+}
+
 function parseTopes(t: string): DatosOnboarding['topesPolitica'] | undefined {
   const s = strip(t);
   if (s === 'topes-demo') return { diesel: 4000, caseta: 1500, alimentacion: 800, hospedaje: 2500 };
   const num = (k: string): number | undefined => {
-    // A37-S53-07: admite separador de miles («4,000» / «4.000»); sin él, «diésel 4,000» no se leía.
-    const m = s.match(new RegExp(`${k}\\s*:?\\s*\\$?\\s*(\\d{1,3}(?:[,.]\\d{3})+|\\d{3,6})(?![\\d,.]\\d)`));
-    if (!m) return undefined;
-    const n = Number(m[1].replace(/[,.]/g, ''));
-    return Number.isFinite(n) && n > 0 ? n : undefined;
+    // A39-S53-03: se toma el número COMPLETO (con sus separadores) y luego se interpreta; antes el lookahead hacía retroceder
+    // la regex y «4000.00» se leía como 400. Lo que no cierra con una forma conocida NO se adivina (undefined).
+    const m = s.match(new RegExp(`${k}\\s*:?\\s*\\$?\\s*(\\d[\\d.,]*\\d|\\d)`));
+    return m ? montoDeTope(m[1]) : undefined;
   };
   const diesel = num('diesel');
   const caseta = num('caseta') ?? num('casetas') ?? num('peaje');
