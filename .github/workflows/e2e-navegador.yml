@@ -196,9 +196,8 @@ jobs:
       # SEGUNDA PASADA con el rediseño forzado (UI v2, Fase 1 del plan). `LIKIDA_UI_V2_FORZAR=1` lo lee el servidor al
       # atender cada petición (ignorado si VERCEL_ENV=production), así que se reinicia `next start` con la variable; eso
       # además reinicia el límite de envíos del login (en memoria), que la primera pasada ya gastó. Escritorio y Pixel 7.
-      # En el teléfono, v2 NO tiene aside visible (una sola navegación a la vez): las dos pruebas de movil.nav.ts que
-      # buscan enlaces en `aside` se excluyen AQUÍ hasta que usen `abrirNavegacion` (pruebas-navegador/apoyo/navegacion.ts);
-      # la hoja «Más» la cubre ui-v2-movil.nav.ts. Quitar el --grep-invert cuando movil.nav.ts adopte el ayudante.
+      # En el teléfono, v2 NO tiene aside visible (una sola navegación a la vez): movil.nav.ts busca el menú con
+      # `abrirNavegacion` (pruebas-navegador/apoyo/navegacion.ts), que abre la hoja «Más» en v2; así corre entera en las dos pasadas.
       - name: Reiniciar el servidor con la UI v2 forzada
         if: ${{ !cancelled() }}
         run: |
@@ -224,7 +223,6 @@ jobs:
         run: >
           npx playwright test
           --output=pruebas-navegador/.artefactos-v2
-          --grep-invert "con la navegación a mano|navegando con el dedo"
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3000
           PLAYWRIGHT_HTML_REPORT: pruebas-navegador/.reporte-v2
