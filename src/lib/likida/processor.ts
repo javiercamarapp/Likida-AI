@@ -1290,7 +1290,11 @@ async function entregarCierrePendiente(op: ResolvedOperador, telefono: string, l
       // `avisar_cierre.ts` ya documentaba).
       const pdfJefeOk = pdfListoParaSellar(liq.pdfUrl, rj);
       if (rj.enviado && pdfJefeOk) {
-        if (rj.pdfEstado === 'definitivo') {
+        if (rj.pdfEstado === 'definitivo' && rj.pdfAvisadoPorPlantilla) {
+          // A39-S30-03: el documento libre no entró por la ventana de 24 h, pero el jefe SÍ fue avisado por plantilla con la
+          // liga al panel: nadie se quedó sin enterarse. Solo queda el rastro en el log.
+          logger.warn('cierre.pdf_jefe_avisado_por_plantilla', { ...ctx });
+        } else if (rj.pdfEstado === 'definitivo') {
           // Se avisa UNA vez —queda sellado, no se repite— y el motivo va al
           // log: el ejemplar del contralor no llegó y nadie más lo va a decir.
           logger.error('cierre.pdf_jefe_definitivo', { ...ctx, motivo: rj.motivo });
