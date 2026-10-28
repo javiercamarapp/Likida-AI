@@ -61,7 +61,7 @@ function ConexionTms() {
       <path className="rv-trazo" pathLength={1} d="M22 38h26M22 48h26M22 58h14" />
       <rect x="104" y="26" width="42" height="44" rx="6" fill={relleno} />
       <path className="rv-trazo rv-trazo--2" pathLength={1} d="M112 38h26M112 48h26M112 58h14" />
-      <path className="rv-trazo rv-trazo--2" pathLength={1} strokeDasharray="1" d="M60 48h14" />
+      <path className="rv-trazo rv-trazo--2" pathLength={1} d="M60 48h14" />
       <circle cx="80" cy="48" r="6" fill="var(--surface, transparent)" />
       <path className="rv-trazo rv-trazo--3" pathLength={1} d="M86 48h14" />
     </>
