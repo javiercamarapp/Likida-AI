@@ -229,3 +229,68 @@ export function cierreMensual(mes: string, archivos: readonly ArchivoCierre[]): 
     avisos,
   };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DOS MESES JUNTOS (A2 ola 1). El cliente revisa «hasta dos meses» para que lo tardío se acomode: un cobro de agosto que
+// llega en el archivo de septiembre ya no es un tardío FUERA de lugar si agosto está en la ventana. Esta vista consolida el
+// mes y el anterior: suma sus totales, junta sus seis decenas y separa los tardíos en los que caen DENTRO de la ventana
+// (acomodados) y los que son anteriores a ella (siguen siendo candidatos a validar). PURO.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface CierreDosMeses {
+  /** [mes anterior, mes pedido]. */
+  meses: [string, string];
+  cierres: [CierreMensual, CierreMensual];
+  /** Las seis decenas, con el mes en la etiqueta. */
+  decenas: ResumenDecena[];
+  decenasFaltantes: string[];
+  archivosSinPeriodo: string[];
+  cruces: number;
+  monto: number;
+  /** Tardíos cuya fecha cae dentro de la ventana de dos meses: se «acomodan» (están en la ventana, no fuera de ella). */
+  acomodados: { n: number; monto: number };
+  /** Tardíos anteriores a la ventana: siguen siendo candidatos a validar con el proveedor. */
+  tardiosFueraDeVentana: { n: number; monto: number };
+  repetidosEntreArchivos: CierreMensual['repetidosEntreArchivos'];
+  dobleConteo: { n: number; monto: number };
+  completo: boolean;
+  avisos: string[];
+}
+
+export function cierreDosMeses(mes: string, archivos: readonly ArchivoCierre[]): CierreDosMeses | { error: string } {
+  const previo = mesAnterior(mes);
+  if (!previo) return { error: `El mes «${mes}» no es válido (usa AAAA-MM).` };
+  const a = cierreMensual(previo, archivos);
+  if ('error' in a) return a;
+  const b = cierreMensual(mes, archivos);
+  if ('error' in b) return b;
+  const ventana = limitesDelMes(previo) as { desde: string; hasta: string };
+
+  let accN = 0; let accM = 0; let fueraN = 0; let fueraM = 0;
+  for (const t of [...a.tardios, ...b.tardios]) {
+    if (t.fecha < ventana.desde) { fueraN++; fueraM += t.monto; } else { accN++; accM += t.monto; }
+  }
+  const vistos = new Set<string>();
+  const repetidos: CierreMensual['repetidosEntreArchivos'] = [];
+  for (const r of [...a.repetidosEntreArchivos, ...b.repetidosEntreArchivos]) {
+    const k = `${r.fecha}|${r.caseta ?? ''}|${r.tag ?? ''}|${r.monto.toFixed(2)}`;
+    if (vistos.has(k)) continue;
+    vistos.add(k);
+    repetidos.push(r);
+  }
+  const decenas = [...a.decenas, ...b.decenas].map((d, i) => ({ ...d, etiqueta: `${i < 3 ? previo : mes} · ${d.etiqueta}` }));
+  const decenasFaltantes = decenas.filter((d) => !d.cubierta).map((d) => d.etiqueta);
+  const archivosSinPeriodo = [...new Set([...a.archivosSinPeriodo, ...b.archivosSinPeriodo])];
+  const dobleConteo = { n: a.dobleConteo.n + b.dobleConteo.n, monto: r2(a.dobleConteo.monto + b.dobleConteo.monto) };
+  const avisos = [...new Set([...a.avisos, ...b.avisos])];
+  // Los tardíos del mes anterior al ANTERIOR se comprobaron contra un mes (mes-2) que esta vista no consolida: se dice.
+  if (fueraN > 0) avisos.push(`${fueraN} cobro(s) por ${r2(fueraM).toFixed(2)} son anteriores a ${previo}: quedan fuera de la ventana de dos meses y siguen siendo candidatos a validar.`);
+  return {
+    meses: [previo, mes], cierres: [a, b], decenas, decenasFaltantes, archivosSinPeriodo,
+    cruces: a.cruces + b.cruces, monto: r2(a.monto + b.monto),
+    acomodados: { n: accN, monto: r2(accM) }, tardiosFueraDeVentana: { n: fueraN, monto: r2(fueraM) },
+    repetidosEntreArchivos: repetidos, dobleConteo,
+    completo: decenasFaltantes.length === 0 && archivosSinPeriodo.length === 0 && dobleConteo.n === 0,
+    avisos,
+  };
+}

@@ -57,7 +57,7 @@ import { validarMargenLejos, margenLejosEfectivo } from './gps_umbral';
 import { validarConfigAtipicos, configAtipicosEfectiva, umbralesDePantalla, sinSenalesApagadas, esEstadoAtipico, puedeCambiarEstado, exigeRevisor, type EstadoAtipico } from './atipicos_config';
 import { matrizDeCsv } from './csv';
 import { detectarAtipicos, type ResultadoAtipicos, type UmbralesAtipicos } from './cruces_atipicos';
-import { cierreMensual, type ArchivoCierre, type CierreMensual } from './cierre_mensual';
+import { cierreMensual, cierreDosMeses, type ArchivoCierre, type CierreMensual, type CierreDosMeses } from './cierre_mensual';
 import {
   estadoTrasAcreditar, evaluarReclamo, resumirSeguimiento, ESTADOS_RECLAMO,
   type EstadoReclamo, type EvaluacionReclamo, type ResumenSeguimiento,
@@ -2707,21 +2707,13 @@ export async function revisionDeDesglose(
 
 // ── El cierre mensual de la flota ───────────────────────────────────────────
 
-/**
- * Consolida los desgloses de un mes (y trae los del mes anterior para comprobar tardíos
- * ya cobrados). Un desglose pertenece al mes en que TERMINA su periodo oficial.
- */
-export async function cierreMensualDeFlota(tenantId: string, mes: string): Promise<CierreMensual | { error: string }> {
-  const lim = limitesDelMes(mes);
-  const previo = mesAnterior(mes);
-  if (!lim || !previo) return { error: `El mes «${mes}» no es válido (usa AAAA-MM).` };
-  const limPrevio = limitesDelMes(previo) as { desde: string; hasta: string };
-
+/** Los archivos (con sus líneas) cuyo periodo termina entre `desde` y `hasta`, listos para consolidar. Lanza ante error de base. */
+async function archivosParaCierre(tenantId: string, desde: string, hasta: string): Promise<ArchivoCierre[]> {
   const desgloses = await traerTodo<Record<string, unknown>>(
     (d, h) => acotada(supabaseAdmin().from('desglose_peaje')
       .select('id, archivo_nombre, periodo_oficial_desde, periodo_oficial_hasta', conteo(d))
       .eq('tenant_id', tenantId).is('anulado_en', null)
-      .gte('periodo_oficial_hasta', limPrevio.desde).lte('periodo_oficial_hasta', lim.hasta)
+      .gte('periodo_oficial_hasta', desde).lte('periodo_oficial_hasta', hasta)
       .order('periodo_oficial_desde').order('id').range(d, h), 'revision_cobros.cierre_desgloses'),
     'revision_cobros.cierre_desgloses',
   );
@@ -2737,7 +2729,33 @@ export async function cierreMensualDeFlota(tenantId: string, mes: string): Promi
       })),
     });
   }
-  return cierreMensual(mes, archivos);
+  return archivos;
+}
+
+/**
+ * Consolida los desgloses de un mes (y trae los del mes anterior para comprobar tardíos
+ * ya cobrados). Un desglose pertenece al mes en que TERMINA su periodo oficial.
+ */
+export async function cierreMensualDeFlota(tenantId: string, mes: string): Promise<CierreMensual | { error: string }> {
+  const lim = limitesDelMes(mes);
+  const previo = mesAnterior(mes);
+  if (!lim || !previo) return { error: `El mes «${mes}» no es válido (usa AAAA-MM).` };
+  const limPrevio = limitesDelMes(previo) as { desde: string; hasta: string };
+  return cierreMensual(mes, await archivosParaCierre(tenantId, limPrevio.desde, lim.hasta));
+}
+
+/**
+ * El cierre de DOS meses juntos (el mes pedido y el anterior): el cliente revisa hasta dos meses para que lo tardío se acomode.
+ * Lee de una vez los archivos desde el inicio del mes anterior AL anterior (contra él se comprueban los tardíos del mes anterior)
+ * hasta el fin del mes pedido.
+ */
+export async function cierreDosMesesDeFlota(tenantId: string, mes: string): Promise<CierreDosMeses | { error: string }> {
+  const lim = limitesDelMes(mes);
+  const previo = mesAnterior(mes);
+  const antes = previo ? mesAnterior(previo) : null;
+  const limAntes = antes ? limitesDelMes(antes) : null;
+  if (!lim || !previo || !antes || !limAntes) return { error: `El mes «${mes}» no es válido (usa AAAA-MM).` };
+  return cierreDosMeses(mes, await archivosParaCierre(tenantId, limAntes.desde, lim.hasta));
 }
 
 // ── El seguimiento de reclamos y notas de crédito ───────────────────────────

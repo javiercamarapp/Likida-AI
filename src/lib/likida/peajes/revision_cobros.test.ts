@@ -383,3 +383,28 @@ describe('A2 ola 1 · clase 1 y casetas por pasada en la revisión', () => {
     expect(antes).not.toBeNull();
   }, 60_000);
 });
+
+describe('A2 ola 1 · cierre de dos meses desde la base', () => {
+  it('lee los archivos de los dos meses (y los del mes previo, para los tardíos) una sola vez y consolida', async () => {
+    await subir('01 A 10 DE FEBRERO.xlsx', { filas: 300, inicio: '2026-02-01', extemporaneos: 0, semilla: 11 });
+    await subir('11 A 20 DE FEBRERO.xlsx', { filas: 300, inicio: '2026-02-11', extemporaneos: 0, semilla: 12 });
+    await subir('21 A 28 DE FEBRERO.xlsx', { filas: 300, inicio: '2026-02-21', extemporaneos: 0, semilla: 13 });
+    await subir('01 A 10 DE MARZO.xlsx', { filas: 300, inicio: '2026-03-01', extemporaneos: 5, semilla: 14 });
+    const dos = await R.cierreDosMesesDeFlota(T, '2026-03');
+    if ('error' in dos) throw new Error(dos.error);
+    expect(dos.meses).toEqual(['2026-02', '2026-03']);
+    expect(dos.decenas).toHaveLength(6);
+    expect(dos.decenasFaltantes).toEqual(['2026-03 · 11 a 20', '2026-03 · 21 a 31']);
+    expect(dos.cruces).toBe(1200);
+    expect(dos.completo).toBe(false);
+    // no mezcla flotas
+    const ajeno = await R.cierreDosMesesDeFlota(OTRO, '2026-03');
+    if ('error' in ajeno) throw new Error(ajeno.error);
+    expect(ajeno.cruces).toBe(0);
+    // el cierre de un mes sigue igual
+    const uno = await R.cierreMensualDeFlota(T, '2026-03');
+    if ('error' in uno) throw new Error(uno.error);
+    expect(uno.cruces).toBe(300);
+    expect(await R.cierreDosMesesDeFlota(T, '2026-13')).toHaveProperty('error');
+  }, 60_000);
+});

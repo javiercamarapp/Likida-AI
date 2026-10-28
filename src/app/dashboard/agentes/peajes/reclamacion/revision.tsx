@@ -2,7 +2,7 @@ import { FileDown } from 'lucide-react';
 import { mxn, numero } from '@/lib/formato';
 // SOLO tipos y módulos puros: la vista no debe arrastrar `supabaseAdmin` al bundle.
 import type { ReporteRevision, ReclamoVista } from '@/lib/likida/peajes/revision_cobros';
-import type { CierreMensual } from '@/lib/likida/peajes/cierre_mensual';
+import type { CierreMensual, CierreDosMeses } from '@/lib/likida/peajes/cierre_mensual';
 import type { ResumenSeguimiento } from '@/lib/likida/peajes/reclamos_seguimiento';
 import { ETIQUETA_ESTADO_RECLAMO, PLAZO_RECLAMO_MESES } from '@/lib/likida/peajes/reclamos_seguimiento';
 import type { ResultadoCasado } from '@/lib/likida/peajes/notas_credito';
@@ -239,26 +239,47 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
 
 // ── El cierre mensual ───────────────────────────────────────────────────────
 
-export function SeccionCierreMensual({ mes, cierre, error, sufijo, desglose }: {
+export function SeccionCierreMensual({ mes, cierre, error, sufijo, desglose, opciones = [], dosMeses = false, cierreDos = null }: {
   mes: string | null; cierre: CierreMensual | null; error: boolean; sufijo: string; desglose: string | null;
+  /** Los meses que ofrece el selector (del más reciente al más viejo). Vacío = campo de texto AAAA-MM. */
+  opciones?: string[];
+  /** Vista de DOS meses juntos (el pedido y el anterior). */
+  dosMeses?: boolean;
+  cierreDos?: CierreDosMeses | null;
 }) {
+  const lista = mes && opciones.length > 0 && !opciones.includes(mes) ? [mes, ...opciones] : opciones;
   return (
     <section className="card p-4" id="cierre-mensual">
       <h2 className="font-display text-[15px] font-semibold">Cierre mensual</h2>
       <p className="text-[12px] mt-0.5" style={{ color: 'var(--muted)' }}>
         Junta las tres decenas de un mes (y compara los cobros tardíos con el mes anterior si también lo subiste). Un mes con una decena faltante se dice incompleto.
+        Con «dos meses juntos» se consolidan el mes elegido y el anterior para que los cobros tardíos se acomoden en la misma ventana.
       </p>
       <form method="get" className="flex items-end gap-2 flex-wrap mt-3">
         <ExtraSufijo sufijo={sufijo} />
         {desglose && <input type="hidden" name="desglose" value={desglose} />}
         <label className="block">
-          <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Mes (AAAA-MM)</span>
-          <input name="mes" defaultValue={mes ?? ''} placeholder="2026-09" pattern="\d{4}-(0[1-9]|1[0-2])" required className={`${CSS_INPUT} w-[120px] mt-0.5`} style={ESTILO_INPUT} />
+          <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Mes</span>
+          {lista.length > 0 ? (
+            <select name="mes" defaultValue={mes ?? lista[0]} required className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT}>
+              {lista.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          ) : (
+            <input name="mes" defaultValue={mes ?? ''} placeholder="2026-09" pattern="\d{4}-(0[1-9]|1[0-2])" required className={`${CSS_INPUT} w-[120px] mt-0.5`} style={ESTILO_INPUT} />
+          )}
         </label>
-        <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>Ver el mes</button>
+        <label className="block">
+          <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Ventana</span>
+          <select name="meses" defaultValue={dosMeses ? '2' : '1'} className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT}>
+            <option value="1">Un mes</option>
+            <option value="2">Dos meses juntos</option>
+          </select>
+        </label>
+        <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>{dosMeses ? 'Ver los dos meses' : 'Ver el mes'}</button>
       </form>
       {error && <p role="alert" className="text-[12.5px] mt-3" style={{ color: 'var(--bad)' }}>No se pudo armar el cierre ahora mismo. No es que no haya cobros: inténtalo de nuevo.</p>}
-      {cierre && (
+      {dosMeses && cierreDos && <CierreDosMesesVista c={cierreDos} />}
+      {!dosMeses && cierre && (
         <div className="mt-3 space-y-3">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
@@ -273,14 +294,7 @@ export function SeccionCierreMensual({ mes, cierre, error, sufijo, desglose }: {
             </div>
           </div>
           <div className="grid sm:grid-cols-3 gap-2">
-            {cierre.decenas.map((d) => (
-              <div key={d.etiqueta} className="rounded-lg hairline p-2.5">
-                <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Decena {d.etiqueta}</span>
-                {d.cubierta
-                  ? <><span className="text-[15px] font-semibold cifra-mono">{numero(d.cruces)}</span><span className="text-[11px] ml-1.5" style={{ color: 'var(--muted)' }}>{mxn(d.monto)}</span></>
-                  : <span className="text-[12.5px]" style={{ color: 'var(--bad)' }}>Falta el archivo</span>}
-              </div>
-            ))}
+            {cierre.decenas.map((d) => <TarjetaDecena key={d.etiqueta} d={d} />)}
           </div>
           <p className="text-[12.5px]">
             Cobros tardíos (candidatos: validar con el proveedor): {numero(cierre.tardiosMesAnterior.n)} del mes anterior ({mxn(cierre.tardiosMesAnterior.monto)}) y {numero(cierre.tardiosDecenaAnterior.n)} de una decena anterior de este mes ({mxn(cierre.tardiosDecenaAnterior.monto)}).
@@ -292,6 +306,46 @@ export function SeccionCierreMensual({ mes, cierre, error, sufijo, desglose }: {
         </div>
       )}
     </section>
+  );
+}
+
+function TarjetaDecena({ d }: { d: CierreMensual['decenas'][number] }) {
+  return (
+    <div className="rounded-lg hairline p-2.5">
+      <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Decena {d.etiqueta}</span>
+      {d.cubierta
+        ? <><span className="text-[15px] font-semibold cifra-mono">{numero(d.cruces)}</span><span className="text-[11px] ml-1.5" style={{ color: 'var(--muted)' }}>{mxn(d.monto)}</span></>
+        : <span className="text-[12.5px]" style={{ color: 'var(--bad)' }}>Falta el archivo</span>}
+    </div>
+  );
+}
+
+function CierreDosMesesVista({ c }: { c: CierreDosMeses }) {
+  return (
+    <div className="mt-3 space-y-3" id="cierre-dos-meses">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <span className="text-[13px] font-semibold">{c.meses[0]} + {c.meses[1]}</span>
+          <span className="inline-flex ml-2 px-2 py-0.5 rounded-full text-[11px] font-medium"
+            style={c.completo ? { color: 'var(--ok)', background: 'var(--okbg)' } : { color: 'var(--warn)', background: 'var(--warnbg)' }}>
+            {c.completo ? 'Dos meses completos' : 'Ventana incompleta'}
+          </span>
+        </div>
+        <div className="text-right">
+          <span className="text-[18px] font-semibold cifra-mono">{numero(c.cruces)}</span> cruces · <span className="cifra-mono">{mxn(c.monto)}</span>
+        </div>
+      </div>
+      <div className="grid sm:grid-cols-3 gap-2">
+        {c.decenas.map((d) => <TarjetaDecena key={d.etiqueta} d={d} />)}
+      </div>
+      <p className="text-[12.5px]">
+        Cobros tardíos que caen dentro de la ventana (se acomodan): {numero(c.acomodados.n)} ({mxn(c.acomodados.monto)}). Anteriores a {c.meses[0]} (candidatos: validar con el proveedor): {numero(c.tardiosFueraDeVentana.n)} ({mxn(c.tardiosFueraDeVentana.monto)}).
+        {c.repetidosEntreArchivos.length > 0 && <> <b>{numero(c.repetidosEntreArchivos.length)} cobros aparecen en más de un archivo.</b></>}
+      </p>
+      {c.avisos.length > 0 && (
+        <ul className="text-[12px] space-y-0.5" style={{ color: 'var(--muted)' }}>{c.avisos.map((a) => <li key={a}>{a}</li>)}</ul>
+      )}
+    </div>
   );
 }
 

@@ -239,6 +239,15 @@ export function mesAnterior(mes: string): string | null {
   return `${a}-${String(m).padStart(2, '0')}`;
 }
 
+/** Los últimos `n` meses «AAAA-MM» hasta el de `hoy` (inclusive), del más reciente al más viejo: lo que ofrece el selector de mes. */
+export function mesesRecientes(hoy: string, n = 12): string[] {
+  const out: string[] = [];
+  let m: string | null = hoy.slice(0, 7);
+  if (!limitesDelMes(m)) return out;
+  while (m && out.length < n) { out.push(m); m = mesAnterior(m); }
+  return out;
+}
+
 /** Las tres decenas de un mes: 1–10, 11–20, 21–fin. */
 export function decenasDelMes(mes: string): Array<{ desde: string; hasta: string; etiqueta: string }> {
   const l = limitesDelMes(mes);

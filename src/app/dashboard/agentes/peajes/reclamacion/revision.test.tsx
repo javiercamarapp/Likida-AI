@@ -4,11 +4,13 @@ import { VistaReclamacionPeajes, type ExtrasReclamacion } from './vista';
 import { MAX_FILAS_POR_CATEGORIA } from './revision';
 import { revisarCobros, type LineaCobro } from '@/lib/likida/peajes/reglas_cobro';
 import { detectarAtipicos } from '@/lib/likida/peajes/cruces_atipicos';
-import { cierreMensual } from '@/lib/likida/peajes/cierre_mensual';
+import { cierreMensual, cierreDosMeses, type LineaCierre, type ArchivoCierre } from '@/lib/likida/peajes/cierre_mensual';
 import { evaluarReclamo, resumirSeguimiento } from '@/lib/likida/peajes/reclamos_seguimiento';
 import type { ReporteRevision, ReclamoVista } from '@/lib/likida/peajes/revision_cobros';
 
 const ID = '11111111-1111-4111-8111-111111111111';
+const lin = (p: Partial<LineaCierre>): LineaCierre => ({ fecha: '2026-03-05', hora: '10:00:00', caseta: 'Caseta Ejemplo Norte', tag: 'IMDM00000001', monto: 100, ...p });
+const archivo = (id: string, desde: string, hasta: string, lineas: LineaCierre[]): ArchivoCierre => ({ id, etiqueta: id, periodoDesde: desde, periodoHasta: hasta, lineas });
 const nada = async () => {};
 const acciones = { crearReclamo: nada, marcarEnviado: nada, registrarNota: nada, rechazar: nada };
 const l = (indice: number, p: Partial<LineaCobro> = {}): LineaCobro => ({
@@ -199,5 +201,39 @@ describe('A2 ola 1 · la propuesta de a qué reclamo corresponde una nota de cr�
   it('un texto de la nota se escapa, no se inyecta', () => {
     const html = con({ texto: '"><script>x</script>', importe: null, resultado: null, motivo: 'no es un número' });
     expect(html).not.toContain('<script>x</script>');
+  });
+});
+
+describe('A2 ola 1 · selector de mes y vista de dos meses', () => {
+  const opciones = ['2026-10', '2026-09', '2026-08'];
+  it('el mes se elige de una lista (los últimos meses) en vez de teclear la URL, y ofrece «dos meses juntos»', () => {
+    const html = pintar(extras(null, { mesesOpciones: opciones }), 'sin_desglose');
+    expect(html).toMatch(/<select[^>]*name="mes"/);
+    for (const m of opciones) expect(html).toContain(`<option value="${m}"`);
+    expect(html).toMatch(/<select[^>]*name="meses"/);
+    expect(html).toContain('Dos meses juntos');
+  });
+  it('un mes fuera de la lista (un cierre viejo pedido por URL) se conserva como opción seleccionada', () => {
+    const html = pintar(extras(null, { mesesOpciones: opciones, mes: '2025-01' }), 'sin_desglose');
+    expect(html).toContain('<option value="2025-01"');
+  });
+  it('sin lista de meses queda el campo de texto de siempre', () => {
+    const html = pintar(extras(null), 'sin_desglose');
+    expect(html).toMatch(/<input[^>]*name="mes"/);
+  });
+  it('la vista de dos meses pinta la ventana, las seis decenas y separa lo que se acomoda de lo que queda fuera', () => {
+    const c = cierreDosMeses('2026-03', [
+      archivo('f-a', '2026-02-01', '2026-02-10', [lin({ fecha: '2026-02-03' })]),
+      archivo('m-c', '2026-03-21', '2026-03-31', [lin({ fecha: '2026-03-22', tag: 'IMDM00000002' }), lin({ fecha: '2026-02-25', tag: 'IMDM00000003', monto: 70 }), lin({ fecha: '2026-01-20', tag: 'IMDM00000004', monto: 30 })]),
+    ]);
+    if ('error' in c) throw new Error(c.error);
+    const html = pintar(extras(null, { mes: '2026-03', dosMeses: true, cierreDos: c, mesesOpciones: opciones }), 'sin_desglose');
+    expect(html).toContain('2026-02 + 2026-03');
+    expect(html).toContain('Ventana incompleta');
+    expect(html).toContain('Decena 2026-02 · 1 a 10');
+    expect(html).toContain('Decena 2026-03 · 21 a 31');
+    expect(html).toContain('Cobros tardíos que caen dentro de la ventana (se acomodan): 1');
+    expect(html).toContain('Anteriores a 2026-02');
+    expect(html).toContain('Ver los dos meses');
   });
 });
