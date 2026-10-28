@@ -51,6 +51,8 @@ export interface TenantEfectivo extends SessionTenant {
    * sería exactamente el error que se quiere cerrar, en el otro sentido.
    */
   tenantExiste: boolean;
+  /** El rol de la SESIÓN real (`rol` es el efectivo, ya recortado por `?rol=`). Sirve para decidir la versión de interfaz. */
+  rolReal?: string;
 }
 
 /**
@@ -253,7 +255,7 @@ export async function resolverTenantEfectivo(
   // cerrada para ambas. Sin perfil, no hace nada.
   await exigirRutaDePerfil(tenantId, destino, sesion.rol);
 
-  return { ...sesion, tenantId, tenantNombre, tenantExiste };
+  return { ...sesion, tenantId, tenantNombre, tenantExiste, rolReal: sesionReal.rol };
 }
 
 

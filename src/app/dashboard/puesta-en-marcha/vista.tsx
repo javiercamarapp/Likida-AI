@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, useTransition } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore, useTransition } from 'react';
 import {
   AlertTriangle, Ban, Check, ChevronDown, CircleDashed, Clock3, Copy, FileUp, HelpCircle, Hourglass, Lock, Mail, User,
 } from 'lucide-react';
@@ -14,9 +14,8 @@ import {
   type Declaraciones, type EstadoAsistente, type IdPaso, type PasoAsistente, type Responsables, type SenalesAsistente,
 } from '@/lib/likida/asistente/pasos_cinco_agentes';
 import { cartaAutorizacion, solicitudParaTi } from '@/lib/likida/asistente/textos_solicitud';
-import {
-  guardarDeclaraciones, leerDeclaraciones, nombreCookieAvance, valorCookieAvance, claveProgreso,
-} from './progreso';
+import { nombreCookieAvance, valorCookieAvance } from './progreso';
+import { useDeclaraciones } from './usar-declaraciones';
 import { enviarPruebaCorreo, type ResultadoPruebaCorreo } from './acciones';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -48,18 +47,6 @@ function EstadoChip({ estado }: { estado: EstadoAsistente }) {
   );
 }
 
-const EVENTO = 'likida-asistente-cambio';
-
-/** Snapshot crudo del almacenamiento (string primitivo = estable para useSyncExternalStore). */
-function suscribir(fn: () => void): () => void {
-  window.addEventListener('storage', fn);
-  window.addEventListener(EVENTO, fn);
-  return () => { window.removeEventListener('storage', fn); window.removeEventListener(EVENTO, fn); };
-}
-function almacen(): Storage | null {
-  try { return window.localStorage; } catch { return null; }
-}
-
 function SoloV2({ children }: { children: React.ReactNode }) {
   // El recorrido solo existe bajo la interfaz nueva: se confirma en el cliente, sin desajuste de hidratación.
   const v2 = useSyncExternalStore(() => () => {}, () => document.querySelector('[data-ui="v2"]') !== null, () => false);
@@ -78,26 +65,12 @@ export function VistaPuestaEnMarcha({ senales, ambito, tenantId, sufijo, soloLec
   pasoInicial?: IdPaso;
   responsables?: Responsables;
 }) {
-  const crudo = useSyncExternalStore(
-    suscribir,
-    () => { try { return almacen()?.getItem(claveProgreso(ambito)) ?? ''; } catch { return ''; } },
-    () => '',
-  );
-  const declaraciones = useMemo<Declaraciones>(() => {
-    if (!crudo) return {};
-    return leerDeclaraciones({ getItem: () => crudo, setItem: () => {}, removeItem: () => {} }, ambito);
-  }, [crudo, ambito]);
+  const { declaraciones, cambiar } = useDeclaraciones(ambito, soloLectura);
 
   const r = useMemo(() => armarPasosCincoAgentes(senales, declaraciones, responsables), [senales, declaraciones, responsables]);
   const [elegido, setElegido] = useState<IdPaso | null>(pasoInicial ?? null);
   const idActual: IdPaso = elegido ?? r.siguiente ?? r.rutaCritica[0].id;
   const actual = [...r.rutaCritica, ...r.despues].find((p) => p.id === idActual)!;
-
-  const cambiar = useCallback((siguiente: Declaraciones) => {
-    if (soloLectura) return;
-    guardarDeclaraciones(almacen(), ambito, siguiente);
-    window.dispatchEvent(new Event(EVENTO));
-  }, [ambito, soloLectura]);
 
   // La insignia del menú sale de una cookie con solo «listos/total» (el layout la lee en el servidor). Nada de negocio.
   useEffect(() => {
