@@ -29,10 +29,10 @@
 }
 a.rv-kpi:hover { background: var(--canvas); }
 a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
-.rv-kpi[data-matiz="1"] { --cat: var(--chart-1); } .rv-kpi[data-matiz="2"] { --cat: var(--chart-2); }
-.rv-kpi[data-matiz="3"] { --cat: var(--chart-3); } .rv-kpi[data-matiz="4"] { --cat: var(--chart-4); }
-.rv-kpi[data-matiz="5"] { --cat: var(--chart-5); } .rv-kpi[data-matiz="6"] { --cat: var(--chart-6); }
-.rv-kpi[data-matiz="7"] { --cat: var(--chart-7); } .rv-kpi[data-matiz="8"] { --cat: var(--chart-8); }
+.rv-kpi[data-matiz="1"] { --cat: var(--chart-1, var(--muted)); } .rv-kpi[data-matiz="2"] { --cat: var(--chart-2, var(--muted)); }
+.rv-kpi[data-matiz="3"] { --cat: var(--chart-3, var(--muted)); } .rv-kpi[data-matiz="4"] { --cat: var(--chart-4, var(--muted)); }
+.rv-kpi[data-matiz="5"] { --cat: var(--chart-5, var(--muted)); } .rv-kpi[data-matiz="6"] { --cat: var(--chart-6, var(--muted)); }
+.rv-kpi[data-matiz="7"] { --cat: var(--chart-7, var(--muted)); } .rv-kpi[data-matiz="8"] { --cat: var(--chart-8, var(--muted)); }
 .rv-kpi__etq { font: 600 11px/1.3 var(--font-mono, ui-monospace, monospace); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .rv-kpi__fila { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
 .rv-kpi__valor { font: 700 26px/1.1 var(--font-display, inherit); letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
