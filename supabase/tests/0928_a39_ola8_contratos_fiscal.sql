@@ -54,19 +54,26 @@ insert into public.sat_descarga_solicitud (id, tenant_id, tipo, desde, hasta, es
   values ('92800000-0000-4000-8000-000000000301', '92800000-0000-4000-8000-0000000000a1', 'recibidos', '2026-07-01', '2026-07-31', 'lista');
 do $$
 begin
-  insert into public.sat_paquete_xml (tenant_id, solicitud_id, paquete, indice, xml)
-    values ('92800000-0000-4000-8000-0000000000a1', '92800000-0000-4000-8000-000000000301', 'p1', 0, '<x/>');
+  insert into public.sat_paquete_xml (tenant_id, solicitud_id, paquete, indice, total, xml)
+    values ('92800000-0000-4000-8000-0000000000a1', '92800000-0000-4000-8000-000000000301', 'p1', 0, 2, '<x/>');
   -- La posición es única por (solicitud, paquete, índice).
   begin
-    insert into public.sat_paquete_xml (tenant_id, solicitud_id, paquete, indice, xml)
-      values ('92800000-0000-4000-8000-0000000000a1', '92800000-0000-4000-8000-000000000301', 'p1', 0, '<y/>');
+    insert into public.sat_paquete_xml (tenant_id, solicitud_id, paquete, indice, total, xml)
+      values ('92800000-0000-4000-8000-0000000000a1', '92800000-0000-4000-8000-000000000301', 'p1', 0, 2, '<y/>');
     raise exception '0928: aceptó la misma posición dos veces';
   exception when unique_violation then null;
   end;
+  -- Un índice fuera del total no entra.
+  begin
+    insert into public.sat_paquete_xml (tenant_id, solicitud_id, paquete, indice, total, xml)
+      values ('92800000-0000-4000-8000-0000000000a1', '92800000-0000-4000-8000-000000000301', 'p1', 5, 2, '<w/>');
+    raise exception '0928: aceptó un índice fuera del total';
+  exception when check_violation then null;
+  end;
   -- Una fila de OTRA flota para esa solicitud no entra (FK compuesta).
   begin
-    insert into public.sat_paquete_xml (tenant_id, solicitud_id, paquete, indice, xml)
-      values ('92800000-0000-4000-8000-0000000000b1', '92800000-0000-4000-8000-000000000301', 'p1', 1, '<z/>');
+    insert into public.sat_paquete_xml (tenant_id, solicitud_id, paquete, indice, total, xml)
+      values ('92800000-0000-4000-8000-0000000000b1', '92800000-0000-4000-8000-000000000301', 'p1', 1, 2, '<z/>');
     raise exception '0928: aceptó un paquete de otra flota sobre la solicitud';
   exception when foreign_key_violation then null;
   end;

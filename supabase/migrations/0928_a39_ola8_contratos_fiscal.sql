@@ -6,10 +6,11 @@
 -- el proveedor lo RECHAZA. Un paquete con miles de CFDI no cabe en una pasada
 -- del cron (≈311 CFDI en los 280 s), así que la corrida siguiente lo re-descargaba
 -- y la tercera ya no podía: el paquete (y su rango) quedaban sin terminar para
--- siempre. `sat_paquete_xml` guarda los XML del paquete en cuanto se bajan (solo
--- los paquetes grandes, que no caben en una pasada) y las pasadas siguientes
--- los leen de aquí SIN volver a llamar al proveedor; al terminar de ingerirlo
--- se borran. Es un cache de trabajo: aditiva, sin datos que reponer.
+-- siempre. `sat_paquete_xml` guarda los XML del paquete cuando una pasada NO
+-- alcanzó a ingerirlo entero (los paquetes que sí caben no escriben nada), y
+-- las pasadas siguientes los leen de aquí SIN volver a llamar al proveedor; al
+-- terminar de ingerirlo se borran. Es un cache de trabajo: aditiva, sin datos
+-- que reponer.
 --
 -- A39-S20-01 (ALTO): `rentabilidad_tenant` sumaba el ingreso de TODOS los viajes
 -- del periodo contra el costo de las liquidaciones (otro universo, y otro
@@ -29,9 +30,11 @@ create table if not exists public.sat_paquete_xml (
   solicitud_id uuid not null,
   paquete      text not null,
   indice       integer not null,
+  -- Cuántos XML tiene el paquete COMPLETO: una copia a medias (la escritura se cortó) se descarta al leerla.
+  total        integer not null,
   xml          text not null,
   creado_en    timestamptz not null default now(),
-  constraint sat_paquete_xml_indice_sano check (indice >= 0),
+  constraint sat_paquete_xml_indice_sano check (indice >= 0 and total > indice),
   constraint sat_paquete_xml_posicion_key unique (solicitud_id, paquete, indice),
   -- Misma llave compuesta que `sat_cfdi_descargado` (0231): el paquete es de la
   -- flota de su solicitud. `cascade`: si se borra la solicitud, su cache sobra.

@@ -54,13 +54,16 @@ vi.mock('./cruce', () => ({
 
 interface Op {
   tabla: string;
-  verbo: 'select' | 'insert' | 'update' | 'upsert';
-  payload: Record<string, unknown> | null;
+  verbo: 'select' | 'insert' | 'update' | 'upsert' | 'delete';
+  payload: Record<string, unknown> | Array<Record<string, unknown>> | null;
+  rango?: [number, number];
   filtros: Record<string, unknown>;
   conteo: boolean;
 }
 
 let manejar: (op: Op) => { data: unknown; error: unknown; count?: number };
+/** Se llama cada vez que se SELLA un CFDI nuevo: permite simular «en esta pasada solo caben N CFDI». */
+let alSellar: (() => void) | null = null;
 
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
@@ -75,11 +78,13 @@ vi.mock('@/lib/supabase/admin', () => ({
         },
         insert: (p: Record<string, unknown>) => { op.verbo = 'insert'; op.payload = p; return cadena(); },
         update: (p: Record<string, unknown>) => { op.verbo = 'update'; op.payload = p; return cadena(); },
-        upsert: (p: Record<string, unknown>) => { op.verbo = 'upsert'; op.payload = p; return cadena(); },
+        upsert: (p: Record<string, unknown> | Array<Record<string, unknown>>) => { op.verbo = 'upsert'; op.payload = p; return cadena(); },
+        delete: () => { op.verbo = 'delete'; return cadena(); },
+        range: (d: number, h: number) => { op.rango = [d, h]; return cadena(); },
         eq: (c: string, v: unknown) => { op.filtros[c] = v; return cadena(); },
         in: (c: string, v: unknown) => { op.filtros[c] = v; return cadena(); },
         is: (c: string, v: unknown) => { op.filtros[c] = v; return cadena(); },
-        gte: cadena, lte: cadena, or: cadena, order: cadena, limit: cadena, range: cadena,
+        gte: cadena, lte: cadena, or: cadena, order: cadena, limit: cadena,
         single: cadena, maybeSingle: cadena,
         then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
           Promise.resolve(manejar(op)).then(res, rej),
@@ -110,9 +115,26 @@ function base(solicitudes: FilaSolicitud[]) {
   // bandeja», que es justo el par que AG-C1 separa.
   const cfdis: { cfdi_uuid: string; solicitud_id: string; estatus?: string }[] = [];
   const errores = new Map<string, { code?: string; message: string }>();
+  // A39-S57-03: la copia de trabajo de los paquetes (0928).
+  const copias: Array<{ solicitud_id: string; paquete: string; indice: number; total: number; xml: string }> = [];
   manejar = (op) => {
     const forzado = errores.get(`${op.tabla}:${op.verbo}`);
     if (forzado !== undefined) return { data: null, error: forzado };
+
+    if (op.tabla === 'sat_paquete_xml') {
+      const coincide = (c: { solicitud_id: string; paquete: string }) => c.solicitud_id === op.filtros.solicitud_id && c.paquete === op.filtros.paquete;
+      if (op.verbo === 'upsert') {
+        for (const f of op.payload as unknown as typeof copias) if (!copias.some((c) => c.solicitud_id === f.solicitud_id && c.paquete === f.paquete && c.indice === f.indice)) copias.push(f);
+        return { data: null, error: null };
+      }
+      if (op.verbo === 'delete') {
+        for (let i = copias.length - 1; i >= 0; i--) if (coincide(copias[i])) copias.splice(i, 1);
+        return { data: null, error: null };
+      }
+      const filas = copias.filter(coincide).sort((a, b) => a.indice - b.indice);
+      const [d, h] = op.rango ?? [0, filas.length - 1];
+      return { data: filas.slice(d, h + 1), error: null };
+    }
 
     if (op.tabla === 'sat_descarga_solicitud') {
       if (op.verbo === 'select') {
@@ -148,6 +170,7 @@ function base(solicitudes: FilaSolicitud[]) {
         const p = op.payload as { cfdi_uuid: string; solicitud_id: string; estatus?: string };
         if (cfdis.some((c) => c.cfdi_uuid === p.cfdi_uuid)) return { data: [], error: null }; // el sello de dedup
         cfdis.push({ cfdi_uuid: p.cfdi_uuid, solicitud_id: p.solicitud_id, estatus: p.estatus });
+        alSellar?.();
         return { data: [{ id: p.cfdi_uuid }], error: null };
       }
       if (op.verbo === 'update') {
@@ -165,7 +188,7 @@ function base(solicitudes: FilaSolicitud[]) {
     if (op.tabla === 'sat_descarga_config') return { data: null, error: null };
     return { data: null, error: null };
   };
-  return { solicitudes, cfdis, errores };
+  return { solicitudes, cfdis, errores, copias };
 }
 
 /** Un SAT falso que CUENTA cada llamada: es la cifra que más importa aquí. */
@@ -199,6 +222,90 @@ const AHORA = new Date('2026-08-27T12:00:00Z');
 beforeEach(() => vi.clearAllMocks());
 
 // ── c7-2 ───────────────────────────────────────────────────────────────────
+describe('A39-S57-03 · un paquete que no cabe en dos pasadas TERMINA sin una tercera descarga', () => {
+  /** Un proveedor con UN paquete de `n` CFDI que cuenta cuántas veces se descargó y RECHAZA la tercera, como el SAT. */
+  function proveedorQueRechazaLaTercera(n: number) {
+    const xmls = Array.from({ length: n }, (_, i) => `p1-cfdi-${i + 1}`);
+    const cuenta = { descargas: 0 };
+    const prov: ProveedorDescargaSat = {
+      nombre: 'sw',
+      async solicitar() { return { ok: true, requestId: 'req-x' }; },
+      async verificar() { return { ok: true, estado: 'lista', paquetes: ['p1'], cfdis: null, mensaje: null }; },
+      async descargar() {
+        cuenta.descargas++;
+        if (cuenta.descargas > 2) return { ok: false, mensaje: '5004 - el paquete ya se descargó el máximo de veces' };
+        return { ok: true, xmls };
+      },
+      async credencial() { return { ok: true, numero: '3'.repeat(20), venceEn: null }; },
+    };
+    return { prov, cuenta };
+  }
+
+  /**
+   * Una pasada del cron en la que solo caben `cabe` CFDI NUEVOS: en cuanto se sella el cabe-ésimo, el reloj pasa de
+   * `venceEn` (por poco: la copia de trabajo tiene su propia gracia para escribirse).
+   */
+  const VENCE = 500_000;
+  async function pasada(prov: ProveedorDescargaSat, cabe: number) {
+    let ahora = 1_000;
+    let nuevos = 0;
+    alSellar = () => { nuevos++; if (nuevos >= cabe) ahora = VENCE + 1; };
+    const reloj = vi.spyOn(Date, 'now').mockImplementation(() => ahora);
+    try { return await correrFlota(CFG(), prov, '2026-08-27', AHORA, VENCE); } finally { reloj.mockRestore(); alSellar = null; }
+  }
+
+  it('un paquete de 6 CFDI con cupo de 2 por pasada: UNA descarga, y se termina en 3 pasadas desde la copia', async () => {
+    const db = base([solicitudViva()]);
+    const { prov, cuenta } = proveedorQueRechazaLaTercera(6);
+
+    await pasada(prov, 2);
+    expect(db.solicitudes[0].estado).not.toBe('descargada');
+    expect(db.solicitudes[0].paquetes_bajados).toEqual([]);
+    expect(db.copias).toHaveLength(6);          // quedó la copia ENTERA
+
+    await pasada(prov, 2);
+    expect(db.solicitudes[0].estado).not.toBe('descargada');
+    await pasada(prov, 2);
+
+    expect(db.solicitudes[0].estado).toBe('descargada');
+    expect(db.solicitudes[0].paquetes_bajados).toEqual(['p1']);
+    expect(db.cfdis).toHaveLength(6);
+    // El SAT rechaza la 3.ª descarga: sin la copia esto era imposible. Con ella solo hubo UNA.
+    expect(cuenta.descargas).toBe(1);
+    // Terminado el paquete, la copia de trabajo se borra.
+    expect(db.copias).toEqual([]);
+  });
+
+  it('una pasada que SÍ termina el paquete no escribe copia alguna', async () => {
+    const db = base([solicitudViva()]);
+    const { prov } = proveedorQueRechazaLaTercera(3);
+    await correrFlota(CFG(), prov, '2026-08-27', AHORA);
+    expect(db.solicitudes[0].estado).toBe('descargada');
+    expect(db.copias).toEqual([]);
+  });
+
+  it('una copia a medias (le faltan filas) NO se usa: se vuelve a bajar del proveedor', async () => {
+    const db = base([solicitudViva()]);
+    // Copia de 4 con la fila 2 perdida (la escritura anterior se cortó).
+    for (const i of [0, 1, 3]) db.copias.push({ solicitud_id: 'sol-1', paquete: 'p1', indice: i, total: 4, xml: `viejo-${i}` });
+    const { prov, cuenta } = proveedorQueRechazaLaTercera(2);
+    await correrFlota(CFG(), prov, '2026-08-27', AHORA);
+    expect(cuenta.descargas).toBe(1);
+    expect(db.cfdis.map((c) => c.cfdi_uuid)).toEqual(['p1-cfdi-1', 'p1-cfdi-2']);
+  });
+
+  it('sin la 0928 (la tabla no existe) se cae al comportamiento de siempre: re-descargar, nunca dar por bajado', async () => {
+    const db = base([solicitudViva()]);
+    db.errores.set('sat_paquete_xml:select', { code: '42P01', message: 'relation "sat_paquete_xml" does not exist' });
+    db.errores.set('sat_paquete_xml:upsert', { code: '42P01', message: 'relation "sat_paquete_xml" does not exist' });
+    const { prov, cuenta } = proveedorQueRechazaLaTercera(6);
+    await pasada(prov, 2);
+    expect(db.solicitudes[0].estado).not.toBe('descargada');
+    expect(db.solicitudes[0].paquetes_bajados).toEqual([]);
+    expect(cuenta.descargas).toBe(1);
+  });
+});
+
 describe('c7-2 · una solicitud de más de 3 paquetes TERMINA, y no re-baja lo bajado', () => {
   it('reanuda por el pendiente y cierra en la corrida en que se acaban', async () => {
     const db = base([solicitudViva()]);
