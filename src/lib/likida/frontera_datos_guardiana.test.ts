@@ -602,7 +602,7 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 326;
 // LOTE A39 OLA 8 tanda 2 (A37-S48-01/03, A5-01): +5 llamadas (2,390 → 2,395), medidas con el barrido real. `jornada/repo.ts` suma `jornadaCerradaDeAyer`
 // (la conformidad de un turno nocturno) y, para retirar la conformidad al anular/recapturar, `leerConformidad`, `retirarConformidad` y la lectura previa de
 // `anularAsiento` (+4; cubiertas por wa_dia_anterior.test.ts); `admin/negocio.ts` suma `fijarAgenteChoferHabilitado` (+1; negocio_agente_chofer.test.ts).
-// INTEGRACIÓN OLA 8b: techo = 2,390 + 4 (O8-6) + 3 (O8-4) + 1 (O8-5) + 5 (tanda 2) = 2,403 (a reconfirmar con el barrido real).
+// INTEGRACIÓN OLA 8b: techo = 2,390 + 4 (O8-6) + 3 (O8-4) + 1 (O8-5) + 5 (tanda 2) = 2,403 (medido con el barrido real tras la fusión).
 const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_403;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.

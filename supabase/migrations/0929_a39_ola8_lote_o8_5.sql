@@ -1,4 +1,4 @@
--- REVERSA: (1) solo si NO hay filas con correccion_n > 0 (anula o borra antes las correcciones -R<n>): create unique index if not exists public.liquidacion_desglose_bitacora_unica on public.liquidacion_desglose (tenant_id, coalesce(terminal, ''), bitacora); create unique index if not exists public.liquidacion_desglose_numero_liquidacion_unico on public.liquidacion_desglose (tenant_id, coalesce(terminal, ''), numero_liquidacion) where numero_liquidacion is not null; drop index if exists public.liquidacion_desglose_bitacora_unica_v2; drop index if exists public.liquidacion_desglose_numero_liquidacion_unico_v2; alter table public.liquidacion_desglose drop column if exists correccion_n; y volver a aplicar el cuerpo de `recibir_desglose_atomico` de 0923_a37_z_resto_14_defensa_en_base.sql (create or replace misma firma + revoke/grant). (2) solo si no hay dos reclamos activos (estado <> 'rechazado') con la misma flota+desglose+categoría (junta o rechaza los extra): create unique index if not exists public.peaje_reclamo_activo_unico on public.peaje_reclamo (tenant_id, desglose_id, categoria) where estado <> 'rechazado'; drop index if exists public.peaje_reclamo_activo_unico_v2; alter table public.peaje_reclamo drop column if exists lote.
+-- REVERSA: (1) solo si NO hay filas con correccion_n > 0 (anula o borra antes las correcciones -R<n>): drop index if exists public.liquidacion_desglose_bitacora_unica; create unique index liquidacion_desglose_bitacora_unica on public.liquidacion_desglose (tenant_id, coalesce(terminal, ''), bitacora); drop index if exists public.liquidacion_desglose_numero_liquidacion_unico; create unique index liquidacion_desglose_numero_liquidacion_unico on public.liquidacion_desglose (tenant_id, coalesce(terminal, ''), numero_liquidacion) where numero_liquidacion is not null; alter table public.liquidacion_desglose drop column if exists correccion_n; y volver a aplicar el cuerpo de `recibir_desglose_atomico` de 0923_a37_z_resto_14_defensa_en_base.sql (create or replace misma firma + revoke/grant). (2) solo si no hay dos reclamos activos (estado <> 'rechazado') con la misma flota+desglose+categoría (junta o rechaza los extra): drop index if exists public.peaje_reclamo_activo_unico; create unique index peaje_reclamo_activo_unico on public.peaje_reclamo (tenant_id, desglose_id, categoria) where estado <> 'rechazado'; alter table public.peaje_reclamo drop column if exists lote.
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 0929 · Ola 8 (auditoría 39) · lote O8-5 — DOS candados de unicidad que impedían un flujo legítimo contra la base real.
 --
@@ -35,22 +35,35 @@ alter table public.liquidacion_desglose
 comment on column public.liquidacion_desglose.correccion_n is
   '0929 (A39-A1-01): 0 = la bitácora original; n ≥ 1 = su corrección -R<n> (A37-A1-02). Entra en las llaves únicas de bitácora y de número de liquidación para que la corrección (misma bitácora, terminal y número) no choque con la original. Máximo 20 (MAX_CORRECCIONES).';
 
--- Los índices nuevos se crean ANTES de soltar los viejos (nunca queda la tabla sin candado) y son estrictamente más débiles en la
--- corrección: toda fila que cumplía el índice viejo cumple el nuevo, así que crearlos no puede fallar por datos existentes.
-create unique index if not exists liquidacion_desglose_bitacora_unica_v2
+-- Los índices CONSERVAN su nombre (no hay `_v2`): 0786 y 0789 hacen `create unique index if not exists <nombre>` y la prueba de reaplicación
+-- 0809 las vuelve a correr después de esta migración; con el nombre viejo ocupado por la definición nueva esas dos son un no-op y el catálogo
+-- no cambia (con un nombre distinto reaplicarlas resucitaba el índice estricto, que volvería a rechazar la corrección -R<n>).
+-- Cada cambio ocurre en UN bloque (atómico: el DROP y el CREATE comparten transacción y bloqueo, la tabla nunca queda sin candado) y solo si el
+-- índice aún es el viejo (sin `correccion_n`), así que reaplicar esta migración no hace nada. El índice nuevo es estrictamente más débil en la
+-- corrección: toda fila que cumplía el viejo cumple el nuevo, así que crearlo no puede fallar por datos existentes.
+do $$
+begin
+  if exists (select 1 from pg_indexes where schemaname = 'public' and tablename = 'liquidacion_desglose'
+                and indexname = 'liquidacion_desglose_bitacora_unica' and indexdef not like '%correccion_n%') then
+    drop index public.liquidacion_desglose_bitacora_unica;
+  end if;
+  if exists (select 1 from pg_indexes where schemaname = 'public' and tablename = 'liquidacion_desglose'
+                and indexname = 'liquidacion_desglose_numero_liquidacion_unico' and indexdef not like '%correccion_n%') then
+    drop index public.liquidacion_desglose_numero_liquidacion_unico;
+  end if;
+end $$;
+
+create unique index if not exists liquidacion_desglose_bitacora_unica
   on public.liquidacion_desglose (tenant_id, coalesce(terminal, ''), bitacora, correccion_n);
 
-create unique index if not exists liquidacion_desglose_numero_liquidacion_unico_v2
+create unique index if not exists liquidacion_desglose_numero_liquidacion_unico
   on public.liquidacion_desglose (tenant_id, coalesce(terminal, ''), numero_liquidacion, correccion_n)
   where numero_liquidacion is not null;
 
-drop index if exists public.liquidacion_desglose_bitacora_unica;
-drop index if exists public.liquidacion_desglose_numero_liquidacion_unico;
-
-comment on index public.liquidacion_desglose_bitacora_unica_v2 is
-  '0929: una bitácora es única por flota+terminal+corrección (la corrección -R<n> comparte bitácora con su original). Sustituye a liquidacion_desglose_bitacora_unica (0786).';
-comment on index public.liquidacion_desglose_numero_liquidacion_unico_v2 is
-  '0929: el número de liquidación es único por flota+terminal+corrección. Sustituye a liquidacion_desglose_numero_liquidacion_unico (0789).';
+comment on index public.liquidacion_desglose_bitacora_unica is
+  '0929: una bitácora es única por flota+terminal+corrección (la corrección -R<n> comparte bitácora con su original). Redefine el índice de 0786 con el mismo nombre.';
+comment on index public.liquidacion_desglose_numero_liquidacion_unico is
+  '0929: el número de liquidación es único por flota+terminal+corrección. Redefine el índice de 0789 con el mismo nombre.';
 
 -- Misma función que 0923 (viaje_ids de la flota, entregas solo si no hay ninguna), con UNA diferencia: el encabezado escribe
 -- `correccion_n` (coalesce a 0 si el llamador no lo manda).
@@ -227,11 +240,18 @@ update public.peaje_reclamo r
    and exists (select 1 from public.peaje_candidato_accion a
                 where a.tenant_id = r.tenant_id and a.reclamo_id = r.id and a.accion = 'reclamado');
 
-create unique index if not exists peaje_reclamo_activo_unico_v2
+-- Mismo criterio que arriba: el índice conserva su nombre (0847) y se redefine en un bloque atómico solo si aún es el viejo (sin `lote`).
+do $$
+begin
+  if exists (select 1 from pg_indexes where schemaname = 'public' and tablename = 'peaje_reclamo'
+                and indexname = 'peaje_reclamo_activo_unico' and indexdef not like '%lote%') then
+    drop index public.peaje_reclamo_activo_unico;
+  end if;
+end $$;
+
+create unique index if not exists peaje_reclamo_activo_unico
   on public.peaje_reclamo (tenant_id, desglose_id, categoria, lote)
   where estado <> 'rechazado';
 
-drop index if exists public.peaje_reclamo_activo_unico;
-
-comment on index public.peaje_reclamo_activo_unico_v2 is
-  '0929: un reclamo ACTIVO (no rechazado) por flota+desglose+categoría+lote. Conserva el candado contra el doble envío de "Registrar reclamo" (lote 0) y permite una tanda nueva de candidatos de la misma categoría (lote siguiente). Sustituye a peaje_reclamo_activo_unico (0847).';
+comment on index public.peaje_reclamo_activo_unico is
+  '0929: un reclamo ACTIVO (no rechazado) por flota+desglose+categoría+lote. Conserva el candado contra el doble envío de "Registrar reclamo" (lote 0) y permite una tanda nueva de candidatos de la misma categoría (lote siguiente). Redefine el índice de 0847 con el mismo nombre.';
