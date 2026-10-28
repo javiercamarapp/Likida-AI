@@ -31,6 +31,10 @@ export const CORREOS = {
   encargado: 'encargado.e2e@likida.test',
   contador: 'contador.e2e@likida.test',
   vendedor: 'vendedor.e2e@likida.test',
+  /** Flota E2E Perfil (tenant_perfil = cinco_agentes): solo para el recorrido del menú por rol. */
+  perfilDueno: 'perfil.dueno.e2e@likida.test',
+  perfilEncargado: 'perfil.encargado.e2e@likida.test',
+  perfilContador: 'perfil.contador.e2e@likida.test',
 } as const;
 
 export const ESTADOS = {

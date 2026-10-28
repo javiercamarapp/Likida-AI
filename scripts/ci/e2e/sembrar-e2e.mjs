@@ -40,6 +40,12 @@
  *     no alcancen ni /admin ni los datos de la flota A.
  *   · encargado.e2e y contador.e2e → roles de oficina de Flota Demo.
  *   · vendedor.e2e → vendedor sin tenant, con cartera sintética propia y ajena.
+ *   · perfil.dueno.e2e / perfil.encargado.e2e / perfil.contador.e2e → los tres
+ *     roles de Flota E2E Perfil (33333333-…), la ÚNICA flota sembrada con
+ *     `tenant_perfil = cinco_agentes` (0770). Existe porque los 26 e2e corren
+ *     todos sobre flotas SIN perfil: nada recorría el menú recortado que ve un
+ *     cliente de cinco agentes, y el rediseño del shell lo sustituye. Sin
+ *     viajes ni datos: el recorrido de menú no los necesita.
  *
  * GUARD (mismo criterio que scripts/seed.sh): esto corre ÚNICAMENTE contra
  * un Supabase local. Cualquier host que no sea 127.0.0.1/localhost rehúsa,
@@ -64,6 +70,7 @@ if (!serviceKey) {
 
 const TENANT_A = '11111111-1111-1111-1111-111111111111'; // Flota Demo (seed.sql)
 const TENANT_B = '22222222-eeee-4eee-8eee-222222222222'; // solo para aislamiento
+const TENANT_C = '33333333-cccc-4ccc-8ccc-333333333333'; // flota con perfil cinco_agentes (solo menú por rol)
 const VIAJE_LIQUIDADO = '44444444-0000-0000-0000-000000000002'; // VJ-2026-0844, cuadrada
 
 const USUARIOS = [
@@ -73,6 +80,9 @@ const USUARIOS = [
   { email: 'contador.e2e@likida.test', nombre: 'Contador E2E', rol: 'contador', tenant: TENANT_A },
   { email: 'vendedor.e2e@likida.test', nombre: 'Vendedor E2E', rol: 'vendedor', tenant: null },
   { email: 'intrusa.e2e@likida.test', nombre: 'Intrusa E2E', rol: 'flota_admin', tenant: TENANT_B },
+  { email: 'perfil.dueno.e2e@likida.test', nombre: 'Dueño Perfil E2E', rol: 'flota_admin', tenant: TENANT_C },
+  { email: 'perfil.encargado.e2e@likida.test', nombre: 'Encargado Perfil E2E', rol: 'encargado', tenant: TENANT_C },
+  { email: 'perfil.contador.e2e@likida.test', nombre: 'Contador Perfil E2E', rol: 'contador', tenant: TENANT_C },
 ];
 
 const admin = createClient(url, serviceKey, { auth: { persistSession: false }, global: { fetch: fetchLocalE2E } });
@@ -95,9 +105,19 @@ function exigir(error, paso) {
   exigir(error, 'upsert tenant B');
 }
 
+// ── 1b. La flota C: la única con perfil `cinco_agentes` ────────────────────
+{
+  const { error } = await admin.from('tenant').upsert(
+    { id: TENANT_C, nombre: 'Flota E2E Perfil', rfc: null, ciudad: 'Mérida', plan: 'demo' },
+    { onConflict: 'id' },
+  );
+  exigir(error, 'upsert tenant C');
+}
+
 // ── 2. Usuarios de Auth + su fila de app_user (contrato de provisionar.ts) ──
 let duenaUserId = null;
 let vendedorUserId = null;
+let duenaPerfilUserId = null;
 for (const u of USUARIOS) {
   let userId = null;
   const creado = await admin.auth.admin.createUser({ email: u.email, email_confirm: true });
@@ -120,6 +140,7 @@ for (const u of USUARIOS) {
 
   if (u.email === 'duena.e2e@likida.test') duenaUserId = userId;
   if (u.email === 'vendedor.e2e@likida.test') vendedorUserId = userId;
+  if (u.email === 'perfil.dueno.e2e@likida.test') duenaPerfilUserId = userId;
 }
 
 // ── 3. El PDF de VJ-2026-0844, en la ruta canónica del bucket privado ──────
@@ -168,6 +189,27 @@ for (const u of USUARIOS) {
   exigir(error, 'declarar perfil fiscal de Flota Demo');
 }
 
+// ── 5. El perfil de la flota C (tabla deny-all de la 0770: solo service-role) y
+//    su declaración fiscal sintética, para que el Resumen no rebote al cuestionario. ─
+{
+  const { error } = await admin.from('tenant_perfil').upsert(
+    { tenant_id: TENANT_C, perfil: 'cinco_agentes', cambiado_por: duenaPerfilUserId },
+    { onConflict: 'tenant_id' },
+  );
+  exigir(error, 'upsert tenant_perfil de Flota E2E Perfil');
+  const fiscal = await admin
+    .from('tenant')
+    .update({
+      perfil: {
+        ingresosAnualesMxn: { valor: 20_000_000, procedencia: 'declarado' }, // 🔴 INVENTADO
+        parteRelacionada: { valor: false, procedencia: 'declarado' },
+      },
+      perfil_actualizado_por: duenaPerfilUserId,
+    })
+    .eq('id', TENANT_C);
+  exigir(fiscal.error, 'declarar perfil fiscal de Flota E2E Perfil');
+}
+
 // Cartera sintética: una propia y otra sin asignar nunca visible al vendedor.
 {
   const { error } = await admin.from('prospecto').upsert([
@@ -177,4 +219,4 @@ for (const u of USUARIOS) {
   exigir(error, 'sembrar cartera sintética de vendedor');
 }
 
-console.log('sembrar-e2e: 6 usuarios (@likida.test), Flota E2E B, el PDF de VJ-2026-0844 y el perfil fiscal de Flota Demo listos.');
+console.log('sembrar-e2e: 9 usuarios (@likida.test), Flota E2E B, Flota E2E Perfil (cinco_agentes), el PDF de VJ-2026-0844 y el perfil fiscal de Flota Demo listos.');
