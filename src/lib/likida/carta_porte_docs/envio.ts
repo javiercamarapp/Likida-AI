@@ -18,7 +18,7 @@
 
 import { createHash } from 'node:crypto';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
-import { leerConfigSalida } from './salida_config';
+import { leerConfigSalida, plantillaParaDocumento } from './salida_config';
 import * as repo from './repo';
 import type { DocumentoFila, EnvioTmsFila, EstadoEnvioTms } from './repo';
 
@@ -72,7 +72,7 @@ export async function prepararEnvioTms(
 ): Promise<ResultadoEnvio> {
   if (doc.estado !== 'aprobado') return { ok: false, motivo: 'no_aprobado', mensaje: 'Solo se prepara el envío de un documento aprobado.' };
   const config = await leerConfigSalida(tenantId);
-  const plantilla = config.plantillaPorDefecto;
+  const plantilla = plantillaParaDocumento(config, doc.extraccion);
   const llave = llaveDeEnvio(tenantId, doc.id, doc.version, plantilla);
 
   const previos = await repo.enviosDeDocumento(tenantId, doc.id);

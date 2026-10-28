@@ -42,6 +42,7 @@ import { hallazgoPlantillaIncompleta, hallazgoRepetido, traducirErroresTms } fro
 import { siguienteEstado, TOPE_TRANSITORIOS, type EnvioEnMaquina, type EventoEnvio, type MotivoAlerta, type Transicion } from './envio_estados';
 import { prechequear } from './prechequeo';
 import { construirPlantilla, faltantesBloqueantes } from './plantilla_tms';
+import { layoutDe, layoutPuedeEnviarse } from './plantilla_tms.layout';
 import type { DocumentoFila, EstadoEnvioTms, TipoEvento } from './repo';
 import type { CambiosEnvio, EnvioDetalle, EnvioReclamado, ResultadoReclamo } from './repo_envios';
 import type { ConfigSalida } from './salida_config';
@@ -241,7 +242,8 @@ async function procesarEnvio(ctx: Contexto, rec: EnvioReclamado): Promise<void> 
     await soltar(ctx, envio, envio.estado, Math.max(0, envio.intentos - 1), iso(deps.ahora() + REINTENTO_PROVEEDOR_MIN * 60_000));
     return;
   }
-  const manual = config.modo === 'descarga' || salida === SIN_TMS;
+  // La plantilla «nueva» no está verificada contra el TMS: no se sube sola; queda lista para descargar y subir a mano.
+  const manual = config.modo === 'descarga' || salida === SIN_TMS || (envio.plantilla === 'nueva' && !layoutPuedeEnviarse(layoutDe('nueva')));
   const ahora = new Date(deps.ahora());
   const intentosFase = Math.max(0, envio.intentos - 1);
   // Bloqueos abiertos: sin validación no se sabe, y lo que no se sabe no se envía.

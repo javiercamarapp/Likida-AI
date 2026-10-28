@@ -425,6 +425,17 @@ describe('el rechazo vuelve a la bandeja (T-A3-29)', () => {
     expect(eventos.some((x) => x.tipo === 'envio_error' && x.detalle.causa === 'plantilla_incompleta')).toBe(true);
   });
 
+  it('un envío con plantilla NUEVA (sin verificar contra el TMS) no se sube solo: queda listo para subir a mano y avisa (OLA1-A3)', async () => {
+    const llamadas = vi.fn(async () => ({ ok: true as const, referencia: 'REF-1' }));
+    puertos.set(A, { cargarPlantilla: llamadas as unknown as SalidaTms['cargarPlantilla'], consultarReque: async () => 'existe', consultarCaja: async () => 'existe' });
+    const envio = sembrar(A, 1, 'pendiente_prechequeo', { envio: { plantilla: 'nueva' } });
+    const r = await pasada();
+    expect(llamadas).not.toHaveBeenCalled();
+    expect(r.enviados).toBe(0);
+    expect((await leer(A, envio.id)).estado).toBe('listo');
+    expect(rechazosDevueltos).toHaveLength(0);
+  });
+
   it('una corrección que SÍ cambia la plantilla se envía normal', async () => {
     puertos.set(A, puertoRechazo([ERROR_FRACCION]));
     const primero = sembrar(A, 1);
