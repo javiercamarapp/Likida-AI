@@ -981,11 +981,11 @@ describe('costoIaDeTenant — la ficha 360', () => {
 describe('getMrr', () => {
   beforeEach(() => { respuestas.clear(); rangos.clear(); });
 
-  it('suma precio_mensual de las suscripciones activas', async () => {
+  it('suma precio_mensual (sin IVA) de las suscripciones activas', async () => {
     respuestas.set('suscripcion', {
       data: [
-        { id: 's1', estado: 'activa', plan: { precio_mensual: 1500 } },
-        { id: 's2', estado: 'activa', plan: { precio_mensual: 2500.5 } },
+        { id: 's1', estado: 'activa', plan: { precio_mensual: 1500, precio_iva_incluido: false } },
+        { id: 's2', estado: 'activa', plan: { precio_mensual: 2500.5, precio_iva_incluido: false } },
       ],
       error: null,
     });
@@ -1002,14 +1002,38 @@ describe('getMrr', () => {
   it('una suscripción activa sin precio configurado: totalMxn null — nunca se descuenta en silencio', async () => {
     respuestas.set('suscripcion', {
       data: [
-        { id: 's1', estado: 'activa', plan: { precio_mensual: 1500 } },
-        { id: 's2', estado: 'activa', plan: { precio_mensual: null } },
+        { id: 's1', estado: 'activa', plan: { precio_mensual: 1500, precio_iva_incluido: false } },
+        { id: 's2', estado: 'activa', plan: { precio_mensual: null, precio_iva_incluido: false } },
       ],
       error: null,
     });
     const r = await getMrr();
     expect(r.totalMxn).toBeNull();
     // El conteo de suscripciones SÍ se sabe, aunque el total no se pueda sumar.
+    expect(r.suscripcionesActivas).toBe(2);
+  });
+
+  it('A39-S26-01: un precio con IVA incluido se desglosa — el MRR es ingreso SIN IVA', async () => {
+    respuestas.set('suscripcion', {
+      data: [
+        { id: 's1', estado: 'activa', plan: { precio_mensual: 11600, precio_iva_incluido: true } },
+        { id: 's2', estado: 'activa', plan: { precio_mensual: 1000, precio_iva_incluido: false } },
+      ],
+      error: null,
+    });
+    expect(await getMrr()).toEqual({ totalMxn: 11000, suscripcionesActivas: 2 });
+  });
+
+  it('A39-S26-01: un plan que no declaró si su precio incluye IVA vuelve el total INDETERMINADO (null), no una suma adivinada', async () => {
+    respuestas.set('suscripcion', {
+      data: [
+        { id: 's1', estado: 'activa', plan: { precio_mensual: 11600, precio_iva_incluido: true } },
+        { id: 's2', estado: 'activa', plan: { precio_mensual: 5000, precio_iva_incluido: null } },
+      ],
+      error: null,
+    });
+    const r = await getMrr();
+    expect(r.totalMxn).toBeNull();
     expect(r.suscripcionesActivas).toBe(2);
   });
 

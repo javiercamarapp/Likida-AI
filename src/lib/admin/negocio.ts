@@ -66,6 +66,7 @@ import { acotada } from '@/lib/likida/presupuesto';
 import { round2, TZ_MX, hoyMx } from '@/lib/formato';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { DatoInvalido } from '@/lib/likida/errores';
+import { desglosarPrecio } from '@/lib/saas/iva';
 import { facilidad15Vigente } from '@/lib/likida/perfil/preguntas';
 // Solo TIPOS: `import type` se borra al compilar, así que esto no arrastra el
 // módulo de corridas (que carga supabaseAdmin/logger al importarse) — aquí
@@ -1134,9 +1135,12 @@ export async function contarLiquidacionesEnRevisar(): Promise<number> {
 
 export interface ResumenMrr {
   /**
-   * Suma de `plan.precio_mensual` de las suscripciones en estado 'activa'.
+   * Suma de `plan.precio_mensual` SIN IVA (A39-S26-01: el MRR es ingreso; un
+   * precio con IVA incluido se desglosa con `desglosarPrecio`) de las
+   * suscripciones en estado 'activa'.
    * `null` = NO SE PUDO MEDIR — o falló la lectura, o alguna suscripción
-   * activa cuelga de un plan sin precio configurado (`precio_mensual` NULL,
+   * activa cuelga de un plan sin precio configurado (`precio_mensual` NULL) o
+   * sin declarar si su precio incluye IVA (`precio_iva_incluido` NULL;
    * ver `plan.ts` — "un precio de ejemplo termina en una propuesta
    * comercial"). Nunca se resta esa suscripción en silencio: un MRR
    * incompleto sin decirlo es peor que decir "sin medir".
@@ -1152,9 +1156,10 @@ export interface ResumenMrr {
  *  arriba, para que 800 flotas no se recorten en silencio. */
 export async function getMrr(): Promise<ResumenMrr> {
   const admin = supabaseAdmin();
-  const filas = await traerTodo<{ id: string; plan: { precio_mensual: number | null } | Array<{ precio_mensual: number | null }> | null }>(
+  type PlanMrr = { precio_mensual: number | null; precio_iva_incluido: boolean | null };
+  const filas = await traerTodo<{ id: string; plan: PlanMrr | PlanMrr[] | null }>(
     (d, h) => acotada(
-      admin.from('suscripcion').select('id, plan:plan_clave(precio_mensual)', conteo(d))
+      admin.from('suscripcion').select('id, plan:plan_clave(precio_mensual, precio_iva_incluido)', conteo(d))
         .eq('estado', 'activa').order('id').range(d, h),
       'getMrr',
     ),
@@ -1165,8 +1170,9 @@ export async function getMrr(): Promise<ResumenMrr> {
   for (const f of filas) {
     const planRel = f.plan;
     const p = Array.isArray(planRel) ? planRel[0] : planRel;
-    if (!p || p.precio_mensual === null) { medible = false; continue; }
-    total += Number(p.precio_mensual);
+    // Sin precio, o sin criterio de IVA declarado: no se adivina (mismo trato que `calcularMrr` de direccion.ts).
+    if (!p || p.precio_mensual === null || p.precio_iva_incluido === null || p.precio_iva_incluido === undefined) { medible = false; continue; }
+    total += desglosarPrecio(Number(p.precio_mensual), p.precio_iva_incluido).subtotal;
   }
   return { totalMxn: medible ? round2(total) : null, suscripcionesActivas: filas.length };
 }
