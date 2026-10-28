@@ -142,3 +142,34 @@
 @media (max-width: 819px) and (prefers-reduced-motion: no-preference) {
   .rv-ov--drawer[open] .rv-ov__panel { animation-name: rv-ov-abajo; }
 }
+
+/* ── Estado vacío v2 ───────────────────────────────────────────────────── */
+.rv-vacio { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 32px 16px; border: 1px dashed var(--line2, var(--line)); border-radius: 12px; background: var(--surface); }
+.rv-vacio[data-compacto] { flex-direction: row; flex-wrap: wrap; justify-content: center; text-align: left; gap: 4px 12px; padding: 12px 14px; background: transparent; border-width: 1.5px; border-style: dotted; }
+.rv-vacio__arte { width: 160px; height: 96px; color: var(--ink2, var(--ink)); }
+.rv-vacio__titulo { margin: 0; font-size: 14px; font-weight: 600; color: var(--ink); }
+.rv-vacio__texto { margin: 0; max-width: 48ch; font-size: 13px; color: var(--muted); }
+.rv-vacio__accion { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
+
+/* ── Monograma ─────────────────────────────────────────────────────────── */
+.rv-mono {
+  display: inline-grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 8px;
+  font: 600 12px/1 var(--font-sans-ui, inherit); letter-spacing: .02em;
+  background: var(--sf, var(--canvas)); color: var(--tx, var(--ink));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tx, var(--ink)) 14%, transparent);
+}
+.rv-mono[data-tamano="32"] { width: 32px; height: 32px; }
+.rv-mono[data-tamano="40"] { width: 40px; height: 40px; font-size: 14px; }
+.rv-mono[data-matiz="1"] { --sf: var(--soft-1); --tx: var(--ink-1); } .rv-mono[data-matiz="2"] { --sf: var(--soft-2); --tx: var(--ink-2); }
+.rv-mono[data-matiz="3"] { --sf: var(--soft-3); --tx: var(--ink-3); } .rv-mono[data-matiz="4"] { --sf: var(--soft-4); --tx: var(--ink-4); }
+.rv-mono[data-matiz="5"] { --sf: var(--soft-5); --tx: var(--ink-5); } .rv-mono[data-matiz="6"] { --sf: var(--soft-6); --tx: var(--ink-6); }
+.rv-mono[data-matiz="7"] { --sf: var(--soft-7); --tx: var(--ink-7); } .rv-mono[data-matiz="8"] { --sf: var(--soft-8); --tx: var(--ink-8); }
+
+/* ── Escenas SVG ───────────────────────────────────────────────────────── */
+.rv-escena { display: block; overflow: visible; }
+.rv-trazo { stroke-dasharray: 1; stroke-dashoffset: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .rv-escena--anima .rv-trazo { animation: rv-trazo var(--t-draw) var(--ui-ease) both; }
+  .rv-escena--anima .rv-trazo--2 { animation-delay: 140ms; }
+  .rv-escena--anima .rv-trazo--3 { animation-delay: 280ms; }
+}
