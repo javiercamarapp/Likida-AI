@@ -6,13 +6,8 @@ import { BotonEnlace, Chip } from '@/app/ui-v2/componentes';
 import { ProgresoAnillo } from '@/app/ui-v2/graficas';
 import { anclaTour } from '@/app/ui-v2/movimiento/tour';
 import { armarPasosCincoAgentes, ROTULO_ESTADO, type SenalesAsistente } from '@/lib/likida/asistente/pasos_cinco_agentes';
+import { conPaso } from './con-paso';
 import { useDeclaraciones } from './usar-declaraciones';
-
-/** `/ruta` + `?paso=x` + el sufijo de tenant/vista/rol que ya trae la página (que empieza con `?`). */
-export function conPaso(ruta: string, sufijo: string, paso?: string): string {
-  const partes = [sufijo.replace(/^\?/, ''), paso ? `paso=${encodeURIComponent(paso)}` : ''].filter(Boolean);
-  return partes.length ? `${ruta}?${partes.join('&')}` : ruta;
-}
 
 /**
  * El avance de la puesta en marcha dentro del Resumen. Usa la MISMA función pura que la pantalla del asistente y las

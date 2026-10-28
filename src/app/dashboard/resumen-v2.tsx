@@ -6,7 +6,8 @@ import { TiraKpi, type ItemKpi } from '@/app/ui-v2/graficas';
 import { anclaTour } from '@/app/ui-v2/movimiento/tour';
 import { leerSenalesAsistente } from '@/lib/likida/asistente/senales';
 import type { SenalesAsistente } from '@/lib/likida/asistente/pasos_cinco_agentes';
-import { TarjetaPuestaEnMarcha, conPaso } from './puesta-en-marcha/tarjeta-marcha';
+import { conPaso } from './puesta-en-marcha/con-paso';
+import { TarjetaPuestaEnMarcha } from './puesta-en-marcha/tarjeta-marcha';
 import { AvisoSinFlota } from './sin-flota';
 
 // ═══════════════════════════════════════════════════════════════════════════
