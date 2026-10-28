@@ -71,7 +71,8 @@ describe('la revisión de cobros en pantalla', () => {
 
   it('sugiere (no aplica) las casetas de posible tarifa por pasada', () => {
     const pasada = Array.from({ length: 30 }, (_, i) => l(i, { caseta: 'Caseta Pasada Uno', clase: 1, hora: `09:00:${String(i).padStart(2, '0')}` }));
-    const html = pintar(extras(reporte(pasada)));
+    // Modo «solo las declaradas»: con el default (la clase 1 es tarifa por pasada en todas) ya no se marca ni se sugiere nada.
+    const html = pintar(extras(reporte(pasada, { revision: revisarCobros(pasada, { periodoDesde: '2026-03-01', clase1: 'declaradas' }) })));
     expect(html).toContain('¿Tarifa por pasada?');
     expect(html).toContain('Caseta Pasada Uno (30)');
   });

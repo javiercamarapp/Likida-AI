@@ -105,6 +105,9 @@ const TEXTO_MOTIVO_INMOVILIZADA: Record<MotivoInmovilizada, string> = {
 /** Una ventana de inmovilización de una unidad. `desde` y `hasta` inclusive; `hasta: null` = sigue inmovilizada. */
 export interface VentanaInmovilizada { desde: string; hasta: string | null; motivo: MotivoInmovilizada }
 
+export type ModoClase1 = 'todas' | 'declaradas';
+export const MODO_CLASE1_DEFAULT: ModoClase1 = 'todas';
+
 /** Las clases de cobro válidas por defecto: 3 (tracto solo) y 5 (tracto + caja de 2 ejes). */
 export const CLASES_VALIDAS_DEFAULT: readonly number[] = [3, 5];
 
@@ -140,6 +143,12 @@ export interface ReglasCobro {
    * se le evalúa la clase (y la regla lo dice en `reglasNoAplicadas`): no se inventa una tarifa de coche.
    */
   clasesUtilitario?: readonly number[];
+  /**
+   * Qué hacer con la clase 1. El cliente indicó que clase 1 es la tarifa POR PASADA (no una clase de ejes), así que:
+   *   · `todas` (default): la clase 1 no se marca en ninguna caseta (se cuenta aparte y se dice);
+   *   · `declaradas`: solo es normal en las casetas que la flota declaró por pasada (o con clase 1 permitida); en las demás se marca.
+   */
+  clase1?: ModoClase1;
   /**
    * Clases ADICIONALES válidas por caseta (la llave es el nombre normalizado con `normalizarNombre`).
    * Ej.: casetas de tarifa por pasada → [1].
@@ -247,6 +256,7 @@ function listaClases(cs: readonly number[]): string {
 export function revisarCobros(lineas: readonly LineaCobro[], reglas: ReglasCobro = {}): ResultadoRevision {
   const clasesValidas = reglas.clasesValidas ?? CLASES_VALIDAS_DEFAULT;
   const clasesUtilitario = reglas.clasesUtilitario ?? [];
+  const clase1 = reglas.clase1 ?? MODO_CLASE1_DEFAULT;
   const excepciones = reglas.excepcionesClase ?? new Map<string, readonly number[]>();
   const periodoDesde = reglas.periodoDesde ?? null;
   const tagsBaja = reglas.tagsBaja ?? new Map<string, string>();
@@ -323,6 +333,7 @@ export function revisarCobros(lineas: readonly LineaCobro[], reglas: ReglasCobro
   }
 
   // ── Clase fuera de {3,5} ──────────────────────────────────────────────────
+  let clase1Omitidas = 0;
   for (const l of lineas) {
     if (l.clase === undefined || l.clase === null) continue;
     const tipo = l.tipoUnidad ?? null;
@@ -331,6 +342,8 @@ export function revisarCobros(lineas: readonly LineaCobro[], reglas: ReglasCobro
     const extras = excepciones.get(norm) ?? [];
     const validas = tipo === 'utilitario' ? clasesUtilitario : clasesValidas;
     if (validas.includes(l.clase) || extras.includes(l.clase)) continue;
+    // Clase 1 = tarifa por pasada (lo dijo el cliente): por defecto no es un candidato. Se cuenta y se dice abajo.
+    if (l.clase === 1 && clase1 === 'todas') { clase1Omitidas++; continue; }
     const esperadas = [...validas, ...extras];
     candidatos.push({
       ...base(l), categoria: 'clase_fuera_de_3_5', tipoUnidad: tipo,
@@ -344,6 +357,14 @@ export function revisarCobros(lineas: readonly LineaCobro[], reglas: ReglasCobro
         ? 'Si esta caseta cobra por pasada, decláralo en «Reglas de cobro» para que deje de aparecer. Si no, pide al proveedor la clase con la que cobró.'
         : 'Compara con la clase que le corresponde a la unidad y, si no coincide, reclama al proveedor la diferencia por el portal (tienes 3 meses desde el cobro).',
       referencia: `clase ${l.clase}; válidas ${listaClases(esperadas)}${tipo === null ? `; ${ROTULO_SIN_TIPO_UNIDAD}` : `; ${tipo}`}`,
+    });
+  }
+
+  if (clase1Omitidas > 0) {
+    reglasNoAplicadas.push({
+      regla: 'clase_fuera_de_3_5',
+      motivo: `${clase1Omitidas} cruce(s) de clase 1 no se marcan: la clase 1 es la tarifa por pasada de la caseta, no una clase de ejes. `
+        + 'Si la flota quiere revisarlos, en «Reglas de cobro» puede pedir que solo se tomen como normales en las casetas declaradas por pasada.',
     });
   }
 
@@ -445,7 +466,8 @@ export function revisarCobros(lineas: readonly LineaCobro[], reglas: ReglasCobro
       casetaClase1.set(nk, c);
     }
   }
-  const sugerenciasPasada = [...casetaClase1.entries()]
+  // Con la clase 1 tratada como pasada en todas las casetas (default) no hay nada que sugerir: ya no se marca.
+  const sugerenciasPasada = clase1 !== 'declaradas' ? [] : [...casetaClase1.entries()]
     .filter(([nk, c]) => c.n >= 20 && c.uno / c.n >= 0.95 && !(excepciones.get(nk) ?? []).includes(1) && !clasesValidas.includes(1))
     .map(([, c]) => ({ caseta: c.nombre, cruces: c.uno, monto: r2(c.monto) }))
     .sort((a, b) => b.cruces - a.cruces);

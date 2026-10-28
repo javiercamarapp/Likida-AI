@@ -38,10 +38,10 @@ import { revisarDobleEntreArchivos, VENTANA_MESES_DEFAULT, type ArchivoPrevio, t
 import { parsearCasetasMatriz, coordenadaDeCelda, validarCoordenadasMexico, type CasetaCatalogo } from './casetas';
 import { parsearTarifasMatriz, planificarTarifa, type OrigenTarifa, type TarifaEntrada, type TarifaExistente } from './tarifario_archivo';
 import { parsearTagsMatriz, resolverUnidadesDeTags, validarBajaTag, type VigenciaTag } from './tags';
-import { parsearInmovilizadasMatriz, resolverUnidadesInmovilizadas, validarExcepcionUnidad, validarJustificacion } from './reglas_cobro_config';
+import { parsearInmovilizadasMatriz, resolverUnidadesInmovilizadas, validarExcepcionUnidad, validarJustificacion, validarReglasFlota, type ReglasFlota } from './reglas_cobro_config';
 import {
-  revisarCobros, ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO, TIPOS_UNIDAD_PEAJE, esCategoriaInterna,
-  type CategoriaCobro, type LineaCobro, type MotivoInmovilizada, type ReglasCobro, type ResultadoRevision, type TipoUnidadPeaje, type VentanaInmovilizada,
+  revisarCobros, ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO, TIPOS_UNIDAD_PEAJE, esCategoriaInterna, MODO_CLASE1_DEFAULT,
+  type CategoriaCobro, type ModoClase1, type LineaCobro, type MotivoInmovilizada, type ReglasCobro, type ResultadoRevision, type TipoUnidadPeaje, type VentanaInmovilizada,
 } from './reglas_cobro';
 import { validarMapeo, type ConfigMapeo } from './mapeo';
 import { evaluarContraTarifa } from './reglas_tarifa';
@@ -462,13 +462,13 @@ export async function quitarInmovilizada(tenantId: string, id: string): Promise<
 }
 
 // ── Casetas ─────────────────────────────────────────────────────────────────
-export interface CasetaVista extends CasetaCatalogo { activa: boolean; fuente: string | null }
+export interface CasetaVista extends CasetaCatalogo { activa: boolean; fuente: string | null; /** La caseta cobra tarifa por pasada (0810): la clase 1 es normal ahí. */ porPasada: boolean }
 
 export async function listarCasetas(tenantId: string, soloActivas = false): Promise<CasetaVista[]> {
-  const filas = await traerTodo<{ id: unknown; nombre: unknown; nombre_norm: unknown; alias: unknown; lat: unknown; lng: unknown; radio_m: unknown; activa: unknown; fuente: unknown }>(
+  const filas = await traerTodo<{ id: unknown; nombre: unknown; nombre_norm: unknown; alias: unknown; lat: unknown; lng: unknown; radio_m: unknown; activa: unknown; fuente: unknown; por_pasada?: unknown }>(
     (d, h) => {
       let q = supabaseAdmin().from('peaje_caseta')
-        .select('id, nombre, nombre_norm, alias, lat, lng, radio_m, activa, fuente', conteo(d))
+        .select('id, nombre, nombre_norm, alias, lat, lng, radio_m, activa, fuente, por_pasada', conteo(d))
         .eq('tenant_id', tenantId);
       if (soloActivas) q = q.eq('activa', true);
       return acotada(q.order('nombre').order('id').range(d, h), 'peajes.casetas');
@@ -481,7 +481,7 @@ export async function listarCasetas(tenantId: string, soloActivas = false): Prom
     lat: f.lat === null || f.lat === undefined ? null : Number(f.lat),
     lng: f.lng === null || f.lng === undefined ? null : Number(f.lng),
     radioM: Number(f.radio_m),
-    activa: f.activa !== false, fuente: (f.fuente as string | null) ?? null,
+    activa: f.activa !== false, fuente: (f.fuente as string | null) ?? null, porPasada: f.por_pasada === true,
   }));
 }
 
@@ -2233,6 +2233,8 @@ export function reglasDesdeConfig(
   excepciones: readonly ExcepcionUnidadVista[] = [], justificados: ReadonlyMap<number, string> = new Map(),
   clasesUtilitario: readonly number[] = [],
   inmovilizadasPorTag: ReadonlyMap<string, readonly VentanaInmovilizada[]> = new Map(),
+  /** Reglas de clase de la flota (0936) y las casetas declaradas por pasada en el catálogo (`peaje_caseta.por_pasada`, 0810). */
+  opciones: { clase1?: ModoClase1; casetasPorPasada?: ReadonlySet<string> } = {},
 ): ReglasCobro {
   const excepcionesClase = new Map<string, readonly number[]>();
   const casetasNoCruzar = new Set<string>();
@@ -2240,13 +2242,49 @@ export function reglasDesdeConfig(
     if (c.clasesPermitidas.length > 0) excepcionesClase.set(c.nombreNorm, c.clasesPermitidas);
     if (c.noCruzar) casetasNoCruzar.add(c.nombreNorm);
   }
+  // Una caseta declarada «por pasada» en el catálogo: la clase 1 es normal ahí (se suma a lo que ya tuviera).
+  for (const norm of opciones.casetasPorPasada ?? []) {
+    const previas = excepcionesClase.get(norm) ?? [];
+    if (!previas.includes(1)) excepcionesClase.set(norm, [...previas, 1]);
+  }
   const excepcionesPorUnidad = new Map<string, Set<string>>();
   for (const e of excepciones) {
     const set = excepcionesPorUnidad.get(e.casetaNorm) ?? new Set<string>();
     set.add(e.unidadNorm);
     excepcionesPorUnidad.set(e.casetaNorm, set);
   }
-  return { periodoDesde, excepcionesClase, casetasNoCruzar, tagsBaja: new Map(bajas.map((b) => [b.tag, b.bajaEn])), excepcionesPorUnidad, justificados, clasesUtilitario, inmovilizadasPorTag };
+  return { periodoDesde, excepcionesClase, casetasNoCruzar, tagsBaja: new Map(bajas.map((b) => [b.tag, b.bajaEn])), excepcionesPorUnidad, justificados, clasesUtilitario, inmovilizadasPorTag, clase1: opciones.clase1 };
+}
+
+// ── Reglas de clase por flota (migración 0936) ──────────────────────────────
+
+/** Los defaults cuando la flota no ha configurado nada (o la 0936 aún no está aplicada): utilitarios sin evaluar, clase 1 como pasada. */
+export const REGLAS_FLOTA_DEFAULT: ReglasFlota = { clasesUtilitario: [], clase1: MODO_CLASE1_DEFAULT };
+
+/** Las reglas de clase de la flota. Sin fila = defaults. Lanza ante error de base. */
+export async function leerReglasFlota(tenantId: string): Promise<ReglasFlota> {
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_regla_flota')
+    .select('clases_utilitario, clase_uno').eq('tenant_id', tenantId).maybeSingle(), 'peajes.reglas_flota');
+  if (error) throw new Error(`leerReglasFlota: ${error.message}`);
+  if (!data) return REGLAS_FLOTA_DEFAULT;
+  return {
+    clasesUtilitario: Array.isArray(data.clases_utilitario) ? (data.clases_utilitario as unknown[]).map(Number).filter(Number.isInteger).sort((a, b) => a - b) : [],
+    clase1: data.clase_uno === 'declaradas' ? 'declaradas' : MODO_CLASE1_DEFAULT,
+  };
+}
+
+/** Guarda las reglas de clase de la flota (validadas). Repetirlo es seguro. */
+export async function guardarReglasFlota(tenantId: string, entrada: { clasesUtilitario: unknown; clase1: unknown }): Promise<{ ok: true; valor: ReglasFlota } | { ok: false; motivo: string }> {
+  const v = validarReglasFlota(entrada);
+  if (!v.ok) return v;
+  const { error } = await acotada(supabaseAdmin().from('peaje_regla_flota').upsert({
+    tenant_id: tenantId, clases_utilitario: v.valor.clasesUtilitario, clase_uno: v.valor.clase1, actualizado_en: new Date().toISOString(),
+  }, { onConflict: 'tenant_id' }), 'peajes.guardar_reglas_flota');
+  if (error) {
+    logger.error('peajes.guardar_reglas_flota', { tenant: tenantId, err: error.message });
+    return { ok: false, motivo: 'No se pudo guardar. Inténtalo de nuevo.' };
+  }
+  return v;
 }
 
 export type Resultado = { ok: true } | { ok: false; motivo: string };
@@ -2543,7 +2581,16 @@ export async function revisionDeDesglose(
     const tag = normalizarTag(l.tag);
     return { ...l, tipoUnidad: (tag ? tipos.get(tag) : undefined) ?? null };
   });
-  const revision = revisarCobros(lineas, reglasDesdeConfig(casetas, bajas, periodoOficialDesde, excepciones, justificados, [], inmovilizadas));
+  // Reglas de clase de la flota (0936) y casetas por pasada del catálogo (0810). Si no se pueden leer: los defaults, y se avisa en el log.
+  let reglasFlota = REGLAS_FLOTA_DEFAULT;
+  try { reglasFlota = await leerReglasFlota(tenantId); } catch (e) {
+    logger.warn('peajes.revision_reglas_flota', { tenant: tenantId, codigo: codigoDeError(e) });
+  }
+  let casetasPorPasada: ReadonlySet<string> = new Set();
+  try { casetasPorPasada = new Set((await listarCasetas(tenantId)).filter((c) => c.porPasada).map((c) => c.nombreNorm)); } catch (e) {
+    logger.warn('peajes.revision_casetas_por_pasada', { tenant: tenantId, codigo: codigoDeError(e) });
+  }
+  const revision = revisarCobros(lineas, reglasDesdeConfig(casetas, bajas, periodoOficialDesde, excepciones, justificados, reglasFlota.clasesUtilitario, inmovilizadas, { clase1: reglasFlota.clase1, casetasPorPasada }));
   const conCoords = casetas.filter((c) => c.lat !== null && c.lng !== null).map((c) => ({ nombre: c.nombre, lat: c.lat as number, lng: c.lng as number }));
   // A37-A2-17: sin umbrales explícitos, la pantalla usa los que la flota guardó en Configuración (los mismos del aviso). Si no se pueden leer, los de partida.
   let umbralesFlota: Partial<UmbralesAtipicos> = umbrales ?? {};

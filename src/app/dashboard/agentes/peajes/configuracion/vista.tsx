@@ -14,6 +14,7 @@ import { SeccionTarifario, type TarifarioVista } from './tarifario';
 import { SeccionUmbralesAvisos, type UmbralesAvisosVista } from './umbrales-avisos';
 import { SeccionCruceViajes, type CruceViajesVista } from './cruce-viajes';
 import { SeccionInmovilizadas, type InmovilizadasConfigVista } from './inmovilizadas';
+import { SeccionClasesCobro, type ClasesCobroVista } from './clases-cobro';
 
 type Accion = (fd: FormData) => Promise<void>;
 
@@ -60,7 +61,7 @@ const CSS_SECUNDARIO = 'hairline text-[12.5px] font-medium px-3 py-1.5 rounded-l
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--muted)' } as const;
 
 export function VistaConfiguracionPeajes({
-  sufijo, aviso, error, agenteApagado, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, archivos, tiposGeocerca, buzon, entradas, acciones, reglasCobro, tarifario, umbralesAvisos, cruceViajes, inmovilizadas, superficie,
+  sufijo, aviso, error, agenteApagado, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, archivos, tiposGeocerca, buzon, entradas, acciones, reglasCobro, tarifario, umbralesAvisos, cruceViajes, inmovilizadas, clasesCobro, superficie,
 }: {
   sufijo: string;
   aviso: string | null;
@@ -88,6 +89,8 @@ export function VistaConfiguracionPeajes({
   cruceViajes?: CruceViajesVista;
   /** Ventanas de unidades inmovilizadas (carga y borrado). Opcional. */
   inmovilizadas?: InmovilizadasConfigVista;
+  /** Clases válidas del utilitario y regla de la clase 1. Opcional. */
+  clasesCobro?: ClasesCobroVista;
   /** T-A2-31: con perfil `cinco_agentes` no se pintan geocercas ni cursos (stand-by). Sin la prop: todo, como siempre. */
   superficie?: { gps: boolean; cursos: boolean };
 }) {
@@ -112,6 +115,7 @@ export function VistaConfiguracionPeajes({
           <SeccionEntradas entradas={entradas} acciones={acciones} />
           <SeccionMapeo mapeos={mapeos} acciones={acciones} />
           {reglasCobro && <SeccionReglasCobro datos={reglasCobro} />}
+          {clasesCobro && <SeccionClasesCobro datos={clasesCobro} />}
           {tarifario && <SeccionTarifario datos={tarifario} />}
           {umbralesAvisos && <SeccionUmbralesAvisos datos={umbralesAvisos} />}
           {cruceViajes && <SeccionCruceViajes datos={cruceViajes} />}

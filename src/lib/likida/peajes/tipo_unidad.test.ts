@@ -53,7 +53,7 @@ describe('regla de clase por tipo de unidad', () => {
   });
 
   it('la lista de utilitarios no afecta a un tracto', () => {
-    expect(clases([linea(1, 'tracto')], { clasesUtilitario: [1] })).toHaveLength(1);
+    expect(clases([linea(1, 'tracto')], { clasesUtilitario: [1], clase1: 'declaradas' })).toHaveLength(1);
   });
 
   it('sin tipo → candidato rotulado «sin tipo de unidad»', () => {

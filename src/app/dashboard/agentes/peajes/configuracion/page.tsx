@@ -21,6 +21,7 @@ import {
   leerConfigPeajes, guardarUmbralesPeajes, guardarConfigAvisos,
   leerVinculosActivo, guardarVinculosActivo, resumenFuenteViajes, vincularDesglose,
   listarInmovilizadas, importarInmovilizadasArchivo, quitarInmovilizada,
+  leerReglasFlota, guardarReglasFlota,
   type ResultadoImportacionCatalogo,
 } from '@/lib/likida/peajes/datos';
 import { ORIGENES_TARIFA, type OrigenTarifa } from '@/lib/likida/peajes/tarifario_archivo';
@@ -124,10 +125,11 @@ export default async function PaginaConfiguracionPeajes({
 
   const superficie = await superficiePeajesDeTenant(tenantId);
   const secreto = secretoMaestro();
-  const [vinculosActivo, fuenteViajes, inmovilizadas, tarifas, configPeajes, reglasCasetas, tagsBaja, excepcionesUnidad, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, buzon, archivos, entradas] = await Promise.all([
+  const [vinculosActivo, fuenteViajes, inmovilizadas, reglasFlota, tarifas, configPeajes, reglasCasetas, tagsBaja, excepcionesUnidad, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, buzon, archivos, entradas] = await Promise.all([
     safe(() => leerVinculosActivo(tenantId)),
     safe(() => resumenFuenteViajes(tenantId)),
     safe(() => listarInmovilizadas(tenantId)),
+    safe(() => leerReglasFlota(tenantId)),
     safe(() => listarTarifas(tenantId)),
     safe(() => leerConfigPeajes(tenantId)),
     safe(() => listarReglasCasetas(tenantId)),
@@ -480,6 +482,15 @@ export default async function PaginaConfiguracionPeajes({
     return volverConfig(sufijo, (await quitarInmovilizada(tenantId, String(fd.get('ventana') ?? ''))) ? 'Ventana quitada.' : 'error:No se pudo quitar la ventana (¿ya no existía?).');
   }
 
+  // ── Clases del cobro por flota: utilitarios y clase 1 (0936) ──
+  async function accionGuardarReglasFlota(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId);
+    if (no) return volverConfig(sufijo, `error:${no}`);
+    const r = await guardarReglasFlota(tenantId, { clasesUtilitario: String(fd.get('clases_utilitario') ?? ''), clase1: String(fd.get('clase_uno') ?? '') });
+    return volverConfig(sufijo, r.ok ? 'Clases guardadas. La revisión de cobros las usa en cuanto abras un desglose.' : `error:${r.motivo}`);
+  }
+
   // ── Mapeo de columnas ──
   async function accionGuardarMapeo(fd: FormData) {
     'use server';
@@ -534,6 +545,7 @@ export default async function PaginaConfiguracionPeajes({
         },
       }}
       inmovilizadas={{ ventanas: inmovilizadas, puedeEditar: puedeVerArea(rol, 'dinero'), acciones: { cargarInmovilizadas: accionCargarInmovilizadas, quitarInmovilizada: accionQuitarInmovilizada } }}
+      clasesCobro={{ reglas: reglasFlota, puedeEditar: puedeVerArea(rol, 'dinero'), acciones: { guardarReglasFlota: accionGuardarReglasFlota } }}
       cruceViajes={{ activo: vinculosActivo, fuente: fuenteViajes, puedeAdministrar, acciones: { guardarCruceViajes: accionGuardarCruceViajes } }}
       tarifario={{ tarifas, acciones: { importarTarifas: accionImportarTarifas, confirmarTarifa: accionConfirmarTarifa, sugerirPasada: accionSugerirPasada } }}
       umbralesAvisos={{
