@@ -2030,21 +2030,61 @@ export async function retirarDecisionesCandidatos(tenantId: string, ids: readonl
   }
 }
 
+/** Ya hay un reclamo de la CATEGORÍA COMPLETA (lote 0) abierto: sus cruces no tienen decisión por renglón y un reclamo por candidatos los duplicaría. */
+export class ReclamoDeCategoriaAbierto extends Error {
+  constructor(readonly categoria: string) {
+    super(`crearReclamoDeCandidatos: ya hay un reclamo abierto de toda la categoría «${categoria}» en este desglose`);
+    this.name = 'ReclamoDeCategoriaAbierto';
+  }
+}
+
+/** La base aún no tiene la columna `peaje_reclamo.lote` (0929): se cae al camino anterior (un solo reclamo por categoría). */
+const faltaColumnaLote = (e: { message?: string; code?: string } | null | undefined): boolean =>
+  !!e && /\blote\b/i.test(e.message ?? '') && (e.code === '42703' || e.code === 'PGRST204' || /column|schema cache/i.test(e.message ?? ''));
+
+const INTENTOS_LOTE = 5;
+
 /**
  * Crea UN reclamo (preparado, o enviado si trae fecha de envío) a partir de un grupo de candidatos ya elegidos.
  * Los números salen de los candidatos, no del formulario. `fechaCobroMasAntigua` es de donde corre el plazo.
+ *
+ * A39-S14-01 (variante de INN-A2-01): el índice único `peaje_reclamo_activo_unico` (0847) era (flota, desglose, categoría) y la segunda
+ * tanda de candidatos de la MISMA categoría chocaba para siempre (el primer reclamo ya estaba enviado y el segundo no podía crearse).
+ * Desde la 0929 cada reclamo lleva un `lote`: la categoría completa es el lote 0 (su doble envío sigue chocando) y cada tanda de
+ * candidatos toma el siguiente lote (1, 2…): los candidatos ya tienen una decisión única por renglón, así que las tandas son disjuntas.
+ * Si ya hay un reclamo de la categoría COMPLETA abierto, no se crea otro por candidatos (duplicaría los mismos cruces).
  */
 export async function crearReclamoDeCandidatos(
   tenantId: string,
   e: { desgloseId: string; proveedor: string | null; categoria: string; nCruces: number; monto: number; fechaCobroMasAntigua: string; enviadoEn: string | null; referenciaPortal?: string | null },
 ): Promise<string> {
-  const { data, error } = await acotada(supabaseAdmin().from('peaje_reclamo').insert({
+  const fila = {
     tenant_id: tenantId, desglose_id: e.desgloseId, proveedor: e.proveedor, categoria: e.categoria,
     estado: e.enviadoEn ? 'enviado' : 'preparado', n_cruces: e.nCruces, monto_reclamado: Math.round(e.monto * 100) / 100, monto_acreditado: 0,
     fecha_cobro_mas_antiguo: e.fechaCobroMasAntigua, enviado_en: e.enviadoEn, referencia_portal: e.referenciaPortal?.trim().slice(0, 120) || null,
-  }).select('id').single(), 'peajes.crear_reclamo_candidatos');
-  if (error || !data) throw new Error(`crearReclamoDeCandidatos: ${error?.message ?? 'sin id'}`);
-  return String(data.id);
+  };
+  const previos = await acotada(supabaseAdmin().from('peaje_reclamo')
+    .select('lote, estado').eq('tenant_id', tenantId).eq('desglose_id', e.desgloseId).eq('categoria', e.categoria)
+    .order('id').limit(1000), 'peajes.crear_reclamo_candidatos_lotes');
+  let lote: number | null = null;
+  if (previos.error) {
+    if (!faltaColumnaLote(previos.error)) throw new Error(`crearReclamoDeCandidatos: ${previos.error.message}`);
+    logger.warn('peajes.reclamo_sin_columna_lote', { tenant: tenantId }); // sin la 0929: camino anterior, sin lote
+  } else {
+    const filas = (previos.data ?? []) as Array<{ lote: unknown; estado: unknown }>;
+    if (filas.some((f) => f.estado !== 'rechazado' && Number(f.lote ?? 0) === 0)) throw new ReclamoDeCategoriaAbierto(e.categoria);
+    lote = Math.max(0, ...filas.map((f) => Number(f.lote ?? 0))) + 1;
+  }
+  for (let intento = 0; intento < INTENTOS_LOTE; intento++) {
+    const { data, error } = await acotada(supabaseAdmin().from('peaje_reclamo')
+      .insert(lote === null ? fila : { ...fila, lote }).select('id').single(), 'peajes.crear_reclamo_candidatos');
+    if (!error && data) return String(data.id);
+    // Otra tanda tomó ese lote en este mismo instante: se prueba el siguiente (la base es la verdad, no esta lectura).
+    if (lote !== null && error && /duplicate key|unique/i.test(error.message ?? '') && intento < INTENTOS_LOTE - 1) { lote += 1; continue; }
+    if (lote !== null && faltaColumnaLote(error)) { lote = null; continue; }
+    throw new Error(`crearReclamoDeCandidatos: ${error?.message ?? 'sin id'}`);
+  }
+  throw new Error('crearReclamoDeCandidatos: sin lote libre');
 }
 
 /** Justifica cruces de «caseta que no debe cruzarse» en lote (la misma tabla que `justificarCruce`, para que la regla los marque). */

@@ -5,7 +5,7 @@ import { actorDePanel } from '@/lib/likida/peajes/actor_panel';
 import { revisionDeDesglose } from '@/lib/likida/peajes/revision_cobros';
 import {
   listarDecisionesCandidatos, registrarDecisionesCandidatos, ligarDecisionesAReclamo, retirarDecisionesCandidatos,
-  crearReclamoDeCandidatos, guardarJustificacionesDeCruces, montosReclamablesDeClase,
+  crearReclamoDeCandidatos, guardarJustificacionesDeCruces, montosReclamablesDeClase, ReclamoDeCategoriaAbierto,
 } from '@/lib/likida/peajes/datos';
 import {
   ACCIONES_CANDIDATO, aplicaAccion, filasDeCandidatos, filasFiltradas, normalizarFiltros, validarMotivoAccion,
@@ -178,6 +178,10 @@ export async function aplicarAccionCandidatos(tenantId: string, e: EntradaAccion
             logger.error('peajes.candidatos_retiro_fallo', { tenant: tenantId, n: sinReclamo.length, err: eRetiro instanceof Error ? eRetiro.message : String(eRetiro) });
           });
           logger.error('peajes.candidatos_reclamo_fallo', { tenant: tenantId, err: err instanceof Error ? err.message : String(err) });
+          if (err instanceof ReclamoDeCategoriaAbierto) {
+            // A39-S14-01: un reclamo de TODA la categoría ya cubre esos cruces: reclamarlos por candidatos los duplicaría.
+            return { ok: false, error: `Ya registraste un reclamo de toda la categoría «${categoria}» en este desglose: esos cruces ya van en él. No se marcó nada de ese grupo ni de los que faltaban.` };
+          }
           return { ok: false, error: `No se pudo registrar el reclamo de «${categoria}»${reclamos > 0 ? ` (los ${reclamos} anteriores sí quedaron)` : ''}. No se marcó nada de ese grupo ni de los que faltaban: inténtalo de nuevo.` };
         }
       }
