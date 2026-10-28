@@ -25,7 +25,7 @@ describe('pantalla de carga del programa (vista)', () => {
     expect(html).toContain('Sube el archivo de hoy');
     expect(html).toContain('name="terminal"');
     expect(html).toContain('name="archivo"');
-    expect(html).toContain('hasta 12 MB');
+    expect(html).toContain('hasta 4 MB');
     expect(html).not.toContain('Qué entendí');
   });
 

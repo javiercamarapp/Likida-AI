@@ -149,11 +149,11 @@ describe('subir el programa', () => {
     expect(sincronizarPrograma).not.toHaveBeenCalled();
   });
 
-  it('más de 12 MB: lo rechaza antes de leerlo', async () => {
+  it('más de 4 MB (el tope real de la subida): lo rechaza antes de leerlo', async () => {
     const { accion } = await props();
-    const grande = new File([new Uint8Array(12 * 1024 * 1024 + 1)], 'grande.csv');
+    const grande = new File([new Uint8Array(4 * 1024 * 1024 + 1)], 'grande.csv');
     const r = await accion(null, forma({ terminal: 'GDL', archivo: grande }));
-    expect(r && !r.ok && r.error).toMatch(/más de 12 MB/);
+    expect(r && !r.ok && r.error).toMatch(/más de 4 MB/);
     expect(sincronizarPrograma).not.toHaveBeenCalled();
   });
 
