@@ -164,6 +164,7 @@ test('claro y oscuro: el globo se ve completo dentro de la ventana y usa la supe
     await siguiente(page).click();
     await siguiente(page).click();
     await expect.poll(() => numeroDePaso(page)).toBe(3);
+    await globo(page).evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished))); // mide con el globo ya asentado
     const caja = await globo(page).boundingBox();
     const ventana = page.viewportSize()!;
     expect(caja).not.toBeNull();

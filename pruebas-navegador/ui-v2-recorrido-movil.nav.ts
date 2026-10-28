@@ -38,6 +38,8 @@ test('no se abre solo; «Ver recorrido» abre una hoja que cabe en la pantalla',
   await expect(globo(page)).toHaveCount(0);
   await lanzador(page).tap();
   await expect(globo(page)).toBeVisible();
+  // La hoja entra subiendo 6 px (rv-globo-entra): medirla a mitad de la animación la da más abajo de lo que queda.
+  await globo(page).evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
   const caja = await globo(page).boundingBox();
   const ventana = page.viewportSize()!;
   expect(caja!.x).toBeGreaterThanOrEqual(0);

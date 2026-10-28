@@ -10,6 +10,8 @@ const id = (n: number) => `eeeeeeee-1000-4000-8000-${(sello + n).toString(16).pa
 const OPERADOR = id(0), VIAJE = id(1), GASTO_EXACTO = id(2), GASTO_DISTINTO = id(3);
 const FOLIO = `E2E-POC-PEAJES-${sello}`;
 const ARCHIVO = `${FOLIO}.csv`;
+// La huella (sha256) del archivo sobrevive a la limpieza: con el mismo contenido en la segunda pasada el panel contesta «ya se recibió».
+const TAG = `TAG-POC-${sello}`;
 let admin: APIRequestContext;
 
 // Datos propios de esta prueba; no modifica seed.sql ni estados de otras pruebas.
@@ -52,9 +54,9 @@ test.describe('PoC A: conciliación de peajes con base real', () => {
     await page.getByLabel('Desglose del proveedor de peaje (Excel, CSV o PDF)').setInputFiles({
       name: ARCHIVO, mimeType: 'text/csv', buffer: Buffer.from([
         'fecha,caseta,importe,tag',
-        '2026-06-01,Caseta exacta PoC,431.27,TAG-POC-A',
-        '2026-06-04,Caseta discrepante PoC,888,TAG-POC-A',
-        '2026-06-20,Caseta sin gasto PoC,123.45,TAG-POC-A',
+        `2026-06-01,Caseta exacta PoC,431.27,${TAG}`,
+        `2026-06-04,Caseta discrepante PoC,888,${TAG}`,
+        `2026-06-20,Caseta sin gasto PoC,123.45,${TAG}`,
       ].join('\n')),
     });
     await page.getByLabel('Proveedor del desglose (opcional)').fill(FOLIO);
