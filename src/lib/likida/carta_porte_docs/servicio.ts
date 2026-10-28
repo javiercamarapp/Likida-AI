@@ -18,6 +18,9 @@ import { estaApagado } from '../interruptores';
 import { MAX_BYTES_DOC, detectarFormato, prepararContenido, type FormatoDoc } from './contenido';
 import { extraerDocumento, type LlmExtractor, type ResultadoExtraccion } from './extractor';
 import { avisosDelCatalogo, enriquecer } from './catalogo_cliente';
+import { convertirExtraccion, FORMATOS_CONVERTIBLES, type FormatoConvertible } from './convertidor';
+import { completarDistancias, type RutaDistancia } from './catalogo_distancias';
+import { leerPlantillaTms } from './lector_plantilla_tms';
 import { precargarCatalogosSat } from './catalogos_sat';
 import type { SalidaTms } from './tms_puerto';
 import { derivarHijos, evaluarDivision, MAX_EMBARQUES, type PlanDivision } from './multiembarque';
@@ -46,6 +49,19 @@ export interface DepsServicio {
   transcribir?: (imagenes: string[], signal?: AbortSignal) => Promise<string>;
   /** T-A3-67: el modelo de visión que lee una remisión escaneada (formato C). Sin él (sin llave: bloqueo externo) esa remisión queda «requiere captura manual». */
   vision?: VisionRemision | null;
+  /** OLA1-A3: las rutas del catálogo de distancias de un cliente. Por omisión las lee de `cp_distancia`; sin la 0830 o sin filas, `[]`. */
+  rutasDistancia?: (tenantId: string, clienteId: string) => Promise<RutaDistancia[]>;
+}
+
+async function rutasPorDefecto(tenantId: string, clienteId: string): Promise<RutaDistancia[]> {
+  const { cargarDistanciasCliente } = await import('./catalogo_distancias_puerto');
+  return cargarDistanciasCliente(tenantId, clienteId);
+}
+
+/** El formato convertible (C, D, E, F1–F3, G) del documento que ya se leyó, o `null` (A y B ya son plantilla). */
+function formatoConvertible(r: ResultadoExtraccion, formato: FormatoDoc): FormatoConvertible | null {
+  const f = String(r.lector?.formato ?? (formato === 'json' ? 'G' : ''));
+  return (FORMATOS_CONVERTIBLES as readonly string[]).includes(f) ? (f as FormatoConvertible) : null;
 }
 
 async function llmPorDefecto(tenantId: string, canal: CanalDoc): Promise<LlmExtractor> {
@@ -403,10 +419,14 @@ export async function procesarDocumento(
     // inventa nada: queda «requiere captura manual», visible y bloqueante, y el flujo no se rompe.
     const sinVision = formatoEntrada === 'C' && !deps.vision && contenido.imagenes.length > 0;
 
-    const llm = sinVision ? null : await (deps.llm ?? llmPorDefecto)(tenantId, doc.canal);
+    // OLA1-A3: un Excel que YA es la plantilla del TMS (normal o nueva) se lee de sus celdas, determinista y sin modelo.
+    const plantillaLeida = d.clase === 'excel' && !sinVision ? leerPlantillaTms(bytes) : null;
+    const llm = sinVision || plantillaLeida ? null : await (deps.llm ?? llmPorDefecto)(tenantId, doc.canal);
     let r: ResultadoExtraccion;
     try {
-      r = sinVision || !llm
+      r = plantillaLeida
+        ? { ...resultadoSinLectura([...contenido.avisos, ...plantillaLeida.avisos], `Plantilla «${plantillaLeida.plantilla}» del TMS leída de sus celdas, sin modelo.`), extraccion: plantillaLeida.extraccion, origen: 'perfil' }
+        : sinVision || !llm
         ? resultadoSinLectura(contenido.avisos, 'Sin modelo de visión configurado: esta remisión escaneada se captura a mano.')
         : await extraerDocumento(contenido, {
           llm, perfiles, remitente: doc.remitente, clienteId: doc.clienteId, signal: deps.signal, nombreArchivo: doc.nombreArchivo, errorFatal: esErrorDePresupuesto,
@@ -434,12 +454,38 @@ export async function procesarDocumento(
     let extraccion = r.extraccion;
     const avisosCatalogo: string[] = [];
     let catalogoAplicados = 0;
-    if (doc.clienteId) {
+    // OLA1-A3: los formatos que se CONVIERTEN (remisión, BOL, orden de agente, correos, JSON) pasan por el convertidor: completa
+    // cliente interno, claves de domicilio y régimen desde el catálogo, marca lo inferido y dice qué falta. Es un borrador para
+    // revisión (nada se envía solo). Si falla, cae al catálogo de siempre.
+    const convertible = formatoConvertible(r, contenido.formato);
+    let convertido = false;
+    if (convertible) {
+      try {
+        const catalogo = doc.clienteId ? await repo.cargarCatalogoCliente(tenantId, doc.clienteId) : null;
+        const b = convertirExtraccion({ formato: convertible, extraccion, catalogo, contexto: { tenantId, clienteId: doc.clienteId } });
+        extraccion = b.extraccion;
+        catalogoAplicados = b.inferidos.length;
+        avisosCatalogo.push(...b.avisos, ...b.bloqueos.slice(0, 10).map((x) => `Falta para la plantilla: ${x.mensaje}`));
+        convertido = true;
+      } catch (e) { logger.warn('carta_porte_docs.convertidor_fallo', { tenantId, documentoId, err: resumenError(e) }); }
+    }
+    if (!convertido && doc.clienteId) {
       const catalogo = await repo.cargarCatalogoCliente(tenantId, doc.clienteId);
       const e = enriquecer(extraccion, catalogo, { tenantId, clienteId: doc.clienteId });
       extraccion = e.extraccion;
       catalogoAplicados = e.aplicados.length;
       avisosCatalogo.push(...avisosDelCatalogo(e, catalogo.truncado === true));
+    }
+    // OLA1-A3: la distancia sale del catálogo de distancias del cliente cuando el documento no la trae (nunca pisa lo leído).
+    if (doc.clienteId) {
+      try {
+        const rutas = await (deps.rutasDistancia ?? rutasPorDefecto)(tenantId, doc.clienteId);
+        if (rutas.length > 0) {
+          const dist = completarDistancias(extraccion, rutas, { tenantId, clienteId: doc.clienteId });
+          extraccion = dist.extraccion;
+          if (dist.completados.length > 0) avisosCatalogo.push(`La distancia salió del catálogo del cliente (${dist.completados.length}): confírmala.`);
+        }
+      } catch (e) { logger.warn('carta_porte_docs.distancias_fallo', { tenantId, documentoId, err: resumenError(e) }); }
     }
 
     const requiereCapturaManual: MetaExtraccion['requiereCapturaManual'] = sinVision ? { formato: 'C', motivo: 'sin_vision' } : null;
