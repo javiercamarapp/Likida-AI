@@ -23,7 +23,7 @@ describe('clase fuera de {3, 5}', () => {
       l({ indice: 0, caseta: 'CASETA PASADA UNO     ', clase: 1 }),
       l({ indice: 1, caseta: 'Caseta Ejemplo Norte', clase: 1 }),
     ];
-    const r = revisarCobros(lineas, { excepcionesClase });
+    const r = revisarCobros(lineas, { excepcionesClase, clase1: 'declaradas' });
     expect(cats(r)).toEqual(['1:clase_fuera_de_3_5']);
     // la explicación de la clase 1 no acusa: dice que puede ser tarifa por pasada
     expect(r.candidatos[0].queSignifica).toMatch(/tarifa por pasada/i);
@@ -31,7 +31,7 @@ describe('clase fuera de {3, 5}', () => {
   });
   it('una excepción de otra clase no deja pasar la clase 1 (y viceversa)', () => {
     const excepcionesClase = new Map([[normalizarNombre('Plaza Oriente'), [6]]]);
-    const r = revisarCobros([l({ indice: 0, caseta: 'Plaza Oriente', clase: 6 }), l({ indice: 1, caseta: 'Plaza Oriente', clase: 1, hora: '11:00:00' })], { excepcionesClase });
+    const r = revisarCobros([l({ indice: 0, caseta: 'Plaza Oriente', clase: 6 }), l({ indice: 1, caseta: 'Plaza Oriente', clase: 1, hora: '11:00:00' })], { excepcionesClase, clase1: 'declaradas' });
     expect(cats(r)).toEqual(['1:clase_fuera_de_3_5']);
   });
   it('sin clase en la línea no se acusa nada, se CUENTA; sin clase en todo el archivo la regla se declara no aplicada', () => {
@@ -45,11 +45,11 @@ describe('clase fuera de {3, 5}', () => {
       ...Array.from({ length: 30 }, (_, i) => l({ indice: i, caseta: 'Pasada X', clase: 1, monto: 50 })),
       ...Array.from({ length: 30 }, (_, i) => l({ indice: 100 + i, caseta: 'Normal Y', clase: 5 })),
     ];
-    const r = revisarCobros(lineas);
+    const r = revisarCobros(lineas, { clase1: 'declaradas' });
     expect(r.sugerenciasPasada).toEqual([{ caseta: 'Pasada X', cruces: 30, monto: 1500 }]);
     // y sigue marcando las 30 hasta que una persona lo declare
     expect(r.porCategoria.clase_fuera_de_3_5.n).toBe(30);
-    const declarada = revisarCobros(lineas, { excepcionesClase: new Map([[normalizarNombre('Pasada X'), [1]]]) });
+    const declarada = revisarCobros(lineas, { clase1: 'declaradas', excepcionesClase: new Map([[normalizarNombre('Pasada X'), [1]]]) });
     expect(declarada.porCategoria.clase_fuera_de_3_5.n).toBe(0);
     expect(declarada.sugerenciasPasada).toHaveLength(0);
   });
@@ -164,9 +164,47 @@ describe('fixture grande (9 000 filas): las cifras del generador coinciden', () 
     const esperadasClase = Object.entries(esperado.porClase).filter(([c]) => !['3', '5', '1'].includes(c)).reduce((s, [, n]) => s + n, 0);
     expect(r.porCategoria.clase_fuera_de_3_5.n).toBe(esperadasClase);
     expect(esperadasClase).toBeGreaterThan(300);
-    // SIN la excepción, la clase 1 sube el conteo exactamente en las clases 1
-    const sin = revisarCobros(lineas, { periodoDesde: esperado.inicio });
+    // Modo «solo las declaradas», SIN la excepción: la clase 1 sube el conteo exactamente en las clases 1
+    const sin = revisarCobros(lineas, { periodoDesde: esperado.inicio, clase1: 'declaradas' });
     expect(sin.porCategoria.clase_fuera_de_3_5.n).toBe(esperadasClase + (esperado.porClase['1'] ?? 0));
     expect(sin.sugerenciasPasada.map((s) => s.caseta).sort()).toEqual(['CASETA PASADA DOS', 'CASETA PASADA UNO']);
+  });
+
+  it('A2 ola 1 · SIN configurar nada (default) la clase 1 no inunda el reporte: las ~4 500 de un mes quedan fuera y se cuentan aparte', () => {
+    const sin = revisarCobros(lineas, { periodoDesde: esperado.inicio });
+    const unos = esperado.porClase['1'] ?? 0;
+    expect(unos).toBeGreaterThan(100);
+    expect(sin.porCategoria.clase_fuera_de_3_5.n).toBe(esperadasClaseSin1());
+    expect(sin.sugerenciasPasada).toEqual([]);
+    const nota = sin.reglasNoAplicadas.find((x) => x.regla === 'clase_fuera_de_3_5' && /clase 1/.test(x.motivo));
+    expect(nota?.motivo).toContain(`${unos} cruce(s) de clase 1 no se marcan`);
+  });
+  const esperadasClaseSin1 = () => Object.entries(esperado.porClase).filter(([c]) => !['3', '5', '1'].includes(c)).reduce((s, [, n]) => s + n, 0);
+});
+
+describe('A2 ola 1 · la clase 1 es tarifa por pasada (default) y el modo «declaradas»', () => {
+  const unaDe = (caseta: string, clase: number, indice: number) => l({ indice, caseta, clase, hora: `10:${String(indice).padStart(2, '0')}:00` });
+
+  it('por defecto la clase 1 no es candidato en ninguna caseta, y se dice cuántas quedaron fuera', () => {
+    const r = revisarCobros([unaDe('Plaza A', 1, 0), unaDe('Plaza B', 1, 1), unaDe('Plaza A', 8, 2)]);
+    expect(cats(r)).toEqual(['2:clase_fuera_de_3_5']);
+    expect(r.reglasNoAplicadas.find((x) => /clase 1/.test(x.motivo))?.motivo).toContain('2 cruce(s) de clase 1 no se marcan');
+  });
+  it('la clase 1 de una caseta que ya la tenía permitida o de una clase válida no cuenta como «omitida»', () => {
+    const r = revisarCobros([unaDe('Plaza A', 1, 0)], { excepcionesClase: new Map([[normalizarNombre('Plaza A'), [1]]]) });
+    expect(r.reglasNoAplicadas.some((x) => /clase 1/.test(x.motivo))).toBe(false);
+    const r2 = revisarCobros([unaDe('Plaza A', 1, 0)], { clasesValidas: [1, 3, 5] });
+    expect(r2.reglasNoAplicadas.some((x) => /clase 1/.test(x.motivo))).toBe(false);
+  });
+  it('modo «declaradas»: solo es normal en la caseta declarada por pasada; en otra se marca (con la explicación de siempre)', () => {
+    const r = revisarCobros([unaDe('Plaza A', 1, 0), unaDe('Plaza B', 1, 1)], {
+      clase1: 'declaradas', excepcionesClase: new Map([[normalizarNombre('Plaza A'), [1]]]),
+    });
+    expect(cats(r)).toEqual(['1:clase_fuera_de_3_5']);
+    expect(r.candidatos[0].queSignifica).toMatch(/tarifa por pasada/i);
+    expect(r.reglasNoAplicadas.some((x) => /clase 1/.test(x.motivo))).toBe(false);
+  });
+  it('el default sigue marcando las demás clases (8, 2) igual que antes', () => {
+    expect(cats(revisarCobros([unaDe('Plaza A', 2, 0), unaDe('Plaza A', 8, 1)]))).toEqual(['0:clase_fuera_de_3_5', '1:clase_fuera_de_3_5']);
   });
 });

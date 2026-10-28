@@ -11,6 +11,10 @@ vi.mock('@/lib/likida/peajes/ingesta_sftp', () => ({ ejecutarSftpPeajes: async (
 vi.mock('@/lib/likida/peajes/aviso_oficina', () => ({ reintentarAvisosPeajes: async () => ({ revisados: 0, enviados: 0, pendientes: 0 }) }));
 const atipicos = vi.fn(async (..._a: unknown[]): Promise<Record<string, number>> => ({ revisados: 0, enviados: 0, pendientes: 0 }));
 vi.mock('@/lib/likida/peajes/aviso_atipicos', () => ({ reintentarAvisosAtipicos: (...a: unknown[]) => atipicos(...a) }));
+vi.mock('@/lib/likida/peajes/aviso_barrido', () => ({
+  barrerAvisosPeajes: async () => ({ flotas: 0, plazo: { enviados: 0, yaAvisados: 0, sinDestinatario: 0, fallidos: 0, vencidosCruces: 0, vencidosMonto: 0 }, recordatorios: { enviados: 0, sinDestinatario: 0, fallidos: 0, yaRecordados: 0 }, fallidas: 0 }),
+  depsBarridoReales: async () => ({}),
+}));
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: vi.fn() }));
 vi.mock('@/lib/observability/sentry', () => ({ codigoDeError: () => 'cod' }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));

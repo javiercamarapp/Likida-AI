@@ -177,3 +177,36 @@ describe('vincularPorIcident (ruta preferente, fixtures sintéticos)', () => {
     expect(llamado).toBe(false);
   });
 });
+
+describe('vincularPorIcident: el Icident que trae el propio cobro (A2 ola 1)', () => {
+  const viajeD = (id: string, unidadNumero: string, inicio: string, fin: string | null, icident: string | null) =>
+    ({ id, folio: null, icident, unidadNumero, inicio, fin, origen: null, destino: null });
+  const cruceD = (over: Partial<Parameters<typeof vincularPorIcident>[0][number]> = {}) =>
+    ({ id: 'c1', unidadArchivo: '101', fecha: '2026-09-03', caseta: 'Caseta Ejemplo Norte', hora: null, ...over });
+
+  it('liga por Icident exacto SIN hora ni posiciones, y aunque la unidad sea genérica', () => {
+    const r = vincularPorIcident([cruceD({ icident: 'D-1', unidadArchivo: 'CAMIONETA' })], [viajeD('vA', '101', '2026-09-03', null, 'D-1')], []);
+    expect(r[0]).toMatchObject({ estado: 'ligado', viajeId: 'vA', via: 'icident', icident: 'D-1', motivo: null });
+  });
+  it('si la ventana dice OTRO viaje: conflicto visible, no se decide', () => {
+    const r = vincularPorIcident(
+      [cruceD({ icident: 'D-1' })],
+      [viajeD('vA', '101', '2026-09-03', '2026-09-03', null), viajeD('vB', '202', '2026-09-03', null, 'D-1')], [],
+    );
+    expect(r[0]).toMatchObject({ estado: 'conflicto', viajeId: null, motivo: 'icident_contradice_ventana', icident: 'D-1' });
+    expect(r[0].candidatos).toEqual(expect.arrayContaining(['vA', 'vB']));
+  });
+  it('Icident sin viaje conocido: no se inventa, cae a la ventana y lo dice', () => {
+    const r = vincularPorIcident([cruceD({ icident: 'D-9' })], [viajeD('vA', '101', '2026-09-03', null, null)], []);
+    expect(r[0]).toMatchObject({ estado: 'ligado', viajeId: 'vA', via: 'unidad_ventana', motivo: 'icident_sin_viaje', icident: 'D-9' });
+  });
+  it('Icident repetido en dos viajes: no elige', () => {
+    const r = vincularPorIcident([cruceD({ icident: 'D-1' })], [viajeD('vA', '101', '2026-09-03', null, 'D-1'), viajeD('vB', '202', '2026-09-03', null, 'D-1')], []);
+    expect(r[0]).toMatchObject({ estado: 'ligado', viajeId: 'vA', via: 'unidad_ventana', motivo: 'icident_repetido', icident: 'D-1' });
+  });
+  it('sin Icident propio el comportamiento no cambia', () => {
+    const r = vincularPorIcident([cruceD()], [viajeD('vA', '101', '2026-09-03', null, 'D-1')], []);
+    expect(r[0]).toMatchObject({ estado: 'ligado', via: 'unidad_ventana', motivo: null });
+    expect(r[0].icident ?? null).toBeNull();
+  });
+});

@@ -8,8 +8,9 @@ import { traerTodo, conteo } from '../pg';
 // `Icident` = número de despacho → viaje; con él se trae la unidad y la
 // caseta que cruzó. Este módulo SOLO define la forma de lo que el cruce
 // cruce→viaje necesita y dos fuentes:
-//   · `desdeTablaViajeLocal`: lee `viaje` local; funciona HOY sin API
-//     (`icident` nace nulo: la tabla local aún no lo guarda).
+//   · `desdeTablaViajeLocal`: lee `viaje` local; funciona HOY sin API.
+//     `icident` sale de `viaje.despacho_ref` (0780): nulo mientras el viaje
+//     no venga del TMS.
 //   · `desdeConectorTms`: interfaz + validador de contrato; se conectará
 //     cuando el frente del conector TMS entregue la API (BLOQUEO EXTERNO).
 // Solo lectura; sin red. No edita el conector (`conectores/tabla_propia`).
@@ -127,7 +128,7 @@ export async function desdeTablaViajeLocal(
   if (!fechaReal(rango.desde) || !fechaReal(rango.hasta) || rango.hasta < rango.desde) throw new Error('rango de fechas inválido');
   const filas = await traerTodo<Record<string, unknown>>(
     (d, h) => acotada(supabaseAdmin()
-      .from('viaje').select('id, folio, unidad_id, fecha_inicio, fecha_fin, origen, destino', conteo(d))
+      .from('viaje').select('id, folio, unidad_id, fecha_inicio, fecha_fin, origen, destino, despacho_ref', conteo(d))
       .eq('tenant_id', tenantId).lte('fecha_inicio', rango.hasta)
       // A37-S53-09: cota inferior en la base (mismo criterio que el filtro de abajo: abierto, o terminó desde `desde`).
       .or(`fecha_fin.is.null,fecha_fin.gte.${rango.desde}`).order('id').range(d, h), 'peajes.viajes_fuente'),
@@ -156,7 +157,7 @@ export async function desdeTablaViajeLocal(
   for (const f of tocan) {
     const num = typeof f.unidad_id === 'string' ? numeros.get(f.unidad_id) : undefined;
     const v = num ? validarViajeFuente({
-      id: String(f.id), folio: f.folio ?? null, icident: null, unidadNumero: num,
+      id: String(f.id), folio: f.folio ?? null, icident: f.despacho_ref ?? null, unidadNumero: num,
       inicio: String(f.fecha_inicio).slice(0, 10), fin: typeof f.fecha_fin === 'string' ? f.fecha_fin.slice(0, 10) : null,
       origen: f.origen ?? null, destino: f.destino ?? null,
     }) : null;

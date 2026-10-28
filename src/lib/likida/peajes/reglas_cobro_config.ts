@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { normalizarNombre, llaveUnidad, fechaHoraDeCelda, type Celda } from './formatos';
-import { MOTIVOS_INMOVILIZADA, type MotivoInmovilizada } from './reglas_cobro';
+import { MOTIVOS_INMOVILIZADA, type MotivoInmovilizada, type ModoClase1 } from './reglas_cobro';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA CONFIGURACIÓN DE LAS REGLAS DE COBRO, validada. PURO: sin base ni red.
@@ -53,6 +53,30 @@ export type ReglasCobroConfig = z.infer<typeof reglasCobroConfigSchema>;
 export const REGLAS_COBRO_CONFIG_VACIA: ReglasCobroConfig = {
   clasesValidas: [], excepcionesClase: [], casetasNoCruzar: [], excepcionesPorUnidad: [],
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REGLAS DE CLASE POR FLOTA (0936): clases del utilitario y qué hacer con la clase 1.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface ReglasFlota { clasesUtilitario: number[]; clase1: ModoClase1 }
+
+/** Lista de clases escrita a mano: «1, 2», «1 y 2», «1;2». Vacío = []; algo que no es un entero de 1 a 12 = `null`. */
+export function parsearListaClases(texto: string): number[] | null {
+  const trozos = texto.split(/[\s,;y]+/i).filter((t) => t !== '');
+  const nums = trozos.map((t) => (/^\d{1,2}$/.test(t) ? Number(t) : NaN));
+  if (nums.some((n) => !Number.isInteger(n))) return null;
+  const r = clasesSchema.safeParse([...new Set(nums)].sort((a, b) => a - b));
+  return r.success ? r.data : null;
+}
+
+export function validarReglasFlota(entrada: { clasesUtilitario: unknown; clase1: unknown }): Validado<ReglasFlota> {
+  const lista = typeof entrada.clasesUtilitario === 'string' ? parsearListaClases(entrada.clasesUtilitario) : entrada.clasesUtilitario;
+  if (lista === null) return { ok: false, motivo: `Las clases del utilitario se escriben como números de ${CLASE_MIN} a ${CLASE_MAX} separados por comas (por ejemplo 1, 2).` };
+  const c = clasesSchema.safeParse(lista);
+  if (!c.success) return { ok: false, motivo: primerMensaje(c.error) };
+  if (entrada.clase1 !== 'todas' && entrada.clase1 !== 'declaradas') return { ok: false, motivo: 'La regla de la clase 1 debe ser «todas» o «declaradas».' };
+  return { ok: true, valor: { clasesUtilitario: [...new Set(c.data)].sort((a, b) => a - b), clase1: entrada.clase1 } };
+}
 
 /** El primer mensaje llano de un fallo de validación. */
 export function primerMensaje(e: z.ZodError): string {
