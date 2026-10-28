@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL INVESTIGADOR (0217) — el contrato que lo define es la COMPUERTA LITERAL:
@@ -32,7 +32,12 @@ function builder(tabla: string) {
   });
   return b;
 }
-vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: (t: string) => builder(t) }) }));
+vi.mock('@/lib/supabase/admin', () => ({
+  supabaseAdmin: () => {
+    const rpc = (globalThis as unknown as { __rpcInvestigador?: (n: string, a: unknown) => Promise<unknown> }).__rpcInvestigador;
+    return { from: (t: string) => builder(t), ...(rpc ? { rpc } : {}) };
+  },
+}));
 vi.mock('../interruptores', () => ({ estaApagado: async () => false }));
 vi.mock('@/lib/llm/openrouter', () => ({ generateStructured: vi.fn() }));
 vi.mock('./corridas', () => ({ registrarCorrida: vi.fn() }));
@@ -249,6 +254,29 @@ function filaProspecto(n: number) {
   // created_at estrictamente creciente — el orden que el cursor recorre.
   return { id: `pr-${String(n).padStart(4, '0')}`, created_at: `2026-08-${String(1 + Math.floor(n / 1000)).padStart(2, '0')}T00:${String(n % 60).padStart(2, '0')}:00.000Z` };
 }
+
+// A39-S28-01: el escaneo acotado a 2,000 filas se detenía para siempre; con la 0930 el filtro vive en la base.
+describe('candidatosSinDossier — A39-S28-01 anti-join en la base (0930)', () => {
+  it('usa prospectos_sin_dossier con el límite pedido y devuelve sus ids, sin escanear la tabla', async () => {
+    const rpc = vi.fn(async () => ({ data: [{ id: 'p-2501' }, { id: 'p-2502' }], error: null }));
+    (globalThis as unknown as { __rpcInvestigador?: typeof rpc }).__rpcInvestigador = rpc;
+    respuestas.set('prospecto', []);
+    expect(await candidatosSinDossier(2)).toEqual(['p-2501', 'p-2502']);
+    expect(rpc).toHaveBeenCalledWith('prospectos_sin_dossier', { p_limite: 2 });
+  });
+
+  it('sin la migración (la función no existe) cae al escaneo paginado y avisa', async () => {
+    (globalThis as unknown as { __rpcInvestigador?: unknown }).__rpcInvestigador = vi.fn(async () => ({ data: null, error: { message: 'function public.prospectos_sin_dossier does not exist' } }));
+    const pagina = [filaProspecto(0), filaProspecto(1)];
+    respuestas.set('prospecto', [{ data: pagina, error: null }]);
+    respuestas.set('prospecto_dossier', [{ data: [], error: null }]);
+    expect(await candidatosSinDossier(5)).toEqual([pagina[0].id, pagina[1].id]);
+    const { logger } = await import('@/lib/logger');
+    expect(logger.warn).toHaveBeenCalledWith('investigador.candidatos_sin_rpc', expect.anything());
+  });
+
+  afterEach(() => { delete (globalThis as unknown as { __rpcInvestigador?: unknown }).__rpcInvestigador; });
+});
 
 describe('candidatosSinDossier — el cursor avanza más allá de una página agotada', () => {
   it('con la primera página de 100 TODA con dossier, sigue a la segunda página y encuentra ahí a los candidatos', async () => {

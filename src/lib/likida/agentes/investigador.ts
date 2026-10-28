@@ -538,6 +538,21 @@ const TOPE_FILAS_ESCANEADAS = 2_000;
  *  tiene dossier, sigue a la siguiente en la MISMA llamada, hasta juntar
  *  `limite` candidatos o agotar `TOPE_FILAS_ESCANEADAS`. */
 export async function candidatosSinDossier(limite: number): Promise<string[]> {
+  // A39-S28-01: con la 0930 el filtro «sin dossier» vive en la base (anti-join): sin tope de escaneo, así que no se detiene tras
+  // ~2,000 investigados. Sin la migración (la función no existe) cae al escaneo paginado de siempre y lo avisa.
+  const admin = supabaseAdmin();
+  if (typeof (admin as unknown as { rpc?: unknown }).rpc === 'function') {
+    const { data, error } = await acotada(admin.rpc('prospectos_sin_dossier', { p_limite: limite }), 'investigador.candidatos_rpc');
+    if (!error) {
+      return ((data ?? []) as Array<{ id?: unknown }>).map((f) => String(f.id)).filter((id) => id !== 'undefined' && id !== '');
+    }
+    logger.warn('investigador.candidatos_sin_rpc', { err: error.message });
+  }
+  return candidatosSinDossierEscaneo(limite);
+}
+
+/** El escaneo paginado de antes de la 0930 (con su tope): solo es el camino de respaldo. */
+async function candidatosSinDossierEscaneo(limite: number): Promise<string[]> {
   const encontrados: string[] = [];
   let cursor: { createdAt: string; id: string } | null = null;
   let escaneadas = 0;
