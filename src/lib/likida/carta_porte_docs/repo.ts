@@ -1281,7 +1281,7 @@ export async function enviosParaInsights(tenantId: string, desde: Date): Promise
 /** Cuánto hacia atrás se buscan salidas (más viejo que esto ya no es un pendiente de la semana). */
 export const DIAS_SALIDAS_SIN_CCP = 45;
 /** Días ANTES de la ventana de salidas desde los que se leen documentos/cargas para ligar por folio (un complemento puede existir antes del viaje). */
-export const MARGEN_DIAS_FOLIO_CCP = 60;
+const MARGEN_DIAS_FOLIO_CCP = 60;
 
 /**
  * Viajes con salida registrada (hito `salida_carga` recibido o validado) y los ids de los que ya tienen un complemento
