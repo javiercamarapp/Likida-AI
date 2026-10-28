@@ -541,6 +541,40 @@ describe('opt-out y consentimiento', () => {
     expect(repo.eventosDe('optout')).toHaveLength(1);
   });
 
+  // A39-S59-02: la orden de BAJA es del cliente y no depende de que la flota use el agente.
+  it('A39-S59-02: BAJA con el agente APAGADO en la flota registra el opt-out (sin guardar el mensaje ni acusar)', async () => {
+    const repo = new RepoEnMemoria();
+    const contacto = repo.agregarContacto({ tenantId: T1, clienteId: CLIENTE_A, telefono: '525511110001' }); // sin config = apagado
+    const { deps, alCliente, alGerente } = armar(repo);
+    expect(await atenderMensajeCliente(msg('BAJA'), deps)).toBe('atendido');
+    expect(repo.contactos.get(contacto.id)).toMatchObject({ estado: 'baja' });
+    expect(repo.contactos.get(contacto.id)!.optoutEn).not.toBeNull();
+    expect(repo.eventosDe('optout')).toHaveLength(1);
+    expect(repo.mensajes.size).toBe(0);
+    expect(alCliente).toEqual([]);
+    expect(alGerente).toEqual([]);
+  });
+
+  it('A39-S59-02: BAJA con la flota en STAND-BY de perfil también se respeta, y no se le escribe al cliente', async () => {
+    const { repo, contacto } = escenario();
+    const { deps, alCliente } = armar(repo);
+    expect(await atenderMensajeCliente(msg('BAJA'), { ...deps, enStandBy: async () => true })).toBe('atendido');
+    expect(repo.contactos.get(contacto.id)).toMatchObject({ estado: 'baja' });
+    expect(repo.eventosDe('optout')).toHaveLength(1);
+    expect(repo.mensajes.size).toBe(0);
+    expect(alCliente).toEqual([]);
+  });
+
+  it('A39-S59-02: con el agente apagado, un mensaje normal NO da de baja a nadie; y si el opt-out no se puede guardar, se reintenta', async () => {
+    const repo = new RepoEnMemoria();
+    const contacto = repo.agregarContacto({ tenantId: T1, clienteId: CLIENTE_A, telefono: '525511110001' });
+    const { deps } = armar(repo);
+    expect(await atenderMensajeCliente(msg('mi jefe dio de baja la unidad 12 del embarque'), deps)).toBe('atendido');
+    expect(repo.contactos.get(contacto.id)).toMatchObject({ estado: 'activo' });
+    vi.spyOn(repo, 'registrarOptOut').mockRejectedValueOnce(new Error('base caída'));
+    expect(await atenderMensajeCliente(msg('BAJA'), deps)).toBe('reintentar');
+  });
+
   it('«dar de baja la unidad 12» NO es un opt-out', async () => {
     const { repo, contacto } = escenario();
     const { deps } = armar(repo);
@@ -619,6 +653,33 @@ describe('toma de control humana', () => {
     expect(alCliente.at(-1)!.texto).toBe('Hola María, soy Luis, te marco en 5 minutos.');
     expect(repo.conversaciones.get(conv.id)!.sinRespuestaDesde).toBeNull();
     expect(repo.salientes().at(-1)).toMatchObject({ autor: 'humano', estado: 'enviado', aprobadoPor: 'u-gerente' });
+  });
+
+  // A39-S59-01: `marcarRespondida` apagaba el reloj del SLA aunque el cliente hubiera escrito DESPUÉS de lo que se contestó.
+  it('A39-S59-01: aprobar un borrador cuando el cliente escribió de nuevo NO apaga el reloj del SLA', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T1, CLIENTE_A, estatus());
+    const { deps, alCliente } = armar(repo);
+    await atenderMensajeCliente(msg('¿Dónde va mi viaje?'), deps);
+    const [borrador] = repo.salientes();
+    // El cliente escribe otra cosa MIENTRAS el borrador espera al gerente.
+    await atenderMensajeCliente(msg('Y necesito la factura', { timestampMs: AHORA.getTime() + 120_000 }), deps);
+    await atenderDecisionVigia(cuentaGerente, `vig_ok:${borrador.id}`, deps);
+    expect(alCliente).toHaveLength(1);
+    const conv = [...repo.conversaciones.values()][0];
+    expect(conv.sinRespuestaDesde).not.toBeNull();
+    expect(conv.entradasSinRespuesta).toBeGreaterThan(0);
+    expect(conv.ultimaSalidaEn).not.toBeNull();
+  });
+
+  it('A39-S59-01: si no llegó nada después del borrador, aprobar sí apaga el reloj (comportamiento de siempre)', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T1, CLIENTE_A, estatus());
+    const { deps } = armar(repo);
+    await atenderMensajeCliente(msg('¿Dónde va mi viaje?'), deps);
+    const [borrador] = repo.salientes();
+    await atenderDecisionVigia(cuentaGerente, `vig_ok:${borrador.id}`, deps);
+    expect([...repo.conversaciones.values()][0].sinRespuestaDesde).toBeNull();
   });
 
   it('responder vacío o a una conversación de otra flota: no envía', async () => {
