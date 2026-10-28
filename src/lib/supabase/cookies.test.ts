@@ -58,9 +58,17 @@ describe('la cookie de sesión no la lee el navegador', () => {
     }
   });
 
+  // Exención ESTRECHA, por archivo y con su razón: la insignia del menú de la puesta en marcha se escribe desde el
+  // navegador en una cookie PROPIA (`listos/total`, sin dato de negocio ni de sesión) para que el layout la lea en el
+  // servidor. No toca la cookie de sesión: la segunda prueba de abajo lo verifica en vez de suponerlo.
+  const EXENTOS: Record<string, string> = {
+    'src/app/dashboard/puesta-en-marcha/vista.tsx': 'cookie de avance (listos/total) del menú, no la de sesión',
+  };
+
   it('LA PREMISA: ningún archivo del repo lee la cookie desde el navegador', () => {
     const culpables = fuentes(SRC)
       .filter((f) => !f.endsWith(join('lib', 'supabase', 'cookies.ts')))
+      .filter((f) => !(f.replace(RAIZ + '/', '') in EXENTOS))
       .filter((f) => {
         const t = readFileSync(f, 'utf8')
           // Los comentarios hablan de esto justamente para explicarlo.
@@ -70,5 +78,14 @@ describe('la cookie de sesión no la lee el navegador', () => {
       .map((f) => f.replace(RAIZ + '/', ''));
 
     expect(culpables, 'alguien lee la cookie desde el cliente: httpOnly le va a romper la sesión').toEqual([]);
+  });
+
+  it('los archivos exentos escriben SOLO su cookie propia, nunca la de sesión del SDK', () => {
+    for (const [ruta, razon] of Object.entries(EXENTOS)) {
+      expect(razon.length).toBeGreaterThan(20);
+      const t = readFileSync(join(RAIZ, ruta), 'utf8');
+      expect(t, `${ruta}: pasa de largo la cookie de sesión`).not.toMatch(/sb-|auth-token|COOKIES_DE_SESION|createBrowserClient|js-cookie/);
+      expect(t, `${ruta}: ya no escribe una cookie propia; quítalo de EXENTOS`).toMatch(/document\.cookie/);
+    }
   });
 });
