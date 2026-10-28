@@ -1,6 +1,12 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { leerSenalesAsistente } from '@/lib/likida/asistente/senales';
+import { sufijoTenant } from '../sufijo';
+import type { IdPaso } from '@/lib/likida/asistente/pasos_cinco_agentes';
+import { VistaPuestaEnMarcha } from './vista';
+
+const PASOS: readonly IdPaso[] = ['equipo', 'tms', 'correo', 'catalogos', 'carta_porte', 'simulacro', 'whatsapp', 'peajes', 'vigia_conductor', 'legal'];
 
 export const dynamic = 'force-dynamic';
 
@@ -10,26 +16,33 @@ const RUTA = '/dashboard/puesta-en-marcha';
 /**
  * Puesta en marcha — el asistente de conexiones del dueño (PLAN-MAESTRO §2.5).
  *
- * ESQUELETO DEL PR «catálogo de rutas» (carril A): solo existe la ruta, su clasificación y su puerta, para que
- * `perfil_fuga_paginas`, `perfil_matriz` y `AREA_POR_RUTA` queden cerrados UNA sola vez en la Fase 1. La pantalla real
- * (anillo de avance, pasos, drawer «Cómo conseguirlo») la completa el carril C sobre este mismo archivo. Es una ruta
- * NUEVA y delgada: no reutiliza `/dashboard/arranque`, cuyas lecturas tocan recursos que el perfil niega.
+ * Ruta NUEVA y delgada: no reutiliza `/dashboard/arranque`, cuyas lecturas tocan recursos que el perfil niega. Las señales
+ * salen de lectores que ya existen (`lib/likida/asistente/senales.ts`, sin consultas propias) y cada una cae a «no se pudo
+ * comprobar» por separado. La pantalla (cliente) suma lo que la persona declara en su navegador.
  */
 export default async function PaginaPuestaEnMarcha({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
+  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; paso?: string }>;
 }) {
   const sp = await searchParams;
-  const { rol } = await resolverTenantEfectivo(RUTA, sp);
-  if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
+  const s = await resolverTenantEfectivo(RUTA, sp);
+  if (!puedeVerRuta(s.rol, RUTA)) redirect('/dashboard');
+
+  const senales = await leerSenalesAsistente(s.tenantId);
+  // Viendo como otra persona (superadmin con ?tenant/?vista/?rol): se mira, pero no se escribe progreso.
+  const soloLectura = Boolean(sp.tenant || sp.vista || sp.rol || s.tenantNombre);
 
   return (
-    <div className="p-6">
-      <h1 className="font-display text-xl font-semibold">Puesta en marcha</h1>
-      <p className="mt-2 text-[13px]" style={{ color: 'var(--muted)' }}>
-        Aquí vas a ver, paso por paso, qué falta para que tus agentes operen y quién tiene que resolverlo.
-      </p>
-    </div>
+    <main className="h-full">
+      <VistaPuestaEnMarcha
+        senales={senales}
+        ambito={`${s.tenantId}:${s.userId}`}
+        tenantId={s.tenantId}
+        sufijo={sufijoTenant(sp)}
+        soloLectura={soloLectura}
+        pasoInicial={PASOS.find((x) => x === sp.paso)}
+      />
+    </main>
   );
 }

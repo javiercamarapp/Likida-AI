@@ -5,11 +5,11 @@ import { solicitudParaTi, cartaAutorizacion } from './textos_solicitud';
 const vacias: SenalesAsistente = {
   tms: 'sin_credencial', archivosRecibidos: 0, correoPlataforma: true,
   correoDesglose: { activa: false, usaCorreo: false, remitenteCapturado: false },
-  operadores: { activos: 0, conCorreo: 0 }, unidadesActivas: 0, patios: 0, supervisores: 0, revisorCartaPorte: false,
+  operadores: { activos: 0, conCorreo: 0 }, unidadesActivas: 0, patios: 0, coordinadores: 0, supervisores: 0, revisorCartaPorte: false,
 };
 const caidas: SenalesAsistente = {
   tms: null, archivosRecibidos: null, correoPlataforma: null, correoDesglose: null, operadores: null,
-  unidadesActivas: null, patios: null, supervisores: null, revisorCartaPorte: null,
+  unidadesActivas: null, patios: null, coordinadores: null, supervisores: null, revisorCartaPorte: null,
 };
 const por = (r: ReturnType<typeof armarPasosCincoAgentes>, id: string) => [...r.rutaCritica, ...r.despues].find((p) => p.id === id)!;
 
@@ -33,7 +33,7 @@ describe('asistente de puesta en marcha (cinco_agentes)', () => {
 
   it('con la base caída todo lo medible es sin_dato: ni listo ni pendiente (E-10: null no es 0)', () => {
     const r = armarPasosCincoAgentes(caidas);
-    for (const id of ['tms', 'correo', 'catalogos', 'carta_porte']) expect(por(r, id).estado, id).toBe('sin_dato');
+    for (const id of ['equipo', 'tms', 'correo', 'catalogos', 'carta_porte']) expect(por(r, id).estado, id).toBe('sin_dato');
     expect(r.listos).toBe(0);
   });
 
@@ -72,7 +72,7 @@ describe('asistente de puesta en marcha (cinco_agentes)', () => {
   it('el simulacro se destraba solo con TMS, correo y catálogos listos; y se cierra por declaración', () => {
     const buenas: SenalesAsistente = {
       ...vacias, archivosRecibidos: 2, correoDesglose: { activa: true, usaCorreo: true, remitenteCapturado: true },
-      operadores: { activos: 3, conCorreo: 3 }, unidadesActivas: 4, revisorCartaPorte: true,
+      operadores: { activos: 3, conCorreo: 3 }, unidadesActivas: 4, coordinadores: 1, revisorCartaPorte: true,
     };
     const antes = armarPasosCincoAgentes(buenas, { correoRecibido: true, equipoInvitado: true });
     expect(por(antes, 'simulacro').estado).toBe('pendiente');

@@ -56,6 +56,9 @@ export interface SenalesAsistente {
   operadores: { activos: number; conCorreo: number | null } | null;
   unidadesActivas: number | null;
   patios: number | null;
+  /** Jefes de tráfico (rol «encargado») activos. */
+  coordinadores: number | null;
+  /** De ellos, los que ya tienen patio asignado. */
   supervisores: number | null;
   /** ¿Hay una persona designada para revisar los borradores de Carta Porte? */
   revisorCartaPorte: boolean | null;
@@ -133,22 +136,30 @@ const ninguna = (texto = 'Sin evidencia todavía.'): Evidencia => ({ tipo: 'ning
 const medido = (texto: string): Evidencia => ({ tipo: 'medido', texto });
 const declarado = (texto: string): Evidencia => ({ tipo: 'declarado', texto });
 
-function pasoEquipo(d: Declaraciones): Borrador {
-  const listo = d.equipoInvitado === true;
+function pasoEquipo(s: SenalesAsistente, d: Declaraciones): Borrador {
+  const c = s.coordinadores;
+  const declarada = d.equipoInvitado === true;
+  const estado: EstadoAsistente = c !== null && c > 0 ? 'listo' : declarada ? 'listo' : c === null ? 'sin_dato' : 'en_curso';
   return {
     id: 'equipo', titulo: 'Tu equipo',
     resumen: 'Quiénes entran a Likida y qué ve cada quien.',
-    estado: listo ? 'listo' : 'en_curso',
+    estado,
     responsable: 'tu_lado', causa: null,
-    // Que haya un administrador es verdad (estás aquí); que invitaste al resto no se puede leer: es una declaración.
-    evidencia: listo ? declarado('Lo confirmaste tú: ya invitaste a tu equipo.') : medido('Ya hay un administrador: tú. Falta invitar a quien coordina y a quien lleva las cuentas.'),
+    // Que haya un administrador es verdad (estás aquí); los coordinadores se cuentan; a quien lleva las cuentas no se le puede contar.
+    evidencia: c !== null && c > 0 ? medido(`Ya hay ${c} ${c === 1 ? 'persona que coordina' : 'personas que coordinan'}.`)
+      : declarada ? declarado('Lo confirmaste tú: ya invitaste a tu equipo.')
+        : ninguna('Ya hay un administrador: tú. Falta invitar a quien coordina la operación.'),
     subpasos: [
       { id: 'admin', titulo: 'Administrador de la cuenta', estado: 'listo', detalle: 'Ya entraste con tu cuenta de administrador.' },
-      { id: 'coordina', titulo: 'Quien coordina la operación', estado: listo ? 'listo' : 'pendiente', detalle: 'Ve viajes, mapa y documentos; no ve dinero.' },
-      { id: 'cuentas', titulo: 'Quien lleva las cuentas', estado: listo ? 'listo' : 'pendiente', detalle: 'Ve liquidaciones y peajes; no ve la operación.' },
+      {
+        id: 'coordina', titulo: 'Quien coordina la operación',
+        estado: c === null ? 'sin_dato' : c > 0 ? 'listo' : declarada ? 'listo' : 'pendiente',
+        detalle: c === null ? 'No pudimos contar a tu equipo.' : 'Ve viajes, mapa y documentos; no ve dinero.',
+      },
+      { id: 'cuentas', titulo: 'Quien lleva las cuentas', estado: declarada ? 'listo' : 'pendiente', detalle: 'Ve liquidaciones y peajes; no ve la operación. No podemos contarlo: lo declaras tú.' },
     ],
     accion: { texto: 'Invitar a mi equipo', href: '/dashboard/usuarios' },
-    declara: listo ? null : 'equipoInvitado',
+    declara: estado === 'listo' || estado === 'sin_dato' ? null : 'equipoInvitado',
   };
 }
 
@@ -316,7 +327,7 @@ export function armarPasosCincoAgentes(
   d: Declaraciones = {},
   responsables: Responsables = RESPONSABLES_POR_OMISION,
 ): ResultadoAsistente {
-  const previos: Borrador[] = [pasoEquipo(d), pasoTms(s), pasoCorreo(s, d), pasoCatalogos(s), pasoCartaPorte(s)];
+  const previos: Borrador[] = [pasoEquipo(s, d), pasoTms(s), pasoCorreo(s, d), pasoCatalogos(s), pasoCartaPorte(s)];
   const todos = [...previos, pasoSimulacro(previos, s, d)];
   const aplicar = (b: Borrador): Borrador => {
     const motivo = d.omitidos?.[b.id];
