@@ -1,0 +1,183 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   UI v2 · TOKENS (SPIKE de la Fase 0 · PLAN-MAESTRO §2.2 y §3-Fase 0.3)
+
+   Este archivo NO se importa desde ningún lado todavía: es la prueba de
+   aceptación de que Tailwind 4 respeta una capa de tokens con alcance. La
+   Fase 1 (carril A, A.3) lo importa SOLO desde `dashboard/layout.tsx`.
+
+   ALCANCE: todo cuelga de `[data-ui="v2"]` (atributo que pondrá el div raíz del
+   chrome junto a `tema-neutro`). Sin el atributo este archivo es inerte y v1
+   pinta idéntico (se mide con capturas, tolerancia 0 px).
+
+   ESPECIFICIDAD: `.tema-neutro` (0,1,0) y `:root[data-theme="dark"] .tema-neutro`
+   (0,3,0) ya fijan --marca/--accent/--g1..g5 en globals.css. Aquí el claro va en
+   `:root [data-ui="v2"]` (0,2,0) y el oscuro en `:root[data-theme="dark"]
+   [data-ui="v2"].tema-neutro` (0,4,0): ganan sin depender del orden en que Next
+   ordene los chunks de CSS.
+
+   VALORES: tabla 01 §3.4 (neutros fríos del sistema de referencia). Los pares
+   tint/ink de estado se midieron en 5.04–7.01:1 contra su fondo.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root [data-ui="v2"] {
+  /* Marco y superficies */
+  --bg: #f6f6f7;
+  --surface: #ffffff;
+  --panel: var(--surface);
+  --canvas: #f1f1f2;
+  --canvas2: #f7f7f8;
+
+  /* Tinta */
+  --ink: #0e0e10;
+  --ink2: #3a3a40;
+  --muted: #5a5a61;
+  --faint: #6a6a73;
+
+  /* Líneas y controles */
+  --line: #e6e6e8;
+  --line2: #d6d6d9;
+  --input: #8a8a90;
+
+  /* Acción: tinta sólida (no el azul suave de la referencia) */
+  --marca: #0e0e10;
+  --marca-fg: #ffffff;
+  --marca-hover: #2a2a2f;
+  --accent: #0e0e10;
+  --accent-fg: #ffffff;
+  /* Señal: el naranja de Likida, solo para la barra de 3 px del ítem activo
+     y el valor elegido. #c2410c sobre blanco mide 5.18:1. */
+  --senal: #c2410c;
+
+  /* Estados (tint/ink) */
+  --ok: #16784a;
+  --okbg: #ecf8f1;
+  --warn: #86580d;
+  --warnbg: #fff7e5;
+  --bad: #ac2440;
+  --badbg: #fdeef0;
+  --info: #145966;
+  --infobg: #e8f3f5;
+
+  /* Rampa de gráficas (neutra) */
+  --g1: #f1f1f2;
+  --g2: #e4e4e6;
+  --g3: #8a8a90;
+  --g4: #3a3a40;
+  --g5: #0e0e10;
+
+  /* Ocho matices de DATOS: solo gráficas, chips de categoría y filete de KPI */
+  --chart-1: #2f6bd8; --chart-2: #f25d22; --chart-3: #1f7a55; --chart-4: #d9a441;
+  --chart-5: #0a84a6; --chart-6: #a6264a; --chart-7: #7b5cd6; --chart-8: #0e0e10;
+  --soft-1: #e6edfa; --soft-2: #fdece4; --soft-3: #e4efeb; --soft-4: #faf4e8;
+  --soft-5: #e2f0f4; --soft-6: #f4e5e9; --soft-7: #efebfa; --soft-8: #e2e2e2;
+  --ink-1: #2c65cb; --ink-2: #b14418; --ink-3: #1d7350; --ink-4: #8c6a2a;
+  --ink-5: #087593; --ink-6: #a6264a; --ink-7: #7456c9; --ink-8: #0e0e10;
+
+  /* Superpuestos */
+  --scrim: #0e0e1066;
+  --tip: #0e0e10;
+  --tip-ink: #f4f4f5;
+
+  /* Gemelos --color-* (los que Tailwind emite como utilidades y 29 .tsx leen) */
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+
+  /* Radios: 8 para controles, 12 para tarjetas. `rounded-lg` (630 usos) hace de
+     control Y de tarjeta; la tarjeta se devuelve a 12 con `.card` abajo. */
+  --radius-md: 8px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 12px;
+
+  /* Sin sombras en el flujo; solo los popovers flotan */
+  --shadow-card: none;
+  --shadow-pop: 0 12px 32px -8px #17181c2e, 0 2px 6px #17181c0f;
+}
+
+:root[data-theme="dark"] [data-ui="v2"].tema-neutro,
+:root[data-theme="dark"] [data-ui="v2"] {
+  --bg: #0e0e10;
+  --surface: #17171a;
+  --canvas: #1f1f23;
+  --canvas2: #17171a;
+
+  --ink: #f4f4f5;
+  --ink2: #d4d4d8;
+  --muted: #a3a3ab;
+  --faint: #98989f;
+
+  --line: #26262b;
+  --line2: #3a3a40;
+  --input: #8b8b93;
+
+  --marca: #f4f4f5;
+  --marca-fg: #0e0e10;
+  --marca-hover: #ffffff;
+  --accent: #f4f4f5;
+  --accent-fg: #0e0e10;
+  --senal: #fb923c;
+
+  --ok: #6fd6a3;
+  --okbg: #12261c;
+  --warn: #f0c987;
+  --warnbg: #33281a;
+  --bad: #ffb3c3;
+  --badbg: #342127;
+  --info: #9fd3de;
+  --infobg: #14272c;
+
+  --g1: #1b1b1f;
+  --g2: #2a2a30;
+  --g3: #8b8b93;
+  --g4: #d4d4d8;
+  --g5: #f4f4f5;
+
+  --chart-1: #4a85ea; --chart-2: #e8602b; --chart-3: #2a9468; --chart-4: #b98526;
+  --chart-5: #1d93b0; --chart-6: #cc4a6c; --chart-7: #8d75e0; --chart-8: #f4f4f5;
+  --soft-1: #1d2433; --soft-2: #30201c; --soft-3: #192623; --soft-4: #2a241b;
+  --soft-5: #18262c; --soft-6: #2d1d24; --soft-7: #252232; --soft-8: #323234;
+  --ink-1: #558ceb; --ink-2: #e8602b; --ink-3: #43a07a; --ink-4: #b98526;
+  --ink-5: #2b99b5; --ink-6: #d56985; --ink-7: #947de2; --ink-8: #f4f4f5;
+
+  --scrim: #000a;
+  --tip: #f4f4f5;
+  --tip-ink: #0e0e10;
+
+  --shadow-pop: 0 12px 32px -8px #000c, 0 2px 6px #0006;
+}
+
+/* Tarjetas: 12 px, sin sombra. Selector de clase propio del alcance (0,2,0)
+   supera a `.card` (0,1,0) de globals.css, que no se edita. */
+[data-ui="v2"] .card,
+[data-ui="v2"] .glass-panel {
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+/* Piso tipográfico de 11 px SIN codemod: los 357 usos de 10 / 10.5 px (y los
+   dos de 9 / 9.5) suben solo bajo el alcance. Sin capa: ganan a las utilidades
+   de Tailwind, que viven en `@layer utilities`. */
+[data-ui="v2"] .text-\[9px\],
+[data-ui="v2"] .text-\[9\.5px\],
+[data-ui="v2"] .text-\[10px\],
+[data-ui="v2"] .text-\[10\.5px\] {
+  font-size: 11px;
+}
+
+/* Divisores de tabla sólidos (v1 los pone punteados/discontinuos) */
+[data-ui="v2"] .card table tbody tr {
+  border-bottom-style: solid;
+}
+
+/* Cifras tabulares en tablas */
+[data-ui="v2"] table {
+  font-variant-numeric: tabular-nums;
+}
