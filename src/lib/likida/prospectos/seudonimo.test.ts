@@ -64,3 +64,14 @@ describe('reponerDecisor', () => {
     expect(reponerDecisor(`${MARCADOR_DECISOR}, buen día`, null)).toBe('buen día');
   });
 });
+
+describe('A39-S55-01 — el mapa de posiciones no se desfasa con emojis', () => {
+  it('el nombre del decisor se tacha ENTERO y el resto de la nota queda intacto aunque haya emojis antes', () => {
+    expect(notasSinPersona('😀🚛 Llamó Ramón Treviño por la cotización 😀', 'Ing. Ramón Treviño'))
+      .toBe(`😀🚛 Llamó ${MARCADOR_DECISOR} por la cotización 😀`);
+    expect(notasSinPersona('😀😀😀😀 Llamó Ramón Treviño', 'Ramón Treviño')).toBe(`😀😀😀😀 Llamó ${MARCADOR_DECISOR}`);
+  });
+  it('un emoji pegado al nombre no se corta a la mitad', () => {
+    expect(notasSinPersona('Habló con Treviño😀 ayer', 'Ramón Treviño')).toBe(`Habló con ${MARCADOR_DECISOR}😀 ayer`);
+  });
+});
