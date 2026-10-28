@@ -15,6 +15,10 @@ import DashboardChromeV2 from './shell/chrome-v2';
 import '../ui-v2/tokens.css';
 import '../ui-v2/fonts.css';
 import '../ui-v2/shell.css';
+// Piezas del carril B (botones, chips, drawers, KPI, gráficas, recorrido) y páginas del carril C. Nadie las importaba todavía.
+import '../ui-v2/componentes.css';
+import '../ui-v2/graficas.css';
+import '../ui-v2/movimiento.css';
 import '../ui-v2/paginas.css';
 import { PulsoProducto } from './pulso-producto';
 import { AvisoLegalPendiente } from './aviso-legal';

@@ -157,7 +157,7 @@ function Indicador({ corrida }: { corrida: CorridaRegistrada | null | undefined 
   );
 }
 
-async function TarjetaAgente({ ficha, tenantId, sufijo, insights }: { ficha: FichaAgente; tenantId: string; sufijo: string; insights: InsightsPorAgente }) {
+export async function TarjetaAgente({ ficha, tenantId, sufijo, insights }: { ficha: FichaAgente; tenantId: string; sufijo: string; insights: InsightsPorAgente }) {
   // «Próximamente» (fase 1): la ficha se ve pero no consulta nada de la flota y su enlace va al anuncio, no a la función.
   const proximamente = moduloProximamenteDeRuta('cinco_agentes', ficha.href);
   const corrida = ficha.corridas && !proximamente ? await ultima(tenantId, ficha.corridas) : undefined;
