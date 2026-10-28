@@ -576,6 +576,27 @@ describe('REN-C1 · el sello de dedup ya puesto no debe impedir reintentar un co
     expect(r.errores.some((e) => e.includes('El consolidado p1-cfdi-1 no se pudo conciliar'))).toBe(true);
   });
 
+  // A39-S57-02: un consolidado (ECC de monedero) cuya conciliación FALLA (o se corta por reloj) se daba por ingerido:
+  // `ingerir` devolvía `completo: true`, el paquete quedaba «bajado» y la solicitud 'descargada' con el calendario
+  // avanzado. Como el paquete ya no se vuelve a ingerir, esa conciliación no se reintentaba nunca.
+  it('A39-S57-02 · si el consolidado NO se pudo conciliar, el paquete NO se da por bajado ni la solicitud por descargada', async () => {
+    const db = base([solicitudViva({ paquetes_bajados: null })]);
+    decidirCruce.mockImplementation((cfdi: { uuid?: string }): DestinoCfdi =>
+      cfdi.uuid === 'p1-cfdi-1'
+        ? { destino: 'consolidado' as const, emisor: 'Banco X (monedero)' }
+        : { destino: 'disponible' as const, motivo: 'ningún gasto le corresponde' });
+    guardarYConciliarConsolidado.mockRejectedValueOnce(new Error('cfdi_consolidado_linea: la base no contestó'));
+    const { prov } = proveedor(['p1']);
+
+    const r = await correrFlota(CFG(), prov, '2026-08-27', AHORA);
+
+    expect(r.descargadas).toBe(0);
+    expect(db.solicitudes[0].estado).not.toBe('descargada');
+    expect(db.solicitudes[0].paquetes_bajados).not.toContain('p1');
+    // Y el calendario no avanzó (un día saltado no vuelve).
+    expect(r.errores.some((e) => e.includes('NO se da por bajado'))).toBe(true);
+  });
+
   // ── AG-C1 (auditoría 30) ────────────────────────────────────────────────
   // El arreglo de REN-C1 le devolvió la oportunidad de conciliarse al
   // consolidado con sello previo, pero dejó `marcar(...,'ignorado')` DENTRO de

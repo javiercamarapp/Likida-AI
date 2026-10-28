@@ -434,6 +434,9 @@ async function ingerir(
         if (!yaDescargado) r.consolidados++;
       } catch (e) {
         r.errores.push(`El consolidado ${uuid} no se pudo conciliar: ${e instanceof Error ? e.message : String(e)}`);
+        // A39-S57-02: sin esto el paquete se daba por ingerido (`completo: true`) aunque este consolidado no se haya
+        // conciliado —por fallo o por corte de reloj—, y como el paquete ya no se vuelve a recorrer, no se reintentaba nunca.
+        hayFallo = true;
       }
       continue;
     }
