@@ -56,8 +56,18 @@ export interface EventoCamaraGrave {
   reintento: boolean;
 }
 
+/**
+ * A39-S38-01. Un 🚨 «POSIBLE COLISIÓN… MÁRCALE AHORA» solo tiene sentido para algo que acaba de pasar. El backfill de 30 días (y
+ * el drenaje de graves que quedaron pendientes) ingieren choques de hace días: abrirles un siniestro crítico llenaba el panel
+ * de expedientes viejos y, peor, un expediente viejo sin resolver tapaba el aviso de un choque real posterior. Pasado este
+ * tope el evento queda REGISTRADO (la fila de `evento_seguridad_flota` ya existe) pero no abre expediente ni avisa.
+ */
+export const EDAD_MAXIMA_AVISO_COLISION_MS = 6 * 3_600_000;
+/** Un expediente abierto hace más que esto, respecto del evento, ya no es «el mismo choque»: el evento es otro y se avisa. */
+const VENTANA_MISMO_CHOQUE_MS = 6 * 3_600_000;
+
 export interface ResultadoDisparo {
-  resultado: 'abierta' | 'anotada_en_existente' | 'fallo';
+  resultado: 'abierta' | 'anotada_en_existente' | 'omitida_por_antiguedad' | 'fallo';
   incidenciaId?: string;
   avisoEstado?: 'no_requerido' | 'encolado' | 'enviado' | 'muerto';
   avisoOutboxId?: string;
@@ -74,6 +84,8 @@ interface ExpedienteAbierto {
   id: string;
   tipo: string;
   prioridad: string;
+  /** ISO; `null` si la fila no lo trajo (se trata como reciente: el comportamiento de siempre). */
+  abiertaEn: string | null;
 }
 
 async function expedienteAbierto(
@@ -81,7 +93,7 @@ async function expedienteAbierto(
 ): Promise<ExpedienteAbierto | null> {
   const consulta = supabaseAdmin()
     .from('incidencia')
-    .select('id, tipo, prioridad')
+    .select('id, tipo, prioridad, abierta_en')
     .eq('tenant_id', tenantId)
     .in('tipo', [...TIPOS_ASISTENCIA])
     .neq('estado', 'resuelta')
@@ -94,7 +106,7 @@ async function expedienteAbierto(
   if (error) throw new Error(`asistencia_camara.abierta: ${error.message}`);
   const f = (data ?? [])[0];
   if (!f) return null;
-  return { id: f.id as string, tipo: f.tipo as string, prioridad: f.prioridad as string };
+  return { id: f.id as string, tipo: f.tipo as string, prioridad: f.prioridad as string, abiertaEn: typeof f.abierta_en === 'string' ? f.abierta_en : null };
 }
 
 /**
@@ -139,6 +151,13 @@ export async function dispararAsistenciaPorEventoCamara(e: EventoCamaraGrave): P
   try {
     const operadorId = e.operadorId;
 
+    // A39-S38-01: solo lo reciente abre expediente y avisa. Una fecha ilegible o futura no es «vieja» (se dispara como siempre).
+    const ocurridoMs = Date.parse(e.ocurridoEn);
+    if (Number.isFinite(ocurridoMs) && Date.now() - ocurridoMs > EDAD_MAXIMA_AVISO_COLISION_MS) {
+      logger.info('asistencia_camara.omitida_por_antiguedad', { tenant: e.tenantId, evento: e.eventoIdExterno });
+      return { resultado: 'omitida_por_antiguedad', avisoEstado: 'no_requerido' };
+    }
+
     const abierta = await expedienteAbierto(e.tenantId, operadorId, e.unidadId);
     if (abierta) {
       // El chofer ya reportó (o un evento anterior ya abrió): la detección se
@@ -155,7 +174,11 @@ export async function dispararAsistenciaPorEventoCamara(e: EventoCamaraGrave): P
       // nadie leía hasta el post-mortem.
       const rangoCamara = RANGO_TIPO.siniestro;
       const rangoAbierto = RANGO_TIPO[abierta.tipo as TipoAsistencia] ?? 0;
-      const escala = rangoCamara > rangoAbierto || abierta.prioridad !== 'critica';
+      // A39-S38-01: un expediente abierto mucho antes que este evento NO es «el mismo choque»: es uno viejo sin resolver. Aunque
+      // ya sea siniestro crítico, el choque nuevo escala (borra el reconocimiento) y el jefe recibe su 🚨.
+      const abiertaMs = abierta.abiertaEn ? Date.parse(abierta.abiertaEn) : NaN;
+      const expedienteViejo = Number.isFinite(abiertaMs) && Number.isFinite(ocurridoMs) && ocurridoMs - abiertaMs > VENTANA_MISMO_CHOQUE_MS;
+      const escala = expedienteViejo || rangoCamara > rangoAbierto || abierta.prioridad !== 'critica';
       if (escala) {
         const { error: errEsc } = await acotada(supabaseAdmin()
           .from('incidencia')

@@ -306,7 +306,7 @@ export async function getBandejaEscalaciones(ahoraMs: number): Promise<BandejaEs
     // la campana ya no pueden salir de `items.length` — se cuentan en la base.
     porValor(async () => {
       const [items, conteos] = await Promise.all([
-        getTicketsCruzados(ahoraMs), contarTickets(ahoraMs),
+        getTicketsCruzados(ahoraMs, { soloAbiertos: true }), contarTickets(ahoraMs),
       ]);
       return { items, conteos };
     }),

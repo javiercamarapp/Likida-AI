@@ -591,7 +591,10 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 326;
 // alerta_operador_compuerta.test.ts.
 // LOTE A39 OLA 8 O8-1 (A39-S57-01): +1 llamada (2,389 → 2,390) al integrar con el lote conductor-jornada. `crearFlota` (administracion.ts) fija `tenant.rfc_sat_verificado`
 // en un update aparte del insert (tolera que la migración 0925 aún no esté aplicada). Cubierta por administracion.test.ts. Si otro lote toca este techo, sumar el incremento al integrar.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_390;
+// LOTE A39 OLA 8 O8-6 (datos-correos): +4 llamadas (2,390 → 2,394), medidas con el barrido real. sincronizar_eventos.ts +2 (A39-S38-03: lectura de las filas mínimas
+// y update de promoción a completa, ambos por `acotada`); investigador.ts +1 (A39-S28-01: RPC prospectos_sin_dossier, 0930); vigia/repo.ts +1 (A39-S59-01: `marcarRespondida`
+// anota solo la salida cuando el cliente escribió después). Cubiertas por sincronizar_eventos_a39_s38.test.ts, investigador.test.ts y servicio.test.ts.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_394;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

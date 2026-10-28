@@ -104,6 +104,8 @@ export async function atenderMensajeCliente(msg: MensajeEntrante, deps: DepsVigi
   // puede leer se falla cerrado (`perfilDeTenant`).
   if (deps.enStandBy && (await deps.enStandBy(contacto.tenantId).catch(() => true))) {
     logger.info('vigia.stand_by_perfil', { tenant: contacto.tenantId });
+    // A39-S59-02: la BAJA es una orden del cliente y no depende de que la flota use el agente.
+    if (await bajaExpresaSinAtencion(msg, contacto, deps, ahora) === 'reintentar') return 'reintentar';
     return 'atendido';
   }
 
@@ -124,6 +126,8 @@ export async function atenderMensajeCliente(msg: MensajeEntrante, deps: DepsVigi
   // tenemos). Se calla y queda en el log.
   if (!config.habilitado || contacto.estado !== 'activo') {
     logger.info('vigia.contacto_sin_atencion', { tenant: contacto.tenantId, contacto: contacto.id, habilitado: config.habilitado, estado: contacto.estado });
+    // A39-S59-02: con el agente apagado la BAJA tampoco se descarta (si ya estaba de baja, no hay nada que registrar).
+    if (await bajaExpresaSinAtencion(msg, contacto, deps, ahora) === 'reintentar') return 'reintentar';
     return 'atendido';
   }
 
@@ -150,6 +154,28 @@ export async function atenderMensajeCliente(msg: MensajeEntrante, deps: DepsVigi
     await escalarPorFallo(tenantId, recibido.conversacionId, contacto, config, deps);
   }
   return 'atendido';
+}
+
+/**
+ * A39-S59-02: «BAJA» llega a una flota que NO está atendiendo con el Vigía (agente apagado o módulo en stand-by).
+ * Antes el mensaje se descartaba antes de leerlo y el cliente que pidió que no le escribieran seguía en la lista (LFPDPPP:
+ * el opt-out no depende de la configuración del proveedor). Aquí solo se REGISTRA el opt-out —la misma regla determinista
+ * de `procesarEntrante`, sin modelo—: no se guarda el mensaje, no se abre hilo ni se avisa a nadie, y NO se acusa al cliente
+ * (la flota no está usando el agente: el acuse sería un mensaje que ella no autorizó). Si el registro falla se REINTENTA:
+ * perder una baja es peor que repetirla (`registrarOptOut` es idempotente).
+ */
+async function bajaExpresaSinAtencion(msg: MensajeEntrante, contacto: Contacto, deps: DepsVigia, ahora: Date): Promise<'ok' | 'reintentar'> {
+  if (contacto.estado !== 'activo' || msg.type !== 'text') return 'ok';
+  const porRegla = clasificarPorReglas(limpiarTexto(msg.text));
+  if (porRegla?.intencion !== 'baja') return 'ok';
+  try {
+    await deps.repo.registrarOptOut(contacto.tenantId, contacto.id, ahora);
+    await deps.repo.evento(contacto.tenantId, { tipo: 'optout', destinatarioHash: hashTelefono(contacto.telefono), detalle: { sin_atencion: true } });
+  } catch (e) {
+    logger.error('vigia.baja_sin_atencion_fallo', { tenant: contacto.tenantId, err: e instanceof Error ? e.message : String(e) });
+    return 'reintentar';
+  }
+  return 'ok';
 }
 
 interface ContextoEntrante {
@@ -523,7 +549,9 @@ async function enviarSaliente(e: EntradaEnviarSaliente, deps: DepsVigia): Promis
   }, deps.enviar);
   if (r.ok) {
     await repo.marcarEnviado(e.tenantId, e.mensajeId, { via: r.via, wamid: r.id, ahora });
-    await repo.marcarRespondida(e.tenantId, e.conversacionId, ahora);
+    // A39-S59-01: lo que se contestó llega hasta que se REDACTÓ el mensaje; lo que el cliente escribió después sigue sin responder.
+    const redactado = await repo.mensaje(e.tenantId, e.mensajeId).catch(() => null);
+    await repo.marcarRespondida(e.tenantId, e.conversacionId, ahora, redactado?.createdAt);
     if (!e.contacto.avisoPrivacidadEn) await repo.marcarAvisoPrivacidad(e.tenantId, e.contacto.id, ahora);
     await repo.evento(e.tenantId, { conversacionId: e.conversacionId, tipo: e.autoenviado ? 'autoenviado' : 'enviado', detalle: { via: r.via, ventana: r.ventana } });
     // Los archivos son un EXTRA: que fallen no deshace el texto que ya salió (queda a la vista del gerente).
