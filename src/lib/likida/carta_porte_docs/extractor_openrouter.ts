@@ -20,9 +20,11 @@ export const ROL_POR_NIVEL: Record<NivelModelo, ModelRole> = {
  * @param proposito  'interactivo' para lo que una persona espera (subida manual, WhatsApp);
  *                   'ocr_lote' para el correo, que se procesa de fondo.
  * Una corrida (= un documento) comparte UN presupuesto entre sus niveles.
+ * A39-S60-01: el runId es un uuid PELADO: `llm_presupuesto_reserva.run_id` es `uuid`; con prefijo (`cp-…`) la
+ * reserva fallaba siempre y la extracción nunca corría.
  */
 export function crearExtractorOpenRouter(tenantId: string, proposito: PropositoIa): LlmExtractor {
-  const budget = createLlmBudget(tenantId, `cp-${randomUUID()}`, proposito);
+  const budget = createLlmBudget(tenantId, randomUUID(), proposito);
   return async (entrada, signal) => {
     const caidas: CaidaLlm[] = [];
     const r = await generateStructured({
