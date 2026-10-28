@@ -638,7 +638,8 @@ describe('facturarAlVuelo · lo que pasa después del portal', () => {
     // es exactamente la posición que sigue chocando si el mismo CFDI entra otra
     // vez por el camino de ingesta.
     expect(sinSello()).toEqual([{
-      fila: { cfdi_uuid: 'B0800A68-1111-2222-3333-444455556666', cfdi_orden: 1 },
+      // A39-S43-01: el portal lo devuelve en MAYÚSCULAS; `gasto_cfdi_uuid_minuscula` (0158) exige minúsculas.
+      fila: { cfdi_uuid: 'b0800a68-1111-2222-3333-444455556666', cfdi_orden: 1 },
       por: [['id', 'g-1'], ['tenant_id', 't-1']],
     }]);
     expect(logger.info).toHaveBeenCalledWith('autofactura.ok', expect.objectContaining({ gastoId: 'g-1' }));
@@ -663,7 +664,7 @@ describe('facturarAlVuelo · lo que pasa después del portal', () => {
     expect(facturarConAgente).toHaveBeenCalledTimes(1);
     // El UUID queda en el log, que es lo único que permite recuperarlo a mano.
     expect(logger.error).toHaveBeenCalledWith('autofactura.uuid_sin_guardar', expect.objectContaining({
-      gastoId: 'g-1', uuid: 'B0800A68-1111-2222-3333-444455556666', err: 'deadlock detected',
+      gastoId: 'g-1', uuid: 'b0800a68-1111-2222-3333-444455556666', err: 'deadlock detected',
     }));
   });
 
