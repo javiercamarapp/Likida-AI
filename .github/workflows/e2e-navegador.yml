@@ -201,8 +201,16 @@ jobs:
       - name: Reiniciar el servidor con la UI v2 forzada
         if: ${{ !cancelled() }}
         run: |
-          if [ -f "$RUNNER_TEMP/likida-next.pid" ]; then kill "$(cat "$RUNNER_TEMP/likida-next.pid")" 2>/dev/null || true; fi
-          sleep 2
+          # `$!` es el PID de `npm`, no el del `next-server` hijo: matar solo el PID de npm deja vivo al servidor v1 en el
+          # puerto 3000 (la segunda pasada corrió contra ÉL: v2 jamás arrancó por EADDRINUSE, el curl de espera contestó el v1
+          # y el presupuesto de correos del login ya estaba gastado). Se mata por patrón y se espera a que el puerto se libere.
+          pkill -f 'next start' 2>/dev/null || true
+          pkill -f 'next-server' 2>/dev/null || true
+          for i in $(seq 1 20); do
+            if ! curl -fsS --max-time 1 http://localhost:3000/ >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          if curl -fsS --max-time 1 http://localhost:3000/ >/dev/null 2>&1; then echo "El servidor v1 sigue vivo en :3000"; exit 1; fi
           nohup env LIKIDA_UI_V2_FORZAR=1 npm run start -- --hostname localhost --port 3000 > "$RUNNER_TEMP/likida-next-v2.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/likida-next.pid"
           for i in $(seq 1 30); do
@@ -258,4 +266,5 @@ jobs:
       - name: Detener el servidor
         if: always()
         run: |
-          if [ -f "$RUNNER_TEMP/likida-next.pid" ]; then kill "$(cat "$RUNNER_TEMP/likida-next.pid")" 2>/dev/null || true; fi
+          pkill -f 'next start' 2>/dev/null || true
+          pkill -f 'next-server' 2>/dev/null || true
