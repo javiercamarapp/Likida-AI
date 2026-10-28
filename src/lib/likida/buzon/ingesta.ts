@@ -105,7 +105,10 @@ export async function procesarCorreoBuzon(
     await deps.repo.registrarRecepcion(tenantId, {
       emailId, nombre: h.nombre, zipOrigen: h.zipOrigen ?? null, tipo, bytes: h.bytes.length, sha256: h.sha, estado, ...extra,
     });
-    resumen.documentos.push({ nombre: h.nombre, estado, motivo: extra.motivo ?? null, cfdiUuid: extra.cfdiUuid ?? null });
+    contar(h.nombre, estado, extra);
+  };
+  const contar = (nombre: string, estado: EstadoRecepcion, extra: { motivo?: string | null; cfdiUuid?: string | null }) => {
+    resumen.documentos.push({ nombre, estado, motivo: extra.motivo ?? null, cfdiUuid: extra.cfdiUuid ?? null });
     if (estado === 'procesada') resumen.guardadas++;
     else if (estado === 'duplicada') resumen.duplicadas++;
     else if (estado === 'revision') resumen.revision++;
@@ -175,6 +178,13 @@ export async function procesarCorreoBuzon(
     try {
       const previa = await deps.repo.recepcionPrevia(tenantId, h.sha);
       if (previa) {
+        if (previa.emailId === emailId) {
+          // A39-S30-01: es ESTE mismo correo reintentado (otro archivo suyo se quedó sin tiempo). La fila ya está bien: no se
+          // re-registra (el upsert la degradaría a `duplicada`) ni se vuelve a leer; solo se reconoce para emparejar PDFs.
+          contar(h.nombre, 'duplicada', { motivo: 'ya registrado en un intento anterior de este correo', cfdiUuid: previa.cfdiUuid });
+          if (previa.cfdiUuid) { delCorreo.set(previa.cfdiUuid, { facturaId: previa.facturaId }); porNombre.set(sinExtension(h.nombre), previa.cfdiUuid); }
+          continue;
+        }
         await anotar(h, 'xml', 'duplicada', { motivo: 'archivo ya recibido antes', cfdiUuid: previa.cfdiUuid, facturaId: previa.facturaId });
         if (previa.cfdiUuid) { delCorreo.set(previa.cfdiUuid, { facturaId: previa.facturaId }); porNombre.set(sinExtension(h.nombre), previa.cfdiUuid); }
         continue;
@@ -241,6 +251,11 @@ export async function procesarCorreoBuzon(
     try {
       const previa = await deps.repo.recepcionPrevia(tenantId, h.sha);
       if (previa) {
+        if (previa.emailId === emailId) {
+          // A39-S30-01: el reintento del mismo correo no reescribe la fila (conservaría `storage_ruta` y el estado `revision`).
+          contar(h.nombre, 'duplicada', { motivo: 'ya registrado en un intento anterior de este correo', cfdiUuid: previa.cfdiUuid });
+          continue;
+        }
         await anotar(h, 'pdf', 'duplicada', { motivo: 'archivo ya recibido antes', cfdiUuid: previa.cfdiUuid, facturaId: previa.facturaId });
         continue;
       }
