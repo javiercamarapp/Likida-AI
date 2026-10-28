@@ -40,8 +40,9 @@ export type AccionDeForma = (
 ) => Promise<ResultadoAccion>;
 
 const CONTROL = {
-  background: 'var(--canvas)',
-  border: '1px solid var(--line)',
+  // Aditivo: en v1 --campo-bg/--input no existen y caen a lo de siempre.
+  background: 'var(--campo-bg, var(--canvas))',
+  border: '1px solid var(--input, var(--line))',
   color: 'var(--ink)',
 } as const;
 

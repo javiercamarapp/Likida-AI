@@ -1,0 +1,132 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   UI v2 · MOVIMIENTO (carril B · PLAN-MAESTRO §2.2 y §3-Fase 1, B.1)
+
+   UNA escala, UNA curva. Interacción ≤ 200 ms, bloques 250–420 ms, gráficas
+   ≤ 700 ms; nada por encima de 700 ms. Solo se anima transform / opacity /
+   stroke-dashoffset / stroke-dasharray (nunca blur en listas ni propiedades de
+   layout). Sin rebotes ni sobreimpulso: la curva es easeOutQuint.
+
+   REGLAS QUE VIGILA `movimiento_css.test.ts` (E-09):
+     1. todo `@keyframes` se declara y se USA solo dentro de
+        `@media (prefers-reduced-motion: no-preference)`;
+     2. con `reduce` toda animación y transición del alcance se anula (regla
+        global al final) y cada pieza tiene su versión estática igual de clara;
+     3. ninguna duración supera 700 ms; ninguna curva con sobreimpulso.
+
+   El archivo se importa SOLO desde `dashboard/layout.tsx` (carril A). Los tokens
+   cuelgan de `:root` porque son nombres nuevos (`--ui-*`, `--t-*`): no pisan
+   nada de v1 y las clases `rv-*` que los leen pueden vivir fuera del alcance.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --ui-fast: 120ms;    /* hover / foco de controles */
+  --ui-motion: 180ms;  /* overlays, tooltips, sombras */
+  --ui-slow: 250ms;    /* entrada de bloque, desliz del foco del recorrido */
+  --ui-ease: cubic-bezier(.22, 1, .36, 1);
+  --t-bar: 420ms;      /* crecimiento de barras */
+  --t-draw: 380ms;     /* trazo de líneas y del check */
+  --t-sweep: 700ms;    /* anillo de progreso (tope del sistema) */
+  --chart-enter: 360ms;
+  --ov-in: 180ms;      /* entrada de Drawer / Modal; la salida NO se anima */
+}
+
+/* ── Keyframes: solo existen para quien no pidió reducir el movimiento ─────── */
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes rv-sube {
+    from { opacity: 0; transform: translateY(6px); }
+  }
+  @keyframes rv-fade {
+    from { opacity: 0; }
+  }
+  @keyframes rv-giro {
+    to { transform: rotate(360deg); }
+  }
+  /* Trazo que se dibuja una vez (pathLength=1 en el SVG). */
+  @keyframes rv-trazo {
+    from { stroke-dashoffset: 1; }
+    to { stroke-dashoffset: 0; }
+  }
+  /* Anillo: el arco crece hasta su valor (pathLength=100). */
+  @keyframes rv-barrido {
+    from { stroke-dasharray: 0 100; }
+  }
+  @keyframes rv-ov-fondo {
+    from { opacity: 0; }
+  }
+  @keyframes rv-ov-derecha {
+    from { transform: translateX(16px); opacity: 0; }
+  }
+  @keyframes rv-ov-abajo {
+    from { transform: translateY(32px); opacity: 0; }
+  }
+  @keyframes rv-ov-pop {
+    from { transform: scale(.97); opacity: 0; }
+  }
+  /* Globo del recorrido: sube 6 px mientras aparece. */
+  @keyframes rv-globo-entra {
+    from { opacity: 0; transform: translate(var(--rv-gx, 0), calc(var(--rv-gy, 0px) + 6px)); }
+  }
+  /* El halo del foco "se asienta" al llegar a su sitio. */
+  @keyframes rv-halo-asienta {
+    from { opacity: 0; transform: scale(1.03); }
+  }
+  /* Pulso suave del aro mientras se espera que la persona haga la acción. */
+  @keyframes rv-halo-espera {
+    0%, 100% { opacity: .55; }
+    50% { opacity: 1; }
+  }
+
+  /* Revelado al hacer scroll (ver movimiento/revelar.tsx). */
+  [data-rv-revelar="oculto"] {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  [data-rv-revelar="visto"] {
+    transition: opacity var(--ui-slow) var(--ui-ease), transform var(--ui-slow) var(--ui-ease);
+  }
+
+  /* Hover / foco de los controles propios: fondo, borde, color a 120 ms. */
+  .rv-btn,
+  .rv-chip,
+  .rv-switch__pista,
+  .rv-campo {
+    transition:
+      background-color var(--ui-fast) ease,
+      border-color var(--ui-fast) ease,
+      color var(--ui-fast) ease;
+  }
+  .rv-btn:active:not(:disabled):not([aria-disabled="true"]) {
+    transform: translateY(1px);
+  }
+  .rv-btn__spinner {
+    animation: rv-giro 700ms linear infinite;
+  }
+}
+
+/* ── Reduced motion: nada se mueve, todo sigue igual de claro ─────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  [data-ui="v2"] *,
+  [data-ui="v2"] *::before,
+  [data-ui="v2"] *::after,
+  .rv-btn,
+  .rv-btn *,
+  .rv-tour,
+  .rv-tour *,
+  [data-rv-revelar] {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+  /* El revelado no oculta nada: con reduce el contenido está ya a la vista. */
+  [data-rv-revelar] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .rv-btn__spinner {
+    /* arco fijo: sigue diciendo «trabajando» sin girar */
+    border-right-color: currentColor;
+    opacity: .6;
+  }
+}

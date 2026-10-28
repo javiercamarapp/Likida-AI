@@ -277,13 +277,15 @@ export function VerMas({ href, children = 'Ver estadísticas' }: { href: string;
 
 // ── StatusPill / Semaphore ───────────────────────────────────────────────
 
-export type Estado = 'ok' | 'warn' | 'bad' | 'neutral';
+export type Estado = 'ok' | 'warn' | 'bad' | 'neutral' | 'info';
 
 const ESTILO_ESTADO: Record<Estado, { bg: string; fg: string; label: string }> = {
   ok: { bg: 'var(--okbg)', fg: 'var(--ok)', label: 'OK' },
   warn: { bg: 'var(--warnbg)', fg: 'var(--warn)', label: 'Atención' },
   bad: { bg: 'var(--badbg)', fg: 'var(--bad)', label: 'Error' },
   neutral: { bg: 'var(--canvas)', fg: 'var(--muted)', label: '—' },
+  // Aditivo (v2): en v1 --info/--infobg no existen y caen a los neutros.
+  info: { bg: 'var(--infobg, var(--canvas))', fg: 'var(--info, var(--muted))', label: 'Info' },
 };
 
 /** Nunca color solo — siempre trae texto (label o children), para no
