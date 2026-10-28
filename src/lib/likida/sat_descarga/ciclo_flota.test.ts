@@ -233,7 +233,7 @@ describe('A39-S57-03 · un paquete que no cabe en dos pasadas TERMINA sin una te
       async verificar() { return { ok: true, estado: 'lista', paquetes: ['p1'], cfdis: null, mensaje: null }; },
       async descargar() {
         cuenta.descargas++;
-        if (cuenta.descargas > 2) return { ok: false, mensaje: '5004 - el paquete ya se descargó el máximo de veces' };
+        if (cuenta.descargas > 2) return { ok: false, clase: 'rechazado', codigo: '5004', mensaje: '5004 - el paquete ya se descargó el máximo de veces' };
         return { ok: true, xmls };
       },
       async credencial() { return { ok: true, numero: '3'.repeat(20), venceEn: null }; },

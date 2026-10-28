@@ -634,13 +634,34 @@ function parseEmail(t: string): string | undefined {
  * Un tope tiene al menos 3 dígitos enteros (como antes) y a lo más 6.
  */
 export function montoDeTope(crudo: string): number | undefined {
-  let n: number;
-  if (/^\d+$/.test(crudo)) n = Number(crudo);
-  else if (/^\d{1,3}([,.]\d{3})+$/.test(crudo) && new Set(crudo.replace(/\d/g, '')).size === 1) n = Number(crudo.replace(/[,.]/g, ''));
-  else if (/^\d{1,3}(,\d{3})*\.\d{1,2}$/.test(crudo)) n = Number(crudo.replace(/,/g, ''));
-  else if (/^\d{1,3}(\.\d{3})*,\d{1,2}$/.test(crudo)) n = Number(crudo.replace(/\./g, '').replace(',', '.'));
-  else if (/^\d+[.,]\d{1,2}$/.test(crudo)) n = Number(crudo.replace(',', '.'));
-  else return undefined;
+  // Sin regex anidadas (security/detect-unsafe-regex): se analiza con split sobre cadenas ya acotadas a [\d.,].
+  const soloDigitos = (x: string) => /^\d+$/.test(x);
+  const milesCon = (x: string, sep: string): boolean => {
+    const g = x.split(sep);
+    return g.length > 1 && soloDigitos(g[0]) && g[0].length <= 3 && g.slice(1).every((t) => soloDigitos(t) && t.length === 3);
+  };
+  let entero: string;
+  let dec = '';
+  if (soloDigitos(crudo)) {
+    entero = crudo;
+  } else {
+    const ult = Math.max(crudo.lastIndexOf('.'), crudo.lastIndexOf(','));
+    const sepUlt = crudo[ult];
+    const otro = sepUlt === '.' ? ',' : '.';
+    const tras = crudo.slice(ult + 1);
+    const antes = crudo.slice(0, ult);
+    if (!crudo.includes(otro) && milesCon(crudo, sepUlt)) {
+      entero = crudo.split(sepUlt).join('');                    // «4,000» / «4.000» / «1,234,567»
+    } else if (soloDigitos(tras) && tras.length <= 2 && !antes.includes(sepUlt)) {
+      if (soloDigitos(antes)) entero = antes;                   // «4000.00» / «2500,50»
+      else if (milesCon(antes, otro)) entero = antes.split(otro).join('');   // «4,000.00» / «4.000,00»
+      else return undefined;
+      dec = tras;
+    } else {
+      return undefined;
+    }
+  }
+  const n = Number(dec ? `${entero}.${dec}` : entero);
   if (!Number.isFinite(n) || Math.floor(n) < 100 || Math.floor(n) > 999_999) return undefined;
   return Math.round(n * 100) / 100;
 }

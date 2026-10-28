@@ -13,7 +13,7 @@ import { mxn } from '@/lib/formato';
 // que sea cierta (comentario de cabecera, vista.tsx:23-28).
 const RENTABILIDAD: Rentabilidad = {
   ingreso: 500_000, costoComprobado: 300_000, contribucion: 200_000,
-  margenPct: 40, viajesConIngreso: 10, viajesSinIngreso: 0,
+  margenPct: 40, viajesConIngreso: 10, viajesSinIngreso: 0, viajesSinLiquidar: 0,
 };
 
 function cobranza(parcial: Partial<Cobranza>): Cobranza {
