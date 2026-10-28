@@ -262,7 +262,12 @@ export interface ResultadoImportacionDesgloses {
   renglonesEnCero: number;
   /** El archivo no se pudo leer en absoluto (formato, vacío, demasiado grande, no es un export de bitácoras). */
   error?: string;
+  /** Se acabó el tiempo de la carga: cuántos desgloses quedaron SIN procesar (volver a subir el mismo archivo es seguro: lo ya recibido es idempotente). */
+  sinProcesar?: number;
 }
+
+/** Tope de tiempo de una carga desde el panel (la acción de servidor tiene límite; la página declara `maxDuration` con margen). */
+export const PRESUPUESTO_DESGLOSES_MS = 45_000;
 
 export interface DependenciasImportacionDesgloses {
   recibir: (tenantId: string, d: DesgloseBitacora) => Promise<ResultadoDesglose>;
@@ -276,7 +281,10 @@ async function recibirPorOmision(tenantId: string, d: DesgloseBitacora): Promise
 
 export async function importarDesglosesDeArchivo(
   tenantId: string, nombre: string, bytes: Uint8Array, deps: DependenciasImportacionDesgloses = { recibir: recibirPorOmision },
+  opciones: { presupuestoMs?: number; ahoraMs?: () => number } = {},
 ): Promise<ResultadoImportacionDesgloses> {
+  const ahoraMs = opciones.ahoraMs ?? Date.now;
+  const limiteMs = ahoraMs() + (opciones.presupuestoMs ?? PRESUPUESTO_DESGLOSES_MS);
   const base: ResultadoImportacionDesgloses = {
     recibidas: 0, idempotentes: 0, retenidas: 0, correcciones: 0, excepciones: [], problemas: [], renglonesEnCero: 0,
   };
@@ -302,7 +310,13 @@ export async function importarDesglosesDeArchivo(
   const salida: ResultadoImportacionDesgloses = {
     ...base, excepciones: [...lectura.excepciones], problemas: [...lectura.problemas], renglonesEnCero: lectura.renglonesEnCero,
   };
+  let procesados = 0;
   for (const d of lectura.desgloses) {
+    if (ahoraMs() > limiteMs) {
+      salida.sinProcesar = lectura.desgloses.length - procesados;
+      break;
+    }
+    procesados++;
     const clave = d.numeroLiquidacion ? claveDeLiquidacion(d.terminal, d.numeroLiquidacion) : claveDeBitacora(d.terminal, d.bitacora);
     try {
       const r = await deps.recibir(tenantId, d);

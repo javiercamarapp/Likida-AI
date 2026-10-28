@@ -319,3 +319,27 @@ describe('desglosesDeCsv: número de liquidación, número de pago y agrupación
     expect(r.problemas.length).toBeGreaterThan(0);
   });
 });
+
+describe('importarDesglosesDeArchivo: presupuesto de tiempo (carga desde el panel)', () => {
+  const CSV = [
+    'terminal;bitacora;poliza;numero_empleado;desde;hasta;tipo;concepto;monto',
+    ...['B-1', 'B-2', 'B-3', 'B-4'].map((b) => `T1;${b};P-1;E-1;2026-09-01;2026-09-06;percepcion;Sueldo;1000`),
+  ].join('\n');
+
+  it('al acabarse el tiempo deja de recibir, dice cuántos faltan y lo ya recibido queda (repetir el archivo es seguro)', async () => {
+    const { recibir, vistos } = recibidor();
+    let reloj = 0;
+    const r = await importarDesglosesDeArchivo('t-1', 'x.csv', new TextEncoder().encode(CSV), { recibir }, { presupuestoMs: 100, ahoraMs: () => (reloj += 60) });
+    expect(vistos.length).toBeGreaterThan(0);
+    expect(vistos.length).toBeLessThan(4);
+    expect(r.recibidas).toBe(vistos.length);
+    expect(r.sinProcesar).toBe(4 - vistos.length);
+  });
+
+  it('con tiempo de sobra procesa todo y no marca «sinProcesar»', async () => {
+    const { recibir, vistos } = recibidor();
+    const r = await importarDesglosesDeArchivo('t-1', 'x.csv', new TextEncoder().encode(CSV), { recibir });
+    expect(vistos).toHaveLength(4);
+    expect(r.sinProcesar).toBeUndefined();
+  });
+});

@@ -28,6 +28,8 @@ import { reenviarDesglose, type DestinoReenvio, type MotivoReenvio } from '@/lib
 import { liberarEnvio } from '@/lib/likida/liquidacion_externa/liberar_envio';
 import { leerFormatoFlota, leerTelefonosFlota } from '@/lib/likida/liquidacion_externa/repo';
 import { importarLiquidacionesDeArchivo } from '@/lib/likida/liquidacion_externa/importar_archivo';
+import { leerArchivoCarga, cargarDesglosesDePanel, cargarContactosDePanel } from '@/lib/likida/liquidacion_externa/cargas_panel';
+import { SeccionCargas } from './cargas';
 import { decodificarCursor, codificarCursor } from '@/app/api/v1/_comun';
 import { SeccionExternas, leerFiltroExterno, leerMensajeExterno } from './externas';
 import {
@@ -284,6 +286,33 @@ export default async function PaginaAgenteLiquidacion({
     return volverAlDetalle(contexto, id, codigo);
   }
 
+  // ── CARGAS POR ARCHIVO (Ola 1 · A1) ─────────────────────────────────────
+  // Mientras el sistema del cliente no manda los desgloses solo: el export de bitácoras (mismo camino que POST /v1/liquidaciones-externas/
+  // desgloses) y los correos de operadores/coordinadores (mismo camino que POST /v1/liquidaciones-externas/contactos). Solo el dueño
+  // (administración) las usa; cada una re-gatea con la sesión REAL (es alcanzable por POST directo) y vuelve con el resultado en una
+  // cookie de servidor (el texto nunca viaja por la URL ni lleva un correo).
+  /** Sube el export de bitácoras: cada bitácora entra como si la hubiera mandado el sistema del cliente. */
+  async function subirDesglosesExportados(fd: FormData): Promise<void> {
+    'use server';
+    const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
+    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion') || !puedeVerArea(s.rol, 'administracion')) throw new Error('Solo el dueño de la flota sube desgloses.');
+    const f = await leerArchivoCarga(fd);
+    await dejarFlash('/dashboard/agentes/liquidacion', f.ok ? await cargarDesglosesDePanel(s.tenantId, f.archivo) : { error: f.error });
+    revalidatePath('/dashboard/agentes/liquidacion');
+    redirect(`/dashboard/agentes/liquidacion${contexto.length ? `?${new URLSearchParams(contexto).toString()}` : ''}#cargas`);
+  }
+
+  /** Sube los correos de los operadores y de sus coordinadores. Nunca crea operadores. */
+  async function subirContactosOperadores(fd: FormData): Promise<void> {
+    'use server';
+    const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
+    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion') || !puedeVerArea(s.rol, 'administracion')) throw new Error('Solo el dueño de la flota sube correos.');
+    const f = await leerArchivoCarga(fd);
+    await dejarFlash('/dashboard/agentes/liquidacion', f.ok ? await cargarContactosDePanel(s.tenantId, f.archivo) : { error: f.error });
+    revalidatePath('/dashboard/agentes/liquidacion');
+    redirect(`/dashboard/agentes/liquidacion${contexto.length ? `?${new URLSearchParams(contexto).toString()}` : ''}#cargas`);
+  }
+
   // ── DESGLOSE POR CORREO (T-A1-28) ───────────────────────────────────────
   // Una flota con el canal en correo ve la lista de desgloses EN LUGAR de los KPIs, la cola y la estrategia del flujo de fotos (se
   // ocultan, no se borran: otras flotas siguen igual). Sin configuración guardada el canal es `whatsapp` y todo queda como hoy.
@@ -305,6 +334,13 @@ export default async function PaginaAgenteLiquidacion({
           <Bloque mensaje="No se pudieron leer los desgloses." esqueleto={<EsqTabla filas={5} />}>
             <SeccionDesgloses lectura={lectura} filtro={filtroDes} desde={desdeDes} hasta={hastaDes} contexto={contexto} />
           </Bloque>
+        }
+        cargas={
+          <SeccionCargas
+            acciones={{ desgloses: subirDesglosesExportados, contactos: subirContactosOperadores }}
+            aviso={flash.aviso ?? null} error={flash.error ?? null} detalle={flash.detalle ?? null}
+            puedeCargar={puedeVerArea(rol, 'administracion')}
+          />
         }
         detalle={idDetalle && (
           <Bloque mensaje="No se pudo leer el detalle del desglose." esqueleto={<EsqTabla filas={5} />}>

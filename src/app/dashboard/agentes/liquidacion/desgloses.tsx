@@ -483,7 +483,7 @@ export function leerMensajeDesglose(v: string | undefined): MensajeDesglose | nu
 
 // ── El detalle de una bitácora ─────────────────────────────────────────────
 
-const ROTULO_ROL_DETALLE: Record<RolDetalle, string> = { operador: 'Operador', coordinador: 'Coordinador', rh: 'RH', archivo: 'Archivo' };
+const ROTULO_ROL_DETALLE: Record<RolDetalle, string> = { operador: 'Operador', coordinador: 'Coordinador', rh: 'RH', archivo: 'Archivo', revisor: 'Revisor (primer mes)' };
 const ORIGEN_GENERACION = { auto: 'Envío automático', reclamo: 'Reclamo del operador', manual: 'Envío manual' } as const;
 
 const EXCEPCION: Record<TipoExcepcion, { titulo: string; ayuda: string }> = {
@@ -778,8 +778,10 @@ export async function SeccionExcepciones(p: SeccionExcepcionesProps) {
 }
 
 /** El marco de la pantalla de un tenant que recibe el desglose por correo: la sección y los avisos, sin los KPIs, la cola ni la estrategia del flujo de fotos. */
-export function VistaDesgloses({ desgloses, detalle, excepciones, notificaciones }: {
+export function VistaDesgloses({ desgloses, detalle, excepciones, notificaciones, cargas }: {
   desgloses: React.ReactNode; detalle?: React.ReactNode; excepciones?: React.ReactNode; notificaciones?: React.ReactNode;
+  /** Ola 1 · A1: la subida de archivos (desgloses y correos de operadores) mientras el sistema del cliente no manda los datos solo. */
+  cargas?: React.ReactNode;
 }) {
   return (
     <main className="h-full">
@@ -787,6 +789,7 @@ export function VistaDesgloses({ desgloses, detalle, excepciones, notificaciones
         <BarraPagina icono={<Route width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />} titulo="Liquidación automática" />
         <div className="px-5 py-5 flex-1 space-y-4">
           {desgloses}
+          {cargas}
           {detalle}
           {excepciones}
           {notificaciones}
