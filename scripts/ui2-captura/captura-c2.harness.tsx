@@ -106,8 +106,8 @@ const CONECTORES: Conector[] = [
   { id: 'whatsapp', nombre: 'WhatsApp (choferes y oficina)', estado: 'listo', detalle: 'Variables del canal presentes en este entorno.', falta: [] },
   { id: 'correo', nombre: 'Correo de avisos', estado: 'incompleto', detalle: 'El envío está configurado; esta comprobación no verifica entrega, SPF ni DKIM.', falta: [] },
   { id: 'rastreo', nombre: 'Rastreo GPS (credenciales del proveedor)', estado: 'sin_configurar', detalle: 'Sin conectar — la credencial de tu proveedor se captura aquí abajo.', falta: ['capturar el acceso de tu proveedor de rastreo y probar la conexión'] },
-  { id: 'cfdi', nombre: 'Emisión de CFDI (timbrado)', estado: 'ensayo', detalle: 'En ensayo por candado legal — decisión de negocio.', falta: [] },
-  { id: 'medir', nombre: 'Rastreo en tiempo real', estado: 'no_medible', detalle: 'No se pudo leer el estado ahora mismo.', falta: [] },
+  { id: 'timbrado', nombre: 'Emisión de CFDI (timbrado)', estado: 'ensayo', detalle: 'En ensayo por candado legal — decisión de negocio.', falta: [] },
+  { id: 'sat', nombre: 'Rastreo en tiempo real', estado: 'no_medible', detalle: 'No se pudo leer el estado ahora mismo.', falta: [] },
 ];
 const conexiones = () => (
   <VistaConexiones
