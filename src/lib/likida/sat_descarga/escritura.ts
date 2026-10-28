@@ -45,7 +45,7 @@ export async function guardarConfigDescarga(
     throw new DatoInvalido('La anticipación del aviso de peaje va de 1 a 25 días: el derecho se vence el último día del mes, así que avisar con 26 sería avisar el día 5.');
   }
   // A37-S57-01 / A37-S18-01 (CRÍTICO): el RFC del buzón se ata al RFC fiscal
-  // VERIFICADO del tenant (`tenant.rfc`). La forma no prueba pertenencia: con
+  // VERIFICADO del tenant (`tenant.rfc_sat_verificado`). La forma no prueba pertenencia: con
   // la cuenta compartida del PAC, una flota podía declarar el RFC de otra.
   const fiscal = await rfcFiscalDelTenant(tenantId);
   if (fiscal === null) throw new DatoInvalido(MENSAJE_RFC_NO_VERIFICADO);
@@ -103,7 +103,7 @@ export async function verificarCredencial(
   if (data === null) {
     return { ok: false, mensaje: 'Todavía no has declarado el RFC del buzón que se va a descargar.' };
   }
-  // Una fila declarada ANTES de este candado (o cuyo `tenant.rfc` cambió) no
+  // Una fila declarada ANTES de este candado (o cuyo `tenant.rfc_sat_verificado` cambió) no
   // autoriza a preguntarle al PAC por la e.firma de un RFC ajeno: 'Verificar'
   // revelaría si otra flota es cliente y la serie/vigencia de su FIEL.
   const rechazo = await rechazoPorRfcAjeno(tenantId, data.rfc);

@@ -679,7 +679,7 @@ async function atenderTextoOficina(
       if (rOficina) {
         logger.info('oficina.asistencia_rojo', { user: cuenta.userId });
         await sendText(from, rOficina);
-        if (pideAtencionPrivacidad(texto)) {
+        if (cuenta.tenantId && pideAtencionPrivacidad(texto)) {
           await atenderPrivacidad(cuenta.tenantId, null, from, texto, cuenta.userId, { soloRegistrar: true });
         }
         return true;

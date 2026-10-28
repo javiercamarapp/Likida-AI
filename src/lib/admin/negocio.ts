@@ -1314,7 +1314,7 @@ export async function fijarAgenteChoferHabilitado(tenantId: string, habilitado: 
     {
       tenantId, actor: { id: userId },
       accion: habilitado ? 'agente_chofer.habilitado' : 'agente_chofer.deshabilitado',
-      entidad: 'agente_conductor_config', entidadId: tenantId, detalle: { habilitado, motivo: m },
+      entidad: 'conductor_config', entidadId: tenantId, detalle: { habilitado, motivo: m },
     },
     { evento: 'admin.agente_chofer_no_bitacorado', contexto: { tenantId, habilitado } },
   );
