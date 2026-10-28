@@ -1,7 +1,7 @@
 import { logger } from '@/lib/logger';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
-import { exigir, traerTodo } from '../pg';
+import { exigir, traerHastaTope, traerTodo } from '../pg';
 import { COLUMNAS_HITO, COLUMNAS_VIAJE_CTX, filaAHito, filaAViajeCtx, type ViajeContexto } from './repo';
 import type { AvisoReclamado } from './planificador';
 import type { HitoFila } from './tipos';
@@ -102,6 +102,9 @@ export async function leerViajesActivos(limite: number): Promise<ViajeContexto[]
   return ids.flatMap((id) => { const v = porId.get(id); return v ? [v] : []; });
 }
 
+/** Tope de emergencias abiertas que se leen por lote de flotas; rebasarlo lanza (no se recorta en silencio). */
+const TOPE_EMERGENCIAS = 2000;
+
 /**
  * A37-A5-02: las emergencias SIN RESOLVER de las flotas dadas (tipos de `TIPOS_EMERGENCIA` o prioridad crítica, abiertas en las últimas
  * `HORAS_EMERGENCIA_VIGENTE` h). LANZA si no se puede leer: quien llama se detiene (fail-closed), no asume «no hay emergencias».
@@ -111,10 +114,17 @@ export async function leerEmergenciasAbiertas(tenantIds: string[], ahora: Date =
   const desde = new Date(ahora.getTime() - HORAS_EMERGENCIA_VIGENTE * 3_600_000).toISOString();
   const filas: FilaEmergencia[] = [];
   for (const lote of trozos(tenantIds, 100)) {
-    const res = await acotada(supabaseAdmin().from('incidencia').select('tenant_id, operador_id, viaje_id, unidad_id')
+    // A39-S36-01: `.limit(2000)` contra `max_rows = 1000` devolvía 1000 filas SIN avisar y una emergencia podía quedar fuera de la
+    // lista que frena el envío al chofer. Se pagina por `range` (orden único por id) y, si la flota rebasa el tope, se LANZA: quien llama
+    // se detiene (fail-closed) en vez de asumir que no hay más emergencias.
+    const qEm = supabaseAdmin().from('incidencia').select('tenant_id, operador_id, viaje_id, unidad_id')
       .in('tenant_id', lote).neq('estado', 'resuelta').gte('abierta_en', desde)
-      .or(`tipo.in.(${TIPOS_EMERGENCIA.join(',')}),prioridad.eq.critica`).order('id').limit(2000), 'conductor.emergencias_abiertas');
-    filas.push(...((exigir(res as never, 'conductor.emergencias_abiertas') ?? []) as unknown as FilaEmergencia[]));
+      .or(`tipo.in.(${TIPOS_EMERGENCIA.join(',')}),prioridad.eq.critica`).order('id');
+    const leidas = await traerHastaTope<FilaEmergencia>(
+      (d, h) => acotada(qEm.range(d, h), 'conductor.emergencias_abiertas') as never, TOPE_EMERGENCIAS + 1, 'conductor.emergencias_abiertas',
+    );
+    if (leidas.length > TOPE_EMERGENCIAS) throw new Error(`conductor.emergencias_abiertas: más de ${TOPE_EMERGENCIAS} emergencias abiertas; no se puede afirmar quién está en emergencia`);
+    filas.push(...leidas);
   }
   return agruparEmergencias(filas);
 }

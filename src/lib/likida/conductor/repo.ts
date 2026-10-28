@@ -1757,9 +1757,10 @@ export async function leerDatosPreflight(tenantId: string, ahora: Date = new Dat
     if (unidades.length > 0) {
       const desde = new Date(ahora.getTime() - HORAS_GPS_RECIENTE * 3_600_000);
       const haceUnaHora = ahora.getTime() - 3_600_000;
-      const rp = await acotada(supabaseAdmin().from('posicion').select('unidad_id, medida_en')
-        .eq('tenant_id', tenantId).in('unidad_id', unidades).neq('proveedor', 'whatsapp').gte('medida_en', desde.toISOString()).order('medida_en', { ascending: false }).order('id').limit(5000), 'conductor.preflight_posiciones');
-      const ps = (exigir(rp as never, 'conductor.preflight_posiciones') ?? []) as unknown as Fila[];
+      // A39-S36-01: `.limit(5000)` contra `max_rows = 1000` recortaba en silencio y el preflight contaba menos posiciones de las que hay.
+      const qp = supabaseAdmin().from('posicion').select('unidad_id, medida_en')
+        .eq('tenant_id', tenantId).in('unidad_id', unidades).neq('proveedor', 'whatsapp').gte('medida_en', desde.toISOString()).order('medida_en', { ascending: false }).order('id');
+      const ps = (await traerHastaTope<Fila>((d, h) => acotada(qp.range(d, h), 'conductor.preflight_posiciones') as never, 5000, 'conductor.preflight_posiciones')) as unknown as Fila[];
       const mut = posicionesPorUnidad as Record<string, { ultimas2h: number; ultimaHora: number }>;
       for (const p of ps) {
         const u = String(p.unidad_id);

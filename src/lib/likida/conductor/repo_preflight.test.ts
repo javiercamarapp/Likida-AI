@@ -6,7 +6,7 @@ const datos: Record<string, unknown> = {};
 
 function cadena(nombre: string): unknown {
   const p: Record<string, unknown> = {};
-  for (const op of ['select', 'eq', 'neq', 'not', 'in', 'gte', 'order', 'limit', 'update', 'insert', 'delete', 'upsert', 'or']) {
+  for (const op of ['select', 'eq', 'neq', 'not', 'in', 'gte', 'order', 'limit', 'range', 'update', 'insert', 'delete', 'upsert', 'or']) {
     p[op] = (...args: unknown[]) => { llamadas.push({ op: `${nombre}.${op}`, args }); return p; };
   }
   p.maybeSingle = async () => ({ data: (datos[`${nombre}.uno`] ?? null) as unknown, error: null });
