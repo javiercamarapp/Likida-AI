@@ -77,3 +77,11 @@ describe('viajes salidos sin Carta Porte (T-A3-66)', () => {
     expect(salidaEnZona('2026-03-09T12:30:00Z')).toBe('2026-03-09 06:30');
   });
 });
+
+import { folioComparable, viajesLigadosPorFolio } from './viajes_sin_ccp';
+describe('viajesLigadosPorFolio (OLA1-A3)', () => {
+  it('liga por folio sin distinguir mayúsculas ni espacios, y un folio vacío no liga nada', () => {
+    const v = [{ viajeId: 'a', folio: ' f-1 ' }, { viajeId: 'b', folio: null }, { viajeId: 'c', folio: '' }, { viajeId: 'd', folio: 'F-9' }];
+    expect([...viajesLigadosPorFolio(v, new Set([folioComparable('F-1'), '']))]).toEqual(['a']);
+  });
+});

@@ -65,6 +65,23 @@ export interface ListadoSinCcp {
   truncado?: boolean;
 }
 
+/** El folio tal como se compara entre el viaje y el documento/envío: sin espacios de más y sin distinguir mayúsculas. */
+export const folioComparable = (f: string | null | undefined): string => String(f ?? '').replace(/\s+/g, ' ').trim().toUpperCase();
+
+/**
+ * OLA1-A3 · Viajes cuyo folio coincide con el de un complemento ya aprobado o con la referencia de una carga ya subida al TMS.
+ * Es el vínculo de los flotas bajo el perfil `cinco_agentes`: ahí el documento nunca crea ni liga un viaje (`cp_documento.viaje_id`
+ * queda vacío), así que la única llave común es el folio. Un folio vacío no liga nada.
+ */
+export function viajesLigadosPorFolio(viajes: ReadonlyArray<Pick<ViajeSalido, 'viajeId' | 'folio'>>, folios: ReadonlySet<string>): Set<string> {
+  const ligados = new Set<string>();
+  for (const v of viajes) {
+    const f = folioComparable(v.folio);
+    if (f !== '' && folios.has(f)) ligados.add(v.viajeId);
+  }
+  return ligados;
+}
+
 const ORDEN_COLOR: Record<ColorAntiguedad, number> = { verde: 0, ambar: 1, rojo: 2 };
 export const SIN_CLIENTE = 'Sin cliente asignado';
 

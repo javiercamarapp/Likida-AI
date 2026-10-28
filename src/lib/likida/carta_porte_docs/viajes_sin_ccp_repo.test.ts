@@ -82,4 +82,27 @@ describe('lectura de salidas para «viajes sin Carta Porte» (T-A3-66)', () => {
     tablas.viaje_hito = { filas: [], error: { message: 'caída' } };
     await expect(leerSalidasParaSinCcp('t1', AHORA)).rejects.toThrow();
   });
+
+  it('OLA1-A3 · bajo cinco_agentes: sin hitos de A5 la salida es la fecha de inicio y «con CCP» se decide por folio (documento aprobado o carga subida)', async () => {
+    tablas.viaje_hito = { filas: [] };
+    tablas.viaje = { filas: [
+      { id: 'v1', fecha_inicio: '2026-03-08', folio: 'F-1', cliente_id: 'c1', cliente: { nombre: 'Cliente Ejemplo' } },
+      { id: 'v2', fecha_inicio: '2026-03-08', folio: 'f-2 ', cliente_id: 'c1', cliente: { nombre: 'Cliente Ejemplo' } },
+      { id: 'v3', fecha_inicio: '2026-03-09', folio: 'F-3', cliente_id: 'c1', cliente: { nombre: 'Cliente Ejemplo' } },
+    ] };
+    tablas.cp_documento = { filas: [{ folio: 'F-1', viaje_id: null }] };
+    tablas.cp_envio_tms = { filas: [{ referencia_tms: 'F-2' }] };
+    const r = await leerSalidasParaSinCcp('t1', AHORA, { viajesDelTms: true });
+    expect(r.viajes.map((v) => v.viajeId).sort()).toEqual(['v1', 'v2', 'v3']);
+    expect([...r.conCcp].sort()).toEqual(['v1', 'v2']);
+    const l = listarViajesSinCcp(r.viajes, r.conCcp, AHORA);
+    expect(l.grupos[0]!.viajes.map((x) => x.viajeId)).toEqual(['v3']);
+    expect(filtros).toContainEqual({ tabla: 'cp_envio_tms', op: 'eq', args: ['tenant_id', 't1'] });
+  });
+
+  it('OLA1-A3 · sin la opción (flotas de siempre) no lee viajes por fecha ni liga por folio', async () => {
+    tablas.viaje_hito = { filas: [] };
+    await leerSalidasParaSinCcp('t1', AHORA);
+    expect(filtros.some((f) => f.tabla === 'viaje' || f.tabla === 'cp_envio_tms')).toBe(false);
+  });
 });
