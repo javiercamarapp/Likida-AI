@@ -212,6 +212,12 @@ export interface ResultadoEnvioAviso {
    * un SEGUNDO WhatsApp real en la siguiente corrida para el mismo (jornada, nivel).
    */
   encolado?: boolean;
+  /**
+   * A39-A5-03: el envío NO se intentó porque la compuerta de seguridad del chofer lo frenó (unidad en marcha, fuera de ventana,
+   * emergencia abierta…). No es un fallo ni un rechazo de Meta: el nivel no se consume (se suelta el claim y se reevalúa en la siguiente
+   * corrida, cuando la unidad ya esté detenida) y no cuenta como fallo ruidoso ni hacia el corte por rechazo masivo.
+   */
+  bloqueadoPorCompuerta?: boolean;
 }
 export type EstadoDestino = 'pendiente' | 'enviado' | 'fallido' | 'sin_destinatario' | 'no_aplica';
 
@@ -277,6 +283,8 @@ export interface ResultadoAlertasTope {
   yaAvisadas: number;
   alertas: Record<NivelAlerta, number>;
   sinDestinatario: number;
+  /** Avisos al operador que la compuerta de seguridad frenó (no se consumió el nivel). Informativo: NO es un fallo. */
+  bloqueadasPorCompuerta: number;
   rechazosReintentables: number;
   cortadosPorReloj: number;
   listaTruncada: boolean;
@@ -294,7 +302,7 @@ export async function correrAlertasTope(p: PuertosAlerta, opts: { ahora?: Date; 
   const ahora = opts.ahora ?? new Date();
   const r: ResultadoAlertasTope = {
     revisadas: 0, enCurso: 0, sinInicio: 0, inicioEnFuturo: 0, sinCierreProbable: 0, bajoUmbral: 0, yaAvisadas: 0,
-    alertas: { aviso: 0, critico: 0, exceso: 0 }, sinDestinatario: 0, rechazosReintentables: 0, cortadosPorReloj: 0,
+    alertas: { aviso: 0, critico: 0, exceso: 0 }, sinDestinatario: 0, bloqueadasPorCompuerta: 0, rechazosReintentables: 0, cortadosPorReloj: 0,
     listaTruncada: false, cortadaPorRechazoMasivo: false, fallos: [],
   };
   // Si no se puede leer la lista, NO se afirma que no hay nada que avisar: lanza (el cron pinta fallo).
@@ -443,6 +451,7 @@ export async function correrAlertasTope(p: PuertosAlerta, opts: { ahora?: Date; 
       let opMotivo: string | null = null;
       let opReintentable = false;
       let opEncolado = false;
+      let opBloqueado = false;
       if (cfg.canalOperador === 'whatsapp') {
         if (!op?.telefono) { opEstado = 'sin_destinatario'; }
         else {
@@ -451,6 +460,8 @@ export async function correrAlertasTope(p: PuertosAlerta, opts: { ahora?: Date; 
             opEstado = 'fallido'; opMotivo = (e.motivo ?? 'rechazado').slice(0, 200);
             opReintentable = e.reintentable || e.encolado === true;
             opEncolado = e.encolado === true;
+            // A39-A5-03: frenado por la compuerta (nunca se intentó enviar): reintentable, y no es un rechazo.
+            if (e.bloqueadoPorCompuerta === true) { opBloqueado = true; opReintentable = true; }
           }
         }
       }
@@ -460,6 +471,14 @@ export async function correrAlertasTope(p: PuertosAlerta, opts: { ahora?: Date; 
       const algunFallido = aplicables.includes('fallido');
       const todosFallidosReintentables = !algunEnviado && algunFallido
         && (encEstado !== 'fallido' || encReintentable) && (opEstado !== 'fallido' || opReintentable);
+      if (todosFallidosReintentables && opBloqueado && encEstado !== 'fallido') {
+        // A39-A5-03: SOLO la compuerta frenó el aviso (el encargado no aplicaba o no tenía a quién; nada salió). El nivel NO se cierra como
+        // fallido definitivo: se suelta el claim y se reevalúa en la siguiente corrida, cuando la unidad ya esté detenida. No es un fallo
+        // ruidoso ni cuenta hacia el corte por rechazo masivo. La compuerta NO se debilita: seguimos sin escribirle manejando.
+        await p.liberar(f.tenantId, reclamo);
+        r.bloqueadasPorCompuerta++;
+        continue;
+      }
       if (todosFallidosReintentables) {
         r.rechazosReintentables++;
         const rechazosDeEstaFlota = (rechazosSeguidosPorTenant.get(f.tenantId) ?? 0) + 1;
