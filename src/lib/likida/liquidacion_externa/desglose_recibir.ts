@@ -25,7 +25,7 @@ import { DatoInvalido, OperadorDeBaja } from '../errores';
 import { huellaContenido, huellaDesglose } from './esquema';
 import type { LiquidacionExternaNormalizada } from './esquema';
 import {
-  aLiquidacionExterna, claveDeBitacora, claveDeLiquidacion, UnidadesMezcladas, type DesgloseBitacora, type RenglonBitacora,
+  aLiquidacionExterna, claveDeBitacora, claveDeLiquidacion, UnidadesMezcladas, type DesgloseBitacora, type RenglonBitacora, type TipoOperadorDesglose,
 } from './desglose_contrato';
 import {
   aplicarRenombres, colapsarRenglonViaje, guardasPreEnvio,
@@ -202,12 +202,15 @@ function guardasDeConfig(c: ConfigCorreo): Partial<ConfigGuardasEnvio> {
   };
 }
 
+/** El renglón único «Pago de viaje» es de los foráneos; los locales conservan «Sueldo» y «Complemento» (c3cc57d3 46:21). */
+export const SOLO_TIPOS_RENGLON_VIAJE: TipoOperadorDesglose[] = ['foraneo'];
+
 /** Lo que verá el operador: renombres del contralor y renglón de viaje. Solo reagrupa/renombra; el neto no cambia. */
-function presentar(d: DesgloseBitacora, c: ConfigCorreo): { percepciones: RenglonBitacora[]; deducciones: RenglonBitacora[] } {
+export function presentar(d: DesgloseBitacora, c: ConfigCorreo): { percepciones: RenglonBitacora[]; deducciones: RenglonBitacora[] } {
   const renombres = renombresDeConfig(c.renombres);
   const percepciones = aplicarRenombres(
     colapsarRenglonViaje(d.percepciones, {
-      activa: c.agruparViaje, etiqueta: c.etiquetaViaje, conceptosOrigen: c.conceptosViaje, tipoOperador: d.tipoOperador,
+      activa: c.agruparViaje, etiqueta: c.etiquetaViaje, conceptosOrigen: c.conceptosViaje, soloTipos: SOLO_TIPOS_RENGLON_VIAJE, tipoOperador: d.tipoOperador,
     }),
     renombres,
   );

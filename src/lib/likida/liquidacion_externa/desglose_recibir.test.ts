@@ -11,7 +11,7 @@ import { CONFIG_CORREO_POR_DEFECTO, type ConfigCorreo, type NuevaEntrega } from 
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error('la base no debe tocarse en estas pruebas'); } }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
-const { recibirDesglose, renombresDeConfig } = await import('./desglose_recibir');
+const { recibirDesglose, renombresDeConfig, presentar } = await import('./desglose_recibir');
 type Deps = import('./desglose_recibir').DependenciasDesglose;
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -623,5 +623,27 @@ describe('recibirDesglose: rescate de una recepción que quedó a medias', () =>
     const b = banco();
     aMedias(b);
     expect((await recibirDesglose(TENANT, desglose(), b.deps)).estado).toBe('idempotente');
+  });
+});
+
+describe('presentar: el renglón de viaje solo para foráneos (c3cc57d3 46:21)', () => {
+  const conViaje = (tipo: 'foraneo' | 'local' | 'permisionario' | undefined) => desglose({
+    tipoOperador: tipo,
+    percepciones: [{ concepto: 'Sueldo', monto: 1000 }, { concepto: 'Viáticos', monto: 500 }, { concepto: 'Complemento', monto: 200 }],
+  });
+  const cfg: ConfigCorreo = { ...CONFIG, agruparViaje: true };
+
+  it('foráneo: Sueldo + Viáticos se funden en «Pago de viaje»', () => {
+    const v = presentar(conViaje('foraneo'), cfg);
+    expect(v.percepciones.map((r) => r.concepto)).toEqual(['Pago de viaje', 'Complemento']);
+  });
+
+  it('local: conserva «Sueldo» y «Viáticos» sueltos aunque agrupar_viaje esté encendido', () => {
+    const v = presentar(conViaje('local'), cfg);
+    expect(v.percepciones.map((r) => r.concepto)).toEqual(['Sueldo', 'Viáticos', 'Complemento']);
+  });
+
+  it('agrupar_viaje apagado no cambia nada para nadie', () => {
+    expect(presentar(conViaje('foraneo'), { ...CONFIG, agruparViaje: false }).percepciones.map((r) => r.concepto)).toEqual(['Sueldo', 'Viáticos', 'Complemento']);
   });
 });
