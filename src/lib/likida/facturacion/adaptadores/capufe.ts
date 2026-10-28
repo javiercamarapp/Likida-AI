@@ -798,7 +798,16 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
 
       if (e instanceof FalloCaptcha) {
         logger.warn('capufe.captcha', { modo, seApreto });
-        return { ...parcial, ok: false, requiereCaptcha: true, error: e.message };
+        // A39-S41-01: si el CAPTCHA salió DESPUÉS de apretar emitir, el CFDI pudo timbrarse. Reportarlo solo como «no se
+        // puede» mandaba a la persona a facturar a mano y DUPLICABA el CFDI. La bandera lo saca de la cola y bloquea el
+        // reintento hasta verificar con el portal (`motivoDeBloqueo` pone `emisionSinConfirmar` por delante del captcha).
+        return {
+          ...parcial, ok: false, requiereCaptcha: true,
+          ...(seApreto ? { emisionSinConfirmar: true } : {}),
+          error: seApreto
+            ? `${e.message}. SE APRETÓ EMITIR antes de que saliera el CAPTCHA: PUEDE QUE EL CFDI YA EXISTA. Revisa el portal (Mis facturas) ANTES de facturarlo a mano — un segundo CFDI por los mismos códigos no se deshace.`
+            : e.message,
+        };
       }
 
       const detalle = e instanceof FalloDePortal ? e.message : `Falló ${this.portal}: ${texto(e)}`;

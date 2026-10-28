@@ -594,7 +594,11 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 326;
 // LOTE A39 OLA 8 O8-6 (datos-correos): +4 llamadas (2,390 → 2,394), medidas con el barrido real. sincronizar_eventos.ts +2 (A39-S38-03: lectura de las filas mínimas
 // y update de promoción a completa, ambos por `acotada`); investigador.ts +1 (A39-S28-01: RPC prospectos_sin_dossier, 0930); vigia/repo.ts +1 (A39-S59-01: `marcarRespondida`
 // anota solo la salida cuando el cliente escribió después). Cubiertas por sincronizar_eventos_a39_s38.test.ts, investigador.test.ts y servicio.test.ts.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_394;
+// LOTE A39 OLA 8 O8-4 (A39-S57-03): +3 llamadas (2,390 → 2,393), medidas con el barrido real. `sat_descarga/ciclo.ts` suma la copia de trabajo de un paquete
+// grande del SAT (`sat_paquete_xml`, 0928): leer, guardar (upsert por tandas) y borrar, las tres por `acotada` con `tenant_id`. Cubiertas por ciclo_flota.test.ts.
+// Si otro lote toca este techo, sumar el incremento al integrar.
+// INTEGRACIÓN OLA 8b: techo = 2,390 + 4 (O8-6) + 3 (O8-4) = 2,397 (a reconfirmar con el barrido real).
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_397;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

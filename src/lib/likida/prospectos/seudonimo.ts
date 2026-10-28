@@ -54,11 +54,15 @@ function sinMarcas(ch: string): string {
  */
 function reemplazarSinAcentos(texto: string, nombre: string, marcador: string): string {
   let plegado = '';
-  const mapa: number[] = []; // índice del plegado → índice del original
+  // A39-S55-01: `plegado` se indexa en unidades UTF-16 (m.index), así que el mapa lleva UNA entrada por unidad UTF-16 del plegado.
+  // Antes iteraba por code point: cada emoji (2 unidades) desfasaba el mapa y el nombre se tachaba corrido/duplicando texto.
+  const mapa: number[] = [];    // unidad UTF-16 del plegado → inicio (UTF-16) del carácter original
+  const finDe: number[] = [];   // ídem → fin (exclusivo) de ese carácter original
   for (let i = 0; i < texto.length;) {
-    const cp = texto.codePointAt(i)!;
-    const ch = String.fromCodePoint(cp);
-    for (const f of sinMarcas(ch)) { mapa.push(i); plegado += f; }
+    const ch = String.fromCodePoint(texto.codePointAt(i)!);
+    const f = sinMarcas(ch);
+    for (let k = 0; k < f.length; k++) { mapa.push(i); finDe.push(i + ch.length); }
+    plegado += f;
     i += ch.length;
   }
   const objetivo = [...nombre].map(sinMarcas).join('');
@@ -67,9 +71,8 @@ function reemplazarSinAcentos(texto: string, nombre: string, marcador: string): 
   const tramos: Array<[number, number]> = [];
   for (const m of plegado.matchAll(re)) {
     const ini = mapa[m.index!];
-    const ultimo = mapa[m.index! + m[0].length - 1];
     // El fin incluye las marcas combinantes que siguen al último carácter base.
-    let fin = ultimo + 1;
+    let fin = finDe[m.index! + m[0].length - 1];
     while (fin < texto.length && /\p{M}/u.test(texto[fin])) fin++;
     tramos.push([ini, fin]);
   }

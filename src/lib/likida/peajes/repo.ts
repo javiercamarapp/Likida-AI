@@ -2806,6 +2806,8 @@ export const ETIQUETA_ESTADO: Record<EstadoConciliado, string> = {
 };
 
 export interface FilaConciliada {
+  /** A39-S53-02: el uuid REAL de `desglose_peaje_linea.id` (el RPC de posiciones lo declara `uuid`); `indice` es solo el renglón. */
+  lineaId: string;
   indice: number;
   fecha: string;
   hora: string;
@@ -2863,7 +2865,7 @@ export async function bitacoraConciliada(tenantId: string, desgloseId: string): 
 
   const crudas = await traerTodo<Record<string, unknown>>(
     (d, h) => acotada(admin.from('desglose_peaje_linea')
-      .select('indice, fecha, hora, cruce_en, caseta, monto, tag, estatus, diferencia, detalle, viaje_id, unidad_id, caseta_id, gps_veredicto, gps_distancia_m, gps_detalle', conteo(d))
+      .select('id, indice, fecha, hora, cruce_en, caseta, monto, tag, estatus, diferencia, detalle, viaje_id, unidad_id, caseta_id, gps_veredicto, gps_distancia_m, gps_detalle', conteo(d))
       .eq('tenant_id', tenantId).eq('desglose_id', desgloseId)
       .order('indice').order('id').range(d, h), 'bitacora_conciliada.lineas'),
     'bitacora_conciliada.lineas',
@@ -2893,6 +2895,7 @@ export async function bitacoraConciliada(tenantId: string, desgloseId: string): 
     if (gpsVeredicto === null) sinEvaluarGps++;
     const v = clasificarVerificacion({ estatus, detalle, gpsVeredicto, gpsMotivo });
     return {
+      lineaId: String(l.id),
       indice: Number(l.indice),
       fecha: (l.fecha as string | null) ?? '',
       hora: l.hora ? String(l.hora).slice(0, 8) : '',
@@ -3013,7 +3016,7 @@ export async function reporteReclamacion(
       || cursosDe(f).some((c) => c.tipo === 'corredor')));
   const ventanas: VentanaPosiciones[] = candidatas.map((f) => {
     const t = Date.parse(f.cruceEn as string);
-    return { lineaId: String(f.indice), unidadId: f.unidadId as string, desde: new Date(t - VENTANA_GPS_MIN * 60_000).toISOString(), hasta: new Date(t + VENTANA_GPS_MIN * 60_000).toISOString() };
+    return { lineaId: f.lineaId, unidadId: f.unidadId as string, desde: new Date(t - VENTANA_GPS_MIN * 60_000).toISOString(), hasta: new Date(t + VENTANA_GPS_MIN * 60_000).toISOString() };
   }).filter((v) => Number.isFinite(Date.parse(v.desde)));
   const muestras = await traerMuestrasPorLinea(tenantId, ventanas);
 
@@ -3023,7 +3026,7 @@ export async function reporteReclamacion(
     cruceMs: f.cruceEn ? Date.parse(f.cruceEn) : null,
     gps: f.gps, gpsDistanciaM: f.gpsDistanciaM, gpsNota: f.gpsNota,
     casetaGeo: f.casetaId ? (geoPorCaseta.get(f.casetaId) ?? null) : null,
-    muestras: muestras.get(String(f.indice)) ?? [],
+    muestras: muestras.get(f.lineaId) ?? [],
     casetaId: f.casetaId ?? null,
     cursos: cursosDe(f),
   }));

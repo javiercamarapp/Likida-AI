@@ -697,8 +697,10 @@ async function guardarUno(
     };
   }
 
-  const orden = (ordenPorUuid.get(p.cfdiUuid) ?? 0) + 1;
-  ordenPorUuid.set(p.cfdiUuid, orden);
+  // A39-S43-01: la posición se lleva por UUID en minúsculas (el mismo CFDI con otra caja es el MISMO CFDI).
+  const claveUuid = p.cfdiUuid.trim().toLowerCase();
+  const orden = (ordenPorUuid.get(claveUuid) ?? 0) + 1;
+  ordenPorUuid.set(claveUuid, orden);
   const guardado = await escribirUuid(admin, args.tenantId, p.gastoId, p.cfdiUuid, orden, args.ahora);
   if (guardado === null && enCurso) await levantarEmisionEnCurso(admin, p.gastoId, args.tenantId);
 
@@ -729,10 +731,14 @@ async function escribirUuid(
   admin: ReturnType<typeof supabaseAdmin>,
   tenantId: string,
   gastoId: string,
-  uuid: string,
+  uuidCrudo: string,
   orden: number,
   ahora?: string,
 ): Promise<string | null> {
+  // A39-S43-01: el portal imprime el folio en MAYÚSCULAS y `esUuidValido` lo acepta (/i), pero
+  // `gasto_cfdi_uuid_minuscula` (0158) exige minúsculas: escribirlo tal cual hacía que la base lo
+  // rechazara con el CFDI YA emitido. Se escribe SIEMPRE en minúsculas (misma forma que `validarUuidCfdi`).
+  const uuid = uuidCrudo.trim().toLowerCase();
   // A37-S42-03: ÚLTIMA BARRERA. Sea cual sea el adaptador, al gasto solo se le
   // escribe un UUID con forma de UUID. Un texto basura quedaría como folio falso
   // (y chocaría con `uq_gasto_cfdi_uuid` en el siguiente gasto). El CFDI pudo

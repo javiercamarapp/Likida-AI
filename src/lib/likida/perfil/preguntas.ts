@@ -394,6 +394,10 @@ export function declararAusente(campos: string[]): Record<string, unknown> {
   for (const c of campos) patch[c] = { valor: null, procedencia: 'ausente' };
   return patch;
 }
+/** A39-S53-01: ¿el patch/perfil DECLARA `regimenElegible`? (aunque falte la dedicación). undefined si no lo declara. */
+export function regimenElegibleDeclarado(perfilCrudo: unknown): boolean | undefined {
+  return decidir(leerPerfil(perfilCrudo).regimenElegible);
+}
 export function facilidad15Declarada(perfilCrudo: unknown): { dedicacionExclusivaCarga: boolean; regimenElegible: boolean } | null {
   const p = leerPerfil(perfilCrudo);
   const ded = decidir(p.dedicacionExclusivaCarga);

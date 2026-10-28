@@ -18,7 +18,8 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 const guardarPerfilPatch = vi.fn(async () => undefined);
 const actualizarFacilidad15 = vi.fn(async () => undefined);
-vi.mock('../repo', () => ({ guardarPerfilPatch, actualizarFacilidad15 }));
+const exigirRegimenCompatibleConFacilidad15 = vi.fn(async (_t: string) => undefined);
+vi.mock('../repo', () => ({ guardarPerfilPatch, actualizarFacilidad15, exigirRegimenCompatibleConFacilidad15 }));
 
 const { guardarPerfilFormulario, PerfilGuardadoParcial } = await import('./guardar_forma');
 const { declararOnboarding, formularioDeclarado } = await import('./preguntas');
@@ -29,6 +30,15 @@ beforeEach(() => {
     rfc: RFC_OK, razon_social: 'RAZON NUEVA SA', regimen_fiscal: '612', codigo_postal_fiscal: '97000',
     uso_cfdi: 'G01', email_facturacion: 'f@flota.mx', domicilio_fiscal: 'Calle 10 número 123, Centro, 97000 Mérida',
   };
+});
+
+describe('A39-S53-01 — el formulario coteja la facilidad del 15 % ANTES de escribir el perfil', () => {
+  it('si el tenant (601) niega la elegibilidad, el perfil no se escribe', async () => {
+    exigirRegimenCompatibleConFacilidad15.mockRejectedValueOnce(new Error('régimen 601'));
+    const patch = declararOnboarding({ ingresosMenoresA300M: true, parteRelacionada: false, dedicacionExclusivaCarga: true, regimenSat: '612', regimenElegible: true });
+    await expect(guardarPerfilFormulario('t-1', patch, 'u-1')).rejects.toThrow(/601/);
+    expect(guardarPerfilPatch).not.toHaveBeenCalled();
+  });
 });
 
 describe('A36-R15-02 — un solo camino para el régimen fiscal', () => {

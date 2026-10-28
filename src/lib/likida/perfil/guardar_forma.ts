@@ -1,6 +1,6 @@
-import { guardarPerfilPatch, actualizarFacilidad15 } from '../repo';
+import { guardarPerfilPatch, actualizarFacilidad15, exigirRegimenCompatibleConFacilidad15 } from '../repo';
 import { guardarDatosFiscalesParciales, REGIMENES } from '@/lib/saas/fiscal';
-import { facilidad15Declarada } from './preguntas';
+import { facilidad15Declarada, regimenElegibleDeclarado } from './preguntas';
 import { DatoInvalido } from '../errores';
 import { logger } from '@/lib/logger';
 
@@ -31,6 +31,8 @@ export async function guardarPerfilFormulario(
   patch: Record<string, unknown>,
   userId: string | null,
 ): Promise<void> {
+  // A39-S53-01: se coteja con el régimen VIVO del tenant ANTES de escribir; después ya sería tarde (el perfil manda al leer).
+  if (regimenElegibleDeclarado(patch) === true) await exigirRegimenCompatibleConFacilidad15(tenantId);
   await guardarPerfilPatch(tenantId, patch, userId);
   const f15 = facilidad15Declarada(patch);
   if (f15) {
