@@ -622,7 +622,10 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 326;
 // (0938, modo primer mes) y, en `leerSalidasParaSinCcp`, los viajes por fecha de inicio y los folios de documentos aprobados y de cargas subidas (viajes sin CCP bajo
 // cinco_agentes); `referencia_cliente_puerto.ts` suma los viajes por fecha de inicio. Cubiertas por servicio.test.ts, primer_mes.test.ts y viajes_sin_ccp_repo.test.ts.
 // INTEGRACION OLA 1: A1 (+7) + A2 (+17) + A3 (+7) sobre 2,403 = 2,434 (MEDIDO con el barrido real tras integrar las tres ramas: 2,434; techo ajustado, sin holgura).
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_434;
+// CORRECCIÓN PR #753 (verificación independiente, M4): 2,434 → 2,439 (+5, medido con el guardián). Sello de dos fases del aviso de peajes en `peajes/repo.ts`, todas por
+// `acotada` y con `tenant_id`: `reservarAvisoPeajes` +2 (¿ya está dado? y la reserva previa vigente/vencida; antes solo el upsert) + 1 (tomar la reserva vencida con borrado
+// condicionado) y `confirmarAvisoPeajes` +2 (sello definitivo y soltar la reserva). Cubiertas por avisos_repo.test.ts y aviso_barrido.test.ts.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_439;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.
