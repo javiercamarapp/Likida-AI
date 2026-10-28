@@ -39,7 +39,23 @@ function crearBuilder(tabla: string) {
   b.is = (c: string, v: unknown) => { l.is.push([c, v]); return b; };
   b.lt = (c: string, v: unknown) => { l.lt.push([c, v]); return b; };
   b.order = (c: string, o?: unknown) => { l.order.push([c, o]); return b; };
-  b.limit = (n: number) => { l.limite = n; return Promise.resolve(resp()); };
+  b.limit = (n: number) => {
+    l.limite = n;
+    const r = resp();
+    // A39-S23-01: la base filtra por estado ANTES del tope; el doble lo imita
+    // (si no, un doble que ignora el filtro es justo lo que oculta el defecto).
+    if (tabla === 'ticket_soporte' && Array.isArray(r.data) && (l.not.length || l.in.length)) {
+      const cerrados = new Set(['resuelto', 'cerrado']);
+      const filas = (r.data as Array<{ estado?: string }>).filter((f) => {
+        const esCerrado = cerrados.has(String(f.estado));
+        if (l.not.some(([c]) => c === 'estado')) return !esCerrado;
+        if (l.in.some(([c]) => c === 'estado')) return esCerrado;
+        return true;
+      }).slice(0, n);
+      return Promise.resolve({ ...r, data: filas });
+    }
+    return Promise.resolve(r);
+  };
   // `resolverTicketCruzado` (0268) termina en `.maybeSingle()`, no en
   // `.limit()`. Lee su propia entrada del mapa para no pisarse con la cola.
   b.maybeSingle = () => Promise.resolve(respuestas.get(`${tabla}#single`) ?? { data: null, error: null });
@@ -111,9 +127,9 @@ describe('getTicketsCruzados', () => {
   it('cruza tenants, aplana la flota y calcula el reloj de SLA contra el reloj inyectado', async () => {
     respuestas.set('ticket_soporte', { data: TICKETS, error: null });
     const r = await getTicketsCruzados(AHORA);
-    expect(r.map((t) => [t.id, t.horasRestantes])).toEqual([['tk1', -12], ['tk3', 24], ['tk2', null]]);
+    expect(r.map((t) => [t.id, t.horasRestantes])).toEqual([['tk1', -12], ['tk2', null], ['tk3', 24]]);
     expect(r[0].tenantNombre).toBe('Flota Demo SA de CV');
-    expect(r[2].tenantId).toBe('t2');
+    expect(r[1].tenantId).toBe('t2');
   });
 
   // 0268: SIN TOMAR no es lo mismo que "en proceso", y la cola lo dice con
@@ -148,6 +164,36 @@ describe('getTicketsCruzados', () => {
     respuestas.set('ticket_soporte', { data: [TICKETS[0]], error: null });
     await getTicketsCruzados(AHORA, { tenantId: 't1' });
     expect(llamadas.find((x) => x.tabla === 'ticket_soporte')!.eq).toEqual([['tenant_id', 't1']]);
+  });
+
+  // A39-S23-01: el tope de 200 se aplicaba a la tabla ENTERA y los cerrados
+  // (que conservan su vence_en pasado) desplazaban a los abiertos de la cola
+  // «más urgentes». Los abiertos van primero y el tope se aplica ya filtrado.
+  it('A39-S23-01: los abiertos se piden con su propio filtro y tope; los cerrados solo rellenan', async () => {
+    respuestas.set('ticket_soporte', { data: TICKETS, error: null });
+    const r = await getTicketsCruzados(AHORA);
+    const consultas = llamadas.filter((x) => x.tabla === 'ticket_soporte');
+    expect(consultas).toHaveLength(2);
+    expect(consultas[0].not).toEqual([['estado', 'in', '(resuelto,cerrado)']]);
+    expect(consultas[0].limite).toBe(TOPE_TICKETS);
+    // El relleno de cerrados pide solo lo que sobra del tope.
+    expect(consultas[1].in).toEqual([['estado', ['resuelto', 'cerrado']]]);
+    expect(consultas[1].limite).toBe(TOPE_TICKETS - 2);
+    expect(r.map((t) => t.id)).toEqual(['tk1', 'tk2', 'tk3']);
+  });
+
+  it('A39-S23-01: con la cola de abiertos llena no se leen cerrados', async () => {
+    const abiertos = Array.from({ length: 3 }, (_, i) => ({ ...TICKETS[0], id: `a${i}` }));
+    respuestas.set('ticket_soporte', { data: abiertos, error: null });
+    await getTicketsCruzados(AHORA, { limite: 3 });
+    expect(llamadas.filter((x) => x.tabla === 'ticket_soporte')).toHaveLength(1);
+  });
+
+  it('A39-S23-01: soloAbiertos no consulta cerrados nunca (bandeja de escalaciones)', async () => {
+    respuestas.set('ticket_soporte', { data: TICKETS, error: null });
+    const r = await getTicketsCruzados(AHORA, { soloAbiertos: true });
+    expect(llamadas.filter((x) => x.tabla === 'ticket_soporte')).toHaveLength(1);
+    expect(r.map((t) => t.estado)).not.toContain('resuelto');
   });
 
   it('el límite no puede subir por encima del tope, aunque lo pidan', async () => {
