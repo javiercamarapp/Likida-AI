@@ -18,6 +18,7 @@ import { acotada } from '../presupuesto';
 import { conteo, exigir, traerPorIds } from '../pg';
 import { leerConTope } from './lectura_paginada';
 import { logger } from '@/lib/logger';
+import { hoyMx } from '@/lib/formato';
 import { aBuffer } from './bytes';
 import type { Extraccion } from './campos';
 import type { ResultadoValidacion } from './validacion';
@@ -1312,7 +1313,7 @@ export async function leerSalidasParaSinCcp(tenantId: string, ahora: Date = new 
   if (opciones.viajesDelTms) {
     // Sin hitos de A5 la salida es la fecha de inicio del viaje (día en hora de México). El hito, si existe, manda.
     const rv = await leerConTope<Fila>((d, h, primera) => acotada(supabaseAdmin().from('viaje').select('id, fecha_inicio', conteo(primera ? 0 : 1))
-      .eq('tenant_id', tenantId).gte('fecha_inicio', desde.slice(0, 10)).order('fecha_inicio', { ascending: false }).order('id').range(d, h), 'cpdocs.sin_ccp_viajes_fecha') as never, TOPE_SALIDAS_SIN_CCP);
+      .eq('tenant_id', tenantId).gte('fecha_inicio', hoyMx(new Date(ahora.getTime() - DIAS_SALIDAS_SIN_CCP * 86_400_000))).order('fecha_inicio', { ascending: false }).order('id').range(d, h), 'cpdocs.sin_ccp_viajes_fecha') as never, TOPE_SALIDAS_SIN_CCP);
     for (const v of (exigir(rv, 'cpdocs.sin_ccp_viajes_fecha') ?? []) as unknown as Fila[]) {
       const id = s(v.id); const f = s(v.fecha_inicio);
       if (!id || !f || salidaPorViaje.has(id)) continue;

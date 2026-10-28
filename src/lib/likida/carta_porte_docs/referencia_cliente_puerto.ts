@@ -11,6 +11,7 @@ import { acotada } from '@/lib/likida/presupuesto';
 import { conteo, exigir } from '@/lib/likida/pg';
 import { leerConTope } from './lectura_paginada';
 import { logger } from '@/lib/logger';
+import { hoyMx } from '@/lib/formato';
 import { tablaAusente } from './repo';
 import { leerReferencia, type ClienteRef, type ReglaReferencia, type ViajeReferencia } from './referencia_cliente';
 
@@ -44,7 +45,7 @@ export async function cargarInsumosReferencia(tenantId: string, opciones: { viaj
   let truncado = rHito.truncado;
   if (opciones.viajesDelTms) {
     // OLA1-A3: bajo `cinco_agentes` no hay hito de carga (A5 apagado): la carga es el inicio del viaje en el TMS (día en hora de México).
-    const desde = new Date(Date.now() - 45 * 86_400_000).toISOString().slice(0, 10);
+    const desde = hoyMx(new Date(Date.now() - 45 * 86_400_000));
     const rv = await leerConTope<{ id: string; fecha_inicio: string | null }>((d, h, primera) => acotada(
       supabaseAdmin().from('viaje').select('id, fecha_inicio', conteo(primera ? 0 : 1)).eq('tenant_id', tenantId).gte('fecha_inicio', desde)
         .order('fecha_inicio', { ascending: false }).order('id').range(d, h),

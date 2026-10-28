@@ -69,7 +69,6 @@ const FORMAS_PROHIBIDAS_EN_ASUNTO = [
   /\d{6,}/,
   /[$€]\s*\d|\d\s*(?:mxn|usd|pesos)\b/i,
   /https?:\/\//i,
-  // eslint-disable-next-line no-control-regex
   /[\u0000-\u001f\u007f]/,
 ];
 
