@@ -1852,20 +1852,64 @@ export async function leerConfigPeajes(tenantId: string): Promise<ConfigPeajesVi
 export type TipoAvisoPeajes = 'plazo' | 'recordatorio_archivo';
 
 /**
- * Reserva el sello de un aviso: `true` solo para QUIEN lo insertó (la llave primaria `(flota, tipo, clave)` es el compare-and-set;
- * `ignoreDuplicates` = ON CONFLICT DO NOTHING). `false` = ya se dio o lo reservó otro proceso. Lanza ante error de base.
+ * SELLO DE DOS FASES (sin cambiar la tabla de la 0937): un aviso tiene dos filas posibles en `peaje_aviso_enviado`:
+ *   · `<clave>#r` = RESERVA con vencimiento (`LEASE_RESERVA_AVISO_MS`): «alguien lo está enviando». Si el proceso muere entre
+ *     reservar y enviar, la reserva VENCE y el siguiente barrido la toma y reintenta (el aviso no se pierde).
+ *   · `<clave>`   = DEFINITIVO: el aviso ya salió (lo escribe `confirmarAvisoPeajes` después de un envío exitoso).
+ * Peor caso: si el proceso muere DESPUÉS de enviar y ANTES de confirmar, el aviso se repite una vez al vencer la reserva (un aviso
+ * repetido es preferible a un plazo de reclamo que se vence sin avisar).
  */
-export async function reservarAvisoPeajes(tenantId: string, tipo: TipoAvisoPeajes, clave: string): Promise<boolean> {
-  const { data, error } = await acotada(supabaseAdmin().from('peaje_aviso_enviado')
-    .upsert({ tenant_id: tenantId, tipo, clave }, { onConflict: 'tenant_id,tipo,clave', ignoreDuplicates: true }).select('clave'), 'peajes.aviso_reservar');
-  if (error) throw new Error(`reservarAvisoPeajes: ${error.message}`);
-  return Array.isArray(data) && data.length > 0;
+export const LEASE_RESERVA_AVISO_MS = 10 * 60_000;
+const SUFIJO_RESERVA_AVISO = '#r';
+
+/**
+ * Reserva el aviso: `true` solo para QUIEN lo reservó (la llave primaria `(flota, tipo, clave)` es el compare-and-set;
+ * `ignoreDuplicates` = ON CONFLICT DO NOTHING). `false` = ya se dio (definitivo) o lo tiene reservado otro proceso con la reserva
+ * vigente. Una reserva VENCIDA se toma (borrado condicionado al mismo `creado_en`, así dos procesos no la toman a la vez).
+ * Lanza ante error de base.
+ */
+export async function reservarAvisoPeajes(tenantId: string, tipo: TipoAvisoPeajes, clave: string, ahora: Date = new Date()): Promise<boolean> {
+  const dado = await acotada(supabaseAdmin().from('peaje_aviso_enviado').select('clave')
+    .eq('tenant_id', tenantId).eq('tipo', tipo).eq('clave', clave).maybeSingle(), 'peajes.aviso_dado');
+  if (dado.error) throw new Error(`reservarAvisoPeajes: ${dado.error.message}`);
+  if (dado.data) return false;
+  const claveReserva = `${clave}${SUFIJO_RESERVA_AVISO}`;
+  const reservar = async (): Promise<boolean> => {
+    const { data, error } = await acotada(supabaseAdmin().from('peaje_aviso_enviado')
+      .upsert({ tenant_id: tenantId, tipo, clave: claveReserva, creado_en: ahora.toISOString() }, { onConflict: 'tenant_id,tipo,clave', ignoreDuplicates: true }).select('clave'), 'peajes.aviso_reservar');
+    if (error) throw new Error(`reservarAvisoPeajes: ${error.message}`);
+    return Array.isArray(data) && data.length > 0;
+  };
+  if (await reservar()) return true;
+  // Ya hay una reserva: ¿venció?
+  const previa = await acotada(supabaseAdmin().from('peaje_aviso_enviado').select('creado_en')
+    .eq('tenant_id', tenantId).eq('tipo', tipo).eq('clave', claveReserva).maybeSingle(), 'peajes.aviso_reserva_previa');
+  if (previa.error) throw new Error(`reservarAvisoPeajes: ${previa.error.message}`);
+  const creado = previa.data ? String((previa.data as Record<string, unknown>).creado_en ?? '') : '';
+  const edad = ahora.getTime() - new Date(creado).getTime();
+  if (!previa.data || (Number.isFinite(edad) && edad < LEASE_RESERVA_AVISO_MS)) return false;
+  const tomada = await acotada(supabaseAdmin().from('peaje_aviso_enviado').delete()
+    .eq('tenant_id', tenantId).eq('tipo', tipo).eq('clave', claveReserva).eq('creado_en', creado).select('clave'), 'peajes.aviso_tomar_vencida');
+  if (tomada.error) throw new Error(`reservarAvisoPeajes: ${tomada.error.message}`);
+  if (!Array.isArray(tomada.data) || tomada.data.length === 0) return false; // otro proceso la tomó primero
+  return reservar();
 }
 
-/** Devuelve el sello cuando el envío falló, para que el siguiente barrido reintente. Lanza ante error de base. */
+/** Marca el aviso como DADO (definitivo) y suelta la reserva. Idempotente. Lanza ante error de base. */
+export async function confirmarAvisoPeajes(tenantId: string, tipo: TipoAvisoPeajes, clave: string, ahora: Date = new Date()): Promise<void> {
+  const { error } = await acotada(supabaseAdmin().from('peaje_aviso_enviado')
+    .upsert({ tenant_id: tenantId, tipo, clave, creado_en: ahora.toISOString() }, { onConflict: 'tenant_id,tipo,clave', ignoreDuplicates: true }), 'peajes.aviso_confirmar');
+  if (error) throw new Error(`confirmarAvisoPeajes: ${error.message}`);
+  const suelta = await acotada(supabaseAdmin().from('peaje_aviso_enviado').delete()
+    .eq('tenant_id', tenantId).eq('tipo', tipo).eq('clave', `${clave}${SUFIJO_RESERVA_AVISO}`), 'peajes.aviso_confirmar_soltar');
+  // Si no se pudo soltar la reserva no importa: el definitivo manda y la reserva vencida no se vuelve a tomar.
+  if (suelta.error) logger.warn('peajes.aviso_confirmar_soltar', { tenant: tenantId, tipo, codigo: codigoDeError(new Error(suelta.error.message)) });
+}
+
+/** Suelta la RESERVA (no toca un definitivo) cuando el envío falló, para que el siguiente barrido reintente. Lanza ante error de base. */
 export async function liberarAvisoPeajes(tenantId: string, tipo: TipoAvisoPeajes, clave: string): Promise<void> {
   const { error } = await acotada(supabaseAdmin().from('peaje_aviso_enviado')
-    .delete().eq('tenant_id', tenantId).eq('tipo', tipo).eq('clave', clave), 'peajes.aviso_liberar');
+    .delete().eq('tenant_id', tenantId).eq('tipo', tipo).eq('clave', `${clave}${SUFIJO_RESERVA_AVISO}`), 'peajes.aviso_liberar');
   if (error) throw new Error(`liberarAvisoPeajes: ${error.message}`);
 }
 

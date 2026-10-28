@@ -26,6 +26,25 @@ describe('sello de avisos (peaje_aviso_enviado, 0937)', () => {
     expect(db.tablas.peaje_aviso_enviado.map((x) => x.tenant_id)).toEqual([OTRO]);
     expect(await R.reservarAvisoPeajes(T, 'plazo', 'd1:30')).toBe(true);
   });
+  it('sello de dos fases: confirmar lo vuelve definitivo y soltar una reserva no toca un aviso ya dado', async () => {
+    const t0 = new Date('2026-10-15T18:00:00Z');
+    expect(await R.reservarAvisoPeajes(T, 'plazo', 'd1:30', t0)).toBe(true);
+    await R.confirmarAvisoPeajes(T, 'plazo', 'd1:30', t0);
+    await R.confirmarAvisoPeajes(T, 'plazo', 'd1:30', t0); // idempotente
+    expect(db.tablas.peaje_aviso_enviado.map((x) => x.clave)).toEqual(['d1:30']); // la reserva se soltó, queda el definitivo
+    expect(await R.reservarAvisoPeajes(T, 'plazo', 'd1:30', new Date(t0.getTime() + 3_600_000))).toBe(false);
+    await R.liberarAvisoPeajes(T, 'plazo', 'd1:30');
+    expect(db.tablas.peaje_aviso_enviado.map((x) => x.clave)).toEqual(['d1:30']);
+  });
+  it('si el proceso muere tras reservar y antes de enviar, la reserva VENCE y el siguiente barrido la toma (el aviso no se pierde)', async () => {
+    const t0 = new Date('2026-10-15T18:00:00Z');
+    expect(await R.reservarAvisoPeajes(T, 'plazo', 'd1:30', t0)).toBe(true); // …y el proceso muere aquí
+    expect(await R.reservarAvisoPeajes(T, 'plazo', 'd1:30', new Date(t0.getTime() + 60_000))).toBe(false); // reserva vigente: otro proceso no lo duplica
+    const tarde = new Date(t0.getTime() + R.LEASE_RESERVA_AVISO_MS + 1);
+    expect(await R.reservarAvisoPeajes(T, 'plazo', 'd1:30', tarde)).toBe(true);   // vencida: se toma
+    expect(await R.reservarAvisoPeajes(T, 'plazo', 'd1:30', tarde)).toBe(false);  // y de nuevo vigente
+    expect(db.tablas.peaje_aviso_enviado).toHaveLength(1);
+  });
   it('un error de base lanza (no se confunde con «ya avisado»)', async () => {
     db.fallar('peaje_aviso_enviado.upsert', 'boom');
     await expect(R.reservarAvisoPeajes(T, 'plazo', 'x')).rejects.toThrow(/reservarAvisoPeajes/);

@@ -4,7 +4,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 vi.mock('@/lib/observability/sentry', () => ({ codigoDeError: () => 'cod' }));
 vi.mock('@/lib/env', () => ({ appUrl: () => 'https://app.likida.ai' }));
 
-const { barrerAvisosPeajes, soloReclamablesAlProveedor } = await import('./aviso_barrido');
+const { barrerAvisosPeajes, soloReclamablesAlProveedor, rotarFlotas, MAX_FLOTAS_POR_CORRIDA, MINUTOS_ENTRE_CORRIDAS } = await import('./aviso_barrido');
 const { CONFIG_AVISOS_DEFAULT } = await import('./config_avisos');
 import type { DepsBarrido } from './aviso_barrido';
 import type { CanalAvisoPeajes } from './aviso_canal';
@@ -122,5 +122,95 @@ describe('soloReclamablesAlProveedor', () => {
   it('deja fuera lo interno de la flota (unidad inmovilizada, caseta prohibida) y conserva lo que sí se reclama al proveedor', () => {
     const r = soloReclamablesAlProveedor([{ categoria: 'clase_fuera_de_3_5' }, { categoria: 'tag_dado_de_baja' }, { categoria: 'unidad_inmovilizada' }, { categoria: 'caseta_no_debe_cruzarse' }]);
     expect(r.map((x) => x.categoria)).toEqual(['clase_fuera_de_3_5', 'tag_dado_de_baja']);
+  });
+});
+
+describe('barrido: rotación de flotas y sello de dos fases (M4)', () => {
+  const nFlotas = (n: number) => Array.from({ length: n }, (_, i) => ({ ...flota({ aviso_plazo: true }), tenantId: `t-${String(i).padStart(2, '0')}` }));
+
+  it('con más flotas que el tope, corridas CONSECUTIVAS atienden a todas (ninguna queda sin evaluar para siempre)', async () => {
+    for (const n of [6, 7, 11, 23]) {
+      const atendidas = new Set<string>();
+      const flotas = nFlotas(n);
+      for (let k = 0; k < n; k++) {
+        const ahora = new Date(HOY.getTime() + k * MINUTOS_ENTRE_CORRIDAS * 60_000);
+        const vistas: string[] = [];
+        const { deps } = armar({
+          flotas: async () => flotas, ahora: () => ahora, desgloses: async (t) => { vistas.push(t); return []; },
+        });
+        const r = await barrerAvisosPeajes(deps);
+        expect(r.flotas).toBe(MAX_FLOTAS_POR_CORRIDA);
+        expect(r.flotasConAvisos).toBe(n);
+        expect(r.sinEvaluar).toBe(n - MAX_FLOTAS_POR_CORRIDA);
+        vistas.forEach((v) => atendidas.add(v));
+      }
+      expect(atendidas.size).toBe(n);
+    }
+  });
+
+  it('rotarFlotas: orden estable por flota, sin cambios si caben en el tope, y la ventana siguiente arranca traslapada', () => {
+    const f = nFlotas(8);
+    expect(rotarFlotas(f.slice(0, 3), HOY).map((x) => x.tenantId)).toEqual(['t-00', 't-01', 't-02']);
+    const a = rotarFlotas([...f].reverse(), HOY).map((x) => x.tenantId);
+    const b = rotarFlotas(f, HOY).map((x) => x.tenantId);
+    expect(a).toEqual(b); // no depende del orden en que llegan
+    const sig = rotarFlotas(f, new Date(HOY.getTime() + MINUTOS_ENTRE_CORRIDAS * 60_000)).map((x) => x.tenantId);
+    const aTope = b.slice(0, MAX_FLOTAS_POR_CORRIDA);
+    expect(sig.slice(0, MAX_FLOTAS_POR_CORRIDA).filter((x) => aTope.includes(x)).length).toBeGreaterThan(0); // traslape
+  });
+
+  it('el presupuesto de tiempo corta, pero lo cortado se cuenta como sin evaluar', async () => {
+    const { deps } = armar({ flotas: async () => nFlotas(3) });
+    const r = await barrerAvisosPeajes(deps, { venceEn: Date.now() - 1 });
+    expect(r.flotas).toBe(0);
+    expect(r.sinEvaluar).toBe(3);
+  });
+
+  it('con sello de dos fases: si el proceso muere antes de enviar la reserva vence y el aviso sale en el siguiente barrido; tras enviar queda definitivo', async () => {
+    const reservas = new Map<string, number>();   // clave → hora de la reserva
+    const dados = new Set<string>();
+    let reloj = HOY.getTime();
+    const LEASE = 10 * 60_000;
+    let muereAlEnviar = true;
+    const enviados: string[] = [];
+    const canal: CanalAvisoPeajes = {
+      nombre: 'prueba', destinatario: async () => '5215500000000',
+      enviar: async (_d, a) => { if (muereAlEnviar) throw new Error('el proceso murió'); enviados.push(a.tipo); return true; },
+    };
+    const { deps } = armar({
+      flotas: async () => [flota({ aviso_plazo: true })], canales: [canal], ahora: () => new Date(reloj),
+      reservar: async (t, tipo, c) => {
+        const k = `${t}|${tipo}|${c}`;
+        if (dados.has(k)) return false;
+        const previa = reservas.get(k);
+        if (previa !== undefined && reloj - previa < LEASE) return false;
+        reservas.set(k, reloj); return true;
+      },
+      liberar: async (t, tipo, c) => { if (muereAlEnviar) throw new Error('el proceso murió antes de liberar'); reservas.delete(`${t}|${tipo}|${c}`); },
+      confirmar: async (t, tipo, c) => { dados.add(`${t}|${tipo}|${c}`); reservas.delete(`${t}|${tipo}|${c}`); },
+    });
+    const r1 = await barrerAvisosPeajes(deps);          // el envío revienta: aviso NO enviado
+    expect(enviados).toHaveLength(0);
+    expect(r1.plazo.enviados).toBe(0);
+    muereAlEnviar = false;
+    reloj += 60_000;                                    // 1 min después: la reserva (si quedó) sigue vigente
+    await barrerAvisosPeajes(deps);
+    expect(enviados).toHaveLength(0);                   // la reserva huérfana aún está vigente: no se duplica
+    reloj += LEASE + 1;                                 // vencida (o liberada): sale
+    const r3 = await barrerAvisosPeajes(deps);
+    expect(enviados).toEqual(['plazo']);
+    expect(r3.plazo.enviados).toBe(1);
+    reloj += 3_600_000;
+    const r4 = await barrerAvisosPeajes(deps);          // ya definitivo: no se repite
+    expect(r4.plazo.enviados).toBe(0);
+    expect(enviados).toEqual(['plazo']);
+  });
+
+  it('un fallo al confirmar NO convierte un envío exitoso en fallido ni lanza', async () => {
+    const { deps, enviados } = armar({ confirmar: async () => { throw new Error('caída'); } });
+    const r = await barrerAvisosPeajes(deps);
+    expect(r.plazo.enviados).toBe(1);
+    expect(r.plazo.fallidos).toBe(0);
+    expect(enviados.some((e) => e.tipo === 'plazo')).toBe(true);
   });
 });

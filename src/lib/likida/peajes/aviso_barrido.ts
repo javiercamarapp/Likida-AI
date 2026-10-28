@@ -39,6 +39,12 @@ export interface DepsBarrido {
   candidatosDeDesglose: (tenantId: string, desgloseId: string) => Promise<CandidatoPlazo[]>;
   reservar: (tenantId: string, tipo: TipoAvisoPeajes, clave: string) => Promise<boolean>;
   liberar: (tenantId: string, tipo: TipoAvisoPeajes, clave: string) => Promise<void>;
+  /**
+   * Marca el aviso como DADO (definitivo) tras un envío exitoso. Con el sello de dos fases (`reservar` = reserva con vencimiento) un
+   * proceso que muere antes de enviar NO pierde el aviso: la reserva vence y el siguiente barrido reintenta. Opcional: sin él,
+   * `reservar` es el sello definitivo (comportamiento anterior, usado por las pruebas puras).
+   */
+  confirmar?: (tenantId: string, tipo: TipoAvisoPeajes, clave: string) => Promise<void>;
   canales: readonly CanalAvisoPeajes[];
   liga: () => string;
   ahora: () => Date;
@@ -50,6 +56,10 @@ export interface ResumenBarridoAvisos {
   recordatorios: { enviados: number; sinDestinatario: number; fallidos: number; yaRecordados: number };
   /** Flotas que no se pudieron evaluar (lectura fallida). Vuelve «parcial» el latido. */
   fallidas: number;
+  /** Flotas con avisos encendidos que ESTA corrida no alcanzó a evaluar (tope por corrida o presupuesto de tiempo): la rotación las atiende en las siguientes. */
+  sinEvaluar: number;
+  /** Cuántas flotas con avisos encendidos hay en total. */
+  flotasConAvisos: number;
 }
 
 const vacioPlazo = (): ResumenAvisoPlazo => ({ enviados: 0, yaAvisados: 0, sinDestinatario: 0, fallidos: 0, vencidosCruces: 0, vencidosMonto: 0 });
@@ -59,8 +69,26 @@ export function soloReclamablesAlProveedor<T extends { categoria: string }>(cand
   return candidatos.filter((c) => !esCategoriaInterna(c.categoria));
 }
 
+/** Cada cuántos minutos corre el cron de peajes (vercel.json): la ventana de la rotación. */
+export const MINUTOS_ENTRE_CORRIDAS = 15;
+
+/**
+ * Rota la lista de flotas para que NINGUNA se quede sin atender cuando hay más que el tope por corrida (o el presupuesto de tiempo
+ * corta a las últimas). Sin estado en la base: la posición inicial avanza con el reloj, `ventana × paso` flotas por corrida, con
+ * `paso = ⌊tope/2⌋`: los bloques de corridas consecutivas SE TRASLAPAN a la mitad, así una flota que quedó al final de un bloque
+ * cortado por tiempo abre el siguiente. Orden base estable por `tenantId`. Pura.
+ */
+export function rotarFlotas<T extends { tenantId: string }>(flotas: readonly T[], ahora: Date, tope: number = MAX_FLOTAS_POR_CORRIDA): T[] {
+  const base = [...flotas].sort((a, b) => (a.tenantId < b.tenantId ? -1 : a.tenantId > b.tenantId ? 1 : 0));
+  if (base.length <= 1 || base.length <= tope) return base;
+  const ventana = Math.floor(ahora.getTime() / (MINUTOS_ENTRE_CORRIDAS * 60_000));
+  const paso = Math.max(1, Math.floor(tope / 2));
+  const inicio = (ventana * paso) % base.length;
+  return [...base.slice(inicio), ...base.slice(0, inicio)];
+}
+
 export async function barrerAvisosPeajes(deps: DepsBarrido, opciones: { limiteFlotas?: number; venceEn?: number } = {}): Promise<ResumenBarridoAvisos> {
-  const r: ResumenBarridoAvisos = { flotas: 0, plazo: vacioPlazo(), recordatorios: { enviados: 0, sinDestinatario: 0, fallidos: 0, yaRecordados: 0 }, fallidas: 0 };
+  const r: ResumenBarridoAvisos = { flotas: 0, plazo: vacioPlazo(), recordatorios: { enviados: 0, sinDestinatario: 0, fallidos: 0, yaRecordados: 0 }, fallidas: 0, sinEvaluar: 0, flotasConAvisos: 0 };
   let flotas: FlotaConAvisos[];
   try { flotas = await deps.flotas(); } catch (e) {
     r.fallidas++;
@@ -68,8 +96,10 @@ export async function barrerAvisosPeajes(deps: DepsBarrido, opciones: { limiteFl
     return r;
   }
   const hoyFecha = hoyMx(deps.ahora());
-  for (const f of flotas.slice(0, opciones.limiteFlotas ?? MAX_FLOTAS_POR_CORRIDA)) {
-    if (opciones.venceEn !== undefined && Date.now() >= opciones.venceEn) break;
+  const tope = opciones.limiteFlotas ?? MAX_FLOTAS_POR_CORRIDA;
+  r.flotasConAvisos = flotas.length;
+  for (const f of rotarFlotas(flotas, deps.ahora(), tope)) {
+    if (r.flotas >= tope || (opciones.venceEn !== undefined && Date.now() >= opciones.venceEn)) break;
     r.flotas++;
     const destinatario = async (tenantId: string): Promise<string | null> => {
       for (const c of deps.canales) { const d = await c.destinatario(tenantId); if (d) return d; }
@@ -83,13 +113,19 @@ export async function barrerAvisosPeajes(deps: DepsBarrido, opciones: { limiteFl
 
       if (f.avisos.interruptores.recordatorio_archivo) {
         const cobertura: DesgloseCobertura[] = desgloses.map((d) => ({ periodoDesde: d.periodoDesde, periodoHasta: d.periodoHasta }));
+        let claveR = '';
         const depsR: DepsRecordatorio = {
-          reservar: (t, decena) => deps.reservar(t, 'recordatorio_archivo', decena),
+          reservar: (t, decena) => { claveR = decena; return deps.reservar(t, 'recordatorio_archivo', decena); },
           liberar: (t, decena) => deps.liberar(t, 'recordatorio_archivo', decena),
           telefono: destinatario,
-          enviar: async (_tel, texto) => (await enviarPorCanales(deps.canales, {
-            tenantId: f.tenantId, tipo: 'recordatorio_archivo', texto, resumen: 'falta el archivo de cobros de la decena', liga: deps.liga(),
-          })) === 'enviado',
+          enviar: async (_tel, texto) => {
+            const ok = (await enviarPorCanales(deps.canales, {
+              tenantId: f.tenantId, tipo: 'recordatorio_archivo', texto, resumen: 'falta el archivo de cobros de la decena', liga: deps.liga(),
+            })) === 'enviado';
+            // Un fallo al confirmar NO convierte el envío en fallido (ya salió): la reserva vence y, peor caso, el aviso se repite una vez.
+            if (ok && deps.confirmar) { try { await deps.confirmar(f.tenantId, 'recordatorio_archivo', claveR); } catch (e) { logger.error('cron.peajes.avisos_confirmar_fallo', { tenant: f.tenantId, codigo: codigoDeError(e) }); } }
+            return ok;
+          },
           liga: deps.liga,
         };
         const res = await recordarArchivoDecenal(f.tenantId, deps.ahora(), cobertura, { activo: true, diasGracia: f.avisos.recordatorio.diasGracia }, depsR);
@@ -101,13 +137,18 @@ export async function barrerAvisosPeajes(deps: DepsBarrido, opciones: { limiteFl
         for (const d of desgloses.slice(0, MAX_DESGLOSES_PLAZO_POR_FLOTA)) {
           candidatos.push(...await deps.candidatosDeDesglose(f.tenantId, d.id));
         }
+        let claveP = '';
         const depsP: DepsAvisoPlazo = {
-          reservar: (t, desgloseId, umbral) => deps.reservar(t, 'plazo', `${desgloseId}:${umbral}`),
+          reservar: (t, desgloseId, umbral) => { claveP = `${desgloseId}:${umbral}`; return deps.reservar(t, 'plazo', claveP); },
           liberar: (t, desgloseId, umbral) => deps.liberar(t, 'plazo', `${desgloseId}:${umbral}`),
           telefono: destinatario,
-          enviar: async (_tel, texto) => (await enviarPorCanales(deps.canales, {
-            tenantId: f.tenantId, tipo: 'plazo', texto, resumen: 'cobros sin reclamar por vencer su plazo', liga: deps.liga(),
-          })) === 'enviado',
+          enviar: async (_tel, texto) => {
+            const ok = (await enviarPorCanales(deps.canales, {
+              tenantId: f.tenantId, tipo: 'plazo', texto, resumen: 'cobros sin reclamar por vencer su plazo', liga: deps.liga(),
+            })) === 'enviado';
+            if (ok && deps.confirmar) { try { await deps.confirmar(f.tenantId, 'plazo', claveP); } catch (e) { logger.error('cron.peajes.avisos_confirmar_fallo', { tenant: f.tenantId, codigo: codigoDeError(e) }); } }
+            return ok;
+          },
           liga: deps.liga,
         };
         const p = await avisarPlazosReclamo(f.tenantId, candidatos, deps.ahora(), depsP, { meses: f.avisos.plazo.meses, avisoDias: f.avisos.plazo.avisoDias });
@@ -119,6 +160,8 @@ export async function barrerAvisosPeajes(deps: DepsBarrido, opciones: { limiteFl
       logger.error('cron.peajes.avisos_barrido_fallo', { tenant: f.tenantId, paso: 'flota', codigo: codigoDeError(e) });
     }
   }
+  r.sinEvaluar = Math.max(0, r.flotasConAvisos - r.flotas);
+  if (r.sinEvaluar > 0) logger.info('cron.peajes.avisos_barrido_sin_evaluar', { sinEvaluar: r.sinEvaluar, flotasConAvisos: r.flotasConAvisos });
   return r;
 }
 
@@ -158,6 +201,7 @@ export async function depsBarridoReales(): Promise<DepsBarrido> {
     },
     reservar: repo.reservarAvisoPeajes,
     liberar: repo.liberarAvisoPeajes,
+    confirmar: repo.confirmarAvisoPeajes,
     canales: [canalWhatsAppPeajes(telefonoPorFlota)],
     liga: () => `${appUrl()}/dashboard/agentes/peajes`,
     ahora: () => new Date(),
