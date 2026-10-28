@@ -181,7 +181,10 @@
 .rv-tour__accion strong { color: var(--ink); font-weight: 600; }
 .rv-tour__nota { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
 .rv-tour__pie { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--line); }
-.rv-tour__izq, .rv-tour__der { display: flex; align-items: center; gap: 6px; }
+.rv-tour__izq, .rv-tour__der { display: flex; align-items: center; gap: 4px; }
+.rv-tour__enlace { padding: 0; border: 0; background: none; font: inherit; color: var(--ink); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.rv-tour__enlace:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 2px; }
+.rv-tour__globo[data-lado="hoja"] .rv-tour__pie { position: sticky; bottom: 0; background: var(--surface); }
 
 @media (prefers-reduced-motion: no-preference) {
   .rv-tour__velo { animation: rv-fade var(--ui-motion) var(--ui-ease) both; }
@@ -190,5 +193,5 @@
 }
 /* Paso de acción: aro más ancho (distinción estática, sin pulso). */
 .rv-tour__halo[data-espera] {
-  box-shadow: 0 0 0 2px var(--marca, var(--ink)), 0 0 0 7px color-mix(in srgb, var(--marca, var(--ink)) 22%, transparent);
+  box-shadow: 0 0 0 2px var(--marca, var(--ink)), 0 0 0 6px color-mix(in srgb, var(--marca, var(--ink)) 18%, transparent);
 }

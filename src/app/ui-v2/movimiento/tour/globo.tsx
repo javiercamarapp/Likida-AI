@@ -74,7 +74,12 @@ export function GloboTour({ snap, col, refGlobo, onSiguiente, onAtras, onSaltar,
       {snap.anclaLista === false ? (
         <p className="rv-tour__nota" role="status">No vemos ese elemento en pantalla ahora. Sigue las indicaciones de arriba y avanza cuando quieras.</p>
       ) : null}
-      {accion && snap.anclaLista ? <p className="rv-tour__nota">Avanzamos solos cuando lo hagas, o aprieta «Siguiente».</p> : null}
+      {accion && snap.anclaLista ? (
+        <p className="rv-tour__nota">
+          Avanzamos solos cuando lo hagas, o aprieta «Siguiente».
+          {onIrAlElemento ? <> <button type="button" className="rv-tour__enlace" onClick={onIrAlElemento}>Ir al elemento</button></> : null}
+        </p>
+      ) : null}
 
       <div className="rv-tour__pie">
         <div className="rv-tour__izq">
@@ -82,9 +87,6 @@ export function GloboTour({ snap, col, refGlobo, onSiguiente, onAtras, onSaltar,
           <Boton variante="ghost" tamano="sm" onClick={onMasTarde}>Más tarde</Boton>
         </div>
         <div className="rv-tour__der">
-          {accion && snap.anclaLista && onIrAlElemento ? (
-            <Boton variante="secondary" tamano="sm" onClick={onIrAlElemento}>Ir al elemento</Boton>
-          ) : null}
           {!snap.esPrimero ? <Boton variante="secondary" tamano="sm" onClick={onAtras}>Atrás</Boton> : null}
           <Boton variante="primary" tamano="sm" onClick={onSiguiente} icono={snap.esUltimo ? undefined : <ArrowRight width={14} height={14} aria-hidden="true" />}>
             {snap.esUltimo ? 'Terminar' : 'Siguiente'}
