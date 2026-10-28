@@ -11,7 +11,8 @@
 --     WhatsApp a ese valor falla en vez de llegarle a un desconocido) y (b) ninguna consulta por teléfono real lo encuentra.
 --   · `operador_telefono_forma` (0290) gana UN brazo: ese marcador exacto. Todo lo demás (teléfono con forma, o fila anonimizada)
 --     sigue igual.
---   · Los dos índices únicos de teléfono (0024) se redefinen como PARCIALES que excluyen el marcador: sin esto todos los
+--   · Los dos índices únicos de teléfono (0024) se redefinen como PARCIALES que excluyen SOLO el marcador EXACTO `^sin-tel:[a-z]{20}$`
+--     (nunca un prefijo laxo: un `sin-tel:5215512345678` pasa el CHECK por su brazo de dígitos y debe seguir sujeto a la unicidad): sin esto todos los
 --     operadores sin teléfono colisionarían entre sí en '' (el fallo que la 0290 cerró). Para los teléfonos reales la unicidad es
 --     exactamente la de antes (mismo criterio, mismo nombre).
 --   · Índice único PARCIAL nuevo (flota, número de empleado) SOLO para filas con marcador: es lo que vuelve idempotente la alta
@@ -36,21 +37,21 @@ do $$
 begin
   if not exists (
     select 1 from pg_indexes
-     where schemaname = 'public' and indexname = 'uq_operador_telefono_activo' and indexdef like '%sin-tel%'
+     where schemaname = 'public' and indexname = 'uq_operador_telefono_activo' and indexdef like '%{20}%'
   ) then
     drop index if exists public.uq_operador_telefono_activo;
     create unique index uq_operador_telefono_activo
       on public.operador (public.telefono_normalizado(telefono))
-      where activo and telefono !~ '^sin-tel:';
+      where activo and telefono !~ '^sin-tel:[a-z]{20}$';
   end if;
   if not exists (
     select 1 from pg_indexes
-     where schemaname = 'public' and indexname = 'uq_operador_tenant_telefono_norm' and indexdef like '%sin-tel%'
+     where schemaname = 'public' and indexname = 'uq_operador_tenant_telefono_norm' and indexdef like '%{20}%'
   ) then
     drop index if exists public.uq_operador_tenant_telefono_norm;
     create unique index uq_operador_tenant_telefono_norm
       on public.operador (tenant_id, public.telefono_normalizado(telefono))
-      where telefono !~ '^sin-tel:';
+      where telefono !~ '^sin-tel:[a-z]{20}$';
   end if;
 end $$;
 
@@ -62,7 +63,7 @@ comment on index public.uq_operador_tenant_telefono_norm is
 -- ── 3. Alta idempotente por número de empleado, solo para los sin teléfono ──
 create unique index if not exists uq_operador_tenant_numero_empleado_sin_tel
   on public.operador (tenant_id, numero_empleado)
-  where telefono ~ '^sin-tel:' and numero_empleado is not null;
+  where telefono ~ '^sin-tel:[a-z]{20}$' and numero_empleado is not null;
 
 comment on index public.uq_operador_tenant_numero_empleado_sin_tel is
   '0932: un número de empleado = un operador SIN WhatsApp por flota (idempotencia de la alta por correo). No limita a los operadores con teléfono.';

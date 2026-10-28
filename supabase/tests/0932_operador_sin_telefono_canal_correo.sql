@@ -59,6 +59,16 @@ begin
     insert into public.operador (tenant_id, nombre, telefono, activo) values ('09320000-0000-4000-8000-0000000000a1', 'Mismo Tel 2', '5215500009321', false);
     raise exception 'FALLO: el mismo teléfono en la misma flota (aunque esté inactivo)';
   exception when unique_violation then null; end;
+  -- un «sin-tel:» CON dígitos NO es el marcador: normaliza al teléfono real y sigue sujeto a la unicidad (no escapa de los índices)
+  begin
+    insert into public.operador (tenant_id, nombre, telefono) values ('09320000-0000-4000-8000-0000000000b1', 'Prefijo con dígitos', 'sin-tel:5215500009321');
+    raise exception 'FALLO: «sin-tel:» con dígitos evadió la unicidad global de teléfono activo';
+  exception when unique_violation then null; end;
+  insert into public.operador (tenant_id, nombre, telefono) values ('09320000-0000-4000-8000-0000000000b1', 'Prefijo 1', 'sin-tel:5215500009322');
+  begin
+    insert into public.operador (tenant_id, nombre, telefono) values ('09320000-0000-4000-8000-0000000000b1', 'Prefijo 2', 'sin-tel:5215500009322');
+    raise exception 'FALLO: dos «sin-tel:<dígitos>» iguales en la misma flota';
+  exception when unique_violation then null; end;
   -- teléfono sin forma sigue rechazado
   begin
     insert into public.operador (tenant_id, nombre, telefono) values ('09320000-0000-4000-8000-0000000000a1', 'Corto', '123');
@@ -69,10 +79,10 @@ end $$;
 -- ── 3. Los índices son los esperados ────────────────────────────────────────
 do $$
 begin
-  if not exists (select 1 from pg_indexes where schemaname = 'public' and indexname = 'uq_operador_telefono_activo' and indexdef like '%sin-tel%' and indexdef like '%activo%') then
+  if not exists (select 1 from pg_indexes where schemaname = 'public' and indexname = 'uq_operador_telefono_activo' and indexdef like '%{20}%' and indexdef like '%activo%') then
     raise exception '0932: uq_operador_telefono_activo no excluye el marcador (o perdió el predicado de activos)';
   end if;
-  if not exists (select 1 from pg_indexes where schemaname = 'public' and indexname = 'uq_operador_tenant_telefono_norm' and indexdef like '%sin-tel%') then
+  if not exists (select 1 from pg_indexes where schemaname = 'public' and indexname = 'uq_operador_tenant_telefono_norm' and indexdef like '%{20}%') then
     raise exception '0932: uq_operador_tenant_telefono_norm no excluye el marcador';
   end if;
   if not exists (select 1 from pg_indexes where schemaname = 'public' and indexname = 'uq_operador_tenant_numero_empleado_sin_tel') then
