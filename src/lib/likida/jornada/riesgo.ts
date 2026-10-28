@@ -359,13 +359,18 @@ export function evaluarRiesgoSemana(
       const horasParciales = HORAS(minParciales);
       if (horasParciales > tope.ordinaria) {
         const extra = Math.round((horasParciales - tope.ordinaria) * 100) / 100;
+        // A37-ola9-N2: mismo umbral que la ruta completa: el exceso probado es rebasar ordinaria + extra, no solo la ordinaria. Entre
+        // ambos umbrales se emite la señal sin exceso (las horas extra dentro del tope legal no son infracción).
+        const rebasaExtra = extra > tope.extra;
         senales.push({
           clase: 'exceso_semanal',
-          esExceso: true,
+          esExceso: rebasaExtra,
           dice:
             `Los días medidos de la semana ya suman ${horasParciales} h contra las ${tope.ordinaria} h ordinarias que aplican en ${anio}: ` +
             `al menos ${extra} h por encima. Faltan datos de ${diasSinDato.length} día(s) (${diasSinDato.join(', ')}), ` +
-            'que solo pueden subir ese total: el exceso está probado aunque el total de la semana no se conozca.',
+            (rebasaExtra
+              ? `Rebasa también las ${tope.extra} h de horas extra de ese año, y los días faltantes solo pueden subir ese total: el exceso está probado aunque el total de la semana no se conozca.`
+              : `Todavía cabe en el tope de ${tope.extra} h de horas extra de ese año: con lo medido no se prueba un exceso, y los días faltantes impiden concluir.`),
           fundamento:
             'LFT art. 59 y Transitorios Segundo y Cuarto del decreto publicado en el DOF el 01-05-2026, ' +
             'que escalonan la jornada semanal y las horas extra por año calendario.',
