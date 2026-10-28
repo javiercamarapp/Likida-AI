@@ -13,6 +13,7 @@ import { SeccionReglasCobro, type ReglasCobroVista } from './reglas-cobro';
 import { SeccionTarifario, type TarifarioVista } from './tarifario';
 import { SeccionUmbralesAvisos, type UmbralesAvisosVista } from './umbrales-avisos';
 import { SeccionCruceViajes, type CruceViajesVista } from './cruce-viajes';
+import { SeccionInmovilizadas, type InmovilizadasConfigVista } from './inmovilizadas';
 
 type Accion = (fd: FormData) => Promise<void>;
 
@@ -59,7 +60,7 @@ const CSS_SECUNDARIO = 'hairline text-[12.5px] font-medium px-3 py-1.5 rounded-l
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--muted)' } as const;
 
 export function VistaConfiguracionPeajes({
-  sufijo, aviso, error, agenteApagado, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, archivos, tiposGeocerca, buzon, entradas, acciones, reglasCobro, tarifario, umbralesAvisos, cruceViajes, superficie,
+  sufijo, aviso, error, agenteApagado, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, archivos, tiposGeocerca, buzon, entradas, acciones, reglasCobro, tarifario, umbralesAvisos, cruceViajes, inmovilizadas, superficie,
 }: {
   sufijo: string;
   aviso: string | null;
@@ -85,6 +86,8 @@ export function VistaConfiguracionPeajes({
   umbralesAvisos?: UmbralesAvisosVista;
   /** Interruptor del cruce cobro ↔ viaje (por Icident). Opcional. */
   cruceViajes?: CruceViajesVista;
+  /** Ventanas de unidades inmovilizadas (carga y borrado). Opcional. */
+  inmovilizadas?: InmovilizadasConfigVista;
   /** T-A2-31: con perfil `cinco_agentes` no se pintan geocercas ni cursos (stand-by). Sin la prop: todo, como siempre. */
   superficie?: { gps: boolean; cursos: boolean };
 }) {
@@ -112,6 +115,7 @@ export function VistaConfiguracionPeajes({
           {tarifario && <SeccionTarifario datos={tarifario} />}
           {umbralesAvisos && <SeccionUmbralesAvisos datos={umbralesAvisos} />}
           {cruceViajes && <SeccionCruceViajes datos={cruceViajes} />}
+          {inmovilizadas && <SeccionInmovilizadas datos={inmovilizadas} />}
           <SeccionTags tags={tags} unidades={unidades} acciones={acciones} />
           <SeccionCasetas casetas={casetas} acciones={acciones} />
           {(superficie?.gps ?? true) && <SeccionGeocercas geocercas={geocercas} tipos={tiposGeocerca} acciones={acciones} />}

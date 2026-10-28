@@ -449,6 +449,18 @@ export async function importarInmovilizadasArchivo(tenantId: string, nombre: str
   return { ok: true, guardadas, actualizadas, rechazadas: todasRechazadas };
 }
 
+/** Quita UNA ventana de inmovilización de la flota (la captura equivocada). `false` si no existía o no se pudo borrar. */
+export async function quitarInmovilizada(tenantId: string, id: string): Promise<boolean> {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return false;
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_unidad_inmovilizada')
+    .delete().eq('tenant_id', tenantId).eq('id', id).select('id'), 'peajes.quitar_inmovilizada');
+  if (error) {
+    logger.error('peajes.quitar_inmovilizada', { tenant: tenantId, err: error.message });
+    return false;
+  }
+  return Array.isArray(data) && data.length > 0;
+}
+
 // ── Casetas ─────────────────────────────────────────────────────────────────
 export interface CasetaVista extends CasetaCatalogo { activa: boolean; fuente: string | null }
 

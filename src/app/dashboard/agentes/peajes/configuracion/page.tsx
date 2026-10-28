@@ -20,6 +20,7 @@ import {
   listarTarifas, confirmarTarifa, importarTarifasArchivo,
   leerConfigPeajes, guardarUmbralesPeajes, guardarConfigAvisos,
   leerVinculosActivo, guardarVinculosActivo, resumenFuenteViajes, vincularDesglose,
+  listarInmovilizadas, importarInmovilizadasArchivo, quitarInmovilizada,
   type ResultadoImportacionCatalogo,
 } from '@/lib/likida/peajes/datos';
 import { ORIGENES_TARIFA, type OrigenTarifa } from '@/lib/likida/peajes/tarifario_archivo';
@@ -123,9 +124,10 @@ export default async function PaginaConfiguracionPeajes({
 
   const superficie = await superficiePeajesDeTenant(tenantId);
   const secreto = secretoMaestro();
-  const [vinculosActivo, fuenteViajes, tarifas, configPeajes, reglasCasetas, tagsBaja, excepcionesUnidad, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, buzon, archivos, entradas] = await Promise.all([
+  const [vinculosActivo, fuenteViajes, inmovilizadas, tarifas, configPeajes, reglasCasetas, tagsBaja, excepcionesUnidad, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, buzon, archivos, entradas] = await Promise.all([
     safe(() => leerVinculosActivo(tenantId)),
     safe(() => resumenFuenteViajes(tenantId)),
+    safe(() => listarInmovilizadas(tenantId)),
     safe(() => listarTarifas(tenantId)),
     safe(() => leerConfigPeajes(tenantId)),
     safe(() => listarReglasCasetas(tenantId)),
@@ -461,6 +463,23 @@ export default async function PaginaConfiguracionPeajes({
     return volverConfig(sufijo, 'Cruce con viajes encendido, pero no se pudo recalcular el último archivo: se calculará con el siguiente corte.');
   }
 
+  // ── Unidades inmovilizadas (T-A2-36) ──
+  async function accionCargarInmovilizadas(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId);
+    if (no) return volverConfig(sufijo, `error:${no}`);
+    const a = await archivoDeForm(fd);
+    if (typeof a === 'string') return volverConfig(sufijo, `error:${a}`);
+    const r = await importarInmovilizadasArchivo(tenantId, (a as { nombre: string }).nombre, (a as { buffer: Uint8Array }).buffer);
+    return volverConfig(sufijo, resumenImportacion(r, 'ventanas de inmovilización'));
+  }
+  async function accionQuitarInmovilizada(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId);
+    if (no) return volverConfig(sufijo, `error:${no}`);
+    return volverConfig(sufijo, (await quitarInmovilizada(tenantId, String(fd.get('ventana') ?? ''))) ? 'Ventana quitada.' : 'error:No se pudo quitar la ventana (¿ya no existía?).');
+  }
+
   // ── Mapeo de columnas ──
   async function accionGuardarMapeo(fd: FormData) {
     'use server';
@@ -514,6 +533,7 @@ export default async function PaginaConfiguracionPeajes({
           guardarExcepcionUnidad: accionGuardarExcepcionUnidad, quitarExcepcionUnidad: accionQuitarExcepcionUnidad,
         },
       }}
+      inmovilizadas={{ ventanas: inmovilizadas, puedeEditar: puedeVerArea(rol, 'dinero'), acciones: { cargarInmovilizadas: accionCargarInmovilizadas, quitarInmovilizada: accionQuitarInmovilizada } }}
       cruceViajes={{ activo: vinculosActivo, fuente: fuenteViajes, puedeAdministrar, acciones: { guardarCruceViajes: accionGuardarCruceViajes } }}
       tarifario={{ tarifas, acciones: { importarTarifas: accionImportarTarifas, confirmarTarifa: accionConfirmarTarifa, sugerirPasada: accionSugerirPasada } }}
       umbralesAvisos={{
