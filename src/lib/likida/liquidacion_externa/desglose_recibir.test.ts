@@ -196,6 +196,10 @@ describe('recibirDesglose: idempotencia y correcciones', () => {
     expect(b.resueltas).toEqual(['BIT-T1-B-0001|correccion_pendiente']);
     expect(b.detallesEvento[1]).toMatchObject({ correccion_de: 'BIT-T1-B-0001', motivo_correccion: 'nómina corregida en origen', actor: 'llave:administracion' });
     expect(b.excepciones.filter((e) => e.tipo === 'correccion_pendiente')).toHaveLength(0);
+    // A39-A1-01: la corrección comparte bitácora, terminal y número con la original; los índices únicos de la base (0929) se
+    // distinguen por `correccionN`. La original no lo lleva (0); la corrección, su ordinal.
+    expect(b.desgloses[0].correccionN).toBeUndefined();
+    expect(b.desgloses[1]).toMatchObject({ bitacora: 'B-0001', terminal: 'T1', correccionN: 1 });
   });
 
   it('A37-A1-02: reintentar la MISMA corrección es idempotente; otra distinta es «-R2»', async () => {
@@ -212,6 +216,7 @@ describe('recibirDesglose: idempotencia y correcciones', () => {
     const r2 = await recibirDesglose(TENANT, c2, b.deps, op);
     expect(r2).toMatchObject({ estado: 'creada', claveExterna: 'BIT-T1-B-0001-R2' });
     expect(b.liquidaciones).toHaveLength(3);
+    expect(b.desgloses.map((d) => d.correccionN)).toEqual([undefined, 1, 2]);
   });
 
   it('A37-A1-02: sin la decisión de la persona la corrección sigue SIN enviarse (solo la excepción), y una bitácora nueva con «correccion» entra normal', async () => {

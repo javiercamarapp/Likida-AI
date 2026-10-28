@@ -194,7 +194,8 @@ describe('el seguimiento de reclamos de punta a punta', () => {
 
   it('A37-S53-03: anular el desglose marca sus reclamos y los saca de las sumas del seguimiento', async () => {
     const { id } = await subir('01 A 10 DE MARZO.xlsx', { filas: 500, inicio: '2026-03-01', extemporaneos: 5 });
-    await R.crearReclamoDeCategoria(T, { desgloseId: id, categoria: 'extemporaneo' });
+    // Enviado (A39-peajes-01: un reclamo solo preparado ya no suma como «reclamado»).
+    await R.crearReclamoDeCategoria(T, { desgloseId: id, categoria: 'extemporaneo', enviadoEn: '2026-03-11' });
     const vivo = await R.listarReclamos(T, '2026-03-12');
     expect(vivo.reclamos[0].desgloseAnulado).not.toBe(true);
     expect(vivo.resumen.montoReclamado).toBeGreaterThan(0);

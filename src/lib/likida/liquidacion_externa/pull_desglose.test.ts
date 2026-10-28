@@ -93,6 +93,10 @@ function banco(opciones: { falla?: (n: number) => boolean; fallaGuardarCursor?: 
       return { id, nueva: true };
     },
     excepcionesSinPoliza: async () => new Map(b.excepciones.filter((e) => e.tipo === 'sin_poliza' && !e.resuelta).map((e) => [e.clave, e.id] as const)),
+    desdeSinPolizaMasAntiguo: async () => {
+      const ts = b.excepciones.filter((e) => e.tipo === 'sin_poliza' && !e.resuelta).map((e) => Date.parse(String(e.detalle.desde))).filter((n) => Number.isFinite(n));
+      return ts.length > 0 ? new Date(Math.min(...ts)).toISOString() : null;
+    },
     resolverExcepcion: async (_t, id) => {
       const e = b.excepciones.find((x) => x.id === id && !x.resuelta);
       if (!e) return false;
@@ -214,6 +218,34 @@ describe('pullDesgloses: cursor, traslape e idempotencia', () => {
     expect(b.estado.cursor?.despuesDe).toBe(clave(11));
     // la página 1 (8 y 9) quedó antes del cursor: no lo hizo retroceder
     expect(b.guardados[0]).not.toHaveProperty('cursor');
+  });
+
+  // A39-A1-02: el cursor avanza por la fecha de inicio del periodo; una póliza que llega DÍAS después de que el cursor pasó no se
+  // detectaba con el traslape de 24 h. La relectura se amplía hasta la bitácora sin póliza más antigua (acotada a 14 días).
+  it('A39-A1-02: la póliza que llega 6 días tarde SÍ se recoge (la relectura llega hasta la bitácora sin póliza abierta)', async () => {
+    const b = banco();
+    const vieja = (poliza: string | null) => ({ modificadoEn: '2026-10-08T10:00:00Z', desglose: bitacora(1, { poliza, desde: '2026-10-08' }) });
+    const nueva = (n: number, hora: number) => ({ modificadoEn: `2026-10-14T${String(hora).padStart(2, '0')}:00:00Z`, desglose: bitacora(n) });
+    // Pasada 1: la bitácora 1 llega sin póliza (excepción con su fecha) y avanza el cursor con las demás.
+    await pullDesgloses(TENANT, lectorEnMemoria([vieja(null), nueva(2, 9)]), b.deps);
+    expect(abiertas(b, 'sin_poliza')).toHaveLength(1);
+    expect(abiertas(b, 'sin_poliza')[0].detalle).toMatchObject({ desde: '2026-10-08' });
+    expect(b.recibidos.has(clave(1))).toBe(false);
+    // Pasada 2, 6 días de periodo después: la póliza ya llegó a la bitácora 1 (su fecha `de` sigue siendo la del 8) y hay filas nuevas.
+    const lector = lectorEnMemoria([vieja('P-1'), nueva(2, 9), nueva(3, 11)]);
+    const r = await pullDesgloses(TENANT, lector, b.deps);
+    expect(r.estado).toBe('ok');
+    expect(b.recibidos.has(clave(1))).toBe(true);
+    expect(abiertas(b, 'sin_poliza')).toHaveLength(0);
+  });
+
+  it('A39-A1-02: sin ninguna bitácora sin póliza abierta el traslape sigue siendo el de 24 h', async () => {
+    const b = banco();
+    b.estado.cursor = { desde: '2026-10-14T10:00:00.000Z', despuesDe: clave(10) };
+    const llamadas: Array<string | undefined> = [];
+    const base = lectorEnMemoria([fila(11, {}, 11)]);
+    await pullDesgloses(TENANT, { listar: async (p) => { llamadas.push(p.reLeerDesde); return base.listar(p); } }, b.deps);
+    expect(llamadas[0]).toBe('2026-10-13T10:00:00.000Z');
   });
 
   it('tope por pasada: con 250 ítems nuevos procesa 100 y deja hayMas; la siguiente pasada continúa', async () => {

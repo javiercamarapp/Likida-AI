@@ -51,7 +51,30 @@ describe('lo acreditado', () => {
       r({ id: 'c', estado: 'rechazado' }),                                  // rechazado: no cuenta como pendiente
       r({ id: 'd', fechaCobroMasAntiguo: '2026-05-01', montoReclamado: 500 }), // vencido
     ], '2026-09-16');
-    expect(s).toMatchObject({ reclamos: 4, montoReclamado: 30_500, montoAcreditado: 12_000, pendienteAcreditar: 8_500, porVencer: 0 });
+    // A39-peajes-01: el rechazado ($10,000) tampoco es «reclamado»: 30,500 − 10,000.
+    expect(s).toMatchObject({ reclamos: 4, montoReclamado: 20_500, montoAcreditado: 12_000, pendienteAcreditar: 8_500, porVencer: 0 });
     expect(s.vencidos).toBe(2); // a (15-sep) y d
+  });
+  // A39-peajes-01 (variante de A37-A2-04, que solo corrigió `resumirAcreditacion`): enviado $10,000 + solo preparado $50,000 +
+  // rechazado $20,000. «Reclamado» y «por acreditar» deben decir $10,000 (lo único que se le exigió al proveedor); el preparado
+  // se rotula aparte y no es dinero pendiente.
+  it('A39-peajes-01: un reclamo preparado o rechazado no se suma como reclamado ni como por acreditar', () => {
+    const s = resumirSeguimiento([
+      r({ id: 'env', montoReclamado: 10_000 }),
+      r({ id: 'prep', estado: 'preparado', montoReclamado: 50_000 }),
+      r({ id: 'rech', estado: 'rechazado', montoReclamado: 20_000 }),
+    ], '2026-07-01');
+    expect(s.montoReclamado).toBe(10_000);
+    expect(s.pendienteAcreditar).toBe(10_000);
+    expect(s.montoPreparado).toBe(50_000);
+    expect(s.preparados).toBe(1);
+    expect(s.reclamos).toBe(3);
+  });
+  it('A39-peajes-01: los centavos no se desvían (0.1 + 0.2)', () => {
+    const s = resumirSeguimiento([
+      r({ id: 'x', montoReclamado: 0.1 }), r({ id: 'y', montoReclamado: 0.2 }), r({ id: 'z', estado: 'preparado', montoReclamado: 0.3 }),
+    ], '2026-07-01');
+    expect(s.montoReclamado).toBe(0.3);
+    expect(s.montoPreparado).toBe(0.3);
   });
 });

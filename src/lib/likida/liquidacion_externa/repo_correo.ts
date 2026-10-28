@@ -84,8 +84,14 @@ export interface MetaDesglose {
   numeroLiquidacion?: string | null;
   numeroPago?: string | null;
   bitacoras?: string[] | null;
+  /**
+   * 0929 (A39-A1-01): 0 = la bitácora original; n ≥ 1 = su corrección `-R<n>` (A37-A1-02). Los índices únicos de la bitácora
+   * y del número de liquidación incluyen este número: sin él la corrección (misma bitácora, mismo terminal, mismo número) chocaba
+   * con 23505 contra la original y era imposible contra la base real.
+   */
+  correccionN?: number;
 }
-export interface Desglose extends Required<Omit<MetaDesglose, 'retenidaMotivo' | 'numeroLiquidacion' | 'numeroPago' | 'bitacoras'>> {
+export interface Desglose extends Required<Omit<MetaDesglose, 'retenidaMotivo' | 'numeroLiquidacion' | 'numeroPago' | 'bitacoras' | 'correccionN'>> {
   numeroLiquidacion?: string | null;
   numeroPago?: string | null;
   bitacoras?: string[] | null;
@@ -418,6 +424,8 @@ export async function insertarDesglose(tenantId: string, m: MetaDesglose): Promi
     ...(m.numeroLiquidacion != null ? { numero_liquidacion: m.numeroLiquidacion } : {}),
     ...(m.numeroPago != null ? { numero_pago: m.numeroPago } : {}),
     ...(m.bitacoras != null ? { bitacoras: m.bitacoras } : {}),
+    // 0929: solo una corrección lo manda (sin la columna, la original sigue insertándose como siempre).
+    ...(m.correccionN ? { correccion_n: m.correccionN } : {}),
   };
   const res = await acotada(supabaseAdmin().from('liquidacion_desglose').insert(fila).select('liquidacion_externa_id'), 'liqcorreo.desglose_insertar');
   const r = res as unknown as { data: unknown; error: ErrorPg };
@@ -571,6 +579,8 @@ export async function recibirDesgloseAtomico(tenantId: string, p: PedidoRecepcio
       tipo_operador: m.tipoOperador ?? null, dias: m.dias ?? null, total_origen: m.totalOrigen,
       retenida_motivo: recortar(m.retenidaMotivo), numero_liquidacion: m.numeroLiquidacion ?? null,
       numero_pago: m.numeroPago ?? null, bitacoras: m.bitacoras ?? null,
+      // 0929 (A39-A1-01): la RPC anterior ignora esta llave; la corrección entonces choca con el índice (23505) como antes.
+      correccion_n: m.correccionN ?? 0,
     },
     p_evento: p.evento,
     p_entregas: p.entregas.map((e) => ({

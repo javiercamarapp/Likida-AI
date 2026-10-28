@@ -104,27 +104,45 @@ export function estadoTrasAcreditar(actual: EstadoReclamo, montoReclamado: numbe
 }
 
 export interface ResumenSeguimiento {
+  /** Todos los reclamos registrados (incluye preparados y rechazados). */
   reclamos: number;
+  /** A39-peajes-01: lo que de verdad se le reclamó al proveedor (enviado / acreditado*): sin preparados ni rechazados. */
   montoReclamado: number;
   montoAcreditado: number;
   pendienteAcreditar: number;
   porVencer: number;
   vencidos: number;
+  /** A39-peajes-01: reclamos solo PREPARADOS (nunca enviados) y su importe: dinero aún no exigido, rotulado aparte. */
+  preparados: number;
+  montoPreparado: number;
 }
 
-/** Totales para el tablero: solo cuentan como «pendiente» los reclamos aún abiertos. */
+const centavos = (n: number) => Math.round(n * 100);
+
+/**
+ * Totales para el tablero. A39-peajes-01 (variante de A37-A2-04): «reclamado» y «por acreditar» cuentan SOLO lo enviado al
+ * proveedor y aún abierto; un reclamo solo preparado se suma en `montoPreparado` y uno rechazado no es dinero pendiente.
+ * Centavos enteros para que la suma no se desvíe.
+ */
 export function resumirSeguimiento(reclamos: readonly ReclamoSeguimiento[], hoy: string): ResumenSeguimiento {
-  const s: ResumenSeguimiento = { reclamos: reclamos.length, montoReclamado: 0, montoAcreditado: 0, pendienteAcreditar: 0, porVencer: 0, vencidos: 0 };
+  let rec = 0; let acr = 0; let pend = 0; let prep = 0;
+  const s: ResumenSeguimiento = {
+    reclamos: reclamos.length, montoReclamado: 0, montoAcreditado: 0, pendienteAcreditar: 0, porVencer: 0, vencidos: 0, preparados: 0, montoPreparado: 0,
+  };
   for (const r of reclamos) {
-    s.montoReclamado += r.montoReclamado;
-    s.montoAcreditado += r.montoAcreditado;
     const e = evaluarReclamo(r, hoy);
-    if (e.alerta !== 'cerrado') s.pendienteAcreditar += e.pendienteAcreditar;
+    if (r.estado === 'preparado') { s.preparados++; prep += centavos(r.montoReclamado); }
+    else if (r.estado !== 'rechazado') {
+      rec += centavos(r.montoReclamado);
+      acr += centavos(r.montoAcreditado);
+      if (e.alerta !== 'cerrado') pend += centavos(e.pendienteAcreditar);
+    }
     if (e.alerta === 'por_vencer') s.porVencer++;
     if (e.alerta === 'vencido') s.vencidos++;
   }
-  s.montoReclamado = r2(s.montoReclamado);
-  s.montoAcreditado = r2(s.montoAcreditado);
-  s.pendienteAcreditar = r2(s.pendienteAcreditar);
+  s.montoReclamado = rec / 100;
+  s.montoAcreditado = acr / 100;
+  s.pendienteAcreditar = pend / 100;
+  s.montoPreparado = prep / 100;
   return s;
 }

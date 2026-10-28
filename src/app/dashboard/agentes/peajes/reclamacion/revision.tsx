@@ -319,6 +319,7 @@ export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revi
       {resumen && reclamos && (
         <p className="text-[12.5px] mt-3">
           {numero(resumen.reclamos)} reclamos · reclamado {mxn(resumen.montoReclamado)} · acreditado {mxn(resumen.montoAcreditado)} · <b>por acreditar {mxn(resumen.pendienteAcreditar)}</b>
+          {resumen.preparados > 0 && <> · <span style={{ color: 'var(--muted)' }}>{numero(resumen.preparados)} preparados sin enviar ({mxn(resumen.montoPreparado)}, aún no exigidos al proveedor)</span></>}
           {resumen.porVencer > 0 && <> · <span style={{ color: 'var(--warn)' }}>{numero(resumen.porVencer)} por vencer</span></>}
           {resumen.vencidos > 0 && <> · <span style={{ color: 'var(--bad)' }}>{numero(resumen.vencidos)} vencidos</span></>}
         </p>

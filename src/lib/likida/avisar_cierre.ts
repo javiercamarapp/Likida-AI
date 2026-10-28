@@ -2,7 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { sendDocument, esReintentableMeta } from '@/lib/meta/client';
-import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina';
+import { avisarOficina, parametrosAvisoOficina, esFueraDeVentana } from '@/lib/meta/aviso_oficina';
 import { appUrl } from '@/lib/env';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { variantesTelefono } from './conv';
@@ -78,6 +78,12 @@ export interface ResultadoAvisoCierre {
    *     que en teoría ya no ocurre, ver el comentario de más abajo).
    */
   pdfEstado: 'enviado' | 'encolado' | 'definitivo' | null;
+  /**
+   * A39-S30-03: el documento libre no entró (ventana de 24 h cerrada: 131047/131026/131042) y el jefe SÍ quedó avisado por la
+   * plantilla `aviso_operacion_v1` con la liga al panel, donde está el PDF. `pdfEstado` sigue en `definitivo` (el documento no
+   * llegó) pero el llamador sabe que nadie se quedó sin enterarse.
+   */
+  pdfAvisadoPorPlantilla?: true;
 }
 
 /**
@@ -110,13 +116,15 @@ export function pdfListoParaSellar(
  * (`entregarCierrePendiente`, processor.ts). Un solo lugar decide qué
  * significa cada `codigo`, para que los dos lean lo mismo.
  */
-export function pdfEstadoDe(r: { ok: boolean; codigo?: number }): 'enviado' | 'encolado' | 'definitivo' {
+export function pdfEstadoDe(r: { ok: boolean; codigo?: number; status?: number }): 'enviado' | 'encolado' | 'definitivo' {
   if (r.ok) return 'enviado';
-  // Sin código: fue el catch de red de `sendDocument` (fetch nunca contestó),
-  // y ESE camino ya encola el payload antes de devolver `{ok:false}` — ver
-  // `meta/client.ts`. No hay nada "definitivo" que decir de un socket caído.
-  if (r.codigo === undefined) return 'encolado';
-  return esReintentableMeta(r.codigo) ? 'encolado' : 'definitivo';
+  // Sin código NI status HTTP: fue el catch de red de `sendDocument` (fetch nunca contestó), y ESE camino ya encola el
+  // payload antes de devolver `{ok:false}` — ver `meta/client.ts`. No hay nada "definitivo" que decir de un socket caído.
+  // A39-S30-03: con `status` pero sin código (un 4xx con cuerpo no JSON) SÍ hubo respuesta: no está en `wa_outbox` salvo que
+  // sea 429/5xx o el token vencido (`alFallarPorToken` lo encola), así que sellarlo `encolado` perdía el PDF.
+  if (r.codigo === undefined && r.status === undefined) return 'encolado';
+  const tokenVencido = r.codigo === 190 || (r.codigo === undefined && r.status === 401);
+  return tokenVencido || esReintentableMeta(r.codigo, r.status) ? 'encolado' : 'definitivo';
 }
 
 /**
@@ -300,6 +308,7 @@ export async function avisarCierreAlJefe(args: {
   // perdía en el log y `enviado: true` lo tapaba entero.
   let pdfEnviado: boolean | null = null;
   let pdfEstado: ResultadoAvisoCierre['pdfEstado'] = null;
+  let pdfAvisadoPorPlantilla = false;
   if (args.urlPdf) {
     // En su propio try: el texto ya salió, y perder el adjunto no debe borrar
     // el aviso que sí llegó.
@@ -319,6 +328,21 @@ export async function avisarCierreAlJefe(args: {
       pdfEnviado = r.ok;
       pdfEstado = pdfEstadoDe(r);
       if (!r.ok) logger.warn('cierre.pdf_al_jefe_falló', { viaje: args.viajeId, err: r.error });
+      // A39-S30-03: el jefe «recibe y no escribe»: su ventana de 24 h está cerrada casi siempre y un documento libre rebota con
+      // 131047 (no reintentable) — antes se sellaba `definitivo` y solo se avisaba a plataforma: el jefe nunca se enteraba. Una
+      // plantilla SÍ atraviesa la ventana; el PDF vive en el panel (la liga firmada del documento caduca en 15 min, no sirve
+      // en un aviso que se abre horas después). Si el texto de decisión ya salió por plantilla, el jefe ya tiene esa liga.
+      if (!r.ok && esFueraDeVentana(r.codigo) && !(requiereDecision && via === 'plantilla')) {
+        const liga = `${appUrl()}/dashboard/viajes`;
+        const aviso = await avisarOficina(tel, `📄 Liquidación ${resumen.folio} de ${resumen.operador}: el PDF ya está en el panel. ${liga}`, {
+          parametros: parametrosAvisoOficina(resumen.operador, `Liquidación ${resumen.folio}: PDF listo en el panel`, liga),
+          contexto: { tenant: args.tenantId, viaje: args.viajeId, evento: 'cierre_pdf' },
+        }).catch((e) => ({ ok: false as const, motivo: e instanceof Error ? e.message : String(e), fueraDeVentana: false, reintentable: false }));
+        if (aviso.ok) pdfAvisadoPorPlantilla = true;
+        else logger.warn('cierre.pdf_jefe_sin_aviso_plantilla', { viaje: args.viajeId, motivo: aviso.motivo });
+      } else if (!r.ok && esFueraDeVentana(r.codigo) && requiereDecision && via === 'plantilla') {
+        pdfAvisadoPorPlantilla = true;
+      }
     } catch (e) {
       // Excepción de verdad, no un `{ok:false}` — en teoría ya no debería
       // ocurrir (ver el comentario de arriba), así que no se le atribuye un
@@ -347,8 +371,9 @@ export async function avisarCierreAlJefe(args: {
     }
   });
 
-  if (motivoTexto) return { enviado: false, motivo: motivoTexto, fueraDeVentana, pdfEnviado, pdfEstado };
+  if (motivoTexto) return { enviado: false, motivo: motivoTexto, fueraDeVentana, pdfEnviado, pdfEstado, ...(pdfAvisadoPorPlantilla ? { pdfAvisadoPorPlantilla: true as const } : {}) };
 
-  logger.info('cierre.avisado_al_jefe', { viaje: args.viajeId, requiereDecision, via, pdfEnviado, pdfEstado });
-  return via ? { enviado: true, via, pdfEnviado, pdfEstado } : { enviado: true, pdfEnviado, pdfEstado };
+  logger.info('cierre.avisado_al_jefe', { viaje: args.viajeId, requiereDecision, via, pdfEnviado, pdfEstado, pdfAvisadoPorPlantilla });
+  const base = { enviado: true as const, pdfEnviado, pdfEstado, ...(pdfAvisadoPorPlantilla ? { pdfAvisadoPorPlantilla: true as const } : {}) };
+  return via ? { ...base, via } : base;
 }

@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { CalendarDays, TriangleAlert, Upload } from 'lucide-react';
 import { AvisoResultado } from '../../../../admin/ui/aviso-resultado';
+import { recortarRellenoCsv, TOPE_SUBIDA_BYTES } from './recortar_relleno';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA PANTALLA DE CARGA DEL PROGRAMA DE DESPACHO (Agente 4, T-A4-07).
@@ -16,8 +17,12 @@ import { AvisoResultado } from '../../../../admin/ui/aviso-resultado';
 // se pintan.
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Tope del archivo, en bytes (el mismo que el de Carta Porte). La página lo valida; aquí solo se dice. */
-export const TOPE_ARCHIVO_PROGRAMA_BYTES = 12 * 1024 * 1024;
+/**
+ * Tope del archivo, en bytes. A39-A4-02: es el REAL de la plataforma (Vercel Functions corta en 4.5 MB; antes se prometían 12 MB y un CSV de
+ * 6 MB moría sin mensaje). El navegador quita antes el relleno de `;` de cada línea (`recortar_relleno.ts`), que es lo que hace pesar 27 MB
+ * al programa real. La página lo valida; aquí solo se dice.
+ */
+export const TOPE_ARCHIVO_PROGRAMA_BYTES = TOPE_SUBIDA_BYTES;
 
 export interface DiaPrograma { fecha: string; filas: number; conAviso: number; sinCaja: number }
 export interface FilaConAviso { lineaCsv: number; fecha: string | null; avisos: string[] }
@@ -98,16 +103,35 @@ const VACIO = 'Aún no has cargado un programa. Sube el archivo de hoy y aquí v
 
 function FormaSubir({ accion }: { accion: AccionPrograma }) {
   const [estado, despachar] = useActionState(accion, null);
+  const [local, setLocal] = useState<string | null>(null);
+  // A39-A4-02: antes de subir, se quita el relleno de `;` y se comprueba el tope REAL, con un mensaje claro en vez de un fallo genérico.
+  async function preparar(fd: FormData): Promise<void> {
+    setLocal(null);
+    const archivo = fd.get('archivo');
+    if (archivo instanceof File && archivo.size > 0) {
+      let listo: File = archivo;
+      if (archivo.size > 64 * 1024) {
+        const recortado = recortarRellenoCsv(await archivo.text());
+        listo = new File([recortado], archivo.name, { type: archivo.type || 'text/csv' });
+      }
+      if (listo.size > TOPE_ARCHIVO_PROGRAMA_BYTES) {
+        setLocal(`El archivo pesa ${(listo.size / (1024 * 1024)).toFixed(1)} MB incluso sin las columnas vacías, y la subida admite hasta ${TOPE_ARCHIVO_PROGRAMA_BYTES / (1024 * 1024)} MB. Sube solo los últimos días del programa.`);
+        return;
+      }
+      fd.set('archivo', listo);
+    }
+    despachar(fd);
+  }
   return (
     <div className="space-y-4">
-      <form action={despachar} className="space-y-3">
+      <form action={preparar} className="space-y-3">
         <div className="grid sm:grid-cols-2 gap-3">
           <label>
             <span className={ETIQUETA}>Terminal</span>
             <input name="terminal" required maxLength={40} placeholder="Por ejemplo, GDL" className={CAMPO} autoComplete="off" />
           </label>
           <label>
-            <span className={ETIQUETA}>Archivo del programa (CSV, hasta {TOPE_ARCHIVO_PROGRAMA_BYTES / (1024 * 1024)} MB)</span>
+            <span className={ETIQUETA}>Archivo del programa (CSV, hasta {TOPE_ARCHIVO_PROGRAMA_BYTES / (1024 * 1024)} MB, sin contar las columnas vacías)</span>
             <input name="archivo" type="file" required accept=".csv,.txt,text/csv" className={`${CAMPO} py-1.5 h-auto`} />
           </label>
         </div>
@@ -117,6 +141,7 @@ function FormaSubir({ accion }: { accion: AccionPrograma }) {
         </p>
         <Enviar />
       </form>
+      {local && <Aviso>{local}</Aviso>}
       <Salida estado={estado} />
     </div>
   );

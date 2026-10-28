@@ -35,6 +35,10 @@ import {
 
 export const TOPE_ITEMS_POR_PASADA = 100;
 export const TOPE_RELECTURA = 300;
+/** A39-A1-02: cuántos días atrás se amplía la relectura para alcanzar la bitácora SIN póliza más antigua (la póliza llega tarde). */
+export const MAX_RELECTURA_PENDIENTES_DIAS = 14;
+/** Con la ventana ampliada hay más ítems ya procesados que releer: el tope sube en proporción. */
+export const TOPE_RELECTURA_AMPLIADA = 1500;
 /** A37-A1-liquidaciones-06: un pull que falla y no tiene un éxito en más de esto (o nunca lo tuvo) está atascado y se avisa. */
 export const ATASCO_PULL_MS = 6 * 3_600_000;
 
@@ -51,6 +55,12 @@ export interface DependenciasPull {
   excepcionesSinPoliza: (tenantId: string) => Promise<Map<string, number>>;
   resolverExcepcion: (tenantId: string, id: number, ahora: Date) => Promise<boolean>;
   entregasDe: (tenantId: string, liquidacionId: string) => Promise<EntregaCorreo[]>;
+  /**
+   * A39-A1-02: `desde` (ISO) de la bitácora SIN póliza abierta más antigua, o `null`. El cursor avanza por la fecha de inicio del
+   * periodo (`campoCursor: 'de'`), así que la póliza que llega días después de que el cursor pasó NO se detectaba con el traslape de
+   * 24 h: con esto la relectura se amplía hasta esa bitácora (acotada a `MAX_RELECTURA_PENDIENTES_DIAS`). Opcional.
+   */
+  desdeSinPolizaMasAntiguo?: (tenantId: string) => Promise<string | null>;
 }
 
 export const dependenciasPullPorOmision: DependenciasPull = {
@@ -67,6 +77,12 @@ export const dependenciasPullPorOmision: DependenciasPull = {
     return new Map(l.ok ? l.valor.map((e) => [e.claveExterna, e.id] as const) : []);
   },
   resolverExcepcion,
+  desdeSinPolizaMasAntiguo: async (t) => {
+    const l = await listarExcepciones(t, { soloAbiertas: true, tipo: 'sin_poliza', limite: 500 });
+    if (!l.ok) return null;
+    const ts = l.valor.map((e) => (typeof e.detalle.desde === 'string' ? Date.parse(e.detalle.desde) : NaN)).filter((n) => Number.isFinite(n));
+    return ts.length > 0 ? new Date(Math.min(...ts)).toISOString() : null;
+  },
   entregasDe: async (t, id) => {
     const l = await entregasDe(t, id);
     return l.ok ? l.valor : [];
@@ -142,7 +158,8 @@ export async function pullDesgloses(
   const cursorInicial = estado.cursor;
   r.cursor = cursorInicial;
   const tamano = Math.min(Math.max(Math.trunc(opciones.limite ?? TOPE_ITEMS_POR_PASADA), 1), TOPE_ITEMS_POR_PASADA);
-  const reLeerDesde = reLeerDesdeDeCursor(cursorInicial);
+  let reLeerDesde = reLeerDesdeDeCursor(cursorInicial);
+  let topeRelectura = TOPE_RELECTURA;
   let saltoRelectura = false;
   const acumulado = () => ({
     leidas: estado.leidas + r.leidas, importadas: estado.importadas + r.importadas, excepciones: estado.excepciones + r.excepciones,
@@ -150,6 +167,15 @@ export async function pullDesgloses(
 
   try {
     const sinPoliza = await deps.excepcionesSinPoliza(tenantId);
+    // A39-A1-02: la relectura llega hasta la bitácora sin póliza más antigua (con tope de días), no solo 24 h.
+    if (reLeerDesde !== undefined && cursorInicial && deps.desdeSinPolizaMasAntiguo) {
+      const pendiente = Date.parse((await deps.desdeSinPolizaMasAntiguo(tenantId).catch(() => null)) ?? '');
+      const piso = Date.parse(cursorInicial.desde) - MAX_RELECTURA_PENDIENTES_DIAS * 86_400_000;
+      if (Number.isFinite(pendiente) && Number.isFinite(piso) && Math.max(pendiente, piso) < Date.parse(reLeerDesde)) {
+        reLeerDesde = new Date(Math.max(pendiente, piso)).toISOString();
+        topeRelectura = TOPE_RELECTURA_AMPLIADA;
+      }
+    }
     let lectura: CursorDesglose | null = cursorInicial; // dónde seguir leyendo
     let nuevos = 0;
     let releidos = 0;
@@ -175,7 +201,7 @@ export async function pullDesgloses(
 
       const esNueva = !cursorInicial || (pagina.siguiente !== null && comparar(pagina.siguiente, cursorInicial) > 0);
       if (esNueva) nuevos += pagina.items.length; else releidos += pagina.items.length;
-      if (releidos > TOPE_RELECTURA && !saltoRelectura && pagina.items.length > 0 && cursorInicial) {
+      if (releidos > topeRelectura && !saltoRelectura && pagina.items.length > 0 && cursorInicial) {
         // A37-A1-liquidaciones-17: más de TOPE_RELECTURA ítems ya procesados en la ventana (flota grande o cursor viejo tras una caída).
         // Antes la pasada LANZABA y, como el cursor no avanzaba, fallaba igual para siempre. La relectura es solo una cortesía para
         // las pólizas tardías: se acota (esta página no se reprocesa) y se salta al cursor para que lo NUEVO sí se procese.
@@ -204,7 +230,7 @@ export async function pullDesgloses(
         }
 
         if (d.poliza === null) {
-          await deps.abrirExcepcion(tenantId, clave, 'sin_poliza', { bitacora: d.bitacora }, ahora);
+          await deps.abrirExcepcion(tenantId, clave, 'sin_poliza', { bitacora: d.bitacora, desde: d.desde }, ahora);
           r.excepciones += 1;
           continue;
         }
