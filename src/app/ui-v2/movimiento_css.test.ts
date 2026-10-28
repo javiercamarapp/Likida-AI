@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- rutas fijas del propio módulo */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';

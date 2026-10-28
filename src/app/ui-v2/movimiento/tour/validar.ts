@@ -1,6 +1,7 @@
 import type { Recorrido } from './tipos';
 
-const ANCLA = /^[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+/** Nombre estable: segmentos a-z0-9 separados por «.» o «-» (sin segmentos vacíos). */
+const esAncla = (n: string) => n.length > 0 && n.split(/[.-]/).every((seg) => /^[a-z0-9]+$/.test(seg));
 export const MAX_TITULO = 48;
 export const MAX_TEXTO = 180;
 
@@ -25,10 +26,10 @@ export function validarRecorrido(r: Recorrido): string[] {
     if (s.titulo.length > MAX_TITULO) p.push(`${n}: título de ${s.titulo.length} (máx ${MAX_TITULO})`);
     if (!s.texto.trim()) p.push(`${n}: sin texto`);
     if (s.texto.length > MAX_TEXTO) p.push(`${n}: texto de ${s.texto.length} (máx ${MAX_TEXTO})`);
-    if (s.ancla !== undefined && !ANCLA.test(s.ancla)) p.push(`${n}: ancla «${s.ancla}» no es un nombre estable (a-z, 0-9, . -)`);
+    if (s.ancla !== undefined && !esAncla(s.ancla)) p.push(`${n}: ancla «${s.ancla}» no es un nombre estable (a-z, 0-9, . -)`);
     if (s.avance?.tipo === 'accion') {
       if (!s.ancla && !s.avance.ancla) p.push(`${n}: avance por acción sin elemento`);
-      if (s.avance.ancla && !ANCLA.test(s.avance.ancla)) p.push(`${n}: ancla de avance inválida`);
+      if (s.avance.ancla && !esAncla(s.avance.ancla)) p.push(`${n}: ancla de avance inválida`);
       if (!s.accion) p.push(`${n}: avance por acción sin la frase «Aprieta aquí → …»`);
     }
     if (s.accion && (!s.accion.verbo.trim() || !s.accion.objetivo.trim())) p.push(`${n}: acción incompleta`);
