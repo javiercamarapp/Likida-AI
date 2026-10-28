@@ -71,7 +71,7 @@ describe('primer mes: copia a los revisores por departamento (OLA1-A3)', () => {
   it('el aviso va al destinatario y a los revisores, sin repetir; sin destinatario principal no se inventa uno', async () => {
     config = { ...config, destinatarioAlertaCorreo: 'oficina@flota.test' };
     primerMes = ['captura@flota.test', 'OFICINA@flota.test'];
-    await crearAlertarEnvio(deps())(entrada('listo_manual'));
+    await crearAlertarEnvio(deps())(entrada('reque_agotado'));
     expect(correos[0].para).toEqual(['oficina@flota.test', 'captura@flota.test']);
   });
 });

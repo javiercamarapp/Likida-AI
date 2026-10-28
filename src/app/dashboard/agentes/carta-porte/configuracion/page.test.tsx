@@ -5,7 +5,7 @@ let sesion: { tenantId: string; rol: string; userId: string } = { tenantId: 't-1
 const puerto = vi.hoisted(() => ({ rutas: [] as string[], salida: null as unknown }));
 vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async (ruta: string) => { puerto.rutas.push(ruta); return sesion; } }));
 vi.mock('next/navigation', () => ({ redirect: (r: string) => { throw new Error(`REDIRECT:${r}`); } }));
-vi.mock('./actions', () => ({ guardarConfiguracionSalida: vi.fn(), probarConexionSalida: vi.fn() }));
+vi.mock('./actions', () => ({ guardarConfiguracionSalida: vi.fn(), probarConexionSalida: vi.fn(), guardarPrimerMesAccion: vi.fn() }));
 vi.mock('@/lib/likida/carta_porte_docs/repo', async () => (await import('@/lib/likida/carta_porte_docs/repo_falso.fixture')).api);
 vi.mock('@/lib/likida/carta_porte_docs/worker_envios_deps', () => ({ salidaDeFlota: async () => puerto.salida }));
 
