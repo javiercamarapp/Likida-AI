@@ -2,6 +2,7 @@ import { logger } from '@/lib/logger';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { exigir, traerHastaTope, traerTodo } from '../pg';
+import { variantesTelefono } from '../telefono_variantes';
 import { COLUMNAS_HITO, COLUMNAS_VIAJE_CTX, filaAHito, filaAViajeCtx, type ViajeContexto } from './repo';
 import type { AvisoReclamado } from './planificador';
 import type { HitoFila } from './tipos';
@@ -134,7 +135,7 @@ export async function leerEmergenciasAbiertas(tenantIds: string[], ahora: Date =
  * que no pasan por la lista de viajes). Lanza si no se puede leer.
  */
 export async function hayEmergenciaDeTelefono(tenantId: string, telefono: string, ahora: Date = new Date()): Promise<boolean> {
-  const op = await acotada(supabaseAdmin().from('operador').select('id').eq('tenant_id', tenantId).eq('telefono', telefono).order('id').limit(20), 'conductor.emergencia_operador');
+  const op = await acotada(supabaseAdmin().from('operador').select('id').eq('tenant_id', tenantId).in('telefono', variantesTelefono(telefono)).order('id').limit(20), 'conductor.emergencia_operador');
   const ids = ((exigir(op as never, 'conductor.emergencia_operador') ?? []) as Array<{ id: string }>).map((f) => f.id);
   if (ids.length === 0) return false;
   const em = (await leerEmergenciasAbiertas([tenantId], ahora)).get(tenantId);
@@ -147,7 +148,7 @@ export async function hayEmergenciaDeTelefono(tenantId: string, telefono: string
  * Fail-closed: sin operador con ese teléfono, o ninguno voluntario, es `false`. Lanza si no se puede leer (quien llama NO envía).
  */
 export async function esVoluntarioDePiloto(tenantId: string, telefono: string): Promise<boolean> {
-  const res = await acotada(supabaseAdmin().from('operador').select('id, agente_voluntario, activo').eq('tenant_id', tenantId).eq('telefono', telefono).order('id').limit(20), 'conductor.voluntario_operador');
+  const res = await acotada(supabaseAdmin().from('operador').select('id, agente_voluntario, activo').eq('tenant_id', tenantId).in('telefono', variantesTelefono(telefono)).order('id').limit(20), 'conductor.voluntario_operador');
   const filas = (exigir(res as never, 'conductor.voluntario_operador') ?? []) as Array<{ agente_voluntario: boolean | null; activo: boolean | null }>;
   return filas.some((f) => f.agente_voluntario === true && f.activo !== false);
 }
@@ -157,7 +158,7 @@ export async function esVoluntarioDePiloto(tenantId: string, telefono: string): 
  * no se puede leer (quien llama NO envía). `[]` = ningún operador con ese teléfono o sin viaje abierto.
  */
 export async function leerViajesAbiertosDeTelefono(tenantId: string, telefono: string): Promise<ViajeContexto[]> {
-  const op = await acotada(supabaseAdmin().from('operador').select('id').eq('tenant_id', tenantId).eq('telefono', telefono).order('id').limit(20), 'conductor.viajes_telefono_operador');
+  const op = await acotada(supabaseAdmin().from('operador').select('id').eq('tenant_id', tenantId).in('telefono', variantesTelefono(telefono)).order('id').limit(20), 'conductor.viajes_telefono_operador');
   const ids = ((exigir(op as never, 'conductor.viajes_telefono_operador') ?? []) as Array<{ id: string }>).map((f) => f.id);
   if (ids.length === 0) return [];
   const res = await acotada(supabaseAdmin().from('viaje').select(COLUMNAS_VIAJE_CTX)
