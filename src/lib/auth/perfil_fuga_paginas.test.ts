@@ -109,16 +109,16 @@ const concreta = (g: string) => (g === '/dashboard/[id]' ? '/dashboard/0f8fad5b-
 /** La función de puerta que la propia página usa: el detalle de liquidación entra por `requireSessionTenant`, el resto por `resolverTenantEfectivo`. */
 const abrirPuerta = (g: string) => (g === '/dashboard/[id]' ? requireSessionTenant(concreta(g)) : resolverTenantEfectivo(g, {}));
 
-describe('(a) las 71 páginas: enumeración y puerta', () => {
-  it('hay 71 page.tsx en /dashboard (cuenta independiente del disco) y todas se leen', () => {
-    expect(TABLA).toHaveLength(71);
-    expect(new Set(TABLA.map((p) => p.archivo)).size).toBe(71);
+describe('(a) las 72 páginas: enumeración y puerta', () => {
+  it('hay 72 page.tsx en /dashboard (cuenta independiente del disco) y todas se leen', () => {
+    expect(TABLA).toHaveLength(72);
+    expect(new Set(TABLA.map((p) => p.archivo)).size).toBe(72);
   });
 
-  it('solo /dashboard/integraciones es un redirect puro (su destino ya gatea); las otras 70 llaman a su puerta', () => {
+  it('solo /dashboard/integraciones es un redirect puro (su destino ya gatea); las otras 71 llaman a su puerta', () => {
     expect(TABLA.filter((p) => p.puerta === 'REDIRECT_PURO').map((p) => p.ruta)).toEqual(['/dashboard/integraciones']);
     expect(TABLA.filter((p) => p.puerta === null).map((p) => p.archivo)).toEqual([]);
-    expect(GATEADAS).toHaveLength(70);
+    expect(GATEADAS).toHaveLength(71);
     const src = readFileSync(join(RAIZ, 'src/app/dashboard/integraciones/page.tsx'), 'utf8');
     expect(src).toContain('/dashboard/conexiones');
     expect(rutaPermitidaEnPerfil('cinco_agentes', '/dashboard/conexiones')).toBe(true);
@@ -146,11 +146,11 @@ describe('(a) bajo el perfil, cada página no permitida rebota y cada permitida 
   const proximamente = permitidasEnLista.filter((p) => rutaProximamenteEnPerfil('cinco_agentes', clave(p)));
   const abiertas = permitidasEnLista.filter((p) => !rutaProximamenteEnPerfil('cinco_agentes', clave(p)));
 
-  it('el reparto es el de la matriz de T-PER-01 con A4/A5 encendidos: 28 negadas, 42 abiertas (+3: llaves-api, usuarios y patios, Ola 1 · A1; +1: la referencia de Carta Porte, Ola 1 · A3) (ARCO pasó a base: A37-TRANSVERSAL-06) (+2: el catálogo y la configuración del Agente de Carta Porte, A3) y 0 «Próximamente»', () => {
+  it('el reparto es el de la matriz de T-PER-01 con A4/A5 encendidos: 28 negadas, 43 abiertas (+1: /dashboard/puesta-en-marcha, rediseño UI v2 Fase 1; +3: llaves-api, usuarios y patios, Ola 1 · A1; +1: la referencia de Carta Porte, Ola 1 · A3) (ARCO pasó a base: A37-TRANSVERSAL-06) (+2: el catálogo y la configuración del Agente de Carta Porte, A3) y 0 «Próximamente»', () => {
     expect(negadas.length).toBe(28);
-    expect(abiertas.length).toBe(42);
+    expect(abiertas.length).toBe(43);
     expect(proximamente.length).toBe(0);
-    expect(negadas.length + abiertas.length + proximamente.length + 1).toBe(71);
+    expect(negadas.length + abiertas.length + proximamente.length + 1).toBe(72);
   });
 
   it.each(negadas.map((p) => [p.ruta, clave(p)] as const))('%s (puerta %s): CON perfil rebota a /dashboard', async (_ruta, puerta) => {

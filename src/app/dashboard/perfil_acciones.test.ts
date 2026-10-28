@@ -65,6 +65,7 @@ const ARCHIVOS: Record<string, Clase> = {
   'usuarios/page.tsx': 'permitido',                          // Ola 1 · A1: el dueño da de alta a nómina/RH que reenvían desgloses
   'arco/page.tsx': 'permitido',                              // A37-TRANSVERSAL-06: obligación legal de la flota, no módulo comercial
   'mi-perfil/page.tsx': 'permitido',
+  'puesta-en-marcha/acciones.ts': 'permitido',               // rediseño UI v2: prueba de correo al propio usuario (asistente de puesta en marcha)
   'operadores/page.tsx': 'permitido',
   'soporte/page.tsx': 'permitido',
   'unidades/page.tsx': 'permitido',

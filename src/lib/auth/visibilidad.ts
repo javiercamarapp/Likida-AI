@@ -285,6 +285,8 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // Administración de la cuenta — solo el dueño
   // Conexiones (F7): la configuración de conectores de la cuenta.
   '/dashboard/conexiones': 'administracion',
+  // Puesta en marcha (rediseño, Fase 1): el asistente de conexiones del dueño. Ruta NUEVA y delgada; no reutiliza /dashboard/arranque.
+  '/dashboard/puesta-en-marcha': 'administracion',
   // Integraciones: fusionada en Conexiones (agosto-2026). La ruta sobrevive
   // como REDIRECT —hay enlaces guardados y correos que apuntan aquí— y por eso
   // sigue declarada: una ruta sin área es una ruta que `puedeVerRuta` no sabe
@@ -419,6 +421,8 @@ export const RUTAS_PERFIL_CINCO_AGENTES: Readonly<Record<string, ModuloPerfil>> 
   '/dashboard/operadores': 'base',
   '/dashboard/unidades': 'base',
   '/dashboard/conexiones': 'base',
+  // El asistente de puesta en marcha (rediseño): el dueño ve qué falta para que sus agentes operen.
+  '/dashboard/puesta-en-marcha': 'base',
   '/dashboard/integraciones': 'base',
   '/dashboard/whatsapp': 'base',
   '/dashboard/notificaciones': 'base',
