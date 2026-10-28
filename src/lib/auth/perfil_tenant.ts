@@ -117,8 +117,9 @@ interface EntradaUi { version: VersionUiTenant; hasta: number }
 const cacheUi = new Map<string, EntradaUi>();
 const ultimaUi = new Map<string, VersionUiTenant>();
 
-/** El ÚNICO punto de acceso a `tenant_ui` (un solo acceso directo: ver el techo de frontera_datos_guardiana). */
-const tablaUi = () => supabaseAdmin().from('tenant_ui');
+/** El ÚNICO punto de acceso a `tenant_ui` (un solo acceso directo: ver el techo de frontera_datos_guardiana). La cadena
+ *  lleva el filtro por tenant en la misma expresión: la prueba de aislamiento de consultas admin lo exige ahí. */
+const leerFilaUi = (tenantId: string) => supabaseAdmin().from('tenant_ui').select('version').eq('tenant_id', tenantId).maybeSingle();
 
 /** Solo para pruebas. */
 export function reiniciarCacheUi(): void {
@@ -138,10 +139,7 @@ export async function versionUiDeTenant(
   const hit = cacheUi.get(tenantId);
   if (hit && hit.hasta > ahora) return hit.version;
   try {
-    const { data, error } = await tablaUi()
-      .select('version')
-      .eq('tenant_id', tenantId)
-      .maybeSingle();
+    const { data, error } = await leerFilaUi(tenantId);
     if (error && (error.code === '42P01' || error.code === 'PGRST205')) {
       cacheUi.set(tenantId, { version: 'v1', hasta: ahora + TTL_PERFIL_MS });
       return 'v1';
