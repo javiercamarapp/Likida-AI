@@ -97,3 +97,17 @@ describe('guardarConfigSalida', () => {
     expect((await leerConfigSalida(T2)).reintentosMax).toBe(9);
   });
 });
+
+import { plantillaParaDocumento } from './salida_config';
+import { extraccionAtlasOk } from './documentos_sinteticos.fixture';
+
+describe('plantillaParaDocumento (OLA1-A3)', () => {
+  it('una razón social sigue la configuración; más de una sube a la nueva', () => {
+    const e = extraccionAtlasOk();
+    expect(plantillaParaDocumento({ plantillaPorDefecto: 'normal' }, e)).toBe('normal');
+    expect(plantillaParaDocumento({ plantillaPorDefecto: 'nueva' }, e)).toBe('nueva');
+    e.campos.origen_2_nombre = { valor: 'Segundo Origen Sintetico SA', confianza: 0.9, evidencia: null, origen: 'llm' };
+    expect(plantillaParaDocumento({ plantillaPorDefecto: 'normal' }, e)).toBe('nueva');
+    expect(plantillaParaDocumento({ plantillaPorDefecto: 'normal' }, null)).toBe('normal');
+  });
+});

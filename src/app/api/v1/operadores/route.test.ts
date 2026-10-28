@@ -61,6 +61,12 @@ vi.mock('@/lib/likida/administracion', async (orig) => {
   return { ...real, getOperadoresRegistro: (...a: [string, Record<string, unknown>]) => getOperadoresRegistro(...a) };
 });
 
+// Ola 1 · A1: la compuerta «¿esta flota entrega el desglose por correo?» se controla por prueba (por omisión: NO, como hoy).
+let canalCorreo = false;
+vi.mock('@/lib/likida/operador_sin_telefono_canal', async (orig) => ({
+  ...(await orig<Record<string, unknown>>()), permiteAltaSinTelefono: async () => canalCorreo,
+}));
+
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 // La capa durable de idempotencia es de CONVENIENCIA y no lanza: sin base
 // responde `null` y la petición sigue. Se simula caída para que estas pruebas
@@ -85,6 +91,7 @@ const postear = (cuerpo: unknown, llave = `llave-de-prueba-${++n}`) =>
 const CHOFER = { nombre: 'Juan Pérez', telefono: '5512345678' };
 
 beforeEach(() => {
+  canalCorreo = false;
   abrir.mockClear(); importarOperadores.mockClear();
   resolverTerminalDeFlota.mockClear(); getOperadoresRegistro.mockClear();
   reiniciarIdempotencia();
@@ -361,5 +368,49 @@ describe('GET /v1/operadores', () => {
     getOperadoresRegistro.mockRejectedValueOnce(new Error('se cayó la base'));
     const r = await GET(new Request(URL_BASE));
     expect(r.status).toBeGreaterThanOrEqual(500);
+  });
+});
+
+
+describe('POST /v1/operadores — altas sin teléfono (flota con el desglose por correo, 0932)', () => {
+  const SIN_TEL = { nombre: 'Ana Torres', numeroEmpleado: 'E-7', correo: 'Ana@Ejemplo.test' };
+
+  it('flota en canal correo: el chofer entra SIN teléfono con número de empleado + correo, y el motor lo recibe marcado sinTelefono', async () => {
+    canalCorreo = true;
+    const r = await postear(SIN_TEL);
+    expect(r.status).toBe(201);
+    const filas = importarOperadores.mock.calls[0]![1] as unknown as Array<Record<string, unknown>>;
+    expect(filas[0]).toMatchObject({ nombre: 'Ana Torres', numeroEmpleado: 'E-7', correo: 'ana@ejemplo.test', sinTelefono: true, telefono: '' });
+  });
+
+  it('flota en canal correo pero sin número de empleado o sin correo: 400 por fila y cero escrituras', async () => {
+    canalCorreo = true;
+    const r = await postear({ nombre: 'Ana Torres', correo: 'ana@ejemplo.test' });
+    expect(r.status).toBe(400);
+    expect(importarOperadores).not.toHaveBeenCalled();
+    expect(JSON.stringify(await r.json())).toMatch(/número de empleado y correo/);
+  });
+
+  it('flota sin canal correo (o sin poder leerlo): el teléfono SIGUE siendo obligatorio — mismo 400 de siempre', async () => {
+    canalCorreo = false;
+    const r = await postear(SIN_TEL);
+    expect(r.status).toBe(400);
+    expect(JSON.stringify(await r.json())).toContain('Falta el `telefono`');
+    expect(importarOperadores).not.toHaveBeenCalled();
+  });
+
+  it('con teléfono nada cambia, y el correo (opcional) viaja al motor', async () => {
+    const r = await postear({ ...CHOFER, correo: 'juan@ejemplo.test' });
+    expect(r.status).toBe(201);
+    const filas = importarOperadores.mock.calls[0]![1] as unknown as Array<Record<string, unknown>>;
+    expect(filas[0]).toMatchObject({ telefono: '525512345678', correo: 'juan@ejemplo.test' });
+    expect(filas[0]).not.toHaveProperty('sinTelefono');
+  });
+
+  it('un lote que mezcla una fila con teléfono y otra sin teléfono las deja entrar a las dos (canal correo)', async () => {
+    canalCorreo = true;
+    const r = await postear({ operadores: [CHOFER, SIN_TEL] });
+    expect(r.status).toBe(201);
+    expect(importarOperadores.mock.calls[0]![1]).toHaveLength(2);
   });
 });

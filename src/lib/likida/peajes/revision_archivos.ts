@@ -10,6 +10,7 @@
 
 import * as XLSX from 'xlsx';
 import type { ReporteRevision } from './revision_cobros';
+import { rotuloOrigenPeriodo } from './periodo';
 import { CATEGORIAS_COBRO, ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO } from './reglas_cobro';
 import { ETIQUETA_SENAL } from './cruces_atipicos';
 
@@ -30,7 +31,7 @@ export function revisionAExcel(r: ReporteRevision): Uint8Array {
     [ROTULO_CANDIDATO],
     [`Archivo: ${texto(r.archivoNombre) || 'sin nombre'} · Proveedor: ${texto(r.proveedor) || 'no declarado'}`],
     [r.periodoOficialDesde && r.periodoOficialHasta
-      ? `Periodo del archivo: ${r.periodoOficialDesde} a ${r.periodoOficialHasta} (${r.periodoOrigen === 'declarado' ? 'declarado al subirlo' : 'tomado del nombre del archivo'})`
+      ? `Periodo del archivo: ${r.periodoOficialDesde} a ${r.periodoOficialHasta} (${rotuloOrigenPeriodo(r.periodoOrigen, 'declarado al subirlo')})`
       : 'Periodo del archivo: NO SE SABE (sin periodo no se revisan los cobros extemporáneos)'],
     [`Líneas revisadas: ${rev.lineasRevisadas} · Importe revisado (MXN): ${rev.montoRevisado}`],
     [`Líneas con al menos un candidato: ${rev.lineasConCandidato} · Importe (MXN): ${rev.montoConCandidato}`],

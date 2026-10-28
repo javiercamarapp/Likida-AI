@@ -66,7 +66,7 @@ function diasParaVencer(vence: string, hoy: string): number {
  */
 export function VistaOperadores({
   filas, pag, conteos, totalConocido, hoy, puedeEditar, guardarOperador, ilegible = false, sufijo, camposOcultos,
-  patios, patioDelJefe, altaOperador, cargarOperadores, invitar, plantillaCsv, invitaciones, hrefPatios, hrefGuia,
+  patios, patioDelJefe, altaOperador, sinWhatsApp = false, cargarOperadores, invitar, plantillaCsv, invitaciones, hrefPatios, hrefGuia,
 }: {
   /** Las filas de ESTA página. Ya vienen cortadas por la base. */
   filas: FilaOperador[];
@@ -97,6 +97,8 @@ export function VistaOperadores({
   /** El nombre del patio de un jefe CON patio (carga y altas caen ahí); null = toda la flota. */
   patioDelJefe: string | null;
   altaOperador: AccionForma;
+  /** La flota entrega el desglose por correo (0932): el alta admite operadores sin WhatsApp. */
+  sinWhatsApp?: boolean;
   cargarOperadores: AccionImportacion;
   invitar: AccionInvitar;
   /** El CSV de la plantilla (con BOM), armado en el servidor. */
@@ -149,14 +151,17 @@ export function VistaOperadores({
                     <p className="mb-3 mt-0.5 text-[12.5px]" style={{ color: 'var(--muted)' }}>
                       Uno por uno. Para toda tu flota de una vez, usa la carga desde Excel o CSV de abajo.
                     </p>
-                    <FormaAltaOperador accion={altaOperador} patios={patios} terminalFijo={patioDelJefe} />
+                    <FormaAltaOperador accion={altaOperador} patios={patios} terminalFijo={patioDelJefe} sinWhatsApp={sinWhatsApp} />
                   </div>
                 </div>
               </section>
               <ImportadorMasivo
                 entidad="operadores" accion={cargarOperadores} plantillaCsv={plantillaCsv}
                 archivoPlantilla="plantilla-operadores.csv"
-                columnas="Obligatorias: nombre y teléfono (el WhatsApp con el que el chofer le escribirá a Likida). Opcionales: número de empleado, RFC, licencia, tipo y vencimiento de licencia, y patio."
+                columnas={(sinWhatsApp
+                  ? 'Obligatorias: nombre y, o bien teléfono, o bien número de empleado y correo (tu flota recibe el desglose por correo). Opcionales: correo con teléfono,'
+                  : 'Obligatorias: nombre y teléfono (el WhatsApp con el que el chofer le escribirá a Likida). Opcionales:')
+                  + ' número de empleado, RFC, licencia, tipo y vencimiento de licencia, y patio.'}
                 hrefPatios={hrefPatios} ofrecerInvitacion patioDelJefe={patioDelJefe} tope={2_000}
               />
             </>

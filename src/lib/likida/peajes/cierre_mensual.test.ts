@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { cierreMensual, type ArchivoCierre, type LineaCierre } from './cierre_mensual';
+import { cierreMensual, cierreDosMeses, type ArchivoCierre, type LineaCierre } from './cierre_mensual';
+import { mesesRecientes } from './periodo';
 import { generarFilasIave } from './fixtures/generar_desglose_iave';
 
 const SERIAL0 = Date.UTC(1899, 11, 30);
@@ -115,5 +116,64 @@ describe('un mes a medias NO se presenta como completo', () => {
   });
   it('mes inválido', () => {
     expect(cierreMensual('2026-13', [])).toHaveProperty('error');
+  });
+});
+
+describe('A2 ola 1 · dos meses juntos', () => {
+  const tres = (mes: string, extra: LineaCierre[] = []) => [
+    archivo(`${mes}-a`, `${mes}-01`, `${mes}-10`, [lin({ fecha: `${mes}-02`, tag: 'IMDM00000001' }), lin({ fecha: `${mes}-05`, tag: 'IMDM00000002' })]),
+    archivo(`${mes}-b`, `${mes}-11`, `${mes}-20`, [lin({ fecha: `${mes}-12`, tag: 'IMDM00000003' })]),
+    archivo(`${mes}-c`, `${mes}-21`, `${mes}-28`, [lin({ fecha: `${mes}-22`, tag: 'IMDM00000004' }), ...extra]),
+  ];
+
+  it('suma los dos meses, junta las seis decenas y los dos completos dan «completo»', () => {
+    const c = cierreDosMeses('2026-03', [...tres('2026-02'), ...tres('2026-03')]);
+    if ('error' in c) throw new Error(c.error);
+    expect(c.meses).toEqual(['2026-02', '2026-03']);
+    expect(c.cruces).toBe(8);
+    expect(c.monto).toBe(800);
+    expect(c.decenas).toHaveLength(6);
+    expect(c.decenas[0].etiqueta).toBe('2026-02 · 1 a 10');
+    expect(c.decenas[5].etiqueta).toBe('2026-03 · 21 a 31');
+    expect(c.completo).toBe(true);
+    expect(c.decenasFaltantes).toEqual([]);
+  });
+  it('un cobro de febrero que llega en el archivo de marzo SE ACOMODA en la ventana; uno de enero queda fuera y sigue como candidato', () => {
+    const tardios = [lin({ fecha: '2026-02-25', tag: 'IMDM00000009', monto: 70 }), lin({ fecha: '2026-01-30', tag: 'IMDM00000008', monto: 30 })];
+    const c = cierreDosMeses('2026-03', [...tres('2026-02'), ...tres('2026-03', tardios)]);
+    if ('error' in c) throw new Error(c.error);
+    expect(c.acomodados).toEqual({ n: 1, monto: 70 });
+    expect(c.tardiosFueraDeVentana).toEqual({ n: 1, monto: 30 });
+    expect(c.avisos.join(' ')).toMatch(/anteriores a 2026-02/);
+  });
+  it('si falta una decena de cualquiera de los dos meses, la ventana se dice incompleta y nombra cuál', () => {
+    const marzo = tres('2026-03').filter((a) => a.id !== '2026-03-b');
+    const c = cierreDosMeses('2026-03', [...tres('2026-02'), ...marzo]);
+    if ('error' in c) throw new Error(c.error);
+    expect(c.completo).toBe(false);
+    expect(c.decenasFaltantes).toEqual(['2026-03 · 11 a 20']);
+  });
+  it('un cobro repetido entre archivos se cuenta una sola vez en la lista y el doble conteo se suma', () => {
+    const rep = lin({ fecha: '2026-03-25', tag: 'IMDM00000007', hora: '11:11:11' });
+    const c = cierreDosMeses('2026-03', [...tres('2026-02'), ...tres('2026-03', [rep]), archivo('dup', '2026-03-21', '2026-03-28', [rep])]);
+    if ('error' in c) throw new Error(c.error);
+    expect(c.repetidosEntreArchivos).toHaveLength(1);
+    expect(c.dobleConteo.n).toBe(1);
+    expect(c.completo).toBe(false);
+  });
+  it('un mes inválido es un error, no un cierre vacío', () => {
+    expect(cierreDosMeses('2026-13', [])).toHaveProperty('error');
+  });
+});
+
+describe('mesesRecientes', () => {
+  it('del mes de hoy hacia atrás, cruzando el año', () => {
+    expect(mesesRecientes('2026-02-15', 4)).toEqual(['2026-02', '2026-01', '2025-12', '2025-11']);
+  });
+  it('doce por defecto', () => {
+    const m = mesesRecientes('2026-10-28');
+    expect(m).toHaveLength(12);
+    expect(m[0]).toBe('2026-10');
+    expect(m[11]).toBe('2025-11');
   });
 });

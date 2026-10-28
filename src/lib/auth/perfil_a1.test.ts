@@ -125,3 +125,41 @@ describe('las server actions de A1 llegan a una puerta que aplica el perfil', ()
     expect(PUERTA.test(fuente), `${archivo} tiene acciones y ninguna puerta`).toBe(true);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Ola 1 · A1 — llaves de API, usuarios y patios bajo el perfil (trazabilidad A1 #3/#21 y transversal [LIKIDA-CÓDIGO] 7).
+// El perfil abre las TRES páginas; el ROL sigue mandando (llaves-api y usuarios son área `administracion`) y los módulos que el
+// perfil debe ocultar siguen ocultos.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('Ola 1 · A1: llaves-api, usuarios y patios bajo cinco_agentes', () => {
+  const ABIERTAS = ['/dashboard/llaves-api', '/dashboard/usuarios', '/dashboard/patios'];
+
+  it.each(ABIERTAS)('%s está dentro de la lista cerrada (base) y ya no figura en stand-by', (ruta) => {
+    expect(rutaPermitidaEnPerfil(PERFIL, ruta)).toBe(true);
+    expect(RUTAS_PERFIL_CINCO_AGENTES[ruta]).toBe('base');
+    expect(RUTAS_STAND_BY_PERFIL_CINCO_AGENTES).not.toContain(ruta);
+  });
+
+  it.each(['/dashboard/llaves-api', '/dashboard/usuarios'])('%s: el dueño y el superadmin la ven bajo el perfil; el contador y el encargado NO', (ruta) => {
+    expect(puedeVerRuta('flota_admin', ruta, PERFIL)).toBe(true);
+    expect(puedeVerRuta('superadmin', ruta, PERFIL)).toBe(true);
+    expect(puedeVerRuta('contador', ruta, PERFIL)).toBe(false);
+    expect(puedeVerRuta('encargado', ruta, PERFIL)).toBe(false);
+  });
+
+  it('/dashboard/patios la ve el dueño bajo el perfil', () => {
+    expect(puedeVerRuta('flota_admin', '/dashboard/patios', PERFIL)).toBe(true);
+    expect(puedeVerRuta('superadmin', '/dashboard/patios', PERFIL)).toBe(true);
+  });
+
+  it('los módulos que el perfil debe ocultar SIGUEN ocultos (no se abrió nada más)', () => {
+    for (const ruta of ['/dashboard/chat', '/dashboard/facturacion', '/dashboard/suscripcion', '/dashboard/sesiones-mcp', '/dashboard/configuracion', '/dashboard/politicas', '/dashboard/timbrado']) {
+      expect(puedeVerRuta('flota_admin', ruta, PERFIL), ruta).toBe(false);
+      expect(puedeVerRuta('superadmin', ruta, PERFIL), ruta).toBe(false);
+    }
+  });
+
+  it('SIN perfil nada cambia: las tres siguen abiertas para el dueño como siempre', () => {
+    for (const ruta of ABIERTAS) expect(puedeVerRuta('flota_admin', ruta), ruta).toBe(true);
+  });
+});

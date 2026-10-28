@@ -425,6 +425,17 @@ describe('el rechazo vuelve a la bandeja (T-A3-29)', () => {
     expect(eventos.some((x) => x.tipo === 'envio_error' && x.detalle.causa === 'plantilla_incompleta')).toBe(true);
   });
 
+  it('un envío con plantilla NUEVA (sin verificar contra el TMS) no se sube solo: queda listo para subir a mano y avisa (OLA1-A3)', async () => {
+    const llamadas = vi.fn(async () => ({ ok: true as const, referencia: 'REF-1' }));
+    puertos.set(A, { cargarPlantilla: llamadas as unknown as SalidaTms['cargarPlantilla'], consultarReque: async () => 'existe', consultarCaja: async () => 'existe' });
+    const envio = sembrar(A, 1, 'pendiente_prechequeo', { envio: { plantilla: 'nueva' } });
+    const r = await pasada();
+    expect(llamadas).not.toHaveBeenCalled();
+    expect(r.enviados).toBe(0);
+    expect((await leer(A, envio.id)).estado).toBe('listo');
+    expect(rechazosDevueltos).toHaveLength(0);
+  });
+
   it('una corrección que SÍ cambia la plantilla se envía normal', async () => {
     puertos.set(A, puertoRechazo([ERROR_FRACCION]));
     const primero = sembrar(A, 1);
@@ -489,6 +500,20 @@ describe('lo que nunca se envía', () => {
     expect((await leer(A, e.id)).estado).toBe('descartado');
     expect(devueltos).toHaveLength(1);
     expect(devueltos[0].motivo).toMatch(/bloqueos abiertos/);
+  });
+
+  it('MODO MANUAL: sin número de cliente interno o sin caja el documento vuelve a revisión; con ambos queda listo (OLA1-A3)', async () => {
+    const sinCliente = sembrar(A, 1);
+    delete docs.get(`${A}:${sinCliente.documentoId}`)!.extraccion!.campos.numero_cliente_interno;
+    const sinCaja = sembrar(A, 2);
+    delete docs.get(`${A}:${sinCaja.documentoId}`)!.extraccion!.campos.caja_numero;
+    const bien = sembrar(A, 3);
+    await pasada();
+    expect((await leer(A, sinCliente.id)).estado).toBe('descartado');
+    expect((await leer(A, sinCaja.id)).estado).toBe('descartado');
+    expect((await leer(A, bien.id)).estado).toBe('listo');
+    expect(devueltos.map((d) => d.motivo).join(' ')).toMatch(/cliente interno/);
+    expect(devueltos.map((d) => d.motivo).join(' ')).toMatch(/número de caja/);
   });
 
   it('un `listo` que gana bloqueos antes de subir tampoco se envía', async () => {

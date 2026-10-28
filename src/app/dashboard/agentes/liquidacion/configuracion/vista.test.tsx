@@ -215,3 +215,59 @@ describe('solo administradores', () => {
     expect(puedeVerArea('encargado', 'administracion')).toBe(false);
   });
 });
+
+describe('Ola 1 · A1: correo emisor, modo primer mes y revisores en el panel', () => {
+  it('traduce el formulario: correo emisor normalizado, revisores «departamento: correo» y el modo primer mes con su fecha', () => {
+    const c = ok(formulario({
+      remitenteCorreo: ' Emisor@Ejemplo.test ', primerMes: 'on', primerMesHasta: '2026-11-30',
+      revisores: 'Nómina: Nomina.Rev@Ejemplo.test\nrh = rh.rev@ejemplo.test',
+    }));
+    expect(c.remitenteCorreo).toBe('emisor@ejemplo.test');
+    expect(c.primerMesHasta).toBe('2026-11-30');
+    expect(c.revisores).toEqual([{ departamento: 'nomina', correo: 'nomina.rev@ejemplo.test' }, { departamento: 'rh', correo: 'rh.rev@ejemplo.test' }]);
+  });
+
+  it('el modo primer mes nace APAGADO: sin la casilla la fecha no se guarda aunque venga, y los revisores pueden quedar listos', () => {
+    const c = ok(formulario({ primerMes: null, primerMesHasta: '2026-11-30', revisores: 'rh: rh.rev@ejemplo.test' }));
+    expect(c.primerMesHasta).toBeNull();
+    expect(c.revisores).toHaveLength(1);
+    expect(ok(formulario()).revisores).toEqual([]);
+    expect(ok(formulario()).remitenteCorreo).toBeNull();
+  });
+
+  it('inválidos, en lenguaje llano: sin revisor, sin fecha, formato, correo, departamento repetido, más de 5', () => {
+    expect(error(formulario({ primerMes: 'on', primerMesHasta: '2026-11-30', revisores: '' }))).toContain('al menos un revisor');
+    expect(error(formulario({ primerMes: 'on', primerMesHasta: '', revisores: 'rh: rh@ejemplo.test' }))).toContain('hasta qué día');
+    expect(error(formulario({ revisores: 'solo-un-correo@ejemplo.test' }))).toContain('Revisor 1');
+    expect(error(formulario({ revisores: 'rh: sin-arroba' }))).toContain('Revisor 1');
+    expect(error(formulario({ revisores: 'RH 2: a@ejemplo.test' }))).toContain('Revisor 1');
+    expect(error(formulario({ revisores: 'rh: a@ejemplo.test\nrh: b@ejemplo.test' }))).toContain('Un solo revisor por departamento');
+    expect(error(formulario({ revisores: ['a', 'b', 'c', 'd', 'e', 'f'].map((d) => `${d}x: ${d}@ejemplo.test`).join('\n') }))).toContain('hasta 5');
+    expect(error(formulario({ remitenteCorreo: 'no es correo' }))).toContain('Correo emisor');
+  });
+
+  it('la pantalla ofrece los campos de siempre que solo se fijaban por API y los nuevos', () => {
+    const html = pintar();
+    for (const n of ['remitenteNombre', 'responderA', 'remitenteCorreo', 'enviarDesdeHora', 'rhCorreos', 'archivoCorreo', 'primerMes', 'primerMesHasta', 'revisores']) {
+      expect(html, n).toContain(`name="${n}"`);
+    }
+    expect(html).toContain('Primer mes: revisión por departamento');
+  });
+
+  it('con la configuración guardada muestra los revisores, la fecha y el correo emisor', () => {
+    const html = pintar({
+      hayFila: true,
+      config: { ...CONFIG_CORREO_POR_DEFECTO, canal: 'correo', remitenteCorreo: 'emisor@ejemplo.test', primerMesHasta: '2026-11-30', revisores: [{ departamento: 'nomina', correo: 'nomina.rev@ejemplo.test' }] },
+    });
+    expect(html).toContain('emisor@ejemplo.test');
+    expect(html).toContain('nomina: nomina.rev@ejemplo.test');
+    expect(html).toContain('value="2026-11-30"');
+    expect(html).toMatch(/name="primerMes"[^>]*checked/);
+  });
+
+  it('sumarDias cruza mes y año', async () => {
+    const { sumarDias } = await import('./vista');
+    expect(sumarDias('2026-10-28', 30)).toBe('2026-11-27');
+    expect(sumarDias('2026-12-20', 30)).toBe('2027-01-19');
+  });
+});

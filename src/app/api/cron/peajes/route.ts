@@ -4,6 +4,7 @@ import { ejecutarPulls, type ResumenPulls } from '@/lib/likida/peajes/pull';
 import { ejecutarSftpPeajes, type ResumenSftpPeajes } from '@/lib/likida/peajes/ingesta_sftp';
 import { reintentarAvisosPeajes, type ResumenAvisos } from '@/lib/likida/peajes/aviso_oficina';
 import { reintentarAvisosAtipicos, type ResumenAvisosAtipicos } from '@/lib/likida/peajes/aviso_atipicos';
+import { barrerAvisosPeajes, depsBarridoReales, type ResumenBarridoAvisos } from '@/lib/likida/peajes/aviso_barrido';
 import { leerInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
@@ -23,6 +24,9 @@ export const maxDuration = 120;
 // cierra solo si todavía tiene el token. Un formato que no entiende queda
 // `fallida` con el motivo exacto (y una corrida de «fallo» en la bitácora del
 // agente); un fallo de infraestructura reintenta con backoff.
+//
+// Además (A2 ola 1): AL FINAL los avisos proactivos de plazo de reclamo y de archivo decenal faltante
+// (`peajes/aviso_barrido.ts`), apagados de origen por flota.
 //
 // Además (0563): PRIMERO consulta los endpoints de las flotas con pull activo
 // (`peajes/pull.ts`: lo que traiga entra a la misma cola), TAMBIÉN PRIMERO las flotas
@@ -86,7 +90,13 @@ export async function GET(req: Request) {
     try { avisosAtipicos = await reintentarAvisosAtipicos(5); } catch (e) {
       logger.error('cron.peajes.avisos_atipicos_fallo', { error: e instanceof Error ? e.message : String(e) });
     }
-    logger.info('cron.peajes.ok', { ...r, pulls, sftp, avisos, avisosAtipicos });
+    // 5. Los avisos proactivos (A2 ola 1): cobros sin reclamar por vencer su plazo y archivo decenal faltante. Apagados de origen por
+    //    flota; sin destinatario no envían y no vuelven «parcial» el latido. Una flota que no se pudo evaluar sí.
+    let avisosProactivos: ResumenBarridoAvisos | null = null;
+    try { avisosProactivos = await barrerAvisosPeajes(await depsBarridoReales(), { venceEn: Date.now() + 15_000 }); } catch (e) {
+      logger.error('cron.peajes.avisos_proactivos_fallo', { error: e instanceof Error ? e.message : String(e) });
+    }
+    logger.info('cron.peajes.ok', { ...r, pulls, sftp, avisos, avisosAtipicos, avisosProactivos });
     // `fallidos` y `reintentar` son trabajo que NO terminó bien: ni «ok» ni «fallo»
     // total, que son las dos maneras de mentir aquí. Un pull, un SFTP fallido o un
     // aviso que no salió tampoco es «ok».
@@ -96,10 +106,11 @@ export async function GET(req: Request) {
       || (sftp?.fallidas ?? 0) > 0 || sftp === null
       || (avisos?.pendientes ?? 0) > 0
       || avisosAtipicos === null || avisosAtipicos.pendientes > 0
+      || avisosProactivos === null || avisosProactivos.fallidas > 0 || avisosProactivos.plazo.fallidos > 0 || avisosProactivos.recordatorios.fallidos > 0
       || (r.atipicos?.fallidos ?? 0) > 0
       || (r.discrepancia?.pendientes ?? 0) > 0;
-    await registrarLatido('peajes', parcial ? 'parcial' : 'ok', { ...r, pulls, sftp, avisos, avisosAtipicos });
-    return NextResponse.json({ corrio: true, ...r, pulls, sftp, avisos, avisosAtipicos });
+    await registrarLatido('peajes', parcial ? 'parcial' : 'ok', { ...r, pulls, sftp, avisos, avisosAtipicos, avisosProactivos });
+    return NextResponse.json({ corrio: true, ...r, pulls, sftp, avisos, avisosAtipicos, avisosProactivos });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     const codigo = codigoDeError(e);

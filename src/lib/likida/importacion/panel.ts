@@ -24,6 +24,7 @@ import { getTerminales } from '../terminales';
 import { invitarOperadores, LIMITE_POR_LLAMADA } from '../invitacion_operador';
 import { MAX_ARCHIVO_BYTES, matrizDeArchivo, TOPE_FILAS_IMPORTACION } from './archivo';
 import { asignarPatios } from './patios';
+import { permiteAltaSinTelefono } from '../operador_sin_telefono_canal';
 import { interpretarFilasOperadores, planificarOperadores, importarOperadores, type OperadorImportado } from './operadores';
 import { interpretarFilasUnidades, planificarUnidades, importarUnidades, type UnidadImportada } from './unidades';
 import { interpretarFilasGps, planificarMapeoGps, aplicarMapeoGps } from './gps_dispositivos';
@@ -92,7 +93,13 @@ export async function cargarOperadoresDesdeArchivo(e: EntradaImportacion): Promi
   const leido = await leerArchivo(e.datos);
   if (!leido.ok) return vacio(paso, leido.error);
 
-  const lectura = interpretarFilasOperadores(leido.matriz);
+  // Flota con el desglose por correo: se admiten filas SIN teléfono (número de empleado + correo). Falla cerrado a «obligatorio».
+  // Se lee primero con la regla de siempre; solo si el archivo SÍ trae filas sin teléfono (número de empleado + correo) se consulta el
+  // canal de la flota, y entonces se vuelve a leer con la regla relajada. Un archivo normal no cuesta ninguna lectura extra.
+  let lectura = interpretarFilasOperadores(leido.matriz);
+  const laxa = interpretarFilasOperadores(leido.matriz, { sinTelefono: true });
+  const traeSinTelefono = laxa.filas.some((f) => f.sinTelefono === true);
+  if (traeSinTelefono && await permiteAltaSinTelefono(e.tenantId)) lectura = laxa;
   if (lectura.error && lectura.filas.length === 0) return vacio(paso, lectura.error);
 
   let patios;
@@ -114,7 +121,7 @@ export async function cargarOperadoresDesdeArchivo(e: EntradaImportacion): Promi
     nuevas: plan.nuevas.length, yaEstaban: plan.duplicados.length, conProblema: total,
     muestra: plan.nuevas.slice(0, TOPE_MUESTRA_UI).map((f: OperadorImportado): MuestraFilaUI => ({
       fila: f.fila, titulo: f.nombre,
-      detalle: [f.telefono, f.patio ? `patio ${f.patio}` : null, f.numeroEmpleado ? `empleado ${f.numeroEmpleado}` : null].filter(Boolean).join(' · '),
+      detalle: [f.sinTelefono ? 'sin WhatsApp (desglose por correo)' : f.telefono, f.correo ?? null, f.patio ? `patio ${f.patio}` : null, f.numeroEmpleado ? `empleado ${f.numeroEmpleado}` : null].filter(Boolean).join(' · '),
     })),
     problemas, patiosDesconocidos: conPatio.patiosDesconocidos, avisos: [], excedeTope,
   };

@@ -43,6 +43,11 @@ export interface ContextoPrechequeo {
   /** Número interno ya resuelto del catálogo; si falta se lee `numero_cliente_interno` de la extracción. */
   clienteInterno?: string | null;
   timeoutMs?: number;
+  /**
+   * OLA1-A3 · Modo manual (sin conector del TMS): solo se revisa lo que Likida sí puede saber — que el documento traiga el
+   * número de cliente interno y la caja—. El requerimiento no se consulta ni se espera: lo verifica la persona al subir.
+   */
+  soloLocal?: boolean;
 }
 
 export const TIMEOUT_PRECHEQUEO_MS = 5000;
@@ -91,6 +96,14 @@ export async function prechequear(doc: Extraccion, ctx: ContextoPrechequeo): Pro
     cajaR = caja ? sinConsulta('No se consultó el TMS: falta el identificador de la flota.') : { estado: 'falta', detalle: 'El documento no trae número de caja.' };
     reque = sinConsulta('No se consultó el TMS: falta el identificador de la flota.');
     return { cliente, caja: cajaR, reque, accion: 'revisar', motivo: 'Falta el identificador de la flota; no se puede consultar el TMS.' };
+  }
+
+  if (ctx.soloLocal) {
+    const cajaL: ResultadoCausa = caja ? { estado: 'desconocido', detalle: 'La caja viene en el documento; sin conector del TMS no se verifica allá.' } : { estado: 'falta', detalle: 'El documento no trae número de caja.' };
+    const requeL: ResultadoCausa = { estado: 'desconocido', detalle: 'Sin conector del TMS no se consulta el requerimiento: se verifica al subir a mano.' };
+    if (cliente.estado === 'falta') return { cliente, caja: cajaL, reque: requeL, accion: 'revisar', motivo: cliente.detalle };
+    if (cajaL.estado === 'falta') return { cliente, caja: cajaL, reque: requeL, accion: 'revisar', motivo: cajaL.detalle };
+    return { cliente, caja: cajaL, reque: requeL, accion: 'enviar', motivo: null };
   }
 
   // Caja y reque se consultan en paralelo: el tope total es un solo timeout.

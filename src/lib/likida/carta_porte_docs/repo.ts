@@ -18,11 +18,12 @@ import { acotada } from '../presupuesto';
 import { conteo, exigir, traerPorIds } from '../pg';
 import { leerConTope } from './lectura_paginada';
 import { logger } from '@/lib/logger';
+import { hoyMx } from '@/lib/formato';
 import { aBuffer } from './bytes';
 import type { Extraccion } from './campos';
 import type { ResultadoValidacion } from './validacion';
 import type { FormatoDoc } from './contenido';
-import type { ViajeSalido } from './viajes_sin_ccp';
+import { folioComparable, viajesLigadosPorFolio, type ViajeSalido } from './viajes_sin_ccp';
 import type { FirmaPerfil, Mapeo, EjemploPerfil, Perfil } from './perfiles';
 import { TOPE_FILAS_CATALOGO, catalogoVacio, type CatalogoCliente, type ParteCat, type ProductoCat } from './catalogo_cliente';
 
@@ -574,6 +575,12 @@ export async function listarClientes(tenantId: string): Promise<Array<{ id: stri
   return ((exigir(r, 'cpdocs.clientes') ?? []) as unknown as Fila[]).map((f) => ({ id: String(f.id), nombre: String(f.nombre) }));
 }
 
+/** Los clientes ACTIVOS de la flota con su correo de contacto (para reconocer al remitente de un documento). Con tope; falla cerrado. */
+export async function clientesConCorreo(tenantId: string): Promise<Array<{ id: string; correo: string | null }>> {
+  const r = await acotada(supabaseAdmin().from('cliente').select('id, correo').eq('tenant_id', tenantId).eq('activo', true).not('correo', 'is', null).order('id').limit(1000), 'cpdocs.clientes_correo');
+  return ((exigir(r, 'cpdocs.clientes_correo') ?? []) as unknown as Fila[]).map((f) => ({ id: String(f.id), correo: s(f.correo) }));
+}
+
 // ── Catálogo por cliente (0792) ─────────────────────────────────────────────
 
 /** La tabla no existe todavía (la 0792 no se ha aplicado): PostgREST PGRST205 / Postgres 42P01. */
@@ -1036,6 +1043,33 @@ export async function guardarSalidaConfig(tenantId: string, c: SalidaConfigFila,
 }
 
 
+// ── Modo primer mes (0938: cp_salida_config.primer_mes_hasta / revisores_departamento) ───────────────────────────────────
+// Se lee y se escribe APARTE de `COLUMNAS_SALIDA_CONFIG` a propósito: la configuración de siempre no puede romperse en una base
+// que todavía no tiene la 0938. Sin las columnas, leer devuelve `null` (modo apagado) y escribir falla con una frase clara.
+
+export interface PrimerMesFila { hasta: string | null; revisores: Array<{ departamento: string; correo: string }> }
+
+export async function leerPrimerMes(tenantId: string): Promise<PrimerMesFila | null> {
+  const r = await acotada(supabaseAdmin().from('cp_salida_config').select('primer_mes_hasta, revisores_departamento').eq('tenant_id', tenantId).maybeSingle(), 'cpdocs.primer_mes');
+  if (columnaAusente(r.error)) { logger.warn('cartaporte_docs.primer_mes_sin_migracion', { tenantId }); return null; }
+  const f = exigir(r, 'cpdocs.primer_mes') as unknown as Fila | null;
+  if (!f) return null;
+  const crudo = Array.isArray(f.revisores_departamento) ? (f.revisores_departamento as unknown[]) : [];
+  const revisores = crudo.flatMap((x) => {
+    const o = (x ?? {}) as Record<string, unknown>;
+    return typeof o.correo === 'string' && typeof o.departamento === 'string' ? [{ departamento: o.departamento, correo: o.correo }] : [];
+  });
+  return { hasta: s(f.primer_mes_hasta)?.slice(0, 10) ?? null, revisores };
+}
+
+export async function guardarPrimerMes(tenantId: string, c: PrimerMesFila, actorId: string | null): Promise<void> {
+  const r = await acotada(supabaseAdmin().from('cp_salida_config').upsert({
+    tenant_id: tenantId, primer_mes_hasta: c.hasta, revisores_departamento: c.revisores, updated_by: actorId, updated_at: new Date().toISOString(),
+  }, { onConflict: 'tenant_id' }), 'cpdocs.primer_mes_guardar');
+  if (columnaAusente(r.error)) throw new Error('El modo primer mes todavía no está habilitado en la base (falta aplicar la migración 0938).');
+  if (r.error) throw new Error(`cartaporte_docs primer mes: ${r.error.message}`);
+}
+
 // ── Revisor asignado (0790: cp_documento.revisor_asignado) ──────────────────
 // Se lee y se escribe APARTE de `COLUMNAS_DOC` a propósito: la bandeja de hoy no puede romperse en una base que todavía no
 // tiene la 0790. Sin la columna, leer devuelve «sin asignar» y escribir falla con una frase clara.
@@ -1246,6 +1280,8 @@ export async function enviosParaInsights(tenantId: string, desde: Date): Promise
 
 /** Cuánto hacia atrás se buscan salidas (más viejo que esto ya no es un pendiente de la semana). */
 export const DIAS_SALIDAS_SIN_CCP = 45;
+/** Días ANTES de la ventana de salidas desde los que se leen documentos/cargas para ligar por folio (un complemento puede existir antes del viaje). */
+const MARGEN_DIAS_FOLIO_CCP = 60;
 
 /**
  * Viajes con salida registrada (hito `salida_carga` recibido o validado) y los ids de los que ya tienen un complemento
@@ -1254,7 +1290,15 @@ export const DIAS_SALIDAS_SIN_CCP = 45;
 /** Tope de salidas que se leen (≈ 45 días de una flota de varios cientos de unidades); pasar de esto se DICE (`truncado`). */
 export const TOPE_SALIDAS_SIN_CCP = 20_000;
 
-export async function leerSalidasParaSinCcp(tenantId: string, ahora: Date = new Date()): Promise<{ viajes: ViajeSalido[]; conCcp: Set<string>; truncado: boolean }> {
+export interface OpcionesSinCcp {
+  /**
+   * Flota bajo el perfil `cinco_agentes`: los viajes nacen en el TMS y no hay hitos del conductor (A5, apagado). Entonces una salida
+   * es un viaje con `fecha_inicio` dentro de la ventana, y «con CCP» se decide por folio (documento aprobado o carga subida al TMS).
+   */
+  viajesDelTms?: boolean;
+}
+
+export async function leerSalidasParaSinCcp(tenantId: string, ahora: Date = new Date(), opciones: OpcionesSinCcp = {}): Promise<{ viajes: ViajeSalido[]; conCcp: Set<string>; truncado: boolean }> {
   const desde = new Date(ahora.getTime() - DIAS_SALIDAS_SIN_CCP * 86_400_000).toISOString();
   // A37-S32-06: `.limit(2000)` recortaba en silencio (y PostgREST ya corta a 1,000): los viajes más viejos sin CCP desaparecían de la
   // pantalla. Se pagina con range() y, si aun así hay más que el tope, se devuelve `truncado` para que la vista lo diga.
@@ -1262,11 +1306,23 @@ export async function leerSalidasParaSinCcp(tenantId: string, ahora: Date = new 
     .eq('tenant_id', tenantId).eq('tipo', 'salida_carga').in('estado', ['recibido', 'validado'])
     .gte('recibido_en', desde).order('recibido_en', { ascending: false }).order('id').range(d, h), 'cpdocs.sin_ccp_hitos') as never, TOPE_SALIDAS_SIN_CCP);
   const hitos = (exigir(rh, 'cpdocs.sin_ccp_hitos') ?? []) as unknown as Fila[];
-  const truncado = rh.truncado;
+  let truncado = rh.truncado;
   const salidaPorViaje = new Map<string, string>();
   for (const h of hitos) {
     const id = s(h.viaje_id); const t = s(h.mensaje_en) ?? s(h.recibido_en);
     if (id && t && !salidaPorViaje.has(id)) salidaPorViaje.set(id, t);
+  }
+  if (opciones.viajesDelTms) {
+    // Sin hitos de A5 la salida es la fecha de inicio del viaje (día en hora de México). El hito, si existe, manda.
+    const rv = await leerConTope<Fila>((d, h, primera) => acotada(supabaseAdmin().from('viaje').select('id, fecha_inicio', conteo(primera ? 0 : 1))
+      .eq('tenant_id', tenantId).gte('fecha_inicio', hoyMx(new Date(ahora.getTime() - DIAS_SALIDAS_SIN_CCP * 86_400_000))).order('fecha_inicio', { ascending: false }).order('id').range(d, h), 'cpdocs.sin_ccp_viajes_fecha') as never, TOPE_SALIDAS_SIN_CCP);
+    for (const v of (exigir(rv, 'cpdocs.sin_ccp_viajes_fecha') ?? []) as unknown as Fila[]) {
+      const id = s(v.id); const f = s(v.fecha_inicio);
+      if (!id || !f || salidaPorViaje.has(id)) continue;
+      const t = new Date(`${f.slice(0, 10)}T00:00:00-06:00`);
+      if (Number.isFinite(t.getTime())) salidaPorViaje.set(id, t.toISOString());
+    }
+    truncado = truncado || rv.truncado;
   }
   const ids = [...salidaPorViaje.keys()];
   if (ids.length === 0) return { viajes: [], conCcp: new Set(), truncado };
@@ -1283,5 +1339,30 @@ export async function leerSalidasParaSinCcp(tenantId: string, ahora: Date = new 
   });
   const conCcp = new Set<string>();
   for (const d of docs) { const id = s(d.viaje_id); if (id) conCcp.add(id); }
+  if (opciones.viajesDelTms) {
+    // Folios de los complementos aprobados y de las cargas ya subidas al TMS (la referencia es el folio del viaje allá).
+    //
+    // SUPUESTO DECLARADO (sin confirmar con el cliente): `viaje.folio` (TMS) = `folio_cliente` del documento («Folio / referencia del
+    // cliente», campos.ts) = `referencia_tms` de la carga subida. Si el supuesto es falso, NINGÚN viaje liga y TODOS salen «sin CCP»
+    // (falla ruidosa, sin enviar nada a nadie): es la señal para confirmar con el cliente qué campo equivale al folio.
+    //
+    // La comparación NO se hace por igualdad exacta en la base (un folio con otra capitalización o con espacios nunca volvía y salía
+    // «sin CCP»): se leen los documentos aprobados y las cargas subidas de la flota desde un margen antes de la ventana de salidas y
+    // se comparan en memoria con `folioComparable` (sin espacios, en mayúsculas) de AMBOS lados.
+    if (viajes.some((v) => folioComparable(v.folio) !== '')) {
+      const margen = new Date(ahora.getTime() - (DIAS_SALIDAS_SIN_CCP + MARGEN_DIAS_FOLIO_CCP) * 86_400_000).toISOString();
+      const [rDoc, rEnvio] = await Promise.all([
+        leerConTope<Fila>((d, h, primera) => acotada(supabaseAdmin().from('cp_documento').select('folio:extraccion->campos->folio_cliente->>valor', conteo(primera ? 0 : 1))
+          .eq('tenant_id', tenantId).eq('estado', 'aprobado').gte('created_at', margen).order('created_at', { ascending: false }).order('id').range(d, h), 'cpdocs.sin_ccp_folio_docs') as never, TOPE_SALIDAS_SIN_CCP),
+        leerConTope<Fila>((d, h, primera) => acotada(supabaseAdmin().from('cp_envio_tms').select('referencia_tms', conteo(primera ? 0 : 1))
+          .eq('tenant_id', tenantId).in('estado', ['enviado', 'subido_a_mano']).gte('created_at', margen).order('created_at', { ascending: false }).order('id').range(d, h), 'cpdocs.sin_ccp_folio_envios') as never, TOPE_SALIDAS_SIN_CCP),
+      ]);
+      const vistos = new Set<string>();
+      for (const d of (exigir(rDoc, 'cpdocs.sin_ccp_folio_docs') ?? []) as unknown as Fila[]) { const f = folioComparable(s(d.folio)); if (f) vistos.add(f); }
+      for (const e of (exigir(rEnvio, 'cpdocs.sin_ccp_folio_envios') ?? []) as unknown as Fila[]) { const f = folioComparable(s(e.referencia_tms)); if (f) vistos.add(f); }
+      truncado = truncado || rDoc.truncado || rEnvio.truncado;
+      for (const id of viajesLigadosPorFolio(viajes, vistos)) conCcp.add(id);
+    }
+  }
   return { viajes, conCcp, truncado };
 }

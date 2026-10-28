@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { crearDbFalsa, type DbFalsa } from './db_falsa.test.util';
 import { generarLibroIave, CASETAS_FIXTURE } from './fixtures/generar_desglose_iave';
+import { normalizarTag } from './formatos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // El I/O de la revisión de cobros contra una base en memoria, de PUNTA A PUNTA:
@@ -16,12 +17,13 @@ vi.mock('../agentes/corridas', () => ({ registrarCorrida: vi.fn(async () => {}) 
 
 const { importarDesglose } = await import('../intake/desglose_peaje');
 const R = await import('./revision_cobros');
+const { reiniciarCachePerfil } = await import('@/lib/auth/perfil_tenant');
 
 const T = 'tenant-1';
 const OTRO = 'tenant-2';
 // Estas pruebas ejercen el camino anterior (leer-sumar-escribir): la base falsa simula que la migración 0860 aún NO está aplicada.
 // El camino con la función atómica se prueba en `nota_credito_rpc.test.ts`.
-beforeEach(() => { db = crearDbFalsa({}, { peaje_nota_credito_registrar: () => ({ error: { message: 'Could not find the function', code: 'PGRST202' } }) }); });
+beforeEach(() => { db = crearDbFalsa({}, { peaje_nota_credito_registrar: () => ({ error: { message: 'Could not find the function', code: 'PGRST202' } }) }); reiniciarCachePerfil(); });
 
 async function subir(nombre: string, op: Parameters<typeof generarLibroIave>[0], tenant = T) {
   const { buffer, esperado } = generarLibroIave({ hojaSecundaria: true, ...op });
@@ -336,5 +338,84 @@ describe('revisionDeDesglose: doble cobro entre archivos (T-A2-38)', () => {
     const previas = llamadasRevision.filter((x) => x.tabla === 'desglose_peaje' || x.tabla === 'desglose_peaje_linea');
     expect(previas.length).toBeGreaterThan(0);
     expect(previas.every((x) => x.filtros.some(([col]) => col === 'tenant_id'))).toBe(true);
+  }, 60_000);
+});
+
+describe('A2 ola 1 · clase 1 y casetas por pasada en la revisión', () => {
+  const sinUnos = (porClase: Record<string, number>) =>
+    Object.entries(porClase).filter(([c]) => !['1', '3', '5'].includes(c)).reduce((s, [, n]) => s + n, 0);
+
+  it('flota SIN perfil cinco_agentes y sin configurar: la clase 1 sigue siendo candidato (comportamiento anterior)', async () => {
+    const { id, esperado } = await subir('01 A 10 DE MARZO.xlsx', { filas: 3000, inicio: '2026-03-01', extemporaneos: 0 });
+    const rep = await R.revisionDeDesglose(T, id);
+    if (!rep) throw new Error('sin reporte');
+    expect(rep.revision.porCategoria.clase_fuera_de_3_5.n).toBe(sinUnos(esperado.porClase) + (esperado.porClase['1'] ?? 0));
+    expect(rep.revision.reglasNoAplicadas.some((x) => /clase 1/.test(x.motivo))).toBe(false);
+  }, 60_000);
+
+  it('perfil cinco_agentes SIN configurar nada: la clase 1 no inunda el reporte (default) y la revisión dice cuántas dejó fuera', async () => {
+    db.tablas.tenant_perfil = [{ tenant_id: T, perfil: 'cinco_agentes' }];
+    reiniciarCachePerfil();
+    const { id, esperado } = await subir('01 A 10 DE MARZO.xlsx', { filas: 9000, inicio: '2026-03-01', extemporaneos: 0 });
+    const rep = await R.revisionDeDesglose(T, id);
+    if (!rep) throw new Error('sin reporte');
+    expect(rep.revision.porCategoria.clase_fuera_de_3_5.n).toBe(sinUnos(esperado.porClase));
+    expect(rep.revision.reglasNoAplicadas.find((x) => /clase 1/.test(x.motivo))?.motivo).toContain(`${esperado.porClase['1']} cruce(s) de clase 1 no se marcan`);
+  }, 60_000);
+
+  it('modo «declaradas»: solo las casetas marcadas por pasada en el catálogo (peaje_caseta.por_pasada) dejan pasar la clase 1', async () => {
+    const { id, esperado } = await subir('01 A 10 DE MARZO.xlsx', { filas: 9000, inicio: '2026-03-01', extemporaneos: 0 });
+    expect(await R.guardarReglasFlota(T, { clasesUtilitario: '', clase1: 'declaradas' })).toMatchObject({ ok: true });
+    const todasMarcadas = await R.revisionDeDesglose(T, id);
+    expect(todasMarcadas?.revision.porCategoria.clase_fuera_de_3_5.n).toBe(sinUnos(esperado.porClase) + (esperado.porClase['1'] ?? 0));
+    // el catálogo declara las casetas por pasada
+    for (const c of CASETAS_FIXTURE.filter((x) => x.porPasada)) {
+      db.tablas.peaje_caseta = [...(db.tablas.peaje_caseta ?? []), {
+        id: `c-${c.nombre}`, tenant_id: T, nombre: c.nombre, nombre_norm: c.nombre.toLowerCase(), alias: [], lat: null, lng: null, radio_m: 300, activa: true, fuente: null, por_pasada: true,
+      }];
+    }
+    const conCatalogo = await R.revisionDeDesglose(T, id);
+    expect(conCatalogo?.revision.porCategoria.clase_fuera_de_3_5.n).toBe(sinUnos(esperado.porClase));
+  }, 60_000);
+
+  it('las clases del utilitario guardadas por la flota se aplican a los TAGs de tipo utilitario', async () => {
+    const { id } = await subir('01 A 10 DE MARZO.xlsx', { filas: 1500, inicio: '2026-03-01', extemporaneos: 0 });
+    const antes = await R.revisionDeDesglose(T, id);
+    const fila = db.tablas.desglose_peaje_linea.find((l) => l.tag && l.clase !== null && ![1, 3, 5].includes(Number(l.clase)));
+    if (!fila) throw new Error('el generador no puso ninguna línea con TAG y clase fuera de 1, 3 y 5: la prueba no probaría nada');
+    const tag = fila.tag as string;
+    const clase = String(fila.clase);
+    db.tablas.peaje_tag = [{ id: 't1', tenant_id: T, tag: normalizarTag(tag), tag_original: tag, unidad_id: 'u1', activo: true, tipo_unidad: 'utilitario' }];
+    const sinLista = await R.revisionDeDesglose(T, id);
+    expect(sinLista?.revision.reglasNoAplicadas.some((x) => /utilitarias/.test(x.motivo))).toBe(true);
+    await R.guardarReglasFlota(T, { clasesUtilitario: clase, clase1: 'todas' });
+    const conLista = await R.revisionDeDesglose(T, id);
+    expect(conLista?.revision.reglasNoAplicadas.some((x) => /utilitarias/.test(x.motivo))).toBe(false);
+    expect(antes).not.toBeNull();
+  }, 60_000);
+});
+
+describe('A2 ola 1 · cierre de dos meses desde la base', () => {
+  it('lee los archivos de los dos meses (y los del mes previo, para los tardíos) una sola vez y consolida', async () => {
+    await subir('01 A 10 DE FEBRERO.xlsx', { filas: 300, inicio: '2026-02-01', extemporaneos: 0, semilla: 11 });
+    await subir('11 A 20 DE FEBRERO.xlsx', { filas: 300, inicio: '2026-02-11', extemporaneos: 0, semilla: 12 });
+    await subir('21 A 28 DE FEBRERO.xlsx', { filas: 300, inicio: '2026-02-21', extemporaneos: 0, semilla: 13 });
+    await subir('01 A 10 DE MARZO.xlsx', { filas: 300, inicio: '2026-03-01', extemporaneos: 5, semilla: 14 });
+    const dos = await R.cierreDosMesesDeFlota(T, '2026-03');
+    if ('error' in dos) throw new Error(dos.error);
+    expect(dos.meses).toEqual(['2026-02', '2026-03']);
+    expect(dos.decenas).toHaveLength(6);
+    expect(dos.decenasFaltantes).toEqual(['2026-03 · 11 a 20', '2026-03 · 21 a 31']);
+    expect(dos.cruces).toBe(1200);
+    expect(dos.completo).toBe(false);
+    // no mezcla flotas
+    const ajeno = await R.cierreDosMesesDeFlota(OTRO, '2026-03');
+    if ('error' in ajeno) throw new Error(ajeno.error);
+    expect(ajeno.cruces).toBe(0);
+    // el cierre de un mes sigue igual
+    const uno = await R.cierreMensualDeFlota(T, '2026-03');
+    if ('error' in uno) throw new Error(uno.error);
+    expect(uno.cruces).toBe(300);
+    expect(await R.cierreDosMesesDeFlota(T, '2026-13')).toHaveProperty('error');
   }, 60_000);
 });

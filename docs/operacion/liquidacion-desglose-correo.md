@@ -100,6 +100,8 @@ configuración no envía nada hasta que se enciende `activa`.
 | `canal` | `whatsapp`, `correo` o `ambos` | `whatsapp` |
 | `activa` | Interruptor del canal correo | `false` |
 | `remitente_nombre`, `responder_a` | Nombre del remitente y dirección de respuesta; sin marca de Likida | vacío |
+| `remitente_correo` (0933) | Correo emisor de la empresa. Es la dirección de respuesta **por omisión** cuando `responder_a` está vacío (fail-cerrado: sin ninguno de los dos no sale nada y la fila espera) y el punto de extensión del transporte propio (ver 5.1) | vacío |
+| `revisores`, `primer_mes_hasta` (0933) | **Modo primer mes**: hasta 5 revisores (uno por departamento: nómina, RH…) que reciben cada desglose enviado o retenido hasta la fecha indicada (inclusive, hora de México); después se apaga solo (ver 5.2) | apagado |
 | `rh_correos` | Hasta 3 destinatarios fijos de recursos humanos | vacío |
 | `archivo_correo` | Buzón de archivo que recibe copia de todo lo enviado | vacío |
 | `envia_coordinador`, `envia_rh` | Si se escribe a esos roles | sí |
@@ -112,6 +114,49 @@ configuración no envía nada hasta que se enciende `activa`.
 
 Con `canal = 'correo'` el camino anterior no corre para esa flota (el gate por canal lo impide); con `ambos` corren los
 dos; con `whatsapp` todo sigue como antes. El interruptor global del agente (`agente:liquidacion`) apaga el cron entero.
+
+### 5.1 Correo emisor y transporte propio del cliente (punto de extensión, NO construido)
+
+Hoy todos los correos salen por Resend, desde `avisos@<dominio de Likida>` con el nombre configurable, y las respuestas llegan a
+`responder_a` o, si falta, a `remitente_correo`. El cliente quiere además que los envíos queden en la carpeta «Enviados» de su
+buzón: eso exige mandar **desde** su Microsoft 365 (Graph o SMTP), que depende de la autorización de su área de TI y no se
+construyó. El punto de extensión es `EnvioCorreoPuerto` (`src/lib/likida/liquidacion_externa/entrega_correo.ts`,
+`dependenciasEntregaCorreo().enviar`): un transporte nuevo es una función con esa firma que devuelva el mismo `ResultadoEnvio`; la
+cola, el lease, la idempotencia (`Idempotency-Key` por liquidación, generación y rol), los reintentos y la ventana de hora no
+cambian. `remitente_correo` es la identidad desde la que ese transporte enviaría.
+
+### 5.2 Modo primer mes (revisores por departamento)
+
+Durante el primer mes cada desglose que llega (por la API, el archivo o la lectura del origen) se copia por correo al revisor de
+cada departamento, con el mismo Excel:
+
+- desglose que **se envía**: copia con asunto «[Revisión] Desglose de pago…» y el departamento del revisor;
+- desglose **retenido**: ningún correo al operador, coordinador, RH ni archivo, pero el revisor recibe «[Revisión] RETENIDO…» con el
+  motivo (sin importes) para que alguien lo libere o lo corrija en el origen;
+- una corrección `-R<n>` es otra recepción y también se copia;
+- un buzón que ya recibe el desglose por otro rol no recibe además la copia; un rebote del revisor no abre excepciones del operador;
+- fuera de alcance de esta versión: la **liberación** manual de un retenido y el **reenvío** manual no vuelven a copiar al revisor
+  (ya recibió el aviso de retenido con el Excel).
+
+Se configura en Agentes, Liquidación, Configuración, sección «Primer mes». Aplica la migración 0933; sin ella la pantalla lo dice y
+no ofrece el modo.
+
+## 5.3 Operadores sin WhatsApp
+
+Con `canal = 'correo'` (o con el perfil `cinco_agentes`, que siempre es correo: el mismo criterio de canal que la entrega) un operador se puede dar de alta (una por una, por la carga masiva de Operadores o por `POST /v1/operadores`)
+solo con **número de empleado y correo**. Se guarda con un marcador interno en `operador.telefono` (migración 0932: sin dígitos, no
+marcable, fuera de los índices únicos de teléfono) que nunca se muestra; con cualquier otro canal el teléfono sigue siendo
+obligatorio. El número de empleado es único entre los operadores sin teléfono de una flota, y un correo no puede repetirse entre
+operadores.
+
+## 5.4 Cargas por archivo en el panel
+
+En el panel de desgloses (canal correo) el dueño puede subir: (1) el export de bitácoras (CSV o Excel, una fila por concepto; con
+`numero_liquidacion` las bitácoras de una misma liquidación —misma unidad— salen como un solo desglose; `numero_pago` va al
+encabezado), por el mismo camino que el POST; y (2) los correos de operadores y coordinadores
+(`numero_empleado;correo;coordinador_nombre;coordinador_correo`; nunca crea operadores). Repetir un archivo es seguro. **Sin póliza no se
+envía**: la bitácora sin póliza no se guarda, abre la excepción «sin póliza» y entra normal cuando llega con póliza (por la API, el
+archivo o el pull).
 
 ## 6. Plan B si la API del origen no está disponible
 

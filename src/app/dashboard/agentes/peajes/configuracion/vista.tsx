@@ -12,6 +12,9 @@ import { SeccionEntradas, type AccionesEntradas, type EntradasVista } from './en
 import { SeccionReglasCobro, type ReglasCobroVista } from './reglas-cobro';
 import { SeccionTarifario, type TarifarioVista } from './tarifario';
 import { SeccionUmbralesAvisos, type UmbralesAvisosVista } from './umbrales-avisos';
+import { SeccionCruceViajes, type CruceViajesVista } from './cruce-viajes';
+import { SeccionInmovilizadas, type InmovilizadasConfigVista } from './inmovilizadas';
+import { SeccionClasesCobro, type ClasesCobroVista } from './clases-cobro';
 
 type Accion = (fd: FormData) => Promise<void>;
 
@@ -58,7 +61,7 @@ const CSS_SECUNDARIO = 'hairline text-[12.5px] font-medium px-3 py-1.5 rounded-l
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--muted)' } as const;
 
 export function VistaConfiguracionPeajes({
-  sufijo, aviso, error, agenteApagado, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, archivos, tiposGeocerca, buzon, entradas, acciones, reglasCobro, tarifario, umbralesAvisos, superficie,
+  sufijo, aviso, error, agenteApagado, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, archivos, tiposGeocerca, buzon, entradas, acciones, reglasCobro, tarifario, umbralesAvisos, cruceViajes, inmovilizadas, clasesCobro, superficie,
 }: {
   sufijo: string;
   aviso: string | null;
@@ -82,6 +85,12 @@ export function VistaConfiguracionPeajes({
   tarifario?: TarifarioVista;
   /** Umbrales de atípicos, plazo de reclamo, avisos e interruptores. Opcional. */
   umbralesAvisos?: UmbralesAvisosVista;
+  /** Interruptor del cruce cobro ↔ viaje (por Icident). Opcional. */
+  cruceViajes?: CruceViajesVista;
+  /** Ventanas de unidades inmovilizadas (carga y borrado). Opcional. */
+  inmovilizadas?: InmovilizadasConfigVista;
+  /** Clases válidas del utilitario y regla de la clase 1. Opcional. */
+  clasesCobro?: ClasesCobroVista;
   /** T-A2-31: con perfil `cinco_agentes` no se pintan geocercas ni cursos (stand-by). Sin la prop: todo, como siempre. */
   superficie?: { gps: boolean; cursos: boolean };
 }) {
@@ -106,8 +115,11 @@ export function VistaConfiguracionPeajes({
           <SeccionEntradas entradas={entradas} acciones={acciones} />
           <SeccionMapeo mapeos={mapeos} acciones={acciones} />
           {reglasCobro && <SeccionReglasCobro datos={reglasCobro} />}
+          {clasesCobro && <SeccionClasesCobro datos={clasesCobro} />}
           {tarifario && <SeccionTarifario datos={tarifario} />}
           {umbralesAvisos && <SeccionUmbralesAvisos datos={umbralesAvisos} />}
+          {cruceViajes && <SeccionCruceViajes datos={cruceViajes} />}
+          {inmovilizadas && <SeccionInmovilizadas datos={inmovilizadas} />}
           <SeccionTags tags={tags} unidades={unidades} acciones={acciones} />
           <SeccionCasetas casetas={casetas} acciones={acciones} />
           {(superficie?.gps ?? true) && <SeccionGeocercas geocercas={geocercas} tipos={tiposGeocerca} acciones={acciones} />}
@@ -366,10 +378,11 @@ function SeccionTags({ tags, unidades, acciones }: { tags: TagVista[] | null; un
 function SeccionCasetas({ casetas, acciones }: { casetas: CasetaVista[] | null; acciones: AccionesConfiguracion }) {
   return (
     <section className="card p-4" id="casetas">
-      <Titulo t="Catálogo de casetas con coordenadas"
-        nota={<>Dónde queda cada caseta, para validar con el GPS que la unidad estuvo ahí a la hora del cobro (distancia Haversine). <b>Nace vacío a propósito</b>:
-          Likida no inventa coordenadas — cárgalas con tu propio CSV <span className="cifra-mono">nombre; lat; lng; radio_m; alias; fuente</span> (grados decimales; radio de 50 a 5,000 m, 300 si lo omites;
-          alias separados por «|»). Volver a cargar una caseta con el mismo nombre actualiza sus coordenadas.</>} />
+      <Titulo t="Catálogo de casetas"
+        nota={<>Las casetas por NOMBRE (lo único obligatorio), con opcionalmente su carretera, si <b>cobra por pasada</b> (la clase 1 es normal ahí) y sus coordenadas, para validar con el GPS que la unidad estuvo ahí a la hora del cobro
+          (distancia Haversine). <b>Nace vacío a propósito</b>: Likida no inventa coordenadas. Acepta la plantilla del catálogo tal cual (sus encabezados largos) o un CSV
+          <span className="cifra-mono"> nombre; carretera; por pasada; lat; lng; radio_m; alias; fuente</span> (grados decimales; radio de 50 a 5,000 m, 300 si lo omites;
+          alias separados por «|»). Volver a cargar una caseta con el mismo nombre actualiza sus datos; las columnas que no traiga el archivo no se tocan.</>} />
       <SubirCsv accion={acciones.importarCasetas} etiqueta="CSV de casetas"
         extra={<input name="fuente" placeholder="Fuente de las coordenadas" aria-label="Fuente de las coordenadas" maxLength={200} className={`${CSS_INPUT} w-[230px]`} style={ESTILO_INPUT} />} />
       {casetas === null ? <NoSePudoLeer que="las casetas" /> : casetas.length === 0 ? (
@@ -383,6 +396,8 @@ function SeccionCasetas({ casetas, acciones }: { casetas: CasetaVista[] | null; 
             <div key={c.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12.5px]" style={c.activa ? undefined : { opacity: 0.55 }}>
               <span className="font-medium">{c.nombre}</span>
               <span className="cifra-mono text-[11.5px]" style={{ color: 'var(--muted)' }}>{c.lat !== null && c.lng !== null ? `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)} · ${c.radioM} m` : 'sin coordenadas · solo por nombre'}</span>
+              {c.carretera && <span className="text-[11px]" style={{ color: 'var(--muted)' }}>{c.carretera}</span>}
+              {c.porPasada && <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ color: 'var(--ok)', background: 'var(--okbg)' }}>por pasada</span>}
               {c.fuente && <span className="text-[11px]" style={{ color: 'var(--faint)' }}>{c.fuente}</span>}
               <form action={acciones.estadoCaseta} className="ml-auto">
                 <input type="hidden" name="caseta" value={c.id} />

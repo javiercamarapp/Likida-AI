@@ -29,6 +29,7 @@ import {
   leerEstadoAvisoDesglose, reclamarIntentoAviso, marcarAvisoEnviado, agotarIntentosAviso, avisosPendientesPeajes, MAX_INTENTOS_AVISO,
 } from './datos';
 import { quedoEnCola } from './aviso_en_cola';
+import { superficiePeajesDeTenant, type SuperficiePeajes } from './superficie_perfil';
 
 export type ResultadoAvisoDesglose =
   | 'enviado' | 'no_requerido' | 'ya_avisado' | 'anulado' | 'no_existe' | 'agotado' | 'ocupado' | 'sin_destinatario' | 'rechazado';
@@ -36,8 +37,48 @@ export type ResultadoAvisoDesglose =
 export interface DepsAvisoPeajes {
   telefono: (tenantId: string) => Promise<string | null>;
   avisar: typeof avisarOficina;
+  /** Qué partes de peajes tiene la flota (perfil). Sin poder leer el perfil, la restringida (falla cerrado). */
+  superficie: (tenantId: string) => Promise<SuperficiePeajes>;
 }
-const depsPorOmision: DepsAvisoPeajes = { telefono: telefonoParaDineroDe, avisar: avisarOficina };
+const depsPorOmision: DepsAvisoPeajes = { telefono: telefonoParaDineroDe, avisar: avisarOficina, superficie: superficiePeajesDeTenant };
+
+/**
+ * Fracción mínima de cobros que deben cuadrar con un ticket de caseta para que «sin respaldo» SIGNIFIQUE algo. Si la flota casi no tiene
+ * tickets de caseta cargados (un solo gasto en el periodo, o ninguno), TODO cobro sale «sin respaldo» — miles — y avisar de eso es ruido:
+ * la comparación no tiene contra qué. Debajo de este umbral la categoría no se avisa (sigue visible en pantalla, con su explicación).
+ */
+export const COBERTURA_MINIMA_TICKETS = 0.05;
+
+export interface ConteoAviso { gpsNoCoincide: number; sinRespaldo: number; porVerificar: number }
+
+/**
+ * Lo que de verdad se avisa de una conciliación, según el PERFIL de la flota y la cobertura de sus tickets (puro):
+ *  · «el GPS no ubica la unidad» solo si la flota tiene la superficie GPS (bajo `cinco_agentes` la evidencia GPS es stand-by);
+ *  · «sin respaldo en tus tickets» / «por verificar» solo si la flota tiene tickets de caseta (`cfdiYTickets`) Y al menos
+ *    `COBERTURA_MINIMA_TICKETS` de los cobros cuadró con alguno.
+ * `motivoOmitido` dice por qué se calló una categoría que sí traía casos (para el log, no para el cliente).
+ */
+export function contarParaAviso(
+  b: { filas: ReadonlyArray<{ gps?: string | null }>; resumen: { total?: number; cuadra?: number; sinRespaldo: number; porVerificar: number } },
+  superficie: SuperficiePeajes,
+): { conteo: ConteoAviso; motivoOmitido: string | null } {
+  let motivoOmitido: string | null = null;
+  const gpsNoCoincide = superficie.gps ? b.filas.filter((f) => f.gps === 'no coincide').length : 0;
+  let sinRespaldo = b.resumen.sinRespaldo;
+  let porVerificar = b.resumen.porVerificar;
+  if (!superficie.cfdiYTickets) {
+    if (sinRespaldo > 0 || porVerificar > 0) motivoOmitido = 'perfil_sin_tickets';
+    sinRespaldo = 0; porVerificar = 0;
+  } else {
+    const total = b.resumen.total ?? b.filas.length;
+    const cuadra = b.resumen.cuadra ?? 0;
+    if (total > 0 && cuadra / total < COBERTURA_MINIMA_TICKETS) {
+      if (sinRespaldo > 0 || porVerificar > 0) motivoOmitido = 'sin_cobertura_de_tickets';
+      sinRespaldo = 0; porVerificar = 0;
+    }
+  }
+  return { conteo: { gpsNoCoincide, sinRespaldo, porVerificar }, motivoOmitido };
+}
 
 const liga = () => `${appUrl()}/dashboard/agentes/peajes`;
 
@@ -67,11 +108,8 @@ export async function avisarDesgloseConciliado(tenantId: string, desgloseId: str
 
     const b = await bitacoraConciliada(tenantId, desgloseId);
     if (!b) return 'anulado';
-    const c = {
-      gpsNoCoincide: b.filas.filter((f) => f.gps === 'no coincide').length,
-      sinRespaldo: b.resumen.sinRespaldo,
-      porVerificar: b.resumen.porVerificar,
-    };
+    const { conteo: c, motivoOmitido } = contarParaAviso(b, await deps.superficie(tenantId));
+    if (motivoOmitido) logger.info('peajes.aviso_categoria_omitida', { tenant: tenantId, desglose: desgloseId, motivo: motivoOmitido });
     if (c.gpsNoCoincide === 0 && c.sinRespaldo === 0) return 'no_requerido';
 
     if (!(await reclamarIntentoAviso(tenantId, desgloseId, estado.intentos))) return 'ocupado';

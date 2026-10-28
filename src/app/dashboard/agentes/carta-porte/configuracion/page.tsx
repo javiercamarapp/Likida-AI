@@ -8,7 +8,7 @@ import { salidaDeFlota } from '@/lib/likida/carta_porte_docs/worker_envios_deps'
 import { sufijoTenant } from '../../../sufijo';
 import { listarCcpRecibidos, respuestaActiva } from '@/lib/likida/carta_porte_docs/ccp_respuesta_repo';
 import { logger } from '@/lib/logger';
-import { guardarConfiguracionSalida, probarConexionSalida } from './actions';
+import { guardarConfiguracionSalida, guardarPrimerMesAccion, probarConexionSalida } from './actions';
 import { confirmarRespuestaCcp, fijarRespuestaCcp } from './ccp_actions';
 import { esProbable } from './formato';
 import { VistaConfiguracionSalida } from './vista';
@@ -46,6 +46,10 @@ export default async function PaginaConfiguracionSalida({
     logger.error('carta_porte_docs.ccp_pantalla_lectura', { error: e instanceof Error ? e.message : String(e) });
   }
 
+  let primerMes: Awaited<ReturnType<typeof repo.leerPrimerMes>> | 'no_disponible' = 'no_disponible';
+  try { primerMes = (await repo.leerPrimerMes(tenantId)) ?? (fila ? 'no_disponible' : { hasta: null, revisores: [] }); }
+  catch (e) { logger.error('carta_porte_docs.primer_mes_pantalla_lectura', { error: e instanceof Error ? e.message : String(e) }); }
+
   return (
     <VistaConfiguracionSalida
       config={fila ?? { ...CONFIG_SALIDA_ARRANQUE }}
@@ -56,6 +60,8 @@ export default async function PaginaConfiguracionSalida({
       ver={{ ...(sp.tenant ? { tenant: sp.tenant } : {}), ...(sp.rol ? { rol: sp.rol } : {}), ...(sp.vista ? { vista: sp.vista } : {}) }}
       acciones={{ guardar: guardarConfiguracionSalida, probar: probarConexionSalida }}
       ccp={ccp}
+      primerMes={primerMes}
+      accionPrimerMes={guardarPrimerMesAccion}
       accionesCcp={{ fijar: fijarRespuestaCcp, confirmar: confirmarRespuestaCcp }}
     />
   );

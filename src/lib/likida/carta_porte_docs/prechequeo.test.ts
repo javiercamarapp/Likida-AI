@@ -156,3 +156,14 @@ describe('guardias: tenant, timeout, lanzamientos', () => {
     expect(res.accion).toBe('pendiente_reque');
   });
 });
+
+describe('prechequear · soloLocal (modo manual, OLA1-A3)', () => {
+  const ext = (campos: Record<string, string>) => ({ campos: Object.fromEntries(Object.entries(campos).map(([k, v]) => [k, { valor: v, confianza: 1, evidencia: null, origen: 'humano' as const }])), mercancias: [] });
+  it('no consulta el TMS ni espera el requerimiento; revisa cliente y caja', async () => {
+    const ok = await prechequear(ext({ numero_cliente_interno: '1', caja_numero: 'C1' }), { tenantId: 't', soloLocal: true });
+    expect(ok.accion).toBe('enviar');
+    expect((await prechequear(ext({ caja_numero: 'C1' }), { tenantId: 't', soloLocal: true })).accion).toBe('revisar');
+    const sinCaja = await prechequear(ext({ numero_cliente_interno: '1' }), { tenantId: 't', soloLocal: true });
+    expect(sinCaja).toMatchObject({ accion: 'revisar', motivo: expect.stringMatching(/caja/) });
+  });
+});

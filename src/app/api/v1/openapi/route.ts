@@ -367,14 +367,15 @@ const FILA_OPERADOR_LOTE = {
   type: 'object',
   properties: {
     nombre: { type: 'string', minLength: 3, maxLength: 120 },
-    telefono: { type: 'string', maxLength: 25, description: 'El WhatsApp del chofer. Se normaliza a E.164 de México (`52` + 10 dígitos): «55 1234 5678», «+52 55 1234 5678» y «5215512345678» son el mismo número. Es ÚNICO por flota y es LA IDENTIDAD del chofer frente al bot — un dedazo en un dígito no produce un registro incompleto, produce un chofer que nunca puede reportar un gasto.' },
-    numeroEmpleado: { type: 'string', maxLength: 40, nullable: true },
+    telefono: { type: 'string', maxLength: 25, description: 'El WhatsApp del chofer. Se normaliza a E.164 de México (`52` + 10 dígitos): «55 1234 5678», «+52 55 1234 5678» y «5215512345678» son el mismo número. Es ÚNICO por flota y es LA IDENTIDAD del chofer frente al bot — un dedazo en un dígito no produce un registro incompleto, produce un chofer que nunca puede reportar un gasto. Obligatorio, SALVO en una flota con el desglose de liquidación por correo: ahí se admite el chofer sin teléfono si trae `numeroEmpleado` y `correo` (en otra flota es 400).' },
+    numeroEmpleado: { type: 'string', maxLength: 40, nullable: true, description: 'Obligatorio, junto con `correo`, para dar de alta a un chofer SIN `telefono` (solo flotas cuyo desglose de liquidación sale por correo).' },
+    correo: { type: 'string', maxLength: 254, nullable: true, description: 'Correo del operador para su desglose de liquidación. Opcional con `telefono`; obligatorio sin él. Un correo no puede repetirse entre operadores de la flota.' },
     rfc: { type: 'string', maxLength: 13, nullable: true, description: 'Se acepta al dar de alta (viene de la nómina del TMS) pero NO se devuelve en el `GET`: es dato fiscal de una persona física y ningún integrador de tráfico lo necesita.' },
     licencia: { type: 'string', maxLength: 40, nullable: true },
     licenciaTipo: { type: 'string', maxLength: 10, nullable: true },
     licenciaVence: { type: 'string', format: 'date', nullable: true, description: 'ISO AAAA-MM-DD.' },
   },
-  required: ['nombre', 'telefono'],
+  required: ['nombre'],
   additionalProperties: false,
 } as const;
 

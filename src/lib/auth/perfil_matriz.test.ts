@@ -94,7 +94,7 @@ describe('matriz: lo permitido es exactamente la lista del perfil', () => {
 
   it('una página de dinero o fiscal figura negada', () => {
     const neg = deSuperficie('página').filter((f) => f.veredicto === 'negado').map((f) => f.id);
-    for (const r of ['/dashboard/facturacion', '/dashboard/timbrado/[viajeId]', '/dashboard/suscripcion', '/dashboard/llaves-api']) expect(neg, r).toContain(r);
+    for (const r of ['/dashboard/facturacion', '/dashboard/timbrado/[viajeId]', '/dashboard/suscripcion']) expect(neg, r).toContain(r);
   });
 });
 

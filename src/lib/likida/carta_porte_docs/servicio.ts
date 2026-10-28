@@ -18,6 +18,9 @@ import { estaApagado } from '../interruptores';
 import { MAX_BYTES_DOC, detectarFormato, prepararContenido, type FormatoDoc } from './contenido';
 import { extraerDocumento, type LlmExtractor, type ResultadoExtraccion } from './extractor';
 import { avisosDelCatalogo, enriquecer } from './catalogo_cliente';
+import { convertirExtraccion, FORMATOS_CONVERTIBLES, type FormatoConvertible } from './convertidor';
+import { completarDistancias, type RutaDistancia } from './catalogo_distancias';
+import { leerPlantillaTms } from './lector_plantilla_tms';
 import { precargarCatalogosSat } from './catalogos_sat';
 import type { SalidaTms } from './tms_puerto';
 import { derivarHijos, evaluarDivision, MAX_EMBARQUES, type PlanDivision } from './multiembarque';
@@ -28,6 +31,8 @@ import { clasificarFormato } from './registro_formatos';
 import type { VisionRemision } from './lectores/remision';
 import * as repo from './repo';
 import { asignarAlLlegarARevision } from './revisor';
+import { notificarMovimiento } from './primer_mes';
+import { remitenteDeEncabezado, resolverClientePorRemitente, type ViaCliente } from './cliente_remitente';
 import type { CanalDoc, DocumentoFila, MetaExtraccion } from './repo';
 
 export const DIAS_RETENCION = { recibido: 180, aprobado: 365, cerrado: 90 } as const;
@@ -45,6 +50,19 @@ export interface DepsServicio {
   transcribir?: (imagenes: string[], signal?: AbortSignal) => Promise<string>;
   /** T-A3-67: el modelo de visión que lee una remisión escaneada (formato C). Sin él (sin llave: bloqueo externo) esa remisión queda «requiere captura manual». */
   vision?: VisionRemision | null;
+  /** OLA1-A3: las rutas del catálogo de distancias de un cliente. Por omisión las lee de `cp_distancia`; sin la 0830 o sin filas, `[]`. */
+  rutasDistancia?: (tenantId: string, clienteId: string) => Promise<RutaDistancia[]>;
+}
+
+async function rutasPorDefecto(tenantId: string, clienteId: string): Promise<RutaDistancia[]> {
+  const { cargarDistanciasCliente } = await import('./catalogo_distancias_puerto');
+  return cargarDistanciasCliente(tenantId, clienteId);
+}
+
+/** El formato convertible (C, D, E, F1–F3, G) del documento que ya se leyó, o `null` (A y B ya son plantilla). */
+function formatoConvertible(r: ResultadoExtraccion, formato: FormatoDoc): FormatoConvertible | null {
+  const f = String(r.lector?.formato ?? (formato === 'json' ? 'G' : ''));
+  return (FORMATOS_CONVERTIBLES as readonly string[]).includes(f) ? (f as FormatoConvertible) : null;
 }
 
 async function llmPorDefecto(tenantId: string, canal: CanalDoc): Promise<LlmExtractor> {
@@ -91,13 +109,23 @@ export async function recibirDocumento(tenantId: string, e: EntradaDocumento, de
   if (e.clienteId && !(await repo.clientePropio(tenantId, e.clienteId))) {
     return { ok: false, motivo: 'cliente', mensaje: 'Ese cliente no pertenece a tu flota.' };
   }
+  // OLA1-A3: el correo y el WhatsApp no traen cliente elegido: se reconoce por el remitente (si apunta a UNO solo).
+  let clienteId = e.clienteId ?? null;
+  let clienteVia: ViaCliente | null = null;
+  if (!clienteId && e.canal !== 'manual' && e.remitenteReconocido !== false) {
+    const quien = e.formatoForzado === 'correo' && e.canal === 'whatsapp' ? remitenteDeEncabezado(new TextDecoder().decode(e.bytes.slice(0, 4000))) : e.remitente;
+    try {
+      const res = quien ? resolverClientePorRemitente(quien, await repo.clientesConCorreo(tenantId)) : null;
+      if (res && res.clienteId) { clienteId = res.clienteId; clienteVia = res.via; }
+    } catch (err) { logger.warn('cpdocs.cliente_remitente_fallo', { tenantId, err: resumenError(err) }); }
+  }
   const sha256 = createHash('sha256').update(e.bytes).digest('hex');
   const ruta = `${tenantId}/${sha256}`;
   const formato = CLASE_A_FORMATO[d.clase];
   await repo.subirArchivo(ruta, e.bytes, d.mime);
   const { documento, duplicado } = await repo.insertarDocumento(tenantId, {
     id: randomUUID(), canal: e.canal, formato, nombreArchivo: nombreArchivoSeguro(e.nombre), mime: d.mime, bytes: e.bytes.length, sha256,
-    storageRuta: ruta, clienteId: e.clienteId ?? null, remitente: e.remitente?.slice(0, 320) ?? null, asunto: e.asunto?.slice(0, 300) ?? null,
+    storageRuta: ruta, clienteId, remitente: e.remitente?.slice(0, 320) ?? null, asunto: e.asunto?.slice(0, 300) ?? null,
     remitenteReconocido: e.remitenteReconocido ?? null, retenerHasta: diasDespues(ahora, DIAS_RETENCION.recibido),
   });
   // A37-A3-17: el duplicado de un documento ya purgado (sin storage_ruta) no vuelve a guardar el archivo: lo recién subido
@@ -106,7 +134,7 @@ export async function recibirDocumento(tenantId: string, e: EntradaDocumento, de
     try { await repo.borrarArchivo(ruta); } catch (err) { logger.warn('cpdocs.huerfano_no_borrado', { tenantId, error: err instanceof Error ? err.message : String(err) }); }
   }
   await repo.registrarEvento(tenantId, documento.id, duplicado ? 'duplicado_recibido' : 'recibido', e.actorId ?? null,
-    duplicado ? { canal: e.canal } : { canal: e.canal, formato, bytes: e.bytes.length });
+    duplicado ? { canal: e.canal } : { canal: e.canal, formato, bytes: e.bytes.length, ...(clienteVia ? { cliente_auto: clienteVia } : {}) });
   // A37-S33-05: el documento previo con esa huella ya se purgó (sin archivo): el archivo recién subido no tiene dueño ni entra a la purga
   // por retención. Se borra y se dice la verdad; reabrir el embarque (que pudo estar aprobado) lo decide una persona.
   if (duplicado && !documento.storageRuta) {
@@ -392,10 +420,14 @@ export async function procesarDocumento(
     // inventa nada: queda «requiere captura manual», visible y bloqueante, y el flujo no se rompe.
     const sinVision = formatoEntrada === 'C' && !deps.vision && contenido.imagenes.length > 0;
 
-    const llm = sinVision ? null : await (deps.llm ?? llmPorDefecto)(tenantId, doc.canal);
+    // OLA1-A3: un Excel que YA es la plantilla del TMS (normal o nueva) se lee de sus celdas, determinista y sin modelo.
+    const plantillaLeida = d.clase === 'excel' && !sinVision ? leerPlantillaTms(bytes) : null;
+    const llm = sinVision || plantillaLeida ? null : await (deps.llm ?? llmPorDefecto)(tenantId, doc.canal);
     let r: ResultadoExtraccion;
     try {
-      r = sinVision || !llm
+      r = plantillaLeida
+        ? { ...resultadoSinLectura([...contenido.avisos, ...plantillaLeida.avisos], `Plantilla «${plantillaLeida.plantilla}» del TMS leída de sus celdas, sin modelo.`), extraccion: plantillaLeida.extraccion, origen: 'perfil' }
+        : sinVision || !llm
         ? resultadoSinLectura(contenido.avisos, 'Sin modelo de visión configurado: esta remisión escaneada se captura a mano.')
         : await extraerDocumento(contenido, {
           llm, perfiles, remitente: doc.remitente, clienteId: doc.clienteId, signal: deps.signal, nombreArchivo: doc.nombreArchivo, errorFatal: esErrorDePresupuesto,
@@ -423,12 +455,38 @@ export async function procesarDocumento(
     let extraccion = r.extraccion;
     const avisosCatalogo: string[] = [];
     let catalogoAplicados = 0;
-    if (doc.clienteId) {
+    // OLA1-A3: los formatos que se CONVIERTEN (remisión, BOL, orden de agente, correos, JSON) pasan por el convertidor: completa
+    // cliente interno, claves de domicilio y régimen desde el catálogo, marca lo inferido y dice qué falta. Es un borrador para
+    // revisión (nada se envía solo). Si falla, cae al catálogo de siempre.
+    const convertible = formatoConvertible(r, contenido.formato);
+    let convertido = false;
+    if (convertible) {
+      try {
+        const catalogo = doc.clienteId ? await repo.cargarCatalogoCliente(tenantId, doc.clienteId) : null;
+        const b = convertirExtraccion({ formato: convertible, extraccion, catalogo, contexto: { tenantId, clienteId: doc.clienteId } });
+        extraccion = b.extraccion;
+        catalogoAplicados = b.inferidos.length;
+        avisosCatalogo.push(...b.avisos, ...b.bloqueos.slice(0, 10).map((x) => `Falta para la plantilla: ${x.mensaje}`));
+        convertido = true;
+      } catch (e) { logger.warn('carta_porte_docs.convertidor_fallo', { tenantId, documentoId, err: resumenError(e) }); }
+    }
+    if (!convertido && doc.clienteId) {
       const catalogo = await repo.cargarCatalogoCliente(tenantId, doc.clienteId);
       const e = enriquecer(extraccion, catalogo, { tenantId, clienteId: doc.clienteId });
       extraccion = e.extraccion;
       catalogoAplicados = e.aplicados.length;
       avisosCatalogo.push(...avisosDelCatalogo(e, catalogo.truncado === true));
+    }
+    // OLA1-A3: la distancia sale del catálogo de distancias del cliente cuando el documento no la trae (nunca pisa lo leído).
+    if (doc.clienteId) {
+      try {
+        const rutas = await (deps.rutasDistancia ?? rutasPorDefecto)(tenantId, doc.clienteId);
+        if (rutas.length > 0) {
+          const dist = completarDistancias(extraccion, rutas, { tenantId, clienteId: doc.clienteId });
+          extraccion = dist.extraccion;
+          if (dist.completados.length > 0) avisosCatalogo.push(`La distancia salió del catálogo del cliente (${dist.completados.length}): confírmala.`);
+        }
+      } catch (e) { logger.warn('carta_porte_docs.distancias_fallo', { tenantId, documentoId, err: resumenError(e) }); }
     }
 
     const requiereCapturaManual: MetaExtraccion['requiereCapturaManual'] = sinVision ? { formato: 'C', motivo: 'sin_vision' } : null;
@@ -459,6 +517,8 @@ export async function procesarDocumento(
     for (const x of r.escalamientos) await repo.registrarEvento(tenantId, documentoId, 'escalada', null, x);
     // T-A3-31: con bloqueo o duda y un destinatario configurado, el caso ya llega a su persona (mejor esfuerzo; sin configuración no hace nada).
     await asignarAlLlegarARevision(tenantId, documentoId, validacion);
+    // OLA1-A3: en el primer mes de la flota, cada movimiento se copia por correo a los revisores por departamento (mejor esfuerzo).
+    await notificarMovimiento(tenantId, documentoId, 'lectura_lista', version);
     return { ok: true, estado: 'por_revisar', origen: r.origen, nivel: r.nivel, costoUsd: r.costoUsd, listoParaAprobar: validacion.listoParaAprobar };
   } catch (e) {
     // Cualquier otra cosa (la base, la bitácora): el documento NO se queda «procesando» para siempre; el lease vence solo

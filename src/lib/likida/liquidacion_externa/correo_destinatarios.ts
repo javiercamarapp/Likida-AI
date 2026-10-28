@@ -4,7 +4,8 @@
 // Dado el operador, su coordinador y la configuración de entrega, devuelve a quién se manda (un correo por destino,
 // nunca To/Cc múltiple: un rebote con varios destinatarios en un mismo correo es ambiguo) y qué no se pudo resolver.
 //
-//   · Roles: operador, coordinador, rh (hasta 3 correos fijos), archivo (buzón de «Enviados»).
+//   · Roles: operador, coordinador, rh (hasta 3 correos fijos), archivo (buzón de «Enviados») y revisor (0933: el «modo primer mes»,
+//     un revisor por departamento; se resuelve APARTE con `resolverRevisores`, porque también recibe los desgloses retenidos).
 //   · Se normaliza (trim + minúsculas) y se DEDUPLICA por correo. Si un mismo correo cae en dos roles se conserva el
 //     más específico: operador > coordinador > rh > archivo.
 //   · Un operador sin correo (o con el correo rebotado) NO recibe, pero coordinador/RH/archivo SÍ: así el desglose
@@ -12,7 +13,7 @@
 //   · Sin I/O y sin cifras: aquí no hay importes, solo direcciones.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export const ROLES_DESTINATARIO = ['operador', 'coordinador', 'rh', 'archivo'] as const;
+export const ROLES_DESTINATARIO = ['operador', 'coordinador', 'rh', 'archivo', 'revisor'] as const;
 export type RolDestinatario = (typeof ROLES_DESTINATARIO)[number];
 
 export type MotivoFaltante = 'operador_sin_correo' | 'correo_rebotado' | 'coordinador_sin_asignar';
@@ -86,4 +87,24 @@ export function resolverDestinatarios(e: EntradaDestinatarios): DestinatariosRes
   if (ar !== null) agregar('archivo', ar);
 
   return { destinos, faltantes };
+}
+
+/**
+ * Los revisores del «modo primer mes» (0933): un correo por departamento (nómina, RH…). PURA. Se normaliza y se deduplica por
+ * correo; `yaVistos` son los correos que ya reciben ESTE desglose por otro rol (operador, coordinador, RH, archivo): ese buzón ya
+ * tiene el desglose y no se le manda dos veces. Sin modo vigente (`vigente=false`) o sin revisores, lista vacía.
+ */
+export function resolverRevisores(
+  revisores: ReadonlyArray<{ departamento: string; correo: string }>, vigente: boolean, yaVistos: ReadonlySet<string> = new Set(),
+): Destino[] {
+  if (!vigente) return [];
+  const salida: Destino[] = [];
+  const vistos = new Set(yaVistos);
+  for (const r of revisores) {
+    const correo = normalizar(r.correo);
+    if (correo === null || vistos.has(correo)) continue;
+    vistos.add(correo);
+    salida.push({ rol: 'revisor', correo });
+  }
+  return salida;
 }

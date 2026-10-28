@@ -116,6 +116,11 @@ export interface CruceIcident extends CruceAVincular {
   caseta: string | null | undefined;
   /** Hora del cruce 'HH:MM' o 'HH:MM:SS'; sin hora no hay coincidencia por posición. */
   hora: string | null | undefined;
+  /**
+   * El `Icident` que trae el PROPIO cobro (columna del CSV que arma el conector del TMS, 0935). Es la
+   * referencia más fuerte: no necesita hora ni posiciones. Ausente/nulo = el cobro no lo trae.
+   */
+  icident?: string | null;
 }
 
 export interface OpcionesIcident extends OpcionesVincular {
@@ -159,6 +164,25 @@ function comparadorCaseta(o: OpcionesIcident): (a: string, b: string) => boolean
 interface PosIndexada { min: number; icident: string; poi: string }
 
 /**
+ * El `Icident` que trae el propio cobro manda sobre la ventana: un viaje con ese despacho → `ligado`
+ * (referencia exacta, pero el viaje solo trae día: la precisión es «por_dia»). Si la ventana dice OTRO viaje, `conflicto` visible, sin decidir.
+ * Sin viaje con ese despacho (o repetido) devuelve `null`: cae a las posiciones y a la ventana, con el motivo a la vista.
+ */
+function icidentDelCobro(
+  c: CruceIcident, propio: string, base: VinculoCruce, viajesDeIcident: ReadonlyMap<string, string[]>,
+): VinculoCruce | null {
+  const viajesIc = viajesDeIcident.get(propio) ?? [];
+  if (viajesIc.length !== 1) return null;
+  const viajeIc = viajesIc[0];
+  const propios = { via: 'icident', precision: 'por_dia' } as const;
+  const contradice = base.candidatos.length > 0 && !base.candidatos.includes(viajeIc);
+  if (contradice) {
+    return { id: c.id, estado: 'conflicto', viajeId: null, candidatos: [viajeIc, ...base.candidatos], motivo: 'icident_contradice_ventana', icident: propio, ...propios };
+  }
+  return { id: c.id, estado: 'ligado', viajeId: viajeIc, candidatos: [viajeIc], motivo: null, icident: propio, ...propios };
+}
+
+/**
  * Liga por `Icident` y cae a unidad+ventana cuando no hay posición que lo respalde.
  * Devuelve un resultado por cruce, en el orden de entrada.
  */
@@ -189,8 +213,13 @@ export function vincularPorIcident(
     posPorUnidad.set(k, l);
   }
 
-  return cruces.map((c, i): VinculoCruce => {
+  const resolver = (c: CruceIcident, i: number): VinculoCruce => {
     const base = porVentana[i];
+    const propio = typeof c.icident === 'string' && c.icident.trim() !== '' ? c.icident.trim() : null;
+    if (propio !== null) {
+      const delCobro = icidentDelCobro(c, propio, base, viajesDeIcident);
+      if (delCobro) return delCobro;
+    }
     const k = llaveUnidadVinculo(c.unidadArchivo);
     const min = c.hora ? minutosDe(c.fecha, c.hora) : null;
     if (!k || min === null || !c.caseta) return base;
@@ -219,5 +248,15 @@ export function vincularPorIcident(
       return { id: c.id, estado: 'conflicto', viajeId: null, candidatos: [viajeIc, ...enVentana], motivo: 'icident_contradice_ventana', icident, ...propios };
     }
     return { id: c.id, estado: 'ligado', viajeId: viajeIc, candidatos: [viajeIc], motivo: null, icident, ...propios };
+  };
+
+  return cruces.map((c, i): VinculoCruce => {
+    const r = resolver(c, i);
+    const propio = typeof c.icident === 'string' && c.icident.trim() !== '' ? c.icident.trim() : null;
+    // El cobro trae Icident pero ningún viaje lo respalda: no se inventa; queda lo que dijo la ventana, con el motivo a la vista.
+    if (propio !== null && r.icident == null) {
+      return { ...r, icident: propio, motivo: r.motivo ?? ((viajesDeIcident.get(propio) ?? []).length === 0 ? 'icident_sin_viaje' : 'icident_repetido') };
+    }
+    return r;
   });
 }

@@ -14,6 +14,7 @@ import { crearAlertarEnvio } from './alerta_envio';
 import { ConflictoDeVersion, reabrirDocumento, reabrirPorRechazoTms } from './bandeja';
 import * as repo from './repo';
 import { repoEnvios } from './repo_envios';
+import { revisoresPrimerMes } from './primer_mes';
 import { leerConfigSalida } from './salida_config';
 import { esFlotaSimulada, salidaSimulada } from './salida_simulada';
 import { SALIDA_NO_DISPONIBLE, SIN_TMS, type SalidaTms } from './tms_puerto';
@@ -63,6 +64,7 @@ export function depsEnviosReales(): DepsEnvios {
     telefonoDeUsuario,
     telefonoJefe: telefonoJefeDe,
     enviarCorreo: (para, correo) => enviarCorreo(para, correo),
+    revisoresPrimerMes: (tenantId) => revisoresPrimerMes(tenantId),
     avisar: (telefono, texto, parametros, contexto) => avisarOficina(telefono, texto, { parametros, contexto }),
     alertarOperador: (evento, detalle) => alertarOperador(evento, detalle),
     urlBandeja: `${appUrl()}/dashboard/carta-porte/documentos`,

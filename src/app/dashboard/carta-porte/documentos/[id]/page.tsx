@@ -5,7 +5,7 @@ import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
 import { DatoInvalido, mensajeParaPantalla } from '@/lib/likida/errores';
-import { aprobarDocumento, abrirRevision, corregirCampos, crearViajeDeDocumento, eliminarDocumento, quitarRenglon, rechazarDocumento, reabrirDocumento, reintentarLectura } from '@/lib/likida/carta_porte_docs/bandeja';
+import { aprobarDocumento, asignarCliente, abrirRevision, corregirCampos, crearViajeDeDocumento, eliminarDocumento, quitarRenglon, rechazarDocumento, reabrirDocumento, reintentarLectura } from '@/lib/likida/carta_porte_docs/bandeja';
 import { flotaBajoPerfil, marcarSubidoAMano, prepararEnvioTms, MENSAJE_FUNCION_NO_DISPONIBLE } from '@/lib/likida/carta_porte_docs/envio';
 import { esFlotaSimulada } from '@/lib/likida/carta_porte_docs/salida_simulada';
 import { puertoSupabase } from '@/lib/likida/carta_porte_docs/catalogo_puerto';
@@ -20,7 +20,7 @@ import { reasignarRevisor } from '@/lib/likida/carta_porte_docs/revisor';
 import { leerConfigSalida } from '@/lib/likida/carta_porte_docs/salida_config';
 import { sufijoTenant } from '../../../sufijo';
 import type { ResultadoAccion } from '../forma_accion';
-import { VistaRevision, type CatalogoBanner, type OriginalVista, type RevisorVista } from './vista';
+import { VistaRevision, type CatalogoBanner, type ClientesVista, type OriginalVista, type RevisorVista } from './vista';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -133,6 +133,29 @@ export default async function PaginaRevision({
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'reasignar el caso') };
     }
+  }
+
+  async function asignarClienteAccion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    const s = await resolverTenantEfectivo(RUTA_PADRE, sp);
+    if (!puedeVerRuta(s.rol, RUTA_PADRE)) return { ok: false, error: 'Tu rol no puede revisar documentos de Carta Porte.' };
+    try {
+      if (String(fd.get('documentoId') ?? '') !== id) return { ok: false, error: 'La forma no corresponde a este documento. Recarga la pantalla.' };
+      const version = Number(fd.get('version'));
+      if (!Number.isInteger(version) || version < 1) return { ok: false, error: 'Falta la versión del documento. Recarga la pantalla.' };
+      const crudo = String(fd.get('clienteId') ?? '');
+      if (crudo !== '' && !UUID.test(crudo)) return { ok: false, error: 'No se reconoce a ese cliente.' };
+      await asignarCliente(s.tenantId, id, version, crudo === '' ? null : crudo, s.userId);
+      revalidatePath(ruta); revalidatePath(RUTA_PADRE);
+      return { ok: true, mensaje: crudo === '' ? 'Cliente quitado del documento.' : 'Cliente asignado: se aplicó su catálogo a lo que faltaba.' };
+    } catch (e) {
+      return { ok: false, error: mensajeParaPantalla(e, 'asignar el cliente') };
+    }
+  }
+
+  let clientes: ClientesVista | null = null;
+  if (doc.estado === 'por_revisar') {
+    try { clientes = { actualId: doc.clienteId, opciones: await repo.listarClientes(tenantId) }; } catch (e) { logger.warn('carta_porte_docs.clientes_no_disponibles', { documentoId: id, err: e instanceof Error ? e.message : String(e) }); }
   }
 
   /** Una sola acción atiende todos los botones: `intencion` dice cuál se apretó. */
@@ -277,7 +300,8 @@ export default async function PaginaRevision({
       original={original}
       operadores={restringido ? [] : operadores.filter((o) => o.activo).map((o) => ({ id: o.id, nombre: o.nombre }))}
       eventos={eventos.map((e) => ({ tipo: e.tipo, creadoEn: e.creadoEn }))}
-      acciones={{ revisar, reasignar }}
+      acciones={{ revisar, reasignar, asignarCliente: asignarClienteAccion }}
+      clientes={clientes}
       revisor={revisor}
       sufijo={sufijoTenant(sp)}
       envio={envio ? { estado: envio.estado, proximaRevision: envio.proximaRevision, motivo: motivoDeRechazo(envio.ultimoError), ...(esFlotaSimulada(tenantId) ? { simulado: true } : {}) } : null}

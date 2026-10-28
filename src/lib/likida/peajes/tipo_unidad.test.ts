@@ -53,7 +53,7 @@ describe('regla de clase por tipo de unidad', () => {
   });
 
   it('la lista de utilitarios no afecta a un tracto', () => {
-    expect(clases([linea(1, 'tracto')], { clasesUtilitario: [1] })).toHaveLength(1);
+    expect(clases([linea(1, 'tracto')], { clasesUtilitario: [1], clase1: 'declaradas' })).toHaveLength(1);
   });
 
   it('sin tipo → candidato rotulado «sin tipo de unidad»', () => {
@@ -96,9 +96,14 @@ describe('CSV de TAGs: columna opcional `tipo`', () => {
   });
 
   it('columna `tipo` inválida → rechazo por fila con su motivo, sin tumbar las buenas', () => {
-    const r = parsearTagsMatriz(csv('tag;unidad;tipo\nIMDM10000001;C2-08;camioneta\nIMDM10000002;C2-09;tracto\n'));
+    const r = parsearTagsMatriz(csv('tag;unidad;tipo\nIMDM10000001;C2-08;autobus\nIMDM10000002;C2-09;tracto\n'));
     expect(r.tags.map((t) => t.tag)).toEqual(['IMDM10000002']);
-    expect(r.rechazadas).toEqual([{ fila: 2, motivo: expect.stringContaining('«camioneta» no es válido') }]);
+    expect(r.rechazadas).toEqual([{ fila: 2, motivo: expect.stringContaining('«autobus» no es válido') }]);
+  });
+
+  it('A2 ola 1: «camioneta» (como dice la plantilla del cliente) es un utilitario; nada más se adivina', () => {
+    const r = parsearTagsMatriz(csv('tag;unidad;tipo\nIMDM10000001;C2-08;camioneta\nIMDM10000002;C2-09;Tractocamión\n'));
+    expect(r.tags.map((t) => [t.tag, t.tipoUnidad])).toEqual([['IMDM10000001', 'utilitario'], ['IMDM10000002', 'tracto']]);
   });
 
   it('el mismo TAG con dos tipos distintos se rechaza completo; con el mismo tipo, o con tipo en una sola fila, no', () => {

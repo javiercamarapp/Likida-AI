@@ -168,6 +168,11 @@ describe('guardia: enumeración de rutas y acciones de servidor', () => {
       'page.tsx#reenviarCopiaExterna',
       'page.tsx#reenviarDesgloseExterno',
       'page.tsx#reintentarExterna',
+      // Ola 1 · A1: las dos cargas por archivo del canal correo. Revisadas: la primera entra por `importarDesglosesDeArchivo` →
+      // `recibirDesglose` (el MISMO camino que POST /v1/.../desgloses: importes de la fuente, idempotente, nunca edita un importe) y la
+      // segunda por `importarContactosDeArchivo` → `aplicarContactos` (solo `correo` y `coordinador_id` de un operador que YA existe).
+      'page.tsx#subirContactosOperadores',
+      'page.tsx#subirDesglosesExportados',
       'page.tsx#subirLiquidacionesExternas',
     ]);
   });
