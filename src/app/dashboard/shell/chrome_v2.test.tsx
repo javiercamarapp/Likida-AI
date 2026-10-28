@@ -50,6 +50,13 @@ describe('DashboardChromeV2: el contrato que no se rompe', () => {
     expect(html).not.toMatch(/<dialog[^>]*\sopen/);
   });
 
+  it('cada ítem del menú lleva su ancla data-tour estable (para el recorrido guiado) y el botón Más también', () => {
+    expect(html).toContain('data-tour="nav-agentes-peajes"');
+    expect(html).toContain('data-tour="nav-conexiones"');
+    expect(html).toContain('data-tour="nav-puesta-en-marcha"');
+    expect(html).toContain('data-tour="nav-mas"');
+  });
+
   it('no pinta el shader de fondo de v1', () => {
     expect(html).not.toContain('sb-aside');
   });

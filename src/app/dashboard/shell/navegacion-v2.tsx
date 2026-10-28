@@ -27,6 +27,11 @@ export function iniciales(nombre: string | null): string {
   return dos.toUpperCase();
 }
 
+/** `/dashboard/agentes/peajes` → `agentes-peajes`; la raíz → `resumen`. */
+export function anclaDe(href: string): string {
+  return href.replace(/^\/dashboard\/?/, '').replace(/\//g, '-') || 'resumen';
+}
+
 function Fila({ item, sufijo, activo, perfil, insignia, alNavegar }: {
   item: Item; sufijo: string; activo: boolean; perfil?: PerfilTenant | null; insignia?: string; alNavegar?: () => void;
 }) {
@@ -42,6 +47,8 @@ function Fila({ item, sufijo, activo, perfil, insignia, alNavegar }: {
         aria-current={esActivo ? 'page' : undefined}
         aria-label={modulo ? `${item.nombre}, próximamente` : undefined}
         title={modulo ? `${item.nombre} (Próximamente)` : item.nombre}
+        // Ancla ESTABLE para el recorrido guiado (`data-tour`): no depende de clases ni de textos.
+        data-tour={`nav-${anclaDe(item.href)}`}
         onClick={alNavegar}
       >
         <item.Icono className="rv-item__ico" width={16} height={16} strokeWidth={1.75} aria-hidden />

@@ -34,7 +34,7 @@ export default function CabeceraMovil({ rol, rolEtiqueta, nombre, perfil, usoIa,
               <Bell width={18} height={18} strokeWidth={1.75} aria-hidden />
             </Link>
           )}
-          <button type="button" className="rv-icono-boton" aria-label="Más: abrir el menú completo" aria-haspopup="dialog"
+          <button type="button" className="rv-icono-boton" aria-label="Más: abrir el menú completo" aria-haspopup="dialog" data-tour="nav-mas"
             aria-expanded={abierta} onClick={() => setAbierta(true)}>
             <Menu width={18} height={18} strokeWidth={1.75} aria-hidden />
           </button>
