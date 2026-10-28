@@ -30,10 +30,11 @@ const T0 = Date.parse('2026-10-15T15:00:00Z');
 const MIN = 60_000;
 
 let config: ConfigSalida;
-let correos: Array<{ para: string; correo: Correo }>;
+let correos: Array<{ para: string | string[]; correo: Correo }>;
 let avisos: Array<{ telefono: string; texto: string; parametros: [string, string, string] }>;
 let operador: Array<{ evento: string; detalle: Record<string, unknown> }>;
 let correoRes: ResultadoEnvio;
+let primerMes: string[] = [];
 let waRes: ResultadoAvisoOficina;
 let telefonos: Record<string, string | null>;
 let correosUsuario: Record<string, string | null>;
@@ -50,6 +51,7 @@ function deps(over: Partial<DepsAlertaEnvio> = {}): DepsAlertaEnvio {
     telefonoDeUsuario: async (u) => telefonos[u] ?? null,
     telefonoJefe: async () => telefonoJefe,
     enviarCorreo: async (para, correo) => { correos.push({ para, correo }); return correoRes; },
+    revisoresPrimerMes: async () => primerMes,
     avisar: async (telefono, texto, parametros) => { avisos.push({ telefono, texto, parametros }); return waRes; },
     alertarOperador: async (evento, detalle) => { operador.push({ evento, detalle }); },
     urlBandeja: BASE,
@@ -60,9 +62,18 @@ function deps(over: Partial<DepsAlertaEnvio> = {}): DepsAlertaEnvio {
 beforeEach(() => {
   config = { ...CONFIG_SALIDA_ARRANQUE, modo: 'api' };
   correos = []; avisos = []; operador = [];
-  correoRes = { ok: true, id: 'c1' };
+  correoRes = { ok: true, id: 'c1' }; primerMes = [];
   waRes = { ok: true, via: 'texto', id: 'w1' };
   telefonos = {}; correosUsuario = {}; telefonoJefe = '+520000000001'; // grep-limpio:ok
+});
+
+describe('primer mes: copia a los revisores por departamento (OLA1-A3)', () => {
+  it('el aviso va al destinatario y a los revisores, sin repetir; sin destinatario principal no se inventa uno', async () => {
+    config = { ...config, destinatarioAlertaCorreo: 'oficina@flota.test' };
+    primerMes = ['captura@flota.test', 'OFICINA@flota.test'];
+    await crearAlertarEnvio(deps())(entrada('listo_manual'));
+    expect(correos[0].para).toEqual(['oficina@flota.test', 'captura@flota.test']);
+  });
 });
 
 describe('a quién se avisa', () => {

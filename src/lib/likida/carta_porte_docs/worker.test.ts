@@ -444,3 +444,54 @@ describe('un archivo partido que reabrió hijos previos avisa a la oficina (M1)'
     expect(r).toMatchObject({ divididos: 1, divisionesAvisadas: 0, sinTelefono: 1, errores: 0 });
   });
 });
+
+describe('el aviso también sale por correo (OLA1-A3)', () => {
+  function conCorreo(o: Parameters<typeof mundo>[0], correos: string[], enviarOk = true) {
+    const m = mundo(o);
+    const correosEnviados: Array<{ tipo: string; para: string[]; liga: string }> = [];
+    m.deps.correosAviso = async () => correos;
+    m.deps.enviarCorreoAviso = async (a) => { correosEnviados.push({ tipo: a.tipo, para: a.para, liga: a.liga }); return { ok: enviarOk }; };
+    return { m, correosEnviados };
+  }
+
+  it('sin teléfono pero con correo: el aviso SÍ sale, se reclama el candado y se cuenta (antes se perdía)', async () => {
+    const { m, correosEnviados } = conCorreo({ porAvisar: ['d1'], telefono: null }, ['revisor@flota.test']);
+    const r = await correrWorkerCartaPorte(m.deps, opts(m));
+    expect(m.avisos).toHaveLength(0);
+    expect(correosEnviados).toEqual([{ tipo: 'hallazgos', para: ['revisor@flota.test'], liga: `${URL}/d1` }]);
+    expect(r).toMatchObject({ avisosEnviados: 1, avisosPorCorreo: 1, sinTelefono: 0, hallazgos: 1 });
+    expect(m.eventos).toEqual([{ id: 'd1', tipo: 'aviso_oficina' }]);
+  });
+
+  it('WhatsApp rechazado de forma definitiva (Meta sin verificar) pero correo enviado: cuenta como avisado y NO suelta el candado', async () => {
+    const { m } = conCorreo({ agotados: ['d1'], envio: () => ({ ok: false, motivo: 'plantilla sin aprobar', fueraDeVentana: false, reintentable: false } as ResultadoAvisoOficina) }, ['alerta@flota.test']);
+    const r = await correrWorkerCartaPorte(m.deps, opts(m));
+    expect(r).toMatchObject({ avisosEnviados: 1, avisosPorCorreo: 1, avisosFallidos: 0, agotados: 1 });
+    expect(m.candados.get('d1')?.has('agotado')).toBe(true);
+    const r2 = await correrWorkerCartaPorte(m.deps, opts(m));
+    expect(r2.avisosEnviados).toBe(0); // el candado sigue cerrado: no se reenvía por correo
+  });
+
+  it('si TODOS los canales fallan de forma definitiva se suelta el candado para reintentar', async () => {
+    const { m } = conCorreo({ agotados: ['d1'], envio: () => ({ ok: false, motivo: 'x', fueraDeVentana: false, reintentable: false } as ResultadoAvisoOficina) }, ['alerta@flota.test'], false);
+    const r = await correrWorkerCartaPorte(m.deps, opts(m));
+    expect(r).toMatchObject({ avisosEnviados: 0, avisosFallidos: 1 });
+    expect(m.candados.get('d1')?.has('agotado')).toBe(false);
+  });
+
+  it('sin teléfono ni correo sigue sin reclamar el candado (comportamiento de siempre)', async () => {
+    const { m, correosEnviados } = conCorreo({ porAvisar: ['d1'], telefono: null }, []);
+    const r = await correrWorkerCartaPorte(m.deps, opts(m));
+    expect(r).toMatchObject({ sinTelefono: 1, avisosEnviados: 0 });
+    expect(correosEnviados).toHaveLength(0);
+    expect(m.candados.size).toBe(0);
+  });
+
+  it('con teléfono Y correo salen los dos canales', async () => {
+    const { m, correosEnviados } = conCorreo({ porAvisar: ['d1'] }, ['revisor@flota.test']);
+    const r = await correrWorkerCartaPorte(m.deps, opts(m));
+    expect(m.avisos).toHaveLength(1);
+    expect(correosEnviados).toHaveLength(1);
+    expect(r).toMatchObject({ avisosEnviados: 1, avisosPorCorreo: 1 });
+  });
+});

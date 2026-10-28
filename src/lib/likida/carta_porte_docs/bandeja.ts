@@ -33,6 +33,7 @@ import { enriquecer, avisosDelCatalogo } from './catalogo_cliente';
 import { CODIGOS_SUMA, confianzaMinimaCritica, conservarHallazgosTms, type Hallazgo, type ResultadoValidacion } from './validacion';
 import * as repo from './repo';
 import { asignarAlLlegarARevision } from './revisor';
+import { notificarMovimiento } from './primer_mes';
 import type { CorreccionFila, DocumentoFila } from './repo';
 
 export class ConflictoDeVersion extends DatoInvalido {
@@ -311,6 +312,7 @@ export async function aprobarDocumento(
   });
   if (!aprobado) throw new ConflictoDeVersion();
   await repo.registrarEvento(tenantId, id, 'aprobado', actor.id, { revisionSeg: medible, avisos: validacion.hallazgos.length });
+  await notificarMovimiento(tenantId, id, 'aprobado', aprobado.version);
 
   const perfil = opciones.aprender === false ? { accion: 'omitido' as const, motivo: 'Aprendizaje desactivado.' } : await aprenderDeAprobado(tenantId, aprobado, actor.id);
   // Bajo el perfil «cinco_agentes» aprobar = preparar el envío al TMS (sin operador ni viaje); si no, el viaje de siempre.
@@ -374,6 +376,7 @@ export async function rechazarDocumento(
   });
   if (!r) throw new ConflictoDeVersion();
   await repo.registrarEvento(tenantId, id, 'rechazado', actorId, { motivo: m });
+  await notificarMovimiento(tenantId, id, 'rechazado', r.version);
   return r;
 }
 

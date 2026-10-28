@@ -1042,6 +1042,33 @@ export async function guardarSalidaConfig(tenantId: string, c: SalidaConfigFila,
 }
 
 
+// ── Modo primer mes (0938: cp_salida_config.primer_mes_hasta / revisores_departamento) ───────────────────────────────────
+// Se lee y se escribe APARTE de `COLUMNAS_SALIDA_CONFIG` a propósito: la configuración de siempre no puede romperse en una base
+// que todavía no tiene la 0938. Sin las columnas, leer devuelve `null` (modo apagado) y escribir falla con una frase clara.
+
+export interface PrimerMesFila { hasta: string | null; revisores: Array<{ departamento: string; correo: string }> }
+
+export async function leerPrimerMes(tenantId: string): Promise<PrimerMesFila | null> {
+  const r = await acotada(supabaseAdmin().from('cp_salida_config').select('primer_mes_hasta, revisores_departamento').eq('tenant_id', tenantId).maybeSingle(), 'cpdocs.primer_mes');
+  if (columnaAusente(r.error)) { logger.warn('cartaporte_docs.primer_mes_sin_migracion', { tenantId }); return null; }
+  const f = exigir(r, 'cpdocs.primer_mes') as unknown as Fila | null;
+  if (!f) return null;
+  const crudo = Array.isArray(f.revisores_departamento) ? (f.revisores_departamento as unknown[]) : [];
+  const revisores = crudo.flatMap((x) => {
+    const o = (x ?? {}) as Record<string, unknown>;
+    return typeof o.correo === 'string' && typeof o.departamento === 'string' ? [{ departamento: o.departamento, correo: o.correo }] : [];
+  });
+  return { hasta: s(f.primer_mes_hasta)?.slice(0, 10) ?? null, revisores };
+}
+
+export async function guardarPrimerMes(tenantId: string, c: PrimerMesFila, actorId: string | null): Promise<void> {
+  const r = await acotada(supabaseAdmin().from('cp_salida_config').upsert({
+    tenant_id: tenantId, primer_mes_hasta: c.hasta, revisores_departamento: c.revisores, updated_by: actorId, updated_at: new Date().toISOString(),
+  }, { onConflict: 'tenant_id' }), 'cpdocs.primer_mes_guardar');
+  if (columnaAusente(r.error)) throw new Error('El modo primer mes todavía no está habilitado en la base (falta aplicar la migración 0938).');
+  if (r.error) throw new Error(`cartaporte_docs primer mes: ${r.error.message}`);
+}
+
 // ── Revisor asignado (0790: cp_documento.revisor_asignado) ──────────────────
 // Se lee y se escribe APARTE de `COLUMNAS_DOC` a propósito: la bandeja de hoy no puede romperse en una base que todavía no
 // tiene la 0790. Sin la columna, leer devuelve «sin asignar» y escribir falla con una frase clara.

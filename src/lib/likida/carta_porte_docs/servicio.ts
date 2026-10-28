@@ -31,6 +31,7 @@ import { clasificarFormato } from './registro_formatos';
 import type { VisionRemision } from './lectores/remision';
 import * as repo from './repo';
 import { asignarAlLlegarARevision } from './revisor';
+import { notificarMovimiento } from './primer_mes';
 import { remitenteDeEncabezado, resolverClientePorRemitente, type ViaCliente } from './cliente_remitente';
 import type { CanalDoc, DocumentoFila, MetaExtraccion } from './repo';
 
@@ -516,6 +517,8 @@ export async function procesarDocumento(
     for (const x of r.escalamientos) await repo.registrarEvento(tenantId, documentoId, 'escalada', null, x);
     // T-A3-31: con bloqueo o duda y un destinatario configurado, el caso ya llega a su persona (mejor esfuerzo; sin configuración no hace nada).
     await asignarAlLlegarARevision(tenantId, documentoId, validacion);
+    // OLA1-A3: en el primer mes de la flota, cada movimiento se copia por correo a los revisores por departamento (mejor esfuerzo).
+    await notificarMovimiento(tenantId, documentoId, 'lectura_lista', version);
     return { ok: true, estado: 'por_revisar', origen: r.origen, nivel: r.nivel, costoUsd: r.costoUsd, listoParaAprobar: validacion.listoParaAprobar };
   } catch (e) {
     // Cualquier otra cosa (la base, la bitácora): el documento NO se queda «procesando» para siempre; el lease vence solo
