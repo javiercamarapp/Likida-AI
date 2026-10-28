@@ -80,11 +80,15 @@ export async function registrarRecepcion(tenantId: string, r: NuevaRecepcion): P
   }
 }
 
-/** ¿Ese MISMO archivo ya se procesó antes (en otro correo)? Evita volver a pagar la visión. */
-export async function recepcionPrevia(tenantId: string, sha256: string): Promise<{ estado: EstadoRecepcion; cfdiUuid: string | null; facturaId: string | null } | null> {
+/**
+ * ¿Ese MISMO archivo ya se procesó antes? Evita volver a pagar la visión. `emailId` dice de QUÉ correo es la fila: si es el
+ * mismo correo que se reintenta (A39-S30-01), el llamador NO debe re-registrarla (el `upsert` por correo+sha degradaría su
+ * estado a `duplicada` y borraría `storage_ruta`), solo reconocerla.
+ */
+export async function recepcionPrevia(tenantId: string, sha256: string): Promise<{ estado: EstadoRecepcion; cfdiUuid: string | null; facturaId: string | null; emailId: string | null } | null> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('buzon_recepcion')
-    .select('estado, cfdi_uuid, factura_id')
+    .select('estado, cfdi_uuid, factura_id, email_id')
     .eq('tenant_id', tenantId)
     .eq('sha256', sha256)
     .in('estado', ['procesada', 'revision'])
@@ -95,8 +99,8 @@ export async function recepcionPrevia(tenantId: string, sha256: string): Promise
     if (faltaMigracion(error)) return null;
     throw new Error(`recepcionPrevia: ${error.message}`);
   }
-  const f = (data ?? [])[0] as { estado: EstadoRecepcion; cfdi_uuid: string | null; factura_id: string | null } | undefined;
-  return f ? { estado: f.estado, cfdiUuid: f.cfdi_uuid, facturaId: f.factura_id } : null;
+  const f = (data ?? [])[0] as { estado: EstadoRecepcion; cfdi_uuid: string | null; factura_id: string | null; email_id: string | null } | undefined;
+  return f ? { estado: f.estado, cfdiUuid: f.cfdi_uuid, facturaId: f.factura_id, emailId: f.email_id ?? null } : null;
 }
 
 // ── Storage del PDF ─────────────────────────────────────────────────────────

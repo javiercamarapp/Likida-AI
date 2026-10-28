@@ -254,6 +254,7 @@ export async function recibirDesglose(
   }
   // A37-A1-02: una persona que administra decidió mandar la corrección → liquidación nueva `<clave>-R<n>`, idempotente.
   let correccionDe: string | null = null;
+  let correccionN = 0;
   if (existente && opciones.correccion) {
     const base = claveExterna;
     let n = 1;
@@ -267,6 +268,7 @@ export async function recibirDesglose(
     }
     if (n > MAX_CORRECCIONES) throw new DatoInvalido(`Esta bitácora ya tiene ${MAX_CORRECCIONES} correcciones: revisa la integración, algo la está reenviando distinta cada vez.`);
     correccionDe = base;
+    correccionN = n;
     claveExterna = `${base}-R${n}`;
     liq = { ...liq, claveExterna };
     huella = huellaDesglose(liq);
@@ -344,6 +346,7 @@ export async function recibirDesglose(
     ...(d.numeroLiquidacion !== undefined ? { numeroLiquidacion: d.numeroLiquidacion } : {}),
     ...(d.numeroPago !== undefined ? { numeroPago: d.numeroPago } : {}),
     ...(d.bitacoras !== undefined ? { bitacoras: liq.viajes } : {}),
+    ...(correccionN > 0 ? { correccionN } : {}),
     totalOrigen: (conversion.totalOrigen === 'origen' ? 'tms' : 'calculado') as 'tms' | 'calculado',
     retenidaMotivo: retenida ? decision.detalle.join(' ') : null,
   };

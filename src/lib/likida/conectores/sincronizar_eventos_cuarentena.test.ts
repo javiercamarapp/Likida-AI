@@ -61,6 +61,7 @@ vi.mock('@/lib/supabase/admin', () => ({
       api.not = () => api;
       api.order = () => api;
       api.limit = () => api;
+      api.range = () => api;
       api.maybeSingle = () => Promise.resolve({ data: { zona_horaria: 'America/Tijuana' }, error: null });
       api.update = () => { actualizandoLegacy = true; return api; };
       api.upsert = () => ({ select: () => Promise.resolve({ data: [], error: null }) });

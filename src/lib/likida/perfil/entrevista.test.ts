@@ -172,6 +172,24 @@ describe('A37-S53-04/06/07 — texto libre fiscal y de catálogo, fail-closed', 
       .toEqual({ diesel: 4000, caseta: 1500, alimentacion: 800, hospedaje: undefined });
     expect(interpretarTurno(cubierto, 'hotel 2.500').hechos.topesPolitica).toMatchObject({ hospedaje: 2500 });
   });
+  it('A39-S53-03: los topes con centavos se leen completos (4000.00 NO es 400)', () => {
+    const cubierto = perfilHasta('topesPolitica');
+    const leer = (t: string) => interpretarTurno(cubierto, t).hechos.topesPolitica;
+    expect(leer('diesel 4000.00')).toMatchObject({ diesel: 4000 });
+    expect(leer('diesel 4000.50')).toMatchObject({ diesel: 4000.5 });
+    expect(leer('caseta 1500.00')).toMatchObject({ caseta: 1500 });
+    expect(leer('hotel 2500,00')).toMatchObject({ hospedaje: 2500 });
+    expect(leer('diesel $4,000.00, comida 800.00.')).toMatchObject({ diesel: 4000, alimentacion: 800 });
+    expect(leer('diesel $4.000')).toMatchObject({ diesel: 4000 });
+    expect(leer('diesel 4000, caseta 1500')).toMatchObject({ diesel: 4000, caseta: 1500 });
+  });
+  it('A39-S53-03: un número ambiguo o sin sentido NO se adivina', () => {
+    const cubierto = perfilHasta('topesPolitica');
+    const leer = (t: string) => interpretarTurno(cubierto, t).hechos.topesPolitica;
+    expect(leer('diesel 4.0.00')).toBeUndefined();
+    expect(leer('diesel 4,00,0')).toBeUndefined();
+    expect(leer('diesel 12')).toBeUndefined();
+  });
 });
 
 function decl(v: unknown) { return { valor: v, procedencia: 'declarado' as const }; }

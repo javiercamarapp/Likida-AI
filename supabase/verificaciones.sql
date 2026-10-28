@@ -6842,12 +6842,14 @@ begin
                        'facturacion_clientes_tenant', 'tablero_operacion_tenant',
                        'carga_operadores_tenant', 'incidencias_tenant');
 
-  -- ── 2+3. Rentabilidad: 15,000 de ingreso (el null NO suma), 2 sin ingreso ─
+  -- ── 2+3. Rentabilidad (A39-S20-01, 0928): ingreso y costo del MISMO universo, los viajes con liquidación vigente ─
+  --         (A1 y A2): 10,000 de ingreso (el null NO suma), 1 con y 1 sin ingreso; A3 y A4 no tienen liquidación.
   j := rentabilidad_tenant(ta, null);
-  ok_rent := (j->>'ingreso')::numeric = 15000        -- si B contamina: +99,999
+  ok_rent := (j->>'ingreso')::numeric = 10000        -- si B contamina: +99,999; si entra el abierto A3: +5,000
          and (j->>'costoComprobado')::numeric = 2200 -- si B contamina: +88,888
-         and (j->>'viajesConIngreso')::int = 2
-         and (j->>'viajesSinIngreso')::int = 2;
+         and (j->>'viajesConIngreso')::int = 1
+         and (j->>'viajesSinIngreso')::int = 1
+         and (j->>'viajesSinLiquidar')::int = 2;
 
   -- ── 2+3. Cartera: reparto por cliente, saldo del más grande, sin cliente ─
   j := cartera_tenant(ta);

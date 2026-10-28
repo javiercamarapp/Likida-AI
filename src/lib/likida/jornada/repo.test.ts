@@ -38,6 +38,8 @@ function crearBuilder(tabla: string) {
     update: (fila: Record<string, unknown>) => { l.op = 'update'; l.fila = fila; return b; },
     eq: (c: string, v: unknown) => { l.eq.push([c, v]); return b; },
     is: (c: string, v: unknown) => { l.is.push([c, v]); return b; },
+    not: () => b,
+    maybeSingle: () => b,
     then: (res: (x: unknown) => unknown, rej?: (e: unknown) => unknown) =>
       Promise.resolve().then(() => resp()).then(res, rej),
   });
@@ -60,10 +62,8 @@ describe('anularAsiento — el candado is(anulado_en, null)', () => {
   it('ancla la consulta con eq(id), eq(tenant_id) e is(anulado_en, null) — EN LA BASE, no en memoria', async () => {
     const r = await anularAsiento(args);
     expect(r).toEqual({ ok: true });
-    expect(llamadas).toHaveLength(1);
-    const l = llamadas[0];
+    const l = llamadas.find((x) => x.op === 'update')!;
     expect(l.tabla).toBe('jornada_asiento');
-    expect(l.op).toBe('update');
     expect(l.eq).toContainEqual(['id', 'as-1']);
     expect(l.eq).toContainEqual(['tenant_id', TENANT]);
     // EL CANDADO: si esta línea desaparece de la producción, la prueba se

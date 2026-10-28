@@ -591,7 +591,19 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 326;
 // alerta_operador_compuerta.test.ts.
 // LOTE A39 OLA 8 O8-1 (A39-S57-01): +1 llamada (2,389 → 2,390) al integrar con el lote conductor-jornada. `crearFlota` (administracion.ts) fija `tenant.rfc_sat_verificado`
 // en un update aparte del insert (tolera que la migración 0925 aún no esté aplicada). Cubierta por administracion.test.ts. Si otro lote toca este techo, sumar el incremento al integrar.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_390;
+// LOTE A39 OLA 8 O8-6 (datos-correos): +4 llamadas (2,390 → 2,394), medidas con el barrido real. sincronizar_eventos.ts +2 (A39-S38-03: lectura de las filas mínimas
+// y update de promoción a completa, ambos por `acotada`); investigador.ts +1 (A39-S28-01: RPC prospectos_sin_dossier, 0930); vigia/repo.ts +1 (A39-S59-01: `marcarRespondida`
+// anota solo la salida cuando el cliente escribió después). Cubiertas por sincronizar_eventos_a39_s38.test.ts, investigador.test.ts y servicio.test.ts.
+// LOTE A39 OLA 8 O8-4 (A39-S57-03): +3 llamadas (2,390 → 2,393), medidas con el barrido real. `sat_descarga/ciclo.ts` suma la copia de trabajo de un paquete
+// grande del SAT (`sat_paquete_xml`, 0928): leer, guardar (upsert por tandas) y borrar, las tres por `acotada` con `tenant_id`. Cubiertas por ciclo_flota.test.ts.
+// Si otro lote toca este techo, sumar el incremento al integrar.
+// LOTE A39 OLA 8 O8-5 (A39-S14-01): +1 llamada (2,390 → 2,391; medida con el barrido real). `crearReclamoDeCandidatos` (peajes/repo.ts) lee los lotes previos de la
+// categoría (`peaje_reclamo`, por `acotada`, con `tenant_id` y `.order('id').limit(1000)`) para tomar el siguiente lote. Cubierta por acciones-candidatos.test.ts y la prueba SQL 0929.
+// LOTE A39 OLA 8 tanda 2 (A37-S48-01/03, A5-01): +5 llamadas (2,390 → 2,395), medidas con el barrido real. `jornada/repo.ts` suma `jornadaCerradaDeAyer`
+// (la conformidad de un turno nocturno) y, para retirar la conformidad al anular/recapturar, `leerConformidad`, `retirarConformidad` y la lectura previa de
+// `anularAsiento` (+4; cubiertas por wa_dia_anterior.test.ts); `admin/negocio.ts` suma `fijarAgenteChoferHabilitado` (+1; negocio_agente_chofer.test.ts).
+// INTEGRACIÓN OLA 8b: techo = 2,390 + 4 (O8-6) + 3 (O8-4) + 1 (O8-5) + 5 (tanda 2) = 2,403 (medido con el barrido real tras la fusión).
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_403;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

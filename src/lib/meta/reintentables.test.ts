@@ -26,7 +26,7 @@ vi.mock('@/lib/likida/wa_outbox', async (importOriginal) => ({
   encolarSalidaWhatsApp: encolarMock,
 }));
 
-const { enviarTexto, sendText, esReintentableMeta, CODIGOS_META_REINTENTABLES } = await import('./client');
+const { enviarTexto, sendText, sendDocument, esReintentableMeta, CODIGOS_META_REINTENTABLES } = await import('./client');
 const { RETRASO_AMBIGUO_SEGUNDOS } = await import('@/lib/likida/wa_outbox');
 
 const fetchMock = vi.fn();
@@ -119,6 +119,16 @@ describe('el catch de red encola con el retraso AMBIGUO — el `!res.ok` no (H1)
   it('un rechazo NO reintentable (destinatario fuera de lista) ni siquiera encola', async () => {
     fetchMock.mockResolvedValue(respuesta(400, { error: { code: 131030, message: 'no está en la lista' } }));
     await enviarTexto('5219991112233', 'hola');
+    expect(encolarMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('sendDocument — A39-S30-03: devuelve el status HTTP', () => {
+  it('un 4xx con cuerpo NO JSON no trae código pero sí status, y no se encola', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 400, text: async () => '<html>Bad Request</html>', json: async () => { throw new Error('no json'); } } as unknown as Response);
+    const r = await sendDocument('5219991112233', 'https://x/y.pdf', 'y.pdf');
+    expect(r).toMatchObject({ ok: false, status: 400 });
+    expect((r as { codigo?: number }).codigo).toBeUndefined();
     expect(encolarMock).not.toHaveBeenCalled();
   });
 });

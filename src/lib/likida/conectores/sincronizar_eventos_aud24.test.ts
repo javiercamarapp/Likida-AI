@@ -49,7 +49,7 @@ vi.mock('@/lib/supabase/admin', () => ({
       api.select = () => api;
       api.eq = (c: string, v: unknown) => { filtros[c] = v; return api; };
       api.in = (c: string, v: unknown[]) => { filtros[`in:${c}`] = v; return api; };
-      api.not = () => api; api.is = () => api; api.order = () => api; api.limit = () => api;
+      api.not = () => api; api.is = () => api; api.order = () => api; api.limit = () => api; api.range = () => api;
       api.lte = () => api; api.or = () => api;
       api.maybeSingle = () => Promise.resolve({ data: { zona_horaria: estado.zonaHoraria }, error: null });
       api.update = () => { esUpdate = true; return api; };

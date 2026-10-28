@@ -67,10 +67,17 @@ describe('getRentabilidad — contribución = ingreso − comprobado, y el marge
     doble.base.viaje = [
       { id: 'v-1', tenant_id: 't-1', operador_id: 'o-1', estatus: 'liquidado', ingreso_flete: 300000 },
       { id: 'v-2', tenant_id: 't-1', operador_id: 'o-1', estatus: 'liquidado', ingreso_flete: 200000 },
-      { id: 'v-3', tenant_id: 't-1', operador_id: 'o-1', estatus: 'abierto', ingreso_flete: null },
+      { id: 'v-3', tenant_id: 't-1', operador_id: 'o-1', estatus: 'liquidado', ingreso_flete: null },
+      // A39-S20-01: un viaje abierto SIN liquidación queda fuera de la medición (ni su ingreso ni su costo existen aún).
+      { id: 'v-4', tenant_id: 't-1', operador_id: 'o-1', estatus: 'abierto', ingreso_flete: 90000 },
     ];
-    doble.base.liquidacion = [{ tenant_id: 't-1', viaje_id: 'v-1', total_comprobado: 380000, created_at: '2026-08-01T12:00:00Z' }];
+    doble.base.liquidacion = [
+      { tenant_id: 't-1', viaje_id: 'v-1', total_comprobado: 200000, created_at: '2026-08-01T12:00:00Z' },
+      { tenant_id: 't-1', viaje_id: 'v-2', total_comprobado: 180000, created_at: '2026-08-01T12:00:00Z' },
+      { tenant_id: 't-1', viaje_id: 'v-3', total_comprobado: 0, created_at: '2026-08-01T12:00:00Z' },
+    ];
     const r = await getRentabilidad('t-1');
+    expect(r.viajesSinLiquidar).toBe(1);
     expect(r.ingreso).toBe(500000);
     expect(r.costoComprobado).toBe(380000);
     expect(r.contribucion).toBe(120000);
@@ -84,7 +91,10 @@ describe('getRentabilidad — contribución = ingreso − comprobado, y el marge
       { id: 'v-1', tenant_id: 't-1', operador_id: 'o-1', estatus: 'abierto', ingreso_flete: null },
       { id: 'v-2', tenant_id: 't-1', operador_id: 'o-1', estatus: 'abierto', ingreso_flete: null },
     ];
-    doble.base.liquidacion = [{ tenant_id: 't-1', viaje_id: 'v-1', total_comprobado: 1500, created_at: '2026-08-01T12:00:00Z' }];
+    doble.base.liquidacion = [
+      { tenant_id: 't-1', viaje_id: 'v-1', total_comprobado: 1500, created_at: '2026-08-01T12:00:00Z' },
+      { tenant_id: 't-1', viaje_id: 'v-2', total_comprobado: 0, created_at: '2026-08-01T12:00:00Z' },
+    ];
     const r = await getRentabilidad('t-1');
     expect(r.ingreso).toBe(0);
     expect(r.margenPct).toBeNull();
@@ -93,7 +103,8 @@ describe('getRentabilidad — contribución = ingreso − comprobado, y el marge
   });
 
   it('un viaje con $0 de ingreso capturado cuenta como CON ingreso (0 es una medición, null no)', async () => {
-    doble.base.viaje = [{ id: 'v-1', tenant_id: 't-1', operador_id: 'o-1', estatus: 'abierto', ingreso_flete: 0 }];
+    doble.base.viaje = [{ id: 'v-1', tenant_id: 't-1', operador_id: 'o-1', estatus: 'liquidado', ingreso_flete: 0 }];
+    doble.base.liquidacion = [{ tenant_id: 't-1', viaje_id: 'v-1', total_comprobado: 0, created_at: '2026-08-01T12:00:00Z' }];
     const r = await getRentabilidad('t-1');
     expect(r.viajesConIngreso).toBe(1);
     expect(r.margenPct).toBeNull();
@@ -101,8 +112,12 @@ describe('getRentabilidad — contribución = ingreso − comprobado, y el marge
 
   it('redondea a centavos', async () => {
     doble.base.viaje = [
-      { id: 'v-1', tenant_id: 't-1', operador_id: 'o-1', estatus: 'abierto', ingreso_flete: 0.1 },
-      { id: 'v-2', tenant_id: 't-1', operador_id: 'o-1', estatus: 'abierto', ingreso_flete: 0.2 },
+      { id: 'v-1', tenant_id: 't-1', operador_id: 'o-1', estatus: 'liquidado', ingreso_flete: 0.1 },
+      { id: 'v-2', tenant_id: 't-1', operador_id: 'o-1', estatus: 'liquidado', ingreso_flete: 0.2 },
+    ];
+    doble.base.liquidacion = [
+      { tenant_id: 't-1', viaje_id: 'v-1', total_comprobado: 0, created_at: '2026-08-01T12:00:00Z' },
+      { tenant_id: 't-1', viaje_id: 'v-2', total_comprobado: 0, created_at: '2026-08-01T12:00:00Z' },
     ];
     const r = await getRentabilidad('t-1');
     expect(r.ingreso).toBe(0.3);

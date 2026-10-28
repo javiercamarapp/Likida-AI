@@ -133,8 +133,13 @@ export interface RepoVigia {
     escalamientoNivel: number; escaladoEn: string | null; control: 'agente' | 'humano'; tomadaPor: string | null; tomadaEn: string | null;
     atendidaEn: string | null; atendidaPor: string | null; prioridad: number;
   }>, guarda?: GuardaConversacion): Promise<boolean>;
-  /** El cliente fue atendido: se apaga el reloj del SLA, la insistencia y la escalera. */
-  marcarRespondida(tenantId: string, conversacionId: string, ahora: Date): Promise<void>;
+  /**
+   * El cliente fue atendido: se apaga el reloj del SLA, la insistencia y la escalera.
+   * `respondeHasta` (ISO) = hasta cuándo llegaba lo que se contestó (cuándo se redactó la respuesta). Si el cliente escribió
+   * DESPUÉS, ese mensaje sigue sin responder: solo se anota la salida y el reloj/escalera se conservan (A39-S59-01).
+   * Sin `respondeHasta` se apaga todo, como siempre.
+   */
+  marcarRespondida(tenantId: string, conversacionId: string, ahora: Date, respondeHasta?: string): Promise<void>;
   cerrarConversacion(tenantId: string, conversacionId: string, ahora: Date): Promise<void>;
 
   evento(tenantId: string, e: NuevoEvento): Promise<boolean>;

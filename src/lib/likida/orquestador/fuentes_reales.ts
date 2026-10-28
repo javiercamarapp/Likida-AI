@@ -208,7 +208,7 @@ export function crearFuentesReales(): Fuentes {
 
     async reclamacionPeajes(tenantId) {
       const r = await acotada(supabaseAdmin().from('desglose_peaje').select('id, proveedor, periodo_desde, periodo_hasta')
-        .eq('tenant_id', tenantId).is('anulado_en', null).order('created_at', { ascending: false }).order('id').limit(1), 'orquestador.peajes_ultimo');
+        .eq('tenant_id', tenantId).is('anulado_en', null).order('creado_en', { ascending: false }).order('id').limit(1), 'orquestador.peajes_ultimo'); // A39-S51-01: `desglose_peaje.creado_en` (0106); `created_at` no existe y el 42703 se leía como «peajes no activos»
       if (esSinTabla(r.error)) return null;
       if (r.error) throw new Error(`orquestador.peajes_ultimo: ${r.error.message}`);
       const f = ((r.data ?? []) as Array<{ id: string; proveedor: string | null; periodo_desde: string | null; periodo_hasta: string | null }>)[0];

@@ -177,8 +177,9 @@ describe('Agente 6 · FELIZ: propone → la persona confirma → se consume UNA 
     expect(portal.llamadas).toEqual([{ tenantId: A, comercio: 'enerser', modo: 'emitir', gastoIds: ['g1', 'g2'] }]);
     expect(portal.emitidos).toHaveLength(1);
     const uuid = portal.emitidos[0].uuid;
-    expect(fila('g1')).toMatchObject({ cfdi_uuid: uuid, cfdi_orden: 1 });
-    expect(fila('g2')).toMatchObject({ cfdi_uuid: uuid, cfdi_orden: 2 });
+    // A39-S43-01: el portal lo imprime en MAYÚSCULAS y la base (`gasto_cfdi_uuid_minuscula`, 0158) lo exige en minúsculas.
+    expect(fila('g1')).toMatchObject({ cfdi_uuid: uuid.toLowerCase(), cfdi_orden: 1 });
+    expect(fila('g2')).toMatchObject({ cfdi_uuid: uuid.toLowerCase(), cfdi_orden: 2 });
     // La marca de «emisión en curso» se levantó solo después de escribir el UUID.
     expect(fila('g1').autofactura_bloqueo).toBeNull();
     expect(fila('g2').autofactura_bloqueada_en).toBeNull();

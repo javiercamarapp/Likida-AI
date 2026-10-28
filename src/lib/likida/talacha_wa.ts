@@ -78,6 +78,10 @@ export function interpretarTalacha(texto: string | undefined): ReporteTalacha | 
   return { monto: extraerMonto(texto) };
 }
 
+/** Lo que sigue a un número y lo vuelve tiempo o distancia (texto ya sin acentos y en minúsculas). Literal y anclado: sin
+ *  cuantificadores anidados. */
+const UNIDAD_NO_MONETARIA = /^ ?(?:min|mins|minuto|minutos|seg|segundos|hora|horas|hr|hrs|h|dia|dias|km|kms|kilometro|kilometros|metros|mts)\b/;
+
 /**
  * El número SOLO cuenta si viene amarrado a dinero. Tres amarres reales:
  * `$800`, `800 pesos/varos`, y "me cobran 800". Si hay más de una cifra y no
@@ -93,6 +97,10 @@ export function extraerMonto(texto: string): number | null {
   ];
   for (const p of patrones) {
     for (const m of t.matchAll(p)) {
+      // A39-S29-01: «son 40 minutos» / «sale en 2 horas» / «son 25 km» son TIEMPO o DISTANCIA, no precio. Sin «$» que lo amarre a
+      // dinero, un número seguido de una unidad de tiempo o de distancia no cuenta. (`m.index` siempre existe en matchAll.)
+      const resto = t.slice((m.index ?? 0) + m[0].length);
+      if (!m[0].includes('$') && UNIDAD_NO_MONETARIA.test(resto)) continue;
       const n = Number(m[1].replace(/,/g, ''));
       if (Number.isFinite(n) && n > 0) encontrados.add(n);
     }

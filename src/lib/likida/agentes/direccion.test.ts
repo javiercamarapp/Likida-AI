@@ -381,8 +381,8 @@ describe('especialistas_incidente: ni un teléfono que no esté en la base', () 
 describe('fundraising: las cifras reales, y la lista de las que no existen', () => {
   it('una sola activa con precio NULL vuelve el MRR INDETERMINADO, no parcial', () => {
     const m = calcularMrr([
-      { plan: 'flota', precio: 17500 },
-      { plan: 'empresa', precio: null },
+      { plan: 'flota', precio: 17500, ivaIncluido: false },
+      { plan: 'empresa', precio: null, ivaIncluido: false },
     ]);
     expect(m.mxn).toBeNull();
     expect(m.motivo).toContain('INDETERMINADO');
@@ -396,13 +396,25 @@ describe('fundraising: las cifras reales, y la lista de las que no existen', () 
   });
 
   it('con todas las activas con precio, el MRR es la suma exacta', () => {
-    const m = calcularMrr([{ plan: 'flota', precio: 17500 }, { plan: 'demo', precio: 1900 }]);
+    const m = calcularMrr([{ plan: 'flota', precio: 17500, ivaIncluido: false }, { plan: 'demo', precio: 1900, ivaIncluido: false }]);
     expect(m).toMatchObject({ mxn: 19400, activas: 2, sinPrecio: 0, motivo: null });
+  });
+
+  it('A39-S26-01: un precio con IVA INCLUIDO se desglosa: el MRR es ingreso SIN IVA', () => {
+    const m = calcularMrr([{ plan: 'flota', precio: 11600, ivaIncluido: true }, { plan: 'demo', precio: 1000, ivaIncluido: false }]);
+    expect(m).toMatchObject({ mxn: 11000, activas: 2, sinPrecio: 0, motivo: null });
+  });
+
+  it('A39-S26-01: un plan que no declaró si su precio incluye IVA vuelve el MRR INDETERMINADO (no se adivina)', () => {
+    const m = calcularMrr([{ plan: 'flota', precio: 11600, ivaIncluido: true }, { plan: 'raro', precio: 5000, ivaIncluido: null }]);
+    expect(m.mxn).toBeNull();
+    expect(m.motivo).toContain('INDETERMINADO');
+    expect(m.motivo).toContain('raro');
   });
 
   const cifras = {
     flotas: 3, suscripciones: { porEstado: [], activas: [] },
-    facturasPagadas: 0, cobradoMxn: 0, pipeline: [], liquidaciones: 0,
+    facturasPagadas: 0, cobradoMxn: 0, facturasSinDesglose: { n: 0, totalConIvaMxn: 0 }, pipeline: [], liquidaciones: 0,
     truncado: false,
   };
 
@@ -430,6 +442,28 @@ describe('fundraising: las cifras reales, y la lista de las que no existen', () 
   it('cero suscripciones NO se lee como cero clientes de pago', () => {
     expect(armarParteFundraising(cifras, calcularMrr([]), '2026-08-01'))
       .toContain('el alta de una flota y su suscripción son dos cosas distintas');
+  });
+
+  it('A39-S26-01: lo cobrado se dice SIN IVA y las facturas sin desglose se declaran aparte, no se mezclan', () => {
+    const c = armarParteFundraising({ ...cifras, facturasPagadas: 3, cobradoMxn: 20000, facturasSinDesglose: { n: 1, totalConIvaMxn: 5800 } }, calcularMrr([]), '2026-08-01');
+    expect(c).toContain('Cobrado histórico SIN IVA');
+    expect(c).toContain('en 2 factura(s)');
+    expect(c).toContain('NO traen desglose de IVA');
+    expect(c).toContain('5,800');
+  });
+
+  it('A39-S26-01: la corrida suma el SUBTOTAL de factura_saas (no el monto con IVA) y lee precio_iva_incluido', async () => {
+    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    respuestas.set('tenant', [{ count: 3, error: null }]);
+    respuestas.set('liquidacion', [{ count: 0, error: null }]);
+    respuestas.set('suscripcion', [{ data: [{ estado: 'activa', plan_clave: 'flota', plan: { precio_mensual: 11600, precio_iva_incluido: true } }], error: null, count: 1 }]);
+    respuestas.set('factura_saas', [{ data: [{ monto: 11600, subtotal: 10000 }, { monto: 5800, subtotal: null }], error: null, count: 2 }]);
+    respuestas.set('prospecto', [{ data: [], error: null }]);
+    await correrAgenteDireccionBandeja('fundraising', 'cron', HOY);
+    const cuerpo = (encolar.mock.calls.at(-1)?.[0] as { cuerpo: string }).cuerpo;
+    expect(cuerpo).toContain('MRR: $10,000');
+    expect(cuerpo).toContain('SIN IVA');
+    expect(cuerpo).toContain('NO traen desglose de IVA');
   });
 
   it('el pipeline se declara CONTEO, no valor en pesos', () => {

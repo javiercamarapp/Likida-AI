@@ -98,7 +98,7 @@ describe('crearFlota', () => {
     update.mockImplementation(() => cadena({ error: { message: 'column "rfc_sat_verificado" does not exist' } }));
     const r = await crearFlota({ nombre: 'Transportes Prueba', rfc: 'gmx0902279i1' });
     expect(r.tenantId).toBe('t-1');
-    expect(logger.warn).toHaveBeenCalledWith('flota.alta.rfc_sat_verificado_no_guardado', expect.anything());
+    expect(logger.error).toHaveBeenCalledWith('flota.alta.rfc_sat_verificado_no_guardado', expect.anything());
   });
 
   it('un nombre de dos letras no pasa', async () => {

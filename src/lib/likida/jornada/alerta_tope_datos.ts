@@ -141,7 +141,7 @@ export const puertosAlertaReales: PuertosAlerta = {
       } catch { motivo = 'no se pudo comprobar la compuerta de seguridad del operador'; }
       if (motivo) {
         logger.warn('jornada.alerta_operador_bloqueada', { tenant: tenantId, motivo });
-        return { ok: false, reintentable: false, motivo: `No se envió: ${motivo}.` };
+        return { ok: false, reintentable: true, bloqueadoPorCompuerta: true, motivo: `No se envió: ${motivo}.` };
       }
     }
     const e = await enviarConFallback(telefono, { texto: msg.texto, plantilla: msg.plantilla, contexto, tenantId, ahora });

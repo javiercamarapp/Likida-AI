@@ -117,6 +117,34 @@ describe('reclamar', () => {
     expect(db.tablas.peaje_candidato_accion ?? []).toHaveLength(0);
   });
 
+  // A39-S14-01 (variante de A37-A2-01): la segunda tanda de candidatos de la MISMA categoría y desglose chocaba para siempre con el
+  // índice (flota, desglose, categoría). Desde la 0929 cada tanda toma su propio lote; el reclamo de categoría completa es el lote 0.
+  it('A39-S14-01: reclamar otra tanda de la misma categoría crea otro reclamo con el siguiente lote (el primero, ya enviado, no estorba)', async () => {
+    sembrar();
+    expect(await A.aplicarAccionCandidatos(T, { ...base, accion: 'reclamado', fila: fila(1), enviadoEn: '2026-03-12' })).toMatchObject({ ok: true, reclamos: 1 });
+    const r2 = await A.aplicarAccionCandidatos(T, { ...base, accion: 'reclamado', fila: fila(2) });
+    expect(r2).toMatchObject({ ok: true, aplicadas: 1, reclamos: 1 });
+    expect(db.tablas.peaje_reclamo.map((x) => [x.estado, x.lote])).toEqual([['enviado', 1], ['preparado', 2]]);
+    expect(db.tablas.peaje_candidato_accion.map((x) => x.reclamo_id)).toEqual(db.tablas.peaje_reclamo.map((x) => x.id));
+  });
+
+  it('A39-S14-01: con un reclamo de la CATEGORÍA COMPLETA abierto (lote 0) no se duplica por candidatos: se dice y se retira la decisión', async () => {
+    sembrar();
+    db.tablas.peaje_reclamo = [{ id: 'rec-cat', tenant_id: T, desglose_id: DES, categoria: 'clase_fuera_de_3_5', estado: 'enviado', lote: 0 }];
+    const r = await A.aplicarAccionCandidatos(T, { ...base, accion: 'reclamado', fila: fila(1) });
+    expect(r).toMatchObject({ ok: false });
+    expect((r as { error: string }).error).toMatch(/toda la categoría/);
+    expect(db.tablas.peaje_reclamo).toHaveLength(1);
+    expect(db.tablas.peaje_candidato_accion ?? []).toHaveLength(0);
+  });
+
+  it('A39-S14-01: un reclamo de categoría completa RECHAZADO (lote 0) no estorba', async () => {
+    sembrar();
+    db.tablas.peaje_reclamo = [{ id: 'rec-cat', tenant_id: T, desglose_id: DES, categoria: 'clase_fuera_de_3_5', estado: 'rechazado', lote: 0 }];
+    expect(await A.aplicarAccionCandidatos(T, { ...base, accion: 'reclamado', fila: fila(1) })).toMatchObject({ ok: true, reclamos: 1 });
+    expect(db.tablas.peaje_reclamo.map((x) => x.lote)).toEqual([0, 1]);
+  });
+
   it('si el reclamo no se puede crear, la decisión se retira (no queda «reclamado» sin reclamo) y se puede reintentar', async () => {
     sembrar();
     db.fallar('peaje_reclamo.insert', 'base caída');

@@ -134,7 +134,8 @@ async function revisar(tenantId: string, id: string, cambios: CambioCampo[]): Pr
       // A35-A3-01: «sin dato» de material peligroso NO se levanta confirmando un vacío: una persona declara Sí/No.
       // La oficina de estas formas sintéticas contesta «No» (ninguna mercancía del dorado es peligrosa).
       h.campo === 'material_peligroso'
-        ? { campo: h.campo, renglon: h.renglon, valor: 'No' }
+        // A39-S31-01: si el «No» vino SOLO del catálogo, el mismo valor no cambia nada; hay que marcarlo `confirmar` para que quede de origen humano.
+        ? { campo: h.campo, renglon: h.renglon, valor: 'No', confirmar: true }
         : {
           campo: h.campo, renglon: h.renglon, confirmar: true,
           valor: (h.renglon === null ? e.campos[h.campo]?.valor : e.mercancias[h.renglon]?.[h.campo]?.valor) ?? null,

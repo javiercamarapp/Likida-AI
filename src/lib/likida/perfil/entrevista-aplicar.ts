@@ -1,4 +1,4 @@
-import { guardarPerfilPatch, actualizarFacilidad15, getPerfilCrudo } from '../repo';
+import { guardarPerfilPatch, actualizarFacilidad15, getPerfilCrudo, exigirRegimenCompatibleConFacilidad15 } from '../repo';
 import { guardarConfigCobranza, leerConfigCobranza } from '../agentes/cobranza';
 import { crearOperador, guardarPolitica } from '../administracion';
 import { crearUnidad } from '../operacion';
@@ -6,7 +6,7 @@ import { guardarDatosFiscalesParciales, REGIMENES } from '@/lib/saas/fiscal';
 import { getConfig } from '../config';
 import { logger } from '@/lib/logger';
 import {
-  declararHechos, declararAusente, facilidad15Declarada, type DatosOnboarding,
+  declararHechos, declararAusente, facilidad15Declarada, regimenElegibleDeclarado, type DatosOnboarding,
 } from './preguntas';
 import {
   interpretarTurno, estadoEntrevista, mensajeConfirmacion, mensajeBienvenida,
@@ -79,6 +79,8 @@ export async function aplicarTurnoEntrevista(opts: {
     ...(skip.length ? declararAusente(skip) : {}),
   };
   const perfilNuevo = await marcar('guardar_perfil', async () => {
+    // A39-S53-01: cotejo FIS-C1 contra el régimen vivo del tenant ANTES de persistir el perfil.
+    if (regimenElegibleDeclarado(patch) === true) await exigirRegimenCompatibleConFacilidad15(opts.tenantId);
     await guardarPerfilPatch(opts.tenantId, patch, opts.userId);
     const leido = await getPerfilCrudo(opts.tenantId);
     const f15 = facilidad15Declarada(leido);

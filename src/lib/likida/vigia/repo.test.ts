@@ -90,6 +90,7 @@ describe('AISLAMIENTO: toda consulta a una tabla con tenant filtra por él', () 
       ['pendientesDeHilo', () => repo.pendientesDeHilo(T1, id)],
       ['actualizarConversacion', () => repo.actualizarConversacion(T1, id, { control: 'humano' })],
       ['marcarRespondida', () => repo.marcarRespondida(T1, id, ahora)],
+      ['marcarRespondidaConCorte', () => repo.marcarRespondida(T1, id, ahora, ahora.toISOString())],
       ['cerrarConversacion', () => repo.cerrarConversacion(T1, id, ahora)],
       ['evento', () => repo.evento(T1, { tipo: 'entrante' })],
       ['registrarOptOut', () => repo.registrarOptOut(T1, id, ahora)],

@@ -186,6 +186,52 @@ describe('correrAlertasTope', () => {
     expect(p.liberar).not.toHaveBeenCalled();
     expect(p.cerrar).toHaveBeenCalledWith(expect.objectContaining({ estado: 'fallida' }));
   });
+  describe('A39-A5-03: el bloqueo de la compuerta de seguridad no consume el nivel', () => {
+    const BLOQ = { ok: false, reintentable: true, bloqueadoPorCompuerta: true, motivo: 'No se envió: la unidad del operador no está detenida.' };
+    const SOLO_OPERADOR: ConfigAlerta = { ...CFG, canalEncargado: 'ninguno' };
+
+    it('solo el operador y la compuerta lo frena: se SUELTA el claim, no se cierra fallido y no es un fallo ruidoso', async () => {
+      const p = puertos([a('inicio_jornada', hace(10))], {
+        candidatas: async () => ({ filas: [{ ...FILA, config: SOLO_OPERADOR }], hayMas: false }),
+        enviarWa: vi.fn(async () => BLOQ),
+      });
+      const r = await correrAlertasTope(p, { ahora: AHORA });
+      expect(p.liberar).toHaveBeenCalledTimes(1);
+      expect(p.cerrar).not.toHaveBeenCalled();
+      expect(r.bloqueadasPorCompuerta).toBe(1);
+      expect(r.fallos).toEqual([]);
+      expect(r.rechazosReintentables).toBe(0);
+      expect(r.cortadaPorRechazoMasivo).toBe(false);
+    });
+
+    it('varias jornadas de la misma flota bloqueadas NO disparan el corte por rechazo masivo', async () => {
+      const filas = Array.from({ length: 8 }, (_, i) => ({ ...FILA, jornadaId: `j${i}`, operadorId: `o${i}`, config: SOLO_OPERADOR }));
+      const p = puertos([a('inicio_jornada', hace(10))], { candidatas: async () => ({ filas, hayMas: false }), enviarWa: vi.fn(async () => BLOQ) });
+      const r = await correrAlertasTope(p, { ahora: AHORA });
+      expect(r.bloqueadasPorCompuerta).toBe(8);
+      expect(r.cortadaPorRechazoMasivo).toBe(false);
+      expect(p.liberar).toHaveBeenCalledTimes(8);
+    });
+
+    it('la compuerta NO se debilita: un bloqueo nunca llega a enviar nada', async () => {
+      const p = puertos([a('inicio_jornada', hace(10))], {
+        candidatas: async () => ({ filas: [{ ...FILA, config: SOLO_OPERADOR }], hayMas: false }),
+        enviarWa: vi.fn(async () => BLOQ),
+      });
+      await correrAlertasTope(p, { ahora: AHORA });
+      expect(p.marcarEnviada).not.toHaveBeenCalled();
+    });
+
+    it('el encargado SÍ recibió y el operador quedó bloqueado: cierra parcial (reenviar duplicaría el aviso al encargado)', async () => {
+      const p = puertos([a('inicio_jornada', hace(10))], {
+        enviarWa: vi.fn(async (_t: string, _m: unknown, _x: string, _a: Date, contexto: string) => (contexto === 'jornada.alerta_encargado' ? { ok: true, reintentable: false } : BLOQ)),
+      });
+      const r = await correrAlertasTope(p, { ahora: AHORA });
+      expect(p.liberar).not.toHaveBeenCalled();
+      expect(p.cerrar).toHaveBeenCalledWith(expect.objectContaining({ estado: 'parcial' }));
+      expect(r.bloqueadasPorCompuerta).toBe(0);
+    });
+  });
   it('sin destinatarios se asienta sin_destinatario', async () => {
     const p = puertos([a('inicio_jornada', hace(10))], {
       encargados: async () => [], datosDelOperador: async () => ({ nombre: 'Luis', telefono: null, terminalId: null }),

@@ -434,6 +434,9 @@ async function ingerir(
         if (!yaDescargado) r.consolidados++;
       } catch (e) {
         r.errores.push(`El consolidado ${uuid} no se pudo conciliar: ${e instanceof Error ? e.message : String(e)}`);
+        // A39-S57-02: sin esto el paquete se daba por ingerido (`completo: true`) aunque este consolidado no se haya
+        // conciliado —por fallo o por corte de reloj—, y como el paquete ya no se vuelve a recorrer, no se reintentaba nunca.
+        hayFallo = true;
       }
       continue;
     }
@@ -500,6 +503,87 @@ async function ingerir(
     return { completo: false };
   }
   return { completo: true };
+}
+
+// ── A39-S57-03 · LA COPIA DE TRABAJO DEL PAQUETE (0928) ────────────────────
+// El SAT deja bajar un paquete DOS veces y a la tercera lo rechaza. Un paquete con miles de CFDI no cabe en una pasada
+// del cron, así que "no se marca bajado y la corrida siguiente lo re-baja" solo alcanza para dos pasadas: la tercera
+// descarga la rechaza el proveedor y el paquete (y su rango) no termina nunca. Cuando una pasada NO alcanza a ingerir
+// el paquete entero, sus XML se guardan en `sat_paquete_xml` y las pasadas siguientes lo ingieren DE AHÍ, sin llamar
+// al proveedor. Los paquetes que sí caben no escriben nada. Todo es best-effort: sin la 0928 (o si la base falla) se
+// cae al comportamiento anterior (re-descargar), nunca a dar el paquete por bajado.
+const TANDA_COPIA = 100;
+const PAGINA_COPIA = 500;
+/** Tiempo extra (ms) que se le concede a guardar la copia DESPUÉS de vencido `venceEn`: el margen del cron lo cubre. */
+const GRACIA_COPIA_MS = 25_000;
+
+/** Los XML guardados de ese paquete, o `null` si no hay copia, está incompleta o no se pudo leer. */
+async function leerCopiaPaquete(tenantId: string, solicitudId: string, paquete: string): Promise<string[] | null> {
+  const xmls: string[] = [];
+  let total: number | null = null;
+  for (let desde = 0; ; desde += PAGINA_COPIA) {
+    const { data, error } = await acotada(supabaseAdmin()
+      .from('sat_paquete_xml')
+      .select('indice, total, xml')
+      .eq('tenant_id', tenantId).eq('solicitud_id', solicitudId).eq('paquete', paquete)
+      .order('indice')
+      .range(desde, desde + PAGINA_COPIA - 1), 'sat_descarga.copia_leer');
+    if (error) {
+      logger.warn('sat.copia_paquete.lectura_fallo', { tenantId, solicitudId, err: error.message });
+      return null;
+    }
+    const filas = (data ?? []) as Array<{ indice: number; total: number; xml: string }>;
+    for (const f of filas) {
+      if (total === null) total = Number(f.total);
+      // Contiguo desde 0 y todas con el mismo total: cualquier hueco = copia a medias.
+      if (Number(f.indice) !== xmls.length || Number(f.total) !== total) return null;
+      xmls.push(String(f.xml));
+    }
+    if (filas.length < PAGINA_COPIA) break;
+  }
+  if (total === null || xmls.length !== total) return null;
+  return xmls;
+}
+
+/** Guarda la copia (reemplazando cualquier resto). Devuelve si quedó ENTERA; nunca lanza. */
+async function guardarCopiaPaquete(
+  tenantId: string, solicitudId: string, paquete: string, xmls: string[], venceEn?: number,
+): Promise<boolean> {
+  try {
+    await borrarCopiaPaquete(tenantId, solicitudId, paquete);
+    for (let i = 0; i < xmls.length; i += TANDA_COPIA) {
+      if (venceEn !== undefined && Date.now() >= venceEn + GRACIA_COPIA_MS) {
+        logger.warn('sat.copia_paquete.sin_tiempo', { tenantId, solicitudId, guardados: i, total: xmls.length });
+        return false;
+      }
+      const filas = xmls.slice(i, i + TANDA_COPIA).map((xml, k) => ({
+        tenant_id: tenantId, solicitud_id: solicitudId, paquete, indice: i + k, total: xmls.length, xml,
+      }));
+      const { error } = await acotada(supabaseAdmin()
+        .from('sat_paquete_xml')
+        .upsert(filas, { onConflict: 'solicitud_id,paquete,indice', ignoreDuplicates: true }), 'sat_descarga.copia_guardar');
+      if (error) {
+        logger.warn('sat.copia_paquete.escritura_fallo', { tenantId, solicitudId, err: error.message });
+        return false;
+      }
+    }
+    return true;
+  } catch (e) {
+    logger.warn('sat.copia_paquete.escritura_fallo', { tenantId, solicitudId, err: e instanceof Error ? e.message : String(e) });
+    return false;
+  }
+}
+
+async function borrarCopiaPaquete(tenantId: string, solicitudId: string, paquete: string): Promise<void> {
+  try {
+    const { error } = await acotada(supabaseAdmin()
+      .from('sat_paquete_xml')
+      .delete()
+      .eq('tenant_id', tenantId).eq('solicitud_id', solicitudId).eq('paquete', paquete), 'sat_descarga.copia_borrar');
+    if (error) logger.warn('sat.copia_paquete.borrado_fallo', { tenantId, solicitudId, err: error.message });
+  } catch (e) {
+    logger.warn('sat.copia_paquete.borrado_fallo', { tenantId, solicitudId, err: e instanceof Error ? e.message : String(e) });
+  }
 }
 
 /** ¿El CFDI ya sellado quedó 'disponible' (nadie lo cruzó o su primera pasada murió)? Ante un
@@ -763,14 +847,26 @@ export async function correrFlota(
         break;
       }
       paquetesBajados++;
-      const d = await prov.descargar(p);
-      if (!d.ok) {
-        r.errores.push(`Paquete de ${requestId}: ${d.mensaje}`);
-        todoBien = false;
-        continue;
+      // A39-S57-03: si una pasada anterior dejó la copia de este paquete, se ingiere de ahí SIN llamar al proveedor
+      // (la tercera descarga la rechaza el SAT).
+      const copia = await leerCopiaPaquete(cfg.tenantId, s.id as string, p);
+      let xmls: string[];
+      if (copia !== null) {
+        xmls = copia;
+      } else {
+        const d = await prov.descargar(p);
+        if (!d.ok) {
+          r.errores.push(`Paquete de ${requestId}: ${d.mensaje}`);
+          todoBien = false;
+          continue;
+        }
+        xmls = d.xmls;
       }
       const conteo: ConteoSolicitud = { nuevos: 0, repetidos: 0 };
-      const resultado = await ingerir(cfg, s.id as string, d.xmls, rango, r, conteo, venceEn, s.tipo === 'emitidos' ? 'emitidos' : 'recibidos');
+      const resultado = await ingerir(cfg, s.id as string, xmls, rango, r, conteo, venceEn, s.tipo === 'emitidos' ? 'emitidos' : 'recibidos');
+      // La copia: se escribe SOLO si esta pasada no alcanzó a terminar el paquete y viene del proveedor; se borra al terminarlo.
+      if (!resultado.completo && copia === null) await guardarCopiaPaquete(cfg.tenantId, s.id as string, p, xmls, venceEn);
+      if (resultado.completo && copia !== null) await borrarCopiaPaquete(cfg.tenantId, s.id as string, p);
       nuevosDeLaSolicitud += conteo.nuevos;
       repetidosDeLaSolicitud += conteo.repetidos;
 
@@ -994,10 +1090,10 @@ export async function correrDescargaSat(
     ? (configs ?? []).filter((c) => !saltarFlotas.has(String(c.tenant_id)))
     : (configs ?? []);
   // A37-S57-01 / A37-S18-01 (CRÍTICO): el barrido SOLO pide el buzón cuyo RFC
-  // es el fiscal verificado del tenant (`tenant.rfc`). Una fila con otro RFC
+  // es el fiscal verificado del tenant (su RFC verificado, 0925). Una fila con otro RFC
   // —declarada antes del candado o por una vía que lo rodee— no se pide: se
   // dice y la flota queda sin descargar, nunca descargando el buzón de otra.
-  // Si `tenant.rfc` no se puede leer, el barrido entero falla cerrado.
+  // Si el RFC verificado del tenant (0925) no se puede leer, el barrido entero falla cerrado.
   const rfcsFiscales = await rfcsFiscalesDeTenants(lista.map((c) => String(c.tenant_id)));
   let flotasSinTurno = 0;
   for (let i = 0; i < lista.length; i++) {

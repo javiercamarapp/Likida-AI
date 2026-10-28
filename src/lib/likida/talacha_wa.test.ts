@@ -156,6 +156,24 @@ describe('extraerMonto — el número solo cuenta amarrado a dinero', () => {
     expect(extraerMonto('me cobran 800 pero con $200 de arrastre')).toBeNull();
   });
 
+  // A39-S29-01: "son/sale en 40 minutos" es un TIEMPO; leerlo como $40 se firmaba y se le comunicaba al proveedor como acordado.
+  it('A39-S29-01: un tiempo o una distancia tras "son"/"sale en" NO es un precio', () => {
+    expect(extraerMonto('son 40 minutos')).toBeNull();
+    expect(extraerMonto('sale en 40 minutos')).toBeNull();
+    expect(extraerMonto('salio en 2 horas')).toBeNull();
+    expect(extraerMonto('llego en 1.5 horas, son 1.5 horas')).toBeNull();
+    expect(extraerMonto('son 25 km')).toBeNull();
+    expect(extraerMonto('me piden 40 min de espera')).toBeNull();
+  });
+
+  it('A39-S29-01: el precio real junto al tiempo sí se lee, y "$" lo amarra siempre', () => {
+    expect(extraerMonto('llego en 40 minutos y cuesta 800')).toBe(800);
+    expect(extraerMonto('sale en 40 minutos, son 800 pesos')).toBe(800);
+    expect(extraerMonto('son 40 minutos y cobran 800')).toBe(800);
+    expect(extraerMonto('me cobran $40 minutos de arrastre')).toBe(40);
+    expect(extraerMonto('sale en 1,500')).toBe(1500);
+  });
+
   it('la misma cifra amarrada dos veces sí cuenta (no es ambigüedad)', () => {
     expect(extraerMonto('son $800, ochocientos: 800 pesos')).toBe(800);
   });

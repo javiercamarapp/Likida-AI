@@ -71,6 +71,7 @@ vi.mock('@/lib/supabase/admin', () => ({
       api.is = () => api;
       api.order = () => api;
       api.limit = () => api;
+      api.range = () => api;
       api.lte = () => api;
       api.or = () => api;
       api.maybeSingle = () => Promise.resolve({ data: { zona_horaria: 'America/Mexico_City' }, error: null });
