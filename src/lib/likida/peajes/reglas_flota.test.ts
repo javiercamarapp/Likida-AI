@@ -9,6 +9,7 @@ vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => db.cliente }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 const R = await import('./repo');
+const { reiniciarCachePerfil } = await import('@/lib/auth/perfil_tenant');
 
 const T = 'tenant-1';
 const OTRO = 'tenant-2';
@@ -34,16 +35,28 @@ describe('parsearListaClases / validarReglasFlota (puro)', () => {
 });
 
 describe('leerReglasFlota / guardarReglasFlota', () => {
-  beforeEach(() => { db = crearDbFalsa({}); });
+  beforeEach(() => { db = crearDbFalsa({}); reiniciarCachePerfil(); });
 
-  it('sin fila: los defaults seguros (utilitarios sin evaluar, clase 1 como pasada)', async () => {
-    expect(await R.leerReglasFlota(T)).toEqual({ clasesUtilitario: [], clase1: 'todas' });
+  it('sin fila y SIN perfil cinco_agentes: la clase 1 conserva el comportamiento anterior (declaradas)', async () => {
+    expect(await R.leerReglasFlota(T)).toEqual({ clasesUtilitario: [], clase1: 'declaradas' });
+    expect(R.REGLAS_FLOTA_DEFAULT.clase1).toBe('declaradas');
   });
+  it('sin fila y con perfil cinco_agentes: la clase 1 es tarifa por pasada (todas), solo para esa flota', async () => {
+    db.tablas.tenant_perfil = [{ tenant_id: T, perfil: 'cinco_agentes' }];
+    expect(await R.leerReglasFlota(T)).toEqual({ clasesUtilitario: [], clase1: 'todas' });
+    expect(await R.leerReglasFlota(OTRO)).toEqual({ clasesUtilitario: [], clase1: 'declaradas' });
+  });
+  it('una fila guardada manda sobre el default del perfil', async () => {
+    db.tablas.tenant_perfil = [{ tenant_id: T, perfil: 'cinco_agentes' }];
+    await R.guardarReglasFlota(T, { clasesUtilitario: '', clase1: 'declaradas' });
+    expect((await R.leerReglasFlota(T)).clase1).toBe('declaradas');
+  });
+
   it('guarda y vuelve a leer; repetir es seguro; no toca a otra flota', async () => {
     expect(await R.guardarReglasFlota(T, { clasesUtilitario: '2, 1', clase1: 'declaradas' })).toMatchObject({ ok: true });
     expect(await R.guardarReglasFlota(T, { clasesUtilitario: '2, 1', clase1: 'declaradas' })).toMatchObject({ ok: true });
     expect(await R.leerReglasFlota(T)).toEqual({ clasesUtilitario: [1, 2], clase1: 'declaradas' });
-    expect(await R.leerReglasFlota(OTRO)).toEqual({ clasesUtilitario: [], clase1: 'todas' });
+    expect(await R.leerReglasFlota(OTRO)).toEqual({ clasesUtilitario: [], clase1: 'declaradas' });
     expect(db.tablas.peaje_regla_flota).toHaveLength(1);
   });
   it('un valor inválido no se guarda', async () => {

@@ -17,12 +17,13 @@ vi.mock('../agentes/corridas', () => ({ registrarCorrida: vi.fn(async () => {}) 
 
 const { importarDesglose } = await import('../intake/desglose_peaje');
 const R = await import('./revision_cobros');
+const { reiniciarCachePerfil } = await import('@/lib/auth/perfil_tenant');
 
 const T = 'tenant-1';
 const OTRO = 'tenant-2';
 // Estas pruebas ejercen el camino anterior (leer-sumar-escribir): la base falsa simula que la migración 0860 aún NO está aplicada.
 // El camino con la función atómica se prueba en `nota_credito_rpc.test.ts`.
-beforeEach(() => { db = crearDbFalsa({}, { peaje_nota_credito_registrar: () => ({ error: { message: 'Could not find the function', code: 'PGRST202' } }) }); });
+beforeEach(() => { db = crearDbFalsa({}, { peaje_nota_credito_registrar: () => ({ error: { message: 'Could not find the function', code: 'PGRST202' } }) }); reiniciarCachePerfil(); });
 
 async function subir(nombre: string, op: Parameters<typeof generarLibroIave>[0], tenant = T) {
   const { buffer, esperado } = generarLibroIave({ hojaSecundaria: true, ...op });
@@ -344,7 +345,17 @@ describe('A2 ola 1 · clase 1 y casetas por pasada en la revisión', () => {
   const sinUnos = (porClase: Record<string, number>) =>
     Object.entries(porClase).filter(([c]) => !['1', '3', '5'].includes(c)).reduce((s, [, n]) => s + n, 0);
 
-  it('SIN configurar nada la clase 1 no inunda el reporte (default) y la revisión dice cuántas dejó fuera', async () => {
+  it('flota SIN perfil cinco_agentes y sin configurar: la clase 1 sigue siendo candidato (comportamiento anterior)', async () => {
+    const { id, esperado } = await subir('01 A 10 DE MARZO.xlsx', { filas: 3000, inicio: '2026-03-01', extemporaneos: 0 });
+    const rep = await R.revisionDeDesglose(T, id);
+    if (!rep) throw new Error('sin reporte');
+    expect(rep.revision.porCategoria.clase_fuera_de_3_5.n).toBe(sinUnos(esperado.porClase) + (esperado.porClase['1'] ?? 0));
+    expect(rep.revision.reglasNoAplicadas.some((x) => /clase 1/.test(x.motivo))).toBe(false);
+  }, 60_000);
+
+  it('perfil cinco_agentes SIN configurar nada: la clase 1 no inunda el reporte (default) y la revisión dice cuántas dejó fuera', async () => {
+    db.tablas.tenant_perfil = [{ tenant_id: T, perfil: 'cinco_agentes' }];
+    reiniciarCachePerfil();
     const { id, esperado } = await subir('01 A 10 DE MARZO.xlsx', { filas: 9000, inicio: '2026-03-01', extemporaneos: 0 });
     const rep = await R.revisionDeDesglose(T, id);
     if (!rep) throw new Error('sin reporte');

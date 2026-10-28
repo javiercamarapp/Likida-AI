@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  revisarCobros, ROTULO_CANDIDATO, CLASES_VALIDAS_DEFAULT, type LineaCobro, type ReglasCobro,
+  revisarCobros, ROTULO_CANDIDATO, CLASES_VALIDAS_DEFAULT, MODO_CLASE1_DEFAULT, type LineaCobro, type ReglasCobro,
 } from './reglas_cobro';
 import { generarFilasIave, CASETAS_FIXTURE } from './fixtures/generar_desglose_iave';
 import { normalizarNombre } from './formatos';
@@ -170,8 +170,8 @@ describe('fixture grande (9 000 filas): las cifras del generador coinciden', () 
     expect(sin.sugerenciasPasada.map((s) => s.caseta).sort()).toEqual(['CASETA PASADA DOS', 'CASETA PASADA UNO']);
   });
 
-  it('A2 ola 1 · SIN configurar nada (default) la clase 1 no inunda el reporte: las ~4 500 de un mes quedan fuera y se cuentan aparte', () => {
-    const sin = revisarCobros(lineas, { periodoDesde: esperado.inicio });
+  it('A2 ola 1 · clase 1 en modo «todas» (cinco_agentes) no inunda el reporte: las ~4 500 de un mes quedan fuera y se cuentan aparte', () => {
+    const sin = revisarCobros(lineas, { periodoDesde: esperado.inicio, clase1: 'todas' });
     const unos = esperado.porClase['1'] ?? 0;
     expect(unos).toBeGreaterThan(100);
     expect(sin.porCategoria.clase_fuera_de_3_5.n).toBe(esperadasClaseSin1());
@@ -185,8 +185,14 @@ describe('fixture grande (9 000 filas): las cifras del generador coinciden', () 
 describe('A2 ola 1 · la clase 1 es tarifa por pasada (default) y el modo «declaradas»', () => {
   const unaDe = (caseta: string, clase: number, indice: number) => l({ indice, caseta, clase, hora: `10:${String(indice).padStart(2, '0')}:00` });
 
-  it('por defecto la clase 1 no es candidato en ninguna caseta, y se dice cuántas quedaron fuera', () => {
+  it('el motor puro SIN modo conserva el comportamiento anterior: la clase 1 es candidato (el modo «todas» es solo de cinco_agentes)', () => {
+    expect(MODO_CLASE1_DEFAULT).toBe('declaradas');
     const r = revisarCobros([unaDe('Plaza A', 1, 0), unaDe('Plaza B', 1, 1), unaDe('Plaza A', 8, 2)]);
+    expect(cats(r)).toEqual(['0:clase_fuera_de_3_5', '1:clase_fuera_de_3_5', '2:clase_fuera_de_3_5']);
+    expect(r.reglasNoAplicadas.some((x) => /clase 1/.test(x.motivo))).toBe(false);
+  });
+  it('modo «todas» (cinco_agentes): la clase 1 no es candidato en ninguna caseta, y se dice cuántas quedaron fuera', () => {
+    const r = revisarCobros([unaDe('Plaza A', 1, 0), unaDe('Plaza B', 1, 1), unaDe('Plaza A', 8, 2)], { clase1: 'todas' });
     expect(cats(r)).toEqual(['2:clase_fuera_de_3_5']);
     expect(r.reglasNoAplicadas.find((x) => /clase 1/.test(x.motivo))?.motivo).toContain('2 cruce(s) de clase 1 no se marcan');
   });

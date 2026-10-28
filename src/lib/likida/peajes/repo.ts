@@ -27,6 +27,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { hoyMx, mxn, OFFSET_MX } from '@/lib/formato';
 import { logger } from '@/lib/logger';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { acotada } from '../presupuesto';
 import { traerTodo, traerPorIds, conteo, type RespuestaPg } from '../pg';
@@ -40,7 +41,7 @@ import { parsearTarifasMatriz, planificarTarifa, type OrigenTarifa, type TarifaE
 import { parsearTagsMatriz, resolverUnidadesDeTags, validarBajaTag, type VigenciaTag } from './tags';
 import { parsearInmovilizadasMatriz, resolverUnidadesInmovilizadas, validarExcepcionUnidad, validarJustificacion, validarReglasFlota, type ReglasFlota } from './reglas_cobro_config';
 import {
-  revisarCobros, ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO, TIPOS_UNIDAD_PEAJE, esCategoriaInterna, MODO_CLASE1_DEFAULT,
+  revisarCobros, ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO, TIPOS_UNIDAD_PEAJE, esCategoriaInterna, MODO_CLASE1_DEFAULT, MODO_CLASE1_CINCO_AGENTES,
   type CategoriaCobro, type ModoClase1, type LineaCobro, type MotivoInmovilizada, type ReglasCobro, type ResultadoRevision, type TipoUnidadPeaje, type VentanaInmovilizada,
 } from './reglas_cobro';
 import { validarMapeo, type ConfigMapeo } from './mapeo';
@@ -2418,18 +2419,29 @@ export function reglasDesdeConfig(
 
 // ── Reglas de clase por flota (migración 0936) ──────────────────────────────
 
-/** Los defaults cuando la flota no ha configurado nada (o la 0936 aún no está aplicada): utilitarios sin evaluar, clase 1 como pasada. */
+/** Los defaults GENERALES (flota sin perfil cinco_agentes): utilitarios sin evaluar y la clase 1 como candidato (comportamiento previo). */
 export const REGLAS_FLOTA_DEFAULT: ReglasFlota = { clasesUtilitario: [], clase1: MODO_CLASE1_DEFAULT };
 
-/** Las reglas de clase de la flota. Sin fila = defaults. Lanza ante error de base. */
+/**
+ * Modo de la clase 1 de una flota que NO lo ha configurado: `todas` (tarifa por pasada) SOLO con el perfil cinco_agentes; el resto
+ * conserva el comportamiento anterior (`declaradas`). Un bache leyendo el perfil se lee como «sin perfil» (nunca asume cinco_agentes).
+ */
+export async function modoClase1PorDefecto(tenantId: string): Promise<ModoClase1> {
+  try {
+    return (await perfilDeTenant(tenantId, Date.now(), 'permitir')) === 'cinco_agentes' ? MODO_CLASE1_CINCO_AGENTES : MODO_CLASE1_DEFAULT;
+  } catch { return MODO_CLASE1_DEFAULT; }
+}
+
+/** Las reglas de clase de la flota. Sin fila = defaults (la clase 1 según el perfil). Lanza ante error de base. */
 export async function leerReglasFlota(tenantId: string): Promise<ReglasFlota> {
   const { data, error } = await acotada(supabaseAdmin().from('peaje_regla_flota')
     .select('clases_utilitario, clase_uno').eq('tenant_id', tenantId).maybeSingle(), 'peajes.reglas_flota');
   if (error) throw new Error(`leerReglasFlota: ${error.message}`);
-  if (!data) return REGLAS_FLOTA_DEFAULT;
+  if (!data) return { ...REGLAS_FLOTA_DEFAULT, clase1: await modoClase1PorDefecto(tenantId) };
   return {
     clasesUtilitario: Array.isArray(data.clases_utilitario) ? (data.clases_utilitario as unknown[]).map(Number).filter(Number.isInteger).sort((a, b) => a - b) : [],
-    clase1: data.clase_uno === 'declaradas' ? 'declaradas' : MODO_CLASE1_DEFAULT,
+    // Fila guardada = decisión explícita de la flota (se respeta tal cual).
+    clase1: data.clase_uno === 'declaradas' ? 'declaradas' : 'todas',
   };
 }
 
@@ -2742,7 +2754,7 @@ export async function revisionDeDesglose(
     return { ...l, tipoUnidad: (tag ? tipos.get(tag) : undefined) ?? null };
   });
   // Reglas de clase de la flota (0936) y casetas por pasada del catálogo (0810). Si no se pueden leer: los defaults, y se avisa en el log.
-  let reglasFlota = REGLAS_FLOTA_DEFAULT;
+  let reglasFlota: ReglasFlota = { ...REGLAS_FLOTA_DEFAULT, clase1: await modoClase1PorDefecto(tenantId) };
   try { reglasFlota = await leerReglasFlota(tenantId); } catch (e) {
     logger.warn('peajes.revision_reglas_flota', { tenant: tenantId, codigo: codigoDeError(e) });
   }

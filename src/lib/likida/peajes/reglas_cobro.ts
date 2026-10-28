@@ -106,7 +106,10 @@ const TEXTO_MOTIVO_INMOVILIZADA: Record<MotivoInmovilizada, string> = {
 export interface VentanaInmovilizada { desde: string; hasta: string | null; motivo: MotivoInmovilizada }
 
 export type ModoClase1 = 'todas' | 'declaradas';
-export const MODO_CLASE1_DEFAULT: ModoClase1 = 'todas';
+/** Comportamiento de siempre (y el de toda flota sin perfil cinco_agentes): la clase 1 es un candidato salvo en las casetas declaradas por pasada. */
+export const MODO_CLASE1_DEFAULT: ModoClase1 = 'declaradas';
+/** Solo para el perfil cinco_agentes (Innovativos: la clase 1 es la tarifa por pasada, lo dijo el cliente). Nunca es el default global. */
+export const MODO_CLASE1_CINCO_AGENTES: ModoClase1 = 'todas';
 
 /** Las clases de cobro válidas por defecto: 3 (tracto solo) y 5 (tracto + caja de 2 ejes). */
 export const CLASES_VALIDAS_DEFAULT: readonly number[] = [3, 5];
