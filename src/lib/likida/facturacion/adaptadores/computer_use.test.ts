@@ -402,6 +402,25 @@ describe('rendirse dice POR QUÉ, y el captcha se declara aparte', () => {
     expect(r.error).toMatch(/captcha/i);
   });
 
+  it('A39-S41-01: CAPTCHA DESPUÉS de apretar emitir (sin UUID) declara `emisionSinConfirmar` además del captcha', async () => {
+    guion = [
+      { tool: 'emitir', args: { selector: '#facturar' } },
+      { tool: 'rendirse', args: { motivo: 'el portal pide CAPTCHA' } },
+    ];
+    const r = await armar().facturar(CAMPOS, 'emitir');
+
+    expect(r.ok).toBe(false);
+    expect(r.requiereCaptcha).toBe(true);
+    expect(r.emisionSinConfirmar).toBe(true);
+    expect(r.error).toMatch(/PUEDE QUE EL CFDI YA EXISTA/);
+  });
+
+  it('rendirse por CAPTCHA SIN haber emitido no declara emisionSinConfirmar', async () => {
+    guion = [{ tool: 'rendirse', args: { motivo: 'el portal pide CAPTCHA' } }];
+    const r = await armar().facturar(CAMPOS, 'emitir');
+    expect(r.emisionSinConfirmar).toBeUndefined();
+  });
+
   it('rendirse por otra razón NO se marca como captcha', async () => {
     guion = [{ tool: 'rendirse', args: { motivo: 'el portal pide un dato que no tengo' } }];
     const r = await armar().facturar(CAMPOS, 'ensayo');
