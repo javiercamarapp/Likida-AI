@@ -1,5 +1,5 @@
 \set ON_ERROR_STOP on
--- 0935 — desglose_peaje_linea.icident, contra Postgres REAL.
+-- 0935 — desglose_peaje_linea.icident y el dominio ampliado de desglose_peaje.periodo_origen, contra Postgres REAL.
 -- Lo que solo la base garantiza: la columna admite NULL (archivo sin API), un Icident de 1 a 80 caracteres,
 -- rechaza la cadena vacía y la de más de 80, y la tabla sigue sin acceso directo para anon/authenticated
 -- fuera de lo que ya tenía. La reaplicación (idempotencia) la corre quien aplica la migración dos veces.
@@ -28,6 +28,16 @@ begin
 
   select count(*) into n from public.desglose_peaje_linea where tenant_id = A and icident is not null;
   if n <> 2 then raise exception '0935: se esperaban 2 líneas con Icident y hay %', n; end if;
+
+  -- El dominio de periodo_origen admite los dos orígenes inferidos y sigue rechazando lo demás
+  update public.desglose_peaje set periodo_oficial_desde = '2026-09-01', periodo_oficial_hasta = '2026-09-10', periodo_origen = 'no_periodo' where id = DA;
+  update public.desglose_peaje set periodo_origen = 'decena_dominante' where id = DA;
+  update public.desglose_peaje set periodo_origen = 'declarado' where id = DA;
+  update public.desglose_peaje set periodo_origen = 'nombre_archivo' where id = DA;
+  begin
+    update public.desglose_peaje set periodo_origen = 'adivinado' where id = DA;
+    raise exception '0935: el origen del periodo admitió un valor inventado';
+  exception when check_violation then null; end;
 
   -- El índice parcial existe y solo cubre las líneas con Icident.
   select count(*) into n from pg_indexes

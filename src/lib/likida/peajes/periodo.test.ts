@@ -1,7 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import {
-  periodoDeNombreArchivo, resolverPeriodo, validarPeriodoDeclarado, limitesDelMes, mesAnterior, decenasDelMes, sumarMeses, diasEntre,
+  periodoDeNombreArchivo, periodoPorDecenaDominante, periodoPorNoPeriodo, esPeriodoInferido, rotuloOrigenPeriodo, resolverPeriodo, validarPeriodoDeclarado, limitesDelMes, mesAnterior, decenasDelMes, sumarMeses, diasEntre,
 } from './periodo';
+
+describe('periodoDeNombreArchivo: el rango ISO del conector del TMS (A2 ola 1)', () => {
+  it('lee la ventana pedida a la API del nombre que el propio conector arma', () => {
+    expect(periodoDeNombreArchivo('tms-peajes-2026-09-01-2026-09-10.csv')).toEqual({ desde: '2026-09-01', hasta: '2026-09-10', origen: 'nombre_archivo' });
+  });
+  it('un rango invertido o imposible no se adivina', () => {
+    expect(periodoDeNombreArchivo('tms-peajes-2026-09-10-2026-09-01.csv')).toBeNull();
+    expect(periodoDeNombreArchivo('tms-peajes-2026-13-01-2026-13-10.csv')).toBeNull();
+  });
+});
 
 describe('periodoDeNombreArchivo', () => {
   it('«01 A 10 DE SEPT» con el año deducido de las fechas del archivo', () => {
@@ -51,5 +61,55 @@ describe('calendario', () => {
     expect(sumarMeses('2026-11-30', 3)).toBe('2027-02-28');
     expect(sumarMeses('2026-08-31', 3)).toBe('2026-11-30');
     expect(diasEntre('2026-09-01', '2026-09-30')).toBe(29);
+  });
+});
+
+// ── A2 ola 1: inferir el periodo cuando el nombre no lo dice ────────────────
+describe('periodoPorDecenaDominante / periodoPorNoPeriodo / resolverPeriodo (inferencia)', () => {
+  const dias = (desde: number, hasta: number, n: number, mes = '2026-09') =>
+    Array.from({ length: n }, (_, i) => `${mes}-${String(desde + (i % (hasta - desde + 1))).padStart(2, '0')}`);
+
+  it('la decena donde cae casi todo el archivo; los extemporáneos (pocos, de antes) no la mueven', () => {
+    const fechas = [...dias(11, 20, 200), '2026-09-02', '2026-09-05', '2026-08-28'];
+    expect(periodoPorDecenaDominante(fechas)).toEqual({ desde: '2026-09-11', hasta: '2026-09-20', origen: 'decena_dominante' });
+  });
+  it('la tercera decena termina el último día del mes (fin de febrero también)', () => {
+    expect(periodoPorDecenaDominante(dias(21, 28, 100, '2026-02'))).toMatchObject({ desde: '2026-02-21', hasta: '2026-02-28' });
+    expect(periodoPorDecenaDominante(dias(21, 31, 100, '2026-10'))).toMatchObject({ desde: '2026-10-21', hasta: '2026-10-31' });
+  });
+  it('si ninguna decena domina (archivo de un mes entero) o hay muy pocas líneas: null, no se adivina', () => {
+    expect(periodoPorDecenaDominante(dias(1, 30, 300))).toBeNull();
+    expect(periodoPorDecenaDominante(dias(1, 10, 5))).toBeNull();
+    expect(periodoPorDecenaDominante([null, null])).toBeNull();
+  });
+  it('por «No. de periodo»: cuenta decenas desde un archivo ancla de la misma flota (cruza de mes y de año)', () => {
+    const ancla = { noPeriodo: 745, desde: '2026-09-01' };
+    expect(periodoPorNoPeriodo('746', ancla, dias(11, 20, 100))).toEqual({ desde: '2026-09-11', hasta: '2026-09-20', origen: 'no_periodo' });
+    expect(periodoPorNoPeriodo('748', ancla, dias(1, 10, 100, '2026-10'))).toMatchObject({ desde: '2026-10-01', hasta: '2026-10-10' });
+    expect(periodoPorNoPeriodo('744', { noPeriodo: 745, desde: '2026-01-01' }, dias(21, 31, 100, '2025-12'))).toMatchObject({ desde: '2025-12-21', hasta: '2025-12-31' });
+  });
+  it('el número solo se acepta si las fechas lo respaldan (la numeración del proveedor no está confirmada)', () => {
+    const ancla = { noPeriodo: 745, desde: '2026-09-01' };
+    expect(periodoPorNoPeriodo('746', ancla, dias(1, 10, 100, '2026-10'))).toBeNull();
+    expect(periodoPorNoPeriodo('746', null, dias(11, 20, 100))).toBeNull();
+    expect(periodoPorNoPeriodo('abc', ancla, dias(11, 20, 100))).toBeNull();
+    expect(periodoPorNoPeriodo(null, ancla, dias(11, 20, 100))).toBeNull();
+  });
+  it('resolverPeriodo: declarado > nombre > No. de periodo > decena dominante > nada; lo inferido se marca como tal', () => {
+    const fechas = dias(11, 20, 100);
+    const ancla = { noPeriodo: 745, desde: '2026-09-01' };
+    expect(resolverPeriodo({ declarado: { desde: '2026-09-01', hasta: '2026-09-10' }, nombreArchivo: '11 A 20 DE SEPT.xlsx', fechas, noPeriodo: '746', ancla })).toMatchObject({ origen: 'declarado' });
+    expect(resolverPeriodo({ nombreArchivo: '11 A 20 DE SEPT.xlsx', fechas, noPeriodo: '746', ancla })).toMatchObject({ origen: 'nombre_archivo' });
+    expect(resolverPeriodo({ nombreArchivo: 'reporte.xlsx', fechas, noPeriodo: '746', ancla })).toMatchObject({ origen: 'no_periodo' });
+    expect(resolverPeriodo({ nombreArchivo: 'reporte.xlsx', fechas, noPeriodo: '746', ancla: null })).toMatchObject({ origen: 'decena_dominante' });
+    expect(resolverPeriodo({ nombreArchivo: 'reporte.xlsx', fechas: dias(1, 30, 300) })).toBeNull();
+    expect(esPeriodoInferido('no_periodo') && esPeriodoInferido('decena_dominante')).toBe(true);
+    expect(esPeriodoInferido('declarado') || esPeriodoInferido('nombre_archivo') || esPeriodoInferido(null)).toBe(false);
+  });
+  it('el rótulo dice cómo se llegó al periodo y pide confirmar lo inferido', () => {
+    expect(rotuloOrigenPeriodo('declarado')).toBe('declarado');
+    expect(rotuloOrigenPeriodo('nombre_archivo')).toBe('tomado del nombre del archivo');
+    expect(rotuloOrigenPeriodo('no_periodo')).toMatch(/inferido por el «No\. de periodo»: confírmalo/);
+    expect(rotuloOrigenPeriodo('decena_dominante')).toMatch(/inferido por la decena/);
   });
 });

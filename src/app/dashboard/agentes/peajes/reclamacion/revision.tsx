@@ -6,6 +6,7 @@ import type { CierreMensual } from '@/lib/likida/peajes/cierre_mensual';
 import type { ResumenSeguimiento } from '@/lib/likida/peajes/reclamos_seguimiento';
 import { ETIQUETA_ESTADO_RECLAMO, PLAZO_RECLAMO_MESES } from '@/lib/likida/peajes/reclamos_seguimiento';
 import type { ResultadoCasado } from '@/lib/likida/peajes/notas_credito';
+import { rotuloOrigenPeriodo } from '@/lib/likida/peajes/periodo';
 import {
   CATEGORIAS_COBRO, ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO, type CategoriaCobro, type CandidatoCobro,
 } from '@/lib/likida/peajes/reglas_cobro';
@@ -135,7 +136,7 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
           <p className="text-[12px] mt-0.5" style={{ color: 'var(--muted)' }}>
             {revision.archivoNombre ? `${revision.archivoNombre} · ` : ''}
             {revision.periodoOficialDesde && revision.periodoOficialHasta
-              ? `Periodo ${revision.periodoOficialDesde} a ${revision.periodoOficialHasta} (${revision.periodoOrigen === 'declarado' ? 'declarado' : 'tomado del nombre del archivo'}) · `
+              ? `Periodo ${revision.periodoOficialDesde} a ${revision.periodoOficialHasta} (${rotuloOrigenPeriodo(revision.periodoOrigen)}) · `
               : 'Periodo del archivo no declarado · '}
             {numero(r.lineasRevisadas)} cruces · {mxn(r.montoRevisado)}
           </p>

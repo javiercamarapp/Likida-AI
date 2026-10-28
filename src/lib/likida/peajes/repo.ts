@@ -33,7 +33,7 @@ import { traerTodo, traerPorIds, conteo, type RespuestaPg } from '../pg';
 import { normalizarNombre, normalizarTag } from './formatos';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from '../conductor/geometria_datos';
 import { matrizDeArchivoCatalogo } from './archivo';
-import { sumarMeses, limitesDelMes, mesAnterior, validarPeriodoDeclarado } from './periodo';
+import { sumarMeses, limitesDelMes, mesAnterior, validarPeriodoDeclarado, type AnclaPeriodo } from './periodo';
 import { revisarDobleEntreArchivos, VENTANA_MESES_DEFAULT, type ArchivoPrevio, type ResultadoDobleEntreArchivos } from './doble_entre_archivos';
 import { parsearCasetasMatriz, coordenadaDeCelda, validarCoordenadasMexico, type CasetaCatalogo } from './casetas';
 import { parsearTarifasMatriz, planificarTarifa, type OrigenTarifa, type TarifaEntrada, type TarifaExistente } from './tarifario_archivo';
@@ -1958,6 +1958,29 @@ export async function guardarVinculosActivo(tenantId: string, activo: boolean): 
   return !error;
 }
 
+/**
+ * El archivo ANCLA para inferir el periodo por «No. de periodo»: de los desgloses vigentes de la flota cuyo periodo SÍ se conoce
+ * (declarado o por nombre; nunca uno ya inferido, para no encadenar suposiciones), el de número más cercano al pedido. Lanza ante error de base.
+ */
+export async function anclaDePeriodo(tenantId: string, noPeriodo: string): Promise<AnclaPeriodo | null> {
+  if (!/^\d{1,6}$/.test(noPeriodo.trim())) return null;
+  const objetivo = Number(noPeriodo.trim());
+  const { data, error } = await acotada(supabaseAdmin().from('desglose_peaje')
+    .select('no_periodo, periodo_oficial_desde')
+    .eq('tenant_id', tenantId).is('anulado_en', null).in('periodo_origen', ['declarado', 'nombre_archivo'])
+    .not('no_periodo', 'is', null).not('periodo_oficial_desde', 'is', null)
+    .order('creado_en', { ascending: false }).order('id').limit(60), 'peajes.ancla_periodo');
+  if (error) throw new Error(`anclaDePeriodo: ${error.message}`);
+  let mejor: AnclaPeriodo | null = null;
+  for (const f of (data ?? []) as Array<Record<string, unknown>>) {
+    const n = /^\d{1,6}$/.test(String(f.no_periodo ?? '').trim()) ? Number(String(f.no_periodo).trim()) : null;
+    const desde = typeof f.periodo_oficial_desde === 'string' ? f.periodo_oficial_desde.slice(0, 10) : null;
+    if (n === null || desde === null) continue;
+    if (mejor === null || Math.abs(n - objetivo) < Math.abs(mejor.noPeriodo - objetivo)) mejor = { noPeriodo: n, desde };
+  }
+  return mejor;
+}
+
 /** Lo que la flota ya tiene cargado y alimenta el cruce con viajes. Lanza ante error de base. */
 export async function resumenFuenteViajes(tenantId: string): Promise<{ viajes: number; viajesConDespacho: number; posicionesConDespacho: number }> {
   const contar = async (consulta: string, q: PromiseLike<RespuestaPg<unknown[]>>): Promise<number> => {
@@ -2573,7 +2596,7 @@ export interface ReporteRevision {
   periodoMedidoHasta: string | null;
   periodoOficialDesde: string | null;
   periodoOficialHasta: string | null;
-  periodoOrigen: 'declarado' | 'nombre_archivo' | null;
+  periodoOrigen: 'declarado' | 'nombre_archivo' | 'no_periodo' | 'decena_dominante' | null;
   noPeriodo: string | null;
   /** El reporte de calidad que se guardó al importar (`CalidadArchivo`), tal cual. */
   calidad: Record<string, unknown> | null;

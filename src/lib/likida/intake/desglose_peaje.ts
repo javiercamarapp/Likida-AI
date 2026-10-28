@@ -61,9 +61,9 @@ import { VENTANA_DIAS_FECHA, TOLERANCIA_MONTO_MXN } from './consolidado';
 import { registrarCorrida } from '../agentes/corridas';
 import { contextoEvidenciaGps, llaveUnidadDia } from '../peajes/evidencia_gps';
 import { resolverTagEnFecha } from '../peajes/tags';
-import { cargarVigenciaTags, gastosRespaldadosPorOtrosDesgloses, cargarMapeo, listarCasetas, evaluarGpsDeLineas } from '../peajes/datos';
+import { cargarVigenciaTags, gastosRespaldadosPorOtrosDesgloses, cargarMapeo, listarCasetas, evaluarGpsDeLineas, anclaDePeriodo } from '../peajes/datos';
 import { normalizarTag } from '../peajes/formatos';
-import { resolverPeriodo } from '../peajes/periodo';
+import { resolverPeriodo, periodoDeNombreArchivo, esPeriodoInferido, rotuloOrigenPeriodo, type AnclaPeriodo } from '../peajes/periodo';
 import { registrarNombresDeCasetas } from '../peajes/revision_cobros';
 import { matrizDeCsv } from '../peajes/csv';
 import { clasificarVerificacion } from '../peajes/verificacion';
@@ -1038,12 +1038,22 @@ export async function importarDesglose(
   // El periodo OFICIAL (el que decide qué es «extemporáneo»): el declarado, o el del nombre
   // del archivo, o ninguno. El periodo MEDIDO (min/max de fechas) se guarda aparte y se ensancha
   // con los extemporáneos, por eso no sirve para esto.
-  const periodoOficial = resolverPeriodo({ declarado: archivo.periodo ?? null, nombreArchivo: archivo.nombre, fechas });
+  // A2 ola 1: si ni lo declararon ni el nombre lo dice (un archivo que llega por correo, API o SFTP con otro nombre), se INFIERE del «No. de periodo»
+  // (contando decenas desde otro archivo de la flota cuyo periodo sí se conoce) o de la decena donde cae casi todo el archivo, y queda marcado como inferido.
+  let ancla: AnclaPeriodo | null = null;
+  if (!archivo.periodo && !periodoDeNombreArchivo(archivo.nombre, fechas) && parseo.calidad.noPeriodo) {
+    try { ancla = await anclaDePeriodo(tenantId, parseo.calidad.noPeriodo); } catch (e) {
+      logger.warn('desglose_peaje.ancla_periodo', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  let periodoOficial = resolverPeriodo({ declarado: archivo.periodo ?? null, nombreArchivo: archivo.nombre, fechas, noPeriodo: parseo.calidad.noPeriodo, ancla });
   const avisos = [...parseo.avisos];
   if (!periodoOficial) {
-    avisos.push('No pude saber el periodo del archivo (ni lo declaraste, ni el nombre lo dice, p. ej. «01 A 10 DE SEPT»): la revisión de cobros extemporáneos no se aplica hasta que lo declares.');
+    avisos.push('No pude saber el periodo del archivo (ni lo declaraste, ni el nombre lo dice, p. ej. «01 A 10 DE SEPT», ni su «No. de periodo» ni sus fechas apuntan a una sola decena): la revisión de cobros extemporáneos no se aplica hasta que lo declares.');
+  } else if (esPeriodoInferido(periodoOficial.origen)) {
+    avisos.push(`El nombre del archivo no dice su periodo; lo inferí: ${periodoOficial.desde} a ${periodoOficial.hasta} (${rotuloOrigenPeriodo(periodoOficial.origen)}). Si no es ese, decláralo y los extemporáneos se recalculan.`);
   }
-  const { data: fila, error: errDesglose } = await acotada(supabaseAdmin()
+  const insertarDesglose = (periodo: typeof periodoOficial) => acotada(supabaseAdmin()
     .from('desglose_peaje')
     .insert({
       tenant_id: tenantId,
@@ -1052,14 +1062,23 @@ export async function importarDesglose(
       periodo_hasta: fechas[fechas.length - 1] ?? null,
       archivo_nombre: archivo.nombre,
       ingesta_archivo_id: archivo.ingestaArchivoId ?? null,
-      periodo_oficial_desde: periodoOficial?.desde ?? null,
-      periodo_oficial_hasta: periodoOficial?.hasta ?? null,
-      periodo_origen: periodoOficial?.origen ?? null,
+      periodo_oficial_desde: periodo?.desde ?? null,
+      periodo_oficial_hasta: periodo?.hasta ?? null,
+      periodo_origen: periodo?.origen ?? null,
       no_periodo: parseo.calidad.noPeriodo,
       calidad: parseo.calidad,
     })
     .select('id')
     .single(), 'desglose_peaje.insertar');
+  let { data: fila, error: errDesglose } = await insertarDesglose(periodoOficial);
+  // La migración 0935 amplía el dominio de `periodo_origen`. Si aún no está aplicada, el periodo INFERIDO se descarta (no se disfraza de
+  // «nombre del archivo»): el archivo entra sin periodo oficial, se avisa, y declararlo después lo recalcula todo.
+  if (errDesglose && esPeriodoInferido(periodoOficial?.origen) && /periodo_origen_dominio/.test(errDesglose.message)) {
+    logger.warn('desglose_peaje.periodo_inferido_sin_migracion', { tenant: tenantId });
+    periodoOficial = null;
+    avisos.push('No pude guardar el periodo inferido del archivo: declara su periodo para que se apliquen los extemporáneos.');
+    ({ data: fila, error: errDesglose } = await insertarDesglose(null));
+  }
   if (errDesglose || !fila) {
     logger.error('desglose_peaje.insertar_error', { tenant: tenantId, err: errDesglose?.message ?? 'sin id' });
     return { ok: false, motivo: 'No se pudo guardar el desglose. Inténtalo de nuevo.', causa: 'infraestructura' };
