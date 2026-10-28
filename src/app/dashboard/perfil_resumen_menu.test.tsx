@@ -81,6 +81,9 @@ describe('/dashboard bajo el perfil', () => {
       resolverTenantEfectivo: async () => ({ tenantId: 't1', tenantNombre: null, nombre: 'Ana', rol: 'flota_admin', tenantExiste: true }),
     }));
     vi.doMock('@/lib/auth/perfil_tenant', () => ({ perfilDeTenant: async () => perfil }));
+    // El Resumen elige v1/v2 con la cookie de la petición: aquí no hay petición, y lo que se prueba es qué Resumen sale.
+    vi.doMock('next/headers', () => ({ cookies: async () => ({ get: () => undefined }) }));
+    vi.doMock('@/lib/auth/version_ui', () => ({ versionUi: async () => 'v1' }));
     vi.doMock('@/lib/likida/repo', () => ({ getPerfilCrudo: async () => ({}) }));
     vi.doMock('@/lib/likida/perfil/preguntas', () => ({ onboardingFiscalListo: () => onboardingCompleto, onboardingPospuesto: () => false }));
     vi.doMock('./inicio-contenido', () => ({ InicioContenido: function InicioContenido() { return null; } }));
