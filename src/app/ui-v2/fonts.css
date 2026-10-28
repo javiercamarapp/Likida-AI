@@ -1,0 +1,46 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   UI v2 · TIPOGRAFÍA (PLAN-MAESTRO §2.2, decisión D-5: Hanken Grotesk)
+
+   Cuatro pesos latinos de Hanken Grotesk (OFL, licencia en public/fonts/) declarados
+   con @font-face LOCAL. El navegador solo descarga un archivo cuando algún texto lo
+   USA, y solo se usa bajo el alcance `[data-ui="v2"]`: v1 no baja un byte más.
+   IBM Plex Mono no cambia (sigue viniendo de `next/font` en el layout raíz).
+
+   Es UNA variable: volver a Inter es borrar las dos líneas de `--font-sans-ui` y
+   `--font-display` de abajo (0 builds de lógica, solo CSS).
+   `font-display: swap` evita texto invisible mientras llega el archivo.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@font-face {
+  font-family: "Hanken Grotesk UI";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/hankengrotesk-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Hanken Grotesk UI";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/hankengrotesk-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Hanken Grotesk UI";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/hankengrotesk-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Hanken Grotesk UI";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/hankengrotesk-700.woff2") format("woff2");
+}
+
+[data-ui="v2"] {
+  --font-sans-ui: "Hanken Grotesk UI", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Hanken Grotesk UI", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}

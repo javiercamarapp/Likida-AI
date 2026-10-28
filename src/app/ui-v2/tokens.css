@@ -1,9 +1,9 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    UI v2 · TOKENS (SPIKE de la Fase 0 · PLAN-MAESTRO §2.2 y §3-Fase 0.3)
 
-   Este archivo NO se importa desde ningún lado todavía: es la prueba de
-   aceptación de que Tailwind 4 respeta una capa de tokens con alcance. La
-   Fase 1 (carril A, A.3) lo importa SOLO desde `dashboard/layout.tsx`.
+   Se importa SOLO desde `dashboard/layout.tsx` (CSS por ruta; nunca desde
+   globals.css). Nació como spike de la Fase 0 (veredicto GO) y en la Fase 1
+   (carril A, A.3) se convirtió en la capa de tokens real.
 
    ALCANCE: todo cuelga de `[data-ui="v2"]` (atributo que pondrá el div raíz del
    chrome junto a `tema-neutro`). Sin el atributo este archivo es inerte y v1
@@ -152,6 +152,21 @@
   --tip-ink: #0e0e10;
 
   --shadow-pop: 0 12px 32px -8px #000c, 0 2px 6px #0006;
+}
+
+/* ── Lienzo fuera del alcance (riesgo del spike: `body` queda fuera del div del chrome) ──
+   `html, body { background: var(--bg) }` vive en globals.css y lee --bg del :root, así que el
+   overscroll de iOS y los huecos del documento enseñarían el color v1. Si hay un chrome v2 en la
+   página, el :root recibe los dos tokens que pinta `body`. `html:root:has(...)` (0,2,1) gana a
+   `:root[data-theme="light"]` (0,2,0) sin depender del orden de los chunks de CSS; el oscuro lleva
+   su propio bloque (0,3,1). Sin un `[data-ui="v2"]` en el documento, esto no aplica a nada. */
+html:root:has([data-ui="v2"]) {
+  --bg: #f6f6f7;
+  --ink: #0e0e10;
+}
+html:root[data-theme="dark"]:has([data-ui="v2"]) {
+  --bg: #0e0e10;
+  --ink: #f4f4f5;
 }
 
 /* Tarjetas: 12 px, sin sombra. Selector de clase propio del alcance (0,2,0)
