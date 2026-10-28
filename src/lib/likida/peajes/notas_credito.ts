@@ -16,8 +16,9 @@ import { evaluarReclamo, type EstadoReclamo } from './reclamos_seguimiento';
 // La combinatoria está acotada: con más de `MAX_RECLAMOS_SUBCONJUNTO` reclamos
 // abiertos (o si la búsqueda excede su presupuesto) responde `demasiados`.
 //
-// ESTADO (A37-S52-04): este módulo y `reclamosParaCasar` (repo.ts) TODAVÍA NO tienen llamador fuera de pruebas: ninguna pantalla ofrece
-// la propuesta, así que el «acreditado» se sigue capturando a mano. Cablearlo a la pantalla de seguimiento es trabajo de producto pendiente.
+// ESTADO (A2 ola 1): la pantalla de seguimiento ya ofrece la propuesta («¿A qué reclamo corresponde una nota de crédito?», `CasarNota` en
+// reclamacion/revision.tsx, con `reclamosParaCasar` de repo.ts). Sigue siendo SOLO una sugerencia: el «acreditado» se captura a mano en el
+// reclamo que la persona confirma; este módulo no escribe nada.
 //
 // PURO: sin base, sin red; el reloj se inyecta. Dinero en centavos enteros.
 // ═══════════════════════════════════════════════════════════════════════════

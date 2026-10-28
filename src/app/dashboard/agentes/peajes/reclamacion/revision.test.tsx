@@ -142,3 +142,62 @@ describe('el seguimiento de reclamos en pantalla', () => {
     expect(html).not.toContain('<option value="tag_dado_de_baja">');
   });
 });
+
+describe('A2 ola 1 · la propuesta de a qué reclamo corresponde una nota de crédito', () => {
+  const vista = (p: Partial<ReclamoVista> & { id: string }): ReclamoVista => {
+    const base = { estado: 'enviado' as const, fechaCobroMasAntiguo: '2026-08-15', montoReclamado: 1000, montoAcreditado: 0, ...p };
+    return {
+      desgloseId: ID, proveedor: 'IAVE', categoria: 'extemporaneo', nCruces: 4, enviadoEn: '2026-08-20', referenciaPortal: null, notas: null, ...base,
+      evaluacion: evaluarReclamo(base, '2026-09-10'),
+    };
+  };
+  const reclamos = [vista({ id: 'aaaaaaaa-1', montoReclamado: 1000, referenciaPortal: 'P-9' }), vista({ id: 'bbbbbbbb-2', montoReclamado: 250.5, categoria: 'duplicado_exacto' }), vista({ id: 'cccccccc-3', montoReclamado: 500, categoria: 'clase_fuera_de_3_5' })];
+  const con = (propuestaNota: ExtrasReclamacion['propuestaNota']) =>
+    pintar(extras(null, { seguimiento: { reclamos, resumen: resumirSeguimiento(reclamos, '2026-09-10') }, propuestaNota }), 'sin_desglose');
+
+  it('ofrece el formulario GET (no escribe nada) cuando hay reclamos enviados, conservando los parámetros de la flota', () => {
+    const html = pintar(extras(null, { seguimiento: { reclamos, resumen: resumirSeguimiento(reclamos, '2026-09-10') } }), 'sin_desglose');
+    expect(html).toContain('¿A qué reclamo corresponde una nota de crédito?');
+    expect(html).toMatch(/<form[^>]*action="\/dashboard\/agentes\/peajes\/reclamacion" method="get"/);
+    expect(html).toContain('name="tenant" value="f-1"');
+    expect(html).toContain('name="nota"');
+    expect(html).toContain('no registra nada');
+  });
+  it('sin reclamos enviados no se pinta (no hay contra qué casar)', () => {
+    const solo = [vista({ id: 'p', estado: 'preparado' })];
+    const html = pintar(extras(null, { seguimiento: { reclamos: solo, resumen: resumirSeguimiento(solo, '2026-09-10') } }), 'sin_desglose');
+    expect(html).not.toContain('¿A qué reclamo corresponde una nota de crédito?');
+  });
+  it('coincidencia exacta con un reclamo: lo nombra y pide confirmación manual', () => {
+    const html = con({ texto: '250.50', importe: 250.5, resultado: { tipo: 'seguro', reclamoIds: ['bbbbbbbb-2'], confirmado: false, alertas: [] } });
+    expect(html).toContain('Coincide exactamente con');
+    expect(html).toContain('Cobro duplicado exacto');
+    expect(html).toContain('Confírmalo capturando la nota en ese reclamo');
+    expect(html).toContain('value="250.50"');
+  });
+  it('varias combinaciones: las lista y dice que ninguna se elige sola', () => {
+    const html = con({ texto: '1500', importe: 1500, resultado: { tipo: 'sugerido', opciones: [['aaaaaaaa-1', 'cccccccc-3']], ambiguo: false, truncado: false, confirmado: false, alertas: [] } });
+    expect(html).toContain('Podría corresponder a la suma de estos reclamos');
+    expect(html).toContain('folio P-9');
+    const amb = con({ texto: '500', importe: 500, resultado: { tipo: 'sugerido', opciones: [['cccccccc-3'], ['bbbbbbbb-2']], ambiguo: true, truncado: true, confirmado: false, alertas: [] } });
+    expect(amb).toContain('ninguna se elige sola');
+    expect(amb).toContain('Hay más combinaciones de las que se muestran');
+  });
+  it('sin coincidencia lo dice y una nota mayor que todo lo pendiente alerta', () => {
+    const html = con({ texto: '999', importe: 999, resultado: { tipo: 'sin_casar', confirmado: false, alertas: ['nota_mayor_que_reclamado'] } });
+    expect(html).toContain('Ningún reclamo enviado ni combinación de ellos suma $999.00');
+    expect(html).toContain('es mayor que todo lo que falta por acreditar');
+  });
+  it('un importe inválido o un fallo de lectura se dicen; un fallo NO se lee como «sin coincidencia»', () => {
+    const malo = con({ texto: '1234,50', importe: null, resultado: null, motivo: 'El monto es ambiguo' });
+    expect(malo).toContain('El monto es ambiguo');
+    expect(malo).not.toContain('Ningún reclamo');
+    const fallo = con({ texto: '100', importe: null, resultado: null, fallo: true });
+    expect(fallo).toContain('No se pudo calcular la propuesta');
+    expect(fallo).not.toContain('Ningún reclamo');
+  });
+  it('un texto de la nota se escapa, no se inyecta', () => {
+    const html = con({ texto: '"><script>x</script>', importe: null, resultado: null, motivo: 'no es un número' });
+    expect(html).not.toContain('<script>x</script>');
+  });
+});

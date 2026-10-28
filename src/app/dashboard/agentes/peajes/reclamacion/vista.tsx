@@ -10,7 +10,7 @@ import { textoEvidencia } from '@/lib/likida/peajes/reclamacion_archivos';
 import type { ReporteRevision, ReclamoVista } from '@/lib/likida/peajes/revision_cobros';
 import type { CierreMensual } from '@/lib/likida/peajes/cierre_mensual';
 import type { ResumenSeguimiento } from '@/lib/likida/peajes/reclamos_seguimiento';
-import { SeccionRevisionCobros, SeccionCierreMensual, SeccionSeguimiento, type AccionesSeguimiento } from './revision';
+import { SeccionRevisionCobros, SeccionCierreMensual, SeccionSeguimiento, type AccionesSeguimiento, type PropuestaNota } from './revision';
 import { TablaCandidatosCobros, type AccionDecidir } from '../candidatos-tabla';
 import type { TablaCandidatos, AccionCandidato } from '@/lib/likida/peajes/candidatos_tabla';
 
@@ -31,6 +31,8 @@ export interface ExtrasReclamacion {
   errorCierre?: boolean;
   seguimiento: { reclamos: ReclamoVista[]; resumen: ResumenSeguimiento } | null;
   errorSeguimiento?: boolean;
+  /** La propuesta de a qué reclamo corresponde la nota de crédito que se tecleó (`?nota=`). */
+  propuestaNota?: PropuestaNota | null;
   acciones: AccionesSeguimiento;
   aviso?: string | null;
   error?: string | null;
@@ -90,7 +92,8 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
               <SeccionCierreMensual mes={extras.mes} cierre={extras.cierre} error={extras.errorCierre === true} sufijo={sufijo} desglose={desglose} />
               <SeccionSeguimiento
                 reclamos={extras.seguimiento?.reclamos ?? null} resumen={extras.seguimiento?.resumen ?? null} acciones={extras.acciones}
-                desglose={estado === 'ok' ? desglose : null} revision={extras.revision} error={extras.errorSeguimiento === true} />
+                desglose={estado === 'ok' ? desglose : null} revision={extras.revision} error={extras.errorSeguimiento === true}
+                propuestaNota={extras.propuestaNota ?? null} sufijo={sufijo} mes={extras.mes} />
             </>
           )}
           {estado === 'ok' && !reporte && extras?.errorGps && (

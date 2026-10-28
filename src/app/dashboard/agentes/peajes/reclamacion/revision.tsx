@@ -5,6 +5,7 @@ import type { ReporteRevision, ReclamoVista } from '@/lib/likida/peajes/revision
 import type { CierreMensual } from '@/lib/likida/peajes/cierre_mensual';
 import type { ResumenSeguimiento } from '@/lib/likida/peajes/reclamos_seguimiento';
 import { ETIQUETA_ESTADO_RECLAMO, PLAZO_RECLAMO_MESES } from '@/lib/likida/peajes/reclamos_seguimiento';
+import type { ResultadoCasado } from '@/lib/likida/peajes/notas_credito';
 import {
   CATEGORIAS_COBRO, ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO, type CategoriaCobro, type CandidatoCobro,
 } from '@/lib/likida/peajes/reglas_cobro';
@@ -303,9 +304,81 @@ const COLOR_ALERTA: Record<ReclamoVista['evaluacion']['alerta'], { color: string
 };
 const ROTULO_ALERTA: Record<ReclamoVista['evaluacion']['alerta'], string> = { ok: 'En plazo', por_vencer: 'Por vencer', vencido: 'Vencido', cerrado: 'Cerrado' };
 
-export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revision, error }: {
+/**
+ * La PROPUESTA de a qué reclamo(s) corresponde una nota de crédito (`casarNota`). Es solo una sugerencia por suma exacta: nada se
+ * registra solo; la persona confirma capturando la nota en el reclamo que corresponda. `texto` es lo que escribió (se devuelve al campo).
+ */
+export interface PropuestaNota {
+  texto: string;
+  /** `null` = el texto no es un importe válido (`motivo` dice por qué) o no se pudo calcular (`fallo`). */
+  importe: number | null;
+  resultado: ResultadoCasado | null;
+  motivo?: string;
+  fallo?: boolean;
+}
+
+function etiquetaReclamo(r: ReclamoVista | undefined, id: string): string {
+  if (!r) return `reclamo ${id.slice(0, 8)}`;
+  const cat = (CATEGORIAS_COBRO as readonly string[]).includes(r.categoria) ? ETIQUETA_CATEGORIA_COBRO[r.categoria as CategoriaCobro] : r.categoria;
+  const falta = Math.round((r.montoReclamado - r.montoAcreditado) * 100) / 100;
+  return `${cat} · ${numero(r.nCruces)} cruces · por acreditar ${mxn(falta)} · cobro más antiguo ${r.fechaCobroMasAntiguo}${r.referenciaPortal ? ` · folio ${r.referenciaPortal}` : ''}`;
+}
+
+/** «¿A qué reclamo corresponde esta nota?»: formulario GET (no escribe nada) y, si hay importe, la propuesta de `casarNota`. */
+export function CasarNota({ propuesta, reclamos, sufijo, desglose, mes }: {
+  propuesta: PropuestaNota | null; reclamos: ReclamoVista[]; sufijo: string; desglose: string | null; mes: string | null;
+}) {
+  const previos = new URLSearchParams(sufijo.replace(/^\?/, ''));
+  if (desglose) previos.set('desglose', desglose);
+  if (mes) previos.set('mes', mes);
+  previos.delete('nota');
+  const porId = new Map(reclamos.map((r) => [r.id, r]));
+  const r = propuesta?.resultado ?? null;
+  return (
+    <div className="mt-4 rounded-lg hairline p-3 text-[12.5px] space-y-2" id="casar-nota">
+      <h3 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>¿A qué reclamo corresponde una nota de crédito?</h3>
+      <p style={{ color: 'var(--muted)' }}>
+        El proveedor manda la nota sin decir qué cruces cubre. Escribe su importe y el sistema propone a qué reclamo(s) enviados les cuadra la suma exacta.
+        Es solo una sugerencia: no registra nada; la nota se captura en el reclamo que tú confirmes.
+      </p>
+      <form method="get" action="/dashboard/agentes/peajes/reclamacion" className="flex items-end gap-2 flex-wrap">
+        {[...previos.entries()].map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
+        <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Importe de la nota (MXN)</span>
+          <input name="nota" inputMode="decimal" required maxLength={20} defaultValue={propuesta?.texto ?? ''} className={`${CSS_INPUT} w-[140px] mt-0.5`} style={ESTILO_INPUT} /></label>
+        <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>Proponer reclamo</button>
+      </form>
+      {propuesta?.fallo && <p role="alert" style={{ color: 'var(--bad)' }}>No se pudo calcular la propuesta ahora mismo. No es que no haya coincidencia: inténtalo de nuevo.</p>}
+      {propuesta && !propuesta.fallo && propuesta.importe === null && <p role="alert" style={{ color: 'var(--bad)' }}>{propuesta.motivo ?? 'El importe no es válido.'}</p>}
+      {r && propuesta?.importe != null && (
+        <div className="space-y-1" role="status">
+          {r.alertas.includes('nota_mayor_que_reclamado') && (
+            <p style={{ color: 'var(--warn)' }}>La nota ({mxn(propuesta.importe)}) es mayor que todo lo que falta por acreditar: revisa si falta registrar un reclamo.</p>
+          )}
+          {r.tipo === 'seguro' && (
+            <p>Coincide exactamente con: <b>{etiquetaReclamo(porId.get(r.reclamoIds[0]), r.reclamoIds[0])}</b>. Confírmalo capturando la nota en ese reclamo.</p>
+          )}
+          {r.tipo === 'sugerido' && (
+            <>
+              <p>{r.ambiguo ? 'Hay más de una combinación posible; ninguna se elige sola:' : 'Podría corresponder a la suma de estos reclamos:'}</p>
+              <ul className="list-disc pl-5 space-y-0.5">
+                {r.opciones.map((op, i) => <li key={i}>{op.map((id) => etiquetaReclamo(porId.get(id), id)).join(' + ')}</li>)}
+              </ul>
+              {r.truncado && <p style={{ color: 'var(--muted)' }}>Hay más combinaciones de las que se muestran: casa la nota a mano.</p>}
+            </>
+          )}
+          {r.tipo === 'demasiados' && <p style={{ color: 'var(--muted)' }}>{r.mensaje}</p>}
+          {r.tipo === 'sin_casar' && !r.alertas.includes('importe_invalido') && (
+            <p style={{ color: 'var(--muted)' }}>Ningún reclamo enviado ni combinación de ellos suma {mxn(propuesta.importe)}. Puede ser una nota parcial: captúrala en el reclamo que creas que corresponde.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revision, error, propuestaNota, sufijo = '', mes = null }: {
   reclamos: ReclamoVista[] | null; resumen: ResumenSeguimiento | null; acciones: AccionesSeguimiento; desglose: string | null;
-  revision: ReporteRevision | null; error: boolean;
+  revision: ReporteRevision | null; error: boolean; propuestaNota?: PropuestaNota | null; sufijo?: string; mes?: string | null;
 }) {
   const conCandidatos = revision ? CATEGORIAS_COBRO.filter((c) => revision.revision.porCategoria[c].n > 0) : [];
   return (
@@ -373,6 +446,9 @@ export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revi
             </div>
           ))}
         </div>
+      )}
+      {reclamos && reclamos.some((r) => r.estado === 'enviado' || r.estado === 'acreditado_parcial') && (
+        <CasarNota propuesta={propuestaNota ?? null} reclamos={reclamos} sufijo={sufijo} desglose={desglose} mes={mes} />
       )}
       {desglose && conCandidatos.length > 0 && (
         <FormaRegistrarReclamo
