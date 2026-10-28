@@ -211,6 +211,12 @@ export interface Rentabilidad {
   margenPct: number | null;
   viajesConIngreso: number;
   viajesSinIngreso: number;
+  /**
+   * A39-S20-01: viajes del periodo que quedan FUERA de la medición por no tener una liquidación vigente (abiertos, en cuadre
+   * o con la liquidación rechazada): su ingreso no se suma porque su costo todavía no existe. `null` = la base aún no
+   * trae la 0928 (no se sabe), que NO es lo mismo que 0.
+   */
+  viajesSinLiquidar: number | null;
 }
 
 /** La forma cruda que devuelve `rentabilidad_tenant`, ya validada. */
@@ -219,6 +225,8 @@ export interface RentabilidadRpc {
   viajesConIngreso: number;
   viajesSinIngreso: number;
   costoComprobado: number;
+  /** Clave de la 0928; ausente en una base sin migrar. */
+  viajesSinLiquidar?: number;
 }
 
 /** Pura: del agregado a la pantalla. El oráculo de la equivalencia. */
@@ -232,6 +240,7 @@ export function armarRentabilidad(r: RentabilidadRpc): Rentabilidad {
     margenPct: ingreso > 0 ? round2(((ingreso - costoComprobado) / ingreso) * 100) : null,
     viajesConIngreso: r.viajesConIngreso,
     viajesSinIngreso: r.viajesSinIngreso,
+    viajesSinLiquidar: r.viajesSinLiquidar ?? null,
   };
 }
 
@@ -241,7 +250,9 @@ export function armarRentabilidad(r: RentabilidadRpc): Rentabilidad {
  * bien y están mal: el anticipo es lo que la empresa le ADELANTA al operador,
  * no lo que le paga el cliente.
  *
- * `desde` (ISO) acota viajes y liquidaciones por `created_at`; `null` = todo
+ * A39-S20-01: ingreso y costo salen del MISMO universo —los viajes con liquidación vigente— (0928).
+ *
+ * `desde` (ISO) acota los viajes por `created_at`; `null` = todo
  * el histórico, que es lo que la pantalla enseña hoy (su rótulo no dice
  * "del periodo").
  */
@@ -260,6 +271,8 @@ export async function getRentabilidad(tenantId: string, desde: string | null = n
     viajesConIngreso: data.viajesConIngreso,
     viajesSinIngreso: data.viajesSinIngreso,
     costoComprobado: data.costoComprobado,
+    // Opcional a propósito: sin la 0928 la clave no viene y se queda en null (no se inventa un 0).
+    ...(esNumero(data.viajesSinLiquidar) ? { viajesSinLiquidar: data.viajesSinLiquidar } : {}),
   });
 }
 
