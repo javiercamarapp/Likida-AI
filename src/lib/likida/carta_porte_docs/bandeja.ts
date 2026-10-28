@@ -29,6 +29,7 @@ import { aprender, claveDePerfil, dominioDe, firmaDe } from './perfiles';
 import { MENSAJE_FUNCION_NO_DISPONIBLE, flotaBajoPerfil, prepararEnvioTms, type ResultadoEnvio } from './envio';
 import { aplicarSalidaViaje, type ResultadoSalida } from './salida';
 import { DIAS_RETENCION, reintentarDocumento, validarDocumento } from './servicio';
+import { enriquecer, avisosDelCatalogo } from './catalogo_cliente';
 import { CODIGOS_SUMA, confianzaMinimaCritica, conservarHallazgosTms, type Hallazgo, type ResultadoValidacion } from './validacion';
 import * as repo from './repo';
 import { asignarAlLlegarARevision } from './revisor';
@@ -144,6 +145,42 @@ export async function corregirCampos(
   if (d.version !== versionVista) throw new ConflictoDeVersion();
   const r = aplicarCambiosAExtraccion(d.extraccion as Extraccion, cambios);
   return guardarRevision(tenantId, d, versionVista, r, actorId);
+}
+
+/**
+ * OLA1-A3 · Asigna (o quita) el cliente de un documento por revisar y le aplica el catálogo de ESE cliente a lo ya leído.
+ * Es la salida para los documentos de correo/WhatsApp cuyo remitente no se reconoció solo. Lo escrito por una persona no se
+ * pisa (lo garantiza `enriquecer`); revalida y deja el evento. Quitar el cliente no deshace lo que el catálogo ya llenó:
+ * eso se corrige campo a campo.
+ */
+export async function asignarCliente(
+  tenantId: string, id: string, versionVista: number, clienteId: string | null, actorId: string | null,
+): Promise<DocumentoFila> {
+  const d = await cargar(tenantId, id);
+  exigirEditable(d);
+  if (d.version !== versionVista) throw new ConflictoDeVersion();
+  if ((d.clienteId ?? null) === clienteId) return d;
+  if (clienteId !== null && !(await repo.clientePropio(tenantId, clienteId))) throw new DatoInvalido('Ese cliente no pertenece a tu flota.');
+  let extraccion = d.extraccion as Extraccion;
+  let aplicados = 0;
+  const meta = d.extraccion?.meta;
+  let avisos = meta?.avisos ?? [];
+  if (clienteId !== null) {
+    const catalogo = await repo.cargarCatalogoCliente(tenantId, clienteId);
+    const e = enriquecer(extraccion, catalogo, { tenantId, clienteId });
+    extraccion = e.extraccion;
+    aplicados = e.aplicados.length;
+    avisos = [...avisos, ...avisosDelCatalogo(e, catalogo.truncado === true)];
+  }
+  const validacion = conservarHallazgosTms(await validarDocumento(tenantId, d, extraccion), d.validacion);
+  const guardada = await repo.actualizarDocumento(tenantId, id, versionVista, {
+    cliente_id: clienteId,
+    extraccion: { campos: extraccion.campos, mercancias: extraccion.mercancias, meta: meta ? { ...meta, avisos } : meta },
+    validacion, confianza_min: confianzaMinimaCritica(extraccion), revisado_por: actorId,
+  });
+  if (!guardada) throw new ConflictoDeVersion();
+  await repo.registrarEvento(tenantId, id, 'campo_corregido', actorId, { cliente_asignado: clienteId !== null, cliente_quitado: clienteId === null, corregidos: 0, confirmados: 0, catalogoAplicados: aplicados });
+  return guardada;
 }
 
 export async function quitarRenglon(tenantId: string, id: string, versionVista: number, renglon: number, actorId: string | null): Promise<DocumentoFila> {

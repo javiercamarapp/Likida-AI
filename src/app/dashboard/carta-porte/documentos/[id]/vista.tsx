@@ -115,15 +115,18 @@ function Campo({ f, editable }: { f: FilaCampo; editable: boolean }) {
 }
 
 /** T-A3-31: a quién le toca este caso y a quién se le puede pasar. `null` = la flota no usa asignación (no se pinta nada). */
+export interface ClientesVista { actualId: string | null; opciones: Array<{ id: string; nombre: string }> }
 export interface RevisorVista { actualId: string | null; opciones: Array<{ id: string; nombre: string }> }
 
-export function VistaRevision({ doc, revision, original, operadores, eventos, acciones, sufijo = '', envio = null, salida = null, puedeEliminar = false, embarque = null, hijos = [], perfilRestringido = false, catalogo = null, revisor = null }: {
+export function VistaRevision({ doc, revision, original, operadores, eventos, acciones, sufijo = '', envio = null, salida = null, puedeEliminar = false, embarque = null, hijos = [], perfilRestringido = false, catalogo = null, revisor = null, clientes = null }: {
   doc: DocumentoFila;
   revision: Revision | null;
   original: OriginalVista;
   operadores: Array<{ id: string; nombre: string }>;
   eventos: EventoVista[];
-  acciones: { revisar: AccionDoc | null; reasignar?: AccionDoc | null };
+  acciones: { revisar: AccionDoc | null; reasignar?: AccionDoc | null; asignarCliente?: AccionDoc | null };
+  /** OLA1-A3: asignar el cliente de un documento por revisar (aplica su catálogo). */
+  clientes?: ClientesVista | null;
   revisor?: RevisorVista | null;
   sufijo?: string;
   /** El envío al TMS de la versión vigente (solo se carga si el documento está aprobado). */
@@ -201,6 +204,21 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
                 <BotonEnvio variante="secundario" etiqueta="Reasignar" pendiente="Reasignando…" />
               </FormaAccion>
             )}
+          </div>
+        )}
+        {editable && clientes && acciones.asignarCliente && (
+          <div className="text-[12px] flex flex-wrap items-center gap-2" style={{ color: 'var(--muted)' }}>
+            <span>Cliente: <strong style={{ color: 'var(--ink)' }}>{clientes.opciones.find((o) => o.id === clientes.actualId)?.nombre ?? 'sin asignar (no se aplica su catálogo)'}</strong></span>
+            <FormaAccion accion={acciones.asignarCliente} className="flex flex-wrap items-center gap-2">
+              <input type="hidden" name="documentoId" value={doc.id} />
+              <input type="hidden" name="version" value={doc.version} />
+              <label className="sr-only" htmlFor="clienteDoc">Asignar cliente</label>
+              <select id="clienteDoc" name="clienteId" defaultValue={clientes.actualId ?? ''} className={`${CAMPO} !w-auto`}>
+                <option value="">Sin cliente</option>
+                {clientes.opciones.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
+              </select>
+              <BotonEnvio variante="secundario" etiqueta="Asignar cliente" pendiente="Asignando…" />
+            </FormaAccion>
           </div>
         )}
         {doc.estado === 'fallido' && <p className="text-[12.5px]" style={{ color: 'var(--bad)' }}>{doc.ultimoError}</p>}
