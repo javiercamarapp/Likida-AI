@@ -98,7 +98,9 @@ describe('getRentabilidad — contribución = ingreso − comprobado, y el marge
     const r = await getRentabilidad('t-1');
     expect(r.ingreso).toBe(0);
     expect(r.margenPct).toBeNull();
-    expect(r.contribucion).toBe(-1500);
+    // 0931: el costo de un viaje SIN ingreso no entra al margen (sería un costo sin su ingreso): 1,500 queda fuera.
+    expect(r.costoComprobado).toBe(0);
+    expect(r.contribucion).toBe(0);
     expect(r.viajesSinIngreso).toBe(2);
   });
 

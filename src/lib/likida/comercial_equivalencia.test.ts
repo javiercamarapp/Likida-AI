@@ -132,7 +132,8 @@ describe('EQUIVALENCIA getRentabilidad — la reducción JS vieja vs rentabilida
   const universo = (b: BaseSintetica, t: string) => {
     const vigentes = filasLiq(b, t).filter((l) => l.revision !== 'rechazada');
     const viajes = filasViaje(b, t).filter((v) => vigentes.some((l) => l.viaje_id === v.id));
-    return { viajes, liqs: vigentes.filter((l) => viajes.some((v) => v.id === l.viaje_id)) };
+    // 0931: el costo solo cuenta los viajes CON ingreso_flete (mismo universo que el ingreso).
+    return { viajes, liqs: vigentes.filter((l) => viajes.some((v) => v.id === l.viaje_id && v.ingreso_flete != null)) };
   };
 
   it('mismas seis cifras sobre el mismo universo, y sin un peso de la otra flota', async () => {
@@ -156,7 +157,7 @@ describe('EQUIVALENCIA getRentabilidad — la reducción JS vieja vs rentabilida
     const nuevo = await getRentabilidad('t-1');
     // v-3 ($5,000, abierto) y v-6 ($2,500, liquidado pero sin liquidación en la base) no pueden inflar el margen.
     expect(nuevo.ingreso).toBe(10000);
-    expect(nuevo.costoComprobado).toBe(2200);
+    expect(nuevo.costoComprobado).toBe(1500);   // 0931: sin los 700 del viaje sin ingreso (v-2)
     expect(nuevo.viajesSinLiquidar).toBe(4);   // v-3, v-4, v-5, v-6
   });
 
@@ -164,7 +165,7 @@ describe('EQUIVALENCIA getRentabilidad — la reducción JS vieja vs rentabilida
     doble.base.liquidacion = doble.base.liquidacion.map((l) => (l.viaje_id === 'v-1' ? { ...l, revision: 'rechazada' } : l));
     const r = await getRentabilidad('t-1');
     expect(r.ingreso).toBe(0);              // v-2 no trae ingreso
-    expect(r.costoComprobado).toBe(700);
+    expect(r.costoComprobado).toBe(0);       // 0931: el costo de v-2 (sin ingreso) tampoco entra
     expect(r.viajesSinLiquidar).toBe(5);
   });
 
