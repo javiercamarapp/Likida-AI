@@ -33,10 +33,11 @@ import {
   getOperadoresRegistro, MAX_BUSQUEDA_OPERADORES, type FilaRegistroOperador,
 } from '@/lib/likida/administracion';
 import {
-  validarOperadorImportado, importarOperadores,
+  validarOperadorImportado, importarOperadores, type OpcionesValidacionOperador,
   type OperadorCrudo, type OperadorImportado, type ResultadoImportacionOperadores,
 } from '@/lib/likida/importacion/operadores';
 import { DatoInvalido } from '@/lib/likida/errores';
+import { permiteAltaSinTelefono } from '@/lib/likida/operador_sin_telefono_canal';
 import { resolverTerminalDeFlota } from '@/lib/likida/terminales';
 // El tope de UN POST es la MISMA tanda con la que `importarOperadores` escribe
 // por dentro: una petición que quepa en una tanda es una petición cuyo tiempo
@@ -234,7 +235,7 @@ function leerLote(cuerpo: Record<string, unknown>, campo: string, max: number): 
 }
 
 /** Normaliza una fila del lote. Lanza `CampoInvalido` con el QUÉ corregir. */
-function normalizarOperador(cuerpo: Record<string, unknown>, fila: number): OperadorImportado {
+function normalizarOperador(cuerpo: Record<string, unknown>, fila: number, opciones: OpcionesValidacionOperador): OperadorImportado {
   // Como en el resto de /v1: un `tenant_id` en el cuerpo no se lee aquí ni en
   // ningún otro sitio de la ruta. El tenant sale de `abrir()`.
   const nombre = texto(cuerpo, 'nombre', { obligatorio: true, max: 120 });
@@ -244,19 +245,23 @@ function normalizarOperador(cuerpo: Record<string, unknown>, fila: number): Oper
   // identidad del chofer» entiende que no puede mandar el campo vacío y
   // rellenarlo después; con el mensaje genérico, lo rellena después.
   const telefono = texto(cuerpo, 'telefono', { max: 25 });
-  if (!telefono) throw new CampoInvalido('telefono', 'Falta el `telefono`: es la identidad del chofer frente al bot de WhatsApp, y sin él no puede reportar un gasto.');
+  // Salvo en una flota cuyo desglose sale por CORREO (0932): ahí se admite el operador con `numeroEmpleado` + `correo` y sin teléfono.
+  if (!telefono && !opciones.sinTelefono) {
+    throw new CampoInvalido('telefono', 'Falta el `telefono`: es la identidad del chofer frente al bot de WhatsApp, y sin él no puede reportar un gasto.');
+  }
 
   const crudo: OperadorCrudo = {
     nombre,
-    telefono,
+    telefono: telefono ?? '',
     numeroEmpleado: texto(cuerpo, 'numeroEmpleado', { max: 40 }),
+    correo: texto(cuerpo, 'correo', { max: 254 }),
     rfc: texto(cuerpo, 'rfc', { max: 13 }),
     licencia: texto(cuerpo, 'licencia', { max: 40 }),
     licenciaTipo: texto(cuerpo, 'licenciaTipo', { max: 10 }),
     licenciaVence: texto(cuerpo, 'licenciaVence', { max: 10 }),
   };
   try {
-    return validarOperadorImportado(crudo, fila);
+    return validarOperadorImportado(crudo, fila, opciones);
   } catch (e) {
     // `validarOperadorImportado` es la MISMA validación que usa el panel y que
     // usa la importación por archivo. Su mensaje ya dice qué corregir; aquí
@@ -285,9 +290,11 @@ export async function POST(req: Request) {
   // puede señalar en su propio arreglo.
   const buenas: OperadorImportado[] = [];
   const errores: Array<{ fila: number; motivo: string }> = [];
+  // Flota con el desglose por correo: el teléfono deja de ser obligatorio (número de empleado + correo lo reemplazan). Fail-closed.
+  const opciones: OpcionesValidacionOperador = { sinTelefono: await permiteAltaSinTelefono(acceso.tenantId) };
   for (let i = 0; i < lote.filas.length; i++) {
     try {
-      buenas.push(normalizarOperador(lote.filas[i] as Record<string, unknown>, i + 1));
+      buenas.push(normalizarOperador(lote.filas[i] as Record<string, unknown>, i + 1, opciones));
     } catch (e) {
       // Los DOS errores que se le enseñan al integrador son los que se
       // escribieron para que alguien los lea, igual que en `validar()`:
@@ -346,7 +353,7 @@ export async function POST(req: Request) {
     // llaves del JSON en otro orden sigue siendo la misma operación, y un
     // `tenant_id` colado en el cuerpo no la cambia porque no entra aquí.
     huella: huella({
-      filas: buenas.map((f) => `${f.telefono}|${f.nombre}|${f.numeroEmpleado ?? ''}|${f.licencia ?? ''}|${f.licenciaVence ?? ''}`).join('\n'),
+      filas: buenas.map((f) => `${f.sinTelefono ? 'sin-tel' : f.telefono}|${f.nombre}|${f.numeroEmpleado ?? ''}|${f.licencia ?? ''}|${f.licenciaVence ?? ''}|${f.correo ?? ''}`).join('\n'),
       terminalId: terminalId ?? '',
       invalidas: errores.length,
       recibidas,

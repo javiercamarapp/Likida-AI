@@ -25,6 +25,7 @@ import { sufijoTenant } from '../sufijo';
 import { camposDeSufijo } from '../paginar-campos';
 import { sanearQ, type PaginaRegistroUI } from '../paginar-registro';
 import { VistaOperadores, type FilaOperador } from './vista';
+import { permiteAltaSinTelefono } from '@/lib/likida/operador_sin_telefono_canal';
 import type { ResultadoForma } from './forma';
 import type { ResultadoInvitar } from './invitaciones';
 
@@ -270,11 +271,18 @@ export default async function PaginaOperadores({
         nombre,
         telefono: String(fd.get('telefono') ?? ''),
         numeroEmpleado: String(fd.get('numeroEmpleado') ?? '') || undefined,
+        correo: String(fd.get('correo') ?? '') || undefined,
         // Un jefe con patio da de alta SIEMPRE en el suyo; el dueño, donde pida.
         terminalId: patioParaCrear(alcanceAccion, String(fd.get('terminalId') ?? '')),
       }, { id: s.userId });
       revalidatePath(RUTA);
-      return { ok: true, mensaje: `${nombre.trim()} quedó dado de alta. Cuando le escriba a Likida desde ese número, el bot ya lo reconoce.` };
+      const sinTel = String(fd.get('telefono') ?? '').trim() === '';
+      return {
+        ok: true,
+        mensaje: sinTel
+          ? `${nombre.trim()} quedó dado de alta sin WhatsApp: recibe su desglose en el correo que capturaste.`
+          : `${nombre.trim()} quedó dado de alta. Cuando le escriba a Likida desde ese número, el bot ya lo reconoce.`,
+      };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'dar de alta al operador') };
     }
@@ -320,6 +328,9 @@ export default async function PaginaOperadores({
     }
   }
 
+  // Flota con el desglose por correo (0932): el alta admite operadores sin WhatsApp (nº de empleado + correo).
+  const sinWhatsApp = puedeEditar ? await permiteAltaSinTelefono(tenantId) : false;
+
   return (
     <VistaOperadores
       filas={filas}
@@ -335,6 +346,7 @@ export default async function PaginaOperadores({
       patios={patios.map((p) => ({ id: p.id, nombre: p.nombre }))}
       patioDelJefe={patioDelJefe}
       altaOperador={altaOperador}
+      sinWhatsApp={sinWhatsApp}
       cargarOperadores={cargarOperadores}
       invitar={invitar}
       plantillaCsv={plantillaOperadoresCsv()}

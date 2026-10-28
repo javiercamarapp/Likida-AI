@@ -122,7 +122,8 @@ export function FormaOperador({ accion, operadorId, inicial, idPrefijo, patios =
             estar libre en la flota (`comprobarTelefonoLibre`). */}
         <div>
           <label htmlFor={campo('telefono')} className={ETIQUETA}>WhatsApp del operador</label>
-          <input id={campo('telefono')} name="telefono" type="tel" required maxLength={25}
+          {/* Un operador sin WhatsApp (desglose por correo, 0932) llega con el teléfono vacío: no se le exige uno al corregir otro dato. */}
+          <input id={campo('telefono')} name="telefono" type="tel" required={inicial.telefono !== ''} maxLength={25}
             defaultValue={inicial.telefono} placeholder="55 1234 5678"
             className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
           <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
@@ -226,8 +227,10 @@ export function FormaOperador({ accion, operadorId, inicial, idPrefijo, patios =
  * alta rápida vivía escondida en Despacho. Mismo `crearOperador` que Despacho y
  * que el importador: un teléfono que uno acepta, los otros también.
  */
-export function FormaAltaOperador({ accion, patios = [], terminalFijo = null }: {
+export function FormaAltaOperador({ accion, patios = [], terminalFijo = null, sinWhatsApp = false }: {
   accion: AccionForma;
+  /** La flota entrega el desglose por correo (0932): el WhatsApp es opcional y se pide el correo. */
+  sinWhatsApp?: boolean;
   patios?: PatioOpcion[];
   /** Un jefe con patio da de alta SOLO en el suyo (nombre del patio). */
   terminalFijo?: string | null;
@@ -242,18 +245,27 @@ export function FormaAltaOperador({ accion, patios = [], terminalFijo = null }: 
             autoComplete="off" className={CAMPO} style={{ background: 'var(--surface)' }} />
         </div>
         <div>
-          <label htmlFor="alta-op-telefono" className={ETIQUETA}>WhatsApp del operador</label>
-          <input id="alta-op-telefono" name="telefono" type="tel" required maxLength={25} autoComplete="off"
+          <label htmlFor="alta-op-telefono" className={ETIQUETA}>WhatsApp del operador{sinWhatsApp ? ' (opcional)' : ''}</label>
+          <input id="alta-op-telefono" name="telefono" type="tel" required={!sinWhatsApp} maxLength={25} autoComplete="off"
             placeholder="55 1234 5678" className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
           <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
-            Es con lo que el bot lo reconoce: desde este número tiene que escribirle a Likida.
+            {sinWhatsApp
+              ? 'Tu flota recibe el desglose por correo: sin WhatsApp, el operador necesita su nº de empleado y su correo.'
+              : 'Es con lo que el bot lo reconoce: desde este número tiene que escribirle a Likida.'}
           </p>
         </div>
         <div>
-          <label htmlFor="alta-op-empleado" className={ETIQUETA}>Nº de empleado (opcional)</label>
+          <label htmlFor="alta-op-empleado" className={ETIQUETA}>Nº de empleado{sinWhatsApp ? '' : ' (opcional)'}</label>
           <input id="alta-op-empleado" name="numeroEmpleado" type="text" maxLength={40}
             className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
         </div>
+        {sinWhatsApp && (
+          <div>
+            <label htmlFor="alta-op-correo" className={ETIQUETA}>Correo del operador</label>
+            <input id="alta-op-correo" name="correo" type="email" maxLength={254} autoComplete="off"
+              className={CAMPO} style={{ background: 'var(--surface)' }} />
+          </div>
+        )}
         {(patios.length > 0 || terminalFijo) && (
           <div>
             <label htmlFor="alta-op-patio" className={ETIQUETA}>Patio</label>
