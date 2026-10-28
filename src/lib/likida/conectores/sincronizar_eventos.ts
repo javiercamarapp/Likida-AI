@@ -33,6 +33,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { diaEnZona, TZ_MX } from '@/lib/formato';
 import { acotada } from '../presupuesto';
+import { PAGINA } from '../pg';
 import { descifrar } from './cofre';
 import { contextoCredencial } from './contexto_credencial';
 import { lectorEventosDe, LECTORES_EVENTOS, esEventoGrave, type EventoSeguridadLeido } from './eventos_seguridad';
@@ -150,6 +151,41 @@ interface DrenajeGraves {
 
 
 
+/** Marcas de actividad que, en un viaje cerrado sin `fecha_fin`, dicen hasta cuándo estuvo en marcha (0090, 0385, 0804). */
+const MARCAS_FIN_VIAJE = ['regreso_en', 'descarga_en', 'llegada_en', 'tms_llegada_en'] as const;
+const COLUMNAS_VIAJE_HISTORICO = `id, folio, unidad_id, operador_id, fecha_inicio, fecha_fin, aceptado_en, estatus, ${MARCAS_FIN_VIAJE.join(', ')}`;
+/** 20 páginas de 1,000: si una ventana necesita más, es una lectura que no se puede demostrar completa y se falla cerrado. */
+const MAX_PAGINAS_VIAJES_HISTORICOS = 20;
+const ESTATUS_VIAJE_VIVO = new Set(['abierto', 'en_cuadre']);
+
+interface ViajeHistorico {
+  id: unknown; folio: unknown; unidad_id: unknown; operador_id: unknown;
+  fecha_inicio: unknown; fecha_fin: unknown; aceptado_en: unknown; estatus?: unknown;
+  regreso_en?: unknown; descarga_en?: unknown; llegada_en?: unknown; tms_llegada_en?: unknown;
+}
+
+/**
+ * A39-S38-02. Hasta qué DÍA (zona del tenant, inclusive) cubre un viaje; `null` = sigue en marcha (sin fin).
+ * `fecha_fin` manda si existe. Como ningún flujo la escribe, un viaje abierto o en cuadre cubre sin fin y uno cerrado cubre hasta
+ * su última marca de actividad (regreso, descarga, llegada, llegada del TMS) o, sin marcas, solo su día de inicio: nunca «para
+ * siempre». Un viaje viejo liquidado del chofer A ya no «cubre» el evento de hoy de B (fail-open de privacidad), y los viajes
+ * históricos dejan de ser ambiguos entre sí.
+ */
+function finEfectivoDelViaje(v: ViajeHistorico, inicio: string, zona: string): string | null {
+  if (v.fecha_fin != null) return String(v.fecha_fin).slice(0, 10);
+  if (ESTATUS_VIAJE_VIVO.has(String(v.estatus))) return null;
+  let fin = inicio;
+  for (const marca of MARCAS_FIN_VIAJE) {
+    const valor = v[marca];
+    if (valor == null) continue;
+    const ms = Date.parse(String(valor));
+    if (!Number.isFinite(ms)) continue;
+    const dia = diaEnZona(new Date(ms), zona);
+    if (dia > fin) fin = dia;
+  }
+  return fin;
+}
+
 /**
  * Resuelve al conductor point-in-time. `estatus` no participa: un backfill
  * histórico casi siempre pertenece a un viaje ya liquidado. Cero o más de un
@@ -176,21 +212,43 @@ async function evaluarPrivacidadHistorica(
   const unidades = [...new Set(entradas.map((e) => e.unidadId))];
   const dias = entradas.map((e) => diaEnZona(new Date(e.evento.ocurridoEn), zonaHoraria)).sort();
   const maxOcurrido = entradas.map((e) => e.evento.ocurridoEn).sort().at(-1) as string;
-  const viajes: Array<{
-    id: unknown; folio: unknown; unidad_id: unknown; operador_id: unknown; fecha_inicio: unknown; fecha_fin: unknown; aceptado_en: unknown;
-  }> = [];
+  const viajes: ViajeHistorico[] = [];
+  // Cota inferior de las marcas de actividad (timestamptz): un día de margen por la zona del tenant; el filtro exacto es en código.
+  const desdeMarcas = new Date(Date.parse(`${dias[0]}T00:00:00Z`) - 36 * 3_600_000).toISOString();
   for (const tanda of enTandas(unidades, IDS_POR_CONSULTA)) {
-    const { data, error } = await acotada(
-      supabaseAdmin().from('viaje')
-        .select('id, folio, unidad_id, operador_id, fecha_inicio, fecha_fin, aceptado_en')
-        .eq('tenant_id', tenantId)
-        .in('unidad_id', tanda)
-        .or(`fecha_inicio.lte.${dias.at(-1)},and(fecha_inicio.is.null,aceptado_en.lte.${maxOcurrido})`)
-        .or(`fecha_fin.is.null,fecha_fin.gte.${dias[0]}`),
-      'eventos.privacidad_viajes_historicos',
-    );
-    if (error) return { porEvento, error: `no se pudo resolver el conductor histórico: ${error.message}` };
-    viajes.push(...((data ?? []) as typeof viajes));
+    // A39-S38-02: la lectura PAGINA y exige demostrar que trajo todo. PostgREST recorta en silencio a `max_rows` (1,000): un viaje
+    // correcto fuera del recorte hacía pasar el evento por «sin viaje» o, peor, por el viaje equivocado.
+    let leidas = 0;
+    for (let pagina = 0; ; pagina++) {
+      if (pagina >= MAX_PAGINAS_VIAJES_HISTORICOS) {
+        return { porEvento, error: 'no se pudo resolver el conductor histórico: demasiados viajes para la ventana' };
+      }
+      const { data, error, count } = await acotada(
+        supabaseAdmin().from('viaje')
+          .select(COLUMNAS_VIAJE_HISTORICO, { count: 'exact' })
+          .eq('tenant_id', tenantId)
+          .in('unidad_id', tanda)
+          .or(`fecha_inicio.lte.${dias.at(-1)},and(fecha_inicio.is.null,aceptado_en.lte.${maxOcurrido})`)
+          // A39-S38-02: `fecha_fin` NULL ya no significa «abierto para siempre» (ningún flujo la escribe): solo cubre quien sigue
+          // abierto/en cuadre, o cerró con actividad registrada dentro de la ventana, o es de la ventana por su inicio.
+          .or([
+            `fecha_fin.gte.${dias[0]}`,
+            'and(fecha_fin.is.null,estatus.in.(abierto,en_cuadre))',
+            ...MARCAS_FIN_VIAJE.map((m) => `and(fecha_fin.is.null,${m}.gte.${desdeMarcas})`),
+            `and(fecha_fin.is.null,fecha_inicio.gte.${dias[0]})`,
+            `and(fecha_fin.is.null,fecha_inicio.is.null,aceptado_en.gte.${desdeMarcas})`,
+          ].join(','))
+          .order('id')
+          .range(leidas, leidas + PAGINA - 1),
+        'eventos.privacidad_viajes_historicos',
+      );
+      if (error) return { porEvento, error: `no se pudo resolver el conductor histórico: ${error.message}` };
+      const filas = (data ?? []) as unknown as ViajeHistorico[];
+      viajes.push(...filas);
+      leidas += filas.length;
+      const completa = typeof count === 'number' ? leidas >= count : filas.length < PAGINA;
+      if (completa || filas.length === 0) break;
+    }
   }
 
   const operadores = [...new Set(viajes.map((v) => v.operador_id).filter(Boolean).map(String))];
@@ -211,11 +269,14 @@ async function evaluarPrivacidadHistorica(
 
   for (const entrada of entradas) {
     const dia = diaEnZona(new Date(entrada.evento.ocurridoEn), zonaHoraria);
-    const candidatos = viajes.filter((v) =>
-      String(v.unidad_id) === entrada.unidadId && v.operador_id != null &&
-      (v.fecha_inicio != null || v.aceptado_en != null) &&
-      (v.fecha_inicio != null ? String(v.fecha_inicio) : diaEnZona(new Date(String(v.aceptado_en)), zonaHoraria)) <= dia &&
-      (v.fecha_fin == null || String(v.fecha_fin) >= dia));
+    const candidatos = viajes.filter((v) => {
+      if (String(v.unidad_id) !== entrada.unidadId || v.operador_id == null) return false;
+      if (v.fecha_inicio == null && v.aceptado_en == null) return false;
+      const inicio = v.fecha_inicio != null ? String(v.fecha_inicio) : diaEnZona(new Date(String(v.aceptado_en)), zonaHoraria);
+      if (inicio > dia) return false;
+      const fin = finEfectivoDelViaje(v, inicio, zonaHoraria);
+      return fin === null || fin >= dia;
+    });
     if (candidatos.length === 0) {
       porEvento.set(entrada.evento.eventoId, { autorizado: false, motivo: 'sin_viaje_historico' });
       continue;
@@ -795,6 +856,7 @@ export async function sincronizarEventosDeFlota(
   // PostgREST recibe tandas: 5,000 eventos ya no son 5,000 round-trips. El
   // RETURNING permite contar sólo las filas insertadas; los duplicados de la
   // ventana quedan fuera por ignoreDuplicates.
+  const insertadosAhora = new Set<string>();
   for (const tanda of enTandas(filas, EVENTOS_POR_UPSERT)) {
     if (opciones.venceEn !== undefined && ahoraMs() >= opciones.venceEn) {
       return { ...base, backlog: true, error: 'quedaron eventos por guardar al vencer el presupuesto' };
@@ -812,6 +874,66 @@ export async function sincronizarEventosDeFlota(
       return { ...base, backlog: true, error: `no se pudo guardar una tanda de eventos: ${errIns.message}` };
     }
     base.guardados += (insertadas ?? []).length;
+    for (const f of (insertadas ?? []) as Array<{ evento_id_externo?: unknown }>) insertadosAhora.add(String(f.evento_id_externo));
+  }
+
+  // ── A39-S38-03: PROMOCIÓN de la fila mínima a completa ──────────────────────────────────────────
+  // La fila mínima ocupa la misma llave que la completa y el upsert con `ignoreDuplicates` no la reemplaza: un fallo transitorio
+  // de la consulta de privacidad (o un viaje asignado tarde) dejaba la ubicación, el video y la fuerza G ya autorizados perdidos
+  // para siempre mientras el sistema reportaba éxito. Ahora, si el evento ya está autorizado y su fila existente es mínima, se
+  // PROMUEVE (update condicionado a `privacidad_minima = true`, contando filas). No cambia `procesado_en`: la alerta mínima
+  // ya salió (o saldrá) una sola vez; promover no la repite.
+  const autorizadasExistentes = filas.filter((f) => f.privacidad_minima === false && !insertadosAhora.has(String(f.evento_id_externo)));
+  const promovidas = new Set<string>();
+  const sinConfirmarMinimo = new Set<string>(); // no se pudo saber si su fila es mínima
+  for (const tanda of enTandas(autorizadasExistentes, IDS_POR_CONSULTA)) {
+    if (opciones.venceEn !== undefined && ahoraMs() >= opciones.venceEn) {
+      base.backlog = true;
+      for (const f of tanda) sinConfirmarMinimo.add(String(f.evento_id_externo));
+      continue;
+    }
+    const ids = tanda.map((f) => String(f.evento_id_externo));
+    const { data: minimas, error: errMin } = await acotada(
+      supabaseAdmin().from('evento_seguridad_flota')
+        .select('evento_id_externo, privacidad_minima')
+        .eq('tenant_id', tenantId)
+        .eq('proveedor', conectorId)
+        .eq('privacidad_minima', true)
+        .in('evento_id_externo', ids),
+      'eventos.minimas_a_promover',
+    );
+    if (errMin) {
+      logger.warn('eventos.promocion_lectura_fallo', { tenantId, proveedor: conectorId, err: errMin.message });
+      base.backlog = true;
+      for (const id of ids) sinConfirmarMinimo.add(id);
+      continue;
+    }
+    const idsMinimas = new Set(((minimas ?? []) as Array<{ evento_id_externo?: unknown; privacidad_minima?: unknown }>)
+      .filter((m) => m.privacidad_minima === true).map((m) => String(m.evento_id_externo)));
+    for (const f of tanda) {
+      const id = String(f.evento_id_externo);
+      if (!idsMinimas.has(id)) continue;
+      const { tenant_id: _t, proveedor: _p, evento_id_externo: _e, ...completa } = f;
+      const { data: actualizadas, error: errProm } = await acotada(
+        supabaseAdmin().from('evento_seguridad_flota')
+          .update(completa)
+          .eq('tenant_id', tenantId)
+          .eq('proveedor', conectorId)
+          .eq('evento_id_externo', id)
+          .eq('privacidad_minima', true)
+          .select('id'),
+        'eventos.promover_minima',
+      );
+      if (errProm) {
+        logger.warn('eventos.promocion_fallo', { tenantId, proveedor: conectorId, err: errProm.message });
+        base.backlog = true;
+        sinConfirmarMinimo.add(id);
+      } else if (((actualizadas ?? []) as unknown[]).length > 0) {
+        promovidas.add(id);
+      } else {
+        sinConfirmarMinimo.add(id); // otro proceso la tocó entre la lectura y el update: se reintenta
+      }
+    }
   }
 
   // Una fila legacy con unidad_id=NULL ya ocupa la llave única. El upsert con
@@ -862,6 +984,9 @@ export async function sincronizarEventosDeFlota(
     const claims = recuperados.claims.get(e.eventoId) ?? [];
     if (error) {
       for (const claim of claims) await finalizarCuarentena(tenantId, conectorId, claim, false, error.message);
+    } else if (sinConfirmarMinimo.has(e.eventoId) && !promovidas.has(e.eventoId)) {
+      // A39-S38-03: la fila existente era (o podría ser) mínima y no se pudo promover: NO se da por reparada.
+      for (const claim of claims) await finalizarCuarentena(tenantId, conectorId, claim, false, 'la fila mínima no se pudo completar');
     } else {
       for (const claim of claims) await finalizarCuarentena(tenantId, conectorId, claim, true);
     }
