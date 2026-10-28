@@ -35,7 +35,7 @@ import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from '../cond
 import { matrizDeArchivoCatalogo } from './archivo';
 import { sumarMeses, limitesDelMes, mesAnterior, validarPeriodoDeclarado, type AnclaPeriodo } from './periodo';
 import { revisarDobleEntreArchivos, VENTANA_MESES_DEFAULT, type ArchivoPrevio, type ResultadoDobleEntreArchivos } from './doble_entre_archivos';
-import { parsearCasetasMatriz, coordenadaDeCelda, validarCoordenadasMexico, type CasetaCatalogo } from './casetas';
+import { parsearCasetasMatriz, coordenadaDeCelda, validarCoordenadasMexico, RADIO_DEFAULT_M, type CasetaCatalogo } from './casetas';
 import { parsearTarifasMatriz, planificarTarifa, type OrigenTarifa, type TarifaEntrada, type TarifaExistente } from './tarifario_archivo';
 import { parsearTagsMatriz, resolverUnidadesDeTags, validarBajaTag, type VigenciaTag } from './tags';
 import { parsearInmovilizadasMatriz, resolverUnidadesInmovilizadas, validarExcepcionUnidad, validarJustificacion, validarReglasFlota, type ReglasFlota } from './reglas_cobro_config';
@@ -286,6 +286,8 @@ export interface ResultadoImportacionCatalogo {
   actualizadas: number;
   rechazadas: Array<{ fila: number; motivo: string }>;
   error?: string;
+  /** Lo que la importación hizo ADEMÁS de guardar las filas (bajas, siniestros, casetas marcadas por pasada...): se dice, no se hace en silencio. */
+  notas?: string[];
 }
 
 export async function importarTagsArchivo(tenantId: string, nombre: string, buffer: Uint8Array): Promise<ResultadoImportacionCatalogo> {
@@ -320,8 +322,9 @@ export async function importarTagsArchivo(tenantId: string, nombre: string, buff
     logger.error('peajes.importar_tags_bajas', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
     return falla('No se pudo comprobar qué TAGs están dados de baja. Inténtalo de nuevo.');
   }
-  const altas = altasResueltas.filter((a) => !conBaja.has(a.tag));
-  const rechazadasPorBaja = altasResueltas.filter((a) => conBaja.has(a.tag))
+  // Una fila que el propio archivo declara en baja (estado = baja) no es una «reactivación»: es la baja otra vez (idempotente).
+  const altas = altasResueltas.filter((a) => !conBaja.has(a.tag) || a.estado === 'baja');
+  const rechazadasPorBaja = altasResueltas.filter((a) => conBaja.has(a.tag) && a.estado !== 'baja')
     .map((a) => ({ fila: a.fila, motivo: 'Este TAG está dado de baja: no se reactiva desde el archivo. Si de verdad volvió a operar, dalo de alta a mano en el catálogo.' }));
   const todasRechazadas = [...lectura.rechazadas, ...rechazadas, ...rechazadasPorBaja].sort((a, b) => a.fila - b.fila);
   if (altas.length === 0) return { ok: true, guardadas: 0, actualizadas: 0, rechazadas: todasRechazadas };
@@ -346,7 +349,7 @@ export async function importarTagsArchivo(tenantId: string, nombre: string, buff
       return { ok: false, guardadas, actualizadas, rechazadas: todasRechazadas, error: `Se guardaron ${guardadas} TAGs y el resto falló. Vuelve a subir el archivo: es seguro repetirlo.` };
     }
     // El importador reactiva (activo=true): un TAG que estaba de baja deja de estarlo.
-    const reactivadas = await quitarBajasDeTags(tenantId, lote.map((a) => a.tag));
+    const reactivadas = await quitarBajasDeTags(tenantId, lote.filter((a) => a.estado !== 'baja').map((a) => a.tag));
     if (!reactivadas.ok) return { ok: false, guardadas, actualizadas, rechazadas: todasRechazadas, error: reactivadas.motivo };
     for (const a of lote) {
       guardadas++;
@@ -354,7 +357,25 @@ export async function importarTagsArchivo(tenantId: string, nombre: string, buff
       if (previa !== undefined && previa !== a.unidadId) actualizadas++;
     }
   }
-  return { ok: true, guardadas, actualizadas, rechazadas: todasRechazadas };
+  // Lo que el maestro declara además del TAG ↔ unidad: bajas (peaje_tag_baja) y siniestros (ventana de unidad inmovilizada desde esa fecha).
+  const notas: string[] = [];
+  let bajas = 0;
+  let siniestros = 0;
+  for (const a of altas) {
+    if (a.estado === 'baja' && a.fechaEstado) {
+      const r = await altaBajaDeTag(tenantId, { tag: a.tagOriginal || a.tag, bajaEn: a.fechaEstado, motivo: 'baja declarada en el maestro de TAGs' });
+      if (r.ok) bajas++; else notas.push(`Fila ${a.fila}: no se pudo registrar la baja del TAG (${r.motivo})`);
+    } else if (a.estado === 'siniestrada' && a.fechaEstado) {
+      const { error } = await acotada(supabaseAdmin().from('peaje_unidad_inmovilizada').upsert({
+        tenant_id: tenantId, unidad_id: a.unidadId, desde: a.fechaEstado, hasta: null, motivo: 'siniestro', nota: 'declarada en el maestro de TAGs',
+      }, { onConflict: 'tenant_id,unidad_id,desde,motivo', ignoreDuplicates: true }), 'peajes.importar_tags_siniestro');
+      if (error) { logger.error('peajes.importar_tags_siniestro', { tenant: tenantId, err: error.message }); notas.push(`Fila ${a.fila}: no se pudo registrar el siniestro de la unidad.`); }
+      else siniestros++;
+    }
+  }
+  if (bajas > 0) notas.push(`${bajas} TAG(s) dados de baja con la fecha del archivo: los cruces posteriores se marcan como candidatos.`);
+  if (siniestros > 0) notas.push(`${siniestros} unidad(es) siniestrada(s) desde la fecha del archivo: sus cruces posteriores se marcan como críticos para validar.`);
+  return { ok: true, guardadas, actualizadas, rechazadas: todasRechazadas, ...(notas.length > 0 ? { notas } : {}) };
 }
 
 // ── Unidades inmovilizadas (taller / siniestro / baja, T-A2-36) ─────────────
@@ -462,19 +483,30 @@ export async function quitarInmovilizada(tenantId: string, id: string): Promise<
 }
 
 // ── Casetas ─────────────────────────────────────────────────────────────────
-export interface CasetaVista extends CasetaCatalogo { activa: boolean; fuente: string | null; /** La caseta cobra tarifa por pasada (0810): la clase 1 es normal ahí. */ porPasada: boolean }
+export interface CasetaVista extends CasetaCatalogo { activa: boolean; fuente: string | null; /** La caseta cobra tarifa por pasada (0810): la clase 1 es normal ahí. */ porPasada: boolean; /** Carretera o tramo (0935); null = sin dato o la columna aún no existe. */ carretera: string | null }
 
 export async function listarCasetas(tenantId: string, soloActivas = false): Promise<CasetaVista[]> {
-  const filas = await traerTodo<{ id: unknown; nombre: unknown; nombre_norm: unknown; alias: unknown; lat: unknown; lng: unknown; radio_m: unknown; activa: unknown; fuente: unknown; por_pasada?: unknown }>(
+  type Fila = { id: unknown; nombre: unknown; nombre_norm: unknown; alias: unknown; lat: unknown; lng: unknown; radio_m: unknown; activa: unknown; fuente: unknown; por_pasada?: unknown; carretera?: unknown };
+  const leer = (columnas: string) => traerTodo<Fila>(
     (d, h) => {
       let q = supabaseAdmin().from('peaje_caseta')
-        .select('id, nombre, nombre_norm, alias, lat, lng, radio_m, activa, fuente, por_pasada', conteo(d))
+        // `columnas` es una cadena dinámica (con y sin `carretera`): el tipo del cliente no puede analizarla, de ahí el '*'.
+        .select(columnas as '*', conteo(d))
         .eq('tenant_id', tenantId);
       if (soloActivas) q = q.eq('activa', true);
       return acotada(q.order('nombre').order('id').range(d, h), 'peajes.casetas');
     },
     'peajes.casetas',
   );
+  const BASE = 'id, nombre, nombre_norm, alias, lat, lng, radio_m, activa, fuente, por_pasada';
+  let filas: Fila[];
+  try {
+    filas = await leer(`${BASE}, carretera`);
+  } catch (e) {
+    // La columna `carretera` es de la migración 0935: si aún no está aplicada, el catálogo se lee igual (sin ella).
+    if (!/carretera/i.test(e instanceof Error ? e.message : String(e))) throw e;
+    filas = await leer(BASE);
+  }
   return filas.map((f) => ({
     id: String(f.id), nombre: String(f.nombre), nombreNorm: String(f.nombre_norm),
     alias: Array.isArray(f.alias) ? (f.alias as unknown[]).map(String) : [],
@@ -482,6 +514,7 @@ export async function listarCasetas(tenantId: string, soloActivas = false): Prom
     lng: f.lng === null || f.lng === undefined ? null : Number(f.lng),
     radioM: Number(f.radio_m),
     activa: f.activa !== false, fuente: (f.fuente as string | null) ?? null, porPasada: f.por_pasada === true,
+    carretera: typeof f.carretera === 'string' && f.carretera !== '' ? f.carretera : null,
   }));
 }
 
@@ -503,6 +536,7 @@ export async function importarCasetasArchivo(tenantId: string, nombre: string, b
   const porNorm = new Map(previas.map((c) => [c.nombreNorm, c]));
   let guardadas = 0;
   let actualizadas = 0;
+  let sinCarretera = false;
   for (const lote of lotes(lectura.casetas)) {
     // Las filas SIN coordenadas se escriben sin las llaves lat/lng: un archivo que solo trae nombres no debe
     // borrar las coordenadas que la flota ya había cargado de esa caseta.
@@ -514,16 +548,22 @@ export async function importarCasetasArchivo(tenantId: string, nombre: string, b
       ...(porNorm.has(c.nombreNorm) ? {} : { activa: true }),
       ...(c.lat !== null && c.lng !== null ? { lat: c.lat, lng: c.lng } : {}),
       ...(c.porPasada === undefined ? {} : { por_pasada: c.porPasada }),
+      ...(c.carretera === undefined ? {} : { carretera: c.carretera }),
     });
     let error = null as { message: string } | null;
     // Se agrupan por forma (con/sin coordenadas, con/sin por_pasada, existente/nueva) para que cada upsert lleve las mismas columnas.
     const grupos = new Map<string, typeof lote>();
     for (const c of lote) {
-      const k = `${c.lat !== null ? 'c' : 's'}${c.porPasada === undefined ? 'n' : 'p'}${porNorm.has(c.nombreNorm) ? 'e' : 'x'}`;
+      const k = `${c.lat !== null ? 'c' : 's'}${c.porPasada === undefined ? 'n' : 'p'}${c.carretera === undefined ? 'n' : 'r'}${porNorm.has(c.nombreNorm) ? 'e' : 'x'}`;
       grupos.set(k, [...(grupos.get(k) ?? []), c]);
     }
     for (const grupo of grupos.values()) {
-      const r = await acotada(supabaseAdmin().from('peaje_caseta').upsert(grupo.map(fila), { onConflict: 'tenant_id,nombre_norm' }), 'peajes.importar_casetas');
+      let r = await acotada(supabaseAdmin().from('peaje_caseta').upsert(grupo.map(fila), { onConflict: 'tenant_id,nombre_norm' }), 'peajes.importar_casetas');
+      // `carretera` es de la migración 0935: si aún no está aplicada, el catálogo se guarda sin ella (y se dice en las notas).
+      if (r.error && /carretera/i.test(r.error.message) && grupo.some((c) => c.carretera !== undefined)) {
+        sinCarretera = true;
+        r = await acotada(supabaseAdmin().from('peaje_caseta').upsert(grupo.map((c) => { const f: Record<string, unknown> = { ...fila(c) }; delete f.carretera; return f; }), { onConflict: 'tenant_id,nombre_norm' }), 'peajes.importar_casetas');
+      }
       if (r.error) { error = r.error; break; }
     }
     if (error) {
@@ -536,7 +576,10 @@ export async function importarCasetasArchivo(tenantId: string, nombre: string, b
       if (p && ((c.lat !== null && (p.lat !== c.lat || p.lng !== c.lng)) || p.radioM !== c.radioM)) actualizadas++;
     }
   }
-  return { ok: true, guardadas, actualizadas, rechazadas: lectura.rechazadas };
+  return {
+    ok: true, guardadas, actualizadas, rechazadas: lectura.rechazadas,
+    ...(sinCarretera ? { notas: ['La columna «carretera» no se guardó: la base aún no la tiene (migración pendiente). El resto del catálogo sí.'] } : {}),
+  };
 }
 
 export async function cambiarEstadoCaseta(tenantId: string, casetaId: string, activa: boolean): Promise<boolean> {
@@ -698,7 +741,40 @@ export async function importarTarifasArchivo(
       return { ok: false, guardadas: 0, actualizadas: 0, rechazadas, error: 'No se pudo guardar el tarifario y no se aplicó ninguna fila de este lote. Vuelve a subir el archivo: es seguro repetirlo.' };
     }
   }
-  return { ok: true, guardadas, actualizadas, rechazadas };
+  // «Cobra por pasada (si)»: la caseta se marca por pasada en el catálogo (la clase 1 es normal ahí). «no» o vacío no desmarca nada.
+  const notas: string[] = [];
+  const pasada = [...new Map(lectura.tarifas.filter((t) => t.porPasada === true).map((t) => [t.casetaNorm, t.caseta])).entries()];
+  if (pasada.length > 0) {
+    const r = await marcarCasetasPorPasada(tenantId, pasada.map(([, nombre]) => nombre));
+    notas.push(r.ok ? `${r.marcadas} caseta(s) marcadas «por pasada» en el catálogo (la clase 1 deja de ser un candidato ahí).` : `No se pudieron marcar las casetas por pasada: ${r.motivo}`);
+  }
+  return { ok: true, guardadas, actualizadas, rechazadas, ...(notas.length > 0 ? { notas } : {}) };
+}
+
+/** Marca (o crea) casetas del catálogo como «por pasada». Repetirlo es seguro; una caseta existente conserva su `activa`, sus coordenadas y su radio. */
+export async function marcarCasetasPorPasada(tenantId: string, nombres: readonly string[]): Promise<{ ok: true; marcadas: number } | { ok: false; motivo: string }> {
+  const limpios = [...new Map(nombres.map((n) => [normalizarNombre(n), n.trim().replace(/\s+/g, ' ')] as const).filter(([norm, n]) => norm && n.length <= 120)).entries()];
+  if (limpios.length === 0) return { ok: true, marcadas: 0 };
+  let previas: CasetaVista[];
+  try { previas = await listarCasetas(tenantId); } catch (e) {
+    logger.error('peajes.marcar_por_pasada_lectura', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, motivo: 'No se pudo leer el catálogo de casetas.' };
+  }
+  const existentes = new Set(previas.map((c) => c.nombreNorm));
+  for (const lote of lotes(limpios)) {
+    const filas = lote.map(([norm, nombre]) => ({
+      tenant_id: tenantId, nombre, nombre_norm: norm, por_pasada: true,
+      ...(existentes.has(norm) ? {} : { activa: true, alias: [], radio_m: RADIO_DEFAULT_M, fuente: 'tarifario (cobra por pasada)' }),
+    }));
+    const nuevas = filas.filter((f) => !existentes.has(f.nombre_norm));
+    const viejas = filas.filter((f) => existentes.has(f.nombre_norm));
+    for (const grupo of [nuevas, viejas]) {
+      if (grupo.length === 0) continue;
+      const { error } = await acotada(supabaseAdmin().from('peaje_caseta').upsert(grupo, { onConflict: 'tenant_id,nombre_norm' }), 'peajes.marcar_por_pasada');
+      if (error) { logger.error('peajes.marcar_por_pasada', { tenant: tenantId, err: error.message }); return { ok: false, motivo: 'No se pudo guardar.' }; }
+    }
+  }
+  return { ok: true, marcadas: limpios.length };
 }
 
 // ── Geocercas (la tabla de la 0050; nadie creaba filas) ─────────────────────
@@ -3344,7 +3420,7 @@ export async function vincularDesglose(
 
     const leerLineas = (columnas: string) => traerTodo<Record<string, unknown>>(
       (d, h) => acotada(supabaseAdmin().from('desglose_peaje_linea')
-        .select(columnas, conteo(d))
+        .select(columnas as '*', conteo(d))
         .eq('tenant_id', tenantId).eq('desglose_id', desgloseId).order('indice').range(d, h), 'peajes.vinculos.lineas'),
       'peajes.vinculos.lineas',
     );

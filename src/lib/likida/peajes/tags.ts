@@ -1,5 +1,5 @@
-import { normalizarNombre, normalizarTag, type Celda } from './formatos';
-import { TIPOS_UNIDAD_PEAJE, type TipoUnidadPeaje } from './reglas_cobro';
+import { normalizarNombre, normalizarEncabezado, normalizarTag, fechaHoraDeCelda, esFilaDeEjemplo, FILA_DE_EJEMPLO, type Celda } from './formatos';
+import type { TipoUnidadPeaje } from './reglas_cobro';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TAG ↔ UNIDAD — alta masiva por CSV.
@@ -22,6 +22,13 @@ import { TIPOS_UNIDAD_PEAJE, type TipoUnidadPeaje } from './reglas_cobro';
 
 export const TOPE_TAGS_IMPORTACION = 5_000;
 
+/** La fecha de una celda como AAAA-MM-DD (ISO, dd/mm/aaaa, serial de Excel), o '' si no se lee. */
+function fechaDeCeldaEstado(v: Celda): string {
+  const crudo = String(v ?? '').trim();
+  if (FECHA_ISO_ESTADO.test(crudo)) return fechaHoraDeCelda(crudo).fecha ?? '';
+  return fechaHoraDeCelda(v).fecha ?? '';
+}
+
 export interface TagImportado {
   fila: number;
   tag: string;
@@ -30,7 +37,13 @@ export interface TagImportado {
   proveedor: string | null;
   /** Tipo de unidad declarado en el CSV; AUSENTE = la columna no viene o la celda está vacía (sin tipo de unidad). */
   tipoUnidad?: TipoUnidadPeaje;
+  /** Estado declarado en el maestro: `baja` (el TAG se dio de baja) o `siniestrada` (la unidad se siniestró). AUSENTE = activo o sin columna. */
+  estado?: EstadoTagMaestro;
+  /** Fecha (AAAA-MM-DD) de la baja o del siniestro; siempre presente cuando hay `estado`. */
+  fechaEstado?: string;
 }
+
+export type EstadoTagMaestro = 'baja' | 'siniestrada';
 
 export interface LecturaTags {
   tags: TagImportado[];
@@ -38,17 +51,26 @@ export interface LecturaTags {
   error?: string;
 }
 
-const COLS: Record<'tag' | 'unidad' | 'proveedor' | 'tipo', string[]> = {
+const COLS: Record<'tag' | 'unidad' | 'proveedor' | 'tipo' | 'estado' | 'fechaEstado', string[]> = {
   tag: ['tag', 'no tag', 'no. tag', 'numero de tag', 'id tag', 'dispositivo', 'telepeaje', 'etiqueta'],
   unidad: ['unidad', 'economico', 'numero economico', 'no economico', 'no. economico', 'numero_economico', 'placas', 'placa', 'camion'],
-  proveedor: ['proveedor', 'emisor', 'operador de telepeaje'],
+  proveedor: ['proveedor', 'emisor', 'operador de telepeaje', 'proveedor del tag'],
   tipo: ['tipo', 'tipo de unidad', 'tipo unidad', 'tipo_unidad'],
+  estado: ['estado', 'estatus', 'status', 'estado del tag'],
+  fechaEstado: ['fecha de baja o siniestro', 'fecha de baja', 'fecha de siniestro', 'fecha baja', 'fecha siniestro', 'fecha del estado'],
 };
+
+/** Lo que el cliente escribe en «tipo de unidad» → el tipo del sistema. «camioneta» es el utilitario; nada más se adivina. */
+const ALIAS_TIPO: Record<string, TipoUnidadPeaje> = { tracto: 'tracto', tractocamion: 'tracto', utilitario: 'utilitario', camioneta: 'utilitario' };
+const ALIAS_ESTADO: Record<string, EstadoTagMaestro | 'activo'> = {
+  activo: 'activo', activa: 'activo', vigente: 'activo', baja: 'baja', 'de baja': 'baja', siniestrada: 'siniestrada', siniestrado: 'siniestrada', siniestro: 'siniestrada',
+};
+const FECHA_ISO_ESTADO = /^\d{4}-\d{2}-\d{2}$/;
 
 export function parsearTagsMatriz(matriz: Celda[][]): LecturaTags {
   const vacio: LecturaTags = { tags: [], rechazadas: [] };
   if (matriz.length === 0) return { ...vacio, error: 'El archivo está vacío.' };
-  const enc = matriz[0].map(normalizarNombre);
+  const enc = matriz[0].map(normalizarEncabezado);
   const idx: Partial<Record<keyof typeof COLS, number>> = {};
   for (const k of Object.keys(COLS) as Array<keyof typeof COLS>) {
     const i = enc.findIndex((e) => COLS[k].includes(e));
@@ -59,7 +81,7 @@ export function parsearTagsMatriz(matriz: Celda[][]): LecturaTags {
     return {
       ...vacio,
       error: `Faltan columnas: ${faltan.join(', ')}. Encabezados leídos: ${matriz[0].map((c) => `«${String(c ?? '').trim()}»`).join(', ')}. `
-        + 'El CSV necesita: tag y unidad (número económico o placas); proveedor y tipo (tracto o utilitario) son opcionales.',
+        + 'El CSV necesita: tag y unidad (número económico o placas); proveedor, tipo (tracto o camioneta/utilitario), estado (activo, baja o siniestrada) y la fecha de baja o siniestro son opcionales.',
     };
   }
   if (matriz.length - 1 > TOPE_TAGS_IMPORTACION) {
@@ -73,6 +95,7 @@ export function parsearTagsMatriz(matriz: Celda[][]): LecturaTags {
     if (!fila || fila.every((c) => String(c ?? '').trim() === '')) continue;
     const n = f + 1;
     const tagOriginal = String(fila[idx.tag as number] ?? '').trim();
+    if (esFilaDeEjemplo(tagOriginal)) { rechazadas.push({ fila: n, motivo: FILA_DE_EJEMPLO }); continue; }
     const tag = normalizarTag(tagOriginal);
     if (!tag) { rechazadas.push({ fila: n, motivo: 'el TAG está vacío o no es un identificador válido (4 a 40 letras/dígitos)' }); continue; }
     const unidadRef = String(fila[idx.unidad as number] ?? '').trim();
@@ -82,13 +105,28 @@ export function parsearTagsMatriz(matriz: Celda[][]): LecturaTags {
     if (idx.tipo !== undefined) {
       const crudo = String(fila[idx.tipo] ?? '').trim();
       if (crudo !== '') {
-        const norm = normalizarNombre(crudo);
-        const valido = TIPOS_UNIDAD_PEAJE.find((t) => t === norm);
-        if (!valido) { rechazadas.push({ fila: n, motivo: `el tipo de unidad «${crudo.slice(0, 40)}» no es válido: usa «tracto» o «utilitario» (o deja la celda vacía)` }); continue; }
+        const valido = ALIAS_TIPO[normalizarNombre(crudo)];
+        if (!valido) { rechazadas.push({ fila: n, motivo: `el tipo de unidad «${crudo.slice(0, 40)}» no es válido: usa «tracto» o «camioneta» (utilitario), o deja la celda vacía` }); continue; }
         tipoUnidad = valido;
       }
     }
-    tags.push({ fila: n, tag, tagOriginal: tagOriginal.slice(0, 60), unidadRef, proveedor, ...(tipoUnidad ? { tipoUnidad } : {}) });
+    // Estado del maestro (activo | baja | siniestrada) y su fecha: una baja o un siniestro SIN fecha legible se rechaza (no se adivina desde cuándo).
+    let estado: EstadoTagMaestro | undefined;
+    let fechaEstado: string | undefined;
+    if (idx.estado !== undefined) {
+      const crudo = String(fila[idx.estado] ?? '').trim();
+      if (crudo !== '') {
+        const e = ALIAS_ESTADO[normalizarNombre(crudo)];
+        if (!e) { rechazadas.push({ fila: n, motivo: `el estado «${crudo.slice(0, 40)}» no es válido: usa «activo», «baja» o «siniestrada» (o deja la celda vacía)` }); continue; }
+        if (e !== 'activo') {
+          const f = idx.fechaEstado === undefined ? '' : fechaDeCeldaEstado(fila[idx.fechaEstado]);
+          if (!f) { rechazadas.push({ fila: n, motivo: `el TAG está «${e}» pero falta la fecha de ${e === 'baja' ? 'la baja' : 'el siniestro'} (AAAA-MM-DD): no se adivina desde cuándo` }); continue; }
+          estado = e;
+          fechaEstado = f;
+        }
+      }
+    }
+    tags.push({ fila: n, tag, tagOriginal: tagOriginal.slice(0, 60), unidadRef, proveedor, ...(tipoUnidad ? { tipoUnidad } : {}), ...(estado && fechaEstado ? { estado, fechaEstado } : {}) });
   }
 
   // Un mismo TAG con dos unidades distintas dentro del archivo: se rechazan las

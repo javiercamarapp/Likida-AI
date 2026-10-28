@@ -39,6 +39,14 @@ begin
     raise exception '0935: el origen del periodo admitió un valor inventado';
   exception when check_violation then null; end;
 
+  -- La carretera de la caseta: opcional, hasta 120 caracteres
+  insert into public.peaje_caseta (tenant_id, nombre, nombre_norm, carretera) values (A, 'Caseta A', 'caseta a', 'Autopista Ejemplo');
+  insert into public.peaje_caseta (tenant_id, nombre, nombre_norm) values (A, 'Caseta B', 'caseta b');
+  begin
+    insert into public.peaje_caseta (tenant_id, nombre, nombre_norm, carretera) values (A, 'Caseta C', 'caseta c', repeat('x', 121));
+    raise exception '0935: la carretera admitió más de 120 caracteres';
+  exception when check_violation then null; end;
+
   -- El índice parcial existe y solo cubre las líneas con Icident.
   select count(*) into n from pg_indexes
    where schemaname = 'public' and indexname = 'desglose_peaje_linea_icident_idx' and indexdef ilike '%where (icident is not null)%';

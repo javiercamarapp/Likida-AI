@@ -378,10 +378,11 @@ function SeccionTags({ tags, unidades, acciones }: { tags: TagVista[] | null; un
 function SeccionCasetas({ casetas, acciones }: { casetas: CasetaVista[] | null; acciones: AccionesConfiguracion }) {
   return (
     <section className="card p-4" id="casetas">
-      <Titulo t="Catálogo de casetas con coordenadas"
-        nota={<>Dónde queda cada caseta, para validar con el GPS que la unidad estuvo ahí a la hora del cobro (distancia Haversine). <b>Nace vacío a propósito</b>:
-          Likida no inventa coordenadas — cárgalas con tu propio CSV <span className="cifra-mono">nombre; lat; lng; radio_m; alias; fuente</span> (grados decimales; radio de 50 a 5,000 m, 300 si lo omites;
-          alias separados por «|»). Volver a cargar una caseta con el mismo nombre actualiza sus coordenadas.</>} />
+      <Titulo t="Catálogo de casetas"
+        nota={<>Las casetas por NOMBRE (lo único obligatorio), con opcionalmente su carretera, si <b>cobra por pasada</b> (la clase 1 es normal ahí) y sus coordenadas, para validar con el GPS que la unidad estuvo ahí a la hora del cobro
+          (distancia Haversine). <b>Nace vacío a propósito</b>: Likida no inventa coordenadas. Acepta la plantilla del catálogo tal cual (sus encabezados largos) o un CSV
+          <span className="cifra-mono"> nombre; carretera; por pasada; lat; lng; radio_m; alias; fuente</span> (grados decimales; radio de 50 a 5,000 m, 300 si lo omites;
+          alias separados por «|»). Volver a cargar una caseta con el mismo nombre actualiza sus datos; las columnas que no traiga el archivo no se tocan.</>} />
       <SubirCsv accion={acciones.importarCasetas} etiqueta="CSV de casetas"
         extra={<input name="fuente" placeholder="Fuente de las coordenadas" aria-label="Fuente de las coordenadas" maxLength={200} className={`${CSS_INPUT} w-[230px]`} style={ESTILO_INPUT} />} />
       {casetas === null ? <NoSePudoLeer que="las casetas" /> : casetas.length === 0 ? (
@@ -395,6 +396,8 @@ function SeccionCasetas({ casetas, acciones }: { casetas: CasetaVista[] | null; 
             <div key={c.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12.5px]" style={c.activa ? undefined : { opacity: 0.55 }}>
               <span className="font-medium">{c.nombre}</span>
               <span className="cifra-mono text-[11.5px]" style={{ color: 'var(--muted)' }}>{c.lat !== null && c.lng !== null ? `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)} · ${c.radioM} m` : 'sin coordenadas · solo por nombre'}</span>
+              {c.carretera && <span className="text-[11px]" style={{ color: 'var(--muted)' }}>{c.carretera}</span>}
+              {c.porPasada && <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ color: 'var(--ok)', background: 'var(--okbg)' }}>por pasada</span>}
               {c.fuente && <span className="text-[11px]" style={{ color: 'var(--faint)' }}>{c.fuente}</span>}
               <form action={acciones.estadoCaseta} className="ml-auto">
                 <input type="hidden" name="caseta" value={c.id} />

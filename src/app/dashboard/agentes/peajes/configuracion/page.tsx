@@ -86,6 +86,7 @@ function resumenImportacion(r: ResultadoImportacionCatalogo, singular: string): 
   if (r.error) return `error:${r.error}`;
   const partes = [`${r.guardadas} ${singular} guardados`];
   if (r.actualizadas > 0) partes.push(`${r.actualizadas} cambiaron algo ya existente`);
+  if (r.notas && r.notas.length > 0) partes.push(r.notas.join(' '));
   if (r.rechazadas.length > 0) {
     const ej = r.rechazadas.slice(0, 5).map((x) => `fila ${x.fila}: ${x.motivo}`).join('; ');
     partes.push(`${r.rechazadas.length} filas rechazadas (${ej}${r.rechazadas.length > 5 ? '…' : ''})`);

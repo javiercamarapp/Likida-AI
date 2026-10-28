@@ -13,12 +13,18 @@
 -- decenas desde otro archivo de la flota) y 'decena_dominante' (la decena donde cae casi todo el archivo). Los valores
 -- viejos siguen valiendo. Es un DROP + ADD de un CHECK (se valida contra las filas existentes: solo traen los dos valores viejos).
 --
+-- Y agrega `peaje_caseta.carretera` (texto libre, opcional): la columna «carretera o tramo» de la plantilla del catálogo de
+-- casetas que se le manda al cliente; el importador la guarda y la pantalla la muestra.
+--
 -- ADITIVA e IDEMPOTENTE: una columna nullable sin default (solo metadatos), un
 -- CHECK de largo y un índice parcial. La tabla ya tiene RLS prendida sin
 -- políticas (deny-all) y sus grants (0775): no crea tablas, no abre nada.
 -- Rango asignado a A2 ola 1: 0935–0937.
 --
--- REVERSA (documentada, NO ejecutada; antes de volver al CHECK viejo hay que pasar a NULL los orígenes inferidos):
+-- REVERSA (documentada, NO ejecutada):
+--   alter table public.peaje_caseta drop constraint if exists peaje_caseta_carretera_larga;
+--   alter table public.peaje_caseta drop column if exists carretera;
+-- (y, antes de volver al CHECK viejo hay que pasar a NULL los orígenes inferidos):
 --   update public.desglose_peaje set periodo_origen = null, periodo_oficial_desde = null, periodo_oficial_hasta = null
 --    where periodo_origen in ('no_periodo', 'decena_dominante');
 --   alter table public.desglose_peaje drop constraint if exists desglose_peaje_periodo_origen_dominio;
@@ -68,3 +74,18 @@ end $$;
 
 comment on column public.desglose_peaje.periodo_origen is
   'De dónde salió el periodo oficial: declarado (la persona), nombre_archivo, o INFERIDO por el sistema: no_periodo (contando decenas desde otro archivo de la flota) o decena_dominante (la decena donde cae casi todo el archivo). Los inferidos se rotulan y se pueden corregir declarando el periodo.';
+
+-- La carretera o tramo de la caseta (texto libre, hasta 120 caracteres, como el nombre).
+alter table public.peaje_caseta
+  add column if not exists carretera text;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'peaje_caseta_carretera_larga' and conrelid = 'public.peaje_caseta'::regclass) then
+    alter table public.peaje_caseta
+      add constraint peaje_caseta_carretera_larga check (carretera is null or char_length(carretera) <= 120);
+  end if;
+end $$;
+
+comment on column public.peaje_caseta.carretera is
+  'Carretera o tramo donde está la caseta (texto libre, opcional): la columna «carretera o tramo» de la plantilla del catálogo (0935). NULL = sin dato.';
