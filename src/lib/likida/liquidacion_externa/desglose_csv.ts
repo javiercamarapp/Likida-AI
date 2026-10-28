@@ -9,7 +9,11 @@
 // mayúsculas, acentos ni separadores); cuando llegue el archivo real se agrega una línea en ALIAS, nada más.
 //
 // Columnas (`;` `,` o tab; con `;` el decimal puede ser coma):
-//   terminal  bitacora*  poliza  numero_empleado*  unidad  desde*  hasta*  dias  tipo*  concepto*  monto*  vale  neto  tipo_operador
+//   terminal  bitacora*  numero_liquidacion  numero_pago  poliza  numero_empleado*  unidad  desde*  hasta*  dias  tipo*  concepto*
+//   monto*  vale  neto  tipo_operador
+//   · con `numero_liquidacion` la liquidación es por UNIDAD: las bitácoras que comparten ese número (en la misma terminal) salen
+//     como UN desglose (`bitacoras[]`, clave `LIQ-…`), con los renglones de todas; si sus unidades difieren, no entra (sin
+//     adivinar). Sin ese número cada bitácora es un desglose, como antes. El número de pago es solo del encabezado.
 //   · `tipo`: percepcion | deduccion, o cargo (= percepción) | abono (= deducción), regla del cliente.
 //   · fechas: AAAA-MM-DD, DD/MM/AAAA o número de serie de Excel.
 //   · los campos del ENCABEZADO (póliza, empleado, unidad, fechas, días, neto, tipo de operador) se toman de la primera fila
@@ -25,7 +29,7 @@ import { matrizDeArchivoCatalogo } from '../peajes/archivo';
 import { decodificarTexto } from '../peajes/csv';
 import { fechaDeCelda } from './liquidacion_csv';
 import {
-  TIPOS_OPERADOR, claveDeBitacora, validarDesgloseBitacora,
+  TIPOS_OPERADOR, claveDeBitacora, claveDeLiquidacion, validarDesgloseBitacora,
   type DesgloseBitacora, type RenglonBitacora, type TipoOperadorDesglose,
 } from './desglose_contrato';
 import type { ResultadoDesglose } from './desglose_recibir';
@@ -35,6 +39,8 @@ export const MAX_BITACORAS_POR_ARCHIVO = 300;
 const ALIAS: Record<string, string[]> = {
   terminal: ['terminal', 'sucursal', 'plaza'],
   bitacora: ['bitacora', 'no_bitacora', 'num_bitacora', 'folio_bitacora'],
+  numeroLiquidacion: ['numero_liquidacion', 'no_liquidacion', 'num_liquidacion', 'folio_liquidacion', 'liquidacion'],
+  numeroPago: ['numero_pago', 'no_pago', 'num_pago', 'folio_pago', 'pago'],
   poliza: ['poliza', 'no_poliza', 'num_poliza'],
   empleado: ['numero_empleado', 'no_empleado', 'num_empleado', 'empleado', 'clave_operador'],
   unidad: ['unidad', 'economico', 'no_unidad', 'tractor'],
@@ -106,41 +112,71 @@ export function desglosesDeMatriz(matriz: readonly (readonly string[])[], decima
 
   const celda = (c: readonly string[], k: string): string => (ix[k] >= 0 ? String(c[ix[k]] ?? '').trim() : '');
   const problemas: ProblemaDesgloseCsv[] = [];
-  const grupos = new Map<string, { terminal: string; bitacora: string; filas: FilaGrupo[] }>();
+  interface Grupo { terminal: string; bitacora: string; numeroLiquidacion: string; filas: FilaGrupo[] }
+  const filasLeidas: Array<{ terminal: string; bitacora: string; reg: FilaGrupo }> = [];
   matriz.slice(1).forEach((fila, k) => {
     const c = fila.map((x) => String(x ?? ''));
     const nFila = k + 2;
     const bitacora = celda(c, 'bitacora');
     if (!bitacora) return void problemas.push({ clave: null, fila: nFila, motivo: 'fila sin bitácora' });
-    const terminal = celda(c, 'terminal');
-    const id = `${terminal}\u0000${bitacora}`;
-    (grupos.get(id) ?? grupos.set(id, { terminal, bitacora, filas: [] }).get(id)!).filas.push({ fila: nFila, c });
+    filasLeidas.push({ terminal: celda(c, 'terminal'), bitacora, reg: { fila: nFila, c } });
   });
+
+  // Número de liquidación por (terminal, bitácora): la primera fila que lo trae; las demás filas de esa bitácora lo heredan
+  // (una celda en blanco no la saca de su liquidación). Dos números distintos para la misma bitácora: no se adivina.
+  const liqDeBitacora = new Map<string, string>();
+  const bitacorasEnConflicto = new Set<string>();
+  for (const { terminal, bitacora, reg } of filasLeidas) {
+    const n = celda(reg.c, 'numeroLiquidacion');
+    if (n === '') continue;
+    const id = `${terminal}\u0000${bitacora}`;
+    const previo = liqDeBitacora.get(id);
+    if (previo === undefined) liqDeBitacora.set(id, n);
+    else if (previo !== n && !bitacorasEnConflicto.has(id)) {
+      bitacorasEnConflicto.add(id);
+      problemas.push({ clave: claveDeBitacora(terminal || undefined, bitacora), fila: reg.fila, motivo: 'la columna numero_liquidacion trae valores distintos en la misma bitácora' });
+    }
+  }
+
+  const grupos = new Map<string, Grupo>();
+  for (const { terminal, bitacora, reg } of filasLeidas) {
+    const idB = `${terminal}\u0000${bitacora}`;
+    if (bitacorasEnConflicto.has(idB)) continue;
+    const numeroLiquidacion = liqDeBitacora.get(idB) ?? '';
+    const id = numeroLiquidacion ? `L\u0000${terminal}\u0000${numeroLiquidacion}` : `B\u0000${idB}`;
+    (grupos.get(id) ?? grupos.set(id, { terminal, bitacora, numeroLiquidacion, filas: [] }).get(id)!).filas.push(reg);
+  }
 
   const desgloses: DesgloseBitacora[] = [];
   const excepciones: ResultadoDesglosesCsv['excepciones'] = [];
   let renglonesEnCero = 0;
 
   for (const g of grupos.values()) {
-    const clave = claveDeBitacora(g.terminal || undefined, g.bitacora);
+    const clave = g.numeroLiquidacion ? claveDeLiquidacion(g.terminal || undefined, g.numeroLiquidacion) : claveDeBitacora(g.terminal || undefined, g.bitacora);
     let ok = true;
     const err = (motivo: string, fila: number | null = g.filas[0].fila) => { problemas.push({ clave, fila, motivo }); ok = false; };
 
     // Campos del encabezado: la primera fila que los trae; valores distintos entre filas = error (jamás se adivina).
-    const encabezado = (k: string, normal: (v: string) => string = (v) => v): string => {
+    const encabezado = (k: string, normal: (v: string) => string = (v) => v, filas: readonly FilaGrupo[] = g.filas): string => {
       let visto: string | null = null;
-      for (const { fila, c } of g.filas) {
+      for (const { fila, c } of filas) {
         const v = celda(c, k);
         if (v === '') continue;
         const n = normal(v);
         if (visto === null) visto = n;
-        else if (visto !== n) { err(`la columna ${ALIAS[k][0]} trae valores distintos en la misma bitácora`, fila); break; }
+        else if (visto !== n) { err(`la columna ${ALIAS[k][0]} trae valores distintos en la misma ${filas === g.filas && g.numeroLiquidacion ? 'liquidación' : 'bitácora'}`, fila); break; }
       }
       return visto ?? '';
     };
+    // Las bitácoras del grupo en orden de aparición, cada una con SU unidad (la liquidación es por unidad).
+    const folios: string[] = [];
+    for (const { c } of g.filas) { const b = celda(c, 'bitacora'); if (!folios.includes(b)) folios.push(b); }
+    const porBitacora = folios.map((b) => ({ bitacora: b, unidad: encabezado('unidad', (v) => v, g.filas.filter(({ c }) => celda(c, 'bitacora') === b)) }));
+    const numeroLiquidacion = g.numeroLiquidacion;
+    const numeroPago = encabezado('numeroPago');
     const empleado = encabezado('empleado');
     const poliza = encabezado('poliza');
-    const unidad = encabezado('unidad');
+    const unidad = porBitacora.find((b) => b.unidad !== '')?.unidad ?? '';
     const desdeT = encabezado('desde', (v) => fechaDeDesglose(v) ?? v);
     const hastaT = encabezado('hasta', (v) => fechaDeDesglose(v) ?? v);
     const diasT = encabezado('dias');
@@ -187,6 +223,9 @@ export function desglosesDeMatriz(matriz: readonly (readonly string[])[], decima
       const d = validarDesgloseBitacora({
         ...(g.terminal ? { terminal: g.terminal } : {}),
         bitacora: g.bitacora,
+        ...(numeroLiquidacion ? { numeroLiquidacion } : {}),
+        ...(numeroPago ? { numeroPago } : {}),
+        ...(numeroLiquidacion && folios.length > 1 ? { bitacoras: porBitacora.map((b) => ({ bitacora: b.bitacora, ...(b.unidad ? { unidad: b.unidad } : {}) })) } : {}),
         poliza: poliza || null,
         operador: { numeroEmpleado: empleado },
         ...(unidad ? { unidad } : {}),
@@ -264,7 +303,7 @@ export async function importarDesglosesDeArchivo(
     ...base, excepciones: [...lectura.excepciones], problemas: [...lectura.problemas], renglonesEnCero: lectura.renglonesEnCero,
   };
   for (const d of lectura.desgloses) {
-    const clave = claveDeBitacora(d.terminal, d.bitacora);
+    const clave = d.numeroLiquidacion ? claveDeLiquidacion(d.terminal, d.numeroLiquidacion) : claveDeBitacora(d.terminal, d.bitacora);
     try {
       const r = await deps.recibir(tenantId, d);
       if (r.estado === 'creada') { salida.recibidas++; if (r.retenida) salida.retenidas++; }

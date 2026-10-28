@@ -218,3 +218,34 @@ describe('A37-A1-liquidaciones-16: las fechas con zona se pasan al día LOCAL de
     expect(con('2026-10-09T06:00:00', '2026-10-14')).toMatchObject({ desde: '2026-10-09', hasta: '2026-10-14' });
   });
 });
+
+describe('mapearBitacoraTms · encabezado real: nº de liquidación, nº de pago y liquidación por unidad', () => {
+  const mapeo: MapeoTms = { ...MAPEO_NODOS, numeroLiquidacion: 'n_liq', numeroPago: 'n_pago', bitacoras: 'bitacoras' };
+
+  it('mapea numeroLiquidacion y numeroPago (número o texto) al desglose', () => {
+    const r = mapearBitacoraTms({ ...TMS_NODOS, n_liq: 7, n_pago: '1025' }, mapeo);
+    expect(r.desglose).toMatchObject({ numeroLiquidacion: '7', numeroPago: '1025' });
+    expect(aLiquidacionExterna(r.desglose, { sistemaOrigen: 'prueba' }).liquidacion.claveExterna).toMatch(/^LIQ-/);
+  });
+
+  it('sin esos campos en la fila el encabezado queda en blanco: nunca se inventa un número', () => {
+    const r = mapearBitacoraTms(TMS_NODOS, mapeo);
+    expect(r.desglose.numeroLiquidacion).toBeUndefined();
+    expect(r.desglose.numeroPago).toBeUndefined();
+    expect(r.desglose.bitacoras).toBeUndefined();
+  });
+
+  it('una liquidación con varias bitácoras de la misma unidad pasa como un solo desglose', () => {
+    const base = mapearBitacoraTms(TMS_NODOS, MAPEO_NODOS).desglose;
+    const folio = base.bitacora;
+    const unidad = base.unidad;
+    const r = mapearBitacoraTms({ ...TMS_NODOS, n_liq: 7, bitacoras: [folio, { bitacora: 'B-OTRA', unidad: String(unidad) }] }, mapeo);
+    expect(r.desglose.bitacoras).toEqual([folio, 'B-OTRA']);
+    expect(() => aLiquidacionExterna(r.desglose, { sistemaOrigen: 'prueba' })).not.toThrow();
+  });
+
+  it('unidades distintas dentro de la misma liquidación se rechazan (unidades_mezcladas), no se agrupan', () => {
+    const folio = mapearBitacoraTms(TMS_NODOS, MAPEO_NODOS).desglose.bitacora;
+    expect(() => mapearBitacoraTms({ ...TMS_NODOS, n_liq: 7, bitacoras: [folio, { bitacora: 'B-OTRA', unidad: '99999' }] }, mapeo)).toThrow(CampoInvalido);
+  });
+});
