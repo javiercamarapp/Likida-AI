@@ -61,13 +61,26 @@ describe('evaluarSemanas — solo semanas enteras, y los huecos no son cero', ()
     expect(s.riesgo.senales.some((x) => x.clase === 'sin_dia_de_descanso_lft_69')).toBe(true);
   });
 
-  it('un día sin expediente NO son cero horas: la semana se niega a concluir y dice cuál falta', () => {
-    const entradas = SEMANA.filter((d) => d !== '2026-08-20').map((d) => diaTrabajado('o-1', d, 9));
+  it('un día sin expediente NO son cero horas: sin exceso probado la semana se niega a concluir y dice cuál falta', () => {
+    const entradas = SEMANA.filter((d) => d !== '2026-08-20').map((d) => diaTrabajado('o-1', d, 6));
     const [s] = evaluarSemanas(entradas, null, LUNES, '2026-08-23');
     expect(s.riesgo.veredicto).toBe('dato_insuficiente');
     expect(s.riesgo.horasMedidas).toBeNull();
     expect(s.diasSinExpediente).toEqual(['2026-08-20']);
     expect(s.riesgo.diasSinDato).toContain('2026-08-20');
+  });
+
+  // A37-S48-02: el día de descanso (art. 69) no tiene marcas por definición; 6 días de 9 h = 54 h > 48 h ya prueba el exceso aunque el
+  // total de la semana no se conozca (los huecos solo lo suben).
+  it('6 días de 9 h + 1 de descanso sin expediente: exceso probado, no «dato insuficiente»', () => {
+    const entradas = SEMANA.filter((d) => d !== '2026-08-23').map((d) => diaTrabajado('o-1', d, 9));
+    const [s] = evaluarSemanas(entradas, null, LUNES, '2026-08-23');
+    expect(s.riesgo.veredicto).toBe('exceso');
+    expect(s.riesgo.horasMedidas).toBeNull();
+    expect(s.diasSinExpediente).toEqual(['2026-08-23']);
+    const sen = s.riesgo.senales.find((x) => x.clase === 'exceso_semanal');
+    expect(sen?.esExceso).toBe(true);
+    expect(sen?.dice).toContain('al menos');
   });
 
   it('media semana visible NO se evalúa: sumar el recorte daría un falso «va bien»', () => {

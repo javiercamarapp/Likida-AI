@@ -41,10 +41,10 @@ describe('enviarWa al operador', () => {
     ['config ilegible', { ilegible: true }],
     ['no es voluntario vigente del piloto (A39-A5-02)', { voluntario: false }],
     ['la unidad va en marcha o no se sabe (A39-A5-03)', { detenida: false }],
-  ])('%s: NO envía y el rechazo no es reintentable', async (_n, cambio) => {
+  ])('%s: NO envía; el rechazo es de la compuerta (reintentable, no un fallo)', async (_n, cambio) => {
     Object.assign(estado, cambio);
     const r = await puertosAlertaReales.enviarWa('521', MSG, 't1', AHORA, 'jornada.alerta_operador');
-    expect(r).toMatchObject({ ok: false, reintentable: false });
+    expect(r).toMatchObject({ ok: false, reintentable: true, bloqueadoPorCompuerta: true });
     expect(wa).not.toHaveBeenCalled();
   });
   it('el aviso al encargado no pasa por esta compuerta', async () => {
@@ -57,7 +57,7 @@ describe('A39-A5-03: la alerta de tope sale al ~80 % de la jornada, es decir, ma
   it('con la unidad en marcha NO se le escribe y el motivo lo dice', async () => {
     estado.detenida = false;
     const r = await puertosAlertaReales.enviarWa('521', MSG, 't1', AHORA, 'jornada.alerta_operador');
-    expect(r).toMatchObject({ ok: false, reintentable: false });
+    expect(r).toMatchObject({ ok: false, reintentable: true, bloqueadoPorCompuerta: true });
     expect((r as { motivo: string }).motivo).toMatch(/no está detenida.*en_movimiento/);
     expect(wa).not.toHaveBeenCalled();
   });

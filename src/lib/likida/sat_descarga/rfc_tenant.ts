@@ -16,9 +16,9 @@
 // Nace vacío: sin él no se abre ningún buzón. NO se usa `flota_fiscal.rfc`
 // ni `tenant.rfc`: los captura la propia flota, así que no prueban nada.
 //
-// Ante la duda se rechaza: sin `tenant.rfc` no se declara ningún buzón, y un
-// RFC distinto del fiscal del tenant exige que Likida lo autorice cargando
-// primero `tenant.rfc`.
+// Ante la duda se rechaza: sin `tenant.rfc_sat_verificado` no se declara ningún
+// buzón, y un RFC distinto del fiscal del tenant exige que Likida lo autorice
+// cargando primero `tenant.rfc_sat_verificado`.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';

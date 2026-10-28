@@ -245,7 +245,8 @@ export async function crearFlota(
     const { error: errVer } = await admin.from('tenant')
       .update({ rfc_sat_verificado: rfcVerificado }).eq('id', tenantId);
     if (errVer) {
-      logger.warn('flota.alta.rfc_sat_verificado_no_guardado', { tenantId, error: errVer.message });
+      // Ruidoso a propósito: la flota quedó creada pero SIN buzón del SAT (falla cerrado) y nadie se entera con un warn.
+      logger.error('flota.alta.rfc_sat_verificado_no_guardado', { tenantId, error: errVer.message });
     }
   }
 

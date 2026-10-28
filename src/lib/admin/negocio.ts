@@ -1288,3 +1288,34 @@ export async function encenderPipelineDeTenant(tenantId: string, pipeline: strin
     { evento: 'admin.interruptor_pipeline_no_bitacorado', contexto: { tenantId, pipeline } },
   );
 }
+
+/**
+ * A5-01 (ola 8): el interruptor `agente_conductor_config.agente_chofer_habilitado` (0859) — la compuerta que decide si el Agente 5
+ * le escribe a CUALQUIER chofer de la flota — tenía un camino de apagado pero ninguno SOPORTADO de encendido (un UPDATE a mano).
+ * Este es ese camino: solo lo llama la ficha de /admin (superadmin, re-gateada en la acción), exige motivo y queda firmado en la
+ * bitácora con quién y por qué. NO crea la fila de configuración (una flota sin configuración del agente no se habilita por
+ * accidente): si no existe, lo dice. Nace apagado y nada lo enciende por omisión. LANZA si la escritura falla.
+ */
+export async function fijarAgenteChoferHabilitado(tenantId: string, habilitado: boolean, motivo: string, userId: string): Promise<void> {
+  const m = motivo.trim();
+  if (m.length < 5) {
+    throw new DatoInvalido('Habilitar o deshabilitar el Agente 5 exige un motivo (mínimo 5 caracteres): es la decisión de que el agente le escriba a los choferes de esta flota.');
+  }
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('agente_conductor_config')
+    .update({ agente_chofer_habilitado: habilitado })
+    .eq('tenant_id', tenantId)
+    .select('tenant_id'), 'fijarAgenteChoferHabilitado');
+  if (error) throw new Error(`fijarAgenteChoferHabilitado(${tenantId}): ${error.message}`);
+  if (!data || data.length === 0) {
+    throw new DatoInvalido('Esta flota todavía no tiene configuración del agente conductor: se crea al guardar su configuración en el panel de conductores. No se habilita nada sin ella.');
+  }
+  await anotarBitacora(
+    {
+      tenantId, actor: { id: userId },
+      accion: habilitado ? 'agente_chofer.habilitado' : 'agente_chofer.deshabilitado',
+      entidad: 'conductor_config', entidadId: tenantId, detalle: { habilitado, motivo: m },
+    },
+    { evento: 'admin.agente_chofer_no_bitacorado', contexto: { tenantId, habilitado } },
+  );
+}

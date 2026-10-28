@@ -1741,8 +1741,9 @@ export async function retirarVoluntario(tenantId: string, operadorId: string): P
 
 /** Lo que el preflight necesita de la base, de UNA flota. Solo LEE: no manda nada ni escribe. Lanza si la base no contesta. */
 export async function leerDatosPreflight(tenantId: string, ahora: Date = new Date()): Promise<DatosPreflight> {
-  const [config, zonaDeclarada, voluntarios, contactos] = await Promise.all([
+  const [config, zonaDeclarada, voluntarios, contactos, agenteChofer] = await Promise.all([
     leerConfigConductor(tenantId), getZonaHorariaTenant(tenantId), listarVoluntarios(tenantId), cargarContactosTrafico(tenantId),
+    leerAgenteChoferHabilitado(tenantId),   // A5-01: nunca lanza; falla cerrado
   ]);
   const ids = voluntarios.map((o) => o.id);
   let viajes: DatosPreflight['viajes'] = [];
@@ -1757,9 +1758,10 @@ export async function leerDatosPreflight(tenantId: string, ahora: Date = new Dat
     if (unidades.length > 0) {
       const desde = new Date(ahora.getTime() - HORAS_GPS_RECIENTE * 3_600_000);
       const haceUnaHora = ahora.getTime() - 3_600_000;
-      const rp = await acotada(supabaseAdmin().from('posicion').select('unidad_id, medida_en')
-        .eq('tenant_id', tenantId).in('unidad_id', unidades).neq('proveedor', 'whatsapp').gte('medida_en', desde.toISOString()).order('medida_en', { ascending: false }).order('id').limit(5000), 'conductor.preflight_posiciones');
-      const ps = (exigir(rp as never, 'conductor.preflight_posiciones') ?? []) as unknown as Fila[];
+      // A39-S36-01: `.limit(5000)` contra `max_rows = 1000` recortaba en silencio y el preflight contaba menos posiciones de las que hay.
+      const qp = supabaseAdmin().from('posicion').select('unidad_id, medida_en')
+        .eq('tenant_id', tenantId).in('unidad_id', unidades).neq('proveedor', 'whatsapp').gte('medida_en', desde.toISOString()).order('medida_en', { ascending: false }).order('id');
+      const ps = (await traerHastaTope<Fila>((d, h) => acotada(qp.range(d, h), 'conductor.preflight_posiciones') as never, 5000, 'conductor.preflight_posiciones')) as unknown as Fila[];
       const mut = posicionesPorUnidad as Record<string, { ultimas2h: number; ultimaHora: number }>;
       for (const p of ps) {
         const u = String(p.unidad_id);
@@ -1772,6 +1774,7 @@ export async function leerDatosPreflight(tenantId: string, ahora: Date = new Dat
   return {
     config: { activo: config.activo, perfilSeguimiento: config.perfilSeguimiento, solicitudesMin: config.solicitudesMin, cohortePiloto: config.cohortePiloto ?? null },
     zonaDeclarada, voluntarios: voluntarios.map((o) => ({ telefono: o.telefono })), viajes, posicionesPorUnidad, contactos,
+    agenteChoferHabilitado: agenteChofer.razon,
     // A37-S36-07: sin lectura del perfil se asume el restrictivo (falla cerrado: se exigen más plantillas, no menos).
     perfilPlantillas: (await (await import('@/lib/auth/perfil_tenant')).perfilDeTenant(tenantId)) === null ? 'piloto' : 'cinco_agentes',
   };

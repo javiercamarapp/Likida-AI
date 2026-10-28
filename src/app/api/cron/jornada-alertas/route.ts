@@ -74,7 +74,7 @@ export async function GET(req: Request) {
       estado: huboFallo || incompleto ? 'parcial' : 'ok',
       detalle: {
         revisadas: r.revisadas, enCurso: r.enCurso, alertas: r.alertas, yaAvisadas: r.yaAvisadas,
-        sinCierreProbable: r.sinCierreProbable, inicioEnFuturo: r.inicioEnFuturo, sinDestinatario: r.sinDestinatario,
+        sinCierreProbable: r.sinCierreProbable, inicioEnFuturo: r.inicioEnFuturo, sinDestinatario: r.sinDestinatario, bloqueadasPorCompuerta: r.bloqueadasPorCompuerta,
         rechazosReintentables: r.rechazosReintentables, cortadosPorReloj: r.cortadosPorReloj, listaTruncada: r.listaTruncada,
         fallos: r.fallos.length,
         motivo: r.cortadaPorRechazoMasivo
