@@ -431,41 +431,39 @@ describe('(3) /v1/openapi bajo el perfil', () => {
 // 4) Emisión de llaves y puertas de usuarios/sesiones MCP
 // ═══════════════════════════════════════════════════════════════════════════
 describe('(4) emisión de llaves de API y de sesiones MCP bajo el perfil', () => {
-  it('llaves-api, sesiones-mcp y usuarios están fuera de la lista del perfil y el dueño no los ve', () => {
-    for (const ruta of ['/dashboard/llaves-api', '/dashboard/sesiones-mcp', '/dashboard/usuarios']) {
-      expect(rutaPermitidaEnPerfil('cinco_agentes', ruta), ruta).toBe(false);
-      expect(puedeVerRuta('flota_admin', ruta, 'cinco_agentes'), `${ruta} oculto al dueño bajo el perfil`).toBe(false);
-      expect(puedeVerRuta('flota_admin', ruta), `${ruta} sin perfil se ve como siempre`).toBe(true);
+  it('sesiones-mcp sigue fuera de la lista del perfil y el dueño no la ve; llaves-api y usuarios (Ola 1 · A1) están DENTRO y solo el dueño las ve', () => {
+    expect(rutaPermitidaEnPerfil('cinco_agentes', '/dashboard/sesiones-mcp')).toBe(false);
+    expect(puedeVerRuta('flota_admin', '/dashboard/sesiones-mcp', 'cinco_agentes'), 'sesiones-mcp oculta al dueño bajo el perfil').toBe(false);
+    expect(puedeVerRuta('flota_admin', '/dashboard/sesiones-mcp'), 'sin perfil se ve como siempre').toBe(true);
+    for (const ruta of ['/dashboard/llaves-api', '/dashboard/usuarios']) {
+      expect(rutaPermitidaEnPerfil('cinco_agentes', ruta), ruta).toBe(true);
+      expect(puedeVerRuta('flota_admin', ruta, 'cinco_agentes'), `${ruta} visible al dueño bajo el perfil`).toBe(true);
+      expect(puedeVerRuta('contador', ruta, 'cinco_agentes'), `${ruta} oculta al contador`).toBe(false);
+      expect(puedeVerRuta('encargado', ruta, 'cinco_agentes'), `${ruta} oculta al encargado`).toBe(false);
     }
   });
 
-  it('el formulario abierto ANTES del perfil: emitir una llave después del perfil rebota a /dashboard y no escribe en tenant_api_key', async () => {
-    sesion = comoDueno(CON);
-    perfiles.delete(CON);
-    reiniciarCachePerfil();
-    const Pagina = (await import('@/app/dashboard/llaves-api/page')).default as (p: { searchParams: Promise<Record<string, string>> }) => Promise<unknown>;
-    const arbol = await Pagina({ searchParams: Promise.resolve({}) });
-    const acciones = accionesDe(arbol);
-    expect(acciones.length, 'la página entrega sus server actions').toBeGreaterThanOrEqual(2);
-
-    // Control: SIN perfil, emitir llega a crear la llave (la base es falsa: no hay llave real).
-    escrituras.length = 0;
-    const fd = new FormData();
-    fd.set('nombre', 'integracion sintetica'); fd.set('area', 'operacion'); fd.set('vigencia', '365'); fd.set('id', UUID);
-    for (const a of acciones) { try { await (a.length >= 2 ? a(null, fd) : a(fd)); } catch { /* redirect o error de la base falsa */ } }
-    expect(redirect.mock.calls.filter(([r]) => r === '/dashboard'), 'sin perfil nada rebota por perfil').toEqual([]);
-    expect(escrituras.some((w) => w.startsWith('tenant_api_key')), 'sin perfil la emisión llega a la tabla de llaves').toBe(true);
-
-    // Con el perfil aplicado: cada acción rebota y no hay una sola escritura.
+  it('Ola 1 · A1: bajo el perfil el DUEÑO emite una llave de API (la que el TMS del cliente necesita) y un contador NO', async () => {
     perfiles.set(CON, 'cinco_agentes');
     reiniciarCachePerfil();
-    escrituras.length = 0;
+    const Pagina = (await import('@/app/dashboard/llaves-api/page')).default as (p: { searchParams: Promise<Record<string, string>> }) => Promise<unknown>;
+    sesion = comoDueno(CON);
+    const acciones = accionesDe(await Pagina({ searchParams: Promise.resolve({}) }));
+    expect(acciones.length, 'la página entrega sus server actions bajo el perfil').toBeGreaterThanOrEqual(2);
+    const fd = new FormData();
+    fd.set('nombre', 'integracion sintetica'); fd.set('area', 'administracion'); fd.set('vigencia', '365'); fd.set('id', UUID);
+
     redirect.mockClear();
-    for (const a of acciones) {
-      await expect(a.length >= 2 ? a(null, fd) : a(fd)).rejects.toThrow('NEXT_REDIRECT');
-    }
-    expect(redirect.mock.calls.every(([r]) => r === '/dashboard')).toBe(true);
-    expect(escrituras, 'emitir ni revocar llaves escribe nada bajo el perfil').toEqual([]);
+    escrituras.length = 0;
+    for (const a of acciones) { try { await (a.length >= 2 ? a(null, fd) : a(fd)); } catch { /* error de la base falsa */ } }
+    expect(redirect.mock.calls.filter(([r]) => r === '/dashboard'), 'bajo el perfil el dueño no rebota').toEqual([]);
+    expect(escrituras.some((w) => w.startsWith('tenant_api_key')), 'la emisión llega a la tabla de llaves').toBe(true);
+
+    // Un POST tardío de otro rol (el formulario ya entregado) lo frena el rol, no el perfil: ninguna escritura.
+    sesion = { ...comoDueno(CON), rol: 'contador' };
+    escrituras.length = 0;
+    for (const a of acciones) { try { await (a.length >= 2 ? a(null, fd) : a(fd)); } catch { /* redirect */ } }
+    expect(escrituras, 'un contador no emite ni revoca llaves').toEqual([]);
   });
 
   it('las sesiones MCP: sus acciones rebotan igual y el MCP mismo no atiende (la credencial emitida antes tampoco sirve)', async () => {
