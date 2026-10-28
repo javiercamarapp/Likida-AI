@@ -907,6 +907,11 @@ export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): R
     // debe indicar Sí/No; al hacerlo el campo queda de origen humano y este «confirmar» se levanta solo. Es una declaración regulatoria.
     if (esVacio(fila.material_peligroso)) {
       reg({ campo: 'material_peligroso', renglon: i, severidad: 'confirmar', codigo: 'peligroso_sin_dato', mensaje: `${etiquetaCampo('material_peligroso', i)}: el documento no dice si es material peligroso. Indica Sí o No.` });
+    } else if (fila.material_peligroso.origen === 'catalogo' && fila.material_peligroso.valor === 'false') {
+      // A39-S31-01: la columna del catálogo (`material_peligroso boolean not null default false`) no tiene «no sé»: un «No» que viene SOLO
+      // del catálogo puede ser un «nadie lo dijo» (celda vacía del CSV, banner que guardó solo la clave SAT). Es una declaración
+      // regulatoria: una persona la confirma (al escribirla queda de origen humano y este «confirmar» se levanta solo).
+      reg({ campo: 'material_peligroso', renglon: i, severidad: 'confirmar', codigo: 'peligroso_catalogo_sin_declarar', mensaje: `${etiquetaCampo('material_peligroso', i)}: «No» viene solo del catálogo del cliente, que no distingue «no peligroso» de «sin dato». Confirma Sí o No.` });
     }
     if (fila.valor_mercancia?.valor && !fila.moneda?.valor) {
       reg({ campo: 'moneda', renglon: i, severidad: 'confirmar', codigo: 'moneda_falta', mensaje: `${etiquetaCampo('valor_mercancia', i)}: hay valor pero el documento no dice la moneda. Indícala.` });

@@ -34,6 +34,30 @@ function sinSat(descripcion = 'LLANTA SKU-PX-205 55R16'): Extraccion {
   };
 }
 
+describe('enriquecer · A39-S31-01 · un «No» que viene solo del catálogo no se da por declarado', () => {
+  it('SKU con material_peligroso=false y documento mudo: se prellena «No» pero queda por CONFIRMAR hasta que una persona lo indique', () => {
+    const r = enriquecer(sinSat(), cat({ productos: [producto('SKU-PX-205', { materialPeligroso: false })] }), ctx);
+    expect(r.extraccion.mercancias[0].material_peligroso).toMatchObject({ valor: 'false', origen: 'catalogo' });
+    const v = validarExtraccion(r.extraccion);
+    const h = v.hallazgos.filter((x) => x.campo === 'material_peligroso');
+    expect(h.map((x) => [x.codigo, x.severidad])).toEqual([['peligroso_catalogo_sin_declarar', 'confirmar']]);
+    expect(v.listoParaAprobar).toBe(false);
+  });
+  it('al escribirlo una persona (origen humano) el confirmar se levanta solo', () => {
+    const r = enriquecer(sinSat(), cat({ productos: [producto('SKU-PX-205', { materialPeligroso: false })] }), ctx);
+    r.extraccion.mercancias[0].material_peligroso = cv('false', 1, 'humano', 'confirmado');
+    expect(validarExtraccion(r.extraccion).hallazgos.some((x) => x.codigo === 'peligroso_catalogo_sin_declarar')).toBe(false);
+  });
+  it('un «No» LEÍDO del documento (no del catálogo) no pide confirmar por esta regla; un «Sí» del catálogo tampoco', () => {
+    const e = sinSat();
+    e.mercancias[0].material_peligroso = cv('false', 0.9, 'llm', 'NO PELIGROSO');
+    const a = enriquecer(e, cat({ productos: [producto('SKU-PX-205', { materialPeligroso: false })] }), ctx);
+    expect(validarExtraccion(a.extraccion).hallazgos.some((x) => x.codigo === 'peligroso_catalogo_sin_declarar')).toBe(false);
+    const b = enriquecer(sinSat(), cat({ productos: [producto('SKU-PX-205', { materialPeligroso: true, claveMaterialPeligroso: '1203' })] }), ctx);
+    expect(validarExtraccion(b.extraccion).hallazgos.some((x) => x.codigo === 'peligroso_catalogo_sin_declarar')).toBe(false);
+  });
+});
+
 describe('enriquecer · producto por SKU', () => {
   it('un SKU conocido llena cinco campos (y los peligrosos) con origen catálogo, 0.95 y evidencia', () => {
     const r = enriquecer(sinSat(), cat({ productos: [producto('SKU-PX-205')] }), ctx);
