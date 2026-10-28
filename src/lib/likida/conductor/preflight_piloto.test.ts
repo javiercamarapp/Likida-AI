@@ -29,6 +29,19 @@ describe('preflight del piloto', () => {
     expect(mensajeBloqueoSenalVida(r)).toBe('');
   });
 
+  // A5-01: la habilitación del Agente 5 (0859) entra al preflight cuando el llamador la leyó.
+  it('A5-01: con la habilitación leída, una línea más; apagada o ilegible es un bloqueo con qué hacer', () => {
+    const habilitado = evaluarPreflight({ ...verde(), agenteChoferHabilitado: 'habilitado' });
+    expect(habilitado.comprobaciones.map((c) => c.id)).toEqual(['activo', 'agente_habilitado', 'zona', 'cohorte', 'voluntarios', 'sitios', 'gps_unidades', 'calidad_gps', 'escalamiento', 'plantillas']);
+    expect(habilitado.lista).toBe(true);
+    for (const estado of ['apagado', 'compuerta_ilegible'] as const) {
+      const r = evaluarPreflight({ ...verde(), agenteChoferHabilitado: estado });
+      expect(r.bloqueos.map((b) => b.id)).toEqual(['agente_habilitado']);
+      expect(r.lista).toBe(false);
+      expect(r.bloqueos[0].queHacer).toContain('superadmin');
+    }
+  });
+
   it('rojo 1: sin voluntarios con teléfono válido (ninguno, o solo inválidos/demo)', () => {
     for (const voluntarios of [[], [{ telefono: '123' }], [{ telefono: '2899912345' }, { telefono: '' }]]) {
       expect(faltas({ ...verde(), voluntarios })).toEqual(['voluntarios']);

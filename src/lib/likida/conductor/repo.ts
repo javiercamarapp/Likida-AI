@@ -1741,8 +1741,9 @@ export async function retirarVoluntario(tenantId: string, operadorId: string): P
 
 /** Lo que el preflight necesita de la base, de UNA flota. Solo LEE: no manda nada ni escribe. Lanza si la base no contesta. */
 export async function leerDatosPreflight(tenantId: string, ahora: Date = new Date()): Promise<DatosPreflight> {
-  const [config, zonaDeclarada, voluntarios, contactos] = await Promise.all([
+  const [config, zonaDeclarada, voluntarios, contactos, agenteChofer] = await Promise.all([
     leerConfigConductor(tenantId), getZonaHorariaTenant(tenantId), listarVoluntarios(tenantId), cargarContactosTrafico(tenantId),
+    leerAgenteChoferHabilitado(tenantId),   // A5-01: nunca lanza; falla cerrado
   ]);
   const ids = voluntarios.map((o) => o.id);
   let viajes: DatosPreflight['viajes'] = [];
@@ -1773,6 +1774,7 @@ export async function leerDatosPreflight(tenantId: string, ahora: Date = new Dat
   return {
     config: { activo: config.activo, perfilSeguimiento: config.perfilSeguimiento, solicitudesMin: config.solicitudesMin, cohortePiloto: config.cohortePiloto ?? null },
     zonaDeclarada, voluntarios: voluntarios.map((o) => ({ telefono: o.telefono })), viajes, posicionesPorUnidad, contactos,
+    agenteChoferHabilitado: agenteChofer.razon,
     // A37-S36-07: sin lectura del perfil se asume el restrictivo (falla cerrado: se exigen más plantillas, no menos).
     perfilPlantillas: (await (await import('@/lib/auth/perfil_tenant')).perfilDeTenant(tenantId)) === null ? 'piloto' : 'cinco_agentes',
   };
