@@ -1,6 +1,6 @@
 import type { ConfigPeajesVista } from '@/lib/likida/peajes/datos';
 import {
-  PLAZO_MESES_MIN, PLAZO_MESES_MAX, AVISO_DIAS_MAX, DIAS_GRACIA_MIN, DIAS_GRACIA_MAX,
+  PLAZO_MESES_MIN, PLAZO_MESES_MAX, PLAZO_MESES_DEFAULT, AVISO_DIAS_MAX, DIAS_GRACIA_MIN, DIAS_GRACIA_MAX,
 } from '@/lib/likida/peajes/config_avisos';
 import { MIN_CRUCES_MIN, MIN_CRUCES_MAX, VELOCIDAD_MIN_KMH, VELOCIDAD_MAX_KMH, VENTANA_HORAS_MAX } from '@/lib/likida/peajes/atipicos_config';
 
@@ -102,11 +102,10 @@ export function SeccionUmbralesAvisos({ datos }: { datos: UmbralesAvisosVista })
             <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
               El proveedor da un plazo para reclamar un cobro; <b>aún no está confirmado por escrito</b> ni se sabe desde qué fecha cuenta, por eso es ajustable.
             </p>
-            {/* A37-A2-03: el cron aún no ejecuta estos avisos y las pantallas usan siempre 3 meses. No se aparenta lo contrario. */}
-            <p role="note" className="text-[12px] font-medium p-2.5 rounded-lg" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
-              Estos avisos y el plazo ajustable aún NO están conectados: hoy no se manda ningún aviso de plazo ni recordatorio de archivo, y
-              las pantallas calculan siempre con 3 meses. Lo que captures aquí se guarda, pero todavía no se aplica. Revisa el vencimiento de tus
-              reclamos en la pantalla de seguimiento.
+            <p role="note" className="text-[11px]" style={{ color: 'var(--faint)' }}>
+              Los avisos salen por WhatsApp al destinatario de abajo (sin destinatario no se manda nada) y los revisa el sistema cada ~15 minutos. El plazo y los
+              días de aviso que captures aquí los usa el aviso; las pantallas de seguimiento siguen mostrando la regla de {PLAZO_MESES_DEFAULT} meses que dijo el cliente
+              mientras el proveedor no la confirme por escrito. El vencimiento de tus reclamos siempre se ve en la pantalla de seguimiento.
             </p>
             <div className="flex items-end gap-3 flex-wrap">
               <Numero nombre="plazo_meses" etiqueta="Plazo (meses)" valor={config.avisos.plazo.meses} min={PLAZO_MESES_MIN} max={PLAZO_MESES_MAX} />
@@ -120,9 +119,9 @@ export function SeccionUmbralesAvisos({ datos }: { datos: UmbralesAvisosVista })
             </div>
             <div className="space-y-2">
               <Interruptor nombre="aviso_plazo" etiqueta="Avisar cuando un cobro sin reclamar está por vencer" activo={config.avisos.interruptores.aviso_plazo}
-                nota="NO conectado: aunque lo enciendas, hoy no se envía nada. El vencimiento solo se ve en pantalla." deshabilitado />
+                nota="Un aviso por archivo y umbral (por ejemplo a 30 y a 7 días). Apagado de origen; no avisa de lo ya reclamado ni de lo interno de la flota." />
               <Interruptor nombre="recordatorio_archivo" etiqueta="Recordar que falta el archivo de la decena" activo={config.avisos.interruptores.recordatorio_archivo}
-                nota="NO conectado: aunque lo enciendas, hoy no se envía nada. Pasados los días de gracia desde el cierre de una decena sin archivo, nadie recibe el recordatorio." deshabilitado />
+                nota="Un solo recordatorio por decena, pasados los días de gracia desde su cierre sin que llegue el archivo. Apagado de origen." />
             </div>
             <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>Guardar plazo y avisos</button>
           </form>

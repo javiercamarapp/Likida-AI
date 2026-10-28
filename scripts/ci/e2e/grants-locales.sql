@@ -86,7 +86,7 @@ declare
     'liquidacion_aviso_discrepancia', 'liquidacion_copia_jefe', 'llm_costo_mensual', 'llm_presupuesto_reserva',
     'marketing_hook', 'marketing_referencia', 'mcp_oauth_cliente', 'mcp_oauth_codigo',
     'mcp_oauth_token', 'orquestador_barrido_estado', 'orquestador_escalacion', 'peaje_cierre_aviso',
-    'peaje_curso', 'peaje_curso_caseta', 'peaje_regla_flota', 'pendiente_societario',
+    'peaje_aviso_enviado', 'peaje_curso', 'peaje_curso_caseta', 'peaje_regla_flota', 'pendiente_societario',
     'politica_detencion',
     'portal_estado', 'portal_pago_acceso', 'portal_pago_liga', 'portal_pago_propuesta',
     'portal_relogin', 'portal_vinculacion_solicitud', 'producto_evento', 'producto_evento_estado',

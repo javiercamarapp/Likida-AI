@@ -29,12 +29,21 @@ describe('umbrales y avisos', () => {
     expect(html).toContain('aún no está confirmado por escrito');
   });
 
-  it('A37-A2-03: dice a la vista que los avisos de plazo y el recordatorio NO están conectados y no deja encenderlos', () => {
+  it('A2 ola 1: los avisos de plazo y de archivo YA están conectados al cron: se pueden encender y la pantalla ya no dice «NO conectado»', () => {
     const html = renderToStaticMarkup(<SeccionUmbralesAvisos datos={{ config, puedeAdministrar: true, acciones: accionesU }} />);
-    expect(html).toContain('aún NO están conectados');
-    expect(html).toMatch(/<input[^>]*disabled[^>]*name="aviso_plazo"/);
-    expect(html).toMatch(/<input[^>]*disabled[^>]*name="recordatorio_archivo"/);
-    expect(html).not.toContain('Necesita un destinatario');
+    expect(html).not.toContain('NO conectado');
+    expect(html).not.toContain('aún NO están conectados');
+    expect(html).not.toMatch(/<input[^>]*disabled[^>]*name="aviso_plazo"/);
+    expect(html).not.toMatch(/<input[^>]*disabled[^>]*name="recordatorio_archivo"/);
+    expect(html).toContain('Los avisos salen por WhatsApp');
+    expect(html).toContain('la regla de 3 meses');
+  });
+
+  it('con los interruptores guardados encendidos se pintan marcados (y apagados de origen)', () => {
+    const encendida = { ...config, avisos: { ...config.avisos, interruptores: { aviso_plazo: true, recordatorio_archivo: false } } };
+    const html = renderToStaticMarkup(<SeccionUmbralesAvisos datos={{ config: encendida, puedeAdministrar: true, acciones: accionesU }} />);
+    expect(html).toMatch(/name="aviso_plazo"[^>]*checked/);
+    expect(html).not.toMatch(/name="recordatorio_archivo"[^>]*checked/);
   });
 
   it('muestra los valores por omisión: plazo de 3 meses, avisos 30 y 7, N=4, H=6, 130 km/h', () => {

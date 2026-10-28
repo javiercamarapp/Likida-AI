@@ -1770,6 +1770,67 @@ export async function leerConfigPeajes(tenantId: string): Promise<ConfigPeajesVi
   };
 }
 
+// ── Avisos proactivos de plazo y de archivo (migración 0937) ────────────────
+
+export type TipoAvisoPeajes = 'plazo' | 'recordatorio_archivo';
+
+/**
+ * Reserva el sello de un aviso: `true` solo para QUIEN lo insertó (la llave primaria `(flota, tipo, clave)` es el compare-and-set;
+ * `ignoreDuplicates` = ON CONFLICT DO NOTHING). `false` = ya se dio o lo reservó otro proceso. Lanza ante error de base.
+ */
+export async function reservarAvisoPeajes(tenantId: string, tipo: TipoAvisoPeajes, clave: string): Promise<boolean> {
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_aviso_enviado')
+    .upsert({ tenant_id: tenantId, tipo, clave }, { onConflict: 'tenant_id,tipo,clave', ignoreDuplicates: true }).select('clave'), 'peajes.aviso_reservar');
+  if (error) throw new Error(`reservarAvisoPeajes: ${error.message}`);
+  return Array.isArray(data) && data.length > 0;
+}
+
+/** Devuelve el sello cuando el envío falló, para que el siguiente barrido reintente. Lanza ante error de base. */
+export async function liberarAvisoPeajes(tenantId: string, tipo: TipoAvisoPeajes, clave: string): Promise<void> {
+  const { error } = await acotada(supabaseAdmin().from('peaje_aviso_enviado')
+    .delete().eq('tenant_id', tenantId).eq('tipo', tipo).eq('clave', clave), 'peajes.aviso_liberar');
+  if (error) throw new Error(`liberarAvisoPeajes: ${error.message}`);
+}
+
+export interface FlotaConAvisos { tenantId: string; avisos: ConfigAvisos; telefono: string | null }
+
+/**
+ * Las flotas que encendieron `aviso_plazo` o `recordatorio_archivo`. Lectura DE CRON, multi-flota a propósito (una fila de
+ * configuración por flota; cada fila trae su `tenant_id` y todo lo que se hace después se ancla a esa flota). Lanza ante error de base.
+ */
+export async function listarFlotasConAvisos(): Promise<FlotaConAvisos[]> {
+  const filas = await traerTodo<Record<string, unknown>>(
+    (d, h) => acotada(supabaseAdmin().from('peaje_atipico_config')
+      .select('tenant_id, umbrales', conteo(d)).order('tenant_id').range(d, h), 'peajes.flotas_con_avisos'),
+    'peajes.flotas_con_avisos',
+  );
+  const flotas: FlotaConAvisos[] = [];
+  for (const f of filas) {
+    const u = comoDetalleCfg(f.umbrales);
+    const avisos = configAvisosEfectiva(u.config_peajes);
+    if (!avisos.interruptores.aviso_plazo && !avisos.interruptores.recordatorio_archivo) continue;
+    const tel = comoDetalleCfg(u.aviso).telefono;
+    flotas.push({ tenantId: String(f.tenant_id), avisos, telefono: typeof tel === 'string' && tel.trim() !== '' ? tel.trim() : null });
+  }
+  return flotas;
+}
+
+export interface DesgloseParaAvisos { id: string; periodoDesde: string | null; periodoHasta: string | null }
+
+/** Los desgloses vigentes de la flota recibidos desde `desdeIso` (más recientes primero, hasta `limite`). Lanza ante error de base. */
+export async function desglosesRecientesParaAvisos(tenantId: string, desdeIso: string, limite = 40): Promise<DesgloseParaAvisos[]> {
+  const { data, error } = await acotada(supabaseAdmin().from('desglose_peaje')
+    .select('id, periodo_oficial_desde, periodo_oficial_hasta, periodo_desde, periodo_hasta')
+    .eq('tenant_id', tenantId).is('anulado_en', null).gte('creado_en', desdeIso)
+    .order('creado_en', { ascending: false }).order('id').limit(limite), 'peajes.aviso_desgloses');
+  if (error) throw new Error(`desglosesRecientesParaAvisos: ${error.message}`);
+  return ((data ?? []) as Array<Record<string, unknown>>).map((d) => ({
+    id: String(d.id),
+    periodoDesde: ((d.periodo_oficial_desde ?? d.periodo_desde) as string | null)?.slice(0, 10) ?? null,
+    periodoHasta: ((d.periodo_oficial_hasta ?? d.periodo_hasta) as string | null)?.slice(0, 10) ?? null,
+  }));
+}
+
 export type ResultadoConfigPeajes<T> = { ok: true; valor: T } | { ok: false; motivo: string };
 const NO_SE_PUDO_CONFIG = 'No se pudo guardar la configuración. Intenta de nuevo.';
 

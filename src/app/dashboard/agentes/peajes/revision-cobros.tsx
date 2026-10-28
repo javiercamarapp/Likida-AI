@@ -2,6 +2,7 @@ import { mxn, numero, porcentaje } from '@/lib/formato';
 import { insightsDeCobros, ETIQUETA_CATEGORIA_INSIGHT, ORDEN_CATEGORIAS_INSIGHT, type ResultadoInsights, type Kpi, type EntradaCategoriaInsight, type CategoriaInsight } from '@/lib/likida/peajes/insights_cobros';
 import { CATEGORIAS_COBRO, ROTULO_CANDIDATO } from '@/lib/likida/peajes/reglas_cobro';
 import { clasificarPlazos } from '@/lib/likida/peajes/plazo_reclamo';
+import { ESTADOS_RECLAMO_ENVIADO, candidatosDePlazo } from '@/lib/likida/peajes/candidatos_plazo';
 import { resumirAcreditacion } from '@/lib/likida/peajes/notas_credito';
 import { ETIQUETA_ESTADO_RECLAMO } from '@/lib/likida/peajes/reclamos_seguimiento';
 // SOLO tipos: estos módulos importan supabaseAdmin y no deben entrar al bundle de la vista.
@@ -59,14 +60,6 @@ export interface DatosRevisionCobros {
 
 const SIN_RECLAMAR = 'Sin reclamar';
 
-/**
- * A37-S15-03: «reclamado» es lo que de verdad LLEGÓ al proveedor. Un reclamo
- * `preparado` (nadie lo envió al portal) no detiene el plazo de 3 meses, y uno
- * `rechazado` ya no está en juego: ninguno de los dos puede apagar el aviso
- * «por vencer» ni contar como atendido.
- */
-const ESTADOS_RECLAMO_ENVIADO: ReadonlySet<string> = new Set(['enviado', 'acreditado_parcial', 'acreditado']);
-
 function entradaDeCategorias(reporte: ReporteRevision, reclamosDelArchivo: readonly ReclamoVista[]): EntradaCategoriaInsight[] {
   const { revision } = reporte;
   return CATEGORIAS_COBRO.map((categoria) => {
@@ -78,37 +71,6 @@ function entradaDeCategorias(reporte: ReporteRevision, reclamosDelArchivo: reado
     // Se atiende lo reclamado y lo justificado; el módulo de insights acota a `n`.
     return { categoria, n: res.n, monto: res.monto, atendidos: reclamados + justificados };
   });
-}
-
-/**
- * Los candidatos que un reclamo ENVIADO de su categoría de verdad cubre. El
- * reclamo guarda cuántos cruces traía (`nCruces`) y la fecha del más antiguo;
- * no guarda cuáles. Por eso:
- *  · un cruce ANTERIOR a esa fecha no pudo ir en el reclamo;
- *  · del resto solo se cubren tantos como `nCruces` — y si sobran (cruces que
- *    aparecieron después de crearlo) se dejan SIN cubrir los más viejos, que son
- *    los urgentes: ante la duda el plazo avisa, no se calla.
- */
-function lineasCubiertasPorReclamo(
-  candidatos: ReadonlyArray<{ indice: number; categoria: string; fecha: string }>,
-  reclamos: readonly ReclamoVista[],
-): Set<number> {
-  const cubiertas = new Set<number>();
-  for (const categoria of new Set(candidatos.map((c) => c.categoria))) {
-    const enviados = reclamos.filter((r) => r.categoria === categoria && ESTADOS_RECLAMO_ENVIADO.has(r.estado));
-    if (enviados.length === 0) continue;
-    const desde = enviados.map((r) => r.fechaCobroMasAntiguo).sort()[0];
-    let cupo = enviados.reduce((s, r) => s + r.nCruces, 0);
-    const elegibles = candidatos
-      .filter((c) => c.categoria === categoria && c.fecha >= desde)
-      .sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : b.indice - a.indice)); // los más nuevos primero
-    for (const c of elegibles) {
-      if (cupo <= 0) break;
-      cubiertas.add(c.indice);
-      cupo -= 1;
-    }
-  }
-  return cubiertas;
 }
 
 /**
@@ -129,22 +91,11 @@ export function estadoRevisionCobros(d: DatosRevisionCobros): EstadoRevisionCobr
     const categorias = entradaDeCategorias(reporte, delArchivo);
 
     if (d.decisiones === null) return { tipo: 'error' };
-    // A37-A2-06: un reclamo con decisiones ligadas (hecho desde la tabla) cubre SOLO esas líneas; uno sin ninguna
-    // (de categoría completa) cubre lo que cubra `lineasCubiertasPorReclamo`. A37-S15-03: solo cuenta lo ENVIADO.
-    const conDecision = new Set((d.decisiones ?? []).map((x) => x.reclamoId).filter((x): x is string => x !== null));
-    const enviadoPorId = new Set(delArchivo.filter((r) => ESTADOS_RECLAMO_ENVIADO.has(r.estado)).map((r) => r.id));
-    const reclamosCompletos = delArchivo.filter((r) => d.decisiones === undefined || !conDecision.has(r.id));
-    const lineasReclamadas = new Set((d.decisiones ?? [])
-      .filter((x) => x.accion === 'reclamado' && x.reclamoId !== null && enviadoPorId.has(x.reclamoId))
-      .map((x) => `${x.indice}|${x.categoria}`));
-    const conFecha = reporte.revision.candidatos
-      .filter((c): c is typeof c & { fecha: string } => typeof c.fecha === 'string' && c.fecha !== '');
-    const cubiertas = lineasCubiertasPorReclamo(conFecha, reclamosCompletos);
-    const candidatosPlazo = conFecha
-      .map((c) => ({
-        lineaId: String(c.indice), desgloseId: reporte.desgloseId, fechaCruce: c.fecha, monto: c.monto,
-        reclamado: cubiertas.has(c.indice) || lineasReclamadas.has(`${c.indice}|${c.categoria}`),
-      }));
+    // A37-A2-06 / A37-S15-03: la definición de «sin reclamar» vive en `candidatos_plazo.ts` (la misma del aviso del cron).
+    const candidatosPlazo = candidatosDePlazo({
+      desgloseId: reporte.desgloseId, candidatos: reporte.revision.candidatos, reclamosDelArchivo: delArchivo,
+      ...(d.decisiones === undefined ? {} : { decisiones: d.decisiones ?? [] }),
+    });
     const hayCandidatos = reporte.revision.candidatos.length > 0;
     const porVencer = hayCandidatos && candidatosPlazo.length === 0
       ? null
