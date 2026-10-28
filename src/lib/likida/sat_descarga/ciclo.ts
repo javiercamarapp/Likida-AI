@@ -1090,10 +1090,10 @@ export async function correrDescargaSat(
     ? (configs ?? []).filter((c) => !saltarFlotas.has(String(c.tenant_id)))
     : (configs ?? []);
   // A37-S57-01 / A37-S18-01 (CRÍTICO): el barrido SOLO pide el buzón cuyo RFC
-  // es el fiscal verificado del tenant (`tenant.rfc_sat_verificado`). Una fila con otro RFC
+  // es el fiscal verificado del tenant (su RFC verificado, 0925). Una fila con otro RFC
   // —declarada antes del candado o por una vía que lo rodee— no se pide: se
   // dice y la flota queda sin descargar, nunca descargando el buzón de otra.
-  // Si `tenant.rfc_sat_verificado` no se puede leer, el barrido entero falla cerrado.
+  // Si el RFC verificado del tenant (0925) no se puede leer, el barrido entero falla cerrado.
   const rfcsFiscales = await rfcsFiscalesDeTenants(lista.map((c) => String(c.tenant_id)));
   let flotasSinTurno = 0;
   for (let i = 0; i < lista.length; i++) {

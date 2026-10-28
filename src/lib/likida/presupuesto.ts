@@ -110,7 +110,11 @@ export const PASOS_CIERRE: ReadonlyArray<PasoCierre> = [
   { paso: 'telefonoParaDineroDe',                  donde: 'contactos.ts',      ms: 300,   techoMs: TECHO_PASO_CONSULTA_MS },
   { paso: 'resumenDeCierre (2 consultas en paralelo)', donde: 'avisar_cierre.ts', ms: 300, techoMs: TECHO_PASO_CONSULTA_MS },
   { paso: 'sendText del aviso al jefe',            donde: 'avisar_cierre.ts',  ms: 1_500, techoMs: TECHO_ENVIO_WHATSAPP_MS },
-  { paso: 'sendDocument del PDF al jefe',          donde: 'avisar_cierre.ts',  ms: 2_500, techoMs: TECHO_ENVIO_WHATSAPP_MS },
+  // A39-S30-03: el PDF libre al jefe y el aviso por plantilla de «PDF fuera de ventana» son EXCLUYENTES en tiempo: si el documento entra (~2.5 s) no hay
+  // plantilla; si rebota por ventana cerrada (131047), Meta lo rechaza rápido (~1 s) y sigue UN aviso por plantilla (~1.5 s). La suma de los dos renglones
+  // (2.5 s) cubre el peor de los dos caminos y deja el margen en 39.6 s, igual que antes de añadir la plantilla (más de eso dejaría `restante()` en 0).
+  { paso: 'sendDocument del PDF al jefe',          donde: 'avisar_cierre.ts',  ms: 1_000, techoMs: TECHO_ENVIO_WHATSAPP_MS },
+  { paso: 'sendText (plantilla) del aviso de PDF fuera de ventana al jefe', donde: 'avisar_cierre.ts', ms: 1_500, techoMs: TECHO_ENVIO_WHATSAPP_MS },
   // AUDITORÍA 25, ALTO (REND-A2, REINCIDENTE): el segundo sello, el del aviso
   // a la oficina (`processor.ts:4338`) — mismo hallazgo que el de arriba.
   { paso: 'sellarEntregaLiquidacion (aviso oficina)', donde: 'processor.ts:4338', ms: 300, techoMs: TECHO_PASO_CONSULTA_MS },
