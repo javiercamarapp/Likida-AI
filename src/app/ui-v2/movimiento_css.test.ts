@@ -34,7 +34,7 @@ describe.each(ARCHIVOS)('movimiento en %s', (archivo) => {
     for (const m of css.matchAll(/@keyframes\s+[\w-]+/g)) {
       expect(dentro(m.index!), `${m[0]} fuera de no-preference`).toBe(true);
     }
-    for (const m of css.matchAll(/(^|[;{\s])animation(-name)?\s*:\s*(?!none)[^;}]+/g)) {
+    for (const m of css.matchAll(/(^|[;{\s])animation(-name)?\s*:(?!\s*none)[^;}]+/g)) {
       expect(dentro(m.index!), `animación fuera de no-preference: ${m[0].trim()}`).toBe(true);
     }
   });
