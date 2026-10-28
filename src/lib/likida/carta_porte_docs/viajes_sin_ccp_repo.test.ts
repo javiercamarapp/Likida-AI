@@ -100,6 +100,30 @@ describe('lectura de salidas para «viajes sin Carta Porte» (T-A3-66)', () => {
     expect(filtros).toContainEqual({ tabla: 'cp_envio_tms', op: 'eq', args: ['tenant_id', 't1'] });
   });
 
+  it('M3 · «abc 123» del viaje liga con «ABC123» del documento (y al revés), sin depender de la igualdad exacta en la base; el filtro de la flota y del estado siguen', async () => {
+    tablas.viaje_hito = { filas: [] };
+    tablas.viaje = { filas: [
+      { id: 'v1', fecha_inicio: '2026-03-08', folio: 'abc 123', cliente_id: null, cliente: null },
+      { id: 'v2', fecha_inicio: '2026-03-08', folio: 'XY-9', cliente_id: null, cliente: null },
+      { id: 'v3', fecha_inicio: '2026-03-08', folio: 'zz 1', cliente_id: null, cliente: null },
+      { id: 'v4', fecha_inicio: '2026-03-08', folio: 'NADA-0', cliente_id: null, cliente: null },
+    ] };
+    tablas.cp_documento = { filas: [{ folio: 'ABC123', viaje_id: null }, { folio: ' xy - 9', viaje_id: null }, { folio: 'OTRO-1', viaje_id: null }] };
+    tablas.cp_envio_tms = { filas: [{ referencia_tms: 'ZZ1' }] };
+    const r = await leerSalidasParaSinCcp('t1', AHORA, { viajesDelTms: true });
+    expect([...r.conCcp].sort()).toEqual(['v1', 'v2', 'v3']);   // espacios internos y mayúsculas se ignoran; un folio que no está en el documento no liga
+    expect(filtros).toContainEqual({ tabla: 'cp_documento', op: 'eq', args: ['estado', 'aprobado'] });
+    expect(filtros).toContainEqual({ tabla: 'cp_documento', op: 'eq', args: ['tenant_id', 't1'] });
+  });
+
+  it('M3 · si la lectura de folios falla LANZA (no se calla como «sin CCP»)', async () => {
+    tablas.viaje_hito = { filas: [] };
+    tablas.viaje = { filas: [{ id: 'v1', fecha_inicio: '2026-03-08', folio: 'F-1', cliente_id: null, cliente: null }] };
+    tablas.cp_documento = { filas: [], error: { message: 'caída' } };
+    tablas.cp_envio_tms = { filas: [] };
+    await expect(leerSalidasParaSinCcp('t1', AHORA, { viajesDelTms: true })).rejects.toThrow();
+  });
+
   it('OLA1-A3 · sin la opción (flotas de siempre) no lee viajes por fecha ni liga por folio', async () => {
     tablas.viaje_hito = { filas: [] };
     await leerSalidasParaSinCcp('t1', AHORA);

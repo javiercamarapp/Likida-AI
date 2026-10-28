@@ -1280,6 +1280,8 @@ export async function enviosParaInsights(tenantId: string, desde: Date): Promise
 
 /** Cuánto hacia atrás se buscan salidas (más viejo que esto ya no es un pendiente de la semana). */
 export const DIAS_SALIDAS_SIN_CCP = 45;
+/** Días ANTES de la ventana de salidas desde los que se leen documentos/cargas para ligar por folio (un complemento puede existir antes del viaje). */
+export const MARGEN_DIAS_FOLIO_CCP = 60;
 
 /**
  * Viajes con salida registrada (hito `salida_carga` recibido o validado) y los ids de los que ya tienen un complemento
@@ -1339,17 +1341,26 @@ export async function leerSalidasParaSinCcp(tenantId: string, ahora: Date = new 
   for (const d of docs) { const id = s(d.viaje_id); if (id) conCcp.add(id); }
   if (opciones.viajesDelTms) {
     // Folios de los complementos aprobados y de las cargas ya subidas al TMS (la referencia es el folio del viaje allá).
-    const folios = [...new Set(viajes.map((v) => s(v.folio)).filter((f): f is string => f !== null))];
-    if (folios.length > 0) {
-      const [porDoc, porEnvio] = await Promise.all([
-        traerPorIds<Fila>(folios, (t) => acotada(supabaseAdmin().from('cp_documento').select('folio:extraccion->campos->folio_cliente->>valor')
-          .eq('tenant_id', tenantId).eq('estado', 'aprobado').in('extraccion->campos->folio_cliente->>valor', t), 'cpdocs.sin_ccp_folio_docs') as never, 'cpdocs.sin_ccp_folio_docs'),
-        traerPorIds<Fila>(folios, (t) => acotada(supabaseAdmin().from('cp_envio_tms').select('referencia_tms')
-          .eq('tenant_id', tenantId).in('estado', ['enviado', 'subido_a_mano']).in('referencia_tms', t), 'cpdocs.sin_ccp_folio_envios') as never, 'cpdocs.sin_ccp_folio_envios'),
+    //
+    // SUPUESTO DECLARADO (sin confirmar con el cliente): `viaje.folio` (TMS) = `folio_cliente` del documento («Folio / referencia del
+    // cliente», campos.ts) = `referencia_tms` de la carga subida. Si el supuesto es falso, NINGÚN viaje liga y TODOS salen «sin CCP»
+    // (falla ruidosa, sin enviar nada a nadie): es la señal para confirmar con el cliente qué campo equivale al folio.
+    //
+    // La comparación NO se hace por igualdad exacta en la base (un folio con otra capitalización o con espacios nunca volvía y salía
+    // «sin CCP»): se leen los documentos aprobados y las cargas subidas de la flota desde un margen antes de la ventana de salidas y
+    // se comparan en memoria con `folioComparable` (sin espacios, en mayúsculas) de AMBOS lados.
+    if (viajes.some((v) => folioComparable(v.folio) !== '')) {
+      const margen = new Date(ahora.getTime() - (DIAS_SALIDAS_SIN_CCP + MARGEN_DIAS_FOLIO_CCP) * 86_400_000).toISOString();
+      const [rDoc, rEnvio] = await Promise.all([
+        leerConTope<Fila>((d, h, primera) => acotada(supabaseAdmin().from('cp_documento').select('folio:extraccion->campos->folio_cliente->>valor', conteo(primera ? 0 : 1))
+          .eq('tenant_id', tenantId).eq('estado', 'aprobado').gte('created_at', margen).order('created_at', { ascending: false }).order('id').range(d, h), 'cpdocs.sin_ccp_folio_docs') as never, TOPE_SALIDAS_SIN_CCP),
+        leerConTope<Fila>((d, h, primera) => acotada(supabaseAdmin().from('cp_envio_tms').select('referencia_tms', conteo(primera ? 0 : 1))
+          .eq('tenant_id', tenantId).in('estado', ['enviado', 'subido_a_mano']).gte('created_at', margen).order('created_at', { ascending: false }).order('id').range(d, h), 'cpdocs.sin_ccp_folio_envios') as never, TOPE_SALIDAS_SIN_CCP),
       ]);
       const vistos = new Set<string>();
-      for (const d of porDoc) { const f = folioComparable(s(d.folio)); if (f) vistos.add(f); }
-      for (const e of porEnvio) { const f = folioComparable(s(e.referencia_tms)); if (f) vistos.add(f); }
+      for (const d of (exigir(rDoc, 'cpdocs.sin_ccp_folio_docs') ?? []) as unknown as Fila[]) { const f = folioComparable(s(d.folio)); if (f) vistos.add(f); }
+      for (const e of (exigir(rEnvio, 'cpdocs.sin_ccp_folio_envios') ?? []) as unknown as Fila[]) { const f = folioComparable(s(e.referencia_tms)); if (f) vistos.add(f); }
+      truncado = truncado || rDoc.truncado || rEnvio.truncado;
       for (const id of viajesLigadosPorFolio(viajes, vistos)) conCcp.add(id);
     }
   }

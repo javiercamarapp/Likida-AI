@@ -65,8 +65,8 @@ export interface ListadoSinCcp {
   truncado?: boolean;
 }
 
-/** El folio tal como se compara entre el viaje y el documento/envío: sin espacios de más y sin distinguir mayúsculas. */
-export const folioComparable = (f: string | null | undefined): string => String(f ?? '').replace(/\s+/g, ' ').trim().toUpperCase();
+/** El folio tal como se compara entre el viaje y el documento/envío: SIN ningún espacio y sin distinguir mayúsculas («abc 123» = «ABC123»). */
+export const folioComparable = (f: string | null | undefined): string => String(f ?? '').replace(/\s+/g, '').toUpperCase();
 
 /**
  * OLA1-A3 · Viajes cuyo folio coincide con el de un complemento ya aprobado o con la referencia de una carga ya subida al TMS.
