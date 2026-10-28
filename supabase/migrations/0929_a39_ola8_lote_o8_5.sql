@@ -12,7 +12,7 @@
 --     `recibir_desglose_atomico` (redefinida desde 0923, mismo cuerpo) lo escribe. Dos originales o dos copias de la misma corrección
 --     siguen chocando: la unicidad por bitácora no se afloja, solo distingue la corrección de su original.
 --
---  2. A39-S14-01 · Reclamar candidatos por SEGUNDA vez en la misma categoría y desglose fallaba para siempre (variante de INN-A2-01).
+--  2. A39-S14-01 · Reclamar candidatos por SEGUNDA vez en la misma categoría y desglose fallaba para siempre (variante de A37-A2-01).
 --     `peaje_reclamo_activo_unico` (0847) era (flota, desglose, categoría): el primer reclamo (ya enviado al portal) bloqueaba
 --     cualquier tanda posterior de candidatos de esa categoría. Ahora `peaje_reclamo.lote` (0 = reclamo de la categoría COMPLETA, que
 --     conserva su candado contra el doble envío; 1, 2… = cada tanda de candidatos, disjuntas porque cada candidato tiene UNA decisión

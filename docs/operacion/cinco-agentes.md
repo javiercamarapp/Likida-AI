@@ -33,7 +33,7 @@ exactos viven en [perfil-cinco-agentes.md](perfil-cinco-agentes.md); aquí solo 
 1. **Migraciones primero.** Aplicar en la base de destino las migraciones que el perfil y los agentes activos necesitan
    (la tabla de perfil y las de cada agente están en [indice-agentes.md](indice-agentes.md)). El código funciona contra
    una base sin su migración y lo dice; no inventa un estado.
-   **Llaves de API ANTES del perfil (A39-INN-transversal-02).** `/dashboard/llaves-api` está en stand-by bajo el perfil (ni el dueño ni
+   **Llaves de API ANTES del perfil (A39-transversal-02).** `/dashboard/llaves-api` está en stand-by bajo el perfil (ni el dueño ni
    el superadmin con `?tenant=` pueden emitir una llave una vez aplicado), pero el TMS del cliente necesita una llave `administracion`
    para `POST /v1/liquidaciones-externas/contactos` y `POST /v1/ccp-timbrado`, y esos recursos `/v1` siguen vivos. Por eso: emitir
    las llaves que el cliente necesite (y entregárselas por el canal acordado) ANTES del paso 3. Si hay que emitir una después,

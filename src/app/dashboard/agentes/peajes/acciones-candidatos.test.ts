@@ -117,7 +117,7 @@ describe('reclamar', () => {
     expect(db.tablas.peaje_candidato_accion ?? []).toHaveLength(0);
   });
 
-  // A39-S14-01 (variante de INN-A2-01): la segunda tanda de candidatos de la MISMA categoría y desglose chocaba para siempre con el
+  // A39-S14-01 (variante de A37-A2-01): la segunda tanda de candidatos de la MISMA categoría y desglose chocaba para siempre con el
   // índice (flota, desglose, categoría). Desde la 0929 cada tanda toma su propio lote; el reclamo de categoría completa es el lote 0.
   it('A39-S14-01: reclamar otra tanda de la misma categoría crea otro reclamo con el siguiente lote (el primero, ya enviado, no estorba)', async () => {
     sembrar();

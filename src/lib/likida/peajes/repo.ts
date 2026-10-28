@@ -2048,7 +2048,7 @@ const INTENTOS_LOTE = 5;
  * Crea UN reclamo (preparado, o enviado si trae fecha de envío) a partir de un grupo de candidatos ya elegidos.
  * Los números salen de los candidatos, no del formulario. `fechaCobroMasAntigua` es de donde corre el plazo.
  *
- * A39-S14-01 (variante de INN-A2-01): el índice único `peaje_reclamo_activo_unico` (0847) era (flota, desglose, categoría) y la segunda
+ * A39-S14-01 (variante de A37-A2-01): el índice único `peaje_reclamo_activo_unico` (0847) era (flota, desglose, categoría) y la segunda
  * tanda de candidatos de la MISMA categoría chocaba para siempre (el primer reclamo ya estaba enviado y el segundo no podía crearse).
  * Desde la 0929 cada reclamo lleva un `lote`: la categoría completa es el lote 0 (su doble envío sigue chocando) y cada tanda de
  * candidatos toma el siguiente lote (1, 2…): los candidatos ya tienen una decisión única por renglón, así que las tandas son disjuntas.
