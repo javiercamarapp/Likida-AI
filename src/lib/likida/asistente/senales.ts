@@ -1,4 +1,4 @@
-// Lectura de las señales del asistente de puesta en marcha. SOLO usa lectores que ya existen (sin `.from(` propio): el
+// Lectura de las señales del asistente de puesta en marcha. SOLO usa lectores que ya existen (ninguna consulta directa propia): el
 // asistente no abre una frontera de datos nueva. Cada lectura cae a `null` POR SEPARADO (null ≠ 0): una consulta caída
 // no tumba el asistente ni lo vuelve «todo pendiente».
 
