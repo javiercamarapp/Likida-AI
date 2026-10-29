@@ -1,10 +1,10 @@
--- REVERSA (solo si algo no previsto lee con el JWT de usuario; reabre lo que esta migración cierra):
---   grant select, insert, update, delete on all tables in schema public to anon, authenticated;
---   grant usage, select on all sequences in schema public to anon, authenticated;
---   -- y, para NO reabrir las credenciales: reaplicar la 0946 y la sección 4 de la 0923 (idempotentes).
---   alter default privileges for role postgres in schema public grant select, insert, update, delete on tables to anon, authenticated;
---   alter default privileges for role postgres in schema public grant usage, select on sequences to anon, authenticated;
---   alter default privileges for role postgres in schema public grant execute on functions to anon, authenticated;
+-- REVERSA: la ÚNICA reversa válida es la EXACTA, generada de producción JUSTO ANTES de aplicar (misma ventana):
+--   psql "$URL" -X -At -f scripts/seguridad/generar_reversa_0947.sql > reversa-exacta-0947.sql    -- guardarla fuera del repo, junto al respaldo
+--   y, si hay que revertir:  psql "$URL" -v ON_ERROR_STOP=1 -f reversa-exacta-0947.sql
+-- (vuelca los ACL reales de anon/authenticated/PUBLIC de tablas, vistas, secuencias, columnas y funciones de `public` y los default
+-- privileges; probada en CI local: tras 0947 + reversa el volcado queda idéntico al previo). NO usar «grant ... on all tables to anon,
+-- authenticated»: daría CRUD a las 280 tablas, PEOR que el estado previo (hoy ~118 sin acceso, ~45 solo SELECT, ~114 CRUD).
+-- Si se revierte, reaplicar después la 0946 y la sección 4 de la 0923 (idempotentes) y correr capa0 bloque E.
 -- Aplicación doble: segura (todo es revoke/grant repetible; los default privileges también).
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 0947 — SEGURIDAD OLA 1 · A1 (B-08, SEG-6-01..04, 6-06, 6-07 parcial): ninguna tabla pública por defecto.
@@ -41,7 +41,7 @@ revoke all on all sequences in schema public from anon, authenticated;
 
 -- 3. Funciones SECURITY DEFINER: fuera PUBLIC/anon/authenticated, salvo (a) las que usa alguna política RLS (el motor de RLS las llama con
 --    el rol de quien pregunta: revocarlas rompería el aislamiento) y (b) los ayudantes de RLS que el repo concedió A PROPÓSITO a authenticated (por nombre: get_user_tenant_ids, is_superadmin, administra_flota, ve_finanzas, ve_operacion, ve_atencion_cliente, es_dueno_flota).
---    Las funciones de extensiones no se tocan. En producción casi todas ya estaban revocadas (204 de 206): esto cierra el resto y
+--    Las funciones de extensiones no se tocan. En producción casi todas ya estaban revocadas (todas menos los ayudantes de RLS exentos): esto cierra el resto y
 --    deja el estado verificable por capa0.
 do $$
 declare r record;
