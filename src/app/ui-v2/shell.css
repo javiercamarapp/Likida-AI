@@ -179,6 +179,8 @@
 }
 [data-ui="v2"] .rv-menu__fila:hover { background: var(--ui-soft); color: var(--ink); }
 [data-ui="v2"] .rv-menu__fila:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: -2px; }
+/* El tema dentro del menú solo se ve donde el segmentado del pie no existe (riel 768–1023 y sidebar plegado) */
+[data-ui="v2"] .rv-menu__tema { display: none; flex-direction: column; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--ui-border); }
 [data-ui="v2"] .rv-menu__valor { margin-left: auto; font-weight: 600; color: var(--ink); }
 
 /* Topbar: botón de plegar + breadcrumb 13/500 */
@@ -267,6 +269,7 @@
   [data-ui="v2"] .rv-sb .rv-sb__plegar { display: none; }
   [data-ui="v2"] .rv-sb .rv-logo-s { display: block; }
   [data-ui="v2"] .rv-sb .rv-tema { display: none; }
+  [data-ui="v2"] .rv-sb .rv-menu__tema { display: flex; }
   [data-ui="v2"] .rv-sb .rv-puesta { justify-content: center; }
   [data-ui="v2"] .rv-sb .rv-puesta__seg { display: none; }
   [data-ui="v2"] .rv-sb .rv-cuenta { flex-direction: column; height: auto; padding: 4px 0; border: 0; background: transparent; }
@@ -305,6 +308,7 @@
   [data-ui="v2"] .rv-sb[data-riel] .rv-sb__plegar { display: none; }
   [data-ui="v2"] .rv-sb[data-riel] .rv-logo-s { display: block; }
   [data-ui="v2"] .rv-sb[data-riel] .rv-tema { display: none; }
+  [data-ui="v2"] .rv-sb[data-riel] .rv-menu__tema { display: flex; }
   [data-ui="v2"] .rv-sb[data-riel] .rv-puesta { justify-content: center; }
   [data-ui="v2"] .rv-sb[data-riel] .rv-puesta__seg { display: none; }
   [data-ui="v2"] .rv-sb[data-riel] .rv-cuenta { flex-direction: column; height: auto; padding: 4px 0; border: 0; background: transparent; }

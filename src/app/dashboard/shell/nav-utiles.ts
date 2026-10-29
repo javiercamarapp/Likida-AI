@@ -19,3 +19,16 @@ export function avanceDe(insignia: string | undefined): { n: number; t: number }
   return m ? { n: Number(m[1]), t: Number(m[2]) } : null;
 }
 
+
+/**
+ * Navegación por teclado de un menú (patrón APG): ArrowDown/ArrowUp recorren con vuelta, Home/End van a los extremos.
+ * Devuelve el índice nuevo, o null si la tecla no es de navegación. `actual` = -1 si el foco no está en un ítem.
+ */
+export function indiceDeMenu(tecla: string, actual: number, total: number): number | null {
+  if (total <= 0) return null;
+  if (tecla === 'ArrowDown') return actual < 0 ? 0 : (actual + 1) % total;
+  if (tecla === 'ArrowUp') return actual < 0 ? total - 1 : (actual - 1 + total) % total;
+  if (tecla === 'Home') return 0;
+  if (tecla === 'End') return total - 1;
+  return null;
+}

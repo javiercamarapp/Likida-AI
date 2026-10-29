@@ -81,12 +81,15 @@ describe('movimiento', () => {
 });
 
 describe('pie del sidebar y tokens de shell', () => {
-  it('el pie cabe en el techo: 32 + 24 + 32 + 44 + 3 huecos de 4 + borde y relleno ≤ 150', () => {
-    const suma = 32 + 24 + 32 + 44 + 3 * 4 + 1 /* borde */ + 2 + 3 /* relleno */;
-    expect(suma).toBeLessThanOrEqual(ALTO_PIE_MAX_PX);
-    expect(regla('[data-ui="v2"] .rv-tema')).toContain('height: 32px');
-    expect(regla('[data-ui="v2"] .rv-cuenta')).toContain('height: 44px');
-    expect(regla('[data-ui="v2"] .rv-puesta')).toContain('height: 24px');
+  it('el pie cabe en el techo: la suma sale de las reglas del CSS (no de números escritos a mano)', () => {
+    const alto = (sel: string) => Number(/(?:^|[\s;{])height:\s*(\d+)px/.exec(regla(sel))?.[1]);
+    const filas = [alto('[data-ui="v2"] .rv-item'), alto('[data-ui="v2"] .rv-puesta'), alto('[data-ui="v2"] .rv-tema'), alto('[data-ui="v2"] .rv-cuenta')];
+    expect(filas.every((n) => Number.isFinite(n) && n > 0), `alturas leídas: ${filas}`).toBe(true);
+    const hueco = Number(/gap:\s*(\d+)px/.exec(regla('[data-ui="v2"] .rv-pie'))?.[1]);
+    const relleno = /padding:\s*(\d+)px \d+px (\d+)px/.exec(regla('[data-ui="v2"] .rv-sb__pie', sinComentarios.indexOf('@media (min-width: 768px)')));
+    const suma = filas.reduce((a, b) => a + b, 0) + hueco * (filas.length - 1) + 1 /* borde superior */ + Number(relleno?.[1]) + Number(relleno?.[2]);
+    expect(suma, `pie = ${filas.join('+')} + ${filas.length - 1} huecos de ${hueco} + borde y relleno`).toBeLessThanOrEqual(ALTO_PIE_MAX_PX);
+    expect(filas).toEqual([32, 24, 32, 44]);
   });
 
   it('los tokens de shell de tokens.css repiten las constantes', () => {
