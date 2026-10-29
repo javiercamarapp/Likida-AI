@@ -51,6 +51,7 @@
   color: var(--ink2); cursor: pointer;
 }
 [data-ui="v2"] .rv-icono-boton:hover { background: var(--ui-soft); color: var(--ink); }
+[data-ui="v2"] .rv-icono-boton::after { content: ""; position: absolute; inset: -6px; }
 
 /* ── Piezas de la navegación (compartidas por el aside y la hoja) ─────────── */
 [data-ui="v2"] .rv-lista { list-style: none; margin: 0; padding: 0; }
@@ -129,13 +130,13 @@
 /* Tema segmentado visible (claro / sistema / oscuro): alto 32 */
 [data-ui="v2"] .rv-tema {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; height: 32px; box-sizing: border-box; padding: 2px;
-  border-radius: 8px; background: var(--ui-soft);
+  border-radius: 12px; background: var(--ui-soft);
 }
 [data-ui="v2"] .rv-tema__op {
-  position: relative; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 6px;
+  position: relative; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 8px;
   background: transparent; color: var(--muted); cursor: pointer;
 }
-[data-ui="v2"] .rv-tema__op::after { content: ""; position: absolute; inset: -6px 0; }
+[data-ui="v2"] .rv-tema__op::after { content: ""; position: absolute; inset: -8px 0; }
 [data-ui="v2"] .rv-tema__op:hover { color: var(--ink); }
 [data-ui="v2"] .rv-tema__op[aria-checked="true"] { background: var(--ui-surface); color: var(--ink); box-shadow: inset 0 0 0 1px var(--ui-border); }
 [data-ui="v2"] .rv-tema__op:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 1px; }
@@ -209,20 +210,21 @@
   [data-ui="v2"] .rv-cab-movil { display: none; }
 
   /* Marco: 100 dvh, padding 16, gap 16. Solo `.rv-contenido` scrollea. */
-  [data-ui="v2"] .rv-fila { align-items: stretch; height: 100dvh; min-height: 0; box-sizing: border-box; padding: 16px; gap: 16px; }
+  [data-ui="v2"] .rv-fila { align-items: stretch; height: 100dvh; min-height: 0; box-sizing: border-box; padding: 16px; gap: 0; }
 
   [data-ui="v2"] .rv-sb {
     display: flex; flex-direction: column; flex: none; position: relative; z-index: 20;
-    width: 72px; height: 100%; box-sizing: border-box; padding-bottom: 8px;
+    width: 72px; height: 100%; box-sizing: border-box; padding-bottom: 8px; margin-right: 16px;
     background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: 12px;
   }
   [data-ui="v2"] .rv-sb__marca { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 52px; box-sizing: border-box; padding: 12px; flex: none; }
-  [data-ui="v2"] .rv-sb__logo { display: inline-flex; align-items: center; color: var(--ink); border-radius: 8px; }
+  [data-ui="v2"] .rv-sb__logo { position: relative; display: inline-flex; align-items: center; color: var(--ink); border-radius: 8px; }
+  [data-ui="v2"] .rv-sb__logo::after { content: ""; position: absolute; inset: -7px 0; }
   [data-ui="v2"] .rv-sb__logo:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 3px; }
   [data-ui="v2"] .rv-logo-s { display: none; }
   [data-ui="v2"] .rv-sb__plegar { width: 32px; height: 32px; }
   /* El contenido del sidebar scrollea por dentro; el pie queda fijo abajo. */
-  [data-ui="v2"] .rv-sb__nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 0 8px; }
+  [data-ui="v2"] .rv-sb__nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 6px 0 8px; }
   [data-ui="v2"] .rv-sb__pie { flex: none; box-sizing: border-box; padding: 2px 8px 3px; border-top: 1px solid var(--ui-border); }
 
   /* La columna del contenido es una tarjeta: topbar fija arriba y contenido que scrollea por dentro */

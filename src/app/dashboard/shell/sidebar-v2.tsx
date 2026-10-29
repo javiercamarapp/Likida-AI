@@ -28,8 +28,8 @@ export default function SidebarV2({ rol, rolEtiqueta, nombre, perfil, usoIa, cer
       <div className="rv-sb__marca">
         <Link href={`${casa}${sufijo}`} className="rv-sb__logo" aria-label="Likida, ir al inicio">
           {/* Una sola marca visible a la vez: horizontal (30 de alto) con el sidebar completo, símbolo (28) en el riel. */}
-          <LogoV2 alto={30} className="rv-logo-h" />
-          <LogoV2 alto={28} variante="simbolo" className="rv-logo-s" />
+          <span className="rv-logo-h"><LogoV2 alto={30} /></span>
+          <span className="rv-logo-s"><LogoV2 alto={28} variante="simbolo" /></span>
         </Link>
         <button type="button" className="rv-icono-boton rv-sb__plegar" onClick={alternar} aria-label="Plegar el menú" title="Plegar el menú" aria-expanded={!riel}>
           <PanelLeftClose width={16} height={16} strokeWidth={1.75} aria-hidden />
