@@ -24,38 +24,38 @@
 
 :root [data-ui="v2"] {
   /* Marco y superficies */
-  --bg: #f6f6f7;
-  --surface: #ffffff;
+  --bg: #f4eee3;
+  --surface: #fbfbfd;
   --panel: var(--surface);
-  --canvas: #f1f1f2;
-  --canvas2: #f7f7f8;
+  --canvas: #efe7d8;
+  --canvas2: #f8f4ec;
 
   /* Tinta */
-  --ink: #0e0e10;
-  --ink2: #3a3a40;
-  --muted: #5a5a61;
-  --faint: #6a6a73;
+  --ink: #17100d;
+  --ink2: #3b302a;
+  --muted: #5f544c;
+  --faint: #6e625a;
 
   /* Líneas y controles */
-  --line: #e6e6e8;
-  --line2: #d6d6d9;
-  --input: #8a8a90;
+  --line: #e3d9c7;
+  --line2: #d2c6b2;
+  --input: #8c8073;
 
   /* Tinta como relleno de marca (anillo, interruptor, foco del recorrido, avatar): sigue siendo tinta sólida. */
-  --marca: #0e0e10;
+  --marca: #c2410c;
   --marca-fg: #ffffff;
-  --marca-hover: #2a2a2f;
-  --accent: #0e0e10;
+  --marca-hover: #9a3412;
+  --accent: #c2410c;
   --accent-fg: #ffffff;
   /* ◆ Botón primario = «tenue neutro» (decisión de Javier: nada de bloque negro ni azul), máx. 1 por pliegue. */
-  --btn-bg: #e4e4e6;
-  --btn-fg: var(--ink);
-  --btn-borde: #d6d6d9;
-  --btn-hover: #d6d6d9;
+  --btn-bg: #c2410c;
+  --btn-fg: #ffffff;
+  --btn-borde: #c2410c;
+  --btn-hover: #9a3412;
   /* Alternativa de G1 (Javier elige): el azul suave de Rovaq. En oscuro usa el par azul de datos. */
-  --btn-soft: #e6edfa;
-  --btn-soft-fg: #1f4fb0;
-  --btn-soft-hover: #d8e3f8;
+  --btn-soft: #e4e9f1;
+  --btn-soft-fg: #2a3f5f;
+  --btn-soft-hover: #d6dee9;
   /* ◆ Señal «requiere acción» = burdeos (matiz 6 de datos), ≤2 % del área; nunca hover, relleno de botón ni «Salir».
      #a6264a sobre blanco mide ≥7:1. */
   --senal: #a6264a;
@@ -71,25 +71,34 @@
   --infobg: #e8f3f5;
 
   /* Rampa de gráficas (neutra) */
-  --g1: #f1f1f2;
-  --g2: #e4e4e6;
-  --g3: #8a8a90;
-  --g4: #3a3a40;
-  --g5: #0e0e10;
+  --g1: #f1ebdf;
+  --g2: #e6ded0;
+  --g3: #8c8073;
+  --g4: #3b302a;
+  --g5: #17100d;
 
   /* Ocho matices de DATOS: solo gráficas, chips de categoría y filete de KPI */
-  --chart-1: #2f6bd8; --chart-2: #f25d22; --chart-3: #1f7a55; --chart-4: #d9a441;
-  --chart-5: #0a84a6; --chart-6: #a6264a; --chart-7: #7b5cd6; --chart-8: #0e0e10;
-  --soft-1: #e6edfa; --soft-2: #fdece4; --soft-3: #e4efeb; --soft-4: #faf4e8;
-  --soft-5: #e2f0f4; --soft-6: #f4e5e9; --soft-7: #efebfa; --soft-8: #e2e2e2;
-  --ink-1: #2c65cb; --ink-2: #b14418; --ink-3: #1d7350; --ink-4: #8c6a2a;
-  --ink-5: #087593; --ink-6: #a6264a; --ink-7: #7456c9; --ink-8: #0e0e10;
+  --chart-1: #2a3f5f; --chart-2: #c2410c; --chart-3: #1f7a55; --chart-4: #d9a441;
+  --chart-5: #0a84a6; --chart-6: #a6264a; --chart-7: #7b5cd6; --chart-8: #17100d;
+  --soft-1: #e4e9f1; --soft-2: #fbe9e0; --soft-3: #e4efeb; --soft-4: #faf4e8;
+  --soft-5: #e2f0f4; --soft-6: #f4e5e9; --soft-7: #efebfa; --soft-8: #e6ded0;
+  --ink-1: #2a3f5f; --ink-2: #9a3412; --ink-3: #1d7350; --ink-4: #8c6a2a;
+  --ink-5: #087593; --ink-6: #a6264a; --ink-7: #7456c9; --ink-8: #17100d;
 
   /* Alias del sistema v2 (ESTILO-LIKIDA §1) */
+  /* ◆ IDENTIDAD DE MARCA (directiva de Javier 29-oct): naranja ladrillo = acción (--marca), azul marino = estructura/activo,
+     crema = superficies, tinta cálida. Máx. un acento fuerte por vista. */
+  --marino: #2a3f5f;
+  --marino-soft: #e4e9f1;
+  --crema: #ede4d3;
+  --ui-activo-bg: var(--marino-soft);
+  --ui-activo-ink: var(--marino);
+  --ui-activo-barra: var(--marca);
+
   --ui-canvas: var(--bg);
   --ui-surface: var(--surface);
   --ui-soft: var(--canvas);
-  --ui-elevated: #ffffff;
+  --ui-elevated: #fbfbfd;
   --ui-border: var(--line);
   --ui-line-strong: var(--line2);
   --ui-input: var(--input);
@@ -99,28 +108,28 @@
   --ui-tip-bg: var(--tip);
   --ui-tip-ink: var(--tip-ink);
   /* ÚNICO color de la capa de carga (= el fondo de la app) */
-  --carga-fondo: #ffffff;
+  --carga-fondo: #fbfbfd;
   /* Cabecera de tabla: petróleo al 7 % sobre la superficie, texto ink-info */
-  --tabla-cab-bg: #eef6f9;
-  --tabla-cab-ink: var(--info);
+  --tabla-cab-bg: #eef0f4;
+  --tabla-cab-ink: var(--marino);
 
   /* Neutros */
-  --n-950: #0e0e10;
-  --n-900: #17171a;
-  --n-850: #1f1f23;
-  --n-800: #2a2a2f;
-  --n-700: #3a3a40;
-  --n-600: #5a5a61;
-  --n-500: #8a8a90;
-  --n-400: #a3a3ab;
-  --n-300: #d6d6d9;
-  --n-200: #e4e4e6;
-  --n-100: #f1f1f2;
-  --n-50: #f7f7f8;
+  --n-950: #17100d;
+  --n-900: #1f1814;
+  --n-850: #2a211c;
+  --n-800: #352b25;
+  --n-700: #4a3f38;
+  --n-600: #5f544c;
+  --n-500: #8c8073;
+  --n-400: #b3a9a0;
+  --n-300: #d2c6b2;
+  --n-200: #e6ded0;
+  --n-100: #f1ebdf;
+  --n-50: #f8f4ec;
 
   /* Texto sobre un segmento relleno con el matiz n de datos */
   --on-1: #ffffff;
-  --on-2: #0e0e10;
+  --on-2: #ffffff;
   --on-3: #ffffff;
   --on-4: #0e0e10;
   --on-5: #000000;
@@ -129,20 +138,20 @@
   --on-8: #ffffff;
 
   /* Neutros de gráfica */
-  --chart-barra: #2f2f33; --chart-fuerte: #0e0e10; --chart-rejilla: #0e0e1014; --chart-eje: #0e0e1033;
-  --heat-0: #ececee;
-  --heat-1: #c9c9cd;
-  --heat-2: #98989f;
-  --heat-3: #5a5a61;
-  --heat-4: #0e0e10;
+  --chart-barra: #4a3f38; --chart-fuerte: #17100d; --chart-rejilla: #17100d14; --chart-eje: #17100d33;
+  --heat-0: #eee7da;
+  --heat-1: #d5cbba;
+  --heat-2: #a89c8c;
+  --heat-3: #5f544c;
+  --heat-4: #17100d;
 
   /* Procedencia (por trazo, no por matiz): Observado silencioso; Estimado discontinuo; Inferido punteado; Sin dato discontinuo vacío */
-  --prov-obs: #0e0e10;
-  --prov-est-bg: #e4e4e6;
-  --prov-est-borde: #4a4a51;
-  --prov-inf-bg: #f7f7f8;
-  --prov-inf-borde: #75757c;
-  --prov-sin-borde: #8a8a90;
+  --prov-obs: #17100d;
+  --prov-est-bg: #e6ded0;
+  --prov-est-borde: #5b4f46;
+  --prov-inf-bg: #f8f4ec;
+  --prov-inf-borde: #7d7166;
+  --prov-sin-borde: #8c8073;
 
   /* Radios (§5): controles y marcas de celda 8 · tarjetas, sidebar, overlays 12 · chips y píldoras 999 · hoja móvil 16 */
   --r-control: 8px;
@@ -188,9 +197,9 @@
   --kpi-h: 112px; --fila-tabla: 40px; --fila-tabla-densa: 32px; --cabecera-tabla: 36px; --chart-h: 168px; --chart-h-sm: 140px;
 
   /* Superpuestos */
-  --scrim: #0e0e1066;
-  --tip: #0e0e10;
-  --tip-ink: #f4f4f5;
+  --scrim: #17100d66;
+  --tip: #17100d;
+  --tip-ink: #f7f1e8;
 
   /* Gemelos --color-* (los que Tailwind emite como utilidades y 29 .tsx leen) */
   --color-bg: var(--bg);
@@ -213,38 +222,38 @@
 
   /* Sin sombras en el flujo; solo los popovers flotan */
   --shadow-card: none;
-  --shadow-pop: 0 12px 32px -8px #17181c2e, 0 2px 6px #17181c0f;
+  --shadow-pop: 0 12px 32px -8px #17100d2e, 0 2px 6px #17100d0f;
   --sh-pop: var(--shadow-pop);
 }
 
 :root[data-theme="dark"] [data-ui="v2"].tema-neutro,
 :root[data-theme="dark"] [data-ui="v2"] {
-  --bg: #0e0e10;
-  --surface: #17171a;
-  --canvas: #1f1f23;
-  --canvas2: #17171a;
+  --bg: #120d0a;
+  --surface: #1c1511;
+  --canvas: #2a201a;
+  --canvas2: #1c1511;
 
-  --ink: #f4f4f5;
-  --ink2: #d4d4d8;
-  --muted: #a3a3ab;
-  --faint: #98989f;
+  --ink: #f7f1e8;
+  --ink2: #e2d8ca;
+  --muted: #b5a99c;
+  --faint: #a89c8f;
 
-  --line: #26262b;
-  --line2: #48484a;
-  --input: #8b8b93;
+  --line: #2f2520;
+  --line2: #4a3d35;
+  --input: #8f8277;
 
-  --marca: #f4f4f5;
-  --marca-fg: #0e0e10;
-  --marca-hover: #ffffff;
-  --accent: #f4f4f5;
-  --accent-fg: #0e0e10;
-  --btn-bg: #2a2a2f;
-  --btn-fg: var(--ink);
-  --btn-borde: #48484a;
-  --btn-hover: #34343a;
-  --btn-soft: var(--soft-1);
-  --btn-soft-fg: var(--ink-1);
-  --btn-soft-hover: #181f2c;
+  --marca: #fb923c;
+  --marca-fg: #17100d;
+  --marca-hover: #fdba74;
+  --accent: #fb923c;
+  --accent-fg: #17100d;
+  --btn-bg: #fb923c;
+  --btn-fg: #17100d;
+  --btn-borde: #fb923c;
+  --btn-hover: #fdba74;
+  --btn-soft: #1b2431;
+  --btn-soft-fg: #9db9e0;
+  --btn-soft-hover: #141b26;
   --senal: #cc4a6c;
 
   --ok: #6fd6a3;
@@ -256,49 +265,52 @@
   --info: #9fd3de;
   --infobg: #14272c;
 
-  --g1: #1b1b1f;
-  --g2: #2a2a30;
-  --g3: #8b8b93;
-  --g4: #d4d4d8;
-  --g5: #f4f4f5;
+  --g1: #1c1511;
+  --g2: #2a201a;
+  --g3: #8f8277;
+  --g4: #e2d8ca;
+  --g5: #f7f1e8;
 
-  --chart-1: #4a85ea; --chart-2: #e8602b; --chart-3: #2a9468; --chart-4: #b98526;
-  --chart-5: #1d93b0; --chart-6: #cc4a6c; --chart-7: #8d75e0; --chart-8: #f4f4f5;
-  --soft-1: #1d2433; --soft-2: #30201c; --soft-3: #192623; --soft-4: #2a241b;
-  --soft-5: #18262c; --soft-6: #2d1d24; --soft-7: #252232; --soft-8: #323234;
-  --ink-1: #558ceb; --ink-2: #e8602b; --ink-3: #43a07a; --ink-4: #b98526;
-  --ink-5: #2b99b5; --ink-6: #d56985; --ink-7: #947de2; --ink-8: #f4f4f5;
+  --chart-1: #7c9bcb; --chart-2: #fb923c; --chart-3: #2a9468; --chart-4: #b98526;
+  --chart-5: #1d93b0; --chart-6: #cc4a6c; --chart-7: #8d75e0; --chart-8: #f7f1e8;
+  --soft-1: #1b2431; --soft-2: #33211a; --soft-3: #192623; --soft-4: #2a241b;
+  --soft-5: #18262c; --soft-6: #2d1d24; --soft-7: #252232; --soft-8: #2a201a;
+  --ink-1: #9db9e0; --ink-2: #fb923c; --ink-3: #43a07a; --ink-4: #b98526;
+  --ink-5: #2b99b5; --ink-6: #d56985; --ink-7: #947de2; --ink-8: #f7f1e8;
 
-  --ui-elevated: #1f1f23;
-  --carga-fondo: #0e0e10;
-  --tabla-cab-bg: #172024;
+  --marino: #9db9e0;
+  --marino-soft: #1b2431;
+  --crema: #3a2d24;
+  --ui-elevated: #2a201a;
+  --carga-fondo: #120d0a;
+  --tabla-cab-bg: #1a2029;
 
-  --on-1: #0e0e10;
-  --on-2: #0e0e10;
+  --on-1: #17100d;
+  --on-2: #17100d;
   --on-3: #0e0e10;
   --on-4: #0e0e10;
   --on-5: #000000;
   --on-6: #000000;
-  --on-7: #0e0e10;
-  --on-8: #0e0e10;
+  --on-7: #17100d;
+  --on-8: #17100d;
 
-  --chart-barra: #d2d2d6; --chart-fuerte: #f4f4f5; --chart-rejilla: #f4f4f514; --chart-eje: #f4f4f533;
-  --heat-0: #2a2a2f;
-  --heat-1: #3e3e45;
-  --heat-2: #62626a;
-  --heat-3: #9a9aa2;
-  --heat-4: #f4f4f5;
+  --chart-barra: #d9d0c4; --chart-fuerte: #f7f1e8; --chart-rejilla: #f7f1e814; --chart-eje: #f7f1e833;
+  --heat-0: #2a201a;
+  --heat-1: #3e322a;
+  --heat-2: #66584c;
+  --heat-3: #a09384;
+  --heat-4: #f7f1e8;
 
-  --prov-obs: #f4f4f5;
-  --prov-est-bg: #2a2a2f;
-  --prov-est-borde: #a3a3ab;
-  --prov-inf-bg: #17171a;
-  --prov-inf-borde: #7a7a82;
-  --prov-sin-borde: #7a7a82;
+  --prov-obs: #f7f1e8;
+  --prov-est-bg: #2a201a;
+  --prov-est-borde: #b3a9a0;
+  --prov-inf-bg: #1c1511;
+  --prov-inf-borde: #857a6f;
+  --prov-sin-borde: #857a6f;
 
   --scrim: #000a;
-  --tip: #f4f4f5;
-  --tip-ink: #0e0e10;
+  --tip: #f7f1e8;
+  --tip-ink: #17100d;
 
   --shadow-pop: 0 12px 32px -8px #000c, 0 2px 6px #0006;
 }
@@ -310,14 +322,14 @@
    `:root[data-theme="light"]` (0,2,0) sin depender del orden de los chunks de CSS; el oscuro lleva
    su propio bloque (0,3,1). Sin un `[data-ui="v2"]` en el documento, esto no aplica a nada. */
 html:root:has([data-ui="v2"]) {
-  --bg: #f6f6f7;
-  --ink: #0e0e10;
-  --carga-fondo: #ffffff;
+  --bg: #f4eee3;
+  --ink: #17100d;
+  --carga-fondo: #fbfbfd;
 }
 html:root[data-theme="dark"]:has([data-ui="v2"]) {
-  --bg: #0e0e10;
-  --ink: #f4f4f5;
-  --carga-fondo: #0e0e10;
+  --bg: #120d0a;
+  --ink: #f7f1e8;
+  --carga-fondo: #120d0a;
 }
 
 /* Tarjetas: 12 px, sin sombra. Selector de clase propio del alcance (0,2,0)

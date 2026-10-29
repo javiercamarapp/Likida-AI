@@ -34,10 +34,11 @@ describe('shell.css ↔ marco-v2.ts', () => {
     expect(regla('[data-ui="v2"] .rv-cab-movil')).toContain(`height: ${ALTO_CABECERA_MOVIL_PX}px`);
     expect(regla('[data-ui="v2"] .rv-cab-esc', sinComentarios.indexOf('@media (min-width: 768px)'))).toContain(`height: ${ALTO_CABECERA_ESCRITORIO_PX}px`);
     expect(regla('[data-ui="v2"] .rv-item', sinComentarios.indexOf('.rv-item {'))).toContain(`height: ${ALTO_ITEM_PX}px`);
-    // Activo = fondo suave + barra de tinta de 3 px (`inset 3px 0 0`), nunca bloque negro/blanco ni barra de color.
+    // Activo = fondo marino suave + barra de 3 px de COLOR de marca (`inset 3px 0 0`), por tokens de marca; nunca bloque negro/blanco.
     const activo = regla('[data-ui="v2"] .rv-item[aria-current="page"]');
-    expect(activo).toContain(`inset ${GROSOR_SENAL_PX}px 0 0 var(--ink)`);
-    expect(activo).toContain('background: var(--ui-soft)');
+    expect(activo).toContain(`inset ${GROSOR_SENAL_PX}px 0 0 var(--ui-activo-barra)`);
+    expect(activo).toContain('background: var(--ui-activo-bg)');
+    expect(activo).toContain('color: var(--ui-activo-ink)');
     expect(activo).not.toMatch(/background:\s*var\(--marca\)/);
     expect(regla('[data-ui="v2"] .rv-fila', sinComentarios.indexOf('@media (min-width: 768px)'))).toContain(`padding: ${MARCO_PX}px`);
   });
@@ -105,5 +106,23 @@ describe('clases del menú de cuenta', () => {
   it('shell.css no define .rv-menu* (son del MenuList de overlay): sus clases propias son .rv-cuenta-*', () => {
     expect(sinComentarios).not.toMatch(/\.rv-menu\b/);
     expect(sinComentarios).toContain('.rv-cuenta-tema');
+  });
+});
+
+describe('identidad de marca (directiva 29-oct)', () => {
+  const tokens = readFileSync(fileURLToPath(new URL('../../ui-v2/tokens.css', import.meta.url)), 'utf8');
+  it('primario, activo y logo se pintan con tokens de marca: naranja ladrillo, azul marino, tinta cálida', () => {
+    expect(tokens).toMatch(/--marca:\s*#c2410c/);
+    expect(tokens).toMatch(/--btn-bg:\s*#c2410c/);
+    expect(tokens).toMatch(/--marino:\s*#2a3f5f/);
+    expect(tokens).toMatch(/--ink:\s*#17100d/);
+    expect(tokens).toMatch(/--ui-activo-barra:\s*var\(--marca\)/);
+    // oscuro: naranja #fb923c sobre tinta cálida
+    expect(tokens).toMatch(/--marca:\s*#fb923c/);
+  });
+  it('las entradas animadas del shell viven solo en no-preference y duran ≤ 220 ms', () => {
+    const i = sinComentarios.indexOf('@keyframes rv-nav-entra');
+    expect(i).toBeGreaterThan(sinComentarios.indexOf('@media (prefers-reduced-motion: no-preference)'));
+    for (const m of sinComentarios.matchAll(/animation:\s*rv-(?:nav|shell)-entra (\d+)ms/g)) expect(Number(m[1])).toBeLessThanOrEqual(220);
   });
 });
