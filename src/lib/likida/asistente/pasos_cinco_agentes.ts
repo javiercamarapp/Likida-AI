@@ -80,7 +80,7 @@ export interface PasoAsistente {
   resumen: string;
   estado: EstadoAsistente;
   responsable: ClaveResponsable;
-  /** «Falta de tu lado (Celi)» — solo cuando falta algo. */
+  /** «Falta de tu lado (nombre de quien se designe)» — solo cuando falta algo. */
   faltaDe: string | null;
   causa: string | null;
   evidencia: Evidencia;

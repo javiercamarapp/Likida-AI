@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync, readdirSync } from 'node:fs';
 import { armarPasosCincoAgentes, etiquetaGlobal, MOTIVO_MINIMO, RESPONSABLES_POR_OMISION, type SenalesAsistente } from './pasos_cinco_agentes';
 import { solicitudParaTi, cartaAutorizacion } from './textos_solicitud';
 
@@ -135,5 +136,14 @@ describe('asistente de puesta en marcha (cinco_agentes)', () => {
       expect(etiquetaGlobal(r)).toBe(`Todo listo para operar (${r.confirmadosPorTi} confirmados por ti)`);
     });
   });
-});
 
+  it('ningún archivo del asistente ni de Puesta en marcha nombra a una persona o cliente (H13)', () => {
+    const dirs = ['src/lib/likida/asistente', 'src/app/dashboard/puesta-en-marcha'];
+    const prohibidos = /\b(celi|celinda|innovativos?|yucarro)\b/i;
+    for (const d of dirs) {
+      for (const f of readdirSync(d).filter((x) => /\.(ts|tsx)$/.test(x) && !/\.test\./.test(x))) {
+        expect(prohibidos.test(readFileSync(`${d}/${f}`, 'utf8')), `${d}/${f}`).toBe(false);
+      }
+    }
+  });
+});
