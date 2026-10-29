@@ -312,10 +312,12 @@
 html:root:has([data-ui="v2"]) {
   --bg: #f6f6f7;
   --ink: #0e0e10;
+  --carga-fondo: #ffffff;
 }
 html:root[data-theme="dark"]:has([data-ui="v2"]) {
   --bg: #0e0e10;
   --ink: #f4f4f5;
+  --carga-fondo: #0e0e10;
 }
 
 /* Tarjetas: 12 px, sin sombra. Selector de clase propio del alcance (0,2,0)

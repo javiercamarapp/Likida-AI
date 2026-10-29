@@ -19,12 +19,16 @@ export default function LogoV2({ alto, variante = 'horizontal', decorativo = fal
 }) {
   const ancho = Math.round(alto * PROPORCION_LOGO[variante] * 100) / 100;
   const vb = variante === 'horizontal' ? '0 0 726 149' : '0 0 114 149';
+  // El `role="img"` va en un contenedor (no en el <svg>): así lo ven igual los lectores de pantalla y el detector (c8/N5), y el
+  // <svg> interior es decorativo. `display:block` en línea: el CSS del shell solo alterna visibilidad con wrappers propios.
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg" viewBox={vb} width={ancho} height={alto} className={className} style={{ display: 'block', flex: 'none', ...style }}
-      {...(decorativo ? { 'aria-hidden': true } : { role: 'img', 'aria-label': 'Likida' })} focusable="false"
+    <span
+      className={className} style={{ display: 'block', flex: 'none', lineHeight: 0, ...style }}
+      {...(decorativo ? { 'aria-hidden': true } : { role: 'img', 'aria-label': 'Likida' })}
     >
-      <path fill="currentColor" fillRule="evenodd" d={variante === 'horizontal' ? D_COMPLETO : D_SIMBOLO} />
-    </svg>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox={vb} width={ancho} height={alto} aria-hidden="true" focusable="false" style={{ display: 'block' }}>
+        <path fill="currentColor" fillRule="evenodd" d={variante === 'horizontal' ? D_COMPLETO : D_SIMBOLO} />
+      </svg>
+    </span>
   );
 }

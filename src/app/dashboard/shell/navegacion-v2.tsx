@@ -115,7 +115,7 @@ export function ArbolMenu({ menu, sufijo, pathname, perfil, insignias, alNavegar
             <h2 className="rv-grupo__h">
               <button type="button" id={idT} className="rv-grupo__t rv-grupo__tog" aria-expanded={esta} aria-controls={`${idT}-c`}
                 onClick={() => setAbierta(esta ? null : g.id)}>
-                <span className="rv-grupo__tt">{g.titulo}</span>
+                {g.titulo}
                 <ChevronDown className="rv-grupo__chev" width={14} height={14} strokeWidth={1.75} aria-hidden />
               </button>
             </h2>

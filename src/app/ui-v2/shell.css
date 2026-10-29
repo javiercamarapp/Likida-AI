@@ -143,11 +143,11 @@
 
 /* Tarjeta de cuenta: alto 44 (monograma, nombre, rol, salir en tinta) */
 [data-ui="v2"] .rv-cuenta {
-  position: relative; display: flex; align-items: center; gap: 4px; height: 44px; box-sizing: border-box; padding: 0 4px 0 0;
+  pointer-events: none; position: relative; display: flex; align-items: center; gap: 4px; height: 44px; box-sizing: border-box; padding: 0 4px 0 0;
   border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-surface);
 }
 [data-ui="v2"] .rv-cuenta__btn {
-  flex: 1 1 0%; min-width: 0; height: 100%; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 8px;
+  pointer-events: auto; flex: 1 1 0%; min-width: 0; height: 100%; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 8px;
   border: 0; border-radius: 11px; background: transparent; color: var(--ink); cursor: pointer; text-align: left; position: relative;
 }
 [data-ui="v2"] .rv-cuenta__btn:hover { background: var(--ui-soft); }
@@ -161,7 +161,7 @@
 [data-ui="v2"] .rv-cuenta__nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; line-height: 1.1; color: var(--ink); }
 [data-ui="v2"] .rv-cuenta__rol { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.1; color: var(--muted); }
 [data-ui="v2"] .rv-cuenta__chev { flex: none; color: var(--muted); }
-[data-ui="v2"] .rv-cuenta__salir { flex: none; margin: 0; }
+[data-ui="v2"] .rv-cuenta__salir { flex: none; margin: 0; pointer-events: auto; }
 [data-ui="v2"] .rv-cuenta__salir .rv-icono-boton { width: 32px; height: 32px; color: var(--ink); }
 [data-ui="v2"] .rv-cuenta__salir .rv-icono-boton::after { content: ""; position: absolute; inset: -6px; }
 
@@ -270,6 +270,10 @@
   [data-ui="v2"] .rv-sb .rv-puesta__seg { display: none; }
   [data-ui="v2"] .rv-sb .rv-cuenta { flex-direction: column; height: auto; padding: 4px 0; border: 0; background: transparent; }
   [data-ui="v2"] .rv-sb .rv-cuenta__salir { display: none; }
+  [data-ui="v2"] .rv-sb .rv-sb__pie { padding-inline: 4px; }
+  [data-ui="v2"] .rv-sb .rv-pie .rv-item { margin: 0; }
+  [data-ui="v2"] .rv-sb .rv-sb__logo::after { inset: -8px -12px; }
+  [data-ui="v2"] .rv-sb .rv-cuenta__btn { width: 100%; height: 40px; padding: 0; justify-content: center; flex: none; }
 
   [data-ui="v2"] .rv-cab-esc__plegar { display: none; }
 }
@@ -304,4 +308,8 @@
   [data-ui="v2"] .rv-sb[data-riel] .rv-puesta__seg { display: none; }
   [data-ui="v2"] .rv-sb[data-riel] .rv-cuenta { flex-direction: column; height: auto; padding: 4px 0; border: 0; background: transparent; }
   [data-ui="v2"] .rv-sb[data-riel] .rv-cuenta__salir { display: none; }
+  [data-ui="v2"] .rv-sb[data-riel] .rv-sb__pie { padding-inline: 4px; }
+  [data-ui="v2"] .rv-sb[data-riel] .rv-pie .rv-item { margin: 0; }
+  [data-ui="v2"] .rv-sb[data-riel] .rv-sb__logo::after { inset: -8px -12px; }
+  [data-ui="v2"] .rv-sb[data-riel] .rv-cuenta__btn { width: 100%; height: 40px; padding: 0; justify-content: center; flex: none; }
 }
