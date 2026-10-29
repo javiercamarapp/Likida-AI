@@ -14,6 +14,8 @@ import { puertaCron, registrarLatido } from '@/lib/admin/salud';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
+/** A2P-15: lo que se reserva para revisar UN archivo más en el barrido de plazo (lee hasta ~26 000 líneas): si no cabe antes del tope, se corta y se cuenta. */
+const PRESUPUESTO_DESGLOSE_AVISOS_MS = 8_000;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CRON QUE PROCESA LOS DESGLOSES DE PEAJE RECIBIDOS (0376).
@@ -68,18 +70,22 @@ export async function GET(req: Request) {
   try {
     // Un margen para el latido: lo que no alcance queda con su lease y el
     // siguiente cron lo recupera.
+    // A2P-16: UN solo reloj para toda la corrida. Antes cada paso calculaba su `venceEn` con `Date.now()` al llegar a él (pull 40 s + SFTP 40 s +
+    // cola 100 s + avisos 15 s excedían `maxDuration`). Ahora todo cuelga del mismo `inicio` y el último paso cierra 10 s antes del tope.
+    const inicio = Date.now();
+    const venceTodo = inicio + (maxDuration - 10) * 1000;
     // 1. El pull: lo que traiga se encola y lo toma el paso 2 en esta misma corrida.
     let pulls: ResumenPulls | null = null;
-    try { pulls = await ejecutarPulls({ limite: 3, venceEn: Date.now() + 40_000 }); } catch (e) {
+    try { pulls = await ejecutarPulls({ limite: 3, venceEn: inicio + 25_000 }); } catch (e) {
       logger.error('cron.peajes.pull_fallo', { error: e instanceof Error ? e.message : String(e) });
     }
     // 1b. El SFTP (0843): mismo margen, mismo blindaje — una flota que falla nunca tumba el cron.
     let sftp: ResumenSftpPeajes | null = null;
-    try { sftp = await ejecutarSftpPeajes({ limite: 3, venceEn: Date.now() + 40_000 }); } catch (e) {
+    try { sftp = await ejecutarSftpPeajes({ limite: 3, venceEn: inicio + 45_000 }); } catch (e) {
       logger.error('cron.peajes.sftp_fallo', { error: e instanceof Error ? e.message : String(e) });
     }
     // 2. La cola.
-    const r = await procesarColaPeajes({ limite: 3, venceEn: Date.now() + 100_000 });
+    const r = await procesarColaPeajes({ limite: 3, venceEn: inicio + 85_000 });
     // 3. Los avisos a la oficina que no salieron al procesar.
     let avisos: ResumenAvisos | null = null;
     try { avisos = await reintentarAvisosPeajes(5); } catch (e) {
@@ -93,7 +99,7 @@ export async function GET(req: Request) {
     // 5. Los avisos proactivos (A2 ola 1): cobros sin reclamar por vencer su plazo y archivo decenal faltante. Apagados de origen por
     //    flota; sin destinatario no envían y no vuelven «parcial» el latido. Una flota que no se pudo evaluar sí.
     let avisosProactivos: ResumenBarridoAvisos | null = null;
-    try { avisosProactivos = await barrerAvisosPeajes(await depsBarridoReales(), { venceEn: Date.now() + 15_000 }); } catch (e) {
+    try { avisosProactivos = await barrerAvisosPeajes(await depsBarridoReales(), { venceEn: venceTodo, presupuestoPorDesgloseMs: PRESUPUESTO_DESGLOSE_AVISOS_MS }); } catch (e) {
       logger.error('cron.peajes.avisos_proactivos_fallo', { error: e instanceof Error ? e.message : String(e) });
     }
     logger.info('cron.peajes.ok', { ...r, pulls, sftp, avisos, avisosAtipicos, avisosProactivos });

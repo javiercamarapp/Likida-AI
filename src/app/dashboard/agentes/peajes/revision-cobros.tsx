@@ -60,7 +60,10 @@ export interface DatosRevisionCobros {
 
 const SIN_RECLAMAR = 'Sin reclamar';
 
-function entradaDeCategorias(reporte: ReporteRevision, reclamosDelArchivo: readonly ReclamoVista[]): EntradaCategoriaInsight[] {
+function entradaDeCategorias(
+  reporte: ReporteRevision, reclamosDelArchivo: readonly ReclamoVista[],
+  decisiones: ReadonlyArray<{ indice: number; categoria: string; accion: string }> = [],
+): EntradaCategoriaInsight[] {
   const { revision } = reporte;
   return CATEGORIAS_COBRO.map((categoria) => {
     const res = revision.porCategoria[categoria];
@@ -68,8 +71,11 @@ function entradaDeCategorias(reporte: ReporteRevision, reclamosDelArchivo: reado
       .filter((r) => r.categoria === categoria && ESTADOS_RECLAMO_ENVIADO.has(r.estado))
       .reduce((s, r) => s + r.nCruces, 0);
     const justificados = revision.candidatos.filter((c) => c.categoria === categoria && c.justificacion).length;
-    // Se atiende lo reclamado y lo justificado; el módulo de insights acota a `n`.
-    return { categoria, n: res.n, monto: res.monto, atendidos: reclamados + justificados };
+    // A2P-09: lo que finanzas descartó o justificó por decisión (sin regla de caseta) también está atendido.
+    const porDecision = new Set(decisiones.filter((x) => x.categoria === categoria && (x.accion === 'descartado' || x.accion === 'justificado')).map((x) => x.indice));
+    const decididos = revision.candidatos.filter((c) => c.categoria === categoria && !c.justificacion && porDecision.has(c.indice)).length;
+    // Se atiende lo reclamado, lo justificado y lo descartado; el módulo de insights acota a `n`.
+    return { categoria, n: res.n, monto: res.monto, atendidos: reclamados + justificados + decididos };
   });
 }
 
@@ -88,9 +94,8 @@ export function estadoRevisionCobros(d: DatosRevisionCobros): EstadoRevisionCobr
   try {
     const reporte = d.reporte;
     const delArchivo = d.reclamos.filter((r) => r.desgloseId === reporte.desgloseId);
-    const categorias = entradaDeCategorias(reporte, delArchivo);
-
     if (d.decisiones === null) return { tipo: 'error' };
+    const categorias = entradaDeCategorias(reporte, delArchivo, d.decisiones ?? []);
     // A37-A2-06 / A37-S15-03: la definición de «sin reclamar» vive en `candidatos_plazo.ts` (la misma del aviso del cron).
     const candidatosPlazo = candidatosDePlazo({
       desgloseId: reporte.desgloseId, candidatos: reporte.revision.candidatos, reclamosDelArchivo: delArchivo,

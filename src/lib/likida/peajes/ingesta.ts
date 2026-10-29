@@ -422,7 +422,10 @@ export async function procesarColaPeajes(
         }
         continue;
       }
-      await conciliarDesglose(a.tenant_id, imp.desgloseId, 'cron');
+      const cruce = await conciliarDesglose(a.tenant_id, imp.desgloseId, 'cron');
+      // A2P-06: un cruce que dejó líneas sin escribir NO cierra el archivo ni avisa sobre datos a medias: va por el reintento con backoff
+      // (reimportar no duplica: el desglose se reconoce por `ingesta_archivo_id`).
+      if (cruce.noEscritas > 0) throw new Error(`el cruce dejó ${cruce.noEscritas} líneas sin escribir; se reintenta`);
       if (await cerrar({
         estado: 'procesada', contenido: null, desglose_id: imp.desgloseId, procesada_en: new Date().toISOString(),
         ultimo_error: null, reclamo: null, reclamado_hasta: null,

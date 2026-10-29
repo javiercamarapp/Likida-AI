@@ -320,7 +320,7 @@ describe('el cron no pierde un archivo grande si expira (lease)', () => {
   it('el lease de la cola es MAYOR que lo que vive la función: nadie más toma un archivo mientras sigue procesándose', () => {
     const ruta = readFileSync(join(process.cwd(), 'src', 'app', 'api', 'cron', 'peajes', 'route.ts'), 'utf8');
     const maxDuration = Number(/export const maxDuration = (\d+);/.exec(ruta)?.[1]);
-    const venceEn = Number(/procesarColaPeajes\(\{[^}]*venceEn: Date\.now\(\) \+ ([\d_]+)/.exec(ruta)?.[1]?.replace(/_/g, ''));
+    const venceEn = Number(/procesarColaPeajes\(\{[^}]*venceEn: inicio \+ ([\d_]+)/.exec(ruta)?.[1]?.replace(/_/g, ''));
     expect(maxDuration).toBeGreaterThan(0);
     // El reloj interno corta ANTES de que la plataforma mate la función (deja margen para el latido)…
     expect(venceEn).toBeLessThan(maxDuration * 1000);

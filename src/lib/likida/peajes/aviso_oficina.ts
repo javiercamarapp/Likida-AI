@@ -26,7 +26,7 @@ import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina'
 import { telefonoParaDineroDe } from '../contactos';
 import { bitacoraConciliada } from './bitacora_conciliada';
 import {
-  leerEstadoAvisoDesglose, reclamarIntentoAviso, marcarAvisoEnviado, agotarIntentosAviso, avisosPendientesPeajes, MAX_INTENTOS_AVISO,
+  leerEstadoAvisoDesglose, reclamarIntentoAviso, devolverIntentoAviso, marcarAvisoRequerido, marcarAvisoEnviado, agotarIntentosAviso, avisosPendientesPeajes, MAX_INTENTOS_AVISO,
 } from './datos';
 import { quedoEnCola } from './aviso_en_cola';
 import { superficiePeajesDeTenant, type SuperficiePeajes } from './superficie_perfil';
@@ -112,13 +112,15 @@ export async function avisarDesgloseConciliado(tenantId: string, desgloseId: str
     if (motivoOmitido) logger.info('peajes.aviso_categoria_omitida', { tenant: tenantId, desglose: desgloseId, motivo: motivoOmitido });
     if (c.gpsNoCoincide === 0 && c.sinRespaldo === 0) return 'no_requerido';
 
-    if (!(await reclamarIntentoAviso(tenantId, desgloseId, estado.intentos))) return 'ocupado';
-
+    // A2P-05: sin destinatario NO se reclama el intento (antes se agotaban 5 en ~75 min y nunca se reenviaba al configurar el teléfono).
     const tel = await deps.telefono(tenantId);
     if (!tel) {
       logger.warn('peajes.aviso_sin_destinatario', { tenant: tenantId, desglose: desgloseId });
+      // Queda pendiente para el barrido (sin gastar intentos): cuando haya teléfono, sale.
+      await marcarAvisoRequerido(tenantId, desgloseId);
       return 'sin_destinatario';
     }
+    if (!(await reclamarIntentoAviso(tenantId, desgloseId, estado.intentos))) return 'ocupado';
     const proveedor = estado.proveedor?.trim() || 'peajes';
     const r = await deps.avisar(tel, textoAvisoDesglose(estado, c), {
       parametros: parametrosAvisoOficina(`Peajes ${proveedor}`, `${c.gpsNoCoincide + c.sinRespaldo} cobros por revisar`, liga()),
@@ -127,6 +129,8 @@ export async function avisarDesgloseConciliado(tenantId: string, desgloseId: str
     const enCola = quedoEnCola(r);
     if (!r.ok && !enCola) {
       logger.error('peajes.aviso_fallo', { tenant: tenantId, desglose: desgloseId, motivo: r.motivo, codigo: r.codigo });
+      // A2P-05: ventana de 24 h cerrada y la plantilla no salió (sin aprobar): no es culpa del aviso, el intento se devuelve para cuando se apruebe.
+      if (r.fueraDeVentana) await devolverIntentoAviso(tenantId, desgloseId, estado.intentos);
       return 'rechazado';
     }
     if (enCola) logger.warn('peajes.aviso_en_cola', { tenant: tenantId, desglose: desgloseId, motivo: r.ok ? null : r.motivo, codigo: r.ok ? null : r.codigo });

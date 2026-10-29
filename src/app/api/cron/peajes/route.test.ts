@@ -74,6 +74,22 @@ describe('las palancas', () => {
   });
 });
 
+describe('A2P-16 / A2P-15: un solo reloj dentro de maxDuration', () => {
+  it('todos los pasos cuelgan del mismo inicio y los avisos reciben tope global y presupuesto por archivo', async () => {
+    const antes = Date.now();
+    await llamar();
+    const despues = Date.now();
+    const venceEn = (m: { mock: { calls: unknown[][] } }) => (m.mock.calls[0][0] as { venceEn: number }).venceEn;
+    expect(venceEn(pulls)).toBeLessThanOrEqual(despues + 25_000);
+    expect(venceEn(sftp)).toBeLessThanOrEqual(despues + 45_000);
+    expect(venceEn(procesar)).toBeLessThanOrEqual(despues + 85_000);
+    const opc = proactivos.mock.calls[0][1] as { venceEn: number; presupuestoPorDesgloseMs: number };
+    expect(opc.venceEn).toBeGreaterThanOrEqual(antes + 110_000);
+    expect(opc.venceEn).toBeLessThanOrEqual(despues + 110_000); // maxDuration = 120 s: 10 s de margen para el latido
+    expect(opc.presupuestoPorDesgloseMs).toBeGreaterThan(0);
+  });
+});
+
 describe('la corrida', () => {
   it('todo bien → latido ok con el resumen', async () => {
     const r = await llamar();

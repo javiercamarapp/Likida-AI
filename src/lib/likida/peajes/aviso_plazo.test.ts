@@ -46,10 +46,11 @@ describe('avisarPlazosReclamo', () => {
     expect(enviados).toHaveLength(0);
     expect(r).toMatchObject({ enviados: 0, yaAvisados: 0 });
   });
-  it('los vencidos no avisan pero se cuentan como «ya no reclamables»', async () => {
+  it('los vencidos se cuentan como «ya no reclamables» y generan UN aviso resumen (A2P-02)', async () => {
     const { d, enviados } = deps();
     const r = await avisarPlazosReclamo('t1', [c('l1', 'dA', '2026-06-01', 250.5)], hoy, d);
-    expect(enviados).toHaveLength(0);
+    expect(enviados).toHaveLength(1);
+    expect(enviados[0].texto).toContain('se vencieron 1 cobro ($250.50');
     expect(r).toMatchObject({ vencidosCruces: 1, vencidosMonto: 250.5 });
   });
   it('sin destinatario: no reserva ni envía', async () => {

@@ -1317,6 +1317,33 @@ export async function reclamarIntentoAviso(tenantId: string, desgloseId: string,
   return (data ?? []).length > 0;
 }
 
+/**
+ * A2P-05: marca el desglose como «aviso pendiente» (`aviso_requerido`) SIN consumir un intento: es lo que lo hace visible para el barrido
+ * (`peaje_avisos_pendientes`) cuando todavía no hay a quién avisar; en cuanto se configure el teléfono, el barrido lo manda. Nunca lanza.
+ */
+export async function marcarAvisoRequerido(tenantId: string, desgloseId: string): Promise<void> {
+  try {
+    await acotada(supabaseAdmin().from('desglose_peaje')
+      .update({ aviso_requerido: true }).eq('tenant_id', tenantId).eq('id', desgloseId).eq('aviso_requerido', false)
+      .is('aviso_oficina_en', null).is('anulado_en', null), 'peajes.marcar_aviso_requerido');
+  } catch (e) {
+    logger.warn('peajes.marcar_aviso_requerido', { tenant: tenantId, codigo: codigoDeError(e) });
+  }
+}
+
+/** A2P-05: devuelve el intento que `reclamarIntentoAviso` tomó (compare-and-set sobre `aviso_intentos`). `false` si no se pudo; nunca lanza. */
+export async function devolverIntentoAviso(tenantId: string, desgloseId: string, intentosLeidos: number): Promise<boolean> {
+  try {
+    const { data, error } = await acotada(supabaseAdmin().from('desglose_peaje')
+      .update({ aviso_intentos: intentosLeidos })
+      .eq('tenant_id', tenantId).eq('id', desgloseId).eq('aviso_intentos', intentosLeidos + 1)
+      .is('aviso_oficina_en', null).select('id'), 'peajes.devolver_intento_aviso');
+    return !error && (data ?? []).length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function marcarAvisoEnviado(tenantId: string, desgloseId: string): Promise<boolean> {
   try {
     const { error } = await acotada(supabaseAdmin().from('desglose_peaje')

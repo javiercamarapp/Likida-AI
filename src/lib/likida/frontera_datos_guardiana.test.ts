@@ -630,6 +630,10 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 326;
 // OLA 10, carril A (A1-01/A1-02): 2,440 → 2,443 (+3, medido con el guardián). Todas en `liquidacion_externa/repo_correo.ts`, por `acotada` y con `tenant_id`:
 // `omitirEntregasPendientes` +1 (UPDATE condicionado pendiente/enviando → omitida: corte de arranque y corrección que reemplaza a la original) y, por la columna
 // de la 0940, la lectura de la configuración con respaldo si falta (+1 select) y el upsert con respaldo (+1). Cubiertas por repo_correo_0940.test.ts.
+// OLA 10 · carril B (peajes): +4 sobre su base (medido con el guardián), todas por `acotada` y con `tenant_id` salvo la recuperación global del cron:
+// `peajes/repo.ts` `devolverIntentoAviso` +1 (A2P-05: devuelve el intento tomado cuando la ventana de WhatsApp está cerrada) y `marcarAvisoRequerido` +1 (A2P-05: deja pendiente el aviso sin gastar intentos cuando falta destinatario) y `peajes/aviso_atipicos.ts`
+// `confirmar` +1 (limpia el vencimiento de la reserva tras enviar) y `recuperarVencidas` +1 (A2P-18, devuelve a `nuevo` lo reservado y vencido; multi-flota a propósito,
+// como el barrido de avisos). La reserva de siempre solo cambió de forma (sigue siendo 1 llamada). Cubiertas por aviso_oficina_ola10.test.ts, ciclo_completo.e2e.test.ts y aviso_atipicos.test.ts.
 const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_443;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.

@@ -243,3 +243,23 @@ describe('destinatario configurable', () => {
     expect(await A.almacenAvisoAtipicos.destinatario(T)).toBe(TEL);
   });
 });
+
+describe('A2P-18: la reserva del aviso de atípicos vence si el proceso muere antes de enviar', () => {
+  it('un hallazgo reservado hace más de 10 min y nunca confirmado vuelve a «nuevo» y se avisa en el siguiente barrido', async () => {
+    const vencida = new Date(Date.now() - 60_000).toISOString();
+    base({ peaje_atipico: [hallazgo('h1', 'repeticion_caseta', 'TC9001', { estado: 'avisado', avisado_en: vencida, aviso_reservado_hasta: vencida })] });
+    const r = await A.reintentarAvisosAtipicos(5, deps());
+    expect(r.enviados).toBe(1);
+    expect(avisarOk).toHaveBeenCalledTimes(1);
+  });
+
+  it('una reserva vigente (otro proceso enviando) no se toca; y tras enviar queda confirmada (sin vencimiento)', async () => {
+    const vigente = new Date(Date.now() + 5 * 60_000).toISOString();
+    base({ peaje_atipico: [hallazgo('h1', 'repeticion_caseta', 'TC9001', { estado: 'avisado', avisado_en: vigente, aviso_reservado_hasta: vigente })] });
+    expect((await A.reintentarAvisosAtipicos(5, deps())).revisados).toBe(0);
+    base();
+    expect(await A.avisarAtipicosDesglose(T, DES, deps())).toBe('enviado');
+    for (const f of db.tablas.peaje_atipico) { expect(f.estado).toBe('avisado'); expect(f.aviso_reservado_hasta ?? null).toBeNull(); }
+    expect((await A.reintentarAvisosAtipicos(5, deps())).revisados).toBe(0);
+  });
+});
