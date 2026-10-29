@@ -153,7 +153,7 @@ function FilaPuesta({ avance, sufijo, alNavegar, activo }: { avance: { n: number
       aria-label={`Puesta en marcha, ${avance.n} de ${avance.t}`} title="Puesta en marcha" data-tour="nav-puesta-en-marcha" onClick={alNavegar}>
       <span className="rv-puesta__txt">Puesta en marcha</span>
       <span className="rv-puesta__seg" aria-hidden>
-        {Array.from({ length: t }, (_, i) => <i key={i} data-on={i < avance.n ? '' : undefined} />)}
+        {[...Array(t)].map((_, i) => <i key={i} data-on={i < avance.n ? '' : undefined} />)}
       </span>
       <span className="rv-puesta__n" aria-hidden>{avance.n}/{avance.t}</span>
     </Link>
