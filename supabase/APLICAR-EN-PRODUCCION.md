@@ -171,3 +171,19 @@ antes de asumir que ya corrieron.
   hacer. Es de otro dueño (`src/app/api/export/poliza/route.ts`). Sigue sin
   cerrar — ya no aplica el escenario original (la 0272 SÍ está aplicada), pero
   la distinción de errores en el 503 sigue siendo una mejora real pendiente.
+
+## Seguridad, Ola 1 · A1 (0946, 0947, 0948) — grants cerrados (29-oct-2026)
+
+**Qué hacen.** 0946: `tenant.buzon_token` deja de ser legible con el JWT de usuario. 0947: REVOKE ALL a `anon`/`authenticated` en todas las tablas, vistas y secuencias de `public`, REVOKE EXECUTE de las SECURITY DEFINER que no usa RLS, `grant select on app_user to authenticated` (la única lectura del producto con JWT) y `alter default privileges` para objetos futuros. 0948: se eliminan las 4 políticas de `avatares` en `storage.objects`. Todas aditivas, idempotentes, con `-- REVERSA:` en la cabecera. No cambian filas ni código.
+
+**Antes (solo lectura, `supabase db query --linked -f`; el MCP de Supabase de la sesión apunta a OTRO proyecto):**
+1. Respaldo de la base (los grants no viven en las filas pero `pg_dump` los conserva): guardar también la salida de `select * from pg_default_acl; select grantee, table_name, privilege_type from information_schema.role_table_grants where table_schema='public' and grantee in ('anon','authenticated');` — es el insumo de la reversa exacta.
+2. `supabase/pruebas-aislamiento/capa0_grants_tablas.sql` como está: debe dar `abiertos` > 0 (el «rojo» de hoy).
+3. Logs de la API de Supabase de 7 días: peticiones a `/rest/v1` o `/rpc` con rol `authenticated`/`anon` a algo distinto de `app_user` (un consumidor externo con la anon key se rompería).
+4. `select id, public from storage.buckets; select policyname, cmd from pg_policies where schemaname='storage';`
+
+**Aplicar** (staging primero): 0946, luego 0947 y 0948, con `supabase db query --linked -f` o `aplicar-migraciones.py`. **Después de 0946: rotar los `buzon_token` de todas las flotas.**
+
+**Después:** capa0 otra vez → los seis bloques con 0 / false; `select * from pg_default_acl` sin `anon`/`authenticated` (si `supabase_admin` conserva entradas, la 0947 solo avisó con NOTICE: cerrarlas desde el rol que tenga permiso). Humo: login por enlace y Google, `/dashboard`, `/cuenta`, `/dashboard/mi-perfil` (subida de avatar y que la foto se siga viendo), MFA de superadmin, un chofer, un encargado y un contador. Panel de Supabase: Exposed schemas = solo `public` (quitar `graphql_public`).
+
+**Si algo se rompe:** reversa de la cabecera de la 0947 (dos `grant` + default privileges) y, de inmediato, reaplicar 0946 y la sección 4 de la 0923. Builds de Vercel que provoca aplicar esto: 0.

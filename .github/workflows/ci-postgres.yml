@@ -169,6 +169,22 @@ jobs:
           done
           echo "$n migraciones aplicadas limpias."
 
+      # ── Capa 0: privilegios de tabla para anon/authenticated (Ola 1 de seguridad, A1) ──
+      # Estado REAL de las migraciones (0946-0948): cero grants abiertos, default ACL cerrada, sin políticas de storage, credenciales
+      # sin SELECT de columna. Corre ANTES de grants-locales.sql, que restituye el grant legado SOLO en esta base efímera.
+      - name: Capa 0 — privilegios de tabla (anon/authenticated)
+        run: |
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          node scripts/ci/correr-verificaciones.mjs supabase/pruebas-aislamiento/capa0_grants_tablas.sql | tee -a "$GITHUB_STEP_SUMMARY"
+          ec=${PIPESTATUS[0]}
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          exit $ec
+
+      # Grant legado SOLO en la base efímera (producción lo tiene revocado por la 0947): así la batería de abajo (verificaciones.sql,
+      # set role authenticated) sigue probando RLS como capa independiente. Respeta las columnas secretas (0923 §4, 0946).
+      - name: Grant legado en la base efímera (grants-locales.sql)
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v es_local=si -q -f scripts/ci/e2e/grants-locales.sql
+
       # Contratos acumulados de retención 0332/0335/0338. Corren sobre la misma
       # base efímera y dentro del mismo job: cero workflow o ejecución adicional.
       # Los SQL hacen rollback; los scripts de dos sesiones limpian sus tenants.
@@ -378,6 +394,7 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0936_a2_ola1_peaje_regla_flota.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0937_a2_ola1_peaje_aviso_enviado.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0945_a2_ola10_peaje_atipico_reserva_aviso.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0946_tenant_buzon_token_y_grants_cerrados.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0863_sembrar_hitos_perfil_con_compuerta.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0876_gasto_ocr_extra_mezcla_atomica.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0892_vigia_datos_personales_arco_y_retencion.sql
