@@ -22,7 +22,32 @@ html:root:has([data-ui="v2"] > .rv-carga:not([data-estado="oculta"])) { --bg: va
 
 /* Mientras la capa se ve, el marco de abajo NO existe: ni se ve ni se lee ni se tabula (visibility), así que hay UN solo logo
    visible y el foco no se cuela bajo la capa. Al soltarla vuelve al instante; el fundido de 170 ms lo hace la capa por encima. */
-[data-ui="v2"]:has(> .rv-carga:not([data-estado="oculta"])) > :is(.rv-skip, .rv-cab-movil, .rv-fila) { visibility: hidden; }
+[data-ui="v2"]:has(> .rv-carga:not([data-estado="oculta"])) > :is(.rv-skip, .rv-cab-movil, .rv-fila) {
+  visibility: hidden;
+  /* Seguro (ver abajo): a los 20 s el marco vuelve a ser visible aunque nadie suelte la capa. */
+  animation-name: rv-marco-seguro; animation-duration: 120ms; animation-delay: 20s; animation-fill-mode: forwards;
+}
+
+/* ── SEGURO DE 20 s, SIN SCRIPT y con CUALQUIER preferencia de movimiento ─────────────────────────────────────────────
+   Si el controlador cliente nunca corre (hidratación rota, chunk bloqueado) o `data-estado` se queda en inicial/nav, a los 20 s
+   la capa se retira (visibility + pointer-events) Y el marco recupera su visibilidad. No es movimiento decorativo: es un cambio
+   de estado diferido (la animación solo conmuta propiedades discretas), por eso vive FUERA de `prefers-reduced-motion`.
+   En reduced-motion la duración baja a ~0: el retardo de 20 s se conserva. */
+@keyframes rv-carga-seguro { to { opacity: 0; visibility: hidden; pointer-events: none; } }
+@keyframes rv-marco-seguro { to { visibility: visible; } }
+[data-ui="v2"] .rv-carga:not([data-estado="oculta"]) {
+  animation-name: rv-carga-seguro; animation-duration: 120ms; animation-delay: 20s; animation-fill-mode: forwards;
+}
+/* Con reduced-motion `movimiento.css` anula TODA animación del alcance con `animation: none !important`: el seguro lo reafirma con
+   !important y mayor especificidad (si no, la capa taparía la app para siempre en esa preferencia). Duración ~0, retardo intacto. */
+@media (prefers-reduced-motion: reduce) {
+  [data-ui="v2"] .rv-carga:not([data-estado="oculta"]) {
+    animation-name: rv-carga-seguro !important; animation-duration: 0.01ms !important; animation-delay: 20s !important; animation-fill-mode: forwards !important;
+  }
+  [data-ui="v2"]:has(> .rv-carga:not([data-estado="oculta"])) > :is(.rv-skip, .rv-cab-movil, .rv-fila) {
+    animation-name: rv-marco-seguro !important; animation-duration: 0.01ms !important; animation-delay: 20s !important; animation-fill-mode: forwards !important;
+  }
+}
 
 /* Sin JavaScript no hay quien suelte la capa: no se muestra. */
 @media (scripting: none) {
@@ -38,9 +63,6 @@ html:root:has([data-ui="v2"] > .rv-carga:not([data-estado="oculta"])) { --bg: va
   [data-ui="v2"] .rv-carga[data-estado="oculta"] { transition: opacity 170ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 170ms; }
   @keyframes rv-respira { 0%, 100% { opacity: 0.35; transform: scale(0.985); } 50% { opacity: 1; transform: scale(1); } }
   [data-ui="v2"] .rv-carga .rv-respira { animation: rv-respira 1600ms cubic-bezier(0.22, 1, 0.36, 1) infinite; }
-  /* Seguro sin script (si la hidratación se rompe): a los 20 s la capa se retira sola. */
-  @keyframes rv-carga-seguro { to { opacity: 0; visibility: hidden; pointer-events: none; } }
-  [data-ui="v2"] .rv-carga[data-estado="inicial"] { animation-name: rv-carga-seguro; animation-duration: 120ms; animation-delay: 20s; animation-fill-mode: forwards; }
 }
 
 /* La pantalla de carga de PÁGINA en línea (`cargando.tsx`) solo REGISTRA la carga: nunca se ve por sí misma (la capa la tapa). */
