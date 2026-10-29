@@ -126,7 +126,9 @@ async function correr() {
   const browser = await chromium.launch();
   const salida = { meta: { version: '2.1', etiqueta: ETIQUETA, fecha: new Date().toISOString(), anchos: ANCHOS, temas: TEMAS, umbrales: UMBRALES, fuentesHanken: hayFuentes, pantallas: pantallas.map((p) => ({ id: p.id, grupo: p.grupo, tipo: p.tipo, ruta: p.ruta })) }, pantallas: {} };
   for (const p of pantallas) {
-    const cuerpo = readFileSync(p.archivo, 'utf8');
+    // El HTML es estático: no corre el controlador que SUELTA la capa de carga (`data-estado="inicial"` viaja desde el servidor y la
+    // deja visible, tapando el marco). Fuera de la pantalla de carga se mide el marco ya liberado (`oculta`), como lo ve el usuario.
+    const cuerpo = readFileSync(p.archivo, 'utf8').replace(p.grupo === 'x-carga' ? /$^/ : / data-estado="inicial"/, ' data-estado="oculta"');
     salida.pantallas[p.id] = { grupo: p.grupo, tipo: p.tipo, combinaciones: {} };
     for (const w of ANCHOS) for (const tema of TEMAS) {
       const carga = p.grupo === 'x-carga';
