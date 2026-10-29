@@ -9,8 +9,10 @@ import { LayoutGrid, MessageCircle } from 'lucide-react';
 // el rediseño) y el mismo filtro (`puedeVerRuta(rol, href, perfil)`), que es el que gatea las páginas: dos listas que se
 // desincronizan dejan un enlace que, al clic, rebota. Lo que cambia es el AGRUPADO:
 //
-//   · bajo el perfil `cinco_agentes`: Resumen · Agentes (A1-A5, un ítem por agente) · Operación · Puesta en marcha ·
-//     Cuenta y conexiones · pie (Notificaciones, Mi perfil, Ayuda);
+//   · bajo el perfil `cinco_agentes`: Resumen · AGENTES (A1-A5, un ítem por agente, SIEMPRE visibles bajo un caption
+//     estático, sin acordeón) · acordeón de UNA sola categoría abierta (Operación · Cuenta y conexiones) · pie
+//     (Notificaciones; Mi perfil y Ayuda viven en el menú de la tarjeta de cuenta). «Puesta en marcha» es la fila del pie
+//     mientras el asistente va <6/6 y un ítem de «Cuenta y conexiones» cuando termina (la insignia llega por props);
 //   · sin perfil: el menú genérico actual (Operación, Dinero y fiscal, Automatizaciones, Sistema).
 //
 // El módulo es de datos: lo importan el sidebar (escritorio) y la hoja «Más» (móvil), así que las dos navegaciones no
@@ -22,6 +24,8 @@ export interface GrupoMenu {
   id: string;
   titulo: string;
   items: Item[];
+  /** Caption estático con sus ítems siempre visibles (AGENTES). Los demás grupos son categorías de UN acordeón (una abierta). */
+  estatico?: boolean;
 }
 
 export interface MenuV2 {
@@ -44,9 +48,9 @@ function porHref(...hrefs: string[]): Item[] {
 }
 
 /** Los grupos de un tenant CON perfil `cinco_agentes`. */
-const GRUPOS_CINCO_AGENTES: ReadonlyArray<{ id: string; titulo: string; hrefs: string[] }> = [
+const GRUPOS_CINCO_AGENTES: ReadonlyArray<{ id: string; titulo: string; hrefs: string[]; estatico?: boolean }> = [
   {
-    id: 'agentes', titulo: 'Agentes',
+    id: 'agentes', titulo: 'Agentes', estatico: true,
     hrefs: [
       '/dashboard/agentes/liquidacion', '/dashboard/agentes/peajes', '/dashboard/agentes/carta-porte',
       '/dashboard/agentes/vigia', '/dashboard/agentes/conductores',
@@ -60,16 +64,21 @@ const GRUPOS_CINCO_AGENTES: ReadonlyArray<{ id: string; titulo: string; hrefs: s
       '/dashboard/whatsapp',
     ],
   },
-  { id: 'puesta-en-marcha', titulo: 'Puesta en marcha', hrefs: ['/dashboard/puesta-en-marcha'] },
   {
     id: 'cuenta', titulo: 'Cuenta y conexiones',
     hrefs: [
-      '/dashboard/conexiones', '/dashboard/usuarios', '/dashboard/llaves-api', '/dashboard/arco', '/dashboard/legal',
+      '/dashboard/puesta-en-marcha', '/dashboard/conexiones', '/dashboard/usuarios', '/dashboard/llaves-api', '/dashboard/arco', '/dashboard/legal',
     ],
   },
 ];
 
 const PIE_CINCO_AGENTES = ['/dashboard/notificaciones', '/dashboard/mi-perfil', '/dashboard/soporte'];
+
+/** La ruta del asistente: fila del pie mientras va <6/6, ítem de «Cuenta y conexiones» cuando termina. */
+export const HREF_PUESTA_EN_MARCHA = '/dashboard/puesta-en-marcha';
+/** Las filas del pie que NO se pintan como ítems de lista: viven en el menú de la tarjeta de cuenta. */
+export const HREFS_MENU_CUENTA = ['/dashboard/mi-perfil', '/dashboard/soporte'] as const;
+export const HREF_NOTIFICACIONES = '/dashboard/notificaciones';
 
 /**
  * El menú que ve un rol con un perfil de tenant. `rol` es el rol con el que se FILTRA (el previsualizado, si el real es
@@ -86,7 +95,7 @@ export function menuPorPerfil(rol: string, perfil?: PerfilTenant | null): MenuV2
     return {
       resumen,
       grupos: GRUPOS_CINCO_AGENTES
-        .map((g) => ({ id: g.id, titulo: g.titulo, items: porHref(...g.hrefs).filter(ve) }))
+        .map((g) => ({ id: g.id, titulo: g.titulo, items: porHref(...g.hrefs).filter(ve), ...(g.estatico ? { estatico: true } : {}) }))
         .filter((g) => g.items.length > 0),
       pie: porHref(...PIE_CINCO_AGENTES).filter(ve),
     };
