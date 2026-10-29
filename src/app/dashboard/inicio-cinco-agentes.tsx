@@ -199,7 +199,7 @@ const ATAJOS: ReadonlyArray<{ href: string; nombre: string; Icono: typeof Route 
 ];
 
 export async function InicioCincoAgentes({
-  tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '', ui = 'v1', userId, soloLectura = false,
+  tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '', ui = 'v1', userId, soloLectura = false, veAsistente = false,
 }: {
   tenantId: string;
   tenantNombre: string | null;
@@ -210,6 +210,8 @@ export async function InicioCincoAgentes({
   ui?: 'v1' | 'v2';
   userId?: string;
   soloLectura?: boolean;
+  /** ¿El rol puede abrir Puesta en marcha? (lo decide la página con `puedeVerRuta`; por omisión NO: falla cerrado). */
+  veAsistente?: boolean;
 }) {
   const diaMx = hoyMx(new Date(ahoraMs()));
   const insights = await leerInsightsPorAgente(tenantId);
@@ -217,7 +219,7 @@ export async function InicioCincoAgentes({
     return (
       <ResumenV2
         tenantId={tenantId} userId={userId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste}
-        sufijo={sufijo} soloLectura={soloLectura}
+        sufijo={sufijo} soloLectura={soloLectura} veAsistente={veAsistente}
         fichas={FICHAS_CINCO_AGENTES.map((f) => (
           <Bloque key={f.clave} mensaje={`No se pudo leer ${f.nombre}.`} esqueleto={<EsqTabla filas={2} titulo={false} />}>
             <TarjetaAgente ficha={f} tenantId={tenantId} sufijo={sufijo} insights={insights} />

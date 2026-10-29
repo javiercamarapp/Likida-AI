@@ -10,14 +10,15 @@ const base: SenalesAsistente = {
   operadores: { activos: 0, conCorreo: 0 }, unidadesActivas: 0, patios: 0, coordinadores: 0, supervisores: 0, revisorCartaPorte: false,
 };
 let actuales: SenalesAsistente = base;
-vi.mock('@/lib/likida/asistente/senales', () => ({ leerSenalesAsistente: async () => actuales }));
+const lecturas = vi.fn(async () => actuales);
+vi.mock('@/lib/likida/asistente/senales', () => ({ leerSenalesAsistente: lecturas }));
 
 const { ResumenV2, indicadoresResumen } = await import('./resumen-v2');
 
-const pintar = async (s: SenalesAsistente) => {
+const pintar = async (s: SenalesAsistente, veAsistente = true) => {
   actuales = s;
   const el = await ResumenV2({
-    tenantId: 't', userId: 'u', tenantNombre: null, nombre: 'Ana', tenantExiste: true, sufijo: '', soloLectura: false,
+    tenantId: 't', userId: 'u', tenantNombre: null, nombre: 'Ana', tenantExiste: true, sufijo: '', soloLectura: false, veAsistente,
     fichas: <div data-ficha>fichas</div>,
   });
   return renderToStaticMarkup(el);
@@ -57,5 +58,23 @@ describe('Resumen v2', () => {
     expect(h.includes('No pudimos revisar tus archivos ahora')).toBe(true);
     expect(h.includes('Sin dato')).toBe(true);
     expect(h.includes('NaN')).toBe(false);
+  });
+});
+
+describe('Resumen v2 para un rol sin acceso a Puesta en marcha (p. ej. el encargado)', () => {
+  it('no pinta la tarjeta ni el enlace y ni siquiera lee las señales del asistente; las fichas siguen', async () => {
+    lecturas.mockClear();
+    const h = await pintar({ ...base, tms: { activa: true, probadaEn: null, ultimoError: 'x' }, archivosRecibidos: 3 }, false);
+    expect(lecturas).not.toHaveBeenCalled();
+    expect(h.includes('puesta-en-marcha')).toBe(false);
+    expect(h.includes('Puesta en marcha')).toBe(false);
+    expect(h.includes('Operadores activos')).toBe(false);
+    expect(h.includes('data-ficha')).toBe(true);
+  });
+  it('para quien sí tiene acceso lee las señales y pinta la tarjeta', async () => {
+    lecturas.mockClear();
+    const h = await pintar(base, true);
+    expect(lecturas).toHaveBeenCalledTimes(1);
+    expect(h.includes('Puesta en marcha')).toBe(true);
   });
 });
