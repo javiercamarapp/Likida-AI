@@ -66,7 +66,7 @@ html:root:has([data-ui="v2"] > .rv-carga:not([data-estado="oculta"])) { --bg: va
 }
 
 /* La pantalla de carga de PÁGINA en línea (`cargando.tsx`) solo REGISTRA la carga: nunca se ve por sí misma (la capa la tapa). */
-[data-ui="v2"] .rv-contenido [role="status"][aria-label="Cargando"]:has(> .likida-respira) { visibility: hidden; }
+[data-ui="v2"] .rv-contenido [data-carga="pagina"] { visibility: hidden; }
 
 /* Seguro cumplido: «No disponible ahora. No es cero» + Reintentar. */
 [data-ui="v2"] .rv-carga-error {

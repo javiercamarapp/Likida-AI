@@ -23,8 +23,10 @@ import { crearControlador, type EstadoCarga } from './controlador-carga';
 // Suspense aún pendiente no se hidrata, pero el DOM del servidor sí trae la pantalla de carga.
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** La pantalla de carga de PÁGINA (`cargando.tsx`, vía `loading.tsx`): el estado con el logo respirando. Las tarjetas que cargan sus datos NO cuentan. */
-const PENDIENTE = '.rv-contenido [role="status"][aria-label="Cargando"]:has(> .likida-respira)';
+/** La marca EXPLÍCITA de la pantalla de carga de PÁGINA (`cargando.tsx`, vía `loading.tsx`). Las tarjetas que cargan sus datos
+ *  (ChartState, «Cargando» en línea) NO la llevan, así que no levantan la capa ni se ocultan. Sin `:has`: funciona en cualquier navegador. */
+export const MARCA_CARGA_PAGINA = { atributo: 'data-carga', valor: 'pagina' } as const;
+export const PENDIENTE = `.rv-contenido [${MARCA_CARGA_PAGINA.atributo}="${MARCA_CARGA_PAGINA.valor}"]`;
 
 export default function CapaCarga() {
   const capa = useRef<HTMLDivElement>(null);
@@ -34,10 +36,21 @@ export default function CapaCarga() {
     const el = capa.current;
     const err = error.current;
     if (!el || !err) return;
+    // Foco: el marco queda `visibility:hidden` mientras la capa se ve, así que el foco cae a <body>; se guarda y se restaura al soltar.
+    let foco: HTMLElement | null = null;
     const ctl = crearControlador({
-      hayPendiente: () => document.readyState === 'loading' || document.querySelector(PENDIENTE) !== null,
+      hayPendiente: () => { try { return document.readyState === 'loading' || document.querySelector(PENDIENTE) !== null; } catch { return false; } },
       documentoCargando: () => document.readyState === 'loading',
-      poner: (e: EstadoCarga) => { el.dataset.estado = e === 'tope' ? 'oculta' : e; el.setAttribute('aria-busy', e === 'inicial' || e === 'nav' ? 'true' : 'false'); err.hidden = e !== 'tope'; },
+      poner: (e: EstadoCarga) => {
+        const visible = e === 'inicial' || e === 'nav';
+        const activo = document.activeElement;
+        if (visible && activo instanceof HTMLElement && activo !== document.body) foco = activo;
+        if (!visible && foco) {
+          const f = foco; foco = null;
+          // Se restaura tras pintar el marco visible; solo si el foco no fue a otro sitio y el elemento sigue en el documento.
+          queueMicrotask(() => { if (f.isConnected && (document.activeElement === document.body || document.activeElement === null)) f.focus({ preventScroll: true }); });
+        }
+        el.dataset.estado = e === 'tope' ? 'oculta' : e; el.setAttribute('aria-busy', e === 'inicial' || e === 'nav' ? 'true' : 'false'); err.hidden = e !== 'tope'; },
       ahora: () => Date.now(),
       esperar: (f, ms) => window.setTimeout(f, ms),
       cancelar: (id) => window.clearTimeout(id),
