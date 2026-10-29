@@ -24,7 +24,7 @@ describe('carga actual del panel (para scripts/ui2-calidad)', () => {
     const dir = path.join(TRABAJO, 'x', 'vistas');
     mkdirSync(dir, { recursive: true });
     const html = renderToStaticMarkup(
-      <DashboardChromeV2 nombre="Ana Prueba" rol="flota_admin" perfil="cinco_agentes" cerrarSesion={async () => {}}>
+      <DashboardChromeV2 nombre="Ximena Salgado Robles" rol="flota_admin" perfil="cinco_agentes" cerrarSesion={async () => {}}>
         <Cargando />
       </DashboardChromeV2>,
     );

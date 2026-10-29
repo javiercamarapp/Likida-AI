@@ -15,6 +15,27 @@ import { informe, CRITERIOS } from './informe.mjs';
 import { PANTALLAS_TIPO, PANTALLAS_RUTA, TIPOS_CON_PLIEGUE } from './pantallas.mjs';
 import { duracionesCss, duracionesInline } from './duraciones.mjs';
 
+// Todo lo pesado (Chromium) corre bajo ~/likida-loop/heavy.sh (un proceso pesado a la vez). Sin el candado, el detector se
+// relanza a sí mismo bajo heavy.sh; HEAVY_ADENTRO lo marca para no relanzar en bucle.
+const { spawnSync, execFileSync } = await import('node:child_process');
+// Si CUALQUIER ancestro es heavy.sh (alguien lo envolvió a mano, también con npm / sh -c entre medio) no se relanza: el candado no
+// es reentrante y el detector se bloquearía solo hasta el timeout de 30 min.
+const bajoHeavy = (() => {
+  try {
+    let pid = process.ppid;
+    for (let n = 0; n < 12 && pid > 1; n++) {
+      const [ppid, ...cmd] = execFileSync('ps', ['-o', 'ppid=,command=', '-p', String(pid)], { encoding: 'utf8' }).trim().split(/\s+/);
+      if (/heavy\.sh/.test(cmd.join(' '))) return true;
+      pid = Number(ppid);
+    }
+  } catch { /* sin ps: se asume que no hay candado y se relanza */ }
+  return false;
+})();
+if (!process.env.HEAVY_ADENTRO && !process.env.UI2_SIN_HEAVY && !bajoHeavy) {
+  const { homedir: casa } = await import('node:os');
+  const r = spawnSync(path.join(casa(), 'likida-loop/heavy.sh'), [process.execPath, ...process.argv.slice(1)], { stdio: 'inherit', env: { ...process.env, HEAVY_ADENTRO: '1' } });
+  process.exit(r.status ?? 1);
+}
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const require = createRequire(path.join(raiz, 'package.json'));
 const { chromium } = require('playwright');
@@ -61,23 +82,31 @@ function descubrir() {
   return lista;
 }
 
-/** El arnés ABORTA si una pantalla no trae el alcance v2: medir CSS v2 sobre HTML sin [data-ui="v2"] mide ruido. */
-function assertV2(cuerpo, id) {
-  if (!/data-ui="v2"/.test(cuerpo)) throw new ArnesSinV2(`la pantalla ${id} no trae [data-ui="v2"]: el HTML no viene del chrome v2 (render.sh con UI2_CHROME=v2)`);
-}
+/** El arnés ABORTA si la pantalla no es la UI v2. No basta con que la cadena aparezca en el HTML (un comentario, un texto o un
+ *  atributo cualquiera la contienen): se valida en el DOM que el ELEMENTO RAÍZ del chrome (`.tema-neutro`) lleva
+ *  data-ui="v2" y que dentro de él viven el shell (sidebar o cabecera móvil) y el contenido. Devuelve el motivo o null. */
+export const comprobarRaizV2 = (page) => page.evaluate(() => {
+  const raices = [...document.querySelectorAll('[data-ui="v2"]')];
+  if (!raices.length) return 'ningún elemento lleva data-ui="v2"';
+  const raiz = raices.find((r) => r.classList.contains('tema-neutro'));
+  if (!raiz) return 'data-ui="v2" no está en el elemento raíz del chrome (.tema-neutro)';
+  if (!raiz.querySelector('.rv-sb,.rv-cab-movil')) return 'la raíz v2 no contiene el shell (.rv-sb / .rv-cab-movil)';
+  if (!raiz.querySelector('main,#contenido-principal,[role="status"]')) return 'la raíz v2 no contiene el contenido';
+  return null;
+});
 class ArnesSinV2 extends Error {}
 
 /** Ejecuta medir() dentro de la página (la función viaja como texto: es autocontenida). */
 export const ejecutar = (page, opts) => page.evaluate(({ src, U, o }) => (0, eval)('(' + src + ')')(U, o), { src: medir.toString(), U: UMBRALES, o: opts });
 
 async function medirPantalla(browser, p, cuerpo, cssRuta, w, tema, { pliegueAplica, carga }) {
-  assertV2(cuerpo, p.id);
   const h = ALTO[w] ?? 900;
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1, reducedMotion: 'reduce', locale: 'es-MX', isMobile: w < 500, hasTouch: w < 500 });
   const page = await ctx.newPage();
   const archivo = path.join(TRABAJO, `.doc-${p.id}.html`);
   writeFileSync(archivo, docHtml(cuerpo, cssRuta));
   await page.goto('file://' + archivo);
+  { const motivo = await comprobarRaizV2(page); if (motivo) throw new ArnesSinV2(`la pantalla ${p.id}: ${motivo} (render.sh con UI2_CHROME=v2)`); }
   await page.evaluate(async (t) => { document.documentElement.setAttribute('data-theme', t === 'claro' ? 'light' : 'dark'); await document.fonts.ready; }, tema);
   // Los Suspense resueltos por prerender se acomodan con un script en línea: se espera a que no queden plantillas ni esqueletos pendientes.
   if (!carga) await page.waitForFunction(() => !document.querySelector('template[id^="B:"]') && !document.querySelector('[role="status"][aria-label="Cargando"]'), null, { timeout: 5000 }).catch(() => {});
@@ -158,7 +187,7 @@ export function globales(salida) {
 
 if (arg.selftest) {
   const { selftest } = await import('./selftest.mjs');
-  const ok = await selftest({ chromium, docHtml, ejecutar, CRITERIOS, ALTO });
+  const ok = await selftest({ chromium, docHtml, ejecutar, CRITERIOS, ALTO, comprobarRaizV2 });
   process.exit(ok ? 0 : 1);
 }
 const total = await correr();

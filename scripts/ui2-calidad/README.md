@@ -14,9 +14,9 @@ Opciones de `detectar.mjs`: `--trabajo= --out= --etiqueta= --pantallas=c01,a1 --
 
 | id | Criterio | Norma |
 |---|---|---|
-| c1 | controles | alto visual ≤ 36 (primario sólido ≤ 32), toque ≥ 44 (prueba de impacto), vecinos ≥ 8 px |
-| c2 | tipografía | 0 textos < 11 px; H1 20; KPI 26 (tope 30); escala {11 MAYÚSC., 12, 13, 14, 15, 20, 26} |
-| c3 | padding / gap / radios | radios {8, 12, píldora}; tarjeta ≤ 14 (móvil ≤ 12); gap ≤ 12; página 24 |
+| c1 | controles | alto visual ≤ 36 (primario ≤ 32, 36 en <820), toque ≥ 44 (prueba de impacto; input/select de escritorio y la caja de 44 de móvil exentos), vecinos ≥ 8 px |
+| c2 | tipografía | 0 textos < 11 px; H1 20; KPI 26 (tope 30; «—» 18; móvil 18–21); escala {11 MAYÚSC., 12, 13, 14, 15, 20, 26} (16 solo campo móvil y cifra de tooltip; 18 solo KPI «—») |
+| c3 | padding / gap / radios | radios {8, 12, píldora; 16 solo hoja inferior móvil}; tarjeta ≤ 14 (móvil ≤ 12); gap ≤ 12; página 24 |
 | c4 | espacio vacío | 0 huecos de fila; aire inferior por tarjeta ≤ 24 px y ≤ 25 %; 0 min-height decorativo; vecinas ±4 px |
 | c5 | primer pliegue 1440×900 | KPI + gráfica + ≥ 8 filas (solo pantallas de tipo `panel`, ver `pantallas.mjs`) |
 | c6 | choques | 0 desborde, 0 recorte, 0 solapes, 0 controles sin nombre |

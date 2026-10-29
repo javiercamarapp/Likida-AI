@@ -61,7 +61,7 @@ import { mkdtempSync, writeFileSync as escribir } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-export async function selftest({ chromium, docHtml, ejecutar }) {
+export async function selftest({ chromium, docHtml, ejecutar, comprobarRaizV2 }) {
   const browser = await chromium.launch();
   const correr = async (cuerpo, opts, w = 1440, h = 900) => {
     const ctx = await browser.newContext({ viewport: { width: w, height: h }, reducedMotion: 'reduce' });
@@ -81,10 +81,11 @@ export async function selftest({ chromium, docHtml, ejecutar }) {
   dice(Object.keys(buena.n).filter((k) => k.startsWith('c8.')).length === 0, 'capa de carga correcta = 0 hallazgos c8 ' + JSON.stringify(buena.n));
   const mala = await correr(CAPA_MALA, { carga: true });
   for (const k of ESPERADOS_CAPA_MALA) dice((mala.n[k] || 0) > 0, `la carga dividida dispara ${k} (${mala.n[k] || 0})`);
-  const v21 = await selftestV21({ correr, dice });
+  const v21 = await selftestV21({ correr, dice, browser, docHtml, comprobarRaizV2 });
   if (!v21) ok = false;
   await browser.close();
   console.log(ok ? 'AUTOPRUEBA OK' : 'AUTOPRUEBA FALLÓ');
+
   return ok;
 }
 
@@ -112,7 +113,7 @@ const GRAF = (h) => `<figure style="margin:0 0 12px;border:1px solid #e6e6e8;bor
 const ATENCION = (n) => `<section style="border:1px solid #e6e6e8;border-radius:12px;background:#fff;padding:14px;margin-bottom:12px"><h2 style="font:600 14px sans-serif;margin:0 0 8px">Requiere tu atención</h2><ul style="margin:0;padding:0">${Array.from({ length: n }, (_, i) => `<li style="list-style:none;height:48px;font:13px sans-serif">Asunto ${i + 1}</li>`).join('')}</ul></section>`;
 const CAMPOS = (n) => `<form style="display:grid;gap:8px">${Array.from({ length: n }, (_, i) => `<label style="font:12px sans-serif">Campo ${i + 1}<input style="display:block;height:32px;border:1px solid #8a8a90;border-radius:8px;width:300px" aria-label="Campo ${i + 1}"></label>`).join('')}</form>`;
 
-async function selftestV21({ correr, dice }) {
+async function selftestV21({ correr, dice, browser, docHtml, comprobarRaizV2 }) {
   let ok = true; const d = (b, m) => { dice(b, m); if (!b) ok = false; };
   const N = (r, k) => r.n[k] || 0;
   // ── c3.radio: marcas de gráfica exentas, cajas NO ──
@@ -189,5 +190,57 @@ async function selftestV21({ correr, dice }) {
   escribir(path.join(tmp, 'x.css'), ':root{--ui-slow:250ms;--rapido:130ms}.a{transition:opacity var(--ui-slow) ease}.b{animation:foo var(--rapido) ease}.c{animation:bar 900ms linear}');
   const dc = duracionesCss(tmp);
   d(dc.length === 2 && dc.some((x) => x.includes('130')) && dc.some((x) => x.includes('900')), 'c9: en CSS resuelve var(--x) y marca 130 ms (no es token) y 900 ms (' + dc.length + ')');
+  // ── Umbrales alineados con ESTILO-LIKIDA.md (escala {11 M,12,13,14,15,16,18,20,26}, radio 16 de hoja móvil, primario 36 en <820) ──
+  const p = (px, extra = '') => `<main id="contenido-principal"><h1 style="font-size:20px;margin:0">T</h1><p style="margin:0;font:${px}px sans-serif;${extra}">Texto</p></main>`;
+  for (const px of [12, 13, 14, 15, 20]) { const r = await correr(p(px), { pliegue: false, sinShell: true }); d(N(r, 'c2.fuera_de_escala') === 0, `tamaño ${px} px pertenece a la escala de ESTILO §3 (0 hallazgos)`); }
+  for (const px of [16, 18]) { const r = await correr(p(px), { pliegue: false, sinShell: true }); d(N(r, 'c2.fuera_de_escala') > 0, `texto de cuerpo a ${px} px en escritorio SÍ se marca (16 y 18 solo en su contexto)`); }
+  d(N(await correr('<main id="contenido-principal"><h1 style="font-size:20px;margin:0">T</h1><input aria-label="c" value="x" style="font:16px sans-serif;height:34px;border:1px solid #8a8a90;border-radius:8px"></main>', { pliegue: false, sinShell: true }, 390, 844), 'c2.fuera_de_escala') === 0, 'campo a 16 px en móvil es válido');
+  d(N(await correr('<main id="contenido-principal"><h1 style="font-size:20px;margin:0">T</h1><input aria-label="c" value="x" style="font:16px sans-serif;height:32px;border:1px solid #8a8a90;border-radius:8px"></main>', { pliegue: false, sinShell: true }), 'c2.fuera_de_escala') > 0, 'campo a 16 px en escritorio SÍ se marca');
+  d(N(await correr('<main id="contenido-principal"><h1 style="font-size:20px;margin:0">T</h1><div role="tooltip" style="font:12px sans-serif"><b style="font:600 16px sans-serif">$1,234</b></div></main>', { pliegue: false, sinShell: true }), 'c2.fuera_de_escala') === 0, 'cifra de tooltip a 16 px es válida');
+  for (const px of [12.5, 13.5, 17, 10.5]) { const r = await correr(p(px), { pliegue: false, sinShell: true }); d(N(r, 'c2.fuera_de_escala') + N(r, 'c2.texto_menor_11') > 0, `tamaño ${px} px está PROHIBIDO por ESTILO §3 (se marca)`); }
+  const kpi = (px, txt) => `<main id="contenido-principal"><h1 style="font-size:20px;margin:0">T</h1><div class="kpi-valor" style="font:700 ${px}px/1.1 sans-serif">${txt}</div></main>`;
+  d(N(await correr(kpi(18, '—'), { pliegue: false, sinShell: true }), 'c2.kpi_no_26') === 0, 'KPI sin dato «—» a 18 px es válido');
+  d(N(await correr(kpi(18, '1,234'), { pliegue: false, sinShell: true }), 'c2.kpi_no_26') > 0, 'una cifra KPI con dato a 18 px en escritorio SÍ se marca (norma 26)');
+  d(N(await correr(kpi(20, '1,234'), { pliegue: false, sinShell: true }, 390, 844), 'c2.kpi_no_26') === 0, 'KPI móvil a 20 px (clamp 18–21) es válido');
+  d(N(await correr(kpi(24, '1,234'), { pliegue: false, sinShell: true }, 390, 844), 'c2.kpi_no_26') > 0, 'KPI móvil a 24 px se marca');
+  d(N(await correr(kpi(26, '1,234'), { pliegue: false, sinShell: true }, 390, 844), 'c2.kpi_no_26') > 0, 'KPI móvil a 26 px SÍ se marca (ESTILO §11: clamp 18–21 bajo 820)');
+  d(N(await correr(kpi(18, '—'), { pliegue: false, sinShell: true }, 390, 844), 'c2.kpi_no_26') === 0, 'KPI «—» a 18 px también es válido en móvil');
+  const hoja = '<main id="contenido-principal"><h1 style="font-size:20px;margin:0">T</h1><div style="border:1px solid #ccc;border-radius:16px;background:#fff;padding:12px;width:300px">Hoja</div></main>';
+  const hojaOk = '<main id="contenido-principal"><h1 style="font-size:20px;margin:0">T</h1><div class="rv-ov__panel" style="border:1px solid #ccc;border-radius:16px;background:#fff;padding:12px;width:300px">Hoja</div></main>';
+  d(N(await correr(hojaOk, { pliegue: false, sinShell: true }, 390, 844), 'c3.radio') === 0, 'radio 16 de la hoja inferior (.rv-ov__panel) en móvil es válido');
+  const hojaHijo = '<main id="contenido-principal"><h1 style="font-size:20px;margin:0">T</h1><div class="rv-ov__panel"><div style="border:1px solid #ccc;border-radius:16px;background:#fff;padding:12px;width:300px">Tarjeta dentro de la hoja</div></div></main>';
+  d(N(await correr(hojaHijo, { pliegue: false, sinShell: true }, 390, 844), 'c3.radio') > 0, 'una tarjeta de radio 16 DENTRO de la hoja SÍ se marca (solo el panel)');
+  d(N(await correr('<main id="contenido-principal"><h1 style="font-size:20px;margin:0">T</h1><div role="tooltip"><span style="font:400 16px sans-serif">texto largo del tooltip</span></div></main>', { pliegue: false, sinShell: true }), 'c2.fuera_de_escala') > 0, 'texto NO cifra a 16 px dentro de un tooltip SÍ se marca');
+  d(N(await correr(hoja, { pliegue: false, sinShell: true }, 390, 844), 'c3.radio') > 0, 'una TARJETA de radio 16 en móvil SÍ se marca (solo la hoja puede)');
+  d(N(await correr(hoja, { pliegue: false, sinShell: true }), 'c3.radio') > 0, 'radio 16 en escritorio SÍ se marca');
+  const prim36 = '<main id="contenido-principal"><h1 style="font-size:20px;margin:0">T</h1><button class="rv-btn--primary" style="height:36px;padding:0 12px;border:1px solid #d6d6d9;border-radius:8px;background:#e4e4e6;font:600 13px sans-serif">Guardar</button></main>';
+  d(N(await correr(prim36, { pliegue: false, sinShell: true }, 390, 844), 'c1.boton_gordo') === 0, 'primario de 36 px en <820 (norma 32 / 36 móvil) es válido');
+  const prim36b = '<main id="contenido-principal"><h1 style="font-size:20px;margin:0">T</h1><button style="height:36px;padding:0 12px;border:0;border-radius:8px;background:#0e0e10;color:#fff;font:600 13px sans-serif">Guardar</button></main>';
+  d(N(await correr(prim36b, { pliegue: false, sinShell: true }), 'c1.boton_gordo') > 0, 'primario sólido de 36 px en escritorio SÍ se marca (máx. 32)');
+  const inp = (alto, envoltura) => `<main id="contenido-principal"><h1 style="font-size:20px;margin:0">T</h1><div style="padding:60px 0">${envoltura === 'caja' ? `<span style="display:inline-flex;align-items:center;height:44px;width:300px">` : envoltura === 'borde' ? `<div style="height:44px;border:1px solid #d6d6d9;border-radius:12px;display:flex;align-items:center;width:300px">` : envoltura === 'layout' ? `<div style="height:44px;display:flex;align-items:center;width:300px">` : ''}<input aria-label="c" style="display:block;box-sizing:border-box;width:280px;height:${alto}px;border:1px solid #8a8a90;border-radius:8px;font:13px sans-serif">${envoltura === 'caja' ? '</span>' : envoltura ? '</div>' : ''}</div></main>`;
+  d(N(await correr(inp(32, ''), { pliegue: false, sinShell: true }), 'c1.toque') === 0, 'input de 32 px en escritorio NO dispara c1.toque (ESTILO §5: 32 fijo)');
+  d(N(await correr(inp(34, 'caja'), { pliegue: false, sinShell: true }, 390, 844), 'c1.toque') === 0, 'input de 34 px dentro de una caja inline-flex de 44 en móvil NO dispara c1.toque');
+  d(N(await correr(inp(34, 'borde'), { pliegue: false, sinShell: true }, 390, 844), 'c1.toque') === 0, 'input de 34 px dentro de una caja con borde propio de 44 en móvil NO dispara c1.toque');
+  d(N(await correr(inp(34, 'layout'), { pliegue: false, sinShell: true }, 390, 844), 'c1.toque') > 0, 'input de 34 px en un contenedor de LAYOUT de 44 (sin borde ni inline) SÍ dispara c1.toque');
+  const celda = '<main id="contenido-principal"><h1 style="font-size:20px;margin:0">T</h1><table style="border-collapse:collapse;margin:60px 0"><tbody><tr style="height:48px"><td style="height:48px;width:200px"><a href="#r" style="display:inline-block;height:20px;line-height:20px;font:13px sans-serif">Revisar</a></td></tr></tbody></table></main>';
+  d(N(await correr(celda, { pliegue: false, sinShell: true }), 'c1.toque') > 0, 'un enlace pequeño de 20 px en una celda de 48 px SÍ dispara c1.toque (la celda no es su caja)');
+  d(N(await correr(celda, { pliegue: false, sinShell: true }, 390, 844), 'c1.toque') > 0, 'el mismo enlace en una celda de 48 px en móvil SÍ dispara c1.toque');
+  d(N(await correr(inp(34, ''), { pliegue: false, sinShell: true }, 390, 844), 'c1.toque') > 0, 'input de 34 px SIN caja de 44 en móvil SÍ dispara c1.toque');
+  const chk = '<main id="contenido-principal"><h1 style="font-size:20px;margin:0">T</h1><div style="padding:60px 0"><input type="checkbox" aria-label="c" style="width:13px;height:13px"></div></main>';
+  d(N(await correr(chk, { pliegue: false, sinShell: true }), 'c1.toque') > 0, 'un checkbox de 13 px sin caja de 44 SÍ dispara c1.toque (la exención no cubre checkbox)');
+  const btnAlto = (h, cls, bg) => `<main id="contenido-principal"><h1 style="font-size:20px;margin:0">T</h1><button class="${cls}" style="height:${h}px;padding:0 12px;border:0;border-radius:8px;background:${bg};color:#fff;font:600 13px sans-serif">Guardar</button></main>`;
+  d(N(await correr(btnAlto(40, '', '#0e0e10'), { pliegue: false, sinShell: true }, 390, 844), 'c1.boton_gordo') > 0, 'primario sólido de 40 px en móvil SÍ se marca (cualquier viewport)');
+  d(N(await correr(btnAlto(40, '', '#0e0e10'), { pliegue: false, sinShell: true }), 'c1.boton_gordo') > 0, 'primario sólido de 40 px en escritorio SÍ se marca');
+  d(N(await correr(btnAlto(36, '', '#0e0e10'), { pliegue: false, sinShell: true }), 'c1.boton_gordo') > 0, 'primario sólido de 36 px en escritorio SÍ se marca (máx. 32)');
+  const svgT = (px) => `<main id="contenido-principal"><h1 style="font-size:20px;margin:0">T</h1><svg width="300" height="100"><text x="10" y="50" style="font:${px}px sans-serif">dato</text></svg></main>`;
+  d(N(await correr(svgT(12), { pliegue: false, sinShell: true }), 'c2.fuera_de_escala') === 0 && N(await correr(svgT(11), { pliegue: false, sinShell: true }), 'c2.fuera_de_escala') > 0, 'texto de gráfica: 12 px válido, 11 px se marca (ESTILO §7 ≥12)');
+  // ── El aborto sin v2 valida el DOM, no solo la cadena ──
+  const motivo = async (html) => { const ctx = await browser.newContext(); const pg = await ctx.newPage(); await pg.setContent(docHtml(html, null)); const m = await comprobarRaizV2(pg); await ctx.close(); return m; };
+  const shell = '<aside class="rv-sb">menú</aside><main id="contenido-principal">x</main>';
+  d((await motivo(`<div class="tema-neutro" data-ui="v2">${shell}</div>`)) === null, 'chrome v2 correcto (raíz .tema-neutro con data-ui="v2" y shell dentro) NO aborta');
+  d((await motivo(`<div class="tema-neutro">${shell}</div>`)) !== null, 'chrome v1 (sin data-ui) ABORTA');
+  d((await motivo(`<!-- data-ui="v2" --><p>data-ui="v2"</p><div class="tema-neutro">${shell}</div>`)) !== null, 'la cadena data-ui="v2" en un comentario o en texto NO basta: ABORTA');
+  d((await motivo(`<span data-ui="v2"></span><div class="tema-neutro">${shell}</div>`)) !== null, 'data-ui="v2" fuera de la raíz del chrome ABORTA');
+  d((await motivo('<div class="tema-neutro" data-ui="v2"><main id="contenido-principal">sin shell</main></div>')) !== null, 'raíz v2 sin shell dentro ABORTA');
   return ok;
 }
