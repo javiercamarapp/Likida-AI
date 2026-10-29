@@ -174,6 +174,23 @@ const V: Record<string, () => ReactNode> = {
       </P.Modal>
     </>
   ),
+  'b07-menu': () => (
+    <>
+      <P.EncabezadoPagina titulo="Popover y menú" descripcion="Filas de 32, radio 12, sombra de popover (abierto para la captura)." acciones={<P.Boton>Cuenta</P.Boton>} />
+      <Rejilla n={1}>
+        <Bloque titulo="Menú de cuenta">
+          <div className="rv-pop" style={{ position: "static", width: 220 }}>
+            <P.MenuList etiqueta="Cuenta">
+              <P.MenuItem href="/dashboard/mi-perfil">Mi perfil</P.MenuItem>
+              <P.MenuItem href="/dashboard/soporte">Ayuda</P.MenuItem>
+              <P.MenuItem deshabilitado>Ver recorrido</P.MenuItem>
+              <P.MenuItem peligro>Salir</P.MenuItem>
+            </P.MenuList>
+          </div>
+        </Bloque>
+      </Rejilla>
+    </>
+  ),
 };
 
 describe('muestrario B', () => {
@@ -187,7 +204,7 @@ describe('muestrario B', () => {
       );
       exigirV2Html(html, id);
       // Overlays abiertos para la captura: <dialog open> (no modal) fijo a pantalla completa.
-      if (id === 'b05-overlays' || id === 'b06-modal') html = html.replace(/<dialog(?=[^>]*rv-ov--(?:drawer|modal))/g, '<dialog open style="position:fixed;inset:0;z-index:50"');
+      if (id === 'b05-overlays' || id === 'b06-modal') html = html.replace(/<dialog(?=[^>]*rv-ov--(?:drawer|modal))/g, '<div style="position:fixed;inset:0;z-index:49;background:var(--scrim)"></div><dialog open style="position:fixed;inset:0;z-index:50"');
       writeFileSync(path.join(OUT, 'a/vistas', `${id}.html`), html);
     }
   });
