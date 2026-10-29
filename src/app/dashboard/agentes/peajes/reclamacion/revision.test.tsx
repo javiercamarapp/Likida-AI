@@ -31,6 +31,20 @@ const extras = (revision: ReporteRevision | null, o: Partial<ExtrasReclamacion> 
 const pintar = (e: ExtrasReclamacion, estado: 'ok' | 'sin_desglose' = 'ok') =>
   renderToStaticMarkup(<VistaReclamacionPeajes sufijo="?tenant=f-1" desglose={estado === 'ok' ? ID : null} estado={estado} reporte={null} extras={e} />);
 
+describe('A2P-04: doble cobro entre archivos en pantalla', () => {
+  it('se pinta con su monto y el archivo previo', async () => {
+    const { revisarDobleEntreArchivos } = await import('@/lib/likida/peajes/doble_entre_archivos');
+    const ls = [l(0, { fecha: '2026-02-20', monto: 189.5, hora: '10:15:00' })];
+    const previo = { id: 'p1', etiqueta: 'corte-febrero.csv', periodoDesde: '2026-02-11', periodoHasta: '2026-02-20',
+      lineas: [{ fecha: '2026-02-20', hora: '10:15:00', caseta: 'Caseta Ejemplo Norte', tag: 'IMDM00000001', monto: 189.5, indice: 3 }] };
+    const dobleEntreArchivos = revisarDobleEntreArchivos(ls, [previo], { periodoDesde: '2026-03-01', archivoActualId: ID });
+    const html = pintar(extras(reporte(ls, { dobleEntreArchivos })));
+    expect(html).toContain('Posible doble cobro entre archivos');
+    expect(html).toContain('$189.50');
+    expect(html).toContain('corte-febrero.csv');
+  });
+});
+
 describe('la revisión de cobros en pantalla', () => {
   const lineas = [l(0, { clase: 9, monto: 400 }), l(1, { fecha: '2026-02-27', monto: 250, caseta: 'Plaza <script>x</script>' }), l(2), l(3, { hora: '10:00:00' })];
 

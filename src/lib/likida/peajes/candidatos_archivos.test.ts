@@ -62,7 +62,8 @@ describe('las hojas', () => {
     const libro = leer(candidatosAExcel(r));
     const cats = [...new Set(r.filas.map((f) => f.categoria))];
     // A37-A2-05: las categorías INTERNAS de la flota no viajan al proveedor
-    const alProveedor = CATEGORIAS_ARCHIVO.filter((c) => !INTERNAS.includes(c));
+    // A2P-04: el doble entre archivos solo aparece cuando se le pasa el resultado de la comparación (ver doble_entre_archivos_superficie.test.ts)
+    const alProveedor = CATEGORIAS_ARCHIVO.filter((c) => !INTERNAS.includes(c) && c !== 'posible_doble_entre_archivos');
     expect(cats.sort()).toEqual([...alProveedor].sort());
     expect(libro.SheetNames).toEqual([...alProveedor.map((c) => ETIQUETA_CATEGORIA_ARCHIVO[c]), 'Resumen', 'Léeme']);
   });

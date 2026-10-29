@@ -88,7 +88,7 @@ export async function GET(req: Request) {
     const reporte = armarCandidatos({
       proveedor: rev.proveedor, archivoNombre: rev.archivoNombre,
       periodoDesde: rev.periodoOficialDesde, periodoHasta: rev.periodoOficialHasta,
-      revision: rev.revision, evaluadas, excluir, decididos,
+      revision: rev.revision, evaluadas, excluir, decididos, dobleEntreArchivos: rev.dobleEntreArchivos?.candidatos,
     });
     const cabeceras = { 'Cache-Control': 'no-store' } as const;
     if (formato === 'csv') {
