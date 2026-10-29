@@ -4,6 +4,7 @@ import { fechaMx, hoyMx } from '@/lib/formato';
 import { BotonEnlace, Chip, EncabezadoPagina, EstadoVacio } from '@/app/ui-v2/componentes';
 import { TiraKpi, type ItemKpi } from '@/app/ui-v2/graficas';
 import { anclaTour } from '@/app/ui-v2/movimiento/tour';
+import { TextoRevelado } from '@/app/ui-v2/movimiento';
 import { leerSenalesAsistente } from '@/lib/likida/asistente/senales';
 import type { SenalesAsistente } from '@/lib/likida/asistente/pasos_cinco_agentes';
 import { conPaso } from './puesta-en-marcha/con-paso';
@@ -90,6 +91,8 @@ export async function ResumenV2({
           </EstadoVacio>
         )}
       </section>}
+
+      <TextoRevelado className="rv-res__manifiesto" texto="Tus agentes cuadran liquidaciones, concilian peajes y revisan la Carta Porte. Tú atiendes solo lo que necesita una decisión." />
 
       <section aria-labelledby="rv-res-ag">
         <h2 id="rv-res-ag" className="rv-res__sec">Agentes</h2>

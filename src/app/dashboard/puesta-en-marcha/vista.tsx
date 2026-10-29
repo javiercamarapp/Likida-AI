@@ -8,6 +8,7 @@ import {
   Aviso, Boton, BotonEnlace, Chip, Drawer, EncabezadoPagina, type TonoChip,
 } from '@/app/ui-v2/componentes';
 import { ProgresoAnillo } from '@/app/ui-v2/graficas';
+import { Constelacion } from '@/app/ui-v2/svg/constelacion';
 import { anclaTour, TourLanzador } from '@/app/ui-v2/movimiento/tour';
 import {
   armarPasosCincoAgentes, etiquetaGlobal, MOTIVO_MINIMO, ROTULO_ESTADO, RESPONSABLES_POR_OMISION,
@@ -82,12 +83,15 @@ export function VistaPuestaEnMarcha({ senales, ambito, tenantId, sufijo, soloLec
 
   return (
     <div className="rv-pem">
-      <EncabezadoPagina
-        rotulo="Puesta en marcha"
-        titulo="Deja lista tu operación"
-        descripcion="Seis pasos para que tus agentes trabajen con tus datos reales. Aquí ves qué falta y de quién es."
-        acciones={<SoloV2><TourLanzador recorridoId="dueno" etiqueta="Ver recorrido" /></SoloV2>}
-      />
+      <div className="rv-hero">
+        <EncabezadoPagina
+          rotulo="Puesta en marcha"
+          titulo="Deja lista tu operación"
+          descripcion="Seis pasos para que tus agentes trabajen con tus datos reales. Aquí ves qué falta y de quién es."
+          acciones={<SoloV2><TourLanzador recorridoId="dueno" etiqueta="Ver recorrido" /></SoloV2>}
+        />
+        <div className="rv-hero__escena" aria-hidden="true"><Constelacion total={r.rutaCritica.length} listos={r.listos} /></div>
+      </div>
 
       {soloLectura && (
         <Aviso tono="info" className="rv-pem__aviso">Estás viendo esta cuenta como superadmin: puedes revisar todo, pero tus confirmaciones no se guardan.</Aviso>
