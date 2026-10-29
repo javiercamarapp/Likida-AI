@@ -24,6 +24,7 @@ import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { exigir, traerTodo } from '../pg';
 import { DatoInvalido } from '../errores';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { rutaPdfExterno, rutaExcelExterno } from './almacen';
 import { subirArchivoExterno, firmarPdfExterno, leerPorId, TIPO_XLSX, type NuevaLiquidacionExterna } from './repo';
 import type { CursorDesglose } from './desglose_puerto';
@@ -306,6 +307,11 @@ export async function guardarConfigCorreo(tenantId: string, c: ConfigCorreo, por
   if (c.primerMesHasta !== null && revisores.length === 0) throw new DatoInvalido('primer_mes_hasta: el modo primer mes necesita al menos un revisor');
   if (c.noEnviarAntes !== null && (!/^\d{4}-\d{2}-\d{2}$/.test(c.noEnviarAntes) || Number.isNaN(Date.parse(`${c.noEnviarAntes}T00:00:00Z`)))) {
     throw new DatoInvalido('no_enviar_antes_de: debe ser una fecha AAAA-MM-DD');
+  }
+  // OLA 10 (decisión de Javier): bajo el perfil `cinco_agentes` activar el envío SIN fecha de corte se bloquea. Sin ella, el primer barrido mandaría
+  // al correo de los operadores todos los desgloses históricos que el TMS ya trae. Las flotas sin perfil (ya activas) no cambian.
+  if (c.activa && c.noEnviarAntes === null && (await perfilDeTenant(tenantId)) === 'cinco_agentes') {
+    throw new DatoInvalido('no_enviar_antes_de: para activar el envío de esta flota hay que poner la fecha de corte (desde cuándo se envían desgloses); sin ella saldrían también los históricos.');
   }
   // A37-A1-04: el correo promete «responde a este correo»; sin dirección de respuesta la respuesta cae en el buzón de campañas y se pierde.
   // 0933: la dirección de respuesta es el «Responder a» o, si falta, el correo emisor de la flota.

@@ -88,17 +88,18 @@ Reintentos: espera de 2, 4, 8 y 16 minutos entre intentos y un máximo de 5 inte
 Todas son de lectura para quien ve finanzas de la flota y de escritura solo para `service_role`. Todo el acceso a datos
 nuevo vive en un solo módulo (`liquidacion_externa/repo_correo.ts`); la prueba de frontera de datos congela el número de
 archivos y de llamadas directas a Supabase fuera de la frontera, y sus techos se suben en el mismo commit que añade
-acceso, con explicación (hoy 290 archivos y 1 940 llamadas).
+acceso, con explicación (hoy 326 archivos y 2 447 llamadas).
 
 ## 5. Configuración por flota
 
 Pantalla: Agentes, Liquidación, Configuración (solo la persona que administra la flota). **Nace apagada**: guardar la
-configuración no envía nada hasta que se enciende `activa`.
+configuración no envía nada hasta que se enciende `activa`. Para una flota nueva sigue el procedimiento de arranque de la 5.5.
 
 | Campo | Efecto | Defecto |
 |---|---|---|
 | `canal` | `whatsapp`, `correo` o `ambos` | `whatsapp` |
-| `activa` | Interruptor del canal correo | `false` |
+| `activa` | Interruptor del canal correo. **Nace apagado y el perfil `cinco_agentes` lo deja apagado** (el script `aplicar-cinco-agentes.sh` pone `activa = false`, también al reaplicarlo). Bajo ese perfil, guardar con `activa = true` y sin fecha de corte se **rechaza** (las flotas sin perfil, que ya estaban activas, no cambian) | `false` |
+| `no_enviar_antes_de` (0940) | **Fecha de corte del arranque** (AAAA-MM-DD, `NULL` = sin corte): un desglose cuyo periodo termina **antes** de esa fecha se guarda con sus entregas en `omitida` y no sale ningún correo (ver 5.5) | sin corte |
 | `remitente_nombre`, `responder_a` | Nombre del remitente y dirección de respuesta; sin marca de Likida | vacío |
 | `remitente_correo` (0933) | Correo emisor de la empresa. Es la dirección de respuesta **por omisión** cuando `responder_a` está vacío (fail-cerrado: sin ninguno de los dos no sale nada y la fila espera) y el punto de extensión del transporte propio (ver 5.1) | vacío |
 | `revisores`, `primer_mes_hasta` (0933) | **Modo primer mes**: hasta 5 revisores (uno por departamento: nómina, RH…) que reciben cada desglose enviado o retenido hasta la fecha indicada (inclusive, hora de México); después se apaga solo (ver 5.2) | apagado |
@@ -157,6 +158,32 @@ encabezado), por el mismo camino que el POST; y (2) los correos de operadores y 
 (`numero_empleado;correo;coordinador_nombre;coordinador_correo`; nunca crea operadores). Repetir un archivo es seguro. **Sin póliza no se
 envía**: la bitácora sin póliza no se guarda, abre la excepción «sin póliza» y entra normal cuando llega con póliza (por la API, el
 archivo o el pull).
+
+## 5.5 Arranque seguro: fecha de corte, vista previa y confirmación (migración 0940)
+
+El TMS devuelve histórico: sin freno, el primer barrido mandaría a los operadores los desgloses de meses atrás. Tres topes:
+
+- **Fecha de corte** (`no_enviar_antes_de`, campo en Configuración). Un desglose cuyo periodo termina antes de ella (o que el origen ya
+  marca como enviado) **se guarda, pero sus entregas nacen `omitida`** en la misma transacción (`recibir_desglose_atomico` redefinida en la
+  0940): no hay instante en que el cron pueda reclamarlas. Cargar 50 desgloses anteriores al corte produce 0 correos.
+- **Vista previa con confirmación.** La subida del export en el panel tiene dos pasos: la **vista previa** cuenta «N desgloses / M correos»
+  sin escribir nada, y la subida real exige **escribir M** para confirmar. La confirmación repite la cuenta; si no coincide con lo escrito (por ejemplo, si el archivo es otro), no se sube nada. Con 0 correos no se pide confirmación.
+- **La corrección reemplaza a la original.** Al guardar una corrección `-R<n>` se **omiten** las entregas aún `pendiente`/`enviando` de la
+  original y de las correcciones anteriores (el operador recibe un solo correo) y se cierran sus excepciones de retención; reintentar la
+  misma corrección repite la omisión sin duplicar.
+
+**Procedimiento de arranque de una flota** (en este orden; el envío sigue apagado hasta el paso 6):
+
+1. Aplicar la migración **0940** (con respaldo; aditiva e idempotente; la reversa viene en su cabecera). Sin ella la pantalla dice que
+   falta y no deja guardar fecha de corte.
+2. Cargar los **contactos** de operadores y coordinadores (`POST /v1/liquidaciones-externas/contactos` o el archivo de correos del panel).
+   Activar por correo sin ningún operador con correo se rechaza.
+3. En Configuración, poner la **fecha de corte** (primer periodo que sí debe enviarse) y guardar, con `activa` todavía apagado.
+4. **Subir** el export de bitácoras desde el panel con la **vista previa**: revisar N y M (lo anterior al corte debe aparecer omitido).
+5. **Confirmar** la subida escribiendo M.
+6. **Activar** el envío en Configuración. Bajo `cinco_agentes` solo se deja activar si ya hay fecha de corte.
+
+Si algo sale mal después del paso 6: `activa = false` (rollback 1 de la sección 10).
 
 ## 6. Plan B si la API del origen no está disponible
 

@@ -27,6 +27,7 @@ vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: construct
 vi.mock('../presupuesto', async (orig) => ({ ...(await orig<typeof import('../presupuesto')>()), acotada: (q: unknown) => q }));
 const warn = vi.fn();
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: (...a: unknown[]) => warn(...a), error: vi.fn() } }));
+vi.mock('@/lib/auth/perfil_tenant', () => ({ perfilDeTenant: async () => (globalThis as { __perfilPrueba?: string | null }).__perfilPrueba ?? null }));
 
 const r = await import('./repo_correo');
 const { DatoInvalido } = await import('../errores');
@@ -36,7 +37,7 @@ const sinColumna0940 = { data: null, error: { message: 'column liquidacion_corre
 const select = (l: Llamada) => String(l.ops.find((o) => o[0] === 'select')?.[1]);
 const upsert = (l: Llamada) => l.ops.find((o) => o[0] === 'upsert')?.[1] as Record<string, unknown>;
 
-beforeEach(() => { llamadas.length = 0; respuestas = []; warn.mockClear(); });
+beforeEach(() => { (globalThis as { __perfilPrueba?: string | null }).__perfilPrueba = null; llamadas.length = 0; respuestas = []; warn.mockClear(); });
 
 describe('A1-01 · lectura de la fecha de corte', () => {
   it('traduce no_enviar_antes_de (date) a AAAA-MM-DD; sin fila o sin valor ⇒ sin corte', async () => {
@@ -89,6 +90,35 @@ describe('A1-01 · guardar la fecha de corte', () => {
     await r.guardarConfigCorreo(T, { ...base, noEnviarAntes: null }, null);
     expect(llamadas).toHaveLength(2);
     expect('no_enviar_antes_de' in upsert(llamadas[1])).toBe(false);
+  });
+});
+
+describe('Ola 10 · activar el envio sin fecha de corte (solo perfil cinco_agentes)', () => {
+  const activa = { ...r.CONFIG_CORREO_POR_DEFECTO, canal: 'correo' as const, activa: true, responderA: 'respuestas@ejemplo.test' };
+  const poner = (p: string | null) => { (globalThis as { __perfilPrueba?: string | null }).__perfilPrueba = p; };
+
+  it('cinco_agentes: activar SIN fecha de corte se rechaza antes de tocar la base', async () => {
+    poner('cinco_agentes');
+    await expect(r.guardarConfigCorreo(T, { ...activa, noEnviarAntes: null }, 'oficina')).rejects.toThrow(/fecha de corte/);
+    expect(llamadas).toHaveLength(0);
+  });
+
+  it('cinco_agentes: activar CON fecha de corte guarda; dejar apagado sin fecha tambien guarda', async () => {
+    poner('cinco_agentes');
+    respuestas = [{ data: [{ tenant_id: T }], error: null }];
+    await r.guardarConfigCorreo(T, { ...activa, noEnviarAntes: '2026-11-02' }, 'oficina');
+    expect(upsert(llamadas[0])).toMatchObject({ activa: true, no_enviar_antes_de: '2026-11-02' });
+    respuestas = [{ data: [{ tenant_id: T }], error: null }];
+    await r.guardarConfigCorreo(T, { ...activa, activa: false, noEnviarAntes: null }, 'oficina');
+    const ups = llamadas.filter((l) => l.ops.some((o) => o[0] === 'upsert'));
+    expect(upsert(ups[ups.length - 1])).toMatchObject({ activa: false });
+  });
+
+  it('flota sin perfil (ya activa): activar sin fecha de corte sigue guardando como siempre', async () => {
+    poner(null);
+    respuestas = [{ data: [{ tenant_id: T }], error: null }];
+    await r.guardarConfigCorreo(T, { ...activa, noEnviarAntes: null }, 'oficina');
+    expect(upsert(llamadas[0])).toMatchObject({ activa: true, no_enviar_antes_de: null });
   });
 });
 
