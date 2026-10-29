@@ -170,6 +170,25 @@ describe('bruto/neto', () => {
   });
 });
 
+describe('A3-08 (cierre100): peso neto usado como bruto OBLIGA a confirmar', () => {
+  it('con solo peso neto, la validación abre un hallazgo `confirmar` (antes la nota no coincidía con el filtro y no había ninguno)', () => {
+    const e = embarque();
+    e.mercancias[0].peso_tipo = cv('neto');
+    completarDerivados(e);
+    const h = hallazgos(e).filter((x) => x.codigo === 'peso_neto_como_bruto');
+    expect(h).toHaveLength(1);
+    expect(h[0]).toMatchObject({ campo: 'peso_kg', renglon: 0, severidad: 'confirmar' });
+    expect(codigos(e)).not.toContain('normalizacion_dudosa');
+  });
+  it('un peso bruto, o un neto que una persona fijó, no abre el hallazgo', () => {
+    const e = embarque();
+    e.mercancias[0].peso_tipo = cv('bruto');
+    e.mercancias[1].peso_tipo = cv('neto'); e.mercancias[1].peso_kg = cv('2577.99', 1, 'humano');
+    completarDerivados(e);
+    expect(codigos(e)).not.toContain('peso_neto_como_bruto');
+  });
+});
+
 describe('A37-A3-08 — unidad de masa distinta de kg escrita dentro del peso', () => {
   it('«24.5 TON» no pasa como 24.5 kg en silencio: nota «Confírmalo» y baja la confianza', () => {
     const r = normalizarValor(pesoCampo, '24.5 TON');
