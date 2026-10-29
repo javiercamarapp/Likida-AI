@@ -2,11 +2,21 @@
 
 import { Play, RotateCcw } from 'lucide-react';
 import { Boton, type VarianteBoton } from '../../componentes/boton';
-import { useProgresoTour, useTour } from './proveedor';
+import { useProgresoTour, useTour, useTourOpcional } from './proveedor';
 
 /** Botón «Ver recorrido» / «Reanudar recorrido (paso N de M)». Es la ÚNICA forma
  *  de abrir un recorrido: nunca se abre solo. */
-export function TourLanzador({ recorridoId, variante = 'ghost', etiqueta = 'Ver recorrido' }: {
+export function TourLanzador(props: {
+  recorridoId: string;
+  variante?: VarianteBoton;
+  etiqueta?: string;
+}) {
+  // Sin proveedor (v2 sin perfil: el layout no monta el motor) no hay recorrido que ofrecer: se degrada a nada.
+  if (!useTourOpcional()) return null;
+  return <LanzadorConProveedor {...props} />;
+}
+
+function LanzadorConProveedor({ recorridoId, variante = 'ghost', etiqueta = 'Ver recorrido' }: {
   recorridoId: string;
   variante?: VarianteBoton;
   etiqueta?: string;
