@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- rutas fijas del propio repo */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { armarPasosCincoAgentes, etiquetaGlobal, MOTIVO_MINIMO, RESPONSABLES_POR_OMISION, type SenalesAsistente } from './pasos_cinco_agentes';
