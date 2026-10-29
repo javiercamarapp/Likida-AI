@@ -38,26 +38,23 @@ const { EsqTabla, EsqCifras, EsqGrafica } = await import('@/app/dashboard/bloque
 const { BTN_PRIMARIO, BTN_SECUNDARIO, ESTILO_PRIMARIO, ESTILO_SECUNDARIO } = await import('@/app/dashboard/[id]/vista');
 import { CalendarDays, Route, Truck, Wallet, Gauge as Medidor } from 'lucide-react';
 import type { Insight } from '@/lib/likida/insights/tipos';
+import { exigirV2Html } from './exigir_v2';
+import { USUARIO, viajes as viajesFx, textoInsight } from './fixtures/logistica_mx';
 
 const OUT = process.env.UI2_OUT ?? path.join(homedir(), 'likida-loop/frontend-plan/.arnes');
 
-const insight = (id: string, severidad: Insight['severidad'], tipo: Insight['tipo'], agente: Insight['agente'] = 'liquidacion'): Insight => ({
-  id, agente, severidad, tipo,
-  ...(tipo === 'ejemplo' || tipo === 'simulado' ? { rotulo: tipo === 'ejemplo' ? 'Ejemplo' : 'Simulado' } : {}),
-  quePaso: 'Tres desgloses de muestra salieron con diferencia contra el anticipo.',
-  queSignifica: 'Lectura sintética: la diferencia viene de casetas sin comprobante.',
-  queHacer: 'Revisar los tres desgloses y pedir el comprobante faltante.',
-  fuente: { tabla: 'tabla_sintetica', periodo: 'semana de prueba', n: 3 },
-}) as Insight;
+const insight = (id: string, severidad: Insight['severidad'], tipo: Insight['tipo'], agente: Insight['agente'] = 'liquidacion'): Insight => {
+  const t = textoInsight(agente);
+  return {
+    id, agente, severidad, tipo,
+    ...(tipo === 'ejemplo' || tipo === 'simulado' ? { rotulo: tipo === 'ejemplo' ? 'Ejemplo' : 'Simulado' } : {}),
+    quePaso: t.quePaso, queSignifica: t.queSignifica, queHacer: t.queHacer,
+    fuente: { tabla: t.tabla, periodo: t.periodo, n: t.n },
+  } as Insight;
+};
 
-const OPERADORES = ['Operador Uno', 'Operador Dos', 'Operador Tres', 'Operador Cuatro', 'Operador Cinco', 'Operador Seis'];
-const RUTAS: Array<[string, string]> = [['Ciudad Alfa', 'Puerto Beta'], ['Puerto Beta', 'Villa Gamma'], ['Villa Gamma', 'Ciudad Alfa'], ['Ciudad Alfa', 'Valle Delta']];
-const VIAJES = Array.from({ length: 12 }, (_, i) => ({
-  id: `v${i}`, folio: `VJ-${1000 + i}`, origen: RUTAS[i % 4][0], destino: RUTAS[i % 4][1],
-  estatus: (['liquidado', 'en_cuadre', 'abierto'] as const)[i % 3], anticipo: 1500 + i * 237.5,
-  operadorNombre: OPERADORES[i % 6], fechaInicio: `2026-10-${String(10 + (i % 15)).padStart(2, '0')}T08:00:00Z`,
-  liqId: i % 3 === 0 ? `l${i}` : null,
-}));
+// 12 viajes con folios ÚNICOS, rutas entre ciudades mexicanas y nulos reales (ver fixtures/logistica_mx.ts).
+const VIAJES = viajesFx(12);
 
 function Pagina({ titulo, icono, children }: { titulo: string; icono?: ReactNode; children: ReactNode }) {
   return (
@@ -71,7 +68,7 @@ function Pagina({ titulo, icono, children }: { titulo: string; icono?: ReactNode
 const VISTAS: Record<string, () => ReactNode> = {
   '01-resumen': () => (
     <Pagina titulo="Resumen" icono={<Route width={15} height={15} />}>
-      <HeroSaludo saludo="Buenas tardes" nombre="Ana" tagline="Así van tus cinco agentes hoy." />
+      <HeroSaludo saludo="Buenas tardes" nombre={USUARIO.saludo} tagline="Así van tus cinco agentes hoy." />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {FICHAS_CINCO_AGENTES.map((f, i) => (
           <div key={f.clave} className="card p-4">
@@ -104,10 +101,10 @@ const VISTAS: Record<string, () => ReactNode> = {
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <kit.KpiTile icono={<Truck width={15} height={15} />} etiqueta="Unidades activas" valor={42} sparkline={[3, 5, 4, 7, 6, 9, 8]} tendencia={8} />
-        <kit.KpiTile icono={<Wallet width={15} height={15} />} etiqueta="Anticipos abiertos" valor={17} destacar nota="Dato sintético" />
+        <kit.KpiTile icono={<Wallet width={15} height={15} />} etiqueta="Anticipos abiertos" valor={17} destacar nota="Corte al 27 de oct" />
         <kit.KpiTile icono={<Route width={15} height={15} />} etiqueta="Sin dato" valor={null} vacio="Sin captura" />
       </div>
-      <kit.BannerInsight etiqueta="Peajes" deltaPct={-6.4} href="/dashboard/agentes/peajes">El gasto en casetas bajó contra la semana anterior (dato sintético).</kit.BannerInsight>
+      <kit.BannerInsight etiqueta="Peajes" deltaPct={-6.4} href="/dashboard/agentes/peajes">El gasto en casetas bajó contra la semana anterior (semana 43 contra semana 42).</kit.BannerInsight>
     </Pagina>
   ),
   '03-tabla-viajes': () => (
@@ -137,7 +134,7 @@ const VISTAS: Record<string, () => ReactNode> = {
   '05-graficas-a': () => (
     <Pagina titulo="Gráficas" icono={<Wallet width={15} height={15} />}>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <kit.ChartCard titulo="Avance de cierre" subtitulo="Dato sintético"><gr.Gauge valor={72} etiqueta="Cerrado" /></kit.ChartCard>
+        <kit.ChartCard titulo="Avance de cierre" subtitulo="Semana 43 de 2026"><gr.Gauge valor={72} etiqueta="Cerrado" /></kit.ChartCard>
         <kit.ChartCard titulo="Gasto por rubro"><gr.HBars datos={[{ etiqueta: 'Casetas', valor: 48200 }, { etiqueta: 'Diésel', valor: 91000 }, { etiqueta: 'Maniobras', valor: 12900 }, { etiqueta: 'Viáticos', valor: 22100 }]} formato="mxn" /></kit.ChartCard>
         <kit.ChartCard titulo="Tendencia semanal"><gr.MultiLine categorias={['S1', 'S2', 'S3', 'S4', 'S5', 'S6']} series={[{ nombre: 'Viajes', valores: [10, 14, 12, 18, 16, 21] }, { nombre: 'Liquidados', valores: [8, 11, 12, 15, 14, 19] }]} /></kit.ChartCard>
         <kit.ChartCard titulo="Barras apiladas"><gr.StackedBars categorias={['Lun', 'Mar', 'Mié', 'Jue', 'Vie']} series={[{ nombre: 'A', valores: [4, 6, 5, 7, 6] }, { nombre: 'B', valores: [2, 3, 4, 2, 5] }, { nombre: 'C', valores: [1, 2, 1, 3, 2] }]} /></kit.ChartCard>
@@ -197,7 +194,7 @@ const VISTAS: Record<string, () => ReactNode> = {
           <span className="text-[11px] px-2 py-0.5 rounded-full" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>Estimado</span>
           <span className="text-[12px] px-2 py-0.5 rounded-full hairline">Sin dato</span>
         </div>
-        <p className="text-[13px]" style={{ color: 'var(--muted)' }}>Texto de cuerpo 13 px con <b style={{ color: 'var(--ink)' }}>énfasis</b>, cifras <span className="tabular">1,234,567.89</span> y <span className="cifra-mono">VJ-1042</span>.</p>
+        <p className="text-[13px]" style={{ color: 'var(--muted)' }}>Texto de cuerpo 13 px con <b style={{ color: 'var(--ink)' }}>énfasis</b>, cifras <span className="tabular">1,234,567.89</span> y <span className="cifra-mono">V-4102</span>.</p>
         <h2 className="font-display text-[22px] font-semibold">Titular en fuente de display</h2>
       </div>
     </Pagina>
@@ -206,7 +203,7 @@ const VISTAS: Record<string, () => ReactNode> = {
     <Pagina titulo="Avisos y uso" icono={<Wallet width={15} height={15} />}>
       <forma.Aviso estado={{ ok: true, mensaje: 'Guardado. Se aplica a los próximos desgloses.' } as never} />
       <forma.Aviso estado={{ ok: false, error: 'No se pudo guardar. Revisa el tope de anticipo.' } as never} />
-      <kit.WidgetUso etiqueta="Análisis con IA hoy" valor="38 %" detalle="Dato sintético" tope={{ usado: 38, limite: 100 }} href="/dashboard/chat" />
+      <kit.WidgetUso etiqueta="Análisis con IA hoy" valor="38 %" detalle="Se renueva a medianoche" tope={{ usado: 38, limite: 100 }} href="/dashboard/chat" />
       <kit.VerMas href="/dashboard/agentes/peajes">Ver conciliación</kit.VerMas>
     </Pagina>
   ),
@@ -222,18 +219,22 @@ const VISTAS: Record<string, () => ReactNode> = {
             </tr>
           </thead>
           <tbody>
-            {VIAJES.concat(VIAJES).map((v, i) => (
-              <tr key={i} style={{ borderBottom: '1px solid var(--line)' }}>
-                <td className="px-3 py-2 cifra-mono">{v.folio}</td>
-                <td className="px-3 py-2">{v.operadorNombre}</td>
-                <td className="px-3 py-2">{v.origen}</td>
-                <td className="px-3 py-2">{v.destino}</td>
-                <td className="px-3 py-2 text-right tabular">${(v.anticipo * 0.31).toFixed(2)}</td>
-                <td className="px-3 py-2 text-right tabular">${(v.anticipo * 0.52).toFixed(2)}</td>
-                <td className="px-3 py-2 text-right tabular" style={{ color: i % 4 === 0 ? 'var(--bad)' : 'var(--ink)' }}>${(i * 13.4).toFixed(2)}</td>
-                <td className="px-3 py-2"><kit.StatusPill estado={i % 4 === 0 ? 'bad' : i % 3 === 0 ? 'warn' : 'ok'}>{i % 4 === 0 ? 'Revisar' : i % 3 === 0 ? 'Pendiente' : 'Cuadra'}</kit.StatusPill></td>
-              </tr>
-            ))}
+            {viajesFx(24, 31).map((v, i) => {
+              const dif = i % 5 === 3 ? null : i % 4 === 0 ? -(120 + i * 37.5) : i % 3 === 0 ? 85 + i * 11.25 : 0;
+              const estado = dif === null ? 'Pendiente' : dif === 0 ? 'Cuadra' : 'Revisar';
+              return (
+                <tr key={v.id} style={{ borderBottom: '1px solid var(--line)' }}>
+                  <td className="px-3 py-2 cifra-mono">{v.folio}</td>
+                  <td className="px-3 py-2">{v.operadorNombre ?? '—'}</td>
+                  <td className="px-3 py-2">{v.origen ?? '—'}</td>
+                  <td className="px-3 py-2">{v.destino ?? '—'}</td>
+                  <td className="px-3 py-2 text-right tabular">${(v.anticipo * 0.31).toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right tabular">${(v.anticipo * 0.52).toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right tabular" style={{ color: dif ? 'var(--bad)' : 'var(--ink)' }}>{dif === null ? '—' : `${dif < 0 ? '−' : ''}$${Math.abs(dif).toFixed(2)}`}</td>
+                  <td className="px-3 py-2"><kit.StatusPill estado={estado === 'Revisar' ? 'bad' : estado === 'Pendiente' ? 'warn' : 'ok'}>{estado}</kit.StatusPill></td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -246,7 +247,7 @@ const VISTAS: Record<string, () => ReactNode> = {
         {['Sistema de transporte', 'Correo emisor', 'Catálogos'].map((n, i) => (
           <div key={n} className="card p-4">
             <div className="flex items-center justify-between"><span className="text-[13px] font-semibold">{n}</span><kit.StatusPill estado={i === 0 ? 'warn' : i === 1 ? 'ok' : 'neutral'}>{i === 0 ? 'En espera' : i === 1 ? 'Listo' : 'Pendiente'}</kit.StatusPill></div>
-            <p className="text-[12px] mt-2" style={{ color: 'var(--muted)' }}>Descripción sintética de la conexión y de quién falta.</p>
+            <p className="text-[12px] mt-2" style={{ color: 'var(--muted)' }}>Falta la credencial del proveedor; la captura quien administra la cuenta.</p>
             <button type="button" className={`${BTN_SECUNDARIO} mt-3`} style={ESTILO_SECUNDARIO}>Configurar</button>
           </div>
         ))}
@@ -260,10 +261,11 @@ describe('arnés de capturas UI v2', () => {
     mkdirSync(path.join(OUT, 'vistas'), { recursive: true });
     for (const [id, vista] of Object.entries(VISTAS)) {
       const html = renderToStaticMarkup(
-        <DashboardChrome nombre="Ana Prueba" rol="flota_admin" perfil="cinco_agentes" cerrarSesion={async () => {}}>
+        <DashboardChrome nombre={USUARIO.nombre} rol="flota_admin" perfil="cinco_agentes" cerrarSesion={async () => {}}>
           {vista()}
         </DashboardChrome>,
       );
+      if (process.env.UI2_CHROME === 'v2') exigirV2Html(html, id);
       writeFileSync(path.join(OUT, 'vistas', `${id}.html`), html);
     }
   });

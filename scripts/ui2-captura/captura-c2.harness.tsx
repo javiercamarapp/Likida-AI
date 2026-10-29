@@ -32,6 +32,8 @@ const { VistaAgenteCartaPorte } = await import('@/app/dashboard/agentes/carta-po
 const { VistaConexiones } = await import('@/app/dashboard/conexiones/vista');
 import type { Conector } from '@/lib/likida/conexiones';
 import type { ResumenDesglose } from '@/lib/likida/intake/desglose_peaje';
+import { comprobarPaginaV2, exigirV2Css, exigirV2Html } from './exigir_v2';
+import { DESGLOSE_PEAJES, KPIS_LIQUIDACION, USUARIO, cierresPorDia, colaRevision, diferenciasPorOperador, liquidaciones, textoInsight } from './fixtures/logistica_mx';
 
 const raiz = path.resolve(__dirname, '../..');
 const require = createRequire(path.join(raiz, 'package.json'));
@@ -48,22 +50,12 @@ const sufijo = '';
 const liquidacion = () => (
   <VistaAgenteLiquidacion
     sufijo={sufijo}
-    kpis={Promise.resolve({ viajesLiquidados: 128, montoComprobado: 4_825_000, diferenciaDetectada: 18_400, conDiferencias: 7, porRevisar: 3, tasaCuadre: 94 })}
-    liquidaciones={Promise.resolve([
-      { id: 'l1', folio: 'V-1042', creadoEn: '2026-10-27T15:10:00Z', comprobado: 8450, diferencia: 0, estatus: 'cuadrada' },
-      { id: 'l2', folio: 'V-1041', creadoEn: '2026-10-27T11:02:00Z', comprobado: 6120.5, diferencia: -320, estatus: 'con_diferencias' },
-      { id: 'l3', folio: 'V-1039', creadoEn: '2026-10-26T18:40:00Z', comprobado: 9980, diferencia: 1250, estatus: 'revisar' },
-    ])}
+    kpis={Promise.resolve(KPIS_LIQUIDACION)}
+    liquidaciones={Promise.resolve(liquidaciones(8))}
     cola={{
-      cola: Promise.resolve({
-        filas: [
-          { id: 'c1', viajeId: 'v1', folio: 'V-1041', creadoEn: '2026-10-27T11:02:00Z', comprobado: 6120.5, anticipo: 6440.5, diferencia: -320, estatus: 'con_diferencias', revision: 'pendiente', operadorNombre: 'Operador de prueba 1', unidadEco: 'U-12', terminalNombre: 'Terminal Norte' },
-          { id: 'c2', viajeId: 'v2', folio: 'V-1039', creadoEn: '2026-10-26T18:40:00Z', comprobado: 9980, anticipo: 8730, diferencia: 1250, estatus: 'revisar', revision: 'pendiente', operadorNombre: 'Operador de prueba 2', unidadEco: 'U-07', terminalNombre: 'Terminal Sur' },
-        ],
-        total: 2, hayMas: false, siguiente: null,
-      }),
+      cola: Promise.resolve({ filas: colaRevision(12), total: 12, hayMas: false, siguiente: null }),
       filtros: { revision: 'pendiente', estado: null, operadorId: null, unidadId: null, terminalId: null, desde: null, hasta: null },
-      terminales: Promise.resolve({ opciones: [{ id: 't1', nombre: 'Terminal Norte' }], recortadas: false }),
+      terminales: Promise.resolve({ opciones: [{ id: 't1', nombre: 'Patio Monterrey' }, { id: 't2', nombre: 'Patio Querétaro' }], recortadas: false }),
       buscar: (async () => []) as never,
       contexto: [],
       sufijo,
@@ -71,19 +63,16 @@ const liquidacion = () => (
     extra={{
       puedeVerReglas: true,
       ciclo: Promise.resolve({ abiertos: 14, enCuadre: 5, porRevisar: 3, liquidados: 128 }),
-      cierresPorDia: Promise.resolve(Array.from({ length: 84 }, (_, i) => ({ fecha: new Date(Date.UTC(2026, 6, 6 + i)).toISOString().slice(0, 10), valor: (i * 7) % 5 }))),
+      cierresPorDia: Promise.resolve(cierresPorDia(84)),
       hizoSolo: Promise.resolve({ hechos: [], huerfanos: { resueltos: 4, totales: 5 }, docsProcesados: 12, actividadIa: 30 }),
-      porTipo: Promise.resolve([{ tipo: 'casetas', monto: 9200, n: 4 }] as never),
-      operadores: Promise.resolve([{ etiqueta: 'Operador de prueba 1', valor: 4200 }, { etiqueta: 'Operador de prueba 2', valor: 2100 }]),
+      porTipo: Promise.resolve([{ tipo: 'casetas', monto: 9200, n: 4 }, { tipo: 'diesel', monto: 5860, n: 3 }] as never),
+      operadores: Promise.resolve(diferenciasPorOperador()),
       politica: Promise.resolve(null),
     }}
   />
 );
 
-const DESGLOSE: ResumenDesglose = {
-  desgloseId: 'd1', proveedor: 'PROVEEDOR DE PRUEBA', archivoNombre: 'corte-muestra.csv', periodoDesde: '2026-10-01', periodoHasta: '2026-10-15',
-  creadoEn: '2026-10-16T00:00:00Z', total: 48, cuadra: 40, noCuadra: 3, sinContraparte: 5, pctCuadra: 83,
-};
+const DESGLOSE: ResumenDesglose = DESGLOSE_PEAJES;
 const peajes = () => (
   <VistaAgentePeajes
     conciliacion={{ conciliadas: 212, porConciliar: 9, sinMatch: 4, cfdis: 6 } as never} lineas={null} desgloses={null} peajeAcreditable={12345} sufijo={sufijo}
@@ -98,7 +87,7 @@ const cartaPorte = () => (
   <VistaAgenteCartaPorte
     sufijo={sufijo}
     datos={{ viajes: [], total: 9, hazmatDeclarado: null, dedicadoDeclarado: null }}
-    buzon={{ direccion: 'cp-muestra@correo.ejemplo.test', activo: true, remitentes: ['cliente.ejemplo.test'], dominioConfigurado: true }}
+    buzon={{ direccion: 'cartaporte@flota.ejemplo.test', activo: true, remitentes: ['logistica.ejemplo.test'], dominioConfigurado: true }}
   />
 );
 
@@ -115,10 +104,10 @@ const conexiones = () => (
     credenciales={(
       <section className="card p-4">
         <h2 className="font-display text-[14px] font-semibold">Credenciales de tus sistemas</h2>
-        <p className="text-[12.5px] mt-1" style={{ color: 'var(--muted)' }}>Fixture: formulario de captura.</p>
+        <p className="text-[12.5px] mt-1" style={{ color: 'var(--muted)' }}>Aquí va el formulario de captura del acceso.</p>
         <form className="mt-3 grid gap-2 max-w-md">
           <label className="text-[12px]" htmlFor="u">Usuario del proveedor</label>
-          <input id="u" className="rounded-lg px-3 py-2 text-[13px] border" defaultValue="usuario-muestra" />
+          <input id="u" className="rounded-lg px-3 py-2 text-[13px] border" defaultValue="capturista@flota.ejemplo.test" />
           <label className="text-[12px]" htmlFor="s">Sistema</label>
           <select id="s" className="rounded-lg px-3 py-2 text-[13px] border"><option>Proveedor de rastreo</option></select>
           <button type="button" className="btn-primary rounded-lg px-3 py-2 text-[13px] w-fit">Guardar y probar</button>
@@ -148,7 +137,7 @@ const FUENTES_CSS = [
 async function envolver(cuerpo: ReactNode, ruta: string): Promise<string> {
   RUTA = ruta;
   const Chrome = MODO === 'v2' ? DashboardChromeV2 : DashboardChromeV1;
-  const arbol = <Chrome nombre="Ana Prueba" rol="flota_admin" perfil="cinco_agentes" cerrarSesion={async () => {}}>{cuerpo}</Chrome>;
+  const arbol = <Chrome nombre={USUARIO.nombre} rol="flota_admin" perfil="cinco_agentes" cerrarSesion={async () => {}}>{cuerpo}</Chrome>;
   // prerender espera a TODOS los Suspense (los bloques async de A1) y deja el HTML final, sin plantillas ni scripts.
   const { prelude } = await prerender(arbol);
   const lector = prelude.getReader();
@@ -167,13 +156,16 @@ describe(`captura carril C tanda 2 (${MODO} + ${CSS})`, () => {
     mkdirSync(path.join(TRABAJO, 'vistas-c2'), { recursive: true });
     mkdirSync(OUT, { recursive: true });
     for (const [id, v] of Object.entries(VISTAS)) {
-      writeFileSync(path.join(TRABAJO, 'vistas-c2', `${id}.html`), await envolver(v.cuerpo(), v.ruta));
+      const html = await envolver(v.cuerpo(), v.ruta);
+      if (MODO === 'v2') exigirV2Html(html, id);
+      writeFileSync(path.join(TRABAJO, 'vistas-c2', `${id}.html`), html);
       // Tailwind escanea esta carpeta: una copia por clase de envoltura basta (las clases son las mismas).
       writeFileSync(path.join(TRABAJO, 'vistas', `c2-${MODO}-${id}.html`), readFileSync(path.join(TRABAJO, 'vistas-c2', `${id}.html`), 'utf8'));
     }
     if (process.env.UI2_SOLO_HTML) return; // scripts/ui2-calidad: solo el HTML, sin CSS ni capturas
     execFileSync('node', [path.join(raiz, 'scripts/ui2-captura/compilar-css.mjs'), TRABAJO], { stdio: 'ignore' });
 
+    if (MODO === 'v2' && CSS === 'v2full') exigirV2Css(path.join(TRABAJO, `${CSS}.css`));
     const { chromium } = require('playwright');
     const browser = await chromium.launch();
     for (const [w, h] of [[1440, 900], [1024, 768], [412, 915]] as Array<[number, number]>) {
@@ -188,6 +180,7 @@ describe(`captura carril C tanda 2 (${MODO} + ${CSS})`, () => {
           // Los Suspense resueltos por prerender se acomodan con un script en línea: se espera a que no quede plantilla pendiente.
           await page.waitForFunction(() => !document.querySelector('template[id^="B:"]') && !document.querySelector('[role="status"][aria-label="Cargando"]'), null, { timeout: 5000 }).catch(() => {});
           await page.waitForTimeout(80);
+          if (MODO === 'v2') { const motivo = await page.evaluate(comprobarPaginaV2); if (motivo) throw new Error(`ABORTO (${id} ${w} ${tema}): ${motivo}`); }
           await page.screenshot({ path: path.join(OUT, `${id}__${w}__${tema}.png`), fullPage: true });
         }
       }
