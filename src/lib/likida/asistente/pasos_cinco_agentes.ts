@@ -100,11 +100,20 @@ export interface ResultadoAsistente {
   total: number;
   /** 0–100 sobre la ruta crítica. */
   avance: number;
-  /** Todo listo u omitido con motivo. */
+  /** Todos los pasos de la ruta crítica en `listo`. Omitir NUNCA cuenta como listo. */
   listoParaOperar: boolean;
+  /** Pasos omitidos por la persona (con un motivo de al menos `MOTIVO_MINIMO` caracteres). */
+  omitidos: number;
+  /** Pasos `listo` cuya única evidencia es lo que la persona declaró en su navegador. */
+  confirmadosPorTi: number;
+  /** Nada por hacer, pero porque se omitió algo: no es lo mismo que «listo». */
+  sinPendientes: boolean;
   /** El próximo paso que le toca a la persona (no el que depende de otros). */
   siguiente: IdPaso | null;
 }
+
+/** Un motivo de una letra no es un motivo: debajo de esto el paso no se omite. */
+export const MOTIVO_MINIMO = 10;
 
 export const ESTADOS_QUE_BLOQUEAN_AVANCE: readonly EstadoAsistente[] = ['pendiente', 'en_curso', 'atencion', 'bloqueado', 'sin_dato'];
 
@@ -330,20 +339,33 @@ export function armarPasosCincoAgentes(
   const previos: Borrador[] = [pasoEquipo(s, d), pasoTms(s), pasoCorreo(s, d), pasoCatalogos(s), pasoCartaPorte(s)];
   const todos = [...previos, pasoSimulacro(previos, s, d)];
   const aplicar = (b: Borrador): Borrador => {
-    const motivo = d.omitidos?.[b.id];
-    return motivo && b.estado !== 'listo'
+    const motivo = d.omitidos?.[b.id]?.trim();
+    return motivo && motivo.length >= MOTIVO_MINIMO && b.estado !== 'listo'
       ? { ...b, estado: 'omitido', evidencia: declarado(`Lo omitiste tú: ${motivo}`), declara: null }
       : b;
   };
   const rutaCritica = ORDEN.map((id, i) => paso(responsables, aplicar(todos.find((p) => p.id === id)!), true, i + 1));
   const despues = pasosDespues().map((b) => paso(responsables, b, false, null));
   const listos = rutaCritica.filter((p) => p.estado === 'listo').length;
+  const omitidos = rutaCritica.filter((p) => p.estado === 'omitido').length;
+  const confirmadosPorTi = rutaCritica.filter((p) => p.estado === 'listo' && p.evidencia.tipo === 'declarado').length;
   const siguiente = rutaCritica.find((p) => ESTADOS_QUE_BLOQUEAN_AVANCE.includes(p.estado) && p.responsable === 'tu_lado' && p.estado !== 'bloqueado')?.id
     ?? rutaCritica.find((p) => ESTADOS_QUE_BLOQUEAN_AVANCE.includes(p.estado))?.id ?? null;
   return {
     rutaCritica, despues, listos, total: rutaCritica.length,
     avance: Math.round((listos / rutaCritica.length) * 100),
-    listoParaOperar: rutaCritica.every((p) => p.estado === 'listo' || p.estado === 'omitido'),
+    // Omitir no es hacer: «listo para operar» exige los seis en `listo`. Y como `tms`, `catalogos` y `carta_porte` solo
+    // pasan a `listo` con una lectura del servidor, no se llega solo con declaraciones del navegador.
+    listoParaOperar: listos === rutaCritica.length,
+    omitidos, confirmadosPorTi,
+    sinPendientes: omitidos > 0 && rutaCritica.every((p) => p.estado === 'listo' || p.estado === 'omitido'),
     siguiente,
   };
+}
+
+/** La frase global del avance (Resumen y pantalla), honesta sobre omisiones y declaraciones. `null` = hay pasos por hacer. */
+export function etiquetaGlobal(r: Pick<ResultadoAsistente, 'listoParaOperar' | 'sinPendientes' | 'omitidos' | 'confirmadosPorTi'>): string | null {
+  if (r.listoParaOperar) return r.confirmadosPorTi > 0 ? `Todo listo para operar (${r.confirmadosPorTi} confirmados por ti)` : 'Todo listo para operar';
+  if (r.sinPendientes) return `Sin pasos pendientes (${r.omitidos} ${r.omitidos === 1 ? 'omitido' : 'omitidos'})`;
+  return null;
 }

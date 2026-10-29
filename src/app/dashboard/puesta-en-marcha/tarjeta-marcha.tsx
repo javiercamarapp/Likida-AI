@@ -5,7 +5,7 @@ import { ArrowRight } from 'lucide-react';
 import { BotonEnlace, Chip } from '@/app/ui-v2/componentes';
 import { ProgresoAnillo } from '@/app/ui-v2/graficas';
 import { anclaTour } from '@/app/ui-v2/movimiento/tour';
-import { armarPasosCincoAgentes, ROTULO_ESTADO, type SenalesAsistente } from '@/lib/likida/asistente/pasos_cinco_agentes';
+import { armarPasosCincoAgentes, etiquetaGlobal, ROTULO_ESTADO, type SenalesAsistente } from '@/lib/likida/asistente/pasos_cinco_agentes';
 import { conPaso } from './con-paso';
 import { useDeclaraciones } from './usar-declaraciones';
 
@@ -26,7 +26,7 @@ export function TarjetaPuestaEnMarcha({ senales, ambito, sufijo, soloLectura }: 
       <div className="rv-res-marcha__texto">
         <p className="rv-res-marcha__rotulo etiqueta-mono">Puesta en marcha</p>
         <h2 id="rv-res-marcha-t" className="rv-res-marcha__titulo font-display">
-          {r.listoParaOperar ? 'Todo listo para operar' : `${r.listos} de ${r.total} pasos terminados`}
+          {etiquetaGlobal(r) ?? `${r.listos} de ${r.total} pasos terminados`}
         </h2>
         {sig ? (
           <p className="rv-res-marcha__sig">
@@ -38,8 +38,8 @@ export function TarjetaPuestaEnMarcha({ senales, ambito, sufijo, soloLectura }: 
           <p className="rv-res-marcha__sig">No hay nada pendiente de tu lado.</p>
         )}
       </div>
-      <BotonEnlace variante={r.listoParaOperar ? 'secondary' : 'primary'} href={conPaso('/dashboard/puesta-en-marcha', sufijo, r.siguiente ?? undefined)} icono={<ArrowRight />}>
-        {r.listoParaOperar ? 'Revisar pasos' : 'Continuar'}
+      <BotonEnlace variante={etiquetaGlobal(r) ? 'secondary' : 'primary'} href={conPaso('/dashboard/puesta-en-marcha', sufijo, r.siguiente ?? undefined)} icono={<ArrowRight />}>
+        {etiquetaGlobal(r) ? 'Revisar pasos' : 'Continuar'}
       </BotonEnlace>
     </section>
   );

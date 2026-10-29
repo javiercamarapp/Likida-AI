@@ -10,7 +10,7 @@ import {
 import { ProgresoAnillo } from '@/app/ui-v2/graficas';
 import { anclaTour, TourLanzador } from '@/app/ui-v2/movimiento/tour';
 import {
-  armarPasosCincoAgentes, ROTULO_ESTADO, RESPONSABLES_POR_OMISION,
+  armarPasosCincoAgentes, etiquetaGlobal, MOTIVO_MINIMO, ROTULO_ESTADO, RESPONSABLES_POR_OMISION,
   type Declaraciones, type EstadoAsistente, type IdPaso, type PasoAsistente, type Responsables, type SenalesAsistente,
 } from '@/lib/likida/asistente/pasos_cinco_agentes';
 import { cartaAutorizacion, solicitudParaTi } from '@/lib/likida/asistente/textos_solicitud';
@@ -100,7 +100,7 @@ export function VistaPuestaEnMarcha({ senales, ambito, tenantId, sufijo, soloLec
             <div>
               <p className="rv-pem__avance-num">{r.listos} de {r.total}</p>
               <p className="rv-pem__avance-txt">
-                {r.listoParaOperar ? 'Todo listo para operar.' : r.listos === 0 ? 'Aún no hay pasos terminados.' : 'pasos terminados'}
+                {etiquetaGlobal(r) ?? (r.listos === 0 ? 'Aún no hay pasos terminados.' : 'pasos terminados')}
               </p>
             </div>
           </section>
@@ -241,13 +241,14 @@ function DetallePaso({ paso, sufijo, soloLectura, declaraciones, onCambiar, resp
           <form className="rv-pem__omitir-form" onSubmit={(e) => {
             e.preventDefault();
             const m = motivo.trim();
-            if (!m) return;
+            if (m.length < MOTIVO_MINIMO) return;
             onCambiar({ ...declaraciones, omitidos: { ...declaraciones.omitidos, [paso.id]: m } });
             setOmitiendo(false); setMotivo('');
           }}>
             <label htmlFor="pem-motivo">¿Por qué lo omites?</label>
-            <input id="pem-motivo" value={motivo} maxLength={140} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej. lo resuelve otra área" />
-            <Boton type="submit" tamano="sm" variante="secondary" disabled={!motivo.trim()}>Omitir</Boton>
+            <input id="pem-motivo" value={motivo} maxLength={140} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej. lo resuelve otra área" aria-describedby="pem-motivo-ayuda" />
+            <p id="pem-motivo-ayuda" className="rv-pem__omitir-ayuda">Cuéntalo en al menos {MOTIVO_MINIMO} letras. Un paso omitido no cuenta como terminado.</p>
+            <Boton type="submit" tamano="sm" variante="secondary" disabled={motivo.trim().length < MOTIVO_MINIMO}>Omitir</Boton>
             <Boton tamano="sm" variante="ghost" onClick={() => setOmitiendo(false)}>Cancelar</Boton>
           </form>
         ) : (
