@@ -78,7 +78,7 @@ describe('viajes salidos sin Carta Porte (T-A3-66)', () => {
   });
 });
 
-import { folioComparable, viajesLigadosPorFolio, evaluarDatosTms, HORAS_IMPORTACION_VIEJA } from './viajes_sin_ccp';
+import { viajesLigadosPorFolio, evaluarDatosTms, HORAS_IMPORTACION_VIEJA } from './viajes_sin_ccp';
 describe('viajesLigadosPorFolio (OLA1-A3 + A3-02: la llave es cliente + folio)', () => {
   const viaje = (viajeId: string, folio: string | null, clienteId: string | null) => ({ viajeId, folio, clienteId });
   it('liga por folio sin distinguir mayúsculas ni espacios, y un folio vacío no liga nada', () => {

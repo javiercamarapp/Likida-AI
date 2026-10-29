@@ -642,7 +642,7 @@ export const api: typeof Real = {
     return m;
   },
   DIAS_SALIDAS_SIN_CCP: 45,
-  async leerSalidasParaSinCcp() { falla('leerSalidasParaSinCcp'); return { viajes: [], conCcp: new Set<string>(), truncado: false }; },
+  async leerSalidasParaSinCcp() { falla('leerSalidasParaSinCcp'); return { viajes: [], conCcp: new Set<string>(), truncado: false, viajesLeidos: 0, ultimoImportadoEn: null }; },
   async enviosParaInsights(tenantId) {
     return estado.envios.filter((e) => e.tenantId === tenantId).map((e) => ({ documentoId: e.documentoId, estado: e.estado, createdAt: new Date().toISOString(), enviadoEn: null, causaPendiente: null }));
   },
