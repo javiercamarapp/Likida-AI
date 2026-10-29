@@ -110,12 +110,11 @@ const PASOS_TOUR: Array<[string, string]> = [
 ];
 
 const FUENTES_CSS = [
-  ...[300, 400].map((w) => `@font-face{font-family:'Newsreader UI';font-weight:${w};font-style:normal;font-display:block;src:url('file://${F}/newsreader-${w}.woff2') format('woff2')}`),
   ...[400, 500, 600, 700].map((w) => `@font-face{font-family:'Hanken Grotesk UI';font-weight:${w};font-style:normal;font-display:block;src:url('file://${F}/hankengrotesk-${w}.woff2') format('woff2')}`),
   ...[400, 500].map((w) => `@font-face{font-family:'IBM Plex Mono';font-weight:${w};font-style:normal;font-display:block;src:url('file://${F}/plexmono-${w}.woff2') format('woff2')}`),
   `html{--font-mono:'IBM Plex Mono'}`,
   // Lo que declara ui-v2/fonts.css (en producción lo importa el layout; aquí las rutas son de archivo):
-  `[data-ui="v2"]{--font-serif:'Newsreader UI',Georgia,serif;--font-sans-ui:'Hanken Grotesk UI',ui-sans-serif,system-ui,sans-serif;--font-display:'Hanken Grotesk UI',ui-sans-serif,system-ui,sans-serif}`,
+  `[data-ui="v2"]{--font-sans-ui:'Hanken Grotesk UI',ui-sans-serif,system-ui,sans-serif;--font-display:'Hanken Grotesk UI',ui-sans-serif,system-ui,sans-serif}`,
 ].join('\n');
 
 const envolver = (cuerpo: ReactNode, ruta: string) => {
@@ -125,12 +124,8 @@ const envolver = (cuerpo: ReactNode, ruta: string) => {
   );
 };
 
-// El logo es una máscara sobre /images/*.png (en producción lo sirve Next): en el HTML estático se incrusta como data URI.
-const LOGO = Object.fromEntries(['logo-icono', 'logo-texto'].map((n) => [n, `data:image/png;base64,${readFileSync(path.join(raiz, `public/images/${n}.png`)).toString('base64')}`]));
-const conLogo = (html: string) => html.replace(/url\(\/images\/(logo-icono|logo-texto)\.png\)/g, (_m, n: string) => `url(${LOGO[n]})`);
-
 const doc = (cuerpo: string, extra = '') =>
-  `<!doctype html><html lang="es" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="file://${TRABAJO}/v2full.css"><style>${FUENTES_CSS}</style><style>*,*::before,*::after{transition:none!important;animation:none!important}</style></head><body>${conLogo(cuerpo)}${extra}</body></html>`;
+  `<!doctype html><html lang="es" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="file://${TRABAJO}/v2full.css"><style>${FUENTES_CSS}</style><style>*,*::before,*::after{transition:none!important;animation:none!important}</style></head><body>${cuerpo}${extra}</body></html>`;
 
 describe('captura de las pantallas del carril C', () => {
   it('renderiza, compila el CSS y captura', async () => {
@@ -142,9 +137,6 @@ describe('captura de las pantallas del carril C', () => {
     }
     execFileSync('node', [path.join(raiz, 'scripts/ui2-captura/compilar-css.mjs'), TRABAJO], { stdio: 'ignore' });
 
-    const { rolldown } = require('rolldown');
-    const paquete = await rolldown({ input: path.join(raiz, 'scripts/ui2-captura/particulas-entrada.ts') });
-    const pintor: string = (await paquete.generate({ format: 'iife' })).output[0].code;
     const { chromium } = require('playwright');
     const browser = await chromium.launch();
     const ANCHOS: Array<[number, number]> = [[1440, 900], [1024, 768], [412, 915]];
@@ -158,8 +150,6 @@ describe('captura de las pantallas del carril C', () => {
         for (const tema of ['claro', 'oscuro'] as const) {
           await page.goto('file://' + archivo);
           await page.evaluate(async (t: string) => { document.documentElement.setAttribute('data-theme', t === 'claro' ? 'light' : 'dark'); await document.fonts.ready; }, tema);
-          await page.addScriptTag({ content: pintor });
-          await page.evaluate(() => (window as unknown as { __pintarParticulas: () => void }).__pintarParticulas());
           await page.waitForTimeout(40);
           await page.screenshot({ path: path.join(OUT, `${id}__${w}__${tema}.png`), fullPage: w === 412 });
         }
