@@ -132,6 +132,13 @@ export function aplicarRenombres(
 
 // ── Guardas previas al envío ───────────────────────────────────────────────
 
+/**
+ * H759-M4/M5: un desglose HISTÓRICO (anterior al corte o ya enviado por el origen) que además trae una guarda que retiene se guarda sin
+ * abrir excepciones (ruido masivo). Su `retenida_motivo` lleva esta marca al inicio para que `liberarEnvio` no lo libere (no hay excepción
+ * que le diga «concepto prohibido») y la pantalla diga por qué no sale.
+ */
+export const MARCA_RETENIDA_OMITIDA = 'NO SE ENVÍA (histórico omitido): ';
+
 export type MotivoRetencion = 'neto_negativo' | 'concepto_prohibido' | 'tipo_sin_regla' | 'sin_poliza';
 
 export interface ConfigGuardasEnvio {

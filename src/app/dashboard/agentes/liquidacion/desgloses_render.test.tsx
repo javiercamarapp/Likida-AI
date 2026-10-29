@@ -465,7 +465,7 @@ describe('estados del panel', () => {
   it('un correo nuevo inválido y cualquier rechazo de la librería tienen mensaje llano', () => {
     expect(leerMensajeDesglose('r_correo_invalido')?.texto).toContain('no parece un correo');
     const motivosReenvio = ['sin_permiso', 'no_encontrada', 'correo_invalido', 'correo_nuevo_no_aplica', 'en_curso', 'limite_diario', 'sin_destinatarios', 'sin_archivo', 'no_disponible'] satisfies MotivoRechazo[];
-    const motivosLiberar = ['sin_permiso', 'no_encontrada', 'no_retenida', 'no_liberable', 'sin_destinatarios', 'no_disponible'] satisfies MotivoRechazoLiberar[];
+    const motivosLiberar = ['sin_permiso', 'no_encontrada', 'no_retenida', 'no_liberable', 'sin_destinatarios', 'no_disponible', 'omitido_por_corte', 'reemplazado'] satisfies MotivoRechazoLiberar[];
     for (const m of new Set([...motivosReenvio, ...motivosLiberar])) {
       expect(leerMensajeDesglose(`r_${m}`), m).not.toBeNull();
       expect(leerMensajeDesglose(`r_${m}`)!.tono).toBe('bad');

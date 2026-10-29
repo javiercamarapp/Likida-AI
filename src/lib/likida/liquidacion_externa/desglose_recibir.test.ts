@@ -7,6 +7,7 @@ import { huellaContenido, huellaDesglose } from './esquema';
 import { aLiquidacionExterna } from './desglose_contrato';
 import type { LiquidacionExterna, NuevaLiquidacionExterna } from './repo';
 import { CONFIG_CORREO_POR_DEFECTO, type ConfigCorreo, type NuevaEntrega } from './repo_correo';
+import { MARCA_RETENIDA_OMITIDA } from './desglose_reglas';
 
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error('la base no debe tocarse en estas pruebas'); } }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
@@ -783,12 +784,30 @@ describe('A1-01: fecha de corte del arranque', () => {
     expect(saldria(b)).toHaveLength(0); // ...pero nace omitida
   });
 
-  it('una omitida con una guarda que RETIENE sigue retenida y abre su excepción (lo prohibido no sale ni liberando después)', async () => {
+  it('una omitida con una guarda que RETIENE sigue retenida, SIN excepciones (H759-M4) y con la marca que impide liberarla (lo prohibido no sale ni liberando después)', async () => {
     const b = banco({ config: { ...CORTE, conceptosProhibidos: ['Retención uno'] } });
     const r = await recibirDesglose(TENANT, desglose(), b.deps);
-    expect(r).toMatchObject({ estado: 'creada', retenida: true, omitida: 'anterior_al_corte' });
-    expect(b.excepciones.map((e) => e.tipo)).toContain('concepto_prohibido');
+    expect(r).toMatchObject({ estado: 'creada', retenida: true, omitida: 'anterior_al_corte', excepciones: [] });
+    expect(b.excepciones).toHaveLength(0);
+    expect(String(b.desgloses[0]!.retenidaMotivo).startsWith(MARCA_RETENIDA_OMITIDA)).toBe(true);
     expect(saldria(b)).toHaveLength(0);
+  });
+
+  it('H759-M4: un histórico omitido sin correo de operador / coordinador NO abre excepciones de destinatarios (y el mismo caso SIN corte sí)', async () => {
+    const sinCorreo = { correoOperador: null, coordinador: null };
+    const viejo = banco({ config: CORTE, ...sinCorreo });
+    expect(await recibirDesglose(TENANT, desglose(), viejo.deps)).toMatchObject({ estado: 'creada', omitida: 'anterior_al_corte', excepciones: [] });
+    expect(viejo.excepciones).toHaveLength(0);
+    const actual = banco({ config: { noEnviarAntes: null }, ...sinCorreo });
+    const r = await recibirDesglose(TENANT, desglose(), actual.deps);
+    expect(r.estado === 'creada' && r.excepciones.length).toBeGreaterThan(0);
+    expect(actual.excepciones.length).toBeGreaterThan(0);
+  });
+
+  it('H759-M4: lo ya enviado por el origen tampoco abre excepciones de destinatarios', async () => {
+    const b = banco({ correoOperador: null });
+    await recibirDesglose(TENANT, desglose({ enviadoOrigen: true }), b.deps);
+    expect(b.excepciones).toHaveLength(0);
   });
 
   it('atómica con RPC anterior a la 0940 (ignora «estado»): tras guardar se pasan a omitida las entregas que quedaron pendientes', async () => {

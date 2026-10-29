@@ -29,7 +29,7 @@ import {
 } from './desglose_contrato';
 import {
   aplicarRenombres, colapsarRenglonViaje, guardasPreEnvio,
-  type ConfigGuardasEnvio, type MotivoRetencion, type Renombre,
+  MARCA_RETENIDA_OMITIDA, type ConfigGuardasEnvio, type MotivoRetencion, type Renombre,
 } from './desglose_reglas';
 import { generarDesgloseXlsx } from './desglose_xlsx';
 import { resolverDestinatarios, resolverRevisores, type MotivoFaltante } from './correo_destinatarios';
@@ -434,7 +434,7 @@ export async function recibirDesglose(
     ...(d.bitacoras !== undefined ? { bitacoras: liq.viajes } : {}),
     ...(correccionN > 0 ? { correccionN } : {}),
     totalOrigen: (conversion.totalOrigen === 'origen' ? 'tms' : 'calculado') as 'tms' | 'calculado',
-    retenidaMotivo: retenida ? decision.detalle.join(' ') : null,
+    retenidaMotivo: retenida ? `${omision ? MARCA_RETENIDA_OMITIDA : ''}${decision.detalle.join(' ')}` : null,
   };
   const detalleEvento = {
     origen: liq.sistemaOrigen, canal: 'correo', renglones: liq.conceptos.length, retenida, viajesEnLikida: viajeIds.length,
@@ -504,13 +504,15 @@ export async function recibirDesglose(
     excepciones.push(tipo);
   };
 
-  // retenida: sin entregas, una excepción por motivo
+  // retenida: sin entregas, una excepción por motivo. H759-M4: un desglose HISTÓRICO omitido (anterior al corte / ya enviado por el origen) no abre
+  // excepciones (subir 1,000 viejos producía cientos de «sin correo de operador» / retenciones sobre datos que nadie va a enviar); su retenida_motivo
+  // lleva la marca que impide liberarlo (`liberarEnvio`).
   if (retenida) {
-    for (const m of decision.motivos) await abrir(MOTIVO_A_EXCEPCION[m], { motivo: m });
+    if (!omision) for (const m of decision.motivos) await abrir(MOTIVO_A_EXCEPCION[m], { motivo: m });
     return { estado: 'creada', liquidacionId, claveExterna, entregas: 0, retenida: true, motivos: decision.motivos, excepciones, ...(correccionDe ? { correccionDe } : {}), ...(omision ? { omitida: omision } : {}) };
   }
 
-  for (const f of faltantes) await abrir(FALTANTE_A_EXCEPCION[f.motivo], { rol: f.rol, motivo: f.motivo });
+  if (!omision) for (const f of faltantes) await abrir(FALTANTE_A_EXCEPCION[f.motivo], { rol: f.rol, motivo: f.motivo });
 
   return { estado: 'creada', liquidacionId, claveExterna, entregas, retenida: false, motivos: [], excepciones, ...(correccionDe ? { correccionDe } : {}), ...(omision ? { omitida: omision } : {}) };
 }
