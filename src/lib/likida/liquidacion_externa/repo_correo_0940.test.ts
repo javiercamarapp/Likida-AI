@@ -36,6 +36,9 @@ const T = 'tenant-sintetico-1';
 const sinColumna0940 = { data: null, error: { message: 'column liquidacion_correo_config.no_enviar_antes_de does not exist', code: '42703' } };
 const select = (l: Llamada) => String(l.ops.find((o) => o[0] === 'select')?.[1]);
 const upsert = (l: Llamada) => l.ops.find((o) => o[0] === 'upsert')?.[1] as Record<string, unknown>;
+/** H759-3: con corte, guardar antes consulta las pendientes anteriores al corte (aquí, ninguna). */
+const SIN_PENDIENTES = { data: [], error: null };
+const ultimoUpsert = () => upsert(llamadas.filter((l) => l.tabla === 'liquidacion_correo_config').at(-1)!);
 
 beforeEach(() => { (globalThis as { __perfilPrueba?: string | null }).__perfilPrueba = null; llamadas.length = 0; respuestas = []; warn.mockClear(); });
 
@@ -81,12 +84,12 @@ describe('A1-01 · guardar la fecha de corte', () => {
   const base = { ...r.CONFIG_CORREO_POR_DEFECTO, canal: 'correo' as const };
 
   it('upsert anclado al tenant con la fecha; null se guarda como null (quitar el corte)', async () => {
-    respuestas = [{ data: [{ tenant_id: T }], error: null }];
+    respuestas = [SIN_PENDIENTES, { data: [{ tenant_id: T }], error: null }];
     await r.guardarConfigCorreo(T, { ...base, noEnviarAntes: '2026-11-02' }, 'oficina');
-    expect(upsert(llamadas[0])).toMatchObject({ tenant_id: T, no_enviar_antes_de: '2026-11-02' });
+    expect(ultimoUpsert()).toMatchObject({ tenant_id: T, no_enviar_antes_de: '2026-11-02' });
     respuestas = [{ data: [{ tenant_id: T }], error: null }];
     await r.guardarConfigCorreo(T, { ...base, noEnviarAntes: null }, 'oficina');
-    expect(upsert(llamadas[1])).toMatchObject({ no_enviar_antes_de: null });
+    expect(ultimoUpsert()).toMatchObject({ no_enviar_antes_de: null });
   });
 
   it('una fecha que no es un día se rechaza antes de tocar la base', async () => {
@@ -97,7 +100,7 @@ describe('A1-01 · guardar la fecha de corte', () => {
   });
 
   it('base SIN la 0940: con corte que guardar dice qué falta y no finge; sin corte guarda como siempre', async () => {
-    respuestas = [sinColumna0940];
+    respuestas = [SIN_PENDIENTES, sinColumna0940];
     await expect(r.guardarConfigCorreo(T, { ...base, noEnviarAntes: '2026-11-02' }, null)).rejects.toThrow(/migración 0940/);
     llamadas.length = 0;
     respuestas = [sinColumna0940, { data: [{ tenant_id: T }], error: null }];
@@ -119,9 +122,9 @@ describe('Ola 10 · activar el envio sin fecha de corte (solo perfil cinco_agent
 
   it('cinco_agentes: activar CON fecha de corte guarda; dejar apagado sin fecha tambien guarda', async () => {
     poner('cinco_agentes');
-    respuestas = [{ data: [{ tenant_id: T }], error: null }];
+    respuestas = [SIN_PENDIENTES, { data: [{ tenant_id: T }], error: null }];
     await r.guardarConfigCorreo(T, { ...activa, noEnviarAntes: '2026-11-02' }, 'oficina');
-    expect(upsert(llamadas[0])).toMatchObject({ activa: true, no_enviar_antes_de: '2026-11-02' });
+    expect(ultimoUpsert()).toMatchObject({ activa: true, no_enviar_antes_de: '2026-11-02' });
     respuestas = [{ data: [{ tenant_id: T }], error: null }];
     await r.guardarConfigCorreo(T, { ...activa, activa: false, noEnviarAntes: null }, 'oficina');
     const ups = llamadas.filter((l) => l.ops.some((o) => o[0] === 'upsert'));
@@ -164,5 +167,52 @@ describe('A1-01/A1-02 · entregas omitidas', () => {
     expect(llamadas).toHaveLength(0);
     respuestas = [{ data: null, error: { message: 'conexión rota' } }];
     await expect(r.omitirEntregasPendientes(T, ['l1'], 'x')).rejects.toThrow(/conexión rota/);
+  });
+});
+
+describe('H759-3 · las entregas pendientes anteriores al corte pasan a omitida al fijar el corte / activar', () => {
+  const base = { ...r.CONFIG_CORREO_POR_DEFECTO, canal: 'correo' as const, responderA: 'responder@ejemplo.test' };
+  const tablas = () => llamadas.map((l) => l.tabla + ':' + (l.ops.find((o) => ['select', 'update', 'upsert'].includes(String(o[0])))?.[0] ?? '?'));
+  const eq = (l: Llamada, c: string, v: unknown) => l.ops.some((o) => o[0] === 'eq' && o[1] === c && o[2] === v);
+
+  it('al activar con corte: primero omite las pendientes con periodo_hasta < corte (de ESA flota), luego guarda y recién entonces adelanta el resto', async () => {
+    respuestas = [
+      { data: [{ id: 'e1', liquidacion_externa: { periodo_hasta: '2026-09-30' } }, { id: 'e2', liquidacion_externa: { periodo_hasta: '2026-10-15' } }], error: null }, // lectura
+      { data: [{ id: 'e1' }, { id: 'e2' }], error: null },                                                                                                   // omitir
+      { data: [{ tenant_id: T }], error: null },                                                                                                             // upsert config
+      { data: [], error: null },                                                                                                                             // adelantar
+    ];
+    await r.guardarConfigCorreo(T, { ...base, activa: true, noEnviarAntes: '2026-11-02' }, 'oficina');
+    expect(tablas()).toEqual([
+      'liquidacion_entrega_correo:select', 'liquidacion_entrega_correo:update', 'liquidacion_correo_config:upsert', 'liquidacion_entrega_correo:update',
+    ]);
+    const [leer, omitir, , adelantar] = llamadas;
+    expect(eq(leer, 'tenant_id', T)).toBe(true);
+    expect(eq(leer, 'estado', 'pendiente')).toBe(true);
+    expect(leer.ops.some((o) => o[0] === 'lt' && o[1] === 'liquidacion_externa.periodo_hasta' && o[2] === '2026-11-02')).toBe(true);
+    expect(eq(omitir, 'tenant_id', T)).toBe(true);
+    expect(eq(omitir, 'estado', 'pendiente')).toBe(true); // una `enviando` no se toca
+    expect(omitir.ops.find((o) => o[0] === 'update')?.[1]).toMatchObject({ estado: 'omitida' });
+    expect(omitir.ops.some((o) => o[0] === 'in' && o[1] === 'id')).toBe(true);
+    expect(adelantar.ops.find((o) => o[0] === 'update')?.[1]).toHaveProperty('proximo_intento_en');
+  });
+
+  it('si omitir falla AL ACTIVAR, no se guarda ni se adelanta nada (fail-closed)', async () => {
+    respuestas = [{ data: null, error: { message: 'boom', code: 'XX000' } }];
+    await expect(r.guardarConfigCorreo(T, { ...base, activa: true, noEnviarAntes: '2026-11-02' }, 'oficina')).rejects.toThrow();
+    expect(tablas()).toEqual(['liquidacion_entrega_correo:select']);
+  });
+
+  it('con el envío apagado un fallo de omitir solo se avisa y la configuración sí se guarda', async () => {
+    respuestas = [{ data: null, error: { message: 'boom', code: 'XX000' } }, { data: [{ tenant_id: T }], error: null }];
+    await r.guardarConfigCorreo(T, { ...base, activa: false, noEnviarAntes: '2026-11-02' }, 'oficina');
+    expect(llamadas.some((l) => l.tabla === 'liquidacion_correo_config')).toBe(true);
+    expect(warn).toHaveBeenCalledWith('liqcorreo.omitir_corte_fallo', expect.anything());
+  });
+
+  it('sin corte no hay nada que omitir (ni siquiera se consulta)', async () => {
+    respuestas = [{ data: [{ tenant_id: T }], error: null }];
+    await r.guardarConfigCorreo(T, { ...base, activa: false, noEnviarAntes: null }, 'oficina');
+    expect(tablas()).toEqual(['liquidacion_correo_config:upsert']);
   });
 });

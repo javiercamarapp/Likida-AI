@@ -82,6 +82,9 @@ export async function cargarDesglosesDePanel(
     if (cfg === null) avisoCorte = 'No pude leer la configuración de envío: revisa la fecha de corte antes de confirmar.';
     else if (cfg.activa && cfg.canal !== 'whatsapp' && cfg.noEnviarAntes === null) {
       avisoCorte = 'ATENCIÓN: el envío está activo y no hay fecha de corte. TODO desglose de este archivo sale a sus destinatarios, aunque sea viejo. Pon la fecha de arranque en Configuración antes de subir histórico.';
+    } else if (!cfg.activa && cfg.canal !== 'whatsapp' && cfg.noEnviarAntes === null) {
+      // H759-3: con el envío apagado también hay que decirlo: lo que se suba ahora queda esperando y saldría al activar si no hay corte.
+      avisoCorte = 'ATENCIÓN: no hay fecha de corte. Lo que subas ahora queda esperando y, si activas el envío sin poner el corte, SALE a sus destinatarios aunque sea histórico. Pon la fecha de arranque en Configuración antes de subir histórico.';
     }
 
     if (paso.tipo === 'previa') {

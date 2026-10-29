@@ -91,10 +91,17 @@ describe('cargarDesglosesDePanel', () => {
     expect(previa.detalle).toContain('no hay fecha de corte');
     const falla = await cargarDesglosesDePanel(T, archivo('x'), CONFIRMAR(null), importar, sinCorte);
     expect(falla.detalle).toContain('no hay fecha de corte');
-    // con corte, o con el envío apagado, no hay advertencia
+    // con corte no hay advertencia
     expect((await cargarDesglosesDePanel(T, archivo('x'), { tipo: 'previa' }, importar, cfgConCorte)).detalle).toBeUndefined();
+    // H759-3: con el envío APAGADO y sin corte también se advierte (lo que se suba queda esperando y saldría al activar); con corte, no
     const apagado = { leerConfig: async () => ({ activa: false, canal: 'correo', noEnviarAntes: null }) };
-    expect((await cargarDesglosesDePanel(T, archivo('x'), { tipo: 'previa' }, importar, apagado)).detalle).toBeUndefined();
+    const p2 = await cargarDesglosesDePanel(T, archivo('x'), { tipo: 'previa' }, importar, apagado);
+    expect(p2.detalle).toContain('no hay fecha de corte');
+    expect(p2.detalle).toContain('si activas el envío');
+    const apagadoConCorte = { leerConfig: async () => ({ activa: false, canal: 'correo', noEnviarAntes: '2026-11-02' }) };
+    expect((await cargarDesglosesDePanel(T, archivo('x'), { tipo: 'previa' }, importar, apagadoConCorte)).detalle).toBeUndefined();
+    const soloWhatsapp = { leerConfig: async () => ({ activa: false, canal: 'whatsapp', noEnviarAntes: null }) };
+    expect((await cargarDesglosesDePanel(T, archivo('x'), { tipo: 'previa' }, importar, soloWhatsapp)).detalle).toBeUndefined();
   });
 
   it('A1-01: si no se pudo leer la configuración se advierte (fail-cerrado en el texto, no se asume que hay corte)', async () => {

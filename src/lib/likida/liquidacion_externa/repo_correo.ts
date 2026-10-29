@@ -346,6 +346,14 @@ export async function guardarConfigCorreo(tenantId: string, c: ConfigCorreo, por
   };
   const fila0933 = { remitente_correo: remitenteCorreo, revisores, primer_mes_hasta: c.primerMesHasta };
   const fila0940 = { no_enviar_antes_de: c.noEnviarAntes };
+  // H759-3: lo que ya esperaba salir (histórico subido con el envío apagado y SIN corte) y es anterior a la fecha de corte pasa a `omitida`
+  // ANTES de guardar/activar. Si esto falla al ACTIVAR, no se activa ni se adelanta nada (fallaría abierto: saldría el histórico).
+  if (c.noEnviarAntes !== null) {
+    try { await omitirPendientesAnterioresAlCorte(tenantId, c.noEnviarAntes); } catch (e) {
+      if (c.activa) throw e;
+      logger.warn('liqcorreo.omitir_corte_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    }
+  }
   let res = await acotada(supabaseAdmin().from('liquidacion_correo_config')
     .upsert({ ...fila, ...fila0933, ...fila0940 }, { onConflict: 'tenant_id' }).select('tenant_id'), 'liqcorreo.config_guardar');
   if (faltaColumna0940((res as unknown as { error: ErrorPg }).error)) {
@@ -798,6 +806,36 @@ export async function omitirEntregasPendientes(tenantId: string, liquidacionIds:
     .update({ estado: 'omitida', ultimo_error: recortar(motivo), ...SIN_LEASE, updated_at: new Date().toISOString() })
     .eq('tenant_id', tenantId).in('liquidacion_externa_id', liquidacionIds).in('estado', ['pendiente', 'enviando']).select('id'), etiqueta);
   return (exigirEscritura(res as unknown as { data: Fila[] | null; error: ErrorPg }, etiqueta) ?? []).length;
+}
+
+const MOTIVO_ANTERIOR_AL_CORTE = 'omitida: el periodo termina antes de la fecha de corte del arranque';
+const PAGINA_OMITIR_CORTE = 500;
+const MAX_PAGINAS_OMITIR_CORTE = 40;
+
+/**
+ * H759-3: pasa a `omitida` las entregas `pendiente` de la flota cuyo desglose termina ANTES de la fecha de corte (`periodo_hasta < corte`).
+ * Es lo que cubre el histórico subido mientras el envío estaba apagado y sin corte (las entregas nacieron `pendiente`, esperando): al fijar
+ * o mover el corte, o al activar, ya no salen. Solo `pendiente` (una `enviando` termina su envío). Idempotente y acotado a la flota;
+ * devuelve cuántas cambió. Lanza ante un error de base: quien activa NO debe adelantar la cola si esto falló.
+ */
+export async function omitirPendientesAnterioresAlCorte(tenantId: string, corte: string): Promise<number> {
+  let total = 0;
+  for (let pagina = 0; pagina < MAX_PAGINAS_OMITIR_CORTE; pagina++) {
+    const etiquetaSel = 'liqcorreo.omitir_corte_leer';
+    const sel = await acotada(supabaseAdmin().from('liquidacion_entrega_correo')
+      .select('id, liquidacion_externa!inner(periodo_hasta)')
+      .eq('tenant_id', tenantId).eq('estado', 'pendiente').lt('liquidacion_externa.periodo_hasta', corte).limit(PAGINA_OMITIR_CORTE), etiquetaSel);
+    const filas = exigirEscritura(sel as unknown as { data: Fila[] | null; error: ErrorPg }, etiquetaSel) ?? [];
+    if (filas.length === 0) return total;
+    const etiqueta = 'liqcorreo.omitir_corte';
+    const res = await acotada(supabaseAdmin().from('liquidacion_entrega_correo')
+      .update({ estado: 'omitida', ultimo_error: MOTIVO_ANTERIOR_AL_CORTE, ...SIN_LEASE, updated_at: new Date().toISOString() })
+      .eq('tenant_id', tenantId).in('id', filas.map((f) => String(f.id))).eq('estado', 'pendiente').select('id'), etiqueta);
+    const n = (exigirEscritura(res as unknown as { data: Fila[] | null; error: ErrorPg }, etiqueta) ?? []).length;
+    total += n;
+    if (filas.length < PAGINA_OMITIR_CORTE || n === 0) return total;
+  }
+  return total;
 }
 
 /** Devuelve la entrega a `pendiente` con su siguiente intento (backoff lo decide quien llama). */
