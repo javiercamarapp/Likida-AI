@@ -15,8 +15,11 @@
    [data-ui="v2"].tema-neutro` (0,4,0): ganan sin depender del orden en que Next
    ordene los chunks de CSS.
 
-   VALORES: tabla 01 §3.4 (neutros fríos del sistema de referencia). Los pares
-   tint/ink de estado se midieron en 5.04–7.01:1 contra su fondo.
+   VALORES: ESTILO-LIKIDA (única fuente de números; los valores sin token propio se declaran AQUÍ y en ningún otro
+   lado). Los nombres de la primera capa (--bg, --surface, --canvas, --ink, --line, --input, --marca, --chart-n…) los
+   leen los componentes de los carriles B y C; los `--ui-*` son los alias del sistema v2 (lienzo, tarjeta, suave,
+   elevado, bordes) y apuntan a ellos, de modo que hay UN solo valor por color. Los pares tint/ink de estado miden
+   5.04–7.01:1; `contraste_v2.test.ts` mide todos los pares nuevos (≥4.5:1 texto, ≥3:1 controles y marcas).
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root [data-ui="v2"] {
@@ -38,15 +41,24 @@
   --line2: #d6d6d9;
   --input: #8a8a90;
 
-  /* Acción: tinta sólida (no el azul suave de la referencia) */
+  /* Tinta como relleno de marca (anillo, interruptor, foco del recorrido, avatar): sigue siendo tinta sólida. */
   --marca: #0e0e10;
   --marca-fg: #ffffff;
   --marca-hover: #2a2a2f;
   --accent: #0e0e10;
   --accent-fg: #ffffff;
-  /* Señal: el naranja de Likida, solo para la barra de 3 px del ítem activo
-     y el valor elegido. #c2410c sobre blanco mide 5.18:1. */
-  --senal: #c2410c;
+  /* ◆ Botón primario = «tenue neutro» (decisión de Javier: nada de bloque negro ni azul), máx. 1 por pliegue. */
+  --btn-bg: #e4e4e6;
+  --btn-fg: var(--ink);
+  --btn-borde: #d6d6d9;
+  --btn-hover: #d6d6d9;
+  /* Alternativa de G1 (Javier elige): el azul suave de Rovaq. En oscuro usa el par azul de datos. */
+  --btn-soft: #e6edfa;
+  --btn-soft-fg: #1f4fb0;
+  --btn-soft-hover: #d8e3f8;
+  /* ◆ Señal «requiere acción» = burdeos (matiz 6 de datos), ≤2 % del área; nunca hover, relleno de botón ni «Salir».
+     #a6264a sobre blanco mide ≥7:1. */
+  --senal: #a6264a;
 
   /* Estados (tint/ink) */
   --ok: #16784a;
@@ -72,6 +84,108 @@
   --soft-5: #e2f0f4; --soft-6: #f4e5e9; --soft-7: #efebfa; --soft-8: #e2e2e2;
   --ink-1: #2c65cb; --ink-2: #b14418; --ink-3: #1d7350; --ink-4: #8c6a2a;
   --ink-5: #087593; --ink-6: #a6264a; --ink-7: #7456c9; --ink-8: #0e0e10;
+
+  /* Alias del sistema v2 (ESTILO-LIKIDA §1) */
+  --ui-canvas: var(--bg);
+  --ui-surface: var(--surface);
+  --ui-soft: var(--canvas);
+  --ui-elevated: #ffffff;
+  --ui-border: var(--line);
+  --ui-line-strong: var(--line2);
+  --ui-input: var(--input);
+  --ui-secondary: var(--ink2);
+  --ui-focus: var(--ink);
+  --ui-scrim: var(--scrim);
+  --ui-tip-bg: var(--tip);
+  --ui-tip-ink: var(--tip-ink);
+  /* ÚNICO color de la capa de carga (= el fondo de la app) */
+  --carga-fondo: #ffffff;
+  /* Cabecera de tabla: petróleo al 7 % sobre la superficie, texto ink-info */
+  --tabla-cab-bg: #eef6f9;
+  --tabla-cab-ink: var(--info);
+
+  /* Neutros */
+  --n-950: #0e0e10;
+  --n-900: #17171a;
+  --n-850: #1f1f23;
+  --n-800: #2a2a2f;
+  --n-700: #3a3a40;
+  --n-600: #5a5a61;
+  --n-500: #8a8a90;
+  --n-400: #a3a3ab;
+  --n-300: #d6d6d9;
+  --n-200: #e4e4e6;
+  --n-100: #f1f1f2;
+  --n-50: #f7f7f8;
+
+  /* Texto sobre un segmento relleno con el matiz n de datos */
+  --on-1: #ffffff;
+  --on-2: #0e0e10;
+  --on-3: #ffffff;
+  --on-4: #0e0e10;
+  --on-5: #000000;
+  --on-6: #ffffff;
+  --on-7: #ffffff;
+  --on-8: #ffffff;
+
+  /* Neutros de gráfica */
+  --chart-barra: #2f2f33; --chart-fuerte: #0e0e10; --chart-rejilla: #0e0e1014; --chart-eje: #0e0e1033;
+  --heat-0: #ececee;
+  --heat-1: #c9c9cd;
+  --heat-2: #98989f;
+  --heat-3: #5a5a61;
+  --heat-4: #0e0e10;
+
+  /* Procedencia (por trazo, no por matiz): Observado silencioso; Estimado discontinuo; Inferido punteado; Sin dato discontinuo vacío */
+  --prov-obs: #0e0e10;
+  --prov-est-bg: #e4e4e6;
+  --prov-est-borde: #4a4a51;
+  --prov-inf-bg: #f7f7f8;
+  --prov-inf-borde: #75757c;
+  --prov-sin-borde: #8a8a90;
+
+  /* Radios (§5): controles y marcas de celda 8 · tarjetas, sidebar, overlays 12 · chips y píldoras 999 · hoja móvil 16 */
+  --r-control: 8px;
+  --r-card: 12px;
+  --r-pill: 999px;
+  --r-sheet: 16px;
+
+  /* Escala tipográfica cerrada {11 M, 12, 13, 14, 15, 16, 18, 20, 26} (§3) */
+  --fs-micro: 11px;
+  --fs-label: 12px;
+  --fs-body: 13px;
+  --fs-h2: 14px;
+  --fs-overlay: 15px;
+  --fs-campo: 16px;
+  --fs-kpi-vacio: 18px;
+  --fs-h1: 20px;
+  --fs-kpi: 26px;
+  --fs-kpi-movil: clamp(18px, 5.2vw, 21px);
+
+  /* Medidas de shell y de composición (§4–§7); el shell las lee de aquí y `marco-v2.ts` las cruza con `shell.css` */
+  --marco-pad: 16px;
+  --sb-w: 232px;
+  --rail-w: 72px;
+  --topbar-h: 44px;
+  --cab-movil-h: 56px;
+  --item-h: 32px;
+  --item-h-riel: 40px;
+  --marca-h: 52px;
+  --pie-max: 150px;
+  --logo-sb: 30px;
+  --logo-riel: 28px;
+  --logo-movil: 28px;
+  --logo-carga: 40px;
+  --pad-pagina: 24px;
+  --pad-pagina-b: 28px;
+  --sp-gap: 12px;
+  --card-pad: 14px;
+  --card-pad-compacta: 12px;
+  --btn-h: 32px;
+  --btn-h-movil: 36px;
+  --input-h: 32px;
+  --toque: 44px;
+  --kpi-h: 112px; --fila-tabla: 40px; --fila-tabla-densa: 32px; --cabecera-tabla: 36px; --chart-h: 168px; --chart-h-sm: 140px;
 
   /* Superpuestos */
   --scrim: #0e0e1066;
@@ -100,6 +214,7 @@
   /* Sin sombras en el flujo; solo los popovers flotan */
   --shadow-card: none;
   --shadow-pop: 0 12px 32px -8px #17181c2e, 0 2px 6px #17181c0f;
+  --sh-pop: var(--shadow-pop);
 }
 
 :root[data-theme="dark"] [data-ui="v2"].tema-neutro,
@@ -115,7 +230,7 @@
   --faint: #98989f;
 
   --line: #26262b;
-  --line2: #3a3a40;
+  --line2: #48484a;
   --input: #8b8b93;
 
   --marca: #f4f4f5;
@@ -123,7 +238,14 @@
   --marca-hover: #ffffff;
   --accent: #f4f4f5;
   --accent-fg: #0e0e10;
-  --senal: #fb923c;
+  --btn-bg: #2a2a2f;
+  --btn-fg: var(--ink);
+  --btn-borde: #48484a;
+  --btn-hover: #34343a;
+  --btn-soft: var(--soft-1);
+  --btn-soft-fg: var(--ink-1);
+  --btn-soft-hover: #181f2c;
+  --senal: #cc4a6c;
 
   --ok: #6fd6a3;
   --okbg: #12261c;
@@ -146,6 +268,33 @@
   --soft-5: #18262c; --soft-6: #2d1d24; --soft-7: #252232; --soft-8: #323234;
   --ink-1: #558ceb; --ink-2: #e8602b; --ink-3: #43a07a; --ink-4: #b98526;
   --ink-5: #2b99b5; --ink-6: #d56985; --ink-7: #947de2; --ink-8: #f4f4f5;
+
+  --ui-elevated: #1f1f23;
+  --carga-fondo: #0e0e10;
+  --tabla-cab-bg: #172024;
+
+  --on-1: #0e0e10;
+  --on-2: #0e0e10;
+  --on-3: #0e0e10;
+  --on-4: #0e0e10;
+  --on-5: #000000;
+  --on-6: #000000;
+  --on-7: #0e0e10;
+  --on-8: #0e0e10;
+
+  --chart-barra: #d2d2d6; --chart-fuerte: #f4f4f5; --chart-rejilla: #f4f4f514; --chart-eje: #f4f4f533;
+  --heat-0: #2a2a2f;
+  --heat-1: #3e3e45;
+  --heat-2: #62626a;
+  --heat-3: #9a9aa2;
+  --heat-4: #f4f4f5;
+
+  --prov-obs: #f4f4f5;
+  --prov-est-bg: #2a2a2f;
+  --prov-est-borde: #a3a3ab;
+  --prov-inf-bg: #17171a;
+  --prov-inf-borde: #7a7a82;
+  --prov-sin-borde: #7a7a82;
 
   --scrim: #000a;
   --tip: #f4f4f5;
@@ -185,6 +334,13 @@ html:root[data-theme="dark"]:has([data-ui="v2"]) {
 [data-ui="v2"] .text-\[10px\],
 [data-ui="v2"] .text-\[10\.5px\] {
   font-size: 11px;
+}
+
+/* Cuerpo: 13 / 400 / 1.5 con cifras tabulares (ESTILO §3); `tabular-nums` es obligatorio en el body del alcance. */
+[data-ui="v2"] {
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Divisores de tabla sólidos (v1 los pone punteados/discontinuos) */
