@@ -26,7 +26,7 @@ import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina'
 import { telefonoParaDineroDe } from '../contactos';
 import { bitacoraConciliada } from './bitacora_conciliada';
 import {
-  leerEstadoAvisoDesglose, reclamarIntentoAviso, devolverIntentoAviso, marcarAvisoEnviado, agotarIntentosAviso, avisosPendientesPeajes, MAX_INTENTOS_AVISO,
+  leerEstadoAvisoDesglose, reclamarIntentoAviso, devolverIntentoAviso, marcarAvisoRequerido, marcarAvisoEnviado, agotarIntentosAviso, avisosPendientesPeajes, MAX_INTENTOS_AVISO,
 } from './datos';
 import { quedoEnCola } from './aviso_en_cola';
 import { superficiePeajesDeTenant, type SuperficiePeajes } from './superficie_perfil';
@@ -116,6 +116,8 @@ export async function avisarDesgloseConciliado(tenantId: string, desgloseId: str
     const tel = await deps.telefono(tenantId);
     if (!tel) {
       logger.warn('peajes.aviso_sin_destinatario', { tenant: tenantId, desglose: desgloseId });
+      // Queda pendiente para el barrido (sin gastar intentos): cuando haya teléfono, sale.
+      await marcarAvisoRequerido(tenantId, desgloseId);
       return 'sin_destinatario';
     }
     if (!(await reclamarIntentoAviso(tenantId, desgloseId, estado.intentos))) return 'ocupado';

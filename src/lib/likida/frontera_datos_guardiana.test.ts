@@ -625,11 +625,11 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 326;
 // CORRECCIÓN PR #753 (verificación independiente, M4): 2,434 → 2,439 (+5, medido con el guardián). Sello de dos fases del aviso de peajes en `peajes/repo.ts`, todas por
 // `acotada` y con `tenant_id`: `reservarAvisoPeajes` +2 (¿ya está dado? y la reserva previa vigente/vencida; antes solo el upsert) + 1 (tomar la reserva vencida con borrado
 // condicionado) y `confirmarAvisoPeajes` +2 (sello definitivo y soltar la reserva). Cubiertas por avisos_repo.test.ts y aviso_barrido.test.ts.
-// OLA 10 · carril B (peajes): 2,439 → 2,442 (+3, medido con el guardián), todas por `acotada` y con `tenant_id` salvo la recuperación global del cron:
-// `peajes/repo.ts` `devolverIntentoAviso` +1 (A2P-05: devuelve el intento tomado cuando la ventana de WhatsApp está cerrada) y `peajes/aviso_atipicos.ts`
+// OLA 10 · carril B (peajes): 2,439 → 2,443 (+4, medido con el guardián), todas por `acotada` y con `tenant_id` salvo la recuperación global del cron:
+// `peajes/repo.ts` `devolverIntentoAviso` +1 (A2P-05: devuelve el intento tomado cuando la ventana de WhatsApp está cerrada) y `marcarAvisoRequerido` +1 (A2P-05: deja pendiente el aviso sin gastar intentos cuando falta destinatario) y `peajes/aviso_atipicos.ts`
 // `confirmar` +1 (limpia el vencimiento de la reserva tras enviar) y `recuperarVencidas` +1 (A2P-18, devuelve a `nuevo` lo reservado y vencido; multi-flota a propósito,
-// como el barrido de avisos). La reserva de siempre solo cambió de forma (sigue siendo 1 llamada). Cubiertas por aviso_oficina_ola10.test.ts y aviso_atipicos.test.ts.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_442;
+// como el barrido de avisos). La reserva de siempre solo cambió de forma (sigue siendo 1 llamada). Cubiertas por aviso_oficina_ola10.test.ts, ciclo_completo.e2e.test.ts y aviso_atipicos.test.ts.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_443;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

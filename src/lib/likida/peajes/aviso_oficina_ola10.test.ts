@@ -5,11 +5,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const estado = { anulado: false, avisoEn: null as string | null, intentos: 2, proveedor: 'Proveedor Uno', periodoDesde: '2026-10-01', periodoHasta: '2026-10-07' };
 const reclamar = vi.fn(async (..._a: unknown[]) => true);
 const devolver = vi.fn(async (..._a: unknown[]) => true);
+const requerido = vi.fn(async (..._a: unknown[]) => {});
 vi.mock('./datos', () => ({
   MAX_INTENTOS_AVISO: 5,
   leerEstadoAvisoDesglose: vi.fn(async () => ({ ...estado })),
   reclamarIntentoAviso: (...a: unknown[]) => reclamar(...a),
   devolverIntentoAviso: (...a: unknown[]) => devolver(...a),
+  marcarAvisoRequerido: (...a: unknown[]) => requerido(...a),
   marcarAvisoEnviado: vi.fn(async () => true),
   agotarIntentosAviso: vi.fn(async () => true),
   avisosPendientesPeajes: vi.fn(async () => []),
@@ -36,6 +38,8 @@ describe('A2P-05: intentos del aviso a la oficina', () => {
     for (let i = 0; i < 8; i++) expect(await avisarDesgloseConciliado('t1', 'd1', deps)).toBe('sin_destinatario');
     expect(reclamar).not.toHaveBeenCalled();
     expect(avisar).not.toHaveBeenCalled();
+    // ...pero queda marcado como pendiente para que el barrido lo encuentre al configurar el teléfono
+    expect(requerido).toHaveBeenCalledWith('t1', 'd1');
   });
 
   it('con la ventana de 24 h cerrada y la plantilla sin aprobar, el intento se devuelve', async () => {

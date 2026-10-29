@@ -41,11 +41,12 @@ let telefonoDinero: Record<string, string | null> = {};
 vi.mock('../contactos', () => ({ telefonoParaDineroDe: async (t: string) => telefonoDinero[t] ?? null }));
 const envios: Array<{ tel: string; texto: string; contexto: unknown }> = [];
 let envioOk = true;
+let ventanaCerrada = false;
 vi.mock('@/lib/meta/aviso_oficina', async (orig) => ({
   ...(await orig<typeof import('@/lib/meta/aviso_oficina')>()),
   avisarOficina: async (tel: string, texto: string, o: { contexto?: unknown }) => {
     envios.push({ tel, texto, contexto: o.contexto });
-    return envioOk ? { ok: true, via: 'texto', id: 'w' } : { ok: false, motivo: 'plantilla no aprobada', fueraDeVentana: true };
+    return envioOk ? { ok: true, via: 'texto', id: 'w' } : { ok: false, motivo: 'plantilla no aprobada', fueraDeVentana: ventanaCerrada };
   },
 }));
 
@@ -190,7 +191,7 @@ const idDesglose = (n = 0) => String(db.tablas.desglose_peaje[n].id);
 beforeEach(() => {
   db = crearDbFalsa(base(), { peaje_archivo_reclamar: claimArchivos, peaje_archivo_encolar: encolarFalso, peaje_pull_reclamar: claimPull, peaje_avisos_pendientes: avisosPendientes, peaje_posiciones_ventana: rpcPosiciones, peaje_curso_reemplazar: rpcCursos });
   correosProcesados.clear(); correosEnCurso.clear(); adjuntos.clear(); envios.length = 0;
-  telefonoDinero = { [T]: '525599990000', [T2]: '525588880000' }; envioOk = true; apagado = false;
+  telefonoDinero = { [T]: '525599990000', [T2]: '525588880000' }; envioOk = true; ventanaCerrada = false; apagado = false;
   process.env.RESEND_API_KEY = 're_test';
   process.env.LIKIDA_COFRE_LLAVE = 'c'.repeat(40);
   guardar('adj1', ARCHIVO);
@@ -283,13 +284,23 @@ describe('FALLO', () => {
     await atenderCorreoPeajes(TOKEN, correo('e1', [['corte.csv', 'adj1']]), deps);
     await procesar();
     expect(envios).toHaveLength(0);
-    expect(db.tablas.desglose_peaje[0]).toMatchObject({ aviso_requerido: true, aviso_intentos: 1 });
+    expect(db.tablas.desglose_peaje[0]).toMatchObject({ aviso_requerido: true, aviso_intentos: 0 }); // A2P-05: sin destinatario no gasta intentos
     expect(db.tablas.desglose_peaje[0].aviso_oficina_en).toBeUndefined();
 
     telefonoDinero = { [T]: '525599990000' };
     expect(await reintentarAvisosPeajes(5)).toMatchObject({ revisados: 1, enviados: 1 });
     expect(await reintentarAvisosPeajes(5)).toMatchObject({ revisados: 0 });
     expect(envios).toHaveLength(1);
+  });
+
+  it('A2P-05: con la ventana de WhatsApp cerrada y la plantilla sin aprobar el aviso NO gasta intentos: sigue pendiente', async () => {
+    envioOk = false; ventanaCerrada = true;
+    await atenderCorreoPeajes(TOKEN, correo('e1', [['corte.csv', 'adj1']]), deps);
+    await procesar();
+    for (let i = 0; i < 7; i++) await reintentarAvisosPeajes(5);
+    expect(db.tablas.desglose_peaje[0]).toMatchObject({ aviso_requerido: true, aviso_intentos: 0 });
+    envioOk = true; ventanaCerrada = false; // se aprueba la plantilla
+    expect(await reintentarAvisosPeajes(5)).toMatchObject({ enviados: 1 });
   });
 
   it('Meta rechaza el aviso: se reintenta hasta el tope y NO lo manda doble', async () => {
