@@ -12,7 +12,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { medir, UMBRALES } from './medir.mjs';
 import { informe, CRITERIOS } from './informe.mjs';
-import { PANTALLAS_TIPO } from './pantallas.mjs';
+import { PANTALLAS_TIPO, PANTALLAS_RUTA, TIPOS_CON_PLIEGUE } from './pantallas.mjs';
+import { duracionesCss, duracionesInline } from './duraciones.mjs';
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const require = createRequire(path.join(raiz, 'package.json'));
@@ -23,7 +24,9 @@ const OUT = arg.out ?? path.join(homedir(), 'likida-loop/frontend-plan/rovaq-met
 const ETIQUETA = arg.etiqueta ?? 'v2-actual';
 const ANCHOS = String(arg.anchos ?? '1440,1024,768,390').split(',').map(Number);
 const TEMAS = String(arg.temas ?? 'claro,oscuro').split(',');
-const ALTO = { 1440: 900, 1024: 768, 768: 1024, 390: 844 };
+const ALTO = { 1440: 900, 1280: 720, 1024: 768, 768: 1024, 390: 844 };
+// N3 (pie del sidebar sin recorte) se mide además a 1280×720, claro, y de esa pasada solo cuentan los n3.*
+const N3_EXTRA = { w: 1280, tema: 'claro' };
 const FUENTES = path.join(homedir(), 'likida-loop/frontend-plan/fuentes-spike');
 
 const ff = (fam, w, f) => `@font-face{font-family:'${fam}';font-weight:${w};font-style:normal;font-display:block;src:url('file://${FUENTES}/${f}') format('woff2')}`;
@@ -53,14 +56,22 @@ function descubrir() {
   for (const p of lista) {
     p.css = path.join(TRABAJO, p.grupo.startsWith('a') ? 'a' : p.grupo.startsWith('x') ? 'x' : 'c', 'v2full.css');
     p.tipo = PANTALLAS_TIPO[p.id] ?? 'componentes';
+    p.ruta = PANTALLAS_RUTA[p.id] ?? null;
   }
   return lista;
 }
+
+/** El arnés ABORTA si una pantalla no trae el alcance v2: medir CSS v2 sobre HTML sin [data-ui="v2"] mide ruido. */
+function assertV2(cuerpo, id) {
+  if (!/data-ui="v2"/.test(cuerpo)) throw new ArnesSinV2(`la pantalla ${id} no trae [data-ui="v2"]: el HTML no viene del chrome v2 (render.sh con UI2_CHROME=v2)`);
+}
+class ArnesSinV2 extends Error {}
 
 /** Ejecuta medir() dentro de la página (la función viaja como texto: es autocontenida). */
 export const ejecutar = (page, opts) => page.evaluate(({ src, U, o }) => (0, eval)('(' + src + ')')(U, o), { src: medir.toString(), U: UMBRALES, o: opts });
 
 async function medirPantalla(browser, p, cuerpo, cssRuta, w, tema, { pliegueAplica, carga }) {
+  assertV2(cuerpo, p.id);
   const h = ALTO[w] ?? 900;
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1, reducedMotion: 'reduce', locale: 'es-MX', isMobile: w < 500, hasTouch: w < 500 });
   const page = await ctx.newPage();
@@ -71,7 +82,7 @@ async function medirPantalla(browser, p, cuerpo, cssRuta, w, tema, { pliegueApli
   // Los Suspense resueltos por prerender se acomodan con un script en línea: se espera a que no queden plantillas ni esqueletos pendientes.
   if (!carga) await page.waitForFunction(() => !document.querySelector('template[id^="B:"]') && !document.querySelector('[role="status"][aria-label="Cargando"]'), null, { timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(80);
-  const res = await ejecutar(page, { pliegue: pliegueAplica, carga });
+  const res = await ejecutar(page, { pliegue: pliegueAplica, carga, tipo: p.tipo });
   if (arg.capturas) {
     const dir = path.join(OUT, 'capturas-' + ETIQUETA); mkdirSync(dir, { recursive: true });
     await page.screenshot({ path: path.join(dir, `${p.id}__${w}__${tema}.png`), fullPage: false });
@@ -84,31 +95,65 @@ async function correr() {
   const pantallas = descubrir().filter((p) => !arg.pantallas || String(arg.pantallas).split(',').some((s) => p.id.startsWith(s)));
   if (!pantallas.length) { console.error('Sin pantallas en ' + TRABAJO + ': corre scripts/ui2-calidad/render.sh primero.'); process.exit(2); }
   const browser = await chromium.launch();
-  const salida = { meta: { etiqueta: ETIQUETA, fecha: new Date().toISOString(), anchos: ANCHOS, temas: TEMAS, umbrales: UMBRALES, fuentesHanken: hayFuentes, pantallas: pantallas.map((p) => ({ id: p.id, grupo: p.grupo, tipo: p.tipo })) }, pantallas: {} };
+  const salida = { meta: { version: '2.1', etiqueta: ETIQUETA, fecha: new Date().toISOString(), anchos: ANCHOS, temas: TEMAS, umbrales: UMBRALES, fuentesHanken: hayFuentes, pantallas: pantallas.map((p) => ({ id: p.id, grupo: p.grupo, tipo: p.tipo, ruta: p.ruta })) }, pantallas: {} };
   for (const p of pantallas) {
     const cuerpo = readFileSync(p.archivo, 'utf8');
     salida.pantallas[p.id] = { grupo: p.grupo, tipo: p.tipo, combinaciones: {} };
     for (const w of ANCHOS) for (const tema of TEMAS) {
       const carga = p.grupo === 'x-carga';
-      const pliegueAplica = w === 1440 && p.tipo === 'panel' && !carga;
+      const pliegueAplica = w === 1440 && TIPOS_CON_PLIEGUE.includes(p.tipo) && !carga;
       let res;
       try { res = await medirPantalla(browser, p, cuerpo, p.css, w, tema, { pliegueAplica, carga }); }
-      catch (e) { res = { n: { error: 1 }, hallazgos: { error: [String(e.message).slice(0, 200)] }, stats: {} }; }
+      catch (e) { if (e instanceof ArnesSinV2) { console.error('\nABORTO: ' + e.message); process.exit(4); } res = { n: { error: 1 }, hallazgos: { error: [String(e.message).slice(0, 200)] }, stats: {} }; }
       // En la pantalla de carga solo cuenta c8 (el resto mide el marco, no la carga).
       for (const k of Object.keys(res.n)) if (carga !== k.startsWith('c8.') && k !== 'error') { delete res.n[k]; delete res.hallazgos[k]; }
       salida.pantallas[p.id].combinaciones[`${w}/${tema}`] = { n: res.n, hallazgos: res.hallazgos, stats: res.stats };
       process.stdout.write('.');
     }
+    if (p.grupo !== 'x-carga' && ANCHOS.includes(1440) && !arg.sin1280) {
+      let res;
+      try { res = await medirPantalla(browser, p, cuerpo, p.css, N3_EXTRA.w, N3_EXTRA.tema, { pliegueAplica: false, carga: false }); }
+      catch (e) { res = { n: { error: 1 }, hallazgos: { error: [String(e.message).slice(0, 200)] }, stats: {} }; }
+      for (const k of Object.keys(res.n)) if (!k.startsWith('n3.') && k !== 'error') { delete res.n[k]; delete res.hallazgos[k]; }
+      salida.pantallas[p.id].combinaciones[`${N3_EXTRA.w}/${N3_EXTRA.tema}`] = { n: res.n, hallazgos: res.hallazgos, stats: { pie: res.stats.pie } };
+      process.stdout.write('+');
+    }
+    // c9 en línea: duraciones de transition/animation que el HTML renderizado lleva en style=""
+    const dIn = duracionesInline(cuerpo);
+    const c0 = salida.pantallas[p.id].combinaciones['1440/claro'] ?? Object.values(salida.pantallas[p.id].combinaciones)[0];
+    if (dIn.length && c0) { c0.n['c9.duracion'] = dIn.length; c0.hallazgos['c9.duracion'] = dIn; }
   }
   await browser.close();
   console.log();
+  // Globales: no dependen de una pantalla sola.
+  salida.global = globales(salida);
   mkdirSync(OUT, { recursive: true });
   writeFileSync(path.join(OUT, arg.json ?? `medidas-${ETIQUETA}.json`), JSON.stringify(salida, null, 1));
+  // Salida por ruta: una JSON por pantalla/ruta (con su tipo, ruta y combinaciones) en medidas-<etiqueta>/
+  const dirRuta = path.join(OUT, `medidas-${ETIQUETA}`); mkdirSync(dirRuta, { recursive: true });
+  for (const [id, pnt] of Object.entries(salida.pantallas)) writeFileSync(path.join(dirRuta, `${id}.json`), JSON.stringify({ id, ruta: PANTALLAS_RUTA[id] ?? null, tipo: pnt.tipo, etiqueta: ETIQUETA, combinaciones: pnt.combinaciones }, null, 1));
   const md = informe(salida);
   writeFileSync(path.join(OUT, arg.md ?? `INFORME-${ETIQUETA}.md`), md);
-  const total = Object.values(salida.pantallas).reduce((a, p) => a + Object.values(p.combinaciones).reduce((b, c) => b + Object.values(c.n).reduce((x, y) => x + y, 0), 0), 0);
+  const total = Object.values(salida.pantallas).reduce((a, p) => a + Object.values(p.combinaciones).reduce((b, c) => b + Object.values(c.n).reduce((x, y) => x + y, 0), 0), 0)
+    + Object.values(salida.global).reduce((a, g) => a + g.n, 0);
+  console.log(`globales: ` + Object.entries(salida.global).map(([k, g]) => `${k}=${g.n}`).join(' '));
   console.log(`${pantallas.length} pantallas × ${ANCHOS.length} anchos × ${TEMAS.length} temas; ${total} hallazgos (suma de combinaciones)`);
   return total;
+}
+
+/** Criterios que miran TODO el arnés (no una pantalla): c9 en las hojas de estilo v2 y N4 (variantes de sidebar). */
+export function globales(salida) {
+  const G = {};
+  const css = duracionesCss(path.join(raiz, 'src/app/ui-v2'));
+  G['c9.duracion_css'] = { n: css.length, hallazgos: css.slice(0, 400) };
+  const sig = {};
+  for (const [id, pnt] of Object.entries(salida.pantallas)) {
+    if (pnt.grupo === 'x-carga') continue;
+    for (const [k, c] of Object.entries(pnt.combinaciones)) { const f = c.stats?.sidebarFirma; if (!f) continue; const [w, tema] = k.split('/'); if (tema !== 'claro' || Number(w) < 768) continue; (sig[w] = sig[w] || {})[f] = (sig[w][f] || []).concat(id); }
+  }
+  const dif = []; for (const [w, m] of Object.entries(sig)) if (Object.keys(m).length > 1) dif.push(`${w} px: ${Object.keys(m).length} variantes de sidebar (${Object.values(m).map((l) => l.length + ' pantallas').join(' / ')})`);
+  G['n4.variantes_sidebar'] = { n: Object.entries(sig).reduce((a, [, m]) => a + Math.max(0, Object.keys(m).length - 1), 0), hallazgos: dif };
+  return G;
 }
 
 if (arg.selftest) {

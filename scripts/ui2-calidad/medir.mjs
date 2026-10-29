@@ -26,8 +26,18 @@ export const UMBRALES = {
   padPagina: 24,
   // c4
   aireInfPx: 24, aireInfPct: 0.25, altoVecinoTol: 4, huecoFila: 0.12,
-  // c5
-  filasPliegue: 8,
+  cabeceraTabla: 36, cabeceraTablaTol: 1, // ESTILO §5: cabecera de tabla 36 (no 32)
+  markRadioMax: 4,           // marcas de gráfica (columnas 3, celdas de calor 2-3) exentas de c3.radio
+  // c5 (por tipo de pantalla, ESTILO §6): resumen / hub / lista / formulario / asistente
+  filasPliegue: 8,           // formulario y asistente: filas o campos
+  filasPliegueLista: 10,     // hub y lista: tabla de ≥10 filas
+  plotMin: 140,              // alto mínimo de la gráfica principal (resumen y hub)
+  atencionFilas: 3,          // «Requiere tu atención»: ≥3 filas en el pliegue (resumen)
+  kpiTira: 112, kpiTiraTol: 8,
+  // N (criterios nuevos, PLAN §4.2)
+  pieMax: 150,               // N3: alto del pie del sidebar
+  categoriasAbiertasMax: 1,  // N4
+
   // c7
   contraste: 4.5, contrasteGrande: 3,
 };
@@ -202,6 +212,15 @@ export function medir(U, opts) {
   for (const h of h1s) { const fs = px(getComputedStyle(h).fontSize); if (Math.abs(fs - U.h1) > U.h1Tol) add('c2.h1', 'h1 ' + fs + 'px (norma ' + U.h1 + ') ' + desc(h)); }
   stats.escalaTexto = escala; stats.kpiTamanos = kpis; stats.h1 = h1s.map((h) => px(getComputedStyle(h).fontSize));
 
+  // Marca de gráfica (exenta de c3.radio, ESTILO §5): hoja (sin elementos hijos) con radio ≤4 dentro de una gráfica o con
+  // etiqueta propia (title / aria-label: celdas de calor y columnas). Una caja con contenido o un botón NO es una marca.
+  const CTX_GRAF = 'svg,figure,[role="img"],[data-grafica],[class*="graf"],[class*="chart"],[class*="heat"],[class*="columna"],[class*="barra"]';
+  const esMarca = (e, v) => {
+    if (v > U.markRadioMax + 0.01 || e.children.length > 0 || e.matches(CTRL_SEL)) return false;
+    const rotulado = e.hasAttribute('title') || e.hasAttribute('aria-label') || !!e.parentElement?.closest('[title],[aria-label]');
+    return rotulado || !!e.closest(CTX_GRAF);
+  };
+
   // ═══ C3 · PADDING / GAP / RADIOS ════════════════════════════════════════
   const radioOk = (e, cs, r) => {
     const t = cs.borderTopLeftRadius; let v;
@@ -212,15 +231,17 @@ export function medir(U, opts) {
     if (v >= mitad - 0.6) return { ok: true, v };
     return { ok: false, v };
   };
+  let marcasExentas = 0;
   const radiosVistos = {};
   for (const e of todos) {
     const cs = getComputedStyle(e); const r = e.getBoundingClientRect();
     if (r.width < 4 || r.height < 4) continue;
     if (!cajaPropia(e, cs)) continue;
     const q = radioOk(e, cs, r); const k = String(Math.round(q.v * 10) / 10); radiosVistos[k] = (radiosVistos[k] || 0) + 1;
+    if (!q.ok && esMarca(e, q.v)) { marcasExentas++; continue; }
     if (!q.ok) add('c3.radio', 'radio ' + Math.round(q.v * 10) / 10 + 'px (permitidos 8, 12, píldora) ' + desc(e));
   }
-  stats.radios = radiosVistos;
+  stats.radios = radiosVistos; stats.marcasExentas = marcasExentas;
   const maxPad = movil ? U.padTarjetaMovil : U.padTarjeta;
   for (const e of tarjetas) {
     const cs = getComputedStyle(e);
@@ -233,6 +254,14 @@ export function medir(U, opts) {
     if (e.children.length < 2) continue;
     const g = Math.max(px(cs.rowGap), px(cs.columnGap));
     if (g > U.gapMax + 0.5) add('c3.gap', 'gap ' + g + 'px (máx. ' + U.gapMax + ') ' + desc(e));
+  }
+  // Cabecera de tabla: alto 36 (ESTILO §5). Solo tablas visibles de escritorio; en móvil la tabla pasa a tarjeta-fila.
+  if (!movil) {
+    for (const tr of document.querySelectorAll('thead tr')) {
+      if (oculto(tr) || !vis(tr)) continue;
+      const h = tr.getBoundingClientRect().height;
+      if (Math.abs(h - U.cabeceraTabla) > U.cabeceraTablaTol) add('c3.cabecera_tabla', 'cabecera de tabla ' + Math.round(h * 10) / 10 + 'px (norma ' + U.cabeceraTabla + ') ' + desc(tr));
+    }
   }
   // Margen de página = distancia entre el borde del contenedor de contenido y el primer bloque pintado (tarjeta, H1 o texto).
   const cont = document.querySelector('#contenido-principal') || document.querySelector('main');
@@ -308,18 +337,47 @@ export function medir(U, opts) {
     }
   }
 
-  // ═══ C5 · PRIMER PLIEGUE (solo 1440×900 y pantallas de tipo panel) ══════
+  // ═══ C5 · PRIMER PLIEGUE (1440×900; criterio según el TIPO de pantalla, ESTILO §6) ═══════════
+  //   resumen    KPI(4) de 112 ±8 → gráfica (plot ≥140) + «Requiere tu atención» (≥3 filas) visibles; SIN tabla
+  //   hub        KPI → gráfica (plot ≥140) + tabla de ≥10 filas
+  //   lista      KPI → tabla de ≥10 filas
+  //   formulario / asistente   ≥8 filas o campos
   if (o.pliegue) {
+    const tipo = o.tipo || 'hub';
+    const necesita = {
+      resumen: { kpi: 1, grafica: 1, atencion: 1, filas: 0 }, hub: { kpi: 1, grafica: 1, filas: U.filasPliegueLista },
+      lista: { kpi: 1, filas: U.filasPliegueLista }, formulario: { filas: U.filasPliegue }, asistente: { filas: U.filasPliegue },
+    }[tipo] || { kpi: 1, grafica: 1, filas: U.filasPliegue };
     const kp = todos.filter((e) => e.matches('.rv-kpis,.rv-kpi,[class*="kpi"]') && !e.closest(SHELL));
-    if (!kp.length) add('c5.kpi', 'sin tira de KPI');
-    else if (!kp.some((e) => e.getBoundingClientRect().bottom <= VH)) add('c5.kpi', 'la tira de KPI no cabe en el primer pliegue (' + VH + ' px)');
+    if (necesita.kpi) {
+      if (!kp.length) add('c5.kpi', 'sin tira de KPI');
+      else if (!kp.some((e) => e.getBoundingClientRect().bottom <= VH)) add('c5.kpi', 'la tira de KPI no cabe en el primer pliegue (' + VH + ' px)');
+      const tira = todos.find((e) => e.matches('.rv-kpis,[data-kpis]') && !e.closest(SHELL));
+      if (tira) { const h = tira.getBoundingClientRect().height; if (Math.abs(h - U.kpiTira) > U.kpiTiraTol) add('c5.kpi', 'la tira de KPI mide ' + Math.round(h) + 'px (norma ' + U.kpiTira + ' ±' + U.kpiTiraTol + ')'); }
+    }
     const grafs = [...document.querySelectorAll('svg')].filter((s) => !oculto(s) && vis(s) && !s.closest(SHELL) && s.getBoundingClientRect().width >= 200 && s.getBoundingClientRect().height >= 80 && !s.closest('button'));
-    if (!grafs.length) add('c5.grafica', 'sin gráfica principal');
-    else if (!grafs.some((s) => s.getBoundingClientRect().bottom <= VH)) add('c5.grafica', 'la gráfica principal no cabe completa en el primer pliegue');
-    const filas = [...document.querySelectorAll('tbody tr')].filter((t) => vis(t) && !oculto(t));
+    if (necesita.grafica) {
+      if (!grafs.length) add('c5.grafica', 'sin gráfica principal');
+      else if (!grafs.some((s) => s.getBoundingClientRect().bottom <= VH)) add('c5.grafica', 'la gráfica principal no cabe completa en el primer pliegue');
+      else if (!grafs.some((s) => s.getBoundingClientRect().bottom <= VH && s.getBoundingClientRect().height >= U.plotMin)) add('c5.grafica', 'la gráfica principal mide menos de ' + U.plotMin + ' px de alto');
+    }
+    if (necesita.atencion) {
+      const tit = todos.find((e) => /^h[1-6]$/i.test(e.tagName) && /requiere tu atenci[oó]n/i.test(e.textContent || ''));
+      const card = tit && (tarjetas.find((t) => t.contains(tit)) || tit.parentElement);
+      if (!card) add('c5.atencion', 'sin «Requiere tu atención»');
+      else {
+        const filasA = [...card.querySelectorAll('li,[role="listitem"],[class*="fila"],a[href]')].filter((x) => vis(x) && x.getBoundingClientRect().bottom <= VH);
+        if (card.getBoundingClientRect().bottom > VH) add('c5.atencion', '«Requiere tu atención» no cabe en el primer pliegue');
+        else if (filasA.length < U.atencionFilas) add('c5.atencion', '«Requiere tu atención» muestra ' + filasA.length + ' fila(s) (mín. ' + U.atencionFilas + ')');
+      }
+    }
+    const trs = [...document.querySelectorAll('tbody tr')].filter((t) => vis(t) && !oculto(t));
+    const campos = (tipo === 'formulario' || tipo === 'asistente')
+      ? [...document.querySelectorAll('input:not([type="hidden"]),select,textarea,[role="row"],.rv-paso,[data-paso]')].filter((t) => vis(t) && !oculto(t) && !t.closest(SHELL)) : [];
+    const filas = trs.concat(campos);
     const dentro = filas.filter((t) => t.getBoundingClientRect().bottom <= VH).length;
-    stats.pliegue = { kpis: kp.length, graficas: grafs.length, filasTotales: filas.length, filasVisibles: dentro };
-    if (dentro < U.filasPliegue) add('c5.filas', dentro + ' fila(s) de tabla en el primer pliegue (mín. ' + U.filasPliegue + '; hay ' + filas.length + ')');
+    stats.pliegue = { tipo, kpis: kp.length, graficas: grafs.length, filasTotales: filas.length, filasVisibles: dentro };
+    if (necesita.filas && dentro < necesita.filas) add('c5.filas', dentro + ' fila(s) en el primer pliegue (mín. ' + necesita.filas + '; hay ' + filas.length + ')');
   }
 
   // ═══ C6 · CHOQUES ═══════════════════════════════════════════════════════
@@ -416,6 +474,98 @@ export function medir(U, opts) {
     if (textosCapa.length) add('c8.sin_texto', 'texto visible en la carga: ' + textosCapa.slice(0, 3).map((e) => '"' + e.textContent.trim().slice(0, 24) + '"').join(', '));
     if (capa) { const bgc = bgDe(capa).c, bgb = rgba(getComputedStyle(document.body).backgroundColor); const bgbase = bgb[3] > 0 ? bgb : bgc; if (rgba(getComputedStyle(capa).backgroundColor)[3] < 0.99 || ratio(bgc, bgbase) > 1.001) add('c8.un_color', 'la capa no es de un solo color opaco igual al fondo de la app'); }
     stats.carga = { logos: logos.length, capaFija: !!capa };
+  }
+
+  // ═══ N · CRITERIOS NUEVOS (PLAN §4.2, N1–N8) ═══════════════════════════════════
+  // Contrato de selectores (los componentes v2 los respetan): sidebar `.rv-sb` con pie `.rv-sb__pie` (o `[data-sb-pie]`),
+  // cabecera móvil `.rv-cab-movil`, primario `.rv-btn--primary` (o `[data-variante="primario"]`), IDs en `code|kbd|samp|.rv-id|[data-mono="id"]`.
+  const oscuro = document.documentElement.getAttribute('data-theme') === 'dark';
+  if (!o.carga) {
+    const sb = [...document.querySelectorAll('.rv-sb')].find((e) => vis(e));
+    // N1 · primarios por pliegue y masas negras/blancas de navegación
+    const PRIM = '.rv-btn--primary,[data-variante="primario"],.btn-primary';
+    const prims = todos.filter((e) => e.matches(PRIM) && !e.closest(SHELL) && e.getBoundingClientRect().top < VH);
+    const solidos = btns.filter((e) => { if (e.closest(SHELL) || e.matches(PRIM)) return false; const cs2 = getComputedStyle(e); const bg = rgba(cs2.backgroundColor); const bgp = e.parentElement ? bgDe(e.parentElement).c : [255, 255, 255, 1]; return bg[3] > 0.9 && lum(bg) < 0.2 && ratio(blend(bg, bgp), bgp) >= 4 && e.getBoundingClientRect().top < VH; });
+    const nPrim = prims.length + solidos.length;
+    if (nPrim > 1) add('n1.primarios', nPrim + ' botones primarios en el primer pliegue (máx. 1): ' + [...prims, ...solidos].slice(0, 3).map(desc).join(' · '));
+    for (const e of todos.filter((x) => x.matches('.rv-sb a,.rv-sb [aria-current],.rv-hoja a,nav a,aside a,[aria-current="page"]'))) {
+      const cs2 = getComputedStyle(e); const r = e.getBoundingClientRect(); const bg = rgba(cs2.backgroundColor);
+      if (bg[3] < 0.9 || r.width * r.height < 1500) continue;
+      const l = lum(bg);
+      if ((!oscuro && l < 0.08) || (oscuro && l > 0.6)) add('n1.masa_nav', (oscuro ? 'bloque blanco' : 'bloque negro') + ' de navegación ' + Math.round(r.width) + '×' + Math.round(r.height) + ' ' + desc(e));
+    }
+    // N2 · mono solo en IDs/folios/trazas y captions de grupo del sidebar
+    const ID_TXT = /^(?:[A-Z]{1,5}-?\d{2,}|[0-9a-f]{8}-[0-9a-f-]{20,}|[0-9a-f]{7,40}|#?[A-Z0-9]{2,}-[A-Z0-9-]{3,})$/;
+    for (const e of conTexto) {
+      const fam = getComputedStyle(e).fontFamily.split(',')[0].replace(/["']/g, '').trim();
+      if (!/mono|courier|consolas|menlo/i.test(fam)) continue;
+      const t = [...e.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim();
+      if (e.matches('code,kbd,samp,.rv-id,[data-mono="id"],.rv-grupo__t,.rv-sb__cap') || ID_TXT.test(t)) continue;
+      add('n2.mono', 'mono (' + fam + ') fuera de IDs/captions: "' + t.slice(0, 24) + '" ' + desc(e));
+    }
+    // N3 · pie del sidebar: alto ≤150 y ningún ítem recortado (se mide a 1440×900 y a 1280×720)
+    if (sb) {
+      const pie = sb.querySelector('.rv-sb__pie,[data-sb-pie]');
+      if (pie) {
+        const pr = pie.getBoundingClientRect(), sr = sb.getBoundingClientRect();
+        stats.pie = { alto: Math.round(pr.height), viewport: VW + '×' + VH };
+        if (pr.height > U.pieMax + 0.5) add('n3.alto_pie', 'pie del sidebar ' + Math.round(pr.height) + 'px (máx. ' + U.pieMax + ')');
+        for (const it of pie.querySelectorAll('a,button,select,[role="button"],[role="radio"]')) {
+          if (oculto(it) || !vis(it)) continue;
+          const r = it.getBoundingClientRect();
+          const fuera = r.bottom > Math.min(sr.bottom, VH) + 0.5 || r.top < sr.top - 0.5;
+          let cortado = false; for (let q = it.parentElement; q && q !== sb.parentElement; q = q.parentElement) { const ov = getComputedStyle(q).overflowY; if (ov !== 'visible') { const qr = q.getBoundingClientRect(); if (r.bottom > qr.bottom + 0.5 || r.top < qr.top - 0.5) { cortado = true; break; } } }
+          if (fuera || cortado) add('n3.recorte', 'ítem del pie recortado a ' + VW + '×' + VH + ': ' + desc(it));
+        }
+      } else add('n3.alto_pie', 'sidebar sin pie identificable (.rv-sb__pie)');
+    }
+    // N4 · categorías abiertas del sidebar (≤1); la comparación de variantes entre pantallas la hace detectar.mjs con stats.sidebarFirma
+    if (sb) {
+      const nav = sb.querySelector('nav') || sb;
+      const grupos = [...nav.querySelectorAll('section,[data-categoria],details')].filter((g) => !/^agentes$/i.test((g.querySelector('h2,summary,[class*="grupo__t"]')?.textContent || '').trim()));
+      const abiertas = grupos.filter((g) => {
+        if (g.tagName === 'DETAILS') return g.open;
+        const tg = g.querySelector('[aria-expanded]'); if (tg) return tg.getAttribute('aria-expanded') === 'true';
+        const ul = g.querySelector('ul'); return !!ul && vis(ul) && ul.getBoundingClientRect().height > 0;
+      });
+      stats.categoriasAbiertas = abiertas.length;
+      if (abiertas.length > U.categoriasAbiertasMax) add('n4.categorias_abiertas', abiertas.length + ' categorías abiertas en el sidebar (máx. ' + U.categoriasAbiertasMax + ')');
+      stats.sidebarFirma = [...nav.querySelectorAll('a')].filter((a) => vis(a)).map((a) => (a.textContent || '').trim()).join('|') + '#' + abiertas.length;
+    }
+    // N5 · logo SVG: exactamente 1 instancia en el sidebar (≥768) o en la cabecera móvil (<768)
+    const marco = VW >= 768 ? sb : [...document.querySelectorAll('.rv-cab-movil')].find((e) => vis(e));
+    if (marco) {
+      const marcas = [...marco.querySelectorAll('[role="img"][aria-label="Likida"],svg[aria-label="Likida"],img[alt="Likida"]')].filter((e) => vis(e));
+      const esSvg = (e) => e.tagName.toLowerCase() === 'svg' || /\.svg(\?|$)/.test(e.getAttribute('src') || '') || !!e.querySelector('svg');
+      const svgs = marcas.filter(esSvg);
+      if (marcas.length === 0) add('n5.logo', 'sin logo en ' + (VW >= 768 ? 'el sidebar' : 'la cabecera móvil'));
+      else if (svgs.length !== 1 || marcas.length !== 1) add('n5.logo', marcas.length + ' marca(s), ' + svgs.length + ' en SVG (debe haber exactamente 1 instancia SVG) en ' + (VW >= 768 ? 'el sidebar' : 'la cabecera móvil'));
+    } else if (!o.sinShell) add('n5.logo', 'sin sidebar / cabecera móvil visible');
+    // N6 · cero falso: un «0» pelado en una cifra KPI / valor de barra sin fuente+periodo, o un cero monetario en una fila
+    //      cuyo estado dice que el dato falta o está sin revisar («$0.00 Revisar»). Un cuadre exacto de una fila cerrada es un cero observado.
+    const CERO = /^[\s$]*(?:MXN\s*)?[−-]?0(?:[.,]0+)?\s*(?:%|MXN|mil|M)?\s*$/;
+    const FALTA = /revisar|pendiente|sin dato|por cuadrar|en espera|incompleto/i;
+    for (const e of conTexto) {
+      if (e.children.length && ![...e.childNodes].every((n) => n.nodeType === 3 || n.nodeName === 'SPAN')) continue;
+      const t = (e.textContent || '').trim();
+      if (!CERO.test(t) || e.closest('[data-cero-fuente]')) continue;
+      if (e.matches(KPI_SEL + ',.rv-kpi__valor,[data-valor],.rv-barra__valor')) add('n6.falso_cero', '«' + t + '» sin fuente+periodo (dato desconocido debe ser «—») ' + desc(e));
+      else if (e.matches('td') && FALTA.test(e.closest('tr')?.textContent || '')) add('n6.falso_cero', '«' + t + '» en una fila que dice «revisar/pendiente» (el dato falta: «—») ' + desc(e));
+    }
+    // N7 · fixtures: folios repetidos, «Operador Uno», aviso sintético por tarjeta
+    const FOLIO = /^[A-Z]{1,4}-\d{3,}$/;
+    const folios = {}; for (const e of document.querySelectorAll('td,.rv-id,code,[data-mono="id"]')) { if (oculto(e) || !vis(e)) continue; const t = (e.textContent || '').trim(); if (FOLIO.test(t)) (folios[t] = folios[t] || []).push(e); }
+    for (const [t, l] of Object.entries(folios)) if (l.length > 1) add('n7.fixture', 'folio repetido ' + t + ' ×' + l.length);
+    const NOMBRES_FALSOS = /\b(?:operador|chofer|conductor|unidad|usuario)\s+(?:uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|de prueba(?:\s*\d+)?|\d+)\b|\b(?:ciudad alfa|puerto beta|villa gamma|valle delta)\b/i;
+    for (const e of conTexto) { const t = [...e.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(' '); const m = t.match(NOMBRES_FALSOS); if (m) add('n7.fixture', 'dato de caricatura «' + m[0] + '» ' + desc(e)); }
+    const avisos = conTexto.filter((e) => /sint[eé]tic/i.test([...e.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(' ')));
+    if (avisos.length > 1) add('n7.fixture', avisos.length + ' avisos «sintético» en la página (debe haber 1 por página, jamás por tarjeta)');
+    // N8 · esqueletos y chips «Observado» repetidos
+    for (const e of todos.filter((x) => x.matches('.skeleton,[class*="skeleton"],[class*="esqueleto"],.animate-pulse,[data-esqueleto]') && !x.closest(SHELL))) add('n8.esqueleto', 'esqueleto ' + desc(e));
+    const observados = conTexto.filter((e) => /^observado$/i.test((e.textContent || '').trim()) && e.matches('[class*="chip"],[class*="kind"],[class*="badge"],span'));
+    const enKpi = observados.filter((e) => e.closest('[class*="kpi"],.card,.rv-kpis'));
+    if (observados.length > 1) add('n8.observado', observados.length + ' chips «Observado» (el Observado va silencioso: punto 6 px + texto muted)');
+    else if (enKpi.length && enKpi[0].closest('[class*="kpi"]')) add('n8.observado', 'chip «Observado» dentro de una celda KPI');
   }
 
   // ── salida ──────────────────────────────────────────────────────────────

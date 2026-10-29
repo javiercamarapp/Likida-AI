@@ -13,6 +13,7 @@ export const CRITERIOS = {
   'c3.padding_tarjeta': ['c3 Padding/gap/radios', 'padding de tarjeta > 14 (móvil > 12)'],
   'c3.gap': ['c3 Padding/gap/radios', 'gap > 12'],
   'c3.padding_pagina': ['c3 Padding/gap/radios', 'padding de página ≠ 24 (≥1024) / > 16 (móvil)'],
+  'c3.cabecera_tabla': ['c3 Padding/gap/radios', 'cabecera de tabla ≠ 36 px'],
   'c4.hueco_fila': ['c4 Espacio vacío', 'fila de tarjetas que no llena el ancho (> 12 % libre)'],
   'c4.aire_inferior': ['c4 Espacio vacío', 'aire inferior de tarjeta > 24 px o > 25 % del alto'],
   'c4.min_height_decorativo': ['c4 Espacio vacío', 'min-height que deja aire interior'],
@@ -20,6 +21,7 @@ export const CRITERIOS = {
   'c5.kpi': ['c5 Primer pliegue', 'sin tira de KPI en 1440×900'],
   'c5.grafica': ['c5 Primer pliegue', 'sin gráfica principal en 1440×900'],
   'c5.filas': ['c5 Primer pliegue', 'menos de 8 filas de tabla en 1440×900'],
+  'c5.atencion': ['c5 Primer pliegue', '«Requiere tu atención» ausente o con < 3 filas en el pliegue (resumen)'],
   'c6.desborde': ['c6 Choques', 'desborde horizontal'],
   'c6.recorte': ['c6 Choques', 'texto recortado / truncado en botón, cifra, etiqueta'],
   'c6.solape': ['c6 Choques', 'hermanos solapados'],
@@ -31,6 +33,18 @@ export const CRITERIOS = {
   'c8.solo_la_capa': ['c8 Carga', 'shell visible junto a la carga'],
   'c8.sin_texto': ['c8 Carga', 'texto visible durante la carga'],
   'c8.un_color': ['c8 Carga', 'capa que no es de un color opaco'],
+  'c9.duracion': ['c9 Movimiento', 'duración fuera de los tokens (en style="" del HTML)'],
+  'n1.primarios': ['N1 Primarios', 'más de 1 botón primario en el pliegue'],
+  'n1.masa_nav': ['N1 Primarios', 'bloque negro (claro) o blanco (oscuro) de navegación'],
+  'n2.mono': ['N2 Mono', 'font-family mono fuera de IDs y captions de sidebar'],
+  'n3.alto_pie': ['N3 Pie sidebar', 'pie del sidebar > 150 px'],
+  'n3.recorte': ['N3 Pie sidebar', 'ítem del pie recortado (1440×900 y 1280×720)'],
+  'n4.categorias_abiertas': ['N4 Categorías', 'más de 1 categoría abierta en el sidebar'],
+  'n5.logo': ['N5 Logo', 'logo SVG ≠ 1 instancia en sidebar / cabecera móvil'],
+  'n6.falso_cero': ['N6 Cero falso', '«0» donde el dato es desconocido (sin fuente+periodo)'],
+  'n7.fixture': ['N7 Fixtures', 'folios repetidos, nombres de caricatura, avisos sintéticos por tarjeta'],
+  'n8.esqueleto': ['N8 Esqueletos', 'esqueleto en pantalla'],
+  'n8.observado': ['N8 Esqueletos', 'chip «Observado» repetido o dentro de un KPI'],
 };
 
 const suma = (o, ks) => ks.reduce((a, k) => a + (o[k] || 0), 0);
@@ -57,6 +71,10 @@ export function informe(S) {
     if (!S.meta.anchos.includes(Number(comb.split('/')[0])) || !S.meta.temas.includes(comb.split('/')[1])) continue;
     L.push('', `## Detalle en ${comb} (elementos en falta por familia)`, '', `| Pantalla | ${familias.map((f) => f.split(' ')[0]).join(' | ')} |`, `|---|${familias.map(() => '---:').join('|')}|`);
     for (const p of ids) { const c = S.pantallas[p].combinaciones[comb]; if (!c) continue; L.push(`| ${p} | ${familias.map((f) => suma(c.n, claves.filter((k) => CRITERIOS[k][0] === f))).join(' | ')} |`); }
+  }
+  if (S.global) {
+    L.push('', '## Globales (no pertenecen a una sola pantalla)', '', '| Criterio | Hallazgos | Ejemplos |', '|---|---:|---|');
+    for (const [k, g] of Object.entries(S.global)) L.push(`| \`${k}\` | ${g.n} | ${g.hallazgos.slice(0, 3).map((x) => x.replace(/\|/g, '/')).join(' · ')} |`);
   }
   L.push('', '## Por ancho (suma de todas las pantallas)', '', `| Ancho/tema | ${familias.map((f) => f.split(' ')[0]).join(' | ')} | Total |`, `|---|${familias.map(() => '---:').join('|')}|---:|`);
   for (const w of S.meta.anchos) for (const t of S.meta.temas) {
