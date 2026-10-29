@@ -1,15 +1,15 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LogOut } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { moduloProximamenteDeRuta, rutaProximamente, type PerfilTenant } from '@/lib/auth/visibilidad';
 import type { Item } from '../rutas';
 import { useSufijoYRol } from '../sidebar-nav';
-import { EnlaceCuenta } from '../enlace-cuenta';
-import { SelectorTema } from '../../selector-tema';
-import { WidgetUso } from '../../admin/ui/kit';
-import { menuPorPerfil, hrefActivo, type MenuV2 } from './menu-por-perfil';
+import { OPCIONES_TEMA, useTema } from '../../selector-tema';
+import { menuPorPerfil, hrefActivo, HREF_NOTIFICACIONES, HREF_PUESTA_EN_MARCHA, HREFS_MENU_CUENTA, type MenuV2, type GrupoMenu } from './menu-por-perfil';
+import MenuCuenta from './menu-cuenta';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA NAVEGACIÓN v2 — una sola pieza para el sidebar de escritorio y la hoja «Más» del móvil.
@@ -17,33 +17,30 @@ import { menuPorPerfil, hrefActivo, type MenuV2 } from './menu-por-perfil';
 // Contrato que NO se rompe (de las pruebas de navegación y de los e2e): enlaces `<a href>` reales, el mismo sufijo
 // `?tenant/?vista/?rol` en cada uno (`useSufijoYRol`, EXPORTADO desde `sidebar-nav.tsx` y reutilizado, no copiado),
 // los mismos nombres de siempre, y `aria-current="page"` en el ítem activo (el sidebar de siempre no lo tenía).
+//
+// ESTRUCTURA (ESTILO-LIKIDA §4): Resumen → AGENTES (caption estático + ítems sueltos, siempre visibles) → acordeón de
+// UNA sola categoría abierta → pie fijo (Notificaciones · Puesta en marcha <6/6 · tema · tarjeta de cuenta).
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Iniciales para el avatar de la tarjeta de cuenta (mientras llega el Monograma de las primitivas). */
-export function iniciales(nombre: string | null): string {
-  const partes = (nombre ?? '').trim().split(/\s+/).filter(Boolean);
-  if (partes.length === 0) return 'F';
-  const dos = partes.length > 1 ? partes[0][0] + partes[partes.length - 1][0] : partes[0].slice(0, 2);
-  return dos.toUpperCase();
-}
+export { iniciales, anclaDe, avanceDe } from './nav-utiles';
+import { iniciales, anclaDe, avanceDe } from './nav-utiles';
 
-/** `/dashboard/agentes/peajes` → `agentes-peajes`; la raíz → `resumen`. */
-export function anclaDe(href: string): string {
-  return href.replace(/^\/dashboard\/?/, '').replace(/\//g, '-') || 'resumen';
-}
+type Insignias = Record<string, string> | undefined;
 
-function Fila({ item, sufijo, activo, perfil, insignia, alNavegar }: {
-  item: Item; sufijo: string; activo: boolean; perfil?: PerfilTenant | null; insignia?: string; alNavegar?: () => void;
+function Fila({ item, sufijo, activo, perfil, insignia, alNavegar, claseExtra }: {
+  item: Item; sufijo: string; activo: boolean; perfil?: PerfilTenant | null; insignia?: string; alNavegar?: () => void; claseExtra?: string;
 }) {
   // «Próximamente» (fase 1 del perfil): el módulo se ve pero su enlace va a la pantalla única de anuncio.
   const modulo = perfil ? moduloProximamenteDeRuta(perfil, item.href) : null;
   const destino = modulo ? rutaProximamente(modulo) : item.href;
   const esActivo = activo && !modulo;
+  // Contador de pendientes: solo si es un número > 0 («requiere acción tuya»); si no, ausente.
+  const n = insignia && /^\d+$/.test(insignia) ? Number(insignia) : 0;
   return (
     <li>
       <Link
         href={`${destino}${sufijo}`}
-        className="rv-item"
+        className={claseExtra ? `rv-item ${claseExtra}` : 'rv-item'}
         aria-current={esActivo ? 'page' : undefined}
         aria-label={modulo ? `${item.nombre}, próximamente` : undefined}
         title={modulo ? `${item.nombre} (Próximamente)` : item.nombre}
@@ -54,88 +51,136 @@ function Fila({ item, sufijo, activo, perfil, insignia, alNavegar }: {
         <item.Icono className="rv-item__ico" width={16} height={16} strokeWidth={1.75} aria-hidden />
         <span className="rv-item__txt">{item.nombre}</span>
         {modulo && <span className="rv-chip" aria-hidden>Próximamente</span>}
-        {!modulo && insignia && <span className="rv-insignia">{insignia}</span>}
+        {!modulo && n > 0 && <span className="rv-contador" aria-label={`${n} pendientes`}>{n > 99 ? '99+' : n}</span>}
       </Link>
     </li>
   );
 }
 
-function Lista({ items, ...resto }: { items: Item[]; sufijo: string; activo: string | null; perfil?: PerfilTenant | null; insignias?: Record<string, string>; alNavegar?: () => void }) {
+function Lista({ items, sufijo, activo, perfil, insignias, alNavegar }: {
+  items: Item[]; sufijo: string; activo: string | null; perfil?: PerfilTenant | null; insignias?: Insignias; alNavegar?: () => void;
+}) {
   return (
     <ul className="rv-lista">
       {items.map((it) => (
-        <Fila key={it.href} item={it} sufijo={resto.sufijo} activo={resto.activo === it.href} perfil={resto.perfil}
-          insignia={resto.insignias?.[it.href]} alNavegar={resto.alNavegar} />
+        <Fila key={it.href} item={it} sufijo={sufijo} activo={activo === it.href} perfil={perfil}
+          insignia={insignias?.[it.href]} alNavegar={alNavegar} />
       ))}
     </ul>
   );
 }
 
-/** El árbol completo: Resumen, grupos y (opcional) pie. Lo pinta el sidebar y la hoja «Más». */
-export function ArbolMenu({ menu, sufijo, pathname, perfil, insignias, alNavegar, conPie = false }: {
+/** Los ítems de un grupo, sin «Puesta en marcha» cuando el asistente va <6/6 (ahí vive como fila del pie, no duplicada). */
+function itemsVisibles(g: GrupoMenu, insignias: Insignias): Item[] {
+  return insignias?.[HREF_PUESTA_EN_MARCHA] ? g.items.filter((i) => i.href !== HREF_PUESTA_EN_MARCHA) : g.items;
+}
+
+/**
+ * El árbol: Resumen, grupos y (opcional) pie. Lo pinta el sidebar (con acordeón de UNA categoría abierta) y la hoja «Más»
+ * (`plano`: todo el árbol a la vista, sin acordeón).
+ */
+export function ArbolMenu({ menu, sufijo, pathname, perfil, insignias, alNavegar, conPie = false, plano = false }: {
   menu: MenuV2; sufijo: string; pathname: string; perfil?: PerfilTenant | null;
-  insignias?: Record<string, string>; alNavegar?: () => void; conPie?: boolean;
+  insignias?: Insignias; alNavegar?: () => void; conPie?: boolean; plano?: boolean;
 }) {
   const activo = hrefActivo(pathname, menu);
   const props = { sufijo, activo, perfil, insignias, alNavegar };
+  const colapsables = menu.grupos.filter((g) => !g.estatico && !plano);
+  const grupoDelActivo = menu.grupos.find((g) => !g.estatico && g.items.some((i) => i.href === activo))?.id ?? null;
+  // Siempre UNA sola categoría abierta. Navegar a una ruta de otra categoría la abre (y cierra la que estaba abierta): se ajusta
+  // durante el render (patrón de React para estado derivado de una prop), no en un efecto.
+  const [est, setEst] = useState<{ ref: string | null; abierta: string | null }>({ ref: grupoDelActivo, abierta: grupoDelActivo ?? colapsables[0]?.id ?? null });
+  if (est.ref !== grupoDelActivo) setEst({ ref: grupoDelActivo, abierta: grupoDelActivo ?? est.abierta });
+  const abierta = est.abierta;
+  const setAbierta = (id: string | null) => setEst({ ref: est.ref, abierta: id });
+
   return (
     <>
       {menu.resumen.length > 0 && <Lista items={menu.resumen} {...props} />}
-      {menu.grupos.map((g) => (
-        <section key={g.id} aria-labelledby={`rv-g-${g.id}`} className="rv-grupo">
-          <h2 id={`rv-g-${g.id}`} className="rv-grupo__t">{g.titulo}</h2>
-          <Lista items={g.items} {...props} />
-        </section>
-      ))}
+      {menu.grupos.map((g) => {
+        const items = itemsVisibles(g, insignias);
+        if (items.length === 0) return null;
+        const idT = `rv-g-${g.id}`;
+        if (g.estatico || plano) {
+          return (
+            <section key={g.id} aria-labelledby={idT} className="rv-grupo" data-estatico>
+              <h2 id={idT} className="rv-grupo__t">{g.titulo}</h2>
+              <Lista items={items} {...props} />
+            </section>
+          );
+        }
+        const esta = abierta === g.id;
+        return (
+          <section key={g.id} aria-labelledby={idT} className="rv-grupo" data-abierto={esta ? '' : undefined}>
+            <h2 className="rv-grupo__h">
+              <button type="button" id={idT} className="rv-grupo__t rv-grupo__tog" aria-expanded={esta} aria-controls={`${idT}-c`}
+                onClick={() => setAbierta(esta ? null : g.id)}>
+                <span className="rv-grupo__tt">{g.titulo}</span>
+                <ChevronDown className="rv-grupo__chev" width={14} height={14} strokeWidth={1.75} aria-hidden />
+              </button>
+            </h2>
+            <div id={`${idT}-c`} className="rv-grupo__cuerpo" role="region" aria-labelledby={idT}>
+              <div className="rv-grupo__int"><Lista items={items} {...props} /></div>
+            </div>
+          </section>
+        );
+      })}
       {conPie && menu.pie.length > 0 && <Lista items={menu.pie} {...props} />}
     </>
   );
 }
 
-/** El pie: tema y tarjeta de cuenta (avatar, nombre, rol y salir). */
-export function PieCuenta({ nombre, rol, rolEtiqueta, cerrarSesion }: { nombre: string | null; rol: string; rolEtiqueta: string; cerrarSesion?: () => Promise<void> }) {
+/** Tema segmentado visible (claro / sistema / oscuro): 3 iconos, alto total 32. */
+function TemaSegmentado() {
+  const { tema, elegir } = useTema();
   return (
-    <div className="rv-cuenta">
-      <span className="rv-avatar" aria-hidden>{iniciales(nombre)}</span>
-      <div className="rv-cuenta__txt">
-        {/* Mismo contrato de sufijo que el menú: un superadmin que previsualiza una flota no pierde `?tenant=`. */}
-        <EnlaceCuenta rol={rol} className="rv-cuenta__nombre">{(nombre ?? '').trim() || 'Mi cuenta'}</EnlaceCuenta>
-        <div className="rv-cuenta__rol">{rolEtiqueta}</div>
-      </div>
-      {cerrarSesion && (
-        <form action={cerrarSesion} className="rv-cuenta__salir">
-          <button type="submit" title="Cerrar sesión" aria-label="Cerrar sesión" className="rv-icono-boton">
-            <LogOut width={14} height={14} strokeWidth={1.75} aria-hidden />
-          </button>
-        </form>
-      )}
+    <div role="radiogroup" aria-label="Tema de la interfaz" className="rv-tema">
+      {OPCIONES_TEMA.map(({ valor, Icono, rotulo }) => (
+        <button key={valor} type="button" role="radio" aria-checked={tema === valor} aria-label={rotulo} title={rotulo}
+          className="rv-tema__op" onClick={() => elegir(valor)}>
+          <Icono width={14} height={14} strokeWidth={1.75} aria-hidden />
+        </button>
+      ))}
     </div>
   );
 }
 
-/** El pie compartido: ítems fijos, uso de IA (solo sin perfil), selector de tema y cuenta. */
+/** «Puesta en marcha» en el pie (solo <6/6): 6 segmentos de 6 px + «3/6»; es un enlace al asistente. */
+function FilaPuesta({ avance, sufijo, alNavegar, activo }: { avance: { n: number; t: number }; sufijo: string; alNavegar?: () => void; activo: boolean }) {
+  const t = Math.min(Math.max(avance.t, 1), 12);
+  return (
+    <Link href={`${HREF_PUESTA_EN_MARCHA}${sufijo}`} className="rv-puesta" aria-current={activo ? 'page' : undefined}
+      aria-label={`Puesta en marcha, ${avance.n} de ${avance.t}`} title="Puesta en marcha" data-tour="nav-puesta-en-marcha" onClick={alNavegar}>
+      <span className="rv-puesta__txt">Puesta en marcha</span>
+      <span className="rv-puesta__seg" aria-hidden>
+        {Array.from({ length: t }, (_, i) => <i key={i} data-on={i < avance.n ? '' : undefined} />)}
+      </span>
+      <span className="rv-puesta__n" aria-hidden>{avance.n}/{avance.t}</span>
+    </Link>
+  );
+}
+
+/** El pie fijo (≤150): Notificaciones · Puesta en marcha (<6/6) · tema · tarjeta de cuenta. Mi perfil y Ayuda viven en el menú de la tarjeta. */
 export function PieMenu({ menu, sufijo, pathname, perfil, rol, rolEtiqueta, nombre, usoIa, cerrarSesion, insignias, alNavegar }: {
   menu: MenuV2; sufijo: string; pathname: string; perfil?: PerfilTenant | null; rol: string; rolEtiqueta: string; nombre: string | null;
-  usoIa?: { pct: number } | null; cerrarSesion?: () => Promise<void>; insignias?: Record<string, string>; alNavegar?: () => void;
+  usoIa?: { pct: number } | null; cerrarSesion?: () => Promise<void>; insignias?: Insignias; alNavegar?: () => void;
 }) {
   const activo = hrefActivo(pathname, menu);
+  const notificaciones = menu.pie.filter((i) => i.href === HREF_NOTIFICACIONES);
+  // Lo que no es Notificaciones ni vive en el menú de la tarjeta (p. ej. Plan y Configuración del menú genérico) sigue como fila.
+  const otros = menu.pie.filter((i) => i.href !== HREF_NOTIFICACIONES && !(HREFS_MENU_CUENTA as readonly string[]).includes(i.href));
+  const filasMenuCuenta = menu.pie.filter((i) => (HREFS_MENU_CUENTA as readonly string[]).includes(i.href));
+  const avance = avanceDe(insignias?.[HREF_PUESTA_EN_MARCHA]);
+  const enMenu = menu.grupos.some((g) => g.items.some((i) => i.href === HREF_PUESTA_EN_MARCHA));
   return (
-    <>
-      {usoIa !== undefined && !perfil && (
-        <div className="rv-uso">
-          <WidgetUso
-            etiqueta="Análisis con IA · hoy"
-            valor={usoIa ? `${usoIa.pct}%` : null}
-            detalle={usoIa ? 'del análisis incluido hoy — se renueva a medianoche' : undefined}
-            tope={usoIa ? { usado: usoIa.pct, limite: 100 } : null}
-            href={`/dashboard/chat${sufijo}`} hrefTexto="Preguntar a tus datos"
-          />
-        </div>
-      )}
-      {menu.pie.length > 0 && <Lista items={menu.pie} sufijo={sufijo} activo={activo} perfil={perfil} insignias={insignias} alNavegar={alNavegar} />}
-      <div className="rv-tema"><SelectorTema /></div>
-      <PieCuenta nombre={nombre} rol={rol} rolEtiqueta={rolEtiqueta} cerrarSesion={cerrarSesion} />
-    </>
+    <div className="rv-pie">
+      {notificaciones.length > 0 && <Lista items={notificaciones} sufijo={sufijo} activo={activo} perfil={perfil} insignias={insignias} alNavegar={alNavegar} />}
+      {otros.length > 0 && <Lista items={otros} sufijo={sufijo} activo={activo} perfil={perfil} insignias={insignias} alNavegar={alNavegar} />}
+      {avance && enMenu && <FilaPuesta avance={avance} sufijo={sufijo} alNavegar={alNavegar} activo={activo === HREF_PUESTA_EN_MARCHA} />}
+      <TemaSegmentado />
+      <MenuCuenta nombre={nombre} rol={rol} rolEtiqueta={rolEtiqueta} sufijo={sufijo} filas={filasMenuCuenta} usoIaPct={usoIa === undefined || perfil ? undefined : usoIa?.pct ?? null}
+        cerrarSesion={cerrarSesion} alNavegar={alNavegar} iniciales={iniciales(nombre)} />
+    </div>
   );
 }
 

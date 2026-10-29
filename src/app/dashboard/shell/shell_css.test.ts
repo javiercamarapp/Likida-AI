@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   CORTE_MOVIL_PX, CORTE_SIDEBAR_COMPLETO_PX, ANCHO_SIDEBAR_PX, ANCHO_RIEL_PX, ALTO_CABECERA_ESCRITORIO_PX,
-  ALTO_CABECERA_MOVIL_PX, ALTO_ITEM_PX, GROSOR_SENAL_PX,
+  ALTO_CABECERA_MOVIL_PX, ALTO_ITEM_PX, GROSOR_SENAL_PX, ALTO_PIE_MAX_PX, MARCO_PX,
 } from '../../marco-v2';
 
 // El CSS del shell repite en px las medidas de `marco-v2.ts`; aquí se cruzan. También se prueba la invariante de las
@@ -34,7 +34,12 @@ describe('shell.css ↔ marco-v2.ts', () => {
     expect(regla('[data-ui="v2"] .rv-cab-movil')).toContain(`height: ${ALTO_CABECERA_MOVIL_PX}px`);
     expect(regla('[data-ui="v2"] .rv-cab-esc', sinComentarios.indexOf('@media (min-width: 768px)'))).toContain(`height: ${ALTO_CABECERA_ESCRITORIO_PX}px`);
     expect(regla('[data-ui="v2"] .rv-item', sinComentarios.indexOf('.rv-item {'))).toContain(`height: ${ALTO_ITEM_PX}px`);
-    expect(regla('[data-ui="v2"] .rv-item[aria-current="page"]::before')).toContain(`width: ${GROSOR_SENAL_PX}px`);
+    // Activo = fondo suave + barra de tinta de 3 px (`inset 3px 0 0`), nunca bloque negro/blanco ni barra de color.
+    const activo = regla('[data-ui="v2"] .rv-item[aria-current="page"]');
+    expect(activo).toContain(`inset ${GROSOR_SENAL_PX}px 0 0 var(--ink)`);
+    expect(activo).toContain('background: var(--ui-soft)');
+    expect(activo).not.toMatch(/background:\s*var\(--marca\)/);
+    expect(regla('[data-ui="v2"] .rv-fila', sinComentarios.indexOf('@media (min-width: 768px)'))).toContain(`padding: ${MARCO_PX}px`);
   });
 });
 
@@ -60,8 +65,7 @@ describe('una sola navegación visible a la vez', () => {
     expect(bloque).toContain('clip-path: inset(50%)');
   });
 
-  it('la hoja «Más» respeta el área segura de abajo y la cabecera móvil la de arriba', () => {
-    expect(CSS).toContain('env(safe-area-inset-bottom)');
+  it('la cabecera móvil respeta el área segura de arriba (la hoja «Más» es el Drawer de overlay.css)', () => {
     expect(regla('[data-ui="v2"] .rv-cab-movil')).toContain('env(safe-area-inset-top)');
   });
 });
@@ -73,5 +77,23 @@ describe('movimiento', () => {
     const dentro = sinComentarios.slice(sinComentarios.indexOf('@media (prefers-reduced-motion: no-preference)'));
     const cierre = dentro.indexOf('\n}\n');
     expect([...dentro.slice(0, cierre).matchAll(/transition:/g)].length).toBe(transiciones);
+  });
+});
+
+describe('pie del sidebar y tokens de shell', () => {
+  it('el pie cabe en el techo: 32 + 24 + 32 + 44 + 3 huecos de 4 + borde y relleno ≤ 150', () => {
+    const suma = 32 + 24 + 32 + 44 + 3 * 4 + 1 /* borde */ + 2 + 3 /* relleno */;
+    expect(suma).toBeLessThanOrEqual(ALTO_PIE_MAX_PX);
+    expect(regla('[data-ui="v2"] .rv-tema')).toContain('height: 32px');
+    expect(regla('[data-ui="v2"] .rv-cuenta')).toContain('height: 44px');
+    expect(regla('[data-ui="v2"] .rv-puesta')).toContain('height: 24px');
+  });
+
+  it('los tokens de shell de tokens.css repiten las constantes', () => {
+    const t = readFileSync(fileURLToPath(new URL('../../ui-v2/tokens.css', import.meta.url)), 'utf8');
+    for (const [k, v] of Object.entries({ '--sb-w': ANCHO_SIDEBAR_PX, '--rail-w': ANCHO_RIEL_PX, '--topbar-h': ALTO_CABECERA_ESCRITORIO_PX,
+      '--cab-movil-h': ALTO_CABECERA_MOVIL_PX, '--item-h': ALTO_ITEM_PX, '--pie-max': ALTO_PIE_MAX_PX, '--marco-pad': MARCO_PX })) {
+      expect(t, k).toMatch(new RegExp(`${k}:\\s*${v}px`));
+    }
   });
 });
