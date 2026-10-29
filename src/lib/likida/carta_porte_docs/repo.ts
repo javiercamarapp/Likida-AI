@@ -1145,12 +1145,15 @@ export type EstadoEnvioTms =
 export interface EnvioTmsFila {
   id: string; tenantId: string; documentoId: string; versionDoc: number; idempotencyKey: string;
   estado: EstadoEnvioTms; plantilla: 'normal' | 'nueva'; intentos: number;
+  /** A3-09: la referencia del TMS y cuándo se envió/creó, para avisar «ya se subió una versión anterior». */
+  referenciaTms?: string | null; enviadoEn?: string | null; creadoEn?: string | null;
 }
 
-const COLUMNAS_ENVIO = 'id, tenant_id, documento_id, version_doc, idempotency_key, estado, plantilla, intentos';
+const COLUMNAS_ENVIO = 'id, tenant_id, documento_id, version_doc, idempotency_key, estado, plantilla, intentos, referencia_tms, enviado_en, created_at';
 const aEnvio = (f: Fila): EnvioTmsFila => ({
   id: String(f.id), tenantId: String(f.tenant_id), documentoId: String(f.documento_id), versionDoc: Number(f.version_doc),
   idempotencyKey: String(f.idempotency_key), estado: f.estado as EstadoEnvioTms, plantilla: f.plantilla as EnvioTmsFila['plantilla'], intentos: Number(f.intentos ?? 0),
+  referenciaTms: s(f.referencia_tms), enviadoEn: s(f.enviado_en), creadoEn: s(f.created_at),
 });
 
 export async function envioPorLlave(tenantId: string, idempotencyKey: string): Promise<EnvioTmsFila | null> {

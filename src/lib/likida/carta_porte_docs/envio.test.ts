@@ -10,7 +10,7 @@ vi.mock('../carta_porte_datos', async (orig) => ({ ...(await orig<typeof import(
 import { api as repoFalso, estado, reset } from './repo_falso.fixture';
 import { A, ACTOR, B, USUARIO_B, llmBoreal, sembrarFlotas, subirYProcesar } from './escenario.fixture';
 import { aprobarDocumento, corregirCampos, crearViajeDeDocumento, reabrirDocumento } from './bandeja';
-import { MENSAJE_FUNCION_NO_DISPONIBLE, fijarGuardiaPerfil, llaveDeEnvio, marcarSubidoAMano, prepararEnvioTms } from './envio';
+import { MENSAJE_FUNCION_NO_DISPONIBLE, MENSAJE_REFERENCIA_OBLIGATORIA, fijarGuardiaPerfil, llaveDeEnvio, marcarSubidoAMano, prepararEnvioTms } from './envio';
 import { aplicarSalidaViaje } from './salida';
 import { llmFalso, lecturaBoreal } from './llm_falso.fixture';
 import { pdfBoreal } from './documentos_sinteticos.fixture';
@@ -152,11 +152,39 @@ describe('las flotas sin perfil conservan el viaje de siempre', () => {
   });
 });
 
+describe('A3-02 y A3-09 (cierre100): avisos al aprobar bajo el perfil', () => {
+  it('A3-02: aprobar sin folio del cliente avisa que no se podrá ligar con su viaje del TMS (y lo deja en la bitácora)', async () => {
+    const { id, doc } = await documentoSinOperador();
+    delete doc().extraccion!.campos.folio_cliente;
+    const r = await aprobarDocumento(A, id, doc().version, ACTOR);
+    expect(r.avisoSinFolio).toMatch(/no trae folio del cliente/);
+    expect(estado.eventos.some((e) => e.documentoId === id && e.tipo === 'aprobado' && (e.detalle as { avisoSinFolio?: boolean })?.avisoSinFolio === true)).toBe(true);
+  });
+
+  it('A3-02: con folio no hay aviso', async () => {
+    const { id, doc } = await documentoSinOperador();
+    const r = await aprobarDocumento(A, id, doc().version, ACTOR);
+    expect(r.avisoSinFolio).toBeUndefined();
+  });
+
+  it('A3-09: reabrir y reaprobar un documento ya subido a mano avisa con la fecha y la referencia de la carga previa', async () => {
+    const { id, doc } = await documentoSinOperador();
+    const primera = await aprobarDocumento(A, id, doc().version, ACTOR);
+    expect(primera.avisoEnvioPrevio).toBeUndefined();
+    await marcarSubidoAMano(A, doc(), doc().version, ACTOR, 'REQ-5');
+    await reabrirDocumento(A, id, doc().version, ACTOR.id);
+    expect(estado.eventos.find((e) => e.documentoId === id && e.tipo === 'reabierto')?.detalle).toMatchObject({ cargaPreviaAlTms: true });
+    await corregirCampos(A, id, doc().version, [{ campo: 'origen_cp', renglon: null, valor: '66601' }], ACTOR.id);
+    const segunda = await aprobarDocumento(A, id, doc().version, ACTOR);
+    expect(segunda.avisoEnvioPrevio).toMatch(/ya se subió a mano al TMS.*\(ref\. REQ-5\).*segunda carga/);
+  });
+});
+
 describe('modo manual: «Ya la subí a mano»', () => {
   it('cierra el envío pendiente, deja el evento y el worker ya no lo reclama', async () => {
     const { id, doc } = await documentoSinOperador();
     await aprobarDocumento(A, id, doc().version, ACTOR);
-    const r = await marcarSubidoAMano(A, doc(), doc().version, ACTOR);
+    const r = await marcarSubidoAMano(A, doc(), doc().version, ACTOR, 'REQ-1');
     expect(r).toMatchObject({ ok: true, yaEstaba: false });
     expect(estado.envios).toHaveLength(1);
     expect(estado.envios[0].estado).toBe('subido_a_mano');
@@ -170,7 +198,7 @@ describe('modo manual: «Ya la subí a mano»', () => {
   it('es idempotente: la segunda vez devuelve el mismo envío sin segundo evento', async () => {
     const { id, doc } = await documentoSinOperador();
     await aprobarDocumento(A, id, doc().version, ACTOR);
-    await marcarSubidoAMano(A, doc(), doc().version, ACTOR);
+    await marcarSubidoAMano(A, doc(), doc().version, ACTOR, 'REQ-1');
     const dos = await marcarSubidoAMano(A, doc(), doc().version, ACTOR);
     expect(dos).toMatchObject({ ok: true, yaEstaba: true });
     expect(estado.envios).toHaveLength(1);
@@ -225,6 +253,16 @@ describe('modo manual: «Ya la subí a mano»', () => {
     expect((estado.envios[0] as unknown as { referenciaTms: string | null }).referenciaTms).toBe('REQ-77813');
   });
 
+  it('A3-02 (cierre100): bajo el perfil, sin la referencia del TMS NO se da por subido a mano (no se podría ligar con su viaje)', async () => {
+    const { id, doc } = await documentoSinOperador();
+    await aprobarDocumento(A, id, doc().version, ACTOR);
+    expect(await marcarSubidoAMano(A, doc(), doc().version, ACTOR)).toEqual({ ok: false, motivo: 'error', mensaje: MENSAJE_REFERENCIA_OBLIGATORIA });
+    expect(await marcarSubidoAMano(A, doc(), doc().version, ACTOR, '   ')).toMatchObject({ ok: false });
+    expect(estado.envios[0].estado).not.toBe('subido_a_mano');
+    expect(tipos(id)).not.toContain('envio_subido_a_mano');
+    expect(await marcarSubidoAMano(A, doc(), doc().version, ACTOR, 'REQ-9')).toMatchObject({ ok: true });
+  });
+
   it('A37-A3-01: una referencia inválida (muy larga o con controles) se rechaza sin marcar nada', async () => {
     const { id, doc } = await documentoSinOperador();
     await aprobarDocumento(A, id, doc().version, ACTOR);
@@ -237,7 +275,7 @@ describe('modo manual: «Ya la subí a mano»', () => {
     const { id, doc } = await documentoSinOperador();
     await aprobarDocumento(A, id, doc().version, ACTOR);
     estado.envios[0].estado = 'rechazado_tms';
-    const r = await marcarSubidoAMano(A, doc(), doc().version, ACTOR);
+    const r = await marcarSubidoAMano(A, doc(), doc().version, ACTOR, 'REQ-1');
     expect(r).toMatchObject({ ok: true, yaEstaba: false });
     expect(estado.envios[0].estado).toBe('subido_a_mano');
     expect(tipos(id).filter((t) => t === 'envio_subido_a_mano')).toHaveLength(1);
@@ -254,7 +292,7 @@ describe('modo manual: «Ya la subí a mano»', () => {
     // Carrera: entre la lectura y el UPDATE el envío pasa a «enviado».
     repoFalso.marcarEnvioSubidoAMano = async () => { e.estado = 'enviado'; return false; };
     try {
-      expect(await marcarSubidoAMano(A, doc(), doc().version, ACTOR)).toMatchObject({ ok: false, motivo: 'ya_enviado' });
+      expect(await marcarSubidoAMano(A, doc(), doc().version, ACTOR, 'REQ-1')).toMatchObject({ ok: false, motivo: 'ya_enviado' });
     } finally { repoFalso.marcarEnvioSubidoAMano = original; }
     expect(tipos(id)).not.toContain('envio_subido_a_mano');
   });
@@ -262,7 +300,7 @@ describe('modo manual: «Ya la subí a mano»', () => {
   it('tras subir a mano, reabrir, corregir y reaprobar crea un envío NUEVO (llave nueva)', async () => {
     const { id, doc } = await documentoSinOperador();
     await aprobarDocumento(A, id, doc().version, ACTOR);
-    await marcarSubidoAMano(A, doc(), doc().version, ACTOR);
+    await marcarSubidoAMano(A, doc(), doc().version, ACTOR, 'REQ-1');
     await reabrirDocumento(A, id, doc().version, ACTOR.id);
     await corregirCampos(A, id, doc().version, [{ campo: 'origen_cp', renglon: null, valor: '66601' }], ACTOR.id);
     const r = await aprobarDocumento(A, id, doc().version, ACTOR);
