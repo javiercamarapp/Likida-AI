@@ -16,9 +16,16 @@ export function Sparkline({ valores, matiz = 8, ancho = 60, alto = 24 }: {
   const rango = max - min || 1;
   const pad = 3;
   const xy = pts.map(([i, v]) => [pad + (i / n) * (ancho - pad * 2), alto - pad - ((v - min) / rango) * (alto - pad * 2)] as const);
-  const d = xy.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
+  // Un nulo corta la línea: se une SOLO lo contiguo (índices consecutivos), nunca se interpola sobre el faltante.
+  const tramos: Array<Array<readonly [number, number]>> = [];
+  pts.forEach(([i], k) => {
+    if (k === 0 || i !== pts[k - 1][0] + 1) tramos.push([]);
+    tramos[tramos.length - 1].push(xy[k]);
+  });
+  const trazo = (t: ReadonlyArray<readonly [number, number]>) => t.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
+  const d = tramos.map(trazo).join(' ');
   const [ux, uy] = xy[xy.length - 1];
-  const area = `${d} L${ux.toFixed(1)} ${alto} L${xy[0][0].toFixed(1)} ${alto} Z`;
+  const area = tramos.filter((t) => t.length > 1).map((t) => `${trazo(t)} L${t[t.length - 1][0].toFixed(1)} ${alto} L${t[0][0].toFixed(1)} ${alto} Z`).join(' ');
   return (
     <svg className="rv-spark" data-matiz={matiz} width={ancho} height={alto} viewBox={`0 0 ${ancho} ${alto}`} aria-hidden="true">
       <path className="rv-spark__area" d={area} />

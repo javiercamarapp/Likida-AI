@@ -19,6 +19,26 @@ describe('gráficas básicas', () => {
     expect(h).toContain('aria-label="Cierres"');
     expect(h).toContain('<td>—</td>');
   });
+  it('AreaMini: un nulo CORTA el relleno y la línea (no se interpola) y marca el hueco punteado', () => {
+    const h = renderToStaticMarkup(<AreaMini valores={[2, 4, null, 6, 8]} etiqueta="Con hueco" />);
+    expect(h.match(/fill="url\(#/g)).toHaveLength(2); // un relleno por tramo contiguo, no uno que cubra el hueco
+    expect(h).toContain('rv-area__hueco');
+    const linea = /class="rv-area__linea" d="([^"]+)"/.exec(h)![1];
+    expect(linea.match(/M/g)).toHaveLength(2);
+    const sin = renderToStaticMarkup(<AreaMini valores={[2, 4, 6]} etiqueta="Sin hueco" />);
+    expect(sin).not.toContain('rv-area__hueco');
+  });
+  it('AreaMini: dos áreas del mismo matiz no repiten el id del degradado', () => {
+    const h = renderToStaticMarkup(<><AreaMini valores={[1, 2, 3]} matiz={1} etiqueta="A" /><AreaMini valores={[3, 2, 1]} matiz={1} etiqueta="B" /></>);
+    const ids = [...h.matchAll(/<linearGradient id="([^"]+)"/g)].map((m) => m[1]);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+  });
+  it('Sparkline: un nulo corta la línea, no une los puntos vecinos', () => {
+    const h = renderToStaticMarkup(<Sparkline valores={[1, 2, null, 5, 6]} />);
+    const d = /class="rv-spark__linea" d="([^"]+)"/.exec(h)![1];
+    expect(d.match(/M/g)).toHaveLength(2);
+  });
   it('DonaMini: nunca más de 5 gajos (agrupa «Otros») y el nulo no suma ni se pinta como 0', () => {
     const gajos = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((e, i) => ({ etiqueta: e, valor: 10 - i }));
     const h = renderToStaticMarkup(<DonaMini gajos={gajos} etiqueta="Rubros" />);
