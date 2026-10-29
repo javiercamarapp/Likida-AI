@@ -170,7 +170,8 @@
 }
 
 .rv-tour__cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.rv-tour__paso { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.rv-tour__paso { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+[data-ui="v2"] .rv-tour__paso { font-size: 12px; font-weight: 600; }
 .rv-tour__marcas { display: flex; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .rv-tour__marcas li { width: 14px; height: 3px; border-radius: 2px; background: var(--line2, var(--line)); }
 .rv-tour__marcas li[data-estado="hecho"] { background: var(--ink2, var(--ink)); }

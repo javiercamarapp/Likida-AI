@@ -12,7 +12,7 @@ export function EncabezadoPagina({ rotulo, titulo, descripcion, acciones }: {
   return (
     <header className="rv-encabezado">
       <div className="rv-encabezado__texto">
-        {rotulo ? <p className="rv-encabezado__rotulo">{rotulo}</p> : null}
+        {rotulo ? <p className="rv-encabezado__rotulo etiqueta-mono">{rotulo}</p> : null}
         <h1 className="rv-encabezado__titulo font-display">{titulo}</h1>
         {descripcion ? <p className="rv-encabezado__desc">{descripcion}</p> : null}
       </div>

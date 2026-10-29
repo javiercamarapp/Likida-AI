@@ -4,7 +4,9 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 // Contrato medible de las primitivas (ESTILO-LIKIDA): lo que se puede afirmar leyendo el CSS.
-const css = (f: string) => readFileSync(join(__dirname, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+// Solo la capa v2 (después del marcador): arriba vive lo de siempre sin tocar (ver invariancia_v1.test.tsx).
+const MARCA = 'Capa v2 Likida-Rovaq';
+const css = (f: string) => { const t = readFileSync(join(__dirname, f), 'utf8'); return t.slice(t.indexOf(MARCA)).replace(/\/\*[\s\S]*?\*\//g, ''); };
 const comp = css('componentes.css');
 const graf = css('graficas.css');
 
@@ -58,7 +60,8 @@ describe('primitivas v2 · contrato de ESTILO-LIKIDA', () => {
     expect(graf).toMatch(/\.rv-kpi \{[^}]*padding: 14px/); // 112 sale del contenido: 3 + 14 + 16 + 6 + 29 + 6 + 20 + 14
     expect(graf).toMatch(/\.rv-kpi__valor \{ font: 700 26px/);
     expect(graf).toMatch(/\.rv-kpi__valor\[data-vacio\] \{ font-size: 18px; font-weight: 600/);
-    expect(graf).toMatch(/max-width: 1099px\) \{ \.rv-kpi__sello \{ display: none/);
+    expect(graf).toMatch(/max-width: 1099px\) \{\s*\[data-ui="v2"\] \.rv-kpi__sello \{\s*position: absolute;\s*width: 1px/);
+    expect(graf).not.toMatch(/\.rv-kpi__sello \{ display: none/);
     expect(graf).not.toContain('text-overflow');
   });
   it('gráficas: sin degradados decorativos fuera del área, trama 45° para parcial', () => {

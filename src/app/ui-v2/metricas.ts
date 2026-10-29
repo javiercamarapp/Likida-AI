@@ -99,5 +99,5 @@ export function claseEfectiva(id: MetricaId, valor: number | string | null | und
   return sobrescribe ? claseMasDebil([base, sobrescribe]) : base;
 }
 
-/** Tonos de un solo matiz (de 100 % a 20 %), para gráficas de UN matiz con varias categorías (dona, barra apilada). */
-export const TONOS_DE_MATIZ = [100, 72, 52, 34, 20] as const;
+/** Tonos de un solo matiz (de 100 % a 34 %), para gráficas de UN matiz con varias categorías (dona, barra apilada). */
+export const TONOS_DE_MATIZ = [100, 76, 58, 44, 34] as const;
