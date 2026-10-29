@@ -6,43 +6,122 @@
 
 .rv-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-/* ── KindBadge ─────────────────────────────────────────────────────────── */
-.rv-kind {
-  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px 2px 6px; border-radius: 999px;
-  font: 600 11px/1.5 var(--font-sans-ui, inherit); white-space: nowrap; color: var(--ink);
-  border: 1px solid var(--line2, var(--line)); background: transparent;
+/* Tokens de procedencia y de gráfica (B). Por TRAZO, no por matiz (ESTILO §2). */
+:root [data-ui="v2"] {
+  --prov-est-bg: #e4e4e6; --prov-est-bd: #4a4a51;
+  --prov-inf-bg: #f7f7f8; --prov-inf-bd: #75757c;
+  --prov-sin-bd: #8a8a90;
+  --gr-rejilla: #0e0e1014; --gr-eje: #0e0e1033;
 }
-.rv-kind[data-tipo="observado"] { border-style: solid; background: var(--canvas); }
-.rv-kind[data-tipo="estimado"] { border-style: dashed; border-color: var(--muted); background: var(--canvas2, var(--canvas)); color: var(--ink2, var(--ink)); }
-.rv-kind[data-tipo="inferido"] { border-style: dotted; border-width: 1.5px; border-color: var(--muted); color: var(--ink2, var(--ink)); }
-.rv-kind[data-tipo="sin_dato"] { border-style: dotted; border-width: 1.5px; border-color: var(--faint, var(--muted)); color: var(--muted); background: transparent; }
+:root[data-theme="dark"] [data-ui="v2"] {
+  --prov-est-bg: #2a2a2f; --prov-est-bd: #a3a3ab;
+  --prov-inf-bg: #17171a; --prov-inf-bd: #7a7a82;
+  --prov-sin-bd: #7a7a82;
+  --gr-rejilla: #f4f4f514; --gr-eje: #f4f4f533;
+}
 
-/* ── TiraKpi: una tarjeta, celdas con filetes ──────────────────────────── */
+/* Matiz de la figura y tonos de UN matiz (100/72/52/34/20 %). */
+.rv-gr[data-matiz="1"], .rv-kpi[data-matiz="1"], .rv-spark[data-matiz="1"] { --cat: var(--chart-1, var(--muted)); --cat-ink: var(--ink-1, var(--ink)); }
+.rv-gr[data-matiz="2"], .rv-kpi[data-matiz="2"], .rv-spark[data-matiz="2"] { --cat: var(--chart-2, var(--muted)); --cat-ink: var(--ink-2, var(--ink)); }
+.rv-gr[data-matiz="3"], .rv-kpi[data-matiz="3"], .rv-spark[data-matiz="3"] { --cat: var(--chart-3, var(--muted)); --cat-ink: var(--ink-3, var(--ink)); }
+.rv-gr[data-matiz="4"], .rv-kpi[data-matiz="4"], .rv-spark[data-matiz="4"] { --cat: var(--chart-4, var(--muted)); --cat-ink: var(--ink-4, var(--ink)); }
+.rv-gr[data-matiz="5"], .rv-kpi[data-matiz="5"], .rv-spark[data-matiz="5"] { --cat: var(--chart-5, var(--muted)); --cat-ink: var(--ink-5, var(--ink)); }
+.rv-gr[data-matiz="6"], .rv-kpi[data-matiz="6"], .rv-spark[data-matiz="6"] { --cat: var(--chart-6, var(--muted)); --cat-ink: var(--ink-6, var(--ink)); }
+.rv-gr[data-matiz="7"], .rv-kpi[data-matiz="7"], .rv-spark[data-matiz="7"] { --cat: var(--chart-7, var(--muted)); --cat-ink: var(--ink-7, var(--ink)); }
+.rv-gr[data-matiz="8"], .rv-kpi[data-matiz="8"], .rv-spark[data-matiz="8"] { --cat: var(--chart-8, var(--muted)); --cat-ink: var(--ink-8, var(--ink)); }
+.rv-tono-0 { --tono: color-mix(in srgb, var(--cat, var(--ink)) 100%, var(--surface)); }
+.rv-tono-1 { --tono: color-mix(in srgb, var(--cat, var(--ink)) 72%, var(--surface)); }
+.rv-tono-2 { --tono: color-mix(in srgb, var(--cat, var(--ink)) 52%, var(--surface)); }
+.rv-tono-3 { --tono: color-mix(in srgb, var(--cat, var(--ink)) 34%, var(--surface)); }
+.rv-tono-4 { --tono: color-mix(in srgb, var(--cat, var(--ink)) 20%, var(--surface)); }
+
+/* ── KindBadge: Observado silencioso; Estimado discontinuo; Inferido punteado; Sin dato vacío ── */
+.rv-kind {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 20px; padding: 0 8px 0 6px; border-radius: 999px;
+  font: 500 12px/1.4 var(--font-sans-ui, inherit); white-space: nowrap; color: var(--ink2, var(--ink));
+  border: 1px solid transparent; background: transparent;
+}
+.rv-kind__punto { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--ink); }
+.rv-kind[data-tipo="observado"] { padding: 0; color: var(--muted); }
+.rv-kind[data-tipo="estimado"] { border-style: dashed; border-color: var(--prov-est-bd); background: var(--prov-est-bg); }
+.rv-kind[data-tipo="inferido"] { border-style: dotted; border-color: var(--prov-inf-bd); background: var(--prov-inf-bg); }
+.rv-kind[data-tipo="sin_dato"] { border-style: dashed; border-color: var(--prov-sin-bd); background: transparent; color: var(--muted); }
+
+/* ── TiraKpi: UNA tarjeta de 112 px, celdas con filetes ────────────────── */
 .rv-kpis {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 168px), 1fr));
   border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden;
 }
 .rv-kpi {
-  position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 14px 16px;
-  color: inherit; text-decoration: none; border-top: 3px solid var(--cat, transparent);
+  position: relative; display: flex; flex-direction: column; justify-content: flex-start; gap: 6px; min-width: 0; min-height: 112px;
+  padding: 14px; color: inherit; text-decoration: none; border-top: 3px solid var(--cat, transparent);
   box-shadow: -1px 0 0 var(--line), 0 -1px 0 var(--line);
 }
 a.rv-kpi:hover { background: var(--canvas); }
-a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
-.rv-kpi[data-matiz="1"] { --cat: var(--chart-1, var(--muted)); } .rv-kpi[data-matiz="2"] { --cat: var(--chart-2, var(--muted)); }
-.rv-kpi[data-matiz="3"] { --cat: var(--chart-3, var(--muted)); } .rv-kpi[data-matiz="4"] { --cat: var(--chart-4, var(--muted)); }
-.rv-kpi[data-matiz="5"] { --cat: var(--chart-5, var(--muted)); } .rv-kpi[data-matiz="6"] { --cat: var(--chart-6, var(--muted)); }
-.rv-kpi[data-matiz="7"] { --cat: var(--chart-7, var(--muted)); } .rv-kpi[data-matiz="8"] { --cat: var(--chart-8, var(--muted)); }
-.rv-kpi__etq { font: 600 11px/1.3 var(--font-mono, ui-monospace, monospace); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -3px; }
+.rv-kpi__cab { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.rv-kpi__icono { display: inline-flex; flex: none; color: var(--cat-ink, var(--muted)); }
+.rv-kpi__icono svg { width: 16px; height: 16px; }
+.rv-kpi__etq { font: 500 12px/1.3 var(--font-sans-ui, inherit); color: var(--muted); }
 .rv-kpi__fila { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
 .rv-kpi__valor { font: 700 26px/1.1 var(--font-display, inherit); letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
 .rv-kpi__valor[data-vacio] { font-size: 18px; font-weight: 600; color: var(--muted); }
-.rv-kpi__spark { width: 72px; flex: none; }
-.rv-kpi__pie { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12px; color: var(--muted); }
-.rv-kpi__delta { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: 999px; font-weight: 600; background: var(--canvas); color: var(--ink2, var(--ink)); }
+.rv-kpi__spark { display: inline-flex; flex: none; }
+.rv-kpi__segs { display: flex; gap: 2px; height: 6px; }
+.rv-kpi__segs i { flex-basis: 0; min-width: 4px; border-radius: 3px; background: var(--tono); }
+.rv-kpi__pie { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; min-height: 20px; font-size: 12px; line-height: 1.4; color: var(--muted); white-space: nowrap; }
+.rv-kpi__punto { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--ink); }
+.rv-kpi__sello { min-width: 0; }
+.rv-kpi__delta { display: inline-flex; align-items: center; gap: 4px; min-height: 20px; padding: 0 8px; border-radius: 999px; font-weight: 600; background: var(--canvas); color: var(--ink2, var(--ink)); }
 .rv-kpi__delta[data-tono="ok"] { background: var(--okbg, var(--canvas)); color: var(--ok, var(--ink)); }
 .rv-kpi__delta[data-tono="bad"] { background: var(--badbg, var(--canvas)); color: var(--bad, var(--ink)); }
-@media (max-width: 767px) { .rv-kpi__spark { display: none; } .rv-kpi { padding: 10px 12px; } .rv-kpi__valor { font-size: clamp(18px, 5.2vw, 21px); white-space: nowrap; } }
+/* La procedencia pasa al tooltip (title) bajo 1100 px: jamás elipsis. */
+@media (max-width: 1099px) { .rv-kpi__sello { display: none; } }
+@media (max-width: 819px) {
+  .rv-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rv-kpi { min-height: 0; padding: 10px; gap: 4px; border-top: 0; }
+  .rv-kpi__cab::before { content: ""; width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--cat, var(--muted)); }
+  .rv-kpi__spark { display: none; }
+  .rv-kpi__valor { font-size: clamp(18px, 5.2vw, 21px); white-space: nowrap; }
+}
+
+/* ── Gráficas básicas: rejilla, ejes, sparkline, área, dona, apilada, bullet ── */
+.rv-gr { margin: 0; color: var(--ink); }
+.rv-gr__rejilla { stroke: var(--gr-rejilla); stroke-width: 1; }
+.rv-gr__eje { fill: var(--muted); font: 400 12px var(--font-sans-ui, inherit); }
+.mc-vacio { display: grid; place-items: center; border: 1.5px dotted var(--line2, var(--line)); border-radius: 8px; font-size: 13px; color: var(--muted); }
+.rv-spark { display: block; }
+.rv-spark__area { fill: var(--cat, var(--ink)); fill-opacity: .06; stroke: none; }
+.rv-spark__linea { stroke: var(--cat, var(--ink)); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; }
+.rv-spark__punto { fill: var(--cat, var(--ink)); }
+.rv-area__linea { stroke: var(--cat, var(--ink)); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; }
+.rv-area__punto { fill: var(--cat, var(--ink)); }
+.rv-dona { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.rv-dona__lienzo { position: relative; flex: none; }
+.rv-dona__pista { stroke: var(--line); }
+.rv-dona__gajo { stroke: var(--tono); }
+.rv-dona__centro { position: absolute; inset: 0; display: grid; place-items: center; font: 700 20px/1 var(--font-display, inherit); font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.rv-dona__leyenda, .rv-apilada__leyenda { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 13px; min-width: 0; flex: 1 1 140px; }
+.rv-dona__leyenda li { display: flex; align-items: center; gap: 8px; }
+.rv-dona__etq { flex: 1 1 auto; min-width: 0; }
+.rv-dona__val { font-weight: 600; font-variant-numeric: tabular-nums; }
+.rv-dona__marca { width: 8px; height: 8px; border-radius: 2px; flex: none; background: var(--tono); }
+.rv-apilada__pista { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--line); }
+.rv-apilada[data-segmentada] .rv-apilada__pista { height: 6px; gap: 2px; background: transparent; overflow: visible; }
+.rv-apilada__tramo { flex-basis: 0; background: var(--tono); }
+.rv-apilada[data-segmentada] .rv-apilada__tramo { border-radius: 3px; min-width: 4px; }
+.rv-apilada__tramo[data-parcial] { background: repeating-linear-gradient(45deg, var(--tono) 0 3px, transparent 3px 6px); }
+.rv-apilada__vacio { flex: 1; border: 1px dashed var(--prov-sin-bd); border-radius: 4px; }
+.rv-apilada__leyenda { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.rv-apilada__leyenda li { display: inline-flex; align-items: center; gap: 6px; }
+.rv-apilada__leyenda b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.rv-bullet { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; font-size: 13px; }
+.rv-bullet__etq { font-weight: 500; }
+.rv-bullet__val { font-weight: 600; font-variant-numeric: tabular-nums; grid-row: 1; grid-column: 2; }
+.rv-bullet__pista { position: relative; grid-column: 1 / -1; height: 8px; border-radius: 4px; background: var(--line); }
+.rv-bullet__pista[data-vacio] { background: transparent; border: 1px dashed var(--prov-sin-bd); }
+.rv-bullet__relleno { position: absolute; inset: 0 auto 0 0; border-radius: 4px; background: var(--cat, var(--ink)); }
+.rv-bullet__meta { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--ink); }
 
 /* ── ChartState ────────────────────────────────────────────────────────── */
 .rv-chartstate {
@@ -65,6 +144,11 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 .rv-check__trazo { stroke: var(--ok, var(--ink)); stroke-dasharray: 1; stroke-dashoffset: 0; }
 
 @media (prefers-reduced-motion: no-preference) {
+  .rv-spark__linea, .rv-area__linea { animation: rv-trazo var(--t-draw) var(--ui-ease) both; }
+  .rv-spark__area { animation: rv-fade var(--t-draw) var(--ui-ease) both; }
+  .rv-dona__gajo { animation: rv-fade var(--ui-slow) var(--ui-ease) both; }
+  .rv-apilada__tramo, .rv-kpi__segs i { transform-origin: left; animation: rv-crece var(--t-bar) var(--ui-ease) both; }
+  .rv-bullet__relleno { transform-origin: left; animation: rv-crece var(--t-bar) var(--ui-ease) both; }
   .rv-anillo__arco { animation: rv-barrido var(--t-sweep) var(--ui-ease) both; }
   .rv-check__trazo { animation: rv-trazo var(--t-draw) var(--ui-ease) both; }
 }
