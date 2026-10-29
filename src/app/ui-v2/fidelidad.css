@@ -1,0 +1,199 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   UI v2 · FIDELIDAD AL SISTEMA ROVAQ (corrección de Javier, 28-oct)
+
+   Esta capa lleva la interfaz v2 de Likida a la MISMA familia que el sistema Rovaq (kit ~/Desktop/FRONTEND y código vivo de
+   ~/vexa/apps/web/src/app/{globals,ui}.css): Hanken Grotesk + IBM Plex Mono (rótulos), paleta negro/grises, lienzo hundido con
+   tarjetas blancas de 12 px y sombra mínima, shell de DOS tarjetas flotantes (sidebar de 232 y marco de contenido con cabecera
+   de 44), grupos del menú plegables con rótulo mono, pie hundido, botones píldora de 34 px, pastillas de estado con punto,
+   escala 4/8 px y movimiento de 260 ms (`reveal`). Sin serif, sin acento nuevo, sin partículas.
+
+   Solo re-pinta (los .tsx conservan ids, textos y clases de los e2e). Todo cuelga de `[data-ui="v2"]`; v1 queda idéntico.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ═══ SHELL: dos tarjetas flotantes sobre el lienzo (≥ 768) ═══════════════════════════════════════════════════════════ */
+@media (min-width: 768px) {
+  [data-ui="v2"] .rv-fila { height: 100dvh; min-height: 0; padding: 16px; gap: 16px; align-items: stretch; }
+  [data-ui="v2"] .rv-sb {
+    position: relative; top: 0; align-self: stretch; height: 100%; min-height: 0; overflow: hidden;
+    border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-card);
+  }
+  [data-ui="v2"] .rv-sb__marca { height: 52px; min-height: 52px; padding: 0 16px; }
+  [data-ui="v2"] .rv-sb__nav { flex: 1 1 0%; min-height: 96px; overflow-y: auto; overscroll-behavior: contain; padding: 0 8px 8px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+  /* Pie hundido y fijo (si no cabe, scrollea él, no el menú) */
+  [data-ui="v2"] .rv-sb__pie {
+    flex: 0 0 auto; position: static; max-height: 55%; overflow-y: auto; padding: 10px 8px 8px;
+    background: var(--sunken); border-top: 1px solid var(--line); scrollbar-width: thin;
+  }
+  [data-ui="v2"] .rv-col { height: 100%; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-card); overflow: hidden; }
+  [data-ui="v2"] .rv-contenido { background: var(--sunken); scrollbar-gutter: stable; }
+  [data-ui="v2"] .rv-cab-esc { padding: 0 20px; }
+  [data-ui="v2"] .rv-cab-esc__titulo { font-weight: 500; }
+}
+[data-ui="v2"].rv-app { background: var(--bg); }
+
+/* Sidebar: grupos con rótulo mono (patrón `nav-group-toggle` de Rovaq) */
+[data-ui="v2"] .rv-grupo { margin: 0 0 7px; }
+[data-ui="v2"] .rv-grupo__t { padding: 0; margin: 0; font: 500 11px/1.5 var(--font-mono), ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+[data-ui="v2"] .rv-grupo__t:not(:has(.rv-grupo__btn)) { padding: 10px 10px 5px; }
+[data-ui="v2"] .rv-grupo__btn {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 32px; margin: 0; padding: 6px 10px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--muted); font: inherit; letter-spacing: inherit; text-transform: inherit; text-align: left; cursor: pointer;
+}
+[data-ui="v2"] .rv-grupo__btn:hover { background: var(--canvas); color: var(--ink); }
+[data-ui="v2"] .rv-grupo__btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+[data-ui="v2"] .rv-grupo__n { display: none; }
+[data-ui="v2"] .rv-grupo__flecha { flex: none; width: 13px; height: 13px; transform: none; transition: transform 150ms ease; }
+[data-ui="v2"] .rv-grupo[data-abierto="false"] .rv-grupo__flecha { transform: rotate(-90deg); }
+/* Plegar sin medir alturas: la fila de la rejilla pasa de 1fr a 0fr; lo plegado sale de la tabulación */
+[data-ui="v2"] .rv-grupo__cuerpo { display: grid; grid-template-rows: 1fr; transition: grid-template-rows var(--ui-motion, 180ms) var(--ui-ease, ease), visibility 0s linear 0s; }
+[data-ui="v2"] .rv-grupo__interior { min-height: 0; overflow: hidden; }
+[data-ui="v2"] .rv-grupo[data-abierto="false"] .rv-grupo__cuerpo { grid-template-rows: 0fr; visibility: hidden; transition: grid-template-rows var(--ui-motion, 180ms) var(--ui-ease, ease), visibility 0s linear var(--ui-motion, 180ms); }
+[data-ui="v2"] .rv-sb .rv-lista:first-child { margin: 4px 0 12px; }
+[data-ui="v2"] .rv-item { margin: 0; padding: 6px 10px; gap: 9px; font-size: 13px; font-weight: 500; line-height: 1.35; color: var(--ink2); }
+[data-ui="v2"] .rv-item[aria-current="page"] { font-weight: 600; }
+/* El activo lleva la barra de señal DENTRO del borde izquierdo de la píldora (como Rovaq), siempre visible */
+[data-ui="v2"] .rv-item[aria-current="page"]::before { left: 0; top: 0; bottom: 0; width: 3px; border-radius: 8px 0 0 8px; }
+[data-ui="v2"] .rv-sb__pie .rv-lista { margin: 0 0 8px; }
+[data-ui="v2"] .rv-tema { padding: 4px 0 10px; }
+[data-ui="v2"] .rv-cuenta { margin: 0; padding: 8px; border-radius: 12px; }
+[data-ui="v2"] .rv-avatar { width: 28px; height: 28px; border-radius: 8px; font-size: 12px; background: color-mix(in srgb, var(--ink) 7%, var(--surface)); color: var(--ink); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent); }
+[data-ui="v2"] .rv-cuenta__rol { font: 500 11px/1.4 var(--font-sans-ui, inherit); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+[data-ui="v2"] .rv-cuenta__nombre { font-size: 12.5px; font-weight: 500; }
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  [data-ui="v2"] .rv-sb .rv-grupo__btn { display: none; }
+  [data-ui="v2"] .rv-sb .rv-grupo[data-colapsable] .rv-grupo__cuerpo { grid-template-rows: 1fr !important; visibility: visible !important; }
+  [data-ui="v2"] .rv-sb .rv-item { margin: 0 8px; padding: 0; }
+  [data-ui="v2"] .rv-sb .rv-sb__marca { padding: 0; }
+  [data-ui="v2"] .rv-sb__nav { padding: 0 0 8px; }
+  [data-ui="v2"] .rv-sb .rv-item[aria-current="page"]::before { left: 0; }
+}
+
+/* ═══ SUPERFICIES: tarjeta blanca de 12 px sobre lienzo hundido, sombra mínima ════════════════════════════════════════ */
+[data-ui="v2"] :is(.rv-pem__avance, .rv-pem__lista, .rv-pem__despues, .rv-pem__paso, .rv-res__hoy, .rv-res-marcha, .rv-kpis, .rv-chartstate) {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-card);
+}
+[data-ui="v2"] .rv-vacio { border-radius: 12px; box-shadow: none; }
+[data-ui="v2"] .rv-vacio__arte { color: var(--muted); }
+[data-ui="v2"] .rv-vacio__titulo { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+[data-ui="v2"] .rv-vacio__texto { font-size: 13px; line-height: 1.55; }
+/* Un estado vacío dentro de una tarjeta es plano: nunca tarjeta dentro de tarjeta */
+[data-ui="v2"] .rv-res__hoy .rv-vacio { border: 0; background: transparent; padding: 8px 0 4px; }
+[data-ui="v2"] .rv-res__hoy .rv-vacio[data-compacto] { justify-content: flex-start; align-items: baseline; }
+
+/* Ritmo de página: relleno 24 × 28 y huecos de 16 (escala 4/8) */
+[data-ui="v2"] .rv-pem, [data-ui="v2"] .rv-res { max-width: 1240px; gap: 16px; padding: 24px 28px 40px; }
+[data-ui="v2"] .rv-encabezado { margin-bottom: 8px; }
+[data-ui="v2"] .rv-encabezado__rotulo { margin: 0 0 8px; font: 500 12px/1.4 var(--font-mono), ui-monospace, monospace; letter-spacing: .06em; color: var(--muted); }
+[data-ui="v2"] .rv-encabezado__titulo { font-size: 20px; font-weight: 600; letter-spacing: -.025em; line-height: 1.2; }
+[data-ui="v2"] .rv-encabezado__desc { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--muted); max-width: 62ch; }
+
+/* ═══ BOTONES (píldora de 34 px) y PASTILLAS (12 px, con punto) ═══════════════════════════════════════════════════════ */
+[data-ui="v2"] .rv-btn { min-height: 34px; padding: 6px 16px; border-radius: 999px; font-size: 13px; font-weight: 600; letter-spacing: .005em; }
+[data-ui="v2"] .rv-btn--sm { min-height: 30px; padding: 4px 12px; font-size: 12px; }
+[data-ui="v2"] .rv-btn--primary { box-shadow: none; }
+[data-ui="v2"] .rv-chip { padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1.6; }
+[data-ui="v2"] .rv-chip[data-tono]::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: currentColor; vertical-align: 1px; }
+[data-ui="v2"] .rv-aviso { border-radius: 8px; font-size: 13px; }
+
+/* ═══ ANILLO DE PROGRESO: trazo de tinta, pista suave, cifra en negrita ═══════════════════════════════════════════════ */
+[data-ui="v2"] .rv-anillo__pista { stroke: var(--line2); }
+[data-ui="v2"] .rv-anillo__arco { stroke: var(--ink); }
+[data-ui="v2"] .rv-anillo__centro { font: 700 15px/1 var(--font-sans-ui, inherit); letter-spacing: -.02em; }
+
+/* ═══ INDICADORES (KPI): UNA tarjeta, celdas separadas por un solo filete (sin bordes dobles ni cajas anidadas) ═══════ */
+[data-ui="v2"] .rv-kpis { gap: 1px; background: var(--line); overflow: hidden; }
+[data-ui="v2"] .rv-kpi { gap: 6px; padding: 16px 20px; background: var(--surface); box-shadow: none; border-top: 3px solid var(--cat, var(--line2)); }
+[data-ui="v2"] a.rv-kpi:hover { background: var(--canvas2); }
+[data-ui="v2"] .rv-kpi__etq { display: flex; align-items: center; gap: 8px; font: 500 12px/1.4 var(--font-sans-ui, inherit); letter-spacing: 0; text-transform: none; color: var(--ink2); }
+[data-ui="v2"] .rv-kpi__etq::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--cat, var(--line2)); }
+[data-ui="v2"] .rv-kpi__valor { font: 700 26px/1.1 var(--font-sans-ui, inherit); letter-spacing: -.035em; }
+[data-ui="v2"] .rv-kpi__pie { gap: 4px 8px; font-size: 12px; }
+/* «Observado»: sin caja, con punto (kind-observed de Rovaq) */
+[data-ui="v2"] .rv-kind[data-tipo="observado"] { padding-inline: 0; border-color: transparent; background: transparent; font-weight: 500; color: var(--muted); }
+[data-ui="v2"] .rv-kind[data-tipo="observado"] svg { display: none; }
+[data-ui="v2"] .rv-kind[data-tipo="observado"]::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); }
+[data-ui="v2"] .rv-kind { font-size: 12px; }
+/* KPI de las páginas con marcado v1 (Liquidación, Peajes…): misma regla, sin barra doble */
+[data-ui="v2"] .card:has(> .etiqueta-mono + .cifra-mono) { padding: 16px 20px; }
+[data-ui="v2"] .card > .etiqueta-mono + .cifra-mono { font: 700 26px/1.1 var(--font-sans-ui, inherit); letter-spacing: -.035em; }
+[data-ui="v2"] .card > .etiqueta-mono { font: 500 12px/1.4 var(--font-mono), ui-monospace, monospace; letter-spacing: .06em; }
+
+/* ═══ ASISTENTE · PUESTA EN MARCHA ════════════════════════════════════════════════════════════════════════════════════ */
+[data-ui="v2"] .rv-pem__cuerpo { grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); gap: 16px; align-items: start; }
+[data-ui="v2"] .rv-pem__lateral { gap: 16px; top: 0; }
+/* Tarjeta de avance: banner con escena de línea fina arriba; anillo y cifra debajo */
+[data-ui="v2"] .rv-pem__avance { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 20px; }
+.rv-pem__arte { display: none; }
+[data-ui="v2"] .rv-pem__arte { display: block; flex: 0 0 100%; height: 104px; padding: 8px 0; border-radius: 8px; background: var(--canvas2); color: var(--ink2); }
+[data-ui="v2"] .rv-pem__arte svg { width: 100%; height: 100%; }
+[data-ui="v2"] .rv-pem__avance-num { font: 700 26px/1.1 var(--font-sans-ui, inherit); letter-spacing: -.035em; }
+[data-ui="v2"] .rv-pem__avance-txt { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+/* Lista de pasos: número en caja de 30 px (como el `step-number` de Rovaq), filas de 56 px */
+[data-ui="v2"] .rv-pem__lista { padding: 8px; gap: 2px; }
+[data-ui="v2"] .rv-pem__item { min-height: 56px; padding: 8px 10px; gap: 12px; }
+[data-ui="v2"] .rv-pem__num { width: 30px; height: 30px; border-radius: 8px; font: 500 12px/1 var(--font-mono), ui-monospace, monospace; }
+[data-ui="v2"] .rv-pem__item-titulo { font-size: 14px; font-weight: 600; }
+[data-ui="v2"] .rv-pem__item-sub { font-size: 12px; color: var(--muted); }
+[data-ui="v2"] .rv-pem__despues { padding: 4px 8px; }
+/* Detalle del paso: tarjeta de 24, tipografía única Hanken, rótulo mono */
+[data-ui="v2"] .rv-pem__paso { gap: 16px; padding: 24px; }
+[data-ui="v2"] .rv-pem__paso-rotulo { font: 500 12px/1.4 var(--font-mono), ui-monospace, monospace; letter-spacing: .06em; color: var(--muted); }
+[data-ui="v2"] .rv-pem__paso-titulo { font-size: 20px; font-weight: 600; letter-spacing: -.025em; }
+[data-ui="v2"] .rv-pem__paso-resumen { font-size: 14px; line-height: 1.55; color: var(--muted); }
+[data-ui="v2"] .rv-pem__falta { font-size: 13px; }
+[data-ui="v2"] .rv-pem__evidencia { padding: 12px 14px; font-size: 13px; border-radius: 8px; }
+[data-ui="v2"] .rv-pem__evidencia-sello { font: 600 11px/1.4 var(--font-sans-ui, inherit); letter-spacing: .08em; }
+/* Subpasos: lista plana de filetes (`catalog-list` de Rovaq), sin caja dentro de la caja */
+[data-ui="v2"] .rv-pem__sub { border: 0; border-radius: 0; }
+[data-ui="v2"] .rv-pem__sub-item { padding: 12px 0; align-items: center; }
+[data-ui="v2"] .rv-pem__sub-item + .rv-pem__sub-item, [data-ui="v2"] .rv-pem__sub-item:first-child { border-top: 1px solid var(--line); }
+[data-ui="v2"] .rv-pem__sub-titulo { font-size: 14px; }
+[data-ui="v2"] .rv-pem__sub-detalle { font-size: 13px; }
+
+/* ═══ RESUMEN ═════════════════════════════════════════════════════════════════════════════════════════════════════════ */
+[data-ui="v2"] .rv-res-marcha { gap: 16px; padding: 16px 20px; }
+[data-ui="v2"] .rv-res-marcha__rotulo { font: 500 12px/1.4 var(--font-mono), ui-monospace, monospace; letter-spacing: .06em; }
+[data-ui="v2"] .rv-res-marcha__titulo { font-size: 17px; font-weight: 600; letter-spacing: -.02em; }
+[data-ui="v2"] .rv-res__sec { font: 500 12px/1.4 var(--font-mono), ui-monospace, monospace; letter-spacing: .06em; }
+[data-ui="v2"] .rv-res__hoy { padding: 16px 20px; }
+[data-ui="v2"] .rv-res__agentes { gap: 16px; }
+[data-ui="v2"] .rv-res__agentes .card { padding: 20px; border-radius: 12px; }
+[data-ui="v2"] .rv-res__agentes .card .card { box-shadow: none; background: var(--canvas2); }
+
+/* ═══ FORMULARIOS (marcado v1 de las páginas de dominio) ══════════════════════════════════════════════════════════════ */
+[data-ui="v2"] main.h-full :is(input:not([type="checkbox"], [type="radio"], [type="file"]), select, textarea) { min-height: 36px; border-radius: 8px; border: 1px solid var(--input); background: var(--surface); font-size: 13px; }
+[data-ui="v2"] main.h-full .btn-primary { border-radius: 999px; }
+
+/* ═══ MOVIMIENTO: `reveal` de Rovaq (260 ms, 6 px, escalón de 40 ms), solo sin reducir ═══════════════════════════════════
+   Los @keyframes de rv-sube viven en movimiento.css; aquí solo se usan. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-ui="v2"] .rv-pem > *, [data-ui="v2"] .rv-res > *, [data-ui="v2"] .rv-pem__lateral > * { animation: rv-sube var(--ui-slow, 250ms) var(--ui-ease, ease) both; }
+  [data-ui="v2"] .rv-pem > :nth-child(2), [data-ui="v2"] .rv-res > :nth-child(2), [data-ui="v2"] .rv-pem__lateral > :nth-child(2) { animation-delay: 40ms; }
+  [data-ui="v2"] .rv-pem > :nth-child(3), [data-ui="v2"] .rv-res > :nth-child(3), [data-ui="v2"] .rv-pem__lateral > :nth-child(3) { animation-delay: 80ms; }
+  [data-ui="v2"] .rv-res > :nth-child(4) { animation-delay: 120ms; }
+  [data-ui="v2"] .rv-res > :nth-child(n+5) { animation-delay: 160ms; }
+  [data-ui="v2"] .rv-pem__item { animation: rv-sube var(--ui-slow, 250ms) var(--ui-ease, ease) both; }
+  [data-ui="v2"] .rv-pem__lista > li:nth-child(2) .rv-pem__item { animation-delay: 40ms; }
+  [data-ui="v2"] .rv-pem__lista > li:nth-child(3) .rv-pem__item { animation-delay: 80ms; }
+  [data-ui="v2"] .rv-pem__lista > li:nth-child(4) .rv-pem__item { animation-delay: 120ms; }
+  [data-ui="v2"] .rv-pem__lista > li:nth-child(n+5) .rv-pem__item { animation-delay: 160ms; }
+  [data-ui="v2"] .rv-kpi { animation: rv-sube var(--ui-slow, 250ms) var(--ui-ease, ease) both; }
+  [data-ui="v2"] .rv-kpi:nth-child(2) { animation-delay: 40ms; }
+  [data-ui="v2"] .rv-kpi:nth-child(3) { animation-delay: 80ms; }
+  [data-ui="v2"] .rv-kpi:nth-child(4) { animation-delay: 120ms; }
+}
+
+/* ═══ MÓVIL ═══════════════════════════════════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  [data-ui="v2"] .rv-pem, [data-ui="v2"] .rv-res { padding: 16px 16px 40px; }
+  [data-ui="v2"] .rv-pem__cuerpo { grid-template-columns: minmax(0, 1fr); }
+  [data-ui="v2"] .rv-pem__lateral { position: static; }
+  [data-ui="v2"] .rv-pem__sub-item { align-items: flex-start; }
+}
+@media (max-width: 767.98px) {
+  [data-ui="v2"] .rv-contenido { background: var(--sunken); }
+  [data-ui="v2"] .rv-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  [data-ui="v2"] .rv-kpi { padding: 12px 14px; }
+  [data-ui="v2"] .rv-kpi__valor { font-size: 22px; white-space: nowrap; }
+  [data-ui="v2"] .rv-pem__paso { padding: 20px 16px; }
+}

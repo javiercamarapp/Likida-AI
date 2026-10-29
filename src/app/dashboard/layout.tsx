@@ -21,6 +21,7 @@ import '../ui-v2/graficas.css';
 import '../ui-v2/movimiento.css';
 import '../ui-v2/paginas.css';
 import '../ui-v2/paginas-dominio.css';
+import '../ui-v2/fidelidad.css';
 import { PulsoProducto } from './pulso-producto';
 import { AvisoLegalPendiente } from './aviso-legal';
 import { TourProvider } from '../ui-v2/movimiento/tour';

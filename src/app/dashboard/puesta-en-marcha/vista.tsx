@@ -5,7 +5,7 @@ import {
   AlertTriangle, Ban, Check, ChevronDown, CircleDashed, Clock3, Copy, FileUp, HelpCircle, Hourglass, Lock, Mail, User,
 } from 'lucide-react';
 import {
-  Aviso, Boton, BotonEnlace, Chip, Drawer, EncabezadoPagina, type TonoChip,
+  Aviso, Boton, BotonEnlace, Chip, Drawer, EncabezadoPagina, Escena, type TonoChip,
 } from '@/app/ui-v2/componentes';
 import { ProgresoAnillo } from '@/app/ui-v2/graficas';
 import { anclaTour, TourLanzador } from '@/app/ui-v2/movimiento/tour';
@@ -96,6 +96,7 @@ export function VistaPuestaEnMarcha({ senales, ambito, tenantId, sufijo, soloLec
       <div className="rv-pem__cuerpo">
         <aside className="rv-pem__lateral" aria-label="Tus pasos">
           <section className="rv-pem__avance" {...anclaTour('asistente.avance')}>
+            <div className="rv-pem__arte" aria-hidden="true"><Escena id="bienvenida" animada /></div>
             <ProgresoAnillo valor={r.avance} tamano={76} grosor={7} etiqueta="Avance de la puesta en marcha" />
             <div>
               <p className="rv-pem__avance-num">{r.listos} de {r.total}</p>
