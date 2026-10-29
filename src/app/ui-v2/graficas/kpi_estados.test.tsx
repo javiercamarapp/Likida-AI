@@ -9,6 +9,18 @@ describe('TiraKpi', () => {
     expect(html).toContain('Sin dato');
     expect(html).not.toMatch(/>0</);
   });
+  it('observado no repite chip por KPI: punto silencioso; estimado sí muestra su marca', () => {
+    const o = renderToStaticMarkup(<TiraKpi items={[{ etiqueta: 'A', valor: '1', tipo: 'observado' }]} />);
+    expect(o).not.toContain('Observado');
+    expect(o).toContain('rv-kpi__punto');
+    expect(renderToStaticMarkup(<TiraKpi items={[{ etiqueta: 'A', valor: '1', tipo: 'estimado' }]} />)).toContain('Estimado');
+  });
+  it('métrica: el matiz y la clase salen del registro; el sello va en una línea y en el tooltip', () => {
+    const h = renderToStaticMarkup(<TiraKpi items={[{ etiqueta: 'Peajes', valor: '$1', metrica: 'gasto_peajes', sello: 'Casetas · semana 43' }]} />);
+    expect(h).toContain('data-matiz="2"');
+    expect(h).toContain('title="Casetas · semana 43"');
+    expect(h).toContain('rv-kpi__sello');
+  });
   it('el valor real está en el HTML servido (sin count-up) y se formatea con lib/formato', () => {
     const html = renderToStaticMarkup(<TiraKpi items={[{ etiqueta: 'Viajes', valor: 1234 }]} />);
     expect(html).toContain('1,234');
@@ -29,11 +41,11 @@ describe('TiraKpi', () => {
 });
 
 describe('KindBadge / ChartState / Anillo / Check', () => {
-  it('KindBadge: icono + texto por cada tipo', () => {
+  it('KindBadge: texto por cada tipo; observado es silencioso (punto, sin icono); el resto lleva icono', () => {
     for (const [t, txt] of [['observado', 'Observado'], ['estimado', 'Estimado'], ['inferido', 'Inferido'], ['sin_dato', 'Sin dato']] as const) {
       const h = renderToStaticMarkup(<KindBadge tipo={t} />);
       expect(h).toContain(txt);
-      expect(h).toContain('<svg');
+      if (t === 'observado') { expect(h).toContain('rv-kind__punto'); expect(h).not.toContain('<svg'); } else expect(h).toContain('<svg');
       expect(h).toContain(`data-tipo="${t}"`);
     }
   });

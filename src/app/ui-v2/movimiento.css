@@ -23,7 +23,7 @@
   --ui-motion: 180ms;  /* overlays, tooltips, sombras */
   --ui-slow: 250ms;    /* entrada de bloque, desliz del foco del recorrido */
   --ui-ease: cubic-bezier(.22, 1, .36, 1);
-  --t-bar: 420ms;      /* crecimiento de barras */
+  --t-bar: 420ms;      /* crecimiento de barras (escalón de 40 ms por barra; columnas 360 ms / 14 ms) */
   --t-draw: 380ms;     /* trazo de líneas y del check */
   --t-sweep: 700ms;    /* anillo de progreso (tope del sistema) */
   --chart-enter: 360ms;
@@ -34,10 +34,14 @@
 
 @media (prefers-reduced-motion: no-preference) {
   @keyframes rv-sube {
-    from { opacity: 0; transform: translateY(6px); }
+    from { transform: translateY(5px); }
   }
   @keyframes rv-fade {
     from { opacity: 0; }
+  }
+  /* Barras: crecen desde el origen (scaleX) en 420 ms. */
+  @keyframes rv-crece {
+    from { transform: scaleX(0); }
   }
   @keyframes rv-giro {
     to { transform: rotate(360deg); }
@@ -73,12 +77,12 @@
   }
 
   /* Revelado al hacer scroll (ver movimiento/revelar.tsx). */
+  /* Entrada de bloque: translateY(5px)→0 en 250 ms, SIN opacidad, una sola vez. */
   [data-rv-revelar="oculto"] {
-    opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(5px);
   }
   [data-rv-revelar="visto"] {
-    transition: opacity var(--ui-slow) var(--ui-ease), transform var(--ui-slow) var(--ui-ease);
+    transition: transform var(--ui-slow) var(--ui-ease);
   }
 
   /* Hover / foco de los controles propios: fondo, borde, color a 120 ms. */
@@ -165,9 +169,9 @@
   max-height: 56dvh; overflow-y: auto;
 }
 
-.rv-tour__escena { height: 72px; margin: -2px 0 2px; padding: 4px 8px; border-radius: 8px; background: var(--canvas2, var(--canvas)); color: var(--ink2, var(--ink)); }
 .rv-tour__cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .rv-tour__paso { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+[data-ui="v2"] .rv-tour__paso { font-size: 12px; font-weight: 600; }
 .rv-tour__marcas { display: flex; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .rv-tour__marcas li { width: 14px; height: 3px; border-radius: 2px; background: var(--line2, var(--line)); }
 .rv-tour__marcas li[data-estado="hecho"] { background: var(--ink2, var(--ink)); }

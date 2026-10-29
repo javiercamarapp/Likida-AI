@@ -41,16 +41,33 @@ function useDialogo(abierto: boolean, onCerrar: () => void) {
       if (previo.current instanceof HTMLElement) previo.current.focus();
     }
   }, [abierto]);
+  // Si el componente se desmonta con el diálogo abierto, también se devuelve el foco al disparador.
+  useEffect(() => () => {
+    const d = ref.current;
+    if (d?.open) { d.close(); if (previo.current instanceof HTMLElement) previo.current.focus(); }
+  }, []);
 
   const alCancelar = useCallback((e: React.SyntheticEvent) => {
     e.preventDefault(); // Esc: el estado lo manda el padre
     onCerrar();
   }, [onCerrar]);
+  // Foco atrapado de verdad: el <dialog> nativo deja escapar Tab hacia el navegador; aquí se cicla dentro del panel.
+  const alTeclear = useCallback((e: React.KeyboardEvent<HTMLDialogElement>) => {
+    if (e.key !== 'Tab') return;
+    const d = ref.current;
+    if (!d) return;
+    const foco = [...d.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),input:not([disabled]):not([type="hidden"]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex="-1"])')]
+      .filter((el) => el.getClientRects().length > 0);
+    if (foco.length === 0) return;
+    const primero = foco[0], ultimo = foco[foco.length - 1];
+    if (e.shiftKey && (document.activeElement === primero || !d.contains(document.activeElement))) { e.preventDefault(); ultimo.focus(); }
+    else if (!e.shiftKey && (document.activeElement === ultimo || !d.contains(document.activeElement))) { e.preventDefault(); primero.focus(); }
+  }, []);
   // Clic en el fondo (el propio <dialog>) = cerrar.
   const alClic = useCallback((e: React.MouseEvent<HTMLDialogElement>) => {
     if (e.target === ref.current) onCerrar();
   }, [onCerrar]);
-  return { ref, alCancelar, alClic };
+  return { ref, alCancelar, alClic, alTeclear };
 }
 
 function Cabecera({ idTitulo, idDesc, titulo, descripcion, onCerrar }: {
@@ -72,7 +89,7 @@ function Cabecera({ idTitulo, idDesc, titulo, descripcion, onCerrar }: {
 export type TamanoDrawer = 'm' | 'l' | 'xl'; // 420 / 480 / 640 px
 
 export function Drawer({ abierto, onCerrar, titulo, descripcion, children, pie, tamano = 'm' }: Base & { tamano?: TamanoDrawer }) {
-  const { ref, alCancelar, alClic } = useDialogo(abierto, onCerrar);
+  const { ref, alCancelar, alClic, alTeclear } = useDialogo(abierto, onCerrar);
   const panel = useRef<HTMLDivElement>(null);
   const y0 = useRef<number | null>(null);
   const idTitulo = useId();
@@ -87,6 +104,7 @@ export function Drawer({ abierto, onCerrar, titulo, descripcion, children, pie, 
       aria-describedby={descripcion ? idDesc : undefined}
       onCancel={alCancelar}
       onClick={alClic}
+      onKeyDown={alTeclear}
     >
       <div className="rv-ov__panel" ref={panel}>
         <div
@@ -117,19 +135,22 @@ export function Drawer({ abierto, onCerrar, titulo, descripcion, children, pie, 
 
 export type TamanoModal = 'm' | 'l'; // 440 / 560 px
 
-export function Modal({ abierto, onCerrar, titulo, descripcion, children, pie, tamano = 'm' }: Base & { tamano?: TamanoModal }) {
-  const { ref, alCancelar, alClic } = useDialogo(abierto, onCerrar);
+/** `alerta` = confirmación que interrumpe (role="alertdialog"): acciones destructivas o con efectos fiscales. */
+export function Modal({ abierto, onCerrar, titulo, descripcion, children, pie, tamano = 'm', alerta = false }: Base & { tamano?: TamanoModal; alerta?: boolean }) {
+  const { ref, alCancelar, alClic, alTeclear } = useDialogo(abierto, onCerrar);
   const idTitulo = useId();
   const idDesc = useId();
   return (
     <dialog
       ref={ref}
       className="rv-ov rv-ov--modal"
+      role={alerta ? 'alertdialog' : undefined}
       data-tamano={tamano}
       aria-labelledby={idTitulo}
       aria-describedby={descripcion ? idDesc : undefined}
       onCancel={alCancelar}
       onClick={alClic}
+      onKeyDown={alTeclear}
     >
       <div className="rv-ov__panel">
         <Cabecera idTitulo={idTitulo} idDesc={idDesc} titulo={titulo} descripcion={descripcion} onCerrar={onCerrar} />

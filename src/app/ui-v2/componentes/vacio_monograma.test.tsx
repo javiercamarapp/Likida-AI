@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { Boton, Escena, EstadoVacio, iniciales, matizDeId, Monograma } from './index';
+import { Boton, EstadoVacio, iniciales, matizDeId, Monograma } from './index';
 
 describe('Monograma', () => {
   it('iniciales: conectores ignorados, una palabra = 2 letras, vacío seguro', () => {
@@ -19,25 +19,12 @@ describe('Monograma', () => {
   });
 });
 
-describe('EstadoVacio v2 / Escena', () => {
-  it('cada escena es un SVG decorativo; con título es img', () => {
-    for (const id of ['desglose-correo', 'documento-revision', 'conexion-tms', 'bienvenida', 'listo'] as const) {
-      const h = renderToStaticMarkup(<Escena id={id} />);
-      expect(h).toContain('<svg');
-      expect(h).toContain('aria-hidden="true"');
-      expect(h).not.toContain('<text'); // sin texto incrustado
-    }
-    expect(renderToStaticMarkup(<Escena id="listo" titulo="Listo" />)).toContain('role="img"');
-  });
-  it('escena animada solo cambia la clase; usa color del tema, nada fijo', () => {
-    const h = renderToStaticMarkup(<Escena id="conexion-tms" animada />);
-    expect(h).toContain('rv-escena--anima');
-    expect(h).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
-  });
-  it('vacío: título, qué falta y CTA real; compacto sin arte', () => {
+describe('EstadoVacio v2', () => {
+  it('una línea punteada: título, qué falta y CTA real; sin ilustración aunque se pase `escena`', () => {
     const h = renderToStaticMarkup(<EstadoVacio escena="conexion-tms" titulo="Sin conexión" accion={<Boton>Entregar archivo de muestra</Boton>}>Falta el archivo.</EstadoVacio>);
     expect(h).toContain('Sin conexión');
     expect(h).toContain('<button');
-    expect(renderToStaticMarkup(<EstadoVacio escena="listo" titulo="x" compacto />)).not.toContain('rv-vacio__arte');
+    expect(h).not.toContain('<svg');
+    expect(h).not.toContain('rv-vacio__arte');
   });
 });

@@ -8,5 +8,5 @@ export { cx } from './clases';
 export { Drawer, Modal, type TamanoDrawer, type TamanoModal } from './overlay';
 export { EstadoVacio } from './estado-vacio';
 export { Monograma, iniciales, matizDeId } from './monograma';
-export { Escena, type EscenaId } from '../svg/escenas';
+export { type EscenaId } from '../svg/escenas';
 export { Switch } from './switch';

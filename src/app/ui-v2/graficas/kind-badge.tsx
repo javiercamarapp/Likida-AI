@@ -3,7 +3,7 @@ import { cx } from '../componentes/clases';
 
 // Modelo epistémico del dato (PLAN §2.4; regla del repo: nunca inventar una cifra).
 // Icono + patrón de borde + texto: JAMÁS solo color.
-//   observado  = borde sólido (registrado en la fuente)
+//   observado  = SILENCIOSO: punto de 6 px + texto muted, sin borde (registrado en la fuente)
 //   estimado   = borde discontinuo (calculado con un supuesto declarado)
 //   inferido   = borde punteado (deducido de otros datos)
 //   sin_dato   = punteado vacío (no hay dato; NO es cero)
@@ -22,7 +22,7 @@ export function KindBadge({ tipo, className }: { tipo: TipoDato; className?: str
   const r = ROTULO_DATO[tipo];
   return (
     <span className={cx('rv-kind', className)} data-tipo={tipo} title={r.ayuda}>
-      <Icono width={12} height={12} strokeWidth={2.2} aria-hidden="true" />
+      {tipo === 'observado' ? <i className="rv-kind__punto" aria-hidden="true" /> : <Icono width={12} height={12} strokeWidth={2.2} aria-hidden="true" />}
       {r.texto}
     </span>
   );
