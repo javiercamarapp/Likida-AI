@@ -13,11 +13,15 @@
 
 /* Tokens de las primitivas (B). Claro y oscuro; solo neutros, sin acento cromático. */
 :root [data-ui="v2"] {
-  --btn-tenue-bg: #e4e4e6; --btn-tenue-bd: #d6d6d9; --btn-tenue-hv: #d6d6d9;
+  --btn-tenue-bg: #e4e4e6;
+  --btn-tenue-bd: #d6d6d9;
+  --btn-tenue-hv: #d6d6d9;
   --ctl-vacio-bd: #8a8a90;
 }
 :root[data-theme="dark"] [data-ui="v2"] {
-  --btn-tenue-bg: #2a2a2f; --btn-tenue-bd: #48484a; --btn-tenue-hv: #34343a;
+  --btn-tenue-bg: #2a2a2f;
+  --btn-tenue-bd: #48484a;
+  --btn-tenue-hv: #34343a;
   --ctl-vacio-bd: #7a7a82;
 }
 
@@ -104,7 +108,7 @@
 @media (max-width: 640px) { .rv-aviso { flex-wrap: wrap; } .rv-aviso__acciones { width: 100%; } }
 
 /* ── Encabezado de página: eyebrow + H1 20 + descripción 1 línea | acciones, MISMO renglón ── */
-.rv-encabezado { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 52px; }
+.rv-encabezado { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; }
 .rv-encabezado__texto { min-width: 0; flex: 1 1 auto; }
 .rv-encabezado__rotulo { margin: 0 0 2px; font: 600 12px/1.3 var(--font-sans-ui, inherit); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .rv-encabezado__titulo { margin: 0; font-size: 20px; line-height: 1.2; font-weight: 600; letter-spacing: -.025em; color: var(--ink); }
@@ -165,7 +169,8 @@
 }
 
 /* ── Estado vacío v2: celda punteada y UNA línea, sin ilustración ─────────── */
-.rv-vacio { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 12px; min-height: 44px; padding: 8px 14px; border: 1.5px dotted var(--line2, var(--line)); border-radius: 8px; background: transparent; text-align: center; }
+.rv-vacio { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 12px; min-height: 44px; padding: 8px 14px; border: 1.5px dotted var(--input); border-radius: 8px; background: transparent; text-align: center; }
+@media (max-width: 819px) { .rv-vacio { padding: 8px 12px; } }
 .rv-vacio__titulo { margin: 0; font-size: 13px; line-height: 1.4; font-weight: 600; color: var(--ink); }
 .rv-vacio__texto { margin: 0; font-size: 13px; line-height: 1.4; color: var(--muted); }
 .rv-vacio__accion { display: flex; align-items: center; gap: 8px; }

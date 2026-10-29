@@ -15,7 +15,7 @@ export function AreaMini({ valores, etiquetas, matiz = 1, etiqueta, formato = (v
   if (ok.length < 2) {
     return <figure className="rv-gr mc-vacio" style={{ height: alto }} aria-label={etiqueta}><span>Sin serie suficiente</span></figure>;
   }
-  const W = 320, padL = 40, padR = 8, padT = 8, padB = 8;
+  const W = 320, padL = 4, padR = 6, padT = 8, padB = 8;
   const min = Math.min(0, ...ok), max = Math.max(...ok);
   const rango = max - min || 1;
   const n = valores.length - 1;
@@ -30,23 +30,27 @@ export function AreaMini({ valores, etiquetas, matiz = 1, etiqueta, formato = (v
   const idg = `rv-ag-${matiz}`;
   return (
     <figure className="rv-gr rv-area" data-matiz={matiz} aria-label={etiqueta}>
+      <div className="rv-area__ejes" aria-hidden="true">
+        {marcas.map((m) => <span key={m} style={{ top: `${(Y(m) / alto) * 100}%` }}>{formato(m)}</span>)}
+      </div>
+      <div className="rv-area__plot">
       <svg viewBox={`0 0 ${W} ${alto}`} width="100%" height={alto} preserveAspectRatio="none" role="img" aria-label={etiqueta}>
         <defs>
           <linearGradient id={idg} x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stopColor="var(--cat)" stopOpacity=".12" />
-            <stop offset="1" stopColor="var(--cat)" stopOpacity="0" />
+            <stop offset="0" stopColor="var(--cat, currentColor)" stopOpacity=".12" />
+            <stop offset="1" stopColor="var(--cat, currentColor)" stopOpacity="0" />
           </linearGradient>
         </defs>
         {marcas.map((m) => (
           <g key={m}>
-            <line className="rv-gr__rejilla" x1={padL} x2={W - padR} y1={Y(m)} y2={Y(m)} />
-            <text className="rv-gr__eje" x={padL - 6} y={Y(m) + 4} textAnchor="end">{formato(m)}</text>
+            <line className="rv-gr__rejilla" x1={padL} x2={W - padR} y1={Y(m)} y2={Y(m)} vectorEffect="non-scaling-stroke" />
           </g>
         ))}
         <path d={`${d} L${X(n).toFixed(1)} ${Y(min)} L${X(0).toFixed(1)} ${Y(min)} Z`} fill={`url(#${idg})`} stroke="none" />
         <path className="rv-area__linea" d={d} fill="none" pathLength={1} vectorEffect="non-scaling-stroke" />
-        <circle className="rv-area__punto" cx={X(ult[0])} cy={Y(ult[1])} r={3.25} />
       </svg>
+      <i className="rv-area__punto" aria-hidden="true" style={{ left: `${(X(ult[0]) / W) * 100}%`, top: `${(Y(ult[1]) / alto) * 100}%` }} />
+      </div>
       <table className="rv-sr">
         <caption>{etiqueta}</caption>
         <tbody>{valores.map((v, i) => <tr key={i}><th scope="row">{etiquetas?.[i] ?? i + 1}</th><td>{v === null ? '—' : formato(v)}</td></tr>)}</tbody>

@@ -75,8 +75,12 @@ export function TiraKpi({ items, etiqueta = 'Indicadores' }: { items: ItemKpi[];
                   <span className="rv-sr"> ({SENTIDO[it.delta.dir]})</span>
                 </span>
               ) : null}
-              {tipo === 'observado' ? <i className="rv-kpi__punto" aria-hidden="true" /> : tipo ? <KindBadge tipo={tipo} /> : null}
-              {sello ? <span className="rv-kpi__sello">{sello}</span> : null}
+              {tipo && tipo !== 'observado' ? <KindBadge tipo={tipo} /> : null}
+              {tipo === 'observado' || sello ? (
+                <span className="rv-kpi__sello">
+                  {tipo === 'observado' ? <i className="rv-kpi__punto" aria-hidden="true" /> : null}{sello}
+                </span>
+              ) : null}
             </span>
           </>
         );

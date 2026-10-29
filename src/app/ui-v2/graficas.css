@@ -8,14 +8,18 @@
 
 /* Tokens de procedencia y de gráfica (B). Por TRAZO, no por matiz (ESTILO §2). */
 :root [data-ui="v2"] {
-  --prov-est-bg: #e4e4e6; --prov-est-bd: #4a4a51;
-  --prov-inf-bg: #f7f7f8; --prov-inf-bd: #75757c;
+  --prov-est-bg: #e4e4e6;
+  --prov-est-bd: #4a4a51;
+  --prov-inf-bg: #f7f7f8;
+  --prov-inf-bd: #75757c;
   --prov-sin-bd: #8a8a90;
   --gr-rejilla: #0e0e1014; --gr-eje: #0e0e1033;
 }
 :root[data-theme="dark"] [data-ui="v2"] {
-  --prov-est-bg: #2a2a2f; --prov-est-bd: #a3a3ab;
-  --prov-inf-bg: #17171a; --prov-inf-bd: #7a7a82;
+  --prov-est-bg: #2a2a2f;
+  --prov-est-bd: #a3a3ab;
+  --prov-inf-bg: #17171a;
+  --prov-inf-bd: #7a7a82;
   --prov-sin-bd: #7a7a82;
   --gr-rejilla: #f4f4f514; --gr-eje: #f4f4f533;
 }
@@ -29,11 +33,21 @@
 .rv-gr[data-matiz="6"], .rv-kpi[data-matiz="6"], .rv-spark[data-matiz="6"] { --cat: var(--chart-6, var(--muted)); --cat-ink: var(--ink-6, var(--ink)); }
 .rv-gr[data-matiz="7"], .rv-kpi[data-matiz="7"], .rv-spark[data-matiz="7"] { --cat: var(--chart-7, var(--muted)); --cat-ink: var(--ink-7, var(--ink)); }
 .rv-gr[data-matiz="8"], .rv-kpi[data-matiz="8"], .rv-spark[data-matiz="8"] { --cat: var(--chart-8, var(--muted)); --cat-ink: var(--ink-8, var(--ink)); }
-.rv-tono-0 { --tono: color-mix(in srgb, var(--cat, var(--ink)) 100%, var(--surface)); }
-.rv-tono-1 { --tono: color-mix(in srgb, var(--cat, var(--ink)) 72%, var(--surface)); }
-.rv-tono-2 { --tono: color-mix(in srgb, var(--cat, var(--ink)) 52%, var(--surface)); }
-.rv-tono-3 { --tono: color-mix(in srgb, var(--cat, var(--ink)) 34%, var(--surface)); }
-.rv-tono-4 { --tono: color-mix(in srgb, var(--cat, var(--ink)) 20%, var(--surface)); }
+.rv-tono-0 {
+  --tono: color-mix(in srgb, var(--cat, var(--ink)) 100%, var(--surface));
+}
+.rv-tono-1 {
+  --tono: color-mix(in srgb, var(--cat, var(--ink)) 72%, var(--surface));
+}
+.rv-tono-2 {
+  --tono: color-mix(in srgb, var(--cat, var(--ink)) 52%, var(--surface));
+}
+.rv-tono-3 {
+  --tono: color-mix(in srgb, var(--cat, var(--ink)) 34%, var(--surface));
+}
+.rv-tono-4 {
+  --tono: color-mix(in srgb, var(--cat, var(--ink)) 20%, var(--surface));
+}
 
 /* ── KindBadge: Observado silencioso; Estimado discontinuo; Inferido punteado; Sin dato vacío ── */
 .rv-kind {
@@ -53,7 +67,7 @@
   border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden;
 }
 .rv-kpi {
-  position: relative; display: flex; flex-direction: column; justify-content: flex-start; gap: 6px; min-width: 0; min-height: 112px;
+  position: relative; display: flex; flex-direction: column; gap: 6px; min-width: 0;
   padding: 14px; color: inherit; text-decoration: none; border-top: 3px solid var(--cat, transparent);
   box-shadow: -1px 0 0 var(--line), 0 -1px 0 var(--line);
 }
@@ -68,14 +82,15 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -3px; }
 .rv-kpi__valor[data-vacio] { font-size: 18px; font-weight: 600; color: var(--muted); }
 .rv-kpi__spark { display: inline-flex; flex: none; }
 .rv-kpi__segs { display: flex; gap: 2px; height: 6px; }
-.rv-kpi__segs i { flex-basis: 0; min-width: 4px; border-radius: 3px; background: var(--tono); }
-.rv-kpi__pie { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; min-height: 20px; font-size: 12px; line-height: 1.4; color: var(--muted); white-space: nowrap; }
-.rv-kpi__punto { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--ink); }
-.rv-kpi__sello { min-width: 0; }
+.rv-kpi__segs i { flex-basis: 0; min-width: 4px; border-radius: 3px; background: var(--tono, var(--ink)); }
+.rv-kpi__pie { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; min-height: 20px; font-size: 12px; line-height: 1.4; color: var(--muted); white-space: nowrap; margin-top: auto; }
+.rv-kpi__punto { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--ink); vertical-align: middle; }
+.rv-kpi__sello { display: inline-flex; align-items: center; min-width: 0; }
 .rv-kpi__delta { display: inline-flex; align-items: center; gap: 4px; min-height: 20px; padding: 0 8px; border-radius: 999px; font-weight: 600; background: var(--canvas); color: var(--ink2, var(--ink)); }
 .rv-kpi__delta[data-tono="ok"] { background: var(--okbg, var(--canvas)); color: var(--ok, var(--ink)); }
 .rv-kpi__delta[data-tono="bad"] { background: var(--badbg, var(--canvas)); color: var(--bad, var(--ink)); }
 /* La procedencia pasa al tooltip (title) bajo 1100 px: jamás elipsis. */
+@media (max-width: 819px) { .rv-chartstate { padding: 12px; } }
 @media (max-width: 1099px) { .rv-kpi__sello { display: none; } }
 @media (max-width: 819px) {
   .rv-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -86,33 +101,37 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -3px; }
 }
 
 /* ── Gráficas básicas: rejilla, ejes, sparkline, área, dona, apilada, bullet ── */
-.rv-gr { margin: 0; color: var(--ink); }
+.rv-gr { position: relative; margin: 0; color: var(--ink); }
+.rv-area { display: flex; }
+.rv-area__ejes { position: relative; flex: none; width: 40px; pointer-events: none; }
+.rv-area__plot { position: relative; flex: 1 1 auto; min-width: 0; }
+.rv-area__ejes span { position: absolute; right: 4px; transform: translateY(-50%); font: 400 12px/1 var(--font-sans-ui, inherit); color: var(--muted); font-variant-numeric: tabular-nums; }
 .rv-gr__rejilla { stroke: var(--gr-rejilla); stroke-width: 1; }
 .rv-gr__eje { fill: var(--muted); font: 400 12px var(--font-sans-ui, inherit); }
-.mc-vacio { display: grid; place-items: center; border: 1.5px dotted var(--line2, var(--line)); border-radius: 8px; font-size: 13px; color: var(--muted); }
+.mc-vacio { display: grid; place-items: center; border: 1.5px dotted var(--input); border-radius: 8px; font-size: 13px; color: var(--muted); }
 .rv-spark { display: block; }
 .rv-spark__area { fill: var(--cat, var(--ink)); fill-opacity: .06; stroke: none; }
 .rv-spark__linea { stroke: var(--cat, var(--ink)); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; }
 .rv-spark__punto { fill: var(--cat, var(--ink)); }
 .rv-area__linea { stroke: var(--cat, var(--ink)); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; }
-.rv-area__punto { fill: var(--cat, var(--ink)); }
-.rv-dona { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.rv-area__punto { position: absolute; width: 6.5px; height: 6.5px; margin: -3.25px 0 0 -3.25px; border-radius: 50%; background: var(--cat, var(--ink)); }
+.rv-dona { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .rv-dona__lienzo { position: relative; flex: none; }
 .rv-dona__pista { stroke: var(--line); }
-.rv-dona__gajo { stroke: var(--tono); }
+.rv-dona__gajo { stroke: var(--tono, var(--ink)); }
 .rv-dona__centro { position: absolute; inset: 0; display: grid; place-items: center; font: 700 20px/1 var(--font-display, inherit); font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
 .rv-dona__leyenda, .rv-apilada__leyenda { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 13px; min-width: 0; flex: 1 1 140px; }
 .rv-dona__leyenda li { display: flex; align-items: center; gap: 8px; }
 .rv-dona__etq { flex: 1 1 auto; min-width: 0; }
 .rv-dona__val { font-weight: 600; font-variant-numeric: tabular-nums; }
-.rv-dona__marca { width: 8px; height: 8px; border-radius: 2px; flex: none; background: var(--tono); }
+.rv-dona__marca { width: 8px; height: 8px; border-radius: 2px; flex: none; background: var(--tono, var(--ink)); }
 .rv-apilada__pista { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--line); }
 .rv-apilada[data-segmentada] .rv-apilada__pista { height: 6px; gap: 2px; background: transparent; overflow: visible; }
-.rv-apilada__tramo { flex-basis: 0; background: var(--tono); }
+.rv-apilada__tramo { flex-basis: 0; background: var(--tono, var(--ink)); }
 .rv-apilada[data-segmentada] .rv-apilada__tramo { border-radius: 3px; min-width: 4px; }
-.rv-apilada__tramo[data-parcial] { background: repeating-linear-gradient(45deg, var(--tono) 0 3px, transparent 3px 6px); }
+.rv-apilada__tramo[data-parcial] { background: repeating-linear-gradient(45deg, var(--tono, var(--ink)) 0 3px, transparent 3px 6px); }
 .rv-apilada__vacio { flex: 1; border: 1px dashed var(--prov-sin-bd); border-radius: 4px; }
-.rv-apilada__leyenda { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.rv-apilada__leyenda { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 12px; color: var(--muted); }
 .rv-apilada__leyenda li { display: inline-flex; align-items: center; gap: 6px; }
 .rv-apilada__leyenda b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 .rv-bullet { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; font-size: 13px; }
@@ -125,8 +144,8 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -3px; }
 
 /* ── ChartState ────────────────────────────────────────────────────────── */
 .rv-chartstate {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; padding: 24px 16px;
-  color: var(--muted); border: 1px dashed var(--line2, var(--line)); border-radius: 12px; background: var(--surface);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; padding: 12px 14px;
+  color: var(--muted); border: 1.5px dotted var(--input); border-radius: 8px; background: var(--surface);
 }
 .rv-chartstate[data-estado="error"] { border-style: solid; border-color: color-mix(in srgb, var(--bad, var(--muted)) 30%, transparent); background: var(--badbg, var(--surface)); color: var(--bad, var(--ink)); }
 .rv-chartstate__msg { margin: 0; max-width: 48ch; font-size: 13px; }

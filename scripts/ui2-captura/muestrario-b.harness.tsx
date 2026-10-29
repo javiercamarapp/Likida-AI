@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- el arnés escribe en una ruta de salida propia */
 // ═══════════════════════════════════════════════════════════════════════════
 // MUESTRARIO DEL CARRIL B (ui2-b2): TODAS las primitivas v2 reales en sus estados (vacío / carga / error /
 // deshabilitado / hover-foco por clase) dentro del chrome v2 real. Datos 100 % sintéticos.
@@ -31,7 +32,7 @@ const SEMANAS = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10'];
 
 function Bloque({ titulo, children }: { titulo: string; children: ReactNode }) {
   return (
-    <section className="card" style={{ padding: 14 }}>
+    <section className="card" style={{ padding: 12 }}>
       <h2 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 600, letterSpacing: '-.01em' }}>{titulo}</h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>{children}</div>
     </section>
@@ -44,14 +45,14 @@ const V: Record<string, () => ReactNode> = {
   'b01-botones-chips': () => (
     <>
       <P.EncabezadoPagina rotulo="Muestrario" titulo="Botones, chips y avisos" descripcion="Primario tenue, 32 px, toque de 44 por ::after."
-        acciones={<><P.Boton icono={<Download />}>Exportar</P.Boton><P.Boton variante="primary" icono={<FileUp />}>Entregar archivo</P.Boton></>} />
+        acciones={<><P.Boton icono={<Download />}>Exportar</P.Boton><P.Boton icono={<FileUp />}>Entregar archivo</P.Boton></>} />
       <Bloque titulo="Botones">
         <Fila>
           <P.Boton variante="primary">Primario tenue</P.Boton><P.Boton>Secundario</P.Boton><P.Boton variante="ghost">Ghost</P.Boton>
           <P.Boton variante="danger-soft">Anular</P.Boton><P.Boton tamano="sm">Fila 28</P.Boton>
         </Fila>
         <Fila>
-          <P.Boton variante="primary" disabled>Primario deshabilitado</P.Boton><P.Boton disabled>Deshabilitado</P.Boton>
+          <P.Boton disabled>Deshabilitado</P.Boton>
           <P.Boton loading>Guardando</P.Boton><P.BotonEnlace href="/dashboard/viajes" icono={<Truck />}>Enlace</P.BotonEnlace>
           <P.BotonEnlace href="/x" deshabilitado>Enlace deshabilitado</P.BotonEnlace>
         </Fila>
@@ -76,7 +77,7 @@ const V: Record<string, () => ReactNode> = {
   'b02-campos-tablas': () => (
     <>
       <P.EncabezadoPagina titulo="Campos y tablas" descripcion="Alto visual 32 (36 en móvil), chevron con aire, tabla 36/40." />
-      <Rejilla n={2}>
+      <Rejilla n={1}>
         <Bloque titulo="Campos">
           <div style={{ display: 'grid', gap: 8 }}>
             <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>Nombre del patio<input defaultValue="Patio Monterrey" /></label>
@@ -98,7 +99,7 @@ const V: Record<string, () => ReactNode> = {
             {viajes(10, 5).map((v, i) => (
               <tr key={v.id}>
                 <td>{v.folio}</td><td>{v.origen ?? '—'} → {v.destino ?? '—'}</td>
-                <td className="num">{mxn(v.anticipo * 0.31)}</td><td className="num">{i % 4 === 3 ? '—' : mxn(i * 45)}</td>
+                <td className="num">{mxn(v.anticipo * 0.31)}</td><td className="num">{i % 4 === 3 ? '—' : mxn(i * 45 + 60)}</td>
                 <td><P.Chip tamano="estado" tono={i % 3 === 0 ? 'bad' : 'ok'}>{i % 3 === 0 ? 'Revisar' : 'Cuadra'}</P.Chip></td>
                 <td style={{ textAlign: 'right' }}><P.BotonEnlace href="/dashboard/viajes" tamano="sm" variante="ghost">Ver</P.BotonEnlace></td>
               </tr>
@@ -117,7 +118,7 @@ const V: Record<string, () => ReactNode> = {
         { etiqueta: 'Carta Porte completas', valor: '84', icono: <ShieldCheck />, metrica: 'cumplimiento_carta_porte', sello: '84 de 96 · hoy', segmentos: [{ etiqueta: 'Completas', valor: 84 }, { etiqueta: 'Pendientes', valor: 12 }] },
         { etiqueta: 'A tiempo', valor: null, icono: <Truck />, metrica: 'servicio_a_tiempo', sello: 'Sin lector verificado' },
       ]} />
-      <Rejilla n={2}>
+      <Rejilla n={1}>
         <Bloque titulo="Área mínima"><G.AreaMini valores={SERIE} etiquetas={SEMANAS} matiz={1} etiqueta="Cierres por semana" formato={(v) => String(v)} /></Bloque>
         <Bloque titulo="Área sin serie (vacío)"><G.AreaMini valores={[7]} etiqueta="Serie corta" /></Bloque>
         <Bloque titulo="Dona (≤5 gajos de un matiz)"><G.DonaMini matiz={2} etiqueta="Gasto de ruta por rubro" gajos={[{ etiqueta: 'Diésel', valor: 91000 }, { etiqueta: 'Casetas', valor: 48200 }, { etiqueta: 'Maniobras', valor: 12900 }, { etiqueta: 'Viáticos', valor: 22100 }, { etiqueta: 'Otros', valor: null }]} formato={mxn} /></Bloque>
@@ -134,10 +135,10 @@ const V: Record<string, () => ReactNode> = {
   'b04-estados': () => (
     <>
       <P.EncabezadoPagina titulo="Estados de gráfica y anillo" descripcion="Carga, error, vacío y avance." />
-      <Rejilla n={3}>
+      <Rejilla n={1}>
         <Bloque titulo="Error"><G.ChartState estado="error" mensaje="No disponible ahora. No es cero: la consulta no respondió a tiempo." alto={120} accion={<P.Boton tamano="sm">Reintentar</P.Boton>} /></Bloque>
         <Bloque titulo="Vacío"><G.ChartState estado="vacio" mensaje="Sin datos en el periodo." alto={120} /></Bloque>
-        <Bloque titulo="Avance"><Fila><G.ProgresoAnillo valor={72} etiqueta="Avance" /><G.ProgresoAnillo valor={null} etiqueta="Sin dato" /><G.CheckExito /></Fila></Bloque>
+        <Bloque titulo="Avance y primario deshabilitado"><Fila><P.Boton variante="primary" disabled>Primario deshabilitado</P.Boton><G.ProgresoAnillo valor={72} etiqueta="Avance" /><G.ProgresoAnillo valor={null} etiqueta="Sin dato" /><G.CheckExito /></Fila></Bloque>
       </Rejilla>
     </>
   ),
