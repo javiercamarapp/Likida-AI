@@ -5,10 +5,13 @@ import { readFileSync } from 'node:fs';
 export class ArnesSinV2 extends Error {}
 
 export function exigirV2Html(html: string, id: string): void {
-  // No basta con que la cadena aparezca (comentario, texto, otro elemento): debe estar en la etiqueta de apertura del elemento
-  // raíz del chrome (`tema-neutro`), en cualquier orden de atributos.
-  const raiz = /<div\b(?=[^>]*\bclass="[^"]*\btema-neutro\b)(?=[^>]*\bdata-ui="v2")[^>]*>/;
-  if (!raiz.test(html)) throw new ArnesSinV2(`ABORTO: la vista ${id} no trae data-ui="v2" en la raíz del chrome (.tema-neutro) (¿chrome v1?)`);
+  // Sin comentarios, <script> ni <style> (ahí la cadena no cuenta). La etiqueta de apertura del elemento raíz del chrome
+  // (`tema-neutro`) debe llevar data-ui="v2" (en cualquier orden de atributos) y su contenido debe traer el shell.
+  const limpio = html.replace(/<!--[\s\S]*?-->/g, '').replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, '');
+  const m = /<div\b(?=[^>]*\bclass="[^"]*\btema-neutro\b)(?=[^>]*\bdata-ui="v2")[^>]*>/.exec(limpio);
+  if (!m) throw new ArnesSinV2(`ABORTO: la vista ${id} no trae data-ui="v2" en la raíz del chrome (.tema-neutro) (¿chrome v1?)`);
+  const dentro = limpio.slice(m.index + m[0].length);
+  if (!/class="[^"]*\b(rv-sb|rv-cab-movil)\b/.test(dentro)) throw new ArnesSinV2(`ABORTO: la raíz v2 de ${id} no contiene el shell (.rv-sb / .rv-cab-movil)`);
 }
 
 export function exigirV2Css(ruta: string): void {

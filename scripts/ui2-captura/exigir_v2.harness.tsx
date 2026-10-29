@@ -8,7 +8,7 @@ import path from 'node:path';
 describe('el arnés aborta si lo que fotografía no es la UI v2', () => {
   it('acepta la raíz del chrome v2', () => {
     expect(() => exigirV2Html('<div class="tema-neutro x" data-ui="v2" style="a:b"><aside class="rv-sb"></aside></div>', 'ok')).not.toThrow();
-    expect(() => exigirV2Html('<div data-ui="v2" class="tema-neutro"></div>', 'orden')).not.toThrow();
+    expect(() => exigirV2Html('<div data-ui="v2" class="tema-neutro"><header class="rv-cab-movil"></header></div>', 'orden')).not.toThrow();
   });
   it('aborta con chrome v1', () => {
     expect(() => exigirV2Html('<div class="tema-neutro"><aside></aside></div>', 'v1')).toThrow(/ABORTO/);
@@ -17,6 +17,11 @@ describe('el arnés aborta si lo que fotografía no es la UI v2', () => {
     expect(() => exigirV2Html('<!-- data-ui="v2" --><div class="tema-neutro"></div>', 'c')).toThrow(/ABORTO/);
     expect(() => exigirV2Html('<p>data-ui="v2"</p><div class="tema-neutro"></div>', 't')).toThrow(/ABORTO/);
     expect(() => exigirV2Html('<span data-ui="v2"></span><div class="tema-neutro"></div>', 's')).toThrow(/ABORTO/);
+  });
+  it('aborta si la etiqueta completa solo está en un comentario o en un script, o la raíz no trae el shell', () => {
+    expect(() => exigirV2Html('<!-- <div class="tema-neutro" data-ui="v2"><aside class="rv-sb"></aside></div> --><div class="tema-neutro"></div>', 'c')).toThrow(/ABORTO/);
+    expect(() => exigirV2Html('<script>var a=\'<div class="tema-neutro" data-ui="v2"><aside class="rv-sb"></aside>\'</script><div class="tema-neutro"></div>', 'sc')).toThrow(/ABORTO/);
+    expect(() => exigirV2Html('<div class="tema-neutro" data-ui="v2"><main>sin shell</main></div>', 'ss')).toThrow(/ABORTO/);
   });
   it('aborta con un CSS sin reglas v2', () => {
     const d = mkdtempSync(path.join(tmpdir(), 'exigir-'));
