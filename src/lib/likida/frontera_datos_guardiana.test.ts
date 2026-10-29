@@ -634,9 +634,9 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 326;
 // `peajes/repo.ts` `devolverIntentoAviso` +1 (A2P-05: devuelve el intento tomado cuando la ventana de WhatsApp está cerrada) y `marcarAvisoRequerido` +1 (A2P-05: deja pendiente el aviso sin gastar intentos cuando falta destinatario) y `peajes/aviso_atipicos.ts`
 // `confirmar` +1 (limpia el vencimiento de la reserva tras enviar) y `recuperarVencidas` +1 (A2P-18, devuelve a `nuevo` lo reservado y vencido; multi-flota a propósito,
 // como el barrido de avisos). La reserva de siempre solo cambió de forma (sigue siendo 1 llamada). Cubiertas por aviso_oficina_ola10.test.ts, ciclo_completo.e2e.test.ts y aviso_atipicos.test.ts.
-// INTEGRACION OLA 10: 2,440 (master con el rediseno) + 3 (carril A) + 4 (carril B) + 0 (carril C) = 2,447, medido con el guardian sobre el arbol fusionado.
+// INTEGRACION OLA 10: 2,440 (master con el rediseno) + 3 (carril A) + 4 (carril B) + 0 (carril C) = 2,447 medido sobre el arbol fusionado; +1 por la integracion: `recuperarVencidas` (carril B) pasaba la guarda de consultas_admin_filtran_tenant solo con un UPDATE global sin tenant_id, asi que ahora lee los vencidos (+1) y devuelve por flota con `.eq('tenant_id')` (el UPDATE de siempre): 2,448 final.
 // La regla de perfil de `guardarConfigCorreo` usa `perfilDeTenant` (su acceso ya estaba contado en perfil_tenant.ts): 0 llamadas nuevas.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_447;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_448;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

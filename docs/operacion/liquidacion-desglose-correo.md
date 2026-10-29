@@ -88,7 +88,7 @@ Reintentos: espera de 2, 4, 8 y 16 minutos entre intentos y un máximo de 5 inte
 Todas son de lectura para quien ve finanzas de la flota y de escritura solo para `service_role`. Todo el acceso a datos
 nuevo vive en un solo módulo (`liquidacion_externa/repo_correo.ts`); la prueba de frontera de datos congela el número de
 archivos y de llamadas directas a Supabase fuera de la frontera, y sus techos se suben en el mismo commit que añade
-acceso, con explicación (hoy 326 archivos y 2 447 llamadas).
+acceso, con explicación (hoy 326 archivos y 2 448 llamadas).
 
 ## 5. Configuración por flota
 

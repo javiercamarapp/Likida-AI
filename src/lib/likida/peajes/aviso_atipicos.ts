@@ -172,14 +172,29 @@ export const almacenAvisoAtipicos: AlmacenAvisoAtipicos = {
   },
 
   async recuperarVencidas() {
-    const { data, error } = await acotada(supabaseAdmin().from('peaje_atipico')
-      .update({ estado: 'nuevo', avisado_en: null, aviso_reservado_hasta: null, actualizado_en: new Date().toISOString() })
-      .eq('estado', 'avisado').lt('aviso_reservado_hasta', new Date().toISOString()).select('id'), 'peajes.atipicos_aviso_recuperar');
-    if (error) {
-      if (/aviso_reservado_hasta/.test(error.message)) return 0; // 0945 sin aplicar
-      throw new Error(`avisoAtipicos.recuperarVencidas: ${error.message}`);
+    // Barrido global a propósito (el cron recupera lo vencido de TODAS las flotas), pero cada UPDATE va anclado a su flota: primero se leen los
+    // vencidos con su flota y luego se devuelven por flota, repitiendo la condición (si otro proceso lo re-reservó entre medias, no se toca).
+    const ahora = new Date().toISOString();
+    const leidos = await acotada(supabaseAdmin().from('peaje_atipico')
+      .select('id, tenant_id').eq('estado', 'avisado').lt('aviso_reservado_hasta', ahora).order('id').limit(500), 'peajes.atipicos_aviso_vencidas');
+    if (leidos.error) {
+      if (/aviso_reservado_hasta/.test(leidos.error.message)) return 0; // 0945 sin aplicar
+      throw new Error(`avisoAtipicos.recuperarVencidas: ${leidos.error.message}`);
     }
-    return (data ?? []).length;
+    const porFlota = new Map<string, string[]>();
+    for (const f of (leidos.data ?? []) as Array<{ id: unknown; tenant_id: unknown }>) {
+      const t = String(f.tenant_id);
+      porFlota.set(t, [...(porFlota.get(t) ?? []), String(f.id)]);
+    }
+    let devueltas = 0;
+    for (const [tenantId, ids] of porFlota) {
+      const { data, error } = await acotada(supabaseAdmin().from('peaje_atipico')
+        .update({ estado: 'nuevo', avisado_en: null, aviso_reservado_hasta: null, actualizado_en: ahora })
+        .eq('tenant_id', tenantId).in('id', ids).eq('estado', 'avisado').lt('aviso_reservado_hasta', ahora).select('id'), 'peajes.atipicos_aviso_recuperar');
+      if (error) throw new Error(`avisoAtipicos.recuperarVencidas: ${error.message}`);
+      devueltas += (data ?? []).length;
+    }
+    return devueltas;
   },
 
   async liberar(tenantId, ids, motivo) {

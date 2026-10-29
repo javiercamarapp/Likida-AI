@@ -253,6 +253,16 @@ describe('A2P-18: la reserva del aviso de atípicos vence si el proceso muere an
     expect(avisarOk).toHaveBeenCalledTimes(1);
   });
 
+  it('la recuperación devuelve por flota: vencidos de dos flotas vuelven a «nuevo» y cada UPDATE va anclado a su tenant', async () => {
+    const vencida = new Date(Date.now() - 60_000).toISOString();
+    base({ peaje_atipico: [
+      hallazgo('h1', 'repeticion_caseta', 'TC9001', { estado: 'avisado', avisado_en: vencida, aviso_reservado_hasta: vencida }),
+      { ...hallazgo('h2', 'repeticion_caseta', 'TC9002', { estado: 'avisado', avisado_en: vencida, aviso_reservado_hasta: vencida }), tenant_id: OTRO },
+    ] });
+    expect(await A.almacenAvisoAtipicos.recuperarVencidas!()).toBe(2);
+    for (const f of db.tablas.peaje_atipico) { expect(f.estado).toBe('nuevo'); expect(f.aviso_reservado_hasta ?? null).toBeNull(); }
+  });
+
   it('una reserva vigente (otro proceso enviando) no se toca; y tras enviar queda confirmada (sin vencimiento)', async () => {
     const vigente = new Date(Date.now() + 5 * 60_000).toISOString();
     base({ peaje_atipico: [hallazgo('h1', 'repeticion_caseta', 'TC9001', { estado: 'avisado', avisado_en: vigente, aviso_reservado_hasta: vigente })] });
