@@ -5,7 +5,10 @@ import { readFileSync } from 'node:fs';
 export class ArnesSinV2 extends Error {}
 
 export function exigirV2Html(html: string, id: string): void {
-  if (!html.includes('data-ui="v2"')) throw new ArnesSinV2(`ABORTO: la vista ${id} no trae [data-ui="v2"] (¿chrome v1?)`);
+  // No basta con que la cadena aparezca (comentario, texto, otro elemento): debe estar en la etiqueta de apertura del elemento
+  // raíz del chrome (`tema-neutro`), en cualquier orden de atributos.
+  const raiz = /<div\b(?=[^>]*\bclass="[^"]*\btema-neutro\b)(?=[^>]*\bdata-ui="v2")[^>]*>/;
+  if (!raiz.test(html)) throw new ArnesSinV2(`ABORTO: la vista ${id} no trae data-ui="v2" en la raíz del chrome (.tema-neutro) (¿chrome v1?)`);
 }
 
 export function exigirV2Css(ruta: string): void {
