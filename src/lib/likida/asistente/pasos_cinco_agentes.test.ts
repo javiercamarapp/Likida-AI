@@ -140,7 +140,9 @@ describe('asistente de puesta en marcha (cinco_agentes)', () => {
 
   it('ningún archivo del asistente ni de Puesta en marcha nombra a una persona o cliente (H13)', () => {
     const dirs = ['src/lib/likida/asistente', 'src/app/dashboard/puesta-en-marcha'];
-    const prohibidos = /\b(celi|celinda|innovativos?|yucarro)\b/i;
+    // Los nombres se arman por pedazos para que esta prueba no sea, ella misma, un archivo que los nombre.
+    const nombres = [['ce', 'li'], ['ce', 'linda'], ['innova', 'tivos?'], ['yu', 'carro']].map((p) => p.join(''));
+    const prohibidos = new RegExp(`\\b(${nombres.join('|')})\\b`, 'i');
     for (const d of dirs) {
       for (const f of readdirSync(d).filter((x) => /\.(ts|tsx)$/.test(x) && !/\.test\./.test(x))) {
         expect(prohibidos.test(readFileSync(`${d}/${f}`, 'utf8')), `${d}/${f}`).toBe(false);
