@@ -41,6 +41,7 @@ import {
 import {
   leerConfigCorreo, leerContactoOperador, listarCoordinadores, insertarDesglose, insertarEntregas, abrirExcepcion, subirXlsx,
   recibirDesgloseAtomico, desgloseIncompleto, listarExcepciones, resolverExcepcion, CONFIG_CORREO_POR_DEFECTO, modoPrimerMesVigente,
+  omitirEntregasPendientes,
   type PedidoRecepcionAtomica, type RecepcionAtomica, type Lectura, type ConfigCorreo, type ContactoOperador, type Coordinador, type MetaDesglose, type NuevaEntrega, type TipoExcepcion,
 } from './repo_correo';
 
@@ -72,6 +73,11 @@ export interface DependenciasDesglose {
   recibirAtomico?: (tenantId: string, pedido: PedidoRecepcionAtomica) => Promise<Lectura<RecepcionAtomica>>;
   /** ¿Una liquidación con la misma huella quedó a medias (sin encabezado, o sin retención y sin entregas)? Se rescata. */
   desgloseIncompleto?: (tenantId: string, liquidacionId: string) => Promise<boolean>;
+  /**
+   * A1-01 / A1-02: pasa a `omitida` las entregas `pendiente`/`enviando` de esas liquidaciones (idempotente); devuelve cuántas. Opcional:
+   * sin ella (pruebas) no se omite nada aparte; la corrección y el corte dependen de ella para ser a prueba de una RPC anterior a la 0940.
+   */
+  omitirPendientes?: (tenantId: string, liquidacionIds: string[], motivo: string) => Promise<number>;
 }
 
 export const dependenciasDesglosePorOmision: DependenciasDesglose = {
@@ -107,13 +113,37 @@ export const dependenciasDesglosePorOmision: DependenciasDesglose = {
   },
   recibirAtomico: recibirDesgloseAtomico,
   desgloseIncompleto,
+  omitirPendientes: omitirEntregasPendientes,
 };
 
 // ── Resultado ───────────────────────────────────────────────────────────────
 
+/**
+ * A1-01: por qué un desglose se guarda pero NO se envía. `anterior_al_corte`: su periodo termina antes de `no_enviar_antes_de`
+ * (la fecha de arranque); `enviado_por_origen`: el sistema de origen ya lo mandó (`enviadoOrigen`).
+ */
+export type MotivoOmision = 'anterior_al_corte' | 'enviado_por_origen';
+
+const TEXTO_OMISION: Record<MotivoOmision, string> = {
+  anterior_al_corte: 'omitida: el periodo termina antes de la fecha de corte del arranque',
+  enviado_por_origen: 'omitida: el sistema de origen ya la envió',
+};
+
+/** ¿Este desglose se guarda sin enviarse? El corte compara el FIN del periodo (`hasta`, AAAA-MM-DD) con la fecha de corte configurada. */
+export function motivoDeOmision(d: Pick<DesgloseBitacora, 'hasta' | 'enviadoOrigen'>, c: Pick<ConfigCorreo, 'noEnviarAntes'>): MotivoOmision | null {
+  if (d.enviadoOrigen === true) return 'enviado_por_origen';
+  if (c.noEnviarAntes !== null && d.hasta < c.noEnviarAntes) return 'anterior_al_corte';
+  return null;
+}
+
 export type ResultadoDesglose =
-  /** Se guardó. `retenida`: quedó pendiente de decisión humana, sin entregas. */
-  | { estado: 'creada'; liquidacionId: string; claveExterna: string; entregas: number; retenida: boolean; motivos: MotivoRetencion[]; excepciones: TipoExcepcion[]; /** Clave de la liquidación que esta corrige (A37-A1-02). */ correccionDe?: string }
+  /** Se guardó. `retenida`: quedó pendiente de decisión humana, sin entregas. `omitida`: se guardó sin enviarse (A1-01); sus entregas nacen `omitida`. */
+  | { estado: 'creada'; liquidacionId: string; claveExterna: string; entregas: number; retenida: boolean; motivos: MotivoRetencion[]; excepciones: TipoExcepcion[]; /** Clave de la liquidación que esta corrige (A37-A1-02). */ correccionDe?: string; omitida?: MotivoOmision }
+  /**
+   * Solo con `opciones.simular` (vista previa de la carga del panel): lo que PASARÍA, sin escribir nada (ni Storage, ni base, ni excepciones).
+   * `correos` = correos que saldrían de verdad (0 si se omite); `omitidas` = entregas que nacerían `omitida`.
+   */
+  | { estado: 'simulada'; claveExterna: string; correos: number; omitidas: number; retenida: boolean; omitida: MotivoOmision | null }
   /** Misma clave y mismo contenido: no se hizo nada. */
   | { estado: 'idempotente'; liquidacionId: string; claveExterna: string }
   /** Misma clave, otro contenido: nada se sobrescribió ni se envió; hay una excepción abierta. */
@@ -135,6 +165,8 @@ export interface OpcionesDesglose {
    * reintentar la misma corrección no crea otra. Sin `existente` no hace nada especial (se recibe como una bitácora nueva).
    */
   correccion?: { motivo: string; actor: string };
+  /** A1-01: vista previa. Hace TODO el cálculo (idempotencia, operador, reglas, destinatarios) pero no escribe nada: devuelve `simulada`. */
+  simular?: boolean;
 }
 
 /** Tope de correcciones encadenadas de una misma bitácora (`-R1`…`-R20`): más allá es un error de integración, no una corrección. */
@@ -225,8 +257,10 @@ export function presentar(d: DesgloseBitacora, c: ConfigCorreo): { percepciones:
  * y el error de Storage/base si algo no se pudo escribir (reintentable: la RPC 0857 no deja nada a medias).
  */
 export async function recibirDesglose(
-  tenantId: string, d: DesgloseBitacora, deps: DependenciasDesglose = dependenciasDesglosePorOmision, opciones: OpcionesDesglose = {},
+  tenantId: string, d: DesgloseBitacora, depsEntrada: DependenciasDesglose = dependenciasDesglosePorOmision, opciones: OpcionesDesglose = {},
 ): Promise<ResultadoDesglose> {
+  // En la vista previa ninguna excepción se abre (es lectura pura): el resto de las escrituras están más abajo, tras el retorno simulado.
+  const deps: DependenciasDesglose = opciones.simular ? { ...depsEntrada, abrirExcepcion: async () => ({ id: 0, nueva: false }) } : depsEntrada;
   // (1) contrato → liquidación vigente + huella
   let conversion: ReturnType<typeof aLiquidacionExterna>;
   try {
@@ -264,16 +298,22 @@ export async function recibirDesglose(
   // A37-A1-02: una persona que administra decidió mandar la corrección → liquidación nueva `<clave>-R<n>`, idempotente.
   let correccionDe: string | null = null;
   let correccionN = 0;
+  /** A1-02: la original y las correcciones anteriores de esta bitácora: lo que la nueva corrección REEMPLAZA (sus claves, para cerrar excepciones). */
+  const reemplazadas: Array<{ id: string; clave: string }> = [];
   if (existente && opciones.correccion) {
     const base = claveExterna;
+    reemplazadas.push({ id: existente.id, clave: base });
     let n = 1;
     for (; n <= MAX_CORRECCIONES; n++) {
       const claveR = `${base}-R${n}`;
       const previa = await deps.buscarPorClave(tenantId, claveR);
       if (!previa) break;
       if (mismaHuella(previa.huella, { ...liq, claveExterna: claveR })) {
+        // A1-02: reintentar una corrección ya recibida también deja las anteriores sin salir (un corte entre «guardar» y «omitir» no las salva).
+        if (!opciones.simular) await omitirReemplazadas(tenantId, deps, reemplazadas);
         return { estado: 'idempotente', liquidacionId: previa.id, claveExterna: claveR };
       }
+      reemplazadas.push({ id: previa.id, clave: claveR });
     }
     if (n > MAX_CORRECCIONES) throw new DatoInvalido(`Esta bitácora ya tiene ${MAX_CORRECCIONES} correcciones: revisa la integración, algo la está reenviando distinta cada vez.`);
     correccionDe = base;
@@ -316,23 +356,28 @@ export async function recibirDesglose(
 
   // (4) reglas del contralor y guardas previas al envío (sobre lo que el operador va a ver)
   const config = await deps.leerConfig(tenantId);
+  const omision = motivoDeOmision(d, config);
   const vista = presentar(d, config);
   const decision = guardasPreEnvio({ ...d, ...vista }, guardasDeConfig(config));
   const retenida = decision.decision === 'retener';
 
-  // (5) Excel → Storage (primero el archivo; si falla, lanza y no queda fila)
-  const bytes = generarDesgloseXlsx({
-    operador: operador.nombre,
-    ...(d.unidad !== undefined ? { unidad: d.unidad } : {}),
-    bitacora: `${d.bitacoras !== undefined ? liq.viajes.join(', ') : d.bitacora}${correccionDe ? ' — CORRECCIÓN' : ''}`,
-    ...(d.numeroLiquidacion !== undefined ? { numeroLiquidacion: d.numeroLiquidacion } : {}),
-    ...(d.numeroPago !== undefined ? { numeroPago: d.numeroPago } : {}),
-    desde: d.desde, hasta: d.hasta, dias: conversion.dias,
-    percepciones: vista.percepciones, deducciones: vista.deducciones,
-    neto: liq.total,
-  });
-  const xlsxRuta = await deps.subirXlsx(tenantId, claveExterna, huella, bytes);
-  const xlsxSha256 = sha256Hex(bytes);
+  // (5) Excel → Storage (primero el archivo; si falla, lanza y no queda fila). En la vista previa no se genera ni se sube nada.
+  let xlsxRuta = '';
+  let xlsxSha256 = '';
+  if (!opciones.simular) {
+    const bytes = generarDesgloseXlsx({
+      operador: operador.nombre,
+      ...(d.unidad !== undefined ? { unidad: d.unidad } : {}),
+      bitacora: `${d.bitacoras !== undefined ? liq.viajes.join(', ') : d.bitacora}${correccionDe ? ' — CORRECCIÓN' : ''}`,
+      ...(d.numeroLiquidacion !== undefined ? { numeroLiquidacion: d.numeroLiquidacion } : {}),
+      ...(d.numeroPago !== undefined ? { numeroPago: d.numeroPago } : {}),
+      desde: d.desde, hasta: d.hasta, dias: conversion.dias,
+      percepciones: vista.percepciones, deducciones: vista.deducciones,
+      neto: liq.total,
+    });
+    xlsxRuta = await deps.subirXlsx(tenantId, claveExterna, huella, bytes);
+    xlsxSha256 = sha256Hex(bytes);
+  }
 
   // (6) destinatarios (solo LECTURAS, antes de escribir nada: un fallo aquí no deja medio desglose)
   let destinos: ReturnType<typeof resolverDestinatarios>['destinos'] = [];
@@ -353,9 +398,22 @@ export async function recibirDesglose(
     }));
   }
   const destinosRevisor = resolverRevisores(config.revisores, revisoresVigentes, new Set(destinos.map((x) => x.correo)));
+  // A1-01: un desglose anterior al corte (o ya enviado por el origen) conserva sus entregas, pero nacen `omitida`: nadie recibe nada y la
+  // oficina puede ver a quién le habría tocado. El estado viaja en la misma transacción (RPC 0940), así que no hay instante en que salgan.
   const entregasPedidas = [...destinos, ...destinosRevisor].map((x) => ({
     rol: x.rol, correo: x.correo, xlsxRuta, xlsxSha256, disparo: 'auto' as const,
+    ...(omision ? { estado: 'omitida' as const, ultimoError: TEXTO_OMISION[omision] } : {}),
   }));
+  if (opciones.simular) {
+    return {
+      estado: 'simulada', claveExterna, retenida, omitida: omision,
+      correos: omision ? 0 : entregasPedidas.length, omitidas: omision ? entregasPedidas.length : 0,
+    };
+  }
+  // A1-02: la corrección REEMPLAZA a la original (y a las correcciones anteriores): lo que de ellas siga esperando salir (ventana de
+  // envío, espera, reintentos) se omite ANTES de guardar la nueva, para que el operador reciba un solo correo y no el equivocado junto
+  // con el bueno. Si guardar fallara después, el reintento de la corrección repite esto (idempotente).
+  if (correccionDe) await omitirReemplazadas(tenantId, deps, reemplazadas);
   const viajeIds = await deps.resolverViajeIds(tenantId, liq.viajes);
   const nuevaLiquidacion: NuevaLiquidacionExterna = {
     tenantId, datos: liq, huella, operadorId: operador.id, viajeIds,
@@ -373,6 +431,7 @@ export async function recibirDesglose(
   };
   const detalleEvento = {
     origen: liq.sistemaOrigen, canal: 'correo', renglones: liq.conceptos.length, retenida, viajesEnLikida: viajeIds.length,
+    ...(omision ? { omitida: omision } : {}),
     ...(correccionDe && opciones.correccion
       ? { correccion_de: correccionDe, motivo_correccion: opciones.correccion.motivo.slice(0, 300), actor: opciones.correccion.actor.slice(0, 120) }
       : {}),
@@ -397,6 +456,13 @@ export async function recibirDesglose(
     }
     // Otra recepción concurrente ya lo guardó completo: no hay nada que abrir ni reenviar.
     if (!atomica.valor.creada && !atomica.valor.reparada) return { estado: 'idempotente', liquidacionId, claveExterna };
+    // A1-01: cinturón y tirantes. Una base con la RPC anterior a la 0940 ignora `estado` y deja las entregas `pendiente`: se omiten ya.
+    if (omision && entregas > 0 && deps.omitirPendientes) {
+      try { await deps.omitirPendientes(tenantId, [liquidacionId], TEXTO_OMISION[omision]); } catch (e) {
+        logger.error('liqcorreo.omitir_corte_fallo', { clave: claveExterna, err: e instanceof Error ? e.message : String(e) });
+        throw e;
+      }
+    }
   } else {
     if (deps.recibirAtomico) logger.warn('liqcorreo.recepcion_no_atomica', { motivo: 'la base no tiene la migracion 0857' });
     const creada = rescate ?? await deps.insertarLiquidacion(nuevaLiquidacion);
@@ -413,10 +479,15 @@ export async function recibirDesglose(
     }
   }
 
-  // La corrección ya salió (o quedó retenida con su excepción): la pendiente de la original se cierra.
+  // La corrección ya salió (o quedó retenida con su excepción): la pendiente de la original se cierra, y con ella las excepciones de
+  // RETENCIÓN de la original y de las correcciones anteriores (A1-02: un original retenido quedaba «liberable» después de corregido).
   if (correccionDe && deps.resolverExcepciones) {
-    try { await deps.resolverExcepciones(tenantId, correccionDe, 'correccion_pendiente', ahora); } catch (e) {
-      logger.warn('liqcorreo.correccion_no_resolvio_excepcion', { clave: correccionDe, err: e instanceof Error ? e.message : String(e) });
+    for (const r of reemplazadas) {
+      for (const tipo of ['correccion_pendiente', 'neto_negativo', 'concepto_prohibido', 'tipo_sin_regla'] as const) {
+        try { await deps.resolverExcepciones(tenantId, r.clave, tipo, ahora); } catch (e) {
+          logger.warn('liqcorreo.correccion_no_resolvio_excepcion', { clave: r.clave, tipo, err: e instanceof Error ? e.message : String(e) });
+        }
+      }
     }
   }
 
@@ -429,10 +500,19 @@ export async function recibirDesglose(
   // retenida: sin entregas, una excepción por motivo
   if (retenida) {
     for (const m of decision.motivos) await abrir(MOTIVO_A_EXCEPCION[m], { motivo: m });
-    return { estado: 'creada', liquidacionId, claveExterna, entregas: 0, retenida: true, motivos: decision.motivos, excepciones, ...(correccionDe ? { correccionDe } : {}) };
+    return { estado: 'creada', liquidacionId, claveExterna, entregas: 0, retenida: true, motivos: decision.motivos, excepciones, ...(correccionDe ? { correccionDe } : {}), ...(omision ? { omitida: omision } : {}) };
   }
 
   for (const f of faltantes) await abrir(FALTANTE_A_EXCEPCION[f.motivo], { rol: f.rol, motivo: f.motivo });
 
-  return { estado: 'creada', liquidacionId, claveExterna, entregas, retenida: false, motivos: [], excepciones, ...(correccionDe ? { correccionDe } : {}) };
+  return { estado: 'creada', liquidacionId, claveExterna, entregas, retenida: false, motivos: [], excepciones, ...(correccionDe ? { correccionDe } : {}), ...(omision ? { omitida: omision } : {}) };
+}
+
+const MOTIVO_REEMPLAZADA = 'omitida: reemplazada por una corrección';
+
+/** A1-02: lo que las liquidaciones reemplazadas tenían por salir pasa a `omitida`. Un fallo se lanza: sin esto saldrían dos correos. */
+async function omitirReemplazadas(tenantId: string, deps: DependenciasDesglose, reemplazadas: ReadonlyArray<{ id: string }>): Promise<void> {
+  if (!deps.omitirPendientes || reemplazadas.length === 0) return;
+  const n = await deps.omitirPendientes(tenantId, reemplazadas.map((r) => r.id), MOTIVO_REEMPLAZADA);
+  if (n > 0) logger.info('liqcorreo.correccion_omitio_pendientes', { entregas: n });
 }

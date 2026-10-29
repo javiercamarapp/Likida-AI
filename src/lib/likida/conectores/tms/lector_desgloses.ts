@@ -161,6 +161,39 @@ export interface DependenciasLectoresTms {
   dormir?: (ms: number) => Promise<void>;
   /** Pruebas: otra forma de API (p. ej. páginas más chicas). Por omisión, `CONFIG_API_DESGLOSE`. */
   config?: ConfigApiDesglose;
+  /**
+   * INT-01 (A40): el TMS rechazó la credencial de la flota. Se llama UNA vez (la pasada que lo vio) para marcarla con el error y
+   * avisar; la flota deja de listarse (`ultimoError`) hasta que alguien la pruebe de nuevo. Sin esto el pull repetía el login con
+   * la clave mala cada pasada (~12 por hora) y podía bloquear la cuenta de servicio del cliente. Opcional (pruebas).
+   */
+  degradar?: (tenantId: string, detalle: string) => Promise<void>;
+}
+
+/**
+ * INT-01: envuelve un lector para que, ante `TmsCredenciales`, degrade la credencial UNA vez por lector (un mismo lector no vuelve a
+ * degradar ni a pedir login dentro de la misma pasada) y relance el error (el pull deja el cursor intacto y guarda el error).
+ */
+function conDegradacion(lector: LectorDesglosesPuerto, tenantId: string, degradar: (tenantId: string, detalle: string) => Promise<void>): LectorDesglosesPuerto {
+  let rechazada = false;
+  return {
+    ...lector,
+    async listar(p) {
+      if (rechazada) throw new TmsCredenciales();
+      try {
+        return await lector.listar(p);
+      } catch (e) {
+        if (e instanceof TmsCredenciales) {
+          rechazada = true;
+          try {
+            await degradar(tenantId, 'El sistema de transporte rechazó el usuario o la clave al leer desgloses. Revisa la conexión y vuelve a probarla.');
+          } catch (err) {
+            logger.warn('liqcorreo.tms_degradar_fallo', { tenantId, tipo: err instanceof Error ? err.name : 'desconocido' });
+          }
+        }
+        throw e;
+      }
+    },
+  };
 }
 
 /** Los lectores de las flotas que cumplen TODO el opt-in. Una flota que falla se salta y se dice; no tumba a las demás. */
@@ -180,7 +213,8 @@ export async function lectoresDesglosesTms(deps: DependenciasLectoresTms): Promi
         credenciales: { usuario: (c.valores.usuario ?? '').trim(), clave: c.valores.clave ?? '' },
         reloj: { ahora: deps.ahora, ...(deps.dormir ? { dormir: deps.dormir } : {}) },
       });
-      salida.push({ tenantId, lector: crearLectorDesglosesTms({ sesion, ahora: deps.ahora, ...(deps.config ? { config: deps.config } : {}) }) });
+      const lector = crearLectorDesglosesTms({ sesion, ahora: deps.ahora, ...(deps.config ? { config: deps.config } : {}) });
+      salida.push({ tenantId, lector: deps.degradar ? conDegradacion(lector, tenantId, deps.degradar) : lector });
     } catch (e) {
       logger.warn('liqcorreo.tms_lector_omitido', { tenantId, tipo: e instanceof Error ? e.name : 'desconocido' });
     }
@@ -190,8 +224,8 @@ export async function lectoresDesglosesTms(deps: DependenciasLectoresTms): Promi
 
 /** Cableado real (lo importa el servicio solo cuando la fase de pull corre). */
 export async function lectoresDesglosesTmsPorOmision(): Promise<Array<{ tenantId: string; lector: LectorDesglosesPuerto }>> {
-  const [{ flotasConEnvioActivo }, { dependenciasPorOmision }, { leerCredencial, listarCredenciales }] = await Promise.all([
-    import('../../liquidacion_externa/trabajo'), import('../../liquidacion_externa/servicio'), import('../credenciales'),
+  const [{ flotasConEnvioActivo }, { dependenciasPorOmision }, { leerCredencial, listarCredenciales, marcarProbada }, { alertarOperador }] = await Promise.all([
+    import('../../liquidacion_externa/trabajo'), import('../../liquidacion_externa/servicio'), import('../credenciales'), import('@/lib/observability/alerta'),
   ]);
   return lectoresDesglosesTms({
     ahora: Date.now,
@@ -202,6 +236,16 @@ export async function lectoresDesglosesTmsPorOmision(): Promise<Array<{ tenantId
       if (!fila) return null;
       const valores = await leerCredencial(tenantId, CONECTOR_TMS);
       return valores ? { valores, probadaEn: fila.probadaEn, ultimoError: fila.ultimoError } : null;
+    },
+    // INT-01: misma salida que el sincronizador (`degradarReal`): la credencial queda marcada con el error y SALE del listado hasta
+    // la próxima prueba exitosa; una alerta (un solo envío por degradación). `marcarProbada` falla si ya no hay credencial activa.
+    degradar: async (tenantId, detalle) => {
+      try {
+        await marcarProbada(tenantId, CONECTOR_TMS, { ok: false, detalle, verificadoContra: null });
+      } catch (e) {
+        logger.warn('liqcorreo.tms_degradar_sin_credencial', { tenantId, tipo: e instanceof Error ? e.name : 'desconocido' });
+      }
+      await alertarOperador('cron.tms.credencial', { tenantId, detalle });
     },
   });
 }

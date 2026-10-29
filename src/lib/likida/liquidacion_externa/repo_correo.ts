@@ -57,6 +57,12 @@ export interface ConfigCorreo {
   revisores: Revisor[];
   /** 0933: último día (AAAA-MM-DD, hora de México, inclusive) del modo primer mes; `null` = modo apagado. */
   primerMesHasta: string | null;
+  /**
+   * 0940 (A1-01): fecha de corte (AAAA-MM-DD, inclusive la mañana de ese día: 00:00 hora de México). Un desglose cuyo periodo TERMINA
+   * antes de esta fecha se guarda pero NO se envía (sus entregas quedan `omitida`): evita mandar nóminas viejas al operador, al
+   * coordinador y a RH en la primera subida del histórico. `null` = sin corte (se envía todo lo que llegue).
+   */
+  noEnviarAntes: string | null;
   rhCorreos: string[];
   archivoCorreo: string | null;
   enviaCoordinador: boolean;
@@ -73,7 +79,7 @@ export interface ConfigCorreo {
 
 /** Lo que vale cuando la flota no tiene fila: el comportamiento de siempre (WhatsApp), sin enviar nada por correo. */
 export const CONFIG_CORREO_POR_DEFECTO: ConfigCorreo = {
-  canal: 'whatsapp', activa: false, remitenteNombre: null, responderA: null, remitenteCorreo: null, revisores: [], primerMesHasta: null,
+  canal: 'whatsapp', activa: false, remitenteNombre: null, responderA: null, remitenteCorreo: null, revisores: [], primerMesHasta: null, noEnviarAntes: null,
   rhCorreos: [], archivoCorreo: null,
   enviaCoordinador: true, enviaRh: true, etiquetaViaje: 'Pago de viaje', agruparViaje: false,
   conceptosViaje: ['Sueldo', 'Viáticos'], renombres: [], conceptosProhibidos: [], tiposQueReciben: ['foraneo', 'local'],
@@ -132,7 +138,12 @@ export interface Desglose extends Required<Omit<MetaDesglose, 'retenidaMotivo' |
   creadoEn: string;
 }
 
-export interface NuevaEntrega { liquidacionExternaId: string; generacion?: number; rol: RolDestinatario; correo: string; xlsxRuta?: string | null; xlsxSha256?: string | null; disparo?: 'auto' | 'manual' | 'reclamo'; pedidoPor?: string | null }
+export interface NuevaEntrega {
+  liquidacionExternaId: string; generacion?: number; rol: RolDestinatario; correo: string; xlsxRuta?: string | null; xlsxSha256?: string | null;
+  disparo?: 'auto' | 'manual' | 'reclamo'; pedidoPor?: string | null;
+  /** 0940 (A1-01): `omitida` nace sin cola (no se enviará); `ultimoError` dice por qué. Por omisión, `pendiente`. */
+  estado?: 'pendiente' | 'omitida'; ultimoError?: string | null;
+}
 export interface EntregaCorreo {
   id: string;
   tenantId: string;
@@ -208,8 +219,12 @@ const COLS_CONFIG_BASE =
   + 'agrupar_viaje, conceptos_viaje, renombres, conceptos_prohibidos, tipos_que_reciben, neto_negativo, enviar_desde_hora';
 /** Las columnas de la migración 0933. Con una base que aún no la tiene se lee sin ellas (y se dice: `nuevasColumnas` en el log). */
 const COLS_CONFIG_0933 = 'remitente_correo, revisores, primer_mes_hasta';
-const COLS_CONFIG = `${COLS_CONFIG_BASE}, ${COLS_CONFIG_0933}`;
+/** La columna de la migración 0940 (fecha de corte). Con una base que aún no la tiene se lee sin ella (sin corte). */
+const COLS_CONFIG_0940 = 'no_enviar_antes_de';
+const COLS_CONFIG_SIN_0940 = `${COLS_CONFIG_BASE}, ${COLS_CONFIG_0933}`;
+const COLS_CONFIG = `${COLS_CONFIG_SIN_0940}, ${COLS_CONFIG_0940}`;
 const faltaColumna0933 = (e: ErrorPg): boolean => !!e && /remitente_correo|revisores|primer_mes_hasta/.test(e.message ?? '');
+const faltaColumna0940 = (e: ErrorPg): boolean => !!e && /no_enviar_antes_de/.test(e.message ?? '');
 
 function aRevisores(v: unknown): Revisor[] {
   if (!Array.isArray(v)) return [];
@@ -232,6 +247,7 @@ function aConfig(r: Fila): ConfigCorreo {
     remitenteCorreo: (r.remitente_correo as string | null | undefined) ?? null,
     revisores: aRevisores(r.revisores),
     primerMesHasta: typeof r.primer_mes_hasta === 'string' ? r.primer_mes_hasta.slice(0, 10) : null,
+    noEnviarAntes: typeof r.no_enviar_antes_de === 'string' ? r.no_enviar_antes_de.slice(0, 10) : null,
     rhCorreos: lista(r.rh_correos),
     archivoCorreo: (r.archivo_correo as string | null) ?? null,
     enviaCoordinador: r.envia_coordinador !== false,
@@ -251,6 +267,12 @@ function aConfig(r: Fila): ConfigCorreo {
 export async function leerConfigCorreo(tenantId: string): Promise<Lectura<ConfigCorreo>> {
   let res = await acotada(supabaseAdmin().from('liquidacion_correo_config')
     .select(COLS_CONFIG).eq('tenant_id', tenantId).maybeSingle(), 'liqcorreo.config_leer');
+  // Una base sin la 0940 (fecha de corte) pero con la 0933: se lee con todo lo demás (los revisores NO se pierden); sin corte.
+  if (faltaColumna0940((res as unknown as { error: ErrorPg }).error)) {
+    logger.warn('liqcorreo.config_sin_0940', {});
+    res = await acotada(supabaseAdmin().from('liquidacion_correo_config')
+      .select(COLS_CONFIG_SIN_0940).eq('tenant_id', tenantId).maybeSingle(), 'liqcorreo.config_leer');
+  }
   // Una base sin la 0933 no tiene las columnas nuevas: se lee con las de siempre (el modo primer mes y el correo emisor quedan apagados).
   if (faltaColumna0933((res as unknown as { error: ErrorPg }).error)) {
     logger.warn('liqcorreo.config_sin_0933', {});
@@ -282,6 +304,9 @@ export async function guardarConfigCorreo(tenantId: string, c: ConfigCorreo, por
   if (new Set(revisores.map((r) => r.departamento)).size !== revisores.length) throw new DatoInvalido('revisores: un solo revisor por departamento');
   if (c.primerMesHasta !== null && !/^\d{4}-\d{2}-\d{2}$/.test(c.primerMesHasta)) throw new DatoInvalido('primer_mes_hasta: debe ser una fecha AAAA-MM-DD');
   if (c.primerMesHasta !== null && revisores.length === 0) throw new DatoInvalido('primer_mes_hasta: el modo primer mes necesita al menos un revisor');
+  if (c.noEnviarAntes !== null && (!/^\d{4}-\d{2}-\d{2}$/.test(c.noEnviarAntes) || Number.isNaN(Date.parse(`${c.noEnviarAntes}T00:00:00Z`)))) {
+    throw new DatoInvalido('no_enviar_antes_de: debe ser una fecha AAAA-MM-DD');
+  }
   // A37-A1-04: el correo promete «responde a este correo»; sin dirección de respuesta la respuesta cae en el buzón de campañas y se pierde.
   // 0933: la dirección de respuesta es el «Responder a» o, si falta, el correo emisor de la flota.
   if (c.activa && c.canal !== 'whatsapp' && !normalizarCorreo(c.responderA, 'responder_a') && !remitenteCorreo) {
@@ -309,8 +334,17 @@ export async function guardarConfigCorreo(tenantId: string, c: ConfigCorreo, por
     actualizado_por: por,
   };
   const fila0933 = { remitente_correo: remitenteCorreo, revisores, primer_mes_hasta: c.primerMesHasta };
+  const fila0940 = { no_enviar_antes_de: c.noEnviarAntes };
   let res = await acotada(supabaseAdmin().from('liquidacion_correo_config')
-    .upsert({ ...fila, ...fila0933 }, { onConflict: 'tenant_id' }).select('tenant_id'), 'liqcorreo.config_guardar');
+    .upsert({ ...fila, ...fila0933, ...fila0940 }, { onConflict: 'tenant_id' }).select('tenant_id'), 'liqcorreo.config_guardar');
+  if (faltaColumna0940((res as unknown as { error: ErrorPg }).error)) {
+    // Base sin la 0940: sin fecha de corte que guardar se guarda como siempre; con ella, se dice (nunca se finge haber guardado).
+    if (c.noEnviarAntes !== null) {
+      throw new DatoInvalido('La fecha de corte todavía no está disponible en esta base (falta aplicar la migración 0940). No se guardó nada.');
+    }
+    res = await acotada(supabaseAdmin().from('liquidacion_correo_config')
+      .upsert({ ...fila, ...fila0933 }, { onConflict: 'tenant_id' }).select('tenant_id'), 'liqcorreo.config_guardar');
+  }
   if (faltaColumna0933((res as unknown as { error: ErrorPg }).error)) {
     // Base sin la 0933: sin valores nuevos que guardar se guarda como siempre; con ellos, se dice (nunca se finge haber guardado).
     if (remitenteCorreo !== null || revisores.length > 0 || c.primerMesHasta !== null) {
@@ -603,6 +637,8 @@ export async function insertarEntregas(tenantId: string, rows: NuevaEntrega[]): 
     tenant_id: tenantId, liquidacion_externa_id: e.liquidacionExternaId, generacion: e.generacion ?? 1, rol: e.rol,
     correo: normalizarCorreo(e.correo, 'correo') ?? '', xlsx_ruta: e.xlsxRuta ?? null, xlsx_sha256: e.xlsxSha256 ?? null,
     disparo: e.disparo ?? 'auto', pedido_por: e.pedidoPor ?? null,
+    // 0940: una entrega `omitida` nace fuera de la cola (el cron solo reclama `pendiente`).
+    ...(e.estado === 'omitida' ? { estado: 'omitida', ultimo_error: recortar(e.ultimoError) } : {}),
   }));
   if (filas.some((f) => f.correo === '')) throw new DatoInvalido('correo: toda entrega necesita un correo');
 
@@ -665,6 +701,8 @@ export async function recibirDesgloseAtomico(tenantId: string, p: PedidoRecepcio
     p_entregas: p.entregas.map((e) => ({
       rol: e.rol, correo: normalizarCorreo(e.correo, 'correo') ?? '', xlsx_ruta: e.xlsxRuta ?? null,
       xlsx_sha256: e.xlsxSha256 ?? null, disparo: e.disparo ?? 'auto',
+      // 0940 (A1-01): la RPC anterior ignora estos campos; `recibirDesglose` lo cubre con `omitirEntregasPendientes` tras insertar.
+      ...(e.estado === 'omitida' ? { estado: 'omitida', ultimo_error: recortar(e.ultimoError) } : {}),
     })),
   }), 'liqcorreo.recibir_atomico');
   const r = res as unknown as { data: { liquidacion_id?: string; creada?: boolean; reparada?: boolean; entregas?: number } | null; error: ErrorPg };
@@ -736,6 +774,20 @@ export const marcarFallida = (tenantId: string, id: string, claimToken: string |
 
 export const marcarOmitida = (tenantId: string, id: string, motivo: string): Promise<boolean> =>
   transicionarEntrega(tenantId, id, ['pendiente', 'enviando'], { estado: 'omitida', ultimo_error: recortar(motivo), ...SIN_LEASE }, null, 'liqcorreo.marcar_omitida');
+
+/**
+ * A1-01 / A1-02: pasa a `omitida` TODAS las entregas `pendiente`/`enviando` de esas liquidaciones (UPDATE condicionado por flota y
+ * estado, idempotente). Devuelve cuántas cambió. Una `enviando` con el correo ya en vuelo no se puede recoger: la guarda de estado de
+ * `marcarEnviada` (solo desde `enviando`) deja de aplicar y el envío en curso termina; el resto de la cola no sale.
+ */
+export async function omitirEntregasPendientes(tenantId: string, liquidacionIds: string[], motivo: string): Promise<number> {
+  if (liquidacionIds.length === 0) return 0;
+  const etiqueta = 'liqcorreo.omitir_pendientes';
+  const res = await acotada(supabaseAdmin().from('liquidacion_entrega_correo')
+    .update({ estado: 'omitida', ultimo_error: recortar(motivo), ...SIN_LEASE, updated_at: new Date().toISOString() })
+    .eq('tenant_id', tenantId).in('liquidacion_externa_id', liquidacionIds).in('estado', ['pendiente', 'enviando']).select('id'), etiqueta);
+  return (exigirEscritura(res as unknown as { data: Fila[] | null; error: ErrorPg }, etiqueta) ?? []).length;
+}
 
 /** Devuelve la entrega a `pendiente` con su siguiente intento (backoff lo decide quien llama). */
 export const reprogramarEntrega = (tenantId: string, id: string, claimToken: string, intentos: number, proximoIntentoEn: Date, error: string | null): Promise<boolean> =>

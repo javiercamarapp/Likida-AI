@@ -343,3 +343,35 @@ describe('importarDesglosesDeArchivo: presupuesto de tiempo (carga desde el pane
     expect(r.sinProcesar).toBeUndefined();
   });
 });
+
+describe('importarDesglosesDeArchivo: A1-01 conteo de correos y omitidos, y vista previa', () => {
+  const bytes = (t: string) => new TextEncoder().encode(t);
+  const CSV = [
+    ENC,
+    'T1;B-1;P-1;E-1;U-10;2026-09-01;2026-09-06;6;percepcion;Sueldo;1000,00;;;foraneo',
+    'T1;B-2;P-2;E-2;U-10;2026-09-01;2026-09-06;6;percepcion;Sueldo;1000,00;;;foraneo',
+    'T1;B-3;P-3;E-3;U-10;2026-09-01;2026-09-06;6;percepcion;Sueldo;1000,00;;;foraneo',
+  ].join('\n');
+  const creada = (clave: string, extra: Record<string, unknown>) => ({ estado: 'creada', liquidacionId: 'x', claveExterna: clave, entregas: 4, retenida: false, motivos: [], excepciones: [], ...extra }) as ResultadoDesglose;
+
+  it('cuenta los correos de lo que sale y los omitidos aparte (un omitido o retenido aporta 0 correos)', async () => {
+    const respuestas: ResultadoDesglose[] = [
+      creada('BIT-T1-B-1', {}),
+      creada('BIT-T1-B-2', { omitida: 'anterior_al_corte' }),
+      creada('BIT-T1-B-3', { retenida: true, entregas: 1 }),
+    ];
+    const recibir = vi.fn(async () => respuestas.shift() as ResultadoDesglose);
+    const r = await importarDesglosesDeArchivo('t1', 'a.csv', bytes(CSV), { recibir });
+    expect(r).toMatchObject({ recibidas: 3, omitidas: 1, retenidas: 1, correos: 4 });
+    // sin vista previa, el receptor se llama como siempre (sin tercer argumento)
+    expect(recibir.mock.calls[0]).toHaveLength(2);
+  });
+
+  it('simular: pasa {simular:true} al receptor y suma los correos que SALDRÍAN', async () => {
+    const recibir = vi.fn(async (_t: string, d: DesgloseBitacora): Promise<ResultadoDesglose> => (
+      { estado: 'simulada', claveExterna: `BIT-T1-${d.bitacora}`, correos: d.bitacora === 'B-2' ? 0 : 3, omitidas: d.bitacora === 'B-2' ? 3 : 0, retenida: false, omitida: d.bitacora === 'B-2' ? 'anterior_al_corte' : null }));
+    const r = await importarDesglosesDeArchivo('t1', 'a.csv', bytes(CSV), { recibir: recibir as never }, { simular: true });
+    expect(r).toMatchObject({ recibidas: 3, omitidas: 1, correos: 6 });
+    expect(recibir.mock.calls.every((c) => (c as unknown[])[2] && ((c as unknown[])[2] as { simular?: boolean }).simular === true)).toBe(true);
+  });
+});

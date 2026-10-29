@@ -372,6 +372,7 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0931_a39_ola9_rentabilidad_costo_con_ingreso.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0932_operador_sin_telefono_canal_correo.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0933_a1_modo_primer_mes_y_remitente.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0940_a1_fecha_de_corte_y_entregas_omitidas.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0935_a2_ola1_desglose_linea_icident.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0936_a2_ola1_peaje_regla_flota.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0937_a2_ola1_peaje_aviso_enviado.sql

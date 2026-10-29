@@ -627,7 +627,10 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 326;
 // condicionado) y `confirmarAvisoPeajes` +2 (sello definitivo y soltar la reserva). Cubiertas por avisos_repo.test.ts y aviso_barrido.test.ts.
 // REDISENO UI v2 (carril A, A.1): +1 llamada (2,439 -> 2,440). `lib/auth/perfil_tenant.ts` suma `versionUiDeTenant`, la lectura de `tenant_ui` (version por tenant,
 // cache de 30 s, falla hacia v1); `version_ui.ts` no consulta la base. Sin archivos nuevos con acceso directo. Cubierta por version_ui.test.ts.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_440;
+// OLA 10, carril A (A1-01/A1-02): 2,440 → 2,443 (+3, medido con el guardián). Todas en `liquidacion_externa/repo_correo.ts`, por `acotada` y con `tenant_id`:
+// `omitirEntregasPendientes` +1 (UPDATE condicionado pendiente/enviando → omitida: corte de arranque y corrección que reemplaza a la original) y, por la columna
+// de la 0940, la lectura de la configuración con respaldo si falta (+1 select) y el upsert con respaldo (+1). Cubiertas por repo_correo_0940.test.ts.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_443;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.
