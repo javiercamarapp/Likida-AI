@@ -41,11 +41,13 @@ import type { SenalesAsistente } from '@/lib/likida/asistente/pasos_cinco_agente
 import type { Conector } from '@/lib/likida/conexiones';
 import type { Instantanea, Rect, Tam } from '@/app/ui-v2/movimiento/tour/tipos';
 import type { Insight } from '@/lib/likida/insights/tipos';
+import { comprobarPaginaV2, exigirV2Css, exigirV2Html } from './exigir_v2';
+import { USUARIO, textoInsight } from './fixtures/logistica_mx';
 
 const raiz = path.resolve(__dirname, '../..');
 const require = createRequire(path.join(raiz, 'package.json'));
 const OUT = process.env.UI2_C_OUT ?? path.join(homedir(), 'likida-loop/frontend-plan/fase1/capturas-c');
-const TRABAJO = path.join(homedir(), 'likida-loop/frontend-plan/.arnes-c');
+const TRABAJO = process.env.UI2_TRABAJO ?? path.join(homedir(), 'likida-loop/frontend-plan/.arnes-c');
 const F = path.join(homedir(), 'likida-loop/frontend-plan/fuentes-spike');
 
 // ── Fixtures sintéticos ────────────────────────────────────────────────────
@@ -73,13 +75,14 @@ const CONECTORES: Conector[] = [
   { id: 'timbrado', nombre: 'Emisión de CFDI (timbrado)', estado: 'ensayo', detalle: 'En ensayo por candado legal — decisión de negocio.', falta: [] },
 ];
 
-const insight = (agente: Insight['agente']): Insight => ({
-  id: `i-${agente}`, agente, severidad: 'atencion', tipo: 'dato',
-  quePaso: 'Dos desgloses de muestra salieron con diferencia contra el anticipo.',
-  queSignifica: 'Lectura sintética: la diferencia viene de casetas sin comprobante.',
-  queHacer: 'Revisar los dos desgloses y pedir el comprobante faltante.',
-  fuente: { tabla: 'tabla_sintetica', periodo: 'semana de prueba', n: 2 },
-}) as Insight;
+const insight = (agente: Insight['agente']): Insight => {
+  const t = textoInsight(agente);
+  return {
+    id: `i-${agente}`, agente, severidad: 'atencion', tipo: 'dato',
+    quePaso: t.quePaso, queSignifica: t.queSignifica, queHacer: t.queHacer,
+    fuente: { tabla: t.tabla, periodo: t.periodo, n: t.n },
+  } as Insight;
+};
 
 async function fichas() {
   const insights = Object.fromEntries(FICHAS_CINCO_AGENTES.map((f) => [f.insight, f.insight === 'liquidacion' ? [insight('liquidacion')] : []]));
@@ -92,15 +95,15 @@ const asistente = (s: SenalesAsistente, paso?: 'tms' | 'correo') => (
 
 interface VistaDef { ruta: string; cuerpo: () => Promise<ReactNode> | ReactNode; senales?: SenalesAsistente }
 const VISTAS: Record<string, VistaDef> = {
-  'c01-resumen-vacio': { ruta: '/dashboard', senales: VACIAS, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: 'Ana', tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, fichas: await fichas() }) },
-  'c02-resumen-en-curso': { ruta: '/dashboard', senales: EN_CURSO, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: 'Ana', tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, fichas: await fichas() }) },
-  'c03-resumen-sin-dato': { ruta: '/dashboard', senales: CAIDAS, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: 'Ana', tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, fichas: await fichas() }) },
+  'c01-resumen-vacio': { ruta: '/dashboard', senales: VACIAS, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, fichas: await fichas() }) },
+  'c02-resumen-en-curso': { ruta: '/dashboard', senales: EN_CURSO, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, fichas: await fichas() }) },
+  'c03-resumen-sin-dato': { ruta: '/dashboard', senales: CAIDAS, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, fichas: await fichas() }) },
   'c04-asistente-vacio': { ruta: '/dashboard/puesta-en-marcha', cuerpo: () => asistente(VACIAS) },
   'c05-asistente-tms': { ruta: '/dashboard/puesta-en-marcha', cuerpo: () => asistente(VACIAS, 'tms') },
   'c06-asistente-atencion': { ruta: '/dashboard/puesta-en-marcha', cuerpo: () => asistente(ATENCION, 'tms') },
   'c07-asistente-en-curso': { ruta: '/dashboard/puesta-en-marcha', cuerpo: () => asistente(EN_CURSO, 'correo') },
   'c08-asistente-sin-dato': { ruta: '/dashboard/puesta-en-marcha', cuerpo: () => asistente(CAIDAS) },
-  'c09-conexiones': { ruta: '/dashboard/conexiones', cuerpo: () => <VistaConexiones conectores={CONECTORES} credenciales={<section className="card p-4"><h2 className="font-display text-[14px] font-semibold">Credenciales de tus sistemas</h2><p className="text-[12.5px] mt-1" style={{ color: 'var(--muted)' }}>Fixture: aquí va el formulario de captura.</p></section>} /> },
+  'c09-conexiones': { ruta: '/dashboard/conexiones', cuerpo: () => <VistaConexiones conectores={CONECTORES} credenciales={<section className="card p-4"><h2 className="font-display text-[14px] font-semibold">Credenciales de tus sistemas</h2><p className="text-[12.5px] mt-1" style={{ color: 'var(--muted)' }}>Aquí va el formulario de captura del acceso.</p></section>} /> },
 };
 
 // Pasos del recorrido a capturar: (id del paso, vista de fondo).
@@ -120,7 +123,7 @@ const FUENTES_CSS = [
 const envolver = (cuerpo: ReactNode, ruta: string) => {
   RUTA = ruta;
   return renderToStaticMarkup(
-    <DashboardChromeV2 nombre="Ana Prueba" rol="flota_admin" perfil="cinco_agentes" cerrarSesion={async () => {}}>{cuerpo}</DashboardChromeV2>,
+    <DashboardChromeV2 nombre={USUARIO.nombre} rol="flota_admin" perfil="cinco_agentes" cerrarSesion={async () => {}}>{cuerpo}</DashboardChromeV2>,
   );
 };
 
@@ -133,10 +136,14 @@ describe('captura de las pantallas del carril C', () => {
     mkdirSync(OUT, { recursive: true });
     for (const [id, v] of Object.entries(VISTAS)) {
       SENALES_RESUMEN.actuales = v.senales ?? VACIAS;
-      writeFileSync(path.join(TRABAJO, 'vistas', `${id}.html`), envolver(await v.cuerpo(), v.ruta));
+      const html = envolver(await v.cuerpo(), v.ruta);
+      exigirV2Html(html, id);
+      writeFileSync(path.join(TRABAJO, 'vistas', `${id}.html`), html);
     }
+    if (process.env.UI2_SOLO_HTML) return; // scripts/ui2-calidad: solo el HTML, sin CSS ni capturas
     execFileSync('node', [path.join(raiz, 'scripts/ui2-captura/compilar-css.mjs'), TRABAJO], { stdio: 'ignore' });
 
+    exigirV2Css(path.join(TRABAJO, 'v2full.css'));
     const { chromium } = require('playwright');
     const browser = await chromium.launch();
     const ANCHOS: Array<[number, number]> = [[1440, 900], [1024, 768], [412, 915]];
@@ -151,6 +158,7 @@ describe('captura de las pantallas del carril C', () => {
           await page.goto('file://' + archivo);
           await page.evaluate(async (t: string) => { document.documentElement.setAttribute('data-theme', t === 'claro' ? 'light' : 'dark'); await document.fonts.ready; }, tema);
           await page.waitForTimeout(40);
+          { const motivo = await page.evaluate(comprobarPaginaV2); if (motivo) throw new Error(`ABORTO (${id} ${w} ${tema}): ${motivo}`); }
           await page.screenshot({ path: path.join(OUT, `${id}__${w}__${tema}.png`), fullPage: w === 412 });
         }
       }
