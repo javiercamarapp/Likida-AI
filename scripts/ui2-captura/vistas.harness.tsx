@@ -242,7 +242,7 @@ const VISTAS: Record<string, () => ReactNode> = {
   ),
   '12-vacio-total': () => (
     <Pagina titulo="Conexiones" icono={<Route width={15} height={15} />}>
-      <kit.EstadoVacio>Aún no hay nada conectado. Empieza por entregar un archivo de muestra.</kit.EstadoVacio>
+      <kit.EstadoVacio>Aún no hay nada conectado. Empieza por entregar el primer archivo del proveedor.</kit.EstadoVacio>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {['Sistema de transporte', 'Correo emisor', 'Catálogos'].map((n, i) => (
           <div key={n} className="card p-4">
