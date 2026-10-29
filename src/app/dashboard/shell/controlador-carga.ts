@@ -36,25 +36,31 @@ export function crearControlador(p: PuertoCarga) {
     p.cancelar(tope);
     tope = p.esperar(() => { if (vivo && (estado === 'inicial' || estado === 'nav')) poner('tope'); }, TOPE_MS);
   };
-  const soltar = () => { p.cancelar(tope); poner('oculta'); };
+  const soltar = () => { p.cancelar(tope); p.cancelar(espera); espera = undefined; poner('oculta'); };
 
+  /**
+   * Idempotente: se llama en cada ráfaga de mutaciones del DOM (a veces continuas: streaming, contadores, mapas) y NO reinicia
+   * nada mientras el estado pendiente/no pendiente no cambie. Solo se (re)arma una ventana cuando cambia el pendiente.
+   */
   function evaluar() {
     if (!vivo) return;
-    if (estado === 'tope') { if (!p.hayPendiente()) poner('oculta'); return; }
-    p.cancelar(espera);
-    p.cancelar(aparicion);
+    const pendiente = p.hayPendiente();
+    if (estado === 'tope') { if (!pendiente) poner('oculta'); return; }
     if (estado === 'inicial' || estado === 'nav') {
-      if (p.hayPendiente()) return;
+      if (pendiente) { p.cancelar(espera); espera = undefined; return; } // volvió a haber algo pendiente: la ventana estable se pierde
+      if (espera !== undefined) return;                                  // ya corre una ventana y nada cambió: se deja correr
       const visible = p.ahora() - desde;
       const ventana = estado === 'inicial'
         ? Math.max(VENTANA_ESTABLE_MS, MINIMO_VISIBLE_MS - visible)
         : Math.max(VENTANA_NAVEGACION_MS, MINIMO_VISIBLE_MS - visible);
-      espera = p.esperar(() => { if (vivo && !p.hayPendiente()) soltar(); }, ventana);
+      espera = p.esperar(() => { espera = undefined; if (vivo && !p.hayPendiente()) soltar(); }, ventana);
       return;
     }
     // oculta: ¿empieza una navegación lenta? Solo aparece si sigue pendiente pasados 250 ms.
-    if (!p.hayPendiente() || p.documentoCargando()) return;
+    if (!pendiente || p.documentoCargando()) { p.cancelar(aparicion); aparicion = undefined; return; }
+    if (aparicion !== undefined) return; // el retardo de 250 ms ya corre
     aparicion = p.esperar(() => {
+      aparicion = undefined;
       if (!vivo || estado !== 'oculta' || !p.hayPendiente()) return;
       desde = p.ahora();
       poner('nav');
