@@ -75,6 +75,9 @@ begin
 end $$;
 
 -- ── 2. Los permisos de tabla que Supabase concede por defecto ──────────────
+-- NOTA (Ola 1 de seguridad, 0947): este default replica el bootstrap de la plataforma y se queda ANTES de las migraciones a propósito.
+-- La 0947 lo revoca (alter default privileges ... revoke) y revoca los grants de todas las tablas; `capa0_grants_tablas.sql` demuestra el
+-- estado final real y `scripts/ci/grants_previos_0947_restaurar.sql` restituye los grants previos SOLO después, para que la batería de RLS no pase en falso.
 -- CRÍTICO PARA QUE LA BATERÍA SIGNIFIQUE ALGO: en un proyecto Supabase real,
 -- toda tabla nueva en `public` nace con SELECT/INSERT/UPDATE/DELETE ya
 -- concedidos a `anon`/`authenticated`/`service_role` — la barrera de verdad

@@ -171,3 +171,25 @@ antes de asumir que ya corrieron.
   hacer. Es de otro dueño (`src/app/api/export/poliza/route.ts`). Sigue sin
   cerrar — ya no aplica el escenario original (la 0272 SÍ está aplicada), pero
   la distinción de errores en el 503 sigue siendo una mejora real pendiente.
+
+## Seguridad, Ola 1 · A1 (0946, 0947, 0948) — grants cerrados (29-oct-2026)
+
+**Qué hacen.** 0946: `tenant.buzon_token` deja de ser legible con el JWT de usuario. 0947: REVOKE ALL a `anon`/`authenticated` en todas las tablas, vistas y secuencias de `public`, REVOKE EXECUTE de las SECURITY DEFINER que no usa RLS, `grant select on app_user to authenticated` (la única lectura del producto con JWT) y `alter default privileges` para objetos futuros. 0948: se eliminan las 4 políticas de `avatares` en `storage.objects`. Todas aditivas, idempotentes, con `-- REVERSA:` en la cabecera. No cambian filas ni código.
+
+**Antes (solo lectura, `supabase db query --linked -f`; el MCP de Supabase de la sesión apunta a OTRO proyecto):**
+1. Respaldo de la base y, JUSTO ANTES de aplicar, la REVERSA EXACTA: `psql "$URL" -X -At -f scripts/seguridad/generar_reversa_0947.sql > reversa-exacta-0947.sql` (guardarla fuera del repo). Es la única reversa válida: vuelca los ACL reales de anon/authenticated/PUBLIC (tablas, columnas, secuencias, funciones, default privileges).
+2. `supabase/pruebas-aislamiento/capa0_grants_tablas.sql` como está: debe dar `abiertos` > 0 (el «rojo» de hoy).
+3. Logs de la API de Supabase de 7 días: peticiones a `/rest/v1` o `/rpc` con rol `authenticated`/`anon` a algo distinto de `app_user` (un consumidor externo con la anon key se rompería).
+4. `select id, public from storage.buckets; select policyname, cmd from pg_policies where schemaname='storage';`
+
+**Aplicar** (staging primero): 0946, luego 0947 y 0948, con `supabase db query --linked -f` o `aplicar-migraciones.py`. **Después de 0946: rotar los `buzon_token` de todas las flotas.**
+
+**Después:** capa0 otra vez → los seis bloques con 0 / false; `select * from pg_default_acl` sin `anon`/`authenticated` (si `supabase_admin` conserva entradas, la 0947 solo avisó con NOTICE: cerrarlas desde el rol que tenga permiso). Humo: login por enlace y Google, `/dashboard`, `/cuenta`, `/dashboard/mi-perfil` (subida de avatar y que la foto se siga viendo), MFA de superadmin, un chofer, un encargado y un contador. Panel de Supabase: Exposed schemas = solo `public` (quitar `graphql_public`).
+
+**Si algo se rompe:** primero intentar un GRANT puntual de lo que falte (SELECT sobre esa tabla a authenticated); solo si no basta, `psql "$URL" -v ON_ERROR_STOP=1 -f reversa-exacta-0947.sql` (la generada antes de aplicar; NUNCA un «grant ... on all tables» genérico, que es peor que el estado previo) y reaplicar 0946 y la sección 4 de la 0923. Builds de Vercel que provoca aplicar esto: 0.
+
+**Notas de la verificación del PR #766.**
+- Prueba de login: `supabase/pruebas-aislamiento/login_bajo_grants_0947.sql` (datos sintéticos, rollback) corre en CI sin restituir grants y se puede correr contra producción tras aplicar: authenticated lee app_user y recibe 42501 en viaje/tenant/liquidacion/tenant_api_key/factura_emitida.
+- capa0 bloque C en producción: `postgres` no es miembro de `supabase_admin`, así que el `alter default privileges for role supabase_admin` de la 0947 caerá en NOTICE y capa0 C dará `default-acl-abiertas` > 0 SOLO por entradas de supabase_admin (objetos creados por la plataforma/extensiones, no por migraciones). No es regresión: la señal que importa es `tabla-nueva-hereda=false` (las migraciones corren como postgres). Si se quiere cerrar también eso, hacerlo desde un rol con permiso en el panel/SQL editor de Supabase: `alter default privileges for role supabase_admin in schema public revoke all on tables from anon, authenticated;` (y sequences/functions).
+- capa0 bloque C crea y deshace una tabla dentro de un DO: correrlo con `postgres` y sin carga; los demás bloques son lectura pura.
+- Orden: 0946, 0947, 0948. No reaplicar la 0946 DESPUÉS de la 0947 salvo por reversa (volvería a dar SELECT de columnas de `tenant` a authenticated y capa0 A lo marcaría).

@@ -112,3 +112,25 @@ begin
   -- DELETE de ese archivo no los tocó, así que tampoco los toca este bloque.
   execute 'grant select, update, delete on public.bitacora_auditoria to anon, authenticated';
 end $$;
+
+-- ── Ola 1 de seguridad (0946/0947): la 0947 revoca TODO a anon/authenticated; este archivo restituye el grant legado SOLO en la base
+--    efímera/local para que la batería siga probando RLS como capa independiente (capa0_grants_tablas.sql corre ANTES y prueba el
+--    estado real de las migraciones). Dos cosas que NO se restituyen: ──
+-- 1. Las columnas secretas siguen sin SELECT para authenticated (0923 §4 y 0946): SELECT de tabla menos esas columnas.
+do $$
+declare
+  v_t text; v_col text; v_cols text;
+begin
+  for v_t, v_col in
+    select * from (values ('tenant', 'buzon_token'), ('conector_credencial', 'valores_cifrados'), ('rastreo_credencial', 'token_cifrado')) as x(t, c)
+  loop
+    if to_regclass('public.' || v_t) is null then continue; end if;
+    select string_agg(quote_ident(a.attname), ', ' order by a.attnum) into v_cols
+      from pg_attribute a
+     where a.attrelid = ('public.' || v_t)::regclass and a.attnum > 0 and not a.attisdropped and a.attname <> v_col;
+    execute format('revoke select on table public.%I from anon, authenticated', v_t);
+    execute format('grant select (%s) on table public.%I to authenticated', v_cols, v_t);
+  end loop;
+end $$;
+-- 2. Secuencias: el bootstrap de la plataforma las concedía junto con las tablas.
+grant usage, select on all sequences in schema public to anon, authenticated;
