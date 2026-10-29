@@ -124,8 +124,12 @@ const envolver = (cuerpo: ReactNode, ruta: string) => {
   );
 };
 
+// El logo es una máscara sobre /images/*.png (en producción lo sirve Next): en el HTML estático se incrusta como data URI.
+const LOGO = Object.fromEntries(['logo-icono', 'logo-texto'].map((n) => [n, `data:image/png;base64,${readFileSync(path.join(raiz, `public/images/${n}.png`)).toString('base64')}`]));
+const conLogo = (html: string) => html.replace(/url\(\/images\/(logo-icono|logo-texto)\.png\)/g, (_m, n: string) => `url(${LOGO[n]})`);
+
 const doc = (cuerpo: string, extra = '') =>
-  `<!doctype html><html lang="es" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="file://${TRABAJO}/v2full.css"><style>${FUENTES_CSS}</style><style>*,*::before,*::after{transition:none!important;animation:none!important}</style></head><body>${cuerpo}${extra}</body></html>`;
+  `<!doctype html><html lang="es" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="file://${TRABAJO}/v2full.css"><style>${FUENTES_CSS}</style><style>*,*::before,*::after{transition:none!important;animation:none!important}</style></head><body>${conLogo(cuerpo)}${extra}</body></html>`;
 
 describe('captura de las pantallas del carril C', () => {
   it('renderiza, compila el CSS y captura', async () => {
