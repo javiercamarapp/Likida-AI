@@ -1320,14 +1320,53 @@ export async function reclamarIntentoAviso(tenantId: string, desgloseId: string,
 /**
  * A2P-05: marca el desglose como «aviso pendiente» (`aviso_requerido`) SIN consumir un intento: es lo que lo hace visible para el barrido
  * (`peaje_avisos_pendientes`) cuando todavía no hay a quién avisar; en cuanto se configure el teléfono, el barrido lo manda. Nunca lanza.
+ * H759-1: al (re)entrar a la cola empieza sin espera (`aviso_esperas = 0`, `aviso_proximo_en = null`).
  */
 export async function marcarAvisoRequerido(tenantId: string, desgloseId: string): Promise<void> {
   try {
     await acotada(supabaseAdmin().from('desglose_peaje')
-      .update({ aviso_requerido: true }).eq('tenant_id', tenantId).eq('id', desgloseId).eq('aviso_requerido', false)
+      .update({ aviso_requerido: true, aviso_esperas: 0, aviso_proximo_en: null }).eq('tenant_id', tenantId).eq('id', desgloseId).eq('aviso_requerido', false)
       .is('aviso_oficina_en', null).is('anulado_en', null), 'peajes.marcar_aviso_requerido');
   } catch (e) {
     logger.warn('peajes.marcar_aviso_requerido', { tenant: tenantId, codigo: codigoDeError(e) });
+  }
+}
+
+/** H759-1: veces que un aviso bloqueado por configuración se pospone antes de salir de la cola (≈ una semana con el backoff de abajo). */
+export const TOPE_ESPERAS_AVISO = 12;
+const ESPERA_AVISO_BASE_MS = 15 * 60_000;
+const ESPERA_AVISO_TOPE_MS = 24 * 3_600_000;
+
+/** H759-1: cuánto se aparta un aviso bloqueado la `n`-ésima vez (1 → 15 min, 2 → 30 min… con tope de 24 h). Puro. */
+export const esperaAvisoMs = (n: number): number => Math.min(ESPERA_AVISO_BASE_MS * 2 ** Math.max(0, n - 1), ESPERA_AVISO_TOPE_MS);
+
+/**
+ * H759-1: aparta un aviso que NO puede salir por configuración (sin destinatario, plantilla sin aprobar) para que no acapare la cola global
+ * del barrido: no se vuelve a ofrecer hasta `aviso_proximo_en` (backoff) y, al llegar a `TOPE_ESPERAS_AVISO`, sale de la cola
+ * (`aviso_requerido = false`; vuelve a entrar con `marcarAvisoRequerido` cuando se reevalúe). Compare-and-set sobre `aviso_esperas`.
+ * Nunca lanza; devuelve `null` si no pudo apartarlo.
+ */
+export async function posponerAviso(tenantId: string, desgloseId: string, ahora: Date = new Date()): Promise<{ esperas: number; salioDeLaCola: boolean } | null> {
+  try {
+    const lec = await acotada(supabaseAdmin().from('desglose_peaje').select('aviso_esperas')
+      .eq('tenant_id', tenantId).eq('id', desgloseId).is('aviso_oficina_en', null).is('anulado_en', null).maybeSingle(), 'peajes.posponer_aviso_leer');
+    if (lec.error || !lec.data) return null;
+    const leidas = Number((lec.data as { aviso_esperas?: unknown }).aviso_esperas ?? 0);
+    const esperas = leidas + 1;
+    const salioDeLaCola = esperas >= TOPE_ESPERAS_AVISO;
+    const { data, error } = await acotada(supabaseAdmin().from('desglose_peaje')
+      .update({
+        aviso_esperas: esperas,
+        aviso_proximo_en: new Date(ahora.getTime() + esperaAvisoMs(esperas)).toISOString(),
+        ...(salioDeLaCola ? { aviso_requerido: false } : {}),
+      })
+      .eq('tenant_id', tenantId).eq('id', desgloseId).eq('aviso_esperas', leidas)
+      .is('aviso_oficina_en', null).is('anulado_en', null).select('id'), 'peajes.posponer_aviso');
+    if (error || (data ?? []).length === 0) return null;
+    return { esperas, salioDeLaCola };
+  } catch (e) {
+    logger.warn('peajes.posponer_aviso', { tenant: tenantId, codigo: codigoDeError(e) });
+    return null;
   }
 }
 
