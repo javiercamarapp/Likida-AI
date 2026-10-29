@@ -17,9 +17,14 @@
 }
 [data-ui="v2"] .rv-carga[data-estado="oculta"] { opacity: 0; visibility: hidden; pointer-events: none; }
 
+/* Mientras la capa se ve, el marco de abajo NO existe: ni se ve ni se lee ni se tabula (visibility), así que hay UN solo logo
+   visible y el foco no se cuela bajo la capa. Al soltarla vuelve al instante; el fundido de 170 ms lo hace la capa por encima. */
+[data-ui="v2"]:has(> .rv-carga:not([data-estado="oculta"])) > :is(.rv-skip, .rv-cab-movil, .rv-fila) { visibility: hidden; }
+
 /* Sin JavaScript no hay quien suelte la capa: no se muestra. */
 @media (scripting: none) {
   [data-ui="v2"] .rv-carga { display: none; }
+  [data-ui="v2"]:has(> .rv-carga:not([data-estado="oculta"])) > :is(.rv-skip, .rv-cab-movil, .rv-fila) { visibility: visible; }
 }
 
 /* Reduced-motion: logo estático al 60 %, sin respiración ni fundido. */
