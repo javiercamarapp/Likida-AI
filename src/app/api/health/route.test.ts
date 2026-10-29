@@ -568,3 +568,39 @@ describe('OP40-01: cron apagado por interruptor no tumba el health', () => {
     expect(r.status).toBe(503);
   });
 });
+
+// H759-9: un apagado PERMANENTE por interruptor no queda verde sin aviso.
+describe('H759-9: apagado por interruptor con antigüedad', () => {
+  const dias = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
+
+  it('publica la antigüedad (solo un número) y sigue siendo 200 mientras sea reciente, sin alerta', async () => {
+    dbFalla = false; permitido = true;
+    alertarHuecoConfiguracion.mockClear();
+    latidos = frescos({ id: 'conductor-hitos', ultimo_latido: new Date().toISOString(), estado: 'saltado', detalle: { interruptor: 'global', apagadoDesde: dias(1) } });
+    const r = await GET(peticion());
+    expect(r.status).toBe(200);
+    expect((await r.json()).checks).toMatchObject({ crons: 'apagado', apagadoDias: 1 });
+    expect(alertarHuecoConfiguracion).not.toHaveBeenCalled();
+  });
+
+  it('con más de 3 días apagado sigue en 200 (neutro) pero AVISA por el canal de huecos y publica los días', async () => {
+    dbFalla = false; permitido = true;
+    alertarHuecoConfiguracion.mockClear();
+    latidos = frescos({ id: 'conductor-hitos', ultimo_latido: new Date().toISOString(), estado: 'saltado', detalle: { interruptor: 'global', apagadoDesde: dias(5) } });
+    const r = await GET(peticion());
+    expect(r.status).toBe(200);
+    expect((await r.json()).checks).toMatchObject({ crons: 'apagado', apagadoDias: 5 });
+    expect(alertarHuecoConfiguracion).toHaveBeenCalledWith('cron.apagado_prolongado:conductor-hitos', expect.stringContaining('5 días'), expect.anything());
+  });
+
+  it('un latido apagado SIN apagadoDesde (anterior a este campo) no inventa antigüedad ni alerta', async () => {
+    dbFalla = false; permitido = true;
+    alertarHuecoConfiguracion.mockClear();
+    latidos = frescos({ id: 'conductor-hitos', ultimo_latido: new Date().toISOString(), estado: 'saltado', detalle: { interruptor: 'global' } });
+    const r = await GET(peticion());
+    const c = await r.json();
+    expect(c.checks.crons).toBe('apagado');
+    expect(c.checks).not.toHaveProperty('apagadoDias');
+    expect(alertarHuecoConfiguracion).not.toHaveBeenCalled();
+  });
+});

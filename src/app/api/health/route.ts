@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
-import { detalleLatidos, esHuecoDeConfiguracion, esApagadoPorInterruptor, type CronId } from '@/lib/admin/salud';
+import { detalleLatidos, esHuecoDeConfiguracion, esApagadoPorInterruptor, diasApagado, DIAS_APAGADO_ALERTA, type CronId } from '@/lib/admin/salud';
 import { alertarOperador, alertarHuecoConfiguracion } from '@/lib/observability/alerta';
 import { logger } from '@/lib/logger';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
@@ -97,6 +97,8 @@ async function manejarGET(req: NextRequest) {
   // Se publica el tercer estado para que el watchdog pueda tratarlos distinto:
   // un hueco declarado se anota y no tumba el job; una regresión sí.
   let cronCheck: 'ok' | 'degraded' | 'config_ausente' | 'apagado' | 'unknown' = 'unknown';
+  // H759-9: la antigüedad (días) del apagado por interruptor más viejo; `null` si nada está apagado o no se sabe desde cuándo.
+  let apagadoDias: number | null = null;
   try {
     const latidos = await detalleLatidos();
     const ids = Object.keys(latidos) as CronId[];
@@ -176,6 +178,21 @@ async function manejarGET(req: NextRequest) {
     // Solo apagados (nada muerto, nada en regresión ni con hueco declarado):
     // el estado visible es `apagado`, que NO degrada el status.
     if (apagados.length > 0 && cronCheck === 'ok') cronCheck = 'apagado';
+    // H759-9: «apagado» es neutro, pero NO para siempre: un `global` olvidado apagaba todo y el pulso seguía verde sin que nadie lo notara. Se publica la
+    // antigüedad (solo un número: el health es público) y, pasados `DIAS_APAGADO_ALERTA` días, se avisa por el canal de huecos (con piso de repetición).
+    if (apagados.length > 0) {
+      const dias = apagados.map((c) => diasApagado(latidos[c].detalle)).filter((d): d is number => d !== null);
+      apagadoDias = dias.length > 0 ? Math.max(...dias) : null;
+      if (apagadoDias !== null && apagadoDias >= DIAS_APAGADO_ALERTA) {
+        for (const c of apagados) {
+          if ((diasApagado(latidos[c].detalle) ?? 0) < DIAS_APAGADO_ALERTA) continue;
+          logger.warn('health.cron_apagado_prolongado', { codigo: 'cron_apagado_prolongado', ruta: `/api/cron/${c}`, dias: diasApagado(latidos[c].detalle) });
+          await alertarHuecoConfiguracion(`cron.apagado_prolongado:${c}`, `El cron lleva ${diasApagado(latidos[c].detalle)} días apagado por un interruptor: confirma que es a propósito o enciéndelo.`, {
+            cron: c, interruptor: String(latidos[c].detalle.interruptor ?? ''),
+          });
+        }
+      }
+    }
   } catch (e) {
     cronCheck = 'unknown';
     logger.warn('health.latidos_ilegibles', { err: e instanceof Error ? e.message : String(e) });
@@ -212,7 +229,7 @@ async function manejarGET(req: NextRequest) {
   const cuerpo = {
     ok: status === 'ok',
     status,
-    checks: { db, crons: cronCheck },
+    checks: { db, crons: cronCheck, ...(apagadoDias !== null ? { apagadoDias } : {}) },
     // Vercel la inyecta en build; en local es "local" y eso también es verdad.
     version: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'local',
     // OP-P1: `{ base, codigo, atras }` — números de migración, no datos de

@@ -83,7 +83,12 @@ jobs:
             echo "::warning::Hay un cron sin configurar (checks.crons=config_ausente). NO tumba el pulso a propósito: dejarlo rojo permanente esconde un cron muerto de verdad. Destrábalo en las variables de entorno."
           fi
           if [ "$crons" = "apagado" ]; then
-            echo "::notice::Hay crons apagados a propósito por interruptor (checks.crons=apagado). Es estado neutro: no tumba el pulso, pero un cron muerto de verdad sí lo hace."
+            dias=$(leer '.checks?.apagadoDias')
+            if [ -n "$dias" ] && [ "$dias" != "invalid" ] && [ "$dias" -ge 3 ] 2>/dev/null; then
+              echo "::warning::Hay crons apagados por interruptor desde hace $dias días (checks.apagadoDias). NO tumba el pulso, pero un apagado permanente no debería pasar desapercibido: confirma que es a propósito o enciéndelo."
+            else
+              echo "::notice::Hay crons apagados a propósito por interruptor (checks.crons=apagado). Es estado neutro: no tumba el pulso, pero un cron muerto de verdad sí lo hace."
+            fi
           fi
           [ "$status" = "200" ] && [ "$estado" = "ok" ] || { echo "::error::/api/health no está healthy (http=$status estado=$estado crons=$crons migracion=$migracion); un cron vencido, una regresión o una base atrás del código se reportan como degraded."; exit 1; }
 
