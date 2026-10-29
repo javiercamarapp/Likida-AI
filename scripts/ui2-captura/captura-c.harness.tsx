@@ -92,9 +92,9 @@ const asistente = (s: SenalesAsistente, paso?: 'tms' | 'correo') => (
 
 interface VistaDef { ruta: string; cuerpo: () => Promise<ReactNode> | ReactNode; senales?: SenalesAsistente }
 const VISTAS: Record<string, VistaDef> = {
-  'c01-resumen-vacio': { ruta: '/dashboard', senales: VACIAS, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: 'Ana', tenantExiste: true, sufijo: '', soloLectura: false, fichas: await fichas() }) },
-  'c02-resumen-en-curso': { ruta: '/dashboard', senales: EN_CURSO, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: 'Ana', tenantExiste: true, sufijo: '', soloLectura: false, fichas: await fichas() }) },
-  'c03-resumen-sin-dato': { ruta: '/dashboard', senales: CAIDAS, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: 'Ana', tenantExiste: true, sufijo: '', soloLectura: false, fichas: await fichas() }) },
+  'c01-resumen-vacio': { ruta: '/dashboard', senales: VACIAS, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: 'Ana', tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, fichas: await fichas() }) },
+  'c02-resumen-en-curso': { ruta: '/dashboard', senales: EN_CURSO, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: 'Ana', tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, fichas: await fichas() }) },
+  'c03-resumen-sin-dato': { ruta: '/dashboard', senales: CAIDAS, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: 'Ana', tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, fichas: await fichas() }) },
   'c04-asistente-vacio': { ruta: '/dashboard/puesta-en-marcha', cuerpo: () => asistente(VACIAS) },
   'c05-asistente-tms': { ruta: '/dashboard/puesta-en-marcha', cuerpo: () => asistente(VACIAS, 'tms') },
   'c06-asistente-atencion': { ruta: '/dashboard/puesta-en-marcha', cuerpo: () => asistente(ATENCION, 'tms') },
