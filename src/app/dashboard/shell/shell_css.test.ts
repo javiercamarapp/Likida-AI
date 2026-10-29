@@ -100,3 +100,10 @@ describe('pie del sidebar y tokens de shell', () => {
     }
   });
 });
+
+describe('clases del menú de cuenta', () => {
+  it('shell.css no define .rv-menu* (son del MenuList de overlay): sus clases propias son .rv-cuenta-*', () => {
+    expect(sinComentarios).not.toMatch(/\.rv-menu\b/);
+    expect(sinComentarios).toContain('.rv-cuenta-tema');
+  });
+});

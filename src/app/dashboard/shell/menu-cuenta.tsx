@@ -1,19 +1,20 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { LogOut, ChevronsUpDown, Play, RotateCcw, Check } from 'lucide-react';
 import type { Item } from '../rutas';
 import { EnlaceCuenta } from '../enlace-cuenta';
-import { useTourOpcional, useProgresoTour } from '../../ui-v2/movimiento/tour/proveedor';
-import { anclaDe, indiceDeMenu } from './nav-utiles';
+import { Popover, MenuList } from '../../ui-v2/componentes/overlay';
+import { useTourOpcional, useProgresoTour } from '../../ui-v2/movimiento/tour';
+import { anclaDe } from './nav-utiles';
 import { OPCIONES_TEMA, useTema } from '../../selector-tema';
 
 /**
  * La tarjeta de cuenta del pie (alto 44): monograma, nombre, rol y «Salir» (icono en tinta, nunca rojo). Al pulsar la tarjeta se
- * abre un menú (popover de filas de 32 px) con Mi perfil, Cuenta, Ayuda y Ver recorrido, y —solo sin perfil— el uso de IA de hoy.
- * Se cierra con Esc, con un clic fuera y al navegar; el foco vuelve a la tarjeta. Es `role="menu"`, no un diálogo.
- * (Cuando B entregue `Popover`/`MenuList` en `overlay.tsx`, esta pieza migra a ellos sin cambiar de aspecto.)
+ * abre el Popover del sistema de overlays (`overlay.tsx`: posición, foco inicial, Esc con retorno del foco, clic fuera) con un
+ * `MenuList` (flechas, Inicio, Fin) de filas de 32 px: Mi perfil, Mi cuenta, Ayuda, Ver recorrido, el tema y —solo sin perfil— el uso
+ * de IA de hoy. Tab sale del menú y lo cierra. Las filas son enlaces reales (`Link`, navegación suave) con `role="menuitem"`.
  */
 export default function MenuCuenta({ nombre, rol, rolEtiqueta, sufijo, filas, usoIaPct, cerrarSesion, alNavegar, iniciales, abiertoInicial = false }: {
   /** Solo para pruebas de render estático (abrir el menú sin interacción). */
@@ -22,34 +23,15 @@ export default function MenuCuenta({ nombre, rol, rolEtiqueta, sufijo, filas, us
   cerrarSesion?: () => Promise<void>; alNavegar?: () => void; iniciales: string;
 }) {
   const [abierto, setAbierto] = useState(abiertoInicial);
-  const { tema, elegir } = useTema();
-  const raiz = useRef<HTMLDivElement>(null);
   const gatillo = useRef<HTMLButtonElement>(null);
   const idMenu = useId();
+  const { tema, elegir } = useTema();
 
-  // Solo los ítems visibles: el tema del menú existe en el DOM pero se oculta donde el segmentado del pie sí cabe.
-  const items = () => [...(raiz.current?.querySelectorAll<HTMLElement>('[role^="menuitem"]') ?? [])].filter((e) => e.getClientRects().length > 0);
-  useEffect(() => {
-    if (!abierto) return;
-    // Foco inicial: el primer ítem del menú (patrón APG de menú).
-    items()[0]?.focus();
-    const fuera = (e: PointerEvent) => { if (raiz.current && !raiz.current.contains(e.target as Node)) setAbierto(false); };
-    const tecla = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setAbierto(false); gatillo.current?.focus(); return; }
-      if (e.key === 'Tab') { setAbierto(false); return; } // Tab sale del menú y lo cierra (el foco sigue su curso)
-      const lista = items();
-      const nuevo = indiceDeMenu(e.key, lista.indexOf(document.activeElement as HTMLElement), lista.length);
-      if (nuevo !== null) { e.preventDefault(); lista[nuevo]?.focus(); }
-    };
-    document.addEventListener('pointerdown', fuera);
-    document.addEventListener('keydown', tecla);
-    return () => { document.removeEventListener('pointerdown', fuera); document.removeEventListener('keydown', tecla); };
-  }, [abierto]);
-
-  const cerrar = () => { setAbierto(false); alNavegar?.(); };
+  const cerrar = () => setAbierto(false);
+  const alElegir = () => { setAbierto(false); alNavegar?.(); };
   const mostrarNombre = (nombre ?? '').trim() || 'Mi cuenta';
   return (
-    <div className="rv-cuenta" ref={raiz}>
+    <div className="rv-cuenta">
       <button ref={gatillo} type="button" className="rv-cuenta__btn" aria-haspopup="menu" aria-expanded={abierto} aria-controls={abierto ? idMenu : undefined}
         title="Menú de la cuenta" onClick={() => setAbierto((a) => !a)}>
         <span className="rv-avatar" aria-hidden>{iniciales}</span>
@@ -66,30 +48,36 @@ export default function MenuCuenta({ nombre, rol, rolEtiqueta, sufijo, filas, us
           </button>
         </form>
       )}
-      {abierto && (
-        <div id={idMenu} role="menu" aria-label="Cuenta" className="rv-menu">
-          {usoIaPct !== undefined && (
-            <Link role="menuitem" tabIndex={-1} href={`/dashboard/chat${sufijo}`} className="rv-menu__fila" onClick={cerrar}>
-              <span>Análisis con IA · hoy</span><span className="rv-menu__valor">{usoIaPct === null ? '—' : `${usoIaPct} %`}</span>
-            </Link>
-          )}
-          {filas.map((it) => (
-            <Link key={it.href} role="menuitem" tabIndex={-1} href={`${it.href}${sufijo}`} className="rv-menu__fila" data-tour={`nav-${anclaDe(it.href)}`} onClick={cerrar}>
-              <it.Icono width={16} height={16} strokeWidth={1.75} aria-hidden /><span>{it.nombre === 'Centro de ayuda' ? 'Ayuda' : it.nombre}</span>
-            </Link>
-          ))}
-          <EnlaceCuenta rol={rol} className="rv-menu__fila" role="menuitem" tabIndex={-1} onClick={cerrar}>Mi cuenta</EnlaceCuenta>
-          <FilaRecorrido alElegir={cerrar} />
-          {/* El tema, también aquí: en el riel (768–1023 y plegado) el segmentado del pie no cabe y esta es la única vía. */}
-          <div role="group" aria-label="Tema de la interfaz" className="rv-menu__tema">
-            {OPCIONES_TEMA.map(({ valor, Icono, rotulo }) => (
-              <button key={valor} type="button" role="menuitemradio" aria-checked={tema === valor} tabIndex={-1} className="rv-menu__fila" onClick={() => elegir(valor)}>
-                <Icono width={16} height={16} strokeWidth={1.75} aria-hidden /><span>{rotulo}</span>{tema === valor && <Check className="rv-menu__valor" width={14} height={14} strokeWidth={2} aria-hidden />}
-              </button>
+      <Popover abierto={abierto} onCerrar={cerrar} ancla={gatillo} etiqueta="Cuenta" alineacion="inicio">
+        {/* Tab sale del menú (el foco sigue su curso) y lo cierra. */}
+        <div id={idMenu} onKeyDown={(e) => { if (e.key === 'Tab') cerrar(); }}>
+          <MenuList etiqueta="Cuenta">
+            {usoIaPct !== undefined && (
+              <Link role="menuitem" tabIndex={-1} href={`/dashboard/chat${sufijo}`} className="rv-menu__item" onClick={alElegir}>
+                <span>Análisis con IA · hoy</span><span className="rv-cuenta-valor">{usoIaPct === null ? '—' : `${usoIaPct} %`}</span>
+              </Link>
+            )}
+            {filas.map((it) => (
+              <Link key={it.href} role="menuitem" tabIndex={-1} href={`${it.href}${sufijo}`} className="rv-menu__item" data-tour={`nav-${anclaDe(it.href)}`} onClick={alElegir}>
+                <span className="rv-menu__icono" aria-hidden><it.Icono width={16} height={16} strokeWidth={1.75} /></span>
+                <span>{it.nombre === 'Centro de ayuda' ? 'Ayuda' : it.nombre}</span>
+              </Link>
             ))}
-          </div>
+            <EnlaceCuenta rol={rol} className="rv-menu__item" role="menuitem" tabIndex={-1} onClick={alElegir}>Mi cuenta</EnlaceCuenta>
+            <FilaRecorrido alElegir={alElegir} />
+            {/* El tema, también aquí: en el riel (768–1023 y plegado) el segmentado del pie no cabe y esta es la única vía. */}
+            <div className="rv-cuenta-tema" role="presentation">
+              {OPCIONES_TEMA.map(({ valor, Icono, rotulo }) => (
+                <button key={valor} type="button" role="menuitem" tabIndex={-1} data-tema={valor} className="rv-menu__item"
+                  aria-label={tema === valor ? `${rotulo}, seleccionado` : rotulo} onClick={() => elegir(valor)}>
+                  <span className="rv-menu__icono" aria-hidden><Icono width={16} height={16} strokeWidth={1.75} /></span>
+                  <span>{rotulo}</span>{tema === valor && <Check className="rv-cuenta-valor" width={14} height={14} strokeWidth={2} aria-hidden />}
+                </button>
+              ))}
+            </div>
+          </MenuList>
         </div>
-      )}
+      </Popover>
     </div>
   );
 }
@@ -105,8 +93,8 @@ function FilaRecorridoConMotor({ alElegir }: { alElegir: () => void }) {
   if (!tour || !tour.existe('dueno')) return null;
   const enCurso = prog?.estado === 'en_curso';
   return (
-    <button type="button" role="menuitem" tabIndex={-1} className="rv-menu__fila" onClick={() => { alElegir(); if (enCurso) tour.reanudar('dueno'); else tour.reiniciar('dueno'); }}>
-      {enCurso ? <RotateCcw width={16} height={16} strokeWidth={1.75} aria-hidden /> : <Play width={16} height={16} strokeWidth={1.75} aria-hidden />}
+    <button type="button" role="menuitem" tabIndex={-1} className="rv-menu__item" onClick={() => { alElegir(); if (enCurso) tour.reanudar('dueno'); else tour.reiniciar('dueno'); }}>
+      <span className="rv-menu__icono" aria-hidden>{enCurso ? <RotateCcw width={16} height={16} strokeWidth={1.75} /> : <Play width={16} height={16} strokeWidth={1.75} />}</span>
       <span>{enCurso ? 'Reanudar recorrido' : 'Ver recorrido'}</span>
     </button>
   );

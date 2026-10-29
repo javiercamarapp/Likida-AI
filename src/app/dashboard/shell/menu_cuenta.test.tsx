@@ -31,11 +31,16 @@ describe('menú de la tarjeta de cuenta abierto', () => {
     expect(html).toMatch(/<a[^>]*role="menuitem"[^>]*href="\/cuenta/);
     expect(html).not.toMatch(/<a(?![^>]*role=)[^>]*href=/); // ningún enlace sin role dentro del menú
   });
-  it('ofrece el tema (claro / sistema / oscuro) como menuitemradio: alcanzable también en riel y tablet', () => {
-    expect(html.match(/role="menuitemradio"/g)).toHaveLength(3);
-    expect(html).toContain('aria-checked="true"');
+  it('ofrece el tema (claro / sistema / oscuro) dentro del menú: alcanzable también en riel y tablet', () => {
+    expect(html.match(/data-tema="(claro|sistema|oscuro)"/g)).toHaveLength(3);
+    expect(html).toContain('aria-label="Tema claro, seleccionado"');
   });
-  it('los ítems no son tabulables (foco programático con flechas) y Tab cierra el menú', () => {
-    expect(html).toContain('tabindex="-1"');
+  it('usa el Popover y el MenuList del sistema de overlays, no un menú propio; ninguna clase propia choca con .rv-menu', () => {
+    expect(html).toContain('class="rv-pop"');
+    expect(html).toContain('class="rv-menu" role="menu"');
+    expect(html).not.toContain('rv-menu__fila');
+  });
+  it('los ítems no son tabulables (foco programático con flechas)', () => {
+    expect(html.match(/tabindex="-1"/g)!.length).toBeGreaterThanOrEqual(5);
   });
 });
