@@ -63,6 +63,20 @@ describe('A1-01 · lectura de la fecha de corte', () => {
   });
 });
 
+describe('H759-2 · base sin la 0940 bajo cinco_agentes', () => {
+  it('lanza en vez de leer «sin corte» (fail-closed); sin perfil sigue leyendo sin la columna', async () => {
+    (globalThis as { __perfilPrueba?: string | null }).__perfilPrueba = 'cinco_agentes';
+    respuestas = [sinColumna0940, { data: { canal: 'correo', activa: true }, error: null }];
+    await expect(r.leerConfigCorreo(T)).rejects.toThrow(/fecha de corte/);
+    expect(llamadas).toHaveLength(1); // no hizo la segunda lectura sin la columna
+    llamadas.length = 0;
+    (globalThis as { __perfilPrueba?: string | null }).__perfilPrueba = null;
+    respuestas = [sinColumna0940, { data: { canal: 'correo', activa: true }, error: null }];
+    const c = await r.leerConfigCorreo(T);
+    expect(c.ok && c.valor.noEnviarAntes).toBeNull();
+  });
+});
+
 describe('A1-01 · guardar la fecha de corte', () => {
   const base = { ...r.CONFIG_CORREO_POR_DEFECTO, canal: 'correo' as const };
 

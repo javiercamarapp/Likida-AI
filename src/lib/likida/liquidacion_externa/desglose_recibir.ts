@@ -34,6 +34,7 @@ import {
 import { generarDesgloseXlsx } from './desglose_xlsx';
 import { resolverDestinatarios, resolverRevisores, type MotivoFaltante } from './correo_destinatarios';
 import { hoyMx } from '@/lib/formato';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import {
   buscarPorClave, resolverOperadorDestino, resolverViajeIds, insertarLiquidacionExterna, registrarEvento,
   type LiquidacionExterna, type NuevaLiquidacionExterna, type OperadorDestino, type TipoEvento,
@@ -82,10 +83,16 @@ export interface DependenciasDesglose {
 
 export const dependenciasDesglosePorOmision: DependenciasDesglose = {
   ahora: () => new Date(),
-  // Sin las migraciones 0785-0787 la lectura no está disponible: se usa el defecto (canal anterior, sin reglas).
+  // Sin las migraciones 0785-0787 la lectura no está disponible: se usa el defecto (canal anterior, sin reglas)... salvo bajo
+  // `cinco_agentes` (H759-2): ahí «sin configuración» NO puede significar «sin corte» (el histórico saldría como correos reales), así
+  // que falla cerrado: lanza (reintentable; la RPC no deja nada a medias) en vez de asumir el defecto.
   leerConfig: async (t) => {
     const l = await leerConfigCorreo(t);
-    return l.ok ? l.valor : CONFIG_CORREO_POR_DEFECTO;
+    if (l.ok) return l.valor;
+    if ((await perfilDeTenant(t)) === 'cinco_agentes') {
+      throw new Error('liqcorreo.recepcion: no se pudo leer la configuración de envío (fecha de corte) de una flota que la exige; se reintenta, no se asume «sin corte».');
+    }
+    return CONFIG_CORREO_POR_DEFECTO;
   },
   buscarPorClave,
   resolverOperador: (t, numeroEmpleado) => resolverOperadorDestino(t, { id: null, telefono: null, numeroEmpleado }),

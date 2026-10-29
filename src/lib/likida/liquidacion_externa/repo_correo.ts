@@ -271,6 +271,11 @@ export async function leerConfigCorreo(tenantId: string): Promise<Lectura<Config
   // Una base sin la 0940 (fecha de corte) pero con la 0933: se lee con todo lo demás (los revisores NO se pierden); sin corte.
   if (faltaColumna0940((res as unknown as { error: ErrorPg }).error)) {
     logger.warn('liqcorreo.config_sin_0940', {});
+    // H759-2: bajo `cinco_agentes` la fecha de corte es obligatoria. Una base sin la columna NO puede responder «sin corte» (los desgloses
+    // históricos nacerían `pendiente` y saldrían como correos reales): falla cerrado, con un error claro y reintentable.
+    if ((await perfilDeTenant(tenantId)) === 'cinco_agentes') {
+      throw new Error('liqcorreo.config_leer: falta la columna de la fecha de corte (migración 0940) y esta flota la exige; no se asume «sin corte».');
+    }
     res = await acotada(supabaseAdmin().from('liquidacion_correo_config')
       .select(COLS_CONFIG_SIN_0940).eq('tenant_id', tenantId).maybeSingle(), 'liqcorreo.config_leer');
   }
