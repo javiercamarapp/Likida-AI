@@ -68,7 +68,9 @@ async function medirPantalla(browser, p, cuerpo, cssRuta, w, tema, { pliegueApli
   writeFileSync(archivo, docHtml(cuerpo, cssRuta));
   await page.goto('file://' + archivo);
   await page.evaluate(async (t) => { document.documentElement.setAttribute('data-theme', t === 'claro' ? 'light' : 'dark'); await document.fonts.ready; }, tema);
-  await page.waitForTimeout(60);
+  // Los Suspense resueltos por prerender se acomodan con un script en línea: se espera a que no queden plantillas ni esqueletos pendientes.
+  if (!carga) await page.waitForFunction(() => !document.querySelector('template[id^="B:"]') && !document.querySelector('[role="status"][aria-label="Cargando"]'), null, { timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(80);
   const res = await ejecutar(page, { pliegue: pliegueAplica, carga });
   if (arg.capturas) {
     const dir = path.join(OUT, 'capturas-' + ETIQUETA); mkdirSync(dir, { recursive: true });

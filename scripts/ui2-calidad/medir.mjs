@@ -152,6 +152,7 @@ export function medir(U, opts) {
     if (!puntos.every(([x, y]) => acierta(x, y))) add('c1.toque', 'zona táctil < 44 (' + Math.round(r.width) + '×' + Math.round(r.height) + ') ' + desc(e));
   }
   window.scrollTo(0, 0);
+  for (const el of document.querySelectorAll('*')) if (el.scrollTop || el.scrollLeft) { el.scrollTop = 0; el.scrollLeft = 0; } // la prueba táctil desplaza contenedores internos
   // Separación entre botones vecinos ≥8 px.
   const btns = controles.filter((e) => e.matches(BTN_SEL) && cajaPropia(e, getComputedStyle(e)));
   if (btns.length <= 120) {
@@ -172,7 +173,8 @@ export function medir(U, opts) {
   const kpis = [];
   for (const e of conTexto) {
     const cs = getComputedStyle(e); const fs = px(cs.fontSize); hist(fs);
-    const mayus = cs.textTransform === 'uppercase';
+    const tx = (e.textContent || '').trim();
+    const mayus = cs.textTransform === 'uppercase' || (/\p{L}/u.test(tx) && tx === tx.toUpperCase());
     const esKpi = e.matches(KPI_SEL);
     if (esKpi) kpis.push(fs);
     if (fs < U.textoMin - 0.05) add('c2.texto_menor_11', fs + 'px ' + desc(e));
@@ -232,12 +234,15 @@ export function medir(U, opts) {
     const g = Math.max(px(cs.rowGap), px(cs.columnGap));
     if (g > U.gapMax + 0.5) add('c3.gap', 'gap ' + g + 'px (máx. ' + U.gapMax + ') ' + desc(e));
   }
+  // Margen de página = distancia entre el borde del contenedor de contenido y el primer bloque pintado (tarjeta, H1 o texto).
   const cont = document.querySelector('#contenido-principal') || document.querySelector('main');
   if (cont) {
-    const cs = getComputedStyle(cont); const pl = px(cs.paddingLeft), pt = px(cs.paddingTop);
-    stats.paddingPagina = { izq: pl, arriba: pt };
-    if (VW >= 1024 && Math.abs(pl - U.padPagina) > 1) add('c3.padding_pagina', 'padding de página ' + pl + 'px (norma ' + U.padPagina + ' en ≥1024)');
-    if (movil && pl > 16.5) add('c3.padding_pagina', 'padding de página ' + pl + 'px en móvil (máx. 16)');
+    const cr = cont.getBoundingClientRect();
+    const bloques = [...tarjetas, ...h1s].filter((x) => cont.contains(x));
+    const izq = bloques.length ? Math.min(...bloques.map((x) => x.getBoundingClientRect().left)) - cr.left : 0;
+    stats.paddingPagina = { izq: Math.round(izq * 10) / 10, contenedor: px(getComputedStyle(cont).paddingLeft) };
+    if (VW >= 1024 && Math.abs(izq - U.padPagina) > 1.5) add('c3.padding_pagina', 'margen de página ' + Math.round(izq) + 'px (norma ' + U.padPagina + ' en ≥1024)');
+    if (movil && izq > 16.5) add('c3.padding_pagina', 'margen de página ' + Math.round(izq) + 'px en móvil (máx. 16)');
   } else add('c3.padding_pagina', 'sin contenedor #contenido-principal / main');
 
   // ═══ C4 · ESPACIO VACÍO ═════════════════════════════════════════════════
@@ -330,7 +335,7 @@ export function medir(U, opts) {
   for (const e of conTexto) {
     const cs = getComputedStyle(e);
     if (!(cs.overflowX === 'hidden' || cs.overflowX === 'clip')) continue;
-    if (e.scrollWidth <= e.clientWidth + 1 || e.tagName === 'SELECT' || e.tagName === 'INPUT' || scrollers(e)) continue;
+    if (e.clientWidth < 4 || e.scrollWidth <= e.clientWidth + 1 || e.tagName === 'SELECT' || e.tagName === 'INPUT' || scrollers(e)) continue;
     if (cs.textOverflow === 'ellipsis') {
       // truncado con «…»: solo grave en botones, chips, cifras, cabeceras y etiquetas cortas (IDs/cifras/etiquetas/botones)
       const t = (e.textContent || '').trim();
@@ -406,7 +411,8 @@ export function medir(U, opts) {
     const taparon = capa ? shell.filter((s) => { const q = s.getBoundingClientRect(); const c = document.elementFromPoint(Math.min(Math.max(q.left + q.width / 2, 0), VW - 1), Math.min(Math.max(q.top + q.height / 2, 0), VH - 1)); return c && !capa.contains(c) && !s.contains(c) && !c.contains(s) ? false : !(c && capa.contains(c)); }) : shell;
     if (taparon.length) add('c8.solo_la_capa', 'visibles junto a la carga: ' + [...new Set(taparon.map((s) => s.className && typeof s.className === 'string' ? s.className.split(/\s+/)[0] : s.tagName.toLowerCase()))].join(', '));
     const textos = [...document.querySelectorAll('body *')].filter((e) => !e.closest('svg') && !e.closest('script,style') && vis(e) && !oculto(e) && [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) && (!capa || !shell.some((s) => s.contains(e))));
-    const textosCapa = capa ? textos.filter((e) => capa.contains(e)) : textos;
+    const ambito = capa || estado[0] || null;
+    const textosCapa = ambito ? textos.filter((e) => ambito.contains(e)) : textos;
     if (textosCapa.length) add('c8.sin_texto', 'texto visible en la carga: ' + textosCapa.slice(0, 3).map((e) => '"' + e.textContent.trim().slice(0, 24) + '"').join(', '));
     if (capa) { const bgc = bgDe(capa).c, bgb = rgba(getComputedStyle(document.body).backgroundColor); const bgbase = bgb[3] > 0 ? bgb : bgc; if (rgba(getComputedStyle(capa).backgroundColor)[3] < 0.99 || ratio(bgc, bgbase) > 1.001) add('c8.un_color', 'la capa no es de un solo color opaco igual al fondo de la app'); }
     stats.carga = { logos: logos.length, capaFija: !!capa };

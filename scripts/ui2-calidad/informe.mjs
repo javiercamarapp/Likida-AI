@@ -55,7 +55,7 @@ export function informe(S) {
   }
   for (const comb of ['1440/claro', '390/claro']) {
     if (!S.meta.anchos.includes(Number(comb.split('/')[0])) || !S.meta.temas.includes(comb.split('/')[1])) continue;
-    L.push('', `## Detalle en ${comb} (elementos distintos por subcriterio)`, '', `| Pantalla | ${familias.map((f) => f.split(' ')[0]).join(' | ')} |`, `|---|${familias.map(() => '---:').join('|')}|`);
+    L.push('', `## Detalle en ${comb} (elementos en falta por familia)`, '', `| Pantalla | ${familias.map((f) => f.split(' ')[0]).join(' | ')} |`, `|---|${familias.map(() => '---:').join('|')}|`);
     for (const p of ids) { const c = S.pantallas[p].combinaciones[comb]; if (!c) continue; L.push(`| ${p} | ${familias.map((f) => suma(c.n, claves.filter((k) => CRITERIOS[k][0] === f))).join(' | ')} |`); }
   }
   L.push('', '## Por ancho (suma de todas las pantallas)', '', `| Ancho/tema | ${familias.map((f) => f.split(' ')[0]).join(' | ')} | Total |`, `|---|${familias.map(() => '---:').join('|')}|---:|`);
