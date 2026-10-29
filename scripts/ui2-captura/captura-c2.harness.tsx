@@ -136,13 +136,14 @@ const VISTAS: Record<string, { ruta: string; cuerpo: () => ReactNode }> = {
 };
 
 const FUENTES_CSS = [
+  ...[300, 400].map((w) => `@font-face{font-family:'Newsreader UI';font-weight:${w};font-style:normal;font-display:block;src:url('file://${F}/newsreader-${w}.woff2') format('woff2')}`),
   ...[400, 500, 600, 700].map((w) => `@font-face{font-family:'Hanken Grotesk UI';font-weight:${w};font-style:normal;font-display:block;src:url('file://${F}/hankengrotesk-${w}.woff2') format('woff2')}`),
   ...[400, 500, 600, 700].map((w) => `@font-face{font-family:'Inter';font-weight:${w};font-style:normal;font-display:block;src:url('file://${F}/inter-${w}.woff2') format('woff2')}`),
   ...[500, 600, 700].map((w) => `@font-face{font-family:'Inter Tight';font-weight:${w};font-style:normal;font-display:block;src:url('file://${F}/intertight-${w}.woff2') format('woff2')}`),
   ...[400, 500].map((w) => `@font-face{font-family:'IBM Plex Mono';font-weight:${w};font-style:normal;font-display:block;src:url('file://${F}/plexmono-${w}.woff2') format('woff2')}`),
   // Lo que next/font deja en <html> en producción (v1) y lo que declara ui-v2/fonts.css bajo el alcance (v2).
   `html{--font-sans-ui:'Inter';--font-display:'Inter Tight';--font-mono:'IBM Plex Mono'}`,
-  `[data-ui="v2"]{--font-sans-ui:'Hanken Grotesk UI',ui-sans-serif,system-ui,sans-serif;--font-display:'Hanken Grotesk UI',ui-sans-serif,system-ui,sans-serif}`,
+  `[data-ui="v2"]{--font-serif:'Newsreader UI',Georgia,serif;--font-sans-ui:'Hanken Grotesk UI',ui-sans-serif,system-ui,sans-serif;--font-display:'Hanken Grotesk UI',ui-sans-serif,system-ui,sans-serif}`,
 ].join('\n');
 
 async function envolver(cuerpo: ReactNode, ruta: string): Promise<string> {
@@ -158,8 +159,12 @@ async function envolver(cuerpo: ReactNode, ruta: string): Promise<string> {
   return partes.join('');
 }
 
+// El logo es una máscara sobre /images/*.png (en producción lo sirve Next): en el HTML estático se incrusta como data URI.
+const LOGO = Object.fromEntries(['logo-icono', 'logo-texto'].map((n) => [n, `data:image/png;base64,${readFileSync(path.join(raiz, `public/images/${n}.png`)).toString('base64')}`]));
+const conLogo = (html: string) => html.replace(/url\(\/images\/(logo-icono|logo-texto)\.png\)/g, (_m, n: string) => `url(${LOGO[n]})`);
+
 const doc = (cuerpo: string) =>
-  `<!doctype html><html lang="es" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="file://${TRABAJO}/${CSS}.css"><style>${FUENTES_CSS}</style><style>*,*::before,*::after{transition:none!important;animation:none!important}</style></head><body>${cuerpo}</body></html>`;
+  `<!doctype html><html lang="es" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="file://${TRABAJO}/${CSS}.css"><style>${FUENTES_CSS}</style><style>*,*::before,*::after{transition:none!important;animation:none!important}</style></head><body>${conLogo(cuerpo)}</body></html>`;
 
 describe(`captura carril C tanda 2 (${MODO} + ${CSS})`, () => {
   it('renderiza, compila el CSS y captura', async () => {
