@@ -75,7 +75,7 @@ export interface DependenciasDesglose {
   /** ¿Una liquidación con la misma huella quedó a medias (sin encabezado, o sin retención y sin entregas)? Se rescata. */
   desgloseIncompleto?: (tenantId: string, liquidacionId: string) => Promise<boolean>;
   /**
-   * A1-01 / A1-02: pasa a `omitida` las entregas `pendiente`/`enviando` de esas liquidaciones (idempotente); devuelve cuántas. Opcional:
+   * A1-01 / A1-02: pasa a `omitida` las entregas `pendiente` de esas liquidaciones (idempotente; una `enviando` termina su envío); devuelve cuántas. Opcional:
    * sin ella (pruebas) no se omite nada aparte; la corrección y el corte dependen de ella para ser a prueba de una RPC anterior a la 0940.
    */
   omitirPendientes?: (tenantId: string, liquidacionIds: string[], motivo: string) => Promise<number>;
@@ -418,9 +418,10 @@ export async function recibirDesglose(
     };
   }
   // A1-02: la corrección REEMPLAZA a la original (y a las correcciones anteriores): lo que de ellas siga esperando salir (ventana de
-  // envío, espera, reintentos) se omite ANTES de guardar la nueva, para que el operador reciba un solo correo y no el equivocado junto
-  // con el bueno. Si guardar fallara después, el reintento de la corrección repite esto (idempotente).
-  if (correccionDe) await omitirReemplazadas(tenantId, deps, reemplazadas);
+  // envío, espera, reintentos) se omite para que el operador reciba un solo correo y no el equivocado junto con el bueno. H759-7: se hace
+  // DESPUÉS de garantizar la nueva (guardada en la transacción de abajo), nunca antes: si guardar fallara y nadie reintentara, la original
+  // quedaría cancelada sin reemplazo. Si omitir falla, se lanza y el reintento de la corrección (idempotente) lo repite.
+  const omitirOriginales = async (): Promise<void> => { if (correccionDe) await omitirReemplazadas(tenantId, deps, reemplazadas); };
   const viajeIds = await deps.resolverViajeIds(tenantId, liq.viajes);
   const nuevaLiquidacion: NuevaLiquidacionExterna = {
     tenantId, datos: liq, huella, operadorId: operador.id, viajeIds,
@@ -453,6 +454,7 @@ export async function recibirDesglose(
   if (atomica && atomica.ok) {
     liquidacionId = atomica.valor.liquidacionId;
     entregas = atomica.valor.entregas;
+    await omitirOriginales();
     // Una base sin la 0933 ignora las entregas de una retenida: el aviso al revisor se inserta aparte (idempotente por el índice único).
     if (retenida && destinosRevisor.length > 0 && atomica.valor.creada && entregas === 0) {
       try {
@@ -477,6 +479,7 @@ export async function recibirDesglose(
     await deps.insertarDesglose(tenantId, { liquidacionExternaId: liquidacionId, ...meta });
     if (!rescate) await deps.registrarEvento(tenantId, liquidacionId, 'recibida', detalleEvento);
     entregas = await deps.insertarEntregas(tenantId, entregasPedidas.map((e) => ({ liquidacionExternaId: liquidacionId, ...e })));
+    await omitirOriginales();
   }
 
   // La póliza ya llegó: la excepción `sin_poliza` de esta clave (si la hubo) se cierra sola.

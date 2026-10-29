@@ -860,7 +860,7 @@ describe('A1-02: una corrección -R<n> reemplaza a la original', () => {
   const distinto = () => desglose({ neto: 4000, percepciones: [{ concepto: 'Sueldo', monto: 9000 }], deducciones: [{ concepto: 'Retención uno', monto: 5000 }] });
   const OP = { correccion: { motivo: 'error de captura', actor: 'llave:administracion' } };
 
-  it('con el original aún pendiente (ventana/espera): queda «omitida» ANTES de guardar la corrección y solo sale el correo de la -R1', async () => {
+  it('con el original aún pendiente (ventana/espera): queda «omitida» DESPUÉS de guardar la corrección y solo sale el correo de la -R1', async () => {
     const b = banco({ config: { enviarDesdeHora: 12 } });
     await recibirDesglose(TENANT, desglose(), b.deps); // original: 4 entregas pendientes esperando la ventana
     expect(saldria(b)).toHaveLength(4);
@@ -869,7 +869,7 @@ describe('A1-02: una corrección -R<n> reemplaza a la original', () => {
     expect(r).toMatchObject({ estado: 'creada', claveExterna: 'BIT-T1-B-0001-R1' });
     expect(b.omitidasIds).toEqual(['liq-1']);
     expect(b.motivosOmision[0]).toMatch(/corrección/);
-    expect(b.orden.indexOf('omitir')).toBeLessThan(b.orden.indexOf('insertar')); // primero se apaga la original
+    expect(b.orden.indexOf('omitir')).toBeGreaterThan(b.orden.indexOf('insertar')); // H759-7: la original se apaga DESPUÉS de garantizar la corrección
     const salen = saldria(b);
     expect(salen).toHaveLength(4);
     expect(new Set(salen.map((e) => e.liquidacionExternaId))).toEqual(new Set(['liq-2'])); // un solo desglose: el corregido
@@ -902,12 +902,29 @@ describe('A1-02: una corrección -R<n> reemplaza a la original', () => {
     expect(b.omitidasIds).toEqual(['liq-1']);
   });
 
-  it('si omitir falla se LANZA y no se guarda la corrección (nunca dos correos en silencio)', async () => {
+  it('H759-7: si GUARDAR la corrección falla, la original NO se omite (no queda cancelada sin reemplazo)', async () => {
     const b = banco();
     await recibirDesglose(TENANT, desglose(), b.deps);
+    const insertar = b.deps.insertarLiquidacion;
+    b.deps.insertarLiquidacion = async () => { throw new Error('base caída al guardar'); };
+    await expect(recibirDesglose(TENANT, distinto(), b.deps, OP)).rejects.toThrow('base caída al guardar');
+    expect(b.omitidasIds).toEqual([]);
+    expect(saldria(b)).toHaveLength(4); // la original sigue saliendo
+    b.deps.insertarLiquidacion = insertar;
+    await recibirDesglose(TENANT, distinto(), b.deps, OP); // el reintento sí reemplaza
+    expect(b.omitidasIds).toEqual(['liq-1']);
+  });
+
+  it('si omitir falla se LANZA (nunca dos correos en silencio) y el reintento idempotente de la corrección ya guardada lo repite', async () => {
+    const b = banco();
+    await recibirDesglose(TENANT, desglose(), b.deps);
+    const omitir = b.deps.omitirPendientes!;
     b.deps.omitirPendientes = async () => { throw new Error('base caída'); };
     await expect(recibirDesglose(TENANT, distinto(), b.deps, OP)).rejects.toThrow('base caída');
-    expect(b.liquidaciones).toHaveLength(1);
+    expect(b.liquidaciones).toHaveLength(2); // la corrección ya está garantizada
+    b.deps.omitirPendientes = omitir;
+    expect(await recibirDesglose(TENANT, distinto(), b.deps, OP)).toMatchObject({ estado: 'idempotente', claveExterna: 'BIT-T1-B-0001-R1' });
+    expect(b.omitidasIds).toEqual(['liq-1']);
   });
 
   it('sin corrección pedida (la pendiente solo se abre) no se omite nada del original', async () => {

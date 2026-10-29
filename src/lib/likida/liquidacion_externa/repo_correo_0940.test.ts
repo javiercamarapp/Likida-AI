@@ -151,14 +151,14 @@ describe('A1-01/A1-02 · entregas omitidas', () => {
     expect('estado' in filas[1]).toBe(false);
   });
 
-  it('omitirEntregasPendientes: UPDATE anclado a la flota y a las liquidaciones, solo desde pendiente/enviando, y devuelve cuántas cambió', async () => {
+  it('omitirEntregasPendientes: UPDATE anclado a la flota y a las liquidaciones, solo desde pendiente (H759-7: una enviando no se toca), y devuelve cuántas cambió', async () => {
     respuestas = [{ data: [{ id: 'a' }, { id: 'b' }, { id: 'c' }], error: null }];
     const n = await r.omitirEntregasPendientes(T, ['l1', 'l2'], 'omitida: reemplazada por una corrección');
     expect(n).toBe(3);
     const ops = llamadas[0].ops;
     expect(ops).toContainEqual(['eq', 'tenant_id', T]);
     expect(ops).toContainEqual(['in', 'liquidacion_externa_id', ['l1', 'l2']]);
-    expect(ops).toContainEqual(['in', 'estado', ['pendiente', 'enviando']]);
+    expect(ops).toContainEqual(['eq', 'estado', 'pendiente']);
     expect(ops.find((o) => o[0] === 'update')?.[1]).toMatchObject({ estado: 'omitida', ultimo_error: 'omitida: reemplazada por una corrección', claim_token: null, claim_expira_en: null });
   });
 
@@ -214,5 +214,17 @@ describe('H759-3 · las entregas pendientes anteriores al corte pasan a omitida 
     respuestas = [{ data: [{ tenant_id: T }], error: null }];
     await r.guardarConfigCorreo(T, { ...base, activa: false, noEnviarAntes: null }, 'oficina');
     expect(tablas()).toEqual(['liquidacion_correo_config:upsert']);
+  });
+});
+
+describe('H759-7 · omitirEntregasPendientes no toca las `enviando`', () => {
+  it('el UPDATE es solo desde `pendiente`, de esa flota y de esas liquidaciones (una enviando termina su envío y conserva su resend_id)', async () => {
+    respuestas = [{ data: [{ id: 'e1' }], error: null }];
+    expect(await r.omitirEntregasPendientes(T, ['liq-1'], 'reemplazada')).toBe(1);
+    const l = llamadas[0];
+    expect(l.ops.some((o) => o[0] === 'eq' && o[1] === 'tenant_id' && o[2] === T)).toBe(true);
+    expect(l.ops.some((o) => o[0] === 'eq' && o[1] === 'estado' && o[2] === 'pendiente')).toBe(true);
+    expect(l.ops.some((o) => o[0] === 'in' && o[1] === 'estado')).toBe(false);
+    expect(l.ops.some((o) => o[0] === 'in' && o[1] === 'liquidacion_externa_id')).toBe(true);
   });
 });

@@ -795,16 +795,17 @@ export const marcarOmitida = (tenantId: string, id: string, motivo: string): Pro
   transicionarEntrega(tenantId, id, ['pendiente', 'enviando'], { estado: 'omitida', ultimo_error: recortar(motivo), ...SIN_LEASE }, null, 'liqcorreo.marcar_omitida');
 
 /**
- * A1-01 / A1-02: pasa a `omitida` TODAS las entregas `pendiente`/`enviando` de esas liquidaciones (UPDATE condicionado por flota y
- * estado, idempotente). Devuelve cuántas cambió. Una `enviando` con el correo ya en vuelo no se puede recoger: la guarda de estado de
- * `marcarEnviada` (solo desde `enviando`) deja de aplicar y el envío en curso termina; el resto de la cola no sale.
+ * A1-01 / A1-02: pasa a `omitida` las entregas `pendiente` de esas liquidaciones (UPDATE condicionado por flota y estado, idempotente).
+ * Devuelve cuántas cambió. H759-7: una `enviando` NO se toca: su correo ya está en vuelo, y pasarla a `omitida` hacía que `marcarEnviada`
+ * (solo desde `enviando`) fallara y se perdieran su `resend_id` y su evento (los rebotes no casarían); el envío en curso termina y el resto
+ * de la cola no sale.
  */
 export async function omitirEntregasPendientes(tenantId: string, liquidacionIds: string[], motivo: string): Promise<number> {
   if (liquidacionIds.length === 0) return 0;
   const etiqueta = 'liqcorreo.omitir_pendientes';
   const res = await acotada(supabaseAdmin().from('liquidacion_entrega_correo')
     .update({ estado: 'omitida', ultimo_error: recortar(motivo), ...SIN_LEASE, updated_at: new Date().toISOString() })
-    .eq('tenant_id', tenantId).in('liquidacion_externa_id', liquidacionIds).in('estado', ['pendiente', 'enviando']).select('id'), etiqueta);
+    .eq('tenant_id', tenantId).in('liquidacion_externa_id', liquidacionIds).eq('estado', 'pendiente').select('id'), etiqueta);
   return (exigirEscritura(res as unknown as { data: Fila[] | null; error: ErrorPg }, etiqueta) ?? []).length;
 }
 
