@@ -23,7 +23,7 @@ import { aBuffer } from './bytes';
 import type { Extraccion } from './campos';
 import type { ResultadoValidacion } from './validacion';
 import type { FormatoDoc } from './contenido';
-import { folioComparable, viajesLigadosPorFolio, type ViajeSalido } from './viajes_sin_ccp';
+import { folioComparable, viajesLigadosPorFolio, type FolioVisto, type ViajeSalido } from './viajes_sin_ccp';
 import type { FirmaPerfil, Mapeo, EjemploPerfil, Perfil } from './perfiles';
 import { TOPE_FILAS_CATALOGO, catalogoVacio, type CatalogoCliente, type ParteCat, type ProductoCat } from './catalogo_cliente';
 
@@ -1145,12 +1145,15 @@ export type EstadoEnvioTms =
 export interface EnvioTmsFila {
   id: string; tenantId: string; documentoId: string; versionDoc: number; idempotencyKey: string;
   estado: EstadoEnvioTms; plantilla: 'normal' | 'nueva'; intentos: number;
+  /** A3-09: la referencia del TMS y cuándo se envió/creó, para avisar «ya se subió una versión anterior». */
+  referenciaTms?: string | null; enviadoEn?: string | null; creadoEn?: string | null;
 }
 
-const COLUMNAS_ENVIO = 'id, tenant_id, documento_id, version_doc, idempotency_key, estado, plantilla, intentos';
+const COLUMNAS_ENVIO = 'id, tenant_id, documento_id, version_doc, idempotency_key, estado, plantilla, intentos, referencia_tms, enviado_en, created_at';
 const aEnvio = (f: Fila): EnvioTmsFila => ({
   id: String(f.id), tenantId: String(f.tenant_id), documentoId: String(f.documento_id), versionDoc: Number(f.version_doc),
   idempotencyKey: String(f.idempotency_key), estado: f.estado as EstadoEnvioTms, plantilla: f.plantilla as EnvioTmsFila['plantilla'], intentos: Number(f.intentos ?? 0),
+  referenciaTms: s(f.referencia_tms), enviadoEn: s(f.enviado_en), creadoEn: s(f.created_at),
 });
 
 export async function envioPorLlave(tenantId: string, idempotencyKey: string): Promise<EnvioTmsFila | null> {
@@ -1298,7 +1301,7 @@ export interface OpcionesSinCcp {
   viajesDelTms?: boolean;
 }
 
-export async function leerSalidasParaSinCcp(tenantId: string, ahora: Date = new Date(), opciones: OpcionesSinCcp = {}): Promise<{ viajes: ViajeSalido[]; conCcp: Set<string>; truncado: boolean }> {
+export async function leerSalidasParaSinCcp(tenantId: string, ahora: Date = new Date(), opciones: OpcionesSinCcp = {}): Promise<{ viajes: ViajeSalido[]; conCcp: Set<string>; truncado: boolean; viajesLeidos: number; ultimoImportadoEn: string | null }> {
   const desde = new Date(ahora.getTime() - DIAS_SALIDAS_SIN_CCP * 86_400_000).toISOString();
   // A37-S32-06: `.limit(2000)` recortaba en silencio (y PostgREST ya corta a 1,000): los viajes más viejos sin CCP desaparecían de la
   // pantalla. Se pagina con range() y, si aun así hay más que el tope, se devuelve `truncado` para que la vista lo diga.
@@ -1325,9 +1328,9 @@ export async function leerSalidasParaSinCcp(tenantId: string, ahora: Date = new 
     truncado = truncado || rv.truncado;
   }
   const ids = [...salidaPorViaje.keys()];
-  if (ids.length === 0) return { viajes: [], conCcp: new Set(), truncado };
+  if (ids.length === 0) return { viajes: [], conCcp: new Set(), truncado, viajesLeidos: 0, ultimoImportadoEn: null };
   const [filas, docs] = await Promise.all([
-    traerPorIds<Fila>(ids, (t) => acotada(supabaseAdmin().from('viaje').select('id, folio, cliente_id, cliente:cliente_id (nombre)')
+    traerPorIds<Fila>(ids, (t) => acotada(supabaseAdmin().from('viaje').select('id, folio, cliente_id, created_at, cliente:cliente_id (nombre)')
       .eq('tenant_id', tenantId).in('id', t), 'cpdocs.sin_ccp_viajes') as never, 'cpdocs.sin_ccp_viajes'),
     traerPorIds<Fila>(ids, (t) => acotada(supabaseAdmin().from('cp_documento').select('viaje_id')
       .eq('tenant_id', tenantId).eq('estado', 'aprobado').in('viaje_id', t), 'cpdocs.sin_ccp_docs') as never, 'cpdocs.sin_ccp_docs'),
@@ -1352,17 +1355,30 @@ export async function leerSalidasParaSinCcp(tenantId: string, ahora: Date = new 
     if (viajes.some((v) => folioComparable(v.folio) !== '')) {
       const margen = new Date(ahora.getTime() - (DIAS_SALIDAS_SIN_CCP + MARGEN_DIAS_FOLIO_CCP) * 86_400_000).toISOString();
       const [rDoc, rEnvio] = await Promise.all([
-        leerConTope<Fila>((d, h, primera) => acotada(supabaseAdmin().from('cp_documento').select('folio:extraccion->campos->folio_cliente->>valor', conteo(primera ? 0 : 1))
+        leerConTope<Fila>((d, h, primera) => acotada(supabaseAdmin().from('cp_documento').select('id, folio:extraccion->campos->folio_cliente->>valor, cliente_id', conteo(primera ? 0 : 1))
           .eq('tenant_id', tenantId).eq('estado', 'aprobado').gte('created_at', margen).order('created_at', { ascending: false }).order('id').range(d, h), 'cpdocs.sin_ccp_folio_docs') as never, TOPE_SALIDAS_SIN_CCP),
-        leerConTope<Fila>((d, h, primera) => acotada(supabaseAdmin().from('cp_envio_tms').select('referencia_tms', conteo(primera ? 0 : 1))
+        leerConTope<Fila>((d, h, primera) => acotada(supabaseAdmin().from('cp_envio_tms').select('referencia_tms, documento_id', conteo(primera ? 0 : 1))
           .eq('tenant_id', tenantId).in('estado', ['enviado', 'subido_a_mano']).gte('created_at', margen).order('created_at', { ascending: false }).order('id').range(d, h), 'cpdocs.sin_ccp_folio_envios') as never, TOPE_SALIDAS_SIN_CCP),
       ]);
-      const vistos = new Set<string>();
-      for (const d of (exigir(rDoc, 'cpdocs.sin_ccp_folio_docs') ?? []) as unknown as Fila[]) { const f = folioComparable(s(d.folio)); if (f) vistos.add(f); }
-      for (const e of (exigir(rEnvio, 'cpdocs.sin_ccp_folio_envios') ?? []) as unknown as Fila[]) { const f = folioComparable(s(e.referencia_tms)); if (f) vistos.add(f); }
+      const vistos: FolioVisto[] = [];
+      const clientePorDoc = new Map<string, string | null>();
+      for (const d of (exigir(rDoc, 'cpdocs.sin_ccp_folio_docs') ?? []) as unknown as Fila[]) {
+        vistos.push({ clienteId: s(d.cliente_id), folio: s(d.folio) });
+        const did = s(d.id); if (did) clientePorDoc.set(did, s(d.cliente_id));
+      }
+      // A3-02: la referencia de una carga subida se liga con el CLIENTE de su documento (no por el número solo). El cliente sale de los
+      // mismos documentos aprobados ya leídos (sin una consulta más); un envío cuyo documento ya no está aprobado no liga a nadie.
+      for (const e of (exigir(rEnvio, 'cpdocs.sin_ccp_folio_envios') ?? []) as unknown as Fila[]) {
+        const did = s(e.documento_id);
+        vistos.push({ clienteId: did ? (clientePorDoc.get(did) ?? null) : null, folio: s(e.referencia_tms) });
+      }
       truncado = truncado || rDoc.truncado || rEnvio.truncado;
       for (const id of viajesLigadosPorFolio(viajes, vistos)) conCcp.add(id);
     }
   }
-  return { viajes, conCcp, truncado };
+  // A3-01: la última importación = el `created_at` más reciente entre los viajes de la ventana (sin una consulta más a la base).
+  let ultimoImportadoEn: string | null = null;
+  for (const f of filas) { const c = s(f.created_at); if (c && (ultimoImportadoEn === null || Date.parse(c) > Date.parse(ultimoImportadoEn))) ultimoImportadoEn = c; }
+  return { viajes, conCcp, truncado, viajesLeidos: viajes.length, ultimoImportadoEn };
 }
+

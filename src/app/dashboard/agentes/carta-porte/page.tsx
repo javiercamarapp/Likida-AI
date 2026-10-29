@@ -9,7 +9,7 @@ import { direccionCp } from '@/lib/likida/carta_porte_docs/correo_entrante';
 import { flotaBajoPerfil } from '@/lib/likida/carta_porte_docs/envio';
 import * as repoDocs from '@/lib/likida/carta_porte_docs/repo';
 import { calcularInsights, type InsightsAgente } from '@/lib/likida/carta_porte_docs/metricas';
-import { listarViajesSinCcp, type ListadoSinCcp } from '@/lib/likida/carta_porte_docs/viajes_sin_ccp';
+import { listarViajesSinCcp, evaluarDatosTms, type ListadoSinCcp } from '@/lib/likida/carta_porte_docs/viajes_sin_ccp';
 import { sufijoTenant } from '../../sufijo';
 import { VistaAgenteCartaPorte, type BuzonCartaPorteVista } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
@@ -51,8 +51,14 @@ async function leerInsights(tenantId: string): Promise<{ insights: InsightsAgent
 async function leerSinCcp(tenantId: string): Promise<ListadoSinCcp | 'no_leido'> {
   try {
     const ahora = new Date();
-    const { viajes, conCcp, truncado } = await repoDocs.leerSalidasParaSinCcp(tenantId, ahora, { viajesDelTms: await flotaBajoPerfil(tenantId) });
-    return { ...listarViajesSinCcp(viajes, conCcp, ahora), ...(truncado ? { truncado: true } : {}) };
+    const delTms = await flotaBajoPerfil(tenantId);
+    const lectura = await repoDocs.leerSalidasParaSinCcp(tenantId, ahora, { viajesDelTms: delTms });
+    const { viajes, conCcp, truncado } = lectura;
+    // A3-01/A3-02 (cierre100): bajo el perfil los viajes solo vienen del TMS; sin viajes importados (o con la importación vieja) la
+    // pantalla dice «Sin datos del TMS», no «cero pendientes», y muestra cuántos viajes ligaron por folio.
+    const sinDatosTms = delTms ? evaluarDatosTms(lectura, ahora) : null;
+    const ligadosPorFolio = delTms && viajes.length > 0 ? { ligados: conCcp.size, total: viajes.length } : undefined;
+    return { ...listarViajesSinCcp(viajes, conCcp, ahora, undefined, { sinDatosTms, ...(ligadosPorFolio ? { ligadosPorFolio } : {}) }), ...(truncado ? { truncado: true } : {}) };
   } catch (e) {
     logger.warn('carta_porte.sin_ccp_no_leido', { tenantId, error: e instanceof Error ? e.message : String(e) });
     return 'no_leido';

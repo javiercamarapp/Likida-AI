@@ -82,6 +82,9 @@ jobs:
           if [ "$crons" = "config_ausente" ]; then
             echo "::warning::Hay un cron sin configurar (checks.crons=config_ausente). NO tumba el pulso a propósito: dejarlo rojo permanente esconde un cron muerto de verdad. Destrábalo en las variables de entorno."
           fi
+          if [ "$crons" = "apagado" ]; then
+            echo "::notice::Hay crons apagados a propósito por interruptor (checks.crons=apagado). Es estado neutro: no tumba el pulso, pero un cron muerto de verdad sí lo hace."
+          fi
           [ "$status" = "200" ] && [ "$estado" = "ok" ] || { echo "::error::/api/health no está healthy (http=$status estado=$estado crons=$crons migracion=$migracion); un cron vencido, una regresión o una base atrás del código se reportan como degraded."; exit 1; }
 
       # ── AUDITORÍA 24, OP-P1 (BLOQUEANTE): LA COMPUERTA, EN ROJO ────────

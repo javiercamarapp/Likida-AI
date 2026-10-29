@@ -125,7 +125,7 @@ export function operadorPorNombre(operadores: OperadorMin[], nombre: string | nu
   return hits.length === 1 ? hits[0] : null;
 }
 
-export type MotivoSinViaje = 'falta_operador' | 'operador_ocupado' | 'operador_invalido' | 'datos_invalidos' | 'carrera' | 'folio_de_otro_cliente';
+export type MotivoSinViaje = 'falta_operador' | 'operador_ocupado' | 'operador_invalido' | 'datos_invalidos' | 'carrera' | 'folio_de_otro_cliente' | 'falta_cliente';
 
 export interface BorradorCcp {
   armado: boolean;
@@ -194,6 +194,11 @@ export async function aplicarSalidaViaje(
     if (!existente) return { ok: false, motivo: 'carrera', mensaje: 'El viaje desapareció mientras se completaba. Vuelve a intentarlo.' };
     // A37-S33-06: el folio es único por flota, no por cliente. Un viaje de OTRO cliente con el mismo folio NO se completa con datos de este
     // documento (contaminaría su cuadre y su Carta Porte): se detiene y una persona decide. Otras discrepancias siguen como advertencia.
+    // A3-14 (cierre100): un documento SIN cliente (WhatsApp, correo sin remitente reconocido) tampoco completa el viaje de un cliente: el
+    // folio es único por flota y un folio corto de un documento sin dueño podría ser de cualquiera. Se pide asignar el cliente primero.
+    if (existente.clienteId && !doc.clienteId) {
+      return { ok: false, motivo: 'falta_cliente', folio: plan.folio, mensaje: `Ya existe un viaje con el folio ${plan.folio} de un cliente y este documento no tiene cliente asignado. No se completó: asigna el cliente al documento para confirmar que es el mismo, o captura el viaje a mano.` };
+    }
     if (doc.clienteId && existente.clienteId && doc.clienteId !== existente.clienteId) {
       return { ok: false, motivo: 'folio_de_otro_cliente', folio: plan.folio, mensaje: `Ya existe un viaje con el folio ${plan.folio} de OTRO cliente. No se completó con los datos de este documento: revisa el folio o captura el viaje a mano.` };
     }

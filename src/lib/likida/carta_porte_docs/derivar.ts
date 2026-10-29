@@ -9,11 +9,11 @@
 import { campoDoc, campoMercancia, type CampoValor, type Extraccion, type Origen } from './campos';
 import { FACTOR_A_KG, claveUnidadDeTexto } from './catalogos';
 import { PEDIMENTO_PARCIAL, limpiarTexto, normalizarNumero, normalizarValor, type OrdenFecha } from './normalizar';
-import { NOTA_REGIMEN_DE_NOMBRE, regimenSoloDeNombre, tipoOperacion } from './validacion';
+import { NOTA_NETO_COMO_BRUTO, NOTA_REGIMEN_DE_NOMBRE, regimenSoloDeNombre, tipoOperacion } from './validacion';
 
 const num = (c: CampoValor | undefined): number | null => (c?.valor != null ? normalizarNumero(c.valor).valor : null);
-/** Nota fija (y por eso idempotente) cuando solo hay peso neto o «peso por embalaje» y se usa como bruto. */
-export const NOTA_NETO_COMO_BRUTO = 'El documento solo da el peso neto (o «peso por embalaje»): se usó como peso bruto por defecto. Pendiente de confirmar con el cliente.';
+/** Nota fija (y por eso idempotente) cuando solo hay peso neto o «peso por embalaje» y se usa como bruto. Vive en `validacion.ts` (A3-08) para que la validación la reconozca. */
+export { NOTA_NETO_COMO_BRUTO };
 const redondea = (n: number): string => String(Math.round(n * 1000) / 1000);
 
 /** Lo que el llamador sabe de FUERA del documento (T-A3-46). Sin él, los derivados de aduana no actúan. */

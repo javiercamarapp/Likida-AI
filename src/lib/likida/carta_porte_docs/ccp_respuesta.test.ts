@@ -16,7 +16,8 @@ const conClienteConocido = (e: ReturnType<typeof dobleCcp>['e']) => e.filas.push
 
 describe('leerCcpTimbrado', () => {
   it('lee el UUID fiscal (en minúsculas) y el folio de un CCP con timbre', () => {
-    expect(leerCcpTimbrado(xmlCcp())).toEqual({ uuid: UUID_FISCAL, folio: 'SF-100' });
+    expect(leerCcpTimbrado(xmlCcp())).toEqual({ uuid: UUID_FISCAL, folio: 'SF-100', folioSolo: 'F-100', rfcReceptor: null });
+    expect(leerCcpTimbrado(xmlCcp(UUID_FISCAL, 'F-100', 'xaxx010101000'))?.rfcReceptor).toBe('XAXX010101000');
   });
   it('rechaza un XML sin complemento Carta Porte, sin timbre, mal formado, con entidades o que no es texto', () => {
     expect(leerCcpTimbrado(xmlSinCartaPorte())).toBeNull();
@@ -58,7 +59,7 @@ describe('procesarCcpTimbrado', () => {
     const { deps, e } = dobleCcp(); conClienteConocido(e);
     expect(await procesarCcpTimbrado(deps, entrada({ referencia: 'REF-AJENA' }))).toMatchObject({ ok: false, codigo: 'no_encontrado' });
     // Una referencia que existe, pero en OTRA flota, tampoco aparece para esta.
-    e.envios.set(`${OTRO_TENANT}|REF-DE-OTRA`, { envioId: 'e2', documentoId: 'd2', remitente: 'x@y.test', remitenteReconocido: true });
+    e.envios.set(`${OTRO_TENANT}|REF-DE-OTRA`, { envioId: 'e2', documentoId: 'd2', remitente: 'x@y.test', remitenteReconocido: true, folioDocumento: 'F-100', rfcsDocumento: [] });
     expect(await procesarCcpTimbrado(deps, entrada({ referencia: 'REF-DE-OTRA' }))).toMatchObject({ ok: false, codigo: 'no_encontrado' });
     expect(e.correos).toHaveLength(0);
     expect(e.archivos.size).toBe(0);
@@ -68,13 +69,13 @@ describe('procesarCcpTimbrado', () => {
   it('el mismo UUID bajo OTRO envío no se re-liga: no_encontrado', async () => {
     const { deps, e } = dobleCcp();
     await procesarCcpTimbrado(deps, entrada());
-    e.envios.set(`${TENANT}|REF-2`, { envioId: 'otro-envio', documentoId: 'd9', remitente: null, remitenteReconocido: null });
+    e.envios.set(`${TENANT}|REF-2`, { envioId: 'otro-envio', documentoId: 'd9', remitente: null, remitenteReconocido: null, folioDocumento: 'F-100', rfcsDocumento: [] });
     expect(await procesarCcpTimbrado(deps, entrada({ referencia: 'REF-2' }))).toMatchObject({ ok: false, codigo: 'no_encontrado' });
   });
 
   it('remitente no reconocido: queda pendiente_confirmacion y 0 correos', async () => {
     const { deps, e } = dobleCcp(); conClienteConocido(e);
-    e.envios.set(`${TENANT}|${REFERENCIA}`, { envioId: 'e1', documentoId: 'd1', remitente: 'desconocido@otro.test', remitenteReconocido: false });
+    e.envios.set(`${TENANT}|${REFERENCIA}`, { envioId: 'e1', documentoId: 'd1', remitente: 'desconocido@otro.test', remitenteReconocido: false, folioDocumento: 'F-100', rfcsDocumento: [] });
     const r = await procesarCcpTimbrado(deps, entrada());
     expect(r).toEqual({ ok: true, duplicado: false, estado: 'pendiente_confirmacion', respondido: false });
     expect(e.correos).toHaveLength(0);
@@ -89,7 +90,7 @@ describe('procesarCcpTimbrado', () => {
 
   it('sin remitente (el documento no vino de un correo): pendiente_confirmacion sin destino', async () => {
     const { deps, e } = dobleCcp();
-    e.envios.set(`${TENANT}|${REFERENCIA}`, { envioId: 'e1', documentoId: 'd1', remitente: null, remitenteReconocido: null });
+    e.envios.set(`${TENANT}|${REFERENCIA}`, { envioId: 'e1', documentoId: 'd1', remitente: null, remitenteReconocido: null, folioDocumento: 'F-100', rfcsDocumento: [] });
     expect(await procesarCcpTimbrado(deps, entrada())).toMatchObject({ estado: 'pendiente_confirmacion', respondido: false });
     expect(e.filas[0].destinoCorreo).toBeNull();
   });
@@ -144,6 +145,44 @@ describe('procesarCcpTimbrado', () => {
   });
 });
 
+describe('A3-13 (cierre100): el XML tiene que ser DEL documento', () => {
+  const activaYConocida = async (envio: Partial<import('./ccp_respuesta').EnvioPropio>) => {
+    const { deps, e } = dobleCcp();
+    e.envios.set(`${TENANT}|${REFERENCIA}`, { ...e.envios.get(`${TENANT}|${REFERENCIA}`)!, ...envio });
+    conClienteConocido(e);   // el destino ya está confirmado: sin el chequeo, este aviso se respondería solo
+    return { deps, e };
+  };
+
+  it('folio del XML distinto al del documento: se guarda y queda pendiente_confirmacion, SIN correo al cliente', async () => {
+    const { deps, e } = await activaYConocida({ folioDocumento: 'OTRO-999' });
+    const r = await procesarCcpTimbrado(deps, { tenantId: TENANT, referencia: REFERENCIA, xml: xmlCcp(), pdf: pdfSintetico() });
+    expect(r).toMatchObject({ ok: true, estado: 'pendiente_confirmacion', respondido: false, verificacion: 'folio_distinto' });
+    expect(e.correos).toHaveLength(0);
+  });
+
+  it('el documento sin folio no permite comprobar: pendiente_confirmacion, SIN correo', async () => {
+    const { deps, e } = await activaYConocida({ folioDocumento: null });
+    const r = await procesarCcpTimbrado(deps, { tenantId: TENANT, referencia: REFERENCIA, xml: xmlCcp(), pdf: pdfSintetico() });
+    expect(r).toMatchObject({ ok: true, estado: 'pendiente_confirmacion', verificacion: 'folio_no_verificable' });
+    expect(e.correos).toHaveLength(0);
+  });
+
+  it('el folio coincide pero el receptor del XML no es ningún RFC del documento: pendiente_confirmacion', async () => {
+    const { deps, e } = await activaYConocida({ rfcsDocumento: ['AAA010101AAA'] });
+    const r = await procesarCcpTimbrado(deps, { tenantId: TENANT, referencia: REFERENCIA, xml: xmlCcp(UUID_FISCAL, 'F-100', 'BBB020202BBB'), pdf: pdfSintetico() });
+    expect(r).toMatchObject({ ok: true, estado: 'pendiente_confirmacion', verificacion: 'rfc_distinto' });
+    expect(e.correos).toHaveLength(0);
+  });
+
+  it('folio y receptor coinciden: se responde como siempre', async () => {
+    const { deps, e } = await activaYConocida({ rfcsDocumento: ['AAA010101AAA'] });
+    const r = await procesarCcpTimbrado(deps, { tenantId: TENANT, referencia: REFERENCIA, xml: xmlCcp(UUID_FISCAL, 'F-100', 'aaa010101aaa'), pdf: pdfSintetico() });
+    expect(r).toMatchObject({ ok: true, estado: 'respondido', respondido: true });
+    expect(r).not.toHaveProperty('verificacion');
+    expect(e.correos).toHaveLength(1);
+  });
+});
+
 describe('confirmarYResponder (la primera vez por cliente)', () => {
   it('una persona confirma: sale UN correo con los archivos guardados y la próxima vez ya no pide confirmación', async () => {
     const { deps, e } = dobleCcp();
@@ -162,7 +201,7 @@ describe('confirmarYResponder (la primera vez por cliente)', () => {
 
   it('puede corregir el destino; uno inválido se rechaza sin mandar nada', async () => {
     const { deps, e } = dobleCcp();
-    e.envios.set(`${TENANT}|${REFERENCIA}`, { envioId: 'e1', documentoId: 'd1', remitente: null, remitenteReconocido: null });
+    e.envios.set(`${TENANT}|${REFERENCIA}`, { envioId: 'e1', documentoId: 'd1', remitente: null, remitenteReconocido: null, folioDocumento: 'F-100', rfcsDocumento: [] });
     await procesarCcpTimbrado(deps, entrada());
     const fila = e.filas[0];
     expect(await confirmarYResponder(deps, TENANT, fila)).toEqual({ ok: false, motivo: 'sin_destino' });

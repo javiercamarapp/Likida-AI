@@ -8,10 +8,11 @@ export const OTRO_TENANT = '22222222-2222-4222-8222-222222222222';
 export const UUID_FISCAL = 'aaaaaaaa-1111-4222-8333-bbbbbbbbbbbb';
 export const REFERENCIA = 'REF-0001';
 
-export function xmlCcp(uuid: string | null = UUID_FISCAL, folio = 'F-100'): Uint8Array {
+export function xmlCcp(uuid: string | null = UUID_FISCAL, folio = 'F-100', rfcReceptor: string | null = null): Uint8Array {
   const timbre = uuid ? `<tfd:TimbreFiscalDigital Version="1.1" UUID="${uuid.toUpperCase()}"/>` : '';
   return new TextEncoder().encode(
     `<?xml version="1.0" encoding="UTF-8"?><cfdi:Comprobante Version="4.0" Serie="S" Folio="${folio}" TipoDeComprobante="T">`
+    + (rfcReceptor ? `<cfdi:Receptor Rfc="${rfcReceptor}" Nombre="Receptor Sintetico"/>` : '')
     + `<cfdi:Complemento><cartaporte31:CartaPorte Version="3.1" TranspInternac="No"/>${timbre}</cfdi:Complemento></cfdi:Comprobante>`,
   );
 }
@@ -34,7 +35,7 @@ export interface EstadoDoble {
 export function dobleCcp(parcial: Partial<EstadoDoble> = {}): { deps: DepsCcp; e: EstadoDoble } {
   const e: EstadoDoble = {
     filas: [], correos: [], archivos: new Map(), logs: [], config: { activa: true },
-    envios: new Map([[`${TENANT}|${REFERENCIA}`, { envioId: 'e0000000-0000-4000-8000-000000000001', documentoId: 'd0000000-0000-4000-8000-000000000001', remitente: 'Cliente Sintetico <compras@cliente-sintetico.test>', remitenteReconocido: true }]]),
+    envios: new Map([[`${TENANT}|${REFERENCIA}`, { envioId: 'e0000000-0000-4000-8000-000000000001', documentoId: 'd0000000-0000-4000-8000-000000000001', remitente: 'Cliente Sintetico <compras@cliente-sintetico.test>', remitenteReconocido: true, folioDocumento: 'F-100', rfcsDocumento: [] }]]),
     correoOk: true, perderCandado: false, ...parcial,
   };
   let n = 0;

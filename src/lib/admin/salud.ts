@@ -228,6 +228,20 @@ export function motivoDeSalto(detalle: Record<string, unknown>): string | null {
 }
 
 /**
+ * OP40-01 (cierre100, ola 10): ¿el cron está APAGADO A PROPÓSITO? Solo cuenta
+ * un `saltado` cuyo detalle nombra la palanca (`{interruptor: 'global' |
+ * 'agente:*'}`): alguien lo apagó y lo dijo. Un `saltado` sin explicación (o con
+ * prosa libre) no se da por apagado: sería esconder un cron que dejó de correr.
+ * Es estado neutro para `/api/health`, el pulso de GitHub y el rollback.
+ */
+export function esApagadoPorInterruptor(ultimoEstado: unknown, detalle: unknown): boolean {
+  if (ultimoEstado !== 'saltado') return false;
+  if (detalle === null || typeof detalle !== 'object') return false;
+  const palanca = (detalle as Record<string, unknown>).interruptor;
+  return typeof palanca === 'string' && palanca.trim() !== '';
+}
+
+/**
  * ¿El latido de un cron describe un HUECO DE CONFIGURACIÓN ya declarado
  * (falta una variable de entorno, un contrato, una credencial) en vez de una
  * regresión real (algo que funcionaba y se rompió)?
