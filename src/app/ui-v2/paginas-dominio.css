@@ -1,0 +1,82 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   UI v2 · PIEL DE LAS PÁGINAS DE DOMINIO (carril C, tanda 2 · PLAN-MAESTRO §2.4 «piel por CSS»)
+
+   Liquidación (A1), Peajes (A2), Carta Porte (A3) y Conexiones conservan su marcado v1 TAL CUAL (ids, name, textos y clases que
+   usan los e2e no cambian): aquí solo se re-pinta lo que ya existe, por estructura y por las utilidades que esas páginas ya traen.
+   Todo cuelga de `[data-ui="v2"]`; sin ese atributo v1 pinta idéntico (lo prueba la invariancia por capturas).
+   Los selectores se apoyan en el marco compartido `main.h-full > .hairline`: cualquier página que lo use hereda la misma piel
+   (es lo deseado: una sola jerarquía), pero las reglas de KPI y de píldora exigen la forma concreta de esos componentes.
+   Sin sombras en flujo; texto mínimo 11 px; radios 8/12; una sola curva de movimiento.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Marco de página: sin caja envolvente; el lienzo es el del shell y el contenido se centra ───────────────────────────── */
+[data-ui="v2"] main.h-full > .hairline.rounded-2xl {
+  border: 0; border-radius: 0; background: transparent !important; min-height: 100%;
+}
+
+/* ── Encabezado de página (BarraPagina): título como jerarquía de página, filete inferior ───────────────────────────────── */
+[data-ui="v2"] main.h-full > .hairline.rounded-2xl > .h-11.border-b {
+  height: auto; min-height: 72px; padding: 20px 24px 16px; background: transparent !important;
+  border-color: var(--line) !important; align-items: center;
+}
+[data-ui="v2"] main.h-full > .hairline.rounded-2xl > .h-11.border-b > div:first-child {
+  gap: 12px; font: 600 20px/1.2 var(--font-display, var(--font-sans-ui, inherit)); letter-spacing: -.015em; color: var(--ink);
+}
+[data-ui="v2"] main.h-full > .hairline.rounded-2xl > .h-11.border-b > div:first-child > svg {
+  box-sizing: content-box; flex: none; width: 16px; height: 16px; padding: 8px; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--line); color: var(--ink2) !important;
+}
+[data-ui="v2"] main.h-full > .hairline.rounded-2xl > .px-5.py-5 { padding: 24px; }
+
+/* ── Tira de KPI: tarjeta con filete de 3 px (recortado por el radio), etiqueta pequeña, cifra grande y tabular ─────────── */
+[data-ui="v2"] .card:has(> .etiqueta-mono + .cifra-mono) {
+  --rv-filete: var(--line2, var(--line));
+  position: relative; padding: 18px 18px 16px; overflow: hidden;
+}
+[data-ui="v2"] .card:has(> .etiqueta-mono + .cifra-mono)::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--rv-filete);
+}
+[data-ui="v2"] .card:has(> .etiqueta-mono + .cifra-mono:is([style*="--warn"], [style*="warn"])) { --rv-filete: var(--warn); }
+[data-ui="v2"] .card:has(> .etiqueta-mono + .cifra-mono:is([style*="--bad"], [style*="bad"])) { --rv-filete: var(--bad); }
+[data-ui="v2"] .card:has(> .etiqueta-mono + .cifra-mono:is([style*="--ok"], [style*="ok)"])) { --rv-filete: var(--ok); }
+[data-ui="v2"] .card > .etiqueta-mono { font-size: 11px; letter-spacing: .06em; font-weight: 500; }
+[data-ui="v2"] .card > .etiqueta-mono + .cifra-mono {
+  font: 600 28px/1.15 var(--font-sans-ui, inherit); letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin-top: 6px;
+}
+[data-ui="v2"] .card > .etiqueta-mono + .cifra-mono + div { font-size: 12px; margin-top: 4px; }
+
+/* ── Encabezados de tarjeta y subrótulos ──────────────────────────────────────────────────────────────────────────────── */
+[data-ui="v2"] main.h-full .card h2.font-display { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+
+/* ── Píldoras de estado (Conexiones, cuadre): punto de color + peso 600, sin cambiar texto ni color asignado ──────────── */
+[data-ui="v2"] main.h-full section.card span.inline-flex.rounded-full[style*="background"] {
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px 2px 8px; font-size: 11px; font-weight: 600; letter-spacing: .01em;
+}
+[data-ui="v2"] main.h-full section.card span.inline-flex.rounded-full[style*="background"]::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+}
+
+/* ── Conexiones: renglones como lista de estado, con aire y detalle legible ──────────────────────────────────────────── */
+[data-ui="v2"] [data-tour="conexiones.estado"] > section.card { padding: 18px 20px; }
+[data-ui="v2"] [data-tour="conexiones.estado"] > section.card h2 { font-size: 15px; }
+[data-ui="v2"] [data-tour="conexiones.estado"] > section.card p { line-height: 1.5; }
+[data-ui="v2"] [data-tour="conexiones.estado"] > section.card ul li { line-height: 1.45; }
+[data-ui="v2"] [data-tour="conexiones.credenciales"] section.card { padding: 20px; }
+
+/* ── Esqueletos: neutros del sistema, sin destello de color ───────────────────────────────────────────────────────────── */
+[data-ui="v2"] main.h-full .skeleton { border-radius: 6px; }
+
+/* ── Tablas dentro de las páginas de dominio: el encabezado de la tabla de v1 usa mono; en v2 va en la tipografía del sistema ── */
+[data-ui="v2"] main.h-full .card table thead th.etiqueta-mono { letter-spacing: .06em; font-weight: 500; }
+
+/* ── Móvil ────────────────────────────────────────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 767.98px) {
+  [data-ui="v2"] main.h-full > .hairline.rounded-2xl > .h-11.border-b { min-height: 60px; padding: 14px 16px 12px; }
+  [data-ui="v2"] main.h-full > .hairline.rounded-2xl > .h-11.border-b > div:first-child { font-size: 18px; }
+  [data-ui="v2"] main.h-full > .hairline.rounded-2xl > .px-5.py-5 { padding: 16px; }
+  [data-ui="v2"] .card > .etiqueta-mono + .cifra-mono { font-size: 24px; }
+}
+
+/* Controles de fecha y de archivo: nunca más anchos que su tarjeta (a 390 px empujaban el documento a un scroll horizontal) */
+[data-ui="v2"] main.h-full .card :is(input[type="date"], input[type="file"], select) { min-width: 0; max-width: 100%; }
+[data-ui="v2"] main.h-full .card :is(form, label, fieldset) { min-width: 0; }

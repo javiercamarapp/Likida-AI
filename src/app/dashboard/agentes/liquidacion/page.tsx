@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { dejarFlash, leerFlash } from '@/lib/likida/mensaje_flash';
 import {
   getKpis, getLiquidaciones, contarViajes, getLiquidacionesPorDia,
@@ -533,8 +534,11 @@ export default async function PaginaAgenteLiquidacion({
 
   // Derivadas: `.then` sobre promesas YA lanzadas — no añaden espera, solo
   // dicen qué hacer cuando lleguen, y agrupan lo que una MISMA tarjeta pinta.
+  // El enlace «Ver» de «Sus reglas» solo se pinta si la ruta destino es visible CON el perfil de la flota: sin él, una flota
+  // `cinco_agentes` veía el enlace y /dashboard/configuracion la rebotaba. `perfilDeTenant` va en la misma caché de 30 s.
+  const perfilFlota = await perfilDeTenant(tenantId);
   const extra: ExtraAgenteLiquidacion = {
-    puedeVerReglas: puedeVerRuta(rol, '/dashboard/configuracion'),
+    puedeVerReglas: puedeVerRuta(rol, '/dashboard/configuracion', perfilFlota),
     ciclo: vigilar(Promise.all([pAbiertos, pEnCuadre, pKpis, pLiquidados]).then(
       ([abiertos, enCuadre, kpis, liquidados]) => ({ abiertos, enCuadre, porRevisar: kpis.porRevisar, liquidados }))),
     cierresPorDia: pPorDia.then((porDia) => porDia?.map((d) => ({ fecha: d.dia, valor: d.valor })) ?? null),

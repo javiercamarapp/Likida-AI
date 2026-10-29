@@ -5,6 +5,8 @@ import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { InicioContenido } from './inicio-contenido';
 import { InicioOperacion } from './inicio-operacion';
 import { InicioCincoAgentes } from './inicio-cinco-agentes';
+import { cookies } from 'next/headers';
+import { versionUi } from '@/lib/auth/version_ui';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { getPerfilCrudo } from '@/lib/likida/repo';
 import { onboardingFiscalListo, onboardingPospuesto } from '@/lib/likida/perfil/preguntas';
@@ -23,7 +25,7 @@ export default async function DashboardInicio({
   searchParams: Promise<{ vista?: string; tenant?: string; rango?: string; rol?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId, tenantNombre, nombre, rol, tenantExiste } = await resolverTenantEfectivo('/dashboard', sp);
+  const { tenantId, tenantNombre, nombre, rol, tenantExiste, userId, rolReal } = await resolverTenantEfectivo('/dashboard', sp);
 
   // EL PERFIL DE LA FLOTA (0770): una flota con perfil `cinco_agentes` tiene su
   // propio Resumen reducido a los cinco agentes y NO pasa por el onboarding
@@ -31,7 +33,15 @@ export default async function DashboardInicio({
   // el propio perfil). Sin perfil, todo sigue como antes.
   const perfilFlota = await perfilDeTenant(tenantId);
   if (perfilFlota) {
-    return <InicioCincoAgentes tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} sufijo={sufijoTenant(sp)} />;
+    // La misma versión con la que el layout eligió el chrome (`versionUi`, con el rol REAL: la cookie del superadmin
+    // solo vale para él). Sin v2 el Resumen es el de siempre.
+    const ui = await versionUi(tenantId, rolReal ?? rol, await cookies());
+    return (
+      <InicioCincoAgentes
+        tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} sufijo={sufijoTenant(sp)}
+        ui={ui} userId={userId} soloLectura={Boolean(sp.tenant || sp.vista || sp.rol || tenantNombre)}
+      />
+    );
   }
 
   // DOS CASAS DISTINTAS EN LA MISMA PUERTA.

@@ -202,11 +202,16 @@ export const ABAJO: Item[] = [
   { href: '/dashboard/configuracion', nombre: 'Configuración', Icono: Settings },
 ];
 
+/** El asistente de puesta en marcha (rediseño, Fase 1). NO está en `OPERACION`: el menú de siempre (v1) no cambia ni un enlace;
+ *  solo el shell v2 (`shell/menu-por-perfil.ts`) lo ofrece, y el ⌘K y el pulso de producto lo conocen por `TODAS_LAS_RUTAS`.
+ *  El nombre ya no choca con `/dashboard/arranque` porque esa ruta es otra pantalla (lista de arranque de una flota nueva). */
+export const PUESTA_EN_MARCHA: Item = { href: '/dashboard/puesta-en-marcha', nombre: 'Puesta en marcha', Icono: ListChecks };
+
 /** Lista plana — punto de extensión del ⌘K de este panel. */
 export const TODAS_LAS_RUTAS: Item[] = [
   { href: '/dashboard', nombre: 'Resumen', Icono: LayoutGrid },
   // El chat vive a PRIMER NIVEL del sidebar (no en una categoría) desde el
   // 17-ago-2026 — pero el ⌘K lo sigue necesitando aquí.
   { href: '/dashboard/chat', nombre: 'Pregunta a tus datos', Icono: MessageCircle },
-  ...OPERACION, ...DINERO_FISCAL, ...AUTOMATIZACIONES, ...SISTEMA, ...ABAJO,
+  ...OPERACION, ...DINERO_FISCAL, ...AUTOMATIZACIONES, ...SISTEMA, ...ABAJO, PUESTA_EN_MARCHA,
 ];

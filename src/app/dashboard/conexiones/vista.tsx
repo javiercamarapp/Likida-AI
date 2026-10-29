@@ -48,6 +48,7 @@ export function VistaConexiones({ conectores, credenciales, integraciones, gps }
             no de un semáforo de adorno.
           </p>
 
+          <div className="space-y-3" data-tour="conexiones.estado">
           {conectores.map((c) => {
             const e = ESTADO[c.estado];
             return (
@@ -76,6 +77,7 @@ export function VistaConexiones({ conectores, credenciales, integraciones, gps }
               </section>
             );
           })}
+          </div>
 
           {/* El orden es el del trabajo: primero QUÉ está medido, luego CON
               QUÉ sabe conectar Likida, y al final DÓNDE se capturan los
@@ -84,7 +86,7 @@ export function VistaConexiones({ conectores, credenciales, integraciones, gps }
 
           {gps}
 
-          {credenciales}
+          <div data-tour="conexiones.credenciales">{credenciales}</div>
         </div>
       </div>
     </main>
