@@ -825,7 +825,7 @@ export async function omitirPendientesAnterioresAlCorte(tenantId: string, corte:
     const etiquetaSel = 'liqcorreo.omitir_corte_leer';
     const sel = await acotada(supabaseAdmin().from('liquidacion_entrega_correo')
       .select('id, liquidacion_externa!inner(periodo_hasta)')
-      .eq('tenant_id', tenantId).eq('estado', 'pendiente').lt('liquidacion_externa.periodo_hasta', corte).limit(PAGINA_OMITIR_CORTE), etiquetaSel);
+      .eq('tenant_id', tenantId).eq('estado', 'pendiente').lt('liquidacion_externa.periodo_hasta', corte).order('id').limit(PAGINA_OMITIR_CORTE), etiquetaSel);
     const filas = exigirEscritura(sel as unknown as { data: Fila[] | null; error: ErrorPg }, etiquetaSel) ?? [];
     if (filas.length === 0) return total;
     const etiqueta = 'liqcorreo.omitir_corte';
