@@ -105,3 +105,44 @@ describe('textoAvisoPlazo', () => {
     expect(t).toContain(liga);
   });
 });
+
+// H759-6: el resumen de vencidos no se repite con cifras distintas ni sale con una evaluación parcial.
+describe('avisarPlazosReclamo · vencidos (H759-6)', () => {
+  function depsGrupo() {
+    const grupos: string[] = [];
+    const sellos = new Set<string>();
+    const textos: string[] = [];
+    const d: DepsAvisoPlazo = {
+      reservar: async (t, dg, u, g) => { const k = `${t}|${dg}|${u}|${g}`; grupos.push(String(g)); if (sellos.has(k)) return false; sellos.add(k); return true; },
+      liberar: async () => {},
+      telefono: async () => '+520000000000',
+      enviar: async (_t, texto) => { textos.push(texto); return true; },
+      liga: () => 'https://app.example/x',
+    };
+    return { d, grupos, textos };
+  }
+
+  it('el mismo mes NO avisa otra vez aunque el conjunto de vencidos cambie (un cruce entra o sale de la ventana)', async () => {
+    const { d, textos } = depsGrupo();
+    await avisarPlazosReclamo('t1', [c('l1', 'dA', '2026-06-01', 100)], '2026-10-10', d);
+    const r = await avisarPlazosReclamo('t1', [c('l1', 'dA', '2026-06-01', 100), c('l2', 'dA', '2026-06-02', 50)], '2026-10-11', d);
+    expect(r).toMatchObject({ enviados: 0, yaAvisados: 1 });
+    expect(textos.filter((t) => t.includes('se vencieron'))).toHaveLength(1);
+  });
+
+  it('el mes siguiente sí vuelve a resumir (con la cifra completa de ese momento)', async () => {
+    const { d, textos } = depsGrupo();
+    await avisarPlazosReclamo('t1', [c('l1', 'dA', '2026-06-01', 100)], '2026-10-10', d);
+    await avisarPlazosReclamo('t1', [c('l1', 'dA', '2026-06-01', 100), c('l2', 'dA', '2026-06-02', 50)], '2026-11-02', d);
+    expect(textos.filter((t) => t.includes('se vencieron'))).toHaveLength(2);
+    expect(textos.at(-1)).toContain('2 cobros');
+  });
+
+  it('con la evaluación PARCIAL (evaluacionCompleta=false) no se avisa el resumen de vencidos (N incompleto), pero los por vencer sí', async () => {
+    const { d, textos } = depsGrupo();
+    const r = await avisarPlazosReclamo('t1', [c('l1', 'dA', '2026-06-01', 100), c('l2', 'dB', '2026-07-12', 300)], '2026-10-10', d, { evaluacionCompleta: false });
+    expect(textos.some((t) => t.includes('se vencieron'))).toBe(false);
+    expect(textos.some((t) => t.includes('sin reclamar'))).toBe(true);
+    expect(r).toMatchObject({ enviados: 1, vencidosCruces: 1 });
+  });
+});

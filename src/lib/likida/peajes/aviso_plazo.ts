@@ -1,5 +1,5 @@
 import type { GrupoPorVencer, CandidatoPlazo, OpcionesPlazo } from './plazo_reclamo';
-import { clasificarPlazos, estadoPlazo } from './plazo_reclamo';
+import { clasificarPlazos, estadoPlazo, fechaLocalMX } from './plazo_reclamo';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 
@@ -21,6 +21,12 @@ import { codigoDeError } from '@/lib/observability/sentry';
 // real (tabla de avisos enviados, lectura de candidatos) es la pieza que falta cablear
 // en el cron: ver `_construccion/T-A2-16.md`.
 // ═══════════════════════════════════════════════════════════════════════════
+
+/** Opciones de `avisarPlazosReclamo`: las del plazo más si la evaluación de los archivos de la flota fue COMPLETA (H759-6). */
+export interface OpcionesAvisoPlazo extends OpcionesPlazo {
+  /** `false` = esta corrida no alcanzó a evaluar todos los archivos de la ventana: sus cifras de «vencidos» son parciales y NO se avisan. Por omisión, `true`. */
+  evaluacionCompleta?: boolean;
+}
 
 export interface DepsAvisoPlazo {
   /**
@@ -49,16 +55,6 @@ export interface ResumenAvisoPlazo {
 const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
 const dinero = (n: number) => `$${n.toFixed(2)}`;
 
-/** Huella corta (FNV-1a) de una lista de claves: identifica el CONJUNTO de cobros vencidos sin guardarlo. */
-function huella(claves: readonly string[]): string {
-  let h = 0x811c9dc5;
-  for (const c of [...claves].sort()) {
-    for (let i = 0; i < c.length; i++) { h ^= c.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
-    h ^= 0x7c; h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h.toString(16).padStart(8, '0');
-}
-
 /** El texto del aviso de lo que YA se venció (puro, para probarlo). */
 export function textoAvisoVencidos(v: { cruces: number; monto: number }, liga: string): string {
   return `⏰ Peajes: se vencieron ${plural(v.cruces, 'cobro', 'cobros')} (${dinero(v.monto)} en total) sin reclamar: pasó el plazo de 3 meses del proveedor y ya no se pueden reclamar `
@@ -79,7 +75,7 @@ export async function avisarPlazosReclamo(
   candidatos: readonly CandidatoPlazo[],
   hoy: string | Date,
   deps: DepsAvisoPlazo,
-  opciones: OpcionesPlazo = {},
+  opciones: OpcionesAvisoPlazo = {},
 ): Promise<ResumenAvisoPlazo> {
   const r: ResumenAvisoPlazo = { enviados: 0, yaAvisados: 0, sinDestinatario: 0, fallidos: 0, vencidosCruces: 0, vencidosMonto: 0 };
   let clase;
@@ -88,11 +84,10 @@ export async function avisarPlazosReclamo(
   r.vencidosMonto = clase.vencidos.monto;
   // A2P-02: el día límite más lejano de cada grupo identifica sus cobros: un cruce nuevo que entra al umbral lo mueve y el grupo vuelve a avisar.
   const limiteDe = new Map<string, string>();
-  const vencidosClaves: string[] = [];
   for (const c of candidatos) {
     if (c.reclamado) continue;
     const e = estadoPlazo(c.fechaCruce, hoy, opciones);
-    if (e.estado === 'vencido') { vencidosClaves.push(`${c.desgloseId}#${c.lineaId}`); continue; }
+    if (e.estado === 'vencido') continue;
     const k = `${c.desgloseId}\u0000${c.lineaId}`;
     limiteDe.set(k, e.fechaLimite);
   }
@@ -101,8 +96,10 @@ export async function avisarPlazosReclamo(
     const lejana = g.lineaIds.map((id) => limiteDe.get(`${g.desgloseId}\u0000${id}`) ?? '').sort().at(-1) ?? '';
     tareas.push({ desgloseId: g.desgloseId, umbral: g.umbral, grupo: lejana, texto: textoAvisoPlazo(g, deps.liga()) });
   }
-  if (clase.vencidos.cruces > 0) {
-    tareas.push({ desgloseId: 'vencidos', umbral: 0, grupo: huella(vencidosClaves), texto: textoAvisoVencidos(clase.vencidos, deps.liga()) });
+  // H759-6: el resumen de vencidos sale UNA vez por (flota, mes) y solo con la evaluación COMPLETA: sellado por el conjunto de cobros (huella) avisaba otra vez
+  // cada vez que un cruce entraba o salía de la ventana, y con una corrida parcial mandaba «se vencieron N» con N incompleto y luego otro con el total.
+  if (clase.vencidos.cruces > 0 && opciones.evaluacionCompleta !== false) {
+    tareas.push({ desgloseId: 'vencidos', umbral: 0, grupo: fechaLocalMX(hoy).slice(0, 7), texto: textoAvisoVencidos(clase.vencidos, deps.liga()) });
   }
   if (tareas.length === 0) return r;
 

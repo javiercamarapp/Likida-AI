@@ -148,10 +148,12 @@ export async function barrerAvisosPeajes(deps: DepsBarrido, opciones: { limiteFl
           candidatos.push(...await deps.candidatosDeDesglose(f.tenantId, d.id));
           evaluados++;
         }
-        const sin = ordenados.length - evaluados;
+        // H759-6: también cuentan los archivos de la ventana que el repositorio dejó fuera por su tope de lectura (`total` > lo leído).
+        const fueraDelTope = Math.max(0, ((desgloses as { total?: number }).total ?? ordenados.length) - ordenados.length);
+        const sin = ordenados.length - evaluados + fueraDelTope;
         if (sin > 0) {
           r.desglosesSinEvaluar += sin;
-          logger.warn('cron.peajes.avisos_desgloses_sin_evaluar', { tenant: f.tenantId, sinEvaluar: sin, total: ordenados.length });
+          logger.warn('cron.peajes.avisos_desgloses_sin_evaluar', { tenant: f.tenantId, sinEvaluar: sin, total: ordenados.length + fueraDelTope });
         }
         let claveP = '';
         const depsP: DepsAvisoPlazo = {
@@ -167,7 +169,7 @@ export async function barrerAvisosPeajes(deps: DepsBarrido, opciones: { limiteFl
           },
           liga: deps.liga,
         };
-        const p = await avisarPlazosReclamo(f.tenantId, candidatos, deps.ahora(), depsP, { meses: f.avisos.plazo.meses, avisoDias: f.avisos.plazo.avisoDias });
+        const p = await avisarPlazosReclamo(f.tenantId, candidatos, deps.ahora(), depsP, { meses: f.avisos.plazo.meses, avisoDias: f.avisos.plazo.avisoDias, evaluacionCompleta: sin === 0 });
         r.plazo.enviados += p.enviados; r.plazo.yaAvisados += p.yaAvisados; r.plazo.sinDestinatario += p.sinDestinatario; r.plazo.fallidos += p.fallidos;
         r.plazo.vencidosCruces += p.vencidosCruces; r.plazo.vencidosMonto += p.vencidosMonto;
       }

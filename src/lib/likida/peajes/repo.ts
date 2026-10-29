@@ -2003,19 +2003,27 @@ export async function listarFlotasConAvisos(): Promise<FlotaConAvisos[]> {
 }
 
 export interface DesgloseParaAvisos { id: string; periodoDesde: string | null; periodoHasta: string | null }
+/** H759-6: la lista (más reciente primero) lleva además `total` = cuántos hay EN LA VENTANA (si pasa del tope, la diferencia no se evaluó). */
+export type ListaDesglosesParaAvisos = DesgloseParaAvisos[] & { total?: number };
 
-/** Los desgloses vigentes de la flota recibidos desde `desdeIso` (más recientes primero, hasta `limite`). Lanza ante error de base. */
-export async function desglosesRecientesParaAvisos(tenantId: string, desdeIso: string, limite = 40): Promise<DesgloseParaAvisos[]> {
-  const { data, error } = await acotada(supabaseAdmin().from('desglose_peaje')
-    .select('id, periodo_oficial_desde, periodo_oficial_hasta, periodo_desde, periodo_hasta')
+/**
+ * Los desgloses vigentes de la flota recibidos desde `desdeIso`, hasta `limite`, más recientes primero. H759-6: si la ventana trae más del
+ * tope se conservan los MÁS VIEJOS (los más cercanos a vencer su plazo de reclamo), no los más nuevos, y `total` dice cuántos había para
+ * que quien llama cuente lo que no alcanzó a evaluar en vez de perderlo en silencio. Lanza ante error de base.
+ */
+export async function desglosesRecientesParaAvisos(tenantId: string, desdeIso: string, limite = 40): Promise<ListaDesglosesParaAvisos> {
+  const { data, error, count } = await acotada(supabaseAdmin().from('desglose_peaje')
+    .select('id, periodo_oficial_desde, periodo_oficial_hasta, periodo_desde, periodo_hasta', { count: 'exact' })
     .eq('tenant_id', tenantId).is('anulado_en', null).gte('creado_en', desdeIso)
-    .order('creado_en', { ascending: false }).order('id').limit(limite), 'peajes.aviso_desgloses');
+    .order('creado_en', { ascending: true }).order('id').limit(limite), 'peajes.aviso_desgloses');
   if (error) throw new Error(`desglosesRecientesParaAvisos: ${error.message}`);
-  return ((data ?? []) as Array<Record<string, unknown>>).map((d) => ({
+  const lista: ListaDesglosesParaAvisos = ((data ?? []) as Array<Record<string, unknown>>).map((d) => ({
     id: String(d.id),
     periodoDesde: ((d.periodo_oficial_desde ?? d.periodo_desde) as string | null)?.slice(0, 10) ?? null,
     periodoHasta: ((d.periodo_oficial_hasta ?? d.periodo_hasta) as string | null)?.slice(0, 10) ?? null,
-  }));
+  })).reverse();
+  lista.total = Math.max(typeof count === 'number' ? count : 0, lista.length);
+  return lista;
 }
 
 export type ResultadoConfigPeajes<T> = { ok: true; valor: T } | { ok: false; motivo: string };

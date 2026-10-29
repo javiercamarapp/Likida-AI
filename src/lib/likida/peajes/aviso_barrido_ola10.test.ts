@@ -112,3 +112,33 @@ describe('A2P-02: cruces escalonados y vencidos', () => {
     expect(enviados.filter((e) => e.texto.includes('se vencieron'))).toHaveLength(1);
   });
 });
+
+describe('H759-6: archivos fuera del tope y corrida parcial', () => {
+  const cand = (id: string, fecha: string, monto = 100): CandidatoPlazo => ({ lineaId: id, desgloseId: 'dA', fechaCruce: fecha, monto, reclamado: false });
+  const unArchivo = [{ id: 'dA', periodoDesde: '2026-07-21', periodoHasta: '2026-07-31' }];
+
+  it('si la ventana tiene más archivos que el tope de lectura, los que quedaron fuera se CUENTAN (no se pierden en silencio) y no se avisa el resumen de vencidos', async () => {
+    const lista = Object.assign([...unArchivo], { total: 45 });
+    const { deps, enviados } = armar({ desgloses: async () => lista, candidatosDeDesglose: async () => [cand('0', '2026-06-01', 250.5)] });
+    const r = await barrerAvisosPeajes(deps);
+    expect(r.desglosesSinEvaluar).toBe(44);
+    expect(enviados.filter((e) => e.texto.includes('se vencieron'))).toHaveLength(0);
+  });
+
+  it('una corrida cortada por el reloj no manda «se vencieron N» con N parcial', async () => {
+    const ids = ['d1', 'd2', 'd3'];
+    const { deps, enviados } = armar({
+      desgloses: async () => ids.map((id) => ({ id, periodoDesde: '2026-07-01', periodoHasta: '2026-07-10' })),
+      candidatosDeDesglose: async (_t, id) => [{ lineaId: id, desgloseId: id, fechaCruce: '2026-06-01', monto: 100, reclamado: false }],
+    });
+    const r = await barrerAvisosPeajes(deps, { venceEn: Date.now() + 5000, presupuestoPorDesgloseMs: 10_000 });
+    expect(r.desglosesSinEvaluar).toBe(2);
+    expect(enviados.filter((e) => e.texto.includes('se vencieron'))).toHaveLength(0);
+  });
+
+  it('con la ventana completa evaluada el resumen sí sale', async () => {
+    const { deps, enviados } = armar({ desgloses: async () => unArchivo, candidatosDeDesglose: async () => [cand('0', '2026-06-01', 250.5)] });
+    await barrerAvisosPeajes(deps);
+    expect(enviados.filter((e) => e.texto.includes('se vencieron'))).toHaveLength(1);
+  });
+});

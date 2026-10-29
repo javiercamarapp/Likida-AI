@@ -84,6 +84,16 @@ describe('desglosesRecientesParaAvisos', () => {
     expect(r.find((x) => x.id === 'a')).toMatchObject({ periodoDesde: '2026-09-21', periodoHasta: '2026-09-30' });
     expect(r.find((x) => x.id === 'b')).toMatchObject({ periodoDesde: '2026-10-01', periodoHasta: '2026-10-10' });
   });
+
+  // H759-6: antes se leían los 40 más NUEVOS y los más viejos (los más cercanos a vencer) se perdían sin contarse.
+  it('con más archivos que el tope se conservan los MÁS VIEJOS (más reciente primero) y `total` dice cuántos había', async () => {
+    db = crearDbFalsa({
+      desglose_peaje: Array.from({ length: 7 }, (_, i) => ({ id: `d${i + 1}`, tenant_id: T, anulado_en: null, creado_en: `2026-10-0${i + 1}T00:00:00Z`, periodo_desde: null, periodo_hasta: null })),
+    });
+    const r = await R.desglosesRecientesParaAvisos(T, '2026-08-01T00:00:00-06:00', 5);
+    expect(r.map((x) => x.id)).toEqual(['d5', 'd4', 'd3', 'd2', 'd1']);
+    expect(r.total).toBe(7);
+  });
 });
 
 // H759-1: un aviso bloqueado por configuración se aparta con backoff y tope (no acapara la cola global del barrido).
