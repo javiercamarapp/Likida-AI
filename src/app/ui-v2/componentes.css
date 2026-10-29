@@ -11,37 +11,53 @@
    radios 8/12; sin sombras en flujo; foco 2 px visible.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Botón ─────────────────────────────────────────────────────────────── */
+/* Tokens de las primitivas (B). Claro y oscuro; solo neutros, sin acento cromático. */
+:root [data-ui="v2"] {
+  --btn-tenue-bg: #e4e4e6; --btn-tenue-bd: #d6d6d9; --btn-tenue-hv: #d6d6d9;
+  --ctl-vacio-bd: #8a8a90;
+}
+:root[data-theme="dark"] [data-ui="v2"] {
+  --btn-tenue-bg: #2a2a2f; --btn-tenue-bd: #48484a; --btn-tenue-hv: #34343a;
+  --ctl-vacio-bd: #7a7a82;
+}
+
+/* ── Botón: 32 (36 en móvil), radio 8, 13/600; toque 44 por ::after ───────── */
 [data-ui="v2"] .rv-btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   height: auto; min-height: 32px; padding: 6px 12px;
   font: 600 13px/1.25 var(--font-sans-ui, inherit); letter-spacing: 0; text-decoration: none; text-align: center;
   border: 1px solid var(--input); border-radius: 8px;
   background: var(--surface); color: var(--ink); box-shadow: none; cursor: pointer;
 }
+[data-ui="v2"] .rv-btn::after {
+  content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: max(100%, 44px); height: max(100%, 44px);
+}
 [data-ui="v2"] .rv-btn svg { width: 16px; height: 16px; flex: none; }
-[data-ui="v2"] .rv-btn:hover { background: var(--canvas); border-color: var(--ink2); }
-[data-ui="v2"] .rv-btn--primary { background: var(--marca); border-color: var(--marca); color: var(--marca-fg); }
-[data-ui="v2"] .rv-btn--primary:hover { background: var(--marca-hover); border-color: var(--marca-hover); }
+[data-ui="v2"] .rv-btn:hover { background: var(--canvas); border-color: var(--line2); }
+/* Primario TENUE neutro: nunca negro sólido ni azul. Máximo uno por pliegue. */
+[data-ui="v2"] .rv-btn--primary { background: var(--btn-tenue-bg); border-color: var(--btn-tenue-bd); color: var(--ink); }
+[data-ui="v2"] .rv-btn--primary:hover { background: var(--btn-tenue-hv); border-color: var(--btn-tenue-bd); }
 [data-ui="v2"] .rv-btn--ghost { background: transparent; border-color: transparent; }
 [data-ui="v2"] .rv-btn--ghost:hover { background: var(--canvas); border-color: transparent; }
 [data-ui="v2"] .rv-btn--danger-soft { background: var(--badbg); border-color: color-mix(in srgb, var(--bad) 28%, transparent); color: var(--bad); }
 [data-ui="v2"] .rv-btn--danger-soft:hover { background: color-mix(in srgb, var(--bad) 14%, var(--badbg)); border-color: var(--bad); }
+/* En filas de tabla y barras densas: 28. */
 [data-ui="v2"] .rv-btn--sm { min-height: 28px; padding: 4px 10px; }
-[data-ui="v2"] .rv-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+[data-ui="v2"] .rv-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 /* Deshabilitado: borde discontinuo y texto legible, NO opacidad. */
 [data-ui="v2"] .rv-btn:disabled,
 [data-ui="v2"] .rv-btn[aria-disabled="true"] {
   opacity: 1; cursor: not-allowed;
   background: var(--surface); color: var(--ink2);
-  border: 1px dashed color-mix(in srgb, var(--input) 55%, var(--surface));
+  border: 1px dashed var(--ctl-vacio-bd);
 }
 [data-ui="v2"] .rv-btn[aria-busy="true"] { cursor: progress; }
 .rv-btn__spinner {
   width: 14px; height: 14px; flex: none; border-radius: 50%;
   border: 2px solid currentColor; border-right-color: transparent;
 }
-@media (max-width: 767px) {
+@media (max-width: 819px) {
   [data-ui="v2"] .rv-btn { min-height: 36px; }
   [data-ui="v2"] .rv-btn--sm { min-height: 28px; }
 }
@@ -54,6 +70,8 @@
   font-size: 12px; font-weight: 500; line-height: 1.4; font-family: var(--font-sans-ui, inherit);
   overflow-wrap: anywhere;
 }
+.rv-chip[data-tam="estado"] { min-height: 22px; padding: 1px 10px; }
+.rv-chip[data-tam="delta"] { min-height: 20px; padding: 0 8px; }
 .rv-chip[data-tono="ok"] { background: var(--okbg, var(--canvas)); color: var(--ok, var(--ink)); border-color: transparent; }
 .rv-chip[data-tono="warn"] { background: var(--warnbg, var(--canvas)); color: var(--warn, var(--ink)); border-color: transparent; }
 .rv-chip[data-tono="bad"] { background: var(--badbg, var(--canvas)); color: var(--bad, var(--ink)); border-color: transparent; }
@@ -85,13 +103,14 @@
 .rv-aviso__acciones { flex: none; display: flex; align-items: center; gap: 8px; }
 @media (max-width: 640px) { .rv-aviso { flex-wrap: wrap; } .rv-aviso__acciones { width: 100%; } }
 
-/* ── Encabezado de página ──────────────────────────────────────────────── */
-.rv-encabezado { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.rv-encabezado__texto { min-width: 0; }
-.rv-encabezado__rotulo { margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-.rv-encabezado__titulo { margin: 0; font-size: 20px; line-height: 1.25; font-weight: 600; color: var(--ink); }
-.rv-encabezado__desc { margin: 4px 0 0; font-size: 13px; color: var(--muted); max-width: 70ch; }
-.rv-encabezado__acciones { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* ── Encabezado de página: eyebrow + H1 20 + descripción 1 línea | acciones, MISMO renglón ── */
+.rv-encabezado { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 52px; }
+.rv-encabezado__texto { min-width: 0; flex: 1 1 auto; }
+.rv-encabezado__rotulo { margin: 0 0 2px; font: 600 12px/1.3 var(--font-sans-ui, inherit); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.rv-encabezado__titulo { margin: 0; font-size: 20px; line-height: 1.2; font-weight: 600; letter-spacing: -.025em; color: var(--ink); }
+.rv-encabezado__desc { margin: 2px 0 0; font-size: 13px; line-height: 1.4; color: var(--muted); }
+.rv-encabezado__acciones { display: flex; align-items: center; gap: 8px; flex: none; }
+@media (max-width: 819px) { .rv-encabezado { flex-wrap: wrap; gap: 8px 12px; } .rv-encabezado__acciones { flex-wrap: wrap; } }
 
 /* ── Overlays (Drawer / Modal sobre <dialog>) ──────────────────────────── */
 .rv-ov {
@@ -104,34 +123,36 @@
   border: 1px solid var(--line2, var(--line)); box-shadow: var(--shadow-pop, none);
 }
 .rv-ov__grabber { display: none; width: 36px; height: 4px; margin: 8px auto 0; border-radius: 2px; background: var(--line2, var(--line)); touch-action: none; cursor: grab; }
-.rv-ov__cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px 16px 12px; border-bottom: 1px solid var(--line); }
-.rv-ov__titulo { margin: 0; font-size: 15px; line-height: 1.35; font-weight: 600; }
-.rv-ov__desc { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+.rv-ov__cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.rv-ov__titulo { margin: 0; font-size: 15px; line-height: 1.35; font-weight: 600; letter-spacing: 0; }
+.rv-ov__desc { margin: 2px 0 0; font-size: 12px; line-height: 1.4; color: var(--muted); }
 .rv-ov__cerrar {
-  flex: none; display: inline-grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 8px;
+  flex: none; position: relative; display: inline-grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 8px;
   background: transparent; color: var(--muted); cursor: pointer;
 }
+.rv-ov__cerrar::after { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
 .rv-ov__cerrar:hover { background: var(--canvas); color: var(--ink); }
 .rv-ov__cerrar:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .rv-ov__cuerpo { padding: 16px; overflow-y: auto; overscroll-behavior: contain; flex: 1 1 auto; font-size: 13px; line-height: 1.5; }
-.rv-ov__pie { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
+.rv-ov__pie { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); flex: none; }
 
 /* Drawer: derecha en escritorio. */
-.rv-ov--drawer { margin: 0 0 0 auto; height: 100dvh; width: min(100vw, 420px); }
-.rv-ov--drawer[data-tamano="l"] { width: min(100vw, 480px); }
-.rv-ov--drawer[data-tamano="xl"] { width: min(100vw, 640px); }
-.rv-ov--drawer .rv-ov__panel { height: 100%; border-width: 0 0 0 1px; }
+.rv-ov--drawer { margin: 8px 8px 8px auto; height: calc(100dvh - 16px); width: min(calc(100vw - 16px), 420px); }
+.rv-ov--drawer[data-tamano="l"] { width: min(calc(100vw - 16px), 480px); }
+.rv-ov--drawer[data-tamano="xl"] { width: min(calc(100vw - 16px), 640px); }
+.rv-ov--drawer .rv-ov__panel { height: 100%; border-radius: 12px; overflow: hidden; }
 /* Modal: centrado. */
-.rv-ov--modal { margin: auto; width: min(92vw, 440px); }
-.rv-ov--modal[data-tamano="l"] { width: min(92vw, 560px); }
-.rv-ov--modal .rv-ov__panel { border-radius: 12px; max-height: 88dvh; }
+.rv-ov--modal { margin: auto; width: min(calc(100vw - 32px), 440px); }
+.rv-ov--modal[data-tamano="l"] { width: min(calc(100vw - 32px), 560px); }
+.rv-ov--modal .rv-ov__panel { border-radius: 12px; max-height: calc(100dvh - 32px); overflow: hidden; }
 
-/* Hoja inferior bajo 820 px. */
+/* Hoja inferior bajo 820 px: 90 dvh, grabber, radio 16, un solo nivel. */
 @media (max-width: 819px) {
   .rv-ov--drawer { margin: auto 0 0; width: 100vw; height: auto; max-height: 90dvh; }
   .rv-ov--drawer[data-tamano] { width: 100vw; }
-  .rv-ov--drawer .rv-ov__panel { height: auto; max-height: 90dvh; border-width: 1px 0 0; border-radius: 12px 12px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+  .rv-ov--drawer .rv-ov__panel { height: auto; max-height: 90dvh; border-width: 1px 0 0; border-radius: 16px 16px 0 0; padding-bottom: env(safe-area-inset-bottom); }
   .rv-ov--drawer .rv-ov__grabber { display: block; }
+  .rv-ov__cerrar { width: 32px; height: 32px; }
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -143,13 +164,11 @@
   .rv-ov--drawer[open] .rv-ov__panel { animation-name: rv-ov-abajo; }
 }
 
-/* ── Estado vacío v2 ───────────────────────────────────────────────────── */
-.rv-vacio { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 32px 16px; border: 1px dashed var(--line2, var(--line)); border-radius: 12px; background: var(--surface); }
-.rv-vacio[data-compacto] { flex-direction: row; flex-wrap: wrap; justify-content: center; text-align: left; gap: 4px 12px; padding: 12px 14px; background: transparent; border-width: 1.5px; border-style: dotted; }
-.rv-vacio__arte { width: 160px; height: 96px; color: var(--ink2, var(--ink)); }
-.rv-vacio__titulo { margin: 0; font-size: 14px; font-weight: 600; color: var(--ink); }
-.rv-vacio__texto { margin: 0; max-width: 48ch; font-size: 13px; color: var(--muted); }
-.rv-vacio__accion { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
+/* ── Estado vacío v2: celda punteada y UNA línea, sin ilustración ─────────── */
+.rv-vacio { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 12px; min-height: 44px; padding: 8px 14px; border: 1.5px dotted var(--line2, var(--line)); border-radius: 8px; background: transparent; text-align: center; }
+.rv-vacio__titulo { margin: 0; font-size: 13px; line-height: 1.4; font-weight: 600; color: var(--ink); }
+.rv-vacio__texto { margin: 0; font-size: 13px; line-height: 1.4; color: var(--muted); }
+.rv-vacio__accion { display: flex; align-items: center; gap: 8px; }
 
 /* ── Monograma ─────────────────────────────────────────────────────────── */
 .rv-mono {
@@ -165,19 +184,10 @@
 .rv-mono[data-matiz="5"] { --sf: var(--soft-5, var(--canvas)); --tx: var(--ink-5, var(--ink)); } .rv-mono[data-matiz="6"] { --sf: var(--soft-6, var(--canvas)); --tx: var(--ink-6, var(--ink)); }
 .rv-mono[data-matiz="7"] { --sf: var(--soft-7, var(--canvas)); --tx: var(--ink-7, var(--ink)); } .rv-mono[data-matiz="8"] { --sf: var(--soft-8, var(--canvas)); --tx: var(--ink-8, var(--ink)); }
 
-/* ── Escenas SVG ───────────────────────────────────────────────────────── */
-.rv-escena { display: block; overflow: visible; }
-.rv-trazo { stroke-dasharray: 1; stroke-dashoffset: 0; }
-@media (prefers-reduced-motion: no-preference) {
-  .rv-escena--anima .rv-trazo { animation: rv-trazo var(--t-draw) var(--ui-ease) both; }
-  .rv-escena--anima .rv-trazo--2 { animation-delay: 140ms; }
-  .rv-escena--anima .rv-trazo--3 { animation-delay: 280ms; }
-}
-
 /* ── Switch ────────────────────────────────────────────────────────────── */
 .rv-switch { display: flex; flex-direction: column; gap: 4px; }
-.rv-switch__fila { position: relative; display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; color: var(--ink); }
-.rv-switch__input { position: absolute; opacity: 0; width: 36px; height: 20px; margin: 0; cursor: pointer; }
+.rv-switch__fila { position: relative; display: inline-flex; align-items: center; gap: 10px; min-height: 32px; cursor: pointer; font-size: 13px; color: var(--ink); }
+.rv-switch__input { position: absolute; left: -4px; top: 50%; transform: translateY(-50%); opacity: 0; width: 44px; height: 44px; margin: 0; cursor: pointer; }
 .rv-switch__pista { position: relative; flex: none; width: 36px; height: 20px; border-radius: 999px; background: var(--canvas); border: 1px solid var(--input, var(--line2)); }
 .rv-switch__perilla { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--input, var(--muted)); transition: none; }
 .rv-switch__input:checked + .rv-switch__pista { background: var(--marca, var(--ink)); border-color: var(--marca, var(--ink)); }
@@ -196,27 +206,44 @@
    formularios de la app (no a elementos desnudos del shell). */
 [data-ui="v2"] .card table { border-collapse: separate; border-spacing: 0; width: 100%; font-variant-numeric: tabular-nums; }
 [data-ui="v2"] .card table thead th {
-  height: 32px; padding: 0 12px; text-align: left; white-space: nowrap;
-  font: 600 11px/1.2 var(--font-mono, ui-monospace, monospace); text-transform: uppercase; letter-spacing: .06em;
-  color: var(--muted); background: var(--canvas2, var(--canvas)); border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; height: 36px; padding: 0 12px; text-align: left; white-space: nowrap;
+  font: 600 12px/1.2 var(--font-sans-ui, inherit); text-transform: none; letter-spacing: 0;
+  color: var(--info); background: color-mix(in srgb, var(--info) 7%, var(--surface)); border-bottom: 1px solid var(--line);
 }
-[data-ui="v2"] .card table tbody td { height: 40px; padding: 6px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+[data-ui="v2"] .card table tbody td { height: 40px; padding: 0 12px; font-size: 13px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 [data-ui="v2"] .card table tbody tr:last-child td { border-bottom: 0; }
 [data-ui="v2"] .card table tbody tr:hover { background: var(--canvas); }
+[data-ui="v2"] .card table[data-densa] tbody td { height: 32px; }
 [data-ui="v2"] .card table td.num,
 [data-ui="v2"] .card table th.num { text-align: right; }
 /* Tabla ancha: scroll interno, no de página. */
 [data-ui="v2"] .card:has(> table),
 [data-ui="v2"] .card > .overflow-x-auto { overflow-x: auto; }
 
+/* Campos: alto visual 32 (36 <820 en filtros); chevron propio con ≥12 px de aire; foco 2 px. */
 [data-ui="v2"] .card :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"]), select, textarea) {
-  min-height: 32px; border-radius: 8px; font-size: 13px;
+  min-height: 32px; border-radius: 8px; font-size: 13px; line-height: 1.25; padding-inline: 10px;
+  background-color: var(--surface); border: 1px solid var(--input);
 }
-[data-ui="v2"] .card :is(input, select, textarea):focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
-[data-ui="v2"] .card :is(input, select, textarea)::placeholder { color: var(--faint, var(--muted)); }
-[data-ui="v2"] .card :is(input, select, textarea):disabled { border-style: dashed; color: var(--muted); }
-/* Campo de formulario sobre superficie blanca (el v1 lo pinta en --canvas). */
-[data-ui="v2"] { --campo-bg: var(--surface); }
-@media (max-width: 767px) {
-  [data-ui="v2"] .card :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"]), select) { min-height: 44px; font-size: 16px; }
+[data-ui="v2"] .card select {
+  appearance: none; -webkit-appearance: none; padding-inline-end: 30px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%235a5a61' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='m2.5 4.5 3.5 3.5 3.5-3.5'/></svg>");
+  background-repeat: no-repeat; background-position: right 10px center; background-size: 12px 12px;
+}
+:root[data-theme="dark"] [data-ui="v2"] .card select {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23a3a3ab' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='m2.5 4.5 3.5 3.5 3.5-3.5'/></svg>");
+}
+[data-ui="v2"] .card select[multiple] { background-image: none; padding-inline-end: 10px; }
+[data-ui="v2"] .card :is(input, select, textarea):focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+[data-ui="v2"] .card :is(input, select, textarea)::placeholder { color: var(--muted); opacity: 1; }
+[data-ui="v2"] .card :is(input, select, textarea):disabled { border-style: dashed; border-color: var(--ctl-vacio-bd); background-color: var(--canvas); color: var(--ink2); }
+@media (max-width: 819px) {
+  /* Caja de 44 con 34 visibles (borde transparente de 5 px + anillo interior): toque 44, fuente 16 (sin zoom iOS). */
+  [data-ui="v2"] .card :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"]), select) {
+    box-sizing: border-box; height: 44px; min-height: 44px; font-size: 16px; padding-block: 0; padding-inline: 10px;
+    border: 5px solid transparent; background-clip: padding-box; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--input);
+    outline-offset: -5px;
+  }
+  [data-ui="v2"] .card select { padding-inline-end: 30px; }
+  [data-ui="v2"] .card textarea { font-size: 16px; }
 }

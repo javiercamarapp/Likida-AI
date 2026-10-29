@@ -53,11 +53,11 @@ describe('GloboTour', () => {
     expect(h).not.toContain('role="dialog"');
     expect(h).not.toContain('<dialog');
   });
-  it('reduced-motion: misma guía (texto, acción, foco, flecha), sin escena animada', () => {
+  it('reduced-motion: misma guía (texto, acción, foco, flecha), sin escenas dibujadas', () => {
     const normal = renderToStaticMarkup(<GloboTour snap={snap()} {...props} />);
     const quieto = renderToStaticMarkup(<GloboTour snap={snap({ reducirMovimiento: true })} {...props} />);
-    expect(normal).toContain('rv-escena--anima');
-    expect(quieto).not.toContain('rv-escena--anima');
+    expect(normal).not.toContain('rv-escena');
+    expect(quieto).not.toContain('rv-escena');
     for (const t of ['Sube el archivo', 'Una muestra basta.', 'Aprieta aquí', 'rv-tour__flecha', '>Siguiente<', '>Saltar<']) expect(quieto).toContain(t);
     expect(quieto).toContain('data-reducido="true"');
   });

@@ -1,7 +1,6 @@
 import { ArrowRight, MoveRight } from 'lucide-react';
 import type { Ref } from 'react';
 import { Boton } from '../../componentes/boton';
-import { Escena } from '../../svg/escenas';
 import type { Colocacion } from './geometria';
 import type { Instantanea } from './tipos';
 
@@ -44,14 +43,8 @@ export function GloboTour({ snap, col, refGlobo, onSiguiente, onAtras, onSaltar,
       {flecha ? <span className="rv-tour__flecha" style={flecha} aria-hidden="true" /> : null}
       <div className="rv-sr" aria-live="polite">{`Paso ${n} de ${snap.total}: ${paso.titulo}`}</div>
 
-      {paso.escena ? (
-        <div className="rv-tour__escena" key={paso.id}>
-          <Escena id={paso.escena} animada={!snap.reducirMovimiento} />
-        </div>
-      ) : null}
-
       <div className="rv-tour__cab">
-        <span className="rv-tour__paso etiqueta-mono">Paso {n} de {snap.total}</span>
+        <span className="rv-tour__paso">Paso {n} de {snap.total}</span>
         <ol className="rv-tour__marcas" aria-hidden="true">
           {[...Array(snap.total).keys()].map((i) => (
             <li key={i} data-estado={i < snap.indice ? 'hecho' : i === snap.indice ? 'actual' : 'pendiente'} />
