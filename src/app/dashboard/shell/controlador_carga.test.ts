@@ -134,3 +134,43 @@ describe('navegación interna', () => {
     expect(ctl.estado()).toBe('tope');
   });
 });
+
+describe('mutaciones del DOM sin cambio de estado (H2): evaluar() repetido NO reinicia los temporizadores', () => {
+  it('carga inicial: evaluar() cada 100 ms sin pendiente libera a los 600 ms (no hasta el seguro)', () => {
+    const { ctl } = armar();
+    for (let t = 0; t < 590; t += 100) { ctl.evaluar(); vi.advanceTimersByTime(100); }
+    ctl.evaluar();
+    vi.advanceTimersByTime(20);
+    expect(ctl.estado()).toBe('oculta');
+  });
+
+  it('carga inicial: ráfaga continua durante 5 s con el mismo estado no dispara el «No disponible» falso', () => {
+    const { ctl, est } = armar();
+    est.pendiente = true;
+    for (let t = 0; t < 5000; t += 50) { ctl.evaluar(); vi.advanceTimersByTime(50); }
+    est.pendiente = false;
+    for (let t = 0; t < 1200; t += 50) { ctl.evaluar(); vi.advanceTimersByTime(50); }
+    expect(ctl.estado()).toBe('oculta');
+  });
+
+  it('navegación lenta: evaluar() cada 50 ms con pendiente igual levanta la capa a los 250 ms', () => {
+    const a = armar();
+    a.ctl.evaluar(); vi.advanceTimersByTime(700);
+    expect(a.ctl.estado()).toBe('oculta');
+    a.est.pendiente = true;
+    for (let t = 0; t < 300; t += 50) { a.ctl.evaluar(); vi.advanceTimersByTime(50); }
+    expect(a.ctl.estado()).toBe('nav');
+  });
+
+  it('navegación: mutaciones continuas con la pantalla ya lista no alargan la ventana de 400 ms', () => {
+    const a = armar();
+    a.ctl.evaluar(); vi.advanceTimersByTime(700);
+    a.est.pendiente = true; a.ctl.evaluar(); vi.advanceTimersByTime(251);
+    expect(a.ctl.estado()).toBe('nav');
+    a.est.pendiente = false;
+    for (let t = 0; t < 140; t += 20) { a.ctl.evaluar(); vi.advanceTimersByTime(20); }
+    expect(a.ctl.estado()).toBe('nav');
+    for (let t = 0; t < 400; t += 20) { a.ctl.evaluar(); vi.advanceTimersByTime(20); }
+    expect(a.ctl.estado()).toBe('oculta');
+  });
+});
