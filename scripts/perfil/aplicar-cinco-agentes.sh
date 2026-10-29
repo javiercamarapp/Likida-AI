@@ -136,10 +136,13 @@ on conflict (tenant_id, pipeline) do update
 
 -- A1 (liquidación) SIEMPRE por correo bajo este perfil, nunca WhatsApp: solo se tocan canal/activa/actualizado_*,
 -- así que remitente, destinatarios de RH y demás reglas de correo que la flota ya tuviera configuradas se conservan.
+-- A1-01 (decisión D1): el envío queda APAGADO (activa = false). Se enciende a mano desde Configuración de Liquidación cuando ya hay
+-- correos de operadores cargados, la fecha de corte del arranque puesta y una primera subida con vista previa revisada; así aplicar
+-- el perfil jamás deja un envío vivo sobre una flota sin corte, y subir el histórico no manda nóminas viejas.
 insert into public.liquidacion_correo_config (tenant_id, canal, activa, actualizado_en, actualizado_por)
-values (:'tenant'::uuid, 'correo', true, now(), null)
+values (:'tenant'::uuid, 'correo', false, now(), null)
 on conflict (tenant_id) do update
-  set canal = 'correo', activa = true, actualizado_en = now(), actualizado_por = null;
+  set canal = 'correo', activa = false, actualizado_en = now(), actualizado_por = null;
 
 select 'perfil' as que, perfil as valor, cambiado_en::text from public.tenant_perfil where tenant_id = :'tenant'::uuid;
 select 'pipeline' as que, pipeline as valor, case when apagado then 'APAGADO' else 'encendido' end as estado
