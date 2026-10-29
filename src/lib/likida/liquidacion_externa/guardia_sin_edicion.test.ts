@@ -261,6 +261,7 @@ describe('guardia con base-doble: lo permitido funciona y no escribe importes', 
       guardarCorreoOperador: async (_t, _o, correo) => { guardados.push(correo); },
       insertarEntregas: async (_t, filas) => { insertadas.push(...filas); return filas.length; },
       registrarEvento: async () => undefined,
+      leerDesglose: async () => ({ existe: true, retenidaMotivo: null }),
     });
     expect(r).toMatchObject({ estado: 'reenviado', generacion: 2 });
     expect(guardados).toEqual(['ana.nueva@ejemplo.test']);
