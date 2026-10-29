@@ -38,7 +38,7 @@ const require = createRequire(path.join(raiz, 'package.json'));
 const MODO = (process.env.UI2_C2_MODO ?? 'v2') as 'v1' | 'v2';
 const CSS = process.env.UI2_C2_CSS ?? (MODO === 'v2' ? 'v2full' : 'v1');
 const OUT = process.env.UI2_C2_OUT ?? path.join(homedir(), 'likida-loop/frontend-plan/fase1/capturas-c2', `${MODO}-${CSS}`);
-const TRABAJO = path.join(homedir(), 'likida-loop/frontend-plan/.arnes-c');
+const TRABAJO = process.env.UI2_TRABAJO ?? path.join(homedir(), 'likida-loop/frontend-plan/.arnes-c');
 const F = path.join(homedir(), 'likida-loop/frontend-plan/fuentes-spike');
 
 // ── Fixtures sintéticos ────────────────────────────────────────────────────
@@ -171,6 +171,7 @@ describe(`captura carril C tanda 2 (${MODO} + ${CSS})`, () => {
       // Tailwind escanea esta carpeta: una copia por clase de envoltura basta (las clases son las mismas).
       writeFileSync(path.join(TRABAJO, 'vistas', `c2-${MODO}-${id}.html`), readFileSync(path.join(TRABAJO, 'vistas-c2', `${id}.html`), 'utf8'));
     }
+    if (process.env.UI2_SOLO_HTML) return; // scripts/ui2-calidad: solo el HTML, sin CSS ni capturas
     execFileSync('node', [path.join(raiz, 'scripts/ui2-captura/compilar-css.mjs'), TRABAJO], { stdio: 'ignore' });
 
     const { chromium } = require('playwright');

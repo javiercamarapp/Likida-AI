@@ -24,7 +24,10 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push() {}, replace() {}, refresh() {} }),
 }));
 
-const { default: DashboardChrome } = await import('@/app/dashboard/chrome');
+// UI2_CHROME=v2 renderiza el vistas con el chrome v2 REAL (lo usa scripts/ui2-calidad); por omisión, el de siempre.
+const { default: DashboardChrome } = process.env.UI2_CHROME === 'v2'
+  ? await import('@/app/dashboard/shell/chrome-v2')
+  : await import('@/app/dashboard/chrome');
 const { BarraPagina, HeroSaludo, ChipFecha, TablaViajes } = await import('@/app/dashboard/resumen-visual');
 const { InsightDeAgente, FICHAS_CINCO_AGENTES } = await import('@/app/dashboard/inicio-cinco-agentes');
 const kit = await import('@/app/admin/ui/kit');

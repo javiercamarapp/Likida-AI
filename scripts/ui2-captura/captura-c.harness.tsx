@@ -45,7 +45,7 @@ import type { Insight } from '@/lib/likida/insights/tipos';
 const raiz = path.resolve(__dirname, '../..');
 const require = createRequire(path.join(raiz, 'package.json'));
 const OUT = process.env.UI2_C_OUT ?? path.join(homedir(), 'likida-loop/frontend-plan/fase1/capturas-c');
-const TRABAJO = path.join(homedir(), 'likida-loop/frontend-plan/.arnes-c');
+const TRABAJO = process.env.UI2_TRABAJO ?? path.join(homedir(), 'likida-loop/frontend-plan/.arnes-c');
 const F = path.join(homedir(), 'likida-loop/frontend-plan/fuentes-spike');
 
 // ── Fixtures sintéticos ────────────────────────────────────────────────────
@@ -135,6 +135,7 @@ describe('captura de las pantallas del carril C', () => {
       SENALES_RESUMEN.actuales = v.senales ?? VACIAS;
       writeFileSync(path.join(TRABAJO, 'vistas', `${id}.html`), envolver(await v.cuerpo(), v.ruta));
     }
+    if (process.env.UI2_SOLO_HTML) return; // scripts/ui2-calidad: solo el HTML, sin CSS ni capturas
     execFileSync('node', [path.join(raiz, 'scripts/ui2-captura/compilar-css.mjs'), TRABAJO], { stdio: 'ignore' });
 
     const { chromium } = require('playwright');
