@@ -165,3 +165,51 @@ export const DESGLOSE_PEAJES = {
 
 /** Usuario con sesión en los chromes de captura. */
 export const USUARIO = { nombre: 'Ximena Salgado Robles', saludo: 'Ximena' };
+
+// ── A2 · Conciliación de peajes ────────────────────────────────────────────────
+const CASETAS = ['Caseta Huinalá', 'Caseta Sabinas Hidalgo', 'Caseta Palmillas', 'Caseta Tepotzotlán', 'Caseta Zapotlanejo', 'Caseta Ecatepec', 'Caseta La Venta', 'Caseta Cuitláhuac', 'Caseta Cadereyta'];
+const uuidDe = (semilla: number) => {
+  const r = azar(semilla);
+  const h = () => Array.from({ length: 4 }, () => Math.floor(r() * 65536).toString(16).padStart(4, '0')).join('');
+  const x = h() + h();
+  return `${x.slice(0, 8)}-${x.slice(8, 12)}-4${x.slice(13, 16)}-a${x.slice(17, 20)}-${x.slice(20, 32)}`;
+};
+export interface LineaPorConciliarFx {
+  id: string; cfdiUuid: string | null; indice: number; fuente: 'ecc12' | 'concepto_base'; fecha: string | null; monto: number;
+  descripcion: string | null; estacionRfc: string | null; folioOperacion: string | null; candidatos: never[];
+}
+/** Cola «por conciliar» (el arreglo lleva `total`, como la lee la vista). Nulos reales: sin fecha y sin descripción. */
+export function lineasPorConciliar(n = 9, semilla = 19) {
+  const r = azar(semilla);
+  const filas: LineaPorConciliarFx[] = Array.from({ length: n }, (_, i) => ({
+    id: `pc${i + 1}`, cfdiUuid: uuidDe(100 + (i % 3)), indice: 40 + i, fuente: i % 2 ? 'ecc12' : 'concepto_base',
+    fecha: i === 4 ? null : `2026-10-${String(2 + i).padStart(2, '0')}`, monto: redondea(180 + r() * 1100, 5),
+    descripcion: i === 6 ? null : CASETAS[i % CASETAS.length], estacionRfc: null, folioOperacion: `OP-${900400 + i * 7}`, candidatos: [],
+  }));
+  return Object.assign(filas, { total: n + 3 });
+}
+/** Consolidados (CFDI de peaje) recibidos. */
+export function desglosesRecibidos(n = 6) {
+  return Array.from({ length: n }, (_, i) => ({
+    cfdiXmlId: `x${i + 1}`, uuidCorto: uuidDe(100 + i).slice(0, 8), recibido: `2026-10-${String(26 - i * 4).padStart(2, '0')}T15:00:00Z`,
+    lineas: 38 + i * 6, conciliadas: 34 + i * 5, porConciliar: 3 + (i % 3), sinMatch: i % 2, monto: 41_200 + i * 6_350.5, parcial: false,
+  }));
+}
+export function detalleDesglosePeajes() {
+  const linea = (i: number, viajeFolio: string | null, diferencia: number | null, motivo: string | null) => ({
+    id: `dl${i}`, indice: i, fecha: `2026-10-${String(2 + (i % 12)).padStart(2, '0')}`, caseta: CASETAS[i % CASETAS.length],
+    monto: redondea(190 + ((i * 97) % 900), 5), tag: `TAG-${70210 + i * 3}`, diferencia, viajeFolio, motivo,
+  });
+  return {
+    cuadra: Array.from({ length: 10 }, (_, i) => linea(i + 1, `V-${4101 + i}`, 0, null)),
+    noCuadra: [linea(21, 'V-4107', 85, 'El monto del cobro excede el de la tarifa por 85 pesos'), linea(22, 'V-4111', -120, 'El cobro es menor al de la tarifa'), linea(23, null, null, 'El TAG no corresponde a una unidad de la flota')],
+    sinContraparte: [linea(31, null, null, 'No hay viaje abierto de esa unidad ese día'), linea(32, null, null, 'No hay viaje abierto de esa unidad ese día')],
+  };
+}
+export function evidenciaGpsPeajes(detalle: ReturnType<typeof detalleDesglosePeajes>) {
+  const todas = [...detalle.cuadra, ...detalle.noCuadra, ...detalle.sinContraparte];
+  const porLinea: Record<string, { estatus: 'con_evidencia'; posicionesDia: number } | { estatus: 'sin_evidencia'; motivo: 'sin_viaje' | 'sin_posiciones_dia' }> = {};
+  todas.forEach((l, i) => { porLinea[l.id] = l.viajeFolio === null ? { estatus: 'sin_evidencia', motivo: 'sin_viaje' } : i % 5 === 4 ? { estatus: 'sin_evidencia', motivo: 'sin_posiciones_dia' } : { estatus: 'con_evidencia', posicionesDia: 40 + i * 3 }; });
+  const con = Object.values(porLinea).filter((x) => x.estatus === 'con_evidencia').length;
+  return { resumen: { total: todas.length, conEvidencia: con, sinEvidencia: todas.length - con, porMotivo: { sin_fecha: 0, sin_viaje: 3, viaje_sin_unidad: 0, sin_posiciones_dia: todas.length - con - 3 } }, porLinea };
+}

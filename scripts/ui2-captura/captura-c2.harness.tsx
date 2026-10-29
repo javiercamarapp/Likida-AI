@@ -33,7 +33,7 @@ const { VistaConexiones } = await import('@/app/dashboard/conexiones/vista');
 import type { Conector } from '@/lib/likida/conexiones';
 import type { ResumenDesglose } from '@/lib/likida/intake/desglose_peaje';
 import { comprobarPaginaV2, exigirV2Css, exigirV2Html } from './exigir_v2';
-import { DESGLOSE_PEAJES, KPIS_LIQUIDACION, USUARIO, cierresPorDia, colaRevision, diferenciasPorOperador, liquidaciones, textoInsight } from './fixtures/logistica_mx';
+import { DESGLOSE_PEAJES, desglosesRecibidos, detalleDesglosePeajes, evidenciaGpsPeajes, lineasPorConciliar, KPIS_LIQUIDACION, USUARIO, cierresPorDia, colaRevision, diferenciasPorOperador, liquidaciones, textoInsight } from './fixtures/logistica_mx';
 
 const raiz = path.resolve(__dirname, '../..');
 const require = createRequire(path.join(raiz, 'package.json'));
@@ -73,13 +73,17 @@ const liquidacion = () => (
 );
 
 const DESGLOSE: ResumenDesglose = DESGLOSE_PEAJES;
+const DETALLE_PEAJES = detalleDesglosePeajes();
 const peajes = () => (
   <VistaAgentePeajes
-    conciliacion={{ conciliadas: 212, porConciliar: 9, sinMatch: 4, cfdis: 6 } as never} lineas={null} desgloses={null} peajeAcreditable={12345} sufijo={sufijo}
+    conciliacion={{ conciliadas: 212, porConciliar: 9, sinMatch: 4, cfdis: 6 } as never}
+    lineas={lineasPorConciliar(9) as never} desgloses={desglosesRecibidos(6)} peajeAcreditable={12345.5} sufijo={sufijo}
     subirDesglose={accion} ejecutarAhora={accion}
     desglosesProveedor={[DESGLOSE]} desgloseSeleccionado={DESGLOSE}
-    detalleSeleccionado={{ cuadra: [], noCuadra: [], sinContraparte: [] }}
-    evidenciaGps={null} verificacion={null} importarDesglose={accion} conciliarDesglose={accion}
+    detalleSeleccionado={DETALLE_PEAJES as never}
+    evidenciaGps={evidenciaGpsPeajes(DETALLE_PEAJES) as never}
+    verificacion={{ resumen: { total: 48, cuadra: 40, sinRespaldo: 3, porVerificar: 5, montoCuadra: 31_480, montoSinRespaldo: 2_250, montoPorVerificar: 3_905 }, sinEvaluarGps: 2 }}
+    importarDesglose={accion} conciliarDesglose={accion}
   />
 );
 
