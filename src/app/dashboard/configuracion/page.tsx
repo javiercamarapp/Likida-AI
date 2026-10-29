@@ -4,6 +4,7 @@ import { getConfig } from '@/lib/likida/config';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { logger } from '@/lib/logger';
 import { revalidatePath } from 'next/cache';
 import {
   guardarAjustesOperativos, guardarRfcsAdicionales, parsearRfcsAdicionales,
@@ -61,12 +62,14 @@ export default async function ConfiguracionPage({
     const { data: viajeEjemplo, error: errViaje } = await supabaseAdmin()
       .from('viaje').select('km_recorridos')
       .eq('tenant_id', tenantId).not('km_recorridos', 'is', null)
-      .order('creado_en', { ascending: false }).limit(1).maybeSingle();
+      .order('created_at', { ascending: false }).limit(1).maybeSingle();
     if (errViaje) throw new Error(errViaje.message);
     ejemploKm = typeof viajeEjemplo?.km_recorridos === 'number' && viajeEjemplo.km_recorridos > 0
       ? viajeEjemplo.km_recorridos
       : null;
-  } catch {
+  } catch (e) {
+    // PRU-02/OP40-10 (cierre100): antes el `catch` mudo culpaba a «nosotros» siempre (la columna estaba mal escrita y nadie lo supo).
+    logger.warn('configuracion.viaje_ejemplo_no_leido', { tenantId, error: e instanceof Error ? e.message : String(e) });
     ejemploIlegible = true;
   }
 
