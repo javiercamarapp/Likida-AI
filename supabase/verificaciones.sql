@@ -1315,7 +1315,7 @@ begin
   set local storage.allow_delete_query = 'true';
   delete from storage.objects where bucket_id = 'avatares' and name in (v_u1::text || '/avatar.jpg', v_u2::text || '/avatar.jpg');
 
-  raise exception E'AVATARES_RLS  escribe-en-su-carpeta=%  escribe-en-carpeta-ajena=%   (esperado false / false — cualquiera en true sería una política de escritura reabierta)',
+  raise exception E'AVATARES_RLS  escribe-en-su-carpeta=%  escribe-en-carpeta-ajena=%   (esperado false / false)',
     ok_propio, ok_ajeno;
 end $$;
 

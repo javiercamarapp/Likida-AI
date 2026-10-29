@@ -184,6 +184,11 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           exit $ec
 
+      # H3 (verificación del PR #766): el camino de LOGIN bajo los grants REALES de la 0947 (sin restituir nada): app_user se lee con el JWT
+      # de usuario y cualquier otra tabla da 42501.
+      - name: Login bajo los grants de la 0947 (authenticated solo lee app_user)
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/pruebas-aislamiento/login_bajo_grants_0947.sql
+
       # Devuelve a la base efímera los privilegios que había ANTES de la 0947 (producción los tiene revocados): la batería de abajo
       # (verificaciones.sql, set role authenticated, supabase/tests) sigue viendo el mismo estado de grants que las migraciones previas
       # dejaron y prueba RLS como capa independiente. Corre DESPUÉS de capa 0, que demuestra el estado real.
