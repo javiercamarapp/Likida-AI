@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { ControladorTour } from './controlador';
 import { colocarGlobo, mezclarRect, rectFoco, rectsIguales, trazoVelo } from './geometria';
+import { bloqueaElClic } from './bloqueo';
 import { GloboTour } from './globo';
 import type { Rect, Tam } from './tipos';
 
@@ -132,7 +133,7 @@ export function CapaTour({ controlador }: { controlador: ControladorTour }) {
           <div key={snap.indice} className="rv-tour__halo" data-espera={accion || undefined}
             style={{ transform: `translate(${foco.x}px, ${foco.y}px)`, width: foco.w, height: foco.h }} aria-hidden="true" />
           {/* Paso informativo: el elemento se ve pero no se activa por accidente. */}
-          {!accion ? <div className="rv-tour__bloqueo" style={{ left: foco.x, top: foco.y, width: foco.w, height: foco.h }} aria-hidden="true" /> : null}
+          {bloqueaElClic(snap.paso) ? <div className="rv-tour__bloqueo" style={{ left: foco.x, top: foco.y, width: foco.w, height: foco.h }} aria-hidden="true" /> : null}
         </>
       ) : null}
       <GloboTour

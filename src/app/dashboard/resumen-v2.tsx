@@ -30,7 +30,7 @@ export function indicadoresResumen(s: SenalesAsistente): ItemKpi[] {
 }
 
 export async function ResumenV2({
-  tenantId, userId, tenantNombre, nombre, tenantExiste, sufijo, soloLectura, fichas,
+  tenantId, userId, tenantNombre, nombre, tenantExiste, sufijo, soloLectura, veAsistente, fichas,
 }: {
   tenantId: string;
   userId: string;
@@ -39,12 +39,16 @@ export async function ResumenV2({
   tenantExiste: boolean;
   sufijo: string;
   soloLectura: boolean;
+  /** ¿Este rol puede abrir /dashboard/puesta-en-marcha? Si no, no se lee ni se pinta nada del asistente (tarjeta, tira, «Hoy»). */
+  veAsistente: boolean;
   /** Las tarjetas de los cinco agentes, ya armadas por `inicio-cinco-agentes.tsx` (no se duplica su lógica). */
   fichas: React.ReactNode;
 }) {
   const diaMx = hoyMx(new Date(ahoraMs()));
-  const senales = await leerSenalesAsistente(tenantId);
-  const recibido = senales.archivosRecibidos;
+  // Sin acceso a la pantalla del asistente (p. ej. el encargado) NO se calculan sus señales: ni tarjeta que rebota,
+  // ni estado de conexiones en la carga del navegador.
+  const senales = veAsistente ? await leerSenalesAsistente(tenantId) : null;
+  const recibido = senales?.archivosRecibidos ?? null;
 
   return (
     <main className="rv-res">
@@ -57,11 +61,15 @@ export async function ResumenV2({
 
       {!tenantExiste && <AvisoSinFlota tenantId={tenantId} />}
 
-      <TarjetaPuestaEnMarcha senales={senales} ambito={`${tenantId}:${userId}`} sufijo={sufijo} soloLectura={soloLectura} />
+      {senales && (
+        <>
+          <TarjetaPuestaEnMarcha senales={senales} ambito={`${tenantId}:${userId}`} sufijo={sufijo} soloLectura={soloLectura} />
 
-      <TiraKpi items={indicadoresResumen(senales)} etiqueta="Tu flota en Likida" />
+          <TiraKpi items={indicadoresResumen(senales)} etiqueta="Tu flota en Likida" />
+        </>
+      )}
 
-      <section className="rv-res__hoy" aria-labelledby="rv-res-hoy" {...anclaTour('resumen.hoy')}>
+      {senales && <section className="rv-res__hoy" aria-labelledby="rv-res-hoy" {...anclaTour('resumen.hoy')}>
         <h2 id="rv-res-hoy" className="rv-res__sec">Hoy</h2>
         {recibido === null ? (
           <EstadoVacio escena="desglose-correo" compacto titulo="No pudimos revisar tus archivos ahora">
@@ -81,7 +89,7 @@ export async function ResumenV2({
             Manda un desglose de muestra de tu sistema de transporte y aquí verás cómo llega, a quién y qué pasó.
           </EstadoVacio>
         )}
-      </section>
+      </section>}
 
       <section aria-labelledby="rv-res-ag">
         <h2 id="rv-res-ag" className="rv-res__sec">Agentes</h2>

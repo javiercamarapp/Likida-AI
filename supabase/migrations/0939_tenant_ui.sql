@@ -1,10 +1,8 @@
+-- REVERSA: drop trigger if exists tenant_ui_bitacora_trg on public.tenant_ui; drop table if exists public.tenant_ui; drop function if exists public.tenant_ui_bitacora();
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 0939 — VERSIÓN DE INTERFAZ POR TENANT (`tenant_ui`): qué piel del panel ve una flota.
 --
--- NÚMERO PROVISIONAL: el orquestador fija el definitivo al abrir el PR de release
--- (debe ser posterior a la última migración fusionada en master y de prefijo
--- único; la compuerta de deploy falla con prefijos repetidos). Renombrar el
--- archivo es lo único que cambia: nada en el código cita este número.
+-- Número definitivo: 0939 (prefijo único). La reversa está en la primera línea.
 --
 -- Es la BANDERA del rediseño (`data-ui="v2"`). Se eligió una tabla propia y no
 -- `tenant_perfil` (CHECK de un solo valor, «el perfil solo quita») ni

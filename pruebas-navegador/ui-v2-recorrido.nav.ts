@@ -93,6 +93,11 @@ test('recorre todo el recorrido: Siguiente y la acción avanzan, navega de pági
       // El paso pide una acción sobre el elemento real: hacerla avanza solo, sin tocar «Siguiente».
       await ancla(page, paso.ancla).click();
     } else {
+      if (paso.accion && paso.ancla) {
+        // El paso dice «Aprieta aquí»: el elemento debe poder recibir el clic de verdad (el velo no lo cubre).
+        // `trial` hace la comprobación de «recibe eventos» de Playwright sin disparar la acción (p. ej. «Probar»).
+        await ancla(page, paso.ancla).click({ trial: true, timeout: 5_000 });
+      }
       await siguiente(page).click();
     }
   }

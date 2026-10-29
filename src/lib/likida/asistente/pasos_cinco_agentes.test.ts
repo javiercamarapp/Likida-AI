@@ -1,5 +1,7 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- rutas fijas del propio repo */
 import { describe, it, expect } from 'vitest';
-import { armarPasosCincoAgentes, RESPONSABLES_POR_OMISION, type SenalesAsistente } from './pasos_cinco_agentes';
+import { readFileSync, readdirSync } from 'node:fs';
+import { armarPasosCincoAgentes, etiquetaGlobal, MOTIVO_MINIMO, RESPONSABLES_POR_OMISION, type SenalesAsistente } from './pasos_cinco_agentes';
 import { solicitudParaTi, cartaAutorizacion } from './textos_solicitud';
 
 const vacias: SenalesAsistente = {
@@ -96,5 +98,55 @@ describe('asistente de puesta en marcha (cinco_agentes)', () => {
     const t = solicitudParaTi({ paraTi: 'Luis', gerencia: 'Dirección', flota: 'la flota' });
     expect(t).toContain('SOLO LECTURA');
     expect(cartaAutorizacion({ paraTi: 'Luis', gerencia: 'Dirección', flota: 'la flota' })).toContain('Dirección');
+  });
+
+  describe('honestidad de «Todo listo para operar» (H4)', () => {
+    const todasDeclaradas = { equipoInvitado: true, correoRecibido: true, simulacroVisto: true } as const;
+    const motivos = { equipo: 'x', tms: 'x', correo: 'x', catalogos: 'x', carta_porte: 'x', simulacro: 'x' } as const;
+
+    it('omitir con motivo de 1 letra NO omite nada: el paso sigue pendiente', () => {
+      const r = armarPasosCincoAgentes(vacias, { omitidos: motivos });
+      expect(r.rutaCritica.some((p) => p.estado === 'omitido')).toBe(false);
+      expect(r.listoParaOperar).toBe(false);
+    });
+
+    it('seis omisiones con motivo razonable no alcanzan «Todo listo para operar»; se rotulan como omitidas', () => {
+      const m = 'lo resuelve otra área';
+      expect(m.length).toBeGreaterThanOrEqual(MOTIVO_MINIMO);
+      const r = armarPasosCincoAgentes(vacias, { omitidos: { equipo: m, tms: m, correo: m, catalogos: m, carta_porte: m, simulacro: m } });
+      expect(r.rutaCritica.every((p) => p.estado === 'omitido')).toBe(true);
+      expect(r.listoParaOperar).toBe(false);
+      expect(r.listos).toBe(0);
+      expect(etiquetaGlobal(r)).toBe('Sin pasos pendientes (6 omitidos)');
+    });
+
+    it('solo con declaraciones del navegador (sin nada medido en el servidor) no se llega a «Todo listo»', () => {
+      const r = armarPasosCincoAgentes(vacias, todasDeclaradas);
+      expect(r.listoParaOperar).toBe(false);
+      expect(etiquetaGlobal(r)).not.toBe('Todo listo para operar');
+    });
+
+    it('con lo medido listo y lo demás declarado sí, pero lo dice: cuántos pasos los confirmó la persona', () => {
+      const buenas: SenalesAsistente = {
+        ...vacias, archivosRecibidos: 2, correoDesglose: { activa: true, usaCorreo: true, remitenteCapturado: true },
+        operadores: { activos: 3, conCorreo: 3 }, unidadesActivas: 4, coordinadores: 0, revisorCartaPorte: true,
+      };
+      const r = armarPasosCincoAgentes(buenas, todasDeclaradas);
+      expect(r.listoParaOperar).toBe(true);
+      expect(r.confirmadosPorTi).toBeGreaterThanOrEqual(2);
+      expect(etiquetaGlobal(r)).toBe(`Todo listo para operar (${r.confirmadosPorTi} confirmados por ti)`);
+    });
+  });
+
+  it('ningún archivo del asistente ni de Puesta en marcha nombra a una persona o cliente (H13)', () => {
+    const dirs = ['src/lib/likida/asistente', 'src/app/dashboard/puesta-en-marcha'];
+    // Los nombres se arman por pedazos para que esta prueba no sea, ella misma, un archivo que los nombre.
+    const nombres = [['ce', 'li'], ['ce', 'linda'], ['innova', 'tivos?'], ['yu', 'carro']].map((p) => p.join(''));
+    const prohibidos = new RegExp(`\\b(${nombres.join('|')})\\b`, 'i');
+    for (const d of dirs) {
+      for (const f of readdirSync(d).filter((x) => /\.(ts|tsx)$/.test(x) && !/\.test\./.test(x))) {
+        expect(prohibidos.test(readFileSync(`${d}/${f}`, 'utf8')), `${d}/${f}`).toBe(false);
+      }
+    }
   });
 });

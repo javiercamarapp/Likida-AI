@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { sufijoTenant } from './sufijo';
-import { puedeVerArea } from '@/lib/auth/visibilidad';
+import { puedeVerArea, puedeVerRuta } from '@/lib/auth/visibilidad';
 import { InicioContenido } from './inicio-contenido';
 import { InicioOperacion } from './inicio-operacion';
 import { InicioCincoAgentes } from './inicio-cinco-agentes';
@@ -40,6 +40,7 @@ export default async function DashboardInicio({
       <InicioCincoAgentes
         tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} sufijo={sufijoTenant(sp)}
         ui={ui} userId={userId} soloLectura={Boolean(sp.tenant || sp.vista || sp.rol || tenantNombre)}
+        veAsistente={puedeVerRuta(rol, '/dashboard/puesta-en-marcha', perfilFlota)}
       />
     );
   }

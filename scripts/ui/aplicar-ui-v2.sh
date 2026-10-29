@@ -33,7 +33,19 @@ perfil_validar_uuid "$TENANT"
 if [ -n "$ENV_FILE" ]; then perfil_cargar_env_file "$ENV_FILE"; fi
 perfil_requerir_db
 
+# La tabla la crea la migración 0939: sin ella nada de lo siguiente tiene sentido (el respaldo saldría vacío y el error
+# sería críptico). Solo lectura; se comprueba antes de respaldar o cambiar cualquier cosa.
+exigir_tabla_tenant_ui() {
+  local hay
+  hay="$(psql "$DB" -X -v ON_ERROR_STOP=1 -tA -c "select to_regclass('public.tenant_ui') is not null" 2>/dev/null || true)"
+  if [ "$hay" != "t" ]; then
+    echo "❌ La tabla public.tenant_ui no existe en esta base (o no se pudo comprobar). Aplica primero la migración 0939 (supabase/migrations/0939_tenant_ui.sql). No se cambió nada." >&2
+    exit 6
+  fi
+}
+
 if [ "$MODO" = "verificar" ]; then
+  exigir_tabla_tenant_ui
   psql "$DB" -X -v ON_ERROR_STOP=1 -v tenant="$TENANT" <<'SQL'
 select 'tenant' as que, id::text as valor, nombre from public.tenant where id = :'tenant';
 select 'ui' as que, version as valor, cambiado_en::text from public.tenant_ui where tenant_id = :'tenant';
@@ -42,6 +54,8 @@ SQL
 fi
 
 perfil_guardia_host "$PRODUCCION" "$TENANT" "$([ "$MODO" = revertir ] && echo 'REVERTIR UI v2' || echo 'ACTIVAR UI v2')"
+
+exigir_tabla_tenant_ui
 
 # Respaldo del estado previo ANTES de cambiar nada.
 DIR="$HOME/likida-respaldos/ui"; mkdir -p "$DIR"; chmod 700 "$DIR"

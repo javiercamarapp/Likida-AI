@@ -125,6 +125,11 @@ export function useTour() {
   return api;
 }
 
+/** Como `useTour`, pero devuelve null cuando no hay `<TourProvider>` (v2 sin perfil: el layout no lo monta). */
+export function useTourOpcional() {
+  return useContext(Contexto);
+}
+
 /** Progreso guardado de un recorrido (null en servidor y sin progreso): sin desajuste de hidratación. */
 export function useProgresoTour(id: string): ProgresoTour | null {
   const api = useTour();
