@@ -118,6 +118,8 @@ async function selftestV21({ correr, dice }) {
   // ── c3.radio: marcas de gráfica exentas, cajas NO ──
   const marcaBuena = await correr('<main id="contenido-principal"><h1>M</h1><figure><div title="2026-10-06: 2" style="width:12px;height:12px;border-radius:2px;background:#888"></div></figure></main>', { pliegue: false, sinShell: true });
   d(N(marcaBuena, 'c3.radio') === 0, 'una marca de gráfica (hoja titulada, radio 2 dentro de figure) NO dispara c3.radio');
+  const marcaPaleta = await correr('<style>:root{--g1:#2f6bd8}</style><main id="contenido-principal"><h1>M</h1><div style="width:10px;height:40px;border-radius:3px;background:var(--g1)"></div></main>', { pliegue: false, sinShell: true });
+  d(N(marcaPaleta, 'c3.radio') === 0, 'una barra pintada con la paleta de datos (var(--g1), radio 3) NO dispara c3.radio');
   const marcaMala = await correr('<main id="contenido-principal"><h1>M</h1><div style="border:1px solid #888;border-radius:3px;padding:8px;width:200px">caja con texto</div><button style="height:32px;border:1px solid #888;border-radius:3px;background:#fff">B</button></main>', { pliegue: false, sinShell: true });
   d(N(marcaMala, 'c3.radio') >= 2, 'una caja con texto y un botón de radio 3 SÍ disparan c3.radio (' + N(marcaMala, 'c3.radio') + ')');
   // ── c1.toque: controles contiguos (≤16 px) reparten la franja ──
@@ -173,6 +175,8 @@ async function selftestV21({ correr, dice }) {
   d(N(fixMalo, 'n7.fixture') >= 4, 'folio repetido, «Operador Uno/Dos» y 2 avisos sintéticos disparan n7.fixture (' + N(fixMalo, 'n7.fixture') + ')');
   const fixBueno = await correr(`<main id="contenido-principal"><h1>F</h1><p style="font:12px sans-serif">Datos sintéticos de demostración</p><table><tbody><tr><td>LQ-4101</td><td>Marisol Treviño Ibarra</td></tr><tr><td>LQ-4102</td><td>Gerardo Pineda Lozano</td></tr></tbody></table></main>`, { pliegue: false, sinShell: true });
   d(N(fixBueno, 'n7.fixture') === 0, 'folios únicos, operadores con nombre y apellido y 1 aviso NO disparan n7.fixture');
+  const dosTablas = await correr(`<main id="contenido-principal"><h1>F</h1><table><tbody><tr><td>LQ-4101</td></tr></tbody></table><table><tbody><tr><td>LQ-4101</td></tr></tbody></table></main>`, { pliegue: false, sinShell: true });
+  d(N(dosTablas, 'n7.fixture') === 0, 'el mismo folio en DOS tablas distintas (liquidada y en cola) NO es folio repetido');
   // ── N8 esqueletos y Observado ──
   const esqMalo = await correr('<main id="contenido-principal"><h1>E</h1><div class="skeleton" style="height:40px;width:200px;background:#eee"></div><div class="rv-kpi"><span class="rv-chip" style="font:12px sans-serif">Observado</span></div><div class="rv-kpi"><span class="rv-chip" style="font:12px sans-serif">Observado</span></div></main>', { pliegue: false, sinShell: true });
   d(N(esqMalo, 'n8.esqueleto') > 0 && N(esqMalo, 'n8.observado') > 0, 'esqueleto y 2 chips «Observado» disparan n8 (' + N(esqMalo, 'n8.esqueleto') + '/' + N(esqMalo, 'n8.observado') + ')');

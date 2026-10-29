@@ -218,7 +218,9 @@ export function medir(U, opts) {
   const esMarca = (e, v) => {
     if (v > U.markRadioMax + 0.01 || e.children.length > 0 || e.matches(CTRL_SEL)) return false;
     const rotulado = e.hasAttribute('title') || e.hasAttribute('aria-label') || !!e.parentElement?.closest('[title],[aria-label]');
-    return rotulado || !!e.closest(CTX_GRAF);
+    // ...o pintada con un color de la paleta de datos (var(--g1..g5), --m1..8, --d1..8): una barra/celda de gráfica sin etiqueta propia
+    const dato = /(?:background(?:-color)?|fill)\s*:\s*var\(--(?:g\d|m\d|d\d|serie-?\d)/.test(e.getAttribute('style') || '');
+    return rotulado || dato || !!e.closest(CTX_GRAF);
   };
 
   // ═══ C3 · PADDING / GAP / RADIOS ════════════════════════════════════════
@@ -506,7 +508,8 @@ export function medir(U, opts) {
     // N3 · pie del sidebar: alto ≤150 y ningún ítem recortado (se mide a 1440×900 y a 1280×720)
     if (sb) {
       const pie = sb.querySelector('.rv-sb__pie,[data-sb-pie]');
-      if (pie) {
+      if (sb.getBoundingClientRect().width < 200) { /* riel de 72 px: el texto del pie se oculta a propósito; N3 mide el sidebar completo */ }
+      else if (pie) {
         const pr = pie.getBoundingClientRect(), sr = sb.getBoundingClientRect();
         stats.pie = { alto: Math.round(pr.height), viewport: VW + '×' + VH };
         if (pr.height > U.pieMax + 0.5) add('n3.alto_pie', 'pie del sidebar ' + Math.round(pr.height) + 'px (máx. ' + U.pieMax + ')');
@@ -530,7 +533,8 @@ export function medir(U, opts) {
       });
       stats.categoriasAbiertas = abiertas.length;
       if (abiertas.length > U.categoriasAbiertasMax) add('n4.categorias_abiertas', abiertas.length + ' categorías abiertas en el sidebar (máx. ' + U.categoriasAbiertasMax + ')');
-      stats.sidebarFirma = [...nav.querySelectorAll('a')].filter((a) => vis(a)).map((a) => (a.textContent || '').trim()).join('|') + '#' + abiertas.length;
+      const limpio = sb.outerHTML.replace(/ aria-current="page"/g, ''); let hh = 0; for (let i = 0; i < limpio.length; i++) hh = (hh * 31 + limpio.charCodeAt(i)) | 0;
+      stats.sidebarFirma = hh + '|' + [...nav.querySelectorAll('a')].filter((a) => vis(a)).map((a) => (a.textContent || '').trim()).join('|') + '#' + abiertas.length;
     }
     // N5 · logo SVG: exactamente 1 instancia en el sidebar (≥768) o en la cabecera móvil (<768)
     const marco = VW >= 768 ? sb : [...document.querySelectorAll('.rv-cab-movil')].find((e) => vis(e));
@@ -554,8 +558,9 @@ export function medir(U, opts) {
     }
     // N7 · fixtures: folios repetidos, «Operador Uno», aviso sintético por tarjeta
     const FOLIO = /^[A-Z]{1,4}-\d{3,}$/;
-    const folios = {}; for (const e of document.querySelectorAll('td,.rv-id,code,[data-mono="id"]')) { if (oculto(e) || !vis(e)) continue; const t = (e.textContent || '').trim(); if (FOLIO.test(t)) (folios[t] = folios[t] || []).push(e); }
-    for (const [t, l] of Object.entries(folios)) if (l.length > 1) add('n7.fixture', 'folio repetido ' + t + ' ×' + l.length);
+    // Repetido = el mismo folio dos veces DENTRO de la misma tabla/lista (un viaje puede salir en dos tablas distintas de la página).
+    const folios = {}; for (const e of document.querySelectorAll('td,.rv-id,code,[data-mono="id"]')) { if (oculto(e) || !vis(e)) continue; const t = (e.textContent || '').trim(); if (!FOLIO.test(t)) continue; const ambito = e.closest('table,ul,ol') || document.body; if (!ambito.__n7) ambito.__n7 = Math.random().toString(36).slice(2); const k = ambito.__n7 + '|' + t; (folios[k] = folios[k] || []).push(e); }
+    for (const [k, l] of Object.entries(folios)) if (l.length > 1) add('n7.fixture', 'folio repetido ' + k.split('|')[1] + ' ×' + l.length);
     const NOMBRES_FALSOS = /\b(?:operador|chofer|conductor|unidad|usuario)\s+(?:uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|de prueba(?:\s*\d+)?|\d+)\b|\b(?:ciudad alfa|puerto beta|villa gamma|valle delta)\b/i;
     for (const e of conTexto) { const t = [...e.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(' '); const m = t.match(NOMBRES_FALSOS); if (m) add('n7.fixture', 'dato de caricatura «' + m[0] + '» ' + desc(e)); }
     const avisos = conTexto.filter((e) => /sint[eé]tic/i.test([...e.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(' ')));
