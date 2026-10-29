@@ -6,6 +6,29 @@ vi.mock('next/navigation', () => ({
 }));
 const { default: DashboardChromeV2 } = await import('./chrome-v2');
 
+/** El texto de un fragmento de HTML: recorre los rangos `<…>` con indexOf (sin regex de saneado: no es un sanitizador, solo una lectura de prueba). */
+function textoVisible(fragmento: string): string {
+  let salida = '';
+  let i = 0;
+  while (i < fragmento.length) {
+    const abre = fragmento.indexOf('<', i);
+    if (abre < 0) { salida += fragmento.slice(i); break; }
+    salida += fragmento.slice(i, abre);
+    const cierra = fragmento.indexOf('>', abre);
+    if (cierra < 0) break;
+    i = cierra + 1;
+  }
+  return salida;
+}
+
+/** El interior del primer <div> cuya etiqueta de apertura contiene `marca` (sin divs anidados: la capa solo tiene un span y un svg). */
+function contenidoDelDiv(html: string, marca: string): string {
+  const m = html.indexOf(marca);
+  if (m < 0) return '';
+  const inicio = html.indexOf('>', m) + 1;
+  return html.slice(inicio, html.indexOf('</div>', inicio));
+}
+
 const pintar = (rol: string, perfil: 'cinco_agentes' | null = 'cinco_agentes') =>
   renderToStaticMarkup(
     <DashboardChromeV2 nombre="Ana Pérez" rol={rol} perfil={perfil} cerrarSesion={async () => {}}>
@@ -62,9 +85,9 @@ describe('DashboardChromeV2: el contrato que no se rompe', () => {
   it('la capa de carga viaja en el HTML del servidor: una sola, visible desde el primer fotograma, solo el logo', () => {
     expect(html.match(/id="rv-carga"/g)).toHaveLength(1);
     expect(html).toMatch(/class="rv-carga" data-estado="inicial" role="status" aria-busy="true" aria-label="Cargando"/);
-    const capa = /<div[^>]*id="rv-carga"[^>]*>([\s\S]*?)<\/div>/.exec(html)?.[1] ?? '';
+    const capa = contenidoDelDiv(html, 'id="rv-carga"');
     expect(capa).toContain('aria-label="Likida"');
-    expect(capa.replace(/<[^>]+>/g, '').trim()).toBe(''); // sin texto visible
+    expect(textoVisible(capa).trim()).toBe(''); // sin texto visible
   });
 
   it('AGENTES son 5 ítems sueltos bajo un caption estático; las demás categorías son un acordeón con UNA abierta', () => {
