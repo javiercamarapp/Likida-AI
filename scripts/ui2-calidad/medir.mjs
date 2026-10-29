@@ -18,9 +18,14 @@ export const UMBRALES = {
   textoMin: 11,
   h1: 20, h1Tol: 0.5,
   kpi: 26, kpiTol: 0.6, kpiMax: 30,
-  escalaPermitida: [11, 12, 13, 14, 15, 20, 26], // 11 solo MAYÚSCULAS; 14 = H2; 15 = título de overlay; 16 solo campos en móvil
+  kpiSinDato: 18,            // «—» de un KPI sin dato: 18/600 (ESTILO §3)
+  kpiMovil: [17.5, 21.5],    // móvil: clamp(18px, 5.2vw, 21px)
+  svgTextoMin: 12,           // texto de gráficas ≥ 12 px (ESTILO §7)
+  escalaPermitida: [11, 12, 13, 14, 15, 16, 18, 20, 26], // ESTILO §3 (escala cerrada): 11 solo MAYÚSCULAS; 14 H2; 15 overlay; 16 campo móvil y cifra de tooltip; 18 KPI sin dato
   // c3
-  radios: [0, 8, 12],        // + píldora (radio >= la mitad del lado menor)
+  radios: [0, 8, 12],        // + píldora / punto 50 % (radio >= la mitad del lado menor) + 16 de la hoja inferior móvil (ESTILO §5)
+  radioHoja: 16,
+  primarioAltoMaxMovil: 36,  // botón 32 (36 en <820)
   padTarjeta: 14, padTarjetaMovil: 12,
   gapMax: 12,
   padPagina: 24,
@@ -127,7 +132,7 @@ export function medir(U, opts) {
       else {
         const bg = rgba(cs.backgroundColor); const bgp = e.parentElement ? bgDe(e.parentElement).c : [255, 255, 255, 1];
         const solido = bg[3] > 0.9 && ratio(blend(bg, bgp), bgp) >= 4 && lum(bg) < 0.2;
-        if ((e.classList.contains('rv-btn--primary') || solido) && h > U.primarioAltoMax + U.tolAlto) add('c1.boton_gordo', 'primario sólido alto ' + Math.round(h * 10) / 10 + ' (máx. ' + U.primarioAltoMax + ') ' + desc(e));
+        if ((e.classList.contains('rv-btn--primary') || solido) && h > (movil ? U.primarioAltoMaxMovil : U.primarioAltoMax) + U.tolAlto) add('c1.boton_gordo', 'primario sólido alto ' + Math.round(h * 10) / 10 + ' (máx. ' + (movil ? U.primarioAltoMaxMovil : U.primarioAltoMax) + ') ' + desc(e));
       }
     } else if (h > U.controlAltoMax + U.tolAlto) add('c1.alto_visual', 'alto ' + Math.round(h * 10) / 10 + ' (máx. ' + U.controlAltoMax + ') ' + desc(e));
   }
@@ -191,7 +196,9 @@ export function medir(U, opts) {
     if (e.matches('h1')) { /* se juzga abajo */ }
     else if (esKpi) {
       if (fs > U.kpiMax + 0.05) add('c2.kpi_mayor_30', fs + 'px (tope ' + U.kpiMax + ') ' + desc(e));
-      if (Math.abs(fs - U.kpi) > U.kpiTol) add('c2.kpi_no_26', fs + 'px (norma ' + U.kpi + ') ' + desc(e));
+      const sinDato = /^[—–-]$/.test(tx); // KPI sin dato «—»: 18
+      const okKpi = sinDato ? Math.abs(fs - U.kpiSinDato) <= U.kpiTol : movil ? (fs >= U.kpiMovil[0] && fs <= U.kpiMovil[1]) || Math.abs(fs - U.kpi) <= U.kpiTol : Math.abs(fs - U.kpi) <= U.kpiTol;
+      if (!okKpi) add('c2.kpi_no_26', fs + 'px (norma ' + (sinDato ? U.kpiSinDato : movil ? '18–21 (móvil) o ' + U.kpi : U.kpi) + ') ' + desc(e));
     } else {
       const campo = e.matches('input,select,textarea');
       const ok = U.escalaPermitida.some((v) => Math.abs(fs - v) < 0.3 && (v !== 11 || mayus)) || (campo && movil && Math.abs(fs - 16) < 0.3);
@@ -205,6 +212,7 @@ export function medir(U, opts) {
     if (oculto(t) || !(t.textContent || '').trim()) continue;
     const m = t.getScreenCTM && t.getScreenCTM(); const esc = m ? Math.hypot(m.a, m.b) : 1;
     const fs = px(getComputedStyle(t).fontSize) * esc;
+    if (fs >= U.textoMin - 0.05 && fs < U.svgTextoMin - 0.05) add('c2.fuera_de_escala', 'texto de gráfica ' + Math.round(fs * 10) / 10 + 'px (mín. ' + U.svgTextoMin + ') "' + (t.textContent || '').trim().slice(0, 20) + '"');
     if (fs > 0 && fs < U.textoMin - 0.05) add('c2.texto_menor_11', 'svg ' + Math.round(fs * 10) / 10 + 'px "' + (t.textContent || '').trim().slice(0, 20) + '"');
   }
   const h1s = todos.filter((e) => e.matches('h1'));
@@ -231,6 +239,7 @@ export function medir(U, opts) {
     if (v <= 0.01) return { ok: true, v };
     if (Math.abs(v - 8) <= 0.6 || Math.abs(v - 12) <= 0.6) return { ok: true, v };
     if (v >= mitad - 0.6) return { ok: true, v };
+    if (movil && Math.abs(v - U.radioHoja) <= 0.6) return { ok: true, v }; // hoja inferior móvil
     return { ok: false, v };
   };
   let marcasExentas = 0;

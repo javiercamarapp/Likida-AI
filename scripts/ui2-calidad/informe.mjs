@@ -8,7 +8,7 @@ export const CRITERIOS = {
   'c2.h1': ['c2 Tipografía', 'H1 ≠ 20 px o ≠ 1 por pantalla'],
   'c2.kpi_mayor_30': ['c2 Tipografía', 'cifra KPI > 30 px'],
   'c2.kpi_no_26': ['c2 Tipografía', 'cifra KPI ≠ 26 px'],
-  'c2.fuera_de_escala': ['c2 Tipografía', 'tamaño fuera de la escala {11 MAYÚSC., 12, 13, 14, 15, 20, 26}'],
+  'c2.fuera_de_escala': ['c2 Tipografía', 'tamaño fuera de la escala {11 MAYÚSC., 12, 13, 14, 15, 16, 18, 20, 26}'],
   'c3.radio': ['c3 Padding/gap/radios', 'radio fuera de {8, 12, píldora}'],
   'c3.padding_tarjeta': ['c3 Padding/gap/radios', 'padding de tarjeta > 14 (móvil > 12)'],
   'c3.gap': ['c3 Padding/gap/radios', 'gap > 12'],
