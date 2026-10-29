@@ -73,6 +73,8 @@ const PARES_TEXTO: Array<[string, string]> = [
   ...[1, 2, 3, 4, 5, 6, 7, 8].map((n): [string, string] => [`--ink-${n}`, `--soft-${n}`]),
   // Capa v2 (rediseño al sistema Rovaq): botón primario tenue y su alternativa, cabecera de tabla, aliases del cromo,
   // texto sobre segmento relleno de cada matiz de datos y el logo (tinta) sobre la capa de carga.
+  // Marca: el naranja ladrillo (acción, enlaces) sobre el lienzo crema y sobre la tarjeta, claro y oscuro.
+  ['--marca', '--surface'], ['--marca', '--bg'],
   ['--btn-fg', '--btn-bg'], ['--btn-fg', '--btn-hover'], ['--btn-soft-fg', '--btn-soft'], ['--btn-soft-fg', '--btn-soft-hover'],
   ['--tabla-cab-ink', '--tabla-cab-bg'], ['--ink', '--ui-elevated'], ['--ink', '--ui-soft'], ['--muted', '--ui-soft'],
   ['--ink', '--carga-fondo'], ['--ink-6', '--ui-soft'],

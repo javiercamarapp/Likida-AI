@@ -24,8 +24,8 @@
 
 :root [data-ui="v2"] {
   /* Marco y superficies */
-  --bg: #f4eee3;
-  --surface: #fbfbfd;
+  --bg: #f6f1e7;
+  --surface: #ffffff;
   --panel: var(--surface);
   --canvas: #efe7d8;
   --canvas2: #f8f4ec;
@@ -37,8 +37,8 @@
   --faint: #6e625a;
 
   /* Líneas y controles */
-  --line: #e3d9c7;
-  --line2: #d2c6b2;
+  --line: #dccfb9;
+  --line2: #cfc1a9;
   --input: #8c8073;
 
   /* Tinta como relleno de marca (anillo, interruptor, foco del recorrido, avatar): sigue siendo tinta sólida. */
@@ -98,7 +98,7 @@
   --ui-canvas: var(--bg);
   --ui-surface: var(--surface);
   --ui-soft: var(--canvas);
-  --ui-elevated: #fbfbfd;
+  --ui-elevated: #ffffff;
   --ui-border: var(--line);
   --ui-line-strong: var(--line2);
   --ui-input: var(--input);
@@ -108,7 +108,7 @@
   --ui-tip-bg: var(--tip);
   --ui-tip-ink: var(--tip-ink);
   /* ÚNICO color de la capa de carga (= el fondo de la app) */
-  --carga-fondo: #fbfbfd;
+  --carga-fondo: #ffffff;
   /* Cabecera de tabla: petróleo al 7 % sobre la superficie, texto ink-info */
   --tabla-cab-bg: #eef0f4;
   --tabla-cab-ink: var(--marino);
@@ -238,8 +238,8 @@
   --muted: #b5a99c;
   --faint: #a89c8f;
 
-  --line: #2f2520;
-  --line2: #4a3d35;
+  --line: #43362e;
+  --line2: #5a4b41;
   --input: #8f8277;
 
   --marca: #fb923c;
@@ -322,9 +322,9 @@
    `:root[data-theme="light"]` (0,2,0) sin depender del orden de los chunks de CSS; el oscuro lleva
    su propio bloque (0,3,1). Sin un `[data-ui="v2"]` en el documento, esto no aplica a nada. */
 html:root:has([data-ui="v2"]) {
-  --bg: #f4eee3;
+  --bg: #f6f1e7;
   --ink: #17100d;
-  --carga-fondo: #fbfbfd;
+  --carga-fondo: #ffffff;
 }
 html:root[data-theme="dark"]:has([data-ui="v2"]) {
   --bg: #120d0a;
