@@ -44,6 +44,8 @@ describe.each(ARCHIVOS)('movimiento en %s', (archivo) => {
     for (const m of css.matchAll(/(?:animation|transition)(?:-duration)?\s*:[^;}]+/g)) {
       for (const d of m[0].matchAll(/(\d*\.?\d+)(ms|s)\b/g)) {
         const ms = d[2] === 's' ? parseFloat(d[1]) * 1000 : parseFloat(d[1]);
+        // Única excepción: la respiración del logo de la capa de carga (1.6 s, ESTILO §9, decisión de Javier); el seguro de 20 s es un retardo.
+        if (ms === 1600 && /rv-respira/.test(m[0])) continue;
         expect(ms, m[0]).toBeLessThanOrEqual(700);
       }
     }
