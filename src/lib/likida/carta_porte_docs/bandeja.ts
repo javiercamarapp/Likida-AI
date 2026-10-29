@@ -343,7 +343,7 @@ export async function aprobarDocumento(
   let envio: ResultadoEnvio | null = null;
   let avisoSinFolio: string | undefined;
   // A3-09: se lee ANTES de preparar el envío nuevo (que ya no cuenta como «previo»).
-  const avisoEnvioPrevio = avisoDeEnvioPrevio(await repo.enviosDeDocumento(tenantId, id));
+  const avisoEnvioPrevio = avisoDeEnvioPrevio(await enviosPreviosSeguros(tenantId, id));
   if (await flotaBajoPerfil(tenantId)) {
     envio = await intentarEnvio(tenantId, aprobado, actor);
     const folio = (aprobado.extraccion as Extraccion | null)?.campos?.folio_cliente?.valor;
@@ -353,6 +353,14 @@ export async function aprobarDocumento(
     }
   } else salida = await intentarSalida(tenantId, aprobado, actor, opciones.operadorId ?? null);
   return { documento: (await repo.leerDocumento(tenantId, id)) ?? aprobado, salida, envio, perfil, ...(avisoSinFolio ? { avisoSinFolio } : {}), ...(avisoEnvioPrevio ? { avisoEnvioPrevio } : {}) };
+}
+
+/**
+ * H759-14: lectura SOLO informativa (el aviso «ya había una carga al TMS»). Corre después de aplicar el cambio de estado: si lanzara, la persona
+ * vería un error con la aprobación/reapertura YA hecha. Un fallo de lectura se trata como «sin envíos previos» (no avisa), nunca como error.
+ */
+async function enviosPreviosSeguros(tenantId: string, id: string): ReturnType<typeof repo.enviosDeDocumento> {
+  try { return await repo.enviosDeDocumento(tenantId, id); } catch { return []; }
 }
 
 /** Prepara el envío al TMS; un fallo NO deshace la aprobación (el documento sigue aprobado y se puede reintentar). */
@@ -446,7 +454,7 @@ async function reabrir(
   });
   if (!r) throw new ConflictoDeVersion();
   // A3-09: queda en la bitácora que ya había una carga al TMS (sin valores del documento).
-  const cargaPrevia = (await repo.enviosDeDocumento(tenantId, id)).some((e) => e.estado === 'enviado' || e.estado === 'subido_a_mano');
+  const cargaPrevia = (await enviosPreviosSeguros(tenantId, id)).some((e) => e.estado === 'enviado' || e.estado === 'subido_a_mano');
   await repo.registrarEvento(tenantId, id, 'reabierto', actorId, { teniaViaje: d.viajeId !== null, ...(cargaPrevia ? { cargaPreviaAlTms: true } : {}), ...extra.evento });
   return r;
 }

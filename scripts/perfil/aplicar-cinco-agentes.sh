@@ -15,7 +15,8 @@
 #   1. inserta (o actualiza) la fila de `tenant_perfil` con perfil = cinco_agentes;
 #   2. apaga en `interruptor_tenant` los pipelines `ocr` y `cuadre` de esa flota, con motivo
 #      (el código ya los trata como apagados bajo el perfil; la fila deja la palanca VISIBLE en /admin);
-#   3. pone (o corrige) `liquidacion_correo_config.canal = 'correo'` y `activa = true` para esa flota —
+#   3. pone (o corrige) `liquidacion_correo_config.canal = 'correo'` y `activa = false` (A1-01, decisión D1: el envío queda APAGADO hasta que
+#      alguien lo encienda a mano con la fecha de corte puesta; reaplicar sobre una fila ya viva TAMBIÉN la apaga) para esa flota —
 #      DECISIÓN DE PRODUCTO: bajo este perfil, A1 (liquidación) es SIEMPRE por correo, nunca por WhatsApp (hallazgo
 #      de la revisión adversarial de oct-2026: sin esta fila explícita, el código caía al default de siempre y
 #      mandaba por WhatsApp). Solo se tocan las columnas `canal`/`activa`/`actualizado_en`/`actualizado_por`: si la
