@@ -273,3 +273,35 @@ describe('A2P-18: la reserva del aviso de atípicos vence si el proceso muere an
     expect((await A.reintentarAvisosAtipicos(5, deps())).revisados).toBe(0);
   });
 });
+
+describe('H759-8: la recuperación de reservas vencidas cuenta intentos y confirmar no repite el aviso', () => {
+  const vencida = () => new Date(Date.now() - 60_000).toISOString();
+
+  it('cada recuperación suma un intento a detalle.aviso.intentos', async () => {
+    base({ peaje_atipico: [hallazgo('h1', 'repeticion_caseta', 'TC9001', { estado: 'avisado', avisado_en: vencida(), aviso_reservado_hasta: vencida(), detalle: { aviso: { intentos: 1 } } })] });
+    expect(await A.almacenAvisoAtipicos.recuperarVencidas!()).toBe(1);
+    expect(db.tablas.peaje_atipico[0]).toMatchObject({ estado: 'nuevo', avisado_en: null });
+    expect((db.tablas.peaje_atipico[0].detalle as { aviso: { intentos: number } }).aviso.intentos).toBe(2);
+  });
+
+  it('un aviso que SIEMPRE lanza llega al tope de intentos y deja de reservarse (antes se repetía sin fin)', async () => {
+    avisarOk.mockRejectedValue(new Error('plantilla rota'));
+    base({ peaje_atipico: [hallazgo('h1', 'repeticion_caseta', 'TC9001')] });
+    let rondas = 0;
+    for (; rondas < 20; rondas++) {
+      const r = await A.reintentarAvisosAtipicos(5, deps());
+      if (r.revisados === 0) break;
+      // el envío lanzó tras reservar: la reserva queda colgada y se vence
+      db.tablas.peaje_atipico[0].aviso_reservado_hasta = vencida();
+    }
+    expect(rondas).toBe(A.MAX_INTENTOS_AVISO_ATIPICOS);
+    expect(avisarOk).toHaveBeenCalledTimes(A.MAX_INTENTOS_AVISO_ATIPICOS);
+  });
+
+  it('si confirmar lanza tras un envío exitoso, el resultado es `enviado` (no `rechazado`) y no se libera la reserva', async () => {
+    const almacen = { ...A.almacenAvisoAtipicos, confirmar: async () => { throw new Error('timeout de base'); } };
+    const r = await A.avisarAtipicosDesglose(T, DES, { almacen, avisar: avisarOk as never });
+    expect(r).toBe('enviado');
+    for (const f of db.tablas.peaje_atipico) expect(f.estado).toBe('avisado'); // sigue reservado/avisado: no vuelve a nuevo
+  });
+});

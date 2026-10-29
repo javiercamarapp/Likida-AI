@@ -173,24 +173,27 @@ export const almacenAvisoAtipicos: AlmacenAvisoAtipicos = {
 
   async recuperarVencidas() {
     // Barrido global a propósito (el cron recupera lo vencido de TODAS las flotas), pero cada UPDATE va anclado a su flota: primero se leen los
-    // vencidos con su flota y luego se devuelven por flota, repitiendo la condición (si otro proceso lo re-reservó entre medias, no se toca).
+    // vencidos con su flota y luego se devuelven uno por uno, repitiendo la condición (si otro proceso lo re-reservó entre medias, no se toca).
+    // H759-8: cada recuperación CUENTA un intento (`detalle.aviso.intentos`): un aviso que siempre falla (error de código o de plantilla, que lanza
+    // sin pasar por `liberar`) llega a MAX_INTENTOS_AVISO_ATIPICOS y deja de reservarse en vez de repetirse cada ~10-25 min para siempre.
     const ahora = new Date().toISOString();
     const leidos = await acotada(supabaseAdmin().from('peaje_atipico')
-      .select('id, tenant_id').eq('estado', 'avisado').lt('aviso_reservado_hasta', ahora).order('id').limit(500), 'peajes.atipicos_aviso_vencidas');
+      .select('id, tenant_id, detalle').eq('estado', 'avisado').lt('aviso_reservado_hasta', ahora).order('id').limit(200), 'peajes.atipicos_aviso_vencidas');
     if (leidos.error) {
       if (/aviso_reservado_hasta/.test(leidos.error.message)) return 0; // 0945 sin aplicar
       throw new Error(`avisoAtipicos.recuperarVencidas: ${leidos.error.message}`);
     }
-    const porFlota = new Map<string, string[]>();
-    for (const f of (leidos.data ?? []) as Array<{ id: unknown; tenant_id: unknown }>) {
-      const t = String(f.tenant_id);
-      porFlota.set(t, [...(porFlota.get(t) ?? []), String(f.id)]);
-    }
     let devueltas = 0;
-    for (const [tenantId, ids] of porFlota) {
+    for (const f of (leidos.data ?? []) as Array<{ id: unknown; tenant_id: unknown; detalle: unknown }>) {
+      const detalle = comoDetalle(f.detalle);
+      const aviso = avisoDe(detalle);
+      const intentos = intentosDe(detalle) + 1;
       const { data, error } = await acotada(supabaseAdmin().from('peaje_atipico')
-        .update({ estado: 'nuevo', avisado_en: null, aviso_reservado_hasta: null, actualizado_en: ahora })
-        .eq('tenant_id', tenantId).in('id', ids).eq('estado', 'avisado').lt('aviso_reservado_hasta', ahora).select('id'), 'peajes.atipicos_aviso_recuperar');
+        .update({
+          estado: 'nuevo', avisado_en: null, aviso_reservado_hasta: null, actualizado_en: ahora,
+          detalle: { ...detalle, aviso: { ...aviso, estado: 'reserva_vencida', intentos } },
+        })
+        .eq('tenant_id', String(f.tenant_id)).eq('id', String(f.id)).eq('estado', 'avisado').lt('aviso_reservado_hasta', ahora).select('id'), 'peajes.atipicos_aviso_recuperar');
       if (error) throw new Error(`avisoAtipicos.recuperarVencidas: ${error.message}`);
       devueltas += (data ?? []).length;
     }
@@ -287,10 +290,17 @@ export async function avisarAtipicosDesglose(
       parametros: parametrosAvisoOficina('Peajes: cruces inusuales', `${plural(mios.length, 'caso inusual', 'casos inusuales')} en ${plural(unidades, 'unidad', 'unidades')}`, liga()),
       contexto: { tenantId, agente: 'peajes', desglose: desgloseId },
     });
+    // H759-8: el aviso YA salió (o está en el outbox). Si `confirmar` lanza (p. ej. el timeout de `acotada`), NO se cae al catch exterior (que dejaría
+    // la reserva sin confirmar y repetiría el aviso a los 10 min): se anota y se responde `enviado`.
+    const confirmarSeguro = async (): Promise<void> => {
+      try { await almacen.confirmar?.(tenantId, mios.map((h) => h.id)); } catch (e) {
+        logger.error('peajes.atipicos_aviso_confirmar_fallo', { tenant: tenantId, desglose: desgloseId, err: e instanceof Error ? e.message : String(e) });
+      }
+    };
     // A37-S51-04: en cola del outbox = enviado (la reserva NO se libera: saldrá solo y otro barrido lo duplicaría).
     if (quedoEnCola(r)) {
       logger.warn('peajes.atipicos_aviso_en_cola', { tenant: tenantId, desglose: desgloseId, motivo: r.ok ? null : r.motivo, codigo: r.ok ? null : r.codigo });
-      await almacen.confirmar?.(tenantId, mios.map((h) => h.id));
+      await confirmarSeguro();
       return 'enviado';
     }
     if (!r.ok) {
@@ -298,7 +308,7 @@ export async function avisarAtipicosDesglose(
       await almacen.liberar(tenantId, mios.map((h) => h.id), String(r.motivo ?? 'envío rechazado'));
       return 'rechazado';
     }
-    await almacen.confirmar?.(tenantId, mios.map((h) => h.id));
+    await confirmarSeguro();
     return 'enviado';
   } catch (e) {
     logger.error('peajes.atipicos_aviso_error', { tenant: tenantId, desglose: desgloseId, err: e instanceof Error ? e.message : String(e) });
