@@ -13,20 +13,25 @@ const alertarOperador = vi.fn(async () => {});
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]) => alertarOperador(...(a as [])) }));
 const upsert = vi.fn(async () => ({ error: null as null | { message: string } }));
 const insertLatencia = vi.fn(async (..._a: unknown[]) => ({ error: null as null | { message: string } }));
+/** H759-9: lo que `leerLatido` encuentra como latido previo del cron (null = nunca latió). */
+let latidoPrevio: null | { ultimo_latido: string; estado: string; detalle: Record<string, unknown> } = null;
 const rpc = vi.fn(async (..._a: unknown[]) => ({ data: null as unknown, error: null as null | { message: string } }));
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: (tabla: string) => (tabla === 'latencia_muestra'
       ? { insert: (...a: unknown[]) => insertLatencia(...a) }
-      : { upsert: (...a: unknown[]) => upsert(...(a as [])) }),
+      : {
+        upsert: (...a: unknown[]) => upsert(...(a as [])),
+        select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: latidoPrevio, error: null }) }) }),
+      }),
     rpc: (...a: unknown[]) => rpc(...a),
   }),
 }));
 
-const { puertaCron, registrarLatido, registrarLatencia, registrarEstado, leerEstado30Dias, purgarObservabilidad, juzgarLatido, salidaTmsDeLatido, motivoDeSalto, esHuecoDeConfiguracion, CRONS, CADENCIA_MS, TOLERANCIA_LATIDO_MS } = await import('./salud');
+const { puertaCron, registrarLatido, registrarLatencia, registrarEstado, leerEstado30Dias, purgarObservabilidad, juzgarLatido, salidaTmsDeLatido, motivoDeSalto, esHuecoDeConfiguracion, diasApagado, CRONS, CADENCIA_MS, TOLERANCIA_LATIDO_MS } = await import('./salud');
 const { estadoDescargaSat } = await import('@/lib/likida/sat_descarga');
 
-beforeEach(() => { vi.clearAllMocks(); process.env.CRON_SECRET = 's3cr3t'; });
+beforeEach(() => { vi.clearAllMocks(); process.env.CRON_SECRET = 's3cr3t'; latidoPrevio = null; });
 
 describe('puertaCron', () => {
   it('sin CRON_SECRET: 500 y ALERTA al operador (antes solo un log)', async () => {
@@ -438,5 +443,60 @@ describe('los contadores de la salida al TMS en el panel de salud (T-A3-38)', ()
     expect(salidaTmsDeLatido({})).toBeNull();
     expect(salidaTmsDeLatido({ envios: { corrio: false, saltado: 'apagada' } })).toBeNull();
     expect(salidaTmsDeLatido({ envios: 'x' })).toBeNull();
+  });
+});
+
+describe('OP40-01: esApagadoPorInterruptor', () => {
+  it('solo un `saltado` que nombra su palanca cuenta como apagado a propósito', async () => {
+    const { esApagadoPorInterruptor } = await import('./salud');
+    expect(esApagadoPorInterruptor('saltado', { interruptor: 'global' })).toBe(true);
+    expect(esApagadoPorInterruptor('saltado', { interruptor: 'agente:peajes' })).toBe(true);
+    expect(esApagadoPorInterruptor('saltado', { interruptor: '  ' })).toBe(false);
+    expect(esApagadoPorInterruptor('saltado', {})).toBe(false);
+    expect(esApagadoPorInterruptor('saltado', { motivo: 'sin adaptador' })).toBe(false);
+    expect(esApagadoPorInterruptor('fallo', { interruptor: 'global' })).toBe(false);
+    expect(esApagadoPorInterruptor('saltado', null)).toBe(false);
+  });
+});
+
+// H759-9: un apagado por interruptor lleva `apagadoDesde` (la primera vez de la racha) para que el health pueda decir cuánto lleva.
+describe('H759-9: apagadoDesde en el latido apagado', () => {
+  const ultimoDetalle = () => (upsert.mock.calls.at(-1) as unknown as [{ detalle: Record<string, unknown> }])[0].detalle;
+
+  it('el primer latido apagado por interruptor estampa apagadoDesde = ahora', async () => {
+    await registrarLatido('peajes', 'saltado', { interruptor: 'global' });
+    const d = ultimoDetalle();
+    expect(d).toMatchObject({ interruptor: 'global' });
+    expect(Date.now() - Date.parse(String(d.apagadoDesde))).toBeLessThan(5000);
+  });
+
+  it('mientras siga apagado por la MISMA palanca conserva la fecha original (la racha no se reinicia en cada corrida)', async () => {
+    const hace4 = new Date(Date.now() - 4 * 86_400_000).toISOString();
+    latidoPrevio = { ultimo_latido: new Date().toISOString(), estado: 'saltado', detalle: { interruptor: 'global', apagadoDesde: hace4 } };
+    await registrarLatido('peajes', 'saltado', { interruptor: 'global' });
+    expect(ultimoDetalle().apagadoDesde).toBe(hace4);
+  });
+
+  it('otra palanca o un latido sano entre medias reinicia la racha; un estado que no es apagado no lleva el campo', async () => {
+    const hace4 = new Date(Date.now() - 4 * 86_400_000).toISOString();
+    latidoPrevio = { ultimo_latido: new Date().toISOString(), estado: 'saltado', detalle: { interruptor: 'agente:peajes', apagadoDesde: hace4 } };
+    await registrarLatido('peajes', 'saltado', { interruptor: 'global' });
+    expect(ultimoDetalle().apagadoDesde).not.toBe(hace4);
+    latidoPrevio = { ultimo_latido: new Date().toISOString(), estado: 'ok', detalle: {} };
+    await registrarLatido('peajes', 'saltado', { interruptor: 'global' });
+    expect(Date.now() - Date.parse(String(ultimoDetalle().apagadoDesde))).toBeLessThan(5000);
+    await registrarLatido('peajes', 'ok', { procesados: 1 });
+    expect(ultimoDetalle()).not.toHaveProperty('apagadoDesde');
+    await registrarLatido('peajes', 'saltado', { motivo: 'sin adaptador' });
+    expect(ultimoDetalle()).not.toHaveProperty('apagadoDesde');
+  });
+
+  it('diasApagado: días enteros desde apagadoDesde; null sin dato o con basura', () => {
+    const ahora = Date.parse('2026-10-28T12:00:00Z');
+    expect(diasApagado({ apagadoDesde: '2026-10-23T12:00:00Z' }, ahora)).toBe(5);
+    expect(diasApagado({ apagadoDesde: '2026-10-28T11:00:00Z' }, ahora)).toBe(0);
+    expect(diasApagado({}, ahora)).toBeNull();
+    expect(diasApagado({ apagadoDesde: 'ayer' }, ahora)).toBeNull();
+    expect(diasApagado(null, ahora)).toBeNull();
   });
 });

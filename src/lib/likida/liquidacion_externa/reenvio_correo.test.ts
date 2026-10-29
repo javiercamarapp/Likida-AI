@@ -240,4 +240,40 @@ describe('A37-A1-liquidaciones-08: reenviar cuando la recepción no creó ningun
     const r = await reenviarDesglose(TENANT, LIQ, op({ a: 'todos' }), { ...conHuella(deps), leerDesglose: async () => ({ existe: false, retenidaMotivo: null }) });
     expect(r).toMatchObject({ estado: 'rechazado', motivo: 'sin_archivo' });
   });
+
+  describe('A1-03: la retención se revalida aunque ya haya entregas (revisor del primer mes)', () => {
+    const soloRevisor = () => entrega({ id: 'e-rev', rol: 'revisor', correo: 'nomina.prueba@ejemplo.test', estado: 'enviada' });
+
+    it('retenida + entrega del revisor + reenvío a todos ⇒ rechazado y no escribe nada', async () => {
+      const { e, deps } = montar({ entregas: [soloRevisor()], desglose: { existe: true, retenidaMotivo: 'Hay un concepto prohibido.' } });
+      const r = await reenviarDesglose(TENANT, LIQ, op({ a: 'todos' }), deps);
+      expect(r).toMatchObject({ estado: 'rechazado', motivo: 'no_disponible' });
+      expect(e.insertadas).toHaveLength(0);
+      expect(e.eventos).toHaveLength(0);
+    });
+
+    it('retenida con cualquier destino pedido (operador) también se rechaza', async () => {
+      const { e, deps } = montar({ entregas: [soloRevisor()], desglose: { existe: true, retenidaMotivo: 'El neto es negativo.' } });
+      expect(await reenviarDesglose(TENANT, LIQ, op(), deps)).toMatchObject({ estado: 'rechazado' });
+      expect(e.insertadas).toHaveLength(0);
+    });
+
+    it('no retenida con SOLO entrega de revisor: el archivo sale de la clave+huella, no de la copia del revisor', async () => {
+      const { e, deps } = montar({ entregas: [soloRevisor()] });
+      const r = await reenviarDesglose(TENANT, LIQ, op({ a: 'todos' }), { ...deps, leerLiquidacion: async () => ({ id: LIQ, tenantId: TENANT, operadorId: OPERADOR, claveExterna: 'BIT-T01-9', huella: 'h'.repeat(64) } as unknown as LiquidacionExterna) });
+      expect(r.estado).toBe('reenviado');
+      expect(e.insertadas.length).toBeGreaterThan(0);
+      for (const f of e.insertadas) {
+        expect(f.rol).not.toBe('revisor');
+        expect(f.xlsxRuta).toBe(`${TENANT}/BIT-T01-9/${'h'.repeat(64)}.xlsx`);
+      }
+    });
+
+    it('sin la dependencia que lee el encabezado no se reenvía (fail-cerrado)', async () => {
+      const { e, deps } = montar();
+      const { leerDesglose: _omitida, ...sinLeer } = deps;
+      expect(await reenviarDesglose(TENANT, LIQ, op(), sinLeer)).toMatchObject({ estado: 'rechazado', motivo: 'no_disponible' });
+      expect(e.insertadas).toHaveLength(0);
+    });
+  });
 });

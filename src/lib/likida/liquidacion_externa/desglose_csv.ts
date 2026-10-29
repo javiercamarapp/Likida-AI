@@ -256,6 +256,13 @@ export interface ResultadoImportacionDesgloses {
   recibidas: number;
   idempotentes: number;
   retenidas: number;
+  /**
+   * A1-01: desgloses guardados SIN enviarse (periodo anterior a la fecha de corte, o ya enviados por el origen). Cuentan también en
+   * `recibidas`: están en Likida, solo que sus entregas quedaron `omitida`.
+   */
+  omitidas: number;
+  /** A1-01: correos que salieron (o, en vista previa, saldrían) por estos desgloses. Un desglose omitido o retenido aporta 0. */
+  correos: number;
   correcciones: number;
   excepciones: Array<{ clave: string; motivo: string }>;
   problemas: ProblemaDesgloseCsv[];
@@ -270,23 +277,23 @@ export interface ResultadoImportacionDesgloses {
 export const PRESUPUESTO_DESGLOSES_MS = 45_000;
 
 export interface DependenciasImportacionDesgloses {
-  recibir: (tenantId: string, d: DesgloseBitacora) => Promise<ResultadoDesglose>;
+  recibir: (tenantId: string, d: DesgloseBitacora, opciones?: { simular?: boolean }) => Promise<ResultadoDesglose>;
 }
 
-async function recibirPorOmision(tenantId: string, d: DesgloseBitacora): Promise<ResultadoDesglose> {
+async function recibirPorOmision(tenantId: string, d: DesgloseBitacora, opciones: { simular?: boolean } = {}): Promise<ResultadoDesglose> {
   // Import perezoso: este módulo se puede usar (y probar) sin arrastrar el acceso a datos.
   const { recibirDesglose } = await import('./desglose_recibir');
-  return recibirDesglose(tenantId, d);
+  return recibirDesglose(tenantId, d, undefined, opciones);
 }
 
 export async function importarDesglosesDeArchivo(
   tenantId: string, nombre: string, bytes: Uint8Array, deps: DependenciasImportacionDesgloses = { recibir: recibirPorOmision },
-  opciones: { presupuestoMs?: number; ahoraMs?: () => number } = {},
+  opciones: { presupuestoMs?: number; ahoraMs?: () => number; /** A1-01: vista previa, no escribe nada. */ simular?: boolean } = {},
 ): Promise<ResultadoImportacionDesgloses> {
   const ahoraMs = opciones.ahoraMs ?? Date.now;
   const limiteMs = ahoraMs() + (opciones.presupuestoMs ?? PRESUPUESTO_DESGLOSES_MS);
   const base: ResultadoImportacionDesgloses = {
-    recibidas: 0, idempotentes: 0, retenidas: 0, correcciones: 0, excepciones: [], problemas: [], renglonesEnCero: 0,
+    recibidas: 0, idempotentes: 0, retenidas: 0, omitidas: 0, correos: 0, correcciones: 0, excepciones: [], problemas: [], renglonesEnCero: 0,
   };
   const ext = (/\.([a-z0-9]+)$/i.exec(nombre.trim())?.[1] ?? '').toLowerCase();
   let matriz: readonly (readonly string[])[]; let decimalComa = false;
@@ -319,8 +326,17 @@ export async function importarDesglosesDeArchivo(
     procesados++;
     const clave = d.numeroLiquidacion ? claveDeLiquidacion(d.terminal, d.numeroLiquidacion) : claveDeBitacora(d.terminal, d.bitacora);
     try {
-      const r = await deps.recibir(tenantId, d);
-      if (r.estado === 'creada') { salida.recibidas++; if (r.retenida) salida.retenidas++; }
+      const r = opciones.simular ? await deps.recibir(tenantId, d, { simular: true }) : await deps.recibir(tenantId, d);
+      if (r.estado === 'creada') {
+        salida.recibidas++;
+        if (r.retenida) salida.retenidas++;
+        if (r.omitida) salida.omitidas++; else if (!r.retenida) salida.correos += r.entregas;
+      } else if (r.estado === 'simulada') {
+        salida.recibidas++;
+        if (r.retenida) salida.retenidas++;
+        if (r.omitida) salida.omitidas++;
+        salida.correos += r.correos;
+      }
       else if (r.estado === 'idempotente') salida.idempotentes++;
       else if (r.estado === 'correccion_pendiente') { salida.correcciones++; salida.excepciones.push({ clave, motivo: 'correccion_pendiente' }); }
       else salida.excepciones.push({ clave, motivo: r.estado });

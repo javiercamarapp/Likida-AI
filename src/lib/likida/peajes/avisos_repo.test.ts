@@ -84,4 +84,58 @@ describe('desglosesRecientesParaAvisos', () => {
     expect(r.find((x) => x.id === 'a')).toMatchObject({ periodoDesde: '2026-09-21', periodoHasta: '2026-09-30' });
     expect(r.find((x) => x.id === 'b')).toMatchObject({ periodoDesde: '2026-10-01', periodoHasta: '2026-10-10' });
   });
+
+  // H759-6: antes se leían los 40 más NUEVOS y los más viejos (los más cercanos a vencer) se perdían sin contarse.
+  it('con más archivos que el tope se conservan los MÁS VIEJOS (más reciente primero) y `total` dice cuántos había', async () => {
+    db = crearDbFalsa({
+      desglose_peaje: Array.from({ length: 7 }, (_, i) => ({ id: `d${i + 1}`, tenant_id: T, anulado_en: null, creado_en: `2026-10-0${i + 1}T00:00:00Z`, periodo_desde: null, periodo_hasta: null })),
+    });
+    const r = await R.desglosesRecientesParaAvisos(T, '2026-08-01T00:00:00-06:00', 5);
+    expect(r.map((x) => x.id)).toEqual(['d5', 'd4', 'd3', 'd2', 'd1']);
+    expect(r.total).toBe(7);
+  });
+});
+
+// H759-1: un aviso bloqueado por configuración se aparta con backoff y tope (no acapara la cola global del barrido).
+describe('posponerAviso (H759-1)', () => {
+  const t0 = new Date('2026-10-28T12:00:00Z');
+  const fila = (extra: Record<string, unknown> = {}) => ({ id: 'd1', tenant_id: T, aviso_requerido: true, aviso_esperas: 0, aviso_proximo_en: null, aviso_oficina_en: null, anulado_en: null, ...extra });
+
+  it('el backoff duplica desde 15 min y topa en 24 h', () => {
+    expect([1, 2, 3, 4, 8, 9, 12].map((n) => R.esperaAvisoMs(n) / 60_000)).toEqual([15, 30, 60, 120, 1440, 1440, 1440]);
+  });
+
+  it('la primera vez cuenta una espera y fija la próxima revisión; sigue en la cola', async () => {
+    db = crearDbFalsa({ desglose_peaje: [fila()] });
+    expect(await R.posponerAviso(T, 'd1', t0)).toEqual({ esperas: 1, salioDeLaCola: false });
+    const f = db.tablas.desglose_peaje[0];
+    expect(f.aviso_esperas).toBe(1);
+    expect(f.aviso_proximo_en).toBe(new Date(t0.getTime() + 15 * 60_000).toISOString());
+    expect(f.aviso_requerido).toBe(true);
+  });
+
+  it('al llegar al tope sale de la cola (aviso_requerido=false) y deja de ofrecerse', async () => {
+    db = crearDbFalsa({ desglose_peaje: [fila({ aviso_esperas: R.TOPE_ESPERAS_AVISO - 1 })] });
+    expect(await R.posponerAviso(T, 'd1', t0)).toEqual({ esperas: R.TOPE_ESPERAS_AVISO, salioDeLaCola: true });
+    expect(db.tablas.desglose_peaje[0].aviso_requerido).toBe(false);
+  });
+
+  it('solo toca el desglose de SU flota y uno sin avisar/no anulado', async () => {
+    db = crearDbFalsa({ desglose_peaje: [fila(), fila({ id: 'd2', anulado_en: '2026-10-01T00:00:00Z' })] });
+    expect(await R.posponerAviso(OTRO, 'd1', t0)).toBeNull();
+    expect(await R.posponerAviso(T, 'd2', t0)).toBeNull();
+    expect(db.tablas.desglose_peaje.map((f) => f.aviso_esperas)).toEqual([0, 0]);
+  });
+
+  it('un error de base no lanza (devuelve null)', async () => {
+    db = crearDbFalsa({ desglose_peaje: [fila()] });
+    db.fallar('desglose_peaje.update', 'boom');
+    expect(await R.posponerAviso(T, 'd1', t0)).toBeNull();
+  });
+
+  it('volver a marcar como requerido (reevaluación) reinicia la espera', async () => {
+    db = crearDbFalsa({ desglose_peaje: [fila({ aviso_requerido: false, aviso_esperas: 12, aviso_proximo_en: '2026-11-01T00:00:00Z' })] });
+    await R.marcarAvisoRequerido(T, 'd1');
+    expect(db.tablas.desglose_peaje[0]).toMatchObject({ aviso_requerido: true, aviso_esperas: 0, aviso_proximo_en: null });
+  });
 });

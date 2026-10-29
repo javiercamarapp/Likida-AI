@@ -4,7 +4,7 @@ Auditoría 25, BAJO (reincidente de la 24): nada distinguía "número saltado"
 de "migración perdida" — una rama futura que ocupiera uno de estos números
 se aplicaría fuera de orden en producción (después de la última migración
 ya aplicada, en vez de en su hueco numérico). Este archivo es la marca que
-faltaba: **estos seis números no existieron nunca y no deben reutilizarse.**
+faltaba: **estos números (los de la tabla) no existieron nunca y no deben reutilizarse.**
 
 | Número | Estado |
 | --- | --- |
@@ -14,6 +14,7 @@ faltaba: **estos seis números no existieron nunca y no deben reutilizarse.**
 | `0343` | Igual que 0277, pero de la auditoría 28: `0342_poliza_revision_y_desglose.sql` (`42f93f91`, fix(poliza)) y `0344_analytics_sin_rechazadas.sql` (`0c2133a8`, fix(analytics)) entraron el 5-sep-2026, trabajo en paralelo el mismo día — el mismo patrón que dejó 0277/0293/0295. Atenuante vigente (corregida 21-oct-2026, hallazgo con reproducción real): hasta esa fecha, `prefijosMigraciones()`/`prefijosDeFilas()` en `scripts/ci/compuerta-deploy.mjs` y `scripts/ci/verificar-migraciones-aplicadas.mjs` colapsaban dos archivos con el mismo prefijo en un `Set`, así que un futuro `0343_*.sql` NO bloqueaba el build — se colaba fuera de orden exactamente como el escenario que este documento señala. Ahora detectan la colisión como error explícito (ver `src/lib/likida/migraciones_verificadas.test.ts`, caso "ninguna migración comparte prefijo con otra migración DISTINTA") y la compuerta/el verificador fallan cerrado en vez de construir. |
 | `0924` | Nunca se escribió. Verificado el 25-oct-2026: no existe en `master`, en ninguna rama remota ni en ningún worktree. El rango 0924-0927 lo trabajaron en paralelo los lotes de la ola 8 de la auditoría 39 (fusionados en #736 y #738, que añadieron 0925 y 0927); no quedó registro de para qué se reservó este número. |
 | `0926` | Igual que 0924. |
+| `0941`-`0944` | Reservados y NO usados en la ola 10 (28-oct-2026, hallazgo H759 de la verificación del PR #759): el carril A (liquidación) usó `0940` y el carril B (peajes) arrancó su rango en `0945` (rango A2 ola 10: 0945-0949), dejando cuatro números intermedios sin archivo. Verificado: ninguna rama remota usa 0941-0944. Si se llenaran después, `supabase db push` rechazaría versiones menores que la última aplicada (haría falta `--include-all`) y la compuerta de despliegue las tomaría por migraciones fuera de orden: no se reutilizan. |
 
 No se rellenan con archivos `.sql` a propósito: producción ya aplicó
 `0294`-`0308` (y las que sigan). Un archivo `0293_*.sql` agregado HOY se

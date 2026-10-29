@@ -15,7 +15,8 @@
 #   1. inserta (o actualiza) la fila de `tenant_perfil` con perfil = cinco_agentes;
 #   2. apaga en `interruptor_tenant` los pipelines `ocr` y `cuadre` de esa flota, con motivo
 #      (el código ya los trata como apagados bajo el perfil; la fila deja la palanca VISIBLE en /admin);
-#   3. pone (o corrige) `liquidacion_correo_config.canal = 'correo'` y `activa = true` para esa flota —
+#   3. pone (o corrige) `liquidacion_correo_config.canal = 'correo'` y `activa = false` (A1-01, decisión D1: el envío queda APAGADO hasta que
+#      alguien lo encienda a mano con la fecha de corte puesta; reaplicar sobre una fila ya viva TAMBIÉN la apaga) para esa flota —
 #      DECISIÓN DE PRODUCTO: bajo este perfil, A1 (liquidación) es SIEMPRE por correo, nunca por WhatsApp (hallazgo
 #      de la revisión adversarial de oct-2026: sin esta fila explícita, el código caía al default de siempre y
 #      mandaba por WhatsApp). Solo se tocan las columnas `canal`/`activa`/`actualizado_en`/`actualizado_por`: si la
@@ -136,10 +137,13 @@ on conflict (tenant_id, pipeline) do update
 
 -- A1 (liquidación) SIEMPRE por correo bajo este perfil, nunca WhatsApp: solo se tocan canal/activa/actualizado_*,
 -- así que remitente, destinatarios de RH y demás reglas de correo que la flota ya tuviera configuradas se conservan.
+-- A1-01 (decisión D1): el envío queda APAGADO (activa = false). Se enciende a mano desde Configuración de Liquidación cuando ya hay
+-- correos de operadores cargados, la fecha de corte del arranque puesta y una primera subida con vista previa revisada; así aplicar
+-- el perfil jamás deja un envío vivo sobre una flota sin corte, y subir el histórico no manda nóminas viejas.
 insert into public.liquidacion_correo_config (tenant_id, canal, activa, actualizado_en, actualizado_por)
-values (:'tenant'::uuid, 'correo', true, now(), null)
+values (:'tenant'::uuid, 'correo', false, now(), null)
 on conflict (tenant_id) do update
-  set canal = 'correo', activa = true, actualizado_en = now(), actualizado_por = null;
+  set canal = 'correo', activa = false, actualizado_en = now(), actualizado_por = null;
 
 select 'perfil' as que, perfil as valor, cambiado_en::text from public.tenant_perfil where tenant_id = :'tenant'::uuid;
 select 'pipeline' as que, pipeline as valor, case when apagado then 'APAGADO' else 'encendido' end as estado

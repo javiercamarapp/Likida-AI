@@ -151,13 +151,44 @@ export async function puertaCron(cron: CronId, req: Request, sinSecreto: string)
 }
 
 
+/** H759-9: pasados estos días apagado por un interruptor, el health ya no lo da por «neutro»: lo avisa (pulso en `::warning::` y alerta de hueco). */
+export const DIAS_APAGADO_ALERTA = 3;
+
+/**
+ * H759-9: desde cuándo está apagado el cron (`detalle.apagadoDesde`, ISO) → días enteros, o `null` si no se sabe (latidos anteriores a este campo).
+ * Un apagado PERMANENTE por interruptor (un `global` olvidado) era verde para siempre y nadie se enteraba.
+ */
+export function diasApagado(detalle: unknown, ahoraMs: number = Date.now()): number | null {
+  if (detalle === null || typeof detalle !== 'object') return null;
+  const desde = (detalle as Record<string, unknown>).apagadoDesde;
+  if (typeof desde !== 'string') return null;
+  const t = Date.parse(desde);
+  return Number.isFinite(t) ? Math.max(0, Math.floor((ahoraMs - t) / 86_400_000)) : null;
+}
+
+/**
+ * H759-9: un `saltado` por interruptor lleva `apagadoDesde`: la fecha del PRIMER latido apagado de esta racha (se conserva mientras el latido
+ * anterior siga siendo el mismo apagado; si cambia de palanca o el cron volvió a correr, empieza de nuevo). Nunca lanza.
+ */
+async function conApagadoDesde(cron: CronId, estado: EstadoLatido, detalle: Record<string, unknown>): Promise<Record<string, unknown>> {
+  if (estado !== 'saltado' || typeof detalle.interruptor !== 'string' || detalle.interruptor.trim() === '' || typeof detalle.apagadoDesde === 'string') return detalle;
+  let desde = new Date().toISOString();
+  try {
+    const previo = await leerLatido(cron);
+    const d = previo?.detalle;
+    if (previo?.estado === 'saltado' && d && d.interruptor === detalle.interruptor && typeof d.apagadoDesde === 'string' && Number.isFinite(Date.parse(d.apagadoDesde))) desde = d.apagadoDesde;
+  } catch { /* sin lectura previa: la racha cuenta desde ahora (nunca falla el latido) */ }
+  return { ...detalle, apagadoDesde: desde };
+}
+
 /** Deja la marca de ESTA corrida. Best-effort con log: nunca lanza. */
-export async function registrarLatido(cron: CronId, estado: EstadoLatido, detalle: Record<string, unknown> = {}): Promise<void> {
+export async function registrarLatido(cron: CronId, estado: EstadoLatido, detalleCrudo: Record<string, unknown> = {}): Promise<void> {
   // M2 (ronda 19): el LATIDO va primero. Un insert de latencia colgado (hasta ~9.5 s con la base lenta) retrasaba el
   // latido; un cron cerca de maxDuration moría antes de latir y parecía muerto (alerta falsa de vencido). El cronómetro
   // se lee AHORA (la duración es hasta aquí) y la muestra se escribe después del latido.
   const muestra = muestraDeCron(cron, estado);
   try {
+    const detalle = await conApagadoDesde(cron, estado, detalleCrudo);
     const { error } = await acotada(supabaseAdmin()
       .from('cron_latido')
       .upsert({ id: cron, ultimo_latido: new Date().toISOString(), estado, detalle }, { onConflict: 'id' }), 'registrarLatido');
@@ -225,6 +256,20 @@ export function motivoDeSalto(detalle: Record<string, unknown>): string | null {
   const motivo = detalle.motivo;
   if (typeof motivo === 'string' && motivo.trim() !== '') return motivo;
   return null;
+}
+
+/**
+ * OP40-01 (cierre100, ola 10): ¿el cron está APAGADO A PROPÓSITO? Solo cuenta
+ * un `saltado` cuyo detalle nombra la palanca (`{interruptor: 'global' |
+ * 'agente:*'}`): alguien lo apagó y lo dijo. Un `saltado` sin explicación (o con
+ * prosa libre) no se da por apagado: sería esconder un cron que dejó de correr.
+ * Es estado neutro para `/api/health`, el pulso de GitHub y el rollback.
+ */
+export function esApagadoPorInterruptor(ultimoEstado: unknown, detalle: unknown): boolean {
+  if (ultimoEstado !== 'saltado') return false;
+  if (detalle === null || typeof detalle !== 'object') return false;
+  const palanca = (detalle as Record<string, unknown>).interruptor;
+  return typeof palanca === 'string' && palanca.trim() !== '';
 }
 
 /**

@@ -11,6 +11,7 @@ import {
   CATEGORIAS_COBRO, ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO, type CategoriaCobro, type CandidatoCobro,
 } from '@/lib/likida/peajes/reglas_cobro';
 import { ETIQUETA_SENAL } from '@/lib/likida/peajes/cruces_atipicos';
+import { ETIQUETA_DOBLE_ENTRE_ARCHIVOS } from '@/lib/likida/peajes/doble_entre_archivos';
 import { FormaRegistrarReclamo } from './forma-registrar-reclamo';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -211,6 +212,27 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
           </details>
         );
       })}
+
+      {revision.dobleEntreArchivos && revision.dobleEntreArchivos.candidatos.length > 0 && (
+        <details className="mt-4" id="doble-entre-archivos" open={revision.dobleEntreArchivos.candidatos.length <= 10}>
+          <summary className="cursor-pointer text-[13px] font-semibold">
+            {ETIQUETA_DOBLE_ENTRE_ARCHIVOS} · {numero(revision.dobleEntreArchivos.candidatos.length)} · {mxn(revision.dobleEntreArchivos.montoCandidatos)}
+          </summary>
+          <p className="text-[12px] my-2" style={{ color: 'var(--muted)' }}>
+            El proveedor cobró tarde un cruce que ya aparece, con el mismo TAG, segundo, caseta e importe, en un archivo anterior de los últimos {revision.dobleEntreArchivos.ventanaMeses} meses.
+            El monto es el del segundo cobro; confírmalo con el proveedor antes de reclamarlo. El Excel del portal lo trae en su propia hoja.
+          </p>
+          <ul className="space-y-2 text-[12.5px]">
+            {revision.dobleEntreArchivos.candidatos.slice(0, MAX_FILAS_POR_CATEGORIA).map((c) => (
+              <li key={`${c.indice}-${c.archivoPrevioId}`} className="rounded-lg hairline p-2.5 space-y-1">
+                <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={ESTILO_CANDIDATO}>{mxn(c.monto)} · {ROTULO_CANDIDATO}</span>
+                <p><b>Qué pasó:</b> {c.quePaso}</p>
+                <p style={{ color: 'var(--muted)' }}><b>Qué hacer:</b> {c.queHacer}</p>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       {revision.atipicos.atipicos.length > 0 && (
         <details className="mt-4" id="atipicos">

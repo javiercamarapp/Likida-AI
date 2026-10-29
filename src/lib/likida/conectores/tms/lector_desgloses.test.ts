@@ -183,3 +183,29 @@ describe('qué flotas leen', () => {
     expect(await base(ok, 'whatsapp')).toHaveLength(0);
   });
 });
+
+describe('INT-01: la credencial que el TMS rechaza se degrada y no se vuelve a probar', () => {
+  it('3 pasadas con login 401 = 1 sola petición de login (y una sola alerta)', async () => {
+    const { TmsCredenciales } = await import('../../liquidacion_externa/desglose_puerto');
+    const servidor = crearServidorTmsFalso({ datos: { liquidaciones: [], peajes: [], viajes: [], posiciones: [] }, reloj: () => AHORA, vigenciaTokenMs: 3_600_000 });
+    const http = comoHttpDeConector(servidor);
+    let peticionesLogin = 0;
+    const contado: typeof http = async (pet) => { if (pet.url.includes('/api/login')) peticionesLogin++; return http(pet); };
+    // La clave de la flota está mal: el TMS responde 401 al login.
+    const estado = { ultimoError: null as string | null };
+    const alertas: string[] = [];
+    const deps = {
+      ahora: () => AHORA, tenantsConEnvioActivo: async () => ['t1'], canalDeEntrega: async () => 'correo' as const,
+      credencial: async () => ({ valores: { base_url: 'https://tms.ejemplo.test', usuario: 'usuario-sintetico', clave: 'clave-MALA' }, probadaEn: '2026-10-01T00:00:00Z', ultimoError: estado.ultimoError }),
+      http: () => contado,
+      degradar: async (_t: string, detalle: string) => { estado.ultimoError = detalle; alertas.push(detalle); },
+    };
+    for (let pasada = 1; pasada <= 3; pasada++) {
+      const lectores = await lectoresDesglosesTms(deps);
+      for (const l of lectores) await expect(l.lector.listar({ tenantId: l.tenantId, cursor: null, limite: 10 })).rejects.toBeInstanceOf(TmsCredenciales);
+    }
+    expect(peticionesLogin).toBe(1);
+    expect(alertas).toHaveLength(1);
+    expect(alertas[0]).not.toMatch(/clave-MALA|usuario-sintetico/);
+  });
+});

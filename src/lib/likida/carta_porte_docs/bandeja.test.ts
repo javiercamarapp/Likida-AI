@@ -409,6 +409,18 @@ describe('rechazar y reabrir', () => {
     expect(estado.mercancias.filter((m) => m.documentoId === id).map((m) => m.descripcion)).toEqual(['Alimentos en lata']);
   });
 
+  it('H759-14: si la lectura informativa de envíos previos falla, reabrir/aprobar NO lanzan (el cambio de estado ya se hizo)', async () => {
+    const { id, doc } = await documentoBoreal();
+    const espia = vi.spyOn(repo, 'enviosDeDocumento').mockRejectedValue(new Error('base lenta'));
+    try {
+      const aprobado = await aprobarDocumento(A, id, doc().version, ACTOR);
+      expect(aprobado.documento.estado).toBe('aprobado');
+      const r = await reabrirDocumento(A, id, doc().version, ACTOR.id);
+      expect(r.estado).toBe('por_revisar');
+      expect(espia).toHaveBeenCalled();
+    } finally { espia.mockRestore(); }
+  });
+
   it('solo se reabren aprobados o rechazados', async () => {
     const { id, doc } = await documentoBoreal();
     await expect(reabrirDocumento(A, id, doc().version, ACTOR.id)).rejects.toThrow(/aprobados o rechazados/);

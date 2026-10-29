@@ -58,6 +58,10 @@ export interface EnvioPropio {
   /** Quién mandó el documento, tal cual llegó (`Nombre <a@b>` o `a@b`); `null` si no vino de un correo. */
   remitente: string | null;
   remitenteReconocido: boolean | null;
+  /** A3-13: el `folio_cliente` del documento de origen (para comprobar que el XML que manda el TMS es de ESTE documento); `null` si no trae. */
+  folioDocumento: string | null;
+  /** A3-13: los RFC del documento de origen (remitente, destinatario, importador) contra los que se compara el receptor del XML. */
+  rfcsDocumento: string[];
 }
 
 export interface NuevaFilaCcp {
@@ -91,7 +95,7 @@ export interface DepsCcp {
 export type CodigoErrorCcp = 'adjunto_grande' | 'xml_invalido' | 'pdf_invalido' | 'no_encontrado' | 'sin_migracion';
 
 export type ResultadoCcp =
-  | { ok: true; duplicado: boolean; estado: EstadoCcpTimbrado; respondido: boolean }
+  | { ok: true; duplicado: boolean; estado: EstadoCcpTimbrado; respondido: boolean; verificacion?: VerificacionCcp }
   | { ok: false; codigo: CodigoErrorCcp; mensaje: string };
 
 const falla = (codigo: CodigoErrorCcp, mensaje: string): ResultadoCcp => ({ ok: false, codigo, mensaje });
@@ -100,7 +104,35 @@ const falla = (codigo: CodigoErrorCcp, mensaje: string): ResultadoCcp => ({ ok: 
 
 const UUID_FISCAL = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-export interface CcpLeido { uuid: string; folio: string | null }
+export interface CcpLeido {
+  uuid: string;
+  /** Serie + folio del comprobante, como lo lee el lector oficial. */
+  folio: string | null;
+  /** Solo el atributo `Folio` (sin la serie). */
+  folioSolo: string | null;
+  /** RFC del receptor del comprobante, en mayúsculas. */
+  rfcReceptor: string | null;
+}
+
+/** A3-13: ¿el XML que mandó el TMS corresponde al documento al que se le buscó la referencia? */
+export type VerificacionCcp = 'coincide' | 'folio_distinto' | 'folio_no_verificable' | 'rfc_distinto';
+
+const comparable = (v: string | null | undefined): string => String(v ?? '').replace(/\s+/g, '').toUpperCase();
+
+/**
+ * A3-13 (cierre100): con la respuesta automática activada, un TMS que mande el XML de OTRO viaje bajo una referencia válida lo
+ * reenviaría al cliente. Se exige que el folio del XML sea el del documento (serie+folio o folio solo) y, si ambos traen RFC, que el
+ * receptor sea uno de los RFC del documento. Sin folio de un lado no se puede comprobar: tampoco se responde solo.
+ */
+export function verificarContraDocumento(ccp: CcpLeido, envio: Pick<EnvioPropio, 'folioDocumento' | 'rfcsDocumento'>): VerificacionCcp {
+  const doc = comparable(envio.folioDocumento);
+  const xml = [comparable(ccp.folio), comparable(ccp.folioSolo)].filter((x) => x !== '');
+  if (doc === '' || xml.length === 0) return 'folio_no_verificable';
+  if (!xml.includes(doc)) return 'folio_distinto';
+  const rfcs = (envio.rfcsDocumento ?? []).map(comparable).filter((x) => x !== '');
+  if (ccp.rfcReceptor && rfcs.length > 0 && !rfcs.includes(comparable(ccp.rfcReceptor))) return 'rfc_distinto';
+  return 'coincide';
+}
 
 /** Lee el XML entregado por el TMS: tiene que ser un CCP con timbre. `null` = no lo es (la razón no se detalla: no es un validador). */
 export function leerCcpTimbrado(bytes: Uint8Array): CcpLeido | null {
@@ -117,7 +149,18 @@ export function leerCcpTimbrado(bytes: Uint8Array): CcpLeido | null {
   const uuid = typeof crudo === 'string' ? crudo.trim().toLowerCase() : '';
   if (!UUID_FISCAL.test(uuid)) return null;
   const f = extraccion.campos.folio_cliente?.valor;
-  return { uuid, folio: typeof f === 'string' || typeof f === 'number' ? String(f) : null };
+  const comprobante = bajar(arbol, 'Comprobante');
+  const atributo = (nodo: unknown, nombre: string): string | null => {
+    const v = nodo && typeof nodo === 'object' ? (nodo as Record<string, unknown>)[`@_${nombre}`] : null;
+    return typeof v === 'string' || typeof v === 'number' ? String(v).trim() || null : null;
+  };
+  const receptor = bajar(arbol, 'Comprobante', 'Receptor');
+  return {
+    uuid,
+    folio: typeof f === 'string' || typeof f === 'number' ? String(f) : null,
+    folioSolo: atributo(comprobante, 'Folio'),
+    rfcReceptor: atributo(receptor, 'Rfc')?.toUpperCase() ?? null,
+  };
 }
 
 const esPdf = (b: Uint8Array): boolean => b.length >= 5 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46 && b[4] === 0x2d; // «%PDF-»
@@ -210,8 +253,12 @@ export async function procesarCcpTimbrado(deps: DepsCcp, e: EntradaCcp): Promise
   const destino = destinoDeRemitente(envio.remitente);
   let estado: 'guardado' | 'pendiente_confirmacion' = 'guardado';
   let enviar = false;
+  // A3-13: el XML tiene que ser DE este documento. Si no coincide (o no se puede comprobar) se guarda y una persona decide: jamás se
+  // reenvía solo al cliente.
+  const verificacion = verificarContraDocumento(ccp, envio);
+  if (verificacion !== 'coincide') deps.registrar?.('ccp_respuesta.no_coincide', { tenant: e.tenantId, motivo: verificacion });
   if (activa) {
-    const conocido = destino !== null && envio.remitenteReconocido === true && await deps.destinoYaConfirmado(e.tenantId, destino);
+    const conocido = verificacion === 'coincide' && destino !== null && envio.remitenteReconocido === true && await deps.destinoYaConfirmado(e.tenantId, destino);
     if (conocido) enviar = true; else estado = 'pendiente_confirmacion';
   }
 
@@ -227,9 +274,11 @@ export async function procesarCcpTimbrado(deps: DepsCcp, e: EntradaCcp): Promise
   // Carrera con otro aviso del mismo UUID: el que perdió no responde.
   if (!creada) return { ok: true, duplicado: true, estado: fila.estado, respondido: fila.estado === 'respondido' };
 
-  if (!enviar || destino === null) return { ok: true, duplicado: false, estado, respondido: false };
+  // `verificacion` solo viaja cuando NO coincide (lo normal no cambia la forma de la respuesta).
+  const aviso = verificacion === 'coincide' ? {} : { verificacion };
+  if (!enviar || destino === null) return { ok: true, duplicado: false, estado, respondido: false, ...aviso };
   const r = await responder(deps, fila, destino, e.xml, e.pdf, ccp.folio);
-  return { ok: true, duplicado: false, estado: r.estado, respondido: r.respondido };
+  return { ok: true, duplicado: false, estado: r.estado, respondido: r.respondido, ...aviso };
 }
 
 // ── La confirmación humana ──────────────────────────────────────────────────

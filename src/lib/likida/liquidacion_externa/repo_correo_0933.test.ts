@@ -27,6 +27,7 @@ vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: construct
 vi.mock('../presupuesto', async (orig) => ({ ...(await orig<typeof import('../presupuesto')>()), acotada: (q: unknown) => q }));
 const warn = vi.fn();
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: (...a: unknown[]) => warn(...a), error: vi.fn() } }));
+vi.mock('@/lib/auth/perfil_tenant', () => ({ perfilDeTenant: async () => (globalThis as { __perfilPrueba?: string | null }).__perfilPrueba ?? null }));
 
 const r = await import('./repo_correo');
 const { DatoInvalido } = await import('../errores');

@@ -26,7 +26,7 @@ import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina'
 import { telefonoParaDineroDe } from '../contactos';
 import { bitacoraConciliada } from './bitacora_conciliada';
 import {
-  leerEstadoAvisoDesglose, reclamarIntentoAviso, marcarAvisoEnviado, agotarIntentosAviso, avisosPendientesPeajes, MAX_INTENTOS_AVISO,
+  leerEstadoAvisoDesglose, reclamarIntentoAviso, devolverIntentoAviso, marcarAvisoRequerido, posponerAviso, marcarAvisoEnviado, agotarIntentosAviso, avisosPendientesPeajes, MAX_INTENTOS_AVISO,
 } from './datos';
 import { quedoEnCola } from './aviso_en_cola';
 import { superficiePeajesDeTenant, type SuperficiePeajes } from './superficie_perfil';
@@ -97,6 +97,12 @@ export function textoAvisoDesglose(
   return `⚠️ Peajes: en el desglose${d.proveedor ? ` de ${d.proveedor}` : ''}${periodo} hay ${partes.join(', ')}. Es una señal para revisar, no afirma que el cobro sea indebido. Revísalo: ${liga()}`;
 }
 
+/** H759-1: aparta el aviso bloqueado por configuración (backoff + tope) y deja constancia una sola vez al salir de la cola. */
+async function avisoBloqueado(tenantId: string, desgloseId: string, motivo: 'sin_destinatario' | 'plantilla_sin_aprobar'): Promise<void> {
+  const p = await posponerAviso(tenantId, desgloseId);
+  if (p?.salioDeLaCola) logger.warn('peajes.aviso_bloqueado_sale_de_la_cola', { tenant: tenantId, desglose: desgloseId, motivo, esperas: p.esperas });
+}
+
 /** Evalúa y, si hay algo que mirar, avisa UNA vez. Nunca lanza. */
 export async function avisarDesgloseConciliado(tenantId: string, desgloseId: string, deps: DepsAvisoPeajes = depsPorOmision): Promise<ResultadoAvisoDesglose> {
   try {
@@ -112,13 +118,17 @@ export async function avisarDesgloseConciliado(tenantId: string, desgloseId: str
     if (motivoOmitido) logger.info('peajes.aviso_categoria_omitida', { tenant: tenantId, desglose: desgloseId, motivo: motivoOmitido });
     if (c.gpsNoCoincide === 0 && c.sinRespaldo === 0) return 'no_requerido';
 
-    if (!(await reclamarIntentoAviso(tenantId, desgloseId, estado.intentos))) return 'ocupado';
-
+    // A2P-05: sin destinatario NO se reclama el intento (antes se agotaban 5 en ~75 min y nunca se reenviaba al configurar el teléfono).
     const tel = await deps.telefono(tenantId);
     if (!tel) {
       logger.warn('peajes.aviso_sin_destinatario', { tenant: tenantId, desglose: desgloseId });
+      // Queda pendiente para el barrido (sin gastar intentos): cuando haya teléfono, sale.
+      await marcarAvisoRequerido(tenantId, desgloseId);
+      // H759-1: pero APARTADO con backoff y tope, para que 5 desgloses viejos sin destinatario no acaparen la cola global de todas las flotas.
+      await avisoBloqueado(tenantId, desgloseId, 'sin_destinatario');
       return 'sin_destinatario';
     }
+    if (!(await reclamarIntentoAviso(tenantId, desgloseId, estado.intentos))) return 'ocupado';
     const proveedor = estado.proveedor?.trim() || 'peajes';
     const r = await deps.avisar(tel, textoAvisoDesglose(estado, c), {
       parametros: parametrosAvisoOficina(`Peajes ${proveedor}`, `${c.gpsNoCoincide + c.sinRespaldo} cobros por revisar`, liga()),
@@ -126,7 +136,15 @@ export async function avisarDesgloseConciliado(tenantId: string, desgloseId: str
     });
     const enCola = quedoEnCola(r);
     if (!r.ok && !enCola) {
-      logger.error('peajes.aviso_fallo', { tenant: tenantId, desglose: desgloseId, motivo: r.motivo, codigo: r.codigo });
+      if (r.fueraDeVentana) {
+        // A2P-05: ventana de 24 h cerrada y la plantilla no salió (sin aprobar): no es culpa del aviso, el intento se devuelve para cuando se
+        // apruebe. H759-1: se APARTA con backoff y tope (no se vuelve a llamar a Meta cada 15 min) y es una advertencia, no un error de Sentry.
+        logger.warn('peajes.aviso_fuera_de_ventana', { tenant: tenantId, desglose: desgloseId, motivo: r.motivo, codigo: r.codigo });
+        await devolverIntentoAviso(tenantId, desgloseId, estado.intentos);
+        await avisoBloqueado(tenantId, desgloseId, 'plantilla_sin_aprobar');
+      } else {
+        logger.error('peajes.aviso_fallo', { tenant: tenantId, desglose: desgloseId, motivo: r.motivo, codigo: r.codigo });
+      }
       return 'rechazado';
     }
     if (enCola) logger.warn('peajes.aviso_en_cola', { tenant: tenantId, desglose: desgloseId, motivo: r.ok ? null : r.motivo, codigo: r.ok ? null : r.codigo });

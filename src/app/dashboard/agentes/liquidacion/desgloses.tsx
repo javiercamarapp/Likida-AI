@@ -473,6 +473,8 @@ const MENSAJES: Record<string, MensajeDesglose> = {
   r_sin_archivo: { texto: 'Este desglose no tiene archivo para reenviar.', tono: 'bad' },
   r_no_disponible: { texto: 'No pude leer el estado de este desglose. Intenta de nuevo en unos minutos.', tono: 'bad' },
   r_no_retenida: { texto: 'Este desglose ya no está retenido: no hay nada que liberar.', tono: 'bad' },
+  r_omitido_por_corte: { texto: 'Este desglose es anterior a la fecha de corte (o el sistema de origen ya lo envió): no se libera desde aquí.', tono: 'bad' },
+  r_reemplazado: { texto: 'Este desglose ya fue reemplazado por una corrección: libera la corrección, no el original.', tono: 'bad' },
   r_no_liberable: { texto: 'Este desglose trae un concepto que la empresa prohibió enviar: corrígelo en su sistema; no se libera desde aquí.', tono: 'bad' },
 };
 

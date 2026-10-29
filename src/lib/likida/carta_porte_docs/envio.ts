@@ -100,6 +100,7 @@ export type ResultadoSubidoAMano =
   | { ok: true; envio: EnvioTmsFila; yaEstaba: boolean }
   | { ok: false; motivo: 'no_aprobado' | 'version_cambio' | 'ya_enviado' | 'envio_en_curso' | 'error'; mensaje: string };
 
+export const MENSAJE_REFERENCIA_OBLIGATORIA = 'Escribe la referencia que el sistema del cliente (TMS) dio a la carga: sin ella no se puede ligar este documento con su viaje ni con el complemento timbrado.';
 const MENSAJE_YA_ENVIADO = 'Este documento ya se envió al TMS: no hay nada que subir a mano.';
 
 /**
@@ -137,6 +138,12 @@ export async function marcarSubidoAMano(
   }
   if (envio?.estado === 'enviado') return { ok: false, motivo: 'ya_enviado', mensaje: MENSAJE_YA_ENVIADO };
   if (envio?.estado === 'enviando') return { ok: false, motivo: 'envio_en_curso', mensaje: 'El envío se está haciendo ahora. Espera a que termine antes de marcarlo como subido a mano.' };
+
+  // A3-02 (cierre100): con viajes del TMS (flota bajo el perfil), la referencia es lo que casa este envío con el viaje allá y con el
+  // CCP timbrado; sin ella el tablero «sin Carta Porte» no puede ligarlo. Es obligatoria para dar el envío por subido a mano.
+  if (ref.valor === null && (await flotaBajoPerfil(tenantId))) {
+    return { ok: false, motivo: 'error', mensaje: MENSAJE_REFERENCIA_OBLIGATORIA };
+  }
 
   if (!envio) {
     const p = await prepararEnvioTms(tenantId, doc, actor);

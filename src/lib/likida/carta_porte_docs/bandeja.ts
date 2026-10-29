@@ -34,7 +34,8 @@ import { CODIGOS_SUMA, confianzaMinimaCritica, conservarHallazgosTms, type Halla
 import * as repo from './repo';
 import { asignarAlLlegarARevision } from './revisor';
 import { notificarMovimiento } from './primer_mes';
-import type { CorreccionFila, DocumentoFila } from './repo';
+import type { CorreccionFila, DocumentoFila, EnvioTmsFila } from './repo';
+import { TZ_MX, fechaHoraEnZona } from '@/lib/formato';
 
 export class ConflictoDeVersion extends DatoInvalido {
   constructor() { super('Otra persona cambió este documento mientras lo revisabas. Recarga la pantalla y vuelve a intentarlo.'); }
@@ -211,6 +212,8 @@ async function guardarRevision(tenantId: string, d: DocumentoFila, versionVista:
 
 // ── Aprobar ─────────────────────────────────────────────────────────────────
 
+export const MENSAJE_APROBADO_SIN_FOLIO = 'El documento no trae folio del cliente: no se podrá ligar con su viaje del TMS y seguirá apareciendo como «sin Carta Porte». Captura el folio o la referencia del TMS al subirlo.';
+
 export interface ResultadoAprobacion {
   documento: DocumentoFila;
   /** Flotas sin perfil: el viaje de siempre. Bajo el perfil «cinco_agentes» es null. */
@@ -218,6 +221,26 @@ export interface ResultadoAprobacion {
   /** Bajo el perfil «cinco_agentes»: el envío preparado al TMS. Para las demás flotas es null. */
   envio: ResultadoEnvio | null;
   perfil: { accion: 'creado' | 'nueva_version' | 'sin_cambios' | 'omitido'; version?: number; cambios?: string[]; motivo?: string };
+  /**
+   * A3-02 (cierre100): bajo el perfil, un documento aprobado SIN folio del cliente nunca se liga con un viaje del TMS (el folio es la
+   * única llave): el tablero «sin Carta Porte» lo seguirá mostrando. Mensaje para la persona; ausente = nada que avisar.
+   */
+  avisoSinFolio?: string;
+  /**
+   * A3-09 (cierre100): el documento YA se envió o se subió al TMS antes (se reabrió y se volvió a aprobar): esta aprobación genera una
+   * segunda carga del mismo folio. Mensaje con la fecha y la referencia de la carga previa; ausente = no había ninguna.
+   */
+  avisoEnvioPrevio?: string;
+}
+
+/** A3-09: ¿qué carga previa ya salió de este documento? (enviada por el sistema o subida a mano). */
+export function avisoDeEnvioPrevio(previos: ReadonlyArray<Pick<EnvioTmsFila, 'estado' | 'referenciaTms' | 'enviadoEn' | 'creadoEn'>>): string | undefined {
+  const salio = previos.find((e) => e.estado === 'enviado' || e.estado === 'subido_a_mano');
+  if (!salio) return undefined;
+  const cuando = salio.enviadoEn ?? salio.creadoEn;
+  const fecha = cuando && Number.isFinite(Date.parse(cuando)) ? ` el ${fechaHoraEnZona(new Date(cuando), TZ_MX)}` : '';
+  const ref = salio.referenciaTms ? ` (ref. ${salio.referenciaTms})` : '';
+  return `Este documento ya se ${salio.estado === 'enviado' ? 'envió' : 'subió a mano'} al TMS${fecha}${ref}. Al aprobarlo de nuevo se genera una segunda carga del mismo folio: la corrección debe cancelarse o actualizarse en el TMS.`;
 }
 
 /** Los motivos por los que NO se puede aprobar, en frases (los 5 primeros). */
@@ -318,9 +341,26 @@ export async function aprobarDocumento(
   // Bajo el perfil «cinco_agentes» aprobar = preparar el envío al TMS (sin operador ni viaje); si no, el viaje de siempre.
   let salida: ResultadoSalida | null = null;
   let envio: ResultadoEnvio | null = null;
-  if (await flotaBajoPerfil(tenantId)) envio = await intentarEnvio(tenantId, aprobado, actor);
-  else salida = await intentarSalida(tenantId, aprobado, actor, opciones.operadorId ?? null);
-  return { documento: (await repo.leerDocumento(tenantId, id)) ?? aprobado, salida, envio, perfil };
+  let avisoSinFolio: string | undefined;
+  // A3-09: se lee ANTES de preparar el envío nuevo (que ya no cuenta como «previo»).
+  const avisoEnvioPrevio = avisoDeEnvioPrevio(await enviosPreviosSeguros(tenantId, id));
+  if (await flotaBajoPerfil(tenantId)) {
+    envio = await intentarEnvio(tenantId, aprobado, actor);
+    const folio = (aprobado.extraccion as Extraccion | null)?.campos?.folio_cliente?.valor;
+    if (folio === null || folio === undefined || String(folio).trim() === '') {
+      avisoSinFolio = MENSAJE_APROBADO_SIN_FOLIO;
+      await repo.registrarEvento(tenantId, id, 'aprobado', actor.id, { avisoSinFolio: true });
+    }
+  } else salida = await intentarSalida(tenantId, aprobado, actor, opciones.operadorId ?? null);
+  return { documento: (await repo.leerDocumento(tenantId, id)) ?? aprobado, salida, envio, perfil, ...(avisoSinFolio ? { avisoSinFolio } : {}), ...(avisoEnvioPrevio ? { avisoEnvioPrevio } : {}) };
+}
+
+/**
+ * H759-14: lectura SOLO informativa (el aviso «ya había una carga al TMS»). Corre después de aplicar el cambio de estado: si lanzara, la persona
+ * vería un error con la aprobación/reapertura YA hecha. Un fallo de lectura se trata como «sin envíos previos» (no avisa), nunca como error.
+ */
+async function enviosPreviosSeguros(tenantId: string, id: string): ReturnType<typeof repo.enviosDeDocumento> {
+  try { return await repo.enviosDeDocumento(tenantId, id); } catch { return []; }
 }
 
 /** Prepara el envío al TMS; un fallo NO deshace la aprobación (el documento sigue aprobado y se puede reintentar). */
@@ -413,7 +453,9 @@ async function reabrir(
     ...(extra.cambios ? extra.cambios(d) : {}),
   });
   if (!r) throw new ConflictoDeVersion();
-  await repo.registrarEvento(tenantId, id, 'reabierto', actorId, { teniaViaje: d.viajeId !== null, ...extra.evento });
+  // A3-09: queda en la bitácora que ya había una carga al TMS (sin valores del documento).
+  const cargaPrevia = (await enviosPreviosSeguros(tenantId, id)).some((e) => e.estado === 'enviado' || e.estado === 'subido_a_mano');
+  await repo.registrarEvento(tenantId, id, 'reabierto', actorId, { teniaViaje: d.viajeId !== null, ...(cargaPrevia ? { cargaPreviaAlTms: true } : {}), ...extra.evento });
   return r;
 }
 

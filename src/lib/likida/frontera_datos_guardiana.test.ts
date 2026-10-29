@@ -627,7 +627,20 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 326;
 // condicionado) y `confirmarAvisoPeajes` +2 (sello definitivo y soltar la reserva). Cubiertas por avisos_repo.test.ts y aviso_barrido.test.ts.
 // REDISENO UI v2 (carril A, A.1): +1 llamada (2,439 -> 2,440). `lib/auth/perfil_tenant.ts` suma `versionUiDeTenant`, la lectura de `tenant_ui` (version por tenant,
 // cache de 30 s, falla hacia v1); `version_ui.ts` no consulta la base. Sin archivos nuevos con acceso directo. Cubierta por version_ui.test.ts.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_440;
+// OLA 10, carril A (A1-01/A1-02): 2,440 → 2,443 (+3, medido con el guardián). Todas en `liquidacion_externa/repo_correo.ts`, por `acotada` y con `tenant_id`:
+// `omitirEntregasPendientes` +1 (UPDATE condicionado pendiente/enviando → omitida: corte de arranque y corrección que reemplaza a la original) y, por la columna
+// de la 0940, la lectura de la configuración con respaldo si falta (+1 select) y el upsert con respaldo (+1). Cubiertas por repo_correo_0940.test.ts.
+// OLA 10 · carril B (peajes): +4 sobre su base (medido con el guardián), todas por `acotada` y con `tenant_id` salvo la recuperación global del cron:
+// `peajes/repo.ts` `devolverIntentoAviso` +1 (A2P-05: devuelve el intento tomado cuando la ventana de WhatsApp está cerrada) y `marcarAvisoRequerido` +1 (A2P-05: deja pendiente el aviso sin gastar intentos cuando falta destinatario) y `peajes/aviso_atipicos.ts`
+// `confirmar` +1 (limpia el vencimiento de la reserva tras enviar) y `recuperarVencidas` +1 (A2P-18, devuelve a `nuevo` lo reservado y vencido; multi-flota a propósito,
+// como el barrido de avisos). La reserva de siempre solo cambió de forma (sigue siendo 1 llamada). Cubiertas por aviso_oficina_ola10.test.ts, ciclo_completo.e2e.test.ts y aviso_atipicos.test.ts.
+// INTEGRACION OLA 10: 2,440 (master con el rediseno) + 3 (carril A) + 4 (carril B) + 0 (carril C) = 2,447 medido sobre el arbol fusionado; +1 por la integracion: `recuperarVencidas` (carril B) pasaba la guarda de consultas_admin_filtran_tenant solo con un UPDATE global sin tenant_id, asi que ahora lee los vencidos (+1) y devuelve por flota con `.eq('tenant_id')` (el UPDATE de siempre): 2,448 final.
+// La regla de perfil de `guardarConfigCorreo` usa `perfilDeTenant` (su acceso ya estaba contado en perfil_tenant.ts): 0 llamadas nuevas.
+// CORRECCION H759 (verificacion independiente del PR #759): 2,448 -> 2,450 (+2, medido con el guardian). H759-1: `peajes/repo.ts` `posponerAviso` (lee `aviso_esperas` y
+// aparta con backoff por compare-and-set, ambas por `acotada` y con `tenant_id`) para que un aviso bloqueado por configuracion no acapare la cola global. Cubierta por avisos_repo.test.ts.
+// H759-3: +2 (2,450 -> 2,452, medido). `liquidacion_externa/repo_correo.ts` `omitirPendientesAnterioresAlCorte` (lee con `tenant_id` las pendientes con periodo_hasta < corte y las pasa a
+// `omitida` por compare-and-set de estado; ambas por `acotada`) para que el historico subido con el envio apagado y sin corte no salga al fijar/activar el corte. Cubierta por repo_correo_0940.test.ts.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_452;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

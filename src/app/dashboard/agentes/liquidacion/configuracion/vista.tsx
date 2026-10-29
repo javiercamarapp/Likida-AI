@@ -103,6 +103,13 @@ export function leerFormularioConfig(fd: FormData): ResultadoFormulario {
     if (primerMes && !/^\d{4}-\d{2}-\d{2}$/.test(hastaTxt)) return { ok: false, error: 'Activaste el modo primer mes: indica hasta qué día dura (AAAA-MM-DD).' };
     const primerMesHasta = primerMes ? hastaTxt : null;
 
+    // A1-01: fecha de corte. Vacía = sin corte (se envía todo lo que llegue); con fecha, lo anterior se guarda pero no se envía.
+    const corteTxt = String(fd.get('noEnviarAntes') ?? '').trim();
+    if (corteTxt !== '' && (!/^\d{4}-\d{2}-\d{2}$/.test(corteTxt) || Number.isNaN(Date.parse(`${corteTxt}T00:00:00Z`)))) {
+      return { ok: false, error: 'La fecha de corte debe ser un día válido (AAAA-MM-DD).' };
+    }
+    const noEnviarAntes = corteTxt === '' ? null : corteTxt;
+
     const agruparViaje = fd.get('agruparViaje') === 'on';
     const etiquetaViaje = String(fd.get('etiquetaViaje') ?? '').trim();
     if (agruparViaje && etiquetaViaje === '') return { ok: false, error: 'Activaste el renglón de viaje: ponle una etiqueta (así se verá en el desglose).' };
@@ -147,6 +154,7 @@ export function leerFormularioConfig(fd: FormData): ResultadoFormulario {
         remitenteCorreo: correo('Correo emisor', String(fd.get('remitenteCorreo') ?? '')),
         revisores: revisoresLeidos,
         primerMesHasta,
+        noEnviarAntes,
         rhCorreos,
         archivoCorreo: correo('Buzón de archivo', String(fd.get('archivoCorreo') ?? '')),
         enviaCoordinador: fd.get('enviaCoordinador') === 'on',
@@ -282,6 +290,19 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
                   ))}
                   <Ayuda>Un tipo que no marques (o un operador sin tipo) queda retenido, no se envía.</Ayuda>
                 </fieldset>
+              </div>
+            </section>
+
+            <section className="card p-4 space-y-3">
+              <h2 className="font-display text-[15px] font-semibold">Fecha de corte del arranque</h2>
+              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+                Los desgloses cuyo periodo termina ANTES de esta fecha se guardan, pero no se envían a nadie (quedan «omitidos»). Pon el día en que arranca
+                el envío: así subir el histórico no manda nóminas viejas a los operadores, coordinadores ni RH. Vacío = se envía todo lo que llegue.
+              </p>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <Etiqueta t="No enviar desgloses anteriores a (AAAA-MM-DD)">
+                  <input name="noEnviarAntes" type="date" defaultValue={config.noEnviarAntes ?? ''} className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
+                </Etiqueta>
               </div>
             </section>
 

@@ -31,4 +31,14 @@ describe('candidatosDePlazo (la misma definición para la pantalla y el aviso de
     });
     expect(r.map((x) => [x.lineaId, x.reclamado])).toEqual([['0', false], ['1', true]]);
   });
+  it('A2P-09: lo descartado o justificado por decisión no corre contra el plazo ni se avisa', () => {
+    const r = candidatosDePlazo({
+      desgloseId: 'd1', candidatos: [cand(0), cand(1), cand(2)], reclamosDelArchivo: [],
+      decisiones: [
+        { indice: 1, categoria: 'clase_fuera_de_3_5', accion: 'descartado', reclamoId: null },
+        { indice: 2, categoria: 'clase_fuera_de_3_5', accion: 'justificado', reclamoId: null },
+      ],
+    });
+    expect(r.map((x) => [x.lineaId, x.reclamado])).toEqual([['0', false], ['1', true], ['2', true]]);
+  });
 });

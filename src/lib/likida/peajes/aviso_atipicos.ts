@@ -18,8 +18,8 @@
 // `avisado_en`): dos procesos simultáneos no mandan dos avisos. Si el envío falla, la
 // reserva se devuelve y se cuenta un intento (`detalle.aviso.intentos`); al llegar a
 // MAX_INTENTOS_AVISO_ATIPICOS el hallazgo deja de reintentarse. Un desglose ANULADO jamás
-// avisa. Si el proceso muere entre reservar y enviar, ese aviso se pierde (a lo sumo una
-// vez, nunca doble); la pantalla sigue mostrando el hallazgo.
+// avisa. La reserva VENCE (10 min, `aviso_reservado_hasta`, 0945): si el proceso muere entre reservar y enviar,
+// el barrido devuelve el hallazgo a `nuevo` y se reintenta (A2P-18); tras enviar se confirma y no se repite.
 //
 // Sale por el selector central (`avisarOficina`: texto en ventana, plantilla
 // `aviso_operacion_v1` fuera). No gestiona plantillas con Meta.
@@ -34,6 +34,8 @@ import { acotada } from '../presupuesto';
 import type { ReglaAtipica } from './atipicos';
 
 export const MAX_INTENTOS_AVISO_ATIPICOS = 5;
+/** A2P-18: cuánto vive la reserva del aviso (igual que la de plazo/recordatorio): pasado esto, si no se confirmó, se reintenta. */
+export const LEASE_RESERVA_ATIPICOS_MS = 10 * 60_000;
 const MAX_UNIDADES_EN_TEXTO = 5;
 const LOTE_BARRIDO = 200;
 /** Tope de páginas del barrido (200 hallazgos cada una): acota el costo de una corrida del cron. */
@@ -60,6 +62,10 @@ export interface AlmacenAvisoAtipicos {
   marcarSinDestinatario: (tenantId: string, ids: string[]) => Promise<void>;
   /** Compare-and-set: devuelve los ids que ESTE proceso logró reservar. */
   reservar: (tenantId: string, ids: string[]) => Promise<string[]>;
+  /** A2P-18: confirma el envío (ya salió o quedó en el outbox): limpia el vencimiento de la reserva. Opcional para pruebas puras. */
+  confirmar?: (tenantId: string, ids: string[]) => Promise<void>;
+  /** A2P-18: devuelve a `nuevo` las reservas vencidas sin confirmar (el proceso murió entre reservar y enviar). Opcional. */
+  recuperarVencidas?: () => Promise<number>;
   /** Devuelve la reserva tras un envío fallido y suma un intento. */
   liberar: (tenantId: string, ids: string[], motivo: string) => Promise<void>;
   /** Desglose con avisos por enviar, de todas las flotas (barrido del cron). */
@@ -143,11 +149,55 @@ export const almacenAvisoAtipicos: AlmacenAvisoAtipicos = {
 
   async reservar(tenantId, ids) {
     if (ids.length === 0) return [];
-    const { data, error } = await acotada(supabaseAdmin().from('peaje_atipico')
-      .update({ estado: 'avisado', avisado_en: new Date().toISOString(), actualizado_en: new Date().toISOString() })
+    const ahora = Date.now();
+    const intentar = (conReserva: boolean) => acotada(supabaseAdmin().from('peaje_atipico')
+      .update({
+        estado: 'avisado', avisado_en: new Date(ahora).toISOString(), actualizado_en: new Date(ahora).toISOString(),
+        ...(conReserva ? { aviso_reservado_hasta: new Date(ahora + LEASE_RESERVA_ATIPICOS_MS).toISOString() } : {}),
+      })
       .eq('tenant_id', tenantId).in('id', ids).eq('estado', 'nuevo').is('avisado_en', null).select('id'), 'peajes.atipicos_aviso_reservar');
-    if (error) throw new Error(`avisoAtipicos.reservar: ${error.message}`);
-    return ((data ?? []) as Array<{ id: unknown }>).map((f) => String(f.id));
+    let r = await intentar(true);
+    // Sin la migración 0945 aplicada la columna no existe: se reserva como antes (sin vencimiento) en vez de dejar de avisar.
+    if (r.error && /aviso_reservado_hasta/.test(r.error.message)) r = await intentar(false);
+    if (r.error) throw new Error(`avisoAtipicos.reservar: ${r.error.message}`);
+    return ((r.data ?? []) as Array<{ id: unknown }>).map((f) => String(f.id));
+  },
+
+  async confirmar(tenantId, ids) {
+    if (ids.length === 0) return;
+    const { error } = await acotada(supabaseAdmin().from('peaje_atipico')
+      .update({ aviso_reservado_hasta: null }).eq('tenant_id', tenantId).in('id', ids).eq('estado', 'avisado'), 'peajes.atipicos_aviso_confirmar');
+    // Si no se pudo limpiar no pasa nada grave: vence y el barrido lo devolvería a `nuevo` (peor caso, un aviso repetido).
+    if (error) logger.warn('peajes.atipicos_aviso_confirmar', { tenant: tenantId, err: error.message });
+  },
+
+  async recuperarVencidas() {
+    // Barrido global a propósito (el cron recupera lo vencido de TODAS las flotas), pero cada UPDATE va anclado a su flota: primero se leen los
+    // vencidos con su flota y luego se devuelven uno por uno, repitiendo la condición (si otro proceso lo re-reservó entre medias, no se toca).
+    // H759-8: cada recuperación CUENTA un intento (`detalle.aviso.intentos`): un aviso que siempre falla (error de código o de plantilla, que lanza
+    // sin pasar por `liberar`) llega a MAX_INTENTOS_AVISO_ATIPICOS y deja de reservarse en vez de repetirse cada ~10-25 min para siempre.
+    const ahora = new Date().toISOString();
+    const leidos = await acotada(supabaseAdmin().from('peaje_atipico')
+      .select('id, tenant_id, detalle').eq('estado', 'avisado').lt('aviso_reservado_hasta', ahora).order('id').limit(200), 'peajes.atipicos_aviso_vencidas');
+    if (leidos.error) {
+      if (/aviso_reservado_hasta/.test(leidos.error.message)) return 0; // 0945 sin aplicar
+      throw new Error(`avisoAtipicos.recuperarVencidas: ${leidos.error.message}`);
+    }
+    let devueltas = 0;
+    for (const f of (leidos.data ?? []) as Array<{ id: unknown; tenant_id: unknown; detalle: unknown }>) {
+      const detalle = comoDetalle(f.detalle);
+      const aviso = avisoDe(detalle);
+      const intentos = intentosDe(detalle) + 1;
+      const { data, error } = await acotada(supabaseAdmin().from('peaje_atipico')
+        .update({
+          estado: 'nuevo', avisado_en: null, aviso_reservado_hasta: null, actualizado_en: ahora,
+          detalle: { ...detalle, aviso: { ...aviso, estado: 'reserva_vencida', intentos } },
+        })
+        .eq('tenant_id', String(f.tenant_id)).eq('id', String(f.id)).eq('estado', 'avisado').lt('aviso_reservado_hasta', ahora).select('id'), 'peajes.atipicos_aviso_recuperar');
+      if (error) throw new Error(`avisoAtipicos.recuperarVencidas: ${error.message}`);
+      devueltas += (data ?? []).length;
+    }
+    return devueltas;
   },
 
   async liberar(tenantId, ids, motivo) {
@@ -240,9 +290,17 @@ export async function avisarAtipicosDesglose(
       parametros: parametrosAvisoOficina('Peajes: cruces inusuales', `${plural(mios.length, 'caso inusual', 'casos inusuales')} en ${plural(unidades, 'unidad', 'unidades')}`, liga()),
       contexto: { tenantId, agente: 'peajes', desglose: desgloseId },
     });
+    // H759-8: el aviso YA salió (o está en el outbox). Si `confirmar` lanza (p. ej. el timeout de `acotada`), NO se cae al catch exterior (que dejaría
+    // la reserva sin confirmar y repetiría el aviso a los 10 min): se anota y se responde `enviado`.
+    const confirmarSeguro = async (): Promise<void> => {
+      try { await almacen.confirmar?.(tenantId, mios.map((h) => h.id)); } catch (e) {
+        logger.error('peajes.atipicos_aviso_confirmar_fallo', { tenant: tenantId, desglose: desgloseId, err: e instanceof Error ? e.message : String(e) });
+      }
+    };
     // A37-S51-04: en cola del outbox = enviado (la reserva NO se libera: saldrá solo y otro barrido lo duplicaría).
     if (quedoEnCola(r)) {
       logger.warn('peajes.atipicos_aviso_en_cola', { tenant: tenantId, desglose: desgloseId, motivo: r.ok ? null : r.motivo, codigo: r.ok ? null : r.codigo });
+      await confirmarSeguro();
       return 'enviado';
     }
     if (!r.ok) {
@@ -250,6 +308,7 @@ export async function avisarAtipicosDesglose(
       await almacen.liberar(tenantId, mios.map((h) => h.id), String(r.motivo ?? 'envío rechazado'));
       return 'rechazado';
     }
+    await confirmarSeguro();
     return 'enviado';
   } catch (e) {
     logger.error('peajes.atipicos_aviso_error', { tenant: tenantId, desglose: desgloseId, err: e instanceof Error ? e.message : String(e) });
@@ -263,6 +322,11 @@ export interface ResumenAvisosAtipicos { revisados: number; enviados: number; pe
 export async function reintentarAvisosAtipicos(limite = 5, deps: DepsAvisoAtipicos = depsPorOmision): Promise<ResumenAvisosAtipicos> {
   const r: ResumenAvisosAtipicos = { revisados: 0, enviados: 0, pendientes: 0 };
   let lista: Array<{ tenantId: string; desgloseId: string }> = [];
+  // A2P-18: lo reservado cuyo envío nunca se confirmó (el proceso murió) vuelve a `nuevo` antes de buscar pendientes.
+  try {
+    const n = (await deps.almacen.recuperarVencidas?.()) ?? 0;
+    if (n > 0) logger.warn('peajes.atipicos_aviso_reservas_vencidas', { recuperadas: n });
+  } catch (e) { logger.error('peajes.atipicos_aviso_recuperar', { err: e instanceof Error ? e.message : String(e) }); }
   try { lista = await deps.almacen.desglosesPendientes(limite); } catch (e) {
     logger.error('peajes.atipicos_avisos_barrido', { err: e instanceof Error ? e.message : String(e) });
     return r;

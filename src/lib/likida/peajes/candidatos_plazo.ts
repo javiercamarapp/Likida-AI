@@ -75,11 +75,16 @@ export function candidatosDePlazo(entrada: {
   const lineasReclamadas = new Set((decisiones ?? [])
     .filter((x) => x.accion === 'reclamado' && x.reclamoId !== null && enviadoPorId.has(x.reclamoId))
     .map((x) => `${x.indice}|${x.categoria}`));
+  // A2P-09: lo que finanzas descartó o justificó por decisión está ATENDIDO: no corre contra el plazo ni se avisa.
+  const atendidas = new Set((decisiones ?? [])
+    .filter((x) => x.accion === 'descartado' || x.accion === 'justificado')
+    .map((x) => `${x.indice}|${x.categoria}`));
   const conFecha = entrada.candidatos
     .filter((c): c is typeof c & { fecha: string } => typeof c.fecha === 'string' && c.fecha !== '');
   const cubiertas = lineasCubiertasPorReclamo(conFecha, reclamosCompletos);
   return conFecha.map((c) => ({
     lineaId: String(c.indice), desgloseId, fechaCruce: c.fecha, monto: c.monto,
-    reclamado: cubiertas.has(c.indice) || lineasReclamadas.has(`${c.indice}|${c.categoria}`),
+    reclamado: cubiertas.has(c.indice) || lineasReclamadas.has(`${c.indice}|${c.categoria}`)
+      || atendidas.has(`${c.indice}|${c.categoria}`),
   }));
 }

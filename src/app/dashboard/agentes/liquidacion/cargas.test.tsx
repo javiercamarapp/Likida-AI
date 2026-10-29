@@ -11,7 +11,12 @@ const pintar = (o: Partial<Parameters<typeof SeccionCargas>[0]> = {}) => renderT
 describe('SeccionCargas (Ola 1 · A1)', () => {
   it('el dueño ve los dos formularios, con el formato de contactos y la regla de la póliza', () => {
     const html = pintar();
-    expect(html).toContain('Subir desgloses');
+    expect(html).toContain('Subir y enviar');
+    expect(html).toContain('Ver vista previa');
+    expect(html).toContain('Correos que saldrán');
+    expect(html).toContain('name="paso"');
+    expect(html).toContain('value="previa"');
+    expect(html).toContain('value="subir"');
     expect(html).toContain('Subir correos');
     expect(html).toContain('numero_empleado;correo;coordinador_nombre;coordinador_correo');
     expect(html).toContain('Una bitácora sin póliza no se envía');
