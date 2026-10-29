@@ -26,6 +26,7 @@ import { exigirV2Html } from './exigir_v2';
 import { USUARIO, viajes } from './fixtures/logistica_mx';
 
 const OUT = process.env.UI2_B_OUT ?? path.join(homedir(), 'likida-loop/frontend-plan/fase1/b2-trabajo');
+const pct = (v: number) => `${v} %`;
 const mxn = (v: number) => `$${Math.round(v).toLocaleString('en-US')}`;
 const SERIE = [12, 14, 13, 17, 16, 21, 19, 24, 22, 27];
 const SEMANAS = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10'];
@@ -93,14 +94,17 @@ const V: Record<string, () => ReactNode> = {
         </Bloque>
       </Rejilla>
       <section className="card">
-        <table>
-          <thead><tr><th>Folio</th><th>Ruta</th><th className="num">Casetas</th><th className="num">Diferencia</th><th>Estado</th><th /></tr></thead>
+        <table data-tarjeta data-densa>
+          <thead><tr><th>Folio</th><th>Ruta</th><th className="num">Casetas</th><th className="num">Diferencia</th><th>Cierre</th><th>Estado</th><th /></tr></thead>
           <tbody>
-            {viajes(10, 5).map((v, i) => (
+            {viajes(12, 5).map((v, i) => (
               <tr key={v.id}>
-                <td>{v.folio}</td><td>{v.origen ?? '—'} → {v.destino ?? '—'}</td>
-                <td className="num">{mxn(v.anticipo * 0.31)}</td><td className="num">{i % 4 === 3 ? '—' : mxn(i * 45 + 60)}</td>
-                <td><P.Chip tamano="estado" tono={i % 3 === 0 ? 'bad' : 'ok'}>{i % 3 === 0 ? 'Revisar' : 'Cuadra'}</P.Chip></td>
+                <td data-label="Folio"><span className="rv-id">{v.folio}</span></td>
+                <td data-label="Ruta">{v.origen ?? '—'} → {v.destino ?? '—'}</td>
+                <td data-label="Casetas" className="num">{mxn(v.anticipo * 0.31)}</td>
+                <td data-label="Diferencia" className="num">{i % 4 === 3 ? '—' : mxn(i * 45 + 60)}</td>
+                <td data-label="Cierre" style={{ minWidth: 96 }}><G.Bullet matiz={3} etiqueta={`Avance ${v.folio}`} valor={i % 5 === 2 ? null : 35 + ((i * 17) % 60)} maximo={100} formato={pct} /></td>
+                <td data-label="Estado"><P.Chip tamano="estado" tono={i % 3 === 0 ? 'bad' : i % 3 === 1 ? 'warn' : 'ok'}>{i % 3 === 0 ? 'Revisar' : i % 3 === 1 ? 'En cuadre' : 'Cuadra'}</P.Chip></td>
                 <td style={{ textAlign: 'right' }}><P.BotonEnlace href="/dashboard/viajes" tamano="sm" variante="ghost">Ver</P.BotonEnlace></td>
               </tr>
             ))}
@@ -144,12 +148,29 @@ const V: Record<string, () => ReactNode> = {
   ),
   'b05-overlays': () => (
     <>
-      <P.EncabezadoPagina titulo="Overlays" descripcion="Drawer 420 y Modal 440 (abiertos para la captura)." />
-      <P.Drawer abierto={false} onCerrar={() => {}} titulo="Sus reglas" descripcion="Política vigente del agente" pie={<><P.Boton>Cerrar</P.Boton><P.Boton variante="primary">Guardar</P.Boton></>}>
-        <p>Cuerpo del drawer con padding de 16.</p>
+      <P.EncabezadoPagina titulo="Overlays" descripcion="Drawer 420, Modal 440 y hoja inferior en móvil (abiertos para la captura)." />
+      <G.TiraKpi etiqueta="Fondo" items={[
+        { etiqueta: 'Diferencias por cuadrar', valor: '$18,420', metrica: 'diferencias_por_cuadrar', sello: 'Cuadre · semana 43', delta: { texto: '+3 casos', dir: 'sube', bueno: 'baja' }, serie: SERIE },
+        { etiqueta: 'Anticipos abiertos', valor: '17', metrica: 'anticipos_abiertos', sello: 'TMS · hace 5 min', segmentos: [{ etiqueta: 'Abiertos', valor: 17 }, { etiqueta: 'Por comprobar', valor: 6 }] },
+      ]} />
+      <P.Drawer abierto={false} onCerrar={() => {}} titulo="Sus reglas" descripcion="Política vigente del agente de liquidación" pie={<><P.Boton>Cerrar</P.Boton><P.Boton variante="primary">Guardar</P.Boton></>}>
+        <div style={{ display: 'grid', gap: 12 }}>
+          <P.Aviso titulo="Candidatos a reclamo, no acusaciones">Se revisan con el operador antes de actuar.</P.Aviso>
+          {['Tope de anticipo', 'Tolerancia de diferencia', 'Casetas sin comprobante'].map((r, i) => (
+            <div key={r} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--line)' }}>
+              <span>{r}</span><P.Chip tamano="estado" tono={i === 1 ? 'warn' : 'ok'}>{i === 1 ? 'Revisar' : 'Activa'}</P.Chip>
+            </div>
+          ))}
+          <P.Switch nombre="sw-r" etiqueta="Avisar por correo al cerrar" defaultChecked />
+        </div>
       </P.Drawer>
-      <P.Modal abierto={false} onCerrar={() => {}} titulo="Confirmar firma" descripcion="Esta acción tiene efectos fiscales." pie={<><P.Boton>Cancelar</P.Boton><P.Boton variante="primary">Firmar</P.Boton></>}>
-        <p>¿Firmar la liquidación del viaje?</p>
+    </>
+  ),
+  'b06-modal': () => (
+    <>
+      <P.EncabezadoPagina titulo="Confirmación" descripcion="Modal de alerta (alertdialog) sobre la liquidación." />
+      <P.Modal alerta abierto={false} onCerrar={() => {}} titulo="¿Firmar la liquidación?" descripcion="Esta acción tiene efectos fiscales." pie={<><P.Boton>Cancelar</P.Boton><P.Boton variante="primary">Firmar</P.Boton></>}>
+        <p>Se firma la liquidación del viaje V-4102 por $48,300. No se puede deshacer desde aquí.</p>
       </P.Modal>
     </>
   ),
@@ -165,7 +186,8 @@ describe('muestrario B', () => {
         </Chrome>,
       );
       exigirV2Html(html, id);
-      if (id === 'b05-overlays') html = html.replace(/<dialog class="rv-ov rv-ov--modal"/, '<dialog open class="rv-ov rv-ov--modal"');
+      // Overlays abiertos para la captura: <dialog open> (no modal) fijo a pantalla completa.
+      if (id === 'b05-overlays' || id === 'b06-modal') html = html.replace(/<dialog(?=[^>]*rv-ov--(?:drawer|modal))/g, '<dialog open style="position:fixed;inset:0;z-index:50"');
       writeFileSync(path.join(OUT, 'a/vistas', `${id}.html`), html);
     }
   });
