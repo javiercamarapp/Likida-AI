@@ -146,8 +146,14 @@ export function medir(U, opts) {
     if (r0.height >= 43.5 && r0.width >= 43.5) continue;
     // ESTILO §5: input/select de ESCRITORIO = 32 fijo, sin exigencia táctil de 44 (solo en móvil <820 se pide la caja de 44).
     if (!movil && e.matches('select,textarea,input:not([type="checkbox"]):not([type="radio"])')) continue;
-    // «34 visibles dentro de una caja de 44»: un ancestro cercano de 44–64 px de alto que contiene al control y a ningún otro es SU caja táctil.
-    { let a = e.parentElement; let caja = false; for (let n = 0; a && n < 3 && !caja; n++, a = a.parentElement) { const ar = a.getBoundingClientRect(); if (ar.height >= 43.5 && ar.height <= 64 && ar.width >= r0.width - 0.5 && ar.top <= r0.top + 0.5 && ar.bottom >= r0.bottom - 0.5 && ![...a.querySelectorAll(ctlSel)].some((o) => o !== e && !e.contains(o) && !o.contains(e))) caja = true; } if (caja) continue; }
+    // «34 visibles dentro de una caja de 44»: solo vale si el ancestro ES la caja del control (borde o fondo propios, display inline-*,
+    // un <label>) y contiene a ningún otro control. Una celda de tabla, un <li> o un contenedor de layout NO son la caja táctil.
+    { let a = e.parentElement; let caja = false; for (let n = 0; a && n < 3 && !caja; n++, a = a.parentElement) {
+      if (a.matches('td,th,tr,li,table,tbody,thead,main,body,form,section,article,ul,ol') ) continue;
+      const ar = a.getBoundingClientRect(); const ac = getComputedStyle(a);
+      const esCaja = a.matches('label') || /^inline/.test(ac.display) || cajaPropia(a, ac);
+      if (esCaja && ar.height >= 43.5 && ar.height <= 64 && ar.width >= r0.width - 0.5 && ar.top <= r0.top + 0.5 && ar.bottom >= r0.bottom - 0.5 && ![...a.querySelectorAll(ctlSel)].some((o) => o !== e && !e.contains(o) && !o.contains(e))) caja = true;
+    } if (caja) continue; }
     e.scrollIntoView({ block: 'center', inline: 'center' });
     const r = e.getBoundingClientRect();
     if (r.top < 0 || r.bottom > innerHeight || r.left < 0 || r.right > innerWidth) continue;
@@ -205,7 +211,7 @@ export function medir(U, opts) {
       if (!okKpi) add('c2.kpi_no_26', fs + 'px (norma ' + (sinDato ? U.kpiSinDato : movil ? '18–21 (móvil <820)' : U.kpi) + ') ' + desc(e));
     } else {
       const campo = e.matches('input,select,textarea,option') || !!e.closest('select');
-      const enTooltip = !!e.closest('[role="tooltip"],[class*="tooltip"],[data-tooltip],.rv-tip');
+      const enTooltip = !!e.closest('[role="tooltip"],[class*="tooltip"],[data-tooltip],.rv-tip') && e.matches('[data-cifra],[class*="cifra"],b,strong') && px(cs.fontWeight) >= 600; // solo la CIFRA del tooltip
       const ok = U.escalaPermitida.some((v) => Math.abs(fs - v) < 0.3 && (v !== 11 || mayus)) || (campo && movil && Math.abs(fs - 16) < 0.3) || (enTooltip && Math.abs(fs - 16) < 0.3);
       // 30 como tope absoluto; entre 15 y 26 solo H1=20 y el título de overlay=15 son parte de la escala
       if (!ok && fs >= U.textoMin - 0.05 && fs <= U.kpiMax) add('c2.fuera_de_escala', fs + 'px ' + (fs < 12 && !mayus ? '(11 solo MAYÚSCULAS) ' : '') + desc(e));
@@ -244,7 +250,7 @@ export function medir(U, opts) {
     if (v <= 0.01) return { ok: true, v };
     if (Math.abs(v - 8) <= 0.6 || Math.abs(v - 12) <= 0.6) return { ok: true, v };
     if (v >= mitad - 0.6) return { ok: true, v };
-    if (movil && Math.abs(v - U.radioHoja) <= 0.6 && e.closest('.rv-hoja,.rv-ov__panel,dialog,[data-hoja]')) return { ok: true, v }; // SOLO la hoja inferior móvil (ESTILO §5)
+    if (movil && Math.abs(v - U.radioHoja) <= 0.6 && e.matches('.rv-hoja,.rv-ov__panel,dialog,[data-hoja]')) return { ok: true, v }; // SOLO el panel de la hoja inferior móvil (ESTILO §5), no sus descendientes
     return { ok: false, v };
   };
   let marcasExentas = 0;
