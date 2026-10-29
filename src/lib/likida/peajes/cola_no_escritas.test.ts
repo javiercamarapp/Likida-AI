@@ -19,10 +19,7 @@ vi.mock('../intake/desglose_peaje', async (orig) => {
 });
 vi.mock('../agentes/corridas', () => ({ registrarCorrida: (...a: unknown[]) => registrarCorrida(...a) }));
 
-const {
-  recibirArchivoPeaje, procesarColaPeajes, reintentarArchivoPeaje, subirDesglosePorCola, huellaDe, byteaDeBuffer, MAX_PENDIENTES_POR_FLOTA, MAX_INTENTOS,
-} = await import('./ingesta');
-const { anularDesgloseDb } = await import('./repo');
+const { procesarColaPeajes, huellaDe, byteaDeBuffer, MAX_PENDIENTES_POR_FLOTA } = await import('./ingesta');
 
 const T = 'flota-1';
 const CSV = 'Fecha de cobro;Hora;Plaza;Importe;No. TAG\n05/08/2026;10:30:00;Caseta Ejemplo Norte;189,50;IMDM 10000001\n';
