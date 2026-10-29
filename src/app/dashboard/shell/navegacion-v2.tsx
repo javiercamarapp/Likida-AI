@@ -2,8 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useSyncExternalStore } from 'react';
-import { ChevronDown, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { moduloProximamenteDeRuta, rutaProximamente, type PerfilTenant } from '@/lib/auth/visibilidad';
 import type { Item } from '../rutas';
 import { useSufijoYRol } from '../sidebar-nav';
@@ -72,72 +71,21 @@ function Lista({ items, ...resto }: { items: Item[]; sufijo: string; activo: str
   );
 }
 
-const LLAVE_GRUPOS = 'likida-nav-grupos';
-// El plegado de los grupos vive en localStorage (por navegador). Snapshot = el texto guardado (primitivo estable);
-// el del servidor es vacío, así que el primer pintado coincide con el HTML servido y el cliente se corrige al hidratar.
-const oyentesGrupos = new Set<() => void>();
-const suscribirGrupos = (cb: () => void) => { oyentesGrupos.add(cb); return () => { oyentesGrupos.delete(cb); }; };
-const leerGrupos = () => { try { return window.localStorage.getItem(LLAVE_GRUPOS) ?? ''; } catch { return ''; } };
-function interpretarGrupos(texto: string): Record<string, boolean> {
-  try { const v = JSON.parse(texto || '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; }
-}
-
-/** Qué grupos arrancan abiertos: el primero, los de un solo ítem y el que contiene la página activa. Pura y probada. */
-export function gruposAbiertosPorOmision(menu: MenuV2, activo: string | null): Record<string, boolean> {
-  const r: Record<string, boolean> = {};
-  menu.grupos.forEach((g, i) => { r[g.id] = i === 0 || g.items.length === 1 || g.items.some((it) => it.href === activo); });
-  return r;
-}
-
-function Grupo({ g, abierto, colapsable, alAlternar, children }: {
-  g: MenuV2['grupos'][number]; abierto: boolean; colapsable: boolean; alAlternar: () => void; children: React.ReactNode;
-}) {
-  if (!colapsable) {
-    return (
-      <section aria-labelledby={`rv-g-${g.id}`} className="rv-grupo">
-        <h2 id={`rv-g-${g.id}`} className="rv-grupo__t">{g.titulo}</h2>
-        {children}
-      </section>
-    );
-  }
-  return (
-    <section aria-labelledby={`rv-g-${g.id}`} className="rv-grupo" data-colapsable data-abierto={abierto}>
-      <h2 id={`rv-g-${g.id}`} className="rv-grupo__t">
-        <button type="button" className="rv-grupo__btn" aria-expanded={abierto} aria-controls={`rv-gc-${g.id}`} onClick={alAlternar}>
-          <span>{g.titulo}</span>
-          <span className="rv-grupo__n" aria-hidden>{g.items.length}</span>
-          <ChevronDown className="rv-grupo__flecha" width={14} height={14} strokeWidth={1.75} aria-hidden />
-        </button>
-      </h2>
-      <div id={`rv-gc-${g.id}`} className="rv-grupo__cuerpo">
-        <div className="rv-grupo__interior">{children}</div>
-      </div>
-    </section>
-  );
-}
-
-/** El árbol completo: Resumen, grupos y (opcional) pie. Lo pinta el sidebar y la hoja «Más». Con `colapsable` (solo el sidebar de escritorio) los grupos se pliegan. */
-export function ArbolMenu({ menu, sufijo, pathname, perfil, insignias, alNavegar, conPie = false, colapsable = false }: {
+/** El árbol completo: Resumen, grupos y (opcional) pie. Lo pinta el sidebar y la hoja «Más». */
+export function ArbolMenu({ menu, sufijo, pathname, perfil, insignias, alNavegar, conPie = false }: {
   menu: MenuV2; sufijo: string; pathname: string; perfil?: PerfilTenant | null;
-  insignias?: Record<string, string>; alNavegar?: () => void; conPie?: boolean; colapsable?: boolean;
+  insignias?: Record<string, string>; alNavegar?: () => void; conPie?: boolean;
 }) {
   const activo = hrefActivo(pathname, menu);
   const props = { sufijo, activo, perfil, insignias, alNavegar };
-  const elegidos = interpretarGrupos(useSyncExternalStore(suscribirGrupos, leerGrupos, () => ''));
-  const omision = gruposAbiertosPorOmision(menu, activo);
-  const abierto = (id: string, items: Item[]) => items.some((it) => it.href === activo) || (elegidos[id] ?? omision[id] ?? true);
-  const alternar = (id: string, items: Item[]) => {
-    const sig = { ...elegidos, [id]: !abierto(id, items) };
-    try { window.localStorage.setItem(LLAVE_GRUPOS, JSON.stringify(sig)); } catch { /* sin almacenamiento: no se recuerda */ }
-    oyentesGrupos.forEach((f) => f());
-  };
   return (
     <>
       {menu.resumen.length > 0 && <Lista items={menu.resumen} {...props} />}
       {menu.grupos.map((g) => (
-        <Grupo key={g.id} g={g} colapsable={colapsable && g.items.length > 1} abierto={abierto(g.id, g.items)} alAlternar={() => alternar(g.id, g.items)}>
+        <section key={g.id} aria-labelledby={`rv-g-${g.id}`} className="rv-grupo">
+          <h2 id={`rv-g-${g.id}`} className="rv-grupo__t">{g.titulo}</h2>
           <Lista items={g.items} {...props} />
-        </Grupo>
+        </section>
       ))}
       {conPie && menu.pie.length > 0 && <Lista items={menu.pie} {...props} />}
     </>

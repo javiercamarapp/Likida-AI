@@ -2,7 +2,6 @@
 
 import type { PerfilTenant } from '@/lib/auth/visibilidad';
 import { Logo } from '../../logo';
-import { useEffect, useRef } from 'react';
 import { ArbolMenu, PieMenu, useMenuV2 } from './navegacion-v2';
 
 /**
@@ -17,14 +16,11 @@ export default function SidebarV2({ rol, rolEtiqueta, nombre, perfil, usoIa, cer
   cerrarSesion?: () => Promise<void>; insignias?: Record<string, string>;
 }) {
   const { pathname, sufijo, menu } = useMenuV2(rol, perfil);
-  const ref = useRef<HTMLElement>(null);
-  // El ítem activo siempre a la vista (el aside scrollea si menú + pie no caben).
-  useEffect(() => { ref.current?.querySelector('[aria-current="page"]')?.scrollIntoView?.({ block: 'nearest' }); }, [pathname]);
   return (
-    <aside className="rv-sb" ref={ref}>
+    <aside className="rv-sb">
       <div className="rv-sb__marca"><Logo alto="h-[18px]" /></div>
       <nav aria-label="Navegación principal" className="rv-sb__nav">
-        <ArbolMenu menu={menu} sufijo={sufijo} pathname={pathname} perfil={perfil} insignias={insignias} colapsable />
+        <ArbolMenu menu={menu} sufijo={sufijo} pathname={pathname} perfil={perfil} insignias={insignias} />
       </nav>
       <div className="rv-sb__pie">
         <PieMenu menu={menu} sufijo={sufijo} pathname={pathname} perfil={perfil} rol={rol} rolEtiqueta={rolEtiqueta} nombre={nombre}
