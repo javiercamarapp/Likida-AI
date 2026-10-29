@@ -4,7 +4,6 @@ import { useMemo } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { BotonEnlace, Chip } from '@/app/ui-v2/componentes';
 import { ProgresoAnillo } from '@/app/ui-v2/graficas';
-import { Particulas } from '@/app/ui-v2/svg/particulas';
 import { anclaTour } from '@/app/ui-v2/movimiento/tour';
 import { armarPasosCincoAgentes, etiquetaGlobal, ROTULO_ESTADO, type SenalesAsistente } from '@/lib/likida/asistente/pasos_cinco_agentes';
 import { conPaso } from './con-paso';
@@ -23,7 +22,6 @@ export function TarjetaPuestaEnMarcha({ senales, ambito, sufijo, soloLectura }: 
 
   return (
     <section className="rv-res-marcha" aria-labelledby="rv-res-marcha-t" {...anclaTour('resumen.puesta-en-marcha')}>
-      <div className="rv-res-marcha__arte" aria-hidden="true"><Particulas /></div>
       <ProgresoAnillo valor={r.avance} tamano={64} grosor={6} etiqueta="Avance de la puesta en marcha" />
       <div className="rv-res-marcha__texto">
         <p className="rv-res-marcha__rotulo etiqueta-mono">Puesta en marcha</p>

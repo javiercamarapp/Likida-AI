@@ -16,7 +16,7 @@ function Lienzo({ children, animada, titulo }: { children: ReactNode; animada?: 
     <svg
       className={animada ? 'rv-escena rv-escena--anima' : 'rv-escena'}
       viewBox={`0 0 ${W} ${H}`} width="100%" height="100%" fill="none"
-      stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"
+      stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
       role={titulo ? 'img' : undefined} aria-label={titulo} aria-hidden={titulo ? undefined : true}
     >
       {children}
@@ -24,26 +24,18 @@ function Lienzo({ children, animada, titulo }: { children: ReactNode; animada?: 
   );
 }
 
-const polvo = (
-  <g fill="currentColor" stroke="none" opacity=".5">
-    <circle cx="10" cy="14" r=".8" /><circle cx="148" cy="12" r=".9" /><circle cx="26" cy="86" r=".7" /><circle cx="140" cy="84" r=".8" />
-    <circle cx="80" cy="8" r=".7" /><circle cx="118" cy="90" r=".7" /><circle cx="52" cy="10" r=".6" />
-  </g>
-);
-const nodo = (cx: number, cy: number) => <circle cx={cx} cy={cy} r="2.6" fill="var(--surface, transparent)" />;
+const relleno = 'color-mix(in srgb, currentColor 8%, var(--surface, transparent))';
 
-/** Desglose de liquidación que sale como correo: renglones finos → sobre. */
+/** Desglose de liquidación que sale como correo. */
 function DesgloseCorreo() {
   return (
     <>
-      {polvo}
-      <circle cx="80" cy="48" r="38" strokeDasharray="1 5" opacity=".6" />
-      <rect x="14" y="26" width="44" height="44" rx="4" />
-      <path className="rv-trazo" pathLength={1} d="M22 38h28M22 47h28M22 56h16" />
-      <path className="rv-trazo rv-trazo--2" pathLength={1} d="M62 48h30" strokeDasharray="1 4" />
-      {nodo(62, 48)}{nodo(92, 48)}
-      <rect x="98" y="32" width="48" height="32" rx="4" />
-      <path className="rv-trazo rv-trazo--3" pathLength={1} d="m99 34 23 16 23-16" />
+      <rect x="16" y="20" width="52" height="60" rx="6" fill={relleno} />
+      <path className="rv-trazo" pathLength={1} d="M26 34h32M26 44h32M26 54h20M26 64h26" />
+      <path className="rv-trazo rv-trazo--2" pathLength={1} d="M74 50h22" />
+      <path className="rv-trazo rv-trazo--2" pathLength={1} d="m91 45 6 5-6 5" />
+      <rect x="102" y="32" width="44" height="34" rx="5" fill={relleno} />
+      <path className="rv-trazo rv-trazo--3" pathLength={1} d="m104 36 20 15 20-15" />
     </>
   );
 }
@@ -51,43 +43,39 @@ function DesgloseCorreo() {
 function DocumentoRevision() {
   return (
     <>
-      {polvo}
-      <rect x="14" y="18" width="46" height="60" rx="4" />
-      <path className="rv-trazo" pathLength={1} d="M23 32h28M23 42h28M23 52h16" />
-      <rect x="100" y="18" width="46" height="60" rx="4" />
-      <path className="rv-trazo rv-trazo--2" pathLength={1} d="M109 32h28M109 42h28M109 52h16" />
-      <path className="rv-trazo rv-trazo--2" pathLength={1} d="M64 48h32" strokeDasharray="1 4" />
-      {nodo(64, 48)}{nodo(96, 48)}
-      <circle cx="133" cy="66" r="7" fill="var(--surface, transparent)" />
-      <path className="rv-trazo rv-trazo--3" pathLength={1} d="m129.5 66 2.5 2.5 5-5.5" />
+      <rect x="14" y="16" width="52" height="64" rx="6" fill={relleno} />
+      <path className="rv-trazo" pathLength={1} d="M24 30h30M24 40h30M24 50h18" />
+      <rect x="94" y="16" width="52" height="64" rx="6" fill={relleno} />
+      <path className="rv-trazo rv-trazo--2" pathLength={1} d="M104 30h30M104 40h30M104 50h18" />
+      <path className="rv-trazo rv-trazo--3" pathLength={1} d="M72 48h16M84 43l5 5-5 5" />
+      <circle cx="132" cy="68" r="8" fill="var(--surface, transparent)" />
+      <path className="rv-trazo rv-trazo--3" pathLength={1} d="m128 68 3 3 5-6" />
     </>
   );
 }
-/** Conexión con el sistema de transporte del cliente: dos nodos y una línea viva. */
+/** Conexión con el sistema de transporte del cliente. */
 function ConexionTms() {
   return (
     <>
-      {polvo}
-      <circle cx="40" cy="48" r="22" strokeDasharray="1 5" opacity=".6" />
-      <circle cx="120" cy="48" r="22" strokeDasharray="1 5" opacity=".6" />
-      <circle cx="40" cy="48" r="10" />
-      <circle cx="120" cy="48" r="10" />
-      <path className="rv-trazo" pathLength={1} d="M50 48h60" />
-      <circle cx="80" cy="48" r="3" fill="currentColor" stroke="none" />
-      <path className="rv-trazo rv-trazo--2" pathLength={1} d="M40 80v-14M120 80v-14" strokeDasharray="1 4" />
+      <rect x="14" y="26" width="42" height="44" rx="6" fill={relleno} />
+      <path className="rv-trazo" pathLength={1} d="M22 38h26M22 48h26M22 58h14" />
+      <rect x="104" y="26" width="42" height="44" rx="6" fill={relleno} />
+      <path className="rv-trazo rv-trazo--2" pathLength={1} d="M112 38h26M112 48h26M112 58h14" />
+      <path className="rv-trazo rv-trazo--2" pathLength={1} d="M60 48h14" />
+      <circle cx="80" cy="48" r="6" fill="var(--surface, transparent)" />
+      <path className="rv-trazo rv-trazo--3" pathLength={1} d="M86 48h14" />
     </>
   );
 }
-/** Bienvenida: una ruta con nodos que asciende. */
+/** Bienvenida: tres peldaños. */
 function Bienvenida() {
   return (
     <>
-      {polvo}
-      <path className="rv-trazo" pathLength={1} d="M18 72C42 72 48 52 70 50S104 38 142 22" />
-      {nodo(18, 72)}{nodo(70, 50)}{nodo(108, 38)}
-      <circle cx="142" cy="22" r="6" />
-      <circle cx="142" cy="22" r="2" fill="currentColor" stroke="none" />
-      <circle cx="108" cy="38" r="12" strokeDasharray="1 4" opacity=".6" />
+      <path className="rv-trazo" pathLength={1} d="M20 76h32V60h28V44h28V28h32" />
+      <circle cx="52" cy="60" r="3" fill="currentColor" />
+      <circle cx="80" cy="44" r="3" fill="currentColor" />
+      <circle cx="108" cy="28" r="3" fill="currentColor" />
+      <path className="rv-trazo rv-trazo--3" pathLength={1} d="M136 28v-8m0 0 5 5m-5-5-5 5" />
     </>
   );
 }
@@ -95,10 +83,8 @@ function Bienvenida() {
 function Listo() {
   return (
     <>
-      {polvo}
-      <circle cx="80" cy="48" r="30" strokeDasharray="1 5" opacity=".6" />
-      <circle cx="80" cy="48" r="20" />
-      <path className="rv-trazo" pathLength={1} d="m71 49 7 7 13-14" strokeWidth="1.8" />
+      <circle cx="80" cy="48" r="26" fill={relleno} />
+      <path className="rv-trazo" pathLength={1} d="m68 49 8 8 16-18" strokeWidth="2.4" />
     </>
   );
 }

@@ -21,7 +21,6 @@ export function ProgresoAnillo({ valor, tamano = 72, grosor = 6, etiqueta, child
       role="progressbar" aria-label={etiqueta} aria-valuemin={0} aria-valuemax={100}
       aria-valuenow={sinDato ? undefined : v} aria-valuetext={sinDato ? 'Sin dato' : `${v} %`}>
       <svg width={tamano} height={tamano} viewBox={`0 0 ${tamano} ${tamano}`} aria-hidden="true">
-        {tamano >= 60 ? <circle className="rv-anillo__marcas" cx={c} cy={c} r={Math.max(r - grosor - 5, 1)} fill="none" strokeWidth={1.5} pathLength={72} strokeDasharray="0.25 0.75" /> : null}
         <circle className={sinDato ? 'rv-anillo__pista rv-anillo__pista--vacia' : 'rv-anillo__pista'} cx={c} cy={c} r={r} fill="none" strokeWidth={grosor} />
         {!sinDato && v > 0 ? (
           <circle className="rv-anillo__arco" cx={c} cy={c} r={r} fill="none" strokeWidth={grosor} strokeLinecap="round"
