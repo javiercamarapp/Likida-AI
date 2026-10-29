@@ -21,7 +21,7 @@ export const UMBRALES = {
   kpiSinDato: 18,            // «—» de un KPI sin dato: 18/600 (ESTILO §3)
   kpiMovil: [17.5, 21.5],    // móvil: clamp(18px, 5.2vw, 21px)
   svgTextoMin: 12,           // texto de gráficas ≥ 12 px (ESTILO §7)
-  escalaPermitida: [11, 12, 13, 14, 15, 16, 18, 20, 26], // ESTILO §3 (escala cerrada): 11 solo MAYÚSCULAS; 14 H2; 15 overlay; 16 campo móvil y cifra de tooltip; 18 KPI sin dato
+  escalaPermitida: [11, 12, 13, 14, 15, 20, 26], // ESTILO §3: 11 solo MAYÚSCULAS; 14 H2; 15 overlay. 16 y 18 NO son de uso libre: 16 = campo en móvil y cifra de tooltip; 18 = «—» de un KPI sin dato (ver más abajo)
   // c3
   radios: [0, 8, 12],        // + píldora / punto 50 % (radio >= la mitad del lado menor) + 16 de la hoja inferior móvil (ESTILO §5)
   radioHoja: 16,
@@ -144,6 +144,10 @@ export function medir(U, opts) {
     if (r0.width < 1) continue;
     if (e.type === 'checkbox' || e.type === 'radio') { const l = e.closest('label'); if (l && l.getBoundingClientRect().height >= 43.5) continue; }
     if (r0.height >= 43.5 && r0.width >= 43.5) continue;
+    // ESTILO §5: input/select de ESCRITORIO = 32 fijo, sin exigencia táctil de 44 (solo en móvil <820 se pide la caja de 44).
+    if (!movil && e.matches('select,textarea,input:not([type="checkbox"]):not([type="radio"])')) continue;
+    // «34 visibles dentro de una caja de 44»: un ancestro cercano de 44–64 px de alto que contiene al control y a ningún otro es SU caja táctil.
+    { let a = e.parentElement; let caja = false; for (let n = 0; a && n < 3 && !caja; n++, a = a.parentElement) { const ar = a.getBoundingClientRect(); if (ar.height >= 43.5 && ar.height <= 64 && ar.width >= r0.width - 0.5 && ar.top <= r0.top + 0.5 && ar.bottom >= r0.bottom - 0.5 && ![...a.querySelectorAll(ctlSel)].some((o) => o !== e && !e.contains(o) && !o.contains(e))) caja = true; } if (caja) continue; }
     e.scrollIntoView({ block: 'center', inline: 'center' });
     const r = e.getBoundingClientRect();
     if (r.top < 0 || r.bottom > innerHeight || r.left < 0 || r.right > innerWidth) continue;
@@ -183,7 +187,7 @@ export function medir(U, opts) {
   // ═══ C2 · TIPOGRAFÍA ════════════════════════════════════════════════════
   const escala = {};
   const hist = (fs) => { const k = String(Math.round(fs * 10) / 10); escala[k] = (escala[k] || 0) + 1; };
-  const conTexto = todos.filter((e) => [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()));
+  const conTexto = todos.filter((e) => [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) || (e.matches('input:not([type="checkbox"]):not([type="radio"]),textarea') && (e.value || e.placeholder)));
   const KPI_SEL = '.rv-kpi__valor,[class*="kpi"][class*="valor"],[class*="kpi"][class*="value"],.stat-value,[data-kpi-valor]';
   const kpis = [];
   for (const e of conTexto) {
@@ -197,11 +201,12 @@ export function medir(U, opts) {
     else if (esKpi) {
       if (fs > U.kpiMax + 0.05) add('c2.kpi_mayor_30', fs + 'px (tope ' + U.kpiMax + ') ' + desc(e));
       const sinDato = /^[—–-]$/.test(tx); // KPI sin dato «—»: 18
-      const okKpi = sinDato ? Math.abs(fs - U.kpiSinDato) <= U.kpiTol : movil ? (fs >= U.kpiMovil[0] && fs <= U.kpiMovil[1]) || Math.abs(fs - U.kpi) <= U.kpiTol : Math.abs(fs - U.kpi) <= U.kpiTol;
-      if (!okKpi) add('c2.kpi_no_26', fs + 'px (norma ' + (sinDato ? U.kpiSinDato : movil ? '18–21 (móvil) o ' + U.kpi : U.kpi) + ') ' + desc(e));
+      const okKpi = sinDato ? Math.abs(fs - U.kpiSinDato) <= U.kpiTol : movil ? (fs >= U.kpiMovil[0] && fs <= U.kpiMovil[1]) : Math.abs(fs - U.kpi) <= U.kpiTol;
+      if (!okKpi) add('c2.kpi_no_26', fs + 'px (norma ' + (sinDato ? U.kpiSinDato : movil ? '18–21 (móvil <820)' : U.kpi) + ') ' + desc(e));
     } else {
-      const campo = e.matches('input,select,textarea');
-      const ok = U.escalaPermitida.some((v) => Math.abs(fs - v) < 0.3 && (v !== 11 || mayus)) || (campo && movil && Math.abs(fs - 16) < 0.3);
+      const campo = e.matches('input,select,textarea,option') || !!e.closest('select');
+      const enTooltip = !!e.closest('[role="tooltip"],[class*="tooltip"],[data-tooltip],.rv-tip');
+      const ok = U.escalaPermitida.some((v) => Math.abs(fs - v) < 0.3 && (v !== 11 || mayus)) || (campo && movil && Math.abs(fs - 16) < 0.3) || (enTooltip && Math.abs(fs - 16) < 0.3);
       // 30 como tope absoluto; entre 15 y 26 solo H1=20 y el título de overlay=15 son parte de la escala
       if (!ok && fs >= U.textoMin - 0.05 && fs <= U.kpiMax) add('c2.fuera_de_escala', fs + 'px ' + (fs < 12 && !mayus ? '(11 solo MAYÚSCULAS) ' : '') + desc(e));
       else if (fs > U.kpiMax + 0.05) add('c2.fuera_de_escala', fs + 'px (> 30) ' + desc(e));
@@ -239,7 +244,7 @@ export function medir(U, opts) {
     if (v <= 0.01) return { ok: true, v };
     if (Math.abs(v - 8) <= 0.6 || Math.abs(v - 12) <= 0.6) return { ok: true, v };
     if (v >= mitad - 0.6) return { ok: true, v };
-    if (movil && Math.abs(v - U.radioHoja) <= 0.6) return { ok: true, v }; // hoja inferior móvil
+    if (movil && Math.abs(v - U.radioHoja) <= 0.6 && e.closest('.rv-hoja,.rv-ov__panel,dialog,[data-hoja]')) return { ok: true, v }; // SOLO la hoja inferior móvil (ESTILO §5)
     return { ok: false, v };
   };
   let marcasExentas = 0;
@@ -250,7 +255,7 @@ export function medir(U, opts) {
     if (!cajaPropia(e, cs)) continue;
     const q = radioOk(e, cs, r); const k = String(Math.round(q.v * 10) / 10); radiosVistos[k] = (radiosVistos[k] || 0) + 1;
     if (!q.ok && esMarca(e, q.v)) { marcasExentas++; continue; }
-    if (!q.ok) add('c3.radio', 'radio ' + Math.round(q.v * 10) / 10 + 'px (permitidos 8, 12, píldora) ' + desc(e));
+    if (!q.ok) add('c3.radio', 'radio ' + Math.round(q.v * 10) / 10 + 'px (permitidos 8, 12, píldora; 16 solo en la hoja inferior móvil) ' + desc(e));
   }
   stats.radios = radiosVistos; stats.marcasExentas = marcasExentas;
   const maxPad = movil ? U.padTarjetaMovil : U.padTarjeta;
