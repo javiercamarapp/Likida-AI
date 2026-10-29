@@ -21,49 +21,49 @@
 
 :root [data-ui="v2"] {
   /* Marco y superficies */
-  --bg: #f6f6f7;
+  --bg: #f2f1ec;
   --surface: #ffffff;
   --panel: var(--surface);
-  --canvas: #f1f1f2;
-  --canvas2: #f7f7f8;
+  --canvas: #eceae4;
+  --canvas2: #f7f6f2;
 
   /* Tinta */
-  --ink: #0e0e10;
-  --ink2: #3a3a40;
-  --muted: #5a5a61;
-  --faint: #6a6a73;
+  --ink: #101319;
+  --ink2: #373b45;
+  --muted: #565b66;
+  --faint: #626773;
 
   /* Líneas y controles */
-  --line: #e6e6e8;
-  --line2: #d6d6d9;
-  --input: #8a8a90;
+  --line: #e3e1da;
+  --line2: #d2d0c8;
+  --input: #81848d;
 
   /* Acción: tinta sólida (no el azul suave de la referencia) */
-  --marca: #0e0e10;
+  --marca: #101319;
   --marca-fg: #ffffff;
-  --marca-hover: #2a2a2f;
-  --accent: #0e0e10;
+  --marca-hover: #2a2f3a;
+  --accent: #101319;
   --accent-fg: #ffffff;
   /* Señal: el naranja de Likida, solo para la barra de 3 px del ítem activo
      y el valor elegido. #c2410c sobre blanco mide 5.18:1. */
-  --senal: #c2410c;
+  --senal: #a64b14;
 
   /* Estados (tint/ink) */
-  --ok: #16784a;
-  --okbg: #ecf8f1;
-  --warn: #86580d;
-  --warnbg: #fff7e5;
-  --bad: #ac2440;
-  --badbg: #fdeef0;
-  --info: #145966;
-  --infobg: #e8f3f5;
+  --ok: #1f6f4d;
+  --okbg: #e7f3ec;
+  --warn: #7c5410;
+  --warnbg: #fbf3e0;
+  --bad: #a02b45;
+  --badbg: #fbebee;
+  --info: #1f5a73;
+  --infobg: #e6f0f4;
 
   /* Rampa de gráficas (neutra) */
-  --g1: #f1f1f2;
-  --g2: #e4e4e6;
-  --g3: #8a8a90;
-  --g4: #3a3a40;
-  --g5: #0e0e10;
+  --g1: #eceae4;
+  --g2: #dedcd5;
+  --g3: #8c8f98;
+  --g4: #373b45;
+  --g5: #101319;
 
   /* Ocho matices de DATOS: solo gráficas, chips de categoría y filete de KPI */
   --chart-1: #2f6bd8; --chart-2: #f25d22; --chart-3: #1f7a55; --chart-4: #d9a441;
@@ -74,9 +74,9 @@
   --ink-5: #087593; --ink-6: #a6264a; --ink-7: #7456c9; --ink-8: #0e0e10;
 
   /* Superpuestos */
-  --scrim: #0e0e1066;
-  --tip: #0e0e10;
-  --tip-ink: #f4f4f5;
+  --scrim: #0c101799;
+  --tip: #101319;
+  --tip-ink: #f2f0ea;
 
   /* Gemelos --color-* (los que Tailwind emite como utilidades y 29 .tsx leen) */
   --color-bg: var(--bg);
@@ -94,51 +94,56 @@
      control Y de tarjeta; la tarjeta se devuelve a 12 con `.card` abajo. */
   --radius-md: 8px;
   --radius-lg: 8px;
-  --radius-xl: 12px;
-  --radius-2xl: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 16px;
 
   /* Sin sombras en el flujo; solo los popovers flotan */
-  --shadow-card: none;
-  --shadow-pop: 0 12px 32px -8px #17181c2e, 0 2px 6px #17181c0f;
+  --shadow-card: 0 1px 2px #10131908, 0 12px 28px -18px #10131926;
+  --glass: #ffffffb8;
+  --glass-linea: #10131914;
+  --halo: #a64b141f;
+  --sombra-1: 0 1px 2px #1013190a, 0 1px 1px #10131906;
+  --sombra-2: 0 1px 2px #1013190a, 0 14px 32px -18px #10131933;
+  --shadow-pop: 0 24px 56px -16px #1013193d, 0 2px 8px #1013190f;
 }
 
 :root[data-theme="dark"] [data-ui="v2"].tema-neutro,
 :root[data-theme="dark"] [data-ui="v2"] {
-  --bg: #0e0e10;
-  --surface: #17171a;
-  --canvas: #1f1f23;
-  --canvas2: #17171a;
+  --bg: #0c1017;
+  --surface: #131822;
+  --canvas: #1a202c;
+  --canvas2: #131822;
 
-  --ink: #f4f4f5;
-  --ink2: #d4d4d8;
-  --muted: #a3a3ab;
-  --faint: #98989f;
+  --ink: #f2f0ea;
+  --ink2: #d3d5db;
+  --muted: #a2a8b5;
+  --faint: #9299a7;
 
-  --line: #26262b;
-  --line2: #3a3a40;
-  --input: #8b8b93;
+  --line: #232a37;
+  --line2: #343c4c;
+  --input: #8a93a3;
 
-  --marca: #f4f4f5;
-  --marca-fg: #0e0e10;
-  --marca-hover: #ffffff;
-  --accent: #f4f4f5;
-  --accent-fg: #0e0e10;
-  --senal: #fb923c;
+  --marca: #e9c98f;
+  --marca-fg: #0c1017;
+  --marca-hover: #f3ddb0;
+  --accent: #e9c98f;
+  --accent-fg: #0c1017;
+  --senal: #e9b06a;
 
-  --ok: #6fd6a3;
-  --okbg: #12261c;
-  --warn: #f0c987;
-  --warnbg: #33281a;
-  --bad: #ffb3c3;
-  --badbg: #342127;
-  --info: #9fd3de;
-  --infobg: #14272c;
+  --ok: #7fd6ae;
+  --okbg: #11261d;
+  --warn: #ebc987;
+  --warnbg: #2b2415;
+  --bad: #f2a5b5;
+  --badbg: #2e1b21;
+  --info: #9ccbdb;
+  --infobg: #13262d;
 
-  --g1: #1b1b1f;
-  --g2: #2a2a30;
-  --g3: #8b8b93;
-  --g4: #d4d4d8;
-  --g5: #f4f4f5;
+  --g1: #171c27;
+  --g2: #262d3a;
+  --g3: #8a93a3;
+  --g4: #d3d5db;
+  --g5: #f2f0ea;
 
   --chart-1: #4a85ea; --chart-2: #e8602b; --chart-3: #2a9468; --chart-4: #b98526;
   --chart-5: #1d93b0; --chart-6: #cc4a6c; --chart-7: #8d75e0; --chart-8: #f4f4f5;
@@ -147,11 +152,17 @@
   --ink-1: #558ceb; --ink-2: #e8602b; --ink-3: #43a07a; --ink-4: #b98526;
   --ink-5: #2b99b5; --ink-6: #d56985; --ink-7: #947de2; --ink-8: #f4f4f5;
 
-  --scrim: #000a;
-  --tip: #f4f4f5;
-  --tip-ink: #0e0e10;
+  --scrim: #04070dcc;
+  --tip: #f2f0ea;
+  --tip-ink: #0c1017;
 
-  --shadow-pop: 0 12px 32px -8px #000c, 0 2px 6px #0006;
+  --shadow-pop: 0 28px 64px -16px #000d, 0 2px 8px #0008;
+  --shadow-card: inset 0 1px 0 #ffffff0a, 0 18px 40px -24px #000c;
+  --glass: #131822b8;
+  --glass-linea: #ffffff14;
+  --halo: #e9c98f26;
+  --sombra-1: inset 0 1px 0 #ffffff0a;
+  --sombra-2: inset 0 1px 0 #ffffff0d, 0 20px 44px -24px #000d;
 }
 
 /* ── Lienzo fuera del alcance (riesgo del spike: `body` queda fuera del div del chrome) ──
@@ -161,20 +172,20 @@
    `:root[data-theme="light"]` (0,2,0) sin depender del orden de los chunks de CSS; el oscuro lleva
    su propio bloque (0,3,1). Sin un `[data-ui="v2"]` en el documento, esto no aplica a nada. */
 html:root:has([data-ui="v2"]) {
-  --bg: #f6f6f7;
-  --ink: #0e0e10;
+  --bg: #0c1017;
+  --ink: #f2f0ea;
 }
 html:root[data-theme="dark"]:has([data-ui="v2"]) {
-  --bg: #0e0e10;
-  --ink: #f4f4f5;
+  --bg: #0c1017;
+  --ink: #f2f0ea;
 }
 
 /* Tarjetas: 12 px, sin sombra. Selector de clase propio del alcance (0,2,0)
    supera a `.card` (0,1,0) de globals.css, que no se edita. */
 [data-ui="v2"] .card,
 [data-ui="v2"] .glass-panel {
-  border-radius: 12px;
-  box-shadow: none;
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
 }
 
 /* Piso tipográfico de 11 px SIN codemod: los 357 usos de 10 / 10.5 px (y los

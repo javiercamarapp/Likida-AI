@@ -40,7 +40,24 @@
   src: url("/fonts/hankengrotesk-700.woff2") format("woff2");
 }
 
+/* Serif de titulares (Newsreader, OFL, licencia en public/fonts/): SOLO titulares de página, cifras grandes y bienvenidas. */
+@font-face {
+  font-family: "Newsreader UI";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("/fonts/newsreader-300.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Newsreader UI";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/newsreader-400.woff2") format("woff2");
+}
+
 [data-ui="v2"] {
   --font-sans-ui: "Hanken Grotesk UI", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Newsreader UI", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
   --font-display: "Hanken Grotesk UI", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
