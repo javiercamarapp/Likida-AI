@@ -150,6 +150,7 @@
   pointer-events: auto; flex: 1 1 0%; min-width: 0; height: 100%; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 8px;
   border: 0; border-radius: 11px; background: transparent; color: var(--ink); cursor: pointer; text-align: left; position: relative;
 }
+[data-ui="v2"] .rv-cuenta__btn::after { content: ""; position: absolute; inset: -4px 0; }
 [data-ui="v2"] .rv-cuenta__btn:hover { background: var(--ui-soft); }
 [data-ui="v2"] .rv-cuenta__btn:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 1px; }
 [data-ui="v2"] .rv-avatar {
