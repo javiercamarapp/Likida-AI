@@ -103,7 +103,7 @@ const V: Record<string, () => ReactNode> = {
                 <td data-label="Ruta">{v.origen ?? '—'} → {v.destino ?? '—'}</td>
                 <td data-label="Casetas" className="num">{mxn(v.anticipo * 0.31)}</td>
                 <td data-label="Diferencia" className="num">{i % 4 === 3 ? '—' : mxn(i * 45 + 60)}</td>
-                <td data-label="Cierre" style={{ minWidth: 96 }}><G.Bullet matiz={3} etiqueta={`Avance ${v.folio}`} valor={i % 5 === 2 ? null : 35 + ((i * 17) % 60)} maximo={100} formato={pct} /></td>
+                <td data-label="Cierre" style={{ minWidth: 96 }}><G.Bullet compacto matiz={3} etiqueta="Avance de cierre" valor={i % 5 === 2 ? null : 35 + ((i * 17) % 60)} maximo={100} formato={pct} /></td>
                 <td data-label="Estado"><P.Chip tamano="estado" tono={i % 3 === 0 ? 'bad' : i % 3 === 1 ? 'warn' : 'ok'}>{i % 3 === 0 ? 'Revisar' : i % 3 === 1 ? 'En cuadre' : 'Cuadra'}</P.Chip></td>
                 <td style={{ textAlign: 'right' }}><P.BotonEnlace href="/dashboard/viajes" tamano="sm" variante="ghost">Ver</P.BotonEnlace></td>
               </tr>
@@ -156,9 +156,9 @@ const V: Record<string, () => ReactNode> = {
       <P.Drawer abierto={false} onCerrar={() => {}} titulo="Sus reglas" descripcion="Política vigente del agente de liquidación" pie={<><P.Boton>Cerrar</P.Boton><P.Boton variante="primary">Guardar</P.Boton></>}>
         <div style={{ display: 'grid', gap: 12 }}>
           <P.Aviso titulo="Candidatos a reclamo, no acusaciones">Se revisan con el operador antes de actuar.</P.Aviso>
-          {['Tope de anticipo', 'Tolerancia de diferencia', 'Casetas sin comprobante'].map((r, i) => (
+          {['Tope de anticipo', 'Tolerancia de diferencia', 'Casetas sin comprobante', 'Diésel sin ticket', 'Anticipo sin comprobar', 'Viáticos fuera de política', 'Maniobras sin evidencia', 'Combustible en otro ejercicio', 'RFC sin verificar', 'Horas de espera'].map((r, i) => (
             <div key={r} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--line)' }}>
-              <span>{r}</span><P.Chip tamano="estado" tono={i === 1 ? 'warn' : 'ok'}>{i === 1 ? 'Revisar' : 'Activa'}</P.Chip>
+              <span>{r}</span><P.Chip tamano="estado" tono={i % 4 === 1 ? 'warn' : i % 4 === 3 ? 'bad' : 'ok'}>{i % 4 === 1 ? 'Revisar' : i % 4 === 3 ? 'Apagada' : 'Activa'}</P.Chip>
             </div>
           ))}
           <P.Switch nombre="sw-r" etiqueta="Avisar por correo al cerrar" defaultChecked />

@@ -151,7 +151,7 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 [data-ui="v2"] .rv-kpi__cab { display: flex; align-items: center; gap: 6px; min-width: 0; }
 [data-ui="v2"] .rv-kpi__icono { display: inline-flex; flex: none; color: var(--cat-ink, var(--muted)); }
 [data-ui="v2"] .rv-kpi__icono svg { width: 16px; height: 16px; }
-[data-ui="v2"] .rv-kpi__etq { font: 500 12px/1.3 var(--font-sans-ui, inherit); color: var(--muted); }
+[data-ui="v2"] .rv-kpi__etq { font: 500 12px/1.3 var(--font-sans-ui, inherit); text-transform: none; letter-spacing: 0; color: var(--muted); }
 [data-ui="v2"] .rv-kpi__fila { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
 [data-ui="v2"] .rv-kpi__valor { font: 700 26px/1.1 var(--font-display, inherit); letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
 [data-ui="v2"] .rv-kpi__valor[data-vacio] { font-size: 18px; font-weight: 600; color: var(--muted); }
@@ -243,3 +243,6 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 [data-ui="v2"] .rv-anillo__arco { animation: rv-barrido var(--t-sweep) var(--ui-ease) both; }
 [data-ui="v2"] .rv-check__trazo { animation: rv-trazo var(--t-draw) var(--ui-ease) both; }
 }
+[data-ui="v2"] .rv-bullet[data-compacto] { grid-template-columns: minmax(48px, 1fr) auto; gap: 0 8px; }
+[data-ui="v2"] .rv-bullet[data-compacto] .rv-bullet__pista { grid-column: 1; grid-row: 1; }
+[data-ui="v2"] .rv-bullet[data-compacto] .rv-bullet__val { grid-column: 2; grid-row: 1; }
