@@ -40,10 +40,21 @@ export function SeccionCargas({ acciones, aviso, error, detalle, puedeCargar }: 
             <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
               CSV o Excel, una fila por concepto: bitácora, nº de empleado, desde, hasta, tipo (percepción/deducción), concepto y monto;
               opcionales: terminal, nº de liquidación, nº de pago, póliza, unidad, vale, neto y tipo de operador. Una bitácora sin póliza no se envía.
-              Si el envío está activo, cada desglose nuevo sale a sus destinatarios.
+              Si el envío está activo, cada desglose nuevo sale a sus destinatarios, salvo los anteriores a la fecha de corte (se guardan sin enviar).
             </p>
             <input type="file" name="archivo" accept=".csv,.txt,.xlsx,.xls" required className={CSS_INPUT} style={{ background: 'var(--surface)' }} />
-            <button type="submit" className={CSS_BOTON} style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>Subir desgloses</button>
+            <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+              Primero pulsa «Ver vista previa»: cuenta «N desgloses / M correos» sin guardar ni enviar nada. Para subir de verdad, vuelve a elegir
+              el archivo, escribe M en «Correos que saldrán» y pulsa «Subir y enviar» (con 0 correos no hace falta escribirlo).
+            </p>
+            <label className="block text-[12px]">
+              <span style={{ color: 'var(--muted)' }}>Correos que saldrán (el número de la vista previa)</span>
+              <input type="text" inputMode="numeric" name="correos" autoComplete="off" pattern="[0-9]*" className={CSS_INPUT} style={{ background: 'var(--surface)' }} />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button type="submit" name="paso" value="previa" className={CSS_BOTON} style={{ background: 'var(--canvas)', color: 'var(--ink)' }}>Ver vista previa</button>
+              <button type="submit" name="paso" value="subir" className={CSS_BOTON} style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>Subir y enviar</button>
+            </div>
           </form>
           <form action={acciones.contactos} className="space-y-2">
             <h3 className="text-[13px] font-medium inline-flex items-center gap-1.5"><Users width={14} height={14} strokeWidth={1.75} /> Correos de operadores y coordinadores</h3>

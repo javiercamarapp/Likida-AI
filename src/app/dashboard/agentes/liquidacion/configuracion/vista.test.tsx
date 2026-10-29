@@ -216,6 +216,26 @@ describe('solo administradores', () => {
   });
 });
 
+describe('Ola 10 · A1-01: fecha de corte del arranque en el panel', () => {
+  it('traduce la fecha de corte; vacía = sin corte', () => {
+    expect(ok(formulario({ noEnviarAntes: '2026-11-02' })).noEnviarAntes).toBe('2026-11-02');
+    expect(ok(formulario({ noEnviarAntes: '' })).noEnviarAntes).toBeNull();
+    expect(ok(formulario()).noEnviarAntes).toBeNull();
+  });
+
+  it('una fecha que no es un día válido se rechaza en lenguaje llano', () => {
+    expect(error(formulario({ noEnviarAntes: '02/11/2026' }))).toContain('fecha de corte');
+    expect(error(formulario({ noEnviarAntes: '2026-13-45' }))).toContain('fecha de corte');
+  });
+
+  it('la pantalla ofrece el campo y, con la configuración guardada, enseña la fecha', () => {
+    expect(pintar()).toContain('name="noEnviarAntes"');
+    const html = pintar({ hayFila: true, config: { ...CONFIG_CORREO_POR_DEFECTO, canal: 'correo', noEnviarAntes: '2026-11-02' } });
+    expect(html).toContain('value="2026-11-02"');
+    expect(html).toContain('Fecha de corte del arranque');
+  });
+});
+
 describe('Ola 1 · A1: correo emisor, modo primer mes y revisores en el panel', () => {
   it('traduce el formulario: correo emisor normalizado, revisores «departamento: correo» y el modo primer mes con su fecha', () => {
     const c = ok(formulario({

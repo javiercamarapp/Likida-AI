@@ -297,7 +297,13 @@ export default async function PaginaAgenteLiquidacion({
     const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
     if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion') || !puedeVerArea(s.rol, 'administracion')) throw new Error('Solo el dueño de la flota sube desgloses.');
     const f = await leerArchivoCarga(fd);
-    await dejarFlash('/dashboard/agentes/liquidacion', f.ok ? await cargarDesglosesDePanel(s.tenantId, f.archivo) : { error: f.error });
+    // A1-01: dos pasos. «Ver vista previa» solo cuenta (N desgloses / M correos); «Subir y enviar» exige haber escrito M.
+    const confirmo = String(fd.get('paso') ?? '') === 'subir';
+    const escrito = String(fd.get('correos') ?? '').trim();
+    const correosEscritos = /^\d{1,6}$/.test(escrito) ? Number(escrito) : null;
+    await dejarFlash('/dashboard/agentes/liquidacion', f.ok
+      ? await cargarDesglosesDePanel(s.tenantId, f.archivo, confirmo ? { tipo: 'confirmar', correos: correosEscritos } : { tipo: 'previa' })
+      : { error: f.error });
     revalidatePath('/dashboard/agentes/liquidacion');
     redirect(`/dashboard/agentes/liquidacion${contexto.length ? `?${new URLSearchParams(contexto).toString()}` : ''}#cargas`);
   }
