@@ -43,6 +43,11 @@
   @keyframes rv-crece {
     from { transform: scaleX(0); }
   }
+  /* Revelado de la línea de área por recorte (sin dasharray). */
+  @keyframes rv-revela {
+    from { clip-path: inset(0 100% 0 0); }
+    to { clip-path: inset(0 0 0 0); }
+  }
   @keyframes rv-giro {
     to { transform: rotate(360deg); }
   }
