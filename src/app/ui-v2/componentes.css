@@ -248,8 +248,9 @@
 }
 [data-ui="v2"] .rv-btn svg { width: 16px; height: 16px; flex: none; }
 [data-ui="v2"] .rv-btn:hover { background: var(--canvas); border-color: var(--line2); }
-[data-ui="v2"] .rv-btn--primary { background: var(--btn-tenue-bg); border-color: var(--btn-tenue-bd); color: var(--ink); }
-[data-ui="v2"] .rv-btn--primary:hover { background: var(--btn-tenue-hv); border-color: var(--btn-tenue-bd); }
+/* Lee --btn-bg/--btn-fg/--btn-borde/--btn-hover (los fija el shell o tokens.css); el respaldo es el tenue neutro. */
+[data-ui="v2"] .rv-btn--primary { background: var(--btn-bg, var(--btn-tenue-bg)); border-color: var(--btn-borde, var(--btn-tenue-bd)); color: var(--btn-fg, var(--ink)); }
+[data-ui="v2"] .rv-btn--primary:hover { background: var(--btn-hover, var(--btn-tenue-hv)); border-color: var(--btn-borde, var(--btn-tenue-bd)); }
 [data-ui="v2"] .rv-btn--ghost { background: transparent; border-color: transparent; }
 [data-ui="v2"] .rv-btn--ghost:hover { background: var(--canvas); border-color: transparent; }
 [data-ui="v2"] .rv-btn--danger-soft { background: var(--badbg); border-color: color-mix(in srgb, var(--bad) 28%, transparent); color: var(--bad); }
@@ -367,7 +368,8 @@
 }
 [data-ui="v2"] .rv-vacio { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 12px; min-height: 44px; padding: 8px 14px; border: 1.5px dotted var(--input); border-radius: 8px; background: transparent; text-align: center; }
 @media (max-width: 819px) {
-[data-ui="v2"] .rv-vacio { padding: 8px 12px; }
+[data-ui="v2"] .rv-vacio { padding: 2px 12px; flex-wrap: nowrap; min-height: 0; }
+[data-ui="v2"] .rv-vacio__texto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 [data-ui="v2"] .rv-vacio__titulo { margin: 0; font-size: 13px; line-height: 1.4; font-weight: 600; color: var(--ink); }
 [data-ui="v2"] .rv-vacio__texto { margin: 0; max-width: none; font-size: 13px; line-height: 1.4; color: var(--muted); }
@@ -470,4 +472,27 @@
 [data-ui="v2"] .card table[data-tarjeta] tbody td { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: auto; min-height: 24px; padding: 0; border: 0; text-align: left; }
 [data-ui="v2"] .card table[data-tarjeta] tbody td::before { content: attr(data-label); flex: none; font-size: 12px; font-weight: 500; color: var(--muted); }
 [data-ui="v2"] .card table[data-tarjeta] tbody td:not([data-label])::before { content: none; }
+}
+
+/* Alto contraste forzado: switch, grabber y cerrar. */
+@media (forced-colors: active) {
+  [data-ui="v2"] .rv-switch__pista { border: 1px solid ButtonText; forced-color-adjust: none; background: Canvas; }
+  [data-ui="v2"] .rv-switch__perilla { forced-color-adjust: none; background: ButtonText; }
+  [data-ui="v2"] .rv-switch__input:checked + .rv-switch__pista { background: Highlight; border-color: Highlight; }
+  [data-ui="v2"] .rv-switch__input:checked + .rv-switch__pista .rv-switch__perilla { background: HighlightText; }
+  [data-ui="v2"] .rv-ov__grabber { forced-color-adjust: none; background: ButtonText; }
+}
+
+/* ── Popover y menú: filas de 32, radio 12, borde 1 px, --shadow-pop, entrada 140 ms ── */
+[data-ui="v2"] .rv-pop { position: fixed; z-index: 60; min-width: 200px; max-width: calc(100vw - 16px); padding: 4px; background: var(--surface); color: var(--ink); border: 1px solid var(--line2, var(--line)); border-radius: 12px; box-shadow: var(--shadow-pop, none); }
+[data-ui="v2"] .rv-menu { display: grid; gap: 0; }
+[data-ui="v2"] .rv-menu__item { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 6px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font: 500 13px/1.25 var(--font-sans-ui, inherit); text-align: left; text-decoration: none; cursor: pointer; }
+[data-ui="v2"] .rv-menu__item:hover { background: var(--canvas); }
+[data-ui="v2"] .rv-menu__item:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+[data-ui="v2"] .rv-menu__item[data-peligro] { color: var(--bad); }
+[data-ui="v2"] .rv-menu__item[aria-disabled="true"] { color: var(--muted); cursor: not-allowed; }
+[data-ui="v2"] .rv-menu__icono { display: inline-flex; flex: none; color: var(--muted); }
+[data-ui="v2"] .rv-menu__icono svg { width: 16px; height: 16px; }
+@media (prefers-reduced-motion: no-preference) {
+  [data-ui="v2"] .rv-pop { animation: rv-ov-fondo 140ms var(--ui-ease) both; }
 }

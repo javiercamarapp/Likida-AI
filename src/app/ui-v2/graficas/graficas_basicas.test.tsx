@@ -3,10 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { AreaMini, BarraApilada, Bullet, DonaMini, Sparkline } from './index';
 
 describe('gráficas básicas', () => {
-  it('Sparkline: 60×24 y con <2 puntos válidos no pinta una raya falsa', () => {
+  it('Sparkline: 60×22 y con <2 puntos válidos no pinta una raya falsa', () => {
     const h = renderToStaticMarkup(<Sparkline valores={[1, 3, 2, 5]} matiz={2} />);
     expect(h).toContain('width="60"');
-    expect(h).toContain('height="24"');
+    expect(h).toContain('height="22"');
     expect(h).toContain('r="2.25"');
     expect(renderToStaticMarkup(<Sparkline valores={[4]} />)).toBe('');
     expect(renderToStaticMarkup(<Sparkline valores={[null, 3, null]} />)).toBe('');

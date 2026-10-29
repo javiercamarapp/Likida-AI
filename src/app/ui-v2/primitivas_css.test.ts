@@ -22,7 +22,7 @@ describe('primitivas v2 · contrato de ESTILO-LIKIDA', () => {
     expect(comp).toMatch(/\.rv-btn \{[^}]*border-radius: 8px/);
     expect(comp).toMatch(/@media \(max-width: 819px\) \{\s*\[data-ui="v2"\] \.rv-btn \{ min-height: 36px; \}/);
     expect(comp).toMatch(/\.rv-btn::after \{[^}]*width: max\(100%, 44px\); height: max\(100%, 44px\)/);
-    expect(comp).toMatch(/\.rv-btn--primary \{ background: var\(--btn-tenue-bg\)/);
+    expect(comp).toMatch(/\.rv-btn--primary \{ background: var\(--btn-bg, var\(--btn-tenue-bg\)\)/); // lee --btn-bg/--btn-fg/--btn-borde/--btn-hover con respaldo tenue
     expect(comp).not.toMatch(/\.rv-btn--primary \{[^}]*var\(--marca\)/);
   });
   it('botón deshabilitado: borde discontinuo y SIN opacidad', () => {

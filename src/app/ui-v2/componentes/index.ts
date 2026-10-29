@@ -5,7 +5,7 @@ export { Aviso, type TonoAviso } from './aviso';
 export { EncabezadoPagina } from './encabezado-pagina';
 export { UiV2Provider, useUiV2 } from './contexto';
 export { cx } from './clases';
-export { Drawer, Modal, type TamanoDrawer, type TamanoModal } from './overlay';
+export { Drawer, Modal, Popover, MenuList, MenuItem, type TamanoDrawer, type TamanoModal } from './overlay';
 export { EstadoVacio } from './estado-vacio';
 export { Monograma, iniciales, matizDeId } from './monograma';
 export { type EscenaId } from '../svg/escenas';

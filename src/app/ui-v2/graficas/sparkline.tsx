@@ -1,8 +1,8 @@
 import type { Matiz } from '../metricas';
 
-/** Sparkline 60×24 (trazo 1.5, área .06, punto final r 2.25), color = matiz de la MÉTRICA.
+/** Sparkline 60×22 (trazo 1.5, área .06, punto final r 2.25), color = matiz de la MÉTRICA.
  *  Menos de 2 puntos válidos ⇒ no pinta una raya falsa: devuelve null (el padre dice «sin serie»). */
-export function Sparkline({ valores, matiz = 8, ancho = 60, alto = 24 }: {
+export function Sparkline({ valores, matiz = 8, ancho = 60, alto = 22 }: {
   valores: ReadonlyArray<number | null>;
   matiz?: Matiz;
   ancho?: number;
@@ -25,11 +25,13 @@ export function Sparkline({ valores, matiz = 8, ancho = 60, alto = 24 }: {
   const trazo = (t: ReadonlyArray<readonly [number, number]>) => t.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
   const d = tramos.map(trazo).join(' ');
   const [ux, uy] = xy[xy.length - 1];
+  const sueltos = tramos.filter((t) => t.length === 1);
   const area = tramos.filter((t) => t.length > 1).map((t) => `${trazo(t)} L${t[t.length - 1][0].toFixed(1)} ${alto} L${t[0][0].toFixed(1)} ${alto} Z`).join(' ');
   return (
     <svg className="rv-spark" data-matiz={matiz} width={ancho} height={alto} viewBox={`0 0 ${ancho} ${alto}`} aria-hidden="true">
       <path className="rv-spark__area" d={area} />
       <path className="rv-spark__linea" d={d} fill="none" pathLength={1} />
+      {sueltos.map(([[x, y]]) => <circle key={x} className="rv-spark__punto" cx={x} cy={y} r={1.75} />)}
       <circle className="rv-spark__punto" cx={ux} cy={uy} r={2.25} />
     </svg>
   );

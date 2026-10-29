@@ -41,7 +41,7 @@ export function AreaMini({ valores, etiquetas, matiz = 1, etiqueta, formato = (v
   return (
     <figure className="rv-gr rv-area" data-matiz={matiz} aria-label={etiqueta}>
       <div className="rv-area__ejes" aria-hidden="true">
-        {marcas.map((m) => <span key={m} style={{ top: `${(Y(m) / alto) * 100}%` }}>{formato(m)}</span>)}
+        {marcas.map((m, i) => <span key={i} style={{ top: `${(Y(m) / alto) * 100}%` }}>{formato(m)}</span>)}
       </div>
       <div className="rv-area__plot">
       <svg viewBox={`0 0 ${W} ${alto}`} width="100%" height={alto} preserveAspectRatio="none" role="img" aria-label={etiqueta}>
@@ -51,8 +51,8 @@ export function AreaMini({ valores, etiquetas, matiz = 1, etiqueta, formato = (v
             <stop offset="1" stopColor="var(--cat, currentColor)" stopOpacity="0" />
           </linearGradient>
         </defs>
-        {marcas.map((m) => (
-          <g key={m}>
+        {marcas.map((m, i) => (
+          <g key={i}>
             <line className="rv-gr__rejilla" x1={padL} x2={W - padR} y1={Y(m)} y2={Y(m)} vectorEffect="non-scaling-stroke" />
           </g>
         ))}
@@ -62,8 +62,11 @@ export function AreaMini({ valores, etiquetas, matiz = 1, etiqueta, formato = (v
         {huecos.map(([a, b]) => (
           <line key={a} className="rv-area__hueco" x1={X(a)} x2={X(b)} y1={Y(min)} y2={Y(min)} vectorEffect="non-scaling-stroke" />
         ))}
-        <path className="rv-area__linea" d={d} fill="none" pathLength={1} vectorEffect="non-scaling-stroke" />
+        <path className="rv-area__linea" d={d} fill="none" vectorEffect="non-scaling-stroke" />
       </svg>
+      {conDatos.filter((t) => t.length === 1).map(([[i, v]]) => (
+        <i key={i} className="rv-area__aislado" aria-hidden="true" style={{ left: `${(X(i) / W) * 100}%`, top: `${(Y(v) / alto) * 100}%` }} />
+      ))}
       <i className="rv-area__punto" aria-hidden="true" style={{ left: `${(X(ult[0]) / W) * 100}%`, top: `${(Y(ult[1]) / alto) * 100}%` }} />
       </div>
       <table className="rv-sr">

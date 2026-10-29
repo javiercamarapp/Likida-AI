@@ -189,7 +189,9 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 [data-ui="v2"] .rv-spark__area { fill: var(--cat, var(--ink)); fill-opacity: .06; stroke: none; }
 [data-ui="v2"] .rv-spark__linea { stroke: var(--cat, var(--ink)); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; }
 [data-ui="v2"] .rv-spark__punto { fill: var(--cat, var(--ink)); }
-[data-ui="v2"] .rv-area__linea { stroke: var(--cat, var(--ink)); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; }
+[data-ui="v2"] .rv-area__linea { stroke: var(--cat, var(--ink)); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+[data-ui="v2"] .rv-area__hueco { stroke: var(--prov-sin-bd); stroke-width: 1.5; stroke-dasharray: 3 4; }
+[data-ui="v2"] .rv-area__aislado { position: absolute; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: var(--cat, var(--ink)); }
 [data-ui="v2"] .rv-area__punto { position: absolute; width: 6.5px; height: 6.5px; margin: -3.25px 0 0 -3.25px; border-radius: 50%; background: var(--cat, var(--ink)); }
 [data-ui="v2"] .rv-dona { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 [data-ui="v2"] .rv-dona__lienzo { position: relative; flex: none; }
@@ -234,7 +236,9 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 [data-ui="v2"] .rv-check__trazo { stroke: var(--ok, var(--ink)); stroke-dasharray: 1; stroke-dashoffset: 0; }
 @media (prefers-reduced-motion: no-preference) {
 [data-ui="v2"] .rv-spark__linea,
-[data-ui="v2"] .rv-area__linea { animation: rv-trazo var(--t-draw) var(--ui-ease) both; }
+/* El trazo de la línea NO usa stroke-dasharray: con vector-effect:non-scaling-stroke el guion se mide en pantalla y el
+     pathLength en unidades de usuario, y la línea salía partida. Se revela con un recorte (no toca el dato). */
+[data-ui="v2"] .rv-area__plot svg { animation: rv-revela var(--t-draw) var(--ui-ease) backwards; }
 [data-ui="v2"] .rv-spark__area { animation: rv-fade var(--t-draw) var(--ui-ease) both; }
 [data-ui="v2"] .rv-dona__gajo { animation: rv-fade var(--ui-slow) var(--ui-ease) both; }
 [data-ui="v2"] .rv-apilada__tramo,
@@ -246,3 +250,17 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 [data-ui="v2"] .rv-bullet[data-compacto] { grid-template-columns: minmax(48px, 1fr) auto; gap: 0 8px; }
 [data-ui="v2"] .rv-bullet[data-compacto] .rv-bullet__pista { grid-column: 1; grid-row: 1; }
 [data-ui="v2"] .rv-bullet[data-compacto] .rv-bullet__val { grid-column: 2; grid-row: 1; }
+
+/* Leyenda de dona: no se estira en tarjetas anchas (etiqueta y cifra quedan juntas). */
+[data-ui="v2"] .rv-dona__leyenda { max-width: 280px; }
+
+/* Alto contraste forzado: barras, pistas, perilla y marcas no pueden desaparecer (dependen de background). */
+@media (forced-colors: active) {
+  [data-ui="v2"] .rv-kpi__segs i, [data-ui="v2"] .rv-apilada__tramo, [data-ui="v2"] .rv-bullet__relleno,
+  [data-ui="v2"] .rv-dona__marca, [data-ui="v2"] .rv-area__punto, [data-ui="v2"] .rv-area__aislado, [data-ui="v2"] .rv-kpi__punto, [data-ui="v2"] .rv-kind__punto {
+    forced-color-adjust: none; background: Highlight;
+  }
+  [data-ui="v2"] .rv-dona__gajo { stroke: Highlight; }
+  [data-ui="v2"] .rv-bullet__pista, [data-ui="v2"] .rv-apilada__pista { border: 1px solid CanvasText; }
+  [data-ui="v2"] .rv-bullet__meta { forced-color-adjust: none; background: CanvasText; }
+}
