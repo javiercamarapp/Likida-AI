@@ -18,8 +18,19 @@ import { duracionesCss, duracionesInline } from './duraciones.mjs';
 // Todo lo pesado (Chromium) corre bajo ~/likida-loop/heavy.sh (un proceso pesado a la vez). Sin el candado, el detector se
 // relanza a sí mismo bajo heavy.sh; HEAVY_ADENTRO lo marca para no relanzar en bucle.
 const { spawnSync, execFileSync } = await import('node:child_process');
-// Si el padre ya es heavy.sh (alguien lo envolvió a mano) no se relanza: el candado no es reentrante y se bloquearía solo.
-const bajoHeavy = (() => { try { return /heavy\.sh/.test(execFileSync('ps', ['-o', 'command=', '-p', String(process.ppid)], { encoding: 'utf8' })); } catch { return false; } })();
+// Si CUALQUIER ancestro es heavy.sh (alguien lo envolvió a mano, también con npm / sh -c entre medio) no se relanza: el candado no
+// es reentrante y el detector se bloquearía solo hasta el timeout de 30 min.
+const bajoHeavy = (() => {
+  try {
+    let pid = process.ppid;
+    for (let n = 0; n < 12 && pid > 1; n++) {
+      const [ppid, ...cmd] = execFileSync('ps', ['-o', 'ppid=,command=', '-p', String(pid)], { encoding: 'utf8' }).trim().split(/\s+/);
+      if (/heavy\.sh/.test(cmd.join(' '))) return true;
+      pid = Number(ppid);
+    }
+  } catch { /* sin ps: se asume que no hay candado y se relanza */ }
+  return false;
+})();
 if (!process.env.HEAVY_ADENTRO && !process.env.UI2_SIN_HEAVY && !bajoHeavy) {
   const { homedir: casa } = await import('node:os');
   const r = spawnSync(path.join(casa(), 'likida-loop/heavy.sh'), [process.execPath, ...process.argv.slice(1)], { stdio: 'inherit', env: { ...process.env, HEAVY_ADENTRO: '1' } });
