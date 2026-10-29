@@ -3,7 +3,7 @@
 --
 -- RLS (capa 1) es la segunda barrera; esta es la primera: ni anon ni authenticated deben tener privilegio alguno sobre las tablas de
 -- `public` salvo una lista blanca explícita (hoy: SELECT de authenticated sobre app_user, la única lectura del producto con JWT de usuario).
--- Corre en ci-postgres JUSTO DESPUÉS de las migraciones y ANTES de `scripts/ci/e2e/grants-locales.sql` (que restituye el grant legado SOLO
+-- Corre en ci-postgres JUSTO DESPUÉS de las migraciones y ANTES de `scripts/ci/grants_previos_0947_restaurar.sql` (que restituye los grants previos SOLO
 -- en la base efímera para que la batería siga probando RLS como capa independiente).
 -- Mismo formato que capa1: cada bloque termina con un `raise exception` cuyo mensaje trae `(esperado …)`; lo califica
 -- `scripts/ci/correr-verificaciones.mjs`.

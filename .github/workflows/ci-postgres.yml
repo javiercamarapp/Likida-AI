@@ -162,6 +162,10 @@ jobs:
                 -f scripts/ci/0335_preflight_retencion_indices.sql
             fi
             n=$((n + 1))
+            # Ola 1 de seguridad: foto de los grants justo antes de la 0947 (la restituye el paso «Grants previos a la 0947», tras capa0).
+            if [ "$(basename "$f")" = "0947_cerrar_grants_anon_authenticated.sql" ]; then
+              psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f scripts/ci/grants_previos_0947_guardar.sql
+            fi
             if ! psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f"; then
               echo "::error::La migración $f no aplicó limpia sobre una base virgen."
               exit 1
@@ -171,7 +175,7 @@ jobs:
 
       # ── Capa 0: privilegios de tabla para anon/authenticated (Ola 1 de seguridad, A1) ──
       # Estado REAL de las migraciones (0946-0948): cero grants abiertos, default ACL cerrada, sin políticas de storage, credenciales
-      # sin SELECT de columna. Corre ANTES de grants-locales.sql, que restituye el grant legado SOLO en esta base efímera.
+      # sin SELECT de columna. Corre ANTES de restituir los grants previos a la 0947 (solo en esta base efímera).
       - name: Capa 0 — privilegios de tabla (anon/authenticated)
         run: |
           echo '```' >> "$GITHUB_STEP_SUMMARY"
@@ -180,10 +184,11 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           exit $ec
 
-      # Grant legado SOLO en la base efímera (producción lo tiene revocado por la 0947): así la batería de abajo (verificaciones.sql,
-      # set role authenticated) sigue probando RLS como capa independiente. Respeta las columnas secretas (0923 §4, 0946).
-      - name: Grant legado en la base efímera (grants-locales.sql)
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v es_local=si -q -f scripts/ci/e2e/grants-locales.sql
+      # Devuelve a la base efímera los privilegios que había ANTES de la 0947 (producción los tiene revocados): la batería de abajo
+      # (verificaciones.sql, set role authenticated, supabase/tests) sigue viendo el mismo estado de grants que las migraciones previas
+      # dejaron y prueba RLS como capa independiente. Corre DESPUÉS de capa 0, que demuestra el estado real.
+      - name: Grants previos a la 0947 (solo base efímera)
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f scripts/ci/grants_previos_0947_restaurar.sql
 
       # Contratos acumulados de retención 0332/0335/0338. Corren sobre la misma
       # base efímera y dentro del mismo job: cero workflow o ejecución adicional.

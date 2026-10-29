@@ -1282,6 +1282,8 @@ end $$;
 -- policy real, no un mock.
 --
 -- Corrido el 3-ago, salida real:  escribe-en-su-carpeta=t  escribe-en-carpeta-ajena=f
+-- 0948 (Ola 1 de seguridad, 29-oct-2026): se eliminaron las 4 políticas de `avatares` (el producto sube con service_role), así que AHORA
+-- ningún authenticated escribe en storage.objects, ni en su carpeta ni en la ajena: el esperado pasó de «true / false» a «false / false».
 do $$
 declare
   v_u1 uuid := gen_random_uuid();
@@ -1313,7 +1315,7 @@ begin
   set local storage.allow_delete_query = 'true';
   delete from storage.objects where bucket_id = 'avatares' and name in (v_u1::text || '/avatar.jpg', v_u2::text || '/avatar.jpg');
 
-  raise exception E'AVATARES_RLS  escribe-en-su-carpeta=%  escribe-en-carpeta-ajena=%   (esperado true / false — ajeno=true sería la fuga)',
+  raise exception E'AVATARES_RLS  escribe-en-su-carpeta=%  escribe-en-carpeta-ajena=%   (esperado false / false — cualquiera en true sería una política de escritura reabierta)',
     ok_propio, ok_ajeno;
 end $$;
 
