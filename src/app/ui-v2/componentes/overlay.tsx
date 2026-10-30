@@ -241,12 +241,15 @@ export function Popover({ abierto, onCerrar, ancla, etiqueta, alineacion = 'fin'
     document.addEventListener('keydown', alTeclear, true);
     document.addEventListener('pointerdown', alPuntero);
     el?.addEventListener('focusout', alPerderFoco);
+    const anc = ancla.current;
+    anc?.addEventListener('focusout', alPerderFoco); // Tab desde el disparador (p. ej. el ⓘ, cuyo foco nunca entra al panel) también cierra
     window.addEventListener('resize', recolocar);
     window.addEventListener('scroll', recolocar, true);
     return () => {
       document.removeEventListener('keydown', alTeclear, true);
       document.removeEventListener('pointerdown', alPuntero);
       el?.removeEventListener('focusout', alPerderFoco);
+      anc?.removeEventListener('focusout', alPerderFoco);
       window.removeEventListener('resize', recolocar);
       window.removeEventListener('scroll', recolocar, true);
     };
@@ -277,7 +280,7 @@ export function MenuList({ etiqueta, children }: { etiqueta: string; children: R
     else if (e.key === 'Home') ir(0);
     else if (e.key === 'End') ir(items.length - 1);
   };
-  return <div className="rv-pop__lista" role="menu" aria-label={etiqueta} onKeyDown={alTeclear}>{children}</div>;
+  return <div className="rv-menu" role="menu" aria-label={etiqueta} onKeyDown={alTeclear}>{children}</div>;
 }
 
 export function MenuItem({ children, icono, onSelect, href, peligro = false, deshabilitado = false }: {
@@ -289,8 +292,8 @@ export function MenuItem({ children, icono, onSelect, href, peligro = false, des
   peligro?: boolean;
   deshabilitado?: boolean;
 }) {
-  const comunes = { role: 'menuitem' as const, className: 'rv-pop__item', 'data-peligro': peligro || undefined, 'aria-disabled': deshabilitado || undefined, tabIndex: -1 };
-  const cuerpo = <>{icono ? <span className="rv-pop__icono" aria-hidden="true">{icono}</span> : null}{children}</>;
+  const comunes = { role: 'menuitem' as const, className: 'rv-menu__item', 'data-peligro': peligro || undefined, 'aria-disabled': deshabilitado || undefined, tabIndex: -1 };
+  const cuerpo = <>{icono ? <span className="rv-menu__icono" aria-hidden="true">{icono}</span> : null}{children}</>;
   return href && !deshabilitado
     ? <a {...comunes} href={href} onClick={onSelect}>{cuerpo}</a>
     : <button type="button" {...comunes} onClick={deshabilitado ? undefined : onSelect}>{cuerpo}</button>;

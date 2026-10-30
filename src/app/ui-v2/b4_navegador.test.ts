@@ -1,9 +1,10 @@
 /* eslint-disable security/detect-non-literal-fs-filename -- rutas fijas del propio módulo (o UI2_CSS_DIR para la prueba de rojo) */
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { chromium, type Browser, type Page } from 'playwright';
+import { type Browser, type Page } from 'playwright';
 import { build } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { lanzarNavegador, SIN_NAVEGADOR } from './navegador_prueba';
 
 // COMPORTAMIENTO REAL (Chromium) de la ronda B4: InfoTip (ⓘ) con explicación unificada, Tarjeta, PanelLateral,
 // BarraFiltros, color de marca, Esc dentro de un panel, conteo de KPI y entradas escalonadas.
@@ -51,8 +52,9 @@ createRoot(document.getElementById('raiz')).render(<App />);
 let browser: Browser | null = null;
 let bundle = '';
 beforeAll(async () => {
-  const entrada = join(RAIZ, '.entrada_b4.tmp.tsx');
-  const enlace = join(RAIZ, '.enlace_b4.tmp.tsx'); // next/link no vive fuera de Next: un <a> equivalente para el navegador de prueba
+  if (SIN_NAVEGADOR) return;
+  const entrada = join(RAIZ, `.entrada_b4_${process.pid}.tmp.tsx`);
+  const enlace = join(RAIZ, `.enlace_b4_${process.pid}.tmp.tsx`); // next/link no vive fuera de Next: un <a> equivalente para el navegador de prueba
   writeFileSync(entrada, ENTRADA);
   writeFileSync(enlace, "import React from 'react'; export default function Link({ href, children, ...r }: { href: string; children?: React.ReactNode }) { return <a href={href} {...r}>{children}</a>; }");
   try {
@@ -62,7 +64,7 @@ beforeAll(async () => {
     const salida = (Array.isArray(r) ? r[0] : r) as { output: Array<{ type: string; code?: string }> };
     bundle = salida.output.find((o) => o.type === 'chunk')!.code!;
   } finally { rmSync(entrada, { force: true }); rmSync(enlace, { force: true }); }
-  try { browser = await chromium.launch(); } catch { browser = null; }
+  browser = await lanzarNavegador();
 }, 90_000);
 afterAll(async () => { await browser?.close(); });
 
@@ -78,9 +80,8 @@ const rgb = (s: string) => (s.match(/\d+\.?\d*/g) ?? []).slice(0, 3).map(Number)
 const lum = ([r, g, b]: number[]) => { const f = (v: number) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
 const ratio = (a: number[], b: number[]) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 
-describe('B4 · InfoTip (ⓘ)', () => {
-  it('abre un popover ≤280 px con los 4 bloques, aria-describedby y aria-expanded; Esc cierra y devuelve el foco', async ({ skip }) => {
-    if (!browser) skip();
+describe.skipIf(SIN_NAVEGADOR)('B4 · InfoTip (ⓘ)', () => {
+  it('abre un popover ≤280 px con sus bloques (y «Por confirmar» cuando no hay lector verificado), aria-describedby y aria-expanded; Esc cierra y devuelve el foco', async () => {
     const p = await abrir();
     const boton = p.locator('.rv-info').first();
     await boton.click();
@@ -97,7 +98,7 @@ describe('B4 · InfoTip (ⓘ)', () => {
       };
     });
     expect(r.w).toBeLessThanOrEqual(280);
-    expect(r.dts).toEqual(['Qué es', 'Cómo se calcula', 'Fuente y corte', 'Qué hacer con esto']);
+    expect(r.dts).toEqual(['Qué es', 'Cómo se calcula', 'Fuente y corte', 'Estado']); // «Qué hacer» es opcional; «Estado» marca lo por confirmar
     expect(r.font).toBeGreaterThanOrEqual(12);
     expect(r.desc).toBe(true);
     expect(r.exp).toBe('true');
@@ -108,38 +109,46 @@ describe('B4 · InfoTip (ⓘ)', () => {
     expect(await p.evaluate(() => document.activeElement?.classList.contains('rv-info'))).toBe(true);
     await p.close();
   });
-  it('un solo ⓘ abierto a la vez', async ({ skip }) => {
-    if (!browser) skip();
+  it('Tab desde el ⓘ cierra la explicación (el foco nunca entra al panel)', async () => {
+    const p = await abrir();
+    await p.locator('.rv-info').first().focus();
+    await p.keyboard.press('Enter');
+    expect(await p.locator('.rv-pop--info').count()).toBe(1);
+    await p.keyboard.press('Tab');
+    expect(await p.locator('.rv-pop--info').count()).toBe(0);
+    await p.close();
+  });
+  it('un solo ⓘ abierto a la vez', async () => {
     const p = await abrir();
     await p.locator('.rv-info').nth(0).click();
-    await p.locator('.rv-info').nth(1).click();
+    // clic programático (sin mover el foco ni depender de lo que tape el primer panel): el almacén cierra el anterior
+    await p.evaluate(() => (document.querySelectorAll('.rv-info')[1] as HTMLElement).click());
     expect(await p.locator('.rv-pop--info').count()).toBe(1);
     expect(await p.evaluate(() => document.querySelectorAll('.rv-info[aria-expanded="true"]').length)).toBe(1);
     await p.close();
   });
-  it('390: la explicación se abre como hoja inferior con los mismos 4 bloques', async ({ skip }) => {
-    if (!browser) skip();
+  it('390: la explicación se abre como hoja inferior con los mismos 4 bloques', async () => {
     const p = await abrir(390);
     await p.locator('.rv-info').first().click();
     const r = await p.evaluate(() => { const d = document.querySelector('dialog[open]')!; const pn = d.querySelector('.rv-ov__panel')!.getBoundingClientRect(); return { dts: [...d.querySelectorAll('dt')].map((x) => x.textContent), pie: Math.round(innerHeight - pn.bottom), alto: pn.height }; });
-    expect(r.dts).toHaveLength(4);
+    expect(r.dts).toEqual(['Qué es', 'Cómo se calcula', 'Fuente y corte', 'Estado']);
     expect(r.pie).toBe(0);
     expect(r.alto).toBeLessThanOrEqual(900 * 0.9 + 1);
     await p.close();
   });
 });
 
-describe('B4 · Tarjeta unificada', () => {
-  it('la ⓘ queda en el mismo sitio en todas las tarjetas, radio 12, padding 12, y los estados vacío / error son una línea', async ({ skip }) => {
-    if (!browser) skip();
+describe.skipIf(SIN_NAVEGADOR)('B4 · Tarjeta unificada', () => {
+  it('la ⓘ queda en el mismo sitio en todas las tarjetas, radio 12, padding 12, y los estados vacío / error son una línea', async () => {
     const p = await abrir();
     const r = await p.evaluate(() => {
       const tarjetas = [...document.querySelectorAll('.rv-tarjeta')] as HTMLElement[];
-      const pos = tarjetas.map((t) => { const i = t.querySelector('.rv-info')!.getBoundingClientRect(); const c = t.getBoundingClientRect(); return { arriba: Math.round(i.top - c.top), alto: Math.round(i.height) }; });
+      const pos = tarjetas.map((t) => { const i = t.querySelector('.rv-info')!.getBoundingClientRect(); const c = t.getBoundingClientRect(); return { arriba: Math.round(i.top - c.top), derecha: Math.round(c.right - i.right), alto: Math.round(i.height) }; });
       const cs = getComputedStyle(tarjetas[0]);
       return { pos, radio: cs.borderTopLeftRadius, pad: cs.paddingTop, vacio: document.querySelector('.rv-tarjeta .rv-vacio')!.getBoundingClientRect().height, errRol: document.querySelector('.rv-tarjeta__error')!.getAttribute('role'), errAlto: document.querySelector('.rv-tarjeta__error')!.getBoundingClientRect().height };
     });
     expect(new Set(r.pos.map((x) => x.arriba)).size, JSON.stringify(r.pos)).toBe(1);
+    expect(new Set(r.pos.map((x) => x.derecha)).size, 'la ⓘ va SIEMPRE en la esquina derecha: ' + JSON.stringify(r.pos)).toBe(1);
     expect(r.radio).toBe('12px');
     expect(r.pad).toBe('12px');
     expect(r.vacio).toBeLessThanOrEqual(44);
@@ -151,26 +160,23 @@ describe('B4 · Tarjeta unificada', () => {
   });
 });
 
-describe('B4 · PanelLateral', () => {
+describe.skipIf(SIN_NAVEGADOR)('B4 · PanelLateral', () => {
   for (const ancho of [320, 420, 560]) {
-    it(`ancho ${ancho} en escritorio`, async ({ skip }) => {
-      if (!browser) skip();
+    it(`ancho ${ancho} en escritorio`, async () => {
       const p = await abrir();
       await p.click(`#abre-${ancho}`);
       expect(await p.evaluate(() => Math.round(document.querySelector('dialog[open] .rv-ov__panel')!.getBoundingClientRect().width))).toBe(ancho);
       await p.close();
     });
   }
-  it('390: hoja inferior', async ({ skip }) => {
-    if (!browser) skip();
+  it('390: hoja inferior', async () => {
     const p = await abrir(390);
     await p.click('#abre-420');
     const r = await p.evaluate(() => { const b = document.querySelector('dialog[open] .rv-ov__panel')!.getBoundingClientRect(); return { w: Math.round(b.width), pie: Math.round(innerHeight - b.bottom) }; });
     expect(r).toEqual({ w: 390, pie: 0 });
     await p.close();
   });
-  it('Esc dentro del panel con un popover abierto cierra SOLO el popover; un segundo Esc cierra el panel', async ({ skip }) => {
-    if (!browser) skip();
+  it('Esc dentro del panel con un popover abierto cierra SOLO el popover; un segundo Esc cierra el panel', async () => {
     const p = await abrir();
     await p.click('#abre-420');
     await p.click('#p-abre');
@@ -184,8 +190,7 @@ describe('B4 · PanelLateral', () => {
     await p.waitForFunction(() => !document.querySelector('dialog')!.hasAttribute('open'));
     await p.close();
   });
-  it('Tab fuera del popover lo cierra', async ({ skip }) => {
-    if (!browser) skip();
+  it('Tab fuera del popover lo cierra', async () => {
     const p = await abrir();
     await p.click('#abre-420');
     await p.click('#p-abre');
@@ -196,10 +201,9 @@ describe('B4 · PanelLateral', () => {
   });
 });
 
-describe('B4 · BarraFiltros', () => {
+describe.skipIf(SIN_NAVEGADOR)('B4 · BarraFiltros', () => {
   for (const ancho of [1440, 390]) {
-    it(`${ancho}: UNA fila de ≤ 48 px (no apila filtros)`, async ({ skip }) => {
-      if (!browser) skip();
+    it(`${ancho}: UNA fila de ≤ 48 px (no apila filtros)`, async () => {
       const p = await abrir(ancho);
       const r = await p.evaluate(() => {
         const b = document.querySelector('.rv-filtros')!;
@@ -213,8 +217,7 @@ describe('B4 · BarraFiltros', () => {
       await p.close();
     });
   }
-  it('1440: «Filtros» abre los avanzados en un popover (no empuja el contenido) y el chip activo es marino', async ({ skip }) => {
-    if (!browser) skip();
+  it('1440: «Filtros» abre los avanzados en un popover (no empuja el contenido) y el chip activo es marino', async () => {
     const p = await abrir();
     const antes = await p.evaluate(() => document.querySelector('#esc')!.getBoundingClientRect().top);
     await p.getByRole('button', { name: /Filtros/ }).click();
@@ -224,15 +227,13 @@ describe('B4 · BarraFiltros', () => {
     expect(rgb(r.activo)).toEqual([42, 63, 95]);
     await p.close();
   });
-  it('390: «Filtros» abre una hoja inferior', async ({ skip }) => {
-    if (!browser) skip();
+  it('390: «Filtros» abre una hoja inferior', async () => {
     const p = await abrir(390);
     await p.getByRole('button', { name: /Filtros/ }).click();
     expect(await p.evaluate(() => !!document.querySelector('dialog[open] select'))).toBe(true);
     await p.close();
   });
-  it('es sticky: al hacer scroll queda pegada arriba', async ({ skip }) => {
-    if (!browser) skip();
+  it('es sticky: al hacer scroll queda pegada arriba', async () => {
     const p = await abrir();
     await p.evaluate(() => { document.getElementById('scroll')!.scrollTop = 300; });
     const r = await p.evaluate(() => ({ barra: document.querySelector('.rv-filtros')!.getBoundingClientRect().top, cont: document.getElementById('scroll')!.getBoundingClientRect().top }));
@@ -241,28 +242,29 @@ describe('B4 · BarraFiltros', () => {
   });
 });
 
-describe('B4 · color de marca', () => {
-  it('claro: el primario es naranja ladrillo #C2410C con texto blanco (AA)', async ({ skip }) => {
-    if (!browser) skip();
+describe.skipIf(SIN_NAVEGADOR)('B4 · chip activo (los tokens de marca son del shell)', () => {
+  it('claro: marino con texto blanco (AA)', async () => {
     const p = await abrir();
-    const c = await p.evaluate(() => { const s = getComputedStyle(document.getElementById('prim')!); return { bg: s.backgroundColor, fg: s.color }; });
-    expect(rgb(c.bg)).toEqual([194, 65, 12]);
+    const c = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.rv-chip[aria-pressed="true"]')!); return { bg: s.backgroundColor, fg: s.color }; });
+    expect(rgb(c.bg)).toEqual([42, 63, 95]);
     expect(ratio(rgb(c.bg), rgb(c.fg))).toBeGreaterThanOrEqual(4.5);
     await p.close();
   });
-  it('oscuro: el primario es naranja #FB923C con tinta cálida (AA)', async ({ skip }) => {
-    if (!browser) skip();
+  it('oscuro: #3a5580 con texto blanco (AA)', async () => {
     const p = await abrir(1440, { oscuro: true });
-    const c = await p.evaluate(() => { const s = getComputedStyle(document.getElementById('prim')!); return { bg: s.backgroundColor, fg: s.color }; });
-    expect(rgb(c.bg)).toEqual([251, 146, 60]);
+    const c = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.rv-chip[aria-pressed="true"]')!); return { bg: s.backgroundColor, fg: s.color }; });
+    expect(rgb(c.bg)).toEqual([58, 85, 128]);
     expect(ratio(rgb(c.bg), rgb(c.fg))).toBeGreaterThanOrEqual(4.5);
     await p.close();
+  });
+  it('esta capa NO redefine los tokens de marca del shell (--btn-*, --marino, --crema, --chart-8)', async () => {
+    const css = readFileSync(join(DIR, 'componentes.css'), 'utf8');
+    for (const t of ['--btn-bg:', '--btn-fg:', '--btn-borde:', '--btn-hover:', '--marino:', '--crema:', '--chart-8:', '--marca-marino:', '--marca-naranja:']) expect(css.includes(t), t).toBe(false);
   });
 });
 
-describe('B4 · movimiento', () => {
-  it('conteo de KPI: arranca cerca (nunca en 0), termina en el valor y con reduced-motion no se mueve', async ({ skip }) => {
-    if (!browser) skip();
+describe.skipIf(SIN_NAVEGADOR)('B4 · movimiento', () => {
+  it('conteo de KPI: arranca cerca (nunca en 0), termina en el valor y con reduced-motion no se mueve', async () => {
     const p = await abrir(1440, { animar: true });
     const muestras: string[] = [];
     for (let i = 0; i < 6; i++) { muestras.push(await p.evaluate(() => document.querySelector('.rv-kpi__valor')!.textContent!)); await p.waitForTimeout(90); }
@@ -277,8 +279,7 @@ describe('B4 · movimiento', () => {
     expect([...fijas]).toEqual(['1,250']);
     await q.close();
   });
-  it('entradas escalonadas: el retardo crece por hijo; con reduced-motion no hay animación', async ({ skip }) => {
-    if (!browser) skip();
+  it('entradas escalonadas: el retardo crece por hijo; con reduced-motion no hay animación', async () => {
     const p = await abrir(1440, { animar: true });
     const r = await p.evaluate(() => [...document.querySelectorAll('#esc > *')].slice(0, 4).map((e) => ({ d: getComputedStyle(e).animationDelay, n: getComputedStyle(e).animationName, t: getComputedStyle(e).animationDuration })));
     expect(r.map((x) => x.d)).toEqual(['0s', '0.04s', '0.08s', '0.12s']);
@@ -296,8 +297,7 @@ const CAPS = process.env.UI2_B4_CAPS;
 describe.skipIf(!CAPS)('B4 · capturas', () => {
   for (const oscuro of [false, true]) {
     for (const ancho of [1440, 390]) {
-      it(`${oscuro ? 'oscuro' : 'claro'} ${ancho}`, async ({ skip }) => {
-        if (!browser) skip();
+      it(`${oscuro ? 'oscuro' : 'claro'} ${ancho}`, async () => {
         const nombre = `${CAPS}/b4-${oscuro ? 'oscuro' : 'claro'}-${ancho}`;
         const p = await abrir(ancho, { oscuro, reduce: true });
         await p.screenshot({ path: `${nombre}-barra-y-tarjetas.png` });

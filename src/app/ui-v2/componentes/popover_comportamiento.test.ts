@@ -1,9 +1,10 @@
 /* eslint-disable security/detect-non-literal-fs-filename -- rutas fijas del propio módulo */
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { chromium, type Browser, type Page } from 'playwright';
+import { type Browser, type Page } from 'playwright';
 import { build } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { lanzarNavegador, SIN_NAVEGADOR } from '../navegador_prueba';
 
 // COMPORTAMIENTO REAL de Popover y MenuList en Chromium: anclaje, Esc + retorno de foco, clic afuera, flechas, filas de 32.
 const RAIZ = join(__dirname, '..');
@@ -35,7 +36,8 @@ createRoot(document.getElementById('raiz')!).render(<App />);
 let browser: Browser | null = null;
 let bundle = '';
 beforeAll(async () => {
-  const entrada = join(__dirname, '.entrada_popover.tmp.tsx');
+  if (SIN_NAVEGADOR) return;
+  const entrada = join(__dirname, `.entrada_popover_${process.pid}.tmp.tsx`);
   writeFileSync(entrada, ENTRADA);
   try {
     const r = await build({ configFile: false, logLevel: 'silent', root: RAIZ, define: { 'process.env.NODE_ENV': '"development"' },
@@ -43,7 +45,7 @@ beforeAll(async () => {
     const salida = (Array.isArray(r) ? r[0] : r) as { output: Array<{ type: string; code?: string }> };
     bundle = salida.output.find((o) => o.type === 'chunk')!.code!;
   } finally { rmSync(entrada, { force: true }); }
-  try { browser = await chromium.launch(); } catch { browser = null; }
+  browser = await lanzarNavegador();
 }, 60_000);
 afterAll(async () => { await browser?.close(); });
 
@@ -55,15 +57,14 @@ async function abrir(): Promise<Page> {
   return p;
 }
 
-describe('Popover / MenuList · comportamiento en Chromium', () => {
-  it('abre anclado bajo el disparador, con filas de 32, foco en el primer ítem y nombre accesible', async ({ skip }) => {
-    if (!browser) skip();
+describe.skipIf(SIN_NAVEGADOR)('Popover / MenuList · comportamiento en Chromium', () => {
+  it('abre anclado bajo el disparador, con filas de 32, foco en el primer ítem y nombre accesible', async () => {
     const p = await abrir();
     await p.click('#ancla');
     const r = await p.evaluate(() => {
       const pop = document.querySelector('.rv-pop')!.getBoundingClientRect();
       const a = document.getElementById('ancla')!.getBoundingClientRect();
-      const fila = document.querySelector('.rv-pop__item')!.getBoundingClientRect();
+      const fila = document.querySelector('.rv-menu__item')!.getBoundingClientRect();
       return { debajo: Math.round(pop.top - a.bottom), alineadoDer: Math.round(pop.right - a.right), fila: Math.round(fila.height), foco: document.activeElement?.textContent, etq: document.querySelector('.rv-pop')!.getAttribute('aria-label'), radio: getComputedStyle(document.querySelector('.rv-pop')!).borderTopLeftRadius };
     });
     expect(r.debajo).toBe(6);
@@ -73,8 +74,7 @@ describe('Popover / MenuList · comportamiento en Chromium', () => {
     expect(r.radio).toBe('12px');
     await p.close();
   });
-  it('flechas recorren los ítems saltando el deshabilitado; Fin va al último', async ({ skip }) => {
-    if (!browser) skip();
+  it('flechas recorren los ítems saltando el deshabilitado; Fin va al último', async () => {
     const p = await abrir();
     await p.click('#ancla');
     await p.keyboard.press('ArrowDown');
@@ -87,8 +87,7 @@ describe('Popover / MenuList · comportamiento en Chromium', () => {
     expect(await p.evaluate(() => document.activeElement?.textContent)).toBe('Salir');
     await p.close();
   });
-  it('Esc cierra y devuelve el foco al disparador; clic afuera cierra', async ({ skip }) => {
-    if (!browser) skip();
+  it('Esc cierra y devuelve el foco al disparador; clic afuera cierra', async () => {
     const p = await abrir();
     await p.click('#ancla');
     await p.keyboard.press('Escape');
@@ -99,8 +98,7 @@ describe('Popover / MenuList · comportamiento en Chromium', () => {
     expect(await p.locator('.rv-pop').count()).toBe(0);
     await p.close();
   });
-  it('elegir un ítem lo ejecuta y cierra; el deshabilitado no ejecuta nada', async ({ skip }) => {
-    if (!browser) skip();
+  it('elegir un ítem lo ejecuta y cierra; el deshabilitado no ejecuta nada', async () => {
     const p = await abrir();
     await p.click('#ancla');
     await p.click('text=Mi perfil');

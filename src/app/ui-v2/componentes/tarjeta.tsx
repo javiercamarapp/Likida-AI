@@ -26,8 +26,8 @@ export function Tarjeta({ titulo, info, acciones, estado = 'ok', mensaje, onRein
     <section className={cx('rv-tarjeta', className)} aria-busy={estado === 'cargando' || undefined} data-estado={estado}>
       <header className="rv-tarjeta__cab">
         <h2 className="rv-tarjeta__titulo">{titulo}</h2>
-        {info ? <InfoTip clave={info} /> : null}
         {acciones ? <div className="rv-tarjeta__acciones">{acciones}</div> : null}
+        {info ? <InfoTip clave={info} /> : null}
       </header>
       <div className="rv-tarjeta__cuerpo">
         {estado === 'vacio' ? <EstadoVacio titulo={mensaje ?? 'Sin datos en el periodo'} /> : null}

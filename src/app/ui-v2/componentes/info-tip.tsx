@@ -27,6 +27,7 @@ function Contenido({ clave }: { clave: InfoClave }) {
       <div><dt>Cómo se calcula</dt><dd>{t.comoSeCalcula}</dd></div>
       <div><dt>Fuente y corte</dt><dd>{t.fuente}</dd></div>
       {t.queHacer ? <div><dt>Qué hacer con esto</dt><dd>{t.queHacer}</dd></div> : null}
+      {t.estado === 'por_confirmar' ? <div><dt>Estado</dt><dd>Por confirmar: descripción provisional, aún sin lector verificado.</dd></div> : null}
     </dl>
   );
 }
@@ -51,7 +52,7 @@ export function InfoTip({ clave }: { clave: InfoClave }) {
       {movil ? (
         <Drawer abierto={abierto} onCerrar={cerrar} titulo={t.titulo}><Contenido clave={clave} /></Drawer>
       ) : (
-        <Popover abierto={abierto} onCerrar={cerrar} ancla={ancla} etiqueta={`Información: ${t.titulo}`} alineacion="inicio" className="rv-pop--info" id={idPanel}>
+        <Popover abierto={abierto} onCerrar={cerrar} ancla={ancla} etiqueta={`Información: ${t.titulo}`} alineacion="fin" className="rv-pop--info" id={idPanel}>
           <p className="rv-infotexto__titulo">{t.titulo}</p>
           <Contenido clave={clave} />
         </Popover>
