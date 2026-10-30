@@ -63,7 +63,7 @@ describe('Popover / MenuList · comportamiento en Chromium', () => {
     const r = await p.evaluate(() => {
       const pop = document.querySelector('.rv-pop')!.getBoundingClientRect();
       const a = document.getElementById('ancla')!.getBoundingClientRect();
-      const fila = document.querySelector('.rv-menu__item')!.getBoundingClientRect();
+      const fila = document.querySelector('.rv-pop__item')!.getBoundingClientRect();
       return { debajo: Math.round(pop.top - a.bottom), alineadoDer: Math.round(pop.right - a.right), fila: Math.round(fila.height), foco: document.activeElement?.textContent, etq: document.querySelector('.rv-pop')!.getAttribute('aria-label'), radio: getComputedStyle(document.querySelector('.rv-pop')!).borderTopLeftRadius };
     });
     expect(r.debajo).toBe(6);

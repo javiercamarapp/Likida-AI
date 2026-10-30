@@ -88,7 +88,10 @@ function Cabecera({ idTitulo, idDesc, titulo, descripcion, onCerrar }: {
 
 export type TamanoDrawer = 'm' | 'l' | 'xl'; // 420 / 480 / 640 px
 
-export function Drawer({ abierto, onCerrar, titulo, descripcion, children, pie, tamano = 'm' }: Base & { tamano?: TamanoDrawer }) {
+/** `ancho` (320 / 420 / 560) es el ancho del PanelLateral; sin él rige `tamano` (420 / 480 / 640, compatibilidad). */
+export type AnchoPanel = 320 | 420 | 560;
+
+export function Drawer({ abierto, onCerrar, titulo, descripcion, children, pie, tamano = 'm', ancho }: Base & { tamano?: TamanoDrawer; ancho?: AnchoPanel }) {
   const { ref, alCancelar, alClic, alTeclear } = useDialogo(abierto, onCerrar);
   const panel = useRef<HTMLDivElement>(null);
   const y0 = useRef<number | null>(null);
@@ -99,7 +102,8 @@ export function Drawer({ abierto, onCerrar, titulo, descripcion, children, pie, 
     <dialog
       ref={ref}
       className="rv-ov rv-ov--drawer"
-      data-tamano={tamano}
+      data-tamano={ancho ? undefined : tamano}
+      data-ancho={ancho}
       aria-labelledby={idTitulo}
       aria-describedby={descripcion ? idDesc : undefined}
       onCancel={alCancelar}
@@ -167,7 +171,21 @@ export function Modal({ abierto, onCerrar, titulo, descripcion, children, pie, t
 // Se pinta en línea (sin portal) para que cuelgue de [data-ui="v2"]; `position: fixed` lo saca del flujo.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export function Popover({ abierto, onCerrar, ancla, etiqueta, alineacion = 'fin', children }: {
+/** Coloca un panel `position: fixed` bajo su ancla (o encima si abajo no cabe), dentro del viewport. */
+function colocarPanel(el: HTMLElement, ancla: HTMLElement | null, alineacion: 'inicio' | 'fin') {
+  const a = ancla?.getBoundingClientRect();
+  if (!a) return;
+  const p = el.getBoundingClientRect();
+  const margen = 8;
+  let left = alineacion === 'fin' ? a.right - p.width : a.left;
+  left = Math.min(Math.max(margen, left), window.innerWidth - p.width - margen);
+  let top = a.bottom + 6;
+  if (top + p.height > window.innerHeight - margen) top = Math.max(margen, a.top - 6 - p.height); // sin espacio abajo: arriba
+  el.style.top = `${top}px`;
+  el.style.left = `${left}px`;
+}
+
+export function Popover({ abierto, onCerrar, ancla, etiqueta, alineacion = 'fin', className, id, children }: {
   abierto: boolean;
   onCerrar: () => void;
   /** Disparador: el panel se ancla a él y le devuelve el foco al cerrar. */
@@ -176,47 +194,76 @@ export function Popover({ abierto, onCerrar, ancla, etiqueta, alineacion = 'fin'
   etiqueta: string;
   /** `fin` alinea el borde derecho del panel con el del ancla; `inicio`, el izquierdo. */
   alineacion?: 'inicio' | 'fin';
+  className?: string;
+  id?: string;
   children: ReactNode;
 }) {
   const panel = useRef<HTMLDivElement>(null);
 
-  // Posición y foco inicial se aplican directo al nodo (sin estado): nace oculto, se coloca y entonces se muestra.
+  // El ancla declara que abre un panel y si está abierto (lectores de pantalla), sin que cada consumidor lo recuerde.
+  useEffect(() => {
+    const a = ancla.current;
+    if (!a) return;
+    if (!a.hasAttribute('aria-haspopup')) a.setAttribute('aria-haspopup', 'true');
+    a.setAttribute('aria-expanded', String(abierto));
+  }, [abierto, ancla]);
+
+  // Posición: nace oculto, se coloca y entonces se muestra; se recoloca con resize y scroll.
   useLayoutEffect(() => {
     const el = panel.current;
     if (!abierto || !el) return;
-    const a = ancla.current?.getBoundingClientRect();
-    if (!a) return;
-    const p = el.getBoundingClientRect();
-    const margen = 8;
-    let left = alineacion === 'fin' ? a.right - p.width : a.left;
-    left = Math.min(Math.max(margen, left), window.innerWidth - p.width - margen);
-    let top = a.bottom + 6;
-    if (top + p.height > window.innerHeight - margen) top = Math.max(margen, a.top - 6 - p.height); // sin espacio abajo: arriba
-    el.style.top = `${top}px`;
-    el.style.left = `${left}px`;
+    colocarPanel(el, ancla.current, alineacion);
     el.style.visibility = 'visible';
-    el.querySelector<HTMLElement>('[data-autofocus],[role="menuitem"]')?.focus();
+    el.querySelector<HTMLElement>('[data-autofocus],[role="menuitem"]:not([aria-disabled="true"])')?.focus();
   }, [abierto, ancla, alineacion]);
 
   useEffect(() => {
     if (!abierto) return;
-    const alTeclear = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onCerrar(); ancla.current?.focus(); } };
+    // Esc en CAPTURA y con preventDefault: dentro de un Drawer/Modal cierra solo el popover, no el <dialog> contenedor.
+    const alTeclear = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault(); e.stopPropagation();
+      onCerrar(); ancla.current?.focus();
+    };
     const alPuntero = (e: PointerEvent) => {
       const t = e.target as Node;
       if (panel.current?.contains(t) || ancla.current?.contains(t)) return;
       onCerrar();
     };
-    document.addEventListener('keydown', alTeclear);
+    // Tab fuera del panel (y del ancla) lo cierra: no queda un panel abierto sin foco dentro.
+    const alPerderFoco = (e: FocusEvent) => {
+      const a = e.relatedTarget as Node | null;
+      if (!a || panel.current?.contains(a) || ancla.current?.contains(a)) return;
+      onCerrar();
+    };
+    const el = panel.current;
+    const recolocar = () => { if (el) colocarPanel(el, ancla.current, alineacion); };
+    document.addEventListener('keydown', alTeclear, true);
     document.addEventListener('pointerdown', alPuntero);
-    return () => { document.removeEventListener('keydown', alTeclear); document.removeEventListener('pointerdown', alPuntero); };
-  }, [abierto, onCerrar, ancla]);
+    el?.addEventListener('focusout', alPerderFoco);
+    window.addEventListener('resize', recolocar);
+    window.addEventListener('scroll', recolocar, true);
+    return () => {
+      document.removeEventListener('keydown', alTeclear, true);
+      document.removeEventListener('pointerdown', alPuntero);
+      el?.removeEventListener('focusout', alPerderFoco);
+      window.removeEventListener('resize', recolocar);
+      window.removeEventListener('scroll', recolocar, true);
+    };
+  }, [abierto, onCerrar, ancla, alineacion]);
 
   if (!abierto) return null;
   return (
-    <div ref={panel} className="rv-pop" role="group" aria-label={etiqueta} style={{ top: 0, left: 0, visibility: 'hidden' }}>
+    <div ref={panel} id={id} className={['rv-pop', className].filter(Boolean).join(' ')} role="group" aria-label={etiqueta} style={{ top: 0, left: 0, visibility: 'hidden' }}>
       {children}
     </div>
   );
+}
+
+/** PanelLateral: base única de drawers de detalle, filtros avanzados, evidencia, notificaciones y menú de cuenta.
+ *  Anchos 320 / 420 / 560, cabecera, cierre, animación 180 ms y hoja inferior en móvil: los mismos del Drawer. */
+export function PanelLateral({ ancho = 420, ...resto }: Base & { ancho?: AnchoPanel }) {
+  return <Drawer ancho={ancho} {...resto} />;
 }
 
 /** Lista de acciones de un Popover (filas de 32). Flechas arriba/abajo, Inicio y Fin recorren los ítems. */
@@ -230,7 +277,7 @@ export function MenuList({ etiqueta, children }: { etiqueta: string; children: R
     else if (e.key === 'Home') ir(0);
     else if (e.key === 'End') ir(items.length - 1);
   };
-  return <div className="rv-menu" role="menu" aria-label={etiqueta} onKeyDown={alTeclear}>{children}</div>;
+  return <div className="rv-pop__lista" role="menu" aria-label={etiqueta} onKeyDown={alTeclear}>{children}</div>;
 }
 
 export function MenuItem({ children, icono, onSelect, href, peligro = false, deshabilitado = false }: {
@@ -242,8 +289,8 @@ export function MenuItem({ children, icono, onSelect, href, peligro = false, des
   peligro?: boolean;
   deshabilitado?: boolean;
 }) {
-  const comunes = { role: 'menuitem' as const, className: 'rv-menu__item', 'data-peligro': peligro || undefined, 'aria-disabled': deshabilitado || undefined, tabIndex: -1 };
-  const cuerpo = <>{icono ? <span className="rv-menu__icono" aria-hidden="true">{icono}</span> : null}{children}</>;
+  const comunes = { role: 'menuitem' as const, className: 'rv-pop__item', 'data-peligro': peligro || undefined, 'aria-disabled': deshabilitado || undefined, tabIndex: -1 };
+  const cuerpo = <>{icono ? <span className="rv-pop__icono" aria-hidden="true">{icono}</span> : null}{children}</>;
   return href && !deshabilitado
     ? <a {...comunes} href={href} onClick={onSelect}>{cuerpo}</a>
     : <button type="button" {...comunes} onClick={deshabilitado ? undefined : onSelect}>{cuerpo}</button>;
