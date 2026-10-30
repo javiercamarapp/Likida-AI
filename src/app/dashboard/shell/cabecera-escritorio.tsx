@@ -8,7 +8,7 @@ import { useRiel } from './colapso';
 
 /**
  * La topbar de escritorio (44 px, ESTILO §4): botón de plegar/expandir el sidebar + breadcrumb 13/500 (categoría / ítem activo,
- * con el icono del ítem). Es contexto, no navegación: sin buscador, sin campana (Notificaciones vive en el pie del sidebar), sin
+ * con el icono del ítem). Es contexto, no navegación (por eso un <div>, no un landmark <nav>: el contrato e2e exige UNA sola navegación): sin buscador, sin campana (Notificaciones vive en el pie del sidebar), sin
  * avatar y sin acciones de página. Bajo 768 px no existe (la reemplaza `CabeceraMovil`).
  */
 export default function CabeceraEscritorio({ rol, perfil }: { rol: string; perfil?: PerfilTenant | null }) {
@@ -24,10 +24,10 @@ export default function CabeceraEscritorio({ rol, perfil }: { rol: string; perfi
         <PanelLeft width={16} height={16} strokeWidth={1.75} aria-hidden />
       </button>
       {item && (
-        <nav aria-label="Ruta" className="rv-migas">
+        <div className="rv-migas">
           {grupo && <><span className="rv-migas__cat">{grupo.titulo}</span><span className="rv-migas__sep" aria-hidden>/</span></>}
           <span className="rv-migas__act"><item.Icono width={16} height={16} strokeWidth={1.75} aria-hidden />{item.nombre}</span>
-        </nav>
+        </div>
       )}
     </header>
   );

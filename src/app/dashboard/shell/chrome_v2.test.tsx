@@ -120,6 +120,11 @@ describe('DashboardChromeV2: el contrato que no se rompe', () => {
     expect(html).not.toContain('logo-icono.png');
   });
 
+  it('contrato e2e: UNA sola navegación (la miga de la topbar no es un landmark <nav>) y la hoja se llama «Menú completo»', () => {
+    expect(html.match(/<nav/g)).toHaveLength(1);
+    expect(html).toContain('>Menú completo</h2>');
+  });
+
   it('no pinta el shader de fondo de v1', () => {
     expect(html).not.toContain('sb-aside');
   });

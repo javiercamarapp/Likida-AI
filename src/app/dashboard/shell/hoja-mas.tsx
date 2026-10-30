@@ -17,7 +17,7 @@ export default function HojaMas({ abierta, alCerrar, rol, rolEtiqueta, nombre, p
 }) {
   const { pathname, sufijo, menu } = useMenuV2(rol, perfil);
   return (
-    <Drawer abierto={abierta} onCerrar={alCerrar} titulo="Menú" pie={abierta ? (
+    <Drawer abierto={abierta} onCerrar={alCerrar} titulo="Menú completo" pie={abierta ? (
       <PieMenu menu={menu} sufijo={sufijo} pathname={pathname} perfil={perfil} rol={rol} rolEtiqueta={rolEtiqueta} nombre={nombre}
         usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} alNavegar={alCerrar} />
     ) : undefined}>
