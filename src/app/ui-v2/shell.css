@@ -125,7 +125,7 @@
 [data-ui="v2"] .rv-puesta__txt { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 [data-ui="v2"] .rv-puesta__seg { display: inline-flex; gap: 2px; flex: none; }
 [data-ui="v2"] .rv-puesta__seg i { display: block; width: 6px; height: 6px; border-radius: 2px; background: var(--ui-line-strong); }
-[data-ui="v2"] .rv-puesta__seg i[data-on] { background: var(--marca); }
+[data-ui="v2"] .rv-puesta__seg i[data-on] { background: var(--marca-naranja); }
 [data-ui="v2"] .rv-puesta__n { flex: none; font-size: 12px; font-weight: 600; color: var(--ink); }
 
 /* Tema segmentado visible (claro / sistema / oscuro): alto 32 */
@@ -173,6 +173,11 @@
 [data-ui="v2"] .rv-cuenta .rv-pop { pointer-events: auto; }
 [data-ui="v2"] .rv-cuenta-valor { margin-left: auto; font-weight: 600; color: var(--ink); }
 [data-ui="v2"] .rv-cuenta-tema { display: flex; flex-direction: column; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--ui-border); }
+
+/* Aviso de lectura (BannerInsight): en pantallas angostas la etiqueta, el delta y el enlace no se encogen y dejaban al texto en una
+   columna de un carácter. Con v2 la fila envuelve y el texto pide al menos 12 rem antes de pasar a su propia línea. */
+[data-ui="v2"] [data-banner="insight"] { flex-wrap: wrap; row-gap: 4px; }
+[data-ui="v2"] [data-banner="insight"] > [data-banner-texto] { flex: 1 1 12rem; }
 
 /* Topbar: botón de plegar + breadcrumb 13/500 */
 [data-ui="v2"] .rv-migas { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; font-weight: 500; line-height: 1; color: var(--muted); }

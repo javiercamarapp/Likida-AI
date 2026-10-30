@@ -112,13 +112,15 @@ describe('clases del menú de cuenta', () => {
 describe('identidad de marca (directiva 29-oct)', () => {
   const tokens = readFileSync(fileURLToPath(new URL('../../ui-v2/tokens.css', import.meta.url)), 'utf8');
   it('primario, activo y logo se pintan con tokens de marca: naranja ladrillo, azul marino, tinta cálida', () => {
-    expect(tokens).toMatch(/--marca:\s*#c2410c/);
-    expect(tokens).toMatch(/--btn-bg:\s*#c2410c/);
-    expect(tokens).toMatch(/--marino:\s*#2a3f5f/);
+    expect(tokens).toMatch(/--marca-naranja:\s*#c2410c/);
+    expect(tokens).toMatch(/--btn-bg:\s*var\(--marca-naranja\)/);
+    expect(tokens).toMatch(/--marca-marino:\s*#2a3f5f/);
+    // --marca sigue siendo tinta neutra: el naranja no se multiplica en mosaicos de icono ni barras de componentes ajenos
+    expect(tokens).toMatch(/--marca:\s*#17100d/);
     expect(tokens).toMatch(/--ink:\s*#17100d/);
-    expect(tokens).toMatch(/--ui-activo-barra:\s*var\(--marca\)/);
+    expect(tokens).toMatch(/--ui-activo-barra:\s*var\(--marca-naranja\)/);
     // oscuro: naranja #fb923c sobre tinta cálida
-    expect(tokens).toMatch(/--marca:\s*#fb923c/);
+    expect(tokens).toMatch(/--marca-naranja:\s*#fb923c/);
   });
   it('las entradas animadas del shell viven solo en no-preference y duran ≤ 220 ms', () => {
     const i = sinComentarios.indexOf('@keyframes rv-nav-entra');

@@ -27,9 +27,9 @@ export default function LogoV2({ alto, variante = 'horizontal', decorativo = fal
       {...(decorativo ? { 'aria-hidden': true } : { role: 'img', 'aria-label': 'Likida' })}
     >
       <svg xmlns="http://www.w3.org/2000/svg" viewBox={vb} width={ancho} height={alto} aria-hidden="true" focusable="false" style={{ display: 'block' }}>
-        {/* Con color de marca: el símbolo en naranja ladrillo (`--marca`; en oscuro #fb923c) y el nombre en la tinta del contenedor.
+        {/* Con color de marca: el símbolo en naranja ladrillo (`--marca-naranja`; en oscuro #fb923c) y el nombre en la tinta del contenedor.
             `monocromo` pinta todo con `currentColor` (impresión, fondos de color). */}
-      <path fill={monocromo ? 'currentColor' : 'var(--marca, currentColor)'} fillRule="evenodd" d={D_SIMBOLO} />
+      <path fill={monocromo ? 'currentColor' : 'var(--marca-naranja, currentColor)'} fillRule="evenodd" d={D_SIMBOLO} />
       {variante === 'horizontal' && <path fill="currentColor" fillRule="evenodd" d={D_TEXTO} />}
       </svg>
     </span>
