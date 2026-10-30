@@ -128,3 +128,10 @@ describe('identidad de marca (directiva 29-oct)', () => {
     for (const m of sinComentarios.matchAll(/animation:\s*rv-(?:nav|shell)-entra (\d+)ms/g)) expect(Number(m[1])).toBeLessThanOrEqual(220);
   });
 });
+
+describe('padding de página', () => {
+  it('móvil: el shell no suma padding (las páginas ya ponen 16); desde 768 el padding único es 24/24/28', () => {
+    expect(regla('[data-ui="v2"] .rv-contenido')).toContain('padding: 0');
+    expect(regla('[data-ui="v2"] .rv-contenido', sinComentarios.indexOf('@media (min-width: 768px)'))).toContain('padding: 24px 24px 28px');
+  });
+});

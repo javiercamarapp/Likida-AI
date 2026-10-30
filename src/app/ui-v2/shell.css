@@ -28,7 +28,9 @@
 
 [data-ui="v2"] .rv-fila { display: flex; align-items: flex-start; min-height: 100dvh; }
 [data-ui="v2"] .rv-col { flex: 1 1 0%; min-width: 0; }
-[data-ui="v2"] .rv-contenido { min-width: 0; padding: 6px 16px 24px; }
+/* Móvil: el margen de 16 px lo ponen HOY las páginas (C); sumar el del shell dejaba 32 y ensanchaba el documento en /agentes/liquidacion
+   a 462 px (e2e «recorrido móvil»). Se desactiva aquí; desde 768 el padding único es del shell. */
+[data-ui="v2"] .rv-contenido { min-width: 0; padding: 0; }
 
 /* ── Móvil (<768): sin aside, documento que scrollea ──────────────────────── */
 [data-ui="v2"] .rv-sb { display: none; }
