@@ -52,6 +52,7 @@ test.describe('con la UI v2 forzada', () => {
     await page.goto('/dashboard/viajes');
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
     const fondo = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-    expect(fondo).toBe('rgb(14, 14, 16)');
+    // Fondo oscuro de la identidad de marca (tinta cálida #120d0a), no el negro frío anterior.
+    expect(fondo).toBe('rgb(18, 13, 10)');
   });
 });

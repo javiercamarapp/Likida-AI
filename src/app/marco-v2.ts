@@ -16,8 +16,15 @@ export const ALTO_CABECERA_ESCRITORIO_PX = 44;
 export const ALTO_CABECERA_MOVIL_PX = 56;
 /** Alto de un ítem del menú. */
 export const ALTO_ITEM_PX = 32;
-/** Grosor de la barra de señal del ítem activo. */
+/** Grosor de la barra de TINTA del ítem activo (fondo suave + barra; nunca bloque negro ni blanco). */
 export const GROSOR_SENAL_PX = 3;
+
+/** Techo del pie fijo del sidebar (Notificaciones, Puesta en marcha, tema, tarjeta de cuenta). */
+export const ALTO_PIE_MAX_PX = 150;
+/** Alto del logo (por ALTURA): sidebar 30, riel y cabecera móvil 28, carga 40. */
+export const ALTO_LOGO_PX = { sidebar: 30, riel: 28, movil: 28, carga: 40 } as const;
+/** Marco: padding y separación entre sidebar y columna de contenido. */
+export const MARCO_PX = 16;
 
 export const CLASES_V2 = {
   raiz: 'rv-app min-h-dvh tema-neutro',

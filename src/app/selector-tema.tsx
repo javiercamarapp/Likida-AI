@@ -29,20 +29,15 @@ function aplicar(tema: Tema) {
   document.documentElement.dataset.theme = oscuro ? 'dark' : 'light';
 }
 
-const OPCIONES: Array<{ valor: Tema; Icono: typeof Sun; rotulo: string }> = [
+export const OPCIONES_TEMA: Array<{ valor: Tema; Icono: typeof Sun; rotulo: string }> = [
   { valor: 'claro', Icono: Sun, rotulo: 'Tema claro' },
   { valor: 'sistema', Icono: Monitor, rotulo: 'Seguir al sistema' },
   { valor: 'oscuro', Icono: Moon, rotulo: 'Tema oscuro' },
 ];
 
-/**
- * El selector claro / sistema / oscuro (13-ago-2026). Activa los overrides `[data-theme]` que globals.css
- * tenía esperando "para ESE switch, si algún día se construye" — hoy se
- * construyó. El default sigue siendo claro: la decisión del 12-ago (no
- * oscurecer la app solo porque el sistema operativo esté en oscuro) se
- * conserva — "sistema" es una elección explícita del usuario.
- */
-export function SelectorTema() {
+/** El tema elegido y cómo cambiarlo — la MISMA fuente de verdad (localStorage + atributo en la raíz) para todo selector:
+ *  el de siempre (`SelectorTema`) y el segmentado del sidebar v2. Extraído sin cambiar comportamiento. */
+export function useTema(): { tema: Tema; elegir: (nuevo: Tema) => void } {
   const tema = useSyncExternalStore(suscribir, leerTema, () => 'claro' as Tema);
 
   // Reaplica al montar (el atributo no sobrevive a la navegación dura) y,
@@ -60,12 +55,24 @@ export function SelectorTema() {
     aplicar(nuevo);
     oyentes.forEach((cb) => cb());
   }
+  return { tema, elegir };
+}
+
+/**
+ * El selector claro / sistema / oscuro (13-ago-2026). Activa los overrides `[data-theme]` que globals.css
+ * tenía esperando "para ESE switch, si algún día se construye" — hoy se
+ * construyó. El default sigue siendo claro: la decisión del 12-ago (no
+ * oscurecer la app solo porque el sistema operativo esté en oscuro) se
+ * conserva — "sistema" es una elección explícita del usuario.
+ */
+export function SelectorTema() {
+  const { tema, elegir } = useTema();
 
   return (
     <div role="radiogroup" aria-label="Tema de la interfaz"
       className="inline-flex items-center gap-0.5 p-0.5 rounded-full hairline"
       style={{ background: 'var(--canvas)' }}>
-      {OPCIONES.map(({ valor, Icono, rotulo }) => {
+      {OPCIONES_TEMA.map(({ valor, Icono, rotulo }) => {
         const activo = tema === valor;
         return (
           <button key={valor} type="button" role="radio" aria-checked={activo}

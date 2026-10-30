@@ -6,6 +6,7 @@ import AvisoRol from '../aviso-rol';
 import SidebarV2 from './sidebar-v2';
 import CabeceraEscritorio from './cabecera-escritorio';
 import CabeceraMovil from './cabecera-movil';
+import CapaCarga from './capa-carga';
 
 /**
  * El marco visual de /dashboard v2. Mismo contrato de props que `DashboardChrome` (el de siempre, que NO se toca):
@@ -17,8 +18,9 @@ import CabeceraMovil from './cabecera-movil';
  * Una sola navegación visible a la vez, por breakpoints disjuntos en `ui-v2/shell.css`:
  *   · <768 px     cabecera sticky de 56 px + hoja «Más» (sin riel);
  *   · 768–1023 px riel de 72 px;
- *   · ≥1024 px    sidebar de 232 px.
- * Sin `Fondo` (el shader): v2 es plano y el documento recibe el fondo por `html:root:has([data-ui="v2"])` (tokens.css).
+ *   · ≥1024 px    sidebar flotante de 232 px (riel de 72 si el usuario lo pliega) y topbar de 44 px.
+ * La capa de carga única (`CapaCarga`) viaja en el HTML del servidor, visible desde el primer fotograma, y tapa todo el marco
+ * hasta que el contenido está listo (ver `capa-carga.tsx` y `ui-v2/carga.css`). Sin `Fondo` (el shader): v2 es plano y el documento recibe el fondo por `html:root:has([data-ui="v2"])` (tokens.css).
  */
 export default function DashboardChromeV2({
   nombre, rol, cerrarSesion, usoIa, perfil, insignias, children,
@@ -40,6 +42,7 @@ export default function DashboardChromeV2({
   return (
     <ProveedorNotificaciones>
       <div className={CLASES_V2.raiz} data-ui="v2" style={{ fontFamily: 'var(--font-sans-ui), var(--font-sans)' }}>
+        <CapaCarga />
         <a href="#contenido-principal" className={CLASES_V2.saltar}>Saltar al contenido</a>
         <CabeceraMovil rol={rol} rolEtiqueta={rolEtiqueta} nombre={nombre} perfil={perfil} usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} />
         <div className={CLASES_V2.fila}>
