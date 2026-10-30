@@ -32,10 +32,13 @@ describe.each(ARCHIVOS)('movimiento en %s', (archivo) => {
   const dentro = (pos: number) => rangos.some(([a, b]) => pos > a && pos < b);
 
   it('todo @keyframes y toda declaración `animation:` viven dentro de no-preference', () => {
+    // Excepción: los dos keyframes del SEGURO de la carga (`*-seguro`) conmutan estado a los 20 s y deben valer también con reduced-motion.
     for (const m of css.matchAll(/@keyframes\s+[\w-]+/g)) {
+      if (/-seguro$/.test(m[0])) continue;
       expect(dentro(m.index!), `${m[0]} fuera de no-preference`).toBe(true);
     }
     for (const m of css.matchAll(/(^|[;{\s])animation(-name)?\s*:(?!\s*none)[^;}]+/g)) {
+      if (/rv-(carga|marco)-seguro/.test(m[0])) continue;
       expect(dentro(m.index!), `animación fuera de no-preference: ${m[0].trim()}`).toBe(true);
     }
   });
@@ -44,6 +47,8 @@ describe.each(ARCHIVOS)('movimiento en %s', (archivo) => {
     for (const m of css.matchAll(/(?:animation|transition)(?:-duration)?\s*:[^;}]+/g)) {
       for (const d of m[0].matchAll(/(\d*\.?\d+)(ms|s)\b/g)) {
         const ms = d[2] === 's' ? parseFloat(d[1]) * 1000 : parseFloat(d[1]);
+        // Única excepción: la respiración del logo de la capa de carga (1.6 s, ESTILO §9, decisión de Javier); el seguro de 20 s es un retardo.
+        if (ms === 1600 && /rv-respira/.test(m[0])) continue;
         expect(ms, m[0]).toBeLessThanOrEqual(700);
       }
     }

@@ -79,7 +79,11 @@ describe('contenido por rol', () => {
 
   it('el orden de los grupos es el del plan', () => {
     const t = menuPorPerfil('flota_admin', 'cinco_agentes').grupos.map((g) => g.titulo);
-    expect(t).toEqual(['Agentes', 'Operación', 'Puesta en marcha', 'Cuenta y conexiones']);
+    expect(t).toEqual(['Agentes', 'Operación', 'Cuenta y conexiones']);
+    // AGENTES es el único grupo estático (sin acordeón); «Puesta en marcha» abre «Cuenta y conexiones».
+    const g = menuPorPerfil('flota_admin', 'cinco_agentes').grupos;
+    expect(g.filter((x) => x.estatico).map((x) => x.titulo)).toEqual(['Agentes']);
+    expect(g.find((x) => x.id === 'cuenta')?.items[0]?.href).toBe('/dashboard/puesta-en-marcha');
   });
 });
 

@@ -69,9 +69,17 @@ const PARES_TEXTO: Array<[string, string]> = [
   ['--warn', '--warnbg'], ['--warn', '--surface'],
   ['--bad', '--badbg'], ['--bad', '--surface'],
   ['--info', '--infobg'], ['--info', '--surface'],
-  ['--senal', '--surface'], ['--senal', '--bg'],
   ['--tip-ink', '--tip'],
   ...[1, 2, 3, 4, 5, 6, 7, 8].map((n): [string, string] => [`--ink-${n}`, `--soft-${n}`]),
+  // Capa v2 (rediseño al sistema Rovaq): botón primario tenue y su alternativa, cabecera de tabla, aliases del cromo,
+  // texto sobre segmento relleno de cada matiz de datos y el logo (tinta) sobre la capa de carga.
+  // Marca: el naranja ladrillo (acción, enlaces) sobre el lienzo crema y sobre la tarjeta, claro y oscuro.
+  ['--marca-naranja', '--surface'], ['--marca-naranja', '--bg'], ['--marino', '--marino-soft'], ['--marino', '--surface'], ['--marino', '--bg'],
+  ['--marca-fg', '--marca-hover'],
+  ['--btn-fg', '--btn-bg'], ['--btn-fg', '--btn-hover'], ['--btn-soft-fg', '--btn-soft'], ['--btn-soft-fg', '--btn-soft-hover'],
+  ['--tabla-cab-ink', '--tabla-cab-bg'], ['--ink', '--ui-elevated'], ['--ink', '--ui-soft'], ['--muted', '--ui-soft'],
+  ['--ink', '--carga-fondo'], ['--ink-6', '--ui-soft'],
+  ...[1, 2, 3, 4, 5, 6, 7, 8].map((n): [string, string] => [`--on-${n}`, `--chart-${n}`]),
 ];
 
 describe.each(TEMAS)('tokens v2, modo %s: texto ≥ 4.5:1', (_nombre, t) => {
@@ -83,7 +91,12 @@ describe.each(TEMAS)('tokens v2, modo %s: texto ≥ 4.5:1', (_nombre, t) => {
 
 describe.each(TEMAS)('tokens v2, modo %s: controles y marcas ≥ 3:1', (_nombre, t) => {
   // 1.4.11: el borde de un campo y la barra de señal tienen que verse sin leer nada.
-  it.each([['--input', '--surface'], ['--input', '--bg'], ['--senal', '--surface']])('%s sobre %s', (a, b) => {
+  it.each([
+    ['--input', '--surface'], ['--input', '--bg'], ['--marca-naranja', '--ui-soft'], ['--ui-activo-barra', '--ui-activo-bg'], ['--input', '--ui-soft'], ['--senal', '--surface'], ['--senal', '--bg'], ['--senal', '--ui-soft'],
+    // Bordes de procedencia (Estimado / Inferido / Sin dato) sobre su relleno y sobre la tarjeta; neutro de barra y ejes de gráfica.
+    ['--prov-est-borde', '--prov-est-bg'], ['--prov-inf-borde', '--prov-inf-bg'], ['--prov-sin-borde', '--surface'],
+    ['--chart-barra', '--surface'], ['--chart-fuerte', '--surface'], ['--ink', '--carga-fondo'], ['--prov-obs', '--surface'],
+  ])('%s sobre %s', (a, b) => {
     const r = contraste(resolver(t, a), resolver(t, b));
     expect(r, `${a} sobre ${b} mide ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA_COMPONENTE);
   });
@@ -113,7 +126,10 @@ describe('tokens v2: excepción declarada', () => {
 describe('tokens v2: cobertura', () => {
   it('el oscuro redefine todo color base (si no, hereda un valor pensado para el claro)', () => {
     const base = ['--bg', '--surface', '--canvas', '--ink', '--ink2', '--muted', '--faint', '--line', '--line2', '--input',
-      '--marca', '--marca-fg', '--ok', '--okbg', '--warn', '--warnbg', '--bad', '--badbg', '--info', '--infobg', '--senal'];
+      '--marca', '--marca-fg', '--marca-naranja', '--marca-naranja-hover', '--marca-marino', '--marca-crema', '--btn-bg', '--btn-borde', '--btn-hover', '--btn-soft', '--btn-soft-fg', '--ui-elevated',
+      '--carga-fondo', '--tabla-cab-bg', '--chart-barra', '--chart-fuerte', '--chart-rejilla', '--chart-eje',
+      '--heat-0', '--heat-1', '--heat-2', '--heat-3', '--heat-4', '--prov-obs', '--prov-est-bg', '--prov-est-borde',
+      '--prov-inf-bg', '--prov-inf-borde', '--prov-sin-borde', '--on-1', '--on-5', '--on-6', '--ok', '--okbg', '--warn', '--warnbg', '--bad', '--badbg', '--info', '--infobg', '--senal'];
     const oscuroPropio = variables(bloque(':root[data-theme="dark"] [data-ui="v2"].tema-neutro,'));
     for (const n of base) expect(oscuroPropio[n], `${n} falta en el bloque oscuro`).toBeDefined();
   });

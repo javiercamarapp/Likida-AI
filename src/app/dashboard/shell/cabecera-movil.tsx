@@ -4,13 +4,13 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Bell, Menu } from 'lucide-react';
 import type { PerfilTenant } from '@/lib/auth/visibilidad';
-import { Logo } from '../../logo';
+import LogoV2 from './logo-v2';
 import { hrefsDelMenu } from './menu-por-perfil';
 import { useMenuV2 } from './navegacion-v2';
 import HojaMas from './hoja-mas';
 
 /**
- * La cabecera móvil (<768 px): sticky, 56 px más el área segura de arriba (notch). Logo, campana de Notificaciones y el
+ * La cabecera móvil (<768 px): sticky, 56 px más el área segura de arriba (notch). Logo de 28 px de alto, campana de 44 de Notificaciones y el
  * botón «Más», que abre la hoja con el árbol completo. En escritorio no existe (`display: none` en `shell.css`).
  */
 export default function CabeceraMovil({ rol, rolEtiqueta, nombre, perfil, usoIa, cerrarSesion, insignias }: {
@@ -26,7 +26,7 @@ export default function CabeceraMovil({ rol, rolEtiqueta, nombre, perfil, usoIa,
     <>
       <header className="rv-cab-movil">
         <Link href={`${casa}${sufijo}`} className="rv-cab-movil__logo" aria-label="Likida, ir al inicio">
-          <Logo alto="h-[18px]" />
+          <LogoV2 alto={28} />
         </Link>
         <div className="rv-cab-movil__acciones">
           {campana && (

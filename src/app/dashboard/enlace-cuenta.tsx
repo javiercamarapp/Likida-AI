@@ -24,7 +24,11 @@ import { useSearchParams } from 'next/navigation';
 // sufijo lo expulsaría del panel; `rol` (previsualización de rol) viaja
 // siempre que exista.
 // ═══════════════════════════════════════════════════════════════════════════
-export function EnlaceCuenta({ rol, children, className }: { rol: string; children: React.ReactNode; className?: string }) {
+export function EnlaceCuenta({ rol, children, className, role, tabIndex, onClick }: {
+  rol: string; children: React.ReactNode; className?: string;
+  /** Solo el menú de la tarjeta de cuenta v2 los usa (role="menuitem", foco por flechas, cerrar al navegar); sin ellos, idéntico. */
+  role?: string; tabIndex?: number; onClick?: () => void;
+}) {
   const sp = useSearchParams();
   const tenant = sp.get('tenant');
   const vista = sp.get('vista');
@@ -34,5 +38,5 @@ export function EnlaceCuenta({ rol, children, className }: { rol: string; childr
     : vista ? `?vista=${vista}`
     : rol === 'superadmin' ? '?vista=demo' : '';
   const sufijo = rolVista ? `${base}${base ? '&' : '?'}rol=${rolVista}` : base;
-  return <Link href={`/cuenta${sufijo}`} className={className}>{children}</Link>;
+  return <Link href={`/cuenta${sufijo}`} className={className} role={role} tabIndex={tabIndex} onClick={onClick}>{children}</Link>;
 }
