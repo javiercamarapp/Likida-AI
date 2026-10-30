@@ -135,3 +135,14 @@ describe('padding de página', () => {
     expect(regla('[data-ui="v2"] .rv-contenido', sinComentarios.indexOf('@media (min-width: 768px)'))).toContain('padding: 24px 24px 28px');
   });
 });
+
+describe('desborde horizontal y lienzo de carga', () => {
+  it('la columna y el marco recortan el desborde horizontal (móvil incluido)', () => {
+    expect(regla('[data-ui="v2"] .rv-col')).toContain('overflow-x: clip');
+    expect(sinComentarios).toMatch(/\.rv-fila \{ overflow-x: clip; \}/);
+  });
+  it('carga.css no redefine --bg del html (pisaba el tema oscuro mientras la capa se veía)', () => {
+    const carga = readFileSync(fileURLToPath(new URL('../../ui-v2/carga.css', import.meta.url)), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(carga).not.toMatch(/--bg\s*:/);
+  });
+});

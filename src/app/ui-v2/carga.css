@@ -17,8 +17,8 @@
 }
 [data-ui="v2"] .rv-carga[data-estado="oculta"] { opacity: 0; visibility: hidden; pointer-events: none; }
 
-/* Mientras la capa se ve, el lienzo del documento (html/body) es TAMBIÉN --carga-fondo: un solo color, sin franjas en el overscroll. */
-html:root:has([data-ui="v2"] > .rv-carga:not([data-estado="oculta"])) { --bg: var(--carga-fondo); }
+/* El lienzo del documento (html/body) ya vale lo mismo que --carga-fondo en cada tema (tokens.css, `html:root:has([data-ui="v2"])`): una
+   regla extra aquí pisaba el oscuro con el color claro mientras la capa estaba visible (e2e «modo oscuro»). */
 
 /* Mientras la capa se ve, el marco de abajo NO existe: ni se ve ni se lee ni se tabula (visibility), así que hay UN solo logo
    visible y el foco no se cuela bajo la capa. Al soltarla vuelve al instante; el fundido de 170 ms lo hace la capa por encima. */

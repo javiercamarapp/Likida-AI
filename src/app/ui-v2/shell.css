@@ -27,7 +27,10 @@
 [data-ui="v2"] .rv-skip:focus { left: 12px; position: fixed; }
 
 [data-ui="v2"] .rv-fila { display: flex; align-items: flex-start; min-height: 100dvh; }
-[data-ui="v2"] .rv-col { flex: 1 1 0%; min-width: 0; }
+/* `clip` (no `hidden`): ninguna página puede ensanchar el documento y desplazar la hoja del recorrido o la cabecera fuera de pantalla
+   (el chrome v1 lo evitaba con overflow-hidden); no crea contenedor de scroll, así que `position: sticky` sigue valiendo. */
+[data-ui="v2"] .rv-col { flex: 1 1 0%; min-width: 0; overflow-x: clip; }
+[data-ui="v2"] .rv-fila { overflow-x: clip; }
 /* Móvil: el margen de 16 px lo ponen HOY las páginas (C); sumar el del shell dejaba 32 y ensanchaba el documento en /agentes/liquidacion
    a 462 px (e2e «recorrido móvil»). Se desactiva aquí; desde 768 el padding único es del shell. */
 [data-ui="v2"] .rv-contenido { min-width: 0; padding: 0; }
