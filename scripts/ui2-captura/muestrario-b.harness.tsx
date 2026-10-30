@@ -191,6 +191,45 @@ const V: Record<string, () => ReactNode> = {
       </Rejilla>
     </>
   ),
+  'b08-tarjeta-info': () => (
+    <>
+      <P.EncabezadoPagina rotulo="Resumen" titulo="Tarjeta unificada con ⓘ" descripcion="Título + ⓘ + acciones; mismos estados en todo el producto." acciones={<P.Boton variante="primary">Exportar</P.Boton>} />
+      <P.BarraFiltros busqueda={{ valor: '', onCambio: () => {}, placeholder: 'Buscar folio' }} chips={[{ id: 'a', etiqueta: 'Este mes', activo: true }, { id: 'b', etiqueta: '30 días', activo: false }, { id: 'c', etiqueta: '90 días', activo: false }, { id: 'd', etiqueta: 'Con diferencias', activo: false }]} avanzados={<span>Avanzados</span>} nAvanzados={2} fuentes="Fuentes 5 de 7" />
+      <G.TiraKpi etiqueta="Indicadores" items={[
+        { etiqueta: 'Monto comprobado', valor: '$4,825,340', icono: <Wallet />, metrica: 'dinero_comprobado', info: 'resumen.monto_comprobado', delta: { texto: '+4.2 %', dir: 'sube', bueno: 'sube' }, serie: SERIE, sello: 'TMS · hace 5 min' },
+        { etiqueta: 'Peajes del periodo', valor: '$318,420', icono: <Ruta />, metrica: 'gasto_peajes', info: 'resumen.peajes_periodo', serie: SERIE.slice().reverse(), sello: 'Casetas · semana 43' },
+        { etiqueta: 'Carta Porte completas', valor: 84, conteo: true, icono: <ShieldCheck />, metrica: 'cumplimiento_carta_porte', info: 'resumen.carta_porte_completas', sello: '84 de 96 · hoy', segmentos: [{ etiqueta: 'Completas', valor: 84 }, { etiqueta: 'Pendientes', valor: 12 }] },
+        { etiqueta: 'A tiempo', valor: null, icono: <Truck />, metrica: 'servicio_a_tiempo', info: 'resumen.a_tiempo', sello: 'Sin lector verificado' },
+      ]} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
+        <P.Tarjeta titulo="Liquidaciones cerradas por semana" info="resumen.cierres_semana" acciones={<P.Boton tamano="sm" variante="ghost">Ver tabla</P.Boton>}>
+          <G.AreaMini valores={SERIE} etiquetas={SEMANAS} matiz={1} etiqueta="Cierres por semana" />
+        </P.Tarjeta>
+        <P.Tarjeta titulo="Requiere tu atención" info="resumen.requiere_atencion">
+          <div style={{ display: 'grid', gap: 0 }}>
+            {['Fuga en el cuadre de V-4102', '17 solicitudes vencidas', 'Carta Porte sin timbrar'].map((t, i) => (
+              <div key={t} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 40, borderBottom: i < 2 ? '1px solid var(--line)' : 0 }}><span>{t}</span><P.Chip tamano="estado" tono={i === 0 ? 'bad' : 'warn'}>{i === 0 ? 'Acción tuya' : 'En espera'}</P.Chip></div>
+            ))}
+          </div>
+        </P.Tarjeta>
+        <P.Tarjeta titulo="Peajes" info="resumen.peajes_periodo" estado="vacio" mensaje="Sin cruces en el periodo" />
+        <P.Tarjeta titulo="A tiempo" info="resumen.a_tiempo" estado="error" />
+      </div>
+    </>
+  ),
+  'b09-panel': () => (
+    <>
+      <P.EncabezadoPagina titulo="Panel lateral" descripcion="Base única de detalle, filtros avanzados y evidencia (320 / 420 / 560)." />
+      <P.PanelLateral abierto={false} ancho={420} onCerrar={() => {}} titulo="Detalle del viaje V-4102" descripcion="Querétaro → Ciudad de México" pie={<><P.Boton>Cerrar</P.Boton><P.Boton variante="primary">Aprobar</P.Boton></>}>
+        <div style={{ display: 'grid', gap: 12 }}>
+          {['Anticipo', 'Casetas', 'Diésel', 'Maniobras', 'Viáticos', 'Diferencia'].map((r, i) => (
+            <div key={r} style={{ display: 'flex', justifyContent: 'space-between', minHeight: 36, alignItems: 'center', borderBottom: '1px solid var(--line)' }}><span>{r}</span><b>{mxn(2500 + i * 811)}</b></div>
+          ))}
+          <G.BarraApilada matiz={8} etiqueta="Distribución" tramos={[{ etiqueta: 'Casetas', valor: 48 }, { etiqueta: 'Diésel', valor: 31 }, { etiqueta: 'Otros', valor: 21 }]} />
+        </div>
+      </P.PanelLateral>
+    </>
+  ),
 };
 
 describe('muestrario B', () => {
@@ -204,7 +243,7 @@ describe('muestrario B', () => {
       );
       exigirV2Html(html, id);
       // Overlays abiertos para la captura: <dialog open> (no modal) fijo a pantalla completa.
-      if (id === 'b05-overlays' || id === 'b06-modal') html = html.replace(/<dialog(?=[^>]*rv-ov--(?:drawer|modal))/g, '<div style="position:fixed;inset:0;z-index:49;background:var(--scrim)"></div><dialog open style="position:fixed;inset:0;z-index:50"');
+      if (id === 'b05-overlays' || id === 'b06-modal' || id === 'b09-panel') html = html.replace(/<dialog(?=[^>]*rv-ov--(?:drawer|modal))/g, '<div style="position:fixed;inset:0;z-index:49;background:var(--scrim)"></div><dialog open style="position:fixed;inset:0;z-index:50"');
       writeFileSync(path.join(OUT, 'a/vistas', `${id}.html`), html);
     }
   });

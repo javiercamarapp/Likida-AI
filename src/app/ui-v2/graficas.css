@@ -235,7 +235,7 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 [data-ui="v2"] .rv-check__aro { stroke: var(--ok, var(--ink)); opacity: .35; }
 [data-ui="v2"] .rv-check__trazo { stroke: var(--ok, var(--ink)); stroke-dasharray: 1; stroke-dashoffset: 0; }
 @media (prefers-reduced-motion: no-preference) {
-[data-ui="v2"] .rv-spark__linea,
+[data-ui="v2"] .rv-spark__linea { animation: rv-trazo var(--t-draw) var(--ui-ease) both; }
 /* El trazo de la línea NO usa stroke-dasharray: con vector-effect:non-scaling-stroke el guion se mide en pantalla y el
      pathLength en unidades de usuario, y la línea salía partida. Se revela con un recorte (no toca el dato). */
 [data-ui="v2"] .rv-area__plot svg { animation: rv-revela var(--t-draw) var(--ui-ease) backwards; }
@@ -264,3 +264,6 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
   [data-ui="v2"] .rv-bullet__pista, [data-ui="v2"] .rv-apilada__pista { border: 1px solid CanvasText; }
   [data-ui="v2"] .rv-bullet__meta { forced-color-adjust: none; background: CanvasText; }
 }
+
+[data-ui="v2"] .rv-kpi__enlace { color: var(--muted); text-decoration: none; }
+[data-ui="v2"] .rv-kpi__enlace:hover { color: var(--ink); text-decoration: underline; }
