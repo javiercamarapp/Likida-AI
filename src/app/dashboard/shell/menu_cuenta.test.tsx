@@ -33,7 +33,9 @@ describe('menú de la tarjeta de cuenta abierto', () => {
   });
   it('ofrece el tema (claro / sistema / oscuro) dentro del menú: alcanzable también en riel y tablet', () => {
     expect(html.match(/data-tema="(claro|sistema|oscuro)"/g)).toHaveLength(3);
-    expect(html).toContain('aria-label="Tema claro, seleccionado"');
+    expect(html.match(/role="menuitemradio"/g)).toHaveLength(3);
+    expect(html).toMatch(/role="menuitemradio" aria-checked="true"[^>]*data-tema="claro"/);
+    expect(html.match(/aria-checked="false"/g)).toHaveLength(2);
   });
   it('usa el Popover y el MenuList del sistema de overlays, no un menú propio; ninguna clase propia choca con .rv-menu', () => {
     expect(html).toContain('class="rv-pop"');

@@ -7,7 +7,7 @@ import type { Item } from '../rutas';
 import { EnlaceCuenta } from '../enlace-cuenta';
 import { Popover, MenuList } from '../../ui-v2/componentes/overlay';
 import { useTourOpcional, useProgresoTour } from '../../ui-v2/movimiento/tour';
-import { anclaDe } from './nav-utiles';
+import { anclaDe, indiceDeMenu } from './nav-utiles';
 import { OPCIONES_TEMA, useTema } from '../../selector-tema';
 
 /**
@@ -49,8 +49,15 @@ export default function MenuCuenta({ nombre, rol, rolEtiqueta, sufijo, filas, us
         </form>
       )}
       <Popover abierto={abierto} onCerrar={cerrar} ancla={gatillo} etiqueta="Cuenta" alineacion="inicio">
-        {/* Tab sale del menú (el foco sigue su curso) y lo cierra. */}
-        <div id={idMenu} onKeyDown={(e) => { if (e.key === 'Tab') cerrar(); }}>
+        {/* En CAPTURA, antes que el MenuList: Tab sale del menú y lo cierra; Esc no cierra además la hoja «Más» (<dialog> contenedor);
+            las flechas recorren TAMBIÉN las filas de tema (menuitemradio), que el MenuList no cuenta. */}
+        <div id={idMenu} onKeyDownCapture={(e) => {
+          if (e.key === 'Tab') { cerrar(); return; }
+          if (e.key === 'Escape') { e.preventDefault(); return; }
+          const lista = [...e.currentTarget.querySelectorAll<HTMLElement>('[role^="menuitem"]')].filter((x) => x.getClientRects().length > 0);
+          const nuevo = indiceDeMenu(e.key, lista.indexOf(document.activeElement as HTMLElement), lista.length);
+          if (nuevo !== null) { e.preventDefault(); e.stopPropagation(); lista[nuevo]?.focus(); }
+        }}>
           <MenuList etiqueta="Cuenta">
             {usoIaPct !== undefined && (
               <Link role="menuitem" tabIndex={-1} href={`/dashboard/chat${sufijo}`} className="rv-menu__item" onClick={alElegir}>
@@ -68,8 +75,8 @@ export default function MenuCuenta({ nombre, rol, rolEtiqueta, sufijo, filas, us
             {/* El tema, también aquí: en el riel (768–1023 y plegado) el segmentado del pie no cabe y esta es la única vía. */}
             <div className="rv-cuenta-tema" role="presentation">
               {OPCIONES_TEMA.map(({ valor, Icono, rotulo }) => (
-                <button key={valor} type="button" role="menuitem" tabIndex={-1} data-tema={valor} className="rv-menu__item"
-                  aria-label={tema === valor ? `${rotulo}, seleccionado` : rotulo} onClick={() => elegir(valor)}>
+                <button key={valor} type="button" role="menuitemradio" aria-checked={tema === valor} tabIndex={-1} data-tema={valor} className="rv-menu__item"
+                  aria-label={rotulo} onClick={() => elegir(valor)}>
                   <span className="rv-menu__icono" aria-hidden><Icono width={16} height={16} strokeWidth={1.75} /></span>
                   <span>{rotulo}</span>{tema === valor && <Check className="rv-cuenta-valor" width={14} height={14} strokeWidth={2} aria-hidden />}
                 </button>
