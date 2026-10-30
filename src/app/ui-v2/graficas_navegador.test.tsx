@@ -1,9 +1,10 @@
 /* eslint-disable security/detect-non-literal-fs-filename -- rutas fijas del propio módulo (o UI2_CSS_DIR para la prueba de rojo) */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { chromium, type Browser, type Page } from 'playwright';
+import { type Browser, type Page } from 'playwright';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { lanzarNavegador, SIN_NAVEGADOR } from './navegador_prueba';
 import { EstadoVacio, Switch } from './componentes';
 import { AreaMini, BarraApilada, DonaMini } from './graficas';
 
@@ -11,7 +12,7 @@ import { AreaMini, BarraApilada, DonaMini } from './graficas';
 // la leyenda de la dona sin estirar y las barras/switch en alto contraste forzado. Chromium real; se omite sin él.
 const DIR = process.env.UI2_CSS_DIR ?? __dirname;
 let browser: Browser | null = null;
-beforeAll(async () => { try { browser = await chromium.launch(); } catch { browser = null; } }, 60_000);
+beforeAll(async () => { browser = await lanzarNavegador(); }, 60_000);
 afterAll(async () => { await browser?.close(); });
 
 const css = () => ['tokens.css', 'movimiento.css', 'componentes.css', 'graficas.css'].map((f) => readFileSync(join(f === 'componentes.css' || f === 'graficas.css' || f === 'movimiento.css' ? DIR : __dirname, f), 'utf8')).join('\n');
@@ -64,32 +65,28 @@ async function columnasSinLinea(p: Page, mitad = false): Promise<number> {
   }, [png.toString('base64'), mitad] as const);
 }
 
-describe('gráficas y vacíos · pintados en Chromium', () => {
+describe.skipIf(SIN_NAVEGADOR)('gráficas y vacíos · pintados en Chromium', () => {
   for (const ancho of [1060, 1280, 1440]) {
-    it(`${ancho}: la línea del área con serie SIN nulos es continua (ninguna columna sin línea)`, async ({ skip }) => {
-      if (!browser) skip();
+    it(`${ancho}: la línea del área con serie SIN nulos es continua (ninguna columna sin línea)`, async () => {
       const p = await pagina(ancho);
       expect(await columnasSinLinea(p)).toBe(0);
       await p.close();
     });
   }
   for (const ancho of [1280, 1440]) {
-    it(`${ancho}: capturada CON la animación en curso, la línea nunca sale partida (sin huecos internos)`, async ({ skip }) => {
-      if (!browser) skip();
+    it(`${ancho}: capturada CON la animación en curso, la línea nunca sale partida (sin huecos internos)`, async () => {
       const p = await pagina(ancho);
       await p.waitForTimeout(120);
       expect(await columnasSinLinea(p, true)).toBe(0);
       await p.close();
     });
   }
-  it('1440 y reduced-motion: también continua', async ({ skip }) => {
-    if (!browser) skip();
+  it('1440 y reduced-motion: también continua', async () => {
     const p = await pagina(1440, { reducedMotion: 'reduce' });
     expect(await columnasSinLinea(p)).toBe(0);
     await p.close();
   });
-  it('el hueco de nulos se dibuja punteado (con regla CSS) y no hay guion sobre la línea', async ({ skip }) => {
-    if (!browser) skip();
+  it('el hueco de nulos se dibuja punteado (con regla CSS) y no hay guion sobre la línea', async () => {
     const p = await pagina(1280);
     const r = await p.evaluate(() => ({
       hueco: getComputedStyle(document.querySelector('#a2 .rv-area__hueco')!).strokeDasharray,
@@ -101,22 +98,19 @@ describe('gráficas y vacíos · pintados en Chromium', () => {
     expect(r.linea).toBe('none');
     await p.close();
   });
-  it('390: el estado vacío es UNA línea de ≤ 44 px', async ({ skip }) => {
-    if (!browser) skip();
+  it('390: el estado vacío es UNA línea de ≤ 44 px', async () => {
     const p = await pagina(390);
     const h = await p.evaluate(() => document.querySelector('#vacio .rv-vacio')!.getBoundingClientRect().height);
     expect(h).toBeLessThanOrEqual(44.5);
     await p.close();
   });
-  it('1440: la leyenda de la dona no se estira (etiqueta y cifra juntas)', async ({ skip }) => {
-    if (!browser) skip();
+  it('1440: la leyenda de la dona no se estira (etiqueta y cifra juntas)', async () => {
     const p = await pagina(1440);
     const w = await p.evaluate(() => document.querySelector('#dona .rv-dona__leyenda')!.getBoundingClientRect().width);
     expect(w).toBeLessThanOrEqual(281);
     await p.close();
   });
-  it('alto contraste forzado: barras y perilla del switch no desaparecen (se pintan con colores del sistema)', async ({ skip }) => {
-    if (!browser) skip();
+  it('alto contraste forzado: barras y perilla del switch no desaparecen (se pintan con colores del sistema)', async () => {
     const p = await pagina(1280, { forcedColors: 'active' });
     const r = await p.evaluate(() => {
       const bg = (s: string) => getComputedStyle(document.querySelector(s)!).backgroundColor;

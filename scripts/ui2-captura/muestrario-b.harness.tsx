@@ -215,6 +215,13 @@ const V: Record<string, () => ReactNode> = {
         <P.Tarjeta titulo="Peajes" info="resumen.peajes_periodo" estado="vacio" mensaje="Sin cruces en el periodo" />
         <P.Tarjeta titulo="A tiempo" info="resumen.a_tiempo" estado="error" />
       </div>
+      <P.PanelLateral abierto={false} ancho={420} onCerrar={() => {}} titulo="Detalle del viaje V-4102" descripcion="Querétaro → Ciudad de México" pie={<><P.Boton>Cerrar</P.Boton><P.Boton variante="primary">Aprobar</P.Boton></>}>
+        <div style={{ display: 'grid', gap: 0 }}>
+          {['Anticipo', 'Casetas', 'Diésel', 'Maniobras', 'Viáticos', 'Diferencia'].map((r, i) => (
+            <div key={r} style={{ display: 'flex', justifyContent: 'space-between', minHeight: 36, alignItems: 'center', borderBottom: '1px solid var(--line)' }}><span>{r}</span><b>{mxn(2500 + i * 811)}</b></div>
+          ))}
+        </div>
+      </P.PanelLateral>
     </>
   ),
   'b09-panel': () => (
@@ -243,7 +250,7 @@ describe('muestrario B', () => {
       );
       exigirV2Html(html, id);
       // Overlays abiertos para la captura: <dialog open> (no modal) fijo a pantalla completa.
-      if (id === 'b05-overlays' || id === 'b06-modal' || id === 'b09-panel') html = html.replace(/<dialog(?=[^>]*rv-ov--(?:drawer|modal))/g, '<div style="position:fixed;inset:0;z-index:49;background:var(--scrim)"></div><dialog open style="position:fixed;inset:0;z-index:50"');
+      if (id === 'b05-overlays' || id === 'b06-modal' || id === 'b09-panel' || (id === 'b08-tarjeta-info' && process.env.UI2_B_PANEL === '1')) html = html.replace(/<dialog(?=[^>]*rv-ov--(?:drawer|modal))/g, '<div style="position:fixed;inset:0;z-index:49;background:var(--scrim)"></div><dialog open style="position:fixed;inset:0;z-index:50"');
       writeFileSync(path.join(OUT, 'a/vistas', `${id}.html`), html);
     }
   });
