@@ -91,6 +91,7 @@ export function PaginaLegal({
       apoyo={`Vigente desde el ${fechaMx(vigenteDesde)} · ${bajada}`}
       pie={pie ?? undefined}
       enlaces={ENLACES_LEGALES}
+      documento
     >
       {aviso}
 

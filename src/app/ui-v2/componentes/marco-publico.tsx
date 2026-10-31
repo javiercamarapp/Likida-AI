@@ -22,7 +22,7 @@ const ENLACES_PIE = [
  * `ancho`: `estrecho` (440, tarjetas de cuenta) · `lectura` (680, texto) · `ancho` (1040, listas y formularios).
  */
 export function MarcoPublico({
-  rotulo, titulo, idTitulo = 'titulo-pagina', apoyo, acciones, children, ancho = 'lectura', centrado = false, derecha, pie, sinCabecera = false, enlaces = ENLACES_PIE,
+  rotulo, titulo, idTitulo = 'titulo-pagina', apoyo, acciones, children, ancho = 'lectura', centrado = false, derecha, pie, sinCabecera = false, documento = false, enlaces = ENLACES_PIE,
 }: {
   rotulo?: string;
   titulo: string;
@@ -36,13 +36,15 @@ export function MarcoPublico({
   derecha?: ReactNode;
   pie?: ReactNode;
   sinCabecera?: boolean;
+  /** Documento legal con huella de texto (`lib/legal/huella_texto`): NO añade ningún texto nuevo a la página (ni visible ni en `aria-label`/`title`/CSS generado): sin salto al contenido, sin cabecera con logo y sin nombre en el pie `nav`. Solo cambia la piel. */
+  documento?: boolean;
   /** Enlaces del pie. Los documentos legales con huella de texto (`lib/legal/huella_texto`) pasan los suyos para no cambiar su texto visible. */
   enlaces?: ReadonlyArray<{ href: string; texto: string }>;
 }) {
   return (
     <div data-ui="v2" className="tema-neutro rv-pub">
-      <a href="#contenido-publico" className="rv-pub__salto" aria-label="Saltar al contenido" />
-      {!sinCabecera && (
+      {!documento && <a href="#contenido-publico" className="rv-pub__salto" aria-label="Saltar al contenido" />}
+      {!sinCabecera && !documento && (
         <header className="rv-pub__cab">
           <Link href="/" aria-label="Likida, inicio"><Logo alto="h-6" /></Link>
           {derecha ? <div className="rv-pub__cab-der">{derecha}</div> : null}
@@ -61,7 +63,7 @@ export function MarcoPublico({
       </div>
       <footer className="rv-pub__pie">
         {pie ?? <p>Likida · Liquidación de viajes por WhatsApp</p>}
-        <nav aria-label="Legal">
+        <nav aria-label={documento ? undefined : 'Legal'}>
           {enlaces.map((e) => <Link key={e.href} href={e.href}>{e.texto}</Link>)}
         </nav>
       </footer>
