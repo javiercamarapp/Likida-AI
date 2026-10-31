@@ -26,4 +26,17 @@ describe('Drawer / Modal', () => {
     expect(css).not.toMatch(/rv-ov[^{]*:not\(\[open\]\)[^{]*\{[^}]*animation/);
     expect(readFileSync(join(__dirname, '..', 'movimiento.css'), 'utf8')).toContain('--ov-in: 180ms');
   });
+
+  it('marca al pie del Drawer (.rv-ov__marca): el logo oficial, decorativo, solo en escritorio y nunca en el Modal', () => {
+    const drawer = renderToStaticMarkup(<Drawer abierto={false} onCerrar={() => {}} titulo="Detalle">x</Drawer>);
+    const modal = renderToStaticMarkup(<Modal abierto={false} onCerrar={() => {}} titulo="Confirmar">x</Modal>);
+    const marca = /<div class="rv-ov__marca" aria-hidden="true">(.*?)<\/div>/.exec(drawer);
+    expect(marca, 'el Drawer debe pintar .rv-ov__marca').not.toBeNull();
+    expect(marca?.[1]).toContain('viewBox="0 0 726 149"'); // el logo horizontal completo, no un símbolo recortado
+    expect(marca?.[1]).not.toContain('aria-label'); // decorativo: el lector de pantalla no lo anuncia
+    expect(modal).not.toContain('rv-ov__marca');
+    const css = readFileSync(join(__dirname, '..', 'componentes.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(css).toMatch(/\.rv-ov__marca \{[^}]*border-top: 1px solid var\(--line\)[^}]*color: var\(--ink\)/); // hereda la tinta: claro y oscuro
+    expect(css).toMatch(/@media \(max-width: 819px\) \{ \[data-ui="v2"\] \.rv-ov__marca \{ display: none; \} \}/); // la hoja inferior móvil no la lleva
+  });
 });
