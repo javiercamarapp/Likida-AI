@@ -51,21 +51,18 @@ export default async function PaginaChat({
   ]);
 
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        {tenantNombre && (
-          <div className="px-5 pt-4">
-            <span className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium"
-              style={{ color: 'var(--accent-fg)', background: 'var(--accent)' }}>
-              viendo como superadmin · {tenantNombre}
-            </span>
-          </div>
-        )}
-        {/* ARRIBA de la conversación, como en el Resumen: una respuesta de la
-            IA sobre una flota que no existe no es un dato del negocio. */}
-        {!tenantExiste && <div className="px-5 pt-4"><AvisoSinFlota tenantId={tenantId} /></div>}
-        <div className="flex-1 flex flex-col"><ChatFlota kpis={kpis} acred={acred} variante="hero" /></div>
-      </div>
+    // `rv-chat-pagina`: la pantalla del agente llena el alto del marco SIN scroll de página (el hilo scrollea por dentro);
+    // el CSS (ui-v2/chat.css) lo detecta con :has() para quitarle el relleno y el scroll a `.rv-contenido`.
+    <main className="rv-chat-pagina">
+      {/* ARRIBA de la conversación, como en el Resumen: una respuesta de la IA sobre una flota que no existe no es un dato del negocio. */}
+      {!tenantExiste && <div className="rv-chat-pagina__aviso"><AvisoSinFlota tenantId={tenantId} /></div>}
+      <ChatFlota
+        kpis={kpis}
+        acred={acred}
+        cabecera={tenantNombre ? (
+          <span className="rv-chat__cinta">viendo como superadmin · {tenantNombre}</span>
+        ) : undefined}
+      />
     </main>
   );
 }

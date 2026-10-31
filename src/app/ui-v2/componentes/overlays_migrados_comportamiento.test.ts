@@ -224,7 +224,7 @@ describe.skipIf(SIN_NAVEGADOR)('overlays migrados · comportamiento en Chromium'
     await p.close();
   });
   it('historial móvil: al abrirse el foco cae en «Nuevo chat», no en el buscador (no sube el teclado)', async () => {
-    const fuente = readFileSync(join(APP, 'dashboard/chat.tsx'), 'utf8');
-    expect(fuente).toMatch(/onClick=\{nuevoChat\} data-autofocus/);
+    const fuente = readFileSync(join(APP, 'dashboard/chat/historial.tsx'), 'utf8');
+    expect(fuente).toMatch(/onClick=\{onNuevo\} data-autofocus/);
   });
 });

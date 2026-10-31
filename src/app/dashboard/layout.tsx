@@ -22,6 +22,7 @@ import '../ui-v2/componentes.css';
 import '../ui-v2/overlay.css';
 import '../ui-v2/graficas.css';
 import '../ui-v2/movimiento.css';
+import '../ui-v2/chat.css';
 import '../ui-v2/paginas.css';
 import '../ui-v2/paginas-dominio.css';
 import { PulsoProducto } from './pulso-producto';
