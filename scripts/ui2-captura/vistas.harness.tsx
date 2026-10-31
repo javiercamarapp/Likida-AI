@@ -268,6 +268,9 @@ const VISTAS: Record<string, () => ReactNode> = {
       </div>
     </Pagina>
   ),
+  // Variantes del SHELL por rol y estado (el contenido es mínimo: lo que se mira es el sidebar, la topbar y la barra inferior).
+  '14-shell-contador': () => (<Pagina titulo="Resumen del contador" icono={<Wallet width={15} height={15} />}><kit.EstadoVacio>Vista del contador: su barra inferior y su menú salen del mismo filtro por rol.</kit.EstadoVacio></Pagina>),
+  '15-shell-puesta': () => (<Pagina titulo="Resumen" icono={<Route width={15} height={15} />}><kit.EstadoVacio>Puesta en marcha 3/6 en el pie y avisos pendientes en la campana de la topbar.</kit.EstadoVacio></Pagina>),
   '12-vacio-total': () => (
     <Pagina titulo="Conexiones" icono={<Route width={15} height={15} />}>
       <kit.EstadoVacio>Aún no hay nada conectado. Empieza por entregar el primer archivo del proveedor.</kit.EstadoVacio>
@@ -284,12 +287,18 @@ const VISTAS: Record<string, () => ReactNode> = {
   ),
 };
 
+/** Props del chrome por vista (las demás: dueño con el perfil de cinco agentes). */
+const CHROME_POR_VISTA: Record<string, { rol?: string; insignias?: Record<string, string> }> = {
+  '14-shell-contador': { rol: 'contador' },
+  '15-shell-puesta': { insignias: { '/dashboard/puesta-en-marcha': '3/6', '/dashboard/notificaciones': '4' } },
+};
+
 describe('arnés de capturas UI v2', () => {
   it('renderiza todas las vistas con componentes reales y fixtures sintéticos', () => {
     mkdirSync(path.join(OUT, 'vistas'), { recursive: true });
     for (const [id, vista] of Object.entries(VISTAS)) {
       const html = renderToStaticMarkup(
-        <DashboardChrome nombre={USUARIO.nombre} rol="flota_admin" perfil="cinco_agentes" cerrarSesion={async () => {}}>
+        <DashboardChrome nombre={USUARIO.nombre} rol={CHROME_POR_VISTA[id]?.rol ?? 'flota_admin'} perfil="cinco_agentes" {...(CHROME_POR_VISTA[id]?.insignias ? { insignias: CHROME_POR_VISTA[id].insignias } : {})} cerrarSesion={async () => {}}>
           {vista()}
         </DashboardChrome>,
       );

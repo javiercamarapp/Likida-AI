@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { PanelLeftClose } from 'lucide-react';
+import { ChevronsLeft } from 'lucide-react';
 import type { PerfilTenant } from '@/lib/auth/visibilidad';
 import LogoV2 from './logo-v2';
 import { ArbolMenu, PieMenu, useMenuV2 } from './navegacion-v2';
@@ -9,8 +9,8 @@ import { useRiel } from './colapso';
 
 /**
  * El sidebar de escritorio v2: tarjeta FLOTANTE de 232 px (riel de 72 px: plegado por el usuario y por defecto entre 768 y 1023).
- * Marca arriba (logo de 30 px de alto + botón de plegar 32×32), árbol que scrollea por dentro y pie fijo (≤150 px) con
- * Notificaciones, Puesta en marcha (<6/6), tema segmentado y la tarjeta de cuenta. Bajo 768 px NO se ve (`display: none` en
+ * Marca arriba (logo de 30 px de alto + botón de plegar 32×32), árbol que scrollea por dentro y pie fijo (≤100 px) con
+ * «Puesta en marcha» (<6/6) y la tarjeta de cuenta, en UN solo bloque compacto. Bajo 768 px NO se ve (`display: none` en
  * `shell.css`, así que sale también del árbol de accesibilidad): ahí manda la cabecera móvil con su hoja «Más».
  *
  * Conserva el contrato de siempre: `<aside>` con `<nav>` y `<a href>` reales.
@@ -32,7 +32,7 @@ export default function SidebarV2({ rol, rolEtiqueta, nombre, perfil, usoIa, cer
           <span className="rv-logo-s"><LogoV2 alto={28} variante="simbolo" /></span>
         </Link>
         <button type="button" className="rv-icono-boton rv-sb__plegar" onClick={alternar} aria-label="Plegar el menú" title="Plegar el menú" aria-expanded={!riel}>
-          <PanelLeftClose width={16} height={16} strokeWidth={1.75} aria-hidden />
+          <ChevronsLeft className="rv-chev-plegar" width={16} height={16} strokeWidth={1.75} aria-hidden />
         </button>
       </div>
       <nav aria-label="Navegación principal" className="rv-sb__nav">

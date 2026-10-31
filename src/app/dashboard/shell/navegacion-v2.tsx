@@ -7,8 +7,7 @@ import { ChevronDown } from 'lucide-react';
 import { moduloProximamenteDeRuta, rutaProximamente, type PerfilTenant } from '@/lib/auth/visibilidad';
 import type { Item } from '../rutas';
 import { useSufijoYRol } from '../sidebar-nav';
-import { OPCIONES_TEMA, useTema } from '../../selector-tema';
-import { menuPorPerfil, hrefActivo, HREF_NOTIFICACIONES, HREF_PUESTA_EN_MARCHA, HREFS_MENU_CUENTA, type MenuV2, type GrupoMenu } from './menu-por-perfil';
+import { menuPorPerfil, hrefActivo, HREF_NOTIFICACIONES, HREF_PUESTA_EN_MARCHA, type MenuV2, type GrupoMenu } from './menu-por-perfil';
 import MenuCuenta from './menu-cuenta';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -19,7 +18,7 @@ import MenuCuenta from './menu-cuenta';
 // los mismos nombres de siempre, y `aria-current="page"` en el ítem activo (el sidebar de siempre no lo tenía).
 //
 // ESTRUCTURA (ESTILO-LIKIDA §4): Resumen → AGENTES (caption estático + ítems sueltos, siempre visibles) → acordeón de
-// UNA sola categoría abierta → pie fijo (Notificaciones · Puesta en marcha <6/6 · tema · tarjeta de cuenta).
+// UNA sola categoría abierta → pie fijo (Puesta en marcha <6/6 · tarjeta de cuenta; el resto, en el menú de la tarjeta).
 // ═══════════════════════════════════════════════════════════════════════════
 
 export { iniciales, anclaDe, avanceDe } from './nav-utiles';
@@ -130,21 +129,6 @@ export function ArbolMenu({ menu, sufijo, pathname, perfil, insignias, alNavegar
   );
 }
 
-/** Tema segmentado visible (claro / sistema / oscuro): 3 iconos, alto total 32. */
-function TemaSegmentado() {
-  const { tema, elegir } = useTema();
-  return (
-    <div role="radiogroup" aria-label="Tema de la interfaz" className="rv-tema">
-      {OPCIONES_TEMA.map(({ valor, Icono, rotulo }) => (
-        <button key={valor} type="button" role="radio" aria-checked={tema === valor} aria-label={rotulo} title={rotulo}
-          className="rv-tema__op" onClick={() => elegir(valor)}>
-          <Icono width={14} height={14} strokeWidth={1.75} aria-hidden />
-        </button>
-      ))}
-    </div>
-  );
-}
-
 /** «Puesta en marcha» en el pie (solo <6/6): 6 segmentos de 6 px + «3/6»; es un enlace al asistente. */
 function FilaPuesta({ avance, sufijo, alNavegar, activo }: { avance: { n: number; t: number }; sufijo: string; alNavegar?: () => void; activo: boolean }) {
   const t = Math.min(Math.max(avance.t, 1), 12);
@@ -160,24 +144,23 @@ function FilaPuesta({ avance, sufijo, alNavegar, activo }: { avance: { n: number
   );
 }
 
-/** El pie fijo (≤150): Notificaciones · Puesta en marcha (<6/6) · tema · tarjeta de cuenta. Mi perfil y Ayuda viven en el menú de la tarjeta. */
-export function PieMenu({ menu, sufijo, pathname, perfil, rol, rolEtiqueta, nombre, usoIa, cerrarSesion, insignias, alNavegar }: {
+/**
+ * El pie fijo: UN solo bloque compacto (≤100 px). «Puesta en marcha» (solo <6/6) y la tarjeta de cuenta (monograma, nombre, rol,
+ * salir). Nada apilado: Notificaciones vive en la topbar (y en la cabecera móvil), y Mi perfil, Ayuda, Plan, Configuración, el
+ * recorrido y el tema, en el menú de la tarjeta. Ninguna función se pierde, solo cambia de lugar.
+ */
+export function PieMenu({ menu, sufijo, rol, rolEtiqueta, nombre, usoIa, cerrarSesion, insignias, perfil, alNavegar, pathname }: {
   menu: MenuV2; sufijo: string; pathname: string; perfil?: PerfilTenant | null; rol: string; rolEtiqueta: string; nombre: string | null;
   usoIa?: { pct: number } | null; cerrarSesion?: () => Promise<void>; insignias?: Insignias; alNavegar?: () => void;
 }) {
   const activo = hrefActivo(pathname, menu);
-  const notificaciones = menu.pie.filter((i) => i.href === HREF_NOTIFICACIONES);
-  // Lo que no es Notificaciones ni vive en el menú de la tarjeta (p. ej. Plan y Configuración del menú genérico) sigue como fila.
-  const otros = menu.pie.filter((i) => i.href !== HREF_NOTIFICACIONES && !(HREFS_MENU_CUENTA as readonly string[]).includes(i.href));
-  const filasMenuCuenta = menu.pie.filter((i) => (HREFS_MENU_CUENTA as readonly string[]).includes(i.href));
+  // Todo lo que el pie ya no pinta como fila (Mi perfil, Ayuda y, en el menú genérico, Plan y Configuración) va al menú de la tarjeta.
+  const filasMenuCuenta = menu.pie.filter((i) => i.href !== HREF_NOTIFICACIONES);
   const avance = avanceDe(insignias?.[HREF_PUESTA_EN_MARCHA]);
   const enMenu = menu.grupos.some((g) => g.items.some((i) => i.href === HREF_PUESTA_EN_MARCHA));
   return (
     <div className="rv-pie">
-      {notificaciones.length > 0 && <Lista items={notificaciones} sufijo={sufijo} activo={activo} perfil={perfil} insignias={insignias} alNavegar={alNavegar} />}
-      {otros.length > 0 && <Lista items={otros} sufijo={sufijo} activo={activo} perfil={perfil} insignias={insignias} alNavegar={alNavegar} />}
       {avance && enMenu && <FilaPuesta avance={avance} sufijo={sufijo} alNavegar={alNavegar} activo={activo === HREF_PUESTA_EN_MARCHA} />}
-      <TemaSegmentado />
       <MenuCuenta nombre={nombre} rol={rol} rolEtiqueta={rolEtiqueta} sufijo={sufijo} filas={filasMenuCuenta} usoIaPct={usoIa === undefined || perfil ? undefined : usoIa?.pct ?? null}
         cerrarSesion={cerrarSesion} alNavegar={alNavegar} iniciales={iniciales(nombre)} />
     </div>

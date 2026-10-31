@@ -2,16 +2,20 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Bell, Menu } from 'lucide-react';
+import { Bell } from 'lucide-react';
 import type { PerfilTenant } from '@/lib/auth/visibilidad';
 import LogoV2 from './logo-v2';
 import { hrefsDelMenu } from './menu-por-perfil';
 import { useMenuV2 } from './navegacion-v2';
 import HojaMas from './hoja-mas';
+import BarraInferior from './barra-inferior';
+import MenuGuia from './menu-guia';
 
 /**
- * La cabecera móvil (<768 px): sticky, 56 px más el área segura de arriba (notch). Logo de 28 px de alto, campana de 44 de Notificaciones y el
- * botón «Más», que abre la hoja con el árbol completo. En escritorio no existe (`display: none` en `shell.css`).
+ * La navegación móvil (<768 px): cabecera sticky de 56 px más el área segura de arriba (notch) con el logo de 28 px de alto, «Guía» y la
+ * campana de 44 de Notificaciones; la barra inferior flotante (4 destinos del rol + «Más») y la hoja «Más», que abre el árbol completo
+ * y el pie (tema + cuenta). La hoja la abre la barra: su estado vive aquí para que cabecera, barra y hoja sean una sola pieza. En
+ * escritorio nada de esto existe (`display: none` en `shell.css`).
  */
 export default function CabeceraMovil({ rol, rolEtiqueta, nombre, perfil, usoIa, cerrarSesion, insignias }: {
   rol: string; rolEtiqueta: string; nombre: string | null; perfil?: PerfilTenant | null; usoIa?: { pct: number } | null;
@@ -29,17 +33,15 @@ export default function CabeceraMovil({ rol, rolEtiqueta, nombre, perfil, usoIa,
           <LogoV2 alto={28} />
         </Link>
         <div className="rv-cab-movil__acciones">
+          <MenuGuia rol={rol} perfil={perfil} compacto />
           {campana && (
             <Link href={`/dashboard/notificaciones${sufijo}`} className="rv-icono-boton" aria-label="Notificaciones">
               <Bell width={18} height={18} strokeWidth={1.75} aria-hidden />
             </Link>
           )}
-          <button type="button" className="rv-icono-boton" aria-label="Más: abrir el menú completo" aria-haspopup="dialog" data-tour="nav-mas"
-            aria-expanded={abierta} onClick={() => setAbierta(true)}>
-            <Menu width={18} height={18} strokeWidth={1.75} aria-hidden />
-          </button>
         </div>
       </header>
+      <BarraInferior rol={rol} perfil={perfil} masAbierta={abierta} alAbrirMas={() => setAbierta(true)} />
       <HojaMas abierta={abierta} alCerrar={() => setAbierta(false)} rol={rol} rolEtiqueta={rolEtiqueta} nombre={nombre} perfil={perfil}
         usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} />
     </>
