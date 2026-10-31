@@ -20,7 +20,6 @@ vi.mock('next/navigation', () => ({
 
 const { default: Chrome } = await import('@/app/dashboard/shell/chrome-v2');
 const P = await import('@/app/ui-v2/componentes');
-const D = await import('@/app/ui-v2/datos');
 const { VistaViajes } = await import('@/app/dashboard/viajes/vista');
 const { FiltrosTablero } = await import('@/app/dashboard/agentes/conductores/tablero-hitos');
 const { SeccionCola } = await import('@/app/dashboard/agentes/liquidacion/cola');

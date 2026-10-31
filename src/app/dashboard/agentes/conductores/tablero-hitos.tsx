@@ -1,5 +1,4 @@
 import { CheckCircle2, CircleAlert, CircleDashed, Clock, MapPin, MapPinOff, Camera, UserCog, Flag, FileCheck2, FileWarning } from 'lucide-react';
-import Link from 'next/link';
 import { fechaHoraMx, numero, porcentaje } from '@/lib/formato';
 import type { ResumenDocumentosCierre } from '@/lib/likida/conductor/documentos_cierre';
 import type { CatalogosFiltro } from '@/lib/likida/conductor/repo_validacion';
