@@ -107,7 +107,7 @@ export function Cifra(p: PropsCifra) {
       {error ? (
         <span className="rv-kpi__error" role="alert">
           <span>{p.mensaje ?? MENSAJE_CIFRA_ERROR}</span>
-          {p.reintentar ? <BotonReintentar /> : null}
+          {p.reintentar ? <BotonReintentar contexto={p.etiqueta} /> : null}
         </span>
       ) : null}
       {!sinValor && segs.length > 0 ? (
