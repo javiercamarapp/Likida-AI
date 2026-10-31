@@ -41,13 +41,13 @@
 }
 .login-editorial .login-btn-tinta { background: #0e0e10; color: #fff; }
 .login-editorial .login-btn-tinta:not(:disabled):hover { background: #26262b; box-shadow: 0 8px 24px #0e0e1026; }
-.login-editorial .login-btn-borde { background: var(--login-surface); border-color: var(--login-line); color: var(--login-ink); }
+.login-editorial .login-btn-borde { background: var(--login-surface); border-color: var(--login-input); color: var(--login-ink); }
 .login-editorial .login-btn-borde:not(:disabled):hover { border-color: var(--login-input); box-shadow: 0 8px 20px #00000012; }
 .login-editorial .login-btn:disabled { opacity: .6; cursor: not-allowed; }
 .login-editorial .login-btn:focus-visible, .login-editorial a:focus-visible, .login-editorial summary:focus-visible { outline: 2px solid var(--login-foco); outline-offset: 2px; }
 
 .login-editorial .login-campo {
-  width: 100%; min-width: 0; min-height: 52px; padding: 14px 18px; border: 1px solid var(--login-line); border-radius: 13px;
+  width: 100%; min-width: 0; min-height: 52px; padding: 14px 18px; border: 1px solid var(--login-input); border-radius: 13px;
   background: var(--login-soft); color: var(--login-ink); font: 500 15px/1.5 var(--login-sans);
 }
 .login-editorial .login-campo::placeholder { color: var(--login-muted); }
@@ -60,7 +60,11 @@
 .login-editorial .login-separator p { margin: 0; flex: 0 1 auto; }
 .login-editorial .login-separator > span { height: 1px; flex: 1; min-width: 16px; background: var(--login-line); }
 
-.login-editorial .login-message { font-size: 13px; line-height: 1.6; border: 1px solid var(--login-line); border-radius: 12px; padding: 12px 16px; background: var(--login-soft); margin: 12px 0; }
+.login-editorial .login-message { font-size: 13px; line-height: 1.6; border: 1px solid var(--login-line); border-radius: 12px; padding: 12px 16px; background: var(--login-soft); margin: 12px 0; }/* El error se distingue del éxito SIN rojo: borde izquierdo grueso de tinta + icono distinto (alerta vs. correo enviado) + peso. */
+.login-editorial .login-message[data-tipo] { display: flex; gap: 10px; align-items: flex-start; }
+.login-editorial .login-message[data-tipo] > svg { flex: none; margin-top: 3px; }
+.login-editorial .login-message[data-tipo="error"] { border-left: 4px solid var(--login-ink); font-weight: 600; }
+.login-editorial .login-message[data-tipo="enviado"] { border-left: 1px solid var(--login-line); }
 .login-editorial .login-message p { margin: 0; }
 .login-editorial .login-message p + p { margin-top: 6px; }
 .login-editorial .login-estado-titulo { font-weight: 600; font-size: 14px; }

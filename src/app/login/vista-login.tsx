@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { MailCheck, OctagonAlert } from 'lucide-react';
 import { Logo, GlifoAdorno } from '../logo';
 import { LoginArtwork } from '@/components/login/artwork';
 import { BotonEnvio } from './boton-envio';
@@ -53,9 +54,10 @@ export function VistaLogin({ next, enviado, reenviado, error, entrarConGoogle, e
             {/* `role="alert"` y texto por motivo (`mensajeDeError`): un enlace usado o caducado no dice «intenta
                 otra vez». Habla del estado del ENLACE, nunca de la cuenta (sin oráculo de enumeración). */}
             {error && (
-              <p className="login-message" role="alert">
-                {mensajeDeError(error)}
-              </p>
+              <div className="login-message" data-tipo="error" role="alert">
+                <OctagonAlert width={16} height={16} strokeWidth={2} aria-hidden="true" />
+                <p>{mensajeDeError(error)}</p>
+              </div>
             )}
 
             <form action={entrarConGoogle} className="login-google login-entra">
@@ -96,9 +98,11 @@ export function VistaLogin({ next, enviado, reenviado, error, entrarConGoogle, e
               />
               {/* Región de estado con altura reservada: no salta el diseño. El aviso de «enviado» va DEBAJO del
                   botón y no lo reemplaza: con un dedazo en el correo la pantalla ofrece volver a escribirlo. */}
-              <div className="login-message login-email-status" role="status">
+              <div className="login-message login-email-status" role="status" data-tipo={enviado ? 'enviado' : undefined}>
                 {enviado && (
                   <>
+                    <MailCheck width={16} height={16} strokeWidth={2} aria-hidden="true" />
+                    <div>
                     <p className="login-estado-titulo">
                       {reenviado
                         ? 'Ese enlace ya se había usado o caducado — te mandamos uno nuevo.'
@@ -110,6 +114,7 @@ export function VistaLogin({ next, enviado, reenviado, error, entrarConGoogle, e
                         : 'Ábrelo desde este mismo dispositivo.'}
                     </p>
                     <p className="login-estado-nota">¿No llega o te equivocaste de correo? Vuelve a escribirlo arriba.</p>
+                    </div>
                   </>
                 )}
               </div>

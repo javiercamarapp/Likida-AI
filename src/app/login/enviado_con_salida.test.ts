@@ -12,22 +12,26 @@ const PAGINA = readFileSync(fileURLToPath(new URL('./vista-login.tsx', import.me
 
 describe('/login?enviado=1 conserva el formulario (B8)', () => {
   it('el aviso de enviado es condicional (&&), no un ternario que sustituye las acciones', () => {
-    expect(PAGINA).toMatch(/\{enviado && \(/);
-    expect(PAGINA).not.toMatch(/\{enviado \? \(/);
+    expect(PAGINA).toMatch(/\{\s*enviado\s*&&\s*\(/);
+    expect(PAGINA).not.toMatch(/\{\s*enviado\s*\?\s*\(/);
   });
 
   it('los dos formularios siguen fuera de cualquier rama de `enviado`', () => {
-    const aviso = PAGINA.indexOf('{enviado && (');
-    const cierreAviso = PAGINA.indexOf('</>\n                )}', aviso);
-    expect(aviso).toBeGreaterThan(-1);
-    expect(cierreAviso).toBeGreaterThan(aviso);
+    // Regex tolerante a formato (sangría, saltos de línea, `<>` vs `<React.Fragment>`): lo que importa es el CONTENIDO de la rama.
+    const rama = PAGINA.match(/\{\s*enviado\s*&&\s*\(([\s\S]*?)<\/>\s*\)\s*\}/);
+    expect(rama, 'no encontré la rama `{enviado && (...)}`').not.toBeNull();
     // Ninguna rama de `enviado` contiene un formulario ni sustituye a las acciones: ambas siguen montadas.
-    expect(PAGINA.slice(aviso, cierreAviso)).not.toContain('<form');
-    expect(PAGINA).toContain('action={entrarConGoogle}');
-    expect(PAGINA).toContain('action={entrarConEmail}');
+    expect(rama![1]).not.toMatch(/<form[\s>]/);
+    expect(PAGINA).toMatch(/action=\{\s*entrarConGoogle\s*\}/);
+    expect(PAGINA).toMatch(/action=\{\s*entrarConEmail\s*\}/);
+    // Y los dos `<form` están antes o después de la rama, nunca dentro de ella.
+    const ini = PAGINA.indexOf(rama![0]);
+    for (const m of PAGINA.matchAll(/<form[\s>]/g)) {
+      expect(m.index! < ini || m.index! > ini + rama![0].length).toBe(true);
+    }
   });
 
   it('el aviso dice cómo reintentar con otro correo', () => {
-    expect(PAGINA).toContain('te equivocaste de correo? Vuelve a escribirlo arriba');
+    expect(PAGINA.replace(/\s+/g, ' ')).toContain('te equivocaste de correo? Vuelve a escribirlo arriba');
   });
 });
