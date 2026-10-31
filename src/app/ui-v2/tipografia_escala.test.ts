@@ -34,10 +34,8 @@ function tamanos(texto: string): number[] {
 const fuera = (texto: string) => tamanos(texto).filter((n) => !ESCALA.has(n));
 
 /** Excepciones JUSTIFICADAS dentro del alcance v2. Cada una debe seguir teniendo valores fuera de escala (si ya está limpia, se borra de aquí). */
-const EXCEPCIONES_V2: Record<string, string> = {
-  'dashboard/chat.tsx': 'Lo toca el lote 3 (overlays/chat); se pasa a la escala cuando ese PR se fusione.',
-  'dashboard/onboarding/chat.tsx': 'Igual que el chat: lote 3.',
-};
+/** Excepciones JUSTIFICADAS dentro del alcance v2. Vacía: el chat y los overlays del lote 3 ya están en la escala. Cada entrada nueva debe seguir teniendo valores fuera de escala. */
+const EXCEPCIONES_V2: Record<string, string> = {};
 
 describe('tipografía: solo la escala de tokens en el código v2 y el dashboard', () => {
   const alcance = [
