@@ -28,9 +28,10 @@ import { acotada } from '@/lib/likida/presupuesto';
 import { logger } from '@/lib/logger';
 import {
   PERFILES_TENANT, rutaPermitidaEnPerfil, apiPermitidaEnPerfil, CRONS_PERFIL_CINCO_AGENTES,
-  moduloProximamenteDeRuta, rutaProximamente, MODULOS_PROXIMAMENTE_PERFIL, inicioDe,
+  moduloProximamenteDeRuta, rutaProximamente, MODULOS_PROXIMAMENTE_PERFIL, inicioDe, puedeVerRuta,
   type PerfilTenant, type ModuloPerfil,
 } from './visibilidad';
+import { esRolNomina, ROL_NOMINA } from './roles';
 
 export type { PerfilTenant };
 
@@ -200,7 +201,21 @@ export async function moduloEnStandBy(tenantId: string | null | undefined, modul
  */
 export async function exigirRutaDePerfil(tenantId: string | null | undefined, destino: string, rol?: string): Promise<void> {
   const perfil = await perfilDeTenant(tenantId);
-  if (!perfil) return;
+  if (!perfil) {
+    // `nomina` (0949) existe SOLO en flotas con perfil: sin perfil no hay nada que enseñarle (deny-by-default). Sin bucle:
+    // `/sin-acceso` no pasa por esta función ni por `inicioDe`.
+    if (esRolNomina(rol)) {
+      logger.warn('perfil_tenant.nomina_sin_perfil', { tenantId, destino });
+      redirect('/sin-acceso');
+    }
+    return;
+  }
+  // `nomina` (0949): además de la lista del perfil, SU lista cerrada. `requireSessionTenant` llama a esta función desde las server
+  // actions de pantallas que no pasan por `resolverTenantEfectivo` (el único otro sitio que compara rol y ruta): aquí también se cierra.
+  if (esRolNomina(rol) && !puedeVerRuta(ROL_NOMINA, destino, perfil)) {
+    logger.warn('perfil_tenant.ruta_negada_nomina', { tenantId, destino });
+    redirect(inicioDe(ROL_NOMINA, perfil));
+  }
   if (rutaPermitidaEnPerfil(perfil, destino)) {
     // «Próximamente» (fase 1): el módulo se ve pero no se opera. La página real y sus server actions se cortan aquí,
     // antes de tocar un dato, y se sirve la pantalla única «Próximamente» (sin datos, sin acciones).

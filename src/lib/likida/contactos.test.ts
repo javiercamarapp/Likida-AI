@@ -103,6 +103,16 @@ describe('resolverCuentaOficina — quién es el teléfono', () => {
     expect(await resolverCuentaOficina('529991234567')).toBeNull();
   });
 
+  it('un usuario `nomina` (0949) con teléfono es "no te conozco": el bot no le contesta operación ni dinero', async () => {
+    TABLAS.app_user = [u({ rol: 'nomina' })];
+    expect(await resolverCuentaOficina('529991234567')).toBeNull();
+    // y los roles de siempre no cambian
+    for (const rol of ['flota_admin', 'contador', 'encargado']) {
+      TABLAS.app_user = [u({ rol })];
+      expect(await resolverCuentaOficina('529991234567')).toMatchObject({ rol });
+    }
+  });
+
   it('activo=true entra igual que antes', async () => {
     TABLAS.app_user = [u({ activo: true })];
     expect(await resolverCuentaOficina('529991234567')).toMatchObject({ userId: 'u-1' });

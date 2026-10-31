@@ -23,6 +23,8 @@
 // cambia es qué se le enseña a cada quien, y eso se decide aquí.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { ROL_NOMINA, esRolNomina } from './roles';
+
 /** Las secciones en que se parte el panel, por naturaleza del dato. */
 export type Area = 'operacion' | 'dinero' | 'administracion';
 
@@ -51,6 +53,39 @@ export function areasDe(rol: string): readonly Area[] {
 export function puedeVerArea(rol: string, area: Area): boolean {
   return areasDe(rol).includes(area);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL ROL `nomina` (Nómina y RH de una flota con perfil `cinco_agentes`, mig. 0949) — DENY-BY-DEFAULT.
+//
+// NO es un área más: no aparece en `AREAS_POR_ROL` (sin áreas: `areasDe('nomina')` es `[]`), así que NINGUNA ruta
+// clasificada por área le abre — ni operación, ni dinero, ni administración. Ve SOLO la LISTA CERRADA de abajo y esa
+// lista se evalúa en `puedeVerRuta` ANTES que las áreas. Una ruta que nadie agregue aquí está prohibida para este
+// rol, incluida una pantalla nueva que mañana se clasifique como `operacion` o `dinero`.
+//
+// Lo que ve: el agente de Liquidaciones (SOLO CONTEOS: desgloses recibidos, enviados, retenidos, rebotados y sin
+// póliza; jamás pesos, netos ni nombres de operador con montos) y lo de la persona (notificaciones, perfil, soporte).
+// Quedan FUERA a propósito: `/dashboard/agentes/liquidacion/formato` y `/configuracion` (muestran dinero y
+// configuración), `/dashboard/[id]` (el detalle de una liquidación trae el neto) y todo `/api/*` de sesión
+// (`resolverTenantApi` lo niega por rol).
+//
+// SOLO CON PERFIL: el rol existe para flotas con `cinco_agentes`. Esta función decide por ROL; que la flota tenga
+// el perfil lo exige `exigirRutaDePerfil` (perfil_tenant.ts), que manda a `/sin-acceso` a un `nomina` sin perfil.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Las ÚNICAS rutas de `/dashboard` que abre el rol `nomina`. Explícito y exacto, no por prefijo. */
+export const RUTAS_NOMINA: ReadonlySet<string> = new Set([
+  '/dashboard/agentes/liquidacion',
+  '/dashboard/notificaciones',
+  '/dashboard/mi-perfil',
+  '/dashboard/soporte',
+]);
+
+/** Donde aterriza `nomina`: la vista de conteos del agente de Liquidaciones. */
+export const INICIO_NOMINA = '/dashboard/agentes/liquidacion';
+
+// `ROL_NOMINA` y `esRolNomina` viven en `roles.ts` (módulo sin imports): las páginas y los guardas los importan de allá y no de aquí,
+// para que las pruebas que sustituyen este módulo por un doble no tengan que replicarlos.
+export { ROL_NOMINA, esRolNomina };
 
 /**
  * ¿Es el dueño de la flota (o el superadmin que la administra)? Lo que la base reserva a `flota_admin` (encender la emisión
@@ -684,6 +719,8 @@ export function puedeVerRuta(rol: string, href: string, perfil?: PerfilTenant | 
   // vería. Sin perfil (`undefined`/`null`) esta línea no hace nada y la función
   // se comporta exactamente como antes.
   if (perfil && !rutaPermitidaEnPerfil(perfil, href)) return false;
+  // `nomina` (0949): lista cerrada propia, ANTES que las áreas y que RUTAS_TODO_ROL (no tiene áreas). Fail closed.
+  if (esRolNomina(rol)) return RUTAS_NOMINA.has(claveRutaPerfil(href));
   // Un rol desconocido no ve nada, ni siquiera su perfil: fail closed.
   if (RUTAS_TODO_ROL.has(href)) return areasDe(rol).length > 0;
   const area = areaDeRuta(href);
@@ -760,6 +797,10 @@ export function inicioDe(rol: string, perfil?: PerfilTenant | null): string {
   // que alguien le dé un área a un rol de esta tabla — por eso va primero.
   const propio = PANEL_PROPIO[rol];
   if (propio) return propio;
+
+  // `nomina` (0949) no tiene áreas: su casa es la vista de conteos de Liquidaciones, con o sin perfil a la mano (quien llama
+  // a veces no lo tiene; sin perfil la flota no es `cinco_agentes` y `exigirRutaDePerfil` lo manda a /sin-acceso, sin bucle).
+  if (esRolNomina(rol)) return INICIO_NOMINA;
 
   // CON PERFIL: el aterrizaje tiene que ser una pantalla que el PERFIL
   // también deje ver — si no, este rebote (por ÁREA) y el rebote de

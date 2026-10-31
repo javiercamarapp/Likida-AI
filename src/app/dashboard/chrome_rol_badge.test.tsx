@@ -48,13 +48,14 @@ describe('DashboardChrome — el badge de rol viene de la fuente única (provisi
     expect(html).toContain('VENDEDOR');
   });
 
-  it('cada uno de los cinco roles vivos pinta su badge explícito', () => {
+  it('cada uno de los seis roles vivos pinta su badge explícito', () => {
     const ESPERADO: Record<string, string> = {
       superadmin: 'SUPERADMIN',
       flota_admin: 'ADMIN FLOTA',
       contador: 'CONTADOR',
       encargado: 'ENCARGADO',
       vendedor: 'VENDEDOR',
+      nomina: 'NÓMINA', // 0949
     };
     for (const [rol, badge] of Object.entries(ESPERADO)) {
       const html = renderToStaticMarkup(
@@ -72,7 +73,7 @@ describe('DashboardChrome — el badge de rol viene de la fuente única (provisi
   });
 
   it('ROL_BADGE (en provisionar.ts) cubre RolAppUser entero, sin `operador`', () => {
-    expect(Object.keys(ROL_BADGE).sort()).toEqual(['contador', 'encargado', 'flota_admin', 'superadmin', 'vendedor']);
+    expect(Object.keys(ROL_BADGE).sort()).toEqual(['contador', 'encargado', 'flota_admin', 'nomina', 'superadmin', 'vendedor']);
   });
 
   it('`operador` (retirado en 0086) ya no tiene entrada en ROL_BADGE', () => {

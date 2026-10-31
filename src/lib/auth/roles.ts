@@ -15,6 +15,13 @@
 // `permisos.ts`; aquí solo vive cómo se le llama y cómo se resume eso.
 // ═══════════════════════════════════════════════════════════════════════════
 
+/** El rol de Nómina y RH (dominio de `app_user.rol` desde la 0949). Solo ve conteos de Liquidaciones: ver `visibilidad.ts`. */
+export const ROL_NOMINA = 'nomina';
+
+export function esRolNomina(rol: string | null | undefined): boolean {
+  return rol === ROL_NOMINA;
+}
+
 export interface RotuloRol {
   /** Cómo se le llama en pantalla. */
   nombre: string;
@@ -34,6 +41,10 @@ export const ROTULOS_ROL: Record<string, RotuloRol> = {
   encargado: {
     nombre: 'Encargado (jefe de tráfico)',
     detalle: 'Despacha y da seguimiento: viajes, mapa y patios; da de alta, corrige y da de baja operadores, unidades y jornadas (solo los de su patio si tiene uno asignado). No ve un peso — ni tarifas, ni facturación, ni rentabilidad.',
+  },
+  nomina: {
+    nombre: 'Nómina y RH',
+    detalle: 'Solo ve el agente de Liquidaciones y solo conteos: desgloses recibidos, enviados, retenidos, rebotados y sin póliza. Ningún peso, sueldo ni neto por persona, y nada más del panel. Solo en flotas con los cinco agentes.',
   },
   operador: {
     nombre: 'Operador (chofer)',
