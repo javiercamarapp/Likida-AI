@@ -85,7 +85,7 @@ function Cabecera<T>({ col, estadoOrden, ordenable, hrefOrden, accion }: {
   const clase = cx('rv-tl__th', col.alinear === 'der' && 'rv-tl__der');
   if (!ordenable || !hrefOrden) {
     return (
-      <th scope="col" className={clase}>
+      <th scope="col" role="columnheader" className={clase}>
         {col.tituloOculto ? <span className="rv-sr">{col.titulo}</span> : col.titulo}
       </th>
     );
@@ -93,7 +93,7 @@ function Cabecera<T>({ col, estadoOrden, ordenable, hrefOrden, accion }: {
   const dir = estadoOrden.orden === col.id ? estadoOrden.dir : null;
   const Icono = dir === 'asc' ? ArrowUp : dir === 'desc' ? ArrowDown : ChevronsUpDown;
   return (
-    <th scope="col" className={clase} aria-sort={ariaSort(estadoOrden, col.id)}>
+    <th scope="col" role="columnheader" className={clase} aria-sort={ariaSort(estadoOrden, col.id)}>
       <Link href={hrefOrden} className="rv-tl__orden" prefetch={false} scroll={false}>
         <span>{col.titulo}</span>
         <Icono className="rv-tl__icono" width={12} height={12} strokeWidth={2} aria-hidden="true" data-activo={dir ? '' : undefined} />
@@ -140,16 +140,16 @@ export function TablaLista<T>(p: PropsTablaLista<T>) {
 
   const tabla = (
     <div className="rv-tl__region" role="region" aria-labelledby={idLeyenda} tabIndex={0}>
-      <table className="rv-tl" data-densa={p.densa || undefined}>
+      <table role="table" className="rv-tl" data-densa={p.densa || undefined}>
         <caption id={idLeyenda} className="rv-sr">
           {p.etiqueta}
           {pag ? `. Filas ${numero(pag.desde)} a ${numero(pag.hasta)} de ${numero(pag.total)}` : ''}
           {col ? `. Ordenada por ${col.titulo}, ${estado.dir === 'asc' ? 'de menor a mayor' : 'de mayor a menor'}` : ''}
         </caption>
-        <thead>
-          <tr>
+        <thead role="rowgroup">
+          <tr role="row">
             {sel ? (
-              <th scope="col" className="rv-tl__th rv-tl__sel">
+              <th scope="col" role="columnheader" className="rv-tl__th rv-tl__sel">
                 <input type="checkbox" data-sel-todas="" aria-label={`Seleccionar todas las filas visibles (${visibles.length})`} />
               </th>
             ) : null}
@@ -159,18 +159,18 @@ export function TablaLista<T>(p: PropsTablaLista<T>) {
             ))}
           </tr>
         </thead>
-        <tbody>
+        <tbody role="rowgroup">
           {visibles.map((f) => (
-            <tr key={p.idFila(f)} {...(p.atributosFila?.(f) ?? {})}>
+            <tr key={p.idFila(f)} role="row" {...(p.atributosFila?.(f) ?? {})}>
               {sel ? (
-                <td className="rv-tl__sel" data-etq="">
+                <td role="cell" className="rv-tl__sel" data-etq="">
                   <input type="checkbox" name={sel.nombre} value={sel.idFila(f)} form={sel.form} data-sel-fila="" aria-label={sel.etiquetaFila(f)} />
                 </td>
               ) : null}
               {p.columnas.map((c) => c.principal ? (
-                <th key={c.id} scope="row" className={cx('rv-tl__td', 'rv-tl__rowhead', (c.alinear === 'der' || c.corta) && 'rv-tl__nw', c.alinear === 'der' && 'rv-tl__der')} data-etq={c.tituloOculto ? '' : (c.etiquetaMovil ?? c.titulo)}><span className="rv-tl__v">{c.celda(f)}</span></th>
+                <th key={c.id} scope="row" role="rowheader" className={cx('rv-tl__td', 'rv-tl__rowhead', (c.alinear === 'der' || c.corta) && 'rv-tl__nw', c.alinear === 'der' && 'rv-tl__der')} data-etq={c.tituloOculto ? '' : (c.etiquetaMovil ?? c.titulo)}><span className="rv-tl__v">{c.celda(f)}</span></th>
               ) : (
-                <td key={c.id} className={cx('rv-tl__td', (c.alinear === 'der' || c.corta) && 'rv-tl__nw', c.alinear === 'der' && 'rv-tl__der')} data-etq={c.tituloOculto ? '' : (c.etiquetaMovil ?? c.titulo)}><span className="rv-tl__v">{c.celda(f)}</span></td>
+                <td key={c.id} role="cell" className={cx('rv-tl__td', (c.alinear === 'der' || c.corta) && 'rv-tl__nw', c.alinear === 'der' && 'rv-tl__der')} data-etq={c.tituloOculto ? '' : (c.etiquetaMovil ?? c.titulo)}><span className="rv-tl__v">{c.celda(f)}</span></td>
               ))}
             </tr>
           ))}

@@ -269,6 +269,13 @@ function columnasCola(sufijo: string): ColumnaTabla<FilaCola>[] {
   ];
 }
 
+/** El nombre solo si es INEQUÍVOCO: todas las filas (ya filtradas por el servidor) traen el mismo nombre. Con nombres distintos, vacíos o
+ *  sin filas, null → el chip dice «elegido» y no adivina. */
+function unico(nombres: ReadonlyArray<string | null>): string | null {
+  if (nombres.length === 0 || nombres.some((n) => !n)) return null;
+  return new Set(nombres).size === 1 ? nombres[0] : null;
+}
+
 /** Los filtros vigentes de la cola como chips: el nombre de operador, unidad y terminal sale de la propia cola / del catálogo de
  *  terminales (la URL solo trae ids). Si no hay filas que lo nombren, el chip dice que hay un filtro y no inventa el nombre. */
 export function chipsDeCola(
@@ -280,8 +287,8 @@ export function chipsDeCola(
   return chipsActivos('', vigentes, [
     { param: 'rev', etiqueta: 'Revisión', rotuloValor: (v) => ROTULO_REVISION[v as RevisionLiquidacion] ?? v },
     { param: 'estado', etiqueta: 'Cuadre', rotuloValor: (v) => ROTULO_ESTADO[v]?.rotulo ?? v },
-    { param: 'operador', etiqueta: 'Operador', rotuloValor: () => pagina.filas[0]?.operadorNombre ?? 'elegido' },
-    { param: 'unidad', etiqueta: 'Unidad', rotuloValor: () => pagina.filas[0]?.unidadEco ?? 'elegida' },
+    { param: 'operador', etiqueta: 'Operador', rotuloValor: () => unico(pagina.filas.map((x) => x.operadorNombre)) ?? 'elegido' },
+    { param: 'unidad', etiqueta: 'Unidad', rotuloValor: () => unico(pagina.filas.map((x) => x.unidadEco)) ?? 'elegida' },
     { param: 'terminal', etiqueta: 'Terminal', rotuloValor: (v) => terminales?.opciones.find((t) => t.id === v)?.nombre ?? 'elegida' },
     { param: 'desde', etiqueta: 'Desde', rotuloValor: (v) => fechaMx(v) },
     { param: 'hasta', etiqueta: 'Hasta', rotuloValor: (v) => fechaMx(v) },

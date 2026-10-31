@@ -8,7 +8,6 @@ import { PillAviso } from '../despacho/vista';
 import { ImportarViajes, type AccionImportar } from './importar';
 import { EnlacePagina, NavPaginas } from '../paginador';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
-import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 import { ChipsFiltro, SelloDato, TablaLista, chipsActivos, type ColumnaTabla } from '@/app/ui-v2/datos';
 import { ahoraMs } from '@/lib/saludo';
@@ -66,11 +65,11 @@ const BTN_SEC = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px
  *  porque ordenar solo la página visible fingiría ordenar el total. */
 function columnasViajes(sufijo: string, verDinero: boolean): ColumnaTabla<FilaRegistroViaje>[] {
   const dinero: ColumnaTabla<FilaRegistroViaje>[] = verDinero ? [
-    { id: 'anticipo', titulo: 'Anticipo', alinear: 'der', celda: (v) => (v.anticipo === null ? '—' : mxn(v.anticipo)) },
-    { id: 'comprobado', titulo: 'Comprobado', alinear: 'der', celda: (v) => (v.comprobado === null ? <span className="rv-tl__tenue">—</span> : mxn(v.comprobado)) },
+    { id: 'anticipo', titulo: 'Anticipo', alinear: 'der', celda: (v) => (v.anticipo === null ? <span className="rv-tl__nada">—</span> : mxn(v.anticipo)) },
+    { id: 'comprobado', titulo: 'Comprobado', alinear: 'der', celda: (v) => (v.comprobado === null ? <span className="rv-tl__tenue rv-tl__nada">—</span> : mxn(v.comprobado)) },
     {
       id: 'diferencia', titulo: 'Diferencia', alinear: 'der',
-      celda: (v) => v.diferencia === null ? <span className="rv-tl__tenue">—</span>
+      celda: (v) => v.diferencia === null ? <span className="rv-tl__tenue rv-tl__nada">—</span>
         : <span className={v.diferencia === 0 ? 'rv-tl__ok' : v.diferencia > 0 ? 'rv-tl__warn' : 'rv-tl__bad'}>{v.diferencia === 0 ? 'Exacta' : mxn(Math.abs(v.diferencia))}</span>,
     },
   ] : [];
@@ -88,10 +87,10 @@ function columnasViajes(sufijo: string, verDinero: boolean): ColumnaTabla<FilaRe
       },
     },
     { id: 'operador', titulo: 'Operador', celda: (v) => v.operadorNombre ?? <span className="rv-tl__tenue">Sin asignar</span> },
-    { id: 'unidad', titulo: 'Unidad', corta: true, celda: (v) => (v.unidadEco ? <span className="cifra-mono">{v.unidadEco}</span> : <span className="rv-tl__tenue">—</span>) },
+    { id: 'unidad', titulo: 'Unidad', corta: true, celda: (v) => (v.unidadEco ? <span className="cifra-mono">{v.unidadEco}</span> : <span className="rv-tl__tenue rv-tl__nada">—</span>) },
     { id: 'inicio', titulo: 'Inicio', corta: true, celda: (v) => <span className="rv-tl__apagado">{v.fechaInicio ? fechaMx(v.fechaInicio) : '—'}</span> },
     ...dinero,
-    { id: 'aviso', titulo: 'Aviso', corta: true, celda: (v) => (v.estatus === 'liquidado' ? <span className="rv-tl__tenue">—</span> : <PillAviso v={v} />) },
+    { id: 'aviso', titulo: 'Aviso', corta: true, celda: (v) => (v.estatus === 'liquidado' ? <span className="rv-tl__tenue rv-tl__nada">—</span> : <PillAviso v={v} />) },
     {
       id: 'estatus', titulo: 'Estatus', corta: true,
       celda: (v) => { const e = PILL_ESTATUS[v.estatus] ?? { etiqueta: v.estatus, estado: 'neutral' as Estado }; return <StatusPill estado={e.estado}>{e.etiqueta}</StatusPill>; },
@@ -103,7 +102,7 @@ function columnasViajes(sufijo: string, verDinero: boolean): ColumnaTabla<FilaRe
           className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity whitespace-nowrap rv-tl__enlace">
           Ver <ArrowRight width={12} height={12} strokeWidth={2} aria-hidden />
         </Link>
-      ) : <span className="rv-tl__tenue">—</span>,
+      ) : <span className="rv-tl__tenue rv-tl__nada">—</span>,
     },
   ];
 }
@@ -152,13 +151,14 @@ export function VistaViajes({
     <MarcoPagina titulo="Viajes" apoyo="El registro de viajes de tu flota, navegable y filtrable. Crear, asignar y avisar se hace en Despacho.">
 
       {/* Un conteo que no se pudo leer es `null`: NUNCA se pinta como 0. La celda dice «No disponible ahora. No es cero.» y ofrece Reintentar. */}
-      <TiraCifras sello={selloHoy('Registro de viajes')}>
+      <TiraCifras>
         <Cifra etiqueta="Viajes en total" {...conteo(conteos.total)} nota="histórico" info="viajes.total" />
         <Cifra etiqueta="Abiertos" {...conteo(conteos.abiertos)} info="viajes.abiertos" />
         <Cifra etiqueta="En cuadre" {...conteo(conteos.enCuadre)} info="viajes.en_cuadre" />
         <Cifra etiqueta="Escalados sin aceptar" {...conteo(conteos.escalados)}
           tono={(conteos.escalados ?? 0) > 0 ? 'bad' : undefined} info="viajes.escalados" />
       </TiraCifras>
+      <div className="rv-tl__sellos"><SelloDato tipo="observado" fuente="Registro de viajes" leidoEn={ahoraMs()} edad={false} /></div>
 
       <section className="card p-4 relative">
         <div className="flex items-center justify-between gap-3 flex-wrap mb-3">

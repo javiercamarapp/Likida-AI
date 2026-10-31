@@ -72,7 +72,7 @@
   [data-ui="v2"] .card .rv-tl tbody > tr > * { height: auto; min-height: 24px; padding: 0; border-bottom: 0; }
   [data-ui="v2"] .card .rv-tl thead > tr > th { position: static; height: auto; border-bottom: 0; background: transparent; }
   [data-ui="v2"] .card .rv-tl thead > tr > th[aria-sort] { padding: 0 10px; border: 1px solid var(--line2); border-radius: 999px; background: var(--surface); }
-  .rv-tl__td:empty::before, .rv-tl__td:has(> .rv-tl__tenue:only-child)[data-etq=""] { display: none; }
+  .rv-tl__td:has(> .rv-tl__v > .rv-tl__nada:only-child) { display: none; }
 }
 @media (forced-colors: active) {
   .rv-tl__pag[aria-current="page"] { forced-color-adjust: none; background: Highlight; color: HighlightText; border-color: Highlight; }

@@ -246,3 +246,41 @@ describe('Honestidad del dato: un conteo caído nunca es 0', () => {
     expect(h).not.toContain('No disponible ahora');
   });
 });
+
+describe('Ajustes del verificador (L6)', () => {
+  it('chips de la cola: el nombre solo si es inequívoco; con nombres distintos o vacíos, «elegido»', () => {
+    const f = { ...SIN_FILTROS, operadorId: U(1), unidadId: U(2) };
+    const igual = chipsDeCola(pagina([fila(1, { operadorNombre: 'Ana', unidadEco: 'C-1' }), fila(2, { operadorNombre: 'Ana', unidadEco: 'C-1' })]), f, TERMS, []);
+    expect(igual.map((c) => c.valor)).toEqual(['Ana', 'C-1']);
+    const distinto = chipsDeCola(pagina([fila(1, { operadorNombre: 'Ana' }), fila(2, { operadorNombre: 'Luis' })]), f, TERMS, []);
+    expect(distinto.find((c) => c.id === 'operador')!.valor).toBe('elegido');
+    const vacio = chipsDeCola(pagina([fila(1, { operadorNombre: null, unidadEco: null })]), f, TERMS, []);
+    expect(vacio.map((c) => c.valor)).toEqual(['elegido', 'elegida']);
+  });
+  it('la tira de Viajes no repite el sello en cada cifra: uno por tira y uno por tabla', () => {
+    const h = pintarViajes();
+    expect(h.match(/Registro de viajes · leído/g)?.length).toBe(2);
+  });
+  it('la tarjeta-fila conserva roles ARIA de tabla', () => {
+    const h = pintarViajes();
+    for (const r of ['role="table"', 'role="row"', 'role="columnheader"', 'role="rowheader"', 'role="cell"', 'role="rowgroup"']) expect(h).toContain(r);
+  });
+  it('cada «Reintentar» de cifra tiene nombre accesible propio', () => {
+    const h = pintarViajes({ conteos: { total: null, abiertos: null, enCuadre: null, liquidados: null, escalados: null } });
+    expect(h).toContain('aria-label="Reintentar: Abiertos"');
+    expect(h).toContain('aria-label="Reintentar: Viajes en total"');
+  });
+  it('los guiones de relleno se marcan para ocultarse en la tarjeta móvil', () => {
+    expect(pintarViajes()).toContain('rv-tl__nada');
+  });
+});
+
+describe('Campo de búsqueda con icono (Viajes)', () => {
+  it('la regla global de campos respeta pl-/pr-: el icono no se monta sobre el texto', async () => {
+    const { readFileSync } = await import('node:fs');
+    const css = readFileSync(new URL('../ui-v2/componentes.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/padding-inline: 10px; padding-block: 4px;/);
+    expect(css).toMatch(/\[class\*="pl-"\], \[class\*="pr-"\]\) \{ padding-inline: 10px/);
+    expect(pintarViajes()).toContain('pl-8');
+  });
+});

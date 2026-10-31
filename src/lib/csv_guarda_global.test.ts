@@ -29,6 +29,30 @@ const EXENTOS: Record<string, string> = {
   'lib/likida/carta_porte_docs/documentos_sinteticos.fixture.ts': 'Fixture sintético de pruebas.',
 };
 
+describe('barrido 2: serializadores que unen celdas con join(\',\') sin escapar', () => {
+  // Un archivo que arma CSV con `.join(',')` (o con `;`/tab) y habla de CSV tiene que pasar por una guarda; si no, una celda con = + - @ viaja intacta.
+  const SOSPECHOSO = /\.join\((['"])[,;]\1\)/;
+  const HABLA_DE_CSV = /text\/csv|\.csv|Csv|CSV/;
+  const GUARDA = /\[=\+\\-@\\t\\r\]|csv_seguro|toCsv|celdaCsv|celdaTexto|tablaConfigurable|csvCell/;
+  /** Usos de join(',') que NO son un archivo CSV (listas para texto, claves, logs). */
+  const NO_ES_CSV = new Set<string>([
+    'app/dashboard/agentes/vigia/avisos/page.tsx', 'app/api/cron/facturar/lote.ts',
+    'lib/likida/vigia/programa/fixtures.ts', // fixtures sintéticos de pruebas
+    'lib/likida/vigia/programa/lector_xlsx.ts', // re-serializa el XLSX SUBIDO a texto para el lector interno; no es una descarga
+  ]);
+  const candidatos = fuentesDeProduccion(RAIZ)
+    .map((f) => ({ rel: f.slice(RAIZ.length + 1), codigo: sinComentarios(readFileSync(f, 'utf8')) }))
+    .filter(({ codigo }) => SOSPECHOSO.test(codigo) && HABLA_DE_CSV.test(codigo));
+  it('todo archivo que une celdas con coma y habla de CSV tiene guarda (o está declarado como no-CSV)', () => {
+    const sin = candidatos.filter(({ rel, codigo }) => !GUARDA.test(codigo) && !NO_ES_CSV.has(rel)).map((c) => c.rel);
+    expect(sin, `serializan con join(',') sin ninguna guarda anti-fórmulas; usa lib/csv_seguro.ts: ${sin.join(', ')}`).toEqual([]);
+  });
+  it('(control) el detector sí ve un join(\',\') con CSV y sin guarda', () => {
+    const cuerpo = "const csv = filas.map((f) => f.join(','));  // text/csv";
+    expect(SOSPECHOSO.test(cuerpo) && HABLA_DE_CSV.test(cuerpo) && !GUARDA.test(cuerpo)).toBe(true);
+  });
+});
+
 describe('barrido: todo serializador de CSV neutraliza fórmulas', () => {
   const archivos = fuentesDeProduccion(RAIZ)
     .map((f) => ({ f, rel: f.slice(RAIZ.length + 1), codigo: sinComentarios(readFileSync(f, 'utf8')) }))

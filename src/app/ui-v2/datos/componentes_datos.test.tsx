@@ -50,7 +50,7 @@ describe('TablaLista · orden por URL', () => {
   it('orden="local": las columnas con `valor` son enlaces con aria-sort y el resto no', () => {
     const h = html({ orden: 'local' });
     expect(h.match(/aria-sort="none"/g)?.length).toBe(3);
-    expect(h).toMatch(/<th scope="col" class="rv-tl__th"><span class="rv-sr">Acción<\/span><\/th>/); // la columna de acciones no se ordena
+    expect(h).toMatch(/<th scope="col" role="columnheader" class="rv-tl__th"><span class="rv-sr">Acción<\/span><\/th>/); // la columna de acciones no se ordena
   });
   it('?orden=total&dir=desc ordena de verdad (los sin dato al final) y marca descending', () => {
     const h = html({ orden: 'local', params: { orden: 'total', dir: 'desc' } });
