@@ -181,17 +181,13 @@
 [data-ui="v2"] .card > .overflow-x-auto { overflow-x: auto; }
 
 /* ── Campo único (L4) ─────────────────────────────────────────────────────────────────────────────────────────────
-   UNA sola regla global para input / select / textarea de todo el panel (antes solo se pintaban dentro de `.card`): alto 32 (36 bajo 820,
-   44 y 16 px en móvil para el toque y para que iOS no haga zoom), radio 8, borde `--input`, fondo `--campo-bg`, 13 px, foco de 2 px y estados
-   deshabilitado / inválido. Sin capa: gana a las utilidades de Tailwind (h-9, px-3, text-[12px]…) que cada formulario traía por su cuenta.
+   UNA sola regla global para input / select / textarea de todo el panel v2 (antes solo se pintaban dentro de `.card`, y dos veces): alto 32 (36 bajo
+   820 px con caja táctil de 44), radio 8, borde `--input`, fondo `--campo-bg`, 13 px (16 en móvil: iOS no hace zoom), foco de 2 px y estados
+   deshabilitado / inválido. Sin capa: gana a las utilidades de Tailwind (h-9, px-3, text-[12.5px]…) que cada formulario traía por su cuenta.
    Quedan fuera: casillas, radios, archivo, rango, color, botones de formulario, el campo embebido sin marco (`bg-transparent` / `border-0`
    del compositor del chat) y lo `sr-only`. Los `select` múltiples o con `size` conservan su alto natural. */
 [data-ui="v2"] { --campo-bg: var(--surface); }
-[data-ui="v2"] :is(
-  input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]),
-  select:not([multiple], [size]),
-  textarea
-):not(.sr-only, .bg-transparent, .border-0) {
+[data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size]), textarea):not(.sr-only, .bg-transparent, .border-0) {
   height: auto; min-height: 32px;
   border: 1px solid var(--input); border-radius: 8px;
   background-color: var(--campo-bg, var(--surface)); color: var(--ink);
@@ -199,22 +195,31 @@
   box-shadow: none;
 }
 /* Relleno unificado (10 px a los lados, 4 arriba y abajo) salvo en los campos que reservan sitio para un icono con `pl-*` / `pr-*` (búsqueda con lupa). */
-[data-ui="v2"] :is(
-  input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]),
-  select:not([multiple], [size]),
-  textarea
-):not(.sr-only, .bg-transparent, .border-0, [class*="pl-"], [class*="pr-"]) { padding-inline: 10px; padding-block: 4px; }
+[data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size]), textarea):not(.sr-only, .bg-transparent, .border-0, [class*="pl-"], [class*="pr-"]) { padding-inline: 10px; padding-block: 4px; }
 [data-ui="v2"] textarea:not(.sr-only, .bg-transparent, .border-0) { min-height: 64px; padding-block: 6px; line-height: 1.5; }
-[data-ui="v2"] :is(input, select, textarea):not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], .sr-only):focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
-[data-ui="v2"] :is(input, select, textarea)::placeholder { color: var(--faint, var(--muted)); }
-[data-ui="v2"] :is(input, select, textarea):disabled { border-style: dashed; color: var(--muted); cursor: not-allowed; }
-[data-ui="v2"] :is(input, select, textarea)[aria-invalid="true"] { border-color: var(--bad); }
-@media (max-width: 819px) {
-  [data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size])):not(.sr-only, .bg-transparent, .border-0) { min-height: 36px; }
+/* Select: una sola flecha propia (la nativa cambia de un navegador a otro). */
+[data-ui="v2"] select:not([multiple], [size]):not(.sr-only, .bg-transparent, .border-0) {
+  appearance: none; -webkit-appearance: none; padding-inline-end: 30px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%235a5a61' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='m2.5 4.5 3.5 3.5 3.5-3.5'/></svg>");
+  background-repeat: no-repeat; background-position: right 10px center; background-size: 12px 12px;
 }
-@media (max-width: 767px) {
-  [data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size]), textarea):not(.sr-only, .bg-transparent, .border-0) { min-height: 44px; font-size: var(--fs-campo); }
-  [data-ui="v2"] textarea:not(.sr-only, .bg-transparent, .border-0) { min-height: 88px; }
+:root[data-theme="dark"] [data-ui="v2"] select:not([multiple], [size]):not(.sr-only, .bg-transparent, .border-0) {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23a3a3ab' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='m2.5 4.5 3.5 3.5 3.5-3.5'/></svg>");
+}
+[data-ui="v2"] :is(input, select, textarea):not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], .sr-only):focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+[data-ui="v2"] :is(input, select, textarea)::placeholder { color: var(--muted); opacity: 1; }
+[data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size]), textarea):disabled { border-style: dashed; border-color: var(--ctl-vacio-bd); background-color: var(--canvas); color: var(--ink2); cursor: not-allowed; }
+[data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size]), textarea)[aria-invalid="true"]:not(.sr-only, .bg-transparent, .border-0) { border-color: var(--bad); }
+@media (max-width: 819px) {
+  /* Caja de 44 (toque) con 36 visibles: el borde transparente de 4 px agranda el área sin engordar el campo. */
+  [data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size])):not(.sr-only, .bg-transparent, .border-0) {
+    box-sizing: border-box; height: 44px; min-height: 44px; font-size: var(--fs-campo); padding-block: 0;
+    border: 4px solid transparent; background-clip: padding-box; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--input);
+    outline-offset: -4px;
+  }
+  [data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size])):not(.sr-only, .bg-transparent, .border-0)[aria-invalid="true"] { border-color: transparent; box-shadow: inset 0 0 0 1px var(--bad); }
+  [data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size])):not(.sr-only, .bg-transparent, .border-0, [class*="pl-"], [class*="pr-"]) { padding-inline: 6px; }
+  [data-ui="v2"] textarea:not(.sr-only, .bg-transparent, .border-0) { font-size: var(--fs-campo); min-height: 88px; }
 }
 
 
@@ -419,41 +424,16 @@
 @media (max-width: 1099px) {
 [data-ui="v2"] .card:has(> table) { overflow-x: auto; }
 }
-[data-ui="v2"] .card :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"]), select, textarea) {
-  min-height: 32px; border-radius: 8px; font-size: 13px; line-height: 1.25; padding-inline: 10px;
-  background-color: var(--surface); border: 1px solid var(--input);
-}
-[data-ui="v2"] .card select {
-  appearance: none; -webkit-appearance: none; padding-inline-end: 30px;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%235a5a61' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='m2.5 4.5 3.5 3.5 3.5-3.5'/></svg>");
-  background-repeat: no-repeat; background-position: right 10px center; background-size: 12px 12px;
-}
-:root[data-theme="dark"] [data-ui="v2"] .card select {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23a3a3ab' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='m2.5 4.5 3.5 3.5 3.5-3.5'/></svg>");
-}
-[data-ui="v2"] .card select[multiple] { background-image: none; padding-inline-end: 10px; }
-[data-ui="v2"] .card :is(input, select, textarea):focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
-[data-ui="v2"] .card :is(input, select, textarea)::placeholder { color: var(--muted); opacity: 1; }
-[data-ui="v2"] .card :is(input, select, textarea):disabled { border-style: dashed; border-color: var(--ctl-vacio-bd); background-color: var(--canvas); color: var(--ink2); }
 @media (max-width: 819px) {
-[data-ui="v2"] .card :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"]), select) {
-    box-sizing: border-box; height: 44px; min-height: 44px; font-size: 16px; padding-block: 0; padding-inline: 10px;
-    border: 5px solid transparent; background-clip: padding-box; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--input);
-    outline-offset: -5px;
-  }
-[data-ui="v2"] .card select { padding-inline-end: 30px; }
-[data-ui="v2"] .card textarea { font-size: 16px; }
-}
-@media (max-width: 819px) {
-[data-ui="v2"] .card :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"]), select, textarea):disabled {
-    border-style: solid; border-color: transparent; box-shadow: none; outline: 1.5px dashed var(--ctl-vacio-bd); outline-offset: -5px;
+[data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"]), select, textarea):disabled {
+    border-style: solid; border-color: transparent; box-shadow: none; outline: 1.5px dashed var(--ctl-vacio-bd); outline-offset: -4px;
   }
 }
 @media (forced-colors: active) {
-[data-ui="v2"] .card :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"]), select, textarea) {
+[data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"]), select, textarea) {
     border: 1px solid ButtonText; box-shadow: none; outline-offset: 2px;
   }
-[data-ui="v2"] .card :is(input, select, textarea):disabled { border: 1px dashed GrayText; outline: 0; }
+[data-ui="v2"] :is(input, select, textarea):disabled { border: 1px dashed GrayText; outline: 0; }
 [data-ui="v2"] .rv-btn { border: 1px solid ButtonText; }
 [data-ui="v2"] .rv-btn:disabled,
 [data-ui="v2"] .rv-btn[aria-disabled="true"] { border: 1px dashed GrayText; }
