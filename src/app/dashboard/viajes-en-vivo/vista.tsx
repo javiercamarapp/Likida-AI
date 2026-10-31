@@ -1,4 +1,4 @@
-import { BotonEnlace, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { BarraFiltros, BotonEnlace, FiltroInterruptor, FiltroOpciones, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 import { CircleAlert, MapPin, MapPinOff, Radio, ShieldAlert } from 'lucide-react';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import { ETIQUETA_DESTINO, type TareaAbierta } from '@/lib/likida/orquestador/escalamiento';
@@ -46,28 +46,13 @@ const GRAVEDAD: Record<1 | 2 | 3, { texto: string; color: string }> = {
 
 
 function Filtros({ f, c, accionUrl, ocultos }: { f: FiltrosVistaViajes; c: CatalogoVista; accionUrl: string; ocultos: Record<string, string> }) {
-  const sel = 'hairline rounded-lg px-2 h-8 text-[12px] outline-none focus:border-[var(--muted)]';
+  const hay = Boolean(f.terminalId || f.clienteId || f.soloExcepciones);
   return (
-    <form method="get" action={accionUrl} className="flex flex-wrap items-end gap-2.5" aria-label="Filtros de viajes en vivo">
-      {Object.entries(ocultos).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-      <label className="text-[11px] font-medium">Terminal
-        <select name="terminal" defaultValue={f.terminalId} className={`${sel} block mt-1`}>
-          <option value="">Todas</option>
-          {c.terminales.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-        </select>
-      </label>
-      <label className="text-[11px] font-medium">Cliente
-        <select name="cliente" defaultValue={f.clienteId} className={`${sel} block mt-1`}>
-          <option value="">Todos</option>
-          {c.clientes.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
-        </select>
-      </label>
-      <label className="text-[11px] font-medium inline-flex items-center gap-1.5 h-8">
-        <input type="checkbox" name="vista" value="excepciones" defaultChecked={f.soloExcepciones} /> Solo con excepciones
-      </label>
-      <button type="submit" className="rv-btn rv-btn--secondary hairline rounded-lg px-3 h-8 text-[12px] font-medium">Aplicar</button>
-      {(f.terminalId || f.clienteId || f.soloExcepciones) && <a href={accionUrl} className="text-[12px] underline" style={{ color: 'var(--muted)' }}>Quitar filtros</a>}
-    </form>
+    <BarraFiltros accion={accionUrl} ocultos={ocultos} etiqueta="Filtros de viajes en vivo" nActivos={hay ? 1 : 0} limpiarHref={accionUrl}>
+      <FiltroOpciones nombre="terminal" etiqueta="Terminal" valor={f.terminalId} opciones={[{ valor: '', rotulo: 'Todas' }, ...c.terminales.map((t) => ({ valor: t.id, rotulo: t.nombre }))]} />
+      <FiltroOpciones nombre="cliente" etiqueta="Cliente" valor={f.clienteId} opciones={[{ valor: '', rotulo: 'Todos' }, ...c.clientes.map((x) => ({ valor: x.id, rotulo: x.nombre }))]} />
+      <FiltroInterruptor nombre="vista" valor="excepciones" etiqueta="Solo con excepciones" marcado={f.soloExcepciones} />
+    </BarraFiltros>
   );
 }
 

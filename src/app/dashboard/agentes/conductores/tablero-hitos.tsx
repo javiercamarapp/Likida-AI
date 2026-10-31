@@ -9,7 +9,7 @@ import type { Estancia } from '@/lib/likida/conductor/estadias_anden';
 import type { ReubicacionesCliente } from '@/lib/likida/conductor/reubicaciones';
 import { AccionesHito, FormaAsignarSitios, type AccionOficinaServidor, type ModoAccion, type OpcionSitio } from './acciones-forma';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
-import { TituloRecuadro } from '@/app/ui-v2/componentes';
+import { BarraFiltros, FiltroOpciones, TituloRecuadro } from '@/app/ui-v2/componentes';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -104,44 +104,18 @@ export function IndicadoresHitos({ i, dias }: { i: IndicadoresVista | null; dias
 export function FiltrosTablero({ f, catalogos, ocultos, accionUrl }: {
   f: FiltrosVista; catalogos: CatalogosFiltro | null; ocultos: Record<string, string>; accionUrl: string;
 }) {
-  const sel = 'hairline rounded-lg px-2 h-8 text-[12px] outline-none focus:border-[var(--muted)]';
+  const todos = { valor: '', rotulo: 'Todos' };
+  const hay = Boolean(f.terminalId || f.clienteId || f.operadorId || f.semaforo);
   return (
-    <form method="get" action={accionUrl} className="flex flex-wrap items-end gap-2.5" aria-label="Filtros del tablero">
-      {Object.entries(ocultos).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-      <label className="text-[11px] font-medium">Patio
-        <select name="terminal" defaultValue={f.terminalId} className={`${sel} block mt-1`}>
-          <option value="">Todos</option>
-          {(catalogos?.terminales ?? []).map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-        </select>
-      </label>
-      <label className="text-[11px] font-medium">Cliente
-        <select name="cliente" defaultValue={f.clienteId} className={`${sel} block mt-1`}>
-          <option value="">Todos</option>
-          {(catalogos?.clientes ?? []).map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-        </select>
-      </label>
-      <label className="text-[11px] font-medium">Chofer
-        <select name="chofer" defaultValue={f.operadorId} className={`${sel} block mt-1`}>
-          <option value="">Todos</option>
-          {(catalogos?.operadores ?? []).map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
-        </select>
-      </label>
-      <label className="text-[11px] font-medium">Semáforo
-        <select name="semaforo" defaultValue={f.semaforo} className={`${sel} block mt-1`}>
-          <option value="">Todos</option>
-          {ORDEN_SEMAFORO.map((s) => <option key={s} value={s}>{SEMAFORO[s].etiqueta}</option>)}
-        </select>
-      </label>
-      <label className="text-[11px] font-medium">Indicadores de
-        <select name="dias" defaultValue={String(f.dias)} className={`${sel} block mt-1`}>
-          <option value="1">último día</option><option value="7">últimos 7 días</option><option value="30">últimos 30 días</option>
-        </select>
-      </label>
-      <button type="submit" className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12px] font-medium hairline transition-colors hover:bg-[var(--canvas)]">Aplicar</button>
-      {(f.terminalId || f.clienteId || f.operadorId || f.semaforo) && (
-        <Link href={accionUrl + (Object.keys(ocultos).length ? `?${new URLSearchParams(ocultos).toString()}` : '')} className="text-[12px] underline" style={{ color: 'var(--muted)' }}>Quitar filtros</Link>
-      )}
-    </form>
+    <BarraFiltros accion={accionUrl} ocultos={ocultos} etiqueta="Filtros del tablero" nActivos={hay ? 1 : 0}
+      limpiarHref={accionUrl + (Object.keys(ocultos).length ? `?${new URLSearchParams(ocultos).toString()}` : '')}>
+      <FiltroOpciones nombre="terminal" etiqueta="Patio" valor={f.terminalId} opciones={[todos, ...(catalogos?.terminales ?? []).map((t) => ({ valor: t.id, rotulo: t.nombre }))]} />
+      <FiltroOpciones nombre="cliente" etiqueta="Cliente" valor={f.clienteId} opciones={[todos, ...(catalogos?.clientes ?? []).map((c) => ({ valor: c.id, rotulo: c.nombre }))]} />
+      <FiltroOpciones nombre="chofer" etiqueta="Chofer" valor={f.operadorId} opciones={[todos, ...(catalogos?.operadores ?? []).map((o) => ({ valor: o.id, rotulo: o.nombre }))]} />
+      <FiltroOpciones nombre="semaforo" etiqueta="Semáforo" valor={f.semaforo} opciones={[todos, ...ORDEN_SEMAFORO.map((s) => ({ valor: s, rotulo: SEMAFORO[s].etiqueta }))]} />
+      <FiltroOpciones nombre="dias" etiqueta="Indicadores de" valor={String(f.dias)} porDefecto="7"
+        opciones={[{ valor: '1', rotulo: 'Último día' }, { valor: '7', rotulo: 'Últimos 7 días' }, { valor: '30', rotulo: 'Últimos 30 días' }]} />
+    </BarraFiltros>
   );
 }
 

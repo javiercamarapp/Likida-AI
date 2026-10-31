@@ -6,7 +6,7 @@ import { FilaTextoSinSitio, FormaImportarEquivalencias } from './formas_equivale
 import { FormaCatalogo } from './formas_catalogo';
 import { FormaEstadoSitio } from './formas_estado';
 import { FormaImportar, FormaSitio, SITIO_VACIO, type AccionSitio, type SitioEditable } from './formas';
-import { MarcoPagina, Aviso, BotonEnlace, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { BarraFiltros, FiltroBusqueda, MarcoPagina, Aviso, BotonEnlace, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 // SOLO tipos: la vista no debe arrastrar al bundle el acceso a datos.
 
@@ -58,11 +58,10 @@ export function VistaSitios(p: PropsVistaSitios) {
       <section className="card p-4 space-y-3" aria-label="Sitios registrados">
         <div className="flex items-center gap-3 flex-wrap">
           <TituloRecuadro info="conductores_sitios.registrados">Sitios registrados</TituloRecuadro>
-          <form method="get" className="ml-auto flex items-center gap-2">
-            {p.sufijo.startsWith('?') && [...new URLSearchParams(p.sufijo.slice(1))].map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-            <input type="search" name="q" defaultValue={p.busqueda} placeholder="Buscar por nombre o código" className="hairline rounded-lg px-2.5 h-8 text-[12px]" aria-label="Buscar sitios" />
-            <button type="submit" className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12px] hairline">Buscar</button>
-          </form>
+          <BarraFiltros accion="?" enLinea className="ml-auto" etiqueta="Buscar sitios" ocultos={p.sufijo.startsWith('?') ? [...new URLSearchParams(p.sufijo.slice(1))] : []}
+            nActivos={p.busqueda ? 1 : 0} limpiarHref={p.sufijo || '?'}>
+            <FiltroBusqueda nombre="q" valor={p.busqueda} placeholder="Buscar por nombre o código" etiqueta="Buscar sitios" />
+          </BarraFiltros>
         </div>
         {p.sitios === null ? (
           <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudo leer el catálogo ahora mismo.</p>
