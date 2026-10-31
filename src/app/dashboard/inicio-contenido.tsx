@@ -341,7 +341,7 @@ export async function InicioContenido({
 
           {/* ── KPIs (caja interna + delta como texto, referencia) ──
               "Total viajes" y "Liquidado" no van aquí: ya se ven como
-              GRÁFICA más abajo. "Ahorro generado" se queda (pedido
+              GRÁFICA más abajo. "Por recuperar" (antes «Ahorro generado») se queda (pedido
               explícito): mismo número que "Recuperable pidiendo
               factura", pero fijo al ejercicio fiscal completo. La
               dirección buena/mala no es igual para las tres: gastar
@@ -614,7 +614,7 @@ async function BloqueKpis({ pKpis, pSeriesKpis, pResumenPerdidas, periodoFiscal 
           <KpiPeriodo icono={<Calculator width={15} height={15} strokeWidth={1.75} />}
             nombre="Costo por viaje" campo="costoPorViaje" formato="mxn" subeEsBueno={false} series={seriesKpis} />
           <Cifra icono={<PiggyBank width={15} height={15} strokeWidth={1.75} />}
-            etiqueta={`Ahorro generado — ${periodoFiscal.etiqueta}`}
+            etiqueta={`Por recuperar — ${periodoFiscal.etiqueta}`}
             // AUDITORÍA 1, ALTO: si la lectura fiscal falló (o no hay
             // config), es `null` — se PRESERVA y la tarjeta dice "—",
             // en vez de afirmar "$0.00 de ahorro" que suena a medición.

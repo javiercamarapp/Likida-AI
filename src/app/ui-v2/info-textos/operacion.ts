@@ -11,14 +11,14 @@ export const INFO_OPERACION = {
     'Tabla de viajes de tu flota, leída al abrir la pantalla. No cambia con el filtro ni con la búsqueda de abajo.',
   ),
   'viajes.abiertos': V(
-    'Viajes abiertos',
+    'Abiertos',
     'Viajes de tu flota con estatus abierto.',
     'Cuenta los viajes cuyo estatus es «abierto». No incluye los que ya están en cuadre ni los liquidados.',
     'Tabla de viajes de tu flota, leída al abrir la pantalla; sin filtro de fecha. Sin dato se muestra «—», no cero.',
     'Usa el filtro «Abiertos» del registro para ver cuáles son.',
   ),
   'viajes.en_cuadre': V(
-    'Viajes en cuadre',
+    'En cuadre',
     'Viajes de tu flota con estatus en cuadre.',
     'Cuenta los viajes cuyo estatus es «en cuadre», sin filtro de fecha.',
     'Tabla de viajes de tu flota, leída al abrir la pantalla. Sin dato se muestra «—», no cero.',
@@ -195,20 +195,20 @@ export const INFO_OPERACION = {
     'Abre «En curso» en Despacho para ver cuáles son y a quién falta avisar.',
   ),
   'despacho.sin_unidad': V(
-    'Viajes en curso sin unidad',
+    'Sin unidad',
     'Viajes en curso que todavía no tienen una unidad asignada.',
     'Cuenta, entre los viajes abiertos o en cuadre, los que no tienen unidad asignada.',
     'Tabla de viajes de tu flota, leída al abrir la pantalla; es la foto de este momento.',
     'Asigna la unidad desde la columna Unidad de «En curso» en Despacho.',
   ),
   'despacho.unidades_libres': V(
-    'Unidades libres',
+    'Unidades disponibles',
     'Unidades activas de tu flota con estado disponible.',
     'Cuenta las unidades activas cuyo estado es «disponible». Las dadas de baja no cuentan.',
     'Tabla de unidades de tu flota, leída al abrir la pantalla. El estado es el que está capturado, no se deduce de los viajes.',
   ),
   'despacho.en_taller': V(
-    'Unidades en taller',
+    'En taller',
     'Unidades activas de tu flota con estado en taller.',
     'Cuenta las unidades activas cuyo estado es «taller». Las dadas de baja no cuentan.',
     'Tabla de unidades de tu flota, leída al abrir la pantalla. El estado es el que está capturado en Unidades.',
@@ -220,7 +220,7 @@ export const INFO_OPERACION = {
     'Tabla de incidencias de tu flota, leída al abrir la pantalla.',
   ),
   'despacho.pod_pendientes': V(
-    'POD pendientes',
+    'Sin evidencia de entrega (POD)',
     'Viajes en curso que aún no tienen comprobante de entrega (POD) subido.',
     'Cuenta, entre los viajes abiertos o en cuadre, los que no tienen un POD en estado «subido». Un POD rechazado, o un viaje sin registro de POD, cuenta como pendiente.',
     'Tabla de viajes y de PODs de tu flota, leída al abrir la pantalla; es la foto de este momento. En el Inicio del encargado esta cifra aparece como «Sin evidencia de entrega».',
@@ -266,7 +266,7 @@ export const INFO_OPERACION = {
     'Tabla de viajes de tu flota, leída al abrir la pantalla. Si no se pudo contar, ves «—», no cero.',
   ),
   'mapa.en_el_mapa': V(
-    'Viajes en el mapa',
+    'En el mapa',
     'Viajes en curso que se pudieron dibujar porque se reconocen su origen y su destino.',
     'Cuenta los viajes en curso, de los más recientes, cuyo origen y destino se encuentran en la tabla de ciudades del mapa. Se leen hasta el tope que declara la nota bajo la tira.',
     'Viajes en curso de tu flota, más recientes primero, y la tabla de ciudades del mapa. El trayecto es ilustrativo: es la línea de origen a destino, no la posición del camión.',
@@ -566,7 +566,7 @@ export const INFO_OPERACION = {
     'Liquidaciones de tu flota, hasta hoy en México, leídas al abrir la pantalla.',
   ),
   'inicio.ahorro_generado': V(
-    'Ahorro generado',
+    'Por recuperar',
     'Monto de gasto del periodo fiscal que el motor fiscal marca como recuperable.',
     'Suma el monto de los comprobantes del periodo fiscal cuya causa dominante de pérdida el motor clasifica como recuperable pidiendo la factura. No suma lo ya perdido ni lo que sigue en riesgo. Es un monto por recuperar, no un ahorro ya cobrado.',
     'Gastos fiscales de tu flota en el periodo que indica la etiqueta, leídos al abrir la pantalla. Si la lectura falla o no hay configuración fiscal, ves «Sin dato», no cero.',

@@ -140,7 +140,7 @@ export const INFO_AGENTES = {
 
   // ═══ Conductores · tablero de hitos ═════════════════════════════════════
   'conductores_tablero.sin_insistencia': V(
-    'Hitos sin insistencia', 'Porcentaje de hitos reportados con a lo más un mensaje del agente.',
+    'Hitos reportados sin insistencia', 'Porcentaje de hitos reportados con a lo más un mensaje del agente.',
     'De los hitos recibidos o validados, cuenta los que tuvieron como máximo un recordatorio y no se escalaron, entre el total de recibidos. Sin hitos recibidos, muestra «—», no 0 %.',
     'Hitos de tu flota con actividad en el periodo que eliges (último día, 7 o 30 días), con los filtros de patio, cliente y chofer.',
   ),
@@ -162,7 +162,7 @@ export const INFO_AGENTES = {
     'Revisa los «sin coincidencia» en la cola de excepciones.',
   ),
   'conductores_tablero.validacion_degradada': V(
-    'Validación degradada', 'Porcentaje de llegadas validadas sin GPS real o sin ubicación con qué comparar.',
+    'Validación en modo degradado', 'Porcentaje de llegadas validadas sin GPS real o sin ubicación con qué comparar.',
     'Entre las llegadas de carga y descarga recibidas o validadas, cuenta las que quedaron sin dato de ubicación, sin registro de validación o validadas solo con el pin que el chofer eligió. Sin llegadas validables, muestra «—», no 0 %.',
     'Hitos de tu flota con actividad en el periodo y filtros elegidos.',
     'Asigna sitios a los viajes y conecta el GPS para que las llegadas se validen con ubicación real.',

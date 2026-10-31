@@ -63,6 +63,33 @@ describe('ⓘ: cobertura de cifras y recuadros en las páginas migradas', () => 
     expect(sueltos, `Títulos de recuadro sin ⓘ (${sueltos.length}):\n${sueltos.join('\n')}`).toEqual([]);
   });
 
+  it('la etiqueta visible de cada <Cifra> no contradice el título de su ⓘ (igual o uno contiene al otro)', () => {
+    const norm = (x: string) => x.toLowerCase().replace(/[^a-záéíóúñ ]/g, '').replace(/\s+/g, ' ').trim();
+    // Alias reconocidos: la misma cifra se rotula distinto en dos pantallas (el título de la ⓘ nombra los dos).
+    const ALIAS: Record<string, string[]> = {
+      'despacho.pod_pendientes': ['pod pendientes', 'sin evidencia de entrega'],
+      'despacho.unidades_libres': ['unidades libres'],
+      'cobranza.gasto_avisos': ['avisos'],
+      'operadores.licencias_por_vencer': ['vencen en'],
+    };
+    const malos: string[] = [];
+    for (const { ruta, src } of todos) {
+      for (const t of etiquetas(src, 'Cifra')) {
+        const e = /etiqueta=(?:"([^"]*)"|\{`([^`$]*)[`$])/.exec(t);
+        const k = /info="([^"]+)"/.exec(t);
+        const rotulo = e?.[1] ?? e?.[2];
+        if (!rotulo || !k) continue;
+        const titulo = (INFO as Record<string, InfoTexto | undefined>)[k[1]]?.titulo;
+        if (!titulo) continue;
+        const a = norm(rotulo), b = norm(titulo);
+        if (a === b || a.startsWith(b) || b.startsWith(a) || a.includes(b) || b.includes(a)) continue;
+        if ((ALIAS[k[1]] ?? []).some((x) => a.startsWith(x))) continue;
+        malos.push(`${ruta}: «${rotulo}» vs ⓘ «${titulo}» (${k[1]})`);
+      }
+    }
+    expect(malos, `Rótulo y ⓘ se contradicen:\n${malos.join('\n')}`).toEqual([]);
+  });
+
   it('el catálogo no gana textos por_confirmar (solo los dos del Resumen)', () => {
     const pend = (Object.entries(INFO) as Array<[string, InfoTexto]>).filter(([, t]) => t.estado === 'por_confirmar').map(([k]) => k).sort();
     expect(pend).toEqual(['resumen.a_tiempo', 'resumen.diferencias_recuperado']);
