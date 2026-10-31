@@ -383,7 +383,7 @@ export default async function MiPerfilFlota({
                 <input type="hidden" name="factorId" value={mfa.factorId ?? ''} />
                 <input name="codigo" inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="000000" required
                   className="w-28 text-[13px] px-3 py-2 rounded-lg hairline tabular" style={{ background: 'var(--surface)' }} />
-                <button type="submit" className="text-[12.5px] px-3 py-2 rounded-lg font-medium hairline transition-colors hover:bg-[var(--canvas)]">
+                <button type="submit" className="rv-btn rv-btn--secondary text-[12.5px] px-3 py-2 rounded-lg font-medium hairline transition-colors hover:bg-[var(--canvas)]">
                   Verificar sesión
                 </button>
               </form>

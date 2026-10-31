@@ -133,7 +133,7 @@ export function VistaViajes({
                   className="h-8 pl-8 pr-3 rounded-lg hairline text-[12.5px] w-[220px] max-w-full"
                   style={{ background: 'var(--surface)' }} />
               </label>
-              <button type="submit" className={BTN_SEC} style={{ background: 'var(--surface)' }}>Buscar</button>
+              <button type="submit" className={`rv-btn rv-btn--secondary ${BTN_SEC}`} style={{ background: 'var(--surface)' }}>Buscar</button>
               {q && (
                 <Link href={hrefRegistro(sufijo, { f: filtro })} className="text-[12px] hover:opacity-70" style={{ color: 'var(--muted)' }}>
                   Limpiar

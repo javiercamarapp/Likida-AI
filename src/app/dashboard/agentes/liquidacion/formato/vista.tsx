@@ -49,7 +49,7 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefono
             <Etiqueta t="Excel de muestra (.xlsx)">
               <input type="file" name="archivo" accept=".xlsx,.xls,.ods,.csv" required className={CSS_INPUT} style={ESTILO_INPUT} />
             </Etiqueta>
-            <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}><Upload width={13} height={13} strokeWidth={2} /> {f ? 'Reemplazar muestra' : 'Subir muestra'}</button>
+            <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}><Upload width={13} height={13} strokeWidth={2} /> {f ? 'Reemplazar muestra' : 'Subir muestra'}</button>
           </form>
         ) : (
           <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota sube la muestra y cambia el formato.</p>
@@ -80,7 +80,7 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefono
               </Etiqueta>
             </div>
             {puedeAdministrar && (
-              <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}><Save width={13} height={13} strokeWidth={2} /> Guardar teléfonos</button>
+              <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}><Save width={13} height={13} strokeWidth={2} /> Guardar teléfonos</button>
             )}
           </form>
         </section>
@@ -157,8 +157,8 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefono
 
               {puedeAdministrar && (
                 <div className="flex flex-wrap gap-2">
-                  <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}><Save width={13} height={13} strokeWidth={2} /> Guardar cambios</button>
-                  <button type="submit" formAction={acciones.quitar} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}><Trash2 width={12} height={12} strokeWidth={2} className="inline mr-1" />Quitar el formato</button>
+                  <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}><Save width={13} height={13} strokeWidth={2} /> Guardar cambios</button>
+                  <button type="submit" formAction={acciones.quitar} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}><Trash2 width={12} height={12} strokeWidth={2} className="inline mr-1" />Quitar el formato</button>
                 </div>
               )}
             </form>

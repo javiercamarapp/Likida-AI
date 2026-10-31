@@ -26,7 +26,7 @@ export function EnlacePagina({ href, direccion, etiqueta }: {
   const texto = etiqueta ?? (direccion === 'siguiente' ? 'Siguiente' : direccion === 'inicio' ? 'Volver al inicio' : 'Anterior');
   return (
     <Link href={href} rel={direccion === 'siguiente' ? 'next' : direccion === 'anterior' ? 'prev' : undefined}
-      className={BOTON} style={{ background: 'var(--surface)', outlineColor: 'var(--marca)' }}>
+      className={`rv-btn rv-btn--secondary ${BOTON}`} style={{ background: 'var(--surface)', outlineColor: 'var(--marca)' }}>
       {direccion !== 'siguiente' && <ChevronLeft aria-hidden width={13} height={13} strokeWidth={1.75} />}
       {texto}
       {direccion === 'siguiente' && <ChevronRight aria-hidden width={13} height={13} strokeWidth={1.75} />}

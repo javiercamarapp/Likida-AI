@@ -171,7 +171,7 @@ export async function SeccionExternas(p: ExternasProps) {
             Subir liquidaciones (CSV o Excel de tu sistema; una fila por renglón, agrupadas por clave_externa)
             <input type="file" name="archivo" accept=".csv,.txt,.xlsx,.xls,.ods" required className={`${CLASE_CONTROL} block mt-1`} style={ESTILO_CONTROL} />
           </label>
-          <button type="submit" className="text-[12px] font-medium rounded-lg px-3 py-1.5"
+          <button type="submit" className="rv-btn rv-btn--primary text-[12px] font-medium rounded-lg px-3 py-1.5"
             style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>Subir y entregar</button>
         </form>
       )}
@@ -203,7 +203,7 @@ export async function SeccionExternas(p: ExternasProps) {
               <option value="no_coincide">No coincide (respuesta del chofer)</option>
             </select>
           </label>
-          <button type="submit" className="text-[12px] font-medium rounded-lg px-3 py-1.5"
+          <button type="submit" className="rv-btn rv-btn--primary text-[12px] font-medium rounded-lg px-3 py-1.5"
             style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>Filtrar</button>
           {p.filtroEstado && (
             <Link href={query(p.contexto)} className="text-[12px] font-medium px-2 py-1.5 hover:opacity-70 transition-opacity"
@@ -225,7 +225,7 @@ export async function SeccionExternas(p: ExternasProps) {
             <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Hasta</span>
             <input type="date" name="hasta" defaultValue={hoy} className={CLASE_CONTROL} style={ESTILO_CONTROL} />
           </label>
-          <button type="submit" className="inline-flex items-center gap-1.5 text-[12px] font-medium rounded-lg px-3 py-1.5 hairline">
+          <button type="submit" className="rv-btn rv-btn--secondary inline-flex items-center gap-1.5 text-[12px] font-medium rounded-lg px-3 py-1.5 hairline">
             <Download width={12} height={12} strokeWidth={2} /> Exportar CSV
           </button>
         </form>

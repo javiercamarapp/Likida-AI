@@ -136,7 +136,7 @@ export function FiltrosTablero({ f, catalogos, ocultos, accionUrl }: {
           <option value="1">último día</option><option value="7">últimos 7 días</option><option value="30">últimos 30 días</option>
         </select>
       </label>
-      <button type="submit" className="h-8 px-3 rounded-lg text-[12.5px] font-medium hairline transition-colors hover:bg-[var(--canvas)]">Aplicar</button>
+      <button type="submit" className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12.5px] font-medium hairline transition-colors hover:bg-[var(--canvas)]">Aplicar</button>
       {(f.terminalId || f.clienteId || f.operadorId || f.semaforo) && (
         <Link href={accionUrl + (Object.keys(ocultos).length ? `?${new URLSearchParams(ocultos).toString()}` : '')} className="text-[12px] underline" style={{ color: 'var(--muted)' }}>Quitar filtros</Link>
       )}

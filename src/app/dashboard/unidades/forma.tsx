@@ -21,7 +21,7 @@ function Boton({ etiqueta }: { etiqueta: string }) {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Save width={14} height={14} strokeWidth={1.75} />
       {pending ? 'Guardando…' : etiqueta}

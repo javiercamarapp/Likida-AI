@@ -52,7 +52,7 @@ function useRespuesta(r: RespuestaControl | null) {
 
 function Boton({ children, pendiente, peligro }: { children: React.ReactNode; pendiente: boolean; peligro?: boolean }) {
   return (
-    <button type="submit" disabled={pendiente} className="text-[12px] px-3 py-1.5 rounded-md border disabled:opacity-50"
+    <button type="submit" disabled={pendiente} className={`rv-btn ${peligro ? 'rv-btn--danger' : 'rv-btn--secondary'} text-[12px] px-3 py-1.5 rounded-md border disabled:opacity-50`}
       style={{ borderColor: peligro ? 'var(--bad)' : 'var(--line2)', color: peligro ? 'var(--bad)' : undefined }}>
       {pendiente ? 'Un momento…' : children}
     </button>
@@ -115,8 +115,8 @@ function FilaLote({ l }: { l: LotePantalla }) {
         {/* A37-S29-06: lo que se está viendo; confirmar se rechaza si el lote cambió desde que se pintó */}
         <input type="hidden" name="vistoTickets" value={l.tickets} />
         <input type="hidden" name="vistoMonto" value={l.montoTotal} />
-        {l.estado === 'propuesto' && <button type="submit" name="decision" value="confirmar" disabled={p} className="text-[12px] px-3 py-1.5 rounded-md border disabled:opacity-50" style={{ borderColor: 'var(--ok)', color: 'var(--ok)' }}>Confirmar lote</button>}
-        <button type="submit" name="decision" value="rechazar" disabled={p} className="text-[12px] px-3 py-1.5 rounded-md border disabled:opacity-50" style={{ borderColor: 'var(--line2)' }}>Rechazar</button>
+        {l.estado === 'propuesto' && <button type="submit" name="decision" value="confirmar" disabled={p} className="rv-btn rv-btn--secondary text-[12px] px-3 py-1.5 rounded-md border disabled:opacity-50" style={{ borderColor: 'var(--ok)', color: 'var(--ok)' }}>Confirmar lote</button>}
+        <button type="submit" name="decision" value="rechazar" disabled={p} className="rv-btn rv-btn--secondary text-[12px] px-3 py-1.5 rounded-md border disabled:opacity-50" style={{ borderColor: 'var(--line2)' }}>Rechazar</button>
       </form>
     </li>
   );

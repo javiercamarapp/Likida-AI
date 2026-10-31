@@ -69,7 +69,7 @@ function AccionesDeFila({ f, desglose, retorno, decidir }: { f: FilaCandidato; d
       {puedeReclamar && (
         <form action={decidir}>
           <Campos desglose={desglose} retorno={retorno} accion="reclamado" indice={f.indice} categoria={f.categoria} />
-          <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>{ROTULO_ACCION.reclamado}</button>
+          <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>{ROTULO_ACCION.reclamado}</button>
         </form>
       )}
       {(['descartado', 'justificado'] as const).map((a) => (
@@ -78,7 +78,7 @@ function AccionesDeFila({ f, desglose, retorno, decidir }: { f: FilaCandidato; d
           <input name="motivo" required minLength={3} maxLength={300} placeholder={a === 'descartado' ? 'Por qué se descarta' : 'Por qué está justificado'}
             aria-label={`Motivo para ${a === 'descartado' ? 'descartar' : 'justificar'} el renglón ${f.indice + 1} (${etiquetaCategoriaFila(f.categoria)})`}
             className={`${CSS_INPUT} w-[170px]`} style={ESTILO_INPUT} />
-          <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>{ROTULO_ACCION[a]}</button>
+          <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>{ROTULO_ACCION[a]}</button>
         </form>
       ))}
     </div>
@@ -168,7 +168,7 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
             {ETIQUETA_ESTADO_CANDIDATO[e]} · {numero(tabla.porEstado[e].n)} · {mxn(tabla.porEstado[e].monto)}
           </span>
         ))}
-        <a href={`/api/export/peajes-candidatos?desglose=${desglose}${ctx}`} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>
+        <a href={`/api/export/peajes-candidatos?desglose=${desglose}${ctx}`} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>
           <FileDown width={13} height={13} strokeWidth={2} className="inline mr-1" /> Reporte para el portal del proveedor
         </a>
       </div>
@@ -200,8 +200,8 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
             <option value="monto_asc">Menor monto primero</option>
             <option value="fecha">Por fecha</option>
           </select></label>
-        <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>Filtrar</button>
-        {hayFiltro && <a href={`?${new URLSearchParams([...new URLSearchParams(sufijo.replace(/^\?/, '')).entries(), ['desglose', desglose]]).toString()}#candidatos`} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>Quitar filtros</a>}
+        <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Filtrar</button>
+        {hayFiltro && <a href={`?${new URLSearchParams([...new URLSearchParams(sufijo.replace(/^\?/, '')).entries(), ['desglose', desglose]]).toString()}#candidatos`} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Quitar filtros</a>}
       </form>
 
       {tabla.total === 0 ? (
@@ -256,9 +256,9 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
           </div>
           {tabla.paginas > 1 && (
             <nav aria-label="Páginas de candidatos" className="flex items-center gap-3 mt-3 text-[12.5px]">
-              {tabla.pagina > 1 ? <a href={enlace(tabla.pagina - 1)} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>← Anterior</a> : <span style={{ color: 'var(--faint)' }}>← Anterior</span>}
+              {tabla.pagina > 1 ? <a href={enlace(tabla.pagina - 1)} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>← Anterior</a> : <span style={{ color: 'var(--faint)' }}>← Anterior</span>}
               <span>Página {numero(tabla.pagina)} de {numero(tabla.paginas)}</span>
-              {tabla.pagina < tabla.paginas ? <a href={enlace(tabla.pagina + 1)} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>Siguiente →</a> : <span style={{ color: 'var(--faint)' }}>Siguiente →</span>}
+              {tabla.pagina < tabla.paginas ? <a href={enlace(tabla.pagina + 1)} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Siguiente →</a> : <span style={{ color: 'var(--faint)' }}>Siguiente →</span>}
             </nav>
           )}
         </>

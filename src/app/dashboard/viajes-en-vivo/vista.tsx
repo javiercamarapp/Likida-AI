@@ -65,7 +65,7 @@ function Filtros({ f, c, accionUrl, ocultos }: { f: FiltrosVistaViajes; c: Catal
       <label className="text-[11px] font-medium inline-flex items-center gap-1.5 h-8">
         <input type="checkbox" name="vista" value="excepciones" defaultChecked={f.soloExcepciones} /> Solo con excepciones
       </label>
-      <button type="submit" className="hairline rounded-lg px-3 h-8 text-[12.5px] font-medium">Aplicar</button>
+      <button type="submit" className="rv-btn rv-btn--secondary hairline rounded-lg px-3 h-8 text-[12.5px] font-medium">Aplicar</button>
       {(f.terminalId || f.clienteId || f.soloExcepciones) && <a href={accionUrl} className="text-[12px] underline" style={{ color: 'var(--muted)' }}>Quitar filtros</a>}
     </form>
   );
@@ -176,7 +176,7 @@ export function TareasAbiertas({ tareas, accion, ocultos, aviso = null, errorLec
                   <form action={accion}>
                     {Object.entries(ocultos).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
                     <input type="hidden" name="id" value={t.id} />
-                    <button type="submit" className="hairline rounded-lg px-2.5 h-7 text-[12px]">Marcar atendida</button>
+                    <button type="submit" className="rv-btn rv-btn--secondary hairline rounded-lg px-2.5 h-7 text-[12px]">Marcar atendida</button>
                   </form>
                 )}
               </li>

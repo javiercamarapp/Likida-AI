@@ -64,7 +64,7 @@ export function SeccionTarifario({ datos }: { datos: TarifarioVista }) {
             <option value="proveedor">el tarifario oficial del proveedor (queda confirmado)</option>
           </select>
         </label>
-        <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}><Upload width={13} height={13} strokeWidth={2} /> Cargar tarifario</button>
+        <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}><Upload width={13} height={13} strokeWidth={2} /> Cargar tarifario</button>
       </form>
 
       {tarifas === null ? (
@@ -92,7 +92,7 @@ export function SeccionTarifario({ datos }: { datos: TarifarioVista }) {
                 <form action={acciones.confirmarTarifa} className="ml-auto flex items-center gap-2">
                   <span className="text-[11.5px]" style={{ color: 'var(--warn, var(--muted))' }}>Por confirmar</span>
                   <input type="hidden" name="tarifa" value={t.id} />
-                  <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO} aria-label={`Confirmar la tarifa de ${t.casetaNorm}, clase ${t.clase}`}>Confirmar</button>
+                  <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO} aria-label={`Confirmar la tarifa de ${t.casetaNorm}, clase ${t.clase}`}>Confirmar</button>
                 </form>
               )}
             </div>
@@ -106,7 +106,7 @@ export function SeccionTarifario({ datos }: { datos: TarifarioVista }) {
           <p className="text-[11px] mb-1.5" style={{ color: 'var(--faint)' }}>
             ¿Hay casetas con tarifa por pasada? Revisa el último desglose: te dice dónde casi todos los cruces son clase 1. Es solo una sugerencia; tú la declaras en «Reglas de cobro».
           </p>
-          <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>Buscar sugerencias en el último desglose</button>
+          <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Buscar sugerencias en el último desglose</button>
         </form>
       )}
     </section>

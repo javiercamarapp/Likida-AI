@@ -61,7 +61,7 @@ export function VistaSitios(p: PropsVistaSitios) {
           <form method="get" className="ml-auto flex items-center gap-2">
             {p.sufijo.startsWith('?') && [...new URLSearchParams(p.sufijo.slice(1))].map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
             <input type="search" name="q" defaultValue={p.busqueda} placeholder="Buscar por nombre o código" className="hairline rounded-lg px-2.5 h-8 text-[12.5px]" aria-label="Buscar sitios" />
-            <button type="submit" className="h-8 px-3 rounded-lg text-[12.5px] hairline">Buscar</button>
+            <button type="submit" className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12.5px] hairline">Buscar</button>
           </form>
         </div>
         {p.sitios === null ? (

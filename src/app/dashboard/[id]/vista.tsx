@@ -129,7 +129,7 @@ export function Diferencia({ nota, monto }: { nota: string; monto: number }) {
           que parece funcionar y no hace nada es un rótulo que miente. */}
       <button type="button" disabled
         title="Todavía no se puede aprobar ni descontar desde el panel: la decisión se toma sobre el PDF con tu contador."
-        className={`${BTN_SECUNDARIO} h-7 px-2.5 text-[11.5px] shrink-0`} style={ESTILO_SECUNDARIO}>
+        className={`rv-btn rv-btn--secondary ${BTN_SECUNDARIO} h-7 px-2.5 text-[11.5px] shrink-0`} style={ESTILO_SECUNDARIO}>
         Aprobar / Descontar
       </button>
     </li>

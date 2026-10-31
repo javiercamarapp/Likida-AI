@@ -17,7 +17,7 @@ function Revisada() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="h-8 px-3 rounded-lg text-[12.5px] font-medium hairline transition-opacity hover:opacity-85 disabled:opacity-50">
+      className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12.5px] font-medium hairline transition-opacity hover:opacity-85 disabled:opacity-50">
       {pending ? 'Marcando…' : 'Revisada'}
     </button>
   );

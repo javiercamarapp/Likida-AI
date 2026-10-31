@@ -29,7 +29,7 @@ function BotonImportarGeocercas() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <MapPinned aria-hidden width={14} height={14} strokeWidth={1.75} />
       {pending ? 'Leyendo tus geocercas…' : 'Importar mis geocercas'}
@@ -71,7 +71,7 @@ function BotonGenerar({ rotulo }: { rotulo: string }) {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <KeyRound aria-hidden width={14} height={14} strokeWidth={1.75} />
       {pending ? 'Generando…' : rotulo}
@@ -180,7 +180,7 @@ export function SeccionGps({ salud, push, endpoint, huerfanos, hayMasHuerfanos, 
             <p className="font-medium" style={{ color: 'var(--warn)' }}>Guárdalo ahora: no se vuelve a mostrar.</p>
             <p className="mt-1 cifra-mono break-all select-all">{estadoSecreto.secreto}</p>
             <button type="button" onClick={() => copiar(estadoSecreto.secreto)}
-              className="hairline mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)]">
+              className="rv-btn rv-btn--secondary hairline mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)]">
               <Copy aria-hidden width={13} height={13} strokeWidth={2} />
               {copiado ? 'Copiado' : 'Copiar secreto'}
             </button>

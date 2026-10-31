@@ -354,7 +354,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
         </section>
 
         {puedeAdministrar && disponible && (
-          <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}><Save width={13} height={13} strokeWidth={2} /> Guardar configuración</button>
+          <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}><Save width={13} height={13} strokeWidth={2} /> Guardar configuración</button>
         )}
       </form>
     </MarcoPagina>

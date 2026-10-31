@@ -37,7 +37,7 @@ function Boton({ children, name, value, tono = 'neutro', Icono }: {
     : tono === 'peligro' ? { background: 'var(--badbg)', color: 'var(--bad)' } : { background: 'var(--canvas)', color: 'var(--ink)' };
   return (
     <button type="submit" name={name} value={value} disabled={pending}
-      className="h-8 px-3 rounded-lg text-[12.5px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50 hairline"
+      className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12.5px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50 hairline"
       style={estilo}>
       {Icono && <Icono width={13} height={13} strokeWidth={1.75} />}{children}
     </button>

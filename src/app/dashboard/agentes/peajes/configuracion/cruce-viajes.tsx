@@ -46,7 +46,7 @@ export function SeccionCruceViajes({ datos }: { datos: CruceViajesVista }) {
           ) : (
             <form action={acciones.guardarCruceViajes} className="flex items-center gap-2 flex-wrap">
               <input type="hidden" name="activo" value={activo ? '0' : '1'} />
-              <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>{activo ? 'Apagar el cruce' : 'Encender el cruce'}</button>
+              <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>{activo ? 'Apagar el cruce' : 'Encender el cruce'}</button>
               <span className="text-[11px]" style={{ color: 'var(--faint)' }}>Aplica a los archivos que se concilien desde ahora; los anteriores se recalculan al reprocesarlos.</span>
             </form>
           )}

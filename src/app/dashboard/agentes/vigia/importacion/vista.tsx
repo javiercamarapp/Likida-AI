@@ -69,7 +69,7 @@ const VACIO = 'Carga el programa del día para ver el estatus.';
 function Enviar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className="hairline rounded-lg px-3 h-9 text-[12.5px] inline-flex items-center gap-1.5 disabled:opacity-60 hover:bg-[var(--canvas)]">
+    <button type="submit" disabled={pending} className="rv-btn rv-btn--secondary hairline rounded-lg px-3 h-9 text-[12.5px] inline-flex items-center gap-1.5 disabled:opacity-60 hover:bg-[var(--canvas)]">
       <Upload width={14} height={14} strokeWidth={1.75} aria-hidden />{pending ? 'Leyendo el archivo…' : 'Subir y ver el estatus'}
     </button>
   );
@@ -85,7 +85,7 @@ function DescargarCsv({ csv }: { csv: string }) {
     URL.revokeObjectURL(url);
   }
   return (
-    <button type="button" onClick={descargar} className="hairline rounded-lg px-3 h-9 text-[12.5px] inline-flex items-center gap-1.5 hover:bg-[var(--canvas)]">
+    <button type="button" onClick={descargar} className="rv-btn rv-btn--secondary hairline rounded-lg px-3 h-9 text-[12.5px] inline-flex items-center gap-1.5 hover:bg-[var(--canvas)]">
       <Download width={14} height={14} strokeWidth={1.75} aria-hidden />Descargar CSV
     </button>
   );

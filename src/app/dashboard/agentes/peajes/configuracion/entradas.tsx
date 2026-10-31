@@ -57,11 +57,11 @@ export function SeccionEntradas({ entradas, acciones }: { entradas: EntradasVist
             {puedeAdministrar ? (
               config?.correoActivo ? (
                 <>
-                  <form action={acciones.rotarCorreo}><button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO} title="La dirección anterior deja de servir al instante"><KeyRound width={12} height={12} strokeWidth={2} className="inline mr-1" />Cambiar dirección</button></form>
-                  <form action={acciones.desactivarCorreo}><button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>Apagar</button></form>
+                  <form action={acciones.rotarCorreo}><button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO} title="La dirección anterior deja de servir al instante"><KeyRound width={12} height={12} strokeWidth={2} className="inline mr-1" />Cambiar dirección</button></form>
+                  <form action={acciones.desactivarCorreo}><button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Apagar</button></form>
                 </>
               ) : (
-                <form action={acciones.activarCorreo}><button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}><Mail width={13} height={13} strokeWidth={2} /> Activar correo</button></form>
+                <form action={acciones.activarCorreo}><button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}><Mail width={13} height={13} strokeWidth={2} /> Activar correo</button></form>
               )
             ) : <SoloAdmin />}
           </div>
@@ -81,7 +81,7 @@ export function SeccionEntradas({ entradas, acciones }: { entradas: EntradasVist
                 <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Remitentes permitidos (correo o dominio, uno por línea; vacío = cualquiera con la dirección)</span>
                 <textarea name="remitentes" rows={3} defaultValue={config.remitentes.join('\n')} maxLength={2500} className={`${CSS_INPUT} w-full cifra-mono mt-0.5`} style={ESTILO_INPUT} />
               </label>
-              <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>Guardar remitentes</button>
+              <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Guardar remitentes</button>
               <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Con lista, un correo de otro remitente se ignora (no entra ni se cruza).</p>
             </form>
           )}
@@ -100,7 +100,7 @@ export function SeccionEntradas({ entradas, acciones }: { entradas: EntradasVist
               {config.pullActivo && <span style={{ color: 'var(--muted)' }}>cada {minutos(config.pullIntervaloMin)}</span>}
               {config.pullUltimoEn && <span className="text-[11px]" style={{ color: 'var(--faint)' }}>última consulta buena: {config.pullUltimoEn.slice(0, 16).replace('T', ' ')} UTC</span>}
               {puedeAdministrar && config.pullActivo && (
-                <form action={acciones.apagarPull}><button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>Apagar</button></form>
+                <form action={acciones.apagarPull}><button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Apagar</button></form>
               )}
             </div>
             {config.pullUltimoError && <p role="alert" className="text-[12px]" style={{ color: 'var(--bad)' }}>Última consulta con problema: {config.pullUltimoError}</p>}
@@ -119,14 +119,14 @@ export function SeccionEntradas({ entradas, acciones }: { entradas: EntradasVist
                     <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Token Bearer (opcional){config.pullConCredencial ? ' · ya hay uno guardado; déjalo vacío para conservarlo' : ''}</span>
                     <input name="token" type="password" autoComplete="off" maxLength={500} disabled={!entradas.cofreConfigurado} className={`${CSS_INPUT} w-full mt-0.5`} style={ESTILO_INPUT} />
                   </label>
-                  <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}><Download width={13} height={13} strokeWidth={2} /> Guardar y encender</button>
+                  <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}><Download width={13} height={13} strokeWidth={2} /> Guardar y encender</button>
                 </div>
                 {!entradas.cofreConfigurado && <p className="text-[11.5px]" style={{ color: 'var(--warn)' }}>Falta LIKIDA_COFRE_LLAVE en el servidor: sin ella no se puede guardar un token de forma segura (el pull sin token sí funciona).</p>}
               </form>
             ) : <SoloAdmin />}
             {puedeAdministrar && config.pullConCredencial && (
               <form action={acciones.borrarCredencialPull}>
-                <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}><Trash2 width={11} height={11} strokeWidth={2} className="inline mr-1" />Borrar el token guardado</button>
+                <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}><Trash2 width={11} height={11} strokeWidth={2} className="inline mr-1" />Borrar el token guardado</button>
               </form>
             )}
           </div>

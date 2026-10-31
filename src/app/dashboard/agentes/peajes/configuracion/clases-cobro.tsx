@@ -58,7 +58,7 @@ export function SeccionClasesCobro({ datos }: { datos: ClasesCobroVista }) {
               <span><span className="font-medium">Solo en las casetas declaradas por pasada</span>: en las demás, la clase 1 se marca como candidato. Declara las casetas por pasada en el catálogo de casetas o en «Reglas de cobro».</span>
             </label>
           </fieldset>
-          <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>Guardar clases</button>
+          <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Guardar clases</button>
         </form>
       )}
     </section>

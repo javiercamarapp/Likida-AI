@@ -51,7 +51,7 @@ export function BotonConciliar({ conciliar, desgloseId }: {
           </span>
           <BotonConfirmar />
           <button type="button" onClick={() => setConfirmando(false)}
-            className="hairline text-[12px] font-medium px-2.5 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
+            className="rv-btn rv-btn--secondary hairline text-[12px] font-medium px-2.5 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
             style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
             Cancelar
           </button>
@@ -59,7 +59,7 @@ export function BotonConciliar({ conciliar, desgloseId }: {
       ) : (
         <button type="button" onClick={() => setConfirmando(true)}
           title="Volver a cruzar todas las líneas del desglose contra los gastos que hay hoy"
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85"
+          className="rv-btn rv-btn--primary inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85"
           style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
           <RefreshCw width={13} height={13} strokeWidth={2} /> Conciliar
         </button>
@@ -88,7 +88,7 @@ function BotonConfirmar() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <RefreshCw width={13} height={13} strokeWidth={2} className={pending ? 'animate-spin' : ''} />
       {pending ? 'Cruzando…' : 'Sí, cruzar'}

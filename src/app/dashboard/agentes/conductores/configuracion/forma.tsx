@@ -52,7 +52,7 @@ function Seccion({ id, titulo, children }: { id: string; titulo: string; childre
 function Guardar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+    <button type="submit" disabled={pending} className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Save width={14} height={14} strokeWidth={1.75} />{pending ? 'Guardando…' : 'Guardar configuración'}
     </button>
@@ -244,7 +244,7 @@ const diezDigitos = (tel: string): string => tel.replace(/\D/g, '').replace(/^52
 function BotonVoluntario({ texto, enCurso }: { texto: string; enCurso: string }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className="h-9 px-4 rounded-lg text-[13px] font-medium hairline transition-opacity hover:opacity-85 disabled:opacity-50">
+    <button type="submit" disabled={pending} className="rv-btn rv-btn--secondary h-9 px-4 rounded-lg text-[13px] font-medium hairline transition-opacity hover:opacity-85 disabled:opacity-50">
       {pending ? enCurso : texto}
     </button>
   );
@@ -296,7 +296,7 @@ export function SeccionVoluntarios({ datos, puedeEditar, accionAlta, accionBaja,
               <span className={ETIQUETA}>Buscar operador activo (nombre o teléfono)</span>
               <input name="q" defaultValue={datos.busqueda} className={CAMPO} />
             </label>
-            <button type="submit" className="h-9 px-4 rounded-lg text-[13px] font-medium hairline">Buscar</button>
+            <button type="submit" className="rv-btn rv-btn--secondary h-9 px-4 rounded-lg text-[13px] font-medium hairline">Buscar</button>
           </form>
           <form action={enviarAlta} className="flex items-end gap-2" aria-label="Agregar operador al piloto">
             <label className="flex-1">

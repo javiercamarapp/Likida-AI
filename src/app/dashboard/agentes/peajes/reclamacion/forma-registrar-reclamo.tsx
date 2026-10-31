@@ -35,7 +35,7 @@ const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as co
 function Boton() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className={CSS_BOTON} style={ESTILO_PRIMARIO}>
+    <button type="submit" disabled={pending} className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>
       {pending ? 'Registrando…' : 'Registrar reclamo'}
     </button>
   );

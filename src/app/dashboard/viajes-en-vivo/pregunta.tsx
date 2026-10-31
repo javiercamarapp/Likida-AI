@@ -59,7 +59,7 @@ export function PreguntaAlAsistente({ tenantParam }: { tenantParam: string | nul
           value={texto} onChange={(e) => setTexto(e.target.value)} maxLength={500} placeholder="Ej. ¿cómo va la terminal de Guadalajara?"
           aria-label="Tu pregunta" className="hairline rounded-lg px-3 h-9 text-[13px] flex-1 outline-none focus:border-[var(--muted)]"
         />
-        <button type="submit" disabled={ocupado || !texto.trim()} className="hairline rounded-lg px-3 h-9 text-[13px] font-medium">{ocupado ? 'Consultando…' : 'Preguntar'}</button>
+        <button type="submit" disabled={ocupado || !texto.trim()} className="rv-btn rv-btn--secondary hairline rounded-lg px-3 h-9 text-[13px] font-medium">{ocupado ? 'Consultando…' : 'Preguntar'}</button>
       </form>
       {error && <p role="alert" className="text-[12.5px]" style={{ color: 'var(--bad)' }}>{error}</p>}
       {bloques && (

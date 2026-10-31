@@ -50,7 +50,7 @@ export function FiltroRegistro<T>({
             style={{ background: 'var(--surface)' }} />
         </div>
         <button type="submit"
-          className="hairline h-8 px-3 rounded-lg text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)]"
+          className="rv-btn rv-btn--secondary hairline h-8 px-3 rounded-lg text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)]"
           style={{ background: 'var(--surface)' }}>
           Buscar
         </button>

@@ -173,7 +173,7 @@ export function ImportadorMasivo({
                   style={{ color: 'var(--muted)' }}
                 />
                 <button type="button" onClick={() => enviar('previsualizar')} disabled={!archivo || pendiente}
-                  className="hairline inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)] disabled:opacity-50">
+                  className="rv-btn rv-btn--secondary hairline inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)] disabled:opacity-50">
                   <FileUp aria-hidden width={13} height={13} strokeWidth={2} className={pendiente ? 'animate-pulse' : ''} />
                   {pendiente ? 'Revisando…' : 'Revisar archivo'}
                 </button>
@@ -314,7 +314,7 @@ export function ImportadorMasivo({
                       </label>
                     )}
                     <button type="button" onClick={() => setConfirmando(true)} disabled={pendiente}
-                      className="h-9 rounded-lg px-4 text-[13px] font-medium transition-opacity hover:opacity-85 disabled:opacity-50"
+                      className="rv-btn rv-btn--primary h-9 rounded-lg px-4 text-[13px] font-medium transition-opacity hover:opacity-85 disabled:opacity-50"
                       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
                       {pendiente ? (esGps ? 'Ligando…' : 'Importando…') : `${esGps ? 'Ligar' : 'Importar'} ${numero(estado.nuevas)} ${estado.nuevas === 1 ? singular : sustantivo}`}
                     </button>

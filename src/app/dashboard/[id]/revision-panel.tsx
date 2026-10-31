@@ -127,7 +127,7 @@ function CorregirMonto({ accion, gasto }: {
         aria-label={`Motivo de la corrección de ${gasto.etiqueta}`}
         className="text-[12.5px] rounded-lg px-2 py-1 flex-1 min-w-40" style={ESTILO_CONTROL} />
       <button type="submit" disabled={pendiente}
-        className="text-[12.5px] font-medium rounded-lg px-3 py-1.5 disabled:opacity-60"
+        className="rv-btn rv-btn--primary text-[12.5px] font-medium rounded-lg px-3 py-1.5 disabled:opacity-60"
         style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
         {pendiente ? 'Corrigiendo…' : 'Corregir monto'}
       </button>

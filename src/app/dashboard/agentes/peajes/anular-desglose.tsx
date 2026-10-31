@@ -29,7 +29,7 @@ export function BotonAnular({ anular, desgloseId }: { anular: AccionAnular; desg
       <input type="hidden" name="desglose" value={desgloseId} />
       <button type="button" onClick={() => setAbierto(true)}
         title="Para un archivo subido por error: deja de contar, no se borra"
-        className="hairline inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
+        className="rv-btn rv-btn--danger hairline inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
         style={{ background: 'var(--surface)', color: 'var(--bad)' }}>
         <Ban width={13} height={13} strokeWidth={2} /> Anular
       </button>

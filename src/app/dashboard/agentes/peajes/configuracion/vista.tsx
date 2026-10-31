@@ -149,7 +149,7 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo }: { buzon: BuzonVista
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Buzón desactivado.</span>
           {buzon.puedeAdministrar
-            ? <form action={acciones.activarBuzon}><button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}><Inbox width={13} height={13} strokeWidth={2} /> Activar buzón</button></form>
+            ? <form action={acciones.activarBuzon}><button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}><Inbox width={13} height={13} strokeWidth={2} /> Activar buzón</button></form>
             : <span className="text-[11px]" style={{ color: 'var(--faint)' }}>Solo quien administra la flota lo activa.</span>}
         </div>
       ) : (
@@ -160,12 +160,12 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo }: { buzon: BuzonVista
             {buzon.puedeAdministrar && (
               <>
                 <form action={acciones.rotarLlave}>
-                  <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO} title="La llave anterior deja de servir al instante">
+                  <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO} title="La llave anterior deja de servir al instante">
                     <KeyRound width={12} height={12} strokeWidth={2} className="inline mr-1" />Rotar llave
                   </button>
                 </form>
                 <form action={acciones.desactivarBuzon}>
-                  <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>Desactivar</button>
+                  <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Desactivar</button>
                 </form>
               </>
             )}
@@ -215,7 +215,7 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo }: { buzon: BuzonVista
                       {!a.proveedor && (
                         <input name="proveedor" maxLength={60} placeholder="Proveedor (p. ej. IAVE)" aria-label="Proveedor del archivo" className="hairline rounded px-1.5 py-0.5 text-[11.5px] w-36 mr-1" />
                       )}
-                      <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>
+                      <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>
                         <RefreshCw width={11} height={11} strokeWidth={2} className="inline mr-1" />Reintentar
                       </button>
                     </form>
@@ -260,7 +260,7 @@ function SeccionMapeo({ mapeos, acciones }: { mapeos: MapeoVista[] | null; accio
               </span>
               <form action={acciones.borrarMapeo} className="ml-auto">
                 <input type="hidden" name="mapeo" value={m.id} />
-                <button type="submit" aria-label={`Eliminar el mapeo de ${m.proveedor}`} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}><Trash2 width={12} height={12} strokeWidth={2} /></button>
+                <button type="submit" aria-label={`Eliminar el mapeo de ${m.proveedor}`} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}><Trash2 width={12} height={12} strokeWidth={2} /></button>
               </form>
             </div>
           ))}
@@ -275,7 +275,7 @@ function SeccionMapeo({ mapeos, acciones }: { mapeos: MapeoVista[] | null; accio
         <Entrada nombre="tag" etiqueta="TAG (opc.)" ph="No. TAG" ancho="w-[110px]" />
         <Entrada nombre="unidad" etiqueta="Unidad (opc.)" ph="No. economico" ancho="w-[120px]" />
         <Entrada nombre="clase" etiqueta="Clase (opc.)" ph="Clase" ancho="w-[90px]" />
-        <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>Guardar mapeo</button>
+        <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Guardar mapeo</button>
       </form>
       <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
         Guardar el mismo proveedor de nuevo reemplaza su mapeo. El archivo REAL de PASE todavía no se ha calibrado aquí: cuando llegue, su mapeo se declara en esta pantalla, sin tocar código.
@@ -300,7 +300,7 @@ function SubirCsv({ accion, etiqueta, extra }: { accion: Accion; etiqueta: strin
         className="text-[12.5px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12.5px] file:font-medium file:cursor-pointer"
         style={{ color: 'var(--muted)' }} />
       {extra}
-      <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}><Upload width={13} height={13} strokeWidth={2} /> Cargar</button>
+      <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}><Upload width={13} height={13} strokeWidth={2} /> Cargar</button>
     </form>
   );
 }
@@ -323,7 +323,7 @@ function SeccionTags({ tags, unidades, acciones }: { tags: TagVista[] | null; un
           </select>
         </label>
         <Entrada nombre="proveedor" etiqueta="Proveedor (opc.)" ph="PASE" ancho="w-[110px]" />
-        <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>Agregar TAG</button>
+        <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Agregar TAG</button>
       </form>
       {tags === null ? <NoSePudoLeer que="los TAGs" /> : tags.length === 0 ? (
         <p className="text-[12.5px] mt-3" style={{ color: 'var(--muted)' }}>Aún no hay TAGs dados de alta: el cruce no puede casar un cobro con una unidad por su TAG.</p>
@@ -347,7 +347,7 @@ function SeccionTags({ tags, unidades, acciones }: { tags: TagVista[] | null; un
                     <input type="date" name="fecha" required className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT} />
                   </label>
                   <Entrada nombre="motivo" etiqueta="Motivo" ph="Unidad siniestrada" ancho="w-[150px]" />
-                  <button type="submit" aria-label={`Eliminar el TAG ${t.tag} del uso: se da de baja con fecha y motivo`} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>
+                  <button type="submit" aria-label={`Eliminar el TAG ${t.tag} del uso: se da de baja con fecha y motivo`} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>
                     <Trash2 width={12} height={12} strokeWidth={2} /> Dar de baja
                   </button>
                 </form>
@@ -389,7 +389,7 @@ function SeccionCasetas({ casetas, acciones }: { casetas: CasetaVista[] | null; 
               <form action={acciones.estadoCaseta} className="ml-auto">
                 <input type="hidden" name="caseta" value={c.id} />
                 <input type="hidden" name="activa" value={c.activa ? 'false' : 'true'} />
-                <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>{c.activa ? 'Desactivar' : 'Activar'}</button>
+                <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>{c.activa ? 'Desactivar' : 'Activar'}</button>
               </form>
             </div>
           ))}
@@ -416,7 +416,7 @@ function SeccionGeocercas({ geocercas, tipos, acciones }: { geocercas: GeocercaV
         <Entrada nombre="lat" etiqueta="Latitud" ph="20.5888" requerido ancho="w-[100px]" />
         <Entrada nombre="lng" etiqueta="Longitud" ph="-100.3899" requerido ancho="w-[100px]" />
         <Entrada nombre="radio_m" etiqueta="Radio (m)" ph="300" requerido ancho="w-[80px]" />
-        <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>Guardar geocerca</button>
+        <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Guardar geocerca</button>
       </form>
       {geocercas === null ? <NoSePudoLeer que="las geocercas" /> : geocercas.length === 0 ? (
         <p className="text-[12.5px] mt-3" style={{ color: 'var(--muted)' }}>Aún no hay geocercas.</p>
@@ -430,7 +430,7 @@ function SeccionGeocercas({ geocercas, tipos, acciones }: { geocercas: GeocercaV
               <form action={acciones.estadoGeocerca} className="ml-auto">
                 <input type="hidden" name="geocerca" value={g.id} />
                 <input type="hidden" name="activa" value={g.activa ? 'false' : 'true'} />
-                <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>{g.activa ? 'Desactivar' : 'Activar'}</button>
+                <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>{g.activa ? 'Desactivar' : 'Activar'}</button>
               </form>
             </div>
           ))}
@@ -459,7 +459,7 @@ function SeccionCursos({ cursos, unidades, convenios, acciones }: {
           acepta, pero el formato real de tus rutas está pendiente: hoy se prueba con datos sintéticos.</>} />
       <SubirCsv accion={acciones.importarCursos} etiqueta="CSV de cursos" />
       <form action={acciones.importarCursosDeTabla} className="mt-2">
-        <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>Leer los cursos de mi tabla conectada</button>
+        <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Leer los cursos de mi tabla conectada</button>
       </form>
       {cursos === null ? <NoSePudoLeer que="los cursos" /> : cursos.length === 0 ? (
         <p className="text-[12.5px] mt-3" style={{ color: 'var(--muted)' }}>
@@ -482,7 +482,7 @@ function SeccionCursos({ cursos, unidades, convenios, acciones }: {
               <form action={acciones.estadoCurso} className="ml-auto">
                 <input type="hidden" name="curso" value={c.id} />
                 <input type="hidden" name="activo" value={c.activo ? 'false' : 'true'} />
-                <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>{c.activo ? 'Desactivar' : 'Activar'}</button>
+                <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>{c.activo ? 'Desactivar' : 'Activar'}</button>
               </form>
             </div>
           ))}

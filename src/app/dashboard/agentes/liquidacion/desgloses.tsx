@@ -308,7 +308,7 @@ export async function SeccionDesgloses(p: DesglosesProps) {
           <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Hasta</span>
           <input type="date" name="des_hasta" defaultValue={p.hasta ?? ''} max={hoy} className={CLASE_CONTROL} style={ESTILO_CONTROL} />
         </label>
-        <button type="submit" className="text-[12px] font-medium rounded-lg px-3 py-1.5" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>Filtrar</button>
+        <button type="submit" className="rv-btn rv-btn--primary text-[12px] font-medium rounded-lg px-3 py-1.5" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>Filtrar</button>
         {filtrando && (
           <Link href={query(p.contexto)} className="text-[12px] font-medium px-2 py-1.5 hover:opacity-70 transition-opacity" style={{ color: 'var(--muted)' }}>Limpiar</Link>
         )}

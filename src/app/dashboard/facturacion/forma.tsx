@@ -20,7 +20,7 @@ function Boton({ etiqueta, tono = 'marca' }: { etiqueta: string; tono?: 'marca' 
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className={`rv-btn ${tono === 'marca' ? 'rv-btn--primary' : 'rv-btn--danger'} h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50`}
       style={tono === 'marca'
         ? { background: 'var(--marca)', color: 'var(--marca-fg)' }
         : { background: 'var(--badbg)', color: 'var(--bad)' }}>

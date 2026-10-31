@@ -59,7 +59,7 @@ function BotonEstado({ destino, numeroEconomico }: { destino: Destino; numeroEco
   }
   return (
     <button type="submit" name="estado" value={destino} disabled={pending}
-      className="h-7 px-2.5 rounded-lg hairline text-[11.5px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-70 disabled:opacity-40"
+      className="rv-btn rv-btn--secondary h-7 px-2.5 rounded-lg hairline text-[11.5px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-70 disabled:opacity-40"
       style={{ color: tono }}>
       <Icono width={12} height={12} strokeWidth={1.75} />
       {pending ? 'Guardando…' : etiqueta}
@@ -125,7 +125,7 @@ function BotonReactivar() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" name="estado" value="disponible" disabled={pending}
-      className="h-7 px-2.5 rounded-lg hairline text-[11.5px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-70 disabled:opacity-40"
+      className="rv-btn rv-btn--secondary h-7 px-2.5 rounded-lg hairline text-[11.5px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-70 disabled:opacity-40"
       style={{ color: 'var(--ok)' }}>
       <RotateCcw width={12} height={12} strokeWidth={1.75} />
       {pending ? 'Guardando…' : 'Regresó al parque'}

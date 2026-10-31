@@ -319,7 +319,7 @@ function BotonGuardar({ apagado, sucio }: { apagado: boolean; sucio: boolean }) 
     <button
       type="submit" disabled={pending || apagado}
       title={apagado ? 'El correo no está configurado en este entorno' : undefined}
-      className="text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-40"
+      className="rv-btn rv-btn--primary text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-40"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       {pending ? 'Guardando…' : sucio ? 'Guardar cambios' : 'Guardar notificaciones'}
     </button>

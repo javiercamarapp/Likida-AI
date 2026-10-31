@@ -95,7 +95,7 @@ function FilasCandidatos({ candidatos, justificar, desglose }: { candidatos: Can
                       <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Motivo</span>
                         <input name="motivo" required minLength={3} maxLength={300} placeholder="Salida de servicio autorizada" aria-label={`Motivo para justificar el cruce del renglón ${c.indice + 1}`}
                           className={`${CSS_INPUT} w-[240px] mt-0.5`} style={ESTILO_INPUT} /></label>
-                      <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>Justificar este cruce</button>
+                      <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Justificar este cruce</button>
                     </form>
                   )}
                 </td>
@@ -150,16 +150,16 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
         </div>
       </div>
       <div className="flex flex-wrap gap-2 mt-3">
-        <a href={`/api/export/peajes-revision?desglose=${desglose}${ctx}`} className={CSS_BOTON} style={ESTILO_PRIMARIO}>
+        <a href={`/api/export/peajes-revision?desglose=${desglose}${ctx}`} className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>
           <FileDown width={13} height={13} strokeWidth={2} /> Excel de la revisión
         </a>
-        <a href={`/api/export/peajes-candidatos?desglose=${desglose}${ctx}`} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>
+        <a href={`/api/export/peajes-candidatos?desglose=${desglose}${ctx}`} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>
           <FileDown width={13} height={13} strokeWidth={2} className="inline mr-1" /> Reporte para el portal del proveedor
         </a>
-        <a href={`/api/export/peajes-candidatos?desglose=${desglose}&excluirReclamados=1${ctx}`} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>
+        <a href={`/api/export/peajes-candidatos?desglose=${desglose}&excluirReclamados=1${ctx}`} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>
           Sin lo que ya reclamaste
         </a>
-        <a href={`/api/export/peajes-candidatos?desglose=${desglose}&formato=csv${ctx}`} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>
+        <a href={`/api/export/peajes-candidatos?desglose=${desglose}&formato=csv${ctx}`} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>
           CSV
         </a>
       </div>
@@ -297,7 +297,7 @@ export function SeccionCierreMensual({ mes, cierre, error, sufijo, desglose, opc
             <option value="2">Dos meses juntos</option>
           </select>
         </label>
-        <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>{dosMeses ? 'Ver los dos meses' : 'Ver el mes'}</button>
+        <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>{dosMeses ? 'Ver los dos meses' : 'Ver el mes'}</button>
       </form>
       {error && <p role="alert" className="text-[12.5px] mt-3" style={{ color: 'var(--bad)' }}>No se pudo armar el cierre ahora mismo. No es que no haya cobros: inténtalo de nuevo.</p>}
       {dosMeses && cierreDos && <CierreDosMesesVista c={cierreDos} />}
@@ -422,7 +422,7 @@ export function CasarNota({ propuesta, reclamos, sufijo, desglose, mes }: {
         {[...previos.entries()].map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
         <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Importe de la nota (MXN)</span>
           <input name="nota" inputMode="decimal" required maxLength={20} defaultValue={propuesta?.texto ?? ''} className={`${CSS_INPUT} w-[140px] mt-0.5`} style={ESTILO_INPUT} /></label>
-        <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>Proponer reclamo</button>
+        <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Proponer reclamo</button>
       </form>
       {propuesta?.fallo && <p role="alert" style={{ color: 'var(--bad)' }}>No se pudo calcular la propuesta ahora mismo. No es que no haya coincidencia: inténtalo de nuevo.</p>}
       {propuesta && !propuesta.fallo && propuesta.importe === null && <p role="alert" style={{ color: 'var(--bad)' }}>{propuesta.motivo ?? 'El importe no es válido.'}</p>}
@@ -497,7 +497,7 @@ export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revi
                     <input type="date" name="enviado_en" required className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT} /></label>
                   <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Folio del portal (opc.)</span>
                     <input name="referencia" maxLength={120} className={`${CSS_INPUT} w-[160px] mt-0.5`} style={ESTILO_INPUT} /></label>
-                  <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>Marcar como enviado</button>
+                  <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Marcar como enviado</button>
                 </form>
               )}
               {(r.estado === 'enviado' || r.estado === 'acreditado_parcial') && (
@@ -512,11 +512,11 @@ export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revi
                       <input type="date" name="fecha" required className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT} /></label>
                     <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Folio de la nota (opc.)</span>
                       <input name="referencia" maxLength={120} className={`${CSS_INPUT} w-[140px] mt-0.5`} style={ESTILO_INPUT} /></label>
-                    <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>Registrar nota de crédito</button>
+                    <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Registrar nota de crédito</button>
                   </form>
                   <form action={acciones.rechazar}>
                     <input type="hidden" name="reclamo" value={r.id} />
-                    <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>El proveedor lo rechazó</button>
+                    <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>El proveedor lo rechazó</button>
                   </form>
                 </div>
               )}

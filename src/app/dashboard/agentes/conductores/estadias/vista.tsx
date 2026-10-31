@@ -66,7 +66,7 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
               <option value="">Todos</option>{(catalogos?.operadores ?? []).map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
             </select>
           </label>
-          <button type="submit" className="h-8 px-3 rounded-lg text-[12.5px] font-medium hairline transition-colors hover:bg-[var(--canvas)]">Aplicar</button>
+          <button type="submit" className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12.5px] font-medium hairline transition-colors hover:bg-[var(--canvas)]">Aplicar</button>
           {csvUrl && (
             <a href={csvUrl} className="h-8 px-3 rounded-lg text-[12.5px] font-medium inline-flex items-center gap-1.5" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
               <Download width={13} height={13} strokeWidth={1.75} aria-hidden />CSV para cobro de estadías

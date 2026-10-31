@@ -47,7 +47,7 @@ function BotonSubir({ rotulo = 'Subir a la bandeja', pendienteRotulo = 'Leyendo�
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Upload width={13} height={13} strokeWidth={2} className={pending ? 'animate-pulse' : ''} />
       {pending ? pendienteRotulo : rotulo}
@@ -104,7 +104,7 @@ export function BotonesDecision({ facturaId, decidir }: { facturaId: string; dec
           <span className="text-[11.5px]" style={{ color: 'var(--muted)' }}>¿Rechazarla?</span>
           <BotonMini texto="Sí" pendienteTexto="…" destructivo />
           <button type="button" onClick={() => setConfirmando(false)}
-            className="hairline text-[11.5px] font-medium px-2 py-1 rounded-lg transition-colors hover:bg-[var(--canvas)]"
+            className="rv-btn rv-btn--secondary hairline text-[11.5px] font-medium px-2 py-1 rounded-lg transition-colors hover:bg-[var(--canvas)]"
             style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
             No
           </button>
@@ -119,7 +119,7 @@ export function BotonesDecision({ facturaId, decidir }: { facturaId: string; dec
             <BotonMini texto={estado?.confirmar ? 'Aprobar de todos modos' : 'Aprobar'} pendienteTexto="Guardando…" IconoOk />
           </form>
           <button type="button" onClick={() => setConfirmando(true)} title="Rechazar la factura"
-            className="hairline inline-flex items-center gap-1 text-[11.5px] font-medium px-2 py-1 rounded-lg transition-colors hover:bg-[var(--canvas)]"
+            className="rv-btn rv-btn--secondary hairline inline-flex items-center gap-1 text-[11.5px] font-medium px-2 py-1 rounded-lg transition-colors hover:bg-[var(--canvas)]"
             style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
             <X width={11} height={11} strokeWidth={2} /> Rechazar
           </button>
@@ -203,7 +203,7 @@ function BotonBuzon({ texto, pendienteTexto, destructivo }: {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
+      className={`rv-btn ${destructivo ? 'rv-btn--danger' : 'rv-btn--primary'} inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50`}
       style={destructivo
         ? { background: 'var(--badbg)', color: 'var(--bad)' }
         : { background: 'var(--marca)', color: 'var(--marca-fg)' }}>

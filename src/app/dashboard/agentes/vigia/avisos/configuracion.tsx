@@ -78,7 +78,7 @@ function Aviso({ children }: { children: React.ReactNode }) {
 function Guardar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className={BOTON}>
+    <button type="submit" disabled={pending} className={`rv-btn rv-btn--secondary ${BOTON}`}>
       <Save width={14} height={14} strokeWidth={1.75} aria-hidden />Guardar configuración
     </button>
   );

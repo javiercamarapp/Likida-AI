@@ -50,7 +50,7 @@ function BotonSubir() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Upload width={13} height={13} strokeWidth={2} className={pending ? 'animate-pulse' : ''} />
       {pending ? 'Cruzando…' : 'Cruzar contra los viajes'}

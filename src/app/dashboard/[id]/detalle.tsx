@@ -160,14 +160,14 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
           <BotonEnlace tamano="sm" href={`/dashboard/viajes${sufijo}`} icono={<ChevronLeft width={13} height={13} strokeWidth={1.75} aria-hidden />}>Viajes</BotonEnlace>
           <div className="flex items-center gap-2 flex-wrap justify-end">
                 {wa && (
-                  <a href={wa} target="_blank" rel="noopener noreferrer" className={BTN_SECUNDARIO} style={ESTILO_SECUNDARIO}>
+                  <a href={wa} target="_blank" rel="noopener noreferrer" className={`rv-btn rv-btn--secondary ${BTN_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>
                     <MessageCircle width={13} height={13} strokeWidth={1.75} aria-hidden /> Ver WhatsApp
                   </a>
                 )}
                 {/* El PDF existía, estaba autenticado y no había forma de llegar a
                     él: `pdf_url` ni se seleccionaba (auditoría 5, frontend, MEDIO 5). */}
                 {pdfHref && (
-                  <a href={pdfHref} className={BTN_PRIMARIO} style={ESTILO_PRIMARIO}>
+                  <a href={pdfHref} className={`rv-btn rv-btn--primary ${BTN_PRIMARIO}`} style={ESTILO_PRIMARIO}>
                     <Download width={13} height={13} strokeWidth={1.75} aria-hidden /> Descargar PDF
                   </a>
                 )}

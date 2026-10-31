@@ -52,8 +52,8 @@ export function SeccionCargas({ acciones, aviso, error, detalle, puedeCargar }: 
               <input type="text" inputMode="numeric" name="correos" autoComplete="off" pattern="[0-9]*" className={CSS_INPUT} style={{ background: 'var(--surface)' }} />
             </label>
             <div className="flex flex-wrap gap-2">
-              <button type="submit" name="paso" value="previa" className={CSS_BOTON} style={{ background: 'var(--canvas)', color: 'var(--ink)' }}>Ver vista previa</button>
-              <button type="submit" name="paso" value="subir" className={CSS_BOTON} style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>Subir y enviar</button>
+              <button type="submit" name="paso" value="previa" className={`rv-btn rv-btn--secondary ${CSS_BOTON}`} style={{ background: 'var(--canvas)', color: 'var(--ink)' }}>Ver vista previa</button>
+              <button type="submit" name="paso" value="subir" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>Subir y enviar</button>
             </div>
           </form>
           <form action={acciones.contactos} className="space-y-2">
@@ -63,7 +63,7 @@ export function SeccionCargas({ acciones, aviso, error, detalle, puedeCargar }: 
               coordinador de operadores que YA existen (no crea a nadie); una celda vacía no borra lo que ya había.
             </p>
             <input type="file" name="archivo" accept=".csv,.txt,.xlsx,.xls" required className={CSS_INPUT} style={{ background: 'var(--surface)' }} />
-            <button type="submit" className={CSS_BOTON} style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>Subir correos</button>
+            <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>Subir correos</button>
           </form>
         </div>
       )}

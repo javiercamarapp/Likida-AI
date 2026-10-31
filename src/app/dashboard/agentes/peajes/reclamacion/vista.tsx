@@ -119,10 +119,10 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
               </div>
             </div>
             {!candidato && <div className="flex flex-wrap gap-2 mt-3">
-              <a href={`/api/export/peajes-reclamacion?desglose=${desglose}&formato=xlsx${ctx}`} className={CSS_BOTON} style={ESTILO_PRIMARIO}>
+              <a href={`/api/export/peajes-reclamacion?desglose=${desglose}&formato=xlsx${ctx}`} className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>
                 <FileDown width={13} height={13} strokeWidth={2} /> Excel
               </a>
-              <a href={`/api/export/peajes-reclamacion?desglose=${desglose}&formato=pdf${ctx}`} className={`${CSS_BOTON} hairline`} style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
+              <a href={`/api/export/peajes-reclamacion?desglose=${desglose}&formato=pdf${ctx}`} className={`rv-btn rv-btn--secondary ${CSS_BOTON} hairline`} style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
                 <FileDown width={13} height={13} strokeWidth={2} /> PDF
               </a>
             </div>}
@@ -134,7 +134,7 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
                   <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Margen de distancia a la caseta (m)</span>
                   <input name="margen" type="number" inputMode="numeric" min={100} max={5000} step={1} defaultValue={candidato.margenLejosM} className="rounded-lg hairline px-2 py-1 w-28" />
                 </label>
-                <button type="submit" className={`${CSS_BOTON} hairline`} style={{ background: 'var(--surface)', color: 'var(--ink)' }}>Guardar margen</button>
+                <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_BOTON} hairline`} style={{ background: 'var(--surface)', color: 'var(--ink)' }}>Guardar margen</button>
                 <span style={{ color: 'var(--muted)' }}>Un cruce se marca como candidato si la unidad pasó a más de ese margen (sumado al radio de la caseta). Por omisión 1,000 m; fíjalo en 200 o 500 m cuando se decida.</span>
               </form>
             )}

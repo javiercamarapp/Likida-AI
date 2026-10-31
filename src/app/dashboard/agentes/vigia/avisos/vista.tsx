@@ -66,7 +66,7 @@ function Aviso({ children }: { children: React.ReactNode }) {
 function Boton({ accion, children, tono }: { accion: string; children: React.ReactNode; tono?: 'peligro' }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" name="accion" value={accion} disabled={pending} className={BOTON} style={tono === 'peligro' ? { color: 'var(--bad)' } : undefined}>
+    <button type="submit" name="accion" value={accion} disabled={pending} className={`rv-btn ${tono === 'peligro' ? 'rv-btn--danger' : 'rv-btn--secondary'} ${BOTON}`} style={tono === 'peligro' ? { color: 'var(--bad)' } : undefined}>
       {children}
     </button>
   );
@@ -77,7 +77,7 @@ function BotonCopiar({ texto }: { texto: string }) {
   const { pending } = useFormStatus();
   return (
     <button
-      type="submit" name="accion" value="copiar" disabled={pending} className={BOTON}
+      type="submit" name="accion" value="copiar" disabled={pending} className={`rv-btn rv-btn--secondary ${BOTON}`}
       onClick={() => {
         try { void navigator.clipboard?.writeText(texto); } catch { /* sin portapapeles: el texto sigue a la vista para copiarlo a mano */ }
       }}

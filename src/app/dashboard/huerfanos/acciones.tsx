@@ -47,7 +47,7 @@ export function FilaAcciones({ huerfanoId, hayViajesVivos, sinMonto, buscarViaje
           <span className="text-[12px]" style={{ color: 'var(--muted)' }}>¿Descartarlo?</span>
           <BotonConfirmarDescarte />
           <button type="button" onClick={() => setConfirmando(false)}
-            className="hairline text-[12px] font-medium px-2.5 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
+            className="rv-btn rv-btn--secondary hairline text-[12px] font-medium px-2.5 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
             style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
             No
           </button>
@@ -98,7 +98,7 @@ function BotonAdjuntar() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="inline-flex items-center gap-1 text-[12px] font-medium px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50 shrink-0"
+      className="rv-btn rv-btn--primary inline-flex items-center gap-1 text-[12px] font-medium px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50 shrink-0"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Link2 width={12} height={12} strokeWidth={2} />
       {pending ? 'Adjuntando…' : 'Adjuntar'}
@@ -112,7 +112,7 @@ function BotonConfirmarDescarte() {
     /* Texto rojo sobre su fondo tenue (tokens existentes) — no se inventa un
        token de contraste para un botón sólido rojo. */
     <button type="submit" disabled={pending}
-      className="inline-flex items-center gap-1 text-[12px] font-medium px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--danger inline-flex items-center gap-1 text-[12px] font-medium px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
       <Trash2 width={12} height={12} strokeWidth={2} />
       {pending ? 'Descartando…' : 'Sí, descartar'}

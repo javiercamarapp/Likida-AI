@@ -59,7 +59,7 @@ function BotonMandar({ apagado }: { apagado: boolean }) {
     <button
       type="submit" disabled={pending || apagado}
       title={apagado ? 'El correo no está configurado en este entorno' : undefined}
-      className="inline-flex items-center gap-1.5 hairline text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)] disabled:opacity-40"
+      className="rv-btn rv-btn--secondary inline-flex items-center gap-1.5 hairline text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)] disabled:opacity-40"
       style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
       <Send width={13} height={13} strokeWidth={2} />
       {pending ? 'Mandando…' : 'Mándate una prueba'}

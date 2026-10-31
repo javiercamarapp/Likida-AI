@@ -206,7 +206,7 @@ export function VistaJornada({
               {(operadores ?? []).map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
             </select>
           </label>
-          <button type="submit" className="h-9 px-4 rounded-lg text-[13px] font-medium hairline hover:opacity-85 transition-opacity">
+          <button type="submit" className="rv-btn rv-btn--secondary h-9 px-4 rounded-lg text-[13px] font-medium hairline hover:opacity-85 transition-opacity">
             Ver
           </button>
         </form>

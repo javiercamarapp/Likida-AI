@@ -94,7 +94,7 @@ export function SeccionUmbralesAvisos({ datos }: { datos: UmbralesAvisosVista })
                 <Numero nombre="velocidad_max" etiqueta="Velocidad máx. (km/h)" valor={config.umbrales.secuencia_imposible.velocidadMaxKmh} min={VELOCIDAD_MIN_KMH} max={VELOCIDAD_MAX_KMH} ancho="w-[140px]" />
               </div>
             </div>
-            <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>Guardar umbrales</button>
+            <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Guardar umbrales</button>
           </form>
 
           <form action={acciones.guardarAvisos} className="space-y-3" id="plazo-avisos">
@@ -123,7 +123,7 @@ export function SeccionUmbralesAvisos({ datos }: { datos: UmbralesAvisosVista })
               <Interruptor nombre="recordatorio_archivo" etiqueta="Recordar que falta el archivo de la decena" activo={config.avisos.interruptores.recordatorio_archivo}
                 nota="Un solo recordatorio por decena, pasados los días de gracia desde su cierre sin que llegue el archivo. Apagado de origen." />
             </div>
-            <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>Guardar plazo y avisos</button>
+            <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Guardar plazo y avisos</button>
           </form>
 
           <form action={acciones.guardarDestinatario} className="space-y-2" id="destinatario-avisos">
@@ -134,7 +134,7 @@ export function SeccionUmbralesAvisos({ datos }: { datos: UmbralesAvisosVista })
                 <input name="telefono" defaultValue={config.telefono ?? ''} maxLength={30} placeholder="Vacío = solo en pantalla" inputMode="tel"
                   className={`${CSS_INPUT} w-[220px] mt-0.5`} style={ESTILO_INPUT} />
               </label>
-              <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>Guardar destinatario</button>
+              <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Guardar destinatario</button>
             </div>
             <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
               {config.telefono
