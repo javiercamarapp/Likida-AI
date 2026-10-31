@@ -23,6 +23,9 @@ export interface OpcionFiltro {
   href?: string;
 }
 
+/** Más opciones que esto: el popover trae un buscador adentro (choferes, operadores, clientes de 100+). */
+const UMBRAL_BUSCADOR = 12;
+
 /** Envía el formulario que contiene `el` (si lo hay). */
 function enviarForma(el: Element | null) {
   const forma = el?.closest('form');
@@ -57,14 +60,23 @@ export function FiltroOpciones({ etiqueta, opciones, valor, porDefecto = '', nom
   const oculto = useRef<HTMLInputElement>(null);
   const lista = useRef<HTMLDivElement>(null);
   const idLista = useId();
+  const [consulta, setConsulta] = useState('');
+  const teclas = useRef<{ texto: string; t: number }>({ texto: '', t: 0 });
 
   const elegida = opciones.find((o) => o.valor === actual);
   const activo = actual !== porDefecto;
-  const rotuloValor = elegida?.rotulo ?? actual;
-  const cerrar = () => setAbierto(false);
+  // B1: un valor de la URL que no está entre las opciones NO se pinta como id crudo.
+  const rotuloValor = elegida?.rotulo ?? 'Valor no válido';
+  const cerrar = () => { setAbierto(false); setConsulta(''); };
+  const conBuscador = opciones.length > UMBRAL_BUSCADOR;
+  const visibles = conBuscador && consulta.trim() !== ''
+    ? opciones.filter((o) => o.rotulo.toLocaleLowerCase('es').includes(consulta.trim().toLocaleLowerCase('es')))
+    : opciones;
+  // Sin JavaScript el chip no hace nada: se oculta y queda el respaldo de <noscript> (select o enlaces).
+  const ocultarChip = !listo && Boolean(nombre || opciones.some((o) => o.href));
 
   const elegir = (o: OpcionFiltro) => {
-    setAbierto(false);
+    cerrar();
     if (o.valor === actual) { ancla.current?.focus(); return; }
     setActual(o.valor);
     onCambio?.(o.valor);
@@ -76,17 +88,23 @@ export function FiltroOpciones({ etiqueta, opciones, valor, porDefecto = '', nom
   };
   const alTeclearLista = (e: KeyboardEvent<HTMLDivElement>) => {
     const items = [...e.currentTarget.querySelectorAll<HTMLElement>('[role="option"]')];
+    const enBuscador = (e.target as HTMLElement).tagName === 'INPUT';
     const i = items.indexOf(document.activeElement as HTMLElement);
     const ir = (k: number) => { e.preventDefault(); items[(k + items.length) % items.length]?.focus(); };
-    if (e.key === 'ArrowDown') ir(i + 1);
+    if (e.key === 'ArrowDown') ir(enBuscador ? 0 : i + 1);
     else if (e.key === 'ArrowUp') ir(i < 0 ? items.length - 1 : i - 1);
+    else if (enBuscador) return; // dentro del buscador las demás teclas escriben
     else if (e.key === 'Home') ir(0);
     else if (e.key === 'End') ir(items.length - 1);
+    else if (e.key === ' ' && (e.target as HTMLElement).tagName === 'A') { e.preventDefault(); (e.target as HTMLElement).click(); } // Espacio activa también el enlace
     else if (e.key.length === 1 && /\S/.test(e.key)) {
-      // Búsqueda por la inicial: salta a la siguiente opción cuyo rótulo empieza con la letra.
-      const letra = e.key.toLocaleLowerCase('es');
-      const orden = [...items.slice(i + 1), ...items.slice(0, i + 1)];
-      const hit = orden.find((el) => (el.textContent ?? '').trim().toLocaleLowerCase('es').startsWith(letra));
+      // Type-ahead acumulado: «Pa» + «t» = «Pat…» (el texto se olvida tras 700 ms).
+      const ahora = Date.now();
+      const base = ahora - teclas.current.t > 700 ? '' : teclas.current.texto;
+      const texto = base + e.key.toLocaleLowerCase('es');
+      teclas.current = { texto, t: ahora };
+      const orden = base === '' ? [...items.slice(i + 1), ...items.slice(0, i + 1)] : items;
+      const hit = orden.find((el) => (el.textContent ?? '').trim().toLocaleLowerCase('es').startsWith(texto));
       if (hit) { e.preventDefault(); hit.focus(); }
     }
   };
@@ -109,13 +127,14 @@ export function FiltroOpciones({ etiqueta, opciones, valor, porDefecto = '', nom
         ref={ancla}
         type="button"
         className={cx('rv-fl', className)}
+        hidden={ocultarChip}
         data-activo={activo ? '' : undefined}
         aria-label={ariaLabel ?? `${etiqueta}${activo ? `: ${rotuloValor}` : ''}`}
         aria-haspopup="listbox"
         aria-expanded={abierto}
         aria-controls={abierto ? idLista : undefined}
         disabled={deshabilitado}
-        onClick={() => setAbierto((v) => !v)}
+        onClick={() => (abierto ? cerrar() : setAbierto(true))}
         onKeyDown={alTeclearAncla}
       >
         <span className="rv-fl__etq">{etiqueta}</span>
@@ -131,14 +150,20 @@ export function FiltroOpciones({ etiqueta, opciones, valor, porDefecto = '', nom
         </noscript>
       ) : null}
       <Popover abierto={abierto} onCerrar={cerrar} ancla={ancla} etiqueta={etiqueta} alineacion="inicio" className="rv-fl__pop">
-        <div ref={lista} id={idLista} role="listbox" aria-label={etiqueta} className="rv-fl__lista" onKeyDown={alTeclearLista}>
-          {opciones.map((o, i) => {
+        <div className="rv-fl__lista" onKeyDown={alTeclearLista}>
+          {conBuscador ? (
+            <input type="search" className="rv-fl__buscar border-0 bg-transparent" value={consulta} onChange={(e) => setConsulta(e.target.value)}
+              placeholder="Buscar…" aria-label={`Buscar en ${etiqueta}`} data-autofocus="" autoComplete="off" />
+          ) : null}
+          <div ref={lista} id={idLista} role="listbox" aria-label={etiqueta} className="rv-fl__opciones">
+          {visibles.length === 0 ? <p className="rv-fl__nada">Sin coincidencias</p> : null}
+          {visibles.map((o, i) => {
             const sel = o.valor === actual;
             const comun = {
               role: 'option' as const,
               'aria-selected': sel,
               tabIndex: sel || (!elegida && i === 0) ? 0 : -1,
-              'data-autofocus': sel || (!elegida && i === 0) ? '' : undefined,
+              'data-autofocus': !conBuscador && (sel || (!elegida && i === 0)) ? '' : undefined,
               className: 'rv-fl__op',
             };
             const cuerpo = (
@@ -149,11 +174,12 @@ export function FiltroOpciones({ etiqueta, opciones, valor, porDefecto = '', nom
             );
             // Con `href` la opción es un enlace real (el estado vive en la URL que arma la pantalla); sin él, un botón.
             return o.href ? (
-              <Link key={o.valor === '' ? `vacio-${i}` : o.valor} href={o.href} prefetch={false} {...comun} onClick={() => setAbierto(false)}>{cuerpo}</Link>
+              <Link key={o.valor === '' ? `vacio-${i}` : o.valor} href={o.href} prefetch={false} {...comun} onClick={cerrar}>{cuerpo}</Link>
             ) : (
               <button key={o.valor === '' ? `vacio-${i}` : o.valor} type="button" {...comun} onClick={() => elegir(o)}>{cuerpo}</button>
             );
           })}
+          </div>
         </div>
       </Popover>
     </>
@@ -192,21 +218,45 @@ export function FiltroBusqueda({ nombre, valor, placeholder = 'Buscar', etiqueta
   );
 }
 
-/** Fecha (type=date) con su rótulo dentro del chip. Al elegir, envía la forma. */
+/** ¿Fecha completa y razonable? (Chrome va dando 0002-…, 0020-… mientras se teclea el año.) */
+function fechaValida(v: string, min?: string, max?: string): boolean {
+  if (v === '') return true;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const anio = Number(v.slice(0, 4));
+  return anio >= 1900 && anio <= 2200 && (!min || v >= min) && (!max || v <= max);
+}
+
+/** Fecha (type=date) con su rótulo dentro del chip. Envía la forma SOLO al elegir del calendario (cambio sin teclear), al salir del campo
+ *  o con Intro, y siempre con una fecha completa y válida: teclear el año dígito a dígito NO recarga la página. */
 export function FiltroFecha({ nombre, etiqueta, valor, min, max, autoEnvio = true, className }: {
   nombre: string;
   etiqueta: string;
   valor?: string | null;
   min?: string;
   max?: string;
-  /** Elegir la fecha envía la forma (por omisión). Falso en formas que ACCIONAN algo (exportar). */
+  /** Envía la forma al terminar de elegir (por omisión). Falso en formas que ACCIONAN algo (exportar). */
   autoEnvio?: boolean;
   className?: string;
 }) {
+  const tecleando = useRef(false);
+  const inicial = valor ?? '';
+  const ultimo = useRef(inicial); // lo último que se envió: Intro + blur no duplican el envío
+  const enviar = (el: HTMLInputElement) => {
+    tecleando.current = false;
+    if (autoEnvio && el.value !== ultimo.current && fechaValida(el.value, min, max)) { ultimo.current = el.value; enviarForma(el); }
+  };
   return (
     <label className={cx('rv-fl rv-fl--fecha', className)} data-activo={valor ? '' : undefined}>
       <span className="rv-fl__etq">{etiqueta}</span>
-      <input type="date" name={nombre} defaultValue={valor ?? ''} min={min} max={max} className="border-0 bg-transparent" data-auto={autoEnvio ? '' : undefined} />
+      <input
+        type="date" name={nombre} defaultValue={inicial} min={min} max={max} className="border-0 bg-transparent"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); enviar(e.currentTarget); }
+          else if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete') tecleando.current = true;
+        }}
+        onChange={(e) => { if (!tecleando.current) enviar(e.currentTarget); }}
+        onBlur={(e) => enviar(e.currentTarget)}
+      />
     </label>
   );
 }

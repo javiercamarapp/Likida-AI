@@ -131,7 +131,7 @@
 /* ── ChipsFiltro: filtros activos, quitables, estado en la URL ── */
 .rv-chipsfiltro { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
 .rv-chipsfiltro__lista { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.rv-chipsfiltro__chip { display: inline-flex; align-items: center; gap: 2px; min-height: 26px; padding: 0 2px 0 10px; border: 1px solid var(--line2); border-radius: 999px; background: var(--chip-activo-bg, var(--canvas)); color: var(--chip-activo-fg, var(--ink)); font-size: 12px; max-width: 100%; }
+.rv-chipsfiltro__chip { display: inline-flex; align-items: center; gap: 2px; min-height: 28px; padding: 0 4px 0 10px; border: 1px solid var(--line2); border-radius: 999px; background: var(--chip-activo-bg, var(--canvas)); color: var(--chip-activo-fg, var(--ink)); font-size: 12px; max-width: 100%; }
 .rv-chipsfiltro__texto { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rv-chipsfiltro__etq { color: var(--muted); }
 .rv-chipsfiltro__quitar { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; color: inherit; }

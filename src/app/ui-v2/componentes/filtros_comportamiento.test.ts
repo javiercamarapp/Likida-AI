@@ -29,6 +29,8 @@ function App() {
         <FiltroFecha nombre="desde" etiqueta="Desde" valor="" />
         <FiltroInterruptor nombre="vista" valor="excepciones" etiqueta="Solo con excepciones" marcado={false} />
         <FiltroBusqueda nombre="q" placeholder="Folio" />
+        <FiltroOpciones nombre="chofer" etiqueta="Chofer" valor="" opciones={[{ valor: '', rotulo: 'Todos' }, ...Array.from({ length: 30 }, (_, i) => ({ valor: 'c' + i, rotulo: (i % 2 ? 'Patricio ' : 'Marisol ') + i }))]} />
+        <FiltroOpciones nombre="raro" etiqueta="Terminal" valor="uuid-desconocido" opciones={[{ valor: '', rotulo: 'Todas' }, { valor: 't1', rotulo: 'Patio Norte' }]} />
       </BarraFiltros>
       <Periodo />
       <FiltroOpciones etiqueta="Estado" valor="todos" porDefecto="todos" opciones={[{ valor: 'todos', rotulo: 'Todos', href: '/v?f=todos' }, { valor: 'abiertos', rotulo: 'Abiertos', href: '/v?f=abiertos&q=a' }]} />
@@ -115,6 +117,67 @@ describe.skipIf(SIN_NAVEGADOR)('Filtros LF · comportamiento en Chromium', { tim
     expect(e[0].get('desde')).toBe('2026-10-01');
     expect(e[1].get('vista')).toBe('excepciones');
     expect(e.at(-1)!.get('q')).toBe('V-10');
+    await p.close();
+  });
+  it('A2: teclear la fecha dígito a dígito NO envía hasta salir del campo; el calendario (cambio sin teclear) envía', async () => {
+    const p = await abrir();
+    const f = p.locator('input[name="desde"]');
+    await f.focus();
+    await f.pressSequentially('10012026', { delay: 30 });
+    expect(await envios(p)).toEqual([]); // 0002, 0020, 0202… no recargan
+    await f.blur();
+    const e = await envios(p);
+    expect(e).toHaveLength(1);
+    expect(new URLSearchParams(e[0]).get('desde')).toBe('2026-10-01');
+    await p.close();
+  });
+  it('A2: Intro con año incompleto no envía; con fecha completa sí', async () => {
+    const p = await abrir();
+    const f = p.locator('input[name="hasta"]').or(p.locator('input[name="desde"]')).first();
+    await f.focus();
+    await f.pressSequentially('1001', { delay: 20 }); // año 0001
+    await p.keyboard.press('Enter');
+    expect(await envios(p)).toEqual([]);
+    await p.keyboard.type('2026');
+    await p.keyboard.press('Enter');
+    expect((await envios(p)).length).toBe(1);
+    await p.close();
+  });
+  it('A1: el foco visible de los chips cabe dentro de la fila con scroll (no se recorta)', async () => {
+    const p = await abrir();
+    await p.keyboard.press('Tab');
+    const r = await p.evaluate(() => {
+      const el = document.activeElement as HTMLElement; const z = document.querySelector('.rv-filtros__chips')!.getBoundingClientRect(); const c = el.getBoundingClientRect();
+      return { arriba: c.top - z.top, abajo: z.bottom - c.bottom, izq: c.left - z.left, outline: getComputedStyle(el).outlineWidth, off: getComputedStyle(el).outlineOffset, foco: el.matches(':focus-visible') };
+    });
+    expect(r.foco).toBe(true);
+    expect(r.arriba).toBeGreaterThanOrEqual(4); expect(r.abajo).toBeGreaterThanOrEqual(4); expect(r.izq).toBeGreaterThanOrEqual(4);
+    if (process.env.UI2_CAPT) await p.screenshot({ path: join(process.env.UI2_CAPT, 'lf-07-foco__1280__claro.png'), clip: { x: 0, y: 0, width: 700, height: 90 } });
+    await p.close();
+  });
+  it('M1: opciones del popover a 44 px bajo 820 px', async () => {
+    const p = await abrir(390);
+    await p.getByRole('button', { name: 'Cuadre' }).click();
+    expect(await p.evaluate(() => Math.round(document.querySelector('.rv-fl__op')!.getBoundingClientRect().height))).toBeGreaterThanOrEqual(44);
+    await p.close();
+  });
+  it('M4: lista larga trae buscador y type-ahead acumulado; Espacio elige', async () => {
+    const p = await abrir();
+    await p.getByRole('button', { name: 'Chofer' }).click();
+    expect(await p.locator('input[aria-label="Buscar en Chofer"]').count()).toBe(1);
+    await p.keyboard.type('patricio 1');
+    expect(await p.locator('[role="option"]').count()).toBeGreaterThan(0);
+    expect(await p.locator('[role="option"]:not(:has-text("Patricio"))').count()).toBe(0);
+    await p.keyboard.press('ArrowDown');
+    await p.keyboard.press('Space');
+    expect(new URLSearchParams((await envios(p))[0]).get('chofer')).toMatch(/^c\d+$/);
+    await p.close();
+  });
+  it('B1: un valor de la URL fuera de las opciones no se pinta como id crudo', async () => {
+    const p = await abrir();
+    const t = await p.evaluate(() => [...document.querySelectorAll('button.rv-fl')].find((x) => x.textContent?.includes('Terminal'))!.textContent);
+    expect(t).not.toContain('uuid-desconocido');
+    expect(t).toContain('Valor no válido');
     await p.close();
   });
   it('«Limpiar» es un enlace al contexto sin filtros; modo cliente (periodo) cambia sin enviar', async () => {
