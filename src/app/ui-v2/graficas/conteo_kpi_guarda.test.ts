@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- recorre el propio arbol de src/ del repo */
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
