@@ -24,7 +24,7 @@ const fuentes = [
   `html{--font-sans-ui:'Hanken Grotesk UI';--font-display:'Hanken Grotesk UI';--font-mono:'IBM Plex Mono';--font-instrument:'Instrument Sans';--font-fraunces:'Fraunces'}`,
   `[data-ui="v2"]{--font-sans-ui:'Hanken Grotesk UI';--font-display:'Hanken Grotesk UI'}`,
 ].join('\n');
-const css = readFileSync(path.join(OUT, 'v2full.css'), 'utf8') + '\n' + readFileSync(path.join(raiz, 'src/app/login/login.css'), 'utf8') + '\n' + fuentes;
+const css = readFileSync(path.join(OUT, 'v2full.css'), 'utf8') + '\n' + readFileSync(path.join(raiz, 'src/app/ui-v2/marco-publico.css'), 'utf8') + '\n' + readFileSync(path.join(raiz, 'src/app/login/login.css'), 'utf8') + '\n' + fuentes;
 const motor = readFileSync(path.join(raiz, 'src/components/login/particle-engine.js'), 'utf8').replace(/export \{ Te as mountLoginParticles \};?/, 'window.mountLoginParticles = Te;');
 const pub = path.join(raiz, 'public');
 const dataUri = (f) => `data:image/png;base64,${readFileSync(path.join(pub, 'images', f)).toString('base64')}`;
