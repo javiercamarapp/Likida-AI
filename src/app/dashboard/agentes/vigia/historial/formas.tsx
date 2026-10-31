@@ -15,7 +15,7 @@ const AYUDA = 'text-[11px] mt-1';
 function Enviar({ children, Icono, peligro }: { children: React.ReactNode; Icono: typeof Save; peligro?: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className="hairline rounded-lg px-3 h-9 text-[12.5px] inline-flex items-center gap-1.5 disabled:opacity-60 hover:bg-[var(--canvas)]" style={peligro ? { color: 'var(--bad)' } : undefined}>
+    <button type="submit" disabled={pending} className={`rv-btn ${peligro ? 'rv-btn--danger' : 'rv-btn--secondary'} hairline rounded-lg px-3 h-9 text-[12px] inline-flex items-center gap-1.5 disabled:opacity-60 hover:bg-[var(--canvas)]`} style={peligro ? { color: 'var(--bad)' } : undefined}>
       <Icono width={14} height={14} strokeWidth={1.75} aria-hidden />{pending ? 'Un momento…' : children}
     </button>
   );
@@ -38,7 +38,7 @@ export function FormaAltaGrupo({ accion, clientes }: { accion: AccionGrupos; cli
           <input name="nombre" required maxLength={120} className={CAMPO} />
         </label>
       </div>
-      <label className="flex items-start gap-2 text-[12.5px]">
+      <label className="flex items-start gap-2 text-[12px]">
         <input type="checkbox" name="critico" className="mt-0.5" />
         <span><strong>Cliente crítico.</strong> Se le atiende con el plazo corto de respuesta de la configuración del Vigía.</span>
       </label>
@@ -54,7 +54,7 @@ export function FilaCritico({ accion, grupoId, critico }: { accion: AccionGrupos
     <form action={despachar} className="inline-flex items-center gap-2">
       <input type="hidden" name="grupoId" value={grupoId} />
       <input type="hidden" name="critico" value={critico ? 'no' : 'si'} />
-      <button type="submit" className="hairline rounded-md px-2 h-7 text-[11.5px] hover:bg-[var(--canvas)]">{critico ? 'Quitar crítico' : 'Marcar crítico'}</button>
+      <button type="submit" className="rv-btn rv-btn--secondary hairline rounded-md px-2 h-7 text-[11px] hover:bg-[var(--canvas)]">{critico ? 'Quitar crítico' : 'Marcar crítico'}</button>
       <AvisoResultado estado={estado} />
     </form>
   );
@@ -65,7 +65,7 @@ export function FilaBorrar({ accion, grupoId }: { accion: AccionGrupos; grupoId:
   return (
     <form action={despachar} className="inline-flex items-center gap-2">
       <input type="hidden" name="grupoId" value={grupoId} />
-      <button type="submit" className="rounded-md px-2 h-7 text-[11.5px] inline-flex items-center gap-1 hover:bg-[var(--canvas)]" style={{ color: 'var(--bad)' }} aria-label="Borrar el grupo y todo su histórico">
+      <button type="submit" className="rv-btn rv-btn--danger rounded-md px-2 h-7 text-[11px] inline-flex items-center gap-1 hover:bg-[var(--canvas)]" style={{ color: 'var(--bad)' }} aria-label="Borrar el grupo y todo su histórico">
         <Trash2 width={12} height={12} strokeWidth={1.75} aria-hidden />Borrar
       </button>
       <AvisoResultado estado={estado} />
@@ -127,7 +127,7 @@ export function FilaRetirarRapida({ accion, respuestaId }: { accion: AccionGrupo
   return (
     <form action={despachar} className="inline-flex items-center gap-2">
       <input type="hidden" name="respuestaId" value={respuestaId} />
-      <button type="submit" className="rounded-md px-2 h-7 text-[11.5px] inline-flex items-center gap-1 hover:bg-[var(--canvas)]" style={{ color: 'var(--bad)' }} aria-label="Retirar esta respuesta rápida">
+      <button type="submit" className="rv-btn rv-btn--danger rounded-md px-2 h-7 text-[11px] inline-flex items-center gap-1 hover:bg-[var(--canvas)]" style={{ color: 'var(--bad)' }} aria-label="Retirar esta respuesta rápida">
         <Trash2 width={12} height={12} strokeWidth={1.75} aria-hidden />Retirar
       </button>
       <AvisoResultado estado={estado} />

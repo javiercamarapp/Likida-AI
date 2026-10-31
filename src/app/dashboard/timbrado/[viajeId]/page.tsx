@@ -52,12 +52,12 @@ export default async function PaginaTimbradoViaje({
   return (
     <main className="max-w-3xl mx-auto px-6 py-8 space-y-5">
       <div className="flex items-start justify-between gap-4">
-        <Link href={`${RUTA}${sufijoTenant(sp)}`} className="text-[12.5px] font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>
+        <Link href={`${RUTA}${sufijoTenant(sp)}`} className="text-[12px] font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>
           ← Volver a Timbrado
         </Link>
         <Link
           href={`/dashboard/carta-porte/borrador/${v.viajeId}${sufijoTenant(sp)}`}
-          className="text-[12.5px] font-medium hover:opacity-75"
+          className="text-[12px] font-medium hover:opacity-75"
           style={{ color: 'var(--marca)' }}
         >
           Ver el borrador completo →
@@ -65,8 +65,8 @@ export default async function PaginaTimbradoViaje({
       </div>
 
       <header className="space-y-1">
-        <h1 className="font-display text-[19px] font-semibold">Timbrado — viaje {rotulo}</h1>
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <h1 className="font-display text-[20px] font-semibold">Timbrado — viaje {rotulo}</h1>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           {v.origen && v.destino ? `${v.origen} → ${v.destino}` : 'Ruta sin capturar'}
           {v.unidadEconomico ? ` · Unidad ${v.unidadEconomico}` : ''}
           {' · '}{numero(v.mercancias.length)} mercancía(s)

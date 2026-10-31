@@ -10,7 +10,7 @@ import type { AccionRelogin } from './relogin-controles';
 import { SeccionControlEmision, type DatosControl } from './control-emision';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /** Topes de las listas — declarados en pantalla cuando recortan, nunca en
  *  silencio (los encabezados suman la lista COMPLETA). */
@@ -118,16 +118,16 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
     <MarcoPagina titulo="Facturas en automático" apoyo="Tickets sin CFDI: lo que te toca a ti, lo que la máquina resuelve sola y lo que está incompleto o vencido.">
 
       <TiraCifras sello={selloHoy('Tickets sin CFDI')}>
-        <Cifra etiqueta="Por facturar" valor={numero(ordenados.length)} nota="tickets sin CFDI, hoy" />
-        <Cifra etiqueta="Monto sin factura" valor={mxn(montoSinFactura)} />
-        <Cifra etiqueta="Urgentes (≤2 días)" valor={numero(urgentes.length)} tono={urgentes.length > 0 ? 'warn' : undefined} />
-        <Cifra etiqueta="Vencidos" valor={numero(vencidos.length)} tono={vencidos.length > 0 ? 'bad' : undefined} />
+        <Cifra info="facturas.por_facturar" etiqueta="Por facturar" valor={numero(ordenados.length)} nota="tickets sin CFDI, hoy" />
+        <Cifra info="facturas.monto_sin_factura" etiqueta="Monto sin factura" valor={mxn(montoSinFactura)} />
+        <Cifra info="facturas.urgentes" etiqueta="Urgentes (≤2 días)" valor={numero(urgentes.length)} tono={urgentes.length > 0 ? 'warn' : undefined} />
+        <Cifra info="facturas.vencidos" etiqueta="Vencidos" valor={numero(vencidos.length)} tono={vencidos.length > 0 ? 'bad' : undefined} />
       </TiraCifras>
 
       <div className="grid lg:grid-cols-3 gap-4">
         {/* ── TU COLA: lo único de esta página que espera una acción tuya ── */}
         <section className="card p-4 lg:col-span-2 flex flex-col">
-          <h2 className="font-display text-[15px] font-semibold">Te toca a ti</h2>
+          <TituloRecuadro info="facturas.te_toca">Te toca a ti</TituloRecuadro>
           <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
             Portales que piden TU cuenta, o donde la máquina se topó con un muro — con los datos ya leídos
             {monto(teToca) > 0 && <> · <span className="cifra-mono">{mxn(monto(teToca))}</span></>}
@@ -163,16 +163,16 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
 
         {/* ── Lo que hizo solo ── */}
         <section className="card p-4 flex flex-col">
-          <h2 className="font-display text-[15px] font-semibold mb-3">Lo que hizo solo</h2>
+          <TituloRecuadro info="facturas.hizo_solo" className="mb-3">Lo que hizo solo</TituloRecuadro>
           {extra.conCfdi !== null && (
-            <p className="text-[12.5px] mb-2">
+            <p className="text-[12px] mb-2">
               <span className="cifra-mono text-[20px] font-medium block">{numero(extra.conCfdi)}</span>
               <span style={{ color: 'var(--faint)' }}>tickets con factura ya amarrada — emitida sola, pescada
                 del XML que mandaron o capturada a mano (el folio tecleado solo se valida de forma, no contra el SAT), histórico.</span>
             </p>
           )}
           {bloqueados.length > 0 && (
-            <div className="space-y-2 text-[12.5px] pt-2 border-t" style={{ borderColor: 'var(--line2)' }}>
+            <div className="space-y-2 text-[12px] pt-2 border-t" style={{ borderColor: 'var(--line2)' }}>
               {bloqueados.slice(0, MAX_MINI).map(({ t, r }) => (
                 <div key={t.gastoId} className="flex items-start gap-2">
                   <ShieldAlert width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--warn)' }} />
@@ -189,7 +189,7 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
             <Leyenda>No se pudo leer el acumulado ahora mismo.</Leyenda>
           )}
           {extra.conCfdi === 0 && bloqueados.length === 0 && (
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
               Aún no amarra su primera factura en esta flota — en cuanto emita una o pesque un
               XML, aquí se cuenta.
             </p>
@@ -207,7 +207,7 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
       <div className="grid lg:grid-cols-3 gap-4">
         {/* ── Monitoreo: lo que NO tienes que hacer ── */}
         <section className="card p-4 flex flex-col">
-          <h2 className="font-display text-[15px] font-semibold">La máquina se encarga</h2>
+          <TituloRecuadro info="facturas.maquina">La máquina se encarga</TituloRecuadro>
           <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
             {extra.emite
               ? 'Sin cuenta y con todo leído: los factura sola en la próxima corrida'
@@ -238,7 +238,7 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
 
         {/* ── Incompletos: se dice QUÉ falta ── */}
         <section className="card p-4 flex flex-col">
-          <h2 className="font-display text-[15px] font-semibold">Incompletos</h2>
+          <TituloRecuadro info="facturas.incompletos">Incompletos</TituloRecuadro>
           <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>Ni tú ni la máquina pueden con lo que hay — esto es lo que falta</p>
           {incompletos.length === 0 ? (
             <Leyenda>Ninguno — todo ticket sin factura tiene con qué facturarse.</Leyenda>
@@ -262,7 +262,7 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
 
         {/* ── Dónde está el dinero sin factura ── */}
         <section className="card p-4 flex flex-col">
-          <h2 className="font-display text-[15px] font-semibold">Sin factura, por comercio</h2>
+          <TituloRecuadro info="facturas.por_comercio">Sin factura, por comercio</TituloRecuadro>
           <p className="text-[11px] mb-2" style={{ color: 'var(--faint)' }}>Dónde se concentra el monto pendiente</p>
           {donaComercios.length === 0 ? (
             <Leyenda>Ningún gasto sin factura — cuando entre un comprobante sin CFDI, aquí se reparte.</Leyenda>
@@ -294,7 +294,7 @@ function Leyenda({ children, icono }: { children: React.ReactNode; icono?: React
     <div className="flex-1 min-h-[110px] flex items-center justify-center">
       <div className="text-center max-w-[32ch]">
         {icono && <div className="flex justify-center mb-2">{icono}</div>}
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{children}</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{children}</p>
       </div>
     </div>
   );

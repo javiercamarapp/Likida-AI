@@ -17,7 +17,9 @@ const COLS: ColumnaTabla<Fila>[] = [
 ];
 const base = { etiqueta: 'Viajes', columnas: COLS, idFila: (f: Fila) => f.id, base: '/dashboard/viajes' };
 const html = (p: Partial<Parameters<typeof TablaLista<Fila>>[0]> = {}) => renderToStaticMarkup(<TablaLista<Fila> {...base} filas={FILAS} params={{}} {...p} />);
-const folios = (h: string) => [...h.matchAll(/<th scope="row"[^>]*>([\s\S]*?)<\/th>/g)].map((m) => m[1].replace(/<[^>]+>/g, ''));
+/** El texto de un fragmento: une sus nodos de texto (lo que queda entre «>» y «<»), sin «limpiar» etiquetas con reemplazos. */
+const texto = (fragmento: string) => [...fragmento.matchAll(/>([^<>]+)</g)].map((m) => m[1]).join('');
+const folios = (h: string) => [...h.matchAll(/<th scope="row"[^>]*>([\s\S]*?)<\/th>/g)].map((m) => texto(`>${m[1]}<`));
 
 describe('TablaLista · semántica accesible', () => {
   it('caption, scope=col en cabeceras, scope=row en la columna principal y región con foco', () => {

@@ -27,7 +27,7 @@ function rotuloCliente(c: ClienteMcpConectado): string {
 export function TablaClientesMcp({ clientes }: { clientes: ClienteMcpConectado[] }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-[12.5px]">
+      <table className="w-full text-[12px]">
         <thead>
           <tr className="text-left" style={{ color: 'var(--muted)' }}>
             <th className="px-3 py-2 font-medium">Cliente</th>
@@ -93,7 +93,7 @@ function TarjetaUsuarioMcp({ s, cortarSesiones }: {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <p className="text-[13px] font-medium">{quien}</p>
-          <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+          <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
             {s.email ?? 'sin correo en el padrón'} · {ROL_LABEL[s.rol as RolAppUser] ?? s.rol}
           </p>
           <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>

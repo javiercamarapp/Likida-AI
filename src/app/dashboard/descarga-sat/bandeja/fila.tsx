@@ -37,21 +37,21 @@ export type AccionFila = (previo: ResultadoFila, fd: FormData) => Promise<Result
 function EstadoCandidato({ c }: { c: CandidatoVista }) {
   if (c.vive === null) {
     return (
-      <span className="text-[11.5px]" style={{ color: 'var(--warn)' }}>
+      <span className="text-[11px]" style={{ color: 'var(--warn)' }}>
         no se pudo comprobar si este gasto sigue ahí
       </span>
     );
   }
   if (c.vive === false) {
     return (
-      <span className="text-[11.5px]" style={{ color: 'var(--bad)' }}>
+      <span className="text-[11px]" style={{ color: 'var(--bad)' }}>
         ese gasto ya no existe (se borró el viaje del que colgaba)
       </span>
     );
   }
   if (c.yaTieneCfdi === true) {
     return (
-      <span className="text-[11.5px]" style={{ color: 'var(--warn)' }}>
+      <span className="text-[11px]" style={{ color: 'var(--warn)' }}>
         ya tiene comprobante — le llegó por otro camino
       </span>
     );
@@ -65,13 +65,13 @@ function EstadoCandidato({ c }: { c: CandidatoVista }) {
     || c.conceptoHoy !== c.conceptoOfrecido;
   if (!cambio) {
     return (
-      <span className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+      <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
         sin cambios desde el cruce
       </span>
     );
   }
   return (
-    <span className="text-[11.5px]" style={{ color: 'var(--warn)' }}>
+    <span className="text-[11px]" style={{ color: 'var(--warn)' }}>
       cambió — hoy: {c.montoHoy === null ? 'sin monto legible' : mxn(c.montoHoy)}
       {c.fechaHoy ? ` · ${fechaMx(c.fechaHoy)}` : ''}
       {c.conceptoHoy ? ` · ${c.conceptoHoy}` : ''}
@@ -125,7 +125,7 @@ export function FilaComprobante({
           {fila.fecha ? fechaMx(fila.fecha) : 'sin fecha'}
           {fila.tipoComprobante ? ` · tipo ${fila.tipoComprobante}` : ''}
         </span>
-        <span className="ml-auto cifra-mono text-[10.5px] shrink-0" style={{ color: 'var(--faint)' }}
+        <span className="ml-auto cifra-mono text-[11px] shrink-0" style={{ color: 'var(--faint)' }}
           title="Folio fiscal — la llave del comprobante ante el SAT">
           {fila.cfdiUuid}
         </span>
@@ -138,13 +138,13 @@ export function FilaComprobante({
 
       {/* La firma viva: quién dejó esta fila como está. */}
       {fila.resueltoPorEmail && (
-        <p className="text-[11.5px] mt-1 m-0" style={{ color: 'var(--faint)' }}>
+        <p className="text-[11px] mt-1 m-0" style={{ color: 'var(--faint)' }}>
           Lo dejó así {fila.resueltoPorEmail}
           {fila.resueltoEn ? ` el ${fechaHoraMx(fila.resueltoEn)}` : ''}.
         </p>
       )}
       {!fila.resueltoPorEmail && fila.estatus === 'casado' && (
-        <p className="text-[11.5px] mt-1 m-0" style={{ color: 'var(--faint)' }}>
+        <p className="text-[11px] mt-1 m-0" style={{ color: 'var(--faint)' }}>
           Casó solo: lo decidió el cruce automático, no una persona.
         </p>
       )}
@@ -172,14 +172,14 @@ export function FilaComprobante({
             </p>
           ) : (
             <div className="space-y-1.5">
-              <p className="text-[11.5px] m-0" style={{ color: 'var(--muted)' }}>
+              <p className="text-[11px] m-0" style={{ color: 'var(--muted)' }}>
                 Varios gastos empataron con este importe y Likida no adivina cuál es.
                 Elige tú — y quedará firmado con tu correo.
               </p>
               {fila.candidatos.map((c) => (
                 <div key={c.gastoId} className="hairline rounded-lg px-2.5 py-2 flex items-center gap-2.5 flex-wrap"
                   style={{ background: 'var(--canvas)' }}>
-                  <span className="text-[12.5px]">
+                  <span className="text-[12px]">
                     {c.montoOfrecido === null ? 'sin monto anotado' : mxn(c.montoOfrecido)}
                     {c.fechaOfrecida ? ` · ${fechaMx(c.fechaOfrecida)}` : ''}
                     {c.conceptoOfrecido ? ` · ${c.conceptoOfrecido}` : ''}
@@ -200,7 +200,7 @@ export function FilaComprobante({
         {/* ── DISPONIBLE: el buscador de gastos ───────────────────────── */}
         {fila.estatus === 'disponible' && busqueda !== null && (
           <div className="hairline rounded-lg p-2.5 space-y-2" style={{ background: 'var(--canvas)' }}>
-            <p className="text-[11.5px] m-0" style={{ color: 'var(--muted)' }}>
+            <p className="text-[11px] m-0" style={{ color: 'var(--muted)' }}>
               Solo se ofrecen gastos de tu flota que TODAVÍA no tienen comprobante. El
               importe viene prellenado con el total del CFDI (± $1). Desde aquí no se crea
               un gasto: si nadie lo reportó, ése es el hallazgo.
@@ -221,7 +221,7 @@ export function FilaComprobante({
                   <ul className="space-y-1.5 m-0 p-0 list-none">
                     {busqueda.gastos.map((g) => (
                       <li key={g.id} className="flex items-center gap-2.5 flex-wrap">
-                        <span className="text-[12.5px]">
+                        <span className="text-[12px]">
                           {mxn(g.monto)}
                           {g.fecha ? ` · ${fechaMx(g.fecha)}` : ' · sin fecha'}
                           {` · ${g.concepto}`}
@@ -238,7 +238,7 @@ export function FilaComprobante({
                   </ul>
                 )}
                 {busqueda.truncada && (
-                  <p className="text-[11.5px] m-0" style={{ color: 'var(--warn)' }}>
+                  <p className="text-[11px] m-0" style={{ color: 'var(--warn)' }}>
                     Hay más gastos que cumplen esos filtros de los que caben aquí — esta lista
                     está recortada. Acota la fecha o el importe para verlos todos.
                   </p>
@@ -255,7 +255,7 @@ export function FilaComprobante({
             placeholder={motivando === 'ignorar'
               ? 'Por qué se archiva (obligatorio) — «no es de esta flota», «duplicado del folio X»…'
               : 'Por qué se deshace (obligatorio) — «era del ticket de la otra unidad»…'}
-            className="w-full text-[12.5px] px-3 py-2 rounded-lg hairline"
+            className="w-full text-[12px] px-3 py-2 rounded-lg hairline"
             style={{ background: 'var(--canvas)' }} />
         )}
 
@@ -331,22 +331,22 @@ export function FilaComprobante({
           <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--muted)' }}>
             Importe
             <input name="bimporte" defaultValue={busqueda.importe} inputMode="decimal"
-              className="text-[12.5px] rounded-lg px-2 py-1.5 hairline w-28" style={{ background: 'var(--canvas)' }} />
+              className="text-[12px] rounded-lg px-2 py-1.5 hairline w-28" style={{ background: 'var(--canvas)' }} />
           </label>
           <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--muted)' }}>
             Desde
             <input name="bdesde" type="date" defaultValue={busqueda.desde}
-              className="text-[12.5px] rounded-lg px-2 py-1.5 hairline" style={{ background: 'var(--canvas)' }} />
+              className="text-[12px] rounded-lg px-2 py-1.5 hairline" style={{ background: 'var(--canvas)' }} />
           </label>
           <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--muted)' }}>
             Hasta
             <input name="bhasta" type="date" defaultValue={busqueda.hasta}
-              className="text-[12.5px] rounded-lg px-2 py-1.5 hairline" style={{ background: 'var(--canvas)' }} />
+              className="text-[12px] rounded-lg px-2 py-1.5 hairline" style={{ background: 'var(--canvas)' }} />
           </label>
           <label className="flex flex-col gap-1 text-[11px] flex-1 min-w-40" style={{ color: 'var(--muted)' }}>
             Folio o RFC del ticket
             <input name="btexto" defaultValue={busqueda.texto} placeholder="A-1234 · XAXX010101000"
-              className="text-[12.5px] rounded-lg px-2 py-1.5 hairline w-full" style={{ background: 'var(--canvas)' }} />
+              className="text-[12px] rounded-lg px-2 py-1.5 hairline w-full" style={{ background: 'var(--canvas)' }} />
           </label>
           <button type="submit"
             className="text-[12px] font-medium px-3 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">
@@ -358,12 +358,12 @@ export function FilaComprobante({
       {/* ── EL EXPEDIENTE: lo que hace que deshacer no sea borrar ────── */}
       {fila.historial.length > 0 && (
         <details className="mt-2.5">
-          <summary className="text-[11.5px] cursor-pointer" style={{ color: 'var(--muted)' }}>
+          <summary className="text-[11px] cursor-pointer" style={{ color: 'var(--muted)' }}>
             Qué se ha decidido sobre este comprobante ({fila.historial.length})
           </summary>
           <ul className="mt-1.5 space-y-1 m-0 p-0 list-none">
             {fila.historial.map((h, i) => (
-              <li key={i} className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+              <li key={i} className="text-[11px]" style={{ color: 'var(--muted)' }}>
                 <strong>{h.acto}</strong>{' '}
                 {h.estatusAntes} → {h.estatusDespues} ·{' '}
                 {/* `null` en actorEmail SOLO ocurre en 'degradado': lo hizo la

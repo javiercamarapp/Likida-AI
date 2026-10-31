@@ -75,15 +75,15 @@ export function VistaRentabilidad({
                 <Cifra
                   icono={<Banknote width={14} height={14} strokeWidth={1.75} />}
                   etiqueta="Ingreso de fletes liquidados" valor={rentabilidad.ingreso} formato="mxn"
-                />
+                info="rentabilidad.ingreso" />
                 <Cifra
                   icono={<ReceiptText width={14} height={14} strokeWidth={1.75} />}
                   etiqueta="Costo comprobado (esos mismos viajes)" valor={rentabilidad.costoComprobado} formato="mxn"
-                />
+                info="rentabilidad.costo" />
                 <Cifra
                   icono={<TrendingUp width={14} height={14} strokeWidth={1.75} />}
                   etiqueta="Contribución (ingreso − comprobado)" valor={rentabilidad.contribucion} formato="mxn"
-                />
+                info="rentabilidad.contribucion" />
               </TiraCifras>
               <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
                 {rentabilidad.margenPct !== null
@@ -122,11 +122,11 @@ export function VistaRentabilidad({
                 <Cifra
                   icono={<Wallet width={14} height={14} strokeWidth={1.75} />}
                   etiqueta="Por cobrar (facturas vivas)" valor={cobranza.porCobrar} formato="mxn"
-                />
+                info="rentabilidad.por_cobrar" />
                 <Cifra
                   icono={<CalendarClock width={14} height={14} strokeWidth={1.75} />}
                   etiqueta="Vencido" valor={cobranza.vencido} formato="mxn"
-                />
+                info="rentabilidad.vencido" />
               </TiraCifras>
               {cobranza.sinCondiciones > 0 && (
                 <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
@@ -145,7 +145,7 @@ export function VistaRentabilidad({
                 </p>
               ) : (
                 <div className="card overflow-x-auto">
-                  <table className="w-full text-[12.5px]">
+                  <table className="w-full text-[12px]">
                     <thead>
                       <tr className="text-left" style={{ color: 'var(--muted)' }}>
                         <th className="px-3 py-2 font-medium">Folio</th>
@@ -184,7 +184,7 @@ export function VistaRentabilidad({
                   arriba (por cobrar, vencido) son de TODAS las facturas,
                   no de esta página — por eso el renglón lo aclara. */}
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <span className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+                <span className="text-[11px]" style={{ color: 'var(--faint)' }}>
                   {`Facturas ${numero(desde)}–${numero(hasta)} de ${numero(cobranza.total)}, `}
                   {'las vencidas primero. Por cobrar y vencido de arriba son de la cartera completa.'}
                 </span>

@@ -6,7 +6,7 @@ import { Plegable } from '../clientes/forma';
 import {
   FormaNuevoPatio, FormaEditarPatio, FormaJefe, FormaSinPatio, type AccionForma,
 } from './formas';
-import { MarcoPagina, Aviso } from '@/app/ui-v2/componentes';
+import { MarcoPagina, Aviso, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 export interface FilaPatio {
   id: string;
@@ -66,13 +66,13 @@ export function VistaPatios({
 
       {puedeAdministrar && (
         <section className="card p-4">
-          <h2 className="font-display text-[15px] font-semibold mb-3">Crear un patio</h2>
+          <TituloRecuadro info="patios.crear" className="mb-3">Crear un patio</TituloRecuadro>
           <FormaNuevoPatio accion={crear} />
         </section>
       )}
 
       <section className="card p-4">
-        <h2 className="font-display text-[15px] font-semibold mb-3">Tus patios</h2>
+        <TituloRecuadro info="patios.lista" className="mb-3">Tus patios</TituloRecuadro>
         {ilegible ? (
           <EstadoError mensaje="No pude leer los patios de tu flota. No se enseña una lista a medias: parecería que faltan patios que sí existen." />
         ) : lista.length === 0 ? (
@@ -87,10 +87,10 @@ export function VistaPatios({
               <caption className="sr-only">Patios de la flota con sus operadores, unidades y jefes de tráfico</caption>
               <thead>
                 <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                  <th scope="col" className="etiqueta-mono pb-2 text-[10px] font-normal uppercase">Patio</th>
-                  <th scope="col" className="etiqueta-mono pb-2 text-right text-[10px] font-normal uppercase">Operadores</th>
-                  <th scope="col" className="etiqueta-mono pb-2 text-right text-[10px] font-normal uppercase">Unidades</th>
-                  <th scope="col" className="etiqueta-mono pb-2 text-right text-[10px] font-normal uppercase">Jefes</th>
+                  <th scope="col" className="etiqueta-mono pb-2 text-[11px] font-normal uppercase">Patio</th>
+                  <th scope="col" className="etiqueta-mono pb-2 text-right text-[11px] font-normal uppercase">Operadores</th>
+                  <th scope="col" className="etiqueta-mono pb-2 text-right text-[11px] font-normal uppercase">Unidades</th>
+                  <th scope="col" className="etiqueta-mono pb-2 text-right text-[11px] font-normal uppercase">Jefes</th>
                 </tr>
               </thead>
               <tbody>
@@ -101,7 +101,7 @@ export function VistaPatios({
             </table>
           </div>
         )}
-        <p className="mt-3 text-[11.5px]" style={{ color: 'var(--faint)' }}>
+        <p className="mt-3 text-[11px]" style={{ color: 'var(--faint)' }}>
           Los números cuentan solo operadores y unidades ACTIVOS. Gente y camiones se asignan a un patio desde su
           ficha en <Link href={hrefOperadores} className="underline">Operadores</Link> y <Link href={hrefUnidades} className="underline">Unidades</Link>,
           o con la columna «patio» de la carga masiva.
@@ -111,10 +111,10 @@ export function VistaPatios({
       {puedeAdministrar && lista.length > 0 && (
         <section className="card p-4 space-y-4">
           <div>
-            <h2 className="font-display text-[15px] font-semibold flex items-center gap-1.5">
+            <TituloRecuadro info="patios.jefes">
               <UserCog aria-hidden width={15} height={15} strokeWidth={1.75} /> Jefes de tráfico
-            </h2>
-            <p className="mt-0.5 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            </TituloRecuadro>
+            <p className="mt-0.5 text-[12px]" style={{ color: 'var(--muted)' }}>
               Con un patio asignado, el jefe solo corrige operadores, unidades y jornadas de ese patio. Sin patio ve y
               corrige toda la flota (un jefe de oficina central). Se invita al equipo desde Usuarios.
             </p>
@@ -122,7 +122,7 @@ export function VistaPatios({
           {jefes === null ? (
             <EstadoError mensaje="No pude leer a tus jefes de tráfico. Vuelve a intentar." />
           ) : jefes.length === 0 ? (
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
               Todavía no tienes usuarios con el rol «Encargado (jefe de tráfico)». Invítalos desde Usuarios del equipo y aquí les asignas su patio.
             </p>
           ) : (
@@ -138,11 +138,11 @@ export function VistaPatios({
       {puedeAdministrar && lista.length > 0 && sinPatio && (sinPatio.operadores > 0 || sinPatio.unidades > 0) && (
         <section className="card p-4 space-y-3">
           <div>
-            <h2 className="font-display text-[15px] font-semibold flex items-center gap-1.5">
+            <TituloRecuadro info="patios.sin_patio">
               <Users aria-hidden width={15} height={15} strokeWidth={1.75} />
               <Container aria-hidden width={15} height={15} strokeWidth={1.75} /> Lo que cargaste sin patio
-            </h2>
-            <p className="mt-0.5 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            </TituloRecuadro>
+            <p className="mt-0.5 text-[12px]" style={{ color: 'var(--muted)' }}>
               Si tu flota opera desde un solo patio, asígnalos de una vez. Si tienes varios, usa la columna «patio» de la
               carga masiva o asigna uno por uno desde su ficha.
             </p>
@@ -163,7 +163,7 @@ function FilaDePatio({ p, puedeAdministrar, editar, eliminar }: {
       <tr className="border-t" style={{ borderColor: 'var(--line2)' }}>
         <th scope="row" className="py-2 text-left font-normal">
           <span className="block font-medium">{p.nombre}</span>
-          {p.ciudad && <span className="block text-[11.5px]" style={{ color: 'var(--faint)' }}>{p.ciudad}</span>}
+          {p.ciudad && <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{p.ciudad}</span>}
         </th>
         <td className="py-2 text-right cifra-mono">{numero(p.operadores)}</td>
         <td className="py-2 text-right cifra-mono">{numero(p.unidades)}</td>

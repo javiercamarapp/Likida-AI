@@ -60,7 +60,7 @@ export function ImportarViajes({ importar, verDinero = false }: { importar: Acci
         <input type="file" name="archivo" accept=".csv,.xlsx,.xls" required
           onChange={(e) => validarArchivoElegido(e.currentTarget)}
           aria-label="CSV o Excel con los viajes"
-          className="text-[12.5px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12.5px] file:font-medium file:cursor-pointer"
+          className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer"
           style={{ color: 'var(--muted)' }} />
         <BotonImportar />
       </form>
@@ -140,7 +140,7 @@ function BotonImportar() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <FileUp width={13} height={13} strokeWidth={2} className={pending ? 'animate-pulse' : ''} />
       {pending ? 'Importando…' : 'Importar viajes'}

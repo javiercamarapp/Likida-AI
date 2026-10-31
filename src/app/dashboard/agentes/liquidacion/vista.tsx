@@ -14,7 +14,7 @@ import { SeccionCola, type ColaProps } from './cola';
 import { rotuloDiferencia as rotuloTipo } from './rotulo-diferencia';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /** Los conteos del ciclo. `porRevisar` sale de los KPIs; los otros tres, de
  *  `contarViajes`. Van juntos porque los pinta UNA sola tarjeta. */
@@ -174,16 +174,16 @@ async function BloqueKpis({ kpis: pKpis }: { kpis: Promise<DashboardKpis> }) {
       {/* FE-17: es el acumulado HISTÓRICO — a escala 50k son miles de millones y
           `$9,000,000,000.00` no cabe en un cuarto de fila. `mxnCompacto`
           abrevia SOLO a partir del millón; debajo es `mxn()` exacto. */}
-      <Cifra etiqueta="Monto comprobado" valor={mxnCompacto(kpis.montoComprobado)} nota="histórico" />
-      <Cifra etiqueta="Tasa de cuadre" valor={`${numero(kpis.tasaCuadre)}%`} nota={`${numero(kpis.viajesLiquidados)} liquidaciones`} />
+      <Cifra info="liquidacion.monto_comprobado" etiqueta="Monto comprobado" valor={mxnCompacto(kpis.montoComprobado)} nota="histórico" />
+      <Cifra info="liquidacion.tasa_cuadre" etiqueta="Tasa de cuadre" valor={`${numero(kpis.tasaCuadre)}%`} nota={`${numero(kpis.viajesLiquidados)} liquidaciones`} />
       {/* BLOQ-6: desde la 0299 hay DOS estados y este KPI es el del MOTOR
           («no pude cuadrarla»), no el de la firma. La cola de abajo cuenta lo
           que espera FIRMA —que incluye las de diferencias— y sale de su
           propia consulta: dos números distintos con su rótulo distinto, en vez
           de dos versiones del mismo. */}
-      <Cifra etiqueta="Por revisar" valor={numero(kpis.porRevisar)} nota="el agente no pudo cuadrarlas"
+      <Cifra info="liquidacion.por_revisar" etiqueta="Por revisar" valor={numero(kpis.porRevisar)} nota="el agente no pudo cuadrarlas"
         tono={kpis.porRevisar > 0 ? 'warn' : undefined} />
-      <Cifra etiqueta="Con diferencias" valor={numero(kpis.conDiferencias)} tono={kpis.conDiferencias > 0 ? 'bad' : undefined} />
+      <Cifra info="liquidacion.con_diferencias" etiqueta="Con diferencias" valor={numero(kpis.conDiferencias)} tono={kpis.conDiferencias > 0 ? 'bad' : undefined} />
     </TiraCifras>
   );
 }
@@ -204,7 +204,7 @@ async function BloqueCiclo({ ciclo }: { ciclo: Promise<CicloLiquidacion> }) {
   const hayCicloVivo = cicloVivoLegible && pasosVivos.some((p) => p.valor > 0);
   return (
     <section className="card p-4 flex flex-col">
-      <h2 className="font-display text-[15px] font-semibold mb-1">Viajes en curso</h2>
+      <TituloRecuadro info="liquidacion.viajes_en_curso" className="mb-1">Viajes en curso</TituloRecuadro>
       <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>La foto de ahora mismo, por etapa</p>
       {!cicloVivoLegible ? (
         <Leyenda>No se pudo contar el ciclo ahora mismo — antes que un cero sin medir, se queda pendiente.</Leyenda>
@@ -232,7 +232,7 @@ async function BloqueCierres({ cierresPorDia }: {
   const total = dias?.reduce((s, d) => s + d.valor, 0) ?? 0;
   return (
     <section className="card p-4 flex flex-col">
-      <h2 className="font-display text-[15px] font-semibold mb-1">Cierres por día</h2>
+      <TituloRecuadro info="liquidacion.cierres_por_dia" className="mb-1">Cierres por día</TituloRecuadro>
       <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>Últimas 12 semanas</p>
       {dias === null ? (
         <Leyenda>No se pudo leer la actividad ahora mismo.</Leyenda>
@@ -254,14 +254,14 @@ async function BloqueHizoSolo({ hizoSolo }: { hizoSolo: Promise<HizoSolo> }) {
   const { hechos, huerfanos, docsProcesados, actividadIa } = await hizoSolo;
   return (
     <section className="card p-4 flex flex-col">
-      <h2 className="font-display text-[15px] font-semibold mb-3">Lo que hizo solo</h2>
+      <TituloRecuadro info="liquidacion.hizo_solo" className="mb-3">Lo que hizo solo</TituloRecuadro>
       {hechos === null ? (
         <Leyenda>No se pudo leer el registro ahora mismo.</Leyenda>
       ) : hechos.length === 0 && !(huerfanos && huerfanos.resueltos > 0) ? (
         <Leyenda>Aún nada que presumir: cuando el agente mande un recordatorio o escale un
           viaje sin que nadie se lo pida, queda escrito aquí.</Leyenda>
       ) : (
-        <div className="space-y-2.5 text-[12.5px]">
+        <div className="space-y-2.5 text-[12px]">
           {hechos.map((h, i) => (
             <div key={i} className="flex items-start gap-2">
               {h.tipo === 'recordatorio'
@@ -305,7 +305,7 @@ export async function BloqueDineroObservado({ porTipo: p }: { porTipo: Promise<D
   const totalObservado = porTipo?.reduce((s, t) => s + t.monto, 0) ?? 0;
   return (
     <section className="card p-4 flex flex-col">
-      <h2 className="font-display text-[15px] font-semibold">Dinero observado</h2>
+      <TituloRecuadro info="liquidacion.dinero_observado">Dinero observado</TituloRecuadro>
       <p className="text-[11px] mb-2" style={{ color: 'var(--faint)' }}>Todas las diferencias que el motor registró, por tipo — histórico completo, no solo fuera de política o duplicado</p>
       {porTipo === null ? (
         <Leyenda>No se pudo leer el desglose ahora mismo.</Leyenda>
@@ -314,7 +314,7 @@ export async function BloqueDineroObservado({ porTipo: p }: { porTipo: Promise<D
           de política o un ticket duplicado, aquí se desglosa.</Leyenda>
       ) : (
         <>
-          <div className="cifra-mono text-[22px] font-medium mb-2">{mxn(totalObservado)}</div>
+          <div className="cifra-mono text-[20px] font-medium mb-2">{mxn(totalObservado)}</div>
           <Dona segmentos={porTipo.map((t) => ({ etiqueta: rotuloTipo(t.tipo), valor: t.monto }))} />
           <div className="mt-2 space-y-1">
             {porTipo.map((t) => (
@@ -336,7 +336,7 @@ async function BloqueOperadores({ operadores: p }: {
   const operadores = await p;
   return (
     <section className="card p-4 flex flex-col">
-      <h2 className="font-display text-[15px] font-semibold">Diferencias por operador</h2>
+      <TituloRecuadro info="liquidacion.por_operador">Diferencias por operador</TituloRecuadro>
       <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>Liquidaciones con diferencia, por operador</p>
       {operadores === null ? (
         <Leyenda>No se pudo leer el desglose ahora mismo.</Leyenda>
@@ -357,7 +357,7 @@ async function BloqueReglas({ politica: p, puedeVerReglas, sufijo }: {
     <section className="card p-4 flex flex-col">
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h2 className="font-display text-[15px] font-semibold">Sus reglas</h2>
+          <TituloRecuadro info="liquidacion.reglas">Sus reglas</TituloRecuadro>
           {puedeVerReglas && (
             /* "Ver", no "Editar": Configuración hoy es solo lectura —
                un botón que promete editar y no edita es un botón que
@@ -396,7 +396,7 @@ async function BloqueUltimosCierres({ liquidaciones, sufijo }: {
   const cierres = liqs.filter((l) => l.estatus !== 'revisar').slice(0, 5);
   return (
     <section className="card p-4">
-      <h2 className="font-display text-[15px] font-semibold mb-3">Últimos cierres</h2>
+      <TituloRecuadro info="liquidacion.ultimos_cierres" className="mb-3">Últimos cierres</TituloRecuadro>
       {cierres.length === 0 ? (
         <EstadoVacio icono={<Bot width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
           El agente todavía no cierra ninguna liquidación en esta flota.
@@ -413,7 +413,7 @@ async function BloqueUltimosCierres({ liquidaciones, sufijo }: {
 function Leyenda({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex-1 min-h-[110px] flex items-center justify-center">
-      <p className="text-[12.5px] text-center max-w-[30ch]" style={{ color: 'var(--muted)' }}>{children}</p>
+      <p className="text-[12px] text-center max-w-[30ch]" style={{ color: 'var(--muted)' }}>{children}</p>
     </div>
   );
 }
@@ -431,11 +431,11 @@ function TablaLiqs({ filas, sufijo, conVer }: { filas: LiqRow[]; sufijo: string;
       <table className="w-full text-[13px]">
         <thead>
           <tr className="text-left" style={{ color: 'var(--faint)' }}>
-            <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Viaje</th>
-            <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Fecha</th>
-            <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 text-right">Comprobado</th>
-            <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 pr-6 text-right">Diferencia</th>
-            <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Estatus</th>
+            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Viaje</th>
+            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Fecha</th>
+            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Comprobado</th>
+            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pr-6 text-right">Diferencia</th>
+            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Estatus</th>
             {conVer && <th className="pb-2" />}
           </tr>
         </thead>

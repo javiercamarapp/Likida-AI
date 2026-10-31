@@ -23,7 +23,7 @@ const AYUDA = 'text-[11px] mt-1';
 
 function Casilla({ nombre, etiqueta, ayuda, marcada, deshabilitada }: { nombre: string; etiqueta: string; ayuda?: string; marcada: boolean; deshabilitada: boolean }) {
   return (
-    <label className="flex items-start gap-2 text-[12.5px]">
+    <label className="flex items-start gap-2 text-[12px]">
       <input type="checkbox" name={`f_${nombre}`} value="si" defaultChecked={marcada} disabled={deshabilitada} className="mt-0.5" />
       <span>{etiqueta}{ayuda && <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{ayuda}</span>}</span>
     </label>
@@ -52,7 +52,7 @@ function Seccion({ id, titulo, children }: { id: string; titulo: string; childre
 function Guardar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+    <button type="submit" disabled={pending} className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Save width={14} height={14} strokeWidth={1.75} />{pending ? 'Guardando…' : 'Guardar configuración'}
     </button>
@@ -87,7 +87,7 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
         <fieldset className="space-y-2" disabled={off}>
           <legend className={ETIQUETA}>Perfil de seguimiento</legend>
           {OPCIONES_PERFIL.map((o) => (
-            <label key={o.valor} className="flex items-start gap-2 text-[12.5px]">
+            <label key={o.valor} className="flex items-start gap-2 text-[12px]">
               <input type="radio" name="f_perfilSeguimiento" value={o.valor} defaultChecked={config.perfilSeguimiento === o.valor} className="mt-0.5" />
               <span>{o.etiqueta}<span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{o.ayuda}</span></span>
             </label>
@@ -128,7 +128,7 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
           <Numero nombre="horaInicio" etiqueta="Desde las (0 a 23)" valor={valores.horaInicio} deshabilitada={off} />
           <Numero nombre="horaFin" etiqueta="Hasta las (1 a 24)" valor={valores.horaFin} deshabilitada={off} />
         </div>
-        <fieldset className="flex flex-wrap gap-x-4 gap-y-1.5 text-[12.5px]" disabled={off}>
+        <fieldset className="flex flex-wrap gap-x-4 gap-y-1.5 text-[12px]" disabled={off}>
           <legend className={ETIQUETA}>Días permitidos</legend>
           {NOMBRES_DIA.map((n, i) => (
             <label key={n} className="flex items-center gap-1.5 capitalize">
@@ -175,7 +175,7 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
         <Casilla nombre="avisarSenalVida" etiqueta="Preguntar «¿sigues bien?» si el GPS de un tractor en tránsito se calla" marcada={config.avisarSenalVida} deshabilitada={off}
           ayuda="Si la última posición queda vieja o el tractor lleva rato detenido fuera de un sitio: un aviso con botones al chofer, un segundo aviso y después al jefe de tráfico. Apagado: solo se ve en el tablero. Requiere plantilla aprobada fuera de la ventana de 24 h. Solo se puede encender cuando «¿Está lista la flota?» no tiene nada en rojo." />
         {puedeForzarPreflight && (
-          <label className="flex items-start gap-2 text-[12.5px]">
+          <label className="flex items-start gap-2 text-[12px]">
             <input type="checkbox" name="forzarPreflight" value="si" disabled={off} className="mt-0.5" />
             <span>Encender la señal de vida aunque «¿Está lista la flota?» tenga faltantes (solo QA; queda en la bitácora)</span>
           </label>
@@ -244,7 +244,7 @@ const diezDigitos = (tel: string): string => tel.replace(/\D/g, '').replace(/^52
 function BotonVoluntario({ texto, enCurso }: { texto: string; enCurso: string }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className="h-9 px-4 rounded-lg text-[13px] font-medium hairline transition-opacity hover:opacity-85 disabled:opacity-50">
+    <button type="submit" disabled={pending} className="rv-btn rv-btn--secondary h-9 px-4 rounded-lg text-[13px] font-medium hairline transition-opacity hover:opacity-85 disabled:opacity-50">
       {pending ? enCurso : texto}
     </button>
   );
@@ -254,7 +254,7 @@ function FilaVoluntario({ op, accion, puedeEditar }: { op: OperadorPilotoVista; 
   const [estado, enviar] = useActionState(accion, null);
   return (
     <li className="py-2 space-y-1.5">
-      <form action={enviar} className="flex items-center justify-between gap-3 text-[12.5px]" aria-label={`Retirar a ${op.nombre} del piloto`}>
+      <form action={enviar} className="flex items-center justify-between gap-3 text-[12px]" aria-label={`Retirar a ${op.nombre} del piloto`}>
         <span><strong>{op.nombre}</strong> <span style={{ color: 'var(--faint)' }}>{diezDigitos(op.telefono)}</span></span>
         <input type="hidden" name="operadorId" value={op.id} />
         {puedeEditar && <BotonVoluntario texto="Retirar del piloto" enCurso="Retirando…" />}
@@ -296,7 +296,7 @@ export function SeccionVoluntarios({ datos, puedeEditar, accionAlta, accionBaja,
               <span className={ETIQUETA}>Buscar operador activo (nombre o teléfono)</span>
               <input name="q" defaultValue={datos.busqueda} className={CAMPO} />
             </label>
-            <button type="submit" className="h-9 px-4 rounded-lg text-[13px] font-medium hairline">Buscar</button>
+            <button type="submit" className="rv-btn rv-btn--secondary h-9 px-4 rounded-lg text-[13px] font-medium hairline">Buscar</button>
           </form>
           <form action={enviarAlta} className="flex items-end gap-2" aria-label="Agregar operador al piloto">
             <label className="flex-1">

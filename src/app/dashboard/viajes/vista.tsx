@@ -9,7 +9,7 @@ import { ImportarViajes, type AccionImportar } from './importar';
 import { EnlacePagina, NavPaginas } from '../paginador';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 import { ChipsFiltro, SelloDato, TablaLista, chipsActivos, type ColumnaTabla } from '@/app/ui-v2/datos';
 import { ahoraMs } from '@/lib/saludo';
 
@@ -59,7 +59,7 @@ export function hrefRegistro(
   return `/dashboard/viajes${qs ? `?${qs}` : ''}`;
 }
 
-const BTN_SEC = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12.5px] font-medium hairline transition-colors hover:bg-[var(--canvas)]';
+const BTN_SEC = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-medium hairline transition-colors hover:bg-[var(--canvas)]';
 
 /** Las columnas del registro. Los tres pesos (anticipo, comprobado, diferencia) SOLO existen si el rol ve dinero: para el jefe de
  *  tráfico ni la cabecera se arma. El orden es el del servidor (cursor, del más reciente al más antiguo): ninguna cabecera ordena,
@@ -100,7 +100,7 @@ function columnasViajes(sufijo: string, verDinero: boolean): ColumnaTabla<FilaRe
       id: 'accion', titulo: 'Acción', alinear: 'der', tituloOculto: true,
       celda: (v) => v.liqId ? (
         <Link href={`/dashboard/${v.liqId}${sufijo}`}
-          className="inline-flex items-center gap-1 text-[12.5px] font-medium hover:opacity-70 transition-opacity whitespace-nowrap rv-tl__enlace">
+          className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity whitespace-nowrap rv-tl__enlace">
           Ver <ArrowRight width={12} height={12} strokeWidth={2} aria-hidden />
         </Link>
       ) : <span className="rv-tl__tenue">—</span>,
@@ -153,11 +153,11 @@ export function VistaViajes({
 
       {/* Un conteo que no se pudo leer es `null`: NUNCA se pinta como 0. La celda dice «No disponible ahora. No es cero.» y ofrece Reintentar. */}
       <TiraCifras sello={selloHoy('Registro de viajes')}>
-        <Cifra etiqueta="Viajes en total" {...conteo(conteos.total)} nota="histórico" />
-        <Cifra etiqueta="Abiertos" {...conteo(conteos.abiertos)} />
-        <Cifra etiqueta="En cuadre" {...conteo(conteos.enCuadre)} />
+        <Cifra etiqueta="Viajes en total" {...conteo(conteos.total)} nota="histórico" info="viajes.total" />
+        <Cifra etiqueta="Abiertos" {...conteo(conteos.abiertos)} info="viajes.abiertos" />
+        <Cifra etiqueta="En cuadre" {...conteo(conteos.enCuadre)} info="viajes.en_cuadre" />
         <Cifra etiqueta="Escalados sin aceptar" {...conteo(conteos.escalados)}
-          tono={(conteos.escalados ?? 0) > 0 ? 'bad' : undefined} />
+          tono={(conteos.escalados ?? 0) > 0 ? 'bad' : undefined} info="viajes.escalados" />
       </TiraCifras>
 
       <section className="card p-4 relative">
@@ -184,10 +184,10 @@ export function VistaViajes({
                 <span className="sr-only">Buscar viaje</span>
                 <Search width={13} height={13} strokeWidth={1.75} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--faint)' }} aria-hidden />
                 <input type="search" name="q" defaultValue={q} placeholder="Folio, origen o destino"
-                  className="h-8 pl-8 pr-3 rounded-lg hairline text-[12.5px] w-[220px] max-w-full"
+                  className="h-8 pl-8 pr-3 rounded-lg hairline text-[12px] w-[220px] max-w-full"
                   style={{ background: 'var(--surface)' }} />
               </label>
-              <button type="submit" className={BTN_SEC} style={{ background: 'var(--surface)' }}>Buscar</button>
+              <button type="submit" className={`rv-btn rv-btn--secondary ${BTN_SEC}`} style={{ background: 'var(--surface)' }}>Buscar</button>
             </form>
             {puedeImportar && (
               // Sin JavaScript ni estado: `<details>` abre y cierra solo.
@@ -199,7 +199,7 @@ export function VistaViajes({
                 </summary>
                 <div className="absolute left-0 right-0 z-10 mt-2 px-4">
                   <div className="card p-4 shadow-[var(--shadow-pop)]">
-                    <h2 className="font-display text-[15px] font-semibold mb-2">Importar desde tu TMS</h2>
+                    <TituloRecuadro info="viajes.importar" className="mb-2">Importar desde tu TMS</TituloRecuadro>
                     <ImportarViajes importar={importar} verDinero={verDinero} />
                   </div>
                 </div>
@@ -247,7 +247,7 @@ export function VistaViajes({
 
         {(cursor || hayMas) && (
           <div className="flex items-center justify-between gap-3 mt-3 pt-3" style={{ borderTop: '1px dashed var(--line2)' }}>
-            <span className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+            <span className="text-[11px]" style={{ color: 'var(--faint)' }}>
               Hasta {numero(porPagina)} viajes por página, del más reciente al más antiguo.
             </span>
             <NavPaginas>

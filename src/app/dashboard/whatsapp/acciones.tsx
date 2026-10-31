@@ -25,12 +25,12 @@ export function AccionesEnlace({ enlace, esPrueba = false }: { enlace: string; e
   return (
     <div className="flex flex-wrap items-center gap-2">
       <button type="button" onClick={copiar} disabled={esPrueba}
-        className="hairline inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-[13px] font-medium transition-colors hover:bg-[var(--canvas)] disabled:cursor-not-allowed disabled:opacity-50">
+        className="rv-btn rv-btn--secondary hairline inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-[13px] font-medium transition-colors hover:bg-[var(--canvas)] disabled:cursor-not-allowed disabled:opacity-50">
         {copiado ? <Check aria-hidden width={14} height={14} strokeWidth={2} /> : <Copy aria-hidden width={14} height={14} strokeWidth={1.75} />}
         {copiado ? 'Copiado' : 'Copiar enlace'}
       </button>
       <button type="button" onClick={() => window.print()} disabled={esPrueba}
-        className="hairline inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-[13px] font-medium transition-colors hover:bg-[var(--canvas)] disabled:cursor-not-allowed disabled:opacity-50">
+        className="rv-btn rv-btn--secondary hairline inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-[13px] font-medium transition-colors hover:bg-[var(--canvas)] disabled:cursor-not-allowed disabled:opacity-50">
         <Printer aria-hidden width={14} height={14} strokeWidth={1.75} />
         Imprimir cartel
       </button>

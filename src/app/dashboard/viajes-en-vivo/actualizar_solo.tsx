@@ -40,7 +40,7 @@ export function ActualizarSolo({ cadaSeg = CADA_SEG_POR_OMISION }: { cadaSeg?: n
   return (
     <div className="inline-flex flex-wrap items-center gap-2 text-[12px]" style={{ color: 'var(--muted)' }} aria-live="off">
       <span>{pausado ? 'Actualización automática en pausa' : `Se actualiza solo cada ${cadaSeg} s`}{ultima ? ` · última vez ${ultima.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : ''}</span>
-      <button type="button" onClick={() => refrescar(true)} className="hairline rounded-lg px-2 h-7 inline-flex items-center gap-1"><RefreshCw size={12} aria-hidden /> Actualizar ahora</button>
+      <button type="button" onClick={() => refrescar(true)} className="rv-btn rv-btn--secondary hairline rounded-lg px-2 h-7 inline-flex items-center gap-1"><RefreshCw size={12} aria-hidden /> Actualizar ahora</button>
       <button type="button" onClick={() => setPausado((p) => !p)} className="underline">{pausado ? 'Reanudar' : 'Pausar'}</button>
     </div>
   );

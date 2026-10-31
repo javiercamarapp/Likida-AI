@@ -88,7 +88,7 @@ export async function Timbrado({ searchParams, tenantExiste, sufijo = '' }: {
         <h2 className="font-display text-[15px] font-semibold">Timbrado (Carta Porte vía PAC)</h2>
       </header>
 
-      <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
         {pac.configurado
           ? `PAC conectado: ${pac.proveedor?.toUpperCase()} — ambiente ${pac.pareceSandbox ? 'de PRUEBAS (los timbres no amparan nada)' : 'de PRODUCCIÓN'}.`
           : 'Sin PAC configurado: el timbrado está apagado. Se enciende con las variables LIKIDA_PAC_* en el servidor (contrato con el PAC + credenciales) — sin eso, Likida no timbra y jamás simula un timbre.'}
@@ -99,7 +99,7 @@ export async function Timbrado({ searchParams, tenantExiste, sufijo = '' }: {
           el único acceso al timbre era el borrador de Carta Porte, que es del
           área `operacion` — o sea, la pantalla donde este rol rebota. Declarar
           el perfil aquí y no poder usarlo era la mitad de un flujo. */}
-      <p className="text-[12.5px]">
+      <p className="text-[12px]">
         <Link href={`/dashboard/timbrado${sufijo}`} className="font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>
           Ir a la cola de Timbrado →
         </Link>
@@ -110,7 +110,7 @@ export async function Timbrado({ searchParams, tenantExiste, sufijo = '' }: {
       </p>
 
       {!leyoOk ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
           No se pudo leer el perfil guardado — reintenta antes de capturar encima.
         </p>
       ) : (

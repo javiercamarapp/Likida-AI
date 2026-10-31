@@ -3,12 +3,13 @@ import { Check, CircleHelp } from 'lucide-react';
 import { numero } from '@/lib/formato';
 import type { PasoMarcha, GrupoPaso, ResumenMarcha } from '@/lib/likida/puesta_en_marcha';
 import { AUTOMATIZACIONES } from '../rutas';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 
-const GRUPOS: Array<{ id: GrupoPaso; titulo: string; nota: string }> = [
-  { id: 'flota', titulo: 'Tu flota y su cuenta', nota: 'Lo que Likida necesita saber de tu empresa antes de hablar con tus choferes.' },
-  { id: 'gente', titulo: 'Tu gente y tus camiones', nota: 'Operadores, unidades, patios y quién los corrige.' },
-  { id: 'operacion', titulo: 'Tu primera operación', nota: 'El ciclo completo: viaje, ticket por WhatsApp y liquidación.' },
+const GRUPOS: Array<{ id: GrupoPaso; titulo: string; nota: string; info: InfoClave }> = [
+  { id: 'flota', titulo: 'Tu flota y su cuenta', nota: 'Lo que Likida necesita saber de tu empresa antes de hablar con tus choferes.', info: 'arranque.grupo_flota' },
+  { id: 'gente', titulo: 'Tu gente y tus camiones', nota: 'Operadores, unidades, patios y quién los corrige.', info: 'arranque.grupo_gente' },
+  { id: 'operacion', titulo: 'Tu primera operación', nota: 'El ciclo completo: viaje, ticket por WhatsApp y liquidación.', info: 'arranque.grupo_operacion' },
 ];
 
 /**
@@ -29,9 +30,9 @@ export function VistaPuestaEnMarcha({ pasos, resumen, puedeAdministrar, hrefAuto
     <MarcoPagina titulo="Puesta en marcha" apoyo="Lo que falta para que tu flota opere sin ayuda, con el estado real de cada paso.">
       <section className="card p-4" aria-labelledby="titulo-avance">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 id="titulo-avance" className="font-display text-[15px] font-semibold">
+          <TituloRecuadro id="titulo-avance" info="arranque.avance">
             {resumen.completo ? 'Tu flota está lista para operar' : 'Lo que falta para operar sin ayuda'}
-          </h2>
+          </TituloRecuadro>
           <span className="etiqueta-mono text-[11px]" style={{ color: 'var(--muted)' }}>
             {numero(resumen.hechos)} de {numero(resumen.total)} pasos
           </span>
@@ -46,7 +47,7 @@ export function VistaPuestaEnMarcha({ pasos, resumen, puedeAdministrar, hrefAuto
           </p>
         )}
         {resumen.siguiente && (
-          <p className="mt-3 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+          <p className="mt-3 text-[12px]" style={{ color: 'var(--muted)' }}>
             Siguiente: <strong style={{ color: 'var(--ink)' }}>{resumen.siguiente.titulo}</strong>
             {(puedeAdministrar || !resumen.siguiente.soloDueno) && (
               <> — <Link href={resumen.siguiente.href} className="underline">{resumen.siguiente.cta}</Link></>
@@ -57,7 +58,7 @@ export function VistaPuestaEnMarcha({ pasos, resumen, puedeAdministrar, hrefAuto
 
       {GRUPOS.map((g) => (
         <section key={g.id} className="card p-4" aria-labelledby={`grupo-${g.id}`}>
-          <h2 id={`grupo-${g.id}`} className="font-display text-[15px] font-semibold">{g.titulo}</h2>
+          <TituloRecuadro id={`grupo-${g.id}`} info={g.info}>{g.titulo}</TituloRecuadro>
           <p className="mb-3 text-[12px]" style={{ color: 'var(--muted)' }}>{g.nota}</p>
           <ol className="space-y-3">
             {pasos.filter((p) => p.grupo === g.id).map((p) => <Paso key={p.id} p={p} puedeAdministrar={puedeAdministrar} />)}
@@ -66,7 +67,7 @@ export function VistaPuestaEnMarcha({ pasos, resumen, puedeAdministrar, hrefAuto
       ))}
 
       <section className="card p-4" aria-labelledby="titulo-agentes">
-        <h2 id="titulo-agentes" className="font-display text-[15px] font-semibold">Las automatizaciones que trabajan con lo que cargaste</h2>
+        <TituloRecuadro id="titulo-agentes" info="arranque.automatizaciones">Las automatizaciones que trabajan con lo que cargaste</TituloRecuadro>
         <p className="mb-3 text-[12px]" style={{ color: 'var(--muted)' }}>
           Cada una se activa en tu cuenta con Likida y arranca con tus operadores, unidades y política. Aquí puedes ver su pantalla.
         </p>
@@ -74,7 +75,7 @@ export function VistaPuestaEnMarcha({ pasos, resumen, puedeAdministrar, hrefAuto
           {AUTOMATIZACIONES.map((a) => {
             const href = hrefAutomatizacion[a.href];
             return (
-              <li key={a.href} className="text-[12.5px]">
+              <li key={a.href} className="text-[12px]">
                 {href ? <Link href={href} className="underline">{a.nombre}</Link> : <span style={{ color: 'var(--muted)' }}>{a.nombre}</span>}
               </li>
             );
@@ -116,7 +117,7 @@ function Paso({ p, puedeAdministrar }: { p: PasoMarcha; puedeAdministrar: boolea
             {p.cta}
           </Link>
         ) : (
-          <span className="shrink-0 text-[11.5px]" style={{ color: 'var(--faint)' }}>Lo hace quien administra</span>
+          <span className="shrink-0 text-[11px]" style={{ color: 'var(--faint)' }}>Lo hace quien administra</span>
         )
       )}
     </li>

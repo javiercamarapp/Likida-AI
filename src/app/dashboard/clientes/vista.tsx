@@ -16,7 +16,7 @@ import type { BuscarCatalogo } from '../combo-catalogo';
 import { FormaCliente, FormaTarifa, Plegable, type AccionForma, type OpcionModo } from './forma';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 const RUTA = '/dashboard/clientes';
 
@@ -105,6 +105,7 @@ function BloqueCartera({ panel }: { panel: PanelClientes }) {
           nota={panel.conIngreso === 0
             ? 'Ningún viaje trae ingreso capturado todavía'
             : `De ${plural(panel.conIngreso, 'viaje', 'viajes')} con el dato capturado`}
+          info="clientes.ingreso"
         />
         <Cifra
           icono={<Users width={14} height={14} strokeWidth={1.75} />}
@@ -112,18 +113,21 @@ function BloqueCartera({ panel }: { panel: PanelClientes }) {
           nota={panel.clientes.length !== activos
             ? `${plural(panel.clientes.length - activos, 'dado de baja', 'dados de baja')}`
             : undefined}
+          info="clientes.activos"
         />
         {conFacturas.length > 0 ? (
           <Cifra
             icono={<Wallet width={14} height={14} strokeWidth={1.75} />}
             etiqueta="Por cobrar a clientes" valor={porCobrar} formato="mxn"
             nota={`De ${plural(conFacturas.length, 'cliente', 'clientes')} con facturas registradas`}
+            info="clientes.por_cobrar"
           />
         ) : (
           <Cifra
             icono={<Wallet width={14} height={14} strokeWidth={1.75} />}
             etiqueta="Por cobrar" valor={null}
             mensaje="Ninguno de tus clientes tiene facturas registradas todavía, así que no hay saldo que sumar. No es cero: es que aún no se ha registrado una factura emitida."
+            info="clientes.por_cobrar"
           />
         )}
       </TiraCifras>
@@ -171,9 +175,9 @@ function BloqueClientes({ panel, puedeEditar, guardarCliente, sp, sufijo, campos
 
   return (
     <section className="space-y-3">
-      <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+      <TituloRecuadro info="clientes.lista">
         Clientes
-      </h2>
+      </TituloRecuadro>
 
       {panel.clientes.length > 0 && (
         <FiltroRegistro ruta={RUTA} sufijo={sufijo} pagina={pagClientes}
@@ -189,7 +193,7 @@ function BloqueClientes({ panel, puedeEditar, guardarCliente, sp, sufijo, campos
         </EstadoVacio>
       ) : (
         <div className="card overflow-x-auto">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full text-[12px]">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
                 <th className="px-3 py-2 font-medium">Cliente</th>
@@ -241,7 +245,7 @@ function RenglonCliente({ c, puedeEditar, guardarCliente, editando, hrefEditar }
         <td className="px-3 py-2">
           <span className="font-medium">{c.nombre}</span>
           {!c.activo && (
-            <span className="ml-2 inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium align-middle"
+            <span className="ml-2 inline-flex px-1.5 py-0.5 rounded-full text-[11px] font-medium align-middle"
               style={{ color: 'var(--muted)', background: 'var(--canvas)' }}>
               dado de baja
             </span>
@@ -257,7 +261,7 @@ function RenglonCliente({ c, puedeEditar, guardarCliente, editando, hrefEditar }
         <td className="px-3 py-2 text-right tabular">
           {numero(c.viajes)}
           {c.viajesSinIngreso > 0 && (
-            <span className="block text-[10.5px]" style={{ color: 'var(--warn)' }}>
+            <span className="block text-[11px]" style={{ color: 'var(--warn)' }}>
               {numero(c.viajesSinIngreso)} sin ingreso
             </span>
           )}
@@ -274,7 +278,7 @@ function RenglonCliente({ c, puedeEditar, guardarCliente, editando, hrefEditar }
               <>
                 {mxn(c.saldoPorCobrar)}
                 {c.vencido !== null && c.vencido > 0 && (
-                  <span className="block text-[10.5px]" style={{ color: 'var(--bad)' }}>
+                  <span className="block text-[11px]" style={{ color: 'var(--bad)' }}>
                     {mxn(c.vencido)} vencido
                   </span>
                 )}
@@ -388,9 +392,9 @@ function BloqueTarifas({
 
   return (
     <section className="space-y-3">
-      <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+      <TituloRecuadro info="clientes.tarifas">
         Tarifas
-      </h2>
+      </TituloRecuadro>
 
       {panel.tarifas.length > 0 && (
         <FiltroRegistro ruta={RUTA} sufijo={sufijo} pagina={pagTarifas} sustantivo="tarifas"
@@ -405,7 +409,7 @@ function BloqueTarifas({
         </EstadoVacio>
       ) : (
         <div className="card overflow-x-auto">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full text-[12px]">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
                 <th className="px-3 py-2 font-medium">Cliente</th>
@@ -438,7 +442,7 @@ function BloqueTarifas({
       {puedeEditar && (
         <div className="card p-4">
           {panel.clientes.length === 0 ? (
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
               Puedes capturar tarifas de lista sin tener clientes, pero una tarifa negociada necesita
               a quién negociársela: da de alta primero al cliente.
             </p>
@@ -485,7 +489,7 @@ function RenglonTarifa({
         <td className="px-3 py-2">{rotuloModo(t.modo)}</td>
         <td className="px-3 py-2 text-right tabular font-medium">
           {mxn(t.precio)}
-          <span className="block text-[10.5px] font-normal" style={{ color: 'var(--faint)' }}>
+          <span className="block text-[11px] font-normal" style={{ color: 'var(--faint)' }}>
             {unidadModo(t.modo)}
           </span>
         </td>
@@ -552,9 +556,9 @@ function BloqueSinIngreso({ panel }: { panel: PanelClientes }) {
 
   return (
     <section className="space-y-3">
-      <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+      <TituloRecuadro info="clientes.sin_ingreso">
         Viajes sin ingreso capturado
-      </h2>
+      </TituloRecuadro>
 
       <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
         {panel.sinIngresoTotal === 1
@@ -566,7 +570,7 @@ function BloqueSinIngreso({ panel }: { panel: PanelClientes }) {
       </p>
 
       <div className="card overflow-x-auto">
-        <table className="w-full text-[12.5px]">
+        <table className="w-full text-[12px]">
           <thead>
             <tr className="text-left" style={{ color: 'var(--muted)' }}>
               <th className="px-3 py-2 font-medium">Viaje</th>
@@ -601,13 +605,13 @@ function RenglonSinIngreso({ v }: { v: ViajeSinIngreso }) {
       <td className="px-3 py-2">
         <span className="cifra-mono">{v.folio ?? '—'}</span>
         {v.fecha && (
-          <span className="block text-[10.5px]" style={{ color: 'var(--faint)' }}>{fechaMx(v.fecha)}</span>
+          <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{fechaMx(v.fecha)}</span>
         )}
       </td>
       <td className="px-3 py-2">
         {rutaDe(v)}
         {v.km !== null && (
-          <span className="block text-[10.5px] cifra-mono" style={{ color: 'var(--faint)' }}>
+          <span className="block text-[11px] cifra-mono" style={{ color: 'var(--faint)' }}>
             {numero(v.km)} km
           </span>
         )}
@@ -625,7 +629,7 @@ function RenglonSinIngreso({ v }: { v: ViajeSinIngreso }) {
           <>
             {s.porque}
             {s.ambigua && (
-              <span className="flex items-start gap-1 text-[10.5px] mt-0.5" style={{ color: 'var(--warn)' }}>
+              <span className="flex items-start gap-1 text-[11px] mt-0.5" style={{ color: 'var(--warn)' }}>
                 <TriangleAlert width={11} height={11} strokeWidth={1.75} className="mt-0.5 shrink-0" />
                 {/* Elegir en silencio entre dos tarifas igual de aplicables es
                     cotizar a suerte: se dice y se corrige en el catálogo. */}

@@ -24,7 +24,8 @@ const pintarViajes = (o: Partial<Parameters<typeof VistaViajes>[0]> = {}) => ren
   <VistaViajes filas={[v(1), v(2, { origen: null, destino: null, operadorNombre: null, unidadEco: null, fechaInicio: null, comprobado: null, diferencia: null, liqId: null, estatus: 'abierto' })]}
     filtro="todos" conteos={conteos} sufijo="?tenant=T1" importar={importar} puedeImportar verDinero q="" cursor={null} siguiente={null} hayMas={false} porPagina={50} {...o} />,
 );
-const celdas = (h: string) => [...h.matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/g)].map((m) => m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+/** Texto de cada celda: une los nodos de texto (entre «>» y «<») sin «limpiar» etiquetas con reemplazos. */
+const celdas = (h: string) => [...h.matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/g)].map((m) => [...`>${m[1]}<`.matchAll(/>([^<>]+)</g)].map((x) => x[1]).join(' ').split(/\s+/).filter(Boolean).join(' '));
 
 describe('Viajes · misma función, tabla accesible', () => {
   it('con dinero: las 10 columnas de antes y todos sus datos', () => {

@@ -40,17 +40,17 @@ export function TableroCifras({ t }: { t: TableroOperacion }) {
           así ningún rótulo sale cortado a 1100 px de contenido (auditoría 10, MEDIO). Arriba, en el orden, los TRES que piden acción. */}
       <TiraCifras className="mt-2" etiqueta="Estado de la operación" sello={selloHoy('Tablero de operación')}>
         <Cifra icono={<CircleSlash width={16} height={16} strokeWidth={1.75} />}
-          etiqueta="Sin unidad" valor={t.sinUnidad} formato="entero" />
+          etiqueta="Sin unidad" valor={t.sinUnidad} formato="entero" info="despacho.sin_unidad" />
         <Cifra icono={<TriangleAlert width={16} height={16} strokeWidth={1.75} />}
-          etiqueta="Incidencias abiertas" valor={t.incidenciasAbiertas} formato="entero" />
+          etiqueta="Incidencias abiertas" valor={t.incidenciasAbiertas} formato="entero" info="despacho.incidencias" />
         <Cifra icono={<PackageCheck width={16} height={16} strokeWidth={1.75} />}
-          etiqueta="Sin evidencia de entrega" valor={t.podPendientes} formato="entero" />
+          etiqueta="Sin evidencia de entrega" valor={t.podPendientes} formato="entero" info="despacho.pod_pendientes" />
         <Cifra icono={<Truck width={16} height={16} strokeWidth={1.75} />}
-          etiqueta="Viajes activos" valor={t.viajesActivos} formato="entero" />
+          etiqueta="Viajes activos" valor={t.viajesActivos} formato="entero" info="despacho.viajes_activos" />
         <Cifra icono={<UserCog width={16} height={16} strokeWidth={1.75} />}
-          etiqueta="Unidades disponibles" valor={t.unidadesDisponibles} formato="entero" />
+          etiqueta="Unidades disponibles" valor={t.unidadesDisponibles} formato="entero" info="despacho.unidades_libres" />
         <Cifra icono={<Wrench width={16} height={16} strokeWidth={1.75} />}
-          etiqueta="En taller" valor={t.unidadesEnTaller} formato="entero" />
+          etiqueta="En taller" valor={t.unidadesEnTaller} formato="entero" info="despacho.en_taller" />
       </TiraCifras>
     </div>
   );
@@ -153,7 +153,7 @@ export function TablaViajesOperacion({ viajes }: { viajes: FilaViajeOperacion[] 
     );
   }
   const visibles = viajes.slice(0, MAX_FILAS);
-  const TH = 'etiqueta-mono text-left text-[10px] font-medium uppercase px-5 py-1.5';
+  const TH = 'etiqueta-mono text-left text-[11px] font-medium uppercase px-5 py-1.5';
   return (
     <div className="overflow-x-auto pb-2">
       <table className="w-full border-collapse">

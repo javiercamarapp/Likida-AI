@@ -40,9 +40,9 @@ export function FormaReasignar({ accion, buscar, actual, actualNombre, total }: 
           etiquetaVacia="Escribe el nombre del chofer…"
           valorInicial={actual} textoInicial={actualNombre}
           total={total}
-          className="h-8 text-[12.5px] px-2.5 rounded-lg hairline min-w-0 max-w-[220px]"
+          className="h-8 text-[12px] px-2.5 rounded-lg hairline min-w-0 max-w-[220px]"
           estilo={{ background: 'var(--surface)' }} />
-        <button type="submit" disabled={pendiente} className={`${BTN_SECUNDARIO} disabled:opacity-60 disabled:cursor-not-allowed`}
+        <button type="submit" disabled={pendiente} className={`rv-btn rv-btn--secondary ${BTN_SECUNDARIO} disabled:opacity-60 disabled:cursor-not-allowed`}
           style={ESTILO_SECUNDARIO}>
           <UserCog width={13} height={13} strokeWidth={1.75} aria-hidden />
           {pendiente ? 'Reasignando…' : 'Reasignar chofer'}

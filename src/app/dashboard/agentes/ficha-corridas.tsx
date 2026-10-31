@@ -27,18 +27,18 @@ export function FichaCorridas({ corridas }: { corridas: CorridaRegistrada[] | nu
       </h2>
 
       {corridas === null ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--bad)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--bad)' }}>
           No pude leer el historial de corridas. No se pinta «sin corridas» sobre una consulta
           caída: es exactamente la mentira que este historial existe para evitar.
         </p>
       ) : corridas.length === 0 ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           Sin corridas registradas todavía. El historial se anota desde el 14 de agosto de 2026 —
           si el agente corrió antes de esa fecha, esas corridas no aparecen aquí.
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full text-[12px]">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
                 <th className="px-2 py-1.5 font-medium">Fecha</th>
@@ -58,12 +58,12 @@ export function FichaCorridas({ corridas }: { corridas: CorridaRegistrada[] | nu
                       {fechaHoraMx(c.inicio)}
                     </td>
                     <td className="px-2 py-1.5">
-                      <span className="inline-flex px-1.5 py-0.5 rounded-full text-[10.5px] font-medium"
+                      <span className="inline-flex px-1.5 py-0.5 rounded-full text-[11px] font-medium"
                         style={{ color: pill.fg, background: pill.bg }}>
                         {pill.rotulo}
                       </span>
                       {c.error && (
-                        <span className="block text-[10.5px] mt-0.5 max-w-[380px]" style={{ color: 'var(--bad)' }}>
+                        <span className="block text-[11px] mt-0.5 max-w-[380px]" style={{ color: 'var(--bad)' }}>
                           {c.error}
                         </span>
                       )}

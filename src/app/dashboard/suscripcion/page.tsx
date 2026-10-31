@@ -23,7 +23,7 @@ import { EstadoVacio } from '../estados';
 import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../admin/ui/forma';
 import { Uso, TarjetaPlan, InstruccionesTransferencia } from './vista';
 import type { Metadata } from 'next';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 export const metadata: Metadata = { title: 'Plan y facturación' };
 
 export const dynamic = 'force-dynamic';
@@ -279,9 +279,7 @@ export default async function SuscripcionPage({
           <section className="p-5 border-b" style={{ borderColor: 'var(--line)' }}>
             <div className="flex items-center gap-2 mb-1">
               <Landmark width={15} height={15} strokeWidth={1.75} />
-              <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
-                Cómo pagar tu mensualidad
-              </h2>
+              <TituloRecuadro info="suscripcion.como_pagar">Cómo pagar tu mensualidad</TituloRecuadro>
               <StatusPill estado="warn">Pendiente</StatusPill>
             </div>
             {banco === null ? (
@@ -316,9 +314,7 @@ export default async function SuscripcionPage({
 
         {/* ── Estado ── */}
         <section className="p-5">
-          <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-            Tu plan
-          </h2>
+          <TituloRecuadro info="suscripcion.plan">Tu plan</TituloRecuadro>
           {suscripcionCaida ? (
             <div className="mt-3">
               <EstadoVacio icono={<TriangleAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--warn)' }} />}>
@@ -364,9 +360,7 @@ export default async function SuscripcionPage({
         {/* ── Uso ── */}
         {uso && (
           <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-            <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-              Lo que llevas este mes
-            </h2>
+            <TituloRecuadro info="suscripcion.uso">Lo que llevas este mes</TituloRecuadro>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
               <Uso etiqueta="Viajes creados este mes" usado={uso.viajesMes} limite={uso.limiteViajesMes} />
               <Uso etiqueta="Operadores activos" usado={uso.operadores} limite={uso.limiteOperadores} />
@@ -382,9 +376,7 @@ export default async function SuscripcionPage({
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
           <div className="flex items-center gap-2 mb-1">
             <FileText width={15} height={15} strokeWidth={1.75} />
-            <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
-              Datos para tu factura
-            </h2>
+            <TituloRecuadro info="suscripcion.datos_factura">Datos para tu factura</TituloRecuadro>
             {puedeFacturar
               ? <StatusPill estado="ok">Completos</StatusPill>
               : <StatusPill estado="warn">Faltan</StatusPill>}
@@ -433,9 +425,7 @@ export default async function SuscripcionPage({
 
         {/* ── Planes ── */}
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-            Planes
-          </h2>
+          <TituloRecuadro info="suscripcion.planes">Planes</TituloRecuadro>
 
           {!hayStripe ? (
             <div className="mt-3">
@@ -484,9 +474,7 @@ export default async function SuscripcionPage({
 
         {/* ── Facturas ── */}
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-            Tus facturas de Likida
-          </h2>
+          <TituloRecuadro info="suscripcion.facturas">Tus facturas de Likida</TituloRecuadro>
           {facturas === null ? (
             <div className="mt-3 text-sm" style={{ color: 'var(--muted)' }}>No se pudieron leer las facturas.</div>
           ) : facturas.length === 0 ? (

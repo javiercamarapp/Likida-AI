@@ -41,17 +41,17 @@ export function SeccionCcp({ activa, filas, ver, acciones }: {
     <section className="space-y-4 pt-4" aria-label="CCP timbrados recibidos">
       <header className="space-y-1">
         <h2 className="text-[16px] font-semibold flex items-center gap-2"><MailCheck width={16} height={16} strokeWidth={1.75} style={{ color: 'var(--muted)' }} /> CCP timbrados recibidos</h2>
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           Cuando el sistema del cliente timbra la carta porte y avisa a Likida, el PDF y el XML se guardan aquí. Si encendes la respuesta, se le manda el CCP al cliente;
           la primera vez por cliente (o si el remitente no se reconoce) necesita tu confirmación.
         </p>
-        <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
           Para que un aviso se asocie a un envío, el envío debe tener la referencia del sistema del cliente: se captura al marcar la plantilla como «subida a mano»
           o la guarda el envío automático. Un aviso sin referencia conocida se rechaza.
         </p>
       </header>
       {activa === 'sin_migracion' || filas === 'sin_migracion' ? (
-        <p className="card p-4 text-[12.5px]" style={{ color: 'var(--muted)' }}>Esta función todavía no está disponible en tu entorno.</p>
+        <p className="card p-4 text-[12px]" style={{ color: 'var(--muted)' }}>Esta función todavía no está disponible en tu entorno.</p>
       ) : (
         <>
           <section className="card p-4 space-y-2" aria-label="Respuesta al cliente">
@@ -65,11 +65,11 @@ export function SeccionCcp({ activa, filas, ver, acciones }: {
 
           <section className="space-y-2" aria-label="CCP recibidos">
             {filas.length === 0 ? (
-              <p className="card p-4 text-[12.5px]" style={{ color: 'var(--muted)' }}>Todavía no ha llegado ningún CCP timbrado.</p>
+              <p className="card p-4 text-[12px]" style={{ color: 'var(--muted)' }}>Todavía no ha llegado ningún CCP timbrado.</p>
             ) : filas.map((f) => (
               <article key={f.id} className="card p-3.5 space-y-2" aria-label={`CCP ${f.uuid}`}>
-                <p className="text-[12.5px]"><strong className="break-all">{f.uuid}</strong> · {ROTULO[f.estado]}</p>
-                <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+                <p className="text-[12px]"><strong className="break-all">{f.uuid}</strong> · {ROTULO[f.estado]}</p>
+                <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
                   Recibido {fechaHoraMx(f.creadoEn)}{f.documentoNombre ? ` · documento «${f.documentoNombre}»` : ''}
                   {f.destinoCorreo ? ` · cliente ${f.destinoCorreo}` : ' · sin correo del cliente'}
                   {f.respondidoEn ? ` · respondido ${fechaHoraMx(f.respondidoEn)}` : ''}

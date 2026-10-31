@@ -93,7 +93,7 @@ describe('primitivas v2 · contrato de ESTILO-LIKIDA', () => {
   });
   it('KPI: tarjeta de 112 px, cifra 26/700, vacío 18/600, sello fuera de pantalla bajo 1100 px, sin elipsis', () => {
     expect(graf).toMatch(/\.rv-kpi \{[^}]*padding: 14px/); // 112 sale del contenido: 3 + 14 + 16 + 6 + 29 + 6 + 20 + 14
-    expect(graf).toMatch(/\.rv-kpi__valor \{ font: 700 26px/);
+    expect(graf).toMatch(/\.rv-kpi__valor \{ font: 700 (26px|var\(--t-kpi\))/);
     expect(graf).toMatch(/\.rv-kpi__valor\[data-vacio\] \{ font-size: 18px; font-weight: 600/);
     expect(graf).toMatch(/max-width: 1099px\) \{\s*\[data-ui="v2"\] \.rv-kpi__sello \{\s*position: absolute;\s*width: 1px/);
     expect(graf).not.toMatch(/\.rv-kpi__sello \{ display: none/);

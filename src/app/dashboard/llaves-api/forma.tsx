@@ -26,7 +26,7 @@ function Boton({ etiqueta, ocupado }: { etiqueta: string; ocupado: string }) {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <KeyRound width={14} height={14} strokeWidth={1.75} />
       {pending ? ocupado : etiqueta}
@@ -56,7 +56,7 @@ export function SecretoUnaVez({ enClaro }: { enClaro: string }) {
 
   return (
     <div className="rounded-lg hairline p-3.5 space-y-2" style={{ background: 'var(--warnbg)' }}>
-      <div className="flex items-start gap-2 text-[12.5px] font-medium" style={{ color: 'var(--warn)' }}>
+      <div className="flex items-start gap-2 text-[12px] font-medium" style={{ color: 'var(--warn)' }}>
         <ShieldAlert width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
         Guárdala ahora. No se puede volver a ver: solo guardamos su huella.
       </div>

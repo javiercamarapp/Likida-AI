@@ -37,7 +37,7 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
   /** Solo si el rol ve dinero: el CSV de cobro (con horas libres, tarifa y monto propuesto). */
   csvUrl: string | null; ocultos: Record<string, string>;
 }) {
-  const sel = 'hairline rounded-lg px-2 h-8 text-[12.5px]';
+  const sel = 'hairline rounded-lg px-2 h-8 text-[12px]';
   const carga = promedioCerradas(filas, 'carga');
   const descarga = promedioCerradas(filas, 'descarga');
   return (
@@ -66,9 +66,9 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
               <option value="">Todos</option>{(catalogos?.operadores ?? []).map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
             </select>
           </label>
-          <button type="submit" className="h-8 px-3 rounded-lg text-[12.5px] font-medium hairline transition-colors hover:bg-[var(--canvas)]">Aplicar</button>
+          <button type="submit" className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12px] font-medium hairline transition-colors hover:bg-[var(--canvas)]">Aplicar</button>
           {csvUrl && (
-            <a href={csvUrl} className="h-8 px-3 rounded-lg text-[12.5px] font-medium inline-flex items-center gap-1.5" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
+            <a href={csvUrl} className="h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
               <Download width={13} height={13} strokeWidth={1.75} aria-hidden />CSV para cobro de estadías
             </a>
           )}
@@ -80,14 +80,14 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
       </section>
 
       {error ? (
-        <section className="card p-4 text-[12.5px]" style={{ color: 'var(--bad)' }}>{error}</section>
+        <section className="card p-4 text-[12px]" style={{ color: 'var(--bad)' }}>{error}</section>
       ) : (
         <>
           <TiraCifras sello={selloHoy('Estadías en andén')}>
-            <Cifra etiqueta="Paradas del periodo" valor={numero(resumen.paradas)} nota={`${numero(resumen.cerradas)} cerradas · ${numero(resumen.enCurso)} en curso`} />
-            <Cifra etiqueta="Tiempo medio en carga" valor={carga ? minutos(carga.promedio) : null} nota={carga ? `sobre ${numero(carga.n)} paradas cerradas` : 'ninguna carga cerrada'} />
-            <Cifra etiqueta="Tiempo medio en descarga" valor={descarga ? minutos(descarga.promedio) : null} nota={descarga ? `sobre ${numero(descarga.n)} paradas cerradas` : 'ninguna descarga cerrada'} />
-            <Cifra etiqueta="En el andén ahora" valor={numero(resumen.enCurso)} tono={resumen.enCurso > 0 ? 'warn' : undefined} nota="llegaron y aún no avisan su salida" />
+            <Cifra etiqueta="Paradas del periodo" info="conductores_estadias.paradas" valor={numero(resumen.paradas)} nota={`${numero(resumen.cerradas)} cerradas · ${numero(resumen.enCurso)} en curso`} />
+            <Cifra etiqueta="Tiempo medio en carga" info="conductores_estadias.medio_carga" valor={carga ? minutos(carga.promedio) : null} nota={carga ? `sobre ${numero(carga.n)} paradas cerradas` : 'ninguna carga cerrada'} />
+            <Cifra etiqueta="Tiempo medio en descarga" info="conductores_estadias.medio_descarga" valor={descarga ? minutos(descarga.promedio) : null} nota={descarga ? `sobre ${numero(descarga.n)} paradas cerradas` : 'ninguna descarga cerrada'} />
+            <Cifra etiqueta="En el andén ahora" info="conductores_estadias.en_anden" valor={numero(resumen.enCurso)} tono={resumen.enCurso > 0 ? 'warn' : undefined} nota="llegaron y aún no avisan su salida" />
           </TiraCifras>
           {truncada && (
             <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
@@ -96,12 +96,12 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
           )}
           <section className="card p-4" aria-label="Paradas">
             {filas.length === 0 ? (
-              <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Ninguna parada con llegada registrada en ese periodo y con esos filtros.</p>
+              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Ninguna parada con llegada registrada en ese periodo y con esos filtros.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-[12.5px]">
+                <table className="w-full text-[12px]">
                   <thead>
-                    <tr className="text-left etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>
+                    <tr className="text-left etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>
                       <th className="py-1.5 pr-3">Viaje</th><th className="pr-3">Chofer</th><th className="pr-3">Parada</th><th className="pr-3">Llegada (hora del mensaje)</th>
                       <th className="pr-3">Salida</th><th className="pr-3 text-right">Tiempo</th><th className="pr-3">Estado</th><th>Respaldo</th>
                     </tr>
@@ -116,7 +116,7 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
                         <td className="pr-3 cifra-mono">{horaExactaMx(f.estancia.salida?.en ?? null, zonaHoraria) || '—'}<div className="text-[11px] font-sans" style={{ color: 'var(--faint)' }}>{f.estancia.salida ? FUENTE[f.estancia.salida.fuente] : ''}</div></td>
                         <td className="pr-3 text-right cifra-mono">{minutos(f.estancia.minutos)}</td>
                         <td className="pr-3">{FASE[f.estancia.fase]}</td>
-                        <td className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+                        <td className="text-[11px]" style={{ color: 'var(--muted)' }}>
                           {f.estancia.llegada ? (f.estancia.llegada.validacion ? VALIDACION[f.estancia.llegada.validacion] : 'sin veredicto') : '—'}
                           <div>{(f.estancia.llegada?.evidencias ?? 0) + (f.estancia.salida?.evidencias ?? 0)} foto(s)</div>
                         </td>

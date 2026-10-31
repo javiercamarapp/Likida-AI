@@ -7,7 +7,7 @@ import { nombreDeRol, detalleDeRol } from '@/lib/auth/roles';
 import {
   FormaInvitar, FormaCambiarRol, FormaDarDeBaja, FormaReactivar, FormaReenviarAcceso, FormaCerrarSesiones, type AccionForma,
 } from './forma';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 export interface UsuarioRow {
   id: string;
@@ -66,9 +66,7 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvi
         ) : (
           <>
             <div className="pt-5 pb-2 px-5">
-              <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
-                Tu equipo
-              </h2>
+              <TituloRecuadro info="usuarios.equipo">Tu equipo</TituloRecuadro>
             </div>
             {usuarios.length === 0 ? (
               <div className="px-5 pb-5">

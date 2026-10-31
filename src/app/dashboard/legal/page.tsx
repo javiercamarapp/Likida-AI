@@ -18,7 +18,7 @@ import {
   ETIQUETA_DOCUMENTO, MANDATO_AUTOFACTURACION, VERSION_TERMINOS, VERSION_AVISO_PRIVACIDAD,
 } from '@/lib/legal/documentos';
 import type { Metadata } from 'next';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 export const metadata: Metadata = { title: 'Términos y mandato' };
 
 
@@ -138,8 +138,8 @@ export default async function PaginaLegal({
       ) : (
         <>
           <section className="space-y-2" aria-labelledby="h-resp">
-            <h2 id="h-resp" className="text-sm font-semibold">Responsable de privacidad de tu flota</h2>
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            <TituloRecuadro id="h-resp" info="legal.responsable">Responsable de privacidad de tu flota</TituloRecuadro>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
               El aviso de privacidad que reciben tus choferes nombra a tu empresa como responsable de sus datos. Si
               aún no los capturas, el aviso <strong>sale igual</strong> y dice qué falta: tus choferes no se quedan sin
               servicio, pero conviene completarlo. Al guardar, el aviso se actualiza solo.
@@ -153,30 +153,30 @@ export default async function PaginaLegal({
                 <Campo nombre="contactoPrivacidad" etiqueta="Contacto de privacidad (correo o teléfono)" valorInicial={responsable.contactoPrivacidad ?? ''} />
               </FormaConAviso>
             ) : (
-              <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{SOLO_DUENO}</p>
+              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{SOLO_DUENO}</p>
             )}
           </section>
 
           <section className="space-y-2" aria-labelledby="h-docs">
-            <h2 id="h-docs" className="text-sm font-semibold">Documentos vigentes</h2>
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            <TituloRecuadro id="h-docs" info="legal.documentos">Documentos vigentes</TituloRecuadro>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
               <Link href="/terminos" className="underline">{ETIQUETA_DOCUMENTO.terminos}</Link> (versión {VERSION_TERMINOS}) y{' '}
               <Link href="/privacidad" className="underline">{ETIQUETA_DOCUMENTO.aviso_privacidad}</Link> (versión {VERSION_AVISO_PRIVACIDAD}).
             </p>
             {pendientes && pendientes.length === 0 ? (
-              <p className="text-[12.5px]" style={{ color: 'var(--ok)' }}>Ya aceptaste la versión vigente de ambos.</p>
+              <p className="text-[12px]" style={{ color: 'var(--ok)' }}>Ya aceptaste la versión vigente de ambos.</p>
             ) : esDueno ? (
               <FormaConAviso accion={accionAceptarVigentes} boton="Acepto los Términos y el Aviso de privacidad vigentes" columnas="md:grid-cols-1">
                 <span />
               </FormaConAviso>
             ) : (
-              <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{SOLO_DUENO}</p>
+              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{SOLO_DUENO}</p>
             )}
           </section>
 
           <section className="space-y-2" aria-labelledby="h-mandato">
-            <h2 id="h-mandato" className="text-sm font-semibold">Mandato de autofacturación</h2>
-            <blockquote className="text-[12.5px] border-l-2 pl-3" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>
+            <TituloRecuadro id="h-mandato" info="legal.mandato">Mandato de autofacturación</TituloRecuadro>
+            <blockquote className="text-[12px] border-l-2 pl-3" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>
               {MANDATO_AUTOFACTURACION.texto}
             </blockquote>
             <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
@@ -185,7 +185,7 @@ export default async function PaginaLegal({
             </p>
             {mandato ? (
               <>
-                <p className="text-[12.5px]" style={{ color: 'var(--ok)' }}>
+                <p className="text-[12px]" style={{ color: 'var(--ok)' }}>
                   Mandato vigente: otorgado el {fechaHoraMx(mandato.aceptadoEn)}
                   {mandato.userId === null ? ' (la cuenta que lo otorgó ya fue cancelada)' : ''}.
                 </p>
@@ -196,13 +196,13 @@ export default async function PaginaLegal({
                 )}
               </>
             ) : conPerfil ? (
-              <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{MANDATO_NO_DISPONIBLE}</p>
+              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{MANDATO_NO_DISPONIBLE}</p>
             ) : esDueno ? (
               <FormaConAviso accion={accionOtorgarMandato} boton="Otorgo el mandato en nombre de mi empresa" columnas="md:grid-cols-1">
                 <span />
               </FormaConAviso>
             ) : (
-              <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Aún no está otorgado. {SOLO_DUENO}</p>
+              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Aún no está otorgado. {SOLO_DUENO}</p>
             )}
           </section>
         </>

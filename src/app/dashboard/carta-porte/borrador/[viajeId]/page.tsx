@@ -47,7 +47,7 @@ export default async function PaginaBorradorCcp({
   return (
     <main className="max-w-3xl mx-auto px-6 py-8 space-y-5 print:px-0 print:py-0">
       <div className="flex items-start justify-between gap-4 print:hidden">
-        <Link href={`${RUTA_PADRE}${sufijoTenant(sp)}`} className="text-[12.5px] font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>
+        <Link href={`${RUTA_PADRE}${sufijoTenant(sp)}`} className="text-[12px] font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>
           ← Volver a Carta Porte
         </Link>
         <p className="text-[11px] text-right" style={{ color: 'var(--faint)' }}>
@@ -56,10 +56,10 @@ export default async function PaginaBorradorCcp({
       </div>
 
       <header className="space-y-1">
-        <h1 className="font-display text-[19px] font-semibold">
+        <h1 className="font-display text-[20px] font-semibold">
           Borrador de Complemento Carta Porte 3.1 — viaje {rotulo}
         </h1>
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           {v.origen && v.destino ? `${v.origen} → ${v.destino}` : 'Ruta sin capturar'}
           {v.unidadEconomico ? ` · Unidad ${v.unidadEconomico}` : ''}
           {v.operadorNombre ? ` · Operador ${v.operadorNombre}` : ''}
@@ -73,7 +73,7 @@ export default async function PaginaBorradorCcp({
 
       <section className="space-y-1">
         <h2 className="font-display text-[15px] font-semibold">Veredicto</h2>
-        <p className="text-[12.5px]">
+        <p className="text-[12px]">
           {v.decision.necesita === 'si' ? 'NECESITA complemento.' : v.decision.necesita === 'no' ? 'Sin complemento, según lo declarado.' : 'Falta declarar para decidir.'}{' '}
           <span style={{ color: 'var(--muted)' }}>{v.decision.motivo}</span>{' '}
           <span style={{ color: 'var(--faint)' }}>({v.decision.fundamento})</span>
@@ -87,7 +87,7 @@ export default async function PaginaBorradorCcp({
       <section className="space-y-2">
         <h2 className="font-display text-[15px] font-semibold">Mercancías ({numero(v.mercancias.length)})</h2>
         {v.mercancias.length === 0 ? (
-          <p className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
+          <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
             Sin renglones capturados — el complemento exige al menos uno. Se capturan en la pantalla de
             Carta Porte, con los datos que da tu cliente.
           </p>
@@ -124,7 +124,7 @@ export default async function PaginaBorradorCcp({
 
       <section className="space-y-2">
         <h2 className="font-display text-[15px] font-semibold">Los 37 datos del Apéndice 3, por responsable</h2>
-        <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
           La regla 2.7.7.1.1 limita la responsabilidad de cada parte ante el SAT a los datos que esa
           parte aportó — por eso cada dato dice de quién es.
         </p>
@@ -138,16 +138,16 @@ export default async function PaginaBorradorCcp({
         <h2 className="font-display text-[15px] font-semibold">Validación contra el rechazo del PAC</h2>
         {b.borrador === null ? (
           <>
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
               El borrador aún no se puede armar. Falta:
             </p>
-            <ul className="list-disc pl-5 text-[12.5px] space-y-1" style={{ color: 'var(--warn)' }}>
+            <ul className="list-disc pl-5 text-[12px] space-y-1" style={{ color: 'var(--warn)' }}>
               {b.faltantes.map((f) => <li key={f}>{f}</li>)}
             </ul>
           </>
         ) : b.fallas.length === 0 ? (
           <div className="space-y-2">
-            <p className="text-[12.5px]" style={{ color: 'var(--ok)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--ok)' }}>
               El borrador pasa las validaciones aritméticas y estructurales del Estándar CCP 3.1
               (sección 8) que el PAC rechaza seguro. Peso bruto total: {numero(b.borrador.pesoBrutoTotal)} kg
               · {numero(b.borrador.numTotalMercancias)} mercancía(s) · distancia {numero(b.borrador.totalDistRec)} km.
@@ -157,7 +157,7 @@ export default async function PaginaBorradorCcp({
             <p className="print:hidden">
               <a
                 href={`/api/export/carta-porte-xml${sufijoTenant(sp) ? `${sufijoTenant(sp)}&` : '?'}viaje=${v.viajeId}`}
-                className="inline-block text-[12.5px] font-medium px-3 py-1.5 rounded-lg hairline hover:opacity-80"
+                className="inline-block text-[12px] font-medium px-3 py-1.5 rounded-lg hairline hover:opacity-80"
                 style={{ color: 'var(--marca)' }}
               >
                 Descargar XML para timbrar ↓
@@ -171,10 +171,10 @@ export default async function PaginaBorradorCcp({
           </div>
         ) : (
           <>
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
               El borrador se armó, pero el PAC lo rechazaría por esto:
             </p>
-            <ul className="list-disc pl-5 text-[12.5px] space-y-1" style={{ color: 'var(--bad)' }}>
+            <ul className="list-disc pl-5 text-[12px] space-y-1" style={{ color: 'var(--bad)' }}>
               {b.fallas.map((f) => <li key={`${f.campo}:${f.detalle}`}><strong>{f.campo}</strong>: {f.detalle} <span style={{ color: 'var(--faint)' }}>({f.fundamento})</span></li>)}
             </ul>
           </>
@@ -194,7 +194,7 @@ export default async function PaginaBorradorCcp({
       {puedeVerArea(rol, 'dinero') && (
         <section className="space-y-1 print:hidden">
           <h2 className="font-display text-[15px] font-semibold">Timbre</h2>
-          <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
             El CFDI con este complemento se emite desde Timbrado, con los importes del flete y el
             perfil fiscal de la flota enfrente — el botón vive ahí porque timbrar es un acto fiscal,
             no un acto de despacho.
@@ -202,7 +202,7 @@ export default async function PaginaBorradorCcp({
           <p>
             <Link
               href={`${RUTA_TIMBRADO}/${v.viajeId}${sufijoTenant(sp)}`}
-              className="text-[12.5px] font-medium hover:opacity-75"
+              className="text-[12px] font-medium hover:opacity-75"
               style={{ color: 'var(--marca)' }}
             >
               Ir a Timbrado de este viaje →
@@ -223,7 +223,7 @@ function TablaCampos({ v, responsable, titulo }: { v: ViajeCcp; responsable: 'cl
   return (
     <div>
       <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--muted)' }}>{titulo}</h3>
-      <table className="w-full text-[11.5px]">
+      <table className="w-full text-[11px]">
         <tbody>
           {campos.map((c) => (
             <tr key={c.clave} className="align-top">

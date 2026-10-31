@@ -15,7 +15,7 @@ export interface VerComo { tenant?: string; rol?: string; vista?: string }
 
 export function SeccionPrimerMes({ primerMes, ver, accion }: { primerMes: PrimerMesFila | 'no_disponible'; ver: VerComo; accion: AccionDoc }) {
   if (primerMes === 'no_disponible') {
-    return <p role="note" className="text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>El modo primer mes todavía no está habilitado en la base (falta aplicar la migración 0938).</p>;
+    return <p role="note" className="text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>El modo primer mes todavía no está habilitado en la base (falta aplicar la migración 0938).</p>;
   }
   return (
     <FormaAccion accion={accion} className="space-y-3 card p-3.5">
@@ -23,7 +23,7 @@ export function SeccionPrimerMes({ primerMes, ver, accion }: { primerMes: Primer
       {ver.rol && <input type="hidden" name="rol" value={ver.rol} />}
       {ver.vista && <input type="hidden" name="vista" value={ver.vista} />}
       <h2 className="text-[13px] font-medium flex items-center gap-1.5"><MailCheck width={15} height={15} strokeWidth={1.75} />Primer mes: copia a los revisores</h2>
-      <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
         Hasta la fecha que elijas, cada movimiento de un documento (leído, aprobado, rechazado, listo para subir, subido a mano) se copia por correo a los revisores.
         Déjalo vacío para apagarlo.
       </p>

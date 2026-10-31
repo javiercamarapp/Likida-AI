@@ -198,7 +198,7 @@ export async function PanelBandeja({
             return (
               <Link key={e} href={enlace(searchParams, { estatus: e, pag: null, buscar: null })}
                 aria-current={activo ? 'page' : undefined}
-                className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-full hairline transition-opacity hover:opacity-80"
+                className="inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-full hairline transition-opacity hover:opacity-80"
                 style={activo
                   ? { background: 'var(--ink)', color: 'var(--surface)' }
                   : { background: 'var(--surface)' }}>
@@ -216,14 +216,14 @@ export async function PanelBandeja({
             La lista de abajo sí se pidió por su cuenta.
           </p>
         )}
-        <p className="text-[12.5px] mt-2 mb-0" style={{ color: 'var(--muted)' }}>{cola.explica}</p>
+        <p className="text-[12px] mt-2 mb-0" style={{ color: 'var(--muted)' }}>{cola.explica}</p>
       </section>
 
       {/* ── QUÉ FALTA PARA QUE HAYA ALGO QUE CONCILIAR ─────────────── */}
       {(!proveedor.configurado || datos.config === null) && (
         <section className="card p-4" style={{ borderColor: 'var(--warn)' }}>
           <TituloSeccion>Todavía no hay de dónde bajar comprobantes</TituloSeccion>
-          <ul className="mt-2 space-y-1.5 text-[12.5px] m-0 pl-4">
+          <ul className="mt-2 space-y-1.5 text-[12px] m-0 pl-4">
             {!proveedor.configurado && (
               <li style={{ color: 'var(--muted)' }}>
                 {proveedor.motivo} <span style={{ color: 'var(--faint)' }}>— lo destraba Likida, no tu flota.</span>
@@ -268,7 +268,7 @@ export async function PanelBandeja({
 
         {bandeja.error !== null ? (
           // NUNCA se pinta como bandeja limpia: no se pudo preguntar.
-          <p className="text-[12.5px] mt-2 mb-0" style={{ color: 'var(--bad)' }}>
+          <p className="text-[12px] mt-2 mb-0" style={{ color: 'var(--bad)' }}>
             No se pudo leer esta lista, así que NO significa que esté vacía: {bandeja.error}
           </p>
         ) : bandeja.filas.length === 0 ? (

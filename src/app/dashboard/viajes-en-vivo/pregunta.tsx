@@ -59,9 +59,9 @@ export function PreguntaAlAsistente({ tenantParam }: { tenantParam: string | nul
           value={texto} onChange={(e) => setTexto(e.target.value)} maxLength={500} placeholder="Ej. ¿cómo va la terminal de Guadalajara?"
           aria-label="Tu pregunta" className="hairline rounded-lg px-3 h-9 text-[13px] flex-1 outline-none focus:border-[var(--muted)]"
         />
-        <button type="submit" disabled={ocupado || !texto.trim()} className="hairline rounded-lg px-3 h-9 text-[13px] font-medium">{ocupado ? 'Consultando…' : 'Preguntar'}</button>
+        <button type="submit" disabled={ocupado || !texto.trim()} className="rv-btn rv-btn--secondary hairline rounded-lg px-3 h-9 text-[13px] font-medium">{ocupado ? 'Consultando…' : 'Preguntar'}</button>
       </form>
-      {error && <p role="alert" className="text-[12.5px]" style={{ color: 'var(--bad)' }}>{error}</p>}
+      {error && <p role="alert" className="text-[12px]" style={{ color: 'var(--bad)' }}>{error}</p>}
       {bloques && (
         <div className="space-y-2 text-[13px]" aria-live="polite">
           {bloques.map((b, i) => b.tipo === 'texto'
@@ -72,7 +72,7 @@ export function PreguntaAlAsistente({ tenantParam }: { tenantParam: string | nul
               : b.tipo === 'serie' ? <Serie key={i} b={b} />
               : (
                 <div key={i} className="card p-1.5 overflow-x-auto">
-                  <table className="w-full border-collapse text-[12.5px]"><tbody>
+                  <table className="w-full border-collapse text-[12px]"><tbody>
                     {b.filas.map(([k, v]) => <tr key={k} className="border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}><td className="px-2 py-1" style={{ color: 'var(--muted)' }}>{k}</td><td className="px-2 py-1 text-right">{v}</td></tr>)}
                   </tbody></table>
                 </div>

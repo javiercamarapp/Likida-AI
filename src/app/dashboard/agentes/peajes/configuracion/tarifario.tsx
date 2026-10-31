@@ -19,11 +19,11 @@ export interface TarifarioVista {
   acciones: AccionesTarifario;
 }
 
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
+const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const CSS_SECUNDARIO = 'hairline text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]';
+const CSS_SECUNDARIO = 'hairline text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]';
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--muted)' } as const;
-const CSS_INPUT = 'hairline text-[12.5px] px-2.5 py-1.5 rounded-lg';
+const CSS_INPUT = 'hairline text-[12px] px-2.5 py-1.5 rounded-lg';
 const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
 
 /** Tarifas que se pintan a la vez (el tarifario real son cientos de filas). */
@@ -55,7 +55,7 @@ export function SeccionTarifario({ datos }: { datos: TarifarioVista }) {
 
       <form action={acciones.importarTarifas} encType="multipart/form-data" className="flex items-center gap-2 flex-wrap">
         <input type="file" name="archivo" accept=".csv,.tsv,.xlsx,.xls,.ods" required aria-label="Archivo de tarifas"
-          className="text-[12.5px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12.5px] file:font-medium file:cursor-pointer"
+          className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer"
           style={{ color: 'var(--muted)' }} />
         <label className="flex items-center gap-1.5">
           <span className="text-[11px]" style={{ color: 'var(--muted)' }}>Este archivo es</span>
@@ -64,13 +64,13 @@ export function SeccionTarifario({ datos }: { datos: TarifarioVista }) {
             <option value="proveedor">el tarifario oficial del proveedor (queda confirmado)</option>
           </select>
         </label>
-        <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}><Upload width={13} height={13} strokeWidth={2} /> Cargar tarifario</button>
+        <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}><Upload width={13} height={13} strokeWidth={2} /> Cargar tarifario</button>
       </form>
 
       {tarifas === null ? (
-        <p className="text-[12.5px] mt-3" style={{ color: 'var(--muted)' }}>No se pudo leer el tarifario ahora mismo.</p>
+        <p className="text-[12px] mt-3" style={{ color: 'var(--muted)' }}>No se pudo leer el tarifario ahora mismo.</p>
       ) : tarifas.length === 0 ? (
-        <p className="text-[12.5px] mt-3" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px] mt-3" style={{ color: 'var(--muted)' }}>
           Aún no hay tarifas: sin tarifario confirmado, la revisión de cobros solo marca candidatos sin monto reclamable.
         </p>
       ) : (
@@ -79,20 +79,20 @@ export function SeccionTarifario({ datos }: { datos: TarifarioVista }) {
             {numero(tarifas.length)} tarifas · {numero(tarifas.length - sinConfirmar)} confirmadas · {numero(sinConfirmar)} por confirmar
           </p>
           {tarifas.slice(0, MAX_TARIFAS_VISIBLES).map((t) => (
-            <div key={t.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12.5px]">
+            <div key={t.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12px]">
               <span className="font-medium">{t.casetaNorm}</span>
-              <span className="cifra-mono text-[11.5px]" style={{ color: 'var(--muted)' }}>clase {t.clase}</span>
+              <span className="cifra-mono text-[11px]" style={{ color: 'var(--muted)' }}>clase {t.clase}</span>
               <span className="cifra-mono">{mxn(t.importe)}</span>
               <span className="text-[11px]" style={{ color: 'var(--faint)' }}>
                 desde {t.vigenteDesde}{t.vigenteHasta ? ` hasta ${t.vigenteHasta}` : ' sin fin'} · {ETIQUETA_ORIGEN[t.origen] ?? t.origen}
               </span>
               {t.confirmada ? (
-                <span className="text-[11.5px] ml-auto" style={{ color: 'var(--ok)' }}>Confirmada{t.confirmadaPor ? ` por ${t.confirmadaPor}` : ''}</span>
+                <span className="text-[11px] ml-auto" style={{ color: 'var(--ok)' }}>Confirmada{t.confirmadaPor ? ` por ${t.confirmadaPor}` : ''}</span>
               ) : (
                 <form action={acciones.confirmarTarifa} className="ml-auto flex items-center gap-2">
-                  <span className="text-[11.5px]" style={{ color: 'var(--warn, var(--muted))' }}>Por confirmar</span>
+                  <span className="text-[11px]" style={{ color: 'var(--warn, var(--muted))' }}>Por confirmar</span>
                   <input type="hidden" name="tarifa" value={t.id} />
-                  <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO} aria-label={`Confirmar la tarifa de ${t.casetaNorm}, clase ${t.clase}`}>Confirmar</button>
+                  <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO} aria-label={`Confirmar la tarifa de ${t.casetaNorm}, clase ${t.clase}`}>Confirmar</button>
                 </form>
               )}
             </div>
@@ -106,7 +106,7 @@ export function SeccionTarifario({ datos }: { datos: TarifarioVista }) {
           <p className="text-[11px] mb-1.5" style={{ color: 'var(--faint)' }}>
             ¿Hay casetas con tarifa por pasada? Revisa el último desglose: te dice dónde casi todos los cruces son clase 1. Es solo una sugerencia; tú la declaras en «Reglas de cobro».
           </p>
-          <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>Buscar sugerencias en el último desglose</button>
+          <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Buscar sugerencias en el último desglose</button>
         </form>
       )}
     </section>

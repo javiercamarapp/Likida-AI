@@ -6,7 +6,7 @@ import type { InsightsAgente, CalidadGrupo, TarjetaInsight } from '@/lib/likida/
 import { aCsvSinCcp, type ListadoSinCcp, type ColorAntiguedad } from '@/lib/likida/carta_porte_docs/viajes_sin_ccp';
 import { EstadoError, EstadoVacio } from '../../estados';
 import { DireccionBuzon } from '../proveedores/controles';
-import { MarcoPagina, Aviso } from '@/app/ui-v2/componentes';
+import { MarcoPagina, Aviso, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /**
  * La ventana del Agente de Carta Porte (Fases B-C del blueprint): los conteos
@@ -67,14 +67,14 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
           </div>
 
           <section className="card p-4 space-y-3">
-            <h2 className="font-display text-[15px] font-semibold">Esperando al jefe</h2>
+            <TituloRecuadro info="carta_porte_agente.cola">Esperando al jefe</TituloRecuadro>
             {cola.length === 0 ? (
               <EstadoVacio icono={<ScrollText width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
                 Nada pendiente de declarar: cada viaje en curso ya tiene su veredicto (o no hay
                 viajes). Al despachar uno nuevo, el agente pregunta solo.
               </EstadoVacio>
             ) : (
-              <ul className="space-y-2 text-[12.5px]">
+              <ul className="space-y-2 text-[12px]">
                 {cola.map((v) => (
                   <li key={v.viajeId} className="flex flex-wrap items-start gap-x-3 gap-y-0.5">
                     <span className="cifra-mono font-medium">{v.folio ?? v.viajeId.slice(0, 8)}</span>
@@ -108,11 +108,11 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
 
       {insights !== undefined && <InsightsDelAgente insights={insights} nombresCliente={nombresCliente} diasVentana={diasVentana} />}
 
-      <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
         Lo que el agente aprende de cada cliente —productos, remitentes, destinatarios y su número interno— vive en el{' '}
         <Link href={`/dashboard/agentes/carta-porte/catalogo${sufijo}`} className="font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>catálogo del cliente →</Link>
       </p>
-      <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
         Los clientes que necesitan su referencia para cobrar, y los viajes cargados que aún no la traen:{' '}
         <Link href={`/dashboard/agentes/carta-porte/referencia${sufijo}`} className="font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>referencia del cliente →</Link>
       </p>
@@ -120,11 +120,11 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
       <section className="card p-4">
         <div className="flex items-center gap-2 mb-3">
           <Sparkles width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-          <h2 className="font-display text-[15px] font-semibold">Lo que hace, y lo que jamás hará</h2>
+          <TituloRecuadro info="carta_porte_agente.alcance">Lo que hace, y lo que jamás hará</TituloRecuadro>
         </div>
-        <div className="grid md:grid-cols-3 gap-4 text-[12.5px]">
+        <div className="grid md:grid-cols-3 gap-4 text-[12px]">
           <div>
-            <div className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>Al despachar</div>
+            <div className="etiqueta-mono text-[11px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>Al despachar</div>
             <p style={{ color: 'var(--muted)' }}>
               Corre el árbol legal y pregunta por WhatsApp: «¿la ruta pisa carretera federal?» con
               botones, y si la unidad cabe en la excepción del C2, el radio («radio F-123 25»).
@@ -132,7 +132,7 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
             </p>
           </div>
           <div>
-            <div className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>Con lo capturado</div>
+            <div className="etiqueta-mono text-[11px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>Con lo capturado</div>
             <p style={{ color: 'var(--muted)' }}>
               Arma el borrador del complemento (37 datos, partidos 19 del cliente / 18 del
               transportista) y lo pasa por las validaciones que el PAC rechaza seguro — «te faltó
@@ -140,7 +140,7 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
             </p>
           </div>
           <div>
-            <div className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>Jamás</div>
+            <div className="etiqueta-mono text-[11px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>Jamás</div>
             <p style={{ color: 'var(--muted)' }}>
               No afirma «no necesitas Carta Porte» sin tu declaración firmada; no inventa claves del
               SAT ni el número de permiso SICT (faltante = faltante); y no timbra — el CFDI lo emite
@@ -158,8 +158,8 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
 function Tarjeta({ rotulo, valor, tono }: { rotulo: string; valor: number | null; tono?: string }) {
   return (
     <div className="card p-4">
-      <div className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>{rotulo}</div>
-      <div className="cifra-mono text-[22px] font-semibold" style={tono && valor !== null && valor > 0 ? { color: tono } : undefined}>
+      <div className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>{rotulo}</div>
+      <div className="cifra-mono text-[20px] font-semibold" style={tono && valor !== null && valor > 0 ? { color: tono } : undefined}>
         {valor === null ? '—' : numero(valor)}
       </div>
     </div>
@@ -175,10 +175,10 @@ function ComoMandarDocumentos({ buzon, sufijo }: { buzon: BuzonCartaPorteVista |
   const panel = `/dashboard/carta-porte/documentos${sufijo}`;
   return (
     <section className="card p-4 space-y-3" aria-labelledby="cp-como-mandar">
-      <h2 id="cp-como-mandar" className="font-display text-[15px] font-semibold">Cómo mandarme documentos</h2>
-      <div className="grid md:grid-cols-3 gap-4 text-[12.5px]">
+      <TituloRecuadro id="cp-como-mandar" info="carta_porte_agente.como_mandar">Cómo mandarme documentos</TituloRecuadro>
+      <div className="grid md:grid-cols-3 gap-4 text-[12px]">
         <div className="space-y-1.5">
-          <div className="etiqueta-mono text-[10px] uppercase flex items-center gap-1" style={{ color: 'var(--faint)' }}>
+          <div className="etiqueta-mono text-[11px] uppercase flex items-center gap-1" style={{ color: 'var(--faint)' }}>
             <Mail width={12} height={12} strokeWidth={1.75} /> 1 · Correo (el medio oficial)
           </div>
           {buzon === 'no_leido' ? (
@@ -208,7 +208,7 @@ function ComoMandarDocumentos({ buzon, sufijo }: { buzon: BuzonCartaPorteVista |
           )}
         </div>
         <div className="space-y-1.5">
-          <div className="etiqueta-mono text-[10px] uppercase flex items-center gap-1" style={{ color: 'var(--faint)' }}>
+          <div className="etiqueta-mono text-[11px] uppercase flex items-center gap-1" style={{ color: 'var(--faint)' }}>
             <MessageCircle width={12} height={12} strokeWidth={1.75} /> 2 · WhatsApp 1:1 de la oficina
           </div>
           <p style={{ color: 'var(--muted)' }}>
@@ -217,7 +217,7 @@ function ComoMandarDocumentos({ buzon, sufijo }: { buzon: BuzonCartaPorteVista |
           </p>
         </div>
         <div className="space-y-1.5">
-          <div className="etiqueta-mono text-[10px] uppercase flex items-center gap-1" style={{ color: 'var(--faint)' }}>
+          <div className="etiqueta-mono text-[11px] uppercase flex items-center gap-1" style={{ color: 'var(--faint)' }}>
             <LayoutDashboard width={12} height={12} strokeWidth={1.75} /> 3 · El panel
           </div>
           <p style={{ color: 'var(--muted)' }}>Sube el archivo a mano en la bandeja de documentos.</p>
@@ -236,10 +236,10 @@ const COLOR_TONO: Record<TarjetaInsight['tono'], string> = { bad: 'var(--bad)', 
 
 function TarjetaQuePaso({ t }: { t: TarjetaInsight }) {
   return (
-    <div className="card p-3.5 text-[12.5px] space-y-1" style={{ borderLeft: `3px solid ${COLOR_TONO[t.tono]}` }}>
+    <div className="card p-3.5 text-[12px] space-y-1" style={{ borderLeft: `3px solid ${COLOR_TONO[t.tono]}` }}>
       <div className="font-medium">{t.quePaso}</div>
-      <div style={{ color: 'var(--muted)' }}><span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Qué significa </span>{t.queSignifica}</div>
-      <div><span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Qué hacer </span>{t.queHacer}</div>
+      <div style={{ color: 'var(--muted)' }}><span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Qué significa </span>{t.queSignifica}</div>
+      <div><span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Qué hacer </span>{t.queHacer}</div>
     </div>
   );
 }
@@ -247,9 +247,9 @@ function TarjetaQuePaso({ t }: { t: TarjetaInsight }) {
 function TablaCalidad({ titulo, filas, rotular }: { titulo: string; filas: CalidadGrupo[]; rotular: (clave: string) => string }) {
   return (
     <div className="card p-4">
-      <div className="etiqueta-mono text-[10px] uppercase mb-2" style={{ color: 'var(--faint)' }}>{titulo}</div>
-      {filas.length === 0 ? <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Sin documentos aprobados todavía.</p> : (
-        <table className="w-full text-[12.5px]">
+      <div className="etiqueta-mono text-[11px] uppercase mb-2" style={{ color: 'var(--faint)' }}>{titulo}</div>
+      {filas.length === 0 ? <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Sin documentos aprobados todavía.</p> : (
+        <table className="w-full text-[12px]">
           <thead><tr style={{ color: 'var(--faint)' }}><th className="text-left font-normal">Grupo</th><th className="text-right font-normal">Aprobados</th><th className="text-right font-normal">Sin tocar</th></tr></thead>
           <tbody>
             {filas.map((g) => (
@@ -276,7 +276,7 @@ function InsightsDelAgente({ insights, nombresCliente, diasVentana }: { insights
   const hayAlgo = i.aprobados > 0 || e.enviados + e.rechazadosTms + e.pendientesReque + e.subidosAMano > 0 || (i.causasRechazo?.length ?? 0) > 0;
   return (
     <section className="space-y-3" aria-label="Cómo le va al agente">
-      <h2 className="font-display text-[15px] font-semibold">Cómo le va al agente <span className="text-[12px] font-normal" style={{ color: 'var(--muted)' }}>· últimos {diasVentana} días</span></h2>
+      <TituloRecuadro info="carta_porte_agente.resultados">Cómo le va al agente <span className="text-[12px] font-normal" style={{ color: 'var(--muted)' }}>· últimos {diasVentana} días</span></TituloRecuadro>
       {i.parcial && (
         <p className="text-[12px]" role="note" style={{ color: 'var(--warn)' }}>
           Cifras de los {numero(i.parcial.leidos)} documentos más recientes de {numero(i.parcial.total)} de los últimos {diasVentana} días: son parciales.
@@ -288,8 +288,8 @@ function InsightsDelAgente({ insights, nombresCliente, diasVentana }: { insights
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="card p-4">
-              <div className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Aprobados sin tocar</div>
-              <div className="cifra-mono text-[22px] font-semibold">{pctTxt(i.pctSinTocar)}</div>
+              <div className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Aprobados sin tocar</div>
+              <div className="cifra-mono text-[20px] font-semibold">{pctTxt(i.pctSinTocar)}</div>
               <div className="text-[11px]" style={{ color: 'var(--muted)' }}>{i.aprobados === 0 ? 'Aún no hay aprobados' : `de ${numero(i.aprobados)} aprobados`}</div>
             </div>
             <Tarjeta rotulo="Enviados al sistema del cliente" valor={e.enviados} />
@@ -305,9 +305,9 @@ function InsightsDelAgente({ insights, nombresCliente, diasVentana }: { insights
             <TablaCalidad titulo="Calidad por formato" filas={i.porFormato} rotular={(c) => c} />
             <TablaCalidad titulo="Calidad por cliente" filas={i.porCliente} rotular={nombre} />
           </div>
-          <div className="grid md:grid-cols-2 gap-3 text-[12.5px]">
+          <div className="grid md:grid-cols-2 gap-3 text-[12px]">
             <div className="card p-4">
-              <div className="etiqueta-mono text-[10px] uppercase mb-2" style={{ color: 'var(--faint)' }}>Por qué se rechazan</div>
+              <div className="etiqueta-mono text-[11px] uppercase mb-2" style={{ color: 'var(--faint)' }}>Por qué se rechazan</div>
               {i.causasRechazo === null ? <p style={{ color: 'var(--muted)' }}>No disponible todavía en esta base.</p>
                 : i.causasRechazo.length === 0 && i.rechazadosSinCausa === 0 ? <p style={{ color: 'var(--muted)' }}>No hubo rechazos.</p>
                 : <ul className="space-y-0.5">
@@ -316,7 +316,7 @@ function InsightsDelAgente({ insights, nombresCliente, diasVentana }: { insights
                   </ul>}
             </div>
             <div className="card p-4">
-              <div className="etiqueta-mono text-[10px] uppercase mb-2" style={{ color: 'var(--faint)' }}>Lo que más se corrige</div>
+              <div className="etiqueta-mono text-[11px] uppercase mb-2" style={{ color: 'var(--faint)' }}>Lo que más se corrige</div>
               {i.topCamposCorregidos.length === 0 ? <p style={{ color: 'var(--muted)' }}>Nadie ha corregido campos en este periodo.</p>
                 : <ol className="space-y-0.5 list-decimal pl-4">{i.topCamposCorregidos.map((c) => <li key={c.campo}>{c.campo}: <span className="cifra-mono">{numero(c.correcciones)}</span> {c.correcciones === 1 ? 'vez' : 'veces'}</li>)}</ol>}
             </div>
@@ -343,7 +343,7 @@ function ViajesSinCcp({ listado }: { listado: ListadoSinCcp | 'no_leido' }) {
   if (listado.sinDatosTms?.motivo === 'sin_viajes') {
     return (
       <section className="space-y-3" aria-label="Viajes salidos sin Carta Porte">
-        <h2 className="font-display text-[15px] font-semibold">Viajes salidos sin Carta Porte</h2>
+        <TituloRecuadro info="carta_porte_agente.sin_ccp">Viajes salidos sin Carta Porte</TituloRecuadro>
         <p role="alert" className="card p-4 text-[13px]" style={{ color: 'var(--warn)' }}>
           <strong>Sin datos del TMS:</strong> no se puede decir si hay viajes salidos sin Carta Porte. No hay ningún viaje importado del sistema de transporte en los últimos días
           {listado.sinDatosTms.ultimoImportadoEn ? ` (el último que entró fue hace ${numero(listado.sinDatosTms.horasDesdeImportacion ?? 0)} h)` : ''}.
@@ -358,14 +358,14 @@ function ViajesSinCcp({ listado }: { listado: ListadoSinCcp | 'no_leido' }) {
   return (
     <section className="space-y-3" aria-label="Viajes salidos sin Carta Porte">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h2 className="font-display text-[15px] font-semibold">Viajes salidos sin Carta Porte <span className="text-[12px] font-normal" style={{ color: 'var(--muted)' }}>· {numero(listado.total)}</span></h2>
+        <TituloRecuadro info="carta_porte_agente.sin_ccp">Viajes salidos sin Carta Porte <span className="text-[12px] font-normal" style={{ color: 'var(--muted)' }}>· {numero(listado.total)}</span></TituloRecuadro>
         {!listado.vacio && (
           <a download="viajes-sin-carta-porte.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(aCsvSinCcp(listado))}`}
-            className="text-[12.5px] font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>Descargar reporte (CSV)</a>
+            className="text-[12px] font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>Descargar reporte (CSV)</a>
         )}
       </div>
       {listado.sinDatosTms?.motivo === 'importacion_vieja' && (
-        <p role="alert" className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
+        <p role="alert" className="text-[12px]" style={{ color: 'var(--warn)' }}>
           La última importación de viajes del TMS fue hace {numero(listado.sinDatosTms.horasDesdeImportacion ?? 0)} h: esta lista puede estar atrasada y no debe leerse como «todo en regla».
         </p>
       )}
@@ -375,12 +375,12 @@ function ViajesSinCcp({ listado }: { listado: ListadoSinCcp | 'no_leido' }) {
         </p>
       )}
       {pocoLigado && (
-        <p role="alert" className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
+        <p role="alert" className="text-[12px]" style={{ color: 'var(--warn)' }}>
           Casi ningún viaje liga con un documento por folio: es posible que el folio del TMS no sea el mismo número que el folio del cliente. Confírmalo antes de leer esta lista como riesgo de multa.
         </p>
       )}
       {listado.truncado && (
-        <p role="alert" className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
+        <p role="alert" className="text-[12px]" style={{ color: 'var(--warn)' }}>
           La lista está incompleta: hay más salidas de las que se pueden leer de una vez y faltan las más antiguas. Revisa los viajes viejos en Viajes.
         </p>
       )}
@@ -390,9 +390,9 @@ function ViajesSinCcp({ listado }: { listado: ListadoSinCcp | 'no_leido' }) {
         <div key={g.clienteId ?? 'sin_cliente'} className="card p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="text-[13px] font-medium">{g.clienteNombre}</div>
-            <div className="text-[11.5px]" style={{ color: TONO_ANTIGUEDAD[g.colorMax] }}>{numero(g.viajes.length)} {g.viajes.length === 1 ? 'viaje' : 'viajes'} · el más viejo {numero(g.masAntiguoHoras)} h</div>
+            <div className="text-[11px]" style={{ color: TONO_ANTIGUEDAD[g.colorMax] }}>{numero(g.viajes.length)} {g.viajes.length === 1 ? 'viaje' : 'viajes'} · el más viejo {numero(g.masAntiguoHoras)} h</div>
           </div>
-          <ul className="space-y-0.5 text-[12.5px]">
+          <ul className="space-y-0.5 text-[12px]">
             {g.viajes.map((v) => (
               <li key={v.viajeId} className="flex items-center justify-between gap-3">
                 <span>{v.folio ?? 'Sin folio'}{v.localAbierto ? ' · local abierto' : ''}</span>

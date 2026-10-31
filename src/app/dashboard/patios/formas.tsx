@@ -17,7 +17,7 @@ function Enviar({ etiqueta, enviando, icono }: { etiqueta: string; enviando: str
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       {icono}
       {pending ? enviando : etiqueta}
@@ -114,7 +114,7 @@ export function FormaJefe({ accion, jefe, patios }: {
     <form action={despachar} className="flex flex-wrap items-end gap-2">
       <input type="hidden" name="userId" value={jefe.userId} />
       <div className="min-w-0">
-        <label htmlFor={id} className="block text-[12.5px] font-medium">{jefe.etiqueta}</label>
+        <label htmlFor={id} className="block text-[12px] font-medium">{jefe.etiqueta}</label>
         <select id={id} name="terminalId" defaultValue={jefe.terminalId} className={`${CAMPO} mt-1 w-56`} style={{ background: 'var(--surface)' }}>
           <option value="">Toda la flota (sin patio)</option>
           {patios.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
@@ -141,7 +141,7 @@ export function FormaSinPatio({ accion, tabla, cuantos, patios }: {
     <form action={despachar} className="flex flex-wrap items-end gap-2">
       <input type="hidden" name="tabla" value={tabla} />
       <div>
-        <label htmlFor={id} className="block text-[12.5px] font-medium">
+        <label htmlFor={id} className="block text-[12px] font-medium">
           {cuantos} {sustantivo} activos sin patio
         </label>
         <select id={id} name="terminalId" required defaultValue="" className={`${CAMPO} mt-1 w-56`} style={{ background: 'var(--surface)' }}>
