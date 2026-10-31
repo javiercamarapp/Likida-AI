@@ -84,5 +84,7 @@ export const BASE_TRAZO_MEZCLADO: Record<string, number> = {
   'app/dashboard/whatsapp/acciones.tsx': 1,
   'app/login/vista-login.tsx': 2,
   'app/ui-v2/componentes/overlay.tsx': 1,
+  'app/ui-v2/datos/banda-cobertura.tsx': 1,
+  'app/ui-v2/datos/chips-filtro.tsx': 1,
   'app/ui-v2/movimiento/tour/globo.tsx': 1,
 };
