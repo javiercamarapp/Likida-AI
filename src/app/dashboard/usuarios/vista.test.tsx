@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { VistaUsuarios, type UsuarioRow } from './vista';
-import { ROLES_INVITABLES } from '@/lib/auth/invitar';
+import { ROLES_INVITABLES, OPCION_NOMINA } from '@/lib/auth/invitar';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // USUARIOS & ROLES, PROBADA SOBRE EL RENDER (patrón seccion-credenciales, C2).
@@ -162,5 +162,27 @@ describe('lectura caída ≠ equipo vacío', () => {
     const html = pintar({ usuarios: [], puedeInvitar: true });
     expect(html).toContain('No hay cuentas dadas de alta');
     expect(html).toContain('Invitar a alguien de tu equipo');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// El rol `nomina` (0949) se ofrece SOLO en la forma de invitar (y solo si la página le pasa `rolesInvitar`): el selector de
+// «Cambiar rol» sigue con los roles de siempre, porque el servidor no asigna `nomina` a una cuenta que ya existe.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('nomina en la forma de invitar, no en la de cambiar rol', () => {
+  const pintarCon = (rolesInvitar?: ReadonlyArray<(typeof ROLES_INVITABLES)[number] | typeof OPCION_NOMINA>) => renderToStaticMarkup(
+    <VistaUsuarios
+      usuarios={[CONTADOR_CON_TEL]} userId="u-9" puedeInvitar roles={ROLES_INVITABLES} rolesInvitar={rolesInvitar} acciones={acciones}
+    />,
+  );
+
+  it('sin rolesInvitar (flota sin perfil o quien invita no es el dueño) no hay opción Nómina ni en una ni en otra forma', () => {
+    expect(pintarCon()).not.toContain('Nómina y RH');
+  });
+
+  it('con rolesInvitar la opción aparece en la forma de invitar y NO en la de cambiar el rol de una cuenta', () => {
+    const html = pintarCon([...ROLES_INVITABLES, OPCION_NOMINA]);
+    expect(html).toContain('value="nomina"');
+    expect(html.split('value="nomina"').length - 1).toBe(1);
   });
 });

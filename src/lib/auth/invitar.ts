@@ -57,13 +57,38 @@ export const ROLES_INVITABLES = [
   { valor: 'flota_admin', rotulo: ROTULOS_ROL.flota_admin.nombre, detalle: ROTULOS_ROL.flota_admin.detalle },
 ] as const;
 
+/**
+ * `nomina` (0949) NO está en `ROLES_INVITABLES` a propósito: esa lista es la de TODA flota y también la de los roles asignables
+ * (`usuarios_escritura.ts`); un rol que solo existe bajo el perfil `cinco_agentes` no puede aparecer ahí. Se ofrece (y se acepta en el
+ * servidor) únicamente con `rolesInvitablesPara`.
+ */
+export const OPCION_NOMINA = {
+  valor: 'nomina', rotulo: ROTULOS_ROL.nomina.nombre, detalle: ROTULOS_ROL.nomina.detalle,
+} as const;
+
 export type RolInvitable = (typeof ROLES_INVITABLES)[number]['valor'];
-export type OpcionRol = (typeof ROLES_INVITABLES)[number];
+export type OpcionRol = (typeof ROLES_INVITABLES)[number] | typeof OPCION_NOMINA;
+
+/** Desde dónde se invita: el rol de quien invita y el perfil de LA FLOTA a la que se invita (sesión, nunca el formulario). */
+export interface ContextoInvitacion {
+  rolInvitador: string;
+  perfil: string | null | undefined;
+}
+
+/**
+ * Los roles que ESTA persona puede invitar a ESTA flota. La lista de siempre y, solo si quien invita es el dueño de la flota
+ * (`flota_admin`: ni el superadmin, ni contador ni encargado) Y la flota tiene el perfil `cinco_agentes`, también `nomina`.
+ * Sin contexto, la lista de siempre: ninguna llamada existente cambia.
+ */
+export function rolesInvitablesPara(ctx?: ContextoInvitacion): readonly OpcionRol[] {
+  if (ctx && ctx.rolInvitador === 'flota_admin' && ctx.perfil === 'cinco_agentes') return [...ROLES_INVITABLES, OPCION_NOMINA];
+  return ROLES_INVITABLES;
+}
 
 export interface InvitacionValida {
   email: string;
   nombre?: string;
-  rol: RolInvitable;
+  rol: RolInvitable | 'nomina';
   /** Como se tecleó (recortado): `provisionarUsuario` lo normaliza adentro. */
   telefono?: string;
 }
@@ -98,13 +123,13 @@ export function validarInvitacion(c: {
   nombre: string;
   rol: string;
   telefono: string;
-}): InvitacionValida {
+}, ctx?: ContextoInvitacion): InvitacionValida {
   const email = correoDeInvitacion(c.email);
   const nombre = nombreDeInvitacion(c.nombre);
 
   // Fail closed contra el catálogo: cualquier valor que no esté en la lista
   // rebota — `superadmin` incluido, aunque el select nunca lo ofrezca.
-  const rol = ROLES_INVITABLES.find((r) => r.valor === c.rol)?.valor;
+  const rol = rolesInvitablesPara(ctx).find((r) => r.valor === c.rol)?.valor;
   if (!rol) {
     throw new DatoInvalido('Elige el rol de la lista: contador, encargado o dueño. Ningún otro se puede invitar desde el panel.');
   }
