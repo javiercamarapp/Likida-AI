@@ -281,6 +281,7 @@ describe('Campo de búsqueda con icono (Viajes)', () => {
     const css = readFileSync(new URL('../ui-v2/componentes.css', import.meta.url), 'utf8');
     expect(css).toMatch(/padding-inline: 10px; padding-block: 4px;/);
     expect(css).toMatch(/\[class\*="pl-"\], \[class\*="pr-"\]\) \{ padding-inline: 10px/);
-    expect(pintarViajes()).toContain('pl-8');
+    // El icono vive DENTRO del chip de búsqueda (flex), no sobre el campo: no hay texto que pisar.
+    expect(pintarViajes()).toContain('rv-fl--buscar');
   });
 });

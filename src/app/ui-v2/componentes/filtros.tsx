@@ -123,6 +123,14 @@ export function FiltroOpciones({ etiqueta, opciones, valor, porDefecto = '', nom
         {activo ? <span className="rv-fl__val">{rotuloValor}</span> : null}
         <ChevronDown className="rv-fl__flecha" aria-hidden="true" />
       </button>
+      {opciones.some((o) => o.href) ? (
+        // Sin JavaScript el chip no abre nada: las opciones-enlace salen como enlaces simples (el estado vive en la URL).
+        <noscript>
+          <span className="rv-fl__ns">
+            {opciones.filter((o) => o.href).map((o, i) => <Link key={`${o.valor}-${i}`} href={o.href!} prefetch={false} aria-current={o.valor === actual ? 'true' : undefined}>{o.rotulo}</Link>)}
+          </span>
+        </noscript>
+      ) : null}
       <Popover abierto={abierto} onCerrar={cerrar} ancla={ancla} etiqueta={etiqueta} alineacion="inicio" className="rv-fl__pop">
         <div ref={lista} id={idLista} role="listbox" aria-label={etiqueta} className="rv-fl__lista" onKeyDown={alTeclearLista}>
           {opciones.map((o, i) => {
