@@ -40,6 +40,8 @@ import { dominioBuzon } from '@/lib/correo/buzon';
 import { parsearImporteMx } from '@/lib/formato';
 import { superficiePeajesDeTenant, MOTIVO_STAND_BY_PERFIL } from '@/lib/likida/peajes/superficie_perfil';
 import { VistaConfiguracionPeajes } from './vista';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Configuración del conciliador de peajes' };
 
 export const dynamic = 'force-dynamic';
 

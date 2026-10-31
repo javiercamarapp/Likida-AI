@@ -9,6 +9,8 @@ import * as repo from '@/lib/likida/carta_porte_docs/repo';
 import { sufijoTenant } from '../../../sufijo';
 import { capturarReferencia, cambiarExigencia } from './actions';
 import { VistaReferencia } from './vista';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Referencia del cliente' };
 
 export const dynamic = 'force-dynamic';
 

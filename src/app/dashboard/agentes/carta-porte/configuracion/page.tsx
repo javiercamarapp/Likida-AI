@@ -12,6 +12,8 @@ import { guardarConfiguracionSalida, guardarPrimerMesAccion, probarConexionSalid
 import { confirmarRespuestaCcp, fijarRespuestaCcp } from './ccp_actions';
 import { esProbable } from './formato';
 import { VistaConfiguracionSalida } from './vista';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Configuración de la salida' };
 
 export const dynamic = 'force-dynamic';
 

@@ -3,7 +3,7 @@ import type { ConfigGasto, PlanCobroGasto, ItemCobro } from '@/lib/likida/agente
 import { ROTULO_MOTIVO, ROTULO_CONCEPTO_COBRANZA } from '@/lib/likida/agentes/cobranza_gasto_pura';
 import type { TableroGastos } from '@/lib/likida/agentes/cobranza_gasto';
 import { numero, mxn, fechaCorta } from '@/lib/formato';
-import { EstadoVacio } from '@/app/admin/ui/kit';
+import { EstadoVacio } from '../../estados';
 import { FormaPorGasto } from './forma-por-gasto';
 import type { AccionSimple } from './controles';
 
