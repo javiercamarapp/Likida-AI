@@ -115,14 +115,10 @@ export function ListaAtencion({ filas, senales, ambito, soloLectura, sufijo, vis
   );
 }
 
-const ATAJOS = [
-  { href: '/dashboard/despacho', nombre: 'Nuevo viaje' },
-  { href: '/dashboard/viajes', nombre: 'Viajes' },
-  { href: '/dashboard/operadores', nombre: 'Operadores' },
-] as const;
-
-export function SiguienteAccion({ filas, senales, ambito, soloLectura, sufijo }: {
+export function SiguienteAccion({ filas, senales, ambito, soloLectura, sufijo, atajos }: {
   filas: readonly FilaAtencion[]; senales: SenalesAsistente | null; ambito: string; soloLectura: boolean; sufijo: string;
+  /** Los atajos que ESTE rol abre (el servidor ya los filtró con `puedeVerRuta`). */
+  atajos: ReadonlyArray<{ href: string; nombre: string }>;
 }) {
   const marcha = useMarcha(senales, ambito, soloLectura, sufijo);
   const acciones = elegirAcciones({ marcha: marcha ? { titulo: marcha.paso.titulo, resumen: marcha.paso.resumen, href: marcha.href } : null, filas });
@@ -141,12 +137,12 @@ export function SiguienteAccion({ filas, senales, ambito, soloLectura, sufijo }:
           <p className="rv-sig__porque">No hay pasos pendientes ni alertas de los agentes en este periodo.</p>
         </div>
       )}
-      <ul className="rv-atajos" aria-label={despues.length ? 'Después y atajos' : 'Atajos'}>
+      {despues.length > 0 || atajos.length > 0 ? <ul className="rv-atajos" aria-label={despues.length ? 'Después y atajos' : 'Atajos'}>
         {despues.slice(0, 2).map((a) => <li key={a.id}><Link href={a.href} className="rv-atajos__fila"><span>Después: {a.titulo}</span><ChevronRight width={16} height={16} aria-hidden="true" /></Link></li>)}
-        {ATAJOS.slice(0, Math.max(0, 2 - despues.length)).map((a) => (
+        {atajos.slice(0, Math.max(0, 2 - despues.length)).map((a) => (
           <li key={a.href}><Link href={`${a.href}${sufijo}`} className="rv-atajos__fila"><span>{a.nombre}</span><ChevronRight width={16} height={16} aria-hidden="true" /></Link></li>
         ))}
-      </ul>
+      </ul> : null}
     </>
   );
 }
