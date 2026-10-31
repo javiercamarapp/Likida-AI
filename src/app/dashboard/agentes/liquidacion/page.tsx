@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
+import { esRolNomina } from '@/lib/auth/roles';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { dejarFlash, leerFlash } from '@/lib/likida/mensaje_flash';
 import {
@@ -44,12 +45,18 @@ import {
 import { leerPorId } from '@/lib/likida/liquidacion_externa/repo';
 import { hoyMx, inicioDiaMx, finDiaMx } from '@/lib/formato';
 import { cargarDetalle, leerIdDetalle } from './detalle_desglose';
+import { PaginaConteosNomina } from './conteos-nomina';
 
 export const dynamic = 'force-dynamic';
 // A37-O7-06: las Server Actions de esta página corren bajo el límite de la página. La subida manual de desgloses y la importación
 // de liquidaciones usan presupuestos de 45 s (el aviso controlado «faltan N» depende de que la plataforma NO corte antes): se
 // declara el literal (Next lo lee en build) con margen sobre ese presupuesto. Ver scripts/ci/max_duration_acciones_o7_06.test.ts.
 export const maxDuration = 60;
+
+/** Las acciones de servidor de esta pantalla son alcanzables por POST directo: `nomina` (solo conteos) JAMÁS opera, aunque vea la ruta. */
+function puedeOperarLiquidacion(rol: string): boolean {
+  return !esRolNomina(rol) && puedeVerRuta(rol, '/dashboard/agentes/liquidacion');
+}
 
 /** Sección secundaria que no se pudo leer → null → su leyenda honesta.
  *  Mismo patrón `safe` que inicio-contenido: una gráfica caída no tumba la
@@ -229,6 +236,8 @@ export default async function PaginaAgenteLiquidacion({
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
   if (!puedeVerRuta(rol, '/dashboard/agentes/liquidacion')) redirect('/dashboard');
+  // `nomina` (0949): SOLO conteos, y antes de leer nada más (flash, canal, desgloses, KPIs, cola...). Ver `conteos-nomina.tsx`.
+  if (esRolNomina(rol)) return <PaginaConteosNomina tenantId={tenantId} />;
 
   const base = sp.tenant ? `?tenant=${sp.tenant}` : sp.vista ? `?vista=${sp.vista}` : '';
   const flash = await leerFlash('/dashboard/agentes/liquidacion');
@@ -250,7 +259,7 @@ export default async function PaginaAgenteLiquidacion({
   async function reenviarDesgloseExterno(fd: FormData): Promise<void> {
     'use server';
     const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
-    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion')) throw new Error('Tu rol no ve esta pantalla.');
+    if (!puedeOperarLiquidacion(s.rol)) throw new Error('Tu rol no ve esta pantalla.');
     const id = leerIdDetalle(String(fd.get('id') ?? ''));
     const a = String(fd.get('a') ?? '');
     const motivo = String(fd.get('motivo') ?? 'manual');
@@ -274,7 +283,7 @@ export default async function PaginaAgenteLiquidacion({
   async function liberarEnvioExterno(fd: FormData): Promise<void> {
     'use server';
     const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
-    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion')) throw new Error('Tu rol no ve esta pantalla.');
+    if (!puedeOperarLiquidacion(s.rol)) throw new Error('Tu rol no ve esta pantalla.');
     const id = leerIdDetalle(String(fd.get('id') ?? ''));
     if (!id) return volverAlDetalle(contexto, null, 'r_entrada');
     let codigo: string;
@@ -296,7 +305,7 @@ export default async function PaginaAgenteLiquidacion({
   async function subirDesglosesExportados(fd: FormData): Promise<void> {
     'use server';
     const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
-    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion') || !puedeVerArea(s.rol, 'administracion')) throw new Error('Solo el dueño de la flota sube desgloses.');
+    if (!puedeOperarLiquidacion(s.rol) || !puedeVerArea(s.rol, 'administracion')) throw new Error('Solo el dueño de la flota sube desgloses.');
     const f = await leerArchivoCarga(fd);
     // A1-01: dos pasos. «Ver vista previa» solo cuenta (N desgloses / M correos); «Subir y enviar» exige haber escrito M.
     const confirmo = String(fd.get('paso') ?? '') === 'subir';
@@ -313,7 +322,7 @@ export default async function PaginaAgenteLiquidacion({
   async function subirContactosOperadores(fd: FormData): Promise<void> {
     'use server';
     const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
-    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion') || !puedeVerArea(s.rol, 'administracion')) throw new Error('Solo el dueño de la flota sube correos.');
+    if (!puedeOperarLiquidacion(s.rol) || !puedeVerArea(s.rol, 'administracion')) throw new Error('Solo el dueño de la flota sube correos.');
     const f = await leerArchivoCarga(fd);
     await dejarFlash('/dashboard/agentes/liquidacion', f.ok ? await cargarContactosDePanel(s.tenantId, f.archivo) : { error: f.error });
     revalidatePath('/dashboard/agentes/liquidacion');
@@ -409,7 +418,7 @@ export default async function PaginaAgenteLiquidacion({
   async function buscarFiltro(tipo: TipoCatalogo, q: string): Promise<OpcionCatalogo[]> {
     'use server';
     const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
-    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion')) throw new Error('Tu rol no ve esta pantalla.');
+    if (!puedeOperarLiquidacion(s.rol)) throw new Error('Tu rol no ve esta pantalla.');
     if (tipo !== 'operador' && tipo !== 'unidad') throw new Error('Catálogo desconocido.');
     return buscarCatalogo(s.tenantId, tipo, typeof q === 'string' ? q : '');
   }
@@ -453,7 +462,7 @@ export default async function PaginaAgenteLiquidacion({
     'use server';
     const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
     // A37-A1-liquidaciones-20: manda por WhatsApp a teléfonos reales con cifras: lo administra el dueño, no basta VER la ruta (el contador ve dinero).
-    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion') || !puedeAdministrar(s.rol)) throw new Error('Solo quien administra la flota puede hacer esto.');
+    if (!puedeOperarLiquidacion(s.rol) || !puedeAdministrar(s.rol)) throw new Error('Solo quien administra la flota puede hacer esto.');
     const id = String(fd.get('id') ?? '');
     let resultado: 'reintentada' | 'no_aplica' | 'no_encontrada' | 'error' = 'no_encontrada';
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
@@ -471,7 +480,7 @@ export default async function PaginaAgenteLiquidacion({
   async function subirLiquidacionesExternas(fd: FormData): Promise<void> {
     'use server';
     const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
-    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion') || !puedeVerArea(s.rol, 'administracion')) throw new Error('Solo el dueño de la flota sube liquidaciones.');
+    if (!puedeOperarLiquidacion(s.rol) || !puedeVerArea(s.rol, 'administracion')) throw new Error('Solo el dueño de la flota sube liquidaciones.');
     const a = fd.get('archivo');
     const params: Array<[string, string]> = [...contexto];
     // A37-S14-07: el detalle (texto) viaja en una cookie de servidor, no en la URL; en la URL solo quedan códigos validados.
@@ -500,7 +509,7 @@ export default async function PaginaAgenteLiquidacion({
     'use server';
     const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
     // A37-A1-liquidaciones-20: manda por WhatsApp a teléfonos reales con cifras: lo administra el dueño, no basta VER la ruta (el contador ve dinero).
-    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion') || !puedeAdministrar(s.rol)) throw new Error('Solo quien administra la flota puede hacer esto.');
+    if (!puedeOperarLiquidacion(s.rol) || !puedeAdministrar(s.rol)) throw new Error('Solo quien administra la flota puede hacer esto.');
     const id = String(fd.get('id') ?? '');
     let resultado: 'copia_enviada' | 'copia_ya' | 'copia_fallo' | 'copia_sin_jefe' | 'canal_correo' | 'no_encontrada' | 'error' = 'no_encontrada';
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
@@ -522,7 +531,7 @@ export default async function PaginaAgenteLiquidacion({
     'use server';
     const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
     // A37-A1-liquidaciones-20: manda por WhatsApp a teléfonos reales con cifras: lo administra el dueño, no basta VER la ruta (el contador ve dinero).
-    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion') || !puedeAdministrar(s.rol)) throw new Error('Solo quien administra la flota puede hacer esto.');
+    if (!puedeOperarLiquidacion(s.rol) || !puedeAdministrar(s.rol)) throw new Error('Solo quien administra la flota puede hacer esto.');
     const id = String(fd.get('id') ?? '');
     let resultado: 'reaviso_ok' | 'reaviso_parcial' | 'reaviso_pendiente' | 'reaviso_ya' | 'reaviso_en_curso' | 'canal_correo' | 'no_aplica' | 'no_encontrada' | 'error' = 'no_encontrada';
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
@@ -570,7 +579,7 @@ export default async function PaginaAgenteLiquidacion({
   async function guardarEstrategia(_previo: ResultadoEstrategia, fd: FormData): Promise<ResultadoEstrategia> {
     'use server';
     const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
-    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion') || !puedeAdministrar(s.rol)) {
+    if (!puedeOperarLiquidacion(s.rol) || !puedeAdministrar(s.rol)) {
       return { ok: false, error: 'Solo el dueño de la flota cambia la estrategia del agente.' };
     }
     try {
