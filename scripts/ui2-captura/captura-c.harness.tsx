@@ -22,6 +22,12 @@ vi.mock('next/navigation', () => ({
 }));
 const SENALES_RESUMEN = { actuales: null as unknown };
 vi.mock('@/lib/likida/asistente/senales', () => ({ leerSenalesAsistente: async () => SENALES_RESUMEN.actuales }));
+// Datos del Resumen v2 (sintéticos): el lector real consulta la base; aquí lo sustituye el arnés por vista.
+const DATOS_RESUMEN = { actuales: null as unknown };
+vi.mock('@/app/dashboard/resumen-datos', async (orig) => ({
+  ...(await orig<typeof import('@/app/dashboard/resumen-datos')>()),
+  leerDatosResumen: async () => DATOS_RESUMEN.actuales,
+}));
 vi.mock('@/lib/likida/agentes/corridas', async (orig) => ({
   ...(await orig<typeof import('@/lib/likida/agentes/corridas')>()),
   ultimasCorridas: async (_t: string, agente: string) => (agente === 'liquidacion'
@@ -33,7 +39,6 @@ const { default: DashboardChromeV2 } = await import('@/app/dashboard/shell/chrom
 const { VistaPuestaEnMarcha } = await import('@/app/dashboard/puesta-en-marcha/vista');
 const { VistaConexiones } = await import('@/app/dashboard/conexiones/vista');
 const { ResumenV2 } = await import('@/app/dashboard/resumen-v2');
-const { TarjetaAgente, FICHAS_CINCO_AGENTES } = await import('@/app/dashboard/inicio-cinco-agentes');
 const { GloboTour } = await import('@/app/ui-v2/movimiento/tour/globo');
 const { colocarGlobo, rectFoco, trazoVelo } = await import('@/app/ui-v2/movimiento/tour/geometria');
 const { RECORRIDO_DUENO } = await import('@/app/dashboard/recorridos/dueno');
@@ -84,20 +89,40 @@ const insight = (agente: Insight['agente']): Insight => {
   } as Insight;
 };
 
-async function fichas() {
-  const insights = Object.fromEntries(FICHAS_CINCO_AGENTES.map((f) => [f.insight, f.insight === 'liquidacion' ? [insight('liquidacion')] : []]));
-  return Promise.all(FICHAS_CINCO_AGENTES.map((f) => TarjetaAgente({ ficha: f, tenantId: 't', sufijo: '', insights: insights as never })));
-}
+const SEMANAS = [4, 6, 5, 9, 7, 11, 8, 5].map((valor, i) => ({ inicio: `2026-09-${String(7 + 7 * i).padStart(2, '0')}`, etiqueta: ['7 sep', '14 sep', '21 sep', '28 sep', '5 oct', '12 oct', '19 oct', '26 oct'][i], valor, parcial: i === 7 }));
+const DATOS_CON: unknown = {
+  rango: '30', hoy: '2026-10-28', veDinero: true,
+  kpis: { viajesLiquidados: 42, montoComprobado: 482310.5, diferenciaDetectada: 12400, conDiferencias: 5, porRevisar: 3, tasaCuadre: 88 },
+  peajes: { total: 18250, semanas: 5 }, cartaPorte: { completas: 7, total: 9 }, cierres: SEMANAS,
+  porTipo: [{ tipo: 'sobre_politica', monto: 9000, n: 3 }, { tipo: 'duplicado', monto: 3400, n: 2 }, { tipo: 'sin_comprobante', monto: 1800, n: 4 }],
+  hechos: [
+    { tipo: 'recordatorio', folio: 'VJ-1042', operador: 'Rosa Medina', cuando: '2026-10-27T15:00:00Z' },
+    { tipo: 'escalado', folio: 'VJ-1038', operador: null, cuando: '2026-10-26T15:00:00Z' },
+    { tipo: 'recordatorio', folio: 'VJ-1031', operador: 'Luis Ortega', cuando: '2026-10-25T15:00:00Z' },
+    { tipo: 'recordatorio', folio: 'VJ-1027', operador: 'Marta Ríos', cuando: '2026-10-24T15:00:00Z' },
+    { tipo: 'escalado', folio: 'VJ-1019', operador: null, cuando: '2026-10-22T15:00:00Z' },
+  ],
+  escalados: 2,
+};
+const DATOS_VACIOS: unknown = {
+  rango: '30', hoy: '2026-10-28', veDinero: true,
+  kpis: { viajesLiquidados: 0, montoComprobado: 0, diferenciaDetectada: 0, conDiferencias: 0, porRevisar: 0, tasaCuadre: 0 },
+  peajes: { total: 0, semanas: 5 }, cartaPorte: { completas: 0, total: 0 }, cierres: SEMANAS.map((c) => ({ ...c, valor: 0 })),
+  porTipo: [], hechos: [], escalados: 0,
+};
+const DATOS_CAIDOS: unknown = { rango: '30', hoy: '2026-10-28', veDinero: true, kpis: null, peajes: null, cartaPorte: null, cierres: null, porTipo: null, hechos: null, escalados: null };
+
+const PRINCIPALES = [insight('peajes')];
 
 const asistente = (s: SenalesAsistente, paso?: 'tms' | 'correo') => (
   <VistaPuestaEnMarcha senales={s} ambito="t:u" tenantId="t" sufijo="" soloLectura={false} pasoInicial={paso} />
 );
 
-interface VistaDef { ruta: string; cuerpo: () => Promise<ReactNode> | ReactNode; senales?: SenalesAsistente }
+interface VistaDef { ruta: string; cuerpo: () => Promise<ReactNode> | ReactNode; senales?: SenalesAsistente; datos?: unknown }
 const VISTAS: Record<string, VistaDef> = {
-  'c01-resumen-vacio': { ruta: '/dashboard', senales: VACIAS, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, fichas: await fichas() }) },
-  'c02-resumen-en-curso': { ruta: '/dashboard', senales: EN_CURSO, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, fichas: await fichas() }) },
-  'c03-resumen-sin-dato': { ruta: '/dashboard', senales: CAIDAS, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, fichas: await fichas() }) },
+  'c01-resumen-vacio': { ruta: '/dashboard', senales: VACIAS, datos: DATOS_VACIOS, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, veDinero: true, principales: [] }) },
+  'c02-resumen-en-curso': { ruta: '/dashboard', senales: EN_CURSO, datos: DATOS_CON, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, veDinero: true, principales: PRINCIPALES }) },
+  'c03-resumen-sin-dato': { ruta: '/dashboard', senales: CAIDAS, datos: DATOS_CAIDOS, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, veDinero: true, principales: [] }) },
   'c04-asistente-vacio': { ruta: '/dashboard/puesta-en-marcha', cuerpo: () => asistente(VACIAS) },
   'c05-asistente-tms': { ruta: '/dashboard/puesta-en-marcha', cuerpo: () => asistente(VACIAS, 'tms') },
   'c06-asistente-atencion': { ruta: '/dashboard/puesta-en-marcha', cuerpo: () => asistente(ATENCION, 'tms') },
@@ -136,6 +161,7 @@ describe('captura de las pantallas del carril C', () => {
     mkdirSync(OUT, { recursive: true });
     for (const [id, v] of Object.entries(VISTAS)) {
       SENALES_RESUMEN.actuales = v.senales ?? VACIAS;
+      DATOS_RESUMEN.actuales = v.datos ?? DATOS_CON;
       const html = envolver(await v.cuerpo(), v.ruta);
       exigirV2Html(html, id);
       writeFileSync(path.join(TRABAJO, 'vistas', `${id}.html`), html);

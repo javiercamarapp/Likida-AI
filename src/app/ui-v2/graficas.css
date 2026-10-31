@@ -267,3 +267,29 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 
 [data-ui="v2"] .rv-kpi__enlace { color: var(--muted); text-decoration: none; }
 [data-ui="v2"] .rv-kpi__enlace:hover { color: var(--ink); text-decoration: underline; }
+
+/* ── Columnas semanales (Resumen v2): ESTILO §7 ─────────────────────────────────────────────────────────────────── */
+[data-ui="v2"] .rv-colum { display: flex; flex-direction: column; gap: 6px; margin: 0; min-width: 0; height: 100%; }
+[data-ui="v2"] .rv-colum__svg { display: block; width: 100%; flex: 1 1 140px; min-height: 140px; overflow: visible; }
+[data-ui="v2"] .rv-colum__base { stroke: var(--line2); stroke-width: 1; }
+[data-ui="v2"] .rv-colum__barra { fill: var(--cat, var(--ink)); transform-box: fill-box; transform-origin: bottom; }
+[data-ui="v2"] .rv-colum__barra[data-parcial] { fill: url(#rv-colum-trama); stroke: var(--cat, var(--ink)); stroke-width: 1; vector-effect: non-scaling-stroke; }
+[data-ui="v2"] .rv-colum__etqs { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; text-align: center; }
+[data-ui="v2"] .rv-colum__etqs li { display: flex; flex-direction: column; min-width: 0; font-size: 12px; line-height: 1.3; color: var(--muted); }
+[data-ui="v2"] .rv-colum__etqs b { font-weight: 600; font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums; }
+[data-ui="v2"] .rv-colum--vacio { position: relative; }
+[data-ui="v2"] .rv-colum__vacio { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 90%; padding: 4px 12px; border: 1.5px dotted var(--input); border-radius: 8px; background: var(--surface); font-size: 13px; color: var(--muted); text-align: center; }
+@media (prefers-reduced-motion: no-preference) {
+  [data-ui="v2"] .rv-colum__barra { animation: rv-crece-y 360ms var(--ui-ease) both; animation-delay: calc(var(--i, 0) * 14ms); }
+  @keyframes rv-crece-y { from { transform: scaleY(0); } }
+}
+
+/* Celda de KPI con enlace: toda la celda es el área de toque (enlace extendido); la ⓘ queda por encima con su propio toque. */
+[data-ui="v2"] .rv-kpi { position: relative; }
+[data-ui="v2"] .rv-kpi__cab { position: static; }
+[data-ui="v2"] .rv-kpi__enlace::after { content: ""; position: absolute; inset: 0; }
+[data-ui="v2"] .rv-kpi__cab .rv-info { position: relative; z-index: 1; }
+@media (max-width: 819px) {
+  /* El texto de la etiqueta queda a 10 px del borde: el área de toque sube hasta el hueco entre bloques (10 px). */
+  [data-ui="v2"] .rv-kpi__enlace::after { inset: -10px 0 0 0; }
+}

@@ -69,7 +69,7 @@ export function TiraKpi({ items, etiqueta = 'Indicadores' }: { items: ItemKpi[];
             </span>
             <span className="rv-kpi__fila">
               <span className="rv-kpi__valor" data-vacio={vacio || undefined}>
-                {it.conteo && typeof it.valor === 'number' ? <ConteoKpi valor={it.valor} formato={numero} /> : texto}
+                {it.conteo && typeof it.valor === 'number' ? <ConteoKpi valor={it.valor} /> : texto}
               </span>
               {!vacio && it.serie && it.serie.length > 1 ? <span className="rv-kpi__spark"><Sparkline valores={it.serie} matiz={matiz} /></span> : null}
             </span>
@@ -94,7 +94,8 @@ export function TiraKpi({ items, etiqueta = 'Indicadores' }: { items: ItemKpi[];
             </span>
           </>
         );
-        const comunes = { 'data-matiz': matiz, title: sello } as const;
+        const cero = typeof it.valor === 'number' ? it.valor === 0 : typeof it.valor === 'string' && /\d/.test(it.valor) && Number(it.valor.replace(/[^0-9.]/g, '')) === 0;
+        const comunes = { 'data-matiz': matiz, title: sello, 'data-cero-fuente': !vacio && cero && sello ? '' : undefined } as const;
         // Un botón ⓘ no puede ir DENTRO de un enlace: con `info`, el enlace pasa a la etiqueta y la celda es un div.
         return it.href && !it.info ? (
           <Link key={it.etiqueta} href={it.href} className="rv-kpi" {...comunes}>{cuerpo}</Link>

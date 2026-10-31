@@ -7,9 +7,10 @@ import { BarraPagina, ChipFecha, HeroSaludo, TituloSeccion } from './resumen-vis
 import { AvisoSinFlota } from './sin-flota';
 import { Bloque, EsqTabla } from './bloque';
 import { moduloProximamenteDeRuta, rutaProximamente } from '@/lib/auth/visibilidad';
-import { PESO_SEVERIDAD, type AgenteInsight, type Insight } from '@/lib/likida/insights/tipos';
+import { AGENTES_INSIGHT, PESO_SEVERIDAD, type AgenteInsight, type Insight } from '@/lib/likida/insights/tipos';
 import { TarjetaInsight } from './agentes/insights/tarjeta-insight';
 import { ResumenV2 } from './resumen-v2';
+import type { RangoResumen } from './resumen-datos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL RESUMEN DE UNA FLOTA CON PERFIL `cinco_agentes` (mig. 0770).
@@ -199,7 +200,7 @@ const ATAJOS: ReadonlyArray<{ href: string; nombre: string; Icono: typeof Route 
 ];
 
 export async function InicioCincoAgentes({
-  tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '', ui = 'v1', userId, soloLectura = false, veAsistente = false,
+  tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '', ui = 'v1', userId, soloLectura = false, veAsistente = false, veDinero = false, rango,
 }: {
   tenantId: string;
   tenantNombre: string | null;
@@ -212,19 +213,22 @@ export async function InicioCincoAgentes({
   soloLectura?: boolean;
   /** ¿El rol puede abrir Puesta en marcha? (lo decide la página con `puedeVerRuta`; por omisión NO: falla cerrado). */
   veAsistente?: boolean;
+  /** ¿El rol ve el área de dinero? (lo decide la página con `puedeVerArea`; por omisión NO: falla cerrado). Solo lo usa el Resumen v2. */
+  veDinero?: boolean;
+  /** Periodo elegido en la barra de filtros (`?rango=`). Solo lo usa el Resumen v2. */
+  rango?: RangoResumen;
 }) {
   const diaMx = hoyMx(new Date(ahoraMs()));
   const insights = await leerInsightsPorAgente(tenantId);
   if (ui === 'v2' && userId) {
+    const principales = AGENTES_INSIGHT.flatMap((a) => {
+      const lista = insights[a];
+      return lista ? [insightMasSevero(lista)].filter((x): x is Insight => x !== null) : [];
+    });
     return (
       <ResumenV2
         tenantId={tenantId} userId={userId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste}
-        sufijo={sufijo} soloLectura={soloLectura} veAsistente={veAsistente}
-        fichas={FICHAS_CINCO_AGENTES.map((f) => (
-          <Bloque key={f.clave} mensaje={`No se pudo leer ${f.nombre}.`} esqueleto={<EsqTabla filas={2} titulo={false} />}>
-            <TarjetaAgente ficha={f} tenantId={tenantId} sufijo={sufijo} insights={insights} />
-          </Bloque>
-        ))}
+        sufijo={sufijo} soloLectura={soloLectura} veAsistente={veAsistente} veDinero={veDinero} rango={rango} principales={principales}
       />
     );
   }

@@ -9,3 +9,4 @@ export { DonaMini, type Gajo } from './dona-mini';
 export { BarraApilada, type Tramo } from './barra-apilada';
 export { Bullet } from './bullet';
 export { ConteoKpi } from './conteo-kpi';
+export { Columnas, type ColumnaDato } from './columnas';
