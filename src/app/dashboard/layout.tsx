@@ -54,8 +54,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // que eligió en el selector; con `?tenant=` el layout no ve el parámetro (limitación
   // de Next), pero las PÁGINAS sí aplican el perfil de la flota que miran.
   const tenantDelMenu = sesion.tenantId ?? (sesion.rol === 'superadmin' ? await leerSeleccionFlota() : null);
-  // La versión de interfaz (`tenant_ui`; sin fila = v1) se lee en el MISMO Promise.all que el perfil. `versionUi` nunca lanza
-  // y falla hacia v1: un bache de lectura deja el panel de siempre, no el nuevo.
+  // La versión de interfaz (`tenant_ui`; sin fila = v2, por omisión) se lee en el MISMO Promise.all que el perfil. `versionUi` nunca lanza:
+  // un bache de lectura sin valor previo cae en v2; solo una fila `v1` explícita deja el panel anterior.
   const jarra = await cookies();
   const [perfil, ui] = await Promise.all([
     perfilDeTenant(tenantDelMenu),
