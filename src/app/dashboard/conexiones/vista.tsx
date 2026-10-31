@@ -51,7 +51,7 @@ export function VistaConexiones({ conectores, credenciales, integraciones, gps }
                   <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
                     style={{ color: e.fg, background: e.bg }}>{e.rotulo}</span>
                 </div>
-                <p className="text-[12.5px] mt-1" style={{ color: 'var(--muted)' }}>{c.detalle}</p>
+                <p className="text-[12px] mt-1" style={{ color: 'var(--muted)' }}>{c.detalle}</p>
                 {c.falta.length > 0 && (
                   <ul className="mt-1.5 space-y-0.5">
                     {c.falta.map((f) => (

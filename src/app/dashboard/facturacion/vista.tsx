@@ -218,7 +218,7 @@ function TablaCubetas({ datos }: { datos: FacturacionClientes }) {
   const c = datos.cartera;
   return (
     <div className="card overflow-x-auto">
-      <table className="w-full text-[12.5px]">
+      <table className="w-full text-[12px]">
         <caption className="text-left px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
           Antigüedad de saldos
         </caption>
@@ -236,7 +236,7 @@ function TablaCubetas({ datos }: { datos: FacturacionClientes }) {
                 <span className="font-medium" style={{ color: b.clave === 'sin_fecha' ? 'var(--warn)' : undefined }}>
                   {b.rotulo}
                 </span>
-                <span className="block text-[10.5px]" style={{ color: 'var(--faint)' }}>{b.ayuda}</span>
+                <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{b.ayuda}</span>
               </td>
               <td className="px-3 py-2 text-right tabular" style={{ color: b.facturas === 0 ? 'var(--faint)' : undefined }}>
                 {b.facturas === 0 ? '—' : numero(b.facturas)}
@@ -262,7 +262,7 @@ function TablaClientes({ clientes }: { clientes: ClienteCartera[] }) {
 
   return (
     <div className="card overflow-x-auto">
-      <table className="w-full text-[12.5px]">
+      <table className="w-full text-[12px]">
         <caption className="text-left px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
           Por cliente — a quién hay que hablarle
         </caption>
@@ -284,7 +284,7 @@ function TablaClientes({ clientes }: { clientes: ClienteCartera[] }) {
             <tr key={c.cliente} className="border-t" style={{ borderColor: 'var(--line2)' }}>
               <td className="px-3 py-2">
                 <span className="font-medium">{c.cliente}</span>
-                <span className="block text-[10.5px]" style={{ color: c.diasMasVencido === null ? 'var(--faint)' : 'var(--bad)' }}>
+                <span className="block text-[11px]" style={{ color: c.diasMasVencido === null ? 'var(--faint)' : 'var(--bad)' }}>
                   {c.diasMasVencido === null
                     ? `${plural(c.facturas, 'factura', 'facturas')}, nada vencido`
                     : `${plural(c.facturas, 'factura', 'facturas')} · lo más atrasado, ${numero(c.diasMasVencido)} días`}
@@ -326,7 +326,7 @@ const PILL_ESTATUS: Record<string, { rotulo: string; fg: string; bg: string }> =
 function TablaFacturas({ facturas, captura }: { facturas: RenglonCartera[]; captura: CapturaFacturacion | null }) {
   return (
     <div className="card overflow-x-auto">
-      <table className="w-full text-[12.5px]">
+      <table className="w-full text-[12px]">
         <caption className="text-left px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
           Facturas emitidas
         </caption>
@@ -400,7 +400,7 @@ function RenglonFactura({ f, captura }: { f: RenglonCartera; captura: CapturaFac
       <td className="px-3 py-2">
         <span className="cifra-mono">{f.folio ?? '—'}</span>
         {pill && (
-          <span className="ml-2 inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium align-middle"
+          <span className="ml-2 inline-flex px-1.5 py-0.5 rounded-full text-[11px] font-medium align-middle"
             style={{ color: pill.fg, background: pill.bg }}>
             {pill.rotulo}
           </span>
@@ -452,7 +452,7 @@ function BloqueEnLaMesa({ datos }: { datos: FacturacionClientes }) {
       ) : m.total === 0 ? (
         // No es un cero disfrazado: se comprobaron los N liquidados y todos
         // tienen factura viva. Se dice el denominador para que se pueda creer.
-        <p className="text-[12.5px]" style={{ color: 'var(--ok)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--ok)' }}>
           {datos.viajesLiquidados === 1
             ? 'El único viaje liquidado ya tiene factura emitida.'
             : `Los ${numero(datos.viajesLiquidados)} viajes liquidados ya tienen factura emitida.`}
@@ -503,7 +503,7 @@ function BloqueEnLaMesa({ datos }: { datos: FacturacionClientes }) {
           )}
 
           <div className="card overflow-x-auto">
-            <table className="w-full text-[12.5px]">
+            <table className="w-full text-[12px]">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--muted)' }}>
                   <th className="px-3 py-2 font-medium">Viaje</th>
@@ -546,7 +546,7 @@ function RenglonMesa({ v }: { v: RenglonSinFacturar }) {
       <td className="px-3 py-2">
         <span className="cifra-mono">{v.folio}</span>
         {v.soloBorrador && (
-          <span className="flex items-center gap-1 text-[10.5px] mt-0.5" style={{ color: 'var(--warn)' }}>
+          <span className="flex items-center gap-1 text-[11px] mt-0.5" style={{ color: 'var(--warn)' }}>
             <TriangleAlert width={11} height={11} strokeWidth={1.75} className="shrink-0" />
             tiene factura en borrador
           </span>
@@ -657,7 +657,7 @@ function BloqueAuditor({ auditoria }: { auditoria: AuditoriaCobranza | null }) {
               </div>
 
               <div className="card overflow-x-auto">
-                <table className="w-full text-[12.5px]">
+                <table className="w-full text-[12px]">
                   <thead>
                     <tr className="text-left text-[11px]" style={{ color: 'var(--faint)' }}>
                       <th className="px-3 py-2 font-medium">Viaje</th>
@@ -672,7 +672,7 @@ function BloqueAuditor({ auditoria }: { auditoria: AuditoriaCobranza | null }) {
                       <tr key={`${h.viajeId}-${h.cubeta}`} className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
                         <td className="px-3 py-2">
                           <span className="cifra-mono">{h.folio}</span>
-                          {h.ruta && <div className="text-[10.5px]" style={{ color: 'var(--faint)' }}>{h.ruta}</div>}
+                          {h.ruta && <div className="text-[11px]" style={{ color: 'var(--faint)' }}>{h.ruta}</div>}
                         </td>
                         <td className="px-3 py-2">
                           {h.cliente ?? <span style={{ color: 'var(--warn)' }}>sin asignar</span>}
@@ -682,7 +682,7 @@ function BloqueAuditor({ auditoria }: { auditoria: AuditoriaCobranza | null }) {
                           {/* Sin monto resoluble no se inventa uno: la nota dice qué falta. */}
                           {h.monto === null ? <span style={{ color: 'var(--faint)' }}>—</span> : mxn(h.monto)}
                         </td>
-                        <td className="px-3 py-2 text-[11.5px]" style={{ color: 'var(--muted)' }}>{h.nota}</td>
+                        <td className="px-3 py-2 text-[11px]" style={{ color: 'var(--muted)' }}>{h.nota}</td>
                       </tr>
                     ))}
                   </tbody>

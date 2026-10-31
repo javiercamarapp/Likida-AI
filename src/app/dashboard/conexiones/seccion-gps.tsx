@@ -43,19 +43,19 @@ function ImportadorGeocercas({ accion }: { accion: AccionImportGeocercas }) {
   return (
     <div className="border-t pt-4" style={{ borderColor: 'var(--line)' }}>
       <h3 className="font-display text-[14px] font-semibold">Geocercas de tu sistema</h3>
-      <p className="mt-0.5 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+      <p className="mt-0.5 text-[12px]" style={{ color: 'var(--muted)' }}>
         Si conectaste «Mis propias tablas de GPS» con una vista o archivo de geocercas, aquí las traes al catálogo de sitios
         (el que usan el Conductor, los peajes y el mapa). Volver a importar actualiza por código, no duplica, y se repite solo una vez al día. Un polígono
         se guarda con su forma real; el que no se pueda guardar así entra como el círculo que lo contiene y se te dice cuáles.
       </p>
       <form action={despachar} className="mt-2"><BotonImportarGeocercas /></form>
       {estado?.ok === true && (
-        <p role="status" className="mt-2 text-[12.5px]" style={{ color: 'var(--ok)' }}>
+        <p role="status" className="mt-2 text-[12px]" style={{ color: 'var(--ok)' }}>
           {estado.mensaje}{(estado.poligonos ?? 0) > 0 ? ` ${estado.poligonos} polígono(s) se guardaron con su forma real.` : ''}{estado.aproximadas > 0 ? ` ${estado.aproximadas} polígono(s) no se pudieron guardar con su forma y entran como el círculo que los contiene (las reclamaciones con ellos bajan a confianza media).` : ''}
         </p>
       )}
       {estado?.ok === false && (
-        <div role="alert" className="mt-2 text-[12.5px]" style={{ color: 'var(--bad)' }}>
+        <div role="alert" className="mt-2 text-[12px]" style={{ color: 'var(--bad)' }}>
           <p>{estado.error}</p>
           {estado.detalles && estado.detalles.length > 0 && <ul className="mt-1 list-disc pl-5">{estado.detalles.map((d) => <li key={d}>{d}</li>)}</ul>}
         </div>
@@ -109,20 +109,20 @@ export function SeccionGps({ salud, push, endpoint, huerfanos, hayMasHuerfanos, 
         </div>
         <div className="min-w-0 flex-1">
           <h2 id="titulo-gps" className="font-display text-[15px] font-semibold">GPS: salud de cada integración</h2>
-          <p className="mt-0.5 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+          <p className="mt-0.5 text-[12px]" style={{ color: 'var(--muted)' }}>
             Cada renglón sale de la última sincronización real. «Sana» solo significa que el último poll terminó completo.
           </p>
         </div>
       </div>
 
       {salud.length === 0 ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           Ningún proveedor de GPS tiene credencial activa todavía. Captúrala abajo, en «Credenciales de tus sistemas».
         </p>
       ) : (
         <ul className="space-y-2">
           {salud.map((f) => (
-            <li key={f.clave} className="rounded-lg px-3 py-2 text-[12.5px]" style={{ background: FONDO[f.tono] }}>
+            <li key={f.clave} className="rounded-lg px-3 py-2 text-[12px]" style={{ background: FONDO[f.tono] }}>
               <span className="font-medium" style={{ color: TONO[f.tono] }}>{f.nombre} · {f.estado}</span>
               <span className="block" style={{ color: 'var(--muted)' }}>{f.texto}</span>
             </li>
@@ -131,7 +131,7 @@ export function SeccionGps({ salud, push, endpoint, huerfanos, hayMasHuerfanos, 
       )}
 
       {conteos && (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           <Truck aria-hidden width={13} height={13} strokeWidth={1.75} className="inline mr-1 -mt-0.5" />
           {numero(conteos.conDispositivo)} de {numero(conteos.activas)} unidades activas tienen dispositivo GPS ligado
           {conteos.sinDispositivo > 0 ? `; ${numero(conteos.sinDispositivo)} no tienen (no aparecen en el mapa con GPS)` : ''}
@@ -142,13 +142,13 @@ export function SeccionGps({ salud, push, endpoint, huerfanos, hayMasHuerfanos, 
       {/* ── PUSH PROPIO ─────────────────────────────────────────────── */}
       <div className="border-t pt-4" style={{ borderColor: 'var(--line)' }}>
         <h3 className="font-display text-[14px] font-semibold">GPS propio (envío firmado a Likida)</h3>
-        <p className="mt-0.5 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="mt-0.5 text-[12px]" style={{ color: 'var(--muted)' }}>
           Si tu GPS puede mandar un POST, envía las posiciones a esta dirección firmadas con HMAC-SHA256
           (cabeceras <code className="cifra-mono">X-Likida-Timestamp</code> y <code className="cifra-mono">X-Likida-Signature: v1=…</code>).
           Hasta 500 lecturas por envío; reenviar es seguro (no duplica).
         </p>
         <p className="mt-2 text-[12px] cifra-mono break-all rounded-lg px-3 py-2" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>{endpoint}</p>
-        <div className="mt-2 rounded-lg px-3 py-2 text-[12.5px]" style={{ background: FONDO[push.fila.tono] }}>
+        <div className="mt-2 rounded-lg px-3 py-2 text-[12px]" style={{ background: FONDO[push.fila.tono] }}>
           <span className="font-medium" style={{ color: TONO[push.fila.tono] }}>{push.fila.estado}</span>
           <span className="block" style={{ color: 'var(--muted)' }}>
             {push.fila.texto}
@@ -176,11 +176,11 @@ export function SeccionGps({ salud, push, endpoint, huerfanos, hayMasHuerfanos, 
 
         {estadoSecreto && !estadoSecreto.ok && <div className="mt-2"><AvisoResultado estado={{ ok: false, error: estadoSecreto.error }} /></div>}
         {estadoSecreto?.ok && (
-          <div role="status" className="mt-3 rounded-lg px-3 py-3 text-[12.5px]" style={{ background: 'var(--warnbg)', border: '1px solid var(--line)' }}>
+          <div role="status" className="mt-3 rounded-lg px-3 py-3 text-[12px]" style={{ background: 'var(--warnbg)', border: '1px solid var(--line)' }}>
             <p className="font-medium" style={{ color: 'var(--warn)' }}>Guárdalo ahora: no se vuelve a mostrar.</p>
             <p className="mt-1 cifra-mono break-all select-all">{estadoSecreto.secreto}</p>
             <button type="button" onClick={() => copiar(estadoSecreto.secreto)}
-              className="rv-btn rv-btn--secondary hairline mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)]">
+              className="rv-btn rv-btn--secondary hairline mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12px] font-medium transition-colors hover:bg-[var(--canvas)]">
               <Copy aria-hidden width={13} height={13} strokeWidth={2} />
               {copiado ? 'Copiado' : 'Copiar secreto'}
             </button>
@@ -191,20 +191,20 @@ export function SeccionGps({ salud, push, endpoint, huerfanos, hayMasHuerfanos, 
       {/* ── HUÉRFANOS ───────────────────────────────────────────────── */}
       <div className="border-t pt-4" style={{ borderColor: 'var(--line)' }}>
         <h3 className="font-display text-[14px] font-semibold">Dispositivos sin unidad</h3>
-        <p className="mt-0.5 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="mt-0.5 text-[12px]" style={{ color: 'var(--muted)' }}>
           Dispositivos que tu proveedor reporta y ninguna unidad reclama. Likida NO crea unidades desde un feed ajeno:
           no se dibujan en el mapa hasta que los ligues a una unidad que ya existe (archivo de abajo).
         </p>
         {huerfanos.length === 0 ? (
-          <p className="mt-2 text-[12.5px]" style={{ color: 'var(--ok)' }}>Ningún dispositivo huérfano.</p>
+          <p className="mt-2 text-[12px]" style={{ color: 'var(--ok)' }}>Ningún dispositivo huérfano.</p>
         ) : (
           <div className="mt-2 max-h-56 overflow-y-auto rounded-lg hairline">
-            <table className="w-full text-[12.5px]">
+            <table className="w-full text-[12px]">
               <caption className="sr-only">Dispositivos GPS que ninguna unidad reclama</caption>
               <thead><tr className="text-left" style={{ color: 'var(--faint)' }}>
-                <th scope="col" className="px-3 py-1.5 text-[10px] font-normal uppercase">Proveedor</th>
-                <th scope="col" className="px-3 py-1.5 text-[10px] font-normal uppercase">Dispositivo</th>
-                <th scope="col" className="px-3 py-1.5 text-[10px] font-normal uppercase">Visto</th>
+                <th scope="col" className="px-3 py-1.5 text-[11px] font-normal uppercase">Proveedor</th>
+                <th scope="col" className="px-3 py-1.5 text-[11px] font-normal uppercase">Dispositivo</th>
+                <th scope="col" className="px-3 py-1.5 text-[11px] font-normal uppercase">Visto</th>
               </tr></thead>
               <tbody>
                 {huerfanos.map((h) => (
@@ -218,7 +218,7 @@ export function SeccionGps({ salud, push, endpoint, huerfanos, hayMasHuerfanos, 
             </table>
           </div>
         )}
-        {hayMasHuerfanos && <p className="mt-1 text-[11.5px]" style={{ color: 'var(--faint)' }}>Se muestran los más recientes; liga estos y vuelve a mirar para ver el resto.</p>}
+        {hayMasHuerfanos && <p className="mt-1 text-[11px]" style={{ color: 'var(--faint)' }}>Se muestran los más recientes; liga estos y vuelve a mirar para ver el resto.</p>}
       </div>
 
       {puedeAdministrarGps && importarGeocercas && <ImportadorGeocercas accion={importarGeocercas} />}

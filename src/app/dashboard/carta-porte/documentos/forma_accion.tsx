@@ -12,14 +12,14 @@ export type AccionDoc = (previo: ResultadoAccion, fd: FormData) => Promise<Resul
 export function Aviso({ estado }: { estado: ResultadoAccion }) {
   if (!estado) return null;
   return estado.ok ? (
-    <div role="status" className="text-[12.5px] px-3.5 py-2.5 rounded-lg space-y-1" style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
+    <div role="status" className="text-[12px] px-3.5 py-2.5 rounded-lg space-y-1" style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
       <p className="flex items-start gap-2"><CheckCircle2 width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />{estado.mensaje}</p>
       {estado.detalles && estado.detalles.length > 0 && (
         <ul className="pl-6 list-disc space-y-0.5">{estado.detalles.map((d) => <li key={d}>{d}</li>)}</ul>
       )}
     </div>
   ) : (
-    <div role="alert" className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
+    <div role="alert" className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
       <TriangleAlert width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />{estado.error}
     </div>
   );

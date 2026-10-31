@@ -100,8 +100,8 @@ function Cifra({ rotulo, valor, nota }: { rotulo: string; valor: string; nota?: 
   return (
     <div className="card p-3.5 space-y-0.5">
       <p className="text-[11px]" style={{ color: 'var(--muted)' }}>{rotulo}</p>
-      <p className="cifra-mono text-[19px] font-medium">{valor}</p>
-      {nota && <p className="text-[10.5px]" style={{ color: 'var(--faint)' }}>{nota}</p>}
+      <p className="cifra-mono text-[20px] font-medium">{valor}</p>
+      {nota && <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{nota}</p>}
     </div>
   );
 }
@@ -238,7 +238,7 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
         </EstadoVacio>
       ) : (
         <div className="card overflow-x-auto">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full text-[12px]">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
                 {['Estado', 'Archivo', 'Formato · canal', 'Lo que falta', ...(conAsignacion ? ['Asignado a'] : []), 'Recibido', ''].map((h) => <th key={h} className="px-3 py-2 font-medium text-[11px]">{h}</th>)}
@@ -340,7 +340,7 @@ function Canales({ buzon, acciones }: { buzon: BuzonVista | null; acciones: Acci
         ) : (
           <>
             {buzon.direccion ? (
-              <p className="text-[12.5px]">Dirección: <code className="cifra-mono select-all">{buzon.direccion}</code>{!buzon.activo && <strong style={{ color: 'var(--warn)' }}> (apagado)</strong>}</p>
+              <p className="text-[12px]">Dirección: <code className="cifra-mono select-all">{buzon.direccion}</code>{!buzon.activo && <strong style={{ color: 'var(--warn)' }}> (apagado)</strong>}</p>
             ) : (
               <p className="text-[12px] px-3 py-2 rounded-lg" style={{ background: 'var(--warnbg, var(--canvas))', color: 'var(--warn)' }}>
                 {buzon.dominioConfigurado ? 'La dirección no se pudo armar.' : 'El dominio de correo de Likida no está configurado en este entorno: el buzón existe pero no hay dirección que dar.'}
@@ -382,7 +382,7 @@ function Perfiles({ perfiles, acciones }: { perfiles: PerfilVista[]; acciones: A
         <div className="space-y-2">
           {perfiles.map((p) => (
             <details key={p.id} className="card p-3.5">
-              <summary className="cursor-pointer text-[12.5px] select-none">
+              <summary className="cursor-pointer text-[12px] select-none">
                 <strong>{p.nombre}</strong> <span style={{ color: 'var(--muted)' }}>· {ROTULO_FORMATO[p.formato] ?? p.formato} · versión {p.versionActiva} · {numero(p.mapeos)} campos reconocidos</span>
               </summary>
               <ul className="pt-2.5 space-y-1.5 text-[12px]">
@@ -446,7 +446,7 @@ function Exportacion({ configs, acciones, apiSufijo }: { configs: ConfigVista[];
       </div>
       {acciones.guardarExport && (
         <details className="card p-3.5 max-w-3xl">
-          <summary className="cursor-pointer text-[12.5px] font-medium select-none">Declarar un formato destino</summary>
+          <summary className="cursor-pointer text-[12px] font-medium select-none">Declarar un formato destino</summary>
           <FormaAccion accion={acciones.guardarExport} className="pt-3 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>

@@ -57,7 +57,7 @@ export function VistaCartaPorte({ datos, declarar = null, agregarMercancia = nul
           dato correcto es que se declara AL EMITIR con el PAC, y la
           consecuencia de no hacerlo es una cifra concreta, no un regaño. */}
       <section className="card p-4 max-w-3xl space-y-1.5" style={{ borderLeft: '3px solid var(--warn)' }}>
-        <p className="text-[12.5px] font-medium flex items-start gap-1.5">
+        <p className="text-[12px] font-medium flex items-start gap-1.5">
           <TriangleAlert width={14} height={14} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--warn)' }} />
           {AVISO_VALOR_MERCANCIA.titulo}
         </p>

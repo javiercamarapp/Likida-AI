@@ -143,7 +143,7 @@ export function FormaCredenciales({ grupos, guardar }: {
 
         {estado && !estado.ok && <AvisoError error={estado.error} />}
         {estado?.ok && (
-          <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{estado.mensaje}</p>
+          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{estado.mensaje}</p>
         )}
         {conector && <BotonGuardar />}
       </form>
@@ -180,7 +180,7 @@ export function FormaProbar({ conectorId, probar }: {
       </form>
       {estado && !estado.ok && <AvisoError error={estado.error} />}
       {estado?.ok && (
-        <p className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg"
+        <p className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg"
           style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
           <CircleCheck width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
           {estado.mensaje}

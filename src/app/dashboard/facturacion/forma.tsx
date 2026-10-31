@@ -90,13 +90,13 @@ export function FormaFactura({ accion, clientes, viajesSinFacturar, hoy }: {
         <div className="sm:col-span-2">
           <label htmlFor="ff-cliente" className={ETIQUETA}>Cliente</label>
           {clientes === null ? (
-            <p className="text-[12.5px]" style={{ color: 'var(--bad)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--bad)' }}>
               Tu catálogo de clientes no se pudo leer en este momento — la lista existe, el
               sistema no la alcanzó. Vuelve a cargar la pantalla en unos minutos; no registres
               la factura a ciegas.
             </p>
           ) : clientes.length === 0 ? (
-            <p className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
               No tienes clientes dados de alta. Una factura siempre es A ALGUIEN: dalos de alta
               primero en la pantalla de Clientes.
             </p>
@@ -183,7 +183,7 @@ export function FormaFactura({ accion, clientes, viajesSinFacturar, hoy }: {
             <legend className="text-[11px] font-medium px-1">Viajes que ampara esta factura</legend>
             <div className="space-y-1.5">
               {viajesSinFacturar.map((v) => (
-                <label key={v.viajeId} className="flex items-center gap-2 text-[12.5px] cursor-pointer">
+                <label key={v.viajeId} className="flex items-center gap-2 text-[12px] cursor-pointer">
                   <input type="checkbox" name="viajeIds" value={v.viajeId} />
                   <span className="cifra-mono">{v.folio}</span>
                   <span style={{ color: 'var(--muted)' }}>
