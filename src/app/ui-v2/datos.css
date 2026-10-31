@@ -5,8 +5,9 @@
 
 /* ── TablaLista: cabecera 36 pegajosa, fila 40, número tabular ── */
 .rv-tl__caja { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.rv-tl__region { max-width: 100%; border-radius: 8px; overflow-x: clip; }
-@media (max-width: 1099px) { .rv-tl__region { overflow-x: auto; } }
+/* `auto` y no `clip`: una tabla más ancha que su caja DESPLAZA en horizontal (con `clip` la última columna —«Ver», «Revisar»— quedaba
+   recortada e inalcanzable; lo cazó el E2E). La cabecera es pegajosa dentro de la región. */
+.rv-tl__region { max-width: 100%; border-radius: 8px; overflow-x: auto; }
 .rv-tl__region:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .rv-tl { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; font-variant-numeric: tabular-nums; }
 .rv-tl__th, .rv-tl__td { box-sizing: border-box; }
