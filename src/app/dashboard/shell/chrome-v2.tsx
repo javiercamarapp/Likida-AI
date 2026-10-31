@@ -8,6 +8,7 @@ import CabeceraEscritorio from './cabecera-escritorio';
 import CabeceraMovil from './cabecera-movil';
 import NavegacionMovil from './navegacion-movil';
 import CapaCarga from './capa-carga';
+import ProveedorArea from './proveedor-area';
 
 /**
  * El marco visual de /dashboard v2. Mismo contrato de props que `DashboardChrome` (el de siempre, que NO se toca):
@@ -53,7 +54,8 @@ export default function DashboardChromeV2({
             {/* `tabIndex={-1}`: el enlace «Saltar al contenido» mueve el foco AQUÍ. */}
             <div id="contenido-principal" tabIndex={-1} className={CLASES_V2.contenido}>
               <AvisoRol rolReal={rol} />
-              {children}
+              {/* El área del menú (la etiqueta sobre cada título) sale del MISMO menú del rol y perfil que pinta el sidebar. */}
+              <ProveedorArea rol={rol} perfil={perfil}>{children}</ProveedorArea>
             </div>
           </div>
         </div>

@@ -406,3 +406,16 @@ html:root[data-theme="dark"]:has([data-ui="v2"]) {
 [data-ui="v2"] table {
   font-variant-numeric: tabular-nums;
 }
+
+
+/* ── Ritmo de página (L2b): separación entre bloques y relleno de recuadro. 12/14 en escritorio, 10/12 bajo 820 px. ── */
+:root [data-ui="v2"] {
+  --ui-rhythm: 12px;
+  --ui-pad: 14px;
+}
+@media (max-width: 819px) {
+  :root [data-ui="v2"] {
+    --ui-rhythm: 10px;
+    --ui-pad: 12px;
+  }
+}

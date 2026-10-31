@@ -122,7 +122,7 @@
 .rv-res__tipos { display: flex; flex-direction: column; justify-content: space-between; gap: 6px; flex: 1 1 auto; }
 
 /* Estados vacío / error: la celda punteada llena la tarjeta (no queda un hueco bajo la línea). */
-.rv-res__fila > .rv-tarjeta > .rv-tarjeta__cuerpo > .rv-vacio, .rv-res__fila > .rv-tarjeta > .rv-tarjeta__cuerpo > .rv-tarjeta__error { flex: 1 1 auto; }
+.rv-res__fila > .rv-tarjeta > .rv-tarjeta__cuerpo > .rv-vacio, .rv-res__fila > .rv-tarjeta > .rv-tarjeta__cuerpo > .rv-error { flex: 1 1 auto; }
 [data-ui="v2"] .rv-res .rv-kpis { min-height: 112px; }
 
 /* Barra de periodo: mientras llega el nuevo periodo, las tarjetas conservan sus datos y se atenúan (sin capa de carga). */
@@ -204,3 +204,7 @@ button.rv-at__fila:focus-visible { outline: 2px solid var(--ink); outline-offset
 @media (max-width: 767px) {
   .rv-res { padding: 6px 16px 24px; }
 }
+
+
+/* ═══ L2b · MarcoPagina fuera del alcance v2 (rollback a v1): una columna con el mismo ritmo, sin piel nueva ═══ */
+.rv-marco { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 20px; }

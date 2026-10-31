@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { supabaseServer } from '@/lib/supabase/server';
@@ -27,6 +28,9 @@ import { AvisoLegalPendiente } from './aviso-legal';
 import { TourProvider } from '../ui-v2/movimiento/tour';
 import { RECORRIDOS_DASHBOARD, rutasDeRecorridos } from './recorridos/dueno';
 import { insigniaDeCookie, nombreCookieAvance } from './puesta-en-marcha/progreso';
+
+// Título de la pestaña: cada pantalla exporta su nombre (el del menú) y la plantilla le pone «· Likida».
+export const metadata: Metadata = { title: { default: 'Likida — Liquidación de viajes', template: '%s · Likida' } };
 
 export const dynamic = 'force-dynamic';
 

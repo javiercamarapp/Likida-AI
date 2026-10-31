@@ -23,6 +23,6 @@ describe.each(['componentes', 'graficas'] as const)('v1 intacto · %s.css', (arc
 
 describe('v1 intacto · marcado', () => {
   it('el rótulo del encabezado conserva etiqueta-mono (la pantalla v1 lo usa)', () => {
-    expect(renderToStaticMarkup(<EncabezadoPagina rotulo="Puesta en marcha" titulo="x" />)).toContain('rv-encabezado__rotulo etiqueta-mono');
+    expect(renderToStaticMarkup(<EncabezadoPagina area="Puesta en marcha" titulo="x" />)).toContain('rv-encabezado__rotulo etiqueta-mono');
   });
 });

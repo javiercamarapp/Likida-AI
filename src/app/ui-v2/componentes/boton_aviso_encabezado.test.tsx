@@ -59,7 +59,7 @@ describe('Chip / StatusPill info / Aviso / Encabezado', () => {
     expect(info).toContain('Detalle');
   });
   it('EncabezadoPagina: un solo h1, descripción y acciones opcionales', () => {
-    const html = renderToStaticMarkup(<EncabezadoPagina rotulo="Agente 1" titulo="Liquidación" descripcion="Desglose" acciones={<Boton>Nuevo</Boton>} />);
+    const html = renderToStaticMarkup(<EncabezadoPagina area="Agente 1" titulo="Liquidación" apoyo="Desglose" acciones={<Boton>Nuevo</Boton>} />);
     expect(html.match(/<h1/g)).toHaveLength(1);
     expect(html).toContain('Agente 1');
     expect(html).toContain('Nuevo');

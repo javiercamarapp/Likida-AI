@@ -98,10 +98,11 @@ describe.skipIf(SIN_NAVEGADOR)('gráficas y vacíos · pintados en Chromium', ()
     expect(r.linea).toBe('none');
     await p.close();
   });
-  it('390: el estado vacío es UNA línea de ≤ 44 px', async () => {
+  it('390: el estado vacío es un bloque compacto (título + acción) sin borde punteado, de ≤ 120 px', async () => {
     const p = await pagina(390);
-    const h = await p.evaluate(() => document.querySelector('#vacio .rv-vacio')!.getBoundingClientRect().height);
-    expect(h).toBeLessThanOrEqual(44.5);
+    const r = await p.evaluate(() => { const e = document.querySelector('#vacio .rv-vacio')!; return { h: e.getBoundingClientRect().height, borde: getComputedStyle(e).borderTopStyle }; });
+    expect(r.h).toBeLessThanOrEqual(120);
+    expect(r.borde).toBe('none');
     await p.close();
   });
   it('1440: la leyenda de la dona no se estira (etiqueta y cifra juntas)', async () => {
