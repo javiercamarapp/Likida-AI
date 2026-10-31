@@ -1,7 +1,7 @@
 'use client';
 
 import { X } from 'lucide-react';
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, type ReactNode, type RefObject } from 'react';
+import { cloneElement, isValidElement, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode, type RefObject } from 'react';
 import LogoV2 from '../../dashboard/shell/logo-v2';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -235,16 +235,19 @@ export function Modal({ abierto, onCerrar, titulo, descripcion, children, pie, t
 // Se pinta en línea (sin portal) para que cuelgue de [data-ui="v2"]; `position: fixed` lo saca del flujo.
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Coloca un panel `position: fixed` bajo su ancla (o encima si abajo no cabe), dentro del viewport. */
-function colocarPanel(el: HTMLElement, ancla: HTMLElement | null, alineacion: 'inicio' | 'fin') {
+/** Coloca un panel `position: fixed` bajo su ancla (o encima si abajo no cabe), dentro del viewport. `lado: 'arriba'` lo prefiere encima
+ *  (tooltip) y `alineacion: 'centro'` lo centra sobre el ancla. Es el ÚNICO colocador de overlays anclados (Popover y Tooltip). */
+function colocarPanel(el: HTMLElement, ancla: HTMLElement | null, alineacion: 'inicio' | 'fin' | 'centro', lado: 'abajo' | 'arriba' = 'abajo') {
   const a = ancla?.getBoundingClientRect();
   if (!a) return;
   const p = el.getBoundingClientRect();
   const margen = 8;
-  let left = alineacion === 'fin' ? a.right - p.width : a.left;
+  let left = alineacion === 'fin' ? a.right - p.width : alineacion === 'centro' ? a.left + a.width / 2 - p.width / 2 : a.left;
   left = Math.min(Math.max(margen, left), window.innerWidth - p.width - margen);
-  let top = a.bottom + 6;
-  if (top + p.height > window.innerHeight - margen) top = Math.max(margen, a.top - 6 - p.height); // sin espacio abajo: arriba
+  const abajo = a.bottom + 6;
+  const arriba = a.top - 6 - p.height;
+  let top = lado === 'arriba' ? (arriba >= margen ? arriba : abajo) : (abajo + p.height > window.innerHeight - margen ? Math.max(margen, arriba) : abajo);
+  top = Math.min(Math.max(margen, top), Math.max(margen, window.innerHeight - p.height - margen));
   el.style.top = `${top}px`;
   el.style.left = `${left}px`;
 }
@@ -361,4 +364,59 @@ export function MenuItem({ children, icono, onSelect, href, peligro = false, des
   return href && !deshabilitado
     ? <a {...comunes} href={href} onClick={onSelect}>{cuerpo}</a>
     : <button type="button" {...comunes} onClick={deshabilitado ? undefined : onSelect}>{cuerpo}</button>;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOOLTIP DE SUPERFICIE (Vexa `Tip`): burbuja corta (tarjeta blanca, 160–280 px, radio 12) que aparece con hover Y con foco de
+// teclado, la cierra Esc y se enlaza con aria-describedby. Para algo largo usa un Popover o el ⓘ. Reutiliza el colocador y las
+// capas del motor (.rv-pop, z 60, fixed) y se pinta en línea para colgar de [data-ui="v2"]. La burbuja siempre está en el DOM
+// (oculta) para que aria-describedby resuelva; no roba el foco.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export function Tooltip({ texto, children, className }: {
+  texto: ReactNode;
+  /** Un elemento enfocable (botón, enlace) recibe el aria-describedby; un texto suelto se envuelve en un span enfocable. */
+  children: ReactElement<{ 'aria-describedby'?: string }> | string;
+  className?: string;
+}) {
+  const id = useId();
+  const [abierto, setAbierto] = useState(false);
+  const raiz = useRef<HTMLSpanElement>(null);
+  const burbuja = useRef<HTMLSpanElement>(null);
+
+  useLayoutEffect(() => {
+    if (abierto && burbuja.current) colocarPanel(burbuja.current, raiz.current, 'centro', 'arriba');
+  }, [abierto]);
+
+  useEffect(() => {
+    if (!abierto) return;
+    // Esc en captura: cierra solo la burbuja (un Drawer/Modal debajo se cierra con el siguiente Esc).
+    const alTeclear = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAbierto(false); } };
+    const recolocar = () => { if (burbuja.current) colocarPanel(burbuja.current, raiz.current, 'centro', 'arriba'); };
+    document.addEventListener('keydown', alTeclear, true);
+    window.addEventListener('resize', recolocar);
+    window.addEventListener('scroll', recolocar, true);
+    return () => {
+      document.removeEventListener('keydown', alTeclear, true);
+      window.removeEventListener('resize', recolocar);
+      window.removeEventListener('scroll', recolocar, true);
+    };
+  }, [abierto]);
+
+  const objetivo = isValidElement(children)
+    ? cloneElement(children, { 'aria-describedby': [children.props['aria-describedby'], id].filter(Boolean).join(' ') })
+    : <span className="rv-tip__texto" tabIndex={0} aria-describedby={id}>{children}</span>;
+  return (
+    <span
+      ref={raiz}
+      className={['rv-tip', className].filter(Boolean).join(' ')}
+      onPointerEnter={() => setAbierto(true)}
+      onPointerLeave={() => setAbierto(false)}
+      onFocus={() => setAbierto(true)}
+      onBlur={() => setAbierto(false)}
+    >
+      {objetivo}
+      <span ref={burbuja} role="tooltip" id={id} className="rv-pop rv-pop--tip" data-abierto={abierto || undefined}>{texto}</span>
+    </span>
+  );
 }

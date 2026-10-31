@@ -16,6 +16,7 @@ import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Casilla, Radio, Campo, Fieldset, CampoArchivo } from '${ruta('componentes/campos')}';
 import { Switch } from '${ruta('componentes/switch')}';
+import { Tooltip } from '${ruta('componentes/overlay')}';
 import { Tabs } from '${ruta('componentes/tabs')}';
 import { SegmentedControl } from '${ruta('componentes/segmented')}';
 function App() {
@@ -25,6 +26,7 @@ function App() {
     <div data-ui="v2" style={{ padding: 16 }}>
       <SegmentedControl etiqueta="Periodo" valor={periodo} onChange={setPeriodo} opciones={[{ valor: 'sem', etiqueta: 'Semana', conteo: 4 }, { valor: 'mes', etiqueta: 'Mes' }, { valor: 'anio', etiqueta: 'Año', deshabilitada: true }, { valor: 'todo', etiqueta: 'Todo' }]} />
       <Tabs etiqueta="Secciones" param="vista" pestanas={[{ valor: 'a', etiqueta: 'Resumen', contenido: <p id="pa">Panel A <button id="ba">x</button></p> }, { valor: 'b', etiqueta: 'Fuentes', conteo: 0, contenido: <p id="pb">Panel B</p> }, { valor: 'c', etiqueta: 'Cobertura', conteo: 3, contenido: <p id="pc">Panel C</p> }]} />
+      <div style={{ position: 'absolute', left: 4, top: 600 }}><Tooltip texto="Cuadra contra el anticipo y la política de gasto de la flota"><button id="con-tip">Cuadre</button></Tooltip> <Tooltip texto="Solo texto">Corte</Tooltip></div>
       <output id="periodo">{periodo}</output>
       <form id="f">
         <Casilla id="c1" name="c1" etiqueta="Recibir avisos" ayuda="Llegan por correo" checked={marcada} onChange={(e) => setMarcada(e.target.checked)} />
@@ -255,6 +257,51 @@ describe.skipIf(SIN_NAVEGADOR)('Tabs · comportamiento en Chromium', () => {
       return { alto: Math.round(t.getBoundingClientRect().height), borde: s.borderBottomWidth, color: s.borderBottomColor, peso: s.fontWeight };
     });
     expect(r).toEqual({ alto: 36, borde: '2px', color: 'rgb(14, 14, 16)', peso: '600' });
+    await p.close();
+  });
+});
+
+describe.skipIf(SIN_NAVEGADOR)('Tooltip · comportamiento en Chromium', () => {
+  it('foco de teclado lo abre, enlazado por aria-describedby con role=tooltip; salir del foco lo cierra', async () => {
+    const p = await abrir();
+    const vis = () => p.evaluate(() => getComputedStyle(document.querySelector('[role="tooltip"]')!).visibility);
+    expect(await vis()).toBe('hidden');
+    await p.focus('#con-tip');
+    expect(await vis()).toBe('visible');
+    const r = await p.evaluate(() => { const b = document.getElementById('con-tip')!; const t = document.getElementById(b.getAttribute('aria-describedby')!)!; return { rol: t.getAttribute('role'), txt: t.textContent }; });
+    expect(r).toEqual({ rol: 'tooltip', txt: 'Cuadra contra el anticipo y la política de gasto de la flota' });
+    await p.evaluate(() => (document.activeElement as HTMLElement).blur());
+    expect(await vis()).toBe('hidden');
+    await p.close();
+  });
+  it('Esc lo cierra aunque el foco siga en el disparador; hover lo abre y salir lo cierra', async () => {
+    const p = await abrir();
+    const vis = () => p.evaluate(() => getComputedStyle(document.querySelector('[role="tooltip"]')!).visibility);
+    await p.focus('#con-tip');
+    await p.keyboard.press('Escape');
+    expect(await vis()).toBe('hidden');
+    await p.hover('#con-tip');
+    expect(await vis()).toBe('visible');
+    await p.mouse.move(900, 100);
+    expect(await vis()).toBe('hidden');
+    await p.close();
+  });
+  it('es una tarjeta de superficie (no invertida) de 160 a 280 px, encima del disparador y dentro del viewport', async () => {
+    const p = await abrir();
+    await p.focus('#con-tip');
+    const r = await p.evaluate(() => {
+      const t = document.querySelector('[role="tooltip"]') as HTMLElement; const b = document.getElementById('con-tip')!.getBoundingClientRect(); const c = t.getBoundingClientRect(); const s = getComputedStyle(t);
+      return { w: Math.round(c.width), arribaDe: c.bottom <= b.top, dentro: c.left >= 8 && c.right <= innerWidth - 8 && c.top >= 8, fondo: s.backgroundColor, radio: s.borderTopLeftRadius, fuente: s.fontSize, sup: getComputedStyle(document.documentElement).getPropertyValue('--surface') };
+    });
+    expect(r.w).toBeGreaterThanOrEqual(160); expect(r.w).toBeLessThanOrEqual(280);
+    expect(r.arribaDe).toBe(true); expect(r.dentro).toBe(true);
+    expect(r.fondo).toBe('rgb(255, 255, 255)'); expect(r.radio).toBe('12px'); expect(r.fuente).toBe('12px');
+    await p.close();
+  });
+  it('un texto suelto se vuelve enfocable (Tab) y también se describe', async () => {
+    const p = await abrir();
+    await p.focus('.rv-tip__texto');
+    expect(await p.evaluate(() => getComputedStyle(document.querySelectorAll('[role="tooltip"]')[1]).visibility)).toBe('visible');
     await p.close();
   });
 });

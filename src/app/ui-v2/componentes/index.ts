@@ -7,7 +7,7 @@ export { MarcoPagina } from './marco-pagina';
 export { ProveedorAreaV2, useArea } from './contexto-area';
 export { UiV2Provider, useUiV2 } from './contexto';
 export { cx } from './clases';
-export { Drawer, Modal, Popover, PanelLateral, MenuList, MenuItem, type TamanoDrawer, type TamanoModal, type AnchoPanel } from './overlay';
+export { Drawer, Modal, Popover, Tooltip, PanelLateral, MenuList, MenuItem, type TamanoDrawer, type TamanoModal, type AnchoPanel } from './overlay';
 export { EstadoVacio } from './estado-vacio';
 export { EstadoError } from './estado-error';
 export { EsqBarra, EsqTarjetaV2, EsqCifrasV2, EsqTablaV2, EsqPagina } from './esqueleto';
