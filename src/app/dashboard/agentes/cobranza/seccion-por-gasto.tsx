@@ -6,6 +6,8 @@ import { numero, mxn, fechaCorta } from '@/lib/formato';
 import { EstadoVacio } from '../../estados';
 import { FormaPorGasto } from './forma-por-gasto';
 import type { AccionSimple } from './controles';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 
 const MAX_FILAS = 40;
 
@@ -41,18 +43,18 @@ export function SeccionPorGasto({ config, plan, tablero, firma, instrucciones, g
         </p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <Kpi titulo="Gastos sin comprobante" valor={numero(plan.pendientes.length)} nota="en viajes abiertos o en cuadre" />
-        <Kpi titulo="Les toca hoy" valor={numero(hoy)} nota={`${numero(plan.paraContactar.length)} choferes, un mensaje cada uno`} />
-        <Kpi titulo="Sin teléfono" valor={numero(plan.sinTelefono.reduce((n, g) => n + g.items.length, 0))}
+      <TiraCifras sello={selloHoy('Gastos de los viajes')}>
+        <Cifra etiqueta="Gastos sin comprobante" valor={numero(plan.pendientes.length)} nota="en viajes abiertos o en cuadre" />
+        <Cifra etiqueta="Les toca hoy" valor={numero(hoy)} nota={`${numero(plan.paraContactar.length)} choferes, un mensaje cada uno`} />
+        <Cifra etiqueta="Sin teléfono" valor={numero(plan.sinTelefono.reduce((n, g) => n + g.items.length, 0))}
           nota="gastos de choferes sin teléfono" tono={plan.sinTelefono.length > 0 ? 'warn' : undefined} />
-        <Kpi titulo="Avisos (30 días)" valor={ef ? numero(ef.avisos) : '—'} nota={ef ? `${numero(ef.abiertos)} aún abiertos` : 'no se pudo leer'} />
-        <Kpi titulo="Efectividad"
+        <Cifra etiqueta="Avisos (30 días)" valor={ef ? numero(ef.avisos) : '—'} nota={ef ? `${numero(ef.abiertos)} aún abiertos` : 'no se pudo leer'} />
+        <Cifra etiqueta="Efectividad"
           valor={ef === null ? '—' : ef.tasa === null ? 'Aún pocos datos' : `${numero(Math.round(ef.tasa * 100))} %`}
           nota={ef === null ? 'no se pudo leer'
             : ef.medianaHoras === null ? 'avisos que produjeron el comprobante'
               : `mediana ${numero(ef.medianaHoras)} h hasta el comprobante`} />
-      </div>
+      </TiraCifras>
 
       {/* ── Qué comprobante falta de qué gasto ── */}
       <div>
@@ -166,15 +168,6 @@ export function SeccionPorGasto({ config, plan, tablero, firma, instrucciones, g
   );
 }
 
-function Kpi({ titulo, valor, nota, tono }: { titulo: string; valor: string; nota?: string; tono?: 'warn' | 'bad' }) {
-  return (
-    <div className="card p-3.5">
-      <div className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{titulo}</div>
-      <div className="cifra-mono text-[18px] font-medium mt-1" style={tono ? { color: `var(--${tono})` } : undefined}>{valor}</div>
-      {nota && <div className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{nota}</div>}
-    </div>
-  );
-}
 
 function Mini({ titulo, filas }: { titulo: string; filas: Array<[string, number, number]> }) {
   return (

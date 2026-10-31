@@ -8,6 +8,8 @@ import { esFolioSimulado, type EpisodioVista, type Excepcion, type FilaTablero, 
 import type { Estancia } from '@/lib/likida/conductor/estadias_anden';
 import type { ReubicacionesCliente } from '@/lib/likida/conductor/reubicaciones';
 import { AccionesHito, FormaAsignarSitios, type AccionOficinaServidor, type ModoAccion, type OpcionSitio } from './acciones-forma';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL TABLERO DE HITOS (0385) — la pantalla del jefe de tráfico.
@@ -61,15 +63,6 @@ export function PuntoSemaforo({ s }: { s: Semaforo }) {
   );
 }
 
-function Kpi({ titulo, valor, nota, tono }: { titulo: string; valor: string; nota?: string; tono?: 'warn' | 'bad' }) {
-  return (
-    <div className="card p-3.5">
-      <div className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{titulo}</div>
-      <div className="cifra-mono text-[20px] font-medium mt-1" style={tono ? { color: `var(--${tono})` } : undefined}>{valor}</div>
-      {nota && <div className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{nota}</div>}
-    </div>
-  );
-}
 
 /** T-A5-26: textos exactos de los estados vacíos y de falta, en lenguaje llano. */
 export const TEXTO_SIN_VIAJES = 'Todavía no hay viajes en seguimiento. Marca operadores en Configuración y sube sus viajes.';
@@ -84,20 +77,20 @@ export function IndicadoresHitos({ i, dias }: { i: IndicadoresVista | null; dias
   }
   return (
     <div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Kpi titulo="Hitos reportados sin insistencia"
+      <TiraCifras sello={selloHoy('Viajes de la flota')}>
+        <Cifra etiqueta="Hitos reportados sin insistencia"
           valor={i.tasaSinInsistencia === null ? 'sin datos' : porcentaje(i.tasaSinInsistencia * 100, 0)}
           nota={i.recibidos === 0 ? 'ningún hito recibido en el periodo' : `de ${numero(i.recibidos)} hitos; a lo más un mensaje del agente`} />
-        <Kpi titulo="Tiempo medio de respuesta"
+        <Cifra etiqueta="Tiempo medio de respuesta"
           valor={i.minutosRespuestaPromedio === null ? 'sin datos' : minutos(i.minutosRespuestaPromedio)}
           nota={i.conRespuestaMedida === 0 ? 'ninguna solicitud con respuesta medible' : `sobre ${numero(i.conRespuestaMedida)} solicitudes contestadas`} />
-        <Kpi titulo="Hitos escalados" valor={numero(i.escalados)} tono={i.escalados > 0 ? 'warn' : undefined} nota="agotaron la escalera de recordatorios" />
-        <Kpi titulo="Validados con ubicación" valor={numero(i.validadosUbicacion)}
+        <Cifra etiqueta="Hitos escalados" valor={numero(i.escalados)} tono={i.escalados > 0 ? 'warn' : undefined} nota="agotaron la escalera de recordatorios" />
+        <Cifra etiqueta="Validados con ubicación" valor={numero(i.validadosUbicacion)}
           nota={i.sinCoincidencia > 0 ? `${numero(i.sinCoincidencia)} sin coincidencia por revisar` : 'pin o GPS dentro del sitio'} />
-        <Kpi titulo="Validación en modo degradado" valor={i.tasaValidacionDegradada === null ? 'sin datos' : porcentaje(i.tasaValidacionDegradada * 100, 0)}
+        <Cifra etiqueta="Validación en modo degradado" valor={i.tasaValidacionDegradada === null ? 'sin datos' : porcentaje(i.tasaValidacionDegradada * 100, 0)}
           tono={i.tasaValidacionDegradada !== null && i.tasaValidacionDegradada > 0 ? 'warn' : undefined}
           nota={i.llegadasValidables === 0 ? 'ninguna llegada validable en el periodo' : `${numero(i.validacionDegradada)} de ${numero(i.llegadasValidables)} llegadas: sin geocerca o solo con el pin del chofer (sin GPS real)`} />
-      </div>
+      </TiraCifras>
       <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
         Hitos con actividad en los últimos {dias} {dias === 1 ? 'día' : 'días'}, con los mismos filtros de abajo.
         {i.capturadosOficina > 0 ? ` ${numero(i.capturadosOficina)} los capturó la oficina a mano.` : ''}
