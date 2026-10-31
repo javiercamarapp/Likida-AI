@@ -1,36 +1,41 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { crearControlador, type EstadoCarga, TOPE_MS } from './controlador-carga';
 
-// ESTILO-LIKIDA §9, medido con reloj falso: aparece a >250 ms, ≥400 ms visible, la carga inicial se libera tras 600 ms estables,
-// seguro de 20 s. Sin DOM: el «puerto» simula la pantalla de carga de página.
+// ESTILO-LIKIDA §9 + decisión de Javier del 31-oct: el telón es SOLO de la primera carga de la sesión. Medido con reloj falso: la
+// primera carga se libera tras 600 ms estables y ≥400 ms visible; una recarga de la misma sesión, en cuanto el contenido está
+// listo; las navegaciones NUNCA levantan el telón (ahí van esqueletos); seguro de 20 s. Sin DOM: el «puerto» simula la pantalla de carga.
 
-function armar() {
-  const est = { pendiente: false, cargandoDoc: false };
+function armar(primeraVez = true) {
+  const est = { pendiente: false };
   const historia: Array<[number, EstadoCarga]> = [];
   const t0 = Date.now();
+  const vistas = { n: 0 };
   const ctl = crearControlador({
-    hayPendiente: () => est.cargandoDoc || est.pendiente,
-    documentoCargando: () => est.cargandoDoc,
+    hayPendiente: () => est.pendiente,
     poner: (e) => historia.push([Date.now() - t0, e]),
     ahora: () => Date.now(),
     esperar: (f, ms) => setTimeout(f, ms) as unknown as number,
     cancelar: (id) => clearTimeout(id),
+    primeraVez,
+    marcarVista: () => { vistas.n++; },
   });
-  return { est, historia, ctl, t0 };
+  return { est, historia, ctl, t0, vistas };
 }
 
 beforeEach(() => { vi.useFakeTimers(); });
 afterEach(() => { vi.useRealTimers(); });
 
-describe('carga inicial', () => {
-  it('con todo listo desde el inicio, la capa se mantiene 600 ms y se suelta', () => {
-    const { ctl, historia } = armar();
+describe('primera carga de la sesión', () => {
+  it('con todo listo desde el inicio, el telón se mantiene 600 ms y se suelta; la sesión queda marcada', () => {
+    const { ctl, historia, vistas } = armar();
     ctl.evaluar();
     vi.advanceTimersByTime(599);
     expect(ctl.estado()).toBe('inicial');
+    expect(vistas.n).toBe(0);
     vi.advanceTimersByTime(2);
     expect(ctl.estado()).toBe('oculta');
     expect(historia.at(-1)?.[0]).toBeGreaterThanOrEqual(600);
+    expect(vistas.n).toBe(1);
   });
 
   it('mientras haya pantalla de carga de página pendiente no se suelta; se libera 600 ms después de que desaparece', () => {
@@ -73,7 +78,28 @@ describe('carga inicial', () => {
   });
 });
 
-describe('navegación interna', () => {
+describe('recarga dentro de la misma sesión', () => {
+  it('se suelta en cuanto el contenido está listo, sin ventana ni mínimo de 400 ms', () => {
+    const { ctl, vistas } = armar(false);
+    ctl.evaluar();
+    expect(ctl.estado()).toBe('inicial');
+    vi.advanceTimersByTime(1);
+    expect(ctl.estado()).toBe('oculta');
+    expect(vistas.n).toBe(1);
+  });
+
+  it('con contenido pendiente espera, y sale apenas termina', () => {
+    const { est, ctl } = armar(false);
+    est.pendiente = true; ctl.evaluar();
+    vi.advanceTimersByTime(2000);
+    expect(ctl.estado()).toBe('inicial');
+    est.pendiente = false; ctl.evaluar();
+    vi.advanceTimersByTime(1);
+    expect(ctl.estado()).toBe('oculta');
+  });
+});
+
+describe('navegación interna: el telón NO vuelve', () => {
   function listoOculta() {
     const a = armar();
     a.ctl.evaluar();
@@ -82,61 +108,27 @@ describe('navegación interna', () => {
     return a;
   }
 
-  it('una navegación rápida (<250 ms) NUNCA muestra la capa', () => {
-    const { est, ctl } = listoOculta();
+  it('una navegación lenta (más de 250 ms, incluso 10 s) no levanta el telón: la pantalla muestra su esqueleto', () => {
+    const { est, ctl, historia } = listoOculta();
     est.pendiente = true; ctl.evaluar();
-    vi.advanceTimersByTime(249);
+    vi.advanceTimersByTime(10_000);
     est.pendiente = false; ctl.evaluar();
     vi.advanceTimersByTime(2000);
     expect(ctl.estado()).toBe('oculta');
+    expect(historia.filter(([, e]) => e !== 'oculta' && e !== 'inicial')).toHaveLength(0);
+    expect(historia.filter(([, e]) => e === 'inicial')).toHaveLength(0);
   });
 
-  it('una navegación lenta muestra la capa a los 250 ms y la mantiene ≥400 ms visible', () => {
-    const { est, ctl, historia } = listoOculta();
-    est.pendiente = true; ctl.evaluar();
-    vi.advanceTimersByTime(251);
-    expect(ctl.estado()).toBe('nav');
-    const aparece = Date.now();
-    vi.advanceTimersByTime(50);
-    est.pendiente = false; ctl.evaluar(); // el contenido llega 50 ms después de aparecer
-    vi.advanceTimersByTime(340);
-    expect(ctl.estado()).toBe('nav'); // aún no cumple 400 ms
-    vi.advanceTimersByTime(20);
-    expect(ctl.estado()).toBe('oculta');
-    expect(Date.now() - aparece).toBeGreaterThanOrEqual(400);
-    expect(historia.filter(([, e]) => e === 'nav')).toHaveLength(1);
-  });
-
-  it('si la pantalla ya llevaba >400 ms visible, se suelta tras la ventana de navegación de 150 ms', () => {
+  it('el seguro de 20 s ya no corre una vez soltado el telón', () => {
     const { est, ctl } = listoOculta();
     est.pendiente = true; ctl.evaluar();
-    vi.advanceTimersByTime(251 + 1000);
-    est.pendiente = false; ctl.evaluar();
-    vi.advanceTimersByTime(149);
-    expect(ctl.estado()).toBe('nav');
-    vi.advanceTimersByTime(2);
+    vi.advanceTimersByTime(TOPE_MS + 1000);
     expect(ctl.estado()).toBe('oculta');
-  });
-
-  it('no levanta la capa mientras el documento aún está llegando (eso lo cubre la carga inicial)', () => {
-    const { est, ctl } = listoOculta();
-    est.cargandoDoc = true; est.pendiente = true; ctl.evaluar();
-    vi.advanceTimersByTime(1000);
-    expect(ctl.estado()).toBe('oculta');
-  });
-
-  it('seguro de 20 s también en navegación', () => {
-    const { est, ctl } = listoOculta();
-    est.pendiente = true; ctl.evaluar();
-    vi.advanceTimersByTime(251);
-    expect(ctl.estado()).toBe('nav');
-    vi.advanceTimersByTime(TOPE_MS + 1);
-    expect(ctl.estado()).toBe('tope');
   });
 });
 
-describe('mutaciones del DOM sin cambio de estado (H2): evaluar() repetido NO reinicia los temporizadores', () => {
-  it('carga inicial: evaluar() cada 100 ms sin pendiente libera a los 600 ms (no hasta el seguro)', () => {
+describe('mutaciones del DOM sin cambio de estado: evaluar() repetido NO reinicia los temporizadores', () => {
+  it('primera carga: evaluar() cada 100 ms sin pendiente libera a los 600 ms (no hasta el seguro)', () => {
     const { ctl } = armar();
     for (let t = 0; t < 590; t += 100) { ctl.evaluar(); vi.advanceTimersByTime(100); }
     ctl.evaluar();
@@ -144,33 +136,12 @@ describe('mutaciones del DOM sin cambio de estado (H2): evaluar() repetido NO re
     expect(ctl.estado()).toBe('oculta');
   });
 
-  it('carga inicial: ráfaga continua durante 5 s con el mismo estado no dispara el «No disponible» falso', () => {
+  it('primera carga: ráfaga continua durante 5 s con el mismo estado no dispara el «No disponible» falso', () => {
     const { ctl, est } = armar();
     est.pendiente = true;
     for (let t = 0; t < 5000; t += 50) { ctl.evaluar(); vi.advanceTimersByTime(50); }
     est.pendiente = false;
     for (let t = 0; t < 1200; t += 50) { ctl.evaluar(); vi.advanceTimersByTime(50); }
     expect(ctl.estado()).toBe('oculta');
-  });
-
-  it('navegación lenta: evaluar() cada 50 ms con pendiente igual levanta la capa a los 250 ms', () => {
-    const a = armar();
-    a.ctl.evaluar(); vi.advanceTimersByTime(700);
-    expect(a.ctl.estado()).toBe('oculta');
-    a.est.pendiente = true;
-    for (let t = 0; t < 300; t += 50) { a.ctl.evaluar(); vi.advanceTimersByTime(50); }
-    expect(a.ctl.estado()).toBe('nav');
-  });
-
-  it('navegación: mutaciones continuas con la pantalla ya lista no alargan la ventana de 400 ms', () => {
-    const a = armar();
-    a.ctl.evaluar(); vi.advanceTimersByTime(700);
-    a.est.pendiente = true; a.ctl.evaluar(); vi.advanceTimersByTime(251);
-    expect(a.ctl.estado()).toBe('nav');
-    a.est.pendiente = false;
-    for (let t = 0; t < 140; t += 20) { a.ctl.evaluar(); vi.advanceTimersByTime(20); }
-    expect(a.ctl.estado()).toBe('nav');
-    for (let t = 0; t < 400; t += 20) { a.ctl.evaluar(); vi.advanceTimersByTime(20); }
-    expect(a.ctl.estado()).toBe('oculta');
   });
 });
