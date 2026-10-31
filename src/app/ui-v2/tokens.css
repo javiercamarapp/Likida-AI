@@ -83,6 +83,8 @@
   --g3: #8a8a90;
   --g4: #3a3a40;
   --g5: #0e0e10;
+  /* Cascada (Waterfall): las bajas flotan con el gris medio (≥3:1 contra la superficie); --g2 se perdía en oscuro (#1f1f23 sobre #17171a) */
+  --casc-baja: var(--g3);
 
   /* Ocho matices de DATOS (identidad de MÉTRICA, fijos; ESTILO-LIKIDA §2 = Vexa). Solo gráficas, chips de categoría y filete de KPI;
      nunca en el cromo. 6 = burdeos = señal «requiere acción». */
@@ -120,7 +122,7 @@
   --ui-tip-ink: var(--tip-ink);
   /* ÚNICO color de la capa de carga (= el fondo de la app) */
   --carga-fondo: #ffffff;
-  /* Cabecera de tabla: gris suave sobre la superficie, texto tinta secundaria */
+  /* Cabecera de tabla: tinte INFO sólido (petróleo muy suave, #eef6f9 en claro; el oscuro se redefine abajo) con texto ink-info, como Vexa. No es gris. */
   --tint-info: #eef6f9;
   --tabla-cab-bg: var(--tint-info);
   --tabla-cab-ink: var(--info);
@@ -199,7 +201,8 @@
   --item-h: 32px;
   --item-h-riel: 40px;
   --marca-h: 52px;
-  --pie-max: 150px;
+  --pie-max: 100px;
+  --nav-inf-h: 64px;
   --logo-sb: 30px;
   --logo-riel: 28px;
   --logo-movil: 28px;

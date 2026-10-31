@@ -48,9 +48,40 @@ test.describe('con la UI v2 forzada', () => {
     expect((await page.locator('aside').boundingBox())?.width).toBe(232);
   });
 
-  test('modo oscuro: el documento (body) también es oscuro, no solo el div del chrome', async ({ page }) => {
+  test('pie del sidebar: UN solo bloque (≤ 100 px) con la tarjeta de cuenta; Guía y Notificaciones en la topbar', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/dashboard/viajes');
-    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    const pie = await page.locator('.rv-sb__pie').boundingBox();
+    expect(pie?.height).toBeLessThanOrEqual(100);
+    await expect(page.locator('.rv-sb__pie [role="radiogroup"]')).toHaveCount(0); // el tema vive en el menú de la tarjeta
+    await expect(page.locator('.rv-sb__pie .rv-contador')).toHaveCount(0); // sin contador de avisos en el pie
+    const topbar = page.locator('header.rv-cab-esc');
+    await expect(topbar.getByRole('button', { name: 'Guía' })).toBeVisible();
+    await expect(topbar.getByRole('link', { name: /Notificaciones/ })).toBeVisible();
+    await expect(page.locator('.rv-migas')).toHaveCount(0);
+    await topbar.getByRole('button', { name: 'Guía' }).click();
+    await expect(page.getByRole('menu', { name: 'Guía' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu', { name: 'Guía' })).toBeHidden();
+  });
+
+  test('el riel se anima: al plegar el sidebar el ancho pasa a 72 px y el chevron gira (movimiento permitido)', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/dashboard/viajes');
+    expect((await page.locator('aside').boundingBox())?.width).toBe(232);
+    await page.getByRole('button', { name: 'Plegar el menú' }).first().click();
+    await expect.poll(async () => (await page.locator('aside').boundingBox())?.width, { timeout: 3000 }).toBe(72);
+    await expect(page.locator('.rv-cab-esc__plegar')).toHaveAttribute('aria-expanded', 'false');
+    // Todos los destinos siguen alcanzables en el riel (el texto se oculta de forma visual, el enlace y su nombre accesible quedan).
+    await expect(page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('link', { name: 'Viajes', exact: true })).toHaveCount(1);
+  });
+
+  test('modo oscuro: el documento (body) también es oscuro, no solo el div del chrome', async ({ page }) => {
+    // El tema vive en localStorage y `useTema` lo reaplica al hidratar: poner el atributo a mano justo tras `goto` perdía la carrera
+    // contra la hidratación (la reaplicación lo devolvía a claro). Se elige el tema como lo hace la app, ANTES de cargar la página.
+    await page.addInitScript(() => window.localStorage.setItem('likida-tema', 'oscuro'));
+    await page.goto('/dashboard/viajes');
     // `body` transiciona el fondo al cambiar de tema: leer el estilo justo después de poner data-theme da un color a medio
     // camino (prueba intermitente). `expect.poll` reintenta hasta que la transición termina; no se debilita lo que se mide:
     // el valor final sigue siendo el negro neutro #0e0e10 de la paleta (ESTILO-LIKIDA §1).

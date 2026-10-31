@@ -283,3 +283,6 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
   /* El texto de la etiqueta queda a 10 px del borde: el área de toque sube hasta el hueco entre bloques (10 px). */
   [data-ui="v2"] .rv-kpi__enlace::after { inset: -10px 0 0 0; }
 }
+
+/* Cascada: la cifra de la barra más alta queda 18 px sobre su barra; sin aire arriba se pisaba con el título de la tarjeta («CASCADA» / «$5,000.00») */
+[data-ui="v2"] .rv-cascada { padding-top: 22px; }

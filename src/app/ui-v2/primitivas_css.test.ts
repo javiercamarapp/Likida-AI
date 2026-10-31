@@ -25,6 +25,10 @@ describe('primitivas v2 · contrato de ESTILO-LIKIDA', () => {
     expect(comp).toMatch(/\.rv-btn--primary \{ background: var\(--btn-bg\)/); // lee --btn-bg/--btn-fg/--btn-borde/--btn-hover (tenue neutro, en tokens.css)
     expect(comp).not.toMatch(/\.rv-btn--primary \{[^}]*var\(--marca\)/);
   });
+  it('botón compacto (.rv-btn--sm): 32 px en escritorio y también bajo 820 (donde el botón normal sube a 36)', () => {
+    expect(comp).toMatch(/\.rv-btn--sm \{ min-height: 32px; padding: 4px 10px; \}/);
+    expect(comp).toMatch(/@media \(max-width: 819px\) \{[^@]*\.rv-btn \{ min-height: 36px; \}\s*\[data-ui="v2"\] \.rv-btn--sm \{ min-height: 32px; \}/);
+  });
   it('botón deshabilitado: borde discontinuo y SIN opacidad', () => {
     const m = /\.rv-btn:disabled,[^{]*\{([^}]*)\}/.exec(comp);
     expect(m?.[1]).toMatch(/opacity: 1/);
@@ -73,5 +77,23 @@ describe('primitivas v2 · contrato de ESTILO-LIKIDA', () => {
     expect(ratio('#3a3a40', '#f7f7f8')).toBeGreaterThanOrEqual(4.5);
     expect(ratio('#d4d4d8', '#2a2a2f')).toBeGreaterThanOrEqual(4.5);
     expect(ratio('#d4d4d8', '#17171a')).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe('cascada (Waterfall) en la capa v2', () => {
+  const tokens = readFileSync(join(__dirname, 'tokens.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const todos = (v: string) => [...tokens.matchAll(new RegExp(`^\\s*--${v}:\\s*(#[0-9a-f]{6});`, 'gim'))].map((m) => m[1].toLowerCase());
+  it('las barras que bajan (--casc-baja = --g3) rinden ≥3:1 contra la superficie en claro y en oscuro', () => {
+    expect(tokens).toMatch(/--casc-baja:\s*var\(--g3\)/);
+    const g3 = todos('g3'); const sup = todos('surface');
+    expect(g3).toHaveLength(2); expect(sup).toHaveLength(2); // [claro, oscuro]
+    expect(ratio(g3[0], sup[0])).toBeGreaterThanOrEqual(3);
+    expect(ratio(g3[1], sup[1])).toBeGreaterThanOrEqual(3);
+  });
+  it('el marcador --g2 anterior (#1f1f23 sobre #17171a) NO alcanzaba 3:1: por eso la capa v2 ya no lo usa', () => {
+    expect(ratio('#1f1f23', '#17171a')).toBeLessThan(3);
+  });
+  it('la cifra de la barra más alta tiene aire arriba: .rv-cascada con padding-top y el rótulo no se pisa con el título', () => {
+    expect(graf).toMatch(/\.rv-cascada \{ padding-top: 22px; \}/);
   });
 });

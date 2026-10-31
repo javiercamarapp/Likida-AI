@@ -6,7 +6,7 @@
    el chrome v2), así que v1 no ve nada de esto.
 
    UNA SOLA NAVEGACIÓN VISIBLE (breakpoints DISJUNTOS, un único corte en 768):
-     <768        cabecera .rv-cab-movil + hoja «Más» (el aside NO se ve)
+     <768        cabecera .rv-cab-movil + barra inferior .rv-nav-inf + hoja «Más» (el aside NO se ve)
      768–1023    riel .rv-sb de 72 px, texto visualmente oculto (sigue en el árbol de accesibilidad)
      ≥1024       sidebar .rv-sb de 232 px (riel de 72 si el usuario lo pliega)
    `display: none` saca el elemento del árbol de accesibilidad; el texto del riel NO usa display:none sino recorte visual
@@ -48,6 +48,7 @@
 }
 [data-ui="v2"] .rv-cab-movil__logo { display: inline-flex; align-items: center; min-height: 44px; color: var(--ink); }
 [data-ui="v2"] .rv-cab-movil__acciones { display: flex; align-items: center; gap: 0; }
+[data-ui="v2"] .rv-cab-movil__acciones .rv-guia { display: inline-flex; }
 
 /* Botón de ícono: 44×44 de área táctil en móvil */
 [data-ui="v2"] .rv-icono-boton {
@@ -115,7 +116,7 @@
   font-size: 12px; font-weight: 500; background: var(--ui-soft); color: var(--muted);
 }
 
-/* ── Pie fijo (≤150): Notificaciones 32 · Puesta en marcha 24 · tema 32 · tarjeta de cuenta 44; gap 4 ── */
+/* ── Pie fijo (≤100): UN solo bloque. Puesta en marcha 24 (solo <6/6) + tarjeta de cuenta 44; gap 4. Notificaciones, tema, perfil y ayuda ya no se apilan aquí ── */
 [data-ui="v2"] .rv-pie { display: flex; flex-direction: column; gap: 4px; }
 [data-ui="v2"] .rv-pie .rv-item { margin: 0; }
 
@@ -132,20 +133,6 @@
 [data-ui="v2"] .rv-puesta__seg i { display: block; width: 6px; height: 6px; border-radius: 2px; background: var(--ui-line-strong); }
 [data-ui="v2"] .rv-puesta__seg i[data-on] { background: var(--ink); }
 [data-ui="v2"] .rv-puesta__n { flex: none; font-size: 12px; font-weight: 600; color: var(--ink); }
-
-/* Tema segmentado visible (claro / sistema / oscuro): alto 32 */
-[data-ui="v2"] .rv-tema {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; height: 32px; box-sizing: border-box; padding: 2px;
-  border-radius: 12px; background: var(--ui-soft);
-}
-[data-ui="v2"] .rv-tema__op {
-  position: relative; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 8px;
-  background: transparent; color: var(--muted); cursor: pointer;
-}
-[data-ui="v2"] .rv-tema__op::after { content: ""; position: absolute; inset: -8px 0; }
-[data-ui="v2"] .rv-tema__op:hover { color: var(--ink); }
-[data-ui="v2"] .rv-tema__op[aria-checked="true"] { background: var(--ui-surface); color: var(--ink); box-shadow: inset 0 0 0 1px var(--ui-border); }
-[data-ui="v2"] .rv-tema__op:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 1px; }
 
 /* Tarjeta de cuenta: alto 44 (monograma, nombre, rol, salir en tinta) */
 [data-ui="v2"] .rv-cuenta {
@@ -177,6 +164,7 @@
    no existe y esta es la vía; ahí el Popover cuelga de la tarjeta, que `.rv-cuenta` deja sin eventos, de ahí el pointer-events. */
 [data-ui="v2"] .rv-cuenta .rv-pop { pointer-events: auto; }
 [data-ui="v2"] .rv-cuenta-valor { margin-left: auto; font-weight: 600; color: var(--ink); }
+[data-ui="v2"] .rv-cuenta-salir-fila { margin: 4px 0 0; padding-top: 4px; border-top: 1px solid var(--ui-border); }
 [data-ui="v2"] .rv-cuenta-tema { display: flex; flex-direction: column; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--ui-border); }
 
 /* Aviso de lectura (BannerInsight): en pantallas angostas la etiqueta, el delta y el enlace no se encogen y dejaban al texto en una
@@ -184,11 +172,53 @@
 [data-ui="v2"] [data-banner="insight"] { flex-wrap: wrap; row-gap: 4px; }
 [data-ui="v2"] [data-banner="insight"] > [data-banner-texto] { flex: 1 1 12rem; }
 
-/* Topbar: botón de plegar + breadcrumb 13/500 */
-[data-ui="v2"] .rv-migas { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; font-weight: 500; line-height: 1; color: var(--muted); }
-[data-ui="v2"] .rv-migas__sep { color: var(--ui-line-strong); }
-[data-ui="v2"] .rv-migas__act svg { color: var(--ink); }
-[data-ui="v2"] .rv-migas__act { display: inline-flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+/* Topbar: botón de plegar a la izquierda; a la derecha «Guía», Notificaciones y la fecha. Sin miga de pan (la etiqueta del área va sobre el título). */
+[data-ui="v2"] .rv-cab-esc__der { display: flex; align-items: center; gap: 8px; margin-left: auto; min-width: 0; }
+[data-ui="v2"] .rv-guia { position: relative; display: inline-flex; }
+[data-ui="v2"] .rv-guia__btn {
+  position: relative; display: inline-flex; align-items: center; gap: 6px; height: 32px; box-sizing: border-box; padding: 0 10px;
+  border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface); color: var(--ink);
+  font: 600 13px/1 var(--font-sans-ui, inherit); cursor: pointer;
+}
+[data-ui="v2"] .rv-guia__btn::after { content: ""; position: absolute; inset: -6px; }
+[data-ui="v2"] .rv-guia__btn:hover,
+[data-ui="v2"] .rv-guia__btn[aria-expanded="true"] { background: var(--ui-soft); border-color: var(--ui-line-strong); }
+[data-ui="v2"] .rv-guia__btn:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
+[data-ui="v2"] .rv-campana[aria-current="page"] { background: var(--ui-soft); color: var(--ink); }
+/* Aviso de pendientes: un punto de 8 px en la señal (acento puntual de atención), sin cifra */
+[data-ui="v2"] .rv-campana__punto { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--senal); box-shadow: 0 0 0 2px var(--ui-surface); }
+[data-ui="v2"] .rv-cab-esc__fecha { flex: none; min-inline-size: 78px; padding-left: 4px; text-align: right; font-size: 12px; font-weight: 500; line-height: 1; white-space: nowrap; color: var(--muted); }
+/* La fecha vive SOLO en el shell (topbar y cabecera móvil): el chip de fecha de cada página se oculta en v2 (duplicaba la fecha y robaba ancho al título) */
+[data-ui="v2"] .chip-fecha { display: none; }
+[data-ui="v2"] .rv-cab-movil__fecha { margin-left: auto; padding-right: 4px; font-size: 12px; font-weight: 500; line-height: 1; white-space: nowrap; color: var(--muted); }
+[data-ui="v2"] .rv-chev-plegar { flex: none; }
+[data-ui="v2"] .rv-cab-esc__plegar[aria-expanded="false"] .rv-chev-plegar,
+[data-ui="v2"] .rv-sb__plegar[aria-expanded="false"] .rv-chev-plegar { transform: rotate(180deg); }
+
+/* ── Barra inferior móvil (<768, ESTILO §11): píldora flotante 64 + área segura, hasta 4 destinos del rol + «Más», icono 22, etiqueta 11/500 ── */
+[data-ui="v2"] .rv-nav-inf {
+  position: fixed; z-index: 45; box-sizing: border-box; height: 64px; padding: 4px;
+  left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); bottom: max(10px, env(safe-area-inset-bottom));
+  border: 1px solid var(--ui-border); border-radius: 999px; box-shadow: var(--sh-pop);
+  background: var(--ui-surface); /* sólido: sin backdrop-filter (la guarda de movimiento prohíbe blur) el texto de abajo se transparentaba */
+}
+[data-ui="v2"] .rv-nav-inf__lista { list-style: none; margin: 0; padding: 0; height: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 2px; }
+[data-ui="v2"] .rv-nav-inf__lista > li { min-width: 0; height: 100%; }
+[data-ui="v2"] .rv-nav-inf__item {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 100%; height: 100%; min-height: 44px; box-sizing: border-box;
+  padding: 0 2px; border: 0; border-radius: 999px; background: transparent; color: var(--muted);
+  font: 500 11px/1.1 var(--font-sans-ui, inherit); text-decoration: none; cursor: pointer;
+}
+[data-ui="v2"] .rv-nav-inf__ico { flex: none; }
+[data-ui="v2"] .rv-nav-inf__txt { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-ui="v2"] .rv-nav-inf__item:hover { background: var(--ui-soft); color: var(--ink); }
+[data-ui="v2"] .rv-nav-inf__item[aria-current="page"],
+[data-ui="v2"] .rv-nav-inf__item[data-activo] { background: var(--ui-activo-bg); color: var(--ui-activo-ink); font-weight: 600; }
+[data-ui="v2"] .rv-nav-inf__item:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: -3px; }
+/* El contenido deja libre la barra (64 + área segura) y 24 de aire */
+@media (max-width: 767.98px) {
+  [data-ui="v2"] .rv-contenido { padding-bottom: calc(64px + max(10px, env(safe-area-inset-bottom)) + 24px); }
+}
 
 /* ── Hoja «Más» (móvil): el Drawer del sistema de overlays; aquí solo el árbol y el pie dentro ── */
 [data-ui="v2"] .rv-hoja__nav { padding: 0 0 8px; }
@@ -201,8 +231,12 @@
   [data-ui="v2"] .rv-item,
   [data-ui="v2"] .rv-puesta,
   [data-ui="v2"] .rv-cuenta__btn,
-  [data-ui="v2"] .rv-tema__op,
-  [data-ui="v2"] .rv-icono-boton { transition: background-color 120ms cubic-bezier(0.22, 1, 0.36, 1), color 120ms cubic-bezier(0.22, 1, 0.36, 1); }
+  [data-ui="v2"] .rv-icono-boton,
+  [data-ui="v2"] .rv-guia__btn,
+  [data-ui="v2"] .rv-nav-inf__item { transition: background-color 120ms cubic-bezier(0.22, 1, 0.36, 1), color 120ms cubic-bezier(0.22, 1, 0.36, 1); }
+  /* Riel ⇄ sidebar: el ancho se anima 180 ms con la curva del sistema; el chevron de plegar gira con él */
+  [data-ui="v2"] .rv-sb { transition: width 180ms cubic-bezier(0.22, 1, 0.36, 1); }
+  [data-ui="v2"] .rv-chev-plegar { transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1); }
   /* Entradas del shell (una sola vez al montar: el sidebar persiste entre rutas): ítems escalonados 220 ms, topbar y pie 180 ms.
      Solo transform/opacity; con reduced-motion `movimiento.css` anula toda animación del alcance. */
   @keyframes rv-nav-entra { from { opacity: 0; transform: translateX(-6px); } }
@@ -224,7 +258,8 @@
 
 /* ── Desde 768: escritorio. El riel (72) y el sidebar completo (232) comparten estructura ── */
 @media (min-width: 768px) {
-  [data-ui="v2"] .rv-cab-movil { display: none; }
+  [data-ui="v2"] .rv-cab-movil,
+  [data-ui="v2"] .rv-nav-inf { display: none; }
 
   /* Marco: 100 dvh, padding 16, gap 16. Solo `.rv-contenido` scrollea. */
   [data-ui="v2"] .rv-fila { align-items: stretch; height: 100dvh; min-height: 0; box-sizing: border-box; padding: 16px; gap: 0; }
@@ -241,13 +276,13 @@
   [data-ui="v2"] .rv-logo-s { display: none; }
   [data-ui="v2"] .rv-sb__plegar { width: 32px; height: 32px; }
   /* El contenido del sidebar scrollea por dentro; el pie queda fijo abajo. */
-  [data-ui="v2"] .rv-sb__nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 6px 0 8px; }
-  [data-ui="v2"] .rv-sb__pie { flex: none; box-sizing: border-box; padding: 2px 8px 3px; border-top: 1px solid var(--ui-border); }
+  [data-ui="v2"] .rv-sb__nav { flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; padding: 6px 0 8px; }
+  [data-ui="v2"] .rv-sb__pie { flex: none; box-sizing: border-box; padding: 8px; border-top: 1px solid var(--ui-border); }
 
   /* La columna del contenido es una tarjeta: topbar fija arriba y contenido que scrollea por dentro */
   [data-ui="v2"] .rv-col {
     display: flex; flex-direction: column; height: 100%; box-sizing: border-box; overflow: hidden;
-    border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-canvas);
+    border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-canvas); box-shadow: var(--sh-marco);
   }
   [data-ui="v2"] .rv-contenido { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 24px 24px 28px; }
 
@@ -282,7 +317,6 @@
   [data-ui="v2"] .rv-sb .rv-logo-h,
   [data-ui="v2"] .rv-sb .rv-sb__plegar { display: none; }
   [data-ui="v2"] .rv-sb .rv-logo-s { display: block; }
-  [data-ui="v2"] .rv-sb .rv-tema { display: none; }
   [data-ui="v2"] .rv-sb .rv-puesta { justify-content: center; }
   [data-ui="v2"] .rv-sb .rv-puesta__seg { display: none; }
   [data-ui="v2"] .rv-sb .rv-cuenta { flex-direction: column; height: auto; padding: 4px 0; border: 0; background: transparent; }
@@ -320,7 +354,6 @@
   [data-ui="v2"] .rv-sb[data-riel] .rv-logo-h,
   [data-ui="v2"] .rv-sb[data-riel] .rv-sb__plegar { display: none; }
   [data-ui="v2"] .rv-sb[data-riel] .rv-logo-s { display: block; }
-  [data-ui="v2"] .rv-sb[data-riel] .rv-tema { display: none; }
   [data-ui="v2"] .rv-sb[data-riel] .rv-puesta { justify-content: center; }
   [data-ui="v2"] .rv-sb[data-riel] .rv-puesta__seg { display: none; }
   [data-ui="v2"] .rv-sb[data-riel] .rv-cuenta { flex-direction: column; height: auto; padding: 4px 0; border: 0; background: transparent; }

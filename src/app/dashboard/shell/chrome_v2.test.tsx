@@ -67,7 +67,9 @@ describe('DashboardChromeV2: el contrato que no se rompe', () => {
     expect(html).toContain('ADMIN FLOTA');
   });
 
-  it('hay cabecera móvil con el botón «Más» y la hoja existe (cerrada = sin open)', () => {
+  it('hay cabecera móvil, barra inferior con el botón «Más» y la hoja existe (cerrada = sin open)', () => {
+    expect(html).toContain('class="rv-cab-movil"');
+    expect(html).toMatch(/<nav class="rv-nav-inf" aria-label="Navegación móvil">/);
     expect(html).toContain('aria-label="Más: abrir el menú completo"');
     // La hoja es el Drawer del sistema de overlays (único lugar con <dialog>); cerrada no trae ítems de menú.
     expect(html).toMatch(/<dialog[^>]*class="rv-ov rv-ov--drawer"/);
@@ -80,6 +82,24 @@ describe('DashboardChromeV2: el contrato que no se rompe', () => {
     expect(html).toContain('data-tour="nav-conexiones"');
     expect(html).toContain('data-tour="nav-puesta-en-marcha"');
     expect(html).toContain('data-tour="nav-mas"');
+  });
+
+  it('«Guía» no se pinta cuando su menú no tiene filas (nómina) y sí con filas (dueño); la fecha vive solo en el shell', () => {
+    const nomina = pintar('nomina');
+    expect(nomina).not.toContain('>Guía<');
+    expect(nomina).not.toContain('aria-label="Guía"');
+    expect(html).toContain('>Guía<');
+    expect(html).toContain('aria-label="Guía"'); // la de la cabecera móvil, solo icono
+    expect(html).toContain('class="rv-cab-movil__fecha"');
+    expect(html).toContain('class="rv-cab-esc__fecha"');
+  });
+
+  it('ninguna ancla data-tour se repite y la barra móvil va DESPUÉS del sidebar (los localizadores que toman el primero ven el del sidebar)', () => {
+    const anclas = [...html.matchAll(/data-tour="([^"]+)"/g)].map((m) => m[1]);
+    expect(anclas.length).toBeGreaterThan(5);
+    expect(anclas.filter((a, i) => anclas.indexOf(a) !== i), 'anclas repetidas').toEqual([]);
+    expect(html.indexOf('class="rv-nav-inf"')).toBeGreaterThan(html.indexOf('<aside'));
+    expect(html.indexOf('href="/dashboard/viajes"')).toBeLessThan(html.indexOf('class="rv-nav-inf"')); // el enlace del sidebar es el primero
   });
 
   it('la capa de carga viaja en el HTML del servidor: una sola, visible desde el primer fotograma, solo el logo', () => {
@@ -97,10 +117,22 @@ describe('DashboardChromeV2: el contrato que no se rompe', () => {
     expect(html.match(/class="rv-grupo" data-abierto/g)).toHaveLength(1);
   });
 
-  it('el pie es una sola superficie: tema segmentado visible y tarjeta de cuenta con salir', () => {
-    expect(html).toContain('role="radiogroup" aria-label="Tema de la interfaz" class="rv-tema"');
-    expect(html.match(/role="radio"/g)).toHaveLength(3);
-    expect(html).toContain('aria-haspopup="menu"');
+  it('el pie es UN solo bloque: la tarjeta de cuenta (monograma, nombre, rol, salir); sin tema segmentado ni Notificaciones apilados', () => {
+    const pie = html.slice(html.indexOf('class="rv-pie"'), html.indexOf('</aside>'));
+    expect(pie).toContain('aria-haspopup="menu"');
+    expect(pie).toContain('aria-label="Cerrar sesión"');
+    expect(pie).not.toContain('role="radiogroup"');
+    expect(pie).not.toContain('Notificaciones');
+    expect(pie).not.toContain('rv-contador');
+    expect(pie.match(/<a /g) ?? []).toHaveLength(0); // sin filas de enlace: perfil, ayuda y demás viven en el menú de la tarjeta
+  });
+
+  it('la topbar de escritorio no tiene miga de pan: trae «Guía», Notificaciones y la fecha', () => {
+    const top = html.slice(html.indexOf('<header class="rv-cab-esc"'), html.indexOf('</header>', html.indexOf('<header class="rv-cab-esc"')));
+    expect(top).not.toContain('rv-migas');
+    expect(top).toContain('>Guía<');
+    expect(top).toContain('aria-label="Notificaciones"');
+    expect(top).toContain('class="rv-cab-esc__fecha"');
   });
 
   it('«Puesta en marcha <6/6» vive en el pie y no se duplica en el acordeón', () => {
@@ -120,8 +152,11 @@ describe('DashboardChromeV2: el contrato que no se rompe', () => {
     expect(html).not.toContain('logo-icono.png');
   });
 
-  it('contrato e2e: UNA sola navegación (la miga de la topbar no es un landmark <nav>) y la hoja se llama «Menú completo»', () => {
-    expect(html.match(/<nav/g)).toHaveLength(1);
+  it('contrato e2e: UNA sola navegación visible a la vez (el sidebar y la barra móvil se excluyen por CSS) y la hoja se llama «Menú completo»', () => {
+    // En el HTML hay dos landmarks: el del sidebar (≥768) y el de la barra inferior (<768). `shell.css` los hace disjuntos (display: none).
+    expect(html.match(/<nav/g)).toHaveLength(2);
+    expect(html.match(/aria-label="Navegación principal"/g)).toHaveLength(1);
+    expect(html.match(/aria-label="Navegación móvil"/g)).toHaveLength(1);
     expect(html).toContain('>Menú completo</h2>');
   });
 

@@ -6,6 +6,7 @@ import AvisoRol from '../aviso-rol';
 import SidebarV2 from './sidebar-v2';
 import CabeceraEscritorio from './cabecera-escritorio';
 import CabeceraMovil from './cabecera-movil';
+import NavegacionMovil from './navegacion-movil';
 import CapaCarga from './capa-carga';
 
 /**
@@ -16,7 +17,7 @@ import CapaCarga from './capa-carga';
  * hidratación). Todo el CSS nuevo cuelga de ese atributo, así que sin él v1 pinta idéntico.
  *
  * Una sola navegación visible a la vez, por breakpoints disjuntos en `ui-v2/shell.css`:
- *   · <768 px     cabecera sticky de 56 px + hoja «Más» (sin riel);
+ *   · <768 px     cabecera sticky de 56 px + barra inferior flotante (4 destinos del rol + «Más») + hoja «Más» (sin riel);
  *   · 768–1023 px riel de 72 px;
  *   · ≥1024 px    sidebar flotante de 232 px (riel de 72 si el usuario lo pliega) y topbar de 44 px.
  * La capa de carga única (`CapaCarga`) viaja en el HTML del servidor, visible desde el primer fotograma, y tapa todo el marco
@@ -44,11 +45,11 @@ export default function DashboardChromeV2({
       <div className={CLASES_V2.raiz} data-ui="v2" style={{ fontFamily: 'var(--font-sans-ui), var(--font-sans)' }}>
         <CapaCarga />
         <a href="#contenido-principal" className={CLASES_V2.saltar}>Saltar al contenido</a>
-        <CabeceraMovil rol={rol} rolEtiqueta={rolEtiqueta} nombre={nombre} perfil={perfil} usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} />
+        <CabeceraMovil rol={rol} perfil={perfil} />
         <div className={CLASES_V2.fila}>
           <SidebarV2 rol={rol} rolEtiqueta={rolEtiqueta} nombre={nombre} perfil={perfil} usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} />
           <div className={CLASES_V2.columna}>
-            <CabeceraEscritorio rol={rol} perfil={perfil} />
+            <CabeceraEscritorio rol={rol} perfil={perfil} insignias={insignias} />
             {/* `tabIndex={-1}`: el enlace «Saltar al contenido» mueve el foco AQUÍ. */}
             <div id="contenido-principal" tabIndex={-1} className={CLASES_V2.contenido}>
               <AvisoRol rolReal={rol} />
@@ -56,6 +57,7 @@ export default function DashboardChromeV2({
             </div>
           </div>
         </div>
+        <NavegacionMovil rol={rol} rolEtiqueta={rolEtiqueta} nombre={nombre} perfil={perfil} usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} />
       </div>
     </ProveedorNotificaciones>
   );

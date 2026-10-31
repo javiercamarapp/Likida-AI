@@ -2,18 +2,17 @@
 
 import { useId, useRef, useState } from 'react';
 import Link from 'next/link';
-import { LogOut, ChevronsUpDown, Play, RotateCcw, Check } from 'lucide-react';
+import { LogOut, ChevronsUpDown, Check } from 'lucide-react';
 import type { Item } from '../rutas';
 import { EnlaceCuenta } from '../enlace-cuenta';
 import { Popover, MenuList } from '../../ui-v2/componentes/overlay';
-import { useTourOpcional, useProgresoTour } from '../../ui-v2/movimiento/tour';
 import { anclaDe, indiceDeMenu } from './nav-utiles';
 import { OPCIONES_TEMA, useTema } from '../../selector-tema';
 
 /**
  * La tarjeta de cuenta del pie (alto 44): monograma, nombre, rol y «Salir» (icono en tinta, nunca rojo). Al pulsar la tarjeta se
  * abre el Popover del sistema de overlays (`overlay.tsx`: posición, foco inicial, Esc con retorno del foco, clic fuera) con un
- * `MenuList` (flechas, Inicio, Fin) de filas de 32 px: Mi perfil, Mi cuenta, Ayuda, Ver recorrido, el tema y —solo sin perfil— el uso
+ * `MenuList` (flechas, Inicio, Fin) de filas de 32 px: Mi perfil, Mi cuenta, Ayuda (y Plan y Configuración en el menú genérico), el tema y —solo sin perfil— el uso
  * de IA de hoy. Tab sale del menú y lo cierra. Las filas son enlaces reales (`Link`, navegación suave) con `role="menuitem"`.
  */
 export default function MenuCuenta({ nombre, rol, rolEtiqueta, sufijo, filas, usoIaPct, cerrarSesion, alNavegar, iniciales, abiertoInicial = false }: {
@@ -71,8 +70,7 @@ export default function MenuCuenta({ nombre, rol, rolEtiqueta, sufijo, filas, us
               </Link>
             ))}
             <EnlaceCuenta rol={rol} className="rv-menu__item" role="menuitem" tabIndex={-1} onClick={alElegir}>Mi cuenta</EnlaceCuenta>
-            <FilaRecorrido alElegir={alElegir} />
-            {/* El tema, también aquí: en el riel (768–1023 y plegado) el segmentado del pie no cabe y esta es la única vía. */}
+            {/* El tema vive SOLO aquí (el pie ya no apila un segmentado): claro / sistema / oscuro, también en el riel y en la hoja «Más». */}
             <div className="rv-cuenta-tema" role="presentation">
               {OPCIONES_TEMA.map(({ valor, Icono, rotulo }) => (
                 <button key={valor} type="button" role="menuitemradio" aria-checked={tema === valor} tabIndex={-1} data-tema={valor} className="rv-menu__item"
@@ -82,27 +80,17 @@ export default function MenuCuenta({ nombre, rol, rolEtiqueta, sufijo, filas, us
                 </button>
               ))}
             </div>
+            {cerrarSesion && (
+              <form action={cerrarSesion} className="rv-cuenta-salir-fila" role="none">
+                <button type="submit" role="menuitem" tabIndex={-1} className="rv-menu__item">
+                  <span className="rv-menu__icono" aria-hidden><LogOut width={16} height={16} strokeWidth={1.75} /></span>
+                  <span>Cerrar sesión</span>
+                </button>
+              </form>
+            )}
           </MenuList>
         </div>
       </Popover>
     </div>
-  );
-}
-
-/** «Ver recorrido» / «Reanudar recorrido»: la única forma de abrirlo; sin motor de recorrido (v2 sin perfil) no existe. */
-function FilaRecorrido({ alElegir }: { alElegir: () => void }) {
-  if (!useTourOpcional()) return null;
-  return <FilaRecorridoConMotor alElegir={alElegir} />;
-}
-function FilaRecorridoConMotor({ alElegir }: { alElegir: () => void }) {
-  const tour = useTourOpcional();
-  const prog = useProgresoTour('dueno');
-  if (!tour || !tour.existe('dueno')) return null;
-  const enCurso = prog?.estado === 'en_curso';
-  return (
-    <button type="button" role="menuitem" tabIndex={-1} className="rv-menu__item" onClick={() => { alElegir(); if (enCurso) tour.reanudar('dueno'); else tour.reiniciar('dueno'); }}>
-      <span className="rv-menu__icono" aria-hidden>{enCurso ? <RotateCcw width={16} height={16} strokeWidth={1.75} /> : <Play width={16} height={16} strokeWidth={1.75} />}</span>
-      <span>{enCurso ? 'Reanudar recorrido' : 'Ver recorrido'}</span>
-    </button>
   );
 }

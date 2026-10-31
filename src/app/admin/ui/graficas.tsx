@@ -295,7 +295,8 @@ export function Waterfall({
   const max = Math.max(...barras.map((b) => b.hasta), 1);
 
   return (
-    <div className="pb-6">
+    // `rv-cascada`: gancho de la capa v2 (aire arriba para la cifra de la barra más alta; ver `ui-v2/graficas.css`). Sin v2 no hace nada.
+    <div className="pb-6 rv-cascada">
       <div className="flex items-end gap-2" style={{ height: 160 }}>
         {barras.map((b, i) => {
           const topPct = (1 - b.hasta / max) * 100;
@@ -305,7 +306,8 @@ export function Waterfall({
               <div className="absolute inset-x-0 rounded-[3px]" style={{
                 top: animar ? `${topPct}%` : '100%',
                 height: animar ? `${Math.max(heightPct, 1)}%` : '0%',
-                background: b.esTotal ? 'var(--g5)' : (b.positivo ? 'var(--g4)' : 'var(--g2)'),
+                // Bajas: `--casc-baja` (solo la define la capa v2: gris medio ≥3:1 contra la superficie en claro y oscuro); sin ella, `--g2` de siempre.
+                background: b.esTotal ? 'var(--g5)' : (b.positivo ? 'var(--g4)' : 'var(--casc-baja, var(--g2))'),
                 transition: reducido ? 'none' : `top 480ms ${EASE} ${i * 80}ms, height 480ms ${EASE} ${i * 80}ms`,
               }} />
               <div className="absolute inset-x-0 text-center text-xs tabular" style={{ top: `calc(${topPct}% - 18px)`, color: 'var(--muted)' }}>
