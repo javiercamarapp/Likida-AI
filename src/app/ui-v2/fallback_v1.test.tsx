@@ -1,4 +1,3 @@
-/* eslint-disable security/detect-non-literal-fs-filename -- lee el CSS del propio módulo */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
