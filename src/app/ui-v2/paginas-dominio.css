@@ -41,7 +41,7 @@
 [data-ui="v2"] .card:has(> .etiqueta-mono + .cifra-mono:is([style*="--ok"], [style*="ok)"])) { --rv-filete: var(--ok); }
 [data-ui="v2"] .card > .etiqueta-mono { font-size: 11px; letter-spacing: .06em; font-weight: 500; }
 [data-ui="v2"] .card > .etiqueta-mono + .cifra-mono {
-  font: 600 28px/1.15 var(--font-sans-ui, inherit); letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin-top: 6px;
+  font: 600 var(--t-kpi)/1.15 var(--font-sans-ui, inherit); letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin-top: 6px;
 }
 [data-ui="v2"] .card > .etiqueta-mono + .cifra-mono + div { font-size: 12px; margin-top: 4px; }
 
@@ -74,7 +74,7 @@
   [data-ui="v2"] main.h-full > .hairline.rounded-2xl > .h-11.border-b { min-height: 60px; padding: 14px 16px 12px; }
   [data-ui="v2"] main.h-full > .hairline.rounded-2xl > .h-11.border-b > div:first-child { font-size: 18px; }
   [data-ui="v2"] main.h-full > .hairline.rounded-2xl > .px-5.py-5 { padding: 16px; }
-  [data-ui="v2"] .card > .etiqueta-mono + .cifra-mono { font-size: 24px; }
+  [data-ui="v2"] .card > .etiqueta-mono + .cifra-mono { font-size: var(--fs-kpi-movil); }
 }
 
 /* Controles de fecha y de archivo: nunca más anchos que su tarjeta (a 390 px empujaban el documento a un scroll horizontal) */
