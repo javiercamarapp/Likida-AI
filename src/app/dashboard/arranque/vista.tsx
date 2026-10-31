@@ -46,7 +46,7 @@ export function VistaPuestaEnMarcha({ pasos, resumen, puedeAdministrar, hrefAuto
           </p>
         )}
         {resumen.siguiente && (
-          <p className="mt-3 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+          <p className="mt-3 text-[12px]" style={{ color: 'var(--muted)' }}>
             Siguiente: <strong style={{ color: 'var(--ink)' }}>{resumen.siguiente.titulo}</strong>
             {(puedeAdministrar || !resumen.siguiente.soloDueno) && (
               <> — <Link href={resumen.siguiente.href} className="underline">{resumen.siguiente.cta}</Link></>
@@ -74,7 +74,7 @@ export function VistaPuestaEnMarcha({ pasos, resumen, puedeAdministrar, hrefAuto
           {AUTOMATIZACIONES.map((a) => {
             const href = hrefAutomatizacion[a.href];
             return (
-              <li key={a.href} className="text-[12.5px]">
+              <li key={a.href} className="text-[12px]">
                 {href ? <Link href={href} className="underline">{a.nombre}</Link> : <span style={{ color: 'var(--muted)' }}>{a.nombre}</span>}
               </li>
             );
@@ -116,7 +116,7 @@ function Paso({ p, puedeAdministrar }: { p: PasoMarcha; puedeAdministrar: boolea
             {p.cta}
           </Link>
         ) : (
-          <span className="shrink-0 text-[11.5px]" style={{ color: 'var(--faint)' }}>Lo hace quien administra</span>
+          <span className="shrink-0 text-[11px]" style={{ color: 'var(--faint)' }}>Lo hace quien administra</span>
         )
       )}
     </li>

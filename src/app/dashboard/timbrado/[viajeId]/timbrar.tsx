@@ -198,12 +198,12 @@ export async function SeccionTimbrado({ v, searchParams }: {
     return (
       <section className="space-y-2 print:hidden">
         <h2 className="font-display text-[15px] font-semibold">Timbre</h2>
-        <p className="text-[12.5px]">
+        <p className="text-[12px]">
           {tv.modo === 'sandbox' ? 'Timbre DE PRUEBA (sandbox — no ampara ningún traslado). ' : 'Timbrado. '}
           Folio fiscal <span className="font-mono">{tv.uuidFiscal}</span> · {tv.fechaTimbrado} · PAC {tv.proveedor.toUpperCase()}.
         </p>
         <a
-          className="inline-block text-[12.5px] font-medium hover:opacity-75"
+          className="inline-block text-[12px] font-medium hover:opacity-75"
           style={{ color: 'var(--marca)' }}
           href={`/api/export/carta-porte-xml${sufijoTenant(searchParams) ? `${sufijoTenant(searchParams)}&` : '?'}viaje=${v.viajeId}&timbrado=1`}
         >
@@ -221,11 +221,11 @@ export async function SeccionTimbrado({ v, searchParams }: {
     return (
       <section className="space-y-2 print:hidden">
         <h2 className="font-display text-[15px] font-semibold">Timbre</h2>
-        <p className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
           {motivoDeReservaViva(ctx.reservaPendiente)}
         </p>
         {ctx.reservaPendiente.reservadoEn !== null && (
-          <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+          <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
             Apartado desde {ctx.reservaPendiente.reservadoEn}.
           </p>
         )}
@@ -253,7 +253,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
     return (
       <section className="space-y-2 print:hidden">
         <h2 className="font-display text-[15px] font-semibold">Timbre</h2>
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           Sin PAC configurado: el timbrado directo está apagado (se enciende con las variables
           LIKIDA_PAC_* del servidor). Mientras tanto, el XML del borrador se descarga y se timbra en
           tu facturador — Likida jamás simula un timbre.
@@ -270,14 +270,14 @@ export async function SeccionTimbrado({ v, searchParams }: {
   return (
     <section className="space-y-3 print:hidden">
       <h2 className="font-display text-[15px] font-semibold">Timbre</h2>
-      <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
         PAC {ctx.pac.proveedor?.toUpperCase()} · ambiente {ctx.emisor.modo === 'sandbox' ? 'SANDBOX (timbres de prueba)' : 'PRODUCCIÓN'}.
         El CFDI sale del borrador validado + tu perfil fiscal (panel del contador) + los datos fiscales del cliente.
       </p>
 
       {!ensayo.ok && (
         <div className="space-y-1">
-          <p className="text-[12.5px] font-medium" style={{ color: 'var(--warn)' }}>Para timbrar falta:</p>
+          <p className="text-[12px] font-medium" style={{ color: 'var(--warn)' }}>Para timbrar falta:</p>
           <ul className="text-[12px] list-disc pl-5 space-y-0.5" style={{ color: 'var(--muted)' }}>
             {ensayo.faltantes.map((f) => <li key={f}>{f}</li>)}
           </ul>
@@ -286,7 +286,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
 
       {ctx.clienteId !== null && puedeEmitir && (
         <details className="rounded-lg hairline px-3 py-2">
-          <summary className="text-[12.5px] font-medium cursor-pointer">Datos fiscales del cliente (receptor)</summary>
+          <summary className="text-[12px] font-medium cursor-pointer">Datos fiscales del cliente (receptor)</summary>
           <div className="pt-2">
             <FormaConAviso accion={guardarReceptor} boton="Guardar datos del cliente" columnas="md:grid-cols-2">
               <Campo nombre="razonSocial" etiqueta="Razón social (exacta a SU constancia)" valorInicial={ctx.receptor.razonSocial ?? ''} />
@@ -299,7 +299,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
       )}
 
       {ensayo.ok && !puedeEmitir && (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           El comprobante está listo para emitirse, pero timbrar es del dueño de la flota o del
           contador: emitir un CFDI es un acto fiscal irreversible y lo firma quien responde por él.
         </p>
@@ -331,7 +331,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
             <Campo nombre="formaPago" etiqueta="Forma de pago (obligatoria con PUE)" placeholder="03 transferencia · 01 efectivo" ayuda="Con PPD se envía 99 «Por definir» (Anexo 20) y este campo se ignora. PUE con 99 se rechaza aquí mismo: se contradicen." />
             <Campo nombre="fechaLlegadaEstimada" etiqueta="Llegada estimada (hora local de México)" tipo="datetime-local" requerido ayuda="Debe ser posterior a la salida; se escribe como FechaHoraSalidaLlegada del destino." />
           </FormaConAviso>
-          <p className="text-[11.5px]" style={{ color: 'var(--warn)' }}>
+          <p className="text-[11px]" style={{ color: 'var(--warn)' }}>
             Si eliges PPD: ese CFDI te obliga a emitir un complemento de pago cuando cobres, y Likida
             todavía no lo emite. Mientras no exista, tu cliente no puede acreditar su IVA y la
             obligación queda abierta a tu nombre. Elige PPD solo si tu contador va a emitir el
@@ -359,7 +359,7 @@ function CancelacionDelTimbre({ cancelacion, cancelar, confirmar }: {
   if (cancelacion?.estado === 'en_proceso') {
     return (
       <div className="space-y-2 pt-3 border-t" style={{ borderColor: 'var(--line2)' }}>
-        <p className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
           Cancelación EN PROCESO (código {cancelacion.codigoSat ?? 's/d'}, motivo {cancelacion.motivo}). El SAT recibió la solicitud, pero este CFDI sigue
           vigente hasta ver el acuse o el estatus «Cancelado» en el portal del SAT o en el panel de tu PAC.
         </p>
@@ -374,7 +374,7 @@ function CancelacionDelTimbre({ cancelacion, cancelar, confirmar }: {
   }
   return (
     <details className="rounded-lg hairline px-3 py-2 mt-3">
-      <summary className="text-[12.5px] font-medium cursor-pointer">Cancelar este CFDI</summary>
+      <summary className="text-[12px] font-medium cursor-pointer">Cancelar este CFDI</summary>
       <div className="pt-2 space-y-2">
         {cancelacion?.estado === 'rechazada' && (
           <p className="text-[12px]" style={{ color: 'var(--bad)' }}>El PAC no canceló: {cancelacion.error ?? 'sin detalle'}</p>
@@ -385,7 +385,7 @@ function CancelacionDelTimbre({ cancelacion, cancelar, confirmar }: {
             {cancelacion.error ? ` (${cancelacion.error})` : ''}
           </p>
         )}
-        <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
           La cancelación tiene ventana y, a veces, exige la aceptación del receptor. Con el motivo 01 el SAT pide el folio fiscal del CFDI que lo sustituye.
         </p>
         <FormaConAviso accion={cancelar} boton="Pedir la cancelación" columnas="md:grid-cols-2">

@@ -49,7 +49,7 @@ export function OperaWhatsApp({ rol, numero = numeroWhatsAppDeLikida(), sufijo =
         <MessageCircle width={16} height={16} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
         <h2 className="text-[15px] font-semibold" style={{ color: 'var(--ink)' }}>Tu flota se opera por WhatsApp</h2>
       </div>
-      <p className="text-[12.5px] mb-4" style={{ color: 'var(--muted)' }}>
+      <p className="text-[12px] mb-4" style={{ color: 'var(--muted)' }}>
         El ciclo completo vive en el chat — este panel es donde lo ves todo junto.{' '}
         {numero.estado === 'configurado' ? (
           <>
@@ -70,7 +70,7 @@ export function OperaWhatsApp({ rol, numero = numeroWhatsAppDeLikida(), sufijo =
       <div className="space-y-2">
         {guion.map((b, i) => (
           <div key={i} className={`flex ${b.de === 'tu' ? 'justify-end' : 'justify-start'}`}>
-            <p className="max-w-[85%] px-3 py-1.5 rounded-2xl text-[12.5px] leading-snug"
+            <p className="max-w-[85%] px-3 py-1.5 rounded-2xl text-[12px] leading-snug"
               style={b.de === 'tu'
                 ? { background: 'var(--marca)', color: 'var(--marca-fg)', borderBottomRightRadius: 6 }
                 : { background: 'var(--canvas)', color: 'var(--ink2)', border: '1px solid var(--line)', borderBottomLeftRadius: 6 }}>

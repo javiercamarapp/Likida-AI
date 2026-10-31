@@ -377,7 +377,7 @@ async function BloqueAvance({ pViajesPorDia, pHistorico, pTablero }: {
         <div className="font-display text-4xl tracking-tight tabular font-semibold">
           {tablero?.viajesActivos ?? '—'}
         </div>
-        <div className="text-[10px] font-semibold uppercase tracking-wide mt-0.5" style={{ color: 'var(--muted)' }}>
+        <div className="text-[11px] font-semibold uppercase tracking-wide mt-0.5" style={{ color: 'var(--muted)' }}>
           Viajes activos
         </div>
         <div className="text-[11px] mt-0.5" style={{ color: 'var(--muted)' }}>

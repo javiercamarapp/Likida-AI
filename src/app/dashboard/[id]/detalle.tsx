@@ -201,12 +201,12 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="min-w-0">
                 <div className="flex items-center gap-2.5 flex-wrap">
-                  <p className="font-display text-[24px] font-semibold leading-tight tabular">{d.folio}</p>
+                  <p className="font-display text-[20px] font-semibold leading-tight tabular">{d.folio}</p>
                   <StatusPill estado={estatus.estado}>{estatus.label}</StatusPill>
                 </div>
                 {/* Hora de México, no UTC: `.slice(0,10)` fechaba en agosto una
                     liquidación cerrada el 31 de julio a las 20:00 (ver formato.ts). */}
-                <p className="text-[12.5px] mt-1" style={{ color: 'var(--muted)' }}>
+                <p className="text-[12px] mt-1" style={{ color: 'var(--muted)' }}>
                   Liquidación cerrada el {fechaMx(d.creadoEn)}
                 </p>
               </div>
@@ -364,7 +364,7 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
             <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
               <h2 className="font-display text-[15px] font-semibold">Comprobantes</h2>
               {d.comprobantesExcluidos > 0 && (
-                <span className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+                <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
                   {d.comprobantesExcluidos === 1
                     ? '1 comprobante excluido del total (duplicado o monto inválido); está explicado en las diferencias.'
                     : `${d.comprobantesExcluidos} comprobantes excluidos del total (duplicados o montos inválidos); están explicados en las diferencias.`}
@@ -401,13 +401,13 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
                           <td className="px-3 py-2.5 font-medium whitespace-nowrap">
                             {etiqueta(g)}
                             {g.imagenUrl && (
-                              <span className="block text-[10.5px] font-normal" style={{ color: 'var(--faint)' }}>Foto archivada</span>
+                              <span className="block text-[11px] font-normal" style={{ color: 'var(--faint)' }}>Foto archivada</span>
                             )}
                           </td>
                           <td className="px-3 py-2.5 min-w-0">
                             <span className="cifra-mono block" style={{ color: g.folio ? 'var(--ink)' : 'var(--faint)' }}>{g.folio ?? '—'}</span>
                             {g.cfdiUuid && (
-                              <span className="cifra-mono block text-[10.5px] truncate max-w-[260px]" style={{ color: 'var(--faint)' }} title={g.cfdiUuid}>
+                              <span className="cifra-mono block text-[11px] truncate max-w-[260px]" style={{ color: 'var(--faint)' }} title={g.cfdiUuid}>
                                 {g.cfdiUuid}
                               </span>
                             )}
@@ -422,7 +422,7 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
                   </tbody>
                   <tfoot>
                     <tr>
-                      <th scope="row" colSpan={4} className="px-3 pt-3 pb-1 text-left text-[12.5px] font-medium">
+                      <th scope="row" colSpan={4} className="px-3 pt-3 pb-1 text-left text-[12px] font-medium">
                         {d.comprobantesCuadran ? 'Total comprobado' : 'Suma de los renglones'}
                         <span className="font-normal ml-2" style={{ color: 'var(--muted)' }}>{comprobantes(d.gastos.length)}</span>
                       </th>
@@ -487,7 +487,7 @@ export function SeccionLaboral({ laboral }: { laboral: ResumenLaboral }) {
     <div className="mt-3 pt-3" style={{ borderTop: '1px dashed var(--line2)' }}>
       <Rotulo>Lo que se le reembolsa al operador</Rotulo>
       <div className="flex items-start justify-between gap-4 mt-1.5">
-        <p className="text-[12.5px] min-w-0">{laboral.texto}</p>
+        <p className="text-[12px] min-w-0">{laboral.texto}</p>
         {laboral.montoPagadero > 0 && (
           <span className="cifra-mono text-[13px] font-medium whitespace-nowrap">{mxn(laboral.montoPagadero)}</span>
         )}

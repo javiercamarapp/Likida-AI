@@ -189,7 +189,7 @@ function BloqueClientes({ panel, puedeEditar, guardarCliente, sp, sufijo, campos
         </EstadoVacio>
       ) : (
         <div className="card overflow-x-auto">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full text-[12px]">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
                 <th className="px-3 py-2 font-medium">Cliente</th>
@@ -241,7 +241,7 @@ function RenglonCliente({ c, puedeEditar, guardarCliente, editando, hrefEditar }
         <td className="px-3 py-2">
           <span className="font-medium">{c.nombre}</span>
           {!c.activo && (
-            <span className="ml-2 inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium align-middle"
+            <span className="ml-2 inline-flex px-1.5 py-0.5 rounded-full text-[11px] font-medium align-middle"
               style={{ color: 'var(--muted)', background: 'var(--canvas)' }}>
               dado de baja
             </span>
@@ -257,7 +257,7 @@ function RenglonCliente({ c, puedeEditar, guardarCliente, editando, hrefEditar }
         <td className="px-3 py-2 text-right tabular">
           {numero(c.viajes)}
           {c.viajesSinIngreso > 0 && (
-            <span className="block text-[10.5px]" style={{ color: 'var(--warn)' }}>
+            <span className="block text-[11px]" style={{ color: 'var(--warn)' }}>
               {numero(c.viajesSinIngreso)} sin ingreso
             </span>
           )}
@@ -274,7 +274,7 @@ function RenglonCliente({ c, puedeEditar, guardarCliente, editando, hrefEditar }
               <>
                 {mxn(c.saldoPorCobrar)}
                 {c.vencido !== null && c.vencido > 0 && (
-                  <span className="block text-[10.5px]" style={{ color: 'var(--bad)' }}>
+                  <span className="block text-[11px]" style={{ color: 'var(--bad)' }}>
                     {mxn(c.vencido)} vencido
                   </span>
                 )}
@@ -405,7 +405,7 @@ function BloqueTarifas({
         </EstadoVacio>
       ) : (
         <div className="card overflow-x-auto">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full text-[12px]">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
                 <th className="px-3 py-2 font-medium">Cliente</th>
@@ -438,7 +438,7 @@ function BloqueTarifas({
       {puedeEditar && (
         <div className="card p-4">
           {panel.clientes.length === 0 ? (
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
               Puedes capturar tarifas de lista sin tener clientes, pero una tarifa negociada necesita
               a quién negociársela: da de alta primero al cliente.
             </p>
@@ -485,7 +485,7 @@ function RenglonTarifa({
         <td className="px-3 py-2">{rotuloModo(t.modo)}</td>
         <td className="px-3 py-2 text-right tabular font-medium">
           {mxn(t.precio)}
-          <span className="block text-[10.5px] font-normal" style={{ color: 'var(--faint)' }}>
+          <span className="block text-[11px] font-normal" style={{ color: 'var(--faint)' }}>
             {unidadModo(t.modo)}
           </span>
         </td>
@@ -566,7 +566,7 @@ function BloqueSinIngreso({ panel }: { panel: PanelClientes }) {
       </p>
 
       <div className="card overflow-x-auto">
-        <table className="w-full text-[12.5px]">
+        <table className="w-full text-[12px]">
           <thead>
             <tr className="text-left" style={{ color: 'var(--muted)' }}>
               <th className="px-3 py-2 font-medium">Viaje</th>
@@ -601,13 +601,13 @@ function RenglonSinIngreso({ v }: { v: ViajeSinIngreso }) {
       <td className="px-3 py-2">
         <span className="cifra-mono">{v.folio ?? '—'}</span>
         {v.fecha && (
-          <span className="block text-[10.5px]" style={{ color: 'var(--faint)' }}>{fechaMx(v.fecha)}</span>
+          <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{fechaMx(v.fecha)}</span>
         )}
       </td>
       <td className="px-3 py-2">
         {rutaDe(v)}
         {v.km !== null && (
-          <span className="block text-[10.5px] cifra-mono" style={{ color: 'var(--faint)' }}>
+          <span className="block text-[11px] cifra-mono" style={{ color: 'var(--faint)' }}>
             {numero(v.km)} km
           </span>
         )}
@@ -625,7 +625,7 @@ function RenglonSinIngreso({ v }: { v: ViajeSinIngreso }) {
           <>
             {s.porque}
             {s.ambigua && (
-              <span className="flex items-start gap-1 text-[10.5px] mt-0.5" style={{ color: 'var(--warn)' }}>
+              <span className="flex items-start gap-1 text-[11px] mt-0.5" style={{ color: 'var(--warn)' }}>
                 <TriangleAlert width={11} height={11} strokeWidth={1.75} className="mt-0.5 shrink-0" />
                 {/* Elegir en silencio entre dos tarifas igual de aplicables es
                     cotizar a suerte: se dice y se corrige en el catálogo. */}

@@ -383,7 +383,7 @@ export default async function MiPerfilFlota({
                 <input type="hidden" name="factorId" value={mfa.factorId ?? ''} />
                 <input name="codigo" inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="000000" required
                   className="w-28 text-[13px] px-3 py-2 rounded-lg hairline tabular" style={{ background: 'var(--surface)' }} />
-                <button type="submit" className="rv-btn rv-btn--secondary text-[12.5px] px-3 py-2 rounded-lg font-medium hairline transition-colors hover:bg-[var(--canvas)]">
+                <button type="submit" className="rv-btn rv-btn--secondary text-[12px] px-3 py-2 rounded-lg font-medium hairline transition-colors hover:bg-[var(--canvas)]">
                   Verificar sesión
                 </button>
               </form>
@@ -391,7 +391,7 @@ export default async function MiPerfilFlota({
                 <input type="hidden" name="factorId" value={mfa.factorId ?? ''} />
                 <input name="codigo" inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="código" required
                   className="w-24 text-[12px] px-3 py-1.5 rounded-lg hairline tabular" style={{ background: 'var(--surface)' }} />
-                <button type="submit" className="text-[11.5px]" style={{ color: 'var(--bad)' }}>
+                <button type="submit" className="text-[11px]" style={{ color: 'var(--bad)' }}>
                   Quitar el factor (exige el código)
                 </button>
               </form>
@@ -423,7 +423,7 @@ export default async function MiPerfilFlota({
                 Un código de tu teléfono además de tu correo. Al activarlo, las acciones sensibles lo van a exigir.
               </p>
               <a href={volverAMiPerfil(sufijo, 'mfa=inscribir')}
-                className="inline-block text-[12.5px] px-3.5 py-2 rounded-lg font-medium hairline transition-colors hover:bg-[var(--canvas)]">
+                className="inline-block text-[12px] px-3.5 py-2 rounded-lg font-medium hairline transition-colors hover:bg-[var(--canvas)]">
                 Activar segundo factor
               </a>
             </div>
@@ -440,7 +440,7 @@ export default async function MiPerfilFlota({
             cierra todas tus sesiones de un tiro. Vas a tener que volver a iniciar sesión aquí también.
           </p>
           <form action={cerrarTodasMisSesiones}>
-            <button type="submit" className="text-[11.5px]" style={{ color: 'var(--bad)' }}>
+            <button type="submit" className="text-[11px]" style={{ color: 'var(--bad)' }}>
               Cerrar sesión en todos los dispositivos
             </button>
           </form>
@@ -472,7 +472,7 @@ export default async function MiPerfilFlota({
               </p>
               <TablaClientesMcp clientes={mcp} />
               <form action={cortarMisSesionesMcp}>
-                <button type="submit" className="text-[11.5px]" style={{ color: 'var(--bad)' }}>
+                <button type="submit" className="text-[11px]" style={{ color: 'var(--bad)' }}>
                   {/* Lo que la función de la 0265 hace, dicho tal cual: corta
                       TODOS, no uno. Un rótulo más fino prometería una
                       precisión que la revocación por usuario no tiene. */}

@@ -102,7 +102,7 @@ export function FormasJornada({
         <h2 className="font-display text-[15px] font-semibold">
           {fila.operadorNombre} · {fila.dia}
         </h2>
-        <p className="text-[12.5px] mt-0.5" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px] mt-0.5" style={{ color: 'var(--muted)' }}>
           {fila.estado === 'cerrado'
             ? `Día cerrado por ${fila.cerradoPorEmail ?? 'sin firma'}. Sigue siendo corregible, y la corrección queda anotada.`
             : 'Día abierto.'}
@@ -116,7 +116,7 @@ export function FormasJornada({
       {/* LO QUE EL MOTOR VIO, CON SU ARTÍCULO. Cada señal trae su fundamento
           para que el contralor pueda ir a leerlo, no para adornar. */}
       {(fila.riesgo.senales.length > 0 || fila.jornada.huecos.length > 0) && (
-        <ul className="space-y-1.5 text-[12.5px]">
+        <ul className="space-y-1.5 text-[12px]">
           {fila.jornada.huecos.map((h) => (
             <li key={h.clase} style={{ color: 'var(--warn)' }}>• {h.dice}</li>
           ))}
@@ -124,12 +124,12 @@ export function FormasJornada({
             <li key={`${s.clase}-${i}`} style={{ color: s.esExceso ? 'var(--bad)' : 'var(--muted)' }}>
               • {s.dice}
               {s.fundamento && (
-                <span className="block text-[11.5px] pl-3" style={{ color: 'var(--muted)' }}>{s.fundamento}</span>
+                <span className="block text-[11px] pl-3" style={{ color: 'var(--muted)' }}>{s.fundamento}</span>
               )}
             </li>
           ))}
           {fila.riesgo.noEvaluado.map((n) => (
-            <li key={n} className="text-[11.5px]" style={{ color: 'var(--muted)' }}>• {n}</li>
+            <li key={n} className="text-[11px]" style={{ color: 'var(--muted)' }}>• {n}</li>
           ))}
         </ul>
       )}
@@ -174,7 +174,7 @@ function MarcasDelDia({
     <div className="space-y-2">
       <h3 className="text-[13px] font-medium">Las marcas del día</h3>
       {vivos.length === 0 && (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           No hay ninguna marca viva. Nadie reportó y no hubo de dónde derivarla: eso no son cero horas.
         </p>
       )}
@@ -182,9 +182,9 @@ function MarcasDelDia({
       <ul className="space-y-2">
         {vivos.map((a) => (
           <li key={a.id} className="hairline rounded-lg p-3">
-            <div className="text-[12.5px]">
+            <div className="text-[12px]">
               <strong>{ROTULO_TIPO[a.tipo] ?? a.tipo}</strong> · {hora(a.momento)}
-              <span className="block text-[11.5px]" style={{ color: 'var(--muted)' }}>
+              <span className="block text-[11px]" style={{ color: 'var(--muted)' }}>
                 {ROTULO_PROCEDENCIA[a.procedencia]}
                 {a.registradoPorEmail ? ` · ${a.registradoPorEmail}` : ''}
                 {a.nota ? ` · ${a.nota}` : ''}
@@ -211,7 +211,7 @@ function MarcasDelDia({
           el expediente incompleto: la historia de las correcciones es parte de
           lo que hace creíble al documento. */}
       {anulados.length > 0 && (
-        <details className="text-[12.5px]">
+        <details className="text-[12px]">
           <summary className="cursor-pointer" style={{ color: 'var(--muted)' }}>
             {anulados.length} marca(s) anulada(s) — siguen en el expediente
           </summary>
@@ -219,7 +219,7 @@ function MarcasDelDia({
             {anulados.map((a) => (
               <li key={a.id} style={{ color: 'var(--muted)' }}>
                 <s>{ROTULO_TIPO[a.tipo] ?? a.tipo} · {hora(a.momento)}</s>
-                <span className="block text-[11.5px]">
+                <span className="block text-[11px]">
                   Anulada por {a.anuladoPorEmail ?? 'sin firma'}
                   {a.anuladoEn ? ` el ${hora(a.anuladoEn)}` : ''} · {a.anuladoMotivo}
                 </span>
@@ -250,7 +250,7 @@ function FormaCaptura({
   return (
     <form action={accion} className="space-y-2">
       <h3 className="text-[13px] font-medium">Capturar una marca</h3>
-      <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+      <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
         Queda con tu nombre y la hora en que la capturaste. Escribe la hora en horario del
         centro de México (hora de CDMX, sin horario de verano): si el operador está en otra zona
         (Pacífico, Sonora, frontera), conviértela antes de capturarla.
@@ -305,7 +305,7 @@ function FormaCierre({ jornadaId, cerrarElDia }: { jornadaId: string; cerrarElDi
   return (
     <form action={accion} className="space-y-2">
       <h3 className="text-[13px] font-medium">Cerrar el día</h3>
-      <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+      <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
         Cerrar es firmar que revisaste este día. No borra ni congela nada: si después hay que
         corregir algo, se puede, y la corrección queda anotada con quién la hizo.
       </p>

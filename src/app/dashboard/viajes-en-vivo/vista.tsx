@@ -46,7 +46,7 @@ const GRAVEDAD: Record<1 | 2 | 3, { texto: string; color: string }> = {
 
 
 function Filtros({ f, c, accionUrl, ocultos }: { f: FiltrosVistaViajes; c: CatalogoVista; accionUrl: string; ocultos: Record<string, string> }) {
-  const sel = 'hairline rounded-lg px-2 h-8 text-[12.5px] outline-none focus:border-[var(--muted)]';
+  const sel = 'hairline rounded-lg px-2 h-8 text-[12px] outline-none focus:border-[var(--muted)]';
   return (
     <form method="get" action={accionUrl} className="flex flex-wrap items-end gap-2.5" aria-label="Filtros de viajes en vivo">
       {Object.entries(ocultos).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
@@ -65,7 +65,7 @@ function Filtros({ f, c, accionUrl, ocultos }: { f: FiltrosVistaViajes; c: Catal
       <label className="text-[11px] font-medium inline-flex items-center gap-1.5 h-8">
         <input type="checkbox" name="vista" value="excepciones" defaultChecked={f.soloExcepciones} /> Solo con excepciones
       </label>
-      <button type="submit" className="rv-btn rv-btn--secondary hairline rounded-lg px-3 h-8 text-[12.5px] font-medium">Aplicar</button>
+      <button type="submit" className="rv-btn rv-btn--secondary hairline rounded-lg px-3 h-8 text-[12px] font-medium">Aplicar</button>
       {(f.terminalId || f.clienteId || f.soloExcepciones) && <a href={accionUrl} className="text-[12px] underline" style={{ color: 'var(--muted)' }}>Quitar filtros</a>}
     </form>
   );
@@ -100,16 +100,16 @@ function FilaTabla({ f, gpsDisponible }: { f: FilaViaje; gpsDisponible: boolean 
     <tr className="border-b align-top" style={{ borderColor: 'var(--line2)' }}>
       <td className="px-3 py-2.5">
         <div className="cifra-mono text-[13px] font-medium">{f.folio ?? 'sin folio'}</div>
-        <div className="text-[11.5px]" style={{ color: 'var(--muted)' }}>{f.origen ?? '?'} → {f.destino ?? '?'}</div>
-        <div className="text-[11.5px]" style={{ color: 'var(--faint)' }}>{[f.chofer, f.terminal, f.cliente].filter(Boolean).join(' · ')}</div>
+        <div className="text-[11px]" style={{ color: 'var(--muted)' }}>{f.origen ?? '?'} → {f.destino ?? '?'}</div>
+        <div className="text-[11px]" style={{ color: 'var(--faint)' }}>{[f.chofer, f.terminal, f.cliente].filter(Boolean).join(' · ')}</div>
       </td>
       <td className="px-3 py-2.5">
         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ color: s.color, background: s.fondo }}>{s.etiqueta}</span>
-        <div className="text-[11.5px] mt-1" style={{ color: 'var(--muted)' }}>
+        <div className="text-[11px] mt-1" style={{ color: 'var(--muted)' }}>
           {f.ultimoHito ? <>Último: {f.ultimoHito.etiqueta}{f.ultimoHito.cuando ? ` · ${fechaHoraMx(f.ultimoHito.cuando)}` : ''}</> : 'Sin hitos registrados'}
         </div>
         {f.escalado && (
-          <div className="text-[11.5px] mt-0.5 inline-flex items-center gap-1" style={{ color: f.escalado.atendido ? 'var(--muted)' : 'var(--bad)' }}>
+          <div className="text-[11px] mt-0.5 inline-flex items-center gap-1" style={{ color: f.escalado.atendido ? 'var(--muted)' : 'var(--bad)' }}>
             <ShieldAlert size={12} aria-hidden /> Escalado a tráfico (nivel {f.escalado.nivel}){f.escalado.atendido ? ', atendido' : ', sin atender'}
           </div>
         )}
@@ -152,7 +152,7 @@ export function TareasAbiertas({ tareas, accion, ocultos, aviso = null, errorLec
     return (
       <section aria-label="Tareas que el asistente dejó para una persona" className="card p-4 space-y-2.5">
         <div className="flex items-center gap-2"><Radio size={15} aria-hidden /><h2 className="text-[13px] font-medium">Tareas del asistente</h2></div>
-        <p role="alert" className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No pude leer las tareas abiertas; recarga la página. Esto no significa que no haya pendientes.</p>
+        <p role="alert" className="text-[12px]" style={{ color: 'var(--muted)' }}>No pude leer las tareas abiertas; recarga la página. Esto no significa que no haya pendientes.</p>
       </section>
     );
   }
@@ -160,13 +160,13 @@ export function TareasAbiertas({ tareas, accion, ocultos, aviso = null, errorLec
   return (
     <section aria-label="Tareas que el asistente dejó para una persona" className="card p-4 space-y-2.5">
       <div className="flex items-center gap-2"><Radio size={15} aria-hidden /><h2 className="text-[13px] font-medium">Tareas del asistente</h2></div>
-      {aviso && AVISO_ATENCION[aviso] && <p role="status" className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{AVISO_ATENCION[aviso]}</p>}
+      {aviso && AVISO_ATENCION[aviso] && <p role="status" className="text-[12px]" style={{ color: 'var(--muted)' }}>{AVISO_ATENCION[aviso]}</p>}
       {tareas.length === 0
-        ? <p className="text-[12.5px]" style={{ color: 'var(--faint)' }}>No hay tareas abiertas. Cuando el asistente derive algo delicado a una persona, aparece aquí.</p>
+        ? <p className="text-[12px]" style={{ color: 'var(--faint)' }}>No hay tareas abiertas. Cuando el asistente derive algo delicado a una persona, aparece aquí.</p>
         : (
           <ul className="space-y-2">
             {tareas.map((t) => (
-              <li key={t.id} className="flex flex-wrap items-start justify-between gap-2 text-[12.5px]">
+              <li key={t.id} className="flex flex-wrap items-start justify-between gap-2 text-[12px]">
                 <div>
                   <span className="font-medium">Para {ETIQUETA_DESTINO[t.destino]}</span>
                   <span style={{ color: 'var(--faint)' }}> · {fechaHoraMx(t.creadaEn)}{t.viajeFolio ? ` · viaje ${t.viajeFolio}` : ''}</span>
@@ -214,7 +214,7 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
     >
 
       {!tablero.gpsDisponible && (
-        <div role="alert" className="card p-3 text-[12.5px] inline-flex items-center gap-2" style={{ color: 'var(--warn)' }}>
+        <div role="alert" className="card p-3 text-[12px] inline-flex items-center gap-2" style={{ color: 'var(--warn)' }}>
           <CircleAlert size={14} aria-hidden /> No se pudieron leer las posiciones del GPS: aquí no se afirma que un tractor esté «sin señal», solo que no se pudo consultar.
         </div>
       )}
@@ -231,14 +231,14 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
       <div className="card overflow-x-auto">
         <table className="w-full border-collapse text-left">
           <thead>
-            <tr className="etiqueta-mono text-[10px] uppercase border-b" style={{ color: 'var(--faint)', borderColor: 'var(--line2)' }}>
+            <tr className="etiqueta-mono text-[11px] uppercase border-b" style={{ color: 'var(--faint)', borderColor: 'var(--line2)' }}>
               <th className="px-3 py-2 font-normal">Viaje</th><th className="px-3 py-2 font-normal">Estado</th>
               <th className="px-3 py-2 font-normal">Posición del tractor</th><th className="px-3 py-2 font-normal">Excepciones</th>
             </tr>
           </thead>
           <tbody>
             {tablero.filas.length === 0
-              ? <tr><td colSpan={4} className="px-3 py-6 text-[12.5px]" style={{ color: 'var(--faint)' }}>{filtros.terminalId || filtros.clienteId || filtros.soloExcepciones ? 'Ningún viaje cumple los filtros.' : 'No hay viajes en curso.'}</td></tr>
+              ? <tr><td colSpan={4} className="px-3 py-6 text-[12px]" style={{ color: 'var(--faint)' }}>{filtros.terminalId || filtros.clienteId || filtros.soloExcepciones ? 'Ningún viaje cumple los filtros.' : 'No hay viajes en curso.'}</td></tr>
               : tablero.filas.map((f) => <FilaTabla key={f.viajeId} f={f} gpsDisponible={tablero.gpsDisponible} />)}
           </tbody>
         </table>

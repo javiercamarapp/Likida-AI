@@ -110,7 +110,7 @@ export default function DashboardChrome({
                 <EnlaceCuenta rol={rol} className="block text-[13px] font-medium hover:opacity-70 transition-opacity truncate leading-tight">
                   {(nombre ?? '').trim() || 'Mi cuenta'}
                 </EnlaceCuenta>
-                <div className="text-[10px] truncate" style={{ color: 'var(--faint)' }}>{ROL_BADGE[rol as RolAppUser] ?? rol.toUpperCase()}</div>
+                <div className="text-[11px] truncate" style={{ color: 'var(--faint)' }}>{ROL_BADGE[rol as RolAppUser] ?? rol.toUpperCase()}</div>
               </div>
               {cerrarSesion && (
                 <form action={cerrarSesion} className="shrink-0">

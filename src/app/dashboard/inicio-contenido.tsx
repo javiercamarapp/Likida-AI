@@ -294,7 +294,7 @@ export async function InicioContenido({
               motor fiscal está completo: mientras las dos preguntas sigan sin
               contestarse, el estímulo de peaje del 50 % no se acredita. */}
           {avisoFiscalPospuesto && (
-            <p role="status" className="rounded-lg px-3.5 py-2.5 text-[12.5px]" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
+            <p role="status" className="rounded-lg px-3.5 py-2.5 text-[12px]" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
               Tu perfil fiscal sigue sin declararse, así que el <strong>estímulo de peaje</strong> se muestra en $0 y no se acredita
               hasta que lo hagas.{' '}
               <a href={`/dashboard/onboarding${sufijo}`} className="underline">Declararlo cuando ya tengas los datos</a>.

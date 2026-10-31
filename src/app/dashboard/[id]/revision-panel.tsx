@@ -88,7 +88,7 @@ function Disputas({ gastos, firmable, corregir }: {
   corregir: ((previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>) | null;
 }) {
   return (
-    <div className="mb-3 rounded-lg p-3 text-[12.5px]" style={{ ...ESTILO_CONTROL }} role="alert">
+    <div className="mb-3 rounded-lg p-3 text-[12px]" style={{ ...ESTILO_CONTROL }} role="alert">
       <p className="m-0 font-semibold" style={{ color: 'var(--ink)' }}>
         El operador dice que {gastos.length === 1 ? 'este monto está mal' : 'estos montos están mal'}
       </p>
@@ -122,12 +122,12 @@ function CorregirMonto({ accion, gasto }: {
       <input type="hidden" name="gastoId" value={gasto.id} />
       <input type="text" inputMode="decimal" name="monto" required placeholder="monto correcto"
         aria-label={`Monto correcto de ${gasto.etiqueta}`}
-        className="text-[12.5px] rounded-lg px-2 py-1 w-32 text-right cifra-mono" style={ESTILO_CONTROL} />
+        className="text-[12px] rounded-lg px-2 py-1 w-32 text-right cifra-mono" style={ESTILO_CONTROL} />
       <input type="text" name="motivo" required placeholder="motivo (queda en la bitácora)"
         aria-label={`Motivo de la corrección de ${gasto.etiqueta}`}
-        className="text-[12.5px] rounded-lg px-2 py-1 flex-1 min-w-40" style={ESTILO_CONTROL} />
+        className="text-[12px] rounded-lg px-2 py-1 flex-1 min-w-40" style={ESTILO_CONTROL} />
       <button type="submit" disabled={pendiente}
-        className="rv-btn rv-btn--primary text-[12.5px] font-medium rounded-lg px-3 py-1.5 disabled:opacity-60"
+        className="rv-btn rv-btn--primary text-[12px] font-medium rounded-lg px-3 py-1.5 disabled:opacity-60"
         style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
         {pendiente ? 'Corrigiendo…' : 'Corregir monto'}
       </button>
@@ -146,7 +146,7 @@ const ROTULO: Record<string, string> = {
 function FirmaActual({ estado }: { estado: RevisionDetalle }) {
   const { revision, revisadaPor, revisadaEn, motivo, ajustes } = estado;
   return (
-    <div className="text-[12.5px] mb-3" style={{ color: 'var(--muted)' }}>
+    <div className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>
       <p className="m-0">
         <strong style={{ color: 'var(--ink)' }}>{ROTULO[revision] ?? revision}</strong>
         {revision !== 'pendiente' && (
@@ -199,7 +199,7 @@ function Forma({ accion, gastos, folio, yaFirmadaPorElMotor }: {
       <div role="radiogroup" aria-label="Qué hacer con esta liquidación" className="flex flex-wrap gap-2">
         {OPCIONES.map((o) => (
           <label key={o.id}
-            className="inline-flex items-center gap-1.5 text-[12.5px] font-medium rounded-lg px-3 py-1.5 cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-[12px] font-medium rounded-lg px-3 py-1.5 cursor-pointer"
             style={elegida === o.id
               ? { background: 'var(--marca)', color: 'var(--marca-fg)' }
               : { ...ESTILO_CONTROL }}>
@@ -224,12 +224,12 @@ function Forma({ accion, gastos, folio, yaFirmadaPorElMotor }: {
           ) : (
             <ul className="m-0 p-0 list-none flex flex-col gap-1.5">
               {gastos.map((g) => (
-                <li key={g.id} className="flex items-center gap-2 text-[12.5px]">
+                <li key={g.id} className="flex items-center gap-2 text-[12px]">
                   <span className="flex-1 truncate">{g.etiqueta}</span>
                   <span className="cifra-mono" style={{ color: 'var(--muted)' }}>{mxn(g.monto)}</span>
                   <input type="text" inputMode="decimal" name={`monto:${g.id}`} placeholder="monto correcto"
                     aria-label={`Monto correcto de ${g.etiqueta}`}
-                    className="text-[12.5px] rounded-lg px-2 py-1 w-32 text-right cifra-mono" style={ESTILO_CONTROL} />
+                    className="text-[12px] rounded-lg px-2 py-1 w-32 text-right cifra-mono" style={ESTILO_CONTROL} />
                 </li>
               ))}
             </ul>
@@ -238,11 +238,11 @@ function Forma({ accion, gastos, folio, yaFirmadaPorElMotor }: {
       )}
 
       <label className="flex flex-col gap-1">
-        <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>
+        <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>
           Motivo{exigeMotivo ? ' (obligatorio)' : ' (opcional)'}
         </span>
         <textarea name="motivo" rows={2} required={exigeMotivo}
-          className="text-[12.5px] rounded-lg px-2 py-1.5" style={ESTILO_CONTROL}
+          className="text-[12px] rounded-lg px-2 py-1.5" style={ESTILO_CONTROL}
           placeholder={elegida === 'rechazar'
             ? 'Lo que va a leer el operador: «faltan las casetas del regreso»'
             : elegida === 'ajustar'

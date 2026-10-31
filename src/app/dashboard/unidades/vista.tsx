@@ -153,7 +153,7 @@ export function VistaUnidades({
           <ShieldAlert width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" />
           <div>
             <p className="text-[13px] font-medium">Papeles que requieren atención</p>
-            <p className="text-[12.5px] mt-0.5">{aviso}</p>
+            <p className="text-[12px] mt-0.5">{aviso}</p>
           </div>
         </div>
       )}
@@ -221,14 +221,14 @@ export function VistaUnidades({
           {hayFiltro && !totalActivasConocido && (
             // No se pudo contar el parque entero, así que el «de N» del
             // pie sería un número inventado. Se dice.
-            <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+            <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
               No pude contar el parque completo en este momento: el total de al lado es el de las que
               coinciden con la búsqueda, no el de la flota.
             </p>
           )}
 
           {pag.filas.length === 0 && (
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
               Ninguna unidad coincide con «{pag.q}».
             </p>
           )}
@@ -251,14 +251,14 @@ export function VistaUnidades({
                         {ESTADO_UNIDAD[u.estado] ?? u.estado}
                       </span>
                       {patios.length > 0 && (
-                        <span className="text-[11.5px]" style={{ color: terminalPorUnidad[u.id] ? 'var(--ink2)' : 'var(--faint)' }}>
+                        <span className="text-[11px]" style={{ color: terminalPorUnidad[u.id] ? 'var(--ink2)' : 'var(--faint)' }}>
                           {nombrePatio.get(terminalPorUnidad[u.id] ?? '') ?? 'Sin patio'}
                         </span>
                       )}
                     </div>
 
                     {(u.marca || u.modelo || u.anio) && (
-                      <p className="text-[12.5px] mt-0.5" style={{ color: 'var(--muted)' }}>
+                      <p className="text-[12px] mt-0.5" style={{ color: 'var(--muted)' }}>
                         {[u.marca, u.modelo, u.anio].filter(Boolean).join(' · ')}
                       </p>
                     )}
@@ -367,7 +367,7 @@ export function VistaUnidades({
                     <span className="text-[12px] ml-2 cifra-mono" style={{ color: 'var(--muted)' }}>{u.placas}</span>
                   )}
                   {(u.marca || u.modelo || u.anio) && (
-                    <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+                    <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
                       {[u.marca, u.modelo, u.anio].filter(Boolean).join(' · ')}
                     </p>
                   )}

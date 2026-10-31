@@ -29,7 +29,7 @@ const CANAL: Record<string, string> = {
 function Evidencias({ regla }: { regla: ReglaEnPantalla }) {
   if (regla.ultimasEvidencias.length === 0) {
     return (
-      <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+      <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
         {regla.ultimaCorridaEn
           ? `Revisada el ${fechaHoraMx(regla.ultimaCorridaEn)} — todavía no ha sonado.`
           : 'Todavía no la reviso: el barrido corre cada hora.'}
@@ -42,7 +42,7 @@ function Evidencias({ regla }: { regla: ReglaEnPantalla }) {
         Últimas veces que sonó
       </p>
       {regla.ultimasEvidencias.map((e) => (
-        <p key={`${e.disparadoEn}-${e.evidencia.slice(0, 24)}`} className="text-[11.5px]" style={{ color: 'var(--ink2)' }}>
+        <p key={`${e.disparadoEn}-${e.evidencia.slice(0, 24)}`} className="text-[11px]" style={{ color: 'var(--ink2)' }}>
           <span className="cifra-mono" style={{ color: 'var(--faint)' }}>{fechaHoraMx(e.disparadoEn)}</span>{' '}
           {e.evidencia}
         </p>
@@ -60,7 +60,7 @@ const VIA: Record<string, string> = {
 function HistorialAvisos({ regla }: { regla: ReglaEnPantalla }) {
   if (regla.ultimosAvisos.length === 0) {
     return (
-      <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+      <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
         Todavía no ha mandado ningún aviso.
       </p>
     );
@@ -68,7 +68,7 @@ function HistorialAvisos({ regla }: { regla: ReglaEnPantalla }) {
   return (
     <div className="space-y-1">
       {regla.ultimosAvisos.map((a) => (
-        <p key={`${a.enviadoEn}-${a.resultado}`} className="text-[11.5px]" style={{ color: 'var(--ink2)' }}>
+        <p key={`${a.enviadoEn}-${a.resultado}`} className="text-[11px]" style={{ color: 'var(--ink2)' }}>
           <span className="cifra-mono" style={{ color: 'var(--faint)' }}>{fechaHoraMx(a.enviadoEn)}</span>{' '}
           {a.resultado === 'enviado'
             ? `Avisó ${a.casos} caso${a.casos === 1 ? '' : 's'} por ${VIA[a.via ?? ''] ?? 'WhatsApp'}.`
@@ -85,10 +85,10 @@ function Ficha({ regla, acciones }: { regla: ReglaEnPantalla; acciones: Acciones
     <div className="card p-4 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1 min-w-0">
-          <p className="text-[13.5px] font-medium" style={{ color: 'var(--ink)' }}>{regla.frase}</p>
+          <p className="text-[13px] font-medium" style={{ color: 'var(--ink)' }}>{regla.frase}</p>
           {/* La cita de lo que la persona escribió. Está aquí para que pueda
               juzgar la traducción — no porque el sistema la vuelva a leer. */}
-          <p className="text-[11.5px] italic" style={{ color: 'var(--muted)' }}>
+          <p className="text-[11px] italic" style={{ color: 'var(--muted)' }}>
             Tú escribiste: &ldquo;{regla.textoOriginal}&rdquo;
           </p>
           <p className="text-[11px]" style={{ color: 'var(--faint)' }}>

@@ -209,7 +209,7 @@ export function MapaVivo({ viajes, pines = [] }: {
         {/* Las cards de los viajes — hover ilumina, clic fija */}
         <div className="space-y-2 lg:max-h-[520px] lg:overflow-y-auto lg:pr-1">
           {viajes.length === 0 ? (
-            <p className="text-[12.5px] pt-2" style={{ color: 'var(--muted)' }}>
+            <p className="text-[12px] pt-2" style={{ color: 'var(--muted)' }}>
               Aquí van las tarjetas de cada viaje en curso, con sus días en ruta y sus fotos recibidas.
             </p>
           ) : viajes.map((v) => {
@@ -226,10 +226,10 @@ export function MapaVivo({ viajes, pines = [] }: {
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-[13px]">{v.folio}</span>
                   {v.escalado ? (
-                    <span className="inline-flex px-2 py-0.5 rounded-full text-[10.5px] font-medium"
+                    <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
                       style={{ color: 'var(--bad)', background: 'var(--badbg)' }}>Escalado</span>
                   ) : (
-                    <span className="inline-flex px-2 py-0.5 rounded-full text-[10.5px] font-medium"
+                    <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
                       style={{ color: 'var(--ok)', background: 'var(--okbg)' }}>En ruta</span>
                   )}
                   {v.dias !== null && (
@@ -238,7 +238,7 @@ export function MapaVivo({ viajes, pines = [] }: {
                     </span>
                   )}
                 </div>
-                <div className="text-[12.5px] mt-1">{v.origenNombre} → {v.destinoNombre}</div>
+                <div className="text-[12px] mt-1">{v.origenNombre} → {v.destinoNombre}</div>
                 <div className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>
                   {v.operadorNombre ?? 'Sin operador asignado'}
                   {' · '}≈ {numero(v.kmRecta)} km en línea recta

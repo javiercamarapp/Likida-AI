@@ -153,7 +153,7 @@ export function TablaViajesOperacion({ viajes }: { viajes: FilaViajeOperacion[] 
     );
   }
   const visibles = viajes.slice(0, MAX_FILAS);
-  const TH = 'etiqueta-mono text-left text-[10px] font-medium uppercase px-5 py-1.5';
+  const TH = 'etiqueta-mono text-left text-[11px] font-medium uppercase px-5 py-1.5';
   return (
     <div className="overflow-x-auto pb-2">
       <table className="w-full border-collapse">

@@ -145,7 +145,7 @@ export function VistaRentabilidad({
                 </p>
               ) : (
                 <div className="card overflow-x-auto">
-                  <table className="w-full text-[12.5px]">
+                  <table className="w-full text-[12px]">
                     <thead>
                       <tr className="text-left" style={{ color: 'var(--muted)' }}>
                         <th className="px-3 py-2 font-medium">Folio</th>
@@ -184,7 +184,7 @@ export function VistaRentabilidad({
                   arriba (por cobrar, vencido) son de TODAS las facturas,
                   no de esta página — por eso el renglón lo aclara. */}
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <span className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+                <span className="text-[11px]" style={{ color: 'var(--faint)' }}>
                   {`Facturas ${numero(desde)}–${numero(hasta)} de ${numero(cobranza.total)}, `}
                   {'las vencidas primero. Por cobrar y vencido de arriba son de la cartera completa.'}
                 </span>

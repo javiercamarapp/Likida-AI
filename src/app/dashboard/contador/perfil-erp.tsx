@@ -80,7 +80,7 @@ function BotonPoliza({ sufijo, hoy }: { sufijo: string; hoy: string }) {
   const href = `/api/export/poliza${sufijo}${sufijo ? '&' : '?'}formato=contpaqi&desde=${hoy.slice(0, 8)}01&hasta=${hoy}`;
   return (
     <a href={href} download
-      className="hairline inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
+      className="hairline inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
       style={{ background: 'var(--surface)' }}>
       <Download width={13} height={13} strokeWidth={1.75} />
       Descargar póliza del mes (CSV CONTPAQi)

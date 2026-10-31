@@ -65,12 +65,12 @@ export function VistaHuerfanos({ pendientes, hayViajesVivos, buscarViaje, totalP
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Recibido</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Operador</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Comprobante</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 pr-6 text-right">Monto</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Por qué está aquí</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 text-right pr-1">Resolver</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Recibido</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Operador</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Comprobante</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pr-6 text-right">Monto</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Por qué está aquí</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right pr-1">Resolver</th>
                 </tr>
               </thead>
               <tbody>

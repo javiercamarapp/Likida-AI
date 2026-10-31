@@ -146,9 +146,9 @@ export function VistaJornada({
         <h2 className="font-display text-[15px] font-semibold">
           Registro del artículo 132 fracción XXXIV de la Ley Federal del Trabajo
         </h2>
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{LEYENDA_NO_ES_BITACORA_83}</p>
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{LEYENDA_NOM_087}</p>
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{LEYENDA_VEREDICTOS}</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{LEYENDA_NO_ES_BITACORA_83}</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{LEYENDA_NOM_087}</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{LEYENDA_VEREDICTOS}</p>
       </section>
 
       <TiraCifras sello={selloHoy('Registro de jornada')}>
@@ -230,7 +230,7 @@ export function VistaJornada({
           </EstadoVacio>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-[12.5px]">
+            <table className="w-full text-[12px]">
               <thead>
                 <tr style={{ color: 'var(--muted)' }} className="text-left">
                   <Th>Día</Th>
@@ -338,14 +338,14 @@ function Renglon({ f, sufijo, desde, hasta }: { f: FilaJornada; sufijo: string; 
           )}
       </Td>
       <Td>
-        <span className="inline-block px-2 py-0.5 rounded-md text-[11.5px] font-medium"
+        <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-medium"
           style={{ background: tono.fondo, color: tono.texto }}>
           {ROTULO_VEREDICTO[f.riesgo.veredicto]}
         </span>
       </Td>
       <Td>
         <div>{f.estado === 'cerrado' ? `Cerrado · ${f.cerradoPorEmail ?? 'sin firma'}` : 'Abierto'}</div>
-        <div style={{ color: 'var(--muted)' }} className="text-[11.5px]">
+        <div style={{ color: 'var(--muted)' }} className="text-[11px]">
           {f.conformeOperadorEn ? 'Con conformidad del operador' : 'Sin conformidad del operador'}
         </div>
       </Td>
@@ -371,26 +371,26 @@ export function SeccionSemanas({ semanas, truncada }: { semanas: SemanaEvaluada[
       <h2 className="font-display text-[15px] font-semibold">
         La semana completa, contra el tope del año
       </h2>
-      <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
         El decreto del 1 de mayo de 2026 escalona la jornada SEMANAL por año (48 h ordinarias en
         2026). Catorce días verdes uno por uno pueden esconder una semana rebasada — por eso aquí
         se evalúa la semana entera, de lunes a domingo, solo cuando cabe completa en el rango de
         arriba.
       </p>
       {semanas === null ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
           {truncada
             ? 'No se evaluó ninguna semana: la lectura vino recortada, y una semana evaluada sobre el recorte diría «va bien» con los días que faltan. Pide un rango más corto.'
             : 'No se evaluó ninguna semana: el registro no se pudo leer.'}
         </p>
       ) : semanas.length === 0 ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           El rango visible no contiene ninguna semana completa (de lunes a domingo) con registro.
           Amplía el rango de fechas para ver el veredicto semanal.
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full text-[12px]">
             <thead>
               <tr style={{ color: 'var(--muted)' }} className="text-left">
                 <Th>Operador</Th>
@@ -436,7 +436,7 @@ function RenglonSemana({ s }: { s: SemanaEvaluada }) {
         )}
       </Td>
       <Td>
-        <span className="inline-block px-2 py-0.5 rounded-md text-[11.5px] font-medium"
+        <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-medium"
           style={{ background: tono.fondo, color: tono.texto }}>
           {ROTULO_VEREDICTO[s.riesgo.veredicto]}
         </span>
@@ -492,14 +492,14 @@ function PoliticaSeccion({
         <ShieldQuestion width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
         Los umbrales de tu flota
       </h2>
-      <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
         Likida ya evalúa los topes de la ley (los artículos 61, 63, 68 y 69 de la LFT, y la tabla
         de jornada semanal por año del decreto del 1 de mayo de 2026). Aquí van los tuyos, si tu
         flota se fijó unos más estrictos por contrato colectivo, por póliza o por política interna.
         Dejar un campo vacío significa <strong>no declarado</strong>, no cero.
       </p>
       {politica === null && (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           Todavía no has declarado ninguno. El registro y las alertas de ley funcionan igual sin ellos.
         </p>
       )}
@@ -544,21 +544,21 @@ export function AlertaTopeSeccion({
         <BellRing width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
         Alerta de tope de jornada
       </h2>
-      <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
         Likida avisa al encargado y al operador cuando una jornada en curso llega a los umbrales que elijas
         (por omisión 80 % y 95 % del tope) y cuando lo rebasa. Solo cuenta lo registrado: sin hora de inicio no
         avisa, y si el inicio no lo declaró el operador el aviso dice «al menos». Es un aviso, no un dictamen.
       </p>
       {configIlegible ? (
-        <p role="alert" className="text-[12.5px]" style={{ color: 'var(--bad)' }}>
+        <p role="alert" className="text-[12px]" style={{ color: 'var(--bad)' }}>
           No se pudo leer la configuración de la alerta. No sabemos si está encendida; vuelve a cargar la pantalla.
         </p>
       ) : config === null ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           Todavía no la has configurado: <strong>la alerta está apagada</strong> y nadie recibe avisos.
         </p>
       ) : (
-        <p className="text-[12.5px]">
+        <p className="text-[12px]">
           <strong>{config.activa ? 'Encendida' : 'Apagada'}</strong>
           {' · '}tope {config.topeHoras === null ? 'de la ley (12 h)' : `propio de ${numero(config.topeHoras)} h`}
           {' · '}aviso al {config.umbralAvisoPct} %, crítico al {config.umbralCriticoPct} %
@@ -568,16 +568,16 @@ export function AlertaTopeSeccion({
 
       <h3 className="text-[13px] font-semibold pt-1">Alertas emitidas en este periodo</h3>
       {alertas === null ? (
-        <p role="alert" className="text-[12.5px]" style={{ color: 'var(--bad)' }}>
+        <p role="alert" className="text-[12px]" style={{ color: 'var(--bad)' }}>
           No se pudieron leer las alertas emitidas. Esto no significa que no haya habido.
         </p>
       ) : ordenadas.length === 0 ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           Ninguna alerta emitida para las jornadas que se muestran{truncada ? ' (la lista no cupo completa: acota el periodo)' : ''}.
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full text-[12px]">
             <thead>
               <tr style={{ color: 'var(--muted)' }} className="text-left">
                 <Th>Cuándo</Th><Th>Operador y día</Th><Th>Nivel</Th><Th>Horas contra tope</Th><Th>Estado</Th><Th>Encargado</Th><Th>Operador</Th>
@@ -614,7 +614,7 @@ export function AlertaTopeSeccion({
 
 
 function Th({ children }: { children: React.ReactNode }) {
-  return <th className="font-medium text-[11.5px] pb-2 pr-3">{children}</th>;
+  return <th className="font-medium text-[11px] pb-2 pr-3">{children}</th>;
 }
 function Td({ children }: { children: React.ReactNode }) {
   return <td className="py-2.5 pr-3">{children}</td>;

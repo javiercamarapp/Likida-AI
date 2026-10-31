@@ -40,7 +40,7 @@ function Fila({ item, sufijo, pathname, perfil }: { item: Item; sufijo: string; 
       aria-label={modulo ? `${item.nombre}, próximamente` : item.nombre}>
       <item.Icono {...estiloIcono(activo)} /> <span className="sb-texto truncate">{item.nombre}</span>
       {modulo && (
-        <span className="sb-texto ml-auto shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>
+        <span className="sb-texto ml-auto shrink-0 text-[11px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>
           Próximamente
         </span>
       )}
@@ -208,7 +208,7 @@ export function SidebarAbajo({ rol, usoIa, perfil }: {
       )}
       {ayuda && (
         <Link href={`${ayuda.href}${sufijo}`} title={ayuda.nombre}
-          className="hairline flex items-center gap-2 px-3 py-1.5 mb-1 rounded-full text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)] sb-centrable"
+          className="hairline flex items-center gap-2 px-3 py-1.5 mb-1 rounded-full text-[12px] font-medium transition-colors hover:bg-[var(--canvas)] sb-centrable"
           style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
           <ayuda.Icono width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
           <span className="sb-texto truncate">{ayuda.nombre}</span>

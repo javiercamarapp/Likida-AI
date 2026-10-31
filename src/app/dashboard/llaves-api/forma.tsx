@@ -56,7 +56,7 @@ export function SecretoUnaVez({ enClaro }: { enClaro: string }) {
 
   return (
     <div className="rounded-lg hairline p-3.5 space-y-2" style={{ background: 'var(--warnbg)' }}>
-      <div className="flex items-start gap-2 text-[12.5px] font-medium" style={{ color: 'var(--warn)' }}>
+      <div className="flex items-start gap-2 text-[12px] font-medium" style={{ color: 'var(--warn)' }}>
         <ShieldAlert width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
         Guárdala ahora. No se puede volver a ver: solo guardamos su huella.
       </div>

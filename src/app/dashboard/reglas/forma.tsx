@@ -127,7 +127,7 @@ export function FormaEscribirRegla({ accion, ejemplos }: {
       <div className="flex flex-wrap gap-1.5">
         {ejemplos.map((e) => (
           <button key={e} type="button" onClick={() => setTexto(e)}
-            className="text-[11.5px] px-2.5 h-7 rounded-full hairline transition-colors hover:bg-[var(--surface)]"
+            className="text-[11px] px-2.5 h-7 rounded-full hairline transition-colors hover:bg-[var(--surface)]"
             style={{ color: 'var(--muted)' }}>
             {e}
           </button>
@@ -211,7 +211,7 @@ export function BotonDeRegla({ accion, id, etiqueta, ocupado, tono = 'suave' }: 
         <BotonEnvio etiqueta={etiqueta} ocupado={ocupado} tono={tono} />
       </form>
       {estado && !estado.ok && (
-        <p className="text-[11.5px]" style={{ color: 'var(--bad)' }}>{estado.error}</p>
+        <p className="text-[11px]" style={{ color: 'var(--bad)' }}>{estado.error}</p>
       )}
     </div>
   );

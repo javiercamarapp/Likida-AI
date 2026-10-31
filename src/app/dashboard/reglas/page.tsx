@@ -218,7 +218,7 @@ export default async function PaginaReglas({
           <FormaEscribirRegla accion={accionInterpretar} ejemplos={ejemplos} />
         </div>
         <details className="card p-4">
-          <summary className="cursor-pointer text-[12.5px] font-medium select-none list-none"
+          <summary className="cursor-pointer text-[12px] font-medium select-none list-none"
             style={{ color: 'var(--ink2)' }}>
             …o elígela de la lista, sin pasar por el intérprete
           </summary>

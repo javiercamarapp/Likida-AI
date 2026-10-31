@@ -17,8 +17,8 @@ import type { TipoDiferencia } from '@/types/likida';
 
 /** Botón primario (tinta) y secundario (blanco con hairline) — DESIGN.md §3.
  *  Máximo UNA primaria visible por vista; en el detalle es "Descargar PDF". */
-export const BTN_PRIMARIO = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12.5px] font-medium transition-opacity hover:opacity-85 disabled:opacity-50';
-export const BTN_SECUNDARIO = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12.5px] font-medium hairline transition-colors hover:bg-[var(--canvas)] disabled:opacity-50 disabled:cursor-not-allowed';
+export const BTN_PRIMARIO = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-medium transition-opacity hover:opacity-85 disabled:opacity-50';
+export const BTN_SECUNDARIO = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-medium hairline transition-colors hover:bg-[var(--canvas)] disabled:opacity-50 disabled:cursor-not-allowed';
 export const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
 export const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--ink)' } as const;
 
@@ -37,7 +37,7 @@ export function estadoDeColor(color: string): Estado {
  *  el mismo tamaño para que el detalle se lea igual que el Resumen. */
 export function Rotulo({ children }: { children: ReactNode }) {
   return (
-    <div className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{children}</div>
+    <div className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>{children}</div>
   );
 }
 
@@ -102,7 +102,7 @@ export function LineaDeTiempo({ hitos }: { hitos: Hito[] }) {
             </div>
             <div className={`min-w-0 ${ultimo ? '' : 'pb-3.5'}`}>
               <div className="text-[13px] font-medium leading-5" style={hecho ? undefined : { color: 'var(--muted)' }}>{h.etiqueta}</div>
-              <div className="cifra-mono text-[11.5px]" style={{ color: hecho ? 'var(--muted)' : 'var(--faint)' }}>
+              <div className="cifra-mono text-[11px]" style={{ color: hecho ? 'var(--muted)' : 'var(--faint)' }}>
                 {h.cuando ? fechaHoraMx(h.cuando) : (h.textoSinHora ?? h.pendiente ?? 'Sin registro')}
               </div>
               {h.nota && <div className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{h.nota}</div>}
@@ -129,7 +129,7 @@ export function Diferencia({ nota, monto }: { nota: string; monto: number }) {
           que parece funcionar y no hace nada es un rótulo que miente. */}
       <button type="button" disabled
         title="Todavía no se puede aprobar ni descontar desde el panel: la decisión se toma sobre el PDF con tu contador."
-        className={`rv-btn rv-btn--secondary ${BTN_SECUNDARIO} h-7 px-2.5 text-[11.5px] shrink-0`} style={ESTILO_SECUNDARIO}>
+        className={`rv-btn rv-btn--secondary ${BTN_SECUNDARIO} h-7 px-2.5 text-[11px] shrink-0`} style={ESTILO_SECUNDARIO}>
         Aprobar / Descontar
       </button>
     </li>
@@ -260,4 +260,4 @@ export function PillRenglon({ e }: { e: EstadoRenglon }) {
 }
 
 /** Encabezado de tabla del panel (mismo `TH` que el Resumen y el registro). */
-export const TH = 'etiqueta-mono text-left text-[10px] font-medium uppercase px-3 py-2 whitespace-nowrap';
+export const TH = 'etiqueta-mono text-left text-[11px] font-medium uppercase px-3 py-2 whitespace-nowrap';

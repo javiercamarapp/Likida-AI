@@ -151,12 +151,12 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
             <h2 className="font-display text-[15px] font-semibold m-0">
               Los comprobantes que el comercio ya te timbró, sin entrar a ningún portal
             </h2>
-            <p className="text-[12.5px] m-0" style={{ color: 'var(--muted)' }}>
+            <p className="text-[12px] m-0" style={{ color: 'var(--muted)' }}>
               Todo CFDI que un proveedor timbró a tu RFC ya está en tu buzón del SAT. Esto lo baja
               en bloque y lo cruza contra los tickets que tus operadores mandaron por WhatsApp.
             </p>
             {/* La pregunta que un contador hace antes de subir nada. */}
-            <p className="text-[12.5px] m-0">
+            <p className="text-[12px] m-0">
               <strong>Tu e.firma no se guarda en Likida.</strong>{' '}
               <span style={{ color: 'var(--muted)' }}>
                 Se carga en la bóveda del PAC —en el portal del PAC, igual que tu CSD del
@@ -167,13 +167,13 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
               </span>
             </p>
             {!proveedor.configurado && (
-              <p className="text-[12.5px] m-0 pt-1" style={{ color: 'var(--warn)' }}>
+              <p className="text-[12px] m-0 pt-1" style={{ color: 'var(--warn)' }}>
                 <TriangleAlert size={13} className="inline mb-0.5 mr-1" aria-hidden />
                 {proveedor.motivo}
               </p>
             )}
             {proveedor.configurado && (
-              <p className="text-[12.5px] m-0 pt-1" style={{ color: 'var(--muted)' }}>
+              <p className="text-[12px] m-0 pt-1" style={{ color: 'var(--muted)' }}>
                 Proveedor conectado: {proveedor.proveedor?.toUpperCase()}. No hay ambiente de
                 pruebas para descarga masiva (ni el SAT ni el proveedor lo ofrecen): la primera
                 solicitud va contra tu buzón real.
@@ -208,7 +208,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
           </div>
         ) : (
           <>
-            <p className="text-[12.5px] mt-2 mb-2" style={{ color: 'var(--muted)' }}>
+            <p className="text-[12px] mt-2 mb-2" style={{ color: 'var(--muted)' }}>
               RFC {cfg.rfc} · modo {cfg.modo === 'webservice'
                 ? 'web service (200,000 CFDI por petición, el SAT tarda hasta 6 días)'
                 : 'portal (2,000 documentos al día, ~48 h)'}
@@ -260,7 +260,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
             tercera decía «Esperan que tú decidas» y no había dónde decidir.
             Los cuatro cubos que SÍ son colas de trabajo llevan ahora a su
             lista, filtrada — el conteo deja de ser una cifra huérfana. */}
-        <div className="mt-2.5 flex items-center gap-2 flex-wrap text-[12.5px]">
+        <div className="mt-2.5 flex items-center gap-2 flex-wrap text-[12px]">
           <span style={{ color: 'var(--muted)' }}>Ver las filas:</span>
           {([
             ['ambiguo', 'los que esperan tu decisión'],
@@ -279,7 +279,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
       {/* ── 3. DECLARAR LA CONEXIÓN ───────────────────────────────── */}
       <section className="card p-3">
         <TituloSeccion>Declara tu buzón</TituloSeccion>
-        <p className="text-[12.5px] mt-1 mb-2" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px] mt-1 mb-2" style={{ color: 'var(--muted)' }}>
           El RFC del que se descarga puede NO ser el mismo con el que emites: aquí va el de la
           razón social que RECIBE las facturas. Cópialo de tu constancia.
         </p>
@@ -302,7 +302,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
       {/* ── 4. PEDIR UN RANGO A MANO ──────────────────────────────── */}
       <section className="card p-3">
         <TituloSeccion>Pedir un periodo a mano</TituloSeccion>
-        <p className="text-[12.5px] mt-1 mb-2" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px] mt-1 mb-2" style={{ color: 'var(--muted)' }}>
           Para un periodo viejo que el barrido automático no va a alcanzar pronto. Máximo{' '}
           {VENTANA_MAX_DIAS} días por solicitud. El SAT tarda: la solicitud queda abierta y
           Likida la revisa sola cada 6 horas. Cada solicitud consume el tope diario de tu RFC,
@@ -331,7 +331,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
             )}
           </TituloSeccion>
           <div className="mt-2 overflow-x-auto">
-            <table className="w-full text-[12.5px]">
+            <table className="w-full text-[12px]">
               <thead>
                 <tr style={{ color: 'var(--muted)' }}>
                   <th className="text-left font-medium py-1">Periodo</th>
@@ -366,7 +366,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
       {/* ── 6. EL CHECKLIST QUE NADIE MÁS TE VA A DECIR ───────────── */}
       <section className="card p-3">
         <TituloSeccion>Para que estos comprobantes lleguen solos, tu flota tiene que…</TituloSeccion>
-        <p className="text-[12.5px] mt-1 mb-2" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px] mt-1 mb-2" style={{ color: 'var(--muted)' }}>
           La descarga recoge lo que el comercio YA timbró a tu RFC. Si el comercio no sabe tu
           RFC, o tu contrato no es del tipo que timbra por periodo, no hay nada que recoger —
           aunque el TAG esté activo y cruzando todos los días.

@@ -82,13 +82,13 @@ export function VistaConocimiento({ normas }: { normas: readonly Norma[] }) {
                   <h2 className="font-display text-[14px] font-semibold mt-1.5">
                     {n.titulo ?? n.instrumento}
                   </h2>
-                  <p className="text-[12.5px] mt-0.5" style={{ color: 'var(--muted)' }}>
+                  <p className="text-[12px] mt-0.5" style={{ color: 'var(--muted)' }}>
                     {n.instrumento}
                     {n.articulo_o_regla ? ` · Art./regla ${n.articulo_o_regla}` : ''}
                   </p>
 
                   {v && (
-                    <p className="text-[11.5px] mt-1.5" style={{ color: v.puede ? 'var(--faint)' : 'var(--warn)' }}>
+                    <p className="text-[11px] mt-1.5" style={{ color: v.puede ? 'var(--faint)' : 'var(--warn)' }}>
                       {v.nota}
                     </p>
                   )}

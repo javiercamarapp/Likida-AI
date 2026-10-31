@@ -106,7 +106,7 @@ export function VistaDespacho({
 
       {tablero === null ? (
         <div className="card p-4">
-          <p className="text-[12.5px] text-center" style={{ color: 'var(--muted)' }}>
+          <p className="text-[12px] text-center" style={{ color: 'var(--muted)' }}>
             No se pudo leer el tablero ahora mismo — las colas de abajo siguen siendo reales.
           </p>
         </div>
@@ -195,7 +195,7 @@ export function VistaDespacho({
                 <Search width={13} height={13} strokeWidth={2} className="absolute left-2 top-1/2 -translate-y-1/2" style={{ color: 'var(--faint)' }} />
                 <input
                   type="search" name="q" defaultValue={folioPedido} placeholder="Folio…" aria-label="Buscar viaje en curso por folio"
-                  className="text-[12.5px] rounded-lg pl-6 pr-2.5 py-1.5 w-32 hairline"
+                  className="text-[12px] rounded-lg pl-6 pr-2.5 py-1.5 w-32 hairline"
                   style={{ background: 'var(--surface)' }}
                 />
               </div>
@@ -225,7 +225,7 @@ export function VistaDespacho({
             // cálculo sobre `pagina` que inventaría un rango que no existe.
             <div className="flex-1 min-h-[110px] flex flex-col items-center justify-center gap-3 text-center">
               <Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-              <p className="text-[12.5px] max-w-[36ch]" style={{ color: 'var(--muted)' }}>
+              <p className="text-[12px] max-w-[36ch]" style={{ color: 'var(--muted)' }}>
                 {folioPedido
                   ? `Esta página no tiene viajes con folio "${folioPedido}" — hay ${numero(activos.total ?? 0)} coincidencias.`
                   : `Esta página no tiene viajes — hay ${numero(activos.total ?? 0)} en curso.`}
@@ -245,12 +245,12 @@ export function VistaDespacho({
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                    <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Viaje</th>
-                    <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Ruta</th>
-                    <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Operador</th>
-                    <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Unidad</th>
-                    <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Inicio</th>
-                    <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Aviso</th>
+                    <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Viaje</th>
+                    <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Ruta</th>
+                    <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Operador</th>
+                    <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Unidad</th>
+                    <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Inicio</th>
+                    <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Aviso</th>
                     <th className="pb-2" />
                   </tr>
                 </thead>
@@ -345,7 +345,7 @@ export function VistaDespacho({
             ) : (
               <div className="space-y-1.5">
                 {carga.slice(0, 8).map((c) => (
-                  <div key={c.operadorId} className="flex items-center justify-between gap-2 text-[12.5px]">
+                  <div key={c.operadorId} className="flex items-center justify-between gap-2 text-[12px]">
                     <span className="truncate">
                       {c.nombre}
                       {!c.activo && <span className="text-[11px] ml-1" style={{ color: 'var(--faint)' }}>· inactivo</span>}
@@ -386,7 +386,7 @@ function Leyenda({ children, icono }: { children: React.ReactNode; icono?: React
     <div className="flex-1 min-h-[110px] flex items-center justify-center">
       <div className="text-center max-w-[32ch]">
         {icono && <div className="flex justify-center mb-2">{icono}</div>}
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{children}</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{children}</p>
       </div>
     </div>
   );

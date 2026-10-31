@@ -197,14 +197,14 @@ export function VistaMapa({ ubicados, sinUbicar, totalVivos, tope, rastreo }: {
             )}
 
             {rastreo.pines.length === 0 ? (
-              <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
                 {rastreo.proveedores.length === 0
                   ? 'Todavía no hay un proveedor de GPS conectado. Se captura en Conexiones, y el número de dispositivo de cada camión en su ficha de Unidades. Mientras tanto, un chofer puede mandar su ubicación por WhatsApp y aparece aquí.'
                   : 'El conector está dado de alta pero ninguna unidad activa ha reportado una posición todavía. Revisa que las unidades tengan capturado su número de dispositivo GPS.'}
               </p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-[12.5px]">
+                <table className="w-full text-[12px]">
                   <thead>
                     <tr style={{ color: 'var(--faint)' }} className="text-left">
                       <th className="py-2 font-medium">Unidad</th>
@@ -225,7 +225,7 @@ export function VistaMapa({ ubicados, sinUbicar, totalVivos, tope, rastreo }: {
                             {p.placas && <span className="ml-2 cifra-mono text-[11px]" style={{ color: 'var(--faint)' }}>{p.placas}</span>}
                           </td>
                           <td className="py-2.5" style={vieja ? { color: `var(--${TONO_FRESCURA[nivel]})` } : undefined}>
-                            <span className="mr-1.5 inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                            <span className="mr-1.5 inline-flex rounded-full px-1.5 py-0.5 text-[11px] font-medium"
                               style={{ color: `var(--${TONO_FRESCURA[nivel]})`, background: `var(--${TONO_FRESCURA[nivel]}bg)` }}>{ROTULO_FRESCURA[nivel]}</span>
                             {antiguedad(p.minutos)}
                             <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{fechaHoraMx(p.medidaEn)}</span>
@@ -265,7 +265,7 @@ export function VistaMapa({ ubicados, sinUbicar, totalVivos, tope, rastreo }: {
           </p>
           <div className="space-y-2">
             {sinUbicar.map((v) => (
-              <div key={v.id} className="flex items-center gap-2.5 text-[12.5px]">
+              <div key={v.id} className="flex items-center gap-2.5 text-[12px]">
                 <MapPinOff width={13} height={13} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--warn)' }} />
                 <span className="font-medium">{v.folio}</span>
                 {v.operadorNombre && <span style={{ color: 'var(--muted)' }}>{v.operadorNombre}</span>}
