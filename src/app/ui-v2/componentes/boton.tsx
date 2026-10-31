@@ -11,7 +11,8 @@ import { cx } from './clases';
 // viven aquí); la forma v2 llega solo por CSS (`componentes.css`).
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type VarianteBoton = 'primary' | 'secondary' | 'ghost' | 'danger-soft';
+// `danger` (peligro) y `danger-soft` se pintan igual en v2 (rojo suave); `danger-soft` es el nombre histórico.
+export type VarianteBoton = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-soft';
 export type TamanoBoton = 'md' | 'sm';
 
 const BASE_V1 = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12.5px] font-medium';
@@ -19,6 +20,7 @@ const V1: Record<VarianteBoton, string> = {
   primary: `${BASE_V1} bg-[var(--marca)] text-[var(--marca-fg)] transition-opacity hover:opacity-85 disabled:opacity-50`,
   secondary: `${BASE_V1} bg-[var(--surface)] text-[var(--ink)] hairline transition-colors hover:bg-[var(--canvas)] disabled:opacity-50 disabled:cursor-not-allowed`,
   ghost: `${BASE_V1} bg-transparent text-[var(--ink)] transition-colors hover:bg-[var(--canvas)] disabled:opacity-50 disabled:cursor-not-allowed`,
+  danger: `${BASE_V1} bg-[var(--badbg)] text-[var(--bad)] transition-opacity hover:opacity-85 disabled:opacity-50`,
   'danger-soft': `${BASE_V1} bg-[var(--badbg)] text-[var(--bad)] transition-opacity hover:opacity-85 disabled:opacity-50`,
 };
 

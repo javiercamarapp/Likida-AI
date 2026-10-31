@@ -100,7 +100,8 @@
     transition:
       background-color var(--ui-fast) ease,
       border-color var(--ui-fast) ease,
-      color var(--ui-fast) ease;
+      color var(--ui-fast) ease,
+      transform var(--ui-fast) ease;
   }
   .rv-btn:active:not(:disabled):not([aria-disabled="true"]) {
     transform: translateY(1px);

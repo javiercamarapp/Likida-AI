@@ -180,16 +180,35 @@
 [data-ui="v2"] .card:has(> table),
 [data-ui="v2"] .card > .overflow-x-auto { overflow-x: auto; }
 
-[data-ui="v2"] .card :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"]), select, textarea) {
-  min-height: 32px; border-radius: 8px; font-size: 13px;
-}
-[data-ui="v2"] .card :is(input, select, textarea):focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
-[data-ui="v2"] .card :is(input, select, textarea)::placeholder { color: var(--faint, var(--muted)); }
-[data-ui="v2"] .card :is(input, select, textarea):disabled { border-style: dashed; color: var(--muted); }
-/* Campo de formulario sobre superficie blanca (el v1 lo pinta en --canvas). */
+/* ── Campo único (L4) ─────────────────────────────────────────────────────────────────────────────────────────────
+   UNA sola regla global para input / select / textarea de todo el panel (antes solo se pintaban dentro de `.card`): alto 32 (36 bajo 820,
+   44 y 16 px en móvil para el toque y para que iOS no haga zoom), radio 8, borde `--input`, fondo `--campo-bg`, 13 px, foco de 2 px y estados
+   deshabilitado / inválido. Sin capa: gana a las utilidades de Tailwind (h-9, px-3, text-[12.5px]…) que cada formulario traía por su cuenta.
+   Quedan fuera: casillas, radios, archivo, rango, color, botones de formulario, el campo embebido sin marco (`bg-transparent` / `border-0`
+   del compositor del chat) y lo `sr-only`. Los `select` múltiples o con `size` conservan su alto natural. */
 [data-ui="v2"] { --campo-bg: var(--surface); }
+[data-ui="v2"] :is(
+  input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]),
+  select:not([multiple], [size]),
+  textarea
+):not(.sr-only, .bg-transparent, .border-0) {
+  height: auto; min-height: 32px; padding-inline: 10px; padding-block: 4px;
+  border: 1px solid var(--input); border-radius: 8px;
+  background-color: var(--campo-bg); color: var(--ink);
+  font-family: inherit; font-size: var(--t-body); line-height: 1.4;
+  box-shadow: none;
+}
+[data-ui="v2"] textarea:not(.sr-only, .bg-transparent, .border-0) { min-height: 64px; padding-block: 6px; line-height: 1.5; }
+[data-ui="v2"] :is(input, select, textarea):not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], .sr-only):focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+[data-ui="v2"] :is(input, select, textarea)::placeholder { color: var(--faint, var(--muted)); }
+[data-ui="v2"] :is(input, select, textarea):disabled { border-style: dashed; color: var(--muted); cursor: not-allowed; }
+[data-ui="v2"] :is(input, select, textarea)[aria-invalid="true"] { border-color: var(--bad); }
+@media (max-width: 819px) {
+  [data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size])):not(.sr-only, .bg-transparent, .border-0) { min-height: 36px; }
+}
 @media (max-width: 767px) {
-  [data-ui="v2"] .card :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"]), select) { min-height: 44px; font-size: 16px; }
+  [data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size]), textarea):not(.sr-only, .bg-transparent, .border-0) { min-height: 44px; font-size: var(--fs-campo); }
+  [data-ui="v2"] textarea:not(.sr-only, .bg-transparent, .border-0) { min-height: 88px; }
 }
 
 
@@ -212,9 +231,14 @@
 [data-ui="v2"] .rv-btn--primary:hover { background: var(--btn-hover); color: var(--btn-fg); border-color: var(--btn-borde); }
 [data-ui="v2"] .rv-btn--ghost { background: transparent; border-color: transparent; }
 [data-ui="v2"] .rv-btn--ghost:hover { background: var(--infobg); color: var(--info); border-color: transparent; }
-[data-ui="v2"] .rv-btn--danger-soft { background: var(--badbg); border-color: color-mix(in srgb, var(--bad) 28%, transparent); color: var(--bad); }
-[data-ui="v2"] .rv-btn--danger-soft:hover { background: color-mix(in srgb, var(--bad) 14%, var(--badbg)); border-color: var(--bad); }
+[data-ui="v2"] :is(.rv-btn--danger, .rv-btn--danger-soft) { background: var(--badbg); border-color: color-mix(in srgb, var(--bad) 28%, transparent); color: var(--bad); }
+[data-ui="v2"] :is(.rv-btn--danger, .rv-btn--danger-soft):hover { background: color-mix(in srgb, var(--bad) 14%, var(--badbg)); border-color: var(--bad); }
 [data-ui="v2"] .rv-btn--sm { min-height: 32px; padding: 4px 10px; }
+/* Botón en celda de tabla: 28 (el único tamaño por debajo de 32; el área de toque de 44 sigue en ::after). */
+[data-ui="v2"] :is(table, .rv-tabla) .rv-btn { min-height: 28px; padding: 3px 10px; }
+/* Pulsado: secundario y fantasma se asientan sobre el lienzo; el primario toma el tono de su hover. */
+[data-ui="v2"] .rv-btn:not(.rv-btn--primary, .rv-btn--danger, .rv-btn--danger-soft):active:not(:disabled):not([aria-disabled="true"]) { background: var(--canvas); color: var(--ink); }
+[data-ui="v2"] .rv-btn--primary:active:not(:disabled):not([aria-disabled="true"]) { background: var(--btn-hover); color: var(--btn-fg); }
 [data-ui="v2"] .rv-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 [data-ui="v2"] .rv-btn:disabled,
 [data-ui="v2"] .rv-btn[aria-disabled="true"] {
@@ -230,6 +254,7 @@
 @media (max-width: 819px) {
 [data-ui="v2"] .rv-btn { min-height: 36px; }
 [data-ui="v2"] .rv-btn--sm { min-height: 32px; }
+[data-ui="v2"] :is(table, .rv-tabla) .rv-btn { min-height: 32px; }
 }
 [data-ui="v2"] .rv-chip {
   display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 24px; padding: 2px 10px;
