@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Inbox, Truck, Users, Search } from 'lucide-react';
+import { Inbox, Truck, Users } from 'lucide-react';
 import type { TableroOperacion, ViajeSinAsignar, CargaOperador } from '@/lib/likida/operacion';
 import type { Pagina, ViajeEnCursoRow } from '@/lib/likida/repo_paginado';
 import { numero, fechaCorta } from '@/lib/formato';
@@ -9,7 +9,7 @@ import { AsignarFila, AsignarUnidadFila, BotonReenviar, AltaOperador, type Accio
 import { EnlacePagina, NavPaginas } from '../paginador';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { BarraFiltros, FiltroBusqueda, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /** Tope de "Por asignar" — declarado en pantalla cuando recorta. "En curso"
  *  ya no usa esta constante: FE-2 le dio su propia paginación con `count`
@@ -188,18 +188,11 @@ export function VistaDespacho({
                 urgentes de la primera página. GET plano, con el sufijo de
                 previsualización como hidden (mismo patrón que
                 `viajes/vista.tsx`) para no perderlo al buscar. */}
-            <form method="get" action="/dashboard/despacho" className="flex items-center gap-1.5" role="search">
-              {[...new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo).entries()]
-                .map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-              <div className="relative">
-                <Search width={13} height={13} strokeWidth={2} className="absolute left-2 top-1/2 -translate-y-1/2" style={{ color: 'var(--faint)' }} />
-                <input
-                  type="search" name="q" defaultValue={folioPedido} placeholder="Folio…" aria-label="Buscar viaje en curso por folio"
-                  className="text-[12px] rounded-lg pl-6 pr-2.5 py-1.5 w-32 hairline"
-                  style={{ background: 'var(--surface)' }}
-                />
-              </div>
-            </form>
+            <BarraFiltros accion="/dashboard/despacho" enLinea etiqueta="Buscar viaje en curso" nActivos={folioPedido ? 1 : 0}
+              limpiarHref={`/dashboard/despacho${sufijo}`}
+              ocultos={[...new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo).entries()]}>
+              <FiltroBusqueda nombre="q" valor={folioPedido} placeholder="Folio…" etiqueta="Buscar viaje en curso por folio" />
+            </BarraFiltros>
           </div>
           {activos.error !== null ? (
             <Leyenda icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--bad)' }} />}>
