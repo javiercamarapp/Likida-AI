@@ -11,6 +11,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import type { ReactNode } from 'react';
 
+vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error('el arnés no toca la base'); } }));
 vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
   usePathname: () => (globalThis as unknown as { __rutaL4?: string }).__rutaL4 ?? '/dashboard',
@@ -21,8 +22,31 @@ const { default: Chrome } = await import('@/app/dashboard/shell/chrome-v2');
 const P = await import('@/app/ui-v2/componentes');
 const G = await import('@/app/ui-v2/graficas');
 const { VistaViajes } = await import('@/app/dashboard/viajes/vista');
+const { VistaConfiguracionPeajes } = await import('@/app/dashboard/agentes/peajes/configuracion/vista');
+const { VistaConfiguracionLiquidacion } = await import('@/app/dashboard/agentes/liquidacion/configuracion/vista');
+const { CONFIG_CORREO_POR_DEFECTO } = await import('@/lib/likida/liquidacion_externa/repo_correo');
+const V = await import('@/app/dashboard/agentes/vigia/vista');
+const { configApagada } = await import('@/lib/likida/vigia/tipos');
 import { exigirV2Html } from './exigir_v2';
 import { USUARIO, viajes as viajesFx, UNIDADES } from './fixtures/logistica_mx';
+
+const nada = async () => {};
+const accPeajes = Object.fromEntries(['activarBuzon', 'desactivarBuzon', 'rotarLlave', 'reintentarArchivo', 'altaTag', 'bajaTag', 'importarTags', 'importarCasetas', 'estadoCaseta', 'guardarGeocerca', 'estadoGeocerca', 'importarCursos', 'importarCursosDeTabla', 'estadoCurso', 'guardarMapeo', 'borrarMapeo', 'activarCorreo', 'desactivarCorreo', 'rotarCorreo', 'guardarRemitentes', 'guardarPull', 'apagarPull', 'borrarCredencialPull'].map((k) => [k, nada])) as never;
+const AHORA = Date.parse('2026-10-01T18:00:00Z');
+const hace = (min: number) => new Date(AHORA - min * 60_000).toISOString();
+const noopV = (async () => null) as never;
+const accVigia = { decidir: noopV, conversacion: noopV, config: noopV, alta: noopV, contacto: noopV, director: noopV } as never;
+const datosVigia = {
+  config: { ...configApagada('t1'), habilitado: true },
+  conversaciones: [{ id: '11111111-1111-4111-8111-111111111111', contactoId: 'ct', contactoNombre: 'Contacto de muestra', clienteNombre: 'Cliente de muestra', control: 'agente', sinRespuestaDesde: hace(75), molestiaNivel: 2, molestiaMotivos: [], escalamientoNivel: 0, atendida: false, ultimaEntradaEn: hace(5), ultimoMensajeCliente: '¿Dónde va mi viaje?' }],
+  pendientes: [], fallidos: [], contactos: [], eventos: [],
+  respuesta: { muestra: 0, promedioMin: null, medianaMin: null }, clientes: [{ id: 'c1', nombre: 'Cliente de muestra' }], gerentes: [],
+} as never;
+const vigiaEl = [
+  await V.BloqueEstadoYKpis({ datos: Promise.resolve(datosVigia), ahoraMs: AHORA }),
+  await V.BloqueExcepciones({ datos: Promise.resolve(datosVigia), ahoraMs: AHORA, puedeDecidir: true, acciones: accVigia }),
+  await V.BloqueConfiguracion({ datos: Promise.resolve(datosVigia), puedeAdministrar: true, acciones: accVigia }),
+];
 
 const OUT = process.env.UI2_OUT ?? path.join(homedir(), 'likida-loop/cierre100/arnes-l4');
 const noop = async () => ({ ok: null }) as never;
@@ -77,6 +101,25 @@ const VISTAS: Record<string, { ruta: string; el: () => ReactNode }> = {
               <tr><td>VJ-20419</td><td>Operador de muestra</td><td className="num">$3,150.00</td><td><P.Boton tamano="sm" variante="danger">Anular</P.Boton></td></tr></tbody></table>
         </section>
       </P.MarcoPagina>
+    ),
+  },
+  'l4-04-peajes-configuracion': {
+    ruta: '/dashboard/agentes/peajes/configuracion',
+    el: () => (
+      <VistaConfiguracionPeajes
+        sufijo="" aviso={null} error={null} agenteApagado={null}
+        tags={[]} unidades={[{ id: 'u1', numeroEconomico: 'TR-104', placas: 'ABC-123' }]} casetas={[]} geocercas={[]} cursos={[]} convenios={[]} mapeos={[]} archivos={[]}
+        tiposGeocerca={['origen', 'punto_interes']}
+        buzon={{ estado: 'activo', rotacion: 2, secretoConfigurado: true, puedeAdministrar: true, llave: 'a'.repeat(64), url: 'https://app.likida.ai/api/peajes/ingesta', flotaId: 'f-1' }}
+        entradas={{ config: null, puedeAdministrar: true, direccionCorreo: null, cofreConfigurado: true } as never} acciones={accPeajes}
+      />
+    ),
+  },
+  'l4-05-vigia': { ruta: '/dashboard/agentes/vigia', el: () => <P.MarcoPagina titulo="Vigía de clientes" apoyo="Conversaciones con clientes, excepciones y configuración.">{vigiaEl}</P.MarcoPagina> },
+  'l4-06-liquidacion-configuracion': {
+    ruta: '/dashboard/agentes/liquidacion/configuracion',
+    el: () => (
+      <VistaConfiguracionLiquidacion sufijo="" aviso={null} error={null} config={{ ...CONFIG_CORREO_POR_DEFECTO }} hayFila={false} disponible puedeAdministrar acciones={{ guardar: nada } as never} />
     ),
   },
   'l4-03-tarjetas-info': {
