@@ -334,7 +334,7 @@
 }
 [data-ui="v2"] .rv-vacio__titulo { margin: 0; font-size: 13px; line-height: 1.4; font-weight: 600; color: var(--ink); }
 [data-ui="v2"] .rv-vacio__texto { margin: 0; max-width: none; font-size: 13px; line-height: 1.4; color: var(--muted); }
-[data-ui="v2"] .rv-vacio__accion { display: flex; align-items: center; gap: 8px; }
+[data-ui="v2"] .rv-vacio__accion { display: flex; align-items: center; gap: 8px; margin: 0; } /* sin el margin-top de v1: con el botón sm a 32 px el vacío de una línea no cabría en 44 */
 [data-ui="v2"] .rv-mono {
   display: inline-grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 8px;
   font: 600 12px/1 var(--font-sans-ui, inherit); letter-spacing: .02em;
