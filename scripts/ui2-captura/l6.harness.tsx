@@ -58,11 +58,11 @@ const cola = colaRevision(11).map((c, i) => ({ ...c, id: U(i + 1), viajeId: U(50
 
 const filasTabla = viajesFx(7).map((v) => ({ id: v.id, folio: v.folio, ruta: v.origen && v.destino ? `${v.origen} → ${v.destino}` : null, total: v.anticipo, fecha: v.fechaInicio }));
 type FilaMu = (typeof filasTabla)[number];
-const colsMu: D.ColumnaTabla<FilaMu>[] = [
-  { id: 'folio', titulo: 'Folio', principal: true, valor: (f) => f.folio, celda: (f) => f.folio },
-  { id: 'ruta', titulo: 'Ruta', valor: (f) => f.ruta, celda: (f) => f.ruta ?? <span className="rv-tl__tenue">sin ruta capturada</span> },
-  { id: 'fecha', titulo: 'Inicio', valor: (f) => f.fecha, celda: (f) => (f.fecha ? f.fecha.slice(0, 10) : '—') },
-  { id: 'total', titulo: 'Anticipo', alinear: 'der', valor: (f) => f.total, celda: (f) => `$${f.total.toLocaleString('es-MX')}` },
+const colsMu: import('@/app/ui-v2/datos').ColumnaTabla<FilaMu>[] = [
+  { id: 'folio', titulo: 'Folio', principal: true, valor: (f: FilaMu) => f.folio, celda: (f: FilaMu) => f.folio },
+  { id: 'ruta', titulo: 'Ruta', valor: (f: FilaMu) => f.ruta, celda: (f: FilaMu) => f.ruta ?? <span className="rv-tl__tenue">sin ruta capturada</span> },
+  { id: 'fecha', titulo: 'Inicio', valor: (f: FilaMu) => f.fecha, celda: (f: FilaMu) => (f.fecha ? f.fecha.slice(0, 10) : '—') },
+  { id: 'total', titulo: 'Anticipo', alinear: 'der', valor: (f: FilaMu) => f.total, celda: (f: FilaMu) => `$${f.total.toLocaleString('es-MX')}` },
 ];
 
 async function vistas(): Promise<Record<string, { ruta: string; el: ReactNode }>> {

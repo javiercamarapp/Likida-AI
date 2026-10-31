@@ -19,8 +19,8 @@ export function TablaTeclado({ children, seleccion, className }: { children: Rea
     if (!el) return;
 
     const enfocables = (): HTMLElement[][] => {
-      const trs = Array.from(el.querySelectorAll<HTMLElement>('tbody > tr'));
-      return trs.map((tr) => Array.from(tr.querySelectorAll<HTMLElement>(ENFOCABLE))).filter((c) => c.length > 0);
+      const trs = [...el.querySelectorAll<HTMLElement>('tbody > tr')];
+      return trs.map((tr) => [...tr.querySelectorAll<HTMLElement>(ENFOCABLE)]).filter((c) => c.length > 0);
     };
 
     const alTeclear = (e: KeyboardEvent) => {
@@ -41,11 +41,11 @@ export function TablaTeclado({ children, seleccion, className }: { children: Rea
 
     const actualizarConteo = () => {
       if (!seleccion) return;
-      const casillas = Array.from(el.querySelectorAll<HTMLInputElement>('input[data-sel-fila]'));
+      const casillas = [...el.querySelectorAll<HTMLInputElement>('input[data-sel-fila]')];
       const marcadas = casillas.filter((c) => c.checked).length;
       const todas = el.querySelector<HTMLInputElement>('input[data-sel-todas]');
       if (todas) { todas.checked = marcadas > 0 && marcadas === casillas.length; todas.indeterminate = marcadas > 0 && marcadas < casillas.length; }
-      for (const tr of Array.from(el.querySelectorAll<HTMLElement>('tbody > tr'))) {
+      for (const tr of [...el.querySelectorAll<HTMLElement>('tbody > tr')]) {
         const c = tr.querySelector<HTMLInputElement>('input[data-sel-fila]');
         if (c) tr.toggleAttribute('data-seleccionada', c.checked);
       }

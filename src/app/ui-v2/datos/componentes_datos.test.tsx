@@ -17,7 +17,7 @@ const COLS: ColumnaTabla<Fila>[] = [
 ];
 const base = { etiqueta: 'Viajes', columnas: COLS, idFila: (f: Fila) => f.id, base: '/dashboard/viajes' };
 const html = (p: Partial<Parameters<typeof TablaLista<Fila>>[0]> = {}) => renderToStaticMarkup(<TablaLista<Fila> {...base} filas={FILAS} params={{}} {...p} />);
-const folios = (h: string) => [...h.matchAll(/<th scope="row"[^>]*>([^<]+)<\/th>/g)].map((m) => m[1]);
+const folios = (h: string) => [...h.matchAll(/<th scope="row"[^>]*>([\s\S]*?)<\/th>/g)].map((m) => m[1].replace(/<[^>]+>/g, ''));
 
 describe('TablaLista · semántica accesible', () => {
   it('caption, scope=col en cabeceras, scope=row en la columna principal y región con foco', () => {
