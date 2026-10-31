@@ -31,7 +31,7 @@ function App() {
       <div id="scroll" style={{ height: 500, overflowY: 'auto' }}>
         <BarraFiltros busqueda={{ valor: q, onCambio: setQ, placeholder: 'Buscar folio' }} chips={chips} onChip={(id) => setChips(chips.map((c) => c.id === id ? { ...c, activo: !c.activo } : c))} avanzados={<><label>Operador<select><option>Todos</option></select></label><label>Patio<select><option>Todos</option></select></label></>} nAvanzados={1} fuentes="Fuentes 5 de 7" />
         <div className="rv-escalona" id="esc" style={{ display: 'grid', gap: 12, paddingTop: 12 }}>
-          <Tarjeta titulo="Monto comprobado" info="resumen.monto_comprobado" acciones={<Boton tamano="sm">Exportar</Boton>}><p>Contenido uno</p></Tarjeta>
+          <Tarjeta titulo="Diferencias vs recuperado" info="resumen.diferencias_recuperado" acciones={<Boton tamano="sm">Exportar</Boton>}><p>Contenido uno</p></Tarjeta>
           <Tarjeta titulo="Por firmar" info="resumen.por_firmar"><p>Contenido dos</p></Tarjeta>
           <Tarjeta titulo="Peajes" info="resumen.peajes_periodo" estado="vacio" mensaje="Sin cruces en el periodo" />
           <Tarjeta titulo="A tiempo" info="resumen.a_tiempo" estado="error" onReintentar={() => { window.__reint = (window.__reint || 0) + 1; }} />

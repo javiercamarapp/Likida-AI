@@ -5,6 +5,7 @@ import { puedeVerArea, puedeVerRuta } from '@/lib/auth/visibilidad';
 import { InicioContenido } from './inicio-contenido';
 import { InicioOperacion } from './inicio-operacion';
 import { InicioCincoAgentes } from './inicio-cinco-agentes';
+import { leerRango } from './resumen-datos';
 import { cookies } from 'next/headers';
 import { versionUi } from '@/lib/auth/version_ui';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
@@ -41,6 +42,7 @@ export default async function DashboardInicio({
         tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} sufijo={sufijoTenant(sp)}
         ui={ui} userId={userId} soloLectura={Boolean(sp.tenant || sp.vista || sp.rol || tenantNombre)}
         veAsistente={puedeVerRuta(rol, '/dashboard/puesta-en-marcha', perfilFlota)}
+        veDinero={puedeVerArea(rol, 'dinero')} rango={leerRango(sp.rango)}
       />
     );
   }
