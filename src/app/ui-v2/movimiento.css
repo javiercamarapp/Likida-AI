@@ -28,6 +28,15 @@
   --t-sweep: 700ms;    /* anillo de progreso (tope del sistema) */
   --chart-enter: 360ms;
   --ov-in: 180ms;      /* entrada de Drawer / Modal; la salida NO se anima */
+  /* «Pregunta a tus datos» (L5): las duraciones EXACTAS del agente de Vexa (ui-rise 260 ms, trace-in 200 ms, chips 240 ms con
+     escalón de 50 ms, controles .15 s, historial 480 ms y la respiración del paso en curso 1.1 s). Misma curva única. */
+  --chat-entra: 260ms;   /* mensaje nuevo y bloque de respuesta: fundido + translateY(6px) */
+  --chat-paso: 200ms;    /* cada paso de «pensando»: translateY(4px) */
+  --chat-chip: 240ms;    /* sugerencias */
+  --chat-escalon: 50ms;  /* retardo entre sugerencias y entre bloques */
+  --chat-control: 150ms; /* recuadro, chips y filas del historial */
+  --chat-hist: 480ms;    /* ancho de la columna del historial */
+  --chat-respira: 1.1s;  /* marca y paso en curso (opacidad .35→1, escala .985→1) */
 }
 
 /* ── Keyframes: solo existen para quien no pidió reducir el movimiento ─────── */
