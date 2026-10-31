@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 // `ui-v2/componentes/overlay.tsx`; ningún velo `fixed inset-0` a mano (solo el fondo decorativo); y las medidas de
 // overlay no se vuelven a definir en otras hojas de estilo.
 const APP = join(__dirname, '..');
+const SRC = join(APP, '..'); // se escanea todo `src`, no solo `src/app`
 const sinComentarios = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 
 function archivos(dir: string, salida: string[] = []): string[] {
@@ -18,16 +19,17 @@ function archivos(dir: string, salida: string[] = []): string[] {
   }
   return salida;
 }
-const todos = archivos(APP);
+const todos = archivos(SRC);
 const codigo = todos.filter((f) => /\.(tsx|ts)$/.test(f) && !/\.test\.|harness|\.tmp\./.test(f));
 const MOTOR = join(APP, 'ui-v2/componentes/overlay.tsx');
+const ESCRITOS = /<dialog|showModal\s*\(|createElement\(\s*['"`]dialog|role\s*[=:]\s*\{?\s*['"`]?(alert)?dialog|aria-modal|ariaModal/;
 
 describe('overlays: un solo motor', () => {
   it('<dialog>, role=dialog/alertdialog, aria-modal y showModal() solo viven en overlay.tsx', () => {
     const fuera: string[] = [];
     for (const f of codigo) {
       if (f === MOTOR) continue;
-      if (/<dialog|showModal\s*\(|role=["']?(alert)?dialog|aria-modal/.test(sinComentarios(readFileSync(f, 'utf8')))) fuera.push(relative(APP, f));
+      if (ESCRITOS.test(sinComentarios(readFileSync(f, 'utf8')))) fuera.push(relative(SRC, f));
     }
     expect(fuera, 'overlay propio fuera del motor').toEqual([]);
   });
@@ -35,7 +37,7 @@ describe('overlays: un solo motor', () => {
   it('ningún velo `fixed inset-0` a mano (el fondo decorativo es la única excepción)', () => {
     const velos: string[] = [];
     for (const f of codigo) {
-      if (/fixed inset-0|inset-0 z-/.test(sinComentarios(readFileSync(f, 'utf8'))) && !f.endsWith('/app/fondo.tsx') && !f.endsWith('/admin/mapa-prospectos/calles.tsx')) velos.push(relative(APP, f));
+      if (/fixed\s+inset-(0|x-0|y-0)|inset-0 z-/.test(sinComentarios(readFileSync(f, 'utf8'))) && !f.endsWith('/app/fondo.tsx') && !f.endsWith('/admin/mapa-prospectos/calles.tsx') && !f.endsWith('/admin/ui/notificaciones.tsx')) velos.push(relative(SRC, f));
     }
     expect(velos).toEqual([]);
   });
@@ -45,13 +47,15 @@ describe('overlays: un solo motor', () => {
     for (const f of todos.filter((x) => x.endsWith('.css') && !x.endsWith('/overlay.css') && !x.endsWith('globals.css'))) {
       const css = sinComentarios(readFileSync(f, 'utf8'));
       // Se permiten ajustes de contexto (`.rv-ov .rv-item` del shell) y las variantes de contenido `.rv-pop--info`.
-      for (const linea of css.split('\n')) {
-        const sel = linea.includes('{') ? linea.slice(0, linea.indexOf('{')).trim() : '';
+      // Selectores de TODAS las reglas, también con @media multilínea o listas en varias líneas.
+      for (const trozo of css.split('{').slice(0, -1)) {
+        const sel = trozo.slice(Math.max(trozo.lastIndexOf('}'), trozo.lastIndexOf(';')) + 1).trim();
+        if (sel.startsWith('@')) continue;
         for (const parte of sel.split(',')) {
           const plano = parte.replace('[data-ui="v2"]', '').trim();
           if (/\s/.test(plano.replace(/\[[^\]]*\]/g, ''))) continue; // ajuste de contexto (`.rv-ov .rv-item`): no redefine el overlay
           const base = plano.split(/[:[]/)[0];
-          if (/^\.rv-(ov|pop|menu)/.test(base) && !base.startsWith('.rv-pop--')) otras.push(`${relative(APP, f)}: ${base}`);
+          if (/^\.rv-(ov|pop|menu)/.test(base) && !base.startsWith('.rv-pop--')) otras.push(`${relative(SRC, f)}: ${base}`);
         }
       }
     }
