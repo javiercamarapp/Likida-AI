@@ -164,7 +164,7 @@ export function VistaViajes({
         <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
           {/* GET puro: la búsqueda vive en la URL y sobrevive a recargar, compartir y volver atrás. El sufijo y el filtro viajan como
               campos ocultos para no perderse al enviar; el estado es un enlace (hrefRegistro) con la búsqueda vigente. */}
-          <BarraFiltros accion="/dashboard/viajes" enLinea etiqueta="Filtros de viajes" nActivos={(filtro !== 'todos' ? 1 : 0) + (q ? 1 : 0)} limpiarHref={hrefRegistro(sufijo, {})}
+          <BarraFiltros accion="/dashboard/viajes" enLinea etiqueta="Filtros de viajes"
             ocultos={[...params.entries(), ...(filtro !== 'todos' ? [['f', filtro] as [string, string]] : [])]}>
             <FiltroOpciones etiqueta="Estado" valor={filtro} porDefecto="todos"
               opciones={(Object.keys(ROTULO_FILTRO) as FiltroViajes[]).map((f) => ({ valor: f, rotulo: ROTULO_FILTRO[f], href: hrefRegistro(sufijo, { f, q }) }))} />

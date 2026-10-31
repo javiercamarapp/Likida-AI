@@ -148,4 +148,13 @@ describe.skipIf(SIN_NAVEGADOR)('Filtros LF · comportamiento en Chromium', { tim
       await p.close();
     }
   });
+  it.skipIf(!process.env.UI2_CAPT)('captura del popover abierto (solo con UI2_CAPT=<dir>)', async () => {
+    for (const ancho of [1280, 390]) for (const tema of ['light', 'dark']) {
+      const p = await abrir(ancho);
+      await p.evaluate((t) => document.documentElement.setAttribute('data-theme', t), tema);
+      await p.getByRole('button', { name: 'Cuadre' }).click();
+      await p.screenshot({ path: join(process.env.UI2_CAPT!, `lf-06-popover__${ancho}__${tema === 'light' ? 'claro' : 'oscuro'}.png`), clip: { x: 0, y: 0, width: Math.min(ancho, 900), height: 260 } });
+      await p.close();
+    }
+  });
 });

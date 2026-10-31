@@ -12,7 +12,7 @@ import { Popover } from './overlay';
 //   · activo = fondo gris suave + borde de tinta (nunca azul); el valor vive DENTRO del chip («Estado · Abiertos»);
 //   · las opciones salen en un Popover del motor de overlays (lote 3), con rol listbox y teclado completo;
 //   · dentro de una `BarraFiltros` con `accion` el estado vive en la URL (GET): elegir envía el formulario;
-//   · sin JavaScript cada FiltroOpciones es un <select> nativo del mismo tamaño y la barra ofrece «Aplicar» (noscript).
+//   · sin JavaScript cada FiltroOpciones ofrece un <select> nativo (noscript) y la barra un «Aplicar»; las opciones-enlace salen como enlaces.
 // Los nombres de los parámetros (`name`) los pone la pantalla: este módulo no inventa ninguno.
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -71,18 +71,6 @@ export function FiltroOpciones({ etiqueta, opciones, valor, porDefecto = '', nom
     if (nombre && oculto.current) { oculto.current.value = o.valor; enviarForma(oculto.current); }
   };
 
-  // Sin JavaScript (o antes de hidratar): <select> nativo con el mismo alto y las mismas opciones.
-  if (!listo && nombre && !opciones.some((o) => o.href)) {
-    return (
-      <label className={cx('rv-fl rv-fl--nativo', className)} data-activo={activo ? '' : undefined}>
-        <span className="rv-fl__etq">{etiqueta}</span>
-        <select name={nombre} defaultValue={valor} aria-label={ariaLabel ?? etiqueta} disabled={deshabilitado}>
-          {opciones.map((o) => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
-        </select>
-      </label>
-    );
-  }
-
   const alTeclearAncla = (e: KeyboardEvent<HTMLButtonElement>) => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setAbierto(true); }
   };
@@ -105,7 +93,18 @@ export function FiltroOpciones({ etiqueta, opciones, valor, porDefecto = '', nom
 
   return (
     <>
-      {nombre ? <input ref={oculto} type="hidden" name={nombre} defaultValue={valor} /> : null}
+      {/* El campo viaja solo con JavaScript (listo): sin él, el <select> de noscript es el campo y no se duplica el parámetro. */}
+      {nombre && listo ? <input ref={oculto} type="hidden" name={nombre} defaultValue={valor} /> : null}
+      {nombre && !opciones.some((o) => o.href) ? (
+        <noscript>
+          <label className="rv-fl rv-fl--nativo" data-activo={activo ? '' : undefined}>
+            <span className="rv-fl__etq">{etiqueta}</span>
+            <select name={nombre} defaultValue={valor} aria-label={ariaLabel ?? etiqueta} disabled={deshabilitado} className="border-0 bg-transparent">
+              {opciones.map((o) => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
+            </select>
+          </label>
+        </noscript>
+      ) : null}
       <button
         ref={ancla}
         type="button"
@@ -188,7 +187,7 @@ export function FiltroBusqueda({ nombre, valor, placeholder = 'Buscar', etiqueta
     <label className={cx('rv-fl rv-fl--buscar', className)}>
       <Search aria-hidden="true" />
       <span className="rv-sr">{etiqueta}</span>
-      <input type="search" name={nombre} defaultValue={valor ?? ''} placeholder={placeholder} maxLength={maxLength} />
+      <input type="search" name={nombre} defaultValue={valor ?? ''} placeholder={placeholder} maxLength={maxLength} className="border-0 bg-transparent" />
     </label>
   );
 }
@@ -207,7 +206,7 @@ export function FiltroFecha({ nombre, etiqueta, valor, min, max, autoEnvio = tru
   return (
     <label className={cx('rv-fl rv-fl--fecha', className)} data-activo={valor ? '' : undefined}>
       <span className="rv-fl__etq">{etiqueta}</span>
-      <input type="date" name={nombre} defaultValue={valor ?? ''} min={min} max={max} data-auto={autoEnvio ? '' : undefined} />
+      <input type="date" name={nombre} defaultValue={valor ?? ''} min={min} max={max} className="border-0 bg-transparent" data-auto={autoEnvio ? '' : undefined} />
     </label>
   );
 }

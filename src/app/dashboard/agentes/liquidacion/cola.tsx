@@ -96,7 +96,7 @@ export async function SeccionCola({ cola, filtros, terminales, buscar, contexto,
         <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{rotuloCola(pagina, filtros)}</p>
       </div>
 
-      <FormaFiltros filtros={filtros} terminales={terms} buscar={buscar} contexto={contexto} conFiltros={conFiltros} />
+      <FormaFiltros filtros={filtros} terminales={terms} buscar={buscar} contexto={contexto} />
 
       {/* Los filtros vigentes como chips quitables (el estado vive en la URL; quitar uno conserva tenant/vista/rol y los demás). */}
       <ChipsFiltro chips={chipsDeCola(pagina, filtros, terms, contexto)} quitarTodosHref={`?${new URLSearchParams(contexto).toString()}`} className="mb-3" />
@@ -155,20 +155,18 @@ export function paramsDeFiltros(f: FiltrosCola): Array<[string, string]> {
   return p;
 }
 
-function FormaFiltros({ filtros, terminales, buscar, contexto, conFiltros }: {
+function FormaFiltros({ filtros, terminales, buscar, contexto }: {
   filtros: FiltrosCola;
   terminales: { opciones: Array<{ id: string; nombre: string }>; recortadas: boolean } | null;
   buscar: BuscarCatalogo;
   contexto: Array<[string, string]>;
-  conFiltros: boolean;
 }) {
   return (
     /* GET y no server action: un filtro tiene que poder compartirse por chat y
        sobrevivir al botón de atrás. `cursor` NO se conserva — cambiar el filtro
        empieza la cola desde arriba, o la página 3 de otro filtro no significa
        nada. Una sola barra (LF): elegir envía, sin botón «Filtrar». */
-    <BarraFiltros accion="?" ocultos={contexto} etiqueta="Filtros de la cola" nActivos={conFiltros ? 1 : 0}
-      limpiarHref={`?${new URLSearchParams(contexto).toString()}`} className="mb-3">
+    <BarraFiltros accion="?" ocultos={contexto} etiqueta="Filtros de la cola" className="mb-3">
       <FiltroOpciones nombre="rev" etiqueta="Revisión" valor={filtros.revision} porDefecto="pendiente"
         opciones={REVISIONES.map((r) => ({ valor: r, rotulo: ROTULO_REVISION[r] }))} />
       <FiltroOpciones nombre="estado" etiqueta="Cuadre" valor={filtros.estado ?? ''}

@@ -177,8 +177,8 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
           opciones={[{ valor: '', rotulo: 'Todas' }, ...TODAS_LAS_CATEGORIAS.map((c) => ({ valor: c, rotulo: etiquetaCategoriaFila(c) }))]} />
         <FiltroOpciones nombre="estado" etiqueta="Estado" valor={f.estado}
           opciones={[{ valor: '', rotulo: 'Todos' }, ...ESTADOS_CANDIDATO.map((e) => ({ valor: e, rotulo: ETIQUETA_ESTADO_CANDIDATO[e] }))]} />
-        <FiltroCampo etiqueta="Unidad"><input name="unidad" defaultValue={f.unidad} maxLength={60} /></FiltroCampo>
-        <FiltroCampo etiqueta="Caseta"><input name="caseta" defaultValue={f.caseta} maxLength={60} /></FiltroCampo>
+        <FiltroCampo etiqueta="Unidad"><input className="border-0 bg-transparent" name="unidad" defaultValue={f.unidad} maxLength={60} /></FiltroCampo>
+        <FiltroCampo etiqueta="Caseta"><input className="border-0 bg-transparent" name="caseta" defaultValue={f.caseta} maxLength={60} /></FiltroCampo>
         <FiltroFecha nombre="desde" etiqueta="Desde" valor={f.desde} />
         <FiltroFecha nombre="hasta" etiqueta="Hasta" valor={f.hasta} />
         <FiltroOpciones nombre="orden" etiqueta="Orden" valor={f.orden} porDefecto="monto_desc"
