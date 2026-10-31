@@ -194,7 +194,7 @@
 ):not(.sr-only, .bg-transparent, .border-0) {
   height: auto; min-height: 32px;
   border: 1px solid var(--input); border-radius: 8px;
-  background-color: var(--campo-bg); color: var(--ink);
+  background-color: var(--campo-bg, var(--surface)); color: var(--ink);
   font-family: inherit; font-size: var(--t-body); line-height: 1.4;
   box-shadow: none;
 }
