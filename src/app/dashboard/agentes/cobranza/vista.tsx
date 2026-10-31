@@ -7,7 +7,7 @@ import { BotonEjecutar, BotonPausa, type AccionSimple, type AccionEjecutar } fro
 import { FormaEstrategia } from './estrategia';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 export interface ExtraAgenteCobranza {
   /** ¿AHORA MISMO está dentro de su ventana de contacto? (calculado en el
@@ -60,12 +60,12 @@ export function VistaAgenteCobranza({
     <MarcoPagina titulo="Seguimiento de comprobantes" apoyo="A quién insistirá el agente por comprobantes y a quién no puede, con el porqué. Cobra comprobantes, no dinero.">
 
       <TiraCifras sello={selloHoy('Cola de seguimiento')}>
-        <Cifra etiqueta="Para contactar" valor={numero(cola.paraContactar.length)}
+        <Cifra info="cobranza.para_contactar" etiqueta="Para contactar" valor={numero(cola.paraContactar.length)}
           nota="alcanzaron un tier sin contacto" />
-        <Cifra etiqueta="No puede contactar" valor={numero(cola.sinTelefono.length)}
+        <Cifra info="cobranza.no_puede_contactar" etiqueta="No puede contactar" valor={numero(cola.sinTelefono.length)}
           nota="sin teléfono capturado" tono={cola.sinTelefono.length > 0 ? 'warn' : undefined} />
-        <Cifra etiqueta="Viajes vigilados" valor={numero(cola.vigilados)} nota="abiertos o en cuadre" />
-        <Cifra etiqueta="Estado" valor={config.activo ? 'Activo' : 'Pausado'} nota={ventana}
+        <Cifra info="cobranza.viajes_vigilados" etiqueta="Viajes vigilados" valor={numero(cola.vigilados)} nota="abiertos o en cuadre" />
+        <Cifra info="cobranza.estado" etiqueta="Estado" valor={config.activo ? 'Activo' : 'Pausado'} nota={ventana}
           tono={config.activo ? undefined : 'warn'} />
       </TiraCifras>
 
@@ -73,7 +73,7 @@ export function VistaAgenteCobranza({
       <section className="card p-4">
         <div className="flex items-start justify-between gap-3 mb-1">
           <div>
-            <h2 className="font-display text-[15px] font-semibold">Los va a contactar</h2>
+            <TituloRecuadro info="cobranza.cola">Los va a contactar</TituloRecuadro>
             <p className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>
               {!config.activo
                 ? 'El agente está pausado: no contacta a nadie, ni con Ejecutar ahora.'
@@ -101,7 +101,7 @@ export function VistaAgenteCobranza({
       <div className="grid lg:grid-cols-2 gap-4">
         {/* A quién NO puede — la mitad honesta de la cola */}
         <section className="card p-4 flex flex-col">
-          <h2 className="font-display text-[15px] font-semibold mb-1">A quién no puede escribirle</h2>
+          <TituloRecuadro info="cobranza.sin_telefono" className="mb-1">A quién no puede escribirle</TituloRecuadro>
           <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
             Alcanzaron un tier, pero el operador no tiene teléfono capturado
           </p>
@@ -124,7 +124,7 @@ export function VistaAgenteCobranza({
 
         {/* Bitácora — lo que ya hizo, con sus fallos a la vista */}
         <section className="card p-4 flex flex-col">
-          <h2 className="font-display text-[15px] font-semibold mb-1">Bitácora de contactos</h2>
+          <TituloRecuadro info="cobranza.bitacora" className="mb-1">Bitácora de contactos</TituloRecuadro>
           <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>Los últimos intentos, salieran o no</p>
           {bitacora === null ? (
             <Leyenda>No se pudo leer la bitácora ahora mismo.</Leyenda>
@@ -161,7 +161,7 @@ export function VistaAgenteCobranza({
       <section className="card p-4">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div>
-            <h2 className="font-display text-[15px] font-semibold">Su estrategia</h2>
+            <TituloRecuadro info="cobranza.estrategia">Su estrategia</TituloRecuadro>
             <p className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>
               Cuándo insiste, en qué horario y con qué palabras — la vista previa es el mensaje literal
             </p>

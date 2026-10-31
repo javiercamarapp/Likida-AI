@@ -3,7 +3,7 @@ import { ArrowLeft, Upload, Trash2, Save } from 'lucide-react';
 // SOLO tipos: el repo importa supabaseAdmin y no debe entrar al bundle de la vista.
 import type { ConfigFormatoFlota, TelefonosFlota } from '@/lib/likida/liquidacion_externa/repo';
 import { ETIQUETA_CAMPO_RENGLON, ETIQUETA_CAMPO_ENCABEZADO } from '@/lib/likida/liquidacion_externa/formato_flota';
-import { MarcoPagina, BotonEnlace } from '@/app/ui-v2/componentes';
+import { MarcoPagina, BotonEnlace, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 type Accion = (fd: FormData) => Promise<void>;
 
@@ -38,7 +38,7 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefono
       {error && <p role="alert" className="card p-3 text-[12px]" style={{ color: 'var(--bad)' }}>{error}</p>}
 
       <section className="card p-4">
-        <h2 className="font-display text-[15px] font-semibold mb-1">1. Tu formato</h2>
+        <TituloRecuadro info="liquidacion_formato.formato" className="mb-1">1. Tu formato</TituloRecuadro>
         <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>
           Tú calculas la liquidación en tu sistema; Likida toma el dato del pago y se lo manda al operador con el mismo formato que hoy
           copias y pegas. Sube el Excel de muestra (el «formatito») y Likida lee sus columnas, sus encabezados y los datos de arriba
@@ -67,7 +67,7 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefono
 
       {!f && acciones.guardarTelefonos && (
         <section className="card p-4">
-          <h2 className="font-display text-[15px] font-semibold mb-1">2. A quién se le avisa (sin formato de Excel)</h2>
+          <TituloRecuadro info="liquidacion_formato.avisos" className="mb-1">2. A quién se le avisa (sin formato de Excel)</TituloRecuadro>
           <form action={acciones.guardarTelefonos} className="space-y-3">
             <div className="grid sm:grid-cols-2 gap-3">
               <Etiqueta t="Copia al jefe de flota (WhatsApp, hasta 3)">
@@ -89,7 +89,7 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefono
       {f && config && (
         <>
           <section className="card p-4">
-            <h2 className="font-display text-[15px] font-semibold mb-1">2. Cómo se imprime</h2>
+            <TituloRecuadro info="liquidacion_formato.impresion" className="mb-1">2. Cómo se imprime</TituloRecuadro>
             <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
               Muestra: {config.nombreMuestra ?? '—'}. Cada liquidación que llega genera el PDF y el Excel con estas columnas; por WhatsApp viaja el que elijas.
             </p>

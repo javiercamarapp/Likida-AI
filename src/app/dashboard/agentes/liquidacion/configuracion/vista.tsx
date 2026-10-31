@@ -3,7 +3,7 @@ import { ArrowLeft, Save } from 'lucide-react';
 // SOLO tipos y constantes: el repo importa supabaseAdmin y no debe entrar al bundle de la vista.
 import type { ConfigCorreo, CanalEntrega, Revisor } from '@/lib/likida/liquidacion_externa/repo_correo';
 import { hoyMx } from '@/lib/formato';
-import { MarcoPagina, BotonEnlace } from '@/app/ui-v2/componentes';
+import { MarcoPagina, BotonEnlace, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 type Accion = (fd: FormData) => Promise<void>;
 export interface AccionesConfiguracion { guardar: Accion }
@@ -225,7 +225,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
 
       <form action={acciones.guardar} className="space-y-4">
         <section className="card p-4 space-y-3">
-          <h2 className="font-display text-[15px] font-semibold">1. Entrega</h2>
+          <TituloRecuadro info="liquidacion_config.entrega">1. Entrega</TituloRecuadro>
           <div className="grid sm:grid-cols-2 gap-3">
             <Etiqueta t="Canal">
               <select name="canal" defaultValue={config.canal} className={CSS_INPUT} style={ESTILO_INPUT} disabled={off}>
@@ -256,7 +256,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
         </section>
 
         <section className="card p-4 space-y-3">
-          <h2 className="font-display text-[15px] font-semibold">2. Quién lo recibe</h2>
+          <TituloRecuadro info="liquidacion_config.destinatarios">2. Quién lo recibe</TituloRecuadro>
           <div className="grid sm:grid-cols-2 gap-3">
             <Etiqueta t={`Correos de RH (hasta ${MAX_RH}, uno por renglón)`}>
               <textarea name="rhCorreos" rows={3} defaultValue={config.rhCorreos.join('\n')} placeholder="(vacío: RH no recibe copia)" className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
@@ -283,7 +283,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
         </section>
 
         <section className="card p-4 space-y-3">
-          <h2 className="font-display text-[15px] font-semibold">Fecha de corte del arranque</h2>
+          <TituloRecuadro info="liquidacion_config.fecha_corte">Fecha de corte del arranque</TituloRecuadro>
           <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
             Los desgloses cuyo periodo termina ANTES de esta fecha se guardan, pero no se envían a nadie (quedan «omitidos»). Pon el día en que arranca
             el envío: así subir el histórico no manda nóminas viejas a los operadores, coordinadores ni RH. Vacío = se envía todo lo que llegue.
@@ -296,7 +296,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
         </section>
 
         <section className="card p-4 space-y-3">
-          <h2 className="font-display text-[15px] font-semibold">Primer mes: revisión por departamento</h2>
+          <TituloRecuadro info="liquidacion_config.primer_mes">Primer mes: revisión por departamento</TituloRecuadro>
           <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
             Durante el primer mes, cada desglose —enviado o retenido— le llega también por correo al revisor de cada departamento, con el mismo Excel.
             Al terminar la fecha, el modo se apaga solo.
@@ -317,7 +317,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
         </section>
 
         <section className="card p-4 space-y-3">
-          <h2 className="font-display text-[15px] font-semibold">3. Cómo se ve el desglose</h2>
+          <TituloRecuadro info="liquidacion_config.formato">3. Cómo se ve el desglose</TituloRecuadro>
           <div className="grid sm:grid-cols-2 gap-3">
             <Etiqueta t="Renglón de viaje">
               <span className="flex items-center gap-2 text-[12px]">
@@ -338,7 +338,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
         </section>
 
         <section className="card p-4 space-y-3">
-          <h2 className="font-display text-[15px] font-semibold">4. Qué retiene el envío</h2>
+          <TituloRecuadro info="liquidacion_config.retencion">4. Qué retiene el envío</TituloRecuadro>
           <div className="grid sm:grid-cols-2 gap-3">
             <Etiqueta t="Conceptos que retienen el envío (uno por renglón)">
               <textarea name="conceptosProhibidos" rows={3} defaultValue={config.conceptosProhibidos.join('\n')} placeholder="(ninguno)" className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />

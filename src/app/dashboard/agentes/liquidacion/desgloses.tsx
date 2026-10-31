@@ -8,7 +8,7 @@ import { BotonConfirmar } from '@/app/admin/ui/confirmar';
 import { calcularInsightsA1, entradaDesdeFichas, type InsightA1 } from '@/lib/likida/liquidacion_externa/insights_a1';
 import type { EntregaCorreo, EstadoEntregaCorreo, Excepcion, TipoExcepcion } from '@/lib/likida/liquidacion_externa/repo_correo';
 import type { DetalleDesglose, LecturaDetalle, RolDetalle } from './detalle_desglose';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 import { EnlacePagina, NavPaginas } from '../../paginador';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -264,10 +264,12 @@ export async function SeccionDesgloses(p: DesglosesProps) {
   return (
     <section className="card p-4" id="desgloses">
       <div className="flex items-baseline justify-between gap-3 flex-wrap mb-1">
-        <h2 className="font-display text-[15px] font-semibold flex items-center gap-1.5">
-          <Mail width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-          Desgloses de pago
-        </h2>
+        <TituloRecuadro info="desgloses.lista">
+          <span className="inline-flex items-center gap-1.5">
+            <Mail width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+            Desgloses de pago
+          </span>
+        </TituloRecuadro>
         {p.filtro && <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Filtro: {ROTULO_FILTRO[p.filtro]}</p>}
       </div>
       <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>
@@ -620,7 +622,7 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
   const marco = (cuerpo: React.ReactNode, titulo = 'Detalle del desglose') => (
     <section className="card p-4" id="detalle-desglose">
       <div className="flex items-baseline justify-between gap-3 flex-wrap mb-2">
-        <h2 className="font-display text-[15px] font-semibold">{titulo}</h2>
+        <TituloRecuadro info="desgloses.detalle">{titulo}</TituloRecuadro>
         <Link href={cerrar} className="text-[12px] font-medium hover:opacity-70 transition-opacity" style={{ color: 'var(--muted)' }}>Cerrar</Link>
       </div>
       {p.mensaje && <Mensaje m={p.mensaje} />}
@@ -755,10 +757,12 @@ export async function SeccionExcepciones(p: SeccionExcepcionesProps) {
   }
   return (
     <section className="card p-4" id="excepciones">
-      <h2 className="font-display text-[15px] font-semibold flex items-center gap-1.5 mb-1">
-        <AlertTriangle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-        Excepciones
-      </h2>
+      <TituloRecuadro info="desgloses.excepciones" className="mb-1">
+        <span className="inline-flex items-center gap-1.5">
+          <AlertTriangle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+          Excepciones
+        </span>
+      </TituloRecuadro>
       <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>Lo que necesita a una persona antes de que el desglose llegue completo.</p>
       {lista.length === 0 ? (
         <EstadoVacio icono={<Mail width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>Sin excepciones abiertas.</EstadoVacio>

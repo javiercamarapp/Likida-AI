@@ -5,7 +5,7 @@ import { mxn, numero, fechaCorta } from '@/lib/formato';
 import { EstadoVacio } from '../../estados';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 
 /** El tope de `listarFacturasProveedor` que usa la página — declarado aquí
@@ -77,13 +77,13 @@ export function VistaAgenteProveedores({
     <MarcoPagina titulo="Facturas de proveedores" apoyo="La bandeja donde el XML del taller espera tu decisión, y el export que evita capturarlo a mano en el ERP.">
 
       <TiraCifras sello={selloHoy('Facturas de proveedores')}>
-        <Cifra etiqueta="Esperan tu decisión" valor={numero(pendientes.length)}
+        <Cifra info="proveedores.esperan_decision" etiqueta="Esperan tu decisión" valor={numero(pendientes.length)}
           tono={pendientes.length > 0 ? 'warn' : undefined} />
-        <Cifra etiqueta="Aprobadas" valor={numero(aprobadas.length)}
+        <Cifra info="proveedores.aprobadas" etiqueta="Aprobadas" valor={numero(aprobadas.length)}
           nota={aprobadas.length === 0 ? undefined
             : `${numero(sinExportar)} sin exportar · ${numero(exportadas)} ya exportadas`} />
-        <Cifra etiqueta="Rechazadas" valor={numero(rechazadas.length)} />
-        <Cifra etiqueta="Con receptor ajeno" valor={numero(receptorAjeno)}
+        <Cifra info="proveedores.rechazadas" etiqueta="Rechazadas" valor={numero(rechazadas.length)} />
+        <Cifra info="proveedores.receptor_ajeno" etiqueta="Con receptor ajeno" valor={numero(receptorAjeno)}
           nota="el CFDI no es a tu RFC" tono={receptorAjeno > 0 ? 'bad' : undefined} />
       </TiraCifras>
 
@@ -98,7 +98,7 @@ export function VistaAgenteProveedores({
       <section className="card p-4">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="min-w-0">
-            <h2 className="font-display text-[15px] font-semibold mb-1">Subir factura de proveedor</h2>
+            <TituloRecuadro info="proveedores.subir" className="mb-1">Subir factura de proveedor</TituloRecuadro>
             <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
               El XML es el dato duro del CFDI — súbelo siempre que lo tengas. Si solo hay
               papel, la foto también entra: la IA lee las cifras y la bandeja la marca para
@@ -138,7 +138,7 @@ export function VistaAgenteProveedores({
       {recepcion}
 
       <section className="card p-4">
-        <h2 className="font-display text-[15px] font-semibold mb-1">La bandeja</h2>
+        <TituloRecuadro info="proveedores.bandeja" className="mb-1">La bandeja</TituloRecuadro>
         <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
           Pendientes arriba; lo decidido queda con su quién y su cuándo
         </p>
@@ -264,7 +264,7 @@ export function SeccionBuzon({ buzon, dominioConfigurado, puedeAdministrarBuzon,
 }) {
   return (
     <section className="card p-4">
-      <h2 className="font-display text-[15px] font-semibold mb-1">Buzón de facturas por correo</h2>
+      <TituloRecuadro info="proveedores.buzon" className="mb-1">Buzón de facturas por correo</TituloRecuadro>
       <p className="text-[11px] mb-3 max-w-xl" style={{ color: 'var(--faint)' }}>
         Dale esta dirección a tus proveedores o reenvía ahí sus facturas: los XML adjuntos
         entran solos a esta bandeja, sin subir nada a mano.

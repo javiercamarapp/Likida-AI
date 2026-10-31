@@ -7,6 +7,7 @@ import { EstadoVacio } from '../../estados';
 import { FormaPorGasto } from './forma-por-gasto';
 import type { AccionSimple } from './controles';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { TituloRecuadro } from '@/app/ui-v2/componentes';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 
 const MAX_FILAS = 40;
@@ -34,7 +35,7 @@ export function SeccionPorGasto({ config, plan, tablero, firma, instrucciones, g
   return (
     <section className="card p-4 space-y-4" aria-labelledby="cobranza-por-gasto">
       <div>
-        <h2 id="cobranza-por-gasto" className="font-display text-[15px] font-semibold">Cobranza por gasto</h2>
+        <TituloRecuadro id="cobranza-por-gasto" info="cobranza.gasto">Cobranza por gasto</TituloRecuadro>
         <p className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>
           Qué comprobante falta de qué gasto, con un solo mensaje por chofer y su tope diario.{' '}
           {config.porGasto
@@ -44,13 +45,13 @@ export function SeccionPorGasto({ config, plan, tablero, firma, instrucciones, g
       </div>
 
       <TiraCifras sello={selloHoy('Gastos de los viajes')}>
-        <Cifra etiqueta="Gastos sin comprobante" valor={numero(plan.pendientes.length)} nota="en viajes abiertos o en cuadre" />
-        <Cifra etiqueta="Les toca hoy" valor={numero(hoy)} nota={`${numero(plan.paraContactar.length)} choferes, un mensaje cada uno`} />
-        <Cifra etiqueta="Sin teléfono" valor={numero(plan.sinTelefono.reduce((n, g) => n + g.items.length, 0))}
+        <Cifra info="cobranza.gasto_sin_comprobante" etiqueta="Gastos sin comprobante" valor={numero(plan.pendientes.length)} nota="en viajes abiertos o en cuadre" />
+        <Cifra info="cobranza.gasto_les_toca_hoy" etiqueta="Les toca hoy" valor={numero(hoy)} nota={`${numero(plan.paraContactar.length)} choferes, un mensaje cada uno`} />
+        <Cifra info="cobranza.gasto_sin_telefono" etiqueta="Sin teléfono" valor={numero(plan.sinTelefono.reduce((n, g) => n + g.items.length, 0))}
           nota="gastos de choferes sin teléfono" tono={plan.sinTelefono.length > 0 ? 'warn' : undefined} />
-        <Cifra etiqueta="Avisos (30 días)" valor={ef ? numero(ef.avisos) : null} estado={ef ? 'ok' : 'error'} reintentar
+        <Cifra info="cobranza.gasto_avisos" etiqueta="Avisos (30 días)" valor={ef ? numero(ef.avisos) : null} estado={ef ? 'ok' : 'error'} reintentar
           nota={ef ? `${numero(ef.abiertos)} aún abiertos` : undefined} />
-        <Cifra etiqueta="Efectividad"
+        <Cifra info="cobranza.gasto_efectividad" etiqueta="Efectividad"
           valor={ef === null || ef.tasa === null ? null : `${numero(Math.round(ef.tasa * 100))} %`}
           estado={ef === null ? 'error' : 'ok'} reintentar
           mensaje={ef !== null && ef.tasa === null ? 'Aún hay pocos datos' : undefined}
@@ -61,7 +62,7 @@ export function SeccionPorGasto({ config, plan, tablero, firma, instrucciones, g
 
       {/* ── Qué comprobante falta de qué gasto ── */}
       <div>
-        <h3 className="text-[12px] font-semibold mb-2">Qué falta, gasto por gasto</h3>
+        <TituloRecuadro nivel="h3" info="cobranza.gasto_faltantes" className="mb-2">Qué falta, gasto por gasto</TituloRecuadro>
         {plan.pendientes.length === 0 ? (
           <EstadoVacio icono={<FileWarning width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
             {config.porGasto
@@ -111,9 +112,11 @@ export function SeccionPorGasto({ config, plan, tablero, firma, instrucciones, g
       <div className="grid lg:grid-cols-2 gap-4">
         {/* ── Efectividad ── */}
         <div>
-          <h3 className="text-[12px] font-semibold mb-2 flex items-center gap-1.5">
-            <Gauge width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} /> Efectividad por tier y por motivo
-          </h3>
+          <TituloRecuadro nivel="h3" info="cobranza.gasto_efectividad_desglose" className="mb-2">
+            <span className="inline-flex items-center gap-1.5">
+              <Gauge width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} /> Efectividad por tier y por motivo
+            </span>
+          </TituloRecuadro>
           {ef === null ? (
             <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudo leer la efectividad ahora mismo.</p>
           ) : ef.avisos === 0 ? (
@@ -135,7 +138,7 @@ export function SeccionPorGasto({ config, plan, tablero, firma, instrucciones, g
 
         {/* ── Bitácora por gasto ── */}
         <div>
-          <h3 className="text-[12px] font-semibold mb-2">Últimos avisos por gasto</h3>
+          <TituloRecuadro nivel="h3" info="cobranza.gasto_bitacora" className="mb-2">Últimos avisos por gasto</TituloRecuadro>
           {tablero === null ? (
             <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudo leer la bitácora ahora mismo.</p>
           ) : tablero.bitacora.length === 0 ? (
@@ -164,7 +167,7 @@ export function SeccionPorGasto({ config, plan, tablero, firma, instrucciones, g
       </div>
 
       <div>
-        <h3 className="text-[12px] font-semibold mb-2">Configuración de la cobranza por gasto</h3>
+        <TituloRecuadro nivel="h3" info="cobranza.gasto_config" className="mb-2">Configuración de la cobranza por gasto</TituloRecuadro>
         <FormaPorGasto config={config} ejemplo={ejemplo} firma={firma} instrucciones={instrucciones} guardar={guardar} />
       </div>
     </section>
