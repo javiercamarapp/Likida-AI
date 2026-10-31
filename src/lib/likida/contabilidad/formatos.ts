@@ -14,13 +14,13 @@
 // lo que un asiento necesita para existir.
 // ═══════════════════════════════════════════════════════════════════════════
 import type { Poliza } from './poliza';
+import { celdaCsvSegura } from '@/lib/csv_seguro';
 
-/** Escapa un campo para CSV/TXT delimitado. */
+/** Escapa un campo para CSV/TXT delimitado y neutraliza fórmulas: `concepto` y `referencia` salen de CFDI ajenos y un texto
+ *  que empiece con = + - @ (o tab/CR) lo evaluaría Excel/Calc como fórmula al abrir el archivo (`csv_seguro.ts`). Los importes
+ *  ya formateados como texto (`pesos`: «-12.50») son números y no se tocan. */
 function celda(v: unknown, sep: string): string {
-  const s = v == null ? '' : String(v);
-  return s.includes(sep) || s.includes('"') || s.includes('\n')
-    ? `"${s.replace(/"/g, '""')}"`
-    : s;
+  return celdaCsvSegura(v, { separador: sep, numerosEnTexto: true });
 }
 
 const pesos = (n: number) => n.toFixed(2);

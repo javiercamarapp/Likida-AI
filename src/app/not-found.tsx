@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import { Logo } from './logo';
-import { Kicker, Pildora, TituloEditorial, serifEditorial } from './editorial';
+import { MarcoPublico } from './ui-v2/componentes/marco-publico';
+import { BotonEnlace } from './ui-v2/componentes/boton';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL 404 ES UNA PANTALLA DE MARCA, NO UNA PANTALLA DE PANEL.
@@ -52,7 +52,7 @@ function FiguraRutaSinDestino() {
     // los micro-rótulos crecían a 15px — más grandes que el pie de página y ya
     // no se leían como micro-rótulos.
     <figure
-      className="relative w-full max-w-xl lg:max-w-none overflow-hidden"
+      className="relative mt-8 w-full overflow-hidden"
       style={{
         backgroundColor: 'color-mix(in srgb, var(--ink) 4%, var(--bg))',
         border: '1px solid var(--line)',
@@ -129,58 +129,21 @@ function FiguraRutaSinDestino() {
 
 export default function NoEncontrado() {
   return (
-    <main
-      className={`${serifEditorial.variable} tema-neutro min-h-dvh flex flex-col`}
-      style={{ background: 'var(--bg)', color: 'var(--ink)' }}
+    <MarcoPublico
+      rotulo="Error 404"
+      titulo="Esta ruta no está en el mapa."
+      apoyo="El enlace pudo cambiar de lugar o venir mal escrito. Vuelve al inicio: te deja en tu panel si ya iniciaste sesión, y en el acceso si no."
+      ancho="lectura"
+      centrado
+      acciones={
+        <>
+          {/* `/` NO es una landing: es la puerta que reparte por sesión y por rol (`page.tsx` → `puertaDeEntrada`). */}
+          <BotonEnlace href="/" variante="primary">Volver al inicio</BotonEnlace>
+          <BotonEnlace href="/dashboard/soporte">Ir a soporte</BotonEnlace>
+        </>
+      }
     >
-      {/* Cabecera de hoja: el logo y una hairline. `self-start` no es
-          decorativo — como hijo de un flex, el `align-items: stretch` de
-          default estiraba el logo a todo el ancho y lo deformaba. */}
-      <header
-        className="flex items-center justify-between px-6 md:px-12 py-5"
-        style={{ borderBottom: '1px solid var(--line)' }}
-      >
-        <Logo alto="h-5" className="self-start" />
-      </header>
-
-      <div className="flex-1 grid items-center gap-12 lg:gap-20 px-6 md:px-12 py-14 md:py-20 lg:grid-cols-[1.05fr_0.95fr]">
-        <div className="max-w-2xl">
-          <Kicker>Error 404</Kicker>
-
-          <TituloEditorial>Esta ruta no está en el mapa.</TituloEditorial>
-
-          <p
-            className="mt-6 max-w-xl"
-            style={{ color: 'var(--muted)', fontSize: 'clamp(16px, 1.3vw, 18.5px)', lineHeight: 1.65 }}
-          >
-            El enlace pudo cambiar de lugar o venir mal escrito. Vuelve al inicio: te deja
-            en tu panel si ya iniciaste sesión, y en el acceso si no.
-          </p>
-
-          <div className="mt-9 flex flex-wrap items-center gap-3">
-            {/* `/` NO es una landing: es la puerta que reparte por sesión y por
-                rol (`page.tsx` → `puertaDeEntrada`). Por eso el botón dice
-                "inicio" y no "panel": a quien no ha entrado, mandarlo a
-                /dashboard le pinta un login con un rebote de más. */}
-            <Pildora href="/">Volver al inicio</Pildora>
-            <Pildora href="/dashboard/soporte" variante="borde">
-              Ir a soporte
-            </Pildora>
-          </div>
-        </div>
-
-        <FiguraRutaSinDestino />
-      </div>
-
-      <footer
-        className="flex flex-wrap items-center justify-between gap-3 px-6 md:px-12 py-5 text-xs"
-        style={{ borderTop: '1px solid var(--line)', color: 'var(--faint)' }}
-      >
-        <p>Likida · Liquidación de viajes por WhatsApp</p>
-        <p className="etiqueta-mono uppercase text-[10px]" style={{ letterSpacing: '0.14em' }}>
-          app.likida.ai
-        </p>
-      </footer>
-    </main>
+      <FiguraRutaSinDestino />
+    </MarcoPublico>
   );
 }

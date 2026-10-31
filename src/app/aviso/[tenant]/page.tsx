@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { getDatosResponsable } from '@/lib/likida/repo';
 import { avisoIntegral } from '@/lib/likida/privacidad';
 import { fechaMx } from '@/lib/formato';
+import { MarcoPublico } from '../../ui-v2/componentes/marco-publico';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL AVISO INTEGRAL DE UNA FLOTA. Página PÚBLICA, y tiene que serlo.
@@ -50,7 +51,7 @@ function ConNegritas({ texto }: { texto: string }) {
     <>
       {texto.split(/(\*\*[^*]+\*\*)/g).map((t, i) =>
         t.startsWith('**') && t.endsWith('**')
-          ? <strong key={i} className="font-semibold" style={{ color: 'var(--ink)' }}>{t.slice(2, -2)}</strong>
+          ? <strong key={i}>{t.slice(2, -2)}</strong>
           : <span key={i}>{t}</span>,
       )}
     </>
@@ -79,77 +80,37 @@ export default async function AvisoIntegral({ params }: { params: Promise<{ tena
   const pendientes = secciones.filter((s) => s.pendiente);
 
   return (
-    // LOS COLORES SALEN DEL SISTEMA (`--ink`, `--muted`, `--line`), no de una
-    // paleta fija. La primera versión usaba `text-neutral-900` y en un teléfono
-    // en modo oscuro los títulos quedaban casi invisibles sobre el fondo: negro
-    // sobre negro. `globals.css` ya invierte estas variables con
-    // `prefers-color-scheme`, y este documento es justo el que se abre de noche,
-    // desde la cabina, con el celular en oscuro.
-    <main
-      className="mx-auto max-w-2xl px-5 py-10 text-[15px] leading-relaxed"
-      style={{ color: 'var(--muted)' }}
+    <MarcoPublico
+      rotulo="Aviso de privacidad integral"
+      titulo={nombreResponsable}
+      apoyo={`Vigente desde el ${fechaMx(VIGENTE_DESDE)} · Ley Federal de Protección de Datos Personales en Posesión de los Particulares`}
+      pie={
+        <p>
+          La herramienta con la que se procesan estos datos la opera <strong>Likida</strong> como persona encargada, por
+          cuenta y bajo instrucciones de {nombreResponsable}. Este aviso está alojado aquí por encargo de la empresa; la
+          responsable de tus datos sigue siendo ella.
+        </p>
+      }
     >
-      <header className="pb-6" style={{ borderBottom: '1px solid var(--line)' }}>
-        <p className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
-          Aviso de privacidad integral
-        </p>
-        {/* `break-words`: una razón social larga no puede empujar la página a lo
-            ancho. En un teléfono eso deja scroll horizontal en TODO el documento. */}
-        <h1 className="mt-2 text-2xl font-semibold break-words" style={{ color: 'var(--ink)' }}>
-          {nombreResponsable}
-        </h1>
-        <p className="mt-3 text-sm" style={{ color: 'var(--muted)' }}>
-          {/* AUDITORÍA 24 (LEG-12, BAJO, reincidente): esto imprimía
-              `fechaMx(new Date())` — "Vigente al" cambiaba cada día que
-              alguien abriera la página, sin decir nunca cuándo cambió el
-              TEXTO de `avisoIntegral()`. `VIGENTE_DESDE` es la fecha del
-              último cambio sustantivo de ese texto (LEG-3/LEG-8, auditoría
-              24: cámara/telemetría y contacto de emergencia), no la fecha
-              del render. */}
-          Vigente desde el {fechaMx(VIGENTE_DESDE)} · Ley Federal de Protección de
-          Datos Personales en Posesión de los Particulares
-        </p>
-      </header>
-
       {pendientes.length > 0 && (
-        // Visible para el titular, no escondido en un log. Si la flota no ha
-        // designado a su responsable de datos, quien lee el aviso tiene derecho
-        // a saber que ese hueco existe: es la diferencia entre un aviso
-        // incompleto y uno que finge estar completo.
-        <p
-          className="mt-6 rounded-md px-4 py-3 text-sm"
-          style={{ border: '1px solid var(--color-warn)', color: 'var(--ink)' }}
-        >
+        <p className="rv-pub__aviso-falta">
           Este aviso tiene {pendientes.length === 1 ? 'un dato' : `${pendientes.length} datos`} que
           la empresa aún no ha capturado. Aparece señalado más abajo en vez de quedar en blanco.
         </p>
       )}
 
-      {secciones.map((s) => (
-        <section key={s.titulo} className="mt-8">
-          <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>{s.titulo}</h2>
-          <p className="mt-0.5 text-xs" style={{ color: 'var(--muted)' }}>{s.fundamento}</p>
-          {s.pendiente && (
-            <p className="mt-2 text-xs font-medium" style={{ color: 'var(--color-warn)' }}>
-              Pendiente de capturar
-            </p>
-          )}
-          {s.parrafos.map((p, i) => (
-            <p key={i} className="mt-3">
-              <ConNegritas texto={p} />
-            </p>
-          ))}
-        </section>
-      ))}
-
-      <footer className="mt-12 pt-6 text-sm" style={{ borderTop: '1px solid var(--line)', color: 'var(--muted)' }}>
-        <p>
-          La herramienta con la que se procesan estos datos la opera{' '}
-          <strong style={{ color: 'var(--ink)' }}>Likida</strong> como persona encargada, por cuenta
-          y bajo instrucciones de {nombreResponsable}. Este aviso está alojado aquí por encargo de
-          la empresa; la responsable de tus datos sigue siendo ella.
-        </p>
-      </footer>
-    </main>
+      <div className="rv-pub__prosa">
+        {secciones.map((s) => (
+          <section key={s.titulo} className="rv-pub__sec">
+            <h2>{s.titulo}</h2>
+            <p className="rv-pub__nota">{s.fundamento}</p>
+            {s.pendiente && <p className="rv-pub__nota"><strong>Pendiente de capturar</strong></p>}
+            {s.parrafos.map((p, i) => (
+              <p key={i}><ConNegritas texto={p} /></p>
+            ))}
+          </section>
+        ))}
+      </div>
+    </MarcoPublico>
   );
 }

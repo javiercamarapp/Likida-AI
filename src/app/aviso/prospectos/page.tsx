@@ -61,9 +61,9 @@ export default function AvisoProspectos() {
       pie={
         <p>
           ¿Ya eres cliente de Likida? Tu aviso es la política de privacidad en{' '}
-          <strong style={{ color: 'var(--ink)' }}>/privacidad</strong>. ¿Eres operador de una
+          <strong>/privacidad</strong>. ¿Eres operador de una
           flota? El tuyo lo publica tu empresa: escribe{' '}
-          <strong style={{ color: 'var(--ink)' }}>PRIVACIDAD</strong> por el chat de WhatsApp.
+          <strong>PRIVACIDAD</strong> por el chat de WhatsApp.
         </p>
       }
     />

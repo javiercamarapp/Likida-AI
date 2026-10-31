@@ -23,6 +23,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { createHash } from 'node:crypto';
+import { neutralizarFormula } from '@/lib/csv_seguro';
 import type { ContenidoDoc } from './contenido';
 import { filasDeDatos, llaveColumna, tablaDeMapeos, tablasDe, type Perfil, type TablaLeida } from './perfiles';
 
@@ -229,12 +230,12 @@ export const planearDivision = (c: ContenidoDoc, perfil: Perfil | null, opciones
 
 /**
  * Una celda de CSV. Se aplana el salto de línea y el tabulador (el lector detecta CSV por líneas: una celda con salto
- * de línea lo rompería) y se neutraliza el inicio de fórmula (`=`, `+`, `@`, `-letra`): el archivo derivado se puede
- * descargar y abrir en Excel, y una celda de un tercero no debe ejecutarse al abrirlo.
+ * de línea lo rompería) y se neutraliza el inicio de fórmula (`=`, `+`, `-`, `@`): el archivo derivado se puede descargar y
+ * abrir en Excel, y una celda de un tercero no debe ejecutarse al abrirlo. Antes `-` solo se neutralizaba seguido de letra o
+ * «(», y `-2+3+cmd|…` pasaba; ahora solo se respeta un número plano («-12.5»), vía `csv_seguro`.
  */
 function celdaCsv(valor: string): string {
-  let v = String(valor ?? '').replace(/[\r\n\t]+/g, ' ');
-  if (/^[=+@]/.test(v) || /^-[A-Za-z(]/.test(v)) v = `'${v}`;
+  const v = neutralizarFormula(String(valor ?? '').replace(/[\r\n\t]+/g, ' '), { numerosEnTexto: true });
   return /[",;|]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 }
 

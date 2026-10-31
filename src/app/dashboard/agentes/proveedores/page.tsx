@@ -75,7 +75,7 @@ async function exigirControlBuzon(tenantId: string): Promise<{ error: string } |
 export default async function PaginaAgenteProveedores({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
+  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; orden?: string; dir?: string; pag?: string }>;
 }) {
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/proveedores', sp);
@@ -352,6 +352,7 @@ export default async function PaginaAgenteProveedores({
       facturas={facturas}
       rfcFlota={rfcFlota}
       sufijo={sufijo}
+      params={sp}
       buzon={buzon}
       dominioConfigurado={dominioConfigurado}
       puedeAdministrarBuzon={puedeAdministrarBuzon}
