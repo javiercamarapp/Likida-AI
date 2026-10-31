@@ -141,9 +141,9 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 [data-ui="v2"] .rv-kpi__cab { display: flex; align-items: center; gap: 6px; min-width: 0; }
 [data-ui="v2"] .rv-kpi__icono { display: inline-flex; flex: none; color: var(--cat-ink, var(--muted)); }
 [data-ui="v2"] .rv-kpi__icono svg { width: 16px; height: 16px; }
-[data-ui="v2"] .rv-kpi__etq { font: 500 12px/1.3 var(--font-sans-ui, inherit); text-transform: none; letter-spacing: 0; color: var(--muted); }
+[data-ui="v2"] .rv-kpi__etq { font: 500 var(--t-small)/1.3 var(--font-sans-ui, inherit); text-transform: none; letter-spacing: 0; color: var(--muted); }
 [data-ui="v2"] .rv-kpi__fila { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
-[data-ui="v2"] .rv-kpi__valor { font: 700 26px/1.1 var(--font-display, inherit); letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
+[data-ui="v2"] .rv-kpi__valor { font: 700 var(--t-kpi)/1.1 var(--font-display, inherit); letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
 [data-ui="v2"] .rv-kpi__valor[data-vacio] { font-size: 18px; font-weight: 600; color: var(--muted); }
 [data-ui="v2"] .rv-kpi__spark { display: inline-flex; flex: none; }
 [data-ui="v2"] .rv-kpi__segs { display: flex; gap: 2px; height: 6px; }
