@@ -122,7 +122,8 @@ describe('cambiarRolUsuario', () => {
   });
 
   it('rechaza roles fuera del catálogo (superadmin, operador, basura) ANTES de leer nada', async () => {
-    for (const rol of ['superadmin', 'operador', 'vendedor', 'x']) {
+    // `nomina` (0949) tampoco se asigna desde aquí: solo nace por invitación del dueño a una flota con perfil.
+    for (const rol of ['superadmin', 'operador', 'vendedor', 'nomina', 'x']) {
       await expect(cambiarRolUsuario(TENANT, U, rol, ACTOR)).rejects.toBeInstanceOf(DatoInvalido);
     }
     expect(llamadas).toHaveLength(0);

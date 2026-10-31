@@ -640,7 +640,10 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 326;
 // aparta con backoff por compare-and-set, ambas por `acotada` y con `tenant_id`) para que un aviso bloqueado por configuracion no acapare la cola global. Cubierta por avisos_repo.test.ts.
 // H759-3: +2 (2,450 -> 2,452, medido). `liquidacion_externa/repo_correo.ts` `omitirPendientesAnterioresAlCorte` (lee con `tenant_id` las pendientes con periodo_hasta < corte y las pasa a
 // `omitida` por compare-and-set de estado; ambas por `acotada`) para que el historico subido con el envio apagado y sin corte no salga al fijar/activar el corte. Cubierta por repo_correo_0940.test.ts.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_452;
+// ROL NOMINA (0949): 2,452 -> 2,455 (+3, medido con el guardian). `liquidacion_externa/repo.ts` `contarParaNomina`: tres `.from(` (desglose, entrega por correo y excepcion) que
+// solo cuentan (`count` con `head: true` sobre una columna identificadora, siempre con `tenant_id`, por `acotada`) para la vista de conteos del rol `nomina`, que NO puede pasar por
+// `listarDesgloses` (esa lectura trae `total_origen`) ni por `fichasDesgloses`. Funcionalidad nueva, no codigo migrado. Cubierta por conteos-nomina.test.tsx.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_455;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

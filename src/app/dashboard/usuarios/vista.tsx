@@ -45,13 +45,15 @@ export interface AccionesEquipo {
  * una fila vieja con esos roles se describe en vez de quedar como «rol sin
  * descripción».
  */
-export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, acciones }: {
+export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvitar, acciones }: {
   usuarios: UsuarioRow[] | null;
   /** El de la sesión, para marcar "(tú)" en la lista y no ofrecerle baja. */
   userId: string;
   /** `puedeAdministrar(rol)`: invitar, cambiar rol, dar de baja, reenviar. */
   puedeInvitar: boolean;
   roles: ReadonlyArray<OpcionRol>;
+  /** Los roles que ofrece SOLO el formulario de invitar (con `nomina` si aplica). Sin él, los mismos de `roles`. */
+  rolesInvitar?: ReadonlyArray<OpcionRol>;
   acciones: AccionesEquipo;
 }) {
   return (
@@ -112,7 +114,7 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, acciones 
                       + Invitar a alguien de tu equipo
                     </summary>
                     <div className="pt-3">
-                      <FormaInvitar accion={acciones.invitar} roles={roles} />
+                      <FormaInvitar accion={acciones.invitar} roles={rolesInvitar ?? roles} />
                     </div>
                   </details>
                 </div>
