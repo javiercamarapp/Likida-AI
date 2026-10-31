@@ -16,10 +16,14 @@ import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Casilla, Radio, Campo, Fieldset, CampoArchivo } from '${ruta('componentes/campos')}';
 import { Switch } from '${ruta('componentes/switch')}';
+import { SegmentedControl } from '${ruta('componentes/segmented')}';
 function App() {
   const [marcada, setMarcada] = useState(false);
+  const [periodo, setPeriodo] = useState('mes');
   return (
     <div data-ui="v2" style={{ padding: 16 }}>
+      <SegmentedControl etiqueta="Periodo" valor={periodo} onChange={setPeriodo} opciones={[{ valor: 'sem', etiqueta: 'Semana', conteo: 4 }, { valor: 'mes', etiqueta: 'Mes' }, { valor: 'anio', etiqueta: 'Año', deshabilitada: true }, { valor: 'todo', etiqueta: 'Todo' }]} />
+      <output id="periodo">{periodo}</output>
       <form id="f">
         <Casilla id="c1" name="c1" etiqueta="Recibir avisos" ayuda="Llegan por correo" checked={marcada} onChange={(e) => setMarcada(e.target.checked)} />
         <Casilla id="c2" name="c2" etiqueta="Todas" indeterminada />
@@ -159,6 +163,50 @@ describe.skipIf(SIN_NAVEGADOR)('Campos · comportamiento en Chromium', () => {
   it('móvil: la fila de la casilla mide 44 de alto (zona táctil)', async () => {
     const p = await abrir(390);
     expect(await p.evaluate(() => Math.round(document.querySelector('.rv-marca__fila')!.getBoundingClientRect().height))).toBeGreaterThanOrEqual(44);
+    await p.close();
+  });
+});
+
+describe.skipIf(SIN_NAVEGADOR)('SegmentedControl · comportamiento en Chromium', () => {
+  it('radiogroup nombrado; solo la opción activa entra con Tab; aria-checked refleja el valor', async () => {
+    const p = await abrir();
+    const r = await p.evaluate(() => {
+      const g = document.querySelector('[role="radiogroup"]')!;
+      return { nombre: g.getAttribute('aria-label'), checked: [...g.querySelectorAll('[role="radio"]')].map((b) => b.getAttribute('aria-checked')), tabs: [...g.querySelectorAll('[role="radio"]')].map((b) => (b as HTMLElement).tabIndex) };
+    });
+    expect(r.nombre).toBe('Periodo');
+    expect(r.checked).toEqual(['false', 'true', 'false', 'false']);
+    expect(r.tabs).toEqual([-1, 0, -1, -1]);
+    await p.close();
+  });
+  it('flechas mueven selección y foco, saltan lo deshabilitado y dan la vuelta; Inicio/Fin', async () => {
+    const p = await abrir();
+    await p.focus('[aria-checked="true"]');
+    await p.keyboard.press('ArrowRight'); // Mes -> (Año deshabilitado) -> Todo
+    await p.waitForFunction(() => document.getElementById('periodo')!.textContent === 'todo');
+    await p.waitForFunction(() => document.activeElement?.textContent === 'Todo');
+    await p.keyboard.press('ArrowRight'); // vuelta -> Semana
+    await p.waitForFunction(() => document.getElementById('periodo')!.textContent === 'sem');
+    await p.waitForFunction(() => document.activeElement?.textContent?.includes('Semana'));
+    await p.keyboard.press('End');
+    await p.waitForFunction(() => document.getElementById('periodo')!.textContent === 'todo');
+    await p.keyboard.press('Home');
+    await p.waitForFunction(() => document.getElementById('periodo')!.textContent === 'sem');
+    await p.keyboard.press('ArrowLeft');
+    await p.waitForFunction(() => document.getElementById('periodo')!.textContent === 'todo');
+    await p.close();
+  });
+  it('clic selecciona; el activo es blanco sobre pista suave; el conteo se lee', async () => {
+    const p = await abrir();
+    await p.click('text=Todo');
+    expect(await p.textContent('#periodo')).toBe('todo');
+    const r = await p.evaluate(() => {
+      const b = document.querySelector('[aria-checked="true"]')!;
+      const g = document.querySelector('.rv-seg')!;
+      return { activo: getComputedStyle(b).backgroundColor, pista: getComputedStyle(g).backgroundColor, radio: getComputedStyle(g).borderTopLeftRadius, conteo: document.querySelector('.rv-seg__conteo')?.textContent };
+    });
+    expect(r.activo).not.toBe(r.pista);
+    expect(r.conteo).toBe('4');
     await p.close();
   });
 });

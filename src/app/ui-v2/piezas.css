@@ -54,3 +54,20 @@
 [data-ui="v2"] .rv-archivo::file-selector-button { min-height: 32px; margin-inline-end: 12px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font: 500 var(--t-small)/1.25 var(--font-sans-ui, inherit); cursor: pointer; }
 [data-ui="v2"] .rv-archivo:hover::file-selector-button { background: var(--canvas); }
 [data-ui="v2"] .rv-archivo:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* ── SegmentedControl (Vexa .segmented): pista suave + borde, activo blanco con anillo ──────────────────────────────── */
+[data-ui="v2"] .rv-seg { display: inline-flex; max-width: 100%; padding: 2px; gap: 2px; overflow-x: auto; background: var(--canvas); border: 1px solid var(--line); border-radius: 999px; }
+[data-ui="v2"] .rv-seg__btn { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 1px 12px; border: 0; border-radius: 999px; background: transparent; color: var(--ink2); font: 600 var(--t-small)/1.3 var(--font-sans-ui, inherit); white-space: nowrap; cursor: pointer; }
+[data-ui="v2"] .rv-seg[data-tam="sm"] .rv-seg__btn { padding: 1px 10px; }
+[data-ui="v2"] .rv-seg__btn[aria-checked="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line), 0 1px 2px #17181c14; }
+[data-ui="v2"] .rv-seg__btn[aria-checked="false"]:hover:not(:disabled) { color: var(--ink); }
+[data-ui="v2"] .rv-seg__btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+[data-ui="v2"] .rv-seg__btn:disabled { color: var(--muted); border: 1px dashed var(--line2); cursor: not-allowed; }
+[data-ui="v2"] .rv-seg__conteo { font: 500 var(--t-small) var(--font-sans-ui, inherit); color: var(--muted); }
+@media (max-width: 819px) { [data-ui="v2"] .rv-seg__btn { min-height: 32px; } }
+@media (prefers-reduced-motion: no-preference) {
+  [data-ui="v2"] .rv-seg__btn { transition: background-color var(--ui-fast) ease, color var(--ui-fast) ease; }
+}
+@media (forced-colors: active) {
+  [data-ui="v2"] .rv-seg__btn[aria-checked="true"] { border: 2px solid Highlight; forced-color-adjust: none; background: Canvas; color: CanvasText; }
+}

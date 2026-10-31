@@ -21,3 +21,4 @@ export { BarraFiltros, type ChipFiltro } from './barra-filtros';
 export { useMovil } from './movil';
 export { Icono, TRAZO_ICONO, type TamanoIcono } from './icono';
 export { Casilla, Radio, Campo, Fieldset, CampoArchivo } from './campos';
+export { SegmentedControl, type OpcionSegmentada } from './segmented';
