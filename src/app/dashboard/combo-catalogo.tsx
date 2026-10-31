@@ -112,9 +112,14 @@ export function ComboCatalogo({
   useEffect(() => {
     if (!enBarra || id === idEnviado.current) return;
     if (id === null && texto.trim() !== '') return; // texto a medias: no se adivina ni se envía
-    idEnviado.current = id;
-    entrada.current?.form?.requestSubmit();
-  }, [enBarra, id, texto]);
+    // Solo con coincidencia ÚNICA y que no sea prefijo de otro registro («Juan» con «Juan Carlos» en la lista espera: Intro envía).
+    if (id !== null) {
+      const t = texto.trim().toLocaleLowerCase('es');
+      if (opciones.some((o) => o.id !== id && o.etiqueta.toLocaleLowerCase('es').startsWith(t))) return;
+    }
+    const espera = setTimeout(() => { idEnviado.current = id; entrada.current?.form?.requestSubmit(); }, 400);
+    return () => clearTimeout(espera);
+  }, [enBarra, id, texto, opciones]);
 
   const sinResolver = texto.trim() !== '' && id === null;
   const ambiguo = sinResolver && coincidencias(opciones, texto).length > 1;
