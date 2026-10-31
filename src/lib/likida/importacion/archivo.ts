@@ -10,6 +10,7 @@
 
 import { read as leerLibro, utils as xlsxUtils } from 'xlsx';
 import { numero } from '@/lib/formato';
+import { celdaCsvSegura } from '@/lib/csv_seguro';
 import { validarZipDeLibro } from './zip_seguro';
 
 /** Cuántas filas de datos se leen de un archivo, COMO MÁXIMO. Mismo tope que
@@ -111,9 +112,9 @@ export function avisoDeTope(matriz: unknown[][]): Descartada | null {
   };
 }
 
-/** Escapa una celda para CSV (RFC 4180). */
+/** Escapa una celda para CSV (RFC 4180) y neutraliza fórmulas (`csv_seguro.ts`). */
 function celdaCsv(v: string): string {
-  return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  return celdaCsvSegura(v);
 }
 
 /**
