@@ -87,7 +87,8 @@ describe('frontera cliente/servidor', () => {
     for (const f of ['resumen-cliente.tsx', 'resumen-modelo.ts']) {
       const src = readFileSync(`${__dirname}/${f}`, 'utf8');
       const importados = [...src.matchAll(/^import\s+(?!type\b)[^;]*?from\s+'([^']+)'/gms)].map((m) => m[1]);
-      for (const m of importados) expect(m, `${f} importa ${m}`).not.toMatch(/resumen-datos|likida\/analytics|carta_porte_datos|supabase|\/senales$/);
+      const prohibidos = ['resumen-datos', 'likida/analytics', 'carta_porte_datos', 'supabase', 'asistente/senales'];
+      for (const m of importados) expect(prohibidos.some((x) => m.includes(x)), `${f} importa ${m}`).toBe(false);
     }
   });
 });
