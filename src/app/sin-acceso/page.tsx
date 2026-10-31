@@ -47,11 +47,10 @@ export default function SinAcceso() {
       }
     >
       <div className="rv-pub__prosa rv-pub__sec">
-        <h2>Qué puede haber pasado</h2>
+        <h2>Qué sabemos y qué puedes hacer</h2>
         <p>
-          Entraste con un correo que todavía no está dado de alta en una flota (por ejemplo, otra cuenta de Google que la
-          que te invitaron). Pídele a tu administrador que te dé de alta desde su panel, o cierra sesión y entra con el
-          correo con el que te invitaron.
+          La sesión es válida, pero esta cuenta no está vinculada a ninguna flota de Likida. Pídele a tu administrador que
+          te dé de alta desde su panel (con el correo de esta sesión), o cierra sesión y entra con otra cuenta.
         </p>
       </div>
     </MarcoPublico>
