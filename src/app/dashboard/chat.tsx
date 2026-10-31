@@ -786,7 +786,7 @@ export default function ChatFlota({
       : [];
     const pillHistorial = (
       <div ref={anclaChat} className="sticky top-0 z-30 h-0 w-full">
-        {!historialAbierto && (
+        {(!historialAbierto || movil) && (
           <button type="button" onClick={abrirHistorial}
             className="absolute top-3 right-4 hairline inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 rounded-full text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)]"
             style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
