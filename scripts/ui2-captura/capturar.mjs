@@ -33,14 +33,16 @@ const fuentesCss = [
 ].join('\n');
 writeFileSync(path.join(OUT, 'fuentes.css'), fuentesCss);
 
-const css = modo === 'v1' ? 'v1.css' : 'v2.css';
+const css = arg.css ? `${arg.css}.css` : modo === 'v1' ? 'v1.css' : 'v2.css'; // --css=v2full: CSS completo del chrome v2
 const vistas = readdirSync(path.join(OUT, 'vistas')).filter((f) => f.endsWith('.html') && !f.endsWith('.doc.html')).map((f) => f.replace('.html', '')).filter((v) => !arg.vistas || arg.vistas.split(',').some((s) => v.startsWith(s)));
-const ANCHOS = [[1440, 900], [1024, 768], [412, 915]];
+// --anchos=1440x900,390x844 sustituye los anchos por omisión
+const ANCHOS = arg.anchos ? arg.anchos.split(',').map((a) => a.split('x').map(Number)) : [[1440, 900], [1024, 768], [412, 915]];
 const TEMAS = ['claro', 'oscuro'];
 mkdirSync(dest, { recursive: true });
 
 const cssTexto = readFileSync(path.join(OUT, css), 'utf8') + '\n' + readFileSync(path.join(OUT, 'fuentes.css'), 'utf8');
-const armarDoc = (cuerpo) => `<!doctype html><html lang="es-MX"><head><meta charset="utf-8"><style>${cssTexto}</style></head><body>${cuerpo}</body></html>`;
+// --sin-carga: el HTML es estático (no corre el controlador que suelta la capa de carga): se marca como liberada para ver el marco.
+const armarDoc = (cuerpo) => `<!doctype html><html lang="es-MX"><head><meta charset="utf-8"><style>${cssTexto}</style></head><body>${arg['sin-carga'] ? cuerpo.replace(' data-estado="inicial"', ' data-estado="oculta"') : cuerpo}</body></html>`;
 
 const browser = await chromium.launch();
 let n = 0;
