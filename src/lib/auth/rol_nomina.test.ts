@@ -24,7 +24,7 @@ import { ROLES_INVITABLES, rolesInvitablesPara, validarInvitacion } from './invi
 // ═══════════════════════════════════════════════════════════════════════════
 
 const PERMITIDAS_NOMINA = [
-  '/dashboard/agentes/liquidacion', '/dashboard/notificaciones', '/dashboard/mi-perfil', '/dashboard/soporte',
+  '/dashboard/agentes/liquidacion', '/dashboard/notificaciones', '/dashboard/mi-perfil',
 ] as const;
 const UUID = '0b6f2c1e-7d3a-4c8e-9f10-123456789abc';
 
@@ -68,7 +68,7 @@ describe('inventario de la matriz', () => {
     for (const r of PERMITIDAS_NOMINA) expect(UNIVERSO).toContain(r);
   });
 
-  it('la lista cerrada del código es exactamente la acordada (cuatro rutas)', () => {
+  it('la lista cerrada del código es exactamente la acordada (tres rutas; soporte queda fuera: sus tickets se filtran por flota, no por usuario)', () => {
     expect([...RUTAS_NOMINA].sort()).toEqual([...PERMITIDAS_NOMINA].sort());
     expect(INICIO_NOMINA).toBe('/dashboard/agentes/liquidacion');
   });
@@ -83,7 +83,7 @@ describe('inventario de la matriz', () => {
 
 describe('nomina — deny-by-default sobre TODO el inventario', () => {
   for (const perfil of ['cinco_agentes', null, undefined] as const) {
-    it(`con perfil=${String(perfil)}: solo pasa a las cuatro rutas permitidas, a ninguna otra`, () => {
+    it(`con perfil=${String(perfil)}: solo pasa a las tres rutas permitidas, a ninguna otra`, () => {
       const pasa = UNIVERSO.filter((r) => puedeVerRuta('nomina', r, perfil));
       expect(pasa.sort()).toEqual([...PERMITIDAS_NOMINA].sort());
     });
@@ -195,7 +195,7 @@ describe('aterrizaje y menú de nomina', () => {
     expect(menu.resumen).toEqual([]);
     expect(menu.grupos.map((g) => g.id)).toEqual(['agentes']);
     expect(menu.grupos[0].items.map((i) => i.href)).toEqual(['/dashboard/agentes/liquidacion']);
-    expect(menu.pie.map((i) => i.href).sort()).toEqual(['/dashboard/mi-perfil', '/dashboard/notificaciones', '/dashboard/soporte']);
+    expect(menu.pie.map((i) => i.href).sort()).toEqual(['/dashboard/mi-perfil', '/dashboard/notificaciones']);
     const todos = hrefsDelMenu(menu);
     expect(todos.every((h) => (PERMITIDAS_NOMINA as readonly string[]).includes(h))).toBe(true);
   });

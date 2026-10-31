@@ -63,8 +63,9 @@ export function puedeVerArea(rol: string, area: Area): boolean {
 // rol, incluida una pantalla nueva que mañana se clasifique como `operacion` o `dinero`.
 //
 // Lo que ve: el agente de Liquidaciones (SOLO CONTEOS: desgloses recibidos, enviados, retenidos, rebotados y sin
-// póliza; jamás pesos, netos ni nombres de operador con montos) y lo de la persona (notificaciones, perfil, soporte).
-// Quedan FUERA a propósito: `/dashboard/agentes/liquidacion/formato` y `/configuracion` (muestran dinero y
+// póliza; jamás pesos, netos ni nombres de operador con montos) y lo de la persona (notificaciones y perfil).
+// Quedan FUERA a propósito: `/dashboard/soporte` (sus tickets se filtran por flota, no por usuario: verían los de toda la flota),
+// `/dashboard/agentes/liquidacion/formato` y `/configuracion` (muestran dinero y
 // configuración), `/dashboard/[id]` (el detalle de una liquidación trae el neto) y todo `/api/*` de sesión
 // (`resolverTenantApi` lo niega por rol).
 //
@@ -77,7 +78,6 @@ export const RUTAS_NOMINA: ReadonlySet<string> = new Set([
   '/dashboard/agentes/liquidacion',
   '/dashboard/notificaciones',
   '/dashboard/mi-perfil',
-  '/dashboard/soporte',
 ]);
 
 /** Donde aterriza `nomina`: la vista de conteos del agente de Liquidaciones. */
