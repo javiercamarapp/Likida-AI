@@ -73,16 +73,23 @@ describe('Inicio v2 cinco_agentes: pesos por rol', () => {
     expect(t).toContain('1 al 10 de octubre de 2026');
     expect(t).toContain('9,177 cruces');
     expect(t).toContain('Medido');
-    expect(t).toContain('Decena anterior (1 al 10 de agosto): $2,988,680');
+    expect(t).toContain('Decena anterior: $2,988,680');
     expect(t).toContain('Periodos distintos');
     expect(t).toContain('Falta cargar: 11 al 20 de octubre de 2026');
     expect(t).toContain('Fuente: Reporte IAVE');
     expect(t).toContain('$12,511');
     expect(t).toContain('Estimado');
-    expect(t).toContain('26 cruces candidatos');
+    expect(t).toContain('26 candidatos a validar');
+    // Una sola vez: ni el conteo ni las decenas faltantes se repiten dentro de la tarjeta de extemporáneos
+    expect((t.match(/26 candidatos a validar/g) ?? []).length).toBe(1);
   });
 
-  it('finanzas (contador) ve los mismos pesos', async () => {
+  // OJO (C3): HOY este camino es INALCANZABLE en producción. `AREA_POR_RUTA['/dashboard']` es 'operacion' y el contador (solo dinero) es
+  // redirigido por `resolverTenantEfectivo` a /dashboard/agentes/liquidacion, así que solo el dueño (flota_admin) y el superadmin ven la
+  // franja. Esta prueba cubre el COMPONENTE (si algún día se abre /dashboard a 'dinero' bajo cinco_agentes), no lo que hoy ve un contador.
+  it('el componente muestra los pesos a un rol de finanzas, aunque hoy el contador no llega a este Inicio', async () => {
+    const { puedeVerRuta } = await import('@/lib/auth/visibilidad');
+    expect(puedeVerRuta('contador', '/dashboard', 'cinco_agentes')).toBe(false); // por eso hoy no llega
     const t = texto(await html('contador'));
     expect(t).toContain('$3,306,107');
     expect(t).toContain('$12,511');
@@ -112,6 +119,8 @@ describe('Inicio v2: fallos honestos', () => {
     const t = texto(h);
     expect(t).toContain('No disponible ahora');
     expect(t).toContain('Reintentar');
+    expect((h.match(/>Reintentar</g) ?? []).length).toBe(1); // un solo Reintentar por bloque de pesos en fallo total
+    expect(t).not.toContain('Cobros extemporáneos');
     expect(t).not.toMatch(/\$\s?0(?![\d,])/);
     expect(t).not.toContain('$3,306,107');
   });
