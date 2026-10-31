@@ -208,7 +208,7 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · BarraFiltros', () => {
       const p = await abrir(ancho);
       const r = await p.evaluate(() => {
         const b = document.querySelector('.rv-filtros')!;
-        const hijos = [...b.querySelectorAll('input, .rv-filtros__chips, .rv-filtros__derecha .rv-btn')].map((e) => Math.round(e.getBoundingClientRect().top));
+        const hijos = [...b.querySelectorAll('input, .rv-filtros__chips, .rv-filtros__derecha .rv-fl')].map((e) => Math.round(e.getBoundingClientRect().top));
         const chips = document.querySelector('.rv-filtros__chips') as HTMLElement;
         return { alto: b.getBoundingClientRect().height, tops: hijos, desplaza: chips.scrollWidth > chips.clientWidth };
       });
@@ -222,7 +222,7 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · BarraFiltros', () => {
     const p = await abrir();
     const antes = await p.evaluate(() => document.querySelector('#esc')!.getBoundingClientRect().top);
     await p.getByRole('button', { name: /Filtros/ }).click();
-    const r = await p.evaluate(() => ({ pop: !!document.querySelector('.rv-pop select'), despues: document.querySelector('#esc')!.getBoundingClientRect().top, activo: getComputedStyle(document.querySelector('.rv-chip[aria-pressed="true"]')!).backgroundColor }));
+    const r = await p.evaluate(() => ({ pop: !!document.querySelector('.rv-pop select'), despues: document.querySelector('#esc')!.getBoundingClientRect().top, activo: getComputedStyle(document.querySelector('.rv-fl[aria-pressed="true"]')!).backgroundColor }));
     expect(r.pop).toBe(true);
     expect(r.despues).toBe(antes);
     expect(rgb(r.activo)).toEqual([226, 226, 226]); // --soft-8 #e2e2e2
@@ -246,7 +246,7 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · BarraFiltros', () => {
 describe.skipIf(SIN_NAVEGADOR)('B4 · chip activo (los tokens de marca son del shell)', () => {
   it('claro: gris suave con texto de tinta (AA), nunca un bloque sólido', async () => {
     const p = await abrir();
-    const c = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.rv-chip[aria-pressed="true"]')!); return { bg: s.backgroundColor, fg: s.color }; });
+    const c = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.rv-fl[aria-pressed="true"]')!); return { bg: s.backgroundColor, fg: s.color }; });
     expect(rgb(c.bg)).toEqual([226, 226, 226]);
     expect(rgb(c.fg)).toEqual([14, 14, 16]);
     expect(ratio(rgb(c.bg), rgb(c.fg))).toBeGreaterThanOrEqual(4.5);
@@ -254,7 +254,7 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · chip activo (los tokens de marca son del s
   });
   it('oscuro: fondo gris oscuro con texto claro (AA)', async () => {
     const p = await abrir(1440, { oscuro: true });
-    const c = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.rv-chip[aria-pressed="true"]')!); return { bg: s.backgroundColor, fg: s.color }; });
+    const c = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.rv-fl[aria-pressed="true"]')!); return { bg: s.backgroundColor, fg: s.color }; });
     expect(rgb(c.bg)).toEqual([50, 50, 52]); // --soft-8 oscuro #323234
     expect(ratio(rgb(c.bg), rgb(c.fg))).toBeGreaterThanOrEqual(4.5);
     await p.close();
