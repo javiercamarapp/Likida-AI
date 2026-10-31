@@ -51,7 +51,7 @@ export default function GlobalError({
   //
   // El logo va como <img> del asset estático: sobrevive al crash del árbol de
   // React, que es justo lo que el <Logo> enmascarado no garantiza aquí.
-  const PAPEL = '#fbfbfd', TINTA = '#17100d', GRIS = '#6b7280', LINEA = '#ececef';
+  const PAPEL = '#fafafa', TINTA = '#0e0e10', GRIS = '#5a5a61', LINEA = '#e6e6e8';
   const SERIF = 'Fraunces, Georgia, "Times New Roman", serif';
   const MONO = '"IBM Plex Mono", ui-monospace, Menlo, monospace';
   const PILDORA: React.CSSProperties = {

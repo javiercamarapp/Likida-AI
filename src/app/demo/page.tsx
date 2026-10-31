@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { mxn } from '@/lib/formato';
+import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
+import { Boton } from '../ui-v2/componentes/boton';
 
 interface Comprobante { concepto: string; monto: number; folio?: string; cfdiUuid?: string; rfcReceptor?: string; label: string }
 interface Bubble { from: 'op' | 'likida'; text: string }
@@ -75,48 +77,42 @@ export default function Demo() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center py-10 px-4">
-      <div className="text-center mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Demo — Likida por WhatsApp</h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--muted)' }}>Simula al operador mandando sus comprobantes. El cuadre es real.</p>
-      </div>
-
+    <MarcoPublico
+      rotulo="Demo"
+      titulo="Demo — Likida por WhatsApp"
+      apoyo="Simula al operador mandando sus comprobantes. El cuadre es real."
+      ancho="estrecho"
+    >
       {/* Teléfono */}
-      <div className="w-full max-w-sm card overflow-hidden flex flex-col" style={{ height: 560 }}>
-        <div className="glass px-4 py-3 border-b flex items-center gap-3" style={{ borderColor: 'var(--line)' }}>
-          <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>L</div>
+      <div className="rv-demo" role="region" aria-label="Conversación de ejemplo">
+        <div className="rv-demo__cab">
+          <div className="rv-demo__avatar" aria-hidden="true">L</div>
           <div>
-            <div className="text-sm font-medium">Likida</div>
-            <div className="text-xs" style={{ color: 'var(--muted)' }}>en línea</div>
+            <div className="rv-demo__nombre">Likida</div>
+            <div className="rv-pub__nota">en línea</div>
           </div>
         </div>
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-2" style={{ background: 'color-mix(in srgb, var(--muted) 6%, transparent)' }}>
+        <div ref={scrollRef} className="rv-demo__hilo" aria-live="polite">
           {bubbles.map((b, i) => (
-            <div key={i} className={`flex ${b.from === 'op' ? 'justify-end' : 'justify-start'}`}>
-              <div className="max-w-[80%] px-3 py-2 rounded-2xl text-sm whitespace-pre-line"
-                style={b.from === 'op'
-                  ? { background: 'var(--accent)', color: 'var(--accent-fg)', borderBottomRightRadius: 4 }
-                  : { background: 'var(--surface)', border: '1px solid var(--line)', borderBottomLeftRadius: 4 }}>
-                {b.text}
-              </div>
+            <div key={i} className="rv-demo__fila" data-de={b.from}>
+              <div className="rv-demo__burbuja" data-de={b.from}>{b.text}</div>
             </div>
           ))}
         </div>
       </div>
 
       {/* Controles */}
-      <div className="w-full max-w-sm mt-4 flex flex-wrap gap-2 justify-center">
+      <div className="rv-pub__acciones">
         {PRESETS.map((p, i) => (
-          <button key={i} onClick={() => add(p)}
-            className="text-xs px-3 py-1.5 rounded-full hairline hover:opacity-70">{p.label}</button>
+          <Boton key={i} tamano="sm" onClick={() => add(p)}>{p.label}</Boton>
         ))}
       </div>
-      <button onClick={cerrar} disabled={loading || !added.length}
-        className="mt-4 px-5 py-2.5 rounded-xl text-sm font-medium disabled:opacity-40"
-        style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
-        {loading ? 'Cuadrando…' : 'Ya no tengo más — cerrar liquidación'}
-      </button>
-    </div>
+      <div className="rv-pub__acciones">
+        <Boton variante="primary" onClick={cerrar} disabled={loading || !added.length} loading={loading}>
+          {loading ? 'Cuadrando…' : 'Ya no tengo más — cerrar liquidación'}
+        </Boton>
+      </div>
+    </MarcoPublico>
   );
 }

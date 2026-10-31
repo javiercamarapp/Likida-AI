@@ -74,8 +74,9 @@
   --warnbg: #fff7e5;
   --bad: #ac2440;
   --badbg: #fdeef0;
-  --info: #145966;
-  --infobg: #e8f3f5;
+  /* Tono «info» = NEUTRO (gris tinta). Sin azul de interfaz: decisión de Javier 31-oct-2026 (paleta negro/gris/blanco); el azul/petróleo queda solo en los colores de DATOS. */
+  --info: #3a3a40;
+  --infobg: #f1f1f2;
 
   /* Rampa de gráficas (neutra) */
   --g1: #f1f1f2;
@@ -122,8 +123,8 @@
   --ui-tip-ink: var(--tip-ink);
   /* ÚNICO color de la capa de carga (= el fondo de la app) */
   --carga-fondo: #ffffff;
-  /* Cabecera de tabla: tinte INFO sólido (petróleo muy suave, #eef6f9 en claro; el oscuro se redefine abajo) con texto ink-info, como Vexa. No es gris. */
-  --tint-info: #eef6f9;
+  /* Cabecera de tabla: tinte NEUTRO sólido (gris muy suave en claro; el oscuro se redefine abajo) con texto tinta. Antes petróleo (#eef6f9). */
+  --tint-info: #f4f4f5;
   --tabla-cab-bg: var(--tint-info);
   --tabla-cab-ink: var(--info);
   /* Líneas de aviso = tono al 24–26 % (R01 de Vexa) */
@@ -286,8 +287,8 @@
   --warnbg: #33281a;
   --bad: #ffb3c3;
   --badbg: #342127;
-  --info: #9fd3de;
-  --infobg: #14272c;
+  --info: #d6d6d9;
+  --infobg: #26262b;
 
   --g1: #17171a;
   --g2: #1f1f23;
@@ -306,7 +307,7 @@
 
   --ui-elevated: #1f1f23;
   --carga-fondo: #0e0e10;
-  --tint-info: #172024;
+  --tint-info: #1b1b1f;
   --tabla-cab-bg: var(--tint-info);
 
   --n-950: #0e0e10;

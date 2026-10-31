@@ -259,7 +259,7 @@ export default function Terminos() {
         <p>
           ¿Eres operador de una flota? Estos términos son entre Likida y tu empresa. El aviso de
           privacidad que te toca lo publica ella: escribe{' '}
-          <strong style={{ color: 'var(--ink)' }}>PRIVACIDAD</strong> por el mismo chat de WhatsApp y
+          <strong>PRIVACIDAD</strong> por el mismo chat de WhatsApp y
           te llega la liga.
         </p>
       }

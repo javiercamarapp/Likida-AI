@@ -7,6 +7,7 @@ import {
   type VistaPortal,
 } from '@/lib/likida/portal_pago_lectura';
 import { FormaDePago } from './forma';
+import { MarcoPublico } from '../../ui-v2/componentes/marco-publico';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // /pago/<token> — LO QUE VE EL CLIENTE DE LA FLOTA. Sin sesión, sin cuenta.
@@ -53,23 +54,9 @@ export const metadata = {
 /** El sobre de todas las pantallas de esta ruta: mismo ancho, mismo tono, y
  *  colores del sistema — este documento se abre de noche, desde un teléfono en
  *  modo oscuro, igual que el aviso de privacidad. */
-function Sobre({ children }: { children: React.ReactNode }) {
-  return (
-    <main
-      className="mx-auto max-w-2xl px-5 py-10 text-[15px] leading-relaxed"
-      style={{ color: 'var(--muted)' }}
-    >
-      {children}
-    </main>
-  );
-}
-
 function Aviso({ titulo, texto }: { titulo: string; texto: string }) {
   return (
-    <Sobre>
-      <h1 className="text-xl font-semibold" style={{ color: 'var(--ink)' }}>{titulo}</h1>
-      <p className="mt-3 break-words">{texto}</p>
-    </Sobre>
+    <MarcoPublico titulo={titulo} apoyo={texto} />
   );
 }
 
@@ -156,17 +143,12 @@ function Contenido({ v, token }: { v: VistaPortal; token: string }) {
   const pendientes = v.propuestas.filter((p) => p.estado === 'pendiente');
 
   return (
-    <Sobre>
-      <header className="pb-6" style={{ borderBottom: '1px solid var(--line)' }}>
-        <p className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
-          Factura de {v.flota}
-        </p>
-        <h1 className="mt-2 text-2xl font-semibold break-words" style={{ color: 'var(--ink)' }}>
-          {identificaFactura(f)}
-        </h1>
-        <p className="mt-1 break-words">A nombre de {v.cliente}</p>
-      </header>
-
+    <MarcoPublico
+      rotulo={`Factura de ${v.flota}`}
+      titulo={identificaFactura(f)}
+      apoyo={`A nombre de ${v.cliente}`}
+      pie={<p>Esta página la genera Likida por cuenta de {v.flota}. No pide contraseñas ni datos de tarjeta: si algo te los pide, no es esto.</p>}
+    >
       {/* ── EL SALDO ─────────────────────────────────────────────────────── */}
       <section className="py-6" style={{ borderBottom: '1px solid var(--line)' }}>
         <Renglon etiqueta="Total de la factura" valor={mxn(f.total)} />
@@ -278,13 +260,7 @@ function Contenido({ v, token }: { v: VistaPortal; token: string }) {
         ))}
       </section>
 
-      <footer className="pt-6 text-[12px]" style={{ borderTop: '1px solid var(--line)', color: 'var(--muted)' }}>
-        <p>
-          Esta página la genera Likida por cuenta de {v.flota}. No pide contraseñas
-          ni datos de tarjeta: si algo te los pide, no es esto.
-        </p>
-      </footer>
-    </Sobre>
+    </MarcoPublico>
   );
 }
 

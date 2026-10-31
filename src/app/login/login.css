@@ -9,8 +9,15 @@
 @font-face { font-family: 'Likida Login Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/login/ibm-plex-mono-400.woff2') format('woff2'); }
 
 .login.login-editorial {
-  --login-bg: #fafafa; --login-ink: #0e0e10; --login-muted: #5a5a61; --login-line: #e6e6e8; --login-surface: #ffffff;
-  --login-soft: #f1f1f2; --login-input: #8a8a90; --login-foco: #0e0e10; --login-foco-halo: #0e0e1012;
+  --login-bg: #fafafa;
+  --login-ink: #0e0e10;
+  --login-muted: #5a5a61;
+  --login-line: #e6e6e8;
+  --login-surface: #ffffff;
+  --login-soft: #f1f1f2;
+  --login-input: #8a8a90;
+  --login-foco: #0e0e10;
+  --login-foco-halo: #0e0e1012;
   --login-sans: var(--font-instrument), 'Instrument Sans', Arial, sans-serif;
   --login-serif: var(--font-fraunces), Fraunces, Georgia, 'Times New Roman', serif;
   min-height: 100dvh; color-scheme: light; background: var(--login-bg); color: var(--login-ink);
@@ -86,8 +93,13 @@
 .login-editorial .login-story-description { max-width: 43ch; font-size: 15px; line-height: 1.7; margin: 20px 0 0; color: #b4b4bb; text-wrap: pretty; }
 .login-editorial .login-artwork {
   position: relative; flex: 1; min-height: 0; margin-top: 16px; overflow: hidden;
-  --login-particle-glow: #ffffff22; --login-particle-wash: #ffffff0a; --login-particle-clear: #ffffff00;
-  --login-particle-front: #ffffff; --login-particle-middle: #c8c8cf; --login-particle-rear: #6b6b73; --login-particle-ambient: #9b9ba3;
+  --login-particle-glow: #ffffff22;
+  --login-particle-wash: #ffffff0a;
+  --login-particle-clear: #ffffff00;
+  --login-particle-front: #ffffff;
+  --login-particle-middle: #c8c8cf;
+  --login-particle-rear: #6b6b73;
+  --login-particle-ambient: #9b9ba3;
 }
 .login-editorial .login-artwork canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .login-editorial .login-artwork-floor { position: absolute; inset: 90% 0 0; pointer-events: none; background: linear-gradient(transparent, #0e0e10); }

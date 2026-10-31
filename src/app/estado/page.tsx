@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import Link from 'next/link';
+import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
 import { headers } from 'next/headers';
 import { cargarEstadoPublico, estadoMemoizado, type EstadoPublico } from './datos';
 import { clientIp, rateLimit } from '@/lib/ratelimit';
@@ -83,31 +84,22 @@ export default async function PaginaEstado() {
   const estado = (await dentroDelLimite()) ? await cargarEstadoPublico().catch((): null => null) : estadoMemoizado();
 
   if (estado === null) {
-    // Ni siquiera se pudo armar: se dice. No se pinta un verde por omisión.
     return (
-      <main className="min-h-dvh px-6 py-16" style={{ background: 'var(--canvas, #fff)' }}>
-        <div className="mx-auto max-w-3xl">
-          <h1 className="font-display text-3xl font-semibold tracking-tight">Estado de Likida</h1>
-          <p className="mt-4 text-[15px]" style={{ color: 'var(--muted, #555)' }}>
-            No pudimos leer las mediciones en este momento. Que esta página no cargue no significa que el servicio esté
-            bien ni que esté mal: significa que no podemos decirlo desde aquí. Vuelve a intentar en unos minutos.
-          </p>
-        </div>
-      </main>
+      <MarcoPublico
+        titulo="Estado de Likida"
+        apoyo="No pudimos leer las mediciones en este momento. Que esta página no cargue no significa que el servicio esté bien ni que esté mal: significa que no podemos decirlo desde aquí. Vuelve a intentar en unos minutos."
+      />
     );
   }
 
   const general = resumenGeneral(estado);
   return (
-    <main className="min-h-dvh px-6 py-16" style={{ background: 'var(--canvas, #fff)' }}>
-      <div className="mx-auto max-w-3xl">
-        <p className="etiqueta-mono text-[11px] uppercase tracking-wide" style={{ color: 'var(--muted, #666)' }}>Estado</p>
-        <h1 className="font-display text-3xl font-semibold mt-2 tracking-tight">Estado de Likida</h1>
-        <p className="mt-3 text-[15px] leading-relaxed" style={{ color: 'var(--muted, #555)' }}>
-          Medido por nuestra propia guardia cada 5 minutos, desde el servidor. Solo lectura: esta página no tiene
-          controles ni datos de clientes. Lo que no se mide, se dice.
-        </p>
-
+    <MarcoPublico
+      ancho="lectura"
+      rotulo="Estado"
+      titulo="Estado de Likida"
+      apoyo="Medido por nuestra propia guardia cada 5 minutos, desde el servidor. Solo lectura: esta página no tiene controles ni datos de clientes. Lo que no se mide, se dice."
+    >
         <section aria-live="polite" className="mt-8 rounded-xl px-5 py-4 flex items-center justify-between gap-4" style={{ background: ESTADO[general.estado].fondo }}>
           <h2 className="font-display text-[17px] font-semibold" style={{ color: ESTADO[general.estado].color }}>{general.titulo}</h2>
           <Etiqueta estado={general.estado} />
@@ -161,7 +153,6 @@ export default async function PaginaEstado() {
           haya durado minutos. Si toda la plataforma cayera, esta página tampoco respondería. Más sobre cómo cuidamos
           tu información en <Link href="/seguridad" className="underline">Seguridad</Link>.
         </p>
-      </div>
-    </main>
+    </MarcoPublico>
   );
 }

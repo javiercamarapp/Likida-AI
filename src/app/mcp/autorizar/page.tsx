@@ -28,7 +28,8 @@ import { leerCliente, emitirCodigo, redirectUriRegistrada, recursoCanonico, SCOP
 import { perfilDeDestino, requiereConfirmacionReforzada, evaluarConsentimiento } from '@/lib/mcp/consentimiento';
 import { appUrl } from '@/lib/env';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
-import { Logo } from '../../logo';
+import { MarcoPublico } from '../../ui-v2/componentes/marco-publico';
+import { Boton } from '../../ui-v2/componentes/boton';
 import { perfilRestringido } from '@/lib/auth/perfil_tenant';
 
 export const dynamic = 'force-dynamic';
@@ -57,42 +58,16 @@ function volverA(redirectUri: string, extras: Record<string, string | null>): st
 
 function Marco({ titulo, children }: { titulo: string; children: ReactNode }) {
   return (
-    <main
-      className="min-h-screen flex flex-col justify-between px-8 py-8 md:px-14 md:py-12"
-      style={{ background: 'var(--bg)' }}
-    >
-      <Logo alto="h-6" className="self-start" />
-      <div className="max-w-2xl">
-        <p className="text-xs font-medium uppercase" style={{ color: 'var(--muted)', letterSpacing: '0.14em' }}>
-          Conectar con Likida
-        </p>
-        <h1
-          className="mt-5 font-medium"
-          style={{
-            fontFamily: 'var(--font-display), system-ui, sans-serif',
-            fontSize: 'clamp(30px, 5vw, 56px)',
-            lineHeight: 1.02,
-            letterSpacing: '-0.035em',
-            textWrap: 'balance',
-          }}
-        >
-          {titulo}
-        </h1>
-        {children}
-      </div>
-      <p className="text-xs" style={{ color: 'var(--faint, var(--muted))' }}>
-        Likida · Liquidación de viajes por WhatsApp
-      </p>
-    </main>
+    <MarcoPublico rotulo="Conectar con Likida" titulo={titulo} ancho="lectura">
+      <div className="rv-pub__prosa">{children}</div>
+    </MarcoPublico>
   );
 }
 
 function PaginaError({ titulo, detalle }: { titulo: string; detalle: string }) {
   return (
     <Marco titulo={titulo}>
-      <p className="mt-6 max-w-lg" style={{ color: 'var(--muted)', fontSize: 17, lineHeight: 1.55 }}>
-        {detalle}
-      </p>
+      <p>{detalle}</p>
     </Marco>
   );
 }
@@ -278,77 +253,60 @@ export default async function Autorizar({
 
   return (
     <Marco titulo={`¿Dejar que ${nombreCliente} lea los datos de tu flota?`}>
-      <p className="mt-6 max-w-lg" style={{ color: 'var(--muted)', fontSize: 17, lineHeight: 1.55 }}>
+      <p>
         Estás conectado como <strong>{s.nombre ?? 'usuario del panel'}</strong> ({s.rol.replace('_', ' ')}).
         Si autorizas, este cliente podrá <strong>leer</strong> — nunca cambiar — lo que tu rol ya ve en el panel:
       </p>
-      <ul className="mt-4 max-w-lg list-disc pl-5" style={{ color: 'var(--muted)', fontSize: 16, lineHeight: 1.6 }}>
+      <ul className="rv-pub__vinetas">
         {areas.map((a) => (
           <li key={a}>{ROTULO_AREA[a] ?? a}</li>
         ))}
       </ul>
       {uno(sp.error) === 'falta_confirmacion' ? (
-        <p className="mt-4 max-w-lg text-sm" role="alert" style={{ color: 'var(--ink)', fontWeight: 600 }}>
+        <p role="alert"><strong>
           El dominio que escribiste no coincide con el de destino. Revísalo y vuelve a intentar.
-        </p>
+        </strong></p>
       ) : null}
-      <div
-        className="mt-5 max-w-lg rounded-xl px-4 py-3 text-sm"
-        style={{ border: '1px solid var(--muted)', lineHeight: 1.5 }}
-        role="note"
-      >
+      <div className="rv-pub__tarjeta" role="note">
         <p>
-          El código de autorización se entregará a: <strong style={{ fontSize: 16 }}>{destino.host}</strong>
+          El código de autorización se entregará a: <strong>{destino.host}</strong>
           {destino.loopback ? ' (tu propia máquina)' : ''}
         </p>
-        <p className="mt-1" style={{ color: 'var(--muted)' }}>
+        <p className="rv-pub__nota">
           {destino.conocido
             ? 'Likida reconoce este destino como el de un cliente conocido.'
             : 'Cliente no verificado por Likida: aprobado manualmente por el equipo. Si ese dominio no es el de la aplicación que estás conectando, pulsa «No autorizar».'}
         </p>
       </div>
-      <p className="mt-4 max-w-lg text-sm" style={{ color: 'var(--faint, var(--muted))', lineHeight: 1.5 }}>
+      <p className="rv-pub__nota">
         El nombre «{nombreCliente}» lo declaró quien se registró, no Likida. El acceso expira solo y las
         acciones con efecto (cerrar liquidaciones, timbrar, enviar mensajes) seguirán firmándose en el panel.
         Alcance: {SCOPE_LECTURA}.
       </p>
-      <form action={autorizar} className="mt-8 flex flex-wrap items-end gap-3">
+      <form action={autorizar} className="rv-pub__acciones">
         <input type="hidden" name="client_id" value={params.client_id} />
         <input type="hidden" name="redirect_uri" value={params.redirect_uri} />
         {params.state !== null ? <input type="hidden" name="state" value={params.state} /> : null}
         <input type="hidden" name="code_challenge" value={params.code_challenge} />
         {params.resource !== null ? <input type="hidden" name="resource" value={params.resource} /> : null}
         {reforzada ? (
-          <label className="flex flex-col gap-1 text-sm" style={{ color: 'var(--muted)' }}>
+          <label className="rv-pub__etiqueta">
             <span>
               Este acceso incluye <strong>dinero</strong> (cuadres, facturación, estado fiscal). Para confirmar,
               escribe el dominio de destino: <strong>{destino.hostname}</strong>
             </span>
             <input
               name="confirmacion" type="text" autoComplete="off" spellCheck={false}
-              className="rounded-lg px-3 py-2" style={{ border: '1px solid var(--muted)', color: 'var(--ink)', background: 'transparent' }}
+              className="rv-pub__campo"
             />
           </label>
         ) : null}
-        <button
-          type="submit" name="decision" value="autorizar"
-          className="rounded-full px-6 py-2.5 text-sm font-medium"
-          // AUDITORÍA 26, FE-4 (ALTO): apuntaba a un token «--fg» que no
-          // existe en ninguna hoja del repo — la tinta de esta paleta es
-          // `--ink`. Sin fallback, `var()` deja la declaración inválida y el
-          // botón se quedaba con el fondo de la página y el texto del color de
-          // la página: 1.00:1 en claro y en oscuro.
-          style={{ background: 'var(--ink)', color: 'var(--bg)' }}
-        >
+        <Boton type="submit" name="decision" value="autorizar" variante="primary">
           Autorizar lectura
-        </button>
-        <button
-          type="submit" name="decision" value="denegar"
-          className="rounded-full px-6 py-2.5 text-sm font-medium"
-          style={{ border: '1px solid var(--muted)', color: 'var(--muted)' }}
-        >
+        </Boton>
+        <Boton type="submit" name="decision" value="denegar">
           No autorizar
-        </button>
+        </Boton>
       </form>
     </Marco>
   );
