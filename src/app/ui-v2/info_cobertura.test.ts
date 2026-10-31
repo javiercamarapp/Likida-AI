@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { INFO } from './info-catalogo';
+import { INFO, type InfoTexto } from './info-catalogo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // COBERTURA DE ⓘ (L4): cada cifra (`<Cifra>`) y cada recuadro con título de las páginas migradas lleva su ⓘ del catálogo.
@@ -64,12 +64,12 @@ describe('ⓘ: cobertura de cifras y recuadros en las páginas migradas', () => 
   });
 
   it('el catálogo no gana textos por_confirmar (solo los dos del Resumen)', () => {
-    const pend = Object.entries(INFO).filter(([, t]) => t.estado === 'por_confirmar').map(([k]) => k).sort();
+    const pend = (Object.entries(INFO) as Array<[string, InfoTexto]>).filter(([, t]) => t.estado === 'por_confirmar').map(([k]) => k).sort();
     expect(pend).toEqual(['resumen.a_tiempo', 'resumen.diferencias_recuperado']);
   });
 
   it('toda clave nueva (fuera de «resumen.») sigue la forma <pagina>.<recuadro> y su título coincide con el nombre accesible', () => {
-    for (const [k, t] of Object.entries(INFO)) {
+    for (const [k, t] of Object.entries(INFO) as Array<[string, InfoTexto]>) {
       expect(k, k).toMatch(/^[a-z0-9_-]+(\.[a-z0-9_-]+)+$/);
       expect(t.titulo.trim().length, k).toBeGreaterThan(3);
       expect(t.queEs, k).not.toMatch(/\n/);
