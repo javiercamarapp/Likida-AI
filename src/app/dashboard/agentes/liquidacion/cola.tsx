@@ -50,10 +50,11 @@ const ROTULO_VACIO: Record<RevisionLiquidacion, string> = {
   rechazada: 'Ninguna rechazada',
 };
 
-const ROTULO_ESTADO: Record<string, { rotulo: string; tono: 'ok' | 'warn' | 'bad' }> = {
-  cuadrada: { rotulo: 'Cuadrada', tono: 'ok' },
-  con_diferencias: { rotulo: 'Con diferencias', tono: 'warn' },
-  revisar: { rotulo: 'Revisar', tono: 'bad' },
+// `fg`/`bg` los lee `etiquetas_sincronizadas.test.ts` (las tres copias del estatus coinciden en severidad); la pastilla se pinta con `tono` por clase.
+const ROTULO_ESTADO: Record<string, { rotulo: string; fg: string; bg: string; tono: 'ok' | 'warn' | 'bad' }> = {
+  cuadrada: { rotulo: 'Cuadrada', fg: 'var(--ok)', bg: 'var(--okbg)', tono: 'ok' },
+  con_diferencias: { rotulo: 'Con diferencias', fg: 'var(--warn)', bg: 'var(--warnbg)', tono: 'warn' },
+  revisar: { rotulo: 'Revisar', fg: 'var(--bad)', bg: 'var(--badbg)', tono: 'bad' },
 };
 
 export interface ColaProps {
