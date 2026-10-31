@@ -1,6 +1,6 @@
 'use client';
 
-import { SlidersHorizontal } from 'lucide-react';
+import { Search, SlidersHorizontal } from 'lucide-react';
 import { useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { cx } from './clases';
 import { FiltroChip, FiltroLimpiar } from './filtros';
@@ -17,7 +17,7 @@ type Ocultos = Record<string, string> | ReadonlyArray<readonly [string, string]>
  *   · GET (estado en la URL): `accion` (+ `ocultos`) la vuelve un <form method="get"> y los hijos son FiltroOpciones/FiltroBusqueda/
  *     FiltroFecha/FiltroInterruptor/FiltroCampo. Elegir una opción o una fecha envía; Intro envía la búsqueda.
  *  «Limpiar» (discreto) aparece con `limpiarHref` cuando hay filtros vigentes (`nActivos` > 0). */
-export function BarraFiltros({ busqueda, chips = [], onChip, avanzados, nAvanzados = 0, fuentes, className, accion, ocultos, etiqueta = 'Filtros', limpiarHref, nActivos = 0, children }: {
+export function BarraFiltros({ busqueda, chips = [], onChip, avanzados, nAvanzados = 0, fuentes, className, accion, ocultos, etiqueta = 'Filtros', limpiarHref, nActivos = 0, enLinea = false, children }: {
   busqueda?: { valor: string; onCambio: (v: string) => void; placeholder?: string; etiqueta?: string };
   chips?: readonly ChipFiltro[];
   onChip?: (id: string) => void;
@@ -36,6 +36,8 @@ export function BarraFiltros({ busqueda, chips = [], onChip, avanzados, nAvanzad
   etiqueta?: string;
   limpiarHref?: string;
   nActivos?: number;
+  /** Dentro de una tarjeta o de una fila de encabezado: sin sticky ni fondo propio. */
+  enLinea?: boolean;
   children?: ReactNode;
 }) {
   const [abierto, setAbierto] = useState(false);
@@ -50,6 +52,7 @@ export function BarraFiltros({ busqueda, chips = [], onChip, avanzados, nAvanzad
       {esForma ? pares.map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />) : null}
       {busqueda ? (
         <label className="rv-fl rv-fl--buscar">
+          <Search aria-hidden="true" />
           <span className="rv-sr">{busqueda.etiqueta ?? 'Buscar'}</span>
           <input type="search" value={busqueda.valor} placeholder={busqueda.placeholder ?? 'Buscar'} onChange={(e) => busqueda.onCambio(e.target.value)} />
         </label>
@@ -87,11 +90,11 @@ export function BarraFiltros({ busqueda, chips = [], onChip, avanzados, nAvanzad
       if (t instanceof HTMLInputElement && t.hasAttribute('data-auto')) e.currentTarget.requestSubmit();
     };
     return (
-      <form method="get" action={accion} role="search" aria-label={etiqueta} className={cx('rv-filtros', className)} onChange={alCambiar}>
+      <form method="get" action={accion} role="search" aria-label={etiqueta} className={cx('rv-filtros', enLinea && 'rv-filtros--en-linea', className)} onChange={alCambiar}>
         {cuerpo}
         <button type="submit" className="rv-sr" tabIndex={-1} aria-hidden="true">Aplicar</button>
       </form>
     );
   }
-  return <div className={cx('rv-filtros', className)} role="toolbar" aria-label={etiqueta}>{cuerpo}</div>;
+  return <div className={cx('rv-filtros', enLinea && 'rv-filtros--en-linea', className)} role="toolbar" aria-label={etiqueta}>{cuerpo}</div>;
 }

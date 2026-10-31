@@ -14,7 +14,7 @@ import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BarraFiltros } from '${join(RAIZ, 'componentes/barra-filtros').replace(/\\/g, '/')}';
 import { FiltroOpciones, FiltroBusqueda, FiltroFecha, FiltroInterruptor } from '${join(RAIZ, 'componentes/filtros').replace(/\\/g, '/')}';
-window.__envios = [];
+window.__envios = []; window.__navegaciones = []; document.addEventListener('click', (e) => { const a = e.target.closest && e.target.closest('a'); if (a) { e.preventDefault(); window.__navegaciones.push(a.getAttribute('href')); } }, true);
 document.addEventListener('submit', (e) => { e.preventDefault(); window.__envios.push(new URLSearchParams(new FormData(e.target)).toString()); }, true);
 function Periodo() {
   const [v, setV] = useState('semanal');
@@ -31,6 +31,7 @@ function App() {
         <FiltroBusqueda nombre="q" placeholder="Folio" />
       </BarraFiltros>
       <Periodo />
+      <FiltroOpciones etiqueta="Estado" valor="todos" porDefecto="todos" opciones={[{ valor: 'todos', rotulo: 'Todos', href: '/v?f=todos' }, { valor: 'abiertos', rotulo: 'Abiertos', href: '/v?f=abiertos&q=a' }]} />
     </div>
   );
 }
@@ -123,6 +124,13 @@ describe.skipIf(SIN_NAVEGADOR)('Filtros LF · comportamiento en Chromium', { tim
     await p.getByRole('option', { name: 'Mensual' }).click();
     expect(await p.locator('#periodo').textContent()).toBe('mensual');
     expect(await envios(p)).toEqual([]);
+    await p.close();
+  });
+  it('modo enlace: elegir navega al href de la pantalla (los enlaces existentes siguen siendo los mismos)', async () => {
+    const p = await abrir();
+    await p.getByRole('button', { name: 'Estado' }).click();
+    await p.getByRole('option', { name: 'Abiertos' }).click();
+    expect(await p.evaluate(() => (window as unknown as { __navegaciones: string[] }).__navegaciones)).toEqual(['/v?f=abiertos&q=a']);
     await p.close();
   });
   it('1440 y 390: UNA fila; controles de 32 px (36 en móvil); la fila se desplaza en horizontal', async () => {

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Check, ChevronDown, Search } from 'lucide-react';
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useId, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from 'react';
 import { cx } from './clases';
 import { Popover } from './overlay';
 
@@ -46,16 +46,17 @@ export function FiltroOpciones({ etiqueta, opciones, valor, porDefecto = '', nom
   className?: string;
   ariaLabel?: string;
 }) {
-  const [actual, setActual] = useState(valor);
+  // Lo elegido localmente solo vale mientras el valor de la URL no cambie (al recargar con otro valor manda la URL).
+  const [local, setLocal] = useState<{ base: string; v: string }>({ base: valor, v: valor });
+  const actual = local.base === valor ? local.v : valor;
+  const setActual = (v: string) => setLocal({ base: valor, v });
   const [abierto, setAbierto] = useState(false);
-  const [listo, setListo] = useState(false);
+  // false en el servidor y durante la hidratación; true ya en el navegador (sin setState en efectos).
+  const listo = useSyncExternalStore(() => () => {}, () => true, () => false);
   const ancla = useRef<HTMLButtonElement>(null);
   const oculto = useRef<HTMLInputElement>(null);
   const lista = useRef<HTMLDivElement>(null);
   const idLista = useId();
-
-  useEffect(() => setListo(true), []);
-  useEffect(() => setActual(valor), [valor]);
 
   const elegida = opciones.find((o) => o.valor === actual);
   const activo = actual !== porDefecto;
@@ -64,9 +65,8 @@ export function FiltroOpciones({ etiqueta, opciones, valor, porDefecto = '', nom
 
   const elegir = (o: OpcionFiltro) => {
     setAbierto(false);
-    if (o.valor === actual && !o.href) { ancla.current?.focus(); return; }
+    if (o.valor === actual) { ancla.current?.focus(); return; }
     setActual(o.valor);
-    if (o.href) { window.location.assign(o.href); return; }
     onCambio?.(o.valor);
     if (nombre && oculto.current) { oculto.current.value = o.valor; enviarForma(oculto.current); }
   };
@@ -76,7 +76,7 @@ export function FiltroOpciones({ etiqueta, opciones, valor, porDefecto = '', nom
     return (
       <label className={cx('rv-fl rv-fl--nativo', className)} data-activo={activo ? '' : undefined}>
         <span className="rv-fl__etq">{etiqueta}</span>
-        <select name={nombre} defaultValue={valor} aria-label={ariaLabel ?? etiqueta}>
+        <select name={nombre} defaultValue={valor} aria-label={ariaLabel ?? etiqueta} disabled={deshabilitado}>
           {opciones.map((o) => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
         </select>
       </label>
@@ -127,20 +127,24 @@ export function FiltroOpciones({ etiqueta, opciones, valor, porDefecto = '', nom
         <div ref={lista} id={idLista} role="listbox" aria-label={etiqueta} className="rv-fl__lista" onKeyDown={alTeclearLista}>
           {opciones.map((o, i) => {
             const sel = o.valor === actual;
-            return (
-              <button
-                key={o.valor === '' ? `vacio-${i}` : o.valor}
-                type="button"
-                role="option"
-                aria-selected={sel}
-                tabIndex={sel || (!elegida && i === 0) ? 0 : -1}
-                data-autofocus={sel || (!elegida && i === 0) ? '' : undefined}
-                className="rv-fl__op"
-                onClick={() => elegir(o)}
-              >
+            const comun = {
+              role: 'option' as const,
+              'aria-selected': sel,
+              tabIndex: sel || (!elegida && i === 0) ? 0 : -1,
+              'data-autofocus': sel || (!elegida && i === 0) ? '' : undefined,
+              className: 'rv-fl__op',
+            };
+            const cuerpo = (
+              <>
                 <span className="rv-fl__marca">{sel ? <Check aria-hidden="true" /> : null}</span>
                 <span className="rv-fl__rotulo">{o.rotulo}</span>
-              </button>
+              </>
+            );
+            // Con `href` la opción es un enlace real (el estado vive en la URL que arma la pantalla); sin él, un botón.
+            return o.href ? (
+              <Link key={o.valor === '' ? `vacio-${i}` : o.valor} href={o.href} prefetch={false} {...comun} onClick={() => setAbierto(false)}>{cuerpo}</Link>
+            ) : (
+              <button key={o.valor === '' ? `vacio-${i}` : o.valor} type="button" {...comun} onClick={() => elegir(o)}>{cuerpo}</button>
             );
           })}
         </div>
@@ -182,18 +186,20 @@ export function FiltroBusqueda({ nombre, valor, placeholder = 'Buscar', etiqueta
 }
 
 /** Fecha (type=date) con su rótulo dentro del chip. Al elegir, envía la forma. */
-export function FiltroFecha({ nombre, etiqueta, valor, min, max, className }: {
+export function FiltroFecha({ nombre, etiqueta, valor, min, max, autoEnvio = true, className }: {
   nombre: string;
   etiqueta: string;
   valor?: string | null;
   min?: string;
   max?: string;
+  /** Elegir la fecha envía la forma (por omisión). Falso en formas que ACCIONAN algo (exportar). */
+  autoEnvio?: boolean;
   className?: string;
 }) {
   return (
     <label className={cx('rv-fl rv-fl--fecha', className)} data-activo={valor ? '' : undefined}>
       <span className="rv-fl__etq">{etiqueta}</span>
-      <input type="date" name={nombre} defaultValue={valor ?? ''} min={min} max={max} data-auto="" />
+      <input type="date" name={nombre} defaultValue={valor ?? ''} min={min} max={max} data-auto={autoEnvio ? '' : undefined} />
     </label>
   );
 }

@@ -405,6 +405,7 @@
 
 /* ═══ LF · Filtros de barra (como Vexa): UNA fila baja, controles de 32 px, radio 8, borde fino, 12 px / 500, activo = tinta (nunca azul) ═══ */
 [data-ui="v2"] .rv-filtros { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; min-height: 40px; min-width: 0; padding: 4px 2px; margin: 0; background: var(--bg); }
+[data-ui="v2"] .rv-filtros--en-linea { position: static; min-height: 32px; padding: 0; background: transparent; }
 [data-ui="v2"] .rv-filtros__chips { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding: 2px; margin: -2px; }
 [data-ui="v2"] .rv-filtros__chips::-webkit-scrollbar { display: none; }
 [data-ui="v2"] .rv-filtros__chips > * { flex: none; }
