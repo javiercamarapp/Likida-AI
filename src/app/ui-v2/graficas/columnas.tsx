@@ -18,13 +18,22 @@ export function Columnas({ datos, matiz = 1, etiqueta, formato = (v) => String(v
   vacio?: string;
 }) {
   const max = Math.max(0, ...datos.map((d) => d.valor ?? 0));
-  if (max === 0) {
-    return <figure className="rv-gr rv-colum rv-colum--vacio" aria-label={etiqueta}><span>{vacio}</span></figure>;
-  }
   const n = datos.length;
   const slot = W / n;
   const ancho = Math.min(40, slot * 0.6);
   const util = H - TOPE;
+  if (max === 0) {
+    // Sin nada que dibujar: el plano (rejilla y base) conserva el alto de la gráfica y UNA línea dice qué falta. Ninguna columna en cero.
+    return (
+      <figure className="rv-gr rv-colum rv-colum--vacio" aria-label={etiqueta}>
+        <svg className="rv-colum__svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={`${etiqueta}: ${vacio}`}>
+          {[0.25, 0.5, 0.75].map((f) => <line key={f} className="rv-gr__rejilla" x1="0" x2={W} y1={H - f * util} y2={H - f * util} vectorEffect="non-scaling-stroke" />)}
+          <line className="rv-colum__base" x1="0" x2={W} y1={H - 0.5} y2={H - 0.5} vectorEffect="non-scaling-stroke" />
+        </svg>
+        <span className="rv-colum__vacio">{vacio}</span>
+      </figure>
+    );
+  }
   return (
     <figure className="rv-gr rv-colum" data-matiz={matiz} aria-label={etiqueta} data-cero-fuente="">
       <svg className="rv-colum__svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={etiqueta}>

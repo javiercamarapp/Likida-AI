@@ -499,17 +499,14 @@
 
 /* ═══ B4 · Chip activo (filtros, segmentados) ═══
    Los tokens de marca (--btn-*, --marino, --crema, --chart-*) los define el shell en tokens.css: aquí NO se repiten.
-   Solo el chip activo tiene los suyos: marino con texto blanco (AA); en oscuro #3a5580 (el marino claro de tokens.css no da AA con blanco). */
+   Activo = marino SUAVE con texto y borde marino (directiva 29-oct: «fondo marino/crema suave»; el único bloque sólido de un
+   pliegue es el botón primario). Usa los pares tinte/tinta del matiz 1, que ya miden AA en claro y oscuro. */
 :root [data-ui="v2"] {
-  --chip-activo-bg: var(--marino, #2a3f5f);
-  --chip-activo-fg: #ffffff;
+  --chip-activo-bg: var(--soft-1, #e4e9f1);
+  --chip-activo-fg: var(--ink-1, #2a3f5f);
 }
-:root[data-theme="dark"] [data-ui="v2"] {
-  --chip-activo-bg: #3a5580;
-  --chip-activo-fg: #ffffff;
-}
-/* Chip activo (filtros, segmentados): marino con texto blanco (AA). */
-[data-ui="v2"] .rv-chip[aria-pressed="true"], [data-ui="v2"] .rv-chip[data-activo] { background: var(--chip-activo-bg); color: var(--chip-activo-fg); border-color: var(--chip-activo-bg); }
+/* Chip activo (filtros, segmentados): marino suave, texto y borde marino. */
+[data-ui="v2"] .rv-chip[aria-pressed="true"], [data-ui="v2"] .rv-chip[data-activo] { background: var(--chip-activo-bg); color: var(--chip-activo-fg); border-color: var(--chip-activo-fg); font-weight: 600; }
 [data-ui="v2"] button.rv-chip { cursor: pointer; font-family: inherit; }
 [data-ui="v2"] button.rv-chip:hover:not([aria-pressed="true"]) { background: var(--canvas); }
 [data-ui="v2"] button.rv-chip:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
@@ -587,3 +584,8 @@
   [data-ui="v2"] .rv-info { border: 1px solid ButtonText; }
   [data-ui="v2"] .rv-chip[aria-pressed="true"], [data-ui="v2"] .rv-chip[data-activo] { forced-color-adjust: none; background: Highlight; color: HighlightText; border-color: Highlight; }
 }
+
+/* Chips de la barra de filtros: 32 px (ESTILO §5), toque 44 por ::after y 8 px entre vecinos. */
+[data-ui="v2"] .rv-filtros__chips { gap: 8px; padding-block: 6px; margin-block: -6px; }
+[data-ui="v2"] .rv-filtros .rv-chip { position: relative; min-height: 32px; padding: 0 12px; font-size: 13px; }
+[data-ui="v2"] .rv-filtros .rv-chip::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%); }

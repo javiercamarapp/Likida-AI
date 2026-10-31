@@ -217,14 +217,14 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · BarraFiltros', () => {
       await p.close();
     });
   }
-  it('1440: «Filtros» abre los avanzados en un popover (no empuja el contenido) y el chip activo es marino', async () => {
+  it('1440: «Filtros» abre los avanzados en un popover (no empuja el contenido) y el chip activo es marino suave', async () => {
     const p = await abrir();
     const antes = await p.evaluate(() => document.querySelector('#esc')!.getBoundingClientRect().top);
     await p.getByRole('button', { name: /Filtros/ }).click();
     const r = await p.evaluate(() => ({ pop: !!document.querySelector('.rv-pop select'), despues: document.querySelector('#esc')!.getBoundingClientRect().top, activo: getComputedStyle(document.querySelector('.rv-chip[aria-pressed="true"]')!).backgroundColor }));
     expect(r.pop).toBe(true);
     expect(r.despues).toBe(antes);
-    expect(rgb(r.activo)).toEqual([42, 63, 95]);
+    expect(rgb(r.activo)).toEqual([228, 233, 241]);
     await p.close();
   });
   it('390: «Filtros» abre una hoja inferior', async () => {
@@ -243,17 +243,18 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · BarraFiltros', () => {
 });
 
 describe.skipIf(SIN_NAVEGADOR)('B4 · chip activo (los tokens de marca son del shell)', () => {
-  it('claro: marino con texto blanco (AA)', async () => {
+  it('claro: marino suave con texto marino (AA), nunca un bloque sólido', async () => {
     const p = await abrir();
     const c = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.rv-chip[aria-pressed="true"]')!); return { bg: s.backgroundColor, fg: s.color }; });
-    expect(rgb(c.bg)).toEqual([42, 63, 95]);
+    expect(rgb(c.bg)).toEqual([228, 233, 241]);
+    expect(rgb(c.fg)).toEqual([42, 63, 95]);
     expect(ratio(rgb(c.bg), rgb(c.fg))).toBeGreaterThanOrEqual(4.5);
     await p.close();
   });
-  it('oscuro: #3a5580 con texto blanco (AA)', async () => {
+  it('oscuro: fondo marino oscuro con texto azul claro (AA)', async () => {
     const p = await abrir(1440, { oscuro: true });
     const c = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.rv-chip[aria-pressed="true"]')!); return { bg: s.backgroundColor, fg: s.color }; });
-    expect(rgb(c.bg)).toEqual([58, 85, 128]);
+    expect(rgb(c.bg)).toEqual([27, 36, 49]);
     expect(ratio(rgb(c.bg), rgb(c.fg))).toBeGreaterThanOrEqual(4.5);
     await p.close();
   });
