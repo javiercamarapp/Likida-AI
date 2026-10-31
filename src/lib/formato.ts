@@ -447,6 +447,16 @@ export function fechaHoraMx(iso?: string | null): string {
 }
 
 /**
+ * Solo la HORA en México, `07:02` (24 h). Para rótulos que ya dicen el día aparte («hoy 07:02»). Ausente o ilegible: `—`.
+ */
+export function horaMx(iso?: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: TZ_MX });
+}
+
+/**
  * Fecha-hora en el formato del SAT (`AAAA-MM-DDThh:mm:ss`, sin zona), en hora
  * de México. Es el formato de `FechaHoraSalidaLlegada` del complemento Carta
  * Porte y de `Fecha` del CFDI: el estándar NO lleva offset — la zona la da el

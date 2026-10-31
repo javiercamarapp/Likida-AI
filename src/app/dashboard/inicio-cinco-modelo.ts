@@ -1,3 +1,4 @@
+import { fechaCorta, horaMx, hoyMx } from '@/lib/formato';
 import type { CorridaRegistrada } from '@/lib/likida/agentes/corridas';
 import type { HechoSolo } from '@/lib/likida/analytics';
 import { PERIODO_RANGO, type DatosResumen, type FilaAtencion } from './resumen-modelo';
@@ -8,10 +9,6 @@ import type { CifrasPesosCincoAgentes, SelloCifra } from './cinco-agentes-cifras
 // piezas presentacionales, los componentes de cliente y las pruebas. Regla de la casa: sin dato NUNCA es 0.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const TZ = 'America/Mexico_City';
-const DIA_MX = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
-const HORA_MX = new Intl.DateTimeFormat('es-MX', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-const FECHA_CORTA_MX = new Intl.DateTimeFormat('es-MX', { timeZone: TZ, day: '2-digit', month: 'short' });
 const PESOS = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0, minimumFractionDigits: 0 });
 
 /** Pesos COMPLETOS sin decimales («$3,306,107»). El compacto («$3.3 M») pierde el detalle que finanzas necesita. `null` = «—». */
@@ -26,7 +23,7 @@ export function pesosCompletos(n: number | null | undefined): string {
 export type PuntoEstado = 'ok' | 'warn' | 'bad' | 'muted';
 export interface EstadoAgente { punto: PuntoEstado; texto: string }
 
-const dia = (iso: string | number) => DIA_MX.format(new Date(iso));
+const dia = (iso: string | number) => hoyMx(new Date(iso));
 
 /**
  * Qué se dice de un agente en su tarjeta. `corrida`: `null` = la lectura falló, `undefined` = no hay corridas registradas.
@@ -41,7 +38,7 @@ export function estadoDeAgente(
   if (corrida === null) return { punto: 'warn', texto: 'No se pudo leer la última corrida' };
   if (corrida === undefined) return { punto: 'muted', texto: 'Sin corridas registradas' };
   const hoy = dia(ahora) === dia(corrida.inicio);
-  const cuando = `${hoy ? 'hoy' : FECHA_CORTA_MX.format(new Date(corrida.inicio))} ${HORA_MX.format(new Date(corrida.inicio))}`;
+  const cuando = `${hoy ? 'hoy' : fechaCorta(corrida.inicio)} ${horaMx(corrida.inicio)}`;
   if (corrida.estado === 'fallo') return { punto: 'bad', texto: `Falló ${cuando}` };
   if (corrida.estado === 'parcial') return { punto: 'warn', texto: `Con pendientes ${cuando}` };
   return hoy ? { punto: 'ok', texto: `Corrió ${cuando}` } : { punto: 'muted', texto: `Última corrida ${cuando}` };
@@ -145,11 +142,11 @@ export const ATAJOS_CINCO: ReadonlyArray<{ href: string; nombre: string }> = [
 export function cuandoMx(iso: string, ahora: number): string {
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return '—';
-  const hora = HORA_MX.format(new Date(t));
+  const hora = horaMx(iso);
   const d = dia(t);
   if (d === dia(ahora)) return `hoy ${hora}`;
   if (d === dia(ahora - 86_400_000)) return `ayer ${hora}`;
-  return `${FECHA_CORTA_MX.format(new Date(t))} ${hora}`;
+  return `${fechaCorta(iso)} ${hora}`;
 }
 
 // ── Fila «viajes en curso» de «Hoy» ───────────────────────────────────────
