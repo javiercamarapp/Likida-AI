@@ -19,7 +19,7 @@ export function EncabezadoPagina({ area, titulo, idTitulo, apoyo, acciones }: {
   acciones?: ReactNode;
 }) {
   return (
-    <header className="rv-encabezado">
+    <header className="rv-encabezado" data-onboarding="pantalla.titulo">
       <div className="rv-encabezado__texto">
         <EtiquetaArea area={area} />
         <h1 id={idTitulo} className="rv-encabezado__titulo font-display">{titulo}</h1>

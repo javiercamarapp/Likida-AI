@@ -1,3 +1,4 @@
+import { ANCLAS_DERIVADAS } from '@/lib/onboarding/anclas';
 import type { Anfitrion, ElementoTour, EventoAccion, Rect } from './tipos';
 
 // Anfitrión real: toca document/window. Es el único archivo del motor que lo hace.
@@ -47,7 +48,10 @@ function almacenLocal() {
 export function crearAnfitrionDom(extra: { navegar: (ruta: string) => void; rutaActual: () => string }): Anfitrion {
   return {
     buscarAncla(nombre) {
-      const lista = document.querySelectorAll<HTMLElement>(`[data-tour="${CSS.escape(nombre)}"]`);
+      // `data-onboarding` es el atributo canónico; `data-tour` (menú y anclas anteriores) sigue valiendo; las derivadas son estructura común.
+      const derivada = Object.hasOwn(ANCLAS_DERIVADAS, nombre) ? ANCLAS_DERIVADAS[nombre] : null;
+      const n = CSS.escape(nombre);
+      const lista = document.querySelectorAll<HTMLElement>(derivada ?? `[data-onboarding="${n}"], [data-tour="${n}"]`);
       for (const el of lista) if (visibleReal(el)) return envolver(el);
       return null;
     },
