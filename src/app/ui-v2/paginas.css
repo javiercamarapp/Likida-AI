@@ -241,3 +241,50 @@ button.rv-at__fila:focus-visible { outline: 2px solid var(--ink); outline-offset
 .rv-error__icono { flex: none; }
 .rv-error__texto { min-width: 0; }
 .rv-error__accion { flex: none; display: flex; align-items: center; gap: 8px; }
+
+/* ── Inicio v2 de `cinco_agentes` (L11) · prefijo rv-ic ─────────────────────────────────────────────────────────────────────────
+   Cinco tarjetas de agente (en móvil, tira deslizable), franja de pesos 7+5, fila Hoy · Puesta en marcha · Lo que hizo solo y atajos.
+   Solo tokens existentes; sin colores propios. */
+.rv-ic__agentes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
+.rv-ic__agentes > .rv-tarjeta { min-width: 0; }
+.rv-ic__agente-cuerpo { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.rv-ic__estado { display: flex; align-items: flex-start; gap: 8px; margin: 0; color: var(--muted); }
+.rv-ic__estado > svg { flex: none; margin-top: 3px; }
+.rv-ic__cifra-fila { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; margin: 0; }
+.rv-ic__cifra { font: 700 var(--t-kpi)/1.1 var(--font-display, inherit); letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
+.rv-ic__cifra[data-vacio] { font-size: 18px; font-weight: 600; color: var(--muted); }
+.rv-ic__nota { margin: 0; font-size: 12px; line-height: 1.35; color: var(--muted); }
+.rv-ic__enlace { font-size: 13px; font-weight: 600; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.rv-ic__fila { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
+.rv-ic__fila > * { min-width: 0; }
+.rv-ic__fila--7-5 { align-items: start; }
+.rv-ic__fila--7-5 > :only-child { grid-column: 1 / -1; }
+.rv-ic__fila--7-5 > :first-child:not(:only-child) { grid-column: span 7; }
+.rv-ic__fila--7-5 > :last-child:not(:only-child) { grid-column: span 5; }
+.rv-ic__fila--4-4-4 > * { grid-column: span 4; }
+.rv-ic__fila--6-6 > * { grid-column: span 6; }
+.rv-ic__pesos .rv-tarjeta__cuerpo, .rv-ic__marcha .rv-tarjeta__cuerpo, .rv-ic__hoy .rv-tarjeta__cuerpo { display: flex; flex-direction: column; gap: 8px; }
+.rv-ic__segs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 2px; margin: 0; padding: 0; list-style: none; }
+.rv-ic__seg { height: 6px; border-radius: 3px; background: var(--line2); }
+.rv-ic__seg[data-listo] { background: var(--ink); }
+.rv-ic__seg[data-omitido] { background: var(--n-400); }
+.rv-ic__sigue { margin: 0; font-size: 13px; line-height: 1.35; color: var(--ink); }
+.rv-ic__linea { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; }
+.rv-ic__pasos { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 13px; }
+.rv-ic__paso { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--ui-border); border-radius: 8px; color: var(--ink); text-decoration: none; }
+.rv-ic__paso-titulo { font-size: 13px; font-weight: 600; }
+.rv-ic__atajos-lista { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+@media (max-width: 1099px) { .rv-ic__agentes { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 819px) {
+  /* Móvil: UNA tira horizontal deslizable (no cinco tarjetas apiladas), para que la primera cifra quede arriba. */
+  .rv-ic__agentes { display: flex; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 4px; gap: 10px; }
+  .rv-ic__agentes > .rv-tarjeta { flex: 0 0 216px; scroll-snap-align: start; }
+  .rv-ic__fila--7-5 > :first-child:not(:only-child), .rv-ic__fila--7-5 > :last-child:not(:only-child), .rv-ic__fila--4-4-4 > *, .rv-ic__fila--6-6 > * { grid-column: 1 / -1; }
+  /* La cifra va arriba del estado: la primera cifra queda por encima de los 300 px. */
+  .rv-ic__cifra-fila { order: -1; }
+  .rv-ic__fila { gap: 10px; }
+}
+@media (min-width: 820px) and (max-width: 1099px) {
+  .rv-ic__fila--4-4-4 > * { grid-column: span 6; }
+  .rv-ic__fila--4-4-4 > :last-child { grid-column: 1 / -1; }
+}

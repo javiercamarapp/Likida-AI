@@ -45,9 +45,9 @@ export default async function DashboardInicio({
         tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} sufijo={sufijoTenant(sp)}
         ui={ui} userId={userId} soloLectura={Boolean(sp.tenant || sp.vista || sp.rol || tenantNombre)}
         veAsistente={puedeVerRuta(rol, '/dashboard/puesta-en-marcha', perfilFlota)}
-        // DECISIÓN (30-oct-2026): el perfil `cinco_agentes` NO ve pesos en el Resumen, aunque su rol vea el área de
-        // dinero: sin `veDinero` el lector no consulta ni pinta ninguna cifra en pesos. Lo que se muestra son conteos.
-        veDinero={false} rango={leerRango(sp.rango)} rol={rol}
+        // DECISIÓN (31-oct-2026): el perfil `cinco_agentes` SÍ ve pesos en el Inicio, pero solo dueño y finanzas, y solo por el lector
+        // propio `leerCifrasPesosCincoAgentes` (importe IAVE y extemporáneos). El encargado nunca; el Resumen de siempre no se toca.
+        rango={leerRango(sp.rango)} rol={rol}
       />
     );
   }
