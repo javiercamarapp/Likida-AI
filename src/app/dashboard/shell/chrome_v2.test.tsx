@@ -84,6 +84,14 @@ describe('DashboardChromeV2: el contrato que no se rompe', () => {
     expect(html).toContain('data-tour="nav-mas"');
   });
 
+  it('ninguna ancla data-tour se repite y la barra móvil va DESPUÉS del sidebar (los localizadores que toman el primero ven el del sidebar)', () => {
+    const anclas = [...html.matchAll(/data-tour="([^"]+)"/g)].map((m) => m[1]);
+    expect(anclas.length).toBeGreaterThan(5);
+    expect(anclas.filter((a, i) => anclas.indexOf(a) !== i), 'anclas repetidas').toEqual([]);
+    expect(html.indexOf('class="rv-nav-inf"')).toBeGreaterThan(html.indexOf('<aside'));
+    expect(html.indexOf('href="/dashboard/viajes"')).toBeLessThan(html.indexOf('class="rv-nav-inf"')); // el enlace del sidebar es el primero
+  });
+
   it('la capa de carga viaja en el HTML del servidor: una sola, visible desde el primer fotograma, solo el logo', () => {
     expect(html.match(/id="rv-carga"/g)).toHaveLength(1);
     expect(html).toMatch(/class="rv-carga" data-estado="inicial" role="status" aria-busy="true" aria-label="Cargando"/);

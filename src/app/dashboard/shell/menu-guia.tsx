@@ -30,7 +30,7 @@ export default function MenuGuia({ rol, perfil, compacto = false }: { rol: strin
   return (
     <div className="rv-guia">
       <button ref={gatillo} type="button" className={compacto ? 'rv-icono-boton' : 'rv-guia__btn'} aria-haspopup="menu" aria-expanded={abierto}
-        aria-controls={abierto ? idMenu : undefined} aria-label={compacto ? 'Guía' : undefined} title="Guía" data-tour="nav-guia"
+        aria-controls={abierto ? idMenu : undefined} aria-label={compacto ? 'Guía' : undefined} title="Guía"
         onClick={() => setAbierto((a) => !a)}>
         <CircleHelp width={compacto ? 18 : 16} height={compacto ? 18 : 16} strokeWidth={1.75} aria-hidden />
         {!compacto && <span>Guía</span>}

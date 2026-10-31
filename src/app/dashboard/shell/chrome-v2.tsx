@@ -6,6 +6,7 @@ import AvisoRol from '../aviso-rol';
 import SidebarV2 from './sidebar-v2';
 import CabeceraEscritorio from './cabecera-escritorio';
 import CabeceraMovil from './cabecera-movil';
+import NavegacionMovil from './navegacion-movil';
 import CapaCarga from './capa-carga';
 
 /**
@@ -44,7 +45,7 @@ export default function DashboardChromeV2({
       <div className={CLASES_V2.raiz} data-ui="v2" style={{ fontFamily: 'var(--font-sans-ui), var(--font-sans)' }}>
         <CapaCarga />
         <a href="#contenido-principal" className={CLASES_V2.saltar}>Saltar al contenido</a>
-        <CabeceraMovil rol={rol} rolEtiqueta={rolEtiqueta} nombre={nombre} perfil={perfil} usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} />
+        <CabeceraMovil rol={rol} perfil={perfil} />
         <div className={CLASES_V2.fila}>
           <SidebarV2 rol={rol} rolEtiqueta={rolEtiqueta} nombre={nombre} perfil={perfil} usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} />
           <div className={CLASES_V2.columna}>
@@ -56,6 +57,7 @@ export default function DashboardChromeV2({
             </div>
           </div>
         </div>
+        <NavegacionMovil rol={rol} rolEtiqueta={rolEtiqueta} nombre={nombre} perfil={perfil} usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} />
       </div>
     </ProveedorNotificaciones>
   );

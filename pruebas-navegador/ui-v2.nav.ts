@@ -78,8 +78,10 @@ test.describe('con la UI v2 forzada', () => {
   });
 
   test('modo oscuro: el documento (body) también es oscuro, no solo el div del chrome', async ({ page }) => {
+    // El tema vive en localStorage y `useTema` lo reaplica al hidratar: poner el atributo a mano justo tras `goto` perdía la carrera
+    // contra la hidratación (la reaplicación lo devolvía a claro). Se elige el tema como lo hace la app, ANTES de cargar la página.
+    await page.addInitScript(() => window.localStorage.setItem('likida-tema', 'oscuro'));
     await page.goto('/dashboard/viajes');
-    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
     // `body` transiciona el fondo al cambiar de tema: leer el estilo justo después de poner data-theme da un color a medio
     // camino (prueba intermitente). `expect.poll` reintenta hasta que la transición termina; no se debilita lo que se mide:
     // el valor final sigue siendo el negro neutro #0e0e10 de la paleta (ESTILO-LIKIDA §1).

@@ -4,6 +4,7 @@ import { useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { Bell, ChevronsLeft } from 'lucide-react';
 import type { PerfilTenant } from '@/lib/auth/visibilidad';
+import { TZ_MX } from '@/lib/formato';
 import { HREF_NOTIFICACIONES, hrefActivo, hrefsDelMenu } from './menu-por-perfil';
 import { useMenuV2 } from './navegacion-v2';
 import { useRiel } from './colapso';
@@ -11,7 +12,7 @@ import MenuGuia from './menu-guia';
 
 /** «31 oct 2026», es-MX, zona de México. Vacío en el servidor: se pinta al hidratar (sin desajuste de hidratación). */
 function fechaDeHoy(): string {
-  const partes = new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Mexico_City' }).formatToParts(new Date());
+  const partes = new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short', year: 'numeric', timeZone: TZ_MX }).formatToParts(new Date());
   const v = (t: string) => partes.find((p) => p.type === t)?.value ?? '';
   return `${v('day')} ${v('month').replace('.', '')} ${v('year')}`;
 }
