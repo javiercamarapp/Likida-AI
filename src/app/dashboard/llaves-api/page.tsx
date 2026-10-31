@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { KeyRound } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
@@ -10,10 +9,12 @@ import {
   crearLlaveApi, revocarLlaveApi, listarLlavesApi, AREAS_DE_LLAVE, VIGENCIAS_DE_LLAVE,
   VIGENCIA_DEFAULT, type LlaveListada,
 } from '@/lib/auth/llave-api-escritura';
-import { EstadoError } from '@/app/admin/ui/kit';
-import { BarraPagina } from '../resumen-visual';
+import { EstadoError } from '../estados';
 import { FormaEmision, type ResultadoForma } from './forma';
 import { ListaLlaves } from './vista';
+import { MarcoPagina, Aviso } from '@/app/ui-v2/componentes';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Llaves de API' };
 
 export const dynamic = 'force-dynamic';
 
@@ -104,39 +105,30 @@ export default async function PaginaLlavesApi({
   }
 
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<KeyRound width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Llaves de API"
-        />
+    <MarcoPagina titulo="Llaves de API" apoyo="Con una llave, un sistema tuyo consume la API de Likida sin navegador ni sesión. Aquí las emites y las revocas.">
+      <Aviso tono="info">
+        Con una llave, un sistema tuyo —un TMS, un tablero— consume la API de Likida sin
+        navegador ni sesión: se manda como <code className="cifra-mono">Authorization: Bearer</code> en
+        cada petición. La referencia completa vive en <code className="cifra-mono">/api/v1/openapi</code>.
+      </Aviso>
 
-        <div className="px-5 py-5 flex-1 space-y-4">
-          <p className="text-[12.5px] max-w-2xl" style={{ color: 'var(--muted)' }}>
-            Con una llave, un sistema tuyo —un TMS, un tablero— consume la API de Likida sin
-            navegador ni sesión: se manda como <code className="cifra-mono">Authorization: Bearer</code> en
-            cada petición. La referencia completa vive en <code className="cifra-mono">/api/v1/openapi</code>.
-          </p>
+      {llaves === null ? (
+        <EstadoError mensaje="No pude leer las llaves de la flota. No se enseña una lista a medias: media lista se vería igual que la lista entera, y sobre llaves eso invita a emitir duplicados." />
+      ) : (
+        <>
+          <ListaLlaves llaves={llaves} revocarLlave={revocarLlave} />
 
-          {llaves === null ? (
-            <EstadoError mensaje="No pude leer las llaves de la flota. No se enseña una lista a medias: media lista se vería igual que la lista entera, y sobre llaves eso invita a emitir duplicados." />
-          ) : (
-            <>
-              <ListaLlaves llaves={llaves} revocarLlave={revocarLlave} />
-
-              <section className="space-y-3">
-                <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-                  Emitir una llave
-                </h2>
-                <div className="card p-4">
-                  <FormaEmision accion={emitirLlave} areas={AREAS_DE_LLAVE}
-                    vigencias={VIGENCIAS_DE_LLAVE} vigenciaDefault={VIGENCIA_DEFAULT} />
-                </div>
-              </section>
-            </>
-          )}
-        </div>
-      </div>
-    </main>
+          <section className="space-y-3">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+              Emitir una llave
+            </h2>
+            <div className="card p-4">
+              <FormaEmision accion={emitirLlave} areas={AREAS_DE_LLAVE}
+                vigencias={VIGENCIAS_DE_LLAVE} vigenciaDefault={VIGENCIA_DEFAULT} />
+            </div>
+          </section>
+        </>
+      )}
+    </MarcoPagina>
   );
 }

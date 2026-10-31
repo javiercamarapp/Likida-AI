@@ -1,8 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
-import { ArrowLeft, Settings2 } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import type { ConfigSalida } from '@/lib/likida/carta_porte_docs/salida_config';
 import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
 import { SeccionCcp, type AccionesCcp } from './seccion_ccp';
@@ -10,6 +9,7 @@ import { SeccionPrimerMes } from './seccion_primer_mes';
 import type { PrimerMesFila } from '@/lib/likida/carta_porte_docs/repo';
 import type { CcpRecibidoVista } from '@/lib/likida/carta_porte_docs/ccp_respuesta_repo';
 import { ROTULO_ARRANQUE, erroresEnLinea, frasePrevia, nombreDestinatario, textoDeConfig, type CamposTexto } from './formato';
+import { Aviso, BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
 
 /**
  * LA PANTALLA «CONFIGURACIÓN DE LA SALIDA» (T-A3-32): cómo sale la plantilla hacia el sistema del cliente, cuántas veces se
@@ -130,15 +130,9 @@ export function VistaConfiguracionSalida({ config, esArranque, personas, conecto
   accionPrimerMes?: AccionDoc;
 }) {
   return (
-    <div className="space-y-6">
-      <Link href={`/dashboard/agentes/carta-porte${sufijo}`} className="inline-flex items-center gap-1.5 text-[12.5px] hover:opacity-75" style={{ color: 'var(--muted)' }}>
-        <ArrowLeft width={14} height={14} strokeWidth={1.75} />Agente de Carta Porte
-      </Link>
-      <header className="space-y-1.5">
-        <h1 className="text-[20px] font-semibold flex items-center gap-2"><Settings2 width={18} height={18} strokeWidth={1.75} />Configuración de la salida</h1>
-        <p className="text-[13px]" style={{ color: 'var(--muted)' }}>Cómo sale la plantilla hacia el sistema del cliente y qué hace el agente cuando algo falta.</p>
-        {esArranque && <p role="note" className="text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>{ROTULO_ARRANQUE}. Ajústalos cuando el cliente los defina.</p>}
-      </header>
+    <MarcoPagina titulo="Configuración de la salida" apoyo="Cómo sale la plantilla hacia el sistema del cliente y qué hace el agente cuando algo falta." acciones={<BotonEnlace tamano="sm" href={`/dashboard/agentes/carta-porte${sufijo}`} icono={<ArrowLeft width={13} height={13} strokeWidth={1.75} />}>Agente de Carta Porte</BotonEnlace>}>
+      {esArranque && <Aviso tono="warn">{ROTULO_ARRANQUE}. Ajústalos cuando el cliente los defina.</Aviso>}
+
       <FormaAccion accion={acciones.guardar} className="space-y-6">
         <Formulario config={config} personas={personas} conector={conector} ver={ver} />
         <BotonEnvio etiqueta="Guardar configuración" pendiente="Guardando…" />
@@ -156,6 +150,6 @@ export function VistaConfiguracionSalida({ config, esArranque, personas, conecto
         <p role="alert" className="text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>No se pudieron leer los CCP timbrados recibidos. Recarga la pantalla; si sigue igual, avisa a soporte.</p>
       )}
       {accionesCcp && ccp && <SeccionCcp activa={ccp.activa} filas={ccp.filas} ver={ver} acciones={accionesCcp} />}
-    </div>
+    </MarcoPagina>
   );
 }

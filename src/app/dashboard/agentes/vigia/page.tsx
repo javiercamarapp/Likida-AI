@@ -21,6 +21,8 @@ import {
 import { sufijoTenant } from '../../sufijo';
 import { VistaAgenteVigia } from './vista';
 import type { ResultadoVigia } from './controles';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Servicio al cliente' };
 
 export const dynamic = 'force-dynamic';
 

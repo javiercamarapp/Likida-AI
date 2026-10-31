@@ -14,6 +14,8 @@ import {
   type ConfigFormatoFlota, type TelefonosFlota,
 } from '@/lib/likida/liquidacion_externa/repo';
 import { VistaFormatoLiquidacion } from './vista';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Formato de las liquidaciones' };
 
 export const dynamic = 'force-dynamic';
 

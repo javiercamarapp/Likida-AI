@@ -1,5 +1,5 @@
 import { KeyRound } from 'lucide-react';
-import { EstadoVacio } from '@/app/admin/ui/kit';
+import { EstadoVacio } from '../estados';
 import { fechaMx, fechaHoraMx } from '@/lib/formato';
 import { AREAS_DE_LLAVE, llaveVencida, type LlaveListada } from '@/lib/auth/llave-api-escritura';
 import { FormaRevocar, type AccionForma } from './forma';

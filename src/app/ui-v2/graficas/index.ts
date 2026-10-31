@@ -2,6 +2,7 @@ export { KindBadge, ROTULO_DATO, type TipoDato } from './kind-badge';
 export { ChartState, type EstadoGrafica } from './chart-state';
 export { ProgresoAnillo } from './progreso-anillo';
 export { CheckExito } from './check-exito';
+export { Cifra, TiraCifras, selloDe, MENSAJE_CIFRA_ERROR, type PropsCifra } from './cifra';
 export { TiraKpi, type ItemKpi, type SegmentoKpi } from './tira-kpi';
 export { Sparkline } from './sparkline';
 export { AreaMini } from './area-mini';

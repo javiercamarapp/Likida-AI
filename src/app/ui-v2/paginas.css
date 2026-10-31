@@ -122,7 +122,7 @@
 .rv-res__tipos { display: flex; flex-direction: column; justify-content: space-between; gap: 6px; flex: 1 1 auto; }
 
 /* Estados vacío / error: la celda punteada llena la tarjeta (no queda un hueco bajo la línea). */
-.rv-res__fila > .rv-tarjeta > .rv-tarjeta__cuerpo > .rv-vacio, .rv-res__fila > .rv-tarjeta > .rv-tarjeta__cuerpo > .rv-tarjeta__error { flex: 1 1 auto; }
+.rv-res__fila > .rv-tarjeta > .rv-tarjeta__cuerpo > .rv-vacio, .rv-res__fila > .rv-tarjeta > .rv-tarjeta__cuerpo > .rv-error { flex: 1 1 auto; }
 [data-ui="v2"] .rv-res .rv-kpis { min-height: 112px; }
 
 /* Barra de periodo: mientras llega el nuevo periodo, las tarjetas conservan sus datos y se atenúan (sin capa de carga). */
@@ -204,3 +204,40 @@ button.rv-at__fila:focus-visible { outline: 2px solid var(--ink); outline-offset
 @media (max-width: 767px) {
   .rv-res { padding: 6px 16px 24px; }
 }
+
+
+/* ═══ L2b · MarcoPagina fuera del alcance v2 (rollback a v1): una columna con el mismo ritmo, sin piel nueva ═══ */
+.rv-marco { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 20px; }
+
+/* ═══ L2b · BASE SIN ÁMBITO (rollback a v1): las piezas nuevas se ven con aire, caja y altura aunque el tenant tenga tenant_ui='v1' ═══
+   El rollback global a v1 es la red de seguridad. Estas reglas viven AQUÍ (y no en componentes.css/graficas.css, cuyo snapshot de
+   reglas sin ámbito guarda que v1 pinte idéntico) y son MÁS BAJAS que sus gemelas de [data-ui="v2"], que las pisan en v2. */
+.rv-marco { padding: 20px 20px 24px; }
+.rv-marco > .rv-encabezado { margin-bottom: 4px; }
+.rv-tarjeta { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.rv-tarjeta__cab { display: flex; align-items: center; gap: 4px; min-height: 32px; }
+.rv-tarjeta__titulo { margin: 0; font-size: 14px; font-weight: 600; }
+.rv-tarjeta__acciones { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.rv-error { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--line2, var(--line)); border-radius: 12px; background: var(--badbg, var(--canvas)); color: var(--bad, var(--ink)); font-size: 13px; }
+.rv-error__cuerpo { flex: 1 1 auto; min-width: 0; }
+.rv-esq-barra, .rv-esq-cuerpo, .rv-esq-fila { display: block; border-radius: 6px; }
+.rv-esq-barra[data-alto="12"] { height: 12px; } .rv-esq-barra[data-alto="14"] { height: 14px; } .rv-esq-barra[data-alto="16"] { height: 16px; }
+.rv-esq-barra[data-alto="24"] { height: 24px; } .rv-esq-barra[data-alto="26"] { height: 26px; }
+.rv-esq-barra[data-ancho="xs"] { width: 96px; } .rv-esq-barra[data-ancho="s"] { width: 40%; } .rv-esq-barra[data-ancho="m"] { width: 55%; }
+.rv-esq-barra[data-ancho="l"] { width: 70%; } .rv-esq-barra[data-ancho="titulo"] { width: 220px; } .rv-esq-barra[data-ancho="lectura"] { width: min(460px, 100%); }
+.rv-esq-barra[data-ancho="full"] { width: 100%; }
+.rv-esq-cuerpo { width: 100%; height: 120px; }
+.rv-esq-cuerpo[data-alto="60"] { height: 60px; } .rv-esq-cuerpo[data-alto="84"] { height: 84px; } .rv-esq-cuerpo[data-alto="160"] { height: 160px; }
+.rv-esq-cuerpo[data-alto="240"] { height: 240px; } .rv-esq-cuerpo[data-alto="320"] { height: 320px; }
+.rv-esq-fila { height: 40px; } .rv-esq-fila--cab { height: 36px; }
+.rv-esq-dos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.rv-esq-encabezado { display: flex; flex-direction: column; gap: 8px; }
+.rv-kpi__nota { font-size: 12px; color: var(--muted); }
+.rv-kpi__atencion { display: inline-flex; min-height: 20px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--canvas); }
+.rv-kpi__error, .rv-kpi__sinbase { font-size: 12px; color: var(--muted); }
+.rv-esq-pagina { min-height: 60vh; }
+.rv-esq-cifras .rv-kpi { min-height: 112px; }
+.rv-esq { min-width: 0; }
+.rv-error__icono { flex: none; }
+.rv-error__texto { min-width: 0; }
+.rv-error__accion { flex: none; display: flex; align-items: center; gap: 8px; }

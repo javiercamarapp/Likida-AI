@@ -1,6 +1,4 @@
 import Link from 'next/link';
-import { MapPinned } from 'lucide-react';
-import { BarraPagina } from '../../../resumen-visual';
 import { numero } from '@/lib/formato';
 import { DIAS_TEXTOS_SIN_SITIO, PLANTILLA_CSV_SITIOS, TOP_TEXTOS_SIN_SITIO, type TextoSinSitio } from '@/lib/likida/conductor/sitios';
 import type { SitioFila } from '@/lib/likida/conductor/repo_validacion';
@@ -8,6 +6,7 @@ import { FilaTextoSinSitio, FormaImportarEquivalencias } from './formas_equivale
 import { FormaCatalogo } from './formas_catalogo';
 import { FormaEstadoSitio } from './formas_estado';
 import { FormaImportar, FormaSitio, SITIO_VACIO, type AccionSitio, type SitioEditable } from './formas';
+import { MarcoPagina, Aviso, BotonEnlace } from '@/app/ui-v2/componentes';
 
 // SOLO tipos: la vista no debe arrastrar al bundle el acceso a datos.
 
@@ -50,169 +49,162 @@ export function VistaSitios(p: PropsVistaSitios) {
   const padres = p.selectorSitios ?? (p.sitios ?? []).filter((s) => s.activa).map((s) => ({ id: s.id, nombre: s.nombre }));
   const avisoSelector = p.selectorHayMas ? 'Hay más sitios activos de los que caben en el selector (solo salen los primeros por nombre).' : null;
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina icono={<MapPinned width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />} titulo="Catálogo de sitios" />
-        <div className="px-5 py-5 flex-1 space-y-4">
-          <p className="text-[12.5px] max-w-[80ch]" style={{ color: 'var(--muted)' }}>
-            Los clientes, plantas y andenes con su centro y su radio. El agente compara cada «ya llegué» contra el sitio del viaje
-            (pin de WhatsApp o GPS). <strong>Ninguna coordenada se calcula ni se inventa</strong>: la capturas tú o viene en tu archivo.
-            Un viaje sin sitio asignado queda «sin dato», nunca «no coincide».{' '}
-            <Link href={`/dashboard/agentes/conductores${p.sufijo}`} className="underline">Volver al tablero</Link>
-          </p>
+    <MarcoPagina titulo="Catálogo de sitios" apoyo="Clientes, plantas y andenes con su centro y su radio. Ninguna coordenada se calcula ni se inventa." acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/conductores${p.sufijo}`}>Volver al tablero</BotonEnlace>}>
+      <Aviso tono="info">
+        El agente compara cada «ya llegué» contra el sitio del viaje (pin de WhatsApp o GPS). <strong>Ninguna coordenada se calcula ni se inventa</strong>: la capturas tú o viene en tu archivo.
+        Un viaje sin sitio asignado queda «sin dato», nunca «no coincide».
+      </Aviso>
 
-          <section className="card p-4 space-y-3" aria-label="Sitios registrados">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="font-display text-[15px] font-semibold">Sitios registrados</h2>
-              <form method="get" className="ml-auto flex items-center gap-2">
-                {p.sufijo.startsWith('?') && [...new URLSearchParams(p.sufijo.slice(1))].map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-                <input type="search" name="q" defaultValue={p.busqueda} placeholder="Buscar por nombre o código" className="hairline rounded-lg px-2.5 h-8 text-[12.5px]" aria-label="Buscar sitios" />
-                <button type="submit" className="h-8 px-3 rounded-lg text-[12.5px] hairline">Buscar</button>
-              </form>
-            </div>
-            {p.sitios === null ? (
-              <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No se pudo leer el catálogo ahora mismo.</p>
-            ) : p.sitios.length === 0 ? (
-              <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
-                {p.busqueda ? 'Ningún sitio coincide con esa búsqueda.' : 'Todavía no hay sitios. Crea uno abajo o importa tu archivo: hasta entonces las llegadas se quedan «sin dato».'}
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-[12.5px]">
-                  <thead>
-                    <tr className="text-left etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>
-                      <th className="py-1.5 pr-3">Nombre</th><th className="pr-3">Tipo</th><th className="pr-3">Código</th>
-                      <th className="pr-3">Centro (lat, lng)</th><th className="pr-3 text-right">Radio</th><th className="pr-3">Cliente</th><th className="pr-3">Origen del dato</th><th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {p.sitios.map((s) => (
-                      <tr key={s.id} className="border-t" style={{ borderColor: 'var(--line2)', opacity: s.activa ? 1 : 0.55 }}>
-                        <td className="py-1.5 pr-3 font-medium">{s.nombre}{!s.activa && <span className="ml-1.5 text-[10.5px]" style={{ color: 'var(--faint)' }}>(archivado)</span>}</td>
-                        <td className="pr-3">{TIPO_TEXTO[s.tipo] ?? s.tipo}</td>
-                        <td className="pr-3 cifra-mono">{s.codigo ?? '—'}</td>
-                        <td className="pr-3 cifra-mono">{s.lat.toFixed(5)}, {s.lng.toFixed(5)}</td>
-                        <td className="pr-3 text-right cifra-mono">{numero(s.radioM)} m</td>
-                        <td className="pr-3">{s.clienteNombre ?? '—'}</td>
-                        <td className="pr-3">{s.fuente === 'csv' ? 'importado de CSV' : 'captura manual'}</td>
-                        <td className="whitespace-nowrap">
-                          {p.puedeEditar && (
-                            <span className="flex items-center gap-3">
-                              <Link href={`/dashboard/agentes/conductores/sitios?editar=${s.id}${p.sufijo.startsWith('?') ? `&${p.sufijo.slice(1)}` : ''}`} className="underline" style={{ color: 'var(--muted)' }}>Editar</Link>
-                              <FormaEstadoSitio accion={p.accionEstado} id={s.id} activa={s.activa} />
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            {p.hayMas && <p className="text-[11px]" style={{ color: 'var(--warn)' }}>Hay más sitios de los que se listan: afina la búsqueda.</p>}
-          </section>
-
-          {p.puedeEditar ? (
-            <>
-              <section className="card p-4 space-y-3" aria-label={p.editando ? 'Editar sitio' : 'Nuevo sitio'}>
-                <h2 className="font-display text-[15px] font-semibold">{p.editando ? `Editar «${p.editando.nombre}»` : 'Nuevo sitio'}</h2>
-                {avisoSelector && <p role="status" className="text-[11px]" style={{ color: 'var(--warn)' }}>{avisoSelector}</p>}
-                <FormaSitio key={p.editando?.id ?? 'nuevo'} accion={p.accionGuardar} inicial={p.editando ? aEditable(p.editando) : SITIO_VACIO} clientes={p.clientes} padres={padres} />
-                {p.editando && <Link href={`/dashboard/agentes/conductores/sitios${p.sufijo}`} className="text-[12px] underline" style={{ color: 'var(--muted)' }}>Cancelar la edición</Link>}
-              </section>
-              <section className="card p-4 space-y-3" aria-label="Importar CSV">
-                <h2 className="font-display text-[15px] font-semibold">Importar desde CSV</h2>
-                <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-                  Columnas: <code>codigo, nombre, tipo, lat, lng, radio_m, direccion, cliente, padre</code>. Todo o nada: si una fila falla, no se importa ninguna y te
-                  decimos cuál corregir. Re-importar el mismo archivo actualiza por <code>codigo</code>; no duplica.
-                </p>
-                <details className="text-[12px]">
-                  <summary className="cursor-pointer underline" style={{ color: 'var(--muted)' }}>Ver el formato de ejemplo</summary>
-                  <pre className="mt-2 p-3 rounded-lg overflow-x-auto font-mono text-[11.5px]" style={{ background: 'var(--canvas)' }}>{PLANTILLA_CSV_SITIOS}</pre>
-                  <p className="mt-1" style={{ color: 'var(--faint)' }}>El ejemplo trae las coordenadas en blanco a propósito: hay que llenarlas con las reales.</p>
-                </details>
-                <FormaImportar accion={p.accionImportar} />
-              </section>
-            </>
-          ) : (
-            <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota o el jefe de tráfico editan el catálogo.</p>
-          )}
-
-          {p.puedeEditar && p.accionCatalogo && (
-            <section className="card p-4 space-y-3" aria-label="Catálogo depurado de orígenes y destinos">
-              <h2 className="font-display text-[15px] font-semibold">Catálogo depurado de orígenes y destinos</h2>
-              <p className="text-[12.5px] max-w-[80ch]" style={{ color: 'var(--muted)' }}>
-                Sin tope de filas. Columnas: <code>nombre, lat, lng, estatus, terminal, pais</code> (y opcionales <code>codigo, radio_m, direccion, tipo</code>).
-                Los posibles duplicados (mismo nombre o a 100 m o menos) <strong>se reportan, nunca se fusionan solos</strong>. Las coordenadas ausentes, (0, 0),
-                fuera de rango o fuera de México sin país declarado quedan «por validar» y no se importan; las inactivas tampoco. El reporte trae, por terminal,
-                la lista de revisión de los sábados con el cupo diario elegido; las de EE. UU. van aparte. Solo lee tu archivo: no escribe en el sistema del cliente.
-              </p>
-              <FormaCatalogo accion={p.accionCatalogo} />
-            </section>
-          )}
-
-          {p.textosSinSitio !== undefined && (
-            <section className="card p-4 space-y-3" aria-label="Textos sin sitio">
-              <h2 className="font-display text-[15px] font-semibold">Textos sin sitio</h2>
-              <p className="text-[12.5px] max-w-[80ch]" style={{ color: 'var(--muted)' }}>
-                El origen y el destino de un viaje llegan como texto libre. Estos son los {TOP_TEXTOS_SIN_SITIO} textos más frecuentes de los viajes abiertos
-                de los últimos {DIAS_TEXTOS_SIN_SITIO} días que todavía no se ligan a ningún sitio: sin sitio no hay llegada que validar. Dile al sistema qué es cada
-                uno: un sitio de tu catálogo, una instrucción («regresa sin carga») o algo que se ignora. Ante la duda no se asigna nada.
-              </p>
-              {p.textosSinSitio === null ? (
-                <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No se pudo leer la lista ahora mismo.</p>
-              ) : p.textosSinSitio.length === 0 ? (
-                <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No hay textos sin sitio en los viajes abiertos de los últimos {DIAS_TEXTOS_SIN_SITIO} días.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-[12.5px]">
-                    <thead>
-                      <tr className="text-left etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>
-                        <th className="py-1.5 pr-3">Texto</th><th className="pr-3">Lado</th><th className="pr-3 text-right">Viajes</th>{p.puedeEditar && <th>Qué es</th>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {p.textosSinSitio.map((x) => (
-                        <tr key={x.textoNormalizado} className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
-                          <td className="py-1.5 pr-3 font-medium break-words max-w-[48ch]">{x.texto}</td>
-                          <td className="pr-3">{x.lado === 'ambos' ? 'origen y destino' : x.lado}</td>
-                          <td className="pr-3 text-right cifra-mono">{numero(x.frecuencia)}</td>
-                          {p.puedeEditar && (
-                            <td className="py-1">
-                              {p.accionAsignarEquivalencia
-                                ? <FilaTextoSinSitio accion={p.accionAsignarEquivalencia} texto={x.texto} lado={x.lado} sitios={padres} />
-                                : null}
-                            </td>
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              {avisoSelector && p.puedeEditar && <p role="status" className="text-[11px]" style={{ color: 'var(--warn)' }}>{avisoSelector} Para uno que no aparezca, usa la importación de equivalencias por CSV (columna geocerca_codigo).</p>}
-              {p.textosTruncado && <p className="text-[11px]" style={{ color: 'var(--warn)' }}>Hay más viajes de los que se leyeron: la cuenta es de una muestra.</p>}
-              {p.descargaCsv && p.textosSinSitio !== null && p.textosSinSitio.length > 0 && (
-                <p className="text-[12px]">
-                  <a href={p.descargaCsv} download="textos-sin-sitio.csv" className="underline" style={{ color: 'var(--muted)' }}>Descargar esta lista como CSV</a>{' '}
-                  <span style={{ color: 'var(--faint)' }}>para que se complete fuera del sistema (solo trae el texto del lugar; ningún dato de personas).</span>
-                </p>
-              )}
-              {p.puedeEditar && p.accionImportarEquivalencias && (
-                <div className="space-y-3 pt-2">
-                  <h3 className="font-display text-[13.5px] font-semibold">Importar equivalencias desde CSV</h3>
-                  <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-                    Columnas: <code>texto, geocerca_codigo, tipo, lado</code>. <code>tipo</code>: <code>sitio</code>, <code>sin_sitio</code> (instrucción) o <code>ignorar</code>;
-                    <code> lado</code>: origen, destino o ambos (vacío = ambos). Cada fila se aprueba o se rechaza sola y te decimos cuál y por qué; las filas sin
-                    completar se omiten. Re-importar el mismo archivo no cambia nada. El código del sitio tiene que existir ya en el catálogo.
-                  </p>
-                  <FormaImportarEquivalencias accion={p.accionImportarEquivalencias} />
-                </div>
-              )}
-            </section>
-          )}
+      <section className="card p-4 space-y-3" aria-label="Sitios registrados">
+        <div className="flex items-center gap-3 flex-wrap">
+          <h2 className="font-display text-[15px] font-semibold">Sitios registrados</h2>
+          <form method="get" className="ml-auto flex items-center gap-2">
+            {p.sufijo.startsWith('?') && [...new URLSearchParams(p.sufijo.slice(1))].map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
+            <input type="search" name="q" defaultValue={p.busqueda} placeholder="Buscar por nombre o código" className="hairline rounded-lg px-2.5 h-8 text-[12.5px]" aria-label="Buscar sitios" />
+            <button type="submit" className="h-8 px-3 rounded-lg text-[12.5px] hairline">Buscar</button>
+          </form>
         </div>
-      </div>
-    </main>
+        {p.sitios === null ? (
+          <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No se pudo leer el catálogo ahora mismo.</p>
+        ) : p.sitios.length === 0 ? (
+          <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            {p.busqueda ? 'Ningún sitio coincide con esa búsqueda.' : 'Todavía no hay sitios. Crea uno abajo o importa tu archivo: hasta entonces las llegadas se quedan «sin dato».'}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12.5px]">
+              <thead>
+                <tr className="text-left etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>
+                  <th className="py-1.5 pr-3">Nombre</th><th className="pr-3">Tipo</th><th className="pr-3">Código</th>
+                  <th className="pr-3">Centro (lat, lng)</th><th className="pr-3 text-right">Radio</th><th className="pr-3">Cliente</th><th className="pr-3">Origen del dato</th><th />
+                </tr>
+              </thead>
+              <tbody>
+                {p.sitios.map((s) => (
+                  <tr key={s.id} className="border-t" style={{ borderColor: 'var(--line2)', opacity: s.activa ? 1 : 0.55 }}>
+                    <td className="py-1.5 pr-3 font-medium">{s.nombre}{!s.activa && <span className="ml-1.5 text-[10.5px]" style={{ color: 'var(--faint)' }}>(archivado)</span>}</td>
+                    <td className="pr-3">{TIPO_TEXTO[s.tipo] ?? s.tipo}</td>
+                    <td className="pr-3 cifra-mono">{s.codigo ?? '—'}</td>
+                    <td className="pr-3 cifra-mono">{s.lat.toFixed(5)}, {s.lng.toFixed(5)}</td>
+                    <td className="pr-3 text-right cifra-mono">{numero(s.radioM)} m</td>
+                    <td className="pr-3">{s.clienteNombre ?? '—'}</td>
+                    <td className="pr-3">{s.fuente === 'csv' ? 'importado de CSV' : 'captura manual'}</td>
+                    <td className="whitespace-nowrap">
+                      {p.puedeEditar && (
+                        <span className="flex items-center gap-3">
+                          <Link href={`/dashboard/agentes/conductores/sitios?editar=${s.id}${p.sufijo.startsWith('?') ? `&${p.sufijo.slice(1)}` : ''}`} className="underline" style={{ color: 'var(--muted)' }}>Editar</Link>
+                          <FormaEstadoSitio accion={p.accionEstado} id={s.id} activa={s.activa} />
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {p.hayMas && <p className="text-[11px]" style={{ color: 'var(--warn)' }}>Hay más sitios de los que se listan: afina la búsqueda.</p>}
+      </section>
+
+      {p.puedeEditar ? (
+        <>
+          <section className="card p-4 space-y-3" aria-label={p.editando ? 'Editar sitio' : 'Nuevo sitio'}>
+            <h2 className="font-display text-[15px] font-semibold">{p.editando ? `Editar «${p.editando.nombre}»` : 'Nuevo sitio'}</h2>
+            {avisoSelector && <p role="status" className="text-[11px]" style={{ color: 'var(--warn)' }}>{avisoSelector}</p>}
+            <FormaSitio key={p.editando?.id ?? 'nuevo'} accion={p.accionGuardar} inicial={p.editando ? aEditable(p.editando) : SITIO_VACIO} clientes={p.clientes} padres={padres} />
+            {p.editando && <Link href={`/dashboard/agentes/conductores/sitios${p.sufijo}`} className="text-[12px] underline" style={{ color: 'var(--muted)' }}>Cancelar la edición</Link>}
+          </section>
+          <section className="card p-4 space-y-3" aria-label="Importar CSV">
+            <h2 className="font-display text-[15px] font-semibold">Importar desde CSV</h2>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+              Columnas: <code>codigo, nombre, tipo, lat, lng, radio_m, direccion, cliente, padre</code>. Todo o nada: si una fila falla, no se importa ninguna y te
+              decimos cuál corregir. Re-importar el mismo archivo actualiza por <code>codigo</code>; no duplica.
+            </p>
+            <details className="text-[12px]">
+              <summary className="cursor-pointer underline" style={{ color: 'var(--muted)' }}>Ver el formato de ejemplo</summary>
+              <pre className="mt-2 p-3 rounded-lg overflow-x-auto font-mono text-[11.5px]" style={{ background: 'var(--canvas)' }}>{PLANTILLA_CSV_SITIOS}</pre>
+              <p className="mt-1" style={{ color: 'var(--faint)' }}>El ejemplo trae las coordenadas en blanco a propósito: hay que llenarlas con las reales.</p>
+            </details>
+            <FormaImportar accion={p.accionImportar} />
+          </section>
+        </>
+      ) : (
+        <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota o el jefe de tráfico editan el catálogo.</p>
+      )}
+
+      {p.puedeEditar && p.accionCatalogo && (
+        <section className="card p-4 space-y-3" aria-label="Catálogo depurado de orígenes y destinos">
+          <h2 className="font-display text-[15px] font-semibold">Catálogo depurado de orígenes y destinos</h2>
+          <p className="text-[12.5px] max-w-[80ch]" style={{ color: 'var(--muted)' }}>
+            Sin tope de filas. Columnas: <code>nombre, lat, lng, estatus, terminal, pais</code> (y opcionales <code>codigo, radio_m, direccion, tipo</code>).
+            Los posibles duplicados (mismo nombre o a 100 m o menos) <strong>se reportan, nunca se fusionan solos</strong>. Las coordenadas ausentes, (0, 0),
+            fuera de rango o fuera de México sin país declarado quedan «por validar» y no se importan; las inactivas tampoco. El reporte trae, por terminal,
+            la lista de revisión de los sábados con el cupo diario elegido; las de EE. UU. van aparte. Solo lee tu archivo: no escribe en el sistema del cliente.
+          </p>
+          <FormaCatalogo accion={p.accionCatalogo} />
+        </section>
+      )}
+
+      {p.textosSinSitio !== undefined && (
+        <section className="card p-4 space-y-3" aria-label="Textos sin sitio">
+          <h2 className="font-display text-[15px] font-semibold">Textos sin sitio</h2>
+          <p className="text-[12.5px] max-w-[80ch]" style={{ color: 'var(--muted)' }}>
+            El origen y el destino de un viaje llegan como texto libre. Estos son los {TOP_TEXTOS_SIN_SITIO} textos más frecuentes de los viajes abiertos
+            de los últimos {DIAS_TEXTOS_SIN_SITIO} días que todavía no se ligan a ningún sitio: sin sitio no hay llegada que validar. Dile al sistema qué es cada
+            uno: un sitio de tu catálogo, una instrucción («regresa sin carga») o algo que se ignora. Ante la duda no se asigna nada.
+          </p>
+          {p.textosSinSitio === null ? (
+            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No se pudo leer la lista ahora mismo.</p>
+          ) : p.textosSinSitio.length === 0 ? (
+            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No hay textos sin sitio en los viajes abiertos de los últimos {DIAS_TEXTOS_SIN_SITIO} días.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-[12.5px]">
+                <thead>
+                  <tr className="text-left etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>
+                    <th className="py-1.5 pr-3">Texto</th><th className="pr-3">Lado</th><th className="pr-3 text-right">Viajes</th>{p.puedeEditar && <th>Qué es</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {p.textosSinSitio.map((x) => (
+                    <tr key={x.textoNormalizado} className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
+                      <td className="py-1.5 pr-3 font-medium break-words max-w-[48ch]">{x.texto}</td>
+                      <td className="pr-3">{x.lado === 'ambos' ? 'origen y destino' : x.lado}</td>
+                      <td className="pr-3 text-right cifra-mono">{numero(x.frecuencia)}</td>
+                      {p.puedeEditar && (
+                        <td className="py-1">
+                          {p.accionAsignarEquivalencia
+                            ? <FilaTextoSinSitio accion={p.accionAsignarEquivalencia} texto={x.texto} lado={x.lado} sitios={padres} />
+                            : null}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {avisoSelector && p.puedeEditar && <p role="status" className="text-[11px]" style={{ color: 'var(--warn)' }}>{avisoSelector} Para uno que no aparezca, usa la importación de equivalencias por CSV (columna geocerca_codigo).</p>}
+          {p.textosTruncado && <p className="text-[11px]" style={{ color: 'var(--warn)' }}>Hay más viajes de los que se leyeron: la cuenta es de una muestra.</p>}
+          {p.descargaCsv && p.textosSinSitio !== null && p.textosSinSitio.length > 0 && (
+            <p className="text-[12px]">
+              <a href={p.descargaCsv} download="textos-sin-sitio.csv" className="underline" style={{ color: 'var(--muted)' }}>Descargar esta lista como CSV</a>{' '}
+              <span style={{ color: 'var(--faint)' }}>para que se complete fuera del sistema (solo trae el texto del lugar; ningún dato de personas).</span>
+            </p>
+          )}
+          {p.puedeEditar && p.accionImportarEquivalencias && (
+            <div className="space-y-3 pt-2">
+              <h3 className="font-display text-[13.5px] font-semibold">Importar equivalencias desde CSV</h3>
+              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+                Columnas: <code>texto, geocerca_codigo, tipo, lado</code>. <code>tipo</code>: <code>sitio</code>, <code>sin_sitio</code> (instrucción) o <code>ignorar</code>;
+                <code> lado</code>: origen, destino o ambos (vacío = ambos). Cada fila se aprueba o se rechaza sola y te decimos cuál y por qué; las filas sin
+                completar se omiten. Re-importar el mismo archivo no cambia nada. El código del sitio tiene que existir ya en el catálogo.
+              </p>
+              <FormaImportarEquivalencias accion={p.accionImportarEquivalencias} />
+            </div>
+          )}
+        </section>
+      )}
+    </MarcoPagina>
   );
 }

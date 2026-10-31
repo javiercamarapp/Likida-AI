@@ -2,10 +2,11 @@
    UI v2 · CAPA DE CARGA ÚNICA (ESTILO-LIKIDA §9, decisión de Javier)
 
    Una capa fija de pantalla completa de UN color (`--carga-fondo` = fondo de la app, claro y oscuro) con SOLO el logo de
-   Likida centrado que respira. Tapa sidebar, topbar y contenido. Sin texto, sin spinner, sin esqueletos.
+   Likida centrado que respira. Tapa sidebar, topbar y contenido. Sin texto ni spinner. SOLO en la primera carga de la sesión
+   (decisión de Javier, 31-oct): las navegaciones y las tarjetas muestran esqueletos con la forma real.
    El primer pintado lo da el HTML del servidor (`data-estado="inicial"`) con ESTE css: no hace falta script inline (la CSP con
    nonce y el hash de SCRIPT_TEMA no se tocan). El controlador cliente (`dashboard/shell/capa-carga.tsx`) solo cambia
-   `data-estado`: inicial | nav (visibles) | oculta.
+   `data-estado`: inicial (visible) | oculta.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 [data-ui="v2"] .rv-carga {
@@ -65,8 +66,8 @@
   [data-ui="v2"] .rv-carga .rv-respira { animation: rv-respira 1600ms cubic-bezier(0.22, 1, 0.36, 1) infinite; }
 }
 
-/* La pantalla de carga de PÁGINA en línea (`cargando.tsx`) solo REGISTRA la carga: nunca se ve por sí misma (la capa la tapa). */
-[data-ui="v2"] .rv-contenido [data-carga="pagina"] { visibility: hidden; }
+/* La pantalla de carga de PÁGINA (`loading.tsx` → esqueleto con la forma de la pantalla) se ve en cada navegación; en la primera
+   carga de la sesión queda tapada por el telón. Lleva `data-carga="pagina"` para que el controlador sepa que aún hay carga pendiente. */
 
 /* Seguro cumplido: «No disponible ahora. No es cero» + Reintentar. */
 [data-ui="v2"] .rv-carga-error {

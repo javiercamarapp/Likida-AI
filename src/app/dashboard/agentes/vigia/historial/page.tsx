@@ -14,6 +14,8 @@ import { altaGrupoPanel, aprobarRespuestaRapidaPanel, borrarGrupoPanel, criticoG
 import { sufijoTenant } from '../../../sufijo';
 import { VistaHistorialVigia } from './vista';
 import type { ResultadoGrupos } from './formas';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Grupos de clientes e histórico' };
 
 export const dynamic = 'force-dynamic';
 

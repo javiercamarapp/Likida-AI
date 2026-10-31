@@ -13,6 +13,8 @@ import { sufijoTenant } from '../sufijo';
 import { camposDeSufijo } from '../paginar-campos';
 import { VistaClientes } from './vista';
 import type { ResultadoForma } from './forma';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Clientes y tarifas' };
 
 export const dynamic = 'force-dynamic';
 

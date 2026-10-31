@@ -14,6 +14,8 @@ import { Bloque, EsqTabla } from '../bloque';
 import { SeccionNotificaciones } from '../agentes/seccion-notificaciones';
 import { PreguntaAlAsistente } from './pregunta';
 import { TareasAbiertas, VistaViajesEnVivo } from './vista';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Viajes en vivo' };
 
 export const dynamic = 'force-dynamic';
 

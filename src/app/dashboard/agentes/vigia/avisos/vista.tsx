@@ -1,5 +1,6 @@
 'use client';
 
+import { MarcoPagina } from '@/app/ui-v2/componentes';
 import Link from 'next/link';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
@@ -246,60 +247,50 @@ export function VistaAvisosVigia({ sufijo, grupos, total, hayMas = false, soloPe
   const base = `/dashboard/agentes/vigia/avisos${sufijo}`;
   const conPendientes = `${base}${sufijo ? '&' : '?'}pendientes=1`;
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <div className="px-5 h-11 flex items-center justify-between gap-3 border-b shrink-0" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}>
-          <div className="flex items-center gap-2 text-[13px] font-medium min-w-0">
-            <Truck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} aria-hidden />
-            <span className="truncate">Avisos de viaje</span>
-          </div>
-        </div>
-        <div className="px-5 py-5 flex-1 space-y-4">
-          <nav aria-label="Navegación" className="flex flex-wrap gap-2 text-[12.5px]">
-            <Link href={`/dashboard/agentes/vigia${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Volver a servicio al cliente</Link>
-            <Link href={soloPendientes ? base : conPendientes} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]" aria-current={soloPendientes ? 'true' : undefined}>
-              {soloPendientes ? 'Mostrar todos' : 'Solo pendientes'}
-            </Link>
-          </nav>
+    <MarcoPagina titulo="Avisos de viaje" apoyo="Los avisos que el Vigía arma para tus clientes, por día, para confirmarlos, editarlos o descartarlos.">
+      <nav aria-label="Navegación" className="flex flex-wrap gap-2 text-[12.5px]">
+        <Link href={`/dashboard/agentes/vigia${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Volver a servicio al cliente</Link>
+        <Link href={soloPendientes ? base : conPendientes} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]" aria-current={soloPendientes ? 'true' : undefined}>
+          {soloPendientes ? 'Mostrar todos' : 'Solo pendientes'}
+        </Link>
+      </nav>
 
-          <p className="text-[12px]" style={{ color: 'var(--muted)' }} data-testid="ayuda">{AYUDA_REGLA_PROVISIONAL}</p>
+      <p className="text-[12px]" style={{ color: 'var(--muted)' }} data-testid="ayuda">{AYUDA_REGLA_PROVISIONAL}</p>
 
-          {avisoEncendido === false ? (
-            <Aviso>El aviso de viaje está apagado: no se arman ni se envían avisos nuevos hasta que el dueño lo encienda.</Aviso>
-          ) : null}
-          {avisoEncendido === null && !sinMigrar && !errorLectura ? (
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No pude confirmar si el aviso de viaje está encendido.</p>
-          ) : null}
-          {!puedeDecidir ? (
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Solo el dueño o el encargado de la flota confirma, edita o descarta avisos. Tú puedes verlos, sin teléfonos completos.</p>
-          ) : null}
+      {avisoEncendido === false ? (
+        <Aviso>El aviso de viaje está apagado: no se arman ni se envían avisos nuevos hasta que el dueño lo encienda.</Aviso>
+      ) : null}
+      {avisoEncendido === null && !sinMigrar && !errorLectura ? (
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No pude confirmar si el aviso de viaje está encendido.</p>
+      ) : null}
+      {!puedeDecidir ? (
+        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Solo el dueño o el encargado de la flota confirma, edita o descarta avisos. Tú puedes verlos, sin teléfonos completos.</p>
+      ) : null}
 
-          {sinMigrar ? <Aviso>La base de datos todavía no está lista para los avisos de viaje. Avísale a soporte.</Aviso> : null}
-          {errorLectura ? <Aviso>{errorLectura}</Aviso> : null}
+      {sinMigrar ? <Aviso>La base de datos todavía no está lista para los avisos de viaje. Avísale a soporte.</Aviso> : null}
+      {errorLectura ? <Aviso>{errorLectura}</Aviso> : null}
 
-          {!sinMigrar && !errorLectura && total === 0 ? (
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }} data-testid="vacio">{soloPendientes ? VACIO_PENDIENTES : VACIO_TODOS}</p>
-          ) : null}
+      {!sinMigrar && !errorLectura && total === 0 ? (
+        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }} data-testid="vacio">{soloPendientes ? VACIO_PENDIENTES : VACIO_TODOS}</p>
+      ) : null}
 
-          {hayMas ? (
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }} data-testid="hay-mas">
-              Se muestran los {total} avisos más recientes; puede haber más antiguos. {soloPendientes ? 'Resuelve los pendientes para ver el resto.' : 'Usa «Solo pendientes» para ver lo que falta por resolver.'}
-            </p>
-          ) : null}
+      {hayMas ? (
+        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }} data-testid="hay-mas">
+          Se muestran los {total} avisos más recientes; puede haber más antiguos. {soloPendientes ? 'Resuelve los pendientes para ver el resto.' : 'Usa «Solo pendientes» para ver lo que falta por resolver.'}
+        </p>
+      ) : null}
 
-          {grupos.map((g) => (
-            <section key={g.fecha || 'sin-fecha'} className="space-y-3" aria-labelledby={`dia-${g.fecha || 'sin-fecha'}`}>
-              <h2 id={`dia-${g.fecha || 'sin-fecha'}`} className="font-display text-[15px] font-semibold">{dia(g.fecha)}</h2>
-              {g.clientes.map((c) => (
-                <div key={c.cliente} className="space-y-2">
-                  <h3 className="text-[12.5px] font-medium" style={{ color: 'var(--muted)' }}>{c.cliente}</h3>
-                  {c.tarjetas.map((t) => <Tarjeta key={t.id} t={t} accion={accion} puedeDecidir={puedeDecidir} />)}
-                </div>
-              ))}
-            </section>
+      {grupos.map((g) => (
+        <section key={g.fecha || 'sin-fecha'} className="space-y-3" aria-labelledby={`dia-${g.fecha || 'sin-fecha'}`}>
+          <h2 id={`dia-${g.fecha || 'sin-fecha'}`} className="font-display text-[15px] font-semibold">{dia(g.fecha)}</h2>
+          {g.clientes.map((c) => (
+            <div key={c.cliente} className="space-y-2">
+              <h3 className="text-[12.5px] font-medium" style={{ color: 'var(--muted)' }}>{c.cliente}</h3>
+              {c.tarjetas.map((t) => <Tarjeta key={t.id} t={t} accion={accion} puedeDecidir={puedeDecidir} />)}
+            </div>
           ))}
-        </div>
-      </div>
-    </main>
+        </section>
+      ))}
+    </MarcoPagina>
   );
 }

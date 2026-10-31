@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Inbox, ArrowRight, Filter } from 'lucide-react';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
-import { EstadoVacio } from '@/app/admin/ui/kit';
+import { EstadoVacio } from '../../estados';
 import { ESTILO_CONTROL } from '@/app/admin/ui/forma';
 import { ComboCatalogo, type BuscarCatalogo } from '../../combo-catalogo';
 import {

@@ -25,6 +25,8 @@ import { reintentarPdfAjustado } from '@/lib/likida/revision_recalculo';
 import { logger } from '@/lib/logger';
 import { corregirMontoGasto } from '@/lib/likida/gasto_correccion';
 import { disputaPendiente } from '@/lib/likida/gasto_disputa';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Liquidación' };
 
 export const dynamic = 'force-dynamic';
 

@@ -1,5 +1,5 @@
 import { revalidatePath } from 'next/cache';
-import { ScrollText, Info, Route } from 'lucide-react';
+import { Info, Route } from 'lucide-react';
 import { getConfig } from '@/lib/likida/config';
 import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { guardarPolitica, armarPolitica, mensajeParaPantalla } from '@/lib/likida/administracion';
@@ -7,8 +7,12 @@ import { mxn } from '@/lib/utils';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { EstadoVacio, StatusPill } from '../../admin/ui/kit';
+import { StatusPill } from '../../admin/ui/kit';
+import { EstadoVacio } from '../estados';
 import { FormaConAviso, type ResultadoAccion, ESTILO_CONTROL } from '../../admin/ui/forma';
+import type { Metadata } from 'next';
+import { MarcoPagina } from '@/app/ui-v2/componentes';
+export const metadata: Metadata = { title: 'Políticas de gasto' };
 
 export const dynamic = 'force-dynamic';
 
@@ -128,17 +132,7 @@ export default async function PoliticasPage({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <ScrollText width={16} height={16} strokeWidth={1.75} />
-        <div>
-          <span className="text-sm font-medium block">Políticas</span>
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>
-            Los topes contra los que el motor cuadra cada viaje de tu flota
-          </span>
-        </div>
-      </header>
-
+    <MarcoPagina titulo="Políticas de gasto" apoyo="Los topes contra los que el motor cuadra cada viaje de tu flota.">
       {config === null ? (
         <div className="glass-panel p-8 text-sm" style={{ color: 'var(--muted)' }}>
           No se pudo leer la configuración de esta flota.
@@ -324,6 +318,6 @@ export default async function PoliticasPage({
           </div>
         </div>
       )}
-    </div>
+    </MarcoPagina>
   );
 }

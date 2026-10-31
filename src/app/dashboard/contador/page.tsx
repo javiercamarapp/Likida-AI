@@ -5,6 +5,8 @@ import '@/lib/likida/orquestador/fuentes_reales';
 import { leerTareasDeDinero, TOPE_TAREAS_DINERO } from '@/lib/likida/orquestador/tareas_de_dinero';
 import { TareasAbiertas } from '../viajes-en-vivo/vista';
 import { InicioContador } from './inicio-contador';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Resumen' };
 
 export const dynamic = 'force-dynamic';
 

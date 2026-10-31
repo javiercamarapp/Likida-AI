@@ -18,9 +18,13 @@ import {
 } from '@/lib/saas/fiscal';
 import { mxn } from '@/lib/utils';
 import { fechaMx } from '../formato';
-import { EstadoVacio, StatusPill } from '../../admin/ui/kit';
+import { StatusPill } from '../../admin/ui/kit';
+import { EstadoVacio } from '../estados';
 import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../admin/ui/forma';
 import { Uso, TarjetaPlan, InstruccionesTransferencia } from './vista';
+import type { Metadata } from 'next';
+import { MarcoPagina } from '@/app/ui-v2/componentes';
+export const metadata: Metadata = { title: 'Plan y facturación' };
 
 export const dynamic = 'force-dynamic';
 
@@ -246,15 +250,7 @@ export default async function SuscripcionPage({
   const pill = suscripcion ? ESTADO_PILL[suscripcion.estado] : null;
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <CreditCard width={16} height={16} strokeWidth={1.75} />
-        <div className="flex-1">
-          <span className="text-sm font-medium block">Plan &amp; Facturación</span>
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>
-            Tu plan de Likida, lo que llevas usado y tus facturas
-          </span>
-        </div>
+    <MarcoPagina titulo="Plan y facturación" apoyo="Tu plan de Likida, lo que llevas usado y tus facturas." acciones={<>
         {/* H8 (auditoría 24): aquí decía "Pago recibido" solo porque la URL
             traía `?ok=contratado` — un query string lo escribe cualquiera,
             no una lectura del cobro. La suscripción SÍ se creó (por eso el
@@ -266,8 +262,7 @@ export default async function SuscripcionPage({
             se apaga nada — el mismo criterio que el límite del plan. */}
         {suscripcion?.vencida && <StatusPill estado="warn">Venció el {fechaMx(suscripcion.periodoFin!)}</StatusPill>}
         {pill && <StatusPill estado={pill.tono}>{pill.texto}</StatusPill>}
-      </header>
-
+      </>}>
       {modo === 'prueba' && (
         <div className="glass-panel px-5 py-3 flex items-start gap-2.5 text-sm" style={{ color: 'var(--warn)' }}>
           <TriangleAlert width={16} height={16} strokeWidth={2} className="shrink-0 mt-0.5" />
@@ -567,6 +562,6 @@ export default async function SuscripcionPage({
           </div>
         )}
       </div>
-    </div>
+    </MarcoPagina>
   );
 }

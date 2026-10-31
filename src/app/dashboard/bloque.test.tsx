@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { Writable } from 'node:stream';
 import type { ReactElement } from 'react';
 import { renderToPipeableStream, renderToStaticMarkup } from 'react-dom/server';
-import { Bloque, EsqCifras, EsqTabla, vigilar } from './bloque';
+import { Bloque, EsqCifras, EsqTabla, EsqTarjeta, vigilar } from './bloque';
 import { LimiteError } from './limite-error';
 
 // `EstadoError` (el fallback de `LimiteError`) usa `router.refresh()` para
@@ -221,20 +221,22 @@ describe('FE-14 — las consultas se lanzan en paralelo, no en cadena', () => {
 });
 
 describe('FE-14 — el esqueleto no provoca salto de layout', () => {
-  it('usa LAS MISMAS clases de rejilla que el contenido definitivo', () => {
-    // La rejilla se pasa como parámetro justo para esto: si el esqueleto
-    // ocupara 1 columna donde el contenido ocupa 4, el aterrizaje movería
-    // media pantalla.
-    const rejilla = 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2';
-    const html = renderToStaticMarkup(<EsqCifras n={4} rejilla={rejilla} />);
-    expect(html).toContain(rejilla);
-    // Y cuatro huecos, uno por tarjeta.
-    expect(html.split('rounded-xl').length - 1).toBe(4);
+  it('la tira de esqueleto tiene la forma de TiraCifras: una tarjeta con una celda por indicador', () => {
+    const html = renderToStaticMarkup(<EsqCifras n={4} />);
+    expect(html).toContain('rv-kpis');
+    expect(html.split('class="rv-kpi"').length - 1).toBe(4);
+    expect(html).toContain('role="status"');
   });
 
-  it('reserva alto real, no una tira de 14px', () => {
+  it('reserva alto real (las celdas miden 112 por CSS), no una tira de 14px', () => {
     const html = renderToStaticMarkup(<EsqCifras n={3} />);
-    expect(html).toContain('min-height:100px');
+    expect(html).toContain('rv-esq-cifras');
+    expect(html).toContain('data-alto="26"'); // la barra de la cifra mide lo que la cifra real (26 px)
+  });
+
+  it('la tabla de esqueleto tiene encabezado y filas, y las tarjetas redondean al escalón de alto más cercano', () => {
+    expect(renderToStaticMarkup(<EsqTabla filas={3} />).split('rv-esq-fila"').length - 1).toBe(3);
+    expect(renderToStaticMarkup(<EsqTarjeta alto={130} />)).toContain('data-alto="120"');
   });
 });
 

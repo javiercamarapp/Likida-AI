@@ -10,6 +10,8 @@ import { listarSitios, leerCatalogosFiltro, leerTextosSinSitio } from '@/lib/lik
 import { sufijoTenant } from '../../../sufijo';
 import { VistaSitios } from './vista';
 import type { ResultadoSitio } from './formas';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Catálogo de sitios' };
 
 export const dynamic = 'force-dynamic';
 

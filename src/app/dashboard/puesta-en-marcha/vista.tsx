@@ -83,9 +83,8 @@ export function VistaPuestaEnMarcha({ senales, ambito, tenantId, sufijo, soloLec
   return (
     <div className="rv-pem">
       <EncabezadoPagina
-        rotulo="Puesta en marcha"
-        titulo="Deja lista tu operación"
-        descripcion="Seis pasos para que tus agentes trabajen con tus datos reales. Aquí ves qué falta y de quién es."
+        titulo="Puesta en marcha"
+        apoyo="Deja lista tu operación: seis pasos para que tus agentes trabajen con tus datos reales. Aquí ves qué falta y de quién es."
         acciones={<SoloV2><TourLanzador recorridoId="dueno" etiqueta="Ver recorrido" /></SoloV2>}
       />
 

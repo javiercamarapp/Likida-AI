@@ -148,9 +148,9 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 [data-ui="v2"] .rv-kpi__spark { display: inline-flex; flex: none; }
 [data-ui="v2"] .rv-kpi__segs { display: flex; gap: 2px; height: 6px; }
 [data-ui="v2"] .rv-kpi__segs i { flex-basis: 0; min-width: 4px; border-radius: 3px; background: var(--tono, var(--ink)); }
-[data-ui="v2"] .rv-kpi__pie { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; min-height: 20px; font-size: 12px; line-height: 1.4; color: var(--muted); white-space: nowrap; margin-top: auto; }
+[data-ui="v2"] .rv-kpi__pie { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 20px; font-size: 12px; line-height: 1.4; color: var(--muted); margin-top: auto; }
 [data-ui="v2"] .rv-kpi__punto { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--ink); vertical-align: middle; }
-[data-ui="v2"] .rv-kpi__sello { display: inline-flex; align-items: center; min-width: 0; }
+[data-ui="v2"] .rv-kpi__sello { display: inline-flex; align-items: center; flex: 1 1 100%; min-width: 0; white-space: normal; }
 [data-ui="v2"] .rv-kpi__delta { display: inline-flex; align-items: center; gap: 4px; min-height: 20px; padding: 0 8px; border-radius: 999px; font-weight: 600; background: var(--canvas); color: var(--ink2, var(--ink)); }
 [data-ui="v2"] .rv-kpi__delta[data-tono="ok"] { background: var(--okbg, var(--canvas)); color: var(--ok, var(--ink)); }
 [data-ui="v2"] .rv-kpi__delta[data-tono="bad"] { background: var(--badbg, var(--canvas)); color: var(--bad, var(--ink)); }
@@ -286,3 +286,15 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 
 /* Cascada: la cifra de la barra más alta queda 18 px sobre su barra; sin aire arriba se pisaba con el título de la tarjeta («CASCADA» / «$5,000.00») */
 [data-ui="v2"] .rv-cascada { padding-top: 22px; }
+
+/* ═══ L2b · Cifra: nota, atención y error (el color va en el filete y el chip, nunca en el número) ═══ */
+[data-ui="v2"] .rv-kpi[data-tono="ok"] { --cat: var(--ok); }
+[data-ui="v2"] .rv-kpi[data-tono="warn"] { --cat: var(--warn); }
+[data-ui="v2"] .rv-kpi[data-tono="bad"] { --cat: var(--bad); }
+[data-ui="v2"] .rv-kpi__nota { font-size: 12px; line-height: 1.4; color: var(--muted); overflow-wrap: anywhere; }
+[data-ui="v2"] .rv-kpi__atencion { display: inline-flex; align-items: center; min-height: 20px; padding: 0 8px; border-radius: 999px; font-weight: 600; background: var(--canvas); color: var(--ink2, var(--ink)); }
+[data-ui="v2"] .rv-kpi__atencion[data-tono="ok"] { background: var(--okbg); color: var(--ok); }
+[data-ui="v2"] .rv-kpi__atencion[data-tono="warn"] { background: var(--warnbg); color: var(--warn); }
+[data-ui="v2"] .rv-kpi__atencion[data-tono="bad"] { background: var(--badbg); color: var(--bad); }
+[data-ui="v2"] .rv-kpi__error { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12px; line-height: 1.4; color: var(--bad); }
+[data-ui="v2"] .rv-kpi__sinbase { font-size: 12px; color: var(--muted); }

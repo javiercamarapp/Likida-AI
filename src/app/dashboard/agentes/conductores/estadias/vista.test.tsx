@@ -40,7 +40,7 @@ describe('estadías en andén', () => {
     const html = pintar(filas);
     expect(html).toContain('Tiempo medio en carga');
     expect(html).toContain('sobre 1 paradas cerradas');
-    expect(html).toContain('sin datos'); // descarga: ninguna cerrada
+    expect(html).toContain('Sin dato'); // descarga: ninguna cerrada
     expect(promedioCerradas(filas, 'carga')).toEqual({ promedio: 150, n: 1 });
     expect(promedioCerradas(filas, 'descarga')).toBeNull();
   });

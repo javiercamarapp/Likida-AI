@@ -139,21 +139,22 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · InfoTip (ⓘ)', () => {
 });
 
 describe.skipIf(SIN_NAVEGADOR)('B4 · Tarjeta unificada', () => {
-  it('la ⓘ queda en el mismo sitio en todas las tarjetas, radio 12, padding 12, y los estados vacío / error son una línea', async () => {
+  it('la ⓘ queda en el mismo sitio en todas las tarjetas, radio 12, padding 14, y los estados vacío (sin borde punteado) / error (blando) son compactos', async () => {
     const p = await abrir();
     const r = await p.evaluate(() => {
       const tarjetas = [...document.querySelectorAll('.rv-tarjeta')] as HTMLElement[];
       const pos = tarjetas.map((t) => { const i = t.querySelector('.rv-info')!.getBoundingClientRect(); const c = t.getBoundingClientRect(); return { arriba: Math.round(i.top - c.top), derecha: Math.round(c.right - i.right), alto: Math.round(i.height) }; });
       const cs = getComputedStyle(tarjetas[0]);
-      return { pos, radio: cs.borderTopLeftRadius, pad: cs.paddingTop, vacio: document.querySelector('.rv-tarjeta .rv-vacio')!.getBoundingClientRect().height, errRol: document.querySelector('.rv-tarjeta__error')!.getAttribute('role'), errAlto: document.querySelector('.rv-tarjeta__error')!.getBoundingClientRect().height };
+      return { pos, radio: cs.borderTopLeftRadius, pad: cs.paddingTop, vacio: document.querySelector('.rv-tarjeta .rv-vacio')!.getBoundingClientRect().height, errRol: document.querySelector('.rv-tarjeta .rv-error')!.getAttribute('role'), errAlto: document.querySelector('.rv-tarjeta .rv-error')!.getBoundingClientRect().height, vacioBorde: getComputedStyle(document.querySelector('.rv-tarjeta .rv-vacio')!).borderTopStyle };
     });
     expect(new Set(r.pos.map((x) => x.arriba)).size, JSON.stringify(r.pos)).toBe(1);
     expect(new Set(r.pos.map((x) => x.derecha)).size, 'la ⓘ va SIEMPRE en la esquina derecha: ' + JSON.stringify(r.pos)).toBe(1);
     expect(r.radio).toBe('12px');
-    expect(r.pad).toBe('12px');
-    expect(r.vacio).toBeLessThanOrEqual(44);
+    expect(r.pad).toBe('14px');
+    expect(r.vacioBorde, 'el vacío ya no es una celda punteada').toBe('none');
+    expect(r.vacio).toBeLessThanOrEqual(100);
     expect(r.errRol).toBe('alert');
-    expect(r.errAlto).toBeLessThanOrEqual(44);
+    expect(r.errAlto).toBeLessThanOrEqual(60);
     await p.getByRole('button', { name: 'Reintentar' }).click();
     expect(await p.evaluate(() => (window as unknown as { __reint: number }).__reint)).toBe(1);
     await p.close();

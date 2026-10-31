@@ -11,7 +11,7 @@ import {
   crearLigaPago, revocarLigaPago, conciliarPropuesta, descartarPropuesta, registrarRepEmitido,
 } from '@/lib/likida/portal_pago_escritura';
 import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../admin/ui/forma';
-import { EstadoVacio } from '../../admin/ui/kit';
+import { EstadoVacio } from '../estados';
 import { TituloSeccion } from '../resumen-visual';
 
 /**

@@ -14,6 +14,8 @@ import { ahoraMs } from '@/lib/saludo';
 import { calcularAlertasFlota } from '../calcular-alertas-flota';
 import { sufijoTenant } from '../sufijo';
 import { ListaAlertas } from './lista';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Notificaciones' };
 
 export const dynamic = 'force-dynamic';
 

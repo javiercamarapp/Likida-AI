@@ -15,6 +15,8 @@ import { sufijoTenant, querystringCompleto } from '../sufijo';
 import { VistaViajes, type FiltroViajes, type FilaRegistroViaje } from './vista';
 import type { ResultadoImportarUI } from './importar';
 import { MAX_ARCHIVO_SUBIDA_BYTES, MENSAJE_ARCHIVO_GRANDE } from '@/lib/http/subidas_formulario';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Viajes' };
 
 const MAX_IMPORT_BYTES = MAX_ARCHIVO_SUBIDA_BYTES;
 

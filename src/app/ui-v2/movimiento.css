@@ -33,6 +33,8 @@
 /* ── Keyframes: solo existen para quien no pidió reducir el movimiento ─────── */
 
 @media (prefers-reduced-motion: no-preference) {
+  /* Esqueleto: UNA variante que respira (opacidad 1 ↔ .5), con la curva y el ritmo del logo de carga. */
+  @keyframes rv-esq-respira { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
   @keyframes rv-sube {
     from { transform: translateY(5px); }
   }

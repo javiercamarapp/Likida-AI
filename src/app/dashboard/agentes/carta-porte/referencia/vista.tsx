@@ -1,9 +1,9 @@
-import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { numero } from '@/lib/formato';
 import type { ClienteRef, Tablero } from '@/lib/likida/carta_porte_docs/referencia_cliente';
 import { REFERENCIA_MAX } from '@/lib/likida/carta_porte_docs/referencia_cliente';
 import { BotonEnvio, CAMPO, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
+import { Aviso, BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
 
 export interface VerComo { tenant?: string; rol?: string; vista?: string }
 
@@ -29,17 +29,8 @@ export function VistaReferencia({ tablero, clientes, exigen, folios, truncado, s
   acciones: { capturar: AccionDoc; exigencia: AccionDoc };
 }) {
   return (
-    <main className="max-w-[1100px] mx-auto px-5 py-6 space-y-5">
-      <Link href={`/dashboard/agentes/carta-porte${sufijo}`} className="text-[12.5px] font-medium inline-flex items-center gap-1 hover:opacity-75" style={{ color: 'var(--marca)' }}>
-        <ArrowLeft width={13} height={13} strokeWidth={1.75} /> Volver al agente de Carta Porte
-      </Link>
-      <header className="space-y-1">
-        <h1 className="font-display text-[19px] font-semibold">Referencia del cliente</h1>
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
-          Algunos clientes necesitan su referencia para cobrar. Aquí ves los viajes ya cargados que no la traen. Es un aviso para quien la pide:
-          no frena el viaje ni el timbrado, y la referencia no va dentro de la Carta Porte.
-        </p>
-      </header>
+    <MarcoPagina titulo="Referencia del cliente" apoyo="Algunos clientes necesitan su referencia para cobrar: aquí ves los viajes ya cargados que no la traen." acciones={<BotonEnlace tamano="sm" href={`/dashboard/agentes/carta-porte${sufijo}`} icono={<ArrowLeft width={13} height={13} strokeWidth={1.75} />}>Volver al agente de Carta Porte</BotonEnlace>}>
+      <Aviso tono="info">Es un aviso para quien la pide: no frena el viaje ni el timbrado, y la referencia no va dentro de la Carta Porte.</Aviso>
 
       {tablero === null ? (
         <p role="alert" className="text-[13px]" style={{ color: 'var(--bad)' }}>No se pudieron leer los viajes. Intenta de nuevo; no significa que no haya pendientes.</p>
@@ -90,6 +81,6 @@ export function VistaReferencia({ tablero, clientes, exigen, folios, truncado, s
           </ul>
         )}
       </section>
-    </main>
+    </MarcoPagina>
   );
 }

@@ -32,8 +32,9 @@ describe('la pantalla «Próximamente» no toca datos de la flota', () => {
   });
 
   it('el componente es accesible: encabezado, región con nombre y la etiqueta «Próximamente»', () => {
-    expect(fuentes.componente).toMatch(/<h1 id="proximamente-titulo"/);
-    expect(fuentes.componente).toMatch(/aria-labelledby="proximamente-titulo"/);
+    // El h1 y la región con nombre ya los pone `MarcoPagina` (un solo encabezado): basta darle el id del título.
+    expect(fuentes.componente).toMatch(/<MarcoPagina[^>]*idTitulo="proximamente-titulo"/);
+    expect(fuentes.componente).not.toContain('BarraPagina');
     expect(fuentes.componente).toContain('Próximamente');
   });
 });

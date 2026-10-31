@@ -34,6 +34,8 @@ import { armarConstancia } from '@/lib/likida/conductor/constancia';
 import { ConstanciaReportes } from './constancia-vista';
 import { TableroHitos, ORDEN_SEMAFORO, type FiltrosVista } from './tablero-hitos';
 import type { ResultadoOficina } from './acciones-forma';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Comunicación con operadores' };
 
 export const dynamic = 'force-dynamic';
 

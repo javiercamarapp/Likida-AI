@@ -8,6 +8,8 @@ import { normalizarPrograma } from '@/lib/likida/vigia/programa/normalizar';
 import { derivarEstatusImportacion, estatusACsv } from '@/lib/likida/vigia/importacion/derivar';
 import { sufijoTenant } from '../../../sufijo';
 import { VistaImportacionVigia, TOPE_ARCHIVO_IMPORTACION_BYTES, type ResultadoImportacion } from './vista';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Estatus de importación' };
 
 export const dynamic = 'force-dynamic';
 

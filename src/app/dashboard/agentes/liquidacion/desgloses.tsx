@@ -1,14 +1,14 @@
 import Link from 'next/link';
 import { Mail, AlertTriangle, Route } from 'lucide-react';
 import { fechaCorta, numero, hoyMx, inicioDiaMx, fechaHoraMx } from '@/lib/formato';
-import { EstadoVacio } from '@/app/admin/ui/kit';
+import { EstadoVacio } from '../../estados';
 import { ESTILO_CONTROL } from '@/app/admin/ui/forma';
 import { dinero } from '@/lib/likida/liquidacion_externa/presentacion';
 import { BotonConfirmar } from '@/app/admin/ui/confirmar';
 import { calcularInsightsA1, entradaDesdeFichas, type InsightA1 } from '@/lib/likida/liquidacion_externa/insights_a1';
 import type { EntregaCorreo, EstadoEntregaCorreo, Excepcion, TipoExcepcion } from '@/lib/likida/liquidacion_externa/repo_correo';
 import type { DetalleDesglose, LecturaDetalle, RolDetalle } from './detalle_desglose';
-import { BarraPagina } from '../../resumen-visual';
+import { MarcoPagina } from '@/app/ui-v2/componentes';
 import { EnlacePagina, NavPaginas } from '../../paginador';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -793,17 +793,12 @@ export function VistaDesgloses({ desgloses, detalle, excepciones, notificaciones
   cargas?: React.ReactNode;
 }) {
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina icono={<Route width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />} titulo="Liquidación automática" />
-        <div className="px-5 py-5 flex-1 space-y-4">
-          {desgloses}
-          {cargas}
-          {detalle}
-          {excepciones}
-          {notificaciones}
-        </div>
-      </div>
-    </main>
+    <MarcoPagina titulo="Liquidación automática" apoyo="Los desgloses de liquidación que llegan por correo, sus excepciones y las notificaciones de entrega.">
+      {desgloses}
+      {cargas}
+      {detalle}
+      {excepciones}
+      {notificaciones}
+    </MarcoPagina>
   );
 }

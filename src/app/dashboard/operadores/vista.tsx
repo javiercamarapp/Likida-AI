@@ -3,14 +3,16 @@ import { Users, Phone, PhoneOff, IdCard, UserPlus } from 'lucide-react';
 import { numero, fechaCorta } from '@/lib/formato';
 import { clasificarVigencia, DIAS_AVISO } from '@/lib/likida/vigencias';
 import type { ConteosOperadores } from '@/lib/likida/administracion';
-import { EstadoVacio, EstadoError } from '@/app/admin/ui/kit';
-import { BarraPagina } from '../resumen-visual';
+import { EstadoVacio, EstadoError } from '../estados';
 import { urlRegistro, type PaginaRegistroUI } from '../paginar-registro';
 import { FiltroRegistro } from '../registro-filtro';
 import { FormaOperador, FormaAltaOperador, type AccionForma, type PatioOpcion } from './forma';
 import { InvitarPendientes, InvitarUno, type AccionInvitar } from './invitaciones';
 import { ImportadorMasivo, type AccionImportacion } from '../importador-masivo';
 import type { InvitacionDeOperador } from '@/lib/likida/invitacion_operador';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
+import { MarcoPagina } from '@/app/ui-v2/componentes';
 
 /** La fila del registro — SIN el dinero que `OperadorDetalle` trae (ver
  *  encabezado de page.tsx: la fuga del 4-ago). `licencia` y `rfc` SÍ viajan:
@@ -115,119 +117,111 @@ export function VistaOperadores({
   const hayFiltro = pag.q !== '';
 
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Users width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Operadores"
-        />
-        <div className="px-5 py-5 flex-1 space-y-4">
+    <MarcoPagina titulo="Operadores" apoyo="Tu padrón de operadores con teléfono y vigencia de licencia. Sin teléfono capturado, los agentes no pueden escribirles.">
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Kpi titulo="Activos" valor={kpi(conteos?.activos)}
-              nota={conteos ? `${numero(conteos.total)} en total` : 'no se pudo contar la flota'} />
-            <Kpi titulo="Sin teléfono" valor={kpi(conteos?.sinTelefono)} nota="los agentes no pueden escribirles"
-              tono={conteos && conteos.sinTelefono > 0 ? 'warn' : undefined} />
-            <Kpi titulo="Licencias vencidas" valor={kpi(conteos?.licenciasVencidas)}
-              tono={conteos && conteos.licenciasVencidas > 0 ? 'bad' : undefined} />
-            <Kpi titulo={`Vencen en ${DIAS_AVISO} días`} valor={kpi(conteos?.licenciasPorVencer)}
-              tono={conteos && conteos.licenciasPorVencer > 0 ? 'warn' : undefined} />
-          </div>
+      <TiraCifras sello={selloHoy('Padrón de operadores')}>
+        <Cifra etiqueta="Activos" valor={kpi(conteos?.activos)}
+          nota={conteos ? `${numero(conteos.total)} en total` : 'no se pudo contar la flota'} />
+        <Cifra etiqueta="Sin teléfono" valor={kpi(conteos?.sinTelefono)} nota="los agentes no pueden escribirles"
+          tono={conteos && conteos.sinTelefono > 0 ? 'warn' : undefined} />
+        <Cifra etiqueta="Licencias vencidas" valor={kpi(conteos?.licenciasVencidas)}
+          tono={conteos && conteos.licenciasVencidas > 0 ? 'bad' : undefined} />
+        <Cifra etiqueta={`Vencen en ${DIAS_AVISO} días`} valor={kpi(conteos?.licenciasPorVencer)}
+          tono={conteos && conteos.licenciasPorVencer > 0 ? 'warn' : undefined} />
+      </TiraCifras>
 
-          {puedeEditar && invitaciones && (
-            <InvitarPendientes pendientes={invitaciones.pendientes} conFallo={invitaciones.conFallo}
-              accion={invitar} hrefGuia={hrefGuia} />
-          )}
+      {puedeEditar && invitaciones && (
+        <InvitarPendientes pendientes={invitaciones.pendientes} conFallo={invitaciones.conFallo}
+          accion={invitar} hrefGuia={hrefGuia} />
+      )}
 
-          {puedeEditar && (
-            <>
-              <section id="alta" aria-labelledby="titulo-alta" className="card p-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
-                    <UserPlus aria-hidden width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h2 id="titulo-alta" className="font-display text-[15px] font-semibold">Dar de alta un operador</h2>
-                    <p className="mb-3 mt-0.5 text-[12.5px]" style={{ color: 'var(--muted)' }}>
-                      Uno por uno. Para toda tu flota de una vez, usa la carga desde Excel o CSV de abajo.
-                    </p>
-                    <FormaAltaOperador accion={altaOperador} patios={patios} terminalFijo={patioDelJefe} sinWhatsApp={sinWhatsApp} />
-                  </div>
-                </div>
-              </section>
-              <ImportadorMasivo
-                entidad="operadores" accion={cargarOperadores} plantillaCsv={plantillaCsv}
-                archivoPlantilla="plantilla-operadores.csv"
-                columnas={(sinWhatsApp
-                  ? 'Obligatorias: nombre y, o bien teléfono, o bien número de empleado y correo (tu flota recibe el desglose por correo). Opcionales: correo con teléfono,'
-                  : 'Obligatorias: nombre y teléfono (el WhatsApp con el que el chofer le escribirá a Likida). Opcionales:')
-                  + ' número de empleado, RFC, licencia, tipo y vencimiento de licencia, y patio.'}
-                hrefPatios={hrefPatios} ofrecerInvitacion patioDelJefe={patioDelJefe} tope={2_000}
-              />
-            </>
-          )}
+      {puedeEditar && (
+        <>
+          <section id="alta" aria-labelledby="titulo-alta" className="card p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
+                <UserPlus aria-hidden width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 id="titulo-alta" className="font-display text-[15px] font-semibold">Dar de alta un operador</h2>
+                <p className="mb-3 mt-0.5 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+                  Uno por uno. Para toda tu flota de una vez, usa la carga desde Excel o CSV de abajo.
+                </p>
+                <FormaAltaOperador accion={altaOperador} patios={patios} terminalFijo={patioDelJefe} sinWhatsApp={sinWhatsApp} />
+              </div>
+            </div>
+          </section>
+          <ImportadorMasivo
+            entidad="operadores" accion={cargarOperadores} plantillaCsv={plantillaCsv}
+            archivoPlantilla="plantilla-operadores.csv"
+            columnas={(sinWhatsApp
+              ? 'Obligatorias: nombre y, o bien teléfono, o bien número de empleado y correo (tu flota recibe el desglose por correo). Opcionales: correo con teléfono,'
+              : 'Obligatorias: nombre y teléfono (el WhatsApp con el que el chofer le escribirá a Likida). Opcionales:')
+              + ' número de empleado, RFC, licencia, tipo y vencimiento de licencia, y patio.'}
+            hrefPatios={hrefPatios} ofrecerInvitacion patioDelJefe={patioDelJefe} tope={2_000}
+          />
+        </>
+      )}
 
-          <section className="card p-4">
-            <h2 className="font-display text-[15px] font-semibold mb-3">El registro</h2>
-            {!ilegible && (pag.filtrados > 0 || hayFiltro) && (
-              <FiltroRegistro ruta="/dashboard/operadores" sufijo={sufijo} pagina={pag}
-                sustantivo="operadores" camposOcultos={camposOcultos} />
-            )}
-            {!ilegible && hayFiltro && !totalConocido && (
-              // No se pudo contar el padrón entero, así que el «de N» del pie
-              // sería un número inventado. Se dice, en vez de dejarlo pasar.
-              <p className="text-[11.5px] mb-3" style={{ color: 'var(--faint)' }}>
-                No pude contar el padrón completo en este momento: el total de al lado es el de los que
-                coinciden con la búsqueda, no el de la flota.
+      <section className="card p-4">
+        <h2 className="font-display text-[15px] font-semibold mb-3">El registro</h2>
+        {!ilegible && (pag.filtrados > 0 || hayFiltro) && (
+          <FiltroRegistro ruta="/dashboard/operadores" sufijo={sufijo} pagina={pag}
+            sustantivo="operadores" camposOcultos={camposOcultos} />
+        )}
+        {!ilegible && hayFiltro && !totalConocido && (
+          // No se pudo contar el padrón entero, así que el «de N» del pie
+          // sería un número inventado. Se dice, en vez de dejarlo pasar.
+          <p className="text-[11.5px] mb-3" style={{ color: 'var(--faint)' }}>
+            No pude contar el padrón completo en este momento: el total de al lado es el de los que
+            coinciden con la búsqueda, no el de la flota.
+          </p>
+        )}
+        {ilegible ? (
+          <EstadoError mensaje="No pude leer el registro de operadores. No se enseña media lista: media lista se ve igual que la lista entera, solo que más corta." />
+        ) : pag.filtrados === 0 && !hayFiltro ? (
+          <EstadoVacio icono={<Users width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+            accion={puedeEditar ? { href: '#alta', texto: 'Dar de alta al primero' } : undefined}>
+            {puedeEditar
+              ? 'Aún no hay operadores dados de alta. Dalos de alta uno por uno arriba, o carga a toda tu flota de una vez desde un Excel o CSV.'
+              : 'Aún no hay operadores dados de alta. Quien administra tu flota los da de alta.'}
+          </EstadoVacio>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="text-left" style={{ color: 'var(--faint)' }}>
+                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Operador</th>
+                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Teléfono</th>
+                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Patio</th>
+                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 pr-6 text-right">Viajes</th>
+                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Licencia</th>
+                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Estado</th>
+                  {puedeEditar && <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2" />}
+                </tr>
+              </thead>
+              <tbody>
+                {filas.map((f) => (
+                  <RenglonOperador key={f.operadorId} f={f} hoy={hoy}
+                    puedeEditar={puedeEditar && f.editable} guardarOperador={guardarOperador}
+                    patios={patios} patioFijo={patioDelJefe !== null} invitar={invitar}
+                    editando={pag.editando === f.operadorId}
+                    hrefEditar={urlRegistro('/dashboard/operadores', sufijo, {
+                      q: pag.q || null, p: pag.pagina,
+                      editar: pag.editando === f.operadorId ? null : f.operadorId,
+                    })} />
+                ))}
+              </tbody>
+            </table>
+            {filas.length === 0 && (
+              <p className="text-[12.5px] pt-2" style={{ color: 'var(--muted)' }}>
+                Ningún operador coincide con «{pag.q}».
               </p>
             )}
-            {ilegible ? (
-              <EstadoError mensaje="No pude leer el registro de operadores. No se enseña media lista: media lista se ve igual que la lista entera, solo que más corta." />
-            ) : pag.filtrados === 0 && !hayFiltro ? (
-              <EstadoVacio icono={<Users width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                accion={puedeEditar ? { href: '#alta', texto: 'Dar de alta al primero' } : undefined}>
-                {puedeEditar
-                  ? 'Aún no hay operadores dados de alta. Dalos de alta uno por uno arriba, o carga a toda tu flota de una vez desde un Excel o CSV.'
-                  : 'Aún no hay operadores dados de alta. Quien administra tu flota los da de alta.'}
-              </EstadoVacio>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                      <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Operador</th>
-                      <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Teléfono</th>
-                      <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Patio</th>
-                      <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 pr-6 text-right">Viajes</th>
-                      <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Licencia</th>
-                      <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Estado</th>
-                      {puedeEditar && <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2" />}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filas.map((f) => (
-                      <RenglonOperador key={f.operadorId} f={f} hoy={hoy}
-                        puedeEditar={puedeEditar && f.editable} guardarOperador={guardarOperador}
-                        patios={patios} patioFijo={patioDelJefe !== null} invitar={invitar}
-                        editando={pag.editando === f.operadorId}
-                        hrefEditar={urlRegistro('/dashboard/operadores', sufijo, {
-                          q: pag.q || null, p: pag.pagina,
-                          editar: pag.editando === f.operadorId ? null : f.operadorId,
-                        })} />
-                    ))}
-                  </tbody>
-                </table>
-                {filas.length === 0 && (
-                  <p className="text-[12.5px] pt-2" style={{ color: 'var(--muted)' }}>
-                    Ningún operador coincide con «{pag.q}».
-                  </p>
-                )}
-              </div>
-            )}
-          </section>
-        </div>
-      </div>
-    </main>
+          </div>
+        )}
+      </section>
+    </MarcoPagina>
   );
 }
 
@@ -380,13 +374,3 @@ function PillLicencia({ f, hoy }: { f: FilaOperador; hoy: string }) {
   return pill(`${tipo}vigente hasta ${fechaCorta(f.licenciaVence)}`, 'var(--ok)', 'var(--okbg)');
 }
 
-function Kpi({ titulo, valor, nota, tono }: { titulo: string; valor: string; nota?: string; tono?: 'warn' | 'bad' }) {
-  return (
-    <div className="card p-3.5">
-      <div className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{titulo}</div>
-      <div className="cifra-mono text-[20px] font-medium mt-1"
-        style={tono ? { color: `var(--${tono})` } : undefined}>{valor}</div>
-      {nota && <div className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{nota}</div>}
-    </div>
-  );
-}

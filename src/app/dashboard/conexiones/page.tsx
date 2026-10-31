@@ -29,6 +29,8 @@ import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { appUrl } from '@/lib/env';
 import { ahoraMs } from '@/lib/saludo';
 import { sufijoTenant } from '../sufijo';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Conexiones' };
 
 export const dynamic = 'force-dynamic';
 

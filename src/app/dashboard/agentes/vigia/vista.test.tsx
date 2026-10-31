@@ -84,7 +84,7 @@ describe('estado y KPIs', () => {
     const html = await pintar(BloqueEstadoYKpis({ datos: Promise.resolve(d), ahoraMs: AHORA }));
     expect(html).toContain('Sin respuesta (SLA 30 min)');
     // activas 5, por aprobar 1, vencidas 1, molestas/escaladas 2
-    const cifras = [...html.matchAll(/cifra-mono text-\[20px\] font-medium mt-1"[^>]*>([^<]+)</g)].map((m) => m[1]);
+    const cifras = [...html.matchAll(/rv-kpi__valor"[^>]*>([^<]+)</g)].map((m) => m[1]);
     expect(cifras).toEqual(['5', '1', '1', '2']);
   });
 });

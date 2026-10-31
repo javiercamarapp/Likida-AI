@@ -7,6 +7,8 @@ import { filasDeCatalogo } from '@/lib/likida/carta_porte_docs/catalogo_pantalla
 import { sufijoTenant } from '../../../sufijo';
 import { guardarFilaCatalogo, importarCatalogoCsv } from './actions';
 import { VistaCatalogo, type CatalogoVista, type ClienteVista } from './vista';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Catálogo del cliente' };
 
 export const dynamic = 'force-dynamic';
 

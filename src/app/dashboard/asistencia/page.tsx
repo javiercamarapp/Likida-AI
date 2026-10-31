@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { RadioTower, Camera, TriangleAlert } from 'lucide-react';
+import { Camera, TriangleAlert } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import {
@@ -12,6 +12,9 @@ import { fechaHoraMx } from '../formato';
 import { logger } from '@/lib/logger';
 import { FormaConAviso, Campo, type ResultadoAccion } from '../../admin/ui/forma';
 import { BotonAccionMesa } from './boton-accion';
+import type { Metadata } from 'next';
+import { MarcoPagina } from '@/app/ui-v2/componentes';
+export const metadata: Metadata = { title: 'Mesa de control' };
 
 export const dynamic = 'force-dynamic';
 
@@ -102,20 +105,13 @@ export default async function PaginaMesaControl({
   const BTN_CHICO = 'text-xs px-2.5 py-1 rounded-lg hairline';
   const criticas = leyoOk ? incidencias.filter((i) => i.prioridad === 'critica').length : null;
 
-  return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <RadioTower width={16} height={16} strokeWidth={1.75} />
-        <div>
-          <span className="text-sm font-medium block">Mesa de control</span>
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>
-            {leyoOk
-              ? `${incidencias.length} incidencia${incidencias.length === 1 ? '' : 's'} de asistencia viva${incidencias.length === 1 ? '' : 's'}${criticas ? ` · ${criticas} crítica${criticas === 1 ? '' : 's'}` : ''} — el agente propone, aquí se decide`
-              : 'Sin datos — no se pudo leer la mesa'}
-          </span>
-        </div>
-      </header>
+  // Una línea (≈90 caracteres): cuántas incidencias vivas hay y cuántas son críticas.
+  const apoyo = leyoOk
+          ? `${incidencias.length} incidencia${incidencias.length === 1 ? '' : 's'} de asistencia viva${incidencias.length === 1 ? '' : 's'}${criticas ? ` · ${criticas} crítica${criticas === 1 ? '' : 's'}` : ''} — el agente propone, aquí se decide`
+          : 'Sin datos — no se pudo leer la mesa';
 
+  return (
+    <MarcoPagina titulo="Mesa de control" apoyo={apoyo}>
       {!leyoOk && (
         <section className="rounded-2xl px-5 py-4 hairline" style={{ background: 'var(--surface)' }}>
           <p className="text-sm">
@@ -234,6 +230,6 @@ export default async function PaginaMesaControl({
           </FormaConAviso>
         </section>
       ))}
-    </div>
+    </MarcoPagina>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { Component, type ReactNode } from 'react';
-import { EstadoError } from '../admin/ui/kit';
+import { EstadoError } from './estados';
 
 /**
  * FE-14 — EL LÍMITE DE ERROR DE UN BLOQUE.
