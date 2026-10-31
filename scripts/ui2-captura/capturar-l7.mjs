@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- el arnés lee y escribe rutas de salida propias */
 // Capturas del lote 7: empaqueta l7.muestrario.tsx con las piezas REALES, compila el CSS REAL (Tailwind de globals + capa v2) y
 // fotografía 1440 y 390 en claro y oscuro. Uso: node scripts/ui2-captura/capturar-l7.mjs [--dest=DIR]
 import { mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
