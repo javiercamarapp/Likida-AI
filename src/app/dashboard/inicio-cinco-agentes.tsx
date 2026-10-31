@@ -6,7 +6,7 @@ import { ultimasCorridas, duracionLegible, type AgenteConCorridas, type CorridaR
 import { BarraPagina, ChipFecha, HeroSaludo, TituloSeccion } from './resumen-visual';
 import { AvisoSinFlota } from './sin-flota';
 import { Bloque, EsqTabla } from './bloque';
-import { moduloProximamenteDeRuta, rutaProximamente } from '@/lib/auth/visibilidad';
+import { moduloProximamenteDeRuta, puedeVerRuta, rutaProximamente, type PerfilTenant } from '@/lib/auth/visibilidad';
 import { AGENTES_INSIGHT, PESO_SEVERIDAD, type AgenteInsight, type Insight } from '@/lib/likida/insights/tipos';
 import { TarjetaInsight } from './agentes/insights/tarjeta-insight';
 import { ResumenV2 } from './resumen-v2';
@@ -74,15 +74,28 @@ export function insightMasSevero(lista: readonly Insight[]): Insight | null {
   return mejor;
 }
 
+/**
+ * Los agentes cuyo insight ESTE rol puede ver en ESTE perfil: su pantalla la abre `puedeVerRuta` y no está en «Próximamente».
+ * Es la compuerta de los lectores: un agente que el rol no ve no se LEE (ni se pinta), así que poblar `LECTORES_INSIGHTS`
+ * no filtra datos de un área ajena (p. ej. los de dinero al encargado) ni consulta módulos en stand-by.
+ */
+export function agentesInsightVisibles(rol: string, perfil: PerfilTenant | null = null): AgenteInsight[] {
+  return FICHAS_CINCO_AGENTES
+    .filter((f) => puedeVerRuta(rol, f.href, perfil) && !(perfil && moduloProximamenteDeRuta(perfil, f.href)))
+    .map((f) => f.insight);
+}
+
 export async function leerInsightsPorAgente(
   tenantId: string,
   lectores: Partial<Record<AgenteInsight, LectorInsights>> = LECTORES_INSIGHTS,
+  /** Solo se leen estos agentes (`agentesInsightVisibles`); los demás quedan en `[]` sin llamar a su lector. Sin lista: todos. */
+  visibles?: readonly AgenteInsight[],
 ): Promise<InsightsPorAgente> {
   const claves = FICHAS_CINCO_AGENTES.map((f) => f.insight);
   const pares = await Promise.all(
     claves.map(async (a) => {
       const lector = lectores[a];
-      if (!lector) return [a, []] as const;
+      if (!lector || (visibles && !visibles.includes(a))) return [a, []] as const;
       try {
         return [a, await lector(tenantId)] as const;
       } catch {
@@ -91,6 +104,31 @@ export async function leerInsightsPorAgente(
     }),
   );
   return Object.fromEntries(pares) as InsightsPorAgente;
+}
+
+/**
+ * Lo que el Resumen v2 necesita de los insights: el más grave de cada agente VISIBLE para el rol, y los agentes cuyo lector
+ * FALLÓ (`null`), que se confiesan en la pantalla en vez de omitirse (omitirlos se leería como «sin pendientes»).
+ */
+export function resumirInsights(insights: InsightsPorAgente, visibles: readonly AgenteInsight[]): { principales: Insight[]; fallidos: AgenteInsight[] } {
+  const principales: Insight[] = [];
+  const fallidos: AgenteInsight[] = [];
+  for (const a of AGENTES_INSIGHT) {
+    if (!visibles.includes(a)) continue;
+    const lista = insights[a];
+    if (lista === null) { fallidos.push(a); continue; }
+    const mas = insightMasSevero(lista);
+    if (mas) principales.push(mas);
+  }
+  return { principales, fallidos };
+}
+
+export async function leerInsightsResumen(
+  tenantId: string, rol: string, perfil: PerfilTenant | null,
+  lectores: Partial<Record<AgenteInsight, LectorInsights>> = LECTORES_INSIGHTS,
+): Promise<{ principales: Insight[]; fallidos: AgenteInsight[] }> {
+  const visibles = agentesInsightVisibles(rol, perfil);
+  return resumirInsights(await leerInsightsPorAgente(tenantId, lectores, visibles), visibles);
 }
 
 export const TEXTO_VACIO_RESUMEN = 'Todavía no hay datos para interpretar. Cuando llegue el primer archivo, aquí verás qué pasó y qué hacer.';
@@ -200,7 +238,7 @@ const ATAJOS: ReadonlyArray<{ href: string; nombre: string; Icono: typeof Route 
 ];
 
 export async function InicioCincoAgentes({
-  tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '', ui = 'v1', userId, soloLectura = false, veAsistente = false, veDinero = false, rango,
+  tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '', ui = 'v1', userId, soloLectura = false, veAsistente = false, veDinero = false, rango, rol = '',
 }: {
   tenantId: string;
   tenantNombre: string | null;
@@ -217,21 +255,21 @@ export async function InicioCincoAgentes({
   veDinero?: boolean;
   /** Periodo elegido en la barra de filtros (`?rango=`). Solo lo usa el Resumen v2. */
   rango?: RangoResumen;
+  /** Rol efectivo (decide qué enlaces e insights se ofrecen en el Resumen v2). Por omisión vacío: falla cerrado. */
+  rol?: string;
 }) {
   const diaMx = hoyMx(new Date(ahoraMs()));
-  const insights = await leerInsightsPorAgente(tenantId);
   if (ui === 'v2' && userId) {
-    const principales = AGENTES_INSIGHT.flatMap((a) => {
-      const lista = insights[a];
-      return lista ? [insightMasSevero(lista)].filter((x): x is Insight => x !== null) : [];
-    });
+    const { principales, fallidos } = await leerInsightsResumen(tenantId, rol, 'cinco_agentes');
     return (
       <ResumenV2
         tenantId={tenantId} userId={userId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste}
-        sufijo={sufijo} soloLectura={soloLectura} veAsistente={veAsistente} veDinero={veDinero} rango={rango} principales={principales}
+        sufijo={sufijo} soloLectura={soloLectura} veAsistente={veAsistente} veDinero={veDinero} rango={rango}
+        principales={principales} fallidos={fallidos} rol={rol} perfil="cinco_agentes"
       />
     );
   }
+  const insights = await leerInsightsPorAgente(tenantId);
   return (
     <main className="h-full">
       <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>

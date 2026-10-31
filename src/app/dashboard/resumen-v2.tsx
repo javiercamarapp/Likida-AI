@@ -1,11 +1,12 @@
 import { saludo, ahoraMs } from '@/lib/saludo';
 import { fechaMx, hoyMx } from '@/lib/formato';
-import { Chip, EncabezadoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import { Aviso, BotonEnlace, Chip, EncabezadoPagina, Tarjeta } from '@/app/ui-v2/componentes';
 import { TiraKpi } from '@/app/ui-v2/graficas';
 import { leerSenalesAsistente } from '@/lib/likida/asistente/senales';
-import type { Insight } from '@/lib/likida/insights/tipos';
+import type { AgenteInsight, Insight } from '@/lib/likida/insights/tipos';
+import { puedeVerRuta, type PerfilTenant } from '@/lib/auth/visibilidad';
 import { AvisoSinFlota } from './sin-flota';
-import { coberturaDe, filasAtencion, leerDatosResumen, type RangoResumen } from './resumen-datos';
+import { ATAJOS_RESUMEN, coberturaDe, filasAtencion, leerDatosResumen, type RangoResumen } from './resumen-datos';
 import { FiltrosResumen, ListaAtencion, SiguienteAccion } from './resumen-cliente';
 import { itemsKpi, TarjetaCierres, TarjetaDiferencias, TarjetaHizoSolo } from './resumen-tarjetas';
 
@@ -18,6 +19,7 @@ import { itemsKpi, TarjetaCierres, TarjetaDiferencias, TarjetaHizoSolo } from '.
 
 export async function ResumenV2({
   tenantId, userId, tenantNombre, nombre, tenantExiste, sufijo, soloLectura, veAsistente, veDinero = false, rango = '30', principales = [],
+  fallidos = [], rol, perfil = null, avisoFiscalPospuesto = false,
 }: {
   tenantId: string;
   userId: string;
@@ -33,13 +35,23 @@ export async function ResumenV2({
   rango?: RangoResumen;
   /** El insight más severo de cada agente que ya tenga lector (puede venir vacío). */
   principales?: readonly Insight[];
+  /** Agentes cuyo lector de insights FALLÓ: se confiesan en «Requiere tu atención», no se omiten. */
+  fallidos?: readonly AgenteInsight[];
+  /** Rol efectivo y perfil de la flota: deciden qué enlaces se ofrecen (`puedeVerRuta`) y el rótulo del encabezado. */
+  rol: string;
+  perfil?: PerfilTenant | null;
+  /** Flota normal con el perfil fiscal sin declarar («lo confirmo con mi contador»): el estímulo de peaje sigue en $0. */
+  avisoFiscalPospuesto?: boolean;
 }) {
   const diaMx = hoyMx(new Date(ahoraMs()));
   const [d, senales] = await Promise.all([
     leerDatosResumen(tenantId, rango, veDinero),
     veAsistente ? leerSenalesAsistente(tenantId) : Promise.resolve(null),
   ]);
-  const filas = filasAtencion(d, principales, sufijo);
+  // Ningún enlace de la pantalla rebota: cada ruta se ofrece solo si este rol, en este perfil, la abre.
+  const puede = (ruta: string) => puedeVerRuta(rol, ruta.split('?')[0], perfil);
+  const filas = filasAtencion(d, principales, sufijo, 3, { puede, fallidos });
+  const atajos = ATAJOS_RESUMEN.filter((a) => puede(a.href));
   const cob = coberturaDe(d);
   const ambito = `${tenantId}:${userId}`;
 
@@ -48,15 +60,21 @@ export async function ResumenV2({
       <EncabezadoPagina
         rotulo={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
         titulo={`${saludo()}, ${nombre ?? 'equipo'}`}
-        descripcion="Tus cinco agentes, de un vistazo."
+        descripcion={perfil ? 'Tus cinco agentes, de un vistazo.' : 'Tu flota, de un vistazo.'}
         acciones={<Chip>{fechaMx(diaMx)}</Chip>}
       />
 
       {!tenantExiste && <AvisoSinFlota tenantId={tenantId} />}
 
+      {avisoFiscalPospuesto && (
+        <Aviso tono="warn" acciones={puede('/dashboard/onboarding') ? <BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/onboarding${sufijo}`}>Declararlo ahora</BotonEnlace> : undefined}>
+          Tu perfil fiscal sigue sin declararse, así que el estímulo de peaje se muestra en $0 y no se acredita hasta que lo hagas.
+        </Aviso>
+      )}
+
       <FiltrosResumen rango={rango} fuentes={`Fuentes ${cob.ok} de ${cob.total}`} />
 
-      <div className="rv-res__kpis"><TiraKpi items={itemsKpi(d, sufijo)} etiqueta="Tu flota en Likida" /></div>
+      <div className="rv-res__kpis"><TiraKpi items={itemsKpi(d, sufijo, puede)} etiqueta="Tu flota en Likida" /></div>
 
       <div className="rv-res__fila rv-res__fila--8-4">
         <TarjetaCierres d={d} />
@@ -67,9 +85,9 @@ export async function ResumenV2({
 
       <div className="rv-res__fila rv-res__fila--4-4-4">
         <TarjetaDiferencias d={d} />
-        <TarjetaHizoSolo d={d} sufijo={sufijo} />
+        <TarjetaHizoSolo d={d} sufijo={sufijo} puede={puede} />
         <Tarjeta titulo="Siguiente mejor acción" info="resumen.siguiente_mejor_accion">
-          <SiguienteAccion filas={filas} senales={senales} ambito={ambito} soloLectura={soloLectura} sufijo={sufijo} />
+          <SiguienteAccion filas={filas} senales={senales} ambito={ambito} soloLectura={soloLectura} sufijo={sufijo} atajos={atajos} />
         </Tarjeta>
       </div>
     </main>

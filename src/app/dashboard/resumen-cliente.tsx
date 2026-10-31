@@ -3,7 +3,7 @@
 import { ArrowRight, Check, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useMemo, useRef, useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { BarraFiltros, BotonEnlace, Boton, PanelLateral, type ChipFiltro } from '@/app/ui-v2/componentes';
 import { armarPasosCincoAgentes, type SenalesAsistente } from '@/lib/likida/asistente/pasos_cinco_agentes';
 import { conPaso } from './puesta-en-marcha/con-paso';
@@ -19,7 +19,6 @@ export function FiltrosResumen({ rango, fuentes }: { rango: RangoResumen; fuente
   const ruta = usePathname();
   const params = useSearchParams();
   const [pendiente, empezar] = useTransition();
-  const ref = useRef<HTMLDivElement>(null);
   const chips: ChipFiltro[] = RANGOS.map((r) => ({ id: r, etiqueta: ROTULO_RANGO[r], activo: r === rango }));
   const elegir = (id: string) => {
     const p = new URLSearchParams(params?.toString() ?? '');
@@ -28,7 +27,7 @@ export function FiltrosResumen({ rango, fuentes }: { rango: RangoResumen; fuente
   };
   // Mientras llega el nuevo periodo las tarjetas conservan sus datos previos, atenuadas (sin capa de carga).
   return (
-    <div ref={ref} data-pendiente={pendiente || undefined} aria-busy={pendiente || undefined}>
+    <div data-pendiente={pendiente || undefined} aria-busy={pendiente || undefined}>
       <BarraFiltros chips={chips} onChip={elegir} fuentes={fuentes} />
     </div>
   );
@@ -116,14 +115,10 @@ export function ListaAtencion({ filas, senales, ambito, soloLectura, sufijo, vis
   );
 }
 
-const ATAJOS = [
-  { href: '/dashboard/despacho', nombre: 'Nuevo viaje' },
-  { href: '/dashboard/viajes', nombre: 'Viajes' },
-  { href: '/dashboard/operadores', nombre: 'Operadores' },
-] as const;
-
-export function SiguienteAccion({ filas, senales, ambito, soloLectura, sufijo }: {
+export function SiguienteAccion({ filas, senales, ambito, soloLectura, sufijo, atajos }: {
   filas: readonly FilaAtencion[]; senales: SenalesAsistente | null; ambito: string; soloLectura: boolean; sufijo: string;
+  /** Los atajos que ESTE rol abre (el servidor ya los filtró con `puedeVerRuta`). */
+  atajos: ReadonlyArray<{ href: string; nombre: string }>;
 }) {
   const marcha = useMarcha(senales, ambito, soloLectura, sufijo);
   const acciones = elegirAcciones({ marcha: marcha ? { titulo: marcha.paso.titulo, resumen: marcha.paso.resumen, href: marcha.href } : null, filas });
@@ -142,12 +137,12 @@ export function SiguienteAccion({ filas, senales, ambito, soloLectura, sufijo }:
           <p className="rv-sig__porque">No hay pasos pendientes ni alertas de los agentes en este periodo.</p>
         </div>
       )}
-      <ul className="rv-atajos" aria-label={despues.length ? 'Después y atajos' : 'Atajos'}>
+      {despues.length > 0 || atajos.length > 0 ? <ul className="rv-atajos" aria-label={despues.length ? 'Después y atajos' : 'Atajos'}>
         {despues.slice(0, 2).map((a) => <li key={a.id}><Link href={a.href} className="rv-atajos__fila"><span>Después: {a.titulo}</span><ChevronRight width={16} height={16} aria-hidden="true" /></Link></li>)}
-        {ATAJOS.slice(0, Math.max(0, 2 - despues.length)).map((a) => (
+        {atajos.slice(0, Math.max(0, 2 - despues.length)).map((a) => (
           <li key={a.href}><Link href={`${a.href}${sufijo}`} className="rv-atajos__fila"><span>{a.nombre}</span><ChevronRight width={16} height={16} aria-hidden="true" /></Link></li>
         ))}
-      </ul>
+      </ul> : null}
     </>
   );
 }

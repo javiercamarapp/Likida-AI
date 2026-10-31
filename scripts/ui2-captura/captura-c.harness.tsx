@@ -112,17 +112,23 @@ const DATOS_VACIOS: unknown = {
 };
 const DATOS_CAIDOS: unknown = { rango: '30', hoy: '2026-10-28', veDinero: true, kpis: null, peajes: null, cartaPorte: null, cierres: null, porTipo: null, hechos: null, escalados: null };
 
+const sinDinero = (d: unknown): unknown => ({ ...(d as object), veDinero: false, peajes: null, porTipo: null });
 const PRINCIPALES = [insight('peajes')];
 
 const asistente = (s: SenalesAsistente, paso?: 'tms' | 'correo') => (
   <VistaPuestaEnMarcha senales={s} ambito="t:u" tenantId="t" sufijo="" soloLectura={false} pasoInicial={paso} />
 );
 
-interface VistaDef { ruta: string; cuerpo: () => Promise<ReactNode> | ReactNode; senales?: SenalesAsistente; datos?: unknown }
+interface VistaDef { ruta: string; cuerpo: () => Promise<ReactNode> | ReactNode; senales?: SenalesAsistente; datos?: unknown; rol?: string; perfil?: 'cinco_agentes' | null }
 const VISTAS: Record<string, VistaDef> = {
-  'c01-resumen-vacio': { ruta: '/dashboard', senales: VACIAS, datos: DATOS_VACIOS, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, veDinero: true, principales: [] }) },
-  'c02-resumen-en-curso': { ruta: '/dashboard', senales: EN_CURSO, datos: DATOS_CON, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, veDinero: true, principales: PRINCIPALES }) },
-  'c03-resumen-sin-dato': { ruta: '/dashboard', senales: CAIDAS, datos: DATOS_CAIDOS, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, veDinero: true, principales: [] }) },
+  'c01-resumen-vacio': { ruta: '/dashboard', senales: VACIAS, datos: sinDinero(DATOS_VACIOS), cuerpo: async () => ResumenV2({ rol: 'flota_admin', perfil: 'cinco_agentes', tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, veDinero: false, principales: [] }) },
+  'c02-resumen-en-curso': { ruta: '/dashboard', senales: EN_CURSO, datos: sinDinero(DATOS_CON), cuerpo: async () => ResumenV2({ rol: 'flota_admin', perfil: 'cinco_agentes', tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, veDinero: false, principales: PRINCIPALES }) },
+  'c03-resumen-sin-dato': { ruta: '/dashboard', senales: CAIDAS, datos: sinDinero(DATOS_CAIDOS), cuerpo: async () => ResumenV2({ rol: 'flota_admin', perfil: 'cinco_agentes', tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, veDinero: false, principales: [] }) },
+  // Flotas SIN perfil (la mayoría): el Resumen v2 con el chrome de flota normal, para el dueño (con pesos y aviso fiscal) y el
+  // encargado (sin dinero, solo conteos y sin enlaces de dinero).
+  'c10-resumen-flota-dueno': { ruta: '/dashboard', datos: DATOS_CON, rol: 'flota_admin', perfil: null, cuerpo: async () => ResumenV2({ rol: 'flota_admin', perfil: null, tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: false, veDinero: true, principales: PRINCIPALES, fallidos: ['carta-porte'], avisoFiscalPospuesto: true }) },
+  'c11-resumen-flota-vacia': { ruta: '/dashboard', datos: DATOS_VACIOS, rol: 'flota_admin', perfil: null, cuerpo: async () => ResumenV2({ rol: 'flota_admin', perfil: null, tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: false, veDinero: true, principales: [] }) },
+  'c12-resumen-flota-encargado': { ruta: '/dashboard', datos: sinDinero(DATOS_CON), rol: 'encargado', perfil: null, cuerpo: async () => ResumenV2({ rol: 'encargado', perfil: null, tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: false, veDinero: false, principales: [] }) },
   'c04-asistente-vacio': { ruta: '/dashboard/puesta-en-marcha', cuerpo: () => asistente(VACIAS) },
   'c05-asistente-tms': { ruta: '/dashboard/puesta-en-marcha', cuerpo: () => asistente(VACIAS, 'tms') },
   'c06-asistente-atencion': { ruta: '/dashboard/puesta-en-marcha', cuerpo: () => asistente(ATENCION, 'tms') },
@@ -145,10 +151,10 @@ const FUENTES_CSS = [
   `[data-ui="v2"]{--font-sans-ui:'Hanken Grotesk UI',ui-sans-serif,system-ui,sans-serif;--font-display:'Hanken Grotesk UI',ui-sans-serif,system-ui,sans-serif}`,
 ].join('\n');
 
-const envolver = (cuerpo: ReactNode, ruta: string) => {
+const envolver = (cuerpo: ReactNode, ruta: string, rol = 'flota_admin', perfil: 'cinco_agentes' | null = 'cinco_agentes') => {
   RUTA = ruta;
   return renderToStaticMarkup(
-    <DashboardChromeV2 nombre={USUARIO.nombre} rol="flota_admin" perfil="cinco_agentes" cerrarSesion={async () => {}}>{cuerpo}</DashboardChromeV2>,
+    <DashboardChromeV2 nombre={USUARIO.nombre} rol={rol} perfil={perfil} cerrarSesion={async () => {}}>{cuerpo}</DashboardChromeV2>,
   );
 };
 
@@ -162,7 +168,7 @@ describe('captura de las pantallas del carril C', () => {
     for (const [id, v] of Object.entries(VISTAS)) {
       SENALES_RESUMEN.actuales = v.senales ?? VACIAS;
       DATOS_RESUMEN.actuales = v.datos ?? DATOS_CON;
-      const html = envolver(await v.cuerpo(), v.ruta);
+      const html = envolver(await v.cuerpo(), v.ruta, v.rol, v.perfil);
       exigirV2Html(html, id);
       writeFileSync(path.join(TRABAJO, 'vistas', `${id}.html`), html);
     }

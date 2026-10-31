@@ -1,6 +1,6 @@
 import type { DashboardKpis, DineroObservadoTipo, HechoSolo, GastoSemanalPorCategoria } from '@/lib/likida/analytics';
 import type { EstadoCartaPorte } from '@/lib/likida/carta_porte_datos';
-import type { Insight } from '@/lib/likida/insights/tipos';
+import type { AgenteInsight, Insight } from '@/lib/likida/insights/tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MODELO DEL RESUMEN v2 (rediseño): tipos y funciones PURAS, sin importar nada de servidor (lo importan también los componentes de
@@ -134,7 +134,7 @@ export interface FilaAtencion {
 const SEVERIDAD_INSIGHT: Record<Insight['severidad'], SeveridadFila> = { urgente: 'accion', atencion: 'atencion', info: 'info' };
 const PESO: Record<SeveridadFila, number> = { accion: 0, atencion: 1, info: 2 };
 
-const RUTA_LIQUIDACION = '/dashboard/agentes/liquidacion';
+export const RUTA_LIQUIDACION = '/dashboard/agentes/liquidacion';
 const RUTA_VIAJES_ESCALADOS = '/dashboard/viajes?filtro=escalados';
 const RUTA_AGENTE: Record<Insight['agente'], string> = {
   liquidacion: RUTA_LIQUIDACION, peajes: '/dashboard/agentes/peajes', 'carta-porte': '/dashboard/agentes/carta-porte',
@@ -153,21 +153,47 @@ export function conSufijo(ruta: string, sufijo: string): string {
   return ruta.includes('?') ? `${ruta}&${s}` : `${ruta}?${s}`;
 }
 
+/** Opciones de `filasAtencion`: `puede` decide si un enlace se ofrece (por rol y perfil); `fallidos` son los agentes cuyo lector falló. */
+export interface OpcionesFilas {
+  puede?: (ruta: string) => boolean;
+  fallidos?: readonly AgenteInsight[];
+}
+
+/** Los atajos del pie de «Siguiente mejor acción». Cada uno se ofrece solo si el rol los abre (`puedeVerRuta`). */
+export const ATAJOS_RESUMEN: ReadonlyArray<{ href: string; nombre: string }> = [
+  { href: '/dashboard/despacho', nombre: 'Nuevo viaje' },
+  { href: '/dashboard/viajes', nombre: 'Viajes' },
+  { href: '/dashboard/operadores', nombre: 'Operadores' },
+];
+
 /** Las filas de «Requiere tu atención» (sin la de Puesta en marcha, que depende del navegador): primero lo que te toca,
  *  después lo que espera, y para llegar a `minimo` filas rellena con lo ya revisado («sin pendientes» / «no se pudo leer»). Pura. */
 export function filasAtencion(
-  d: Pick<DatosResumen, 'kpis' | 'escalados'>,
+  d: Pick<DatosResumen, 'kpis' | 'escalados'> & { rango?: RangoResumen },
   principales: readonly Insight[],
   sufijo: string,
   minimo = 3,
+  opciones: OpcionesFilas = {},
 ): FilaAtencion[] {
+  const puede = opciones.puede ?? (() => true);
+  /** El enlace de una fila solo existe si este rol (y este perfil) abre esa pantalla: jamás una fila que rebota. */
+  const enlace = (ruta: string): string | null => (puede(ruta) ? conSufijo(ruta, sufijo) : null);
   const filas: FilaAtencion[] = [];
   for (const i of principales) {
     filas.push({
       id: `insight-${i.agente}`, severidad: SEVERIDAD_INSIGHT[i.severidad],
       titulo: `${NOMBRE_AGENTE[i.agente]}: ${i.quePaso}`, detalle: i.queSignifica,
-      href: conSufijo(RUTA_AGENTE[i.agente], sufijo), queSignifica: i.queSignifica, queHacer: i.queHacer,
+      href: enlace(RUTA_AGENTE[i.agente]), queSignifica: i.queSignifica, queHacer: i.queHacer,
       fuente: `${i.fuente.periodo} · ${i.fuente.n} ${plural(i.fuente.n, 'registro', 'registros')}`, textoAccion: `Abrir ${NOMBRE_AGENTE[i.agente]}`,
+    });
+  }
+  // Un agente cuyo lector FALLÓ no se omite en silencio (eso se leería como «sin pendientes»): se confiesa como fila.
+  for (const a of opciones.fallidos ?? []) {
+    filas.push({
+      id: `insight-sin-lectura-${a}`, severidad: 'atencion', titulo: `${NOMBRE_AGENTE[a]}: no se pudo leer`,
+      detalle: 'Su interpretación no cargó ahora. No es «sin pendientes».', href: enlace(RUTA_AGENTE[a]),
+      queSignifica: 'La lectura de este agente falló, así que no sabemos si tiene algo pendiente. Es distinto de que no haya nada.',
+      queHacer: 'Vuelve a cargar en un momento. Si sigue igual, abre el agente y revisa ahí.', fuente: 'Lectura del agente, ahora', textoAccion: `Abrir ${NOMBRE_AGENTE[a]}`,
     });
   }
   const porRevisar = d.kpis?.porRevisar ?? null;
@@ -176,7 +202,7 @@ export function filasAtencion(
       id: 'por-revisar', severidad: 'accion',
       titulo: `${porRevisar} ${plural(porRevisar, 'liquidación por revisar', 'liquidaciones por revisar')}`,
       detalle: 'El agente las dejó con estatus «revisar».',
-      href: conSufijo(RUTA_LIQUIDACION, sufijo),
+      href: enlace(RUTA_LIQUIDACION),
       queSignifica: 'Son liquidaciones del periodo que el agente no pudo dar por cuadradas y esperan que alguien las revise.',
       queHacer: 'Abre la cola de revisión del agente de Liquidación y decide cada una.', fuente: 'Liquidaciones de tu flota, periodo elegido', textoAccion: 'Revisar liquidaciones',
     });
@@ -187,7 +213,7 @@ export function filasAtencion(
       id: 'escalados', severidad: 'atencion',
       titulo: `${escalados} ${plural(escalados, 'viaje escalado', 'viajes escalados')}`,
       detalle: 'Se escalaron por falta de respuesta o de comprobantes.',
-      href: conSufijo(RUTA_VIAJES_ESCALADOS, sufijo),
+      href: enlace(RUTA_VIAJES_ESCALADOS),
       queSignifica: 'El agente ya intentó avisar al operador y escaló el viaje para que alguien de la oficina lo atienda.',
       queHacer: 'Abre los viajes escalados y da seguimiento.', fuente: 'Viajes con sello de escalado', textoAccion: 'Ver viajes escalados',
     });
@@ -195,15 +221,18 @@ export function filasAtencion(
   filas.sort((a, b) => PESO[a.severidad] - PESO[b.severidad]);
 
   // Relleno honesto: lo que se revisó y salió limpio (o no se pudo leer; jamás un «limpio» inventado).
-  const revisadas: Array<[string, string, number | null, boolean]> = [
-    ['por-revisar', 'Liquidaciones por revisar', porRevisar, filas.some((f) => f.id === 'por-revisar')],
-    ['escalados', 'Viajes escalados', escalados, filas.some((f) => f.id === 'escalados')],
+  // Cada «sin pendientes» dice SU corte: las liquidaciones por revisar se leen con la ventana del periodo elegido; los
+  // viajes escalados son un conteo de ahora (sin ventana), y no se les cuelga un periodo que no tienen.
+  const periodo = PERIODO_RANGO[d.rango ?? RANGO_POR_OMISION];
+  const revisadas: Array<[string, string, number | null, boolean, string]> = [
+    ['por-revisar', 'Liquidaciones por revisar', porRevisar, filas.some((f) => f.id === 'por-revisar'), `Sin pendientes · ${periodo}.`],
+    ['escalados', 'Viajes escalados', escalados, filas.some((f) => f.id === 'escalados'), 'Sin pendientes · ahora.'],
   ];
-  for (const [id, rotulo, n, yaEsta] of revisadas) {
+  for (const [id, rotulo, n, yaEsta, limpio] of revisadas) {
     if (filas.length >= minimo || yaEsta) continue;
     filas.push(n === null
       ? { id: `${id}-sin-lectura`, severidad: 'atencion', titulo: rotulo, detalle: 'No se pudo leer ahora. No es cero.', href: null, sinPendiente: true }
-      : { id: `${id}-limpio`, severidad: 'info', titulo: rotulo, detalle: 'Sin pendientes en este periodo.', href: null, sinPendiente: true });
+      : { id: `${id}-limpio`, severidad: 'info', titulo: rotulo, detalle: limpio, href: null, sinPendiente: true });
   }
   return filas;
 }

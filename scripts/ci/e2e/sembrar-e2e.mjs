@@ -210,6 +210,18 @@ for (const u of USUARIOS) {
   exigir(fiscal.error, 'declarar perfil fiscal de Flota E2E Perfil');
 }
 
+// ── 6. La salida EXPLÍCITA a v1 de las tres flotas sembradas. Desde el 30-oct-2026 la interfaz por omisión es v2 (sin fila
+//    en `tenant_ui` = v2), así que la PRIMERA pasada de la suite —la que sigue probando el panel de siempre y comprueba que v1
+//    NO trae `data-ui`— necesita una fila `v1` para ser v1. La SEGUNDA pasada sigue forzando v2 con LIKIDA_UI_V2_FORZAR=1
+//    (la variable gana a la fila). Sin cambiar esto, la primera pasada correría v2 sin que nadie lo hubiera decidido. ─
+{
+  const { error } = await admin.from('tenant_ui').upsert(
+    [TENANT_A, TENANT_B, TENANT_C].map((tenant_id) => ({ tenant_id, version: 'v1' })),
+    { onConflict: 'tenant_id' },
+  );
+  exigir(error, 'upsert tenant_ui v1 de las flotas sembradas');
+}
+
 // Cartera sintética: una propia y otra sin asignar nunca visible al vendedor.
 {
   const { error } = await admin.from('prospecto').upsert([

@@ -30,7 +30,7 @@ vi.mock('./resumen-datos', async (orig) => ({ ...(await orig<typeof import('./re
 const { ResumenV2 } = await import('./resumen-v2');
 
 const pintar = async (extra: Partial<Parameters<typeof ResumenV2>[0]> = {}) => renderToStaticMarkup(await ResumenV2({
-  tenantId: 't', userId: 'u', tenantNombre: null, nombre: 'Ana', tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, veDinero: true, ...extra,
+  tenantId: 't', userId: 'u', tenantNombre: null, nombre: 'Ana', tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, veDinero: true, rol: 'flota_admin', ...extra,
 }));
 
 describe('Resumen v2 del dueño', () => {
@@ -76,12 +76,57 @@ describe('Resumen v2 del dueño', () => {
   it('sin pendientes: las filas de atención dicen «Sin pendientes» (con lectura) y no inventan alertas', async () => {
     datos = { ...completos(), kpis: { ...completos().kpis!, porRevisar: 0 }, escalados: 0 };
     const h = await pintar({ veAsistente: false });
-    expect(h).toContain('Sin pendientes en este periodo.');
+    expect(h).toContain('Sin pendientes · últimos 30 días.');
+    expect(h).toContain('Sin pendientes · ahora.');
     expect(h).toContain('Nada urgente por hacer hoy');
   });
   it('periodo elegido: el chip activo es el de la URL', async () => {
     datos = { ...completos(), rango: '7' };
     const h = await pintar({ rango: '7' });
     expect(h).toMatch(/aria-pressed="true"[^>]*>7 días</);
+  });
+
+  it('flota normal (sin perfil): se presenta como «Tu flota» y no como «cinco agentes»', async () => {
+    datos = completos();
+    const h = await pintar({ perfil: null, veAsistente: false });
+    expect(h).toContain('Tu flota, de un vistazo.');
+    expect(h).not.toContain('cinco agentes');
+    const hp = await pintar({ perfil: 'cinco_agentes' });
+    expect(hp).toContain('Tus cinco agentes, de un vistazo.');
+  });
+  it('el encargado (sin dinero) no recibe enlaces a pantallas de dinero: liquidación y peajes no salen como enlaces', async () => {
+    datos = { ...completos(), veDinero: false, peajes: null, porTipo: null };
+    const h = await pintar({ rol: 'encargado', veDinero: false, veAsistente: false });
+    expect(h).not.toContain('/dashboard/agentes/liquidacion');
+    expect(h).not.toContain('/dashboard/agentes/peajes');
+    expect(h).toContain('/dashboard/agentes/carta-porte');
+    expect(h).not.toContain('Ver actividad');
+    expect(h).not.toContain('$');
+    expect(h).toContain('Diferencias en liquidaciones');
+    expect(h).not.toContain('Recuperado');
+  });
+  it('los atajos son los que el rol abre', async () => {
+    datos = { ...completos(), kpis: { ...completos().kpis!, porRevisar: 0 }, escalados: 0 };
+    expect(await pintar({ veAsistente: false })).toContain('Nuevo viaje');
+    expect(await pintar({ rol: 'contador', veAsistente: false })).not.toContain('Nuevo viaje');
+  });
+  it('un lector de insights caído se confiesa en «Requiere tu atención» (no es «sin pendientes»)', async () => {
+    datos = { ...completos(), kpis: { ...completos().kpis!, porRevisar: 0 }, escalados: 0 };
+    const h = await pintar({ veAsistente: false, fallidos: ['peajes'] });
+    expect(h).toContain('Peajes: no se pudo leer');
+    expect(h).toContain('No es «sin pendientes».');
+  });
+  it('perfil fiscal pospuesto: aviso con enlace a declararlo', async () => {
+    datos = completos();
+    const h = await pintar({ avisoFiscalPospuesto: true, veAsistente: false });
+    expect(h).toContain('estímulo de peaje se muestra en $0');
+    expect(h).toContain('/dashboard/onboarding');
+    expect(await pintar({ veAsistente: false })).not.toContain('estímulo de peaje se muestra');
+  });
+  it('el dinero se pinta sin decimales', async () => {
+    datos = completos();
+    const h = await pintar();
+    expect(h).toContain('$482,311');
+    expect(h).not.toContain('.50');
   });
 });

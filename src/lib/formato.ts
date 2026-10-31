@@ -302,6 +302,16 @@ export function mxnCompacto(n: number): string {
   return `${n < 0 ? '-' : ''}$${magnitud}`;
 }
 
+/**
+ * Pesos SIN decimales (ESTILO-LIKIDA: «dinero sin decimales salvo columnas de cuadre»): `$482,311`; desde un millón, el
+ * compacto de siempre (`$1.5 M`). Para tarjetas y KPI; las columnas de cuadre siguen con `mxn` (2 decimales).
+ */
+export function mxnEntero(n: number): string {
+  if (Math.abs(n) >= COMPACTO_DESDE) return mxnCompacto(n);
+  const r = Math.round(n);
+  return (Object.is(r, -0) ? 0 : r).toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0, minimumFractionDigits: 0 });
+}
+
 /** Un entero con separador de millares, sin moneda ni unidad — tokens, conteos. */
 export function numero(n: number): string {
   return n.toLocaleString('es-MX');
