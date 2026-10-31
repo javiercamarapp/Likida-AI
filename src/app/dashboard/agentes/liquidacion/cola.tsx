@@ -9,6 +9,9 @@ import {
   type FiltrosCola, type PaginaCola, type FilaCola, type RevisionLiquidacion,
 } from '@/lib/likida/revision';
 import { EnlacePagina, NavPaginas } from '../../paginador';
+import { ChipsFiltro, SelloDato, TablaLista, chipsActivos, type ColumnaTabla } from '@/app/ui-v2/datos';
+import { ahoraMs } from '@/lib/saludo';
+import { fechaMx } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // «ESPERAN TU REVISIÓN» — LA COLA DE VERDAD (auditoría 24, FE-5 · BLOQ-6).
@@ -47,10 +50,11 @@ const ROTULO_VACIO: Record<RevisionLiquidacion, string> = {
   rechazada: 'Ninguna rechazada',
 };
 
-const ROTULO_ESTADO: Record<string, { rotulo: string; fg: string; bg: string }> = {
-  cuadrada: { rotulo: 'Cuadrada', fg: 'var(--ok)', bg: 'var(--okbg)' },
-  con_diferencias: { rotulo: 'Con diferencias', fg: 'var(--warn)', bg: 'var(--warnbg)' },
-  revisar: { rotulo: 'Revisar', fg: 'var(--bad)', bg: 'var(--badbg)' },
+// `fg`/`bg` los lee `etiquetas_sincronizadas.test.ts` (las tres copias del estatus coinciden en severidad); la pastilla se pinta con `tono` por clase.
+const ROTULO_ESTADO: Record<string, { rotulo: string; fg: string; bg: string; tono: 'ok' | 'warn' | 'bad' }> = {
+  cuadrada: { rotulo: 'Cuadrada', fg: 'var(--ok)', bg: 'var(--okbg)', tono: 'ok' },
+  con_diferencias: { rotulo: 'Con diferencias', fg: 'var(--warn)', bg: 'var(--warnbg)', tono: 'warn' },
+  revisar: { rotulo: 'Revisar', fg: 'var(--bad)', bg: 'var(--badbg)', tono: 'bad' },
 };
 
 export interface ColaProps {
@@ -94,6 +98,9 @@ export async function SeccionCola({ cola, filtros, terminales, buscar, contexto,
 
       <FormaFiltros filtros={filtros} terminales={terms} buscar={buscar} contexto={contexto} conFiltros={conFiltros} />
 
+      {/* Los filtros vigentes como chips quitables (el estado vive en la URL; quitar uno conserva tenant/vista/rol y los demás). */}
+      <ChipsFiltro chips={chipsDeCola(pagina, filtros, terms, contexto)} quitarTodosHref={`?${new URLSearchParams(contexto).toString()}`} className="mb-3" />
+
       {pagina.filas.length === 0 ? (
         <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
           {conFiltros
@@ -101,25 +108,35 @@ export async function SeccionCola({ cola, filtros, terminales, buscar, contexto,
             : 'No hay liquidaciones esperando a un humano — cuando el agente no pueda cuadrar una solo, la vas a ver aquí.'}
         </EstadoVacio>
       ) : (
-        <>
-          <TablaCola filas={pagina.filas} sufijo={sufijo} />
-          <div className="flex items-center justify-between gap-3 mt-2.5">
-            <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
-              {/* La ventana, DECLARADA. No hay «se muestran las más recientes»
-                  que esconda a las viejas: esta cola empieza por las viejas. */}
-              Por antigüedad. La firma se pone en el detalle de cada una.
-            </p>
-            {pagina.siguiente && (
-              <NavPaginas>
-                <EnlacePagina
-                  href={`?${new URLSearchParams([...contexto, ...paramsDeFiltros(filtros), ['cursor', pagina.siguiente]]).toString()}`}
-                  direccion="siguiente"
-                />
-              </NavPaginas>
-            )}
-          </div>
-        </>
+        <TablaLista<FilaCola>
+          etiqueta="Cola de revisión de liquidaciones"
+          columnas={columnasCola(sufijo)}
+          filas={pagina.filas}
+          idFila={(l) => l.id}
+          base=""
+          params={{}}
+          pie={(
+            <div className="rv-tl__sellos">
+              <p className="rv-tl__nota">
+                {/* La ventana, DECLARADA. No hay «se muestran las más recientes»
+                    que esconda a las viejas: esta cola empieza por las viejas. */}
+                Por antigüedad. La firma se pone en el detalle de cada una.
+              </p>
+              {pagina.siguiente && (
+                <NavPaginas>
+                  <EnlacePagina
+                    href={`?${new URLSearchParams([...contexto, ...paramsDeFiltros(filtros), ['cursor', pagina.siguiente]]).toString()}`}
+                    direccion="siguiente"
+                  />
+                </NavPaginas>
+              )}
+            </div>
+          )}
+        />
       )}
+      <div className="rv-tl__sellos">
+        <SelloDato tipo="observado" fuente="Cola de revisión" leidoEn={ahoraMs()} edad={false} />
+      </div>
     </section>
   );
 }
@@ -223,59 +240,57 @@ function Campo({ etiqueta, pista, children }: { etiqueta: string; pista?: string
   );
 }
 
-function TablaCola({ filas, sufijo }: { filas: FilaCola[]; sufijo: string }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-[13px]">
-        <thead>
-          <tr className="text-left" style={{ color: 'var(--faint)' }}>
-            <Th>Viaje</Th>
-            <Th>Cerrada</Th>
-            <Th>Operador</Th>
-            <Th>Unidad</Th>
-            <Th derecha>Comprobado</Th>
-            <Th derecha>Diferencia</Th>
-            <Th>Cuadre</Th>
-            <th className="pb-2" />
-          </tr>
-        </thead>
-        <tbody>
-          {filas.map((l) => {
-            const e = ROTULO_ESTADO[l.estatus] ?? { rotulo: l.estatus, fg: 'var(--muted)', bg: 'var(--canvas)' };
-            return (
-              <tr key={l.id} className="border-t" style={{ borderColor: 'var(--line2)' }}>
-                <td className="py-2 font-medium">{l.folio}</td>
-                <td className="py-2" style={{ color: 'var(--muted)' }}>{fechaCorta(l.creadoEn)}</td>
-                {/* Sin nombre no se inventa uno: la ficha del chofer puede
-                    estar incompleta y «—» es la verdad. */}
-                <td className="py-2" style={{ color: 'var(--muted)' }}>{l.operadorNombre ?? '—'}</td>
-                <td className="py-2" style={{ color: 'var(--muted)' }}>{l.unidadEco ?? '—'}</td>
-                <td className="py-2 text-right cifra-mono">{mxn(l.comprobado)}</td>
-                <td className="py-2 text-right cifra-mono" style={l.diferencia !== 0 ? { color: 'var(--bad)' } : undefined}>
-                  {mxn(l.diferencia)}
-                </td>
-                <td className="py-2">
-                  <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
-                    style={{ color: e.fg, background: e.bg }}>{e.rotulo}</span>
-                </td>
-                <td className="py-2 text-right">
-                  <Link href={`/dashboard/${l.id}${sufijo}`}
-                    className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity"
-                    style={{ color: 'var(--marca)' }}>
-                    Revisar <ArrowRight width={12} height={12} strokeWidth={2} />
-                  </Link>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
+/** Las columnas de la cola. El orden es el del servidor (por antigüedad, la que más lleva esperando primero) y NO se ofrece ordenar:
+ *  la cola se pagina por cursor, y ordenar solo la página visible escondería a las que más llevan esperando firma. */
+function columnasCola(sufijo: string): ColumnaTabla<FilaCola>[] {
+  return [
+    { id: 'viaje', titulo: 'Viaje', principal: true, celda: (l) => l.folio },
+    { id: 'cerrada', titulo: 'Cerrada', corta: true, celda: (l) => <span className="rv-tl__apagado">{fechaCorta(l.creadoEn)}</span> },
+    // Sin nombre no se inventa uno: la ficha del chofer puede estar incompleta y «—» es la verdad.
+    { id: 'operador', titulo: 'Operador', celda: (l) => <span className="rv-tl__apagado">{l.operadorNombre ?? '—'}</span> },
+    { id: 'unidad', titulo: 'Unidad', corta: true, celda: (l) => <span className="rv-tl__apagado">{l.unidadEco ?? '—'}</span> },
+    { id: 'comprobado', titulo: 'Comprobado', alinear: 'der', celda: (l) => <span className="cifra-mono">{mxn(l.comprobado)}</span> },
+    { id: 'diferencia', titulo: 'Diferencia', alinear: 'der', celda: (l) => <span className={l.diferencia !== 0 ? 'cifra-mono rv-tl__bad' : 'cifra-mono'}>{mxn(l.diferencia)}</span> },
+    {
+      id: 'cuadre', titulo: 'Cuadre', corta: true,
+      celda: (l) => {
+        const e = ROTULO_ESTADO[l.estatus] ?? { rotulo: l.estatus, tono: undefined };
+        return <span className="rv-tl__pill" data-tono={e.tono}>{e.rotulo}</span>;
+      },
+    },
+    {
+      id: 'accion', titulo: 'Revisar', tituloOculto: true, alinear: 'der',
+      celda: (l) => (
+        <Link href={`/dashboard/${l.id}${sufijo}`} className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity rv-tl__enlace">
+          Revisar <ArrowRight width={12} height={12} strokeWidth={2} aria-hidden />
+        </Link>
+      ),
+    },
+  ];
 }
 
-function Th({ children, derecha }: { children: React.ReactNode; derecha?: boolean }) {
-  return (
-    <th className={`etiqueta-mono text-[11px] uppercase font-normal pb-2${derecha ? ' text-right' : ''}`}>{children}</th>
-  );
+/** El nombre solo si es INEQUÍVOCO: todas las filas (ya filtradas por el servidor) traen el mismo nombre. Con nombres distintos, vacíos o
+ *  sin filas, null → el chip dice «elegido» y no adivina. */
+function unico(nombres: ReadonlyArray<string | null>): string | null {
+  if (nombres.length === 0 || nombres.some((n) => !n)) return null;
+  return new Set(nombres).size === 1 ? nombres[0] : null;
+}
+
+/** Los filtros vigentes de la cola como chips: el nombre de operador, unidad y terminal sale de la propia cola / del catálogo de
+ *  terminales (la URL solo trae ids). Si no hay filas que lo nombren, el chip dice que hay un filtro y no inventa el nombre. */
+export function chipsDeCola(
+  pagina: PaginaCola, f: FiltrosCola,
+  terminales: { opciones: Array<{ id: string; nombre: string }> } | null,
+  contexto: Array<[string, string]>,
+) {
+  const vigentes = Object.fromEntries([...contexto, ...paramsDeFiltros(f)]);
+  return chipsActivos('', vigentes, [
+    { param: 'rev', etiqueta: 'Revisión', rotuloValor: (v) => ROTULO_REVISION[v as RevisionLiquidacion] ?? v },
+    { param: 'estado', etiqueta: 'Cuadre', rotuloValor: (v) => ROTULO_ESTADO[v]?.rotulo ?? v },
+    { param: 'operador', etiqueta: 'Operador', rotuloValor: () => unico(pagina.filas.map((x) => x.operadorNombre)) ?? 'elegido' },
+    { param: 'unidad', etiqueta: 'Unidad', rotuloValor: () => unico(pagina.filas.map((x) => x.unidadEco)) ?? 'elegida' },
+    { param: 'terminal', etiqueta: 'Terminal', rotuloValor: (v) => terminales?.opciones.find((t) => t.id === v)?.nombre ?? 'elegida' },
+    { param: 'desde', etiqueta: 'Desde', rotuloValor: (v) => fechaMx(v) },
+    { param: 'hasta', etiqueta: 'Hasta', rotuloValor: (v) => fechaMx(v) },
+  ], ['cursor', 'c', 'pag']);
 }
