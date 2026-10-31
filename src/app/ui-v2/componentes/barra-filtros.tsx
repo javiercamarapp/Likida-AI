@@ -54,7 +54,7 @@ export function BarraFiltros({ busqueda, chips = [], onChip, avanzados, nAvanzad
       {esForma ? pares.map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />) : null}
       {busqueda ? (
         <label className="rv-fl rv-fl--buscar">
-          <Search aria-hidden="true" />
+          <Search aria-hidden="true" strokeWidth={1.75} />
           <span className="rv-sr">{busqueda.etiqueta ?? 'Buscar'}</span>
           <input type="search" className="border-0 bg-transparent" value={busqueda.valor} placeholder={busqueda.placeholder ?? 'Buscar'} onChange={(e) => busqueda.onCambio(e.target.value)} />
         </label>
@@ -69,7 +69,7 @@ export function BarraFiltros({ busqueda, chips = [], onChip, avanzados, nAvanzad
         {esForma ? <noscript><button type="submit" className="rv-btn rv-btn--sm">Aplicar</button></noscript> : null}
         {avanzados ? (
           <button ref={ancla} type="button" className="rv-fl" data-activo={nAvanzados > 0 ? '' : undefined} aria-expanded={abierto} aria-controls={idPanel} onClick={() => setAbierto((v) => !v)}>
-            <SlidersHorizontal aria-hidden="true" />
+            <SlidersHorizontal aria-hidden="true" strokeWidth={1.75} />
             <span>Filtros</span>
             {nAvanzados > 0 ? <span className="rv-fl__n">{nAvanzados}</span> : null}
           </button>

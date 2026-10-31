@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { FiltroOpciones } from '../ui-v2/componentes';
+import { SegmentedControl } from '../ui-v2/componentes';
 import { Dona, AreaChartSimple } from '../admin/charts';
 import { GastoSemanalChart } from './gasto-semanal-chart';
 import { TopRutas } from './top-rutas';
@@ -66,8 +66,8 @@ export function PanelPeriodo({
     // (12-ago-2026) — el padding horizontal lo pone el padre.
     <>
       <div className="flex items-center justify-end">
-        <FiltroOpciones etiqueta="Periodo" valor={modo} porDefecto="" ariaLabel="Periodo de las gráficas"
-          onCambio={(v) => setModoIdx(MODOS.indexOf(v as ModoPeriodo))} opciones={OPCIONES.map((o) => ({ valor: o.id, rotulo: o.etiqueta }))} />
+        <SegmentedControl etiqueta="Periodo de las gráficas" tamano="sm" valor={modo}
+          onChange={(v) => setModoIdx(MODOS.indexOf(v))} opciones={OPCIONES.map((o) => ({ valor: o.id, etiqueta: o.etiqueta }))} />
       </div>
 
       {/* ── Viajes / Actividad ── */}

@@ -210,7 +210,7 @@ export async function SeccionExternas(p: ExternasProps) {
           ]}>
           <FiltroFecha nombre="desde" etiqueta="Desde" valor={hace30} autoEnvio={false} />
           <FiltroFecha nombre="hasta" etiqueta="Hasta" valor={hoy} autoEnvio={false} />
-          <button type="submit" className="rv-btn rv-btn--secondary rv-btn--sm"><Download aria-hidden /> Exportar CSV</button>
+          <button type="submit" className="rv-btn rv-btn--secondary rv-btn--sm"><Download aria-hidden strokeWidth={1.75} /> Exportar CSV</button>
         </BarraFiltros>
       </div>
 

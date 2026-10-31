@@ -56,7 +56,7 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
           <FiltroOpciones nombre="chofer" etiqueta="Chofer" valor={filtros.operadorId} opciones={[{ valor: '', rotulo: 'Todos' }, ...(catalogos?.operadores ?? []).map((o) => ({ valor: o.id, rotulo: o.nombre }))]} />
           {csvUrl && (
             <a href={csvUrl} className="rv-btn rv-btn--primary rv-btn--sm">
-              <Download aria-hidden />CSV para cobro de estadías
+              <Download aria-hidden strokeWidth={1.75} />CSV para cobro de estadías
             </a>
           )}
         </BarraFiltros>

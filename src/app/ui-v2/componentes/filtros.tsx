@@ -139,7 +139,7 @@ export function FiltroOpciones({ etiqueta, opciones, valor, porDefecto = '', nom
       >
         <span className="rv-fl__etq">{etiqueta}</span>
         {activo ? <span className="rv-fl__val">{rotuloValor}</span> : null}
-        <ChevronDown className="rv-fl__flecha" aria-hidden="true" />
+        <ChevronDown className="rv-fl__flecha" aria-hidden="true" strokeWidth={1.75} />
       </button>
       {opciones.some((o) => o.href) ? (
         // Sin JavaScript el chip no abre nada: las opciones-enlace salen como enlaces simples (el estado vive en la URL).
@@ -168,7 +168,7 @@ export function FiltroOpciones({ etiqueta, opciones, valor, porDefecto = '', nom
             };
             const cuerpo = (
               <>
-                <span className="rv-fl__marca">{sel ? <Check aria-hidden="true" /> : null}</span>
+                <span className="rv-fl__marca">{sel ? <Check aria-hidden="true" strokeWidth={1.75} /> : null}</span>
                 <span className="rv-fl__rotulo">{o.rotulo}</span>
               </>
             );
@@ -211,7 +211,7 @@ export function FiltroBusqueda({ nombre, valor, placeholder = 'Buscar', etiqueta
 }) {
   return (
     <label className={cx('rv-fl rv-fl--buscar', className)}>
-      <Search aria-hidden="true" />
+      <Search aria-hidden="true" strokeWidth={1.75} />
       <span className="rv-sr">{etiqueta}</span>
       <input type="search" name={nombre} defaultValue={valor ?? ''} placeholder={placeholder} maxLength={maxLength} className="border-0 bg-transparent" />
     </label>
@@ -273,7 +273,7 @@ export function FiltroInterruptor({ nombre, valor = 'on', etiqueta, marcado, cla
   return (
     <label className={cx('rv-fl rv-fl--interruptor', className)}>
       <input type="checkbox" className="rv-sr" name={nombre} value={valor} defaultChecked={marcado} data-auto="" />
-      <Check className="rv-fl__tilde" aria-hidden="true" />
+      <Check className="rv-fl__tilde" aria-hidden="true" strokeWidth={1.75} />
       <span>{etiqueta}</span>
     </label>
   );
