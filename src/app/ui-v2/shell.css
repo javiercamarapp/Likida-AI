@@ -95,8 +95,8 @@
 [data-ui="v2"] .rv-item:hover { background: var(--ui-soft); color: var(--ink); }
 [data-ui="v2"] .rv-item__ico { flex: none; color: var(--muted); }
 [data-ui="v2"] .rv-item__txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-/* ◆ Activo (marca, directiva 29-oct) = fondo azul marino suave + texto marino 600 + barra izquierda de 3 px de COLOR de marca
-   (naranja ladrillo; en oscuro #fb923c), `inset 3px 0 0`. Nunca bloque negro ni blanco. */
+/* ◆ Activo = fondo suave + texto tinta 600 + barra izquierda GRIS de 3 px (--n-500), `inset 3px 0 0`.
+   Nunca bloque negro ni blanco ni barra de color; el rojo/burdeos (--senal) solo como acento puntual de atención. */
 [data-ui="v2"] .rv-item[aria-current="page"] { background: var(--ui-activo-bg); color: var(--ui-activo-ink); font-weight: 600; box-shadow: inset 3px 0 0 var(--ui-activo-barra); }
 [data-ui="v2"] .rv-item[aria-current="page"] .rv-item__ico { color: var(--ui-activo-ink); }
 [data-ui="v2"] .rv-item:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
@@ -130,7 +130,7 @@
 [data-ui="v2"] .rv-puesta__txt { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 [data-ui="v2"] .rv-puesta__seg { display: inline-flex; gap: 2px; flex: none; }
 [data-ui="v2"] .rv-puesta__seg i { display: block; width: 6px; height: 6px; border-radius: 2px; background: var(--ui-line-strong); }
-[data-ui="v2"] .rv-puesta__seg i[data-on] { background: var(--marca-naranja); }
+[data-ui="v2"] .rv-puesta__seg i[data-on] { background: var(--ink); }
 [data-ui="v2"] .rv-puesta__n { flex: none; font-size: 12px; font-weight: 600; color: var(--ink); }
 
 /* Tema segmentado visible (claro / sistema / oscuro): alto 32 */
@@ -162,7 +162,7 @@
 [data-ui="v2"] .rv-avatar {
   flex: none; display: inline-flex; align-items: center; justify-content: center;
   width: 28px; height: 28px; border-radius: 8px; font-size: 12px; font-weight: 600;
-  background: var(--marino-soft); color: var(--marino); box-shadow: inset 0 0 0 1px var(--ui-line-strong);
+  background: var(--ui-soft); color: var(--ink); box-shadow: inset 0 0 0 1px var(--ui-line-strong);
 }
 [data-ui="v2"] .rv-cuenta__txt { min-width: 0; flex: 1 1 0%; display: flex; flex-direction: column; gap: 2px; }
 [data-ui="v2"] .rv-cuenta__nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; line-height: 1.1; color: var(--ink); }
@@ -187,7 +187,7 @@
 /* Topbar: botón de plegar + breadcrumb 13/500 */
 [data-ui="v2"] .rv-migas { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; font-weight: 500; line-height: 1; color: var(--muted); }
 [data-ui="v2"] .rv-migas__sep { color: var(--ui-line-strong); }
-[data-ui="v2"] .rv-migas__act svg { color: var(--marino); }
+[data-ui="v2"] .rv-migas__act svg { color: var(--ink); }
 [data-ui="v2"] .rv-migas__act { display: inline-flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 
 /* ── Hoja «Más» (móvil): el Drawer del sistema de overlays; aquí solo el árbol y el pie dentro ── */
@@ -232,7 +232,7 @@
   [data-ui="v2"] .rv-sb {
     display: flex; flex-direction: column; flex: none; position: relative; z-index: 20;
     width: 72px; height: 100%; box-sizing: border-box; padding-bottom: 8px; margin-right: 16px;
-    background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: 12px;
+    background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: 12px; box-shadow: var(--sh-marco);
   }
   [data-ui="v2"] .rv-sb__marca { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 52px; box-sizing: border-box; padding: 12px; flex: none; }
   [data-ui="v2"] .rv-sb__logo { position: relative; display: inline-flex; align-items: center; color: var(--ink); border-radius: 8px; }

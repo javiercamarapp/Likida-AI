@@ -19,7 +19,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 // AUDITORÍA 28, FE-B2 (BAJO, reincidente). Esta prueba nació mirando SOLO
 // `mcp/autorizar/page.tsx` contra SOLO `globals.css`. Con ese recorte,
 // `login.css` (y `login/page.tsx`, que la usa) salían como DOS «huérfanos»
-// falsos: `--crema`/`--serif-marca`/`--sans-marca` SÍ están definidos, pero
+// falsos: `--suave-login`/`--serif-marca`/`--sans-marca` SÍ están definidos, pero
 // en `login.css`, no en `globals.css` — la prueba no los veía y habría
 // reportado un defecto que no existe. El barrido se amplía a TODOS los
 // `.tsx`/`.ts`/`.css` de producción bajo `src/app` (tokens definidos en
@@ -97,7 +97,7 @@ describe('FE-4/FE-B2 · ninguna pantalla de src/app referencia un token que nadi
     expect(DEFINIDOS.has('--ink')).toBe(true);
     expect(DEFINIDOS.has('--bg')).toBe(true);
     // Definido en login.css, no en globals.css — la prueba de la 26 no lo veía.
-    expect(DEFINIDOS.has('--crema')).toBe(true);
+    expect(DEFINIDOS.has('--suave-login')).toBe(true);
   });
 
   it('cada var(--x) sin fallback de TODOS los .tsx/.ts/.css de src/app está definido en algún .css de src/app', () => {
