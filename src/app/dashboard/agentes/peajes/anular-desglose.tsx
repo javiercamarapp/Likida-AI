@@ -34,7 +34,7 @@ export function BotonAnular({ anular, desgloseId }: { anular: AccionAnular; desg
         <Ban width={13} height={13} strokeWidth={2} /> Anular
       </button>
       <DialogoConfirmar
-        abierto={abierto} titulo="¿Anular este desglose?" tono="peligro"
+        abierto={abierto} titulo="¿Anular este desglose?" tono="peligro" cierraConFondo={false}
         etiquetaConfirmar="Anular desglose" tipoConfirmar="submit" pendiente={pendiente}
         onConfirmar={() => setAbierto(false)} onCancelar={() => setAbierto(false)}
         descripcion={(

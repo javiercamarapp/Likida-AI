@@ -20,33 +20,78 @@ interface Base {
   onCerrar: () => void;
   titulo: string;
   descripcion?: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
   /** Pie con acciones (botones). */
   pie?: ReactNode;
+  /** `false` ignora el clic al fondo (formularios a medio llenar). Esc y Cerrar siguen cerrando. */
+  cierraConFondo?: boolean;
 }
 
-function useDialogo(abierto: boolean, onCerrar: () => void) {
+// ── Scroll lock por contador ────────────────────────────────────────────────────────────────────
+// Varios overlays apilados (un Modal sobre un Drawer) comparten UN bloqueo: <html data-overlay-abierto> se quita solo
+// cuando se cierra el último.
+let abiertos = 0;
+function bloquearScroll() {
+  abiertos += 1;
+  document.documentElement.setAttribute('data-overlay-abierto', '');
+}
+function soltarScroll() {
+  abiertos = Math.max(0, abiertos - 1);
+  if (abiertos === 0) document.documentElement.removeAttribute('data-overlay-abierto');
+}
+
+// ── Disparador para devolver el foco, también en WebKit ─────────────────────────────────────────
+// Safari (macOS e iOS) NO enfoca un <button> al hacer clic: `document.activeElement` es <body> y el foco "no tendría
+// adónde volver". Se recuerda el último elemento tocado con el puntero y se usa si no hay uno enfocado.
+let ultimoToque: Element | null = null;
+let escuchando = false;
+function escucharToques() {
+  if (escuchando || typeof document === 'undefined') return;
+  escuchando = true;
+  document.addEventListener('pointerdown', (e) => {
+    ultimoToque = (e.target as Element | null)?.closest?.('button,a[href],[role="button"],input,select,textarea,summary,[tabindex]') ?? null;
+  }, true);
+}
+
+const SELECTOR_CAMPO = 'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([disabled]),select:not([disabled]),textarea:not([disabled])';
+
+function useDialogo(abierto: boolean, onCerrar: () => void, cierraConFondo = true) {
   const ref = useRef<HTMLDialogElement>(null);
   const previo = useRef<Element | null>(null);
+  const bloqueado = useRef(false);
+  const desdeFondo = useRef(false);
+
+  const liberar = useCallback((d: HTMLDialogElement | null) => {
+    if (bloqueado.current) { bloqueado.current = false; soltarScroll(); }
+    // El navegador ya devolvió el foco en Chromium; en WebKit (y si el disparador cambió) se asegura aquí.
+    const destino = previo.current;
+    previo.current = null;
+    if (destino instanceof HTMLElement && destino.isConnected) {
+      const a = document.activeElement;
+      if (!a || a === document.body || d?.contains(a)) destino.focus();
+    }
+  }, []);
 
   useEffect(() => {
+    escucharToques();
     const d = ref.current;
     if (!d) return;
     if (abierto && !d.open) {
-      previo.current = document.activeElement;
+      const a = document.activeElement;
+      previo.current = a && a !== document.body ? a : (ultimoToque?.isConnected ? ultimoToque : null);
       d.showModal();
-      d.querySelector<HTMLElement>('[data-autofocus]')?.focus();
+      bloquearScroll(); bloqueado.current = true;
+      // Foco inicial: lo marcado `data-autofocus`; si no, el primer campo del cuerpo; si no, Cerrar.
+      (d.querySelector<HTMLElement>('[data-autofocus]') ?? d.querySelector<HTMLElement>('.rv-ov__cuerpo')?.querySelector<HTMLElement>(SELECTOR_CAMPO) ?? d.querySelector<HTMLElement>('.rv-ov__cerrar'))?.focus();
     }
-    if (!abierto && d.open) {
-      d.close();
-      if (previo.current instanceof HTMLElement) previo.current.focus();
-    }
-  }, [abierto]);
-  // Si el componente se desmonta con el diálogo abierto, también se devuelve el foco al disparador.
+    if (!abierto && d.open) { d.close(); liberar(d); }
+  }, [abierto, liberar]);
+  // Si el componente se desmonta con el diálogo abierto, también se suelta el bloqueo y se devuelve el foco.
   useEffect(() => () => {
     const d = ref.current;
-    if (d?.open) { d.close(); if (previo.current instanceof HTMLElement) previo.current.focus(); }
-  }, []);
+    if (d?.open) d.close();
+    liberar(null);
+  }, [liberar]);
 
   const alCancelar = useCallback((e: React.SyntheticEvent) => {
     e.preventDefault(); // Esc: el estado lo manda el padre
@@ -64,11 +109,14 @@ function useDialogo(abierto: boolean, onCerrar: () => void) {
     if (e.shiftKey && (document.activeElement === primero || !d.contains(document.activeElement))) { e.preventDefault(); ultimo.focus(); }
     else if (!e.shiftKey && (document.activeElement === ultimo || !d.contains(document.activeElement))) { e.preventDefault(); primero.focus(); }
   }, []);
-  // Clic en el fondo (el propio <dialog>) = cerrar.
+  // Clic en el fondo (el propio <dialog>) = cerrar, pero solo si el gesto EMPEZÓ en el fondo (arrastrar un texto desde un
+  // campo hasta afuera no debe cerrar).
+  const alPuntero = useCallback((e: React.PointerEvent<HTMLDialogElement>) => { desdeFondo.current = e.target === ref.current; }, []);
   const alClic = useCallback((e: React.MouseEvent<HTMLDialogElement>) => {
-    if (e.target === ref.current) onCerrar();
-  }, [onCerrar]);
-  return { ref, alCancelar, alClic, alTeclear };
+    if (cierraConFondo && desdeFondo.current && e.target === ref.current) onCerrar();
+    desdeFondo.current = false;
+  }, [onCerrar, cierraConFondo]);
+  return { ref, alCancelar, alClic, alTeclear, alPuntero };
 }
 
 function Cabecera({ idTitulo, idDesc, titulo, descripcion, onCerrar }: {
@@ -78,9 +126,9 @@ function Cabecera({ idTitulo, idDesc, titulo, descripcion, onCerrar }: {
     <header className="rv-ov__cab">
       <div className="rv-ov__textos">
         <h2 id={idTitulo} className="rv-ov__titulo">{titulo}</h2>
-        {descripcion ? <p id={idDesc} className="rv-ov__desc">{descripcion}</p> : null}
+        {descripcion ? <div id={idDesc} className="rv-ov__desc">{descripcion}</div> : null}
       </div>
-      <button type="button" className="rv-ov__cerrar" aria-label="Cerrar" onClick={onCerrar} data-autofocus>
+      <button type="button" className="rv-ov__cerrar" aria-label="Cerrar" onClick={onCerrar}>
         <X width={16} height={16} strokeWidth={2} aria-hidden="true" />
       </button>
     </header>
@@ -92,8 +140,8 @@ export type TamanoDrawer = 'm' | 'l' | 'xl'; // 420 / 480 / 640 px
 /** `ancho` (320 / 420 / 560) es el ancho del PanelLateral; sin él rige `tamano` (420 / 480 / 640, compatibilidad). */
 export type AnchoPanel = 320 | 420 | 560;
 
-export function Drawer({ abierto, onCerrar, titulo, descripcion, children, pie, tamano = 'm', ancho }: Base & { tamano?: TamanoDrawer; ancho?: AnchoPanel }) {
-  const { ref, alCancelar, alClic, alTeclear } = useDialogo(abierto, onCerrar);
+export function Drawer({ abierto, onCerrar, titulo, descripcion, children, pie, tamano = 'm', ancho, cierraConFondo }: Base & { tamano?: TamanoDrawer; ancho?: AnchoPanel }) {
+  const { ref, alCancelar, alClic, alTeclear, alPuntero } = useDialogo(abierto, onCerrar, cierraConFondo);
   const panel = useRef<HTMLDivElement>(null);
   const y0 = useRef<number | null>(null);
   const idTitulo = useId();
@@ -108,6 +156,7 @@ export function Drawer({ abierto, onCerrar, titulo, descripcion, children, pie, 
       aria-labelledby={idTitulo}
       aria-describedby={descripcion ? idDesc : undefined}
       onCancel={alCancelar}
+      onPointerDown={alPuntero}
       onClick={alClic}
       onKeyDown={alTeclear}
     >
@@ -143,8 +192,16 @@ export function Drawer({ abierto, onCerrar, titulo, descripcion, children, pie, 
 export type TamanoModal = 'm' | 'l'; // 440 / 560 px
 
 /** `alerta` = confirmación que interrumpe (role="alertdialog"): acciones destructivas o con efectos fiscales. */
-export function Modal({ abierto, onCerrar, titulo, descripcion, children, pie, tamano = 'm', alerta = false }: Base & { tamano?: TamanoModal; alerta?: boolean }) {
-  const { ref, alCancelar, alClic, alTeclear } = useDialogo(abierto, onCerrar);
+export function Modal({ abierto, onCerrar, titulo, descripcion, children, pie, tamano = 'm', alerta = false, cierraConFondo, sinCabecera = false, posicion = 'centro', describedBy }: Base & {
+  /** id de un nodo del cuerpo que describe el diálogo (confirmaciones: el texto va en el cuerpo, no en la cabecera). */
+  describedBy?: string;
+  tamano?: TamanoModal; alerta?: boolean;
+  /** Sin cabecera visible (paleta de comandos): `titulo` queda como nombre accesible. */
+  sinCabecera?: boolean;
+  /** `arriba` sube el modal a un 12 % de la altura (paleta). */
+  posicion?: 'centro' | 'arriba';
+}) {
+  const { ref, alCancelar, alClic, alTeclear, alPuntero } = useDialogo(abierto, onCerrar, cierraConFondo);
   const idTitulo = useId();
   const idDesc = useId();
   return (
@@ -153,15 +210,19 @@ export function Modal({ abierto, onCerrar, titulo, descripcion, children, pie, t
       className="rv-ov rv-ov--modal"
       role={alerta ? 'alertdialog' : undefined}
       data-tamano={tamano}
-      aria-labelledby={idTitulo}
-      aria-describedby={descripcion ? idDesc : undefined}
+      data-posicion={posicion === 'arriba' ? 'arriba' : undefined}
+      aria-labelledby={sinCabecera ? undefined : idTitulo}
+      aria-label={sinCabecera ? titulo : undefined}
+      aria-describedby={descripcion ? idDesc : describedBy}
       onCancel={alCancelar}
+      onPointerDown={alPuntero}
       onClick={alClic}
       onKeyDown={alTeclear}
     >
       <div className="rv-ov__panel">
-        <Cabecera idTitulo={idTitulo} idDesc={idDesc} titulo={titulo} descripcion={descripcion} onCerrar={onCerrar} />
-        <div className="rv-ov__cuerpo">{children}</div>
+        {sinCabecera ? null : <Cabecera idTitulo={idTitulo} idDesc={idDesc} titulo={titulo} descripcion={descripcion} onCerrar={onCerrar} />}
+        {sinCabecera && descripcion ? <div id={idDesc} hidden>{descripcion}</div> : null}
+        <div className="rv-ov__cuerpo" data-sin-padding={sinCabecera || undefined}>{children}</div>
         {pie ? <footer className="rv-ov__pie">{pie}</footer> : null}
       </div>
     </dialog>

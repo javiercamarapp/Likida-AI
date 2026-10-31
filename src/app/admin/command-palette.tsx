@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Power, Eye, Siren, AlertTriangle, Check, Sparkles } from 'lucide-react';
+import { Modal } from '../ui-v2/componentes/overlay';
 import { TODAS_LAS_RUTAS } from './rutas';
 import { etiquetaInterruptor } from './observabilidad/etiquetas';
 
@@ -23,7 +24,7 @@ import { etiquetaInterruptor } from './observabilidad/etiquetas';
  *     que desde la 0110 queda FIRMADO en la bitácora.
  *   · Ir a escalaciones (⌃⇧E).
  *
- * Sin librería nueva, igual que antes: overlay a mano, filtrado por
+ * Sin librería nueva, igual que antes: Modal del motor único de overlays (L3), filtrado por
  * substring, ↑↓ + Enter, Esc cierra, Backspace con el campo vacío regresa
  * del submenú a la raíz.
  */
@@ -155,9 +156,8 @@ export default function CommandPalette() {
         e.preventDefault();
         setAbierto(false);
         router.push('/admin/escalaciones');
-      } else if (e.key === 'Escape') {
-        setAbierto(false);
       }
+      // Esc lo atiende el Modal (onCancel): un solo camino de cierre y retorno de foco.
     }
     // El botón "Buscar" del sidebar (layout.tsx) dispara este evento en vez
     // de compartir estado de React — es más simple que levantar el estado
@@ -267,83 +267,61 @@ export default function CommandPalette() {
     : 'Buscar página o acción… (Inicio, Apagar, Ver como…)';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[12vh] px-4"
-      role="presentation" style={{ background: 'rgba(0,0,0,0.5)' }}
-      onClick={() => setAbierto(false)}
-    >
-      <div className="w-full rounded-2xl overflow-hidden glass-panel" role="dialog" aria-modal="true" aria-label="Buscar en administración" style={{ maxWidth: 480 }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2.5 px-4 py-3 border-b" style={{ borderColor: 'var(--line)' }}>
-          {modo === 'motivo'
-            ? <Power width={16} height={16} strokeWidth={1.75} style={{ color: 'var(--bad)' }} />
-            : <Search width={16} height={16} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          <input
-            ref={inputRef}
-            aria-label={modo === 'motivo' ? 'Motivo de la acción' : 'Buscar una acción, interruptor o flota'}
-            aria-controls="command-palette-results"
-            value={consulta}
-            onChange={(e) => setConsulta(e.target.value)}
-            onKeyDown={onInputKeyDown}
-            placeholder={placeholder}
-            className="flex-1 min-w-0 text-sm bg-transparent outline-none"
-          />
-          <kbd className="text-[10px] px-1.5 py-0.5 rounded hairline shrink-0" style={{ color: 'var(--muted)' }}>Esc</kbd>
-        </div>
-
-        {/* El resultado de la última palanca — visible sin cerrar el palette. */}
-        {aviso && (
-          <div aria-live="polite" className="flex items-start gap-2 px-4 py-2.5 text-xs border-b"
-            style={{
-              borderColor: 'var(--line)',
-              background: aviso.tipo === 'error' ? 'var(--badbg)' : 'var(--okbg)',
-              color: aviso.tipo === 'error' ? 'var(--bad)' : 'var(--ok)',
-            }}>
-            {aviso.tipo === 'error'
-              ? <AlertTriangle width={13} height={13} strokeWidth={2} className="shrink-0 mt-0.5" />
-              : <Check width={13} height={13} strokeWidth={2} className="shrink-0 mt-0.5" />}
-            <span>{aviso.texto}</span>
-          </div>
-        )}
-
-        <div id="command-palette-results" role="listbox" aria-label="Resultados" className="max-h-80 overflow-y-auto py-1.5">
-          {modo === 'motivo' ? (
-            <div className="px-4 py-4 text-sm" style={{ color: 'var(--muted)' }}>
-              Vas a apagar <span className="font-medium" style={{ color: 'var(--ink)' }}>{motivoPara ? etiquetaInterruptor(motivoPara) : ''}</span>.
-              Escribe el motivo arriba y confirma con Enter. {enviando ? 'Guardando…' : ''}
-            </div>
-          ) : errorDatos && (modo === 'interruptores' || modo === 'flotas') ? (
-            <div className="px-4 py-4 text-sm" style={{ color: 'var(--bad)' }}>{errorDatos}</div>
-          ) : (modo === 'interruptores' || modo === 'flotas') && datos === null ? (
-            <div className="px-4 py-4 text-sm" style={{ color: 'var(--muted)' }}>Leyendo…</div>
-          ) : resultados.length === 0 ? (
-            <div className="px-4 py-6 text-sm text-center" style={{ color: 'var(--muted)' }}>Sin resultados.</div>
-          ) : (
-            resultados.map((item, i) => {
-              const { key, etiqueta, detalle, Icono, apagado, correr } = item;
-              return (
-                <button key={key} type="button" role="option" aria-selected={i === activo} onClick={correr} disabled={enviando}
-                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-left transition-colors disabled:opacity-60"
-                  style={i === activo ? { background: 'var(--marca)', color: 'white' } : undefined}
-                  onMouseEnter={() => setActivo(i)}
-                >
-                  {Icono && (
-                    <Icono width={15} height={15} strokeWidth={1.75}
-                      style={{ color: i === activo ? 'white' : apagado ? 'var(--bad)' : 'var(--muted)' }} />
-                  )}
-                  <span className="flex-1 min-w-0 truncate">{etiqueta}</span>
-                  {detalle && (
-                    <span className="text-[10px] shrink-0 tabular"
-                      style={{ color: i === activo ? 'rgba(255,255,255,0.8)' : apagado ? 'var(--bad)' : 'var(--muted)' }}>
-                      {detalle}
-                    </span>
-                  )}
-                </button>
-              );
-            })
-          )}
-        </div>
+    <Modal abierto onCerrar={() => setAbierto(false)} titulo="Buscar en administración" sinCabecera tamano="l" posicion="arriba">
+      <div className="rv-paleta__campo" data-motivo={modo === 'motivo' || undefined}>
+        {modo === 'motivo'
+          ? <Power width={16} height={16} strokeWidth={1.75} aria-hidden="true" />
+          : <Search width={16} height={16} strokeWidth={1.75} aria-hidden="true" />}
+        <input
+          ref={inputRef}
+          aria-label={modo === 'motivo' ? 'Motivo de la acción' : 'Buscar una acción, interruptor o flota'}
+          aria-controls="command-palette-results"
+          value={consulta}
+          onChange={(e) => setConsulta(e.target.value)}
+          onKeyDown={onInputKeyDown}
+          placeholder={placeholder}
+        />
+        <kbd>Esc</kbd>
       </div>
-    </div>
+
+      {/* El resultado de la última palanca: visible sin cerrar el palette. */}
+      {aviso && (
+        <div aria-live="polite" className="rv-paleta__aviso" data-tono={aviso.tipo}>
+          {aviso.tipo === 'error'
+            ? <AlertTriangle width={13} height={13} strokeWidth={2} aria-hidden="true" className="shrink-0 mt-0.5" />
+            : <Check width={13} height={13} strokeWidth={2} aria-hidden="true" className="shrink-0 mt-0.5" />}
+          <span>{aviso.texto}</span>
+        </div>
+      )}
+
+      <div id="command-palette-results" role="listbox" aria-label="Resultados" className="rv-paleta__lista">
+        {modo === 'motivo' ? (
+          <div className="rv-paleta__nota">
+            Vas a apagar <strong>{motivoPara ? etiquetaInterruptor(motivoPara) : ''}</strong>.
+            Escribe el motivo arriba y confirma con Enter. {enviando ? 'Guardando…' : ''}
+          </div>
+        ) : errorDatos && (modo === 'interruptores' || modo === 'flotas') ? (
+          <div className="rv-paleta__nota" data-error>{errorDatos}</div>
+        ) : (modo === 'interruptores' || modo === 'flotas') && datos === null ? (
+          <div className="rv-paleta__nota">Leyendo…</div>
+        ) : resultados.length === 0 ? (
+          <div className="rv-paleta__nota" data-centrada>Sin resultados.</div>
+        ) : (
+          resultados.map((item, i) => {
+            const { key, etiqueta, detalle, Icono, apagado, correr } = item;
+            return (
+              <button key={key} type="button" role="option" aria-selected={i === activo} onClick={correr} disabled={enviando}
+                className="rv-paleta__fila" data-apagado={apagado || undefined}
+                onMouseEnter={() => setActivo(i)}
+              >
+                {Icono && <Icono width={15} height={15} strokeWidth={1.75} aria-hidden="true" />}
+                <span className="flex-1 min-w-0 truncate">{etiqueta}</span>
+                {detalle && <span className="rv-paleta__detalle tabular">{detalle}</span>}
+              </button>
+            );
+          })
+        )}
+      </div>
+    </Modal>
   );
 }

@@ -25,19 +25,35 @@ describe('DialogoConfirmar', () => {
 
   it('en tono peligro el foco inicial cae en CANCELAR, no en el botón rojo', () => {
     const html = renderToStaticMarkup(<DialogoConfirmar {...base} tono="peligro" />);
-    expect(boton(html, 'Cancelar')).toContain('data-foco-inicial');
-    expect(boton(html, 'Dar de baja')).not.toContain('data-foco-inicial');
+    expect(boton(html, 'Cancelar')).toContain('data-autofocus');
+    expect(boton(html, 'Dar de baja')).not.toContain('data-autofocus');
   });
 
   it('en tono normal el foco inicial cae en confirmar', () => {
     const html = renderToStaticMarkup(<DialogoConfirmar {...base} tono="normal" />);
-    expect(boton(html, 'Dar de baja')).toContain('data-foco-inicial');
-    expect(boton(html, 'Cancelar')).not.toContain('data-foco-inicial');
+    expect(boton(html, 'Dar de baja')).toContain('data-autofocus');
+    expect(boton(html, 'Cancelar')).not.toContain('data-autofocus');
   });
 
   it('mientras el server action corre, confirmar se deshabilita (no hay doble envío)', () => {
     const html = renderToStaticMarkup(<DialogoConfirmar {...base} pendiente />);
     expect(html).toMatch(/<button[^>]*disabled[^>]*>Un momento…/);
+  });
+
+  it('peligro = alertdialog; normal = dialog; el texto va en el cuerpo y describe el diálogo (describedby)', () => {
+    const p = renderToStaticMarkup(<DialogoConfirmar {...base} tono="peligro" />);
+    const n = renderToStaticMarkup(<DialogoConfirmar {...base} tono="normal" />);
+    expect(p).toContain('role="alertdialog"');
+    expect(n).not.toContain('role="alertdialog"');
+    const id = /aria-describedby="([^"]+)"/.exec(p)![1];
+    expect(p).toContain(`id="${id}" class="rv-confirmar__texto"`);
+  });
+
+  it('es el Modal del motor único: clases rv-ov, sin <dialog> ni estilos propios en línea', () => {
+    const html = renderToStaticMarkup(<DialogoConfirmar {...base} />);
+    expect(html).toContain('rv-ov rv-ov--modal');
+    expect(html).not.toContain('style=');
+    expect(html).not.toContain('rounded-2xl');
   });
 
   it('cerrado por omisión: no lleva el atributo open', () => {

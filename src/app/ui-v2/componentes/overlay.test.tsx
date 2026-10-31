@@ -22,7 +22,7 @@ describe('Drawer / Modal', () => {
     expect(html).toContain('data-tamano="m"');
   });
   it('CSS: la salida no se anima (no hay keyframes de cierre) y la entrada ≤ 180 ms', () => {
-    const css = readFileSync(join(__dirname, '..', 'componentes.css'), 'utf8');
+    const css = readFileSync(join(__dirname, '..', 'overlay.css'), 'utf8');
     expect(css).not.toMatch(/rv-ov[^{]*:not\(\[open\]\)[^{]*\{[^}]*animation/);
     expect(readFileSync(join(__dirname, '..', 'movimiento.css'), 'utf8')).toContain('--ov-in: 180ms');
   });
@@ -35,8 +35,8 @@ describe('Drawer / Modal', () => {
     expect(marca?.[1]).toContain('viewBox="0 0 726 149"'); // el logo horizontal completo, no un símbolo recortado
     expect(marca?.[1]).not.toContain('aria-label'); // decorativo: el lector de pantalla no lo anuncia
     expect(modal).not.toContain('rv-ov__marca');
-    const css = readFileSync(join(__dirname, '..', 'componentes.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const css = readFileSync(join(__dirname, '..', 'overlay.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     expect(css).toMatch(/\.rv-ov__marca \{[^}]*border-top: 1px solid var\(--line\)[^}]*color: var\(--ink\)/); // hereda la tinta: claro y oscuro
-    expect(css).toMatch(/@media \(max-width: 819px\) \{ \[data-ui="v2"\] \.rv-ov__marca \{ display: none; \} \}/); // la hoja inferior móvil no la lleva
+    expect(css).toMatch(/@media \(max-width: 819px\) \{\s*\.rv-ov__marca \{ display: none; \}/); // la hoja inferior móvil no la lleva
   });
 });

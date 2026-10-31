@@ -132,7 +132,7 @@ describe('paleta: cromo negro/gris/blanco, color en los datos como Vexa (decisi�
   });
   it('ningún token ni valor de naranja, marino o crema sobrevive en la capa v2 (tokens, shell, componentes, páginas, gráficas, logo)', () => {
     const dir = new URL('../../ui-v2/', import.meta.url);
-    const archivos = ['tokens.css', 'shell.css', 'componentes.css', 'paginas.css', 'paginas-dominio.css', 'graficas.css', 'movimiento.css', 'carga.css'];
+    const archivos = ['tokens.css', 'shell.css', 'componentes.css', 'overlay.css', 'paginas.css', 'paginas-dominio.css', 'graficas.css', 'movimiento.css', 'carga.css'];
     for (const a of archivos) {
       const css = readFileSync(fileURLToPath(new URL(a, dir)), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
       expect(css, a).not.toMatch(/--marca-(naranja|marino|crema)|--marino|--crema|#c2410c|#9a3412|#fb923c|#2a3f5f|#ede4d3|#e4e9f1|#f6f1e7|#17100d|#f7f1e8|#120d0a/i);
