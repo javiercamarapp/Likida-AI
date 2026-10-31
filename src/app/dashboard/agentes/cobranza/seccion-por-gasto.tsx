@@ -48,10 +48,13 @@ export function SeccionPorGasto({ config, plan, tablero, firma, instrucciones, g
         <Cifra etiqueta="Les toca hoy" valor={numero(hoy)} nota={`${numero(plan.paraContactar.length)} choferes, un mensaje cada uno`} />
         <Cifra etiqueta="Sin teléfono" valor={numero(plan.sinTelefono.reduce((n, g) => n + g.items.length, 0))}
           nota="gastos de choferes sin teléfono" tono={plan.sinTelefono.length > 0 ? 'warn' : undefined} />
-        <Cifra etiqueta="Avisos (30 días)" valor={ef ? numero(ef.avisos) : '—'} nota={ef ? `${numero(ef.abiertos)} aún abiertos` : 'no se pudo leer'} />
+        <Cifra etiqueta="Avisos (30 días)" valor={ef ? numero(ef.avisos) : null} estado={ef ? 'ok' : 'error'} reintentar
+          nota={ef ? `${numero(ef.abiertos)} aún abiertos` : undefined} />
         <Cifra etiqueta="Efectividad"
-          valor={ef === null ? '—' : ef.tasa === null ? 'Aún pocos datos' : `${numero(Math.round(ef.tasa * 100))} %`}
-          nota={ef === null ? 'no se pudo leer'
+          valor={ef === null || ef.tasa === null ? null : `${numero(Math.round(ef.tasa * 100))} %`}
+          estado={ef === null ? 'error' : 'ok'} reintentar
+          mensaje={ef !== null && ef.tasa === null ? 'Aún hay pocos datos' : undefined}
+          nota={ef === null ? undefined
             : ef.medianaHoras === null ? 'avisos que produjeron el comprobante'
               : `mediana ${numero(ef.medianaHoras)} h hasta el comprobante`} />
       </TiraCifras>

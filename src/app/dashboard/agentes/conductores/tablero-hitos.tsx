@@ -79,15 +79,15 @@ export function IndicadoresHitos({ i, dias }: { i: IndicadoresVista | null; dias
     <div>
       <TiraCifras sello={selloHoy('Viajes de la flota')}>
         <Cifra etiqueta="Hitos reportados sin insistencia"
-          valor={i.tasaSinInsistencia === null ? 'sin datos' : porcentaje(i.tasaSinInsistencia * 100, 0)}
+          valor={i.tasaSinInsistencia === null ? null : porcentaje(i.tasaSinInsistencia * 100, 0)}
           nota={i.recibidos === 0 ? 'ningún hito recibido en el periodo' : `de ${numero(i.recibidos)} hitos; a lo más un mensaje del agente`} />
         <Cifra etiqueta="Tiempo medio de respuesta"
-          valor={i.minutosRespuestaPromedio === null ? 'sin datos' : minutos(i.minutosRespuestaPromedio)}
+          valor={i.minutosRespuestaPromedio === null ? null : minutos(i.minutosRespuestaPromedio)}
           nota={i.conRespuestaMedida === 0 ? 'ninguna solicitud con respuesta medible' : `sobre ${numero(i.conRespuestaMedida)} solicitudes contestadas`} />
         <Cifra etiqueta="Hitos escalados" valor={numero(i.escalados)} tono={i.escalados > 0 ? 'warn' : undefined} nota="agotaron la escalera de recordatorios" />
         <Cifra etiqueta="Validados con ubicación" valor={numero(i.validadosUbicacion)}
           nota={i.sinCoincidencia > 0 ? `${numero(i.sinCoincidencia)} sin coincidencia por revisar` : 'pin o GPS dentro del sitio'} />
-        <Cifra etiqueta="Validación en modo degradado" valor={i.tasaValidacionDegradada === null ? 'sin datos' : porcentaje(i.tasaValidacionDegradada * 100, 0)}
+        <Cifra etiqueta="Validación en modo degradado" valor={i.tasaValidacionDegradada === null ? null : porcentaje(i.tasaValidacionDegradada * 100, 0)}
           tono={i.tasaValidacionDegradada !== null && i.tasaValidacionDegradada > 0 ? 'warn' : undefined}
           nota={i.llegadasValidables === 0 ? 'ninguna llegada validable en el periodo' : `${numero(i.validacionDegradada)} de ${numero(i.llegadasValidables)} llegadas: sin geocerca o solo con el pin del chofer (sin GPS real)`} />
       </TiraCifras>

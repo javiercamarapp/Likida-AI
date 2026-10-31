@@ -85,8 +85,8 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
         <>
           <TiraCifras sello={selloHoy('Estadías en andén')}>
             <Cifra etiqueta="Paradas del periodo" valor={numero(resumen.paradas)} nota={`${numero(resumen.cerradas)} cerradas · ${numero(resumen.enCurso)} en curso`} />
-            <Cifra etiqueta="Tiempo medio en carga" valor={carga ? minutos(carga.promedio) : 'sin datos'} nota={carga ? `sobre ${numero(carga.n)} paradas cerradas` : 'ninguna carga cerrada'} />
-            <Cifra etiqueta="Tiempo medio en descarga" valor={descarga ? minutos(descarga.promedio) : 'sin datos'} nota={descarga ? `sobre ${numero(descarga.n)} paradas cerradas` : 'ninguna descarga cerrada'} />
+            <Cifra etiqueta="Tiempo medio en carga" valor={carga ? minutos(carga.promedio) : null} nota={carga ? `sobre ${numero(carga.n)} paradas cerradas` : 'ninguna carga cerrada'} />
+            <Cifra etiqueta="Tiempo medio en descarga" valor={descarga ? minutos(descarga.promedio) : null} nota={descarga ? `sobre ${numero(descarga.n)} paradas cerradas` : 'ninguna descarga cerrada'} />
             <Cifra etiqueta="En el andén ahora" valor={numero(resumen.enCurso)} tono={resumen.enCurso > 0 ? 'warn' : undefined} nota="llegaron y aún no avisan su salida" />
           </TiraCifras>
           {truncada && (
