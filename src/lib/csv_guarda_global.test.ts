@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- recorre el propio árbol src/ del repo; ninguna ruta viene de entrada externa. */
 // GUARDA GLOBAL ANTI-FÓRMULAS EN CSV (lote L6, criterio «CSV con guarda anti-inyección en TODOS los exports»).
 //
 // 1) Barrido estructural: todo archivo de producción que ESCAPA comillas de CSV (`replace(/"/g, '""')`) —o sea, que serializa
@@ -71,8 +72,12 @@ function partir(texto: string, sep = ','): string[][] {
   return filas;
 }
 const FORMULA = /^[=+\-@\t\r]/;
-function sinFormulas(csv: string, sep = ',', permitidas: RegExp = /^-?\d+(\.\d+)?$/) {
-  return partir(csv, sep).flat().filter((c) => FORMULA.test(c) && !permitidas.test(c));
+/** Un número plano («-12.50», «-12,50», «340») no es fórmula. */
+const ENTERO = /^-?\d+$/;
+const DECIMAL = /^-?\d+[.,]\d+$/;
+const esNumero = (c: string) => ENTERO.test(c) || DECIMAL.test(c);
+function sinFormulas(csv: string, sep = ',', permitidas: (c: string) => boolean = esNumero) {
+  return partir(csv, sep).flat().filter((c) => FORMULA.test(c) && !permitidas(c));
 }
 
 describe('comportamiento: cargas hostiles en cada exportador real', () => {
@@ -88,7 +93,7 @@ describe('comportamiento: cargas hostiles en cada exportador real', () => {
     for (const separador of ['coma', 'punto_y_coma', 'tab'] as const) {
       const csv = tablaConfigurable(['a', 'b'], PAYLOADS_HOSTILES.map((p) => [p, -3]), { separador, decimal: 'punto', fechas: 'iso', encabezado: true, bom: false });
       const sep = { coma: ',', punto_y_coma: ';', tab: '\t' }[separador];
-      expect(sinFormulas(csv, sep, /^-?\d+([.,]\d+)?$/), separador).toEqual([]);
+      expect(sinFormulas(csv, sep), separador).toEqual([]);
     }
   });
 
@@ -98,11 +103,11 @@ describe('comportamiento: cargas hostiles en cada exportador real', () => {
       movimientos: PAYLOADS_HOSTILES.map((p, i) => ({ cuenta: i === 0 ? p : '5010-001', cargo: i === 0 ? 0 : 10, abono: i === 0 ? 10 : 0, concepto: p, referencia: PAYLOADS_HOSTILES[(i + 1) % PAYLOADS_HOSTILES.length] })),
     };
     const contpaqi = [aContpaqi(poliza, { tipo: 'Dr', numero: 1 }), archivoContpaqi([poliza], { tipo: 'Dr', numeroInicial: 1 })];
-    for (const csv of contpaqi) expect(sinFormulas(csv, ',', /^-?\d+(\.\d+)?$|^\d{2}\/\d{2}\/\d{4}$/)).toEqual([]);
+    for (const csv of contpaqi) expect(sinFormulas(csv)).toEqual([]);
     const sap = [aSapB1(poliza), archivoSapB1([poliza], SAP_B1_BASE)];
     for (const a of sap) for (const csv of [a.cabecera, a.lineas]) {
       const cuerpo = csv.split('\n').slice(0, -1).filter((l) => !/^(JdtNum)/.test(l)).join('\n') + '\n';
-      expect(sinFormulas(cuerpo, '\t', /^-?\d+(\.\d+)?$/)).toEqual([]);
+      expect(sinFormulas(cuerpo, '\t')).toEqual([]);
     }
     expect(aContpaqi({ ...poliza, movimientos: [{ cuenta: '5010-001', cargo: 10, abono: 0, concepto: 'ok', referencia: 'r' }] }, { tipo: 'Dr', numero: 1 })).toContain('10.00');
   });
