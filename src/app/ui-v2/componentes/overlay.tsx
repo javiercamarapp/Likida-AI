@@ -192,7 +192,9 @@ export function Drawer({ abierto, onCerrar, titulo, descripcion, children, pie, 
 export type TamanoModal = 'm' | 'l'; // 440 / 560 px
 
 /** `alerta` = confirmación que interrumpe (role="alertdialog"): acciones destructivas o con efectos fiscales. */
-export function Modal({ abierto, onCerrar, titulo, descripcion, children, pie, tamano = 'm', alerta = false, cierraConFondo, sinCabecera = false, posicion = 'centro' }: Base & {
+export function Modal({ abierto, onCerrar, titulo, descripcion, children, pie, tamano = 'm', alerta = false, cierraConFondo, sinCabecera = false, posicion = 'centro', describedBy }: Base & {
+  /** id de un nodo del cuerpo que describe el diálogo (confirmaciones: el texto va en el cuerpo, no en la cabecera). */
+  describedBy?: string;
   tamano?: TamanoModal; alerta?: boolean;
   /** Sin cabecera visible (paleta de comandos): `titulo` queda como nombre accesible. */
   sinCabecera?: boolean;
@@ -211,7 +213,7 @@ export function Modal({ abierto, onCerrar, titulo, descripcion, children, pie, t
       data-posicion={posicion === 'arriba' ? 'arriba' : undefined}
       aria-labelledby={sinCabecera ? undefined : idTitulo}
       aria-label={sinCabecera ? titulo : undefined}
-      aria-describedby={descripcion ? idDesc : undefined}
+      aria-describedby={descripcion ? idDesc : describedBy}
       onCancel={alCancelar}
       onPointerDown={alPuntero}
       onClick={alClic}

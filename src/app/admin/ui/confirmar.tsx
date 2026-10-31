@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Boton } from '../../ui-v2/componentes/boton';
 import { Modal } from '../../ui-v2/componentes/overlay';
 
@@ -53,11 +53,12 @@ export function DialogoConfirmar({
   nombreConfirmar, valorConfirmar,
 }: PropsDialogo) {
   const peligro = tono === 'peligro';
+  const idTexto = useId();
   // Una confirmación destructiva es una ALERTA (role="alertdialog"); Esc, el clic al fondo y Cancelar cancelan.
   // El foco inicial cae en CANCELAR cuando es peligro, en confirmar si no.
   return (
     <Modal
-      alerta={peligro} abierto={abierto} onCerrar={onCancelar} titulo={titulo} descripcion={descripcion}
+      alerta={peligro} abierto={abierto} onCerrar={onCancelar} titulo={titulo} describedBy={idTexto}
       pie={(
         <>
           <Boton variante="secondary" tamano="sm" onClick={onCancelar} data-autofocus={peligro ? '' : undefined}>
@@ -69,7 +70,9 @@ export function DialogoConfirmar({
           </Boton>
         </>
       )}
-    />
+    >
+      <div id={idTexto} className="rv-confirmar__texto">{descripcion}</div>
+    </Modal>
   );
 }
 
