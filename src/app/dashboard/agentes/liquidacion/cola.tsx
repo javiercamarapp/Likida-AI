@@ -1,8 +1,8 @@
 import Link from 'next/link';
-import { Inbox, ArrowRight, Filter } from 'lucide-react';
+import { Inbox, ArrowRight } from 'lucide-react';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
 import { EstadoVacio } from '../../estados';
-import { ESTILO_CONTROL } from '@/app/admin/ui/forma';
+import { BarraFiltros, FiltroCampo, FiltroFecha, FiltroOpciones } from '@/app/ui-v2/componentes';
 import { ComboCatalogo, type BuscarCatalogo } from '../../combo-catalogo';
 import {
   ESTADOS_CUADRE, REVISIONES, hayFiltrosCola,
@@ -166,77 +166,35 @@ function FormaFiltros({ filtros, terminales, buscar, contexto, conFiltros }: {
     /* GET y no server action: un filtro tiene que poder compartirse por chat y
        sobrevivir al botón de atrás. `cursor` NO se conserva — cambiar el filtro
        empieza la cola desde arriba, o la página 3 de otro filtro no significa
-       nada. */
-    <form method="get" className="flex flex-wrap items-end gap-2 mb-3">
-      {contexto.map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-
-      <Campo etiqueta="Revisión">
-        <select name="rev" defaultValue={filtros.revision} className={CLASE_CONTROL} style={ESTILO_CONTROL}>
-          {REVISIONES.map((r) => <option key={r} value={r}>{ROTULO_REVISION[r]}</option>)}
-        </select>
-      </Campo>
-
-      <Campo etiqueta="Cuadre">
-        <select name="estado" defaultValue={filtros.estado ?? ''} className={CLASE_CONTROL} style={ESTILO_CONTROL}>
-          <option value="">Cualquiera</option>
-          {ESTADOS_CUADRE.map((e) => <option key={e} value={e}>{ROTULO_ESTADO[e]?.rotulo ?? e}</option>)}
-        </select>
-      </Campo>
+       nada. Una sola barra (LF): elegir envía, sin botón «Filtrar». */
+    <BarraFiltros accion="?" ocultos={contexto} etiqueta="Filtros de la cola" nActivos={conFiltros ? 1 : 0}
+      limpiarHref={`?${new URLSearchParams(contexto).toString()}`} className="mb-3">
+      <FiltroOpciones nombre="rev" etiqueta="Revisión" valor={filtros.revision} porDefecto="pendiente"
+        opciones={REVISIONES.map((r) => ({ valor: r, rotulo: ROTULO_REVISION[r] }))} />
+      <FiltroOpciones nombre="estado" etiqueta="Cuadre" valor={filtros.estado ?? ''}
+        opciones={[{ valor: '', rotulo: 'Cualquiera' }, ...ESTADOS_CUADRE.map((e) => ({ valor: e, rotulo: ROTULO_ESTADO[e]?.rotulo ?? e }))]} />
 
       {/* El catálogo NO viaja: el combo pide 20 al escribir (FE-2). */}
-      <Campo etiqueta="Operador">
-        <ComboCatalogo tipo="operador" name="operador" buscar={buscar} etiquetaVacia="Cualquiera"
-          valorInicial={filtros.operadorId} className={CLASE_CONTROL} estilo={ESTILO_CONTROL} aria-label="Filtrar por operador" />
-      </Campo>
-      <Campo etiqueta="Unidad">
-        <ComboCatalogo tipo="unidad" name="unidad" buscar={buscar} etiquetaVacia="Cualquiera"
-          valorInicial={filtros.unidadId} className={CLASE_CONTROL} estilo={ESTILO_CONTROL} aria-label="Filtrar por unidad" />
-      </Campo>
+      <FiltroCampo etiqueta="Operador">
+        <ComboCatalogo tipo="operador" name="operador" buscar={buscar} etiquetaVacia="Cualquiera" enBarra
+          valorInicial={filtros.operadorId} aria-label="Filtrar por operador" />
+      </FiltroCampo>
+      <FiltroCampo etiqueta="Unidad">
+        <ComboCatalogo tipo="unidad" name="unidad" buscar={buscar} etiquetaVacia="Cualquiera" enBarra
+          valorInicial={filtros.unidadId} aria-label="Filtrar por unidad" />
+      </FiltroCampo>
 
-      {/* Sin terminales legibles NO se pinta el selector: un `<select>` con
+      {/* Sin terminales legibles NO se pinta el selector: un selector con
           solo «Cualquiera» afirmaría que la flota no tiene sucursales. */}
       {terminales && terminales.opciones.length > 0 && (
-        <Campo etiqueta="Terminal" pista={terminales.recortadas ? `primeras ${numero(terminales.opciones.length)}; hay más` : undefined}>
-          <select name="terminal" defaultValue={filtros.terminalId ?? ''} className={CLASE_CONTROL} style={ESTILO_CONTROL}>
-            <option value="">Cualquiera</option>
-            {terminales.opciones.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-          </select>
-        </Campo>
+        <FiltroOpciones nombre="terminal" valor={filtros.terminalId ?? ''}
+          etiqueta={terminales.recortadas ? `Terminal (primeras ${numero(terminales.opciones.length)}; hay más)` : 'Terminal'}
+          opciones={[{ valor: '', rotulo: 'Cualquiera' }, ...terminales.opciones.map((t) => ({ valor: t.id, rotulo: t.nombre }))]} />
       )}
 
-      <Campo etiqueta="Desde">
-        <input type="date" name="desde" defaultValue={filtros.desde ?? ''} className={CLASE_CONTROL} style={ESTILO_CONTROL} />
-      </Campo>
-      <Campo etiqueta="Hasta">
-        <input type="date" name="hasta" defaultValue={filtros.hasta ?? ''} className={CLASE_CONTROL} style={ESTILO_CONTROL} />
-      </Campo>
-
-      <button type="submit"
-        className="rv-btn rv-btn--primary inline-flex items-center gap-1.5 text-[12px] font-medium rounded-lg px-3 py-1.5"
-        style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-        <Filter width={12} height={12} strokeWidth={2} /> Filtrar
-      </button>
-      {conFiltros && (
-        <Link href={`?${new URLSearchParams(contexto).toString()}`}
-          className="text-[12px] font-medium px-2 py-1.5 hover:opacity-70 transition-opacity"
-          style={{ color: 'var(--muted)' }}>
-          Limpiar
-        </Link>
-      )}
-    </form>
-  );
-}
-
-const CLASE_CONTROL = 'text-[12px] rounded-lg px-2 py-1.5 min-w-[9rem]';
-
-function Campo({ etiqueta, pista, children }: { etiqueta: string; pista?: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>
-        {etiqueta}{pista ? ` · ${pista}` : ''}
-      </span>
-      {children}
-    </label>
+      <FiltroFecha nombre="desde" etiqueta="Desde" valor={filtros.desde} />
+      <FiltroFecha nombre="hasta" etiqueta="Hasta" valor={filtros.hasta} />
+    </BarraFiltros>
   );
 }
 
