@@ -10,23 +10,37 @@ import { useEffect, useRef } from 'react';
  * el contenido — no de su código.
  *
  * Honesto con la máquina y con el usuario: ~20 fps, se pausa con la pestaña
- * oculta, y con `prefers-reduced-motion` pinta UN cuadro estático. El color
- * es `--g3` del tema (por eso pivota solo entre claro y oscuro).
+ * oculta Y cuando el canvas sale de pantalla, devicePixelRatio ≤ 2, y con
+ * `prefers-reduced-motion` pinta UN cuadro estático (también si la
+ * preferencia cambia con la página abierta). El tiempo medio de pintado se
+ * expone en `data-draw-ms` y los cuadros en `data-frames` para medirlo.
+ *
+ * `intensidad`: `suave` (el original: color `--g3`, alfa ≤ .5; lo usan el copiloto de /admin y el
+ * onboarding) o `vexa` (L5: color de tinta por CLASE, alfa .22 + d·.4 con tope .65, las constantes del campo de Vexa).
  */
-export function CampoPixeles() {
+export function CampoPixeles({ intensidad = 'suave' }: { intensidad?: 'suave' | 'vexa' }) {
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const canvas = ref.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
-    const reducido = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const reducir = window.matchMedia('(prefers-reduced-motion: reduce)');
 
     const CELDA = 10;
     const PUNTO = 2.4;
+    const MS_CUADRO = 50;
+    const base = intensidad === 'vexa' ? 0.22 : 0.16;
+    const peso = intensidad === 'vexa' ? 0.4 : 0.3;
+    const tope = intensidad === 'vexa' ? 0.65 : 0.5;
     let raf = 0;
     let vivo = true;
+    let visible = true;
     let ultimo = 0;
+    let cuadros = 0;
+    let total = 0;
+    let anchoMedido = 0;
+    let altoMedido = 0;
 
     // Umbral de dithering FIJO por celda: la animación es la nube pasando a
     // través de una trama quieta — así se ve la referencia, no como lluvia.
@@ -38,9 +52,12 @@ export function CampoPixeles() {
     function medir() {
       if (!canvas || !ctx) return;
       const r = canvas.getBoundingClientRect();
-      canvas.width = Math.max(1, Math.round(r.width * devicePixelRatio));
-      canvas.height = Math.max(1, Math.round(r.height * devicePixelRatio));
-      ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+      anchoMedido = r.width;
+      altoMedido = r.height;
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      canvas.width = Math.max(1, Math.round(r.width * dpr));
+      canvas.height = Math.max(1, Math.round(r.height * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
 
     function dibujar(t: number) {
@@ -48,6 +65,7 @@ export function CampoPixeles() {
       const r = canvas.getBoundingClientRect();
       const W = r.width, H = r.height;
       if (W === 0 || H === 0) return;
+      const t0 = performance.now();
       ctx.clearRect(0, 0, W, H);
       ctx.fillStyle = getComputedStyle(canvas).color;
 
@@ -69,42 +87,67 @@ export function CampoPixeles() {
           const dcx = (gx - cx) / (W * 0.42), dcy = (gy - cy) / (H * 0.5);
           d *= Math.min(1, Math.max(0, dcx * dcx + dcy * dcy - 0.15) * 2.2);
           if (d > umbral(gx, gy)) {
-            ctx.globalAlpha = Math.min(0.5, 0.16 + d * 0.3);
+            ctx.globalAlpha = Math.min(tope, base + d * peso);
             ctx.fillRect(gx, gy, PUNTO, PUNTO);
           }
         }
       }
       ctx.globalAlpha = 1;
+      total += performance.now() - t0;
+      cuadros += 1;
+      canvas.dataset.drawMs = (total / cuadros).toFixed(2);
+      canvas.dataset.frames = String(cuadros);
     }
 
+    const puedeAnimar = () => vivo && visible && !document.hidden && !reducir.matches;
     function loop(ts: number) {
-      if (!vivo) return;
-      if (ts - ultimo > 50) { ultimo = ts; dibujar(ts); }
+      if (!puedeAnimar()) { raf = 0; return; }
+      if (ts - ultimo >= MS_CUADRO) { ultimo = ts; dibujar(ts); }
       raf = requestAnimationFrame(loop);
     }
+    const arrancar = () => { if (!raf && puedeAnimar()) raf = requestAnimationFrame(loop); };
+    const parar = () => { if (raf) { cancelAnimationFrame(raf); raf = 0; } };
 
     medir();
     dibujar(0);
-    if (!reducido) raf = requestAnimationFrame(loop);
+    arrancar();
 
-    const alCambiarTamano = () => { medir(); dibujar(performance.now()); };
-    const alCambiarVisibilidad = () => {
-      cancelAnimationFrame(raf);
-      if (!document.hidden && !reducido && vivo) raf = requestAnimationFrame(loop);
+    const alCambiarTamano = () => {
+      // El ResizeObserver avisa una vez al empezar a observar: si el tamaño no cambió, no hay nada que repintar (y con movimiento
+      // reducido el campo sigue siendo UN solo cuadro).
+      const r = canvas.getBoundingClientRect();
+      if (r.width === anchoMedido && r.height === altoMedido) return;
+      medir();
+      dibujar(reducir.matches ? 0 : performance.now());
     };
-    window.addEventListener('resize', alCambiarTamano);
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(alCambiarTamano);
+    ro?.observe(canvas);
+    const io = typeof IntersectionObserver === 'undefined' ? null : new IntersectionObserver((es) => {
+      visible = es.some((e) => e.isIntersecting);
+      if (visible) arrancar(); else parar();
+    });
+    io?.observe(canvas);
+    const alCambiarVisibilidad = () => { if (document.hidden) parar(); else arrancar(); };
+    const alCambiarPreferencia = () => { if (reducir.matches) { parar(); dibujar(0); } else arrancar(); };
+    if (!ro) window.addEventListener('resize', alCambiarTamano);
     document.addEventListener('visibilitychange', alCambiarVisibilidad);
+    reducir.addEventListener('change', alCambiarPreferencia);
     return () => {
       vivo = false;
-      cancelAnimationFrame(raf);
+      parar();
+      ro?.disconnect();
+      io?.disconnect();
       window.removeEventListener('resize', alCambiarTamano);
       document.removeEventListener('visibilitychange', alCambiarVisibilidad);
+      reducir.removeEventListener('change', alCambiarPreferencia);
     };
-  }, []);
+  }, [intensidad]);
 
-  return (
-    <canvas ref={ref} aria-hidden
-      className="absolute inset-0 h-full w-full pointer-events-none"
-      style={{ color: 'var(--g3)' }} />
-  );
+  return intensidad === 'vexa'
+    ? <canvas ref={ref} aria-hidden className="rv-chat__pixeles" />
+    : (
+      <canvas ref={ref} aria-hidden
+        className="absolute inset-0 h-full w-full pointer-events-none"
+        style={{ color: 'var(--g3)' }} />
+    );
 }
