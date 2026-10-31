@@ -53,7 +53,7 @@ async function columnasSinLinea(p: Page, mitad = false): Promise<number> {
       for (let fila = 0; fila < c.height && !hay; fila++) {
         const i = (fila * c.width + col) * 4;
         const [r, g, bl] = [d[i], d[i + 1], d[i + 2]];
-        if (bl > 70 && r < 110 && g < 150 && bl - r > 30) hay = true; // azul de la métrica 1: marino de marca #2a3f5f (antes #2f6bd8)
+        if (bl > 70 && r < 110 && g < 150 && bl - r > 30) hay = true; // azul de la métrica 1 (#2f6bd8, paleta de datos de Vexa)
       }
       cubiertas.push(hay);
     }

@@ -2,6 +2,7 @@
 
 import { X } from 'lucide-react';
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, type ReactNode, type RefObject } from 'react';
+import LogoV2 from '../../dashboard/shell/logo-v2';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DRAWER Y MODAL sobre <dialog> NATIVO (PLAN §2.3).
@@ -132,6 +133,8 @@ export function Drawer({ abierto, onCerrar, titulo, descripcion, children, pie, 
         <Cabecera idTitulo={idTitulo} idDesc={idDesc} titulo={titulo} descripcion={descripcion} onCerrar={onCerrar} />
         <div className="rv-ov__cuerpo">{children}</div>
         {pie ? <footer className="rv-ov__pie">{pie}</footer> : null}
+        {/* Marca al pie del cajón (escritorio), como `.drawer-marca` de Vexa: logo oficial de Likida, sin recolorear (hereda la tinta). */}
+        <div className="rv-ov__marca" aria-hidden="true"><LogoV2 alto={14} decorativo /></div>
       </div>
     </dialog>
   );

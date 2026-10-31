@@ -217,14 +217,14 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · BarraFiltros', () => {
       await p.close();
     });
   }
-  it('1440: «Filtros» abre los avanzados en un popover (no empuja el contenido) y el chip activo es marino suave', async () => {
+  it('1440: «Filtros» abre los avanzados en un popover (no empuja el contenido) y el chip activo es gris suave', async () => {
     const p = await abrir();
     const antes = await p.evaluate(() => document.querySelector('#esc')!.getBoundingClientRect().top);
     await p.getByRole('button', { name: /Filtros/ }).click();
     const r = await p.evaluate(() => ({ pop: !!document.querySelector('.rv-pop select'), despues: document.querySelector('#esc')!.getBoundingClientRect().top, activo: getComputedStyle(document.querySelector('.rv-chip[aria-pressed="true"]')!).backgroundColor }));
     expect(r.pop).toBe(true);
     expect(r.despues).toBe(antes);
-    expect(rgb(r.activo)).toEqual([228, 233, 241]);
+    expect(rgb(r.activo)).toEqual([226, 226, 226]); // --soft-8 #e2e2e2
     await p.close();
   });
   it('390: «Filtros» abre una hoja inferior', async () => {
@@ -243,24 +243,24 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · BarraFiltros', () => {
 });
 
 describe.skipIf(SIN_NAVEGADOR)('B4 · chip activo (los tokens de marca son del shell)', () => {
-  it('claro: marino suave con texto marino (AA), nunca un bloque sólido', async () => {
+  it('claro: gris suave con texto de tinta (AA), nunca un bloque sólido', async () => {
     const p = await abrir();
     const c = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.rv-chip[aria-pressed="true"]')!); return { bg: s.backgroundColor, fg: s.color }; });
-    expect(rgb(c.bg)).toEqual([228, 233, 241]);
-    expect(rgb(c.fg)).toEqual([42, 63, 95]);
+    expect(rgb(c.bg)).toEqual([226, 226, 226]);
+    expect(rgb(c.fg)).toEqual([14, 14, 16]);
     expect(ratio(rgb(c.bg), rgb(c.fg))).toBeGreaterThanOrEqual(4.5);
     await p.close();
   });
-  it('oscuro: fondo marino oscuro con texto azul claro (AA)', async () => {
+  it('oscuro: fondo gris oscuro con texto claro (AA)', async () => {
     const p = await abrir(1440, { oscuro: true });
     const c = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.rv-chip[aria-pressed="true"]')!); return { bg: s.backgroundColor, fg: s.color }; });
-    expect(rgb(c.bg)).toEqual([27, 36, 49]);
+    expect(rgb(c.bg)).toEqual([50, 50, 52]); // --soft-8 oscuro #323234
     expect(ratio(rgb(c.bg), rgb(c.fg))).toBeGreaterThanOrEqual(4.5);
     await p.close();
   });
-  it('esta capa NO redefine los tokens de marca del shell (--btn-*, --marino, --crema, --chart-8)', async () => {
+  it('esta capa NO redefine los tokens de marca del shell (--btn-*, --chart-8)', async () => {
     const css = readFileSync(join(DIR, 'componentes.css'), 'utf8');
-    for (const t of ['--btn-bg:', '--btn-fg:', '--btn-borde:', '--btn-hover:', '--marino:', '--crema:', '--chart-8:', '--marca-marino:', '--marca-naranja:']) expect(css.includes(t), t).toBe(false);
+    for (const t of ['--btn-bg:', '--btn-fg:', '--btn-borde:', '--btn-hover:', '--chart-8:']) expect(css.includes(t), t).toBe(false);
   });
 });
 

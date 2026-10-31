@@ -73,20 +73,10 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 /* ═══ Capa v2 Likida-Rovaq (carril B2): TODA regla nueva cuelga de [data-ui="v2"]; arriba, lo de siempre sin tocar (v1 intacto). ═══ */
 [data-ui="v2"] .rv-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 :root [data-ui="v2"] {
-  --prov-est-bg: #e4e4e6;
-  --prov-est-bd: #4a4a51;
-  --prov-inf-bg: #f7f7f8;
-  --prov-inf-bd: #75757c;
-  --prov-sin-bd: #8a8a90;
-  --gr-rejilla: #0e0e1014; --gr-eje: #0e0e1033;
-}
-:root[data-theme="dark"] [data-ui="v2"] {
-  --prov-est-bg: #2a2a2f;
-  --prov-est-bd: #a3a3ab;
-  --prov-inf-bg: #17171a;
-  --prov-inf-bd: #7a7a82;
-  --prov-sin-bd: #7a7a82;
-  --gr-rejilla: #f4f4f514; --gr-eje: #f4f4f533;
+  --prov-est-bd: var(--prov-est-borde);
+  --prov-inf-bd: var(--prov-inf-borde);
+  --prov-sin-bd: var(--prov-sin-borde);
+  --gr-rejilla: var(--chart-rejilla); --gr-eje: var(--chart-eje);
 }
 [data-ui="v2"] .rv-gr[data-matiz="1"],
 [data-ui="v2"] .rv-kpi[data-matiz="1"],

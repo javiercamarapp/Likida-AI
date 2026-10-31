@@ -33,7 +33,7 @@
      papel de la CANALETA entre la columna del formulario y la foto. Sin ella
      las dos mitades son el mismo blanco y la foto —que es casi blanca— se
      derrama en la página en vez de leerse como una lámina montada encima. */
-  --crema: #f2f1ee;
+  --suave-login: #f1f1f2;
   --serif-marca: var(--font-fraunces), Fraunces, Georgia, 'Times New Roman', serif;
   --sans-marca: var(--font-instrument), 'Instrument Sans', var(--font-sans-ui), var(--font-sans);
 
@@ -196,7 +196,7 @@
   border: 1px solid var(--line);
   /* La crema debajo de la foto, no el blanco: mientras la imagen carga, el
      hueco tiene el color del papel y no un rectángulo blanco que parpadea. */
-  background: var(--crema);
+  background: var(--suave-login);
 }
 .login-foto {
   position: absolute;

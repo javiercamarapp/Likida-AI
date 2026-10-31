@@ -109,18 +109,28 @@ describe('clases del menú de cuenta', () => {
   });
 });
 
-describe('identidad de marca (directiva 29-oct)', () => {
+describe('paleta: cromo negro/gris/blanco, color en los datos como Vexa (decisión de Javier, 31-oct)', () => {
   const tokens = readFileSync(fileURLToPath(new URL('../../ui-v2/tokens.css', import.meta.url)), 'utf8');
-  it('primario, activo y logo se pintan con tokens de marca: naranja ladrillo, azul marino, tinta cálida', () => {
-    expect(tokens).toMatch(/--marca-naranja:\s*#c2410c/);
-    expect(tokens).toMatch(/--btn-bg:\s*var\(--marca-naranja\)/);
-    expect(tokens).toMatch(/--marca-marino:\s*#2a3f5f/);
-    // --marca sigue siendo tinta neutra: el naranja no se multiplica en mosaicos de icono ni barras de componentes ajenos
-    expect(tokens).toMatch(/--marca:\s*#17100d/);
-    expect(tokens).toMatch(/--ink:\s*#17100d/);
-    expect(tokens).toMatch(/--ui-activo-barra:\s*var\(--marca-naranja\)/);
-    // oscuro: naranja #fb923c sobre tinta cálida
-    expect(tokens).toMatch(/--marca-naranja:\s*#fb923c/);
+  it('primario negro, activo con barra gris de 3 px y señal burdeos como acento puntual', () => {
+    expect(tokens).toMatch(/--btn-bg:\s*#0e0e10/); // primario negro
+    expect(tokens).toMatch(/--marca:\s*#0e0e10/);
+    expect(tokens).toMatch(/--ink:\s*#0e0e10/);
+    expect(tokens).toMatch(/--ui-activo-barra:\s*var\(--n-500\)/); // barra gris, el rojo es solo acento puntual
+    expect(tokens).not.toMatch(/--acento-marca/);
+    expect(tokens).toMatch(/--senal:\s*#a6264a/);
+    // oscuro: negro neutro #0e0e10, señal #cc4a6c
+    expect(tokens).toMatch(/--bg:\s*#0e0e10/);
+    expect(tokens).toMatch(/--senal:\s*#cc4a6c/);
+  });
+  it('ningún token ni valor de naranja, marino o crema sobrevive en la capa v2 (tokens, shell, componentes, páginas, gráficas, logo)', () => {
+    const dir = new URL('../../ui-v2/', import.meta.url);
+    const archivos = ['tokens.css', 'shell.css', 'componentes.css', 'paginas.css', 'paginas-dominio.css', 'graficas.css', 'movimiento.css', 'carga.css'];
+    for (const a of archivos) {
+      const css = readFileSync(fileURLToPath(new URL(a, dir)), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+      expect(css, a).not.toMatch(/--marca-(naranja|marino|crema)|--marino|--crema|#c2410c|#9a3412|#fb923c|#2a3f5f|#ede4d3|#e4e9f1|#f6f1e7|#17100d|#f7f1e8|#120d0a/i);
+    }
+    const logo = readFileSync(fileURLToPath(new URL('./logo-v2.tsx', import.meta.url)), 'utf8');
+    expect(logo).not.toMatch(/marca-naranja|#fb923c/);
   });
   it('las entradas animadas del shell viven solo en no-preference y duran ≤ 220 ms', () => {
     const i = sinComentarios.indexOf('@keyframes rv-nav-entra');

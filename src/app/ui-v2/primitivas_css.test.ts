@@ -17,12 +17,12 @@ const lum = (hex: string) => {
 const ratio = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 
 describe('primitivas v2 · contrato de ESTILO-LIKIDA', () => {
-  it('botón: 32 px (36 en <820), radio 8, 13/600, toque 44 por ::after, primario tenue (nunca negro ni azul)', () => {
+  it('botón: 32 px (36 en <820), radio 8, 13/600, toque 44 por ::after, primario negro por tokens (sin azul)', () => {
     expect(comp).toMatch(/\.rv-btn \{[^}]*min-height: 32px[^}]*font: 600 13px/);
     expect(comp).toMatch(/\.rv-btn \{[^}]*border-radius: 8px/);
     expect(comp).toMatch(/@media \(max-width: 819px\) \{\s*\[data-ui="v2"\] \.rv-btn \{ min-height: 36px; \}/);
     expect(comp).toMatch(/\.rv-btn::after \{[^}]*width: max\(100%, 44px\); height: max\(100%, 44px\)/);
-    expect(comp).toMatch(/\.rv-btn--primary \{ background: var\(--btn-bg, var\(--btn-tenue-bg\)\)/); // lee --btn-bg/--btn-fg/--btn-borde/--btn-hover con respaldo tenue
+    expect(comp).toMatch(/\.rv-btn--primary \{ background: var\(--btn-bg\)/); // lee --btn-bg/--btn-fg/--btn-borde/--btn-hover (tenue neutro, en tokens.css)
     expect(comp).not.toMatch(/\.rv-btn--primary \{[^}]*var\(--marca\)/);
   });
   it('botón deshabilitado: borde discontinuo y SIN opacidad', () => {

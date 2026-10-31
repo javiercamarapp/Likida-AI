@@ -11,39 +11,10 @@
    radios 8/12; sin sombras en flujo; foco 2 px visible.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Botón ─────────────────────────────────────────────────────────────── */
-[data-ui="v2"] .rv-btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  height: auto; min-height: 32px; padding: 6px 12px;
-  font: 600 13px/1.25 var(--font-sans-ui, inherit); letter-spacing: 0; text-decoration: none; text-align: center;
-  border: 1px solid var(--input); border-radius: 8px;
-  background: var(--surface); color: var(--ink); box-shadow: none; cursor: pointer;
-}
-[data-ui="v2"] .rv-btn svg { width: 16px; height: 16px; flex: none; }
-[data-ui="v2"] .rv-btn:hover { background: var(--canvas); border-color: var(--ink2); }
-[data-ui="v2"] .rv-btn--primary { background: var(--marca); border-color: var(--marca); color: var(--marca-fg); }
-[data-ui="v2"] .rv-btn--primary:hover { background: var(--marca-hover); border-color: var(--marca-hover); }
-[data-ui="v2"] .rv-btn--ghost { background: transparent; border-color: transparent; }
-[data-ui="v2"] .rv-btn--ghost:hover { background: var(--canvas); border-color: transparent; }
-[data-ui="v2"] .rv-btn--danger-soft { background: var(--badbg); border-color: color-mix(in srgb, var(--bad) 28%, transparent); color: var(--bad); }
-[data-ui="v2"] .rv-btn--danger-soft:hover { background: color-mix(in srgb, var(--bad) 14%, var(--badbg)); border-color: var(--bad); }
-[data-ui="v2"] .rv-btn--sm { min-height: 28px; padding: 4px 10px; }
-[data-ui="v2"] .rv-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-/* Deshabilitado: borde discontinuo y texto legible, NO opacidad. */
-[data-ui="v2"] .rv-btn:disabled,
-[data-ui="v2"] .rv-btn[aria-disabled="true"] {
-  opacity: 1; cursor: not-allowed;
-  background: var(--surface); color: var(--ink2);
-  border: 1px dashed color-mix(in srgb, var(--input) 55%, var(--surface));
-}
-[data-ui="v2"] .rv-btn[aria-busy="true"] { cursor: progress; }
+/* ── Botón ─ (las reglas del botón v2 viven en la «Capa v2» más abajo; aquí queda solo el spinner sin alcance) */
 .rv-btn__spinner {
   width: 14px; height: 14px; flex: none; border-radius: 50%;
   border: 2px solid currentColor; border-right-color: transparent;
-}
-@media (max-width: 767px) {
-  [data-ui="v2"] .rv-btn { min-height: 36px; }
-  [data-ui="v2"] .rv-btn--sm { min-height: 28px; }
 }
 
 /* ── Chip ──────────────────────────────────────────────────────────────── */
@@ -223,18 +194,6 @@
 
 
 /* ═══ Capa v2 Likida-Rovaq (carril B2): TODA regla nueva cuelga de [data-ui="v2"]; arriba, lo de siempre sin tocar (v1 intacto). ═══ */
-:root [data-ui="v2"] {
-  --btn-tenue-bg: #e4e4e6;
-  --btn-tenue-bd: #d6d6d9;
-  --btn-tenue-hv: #d6d6d9;
-  --ctl-vacio-bd: #8a8a90;
-}
-:root[data-theme="dark"] [data-ui="v2"] {
-  --btn-tenue-bg: #2a2a2f;
-  --btn-tenue-bd: #48484a;
-  --btn-tenue-hv: #34343a;
-  --ctl-vacio-bd: #7a7a82;
-}
 [data-ui="v2"] .rv-btn {
   position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   height: auto; min-height: 32px; padding: 6px 12px;
@@ -247,12 +206,12 @@
   width: max(100%, 44px); height: max(100%, 44px);
 }
 [data-ui="v2"] .rv-btn svg { width: 16px; height: 16px; flex: none; }
-[data-ui="v2"] .rv-btn:hover { background: var(--canvas); border-color: var(--line2); }
-/* Lee --btn-bg/--btn-fg/--btn-borde/--btn-hover (los fija el shell o tokens.css); el respaldo es el tenue neutro. */
-[data-ui="v2"] .rv-btn--primary { background: var(--btn-bg, var(--btn-tenue-bg)); border-color: var(--btn-borde, var(--btn-tenue-bd)); color: var(--btn-fg, var(--ink)); }
-[data-ui="v2"] .rv-btn--primary:hover { background: var(--btn-hover, var(--btn-tenue-hv)); border-color: var(--btn-borde, var(--btn-tenue-bd)); }
+[data-ui="v2"] .rv-btn:hover { background: var(--infobg); color: var(--info); border-color: var(--aviso-linea-info); }
+/* Lee --btn-bg/--btn-fg/--btn-borde/--btn-hover (los fija el shell o tokens.css); tenue neutro. */
+[data-ui="v2"] .rv-btn--primary { background: var(--btn-bg); border-color: var(--btn-borde); color: var(--btn-fg); }
+[data-ui="v2"] .rv-btn--primary:hover { background: var(--btn-hover); color: var(--btn-fg); border-color: var(--btn-borde); }
 [data-ui="v2"] .rv-btn--ghost { background: transparent; border-color: transparent; }
-[data-ui="v2"] .rv-btn--ghost:hover { background: var(--canvas); border-color: transparent; }
+[data-ui="v2"] .rv-btn--ghost:hover { background: var(--infobg); color: var(--info); border-color: transparent; }
 [data-ui="v2"] .rv-btn--danger-soft { background: var(--badbg); border-color: color-mix(in srgb, var(--bad) 28%, transparent); color: var(--bad); }
 [data-ui="v2"] .rv-btn--danger-soft:hover { background: color-mix(in srgb, var(--bad) 14%, var(--badbg)); border-color: var(--bad); }
 [data-ui="v2"] .rv-btn--sm { min-height: 28px; padding: 4px 10px; }
@@ -344,6 +303,8 @@
 [data-ui="v2"] .rv-ov__cerrar:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 [data-ui="v2"] .rv-ov__cuerpo { padding: 16px; overflow-y: auto; overscroll-behavior: contain; flex: 1 1 auto; font-size: 13px; line-height: 1.5; }
 [data-ui="v2"] .rv-ov__pie { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); flex: none; }
+[data-ui="v2"] .rv-ov__marca { display: flex; justify-content: center; flex: none; padding: 9px 0 11px; border-top: 1px solid var(--line); opacity: .6; color: var(--ink); }
+@media (max-width: 819px) { [data-ui="v2"] .rv-ov__marca { display: none; } }
 [data-ui="v2"] .rv-ov--drawer { margin: 8px 8px 8px auto; height: calc(100dvh - 16px); width: min(calc(100vw - 16px), 420px); }
 [data-ui="v2"] .rv-ov--drawer[data-tamano="l"] { width: min(calc(100vw - 16px), 480px); }
 [data-ui="v2"] .rv-ov--drawer[data-tamano="xl"] { width: min(calc(100vw - 16px), 640px); }
@@ -408,7 +369,7 @@
 [data-ui="v2"] .card table thead th {
   position: sticky; top: 0; height: 36px; padding: 0 12px; text-align: left; white-space: nowrap;
   font: 600 12px/1.2 var(--font-sans-ui, inherit); text-transform: none; letter-spacing: 0;
-  color: var(--info); background: color-mix(in srgb, var(--info) 7%, var(--surface)); border-bottom: 1px solid var(--line);
+  color: var(--tabla-cab-ink); background: var(--tabla-cab-bg); border-bottom: 1px solid var(--line);
 }
 [data-ui="v2"] .card table tbody td { height: 40px; padding: 0 12px; font-size: 13px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 [data-ui="v2"] .card table tbody tr:last-child td { border-bottom: 0; }
@@ -498,14 +459,9 @@
 }
 
 /* ═══ B4 · Chip activo (filtros, segmentados) ═══
-   Los tokens de marca (--btn-*, --marino, --crema, --chart-*) los define el shell en tokens.css: aquí NO se repiten.
-   Activo = marino SUAVE con texto y borde marino (directiva 29-oct: «fondo marino/crema suave»; el único bloque sólido de un
-   pliegue es el botón primario). Usa los pares tinte/tinta del matiz 1, que ya miden AA en claro y oscuro. */
-:root [data-ui="v2"] {
-  --chip-activo-bg: var(--soft-1, #e4e9f1);
-  --chip-activo-fg: var(--ink-1, #2a3f5f);
-}
-/* Chip activo (filtros, segmentados): marino suave, texto y borde marino. */
+   Los tokens de marca (--btn-*, --chart-*) los define el shell en tokens.css: aquí NO se repiten.
+   Activo = gris suave con texto y borde de tinta: usa el par tinte/tinta del matiz 8 (tinta), que ya mide AA en claro y oscuro. */
+/* Chip activo (filtros, segmentados): gris suave, texto y borde de tinta. */
 [data-ui="v2"] .rv-chip[aria-pressed="true"], [data-ui="v2"] .rv-chip[data-activo] { background: var(--chip-activo-bg); color: var(--chip-activo-fg); border-color: var(--chip-activo-fg); font-weight: 600; }
 [data-ui="v2"] button.rv-chip { cursor: pointer; font-family: inherit; }
 [data-ui="v2"] button.rv-chip:hover:not([aria-pressed="true"]) { background: var(--canvas); }

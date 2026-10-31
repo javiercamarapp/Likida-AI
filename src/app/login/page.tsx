@@ -310,7 +310,7 @@ export default async function Login({
                 <div
                   role="status"
                   className="login-entra mt-9 rounded-[18px] p-5"
-                  style={{ background: 'var(--crema)', border: '1px solid var(--line)', animationDelay: '190ms' }}
+                  style={{ background: 'var(--suave-login)', border: '1px solid var(--line)', animationDelay: '190ms' }}
                 >
                   <p className="text-[15px] font-semibold" style={{ color: 'var(--ink)' }}>
                     {sp?.reenviado
