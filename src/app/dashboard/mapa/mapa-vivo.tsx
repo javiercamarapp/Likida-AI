@@ -146,11 +146,11 @@ export function MapaVivo({ viajes, pines = [] }: {
                     <circle r={3.6} fill="var(--marca)" stroke="var(--surface)" strokeWidth={1.4}
                       className="mapa-camion" style={{ offsetPath: `path('${d}')` }} />
                   )}
-                  <text x={activo.ox} y={activo.oy - 7} textAnchor="middle" fontSize={11.5} fontWeight={600}
+                  <text x={activo.ox} y={activo.oy - 7} textAnchor="middle" fontSize={12} fontWeight={600}
                     fill="var(--ink)" stroke="var(--surface)" strokeWidth={3} paintOrder="stroke">
                     {activo.origenNombre}
                   </text>
-                  <text x={activo.dx} y={activo.dy - 7} textAnchor="middle" fontSize={11.5} fontWeight={600}
+                  <text x={activo.dx} y={activo.dy - 7} textAnchor="middle" fontSize={12} fontWeight={600}
                     fill="var(--ink)" stroke="var(--surface)" strokeWidth={3} paintOrder="stroke">
                     {activo.destinoNombre}
                   </text>
@@ -175,7 +175,7 @@ export function MapaVivo({ viajes, pines = [] }: {
                       {`${p.etiqueta} — ${ROTULO_FRESCURA[nivel]}${fresco ? '' : ': última posición conocida, no dónde está ahora'} (${p.respaldoWa ? 'pin del chofer, respaldo del GPS' : p.proveedor})`}
                     </title>
                   </rect>
-                  <text x={p.x} y={p.y + 11} textAnchor="middle" fontSize={9} fontWeight={600}
+                  <text x={p.x} y={p.y + 11} textAnchor="middle" fontSize={11} fontWeight={600}
                     fill="var(--ink)" stroke="var(--surface)" strokeWidth={2.4} paintOrder="stroke"
                     opacity={nivel === 'obsoleta' ? 0.6 : 1}>
                     {p.etiqueta}

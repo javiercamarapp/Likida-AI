@@ -43,6 +43,64 @@ function etiquetas(src: string, nombre: string): string[] {
   return out;
 }
 
+
+/** Archivos hijo (sin `MarcoPagina`) con títulos de recuadro todavía sin ⓘ al cerrar L4: 52 archivos, 96 títulos. Pendiente declarado: cada vez que uno se
+ *  cubre, su tope baja o se borra la línea. Un archivo nuevo o un tope superado hace fallar la prueba. */
+const HIJOS_SIN_CUBRIR: Record<string, number> = {
+  '[id]/revision-panel.tsx': 1,
+  'agentes/carta-porte/configuracion/seccion_ccp.tsx': 1,
+  'agentes/carta-porte/configuracion/seccion_primer_mes.tsx': 1,
+  'agentes/cobranza/page.tsx': 1,
+  'agentes/conductores/configuracion/documentos_cliente.tsx': 1,
+  'agentes/conductores/configuracion/forma.tsx': 1,
+  'agentes/conductores/configuracion/preflight.tsx': 2,
+  'agentes/conductores/constancia-vista.tsx': 1,
+  'agentes/estrategia-forma.tsx': 1,
+  'agentes/facturas/control-emision.tsx': 3,
+  'agentes/facturas/portales-vinculo.tsx': 1,
+  'agentes/ficha-corridas.tsx': 1,
+  'agentes/insights/panel-insights.tsx': 1,
+  'agentes/insights/tarjeta-insight.tsx': 1,
+  'agentes/liquidacion/cargas.tsx': 3,
+  'agentes/liquidacion/cola.tsx': 1,
+  'agentes/liquidacion/conteos-nomina.tsx': 1,
+  'agentes/liquidacion/externas.tsx': 1,
+  'agentes/peajes/candidatos-tabla.tsx': 2,
+  'agentes/peajes/configuracion/clases-cobro.tsx': 1,
+  'agentes/peajes/configuracion/cruce-viajes.tsx': 1,
+  'agentes/peajes/configuracion/entradas.tsx': 1,
+  'agentes/peajes/configuracion/inmovilizadas.tsx': 1,
+  'agentes/peajes/configuracion/reglas-cobro.tsx': 4,
+  'agentes/peajes/configuracion/tarifario.tsx': 1,
+  'agentes/peajes/configuracion/umbrales-avisos.tsx': 4,
+  'agentes/peajes/reclamacion/revision.tsx': 4,
+  'agentes/peajes/revision-cobros.tsx': 2,
+  'agentes/proveedores/seccion_buzon.tsx': 3,
+  'agentes/seccion-notificaciones.tsx': 1,
+  'carta-porte/borrador/[viajeId]/page.tsx': 6,
+  'carta-porte/documentos/[id]/vista.tsx': 1,
+  'chat.tsx': 1,
+  'conexiones/page.tsx': 1,
+  'conexiones/seccion-credenciales.tsx': 1,
+  'conexiones/seccion-gps.tsx': 4,
+  'conexiones/seccion-integraciones.tsx': 2,
+  'configuracion/forma.tsx': 2,
+  'contador/timbrado.tsx': 1,
+  'inicio-cinco-agentes.tsx': 1,
+  'jornada/formas.tsx': 4,
+  'onboarding/forma.tsx': 4,
+  'opera-whatsapp.tsx': 1,
+  'operadores/invitaciones.tsx': 1,
+  'primera-liquidacion.tsx': 1,
+  'puesta-en-marcha/vista.tsx': 3,
+  'reglas/vista.tsx': 2,
+  'resumen-visual.tsx': 1,
+  'shell/navegacion-v2.tsx': 2,
+  'timbrado/[viajeId]/timbrar.tsx': 4,
+  'unidades/taller.tsx': 4,
+  'viajes-en-vivo/pregunta.tsx': 1,
+};
+
 describe('ⓘ: cobertura de cifras y recuadros en las páginas migradas', () => {
   it('toda <Cifra> lleva info=', () => {
     const faltan = todos.flatMap(({ ruta, src }) => etiquetas(src, 'Cifra').filter((t) => !/\binfo=/.test(t)).map((t) => `${ruta}: ${t.slice(0, 70).replace(/\s+/g, ' ')}`));
@@ -61,6 +119,22 @@ describe('ⓘ: cobertura de cifras y recuadros en las páginas migradas', () => 
       });
     }
     expect(sueltos, `Títulos de recuadro sin ⓘ (${sueltos.length}):\n${sueltos.join('\n')}`).toEqual([]);
+  });
+
+  it('en el resto de dashboard/** los <h2>/<h3> sueltos NO crecen: lista explícita de archivos hijo aún sin cubrir (solo puede bajar)', () => {
+    const sueltosDe = (src: string) => src.split('\n').filter((l, i, a) => /<h[23][\s>]/.test(l) && !/sin-info:/.test(l) && !/sin-info:/.test(a[i - 1] ?? '')).length;
+    const excesos: string[] = [];
+    const obsoletos: string[] = [];
+    for (const { ruta, src } of todos) {
+      if (src.includes('MarcoPagina')) continue;
+      const n = sueltosDe(src);
+      const tope = HIJOS_SIN_CUBRIR[ruta] ?? 0;
+      if (n > tope) excesos.push(`${ruta}: ${n} > ${tope}`);
+      if (n < tope) obsoletos.push(`${ruta}: ${n} < ${tope} (baja el tope en HIJOS_SIN_CUBRIR)`);
+    }
+    for (const r of Object.keys(HIJOS_SIN_CUBRIR)) if (!todos.some((t) => t.ruta === r)) obsoletos.push(`${r}: el archivo ya no existe`);
+    expect(excesos, `Títulos sueltos nuevos (usa TituloRecuadro con info):\n${excesos.join('\n')}`).toEqual([]);
+    expect(obsoletos, `Topes obsoletos:\n${obsoletos.join('\n')}`).toEqual([]);
   });
 
   it('la etiqueta visible de cada <Cifra> no contradice el título de su ⓘ (igual o uno contiene al otro)', () => {
@@ -95,7 +169,7 @@ describe('ⓘ: cobertura de cifras y recuadros en las páginas migradas', () => 
     expect(pend).toEqual(['resumen.a_tiempo', 'resumen.diferencias_recuperado']);
   });
 
-  it('toda clave nueva (fuera de «resumen.») sigue la forma <pagina>.<recuadro> y su título coincide con el nombre accesible', () => {
+  it('toda clave sigue la forma <pagina>.<recuadro>, con título legible, «Qué es» de una línea y tono de guía (sin exclamaciones ni emojis)', () => {
     for (const [k, t] of Object.entries(INFO) as Array<[string, InfoTexto]>) {
       expect(k.split('.').length, k).toBeGreaterThan(1);
       for (const parte of k.split('.')) expect(parte, k).toMatch(/^[a-z0-9_-]+$/);

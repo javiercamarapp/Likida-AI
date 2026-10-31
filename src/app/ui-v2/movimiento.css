@@ -88,10 +88,17 @@
     transition:
       background-color var(--ui-fast) ease,
       border-color var(--ui-fast) ease,
+      color var(--ui-fast) ease;
+  }
+  /* Pulsado del botón: solo bajo v2 (v1 conserva su comportamiento de siempre). */
+  [data-ui="v2"] .rv-btn {
+    transition:
+      background-color var(--ui-fast) ease,
+      border-color var(--ui-fast) ease,
       color var(--ui-fast) ease,
       transform var(--ui-fast) ease;
   }
-  .rv-btn:active:not(:disabled):not([aria-disabled="true"]) {
+  [data-ui="v2"] .rv-btn:active:not(:disabled):not([aria-disabled="true"]) {
     transform: translateY(1px);
   }
   .rv-btn__spinner {

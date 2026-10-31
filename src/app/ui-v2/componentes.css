@@ -389,6 +389,7 @@
 [data-ui="v2"] .rv-tarjeta { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: var(--ui-pad); border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: none; }
 /* Título de recuadro sin Tarjeta (L4): mismo estilo que el de la Tarjeta, con la ⓘ pegada. */
 [data-ui="v2"] .rv-recuadro-tit { display: flex; align-items: center; gap: 4px; min-height: 28px; }
+[data-ui="v2"] .rv-recuadro-tit > .rv-info { margin-left: auto; }
 [data-ui="v2"] .rv-recuadro-tit__texto { margin: 0; min-width: 0; font: 600 var(--t-card)/1.3 var(--font-sans-ui, inherit); letter-spacing: -.01em; color: var(--ink); }
 [data-ui="v2"] .rv-tarjeta__cab { display: flex; align-items: center; gap: 4px; height: 32px; }
 [data-ui="v2"] .rv-tarjeta__titulo { margin: 0; min-width: 0; font: 600 var(--t-card)/1.3 var(--font-sans-ui, inherit); letter-spacing: -.01em; color: var(--ink); }
