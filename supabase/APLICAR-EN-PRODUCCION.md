@@ -1,5 +1,11 @@
 # Aplicar en producción — orden, riesgos y qué se rompe si no
 
+> **Actualización 1-nov-2026.** La **0949** (rol `nomina`: solo amplía el dominio de
+> `app_user.rol`) quedó aplicada contra producción antes del despliegue 19 y verificada
+> con `pg_get_constraintdef` (el CHECK incluye `nomina`). `/api/health` reporta
+> `migracion.base = "0949"`. 0946–0948 ya estaban aplicadas (build 17). Antes de invitar al
+> primer usuario `nomina` confirma que 0946/0947 siguen vigentes (REVOKE a authenticated).
+
 > **Actualización 2-sep-2026.** Las migraciones **0272→0301** ya están
 > aplicadas contra la base real de producción (proyecto Supabase "Likida"),
 > confirmadas en `supabase_migrations.schema_migrations` y contra el esquema
