@@ -6,14 +6,15 @@ import type { ReporteHistorial } from '@/lib/likida/vigia/historial/analisis';
 import type { ResultadoPendientes } from '@/lib/likida/vigia/historial/pendientes';
 import type { RespuestaRapidaFila } from '@/lib/likida/vigia/historial/repo';
 import { FilaBorrar, FilaCritico, FilaRetirarRapida, FormaAltaGrupo, FormaAprobarRapida, FormaImportar, type AccionGrupos } from './formas';
-import { MarcoPagina, Aviso, BotonEnlace } from '@/app/ui-v2/componentes';
+import { MarcoPagina, Aviso, BotonEnlace, TituloRecuadro } from '@/app/ui-v2/componentes';
+import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 
 export interface AccionesGrupos { alta: AccionGrupos; critico: AccionGrupos; borrar: AccionGrupos; importar: AccionGrupos; aprobarRapida: AccionGrupos; retirarRapida: AccionGrupos }
 
-function Seccion({ id, titulo, children }: { id: string; titulo: string; children: React.ReactNode }) {
+function Seccion({ id, titulo, info, children }: { id: string; titulo: string; info: InfoClave; children: React.ReactNode }) {
   return (
     <section className="card p-4 space-y-3" aria-labelledby={id}>
-      <h2 id={id} className="font-display text-[15px] font-semibold">{titulo}</h2>
+      <TituloRecuadro id={id} info={info}>{titulo}</TituloRecuadro>
       {children}
     </section>
   );
@@ -59,7 +60,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
         <Aviso tono="error">La base de datos todavía no tiene las tablas de grupos (falta aplicar la migración 0484). Mientras tanto no hay nada que mostrar aquí.</Aviso>
       ) : (
         <>
-          <Seccion id="grupos" titulo="Grupos">
+          <Seccion id="grupos" titulo="Grupos" info="vigia_historial.grupos">
             {grupos.length === 0 ? (
               <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Aún no hay grupos. Agrega el primero abajo.</p>
             ) : (
@@ -86,9 +87,9 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
 
           {puedeEditar ? (
             <>
-              <Seccion id="alta" titulo="Agregar un grupo"><FormaAltaGrupo accion={acciones.alta} clientes={clientes} /></Seccion>
+              <Seccion id="alta" titulo="Agregar un grupo" info="vigia_historial.alta"><FormaAltaGrupo accion={acciones.alta} clientes={clientes} /></Seccion>
               {grupos.length > 0 && (
-                <Seccion id="importar" titulo="Subir el chat exportado">
+                <Seccion id="importar" titulo="Subir el chat exportado" info="vigia_historial.importar">
                   <FormaImportar accion={acciones.importar} grupos={grupos.map((g) => ({ id: g.id, nombre: g.nombre, cliente: g.clienteNombre }))} />
                 </Seccion>
               )}
@@ -97,7 +98,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
             <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota agrega grupos y sube histórico.</p>
           )}
 
-          {!standby && <Seccion id="rapidas" titulo="Respuestas rápidas aprobadas">
+          {!standby && <Seccion id="rapidas" titulo="Respuestas rápidas aprobadas" info="vigia_historial.rapidas">
             {rapidas === null ? (
               <Aviso tono="error">La base de datos todavía no tiene las respuestas rápidas (falta aplicar la migración 0647). Mientras tanto el Vigía contesta como siempre.</Aviso>
             ) : (
@@ -124,7 +125,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
             )}
           </Seccion>}
 
-          <Seccion id="reporte" titulo={grupoElegido ? 'Reporte del grupo elegido' : 'Reporte de todos los grupos'}>
+          <Seccion id="reporte" titulo={grupoElegido ? 'Reporte del grupo elegido' : 'Reporte de todos los grupos'} info="vigia_historial.reporte">
             {reporte === null || reporte.mensajes === 0 ? (
               <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Todavía no hay histórico subido: sube el chat de un grupo y aquí aparecen sus preguntas frecuentes, sus temas y los tiempos de respuesta.</p>
             ) : (
@@ -142,7 +143,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
 
                 {pendientes && (
                   <div>
-                    <h3 className="text-[13px] font-semibold mb-1.5">Pendientes de contestar en el chat subido</h3>
+                    <TituloRecuadro nivel="h3" info="vigia_historial.pendientes" className="mb-1.5">Pendientes de contestar en el chat subido</TituloRecuadro>
                     <p className="text-[11px] mb-1.5" style={{ color: 'var(--faint)' }}>
                       Foto del momento de la exportación{pendientes.fotoEn ? ` (${fechaHoraMx(pendientes.fotoEn)})` : ''}, no en vivo: el Vigía no lee los grupos al instante. Se ocultan los «gracias», los avisos de monitoreo y lo que el equipo ya contestó.
                     </p>
@@ -165,7 +166,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
                 )}
 
                 <div>
-                  <h3 className="text-[13px] font-semibold mb-1.5">Tiempo de respuesta del equipo</h3>
+                  <TituloRecuadro nivel="h3" info="vigia_historial.tiempos" className="mb-1.5">Tiempo de respuesta del equipo</TituloRecuadro>
                   <p className="text-[12px]">
                     Mediana {duracion(reporte.tiempos.medianaMin)} · 9 de cada 10 respuestas en {duracion(reporte.tiempos.p90Min)} ·{' '}
                     <strong>{numero(reporte.tiempos.sobreUmbral)}</strong> esperas pasaron de {numero(umbralMin)} min (incluye {numero(reporte.tiempos.sinRespuesta)} mensajes que nadie contestó).
@@ -173,7 +174,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
                 </div>
 
                 <div>
-                  <h3 className="text-[13px] font-semibold mb-1.5">Preguntas frecuentes</h3>
+                  <TituloRecuadro nivel="h3" info="vigia_historial.faqs" className="mb-1.5">Preguntas frecuentes</TituloRecuadro>
                   {reporte.faqs.length === 0 ? (
                     <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No hay preguntas que se repitan lo suficiente (al menos 2 veces) para llamarlas frecuentes.</p>
                   ) : (
@@ -192,7 +193,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
                 </div>
 
                 <div>
-                  <h3 className="text-[13px] font-semibold mb-1.5">Temas y tendencia</h3>
+                  <TituloRecuadro nivel="h3" info="vigia_historial.temas" className="mb-1.5">Temas y tendencia</TituloRecuadro>
                   <div className="overflow-x-auto">
                     <table className="w-full text-[12px]">
                       <thead><tr className="text-left text-[11px]" style={{ color: 'var(--faint)' }}><th className="py-1 pr-3">Tema</th><th className="pr-3">Mensajes</th><th className="pr-3">Últimas 4 semanas</th><th className="pr-3">4 anteriores</th><th>Cambio</th></tr></thead>

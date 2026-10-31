@@ -12,7 +12,7 @@ import type { ResumenSeguimiento } from '@/lib/likida/peajes/reclamos_seguimient
 import { SeccionRevisionCobros, SeccionCierreMensual, SeccionSeguimiento, type AccionesSeguimiento, type PropuestaNota } from './revision';
 import { TablaCandidatosCobros, type AccionDecidir } from '../candidatos-tabla';
 import type { TablaCandidatos, AccionCandidato } from '@/lib/likida/peajes/candidatos_tabla';
-import { MarcoPagina, BotonEnlace } from '@/app/ui-v2/componentes';
+import { MarcoPagina, BotonEnlace, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 export type EstadoReclamacion = 'sin_desglose' | 'no_existe' | 'error' | 'ok';
 
@@ -102,11 +102,11 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
           <section className="card p-4">
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div>
-                <h2 className="font-display text-[15px] font-semibold">
+                <TituloRecuadro info="peajes_reclamacion.cruces">
                   {candidato
                     ? (reporte.resumen.reclamables === 0 ? 'Sin cruces candidatos' : `${numero(reporte.resumen.reclamables)} ${reporte.resumen.reclamables === 1 ? 'cruce candidato' : 'cruces candidatos'} para pedir revisión`)
                     : (reporte.resumen.reclamables === 0 ? 'Sin cruces para reclamar' : `${numero(reporte.resumen.reclamables)} ${reporte.resumen.reclamables === 1 ? 'cruce' : 'cruces'} para pedir revisión`)}
-                </h2>
+                </TituloRecuadro>
                 <p className="text-[12px] mt-0.5" style={{ color: 'var(--muted)' }}>
                   {reporte.proveedor ? `Proveedor ${reporte.proveedor} · ` : ''}
                   {reporte.periodoDesde && reporte.periodoHasta ? `Periodo ${reporte.periodoDesde} a ${reporte.periodoHasta} · ` : ''}
@@ -195,7 +195,7 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
           )}
 
           <section className="card p-4">
-            <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>Qué significa y qué NO afirma</h3>
+            <TituloRecuadro nivel="h3" info="peajes_reclamacion.leyendas" className="mb-2">Qué significa y qué NO afirma</TituloRecuadro>
             <ul className="space-y-1.5 text-[11px]" style={{ color: 'var(--muted)' }}>
               {reporte.leyendas.map((l) => <li key={l}>{l}</li>)}
             </ul>

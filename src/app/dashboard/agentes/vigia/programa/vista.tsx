@@ -1,6 +1,6 @@
 'use client';
 
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 import Link from 'next/link';
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
@@ -160,7 +160,7 @@ function Resultado({ resumen: r }: { resumen: ResumenPrograma }) {
   return (
     <div className="space-y-4" aria-live="polite">
       <div className="space-y-1.5">
-        <h3 className="font-display text-[14px] font-semibold">Qué entendí</h3>
+        <TituloRecuadro nivel="h3" info="vigia_programa.entendi">Qué entendí</TituloRecuadro>
         <p className="text-[13px]">
           Leí {miles(r.leidas)} {plural(r.leidas, 'fila', 'filas')} de {miles(r.dias)} {plural(r.dias, 'día', 'días')} en la terminal {r.terminal}.
           {r.totalDescartadas > 0
@@ -188,7 +188,7 @@ function Resultado({ resumen: r }: { resumen: ResumenPrograma }) {
 
       {r.descartadas.length > 0 ? (
         <div className="space-y-1.5">
-          <h3 className="font-display text-[14px] font-semibold">Lo que descarté</h3>
+          <TituloRecuadro nivel="h3" info="vigia_programa.descarte">Lo que descarté</TituloRecuadro>
           <ul className="text-[12px] space-y-0.5 list-disc pl-5">
             {r.descartadas.map((d) => <li key={d.lineaCsv}>Línea {miles(d.lineaCsv)} del archivo: {MOTIVOS[d.motivo] ?? 'no se pudo entender'}.</li>)}
           </ul>
@@ -199,7 +199,7 @@ function Resultado({ resumen: r }: { resumen: ResumenPrograma }) {
       ) : null}
 
       <div className="space-y-1.5">
-        <h3 className="font-display text-[14px] font-semibold">Por día</h3>
+        <TituloRecuadro nivel="h3" info="vigia_programa.por_dia">Por día</TituloRecuadro>
         <div className="overflow-x-auto">
           <table className="w-full text-[12px]">
             <thead>
@@ -226,7 +226,7 @@ function Resultado({ resumen: r }: { resumen: ResumenPrograma }) {
 
       {r.filasConAviso.length > 0 ? (
         <div className="space-y-1.5">
-          <h3 className="font-display text-[14px] font-semibold">Filas que conviene revisar</h3>
+          <TituloRecuadro nivel="h3" info="vigia_programa.revisar">Filas que conviene revisar</TituloRecuadro>
           <ul className="text-[12px] space-y-1">
             {r.filasConAviso.map((f) => (
               <li key={f.lineaCsv}>
@@ -266,7 +266,7 @@ export function VistaProgramaVigia({ sufijo, puedeEscribir, vigiaEncendido, acci
       ) : null}
 
       <section className="card p-4 space-y-3" aria-labelledby="programa-subir">
-        <h2 id="programa-subir" className="font-display text-[15px] font-semibold">Subir el programa del día</h2>
+        <TituloRecuadro id="programa-subir" info="vigia_programa.subir">Subir el programa del día</TituloRecuadro>
         {puedeEscribir ? (
           <FormaSubir accion={accion} />
         ) : (

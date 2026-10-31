@@ -9,6 +9,7 @@ import type { Estancia } from '@/lib/likida/conductor/estadias_anden';
 import type { ReubicacionesCliente } from '@/lib/likida/conductor/reubicaciones';
 import { AccionesHito, FormaAsignarSitios, type AccionOficinaServidor, type ModoAccion, type OpcionSitio } from './acciones-forma';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { TituloRecuadro } from '@/app/ui-v2/componentes';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -78,16 +79,16 @@ export function IndicadoresHitos({ i, dias }: { i: IndicadoresVista | null; dias
   return (
     <div>
       <TiraCifras sello={selloHoy('Viajes de la flota')}>
-        <Cifra etiqueta="Hitos reportados sin insistencia"
+        <Cifra etiqueta="Hitos reportados sin insistencia" info="conductores_tablero.sin_insistencia"
           valor={i.tasaSinInsistencia === null ? null : porcentaje(i.tasaSinInsistencia * 100, 0)}
           nota={i.recibidos === 0 ? 'ningún hito recibido en el periodo' : `de ${numero(i.recibidos)} hitos; a lo más un mensaje del agente`} />
-        <Cifra etiqueta="Tiempo medio de respuesta"
+        <Cifra etiqueta="Tiempo medio de respuesta" info="conductores_tablero.tiempo_respuesta"
           valor={i.minutosRespuestaPromedio === null ? null : minutos(i.minutosRespuestaPromedio)}
           nota={i.conRespuestaMedida === 0 ? 'ninguna solicitud con respuesta medible' : `sobre ${numero(i.conRespuestaMedida)} solicitudes contestadas`} />
-        <Cifra etiqueta="Hitos escalados" valor={numero(i.escalados)} tono={i.escalados > 0 ? 'warn' : undefined} nota="agotaron la escalera de recordatorios" />
-        <Cifra etiqueta="Validados con ubicación" valor={numero(i.validadosUbicacion)}
+        <Cifra etiqueta="Hitos escalados" info="conductores_tablero.escalados" valor={numero(i.escalados)} tono={i.escalados > 0 ? 'warn' : undefined} nota="agotaron la escalera de recordatorios" />
+        <Cifra etiqueta="Validados con ubicación" info="conductores_tablero.validados_ubicacion" valor={numero(i.validadosUbicacion)}
           nota={i.sinCoincidencia > 0 ? `${numero(i.sinCoincidencia)} sin coincidencia por revisar` : 'pin o GPS dentro del sitio'} />
-        <Cifra etiqueta="Validación en modo degradado" valor={i.tasaValidacionDegradada === null ? null : porcentaje(i.tasaValidacionDegradada * 100, 0)}
+        <Cifra etiqueta="Validación en modo degradado" info="conductores_tablero.validacion_degradada" valor={i.tasaValidacionDegradada === null ? null : porcentaje(i.tasaValidacionDegradada * 100, 0)}
           tono={i.tasaValidacionDegradada !== null && i.tasaValidacionDegradada > 0 ? 'warn' : undefined}
           nota={i.llegadasValidables === 0 ? 'ninguna llegada validable en el periodo' : `${numero(i.validacionDegradada)} de ${numero(i.llegadasValidables)} llegadas: sin geocerca o solo con el pin del chofer (sin GPS real)`} />
       </TiraCifras>
@@ -160,7 +161,7 @@ function modosDeExcepcion(e: Excepcion): ModoAccion[] {
 export function ColaExcepciones({ excepciones, puedeActuar, accion }: { excepciones: Excepcion[]; puedeActuar: boolean; accion: AccionOficinaServidor }) {
   return (
     <section className="card p-4" aria-label="Cola de excepciones">
-      <h2 className="font-display text-[15px] font-semibold mb-1">Cola de excepciones</h2>
+      <TituloRecuadro info="conductores_tablero.excepciones" className="mb-1">Cola de excepciones</TituloRecuadro>
       <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>Lo que pide una decisión tuya, lo más urgente primero.</p>
       {excepciones.length === 0 ? (
         <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Nada pendiente: ningún hito escalado, atrasado ni sin coincidencia en los viajes que se listan.</p>
@@ -364,7 +365,7 @@ export function TarjetaViaje({ f, puedeActuar, accion, accionSitios, sitios, sit
 export function EpisodiosSenalVida({ episodios, dias, hayMas }: { episodios: EpisodioVista[] | null; dias: number; hayMas?: boolean }) {
   return (
     <section className="card p-4 space-y-3" aria-label="Sin señal de vida">
-      <h2 className="font-display text-[15px] font-semibold">Sin señal de vida</h2>
+      <TituloRecuadro info="conductores_tablero.sin_senal">Sin señal de vida</TituloRecuadro>
       {episodios === null ? (
         <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudieron leer los episodios ahora mismo.</p>
       ) : episodios.length === 0 ? (
@@ -406,7 +407,7 @@ export function ReubicacionesPorCliente({ filas, csv }: { filas: ReubicacionesCl
   return (
     <section className="card p-4 space-y-3" aria-label="Reubicaciones por cliente">
       <div className="flex items-center gap-2 flex-wrap">
-        <h2 className="font-display text-[15px] font-semibold mr-2">Reubicaciones por cliente</h2>
+        <TituloRecuadro info="conductores_tablero.reubicaciones" className="mr-2">Reubicaciones por cliente</TituloRecuadro>
         {hayCsv && (
           <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`} download="reubicaciones-por-cliente.csv" className="text-[12px] underline" style={{ color: 'var(--muted)' }}>
             Descargar evidencia (CSV)
@@ -455,7 +456,7 @@ export function TableroHitos({
       <IndicadoresHitos i={indicadores} dias={dias} />
       <section className="card p-4 space-y-3" aria-label="Viajes y semáforo">
         <div className="flex items-center gap-2 flex-wrap">
-          <h2 className="font-display text-[15px] font-semibold mr-2">Viajes en curso</h2>
+          <TituloRecuadro info="conductores_tablero.viajes_en_curso" className="mr-2">Viajes en curso</TituloRecuadro>
           {ORDEN_SEMAFORO.map((s) => (
             <span key={s} className="inline-flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--muted)' }}>
               <PuntoSemaforo s={s} /><span className="cifra-mono">{numero(tablero.conteos[s])}</span>

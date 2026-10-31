@@ -3,7 +3,7 @@ import { numero } from '@/lib/formato';
 import type { ClienteRef, Tablero } from '@/lib/likida/carta_porte_docs/referencia_cliente';
 import { REFERENCIA_MAX } from '@/lib/likida/carta_porte_docs/referencia_cliente';
 import { BotonEnvio, CAMPO, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
-import { Aviso, BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
+import { Aviso, BotonEnlace, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 export interface VerComo { tenant?: string; rol?: string; vista?: string }
 
@@ -43,7 +43,7 @@ export function VistaReferencia({ tablero, clientes, exigen, folios, truncado, s
           <p className="text-[12px]"><strong>{numero(tablero.total)}</strong> {tablero.total === 1 ? 'viaje' : 'viajes'} sin referencia{truncado ? ' (la lectura llegó a su tope: faltan los más antiguos)' : ''}.</p>
           {tablero.clientes.map((c) => (
             <div key={c.clienteId} className="card p-3.5 space-y-2">
-              <h2 className="text-[13px] font-medium">{c.clienteNombre} · {numero(c.pendientes)} · el más antiguo lleva {numero(c.masAntiguoHoras)} h</h2>
+              <TituloRecuadro info="carta_porte_referencia.pendientes_cliente">{c.clienteNombre} · {numero(c.pendientes)} · el más antiguo lleva {numero(c.masAntiguoHoras)} h</TituloRecuadro>
               <ul className="space-y-2">
                 {c.viajes.slice(0, 50).map((v) => (
                   <li key={v.viajeId}>
@@ -64,7 +64,7 @@ export function VistaReferencia({ tablero, clientes, exigen, folios, truncado, s
       )}
 
       <section aria-label="Qué clientes la exigen" className="card p-3.5 space-y-2">
-        <h2 className="text-[13px] font-medium">Clientes que exigen referencia</h2>
+        <TituloRecuadro info="carta_porte_referencia.exigen">Clientes que exigen referencia</TituloRecuadro>
         {clientes.length === 0 ? <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Aún no hay clientes en la flota.</p> : (
           <ul className="space-y-1.5">
             {clientes.map((c) => (

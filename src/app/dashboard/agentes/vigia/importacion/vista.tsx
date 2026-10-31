@@ -1,6 +1,6 @@
 'use client';
 
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 import Link from 'next/link';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
@@ -129,7 +129,7 @@ function Tablero({ r }: { r: ResumenImportacion }) {
   return (
     <div className="space-y-4" aria-live="polite">
       <div className="space-y-1.5">
-        <h3 className="font-display text-[14px] font-semibold">Estatus por día</h3>
+        <TituloRecuadro nivel="h3" info="vigia_importacion.estatus_dia">Estatus por día</TituloRecuadro>
         <p className="text-[13px]" data-testid="resumen">
           {r.totalCajas === 0
             ? `No encontré cajas de importación en la terminal ${r.terminal}.`
@@ -179,7 +179,7 @@ function Tablero({ r }: { r: ResumenImportacion }) {
       ) : null}
 
       <div className="space-y-1.5">
-        <h3 className="font-display text-[14px] font-semibold">Filas que no cuadran</h3>
+        <TituloRecuadro nivel="h3" info="vigia_importacion.incoherencias">Filas que no cuadran</TituloRecuadro>
         {r.totalIncoherencias === 0 ? (
           <p className="text-[12px]" data-testid="sin-incoherencias">Ninguna fila se contradice: lo que dice TRANSITO y lo que dice CCP es coherente.</p>
         ) : (
@@ -200,7 +200,7 @@ function Tablero({ r }: { r: ResumenImportacion }) {
       </div>
 
       <div className="space-y-1.5">
-        <h3 className="font-display text-[14px] font-semibold">Comparación con Track &amp; Trace</h3>
+        <TituloRecuadro nivel="h3" info="vigia_importacion.track_trace">Comparación con Track &amp; Trace</TituloRecuadro>
         {c === null ? (
           <p className="text-[12px]" style={{ color: 'var(--muted)' }} data-testid="sin-tt">
             Track &amp; Trace todavía no está conectado: no hay con qué comparar. Cuando lo esté, aquí aparecerán las cajas donde no coincidan.
@@ -235,7 +235,7 @@ export function VistaImportacionVigia({ sufijo, accion }: { sufijo: string; acci
       </p>
 
       <section className="card p-4 space-y-3" aria-labelledby="importacion-subir">
-        <h2 id="importacion-subir" className="font-display text-[15px] font-semibold">Subir el programa del día</h2>
+        <TituloRecuadro id="importacion-subir" info="vigia_importacion.subir">Subir el programa del día</TituloRecuadro>
         <Forma accion={accion} />
       </section>
     </MarcoPagina>

@@ -9,7 +9,7 @@ import { EtiquetaSimulado } from './tablero-hitos';
 import { MENSAJE_SIN_LINEA_BASE, type Cifra as CifraDato, type InsightsConductor, type KpiPiloto } from '@/lib/likida/conductor/insights';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 export interface EsperaAceptar {
   id: string;
@@ -126,7 +126,7 @@ export function VistaAgenteConductores({
       <section className="card p-4">
         <div className="flex items-center gap-2 mb-3">
           <Sparkles width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-          <h2 className="font-display text-[15px] font-semibold">Lo que entiende por WhatsApp</h2>
+          <TituloRecuadro info="conductores.entiende">Lo que entiende por WhatsApp</TituloRecuadro>
         </div>
         <div className="grid md:grid-cols-3 gap-4 text-[12px]">
           <div>
@@ -181,26 +181,26 @@ export async function BloqueConteos({ kpis: p }: { kpis: Promise<ConteosConducto
   return (
     <div>
       <TiraCifras sello={selloHoy('Viajes de la flota')}>
-        <Cifra etiqueta="Viajes en curso" valor={kpis.vivos === null ? '—' : numero(kpis.vivos)}
+        <Cifra etiqueta="Viajes en curso" info="conductores.viajes_en_curso" valor={kpis.vivos === null ? '—' : numero(kpis.vivos)}
           nota={kpis.vivos === null ? 'no se pudo contar' : 'abiertos o en cuadre'} />
-        <Cifra etiqueta="Aceptados" valor={kpis.aceptados === null ? '—' : numero(kpis.aceptados)}
+        <Cifra etiqueta="Aceptados" info="conductores.aceptados" valor={kpis.aceptados === null ? '—' : numero(kpis.aceptados)}
           nota={kpis.aceptados === null ? 'no se pudo contar' : 'el chofer dijo que sí'} />
         {kpis.importados !== undefined && (
-          <Cifra etiqueta="En seguimiento por importación" valor={kpis.importados === null ? '—' : numero(kpis.importados)}
+          <Cifra etiqueta="En seguimiento por importación" info="conductores.importados" valor={kpis.importados === null ? '—' : numero(kpis.importados)}
             nota={kpis.importados === null ? 'no se pudo contar' : 'cargados por archivo; no los aceptó el chofer'} />
         )}
         {kpis.tiempoAceptacion !== undefined && (
-          <Cifra etiqueta="Tiempo en aceptar"
+          <Cifra etiqueta="Tiempo en aceptar" info="conductores.tiempo_aceptar"
             valor={kpis.tiempoAceptacion === null || kpis.tiempoAceptacion.minutos === null
               ? '—' : `${numero(Math.round(kpis.tiempoAceptacion.minutos * 10) / 10)} min`}
             nota={kpis.tiempoAceptacion === null ? 'no se pudo medir'
               : kpis.tiempoAceptacion.minutos === null ? 'aún sin aceptaciones del chofer que medir'
                 : `media de ${numero(kpis.tiempoAceptacion.n)} aceptados por el chofer (200 viajes recientes); no cuenta ${numero(kpis.tiempoAceptacion.excluidosImportados)} por importación`} />
         )}
-        <Cifra etiqueta="Esperan aceptar" valor={kpis.esperan === null ? '—' : numero(kpis.esperan)}
+        <Cifra etiqueta="Esperan aceptar" info="conductores.esperan" valor={kpis.esperan === null ? '—' : numero(kpis.esperan)}
           nota={kpis.esperan === null ? 'no se pudo contar' : undefined}
           tono={(kpis.esperan ?? 0) > 0 ? 'warn' : undefined} />
-        <Cifra etiqueta="Escalados" valor={kpis.escalados === null ? '—' : numero(kpis.escalados)}
+        <Cifra etiqueta="Escalados" info="conductores.escalados" valor={kpis.escalados === null ? '—' : numero(kpis.escalados)}
           nota={kpis.escalados === null ? 'no se pudo contar' : 'esperan cambio de chofer'}
           tono={(kpis.escalados ?? 0) > 0 ? 'bad' : undefined} />
       </TiraCifras>
@@ -228,7 +228,7 @@ export async function BloqueCola({ cola, sufijo }: {
   return (
     /* La cola honesta de aceptación */
     <section className="card p-4 flex flex-col">
-      <h2 className="font-display text-[15px] font-semibold mb-1">Esperan aceptar</h2>
+      <TituloRecuadro info="conductores.cola" className="mb-1">Esperan aceptar</TituloRecuadro>
       <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
         Avisados sin respuesta — a las {HORAS_PARA_ESCALAR} horas el agente escala al jefe solo
       </p>
@@ -295,7 +295,7 @@ async function BloqueBitacora({ eventos: p }: { eventos: Promise<EventoConductor
   return (
     /* Bitácora */
     <section className="card p-4 flex flex-col">
-      <h2 className="font-display text-[15px] font-semibold mb-1">Bitácora</h2>
+      <TituloRecuadro info="conductores.bitacora" className="mb-1">Bitácora</TituloRecuadro>
       <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
         Los últimos sellos, sobre los 60 viajes más recientes
       </p>
@@ -426,15 +426,16 @@ export function TarjetaInsights({ insights, dias, discrepancias = null, recortad
   const ex = insights.excepciones;
   const seccion = (titulo: string, lineas: string[]) => (
     <div>
+      {/* sin-info: subtítulo de una de las tres columnas del recuadro de insights, que lleva su propia ⓘ */}
       <h3 className="text-[11px] uppercase tracking-wide" style={{ color: 'var(--muted)' }}>{titulo}</h3>
       <ul className="mt-1 space-y-1 text-[13px]">{lineas.map((l, k) => <li key={k}>{l}</li>)}</ul>
     </div>
   );
   return (
     <section aria-label="Insights del agente" className="hairline rounded-xl px-4 py-4 space-y-3" style={{ background: 'var(--canvas)' }}>
-      <div className="flex items-center gap-2 text-[13px] font-medium">
+      <div className="flex items-center gap-2">
         <Sparkles width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-        Insights de los últimos {numero(dias)} {dias === 1 ? 'día' : 'días'}
+        <TituloRecuadro info="conductores.insights">Insights de los últimos {numero(dias)} {dias === 1 ? 'día' : 'días'}</TituloRecuadro>
       </div>
       <div className="grid md:grid-cols-3 gap-4">
         {seccion('Qué pasó', t.quePaso)}
@@ -442,7 +443,7 @@ export function TarjetaInsights({ insights, dias, discrepancias = null, recortad
         {seccion('Qué hacer', t.queHacer)}
       </div>
       <section aria-label="KPIs del piloto" className="space-y-1">
-        <h3 className="text-[11px] uppercase tracking-wide" style={{ color: 'var(--muted)' }}>KPIs del piloto</h3>
+        <TituloRecuadro nivel="h3" info="conductores.kpis_piloto">KPIs del piloto</TituloRecuadro>
         <ul className="space-y-1">
           {insights.kpisPiloto.map((k) => {
             const t2 = textoKpiPiloto(k);

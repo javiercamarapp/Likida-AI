@@ -6,7 +6,7 @@ import { FilaTextoSinSitio, FormaImportarEquivalencias } from './formas_equivale
 import { FormaCatalogo } from './formas_catalogo';
 import { FormaEstadoSitio } from './formas_estado';
 import { FormaImportar, FormaSitio, SITIO_VACIO, type AccionSitio, type SitioEditable } from './formas';
-import { MarcoPagina, Aviso, BotonEnlace } from '@/app/ui-v2/componentes';
+import { MarcoPagina, Aviso, BotonEnlace, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 // SOLO tipos: la vista no debe arrastrar al bundle el acceso a datos.
 
@@ -57,7 +57,7 @@ export function VistaSitios(p: PropsVistaSitios) {
 
       <section className="card p-4 space-y-3" aria-label="Sitios registrados">
         <div className="flex items-center gap-3 flex-wrap">
-          <h2 className="font-display text-[15px] font-semibold">Sitios registrados</h2>
+          <TituloRecuadro info="conductores_sitios.registrados">Sitios registrados</TituloRecuadro>
           <form method="get" className="ml-auto flex items-center gap-2">
             {p.sufijo.startsWith('?') && [...new URLSearchParams(p.sufijo.slice(1))].map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
             <input type="search" name="q" defaultValue={p.busqueda} placeholder="Buscar por nombre o código" className="hairline rounded-lg px-2.5 h-8 text-[12px]" aria-label="Buscar sitios" />
@@ -109,13 +109,13 @@ export function VistaSitios(p: PropsVistaSitios) {
       {p.puedeEditar ? (
         <>
           <section className="card p-4 space-y-3" aria-label={p.editando ? 'Editar sitio' : 'Nuevo sitio'}>
-            <h2 className="font-display text-[15px] font-semibold">{p.editando ? `Editar «${p.editando.nombre}»` : 'Nuevo sitio'}</h2>
+            <TituloRecuadro info="conductores_sitios.formulario">{p.editando ? `Editar «${p.editando.nombre}»` : 'Nuevo sitio'}</TituloRecuadro>
             {avisoSelector && <p role="status" className="text-[11px]" style={{ color: 'var(--warn)' }}>{avisoSelector}</p>}
             <FormaSitio key={p.editando?.id ?? 'nuevo'} accion={p.accionGuardar} inicial={p.editando ? aEditable(p.editando) : SITIO_VACIO} clientes={p.clientes} padres={padres} />
             {p.editando && <Link href={`/dashboard/agentes/conductores/sitios${p.sufijo}`} className="text-[12px] underline" style={{ color: 'var(--muted)' }}>Cancelar la edición</Link>}
           </section>
           <section className="card p-4 space-y-3" aria-label="Importar CSV">
-            <h2 className="font-display text-[15px] font-semibold">Importar desde CSV</h2>
+            <TituloRecuadro info="conductores_sitios.importar_csv">Importar desde CSV</TituloRecuadro>
             <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
               Columnas: <code>codigo, nombre, tipo, lat, lng, radio_m, direccion, cliente, padre</code>. Todo o nada: si una fila falla, no se importa ninguna y te
               decimos cuál corregir. Re-importar el mismo archivo actualiza por <code>codigo</code>; no duplica.
@@ -134,7 +134,7 @@ export function VistaSitios(p: PropsVistaSitios) {
 
       {p.puedeEditar && p.accionCatalogo && (
         <section className="card p-4 space-y-3" aria-label="Catálogo depurado de orígenes y destinos">
-          <h2 className="font-display text-[15px] font-semibold">Catálogo depurado de orígenes y destinos</h2>
+          <TituloRecuadro info="conductores_sitios.catalogo_depurado">Catálogo depurado de orígenes y destinos</TituloRecuadro>
           <p className="text-[12px] max-w-[80ch]" style={{ color: 'var(--muted)' }}>
             Sin tope de filas. Columnas: <code>nombre, lat, lng, estatus, terminal, pais</code> (y opcionales <code>codigo, radio_m, direccion, tipo</code>).
             Los posibles duplicados (mismo nombre o a 100 m o menos) <strong>se reportan, nunca se fusionan solos</strong>. Las coordenadas ausentes, (0, 0),
@@ -147,7 +147,7 @@ export function VistaSitios(p: PropsVistaSitios) {
 
       {p.textosSinSitio !== undefined && (
         <section className="card p-4 space-y-3" aria-label="Textos sin sitio">
-          <h2 className="font-display text-[15px] font-semibold">Textos sin sitio</h2>
+          <TituloRecuadro info="conductores_sitios.textos_sin_sitio">Textos sin sitio</TituloRecuadro>
           <p className="text-[12px] max-w-[80ch]" style={{ color: 'var(--muted)' }}>
             El origen y el destino de un viaje llegan como texto libre. Estos son los {TOP_TEXTOS_SIN_SITIO} textos más frecuentes de los viajes abiertos
             de los últimos {DIAS_TEXTOS_SIN_SITIO} días que todavía no se ligan a ningún sitio: sin sitio no hay llegada que validar. Dile al sistema qué es cada
@@ -194,7 +194,7 @@ export function VistaSitios(p: PropsVistaSitios) {
           )}
           {p.puedeEditar && p.accionImportarEquivalencias && (
             <div className="space-y-3 pt-2">
-              <h3 className="font-display text-[13px] font-semibold">Importar equivalencias desde CSV</h3>
+              <TituloRecuadro nivel="h3" info="conductores_sitios.importar_equivalencias">Importar equivalencias desde CSV</TituloRecuadro>
               <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
                 Columnas: <code>texto, geocerca_codigo, tipo, lado</code>. <code>tipo</code>: <code>sitio</code>, <code>sin_sitio</code> (instrucción) o <code>ignorar</code>;
                 <code> lado</code>: origen, destino o ambos (vacío = ambos). Cada fila se aprueba o se rechaza sola y te decimos cuál y por qué; las filas sin

@@ -1,6 +1,6 @@
 'use client';
 
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 import Link from 'next/link';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
@@ -282,9 +282,10 @@ export function VistaAvisosVigia({ sufijo, grupos, total, hayMas = false, soloPe
 
       {grupos.map((g) => (
         <section key={g.fecha || 'sin-fecha'} className="space-y-3" aria-labelledby={`dia-${g.fecha || 'sin-fecha'}`}>
-          <h2 id={`dia-${g.fecha || 'sin-fecha'}`} className="font-display text-[15px] font-semibold">{dia(g.fecha)}</h2>
+          <TituloRecuadro id={`dia-${g.fecha || 'sin-fecha'}`} info="vigia_avisos.dia">{dia(g.fecha)}</TituloRecuadro>
           {g.clientes.map((c) => (
             <div key={c.cliente} className="space-y-2">
+              {/* sin-info: nombre del cliente que agrupa las tarjetas de un día, dentro del recuadro del día que lleva su ⓘ */}
               <h3 className="text-[12px] font-medium" style={{ color: 'var(--muted)' }}>{c.cliente}</h3>
               {c.tarjetas.map((t) => <Tarjeta key={t.id} t={t} accion={accion} puedeDecidir={puedeDecidir} />)}
             </div>

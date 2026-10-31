@@ -6,7 +6,7 @@ import type { InsightsAgente, CalidadGrupo, TarjetaInsight } from '@/lib/likida/
 import { aCsvSinCcp, type ListadoSinCcp, type ColorAntiguedad } from '@/lib/likida/carta_porte_docs/viajes_sin_ccp';
 import { EstadoError, EstadoVacio } from '../../estados';
 import { DireccionBuzon } from '../proveedores/controles';
-import { MarcoPagina, Aviso } from '@/app/ui-v2/componentes';
+import { MarcoPagina, Aviso, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /**
  * La ventana del Agente de Carta Porte (Fases B-C del blueprint): los conteos
@@ -67,7 +67,7 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
           </div>
 
           <section className="card p-4 space-y-3">
-            <h2 className="font-display text-[15px] font-semibold">Esperando al jefe</h2>
+            <TituloRecuadro info="carta_porte_agente.cola">Esperando al jefe</TituloRecuadro>
             {cola.length === 0 ? (
               <EstadoVacio icono={<ScrollText width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
                 Nada pendiente de declarar: cada viaje en curso ya tiene su veredicto (o no hay
@@ -120,7 +120,7 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
       <section className="card p-4">
         <div className="flex items-center gap-2 mb-3">
           <Sparkles width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-          <h2 className="font-display text-[15px] font-semibold">Lo que hace, y lo que jamás hará</h2>
+          <TituloRecuadro info="carta_porte_agente.alcance">Lo que hace, y lo que jamás hará</TituloRecuadro>
         </div>
         <div className="grid md:grid-cols-3 gap-4 text-[12px]">
           <div>
@@ -175,7 +175,7 @@ function ComoMandarDocumentos({ buzon, sufijo }: { buzon: BuzonCartaPorteVista |
   const panel = `/dashboard/carta-porte/documentos${sufijo}`;
   return (
     <section className="card p-4 space-y-3" aria-labelledby="cp-como-mandar">
-      <h2 id="cp-como-mandar" className="font-display text-[15px] font-semibold">Cómo mandarme documentos</h2>
+      <TituloRecuadro id="cp-como-mandar" info="carta_porte_agente.como_mandar">Cómo mandarme documentos</TituloRecuadro>
       <div className="grid md:grid-cols-3 gap-4 text-[12px]">
         <div className="space-y-1.5">
           <div className="etiqueta-mono text-[11px] uppercase flex items-center gap-1" style={{ color: 'var(--faint)' }}>
@@ -276,7 +276,7 @@ function InsightsDelAgente({ insights, nombresCliente, diasVentana }: { insights
   const hayAlgo = i.aprobados > 0 || e.enviados + e.rechazadosTms + e.pendientesReque + e.subidosAMano > 0 || (i.causasRechazo?.length ?? 0) > 0;
   return (
     <section className="space-y-3" aria-label="Cómo le va al agente">
-      <h2 className="font-display text-[15px] font-semibold">Cómo le va al agente <span className="text-[12px] font-normal" style={{ color: 'var(--muted)' }}>· últimos {diasVentana} días</span></h2>
+      <TituloRecuadro info="carta_porte_agente.resultados">Cómo le va al agente <span className="text-[12px] font-normal" style={{ color: 'var(--muted)' }}>· últimos {diasVentana} días</span></TituloRecuadro>
       {i.parcial && (
         <p className="text-[12px]" role="note" style={{ color: 'var(--warn)' }}>
           Cifras de los {numero(i.parcial.leidos)} documentos más recientes de {numero(i.parcial.total)} de los últimos {diasVentana} días: son parciales.
@@ -343,7 +343,7 @@ function ViajesSinCcp({ listado }: { listado: ListadoSinCcp | 'no_leido' }) {
   if (listado.sinDatosTms?.motivo === 'sin_viajes') {
     return (
       <section className="space-y-3" aria-label="Viajes salidos sin Carta Porte">
-        <h2 className="font-display text-[15px] font-semibold">Viajes salidos sin Carta Porte</h2>
+        <TituloRecuadro info="carta_porte_agente.sin_ccp">Viajes salidos sin Carta Porte</TituloRecuadro>
         <p role="alert" className="card p-4 text-[13px]" style={{ color: 'var(--warn)' }}>
           <strong>Sin datos del TMS:</strong> no se puede decir si hay viajes salidos sin Carta Porte. No hay ningún viaje importado del sistema de transporte en los últimos días
           {listado.sinDatosTms.ultimoImportadoEn ? ` (el último que entró fue hace ${numero(listado.sinDatosTms.horasDesdeImportacion ?? 0)} h)` : ''}.
@@ -358,7 +358,7 @@ function ViajesSinCcp({ listado }: { listado: ListadoSinCcp | 'no_leido' }) {
   return (
     <section className="space-y-3" aria-label="Viajes salidos sin Carta Porte">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h2 className="font-display text-[15px] font-semibold">Viajes salidos sin Carta Porte <span className="text-[12px] font-normal" style={{ color: 'var(--muted)' }}>· {numero(listado.total)}</span></h2>
+        <TituloRecuadro info="carta_porte_agente.sin_ccp">Viajes salidos sin Carta Porte <span className="text-[12px] font-normal" style={{ color: 'var(--muted)' }}>· {numero(listado.total)}</span></TituloRecuadro>
         {!listado.vacio && (
           <a download="viajes-sin-carta-porte.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(aCsvSinCcp(listado))}`}
             className="text-[12px] font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>Descargar reporte (CSV)</a>

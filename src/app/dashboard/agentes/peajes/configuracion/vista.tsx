@@ -14,7 +14,8 @@ import { SeccionUmbralesAvisos, type UmbralesAvisosVista } from './umbrales-avis
 import { SeccionCruceViajes, type CruceViajesVista } from './cruce-viajes';
 import { SeccionInmovilizadas, type InmovilizadasConfigVista } from './inmovilizadas';
 import { SeccionClasesCobro, type ClasesCobroVista } from './clases-cobro';
-import { MarcoPagina, BotonEnlace } from '@/app/ui-v2/componentes';
+import { MarcoPagina, BotonEnlace, TituloRecuadro } from '@/app/ui-v2/componentes';
+import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 
 type Accion = (fd: FormData) => Promise<void>;
 
@@ -117,10 +118,10 @@ export function VistaConfiguracionPeajes({
   );
 }
 
-function Titulo({ t, nota }: { t: string; nota: React.ReactNode }) {
+function Titulo({ t, nota, info }: { t: string; nota: React.ReactNode; info: InfoClave }) {
   return (
     <>
-      <h2 className="font-display text-[15px] font-semibold mb-1">{t}</h2>
+      <TituloRecuadro info={info} className="mb-1">{t}</TituloRecuadro>
       <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>{nota}</p>
     </>
   );
@@ -136,7 +137,7 @@ const ETIQUETA_ESTADO: Record<string, string> = { pendiente: 'en cola', procesan
 function SeccionBuzon({ buzon, archivos, acciones, sufijo }: { buzon: BuzonVista; archivos: ArchivoIngestaVista[] | null; acciones: AccionesConfiguracion; sufijo: string }) {
   return (
     <section className="card p-4" id="buzon">
-      <Titulo t="Buzón automático del proveedor"
+      <Titulo t="Buzón automático del proveedor" info="peajes_config.buzon"
         nota="El sistema del proveedor (o un script de la flota) manda el archivo de cada corte a este buzón firmado y el agente lo importa y lo cruza solo, cada 15 minutos. Sin esto, alguien tiene que subirlo a mano." />
       {!buzon.secretoConfigurado && (
         <p className="text-[12px] mb-3" style={{ color: 'var(--warn)' }}>
@@ -188,7 +189,7 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo }: { buzon: BuzonVista
         </div>
       )}
 
-      <h3 className="etiqueta-mono text-[11px] uppercase mt-5 mb-2" style={{ color: 'var(--faint)' }}>Archivos recibidos</h3>
+      <TituloRecuadro nivel="h3" info="peajes_config.archivos_recibidos" className="mt-5 mb-2">Archivos recibidos</TituloRecuadro>
       {archivos === null ? <NoSePudoLeer que="los archivos recibidos" /> : archivos.length === 0 ? (
         <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
           Aún no se ha recibido ningún archivo por el buzón.
@@ -244,7 +245,7 @@ function Campo({ etiqueta, valor }: { etiqueta: string; valor: string }) {
 function SeccionMapeo({ mapeos, acciones }: { mapeos: MapeoVista[] | null; acciones: AccionesConfiguracion }) {
   return (
     <section className="card p-4" id="mapeo">
-      <Titulo t="Mapeo de columnas por proveedor"
+      <Titulo t="Mapeo de columnas por proveedor" info="peajes_config.mapeo"
         nota={<>El lector detecta las columnas por su nombre. Si un proveedor usa otros encabezados (o el lector te dijo «no encontré la columna…»),
           declara aquí cuál es cuál: por el <b>encabezado exacto</b> («Fecha de cobro») o por la <b>letra de la columna</b> («C»). Fecha, caseta e importe son obligatorios; hora, TAG, unidad y clase, opcionales (si no los declaras, se buscan por nombre: «Tarjeta IDMX», «No. economico», «Clase»).</>} />
       {mapeos === null ? <NoSePudoLeer que="los mapeos" /> : mapeos.length === 0 ? (
@@ -309,7 +310,7 @@ function SubirCsv({ accion, etiqueta, extra }: { accion: Accion; etiqueta: strin
 function SeccionTags({ tags, unidades, acciones }: { tags: TagVista[] | null; unidades: Array<{ id: string; numeroEconomico: string; placas: string | null }> | null; acciones: AccionesConfiguracion }) {
   return (
     <section className="card p-4" id="tags">
-      <Titulo t="TAGs de telepeaje por unidad"
+      <Titulo t="TAGs de telepeaje por unidad" info="peajes_config.tags"
         nota={<>Qué TAG es de qué camión. Con esto el cruce sabe <b>qué unidad pasó</b> aunque el chofer no fotografíe el ticket, desempata entre dos gastos iguales y avisa si el TAG es de otra unidad que la del viaje.
           Carga masiva por CSV con columnas <span className="cifra-mono">tag; unidad; proveedor</span> (unidad = número económico o placas).</>} />
       <SubirCsv accion={acciones.importarTags} etiqueta="CSV de TAGs" />
@@ -365,7 +366,7 @@ function SeccionTags({ tags, unidades, acciones }: { tags: TagVista[] | null; un
 function SeccionCasetas({ casetas, acciones }: { casetas: CasetaVista[] | null; acciones: AccionesConfiguracion }) {
   return (
     <section className="card p-4" id="casetas">
-      <Titulo t="Catálogo de casetas"
+      <Titulo t="Catálogo de casetas" info="peajes_config.casetas"
         nota={<>Las casetas por NOMBRE (lo único obligatorio), con opcionalmente su carretera, si <b>cobra por pasada</b> (la clase 1 es normal ahí) y sus coordenadas, para validar con el GPS que la unidad estuvo ahí a la hora del cobro
           (distancia Haversine). <b>Nace vacío a propósito</b>: Likida no inventa coordenadas. Acepta la plantilla del catálogo tal cual (sus encabezados largos) o un CSV
           <span className="cifra-mono"> nombre; carretera; por pasada; lat; lng; radio_m; alias; fuente</span> (grados decimales; radio de 50 a 5,000 m, 300 si lo omites;
@@ -403,7 +404,7 @@ function SeccionCasetas({ casetas, acciones }: { casetas: CasetaVista[] | null; 
 function SeccionGeocercas({ geocercas, tipos, acciones }: { geocercas: GeocercaVista[] | null; tipos: string[]; acciones: AccionesConfiguracion }) {
   return (
     <section className="card p-4" id="geocercas">
-      <Titulo t="Geocercas"
+      <Titulo t="Geocercas" info="peajes_config.geocercas"
         nota="Círculos (centro y radio) para patios, orígenes, destinos y puntos de interés. Las usan estadías, el briefing y la facturación; hasta hoy nadie podía crearlas desde el panel. Mismo nombre = se actualiza." />
       <form action={acciones.guardarGeocerca} className="flex items-end gap-2 flex-wrap">
         <Entrada nombre="nombre" etiqueta="Nombre" ph="Patio Querétaro" requerido />
@@ -451,7 +452,7 @@ function SeccionCursos({ cursos, unidades, convenios, acciones }: {
   const conv = new Map((convenios ?? []).map((c) => [c.id, c.nombre]));
   return (
     <section className="card p-4" id="cursos">
-      <Titulo t="Cursos (rutas autorizadas)"
+      <Titulo t="Cursos (rutas autorizadas)" info="peajes_config.cursos"
         nota={<>Las casetas que cada unidad, o cada convenio A→B, puede cruzar. Un pase en una caseta que <b>no</b> está en el curso aparece en el reporte de reclamación como
           «Cruce fuera de curso» (confianza media: el curso lo declara la flota). Sin curso declarado no se reclama nada por este motivo. Carga tu CSV o Excel
           <span className="cifra-mono"> codigo; nombre; unidad; convenio; casetas</span> (una fila por curso; las casetas, en orden de recorrido y separadas por «|»; deben existir en el catálogo de casetas;

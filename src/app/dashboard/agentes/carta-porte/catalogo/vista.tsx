@@ -10,7 +10,7 @@ import { plantillaCsv, TIPOS_PLANTILLA, type Registro, type TipoPlantilla } from
 import { COLUMNAS_CLAVE, ROTULO_COLUMNA, columnasDeFila, filtrarFilas, valoresDeFormulario, type FilasCatalogo } from '@/lib/likida/carta_porte_docs/catalogo_pantalla';
 import { Aviso, BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
 import type { EstadoImportacion } from './actions';
-import { Aviso as AvisoV2, BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
+import { Aviso as AvisoV2, BotonEnlace, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /**
  * LA PANTALLA «CATÁLOGO DEL CLIENTE» (T-A3-22): lo que el agente aprende UNA vez de cada cliente y usa en cada documento.
@@ -134,7 +134,7 @@ function Tabla({ tipo, titulo, filas, clienteId, ver, acciones }: { tipo: TipoPl
   return (
     <section aria-label={titulo} className="card p-4 space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h2 className="text-[13px] font-medium">{titulo} <span className="font-normal" style={{ color: 'var(--faint)' }}>({fmtNumero(filas.length)})</span></h2>
+        <TituloRecuadro info={tipo === 'producto' ? 'carta_porte_catalogo.productos' : 'carta_porte_catalogo.partes'}>{titulo} <span className="font-normal" style={{ color: 'var(--faint)' }}>({fmtNumero(filas.length)})</span></TituloRecuadro>
         {filas.length > 0 && (
           <div className="min-w-[220px]">
             <label htmlFor={idFiltro} className={ETIQUETA}>Filtrar</label>
@@ -174,7 +174,7 @@ function Tabla({ tipo, titulo, filas, clienteId, ver, acciones }: { tipo: TipoPl
 function Numero({ fila, clienteId, ver, acciones }: { fila: Registro | null; clienteId: string; ver: VerComo; acciones: AccionesCatalogo }) {
   return (
     <section aria-label="Número interno del cliente" className="card p-4 space-y-2">
-      <h2 className="text-[13px] font-medium">Número interno del cliente</h2>
+      <TituloRecuadro info="carta_porte_catalogo.numero_interno">Número interno del cliente</TituloRecuadro>
       <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
         Es el número con el que el sistema de la empresa conoce al cliente que paga. Si falta o está mal, el documento no se liga: el agente no lo inventa.
       </p>
@@ -190,7 +190,7 @@ function Importador({ ver, importar }: { ver: VerComo; importar: AccionesCatalog
   const [archivo, setArchivo] = useState<File | null>(null);
   return (
     <section aria-label="Importar un CSV" className="card p-4 space-y-3">
-      <h2 className="text-[13px] font-medium flex items-center gap-1.5"><Upload width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />Importar un CSV</h2>
+      <TituloRecuadro info="carta_porte_catalogo.importar"><Upload width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />Importar un CSV</TituloRecuadro>
       <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
         Descarga la plantilla, llénala (una fila por cliente y producto, remitente o destinatario) y súbela. Primero ves cuántas filas son nuevas, cuántas cambian y cuáles traen error; nada se guarda hasta que confirmes.
       </p>
@@ -269,7 +269,7 @@ export function VistaCatalogo({ clientes, clienteId, catalogo, lecturaFallida = 
       <Importador ver={ver} importar={acciones.importar} />
 
       <section aria-label="Cliente" className="card p-4 space-y-3">
-        <h2 className="text-[13px] font-medium">Cliente</h2>
+        <TituloRecuadro info="carta_porte_catalogo.cliente">Cliente</TituloRecuadro>
         {clientes.length === 0 ? (
           <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Aún no hay clientes en tu flota: el catálogo se arma por cliente. Da de alta uno primero.</p>
         ) : (
