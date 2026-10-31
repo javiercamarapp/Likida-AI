@@ -6,6 +6,13 @@ import '../fonts.css';
 import '../componentes.css';
 import '../marco-publico.css';
 
+const ENLACES_PIE = [
+  { href: '/terminos', texto: 'Términos' },
+  { href: '/privacidad', texto: 'Privacidad' },
+  { href: '/seguridad', texto: 'Seguridad' },
+  { href: '/estado', texto: 'Estado' },
+] as const;
+
 /**
  * EL MARCO ÚNICO de las páginas de acceso y públicas (L9a): cabecera con el logo oficial, columna de lectura, rótulo mono +
  * título + UNA línea de apoyo, acciones (con `.rv-btn`) y pie con los enlaces legales. Se pinta bajo `data-ui="v2"` y `tema-neutro`
@@ -15,7 +22,7 @@ import '../marco-publico.css';
  * `ancho`: `estrecho` (440, tarjetas de cuenta) · `lectura` (680, texto) · `ancho` (1040, listas y formularios).
  */
 export function MarcoPublico({
-  rotulo, titulo, idTitulo = 'titulo-pagina', apoyo, acciones, children, ancho = 'lectura', centrado = false, derecha, pie, sinCabecera = false,
+  rotulo, titulo, idTitulo = 'titulo-pagina', apoyo, acciones, children, ancho = 'lectura', centrado = false, derecha, pie, sinCabecera = false, enlaces = ENLACES_PIE,
 }: {
   rotulo?: string;
   titulo: string;
@@ -29,10 +36,12 @@ export function MarcoPublico({
   derecha?: ReactNode;
   pie?: ReactNode;
   sinCabecera?: boolean;
+  /** Enlaces del pie. Los documentos legales con huella de texto (`lib/legal/huella_texto`) pasan los suyos para no cambiar su texto visible. */
+  enlaces?: ReadonlyArray<{ href: string; texto: string }>;
 }) {
   return (
     <div data-ui="v2" className="tema-neutro rv-pub">
-      <a href="#contenido-publico" className="rv-pub__salto">Saltar al contenido</a>
+      <a href="#contenido-publico" className="rv-pub__salto" aria-label="Saltar al contenido" />
       {!sinCabecera && (
         <header className="rv-pub__cab">
           <Link href="/" aria-label="Likida, inicio"><Logo alto="h-6" /></Link>
@@ -53,10 +62,7 @@ export function MarcoPublico({
       <footer className="rv-pub__pie">
         {pie ?? <p>Likida · Liquidación de viajes por WhatsApp</p>}
         <nav aria-label="Legal">
-          <Link href="/terminos">Términos</Link>
-          <Link href="/privacidad">Privacidad</Link>
-          <Link href="/seguridad">Seguridad</Link>
-          <Link href="/estado">Estado</Link>
+          {enlaces.map((e) => <Link key={e.href} href={e.href}>{e.texto}</Link>)}
         </nav>
       </footer>
     </div>

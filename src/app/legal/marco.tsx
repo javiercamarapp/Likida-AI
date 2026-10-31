@@ -52,6 +52,12 @@ export function FaltaDato({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Los mismos dos enlaces de siempre: el texto visible de /terminos y /privacidad tiene huella registrada (lib/legal/huella_texto).
+const ENLACES_LEGALES = [
+  { href: '/terminos', texto: 'Términos de servicio' },
+  { href: '/privacidad', texto: 'Política de privacidad' },
+] as const;
+
 export function PaginaLegal({
   etiqueta, bajada, secciones, aviso, pie, vigenteDesde,
 }: {
@@ -84,6 +90,7 @@ export function PaginaLegal({
       titulo="Likida"
       apoyo={`Vigente desde el ${fechaMx(vigenteDesde)} · ${bajada}`}
       pie={pie ?? undefined}
+      enlaces={ENLACES_LEGALES}
     >
       {aviso}
 
