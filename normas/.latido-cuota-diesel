@@ -1,41 +1,49 @@
 INFRA egress bloqueado a sidofqa.segob.gob.mx
 
-fecha_corrida: 2026-09-12
-viernes_objetivo: 2026-09-11
-estado: "INFRA — egress bloqueado, no se pudo consultar el DOF para el viernes 11-sep"
+fecha_corrida: 2026-10-31
+viernes_objetivo: 2026-10-30
+estado: "INFRA — egress bloqueado, no se pudo consultar el DOF para el viernes 30-oct"
 detalle: >
-  Corrida desde la sesion en la nube (routine automatica). curl y WebFetch a
-  https://sidofqa.segob.gob.mx/dof/sidof/notas/11-09-2026 fallan los dos:
-  curl -> CONNECT tunnel failed, response 403 (proxy status endpoint registra
-  "connect_rejected: gateway answered 403 to CONNECT (policy denial or
-  upstream failure)" para sidofqa.segob.gob.mx:443); WebFetch -> EGRESS_BLOCKED
-  domain sidofqa.segob.gob.mx. No es el fallo "200 con arrays vacios" que el
-  procedimiento distingue como caso normal de "sin publicacion" — aqui la
-  solicitud nunca llega al SIDOF, la bloquea el proxy de salida de ESTE
-  entorno antes de tocar la red. Por eso se reporta INFRA y no SIN CAMBIOS ni
-  FALTA CUOTA: no hay evidencia de si el acuerdo del 11-sep existe o no.
-  Es la MISMA falla ya documentada en este archivo el 22-ago-2026 (bloqueo de
-  egress de la routine en la nube a este host) — recurrente, no resuelta de
-  raiz, aunque corridas intermedias (28-ago, 04-sep) sí lograron salir.
-  README del proxy de egress instruye no reintentar denegaciones de política
-  (403/407), así que no se insistió con más llamadas.
+  Corrida desde la sesion en la nube (routine automatica). Dos intentos
+  independientes, ambos bloqueados antes de tocar la red real:
+  curl -> "CONNECT tunnel failed, response 403" contra
+  https://sidofqa.segob.gob.mx/dof/sidof/notas/30-10-2026 (el status del
+  proxy de egress lo registra como "connect_rejected: gateway answered 403
+  to CONNECT (policy denial or upstream failure)"); WebFetch al mismo host ->
+  "getaddrinfo ENOTFOUND sidofqa.segob.gob.mx" (host fuera de los dominios
+  permitidos de esta sesion). No es el caso "200 con arrays vacios" que el
+  procedimiento distingue como "sin publicacion" — la solicitud nunca llega
+  al SIDOF. El README del proxy instruye no reintentar denegaciones de
+  politica (403/407), asi que no se insistio con mas llamadas.
+  ES LA MISMA FALLA ya documentada en este archivo el 22-ago y el 12-sep-2026
+  (bloqueo de egress de la routine en la nube a este host) — pero esta vez
+  NINGUNA corrida intermedia logro salir desde el 12-sep: el bloqueo lleva
+  ya 7 semanas corridas sin resolverse, no un incidente aislado.
 cuota_vigente_en_repo: >
   0.6787 $/litro (vigencia 2026-09-05 a 2026-09-11, DOF 04-sep vespertina,
-  codNota 5798037) — VENCIDA a partir de hoy, sabado 12-sep-2026. No se agrego
-  ninguna fila nueva a normas/datos/cuota-ieps-diesel.yaml en esta corrida.
+  codNota 5798037) — es la MISMA que ya estaba VENCIDA en el latido del
+  12-sep-2026. No se agrego ninguna fila nueva a
+  normas/datos/cuota-ieps-diesel.yaml en esta corrida ni en ninguna desde esa
+  fecha.
+semanas_sin_capturar: >
+  Ocho vigencias completas sin verificar, cada una con su propio acuerdo
+  de viernes vespertina pendiente de consultar: 2026-09-12 a 2026-09-18
+  (fuente 11-sep), 2026-09-19 a 2026-09-25 (18-sep), 2026-09-26 a 2026-10-02
+  (25-sep), 2026-10-03 a 2026-10-09 (02-oct), 2026-10-10 a 2026-10-16
+  (09-oct), 2026-10-17 a 2026-10-23 (16-oct), 2026-10-24 a 2026-10-30
+  (23-oct) y 2026-10-31 a 2026-11-06 (30-oct, la de esta corrida). Ninguna
+  tiene evidencia de si el acuerdo correspondiente existe o no — el bloqueo
+  es de salida de red, no de ausencia de publicacion.
 riesgo: >
-  Desde hoy sabado 12-sep-2026 no hay cuota disminuida vigente en el repo para
-  ningun viaje que se liquide con fecha 12-sep en adelante. El motor no puede
-  calcular el estimulo de IEPS diesel en pesos para esas liquidaciones hasta
-  que se capture el acuerdo de la semana 12-18 sep (que deberia haber salido
-  el viernes 11-sep, edicion vespertina, y no se pudo verificar en esta
-  corrida por el bloqueo de egress, no porque se confirmara su ausencia).
+  Desde el sabado 12-sep-2026 no hay cuota disminuida vigente en el repo
+  para NINGUN viaje que se liquide con fecha 12-sep en adelante — son ya 7
+  semanas completas. El motor no puede calcular el estimulo de IEPS diesel
+  en pesos para esas liquidaciones. El hueco crece una semana mas cada
+  viernes que pasa sin que se repare la salida de red de esta routine.
 accion_requerida: >
-  No se abre PR: no hay dato verificado que registrar. Repetir la captura
-  desde un entorno con salida real a sidofqa.segob.gob.mx (sesion local, o
-  ajustar la politica de egress de esta routine en la nube para permitir ese
-  host de forma estable, ya que el bloqueo reaparecio despues de corridas
-  intermedias exitosas) para el viernes 11-sep-2026, y de paso el 18-sep
-  cuando llegue, para no acumular otro hueco en el historico.
-</content>
-</invoke>
+  No se abre PR: no hay dato verificado que registrar. Esto requiere arreglo
+  de infraestructura, no otro reintento de la routine: permitir
+  sidofqa.segob.gob.mx en la politica de egress de esta sesion en la nube (o
+  correr la captura desde un entorno con salida real a ese host) y entonces
+  capturar, en orden, las ocho vigencias listadas arriba para no dejar
+  huecos en el historico.
