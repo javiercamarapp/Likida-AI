@@ -257,7 +257,7 @@ const ORDEN_ESTADO = { pendiente: 0, aprobada: 1, rechazada: 2 } as const;
 function columnasBandeja(acciones: { decidir: AccionProveedores; verPdf?: AccionProveedores }): ColumnaTabla<FacturaProveedor>[] {
   return [
     {
-      id: 'fecha', titulo: 'Fecha', valor: (f) => f.fecha,
+      id: 'fecha', titulo: 'Fecha', corta: true, valor: (f) => f.fecha,
       celda: (f) => (
         <span className="rv-tl__apagado">
           {f.fecha ? fechaCorta(f.fecha) : '—'}
@@ -312,7 +312,7 @@ function columnasBandeja(acciones: { decidir: AccionProveedores; verPdf?: Accion
     },
     { id: 'total', titulo: 'Total', alinear: 'der', valor: (f) => f.total, celda: (f) => <span className="cifra-mono">{mxn(f.total)}</span> },
     {
-      id: 'estado', titulo: 'Estado', valor: (f) => ORDEN_ESTADO[f.estado],
+      id: 'estado', titulo: 'Estado', corta: true, valor: (f) => ORDEN_ESTADO[f.estado],
       celda: (f) => (<><PillEstado f={f} /><NotaSat estadoSat={f.estadoSat} /></>),
     },
     {

@@ -244,14 +244,14 @@ function Campo({ etiqueta, pista, children }: { etiqueta: string; pista?: string
 function columnasCola(sufijo: string): ColumnaTabla<FilaCola>[] {
   return [
     { id: 'viaje', titulo: 'Viaje', principal: true, celda: (l) => l.folio },
-    { id: 'cerrada', titulo: 'Cerrada', celda: (l) => <span className="rv-tl__apagado">{fechaCorta(l.creadoEn)}</span> },
+    { id: 'cerrada', titulo: 'Cerrada', corta: true, celda: (l) => <span className="rv-tl__apagado">{fechaCorta(l.creadoEn)}</span> },
     // Sin nombre no se inventa uno: la ficha del chofer puede estar incompleta y «—» es la verdad.
     { id: 'operador', titulo: 'Operador', celda: (l) => <span className="rv-tl__apagado">{l.operadorNombre ?? '—'}</span> },
-    { id: 'unidad', titulo: 'Unidad', celda: (l) => <span className="rv-tl__apagado">{l.unidadEco ?? '—'}</span> },
+    { id: 'unidad', titulo: 'Unidad', corta: true, celda: (l) => <span className="rv-tl__apagado">{l.unidadEco ?? '—'}</span> },
     { id: 'comprobado', titulo: 'Comprobado', alinear: 'der', celda: (l) => <span className="cifra-mono">{mxn(l.comprobado)}</span> },
     { id: 'diferencia', titulo: 'Diferencia', alinear: 'der', celda: (l) => <span className={l.diferencia !== 0 ? 'cifra-mono rv-tl__bad' : 'cifra-mono'}>{mxn(l.diferencia)}</span> },
     {
-      id: 'cuadre', titulo: 'Cuadre',
+      id: 'cuadre', titulo: 'Cuadre', corta: true,
       celda: (l) => {
         const e = ROTULO_ESTADO[l.estatus] ?? { rotulo: l.estatus, tono: undefined };
         return <span className="rv-tl__pill" data-tono={e.tono}>{e.rotulo}</span>;

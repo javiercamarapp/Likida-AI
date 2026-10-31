@@ -26,6 +26,8 @@ export interface ColumnaTabla<T> {
   tituloOculto?: boolean;
   /** Rótulo de la celda en la tarjeta-fila de móvil. Por omisión, el título. */
   etiquetaMovil?: string;
+  /** Contenido corto (fecha, unidad, importe, pastilla) que no debe partirse en dos renglones. Las columnas a la derecha ya van así. */
+  corta?: boolean;
 }
 
 export interface SeleccionTabla<T> {
@@ -166,9 +168,9 @@ export function TablaLista<T>(p: PropsTablaLista<T>) {
                 </td>
               ) : null}
               {p.columnas.map((c) => c.principal ? (
-                <th key={c.id} scope="row" className={cx('rv-tl__td', 'rv-tl__rowhead', c.alinear === 'der' && 'rv-tl__der')} data-etq={c.tituloOculto ? '' : (c.etiquetaMovil ?? c.titulo)}>{c.celda(f)}</th>
+                <th key={c.id} scope="row" className={cx('rv-tl__td', 'rv-tl__rowhead', (c.alinear === 'der' || c.corta) && 'rv-tl__nw', c.alinear === 'der' && 'rv-tl__der')} data-etq={c.tituloOculto ? '' : (c.etiquetaMovil ?? c.titulo)}><span className="rv-tl__v">{c.celda(f)}</span></th>
               ) : (
-                <td key={c.id} className={cx('rv-tl__td', c.alinear === 'der' && 'rv-tl__der')} data-etq={c.tituloOculto ? '' : (c.etiquetaMovil ?? c.titulo)}>{c.celda(f)}</td>
+                <td key={c.id} className={cx('rv-tl__td', (c.alinear === 'der' || c.corta) && 'rv-tl__nw', c.alinear === 'der' && 'rv-tl__der')} data-etq={c.tituloOculto ? '' : (c.etiquetaMovil ?? c.titulo)}><span className="rv-tl__v">{c.celda(f)}</span></td>
               ))}
             </tr>
           ))}

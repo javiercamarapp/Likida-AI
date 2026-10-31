@@ -20,6 +20,9 @@
 .rv-tl[data-densa] .rv-tl__td { height: 32px; }
 .rv-tl tbody tr:last-child > * { border-bottom: 0; }
 .rv-tl__der { text-align: right; }
+.rv-tl__nw { white-space: nowrap; }
+.rv-tl__v { display: contents; }
+@media (max-width: 819px) { .rv-tl__nw { white-space: normal; } }
 .rv-tl__sel { width: 40px; padding-inline: 12px 0; }
 .rv-tl tbody tr:hover > *, .rv-tl tbody tr:focus-within > * { background: var(--canvas); }
 .rv-tl tbody tr[data-seleccionada] > * { background: var(--infobg, var(--canvas)); }
@@ -57,11 +60,18 @@
   .rv-tl__td::before { content: attr(data-etq); flex: none; font-size: 12px; font-weight: 500; color: var(--muted); }
   .rv-tl__td[data-etq=""]::before { content: none; }
   .rv-tl__sel { width: auto; }
+  .rv-tl__v { display: block; flex: 1 1 auto; min-width: 0; text-align: right; overflow-wrap: anywhere; }
+  .rv-tl__td[data-etq=""] .rv-tl__v { text-align: left; }
   .rv-tl tbody tr:hover > *, .rv-tl tbody tr:focus-within > * { background: transparent; }
   .rv-tl tbody tr:focus-within { border-color: var(--ink); }
   .rv-tl tbody tr[data-seleccionada] { background: var(--infobg, var(--canvas)); }
   .rv-tl tbody tr[data-seleccionada] > * { background: transparent; }
   .rv-tl__pag { height: 36px; }
+  /* Dentro de una .card la piel de tablas de componentes.css (más específica) pone alto y filete a cada celda: aquí se anula. */
+  [data-ui="v2"] .card .rv-tl tbody > tr > * { height: auto; min-height: 24px; padding: 0; border-bottom: 0; }
+  [data-ui="v2"] .card .rv-tl thead > tr > th { position: static; height: auto; border-bottom: 0; background: transparent; }
+  [data-ui="v2"] .card .rv-tl thead > tr > th[aria-sort] { padding: 0 10px; border: 1px solid var(--line2); border-radius: 999px; background: var(--surface); }
+  .rv-tl__td:empty::before, .rv-tl__td:has(> .rv-tl__tenue:only-child)[data-etq=""] { display: none; }
 }
 @media (forced-colors: active) {
   .rv-tl__pag[aria-current="page"] { forced-color-adjust: none; background: Highlight; color: HighlightText; border-color: Highlight; }

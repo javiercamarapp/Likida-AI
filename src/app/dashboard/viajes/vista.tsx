@@ -88,12 +88,12 @@ function columnasViajes(sufijo: string, verDinero: boolean): ColumnaTabla<FilaRe
       },
     },
     { id: 'operador', titulo: 'Operador', celda: (v) => v.operadorNombre ?? <span className="rv-tl__tenue">Sin asignar</span> },
-    { id: 'unidad', titulo: 'Unidad', celda: (v) => (v.unidadEco ? <span className="cifra-mono">{v.unidadEco}</span> : <span className="rv-tl__tenue">—</span>) },
-    { id: 'inicio', titulo: 'Inicio', celda: (v) => <span className="rv-tl__apagado">{v.fechaInicio ? fechaMx(v.fechaInicio) : '—'}</span> },
+    { id: 'unidad', titulo: 'Unidad', corta: true, celda: (v) => (v.unidadEco ? <span className="cifra-mono">{v.unidadEco}</span> : <span className="rv-tl__tenue">—</span>) },
+    { id: 'inicio', titulo: 'Inicio', corta: true, celda: (v) => <span className="rv-tl__apagado">{v.fechaInicio ? fechaMx(v.fechaInicio) : '—'}</span> },
     ...dinero,
-    { id: 'aviso', titulo: 'Aviso', celda: (v) => (v.estatus === 'liquidado' ? <span className="rv-tl__tenue">—</span> : <PillAviso v={v} />) },
+    { id: 'aviso', titulo: 'Aviso', corta: true, celda: (v) => (v.estatus === 'liquidado' ? <span className="rv-tl__tenue">—</span> : <PillAviso v={v} />) },
     {
-      id: 'estatus', titulo: 'Estatus',
+      id: 'estatus', titulo: 'Estatus', corta: true,
       celda: (v) => { const e = PILL_ESTATUS[v.estatus] ?? { etiqueta: v.estatus, estado: 'neutral' as Estado }; return <StatusPill estado={e.estado}>{e.etiqueta}</StatusPill>; },
     },
     {
@@ -139,7 +139,7 @@ export function VistaViajes({
   hayMas: boolean;
   porPagina: number;
 }) {
-  const kpi = (n: number | null) => (n === null ? '—' : numero(n));
+  const conteo = (n: number | null): { valor: string; estado?: 'error'; reintentar?: boolean } => (n === null ? { valor: '—', estado: 'error', reintentar: true } : { valor: numero(n) });
   const params = new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo);
   // Los filtros vigentes como chips quitables: el estado vive en la URL (sin JavaScript). Quitar uno conserva tenant/vista/rol y los demás.
   const vigentes = Object.fromEntries([...params.entries(), ...(filtro !== 'todos' ? [['f', filtro]] : []), ...(q ? [['q', q]] : [])]);
@@ -151,11 +151,12 @@ export function VistaViajes({
   return (
     <MarcoPagina titulo="Viajes" apoyo="El registro de viajes de tu flota, navegable y filtrable. Crear, asignar y avisar se hace en Despacho.">
 
+      {/* Un conteo que no se pudo leer es `null`: NUNCA se pinta como 0. La celda dice «No disponible ahora. No es cero.» y ofrece Reintentar. */}
       <TiraCifras sello={selloHoy('Registro de viajes')}>
-        <Cifra etiqueta="Viajes en total" valor={kpi(conteos.total)} nota="histórico" />
-        <Cifra etiqueta="Abiertos" valor={kpi(conteos.abiertos)} />
-        <Cifra etiqueta="En cuadre" valor={kpi(conteos.enCuadre)} />
-        <Cifra etiqueta="Escalados sin aceptar" valor={kpi(conteos.escalados)}
+        <Cifra etiqueta="Viajes en total" {...conteo(conteos.total)} nota="histórico" />
+        <Cifra etiqueta="Abiertos" {...conteo(conteos.abiertos)} />
+        <Cifra etiqueta="En cuadre" {...conteo(conteos.enCuadre)} />
+        <Cifra etiqueta="Escalados sin aceptar" {...conteo(conteos.escalados)}
           tono={(conteos.escalados ?? 0) > 0 ? 'bad' : undefined} />
       </TiraCifras>
 

@@ -230,3 +230,18 @@ describe('Bandeja de proveedores · misma función, tabla accesible', () => {
     expect(pintarBandeja(lista)).toMatch(/Buzón de facturas · leído/);
   });
 });
+
+describe('Honestidad del dato: un conteo caído nunca es 0', () => {
+  it('Viajes: si no se pudieron leer los conteos, cada celda dice «No disponible ahora. No es cero.» con Reintentar y ningún 0', () => {
+    const h = pintarViajes({ conteos: { total: null, abiertos: null, enCuadre: null, liquidados: null, escalados: null } });
+    expect(h.match(/No disponible ahora\. No es cero\./g)?.length).toBe(4);
+    expect(h.match(/>Reintentar</g)?.length).toBeGreaterThanOrEqual(4);
+    expect(h).not.toMatch(/rv-kpi__valor[^>]*>0</);
+    expect(h).toContain('data-estado="error"');
+  });
+  it('un cero MEDIDO sí se pinta como 0 (la fuente lo dijo)', () => {
+    const h = pintarViajes({ conteos: { ...conteos, abiertos: 0 } });
+    expect(h).toMatch(/rv-kpi__valor[^>]*>0</);
+    expect(h).not.toContain('No disponible ahora');
+  });
+});
