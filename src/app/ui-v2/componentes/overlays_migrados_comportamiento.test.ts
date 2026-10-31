@@ -20,6 +20,7 @@ import { DialogoConfirmar } from '${ruta('admin/ui/confirmar')}';
 import CommandPalette from '${ruta('admin/command-palette')}';
 import MenuAdjuntar from '${ruta('dashboard/menu-adjuntar')}';
 import { Drawer } from '${ruta('ui-v2/componentes/overlay')}';
+import { AvisoResultado } from '${ruta('admin/ui/aviso-resultado')}';
 window.__acciones = [];
 function App() {
   const [c, setC] = useState(false);
@@ -28,7 +29,9 @@ function App() {
   const [h, setH] = useState(false);
   const clip = useRef(null);
   return (
-    <div data-ui="v2" style={{ padding: 40 }}>
+    <div data-ui={window.__v1 ? undefined : 'v2'} style={{ padding: 40 }}>
+      <AvisoResultado estado={{ ok: true, mensaje: 'Guardado.' }} />
+      <AvisoResultado compacto estado={{ error: 'No se pudo.' }} />
       <form onSubmit={(e) => { e.preventDefault(); window.__acciones.push('submit'); }}>
         <button id="abre-c" type="button" onClick={() => setC(true)}>Dar de baja</button>
         <DialogoConfirmar abierto={c} titulo="Dar de baja a un operador" descripcion="Dejará de recibir mensajes." etiquetaConfirmar="Dar de baja"
@@ -77,11 +80,13 @@ beforeAll(async () => {
 }, 90_000);
 afterAll(async () => { await browser?.close(); });
 
-async function abrir(ancho = 1280, alto = 800): Promise<Page> {
+async function abrir(ancho = 1280, alto = 800, v1 = false): Promise<Page> {
   const p = await browser!.newPage({ viewport: { width: ancho, height: alto }, reducedMotion: 'reduce' });
   await p.route('**/api/admin/palette', (ruta) => ruta.fulfill({ json: { interruptores: [], flotas: [] } }));
-  const css = ['tokens.css', 'movimiento.css', 'componentes.css', 'overlay.css'].map((f) => readFileSync(join(RAIZ, f), 'utf8')).join('\n');
-  await p.setContent(`<!doctype html><html data-theme="light"><head><style>${css}</style></head><body><div id="raiz"></div><script>window.process = { env: {} };</script><script>${bundle.replace(/<\/script>/g, '<\\/script>')}</script></body></html>`);
+  // v1 = /admin: SIN data-ui="v2", sin tokens.css ni movimiento.css, solo las dos hojas que carga el layout de admin + los tokens v1 mínimos.
+  const v1Tokens = ':root{--surface:#fff;--canvas:#f6f6f7;--ink:#0e0e10;--ink2:#3f3f46;--muted:#6b6b72;--line:#e4e4e7;--line2:#e4e4e7;--bad:#b4234a;--badbg:#fdecef;--ok:#176a3a;--okbg:#e8f6ee;--shadow-pop:0 12px 32px -8px rgba(0,0,0,.18)}';
+  const css = (v1 ? [v1Tokens, ...['componentes.css', 'overlay.css'].map((f) => readFileSync(join(RAIZ, f), 'utf8'))] : ['tokens.css', 'movimiento.css', 'componentes.css', 'overlay.css'].map((f) => readFileSync(join(RAIZ, f), 'utf8'))).join('\n');
+  await p.setContent(`<!doctype html><html data-theme="light"><head><style>${css}</style></head><body><div id="raiz"></div><script>window.process = { env: {} }; window.__v1 = ${v1};</script><script>${bundle.replace(/<\/script>/g, '<\\/script>')}</script></body></html>`);
   await p.waitForSelector('#abre-c');
   return p;
 }
@@ -184,5 +189,42 @@ describe.skipIf(SIN_NAVEGADOR)('overlays migrados · comportamiento en Chromium'
     expect(await activo(p)).toBe('abre-h');
     expect(await bloqueado(p)).toBe(false);
     await p.close();
+  });
+
+  it('modo /admin v1 (sin data-ui, solo overlay.css + componentes.css): la confirmación de peligro mide 440, radio 12, backdrop y botones; los avisos se pintan', async () => {
+    const p = await abrir(1280, 800, true);
+    expect(await p.evaluate(() => document.querySelector('[data-ui]'))).toBeNull();
+    const aviso = await p.evaluate(() => { const a = [...document.querySelectorAll('.rv-aviso')].map((e) => ({ tono: e.getAttribute('data-tono'), rol: e.getAttribute('role'), pad: getComputedStyle(e).paddingLeft, fondo: getComputedStyle(e).backgroundColor })); return a; });
+    expect(aviso.map((a) => a.tono)).toEqual(['ok', 'error']);
+    expect(aviso.map((a) => a.rol)).toEqual(['status', 'alert']);
+    expect(aviso.every((a) => a.pad === '12px' && a.fondo !== 'rgba(0, 0, 0, 0)')).toBe(true);
+    await p.focus('#abre-c');
+    await p.keyboard.press('Enter');
+    const m = await p.evaluate(() => {
+      const d = document.querySelector('dialog[role="alertdialog"]')!; const panel = d.querySelector('.rv-ov__panel')!;
+      const b = panel.getBoundingClientRect(); const cs = getComputedStyle(panel); const bd = getComputedStyle(d, '::backdrop');
+      const btns = [...d.querySelectorAll('.rv-ov__pie button')].map((x) => x.textContent);
+      return { abierto: d.hasAttribute('open'), w: Math.round(b.width), radio: cs.borderTopLeftRadius, fondo: cs.backgroundColor, sombra: cs.boxShadow !== 'none', scrim: bd.backgroundColor, btns, foco: document.activeElement?.textContent, cab: getComputedStyle(d.querySelector('.rv-ov__titulo')!).fontSize };
+    });
+    expect(m).toMatchObject({ abierto: true, w: 440, radio: '12px', fondo: 'rgb(255, 255, 255)', sombra: true, btns: ['Cancelar', 'Dar de baja'], foco: 'Cancelar', cab: '15px' });
+    expect(m.scrim).toBe('rgba(14, 14, 16, 0.4)'); // respaldo del token que /admin no define
+    expect(await bloqueado(p)).toBe(true);
+    await p.keyboard.press('Escape');
+    await p.waitForFunction(() => !document.querySelector('dialog[role="alertdialog"]')!.hasAttribute('open'));
+    expect(await activo(p)).toBe('abre-c');
+    await p.close();
+  });
+  it('Adjuntar en 390 px queda a ≥ 8 px de ambos bordes', async () => {
+    const p = await abrir(390, 844);
+    await p.click('#clip');
+    await p.waitForSelector('[role="menu"]');
+    const r = await p.evaluate(() => { const b = document.querySelector('.rv-pop')!.getBoundingClientRect(); return { izq: Math.round(b.left), der: Math.round(innerWidth - b.right) }; });
+    expect(r.izq).toBeGreaterThanOrEqual(8);
+    expect(r.der).toBeGreaterThanOrEqual(8);
+    await p.close();
+  });
+  it('historial móvil: al abrirse el foco cae en «Nuevo chat», no en el buscador (no sube el teclado)', async () => {
+    const fuente = readFileSync(join(APP, 'dashboard/chat.tsx'), 'utf8');
+    expect(fuente).toMatch(/onClick=\{nuevoChat\} data-autofocus/);
   });
 });

@@ -816,7 +816,7 @@ export default function ChatFlota({
     const cuerpoHistorial = (
       <>
         <div className="flex items-center justify-between">
-          <button type="button" onClick={nuevoChat}
+          <button type="button" onClick={nuevoChat} data-autofocus
             className="hairline flex-1 flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] font-medium transition-colors hover:bg-[var(--canvas)]">
             <PencilLine width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
             Nuevo chat

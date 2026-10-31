@@ -86,7 +86,7 @@ html[data-overlay-abierto] { overflow: hidden; }
 }
 
 /* ── Popover y menú: filas de 32, radio 12, borde 1 px, --shadow-pop, entrada 140 ms ── */
-.rv-pop { position: fixed; z-index: 60; min-width: 200px; max-width: calc(100vw - 16px); padding: 4px; background: var(--surface); color: var(--ink); border: 1px solid var(--line2, var(--line)); border-radius: 12px; box-shadow: var(--shadow-pop, none); }
+.rv-pop { box-sizing: border-box; position: fixed; z-index: 60; min-width: 200px; max-width: calc(100vw - 16px); padding: 4px; background: var(--surface); color: var(--ink); border: 1px solid var(--line2, var(--line)); border-radius: 12px; box-shadow: var(--shadow-pop, none); }
 .rv-menu { display: grid; gap: 0; }
 .rv-menu__item { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 6px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font: 500 13px/1.25 var(--font-sans-ui, inherit); text-align: left; text-decoration: none; cursor: pointer; }
 .rv-menu__item:hover { background: var(--canvas); }
