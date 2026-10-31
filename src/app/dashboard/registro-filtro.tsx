@@ -39,7 +39,7 @@ export function FiltroRegistro<T>({
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-      <BarraFiltros accion={ruta} enLinea etiqueta={`Buscar en ${sustantivo}`} ocultos={camposOcultos} nActivos={hayFiltro ? 1 : 0}
+      <BarraFiltros buscar accion={ruta} enLinea etiqueta={`Buscar en ${sustantivo}`} ocultos={camposOcultos} nActivos={hayFiltro ? 1 : 0}
         limpiarHref={urlRegistro(ruta, sufijo, { [nombreQ]: null, [nombreP]: null, [nombreEditar]: null })}>
         <FiltroBusqueda nombre={nombreQ} valor={q} placeholder={`Buscar en ${sustantivo}…`} etiqueta={`Buscar en ${sustantivo}`} />
       </BarraFiltros>

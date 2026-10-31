@@ -58,7 +58,7 @@ export function VistaSitios(p: PropsVistaSitios) {
       <section className="card p-4 space-y-3" aria-label="Sitios registrados">
         <div className="flex items-center gap-3 flex-wrap">
           <TituloRecuadro info="conductores_sitios.registrados">Sitios registrados</TituloRecuadro>
-          <BarraFiltros accion="?" enLinea className="ml-auto" etiqueta="Buscar sitios" ocultos={p.sufijo.startsWith('?') ? [...new URLSearchParams(p.sufijo.slice(1))] : []}
+          <BarraFiltros buscar accion="?" enLinea className="ml-auto" etiqueta="Buscar sitios" ocultos={p.sufijo.startsWith('?') ? [...new URLSearchParams(p.sufijo.slice(1))] : []}
             nActivos={p.busqueda ? 1 : 0} limpiarHref={p.sufijo || '?'}>
             <FiltroBusqueda nombre="q" valor={p.busqueda} placeholder="Buscar por nombre o código" etiqueta="Buscar sitios" />
           </BarraFiltros>

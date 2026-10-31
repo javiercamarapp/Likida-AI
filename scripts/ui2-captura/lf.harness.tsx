@@ -115,7 +115,9 @@ describe('LF', () => {
     mkdirSync(path.join(OUT, 'vistas'), { recursive: true });
     for (const [id, v] of Object.entries(await vistas())) {
       (globalThis as unknown as { __rutaLF?: string }).__rutaLF = v.ruta;
-      const html = renderToStaticMarkup(<Chrome nombre={USUARIO.nombre} rol="flota_admin" cerrarSesion={async () => {}}>{v.el}</Chrome>);
+      const htmlCrudo = renderToStaticMarkup(<Chrome nombre={USUARIO.nombre} rol="flota_admin" cerrarSesion={async () => {}}>{v.el}</Chrome>);
+      // Sin hidratar, el chip nace oculto (respaldo noscript); la captura simula el navegador ya hidratado.
+      const html = htmlCrudo.replace(/<button([^>]*class="rv-fl[^"]*"[^>]*?) hidden=""/g, '<button$1');
       exigirV2Html(html, id);
       writeFileSync(path.join(OUT, 'vistas', `${id}.html`), html);
     }

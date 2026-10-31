@@ -9,7 +9,7 @@ import {
   type FiltrosCola, type PaginaCola, type FilaCola, type RevisionLiquidacion,
 } from '@/lib/likida/revision';
 import { EnlacePagina, NavPaginas } from '../../paginador';
-import { ChipsFiltro, SelloDato, TablaLista, chipsActivos, type ColumnaTabla } from '@/app/ui-v2/datos';
+import { SelloDato, TablaLista, chipsActivos, type ColumnaTabla } from '@/app/ui-v2/datos';
 import { ahoraMs } from '@/lib/saludo';
 import { fechaMx } from '@/lib/formato';
 
@@ -96,10 +96,9 @@ export async function SeccionCola({ cola, filtros, terminales, buscar, contexto,
         <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{rotuloCola(pagina, filtros)}</p>
       </div>
 
-      <FormaFiltros filtros={filtros} terminales={terms} buscar={buscar} contexto={contexto} conFiltros={conFiltros} />
+      <FormaFiltros filtros={filtros} terminales={terms} buscar={buscar} contexto={contexto} conFiltros={conFiltros}
+        nombres={Object.fromEntries(chipsDeCola(pagina, filtros, terms, contexto).map((c) => [c.id, c.valor]))} />
 
-      {/* Los filtros vigentes como chips quitables (el estado vive en la URL; quitar uno conserva tenant/vista/rol y los demás). */}
-      <ChipsFiltro chips={chipsDeCola(pagina, filtros, terms, contexto)} quitarTodosHref={`?${new URLSearchParams(contexto).toString()}`} className="mb-3" />
 
       {pagina.filas.length === 0 ? (
         <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
@@ -155,12 +154,14 @@ export function paramsDeFiltros(f: FiltrosCola): Array<[string, string]> {
   return p;
 }
 
-function FormaFiltros({ filtros, terminales, buscar, contexto, conFiltros }: {
+function FormaFiltros({ filtros, terminales, buscar, contexto, conFiltros, nombres }: {
   filtros: FiltrosCola;
   terminales: { opciones: Array<{ id: string; nombre: string }>; recortadas: boolean } | null;
   buscar: BuscarCatalogo;
   contexto: Array<[string, string]>;
   conFiltros: boolean;
+  /** Nombres legibles de los filtros vigentes (operador, unidad): el combo los muestra, no el id. */
+  nombres: Record<string, string>;
 }) {
   return (
     /* GET y no server action: un filtro tiene que poder compartirse por chat y
@@ -177,11 +178,11 @@ function FormaFiltros({ filtros, terminales, buscar, contexto, conFiltros }: {
       {/* El catálogo NO viaja: el combo pide 20 al escribir (FE-2). */}
       <FiltroCampo etiqueta="Operador">
         <ComboCatalogo tipo="operador" name="operador" buscar={buscar} etiquetaVacia="Cualquiera" enBarra
-          valorInicial={filtros.operadorId} aria-label="Filtrar por operador" />
+          valorInicial={filtros.operadorId} textoInicial={filtros.operadorId && nombres.operador !== 'elegido' ? nombres.operador : ''} aria-label="Filtrar por operador" />
       </FiltroCampo>
       <FiltroCampo etiqueta="Unidad">
         <ComboCatalogo tipo="unidad" name="unidad" buscar={buscar} etiquetaVacia="Cualquiera" enBarra
-          valorInicial={filtros.unidadId} aria-label="Filtrar por unidad" />
+          valorInicial={filtros.unidadId} textoInicial={filtros.unidadId && nombres.unidad !== 'elegida' ? nombres.unidad : ''} aria-label="Filtrar por unidad" />
       </FiltroCampo>
 
       {/* Sin terminales legibles NO se pinta el selector: un selector con

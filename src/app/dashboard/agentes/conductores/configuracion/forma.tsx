@@ -291,7 +291,7 @@ export function SeccionVoluntarios({ datos, puedeEditar, accionAlta, accionBaja,
       )}
       {puedeEditar ? (
         <div className="space-y-2">
-          <BarraFiltros accion="?" enLinea etiqueta="Buscar operador" ocultos={parametros.map(([k, v]) => [k, v] as const)}
+          <BarraFiltros buscar accion="?" enLinea etiqueta="Buscar operador" ocultos={parametros.map(([k, v]) => [k, v] as const)}
             nActivos={datos.busqueda ? 1 : 0} limpiarHref={`?${new URLSearchParams(parametros).toString()}`}>
             <FiltroBusqueda nombre="q" valor={datos.busqueda} placeholder="Nombre o teléfono" etiqueta="Buscar operador activo (nombre o teléfono)" />
           </BarraFiltros>

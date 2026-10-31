@@ -188,7 +188,7 @@ export function VistaDespacho({
                 urgentes de la primera página. GET plano, con el sufijo de
                 previsualización como hidden (mismo patrón que
                 `viajes/vista.tsx`) para no perderlo al buscar. */}
-            <BarraFiltros accion="/dashboard/despacho" enLinea etiqueta="Buscar viaje en curso" nActivos={folioPedido ? 1 : 0}
+            <BarraFiltros buscar accion="/dashboard/despacho" enLinea etiqueta="Buscar viaje en curso" nActivos={folioPedido ? 1 : 0}
               limpiarHref={`/dashboard/despacho${sufijo}`}
               ocultos={[...new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo).entries()]}>
               <FiltroBusqueda nombre="q" valor={folioPedido} placeholder="Folio…" etiqueta="Buscar viaje en curso por folio" />

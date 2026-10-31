@@ -9,7 +9,7 @@ import { ImportarViajes, type AccionImportar } from './importar';
 import { EnlacePagina, NavPaginas } from '../paginador';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { BarraFiltros, FiltroBusqueda, FiltroOpciones, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
-import { ChipsFiltro, SelloDato, TablaLista, chipsActivos, type ColumnaTabla } from '@/app/ui-v2/datos';
+import { SelloDato, TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
 import { ahoraMs } from '@/lib/saludo';
 
 export type FiltroViajes = 'todos' | 'abiertos' | 'en_cuadre' | 'liquidados' | 'escalados';
@@ -140,13 +140,6 @@ export function VistaViajes({
 }) {
   const conteo = (n: number | null): { valor: string; estado?: 'error'; reintentar?: boolean } => (n === null ? { valor: '—', estado: 'error', reintentar: true } : { valor: numero(n) });
   const params = new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo);
-  // Los filtros vigentes como chips quitables: el estado vive en la URL (sin JavaScript). Quitar uno conserva tenant/vista/rol y los demás.
-  const vigentes = Object.fromEntries([...params.entries(), ...(filtro !== 'todos' ? [['f', filtro]] : []), ...(q ? [['q', q]] : [])]);
-  const chips = chipsActivos('/dashboard/viajes', vigentes, [
-    { param: 'f', etiqueta: 'Estado', omitir: ['todos'], rotuloValor: (v) => ROTULO_FILTRO[v as FiltroViajes] ?? v },
-    { param: 'q', etiqueta: 'Búsqueda' },
-  ]);
-
   return (
     <MarcoPagina titulo="Viajes" apoyo="El registro de viajes de tu flota, navegable y filtrable. Crear, asignar y avisar se hace en Despacho.">
 
@@ -164,7 +157,7 @@ export function VistaViajes({
         <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
           {/* GET puro: la búsqueda vive en la URL y sobrevive a recargar, compartir y volver atrás. El sufijo y el filtro viajan como
               campos ocultos para no perderse al enviar; el estado es un enlace (hrefRegistro) con la búsqueda vigente. */}
-          <BarraFiltros accion="/dashboard/viajes" enLinea etiqueta="Filtros de viajes"
+          <BarraFiltros accion="/dashboard/viajes" enLinea buscar etiqueta="Filtros de viajes" nActivos={(filtro !== 'todos' ? 1 : 0) + (q ? 1 : 0)} limpiarHref={hrefRegistro(sufijo, {})}
             ocultos={[...params.entries(), ...(filtro !== 'todos' ? [['f', filtro] as [string, string]] : [])]}>
             <FiltroOpciones etiqueta="Estado" valor={filtro} porDefecto="todos"
               opciones={(Object.keys(ROTULO_FILTRO) as FiltroViajes[]).map((f) => ({ valor: f, rotulo: ROTULO_FILTRO[f], href: hrefRegistro(sufijo, { f, q }) }))} />
@@ -189,8 +182,6 @@ export function VistaViajes({
             )}
           </div>
         </div>
-
-        <ChipsFiltro chips={chips} quitarTodosHref={hrefRegistro(sufijo, {})} className="mb-3" />
 
         {filas.length === 0 ? (
           <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
