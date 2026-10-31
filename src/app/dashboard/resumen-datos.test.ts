@@ -80,3 +80,14 @@ describe('siguiente acción', () => {
     expect(R.elegirAcciones({ marcha: null, filas: [] })).toEqual([]);
   });
 });
+
+describe('frontera cliente/servidor', () => {
+  it('los componentes de cliente del Resumen no importan el lector ni nada de servidor (webpack metería ssh2 en el navegador)', async () => {
+    const { readFileSync } = await import('node:fs');
+    for (const f of ['resumen-cliente.tsx', 'resumen-modelo.ts']) {
+      const src = readFileSync(`${__dirname}/${f}`, 'utf8');
+      const importados = [...src.matchAll(/^import\s+(?!type\b)[^;]*?from\s+'([^']+)'/gms)].map((m) => m[1]);
+      for (const m of importados) expect(m, `${f} importa ${m}`).not.toMatch(/resumen-datos|likida\/analytics|carta_porte_datos|supabase|\/senales$/);
+    }
+  });
+});

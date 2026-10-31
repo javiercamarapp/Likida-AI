@@ -3,7 +3,7 @@ import { fechaCorta, mxnCompacto, numero, porcentaje } from '@/lib/formato';
 import { BotonEnlace, Chip, EstadoVacio, Tarjeta } from '@/app/ui-v2/componentes';
 import { Bullet, Columnas, KindBadge, type ItemKpi } from '@/app/ui-v2/graficas';
 import { rotuloDiferencia } from './agentes/liquidacion/rotulo-diferencia';
-import { PERIODO_RANGO, type DatosResumen } from './resumen-datos';
+import { PERIODO_RANGO, type DatosResumen } from './resumen-modelo';
 
 // Las tarjetas de datos del Resumen v2. Componentes de servidor, puros sobre `DatosResumen`: sin lectura propia, sin cifra
 // inventada (null = «—» / «No es cero»).

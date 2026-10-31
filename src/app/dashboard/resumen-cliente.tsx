@@ -8,7 +8,7 @@ import { BarraFiltros, BotonEnlace, Boton, PanelLateral, type ChipFiltro } from 
 import { armarPasosCincoAgentes, type SenalesAsistente } from '@/lib/likida/asistente/pasos_cinco_agentes';
 import { conPaso } from './puesta-en-marcha/con-paso';
 import { useDeclaraciones } from './puesta-en-marcha/usar-declaraciones';
-import { elegirAcciones, RANGOS, ROTULO_RANGO, type FilaAtencion, type RangoResumen } from './resumen-datos';
+import { elegirAcciones, RANGOS, ROTULO_RANGO, type FilaAtencion, type RangoResumen } from './resumen-modelo';
 
 // Piezas de cliente del Resumen v2: la barra de periodo, «Requiere tu atención» (con su panel lateral de detalle) y «Siguiente
 // mejor acción». Las dos últimas leen las declaraciones del navegador para que la Puesta en marcha coincida con el asistente.
