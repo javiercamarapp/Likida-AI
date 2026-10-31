@@ -22,3 +22,5 @@ export { useMovil } from './movil';
 export { Icono, TRAZO_ICONO, type TamanoIcono } from './icono';
 export { Casilla, Radio, Campo, Fieldset, CampoArchivo } from './campos';
 export { SegmentedControl, type OpcionSegmentada } from './segmented';
+export { Tabs, type PestanaDef } from './tabs';
+export { TabsLinea, type PestanaLinea } from './tabs-linea';

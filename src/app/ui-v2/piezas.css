@@ -71,3 +71,23 @@
 @media (forced-colors: active) {
   [data-ui="v2"] .rv-seg__btn[aria-checked="true"] { border: 2px solid Highlight; forced-color-adjust: none; background: Canvas; color: CanvasText; }
 }
+
+/* ── Pestañas de sección (Vexa pc-tabs): 36 px, 13/500, activa 600 con subrayado de 2 px en tinta ───────────────────── */
+[data-ui="v2"] .rv-tabs { display: flex; gap: 4px; margin: 0; padding: 0; list-style: none; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+[data-ui="v2"] .rv-tabs::-webkit-scrollbar { display: none; }
+[data-ui="v2"] .rv-tabs__tab { display: inline-flex; flex: none; align-items: center; gap: 8px; height: 36px; margin-bottom: -1px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font: 500 var(--t-body)/1.25 var(--font-sans-ui, inherit); text-decoration: none; white-space: nowrap; cursor: pointer; }
+[data-ui="v2"] .rv-tabs__tab:hover { color: var(--ink); }
+[data-ui="v2"] .rv-tabs__tab[aria-selected="true"],
+[data-ui="v2"] .rv-tabs__tab[aria-current="page"] { color: var(--ink); font-weight: 600; border-bottom-color: var(--ink); }
+[data-ui="v2"] .rv-tabs__tab:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; border-radius: 8px; }
+[data-ui="v2"] .rv-tabs__conteo { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--canvas); color: var(--ink); font: 600 var(--t-small)/1 var(--font-sans-ui, inherit); font-variant-numeric: tabular-nums; }
+[data-ui="v2"] .rv-tabs__tab[aria-selected="true"] .rv-tabs__conteo,
+[data-ui="v2"] .rv-tabs__tab[aria-current="page"] .rv-tabs__conteo { background: var(--soft-6, var(--canvas)); color: var(--ink-6, var(--ink)); }
+[data-ui="v2"] .rv-tabs__tab[aria-selected="true"] .rv-tabs__conteo[data-cero],
+[data-ui="v2"] .rv-tabs__tab[aria-current="page"] .rv-tabs__conteo[data-cero] { background: var(--canvas); color: var(--muted); }
+[data-ui="v2"] .rv-tabs__panel { padding-top: 16px; }
+[data-ui="v2"] .rv-tabs__panel[hidden] { display: none; }
+[data-ui="v2"] .rv-tabs__panel:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+@media (forced-colors: active) {
+  [data-ui="v2"] .rv-tabs__tab[aria-selected="true"], [data-ui="v2"] .rv-tabs__tab[aria-current="page"] { border-bottom-color: Highlight; forced-color-adjust: none; color: CanvasText; }
+}

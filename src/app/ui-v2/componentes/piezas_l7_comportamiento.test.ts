@@ -16,6 +16,7 @@ import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Casilla, Radio, Campo, Fieldset, CampoArchivo } from '${ruta('componentes/campos')}';
 import { Switch } from '${ruta('componentes/switch')}';
+import { Tabs } from '${ruta('componentes/tabs')}';
 import { SegmentedControl } from '${ruta('componentes/segmented')}';
 function App() {
   const [marcada, setMarcada] = useState(false);
@@ -23,6 +24,7 @@ function App() {
   return (
     <div data-ui="v2" style={{ padding: 16 }}>
       <SegmentedControl etiqueta="Periodo" valor={periodo} onChange={setPeriodo} opciones={[{ valor: 'sem', etiqueta: 'Semana', conteo: 4 }, { valor: 'mes', etiqueta: 'Mes' }, { valor: 'anio', etiqueta: 'Año', deshabilitada: true }, { valor: 'todo', etiqueta: 'Todo' }]} />
+      <Tabs etiqueta="Secciones" param="vista" pestanas={[{ valor: 'a', etiqueta: 'Resumen', contenido: <p id="pa">Panel A <button id="ba">x</button></p> }, { valor: 'b', etiqueta: 'Fuentes', conteo: 0, contenido: <p id="pb">Panel B</p> }, { valor: 'c', etiqueta: 'Cobertura', conteo: 3, contenido: <p id="pc">Panel C</p> }]} />
       <output id="periodo">{periodo}</output>
       <form id="f">
         <Casilla id="c1" name="c1" etiqueta="Recibir avisos" ayuda="Llegan por correo" checked={marcada} onChange={(e) => setMarcada(e.target.checked)} />
@@ -207,6 +209,52 @@ describe.skipIf(SIN_NAVEGADOR)('SegmentedControl · comportamiento en Chromium',
     });
     expect(r.activo).not.toBe(r.pista);
     expect(r.conteo).toBe('4');
+    await p.close();
+  });
+});
+
+describe.skipIf(SIN_NAVEGADOR)('Tabs · comportamiento en Chromium', () => {
+  it('tablist nombrada; tab/tabpanel enlazados por aria-controls/labelledby; solo el panel activo visible', async () => {
+    const p = await abrir();
+    const r = await p.evaluate(() => {
+      const tabs = [...document.querySelectorAll('[role="tab"]')];
+      return {
+        lista: document.querySelector('[role="tablist"]')!.getAttribute('aria-label'),
+        sel: tabs.map((t) => t.getAttribute('aria-selected')),
+        ok: tabs.every((t) => document.getElementById(t.getAttribute('aria-controls')!)?.getAttribute('aria-labelledby') === t.id),
+        visibles: [...document.querySelectorAll('[role="tabpanel"]')].map((x) => !(x as HTMLElement).hidden),
+      };
+    });
+    expect(r).toEqual({ lista: 'Secciones', sel: ['true', 'false', 'false'], ok: true, visibles: [true, false, false] });
+    await p.close();
+  });
+  it('flechas cambian y activan con foco; Inicio/Fin; Tab entra al panel; la URL refleja ?vista=', async () => {
+    const p = await abrir();
+    await p.focus('[role="tab"][aria-selected="true"]');
+    await p.keyboard.press('ArrowRight');
+    expect(await p.evaluate(() => document.activeElement?.textContent)).toContain('Fuentes');
+    expect(await p.isVisible('#pb')).toBe(true);
+    expect(await p.isVisible('#pa')).toBe(false);
+    await p.keyboard.press('End');
+    expect(await p.evaluate(() => document.activeElement?.textContent)).toContain('Cobertura');
+    await p.keyboard.press('ArrowRight');
+    expect(await p.evaluate(() => document.activeElement?.textContent)).toContain('Resumen');
+    await p.keyboard.press('Tab'); // al panel activo
+    expect(await p.evaluate(() => document.activeElement?.getAttribute('role'))).toBe('tabpanel');
+    await p.keyboard.press('Shift+Tab');
+    await p.keyboard.press('Home');
+    await p.keyboard.press('ArrowRight');
+    expect(await p.evaluate(() => new URL(location.href).searchParams.get('vista'))).toBe('b');
+    await p.close();
+  });
+  it('subrayado de 2 px en tinta y alto de 36 px en la activa; conteo 0 en gris', async () => {
+    const p = await abrir();
+    const r = await p.evaluate(() => {
+      const t = document.querySelector('[role="tab"][aria-selected="true"]')!;
+      const s = getComputedStyle(t);
+      return { alto: Math.round(t.getBoundingClientRect().height), borde: s.borderBottomWidth, color: s.borderBottomColor, peso: s.fontWeight };
+    });
+    expect(r).toEqual({ alto: 36, borde: '2px', color: 'rgb(14, 14, 16)', peso: '600' });
     await p.close();
   });
 });
