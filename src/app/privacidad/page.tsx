@@ -209,7 +209,7 @@ export default function Privacidad() {
       pie={
         <p>
           ¿Eres operador de una flota? Esta página no es tu aviso: el tuyo lo publica tu
-          empresa. Escribe <strong style={{ color: 'var(--ink)' }}>PRIVACIDAD</strong> por el
+          empresa. Escribe <strong>PRIVACIDAD</strong> por el
           mismo chat de WhatsApp y te llega la liga.
         </p>
       }

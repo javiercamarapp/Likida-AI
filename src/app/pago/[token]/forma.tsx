@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { mxn } from '@/lib/formato';
+import { Boton } from '../../ui-v2/componentes/boton';
 // SOLO EL TIPO de `portal_pago.ts`: ese módulo importa `node:crypto` para
 // generar y hashear tokens, y un import de VALOR lo arrastraría al bundle del
 // navegador — el build de webpack lo rechaza de plano, que es la forma dura de
@@ -85,8 +86,7 @@ export function FormaDePago({ token, saldo, metodos }: {
           type="date"
           value={fecha}
           onChange={(e) => setFecha(e.target.value)}
-          className="w-full rounded-md px-3 py-2 text-[15px]"
-          style={{ border: '1px solid var(--line)', background: 'transparent', color: 'var(--ink)' }}
+          className="rv-pub__campo"
         />
       </Campo>
 
@@ -97,8 +97,7 @@ export function FormaDePago({ token, saldo, metodos }: {
           placeholder="12345.67"
           value={monto}
           onChange={(e) => setMonto(e.target.value)}
-          className="w-full rounded-md px-3 py-2 text-[15px]"
-          style={{ border: '1px solid var(--line)', background: 'transparent', color: 'var(--ink)' }}
+          className="rv-pub__campo"
         />
       </Campo>
 
@@ -109,8 +108,7 @@ export function FormaDePago({ token, saldo, metodos }: {
           placeholder="Clave de rastreo, número de operación o folio del depósito"
           value={referencia}
           onChange={(e) => setReferencia(e.target.value)}
-          className="w-full rounded-md px-3 py-2 text-[15px]"
-          style={{ border: '1px solid var(--line)', background: 'transparent', color: 'var(--ink)' }}
+          className="rv-pub__campo"
         />
         <p className="mt-1 text-[12px]">
           Es el dato con el que quien te facturó va a encontrar tu depósito en su
@@ -122,8 +120,7 @@ export function FormaDePago({ token, saldo, metodos }: {
         <select
           value={metodo}
           onChange={(e) => setMetodo(e.target.value)}
-          className="w-full rounded-md px-3 py-2 text-[15px]"
-          style={{ border: '1px solid var(--line)', background: 'transparent', color: 'var(--ink)' }}
+          className="rv-pub__campo"
         >
           {metodos.map((m) => (
             <option key={m.id} value={m.id}>{m.rotulo}</option>
@@ -143,18 +140,12 @@ export function FormaDePago({ token, saldo, metodos }: {
       />
 
       {mensaje && envio === 'error' && (
-        <p className="text-[14px]" style={{ color: 'var(--color-warn, var(--ink))' }}>{mensaje}</p>
+        <p className="text-[14px]" style={{ color: 'var(--warn, var(--ink))' }}>{mensaje}</p>
       )}
 
-      <button
-        type="button"
-        onClick={mandar}
-        disabled={envio === 'mandando'}
-        className="rounded-md px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-        style={{ background: 'var(--marca)' }}
-      >
+      <Boton variante="primary" onClick={mandar} disabled={envio === 'mandando'} loading={envio === 'mandando'}>
         {envio === 'mandando' ? 'Registrando…' : 'Registrar mi pago'}
-      </button>
+      </Boton>
     </div>
   );
 }

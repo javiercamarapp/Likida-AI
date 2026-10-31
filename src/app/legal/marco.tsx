@@ -12,8 +12,8 @@
 // aun así tienen que verse de Likida.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import Link from 'next/link';
 import { fechaMx } from '@/lib/formato';
+import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
 
 export interface SeccionLegal {
   titulo: string;
@@ -33,7 +33,7 @@ export function ConNegritas({ texto }: { texto: string }) {
     <>
       {texto.split(/(\*\*[^*]+\*\*)/g).map((t, i) =>
         t.startsWith('**') && t.endsWith('**')
-          ? <strong key={i} className="font-semibold" style={{ color: 'var(--ink)' }}>{t.slice(2, -2)}</strong>
+          ? <strong key={i}>{t.slice(2, -2)}</strong>
           : <span key={i}>{t}</span>,
       )}
     </>
@@ -48,14 +48,15 @@ export function ConNegritas({ texto }: { texto: string }) {
  */
 export function FaltaDato({ children }: { children: React.ReactNode }) {
   return (
-    <p
-      className="mt-6 rounded-md px-4 py-3 text-sm"
-      style={{ border: '1px solid var(--color-warn)', color: 'var(--ink)' }}
-    >
-      {children}
-    </p>
+    <p className="rv-pub__aviso-falta">{children}</p>
   );
 }
+
+// Los mismos dos enlaces de siempre: el texto visible de /terminos y /privacidad tiene huella registrada (lib/legal/huella_texto).
+const ENLACES_LEGALES = [
+  { href: '/terminos', texto: 'Términos de servicio' },
+  { href: '/privacidad', texto: 'Política de privacidad' },
+] as const;
 
 export function PaginaLegal({
   etiqueta, bajada, secciones, aviso, pie, vigenteDesde,
@@ -84,45 +85,27 @@ export function PaginaLegal({
   vigenteDesde: string;
 }) {
   return (
-    <main
-      className="mx-auto max-w-2xl px-5 py-10 text-[15px] leading-relaxed"
-      style={{ color: 'var(--muted)' }}
+    <MarcoPublico
+      rotulo={etiqueta}
+      titulo="Likida"
+      apoyo={`Vigente desde el ${fechaMx(vigenteDesde)} · ${bajada}`}
+      pie={pie ?? undefined}
+      enlaces={ENLACES_LEGALES}
+      documento
     >
-      <header className="pb-6" style={{ borderBottom: '1px solid var(--line)' }}>
-        <p className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
-          {etiqueta}
-        </p>
-        <h1 className="mt-2 text-2xl font-semibold" style={{ color: 'var(--ink)' }}>Likida</h1>
-        <p className="mt-3 text-sm" style={{ color: 'var(--muted)' }}>
-          Vigente desde el {fechaMx(vigenteDesde)} · {bajada}
-        </p>
-      </header>
-
       {aviso}
 
-      {secciones.map((s) => (
-        <section key={s.titulo} className="mt-8">
-          <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>{s.titulo}</h2>
-          {s.fundamento && (
-            <p className="mt-0.5 text-xs" style={{ color: 'var(--muted)' }}>{s.fundamento}</p>
-          )}
-          {s.parrafos.map((p, i) => (
-            <p key={i} className="mt-3"><ConNegritas texto={p} /></p>
-          ))}
-        </section>
-      ))}
-
-      <footer className="mt-12 pt-6 text-sm" style={{ borderTop: '1px solid var(--line)', color: 'var(--muted)' }}>
-        {pie}
-        <p className="mt-4 flex gap-4">
-          <Link href="/terminos" className="underline underline-offset-2 hover:opacity-70 transition-opacity">
-            Términos de servicio
-          </Link>
-          <Link href="/privacidad" className="underline underline-offset-2 hover:opacity-70 transition-opacity">
-            Política de privacidad
-          </Link>
-        </p>
-      </footer>
-    </main>
+      <div className="rv-pub__prosa">
+        {secciones.map((s) => (
+          <section key={s.titulo} className="rv-pub__sec">
+            <h2>{s.titulo}</h2>
+            {s.fundamento && <p className="rv-pub__nota">{s.fundamento}</p>}
+            {s.parrafos.map((p, i) => (
+              <p key={i}><ConNegritas texto={p} /></p>
+            ))}
+          </section>
+        ))}
+      </div>
+    </MarcoPublico>
   );
 }
