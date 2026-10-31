@@ -1,8 +1,5 @@
 import Link from 'next/link';
-import {
-  Calculator, CalendarDays, Plus, MessageCircle, Landmark, Route as RouteIcon,
-  ReceiptText, Fuel, Wallet, FileX2, FileSearch, Download,
-} from 'lucide-react';
+import { Plus, MessageCircle, Landmark, Route as RouteIcon, ReceiptText, Fuel, Wallet, FileX2, FileSearch, Download } from 'lucide-react';
 import {
   getAcreditables, getKpis, detectarAnomalias,
   type Acreditables, type DashboardKpis, type Anomalia,
@@ -17,18 +14,21 @@ import {
 } from '@/lib/likida/fiscal';
 import { getFacturacionClientes, type FacturacionClientes } from '@/lib/likida/facturacion_clientes';
 import { saludo, ahoraMs } from '@/lib/saludo';
-import { fechaMx, mxn, hoyMx } from '@/lib/formato';
+import { mxn, hoyMx } from '@/lib/formato';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { areaDeRuta } from '@/lib/auth/visibilidad';
 import { AUTOMATIZACIONES, DINERO_FISCAL, SISTEMA, type Item } from '../rutas';
-import { BarraPagina, ChipFecha, HeroSaludo, MotorFiscal, TituloSeccion } from '../resumen-visual';
-import { StatCard, EstadoVacio } from '../../admin/ui/kit';
+import { MotorFiscal, TituloSeccion } from '../resumen-visual';
+import { BotonEnlace, MarcoPagina, clasesBoton } from '@/app/ui-v2/componentes';
+import { EstadoVacio } from '../estados';
 import { MotorFiscalPeriodo } from '../motor-fiscal-periodo';
 import { AvisoSinFlota } from '../sin-flota';
 import { Bloque, Barra, EsqCifras } from '../bloque';
 import { EstimuloPeaje } from './estimulo-peaje';
 import { PerfilErp } from './perfil-erp';
 import { Timbrado } from './timbrado';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 
 /** Resiliencia por sección: si una consulta falla, devuelve null y la
  *  tarjeta muestra un fallback en vez de tirar toda la pantalla. */
@@ -146,81 +146,50 @@ export async function InicioContador({
   const pantallas: Item[] = [...AUTOMATIZACIONES, ...DINERO_FISCAL, ...SISTEMA]
     .filter((it) => areaDeRuta(it.href) === 'dinero' && it.href !== '/dashboard/chat');
 
-  const ICONO_BARRA = { width: 15, height: 15, strokeWidth: 1.75, style: { color: 'var(--muted)' } } as const;
-
   return (
     // El scroll vive DENTRO del panel (patrón FASE 1.5). Lienzo tenue
     // (`--g1`) con tarjetas blancas encima — la misma anatomía que el
     // Resumen del dueño, porque es la misma casa con otro contenido.
-    <main className="h-full">
-      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Calculator {...ICONO_BARRA} />}
-          titulo="Panel del contador"
-          derecha={
-            <div className="flex items-center gap-2 min-w-0">
-              {tenantNombre && (
-                <span className="hidden lg:inline-block text-[11px] px-2 py-0.5 rounded-full font-medium shrink-0" style={{ color: 'var(--accent-fg)', background: 'var(--accent)' }}>
-                  viendo como superadmin · {tenantNombre}
-                </span>
-              )}
-              {/* Un link directo, no `BarraAcciones`: su buscador indexa los
-                  VIAJES (registro operativo, área `operacion`) y esta
-                  pantalla no debe cargar datos de un área que su lector
-                  principal no ve. El asistente sí es suyo (chat es dinero). */}
-              <Link href={`/dashboard/chat${sufijo}`}
-                className="hairline h-8 px-3 rounded-lg inline-flex items-center gap-1.5 text-[13px] font-medium transition-colors hover:bg-[var(--canvas)] shrink-0"
-                style={{ background: 'var(--surface)' }}>
-                <MessageCircle width={14} height={14} strokeWidth={1.75} /> Chatea con tus datos
-              </Link>
-            </div>
-          }
-        />
-        <HeroSaludo
-          saludo={saludo()} nombre={nombre ?? 'contador'}
-          tagline="El dinero comprobado y el papel que lo sostiene, con su fundamento citado"
-          derecha={
-            <div className="flex items-center gap-2.5 shrink-0 pt-1">
-              {/* El DÍA DE MÉXICO, no el UTC — mismo arreglo que el Resumen
-                  del dueño (capturado el 12-ago). */}
-              <ChipFecha icono={<CalendarDays {...ICONO_BARRA} />}>{fechaMx(hoyMx(new Date(ahoraMs())))}</ChipFecha>
-              {/* La acción primaria del contador no es despachar: es meter el
-                  papel. Facturación es lectura Y captura desde la auditoría
-                  4 (A1), y este botón es su puerta. */}
-              {/* AUDITORÍA 2, ALTO (proceso faltante): el CSV de liquidaciones
-                  para el ERP/Excel ya existía en /api/export/liquidaciones —bien
-                  protegido por sesión, rol (`puedeExportar`) y tenant— pero NO
-                  tenía puerta en ninguna pantalla, así que el contador no podía
-                  sacar sus datos. Un `<a download>` a esa ruta, con el `?tenant=`
-                  del sufijo del superadmin (vacío para roles reales, que usan su
-                  sesión). Es la puerta que faltaba, no un endpoint nuevo. */}
-              {/* ESCALA 50k (22-ago-2026, ESC-8): la ruta ahora EXIGE ventana
-                  (máx. 3 meses) porque el CSV completo de un cliente grande no
-                  cabe en la respuesta de la plataforma. La puerta del contador
-                  se lleva el MES EN CURSO, que es su unidad de trabajo, y lo
-                  dice en el rótulo: un botón que promete "todo" y entrega un
-                  mes sería el recorte silencioso de siempre. */}
-              <a href={`/api/export/liquidaciones${sufijo}${sufijo ? '&' : '?'}desde=${hoy.slice(0, 8)}01&hasta=${hoy}`} download
-                className="h-8 px-3 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 shrink-0 transition-opacity hover:opacity-85 border"
-                style={{ borderColor: 'var(--line)', color: 'var(--ink)' }}>
-                <Download width={15} height={15} strokeWidth={2} /> Exportar CSV del mes
-              </a>
-              <Link href={`/dashboard/facturacion${sufijo}`}
-                className="h-8 px-3 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 shrink-0 transition-opacity hover:opacity-85"
-                style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                <Plus width={15} height={15} strokeWidth={2} /> Registrar factura
-              </Link>
-            </div>
-          }
-        />
-
-        <div className="px-5 pb-5 flex-1">
+    <MarcoPagina
+      titulo="Resumen"
+      area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
+      apoyo={`${saludo()}, ${nombre ?? 'contador'}. El dinero comprobado y el papel que lo sostiene, con su fundamento citado.`}
+      acciones={(
+        <>
+          {/* Un link directo, no `BarraAcciones`: su buscador indexa los
+              VIAJES (registro operativo, área `operacion`) y esta
+              pantalla no debe cargar datos de un área que su lector
+              principal no ve. El asistente sí es suyo (chat es dinero). */}
+          <BotonEnlace variante="secondary" tamano="sm" href={`/dashboard/chat${sufijo}`} icono={<MessageCircle width={14} height={14} strokeWidth={1.75} />}>
+            Chatea con tus datos
+          </BotonEnlace>
+          {/* AUDITORÍA 2, ALTO (proceso faltante): el CSV de liquidaciones para el ERP/Excel ya existía en
+              /api/export/liquidaciones —bien protegido por sesión, rol (`puedeExportar`) y tenant— pero NO tenía puerta en
+              ninguna pantalla, así que el contador no podía sacar sus datos. Un `<a download>` a esa ruta, con el `?tenant=`
+              del sufijo del superadmin (vacío para roles reales, que usan su sesión). Es la puerta que faltaba, no un
+              endpoint nuevo.
+              ESCALA 50k (22-ago-2026, ESC-8): la ruta ahora EXIGE ventana (máx. 3 meses) porque el CSV completo de un
+              cliente grande no cabe en la respuesta de la plataforma. La puerta del contador se lleva el MES EN CURSO, que
+              es su unidad de trabajo, y lo dice en el rótulo: un botón que promete "todo" y entrega un mes sería el recorte
+              silencioso de siempre. Es un <a> y no un Link: un Link precargaría el CSV. */}
+          <a href={`/api/export/liquidaciones${sufijo}${sufijo ? '&' : '?'}desde=${hoy.slice(0, 8)}01&hasta=${hoy}`} download
+            className={clasesBoton('secondary', 'sm')}>
+            <Download width={15} height={15} strokeWidth={2} /> Exportar CSV del mes
+          </a>
+          {/* La acción primaria del contador no es despachar: es meter el papel. Facturación es lectura Y captura desde la
+              auditoría 4 (A1), y este botón es su puerta. */}
+          <BotonEnlace variante="primary" tamano="sm" href={`/dashboard/facturacion${sufijo}`} icono={<Plus width={15} height={15} strokeWidth={2} />}>
+            Registrar factura
+          </BotonEnlace>
+        </>
+      )}
+    >
           {/* ANTES QUE NINGUNA CIFRA: los ceros de una flota que no existe no
               son una medición, y menos una fiscal. Sin consulta de por medio,
               o sea que llega con el primer flush — que es exactamente lo que
               "antes que ninguna cifra" pide. */}
           {!tenantExiste && (
-            <div className="mt-3"><AvisoSinFlota tenantId={tenantId} /></div>
+            <div><AvisoSinFlota tenantId={tenantId} /></div>
           )}
 
           {/* FASE 3: la pregunta del 50% de peaje va ANTES que las cifras.
@@ -261,7 +230,7 @@ export async function InicioContador({
               recalcula sobre comprobantes, y por eso cada bloque dice de
               dónde sale: dos números parecidos sin su fuente se leen
               como dos cálculos. */}
-          <div className="mt-2">
+          <div>
             <Bloque mensaje="No se pudo cargar lo acreditable de tus liquidaciones."
               esqueleto={<EsqCifras n={4} rejilla="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2" />}>
               <BloqueAcreditables pAcred={pAcred} pResumenPerdidas={pResumenPerdidas} periodoFiscal={periodoFiscal} />
@@ -270,7 +239,7 @@ export async function InicioContador({
 
           {/* ── Motor fiscal — las mismas piezas que el Resumen del
               dueño, porque el motor ES la pantalla del contador. */}
-          <div className="mt-2">
+          <div>
             <Bloque mensaje="No se pudo cargar el motor fiscal." esqueleto={<EsqMotorFiscal />}>
               <BloqueFiscal pResumenPerdidas={pResumenPerdidas} pResumenPerdidasSeries={pResumenPerdidasSeries}
                 periodoFiscal={periodoFiscal} />
@@ -285,7 +254,7 @@ export async function InicioContador({
               que se afirma es lo que las columnas sí sostienen: el IVA
               documentado, en sus dos cubetas que SUMAN todo el IVA
               desglosado, y el estado de cada CFDI ante el SAT. */}
-          <div className="mt-2">
+          <div>
             <Bloque mensaje="No se pudo leer el desglose fiscal." esqueleto={<EsqDesgloseFiscal />}>
               <BloqueDesglose pResumenFiscal={pResumenFiscal} periodoFiscal={periodoFiscal} />
             </Bloque>
@@ -294,7 +263,7 @@ export async function InicioContador({
           {/* ── Sus pantallas: solo rutas de área `dinero`, del mismo
               mapa que las gatea. Todos los links cargan el sufijo. Cero
               consultas: entra con el primer flush. */}
-          <div className="card p-3 mt-2">
+          <div className="card p-3">
             <TituloSeccion>Tus pantallas</TituloSeccion>
             <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-1.5">
               {pantallas.map((it) => (
@@ -309,9 +278,7 @@ export async function InicioContador({
           </div>
 
           <p className="text-[11px] pt-3" style={{ color: 'var(--faint)' }}>{LEYENDA_CORTA}</p>
-        </div>
-      </div>
-    </main>
+    </MarcoPagina>
   );
 }
 
@@ -441,36 +408,36 @@ async function BloqueAcreditables({ pAcred, pResumenPerdidas, periodoFiscal }: {
     );
   }
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
-      <StatCard icono={<Landmark width={15} height={15} strokeWidth={1.75} />}
+    <TiraCifras sello={selloHoy('Liquidaciones certificadas')}>
+      <Cifra icono={<Landmark width={15} height={15} strokeWidth={1.75} />}
         etiqueta={`IVA acreditable de tus liquidaciones — ${periodoFiscal.etiqueta}`}
         valor={acred.iva} formato="mxn"
         nota="LIVA art. 5 — lo que el motor certificó al cerrar cada liquidación" />
       {/* La condición va en el rótulo, no solo en la nota — el
           criterio de `liquidacion/acreditable.ts`: "Estímulo de
           peaje 50%" a secas se lee como un derecho ya ganado. */}
-      <StatCard icono={<RouteIcon width={15} height={15} strokeWidth={1.75} />}
+      <Cifra icono={<RouteIcon width={15} height={15} strokeWidth={1.75} />}
         etiqueta={`Estímulo de peaje 50% — ${periodoFiscal.etiqueta} · sujeto a elegibilidad`}
         valor={acred.peaje} formato="mxn"
         nota="LIF 2026 art. 20, ap. A — base: subtotal SIN IVA de casetas con CFDI" />
       {resumenPerdidas ? (
-        <StatCard icono={<ReceiptText width={15} height={15} strokeWidth={1.75} />}
+        <Cifra icono={<ReceiptText width={15} height={15} strokeWidth={1.75} />}
           etiqueta={`Recuperable pidiendo factura — ${periodoFiscal.etiqueta}`}
           valor={resumenPerdidas.montoRecuperable} formato="mxn"
           nota="Gasto cuya factura aún se puede pedir — el motor dice a quién, abajo" />
       ) : (
-        <div className="card p-3 h-full flex items-center text-sm" style={{ color: 'var(--muted)' }}>
-          No se pudo calcular lo recuperable en este momento.
-        </div>
+        <Cifra icono={<ReceiptText width={15} height={15} strokeWidth={1.75} />}
+          etiqueta={`Recuperable pidiendo factura — ${periodoFiscal.etiqueta}`}
+          valor={null} estado="error" mensaje="No se pudo calcular lo recuperable en este momento." reintentar />
       )}
       {/* En LITROS, nunca en pesos — regla de producto: el
           estímulo es cuota DOF (semanal) × litros, y la cuota no
           vive aquí (decisión D2; `guion_demo.test.ts` la ata). */}
-      <StatCard icono={<Fuel width={15} height={15} strokeWidth={1.75} />}
+      <Cifra icono={<Fuel width={15} height={15} strokeWidth={1.75} />}
         etiqueta="Diésel elegible para el estímulo"
         valor={acred.litrosDiesel} formato="litros"
         nota="LIF 2026, art. 20-A: cuota semanal del DOF × litros — tu contador aplica la cuota fechada" />
-    </div>
+    </TiraCifras>
   );
 }
 
@@ -544,11 +511,11 @@ async function BloqueDesglose({ pResumenFiscal, periodoFiscal }: {
         </div>
       ) : (
         <>
-          <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <StatCard icono={<Wallet width={15} height={15} strokeWidth={1.75} />}
+          <TiraCifras className="mt-2" sello={selloHoy('Liquidaciones y comprobantes')}>
+            <Cifra icono={<Wallet width={15} height={15} strokeWidth={1.75} />}
               etiqueta="Gasto comprobado leído" valor={resumenFiscal.gastoTotal} formato="mxn"
               nota={`${resumenFiscal.n} comprobante${resumenFiscal.n === 1 ? '' : 's'} · ${resumenFiscal.conCfdi} con CFDI, ${resumenFiscal.sinCfdi} sin CFDI`} />
-            <StatCard icono={<Landmark width={15} height={15} strokeWidth={1.75} />}
+            <Cifra icono={<Landmark width={15} height={15} strokeWidth={1.75} />}
               etiqueta="IVA acreditable documentado" valor={resumenFiscal.ivaAcreditable} formato="mxn"
               nota={resumenFiscal.combustible15SujetoADeriva
                 // RE-AUDITORÍA 25, FIS-REAUD-3 (ALTO): incluye combustible en
@@ -569,10 +536,10 @@ async function BloqueDesglose({ pResumenFiscal, periodoFiscal }: {
                 // ESTIMACIÓN, no una reproducción exacta del PDF.
                 ? 'LIVA art. 5 — incluye combustible en efectivo al 15% del acumulado de HOY, prorrateado en AGREGADO (estimación, no viaje por viaje): puede diferir de lo firmado en PDFs viejos y de tasas de IVA no uniformes (ver "de tus liquidaciones", arriba)'
                 : 'LIVA art. 5 — solo el IVA desglosado en CFDI que lo sostiene'} />
-            <StatCard icono={<FileX2 width={15} height={15} strokeWidth={1.75} />}
+            <Cifra icono={<FileX2 width={15} height={15} strokeWidth={1.75} />}
               etiqueta="IVA desglosado que NO se acredita" valor={resumenFiscal.ivaNoAcreditable} formato="mxn"
               nota="Las dos cubetas suman todo el IVA desglosado del periodo — crúzalo con calculadora" />
-          </div>
+          </TiraCifras>
           <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
             Estado ante el SAT de los {resumenFiscal.conCfdi} CFDI: {resumenFiscal.vigentes} vigente{resumenFiscal.vigentes === 1 ? '' : 's'} · {resumenFiscal.porValidar} por validar · {resumenFiscal.cancelados} cancelado{resumenFiscal.cancelados === 1 ? '' : 's'}.
             {/* "Por validar" no es "inválido": es "no comprobado" —

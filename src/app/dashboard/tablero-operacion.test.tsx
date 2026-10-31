@@ -25,15 +25,18 @@ const TABLERO: TableroOperacion = {
   podPendientes: 1,
 };
 
-describe('TableroCifras — la grilla ya no aprieta a 6 columnas', () => {
-  it('el HTML servido no pide xl:grid-cols-6', () => {
+describe('TableroCifras — una sola tira que se acomoda por ancho', () => {
+  it('el HTML servido no pide xl:grid-cols-6 ni una rejilla propia', () => {
     const html = renderToStaticMarkup(<TableroCifras t={TABLERO} />);
     expect(html).not.toContain('xl:grid-cols-6');
+    expect(html).not.toContain('grid-cols');
   });
 
-  it('se queda en md:grid-cols-3 (el ancho que sí le alcanza al rótulo)', () => {
+  it('son seis indicadores en UNA tira (TiraCifras), con sello de procedencia', () => {
     const html = renderToStaticMarkup(<TableroCifras t={TABLERO} />);
-    expect(html).toContain('md:grid-cols-3');
+    expect(html.split('class="rv-kpi"').length - 1).toBe(6);
+    expect(html.split('rv-kpis').length - 1).toBe(1);
+    expect(html).toContain('Tablero de operación · corte');
   });
 
   it('los rótulos accionables e informativos siguen en el DOM', () => {

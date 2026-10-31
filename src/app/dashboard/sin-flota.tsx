@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Building2 } from 'lucide-react';
-import { EstadoVacio } from '../admin/ui/kit';
+import { EstadoVacio } from './estados';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // "NO HAY FLOTA" NO ES LO MISMO QUE "LA FLOTA NO HA LIQUIDADO NADA".
