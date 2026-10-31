@@ -180,6 +180,7 @@
 [data-ui="v2"] .card:has(> table),
 [data-ui="v2"] .card > .overflow-x-auto { overflow-x: auto; }
 
+/* ═══ Capa v2 Likida-Rovaq (carril B2): TODA regla nueva cuelga de [data-ui="v2"]; arriba, lo de siempre sin tocar (v1 intacto). ═══ */
 /* ── Campo único (L4) ─────────────────────────────────────────────────────────────────────────────────────────────
    UNA sola regla global para input / select / textarea de todo el panel v2 (antes solo se pintaban dentro de `.card`, y dos veces): alto 32 (36 bajo
    820 px con caja táctil de 44), radio 8, borde `--input`, fondo `--campo-bg`, 13 px (16 en móvil: iOS no hace zoom), foco de 2 px y estados
@@ -211,19 +212,18 @@
 [data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size]), textarea):disabled { border-style: dashed; border-color: var(--ctl-vacio-bd); background-color: var(--canvas); color: var(--ink2); cursor: not-allowed; }
 [data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size]), textarea)[aria-invalid="true"]:not(.sr-only, .bg-transparent, .border-0) { border-color: var(--bad); }
 @media (max-width: 819px) {
-  /* Caja de 44 (toque) con 36 visibles: el borde transparente de 4 px agranda el área sin engordar el campo. */
+  /* Caja de 44 (toque) con 34 visibles: el borde transparente de 5 px agranda el área sin engordar el campo. */
   [data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size])):not(.sr-only, .bg-transparent, .border-0) {
-    box-sizing: border-box; height: 44px; min-height: 44px; font-size: var(--fs-campo); padding-block: 0;
-    border: 4px solid transparent; background-clip: padding-box; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--input);
-    outline-offset: -4px;
+    box-sizing: border-box; height: 44px; min-height: 44px; font-size: 16px; padding-block: 0;
+    border: 5px solid transparent; background-clip: padding-box; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--input);
+    outline-offset: -5px;
   }
   [data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size])):not(.sr-only, .bg-transparent, .border-0)[aria-invalid="true"] { border-color: transparent; box-shadow: inset 0 0 0 1px var(--bad); }
-  [data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size])):not(.sr-only, .bg-transparent, .border-0, [class*="pl-"], [class*="pr-"]) { padding-inline: 6px; }
-  [data-ui="v2"] textarea:not(.sr-only, .bg-transparent, .border-0) { font-size: var(--fs-campo); min-height: 88px; }
+  [data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size])):not(.sr-only, .bg-transparent, .border-0, [class*="pl-"], [class*="pr-"]) { padding-inline: 5px; }
+  [data-ui="v2"] textarea:not(.sr-only, .bg-transparent, .border-0) { font-size: 16px; min-height: 88px; }
 }
 
 
-/* ═══ Capa v2 Likida-Rovaq (carril B2): TODA regla nueva cuelga de [data-ui="v2"]; arriba, lo de siempre sin tocar (v1 intacto). ═══ */
 [data-ui="v2"] .rv-btn {
   position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   height: auto; min-height: 32px; padding: 6px 12px;
@@ -426,11 +426,11 @@
 }
 @media (max-width: 819px) {
 [data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"]), select, textarea):disabled {
-    border-style: solid; border-color: transparent; box-shadow: none; outline: 1.5px dashed var(--ctl-vacio-bd); outline-offset: -4px;
+    border-style: solid; border-color: transparent; box-shadow: none; outline: 1.5px dashed var(--ctl-vacio-bd); outline-offset: -5px;
   }
 }
 @media (forced-colors: active) {
-[data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"]), select, textarea) {
+[data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"]), select, textarea):not(.sr-only, .bg-transparent, .border-0) {
     border: 1px solid ButtonText; box-shadow: none; outline-offset: 2px;
   }
 [data-ui="v2"] :is(input, select, textarea):disabled { border: 1px dashed GrayText; outline: 0; }
