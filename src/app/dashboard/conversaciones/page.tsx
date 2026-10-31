@@ -63,12 +63,12 @@ export default async function ConversacionesFlotaPage({ searchParams }: {
       <TiraCifras sello={selloHoy('Hilos de WhatsApp')}>
         <Cifra
           icono={<MessageCircle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-          etiqueta="Hilos de tu flota" valor={total} formato="entero"
+          etiqueta="Hilos de tu flota" info="conversaciones.hilos" valor={total} formato="entero"
           mensaje={total === null ? 'No se pudo contar — esto no significa que no haya ninguno.' : undefined}
         />
         <Cifra
           icono={<MessagesSquare width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-          etiqueta={`Mensajes en los ${hilos.length} que se listan`} valor={mensajes} formato="entero"
+          etiqueta={`Mensajes en los ${hilos.length} que se listan`} info="conversaciones.mensajes" valor={mensajes} formato="entero"
         />
       </TiraCifras>
 

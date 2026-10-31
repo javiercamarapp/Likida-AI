@@ -12,7 +12,7 @@ import {
 import { EstadoError } from '../estados';
 import { FormaEmision, type ResultadoForma } from './forma';
 import { ListaLlaves } from './vista';
-import { MarcoPagina, Aviso } from '@/app/ui-v2/componentes';
+import { MarcoPagina, Aviso, TituloRecuadro } from '@/app/ui-v2/componentes';
 import type { Metadata } from 'next';
 export const metadata: Metadata = { title: 'Llaves de API' };
 
@@ -119,9 +119,7 @@ export default async function PaginaLlavesApi({
           <ListaLlaves llaves={llaves} revocarLlave={revocarLlave} />
 
           <section className="space-y-3">
-            <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-              Emitir una llave
-            </h2>
+            <TituloRecuadro info="llaves_api.emitir">Emitir una llave</TituloRecuadro>
             <div className="card p-4">
               <FormaEmision accion={emitirLlave} areas={AREAS_DE_LLAVE}
                 vigencias={VIGENCIAS_DE_LLAVE} vigenciaDefault={VIGENCIA_DEFAULT} />

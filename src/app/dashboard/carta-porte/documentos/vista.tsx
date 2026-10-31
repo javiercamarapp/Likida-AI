@@ -7,7 +7,8 @@ import { prioridadEstado, ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO } from '@/
 import { MINUTOS_CAPTURA_MANUAL_EMBARQUE, type MetricasAgente } from '@/lib/likida/carta_porte_docs/metricas';
 import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_docs/repo';
 import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from './forma_accion';
-import { MarcoPagina, Aviso, BotonEnlace } from '@/app/ui-v2/componentes';
+import { MarcoPagina, Aviso, BotonEnlace, TituloRecuadro, InfoTip } from '@/app/ui-v2/componentes';
+import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 
 /**
  * LOS DOCUMENTOS DE TUS CLIENTES — la bandeja del Agente de Carta Porte multi-formato.
@@ -96,10 +97,10 @@ const PILL: Record<DocumentoFila['estado'], { fg: string; bg: string }> = {
   dividido: { fg: 'var(--muted)', bg: 'var(--canvas)' },
 };
 
-function Cifra({ rotulo, valor, nota }: { rotulo: string; valor: string; nota?: string }) {
+function Cifra({ rotulo, valor, nota, info }: { rotulo: string; valor: string; nota?: string; info: InfoClave }) {
   return (
     <div className="card p-3.5 space-y-0.5">
-      <p className="text-[11px]" style={{ color: 'var(--muted)' }}>{rotulo}</p>
+      <p className="text-[11px] flex items-center gap-1" style={{ color: 'var(--muted)' }}>{rotulo}<InfoTip clave={info} /></p>
       <p className="cifra-mono text-[20px] font-medium">{valor}</p>
       {nota && <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{nota}</p>}
     </div>
@@ -152,14 +153,16 @@ function Metricas({ m }: { m: MetricasAgente }) {
         </p>
       )}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Cifra rotulo="Documentos recibidos (90 días)" valor={numero(m.recibidos)} nota={`${numero(m.porRevisar)} por revisar · ${numero(m.fallidos)} sin poder leer`} />
-        <Cifra rotulo="Aprobados" valor={numero(m.aprobados)} nota={`${numero(m.rechazados)} rechazados`} />
+        <Cifra info="carta_porte_docs.recibidos" rotulo="Documentos recibidos (90 días)" valor={numero(m.recibidos)} nota={`${numero(m.porRevisar)} por revisar · ${numero(m.fallidos)} sin poder leer`} />
+        <Cifra info="carta_porte_docs.aprobados" rotulo="Aprobados" valor={numero(m.aprobados)} nota={`${numero(m.rechazados)} rechazados`} />
         <Cifra
+          info="carta_porte_docs.sin_correccion"
           rotulo="Aprobados sin corrección"
           valor={m.pctSinCorreccion === null ? '—' : porcentaje(m.pctSinCorreccion, 0)}
           nota={m.pctSinCorreccion === null ? 'Aún no hay aprobados: no se pinta un porcentaje.' : `${numero(m.sinCorreccion)} de ${numero(m.aprobados)} (confirmar un dato no cuenta como corregirlo)`}
         />
         <Cifra
+          info="carta_porte_docs.tiempo_ahorrado"
           rotulo="Tiempo ahorrado por embarque"
           valor={m.minutosAhorradosPorEmbarque === null ? '—' : `${numero(m.minutosAhorradosPorEmbarque)} min`}
           nota={m.minutosAhorradosPorEmbarque === null
@@ -179,7 +182,7 @@ function Metricas({ m }: { m: MetricasAgente }) {
 function Subir({ accion, clientes }: { accion: AccionDoc; clientes: Array<{ id: string; nombre: string }> }) {
   return (
     <section className="card p-4 space-y-3 max-w-3xl">
-      <h2 className="text-[13px] font-medium flex items-center gap-1.5"><Upload width={14} height={14} strokeWidth={1.75} /> Subir un documento</h2>
+      <TituloRecuadro info="carta_porte_docs.subir"><Upload width={14} height={14} strokeWidth={1.75} /> Subir un documento</TituloRecuadro>
       <FormaAccion accion={accion} enctype="multipart/form-data">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
@@ -209,7 +212,7 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
   const cliente = new Map(datos.clientes.map((c) => [c.id, c.nombre]));
   return (
     <section className="space-y-2">
-      <h2 className="text-[13px] font-medium">Bandeja de revisión</h2>
+      <TituloRecuadro info="carta_porte_docs.bandeja">Bandeja de revisión</TituloRecuadro>
       {conAsignacion && usuarioId !== null && (
         <nav aria-label="Filtrar por persona asignada" className="flex flex-wrap items-center gap-1.5 text-[12px]">
           <span style={{ color: 'var(--muted)' }}>Asignación:</span>
@@ -326,7 +329,7 @@ function Canales({ buzon, acciones }: { buzon: BuzonVista | null; acciones: Acci
   return (
     <section className="grid grid-cols-1 lg:grid-cols-2 gap-3">
       <div className="card p-4 space-y-2.5">
-        <h2 className="text-[13px] font-medium flex items-center gap-1.5"><Mail width={14} height={14} strokeWidth={1.75} /> Correo de tu flota</h2>
+        <TituloRecuadro info="carta_porte_docs.correo"><Mail width={14} height={14} strokeWidth={1.75} /> Correo de tu flota</TituloRecuadro>
         {buzon === null ? (
           <>
             <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
@@ -358,7 +361,7 @@ function Canales({ buzon, acciones }: { buzon: BuzonVista | null; acciones: Acci
         )}
       </div>
       <div className="card p-4 space-y-2">
-        <h2 className="text-[13px] font-medium flex items-center gap-1.5"><MessageCircle width={14} height={14} strokeWidth={1.75} /> WhatsApp</h2>
+        <TituloRecuadro info="carta_porte_docs.whatsapp"><MessageCircle width={14} height={14} strokeWidth={1.75} /> WhatsApp</TituloRecuadro>
         <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           Quien despacha en tu flota puede reenviar el documento del cliente al número de Likida: un PDF, un Excel o un XML con
           Carta Porte entran solos; una foto debe llevar el pie «carta porte» o «embarque». Funciona en las flotas que activaron el
@@ -372,7 +375,7 @@ function Canales({ buzon, acciones }: { buzon: BuzonVista | null; acciones: Acci
 function Perfiles({ perfiles, acciones }: { perfiles: PerfilVista[]; acciones: AccionesDocumentos }) {
   return (
     <section className="space-y-2">
-      <h2 className="text-[13px] font-medium flex items-center gap-1.5"><Layers width={14} height={14} strokeWidth={1.75} /> Formatos que Likida ya conoce</h2>
+      <TituloRecuadro info="carta_porte_docs.formatos"><Layers width={14} height={14} strokeWidth={1.75} /> Formatos que Likida ya conoce</TituloRecuadro>
       {perfiles.length === 0 ? (
         <p className="text-[12px] max-w-3xl" style={{ color: 'var(--muted)' }}>
           Todavía ninguno. Cuando apruebes el primer Excel, PDF con texto, XML o correo de un cliente, Likida recuerda en qué columna o
@@ -426,7 +429,7 @@ function Exportacion({ configs, acciones, apiSufijo }: { configs: ConfigVista[];
   const liga = (config: string, formato: string) => `/api/export/carta-porte-docs?config=${encodeURIComponent(config)}&formato=${formato}${apiSufijo}`;
   return (
     <section className="space-y-2">
-      <h2 className="text-[13px] font-medium flex items-center gap-1.5"><Download width={14} height={14} strokeWidth={1.75} /> Exportar lo aprobado</h2>
+      <TituloRecuadro info="carta_porte_docs.exportar"><Download width={14} height={14} strokeWidth={1.75} /> Exportar lo aprobado</TituloRecuadro>
       <p className="text-[12px] max-w-3xl" style={{ color: 'var(--muted)' }}>
         Solo salen documentos <strong>aprobados</strong>. El formato exacto que espera tu cliente (por ejemplo el cliente de demo) todavía no se conoce:
         declara aquí qué columna lleva cada dato y se genera el CSV o JSON a tu medida. Mientras tanto, está el formato estándar de Likida.

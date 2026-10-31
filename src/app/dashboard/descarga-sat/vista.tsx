@@ -18,7 +18,7 @@ import { EstadoVacio } from '../estados';
 import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../admin/ui/forma';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /**
  * DESCARGA DEL SAT (0231) — la pantalla del contralor.
@@ -148,9 +148,9 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
         <div className="flex items-start gap-2">
           <ShieldCheck size={16} style={{ color: 'var(--marca)' }} aria-hidden className="mt-0.5 shrink-0" />
           <div className="space-y-1.5">
-            <h2 className="font-display text-[15px] font-semibold m-0">
+            <TituloRecuadro info="descarga_sat.intro">
               Los comprobantes que el comercio ya te timbró, sin entrar a ningún portal
-            </h2>
+            </TituloRecuadro>
             <p className="text-[12px] m-0" style={{ color: 'var(--muted)' }}>
               Todo CFDI que un proveedor timbró a tu RFC ya está en tu buzón del SAT. Esto lo baja
               en bloque y lo cruza contra los tickets que tus operadores mandaron por WhatsApp.
@@ -239,19 +239,19 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
         {/* null ≠ 0: si la consulta se cayó, la tarjeta lo dice. */}
         <TiraCifras className="mt-3" sello={selloHoy('Buzón del SAT')}>
           <Cifra icono={<CloudDownload width={15} height={15} strokeWidth={1.75} />}
-            etiqueta="CFDI bajados del buzón" valor={c?.descargados ?? null}
+            etiqueta="CFDI bajados del buzón" info="descarga_sat.bajados" valor={c?.descargados ?? null}
             mensaje="no se pudo leer" nota="Folios fiscales únicos: el mismo no entra dos veces" />
           <Cifra icono={<Link2 width={15} height={15} strokeWidth={1.75} />}
-            etiqueta="Casaron solos con un gasto" valor={c?.casados ?? null}
+            etiqueta="Casaron solos con un gasto" info="descarga_sat.casados" valor={c?.casados ?? null}
             mensaje="no se pudo leer" nota="Quedaron facturados sin que nadie entrara a un portal" />
           <Cifra icono={<FileQuestion width={15} height={15} strokeWidth={1.75} />}
-            etiqueta="Esperan que tú decidas" valor={c?.ambiguos ?? null}
+            etiqueta="Esperan que tú decidas" info="descarga_sat.ambiguos" valor={c?.ambiguos ?? null}
             mensaje="no se pudo leer" nota="Varios gastos empatan: Likida no adivina cuál es" />
           <Cifra icono={<FileCheck2 width={15} height={15} strokeWidth={1.75} />}
-            etiqueta="Sin gasto que les corresponda" valor={c?.disponibles ?? null}
+            etiqueta="Sin gasto que les corresponda" info="descarga_sat.disponibles" valor={c?.disponibles ?? null}
             mensaje="no se pudo leer" nota="Puede ser un gasto que nadie reportó — eso también es hallazgo" />
           <Cifra icono={<Archive width={15} height={15} strokeWidth={1.75} />}
-            etiqueta="Archivados a propósito" valor={c?.ignorados ?? null}
+            etiqueta="Archivados a propósito" info="descarga_sat.ignorados" valor={c?.ignorados ?? null}
             mensaje="no se pudo leer" nota="Consolidados que ya entraron por su propio camino — no se pierden, se archivan" />
         </TiraCifras>
 

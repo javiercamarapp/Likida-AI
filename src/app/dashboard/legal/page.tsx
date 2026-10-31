@@ -18,7 +18,7 @@ import {
   ETIQUETA_DOCUMENTO, MANDATO_AUTOFACTURACION, VERSION_TERMINOS, VERSION_AVISO_PRIVACIDAD,
 } from '@/lib/legal/documentos';
 import type { Metadata } from 'next';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 export const metadata: Metadata = { title: 'Términos y mandato' };
 
 
@@ -138,7 +138,7 @@ export default async function PaginaLegal({
       ) : (
         <>
           <section className="space-y-2" aria-labelledby="h-resp">
-            <h2 id="h-resp" className="text-sm font-semibold">Responsable de privacidad de tu flota</h2>
+            <TituloRecuadro id="h-resp" info="legal.responsable">Responsable de privacidad de tu flota</TituloRecuadro>
             <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
               El aviso de privacidad que reciben tus choferes nombra a tu empresa como responsable de sus datos. Si
               aún no los capturas, el aviso <strong>sale igual</strong> y dice qué falta: tus choferes no se quedan sin
@@ -158,7 +158,7 @@ export default async function PaginaLegal({
           </section>
 
           <section className="space-y-2" aria-labelledby="h-docs">
-            <h2 id="h-docs" className="text-sm font-semibold">Documentos vigentes</h2>
+            <TituloRecuadro id="h-docs" info="legal.documentos">Documentos vigentes</TituloRecuadro>
             <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
               <Link href="/terminos" className="underline">{ETIQUETA_DOCUMENTO.terminos}</Link> (versión {VERSION_TERMINOS}) y{' '}
               <Link href="/privacidad" className="underline">{ETIQUETA_DOCUMENTO.aviso_privacidad}</Link> (versión {VERSION_AVISO_PRIVACIDAD}).
@@ -175,7 +175,7 @@ export default async function PaginaLegal({
           </section>
 
           <section className="space-y-2" aria-labelledby="h-mandato">
-            <h2 id="h-mandato" className="text-sm font-semibold">Mandato de autofacturación</h2>
+            <TituloRecuadro id="h-mandato" info="legal.mandato">Mandato de autofacturación</TituloRecuadro>
             <blockquote className="text-[12px] border-l-2 pl-3" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>
               {MANDATO_AUTOFACTURACION.texto}
             </blockquote>

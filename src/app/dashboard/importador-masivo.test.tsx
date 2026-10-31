@@ -37,7 +37,7 @@ describe('ImportadorMasivo — los tres tiempos', () => {
   it('la vista previa dice nuevas / ya estaban / con problema, enseña la muestra y los problemas fila por fila', () => {
     const html = pintar(BASE);
     expect(html).toContain('Se darían de alta');
-    expect(html).toMatch(/Se darían de alta<\/p><p[^>]*>3</);
+    expect(html).toMatch(/Se darían de alta[\s\S]*?<\/p><p[^>]*>3</);
     expect(html).toContain('Ya estaban');
     expect(html).toContain('Ana Ruiz');
     expect(html).toContain('2 filas no entran');

@@ -19,7 +19,7 @@ import {
 } from './forma';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /** Lo que la página inyecta para que la pantalla además CAPTURE. Opcional a
  *  propósito: sin esto la vista sigue siendo pura-props y se puede mirar con
@@ -124,9 +124,7 @@ function BloqueCartera({ datos, captura }: { datos: FacturacionClientes; captura
 
   return (
     <section className="space-y-3">
-      <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-        Lo que facturaste y lo que te deben
-      </h2>
+      <TituloRecuadro info="facturacion.cartera">Lo que facturaste y lo que te deben</TituloRecuadro>
 
       {captura && (
         <div className="card p-4">
@@ -149,22 +147,22 @@ function BloqueCartera({ datos, captura }: { datos: FacturacionClientes; captura
           <TiraCifras sello={selloHoy('Facturas emitidas')}>
             <Cifra
               icono={<FileText width={14} height={14} strokeWidth={1.75} />}
-              etiqueta="Facturado a clientes" valor={c.facturado} formato="mxn"
+              etiqueta="Facturado a clientes" info="facturacion.facturado" valor={c.facturado} formato="mxn"
               nota={`De ${plural(c.vivas, 'factura emitida', 'facturas emitidas')}`}
             />
             <Cifra
               icono={<HandCoins width={14} height={14} strokeWidth={1.75} />}
-              etiqueta="Cobrado" valor={c.cobrado} formato="mxn"
+              etiqueta="Cobrado" info="facturacion.cobrado" valor={c.cobrado} formato="mxn"
               nota="Suma de los pagos registrados contra esas facturas"
             />
             <Cifra
               icono={<Wallet width={14} height={14} strokeWidth={1.75} />}
-              etiqueta="Por cobrar" valor={c.porCobrar} formato="mxn"
+              etiqueta="Por cobrar" info="facturacion.por_cobrar" valor={c.porCobrar} formato="mxn"
               nota="Saldo vivo: no incluye borradores ni canceladas"
             />
             <Cifra
               icono={<CalendarClock width={14} height={14} strokeWidth={1.75} />}
-              etiqueta="Vencido" valor={c.vencido} formato="mxn"
+              etiqueta="Vencido" info="facturacion.vencido" valor={c.vencido} formato="mxn"
               nota={c.vencido > 0
                 ? 'Saldo que ya pasó su fecha pactada'
                 : 'Nada ha pasado de su fecha pactada'}
@@ -439,9 +437,7 @@ function BloqueEnLaMesa({ datos }: { datos: FacturacionClientes }) {
 
   return (
     <section className="space-y-3">
-      <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-        Viajes liquidados que nadie facturó
-      </h2>
+      <TituloRecuadro info="facturacion.en_la_mesa">Viajes liquidados que nadie facturó</TituloRecuadro>
 
       {datos.viajesLiquidados === 0 ? (
         <EstadoVacio icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
@@ -463,12 +459,12 @@ function BloqueEnLaMesa({ datos }: { datos: FacturacionClientes }) {
           <TiraCifras sello={selloHoy('Viajes liquidados sin factura')}>
             <Cifra
               icono={<Truck width={14} height={14} strokeWidth={1.75} />}
-              etiqueta="Viajes liquidados sin factura" valor={m.total} formato="numero"
+              etiqueta="Viajes liquidados sin factura" info="facturacion.sin_factura" valor={m.total} formato="numero"
               nota={`De ${plural(datos.viajesLiquidados, 'viaje liquidado', 'viajes liquidados')} en total`}
             />
             <Cifra
               icono={<Banknote width={14} height={14} strokeWidth={1.75} />}
-              etiqueta="Ingreso capturado sin facturar" valor={m.ingresoCapturado} formato="mxn"
+              etiqueta="Ingreso capturado sin facturar" info="facturacion.ingreso_sin_facturar" valor={m.ingresoCapturado} formato="mxn"
               nota={m.sinIngreso === 0
                 ? 'Todos traen su ingreso de flete capturado'
                 : m.sinIngreso === 1
@@ -480,13 +476,13 @@ function BloqueEnLaMesa({ datos }: { datos: FacturacionClientes }) {
             {m.diasMasViejo === null ? (
               <Cifra
                 icono={<CalendarClock width={14} height={14} strokeWidth={1.75} />}
-                etiqueta="El más viejo, sin facturar" valor={null}
+                etiqueta="El más viejo, sin facturar" info="facturacion.mas_viejo" valor={null}
                 mensaje="Ninguno de estos viajes tiene fecha de cierre de su liquidación, así que no hay días que contar. No es cero días: es que no se puede fechar."
               />
             ) : (
               <Cifra
                 icono={<CalendarClock width={14} height={14} strokeWidth={1.75} />}
-                etiqueta="El más viejo, sin facturar"
+                etiqueta="El más viejo, sin facturar" info="facturacion.mas_viejo"
                 valor={m.diasMasViejo} formato="numero"
                 nota="días desde que se cerró su liquidación"
               />
@@ -595,9 +591,7 @@ const ROTULO_CUBETA: Record<CubetaAuditor, { rotulo: string; ayuda: string }> = 
 function BloqueAuditor({ auditoria }: { auditoria: AuditoriaCobranza | null }) {
   return (
     <section className="space-y-3">
-      <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-        Auditor de cobranza — lo pactado contra lo entregado, lo facturado y lo cobrado
-      </h2>
+      <TituloRecuadro info="facturacion.auditor">Auditor de cobranza — lo pactado contra lo entregado, lo facturado y lo cobrado</TituloRecuadro>
 
       {auditoria === null ? (
         <EstadoError mensaje="No pude cruzar los viajes contra sus tarifas, PODs, facturas y pagos. No se enseña una auditoría a medias: un cruce incompleto diría que no hay discrepancias en viajes que sí las tienen." />
@@ -619,19 +613,19 @@ function BloqueAuditor({ auditoria }: { auditoria: AuditoriaCobranza | null }) {
           <TiraCifras sello={selloHoy('Auditoría de facturación')}>
             <Cifra
               icono={<Truck width={14} height={14} strokeWidth={1.75} />}
-              etiqueta="Dinero dormido" valor={auditoria.resumen.dineroDormido} formato="mxn"
+              etiqueta="Dinero dormido" info="facturacion.dinero_dormido" valor={auditoria.resumen.dineroDormido} formato="mxn"
               nota={auditoria.resumen.dormidosSinMonto > 0
                 ? `Entregado y sin facturar. Es el piso: ${plural(auditoria.resumen.dormidosSinMonto, 'entrega más no tiene', 'entregas más no tienen')} monto resoluble`
                 : 'Viajes con entrega probada y ninguna factura viva'}
             />
             <Cifra
               icono={<TriangleAlert width={14} height={14} strokeWidth={1.75} />}
-              etiqueta="Facturado de menos" valor={auditoria.resumen.brechaFacturadoDeMenos} formato="mxn"
+              etiqueta="Facturado de menos" info="facturacion.facturado_de_menos" valor={auditoria.resumen.brechaFacturadoDeMenos} formato="mxn"
               nota="La brecha entre lo pactado y lo que suman las facturas"
             />
             <Cifra
               icono={<Wallet width={14} height={14} strokeWidth={1.75} />}
-              etiqueta="Margen real medido" valor={auditoria.resumen.margen.margen} formato="mxn"
+              etiqueta="Margen real medido" info="facturacion.margen_medido" valor={auditoria.resumen.margen.margen} formato="mxn"
               nota={auditoria.resumen.margen.viajesMedidos > 0
                 ? `${auditoria.resumen.margen.margenPct === null ? '' : `${numero(auditoria.resumen.margen.margenPct)}% · `}pactado menos gastos liquidados, en ${plural(auditoria.resumen.margen.viajesMedidos, 'viaje medido', 'viajes medidos')}; ${numero(auditoria.resumen.margen.viajesSinDato)} sin las dos mitades`
                 : 'Ningún viaje de la ventana tiene pactado Y liquidación: no se mide'}

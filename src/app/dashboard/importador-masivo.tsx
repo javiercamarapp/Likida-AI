@@ -10,6 +10,8 @@ import type { ResultadoImportacionUI } from '@/lib/likida/importacion/resultado_
 import { DialogoConfirmar } from '../admin/ui/confirmar';
 import { useNotificar } from '../admin/ui/notificaciones';
 import { AvisoResultado } from '../admin/ui/aviso-resultado';
+import { TituloRecuadro, InfoTip } from '@/app/ui-v2/componentes';
+import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA CARGA MASIVA, EN TRES TIEMPOS: plantilla → revisar → confirmar (W2).
@@ -146,7 +148,7 @@ export function ImportadorMasivo({
           <FileSpreadsheet aria-hidden width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 id="titulo-importar" className="font-display text-[15px] font-semibold">{esGps ? 'Ligar dispositivos GPS desde Excel o CSV' : `Cargar ${sustantivo} desde Excel o CSV`}</h2>
+          <TituloRecuadro id="titulo-importar" info="importador.carga">{esGps ? 'Ligar dispositivos GPS desde Excel o CSV' : `Cargar ${sustantivo} desde Excel o CSV`}</TituloRecuadro>
           <p className="mt-0.5 text-[12px]" style={{ color: 'var(--muted)' }}>
             {esGps ? 'Para ligar el GPS de toda tu flota de una vez a unidades que YA existen (no se dan de alta unidades).' : 'Para dar de alta tu flota completa de una vez.'} Primero se <strong>revisa</strong> el archivo —no se escribe nada—,
             ves cuántas filas entran y cuáles traen un problema, y recién entonces confirmas.
@@ -197,9 +199,9 @@ export function ImportadorMasivo({
                 </p>
 
                 <div className="grid grid-cols-3 gap-2">
-                  <Cifra titulo={estado.confirmado ? (esGps ? 'Se ligaron' : 'Se dieron de alta') : (esGps ? 'Se ligarían' : 'Se darían de alta')} valor={estado.nuevas} tono={estado.nuevas > 0 ? 'ok' : undefined} />
-                  <Cifra titulo="Ya estaban" valor={estado.yaEstaban} nota="no se tocan" />
-                  <Cifra titulo="Con problema" valor={estado.conProblema} tono={estado.conProblema > 0 ? 'bad' : undefined} nota="no entran" />
+                  <Cifra info="importador.nuevas" titulo={estado.confirmado ? (esGps ? 'Se ligaron' : 'Se dieron de alta') : (esGps ? 'Se ligarían' : 'Se darían de alta')} valor={estado.nuevas} tono={estado.nuevas > 0 ? 'ok' : undefined} />
+                  <Cifra info="importador.ya_estaban" titulo="Ya estaban" valor={estado.yaEstaban} nota="no se tocan" />
+                  <Cifra info="importador.con_problema" titulo="Con problema" valor={estado.conProblema} tono={estado.conProblema > 0 ? 'bad' : undefined} nota="no entran" />
                 </div>
 
                 {estado.excedeTope && (
@@ -345,11 +347,11 @@ export function ImportadorMasivo({
   );
 }
 
-function Cifra({ titulo, valor, nota, tono }: { titulo: string; valor: number; nota?: string; tono?: 'ok' | 'bad' }) {
+function Cifra({ titulo, valor, nota, tono, info }: { titulo: string; valor: number; nota?: string; tono?: 'ok' | 'bad'; info: InfoClave }) {
   const color = tono === 'ok' ? 'var(--ok)' : tono === 'bad' ? 'var(--bad)' : 'var(--ink)';
   return (
     <div className="rounded-lg px-3 py-2" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
-      <p className="text-[11px]" style={{ color: 'var(--muted)' }}>{titulo}</p>
+      <p className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--muted)' }}>{titulo}<InfoTip clave={info} /></p>
       <p className="font-display text-[20px] font-semibold tabular" style={{ color }}>{numero(valor)}</p>
       {nota && <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{nota}</p>}
     </div>

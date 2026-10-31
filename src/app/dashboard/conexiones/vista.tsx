@@ -1,6 +1,6 @@
 import { CircleCheck, CircleAlert, CircleDashed, CircleHelp, FlaskConical } from 'lucide-react';
 import type { Conector } from '@/lib/likida/conexiones';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 
 const ESTADO: Record<Conector['estado'], { rotulo: string; fg: string; bg: string; Icono: typeof CircleCheck }> = {
@@ -47,7 +47,7 @@ export function VistaConexiones({ conectores, credenciales, integraciones, gps }
               <e.Icono width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: e.fg }} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2.5 flex-wrap">
-                  <h2 className="font-display text-[14px] font-semibold">{c.nombre}</h2>
+                  <TituloRecuadro info="conexiones.conector">{c.nombre}</TituloRecuadro>
                   <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
                     style={{ color: e.fg, background: e.bg }}>{e.rotulo}</span>
                 </div>

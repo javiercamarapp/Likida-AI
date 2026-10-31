@@ -6,7 +6,8 @@ import { AVISO_VALOR_MERCANCIA } from '@/lib/likida/relojes_legales';
 import { EstadoVacio, EstadoError } from '../estados';
 import { numero } from '@/lib/formato';
 import { FormaDeclaracion, FormaMercancia, FormaDatosCliente, BotonBorrarMercancia, type AccionForma } from './forma';
-import { MarcoPagina, Aviso } from '@/app/ui-v2/componentes';
+import { MarcoPagina, Aviso, TituloRecuadro } from '@/app/ui-v2/componentes';
+import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 
 /**
  * CARTA PORTE — la pregunta del minuto tres de cualquier demo (hallazgo A3,
@@ -164,8 +165,8 @@ function TarjetaViaje({ v, acciones, sufijo }: { v: ViajeCcp; acciones: Acciones
           Los 37 datos, uno por uno
         </summary>
         <div className="pt-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <ListaCampos titulo="Del transportista (18) — responde tu flota" campos={c.campos.filter((x) => x.responsable === 'transportista')} />
-          <ListaCampos titulo="Del cliente (19) — pídeselos ANTES del viaje" campos={c.campos.filter((x) => x.responsable === 'cliente')} />
+          <ListaCampos info="carta_porte.datos_transportista" titulo="Del transportista (18) — responde tu flota" campos={c.campos.filter((x) => x.responsable === 'transportista')} />
+          <ListaCampos info="carta_porte.datos_cliente" titulo="Del cliente (19) — pídeselos ANTES del viaje" campos={c.campos.filter((x) => x.responsable === 'cliente')} />
         </div>
       </details>
 
@@ -248,12 +249,10 @@ function TarjetaViaje({ v, acciones, sufijo }: { v: ViajeCcp; acciones: Acciones
   );
 }
 
-function ListaCampos({ titulo, campos }: { titulo: string; campos: EstadoCampoCcp[] }) {
+function ListaCampos({ titulo, campos, info }: { titulo: string; campos: EstadoCampoCcp[]; info: InfoClave }) {
   return (
     <div>
-      <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--muted)' }}>
-        {titulo}
-      </h3>
+      <TituloRecuadro nivel="h3" info={info} className="mb-1.5">{titulo}</TituloRecuadro>
       <ul className="space-y-0.5 text-[12px]">
         {campos.map((c) => (
           <li key={c.clave} className="flex items-start gap-1.5">

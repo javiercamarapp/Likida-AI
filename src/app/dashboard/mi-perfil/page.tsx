@@ -15,7 +15,7 @@ import AvatarUploader from '../../admin/mi-perfil/avatar-uploader';
 import { sufijoTenant } from '../sufijo';
 import { TablaClientesMcp } from '../sesiones-mcp/vista';
 import type { Metadata } from 'next';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 export const metadata: Metadata = { title: 'Mi perfil' };
 
 export const dynamic = 'force-dynamic';
@@ -373,7 +373,7 @@ export default async function MiPerfilFlota({
             La política es incremental: inscribirlo es OPTAR por que las
             acciones sensibles exijan AAL2 (lib/auth/mfa.ts). ── */}
         <div className="mt-6 pt-6 border-t" style={{ borderColor: 'var(--line)' }}>
-          <h2 className="text-[13px] font-semibold mb-1">Seguridad — segundo factor</h2>
+          <TituloRecuadro info="mi_perfil.segundo_factor" className="mb-1">Seguridad — segundo factor</TituloRecuadro>
           {mfa.inscrito ? (
             <div className="space-y-3">
               <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
@@ -434,7 +434,7 @@ export default async function MiPerfilFlota({
             Cierra TODAS mis sesiones a la vez, en cualquier dispositivo
             donde haya iniciado sesión — no solo esta pestaña. ── */}
         <div className="mt-6 pt-6 border-t" style={{ borderColor: 'var(--line)' }}>
-          <h2 className="text-[13px] font-semibold mb-1">Seguridad — sesiones activas</h2>
+          <TituloRecuadro info="mi_perfil.sesiones" className="mb-1">Seguridad — sesiones activas</TituloRecuadro>
           <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>
             Si crees que alguien más entró con tu cuenta, o perdiste un celular o laptop donde quedaste conectado,
             cierra todas tus sesiones de un tiro. Vas a tener que volver a iniciar sesión aquí también.
@@ -451,7 +451,7 @@ export default async function MiPerfilFlota({
             Vive junto al segundo factor y no en otra pantalla porque es
             la misma pregunta: ¿qué puede entrar a mi cuenta hoy? ── */}
         <div className="mt-6 pt-6 border-t" style={{ borderColor: 'var(--line)' }}>
-          <h2 className="text-[13px] font-semibold mb-1">Seguridad — clientes MCP conectados</h2>
+          <TituloRecuadro info="mi_perfil.clientes_mcp" className="mb-1">Seguridad — clientes MCP conectados</TituloRecuadro>
           {mcp === null ? (
             <p className="text-[12px]" style={{ color: 'var(--bad)' }}>
               No pude leer tus conexiones MCP. No se enseña una lista a medias:
