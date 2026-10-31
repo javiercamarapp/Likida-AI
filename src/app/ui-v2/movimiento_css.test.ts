@@ -26,6 +26,13 @@ function rangosNoPreference(css: string): Array<[number, number]> {
   return r;
 }
 
+/** Tokens de duración declarados en cualquier css del módulo (`--chat-entra: 260ms`): `var(--x)` en una animación se RESUELVE antes de medir. */
+const TOKENS_DURACION = new Map<string, string>();
+for (const f of ARCHIVOS) {
+  for (const m of sinComentarios(readFileSync(join(DIR, f), 'utf8')).matchAll(/(--[\w-]+)\s*:\s*(\d*\.?\d+(?:ms|s))\s*;/g)) TOKENS_DURACION.set(m[1], m[2]);
+}
+const resolverVars = (decl: string) => decl.replace(/var\((--[\w-]+)\)/g, (todo, n: string) => TOKENS_DURACION.get(n) ?? todo);
+
 describe.each(ARCHIVOS)('movimiento en %s', (archivo) => {
   const css = sinComentarios(readFileSync(join(DIR, archivo), 'utf8'));
   const rangos = rangosNoPreference(css);
@@ -45,8 +52,12 @@ describe.each(ARCHIVOS)('movimiento en %s', (archivo) => {
 
   it('ninguna duración pasa de 700 ms', () => {
     for (const m of css.matchAll(/(?:animation|transition)(?:-duration)?\s*:[^;}]+/g)) {
-      for (const d of m[0].matchAll(/(\d*\.?\d+)(ms|s)\b/g)) {
+      const decl = resolverVars(m[0]);
+      for (const d of decl.matchAll(/(\d*\.?\d+)(ms|s)\b/g)) {
         const ms = d[2] === 's' ? parseFloat(d[1]) * 1000 : parseFloat(d[1]);
+        // Segunda excepción EXPLÍCITA y acotada (L5): la respiración de la marca y del paso en curso del chat, 1.1 s, la duración exacta
+        // del agente de Vexa (ni un ms más: 1100). Es un bucle de opacidad/escala, sin layout; con reduce no se mueve.
+        if (ms === 1100 && /rv-chat-respira/.test(decl)) continue;
         // Única excepción: la respiración del logo de la capa de carga y del esqueleto (1.6 s, ESTILO §9 y R08, decisión de Javier); el seguro de 20 s es un retardo.
         if (ms === 1600 && /rv-(esq-)?respira/.test(m[0])) continue;
         expect(ms, m[0]).toBeLessThanOrEqual(700);

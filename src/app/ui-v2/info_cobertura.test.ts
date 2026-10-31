@@ -79,7 +79,6 @@ const HIJOS_SIN_CUBRIR: Record<string, number> = {
   'agentes/seccion-notificaciones.tsx': 1,
   'carta-porte/borrador/[viajeId]/page.tsx': 6,
   'carta-porte/documentos/[id]/vista.tsx': 1,
-  'chat.tsx': 1,
   'conexiones/page.tsx': 1,
   'conexiones/seccion-credenciales.tsx': 1,
   'conexiones/seccion-gps.tsx': 4,
