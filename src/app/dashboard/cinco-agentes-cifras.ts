@@ -30,7 +30,10 @@ export async function leerCifrasPesosCincoAgentes(
   tenantId: string, rol: string, hoy: string = hoyMx(new Date(ahoraMs())),
 ): Promise<CifrasPesosCincoAgentes | null> {
   if (!puedeVerArea(rol, 'dinero')) return null; // el encargado nunca: ni siquiera se consulta el perfil
-  if ((await perfilDeTenant(tenantId)) !== PERFIL_CIFRAS_PESOS) return null;
+  // FALLA CERRADO: `perfilDeTenant` por omisión asume `cinco_agentes` cuando no pudo leer la tabla (así se oculta de más en
+  // las demás pantallas). Aquí eso ABRIRÍA la puerta de dinero, así que se pide la variante 'permitir': sin lectura exitosa
+  // (ni valor previo conocido) devuelve null y esta puerta no abre. El comportamiento de las otras pantallas no cambia.
+  if ((await perfilDeTenant(tenantId, Date.now(), 'permitir')) !== PERFIL_CIFRAS_PESOS) return null;
   try {
     const dos = await cierreDosMesesDeFlota(tenantId, hoy.slice(0, 7));
     if ('error' in dos) {

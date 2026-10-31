@@ -5,7 +5,8 @@ import { mxnEntero } from '@/lib/formato';
 // ═══════════════════════════════════════════════════════════════════════════
 // CIFRAS EN PESOS DEL INICIO PARA UNA FLOTA CON PERFIL `cinco_agentes` — MODELO PURO.
 //
-// Dos cifras, autorizadas para el dueño y el contador de la flota y para nadie más:
+// Dos cifras, autorizadas para quien ve el área de dinero de una flota con este perfil (dueño y contador; el superadmin
+// pasa porque `puedeVerArea` le da `dinero`; el encargado y cualquier otro rol, nunca):
 //   (a) el importe del estado de cuenta IAVE de la última decena cargada, con la decena anterior cargada como
 //       referencia (siempre rotulada: son PERIODOS DISTINTOS, no una variación del mismo periodo);
 //   (b) los cobros extemporáneos de las decenas cargadas del mismo mes (cantidad y monto), siempre «candidatos».
@@ -41,7 +42,10 @@ export type SelloCifra = 'Medido' | 'Estimado' | 'Sin dato';
 export interface CifraPesos {
   /** Pesos exactos (2 decimales del reporte). `null` = sin dato: jamás 0. */
   valor: number | null;
-  /** `valor` sin decimales (`mxnEntero`; desde un millón sale compacto). `null` = sin dato. */
+  /**
+   * `valor` con `mxnEntero`. OJO: desde $1 M sale COMPACTO («$3 M», «$3.3 M») y pierde el detalle. La UI de finanzas (contador)
+   * debe mostrar pesos completos desde `valor`; este texto es para tarjetas de resumen. `null` = sin dato.
+   */
   valorTexto: string | null;
   /** Periodo que cubre la cifra, legible («1 al 10 de octubre de 2026»). `null` = sin dato. */
   periodo: string | null;
@@ -49,6 +53,8 @@ export interface CifraPesos {
   sello: SelloCifra;
   /** Decenas ya terminadas del mes de la cifra que no tienen archivo (vacío = ninguna falta). */
   decenasFaltantes: string[];
+  /** Decenas MÁS RECIENTES que la cifrada con archivo pero sin cruces dentro de ellas: no se cifran y se declaran. */
+  decenasSinCruces: string[];
   /** Texto corto de pie de tarjeta: alcance y salvedades. */
   rotulo: string;
   /** `true` solo si la lectura falló: la pantalla ofrece «Reintentar». */
@@ -80,6 +86,9 @@ export interface CifrasPesosCincoAgentes {
   extemporaneos: CifraExtemporaneos;
 }
 
+/** Pasa a `false` cuando el cliente acuerde la definición de «extemporáneo»; mientras tanto la cifra (b) es siempre «Estimado». */
+export const DEFINICION_EXTEMPORANEO_PROVISIONAL = true;
+
 const FUENTE_IMPORTE = 'Reporte IAVE · cruces con fecha dentro de la decena (sin cobros tardíos)';
 const FUENTE_EXTEMPORANEOS = 'Reporte IAVE · cruces con fecha anterior al inicio del periodo de su archivo';
 
@@ -100,7 +109,7 @@ const dias = (d: { desde: string; hasta: string }) => Number(d.hasta.slice(8, 10
 
 export function cifraSinDato(fuente: string, motivo: string, reintentar = false): CifraPesos {
   return {
-    valor: null, valorTexto: null, periodo: null, fuente, sello: 'Sin dato', decenasFaltantes: [],
+    valor: null, valorTexto: null, periodo: null, fuente, sello: 'Sin dato', decenasFaltantes: [], decenasSinCruces: [],
     rotulo: reintentar ? 'No se pudo leer. Reintenta en un momento.' : motivo, reintentar, motivo,
   };
 }
@@ -128,13 +137,20 @@ function faltantesDelMes(c: CierreMensual, hoy: string): string[] {
   return c.decenas.filter((d) => !d.cubierta && d.hasta < hoy).map((d) => `${d.etiqueta} de ${nombreMes(c.mes)}`);
 }
 
-function decenaMasReciente(dos: CierreDosMeses, hoy: string): { idx: number; lista: DecenaDeVentana[] } | null {
+function decenaMasReciente(dos: CierreDosMeses, hoy: string): { idx: number; lista: DecenaDeVentana[]; sinCruces: string[] } | null {
   const lista = ventana(dos);
+  const sinCruces: string[] = [];
   for (let i = lista.length - 1; i >= 0; i--) {
-    if (lista[i].d.desde <= hoy && usable(lista[i].d)) return { idx: i, lista };
+    const { d, c } = lista[i];
+    if (d.desde > hoy) continue;
+    if (usable(d)) return { idx: i, lista, sinCruces };
+    // Con archivo pero sin cruces dentro: no se cifra (no es $0), pero tampoco se salta en silencio.
+    if (d.cubierta) sinCruces.push(`${d.etiqueta} de ${nombreMes(c.mes)}`);
   }
   return null;
 }
+
+const avisoSinCruces = (l: string[]) => (l.length > 0 ? `Tiene archivo pero sin cruces dentro, no se cifra: ${l.join(', ')}.` : null);
 
 const MOTIVO_SIN_ARCHIVO = 'No hay estado de cuenta IAVE cargado en los últimos dos meses.';
 
@@ -142,7 +158,7 @@ const MOTIVO_SIN_ARCHIVO = 'No hay estado de cuenta IAVE cargado en los últimos
 export function cifraImporteDecena(dos: CierreDosMeses, hoy: string): CifraImporteDecena {
   const hallada = decenaMasReciente(dos, hoy);
   if (!hallada) return { ...cifraSinDato(FUENTE_IMPORTE, MOTIVO_SIN_ARCHIVO), cruces: null, anterior: null };
-  const { idx, lista } = hallada;
+  const { idx, lista, sinCruces } = hallada;
   const { d, c } = lista[idx];
   const periodo = etiquetaPeriodo(d.desde, d.hasta);
 
@@ -167,13 +183,16 @@ export function cifraImporteDecena(dos: CierreDosMeses, hoy: string): CifraImpor
   if (enCurso) salvedades.push('la decena aún no termina: el importe puede crecer');
   if (c.dobleConteo.n > 0) salvedades.push(`${c.dobleConteo.n} cobro(s) están en más de un archivo y pueden estar sumados dos veces`);
   if (c.archivosSinPeriodo.length > 0) salvedades.push(`${c.archivosSinPeriodo.length} archivo(s) sin periodo no entran a la cifra`);
+  if (sinCruces.length > 0) salvedades.push(`hay una decena más reciente sin cruces (${sinCruces.join(', ')})`);
   const sello: SelloCifra = salvedades.length === 0 ? 'Medido' : 'Estimado';
   const partes = [`Importe del reporte IAVE del ${periodo}.`];
   if (faltantes.length > 0) partes.push(`Faltan por cargar: ${faltantes.join(', ')}.`);
+  const av = avisoSinCruces(sinCruces);
+  if (av) partes.push(av);
   if (salvedades.length > 0) partes.push(`Estimado: ${salvedades.join('; ')}.`);
   return {
     valor: d.monto, valorTexto: mxnEntero(d.monto), periodo, fuente: FUENTE_IMPORTE, sello,
-    decenasFaltantes: faltantes, rotulo: partes.join(' '), reintentar: false, motivo: null,
+    decenasFaltantes: faltantes, decenasSinCruces: sinCruces, rotulo: partes.join(' '), reintentar: false, motivo: null,
     cruces: d.cruces, anterior,
   };
 }
@@ -186,6 +205,7 @@ export function cifraExtemporaneos(dos: CierreDosMeses, hoy: string): CifraExtem
   const hallada = decenaMasReciente(dos, hoy);
   if (!hallada) return { ...cifraSinDato(FUENTE_EXTEMPORANEOS, MOTIVO_SIN_ARCHIVO), n: null };
   const c = hallada.lista[hallada.idx].c;
+  const sinCruces = hallada.sinCruces;
   const cargadas = c.decenas.filter((d) => d.cubierta);
   // Un mes con menos de sus tres decenas NO se presenta como mes: se dicen las decenas cargadas.
   const periodo = cargadas.length === c.decenas.length
@@ -195,7 +215,9 @@ export function cifraExtemporaneos(dos: CierreDosMeses, hoy: string): CifraExtem
   const n = c.tardiosMesAnterior.n + c.tardiosDecenaAnterior.n;
   const monto = Math.round((c.tardiosMesAnterior.monto + c.tardiosDecenaAnterior.monto) * 100) / 100;
 
-  const salvedades: string[] = [];
+  // La definición de «extemporáneo» está pendiente de acordar con el cliente: mientras sea provisional, NUNCA «Medido».
+  const salvedades: string[] = [DEFINICION_EXTEMPORANEO_PROVISIONAL ? 'la definición de extemporáneo es provisional' : ''].filter(Boolean);
+  if (sinCruces.length > 0) salvedades.push(`hay una decena más reciente sin cruces (${sinCruces.join(', ')})`);
   if (faltantes.length > 0) salvedades.push('faltan decenas, la cifra es parcial');
   if (c.archivosSinPeriodo.length > 0) salvedades.push(`${c.archivosSinPeriodo.length} archivo(s) sin periodo no se revisaron`);
   if (c.dobleConteo.n > 0) salvedades.push(`${c.dobleConteo.n} cobro(s) en más de un archivo`);
@@ -205,7 +227,7 @@ export function cifraExtemporaneos(dos: CierreDosMeses, hoy: string): CifraExtem
   if (salvedades.length > 0) partes.push(`Estimado: ${salvedades.join('; ')}.`);
   return {
     valor: monto, valorTexto: mxnEntero(monto), periodo, fuente: FUENTE_EXTEMPORANEOS, sello,
-    decenasFaltantes: faltantes, rotulo: partes.join(' '), reintentar: false, motivo: null, n,
+    decenasFaltantes: faltantes, decenasSinCruces: sinCruces, rotulo: partes.join(' '), reintentar: false, motivo: null, n,
   };
 }
 

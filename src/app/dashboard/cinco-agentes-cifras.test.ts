@@ -66,11 +66,26 @@ describe('leerCifrasPesosCincoAgentes — la puerta decide qué se CONSULTA', ()
     expect(cierreDosMesesDeFlota).toHaveBeenCalledTimes(1);
     expect(cierreDosMesesDeFlota).toHaveBeenCalledWith('t1', '2026-10');
     expect(r?.importeDecena.sello).toBe('Medido');
+    // La puerta pide el perfil en la variante que NO abre si no se pudo leer.
+    expect(perfilDeTenant).toHaveBeenCalledWith('t1', expect.any(Number), 'permitir');
     expect(r?.extemporaneos.n).toBe(2);
     // Los lectores del flujo nativo (que darían $0) no se tocan jamás.
     expect(getKpis).not.toHaveBeenCalled();
     expect(getGastoPorSemana).not.toHaveBeenCalled();
     expect(getDineroObservadoPorTipo).not.toHaveBeenCalled();
+  });
+
+  it('superadmin (ve dinero) pasa la puerta con perfil cinco_agentes', async () => {
+    expect(puedeVerCifrasPesos('superadmin', 'cinco_agentes')).toBe(true);
+    perfilDeTenant.mockResolvedValue('cinco_agentes');
+    cierreDosMesesDeFlota.mockResolvedValue(dosMeses('2026-10', [OCT1]));
+    expect(await leerCifrasPesosCincoAgentes('t1', 'superadmin', '2026-10-31')).not.toBeNull();
+  });
+
+  it('perfil ilegible (la variante que no abre devuelve null): la puerta falla cerrada', async () => {
+    perfilDeTenant.mockResolvedValue(null);
+    expect(await leerCifrasPesosCincoAgentes('t1', 'flota_admin', '2026-10-31')).toBeNull();
+    expect(cierreDosMesesDeFlota).not.toHaveBeenCalled();
   });
 
   it('fallo de lectura: Sin dato con reintentar, nunca $0', async () => {
@@ -162,6 +177,19 @@ describe('importe de la decena (a)', () => {
   });
 });
 
+describe('decena más reciente con archivo pero sin cruces', () => {
+  it('se declara en vez de cifrar la anterior en silencio', () => {
+    const vacia = arch('o2', '2026-10-11', '2026-10-20', [lin('2026-10-05', 30, 1)]); // solo un tardío: sin cruces dentro de 11-20
+    const dos = dosMeses('2026-10', [OCT1, vacia]);
+    const c = cifraImporteDecena(dos, '2026-10-31');
+    expect(c.periodo).toBe('1 al 10 de octubre de 2026');
+    expect(c.decenasSinCruces).toEqual(['11 a 20 de octubre de 2026']);
+    expect(c.sello).toBe('Estimado');
+    expect(c.rotulo).toContain('sin cruces');
+    expect(cifraExtemporaneos(dos, '2026-10-31').decenasSinCruces).toEqual(['11 a 20 de octubre de 2026']);
+  });
+});
+
 describe('extemporáneos (b)', () => {
   it('cantidad y monto de candidatos, sin acusar', () => {
     const e = cifraExtemporaneos(dosMeses('2026-10', [SEP1, SEP2, SEP3, OCT1]), '2026-10-31');
@@ -176,12 +204,13 @@ describe('extemporáneos (b)', () => {
     expect(e.decenasFaltantes).toEqual(['11 a 20 de octubre de 2026']);
   });
 
-  it('mes completo: se nombra el mes y el sello es Medido', () => {
+  it('mes completo: se nombra el mes; el sello sigue Estimado mientras la definición sea provisional', () => {
     const o2 = arch('o2', '2026-10-11', '2026-10-20', [lin('2026-10-12', 10, 1)]);
     const o3 = arch('o3', '2026-10-21', '2026-10-31', [lin('2026-10-22', 10, 2)]);
     const e = cifraExtemporaneos(dosMeses('2026-10', [OCT1, o2, o3]), '2026-11-05');
     expect(e.periodo).toBe('octubre de 2026');
-    expect(e.sello).toBe('Medido');
+    expect(e.sello).toBe('Estimado');
+    expect(e.rotulo).toContain('provisional');
     expect(e.decenasFaltantes).toEqual([]);
   });
 
