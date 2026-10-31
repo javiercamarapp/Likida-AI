@@ -16,7 +16,7 @@ const mxn = (v: number) => `$${v.toLocaleString('en-US')}`;
 
 function Muestrario() {
   return (
-    <div className="rv-muestra" style={{ display: 'grid', gap: 14, padding: 20, maxWidth: 1180, margin: '0 auto' }}>
+    <div data-ui="v2" className="rv-muestra" style={{ display: 'grid', gap: 14, padding: 20, maxWidth: 1180, margin: '0 auto' }}>
       <h1 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>Gráficas interactivas · lote G</h1>
       <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))' }}>
         <div id="c-col"><Tarjeta titulo="Liquidaciones cerradas por semana"><Columnas datos={CIERRES} etiqueta="Liquidaciones cerradas por semana" unidad="cierres" matiz={1} /></Tarjeta></div>

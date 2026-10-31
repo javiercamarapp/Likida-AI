@@ -67,7 +67,7 @@ export function Columnas({ datos, matiz = 1, etiqueta, formato = (v) => String(v
   const base = PAD_T + altoPlano;
   const { ranura, ancho: anchoBarra, desfase } = geometriaColumnas(n, anchoPlano);
   const Y = (v: number) => PAD_T + altoPlano - (v / eje.max) * altoPlano;
-  const cada = cadaCuantas(n, anchoPlano, 34);
+  const cada = cadaCuantas(n, anchoPlano, Math.max(34, Math.max(...datos.map((d) => d.etiqueta.length)) * 6.6 + 12));
   const puntos = datos.map((d) => ({ valor: d.valor, parcial: d.parcial }));
   const rotuladas = indicesEtiquetados(puntos);
   const ultima = datos.reduce((a, d, i) => (d.valor !== null && !d.parcial ? i : a), -1);

@@ -25,7 +25,7 @@ describe('Columnas', () => {
     const h = renderToStaticMarkup(<Columnas datos={[{ etiqueta: 'a', valor: 3 }, { etiqueta: 'b', valor: null }]} etiqueta="x" />);
     expect((h.match(/rv-colum__barra/g) ?? []).length).toBe(1);
     expect(h).toContain('>s/d<');
-    expect(h).toContain('s/d = sin datos');
+    expect(h).toContain('= sin datos');
     expect(h).toContain('<td class="rv-num">—</td>');
   });
   it('todo en cero: plano sin columnas y UNA línea que dice qué falta', () => {

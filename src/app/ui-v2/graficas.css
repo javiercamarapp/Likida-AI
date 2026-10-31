@@ -266,7 +266,8 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 [data-ui="v2"] .rv-colum__golpe { fill: transparent; }
 [data-ui="v2"] .rv-colum__col[data-activa] .rv-colum__golpe { fill: var(--chart-rejilla); }
 [data-ui="v2"] .rv-colum__col:focus-visible .rv-colum__golpe { stroke: var(--ink); stroke-width: 2; }
-[data-ui="v2"] .rv-colum__barra { fill: var(--cat, var(--ink)); transform-box: fill-box; transform-origin: bottom; }
+[data-ui="v2"] .rv-colum__barra:not([data-parcial]) { fill: var(--cat, var(--ink)); }
+[data-ui="v2"] .rv-colum__barra { transform-box: fill-box; transform-origin: bottom; }
 [data-ui="v2"] .rv-colum[data-tipo="estimado"] .rv-colum__barra { fill-opacity: .6; }
 [data-ui="v2"] .rv-colum[data-tipo="inferido"] .rv-colum__barra { fill-opacity: .42; }
 [data-ui="v2"] .rv-colum__barra[data-parcial] { stroke: var(--cat, var(--ink)); stroke-width: 1; }

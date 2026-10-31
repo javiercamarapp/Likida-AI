@@ -62,7 +62,7 @@ export function AreaMini({ valores, etiquetas, matiz = 1, etiqueta, formato = (v
   const rotuladas = indicesEtiquetados(puntos);
   const ultimo = rotuladas[rotuladas.length - 1] ?? -1;
   const paso = anchoPlano / Math.max(1, n - 1);
-  const cada = cadaCuantas(n, anchoPlano, 44);
+  const cada = cadaCuantas(n, anchoPlano, Math.max(44, Math.max(...(etiquetas ?? ['']).map((e) => e.length)) * 6.6 + 12));
   const etq = (i: number) => etiquetas?.[i] ?? String(i + 1);
 
   const lectura = sel === null ? null : (() => {

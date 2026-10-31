@@ -44,7 +44,7 @@ export function ColumnasAgrupadas({ categorias, series, matiz = 2, etiqueta, for
   const anchoBarra = Math.max(3, Math.min(14, (ranura * 0.7 - hueco * (k - 1)) / k));
   const anchoGrupo = anchoBarra * k + hueco * (k - 1);
   const Y = (v: number) => base - (v / eje.max) * altoPlano;
-  const cada = cadaCuantas(n, anchoPlano, 40);
+  const cada = cadaCuantas(n, anchoPlano, Math.max(40, Math.max(...categorias.map((c) => c.length)) * 6.6 + 12));
   const nombreSerie = (s: SerieAgrupada) => s.nombre;
 
   const filasDe = (ci: number) => series.map((s, si) => ({ tono: si, nombre: nombreSerie(s), texto: formato(s.valores[ci] ?? 0) }));

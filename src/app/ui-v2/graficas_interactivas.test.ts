@@ -118,7 +118,7 @@ describe.skipIf(SIN_NAVEGADOR)('gráficas interactivas · Chromium', () => {
     expect(await p.locator('#s-col [data-i="2"]').textContent()).toContain('s/d');
     const leyenda = await p.locator('#s-col .rv-leyenda-fina').innerText();
     expect(leyenda).toContain('trama = parcial');
-    expect(leyenda).toContain('s/d = sin datos');
+    expect(leyenda).toContain('= sin datos');
     await p.close();
   });
   it('columnas: «Ver como tabla» abre una tabla con los MISMOS valores y «—» donde no hay dato', async () => {

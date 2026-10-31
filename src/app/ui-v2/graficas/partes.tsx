@@ -59,7 +59,7 @@ export function LeyendaFina({ parcial, sinDato }: { parcial?: boolean; sinDato?:
   return (
     <p className="rv-leyenda-fina">
       {parcial ? <span><i className="rv-leyenda-fina__trama" aria-hidden="true" />trama = parcial</span> : null}
-      {sinDato ? <span><b aria-hidden="true">{TEXTO_SIN_DATO}</b>{TEXTO_SIN_DATO} = sin datos</span> : null}
+      {sinDato ? <span><b aria-hidden="true">{TEXTO_SIN_DATO}</b>{' '}= sin datos</span> : null}
     </p>
   );
 }
