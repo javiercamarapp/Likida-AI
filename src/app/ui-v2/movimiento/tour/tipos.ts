@@ -36,6 +36,17 @@ export interface PasoTour {
   avance?: Avance;
   escena?: EscenaId;
   lado?: Lado;
+  // ── Onboarding por cobertura (lote O). Todo opcional: los recorridos de antes siguen siendo válidos. ──
+  /** `ir` = señala el ítem del menú (avanza al hacer clic o con «Llévame»); `info` = explica; `cierre` = último paso. */
+  tipo?: 'ir' | 'info' | 'cierre';
+  /** Ruta de la pantalla a la que pertenece (agrupa los pasos para «PANTALLA n DE N» y la ruta de pantallas). */
+  pantalla?: string;
+  /** Índice de la pantalla dentro del recorrido (0..n-1). */
+  grupo?: number;
+  nombrePantalla?: string;
+  ilu?: string;
+  /** Enlace final del cierre (p. ej. «Ir a Puesta en marcha»). */
+  cta?: { etiqueta: string; ruta: string };
 }
 
 export interface Recorrido {
@@ -44,6 +55,9 @@ export interface Recorrido {
   version: number;
   titulo: string;
   pasos: PasoTour[];
+  /** Pista (rol) y modo con que se construyó; solo informativo. */
+  pista?: string;
+  modo?: 'corto' | 'completo';
 }
 
 export interface Almacen {
