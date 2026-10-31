@@ -1,0 +1,122 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   OVERLAYS: UN SOLO MOTOR (L3, ESTILO §8). Drawer, Modal, Popover y MenuList viven AQUÍ y en
+   `componentes/overlay.tsx`; ninguna otra hoja define medidas de overlay.
+
+   SIN ÁMBITO A PROPÓSITO: los overlays se pintan igual en /dashboard (que lleva `[data-ui="v2"]`) y en /admin (que no),
+   porque son el mismo componente. Por eso este archivo se carga en AMBOS layouts y cada variable lleva su valor de
+   respaldo: /admin define los tokens v1 (`--surface`, `--line`, `--shadow-pop`) pero no `--scrim`.
+
+   Medidas (Vexa R06): Drawer 420 / 480 / 640 con margen 8; Modal 440 / 560 con margen 16; padding 16; radio 12; cabecera
+   12×16 (título 15/600, apoyo 12); cerrar 28 (32 con toque 44 en hoja); pie 12×16; hoja inferior < 820 px con grabber.
+   Movimiento: solo con `no-preference`, entrada ≤ 180 ms, la salida no se anima.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Scroll lock por contador: `overlay.tsx` marca <html> mientras haya UN overlay modal abierto o más. */
+html[data-overlay-abierto] { overflow: hidden; }
+
+.rv-ov {
+  padding: 0; border: 0; background: transparent; color: var(--ink);
+  max-width: none; max-height: none; overflow: visible;
+  font-size: 13px; line-height: 1.5;
+}
+.rv-ov::backdrop { background: var(--scrim, rgba(14, 14, 16, .4)); }
+.rv-ov__panel {
+  display: flex; flex-direction: column; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line2, var(--line)); border-radius: 12px; box-shadow: var(--shadow-pop, none); overflow: hidden;
+}
+.rv-ov__grabber { display: none; width: 36px; height: 4px; margin: 8px auto 0; border-radius: 2px; background: var(--line2, var(--line)); touch-action: none; cursor: grab; }
+.rv-ov__cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.rv-ov__textos { min-width: 0; }
+.rv-ov__titulo { margin: 0; font-size: 15px; line-height: 1.35; font-weight: 600; letter-spacing: 0; }
+.rv-ov__desc { margin: 2px 0 0; font-size: 12px; line-height: 1.4; color: var(--muted); text-wrap: pretty; }
+.rv-ov__cerrar {
+  flex: none; position: relative; display: inline-grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.rv-ov__cerrar::after { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+.rv-ov__cerrar:hover { background: var(--canvas); color: var(--ink); }
+.rv-ov__cerrar:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.rv-ov__cuerpo { padding: 16px; overflow-y: auto; overscroll-behavior: contain; flex: 1 1 auto; font-size: 13px; line-height: 1.5; }
+.rv-ov__cuerpo:empty { display: none; }
+.rv-ov__cuerpo[data-sin-padding] { padding: 0; }
+.rv-ov__pie { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); flex: none; }
+.rv-ov__marca { display: flex; justify-content: center; flex: none; padding: 9px 0 11px; border-top: 1px solid var(--line); opacity: .6; color: var(--ink); }
+
+/* Drawer: a la derecha en escritorio, 8 px de margen. `data-ancho` (PanelLateral) manda sobre `data-tamano`. */
+.rv-ov--drawer { margin: 8px 8px 8px auto; height: calc(100dvh - 16px); width: min(calc(100vw - 16px), 420px); }
+.rv-ov--drawer[data-tamano="l"] { width: min(calc(100vw - 16px), 480px); }
+.rv-ov--drawer[data-tamano="xl"] { width: min(calc(100vw - 16px), 640px); }
+.rv-ov--drawer[data-ancho="320"] { width: min(calc(100vw - 16px), 320px); }
+.rv-ov--drawer[data-ancho="420"] { width: min(calc(100vw - 16px), 420px); }
+.rv-ov--drawer[data-ancho="560"] { width: min(calc(100vw - 16px), 560px); }
+.rv-ov--drawer .rv-ov__panel { height: 100%; }
+/* Modal: centrado, 16 px de margen. `data-posicion="arriba"` (paleta de comandos) lo sube a un 12 % de la altura. */
+.rv-ov--modal { margin: auto; width: min(calc(100vw - 32px), 440px); }
+.rv-ov--modal[data-tamano="l"] { width: min(calc(100vw - 32px), 560px); }
+.rv-ov--modal[data-posicion="arriba"] { margin: 12vh auto auto; }
+.rv-ov--modal .rv-ov__panel { max-height: calc(100dvh - 32px); }
+.rv-ov--modal[data-posicion="arriba"] .rv-ov__panel { max-height: calc(88dvh - 32px); }
+
+/* Hoja inferior bajo 820 px: 90 dvh, esquinas superiores de 16, grabber; la marca se oculta. */
+@media (max-width: 819px) {
+  .rv-ov__marca { display: none; }
+  .rv-ov--drawer, .rv-ov--drawer[data-tamano], .rv-ov--drawer[data-ancho] { margin: auto 0 0; width: 100vw; height: fit-content; max-height: 90dvh; }
+  .rv-ov--drawer .rv-ov__panel { height: auto; max-height: 90dvh; border-width: 1px 0 0; border-radius: 16px 16px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+  .rv-ov--drawer .rv-ov__grabber { display: block; }
+  .rv-ov__cerrar { width: 32px; height: 32px; }
+}
+
+/* Entrada: fondo 140, cajón 180, modal 160. La SALIDA no se anima. Los @keyframes viven aquí para que /admin los tenga. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes rv-ov-fondo { from { opacity: 0; } }
+  @keyframes rv-ov-derecha { from { transform: translateX(16px); opacity: 0; } }
+  @keyframes rv-ov-abajo { from { transform: translateY(32px); opacity: 0; } }
+  @keyframes rv-ov-pop { from { transform: scale(.97); opacity: 0; } }
+  .rv-ov[open]::backdrop { animation: rv-ov-fondo 140ms ease both; }
+  .rv-ov--drawer[open] .rv-ov__panel { animation: rv-ov-derecha var(--ov-in, 180ms) var(--ui-ease, cubic-bezier(.22, 1, .36, 1)) both; }
+  .rv-ov--modal[open] .rv-ov__panel { animation: rv-ov-pop 160ms var(--ui-ease, cubic-bezier(.22, 1, .36, 1)) both; }
+}
+@media (max-width: 819px) and (prefers-reduced-motion: no-preference) {
+  .rv-ov--drawer[open] .rv-ov__panel { animation-name: rv-ov-abajo; }
+}
+
+/* Alto contraste forzado. */
+@media (forced-colors: active) {
+  .rv-ov__grabber { forced-color-adjust: none; background: ButtonText; }
+}
+
+/* ── Popover y menú: filas de 32, radio 12, borde 1 px, --shadow-pop, entrada 140 ms ── */
+.rv-pop { position: fixed; z-index: 60; min-width: 200px; max-width: calc(100vw - 16px); padding: 4px; background: var(--surface); color: var(--ink); border: 1px solid var(--line2, var(--line)); border-radius: 12px; box-shadow: var(--shadow-pop, none); }
+.rv-menu { display: grid; gap: 0; }
+.rv-menu__item { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 6px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font: 500 13px/1.25 var(--font-sans-ui, inherit); text-align: left; text-decoration: none; cursor: pointer; }
+.rv-menu__item:hover { background: var(--canvas); }
+.rv-menu__item:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.rv-menu__item[data-peligro] { color: var(--bad); }
+.rv-menu__item[aria-disabled="true"] { color: var(--muted); cursor: not-allowed; }
+.rv-menu__icono { display: inline-flex; flex: none; color: var(--muted); }
+.rv-menu__icono svg { width: 16px; height: 16px; }
+/* Fila con apoyo (Adjuntar): título + línea gris que se recorta. */
+.rv-menu__item--apoyo { min-height: 40px; }
+.rv-menu__apoyo { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) {
+  .rv-pop { animation: rv-ov-fondo 140ms var(--ui-ease, cubic-bezier(.22, 1, .36, 1)) both; }
+}
+
+/* ── Paleta de comandos (Modal sin cabecera): campo arriba, resultados con scroll ── */
+.rv-paleta__campo { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.rv-paleta__campo input { flex: 1 1 auto; min-width: 0; border: 0; outline: none; background: transparent; color: var(--ink); font: 400 14px/1.4 inherit; }
+.rv-paleta__campo kbd { flex: none; padding: 2px 6px; border: 1px solid var(--line); border-radius: 6px; font: 500 12px/1.2 inherit; color: var(--muted); }
+.rv-paleta__lista { max-height: 20rem; overflow-y: auto; padding: 6px 0; }
+.rv-paleta__fila { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 6px 16px; border: 0; background: transparent; color: var(--ink); font: 400 13px/1.3 inherit; text-align: left; cursor: pointer; }
+.rv-paleta__fila[aria-selected="true"] { background: var(--ink); color: var(--surface); }
+.rv-paleta__fila:disabled { opacity: .6; }
+.rv-paleta__detalle { flex: none; font-size: 12px; color: var(--muted); }
+.rv-paleta__fila[aria-selected="true"] .rv-paleta__detalle { color: inherit; opacity: .8; }
+.rv-paleta__fila[data-apagado] .rv-paleta__detalle { color: var(--bad); }
+.rv-paleta__nota { padding: 16px; font-size: 13px; color: var(--muted); }
+.rv-paleta__nota[data-error] { color: var(--bad); }
+.rv-paleta__aviso { display: flex; align-items: flex-start; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); font-size: 12px; background: var(--okbg); color: var(--ok); }
+.rv-paleta__aviso[data-tono="error"] { background: var(--badbg); color: var(--bad); }
+
+/* ── Historial del chat en móvil (Drawer): lista de conversaciones ── */
+.rv-historial { display: flex; flex-direction: column; gap: 10px; min-height: 0; }

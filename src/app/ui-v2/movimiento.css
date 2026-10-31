@@ -60,18 +60,6 @@
   @keyframes rv-barrido {
     from { stroke-dasharray: 0 100; }
   }
-  @keyframes rv-ov-fondo {
-    from { opacity: 0; }
-  }
-  @keyframes rv-ov-derecha {
-    from { transform: translateX(16px); opacity: 0; }
-  }
-  @keyframes rv-ov-abajo {
-    from { transform: translateY(32px); opacity: 0; }
-  }
-  @keyframes rv-ov-pop {
-    from { transform: scale(.97); opacity: 0; }
-  }
   /* Globo del recorrido: sube 6 px mientras aparece. */
   @keyframes rv-globo-entra {
     from { opacity: 0; transform: translate(var(--rv-gx, 0), calc(var(--rv-gy, 0px) + 6px)); }

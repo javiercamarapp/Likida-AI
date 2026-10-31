@@ -68,7 +68,7 @@ beforeAll(async () => {
 }, 90_000);
 afterAll(async () => { await browser?.close(); });
 
-const css = () => ['tokens.css', 'movimiento.css', 'componentes.css', 'graficas.css'].map((f) => readFileSync(join(f === 'tokens.css' ? RAIZ : DIR, f), 'utf8')).join('\n');
+const css = () => ['tokens.css', 'movimiento.css', 'componentes.css', 'overlay.css', 'graficas.css'].map((f) => readFileSync(join(f === 'tokens.css' ? RAIZ : DIR, f), 'utf8')).join('\n');
 async function abrir(ancho = 1440, opts: { animar?: boolean; reduce?: boolean; oscuro?: boolean } = {}): Promise<Page> {
   // Por omisión SIN animación (medidas estables); las pruebas de movimiento piden `animar`.
   const p = await browser!.newPage({ viewport: { width: ancho, height: 900 }, reducedMotion: opts.animar && !opts.reduce ? 'no-preference' : 'reduce' });
