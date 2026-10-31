@@ -1,7 +1,8 @@
 'use client';
 
 import MenuAdjuntar from './menu-adjuntar';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Drawer } from '../ui-v2/componentes/overlay';
 import { Send, ArrowUp, Search, Paperclip, X, FileText, History, PencilLine, PanelRightClose, Check } from 'lucide-react';
 import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
 import { mxn, litros, numero, fechaCorta } from '@/lib/formato';
@@ -9,6 +10,16 @@ import { useSearchParams } from 'next/navigation';
 import { Logo, LogoIcono } from '../logo';
 import { CampoPixeles } from './pixeles';
 import { Dona, AreaChartSimple } from '../admin/charts';
+
+// ¿Bajo `lg` (1024 px)? Ahí el historial es un Drawer (hoja inferior en <820, cajón en 820–1023); sobre `lg`, una columna.
+const CONSULTA_LG = '(max-width: 1023.98px)';
+function useBajoLg(): boolean {
+  return useSyncExternalStore(
+    (cb) => { const m = window.matchMedia(CONSULTA_LG); m.addEventListener('change', cb); return () => m.removeEventListener('change', cb); },
+    () => window.matchMedia(CONSULTA_LG).matches,
+    () => false,
+  );
+}
 
 /**
  * Mismo criterio que admin/chat.tsx: coincidencia de palabras clave contra
@@ -321,6 +332,7 @@ export default function ChatFlota({
   const [ocupado, setOcupado] = useState(false);
   const [recomendar, setRecomendar] = useState(false);
   const [menuAdjuntar, setMenuAdjuntar] = useState(false);
+  const movil = useBajoLg();
   const inputArchivo = useRef<HTMLInputElement>(null);
   const inputImagen = useRef<HTMLInputElement>(null);
   const inputCamara = useRef<HTMLInputElement>(null);
@@ -804,71 +816,81 @@ export default function ChatFlota({
     // una cortina. Bajo `lg` y con el historial abierto, el panel se vuelve
     // un overlay `fixed inset-0` de ancho completo (`!` fuerza el override
     // sobre el `width` inline, que sigue animando el caso de escritorio).
-    const panelHistorialMovil = historialAbierto
-      ? 'max-lg:!fixed max-lg:!inset-0 max-lg:!top-0 max-lg:!mt-0 max-lg:!w-full max-lg:!h-full max-lg:z-40'
-      : '';
-    const panelHistorial = (
-      <div className={`shrink-0 self-start sticky top-4 mt-4 overflow-hidden ${panelHistorialMovil}`}
-        style={{ width: historialAbierto ? 352 : 0, height: `calc(100dvh - ${topPanel + 32}px)`, transition: 'width 480ms cubic-bezier(0.22, 1, 0.36, 1)' }}>
-        <div className="w-[320px] mx-4 h-full rounded-2xl hairline flex flex-col p-3 gap-2.5 max-lg:!w-full max-lg:!mx-0 max-lg:!rounded-none"
-          style={{ background: 'var(--surface)', boxShadow: 'var(--shadow-card)' }}>
-          <div className="flex items-center justify-between">
-            <button type="button" onClick={nuevoChat}
-              className="hairline flex-1 flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] font-medium transition-colors hover:bg-[var(--canvas)]">
-              <PencilLine width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-              Nuevo chat
-            </button>
-            <button type="button" aria-label="Cerrar historial" title="Cerrar historial" onClick={() => setHistorialAbierto(false)}
-              className="w-8 h-8 ml-1.5 rounded-lg flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--canvas)]"
-              style={{ color: 'var(--muted)' }}>
-              <PanelRightClose width={15} height={15} strokeWidth={1.75} />
-            </button>
-          </div>
+    // H12: bajo `lg` el historial NO es una cortina `fixed inset-0` a mano sino un Drawer del motor único de overlays
+    // (hoja inferior con grabber, Esc, foco atrapado, scroll lock y retorno de foco al botón «Historial»). Sobre `lg`
+    // sigue siendo la columna en flujo de 352 px. El contenido es UNO y se monta en un solo sitio a la vez.
+    const cuerpoHistorial = (
+      <>
+        <div className="flex items-center justify-between">
+          <button type="button" onClick={nuevoChat}
+            className="hairline flex-1 flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] font-medium transition-colors hover:bg-[var(--canvas)]">
+            <PencilLine width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+            Nuevo chat
+          </button>
+          {!movil && <button type="button" aria-label="Cerrar historial" title="Cerrar historial" onClick={() => setHistorialAbierto(false)}
+            className="w-8 h-8 ml-1.5 rounded-lg flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--canvas)]"
+            style={{ color: 'var(--muted)' }}>
+            <PanelRightClose width={15} height={15} strokeWidth={1.75} />
+          </button>}
+        </div>
 
-          <div className="hairline flex items-center gap-2 px-3 py-2 rounded-full" style={{ background: 'var(--canvas)' }}>
-            <Search width={13} height={13} strokeWidth={2} style={{ color: 'var(--muted)' }} />
-            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Buscar chats" aria-label="Buscar chats"
-              className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[13px]" />
-          </div>
+        <div className="hairline flex items-center gap-2 px-3 py-2 rounded-full" style={{ background: 'var(--canvas)' }}>
+          <Search width={13} height={13} strokeWidth={2} style={{ color: 'var(--muted)' }} />
+          <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar chats" aria-label="Buscar chats"
+            className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[13px]" />
+        </div>
 
-          <div className="etiqueta-mono text-[10px] uppercase px-1 pt-1" style={{ color: 'var(--faint)' }}>
-            Recientes
-          </div>
+        <div className="etiqueta-mono text-[10px] uppercase px-1 pt-1" style={{ color: 'var(--faint)' }}>
+          Recientes
+        </div>
 
-          {errorCarga && (
-            <p className="text-[12px] px-1" style={{ color: 'var(--bad)' }}>{errorCarga}</p>
+        {errorCarga && (
+          <p className="text-[12px] px-1" style={{ color: 'var(--bad)' }}>{errorCarga}</p>
+        )}
+
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-0.5">
+          {convs === null && (
+            <div className="space-y-2 px-1 pt-1">
+              <div className="skeleton h-4 rounded" /><div className="skeleton h-4 rounded w-4/5" /><div className="skeleton h-4 rounded w-3/5" />
+            </div>
           )}
-
-          <div className="flex-1 min-h-0 overflow-y-auto space-y-0.5">
-            {convs === null && (
-              <div className="space-y-2 px-1 pt-1">
-                <div className="skeleton h-4 rounded" /><div className="skeleton h-4 rounded w-4/5" /><div className="skeleton h-4 rounded w-3/5" />
-              </div>
-            )}
-            {convs === 'error' && (
-              <p className="text-[12.5px] px-1" style={{ color: 'var(--muted)' }}>
-                No se pudo leer el historial ahora mismo — tus conversaciones siguen
-                guardadas; reintenta en un momento.
-              </p>
-            )}
-            {Array.isArray(convs) && listaFiltrada.length === 0 && (
-              <p className="text-[12.5px] px-1" style={{ color: 'var(--muted)' }}>
-                {convs.length === 0 ? 'Sin chats recientes.' : `Nada coincide con «${busqueda.trim()}».`}
-              </p>
-            )}
-            {listaFiltrada.map((c) => {
-              const activa = c.id === conversacionId;
-              return (
-                <button key={c.id} type="button" onClick={() => void cargarConversacion(c.id)}
-                  className={`w-full text-left px-2.5 py-2 rounded-lg text-[13px] transition-colors ${activa ? 'font-medium' : 'hover:bg-[var(--canvas)]'}`}
-                  style={activa ? { background: 'var(--g1)', color: 'var(--marca)' } : undefined}>
-                  <span className="block truncate">{c.titulo}</span>
-                  <span className="block text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{fechaCorta(c.actualizadoEn)}</span>
-                </button>
-              );
-            })}
-          </div>
+          {convs === 'error' && (
+            <p className="text-[12.5px] px-1" style={{ color: 'var(--muted)' }}>
+              No se pudo leer el historial ahora mismo — tus conversaciones siguen
+              guardadas; reintenta en un momento.
+            </p>
+          )}
+          {Array.isArray(convs) && listaFiltrada.length === 0 && (
+            <p className="text-[12.5px] px-1" style={{ color: 'var(--muted)' }}>
+              {convs.length === 0 ? 'Sin chats recientes.' : `Nada coincide con «${busqueda.trim()}».`}
+            </p>
+          )}
+          {listaFiltrada.map((c) => {
+            const activa = c.id === conversacionId;
+            return (
+              <button key={c.id} type="button" onClick={() => void cargarConversacion(c.id)}
+                className={`w-full text-left px-2.5 py-2 rounded-lg text-[13px] transition-colors ${activa ? 'font-medium' : 'hover:bg-[var(--canvas)]'}`}
+                style={activa ? { background: 'var(--g1)', color: 'var(--marca)' } : undefined}>
+                <span className="block truncate">{c.titulo}</span>
+                <span className="block text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{fechaCorta(c.actualizadoEn)}</span>
+              </button>
+            );
+          })}
+        </div>
+      </>
+    );
+    const panelHistorial = movil ? (
+      <Drawer abierto={historialAbierto} onCerrar={() => setHistorialAbierto(false)} titulo="Historial">
+        <div className="rv-historial">{cuerpoHistorial}</div>
+      </Drawer>
+    ) : (
+      <div className="shrink-0 self-start sticky top-4 mt-4 overflow-hidden"
+        style={{ width: historialAbierto ? 352 : 0, height: `calc(100dvh - ${topPanel + 32}px)`, transition: 'width 480ms cubic-bezier(0.22, 1, 0.36, 1)' }}
+        inert={!historialAbierto}>
+        <div className="w-[320px] mx-4 h-full rounded-2xl hairline flex flex-col p-3 gap-2.5"
+          style={{ background: 'var(--surface)', boxShadow: 'var(--shadow-card)' }}>
+          {cuerpoHistorial}
         </div>
       </div>
     );
