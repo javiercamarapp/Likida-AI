@@ -24,6 +24,12 @@ Las dos comparten medidas (cabecera 36, fila 40, densa 32) y estados (`EsqTablaV
 paginación por URL, selección y teclado de celdas; `TablaBase` es el marcado mínimo correcto. No dupliques: si una pantalla necesita más
 que `TablaBase`, sube a `TablaLista` sin cambiar el contenido de las celdas (`celda(fila)` es el mismo contrato).
 
+## Notas de uso (revisión)
+- `Tabs`/`TabsLinea`: el conteo es neutro; `atencion: true` (con conteo > 0) lo pinta burdeos, solo si de verdad pide acción. Con `param`, la URL es la fuente de verdad (atrás/adelante la siguen). En móvil (<820 px) cada pestaña mide 44 px; en `SegmentedControl`, 44 px por botón.
+- `Radio` en un grupo que NO debe viajar al servidor: `name` + `form="sin-formulario"` (un formulario que no existe) mantiene las flechas del grupo sin enviar el campo.
+- `Tooltip`: abierta mientras el puntero esté sobre el disparador o la burbuja (puente CSS de 10 px); en táctil un toque la muestra 3 s.
+- Iconos: lucide sin `strokeWidth` se dibuja a 2, no a 1.75; la guarda tiene un segundo trinquete (`BASE_SIN_TRAZO`) para código nuevo.
+
 ## Reglas
 - Sin `style=` ni `<style>` (CSP con nonce). Movimiento solo bajo `prefers-reduced-motion: no-preference`.
 - Nunca solo color: el estado siempre lleva texto (o forma, como el punto hueco de `muted`).
