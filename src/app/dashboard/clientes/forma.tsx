@@ -4,6 +4,7 @@ import { useActionState } from 'react';
 import { ComboCatalogo, type BuscarCatalogo } from '../combo-catalogo';
 import { useFormStatus } from 'react-dom';
 import { Save } from 'lucide-react';
+import { Casilla } from '@/app/ui-v2/componentes';
 // SOLO TIPOS DE `clientes.ts`, y es una restricción real, no un gusto: ese
 // módulo importa `supabaseAdmin`, cuyo encabezado dice textualmente "NUNCA
 // importar en código de cliente". Un `import` de valor (por ejemplo del
@@ -131,10 +132,7 @@ export function FormaCliente({ accion, id = '', inicial, idPrefijo }: {
         </div>
       </div>
 
-      <label className="flex items-center gap-2 text-[12px] cursor-pointer">
-        <input type="checkbox" name="activo" defaultChecked={inicial.activo} />
-        Cliente activo
-      </label>
+      <Casilla name="activo" defaultChecked={inicial.activo} etiqueta="Cliente activo" />
 
       <Aviso estado={estado} />
       <Boton etiqueta={id ? 'Guardar cambios' : 'Dar de alta'} />
@@ -255,10 +253,7 @@ export function FormaTarifa({
         </div>
       </div>
 
-      <label className="flex items-center gap-2 text-[12px] cursor-pointer">
-        <input type="checkbox" name="activa" defaultChecked={inicial.activa} />
-        Tarifa activa
-      </label>
+      <Casilla name="activa" defaultChecked={inicial.activa} etiqueta="Tarifa activa" />
 
       <Aviso estado={estado} />
       <Boton etiqueta={id ? 'Guardar cambios' : 'Agregar tarifa'} />
