@@ -11,6 +11,8 @@ import { DIAS_AVISO } from '@/lib/likida/vigencias';
 import { hoyMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import { VistaArranqueWhatsApp, type DatosArranque } from './vista';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'WhatsApp del operador' };
 
 export const dynamic = 'force-dynamic';
 

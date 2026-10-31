@@ -22,6 +22,8 @@ import { evaluarRiesgoDia, type PoliticaFlota } from '@/lib/likida/jornada/riesg
 import { evaluarSemanas, type SemanaEvaluada } from '@/lib/likida/jornada/semanas';
 import { sufijoTenant } from '../sufijo';
 import { VistaJornada, type FilaJornada } from './vista';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Jornada' };
 
 export const dynamic = 'force-dynamic';
 

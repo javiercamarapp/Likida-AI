@@ -17,6 +17,8 @@ import { procesarDocumento, recibirDocumento } from '@/lib/likida/carta_porte_do
 import { sufijoTenant } from '../../sufijo';
 import { VistaDocumentos, filtroEnvioDe, type DatosDocumentos } from './vista';
 import type { ResultadoAccion } from './forma_accion';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Documentos de clientes' };
 
 export const dynamic = 'force-dynamic';
 // Subir un documento lo lee en la misma petición (visión + posible escalamiento): puede tardar.

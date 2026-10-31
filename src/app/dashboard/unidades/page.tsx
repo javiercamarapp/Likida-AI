@@ -27,6 +27,8 @@ import { VistaUnidades } from './vista';
 import { BloqueTaller } from './taller';
 import type { ResultadoForma } from './forma';
 import type { ResultadoEstado } from './estado';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Unidades' };
 
 export const dynamic = 'force-dynamic';
 

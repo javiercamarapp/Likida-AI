@@ -11,6 +11,8 @@ import { ahoraMs } from '@/lib/saludo';
 import { proyectar } from './mexico-geo';
 import { VistaMapa, type SinUbicar, type Rastreo } from './vista';
 import type { ViajeEnMapa, PinUnidad } from './mapa-vivo';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Mapa' };
 
 export const dynamic = 'force-dynamic';
 

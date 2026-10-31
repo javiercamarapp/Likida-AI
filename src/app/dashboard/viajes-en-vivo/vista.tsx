@@ -1,3 +1,4 @@
+import { BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
 import { CircleAlert, MapPin, MapPinOff, Radio, ShieldAlert } from 'lucide-react';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import { ETIQUETA_DESTINO, type TareaAbierta } from '@/lib/likida/orquestador/escalamiento';
@@ -5,6 +6,8 @@ import { textoAntiguedad, type FilaViaje, type TableroViajes, type TipoExcepcion
 import type { NivelFrescura } from '@/lib/likida/orquestador/enganche_gps';
 import type { Semaforo } from '@/lib/likida/conductor/tablero';
 import { ActualizarSolo } from './actualizar_solo';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL TABLERO DE VIAJES EN VIVO — presentación pura (el modelo ya viene armado
@@ -41,15 +44,6 @@ const GRAVEDAD: Record<1 | 2 | 3, { texto: string; color: string }> = {
   3: { texto: 'Urgente', color: 'var(--bad)' }, 2: { texto: 'Revisar', color: 'var(--warn)' }, 1: { texto: 'Vigilar', color: 'var(--muted)' },
 };
 
-function Kpi({ titulo, valor, nota, tono }: { titulo: string; valor: string; nota?: string; tono?: 'warn' | 'bad' }) {
-  return (
-    <div className="card p-3.5">
-      <div className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{titulo}</div>
-      <div className="cifra-mono text-[20px] font-medium mt-1" style={tono ? { color: `var(--${tono})` } : undefined}>{valor}</div>
-      {nota && <div className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{nota}</div>}
-    </div>
-  );
-}
 
 function Filtros({ f, c, accionUrl, ocultos }: { f: FiltrosVistaViajes; c: CatalogoVista; accionUrl: string; ocultos: Record<string, string> }) {
   const sel = 'hairline rounded-lg px-2 h-8 text-[12.5px] outline-none focus:border-[var(--muted)]';
@@ -208,17 +202,16 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
 }) {
   const c = tablero.conteos;
   return (
-    <div className="space-y-4">
-      <header className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h1 className="font-display text-[22px] font-semibold">Viajes en vivo</h1>
-          <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
-            Todos los viajes en curso con su último hito, la posición del tractor y qué tan vieja es. Actualizado {fechaHoraMx(tablero.generadoEn)}.
-          </p>
+    <MarcoPagina
+      titulo="Viajes en vivo"
+      apoyo={`Viajes en curso con su último hito y la posición del tractor, con qué tan vieja es. Actualizado ${fechaHoraMx(tablero.generadoEn)}.`}
+      acciones={(
+        <>
           <ActualizarSolo />
-        </div>
-        <a href={hrefMapa} className="text-[12.5px] underline" style={{ color: 'var(--muted)' }}>Ver el mapa</a>
-      </header>
+          <BotonEnlace tamano="sm" href={hrefMapa}>Ver el mapa</BotonEnlace>
+        </>
+      )}
+    >
 
       {!tablero.gpsDisponible && (
         <div role="alert" className="card p-3 text-[12.5px] inline-flex items-center gap-2" style={{ color: 'var(--warn)' }}>
@@ -226,12 +219,12 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-        <Kpi titulo="Viajes en curso" valor={numero(c.viajes)} nota={tablero.hayMas ? 'Hay más viajes activos que los listados' : undefined} />
-        <Kpi titulo="Con excepción" valor={numero(c.conExcepcion)} tono={c.conExcepcion > 0 ? 'warn' : undefined} />
-        <Kpi titulo="Sin señal de vida" valor={numero(c.sinSenal)} nota="Chofer y tractor callados" tono={c.sinSenal > 0 ? 'bad' : undefined} />
-        <Kpi titulo="Llegadas sin confirmar" valor={numero(c.llegadaSinConfirmar)} nota={`${numero(c.escaladosATrafico)} escalados a tráfico`} />
-      </div>
+      <TiraCifras sello={selloHoy('Viajes en curso')}>
+        <Cifra etiqueta="Viajes en curso" valor={numero(c.viajes)} nota={tablero.hayMas ? 'Hay más viajes activos que los listados' : undefined} />
+        <Cifra etiqueta="Con excepción" valor={numero(c.conExcepcion)} tono={c.conExcepcion > 0 ? 'warn' : undefined} />
+        <Cifra etiqueta="Sin señal de vida" valor={numero(c.sinSenal)} nota="Chofer y tractor callados" tono={c.sinSenal > 0 ? 'bad' : undefined} />
+        <Cifra etiqueta="Llegadas sin confirmar" valor={numero(c.llegadaSinConfirmar)} nota={`${numero(c.escaladosATrafico)} escalados a tráfico`} />
+      </TiraCifras>
 
       <Filtros f={filtros} c={catalogo} accionUrl={accionUrl} ocultos={ocultos} />
 
@@ -253,7 +246,7 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
       {pregunta}
       {tareas}
       {notificaciones}
-    </div>
+    </MarcoPagina>
   );
 }
 
