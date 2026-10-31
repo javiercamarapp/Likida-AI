@@ -20,6 +20,7 @@ import { Casilla, Radio, Campo, Fieldset, CampoArchivo } from '${ruta('component
 import { Switch } from '${ruta('componentes/switch')}';
 import { Tooltip } from '${ruta('componentes/overlay')}';
 import { StatusChip } from '${ruta('componentes/status-chip')}';
+import { TablaBase } from '${ruta('componentes/tabla-base')}';
 import { Tabs } from '${ruta('componentes/tabs')}';
 import { SegmentedControl } from '${ruta('componentes/segmented')}';
 function App() {
@@ -31,6 +32,8 @@ function App() {
       <Tabs etiqueta="Secciones" param="vista" pestanas={[{ valor: 'a', etiqueta: 'Resumen', contenido: <p id="pa">Panel A <button id="ba">x</button></p> }, { valor: 'b', etiqueta: 'Fuentes', conteo: 0, contenido: <p id="pb">Panel B</p> }, { valor: 'c', etiqueta: 'Cobertura', conteo: 3, contenido: <p id="pc">Panel C</p> }]} />
       <div style={{ position: 'absolute', left: 4, top: 600 }}><Tooltip texto="Cuadra contra el anticipo y la política de gasto de la flota"><button id="con-tip">Cuadre</button></Tooltip> <Tooltip texto="Solo texto">Corte</Tooltip></div>
       <div id="estados"><StatusChip tono="ok">Cuadra</StatusChip><StatusChip tono="warn">Por revisar</StatusChip><StatusChip tono="bad">Rechazada</StatusChip><StatusChip tono="info">En cola</StatusChip><StatusChip>Borrador</StatusChip><StatusChip tono="muted">Sin dato</StatusChip></div>
+      <div id="tablas"><TablaBase etiqueta="Unidades" tarjetaMovil idFila={(f: { id: string }) => f.id} columnas={[{ id: 'u', titulo: 'Unidad', principal: true, celda: (f: { id: string; km: number }) => f.id }, { id: 'k', titulo: 'Km', alinear: 'der', celda: (f: { id: string; km: number }) => f.km }]} filas={Array.from({ length: 40 }, (_, i) => ({ id: 'U-' + i, km: i * 10 }))} />
+<TablaBase etiqueta="Vacía" idFila={(f: { id: string }) => f.id} columnas={[]} filas={[]} vacio={{ titulo: 'Sin unidades', texto: 'Aún no hay unidades.' }} /></div>
       <output id="periodo">{periodo}</output>
       <form id="f">
         <Casilla id="c1" name="c1" etiqueta="Recibir avisos" ayuda="Llegan por correo" checked={marcada} onChange={(e) => setMarcada(e.target.checked)} />
@@ -59,6 +62,8 @@ beforeAll(async () => {
   try {
     const r = await build({
       configFile: false, logLevel: 'silent', root: RAIZ,
+      // next/link y next/navigation (Boton → EstadoError) no se empaquetan para el navegador: se sustituyen por fixtures.
+      resolve: { alias: { 'next/link': join(RAIZ, '__fixtures__/next-link-prueba.tsx'), 'next/navigation': join(RAIZ, '__fixtures__/next-navigation-prueba.ts') } },
       define: { 'process.env.NODE_ENV': '"development"' },
       build: { write: false, minify: false, lib: { entry: entrada, formats: ['iife'], name: 'App', fileName: 'app' } },
     });
@@ -321,6 +326,34 @@ describe.skipIf(SIN_NAVEGADOR)('StatusChip · comportamiento en Chromium', () =>
     expect(new Set(r.slice(0, 4).map((c) => c.fondo)).size).toBe(4);
     expect(r[0].dot).toBe(r[0].color); // el punto lleva la tinta del tono
     expect(r[5].dot).toBe('rgba(0, 0, 0, 0)'); expect(r[5].sombra).not.toBe('none'); // muted = punto hueco
+    await p.close();
+  });
+});
+
+describe.skipIf(SIN_NAVEGADOR)('TablaBase · comportamiento en Chromium', () => {
+  it('región con nombre y foco por teclado, cabecera de 36 px pegajosa, filas de 40 y tope de alto', async () => {
+    const p = await abrir();
+    const r = await p.evaluate(() => {
+      const reg = document.querySelector('.rv-tb__region') as HTMLElement;
+      const th = document.querySelector('.rv-tb thead th') as HTMLElement; const td = document.querySelector('.rv-tb tbody td') as HTMLElement;
+      return { rol: reg.getAttribute('role'), nombre: document.getElementById(reg.getAttribute('aria-labelledby')!)?.textContent, tab: reg.tabIndex, cab: Math.round(parseFloat(getComputedStyle(th).height)), fila: Math.round(parseFloat(getComputedStyle(td).height)), pos: getComputedStyle(th).position, max: getComputedStyle(reg).maxHeight, scroll: reg.scrollHeight > reg.clientHeight, rowhead: document.querySelector('.rv-tb tbody th')?.getAttribute('scope') };
+    });
+    expect(r).toMatchObject({ rol: 'region', nombre: 'Unidades', tab: 0, cab: 36, fila: 40, pos: 'sticky', scroll: true, rowhead: 'row' });
+    expect(r.max).not.toBe('none');
+    await p.close();
+  });
+  it('la cabecera se queda fija al desplazar; sin filas muestra el estado vacío, no una tabla', async () => {
+    const p = await abrir();
+    const antes = await p.evaluate(() => { const reg = document.querySelector('.rv-tb__region') as HTMLElement; reg.scrollTop = 300; return document.querySelector('.rv-tb thead th')!.getBoundingClientRect().top - reg.getBoundingClientRect().top; });
+    expect(Math.abs(antes)).toBeLessThan(2);
+    expect(await p.evaluate(() => document.querySelectorAll('#tablas table').length)).toBe(1);
+    expect(await p.textContent('#tablas .rv-vacio__titulo')).toBe('Sin unidades');
+    await p.close();
+  });
+  it('móvil: cada fila es una tarjeta con rótulo y valor', async () => {
+    const p = await abrir(390);
+    const r = await p.evaluate(() => ({ disp: getComputedStyle(document.querySelector('.rv-tb tbody tr')!).display, etq: getComputedStyle(document.querySelector('.rv-tb tbody td')!, '::before').content }));
+    expect(r.disp).toBe('grid'); expect(r.etq).toContain('Km');
     await p.close();
   });
 });

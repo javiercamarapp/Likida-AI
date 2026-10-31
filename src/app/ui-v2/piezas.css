@@ -106,3 +106,16 @@
 [data-ui="v2"] .rv-estado[data-tono="muted"] { color: var(--muted); }
 [data-ui="v2"] .rv-estado[data-tono="muted"] .rv-estado__punto { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted); }
 @media (forced-colors: active) { [data-ui="v2"] .rv-estado { border: 1px solid CanvasText; } [data-ui="v2"] .rv-estado__punto { forced-color-adjust: none; background: CanvasText; } }
+
+/* ── Tabla base: región con scroll y foco; la cabecera pegajosa y las filas de 40 las dan `.card table` (componentes.css) ── */
+[data-ui="v2"] .rv-tb { overflow: hidden; padding: 0; }
+[data-ui="v2"] .rv-tb__region { overflow: auto; scrollbar-width: thin; }
+[data-ui="v2"] .rv-tb__region[data-alto="max"] { max-height: min(62dvh, 640px); }
+[data-ui="v2"] .rv-tb__region:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+[data-ui="v2"] .rv-tb table tbody th { height: 40px; padding: 0 12px; border-bottom: 1px solid var(--line); font-size: var(--t-body); font-weight: 500; text-align: left; vertical-align: middle; }
+[data-ui="v2"] .rv-tb table[data-densa] tbody th { height: 32px; }
+[data-ui="v2"] .rv-tb table tbody tr:last-child th { border-bottom: 0; }
+[data-ui="v2"] .rv-tb table tbody tr:hover { background: var(--canvas); }
+@media (max-width: 819px) {
+  [data-ui="v2"] .rv-tb table[data-tarjeta] tbody th { display: flex; justify-content: space-between; gap: 8px; height: auto; padding: 0; border: 0; }
+}

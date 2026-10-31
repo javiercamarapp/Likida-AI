@@ -25,3 +25,4 @@ export { SegmentedControl, type OpcionSegmentada } from './segmented';
 export { Tabs, type PestanaDef } from './tabs';
 export { TabsLinea, type PestanaLinea } from './tabs-linea';
 export { StatusChip, type TonoEstado } from './status-chip';
+export { TablaBase, type ColumnaBase } from './tabla-base';
