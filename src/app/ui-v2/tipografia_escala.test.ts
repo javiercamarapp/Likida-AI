@@ -27,7 +27,7 @@ function tamanos(texto: string): number[] {
   const out: number[] = [];
   for (const m of limpio.matchAll(/text-\[([0-9.]+)px\]/g)) out.push(Number(m[1]));
   for (const m of limpio.matchAll(/font-size:\s*([0-9.]+)px/g)) out.push(Number(m[1]));
-  for (const m of limpio.matchAll(/font:\s*(?:italic\s+)?[0-9]{3}\s+([0-9.]+)px/g)) out.push(Number(m[1]));
+  for (const m of limpio.matchAll(/font:\s*[a-z]*\s*[0-9]{3}\s+([0-9.]+)px/g)) out.push(Number(m[1]));
   for (const m of limpio.matchAll(/fontSize:\s*['"]?([0-9.]+)(?:px)?['"]?/g)) out.push(Number(m[1]));
   return out;
 }

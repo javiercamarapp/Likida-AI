@@ -70,7 +70,8 @@ describe('ⓘ: cobertura de cifras y recuadros en las páginas migradas', () => 
 
   it('toda clave nueva (fuera de «resumen.») sigue la forma <pagina>.<recuadro> y su título coincide con el nombre accesible', () => {
     for (const [k, t] of Object.entries(INFO) as Array<[string, InfoTexto]>) {
-      expect(k, k).toMatch(/^[a-z0-9_-]+(\.[a-z0-9_-]+)+$/);
+      expect(k.split('.').length, k).toBeGreaterThan(1);
+      for (const parte of k.split('.')) expect(parte, k).toMatch(/^[a-z0-9_-]+$/);
       expect(t.titulo.trim().length, k).toBeGreaterThan(3);
       expect(t.queEs, k).not.toMatch(/\n/);
       expect(t.queEs.length, k).toBeLessThanOrEqual(110);
