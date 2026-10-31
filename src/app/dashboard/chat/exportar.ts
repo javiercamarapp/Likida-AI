@@ -1,3 +1,4 @@
+import { filaCsvSegura } from '@/lib/csv_seguro';
 import type { Respuesta, Visual } from './respuestas';
 
 /** Los visuales de una respuesta, en el orden en que se pintan. */
@@ -5,11 +6,11 @@ export function visualesDe(r: Respuesta): Visual[] {
   return [...(r.visual ? [r.visual] : []), ...(r.visuales ?? [])];
 }
 
-const escaparCsv = (s: string) => (/[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s);
-
-/** CSV de una tabla de respuesta (clave, valor): lo MISMO que se ve en pantalla, ya formateado. */
+/** CSV de una tabla de respuesta (concepto, valor): lo MISMO que se ve en pantalla, ya formateado. TODA celda pasa por la guarda
+ *  única anti-inyección de fórmulas (`@/lib/csv_seguro`, CWE-1236): el texto de una tabla puede venir de un documento ajeno (CFDI, PDF,
+ *  Excel adjunto) y empezar con `=`, `+`, `-`, `@` o tabulador. Un importe en texto plano («-12.50») no se altera. */
 export function tablaACsv(filas: Array<[string, string]>): string {
-  return ['Concepto,Valor', ...filas.map(([k, v]) => `${escaparCsv(k)},${escaparCsv(String(v))}`)].join('\n');
+  return [filaCsvSegura(['Concepto', 'Valor']), ...filas.map(([k, v]) => filaCsvSegura([k, v], { numerosEnTexto: true }))].join('\n');
 }
 
 /** Texto plano de una respuesta para copiarla: el texto y, debajo, cada tabla / cifra en líneas «Concepto: valor». */
