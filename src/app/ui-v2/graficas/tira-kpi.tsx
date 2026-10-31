@@ -69,7 +69,7 @@ export function TiraKpi({ items, etiqueta = 'Indicadores' }: { items: ItemKpi[];
             </span>
             <span className="rv-kpi__fila">
               <span className="rv-kpi__valor" data-vacio={vacio || undefined}>
-                {it.conteo && typeof it.valor === 'number' ? <ConteoKpi valor={it.valor} formato={numero} /> : texto}
+                {it.conteo && typeof it.valor === 'number' ? <ConteoKpi valor={it.valor} /> : texto}
               </span>
               {!vacio && it.serie && it.serie.length > 1 ? <span className="rv-kpi__spark"><Sparkline valores={it.serie} matiz={matiz} /></span> : null}
             </span>
