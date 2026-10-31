@@ -18,6 +18,7 @@ export { InfoTip } from './info-tip';
 export { Tarjeta, type EstadoTarjeta } from './tarjeta';
 export { TituloRecuadro } from './titulo-recuadro';
 export { BarraFiltros, type ChipFiltro } from './barra-filtros';
+export { FiltroOpciones, FiltroChip, FiltroBusqueda, FiltroFecha, FiltroInterruptor, FiltroCampo, FiltroLimpiar, type OpcionFiltro } from './filtros';
 export { useMovil } from './movil';
 export { Icono, TRAZO_ICONO, type TamanoIcono } from './icono';
 export { Casilla, Radio, Campo, Fieldset, CampoArchivo } from './campos';

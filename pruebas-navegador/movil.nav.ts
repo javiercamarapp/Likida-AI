@@ -56,7 +56,8 @@ test('del resumen al registro navegando con el dedo, y la tabla es legible', asy
 
 test('los filtros del registro también funcionan a dedo', async ({ page }) => {
   await page.goto('/dashboard/viajes');
-  await page.getByRole('link', { name: 'Liquidados', exact: true }).tap();
+  await page.getByRole('button', { name: /^Estado/ }).tap();
+  await page.getByRole('option', { name: 'Liquidados', exact: true }).tap();
   await expect(page).toHaveURL(/f=liquidados/);
   await expect(page.locator('body')).toContainText('VJ-2026-0844');
   await expect(page.locator('body')).not.toContainText('VJ-2026-0001');

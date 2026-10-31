@@ -8,7 +8,7 @@ import { BotonConfirmar } from '@/app/admin/ui/confirmar';
 import { calcularInsightsA1, entradaDesdeFichas, type InsightA1 } from '@/lib/likida/liquidacion_externa/insights_a1';
 import type { EntregaCorreo, EstadoEntregaCorreo, Excepcion, TipoExcepcion } from '@/lib/likida/liquidacion_externa/repo_correo';
 import type { DetalleDesglose, LecturaDetalle, RolDetalle } from './detalle_desglose';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { BarraFiltros, FiltroFecha, FiltroOpciones, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 import { EnlacePagina, NavPaginas } from '../../paginador';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -293,28 +293,12 @@ export async function SeccionDesgloses(p: DesglosesProps) {
 
       <BloqueInsights insights={lectura.insights ?? calcularInsightsA1(entradaDesdeFichas(fichas))} />
 
-      <form method="get" className="flex flex-wrap items-end gap-2 mb-3">
-        {p.contexto.map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-        <label className="flex flex-col gap-1">
-          <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Estado</span>
-          <select name="des_estado" defaultValue={p.filtro ?? ''} className={CLASE_CONTROL} style={ESTILO_CONTROL}>
-            <option value="">Todos</option>
-            {FILTROS.map((f) => <option key={f} value={f}>{ROTULO_FILTRO[f]}</option>)}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Desde</span>
-          <input type="date" name="des_desde" defaultValue={p.desde ?? ''} max={hoy} className={CLASE_CONTROL} style={ESTILO_CONTROL} />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Hasta</span>
-          <input type="date" name="des_hasta" defaultValue={p.hasta ?? ''} max={hoy} className={CLASE_CONTROL} style={ESTILO_CONTROL} />
-        </label>
-        <button type="submit" className="rv-btn rv-btn--primary text-[12px] font-medium rounded-lg px-3 py-1.5" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>Filtrar</button>
-        {filtrando && (
-          <Link href={query(p.contexto)} className="text-[12px] font-medium px-2 py-1.5 hover:opacity-70 transition-opacity" style={{ color: 'var(--muted)' }}>Limpiar</Link>
-        )}
-      </form>
+      <BarraFiltros accion="?" ocultos={p.contexto} etiqueta="Filtros de desgloses" nActivos={filtrando ? 1 : 0} limpiarHref={query(p.contexto)} className="mb-3">
+        <FiltroOpciones nombre="des_estado" etiqueta="Estado" valor={p.filtro ?? ''}
+          opciones={[{ valor: '', rotulo: 'Todos' }, ...FILTROS.map((f) => ({ valor: f, rotulo: ROTULO_FILTRO[f] }))]} />
+        <FiltroFecha nombre="des_desde" etiqueta="Desde" valor={p.desde} max={hoy} />
+        <FiltroFecha nombre="des_hasta" etiqueta="Hasta" valor={p.hasta} max={hoy} />
+      </BarraFiltros>
 
       {verSinPoliza ? (
         sinPoliza.length === 0 ? (

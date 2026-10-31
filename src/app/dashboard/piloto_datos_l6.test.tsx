@@ -69,17 +69,21 @@ describe('Viajes · misma función, tabla accesible', () => {
     expect(h).toContain('Importar desde tu TMS');
     expect(pintarViajes({ puedeImportar: false })).not.toContain('Importar desde tu TMS');
   });
-  it('chips de filtros activos: estado y búsqueda; quitar uno conserva el otro y el tenant', () => {
+  it('UNA sola representación de los filtros activos (la barra): estado y búsqueda vigentes, opciones que conservan el otro filtro y el tenant', () => {
     const h = pintarViajes({ filtro: 'abiertos', q: 'V-1' });
-    expect(h).toContain('aria-label="Filtros activos"');
-    expect(h).toContain('Quitar el filtro Estado: Abiertos');
-    expect(h).toContain('Quitar el filtro Búsqueda: V-1');
-    const etiqueta = [...h.matchAll(/<a\b[^>]*>/g)].map((m) => m[0]).find((a) => a.includes('Quitar el filtro Estado: Abiertos')) ?? '';
-    const quitarEstado = (etiqueta.match(/href="([^"]+)"/)?.[1] ?? '').replace(/&amp;/g, '&');
-    expect(quitarEstado).not.toBe('');
-    const q = new URL(quitarEstado, 'https://x').searchParams;
-    expect(Object.fromEntries(q)).toEqual({ tenant: 'T1', q: 'V-1' });
-    expect(pintarViajes()).not.toContain('Filtros activos');
+    expect(h).not.toContain('Filtros activos'); // sin segunda fila de chips duplicada
+    expect(h).toContain('name="q"');
+    expect(h).toContain('value="V-1"');
+    expect(h).toContain('type="hidden" name="tenant" value="T1"');
+    expect(h).toContain('type="hidden" name="f" value="abiertos"');
+    const hrefs = [...h.matchAll(/<a\b[^>]*href="([^"]+)"[^>]*>(Liquidados|Todos)<\/a>/g)].map((m) => m[1].replace(/&amp;/g, '&'));
+    expect(hrefs.length).toBe(2);
+    const liq = new URL(hrefs.find((u) => u.includes('liquidados')) ?? '', 'https://x').searchParams;
+    expect(Object.fromEntries(liq)).toEqual({ tenant: 'T1', f: 'liquidados', q: 'V-1' });
+    // «Limpiar» vuelve al registro sin filtros y conserva el tenant
+    const limpiar = [...h.matchAll(/<a\b[^>]*href="([^"]+)"[^>]*>Limpiar<\/a>/g)].map((m) => m[1].replace(/&amp;/g, '&'));
+    expect(limpiar).toEqual(['/dashboard/viajes?tenant=T1']);
+    expect(pintarViajes()).not.toContain('Limpiar');
   });
   it('paginación por cursor intacta y vacío por filtro', () => {
     const h = pintarViajes({ cursor: 'CUR', hayMas: true, siguiente: 'SIG' });
@@ -157,9 +161,11 @@ describe('Cola de liquidaciones · misma función, tabla accesible', () => {
     const chips = chipsDeCola(pagina([]), { ...SIN_FILTROS, operadorId: U(1) }, TERMS, []);
     expect(chips[0].valor).toBe('elegido');
   });
-  it('«Quitar todos» limpia la query pero conserva el tenant', async () => {
+  it('«Limpiar» (única representación, sin fila de chips duplicada) limpia la query pero conserva el tenant', async () => {
     const h = await pintarCola(pagina([fila(1)], 1), { ...SIN_FILTROS, estado: 'revisar', desde: '2026-10-01' });
-    expect(h).toContain('Quitar todos');
+    expect(h).toContain('Limpiar');
+    expect(h).not.toContain('Quitar todos');
+    expect(h).not.toContain('Filtros activos');
     expect(h).toContain('href="?tenant=flota-1"');
   });
   it('vacío con filtro dice que quites alguno; sin filtro, que no hay nada que firmar', async () => {
@@ -281,6 +287,7 @@ describe('Campo de búsqueda con icono (Viajes)', () => {
     const css = readFileSync(new URL('../ui-v2/componentes.css', import.meta.url), 'utf8');
     expect(css).toMatch(/padding-inline: 10px; padding-block: 4px;/);
     expect(css).toMatch(/\[class\*="pl-"\], \[class\*="pr-"\]\) \{ padding-inline: 10px/);
-    expect(pintarViajes()).toContain('pl-8');
+    // El icono vive DENTRO del chip de búsqueda (flex), no sobre el campo: no hay texto que pisar.
+    expect(pintarViajes()).toContain('rv-fl--buscar');
   });
 });

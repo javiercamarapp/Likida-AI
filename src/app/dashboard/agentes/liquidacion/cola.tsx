@@ -1,15 +1,15 @@
 import Link from 'next/link';
-import { Inbox, ArrowRight, Filter } from 'lucide-react';
+import { Inbox, ArrowRight } from 'lucide-react';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
 import { EstadoVacio } from '../../estados';
-import { ESTILO_CONTROL } from '@/app/admin/ui/forma';
+import { BarraFiltros, FiltroCampo, FiltroFecha, FiltroOpciones } from '@/app/ui-v2/componentes';
 import { ComboCatalogo, type BuscarCatalogo } from '../../combo-catalogo';
 import {
   ESTADOS_CUADRE, REVISIONES, hayFiltrosCola,
   type FiltrosCola, type PaginaCola, type FilaCola, type RevisionLiquidacion,
 } from '@/lib/likida/revision';
 import { EnlacePagina, NavPaginas } from '../../paginador';
-import { ChipsFiltro, SelloDato, TablaLista, chipsActivos, type ColumnaTabla } from '@/app/ui-v2/datos';
+import { SelloDato, TablaLista, chipsActivos, type ColumnaTabla } from '@/app/ui-v2/datos';
 import { ahoraMs } from '@/lib/saludo';
 import { fechaMx } from '@/lib/formato';
 
@@ -96,10 +96,9 @@ export async function SeccionCola({ cola, filtros, terminales, buscar, contexto,
         <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{rotuloCola(pagina, filtros)}</p>
       </div>
 
-      <FormaFiltros filtros={filtros} terminales={terms} buscar={buscar} contexto={contexto} conFiltros={conFiltros} />
+      <FormaFiltros filtros={filtros} terminales={terms} buscar={buscar} contexto={contexto} conFiltros={conFiltros}
+        nombres={Object.fromEntries(chipsDeCola(pagina, filtros, terms, contexto).map((c) => [c.id, c.valor]))} />
 
-      {/* Los filtros vigentes como chips quitables (el estado vive en la URL; quitar uno conserva tenant/vista/rol y los demás). */}
-      <ChipsFiltro chips={chipsDeCola(pagina, filtros, terms, contexto)} quitarTodosHref={`?${new URLSearchParams(contexto).toString()}`} className="mb-3" />
 
       {pagina.filas.length === 0 ? (
         <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
@@ -155,88 +154,48 @@ export function paramsDeFiltros(f: FiltrosCola): Array<[string, string]> {
   return p;
 }
 
-function FormaFiltros({ filtros, terminales, buscar, contexto, conFiltros }: {
+function FormaFiltros({ filtros, terminales, buscar, contexto, conFiltros, nombres }: {
   filtros: FiltrosCola;
   terminales: { opciones: Array<{ id: string; nombre: string }>; recortadas: boolean } | null;
   buscar: BuscarCatalogo;
   contexto: Array<[string, string]>;
   conFiltros: boolean;
+  /** Nombres legibles de los filtros vigentes (operador, unidad): el combo los muestra, no el id. */
+  nombres: Record<string, string>;
 }) {
   return (
     /* GET y no server action: un filtro tiene que poder compartirse por chat y
        sobrevivir al botón de atrás. `cursor` NO se conserva — cambiar el filtro
        empieza la cola desde arriba, o la página 3 de otro filtro no significa
-       nada. */
-    <form method="get" className="flex flex-wrap items-end gap-2 mb-3">
-      {contexto.map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-
-      <Campo etiqueta="Revisión">
-        <select name="rev" defaultValue={filtros.revision} className={CLASE_CONTROL} style={ESTILO_CONTROL}>
-          {REVISIONES.map((r) => <option key={r} value={r}>{ROTULO_REVISION[r]}</option>)}
-        </select>
-      </Campo>
-
-      <Campo etiqueta="Cuadre">
-        <select name="estado" defaultValue={filtros.estado ?? ''} className={CLASE_CONTROL} style={ESTILO_CONTROL}>
-          <option value="">Cualquiera</option>
-          {ESTADOS_CUADRE.map((e) => <option key={e} value={e}>{ROTULO_ESTADO[e]?.rotulo ?? e}</option>)}
-        </select>
-      </Campo>
+       nada. Una sola barra (LF): elegir envía, sin botón «Filtrar». */
+    <BarraFiltros accion="?" ocultos={contexto} etiqueta="Filtros de la cola" nActivos={conFiltros ? 1 : 0}
+      limpiarHref={`?${new URLSearchParams(contexto).toString()}`} className="mb-3">
+      <FiltroOpciones nombre="rev" etiqueta="Revisión" valor={filtros.revision} porDefecto="pendiente"
+        opciones={REVISIONES.map((r) => ({ valor: r, rotulo: ROTULO_REVISION[r] }))} />
+      <FiltroOpciones nombre="estado" etiqueta="Cuadre" valor={filtros.estado ?? ''}
+        opciones={[{ valor: '', rotulo: 'Cualquiera' }, ...ESTADOS_CUADRE.map((e) => ({ valor: e, rotulo: ROTULO_ESTADO[e]?.rotulo ?? e }))]} />
 
       {/* El catálogo NO viaja: el combo pide 20 al escribir (FE-2). */}
-      <Campo etiqueta="Operador">
-        <ComboCatalogo tipo="operador" name="operador" buscar={buscar} etiquetaVacia="Cualquiera"
-          valorInicial={filtros.operadorId} className={CLASE_CONTROL} estilo={ESTILO_CONTROL} aria-label="Filtrar por operador" />
-      </Campo>
-      <Campo etiqueta="Unidad">
-        <ComboCatalogo tipo="unidad" name="unidad" buscar={buscar} etiquetaVacia="Cualquiera"
-          valorInicial={filtros.unidadId} className={CLASE_CONTROL} estilo={ESTILO_CONTROL} aria-label="Filtrar por unidad" />
-      </Campo>
+      <FiltroCampo etiqueta="Operador">
+        <ComboCatalogo tipo="operador" name="operador" buscar={buscar} etiquetaVacia="Cualquiera" enBarra
+          valorInicial={filtros.operadorId} textoInicial={filtros.operadorId && nombres.operador !== 'elegido' ? nombres.operador : ''} aria-label="Filtrar por operador" />
+      </FiltroCampo>
+      <FiltroCampo etiqueta="Unidad">
+        <ComboCatalogo tipo="unidad" name="unidad" buscar={buscar} etiquetaVacia="Cualquiera" enBarra
+          valorInicial={filtros.unidadId} textoInicial={filtros.unidadId && nombres.unidad !== 'elegida' ? nombres.unidad : ''} aria-label="Filtrar por unidad" />
+      </FiltroCampo>
 
-      {/* Sin terminales legibles NO se pinta el selector: un `<select>` con
+      {/* Sin terminales legibles NO se pinta el selector: un selector con
           solo «Cualquiera» afirmaría que la flota no tiene sucursales. */}
       {terminales && terminales.opciones.length > 0 && (
-        <Campo etiqueta="Terminal" pista={terminales.recortadas ? `primeras ${numero(terminales.opciones.length)}; hay más` : undefined}>
-          <select name="terminal" defaultValue={filtros.terminalId ?? ''} className={CLASE_CONTROL} style={ESTILO_CONTROL}>
-            <option value="">Cualquiera</option>
-            {terminales.opciones.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-          </select>
-        </Campo>
+        <FiltroOpciones nombre="terminal" valor={filtros.terminalId ?? ''}
+          etiqueta={terminales.recortadas ? `Terminal (primeras ${numero(terminales.opciones.length)}; hay más)` : 'Terminal'}
+          opciones={[{ valor: '', rotulo: 'Cualquiera' }, ...terminales.opciones.map((t) => ({ valor: t.id, rotulo: t.nombre }))]} />
       )}
 
-      <Campo etiqueta="Desde">
-        <input type="date" name="desde" defaultValue={filtros.desde ?? ''} className={CLASE_CONTROL} style={ESTILO_CONTROL} />
-      </Campo>
-      <Campo etiqueta="Hasta">
-        <input type="date" name="hasta" defaultValue={filtros.hasta ?? ''} className={CLASE_CONTROL} style={ESTILO_CONTROL} />
-      </Campo>
-
-      <button type="submit"
-        className="rv-btn rv-btn--primary inline-flex items-center gap-1.5 text-[12px] font-medium rounded-lg px-3 py-1.5"
-        style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-        <Filter width={12} height={12} strokeWidth={2} /> Filtrar
-      </button>
-      {conFiltros && (
-        <Link href={`?${new URLSearchParams(contexto).toString()}`}
-          className="text-[12px] font-medium px-2 py-1.5 hover:opacity-70 transition-opacity"
-          style={{ color: 'var(--muted)' }}>
-          Limpiar
-        </Link>
-      )}
-    </form>
-  );
-}
-
-const CLASE_CONTROL = 'text-[12px] rounded-lg px-2 py-1.5 min-w-[9rem]';
-
-function Campo({ etiqueta, pista, children }: { etiqueta: string; pista?: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>
-        {etiqueta}{pista ? ` · ${pista}` : ''}
-      </span>
-      {children}
-    </label>
+      <FiltroFecha nombre="desde" etiqueta="Desde" valor={filtros.desde} />
+      <FiltroFecha nombre="hasta" etiqueta="Hasta" valor={filtros.hasta} />
+    </BarraFiltros>
   );
 }
 

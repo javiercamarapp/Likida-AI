@@ -1,0 +1,223 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- rutas fijas del propio módulo */
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { type Browser, type Page } from 'playwright';
+import { build } from 'vite';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { lanzarNavegador, SIN_NAVEGADOR } from '../navegador_prueba';
+
+// COMPORTAMIENTO REAL de la familia de filtros (LF) en Chromium: selección, envío GET con los parámetros de siempre,
+// limpiar, teclado, Esc, alto 32/36, una sola fila.
+const RAIZ = join(__dirname, '..');
+const ENTRADA = `
+import React, { useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import { BarraFiltros } from '${join(RAIZ, 'componentes/barra-filtros').replace(/\\/g, '/')}';
+import { FiltroOpciones, FiltroBusqueda, FiltroFecha, FiltroInterruptor } from '${join(RAIZ, 'componentes/filtros').replace(/\\/g, '/')}';
+window.__envios = []; window.__navegaciones = []; document.addEventListener('click', (e) => { const a = e.target.closest && e.target.closest('a'); if (a) { e.preventDefault(); window.__navegaciones.push(a.getAttribute('href')); } }, true);
+document.addEventListener('submit', (e) => { e.preventDefault(); window.__envios.push(new URLSearchParams(new FormData(e.target)).toString()); }, true);
+function Periodo() {
+  const [v, setV] = useState('semanal');
+  return <div><FiltroOpciones etiqueta="Periodo" porDefecto="semanal" valor={v} onCambio={setV} opciones={[{ valor: 'semanal', rotulo: 'Semanal' }, { valor: 'mensual', rotulo: 'Mensual' }]} /><output id="periodo">{v}</output></div>;
+}
+function App() {
+  return (
+    <div data-ui="v2" style={{ padding: 16, width: '100%' }}>
+      <BarraFiltros accion="/dashboard/x" ocultos={{ tenant: 't1' }} nActivos={1} limpiarHref="/dashboard/x?tenant=t1">
+        <FiltroOpciones nombre="rev" etiqueta="Revisión" porDefecto="pendientes" valor="pendientes" opciones={[{ valor: 'pendientes', rotulo: 'Pendientes' }, { valor: 'todas', rotulo: 'Todas' }]} />
+        <FiltroOpciones nombre="estado" etiqueta="Cuadre" valor="" opciones={[{ valor: '', rotulo: 'Cualquiera' }, { valor: 'cuadrado', rotulo: 'Cuadrado' }, { valor: 'sobrante', rotulo: 'Sobrante' }]} />
+        <FiltroFecha nombre="desde" etiqueta="Desde" valor="" />
+        <FiltroInterruptor nombre="vista" valor="excepciones" etiqueta="Solo con excepciones" marcado={false} />
+        <FiltroBusqueda nombre="q" placeholder="Folio" />
+        <FiltroOpciones nombre="chofer" etiqueta="Chofer" valor="" opciones={[{ valor: '', rotulo: 'Todos' }, ...Array.from({ length: 30 }, (_, i) => ({ valor: 'c' + i, rotulo: (i % 2 ? 'Patricio ' : 'Marisol ') + i }))]} />
+        <FiltroOpciones nombre="raro" etiqueta="Terminal" valor="uuid-desconocido" opciones={[{ valor: '', rotulo: 'Todas' }, { valor: 't1', rotulo: 'Patio Norte' }]} />
+      </BarraFiltros>
+      <Periodo />
+      <FiltroOpciones etiqueta="Estado" valor="todos" porDefecto="todos" opciones={[{ valor: 'todos', rotulo: 'Todos', href: '/v?f=todos' }, { valor: 'abiertos', rotulo: 'Abiertos', href: '/v?f=abiertos&q=a' }]} />
+    </div>
+  );
+}
+createRoot(document.getElementById('raiz')!).render(<App />);
+`;
+let browser: Browser | null = null;
+let bundle = '';
+beforeAll(async () => {
+  if (SIN_NAVEGADOR) return;
+  const entrada = join(__dirname, `.entrada_filtros_${process.pid}.tmp.tsx`);
+  const enlace = join(__dirname, `.stub_link_${process.pid}.tmp.tsx`);
+  writeFileSync(entrada, ENTRADA);
+  writeFileSync(enlace, "import React from 'react';\nexport default function Link({ href, children, prefetch: _p, scroll: _s, ...r }: any) { return <a href={href} {...r}>{children}</a>; }\n");
+  try {
+    const r = await build({ configFile: false, logLevel: 'silent', root: RAIZ, define: { 'process.env.NODE_ENV': '"development"' },
+      resolve: { alias: { 'next/link': enlace } },
+      build: { write: false, minify: false, lib: { entry: entrada, formats: ['iife'], name: 'App', fileName: 'app' } } });
+    const salida = (Array.isArray(r) ? r[0] : r) as { output: Array<{ type: string; code?: string }> };
+    bundle = salida.output.find((o) => o.type === 'chunk')!.code!;
+  } finally { rmSync(entrada, { force: true }); rmSync(enlace, { force: true }); }
+  browser = await lanzarNavegador();
+}, 90_000);
+afterAll(async () => { await browser?.close(); });
+
+async function abrir(ancho = 1280): Promise<Page> {
+  const p = await browser!.newPage({ viewport: { width: ancho, height: 800 }, reducedMotion: 'reduce' });
+  const css = ['tokens.css', 'movimiento.css', 'graficas.css', 'componentes.css', 'overlay.css'].map((f) => readFileSync(join(RAIZ, f), 'utf8')).join('\n');
+  await p.setContent(`<!doctype html><html data-theme="light"><head><style>*{box-sizing:border-box}${css}</style></head><body><div id="raiz"></div><script>${bundle.replace(/<\/script>/g, '<\\/script>')}</script></body></html>`);
+  await p.waitForSelector('button.rv-fl');
+  return p;
+}
+const envios = (p: Page) => p.evaluate(() => (window as unknown as { __envios: string[] }).__envios);
+
+describe.skipIf(SIN_NAVEGADOR)('Filtros LF · comportamiento en Chromium', { timeout: 30_000 }, () => {
+  it('elegir una opción envía el GET con TODOS los parámetros (ocultos + valores vigentes)', async () => {
+    const p = await abrir();
+    await p.getByRole('button', { name: 'Cuadre' }).click();
+    await p.getByRole('option', { name: 'Sobrante' }).click();
+    const e = await envios(p);
+    expect(e).toHaveLength(1);
+    const q = new URLSearchParams(e[0]);
+    expect(q.get('tenant')).toBe('t1');
+    expect(q.get('estado')).toBe('sobrante');
+    expect(q.get('rev')).toBe('pendientes');
+    await p.close();
+  });
+  it('el chip activo muestra el valor dentro y se marca; el neutro no', async () => {
+    const p = await abrir();
+    await p.getByRole('button', { name: 'Cuadre' }).click();
+    await p.getByRole('option', { name: 'Cuadrado' }).click();
+    // la página real recarga; aquí el estado local ya refleja el valor
+    const t = await p.evaluate(() => { const b = [...document.querySelectorAll('button.rv-fl')].find((x) => x.textContent?.includes('Cuadre'))!; return { txt: b.textContent, activo: b.hasAttribute('data-activo') }; });
+    expect(t.txt).toContain('Cuadrado');
+    expect(t.activo).toBe(true);
+    const neutro = await p.evaluate(() => [...document.querySelectorAll('button.rv-fl')].find((x) => x.textContent?.includes('Revisión'))!.hasAttribute('data-activo'));
+    expect(neutro).toBe(false);
+    await p.close();
+  });
+  it('teclado: flecha abre, flechas mueven, Intro elige, Esc cierra y devuelve el foco', async () => {
+    const p = await abrir();
+    await p.getByRole('button', { name: 'Cuadre' }).focus();
+    await p.keyboard.press('ArrowDown');
+    expect(await p.locator('[role="option"]').count()).toBe(3);
+    expect(await p.evaluate(() => document.activeElement?.textContent)).toContain('Cualquiera');
+    await p.keyboard.press('Escape');
+    expect(await p.locator('.rv-pop').count()).toBe(0);
+    expect(await p.evaluate(() => document.activeElement?.textContent)).toContain('Cuadre');
+    await p.keyboard.press('ArrowDown');
+    await p.keyboard.press('ArrowDown');
+    await p.keyboard.press('Enter');
+    expect(new URLSearchParams((await envios(p))[0]).get('estado')).toBe('cuadrado');
+    await p.close();
+  });
+  it('fecha e interruptor envían al cambiar; Intro en la búsqueda envía q', async () => {
+    const p = await abrir();
+    await p.locator('input[name="desde"]').fill('2026-10-01', { timeout: 4000 });
+    await p.locator('label.rv-fl--interruptor').click({ timeout: 4000 });
+    await p.locator('input[name="q"]').fill('V-10', { timeout: 4000 });
+    await p.keyboard.press('Enter');
+    const e = (await envios(p)).map((s) => new URLSearchParams(s));
+    expect(e[0].get('desde')).toBe('2026-10-01');
+    expect(e[1].get('vista')).toBe('excepciones');
+    expect(e.at(-1)!.get('q')).toBe('V-10');
+    await p.close();
+  });
+  it('A2: teclear la fecha dígito a dígito NO envía hasta salir del campo; el calendario (cambio sin teclear) envía', async () => {
+    const p = await abrir();
+    const f = p.locator('input[name="desde"]');
+    await f.focus();
+    await f.pressSequentially('10012026', { delay: 30 });
+    expect(await envios(p)).toEqual([]); // 0002, 0020, 0202… no recargan
+    await f.blur();
+    const e = await envios(p);
+    expect(e).toHaveLength(1);
+    expect(new URLSearchParams(e[0]).get('desde')).toBe('2026-10-01');
+    await p.close();
+  });
+  it('A2: Intro con año incompleto no envía; con fecha completa sí', async () => {
+    const p = await abrir();
+    const f = p.locator('input[name="hasta"]').or(p.locator('input[name="desde"]')).first();
+    await f.focus();
+    await f.pressSequentially('1001', { delay: 20 }); // año 0001
+    await p.keyboard.press('Enter');
+    expect(await envios(p)).toEqual([]);
+    await p.keyboard.type('2026');
+    await p.keyboard.press('Enter');
+    expect((await envios(p)).length).toBe(1);
+    await p.close();
+  });
+  it('A1: el foco visible de los chips cabe dentro de la fila con scroll (no se recorta)', async () => {
+    const p = await abrir();
+    await p.keyboard.press('Tab');
+    const r = await p.evaluate(() => {
+      const el = document.activeElement as HTMLElement; const z = document.querySelector('.rv-filtros__chips')!.getBoundingClientRect(); const c = el.getBoundingClientRect();
+      return { arriba: c.top - z.top, abajo: z.bottom - c.bottom, izq: c.left - z.left, outline: getComputedStyle(el).outlineWidth, off: getComputedStyle(el).outlineOffset, foco: el.matches(':focus-visible') };
+    });
+    expect(r.foco).toBe(true);
+    expect(r.arriba).toBeGreaterThanOrEqual(4); expect(r.abajo).toBeGreaterThanOrEqual(4); expect(r.izq).toBeGreaterThanOrEqual(4);
+    if (process.env.UI2_CAPT) await p.screenshot({ path: join(process.env.UI2_CAPT, 'lf-07-foco__1280__claro.png'), clip: { x: 0, y: 0, width: 700, height: 90 } });
+    await p.close();
+  });
+  it('M1: opciones del popover a 44 px bajo 820 px', async () => {
+    const p = await abrir(390);
+    await p.getByRole('button', { name: 'Cuadre' }).click();
+    expect(await p.evaluate(() => Math.round(document.querySelector('.rv-fl__op')!.getBoundingClientRect().height))).toBeGreaterThanOrEqual(44);
+    await p.close();
+  });
+  it('M4: lista larga trae buscador y type-ahead acumulado; Espacio elige', async () => {
+    const p = await abrir();
+    await p.getByRole('button', { name: 'Chofer' }).click();
+    expect(await p.locator('input[aria-label="Buscar en Chofer"]').count()).toBe(1);
+    await p.keyboard.type('patricio 1');
+    expect(await p.locator('[role="option"]').count()).toBeGreaterThan(0);
+    expect(await p.locator('[role="option"]:not(:has-text("Patricio"))').count()).toBe(0);
+    await p.keyboard.press('ArrowDown');
+    await p.keyboard.press('Space');
+    expect(new URLSearchParams((await envios(p))[0]).get('chofer')).toMatch(/^c\d+$/);
+    await p.close();
+  });
+  it('B1: un valor de la URL fuera de las opciones no se pinta como id crudo', async () => {
+    const p = await abrir();
+    const t = await p.evaluate(() => [...document.querySelectorAll('button.rv-fl')].find((x) => x.textContent?.includes('Terminal'))!.textContent);
+    expect(t).not.toContain('uuid-desconocido');
+    expect(t).toContain('Valor no válido');
+    await p.close();
+  });
+  it('«Limpiar» es un enlace al contexto sin filtros; modo cliente (periodo) cambia sin enviar', async () => {
+    const p = await abrir();
+    expect(await p.getByRole('link', { name: 'Limpiar' }).getAttribute('href')).toBe('/dashboard/x?tenant=t1');
+    await p.getByRole('button', { name: 'Periodo' }).click();
+    await p.getByRole('option', { name: 'Mensual' }).click();
+    expect(await p.locator('#periodo').textContent()).toBe('mensual');
+    expect(await envios(p)).toEqual([]);
+    await p.close();
+  });
+  it('modo enlace: elegir navega al href de la pantalla (los enlaces existentes siguen siendo los mismos)', async () => {
+    const p = await abrir();
+    await p.getByRole('button', { name: 'Estado' }).click();
+    await p.getByRole('option', { name: 'Abiertos' }).click();
+    expect(await p.evaluate(() => (window as unknown as { __navegaciones: string[] }).__navegaciones)).toEqual(['/v?f=abiertos&q=a']);
+    await p.close();
+  });
+  it('1440 y 390: UNA fila; controles de 32 px (36 en móvil); la fila se desplaza en horizontal', async () => {
+    for (const [ancho, alto] of [[1280, 32], [390, 36]] as const) {
+      const p = await abrir(ancho);
+      const r = await p.evaluate(() => {
+        const cs = [...document.querySelectorAll('.rv-filtros .rv-fl')].map((e) => e.getBoundingClientRect());
+        const z = document.querySelector('.rv-filtros__chips') as HTMLElement;
+        return { altos: cs.map((c) => Math.round(c.height)), tops: cs.map((c) => Math.round(c.top)), desplaza: z.scrollWidth > z.clientWidth, barra: document.querySelector('.rv-filtros')!.getBoundingClientRect().height };
+      });
+      expect(new Set(r.altos)).toEqual(new Set([alto]));
+      expect(Math.max(...r.tops) - Math.min(...r.tops)).toBeLessThanOrEqual(2);
+      expect(r.barra).toBeLessThanOrEqual(48);
+      if (ancho === 390) expect(r.desplaza).toBe(true);
+      await p.close();
+    }
+  });
+  it.skipIf(!process.env.UI2_CAPT)('captura del popover abierto (solo con UI2_CAPT=<dir>)', async () => {
+    for (const ancho of [1280, 390]) for (const tema of ['light', 'dark']) {
+      const p = await abrir(ancho);
+      await p.evaluate((t) => document.documentElement.setAttribute('data-theme', t), tema);
+      await p.getByRole('button', { name: 'Cuadre' }).click();
+      await p.screenshot({ path: join(process.env.UI2_CAPT!, `lf-06-popover__${ancho}__${tema === 'light' ? 'claro' : 'oscuro'}.png`), clip: { x: 0, y: 0, width: Math.min(ancho, 900), height: 260 } });
+      await p.close();
+    }
+  });
+});

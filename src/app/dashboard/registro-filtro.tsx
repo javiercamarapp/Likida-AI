@@ -1,12 +1,12 @@
 import Link from 'next/link';
-import { Search } from 'lucide-react';
+import { BarraFiltros, FiltroBusqueda } from '@/app/ui-v2/componentes';
 import { numero } from '@/lib/formato';
 import { urlRegistro, type PaginaRegistroUI } from './paginar-registro';
 
 /**
  * La barra de búsqueda + paginación de los registros del panel (FE-12).
  *
- * Es un `<form method="get">` a propósito: sin JavaScript, sin estado de
+ * Es un `<form method="get">` a propósito (la BarraFiltros de ui-v2 en modo GET): Intro envía, sin estado de
  * cliente y sin server action. El registro es una pantalla de lectura; lo que
  * necesita es que la URL diga qué se está mirando —para poder compartirla y
  * para que "atrás" funcione—, no un componente interactivo.
@@ -39,28 +39,10 @@ export function FiltroRegistro<T>({
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-      <form method="get" action={ruta} className="flex items-center gap-2">
-        {camposOcultos.map(([n, v]) => <input key={n} type="hidden" name={n} value={v} />)}
-        <div className="relative">
-          <Search width={14} height={14} strokeWidth={1.75} aria-hidden
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--faint)' }} />
-          <input type="search" name={nombreQ} defaultValue={q} maxLength={80}
-            aria-label={`Buscar en ${sustantivo}`} placeholder={`Buscar en ${sustantivo}…`}
-            className="hairline h-8 w-64 rounded-lg pl-8 pr-3 text-[13px] outline-none focus:border-[var(--muted)] transition-colors"
-            style={{ background: 'var(--surface)' }} />
-        </div>
-        <button type="submit"
-          className="rv-btn rv-btn--secondary hairline h-8 px-3 rounded-lg text-[12px] font-medium transition-colors hover:bg-[var(--canvas)]"
-          style={{ background: 'var(--surface)' }}>
-          Buscar
-        </button>
-        {hayFiltro && (
-          <Link href={urlRegistro(ruta, sufijo, { [nombreQ]: null, [nombreP]: null, [nombreEditar]: null })}
-            className="text-[12px] underline hover:opacity-70 transition-opacity" style={{ color: 'var(--muted)' }}>
-            Quitar filtro
-          </Link>
-        )}
-      </form>
+      <BarraFiltros buscar accion={ruta} enLinea etiqueta={`Buscar en ${sustantivo}`} ocultos={camposOcultos} nActivos={hayFiltro ? 1 : 0}
+        limpiarHref={urlRegistro(ruta, sufijo, { [nombreQ]: null, [nombreP]: null, [nombreEditar]: null })}>
+        <FiltroBusqueda nombre={nombreQ} valor={q} placeholder={`Buscar en ${sustantivo}…`} etiqueta={`Buscar en ${sustantivo}`} />
+      </BarraFiltros>
 
       <div className="flex items-center gap-3 text-[12px]" style={{ color: 'var(--muted)' }}>
         <span>

@@ -248,6 +248,6 @@ describe('A2 ola 1 · selector de mes y vista de dos meses', () => {
     expect(html).toContain('Decena 2026-03 · 21 a 31');
     expect(html).toContain('Cobros tardíos que caen dentro de la ventana (se acomodan): 1');
     expect(html).toContain('Anteriores a 2026-02');
-    expect(html).toContain('Ver los dos meses');
+    expect(html).toContain('Dos meses juntos');
   });
 });

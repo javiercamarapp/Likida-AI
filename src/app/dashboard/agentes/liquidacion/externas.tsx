@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { BarraFiltros, FiltroFecha, FiltroOpciones } from '@/app/ui-v2/componentes';
 import { Truck, Download, RefreshCw, FileText, FileSpreadsheet, Send, Settings2 } from 'lucide-react';
 import { fechaCorta, numero, hoyMx, fechaHoraMx } from '@/lib/formato';
 import { EstadoVacio } from '../../estados';
@@ -192,43 +193,25 @@ export async function SeccionExternas(p: ExternasProps) {
           href={query(p.contexto, [['ext_estado', 'acusada']])} />
       </div>
 
-      <div className="flex flex-wrap items-end gap-2 mb-3 justify-between">
-        <form method="get" className="flex flex-wrap items-end gap-2">
-          {p.contexto.map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-          <label className="flex flex-col gap-1">
-            <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Estado</span>
-            <select name="ext_estado" defaultValue={p.filtroEstado ?? ''} className={CLASE_CONTROL} style={ESTILO_CONTROL}>
-              <option value="">Todos</option>
-              {ESTADOS.map((e) => <option key={e} value={e}>{ROTULO_ESTADO[e].rotulo}</option>)}
-              <option value="no_coincide">No coincide (respuesta del chofer)</option>
-            </select>
-          </label>
-          <button type="submit" className="rv-btn rv-btn--primary text-[12px] font-medium rounded-lg px-3 py-1.5"
-            style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>Filtrar</button>
-          {p.filtroEstado && (
-            <Link href={query(p.contexto)} className="text-[12px] font-medium px-2 py-1.5 hover:opacity-70 transition-opacity"
-              style={{ color: 'var(--muted)' }}>Limpiar</Link>
-          )}
-        </form>
+      <div className="flex flex-wrap items-center gap-2 mb-3 justify-between">
+        <BarraFiltros accion="?" enLinea ocultos={p.contexto} etiqueta="Filtros de liquidaciones externas" nActivos={p.filtroEstado ? 1 : 0} limpiarHref={query(p.contexto)}>
+          <FiltroOpciones nombre="ext_estado" etiqueta="Estado" valor={p.filtroEstado ?? ''}
+            opciones={[{ valor: '', rotulo: 'Todos' }, ...ESTADOS.map((e) => ({ valor: e, rotulo: ROTULO_ESTADO[e].rotulo })), { valor: 'no_coincide', rotulo: 'No coincide (respuesta del chofer)' }]} />
+        </BarraFiltros>
 
         {/* El CSV es de un PERIODO (máximo 3 meses): el rótulo lo dice. GET a la
-            ruta de export, que re-gatea sesión, área y rol. */}
-        <form method="get" action="/api/export/liquidaciones-externas" className="flex flex-wrap items-end gap-2">
-          {p.contexto.filter(([k]) => k === 'tenant').map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-          {p.filtroEstado && p.filtroEstado !== 'no_coincide' && <input type="hidden" name="estado" value={p.filtroEstado} />}
-          {p.filtroEstado === 'no_coincide' && <input type="hidden" name="respuestaChofer" value="no_coincide" />}
-          <label className="flex flex-col gap-1">
-            <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Desde</span>
-            <input type="date" name="desde" defaultValue={hace30} className={CLASE_CONTROL} style={ESTILO_CONTROL} />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Hasta</span>
-            <input type="date" name="hasta" defaultValue={hoy} className={CLASE_CONTROL} style={ESTILO_CONTROL} />
-          </label>
-          <button type="submit" className="rv-btn rv-btn--secondary inline-flex items-center gap-1.5 text-[12px] font-medium rounded-lg px-3 py-1.5 hairline">
-            <Download width={12} height={12} strokeWidth={2} /> Exportar CSV
-          </button>
-        </form>
+            ruta de export, que re-gatea sesión, área y rol. Aquí elegir una fecha NO
+            envía: exportar es una acción, no un filtro. */}
+        <BarraFiltros accion="/api/export/liquidaciones-externas" enLinea etiqueta="Exportar CSV por periodo"
+          ocultos={[
+            ...p.contexto.filter(([k]) => k === 'tenant'),
+            ...(p.filtroEstado && p.filtroEstado !== 'no_coincide' ? [['estado', p.filtroEstado] as const] : []),
+            ...(p.filtroEstado === 'no_coincide' ? [['respuestaChofer', 'no_coincide'] as const] : []),
+          ]}>
+          <FiltroFecha nombre="desde" etiqueta="Desde" valor={hace30} autoEnvio={false} />
+          <FiltroFecha nombre="hasta" etiqueta="Hasta" valor={hoy} autoEnvio={false} />
+          <button type="submit" className="rv-btn rv-btn--secondary rv-btn--sm"><Download aria-hidden strokeWidth={1.75} /> Exportar CSV</button>
+        </BarraFiltros>
       </div>
 
       {pagina.filas.length === 0 ? (

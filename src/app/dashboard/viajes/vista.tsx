@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowRight, Inbox, Search, FileUp } from 'lucide-react';
+import { ArrowRight, Inbox, FileUp } from 'lucide-react';
 import { numero, fechaMx, mxn } from '@/lib/formato';
 import { StatusPill, type Estado } from '@/app/admin/ui/kit';
 import { EstadoVacio } from '../estados';
@@ -8,8 +8,8 @@ import { PillAviso } from '../despacho/vista';
 import { ImportarViajes, type AccionImportar } from './importar';
 import { EnlacePagina, NavPaginas } from '../paginador';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
-import { ChipsFiltro, SelloDato, TablaLista, chipsActivos, type ColumnaTabla } from '@/app/ui-v2/datos';
+import { BarraFiltros, FiltroBusqueda, FiltroOpciones, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { SelloDato, TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
 import { ahoraMs } from '@/lib/saludo';
 
 export type FiltroViajes = 'todos' | 'abiertos' | 'en_cuadre' | 'liquidados' | 'escalados';
@@ -140,13 +140,6 @@ export function VistaViajes({
 }) {
   const conteo = (n: number | null): { valor: string; estado?: 'error'; reintentar?: boolean } => (n === null ? { valor: '—', estado: 'error', reintentar: true } : { valor: numero(n) });
   const params = new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo);
-  // Los filtros vigentes como chips quitables: el estado vive en la URL (sin JavaScript). Quitar uno conserva tenant/vista/rol y los demás.
-  const vigentes = Object.fromEntries([...params.entries(), ...(filtro !== 'todos' ? [['f', filtro]] : []), ...(q ? [['q', q]] : [])]);
-  const chips = chipsActivos('/dashboard/viajes', vigentes, [
-    { param: 'f', etiqueta: 'Estado', omitir: ['todos'], rotuloValor: (v) => ROTULO_FILTRO[v as FiltroViajes] ?? v },
-    { param: 'q', etiqueta: 'Búsqueda' },
-  ]);
-
   return (
     <MarcoPagina titulo="Viajes" apoyo="El registro de viajes de tu flota, navegable y filtrable. Crear, asignar y avisar se hace en Despacho.">
 
@@ -162,33 +155,15 @@ export function VistaViajes({
 
       <section className="card p-4 relative">
         <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {(Object.keys(ROTULO_FILTRO) as FiltroViajes[]).map((f) => (
-              <Link key={f} href={hrefRegistro(sufijo, { f, q })}
-                className="px-2.5 h-7 inline-flex items-center rounded-lg text-[12px] font-medium transition-colors hairline"
-                style={filtro === f
-                  ? { background: 'var(--marca)', color: 'var(--marca-fg)', borderColor: 'var(--marca)' }
-                  : { background: 'var(--surface)', color: 'var(--muted)' }}>
-                {ROTULO_FILTRO[f]}
-              </Link>
-            ))}
-          </div>
+          {/* GET puro: la búsqueda vive en la URL y sobrevive a recargar, compartir y volver atrás. El sufijo y el filtro viajan como
+              campos ocultos para no perderse al enviar; el estado es un enlace (hrefRegistro) con la búsqueda vigente. */}
+          <BarraFiltros accion="/dashboard/viajes" enLinea buscar etiqueta="Filtros de viajes" nActivos={(filtro !== 'todos' ? 1 : 0) + (q ? 1 : 0)} limpiarHref={hrefRegistro(sufijo, {})}
+            ocultos={[...params.entries(), ...(filtro !== 'todos' ? [['f', filtro] as [string, string]] : [])]}>
+            <FiltroOpciones etiqueta="Estado" valor={filtro} porDefecto="todos"
+              opciones={(Object.keys(ROTULO_FILTRO) as FiltroViajes[]).map((f) => ({ valor: f, rotulo: ROTULO_FILTRO[f], href: hrefRegistro(sufijo, { f, q }) }))} />
+            <FiltroBusqueda nombre="q" valor={q} placeholder="Folio, origen o destino" etiqueta="Buscar viaje" />
+          </BarraFiltros>
           <div className="flex items-center gap-2 flex-wrap">
-            {/* GET puro: la búsqueda vive en la URL y sobrevive a recargar,
-                compartir y volver atrás. El sufijo y el filtro viajan como
-                campos ocultos para no perderse al enviar. */}
-            <form method="get" action="/dashboard/viajes" className="flex items-center gap-1.5" role="search">
-              {[...params.entries()].map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-              {filtro !== 'todos' && <input type="hidden" name="f" value={filtro} />}
-              <label className="relative">
-                <span className="sr-only">Buscar viaje</span>
-                <Search width={13} height={13} strokeWidth={1.75} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--faint)' }} aria-hidden />
-                <input type="search" name="q" defaultValue={q} placeholder="Folio, origen o destino"
-                  className="h-8 pl-8 pr-3 rounded-lg hairline text-[12px] w-[220px] max-w-full"
-                  style={{ background: 'var(--surface)' }} />
-              </label>
-              <button type="submit" className={`rv-btn rv-btn--secondary ${BTN_SEC}`} style={{ background: 'var(--surface)' }}>Buscar</button>
-            </form>
             {puedeImportar && (
               // Sin JavaScript ni estado: `<details>` abre y cierra solo.
               // Cerrado es un botón secundario; abierto, el panel del
@@ -207,8 +182,6 @@ export function VistaViajes({
             )}
           </div>
         </div>
-
-        <ChipsFiltro chips={chips} quitarTodosHref={hrefRegistro(sufijo, {})} className="mb-3" />
 
         {filas.length === 0 ? (
           <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>

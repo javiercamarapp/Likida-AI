@@ -3,7 +3,7 @@ import { numero } from '@/lib/formato';
 import { horaExactaMx, type FilaEstadia, type ResumenEstadias } from '@/lib/likida/conductor/estadias_anden';
 import { textoTiempo } from '@/lib/likida/conductor/planificador';
 import type { CatalogosFiltro } from '@/lib/likida/conductor/repo_validacion';
-import { MarcoPagina, Aviso, BotonEnlace } from '@/app/ui-v2/componentes';
+import { BarraFiltros, FiltroFecha, FiltroOpciones, MarcoPagina, Aviso, BotonEnlace } from '@/app/ui-v2/componentes';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 
@@ -37,7 +37,8 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
   /** Solo si el rol ve dinero: el CSV de cobro (con horas libres, tarifa y monto propuesto). */
   csvUrl: string | null; ocultos: Record<string, string>;
 }) {
-  const sel = 'hairline rounded-lg px-2 h-8 text-[12px]';
+  const hay = Boolean(filtros.terminalId || filtros.clienteId || filtros.operadorId);
+  const hrefLimpio = `?${new URLSearchParams(ocultos).toString()}`;
   const carga = promedioCerradas(filas, 'carga');
   const descarga = promedioCerradas(filas, 'descarga');
   return (
@@ -47,32 +48,18 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
       </Aviso>
 
       <section className="card p-4 space-y-3" aria-label="Filtros">
-        <form method="get" className="flex flex-wrap items-end gap-2.5">
-          {Object.entries(ocultos).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-          <label className="text-[11px] font-medium">Desde<input type="date" name="desde" defaultValue={filtros.desde} className={`${sel} block mt-1`} /></label>
-          <label className="text-[11px] font-medium">Hasta<input type="date" name="hasta" defaultValue={filtros.hasta} className={`${sel} block mt-1`} /></label>
-          <label className="text-[11px] font-medium">Patio
-            <select name="terminal" defaultValue={filtros.terminalId} className={`${sel} block mt-1`}>
-              <option value="">Todos</option>{(catalogos?.terminales ?? []).map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-            </select>
-          </label>
-          <label className="text-[11px] font-medium">Cliente
-            <select name="cliente" defaultValue={filtros.clienteId} className={`${sel} block mt-1`}>
-              <option value="">Todos</option>{(catalogos?.clientes ?? []).map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-            </select>
-          </label>
-          <label className="text-[11px] font-medium">Chofer
-            <select name="chofer" defaultValue={filtros.operadorId} className={`${sel} block mt-1`}>
-              <option value="">Todos</option>{(catalogos?.operadores ?? []).map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
-            </select>
-          </label>
-          <button type="submit" className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12px] font-medium hairline transition-colors hover:bg-[var(--canvas)]">Aplicar</button>
+        <BarraFiltros accion="?" ocultos={ocultos} etiqueta="Filtros de estadías" nActivos={hay ? 1 : 0} limpiarHref={hrefLimpio}>
+          <FiltroFecha nombre="desde" etiqueta="Desde" valor={filtros.desde} />
+          <FiltroFecha nombre="hasta" etiqueta="Hasta" valor={filtros.hasta} />
+          <FiltroOpciones nombre="terminal" etiqueta="Patio" valor={filtros.terminalId} opciones={[{ valor: '', rotulo: 'Todos' }, ...(catalogos?.terminales ?? []).map((t) => ({ valor: t.id, rotulo: t.nombre }))]} />
+          <FiltroOpciones nombre="cliente" etiqueta="Cliente" valor={filtros.clienteId} opciones={[{ valor: '', rotulo: 'Todos' }, ...(catalogos?.clientes ?? []).map((c) => ({ valor: c.id, rotulo: c.nombre }))]} />
+          <FiltroOpciones nombre="chofer" etiqueta="Chofer" valor={filtros.operadorId} opciones={[{ valor: '', rotulo: 'Todos' }, ...(catalogos?.operadores ?? []).map((o) => ({ valor: o.id, rotulo: o.nombre }))]} />
           {csvUrl && (
-            <a href={csvUrl} className="h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-              <Download width={13} height={13} strokeWidth={1.75} aria-hidden />CSV para cobro de estadías
+            <a href={csvUrl} className="rv-btn rv-btn--primary rv-btn--sm">
+              <Download aria-hidden strokeWidth={1.75} />CSV para cobro de estadías
             </a>
           )}
-        </form>
+        </BarraFiltros>
         {!csvUrl && (
           <p className="text-[11px]" style={{ color: 'var(--faint)' }}>El CSV de cobro (horas libres, tarifa y monto propuesto) lo descargan el dueño de la flota y el contador.</p>
         )}

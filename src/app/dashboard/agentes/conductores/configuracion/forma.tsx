@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Save } from 'lucide-react';
+import { BarraFiltros, FiltroBusqueda } from '@/app/ui-v2/componentes';
 import { AvisoResultado, type ResultadoUI } from '../../../../admin/ui/aviso-resultado';
 import { FILAS_NUEVAS_CONTACTO, NOMBRES_DIA, OPCIONES_PERFIL, avisoZona } from '@/lib/likida/conductor/config_forma';
 import type { ConfigConductor } from '@/lib/likida/conductor/config';
@@ -290,14 +291,10 @@ export function SeccionVoluntarios({ datos, puedeEditar, accionAlta, accionBaja,
       )}
       {puedeEditar ? (
         <div className="space-y-2">
-          <form method="get" className="flex items-end gap-2" aria-label="Buscar operador">
-            {parametros.map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-            <label className="flex-1">
-              <span className={ETIQUETA}>Buscar operador activo (nombre o teléfono)</span>
-              <input name="q" defaultValue={datos.busqueda} className={CAMPO} />
-            </label>
-            <button type="submit" className="rv-btn rv-btn--secondary h-9 px-4 rounded-lg text-[13px] font-medium hairline">Buscar</button>
-          </form>
+          <BarraFiltros buscar accion="?" enLinea etiqueta="Buscar operador" ocultos={parametros.map(([k, v]) => [k, v] as const)}
+            nActivos={datos.busqueda ? 1 : 0} limpiarHref={`?${new URLSearchParams(parametros).toString()}`}>
+            <FiltroBusqueda nombre="q" valor={datos.busqueda} placeholder="Nombre o teléfono" etiqueta="Buscar operador activo (nombre o teléfono)" />
+          </BarraFiltros>
           <form action={enviarAlta} className="flex items-end gap-2" aria-label="Agregar operador al piloto">
             <label className="flex-1">
               <span className={ETIQUETA}>Operador</span>
