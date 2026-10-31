@@ -1,6 +1,6 @@
 import { Bell, Flag } from 'lucide-react';
-import { fechaCorta, mxnCompacto, numero, porcentaje } from '@/lib/formato';
-import { BotonEnlace, Chip, EstadoVacio, Tarjeta } from '@/app/ui-v2/componentes';
+import { fechaCorta, mxnEntero, numero, porcentaje } from '@/lib/formato';
+import { BotonEnlace, EstadoVacio, Tarjeta } from '@/app/ui-v2/componentes';
 import { Bullet, Columnas, KindBadge, type ItemKpi } from '@/app/ui-v2/graficas';
 import { rotuloDiferencia } from './agentes/liquidacion/rotulo-diferencia';
 import { PERIODO_RANGO, type DatosResumen } from './resumen-modelo';
@@ -28,12 +28,12 @@ export function itemsKpi(d: DatosResumen, sufijo: string): ItemKpi[] {
   if (d.veDinero) {
     const p = d.peajes;
     return [
-      { etiqueta: 'Monto comprobado', metrica: 'dinero_comprobado', info: 'resumen.monto_comprobado', href: hrefLiq, valor: k ? mxnCompacto(k.montoComprobado) : null, sello: selloLiq },
+      { etiqueta: 'Monto comprobado', metrica: 'dinero_comprobado', info: 'resumen.monto_comprobado', href: hrefLiq, valor: k ? mxnEntero(k.montoComprobado) : null, sello: selloLiq },
       porRevisar,
       {
         etiqueta: 'Peajes del periodo', metrica: 'gasto_peajes', info: 'resumen.peajes_periodo', href: `/dashboard/agentes/peajes${sufijo}`,
-        valor: p && p.total !== null ? mxnCompacto(p.total) : null,
-        sello: p && p.total !== null ? (p.semanas === 1 ? 'Gasto · semana en curso' : `Gasto · ${p.semanas} semanas`) : undefined,
+        valor: p && p.total !== null ? mxnEntero(p.total) : null,
+        sello: p && p.total !== null ? `Casetas · ${p.semanas === 1 ? 'semana en curso' : `últimas ${p.semanas} semanas`}` : undefined,
       },
       cartaPorte,
     ];
@@ -73,7 +73,7 @@ export function TarjetaDiferencias({ d }: { d: DatosResumen }) {
       {k ? (
         <>
           <dl className="rv-datos">
-            {d.veDinero ? <Dato etiqueta="Diferencia detectada">{mxnCompacto(k.diferenciaDetectada)}</Dato> : null}
+            {d.veDinero ? <Dato etiqueta="Diferencia detectada">{mxnEntero(k.diferenciaDetectada)}</Dato> : null}
             {d.veDinero ? <Dato etiqueta="Recuperado" sello={<KindBadge tipo="sin_dato" />}>—</Dato> : null}
             <Dato etiqueta="Con diferencias">{numero(k.conDiferencias)} de {numero(k.viajesLiquidados)}</Dato>
             {!d.veDinero ? <Dato etiqueta="Por revisar">{numero(k.porRevisar)}</Dato> : null}
@@ -85,7 +85,7 @@ export function TarjetaDiferencias({ d }: { d: DatosResumen }) {
             <div className="rv-res__tipos">
               <p className="rv-res__sub">Dónde más pesa (historial)</p>
               {tipos === null ? <EstadoVacio titulo="No disponible ahora. No es cero." /> : tipos.length === 0 ? <EstadoVacio titulo="Sin diferencias registradas" /> : tipos.map((t) => (
-                <Bullet key={t.tipo} compacto valor={t.monto} maximo={tope} matiz={6} etiqueta={rotuloDiferencia(t.tipo)} formato={mxnCompacto} />
+                <Bullet key={t.tipo} compacto valor={t.monto} maximo={tope} matiz={6} etiqueta={rotuloDiferencia(t.tipo)} formato={mxnEntero} />
               ))}
             </div>
           ) : null}
@@ -118,9 +118,4 @@ export function TarjetaHizoSolo({ d, sufijo }: { d: DatosResumen; sufijo: string
       ) : null}
     </Tarjeta>
   );
-}
-
-/** Aviso de periodo en el encabezado. */
-export function ChipRango({ d }: { d: DatosResumen }) {
-  return <Chip>{PERIODO_RANGO[d.rango]}</Chip>;
 }

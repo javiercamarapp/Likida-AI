@@ -156,7 +156,7 @@ export function conSufijo(ruta: string, sufijo: string): string {
 /** Las filas de «Requiere tu atención» (sin la de Puesta en marcha, que depende del navegador): primero lo que te toca,
  *  después lo que espera, y para llegar a `minimo` filas rellena con lo ya revisado («sin pendientes» / «no se pudo leer»). Pura. */
 export function filasAtencion(
-  d: Pick<DatosResumen, 'kpis' | 'escalados'>,
+  d: Pick<DatosResumen, 'kpis' | 'escalados'> & { rango?: RangoResumen },
   principales: readonly Insight[],
   sufijo: string,
   minimo = 3,
@@ -195,15 +195,18 @@ export function filasAtencion(
   filas.sort((a, b) => PESO[a.severidad] - PESO[b.severidad]);
 
   // Relleno honesto: lo que se revisó y salió limpio (o no se pudo leer; jamás un «limpio» inventado).
-  const revisadas: Array<[string, string, number | null, boolean]> = [
-    ['por-revisar', 'Liquidaciones por revisar', porRevisar, filas.some((f) => f.id === 'por-revisar')],
-    ['escalados', 'Viajes escalados', escalados, filas.some((f) => f.id === 'escalados')],
+  // Cada «sin pendientes» dice SU corte: las liquidaciones por revisar se leen con la ventana del periodo elegido; los
+  // viajes escalados son un conteo de ahora (sin ventana), y no se les cuelga un periodo que no tienen.
+  const periodo = PERIODO_RANGO[d.rango ?? RANGO_POR_OMISION];
+  const revisadas: Array<[string, string, number | null, boolean, string]> = [
+    ['por-revisar', 'Liquidaciones por revisar', porRevisar, filas.some((f) => f.id === 'por-revisar'), `Sin pendientes · ${periodo}.`],
+    ['escalados', 'Viajes escalados', escalados, filas.some((f) => f.id === 'escalados'), 'Sin pendientes · ahora.'],
   ];
-  for (const [id, rotulo, n, yaEsta] of revisadas) {
+  for (const [id, rotulo, n, yaEsta, limpio] of revisadas) {
     if (filas.length >= minimo || yaEsta) continue;
     filas.push(n === null
       ? { id: `${id}-sin-lectura`, severidad: 'atencion', titulo: rotulo, detalle: 'No se pudo leer ahora. No es cero.', href: null, sinPendiente: true }
-      : { id: `${id}-limpio`, severidad: 'info', titulo: rotulo, detalle: 'Sin pendientes en este periodo.', href: null, sinPendiente: true });
+      : { id: `${id}-limpio`, severidad: 'info', titulo: rotulo, detalle: limpio, href: null, sinPendiente: true });
   }
   return filas;
 }

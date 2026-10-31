@@ -76,7 +76,8 @@ describe('Resumen v2 del dueño', () => {
   it('sin pendientes: las filas de atención dicen «Sin pendientes» (con lectura) y no inventan alertas', async () => {
     datos = { ...completos(), kpis: { ...completos().kpis!, porRevisar: 0 }, escalados: 0 };
     const h = await pintar({ veAsistente: false });
-    expect(h).toContain('Sin pendientes en este periodo.');
+    expect(h).toContain('Sin pendientes · últimos 30 días.');
+    expect(h).toContain('Sin pendientes · ahora.');
     expect(h).toContain('Nada urgente por hacer hoy');
   });
   it('periodo elegido: el chip activo es el de la URL', async () => {

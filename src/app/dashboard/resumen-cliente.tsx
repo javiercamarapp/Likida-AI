@@ -3,7 +3,7 @@
 import { ArrowRight, Check, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useMemo, useRef, useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { BarraFiltros, BotonEnlace, Boton, PanelLateral, type ChipFiltro } from '@/app/ui-v2/componentes';
 import { armarPasosCincoAgentes, type SenalesAsistente } from '@/lib/likida/asistente/pasos_cinco_agentes';
 import { conPaso } from './puesta-en-marcha/con-paso';
@@ -19,7 +19,6 @@ export function FiltrosResumen({ rango, fuentes }: { rango: RangoResumen; fuente
   const ruta = usePathname();
   const params = useSearchParams();
   const [pendiente, empezar] = useTransition();
-  const ref = useRef<HTMLDivElement>(null);
   const chips: ChipFiltro[] = RANGOS.map((r) => ({ id: r, etiqueta: ROTULO_RANGO[r], activo: r === rango }));
   const elegir = (id: string) => {
     const p = new URLSearchParams(params?.toString() ?? '');
@@ -28,7 +27,7 @@ export function FiltrosResumen({ rango, fuentes }: { rango: RangoResumen; fuente
   };
   // Mientras llega el nuevo periodo las tarjetas conservan sus datos previos, atenuadas (sin capa de carga).
   return (
-    <div ref={ref} data-pendiente={pendiente || undefined} aria-busy={pendiente || undefined}>
+    <div data-pendiente={pendiente || undefined} aria-busy={pendiente || undefined}>
       <BarraFiltros chips={chips} onChip={elegir} fuentes={fuentes} />
     </div>
   );
