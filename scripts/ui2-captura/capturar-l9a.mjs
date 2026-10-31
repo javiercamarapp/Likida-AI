@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- el arnés lee y escribe en rutas de salida propias */
 // Captura las vistas del arnés L9a. Uso: node scripts/ui2-captura/capturar-l9a.mjs --out=DIR --dest=DIR [--vistas=a,b] [--anchos=1440x900,390x844]
 // Documento = CSS compilado (v2full) + login.css + fuentes locales por archivo; la partícula del login se ejecuta de verdad.
 import { readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';

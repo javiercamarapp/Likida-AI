@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- la guarda recorre el árbol propio del repo (rutas fijas de src/app), nunca entrada externa */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
