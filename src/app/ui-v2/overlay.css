@@ -142,3 +142,8 @@ html[data-overlay-abierto] { overflow: hidden; }
 
 /* ── Historial del chat en móvil (Drawer): lista de conversaciones ── */
 .rv-historial { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+
+/* ── Tooltip de gráfica (TooltipGrafica): misma burbuja, sin puente de hover, sin eventos; en móvil la lectura va en la cinta fija. ── */
+.rv-pop--grafica { pointer-events: none; }
+.rv-pop--grafica::before, .rv-pop--grafica::after { content: none; }
+@media (max-width: 819px) { .rv-pop--grafica { display: none; } }
