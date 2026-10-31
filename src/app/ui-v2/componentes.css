@@ -183,7 +183,7 @@
 /* ── Campo único (L4) ─────────────────────────────────────────────────────────────────────────────────────────────
    UNA sola regla global para input / select / textarea de todo el panel (antes solo se pintaban dentro de `.card`): alto 32 (36 bajo 820,
    44 y 16 px en móvil para el toque y para que iOS no haga zoom), radio 8, borde `--input`, fondo `--campo-bg`, 13 px, foco de 2 px y estados
-   deshabilitado / inválido. Sin capa: gana a las utilidades de Tailwind (h-9, px-3, text-[12.5px]…) que cada formulario traía por su cuenta.
+   deshabilitado / inválido. Sin capa: gana a las utilidades de Tailwind (h-9, px-3, text-[12px]…) que cada formulario traía por su cuenta.
    Quedan fuera: casillas, radios, archivo, rango, color, botones de formulario, el campo embebido sin marco (`bg-transparent` / `border-0`
    del compositor del chat) y lo `sr-only`. Los `select` múltiples o con `size` conservan su alto natural. */
 [data-ui="v2"] { --campo-bg: var(--surface); }

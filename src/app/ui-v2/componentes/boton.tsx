@@ -15,7 +15,7 @@ import { cx } from './clases';
 export type VarianteBoton = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-soft';
 export type TamanoBoton = 'md' | 'sm';
 
-const BASE_V1 = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12.5px] font-medium';
+const BASE_V1 = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-medium';
 const V1: Record<VarianteBoton, string> = {
   primary: `${BASE_V1} bg-[var(--marca)] text-[var(--marca-fg)] transition-opacity hover:opacity-85 disabled:opacity-50`,
   secondary: `${BASE_V1} bg-[var(--surface)] text-[var(--ink)] hairline transition-colors hover:bg-[var(--canvas)] disabled:opacity-50 disabled:cursor-not-allowed`,
