@@ -24,14 +24,13 @@ export interface InfoTexto {
   queHacer?: string;
 }
 
-const PENDIENTE_CALCULO = 'Por confirmar: la fórmula exacta se documenta al verificar el lector de este indicador.';
-const PENDIENTE_FUENTE = 'Por confirmar: fuente y fecha de corte de este indicador.';
-const T = (titulo: string, queEs: string): InfoTexto => ({ titulo, estado: 'por_confirmar', queEs, comoSeCalcula: PENDIENTE_CALCULO, fuente: PENDIENTE_FUENTE });
+import { PENDIENTE, T, V } from './info-textos/constructores';
+import { INFO_OPERACION } from './info-textos/operacion';
+import { INFO_ADMIN } from './info-textos/administracion';
+import { INFO_LIQUIDACION } from './info-textos/liquidacion';
+import { INFO_AGENTES } from './info-textos/agentes';
 
-/** Entrada verificada: el texto describe lo que el lector de la página hace de verdad. */
-const V = (titulo: string, queEs: string, comoSeCalcula: string, fuente: string, queHacer?: string): InfoTexto => ({
-  titulo, estado: 'verificado', queEs, comoSeCalcula, fuente, ...(queHacer ? { queHacer } : {}),
-});
+const PENDIENTE_FUENTE = PENDIENTE.PENDIENTE_FUENTE;
 
 export const INFO = {
   'resumen.monto_comprobado': V(
@@ -94,6 +93,11 @@ export const INFO = {
     'Regla fija, no un modelo: primero el siguiente paso de la puesta en marcha, luego una alerta urgente de un agente, después los viajes escalados y al final las liquidaciones por revisar.',
     'Las mismas lecturas de «Requiere tu atención».',
   ),
+  // Páginas migradas (L4): un archivo por grupo, claves `<pagina>.<recuadro>`.
+  ...INFO_OPERACION,
+  ...INFO_ADMIN,
+  ...INFO_LIQUIDACION,
+  ...INFO_AGENTES,
 } as const satisfies Record<string, InfoTexto>;
 
 export type InfoClave = keyof typeof INFO;
