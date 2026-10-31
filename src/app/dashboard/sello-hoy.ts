@@ -1,9 +1,9 @@
-import { fechaCorta, hoyMx } from '@/lib/formato';
+import { fechaMx, hoyMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
-import { selloDe } from '../ui-v2/graficas/cifra';
 
-/** Sello de procedencia de una cifra leída AL ABRIR la pantalla: «<Fuente> · corte 31 oct». La fuente es el registro del que sale
- *  la cifra (nunca un sistema que la pantalla no lee); el corte es el día de la lectura. */
+/** Sello de procedencia de una cifra leída AL ABRIR la pantalla: «<Fuente> · leído 31 oct 2026». Dice lo que es: el día de la LECTURA,
+ *  no el corte de la fuente (eso solo se afirma cuando la pantalla conoce la fecha real; ver `selloDe` con su `corte`). La fuente es el
+ *  registro del que sale la cifra, nunca un sistema que la pantalla no lee. */
 export function selloHoy(fuente: string): string {
-  return selloDe(fuente, fechaCorta(hoyMx(new Date(ahoraMs()))));
+  return `${fuente} · leído ${fechaMx(hoyMx(new Date(ahoraMs())))}`;
 }

@@ -460,7 +460,7 @@ function BloqueEnLaMesa({ datos }: { datos: FacturacionClientes }) {
         </p>
       ) : (
         <>
-          <TiraCifras sello={selloHoy('Facturas emitidas')}>
+          <TiraCifras sello={selloHoy('Viajes liquidados sin factura')}>
             <Cifra
               icono={<Truck width={14} height={14} strokeWidth={1.75} />}
               etiqueta="Viajes liquidados sin factura" valor={m.total} formato="numero"
@@ -616,7 +616,7 @@ function BloqueAuditor({ auditoria }: { auditoria: AuditoriaCobranza | null }) {
         </EstadoVacio>
       ) : (
         <>
-          <TiraCifras sello={selloHoy('Facturas emitidas')}>
+          <TiraCifras sello={selloHoy('Auditoría de facturación')}>
             <Cifra
               icono={<Truck width={14} height={14} strokeWidth={1.75} />}
               etiqueta="Dinero dormido" valor={auditoria.resumen.dineroDormido} formato="mxn"

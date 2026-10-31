@@ -36,7 +36,7 @@ describe('TableroCifras — una sola tira que se acomoda por ancho', () => {
     const html = renderToStaticMarkup(<TableroCifras t={TABLERO} />);
     expect(html.split('class="rv-kpi"').length - 1).toBe(6);
     expect(html.split('rv-kpis').length - 1).toBe(1);
-    expect(html).toContain('Tablero de operación · corte');
+    expect(html).toContain('Tablero de operación · leído');
   });
 
   it('los rótulos accionables e informativos siguen en el DOM', () => {
