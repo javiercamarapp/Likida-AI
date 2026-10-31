@@ -21,6 +21,7 @@ import { Switch } from '${ruta('componentes/switch')}';
 import { Tooltip } from '${ruta('componentes/overlay')}';
 import { StatusChip } from '${ruta('componentes/status-chip')}';
 import { TablaBase } from '${ruta('componentes/tabla-base')}';
+import { TabsLinea } from '${ruta('componentes/tabs-linea')}';
 import { Tabs } from '${ruta('componentes/tabs')}';
 import { SegmentedControl } from '${ruta('componentes/segmented')}';
 function App() {
@@ -29,7 +30,11 @@ function App() {
   return (
     <div data-ui="v2" style={{ padding: 16 }}>
       <SegmentedControl etiqueta="Periodo" valor={periodo} onChange={setPeriodo} opciones={[{ valor: 'sem', etiqueta: 'Semana', conteo: 4 }, { valor: 'mes', etiqueta: 'Mes' }, { valor: 'anio', etiqueta: 'Año', deshabilitada: true }, { valor: 'todo', etiqueta: 'Todo' }]} />
-      <Tabs etiqueta="Secciones" param="vista" pestanas={[{ valor: 'a', etiqueta: 'Resumen', contenido: <p id="pa">Panel A <button id="ba">x</button></p> }, { valor: 'b', etiqueta: 'Fuentes', conteo: 0, contenido: <p id="pb">Panel B</p> }, { valor: 'c', etiqueta: 'Cobertura', conteo: 3, contenido: <p id="pc">Panel C</p> }]} />
+      <Tabs etiqueta="Secciones" param="vista" pestanas={[{ valor: 'a', etiqueta: 'Resumen', contenido: <p id="pa">Panel A <button id="ba">x</button></p> }, { valor: 'b', etiqueta: 'Fuentes', conteo: 0, contenido: <p id="pb">Panel B</p> }, { valor: 'c', etiqueta: 'Cobertura', conteo: 3, atencion: true, contenido: <p id="pc">Panel C</p> }]} />
+      <TabsLinea etiqueta="Rutas" actual="a" pestanas={[{ clave: 'a', etiqueta: 'Uno', href: '#a', conteo: 2 }, { clave: 'b', etiqueta: 'Dos', href: '#b' }]} />
+      <Campo etiqueta="Con descripción propia" ayuda="Ayuda del campo"><input id="cd" name="cd" aria-describedby="nota-propia" /></Campo><span id="nota-propia">Nota propia</span>
+      <Casilla name="cdesc" etiqueta="Con nota" ayuda="Ayuda casilla" aria-describedby="nota-propia" />
+      <Radio name="ui" form="sin-formulario" value="1" etiqueta="Uno" defaultChecked /><Radio name="ui" form="sin-formulario" value="2" etiqueta="Dos" />
       <div style={{ position: 'absolute', left: 4, top: 600 }}><Tooltip texto="Cuadra contra el anticipo y la política de gasto de la flota"><button id="con-tip">Cuadre</button></Tooltip> <Tooltip texto="Solo texto">Corte</Tooltip></div>
       <div id="estados"><StatusChip tono="ok">Cuadra</StatusChip><StatusChip tono="warn">Por revisar</StatusChip><StatusChip tono="bad">Rechazada</StatusChip><StatusChip tono="info">En cola</StatusChip><StatusChip>Borrador</StatusChip><StatusChip tono="muted">Sin dato</StatusChip></div>
       <div id="tablas"><TablaBase etiqueta="Unidades" tarjetaMovil idFila={(f: { id: string }) => f.id} columnas={[{ id: 'u', titulo: 'Unidad', principal: true, celda: (f: { id: string; km: number }) => f.id }, { id: 'k', titulo: 'Km', alinear: 'der', celda: (f: { id: string; km: number }) => f.km }]} filas={Array.from({ length: 40 }, (_, i) => ({ id: 'U-' + i, km: i * 10 }))} />
@@ -74,10 +79,12 @@ beforeAll(async () => {
 }, 90_000);
 afterAll(async () => { await browser?.close(); });
 
-async function abrir(ancho = 1280, extra: { forcedColors?: 'active' } = {}): Promise<Page> {
+async function abrir(ancho = 1280, extra: { forcedColors?: 'active' } = {}, urlReal = false): Promise<Page> {
   const p = await browser!.newPage({ viewport: { width: ancho, height: 900 }, reducedMotion: 'reduce', ...extra });
   const css = ['tokens.css', 'movimiento.css', 'componentes.css', 'overlay.css', 'piezas.css'].map((f) => readFileSync(join(RAIZ, f), 'utf8')).join('\n');
-  await p.setContent(`<!doctype html><html data-theme="light"><head><style>${css}</style></head><body><div id="raiz"></div><script>${bundle.replace(/<\/script>/g, '<\\/script>')}</script></body></html>`);
+  const html = `<!doctype html><html data-theme="light"><head><style>${css}</style></head><body><div id="raiz"></div><script>${bundle.replace(/<\/script>/g, '<\\/script>')}</script></body></html>`;
+  if (urlReal) { await p.route('http://l7.test/**', (r) => r.fulfill({ contentType: 'text/html', body: html })); await p.goto('http://l7.test/pagina'); } // historial real (about:blank no admite replaceState)
+  else await p.setContent(html);
   await p.waitForSelector('form#f');
   return p;
 }
@@ -355,5 +362,89 @@ describe.skipIf(SIN_NAVEGADOR)('TablaBase · comportamiento en Chromium', () => 
     const r = await p.evaluate(() => ({ disp: getComputedStyle(document.querySelector('.rv-tb tbody tr')!).display, etq: getComputedStyle(document.querySelector('.rv-tb tbody td')!, '::before').content }));
     expect(r.disp).toBe('grid'); expect(r.etq).toContain('Km');
     await p.close();
+  });
+});
+
+describe.skipIf(SIN_NAVEGADOR)('Revisión L7 · móvil, URL, aria y tooltip', () => {
+  it('móvil: la zona táctil de SegmentedControl, Tabs y TabsLinea es de 44 px', async () => {
+    const p = await abrir(390);
+    const r = await p.evaluate(() => {
+      const alto = (sel: string) => Math.round(document.querySelector(sel)!.getBoundingClientRect().height);
+      return { tab: alto('[role="tab"]'), linea: alto('.rv-tabs--enlaces .rv-tabs__tab'), segAlto: alto('.rv-seg__btn') };
+    });
+    expect(r.tab).toBeGreaterThanOrEqual(44);
+    expect(r.linea).toBeGreaterThanOrEqual(44);
+    expect(r.segAlto).toBeGreaterThanOrEqual(44);
+    await p.close();
+  });
+  it('el conteo de la pestaña activa es neutro; solo `atencion` lo pinta burdeos', async () => {
+    const p = await abrir();
+    const r = await p.evaluate(() => {
+      const f = (e: Element) => getComputedStyle(e).backgroundColor;
+      const activo = document.querySelector('[role="tab"][aria-selected="true"] .rv-tabs__conteo') ?? document.querySelectorAll('.rv-tabs__conteo')[0];
+      const atencion = document.querySelector('.rv-tabs__conteo[data-atencion]')!;
+      const neutro = document.querySelector('.rv-tabs--enlaces [aria-current="page"] .rv-tabs__conteo')!;
+      return { atencion: f(atencion), neutro: f(neutro), canvas: getComputedStyle(document.documentElement).getPropertyValue('--canvas').trim(), hay: !!activo };
+    });
+    expect(r.atencion).not.toBe(r.neutro);
+    expect(r.neutro).not.toBe('rgb(244, 229, 233)'); // --soft-6 (burdeos suave)
+    expect(await p.evaluate(() => document.querySelectorAll('.rv-tabs__conteo[data-atencion]').length)).toBe(1); // solo la que pidió `atencion`
+    await p.close();
+  });
+  it('Tabs con `param` sigue la URL con atrás/adelante, también tras un clic propio', async () => {
+    const p = await abrir(1280, {}, true);
+    await p.click('[role="tab"]:has-text("Fuentes")');
+    await p.click('[role="tab"]:has-text("Cobertura")');
+    expect(await p.evaluate(() => new URL(location.href).searchParams.get('vista'))).toBe('c');
+    await p.evaluate(() => { history.pushState(null, '', '?vista=b'); window.dispatchEvent(new PopStateEvent('popstate')); });
+    await p.waitForFunction(() => document.querySelector('[role="tab"][aria-selected="true"]')?.textContent?.includes('Fuentes'));
+    await p.evaluate(() => history.back()); // vuelve a ?vista=c (el clic propio): la pestaña lo sigue
+    await p.waitForFunction(() => document.querySelector('[role="tab"][aria-selected="true"]')?.textContent?.includes('Cobertura'));
+    await p.close();
+  });
+  it('aria-describedby propio del hijo se conserva junto al de la ayuda (Campo y Casilla)', async () => {
+    const p = await abrir();
+    const r = await p.evaluate(() => ({
+      campo: document.querySelector('input[name="cd"]')!.getAttribute('aria-describedby')!.split(' ').map((i) => document.getElementById(i)?.textContent),
+      casilla: document.querySelector('input[name="cdesc"]')!.getAttribute('aria-describedby')!.split(' ').map((i) => document.getElementById(i)?.textContent),
+    }));
+    expect(r.campo).toEqual(['Nota propia', 'Ayuda del campo']);
+    expect(r.casilla).toEqual(['Nota propia', 'Ayuda casilla']);
+    await p.close();
+  });
+  it('radios con `form` ajeno: las flechas recorren el grupo y no viajan en el FormData', async () => {
+    const p = await abrir();
+    await p.focus('input[name="ui"][value="1"]');
+    await p.keyboard.press('ArrowDown');
+    expect(await p.isChecked('input[name="ui"][value="2"]')).toBe(true);
+    expect(await p.evaluate(() => new FormData(document.querySelector('form')!).has('ui'))).toBe(false);
+    await p.close();
+  });
+  it('Tooltip: cruzar el hueco con el puntero no la cierra y sigue abierta sobre la burbuja', async () => {
+    const p = await abrir();
+    const caja = await p.evaluate(() => { const b = document.getElementById('con-tip')!.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top }; });
+    await p.mouse.move(caja.x, caja.y + 5);
+    await p.waitForFunction(() => getComputedStyle(document.querySelector('[role="tooltip"]')!).visibility === 'visible');
+    const t = await p.evaluate(() => { const r = document.querySelector('[role="tooltip"]')!.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.bottom, cy: r.top + r.height / 2 }; });
+    await p.mouse.move(caja.x, caja.y - 3, { steps: 4 }); // dentro del hueco de 6 px
+    expect(await p.evaluate(() => getComputedStyle(document.querySelector('[role="tooltip"]')!).visibility)).toBe('visible');
+    await p.mouse.move(t.x, t.cy, { steps: 4 }); // sobre la burbuja
+    expect(await p.evaluate(() => getComputedStyle(document.querySelector('[role="tooltip"]')!).visibility)).toBe('visible');
+    await p.mouse.move(700, 800);
+    await p.waitForFunction(() => getComputedStyle(document.querySelector('[role="tooltip"]')!).visibility === 'hidden');
+    await p.close();
+  });
+  it('Tooltip en táctil: un toque la muestra unos segundos y luego se va sola', async () => {
+    const c = await browser!.newContext({ viewport: { width: 390, height: 900 }, hasTouch: true, reducedMotion: 'reduce' });
+    const p = await c.newPage();
+    const css = ['tokens.css', 'movimiento.css', 'componentes.css', 'overlay.css', 'piezas.css'].map((f) => readFileSync(join(RAIZ, f), 'utf8')).join('\n');
+    await p.setContent(`<!doctype html><html data-theme="light"><head><style>${css}</style></head><body><div id="raiz"></div><script>${bundle.replace(/<\/script>/g, '<\\/script>')}</script></body></html>`);
+    await p.waitForSelector('#con-tip');
+    await p.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    const caja = await p.evaluate(() => { const b = document.getElementById('con-tip')!.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; });
+    await p.touchscreen.tap(caja.x, caja.y);
+    await p.waitForFunction(() => getComputedStyle(document.querySelector('[role="tooltip"]')!).visibility === 'visible');
+    await p.waitForFunction(() => getComputedStyle(document.querySelector('[role="tooltip"]')!).visibility === 'hidden', undefined, { timeout: 8000 });
+    await c.close();
   });
 });

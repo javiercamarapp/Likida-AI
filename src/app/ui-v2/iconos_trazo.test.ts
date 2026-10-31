@@ -2,12 +2,14 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { BASE_TRAZO_MEZCLADO } from './iconos_trazo_base';
+import { BASE_SIN_TRAZO, BASE_TRAZO_MEZCLADO } from './iconos_trazo_base';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GUARDA DE ICONOS (L7): un solo grosor de trazo. Vexa dibuja TODOS sus iconos en una rejilla de 24 con trazo 1.75 (`icons.tsx`);
 // Likida mezclaba 1.25 / 1.5 / 2 / 2.5 / 3 sobre lucide. Código nuevo: solo `<Icono>` (ui-v2/componentes/icono.tsx), que fija 1.75
 // y los tamaños 14/16/18/20, o un icono de lucide SIN `strokeWidth` propio distinto de 1.75.
+// `strokeWidth={TRAZO_ICONO}` (la constante de icono.tsx, 1.75) cuenta como válido. OJO: un icono de lucide SIN `strokeWidth` se dibuja a 2
+// (el valor por omisión de lucide), no a 1.75: por eso hay un segundo trinquete para los iconos sin grosor declarado en código nuevo.
 // Trinquete: los archivos de la base conservan su deuda y no pueden crecer; un archivo nuevo con grosor distinto, falla.
 // Al migrar un archivo a 1.75 se borra su línea de `iconos_trazo_base.ts` (si ya está limpio y sigue en la lista, también falla).
 // ═══════════════════════════════════════════════════════════════════════════
@@ -63,9 +65,16 @@ export function trazosMezclados(src: string): number {
       const m = /strokeWidth\s*=\s*(?:\{\s*([^}]*?)\s*\}|"([^"]*)")/.exec(tag);
       if (!m) continue;
       const v = (m[1] ?? m[2]).replace(/^['"]|['"]$/g, '');
-      if (Number(v) !== 1.75) n++;
+      if (Number(v) !== 1.75 && v !== 'TRAZO_ICONO') n++;
     }
   }
+  return n;
+}
+
+/** Cuántos iconos de lucide del archivo NO declaran `strokeWidth` (lucide los dibuja a 2, no a 1.75). */
+export function trazosSinDeclarar(src: string): number {
+  let n = 0;
+  for (const nombre of nombresLucide(src)) for (const tag of etiquetas(src, nombre)) if (!/strokeWidth\s*=/.test(tag)) n++;
   return n;
 }
 
@@ -77,11 +86,19 @@ describe('iconos: un solo grosor de trazo (1.75)', () => {
     expect(trazosMezclados(`import { Info as I } from 'lucide-react';\n<I className="x" strokeWidth="1.5" aria-hidden />`)).toBe(1);
     expect(trazosMezclados(`import { Info } from 'lucide-react';\n<Info strokeWidth={1.75} /><Info />`)).toBe(0);
     expect(trazosMezclados(`<svg strokeWidth={2} />`)).toBe(0); // gráficas y SVG propios: no son iconos de lucide
+    expect(trazosMezclados(`import { Info } from 'lucide-react';\n<Info strokeWidth={TRAZO_ICONO} />`)).toBe(0);
+    expect(trazosSinDeclarar(`import { Info } from 'lucide-react';\n<Info /><Info strokeWidth={1.75} />`)).toBe(1);
   });
 
   it('ningún archivo fuera de la base declara un grosor distinto de 1.75 en un icono de lucide', () => {
     const nuevos = archivos.filter((a) => a.n > 0 && !(a.ruta in BASE_TRAZO_MEZCLADO)).map((a) => `${a.ruta}: ${a.n}`);
     expect(nuevos, 'usa <Icono> (ui-v2/componentes/icono.tsx) o quita el strokeWidth').toEqual([]);
+  });
+
+  it('ningún archivo nuevo dibuja un icono de lucide sin declarar el trazo (a 2 por omisión): usa <Icono> o strokeWidth={1.75}', () => {
+    const sin = tsx(SRC).map((f) => ({ ruta: relative(SRC, f), n: trazosSinDeclarar(readFileSync(f, 'utf8')) }));
+    expect(sin.filter((a) => a.n > BASE_SIN_TRAZO[a.ruta] || (a.n > 0 && !(a.ruta in BASE_SIN_TRAZO))).map((a) => `${a.ruta}: ${a.n}`)).toEqual([]);
+    expect(Object.keys(BASE_SIN_TRAZO).filter((r) => (sin.find((a) => a.ruta === r)?.n ?? 0) === 0), 'ya limpios: bórralos de BASE_SIN_TRAZO').toEqual([]);
   });
 
   it('la deuda de la base no crece, y los archivos ya limpios salen de la lista', () => {

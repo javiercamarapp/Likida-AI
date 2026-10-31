@@ -383,6 +383,9 @@ export function Tooltip({ texto, children, className }: {
   const [abierto, setAbierto] = useState(false);
   const raiz = useRef<HTMLSpanElement>(null);
   const burbuja = useRef<HTMLSpanElement>(null);
+  const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const soltarTemporizador = () => { if (temporizador.current) { clearTimeout(temporizador.current); temporizador.current = null; } };
+  useEffect(() => soltarTemporizador, []);
 
   useLayoutEffect(() => {
     if (abierto && burbuja.current) colocarPanel(burbuja.current, raiz.current, 'centro', 'arriba');
@@ -410,10 +413,16 @@ export function Tooltip({ texto, children, className }: {
     <span
       ref={raiz}
       className={['rv-tip', className].filter(Boolean).join(' ')}
-      onPointerEnter={() => setAbierto(true)}
-      onPointerLeave={() => setAbierto(false)}
+      // Ratón: abierta mientras el puntero esté sobre el disparador O sobre la burbuja (es hija del contenedor y un puente CSS cubre el hueco: WCAG 1.4.13).
+      // Táctil: un toque la muestra unos segundos (no hay «salir» en una pantalla táctil).
+      onPointerEnter={(e) => {
+        setAbierto(true);
+        soltarTemporizador();
+        if (e.pointerType === 'touch') temporizador.current = setTimeout(() => setAbierto(false), 3000);
+      }}
+      onPointerLeave={(e) => { if (e.pointerType !== 'touch') setAbierto(false); }}
       onFocus={() => setAbierto(true)}
-      onBlur={() => setAbierto(false)}
+      onBlur={() => { soltarTemporizador(); setAbierto(false); }}
     >
       {objetivo}
       <span ref={burbuja} role="tooltip" id={id} className="rv-pop rv-pop--tip" data-abierto={abierto || undefined}>{texto}</span>

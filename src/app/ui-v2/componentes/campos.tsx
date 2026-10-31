@@ -34,7 +34,7 @@ function Marca({ tipo, etiqueta, ayuda, className, id, indeterminada, ...resto }
           id={idCampo}
           type={tipo}
           className="rv-marca__input"
-          aria-describedby={ayuda ? idAyuda : resto['aria-describedby']}
+          aria-describedby={[resto['aria-describedby'], ayuda ? idAyuda : null].filter(Boolean).join(' ') || undefined}
         />
         <span className="rv-marca__etq">{etiqueta}</span>
       </label>
@@ -66,7 +66,8 @@ export function Campo({ etiqueta, ayuda, error, obligatorio, id, className, chil
 }) {
   const auto = useId();
   const idCampo = id ?? auto;
-  const ids = [ayuda ? `${idCampo}-ayuda` : null, error ? `${idCampo}-error` : null].filter(Boolean).join(' ') || undefined;
+  const propio = isValidElement(children) ? children.props['aria-describedby'] : undefined;
+  const ids = [propio, ayuda ? `${idCampo}-ayuda` : null, error ? `${idCampo}-error` : null].filter(Boolean).join(' ') || undefined;
   const control = isValidElement(children)
     ? cloneElement(children, { id: idCampo, 'aria-describedby': ids, 'aria-invalid': error ? true : undefined, required: obligatorio || children.props.required })
     : children;

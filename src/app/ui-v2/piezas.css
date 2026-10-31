@@ -64,7 +64,11 @@
 [data-ui="v2"] .rv-seg__btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
 [data-ui="v2"] .rv-seg__btn:disabled { color: var(--muted); border: 1px dashed var(--line2); cursor: not-allowed; }
 [data-ui="v2"] .rv-seg__conteo { font-size: var(--t-small); font-weight: 500; font-family: var(--font-sans-ui, inherit); color: var(--muted); }
-@media (max-width: 819px) { [data-ui="v2"] .rv-seg__btn { min-height: 32px; } }
+/* Móvil: botones de 44 px de alto (zona táctil). */
+@media (max-width: 819px) {
+  [data-ui="v2"] .rv-seg { padding: 1px; }
+  [data-ui="v2"] .rv-seg__btn { min-height: 44px; }
+}
 @media (prefers-reduced-motion: no-preference) {
   [data-ui="v2"] .rv-seg__btn { transition: background-color var(--ui-fast) ease, color var(--ui-fast) ease; }
 }
@@ -81,10 +85,10 @@
 [data-ui="v2"] .rv-tabs__tab[aria-current="page"] { color: var(--ink); font-weight: 600; border-bottom-color: var(--ink); }
 [data-ui="v2"] .rv-tabs__tab:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; border-radius: 8px; }
 [data-ui="v2"] .rv-tabs__conteo { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--canvas); color: var(--ink); font-size: var(--t-small); font-weight: 600; line-height: 1; font-family: var(--font-sans-ui, inherit); font-variant-numeric: tabular-nums; }
-[data-ui="v2"] .rv-tabs__tab[aria-selected="true"] .rv-tabs__conteo,
-[data-ui="v2"] .rv-tabs__tab[aria-current="page"] .rv-tabs__conteo { background: var(--soft-6, var(--canvas)); color: var(--ink-6, var(--ink)); }
-[data-ui="v2"] .rv-tabs__tab[aria-selected="true"] .rv-tabs__conteo[data-cero],
-[data-ui="v2"] .rv-tabs__tab[aria-current="page"] .rv-tabs__conteo[data-cero] { background: var(--canvas); color: var(--muted); }
+/* Neutro por omisión (parece contador, no alerta); burdeos solo con `atencion` y un conteo > 0. */
+[data-ui="v2"] .rv-tabs__conteo[data-atencion] { background: var(--soft-6, var(--canvas)); color: var(--ink-6, var(--ink)); }
+[data-ui="v2"] .rv-tabs__conteo[data-cero] { color: var(--muted); }
+@media (max-width: 819px) { [data-ui="v2"] .rv-tabs__tab { height: 44px; } } /* zona táctil de 44 en móvil */
 [data-ui="v2"] .rv-tabs__panel { padding-top: 16px; }
 [data-ui="v2"] .rv-tabs__panel[hidden] { display: none; }
 [data-ui="v2"] .rv-tabs__panel:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }

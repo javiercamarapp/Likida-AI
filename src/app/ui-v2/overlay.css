@@ -110,6 +110,10 @@ html[data-overlay-abierto] { overflow: hidden; }
 .rv-tip__texto:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .rv-pop--tip { top: 0; left: 0; display: grid; gap: 3px; box-sizing: border-box; width: max-content; min-width: 160px; max-width: min(280px, calc(100vw - 32px)); padding: 10px 12px; border-radius: 12px; box-shadow: 0 1px 2px #0e0e100a, 0 8px 24px -8px #0e0e1029; font-size: var(--t-small); font-weight: 500; line-height: 1.4; font-family: var(--font-sans-ui, inherit); text-align: left; white-space: normal; overflow-wrap: break-word; font-variant-numeric: tabular-nums; visibility: hidden; opacity: 0; animation: none; }
 .rv-pop--tip[data-abierto] { visibility: visible; opacity: 1; }
+/* Puente de hover: cubre el hueco de 6 px entre disparador y burbuja (arriba o abajo) para que cruzar con el puntero no la cierre. */
+.rv-pop--tip::before, .rv-pop--tip::after { content: ""; position: absolute; left: 0; right: 0; height: 10px; }
+.rv-pop--tip::before { top: -10px; }
+.rv-pop--tip::after { bottom: -10px; }
 @media (prefers-reduced-motion: no-preference) {
   .rv-pop--tip[data-abierto] { animation: rv-ov-fondo 140ms var(--ui-ease, cubic-bezier(.22, 1, .36, 1)) both; }
 }
