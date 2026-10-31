@@ -13,7 +13,9 @@
 export const INICIO_FORMULA = /^[=+\-@\t\r]/;
 
 /** Un texto que ya es un número plano («-12.50», «340»): Excel lo lee como número, no como fórmula. */
-const NUMERO_PLANO = /^-?\d+(\.\d+)?$/;
+const ENTERO_PLANO = /^-?\d+$/;
+const DECIMAL_PLANO = /^-?\d+\.\d+$/;
+const esNumeroPlano = (s: string): boolean => ENTERO_PLANO.test(s) || DECIMAL_PLANO.test(s);
 
 export interface OpcionesNeutralizar {
   /** Deja intacto un texto que es solo un número plano (importes ya formateados como texto, p. ej. `toFixed(2)`). */
@@ -25,7 +27,7 @@ export function neutralizarFormula(v: unknown, opciones: OpcionesNeutralizar = {
   const s = v === null || v === undefined ? '' : String(v);
   if (typeof v === 'number') return s;
   if (!INICIO_FORMULA.test(s)) return s;
-  if (opciones.numerosEnTexto && NUMERO_PLANO.test(s)) return s;
+  if (opciones.numerosEnTexto && esNumeroPlano(s)) return s;
   return `'${s}`;
 }
 

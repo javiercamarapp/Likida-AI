@@ -10,6 +10,8 @@ import { EnlacePagina, NavPaginas } from '../paginador';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { ChipsFiltro, SelloDato, TablaLista, chipsActivos, type ColumnaTabla } from '@/app/ui-v2/datos';
+import { ahoraMs } from '@/lib/saludo';
 
 export type FiltroViajes = 'todos' | 'abiertos' | 'en_cuadre' | 'liquidados' | 'escalados';
 
@@ -57,8 +59,54 @@ export function hrefRegistro(
   return `/dashboard/viajes${qs ? `?${qs}` : ''}`;
 }
 
-const TH = 'etiqueta-mono text-left text-[10px] font-medium uppercase px-3 py-2 whitespace-nowrap';
 const BTN_SEC = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12.5px] font-medium hairline transition-colors hover:bg-[var(--canvas)]';
+
+/** Las columnas del registro. Los tres pesos (anticipo, comprobado, diferencia) SOLO existen si el rol ve dinero: para el jefe de
+ *  tráfico ni la cabecera se arma. El orden es el del servidor (cursor, del más reciente al más antiguo): ninguna cabecera ordena,
+ *  porque ordenar solo la página visible fingiría ordenar el total. */
+function columnasViajes(sufijo: string, verDinero: boolean): ColumnaTabla<FilaRegistroViaje>[] {
+  const dinero: ColumnaTabla<FilaRegistroViaje>[] = verDinero ? [
+    { id: 'anticipo', titulo: 'Anticipo', alinear: 'der', celda: (v) => (v.anticipo === null ? '—' : mxn(v.anticipo)) },
+    { id: 'comprobado', titulo: 'Comprobado', alinear: 'der', celda: (v) => (v.comprobado === null ? <span className="rv-tl__tenue">—</span> : mxn(v.comprobado)) },
+    {
+      id: 'diferencia', titulo: 'Diferencia', alinear: 'der',
+      celda: (v) => v.diferencia === null ? <span className="rv-tl__tenue">—</span>
+        : <span className={v.diferencia === 0 ? 'rv-tl__ok' : v.diferencia > 0 ? 'rv-tl__warn' : 'rv-tl__bad'}>{v.diferencia === 0 ? 'Exacta' : mxn(Math.abs(v.diferencia))}</span>,
+    },
+  ] : [];
+  return [
+    {
+      id: 'viaje', titulo: 'Viaje', principal: true,
+      celda: (v) => {
+        const ruta = v.origen && v.destino ? `${v.origen} → ${v.destino}` : v.origen ?? v.destino ?? null;
+        return (
+          <>
+            <span className="font-medium block whitespace-nowrap">{v.folio}</span>
+            <span className="rv-tl__sub">{ruta ?? 'sin ruta capturada'}</span>
+          </>
+        );
+      },
+    },
+    { id: 'operador', titulo: 'Operador', celda: (v) => v.operadorNombre ?? <span className="rv-tl__tenue">Sin asignar</span> },
+    { id: 'unidad', titulo: 'Unidad', celda: (v) => (v.unidadEco ? <span className="cifra-mono">{v.unidadEco}</span> : <span className="rv-tl__tenue">—</span>) },
+    { id: 'inicio', titulo: 'Inicio', celda: (v) => <span className="rv-tl__apagado">{v.fechaInicio ? fechaMx(v.fechaInicio) : '—'}</span> },
+    ...dinero,
+    { id: 'aviso', titulo: 'Aviso', celda: (v) => (v.estatus === 'liquidado' ? <span className="rv-tl__tenue">—</span> : <PillAviso v={v} />) },
+    {
+      id: 'estatus', titulo: 'Estatus',
+      celda: (v) => { const e = PILL_ESTATUS[v.estatus] ?? { etiqueta: v.estatus, estado: 'neutral' as Estado }; return <StatusPill estado={e.estado}>{e.etiqueta}</StatusPill>; },
+    },
+    {
+      id: 'accion', titulo: 'Acción', alinear: 'der', tituloOculto: true,
+      celda: (v) => v.liqId ? (
+        <Link href={`/dashboard/${v.liqId}${sufijo}`}
+          className="inline-flex items-center gap-1 text-[12.5px] font-medium hover:opacity-70 transition-opacity whitespace-nowrap rv-tl__enlace">
+          Ver <ArrowRight width={12} height={12} strokeWidth={2} aria-hidden />
+        </Link>
+      ) : <span className="rv-tl__tenue">—</span>,
+    },
+  ];
+}
 
 /**
  * El Registro de Viajes (F2), v2: navegable, filtrable, buscable y paginado
@@ -93,7 +141,12 @@ export function VistaViajes({
 }) {
   const kpi = (n: number | null) => (n === null ? '—' : numero(n));
   const params = new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo);
-  const columnas = verDinero ? 10 : 7;
+  // Los filtros vigentes como chips quitables: el estado vive en la URL (sin JavaScript). Quitar uno conserva tenant/vista/rol y los demás.
+  const vigentes = Object.fromEntries([...params.entries(), ...(filtro !== 'todos' ? [['f', filtro]] : []), ...(q ? [['q', q]] : [])]);
+  const chips = chipsActivos('/dashboard/viajes', vigentes, [
+    { param: 'f', etiqueta: 'Estado', omitir: ['todos'], rotuloValor: (v) => ROTULO_FILTRO[v as FiltroViajes] ?? v },
+    { param: 'q', etiqueta: 'Búsqueda' },
+  ]);
 
   return (
     <MarcoPagina titulo="Viajes" apoyo="El registro de viajes de tu flota, navegable y filtrable. Crear, asignar y avisar se hace en Despacho.">
@@ -134,11 +187,6 @@ export function VistaViajes({
                   style={{ background: 'var(--surface)' }} />
               </label>
               <button type="submit" className={BTN_SEC} style={{ background: 'var(--surface)' }}>Buscar</button>
-              {q && (
-                <Link href={hrefRegistro(sufijo, { f: filtro })} className="text-[12px] hover:opacity-70" style={{ color: 'var(--muted)' }}>
-                  Limpiar
-                </Link>
-              )}
             </form>
             {puedeImportar && (
               // Sin JavaScript ni estado: `<details>` abre y cierra solo.
@@ -159,6 +207,8 @@ export function VistaViajes({
           </div>
         </div>
 
+        <ChipsFiltro chips={chips} quitarTodosHref={hrefRegistro(sufijo, {})} className="mb-3" />
+
         {filas.length === 0 ? (
           <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
             {q
@@ -168,90 +218,20 @@ export function VistaViajes({
                 : `Ningún viaje cae en «${ROTULO_FILTRO[filtro]}».`}
           </EstadoVacio>
         ) : (
-          <div className="overflow-x-auto -mx-1">
-            <table className="w-full border-collapse text-[13px]">
-              <thead>
-                <tr style={{ background: 'var(--canvas)' }}>
-                  <th className={`${TH} rounded-l-lg`} style={{ color: 'var(--muted)' }}>Viaje</th>
-                  <th className={TH} style={{ color: 'var(--muted)' }}>Operador</th>
-                  <th className={TH} style={{ color: 'var(--muted)' }}>Unidad</th>
-                  <th className={TH} style={{ color: 'var(--muted)' }}>Inicio</th>
-                  {verDinero && (
-                    <>
-                      <th className={`${TH} text-right`} style={{ color: 'var(--muted)' }}>Anticipo</th>
-                      <th className={`${TH} text-right`} style={{ color: 'var(--muted)' }}>Comprobado</th>
-                      <th className={`${TH} text-right`} style={{ color: 'var(--muted)' }}>Diferencia</th>
-                    </>
-                  )}
-                  <th className={TH} style={{ color: 'var(--muted)' }}>Aviso</th>
-                  <th className={TH} style={{ color: 'var(--muted)' }}>Estatus</th>
-                  <th className={`${TH} rounded-r-lg text-right`} style={{ color: 'var(--muted)' }}>Acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filas.map((v) => {
-                  const e = PILL_ESTATUS[v.estatus] ?? { etiqueta: v.estatus, estado: 'neutral' as Estado };
-                  const ruta = v.origen && v.destino ? `${v.origen} → ${v.destino}` : v.origen ?? v.destino ?? null;
-                  return (
-                    <tr key={v.id} className="h-14 border-b transition-colors hover:bg-[var(--canvas)]" style={{ borderColor: 'var(--line2)' }}>
-                      <td className="px-3 py-2 min-w-0">
-                        <span className="font-medium block whitespace-nowrap">{v.folio}</span>
-                        <span className="block text-[11px] truncate max-w-[240px]" style={{ color: 'var(--faint)' }}>
-                          {ruta ?? 'sin ruta capturada'}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {v.operadorNombre ?? <span style={{ color: 'var(--faint)' }}>Sin asignar</span>}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap cifra-mono" style={{ color: v.unidadEco ? 'var(--ink)' : 'var(--faint)' }}>
-                        {v.unidadEco ?? '—'}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--muted)' }}>{v.fechaInicio ? fechaMx(v.fechaInicio) : '—'}</td>
-                      {verDinero && (
-                        <>
-                          <td className="px-3 py-2 text-right cifra-mono whitespace-nowrap">{v.anticipo === null ? '—' : mxn(v.anticipo)}</td>
-                          <td className="px-3 py-2 text-right cifra-mono whitespace-nowrap" style={{ color: v.comprobado === null ? 'var(--faint)' : undefined }}>
-                            {v.comprobado === null ? '—' : mxn(v.comprobado)}
-                          </td>
-                          <td className="px-3 py-2 text-right cifra-mono whitespace-nowrap"
-                            style={{ color: v.diferencia === null ? 'var(--faint)' : v.diferencia === 0 ? 'var(--ok)' : v.diferencia > 0 ? 'var(--warn)' : 'var(--bad)' }}>
-                            {v.diferencia === null ? '—' : v.diferencia === 0 ? 'Exacta' : mxn(Math.abs(v.diferencia))}
-                          </td>
-                        </>
-                      )}
-                      <td className="px-3 py-2">
-                        {v.estatus === 'liquidado'
-                          ? <span style={{ color: 'var(--faint)' }}>—</span>
-                          : <PillAviso v={v} />}
-                      </td>
-                      <td className="px-3 py-2"><StatusPill estado={e.estado}>{e.etiqueta}</StatusPill></td>
-                      <td className="px-3 py-2 text-right">
-                        {v.liqId ? (
-                          <Link href={`/dashboard/${v.liqId}${sufijo}`}
-                            className="inline-flex items-center gap-1 text-[12.5px] font-medium hover:opacity-70 transition-opacity whitespace-nowrap"
-                            style={{ color: 'var(--marca)' }}>
-                            Ver <ArrowRight width={12} height={12} strokeWidth={2} aria-hidden />
-                          </Link>
-                        ) : (
-                          <span className="text-[12px]" style={{ color: 'var(--faint)' }}>—</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              {verDinero && (
-                <tfoot>
-                  <tr>
-                    <td colSpan={columnas} className="px-3 pt-2 text-[11px]" style={{ color: 'var(--faint)' }}>
-                      Diferencia en ámbar = sobrante a favor de la empresa; en rojo = faltante a favor del operador.
-                      Un guion en Comprobado es un viaje sin liquidación todavía.
-                    </td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
+          <TablaLista<FilaRegistroViaje>
+            etiqueta="Registro de viajes"
+            columnas={columnasViajes(sufijo, verDinero)}
+            filas={filas}
+            idFila={(v) => v.id}
+            base="/dashboard/viajes"
+            params={{}}
+            pie={verDinero ? (
+              <p className="rv-tl__nota">
+                Diferencia en ámbar = sobrante a favor de la empresa; en rojo = faltante a favor del operador.
+                Un guion en Comprobado es un viaje sin liquidación todavía.
+              </p>
+            ) : undefined}
+          />
         )}
 
         {/* Paginación por CURSOR (escala 50k, 22-ago-2026): nunca más de
@@ -260,6 +240,10 @@ export function VistaViajes({
             el cursor es la posición del último viaje visto, y "Siguientes"
             continúa desde ahí sin que la base relea lo anterior. Hacia
             atrás sirve el botón del navegador o "Volver al inicio". */}
+        <div className="rv-tl__sellos">
+          <SelloDato tipo="observado" fuente="Registro de viajes" leidoEn={ahoraMs()} edad={false} />
+        </div>
+
         {(cursor || hayMas) && (
           <div className="flex items-center justify-between gap-3 mt-3 pt-3" style={{ borderTop: '1px dashed var(--line2)' }}>
             <span className="text-[11.5px]" style={{ color: 'var(--faint)' }}>

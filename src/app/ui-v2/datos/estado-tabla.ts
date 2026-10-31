@@ -81,7 +81,8 @@ export function hrefConParams(base: string, params: ParamsURL, cambios: Readonly
   }
   for (const [k, v] of Object.entries(cambios)) if (v !== null) q.set(k, v);
   const s = q.toString();
-  return s ? `${base}?${s}` : base;
+  // Base vacía = «esta misma página»: sin query, `''` volvería a pedir la URL actual CON sus filtros; `?` la pide limpia.
+  return s ? `${base}?${s}` : base === '' ? '?' : base;
 }
 
 /** Lo que pasa al pulsar la cabecera de `col`: otra columna → ascendente; la misma → descendente; ya descendente → quitar el orden. */

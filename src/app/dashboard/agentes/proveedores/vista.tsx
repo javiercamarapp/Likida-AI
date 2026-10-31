@@ -6,6 +6,8 @@ import { EstadoVacio } from '../../estados';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { SelloDato, TablaLista, type ColumnaTabla, type ParamsURL } from '@/app/ui-v2/datos';
+import { ahoraMs } from '@/lib/saludo';
 
 
 /** El tope de `listarFacturasProveedor` que usa la página — declarado aquí
@@ -28,8 +30,10 @@ import {
  */
 export function VistaAgenteProveedores({
   facturas, rfcFlota, sufijo, acciones, notificaciones, ficha,
-  buzon, dominioConfigurado, puedeAdministrarBuzon, entrega, recepcion,
+  buzon, dominioConfigurado, puedeAdministrarBuzon, entrega, recepcion, params = {},
 }: {
+  /** Los parámetros de la URL (`searchParams`): la bandeja ordena y pagina por ellos (`orden`, `dir`, `pag`) y los conserva todos. */
+  params?: ParamsURL;
   facturas: FacturaProveedor[];
   rfcFlota: string | null;
   sufijo: string;
@@ -148,85 +152,22 @@ export function VistaAgenteProveedores({
             esperando tu decisión.
           </EstadoVacio>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
-              <thead>
-                <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Fecha</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Proveedor (RFC)</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Concepto</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 pr-6 text-right">Total</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Estado</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 text-right pr-1">Decidir</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...pendientes, ...aprobadas, ...rechazadas].map((f) => (
-                  <tr key={f.id} className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
-                    <td className="py-2.5" style={{ color: 'var(--muted)' }}>
-                      {f.fecha ? fechaCorta(f.fecha) : '—'}
-                      {/* NULL = fila anterior al rastreo de origen (0108): no se adivina. */}
-                      {f.origen && (
-                        <span className="block text-[10.5px]" style={{ color: 'var(--faint)' }}>
-                          {f.origen === 'correo' ? 'por correo' : 'subida a mano'}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2.5">
-                      <span className="cifra-mono block">{f.emisorRfc ?? 'sin RFC'}</span>
-                      {f.receptorEsFlota === false && (
-                        <span className="inline-flex items-center gap-1 text-[11px]" style={{ color: 'var(--bad)' }}>
-                          <TriangleAlert width={11} height={11} strokeWidth={2} /> receptor ajeno
-                        </span>
-                      )}
-                      {f.receptorEsFlota === null && (
-                        <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>receptor sin validar</span>
-                      )}
-                    </td>
-                    <td className="py-2.5">
-                      <span className="block truncate max-w-[26ch]" title={f.descripcion ?? undefined}>
-                        {f.descripcion ?? 'sin descripción en el XML'}
-                      </span>
-                      {f.conceptos > 1 && (
-                        <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>
-                          y {numero(f.conceptos - 1)} concepto{f.conceptos - 1 === 1 ? '' : 's'} más
-                        </span>
-                      )}
-                      {/* Cifra leída por VISIÓN, no del XML: se dice siempre, con su
-                          confianza, para que nadie apruebe un OCR como dato duro. */}
-                      {f.requiereRevision && (
-                        <span className="inline-flex items-center gap-1 text-[10.5px]" style={{ color: 'var(--warn)' }}>
-                          <TriangleAlert width={10} height={10} strokeWidth={2} />
-                          {f.revisionMotivo ?? 'lectura de PDF: cotéjala antes de aprobar'}
-                        </span>
-                      )}
-                      {f.tienePdf && acciones.verPdf && (
-                        <span className="block mt-1"><BotonVerPdf campo="facturaId" id={f.id} ver={acciones.verPdf} /></span>
-                      )}
-                      {f.ocrConfianza !== null && (
-                        <span className="inline-flex items-center gap-1 text-[10.5px]" style={{ color: 'var(--warn)' }}>
-                          <TriangleAlert width={10} height={10} strokeWidth={2} />
-                          leída de {f.fuenteDatos === 'pdf_texto' || f.fuenteDatos === 'pdf_vision' ? 'PDF' : 'foto'} (OCR {numero(f.ocrConfianza)}) — revisa contra el papel
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2.5 pr-6 text-right cifra-mono">{mxn(f.total)}</td>
-                    <td className="py-2.5">
-                      <PillEstado f={f} />
-                      <NotaSat estadoSat={f.estadoSat} />
-                    </td>
-                    <td className="py-2.5 pl-3 text-right">
-                      {f.estado === 'pendiente'
-                        ? <BotonesDecision facturaId={f.id} decidir={acciones.decidir} />
-                        : <span className="text-[11px]" style={{ color: 'var(--faint)' }}>
-                            {f.decididoPor ?? '—'}{f.decididoEn ? ` · ${fechaCorta(f.decididoEn)}` : ''}
-                          </span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <TablaLista<FacturaProveedor>
+              etiqueta="Bandeja de facturas de proveedor"
+              columnas={columnasBandeja(acciones)}
+              filas={[...pendientes, ...aprobadas, ...rechazadas]}
+              idFila={(f) => f.id}
+              base="/dashboard/agentes/proveedores"
+              params={params}
+              orden="local"
+              paginacion={{ tamano: 25 }}
+              atributosFila={(f) => ({ 'data-estado': f.estado })}
+            />
+            <div className="rv-tl__sellos">
+              <SelloDato tipo="observado" fuente="Buzón de facturas" leidoEn={ahoraMs()} edad={false} />
+            </div>
+          </>
         )}
       </section>
 
@@ -307,6 +248,80 @@ export function SeccionBuzon({ buzon, dominioConfigurado, puedeAdministrarBuzon,
       )}
     </section>
   );
+}
+
+const ORDEN_ESTADO = { pendiente: 0, aprobada: 1, rechazada: 2 } as const;
+
+/** Las columnas de la bandeja. Por omisión el orden es el de siempre (pendientes arriba, luego aprobadas y rechazadas); cada cabecera
+ *  con dato se puede ordenar (`?orden=total&dir=desc`), y la página (`?pag=2`) vive en la URL junto con tenant/vista/rol. */
+function columnasBandeja(acciones: { decidir: AccionProveedores; verPdf?: AccionProveedores }): ColumnaTabla<FacturaProveedor>[] {
+  return [
+    {
+      id: 'fecha', titulo: 'Fecha', valor: (f) => f.fecha,
+      celda: (f) => (
+        <span className="rv-tl__apagado">
+          {f.fecha ? fechaCorta(f.fecha) : '—'}
+          {/* NULL = fila anterior al rastreo de origen (0108): no se adivina. */}
+          {f.origen && <span className="rv-tl__sub">{f.origen === 'correo' ? 'por correo' : 'subida a mano'}</span>}
+        </span>
+      ),
+    },
+    {
+      id: 'proveedor', titulo: 'Proveedor (RFC)', principal: true, valor: (f) => f.emisorRfc,
+      celda: (f) => (
+        <>
+          <span className="cifra-mono block">{f.emisorRfc ?? 'sin RFC'}</span>
+          {f.receptorEsFlota === false && (
+            <span className="inline-flex items-center gap-1 text-[11px] rv-tl__bad">
+              <TriangleAlert width={11} height={11} strokeWidth={2} aria-hidden /> receptor ajeno
+            </span>
+          )}
+          {f.receptorEsFlota === null && <span className="rv-tl__sub">receptor sin validar</span>}
+        </>
+      ),
+    },
+    {
+      id: 'concepto', titulo: 'Concepto', valor: (f) => f.descripcion,
+      celda: (f) => (
+        <>
+          <span className="block truncate max-w-[26ch]" title={f.descripcion ?? undefined}>
+            {f.descripcion ?? 'sin descripción en el XML'}
+          </span>
+          {f.conceptos > 1 && (
+            <span className="rv-tl__sub">y {numero(f.conceptos - 1)} concepto{f.conceptos - 1 === 1 ? '' : 's'} más</span>
+          )}
+          {/* Cifra leída por VISIÓN, no del XML: se dice siempre, con su
+              confianza, para que nadie apruebe un OCR como dato duro. */}
+          {f.requiereRevision && (
+            <span className="inline-flex items-center gap-1 text-[10.5px] rv-tl__warn">
+              <TriangleAlert width={10} height={10} strokeWidth={2} aria-hidden />
+              {f.revisionMotivo ?? 'lectura de PDF: cotéjala antes de aprobar'}
+            </span>
+          )}
+          {f.tienePdf && acciones.verPdf && (
+            <span className="block mt-1"><BotonVerPdf campo="facturaId" id={f.id} ver={acciones.verPdf} /></span>
+          )}
+          {f.ocrConfianza !== null && (
+            <span className="inline-flex items-center gap-1 text-[10.5px] rv-tl__warn">
+              <TriangleAlert width={10} height={10} strokeWidth={2} aria-hidden />
+              leída de {f.fuenteDatos === 'pdf_texto' || f.fuenteDatos === 'pdf_vision' ? 'PDF' : 'foto'} (OCR {numero(f.ocrConfianza)}) — revisa contra el papel
+            </span>
+          )}
+        </>
+      ),
+    },
+    { id: 'total', titulo: 'Total', alinear: 'der', valor: (f) => f.total, celda: (f) => <span className="cifra-mono">{mxn(f.total)}</span> },
+    {
+      id: 'estado', titulo: 'Estado', valor: (f) => ORDEN_ESTADO[f.estado],
+      celda: (f) => (<><PillEstado f={f} /><NotaSat estadoSat={f.estadoSat} /></>),
+    },
+    {
+      id: 'decidir', titulo: 'Decidir', alinear: 'der',
+      celda: (f) => f.estado === 'pendiente'
+        ? <BotonesDecision facturaId={f.id} decidir={acciones.decidir} />
+        : <span className="rv-tl__sub rv-tl__der">{f.decididoPor ?? '—'}{f.decididoEn ? ` · ${fechaCorta(f.decididoEn)}` : ''}</span>,
+    },
+  ];
 }
 
 /** El link del export arrastrando el `?tenant=`/`?vista=`/`?rol=` de la

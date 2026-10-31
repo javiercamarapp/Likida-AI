@@ -34,6 +34,9 @@ export interface PropsSelloDato {
   leidoEn?: Instante;
   /** Reloj de la comparación (ms). Por omisión, ahora; se inyecta en pruebas y en pantallas que ya tienen su reloj. */
   ahora?: number;
+  /** Mostrar «· actualizado hace …» (por omisión, sí cuando se conoce `leidoEn`). Una pantalla que lee la fuente AL abrirse lo apaga:
+   *  decir «hace unos segundos» en cada carga no informa nada. */
+  edad?: boolean;
   className?: string;
 }
 
@@ -59,7 +62,7 @@ export function textoSello(p: Pick<PropsSelloDato, 'fuente' | 'corte' | 'leidoEn
 
 /** El sello de procedencia de una cifra o tabla: clase de dato + fuente + corte real + «actualizado hace». Reutiliza `KindBadge`:
  *  el punto silencioso de «observado» y la marca de estimado / inferido / sin dato (icono + texto, nunca solo color). */
-export function SelloDato({ tipo, className, ...resto }: PropsSelloDato) {
+export function SelloDato({ tipo, className, edad = true, ...resto }: PropsSelloDato) {
   const t = textoSello(resto);
   const ref = aMs(resto.corte) !== null ? resto.corte : resto.leidoEn;
   const ms = aMs(ref);
@@ -68,7 +71,7 @@ export function SelloDato({ tipo, className, ...resto }: PropsSelloDato) {
     <span className={cx('rv-sello', className)} data-tipo={tipo} title={t.ayuda}>
       {tipo === 'observado' ? <i className="rv-sello__punto" aria-hidden="true" /> : <KindBadge tipo={tipo} />}
       <time className="rv-sello__texto" dateTime={dateTime}>{t.texto}</time>
-      {t.actualizado ? <span className="rv-sello__edad"> · actualizado {t.actualizado}</span> : null}
+      {edad && t.actualizado ? <span className="rv-sello__edad"> · actualizado {t.actualizado}</span> : null}
     </span>
   );
 }

@@ -80,6 +80,10 @@ describe('hrefConParams', () => {
     expect(hrefConParams('/x', { a: '1' }, { a: null })).toBe('/x');
     expect(hrefConParams('/x', { t: ['1', '2'] }, {})).toBe('/x?t=1&t=2');
   });
+  it('base vacía (esta misma página): sin parámetros devuelve «?» para limpiar la query, no «» que la conservaría', () => {
+    expect(hrefConParams('', { rev: 'x' }, { rev: null })).toBe('?');
+    expect(hrefConParams('', { tenant: 'T' }, { rev: 'x' })).toBe('?tenant=T&rev=x');
+  });
   it('escapa valores hostiles (no se puede colar otro parámetro ni salir de la ruta)', () => {
     const h = hrefConParams('/x', {}, { q: 'a&b=1#x' });
     expect(h).toBe('/x?q=a%26b%3D1%23x');

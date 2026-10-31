@@ -71,6 +71,23 @@
   .rv-tl tbody tr > *, .rv-tl__pag { transition: background-color 120ms ease; }
 }
 
+/* Ayudas de celda (sin style=): colores por tokens con respaldo. */
+.rv-tl__tenue { color: var(--faint, var(--muted)); }
+.rv-tl__apagado { color: var(--muted); }
+.rv-tl__sub { display: block; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--faint, var(--muted)); }
+.rv-tl__ok { color: var(--ok, var(--ink)); }
+.rv-tl__warn { color: var(--warn, var(--ink)); }
+.rv-tl__bad { color: var(--bad, var(--ink)); }
+.rv-tl__enlace { color: var(--marca, var(--ink)); }
+.rv-tl__nota { margin: 0; font-size: 12px; color: var(--faint, var(--muted)); }
+.rv-tl__sellos { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+
+/* Pastilla de estado de una celda (texto siempre; el tono es apoyo). */
+.rv-tl__pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; color: var(--muted); background: var(--canvas); white-space: nowrap; }
+.rv-tl__pill[data-tono="ok"] { color: var(--ok, var(--ink)); background: var(--okbg, var(--canvas)); }
+.rv-tl__pill[data-tono="warn"] { color: var(--warn, var(--ink)); background: var(--warnbg, var(--canvas)); }
+.rv-tl__pill[data-tono="bad"] { color: var(--bad, var(--ink)); background: var(--badbg, var(--canvas)); }
+
 /* ── SelloDato ── */
 .rv-sello { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 12px; line-height: 1.3; color: var(--muted); }
 .rv-sello__punto { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--prov-obs, var(--ink)); }
