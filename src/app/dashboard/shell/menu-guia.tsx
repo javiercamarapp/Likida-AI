@@ -27,6 +27,9 @@ export default function MenuGuia({ rol, perfil, compacto = false }: { rol: strin
   const cerrar = () => setAbierto(false);
   const primeros = hrefs.includes(HREF_PRIMEROS_PASOS);
   const ayuda = hrefs.includes(HREF_AYUDA);
+  const tour = useTourOpcional();
+  // Sin ninguna fila que ofrecer (p. ej. nómina: solo Liquidación, avisos y su perfil) el botón no existe: un menú vacío miente.
+  if (!(tour?.existe('dueno') || primeros || ayuda)) return null;
   return (
     <div className="rv-guia">
       <button ref={gatillo} type="button" className={compacto ? 'rv-icono-boton' : 'rv-guia__btn'} aria-haspopup="menu" aria-expanded={abierto}

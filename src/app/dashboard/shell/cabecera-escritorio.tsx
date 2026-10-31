@@ -1,22 +1,13 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { Bell, ChevronsLeft } from 'lucide-react';
 import type { PerfilTenant } from '@/lib/auth/visibilidad';
-import { TZ_MX } from '@/lib/formato';
 import { HREF_NOTIFICACIONES, hrefActivo, hrefsDelMenu } from './menu-por-perfil';
 import { useMenuV2 } from './navegacion-v2';
 import { useRiel } from './colapso';
 import MenuGuia from './menu-guia';
-
-/** «31 oct 2026», es-MX, zona de México. Vacío en el servidor: se pinta al hidratar (sin desajuste de hidratación). */
-function fechaDeHoy(): string {
-  const partes = new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short', year: 'numeric', timeZone: TZ_MX }).formatToParts(new Date());
-  const v = (t: string) => partes.find((p) => p.type === t)?.value ?? '';
-  return `${v('day')} ${v('month').replace('.', '')} ${v('year')}`;
-}
-const sinSuscripcion = () => () => {};
+import FechaHoy from './fecha-hoy';
 
 /**
  * La topbar de escritorio (44 px, ESTILO §4): botón de plegar/expandir el sidebar a la izquierda y, a la derecha, «Guía» (menú),
@@ -27,7 +18,6 @@ const sinSuscripcion = () => () => {};
 export default function CabeceraEscritorio({ rol, perfil, insignias }: { rol: string; perfil?: PerfilTenant | null; insignias?: Record<string, string> }) {
   const { pathname, sufijo, menu } = useMenuV2(rol, perfil);
   const { riel, alternar } = useRiel();
-  const fecha = useSyncExternalStore(sinSuscripcion, fechaDeHoy, () => '');
   const campana = hrefsDelMenu(menu).includes(HREF_NOTIFICACIONES);
   const pendientes = /^\d+$/.test(insignias?.[HREF_NOTIFICACIONES] ?? '') && Number(insignias?.[HREF_NOTIFICACIONES]) > 0;
   const enNotificaciones = hrefActivo(pathname, menu) === HREF_NOTIFICACIONES;
@@ -46,7 +36,7 @@ export default function CabeceraEscritorio({ rol, perfil, insignias }: { rol: st
             {pendientes && <span className="rv-campana__punto" aria-hidden />}
           </Link>
         )}
-        <time className="rv-cab-esc__fecha" suppressHydrationWarning>{fecha}</time>
+        <FechaHoy className="rv-cab-esc__fecha" />
       </div>
     </header>
   );

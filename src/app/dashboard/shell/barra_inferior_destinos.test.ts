@@ -5,7 +5,7 @@ import { puedeVerRuta } from '@/lib/auth/visibilidad';
 
 // La barra inferior móvil sale del MISMO menú filtrado que el sidebar: nunca ofrece una ruta que el rol o el perfil no abren.
 
-const ROLES = ['superadmin', 'flota_admin', 'contador', 'encargado', 'vendedor'] as const;
+const ROLES = ['superadmin', 'flota_admin', 'contador', 'encargado', 'vendedor', 'nomina'] as const;
 
 describe('destinos de la barra inferior móvil', () => {
   for (const perfil of ['cinco_agentes', null] as const) {
@@ -46,6 +46,14 @@ describe('destinos de la barra inferior móvil', () => {
       const d = destinosMovil(rol, menuPorPerfil(rol, 'cinco_agentes')).map((x) => x.href);
       expect(d).not.toContain('/dashboard/mi-perfil');
       expect(d).not.toContain('/dashboard/soporte');
+    }
+  });
+
+  it('nómina ve SOLO Liquidación (más «Más»): ni dinero ni nada fuera de sus 3 rutas', () => {
+    for (const perfil of ['cinco_agentes', null] as const) {
+      const menu = menuPorPerfil('nomina', perfil);
+      expect(destinosMovil('nomina', menu).map((x) => x.href)).toEqual(['/dashboard/agentes/liquidacion']);
+      expect(hrefsDelMenu(menu).sort()).toEqual(['/dashboard/agentes/liquidacion', '/dashboard/mi-perfil', '/dashboard/notificaciones'].sort());
     }
   });
 

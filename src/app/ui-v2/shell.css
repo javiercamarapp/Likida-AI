@@ -188,6 +188,9 @@
 /* Aviso de pendientes: un punto de 8 px en la señal (acento puntual de atención), sin cifra */
 [data-ui="v2"] .rv-campana__punto { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--senal); box-shadow: 0 0 0 2px var(--ui-surface); }
 [data-ui="v2"] .rv-cab-esc__fecha { flex: none; min-inline-size: 78px; padding-left: 4px; text-align: right; font-size: 12px; font-weight: 500; line-height: 1; white-space: nowrap; color: var(--muted); }
+/* La fecha vive SOLO en el shell (topbar y cabecera móvil): el chip de fecha de cada página se oculta en v2 (duplicaba la fecha y robaba ancho al título) */
+[data-ui="v2"] .chip-fecha { display: none; }
+[data-ui="v2"] .rv-cab-movil__fecha { margin-left: auto; padding-right: 4px; font-size: 12px; font-weight: 500; line-height: 1; white-space: nowrap; color: var(--muted); }
 [data-ui="v2"] .rv-chev-plegar { flex: none; }
 [data-ui="v2"] .rv-cab-esc__plegar[aria-expanded="false"] .rv-chev-plegar,
 [data-ui="v2"] .rv-sb__plegar[aria-expanded="false"] .rv-chev-plegar { transform: rotate(180deg); }

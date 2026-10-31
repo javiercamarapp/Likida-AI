@@ -7,6 +7,7 @@ import LogoV2 from './logo-v2';
 import { hrefsDelMenu } from './menu-por-perfil';
 import { useMenuV2 } from './navegacion-v2';
 import MenuGuia from './menu-guia';
+import FechaHoy from './fecha-hoy';
 
 /**
  * La cabecera móvil (<768 px): sticky, 56 px más el área segura de arriba (notch). Logo de 28 px de alto, «Guía» (icono, 44 px) y la
@@ -24,6 +25,7 @@ export default function CabeceraMovil({ rol, perfil }: { rol: string; perfil?: P
         <LogoV2 alto={28} />
       </Link>
       <div className="rv-cab-movil__acciones">
+        <FechaHoy className="rv-cab-movil__fecha" />
         <MenuGuia rol={rol} perfil={perfil} compacto />
         {campana && (
           <Link href={`/dashboard/notificaciones${sufijo}`} className="rv-icono-boton" aria-label="Notificaciones">

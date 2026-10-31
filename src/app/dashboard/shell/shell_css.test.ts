@@ -205,4 +205,9 @@ describe('riel, topbar y barra inferior móvil (lote L2a)', () => {
     expect(item).toContain('min-height: 44px');
     expect(item).toMatch(/font: 500 11px/);
   });
+
+  it('el chip de fecha de cada página se oculta en v2 (la fecha vive en el shell) y la cabecera móvil lleva la suya', () => {
+    expect(sinComentarios).toContain('[data-ui="v2"] .chip-fecha { display: none; }');
+    expect(sinComentarios).toContain('.rv-cab-movil__fecha');
+  });
 });

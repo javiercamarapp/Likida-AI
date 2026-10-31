@@ -84,6 +84,16 @@ describe('DashboardChromeV2: el contrato que no se rompe', () => {
     expect(html).toContain('data-tour="nav-mas"');
   });
 
+  it('«Guía» no se pinta cuando su menú no tiene filas (nómina) y sí con filas (dueño); la fecha vive solo en el shell', () => {
+    const nomina = pintar('nomina');
+    expect(nomina).not.toContain('>Guía<');
+    expect(nomina).not.toContain('aria-label="Guía"');
+    expect(html).toContain('>Guía<');
+    expect(html).toContain('aria-label="Guía"'); // la de la cabecera móvil, solo icono
+    expect(html).toContain('class="rv-cab-movil__fecha"');
+    expect(html).toContain('class="rv-cab-esc__fecha"');
+  });
+
   it('ninguna ancla data-tour se repite y la barra móvil va DESPUÉS del sidebar (los localizadores que toman el primero ven el del sidebar)', () => {
     const anclas = [...html.matchAll(/data-tour="([^"]+)"/g)].map((m) => m[1]);
     expect(anclas.length).toBeGreaterThan(5);
