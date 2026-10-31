@@ -44,9 +44,15 @@ describe('overlays: un solo motor', () => {
     const otras: string[] = [];
     for (const f of todos.filter((x) => x.endsWith('.css') && !x.endsWith('/overlay.css') && !x.endsWith('globals.css'))) {
       const css = sinComentarios(readFileSync(f, 'utf8'));
-      // Se permiten ajustes de contexto (p. ej. `.rv-ov .rv-item` del shell) y las variantes de contenido `.rv-pop--info`.
-      for (const m of css.matchAll(/(?:^|\n|\})\s*(?:\[data-ui="v2"\]\s*)?(\.rv-(?:ov|pop|menu)(?:__[a-z]+|--[a-z]+)?(?:\[[^\]]*\])?)\s*(?:[,{:])/g)) {
-        if (!m[1].startsWith('.rv-pop--')) otras.push(`${relative(APP, f)}: ${m[1]}`);
+      // Se permiten ajustes de contexto (`.rv-ov .rv-item` del shell) y las variantes de contenido `.rv-pop--info`.
+      for (const linea of css.split('\n')) {
+        const sel = linea.includes('{') ? linea.slice(0, linea.indexOf('{')).trim() : '';
+        for (const parte of sel.split(',')) {
+          const plano = parte.replace('[data-ui="v2"]', '').trim();
+          if (/\s/.test(plano.replace(/\[[^\]]*\]/g, ''))) continue; // ajuste de contexto (`.rv-ov .rv-item`): no redefine el overlay
+          const base = plano.split(/[:[]/)[0];
+          if (/^\.rv-(ov|pop|menu)/.test(base) && !base.startsWith('.rv-pop--')) otras.push(`${relative(APP, f)}: ${base}`);
+        }
       }
     }
     expect(otras).toEqual([]);
