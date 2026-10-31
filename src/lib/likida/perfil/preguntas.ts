@@ -137,6 +137,15 @@ export function calificaEstimuloPeaje(perfilCrudo: unknown): ElegibilidadEstimul
   // declaración se sigue tratando como antes— y `decidir()` mantiene el candado
   // de siempre: un valor inferido o un default no deciden.
   if (decidir(perfil.casetasRedNacional) === false) return { elegible: false };
+  // A40-FIS-01: y la dedicación exclusiva cierra igual, por la misma razón.
+  // La fr. V cuelga el «exclusivamente» del CONTRIBUYENTE («personas
+  // contribuyentes QUE SE DEDIQUEN exclusivamente al transporte terrestre
+  // público y privado, de carga o pasaje»), no del vehículo como la fr. IV del
+  // IEPS — así está transcrito y verificado en `normas/lif-2026-20-A.yaml`.
+  // El campo se preguntaba (`onboarding/forma.tsx:108`, cuya ayuda dice en voz
+  // alta que es la válvula «del estímulo de peaje»), se guardaba, lo leía
+  // `facilidad15Declarada` para la OTRA norma, y aquí no lo leía nadie.
+  if (decidir(perfil.dedicacionExclusivaCarga) === false) return { elegible: false };
   const ingresos = decidir(perfil.ingresosAnualesMxn);
   const menoresA300M = ingresos !== undefined ? ingresos < 300_000_000 : decidir(perfil.ingresosMenoresA300M);
   const parteRelacionada = decidir(perfil.parteRelacionada);

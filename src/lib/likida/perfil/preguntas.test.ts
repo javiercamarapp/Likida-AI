@@ -46,6 +46,58 @@ describe('calificaEstimuloPeaje — FASE 3', () => {
   // dato: es un hecho que cierra. Falta de declaración (`undefined`) se sigue
   // tratando como antes, porque ahí sí no hay nada que leer.
   // ═════════════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════════════════════════════════
+  // A40-FIS-01 (CRÍTICO, auditoría 40) — FIS-34-1 otra vez, en el campo de al
+  // lado. `dedicacionExclusivaCarga` se pregunta en la forma de arranque
+  // (`app/dashboard/onboarding/forma.tsx:108`), cuya propia ayuda dice que es
+  // la «válvula del 15% de combustible en efectivo Y DEL ESTÍMULO DE PEAJE»,
+  // se guarda, y lo lee `facilidad15Declarada` (`preguntas.ts:418-423`) para la
+  // OTRA norma — pero `calificaEstimuloPeaje` nunca lo miraba.
+  //
+  // La LIF 2026 art. 20-A fr. V cuelga el «exclusivamente» del CONTRIBUYENTE
+  // («personas contribuyentes QUE SE DEDIQUEN exclusivamente al transporte
+  // terrestre público y privado, de carga o pasaje»), no del vehículo como la
+  // fr. IV del IEPS: así está transcrito y verificado contra fuente primaria en
+  // `normas/lif-2026-20-A.yaml`. Una flota que declara que NO se dedica
+  // exclusivamente a la carga federal salía `elegible: true`, y el PDF le
+  // imprimía «Estímulo de peaje 50% … $250.00» sobre una caseta de $500.00.
+  //
+  // Cierra como FIS-34-1 y por la misma razón: una negativa DECLARADA no es
+  // falta de dato, es un hecho que niega. `undefined` no cierra, y `decidir()`
+  // mantiene el candado de que un valor inferido o un default no deciden.
+  // ═════════════════════════════════════════════════════════════════════════
+  it('A40-FIS-01: un «no» declarado a la dedicación exclusiva cierra el estímulo de peaje, aunque lo demás califique', () => {
+    expect(calificaEstimuloPeaje({
+      ...declarado(50_000_000, false),
+      casetasRedNacional: { valor: true, procedencia: 'declarado' },
+      dedicacionExclusivaCarga: { valor: false, procedencia: 'declarado' },
+    })).toEqual({ elegible: false });
+  });
+
+  it('A40-FIS-01: cierra incluso sin las otras declaraciones (niega con el único hecho que hay)', () => {
+    expect(calificaEstimuloPeaje({
+      dedicacionExclusivaCarga: { valor: false, procedencia: 'declarado' },
+    })).toEqual({ elegible: false });
+  });
+
+  it('A40-FIS-01: un «sí» a la dedicación exclusiva no cambia nada (no es el candado que falta)', () => {
+    expect(calificaEstimuloPeaje({
+      ...declarado(50_000_000, false),
+      dedicacionExclusivaCarga: { valor: true, procedencia: 'declarado' },
+    })).toEqual({ elegible: true });
+  });
+
+  it('A40-FIS-01: EL CANDADO — un «no» inferido NO cierra, solo el declarado', () => {
+    expect(calificaEstimuloPeaje({
+      ...declarado(50_000_000, false),
+      dedicacionExclusivaCarga: { valor: false, procedencia: 'inferido' },
+    })).toEqual({ elegible: true });
+  });
+
+  it('A40-FIS-01: sin declarar la dedicación exclusiva, la conducta es la de siempre', () => {
+    expect(calificaEstimuloPeaje(declarado(50_000_000, false))).toEqual({ elegible: true });
+  });
+
   it('FIS-34-1: un «no» declarado a la Red Nacional cierra el estímulo, aunque lo demás califique', () => {
     expect(calificaEstimuloPeaje({
       ...declarado(50_000_000, false),
