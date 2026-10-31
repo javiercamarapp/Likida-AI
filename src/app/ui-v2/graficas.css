@@ -410,3 +410,48 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 [data-ui="v2"] .rv-dona[data-hay-activo] .rv-dona__gajo:not([data-activo]) { opacity: .35; }
 [data-ui="v2"] .rv-dona__gajo { transition: opacity var(--ui-fast) ease; }
 [data-ui="v2"] .rv-dona__lienzo { width: 132px; height: 132px; }
+
+/* ── BarList (Vexa `BarList`) ── */
+[data-ui="v2"] .rv-barlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+[data-ui="v2"] .rv-barlist__fila { display: grid; gap: 5px; min-width: 0; }
+[data-ui="v2"] .rv-barlist__cab { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; color: inherit; text-decoration: none; }
+[data-ui="v2"] .rv-barlist__etq { font-size: 13px; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-ui="v2"] .rv-barlist__val { font: 600 13px var(--font-sans-ui, inherit); letter-spacing: -.005em; font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
+[data-ui="v2"] .rv-barlist__pista { display: block; height: 4px; border-radius: 999px; background: var(--chart-rejilla); overflow: hidden; }
+[data-ui="v2"] .rv-barlist[data-matiz] .rv-barlist__pista { height: 6px; }
+[data-ui="v2"] .rv-barlist__pista[data-desconocido] { background: repeating-linear-gradient(135deg, var(--muted) 0 3px, transparent 3px 6px); opacity: .55; }
+[data-ui="v2"] .rv-barlist__relleno { fill: var(--chart-barra); transform-box: fill-box; transform-origin: left; transition: fill var(--ui-fast) ease; }
+[data-ui="v2"] .rv-barlist[data-matiz] .rv-barlist__relleno { fill: var(--cat, var(--chart-barra)); }
+[data-ui="v2"] .rv-barlist__fila:hover .rv-barlist__relleno { fill: var(--chart-fuerte); }
+[data-ui="v2"] .rv-barlist[data-matiz] .rv-barlist__fila:hover .rv-barlist__relleno { fill: var(--cat, var(--chart-fuerte)); }
+[data-ui="v2"] .rv-barlist__pista[data-tipo="estimado"] .rv-barlist__relleno, [data-ui="v2"] .rv-barlist__pista[data-tipo="inferido"] .rv-barlist__relleno { fill-opacity: .55; }
+[data-ui="v2"] a.rv-barlist__cab:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 6px; }
+[data-ui="v2"] .rv-barlist__nota { font-size: 12px; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) {
+  [data-ui="v2"] .rv-barlist__relleno { animation: rv-crece var(--t-bar) var(--ui-ease) both; }
+  [data-ui="v2"] .rv-barlist__relleno[data-r="1"] { animation-delay: 40ms; }
+  [data-ui="v2"] .rv-barlist__relleno[data-r="2"] { animation-delay: 80ms; }
+  [data-ui="v2"] .rv-barlist__relleno[data-r="3"] { animation-delay: 120ms; }
+  [data-ui="v2"] .rv-barlist__relleno[data-r="4"] { animation-delay: 160ms; }
+  [data-ui="v2"] .rv-barlist__relleno[data-r="5"] { animation-delay: 200ms; }
+  [data-ui="v2"] .rv-barlist__relleno[data-r="6"] { animation-delay: 240ms; }
+  [data-ui="v2"] .rv-barlist__relleno[data-r="7"] { animation-delay: 280ms; }
+  [data-ui="v2"] .rv-barlist__relleno[data-r="8"] { animation-delay: 320ms; }
+  [data-ui="v2"] .rv-barlist__relleno[data-r="9"] { animation-delay: 360ms; }
+  [data-ui="v2"] .rv-barlist__relleno[data-r="10"] { animation-delay: 400ms; }
+  [data-ui="v2"] .rv-barlist__relleno[data-r="11"] { animation-delay: 440ms; }
+  [data-ui="v2"] .rv-barlist__relleno[data-r="12"] { animation-delay: 480ms; }
+  [data-ui="v2"] .rv-barlist__relleno[data-r="13"] { animation-delay: 520ms; }
+  [data-ui="v2"] .rv-barlist__relleno[data-r="14"] { animation-delay: 560ms; }
+  [data-ui="v2"] .rv-barlist__relleno[data-r="15"] { animation-delay: 600ms; }
+}
+
+/* ── Columnas agrupadas: leyenda de series y filas de la lectura (swatch + nombre + cifra) ── */
+[data-ui="v2"] .rv-colum__barra.rv-tono-0, [data-ui="v2"] .rv-colum__barra.rv-tono-1, [data-ui="v2"] .rv-colum__barra.rv-tono-2, [data-ui="v2"] .rv-colum__barra.rv-tono-3 { fill: var(--tono); }
+[data-ui="v2"] .rv-leyenda-series { display: flex; flex-wrap: wrap; gap: 2px 16px; margin: 0 0 6px; padding: 0; list-style: none; font-size: 12px; color: var(--muted); }
+[data-ui="v2"] .rv-leyenda-series li { display: inline-flex; align-items: center; gap: 6px; }
+[data-ui="v2"] .rv-gt__sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none; background: var(--tono, var(--ink)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cat, var(--ink)) 55%, transparent); }
+[data-ui="v2"] .rv-gt__fila { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: 8px; font: 500 12px/1.4 var(--font-sans-ui, inherit); }
+[data-ui="v2"] .rv-gt__fila strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+[data-ui="v2"] .rv-gt__total { grid-template-columns: minmax(0, 1fr) auto; margin-top: 2px; padding-top: 4px; border-top: 1px solid var(--line); }
+[data-ui="v2"] .rv-colum__barra, [data-ui="v2"] .rv-gr svg text { pointer-events: none; }

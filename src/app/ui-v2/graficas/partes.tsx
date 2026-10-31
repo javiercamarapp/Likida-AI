@@ -90,3 +90,21 @@ export function TablaGrafica({ titulo, encabezados, filas, primera = 'Periodo' }
     </details>
   );
 }
+
+/** Lectura de varias series en un mismo periodo (columnas agrupadas): una fila por serie con su muestra de color (tono del matiz) y,
+ *  si hay más de una, el total. El color nunca es la única señal: cada fila lleva el nombre. */
+export function LecturaSeries({ titulo, filas, total }: {
+  titulo: string;
+  filas: ReadonlyArray<{ tono: number; nombre: string; texto: string }>;
+  total?: string;
+}) {
+  return (
+    <>
+      <span className="rv-gt__cab"><span className="rv-gt__titulo">{titulo}</span></span>
+      {filas.map((f) => (
+        <span key={f.nombre} className="rv-gt__fila"><i className={`rv-gt__sw rv-tono-${f.tono}`} aria-hidden="true" /><span>{f.nombre}</span><strong>{f.texto}</strong></span>
+      ))}
+      {total ? <span className="rv-gt__fila rv-gt__total"><span>Total</span><strong>{total}</strong></span> : null}
+    </>
+  );
+}

@@ -1,7 +1,7 @@
 import { Bell, Flag } from 'lucide-react';
 import { fechaCorta, mxnEntero, numero, porcentaje } from '@/lib/formato';
 import { BotonEnlace, EstadoVacio, Tarjeta } from '@/app/ui-v2/componentes';
-import { Bullet, Columnas, KindBadge, type ItemKpi } from '@/app/ui-v2/graficas';
+import { BarList, Bullet, Columnas, KindBadge, type ItemKpi } from '@/app/ui-v2/graficas';
 import { rotuloDiferencia } from './agentes/liquidacion/rotulo-diferencia';
 import { PERIODO_RANGO, RUTA_LIQUIDACION, type DatosResumen } from './resumen-modelo';
 
@@ -60,7 +60,7 @@ export function TarjetaCierres({ d }: { d: DatosResumen }) {
       estado={c === null ? 'error' : 'ok'} reintentar
       acciones={c && total > 0 ? <span className="rv-res__nota">{numero(total)} en {c.length} semanas · la última, en curso</span> : undefined}
     >
-      {c ? <Columnas datos={c} matiz={1} etiqueta="Liquidaciones cerradas por semana, últimas ocho semanas" formato={numero} vacio="Sin liquidaciones cerradas en las últimas ocho semanas" /> : null}
+      {c ? <Columnas datos={c.map((x) => ({ etiqueta: x.etiqueta, valor: x.valor, parcial: x.parcial, largo: `Semana del ${x.etiqueta}` }))} unidad="cierres" matiz={1} etiqueta="Liquidaciones cerradas por semana, últimas ocho semanas" formato={numero} vacio="Sin liquidaciones cerradas en las últimas ocho semanas" /> : null}
     </Tarjeta>
   );
 }
@@ -89,9 +89,10 @@ export function TarjetaDiferencias({ d }: { d: DatosResumen }) {
           {d.veDinero ? (
             <div className="rv-res__tipos">
               <p className="rv-res__sub">Dónde más pesa (historial)</p>
-              {tipos === null ? <EstadoVacio titulo="No disponible ahora. No es cero." /> : tipos.length === 0 ? <EstadoVacio titulo="Sin diferencias registradas" /> : tipos.map((t) => (
-                <Bullet key={t.tipo} compacto valor={t.monto} maximo={tope} matiz={6} etiqueta={rotuloDiferencia(t.tipo)} formato={mxnEntero} />
-              ))}
+              {tipos === null ? <EstadoVacio titulo="No disponible ahora. No es cero." /> : tipos.length === 0 ? <EstadoVacio titulo="Sin diferencias registradas" /> : (
+                <BarList etiqueta="Dónde más pesan las diferencias" matiz={6} maximo={tope} formato={mxnEntero}
+                  items={tipos.map((t) => ({ clave: t.tipo, etiqueta: rotuloDiferencia(t.tipo), valor: t.monto }))} />
+              )}
             </div>
           ) : null}
         </>
