@@ -193,3 +193,15 @@ antes de asumir que ya corrieron.
 - capa0 bloque C en producción: `postgres` no es miembro de `supabase_admin`, así que el `alter default privileges for role supabase_admin` de la 0947 caerá en NOTICE y capa0 C dará `default-acl-abiertas` > 0 SOLO por entradas de supabase_admin (objetos creados por la plataforma/extensiones, no por migraciones). No es regresión: la señal que importa es `tabla-nueva-hereda=false` (las migraciones corren como postgres). Si se quiere cerrar también eso, hacerlo desde un rol con permiso en el panel/SQL editor de Supabase: `alter default privileges for role supabase_admin in schema public revoke all on tables from anon, authenticated;` (y sequences/functions).
 - capa0 bloque C crea y deshace una tabla dentro de un DO: correrlo con `postgres` y sin carga; los demás bloques son lectura pura.
 - Orden: 0946, 0947, 0948. No reaplicar la 0946 DESPUÉS de la 0947 salvo por reversa (volvería a dar SELECT de columnas de `tenant` a authenticated y capa0 A lo marcaría).
+
+## Rol `nomina` (0949) — Nómina y RH, solo conteos de Liquidaciones (31-oct-2026)
+
+**Qué hace.** Amplía el CHECK `app_user_rol_dominio` de `app_user.rol` con `'nomina'` y conserva exactamente `superadmin`, `flota_admin`, `contador`, `encargado`, `vendedor`. No redefine `is_superadmin()`, `ve_finanzas()`, `administra_flota()` ni `ve_operacion()` (listas positivas: `nomina` da false), no toca RLS ni grants, no crea tablas ni funciones. Aditiva e idempotente, con `-- REVERSA:` en la cabecera. Sin ella nadie puede tener el rol; el código nuevo es inerte para los demás roles.
+
+**Antes:** respaldo de la base. `select rol, count(*) from app_user group by 1;` (no debe existir ninguna fila fuera del dominio de arriba).
+
+**Aplicar:** `supabase db query --linked -f supabase/migrations/0949_rol_nomina.sql` (o `aplicar-migraciones.py`). Puede ir antes o después del código: el código solo reconoce el rol cuando existe una fila con él.
+
+**Después:** `select pg_get_constraintdef(oid) from pg_constraint where conname='app_user_rol_dominio';` debe listar los seis roles. Humo: el dueño de una flota con perfil `cinco_agentes` invita a una persona con el rol «Nómina y RH» desde `/dashboard/usuarios` (la opción no aparece en flotas sin perfil ni para contador/encargado/superadmin); esa persona aterriza en `/dashboard/agentes/liquidacion`, ve seis conteos y ninguna otra pantalla.
+
+**Si algo se rompe:** pasar a esos usuarios a otro rol o darlos de baja, y la REVERSA de la cabecera. Builds de Vercel que provoca aplicar esto: 0.
