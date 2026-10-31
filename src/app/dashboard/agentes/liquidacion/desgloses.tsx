@@ -436,16 +436,23 @@ export function BloqueInsights({ insights }: { insights: InsightA1[] }) {
   );
 }
 
-function Ficha({ etiqueta, valor, ayuda, href, tono }: { etiqueta: string; valor: number | null; ayuda: string; href: string; tono?: 'bad' }) {
+/** `href` ausente = la ficha NO es un enlace (la vista de conteos de `nomina` no lleva a ninguna lista). */
+export function Ficha({ etiqueta, valor, ayuda, href, tono }: { etiqueta: string; valor: number | null; ayuda: string; href?: string; tono?: 'bad' }) {
   // `null` = no se pudo contar: «—», jamás un cero que nadie midió.
   const alerta = tono === 'bad' && valor !== null && valor > 0;
-  return (
-    <Link href={href} title={ayuda} className="card p-3 hover:opacity-80 transition-opacity block" style={alerta ? { borderColor: 'var(--bad)' } : undefined}>
+  const contenido = (
+    <>
       <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>{etiqueta}</span>
       <span className="text-[20px] font-semibold cifra-mono block" style={alerta ? { color: 'var(--bad)' } : undefined}>
         {valor === null ? '—' : numero(valor)}
       </span>
       {valor === null && <span className="text-[10px] block" style={{ color: 'var(--faint)' }}>no se pudo contar</span>}
+    </>
+  );
+  if (href === undefined) return <div title={ayuda} className="card p-3 block" style={alerta ? { borderColor: 'var(--bad)' } : undefined}>{contenido}</div>;
+  return (
+    <Link href={href} title={ayuda} className="card p-3 hover:opacity-80 transition-opacity block" style={alerta ? { borderColor: 'var(--bad)' } : undefined}>
+      {contenido}
     </Link>
   );
 }

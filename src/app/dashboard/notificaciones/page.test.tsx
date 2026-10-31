@@ -151,3 +151,10 @@ it('si el tablero o las tareas no se pueden leer se confiesa (null), no se pinta
     expect.objectContaining({ tareasAsistente: null, excepcionesConductor: null }), expect.anything(), expect.any(Function),
   );
 });
+
+it('el rol nomina (0949) no lee NADA (ni KPIs, ni anomalías, ni tablero) y ve una lista sin alertas', async () => {
+  sesion = { tenantId: 't-1', rol: 'nomina' };
+  const el = (await PaginaNotificaciones({ searchParams: SP })) as unknown as { props: { alertas: unknown[] } };
+  expect(el.props.alertas).toEqual([]);
+  for (const k of Object.keys(dobles) as Array<keyof typeof dobles>) expect(dobles[k], k).not.toHaveBeenCalled();
+});

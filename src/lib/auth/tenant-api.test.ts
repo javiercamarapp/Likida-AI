@@ -158,3 +158,29 @@ describe('resolverTenantApi — SEG-3 también gatea /api (auditoría 25, línea
     expect(veredictoMfa).not.toHaveBeenCalled();
   });
 });
+
+describe('resolverTenantApi — el rol nomina (0949) no tiene ninguna API de sesión', () => {
+  const URLS = [
+    'https://x/api/export/liquidaciones', 'https://x/api/export/liquidaciones-externas?tenant=t-otra', 'https://x/api/export/pdf/abc',
+    'https://x/api/export/poliza', 'https://x/api/v1/liquidaciones', 'https://x/api/v1/viajes', 'https://x/api/dashboard/chat',
+    'https://x/api/dashboard/conversaciones', 'https://x/api/dashboard/evento',
+  ];
+
+  it('responde 403 en TODAS (export, v1 por cookie, dashboard), sin siquiera consultar la flota pedida', async () => {
+    getSessionTenant.mockResolvedValue({ tenantId: 't-sesion', rol: 'nomina', userId: 'u-n', nombre: 'RH' });
+    respuestas.set('tenant', { data: { id: 't-otra' }, error: null });
+    for (const url of URLS) {
+      const r = await resolverTenantApi(url);
+      expect(r.ok, url).toBe(false);
+      if (!r.ok) expect(r.status, url).toBe(403);
+    }
+  });
+
+  it('los demás roles de oficina siguen resolviendo igual', async () => {
+    for (const rol of ['flota_admin', 'contador', 'encargado']) {
+      getSessionTenant.mockResolvedValue({ tenantId: 't-sesion', rol, userId: 'u-1', nombre: 'X' });
+      const r = await resolverTenantApi('https://x/api/export/liquidaciones');
+      expect(r).toEqual({ ok: true, tenantId: 't-sesion', rol });
+    }
+  });
+});

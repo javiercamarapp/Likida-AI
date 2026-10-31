@@ -881,3 +881,50 @@ export async function listarParaExportacion(
   const filas = ((exigir(res, 'liqext.exportar') ?? []) as unknown as Fila[]);
   return { filas: filas.slice(0, tope).map(aLiquidacionExterna), truncado: filas.length > tope };
 }
+
+// ── Conteos para el rol `nomina` (0949) ─────────────────────────────────────
+// Viven aquí, en el acceso a datos del módulo. OJO: el guardián de la frontera solo exime el `repo.ts` de la raíz, así que estas tres
+// llamadas SÍ cuentan contra el techo de `frontera_datos_guardiana.test.ts` (subido de 2,452 a 2,455 por esto).
+
+/** Los seis números que ve Nómina y RH: SOLO conteos (`null` = no se pudo contar, jamás un cero sin medir). */
+export interface ConteosNomina {
+  recibidosHoy: number | null;
+  enviados: number | null;
+  entregados: number | null;
+  rebotados: number | null;
+  retenidos: number | null;
+  sinPoliza: number | null;
+}
+
+/**
+ * Los conteos de Liquidaciones para el rol `nomina`. Cada uno es UNA consulta `count` con `head: true` sobre UNA columna
+ * identificadora (`liquidacion_externa_id` / `id`): la base no devuelve ni una fila, y por construcción ninguna consulta toca una
+ * columna de dinero ni una tabla de dinero (`liquidacion`, `gasto`, `factura_*`...). Siempre anclada al `tenant_id` de la sesión.
+ * Mismas definiciones que las fichas de la pantalla del dueño (`fichasDesgloses`): enviados = `enviada`, entregados = `entregada`,
+ * rebotados = `rebotada`+`queja`+`fallida` (ventana de 30 días); retenidos y sin póliza = lo que sigue abierto hoy.
+ */
+export async function contarParaNomina(
+  tenantId: string, ventana: { hoyDesde: Date; manana: Date; desde30: Date },
+): Promise<ConteosNomina> {
+  const contar = async (q: PromiseLike<unknown>, etiqueta: string): Promise<number | null> => {
+    try {
+      const r = (await acotada(q as never, etiqueta)) as unknown as { count?: number | null; error: { message?: string; code?: string } | null };
+      return r.error || typeof r.count !== 'number' ? null : r.count;
+    } catch {
+      return null;
+    }
+  };
+  const desgloses = () => supabaseAdmin().from('liquidacion_desglose').select('liquidacion_externa_id', { count: 'exact', head: true }).eq('tenant_id', tenantId);
+  const entregas = (estados: string[]) => supabaseAdmin().from('liquidacion_entrega_correo').select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId).in('estado', estados).gte('created_at', ventana.desde30.toISOString()).lt('created_at', ventana.manana.toISOString());
+  const [recibidosHoy, enviados, entregados, rebotados, retenidos, sinPoliza] = await Promise.all([
+    contar(desgloses().gte('created_at', ventana.hoyDesde.toISOString()).lt('created_at', ventana.manana.toISOString()), 'liqcorreo.nomina_recibidos'),
+    contar(entregas(['enviada']), 'liqcorreo.nomina_enviados'),
+    contar(entregas(['entregada']), 'liqcorreo.nomina_entregados'),
+    contar(entregas(['rebotada', 'queja', 'fallida']), 'liqcorreo.nomina_rebotados'),
+    contar(desgloses().not('retenida_motivo', 'is', null), 'liqcorreo.nomina_retenidos'),
+    contar(supabaseAdmin().from('liquidacion_excepcion').select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId).eq('tipo', 'sin_poliza').is('resuelta_en', null), 'liqcorreo.nomina_sin_poliza'),
+  ]);
+  return { recibidosHoy, enviados, entregados, rebotados, retenidos, sinPoliza };
+}

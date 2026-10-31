@@ -38,7 +38,10 @@ export async function alcanceDePatio(
   rol: string,
 ): Promise<AlcancePatio | null> {
   if (!puedeEditarCatalogoOperativo(rol)) return null;
-  if (rol !== 'encargado') return { tipo: 'flota' };
+  // Lista POSITIVA: solo el dueño y el superadmin tienen alcance de toda la flota; el encargado, el de su patio; cualquier otro rol que
+  // algún día pase `puedeEditarCatalogoOperativo` no hereda la flota entera por omisión.
+  if (rol === 'flota_admin' || rol === 'superadmin') return { tipo: 'flota' };
+  if (rol !== 'encargado') return null;
   let terminalId: string | null | undefined;
   try {
     terminalId = await terminalDeUsuario(tenantId, userId);
