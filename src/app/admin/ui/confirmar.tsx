@@ -45,12 +45,14 @@ export interface PropsDialogo {
    *  y confirmar) dice cuál se eligió con `paso=confirmar`. */
   nombreConfirmar?: string;
   valorConfirmar?: string;
+  /** `false` si el cuerpo lleva un campo (motivo): el clic al fondo no debe tirar lo escrito. Esc y Cancelar siguen cancelando. */
+  cierraConFondo?: boolean;
 }
 
 export function DialogoConfirmar({
   abierto, titulo, descripcion, etiquetaConfirmar, etiquetaCancelar = 'Cancelar',
   tono = 'peligro', onConfirmar, onCancelar, pendiente = false, tipoConfirmar = 'button',
-  nombreConfirmar, valorConfirmar,
+  nombreConfirmar, valorConfirmar, cierraConFondo,
 }: PropsDialogo) {
   const peligro = tono === 'peligro';
   const idTexto = useId();
@@ -58,13 +60,13 @@ export function DialogoConfirmar({
   // El foco inicial cae en CANCELAR cuando es peligro, en confirmar si no.
   return (
     <Modal
-      alerta={peligro} abierto={abierto} onCerrar={onCancelar} titulo={titulo} describedBy={idTexto}
+      alerta={peligro} abierto={abierto} onCerrar={onCancelar} titulo={titulo} describedBy={idTexto} cierraConFondo={cierraConFondo}
       pie={(
         <>
           <Boton variante="secondary" tamano="sm" onClick={onCancelar} data-autofocus={peligro ? '' : undefined}>
             {etiquetaCancelar}
           </Boton>
-          <Boton variante={peligro ? 'danger-soft' : 'primary'} tamano="sm" type={tipoConfirmar} name={nombreConfirmar} value={valorConfirmar}
+          <Boton variante={peligro ? 'danger-soft' : 'primary'} tamano="sm" className={peligro ? 'border border-[var(--bad)]' : undefined} type={tipoConfirmar} name={nombreConfirmar} value={valorConfirmar}
             disabled={pendiente} onClick={onConfirmar} data-autofocus={peligro ? undefined : ''}>
             {pendiente ? 'Un momento…' : etiquetaConfirmar}
           </Boton>
