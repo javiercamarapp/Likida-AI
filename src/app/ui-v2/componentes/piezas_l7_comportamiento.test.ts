@@ -3,7 +3,9 @@ import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { build } from 'vite';
 import { type Browser, type Page } from 'playwright';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+vi.setConfig({ testTimeout: 30_000 }); // Chromium bajo una Mac cargada
 import { lanzarNavegador, SIN_NAVEGADOR } from '../navegador_prueba';
 
 // COMPORTAMIENTO REAL (Chromium) de las piezas comunes de L7: teclado, aria, foco y estilos calculados. Monta React de verdad.
@@ -17,6 +19,7 @@ import { createRoot } from 'react-dom/client';
 import { Casilla, Radio, Campo, Fieldset, CampoArchivo } from '${ruta('componentes/campos')}';
 import { Switch } from '${ruta('componentes/switch')}';
 import { Tooltip } from '${ruta('componentes/overlay')}';
+import { StatusChip } from '${ruta('componentes/status-chip')}';
 import { Tabs } from '${ruta('componentes/tabs')}';
 import { SegmentedControl } from '${ruta('componentes/segmented')}';
 function App() {
@@ -27,6 +30,7 @@ function App() {
       <SegmentedControl etiqueta="Periodo" valor={periodo} onChange={setPeriodo} opciones={[{ valor: 'sem', etiqueta: 'Semana', conteo: 4 }, { valor: 'mes', etiqueta: 'Mes' }, { valor: 'anio', etiqueta: 'Año', deshabilitada: true }, { valor: 'todo', etiqueta: 'Todo' }]} />
       <Tabs etiqueta="Secciones" param="vista" pestanas={[{ valor: 'a', etiqueta: 'Resumen', contenido: <p id="pa">Panel A <button id="ba">x</button></p> }, { valor: 'b', etiqueta: 'Fuentes', conteo: 0, contenido: <p id="pb">Panel B</p> }, { valor: 'c', etiqueta: 'Cobertura', conteo: 3, contenido: <p id="pc">Panel C</p> }]} />
       <div style={{ position: 'absolute', left: 4, top: 600 }}><Tooltip texto="Cuadra contra el anticipo y la política de gasto de la flota"><button id="con-tip">Cuadre</button></Tooltip> <Tooltip texto="Solo texto">Corte</Tooltip></div>
+      <div id="estados"><StatusChip tono="ok">Cuadra</StatusChip><StatusChip tono="warn">Por revisar</StatusChip><StatusChip tono="bad">Rechazada</StatusChip><StatusChip tono="info">En cola</StatusChip><StatusChip>Borrador</StatusChip><StatusChip tono="muted">Sin dato</StatusChip></div>
       <output id="periodo">{periodo}</output>
       <form id="f">
         <Casilla id="c1" name="c1" etiqueta="Recibir avisos" ayuda="Llegan por correo" checked={marcada} onChange={(e) => setMarcada(e.target.checked)} />
@@ -302,6 +306,21 @@ describe.skipIf(SIN_NAVEGADOR)('Tooltip · comportamiento en Chromium', () => {
     const p = await abrir();
     await p.focus('.rv-tip__texto');
     expect(await p.evaluate(() => getComputedStyle(document.querySelectorAll('[role="tooltip"]')[1]).visibility)).toBe('visible');
+    await p.close();
+  });
+});
+
+describe.skipIf(SIN_NAVEGADOR)('StatusChip · comportamiento en Chromium', () => {
+  it('22 px, punto de 6 px, 12/600; cada tono pinta fondo y texto distintos y siempre hay texto', async () => {
+    const p = await abrir();
+    const r = await p.evaluate(() => [...document.querySelectorAll('#estados .rv-estado')].map((c) => {
+      const s = getComputedStyle(c); const d = getComputedStyle(c.querySelector('i')!);
+      return { alto: Math.round(c.getBoundingClientRect().height), punto: d.width, peso: s.fontWeight, tam: s.fontSize, fondo: s.backgroundColor, color: s.color, texto: c.textContent, dot: d.backgroundColor, sombra: d.boxShadow };
+    }));
+    for (const c of r) { expect(c.alto).toBe(22); expect(c.punto).toBe('6px'); expect(c.peso).toBe('600'); expect(c.tam).toBe('12px'); expect(c.texto!.length).toBeGreaterThan(0); }
+    expect(new Set(r.slice(0, 4).map((c) => c.fondo)).size).toBe(4);
+    expect(r[0].dot).toBe(r[0].color); // el punto lleva la tinta del tono
+    expect(r[5].dot).toBe('rgba(0, 0, 0, 0)'); expect(r[5].sombra).not.toBe('none'); // muted = punto hueco
     await p.close();
   });
 });
