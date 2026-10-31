@@ -7,6 +7,7 @@ import { Cifra } from '../ui-v2/graficas';
 import type { ComparativoPeriodo, SeriesKpiCards } from '@/lib/likida/analytics';
 import { pctCambio } from '@/lib/formato';
 import type { FormatoPreset } from '../admin/ui/formato-preset';
+import type { InfoClave } from '../ui-v2/info-catalogo';
 
 type Modo = 'semanal' | 'mensual' | 'historico';
 const MODOS: Modo[] = ['semanal', 'mensual', 'historico'];
@@ -14,6 +15,14 @@ const ETIQUETA_MODO: Record<Modo, string> = {
   semanal: 'últimos 7 días',
   mensual: 'últimos 30 días',
   historico: 'histórico',
+};
+
+/** La clave del ⓘ de cada indicador (el texto vive en el catálogo; la ventana la dice la etiqueta de la cifra). */
+const INFO_CAMPO: Record<'gastoTotal' | 'totalViajes' | 'costoPorViaje' | 'liquidado', InfoClave> = {
+  gastoTotal: 'inicio.gasto_total',
+  totalViajes: 'inicio.total_viajes',
+  costoPorViaje: 'inicio.costo_por_viaje',
+  liquidado: 'inicio.liquidado',
 };
 
 /**
@@ -74,6 +83,7 @@ export function KpiPeriodo({
       // no cero). Colapsarlo a 0 pintaba un $0.00 inventado — la regla #1.
       valor={valorActual}
       mensaje="sin viajes en el periodo"
+      info={INFO_CAMPO[campo]}
       formato={formato}
       deltaPct={pct === null ? null : { pct, bueno: subeEsBueno ? pct >= 0 : pct <= 0 }}
       flechas={

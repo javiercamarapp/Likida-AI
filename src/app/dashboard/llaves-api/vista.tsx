@@ -32,7 +32,7 @@ export function ListaLlaves({ llaves, revocarLlave }: {
 
   return (
     <div className="card overflow-x-auto">
-      <table className="w-full text-[12.5px]">
+      <table className="w-full text-[12px]">
         <thead>
           <tr className="text-left" style={{ color: 'var(--muted)' }}>
             <th className="px-3 py-2 font-medium">Pista</th>

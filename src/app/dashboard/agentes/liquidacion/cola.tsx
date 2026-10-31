@@ -195,7 +195,7 @@ function FormaFiltros({ filtros, terminales, buscar, contexto, conFiltros }: {
       </Campo>
 
       <button type="submit"
-        className="inline-flex items-center gap-1.5 text-[12px] font-medium rounded-lg px-3 py-1.5"
+        className="rv-btn rv-btn--primary inline-flex items-center gap-1.5 text-[12px] font-medium rounded-lg px-3 py-1.5"
         style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
         <Filter width={12} height={12} strokeWidth={2} /> Filtrar
       </button>
@@ -210,12 +210,12 @@ function FormaFiltros({ filtros, terminales, buscar, contexto, conFiltros }: {
   );
 }
 
-const CLASE_CONTROL = 'text-[12.5px] rounded-lg px-2 py-1.5 min-w-[9rem]';
+const CLASE_CONTROL = 'text-[12px] rounded-lg px-2 py-1.5 min-w-[9rem]';
 
 function Campo({ etiqueta, pista, children }: { etiqueta: string; pista?: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>
+      <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>
         {etiqueta}{pista ? ` · ${pista}` : ''}
       </span>
       {children}
@@ -276,6 +276,6 @@ function TablaCola({ filas, sufijo }: { filas: FilaCola[]; sufijo: string }) {
 
 function Th({ children, derecha }: { children: React.ReactNode; derecha?: boolean }) {
   return (
-    <th className={`etiqueta-mono text-[10px] uppercase font-normal pb-2${derecha ? ' text-right' : ''}`}>{children}</th>
+    <th className={`etiqueta-mono text-[11px] uppercase font-normal pb-2${derecha ? ' text-right' : ''}`}>{children}</th>
   );
 }

@@ -16,7 +16,7 @@ export type ResultadoOficina = { ok: true; mensaje: string } | { ok: false; erro
 export type AccionOficinaServidor = (previo: ResultadoOficina, fd: FormData) => Promise<ResultadoOficina>;
 export type ModoAccion = 'capturar' | 'validar' | 'atender';
 
-const CAMPO = 'hairline rounded-lg px-2.5 h-8 text-[12.5px] outline-none focus:border-[var(--muted)]';
+const CAMPO = 'hairline rounded-lg px-2.5 h-8 text-[12px] outline-none focus:border-[var(--muted)]';
 
 const TITULO: Record<ModoAccion, string> = { capturar: 'Capturar a mano', validar: 'Validar', atender: 'Marcar atendido' };
 const BOTON: Record<ModoAccion, string> = { capturar: 'Guardar captura', validar: 'Validar hito', atender: 'Marcar atendido' };
@@ -30,7 +30,7 @@ function Enviar({ texto }: { texto: string }) {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="h-8 px-3 rounded-lg text-[12.5px] font-medium transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary h-8 px-3 rounded-lg text-[12px] font-medium transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       {pending ? 'Guardando…' : texto}
     </button>

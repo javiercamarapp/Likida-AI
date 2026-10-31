@@ -16,7 +16,7 @@ import { ROTULO_NIVEL, horasTexto } from '@/lib/likida/jornada/alerta_tope';
 import { FormasJornada, FormaPolitica, FormaAlertaTope, type AccionJornada, type ConfigAlertaForma } from './formas';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /**
  * LA PANTALLA DEL CONTRALOR — ver, corregir y cerrar el registro de jornada.
@@ -143,30 +143,30 @@ export function VistaJornada({
           de servicio se lleva la multa del art. 83 con nuestro archivo en
           la mano. */}
       <section className="card p-4 space-y-2">
-        <h2 className="font-display text-[15px] font-semibold">
+        <TituloRecuadro info="jornada.alcance">
           Registro del artículo 132 fracción XXXIV de la Ley Federal del Trabajo
-        </h2>
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{LEYENDA_NO_ES_BITACORA_83}</p>
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{LEYENDA_NOM_087}</p>
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{LEYENDA_VEREDICTOS}</p>
+        </TituloRecuadro>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{LEYENDA_NO_ES_BITACORA_83}</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{LEYENDA_NOM_087}</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{LEYENDA_VEREDICTOS}</p>
       </section>
 
       <TiraCifras sello={selloHoy('Registro de jornada')}>
         <Cifra etiqueta="Sin registro declarado" valor={cuenta && numero(cuenta.sinRegistro)}
-          nota="nadie reportó — no son cero horas" tono={cuenta && cuenta.sinRegistro > 0 ? 'warn' : undefined} />
+          nota="nadie reportó — no son cero horas" tono={cuenta && cuenta.sinRegistro > 0 ? 'warn' : undefined} info="jornada.sin_registro" />
         <Cifra etiqueta="Posible exceso" valor={cuenta && numero(cuenta.conExceso)}
-          nota="rebasa un tope citable" tono={cuenta && cuenta.conExceso > 0 ? 'bad' : undefined} />
+          nota="rebasa un tope citable" tono={cuenta && cuenta.conExceso > 0 ? 'bad' : undefined} info="jornada.posible_exceso" />
         <Cifra etiqueta="Dato insuficiente" valor={cuenta && numero(cuenta.insuficientes)}
-          nota="no alcanza para concluir" tono={cuenta && cuenta.insuficientes > 0 ? 'warn' : undefined} />
+          nota="no alcanza para concluir" tono={cuenta && cuenta.insuficientes > 0 ? 'warn' : undefined} info="jornada.dato_insuficiente" />
         <Cifra etiqueta="Sin conformidad" valor={cuenta && numero(cuenta.sinConformidad)}
-          nota="el operador no ha confirmado" tono={cuenta && cuenta.sinConformidad > 0 ? 'warn' : undefined} />
+          nota="el operador no ha confirmado" tono={cuenta && cuenta.sinConformidad > 0 ? 'warn' : undefined} info="jornada.sin_conformidad" />
       </TiraCifras>
 
       <section className="card p-4 space-y-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h2 className="font-display text-[15px] font-semibold">
+          <TituloRecuadro info="jornada.registro">
             Del {desde} al {hasta}
-          </h2>
+          </TituloRecuadro>
           <Link href={`${urlExport}`} prefetch={false}
             className="h-9 px-3.5 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 hairline hover:opacity-85 transition-opacity">
             <Download width={14} height={14} strokeWidth={1.75} />
@@ -206,7 +206,7 @@ export function VistaJornada({
               {(operadores ?? []).map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
             </select>
           </label>
-          <button type="submit" className="h-9 px-4 rounded-lg text-[13px] font-medium hairline hover:opacity-85 transition-opacity">
+          <button type="submit" className="rv-btn rv-btn--secondary h-9 px-4 rounded-lg text-[13px] font-medium hairline hover:opacity-85 transition-opacity">
             Ver
           </button>
         </form>
@@ -230,7 +230,7 @@ export function VistaJornada({
           </EstadoVacio>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-[12.5px]">
+            <table className="w-full text-[12px]">
               <thead>
                 <tr style={{ color: 'var(--muted)' }} className="text-left">
                   <Th>Día</Th>
@@ -338,14 +338,14 @@ function Renglon({ f, sufijo, desde, hasta }: { f: FilaJornada; sufijo: string; 
           )}
       </Td>
       <Td>
-        <span className="inline-block px-2 py-0.5 rounded-md text-[11.5px] font-medium"
+        <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-medium"
           style={{ background: tono.fondo, color: tono.texto }}>
           {ROTULO_VEREDICTO[f.riesgo.veredicto]}
         </span>
       </Td>
       <Td>
         <div>{f.estado === 'cerrado' ? `Cerrado · ${f.cerradoPorEmail ?? 'sin firma'}` : 'Abierto'}</div>
-        <div style={{ color: 'var(--muted)' }} className="text-[11.5px]">
+        <div style={{ color: 'var(--muted)' }} className="text-[11px]">
           {f.conformeOperadorEn ? 'Con conformidad del operador' : 'Sin conformidad del operador'}
         </div>
       </Td>
@@ -368,29 +368,29 @@ function Renglon({ f, sufijo, desde, hasta }: { f: FilaJornada; sufijo: string; 
 export function SeccionSemanas({ semanas, truncada }: { semanas: SemanaEvaluada[] | null; truncada: boolean }) {
   return (
     <section className="card p-4 space-y-3">
-      <h2 className="font-display text-[15px] font-semibold">
+      <TituloRecuadro info="jornada.semana">
         La semana completa, contra el tope del año
-      </h2>
-      <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+      </TituloRecuadro>
+      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
         El decreto del 1 de mayo de 2026 escalona la jornada SEMANAL por año (48 h ordinarias en
         2026). Catorce días verdes uno por uno pueden esconder una semana rebasada — por eso aquí
         se evalúa la semana entera, de lunes a domingo, solo cuando cabe completa en el rango de
         arriba.
       </p>
       {semanas === null ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
           {truncada
             ? 'No se evaluó ninguna semana: la lectura vino recortada, y una semana evaluada sobre el recorte diría «va bien» con los días que faltan. Pide un rango más corto.'
             : 'No se evaluó ninguna semana: el registro no se pudo leer.'}
         </p>
       ) : semanas.length === 0 ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           El rango visible no contiene ninguna semana completa (de lunes a domingo) con registro.
           Amplía el rango de fechas para ver el veredicto semanal.
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full text-[12px]">
             <thead>
               <tr style={{ color: 'var(--muted)' }} className="text-left">
                 <Th>Operador</Th>
@@ -436,7 +436,7 @@ function RenglonSemana({ s }: { s: SemanaEvaluada }) {
         )}
       </Td>
       <Td>
-        <span className="inline-block px-2 py-0.5 rounded-md text-[11.5px] font-medium"
+        <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-medium"
           style={{ background: tono.fondo, color: tono.texto }}>
           {ROTULO_VEREDICTO[s.riesgo.veredicto]}
         </span>
@@ -488,18 +488,18 @@ function PoliticaSeccion({
 }) {
   return (
     <section className="card p-4 space-y-3">
-      <h2 className="font-display text-[15px] font-semibold flex items-center gap-2">
+      <TituloRecuadro info="jornada.umbrales">
         <ShieldQuestion width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
         Los umbrales de tu flota
-      </h2>
-      <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+      </TituloRecuadro>
+      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
         Likida ya evalúa los topes de la ley (los artículos 61, 63, 68 y 69 de la LFT, y la tabla
         de jornada semanal por año del decreto del 1 de mayo de 2026). Aquí van los tuyos, si tu
         flota se fijó unos más estrictos por contrato colectivo, por póliza o por política interna.
         Dejar un campo vacío significa <strong>no declarado</strong>, no cero.
       </p>
       {politica === null && (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           Todavía no has declarado ninguno. El registro y las alertas de ley funcionan igual sin ellos.
         </p>
       )}
@@ -540,25 +540,25 @@ export function AlertaTopeSeccion({
   const ordenadas = alertas === null ? [] : [...alertas].sort((a, b) => b.creadaEn.localeCompare(a.creadaEn));
   return (
     <section className="card p-4 space-y-3">
-      <h2 className="font-display text-[15px] font-semibold flex items-center gap-2">
+      <TituloRecuadro info="jornada.alerta_tope">
         <BellRing width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
         Alerta de tope de jornada
-      </h2>
-      <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+      </TituloRecuadro>
+      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
         Likida avisa al encargado y al operador cuando una jornada en curso llega a los umbrales que elijas
         (por omisión 80 % y 95 % del tope) y cuando lo rebasa. Solo cuenta lo registrado: sin hora de inicio no
         avisa, y si el inicio no lo declaró el operador el aviso dice «al menos». Es un aviso, no un dictamen.
       </p>
       {configIlegible ? (
-        <p role="alert" className="text-[12.5px]" style={{ color: 'var(--bad)' }}>
+        <p role="alert" className="text-[12px]" style={{ color: 'var(--bad)' }}>
           No se pudo leer la configuración de la alerta. No sabemos si está encendida; vuelve a cargar la pantalla.
         </p>
       ) : config === null ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           Todavía no la has configurado: <strong>la alerta está apagada</strong> y nadie recibe avisos.
         </p>
       ) : (
-        <p className="text-[12.5px]">
+        <p className="text-[12px]">
           <strong>{config.activa ? 'Encendida' : 'Apagada'}</strong>
           {' · '}tope {config.topeHoras === null ? 'de la ley (12 h)' : `propio de ${numero(config.topeHoras)} h`}
           {' · '}aviso al {config.umbralAvisoPct} %, crítico al {config.umbralCriticoPct} %
@@ -566,18 +566,19 @@ export function AlertaTopeSeccion({
       )}
       {puedeConfigurar && !configIlegible && <FormaAlertaTope config={config} guardarAlerta={guardarAlerta} />}
 
+      {/* sin-info: subtítulo de la lista dentro de «Alerta de tope de jornada», que ya se explica arriba */}
       <h3 className="text-[13px] font-semibold pt-1">Alertas emitidas en este periodo</h3>
       {alertas === null ? (
-        <p role="alert" className="text-[12.5px]" style={{ color: 'var(--bad)' }}>
+        <p role="alert" className="text-[12px]" style={{ color: 'var(--bad)' }}>
           No se pudieron leer las alertas emitidas. Esto no significa que no haya habido.
         </p>
       ) : ordenadas.length === 0 ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           Ninguna alerta emitida para las jornadas que se muestran{truncada ? ' (la lista no cupo completa: acota el periodo)' : ''}.
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full text-[12px]">
             <thead>
               <tr style={{ color: 'var(--muted)' }} className="text-left">
                 <Th>Cuándo</Th><Th>Operador y día</Th><Th>Nivel</Th><Th>Horas contra tope</Th><Th>Estado</Th><Th>Encargado</Th><Th>Operador</Th>
@@ -614,7 +615,7 @@ export function AlertaTopeSeccion({
 
 
 function Th({ children }: { children: React.ReactNode }) {
-  return <th className="font-medium text-[11.5px] pb-2 pr-3">{children}</th>;
+  return <th className="font-medium text-[11px] pb-2 pr-3">{children}</th>;
 }
 function Td({ children }: { children: React.ReactNode }) {
   return <td className="py-2.5 pr-3">{children}</td>;

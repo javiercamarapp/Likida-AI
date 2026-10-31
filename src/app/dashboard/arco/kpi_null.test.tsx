@@ -46,7 +46,7 @@ describe('ARCO — las KPI dicen NO MEDIBLE cuando la lectura falla', () => {
     const html = await render();
     // KpiTile pinta `null` como "—" y un número como el número mismo — con
     // lectura sana, ninguna de las tres debe salir "—".
-    const tiles = html.match(/Por responder|Vencen pronto|Vencidas sin responder/g);
+    const tiles = html.match(/(?<!Información: )(Por responder|Vencen pronto|Vencidas sin responder)/g);
     expect(tiles?.length).toBe(3);
   });
 

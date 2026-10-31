@@ -294,7 +294,7 @@ export async function InicioContenido({
               motor fiscal está completo: mientras las dos preguntas sigan sin
               contestarse, el estímulo de peaje del 50 % no se acredita. */}
           {avisoFiscalPospuesto && (
-            <p role="status" className="rounded-lg px-3.5 py-2.5 text-[12.5px]" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
+            <p role="status" className="rounded-lg px-3.5 py-2.5 text-[12px]" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
               Tu perfil fiscal sigue sin declararse, así que el <strong>estímulo de peaje</strong> se muestra en $0 y no se acredita
               hasta que lo hagas.{' '}
               <a href={`/dashboard/onboarding${sufijo}`} className="underline">Declararlo cuando ya tengas los datos</a>.
@@ -341,7 +341,7 @@ export async function InicioContenido({
 
           {/* ── KPIs (caja interna + delta como texto, referencia) ──
               "Total viajes" y "Liquidado" no van aquí: ya se ven como
-              GRÁFICA más abajo. "Ahorro generado" se queda (pedido
+              GRÁFICA más abajo. "Por recuperar" (antes «Ahorro generado») se queda (pedido
               explícito): mismo número que "Recuperable pidiendo
               factura", pero fijo al ejercicio fiscal completo. La
               dirección buena/mala no es igual para las tres: gastar
@@ -614,12 +614,13 @@ async function BloqueKpis({ pKpis, pSeriesKpis, pResumenPerdidas, periodoFiscal 
           <KpiPeriodo icono={<Calculator width={15} height={15} strokeWidth={1.75} />}
             nombre="Costo por viaje" campo="costoPorViaje" formato="mxn" subeEsBueno={false} series={seriesKpis} />
           <Cifra icono={<PiggyBank width={15} height={15} strokeWidth={1.75} />}
-            etiqueta={`Ahorro generado — ${periodoFiscal.etiqueta}`}
+            etiqueta={`Por recuperar — ${periodoFiscal.etiqueta}`}
             // AUDITORÍA 1, ALTO: si la lectura fiscal falló (o no hay
             // config), es `null` — se PRESERVA y la tarjeta dice "—",
             // en vez de afirmar "$0.00 de ahorro" que suena a medición.
             valor={resumenPerdidas ? resumenPerdidas.montoRecuperable : null}
             mensaje="no se pudo leer el dato fiscal"
+            info="inicio.ahorro_generado"
             // Sin `delta`: esta cifra va fija al ejercicio completo,
             // no hay "periodo anterior" contra el que compararla (A12).
             formato="mxn" />

@@ -11,7 +11,7 @@ import { StatusPill } from '../../admin/ui/kit';
 import { EstadoVacio } from '../estados';
 import { FormaConAviso, type ResultadoAccion, ESTILO_CONTROL } from '../../admin/ui/forma';
 import type { Metadata } from 'next';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 export const metadata: Metadata = { title: 'Políticas de gasto' };
 
 export const dynamic = 'force-dynamic';
@@ -140,9 +140,7 @@ export default async function PoliticasPage({
       ) : (
         <div className="glass-panel overflow-hidden">
           <div className="pt-5 pb-2 px-5 flex items-center gap-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
-              Topes por concepto
-            </h2>
+            <TituloRecuadro info="politicas.topes">Topes por concepto</TituloRecuadro>
             {politicaPropiaFalloLectura ? (
               <StatusPill estado="warn">No se pudo saber si es propia</StatusPill>
             ) : (
@@ -247,9 +245,7 @@ export default async function PoliticasPage({
             <section className="px-5 pb-5 pt-4 border-t" style={{ borderColor: 'var(--line)' }}>
               <div className="flex items-center gap-2 mb-2">
                 <Route width={15} height={15} strokeWidth={1.75} />
-                <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
-                  Reglas por ruta
-                </h2>
+                <TituloRecuadro info="politicas.reglas_ruta">Reglas por ruta</TituloRecuadro>
               </div>
               {/* H39 (auditoría 24): las otras dos tablas de esta página van
                   envueltas en overflow-x-auto — ésta no, y con nombres de
@@ -279,9 +275,7 @@ export default async function PoliticasPage({
           )}
 
           <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-            <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-              Topes fiscales que aplica el motor
-            </h2>
+            <TituloRecuadro info="politicas.topes_fiscales">Topes fiscales que aplica el motor</TituloRecuadro>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
               <div className="card p-4">
                 <div className="text-lg font-semibold tabular">{mxn(config.estimulos.viaticosTopeFiscalDiarioMxn)}</div>

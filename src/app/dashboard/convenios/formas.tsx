@@ -20,7 +20,7 @@ function BotonImportar() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Upload width={14} height={14} strokeWidth={1.75} />{pending ? 'Importando…' : 'Importar'}
     </button>
@@ -32,7 +32,7 @@ export function FormaImportarConvenios({ accion }: { accion: AccionConvenio }) {
   return (
     <form action={enviar} className="space-y-3" aria-label="Importar convenios desde CSV o Excel" encType="multipart/form-data">
       <label className="block"><span className={ETIQUETA}>Archivo CSV o Excel (.xlsx)</span>
-        <input type="file" name="archivo" accept=".csv,.xlsx,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="text-[12.5px]" />
+        <input type="file" name="archivo" accept=".csv,.xlsx,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="text-[12px]" />
       </label>
       <label className="block"><span className={ETIQUETA}>…o pega el contenido</span>
         <textarea name="csv" rows={5} spellCheck={false} className={`${CAMPO} h-auto py-2 font-mono text-[12px]`}
@@ -61,7 +61,7 @@ export function FormaCorregirConvenio({ accion, viajeId, folio, actual, opciones
         </select>
       </label>
       <label className="flex items-center gap-1.5 text-[12px] h-9"><input type="checkbox" name="reenviar" value="si" defaultChecked />Mandar de nuevo las instrucciones al operador</label>
-      <button type="submit" disabled={pendiente} className="h-9 px-3 rounded-lg text-[12.5px] font-medium hairline disabled:opacity-50" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
+      <button type="submit" disabled={pendiente} className="rv-btn rv-btn--secondary h-9 px-3 rounded-lg text-[12px] font-medium hairline disabled:opacity-50" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
         {pendiente ? 'Guardando…' : 'Corregir convenio'}
       </button>
       <div className="basis-full"><Aviso r={estado} /></div>
@@ -106,7 +106,7 @@ function BotonGuardar({ texto }: { texto: string }) {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Save width={14} height={14} strokeWidth={1.75} />{pending ? 'Guardando…' : texto}
     </button>
@@ -217,14 +217,14 @@ export function FormaConvenio({ accion, catalogos, convenio }: { accion: AccionC
           </div>
         ))}
         <button type="button" disabled={filas.length >= MAX_INSTRUCCIONES_POR_CONVENIO} onClick={() => setFilas((fs) => [...fs, { ...FILA_NUEVA }])}
-          className="h-8 px-3 rounded-lg text-[12.5px] inline-flex items-center gap-1.5 hairline disabled:opacity-50" style={{ color: 'var(--ink)' }}>
+          className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12px] inline-flex items-center gap-1.5 hairline disabled:opacity-50" style={{ color: 'var(--ink)' }}>
           <Plus width={13} height={13} strokeWidth={1.75} />Agregar instrucción
         </button>
-        <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>Las filas sin texto se ignoran. Las que quites de la lista se borran del convenio al guardar.</p>
+        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Las filas sin texto se ignoran. Las que quites de la lista se borran del convenio al guardar.</p>
       </fieldset>
 
       {editando && (
-        <div className="space-y-1.5 text-[12.5px]">
+        <div className="space-y-1.5 text-[12px]">
           <label className="flex items-start gap-2"><input type="checkbox" name="llevarAViajes" value="si" checked={llevar} onChange={(e) => setLlevar(e.target.checked)} className="mt-0.5" />
             <span>Llevar este cambio a los viajes en curso de este convenio (si no, conservan las instrucciones que ya se les dijeron).</span>
           </label>

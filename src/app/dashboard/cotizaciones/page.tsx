@@ -1,4 +1,4 @@
-import { EstadoError, MarcoPagina } from '@/app/ui-v2/componentes';
+import { EstadoError, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { TriangleAlert } from 'lucide-react';
@@ -170,7 +170,7 @@ export default async function PaginaCotizaciones({
       {panel && (
         <>
           <section className="rounded-lg border p-4">
-            <h2 className="mb-1 font-medium">Costos declarados de la flota</h2>
+            <TituloRecuadro info="cotizaciones.costos" className="mb-1">Costos declarados de la flota</TituloRecuadro>
             <p className="mb-3 text-sm" style={{ color: 'var(--muted)' }}>
               Lo que TÚ declaras — nada se supone. Un campo vacío = sin declarar, y el
               cotizador entonces no sugiere precio: dice qué falta.
@@ -186,7 +186,7 @@ export default async function PaginaCotizaciones({
           </section>
 
           <section className="rounded-lg border p-4">
-            <h2 className="mb-1 font-medium">Nueva cotización</h2>
+            <TituloRecuadro info="cotizaciones.nueva" className="mb-1">Nueva cotización</TituloRecuadro>
             <p className="mb-3 text-sm" style={{ color: 'var(--muted)' }}>
               Si esta ruta tiene viajes liquidados, las casetas salen MEDIDAS de ahí (y la
               captura manual se ignora — la medición gana y el desglose lo dice).
@@ -205,9 +205,9 @@ export default async function PaginaCotizaciones({
           </section>
 
           <section className="rounded-lg border p-4">
-            <h2 className="mb-3 font-medium">
+            <TituloRecuadro info="cotizaciones.lista" className="mb-3">
               Cotizaciones ({panel.cotizaciones.length})
-            </h2>
+            </TituloRecuadro>
             {panel.cotizaciones.length === 0 && (
               <p className="text-sm" style={{ color: 'var(--muted)' }}>
                 Aún no hay cotizaciones. La primera se arma arriba — con los costos

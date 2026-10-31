@@ -234,7 +234,7 @@ export default async function PaginaConexiones({
       integraciones={<SeccionIntegraciones integraciones={catalogoIntegraciones({ credencialesRastreo }).filter((i) => perfil === null || integracionPermitidaEnPerfil(perfil, i.id))} />}
       gps={panelGps.error !== null ? (
         <section className="card p-4"><h2 className="font-display text-[15px] font-semibold">GPS</h2>
-          <p role="alert" className="mt-1 text-[12.5px]" style={{ color: 'var(--warn)' }}>{panelGps.error}</p></section>
+          <p role="alert" className="mt-1 text-[12px]" style={{ color: 'var(--warn)' }}>{panelGps.error}</p></section>
       ) : (
         <SeccionGps
           salud={panelGps.salud} push={panelGps.push} endpoint={panelGps.endpoint}

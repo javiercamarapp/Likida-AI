@@ -5,7 +5,7 @@ import { mxn, numero, fechaCorta } from '@/lib/formato';
 import { EstadoVacio } from '../../estados';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 
 /** El tope de `listarFacturasProveedor` que usa la página — declarado aquí
@@ -77,13 +77,13 @@ export function VistaAgenteProveedores({
     <MarcoPagina titulo="Facturas de proveedores" apoyo="La bandeja donde el XML del taller espera tu decisión, y el export que evita capturarlo a mano en el ERP.">
 
       <TiraCifras sello={selloHoy('Facturas de proveedores')}>
-        <Cifra etiqueta="Esperan tu decisión" valor={numero(pendientes.length)}
+        <Cifra info="proveedores.esperan_decision" etiqueta="Esperan tu decisión" valor={numero(pendientes.length)}
           tono={pendientes.length > 0 ? 'warn' : undefined} />
-        <Cifra etiqueta="Aprobadas" valor={numero(aprobadas.length)}
+        <Cifra info="proveedores.aprobadas" etiqueta="Aprobadas" valor={numero(aprobadas.length)}
           nota={aprobadas.length === 0 ? undefined
             : `${numero(sinExportar)} sin exportar · ${numero(exportadas)} ya exportadas`} />
-        <Cifra etiqueta="Rechazadas" valor={numero(rechazadas.length)} />
-        <Cifra etiqueta="Con receptor ajeno" valor={numero(receptorAjeno)}
+        <Cifra info="proveedores.rechazadas" etiqueta="Rechazadas" valor={numero(rechazadas.length)} />
+        <Cifra info="proveedores.receptor_ajeno" etiqueta="Con receptor ajeno" valor={numero(receptorAjeno)}
           nota="el CFDI no es a tu RFC" tono={receptorAjeno > 0 ? 'bad' : undefined} />
       </TiraCifras>
 
@@ -98,7 +98,7 @@ export function VistaAgenteProveedores({
       <section className="card p-4">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="min-w-0">
-            <h2 className="font-display text-[15px] font-semibold mb-1">Subir factura de proveedor</h2>
+            <TituloRecuadro info="proveedores.subir" className="mb-1">Subir factura de proveedor</TituloRecuadro>
             <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
               El XML es el dato duro del CFDI — súbelo siempre que lo tengas. Si solo hay
               papel, la foto también entra: la IA lee las cifras y la bandeja la marca para
@@ -119,7 +119,7 @@ export function VistaAgenteProveedores({
               <BotonExport
                 href={linkExport(sufijo, 'contpaqi')}
                 rotulo="Exportar aprobadas (CSV CONTPAQi)" />
-              <p className="text-[10.5px] max-w-[260px]" style={{ color: 'var(--faint)' }}>
+              <p className="text-[11px] max-w-[260px]" style={{ color: 'var(--faint)' }}>
                 Layout estándar de importación — valídalo con tu contador o consultor SAP
                 antes del primer import. Lo exportado queda marcado en la bandeja.
               </p>
@@ -138,7 +138,7 @@ export function VistaAgenteProveedores({
       {recepcion}
 
       <section className="card p-4">
-        <h2 className="font-display text-[15px] font-semibold mb-1">La bandeja</h2>
+        <TituloRecuadro info="proveedores.bandeja" className="mb-1">La bandeja</TituloRecuadro>
         <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
           Pendientes arriba; lo decidido queda con su quién y su cuándo
         </p>
@@ -152,12 +152,12 @@ export function VistaAgenteProveedores({
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Fecha</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Proveedor (RFC)</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Concepto</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 pr-6 text-right">Total</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Estado</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 text-right pr-1">Decidir</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Fecha</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Proveedor (RFC)</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Concepto</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pr-6 text-right">Total</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Estado</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right pr-1">Decidir</th>
                 </tr>
               </thead>
               <tbody>
@@ -167,7 +167,7 @@ export function VistaAgenteProveedores({
                       {f.fecha ? fechaCorta(f.fecha) : '—'}
                       {/* NULL = fila anterior al rastreo de origen (0108): no se adivina. */}
                       {f.origen && (
-                        <span className="block text-[10.5px]" style={{ color: 'var(--faint)' }}>
+                        <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>
                           {f.origen === 'correo' ? 'por correo' : 'subida a mano'}
                         </span>
                       )}
@@ -195,7 +195,7 @@ export function VistaAgenteProveedores({
                       {/* Cifra leída por VISIÓN, no del XML: se dice siempre, con su
                           confianza, para que nadie apruebe un OCR como dato duro. */}
                       {f.requiereRevision && (
-                        <span className="inline-flex items-center gap-1 text-[10.5px]" style={{ color: 'var(--warn)' }}>
+                        <span className="inline-flex items-center gap-1 text-[11px]" style={{ color: 'var(--warn)' }}>
                           <TriangleAlert width={10} height={10} strokeWidth={2} />
                           {f.revisionMotivo ?? 'lectura de PDF: cotéjala antes de aprobar'}
                         </span>
@@ -204,7 +204,7 @@ export function VistaAgenteProveedores({
                         <span className="block mt-1"><BotonVerPdf campo="facturaId" id={f.id} ver={acciones.verPdf} /></span>
                       )}
                       {f.ocrConfianza !== null && (
-                        <span className="inline-flex items-center gap-1 text-[10.5px]" style={{ color: 'var(--warn)' }}>
+                        <span className="inline-flex items-center gap-1 text-[11px]" style={{ color: 'var(--warn)' }}>
                           <TriangleAlert width={10} height={10} strokeWidth={2} />
                           leída de {f.fuenteDatos === 'pdf_texto' || f.fuenteDatos === 'pdf_vision' ? 'PDF' : 'foto'} (OCR {numero(f.ocrConfianza)}) — revisa contra el papel
                         </span>
@@ -264,7 +264,7 @@ export function SeccionBuzon({ buzon, dominioConfigurado, puedeAdministrarBuzon,
 }) {
   return (
     <section className="card p-4">
-      <h2 className="font-display text-[15px] font-semibold mb-1">Buzón de facturas por correo</h2>
+      <TituloRecuadro info="proveedores.buzon" className="mb-1">Buzón de facturas por correo</TituloRecuadro>
       <p className="text-[11px] mb-3 max-w-xl" style={{ color: 'var(--faint)' }}>
         Dale esta dirección a tus proveedores o reenvía ahí sus facturas: los XML adjuntos
         entran solos a esta bandeja, sin subir nada a mano.
@@ -275,7 +275,7 @@ export function SeccionBuzon({ buzon, dominioConfigurado, puedeAdministrarBuzon,
         // generar uno encima del que quizá ya existe, y rotarlo sin querer.
         // Un <p> y no `EstadoError`: aquel trae `useRouter` para reintentar,
         // y esta sección se degrada dentro de una página que sí cargó.
-        <p className="text-[12.5px]" style={{ color: 'var(--bad)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--bad)' }}>
           No se pudo leer el buzón de la flota ahora mismo. Recarga la página; si se repite,
           avísale a Likida.
         </p>
@@ -294,7 +294,7 @@ export function SeccionBuzon({ buzon, dominioConfigurado, puedeAdministrarBuzon,
         </div>
       ) : (
         <div>
-          <p className="text-[12.5px] mb-2 max-w-xl" style={{ color: 'var(--muted)' }}>
+          <p className="text-[12px] mb-2 max-w-xl" style={{ color: 'var(--muted)' }}>
             Tu flota aún no tiene dirección. Se genera una vez y es única de tu flota — el token
             en la dirección es lo que decide que esas facturas entren aquí y no a otra parte.
           </p>
@@ -318,7 +318,7 @@ function linkExport(sufijo: string, formato: 'sap_b1' | 'contpaqi'): string {
 function BotonExport({ href, rotulo }: { href: string; rotulo: string }) {
   return (
     <a href={href}
-      className="hairline flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
+      className="hairline flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
       style={{ background: 'var(--surface)' }}>
       <Download width={13} height={13} strokeWidth={1.75} />
       {rotulo}
@@ -332,11 +332,11 @@ function BotonExport({ href, rotulo }: { href: string; rotulo: string }) {
  *  que el SAT ya no reconoce. */
 function NotaSat({ estadoSat }: { estadoSat: FacturaProveedor['estadoSat'] }) {
   if (estadoSat === 'vigente') {
-    return <span className="block text-[10.5px] mt-0.5" style={{ color: 'var(--ok)' }}>vigente ante el SAT</span>;
+    return <span className="block text-[11px] mt-0.5" style={{ color: 'var(--ok)' }}>vigente ante el SAT</span>;
   }
   if (estadoSat === 'cancelado') {
     return (
-      <span className="inline-flex items-center gap-1 text-[10.5px] mt-0.5 font-medium" style={{ color: 'var(--bad)' }}>
+      <span className="inline-flex items-center gap-1 text-[11px] mt-0.5 font-medium" style={{ color: 'var(--bad)' }}>
         <TriangleAlert width={10} height={10} strokeWidth={2} /> CANCELADO ante el SAT
       </span>
     );
@@ -347,13 +347,13 @@ function NotaSat({ estadoSat }: { estadoSat: FacturaProveedor['estadoSat'] }) {
     // MISMO tratamiento que 'cancelado': no se ve igual de discreto que
     // "pendiente"/"sin consultar".
     return (
-      <span className="inline-flex items-center gap-1 text-[10.5px] mt-0.5 font-medium" style={{ color: 'var(--bad)' }}>
+      <span className="inline-flex items-center gap-1 text-[11px] mt-0.5 font-medium" style={{ color: 'var(--bad)' }}>
         <TriangleAlert width={10} height={10} strokeWidth={2} /> el SAT NO LO ENCUENTRA — folio no reconocido
       </span>
     );
   }
   return (
-    <span className="block text-[10.5px] mt-0.5" style={{ color: 'var(--faint)' }}>
+    <span className="block text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>
       {estadoSat === 'pendiente' ? 'SAT sin contestar al ingerir' : 'SAT sin consultar'}
     </span>
   );

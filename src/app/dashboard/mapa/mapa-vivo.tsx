@@ -146,11 +146,11 @@ export function MapaVivo({ viajes, pines = [] }: {
                     <circle r={3.6} fill="var(--marca)" stroke="var(--surface)" strokeWidth={1.4}
                       className="mapa-camion" style={{ offsetPath: `path('${d}')` }} />
                   )}
-                  <text x={activo.ox} y={activo.oy - 7} textAnchor="middle" fontSize={11.5} fontWeight={600}
+                  <text x={activo.ox} y={activo.oy - 7} textAnchor="middle" fontSize={12} fontWeight={600}
                     fill="var(--ink)" stroke="var(--surface)" strokeWidth={3} paintOrder="stroke">
                     {activo.origenNombre}
                   </text>
-                  <text x={activo.dx} y={activo.dy - 7} textAnchor="middle" fontSize={11.5} fontWeight={600}
+                  <text x={activo.dx} y={activo.dy - 7} textAnchor="middle" fontSize={12} fontWeight={600}
                     fill="var(--ink)" stroke="var(--surface)" strokeWidth={3} paintOrder="stroke">
                     {activo.destinoNombre}
                   </text>
@@ -175,7 +175,7 @@ export function MapaVivo({ viajes, pines = [] }: {
                       {`${p.etiqueta} — ${ROTULO_FRESCURA[nivel]}${fresco ? '' : ': última posición conocida, no dónde está ahora'} (${p.respaldoWa ? 'pin del chofer, respaldo del GPS' : p.proveedor})`}
                     </title>
                   </rect>
-                  <text x={p.x} y={p.y + 11} textAnchor="middle" fontSize={9} fontWeight={600}
+                  <text x={p.x} y={p.y + 11} textAnchor="middle" fontSize={11} fontWeight={600}
                     fill="var(--ink)" stroke="var(--surface)" strokeWidth={2.4} paintOrder="stroke"
                     opacity={nivel === 'obsoleta' ? 0.6 : 1}>
                     {p.etiqueta}
@@ -209,7 +209,7 @@ export function MapaVivo({ viajes, pines = [] }: {
         {/* Las cards de los viajes — hover ilumina, clic fija */}
         <div className="space-y-2 lg:max-h-[520px] lg:overflow-y-auto lg:pr-1">
           {viajes.length === 0 ? (
-            <p className="text-[12.5px] pt-2" style={{ color: 'var(--muted)' }}>
+            <p className="text-[12px] pt-2" style={{ color: 'var(--muted)' }}>
               Aquí van las tarjetas de cada viaje en curso, con sus días en ruta y sus fotos recibidas.
             </p>
           ) : viajes.map((v) => {
@@ -226,10 +226,10 @@ export function MapaVivo({ viajes, pines = [] }: {
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-[13px]">{v.folio}</span>
                   {v.escalado ? (
-                    <span className="inline-flex px-2 py-0.5 rounded-full text-[10.5px] font-medium"
+                    <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
                       style={{ color: 'var(--bad)', background: 'var(--badbg)' }}>Escalado</span>
                   ) : (
-                    <span className="inline-flex px-2 py-0.5 rounded-full text-[10.5px] font-medium"
+                    <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
                       style={{ color: 'var(--ok)', background: 'var(--okbg)' }}>En ruta</span>
                   )}
                   {v.dias !== null && (
@@ -238,7 +238,7 @@ export function MapaVivo({ viajes, pines = [] }: {
                     </span>
                   )}
                 </div>
-                <div className="text-[12.5px] mt-1">{v.origenNombre} → {v.destinoNombre}</div>
+                <div className="text-[12px] mt-1">{v.origenNombre} → {v.destinoNombre}</div>
                 <div className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>
                   {v.operadorNombre ?? 'Sin operador asignado'}
                   {' · '}≈ {numero(v.kmRecta)} km en línea recta

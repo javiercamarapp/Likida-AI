@@ -15,7 +15,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 // lleva `rel="prev" | "next"`; el ícono es decorativo y el rótulo dice la dirección.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const BOTON = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12.5px] font-medium hairline transition-colors hover:bg-[var(--canvas)] focus-visible:outline-2 focus-visible:outline-offset-2';
+const BOTON = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-medium hairline transition-colors hover:bg-[var(--canvas)] focus-visible:outline-2 focus-visible:outline-offset-2';
 
 export function EnlacePagina({ href, direccion, etiqueta }: {
   href: string;
@@ -26,7 +26,7 @@ export function EnlacePagina({ href, direccion, etiqueta }: {
   const texto = etiqueta ?? (direccion === 'siguiente' ? 'Siguiente' : direccion === 'inicio' ? 'Volver al inicio' : 'Anterior');
   return (
     <Link href={href} rel={direccion === 'siguiente' ? 'next' : direccion === 'anterior' ? 'prev' : undefined}
-      className={BOTON} style={{ background: 'var(--surface)', outlineColor: 'var(--marca)' }}>
+      className={`rv-btn rv-btn--secondary ${BOTON}`} style={{ background: 'var(--surface)', outlineColor: 'var(--marca)' }}>
       {direccion !== 'siguiente' && <ChevronLeft aria-hidden width={13} height={13} strokeWidth={1.75} />}
       {texto}
       {direccion === 'siguiente' && <ChevronRight aria-hidden width={13} height={13} strokeWidth={1.75} />}

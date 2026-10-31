@@ -169,7 +169,7 @@ function Boton({ children, icono }: { children: React.ReactNode; icono: React.Re
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="mt-2 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11.5px] transition-colors hover:bg-[var(--line2)] disabled:opacity-50"
+      className="mt-2 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] transition-colors hover:bg-[var(--line2)] disabled:opacity-50"
       style={{ borderColor: 'var(--line)' }}>
       {icono}
       {pending ? 'Guardando…' : children}

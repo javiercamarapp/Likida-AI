@@ -138,7 +138,7 @@ export function FormaNotificaciones({ datos, guardar }: {
 
           {/* ── DE QUÉ avisa ── */}
           <fieldset disabled={apagado} className="disabled:opacity-50">
-            <legend className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>
+            <legend className="etiqueta-mono text-[11px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>
               {/* «el» a mano: los seis se llaman "Agente de …", así que el
                   artículo siempre cuadra. Sin él se lee "De qué te avisa
                   Agente de Cobranza", que suena a traducción automática. */}
@@ -165,7 +165,7 @@ export function FormaNotificaciones({ datos, guardar }: {
                     />
                     <span className="min-w-0" style={muerto ? { opacity: 0.55 } : undefined}>
                       <span className="block text-[13px] font-medium">{e.titulo}</span>
-                      <span className="block text-[11.5px]" style={{ color: 'var(--muted)' }}>{e.cuando}</span>
+                      <span className="block text-[11px]" style={{ color: 'var(--muted)' }}>{e.cuando}</span>
                       {muerto ? (
                         <span className="block text-[11px] mt-0.5" style={{ color: 'var(--warn)' }}>
                           Todavía no está conectado: este agente aún no detecta esa situación, así que
@@ -187,7 +187,7 @@ export function FormaNotificaciones({ datos, guardar }: {
 
           {/* ── A QUIÉN ── */}
           <fieldset disabled={apagado} className="disabled:opacity-50">
-            <legend className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>
+            <legend className="etiqueta-mono text-[11px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>
               A quién le llega
             </legend>
             <div className="space-y-2">
@@ -238,7 +238,7 @@ export function FormaNotificaciones({ datos, guardar }: {
         {/* ── La verdad medida: a quién le llega hoy y a quién no ── */}
         <div className="space-y-3">
           <div>
-            <div className="etiqueta-mono text-[10px] uppercase mb-1.5 flex items-center gap-1.5" style={{ color: 'var(--faint)' }}>
+            <div className="etiqueta-mono text-[11px] uppercase mb-1.5 flex items-center gap-1.5" style={{ color: 'var(--faint)' }}>
               <Mail width={11} height={11} strokeWidth={2} />
               Hoy le llega a
             </div>
@@ -255,7 +255,7 @@ export function FormaNotificaciones({ datos, guardar }: {
               ) : (
                 <ul className="space-y-1.5">
                   {datos.reparto.reciben.map((d) => (
-                    <li key={d.id} className="text-[12.5px] flex items-baseline gap-2">
+                    <li key={d.id} className="text-[12px] flex items-baseline gap-2">
                       <span className="font-medium truncate">{d.nombre ?? d.email}</span>
                       <span className="truncate" style={{ color: 'var(--muted)' }}>{d.email}</span>
                       <span className="ml-auto shrink-0 text-[11px]" style={{ color: 'var(--faint)' }}>
@@ -275,13 +275,13 @@ export function FormaNotificaciones({ datos, guardar }: {
 
           {datos.reparto.excluidos.length > 0 && (
             <div>
-              <div className="etiqueta-mono text-[10px] uppercase mb-1.5 flex items-center gap-1.5" style={{ color: 'var(--faint)' }}>
+              <div className="etiqueta-mono text-[11px] uppercase mb-1.5 flex items-center gap-1.5" style={{ color: 'var(--faint)' }}>
                 <UserX width={11} height={11} strokeWidth={2} />
                 A quién no, y por qué
               </div>
               <div className="rounded-xl hairline p-3.5 space-y-1.5" style={{ background: 'var(--surface)' }}>
                 {datos.reparto.excluidos.map((x) => (
-                  <p key={x.id} className="text-[12.5px]">
+                  <p key={x.id} className="text-[12px]">
                     <span className="font-medium">{x.nombre ?? ROTULO_ROL[x.rol] ?? x.rol}</span>
                     <span style={{ color: 'var(--muted)' }}> — {x.porque}</span>
                   </p>
@@ -293,7 +293,7 @@ export function FormaNotificaciones({ datos, guardar }: {
           {/* El anti-ruido, con los números del motor: es la pregunta que
               sigue a "¿lo enciendo?" y la razón por la que se puede encender. */}
           <div>
-            <div className="etiqueta-mono text-[10px] uppercase mb-1.5 flex items-center gap-1.5" style={{ color: 'var(--faint)' }}>
+            <div className="etiqueta-mono text-[11px] uppercase mb-1.5 flex items-center gap-1.5" style={{ color: 'var(--faint)' }}>
               <BellOff width={11} height={11} strokeWidth={2} />
               Cuántos correos, como máximo
             </div>
@@ -319,7 +319,7 @@ function BotonGuardar({ apagado, sucio }: { apagado: boolean; sucio: boolean }) 
     <button
       type="submit" disabled={pending || apagado}
       title={apagado ? 'El correo no está configurado en este entorno' : undefined}
-      className="text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-40"
+      className="rv-btn rv-btn--primary text-[12px] font-medium px-3.5 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-40"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       {pending ? 'Guardando…' : sucio ? 'Guardar cambios' : 'Guardar notificaciones'}
     </button>
@@ -327,7 +327,7 @@ function BotonGuardar({ apagado, sucio }: { apagado: boolean; sucio: boolean }) 
 }
 
 function Nota({ children }: { children: React.ReactNode }) {
-  return <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{children}</p>;
+  return <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{children}</p>;
 }
 
 function Banda({ tono, Icono, children }: {
@@ -336,7 +336,7 @@ function Banda({ tono, Icono, children }: {
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl hairline px-3.5 py-2.5 flex items-start gap-2.5 text-[12.5px]"
+    <div className="rounded-xl hairline px-3.5 py-2.5 flex items-start gap-2.5 text-[12px]"
       style={{ background: 'var(--surface)' }}>
       <Icono width={14} height={14} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: `var(--${tono})` }} />
       <span style={{ color: 'var(--muted)' }}>{children}</span>

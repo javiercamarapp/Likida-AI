@@ -157,7 +157,7 @@ export function FormaOnboarding({
         </label>
         <input id="politica" type="file" name="politica"
           accept="application/pdf,image/jpeg,image/png,image/webp"
-          className="text-[13px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12.5px] file:font-medium"
+          className="text-[13px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium"
           style={{ color: 'var(--muted)' }} />
       </section>
 

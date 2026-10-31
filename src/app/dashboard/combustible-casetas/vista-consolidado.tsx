@@ -81,7 +81,7 @@ export function LineasPorConciliar({
               ))}
               <option value={NINGUNO_VALOR}>Ninguno de estos — no ligar a nada</option>
             </select>
-            <button type="submit" className="text-sm font-medium rounded-lg px-3 py-1.5"
+            <button type="submit" className="rv-btn rv-btn--primary text-sm font-medium rounded-lg px-3 py-1.5"
               style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
               Resolver
             </button>

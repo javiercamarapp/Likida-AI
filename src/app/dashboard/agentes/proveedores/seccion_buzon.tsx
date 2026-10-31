@@ -43,7 +43,7 @@ export function SeccionEntrega({ config, disponible, lotes, sinEntregar, puedeAd
       </p>
 
       {config === null ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--bad)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--bad)' }}>
           No se pudo leer la configuración de la entrega. Recarga la página; si se repite, avísale a Likida.
         </p>
       ) : !disponible ? (
@@ -56,7 +56,7 @@ export function SeccionEntrega({ config, disponible, lotes, sinEntregar, puedeAd
           {puedeAdministrar ? (
             <FormaEntrega config={config} guardar={acciones.guardar} />
           ) : (
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
               {config.activo
                 ? <>Activa: se entrega a {config.destinatarios.join(', ')} ({ROTULO_FORMATO[config.formato]}{config.automatica ? `, solo, desde las ${config.horaEnvio}:00` : ', a petición'}).</>
                 : 'Apagada. Configurarla es una acción del dueño de la flota.'}
@@ -74,21 +74,21 @@ export function SeccionEntrega({ config, disponible, lotes, sinEntregar, puedeAd
           )}
 
           <div>
-            <h3 className="etiqueta-mono text-[10px] uppercase mb-2" style={{ color: 'var(--faint)' }}>Últimos envíos</h3>
+            <h3 className="etiqueta-mono text-[11px] uppercase mb-2" style={{ color: 'var(--faint)' }}>Últimos envíos</h3>
             {lotes === null ? (
-              <p className="text-[12.5px]" style={{ color: 'var(--bad)' }}>No se pudo leer el historial de envíos.</p>
+              <p className="text-[12px]" style={{ color: 'var(--bad)' }}>No se pudo leer el historial de envíos.</p>
             ) : lotes.length === 0 ? (
               <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Aún no se ha enviado ningún lote.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-[12.5px]">
+                <table className="w-full text-[12px]">
                   <thead>
                     <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                      <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Creado</th>
-                      <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Facturas</th>
-                      <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 pr-4 text-right">Total</th>
-                      <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Estado</th>
-                      <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 text-right">Acciones</th>
+                      <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Creado</th>
+                      <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Facturas</th>
+                      <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pr-4 text-right">Total</th>
+                      <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Estado</th>
+                      <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -98,7 +98,7 @@ export function SeccionEntrega({ config, disponible, lotes, sinEntregar, puedeAd
                         <tr key={l.id} className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
                           <td className="py-2" style={{ color: 'var(--muted)' }}>
                             {fechaHoraMx(l.creadoEn)}
-                            <span className="block text-[10.5px]" style={{ color: 'var(--faint)' }}>
+                            <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>
                               {l.disparo === 'automatica' ? 'automático' : 'a petición'} · {ROTULO_FORMATO[l.formato]}
                             </span>
                           </td>
@@ -107,15 +107,15 @@ export function SeccionEntrega({ config, disponible, lotes, sinEntregar, puedeAd
                           <td className="py-2">
                             <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ color: r.color, background: r.fondo }}>{r.texto}</span>
                             {l.estado === 'pendiente' && l.intentos > 0 && (
-                              <span className="block text-[10.5px]" style={{ color: 'var(--faint)' }}>intento {l.intentos}, reintenta solo</span>
+                              <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>intento {l.intentos}, reintenta solo</span>
                             )}
                             {l.estado === 'rebotada' && (
-                              <span className="block text-[10.5px]" style={{ color: 'var(--bad)' }}>
+                              <span className="block text-[11px]" style={{ color: 'var(--bad)' }}>
                                 El correo rebotó: revisa la dirección del contador; sus facturas volvieron a la cola.
                               </span>
                             )}
                             {(l.estado === 'fallida' || (l.estado === 'pendiente' && l.error)) && l.error && (
-                              <span className="block text-[10.5px] max-w-[34ch]" style={{ color: 'var(--bad)' }}>{l.error}</span>
+                              <span className="block text-[11px] max-w-[34ch]" style={{ color: 'var(--bad)' }}>{l.error}</span>
                             )}
                           </td>
                           <td className="py-2 text-right">
@@ -161,7 +161,7 @@ export function SeccionRecepcion({ recepciones, conteo, acciones }: {
         un ZIP se abre con límites de tamaño y un archivo sospechoso se rechaza y se anota aquí con el motivo.
       </p>
       {recepciones === null || conteo === null ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--bad)' }}>No se pudo leer lo recibido. Recarga la página; si se repite, avísale a Likida (en un entorno sin la migración 0530 aplicada es lo esperado).</p>
+        <p className="text-[12px]" style={{ color: 'var(--bad)' }}>No se pudo leer lo recibido. Recarga la página; si se repite, avísale a Likida (en un entorno sin la migración 0530 aplicada es lo esperado).</p>
       ) : recepciones.length === 0 ? (
         <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
           Todavía no llega ningún archivo por correo. Cuando un proveedor mande una factura a tu dirección, aparece aquí.
@@ -180,13 +180,13 @@ export function SeccionRecepcion({ recepciones, conteo, acciones }: {
             {conteo.porEstado.rechazada > 0 && <span style={{ color: 'var(--bad)' }}>{numero(conteo.porEstado.rechazada)} rechazados por seguridad</span>}
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-[12.5px]">
+            <table className="w-full text-[12px]">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Recibido</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Archivo</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Qué pasó</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 text-right">Acciones</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Recibido</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Archivo</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Qué pasó</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -197,13 +197,13 @@ export function SeccionRecepcion({ recepciones, conteo, acciones }: {
                       <td className="py-2" style={{ color: 'var(--muted)' }}>{fechaHoraMx(r.recibidoEn)}</td>
                       <td className="py-2">
                         <span className="block truncate max-w-[30ch]" title={r.nombre}>{r.nombre}</span>
-                        <span className="block text-[10.5px]" style={{ color: 'var(--faint)' }}>
+                        <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>
                           {r.tipo.toUpperCase()} · {pesoArchivo(r.bytes)}{r.zipOrigen ? ` · dentro de ${r.zipOrigen}` : ''}
                         </span>
                       </td>
                       <td className="py-2">
                         <span className="font-medium" style={{ color: e.color }}>{e.texto}</span>
-                        {r.motivo && <span className="block text-[10.5px] max-w-[46ch]" style={{ color: 'var(--faint)' }}>{r.motivo}</span>}
+                        {r.motivo && <span className="block text-[11px] max-w-[46ch]" style={{ color: 'var(--faint)' }}>{r.motivo}</span>}
                       </td>
                       <td className="py-2 text-right">
                         <div className="inline-flex gap-1.5 flex-wrap justify-end">

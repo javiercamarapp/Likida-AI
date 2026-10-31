@@ -31,11 +31,11 @@ export function ConstanciaReportes({ constancia, dias, hayMas }: { constancia: C
         )}
       </div>
       {constancia.vacio ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{TEXTO_CONSTANCIA_VACIA}</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{TEXTO_CONSTANCIA_VACIA}</p>
       ) : (
         <ul className="space-y-1.5">
           {constancia.operadores.map((o) => (
-            <li key={o.operadorId} className="hairline rounded-lg p-2.5 text-[12.5px] space-y-1">
+            <li key={o.operadorId} className="hairline rounded-lg p-2.5 text-[12px] space-y-1">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
                 <span className="font-medium">{o.operadorNombre ?? 'Operador sin nombre'}</span>
                 <span style={{ color: 'var(--muted)' }}>{ESTADO[o.estado]}</span>

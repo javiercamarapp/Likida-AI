@@ -149,11 +149,11 @@ export function InsightDeAgente({
   return (
     <div className="mt-2" data-insight-agente>
       {proximamente ? (
-        <p className="card p-3 text-[12.5px]" style={{ color: 'var(--muted)' }} data-estado="proximamente">{TEXTO_PROXIMAMENTE_RESUMEN}</p>
+        <p className="card p-3 text-[12px]" style={{ color: 'var(--muted)' }} data-estado="proximamente">{TEXTO_PROXIMAMENTE_RESUMEN}</p>
       ) : insights == null ? (
-        <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--ink)' }} data-estado="error">{TEXTO_ERROR_RESUMEN}</p>
+        <p role="alert" className="card p-3 text-[12px]" style={{ color: 'var(--ink)' }} data-estado="error">{TEXTO_ERROR_RESUMEN}</p>
       ) : principal === null ? (
-        <p className="card p-3 text-[12.5px]" style={{ color: 'var(--muted)' }} data-estado="vacio">{TEXTO_VACIO_RESUMEN}</p>
+        <p className="card p-3 text-[12px]" style={{ color: 'var(--muted)' }} data-estado="vacio">{TEXTO_VACIO_RESUMEN}</p>
       ) : (
         <TarjetaInsight insight={principal} />
       )}
@@ -211,10 +211,10 @@ export async function TarjetaAgente({ ficha, tenantId, sufijo, insights }: { fic
           <h3 className="text-[14px] font-medium">
             {ficha.nombre}
             {proximamente && (
-              <span className="ml-2 align-middle text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>Próximamente</span>
+              <span className="ml-2 align-middle text-[11px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>Próximamente</span>
             )}
           </h3>
-          <p className="text-[12.5px] mt-0.5" style={{ color: 'var(--ink2)' }}>{ficha.descripcion}</p>
+          <p className="text-[12px] mt-0.5" style={{ color: 'var(--ink2)' }}>{ficha.descripcion}</p>
           <div className="mt-2">
             {proximamente ? (
               <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Todavía no está activo en tu cuenta.</p>

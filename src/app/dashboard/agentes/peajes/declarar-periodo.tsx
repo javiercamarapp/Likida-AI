@@ -20,7 +20,7 @@ export function DeclararPeriodo({ declarar, desgloseId, desde, hasta }: { declar
   }, [estado, router]);
 
   return (
-    <form action={accion} className="flex items-center gap-1.5 flex-wrap text-[11.5px]" style={{ color: 'var(--muted)' }}>
+    <form action={accion} className="flex items-center gap-1.5 flex-wrap text-[11px]" style={{ color: 'var(--muted)' }}>
       <input type="hidden" name="desglose" value={desgloseId} />
       <span>Periodo oficial del archivo{desde && hasta ? `: ${desde} a ${hasta}` : ': sin declarar'}</span>
       <input type="date" name="periodo_desde" required defaultValue={desde ?? ''} aria-label="Inicio del periodo oficial"
@@ -29,7 +29,7 @@ export function DeclararPeriodo({ declarar, desgloseId, desde, hasta }: { declar
       <input type="date" name="periodo_hasta" required defaultValue={hasta ?? ''} aria-label="Fin del periodo oficial"
         className="hairline text-[12px] px-2 py-0.5 rounded-lg" style={{ background: 'var(--surface)', color: 'var(--ink)' }} />
       <button type="submit" disabled={pendiente}
-        className="hairline text-[12px] font-medium px-2.5 py-0.5 rounded-lg transition-colors hover:bg-[var(--canvas)] disabled:opacity-50"
+        className="rv-btn rv-btn--secondary hairline text-[12px] font-medium px-2.5 py-0.5 rounded-lg transition-colors hover:bg-[var(--canvas)] disabled:opacity-50"
         style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
         {pendiente ? 'Guardando…' : 'Declarar periodo'}
       </button>

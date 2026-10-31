@@ -72,10 +72,10 @@ export function fraseEnvio(e: EnvioVista | null): string {
 }
 
 function Confianza({ c }: { c: number | null }) {
-  if (c === null) return <span className="text-[10.5px]" style={{ color: 'var(--faint)' }}>sin dato</span>;
+  if (c === null) return <span className="text-[11px]" style={{ color: 'var(--faint)' }}>sin dato</span>;
   const pct = Math.round(c * 100);
   const fg = c >= 0.9 ? 'var(--ok)' : c >= 0.8 ? 'var(--warn)' : 'var(--bad)';
-  return <span className="text-[10.5px] font-medium cifra-mono" style={{ color: fg }} title="Qué tan seguro está el agente de que leyó exactamente lo que dice el documento">{pct} %</span>;
+  return <span className="text-[11px] font-medium cifra-mono" style={{ color: fg }} title="Qué tan seguro está el agente de que leyó exactamente lo que dice el documento">{pct} %</span>;
 }
 
 function Campo({ f, editable }: { f: FilaCampo; editable: boolean }) {
@@ -88,17 +88,17 @@ function Campo({ f, editable }: { f: FilaCampo; editable: boolean }) {
       <div className="flex items-center justify-between gap-2">
         <label htmlFor={id} className="text-[11px] font-medium">{f.rotulo}{f.critico && <abbr title="Dato crítico: si falta o es dudoso, no se aprueba" className="no-underline" style={{ color: 'var(--marca)' }}> *</abbr>}</label>
         <span className="flex items-center gap-1.5">
-          {marca.inferido && <span className="text-[10.5px] font-medium px-1.5 py-0.5 rounded" style={{ color: 'var(--warn)', border: '1px solid var(--warn)' }}>Inferido</span>}
-          {!marca.inferido && marca.bajaConfianza && <span className="text-[10.5px] font-medium px-1.5 py-0.5 rounded" style={{ color: 'var(--warn)', border: '1px solid var(--warn)' }}>Poco seguro</span>}
-          {f.origen && <span className="text-[10.5px]" style={{ color: 'var(--faint)' }}>{ROTULO_ORIGEN[f.origen]}</span>}
+          {marca.inferido && <span className="text-[11px] font-medium px-1.5 py-0.5 rounded" style={{ color: 'var(--warn)', border: '1px solid var(--warn)' }}>Inferido</span>}
+          {!marca.inferido && marca.bajaConfianza && <span className="text-[11px] font-medium px-1.5 py-0.5 rounded" style={{ color: 'var(--warn)', border: '1px solid var(--warn)' }}>Poco seguro</span>}
+          {f.origen && <span className="text-[11px]" style={{ color: 'var(--faint)' }}>{ROTULO_ORIGEN[f.origen]}</span>}
           <Confianza c={f.confianza} />
         </span>
       </div>
       <input id={id} name={f.nombre} defaultValue={f.valor} readOnly={!editable} autoComplete="off" spellCheck={false}
         className={CAMPO} style={{ background: 'var(--surface)', ...(borde ? { borderColor: borde } : {}) }} aria-invalid={f.bloqueado || undefined} />
-      {f.evidencia && <p className="text-[10.5px] truncate" style={{ color: 'var(--faint)' }} title={f.evidencia}>Evidencia: «{f.evidencia}»</p>}
-      {marca.avisos.map((a) => <p key={a} className="text-[10.5px]" style={{ color: 'var(--warn)' }}>{a}</p>)}
-      {f.notas.map((n) => <p key={n} className="text-[10.5px]" style={{ color: 'var(--muted)' }}>{n}</p>)}
+      {f.evidencia && <p className="text-[11px] truncate" style={{ color: 'var(--faint)' }} title={f.evidencia}>Evidencia: «{f.evidencia}»</p>}
+      {marca.avisos.map((a) => <p key={a} className="text-[11px]" style={{ color: 'var(--warn)' }}>{a}</p>)}
+      {f.notas.map((n) => <p key={n} className="text-[11px]" style={{ color: 'var(--muted)' }}>{n}</p>)}
       {f.hallazgos.map((h) => (
         <p key={`${h.codigo}-${h.mensaje}`} className="text-[11px] flex items-start gap-1" style={{ color: color(h.severidad) }}>
           <TriangleAlert width={11} height={11} strokeWidth={1.75} className="mt-0.5 shrink-0" />{h.origen && <strong className="font-medium">{ROTULO_ORIGEN_HALLAZGO[h.origen]}:</strong>} {h.mensaje}
@@ -148,12 +148,12 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
   const meta = doc.extraccion?.meta;
   return (
     <main className="max-w-[1500px] mx-auto px-5 py-6 space-y-4">
-      <Link href={`/dashboard/carta-porte/documentos${sufijo}`} className="text-[12.5px] font-medium inline-flex items-center gap-1 hover:opacity-75" style={{ color: 'var(--marca)' }}>
+      <Link href={`/dashboard/carta-porte/documentos${sufijo}`} className="text-[12px] font-medium inline-flex items-center gap-1 hover:opacity-75" style={{ color: 'var(--marca)' }}>
         <ArrowLeft width={13} height={13} strokeWidth={1.75} /> Volver a los documentos
       </Link>
 
       <header className="space-y-1">
-        <h1 className="font-display text-[19px] font-semibold flex flex-wrap items-center gap-2">
+        <h1 className="font-display text-[20px] font-semibold flex flex-wrap items-center gap-2">
           <FileSearch width={18} height={18} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
           <span className="break-all">{doc.nombreArchivo}</span>
           <span className="text-[11px] font-medium px-2 py-0.5 rounded-full hairline" style={{ color: 'var(--muted)' }}>{ROTULO_ESTADO[doc.estado]}</span>
@@ -163,7 +163,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
           {doc.remitente ? ` · de ${doc.remitente}` : ''}{doc.asunto ? ` · «${doc.asunto}»` : ''}
         </p>
         {meta && (
-          <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+          <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
             Lectura: {meta.origen === 'xml' ? 'directa del XML, sin modelo' : meta.origen === 'perfil' ? 'con el perfil del cliente, sin modelo' : meta.origen === 'perfil+llm' ? 'perfil del cliente + modelo para lo que faltaba' : `modelo nivel ${meta.nivel}`}
             {doc.modelo ? ` (${doc.modelo})` : ''} · {usd4(doc.costoUsd)}
             {meta.escalamientos.length > 0 ? ` · se releyó ${numero(meta.escalamientos.length)} ${meta.escalamientos.length === 1 ? 'vez' : 'veces'} con un modelo más fuerte` : ''}
@@ -221,13 +221,13 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
             </FormaAccion>
           </div>
         )}
-        {doc.estado === 'fallido' && <p className="text-[12.5px]" style={{ color: 'var(--bad)' }}>{doc.ultimoError}</p>}
-        {doc.estado === 'rechazado' && <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Rechazado: {doc.rechazoMotivo}</p>}
+        {doc.estado === 'fallido' && <p className="text-[12px]" style={{ color: 'var(--bad)' }}>{doc.ultimoError}</p>}
+        {doc.estado === 'rechazado' && <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Rechazado: {doc.rechazoMotivo}</p>}
       </header>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
         <section aria-label="El documento" className="card p-3 space-y-2 xl:sticky xl:top-4 max-h-[85vh] overflow-auto">
-          <h2 className="text-[12.5px] font-medium">El documento</h2>
+          <h2 className="text-[12px] font-medium">El documento</h2>
           {/* eslint-disable-next-line @next/next/no-img-element -- URL firmada de Storage: next/image exigiría declarar el dominio y optimizaría un documento que NO se debe recomprimir */}
           {original.tipo === 'imagen' && <img src={original.url} alt="Documento del cliente" className="w-full rounded-md hairline" />}
           {original.tipo === 'imagenes' && original.urls.map((u, i) => (
@@ -241,14 +241,14 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
         <section aria-label="Lo que se leyó" className="space-y-3">
           {doc.estado === 'dividido' ? (
             <div className="card p-4 space-y-2.5">
-              <p className="text-[12.5px]">
+              <p className="text-[12px]">
                 Este archivo traía varios embarques. Cada uno es un documento aparte, con su propia revisión, su aprobación y su viaje;
                 este queda como constancia de lo que llegó.
               </p>
               {hijos.length === 0 ? (
                 <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No hay embarques ligados a este archivo.</p>
               ) : (
-                <ul className="space-y-1.5 text-[12.5px]">
+                <ul className="space-y-1.5 text-[12px]">
                   {hijos.map((h) => (
                     <li key={h.id} className="flex flex-wrap items-baseline gap-x-2">
                       <span className="cifra-mono" style={{ color: 'var(--faint)' }}>{numero(h.indice)}.</span>
@@ -267,7 +267,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
             </div>
           ) : revision === null ? (
             <div className="card p-4 space-y-3">
-              <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
                 {doc.estado === 'fallido' ? 'El documento no se pudo leer; no hay datos que revisar.' : 'El documento todavía no tiene datos leídos.'}
               </p>
               {doc.estado === 'fallido' && acciones.revisar && (
@@ -295,14 +295,14 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
 
               {revision.grupos.map((g) => (
                 <fieldset key={g.id} className="card p-3.5 space-y-3">
-                  <legend className="text-[12.5px] font-medium px-1">{g.titulo}</legend>
+                  <legend className="text-[12px] font-medium px-1">{g.titulo}</legend>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">{g.filas.map((f) => <Campo key={f.nombre} f={f} editable={editable} />)}</div>
                 </fieldset>
               ))}
 
               {revision.mercancias.map((m) => (editable || !m.esNuevo) && (
                 <fieldset key={m.indice} className="card p-3.5 space-y-3">
-                  <legend className="text-[12.5px] font-medium px-1">{m.esNuevo ? 'Agregar una mercancía que falte' : `Mercancía ${m.indice + 1}`}</legend>
+                  <legend className="text-[12px] font-medium px-1">{m.esNuevo ? 'Agregar una mercancía que falte' : `Mercancía ${m.indice + 1}`}</legend>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">{m.filas.map((f) => <Campo key={f.nombre} f={f} editable={editable} />)}</div>
                   {!m.esNuevo && editable && (
                     <BotonEnvio variante="peligro" intencion={`quitar:${m.indice}`} etiqueta="Quitar este renglón" pendiente="Quitando…"
@@ -348,17 +348,17 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
                 <div className="card p-3.5 space-y-3">
                   {doc.estado === 'aprobado' && perfilRestringido && (
                     <div className="space-y-1" aria-label="Envío al sistema del cliente">
-                      <p className="text-[12.5px] font-medium flex items-center gap-1.5">
+                      <p className="text-[12px] font-medium flex items-center gap-1.5">
                         <Send width={14} height={14} strokeWidth={1.75} style={{ color: envio?.estado === 'rechazado_tms' ? 'var(--bad)' : envio?.estado === 'enviado' ? 'var(--ok)' : 'var(--muted)' }} />Envío al sistema del cliente
-                        {envio?.simulado && <span className="text-[10.5px] font-medium px-1.5 py-0.5 rounded" style={{ color: 'var(--warn)', border: '1px solid var(--warn)' }} data-testid="rotulo-simulado">{ROTULO_SIMULADO}</span>}
+                        {envio?.simulado && <span className="text-[11px] font-medium px-1.5 py-0.5 rounded" style={{ color: 'var(--warn)', border: '1px solid var(--warn)' }} data-testid="rotulo-simulado">{ROTULO_SIMULADO}</span>}
                       </p>
-                      <p className="text-[12.5px]" role="status">{fraseEnvio(envio)}</p>
+                      <p className="text-[12px]" role="status">{fraseEnvio(envio)}</p>
                       {envio === null && <BotonEnvio variante="secundario" intencion="preparar_envio" etiqueta="Preparar el envío" pendiente="Preparando…" icono={<Send width={14} height={14} strokeWidth={1.75} />} />}
                     </div>
                   )}
                   {doc.estado === 'aprobado' && !perfilRestringido && (
                     <>
-                      <p className="text-[12.5px] flex items-center gap-1.5">
+                      <p className="text-[12px] flex items-center gap-1.5">
                         <Truck width={14} height={14} strokeWidth={1.75} style={{ color: doc.viajeId ? 'var(--ok)' : 'var(--warn)' }} />
                         {doc.viajeId ? <>Con viaje{salida ? ` ${salida.folio}` : ''}. <Link href={`/dashboard/carta-porte/borrador/${doc.viajeId}${sufijo}`} className="font-medium" style={{ color: 'var(--marca)' }}>Ver el borrador del complemento →</Link></> : 'Todavía sin viaje: elige el operador y créalo.'}
                       </p>
@@ -407,7 +407,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
               )}
             </FormaAccion>
           ) : (
-            <p className="card p-4 text-[12.5px]" style={{ color: 'var(--muted)' }}>Tu rol no puede revisar este documento.</p>
+            <p className="card p-4 text-[12px]" style={{ color: 'var(--muted)' }}>Tu rol no puede revisar este documento.</p>
           )}
         </section>
       </div>
@@ -427,7 +427,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
 
       {eventos.length > 0 && (
         <details className="card p-3.5">
-          <summary className="cursor-pointer text-[12.5px] font-medium select-none">Bitácora de este documento ({numero(eventos.length)})</summary>
+          <summary className="cursor-pointer text-[12px] font-medium select-none">Bitácora de este documento ({numero(eventos.length)})</summary>
           <ul className="pt-2.5 space-y-1 text-[12px]">
             {eventos.map((e, i) => <li key={i} className="flex gap-3"><span className="cifra-mono" style={{ color: 'var(--faint)' }}>{fechaHoraMx(e.creadoEn)}</span><span>{ROTULO_EVENTO[e.tipo] ?? e.tipo}</span></li>)}
           </ul>
@@ -445,10 +445,10 @@ function BannerCatalogo({ catalogo }: { catalogo: CatalogoBanner }) {
   const { propuesta } = catalogo;
   return (
     <div className="space-y-2.5 rounded-lg p-3" role="region" aria-label="Guardar en el catálogo" style={{ background: 'var(--canvas)' }}>
-      <p className="text-[12.5px] font-medium flex items-center gap-1.5">
+      <p className="text-[12px] font-medium flex items-center gap-1.5">
         <BookOpen width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />¿Guardar estos datos en el catálogo de {catalogo.cliente}?
       </p>
-      <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+      <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
         Los escribiste tú en esta revisión. Si los guardas, el próximo documento con el mismo producto, remitente o destinatario saldrá con ellos ya llenos. No se guarda nada solo.
       </p>
       <ul className="space-y-2">
@@ -487,7 +487,7 @@ function TextoOriginal({ texto, revision }: { texto: string; revision: Revision 
   const { lineas, recortado } = lineasDelOriginal(texto, revision);
   return (
     <>
-      <pre className="text-[11.5px] whitespace-pre-wrap break-words cifra-mono">
+      <pre className="text-[11px] whitespace-pre-wrap break-words cifra-mono">
         {lineas.map((l, i) => (l.resaltada
           ? <mark key={i} data-linea-resaltada style={{ display: 'block', background: 'var(--warnbg, var(--canvas))', color: 'inherit' }}>{l.texto}{'\n'}</mark>
           : <span key={i}>{l.texto}{'\n'}</span>))}
@@ -502,7 +502,7 @@ function Resumen({ revision }: { revision: Revision }) {
   const { inferidos, pocoSeguros } = resumenDeMarcas(revision);
   return (
     <div className="space-y-1.5">
-      <p className="text-[12.5px] px-3.5 py-2.5 rounded-lg" role="status"
+      <p className="text-[12px] px-3.5 py-2.5 rounded-lg" role="status"
         style={{ background: listoParaAprobar ? 'var(--okbg)' : 'var(--canvas)', color: listoParaAprobar ? 'var(--ok)' : 'var(--ink)' }}>
         {listoParaAprobar
           ? 'Todo en orden: puedes aprobar.'

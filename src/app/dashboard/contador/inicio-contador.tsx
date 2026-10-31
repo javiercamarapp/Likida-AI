@@ -411,6 +411,7 @@ async function BloqueAcreditables({ pAcred, pResumenPerdidas, periodoFiscal }: {
     <TiraCifras sello={selloHoy('Liquidaciones certificadas')}>
       <Cifra icono={<Landmark width={15} height={15} strokeWidth={1.75} />}
         etiqueta={`IVA acreditable de tus liquidaciones — ${periodoFiscal.etiqueta}`}
+        info="contador.iva_liquidaciones"
         valor={acred.iva} formato="mxn"
         nota="LIVA art. 5 — lo que el motor certificó al cerrar cada liquidación" />
       {/* La condición va en el rótulo, no solo en la nota — el
@@ -418,16 +419,19 @@ async function BloqueAcreditables({ pAcred, pResumenPerdidas, periodoFiscal }: {
           peaje 50%" a secas se lee como un derecho ya ganado. */}
       <Cifra icono={<RouteIcon width={15} height={15} strokeWidth={1.75} />}
         etiqueta={`Estímulo de peaje 50% — ${periodoFiscal.etiqueta} · sujeto a elegibilidad`}
+        info="contador.estimulo_peaje"
         valor={acred.peaje} formato="mxn"
         nota="LIF 2026 art. 20, ap. A — base: subtotal SIN IVA de casetas con CFDI" />
       {resumenPerdidas ? (
         <Cifra icono={<ReceiptText width={15} height={15} strokeWidth={1.75} />}
           etiqueta={`Recuperable pidiendo factura — ${periodoFiscal.etiqueta}`}
+          info="contador.recuperable"
           valor={resumenPerdidas.montoRecuperable} formato="mxn"
           nota="Gasto cuya factura aún se puede pedir — el motor dice a quién, abajo" />
       ) : (
         <Cifra icono={<ReceiptText width={15} height={15} strokeWidth={1.75} />}
           etiqueta={`Recuperable pidiendo factura — ${periodoFiscal.etiqueta}`}
+          info="contador.recuperable"
           valor={null} estado="error" mensaje="No se pudo calcular lo recuperable en este momento." reintentar />
       )}
       {/* En LITROS, nunca en pesos — regla de producto: el
@@ -435,6 +439,7 @@ async function BloqueAcreditables({ pAcred, pResumenPerdidas, periodoFiscal }: {
           vive aquí (decisión D2; `guion_demo.test.ts` la ata). */}
       <Cifra icono={<Fuel width={15} height={15} strokeWidth={1.75} />}
         etiqueta="Diésel elegible para el estímulo"
+        info="contador.diesel_elegible"
         valor={acred.litrosDiesel} formato="litros"
         nota="LIF 2026, art. 20-A: cuota semanal del DOF × litros — tu contador aplica la cuota fechada" />
     </TiraCifras>
@@ -513,10 +518,10 @@ async function BloqueDesglose({ pResumenFiscal, periodoFiscal }: {
         <>
           <TiraCifras className="mt-2" sello={selloHoy('Liquidaciones y comprobantes')}>
             <Cifra icono={<Wallet width={15} height={15} strokeWidth={1.75} />}
-              etiqueta="Gasto comprobado leído" valor={resumenFiscal.gastoTotal} formato="mxn"
+              etiqueta="Gasto comprobado leído" info="contador.gasto_leido" valor={resumenFiscal.gastoTotal} formato="mxn"
               nota={`${resumenFiscal.n} comprobante${resumenFiscal.n === 1 ? '' : 's'} · ${resumenFiscal.conCfdi} con CFDI, ${resumenFiscal.sinCfdi} sin CFDI`} />
             <Cifra icono={<Landmark width={15} height={15} strokeWidth={1.75} />}
-              etiqueta="IVA acreditable documentado" valor={resumenFiscal.ivaAcreditable} formato="mxn"
+              etiqueta="IVA acreditable documentado" info="contador.iva_documentado" valor={resumenFiscal.ivaAcreditable} formato="mxn"
               nota={resumenFiscal.combustible15SujetoADeriva
                 // RE-AUDITORÍA 25, FIS-REAUD-3 (ALTO): incluye combustible en
                 // efectivo prorrateado al 15% con el acumulado del ejercicio
@@ -537,7 +542,7 @@ async function BloqueDesglose({ pResumenFiscal, periodoFiscal }: {
                 ? 'LIVA art. 5 — incluye combustible en efectivo al 15% del acumulado de HOY, prorrateado en AGREGADO (estimación, no viaje por viaje): puede diferir de lo firmado en PDFs viejos y de tasas de IVA no uniformes (ver "de tus liquidaciones", arriba)'
                 : 'LIVA art. 5 — solo el IVA desglosado en CFDI que lo sostiene'} />
             <Cifra icono={<FileX2 width={15} height={15} strokeWidth={1.75} />}
-              etiqueta="IVA desglosado que NO se acredita" valor={resumenFiscal.ivaNoAcreditable} formato="mxn"
+              etiqueta="IVA desglosado que NO se acredita" info="contador.iva_no_acreditable" valor={resumenFiscal.ivaNoAcreditable} formato="mxn"
               nota="Las dos cubetas suman todo el IVA desglosado del periodo — crúzalo con calculadora" />
           </TiraCifras>
           <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>

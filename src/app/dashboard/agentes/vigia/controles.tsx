@@ -37,7 +37,7 @@ function Boton({ children, name, value, tono = 'neutro', Icono }: {
     : tono === 'peligro' ? { background: 'var(--badbg)', color: 'var(--bad)' } : { background: 'var(--canvas)', color: 'var(--ink)' };
   return (
     <button type="submit" name={name} value={value} disabled={pending}
-      className="h-8 px-3 rounded-lg text-[12.5px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50 hairline"
+      className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50 hairline"
       style={estilo}>
       {Icono && <Icono width={13} height={13} strokeWidth={1.75} />}{children}
     </button>
@@ -106,7 +106,7 @@ export function FormaConfig({ accion, valores, standby = false }: {
   const [estado, despachar] = useActionState(accion, null);
   return (
     <form action={despachar} className="space-y-3">
-      <label className="flex items-start gap-2 text-[12.5px]">
+      <label className="flex items-start gap-2 text-[12px]">
         <input type="checkbox" name="habilitado" defaultChecked={valores.habilitado} className="mt-0.5" />
         <span><strong>Vigía encendido.</strong> Apagado, ningún cliente recibe respuesta de este agente (queda silencio, no «no te tengo registrado»).</span>
       </label>
@@ -166,7 +166,7 @@ export function FormaConfig({ accion, valores, standby = false }: {
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>Va en el primer mensaje que recibe cada cliente. Sin liga, se manda la de Likida.</p>
         </div>
       </div>
-      <label className="flex items-start gap-2 text-[12.5px]">
+      <label className="flex items-start gap-2 text-[12px]">
         <input type="checkbox" name="respaldoCorreo" defaultChecked={valores.respaldoCorreo} className="mt-0.5" />
         <span>
           <strong>Respaldo por correo.</strong> Si el aviso de escalamiento por WhatsApp no sale (plantilla sin aprobar o ventana de 24 h cerrada), se manda por correo a quien
@@ -294,7 +294,7 @@ export function FormaAlta({ accion, clientes, gerentes }: {
           </select>
         </div>
       </div>
-      <label className="flex items-start gap-2 text-[12.5px]">
+      <label className="flex items-start gap-2 text-[12px]">
         <input type="checkbox" name="consentimiento" required className="mt-0.5" />
         <span>Confirmo que este cliente <strong>autorizó recibir mensajes por WhatsApp</strong> de mi empresa. Queda constancia con fecha. Puede pedir su baja escribiendo BAJA.</span>
       </label>
@@ -311,7 +311,7 @@ export function AccionesContacto({ accion, id, activo }: { accion: AccionVigia; 
     <form action={despachar} className="flex flex-wrap items-center gap-2">
       <input type="hidden" name="id" value={id} />
       {activo && <Boton name="accion" value="baja" Icono={UserX}>Dar de baja</Boton>}
-      <label className="inline-flex items-center gap-1.5 text-[11.5px]" style={{ color: 'var(--muted)' }}>
+      <label className="inline-flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--muted)' }}>
         <input type="checkbox" name="confirmo" /> Entiendo que borra sus chats
       </label>
       <Boton name="accion" value="suprimir" tono="peligro" Icono={Trash2}>Suprimir sus datos (ARCO)</Boton>
@@ -361,7 +361,7 @@ export function FormaFestivos({ accion, festivos, sugeridos }: { accion: AccionV
       <ul className="space-y-1.5">
         {festivos.length === 0 && <li className="text-[12px]" style={{ color: 'var(--muted)' }}>Aún no hay festivos: solo cuentan los sábados y domingos.</li>}
         {festivos.map((f) => (
-          <li key={f.id} className="flex items-center justify-between gap-2 text-[12.5px]">
+          <li key={f.id} className="flex items-center justify-between gap-2 text-[12px]">
             <span>{f.fecha} · {f.nombre}</span>
             <Boton name="quitar" value={f.id} tono="peligro" Icono={Trash2}>Quitar</Boton>
           </li>

@@ -25,7 +25,7 @@ export interface AccionesConfiguracion { guardar: AccionDoc; probar: AccionDoc }
 const ESTILO = { background: 'var(--surface)' } as const;
 
 function Error_({ id, mensaje }: { id: string; mensaje?: string }) {
-  return mensaje ? <p id={id} role="alert" className="text-[11.5px] mt-1" style={{ color: 'var(--bad)' }}>{mensaje}</p> : null;
+  return mensaje ? <p id={id} role="alert" className="text-[11px] mt-1" style={{ color: 'var(--bad)' }}>{mensaje}</p> : null;
 }
 
 function Formulario({ config, personas, conector, ver }: { config: ConfigSalida; personas: PersonaVista[]; conector: { hay: boolean }; ver: VerComo }) {
@@ -68,8 +68,8 @@ function Formulario({ config, personas, conector, ver }: { config: ConfigSalida;
             <option value="descarga">Descarga (la subes tú al sistema del cliente)</option>
             <option value="api" disabled={apiBloqueado}>API (el agente la sube solo){apiBloqueado ? ' — todavía no disponible' : ''}</option>
           </select>
-          {apiBloqueado && <p className="text-[11.5px] mt-1" style={{ color: 'var(--muted)' }}>El modo API se activa cuando haya una conexión probada con el sistema del cliente. Mientras tanto, la plantilla se descarga y se sube a mano.</p>}
-          {apiBloqueado && <p role="note" className="text-[11.5px] mt-1.5 px-3 py-2 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>La subida automática al sistema del cliente NO está disponible todavía: depende de la API que el cliente entregue. Hasta entonces todo envío es descarga y subida a mano, y la existencia del requerimiento en su sistema no se puede verificar («desconocido»).</p>}
+          {apiBloqueado && <p className="text-[11px] mt-1" style={{ color: 'var(--muted)' }}>El modo API se activa cuando haya una conexión probada con el sistema del cliente. Mientras tanto, la plantilla se descarga y se sube a mano.</p>}
+          {apiBloqueado && <p role="note" className="text-[11px] mt-1.5 px-3 py-2 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>La subida automática al sistema del cliente NO está disponible todavía: depende de la API que el cliente entregue. Hasta entonces todo envío es descarga y subida a mano, y la existencia del requerimiento en su sistema no se puede verificar («desconocido»).</p>}
         </div>
         <div>
           <label htmlFor="cs-plantilla" className={ETIQUETA}>Plantilla por defecto</label>
@@ -102,7 +102,7 @@ function Formulario({ config, personas, conector, ver }: { config: ConfigSalida;
             <option value="enviar">Enviar de todos modos</option>
           </select>
         </div>
-        <p data-testid="vista-previa" className="text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>{frase}</p>
+        <p data-testid="vista-previa" className="text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>{frase}</p>
       </fieldset>
 
       <fieldset className="space-y-3">
@@ -113,7 +113,7 @@ function Formulario({ config, personas, conector, ver }: { config: ConfigSalida;
           {persona('destinatarioRevisionUsuario', 'Revisión de rechazos: persona')}
           {campo('destinatarioRevisionCorreo', 'Revisión de rechazos: correo', { type: 'email' })}
         </div>
-        <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>Si no eliges a nadie, el aviso llega al jefe de tráfico por WhatsApp.</p>
+        <p className="text-[11px]" style={{ color: 'var(--muted)' }}>Si no eliges a nadie, el aviso llega al jefe de tráfico por WhatsApp.</p>
       </fieldset>
     </>
   );
@@ -147,7 +147,7 @@ export function VistaConfiguracionSalida({ config, esArranque, personas, conecto
       )}
       {primerMes && accionPrimerMes && <SeccionPrimerMes primerMes={primerMes} ver={ver} accion={accionPrimerMes} />}
       {accionesCcp && ccp === null && (
-        <p role="alert" className="text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>No se pudieron leer los CCP timbrados recibidos. Recarga la pantalla; si sigue igual, avisa a soporte.</p>
+        <p role="alert" className="text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>No se pudieron leer los CCP timbrados recibidos. Recarga la pantalla; si sigue igual, avisa a soporte.</p>
       )}
       {accionesCcp && ccp && <SeccionCcp activa={ccp.activa} filas={ccp.filas} ver={ver} acciones={accionesCcp} />}
     </MarcoPagina>

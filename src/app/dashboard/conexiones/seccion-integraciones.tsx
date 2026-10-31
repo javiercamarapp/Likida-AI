@@ -71,21 +71,21 @@ export function SeccionIntegraciones({ integraciones }: { integraciones: Integra
                     </span>
                   </div>
 
-                  <p className="text-[12.5px] mt-1" style={{ color: 'var(--muted)' }}>{i.queHace}</p>
+                  <p className="text-[12px] mt-1" style={{ color: 'var(--muted)' }}>{i.queHace}</p>
 
                   <dl className="mt-2 space-y-1.5">
                     <div>
-                      <dt className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>
+                      <dt className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>
                         Cómo conecta hoy
                       </dt>
-                      <dd className="text-[12.5px] mt-0.5">{i.comoConectaHoy}</dd>
+                      <dd className="text-[12px] mt-0.5">{i.comoConectaHoy}</dd>
                     </div>
                     {i.paraSubirDeEscalon && (
                       <div>
-                        <dt className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>
+                        <dt className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>
                           Para dar el siguiente paso
                         </dt>
-                        <dd className="text-[12.5px] mt-0.5" style={{ color: 'var(--muted)' }}>
+                        <dd className="text-[12px] mt-0.5" style={{ color: 'var(--muted)' }}>
                           {i.paraSubirDeEscalon}
                         </dd>
                       </div>
@@ -98,7 +98,7 @@ export function SeccionIntegraciones({ integraciones }: { integraciones: Integra
         ))}
       </div>
 
-      <p className="text-[11.5px] mt-3" style={{ color: 'var(--faint)' }}>
+      <p className="text-[11px] mt-3" style={{ color: 'var(--faint)' }}>
         ¿Falta el sistema que tú usas? Es exactamente lo que se conecta contigo en el arranque —
         escríbenos desde el Centro de ayuda.
       </p>

@@ -6,7 +6,7 @@ import { Search, ShieldCheck, ShieldAlert, ExternalLink, Code2 } from 'lucide-re
 import {
   buscarNormas, PUEDE_AFIRMARSE, JERARQUIA_ROTULO, type Norma,
 } from '@/lib/likida/normas/tipos';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 
 /**
@@ -79,16 +79,16 @@ export function VistaConocimiento({ normas }: { normas: readonly Norma[] }) {
                     </span>
                   </div>
 
-                  <h2 className="font-display text-[14px] font-semibold mt-1.5">
+                  <TituloRecuadro info="conocimiento.ficha" className="mt-1.5">
                     {n.titulo ?? n.instrumento}
-                  </h2>
-                  <p className="text-[12.5px] mt-0.5" style={{ color: 'var(--muted)' }}>
+                  </TituloRecuadro>
+                  <p className="text-[12px] mt-0.5" style={{ color: 'var(--muted)' }}>
                     {n.instrumento}
                     {n.articulo_o_regla ? ` · Art./regla ${n.articulo_o_regla}` : ''}
                   </p>
 
                   {v && (
-                    <p className="text-[11.5px] mt-1.5" style={{ color: v.puede ? 'var(--faint)' : 'var(--warn)' }}>
+                    <p className="text-[11px] mt-1.5" style={{ color: v.puede ? 'var(--faint)' : 'var(--warn)' }}>
                       {v.nota}
                     </p>
                   )}
