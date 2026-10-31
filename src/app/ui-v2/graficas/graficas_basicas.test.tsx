@@ -3,10 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { AreaMini, BarraApilada, Bullet, DonaMini, Sparkline } from './index';
 
 describe('gráficas básicas', () => {
-  it('Sparkline: 60×22 y con <2 puntos válidos no pinta una raya falsa', () => {
+  it('Sparkline: 72×24 y con <2 puntos válidos no pinta una raya falsa', () => {
     const h = renderToStaticMarkup(<Sparkline valores={[1, 3, 2, 5]} matiz={2} />);
-    expect(h).toContain('width="60"');
-    expect(h).toContain('height="22"');
+    expect(h).toContain('width="72"');
+    expect(h).toContain('height="24"');
     expect(h).toContain('r="2.25"');
     expect(renderToStaticMarkup(<Sparkline valores={[4]} />)).toBe('');
     expect(renderToStaticMarkup(<Sparkline valores={[null, 3, null]} />)).toBe('');
@@ -14,17 +14,16 @@ describe('gráficas básicas', () => {
   it('AreaMini: <2 puntos = celda punteada que conserva el alto; con serie trae tabla accesible y «—» para nulos', () => {
     const v = renderToStaticMarkup(<AreaMini valores={[5]} etiqueta="Serie" alto={140} />);
     expect(v).toContain('mc-vacio');
-    expect(v).toContain('height:140px');
+    expect(v).toContain('height="140"');
     const h = renderToStaticMarkup(<AreaMini valores={[1, null, 3]} etiquetas={['a', 'b', 'c']} etiqueta="Cierres" />);
     expect(h).toContain('aria-label="Cierres"');
-    expect(h).toContain('<td>—</td>');
+    expect(h).toContain('<td class="rv-num">—</td>');
   });
   it('AreaMini: un nulo CORTA el relleno y la línea (no se interpola) y marca el hueco punteado', () => {
     const h = renderToStaticMarkup(<AreaMini valores={[2, 4, null, 6, 8]} etiqueta="Con hueco" />);
     expect(h.match(/fill="url\(#/g)).toHaveLength(2); // un relleno por tramo contiguo, no uno que cubra el hueco
     expect(h).toContain('rv-area__hueco');
-    const linea = /class="rv-area__linea" d="([^"]+)"/.exec(h)![1];
-    expect(linea.match(/M/g)).toHaveLength(2);
+    expect(h.match(/class="rv-area__linea"/g)).toHaveLength(2); // un trazo por tramo contiguo
     const sin = renderToStaticMarkup(<AreaMini valores={[2, 4, 6]} etiqueta="Sin hueco" />);
     expect(sin).not.toContain('rv-area__hueco');
   });

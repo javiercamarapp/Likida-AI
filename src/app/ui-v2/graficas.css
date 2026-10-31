@@ -168,10 +168,6 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 [data-ui="v2"] .rv-kpi__valor { font-size: clamp(18px, 5.2vw, 21px); white-space: nowrap; }
 }
 [data-ui="v2"] .rv-gr { position: relative; margin: 0; color: var(--ink); }
-[data-ui="v2"] .rv-area { display: flex; }
-[data-ui="v2"] .rv-area__ejes { position: relative; flex: none; width: 40px; pointer-events: none; }
-[data-ui="v2"] .rv-area__plot { position: relative; flex: 1 1 auto; min-width: 0; }
-[data-ui="v2"] .rv-area__ejes span { position: absolute; right: 4px; transform: translateY(-50%); font: 400 12px/1 var(--font-sans-ui, inherit); color: var(--muted); font-variant-numeric: tabular-nums; }
 [data-ui="v2"] .rv-gr__rejilla { stroke: var(--gr-rejilla); stroke-width: 1; }
 [data-ui="v2"] .rv-gr__eje { fill: var(--muted); font: 400 12px var(--font-sans-ui, inherit); }
 [data-ui="v2"] .mc-vacio { display: grid; place-items: center; border: 1.5px dotted var(--input); border-radius: 8px; font-size: 13px; color: var(--muted); }
@@ -181,8 +177,6 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 [data-ui="v2"] .rv-spark__punto { fill: var(--cat, var(--ink)); }
 [data-ui="v2"] .rv-area__linea { stroke: var(--cat, var(--ink)); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
 [data-ui="v2"] .rv-area__hueco { stroke: var(--prov-sin-bd); stroke-width: 1.5; stroke-dasharray: 3 4; }
-[data-ui="v2"] .rv-area__aislado { position: absolute; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: var(--cat, var(--ink)); }
-[data-ui="v2"] .rv-area__punto { position: absolute; width: 6.5px; height: 6.5px; margin: -3.25px 0 0 -3.25px; border-radius: 50%; background: var(--cat, var(--ink)); }
 [data-ui="v2"] .rv-dona { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 [data-ui="v2"] .rv-dona__lienzo { position: relative; flex: none; }
 [data-ui="v2"] .rv-dona__pista { stroke: var(--line); }
@@ -226,11 +220,11 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 [data-ui="v2"] .rv-check__trazo { stroke: var(--ok, var(--ink)); stroke-dasharray: 1; stroke-dashoffset: 0; }
 @media (prefers-reduced-motion: no-preference) {
 [data-ui="v2"] .rv-spark__linea { animation: rv-trazo var(--t-draw) var(--ui-ease) both; }
-/* El trazo de la línea NO usa stroke-dasharray: con vector-effect:non-scaling-stroke el guion se mide en pantalla y el
-     pathLength en unidades de usuario, y la línea salía partida. Se revela con un recorte (no toca el dato). */
-[data-ui="v2"] .rv-area__plot svg { animation: rv-revela var(--t-draw) var(--ui-ease) backwards; }
 [data-ui="v2"] .rv-spark__area { animation: rv-fade var(--t-draw) var(--ui-ease) both; }
-[data-ui="v2"] .rv-dona__gajo { animation: rv-fade var(--ui-slow) var(--ui-ease) both; }
+[data-ui="v2"] .rv-area__linea { animation: rv-trazo var(--t-draw) var(--ui-ease) both; }
+[data-ui="v2"] .rv-area__relleno { animation: rv-fade var(--t-draw) ease both; }
+[data-ui="v2"] .rv-area__punto, [data-ui="v2"] .rv-spark__punto:last-child { animation: rv-fade 400ms ease 700ms both; }
+[data-ui="v2"] .rv-dona__gajo { animation: rv-barrido var(--t-sweep) var(--ui-ease) both; }
 [data-ui="v2"] .rv-apilada__tramo,
 [data-ui="v2"] .rv-kpi__segs i { transform-origin: left; animation: rv-crece var(--t-bar) var(--ui-ease) both; }
 [data-ui="v2"] .rv-bullet__relleno { transform-origin: left; animation: rv-crece var(--t-bar) var(--ui-ease) both; }
@@ -258,19 +252,30 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 [data-ui="v2"] .rv-kpi__enlace { color: var(--muted); text-decoration: none; }
 [data-ui="v2"] .rv-kpi__enlace:hover { color: var(--ink); text-decoration: underline; }
 
-/* ── Columnas semanales (Resumen v2): ESTILO §7 ─────────────────────────────────────────────────────────────────── */
+/* ── Columnas interactivas (Resumen v2): ESTILO §7 + Vexa `ColumnPlot` ──────────────────────────────────────────── */
 [data-ui="v2"] .rv-colum { display: flex; flex-direction: column; gap: 6px; margin: 0; min-width: 0; height: 100%; }
-[data-ui="v2"] .rv-colum__svg { display: block; width: 100%; flex: 1 1 140px; min-height: 140px; overflow: visible; }
-[data-ui="v2"] .rv-colum__base { stroke: var(--line2); stroke-width: 1; }
-[data-ui="v2"] .rv-colum__barra { fill: var(--cat, var(--ink)); transform-box: fill-box; transform-origin: bottom; }
-[data-ui="v2"] .rv-colum__barra[data-parcial] { fill: url(#rv-colum-trama); stroke: var(--cat, var(--ink)); stroke-width: 1; vector-effect: non-scaling-stroke; }
-[data-ui="v2"] .rv-colum__etqs { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; text-align: center; }
-[data-ui="v2"] .rv-colum__etqs li { display: flex; flex-direction: column; min-width: 0; font-size: 12px; line-height: 1.3; color: var(--muted); }
-[data-ui="v2"] .rv-colum__etqs b { font-weight: 600; font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums; }
+[data-ui="v2"] .rv-colum__svg { display: block; max-width: 100%; overflow: visible; outline: none; }
 [data-ui="v2"] .rv-colum--vacio { position: relative; }
+[data-ui="v2"] .rv-colum--vacio .rv-colum__svg { width: 100%; }
+[data-ui="v2"] .rv-colum__base { stroke: var(--chart-eje); stroke-width: 1; }
+[data-ui="v2"] .rv-gr__rejilla { stroke: var(--chart-rejilla); stroke-width: 1; }
+[data-ui="v2"] .rv-gr__marca { font: 500 12px/1 var(--font-sans-ui, inherit); fill: var(--muted); font-variant-numeric: tabular-nums; }
+[data-ui="v2"] .rv-gr__nota { font: 500 12px/1 var(--font-sans-ui, inherit); fill: var(--muted); }
+[data-ui="v2"] .rv-gr__directa { font: 600 12px/1 var(--font-sans-ui, inherit); fill: var(--ink); font-variant-numeric: tabular-nums; }
+[data-ui="v2"] .rv-colum__col { outline: none; }
+[data-ui="v2"] .rv-colum__golpe { fill: transparent; }
+[data-ui="v2"] .rv-colum__col[data-activa] .rv-colum__golpe { fill: var(--chart-rejilla); }
+[data-ui="v2"] .rv-colum__col:focus-visible .rv-colum__golpe { stroke: var(--ink); stroke-width: 2; }
+[data-ui="v2"] .rv-colum__barra { fill: var(--cat, var(--ink)); transform-box: fill-box; transform-origin: bottom; }
+[data-ui="v2"] .rv-colum[data-tipo="estimado"] .rv-colum__barra { fill-opacity: .6; }
+[data-ui="v2"] .rv-colum[data-tipo="inferido"] .rv-colum__barra { fill-opacity: .42; }
+[data-ui="v2"] .rv-colum__barra[data-parcial] { stroke: var(--cat, var(--ink)); stroke-width: 1; }
+[data-ui="v2"] .rv-colum__trama-fondo { fill: var(--surface); fill-opacity: .55; }
+[data-ui="v2"] .rv-colum__trama-raya { stroke: var(--cat, var(--muted)); stroke-width: 1.4; }
 [data-ui="v2"] .rv-colum__vacio { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 90%; padding: 4px 12px; border: 1.5px dotted var(--input); border-radius: 8px; background: var(--surface); font-size: 13px; color: var(--muted); text-align: center; }
 @media (prefers-reduced-motion: no-preference) {
-  [data-ui="v2"] .rv-colum__barra { animation: rv-crece-y 360ms var(--ui-ease) both; animation-delay: calc(var(--i, 0) * 14ms); }
+  [data-ui="v2"] .rv-colum__barra { animation: rv-crece-y var(--t-bar) var(--ui-ease) both; }
+  [data-ui="v2"] .rv-colum__barra, [data-ui="v2"] .rv-colum__golpe { transition: fill var(--ui-fast) ease; }
   @keyframes rv-crece-y { from { transform: scaleY(0); } }
 }
 
@@ -298,3 +303,110 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 [data-ui="v2"] .rv-kpi__atencion[data-tono="bad"] { background: var(--badbg); color: var(--bad); }
 [data-ui="v2"] .rv-kpi__error { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12px; line-height: 1.4; color: var(--bad); }
 [data-ui="v2"] .rv-kpi__sinbase { font-size: 12px; color: var(--muted); }
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-ui="v2"] .rv-colum__barra[data-r="1"] { animation-delay: 14ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="2"] { animation-delay: 28ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="3"] { animation-delay: 42ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="4"] { animation-delay: 56ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="5"] { animation-delay: 70ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="6"] { animation-delay: 84ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="7"] { animation-delay: 98ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="8"] { animation-delay: 112ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="9"] { animation-delay: 126ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="10"] { animation-delay: 140ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="11"] { animation-delay: 154ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="12"] { animation-delay: 168ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="13"] { animation-delay: 182ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="14"] { animation-delay: 196ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="15"] { animation-delay: 210ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="16"] { animation-delay: 224ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="17"] { animation-delay: 238ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="18"] { animation-delay: 252ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="19"] { animation-delay: 266ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="20"] { animation-delay: 280ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="21"] { animation-delay: 294ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="22"] { animation-delay: 308ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="23"] { animation-delay: 322ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="24"] { animation-delay: 336ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="25"] { animation-delay: 350ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="26"] { animation-delay: 364ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="27"] { animation-delay: 378ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="28"] { animation-delay: 392ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="29"] { animation-delay: 406ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="30"] { animation-delay: 420ms; }
+  [data-ui="v2"] .rv-colum__barra[data-r="31"] { animation-delay: 434ms; }
+}
+
+/* ── Piezas comunes de las gráficas interactivas: plano, cinta móvil, lectura del tooltip, leyenda fina y «Ver como tabla» ── */
+[data-ui="v2"] .rv-gr-plot { position: relative; width: 100%; min-height: 1px; min-width: 0; }
+[data-ui="v2"] .rv-gr-plot svg { display: block; overflow: visible; }
+[data-ui="v2"] .rv-gr-plot svg:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 8px; }
+[data-ui="v2"] .rv-gr-cinta { display: none; margin: 0; }
+[data-ui="v2"] .rv-gt__cab { display: flex; align-items: center; gap: 6px; }
+[data-ui="v2"] .rv-gt__titulo { font: 500 12px/1.4 var(--font-sans-ui, inherit); color: var(--muted); }
+[data-ui="v2"] .rv-gt__chip { display: inline-flex; align-items: center; padding: 0 7px; border-radius: 8px; border: 1px solid var(--line); background: var(--canvas); font: 500 12px/18px var(--font-sans-ui, inherit); color: var(--ink); }
+[data-ui="v2"] .rv-gt__cifra { font: 600 16px/1.25 var(--font-display, inherit); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+[data-ui="v2"] .rv-gt__delta { font: 500 12px/1.4 var(--font-sans-ui, inherit); color: var(--ink); }
+[data-ui="v2"] .rv-gt__delta i { font-style: normal; font-size: 8px; margin-right: 4px; vertical-align: 1px; }
+[data-ui="v2"] .rv-gt__delta small { color: var(--muted); font-size: 12px; }
+[data-ui="v2"] .rv-gt__detalle { color: var(--muted); font-size: 12px; }
+[data-ui="v2"] .rv-gt__tipo { margin-top: 2px; }
+[data-ui="v2"] .rv-leyenda-fina { display: flex; flex-wrap: wrap; gap: 2px 16px; margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+[data-ui="v2"] .rv-leyenda-fina span { display: inline-flex; align-items: center; gap: 6px; }
+[data-ui="v2"] .rv-leyenda-fina b { font: 600 12px var(--font-sans-ui, inherit); }
+[data-ui="v2"] .rv-leyenda-fina__trama { display: inline-block; width: 12px; height: 8px; border-radius: 8px; border: 1px solid var(--muted); background: repeating-linear-gradient(135deg, var(--muted) 0 1px, transparent 1px 4px); }
+[data-ui="v2"] details.rv-tabla-grafica { margin-top: 2px; }
+[data-ui="v2"] details.rv-tabla-grafica > summary { display: inline-flex; align-items: center; min-height: 32px; padding: 2px 8px 2px 4px; border: 0; background: transparent; font-size: 12px; font-weight: 500; color: var(--muted); cursor: pointer; }
+[data-ui="v2"] details.rv-tabla-grafica > summary:hover { color: var(--ink); }
+[data-ui="v2"] details.rv-tabla-grafica > summary:focus-visible, [data-ui="v2"] details.rv-tabla-grafica .rv-tabla-grafica__caja:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 8px; }
+[data-ui="v2"] .rv-tabla-grafica__caja { overflow-x: auto; }
+[data-ui="v2"] .rv-tabla-grafica__caja table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+[data-ui="v2"] .rv-tabla-grafica__caja th, [data-ui="v2"] .rv-tabla-grafica__caja td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+[data-ui="v2"] .rv-tabla-grafica__caja thead th { font-size: 12px; font-weight: 600; color: var(--muted); }
+[data-ui="v2"] .rv-tabla-grafica__caja tbody th { font-weight: 500; }
+[data-ui="v2"] .rv-tabla-grafica__caja .rv-num { text-align: right; }
+@media (max-width: 819px) {
+  [data-ui="v2"] .rv-gr-plot { display: flex; flex-direction: column; }
+  [data-ui="v2"] .rv-gr-plot > svg { touch-action: pan-y; max-width: 100%; height: auto; }
+  [data-ui="v2"] .rv-gr-plot svg text { font-size: 12px; }
+  [data-ui="v2"] .rv-gr-cinta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-height: 40px; padding: 6px 10px; margin: 0 0 4px; border-radius: 8px; background: var(--canvas); color: var(--ink); font-size: 12px; }
+  [data-ui="v2"] .rv-gr-cinta[data-vacia] { align-items: center; color: var(--muted); }
+  [data-ui="v2"] .rv-gr-cinta .rv-gt__cab, [data-ui="v2"] .rv-gr-cinta .rv-gt__tipo { display: inline-flex; margin: 0; }
+}
+@media (forced-colors: active) {
+  [data-ui="v2"] .rv-colum__barra { forced-color-adjust: none; fill: Highlight; }
+  [data-ui="v2"] .rv-colum__golpe { stroke: none; }
+}
+
+/* ── Área interactiva (Vexa `AreaChart`) ── */
+[data-ui="v2"] .rv-area { display: block; }
+[data-ui="v2"] .rv-area__svg { max-width: 100%; outline: none; }
+[data-ui="v2"] .rv-area__linea { stroke-dasharray: 1; stroke-dashoffset: 0; }
+[data-ui="v2"] .rv-area__aislado { fill: var(--cat, var(--ink)); }
+[data-ui="v2"] .rv-area__punto { fill: var(--cat, var(--ink)); stroke: var(--surface); stroke-width: 2; }
+[data-ui="v2"] .rv-area__cruz line { stroke: var(--chart-eje); stroke-width: 1; }
+[data-ui="v2"] .rv-area__activo { fill: var(--cat, var(--ink)); stroke: var(--surface); stroke-width: 2; }
+[data-ui="v2"] .rv-area__ancla { fill: none; pointer-events: none; }
+[data-ui="v2"] .mc-vacio { position: relative; }
+[data-ui="v2"] .mc-vacio > svg { grid-area: 1 / 1; }
+[data-ui="v2"] .mc-vacio > span { grid-area: 1 / 1; }
+@media (forced-colors: active) {
+  [data-ui="v2"] .rv-area__punto, [data-ui="v2"] .rv-area__activo, [data-ui="v2"] .rv-area__aislado { forced-color-adjust: none; fill: Highlight; }
+  [data-ui="v2"] .rv-area__linea { forced-color-adjust: none; stroke: Highlight; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-ui="v2"] .rv-dona__gajo[data-r="1"] { animation-delay: 90ms; }
+  [data-ui="v2"] .rv-dona__gajo[data-r="2"] { animation-delay: 180ms; }
+  [data-ui="v2"] .rv-dona__gajo[data-r="3"] { animation-delay: 270ms; }
+  [data-ui="v2"] .rv-dona__gajo[data-r="4"] { animation-delay: 360ms; }
+}
+
+/* ── Dona: leyenda con cifra exacta y porcentaje; el gajo y su fila se resaltan juntos (hover, toque o foco) ── */
+[data-ui="v2"] .rv-dona__pct { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+[data-ui="v2"] .rv-dona__leyenda li { border-radius: 8px; outline: none; }
+[data-ui="v2"] .rv-dona__leyenda li:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+[data-ui="v2"] .rv-dona__leyenda li[data-activo] { background: var(--soft, var(--canvas)); }
+[data-ui="v2"] .rv-dona[data-hay-activo] .rv-dona__gajo:not([data-activo]) { opacity: .35; }
+[data-ui="v2"] .rv-dona__gajo { transition: opacity var(--ui-fast) ease; }
+[data-ui="v2"] .rv-dona__lienzo { width: 132px; height: 132px; }
