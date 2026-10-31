@@ -1,0 +1,56 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   UI v2 · PIEZAS COMUNES (L7). Casilla, radio, campo, fieldset, archivo, segmentado, pestañas, chip de estado y tabla base.
+   TODA regla cuelga de [data-ui="v2"]. Solo tokens (tokens.css); texto con la escala --t-*; sin azul; animaciones solo bajo
+   prefers-reduced-motion: no-preference. El tooltip vive en overlay.css (es del motor de overlays).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Casilla y radio ─ caja propia de 16 px sobre el control nativo ─────────────────────────────────────────────────── */
+[data-ui="v2"] .rv-marca { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+[data-ui="v2"] .rv-marca__fila { display: flex; align-items: center; gap: 9px; min-height: 36px; font-size: var(--t-body); line-height: 1.5; color: var(--ink); cursor: pointer; }
+[data-ui="v2"] .rv-marca__input {
+  appearance: none; -webkit-appearance: none; position: relative; box-sizing: border-box; flex: none; margin: 0; padding: 0;
+  width: 16px; height: 16px; min-width: 16px; min-height: 16px; border: 1px solid var(--input); border-radius: 4px; background: var(--surface); cursor: pointer;
+}
+[data-ui="v2"] .rv-marca--radio .rv-marca__input { border-radius: 50%; }
+[data-ui="v2"] .rv-marca__input::after { content: ""; position: absolute; display: none; }
+/* marca de la casilla */
+[data-ui="v2"] .rv-marca__input:checked,
+[data-ui="v2"] .rv-marca__input:indeterminate { background: var(--marca); border-color: var(--marca); }
+[data-ui="v2"] .rv-marca__input:checked::after { display: block; left: 4px; top: 1px; width: 4px; height: 8px; border: solid var(--marca-fg); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+[data-ui="v2"] .rv-marca__input:indeterminate::after { display: block; left: 3px; top: 6px; width: 8px; height: 0; border-top: 2px solid var(--marca-fg); }
+/* punto del radio */
+[data-ui="v2"] .rv-marca--radio .rv-marca__input:checked { background: var(--surface); border-color: var(--marca); }
+[data-ui="v2"] .rv-marca--radio .rv-marca__input:checked::after { display: block; left: 3px; top: 3px; width: 8px; height: 8px; border: 0; border-radius: 50%; background: var(--marca); transform: none; }
+[data-ui="v2"] .rv-marca__input:hover:not(:disabled) { border-color: var(--ink); }
+[data-ui="v2"] .rv-marca__input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+[data-ui="v2"] .rv-marca__input:disabled { border-style: dashed; cursor: not-allowed; }
+[data-ui="v2"] .rv-marca__input:disabled ~ .rv-marca__etq { color: var(--muted); }
+[data-ui="v2"] .rv-marca__fila:has(.rv-marca__input:disabled) { cursor: not-allowed; }
+[data-ui="v2"] .rv-marca__ayuda { padding-inline-start: 25px; font-size: var(--t-small); color: var(--muted); }
+@media (max-width: 819px) { [data-ui="v2"] .rv-marca__fila { min-height: 44px; } }
+/* Alto contraste forzado: el control vuelve a ser el nativo del sistema. */
+@media (forced-colors: active) {
+  [data-ui="v2"] .rv-marca__input { appearance: auto; -webkit-appearance: auto; forced-color-adjust: auto; }
+  [data-ui="v2"] .rv-marca__input::after { display: none !important; }
+}
+
+/* ── Campo: etiqueta, ayuda, error ─────────────────────────────────────────────────────────────────────────────────── */
+[data-ui="v2"] .rv-campo { display: grid; gap: 6px; min-width: 0; }
+[data-ui="v2"] .rv-campo__etq { font-size: var(--t-small); font-weight: 500; color: var(--ink2); }
+[data-ui="v2"] .rv-campo__obl { font-weight: 400; color: var(--muted); }
+[data-ui="v2"] .rv-campo__ayuda { font-size: var(--t-small); color: var(--muted); }
+[data-ui="v2"] .rv-campo__error { display: flex; align-items: flex-start; gap: 6px; font-size: var(--t-small); line-height: 1.4; color: var(--bad); }
+[data-ui="v2"] .rv-campo__error svg { flex: none; margin-top: 2px; }
+[data-ui="v2"] .rv-campo > [aria-invalid="true"] { border-color: var(--bad); }
+
+/* ── Fieldset / legend ─────────────────────────────────────────────────────────────────────────────────────────────── */
+[data-ui="v2"] .rv-fieldset { display: grid; gap: 12px; min-inline-size: 0; margin: 0; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+[data-ui="v2"] .rv-fieldset .rv-fieldset { background: var(--canvas); }
+[data-ui="v2"] .rv-fieldset__leyenda { max-width: 100%; padding: 0 6px; font-size: var(--t-body); font-weight: 600; line-height: 1.5; color: var(--ink); }
+[data-ui="v2"] .rv-fieldset__ayuda { margin: 0; font-size: var(--t-small); color: var(--muted); }
+
+/* ── Campo de archivo ──────────────────────────────────────────────────────────────────────────────────────────────── */
+[data-ui="v2"] .rv-archivo { box-sizing: border-box; width: 100%; padding: 8px; border: 1px solid var(--input); border-radius: 8px; background: var(--canvas); color: var(--ink); font: 400 var(--t-small)/1.4 var(--font-sans-ui, inherit); }
+[data-ui="v2"] .rv-archivo::file-selector-button { min-height: 32px; margin-inline-end: 12px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font: 500 var(--t-small)/1.25 var(--font-sans-ui, inherit); cursor: pointer; }
+[data-ui="v2"] .rv-archivo:hover::file-selector-button { background: var(--canvas); }
+[data-ui="v2"] .rv-archivo:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
