@@ -189,6 +189,10 @@ jobs:
       - name: Login bajo los grants de la 0947 (authenticated solo lee app_user)
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/pruebas-aislamiento/login_bajo_grants_0947.sql
 
+      # 0949: el rol `nomina` bajo esos mismos grants (producción ya los tiene): lee solo su fila de app_user, 42501 en dinero y operación.
+      - name: Rol nomina bajo los grants de la 0947
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/pruebas-aislamiento/nomina_bajo_grants_0947.sql
+
       # Devuelve a la base efímera los privilegios que había ANTES de la 0947 (producción los tiene revocados): la batería de abajo
       # (verificaciones.sql, set role authenticated, supabase/tests) sigue viendo el mismo estado de grants que las migraciones previas
       # dejaron y prueba RLS como capa independiente. Corre DESPUÉS de capa 0, que demuestra el estado real.
