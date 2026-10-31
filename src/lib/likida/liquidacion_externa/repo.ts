@@ -883,8 +883,8 @@ export async function listarParaExportacion(
 }
 
 // ── Conteos para el rol `nomina` (0949) ─────────────────────────────────────
-// Viven aquí y no en `repo_correo.ts` por la frontera de datos: este archivo es el acceso del módulo y no suma al techo de
-// `frontera_datos_guardiana.test.ts`.
+// Viven aquí, en el acceso a datos del módulo. OJO: el guardián de la frontera solo exime el `repo.ts` de la raíz, así que estas tres
+// llamadas SÍ cuentan contra el techo de `frontera_datos_guardiana.test.ts` (subido de 2,452 a 2,455 por esto).
 
 /** Los seis números que ve Nómina y RH: SOLO conteos (`null` = no se pudo contar, jamás un cero sin medir). */
 export interface ConteosNomina {

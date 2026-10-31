@@ -28,6 +28,10 @@ const m = vi.hoisted(() => {
     contarParaNomina: vi.fn(async () => ({ recibidosHoy: 1, enviados: 2, entregados: 3, rebotados: 4, retenidos: 5, sinPoliza: 6 })),
     leerFlash: vi.fn(async () => ({})),
     canal: vi.fn(async () => 'correo'),
+    efectos: {
+      reintentar: vi.fn(async () => 'x'), copia: vi.fn(async () => ({})), reavisar: vi.fn(async () => 'x'), reenviar: vi.fn(async () => ({ estado: 'reenviado' })),
+      liberar: vi.fn(async () => ({ estado: 'liberado' })), importar: vi.fn(async () => ({})), guardarEstrategia: vi.fn(async () => {}),
+    },
   };
 });
 
@@ -43,7 +47,8 @@ vi.mock('@/lib/likida/analytics', () => ({
 vi.mock('@/lib/likida/config', () => ({ getConfig: m.getConfig }));
 vi.mock('@/lib/likida/costos', () => ({ traerResumenCostoIaTenant: m.traerResumenCostoIaTenant }));
 vi.mock('@/lib/likida/agentes/corridas', () => ({ ultimasCorridas: m.ultimasCorridas }));
-vi.mock('@/lib/likida/agentes/estrategia', () => ({ validarUmbralConfianza: () => 0, guardarEstrategiaAgente: async () => {} }));
+vi.mock('@/lib/likida/agentes/estrategia', () => ({ validarUmbralConfianza: () => 0, guardarEstrategiaAgente: m.efectos.guardarEstrategia }));
+vi.mock('@/lib/likida/liquidacion_externa/liberar_envio', () => ({ liberarEnvio: m.efectos.liberar }));
 vi.mock('@/lib/likida/errores', () => ({ mensajeParaPantalla: () => '' }));
 vi.mock('@/lib/likida/revision', () => ({
   colaRevision: m.colaRevision, leerFiltrosCola: () => ({}), decodificarCursorCola: () => null, listarTerminales: m.listarTerminales,
@@ -55,11 +60,11 @@ vi.mock('@/lib/likida/liquidacion_externa/repo', () => ({
   contarParaNomina: m.contarParaNomina,
 }));
 vi.mock('@/lib/likida/liquidacion_externa/servicio', () => ({
-  reintentarLiquidacionExterna: async () => 'x', reenviarCopiaAJefe: async () => ({}), reavisarDiscrepancia: async () => 'x',
+  reintentarLiquidacionExterna: m.efectos.reintentar, reenviarCopiaAJefe: m.efectos.copia, reavisarDiscrepancia: m.efectos.reavisar,
   canalDeEntregaPorOmision: m.canal,
 }));
-vi.mock('@/lib/likida/liquidacion_externa/reenvio_correo', () => ({ reenviarDesglose: async () => ({ estado: 'reenviado' }) }));
-vi.mock('@/lib/likida/liquidacion_externa/importar_archivo', () => ({ importarLiquidacionesDeArchivo: async () => ({}) }));
+vi.mock('@/lib/likida/liquidacion_externa/reenvio_correo', () => ({ reenviarDesglose: m.efectos.reenviar }));
+vi.mock('@/lib/likida/liquidacion_externa/importar_archivo', () => ({ importarLiquidacionesDeArchivo: m.efectos.importar }));
 vi.mock('@/lib/likida/liquidacion_externa/repo_correo', () => ({
   leerConfigCorreo: m.leerConfigCorreo, listarDesgloses: m.listarDesgloses, entregasDe: m.entregasDe,
   contarParaInsights: m.contarParaInsights, listarExcepciones: m.listarExcepciones,
@@ -134,5 +139,56 @@ describe('un rol que no ve la ruta rebota como siempre', () => {
   it('un encargado (operación, sin dinero) no abre Liquidaciones', async () => {
     m.resolver.mockResolvedValue({ tenantId: 't-1', rol: 'encargado', userId: 'u-e' });
     await expect(pedir()).rejects.toThrow('redirect:/dashboard');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LAS DIEZ ACCIONES DE SERVIDOR: alcanzables por POST directo, así que se sacan de la pantalla del dueño (la que las trae como
+// props), se cambia la sesión a `nomina` y se invocan. Todas deben rechazar y NINGÚN efecto debe ejecutarse.
+// ═══════════════════════════════════════════════════════════════════════════
+const ACCIONES = [
+  'reenviarDesgloseExterno', 'liberarEnvioExterno', 'subirDesglosesExportados', 'subirContactosOperadores', 'buscarFiltro',
+  'reintentarExterna', 'subirLiquidacionesExternas', 'reenviarCopiaExterna', 'reavisarExterna', 'guardarEstrategia',
+];
+
+function funciones(nodo: unknown, vistos = new Set<unknown>(), fuera: Array<(...a: unknown[]) => unknown> = []) {
+  if (!nodo || typeof nodo !== 'object' || vistos.has(nodo) || typeof (nodo as { then?: unknown }).then === 'function') return fuera;
+  vistos.add(nodo);
+  const valores = Array.isArray(nodo) ? nodo : Object.values(nodo as object);
+  for (const v of valores) {
+    if (typeof v === 'function') { if (!fuera.includes(v as never)) fuera.push(v as never); } else funciones(v, vistos, fuera);
+  }
+  return fuera;
+}
+
+describe('las acciones de servidor rechazan a nomina', () => {
+  it('las diez existen, y ninguna opera ni lee cuando la sesión es nomina', async () => {
+    m.resolver.mockResolvedValue({ tenantId: 't-1', rol: 'flota_admin', userId: 'u-1' });
+    const todas: Array<(...a: unknown[]) => unknown> = [];
+    for (const canal of ['whatsapp', 'correo'] as const) {
+      m.canal.mockResolvedValue(canal);
+      // `des_det` abre el detalle de un desglose, que es donde la pantalla del dueño trae reenviar y liberar.
+      funciones(await pedir({ des_det: '0b6f2c1e-7d3a-4c8e-9f10-123456789abc' }), new Set(), todas);
+    }
+    const acciones = todas.filter((f) => ACCIONES.includes(f.name));
+    expect(new Set(acciones.map((f) => f.name))).toEqual(new Set(ACCIONES));
+
+    m.resolver.mockResolvedValue({ tenantId: 't-1', rol: 'nomina', userId: 'u-n' });
+    for (const k of LECTORES) (m[k] as ReturnType<typeof vi.fn>).mockClear();
+    for (const f of Object.values(m.efectos)) f.mockClear();
+    const fd = new FormData();
+    fd.set('id', '0b6f2c1e-7d3a-4c8e-9f10-123456789abc'); fd.set('a', 'todos'); fd.set('motivo', 'manual');
+    for (const accion of acciones) {
+      let rechazo = false;
+      try {
+        const r = await (accion.length >= 2 ? accion({ ok: true }, fd) : accion.name === 'buscarFiltro' ? accion('operador', 'x') : accion(fd));
+        rechazo = !!r && typeof r === 'object' && 'ok' in r && (r as { ok: boolean }).ok === false;
+      } catch {
+        rechazo = true;
+      }
+      expect(rechazo, `${accion.name} no rechazó a nomina`).toBe(true);
+    }
+    for (const [k, f] of Object.entries(m.efectos)) expect(f, k).not.toHaveBeenCalled();
+    expect(m.buscarCatalogo).not.toHaveBeenCalled();
   });
 });
