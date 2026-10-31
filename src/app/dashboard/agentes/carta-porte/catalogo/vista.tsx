@@ -3,13 +3,14 @@
 import { useState, type ReactNode } from 'react';
 import { useActionState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, BookOpen, Download, Plus, Upload } from 'lucide-react';
+import { ArrowLeft, Download, Plus, Upload } from 'lucide-react';
 import { numero as fmtNumero } from '@/lib/formato';
 import { llaveTexto } from '@/lib/likida/carta_porte_docs/catalogos';
 import { plantillaCsv, TIPOS_PLANTILLA, type Registro, type TipoPlantilla } from '@/lib/likida/carta_porte_docs/catalogo_import';
 import { COLUMNAS_CLAVE, ROTULO_COLUMNA, columnasDeFila, filtrarFilas, valoresDeFormulario, type FilasCatalogo } from '@/lib/likida/carta_porte_docs/catalogo_pantalla';
 import { Aviso, BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
 import type { EstadoImportacion } from './actions';
+import { Aviso as AvisoV2, BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
 
 /**
  * LA PANTALLA «CATÁLOGO DEL CLIENTE» (T-A3-22): lo que el agente aprende UNA vez de cada cliente y usa en cada documento.
@@ -262,17 +263,8 @@ export function VistaCatalogo({ clientes, clienteId, catalogo, lecturaFallida = 
   const clientesVisibles = k === '' ? clientes : clientes.filter((c) => llaveTexto(c.nombre).includes(k));
   const vacio = catalogo !== null && catalogo.numero === null && catalogo.productos.length === 0 && catalogo.partes.length === 0;
   return (
-    <main className="max-w-[1100px] mx-auto px-5 py-6 space-y-4">
-      <Link href={`/dashboard/agentes/carta-porte${sufijo}`} className="text-[12.5px] font-medium inline-flex items-center gap-1 hover:opacity-75" style={{ color: 'var(--marca)' }}>
-        <ArrowLeft width={13} height={13} strokeWidth={1.75} /> Volver al Agente de Carta Porte
-      </Link>
-      <header className="space-y-1">
-        <h1 className="font-display text-[19px] font-semibold flex items-center gap-2"><BookOpen width={18} height={18} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />Catálogo del cliente</h1>
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
-          Lo que el agente aprende una vez de cada cliente —sus productos, sus remitentes y destinatarios y su número interno— para no pedirlo en cada documento.
-          Un dato del catálogo nunca pisa lo que una persona escribió en la revisión.
-        </p>
-      </header>
+    <MarcoPagina titulo="Catálogo del cliente" apoyo="Lo que el agente aprende una vez de cada cliente: productos, remitentes y destinatarios y su número interno." acciones={<BotonEnlace tamano="sm" href={`/dashboard/agentes/carta-porte${sufijo}`} icono={<ArrowLeft width={13} height={13} strokeWidth={1.75} />}>Volver al Agente de Carta Porte</BotonEnlace>}>
+      <AvisoV2 tono="info">Un dato del catálogo nunca pisa lo que una persona escribió en la revisión.</AvisoV2>
 
       <Importador ver={ver} importar={acciones.importar} />
 
@@ -320,6 +312,6 @@ export function VistaCatalogo({ clientes, clienteId, catalogo, lecturaFallida = 
           <Tabla tipo="parte" titulo="Remitentes y destinatarios" filas={catalogo.partes} clienteId={elegido.id} ver={ver} acciones={acciones} />
         </>
       )}
-    </main>
+    </MarcoPagina>
   );
 }

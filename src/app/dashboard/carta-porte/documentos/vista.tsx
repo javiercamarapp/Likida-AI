@@ -1,13 +1,13 @@
 import Link from 'next/link';
 import { FileInput, TriangleAlert, Mail, MessageCircle, Upload, Download, RotateCcw, Layers } from 'lucide-react';
-import { EstadoVacio, EstadoError } from '@/app/admin/ui/kit';
-import { BarraPagina } from '../../resumen-visual';
+import { EstadoVacio, EstadoError } from '../../estados';
 import { fechaHoraMx, numero, pesoArchivo, porcentaje, usd4 } from '@/lib/formato';
 import { soloMisCasos } from '@/lib/likida/carta_porte_docs/revisor';
 import { prioridadEstado, ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO } from '@/lib/likida/carta_porte_docs/presentacion';
 import { MINUTOS_CAPTURA_MANUAL_EMBARQUE, type MetricasAgente } from '@/lib/likida/carta_porte_docs/metricas';
 import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_docs/repo';
 import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from './forma_accion';
+import { MarcoPagina, Aviso, BotonEnlace } from '@/app/ui-v2/componentes';
 
 /**
  * LOS DOCUMENTOS DE TUS CLIENTES — la bandeja del Agente de Carta Porte multi-formato.
@@ -119,36 +119,27 @@ export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', 
   usuarioId?: string | null;
 }) {
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina icono={<FileInput width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />} titulo="Documentos de tus clientes" />
-        <div className="px-5 py-5 flex-1 space-y-5">
-          <p className="text-[12.5px] max-w-3xl" style={{ color: 'var(--muted)' }}>
-            Tus clientes mandan la carga en su propio formato. Aquí llegan —por carga manual, por el correo de tu flota o por
-            WhatsApp—, el agente los lee y <strong>una persona revisa y aprueba</strong> lado a lado antes de que nada llegue al viaje.
-            Cada corrección enseña al perfil de ese cliente, así que la siguiente vez se lee sin modelo. Likida no timbra: lo aprobado
-            es un borrador que sigue el camino de siempre hacia el PAC de tu flota.
-          </p>
+    <MarcoPagina titulo="Documentos de clientes" apoyo="Los documentos que mandan tus clientes: el agente los lee y una persona los revisa y aprueba lado a lado." acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/carta-porte${sufijo}`}>Volver a Carta Porte por viaje</BotonEnlace>}>
+      <Aviso tono="info">
+        Tus clientes mandan la carga en su propio formato. Aquí llegan —por carga manual, por el correo de tu flota o por
+        WhatsApp—, el agente los lee y <strong>una persona revisa y aprueba</strong> lado a lado antes de que nada llegue al viaje.
+        Cada corrección enseña al perfil de ese cliente, así que la siguiente vez se lee sin modelo. Likida no timbra: lo aprobado
+        es un borrador que sigue el camino de siempre hacia el PAC de tu flota.
+      </Aviso>
 
-          <Link href={`/dashboard/carta-porte${sufijo}`} className="text-[12px] font-medium hover:opacity-75 inline-block" style={{ color: 'var(--marca)' }}>
-            ← Volver a Carta Porte por viaje
-          </Link>
-
-          {datos === null ? (
-            <EstadoError mensaje="No pude leer los documentos de tu flota. No se pinta una bandeja vacía sobre una base que no contestó: eso diría «no hay nada que revisar» estando ciego." />
-          ) : (
-            <>
-              <Metricas m={datos.metricas} />
-              {acciones.subir && <Subir accion={acciones.subir} clientes={datos.clientes} />}
-              <Bandeja datos={datos} acciones={acciones} sufijo={sufijo} filtroEnvio={filtroEnvio} perfilRestringido={perfilRestringido} soloMios={soloMios} usuarioId={usuarioId} />
-              <Canales buzon={datos.buzon} acciones={acciones} />
-              <Perfiles perfiles={datos.perfiles} acciones={acciones} />
-              <Exportacion configs={datos.configs} acciones={acciones} apiSufijo={apiSufijo} />
-            </>
-          )}
-        </div>
-      </div>
-    </main>
+      {datos === null ? (
+        <EstadoError mensaje="No pude leer los documentos de tu flota. No se pinta una bandeja vacía sobre una base que no contestó: eso diría «no hay nada que revisar» estando ciego." />
+      ) : (
+        <>
+          <Metricas m={datos.metricas} />
+          {acciones.subir && <Subir accion={acciones.subir} clientes={datos.clientes} />}
+          <Bandeja datos={datos} acciones={acciones} sufijo={sufijo} filtroEnvio={filtroEnvio} perfilRestringido={perfilRestringido} soloMios={soloMios} usuarioId={usuarioId} />
+          <Canales buzon={datos.buzon} acciones={acciones} />
+          <Perfiles perfiles={datos.perfiles} acciones={acciones} />
+          <Exportacion configs={datos.configs} acciones={acciones} apiSufijo={apiSufijo} />
+        </>
+      )}
+    </MarcoPagina>
   );
 }
 

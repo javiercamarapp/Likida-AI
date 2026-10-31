@@ -1,5 +1,6 @@
 import { fechaHoraMx } from '@/lib/formato';
-import { EstadoVacio, StatusPill } from '@/app/admin/ui/kit';
+import { StatusPill } from '@/app/admin/ui/kit';
+import { EstadoVacio } from '../estados';
 import type { ReglaEnPantalla } from '@/lib/likida/reglas/repo';
 import { BotonDeRegla, BorrarRegla, FormaFrecuencia, type AccionForma } from './forma';
 

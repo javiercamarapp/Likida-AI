@@ -46,6 +46,8 @@ import { leerPorId } from '@/lib/likida/liquidacion_externa/repo';
 import { hoyMx, inicioDiaMx, finDiaMx } from '@/lib/formato';
 import { cargarDetalle, leerIdDetalle } from './detalle_desglose';
 import { PaginaConteosNomina } from './conteos-nomina';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Liquidación automática' };
 
 export const dynamic = 'force-dynamic';
 // A37-O7-06: las Server Actions de esta página corren bajo el límite de la página. La subida manual de desgloses y la importación

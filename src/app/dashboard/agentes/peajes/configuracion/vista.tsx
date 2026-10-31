@@ -1,13 +1,12 @@
 import Link from 'next/link';
-import { Settings2, ArrowLeft, Upload, Trash2, KeyRound, Inbox, RefreshCw } from 'lucide-react';
-import { BarraPagina } from '../../../resumen-visual';
-import { EstadoVacio } from '@/app/admin/ui/kit';
+import { ArrowLeft, Upload, Trash2, KeyRound, Inbox, RefreshCw } from 'lucide-react';
+import { EstadoVacio } from '../../../estados';
 import { numero } from '@/lib/formato';
+
 // SOLO tipos: los módulos importan supabaseAdmin y no deben entrar al bundle de la vista.
 import type {
   TagVista, CasetaVista, GeocercaVista, MapeoVista, ArchivoIngestaVista, CursoVista,
 } from '@/lib/likida/peajes/datos';
-
 import { SeccionEntradas, type AccionesEntradas, type EntradasVista } from './entradas';
 import { SeccionReglasCobro, type ReglasCobroVista } from './reglas-cobro';
 import { SeccionTarifario, type TarifarioVista } from './tarifario';
@@ -15,6 +14,7 @@ import { SeccionUmbralesAvisos, type UmbralesAvisosVista } from './umbrales-avis
 import { SeccionCruceViajes, type CruceViajesVista } from './cruce-viajes';
 import { SeccionInmovilizadas, type InmovilizadasConfigVista } from './inmovilizadas';
 import { SeccionClasesCobro, type ClasesCobroVista } from './clases-cobro';
+import { MarcoPagina, BotonEnlace } from '@/app/ui-v2/componentes';
 
 type Accion = (fd: FormData) => Promise<void>;
 
@@ -95,38 +95,25 @@ export function VistaConfiguracionPeajes({
   superficie?: { gps: boolean; cursos: boolean };
 }) {
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Settings2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Configuración del conciliador de peajes"
-          derecha={
-            <Link href={`/dashboard/agentes/peajes${sufijo}`} className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70" style={{ color: 'var(--marca)' }}>
-              <ArrowLeft width={12} height={12} strokeWidth={2} /> Volver al agente
-            </Link>
-          }
-        />
-        <div className="px-5 py-5 flex-1 space-y-4">
-          {aviso && <p role="status" className="card p-3 text-[12.5px]" style={{ color: 'var(--ink)' }}>{aviso}</p>}
-          {error && <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>{error}</p>}
-          {agenteApagado && <p role="status" className="card p-3 text-[12px]" style={{ color: 'var(--warn)' }}>{agenteApagado}</p>}
+    <MarcoPagina titulo="Configuración del conciliador de peajes" apoyo="Buzón, entradas y mapeos con los que el agente concilia el estado de cuenta contra los gastos de los viajes." acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/peajes${sufijo}`} icono={<ArrowLeft width={12} height={12} strokeWidth={2} />}>Volver al agente</BotonEnlace>}>
+      {aviso && <p role="status" className="card p-3 text-[12.5px]" style={{ color: 'var(--ink)' }}>{aviso}</p>}
+      {error && <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>{error}</p>}
+      {agenteApagado && <p role="status" className="card p-3 text-[12px]" style={{ color: 'var(--warn)' }}>{agenteApagado}</p>}
 
-          <SeccionBuzon buzon={buzon} archivos={archivos} acciones={acciones} sufijo={sufijo} />
-          <SeccionEntradas entradas={entradas} acciones={acciones} />
-          <SeccionMapeo mapeos={mapeos} acciones={acciones} />
-          {reglasCobro && <SeccionReglasCobro datos={reglasCobro} />}
-          {clasesCobro && <SeccionClasesCobro datos={clasesCobro} />}
-          {tarifario && <SeccionTarifario datos={tarifario} />}
-          {umbralesAvisos && <SeccionUmbralesAvisos datos={umbralesAvisos} />}
-          {cruceViajes && <SeccionCruceViajes datos={cruceViajes} />}
-          {inmovilizadas && <SeccionInmovilizadas datos={inmovilizadas} />}
-          <SeccionTags tags={tags} unidades={unidades} acciones={acciones} />
-          <SeccionCasetas casetas={casetas} acciones={acciones} />
-          {(superficie?.gps ?? true) && <SeccionGeocercas geocercas={geocercas} tipos={tiposGeocerca} acciones={acciones} />}
-          {(superficie?.cursos ?? true) && <SeccionCursos cursos={cursos} unidades={unidades} convenios={convenios} acciones={acciones} />}
-        </div>
-      </div>
-    </main>
+      <SeccionBuzon buzon={buzon} archivos={archivos} acciones={acciones} sufijo={sufijo} />
+      <SeccionEntradas entradas={entradas} acciones={acciones} />
+      <SeccionMapeo mapeos={mapeos} acciones={acciones} />
+      {reglasCobro && <SeccionReglasCobro datos={reglasCobro} />}
+      {clasesCobro && <SeccionClasesCobro datos={clasesCobro} />}
+      {tarifario && <SeccionTarifario datos={tarifario} />}
+      {umbralesAvisos && <SeccionUmbralesAvisos datos={umbralesAvisos} />}
+      {cruceViajes && <SeccionCruceViajes datos={cruceViajes} />}
+      {inmovilizadas && <SeccionInmovilizadas datos={inmovilizadas} />}
+      <SeccionTags tags={tags} unidades={unidades} acciones={acciones} />
+      <SeccionCasetas casetas={casetas} acciones={acciones} />
+      {(superficie?.gps ?? true) && <SeccionGeocercas geocercas={geocercas} tipos={tiposGeocerca} acciones={acciones} />}
+      {(superficie?.cursos ?? true) && <SeccionCursos cursos={cursos} unidades={unidades} convenios={convenios} acciones={acciones} />}
+    </MarcoPagina>
   );
 }
 

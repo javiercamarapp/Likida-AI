@@ -5,6 +5,8 @@ import { leerSenalesAsistente } from '@/lib/likida/asistente/senales';
 import { sufijoTenant } from '../sufijo';
 import type { IdPaso } from '@/lib/likida/asistente/pasos_cinco_agentes';
 import { VistaPuestaEnMarcha } from './vista';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Puesta en marcha' };
 
 const PASOS: readonly IdPaso[] = ['equipo', 'tms', 'correo', 'catalogos', 'carta_porte', 'simulacro', 'whatsapp', 'peajes', 'vigia_conductor', 'legal'];
 

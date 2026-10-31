@@ -1,9 +1,10 @@
 'use client';
 
+import { MarcoPagina } from '@/app/ui-v2/componentes';
 import Link from 'next/link';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { Download, PackageCheck, TriangleAlert, Upload } from 'lucide-react';
+import { Download, TriangleAlert, Upload } from 'lucide-react';
 import { AvisoResultado } from '../../../../admin/ui/aviso-resultado';
 import {
   ETIQUETA_DOCS, ETIQUETA_ESTADO, ROTULO_DERIVADO,
@@ -224,29 +225,19 @@ function Tablero({ r }: { r: ResumenImportacion }) {
 
 export function VistaImportacionVigia({ sufijo, accion }: { sufijo: string; accion: AccionImportacion }) {
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <div className="px-5 h-11 flex items-center justify-between gap-3 border-b shrink-0" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}>
-          <div className="flex items-center gap-2 text-[13px] font-medium min-w-0">
-            <PackageCheck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} aria-hidden />
-            <span className="truncate">Estatus de importación</span>
-          </div>
-        </div>
-        <div className="px-5 py-5 flex-1 space-y-4">
-          <nav aria-label="Volver" className="text-[12.5px]">
-            <Link href={`/dashboard/agentes/vigia${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Volver a servicio al cliente</Link>
-          </nav>
+    <MarcoPagina titulo="Estatus de importación" apoyo="Sube el programa del día y ve el estatus de cada viaje, derivado del archivo.">
+      <nav aria-label="Volver" className="text-[12.5px]">
+        <Link href={`/dashboard/agentes/vigia${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Volver a servicio al cliente</Link>
+      </nav>
 
-          <p role="note" className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--canvas)' }} data-testid="rotulo">
-            <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />{ROTULO_DERIVADO}
-          </p>
+      <p role="note" className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--canvas)' }} data-testid="rotulo">
+        <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />{ROTULO_DERIVADO}
+      </p>
 
-          <section className="card p-4 space-y-3" aria-labelledby="importacion-subir">
-            <h2 id="importacion-subir" className="font-display text-[15px] font-semibold">Subir el programa del día</h2>
-            <Forma accion={accion} />
-          </section>
-        </div>
-      </div>
-    </main>
+      <section className="card p-4 space-y-3" aria-labelledby="importacion-subir">
+        <h2 id="importacion-subir" className="font-display text-[15px] font-semibold">Subir el programa del día</h2>
+        <Forma accion={accion} />
+      </section>
+    </MarcoPagina>
   );
 }

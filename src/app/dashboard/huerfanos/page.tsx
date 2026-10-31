@@ -12,6 +12,8 @@ import { contarHuerfanosPendientes } from '@/lib/likida/repo';
 import { logger } from '@/lib/logger';
 import { sufijoTenant } from '../sufijo';
 import { VistaHuerfanos } from './vista';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Comprobantes sin viaje' };
 
 export const dynamic = 'force-dynamic';
 

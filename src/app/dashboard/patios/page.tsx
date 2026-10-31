@@ -12,6 +12,8 @@ import {
 import { sufijoTenant } from '../sufijo';
 import { VistaPatios, type FilaPatio, type FilaJefe } from './vista';
 import type { ResultadoForma } from './formas';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Patios' };
 
 export const dynamic = 'force-dynamic';
 

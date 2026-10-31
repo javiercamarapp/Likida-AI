@@ -3,16 +3,17 @@ import type { UnidadRow, UnidadCruda } from '@/lib/likida/operacion';
 import { clasificarVigencia, avisoVigencias, DIAS_AVISO, type ConteoVigencias, type EstadoVigencia } from '@/lib/likida/vigencias';
 import { numero } from '@/lib/formato';
 import Link from 'next/link';
-import { EstadoVacio } from '@/app/admin/ui/kit';
+import { EstadoVacio } from '../estados';
 import { urlRegistro, type PaginaRegistroUI } from '../paginar-registro';
 import { FiltroRegistro } from '../registro-filtro';
-import { BarraPagina } from '../resumen-visual';
+
 // El Plegable es el mismo `<details>` de clientes — no hay una segunda
 // librería de UI, y un plegable propio sería su segunda copia.
 import { Plegable } from '../clientes/forma';
 import { FormaUnidad, type AccionForma, type ProveedorGps, type PatioOpcion } from './forma';
 import { ImportadorMasivo, type AccionImportacion } from '../importador-masivo';
 import { AccionesEstadoUnidad, ReactivarUnidad, type AccionEstado } from './estado';
+import { MarcoPagina } from '@/app/ui-v2/componentes';
 
 const PILL: Record<EstadoVigencia, { fg: string; bg: string; Icono: typeof ShieldCheck }> = {
   vencido: { fg: 'var(--bad)', bg: 'var(--badbg)', Icono: ShieldAlert },
@@ -145,247 +146,238 @@ export function VistaUnidades({
   const vacio = !hayFiltro && pag.filtrados === 0 && totalBajas === 0;
 
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Truck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Unidades"
-        />
-
-        <div className="px-5 py-5 flex-1 space-y-3">
-          {aviso && (
-            <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl"
-              style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-              <ShieldAlert width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-              <div>
-                <p className="text-[13px] font-medium">Papeles que requieren atención</p>
-                <p className="text-[12.5px] mt-0.5">{aviso}</p>
-              </div>
-            </div>
-          )}
-
-          {/* El alta va ANTES del estado vacío a propósito: con cero unidades,
-              esta sección es la única forma de que deje de haber cero. Solo se
-              pinta a quien puede administrar — el encargado la lee, no la
-              escribe (misma puerta que clientes). */}
-          {puedeEditar && (
-            <section className="card p-4">
-              <h2 className="font-display text-[14px] font-semibold mb-1">Dar de alta una unidad</h2>
-              <p className="text-[11px] mb-2" style={{ color: 'var(--faint)' }}>
-                Con sus vigencias capturadas, Likida avisa qué papel vence primero.
-              </p>
-              <Plegable resumen="Capturar unidad">
-                <FormaUnidad accion={guardar} inicial={INICIAL_VACIO} idPrefijo="alta" proveedoresGps={proveedoresGps}
-                  patios={patios} terminalId="" patioFijo={patioDelJefe !== null} />
-              </Plegable>
-            </section>
-          )}
-
-          {puedeEditar && (
-            <ImportadorMasivo
-              entidad="unidades" accion={cargarUnidades} plantillaCsv={plantillaCsv}
-              archivoPlantilla="plantilla-unidades.csv"
-              columnas="Obligatoria: placas. Número económico (si no lo traes, se usa la placa), marca, modelo, año, vencimiento de póliza, permiso SICT y verificación, y patio."
-              hrefPatios={hrefPatios} patioDelJefe={patioDelJefe} tope={2_000}
-            />
-          )}
-
-          {/* `unidades` y no `activas`: con todo el parque dado de baja,
-              "todavía no hay unidades dadas de alta" sería falso — y mandaría
-              a capturar de nuevo camiones que ya están en la base, abajo. */}
-          {vacio ? (
-            <EstadoVacio icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-              accion={puedeEditar ? { href: '#importar', texto: 'Cargar mi flota desde Excel' } : undefined}>
-              Todavía no hay unidades dadas de alta. Cuando registres tus tractocamiones con su póliza,
-              permiso SICT y verificación, aquí se ve cuál está por vencer antes de que te pare un inspector.
-              {puedeEditar ? ' Puedes darlas de alta una por una arriba, o cargar toda tu flota de una vez desde un Excel o CSV.' : ''}
-            </EstadoVacio>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-                {([
-                  ['Vencidos', conteos?.vencidos, 'var(--bad)'],
-                  [`Vencen en ${DIAS_AVISO} días`, conteos?.porVencer, 'var(--warn)'],
-                  ['En regla', conteos?.vigentes, 'var(--ok)'],
-                  ['Sin papeles', conteos?.sinDato, 'var(--muted)'],
-                ] as const).map(([rotulo, n, color]) => (
-                  <div key={rotulo} className="card p-3.5">
-                    {/* `—` y no 0 cuando no se pudo contar: un 0 aquí diría
-                        «no hay ninguna vencida», que es la afirmación más cara
-                        que esta pantalla puede hacer en falso. */}
-                    <div className="text-[20px] font-semibold tabular" style={{ color: n !== undefined && n > 0 ? color : 'var(--muted)' }}>
-                      {n === undefined ? '—' : numero(n)}
-                    </div>
-                    <div className="text-[11px] mt-0.5" style={{ color: 'var(--muted)' }}>{rotulo}</div>
-                  </div>
-                ))}
-              </div>
-
-              <FiltroRegistro ruta="/dashboard/unidades" sufijo={sufijo} pagina={pag}
-                sustantivo="unidades" camposOcultos={camposOcultos} />
-
-              {hayFiltro && !totalActivasConocido && (
-                // No se pudo contar el parque entero, así que el «de N» del
-                // pie sería un número inventado. Se dice.
-                <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
-                  No pude contar el parque completo en este momento: el total de al lado es el de las que
-                  coinciden con la búsqueda, no el de la flota.
-                </p>
-              )}
-
-              {pag.filas.length === 0 && (
-                <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
-                  Ninguna unidad coincide con «{pag.q}».
-                </p>
-              )}
-
-              {pag.filas.map((u) => {
-                const v = clasificarVigencia(u.diasAlVencimiento, u.queVence);
-                const p = PILL[v.estado];
-                return (
-                  <section key={u.id} className="card p-4">
-                    <div className="flex items-start gap-3">
-                      <p.Icono width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: p.fg }} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h2 className="font-display text-[14px] font-semibold">{u.numeroEconomico}</h2>
-                          {u.placas && (
-                            <span className="text-[12px] cifra-mono" style={{ color: 'var(--muted)' }}>{u.placas}</span>
-                          )}
-                          <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
-                            style={{ color: 'var(--muted)', background: 'var(--canvas)' }}>
-                            {ESTADO_UNIDAD[u.estado] ?? u.estado}
-                          </span>
-                          {patios.length > 0 && (
-                            <span className="text-[11.5px]" style={{ color: terminalPorUnidad[u.id] ? 'var(--ink2)' : 'var(--faint)' }}>
-                              {nombrePatio.get(terminalPorUnidad[u.id] ?? '') ?? 'Sin patio'}
-                            </span>
-                          )}
-                        </div>
-
-                        {(u.marca || u.modelo || u.anio) && (
-                          <p className="text-[12.5px] mt-0.5" style={{ color: 'var(--muted)' }}>
-                            {[u.marca, u.modelo, u.anio].filter(Boolean).join(' · ')}
-                          </p>
-                        )}
-
-                        <div className="flex items-center gap-2 mt-2 flex-wrap">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium"
-                            style={{ color: p.fg, background: p.bg }}>
-                            {v.rotulo}
-                          </span>
-                          {u.ordenesAbiertas > 0 && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium"
-                              style={{ color: 'var(--warn)', background: 'var(--warnbg)' }}>
-                              <Wrench width={11} height={11} strokeWidth={1.75} />
-                              {u.ordenesAbiertas === 1 ? '1 orden abierta' : `${u.ordenesAbiertas} órdenes abiertas`}
-                            </span>
-                          )}
-                          {u.kmActual !== null && (
-                            <span className="text-[11px] cifra-mono" style={{ color: 'var(--faint)' }}>
-                              {numero(u.kmActual)} km
-                            </span>
-                          )}
-                          {/* El GPS a la vista en la fila: «ligada» y «entrando»
-                              son cosas distintas y se pintan distinto. Sin
-                              dispositivo no se dice nada — no toda flota tiene
-                              rastreo y un «sin GPS» en cada renglón sería ruido. */}
-                          {u.gpsDeviceId && (
-                            <span className="text-[11px] inline-flex items-center gap-1"
-                              style={{ color: u.gpsVistoEn ? 'var(--ok)' : 'var(--muted)' }}>
-                              <Satellite width={11} height={11} strokeWidth={2} />
-                              {u.gpsProveedor}
-                              {/* La FECHA y no «al día»: `gps_visto_en` puede ser
-                                  de hace tres semanas, y «conectado» a secas
-                                  taparía justo a la unidad que dejó de reportar. */}
-                              {u.gpsVistoEn ? ` · última posición ${u.gpsVistoEn.slice(0, 10)}` : ' · ligada, sin posición todavía'}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* UNA forma de edición por página, la de `?editar=`.
-                            Antes cada fila traía la suya plegada: 5,000
-                            formularios servidos para escribir en uno. */}
-                        {puedeEditar && editablePorUnidad[u.id] && (
-                          pag.editando === u.id ? (
-                            <div className="mt-3">
-                              <FormaUnidad accion={guardar} id={u.id} inicial={aInicial(u)} idPrefijo={`u-${u.id}`}
-                                proveedoresGps={proveedoresGps} gpsVistoEn={u.gpsVistoEn}
-                                patios={patios} terminalId={terminalPorUnidad[u.id] ?? ''} patioFijo={patioDelJefe !== null} />
-                              <Link href={urlRegistro('/dashboard/unidades', sufijo, { q: pag.q || null, p: pag.pagina, editar: null })}
-                                className="inline-block mt-2 text-[12px] underline hover:opacity-70 transition-opacity"
-                                style={{ color: 'var(--muted)' }}>
-                                Cerrar
-                              </Link>
-                            </div>
-                          ) : (
-                            <Link href={urlRegistro('/dashboard/unidades', sufijo, { q: pag.q || null, p: pag.pagina, editar: u.id })}
-                              className="inline-block mt-3 text-[12px] underline hover:opacity-70 transition-opacity"
-                              style={{ color: 'var(--muted)' }}>
-                              Editar unidad
-                            </Link>
-                          )
-                        )}
-
-                        {/* El estado operativo NO vive en la forma de edición:
-                            es una acción de un clic sobre un hecho del mundo
-                            ("se fue al taller", "la vendimos"), no un campo que
-                            se captura junto a las placas. Va siempre visible,
-                            no solo en la fila que `?editar=` abrió. */}
-                        {puedeEditar && editablePorUnidad[u.id] && (
-                          <AccionesEstadoUnidad accion={cambiarEstado} unidadId={u.id} estado={u.estado} numeroEconomico={u.numeroEconomico} />
-                        )}
-                      </div>
-                    </div>
-                  </section>
-                );
-              })}
-
-              <p className="text-[11px] pt-1" style={{ color: 'var(--faint)' }}>
-                Se avisa del papel MÁS próximo a vencer de los tres (póliza, permiso SICT, verificación).
-                Una unidad sin fecha capturada sale como &quot;sin papeles&quot;, no como vigente — no sabemos
-                si está en regla, y decir que sí sería inventarlo.
-              </p>
-            </>
-          )}
-
-          {/* ── LAS QUE YA NO ESTÁN EN EL PARQUE ────────────────────────────
-              Aparte y al final: no cuentan en los cuatro contadores de arriba
-              (una póliza vencida de un camión vendido no es un pendiente) ni
-              se ofrecen en Despacho. Pero SE VEN — un activo dado de baja que
-              desaparece de la pantalla se lee como borrado, y no lo está: su
-              historial de viajes y de taller sigue completo. */}
-          {totalBajas > 0 && (
-            <section className="card p-4">
-              <h2 className="font-display text-[14px] font-semibold mb-1">
-                Dadas de baja ({numero(totalBajas)})
-              </h2>
-              <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
-                Fuera del parque: no se ofrecen para viajes nuevos y no cuentan en los papeles de arriba.
-                Su historial se conserva.
-              </p>
-              <ul className="space-y-2">
-                {bajas.map((u) => (
-                  <li key={u.id} className="flex items-start justify-between gap-3 flex-wrap">
-                    <div className="min-w-0">
-                      <span className="text-[13px] font-medium">{u.numeroEconomico}</span>
-                      {u.placas && (
-                        <span className="text-[12px] ml-2 cifra-mono" style={{ color: 'var(--muted)' }}>{u.placas}</span>
-                      )}
-                      {(u.marca || u.modelo || u.anio) && (
-                        <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
-                          {[u.marca, u.modelo, u.anio].filter(Boolean).join(' · ')}
-                        </p>
-                      )}
-                    </div>
-                    {puedeEditar && editablePorUnidad[u.id] && <ReactivarUnidad accion={cambiarEstado} unidadId={u.id} />}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+    <MarcoPagina titulo="Unidades" apoyo="Tus unidades con las vigencias que pide la ley. Lo vencido o por vencer aparece primero.">
+      {aviso && (
+        <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl"
+          style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
+          <ShieldAlert width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+          <div>
+            <p className="text-[13px] font-medium">Papeles que requieren atención</p>
+            <p className="text-[12.5px] mt-0.5">{aviso}</p>
+          </div>
         </div>
-      </div>
-    </main>
+      )}
+
+      {/* El alta va ANTES del estado vacío a propósito: con cero unidades,
+          esta sección es la única forma de que deje de haber cero. Solo se
+          pinta a quien puede administrar — el encargado la lee, no la
+          escribe (misma puerta que clientes). */}
+      {puedeEditar && (
+        <section className="card p-4">
+          <h2 className="font-display text-[14px] font-semibold mb-1">Dar de alta una unidad</h2>
+          <p className="text-[11px] mb-2" style={{ color: 'var(--faint)' }}>
+            Con sus vigencias capturadas, Likida avisa qué papel vence primero.
+          </p>
+          <Plegable resumen="Capturar unidad">
+            <FormaUnidad accion={guardar} inicial={INICIAL_VACIO} idPrefijo="alta" proveedoresGps={proveedoresGps}
+              patios={patios} terminalId="" patioFijo={patioDelJefe !== null} />
+          </Plegable>
+        </section>
+      )}
+
+      {puedeEditar && (
+        <ImportadorMasivo
+          entidad="unidades" accion={cargarUnidades} plantillaCsv={plantillaCsv}
+          archivoPlantilla="plantilla-unidades.csv"
+          columnas="Obligatoria: placas. Número económico (si no lo traes, se usa la placa), marca, modelo, año, vencimiento de póliza, permiso SICT y verificación, y patio."
+          hrefPatios={hrefPatios} patioDelJefe={patioDelJefe} tope={2_000}
+        />
+      )}
+
+      {/* `unidades` y no `activas`: con todo el parque dado de baja,
+          "todavía no hay unidades dadas de alta" sería falso — y mandaría
+          a capturar de nuevo camiones que ya están en la base, abajo. */}
+      {vacio ? (
+        <EstadoVacio icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+          accion={puedeEditar ? { href: '#importar', texto: 'Cargar mi flota desde Excel' } : undefined}>
+          Todavía no hay unidades dadas de alta. Cuando registres tus tractocamiones con su póliza,
+          permiso SICT y verificación, aquí se ve cuál está por vencer antes de que te pare un inspector.
+          {puedeEditar ? ' Puedes darlas de alta una por una arriba, o cargar toda tu flota de una vez desde un Excel o CSV.' : ''}
+        </EstadoVacio>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+            {([
+              ['Vencidos', conteos?.vencidos, 'var(--bad)'],
+              [`Vencen en ${DIAS_AVISO} días`, conteos?.porVencer, 'var(--warn)'],
+              ['En regla', conteos?.vigentes, 'var(--ok)'],
+              ['Sin papeles', conteos?.sinDato, 'var(--muted)'],
+            ] as const).map(([rotulo, n, color]) => (
+              <div key={rotulo} className="card p-3.5">
+                {/* `—` y no 0 cuando no se pudo contar: un 0 aquí diría
+                    «no hay ninguna vencida», que es la afirmación más cara
+                    que esta pantalla puede hacer en falso. */}
+                <div className="text-[20px] font-semibold tabular" style={{ color: n !== undefined && n > 0 ? color : 'var(--muted)' }}>
+                  {n === undefined ? '—' : numero(n)}
+                </div>
+                <div className="text-[11px] mt-0.5" style={{ color: 'var(--muted)' }}>{rotulo}</div>
+              </div>
+            ))}
+          </div>
+
+          <FiltroRegistro ruta="/dashboard/unidades" sufijo={sufijo} pagina={pag}
+            sustantivo="unidades" camposOcultos={camposOcultos} />
+
+          {hayFiltro && !totalActivasConocido && (
+            // No se pudo contar el parque entero, así que el «de N» del
+            // pie sería un número inventado. Se dice.
+            <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+              No pude contar el parque completo en este momento: el total de al lado es el de las que
+              coinciden con la búsqueda, no el de la flota.
+            </p>
+          )}
+
+          {pag.filas.length === 0 && (
+            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+              Ninguna unidad coincide con «{pag.q}».
+            </p>
+          )}
+
+          {pag.filas.map((u) => {
+            const v = clasificarVigencia(u.diasAlVencimiento, u.queVence);
+            const p = PILL[v.estado];
+            return (
+              <section key={u.id} className="card p-4">
+                <div className="flex items-start gap-3">
+                  <p.Icono width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: p.fg }} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="font-display text-[14px] font-semibold">{u.numeroEconomico}</h2>
+                      {u.placas && (
+                        <span className="text-[12px] cifra-mono" style={{ color: 'var(--muted)' }}>{u.placas}</span>
+                      )}
+                      <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
+                        style={{ color: 'var(--muted)', background: 'var(--canvas)' }}>
+                        {ESTADO_UNIDAD[u.estado] ?? u.estado}
+                      </span>
+                      {patios.length > 0 && (
+                        <span className="text-[11.5px]" style={{ color: terminalPorUnidad[u.id] ? 'var(--ink2)' : 'var(--faint)' }}>
+                          {nombrePatio.get(terminalPorUnidad[u.id] ?? '') ?? 'Sin patio'}
+                        </span>
+                      )}
+                    </div>
+
+                    {(u.marca || u.modelo || u.anio) && (
+                      <p className="text-[12.5px] mt-0.5" style={{ color: 'var(--muted)' }}>
+                        {[u.marca, u.modelo, u.anio].filter(Boolean).join(' · ')}
+                      </p>
+                    )}
+
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium"
+                        style={{ color: p.fg, background: p.bg }}>
+                        {v.rotulo}
+                      </span>
+                      {u.ordenesAbiertas > 0 && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium"
+                          style={{ color: 'var(--warn)', background: 'var(--warnbg)' }}>
+                          <Wrench width={11} height={11} strokeWidth={1.75} />
+                          {u.ordenesAbiertas === 1 ? '1 orden abierta' : `${u.ordenesAbiertas} órdenes abiertas`}
+                        </span>
+                      )}
+                      {u.kmActual !== null && (
+                        <span className="text-[11px] cifra-mono" style={{ color: 'var(--faint)' }}>
+                          {numero(u.kmActual)} km
+                        </span>
+                      )}
+                      {/* El GPS a la vista en la fila: «ligada» y «entrando»
+                          son cosas distintas y se pintan distinto. Sin
+                          dispositivo no se dice nada — no toda flota tiene
+                          rastreo y un «sin GPS» en cada renglón sería ruido. */}
+                      {u.gpsDeviceId && (
+                        <span className="text-[11px] inline-flex items-center gap-1"
+                          style={{ color: u.gpsVistoEn ? 'var(--ok)' : 'var(--muted)' }}>
+                          <Satellite width={11} height={11} strokeWidth={2} />
+                          {u.gpsProveedor}
+                          {/* La FECHA y no «al día»: `gps_visto_en` puede ser
+                              de hace tres semanas, y «conectado» a secas
+                              taparía justo a la unidad que dejó de reportar. */}
+                          {u.gpsVistoEn ? ` · última posición ${u.gpsVistoEn.slice(0, 10)}` : ' · ligada, sin posición todavía'}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* UNA forma de edición por página, la de `?editar=`.
+                        Antes cada fila traía la suya plegada: 5,000
+                        formularios servidos para escribir en uno. */}
+                    {puedeEditar && editablePorUnidad[u.id] && (
+                      pag.editando === u.id ? (
+                        <div className="mt-3">
+                          <FormaUnidad accion={guardar} id={u.id} inicial={aInicial(u)} idPrefijo={`u-${u.id}`}
+                            proveedoresGps={proveedoresGps} gpsVistoEn={u.gpsVistoEn}
+                            patios={patios} terminalId={terminalPorUnidad[u.id] ?? ''} patioFijo={patioDelJefe !== null} />
+                          <Link href={urlRegistro('/dashboard/unidades', sufijo, { q: pag.q || null, p: pag.pagina, editar: null })}
+                            className="inline-block mt-2 text-[12px] underline hover:opacity-70 transition-opacity"
+                            style={{ color: 'var(--muted)' }}>
+                            Cerrar
+                          </Link>
+                        </div>
+                      ) : (
+                        <Link href={urlRegistro('/dashboard/unidades', sufijo, { q: pag.q || null, p: pag.pagina, editar: u.id })}
+                          className="inline-block mt-3 text-[12px] underline hover:opacity-70 transition-opacity"
+                          style={{ color: 'var(--muted)' }}>
+                          Editar unidad
+                        </Link>
+                      )
+                    )}
+
+                    {/* El estado operativo NO vive en la forma de edición:
+                        es una acción de un clic sobre un hecho del mundo
+                        ("se fue al taller", "la vendimos"), no un campo que
+                        se captura junto a las placas. Va siempre visible,
+                        no solo en la fila que `?editar=` abrió. */}
+                    {puedeEditar && editablePorUnidad[u.id] && (
+                      <AccionesEstadoUnidad accion={cambiarEstado} unidadId={u.id} estado={u.estado} numeroEconomico={u.numeroEconomico} />
+                    )}
+                  </div>
+                </div>
+              </section>
+            );
+          })}
+
+          <p className="text-[11px] pt-1" style={{ color: 'var(--faint)' }}>
+            Se avisa del papel MÁS próximo a vencer de los tres (póliza, permiso SICT, verificación).
+            Una unidad sin fecha capturada sale como &quot;sin papeles&quot;, no como vigente — no sabemos
+            si está en regla, y decir que sí sería inventarlo.
+          </p>
+        </>
+      )}
+
+      {/* ── LAS QUE YA NO ESTÁN EN EL PARQUE ────────────────────────────
+          Aparte y al final: no cuentan en los cuatro contadores de arriba
+          (una póliza vencida de un camión vendido no es un pendiente) ni
+          se ofrecen en Despacho. Pero SE VEN — un activo dado de baja que
+          desaparece de la pantalla se lee como borrado, y no lo está: su
+          historial de viajes y de taller sigue completo. */}
+      {totalBajas > 0 && (
+        <section className="card p-4">
+          <h2 className="font-display text-[14px] font-semibold mb-1">
+            Dadas de baja ({numero(totalBajas)})
+          </h2>
+          <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+            Fuera del parque: no se ofrecen para viajes nuevos y no cuentan en los papeles de arriba.
+            Su historial se conserva.
+          </p>
+          <ul className="space-y-2">
+            {bajas.map((u) => (
+              <li key={u.id} className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="min-w-0">
+                  <span className="text-[13px] font-medium">{u.numeroEconomico}</span>
+                  {u.placas && (
+                    <span className="text-[12px] ml-2 cifra-mono" style={{ color: 'var(--muted)' }}>{u.placas}</span>
+                  )}
+                  {(u.marca || u.modelo || u.anio) && (
+                    <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+                      {[u.marca, u.modelo, u.anio].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
+                </div>
+                {puedeEditar && editablePorUnidad[u.id] && <ReactivarUnidad accion={cambiarEstado} unidadId={u.id} />}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </MarcoPagina>
   );
 }

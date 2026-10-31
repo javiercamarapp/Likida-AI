@@ -3,7 +3,7 @@ import type { Entrega } from '@/lib/likida/buzon/entrega_repo';
 import type { Recepcion, ConteoBuzon } from '@/lib/likida/buzon/repo';
 import type { ConfigEntrega } from '@/lib/likida/buzon/entrega_pura';
 import { mxn, numero, fechaHoraMx, pesoArchivo } from '@/lib/formato';
-import { EstadoVacio } from '@/app/admin/ui/kit';
+import { EstadoVacio } from '../../estados';
 import type { AccionProveedores } from './controles';
 import { FormaEntrega, BotonEnviarAhora, BotonesLote, BotonDescartar, BotonVerPdf } from './controles_buzon';
 

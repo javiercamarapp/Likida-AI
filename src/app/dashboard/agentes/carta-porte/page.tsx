@@ -15,6 +15,8 @@ import { VistaAgenteCartaPorte, type BuzonCartaPorteVista } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { FichaCorridas } from '../ficha-corridas';
 import { Bloque, EsqTabla } from '../../bloque';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Carta Porte en automático' };
 
 export const dynamic = 'force-dynamic';
 

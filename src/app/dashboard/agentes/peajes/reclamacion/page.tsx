@@ -25,6 +25,8 @@ import { MOTIVOS_VISIBLES_CINCO_AGENTES } from '@/lib/likida/peajes/reclamacion_
 import { filasDeCandidatos, filtrosAQuery, normalizarFiltros, tablaDeCandidatos, type TablaCandidatos, type AccionCandidato } from '@/lib/likida/peajes/candidatos_tabla';
 import { aplicablesDelFiltro, ejecutarAccionDeFormulario } from '../acciones-candidatos';
 import { VistaReclamacionPeajes } from './vista';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Reporte de reclamación de peajes' };
 
 export const dynamic = 'force-dynamic';
 

@@ -1,15 +1,15 @@
 import Link from 'next/link';
-import {
-  MessagesSquare, Send, CheckCheck, Flag, MapPin, Package, Truck, Sparkles, Ban,
-} from 'lucide-react';
+import { Send, CheckCheck, Flag, MapPin, Package, Truck, Sparkles, Ban } from 'lucide-react';
 import type { EventoConductor } from '@/lib/likida/analytics';
 import { HORAS_PARA_ESCALAR } from '@/lib/likida/escalar_viaje';
 import { numero, fechaCorta } from '@/lib/formato';
-import { BarraPagina } from '../../resumen-visual';
 import { Bloque, Barra, EsqTabla } from '../../bloque';
 import { esFolioSimulado } from '@/lib/likida/conductor/tablero';
 import { EtiquetaSimulado } from './tablero-hitos';
-import { MENSAJE_SIN_LINEA_BASE, type Cifra, type InsightsConductor, type KpiPiloto } from '@/lib/likida/conductor/insights';
+import { MENSAJE_SIN_LINEA_BASE, type Cifra as CifraDato, type InsightsConductor, type KpiPiloto } from '@/lib/likida/conductor/insights';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
+import { MarcoPagina } from '@/app/ui-v2/componentes';
 
 export interface EsperaAceptar {
   id: string;
@@ -41,6 +41,7 @@ export interface ConteosConductores {
   /** En seguimiento del agente por importación, no por el chofer. Opcional:
    *  un origen que no lo manda no pinta la tarjeta. */
   importados?: number | null;
+
   /** Tiempo medio avisado → aceptó, SOLO del chofer (T-A5-06). `null` = no se
    *  pudo leer; `minutos: null` = ningún viaje medible. Opcional: un origen que
    *  no lo manda no pinta la tarjeta. */
@@ -98,70 +99,62 @@ export function VistaAgenteConductores({
   notificaciones?: React.ReactNode;
 }) {
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<MessagesSquare width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Comunicación con operadores"
-        />
-        <div className="px-5 py-5 flex-1 space-y-4">
+    <MarcoPagina titulo="Comunicación con operadores" apoyo="La cola de aceptación por WhatsApp, lo que el agente selló y lo que entiende de lo que escriben tus operadores.">
 
-          {tablero}
-          <nav aria-label="Herramientas del agente" className="flex flex-wrap gap-2 text-[12.5px]">
-            <Link href={`/dashboard/agentes/conductores/sitios${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Catálogo de sitios (clientes, plantas y andenes)</Link>
-            <Link href={`/dashboard/agentes/conductores/estadias${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Estadías en andén</Link>
-            <Link href={`/dashboard/agentes/conductores/configuracion${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Configuración (recordatorios, horario, contactos)</Link>
-          </nav>
+      {tablero}
+      <nav aria-label="Herramientas del agente" className="flex flex-wrap gap-2 text-[12.5px]">
+        <Link href={`/dashboard/agentes/conductores/sitios${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Catálogo de sitios (clientes, plantas y andenes)</Link>
+        <Link href={`/dashboard/agentes/conductores/estadias${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Estadías en andén</Link>
+        <Link href={`/dashboard/agentes/conductores/configuracion${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Configuración (recordatorios, horario, contactos)</Link>
+      </nav>
 
-          <Bloque mensaje="No se pudieron leer los conteos de la flota." esqueleto={<EsqConteos />}>
-            <BloqueConteos kpis={kpis} />
-          </Bloque>
+      <Bloque mensaje="No se pudieron leer los conteos de la flota." esqueleto={<EsqConteos />}>
+        <BloqueConteos kpis={kpis} />
+      </Bloque>
 
-          <div className="grid lg:grid-cols-2 gap-4">
-            <Bloque mensaje="No se pudo leer la cola de aceptación." esqueleto={<EsqTabla filas={4} />}>
-              <BloqueCola cola={cola} sufijo={sufijo} />
-            </Bloque>
-            <Bloque mensaje="No se pudo leer la bitácora." esqueleto={<EsqTabla filas={4} />}>
-              <BloqueBitacora eventos={eventos} />
-            </Bloque>
-          </div>
-
-          {/* Lo que entiende — la verdad del código, como onboarding. Texto
-              fijo: sale con el primer flush, sin esperar a una sola consulta. */}
-          <section className="card p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-              <h2 className="font-display text-[15px] font-semibold">Lo que entiende por WhatsApp</h2>
-            </div>
-            <div className="grid md:grid-cols-3 gap-4 text-[12.5px]">
-              <div>
-                <div className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>El chofer avisa</div>
-                <p style={{ color: 'var(--muted)' }}>
-                  «ya llegué» · «estoy descargando» · «voy de regreso» — cada uno queda
-                  sellado con su hora. Y cada foto de recibo se anota sola en su viaje.
-                </p>
-              </div>
-              <div>
-                <div className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>El jefe despacha</div>
-                <p style={{ color: 'var(--muted)' }}>
-                  «nuevo viaje para Juan Pérez, Puebla a Monterrey, anticipo 8000» —
-                  el agente confirma antes de crear, y al confirmar el chofer recibe su aviso.
-                </p>
-              </div>
-              <div>
-                <div className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>Solo, sin que nadie pida</div>
-                <p style={{ color: 'var(--muted)' }}>
-                  Persigue la aceptación del viaje y a las {HORAS_PARA_ESCALAR} horas sin respuesta
-                  escala al jefe. Corre con las reglas de fábrica — aún no tiene estrategia editable.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {notificaciones}
-        </div>
+      <div className="grid lg:grid-cols-2 gap-4">
+        <Bloque mensaje="No se pudo leer la cola de aceptación." esqueleto={<EsqTabla filas={4} />}>
+          <BloqueCola cola={cola} sufijo={sufijo} />
+        </Bloque>
+        <Bloque mensaje="No se pudo leer la bitácora." esqueleto={<EsqTabla filas={4} />}>
+          <BloqueBitacora eventos={eventos} />
+        </Bloque>
       </div>
-    </main>
+
+      {/* Lo que entiende — la verdad del código, como onboarding. Texto
+          fijo: sale con el primer flush, sin esperar a una sola consulta. */}
+      <section className="card p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Sparkles width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
+          <h2 className="font-display text-[15px] font-semibold">Lo que entiende por WhatsApp</h2>
+        </div>
+        <div className="grid md:grid-cols-3 gap-4 text-[12.5px]">
+          <div>
+            <div className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>El chofer avisa</div>
+            <p style={{ color: 'var(--muted)' }}>
+              «ya llegué» · «estoy descargando» · «voy de regreso» — cada uno queda
+              sellado con su hora. Y cada foto de recibo se anota sola en su viaje.
+            </p>
+          </div>
+          <div>
+            <div className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>El jefe despacha</div>
+            <p style={{ color: 'var(--muted)' }}>
+              «nuevo viaje para Juan Pérez, Puebla a Monterrey, anticipo 8000» —
+              el agente confirma antes de crear, y al confirmar el chofer recibe su aviso.
+            </p>
+          </div>
+          <div>
+            <div className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>Solo, sin que nadie pida</div>
+            <p style={{ color: 'var(--muted)' }}>
+              Persigue la aceptación del viaje y a las {HORAS_PARA_ESCALAR} horas sin respuesta
+              escala al jefe. Corre con las reglas de fábrica — aún no tiene estrategia editable.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {notificaciones}
+    </MarcoPagina>
   );
 }
 
@@ -187,30 +180,30 @@ export async function BloqueConteos({ kpis: p }: { kpis: Promise<ConteosConducto
   const kpis = await p;
   return (
     <div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Kpi titulo="Viajes en curso" valor={kpis.vivos === null ? '—' : numero(kpis.vivos)}
+      <TiraCifras sello={selloHoy('Viajes de la flota')}>
+        <Cifra etiqueta="Viajes en curso" valor={kpis.vivos === null ? '—' : numero(kpis.vivos)}
           nota={kpis.vivos === null ? 'no se pudo contar' : 'abiertos o en cuadre'} />
-        <Kpi titulo="Aceptados" valor={kpis.aceptados === null ? '—' : numero(kpis.aceptados)}
+        <Cifra etiqueta="Aceptados" valor={kpis.aceptados === null ? '—' : numero(kpis.aceptados)}
           nota={kpis.aceptados === null ? 'no se pudo contar' : 'el chofer dijo que sí'} />
         {kpis.importados !== undefined && (
-          <Kpi titulo="En seguimiento por importación" valor={kpis.importados === null ? '—' : numero(kpis.importados)}
+          <Cifra etiqueta="En seguimiento por importación" valor={kpis.importados === null ? '—' : numero(kpis.importados)}
             nota={kpis.importados === null ? 'no se pudo contar' : 'cargados por archivo; no los aceptó el chofer'} />
         )}
         {kpis.tiempoAceptacion !== undefined && (
-          <Kpi titulo="Tiempo en aceptar"
+          <Cifra etiqueta="Tiempo en aceptar"
             valor={kpis.tiempoAceptacion === null || kpis.tiempoAceptacion.minutos === null
               ? '—' : `${numero(Math.round(kpis.tiempoAceptacion.minutos * 10) / 10)} min`}
             nota={kpis.tiempoAceptacion === null ? 'no se pudo medir'
               : kpis.tiempoAceptacion.minutos === null ? 'aún sin aceptaciones del chofer que medir'
                 : `media de ${numero(kpis.tiempoAceptacion.n)} aceptados por el chofer (200 viajes recientes); no cuenta ${numero(kpis.tiempoAceptacion.excluidosImportados)} por importación`} />
         )}
-        <Kpi titulo="Esperan aceptar" valor={kpis.esperan === null ? '—' : numero(kpis.esperan)}
+        <Cifra etiqueta="Esperan aceptar" valor={kpis.esperan === null ? '—' : numero(kpis.esperan)}
           nota={kpis.esperan === null ? 'no se pudo contar' : undefined}
           tono={(kpis.esperan ?? 0) > 0 ? 'warn' : undefined} />
-        <Kpi titulo="Escalados" valor={kpis.escalados === null ? '—' : numero(kpis.escalados)}
+        <Cifra etiqueta="Escalados" valor={kpis.escalados === null ? '—' : numero(kpis.escalados)}
           nota={kpis.escalados === null ? 'no se pudo contar' : 'esperan cambio de chofer'}
           tono={(kpis.escalados ?? 0) > 0 ? 'bad' : undefined} />
-      </div>
+      </TiraCifras>
       {/* FE-5: aquí decía "se calculan sobre los 100 viajes más
           recientes" — un rótulo honesto sobre una cifra inútil (a 50k
           viajes/mes, 100 filas son ~90 minutos). Los cuatro conteos
@@ -340,16 +333,6 @@ function Leyenda({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Kpi({ titulo, valor, nota, tono }: { titulo: string; valor: string; nota?: string; tono?: 'warn' | 'bad' }) {
-  return (
-    <div className="card p-3.5">
-      <div className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{titulo}</div>
-      <div className="cifra-mono text-[20px] font-medium mt-1"
-        style={tono ? { color: `var(--${tono})` } : undefined}>{valor}</div>
-      {nota && <div className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{nota}</div>}
-    </div>
-  );
-}
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -426,7 +409,7 @@ function textoKpiPiloto(k: KpiPiloto): { valor: string; comparacion: string } {
   return { valor, comparacion: partes.join(' · ') };
 }
 
-const valorCifra = (c: Cifra<number | null>) => (c.valor === null ? '—' : numero(c.valor));
+const valorCifra = (c: CifraDato<number | null>) => (c.valor === null ? '—' : numero(c.valor));
 
 /** La tarjeta de arriba del tablero. `insights = null` = no se pudo leer (se dice; no se pinta «0»). */
 export function TarjetaInsights({ insights, dias, discrepancias = null, recortada = false }: {

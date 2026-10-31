@@ -1,18 +1,20 @@
 import Link from 'next/link';
-import { Route, ArrowRight, Bot, BellRing, Flag, Link2, Settings } from 'lucide-react';
+import { ArrowRight, Bot, BellRing, Flag, Link2, Settings } from 'lucide-react';
 import type { LiqRow, DashboardKpis, HechoSolo, DineroObservadoTipo } from '@/lib/likida/analytics';
 import { etiquetaConcepto, type PoliticaGasto } from '@/lib/likida/cuadre/engine';
 import { mxn, mxnCompacto, numero, fechaCorta } from '@/lib/formato';
-import { EstadoVacio } from '@/app/admin/ui/kit';
+import { EstadoVacio } from '../../estados';
 import { CalendarHeatmap, HBars } from '@/app/admin/ui/graficas';
 import { Dona } from '@/app/admin/charts';
-import { BarraPagina } from '../../resumen-visual';
 import { Bloque, Barra, EsqTabla } from '../../bloque';
 import { SeccionCola, type ColaProps } from './cola';
 
 // El rótulo de cada tipo de diferencia vive en `rotulo-diferencia.ts`, tipado
 // contra `TipoDiferencia` completo (M10) — aquí había 3 renglones para ~35 tipos.
 import { rotuloDiferencia as rotuloTipo } from './rotulo-diferencia';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
+import { MarcoPagina } from '@/app/ui-v2/componentes';
 
 /** Los conteos del ciclo. `porRevisar` sale de los KPIs; los otros tres, de
  *  `contarViajes`. Van juntos porque los pinta UNA sola tarjeta. */
@@ -91,69 +93,61 @@ export function VistaAgenteLiquidacion({
   externas?: React.ReactNode;
 }) {
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Route width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Liquidación automática"
-        />
-        <div className="px-5 py-5 flex-1 space-y-4">
+    <MarcoPagina titulo="Liquidación automática" apoyo="El agente arma la liquidación de cada viaje: lo que espera tu firma, lo que hizo solo y el criterio con el que juzga.">
 
-          <Bloque mensaje="No se pudieron leer los indicadores del agente."
-            esqueleto={
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" role="status" aria-label="Cargando">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="card p-3.5">
-                    <Barra alto={10} ancho="55%" />
-                    <div className="mt-1.5"><Barra alto={20} ancho="70%" /></div>
-                    <div className="mt-1"><Barra alto={11} ancho="40%" /></div>
-                  </div>
-                ))}
+      <Bloque mensaje="No se pudieron leer los indicadores del agente."
+        esqueleto={
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" role="status" aria-label="Cargando">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="card p-3.5">
+                <Barra alto={10} ancho="55%" />
+                <div className="mt-1.5"><Barra alto={20} ancho="70%" /></div>
+                <div className="mt-1"><Barra alto={11} ancho="40%" /></div>
               </div>
-            }>
-            <BloqueKpis kpis={kpis} />
-          </Bloque>
-
-          <Bloque mensaje="No se pudo leer la cola de revisión." esqueleto={<EsqTabla filas={5} />}>
-            <SeccionCola {...cola} />
-          </Bloque>
-
-          {externas}
-
-          {/* ── La evidencia de que trabaja ── */}
-          <div className="grid lg:grid-cols-3 gap-4">
-            <Bloque mensaje="No se pudo contar el ciclo." esqueleto={<EsqSeccion alto={190} />}>
-              <BloqueCiclo ciclo={extra.ciclo} />
-            </Bloque>
-            <Bloque mensaje="No se pudo leer la actividad." esqueleto={<EsqSeccion alto={190} />}>
-              <BloqueCierres cierresPorDia={extra.cierresPorDia} />
-            </Bloque>
-            <Bloque mensaje="No se pudo leer el registro." esqueleto={<EsqSeccion alto={190} />}>
-              <BloqueHizoSolo hizoSolo={extra.hizoSolo} />
-            </Bloque>
+            ))}
           </div>
+        }>
+        <BloqueKpis kpis={kpis} />
+      </Bloque>
 
-          {/* ── El criterio con el que juzga ── */}
-          <div className="grid lg:grid-cols-3 gap-4">
-            <Bloque mensaje="No se pudo leer el desglose." esqueleto={<EsqSeccion alto={230} />}>
-              <BloqueDineroObservado porTipo={extra.porTipo} />
-            </Bloque>
-            <Bloque mensaje="No se pudo leer el desglose por operador." esqueleto={<EsqSeccion alto={230} />}>
-              <BloqueOperadores operadores={extra.operadores} />
-            </Bloque>
-            <Bloque mensaje="No se pudo leer la política." esqueleto={<EsqSeccion alto={230} />}>
-              <BloqueReglas politica={extra.politica} puedeVerReglas={extra.puedeVerReglas} sufijo={sufijo} />
-            </Bloque>
-          </div>
+      <Bloque mensaje="No se pudo leer la cola de revisión." esqueleto={<EsqTabla filas={5} />}>
+        <SeccionCola {...cola} />
+      </Bloque>
 
-          <Bloque mensaje="No se pudieron leer los últimos cierres." esqueleto={<EsqTabla filas={5} />}>
-            <BloqueUltimosCierres liquidaciones={liquidaciones} sufijo={sufijo} />
-          </Bloque>
+      {externas}
 
-          {notificaciones}
-        </div>
+      {/* ── La evidencia de que trabaja ── */}
+      <div className="grid lg:grid-cols-3 gap-4">
+        <Bloque mensaje="No se pudo contar el ciclo." esqueleto={<EsqSeccion alto={190} />}>
+          <BloqueCiclo ciclo={extra.ciclo} />
+        </Bloque>
+        <Bloque mensaje="No se pudo leer la actividad." esqueleto={<EsqSeccion alto={190} />}>
+          <BloqueCierres cierresPorDia={extra.cierresPorDia} />
+        </Bloque>
+        <Bloque mensaje="No se pudo leer el registro." esqueleto={<EsqSeccion alto={190} />}>
+          <BloqueHizoSolo hizoSolo={extra.hizoSolo} />
+        </Bloque>
       </div>
-    </main>
+
+      {/* ── El criterio con el que juzga ── */}
+      <div className="grid lg:grid-cols-3 gap-4">
+        <Bloque mensaje="No se pudo leer el desglose." esqueleto={<EsqSeccion alto={230} />}>
+          <BloqueDineroObservado porTipo={extra.porTipo} />
+        </Bloque>
+        <Bloque mensaje="No se pudo leer el desglose por operador." esqueleto={<EsqSeccion alto={230} />}>
+          <BloqueOperadores operadores={extra.operadores} />
+        </Bloque>
+        <Bloque mensaje="No se pudo leer la política." esqueleto={<EsqSeccion alto={230} />}>
+          <BloqueReglas politica={extra.politica} puedeVerReglas={extra.puedeVerReglas} sufijo={sufijo} />
+        </Bloque>
+      </div>
+
+      <Bloque mensaje="No se pudieron leer los últimos cierres." esqueleto={<EsqTabla filas={5} />}>
+        <BloqueUltimosCierres liquidaciones={liquidaciones} sufijo={sufijo} />
+      </Bloque>
+
+      {notificaciones}
+    </MarcoPagina>
   );
 }
 
@@ -176,21 +170,21 @@ function EsqSeccion({ alto }: { alto: number }) {
 async function BloqueKpis({ kpis: pKpis }: { kpis: Promise<DashboardKpis> }) {
   const kpis = await pKpis;
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <TiraCifras sello={selloHoy('Liquidaciones de la flota')}>
       {/* FE-17: es el acumulado HISTÓRICO — a escala 50k son miles de millones y
           `$9,000,000,000.00` no cabe en un cuarto de fila. `mxnCompacto`
           abrevia SOLO a partir del millón; debajo es `mxn()` exacto. */}
-      <Kpi titulo="Monto comprobado" valor={mxnCompacto(kpis.montoComprobado)} nota="histórico" />
-      <Kpi titulo="Tasa de cuadre" valor={`${numero(kpis.tasaCuadre)}%`} nota={`${numero(kpis.viajesLiquidados)} liquidaciones`} />
+      <Cifra etiqueta="Monto comprobado" valor={mxnCompacto(kpis.montoComprobado)} nota="histórico" />
+      <Cifra etiqueta="Tasa de cuadre" valor={`${numero(kpis.tasaCuadre)}%`} nota={`${numero(kpis.viajesLiquidados)} liquidaciones`} />
       {/* BLOQ-6: desde la 0299 hay DOS estados y este KPI es el del MOTOR
           («no pude cuadrarla»), no el de la firma. La cola de abajo cuenta lo
           que espera FIRMA —que incluye las de diferencias— y sale de su
           propia consulta: dos números distintos con su rótulo distinto, en vez
           de dos versiones del mismo. */}
-      <Kpi titulo="Por revisar" valor={numero(kpis.porRevisar)} nota="el agente no pudo cuadrarlas"
+      <Cifra etiqueta="Por revisar" valor={numero(kpis.porRevisar)} nota="el agente no pudo cuadrarlas"
         tono={kpis.porRevisar > 0 ? 'warn' : undefined} />
-      <Kpi titulo="Con diferencias" valor={numero(kpis.conDiferencias)} tono={kpis.conDiferencias > 0 ? 'bad' : undefined} />
-    </div>
+      <Cifra etiqueta="Con diferencias" valor={numero(kpis.conDiferencias)} tono={kpis.conDiferencias > 0 ? 'bad' : undefined} />
+    </TiraCifras>
   );
 }
 
@@ -424,16 +418,6 @@ function Leyenda({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Kpi({ titulo, valor, nota, tono }: { titulo: string; valor: string; nota?: string; tono?: 'warn' | 'bad' }) {
-  return (
-    <div className="card p-3.5">
-      <div className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{titulo}</div>
-      <div className="cifra-mono text-[20px] font-medium mt-1"
-        style={tono ? { color: `var(--${tono})` } : undefined}>{valor}</div>
-      {nota && <div className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{nota}</div>}
-    </div>
-  );
-}
 
 const ESTATUS: Record<string, { rotulo: string; fg: string; bg: string }> = {
   cuadrada: { rotulo: 'Cuadrada', fg: 'var(--ok)', bg: 'var(--okbg)' },

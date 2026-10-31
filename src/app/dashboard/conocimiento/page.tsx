@@ -3,6 +3,8 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { NORMAS } from '@/lib/likida/normas/corpus';
 import { VistaConocimiento } from './vista';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Conocimiento normativo' };
 
 export const dynamic = 'force-dynamic';
 

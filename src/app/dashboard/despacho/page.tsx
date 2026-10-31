@@ -21,6 +21,8 @@ import { VistaDespacho } from './vista';
 import { validarIngreso } from '@/lib/likida/ingreso_viaje';
 import { getConfig } from '@/lib/likida/config';
 import { topeAnticipoParaPanel, evaluarAnticipo, MENSAJE_POLITICA_ILEGIBLE, type TopeAnticipo } from '@/lib/likida/crear_viaje_wa';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Despacho' };
 
 export const dynamic = 'force-dynamic';
 

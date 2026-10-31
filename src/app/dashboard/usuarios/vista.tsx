@@ -1,11 +1,13 @@
 import { Users, ShieldCheck } from 'lucide-react';
-import { EstadoVacio, StatusPill } from '../../admin/ui/kit';
+import { StatusPill } from '../../admin/ui/kit';
+import { EstadoVacio } from '../estados';
 import { fechaMx } from '@/lib/formato';
 import type { OpcionRol } from '@/lib/auth/invitar';
 import { nombreDeRol, detalleDeRol } from '@/lib/auth/roles';
 import {
   FormaInvitar, FormaCambiarRol, FormaDarDeBaja, FormaReactivar, FormaReenviarAcceso, FormaCerrarSesiones, type AccionForma,
 } from './forma';
+import { MarcoPagina } from '@/app/ui-v2/componentes';
 
 export interface UsuarioRow {
   id: string;
@@ -57,15 +59,7 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvi
   acciones: AccionesEquipo;
 }) {
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <Users width={16} height={16} strokeWidth={1.75} />
-        <div>
-          <span className="text-sm font-medium block">Usuarios & Roles</span>
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>Quién entra a este panel y qué puede ver</span>
-        </div>
-      </header>
-
+    <MarcoPagina titulo="Usuarios del equipo" apoyo="Quién entra a este panel y qué puede ver.">
       <div className="glass-panel overflow-hidden">
         {usuarios === null ? (
           <div className="p-8 text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar el equipo.</div>
@@ -145,7 +139,7 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvi
           </>
         )}
       </div>
-    </div>
+    </MarcoPagina>
   );
 }
 

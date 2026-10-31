@@ -1,8 +1,7 @@
-import Link from 'next/link';
 import { FileDown, ArrowLeft, ShieldAlert } from 'lucide-react';
-import { BarraPagina } from '../../../resumen-visual';
-import { EstadoVacio } from '@/app/admin/ui/kit';
+import { EstadoVacio } from '../../../estados';
 import { mxn, numero } from '@/lib/formato';
+
 // El módulo `reclamacion` es puro (sin base): el bundle de la vista puede importarlo.
 import { ETIQUETA_MOTIVO_RECLAMACION, type ReporteReclamacion, type MotivoReclamacion } from '@/lib/likida/peajes/reclamacion';
 import { TEXTO_SIN_POSICIONES } from '@/lib/likida/peajes/reclamacion_perfil';
@@ -13,6 +12,7 @@ import type { ResumenSeguimiento } from '@/lib/likida/peajes/reclamos_seguimient
 import { SeccionRevisionCobros, SeccionCierreMensual, SeccionSeguimiento, type AccionesSeguimiento, type PropuestaNota } from './revision';
 import { TablaCandidatosCobros, type AccionDecidir } from '../candidatos-tabla';
 import type { TablaCandidatos, AccionCandidato } from '@/lib/likida/peajes/candidatos_tabla';
+import { MarcoPagina, BotonEnlace } from '@/app/ui-v2/componentes';
 
 export type EstadoReclamacion = 'sin_desglose' | 'no_existe' | 'error' | 'ok';
 
@@ -62,159 +62,146 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
   // Sin nada evaluado (ni una línea confirmada ni un cruce) no hay con qué comparar: no se pinta como «todo bien».
   const faltanDatos = !!candidato && !!reporte && reporte.resumen.reclamables === 0 && reporte.resumen.confirmadas === 0;
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<ShieldAlert width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Reporte de reclamación de peajes"
-          derecha={
-            <Link href={`/dashboard/agentes/peajes${sufijo}`} className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70" style={{ color: 'var(--marca)' }}>
-              <ArrowLeft width={12} height={12} strokeWidth={2} /> Volver al agente
-            </Link>
-          }
-        />
-        <div className="px-5 py-5 flex-1 space-y-4">
-          {estado === 'sin_desglose' && (
-            <EstadoVacio icono={<ShieldAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-              Elige un desglose en el agente de Peajes y abre «Reporte de reclamación». Aquí también puedes ver el cierre mensual y el seguimiento de reclamos.
-            </EstadoVacio>
-          )}
-          {estado === 'no_existe' && <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>Ese desglose no existe en tu flota (o fue anulado).</p>}
-          {estado === 'error' && <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>No se pudo armar el reporte ahora mismo. No es que no haya nada que reclamar: inténtalo de nuevo en un momento.</p>}
+    <MarcoPagina titulo="Reporte de reclamación de peajes" apoyo="Los cruces candidatos a reclamo de un desglose de peajes, el cierre mensual y el seguimiento de reclamos." acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/peajes${sufijo}`} icono={<ArrowLeft width={12} height={12} strokeWidth={2} />}>Volver al agente</BotonEnlace>}>
+      {estado === 'sin_desglose' && (
+        <EstadoVacio icono={<ShieldAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+          Elige un desglose en el agente de Peajes y abre «Reporte de reclamación». Aquí también puedes ver el cierre mensual y el seguimiento de reclamos.
+        </EstadoVacio>
+      )}
+      {estado === 'no_existe' && <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>Ese desglose no existe en tu flota (o fue anulado).</p>}
+      {estado === 'error' && <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>No se pudo armar el reporte ahora mismo. No es que no haya nada que reclamar: inténtalo de nuevo en un momento.</p>}
 
-          {extras?.aviso && <p role="status" className="card p-3 text-[12.5px]" style={{ color: 'var(--ok)' }}>{extras.aviso}</p>}
-          {extras?.error && <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>{extras.error}</p>}
+      {extras?.aviso && <p role="status" className="card p-3 text-[12.5px]" style={{ color: 'var(--ok)' }}>{extras.aviso}</p>}
+      {extras?.error && <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>{extras.error}</p>}
 
-          {estado === 'ok' && extras?.revision && desglose && (
-            <SeccionRevisionCobros revision={extras.revision} desglose={desglose} sufijo={sufijo} justificarCruce={extras.acciones.justificarCruce} />
-          )}
-          {estado === 'ok' && extras?.candidatos && desglose && (
-            <TablaCandidatosCobros tabla={extras.candidatos.tabla} error={extras.candidatos.error} desglose={desglose} sufijo={sufijo}
-              decidir={extras.candidatos.decidir} aplicables={extras.candidatos.aplicables} />
-          )}
-          {extras && (estado === 'ok' || estado === 'sin_desglose') && (
-            <>
-              <SeccionCierreMensual mes={extras.mes} cierre={extras.cierre} error={extras.errorCierre === true} sufijo={sufijo} desglose={desglose}
-                opciones={extras.mesesOpciones} dosMeses={extras.dosMeses === true} cierreDos={extras.cierreDos ?? null} />
-              <SeccionSeguimiento
-                reclamos={extras.seguimiento?.reclamos ?? null} resumen={extras.seguimiento?.resumen ?? null} acciones={extras.acciones}
-                desglose={estado === 'ok' ? desglose : null} revision={extras.revision} error={extras.errorSeguimiento === true}
-                propuestaNota={extras.propuestaNota ?? null} sufijo={sufijo} mes={extras.mes} />
-            </>
-          )}
-          {estado === 'ok' && !reporte && extras?.errorGps && (
-            <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>
-              El reporte con evidencia de GPS no se pudo armar ahora mismo. No es que no haya nada que reclamar: la revisión de cobros de arriba no depende del GPS.
-            </p>
-          )}
+      {estado === 'ok' && extras?.revision && desglose && (
+        <SeccionRevisionCobros revision={extras.revision} desglose={desglose} sufijo={sufijo} justificarCruce={extras.acciones.justificarCruce} />
+      )}
+      {estado === 'ok' && extras?.candidatos && desglose && (
+        <TablaCandidatosCobros tabla={extras.candidatos.tabla} error={extras.candidatos.error} desglose={desglose} sufijo={sufijo}
+          decidir={extras.candidatos.decidir} aplicables={extras.candidatos.aplicables} />
+      )}
+      {extras && (estado === 'ok' || estado === 'sin_desglose') && (
+        <>
+          <SeccionCierreMensual mes={extras.mes} cierre={extras.cierre} error={extras.errorCierre === true} sufijo={sufijo} desglose={desglose}
+            opciones={extras.mesesOpciones} dosMeses={extras.dosMeses === true} cierreDos={extras.cierreDos ?? null} />
+          <SeccionSeguimiento
+            reclamos={extras.seguimiento?.reclamos ?? null} resumen={extras.seguimiento?.resumen ?? null} acciones={extras.acciones}
+            desglose={estado === 'ok' ? desglose : null} revision={extras.revision} error={extras.errorSeguimiento === true}
+            propuestaNota={extras.propuestaNota ?? null} sufijo={sufijo} mes={extras.mes} />
+        </>
+      )}
+      {estado === 'ok' && !reporte && extras?.errorGps && (
+        <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>
+          El reporte con evidencia de GPS no se pudo armar ahora mismo. No es que no haya nada que reclamar: la revisión de cobros de arriba no depende del GPS.
+        </p>
+      )}
 
-          {estado === 'ok' && reporte && desglose && (
-            <>
-              <section className="card p-4">
-                <div className="flex items-start justify-between gap-3 flex-wrap">
-                  <div>
-                    <h2 className="font-display text-[15px] font-semibold">
-                      {candidato
-                        ? (reporte.resumen.reclamables === 0 ? 'Sin cruces candidatos' : `${numero(reporte.resumen.reclamables)} ${reporte.resumen.reclamables === 1 ? 'cruce candidato' : 'cruces candidatos'} para pedir revisión`)
-                        : (reporte.resumen.reclamables === 0 ? 'Sin cruces para reclamar' : `${numero(reporte.resumen.reclamables)} ${reporte.resumen.reclamables === 1 ? 'cruce' : 'cruces'} para pedir revisión`)}
-                    </h2>
-                    <p className="text-[12px] mt-0.5" style={{ color: 'var(--muted)' }}>
-                      {reporte.proveedor ? `Proveedor ${reporte.proveedor} · ` : ''}
-                      {reporte.periodoDesde && reporte.periodoHasta ? `Periodo ${reporte.periodoDesde} a ${reporte.periodoHasta} · ` : ''}
-                      {numero(reporte.resumen.lineas)} líneas en el desglose
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Monto reclamable</span>
-                    <span className="text-[20px] font-semibold cifra-mono">{mxn(reporte.resumen.montoReclamable)}</span>
-                  </div>
-                </div>
-                {!candidato && <div className="flex flex-wrap gap-2 mt-3">
-                  <a href={`/api/export/peajes-reclamacion?desglose=${desglose}&formato=xlsx${ctx}`} className={CSS_BOTON} style={ESTILO_PRIMARIO}>
-                    <FileDown width={13} height={13} strokeWidth={2} /> Excel
-                  </a>
-                  <a href={`/api/export/peajes-reclamacion?desglose=${desglose}&formato=pdf${ctx}`} className={`${CSS_BOTON} hairline`} style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
-                    <FileDown width={13} height={13} strokeWidth={2} /> PDF
-                  </a>
-                </div>}
-                {faltanDatos && <p role="status" className="card p-3 mt-3 text-[12.5px]" style={{ color: 'var(--muted)' }}>{TEXTO_SIN_POSICIONES}</p>}
-                {candidato?.guardarMargen && (
-                  <form action={candidato.guardarMargen} className="mt-3 flex flex-wrap items-end gap-2 text-[12px]">
-                    <input type="hidden" name="desglose" value={desglose} />
-                    <label className="flex flex-col gap-1">
-                      <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Margen de distancia a la caseta (m)</span>
-                      <input name="margen" type="number" inputMode="numeric" min={100} max={5000} step={1} defaultValue={candidato.margenLejosM} className="rounded-lg hairline px-2 py-1 w-28" />
-                    </label>
-                    <button type="submit" className={`${CSS_BOTON} hairline`} style={{ background: 'var(--surface)', color: 'var(--ink)' }}>Guardar margen</button>
-                    <span style={{ color: 'var(--muted)' }}>Un cruce se marca como candidato si la unidad pasó a más de ese margen (sumado al radio de la caseta). Por omisión 1,000 m; fíjalo en 200 o 500 m cuando se decida.</span>
-                  </form>
-                )}
-                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 mt-3">
-                  {motivosVisibles.map((m) => (
-                    <div key={m} className="rounded-lg hairline p-2.5">
-                      <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>{ETIQUETA_MOTIVO_RECLAMACION[m]}</span>
-                      <span className="text-[15px] font-semibold cifra-mono">{numero(reporte.resumen.porMotivo[m].n)}</span>
-                      <span className="text-[11px] ml-1.5" style={{ color: 'var(--muted)' }}>{mxn(reporte.resumen.porMotivo[m].monto)}</span>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-[11px] mt-3" style={{ color: 'var(--faint)' }}>
-                  No se reclaman (sin evidencia en contra del cobro): {numero(reporte.resumen.confirmadas)} confirmadas por el GPS · {numero(reporte.resumen.sinDatos)} sin datos suficientes
-                  {reporte.resumen.sinEvaluar > 0 ? ` · ${numero(reporte.resumen.sinEvaluar)} sin evaluar (vuelve a conciliar el desglose)` : ''}. Sin datos no es evidencia en contra de nadie.
-                  {!candidato && reporte.resumen.sinCurso > 0 ? ` ${numero(reporte.resumen.sinCurso)} de ${numero(reporte.resumen.lineas)} líneas no tienen curso declarado y no se evaluaron por curso: cárgalos en Configuración, sección Cursos.` : ''}
+      {estado === 'ok' && reporte && desglose && (
+        <>
+          <section className="card p-4">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <h2 className="font-display text-[15px] font-semibold">
+                  {candidato
+                    ? (reporte.resumen.reclamables === 0 ? 'Sin cruces candidatos' : `${numero(reporte.resumen.reclamables)} ${reporte.resumen.reclamables === 1 ? 'cruce candidato' : 'cruces candidatos'} para pedir revisión`)
+                    : (reporte.resumen.reclamables === 0 ? 'Sin cruces para reclamar' : `${numero(reporte.resumen.reclamables)} ${reporte.resumen.reclamables === 1 ? 'cruce' : 'cruces'} para pedir revisión`)}
+                </h2>
+                <p className="text-[12px] mt-0.5" style={{ color: 'var(--muted)' }}>
+                  {reporte.proveedor ? `Proveedor ${reporte.proveedor} · ` : ''}
+                  {reporte.periodoDesde && reporte.periodoHasta ? `Periodo ${reporte.periodoDesde} a ${reporte.periodoHasta} · ` : ''}
+                  {numero(reporte.resumen.lineas)} líneas en el desglose
                 </p>
-              </section>
+              </div>
+              <div className="text-right">
+                <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Monto reclamable</span>
+                <span className="text-[20px] font-semibold cifra-mono">{mxn(reporte.resumen.montoReclamable)}</span>
+              </div>
+            </div>
+            {!candidato && <div className="flex flex-wrap gap-2 mt-3">
+              <a href={`/api/export/peajes-reclamacion?desglose=${desglose}&formato=xlsx${ctx}`} className={CSS_BOTON} style={ESTILO_PRIMARIO}>
+                <FileDown width={13} height={13} strokeWidth={2} /> Excel
+              </a>
+              <a href={`/api/export/peajes-reclamacion?desglose=${desglose}&formato=pdf${ctx}`} className={`${CSS_BOTON} hairline`} style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
+                <FileDown width={13} height={13} strokeWidth={2} /> PDF
+              </a>
+            </div>}
+            {faltanDatos && <p role="status" className="card p-3 mt-3 text-[12.5px]" style={{ color: 'var(--muted)' }}>{TEXTO_SIN_POSICIONES}</p>}
+            {candidato?.guardarMargen && (
+              <form action={candidato.guardarMargen} className="mt-3 flex flex-wrap items-end gap-2 text-[12px]">
+                <input type="hidden" name="desglose" value={desglose} />
+                <label className="flex flex-col gap-1">
+                  <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Margen de distancia a la caseta (m)</span>
+                  <input name="margen" type="number" inputMode="numeric" min={100} max={5000} step={1} defaultValue={candidato.margenLejosM} className="rounded-lg hairline px-2 py-1 w-28" />
+                </label>
+                <button type="submit" className={`${CSS_BOTON} hairline`} style={{ background: 'var(--surface)', color: 'var(--ink)' }}>Guardar margen</button>
+                <span style={{ color: 'var(--muted)' }}>Un cruce se marca como candidato si la unidad pasó a más de ese margen (sumado al radio de la caseta). Por omisión 1,000 m; fíjalo en 200 o 500 m cuando se decida.</span>
+              </form>
+            )}
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 mt-3">
+              {motivosVisibles.map((m) => (
+                <div key={m} className="rounded-lg hairline p-2.5">
+                  <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>{ETIQUETA_MOTIVO_RECLAMACION[m]}</span>
+                  <span className="text-[15px] font-semibold cifra-mono">{numero(reporte.resumen.porMotivo[m].n)}</span>
+                  <span className="text-[11px] ml-1.5" style={{ color: 'var(--muted)' }}>{mxn(reporte.resumen.porMotivo[m].monto)}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] mt-3" style={{ color: 'var(--faint)' }}>
+              No se reclaman (sin evidencia en contra del cobro): {numero(reporte.resumen.confirmadas)} confirmadas por el GPS · {numero(reporte.resumen.sinDatos)} sin datos suficientes
+              {reporte.resumen.sinEvaluar > 0 ? ` · ${numero(reporte.resumen.sinEvaluar)} sin evaluar (vuelve a conciliar el desglose)` : ''}. Sin datos no es evidencia en contra de nadie.
+              {!candidato && reporte.resumen.sinCurso > 0 ? ` ${numero(reporte.resumen.sinCurso)} de ${numero(reporte.resumen.lineas)} líneas no tienen curso declarado y no se evaluaron por curso: cárgalos en Configuración, sección Cursos.` : ''}
+            </p>
+          </section>
 
-              {reporte.cruces.length > 0 && (
-                <section className="card p-4">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-[12.5px]">
-                      <thead>
-                        <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                          <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Fecha y hora</th>
-                          <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Caseta</th>
-                          <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">TAG / unidad</th>
-                          <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 text-right">Monto</th>
-                          <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 pl-3">{candidato ? 'Por qué es candidato' : 'Por qué se reclama'}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {reporte.cruces.map((c) => (
-                          <tr key={c.indice} className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
-                            <td className="py-2 whitespace-nowrap">{c.fecha}{c.hora && <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{c.hora.slice(0, 8)}</span>}</td>
-                            <td className="py-2">{c.casetaCatalogo || c.caseta || '—'}</td>
-                            <td className="py-2">{c.tag || '—'}{c.unidad && <span className="block text-[11px]" style={{ color: 'var(--muted)' }}>{c.unidad}</span>}</td>
-                            <td className="py-2 text-right cifra-mono">{mxn(c.monto)}</td>
-                            <td className="py-2 pl-3 max-w-[34rem]">
-                              <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium mr-1.5"
-                                style={c.confianza === 'alta' ? { color: 'var(--bad)', background: 'var(--badbg)' } : { color: 'var(--warn)', background: 'var(--warnbg)' }}>
-                                {ETIQUETA_MOTIVO_RECLAMACION[c.motivo]} · {candidato ? 'candidato' : c.confianza}
-                              </span>
-                              <span>{c.porQue}</span>
-                              {c.evidencia.length > 0 && (
-                                <ul className="mt-1 space-y-0.5 text-[11px]" style={{ color: 'var(--muted)' }}>
-                                  {c.evidencia.map((e) => <li key={e.en}>{textoEvidencia(e)}</li>)}
-                                </ul>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              )}
-
-              <section className="card p-4">
-                <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>Qué significa y qué NO afirma</h3>
-                <ul className="space-y-1.5 text-[11.5px]" style={{ color: 'var(--muted)' }}>
-                  {reporte.leyendas.map((l) => <li key={l}>{l}</li>)}
-                </ul>
-              </section>
-            </>
+          {reporte.cruces.length > 0 && (
+            <section className="card p-4">
+              <div className="overflow-x-auto">
+                <table className="w-full text-[12.5px]">
+                  <thead>
+                    <tr className="text-left" style={{ color: 'var(--faint)' }}>
+                      <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Fecha y hora</th>
+                      <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Caseta</th>
+                      <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">TAG / unidad</th>
+                      <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 text-right">Monto</th>
+                      <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 pl-3">{candidato ? 'Por qué es candidato' : 'Por qué se reclama'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reporte.cruces.map((c) => (
+                      <tr key={c.indice} className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
+                        <td className="py-2 whitespace-nowrap">{c.fecha}{c.hora && <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{c.hora.slice(0, 8)}</span>}</td>
+                        <td className="py-2">{c.casetaCatalogo || c.caseta || '—'}</td>
+                        <td className="py-2">{c.tag || '—'}{c.unidad && <span className="block text-[11px]" style={{ color: 'var(--muted)' }}>{c.unidad}</span>}</td>
+                        <td className="py-2 text-right cifra-mono">{mxn(c.monto)}</td>
+                        <td className="py-2 pl-3 max-w-[34rem]">
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium mr-1.5"
+                            style={c.confianza === 'alta' ? { color: 'var(--bad)', background: 'var(--badbg)' } : { color: 'var(--warn)', background: 'var(--warnbg)' }}>
+                            {ETIQUETA_MOTIVO_RECLAMACION[c.motivo]} · {candidato ? 'candidato' : c.confianza}
+                          </span>
+                          <span>{c.porQue}</span>
+                          {c.evidencia.length > 0 && (
+                            <ul className="mt-1 space-y-0.5 text-[11px]" style={{ color: 'var(--muted)' }}>
+                              {c.evidencia.map((e) => <li key={e.en}>{textoEvidencia(e)}</li>)}
+                            </ul>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           )}
-        </div>
-      </div>
-    </main>
+
+          <section className="card p-4">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>Qué significa y qué NO afirma</h3>
+            <ul className="space-y-1.5 text-[11.5px]" style={{ color: 'var(--muted)' }}>
+              {reporte.leyendas.map((l) => <li key={l}>{l}</li>)}
+            </ul>
+          </section>
+        </>
+      )}
+    </MarcoPagina>
   );
 }

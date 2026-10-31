@@ -12,6 +12,8 @@ import { versionUi } from '@/lib/auth/version_ui';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { getPerfilCrudo } from '@/lib/likida/repo';
 import { onboardingFiscalListo, onboardingPospuesto } from '@/lib/likida/perfil/preguntas';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Resumen' };
 
 export const dynamic = 'force-dynamic';
 

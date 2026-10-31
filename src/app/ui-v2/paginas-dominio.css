@@ -46,13 +46,13 @@
 [data-ui="v2"] .card > .etiqueta-mono + .cifra-mono + div { font-size: 12px; margin-top: 4px; }
 
 /* ── Encabezados de tarjeta y subrótulos ──────────────────────────────────────────────────────────────────────────────── */
-[data-ui="v2"] main.h-full .card h2.font-display { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+[data-ui="v2"] :is(main.h-full, .rv-marco) .card h2.font-display { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
 
 /* ── Píldoras de estado (Conexiones, cuadre): punto de color + peso 600, sin cambiar texto ni color asignado ──────────── */
-[data-ui="v2"] main.h-full section.card span.inline-flex.rounded-full[style*="background"] {
+[data-ui="v2"] :is(main.h-full, .rv-marco) section.card span.inline-flex.rounded-full[style*="background"] {
   display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px 2px 8px; font-size: 11px; font-weight: 600; letter-spacing: .01em;
 }
-[data-ui="v2"] main.h-full section.card span.inline-flex.rounded-full[style*="background"]::before {
+[data-ui="v2"] :is(main.h-full, .rv-marco) section.card span.inline-flex.rounded-full[style*="background"]::before {
   content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor;
 }
 
@@ -64,10 +64,10 @@
 [data-ui="v2"] [data-tour="conexiones.credenciales"] section.card { padding: 20px; }
 
 /* ── Esqueletos: neutros del sistema, sin destello de color ───────────────────────────────────────────────────────────── */
-[data-ui="v2"] main.h-full .skeleton { border-radius: 6px; }
+[data-ui="v2"] :is(main.h-full, .rv-marco) .skeleton { border-radius: 6px; }
 
 /* ── Tablas dentro de las páginas de dominio: el encabezado de la tabla de v1 usa mono; en v2 va en la tipografía del sistema ── */
-[data-ui="v2"] main.h-full .card table thead th.etiqueta-mono { letter-spacing: .06em; font-weight: 500; }
+[data-ui="v2"] :is(main.h-full, .rv-marco) .card table thead th.etiqueta-mono { letter-spacing: .06em; font-weight: 500; }
 
 /* ── Móvil ────────────────────────────────────────────────────────────────────────────────────────────────────────────── */
 @media (max-width: 767.98px) {
@@ -78,5 +78,5 @@
 }
 
 /* Controles de fecha y de archivo: nunca más anchos que su tarjeta (a 390 px empujaban el documento a un scroll horizontal) */
-[data-ui="v2"] main.h-full .card :is(input[type="date"], input[type="file"], select) { min-width: 0; max-width: 100%; }
-[data-ui="v2"] main.h-full .card :is(form, label, fieldset) { min-width: 0; }
+[data-ui="v2"] :is(main.h-full, .rv-marco) .card :is(input[type="date"], input[type="file"], select) { min-width: 0; max-width: 100%; }
+[data-ui="v2"] :is(main.h-full, .rv-marco) .card :is(form, label, fieldset) { min-width: 0; }

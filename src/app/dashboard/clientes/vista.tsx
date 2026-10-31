@@ -5,15 +5,18 @@ import {
 import type {
   PanelClientes, ClienteConMetricas, TarifaRow, ViajeSinIngreso,
 } from '@/lib/likida/clientes';
-import { StatCard, EstadoVacio, EstadoError } from '@/app/admin/ui/kit';
+import { EstadoVacio, EstadoError } from '../estados';
+
 // El formato de cifras vive SOLO en formato.ts — hay una prueba que falla si
 // otro archivo formatea moneda mexicana por su cuenta.
 import { mxn, numero, fechaMx } from '@/lib/formato';
-import { BarraPagina } from '../resumen-visual';
 import { paginarRegistro, urlRegistro, type ParamsRegistro } from '../paginar-registro';
 import { FiltroRegistro } from '../registro-filtro';
 import type { BuscarCatalogo } from '../combo-catalogo';
 import { FormaCliente, FormaTarifa, Plegable, type AccionForma, type OpcionModo } from './forma';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
+import { MarcoPagina } from '@/app/ui-v2/componentes';
 
 const RUTA = '/dashboard/clientes';
 
@@ -52,36 +55,27 @@ export function VistaClientes({
   camposOcultos: Array<[string, string]>;
 }) {
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Handshake width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Clientes y tarifas"
-        />
-
-        <div className="px-5 py-5 flex-1 space-y-4">
-          {panel === null ? (
-            <EstadoError mensaje="No pude leer tus clientes, tarifas y facturas. No se enseña una cartera a medias: media tabla sumada se ve igual que la tabla entera." />
-          ) : (
-            <>
-              <BloqueCartera panel={panel} />
-              <BloqueClientes panel={panel} puedeEditar={puedeEditar} guardarCliente={guardarCliente}
-                sp={sp} sufijo={sufijo} camposOcultos={camposOcultos} />
-              <BloqueTarifas panel={panel} puedeEditar={puedeEditar} modos={modos} guardarTarifa={guardarTarifa}
-                buscarCliente={buscarCliente} totalClientes={totalClientes}
-                sp={sp} sufijo={sufijo} camposOcultos={camposOcultos} />
-              <BloqueSinIngreso panel={panel} />
-              {!puedeEditar && (
-                <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
-                  Tu rol ve esta pantalla pero no da de alta clientes ni tarifas: el catálogo de precios
-                  es una decisión del dueño de la flota.
-                </p>
-              )}
-            </>
+    <MarcoPagina titulo="Clientes y tarifas" apoyo="Quién paga el flete y cuánto debe, con las tarifas por cliente. No se muestra una cartera a medias.">
+      {panel === null ? (
+        <EstadoError mensaje="No pude leer tus clientes, tarifas y facturas. No se enseña una cartera a medias: media tabla sumada se ve igual que la tabla entera." />
+      ) : (
+        <>
+          <BloqueCartera panel={panel} />
+          <BloqueClientes panel={panel} puedeEditar={puedeEditar} guardarCliente={guardarCliente}
+            sp={sp} sufijo={sufijo} camposOcultos={camposOcultos} />
+          <BloqueTarifas panel={panel} puedeEditar={puedeEditar} modos={modos} guardarTarifa={guardarTarifa}
+            buscarCliente={buscarCliente} totalClientes={totalClientes}
+            sp={sp} sufijo={sufijo} camposOcultos={camposOcultos} />
+          <BloqueSinIngreso panel={panel} />
+          {!puedeEditar && (
+            <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
+              Tu rol ve esta pantalla pero no da de alta clientes ni tarifas: el catálogo de precios
+              es una decisión del dueño de la flota.
+            </p>
           )}
-        </div>
-      </div>
-    </main>
+        </>
+      )}
+    </MarcoPagina>
   );
 }
 
@@ -104,15 +98,15 @@ function BloqueCartera({ panel }: { panel: PanelClientes }) {
 
   return (
     <section className="space-y-2">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <StatCard
+      <TiraCifras sello={selloHoy('Cartera de clientes')}>
+        <Cifra
           icono={<Banknote width={14} height={14} strokeWidth={1.75} />}
           etiqueta="Ingreso de fletes capturado" valor={panel.ingresoTotal} formato="mxn"
           nota={panel.conIngreso === 0
             ? 'Ningún viaje trae ingreso capturado todavía'
             : `De ${plural(panel.conIngreso, 'viaje', 'viajes')} con el dato capturado`}
         />
-        <StatCard
+        <Cifra
           icono={<Users width={14} height={14} strokeWidth={1.75} />}
           etiqueta="Clientes activos" valor={activos} formato="numero"
           nota={panel.clientes.length !== activos
@@ -120,19 +114,19 @@ function BloqueCartera({ panel }: { panel: PanelClientes }) {
             : undefined}
         />
         {conFacturas.length > 0 ? (
-          <StatCard
+          <Cifra
             icono={<Wallet width={14} height={14} strokeWidth={1.75} />}
             etiqueta="Por cobrar a clientes" valor={porCobrar} formato="mxn"
             nota={`De ${plural(conFacturas.length, 'cliente', 'clientes')} con facturas registradas`}
           />
         ) : (
-          <div className="card p-4 text-[12.5px]" style={{ color: 'var(--muted)' }}>
-            <span className="block font-medium" style={{ color: 'var(--ink)' }}>Por cobrar</span>
-            Ninguno de tus clientes tiene facturas registradas todavía, así que no hay saldo que
-            sumar. No es cero: es que aún no se ha registrado una factura emitida.
-          </div>
+          <Cifra
+            icono={<Wallet width={14} height={14} strokeWidth={1.75} />}
+            etiqueta="Por cobrar" valor={null}
+            mensaje="Ninguno de tus clientes tiene facturas registradas todavía, así que no hay saldo que sumar. No es cero: es que aún no se ha registrado una factura emitida."
+          />
         )}
-      </div>
+      </TiraCifras>
 
       {panel.concentracion !== null && (
         <p className="text-[12px]" style={{ color: 'var(--muted)' }}>

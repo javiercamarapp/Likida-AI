@@ -1,15 +1,16 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { PlugZap } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { listarSesionesMcp, revocarSesionesMcp, type SesionMcpUsuario } from '@/lib/mcp/sesiones';
-import { EstadoError } from '@/app/admin/ui/kit';
-import { BarraPagina } from '../resumen-visual';
+import { EstadoError } from '../estados';
 import type { ResultadoForma } from './forma';
 import { ListaSesionesMcp } from './vista';
+import { MarcoPagina, Aviso } from '@/app/ui-v2/componentes';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Sesiones MCP' };
 
 export const dynamic = 'force-dynamic';
 
@@ -89,35 +90,26 @@ export default async function PaginaSesionesMcp({
   }
 
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<PlugZap width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Sesiones MCP"
-        />
+    <MarcoPagina titulo="Sesiones MCP" apoyo="Quién de tu equipo tiene Claude o ChatGPT conectado a Likida, con qué rol y desde cuándo. Solo lectura.">
+      <Aviso tono="info">
+        Cuando alguien de tu equipo conecta Claude o ChatGPT a Likida, ese cliente
+        queda <strong>leyendo</strong> —nunca cambiando— lo que ve el rol con el que
+        autorizó, sin navegador y sin volver a iniciar sesión. Aquí está quién tiene
+        qué conectado y desde cuándo. Tus propias conexiones las cortas en{' '}
+        <strong>Mi perfil</strong>.
+      </Aviso>
 
-        <div className="px-5 py-5 flex-1 space-y-4">
-          <p className="text-[12.5px] max-w-2xl" style={{ color: 'var(--muted)' }}>
-            Cuando alguien de tu equipo conecta Claude o ChatGPT a Likida, ese cliente
-            queda <strong>leyendo</strong> —nunca cambiando— lo que ve el rol con el que
-            autorizó, sin navegador y sin volver a iniciar sesión. Aquí está quién tiene
-            qué conectado y desde cuándo. Tus propias conexiones las cortas en{' '}
-            <strong>Mi perfil</strong>.
-          </p>
+      {sesiones === null ? (
+        <EstadoError mensaje="No pude leer las sesiones MCP de la flota. No se enseña una lista a medias: media lista se vería igual que la lista entera, y sobre accesos eso hace creer que ya no queda nada conectado." />
+      ) : (
+        <ListaSesionesMcp sesiones={sesiones} cortarSesiones={cortarSesiones} />
+      )}
 
-          {sesiones === null ? (
-            <EstadoError mensaje="No pude leer las sesiones MCP de la flota. No se enseña una lista a medias: media lista se vería igual que la lista entera, y sobre accesos eso hace creer que ya no queda nada conectado." />
-          ) : (
-            <ListaSesionesMcp sesiones={sesiones} cortarSesiones={cortarSesiones} />
-          )}
-
-          <p className="text-[11px] max-w-2xl" style={{ color: 'var(--faint)' }}>
-            El nombre del cliente lo declaró quien lo registró, no Likida. Cortar el
-            acceso tumba todos los tokens vivos de esa persona de un tiro y no tiene
-            deshacer: para volver a conectar hay que autorizar otra vez desde el cliente.
-          </p>
-        </div>
-      </div>
-    </main>
+      <p className="text-[11px] max-w-2xl" style={{ color: 'var(--faint)' }}>
+        El nombre del cliente lo declaró quien lo registró, no Likida. Cortar el
+        acceso tumba todos los tokens vivos de esa persona de un tiro y no tiene
+        deshacer: para volver a conectar hay que autorizar otra vez desde el cliente.
+      </p>
+    </MarcoPagina>
   );
 }

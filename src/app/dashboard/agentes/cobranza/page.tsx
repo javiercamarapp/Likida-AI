@@ -17,6 +17,8 @@ import { VistaAgenteCobranza } from './vista';
 import { SeccionPorGasto } from './seccion-por-gasto';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { FichaCorridas } from '../ficha-corridas';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Seguimiento de comprobantes' };
 
 export const dynamic = 'force-dynamic';
 

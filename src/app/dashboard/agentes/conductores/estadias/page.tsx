@@ -9,6 +9,8 @@ import { leerCatalogosFiltro, leerDatosEstadias } from '@/lib/likida/conductor/r
 import { getZonaHorariaTenant } from '@/lib/likida/repo';
 import { sufijoTenant } from '../../../sufijo';
 import { VistaEstadias } from './vista';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Estadías en andén' };
 
 export const dynamic = 'force-dynamic';
 

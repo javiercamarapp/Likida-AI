@@ -21,6 +21,8 @@ import { VistaAgenteFacturas } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { FichaCorridas } from '../ficha-corridas';
 import { ultimasCorridas } from '@/lib/likida/agentes/corridas';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Facturas en automático' };
 
 export const dynamic = 'force-dynamic';
 

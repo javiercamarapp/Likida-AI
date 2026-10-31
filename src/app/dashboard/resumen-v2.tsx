@@ -58,9 +58,9 @@ export async function ResumenV2({
   return (
     <main className="rv-res">
       <EncabezadoPagina
-        rotulo={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
-        titulo={`${saludo()}, ${nombre ?? 'equipo'}`}
-        descripcion={perfil ? 'Tus cinco agentes, de un vistazo.' : 'Tu flota, de un vistazo.'}
+        area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
+        titulo="Resumen"
+        apoyo={`${saludo()}, ${nombre ?? 'equipo'}. ${perfil ? 'Tus cinco agentes, de un vistazo.' : 'Tu flota, de un vistazo.'}`}
         acciones={<Chip>{fechaMx(diaMx)}</Chip>}
       />
 

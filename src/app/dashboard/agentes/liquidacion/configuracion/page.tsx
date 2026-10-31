@@ -10,6 +10,8 @@ import {
   leerConfigCorreo, guardarConfigCorreo, exigirContactosParaActivar, CONFIG_CORREO_POR_DEFECTO, type ConfigCorreo,
 } from '@/lib/likida/liquidacion_externa/repo_correo';
 import { VistaConfiguracionLiquidacion, leerFormularioConfig } from './vista';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Configuración del desglose' };
 
 export const dynamic = 'force-dynamic';
 

@@ -4,11 +4,13 @@ import { UsersRound, Hand, Clock, Flame, Inbox, ShieldCheck, History, Settings2,
 import { numero, fechaHoraMx } from '@/lib/formato';
 import type { DatosTablero, ConversacionTablero } from '@/lib/likida/vigia/repo';
 import { tarjetasInsights, type InsightsEntrada } from '@/lib/likida/vigia/insights';
-import { BarraPagina } from '../../resumen-visual';
 import { Bloque, Barra, EsqTabla } from '../../bloque';
 import {
   FormaBorrador, BotonConversacion, FormaResponder, FormaConfig, FormaAlta, FormaDirector, FormaServicio, AccionesContacto, type AccionVigia,
 } from './controles';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
+import { MarcoPagina } from '@/app/ui-v2/componentes';
 
 export interface AccionesVigia {
   decidir: AccionVigia;
@@ -110,78 +112,70 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
   acciones: AccionesVigia;
 }) {
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<UsersRound width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Servicio al cliente (Vigía)"
-        />
-        <div className="px-5 py-5 flex-1 space-y-4">
-          <nav aria-label="Herramientas del agente" className="flex flex-wrap gap-2 text-[12.5px]">
-            <Link href={`/dashboard/agentes/vigia/historial${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Grupos críticos e histórico (FAQs y tendencias)</Link>
-            <Link href={`/dashboard/agentes/vigia/programa${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Programa de despacho (subir el archivo del día)</Link>
-            <Link href={`/dashboard/agentes/vigia/importacion${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Estatus de importación (derivado del programa)</Link>
-            <Suspense fallback={<Link href={`/dashboard/agentes/vigia/avisos${sufijo}`} className={ENLACE}>Avisos de viaje</Link>}>
-              <EnlaceAvisos sufijo={sufijo} pendientes={avisosPendientes} />
-            </Suspense>
-          </nav>
-          <Bloque mensaje="No se pudo leer el tablero del Vigía." esqueleto={<EsqKpis />}>
-            <BloqueEstadoYKpis datos={datos} ahoraMs={ahoraMs} />
-          </Bloque>
+    <MarcoPagina titulo="Servicio al cliente" apoyo="Atiende a los clientes de tu flota: clasifica, responde con datos reales y escala a una persona lo que lo requiere.">
+      <nav aria-label="Herramientas del agente" className="flex flex-wrap gap-2 text-[12.5px]">
+        <Link href={`/dashboard/agentes/vigia/historial${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Grupos críticos e histórico (FAQs y tendencias)</Link>
+        <Link href={`/dashboard/agentes/vigia/programa${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Programa de despacho (subir el archivo del día)</Link>
+        <Link href={`/dashboard/agentes/vigia/importacion${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Estatus de importación (derivado del programa)</Link>
+        <Suspense fallback={<Link href={`/dashboard/agentes/vigia/avisos${sufijo}`} className={ENLACE}>Avisos de viaje</Link>}>
+          <EnlaceAvisos sufijo={sufijo} pendientes={avisosPendientes} />
+        </Suspense>
+      </nav>
+      <Bloque mensaje="No se pudo leer el tablero del Vigía." esqueleto={<EsqKpis />}>
+        <BloqueEstadoYKpis datos={datos} ahoraMs={ahoraMs} />
+      </Bloque>
 
-          <Bloque mensaje="No se pudo leer la cola de aprobación." esqueleto={<EsqTabla filas={3} />}>
-            <BloqueAprobacion datos={datos} puedeDecidir={puedeDecidir} acciones={acciones} standby={standby} />
-          </Bloque>
+      <Bloque mensaje="No se pudo leer la cola de aprobación." esqueleto={<EsqTabla filas={3} />}>
+        <BloqueAprobacion datos={datos} puedeDecidir={puedeDecidir} acciones={acciones} standby={standby} />
+      </Bloque>
 
-          <Bloque mensaje="No se pudieron leer las excepciones." esqueleto={<EsqTabla filas={3} />}>
-            <BloqueExcepciones datos={datos} ahoraMs={ahoraMs} puedeDecidir={puedeDecidir} acciones={acciones} />
-          </Bloque>
+      <Bloque mensaje="No se pudieron leer las excepciones." esqueleto={<EsqTabla filas={3} />}>
+        <BloqueExcepciones datos={datos} ahoraMs={ahoraMs} puedeDecidir={puedeDecidir} acciones={acciones} />
+      </Bloque>
 
-          <Bloque mensaje="No se pudieron leer las conversaciones." esqueleto={<EsqTabla filas={5} />}>
-            <BloqueConversaciones datos={datos} ahoraMs={ahoraMs} puedeDecidir={puedeDecidir} acciones={acciones} />
-          </Bloque>
+      <Bloque mensaje="No se pudieron leer las conversaciones." esqueleto={<EsqTabla filas={5} />}>
+        <BloqueConversaciones datos={datos} ahoraMs={ahoraMs} puedeDecidir={puedeDecidir} acciones={acciones} />
+      </Bloque>
 
-          <div className="grid lg:grid-cols-2 gap-4">
-            <Bloque mensaje="No se pudo leer la configuración." esqueleto={<EsqTabla filas={4} />}>
-              <BloqueConfiguracion datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} standby={standby} />
-            </Bloque>
-            <Bloque mensaje="No se pudo leer la bitácora." esqueleto={<EsqTabla filas={4} />}>
-              <BloqueBitacora datos={datos} />
-            </Bloque>
-          </div>
-
-          <Bloque mensaje="No se pudo leer la lista de directores." esqueleto={<EsqTabla filas={3} />}>
-            <BloqueDirectores datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
-          </Bloque>
-
-          <Bloque mensaje="No se pudo leer la lista de servicio al cliente." esqueleto={<EsqTabla filas={3} />}>
-            <BloqueServicio datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
-          </Bloque>
-
-          <Bloque mensaje="No se pudieron leer los correos de respaldo." esqueleto={<EsqTabla filas={3} />}>
-            <BloqueCorreos datos={datos} />
-          </Bloque>
-
-          <Bloque mensaje="No se pudieron leer los contactos autorizados." esqueleto={<EsqTabla filas={4} />}>
-            <BloqueContactos datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
-          </Bloque>
-
-          <section className="card p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <ShieldCheck width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-              <h2 className="font-display text-[15px] font-semibold">Los límites del Vigía</h2>
-            </div>
-            <ul className="text-[12.5px] space-y-1.5 list-disc pl-5" style={{ color: 'var(--muted)' }}>
-              <li>Solo contesta a clientes que la flota autorizó aquí, con constancia de su consentimiento. Cualquier otro número recibe la respuesta de siempre.</li>
-              <li>Cada cifra de una respuesta sale de un dato real del viaje de ESE cliente. Si el dato no existe (por ejemplo la hora estimada de llegada, que Likida aún no guarda), dice que lo consulta y te avisa.</li>
-              <li>Un cliente jamás ve datos de otro cliente ni de otra flota. Si pregunta por un folio que no es suyo, no se confirma ni se niega nada.</li>
-              <li>Fuera de las 24 h de su último mensaje, WhatsApp solo permite plantillas aprobadas; el Vigía no manda texto libre fuera de esa ventana.</li>
-              <li>«BAJA» corta los mensajes de inmediato. Los chats se borran solos pasado el plazo de retención, y puedes suprimir los de un contacto (derechos ARCO) desde su fila.</li>
-            </ul>
-          </section>
-        </div>
+      <div className="grid lg:grid-cols-2 gap-4">
+        <Bloque mensaje="No se pudo leer la configuración." esqueleto={<EsqTabla filas={4} />}>
+          <BloqueConfiguracion datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} standby={standby} />
+        </Bloque>
+        <Bloque mensaje="No se pudo leer la bitácora." esqueleto={<EsqTabla filas={4} />}>
+          <BloqueBitacora datos={datos} />
+        </Bloque>
       </div>
-    </main>
+
+      <Bloque mensaje="No se pudo leer la lista de directores." esqueleto={<EsqTabla filas={3} />}>
+        <BloqueDirectores datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
+      </Bloque>
+
+      <Bloque mensaje="No se pudo leer la lista de servicio al cliente." esqueleto={<EsqTabla filas={3} />}>
+        <BloqueServicio datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
+      </Bloque>
+
+      <Bloque mensaje="No se pudieron leer los correos de respaldo." esqueleto={<EsqTabla filas={3} />}>
+        <BloqueCorreos datos={datos} />
+      </Bloque>
+
+      <Bloque mensaje="No se pudieron leer los contactos autorizados." esqueleto={<EsqTabla filas={4} />}>
+        <BloqueContactos datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
+      </Bloque>
+
+      <section className="card p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <ShieldCheck width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
+          <h2 className="font-display text-[15px] font-semibold">Los límites del Vigía</h2>
+        </div>
+        <ul className="text-[12.5px] space-y-1.5 list-disc pl-5" style={{ color: 'var(--muted)' }}>
+          <li>Solo contesta a clientes que la flota autorizó aquí, con constancia de su consentimiento. Cualquier otro número recibe la respuesta de siempre.</li>
+          <li>Cada cifra de una respuesta sale de un dato real del viaje de ESE cliente. Si el dato no existe (por ejemplo la hora estimada de llegada, que Likida aún no guarda), dice que lo consulta y te avisa.</li>
+          <li>Un cliente jamás ve datos de otro cliente ni de otra flota. Si pregunta por un folio que no es suyo, no se confirma ni se niega nada.</li>
+          <li>Fuera de las 24 h de su último mensaje, WhatsApp solo permite plantillas aprobadas; el Vigía no manda texto libre fuera de esa ventana.</li>
+          <li>«BAJA» corta los mensajes de inmediato. Los chats se borran solos pasado el plazo de retención, y puedes suprimir los de un contacto (derechos ARCO) desde su fila.</li>
+        </ul>
+      </section>
+    </MarcoPagina>
   );
 }
 
@@ -195,15 +189,6 @@ function EsqKpis() {
   );
 }
 
-function Kpi({ titulo, valor, nota, tono }: { titulo: string; valor: string; nota?: string; tono?: 'warn' | 'bad' }) {
-  return (
-    <div className="card p-3.5">
-      <div className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{titulo}</div>
-      <div className="cifra-mono text-[20px] font-medium mt-1" style={tono ? { color: `var(--${tono})` } : undefined}>{valor}</div>
-      {nota && <div className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{nota}</div>}
-    </div>
-  );
-}
 
 function Leyenda({ children }: { children: React.ReactNode }) {
   return (
@@ -235,12 +220,12 @@ export async function BloqueEstadoYKpis({ datos: p, ahoraMs }: { datos: Promise<
           El Vigía está apagado para tu flota: ningún cliente recibe respuesta. Autoriza a tus clientes y enciéndelo en «Configuración».
         </div>
       )}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Kpi titulo="Conversaciones activas" valor={numero(d.conversaciones.length)} nota="clientes con un hilo abierto" />
-        <Kpi titulo="Por aprobar" valor={numero(d.pendientes.length)} nota="respuestas que esperan tu toque" tono={d.pendientes.length > 0 ? 'warn' : undefined} />
-        <Kpi titulo={`Sin respuesta (SLA ${numero(sla)} min)`} valor={numero(vencidas)} nota="esperan más de lo permitido" tono={vencidas > 0 ? 'bad' : undefined} />
-        <Kpi titulo="Molestos o escalados" valor={numero(molestasOEscaladas)} nota="requieren a una persona" tono={molestasOEscaladas > 0 ? 'bad' : undefined} />
-      </div>
+      <TiraCifras sello={selloHoy('Avisos de viaje')}>
+        <Cifra etiqueta="Conversaciones activas" valor={numero(d.conversaciones.length)} nota="clientes con un hilo abierto" />
+        <Cifra etiqueta="Por aprobar" valor={numero(d.pendientes.length)} nota="respuestas que esperan tu toque" tono={d.pendientes.length > 0 ? 'warn' : undefined} />
+        <Cifra etiqueta={`Sin respuesta (SLA ${numero(sla)} min)`} valor={numero(vencidas)} nota="esperan más de lo permitido" tono={vencidas > 0 ? 'bad' : undefined} />
+        <Cifra etiqueta="Molestos o escalados" valor={numero(molestasOEscaladas)} nota="requieren a una persona" tono={molestasOEscaladas > 0 ? 'bad' : undefined} />
+      </TiraCifras>
       <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
         Tiempo de primera respuesta:{' '}
         {d.respuesta.muestra === 0

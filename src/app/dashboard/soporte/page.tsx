@@ -12,12 +12,18 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { FormaConAviso, Campo, CampoTexto, type ResultadoAccion } from '../../admin/ui/forma';
 import { HiloSoporte } from '../../admin/ui/hilo-soporte';
 import { ahoraMs } from '@/lib/saludo';
-import { EstadoVacio, KpiTile, StatusPill } from '../../admin/ui/kit';
+import { StatusPill } from '../../admin/ui/kit';
+import { EstadoVacio } from '../estados';
 // El rótulo del estado del ticket es COMPARTIDO con /admin/soporte (auditoría
 // 21, MEDIO 1): imprimir `t.estado` crudo aquí enseñaba "en_proceso" con guion
 // bajo al flota_admin mientras el admin sí lo traducía con su mapa privado.
 import { pillTicket } from './estatus';
 import { fechaMx, fechaHoraMx } from '@/lib/formato';
+import type { Metadata } from 'next';
+import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
+export const metadata: Metadata = { title: 'Centro de ayuda' };
 
 export const dynamic = 'force-dynamic';
 
@@ -183,17 +189,7 @@ export default async function SoportePage({
   const cerrado = detalle !== null && (detalle.estado === 'resuelto' || detalle.estado === 'cerrado');
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <LifeBuoy width={16} height={16} strokeWidth={1.75} />
-        <div>
-          <span className="text-sm font-medium block">Soporte &amp; Quejas</span>
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>
-            Tickets, prioridad, reloj de SLA y la conversación con Likida
-          </span>
-        </div>
-      </header>
-
+    <MarcoPagina titulo="Centro de ayuda" apoyo="Tickets, prioridad, reloj de SLA y la conversación con Likida.">
       {!tickets ? (
         <div className="glass-panel p-5">
           <EstadoVacio>
@@ -211,25 +207,25 @@ export default async function SoportePage({
       ) : (
         <>
           <div className="glass-panel p-5">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <KpiTile
+            <TiraCifras sello={selloHoy('Tickets de soporte')}>
+              <Cifra
                 icono={<LifeBuoy width={15} height={15} strokeWidth={1.75} />}
                 etiqueta="Abiertos"
                 valor={abiertos.length}
               />
-              <KpiTile
+              <Cifra
                 icono={<AlertTriangle width={15} height={15} strokeWidth={1.75} />}
                 etiqueta="SLA vencido"
                 valor={vencidos.length}
-                destacar={vencidos.length > 0}
+                tono={vencidos.length > 0 ? 'bad' : undefined}
               />
-              <KpiTile
+              <Cifra
                 icono={<Timer width={15} height={15} strokeWidth={1.75} />}
                 etiqueta="Sin SLA pactado"
                 valor={sinSla.length}
                 nota="No están vencidos: nadie les puso plazo"
               />
-            </div>
+            </TiraCifras>
           </div>
 
           <div className="glass-panel overflow-hidden">
@@ -379,6 +375,6 @@ export default async function SoportePage({
           <Campo nombre="descripcion" etiqueta="Detalle" placeholder="Opcional — folios, pantalla, qué esperabas" />
         </FormaConAviso>
       </div>
-    </div>
+    </MarcoPagina>
   );
 }

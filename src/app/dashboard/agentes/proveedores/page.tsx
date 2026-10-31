@@ -29,6 +29,8 @@ import { SeccionEntrega, SeccionRecepcion } from './seccion_buzon';
 import { VistaAgenteProveedores } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { MAX_ARCHIVO_SUBIDA_BYTES, MENSAJE_ARCHIVO_GRANDE } from '@/lib/http/subidas_formulario';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Facturas de proveedores' };
 
 export const dynamic = 'force-dynamic';
 

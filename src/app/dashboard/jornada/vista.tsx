@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { BellRing, CalendarClock, Download, ShieldQuestion } from 'lucide-react';
 import { numero, TZ_MX } from '@/lib/formato';
-import { EstadoVacio, EstadoError } from '@/app/admin/ui/kit';
+import { EstadoVacio, EstadoError } from '../estados';
 import {
   ROTULO_PROCEDENCIA, ALCANCE_PROCEDENCIA, aHoras, fraseDelHueco,
   type JornadaCompuesta,
@@ -11,10 +11,12 @@ import {
 } from '@/lib/likida/jornada/riesgo';
 import { LEYENDA_NOM_087, LEYENDA_NO_ES_BITACORA_83 } from '@/lib/likida/jornada/topes';
 import type { SemanaEvaluada } from '@/lib/likida/jornada/semanas';
-import { BarraPagina } from '../resumen-visual';
 import type { AlertaDeJornada } from '@/lib/likida/jornada/alerta_tope_datos';
 import { ROTULO_NIVEL, horasTexto } from '@/lib/likida/jornada/alerta_tope';
 import { FormasJornada, FormaPolitica, FormaAlertaTope, type AccionJornada, type ConfigAlertaForma } from './formas';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
+import { MarcoPagina } from '@/app/ui-v2/componentes';
 
 /**
  * LA PANTALLA DEL CONTRALOR — ver, corregir y cerrar el registro de jornada.
@@ -134,173 +136,165 @@ export function VistaJornada({
   const urlExport = `/api/export/jornada?${paramsExport.toString()}`;
 
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<CalendarClock width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Registro de jornada"
-        />
-        <div className="px-5 py-5 flex-1 space-y-4">
+    <MarcoPagina titulo="Jornada" apoyo="Registro de jornada del art. 132 fr. XXXIV de la LFT, por operador. Registra y avisa; no sustituye la bitácora de horas.">
 
-          {/* QUÉ ES ESTE DOCUMENTO Y QUÉ NO ES. Va arriba, no en una nota al
-              pie: una flota que crea que esto sustituye la bitácora de horas
-              de servicio se lleva la multa del art. 83 con nuestro archivo en
-              la mano. */}
-          <section className="card p-4 space-y-2">
-            <h2 className="font-display text-[15px] font-semibold">
-              Registro del artículo 132 fracción XXXIV de la Ley Federal del Trabajo
-            </h2>
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{LEYENDA_NO_ES_BITACORA_83}</p>
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{LEYENDA_NOM_087}</p>
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{LEYENDA_VEREDICTOS}</p>
-          </section>
+      {/* QUÉ ES ESTE DOCUMENTO Y QUÉ NO ES. Va arriba, no en una nota al
+          pie: una flota que crea que esto sustituye la bitácora de horas
+          de servicio se lleva la multa del art. 83 con nuestro archivo en
+          la mano. */}
+      <section className="card p-4 space-y-2">
+        <h2 className="font-display text-[15px] font-semibold">
+          Registro del artículo 132 fracción XXXIV de la Ley Federal del Trabajo
+        </h2>
+        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{LEYENDA_NO_ES_BITACORA_83}</p>
+        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{LEYENDA_NOM_087}</p>
+        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{LEYENDA_VEREDICTOS}</p>
+      </section>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Kpi titulo="Sin registro declarado" valor={cuenta && numero(cuenta.sinRegistro)}
-              nota="nadie reportó — no son cero horas" tono={cuenta && cuenta.sinRegistro > 0 ? 'warn' : undefined} />
-            <Kpi titulo="Posible exceso" valor={cuenta && numero(cuenta.conExceso)}
-              nota="rebasa un tope citable" tono={cuenta && cuenta.conExceso > 0 ? 'bad' : undefined} />
-            <Kpi titulo="Dato insuficiente" valor={cuenta && numero(cuenta.insuficientes)}
-              nota="no alcanza para concluir" tono={cuenta && cuenta.insuficientes > 0 ? 'warn' : undefined} />
-            <Kpi titulo="Sin conformidad" valor={cuenta && numero(cuenta.sinConformidad)}
-              nota="el operador no ha confirmado" tono={cuenta && cuenta.sinConformidad > 0 ? 'warn' : undefined} />
-          </div>
+      <TiraCifras sello={selloHoy('Registro de jornada')}>
+        <Cifra etiqueta="Sin registro declarado" valor={cuenta && numero(cuenta.sinRegistro)}
+          nota="nadie reportó — no son cero horas" tono={cuenta && cuenta.sinRegistro > 0 ? 'warn' : undefined} />
+        <Cifra etiqueta="Posible exceso" valor={cuenta && numero(cuenta.conExceso)}
+          nota="rebasa un tope citable" tono={cuenta && cuenta.conExceso > 0 ? 'bad' : undefined} />
+        <Cifra etiqueta="Dato insuficiente" valor={cuenta && numero(cuenta.insuficientes)}
+          nota="no alcanza para concluir" tono={cuenta && cuenta.insuficientes > 0 ? 'warn' : undefined} />
+        <Cifra etiqueta="Sin conformidad" valor={cuenta && numero(cuenta.sinConformidad)}
+          nota="el operador no ha confirmado" tono={cuenta && cuenta.sinConformidad > 0 ? 'warn' : undefined} />
+      </TiraCifras>
 
-          <section className="card p-4 space-y-3">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <h2 className="font-display text-[15px] font-semibold">
-                Del {desde} al {hasta}
-              </h2>
-              <Link href={`${urlExport}`} prefetch={false}
-                className="h-9 px-3.5 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 hairline hover:opacity-85 transition-opacity">
-                <Download width={14} height={14} strokeWidth={1.75} />
-                Descargar el reporte (CSV)
-              </Link>
-            </div>
-
-            {/* El filtro de fechas por GET: mueve TODO lo que hay debajo,
-                incluida la liga de descarga. Un rótulo que dice «del X al Y»
-                tiene que ser cierto para las dos cosas. */}
-            <form method="get" className="flex items-end gap-2 flex-wrap">
-              {/* El sufijo de previsualización del superadmin, como hidden —
-                  un GET plano sin esto apagaba `?tenant=`/`?vista=`/`?rol=` al
-                  filtrar (mismo patrón que `viajes/vista.tsx`). */}
-              {[...new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo).entries()]
-                .map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-              <label className="text-[11px] font-medium">
-                Desde
-                <input type="date" name="desde" defaultValue={desde}
-                  className="block hairline rounded-lg px-3 h-9 text-[13px] outline-none mt-1.5" />
-              </label>
-              <label className="text-[11px] font-medium">
-                Hasta
-                <input type="date" name="hasta" defaultValue={hasta}
-                  className="block hairline rounded-lg px-3 h-9 text-[13px] outline-none mt-1.5" />
-              </label>
-              {/* FE-19: con cientos de choferes, la ventana por omisión nace
-                  truncada casi siempre — sin este selector, la única forma de
-                  ver la jornada de UN operador era teclear su id en la URL. */}
-              <label className="text-[11px] font-medium">
-                Operador
-                <select name="operador" defaultValue={operador ?? ''}
-                  disabled={operadores === null || operadores.length === 0}
-                  aria-label="Filtrar por operador"
-                  className="block hairline rounded-lg px-3 h-9 text-[13px] outline-none mt-1.5 max-w-[220px]">
-                  <option value="">Todos</option>
-                  {(operadores ?? []).map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
-                </select>
-              </label>
-              <button type="submit" className="h-9 px-4 rounded-lg text-[13px] font-medium hairline hover:opacity-85 transition-opacity">
-                Ver
-              </button>
-            </form>
-            {operadores === null && (
-              <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
-                No se pudo leer el catálogo de operadores — el filtro por URL (<code>?operador=</code>) sigue funcionando.
-              </p>
-            )}
-
-            {truncada && (
-              <EstadoError mensaje="Este periodo trae más expedientes de los que caben en una lectura. Lo que se ve NO es el periodo entero: pídelo en rangos más cortos." />
-            )}
-
-            {motivoIlegible !== null ? (
-              <EstadoError mensaje={`${motivoIlegible} No se enseña media lista: media lista se ve igual que la lista entera, solo más corta — y aquí eso sería afirmar que unos operadores no reportaron.`} />
-            ) : lista.length === 0 ? (
-              <EstadoVacio icono={<CalendarClock width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                No hay expedientes de jornada en este periodo. Eso no significa que nadie trabajó:
-                significa que todavía no hay registro. Los operadores lo abren por WhatsApp con
-                «inicio jornada», y el sistema deriva lo que puede de los viajes y del GPS.
-              </EstadoVacio>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-[12.5px]">
-                  <thead>
-                    <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <Th>Día</Th>
-                      <Th>Operador</Th>
-                      <Th>Inicio</Th>
-                      <Th>Fin</Th>
-                      <Th>Descanso</Th>
-                      <Th>Total</Th>
-                      <Th>Lectura</Th>
-                      <Th>Estado</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lista.map((f) => (
-                      <Renglon key={f.jornadaId} f={f} sufijo={sufijo} desde={desde} hasta={hasta} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-
-          {/* ── EL EJE SEMANAL (tableros al día, 28-ago-2026) ──────────────
-              El tope del decreto es SEMANAL: un contralor podía tener catorce
-              días verdes uno por uno y una semana de 63 h — y esta pantalla
-              nunca lo decía, porque `evaluarRiesgoSemana` no tenía un solo
-              llamador. Solo semanas ENTERAS (lunes a domingo dentro de la
-              ventana): media semana evaluada diría «va bien» con el recorte. */}
-          {motivoIlegible === null && (
-            <SeccionSemanas semanas={semanas} truncada={truncada} />
-          )}
-
-          {/* El detalle y las correcciones del día abierto. Un solo día a la
-              vez: pintar un formulario por cada renglón mete cientos de forms
-              en una pantalla donde se corrige uno (la lección de FE-12 en
-              /dashboard/operadores). */}
-          {abrir !== null && lista.some((f) => f.jornadaId === abrir) && (
-            <FormasJornada
-              fila={lista.find((f) => f.jornadaId === abrir)!}
-              puedeCorregir={puedeCorregir && lista.find((f) => f.jornadaId === abrir)!.editable}
-              anularMarca={anularMarca}
-              capturarMarca={capturarMarca}
-              cerrarElDia={cerrarElDia}
-            />
-          )}
-
-          <PoliticaSeccion
-            politica={politica}
-            puedeCorregir={puedeDeclararPolitica}
-            declararPolitica={declararPolitica}
-          />
-
-          {motivoIlegible === null && (
-            <AlertaTopeSeccion
-              config={alertaConfig}
-              configIlegible={alertaConfigIlegible}
-              alertas={alertas}
-              filas={lista}
-              truncada={truncada}
-              puedeConfigurar={puedeConfigurarAlerta}
-              guardarAlerta={guardarAlerta}
-            />
-          )}
+      <section className="card p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="font-display text-[15px] font-semibold">
+            Del {desde} al {hasta}
+          </h2>
+          <Link href={`${urlExport}`} prefetch={false}
+            className="h-9 px-3.5 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 hairline hover:opacity-85 transition-opacity">
+            <Download width={14} height={14} strokeWidth={1.75} />
+            Descargar el reporte (CSV)
+          </Link>
         </div>
-      </div>
-    </main>
+
+        {/* El filtro de fechas por GET: mueve TODO lo que hay debajo,
+            incluida la liga de descarga. Un rótulo que dice «del X al Y»
+            tiene que ser cierto para las dos cosas. */}
+        <form method="get" className="flex items-end gap-2 flex-wrap">
+          {/* El sufijo de previsualización del superadmin, como hidden —
+              un GET plano sin esto apagaba `?tenant=`/`?vista=`/`?rol=` al
+              filtrar (mismo patrón que `viajes/vista.tsx`). */}
+          {[...new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo).entries()]
+            .map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
+          <label className="text-[11px] font-medium">
+            Desde
+            <input type="date" name="desde" defaultValue={desde}
+              className="block hairline rounded-lg px-3 h-9 text-[13px] outline-none mt-1.5" />
+          </label>
+          <label className="text-[11px] font-medium">
+            Hasta
+            <input type="date" name="hasta" defaultValue={hasta}
+              className="block hairline rounded-lg px-3 h-9 text-[13px] outline-none mt-1.5" />
+          </label>
+          {/* FE-19: con cientos de choferes, la ventana por omisión nace
+              truncada casi siempre — sin este selector, la única forma de
+              ver la jornada de UN operador era teclear su id en la URL. */}
+          <label className="text-[11px] font-medium">
+            Operador
+            <select name="operador" defaultValue={operador ?? ''}
+              disabled={operadores === null || operadores.length === 0}
+              aria-label="Filtrar por operador"
+              className="block hairline rounded-lg px-3 h-9 text-[13px] outline-none mt-1.5 max-w-[220px]">
+              <option value="">Todos</option>
+              {(operadores ?? []).map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
+            </select>
+          </label>
+          <button type="submit" className="h-9 px-4 rounded-lg text-[13px] font-medium hairline hover:opacity-85 transition-opacity">
+            Ver
+          </button>
+        </form>
+        {operadores === null && (
+          <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
+            No se pudo leer el catálogo de operadores — el filtro por URL (<code>?operador=</code>) sigue funcionando.
+          </p>
+        )}
+
+        {truncada && (
+          <EstadoError mensaje="Este periodo trae más expedientes de los que caben en una lectura. Lo que se ve NO es el periodo entero: pídelo en rangos más cortos." />
+        )}
+
+        {motivoIlegible !== null ? (
+          <EstadoError mensaje={`${motivoIlegible} No se enseña media lista: media lista se ve igual que la lista entera, solo más corta — y aquí eso sería afirmar que unos operadores no reportaron.`} />
+        ) : lista.length === 0 ? (
+          <EstadoVacio icono={<CalendarClock width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+            No hay expedientes de jornada en este periodo. Eso no significa que nadie trabajó:
+            significa que todavía no hay registro. Los operadores lo abren por WhatsApp con
+            «inicio jornada», y el sistema deriva lo que puede de los viajes y del GPS.
+          </EstadoVacio>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12.5px]">
+              <thead>
+                <tr style={{ color: 'var(--muted)' }} className="text-left">
+                  <Th>Día</Th>
+                  <Th>Operador</Th>
+                  <Th>Inicio</Th>
+                  <Th>Fin</Th>
+                  <Th>Descanso</Th>
+                  <Th>Total</Th>
+                  <Th>Lectura</Th>
+                  <Th>Estado</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {lista.map((f) => (
+                  <Renglon key={f.jornadaId} f={f} sufijo={sufijo} desde={desde} hasta={hasta} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* ── EL EJE SEMANAL (tableros al día, 28-ago-2026) ──────────────
+          El tope del decreto es SEMANAL: un contralor podía tener catorce
+          días verdes uno por uno y una semana de 63 h — y esta pantalla
+          nunca lo decía, porque `evaluarRiesgoSemana` no tenía un solo
+          llamador. Solo semanas ENTERAS (lunes a domingo dentro de la
+          ventana): media semana evaluada diría «va bien» con el recorte. */}
+      {motivoIlegible === null && (
+        <SeccionSemanas semanas={semanas} truncada={truncada} />
+      )}
+
+      {/* El detalle y las correcciones del día abierto. Un solo día a la
+          vez: pintar un formulario por cada renglón mete cientos de forms
+          en una pantalla donde se corrige uno (la lección de FE-12 en
+          /dashboard/operadores). */}
+      {abrir !== null && lista.some((f) => f.jornadaId === abrir) && (
+        <FormasJornada
+          fila={lista.find((f) => f.jornadaId === abrir)!}
+          puedeCorregir={puedeCorregir && lista.find((f) => f.jornadaId === abrir)!.editable}
+          anularMarca={anularMarca}
+          capturarMarca={capturarMarca}
+          cerrarElDia={cerrarElDia}
+        />
+      )}
+
+      <PoliticaSeccion
+        politica={politica}
+        puedeCorregir={puedeDeclararPolitica}
+        declararPolitica={declararPolitica}
+      />
+
+      {motivoIlegible === null && (
+        <AlertaTopeSeccion
+          config={alertaConfig}
+          configIlegible={alertaConfigIlegible}
+          alertas={alertas}
+          filas={lista}
+          truncada={truncada}
+          puedeConfigurar={puedeConfigurarAlerta}
+          guardarAlerta={guardarAlerta}
+        />
+      )}
+    </MarcoPagina>
   );
 }
 
@@ -617,28 +611,7 @@ export function AlertaTopeSeccion({
   );
 }
 
-/** `valor === null` = no se pudo contar. Se ESCRIBE, no se pinta un 0: un cero
- *  aquí es una afirmación sobre cuántos operadores no reportaron. */
-function Kpi({ titulo, valor, nota, tono }: {
-  titulo: string; valor: string | null; nota?: string; tono?: 'warn' | 'bad' | null;
-}) {
-  const color = tono === 'bad' ? 'var(--bad)' : tono === 'warn' ? 'var(--warn)' : undefined;
-  return (
-    <div className="card p-3.5">
-      <div className="text-[11.5px]" style={{ color: 'var(--muted)' }}>{titulo}</div>
-      {valor === null ? (
-        <div className="text-[12.5px] mt-1" style={{ color: 'var(--muted)' }}>
-          no se pudo leer
-        </div>
-      ) : (
-        <>
-          <div className="font-display text-[22px] font-semibold mt-0.5" style={color ? { color } : undefined}>{valor}</div>
-          {nota && <div className="text-[11px] mt-0.5" style={{ color: 'var(--muted)' }}>{nota}</div>}
-        </>
-      )}
-    </div>
-  );
-}
+
 
 function Th({ children }: { children: React.ReactNode }) {
   return <th className="font-medium text-[11.5px] pb-2 pr-3">{children}</th>;

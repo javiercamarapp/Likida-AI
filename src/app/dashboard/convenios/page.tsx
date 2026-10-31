@@ -10,6 +10,8 @@ import { ConveniosNoDisponibles, listarCatalogosConvenio, listarConvenios, lista
 import { sufijoTenant } from '../sufijo';
 import { VistaConvenios } from './vista';
 import type { ResultadoSitio } from '../agentes/conductores/sitios/formas';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Convenios de clientes' };
 
 export const dynamic = 'force-dynamic';
 

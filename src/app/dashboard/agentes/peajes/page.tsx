@@ -33,6 +33,8 @@ import type { EstadoConciliar } from './conciliar-desglose';
 import type { EstadoAnular } from './anular-desglose';
 import type { EstadoPeriodo } from './declarar-periodo';
 import { MAX_ARCHIVO_SUBIDA_BYTES, MENSAJE_ARCHIVO_GRANDE } from '@/lib/http/subidas_formulario';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Conciliación de peajes' };
 
 export const dynamic = 'force-dynamic';
 // A37-O7-06: las Server Actions de esta página corren bajo el límite de la página. La subida manual de desgloses y la importación

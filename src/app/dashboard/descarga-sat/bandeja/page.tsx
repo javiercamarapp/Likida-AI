@@ -1,5 +1,7 @@
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { VistaBandejaSat } from './vista';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Conciliación del SAT' };
 
 export const dynamic = 'force-dynamic';
 

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Truck, Download, RefreshCw, FileText, FileSpreadsheet, Send, Settings2 } from 'lucide-react';
 import { fechaCorta, numero, hoyMx, fechaHoraMx } from '@/lib/formato';
-import { EstadoVacio } from '@/app/admin/ui/kit';
+import { EstadoVacio } from '../../estados';
 import { ESTILO_CONTROL } from '@/app/admin/ui/forma';
 import { dinero } from '@/lib/likida/liquidacion_externa/presentacion';
 import { motivoDeFallo } from '@/lib/likida/liquidacion_externa/api';
