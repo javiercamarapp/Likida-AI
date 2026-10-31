@@ -10,7 +10,7 @@ import { plantillaCsv, TIPOS_PLANTILLA, type Registro, type TipoPlantilla } from
 import { COLUMNAS_CLAVE, ROTULO_COLUMNA, columnasDeFila, filtrarFilas, valoresDeFormulario, type FilasCatalogo } from '@/lib/likida/carta_porte_docs/catalogo_pantalla';
 import { Aviso, BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
 import type { EstadoImportacion } from './actions';
-import { Aviso, BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
+import { Aviso as AvisoV2, BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
 
 /**
  * LA PANTALLA «CATÁLOGO DEL CLIENTE» (T-A3-22): lo que el agente aprende UNA vez de cada cliente y usa en cada documento.
@@ -264,7 +264,7 @@ export function VistaCatalogo({ clientes, clienteId, catalogo, lecturaFallida = 
   const vacio = catalogo !== null && catalogo.numero === null && catalogo.productos.length === 0 && catalogo.partes.length === 0;
   return (
     <MarcoPagina titulo="Catálogo del cliente" apoyo="Lo que el agente aprende una vez de cada cliente: productos, remitentes y destinatarios y su número interno." acciones={<BotonEnlace tamano="sm" href={`/dashboard/agentes/carta-porte${sufijo}`} icono={<ArrowLeft width={13} height={13} strokeWidth={1.75} />}>Volver al Agente de Carta Porte</BotonEnlace>}>
-      <Aviso tono="info">Un dato del catálogo nunca pisa lo que una persona escribió en la revisión.</Aviso>
+      <AvisoV2 tono="info">Un dato del catálogo nunca pisa lo que una persona escribió en la revisión.</AvisoV2>
 
       <Importador ver={ver} importar={acciones.importar} />
 
