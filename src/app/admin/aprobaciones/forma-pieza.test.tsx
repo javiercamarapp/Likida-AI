@@ -108,8 +108,8 @@ describe('FormaEnvio — "Enviar por correo" exige confirmación (HALLAZGO MEDIO
 
   it('tono="peligro": el foco inicial cae en Cancelar, no en el botón que envía', () => {
     const html = renderToStaticMarkup(<FormaEnvio pieza={pieza({})} accion={accionNoop} />);
-    expect(boton(html, 'Cancelar')).toContain('data-foco-inicial');
-    expect(boton(html, 'Sí, enviar')).not.toContain('data-foco-inicial');
+    expect(boton(html, 'Cancelar')).toContain('data-autofocus');
+    expect(boton(html, 'Sí, enviar')).not.toContain('data-autofocus');
   });
 
   it('INTEGRACIÓN — confirmar en el diálogo (el type="submit" real) SÍ invoca la acción de envío', async () => {

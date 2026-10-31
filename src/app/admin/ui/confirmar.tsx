@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useState } from 'react';
+import { Boton } from '../../ui-v2/componentes/boton';
+import { Modal } from '../../ui-v2/componentes/overlay';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL DIÁLOGO DE CONFIRMACIÓN — UNO (W2 «producto», 1-oct-2026).
@@ -8,9 +10,10 @@ import { useEffect, useId, useRef, useState } from 'react';
 // El panel confirmaba lo destructivo de cuatro maneras distintas: botones
 // «¿Seguro? Sí / No» en línea (usuarios, llaves, reglas, credenciales, sesiones
 // MCP), un `confirm()` del navegador (que bloquea el headless y los modales) o
-// nada. Aquí vive el modal, sobre el `<dialog>` NATIVO: `showModal()` da gratis
-// el foco atrapado, el fondo inerte, Esc para cancelar y la devolución del foco
-// al botón que lo abrió — lo que un div con z-index no da sin 150 líneas.
+// nada. Aquí vive el modal, y es el `Modal alerta` del motor ÚNICO de overlays
+// (`ui-v2/componentes/overlay.tsx`, L3): foco atrapado, fondo inerte, Esc,
+// scroll lock y retorno del foco al botón que lo abrió, con las medidas del
+// resto de pop-ups (440, radio 12, pie 12×16). Misma API de siempre.
 //
 // REGLAS DE USO:
 //  · lo irreversible o lo que corta el acceso de una persona (baja de chofer,
@@ -49,52 +52,24 @@ export function DialogoConfirmar({
   tono = 'peligro', onConfirmar, onCancelar, pendiente = false, tipoConfirmar = 'button',
   nombreConfirmar, valorConfirmar,
 }: PropsDialogo) {
-  const ref = useRef<HTMLDialogElement>(null);
-  const idTitulo = useId();
-  const idDescripcion = useId();
-
-  useEffect(() => {
-    const d = ref.current;
-    if (!d) return;
-    if (abierto && !d.open) {
-      d.showModal();
-      // `autoFocus` de React llama a focus() al montar (con el diálogo cerrado,
-      // sin efecto) y no emite el atributo nativo: el foco inicial se pone aquí.
-      d.querySelector<HTMLElement>('[data-foco-inicial]')?.focus();
-    }
-    if (!abierto && d.open) d.close();
-  }, [abierto]);
-
   const peligro = tono === 'peligro';
+  // Una confirmación destructiva es una ALERTA (role="alertdialog"); Esc, el clic al fondo y Cancelar cancelan.
+  // El foco inicial cae en CANCELAR cuando es peligro, en confirmar si no.
   return (
-    <dialog
-      ref={ref}
-      aria-labelledby={idTitulo} aria-describedby={idDescripcion}
-      onCancel={(e) => { e.preventDefault(); onCancelar(); }}
-      // Clic en el fondo (el propio <dialog>, no su contenido) = cancelar.
-      onClick={(e) => { if (e.target === ref.current) onCancelar(); }}
-      className="m-auto w-[min(92vw,28rem)] rounded-2xl p-0 backdrop:bg-black/40"
-      style={{ background: 'var(--surface)', color: 'var(--ink)', border: '1px solid var(--line)', boxShadow: 'var(--shadow-pop)' }}
-    >
-      <div className="space-y-2 p-5">
-        <h2 id={idTitulo} className="font-display text-[16px] font-semibold">{titulo}</h2>
-        <div id={idDescripcion} className="text-[13px]" style={{ color: 'var(--muted)' }}>{descripcion}</div>
-      </div>
-      <div className="flex justify-end gap-2 px-5 pb-5">
-        <button type="button" onClick={onCancelar} data-foco-inicial={peligro ? '' : undefined}
-          className="hairline h-9 rounded-lg px-4 text-[13px] font-medium transition-colors hover:bg-[var(--canvas)]">
-          {etiquetaCancelar}
-        </button>
-        <button type={tipoConfirmar} name={nombreConfirmar} value={valorConfirmar} disabled={pendiente} data-foco-inicial={peligro ? undefined : ''}
-          onClick={onConfirmar}
-          className="h-9 rounded-lg px-4 text-[13px] font-medium transition-opacity hover:opacity-85 disabled:opacity-50"
-          style={peligro
-            ? { background: 'var(--badbg)', color: 'var(--bad)', border: '1px solid var(--bad)' }
-            : { background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-          {pendiente ? 'Un momento…' : etiquetaConfirmar}
-        </button>
-      </div>
-    </dialog>
+    <Modal
+      alerta={peligro} abierto={abierto} onCerrar={onCancelar} titulo={titulo} descripcion={descripcion}
+      pie={(
+        <>
+          <Boton variante="secondary" tamano="sm" onClick={onCancelar} data-autofocus={peligro ? '' : undefined}>
+            {etiquetaCancelar}
+          </Boton>
+          <Boton variante={peligro ? 'danger-soft' : 'primary'} tamano="sm" type={tipoConfirmar} name={nombreConfirmar} value={valorConfirmar}
+            disabled={pendiente} onClick={onConfirmar} data-autofocus={peligro ? undefined : ''}>
+            {pendiente ? 'Un momento…' : etiquetaConfirmar}
+          </Boton>
+        </>
+      )}
+    />
   );
 }
 

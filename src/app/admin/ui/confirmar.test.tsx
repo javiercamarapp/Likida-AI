@@ -25,14 +25,14 @@ describe('DialogoConfirmar', () => {
 
   it('en tono peligro el foco inicial cae en CANCELAR, no en el botón rojo', () => {
     const html = renderToStaticMarkup(<DialogoConfirmar {...base} tono="peligro" />);
-    expect(boton(html, 'Cancelar')).toContain('data-foco-inicial');
-    expect(boton(html, 'Dar de baja')).not.toContain('data-foco-inicial');
+    expect(boton(html, 'Cancelar')).toContain('data-autofocus');
+    expect(boton(html, 'Dar de baja')).not.toContain('data-autofocus');
   });
 
   it('en tono normal el foco inicial cae en confirmar', () => {
     const html = renderToStaticMarkup(<DialogoConfirmar {...base} tono="normal" />);
-    expect(boton(html, 'Dar de baja')).toContain('data-foco-inicial');
-    expect(boton(html, 'Cancelar')).not.toContain('data-foco-inicial');
+    expect(boton(html, 'Dar de baja')).toContain('data-autofocus');
+    expect(boton(html, 'Cancelar')).not.toContain('data-autofocus');
   });
 
   it('mientras el server action corre, confirmar se deshabilita (no hay doble envío)', () => {
