@@ -38,7 +38,15 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 vi.mock('@/lib/meta/enviar_con_fallback', () => ({ enviarConFallback: vi.fn() }));
 vi.mock('../conductor/repo', () => ({ leerAgenteChoferHabilitado: vi.fn(), leerConfigConductor: vi.fn() }));
-vi.mock('../conductor/trabajo', () => ({ hayEmergenciaDeTelefono: vi.fn() }));
+// El merge de la 40 trajo `compuerta_operador.ts`, que al cargarse lee TRES
+// exports de este modulo (`trabajo.ts:5` de `compuerta_operador.ts`). El doble
+// tiene que ofrecerlos los tres o el modulo no se puede importar.
+vi.mock('../conductor/trabajo', () => ({
+  hayEmergenciaDeTelefono: vi.fn(),
+  leerViajesAbiertosDeTelefono: vi.fn(),
+  leerMuestrasGps: vi.fn(),
+  leerSitiosGeometriaDeViajes: vi.fn(),
+}));
 vi.mock('../conductor/escalamiento', () => ({ destinatariosEscalacion: vi.fn() }));
 vi.mock('./repo', () => ({ asientosDeJornada: vi.fn(), leerPolitica: vi.fn() }));
 vi.mock('../presupuesto', () => ({ acotada: async <T,>(p: PromiseLike<T>) => p }));
