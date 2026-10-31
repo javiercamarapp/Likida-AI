@@ -157,6 +157,8 @@ export function conSufijo(ruta: string, sufijo: string): string {
 export interface OpcionesFilas {
   puede?: (ruta: string) => boolean;
   fallidos?: readonly AgenteInsight[];
+  /** Filas ya armadas por quien llama (p. ej. «viajes en curso» del Inicio de cinco agentes); cuentan para el mínimo. */
+  extra?: readonly FilaAtencion[];
 }
 
 /** Los atajos del pie de «Siguiente mejor acción». Cada uno se ofrece solo si el rol los abre (`puedeVerRuta`). */
@@ -196,6 +198,7 @@ export function filasAtencion(
       queHacer: 'Vuelve a cargar en un momento. Si sigue igual, abre el agente y revisa ahí.', fuente: 'Lectura del agente, ahora', textoAccion: `Abrir ${NOMBRE_AGENTE[a]}`,
     });
   }
+  filas.push(...(opciones.extra ?? []));
   const porRevisar = d.kpis?.porRevisar ?? null;
   if (porRevisar !== null && porRevisar > 0) {
     filas.push({
