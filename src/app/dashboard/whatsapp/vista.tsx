@@ -4,7 +4,7 @@ import { numero } from '@/lib/formato';
 import { EstadoError } from '../estados';
 import { AccionesEnlace } from './acciones';
 import type { NumeroWhatsApp } from '@/lib/likida/arranque_whatsapp';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 export interface DatosArranque {
   numero: NumeroWhatsApp;
@@ -75,10 +75,10 @@ export function VistaArranqueWhatsApp({ datos, hrefOperadores, hrefAyuda }: {
                 dangerouslySetInnerHTML={{ __html: datos.qrSvg }} />
             )}
             <div className="min-w-0 space-y-2">
-              <h2 id="titulo-cartel" className="font-display text-[16px] font-semibold flex items-center gap-1.5">
+              <TituloRecuadro id="titulo-cartel" info="whatsapp.cartel">
                 <MessageCircle aria-hidden width={16} height={16} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
                 Escríbele a Likida por WhatsApp
-              </h2>
+              </TituloRecuadro>
               <p className="font-display text-[26px] font-semibold tabular" style={{ color: 'var(--ink)' }}>{n.visible}</p>
               <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
                 Escanea el código o toca el enlace desde el celular que diste de alta en {datos.nombreFlota}. Se abre el chat con el mensaje
@@ -101,7 +101,7 @@ export function VistaArranqueWhatsApp({ datos, hrefOperadores, hrefAyuda }: {
       )}
 
       <section aria-labelledby="titulo-flujo" className="card p-4">
-        <h2 id="titulo-flujo" className="font-display text-[15px] font-semibold mb-3">Qué pasa con cada chofer</h2>
+        <TituloRecuadro id="titulo-flujo" info="whatsapp.flujo" className="mb-3">Qué pasa con cada chofer</TituloRecuadro>
         <ol className="space-y-3">
           {PASOS_CHOFER.map(([titulo, detalle], i) => (
             <li key={titulo} className="flex items-start gap-3">
@@ -117,7 +117,7 @@ export function VistaArranqueWhatsApp({ datos, hrefOperadores, hrefAyuda }: {
       </section>
 
       <section aria-labelledby="titulo-estado" className="card p-4">
-        <h2 id="titulo-estado" className="font-display text-[15px] font-semibold mb-1">Dónde vas con tus operadores</h2>
+        <TituloRecuadro id="titulo-estado" info="whatsapp.avance" className="mb-1">Dónde vas con tus operadores</TituloRecuadro>
         {datos.operadores === null ? (
           <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No pude contar a tus operadores en este momento.</p>
         ) : datos.operadores.activos === 0 ? (

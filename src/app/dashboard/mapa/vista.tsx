@@ -5,7 +5,7 @@ import { nivelDePosicion, contarPorFrescura, ROTULO_FRESCURA, TONO_FRESCURA, MIN
 import { MapaVivo, type ViajeEnMapa, type PinUnidad } from './mapa-vivo';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 export interface SinUbicar {
   id: string;
@@ -86,12 +86,12 @@ export function VistaMapa({ ubicados, sinUbicar, totalVivos, tope, rastreo }: {
               recientes — ~90 minutos de operación a 50k viajes/mes. Ahora
               es el conteo real de la flota; lo acotado es el DIBUJO. */}
           <Cifra etiqueta="Viajes en curso" valor={totalVivos === null ? '—' : numero(totalVivos)}
-            nota={totalVivos === null ? 'no se pudo contar' : 'abiertos o en cuadre'} />
-          <Cifra etiqueta="En el mapa" valor={numero(ubicados.length)} />
+            nota={totalVivos === null ? 'no se pudo contar' : 'abiertos o en cuadre'} info="mapa.viajes_en_curso" />
+          <Cifra etiqueta="En el mapa" valor={numero(ubicados.length)} info="mapa.en_el_mapa" />
           <Cifra etiqueta="Sin ubicar" valor={numero(sinUbicar.length)}
             nota={sinUbicar.length > 0 ? 'listados abajo, no omitidos' : undefined}
-            tono={sinUbicar.length > 0 ? 'warn' : undefined} />
-          <Cifra etiqueta="Escalados" valor={numero(escalados)} tono={escalados > 0 ? 'bad' : undefined} />
+            tono={sinUbicar.length > 0 ? 'warn' : undefined} info="mapa.sin_ubicar" />
+          <Cifra etiqueta="Escalados" valor={numero(escalados)} tono={escalados > 0 ? 'bad' : undefined} info="mapa.escalados" />
           {/* AUDITORÍA 20 (H5): el GPS existía y no se veía. `null` cuando
               la lectura no se pudo hacer — nunca un 0 inventado, que aquí
               significaría "ninguna unidad reporta". */}
@@ -102,7 +102,7 @@ export function VistaMapa({ ubicados, sinUbicar, totalVivos, tope, rastreo }: {
               : rastreo.ultimaPosicion !== null
                 ? `última: ${fechaHoraMx(rastreo.ultimaPosicion)}`
                 : 'sin una sola posición todavía'}
-            tono={rastreo.error !== null ? 'warn' : undefined} />
+            tono={rastreo.error !== null ? 'warn' : undefined} info="mapa.unidades_con_posicion" />
         </TiraCifras>
         {/* El tope se declara. Antes decía "los N viajes más recientes"
             mezclando liquidados y vivos; ahora la base ya filtró por
@@ -124,7 +124,7 @@ export function VistaMapa({ ubicados, sinUbicar, totalVivos, tope, rastreo }: {
       <section className="card p-4">
         <div className="flex items-center gap-2 mb-1">
           <Satellite width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-          <h2 className="font-display text-[15px] font-semibold">Últimas posiciones</h2>
+          <TituloRecuadro info="mapa.posiciones">Últimas posiciones</TituloRecuadro>
         </div>
 
         {rastreo.error !== null ? (
@@ -259,7 +259,7 @@ export function VistaMapa({ ubicados, sinUbicar, totalVivos, tope, rastreo }: {
 
       {sinUbicar.length > 0 && (
         <section className="card p-4">
-          <h2 className="font-display text-[15px] font-semibold mb-1">Sin ubicar en el mapa</h2>
+          <TituloRecuadro info="mapa.sin_ubicar_lista" className="mb-1">Sin ubicar en el mapa</TituloRecuadro>
           <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
             Viajes vivos cuya ciudad no está en la tabla del mapa — existen igual, solo no se dibujan
           </p>

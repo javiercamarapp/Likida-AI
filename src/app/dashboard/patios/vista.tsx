@@ -6,7 +6,7 @@ import { Plegable } from '../clientes/forma';
 import {
   FormaNuevoPatio, FormaEditarPatio, FormaJefe, FormaSinPatio, type AccionForma,
 } from './formas';
-import { MarcoPagina, Aviso } from '@/app/ui-v2/componentes';
+import { MarcoPagina, Aviso, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 export interface FilaPatio {
   id: string;
@@ -66,13 +66,13 @@ export function VistaPatios({
 
       {puedeAdministrar && (
         <section className="card p-4">
-          <h2 className="font-display text-[15px] font-semibold mb-3">Crear un patio</h2>
+          <TituloRecuadro info="patios.crear" className="mb-3">Crear un patio</TituloRecuadro>
           <FormaNuevoPatio accion={crear} />
         </section>
       )}
 
       <section className="card p-4">
-        <h2 className="font-display text-[15px] font-semibold mb-3">Tus patios</h2>
+        <TituloRecuadro info="patios.lista" className="mb-3">Tus patios</TituloRecuadro>
         {ilegible ? (
           <EstadoError mensaje="No pude leer los patios de tu flota. No se enseña una lista a medias: parecería que faltan patios que sí existen." />
         ) : lista.length === 0 ? (
@@ -111,9 +111,9 @@ export function VistaPatios({
       {puedeAdministrar && lista.length > 0 && (
         <section className="card p-4 space-y-4">
           <div>
-            <h2 className="font-display text-[15px] font-semibold flex items-center gap-1.5">
+            <TituloRecuadro info="patios.jefes">
               <UserCog aria-hidden width={15} height={15} strokeWidth={1.75} /> Jefes de tráfico
-            </h2>
+            </TituloRecuadro>
             <p className="mt-0.5 text-[12px]" style={{ color: 'var(--muted)' }}>
               Con un patio asignado, el jefe solo corrige operadores, unidades y jornadas de ese patio. Sin patio ve y
               corrige toda la flota (un jefe de oficina central). Se invita al equipo desde Usuarios.
@@ -138,10 +138,10 @@ export function VistaPatios({
       {puedeAdministrar && lista.length > 0 && sinPatio && (sinPatio.operadores > 0 || sinPatio.unidades > 0) && (
         <section className="card p-4 space-y-3">
           <div>
-            <h2 className="font-display text-[15px] font-semibold flex items-center gap-1.5">
+            <TituloRecuadro info="patios.sin_patio">
               <Users aria-hidden width={15} height={15} strokeWidth={1.75} />
               <Container aria-hidden width={15} height={15} strokeWidth={1.75} /> Lo que cargaste sin patio
-            </h2>
+            </TituloRecuadro>
             <p className="mt-0.5 text-[12px]" style={{ color: 'var(--muted)' }}>
               Si tu flota opera desde un solo patio, asígnalos de una vez. Si tienes varios, usa la columna «patio» de la
               carga masiva o asigna uno por uno desde su ficha.

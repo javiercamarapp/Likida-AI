@@ -1,4 +1,4 @@
-import { BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
+import { BotonEnlace, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 import { CircleAlert, MapPin, MapPinOff, Radio, ShieldAlert } from 'lucide-react';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import { ETIQUETA_DESTINO, type TareaAbierta } from '@/lib/likida/orquestador/escalamiento';
@@ -151,7 +151,7 @@ export function TareasAbiertas({ tareas, accion, ocultos, aviso = null, errorLec
   if (errorLectura) {
     return (
       <section aria-label="Tareas que el asistente dejó para una persona" className="card p-4 space-y-2.5">
-        <div className="flex items-center gap-2"><Radio size={15} aria-hidden /><h2 className="text-[13px] font-medium">Tareas del asistente</h2></div>
+        <div className="flex items-center gap-2"><Radio size={15} aria-hidden /><TituloRecuadro info="viajes_en_vivo.tareas">Tareas del asistente</TituloRecuadro></div>
         <p role="alert" className="text-[12px]" style={{ color: 'var(--muted)' }}>No pude leer las tareas abiertas; recarga la página. Esto no significa que no haya pendientes.</p>
       </section>
     );
@@ -159,7 +159,7 @@ export function TareasAbiertas({ tareas, accion, ocultos, aviso = null, errorLec
   if (tareas === null) return null; // base sin la 0650: el asistente avisa por chat que no puede escalar
   return (
     <section aria-label="Tareas que el asistente dejó para una persona" className="card p-4 space-y-2.5">
-      <div className="flex items-center gap-2"><Radio size={15} aria-hidden /><h2 className="text-[13px] font-medium">Tareas del asistente</h2></div>
+      <div className="flex items-center gap-2"><Radio size={15} aria-hidden /><TituloRecuadro info="viajes_en_vivo.tareas">Tareas del asistente</TituloRecuadro></div>
       {aviso && AVISO_ATENCION[aviso] && <p role="status" className="text-[12px]" style={{ color: 'var(--muted)' }}>{AVISO_ATENCION[aviso]}</p>}
       {tareas.length === 0
         ? <p className="text-[12px]" style={{ color: 'var(--faint)' }}>No hay tareas abiertas. Cuando el asistente derive algo delicado a una persona, aparece aquí.</p>
@@ -220,10 +220,10 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
       )}
 
       <TiraCifras sello={selloHoy('Viajes en curso')}>
-        <Cifra etiqueta="Viajes en curso" valor={numero(c.viajes)} nota={tablero.hayMas ? 'Hay más viajes activos que los listados' : undefined} />
-        <Cifra etiqueta="Con excepción" valor={numero(c.conExcepcion)} tono={c.conExcepcion > 0 ? 'warn' : undefined} />
-        <Cifra etiqueta="Sin señal de vida" valor={numero(c.sinSenal)} nota="Chofer y tractor callados" tono={c.sinSenal > 0 ? 'bad' : undefined} />
-        <Cifra etiqueta="Llegadas sin confirmar" valor={numero(c.llegadaSinConfirmar)} nota={`${numero(c.escaladosATrafico)} escalados a tráfico`} />
+        <Cifra etiqueta="Viajes en curso" valor={numero(c.viajes)} nota={tablero.hayMas ? 'Hay más viajes activos que los listados' : undefined} info="viajes_en_vivo.en_curso" />
+        <Cifra etiqueta="Con excepción" valor={numero(c.conExcepcion)} tono={c.conExcepcion > 0 ? 'warn' : undefined} info="viajes_en_vivo.con_excepcion" />
+        <Cifra etiqueta="Sin señal de vida" valor={numero(c.sinSenal)} nota="Chofer y tractor callados" tono={c.sinSenal > 0 ? 'bad' : undefined} info="viajes_en_vivo.sin_senal" />
+        <Cifra etiqueta="Llegadas sin confirmar" valor={numero(c.llegadaSinConfirmar)} nota={`${numero(c.escaladosATrafico)} escalados a tráfico`} info="viajes_en_vivo.llegadas_sin_confirmar" />
       </TiraCifras>
 
       <Filtros f={filtros} c={catalogo} accionUrl={accionUrl} ocultos={ocultos} />

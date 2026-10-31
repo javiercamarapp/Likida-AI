@@ -13,7 +13,7 @@ import { Plegable } from '../clientes/forma';
 import { FormaUnidad, type AccionForma, type ProveedorGps, type PatioOpcion } from './forma';
 import { ImportadorMasivo, type AccionImportacion } from '../importador-masivo';
 import { AccionesEstadoUnidad, ReactivarUnidad, type AccionEstado } from './estado';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 const PILL: Record<EstadoVigencia, { fg: string; bg: string; Icono: typeof ShieldCheck }> = {
   vencido: { fg: 'var(--bad)', bg: 'var(--badbg)', Icono: ShieldAlert },
@@ -164,7 +164,7 @@ export function VistaUnidades({
           escribe (misma puerta que clientes). */}
       {puedeEditar && (
         <section className="card p-4">
-          <h2 className="font-display text-[14px] font-semibold mb-1">Dar de alta una unidad</h2>
+          <TituloRecuadro info="unidades.alta" className="mb-1">Dar de alta una unidad</TituloRecuadro>
           <p className="text-[11px] mb-2" style={{ color: 'var(--faint)' }}>
             Con sus vigencias capturadas, Likida avisa qué papel vence primero.
           </p>
@@ -242,7 +242,7 @@ export function VistaUnidades({
                   <p.Icono width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: p.fg }} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h2 className="font-display text-[14px] font-semibold">{u.numeroEconomico}</h2>
+                      <TituloRecuadro info="unidades.ficha">{u.numeroEconomico}</TituloRecuadro>
                       {u.placas && (
                         <span className="text-[12px] cifra-mono" style={{ color: 'var(--muted)' }}>{u.placas}</span>
                       )}
@@ -351,9 +351,9 @@ export function VistaUnidades({
           historial de viajes y de taller sigue completo. */}
       {totalBajas > 0 && (
         <section className="card p-4">
-          <h2 className="font-display text-[14px] font-semibold mb-1">
+          <TituloRecuadro info="unidades.bajas" className="mb-1">
             Dadas de baja ({numero(totalBajas)})
-          </h2>
+          </TituloRecuadro>
           <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
             Fuera del parque: no se ofrecen para viajes nuevos y no cuentan en los papeles de arriba.
             Su historial se conserva.

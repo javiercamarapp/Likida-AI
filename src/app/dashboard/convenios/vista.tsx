@@ -4,7 +4,7 @@ import { ETIQUETA_CATEGORIA } from '@/lib/likida/convenios/tipos';
 import { textoParaSistemaDeLaFlota } from '@/lib/likida/convenios/importador';
 import type { ConvenioFila, ViajeConvenioFila } from '@/lib/likida/convenios/repo';
 import { FormaConvenio, FormaCorregirConvenio, FormaImportarConvenios, type AccionConvenio, type CatalogosFormaConvenio } from './formas';
-import { MarcoPagina, Aviso } from '@/app/ui-v2/componentes';
+import { MarcoPagina, Aviso, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 // SOLO tipos del repositorio: la vista no arrastra al bundle el acceso a datos.
 
@@ -86,7 +86,7 @@ export function VistaConvenios(p: PropsVistaConvenios) {
       {p.estado === 'ok' && (
         <section className="card p-4 space-y-3" aria-label="Convenios registrados">
           <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="font-display text-[15px] font-semibold">Convenios registrados</h2>
+            <TituloRecuadro info="convenios.registrados">Convenios registrados</TituloRecuadro>
             {p.puedeExportar && (
               <span className="ml-auto flex items-center gap-3 text-[12px]">
                 <a href={descarga('instrucciones')} className="underline" style={{ color: 'var(--muted)' }}>Descargar instrucciones (CSV, sin dinero)</a>
@@ -171,7 +171,7 @@ export function VistaConvenios(p: PropsVistaConvenios) {
 
       {p.estado === 'ok' && p.puedeEditar && p.accionCorregir && p.viajes && (
         <section className="card p-4 space-y-3" aria-label="Convenio ligado a cada viaje">
-          <h2 className="font-display text-[15px] font-semibold">Convenio ligado a cada viaje en curso</h2>
+          <TituloRecuadro info="convenios.ligado_viaje">Convenio ligado a cada viaje en curso</TituloRecuadro>
           <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
             Si el sistema ligó el convenio equivocado, o no pudo elegir porque varios empataban, corrígelo aquí: se vuelve a tomar la foto de
             instrucciones del convenio que elijas y queda como corrección manual (el despacho automático ya no lo cambia). Puedes mandarle de nuevo
@@ -205,7 +205,7 @@ export function VistaConvenios(p: PropsVistaConvenios) {
 
       {puedeEditarEnPantalla && (edicionDisponible ? (
         <section className="card p-4 space-y-3" aria-label="Nuevo convenio">
-          <h2 className="font-display text-[15px] font-semibold">Nuevo convenio</h2>
+          <TituloRecuadro info="convenios.nuevo">Nuevo convenio</TituloRecuadro>
           <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
             Da de alta un convenio y su calle de instrucciones sin subir un archivo. El cliente tiene que existir en Clientes y los sitios salen del catálogo de sitios.
             La tarifa y los requisitos de cobro no se editan aquí: entran por la importación con permiso de finanzas.
@@ -220,7 +220,7 @@ export function VistaConvenios(p: PropsVistaConvenios) {
 
       {p.puedeEditar ? (
         <section className="card p-4 space-y-3" aria-label="Importar convenios">
-          <h2 className="font-display text-[15px] font-semibold">Importar desde CSV o Excel</h2>
+          <TituloRecuadro info="convenios.importar">Importar desde CSV o Excel</TituloRecuadro>
           <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
             <strong>Una fila por instrucción.</strong> Columnas: <code>cliente, convenio</code> (obligatorias), <code>origen, destino, sitio_origen, sitio_destino, vigente_desde, vigente_hasta, notas</code>,
             y por instrucción <code>categoria</code> (puerta, reportarse, peculiaridad, documentos, horario, seguridad, otro), <code>instruccion</code>, <code>momento</code> (despacho, acercamiento, ambos)

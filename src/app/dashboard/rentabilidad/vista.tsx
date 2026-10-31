@@ -75,15 +75,15 @@ export function VistaRentabilidad({
                 <Cifra
                   icono={<Banknote width={14} height={14} strokeWidth={1.75} />}
                   etiqueta="Ingreso de fletes liquidados" valor={rentabilidad.ingreso} formato="mxn"
-                />
+                info="rentabilidad.ingreso" />
                 <Cifra
                   icono={<ReceiptText width={14} height={14} strokeWidth={1.75} />}
                   etiqueta="Costo comprobado (esos mismos viajes)" valor={rentabilidad.costoComprobado} formato="mxn"
-                />
+                info="rentabilidad.costo" />
                 <Cifra
                   icono={<TrendingUp width={14} height={14} strokeWidth={1.75} />}
                   etiqueta="Contribución (ingreso − comprobado)" valor={rentabilidad.contribucion} formato="mxn"
-                />
+                info="rentabilidad.contribucion" />
               </TiraCifras>
               <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
                 {rentabilidad.margenPct !== null
@@ -122,11 +122,11 @@ export function VistaRentabilidad({
                 <Cifra
                   icono={<Wallet width={14} height={14} strokeWidth={1.75} />}
                   etiqueta="Por cobrar (facturas vivas)" valor={cobranza.porCobrar} formato="mxn"
-                />
+                info="rentabilidad.por_cobrar" />
                 <Cifra
                   icono={<CalendarClock width={14} height={14} strokeWidth={1.75} />}
                   etiqueta="Vencido" valor={cobranza.vencido} formato="mxn"
-                />
+                info="rentabilidad.vencido" />
               </TiraCifras>
               {cobranza.sinCondiciones > 0 && (
                 <p className="text-[12px]" style={{ color: 'var(--warn)' }}>

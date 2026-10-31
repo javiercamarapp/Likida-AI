@@ -16,7 +16,7 @@ import type { BuscarCatalogo } from '../combo-catalogo';
 import { FormaCliente, FormaTarifa, Plegable, type AccionForma, type OpcionModo } from './forma';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 const RUTA = '/dashboard/clientes';
 
@@ -105,6 +105,7 @@ function BloqueCartera({ panel }: { panel: PanelClientes }) {
           nota={panel.conIngreso === 0
             ? 'Ningún viaje trae ingreso capturado todavía'
             : `De ${plural(panel.conIngreso, 'viaje', 'viajes')} con el dato capturado`}
+          info="clientes.ingreso"
         />
         <Cifra
           icono={<Users width={14} height={14} strokeWidth={1.75} />}
@@ -112,18 +113,21 @@ function BloqueCartera({ panel }: { panel: PanelClientes }) {
           nota={panel.clientes.length !== activos
             ? `${plural(panel.clientes.length - activos, 'dado de baja', 'dados de baja')}`
             : undefined}
+          info="clientes.activos"
         />
         {conFacturas.length > 0 ? (
           <Cifra
             icono={<Wallet width={14} height={14} strokeWidth={1.75} />}
             etiqueta="Por cobrar a clientes" valor={porCobrar} formato="mxn"
             nota={`De ${plural(conFacturas.length, 'cliente', 'clientes')} con facturas registradas`}
+            info="clientes.por_cobrar"
           />
         ) : (
           <Cifra
             icono={<Wallet width={14} height={14} strokeWidth={1.75} />}
             etiqueta="Por cobrar" valor={null}
             mensaje="Ninguno de tus clientes tiene facturas registradas todavía, así que no hay saldo que sumar. No es cero: es que aún no se ha registrado una factura emitida."
+            info="clientes.por_cobrar"
           />
         )}
       </TiraCifras>
@@ -171,9 +175,9 @@ function BloqueClientes({ panel, puedeEditar, guardarCliente, sp, sufijo, campos
 
   return (
     <section className="space-y-3">
-      <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+      <TituloRecuadro info="clientes.lista">
         Clientes
-      </h2>
+      </TituloRecuadro>
 
       {panel.clientes.length > 0 && (
         <FiltroRegistro ruta={RUTA} sufijo={sufijo} pagina={pagClientes}
@@ -388,9 +392,9 @@ function BloqueTarifas({
 
   return (
     <section className="space-y-3">
-      <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+      <TituloRecuadro info="clientes.tarifas">
         Tarifas
-      </h2>
+      </TituloRecuadro>
 
       {panel.tarifas.length > 0 && (
         <FiltroRegistro ruta={RUTA} sufijo={sufijo} pagina={pagTarifas} sustantivo="tarifas"
@@ -552,9 +556,9 @@ function BloqueSinIngreso({ panel }: { panel: PanelClientes }) {
 
   return (
     <section className="space-y-3">
-      <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+      <TituloRecuadro info="clientes.sin_ingreso">
         Viajes sin ingreso capturado
-      </h2>
+      </TituloRecuadro>
 
       <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
         {panel.sinIngresoTotal === 1

@@ -5,7 +5,7 @@ import { mxn, numero, fechaCorta } from '@/lib/formato';
 import { EstadoVacio } from '../estados';
 import { FilaAcciones, type AccionHuerfano } from './acciones';
 import type { BuscarViaje } from './combo-viaje';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /** Por qué quedó suelto, en palabras de oficina. Un motivo nuevo cae al
  *  crudo en gris — visible, no roto. */
@@ -42,13 +42,13 @@ export function VistaHuerfanos({ pendientes, hayViajesVivos, buscarViaje, totalP
 
       <section className="card p-4">
         <div className="mb-3">
-          <h2 className="font-display text-[15px] font-semibold">
+          <TituloRecuadro info="huerfanos.bandeja">
             Esperan que alguien los acomode{pendientes.length > 0 && (
               <> · <span className="cifra-mono">
                 {hayMas ? `${numero(pendientes.length)} de ${numero(totalPendientes!)}` : numero(pendientes.length)}
               </span></>
             )}
-          </h2>
+          </TituloRecuadro>
           <p className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>
             Una foto nunca se rechaza: lo que llega sin viaje se guarda aquí. Al chofer también
             se le ofrece adjuntarlos por WhatsApp — quien llegue primero.

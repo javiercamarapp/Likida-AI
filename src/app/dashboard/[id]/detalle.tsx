@@ -1,5 +1,5 @@
 import { ChevronLeft, Download, MessageCircle, RotateCcw } from 'lucide-react';
-import { BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
+import { BotonEnlace, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 import type { LiquidacionDetalle } from '@/lib/likida/analytics';
 import type { ResumenLaboral } from '@/lib/likida/laboral/pagadero';
 import { filasDeducibilidad } from '@/lib/likida/liquidacion/deducibilidad';
@@ -236,25 +236,28 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
 
           {/* ── KPIs ── */}
           <TiraCifras sello={selloHoy('Liquidación del viaje')}>
-            <Cifra etiqueta="Anticipo" valor={mxn(d.totalAnticipo)} nota="entregado al operador" />
+            <Cifra etiqueta="Anticipo" valor={mxn(d.totalAnticipo)} nota="entregado al operador" info="liquidacion_detalle.anticipo" />
             <Cifra etiqueta="Comprobado" valor={mxn(d.totalComprobado)}
-              nota={d.comprobantesCuadran ? `${comprobantes(d.gastos.length)} válidos` : 'total persistido al cierre'} />
+              nota={d.comprobantesCuadran ? `${comprobantes(d.gastos.length)} válidos` : 'total persistido al cierre'} info="liquidacion_detalle.comprobado" />
             <Cifra
               etiqueta="Diferencia"
               valor={d.diferencia === 0 ? 'Cuadra exacto' : mxn(Math.abs(d.diferencia))}
               tono={d.diferencia === 0 ? 'ok' : d.diferencia > 0 ? 'warn' : 'bad'}
               nota={d.diferencia === 0 ? 'anticipo = comprobado' : d.diferencia > 0 ? 'sobrante · a favor de la empresa' : 'faltante · a favor del operador'}
+              info="liquidacion_detalle.diferencia"
             />
             <Cifra
               etiqueta="Sin CFDI"
               valor={difsSinCfdi.length === 0 ? mxn(0) : sinCfdiCruzable ? mxn(montoSinCfdi) : '—'}
               tono={difsSinCfdi.length > 0 ? 'warn' : undefined}
+              info="liquidacion_detalle.sin_cfdi"
               nota={difsSinCfdi.length === 0 ? 'todo lo que lo requería trae factura' : sinCfdiCruzable ? `${comprobantes(idsSinCfdi.size)} sin factura` : `${comprobantes(difsSinCfdi.length)} — monto no cruzable`}
             />
             <Cifra
               etiqueta="Sobre tope"
               valor={mxn(excedenteTope)}
               tono={difsTope.length > 0 ? 'warn' : undefined}
+              info="liquidacion_detalle.sobre_tope"
               nota={difsTope.length === 0 ? 'nada excede política ni tope fiscal' : `excedente en ${comprobantes(difsTope.length)}`}
             />
           </TiraCifras>
@@ -266,7 +269,7 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
                   × litros y esa cuota no la tenemos. `ieps` solo puede venir de filas
                   viejas escritas antes del cambio; se conserva para no ocultarlas. */}
               <section className="card p-4">
-                <h2 className="font-display text-[15px] font-semibold mb-2">Acreditable / recuperable</h2>
+                <TituloRecuadro info="liquidacion_detalle.acreditable" className="mb-2">Acreditable / recuperable</TituloRecuadro>
                 <div className="overflow-x-auto -mx-1">
                   <table className="w-full border-collapse">
                     <thead>
@@ -335,10 +338,10 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
               {/* ── Diferencias en lenguaje humano ── */}
               {d.diferencias.length > 0 && (
                 <section className="card p-4">
-                  <h2 className="font-display text-[15px] font-semibold mb-1">
+                  <TituloRecuadro info="liquidacion_detalle.diferencias" className="mb-1">
                     Diferencias detectadas
                     <span className="cifra-mono text-[12px] font-normal ml-2" style={{ color: 'var(--muted)' }}>{d.diferencias.length}</span>
-                  </h2>
+                  </TituloRecuadro>
                   <ul>
                     {d.diferencias.map((df, i) => <Diferencia key={i} nota={df.nota} monto={df.monto} />)}
                   </ul>
@@ -348,7 +351,7 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
 
             {/* ── Línea de tiempo ── */}
             <section className="card p-4 xl:self-start">
-              <h2 className="font-display text-[15px] font-semibold mb-3">Línea de tiempo</h2>
+              <TituloRecuadro info="liquidacion_detalle.linea_tiempo" className="mb-3">Línea de tiempo</TituloRecuadro>
               <LineaDeTiempo hitos={hitos} />
               <p className="text-[11px] mt-3 pt-3" style={{ color: 'var(--faint)', borderTop: '1px dashed var(--line2)' }}>
                 Horas de recepción por WhatsApp, en hora de México. Un hito sin sello no se estima.
@@ -362,7 +365,7 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
               contralor no tenga que sumar la columna con el dedo. */}
           <section className="card p-4">
             <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
-              <h2 className="font-display text-[15px] font-semibold">Comprobantes</h2>
+              <TituloRecuadro info="liquidacion_detalle.comprobantes">Comprobantes</TituloRecuadro>
               {d.comprobantesExcluidos > 0 && (
                 <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
                   {d.comprobantesExcluidos === 1
@@ -454,7 +457,7 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
             <section className="card p-4">
               <div className="flex items-center gap-2 mb-1">
                 <RotateCcw width={14} height={14} strokeWidth={1.75} aria-hidden />
-                <h2 className="font-display text-[15px] font-semibold m-0">Reabrir este viaje</h2>
+                <TituloRecuadro info="liquidacion_detalle.reabrir" className="m-0">Reabrir este viaje</TituloRecuadro>
               </div>
               <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>
                 Vuelve a aceptar comprobantes por WhatsApp. <strong>Borra la liquidación actual y su PDF</strong> — si

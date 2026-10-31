@@ -12,7 +12,7 @@ import { ImportadorMasivo, type AccionImportacion } from '../importador-masivo';
 import type { InvitacionDeOperador } from '@/lib/likida/invitacion_operador';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /** La fila del registro — SIN el dinero que `OperadorDetalle` trae (ver
  *  encabezado de page.tsx: la fuga del 4-ago). `licencia` y `rfc` SÍ viajan:
@@ -121,13 +121,13 @@ export function VistaOperadores({
 
       <TiraCifras sello={selloHoy('Padrón de operadores')}>
         <Cifra etiqueta="Activos" valor={kpi(conteos?.activos)}
-          nota={conteos ? `${numero(conteos.total)} en total` : 'no se pudo contar la flota'} />
+          nota={conteos ? `${numero(conteos.total)} en total` : 'no se pudo contar la flota'} info="operadores.activos" />
         <Cifra etiqueta="Sin teléfono" valor={kpi(conteos?.sinTelefono)} nota="los agentes no pueden escribirles"
-          tono={conteos && conteos.sinTelefono > 0 ? 'warn' : undefined} />
+          tono={conteos && conteos.sinTelefono > 0 ? 'warn' : undefined} info="operadores.sin_telefono" />
         <Cifra etiqueta="Licencias vencidas" valor={kpi(conteos?.licenciasVencidas)}
-          tono={conteos && conteos.licenciasVencidas > 0 ? 'bad' : undefined} />
+          tono={conteos && conteos.licenciasVencidas > 0 ? 'bad' : undefined} info="operadores.licencias_vencidas" />
         <Cifra etiqueta={`Vencen en ${DIAS_AVISO} días`} valor={kpi(conteos?.licenciasPorVencer)}
-          tono={conteos && conteos.licenciasPorVencer > 0 ? 'warn' : undefined} />
+          tono={conteos && conteos.licenciasPorVencer > 0 ? 'warn' : undefined} info="operadores.licencias_por_vencer" />
       </TiraCifras>
 
       {puedeEditar && invitaciones && (
@@ -143,7 +143,7 @@ export function VistaOperadores({
                 <UserPlus aria-hidden width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
               </div>
               <div className="min-w-0 flex-1">
-                <h2 id="titulo-alta" className="font-display text-[15px] font-semibold">Dar de alta un operador</h2>
+                <TituloRecuadro id="titulo-alta" info="operadores.alta">Dar de alta un operador</TituloRecuadro>
                 <p className="mb-3 mt-0.5 text-[12px]" style={{ color: 'var(--muted)' }}>
                   Uno por uno. Para toda tu flota de una vez, usa la carga desde Excel o CSV de abajo.
                 </p>
@@ -164,7 +164,7 @@ export function VistaOperadores({
       )}
 
       <section className="card p-4">
-        <h2 className="font-display text-[15px] font-semibold mb-3">El registro</h2>
+        <TituloRecuadro info="operadores.registro" className="mb-3">El registro</TituloRecuadro>
         {!ilegible && (pag.filtrados > 0 || hayFiltro) && (
           <FiltroRegistro ruta="/dashboard/operadores" sufijo={sufijo} pagina={pag}
             sustantivo="operadores" camposOcultos={camposOcultos} />

@@ -9,7 +9,7 @@ import { AsignarFila, AsignarUnidadFila, BotonReenviar, AltaOperador, type Accio
 import { EnlacePagina, NavPaginas } from '../paginador';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /** Tope de "Por asignar" — declarado en pantalla cuando recorta. "En curso"
  *  ya no usa esta constante: FE-2 le dio su propia paginación con `count`
@@ -112,19 +112,19 @@ export function VistaDespacho({
         </div>
       ) : (
         <TiraCifras sello={selloHoy('Tablero de despacho')}>
-          <Cifra etiqueta="Viajes activos" valor={numero(tablero.viajesActivos)} />
-          <Cifra etiqueta="Sin unidad" valor={numero(tablero.sinUnidad)} tono={tablero.sinUnidad > 0 ? 'warn' : undefined} />
-          <Cifra etiqueta="Unidades libres" valor={numero(tablero.unidadesDisponibles)} />
-          <Cifra etiqueta="En taller" valor={numero(tablero.unidadesEnTaller)} />
-          <Cifra etiqueta="Incidencias" valor={numero(tablero.incidenciasAbiertas)} tono={tablero.incidenciasAbiertas > 0 ? 'warn' : undefined} />
-          <Cifra etiqueta="POD pendientes" valor={numero(tablero.podPendientes)} />
+          <Cifra etiqueta="Viajes activos" valor={numero(tablero.viajesActivos)} info="despacho.viajes_activos" />
+          <Cifra etiqueta="Sin unidad" valor={numero(tablero.sinUnidad)} tono={tablero.sinUnidad > 0 ? 'warn' : undefined} info="despacho.sin_unidad" />
+          <Cifra etiqueta="Unidades libres" valor={numero(tablero.unidadesDisponibles)} info="despacho.unidades_libres" />
+          <Cifra etiqueta="En taller" valor={numero(tablero.unidadesEnTaller)} info="despacho.en_taller" />
+          <Cifra etiqueta="Incidencias" valor={numero(tablero.incidenciasAbiertas)} tono={tablero.incidenciasAbiertas > 0 ? 'warn' : undefined} info="despacho.incidencias" />
+          <Cifra etiqueta="POD pendientes" valor={numero(tablero.podPendientes)} info="despacho.pod_pendientes" />
         </TiraCifras>
       )}
 
       <div className="grid lg:grid-cols-3 gap-4">
         {/* ── La cola que reparte el día ── */}
         <section className="card p-4 lg:col-span-2 flex flex-col">
-          <h2 className="font-display text-[15px] font-semibold">Por asignar</h2>
+          <TituloRecuadro info="despacho.por_asignar">Por asignar</TituloRecuadro>
           <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
             Viajes sin chofer — se asigna y el aviso de WhatsApp sale en el mismo paso
           </p>
@@ -164,7 +164,7 @@ export function VistaDespacho({
 
         {/* ── Crear operación nueva ── */}
         <section className="card p-4">
-          <h2 className="font-display text-[15px] font-semibold mb-1">Nuevo viaje</h2>
+          <TituloRecuadro info="despacho.nuevo_viaje" className="mb-1">Nuevo viaje</TituloRecuadro>
           <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
             Nace abierto: desde ese momento el operador puede mandar comprobantes por WhatsApp
           </p>
@@ -178,7 +178,7 @@ export function VistaDespacho({
         <section className="card p-4 lg:col-span-2 flex flex-col">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
-              <h2 className="font-display text-[15px] font-semibold">En curso</h2>
+              <TituloRecuadro info="despacho.en_curso">En curso</TituloRecuadro>
               <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
                 Primero lo que nadie ha aceptado, y entre eso lo avisado hace más tiempo
               </p>
@@ -325,7 +325,7 @@ export function VistaDespacho({
         <div className="space-y-4">
           {/* ── Alta rápida ── */}
           <section className="card p-4">
-            <h2 className="font-display text-[15px] font-semibold mb-1">Alta rápida de operador</h2>
+            <TituloRecuadro info="despacho.alta_operador" className="mb-1">Alta rápida de operador</TituloRecuadro>
             <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
               Nombre y WhatsApp — la lada 52 y los duplicados los cuida el servidor
             </p>
@@ -334,7 +334,7 @@ export function VistaDespacho({
 
           {/* ── Quién trae cuánto ── */}
           <section className="card p-4 flex flex-col">
-            <h2 className="font-display text-[15px] font-semibold">Carga por operador</h2>
+            <TituloRecuadro info="despacho.carga">Carga por operador</TituloRecuadro>
             <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>El que trae más sale arriba — ¿a quién NO le cargas otro?</p>
             {carga === null ? (
               <Leyenda>No se pudo leer la carga ahora mismo.</Leyenda>

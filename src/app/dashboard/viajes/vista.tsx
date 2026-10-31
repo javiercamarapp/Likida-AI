@@ -9,7 +9,7 @@ import { ImportarViajes, type AccionImportar } from './importar';
 import { EnlacePagina, NavPaginas } from '../paginador';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 export type FiltroViajes = 'todos' | 'abiertos' | 'en_cuadre' | 'liquidados' | 'escalados';
 
@@ -99,11 +99,11 @@ export function VistaViajes({
     <MarcoPagina titulo="Viajes" apoyo="El registro de viajes de tu flota, navegable y filtrable. Crear, asignar y avisar se hace en Despacho.">
 
       <TiraCifras sello={selloHoy('Registro de viajes')}>
-        <Cifra etiqueta="Viajes en total" valor={kpi(conteos.total)} nota="histórico" />
-        <Cifra etiqueta="Abiertos" valor={kpi(conteos.abiertos)} />
-        <Cifra etiqueta="En cuadre" valor={kpi(conteos.enCuadre)} />
+        <Cifra etiqueta="Viajes en total" valor={kpi(conteos.total)} nota="histórico" info="viajes.total" />
+        <Cifra etiqueta="Abiertos" valor={kpi(conteos.abiertos)} info="viajes.abiertos" />
+        <Cifra etiqueta="En cuadre" valor={kpi(conteos.enCuadre)} info="viajes.en_cuadre" />
         <Cifra etiqueta="Escalados sin aceptar" valor={kpi(conteos.escalados)}
-          tono={(conteos.escalados ?? 0) > 0 ? 'bad' : undefined} />
+          tono={(conteos.escalados ?? 0) > 0 ? 'bad' : undefined} info="viajes.escalados" />
       </TiraCifras>
 
       <section className="card p-4 relative">
@@ -150,7 +150,7 @@ export function VistaViajes({
                 </summary>
                 <div className="absolute left-0 right-0 z-10 mt-2 px-4">
                   <div className="card p-4 shadow-[var(--shadow-pop)]">
-                    <h2 className="font-display text-[15px] font-semibold mb-2">Importar desde tu TMS</h2>
+                    <TituloRecuadro info="viajes.importar" className="mb-2">Importar desde tu TMS</TituloRecuadro>
                     <ImportarViajes importar={importar} verDinero={verDinero} />
                   </div>
                 </div>

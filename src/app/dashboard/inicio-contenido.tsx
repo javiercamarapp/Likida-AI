@@ -620,6 +620,7 @@ async function BloqueKpis({ pKpis, pSeriesKpis, pResumenPerdidas, periodoFiscal 
             // en vez de afirmar "$0.00 de ahorro" que suena a medición.
             valor={resumenPerdidas ? resumenPerdidas.montoRecuperable : null}
             mensaje="no se pudo leer el dato fiscal"
+            info="inicio.ahorro_generado"
             // Sin `delta`: esta cifra va fija al ejercicio completo,
             // no hay "periodo anterior" contra el que compararla (A12).
             formato="mxn" />
