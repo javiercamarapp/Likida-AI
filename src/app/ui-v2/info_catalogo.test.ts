@@ -23,6 +23,11 @@ describe('catálogo de explicaciones (ⓘ)', () => {
         expect(t.fuente, k).toMatch(/^Por confirmar|Aún sin lector verificado|^Por confirmar/);
         expect(t.comoSeCalcula, k).toMatch(/Por confirmar|Aún sin lector verificado/);
       }
+      // OJO: esta lista de prohibidos (cifras, vocabulario de producto) vigila SOLO a las entradas SIN lector verificado, que no pueden inventar
+      // nada. Las `verificado` (L4) NO pasan por ella: usan el vocabulario de la pantalla (bitácora, conciliada…) y nombran ventanas y topes que el
+      // código fija; esas cifras se atan a su constante en `info_constantes.test.ts` (falla si la constante cambia) y su veracidad la respalda la
+      // lectura del código, no esta lista.
+      if (t.estado === 'verificado') continue;
       const todo = [t.queEs, t.comoSeCalcula, t.fuente, (t as InfoTexto).queHacer ?? ''].join(' ');
       for (const re of PROHIBIDO) expect(todo, `${k} ${re}`).not.toMatch(re);
     }

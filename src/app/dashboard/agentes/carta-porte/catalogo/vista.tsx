@@ -10,7 +10,7 @@ import { plantillaCsv, TIPOS_PLANTILLA, type Registro, type TipoPlantilla } from
 import { COLUMNAS_CLAVE, ROTULO_COLUMNA, columnasDeFila, filtrarFilas, valoresDeFormulario, type FilasCatalogo } from '@/lib/likida/carta_porte_docs/catalogo_pantalla';
 import { Aviso, BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
 import type { EstadoImportacion } from './actions';
-import { Aviso as AvisoV2, BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
+import { Aviso as AvisoV2, BotonEnlace, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /**
  * LA PANTALLA «CATÁLOGO DEL CLIENTE» (T-A3-22): lo que el agente aprende UNA vez de cada cliente y usa en cada documento.
@@ -134,7 +134,7 @@ function Tabla({ tipo, titulo, filas, clienteId, ver, acciones }: { tipo: TipoPl
   return (
     <section aria-label={titulo} className="card p-4 space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h2 className="text-[13px] font-medium">{titulo} <span className="font-normal" style={{ color: 'var(--faint)' }}>({fmtNumero(filas.length)})</span></h2>
+        <TituloRecuadro info={tipo === 'producto' ? 'carta_porte_catalogo.productos' : 'carta_porte_catalogo.partes'}>{titulo} <span className="font-normal" style={{ color: 'var(--faint)' }}>({fmtNumero(filas.length)})</span></TituloRecuadro>
         {filas.length > 0 && (
           <div className="min-w-[220px]">
             <label htmlFor={idFiltro} className={ETIQUETA}>Filtrar</label>
@@ -143,15 +143,15 @@ function Tabla({ tipo, titulo, filas, clienteId, ver, acciones }: { tipo: TipoPl
         )}
       </div>
       {filas.length === 0 ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Todavía no hay nada aquí.</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Todavía no hay nada aquí.</p>
       ) : visibles.length === 0 ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Ninguna fila coincide con «{filtro}».</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Ninguna fila coincide con «{filtro}».</p>
       ) : (
         <ul className="divide-y" style={{ borderColor: 'var(--hairline, var(--canvas))' }}>
           {visibles.slice(0, FILAS_VISIBLES).map((f, i) => (
             <li key={`${textoDe(f.sku)}|${textoDe(f.rol)}|${textoDe(f.alias)}|${i}`} className="py-2">
               <details>
-                <summary className="cursor-pointer text-[12.5px] select-none">{resumen(tipo, f)}</summary>
+                <summary className="cursor-pointer text-[12px] select-none">{resumen(tipo, f)}</summary>
                 <FormaFila tipo={tipo} clienteId={clienteId} ver={ver} accion={acciones.guardarFila} fila={f} modo="editar" />
               </details>
             </li>
@@ -159,10 +159,10 @@ function Tabla({ tipo, titulo, filas, clienteId, ver, acciones }: { tipo: TipoPl
         </ul>
       )}
       {visibles.length > FILAS_VISIBLES && (
-        <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>Se muestran {fmtNumero(FILAS_VISIBLES)} de {fmtNumero(visibles.length)} filas: afina el filtro para ver las demás.</p>
+        <p className="text-[11px]" style={{ color: 'var(--muted)' }}>Se muestran {fmtNumero(FILAS_VISIBLES)} de {fmtNumero(visibles.length)} filas: afina el filtro para ver las demás.</p>
       )}
       <details>
-        <summary className="cursor-pointer text-[12.5px] font-medium select-none inline-flex items-center gap-1.5" style={{ color: 'var(--marca)' }}>
+        <summary className="cursor-pointer text-[12px] font-medium select-none inline-flex items-center gap-1.5" style={{ color: 'var(--marca)' }}>
           <Plus width={13} height={13} strokeWidth={1.75} />Agregar una fila
         </summary>
         <FormaFila tipo={tipo} clienteId={clienteId} ver={ver} accion={acciones.guardarFila} fila={null} modo="nuevo" />
@@ -174,11 +174,11 @@ function Tabla({ tipo, titulo, filas, clienteId, ver, acciones }: { tipo: TipoPl
 function Numero({ fila, clienteId, ver, acciones }: { fila: Registro | null; clienteId: string; ver: VerComo; acciones: AccionesCatalogo }) {
   return (
     <section aria-label="Número interno del cliente" className="card p-4 space-y-2">
-      <h2 className="text-[13px] font-medium">Número interno del cliente</h2>
+      <TituloRecuadro info="carta_porte_catalogo.numero_interno">Número interno del cliente</TituloRecuadro>
       <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
         Es el número con el que el sistema de la empresa conoce al cliente que paga. Si falta o está mal, el documento no se liga: el agente no lo inventa.
       </p>
-      {fila ? <p className="text-[12.5px]">Hoy: {resumen('cliente_numero', fila)}</p> : <p className="text-[12.5px]" style={{ color: 'var(--warn)' }}>Este cliente todavía no tiene número interno.</p>}
+      {fila ? <p className="text-[12px]">Hoy: {resumen('cliente_numero', fila)}</p> : <p className="text-[12px]" style={{ color: 'var(--warn)' }}>Este cliente todavía no tiene número interno.</p>}
       <FormaFila tipo="cliente_numero" clienteId={clienteId} ver={ver} accion={acciones.guardarFila} fila={fila} modo={fila ? 'editar' : 'nuevo'} />
     </section>
   );
@@ -190,7 +190,7 @@ function Importador({ ver, importar }: { ver: VerComo; importar: AccionesCatalog
   const [archivo, setArchivo] = useState<File | null>(null);
   return (
     <section aria-label="Importar un CSV" className="card p-4 space-y-3">
-      <h2 className="text-[13px] font-medium flex items-center gap-1.5"><Upload width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />Importar un CSV</h2>
+      <TituloRecuadro info="carta_porte_catalogo.importar"><Upload width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />Importar un CSV</TituloRecuadro>
       <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
         Descarga la plantilla, llénala (una fila por cliente y producto, remitente o destinatario) y súbela. Primero ves cuántas filas son nuevas, cuántas cambian y cuáles traen error; nada se guarda hasta que confirmes.
       </p>
@@ -216,7 +216,7 @@ function Importador({ ver, importar }: { ver: VerComo; importar: AccionesCatalog
           </div>
           <div className="grow min-w-[220px]">
             <label htmlFor="cat-imp-archivo" className={ETIQUETA}>Archivo CSV (hasta 4 MB)</label>
-            <input id="cat-imp-archivo" type="file" accept=".csv,text/csv" onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} className="text-[12.5px]" />
+            <input id="cat-imp-archivo" type="file" accept=".csv,text/csv" onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} className="text-[12px]" />
             {archivo && <p className="text-[11px] pt-1" style={{ color: 'var(--faint)' }}>Archivo elegido: {archivo.name}</p>}
           </div>
         </div>
@@ -269,9 +269,9 @@ export function VistaCatalogo({ clientes, clienteId, catalogo, lecturaFallida = 
       <Importador ver={ver} importar={acciones.importar} />
 
       <section aria-label="Cliente" className="card p-4 space-y-3">
-        <h2 className="text-[13px] font-medium">Cliente</h2>
+        <TituloRecuadro info="carta_porte_catalogo.cliente">Cliente</TituloRecuadro>
         {clientes.length === 0 ? (
-          <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Aún no hay clientes en tu flota: el catálogo se arma por cliente. Da de alta uno primero.</p>
+          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Aún no hay clientes en tu flota: el catálogo se arma por cliente. Da de alta uno primero.</p>
         ) : (
           <>
             {clientes.length > 8 && (
@@ -284,7 +284,7 @@ export function VistaCatalogo({ clientes, clienteId, catalogo, lecturaFallida = 
               {clientesVisibles.map((c) => (
                 <li key={c.id}>
                   <Link href={hrefDe(sufijo, c.id)} aria-current={c.id === clienteId ? 'true' : undefined}
-                    className="h-8 px-3 rounded-lg text-[12.5px] font-medium inline-flex items-center hairline hover:opacity-85"
+                    className="h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center hairline hover:opacity-85"
                     style={c.id === clienteId ? { background: 'var(--marca)', color: 'var(--marca-fg)' } : { background: 'var(--surface)', color: 'var(--ink)' }}>
                     {c.nombre}
                   </Link>
@@ -296,12 +296,12 @@ export function VistaCatalogo({ clientes, clienteId, catalogo, lecturaFallida = 
       </section>
 
       {elegido === null ? (
-        clientes.length > 0 && <p className="card p-4 text-[12.5px]" style={{ color: 'var(--muted)' }}>Elige un cliente para ver y editar su catálogo.</p>
+        clientes.length > 0 && <p className="card p-4 text-[12px]" style={{ color: 'var(--muted)' }}>Elige un cliente para ver y editar su catálogo.</p>
       ) : lecturaFallida || catalogo === null ? (
-        <p className="card p-4 text-[12.5px]" role="alert" style={{ color: 'var(--bad)' }}>No se pudo leer el catálogo de {elegido.nombre}. Recarga la pantalla; si sigue igual, avísanos.</p>
+        <p className="card p-4 text-[12px]" role="alert" style={{ color: 'var(--bad)' }}>No se pudo leer el catálogo de {elegido.nombre}. Recarga la pantalla; si sigue igual, avísanos.</p>
       ) : (
         <>
-          {vacio && <p className="card p-4 text-[12.5px]" role="status">{FRASE_SIN_CATALOGO}</p>}
+          {vacio && <p className="card p-4 text-[12px]" role="status">{FRASE_SIN_CATALOGO}</p>}
           {catalogo.truncado && (
             <p className="text-[12px] px-3 py-2 rounded-lg" role="alert" style={{ color: 'var(--warn)' }}>
               El catálogo de este cliente es tan grande que solo se leyó una parte: puede faltar alguna fila en esta pantalla.

@@ -50,7 +50,7 @@ export function PrimeraLiquidacion({ datos, sufijo = '' }: { datos: PrimerosPaso
         <h2 className="text-[15px] font-semibold" style={{ color: 'var(--ink)' }}>Tu primera liquidación</h2>
         <span className="etiqueta-mono text-[11px]" style={{ color: 'var(--muted)' }}>{hechos} de {pasos.length}</span>
       </div>
-      <p className="text-[12.5px] mb-4" style={{ color: 'var(--muted)' }}>
+      <p className="text-[12px] mb-4" style={{ color: 'var(--muted)' }}>
         Así se aprende Likida: no con un manual, con un viaje real. Cada paso se palomea solo cuando de verdad sucede.
       </p>
       <ol className="space-y-2.5">
@@ -78,7 +78,7 @@ export function PrimeraLiquidacion({ datos, sufijo = '' }: { datos: PrimerosPaso
           </li>
         ))}
       </ol>
-      <p className="text-[11.5px] mt-4 flex items-center gap-1.5" style={{ color: 'var(--muted)' }}>
+      <p className="text-[11px] mt-4 flex items-center gap-1.5" style={{ color: 'var(--muted)' }}>
         <MessageCircle width={13} height={13} strokeWidth={1.75} />
         ¿Arrancas una flota completa?{' '}
         <Link href={`/dashboard/arranque${sufijo}`} className="underline">Ver la puesta en marcha paso a paso</Link>.

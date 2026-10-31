@@ -48,7 +48,7 @@ export function GastoSemanalChart({ categorias, series }: { categorias: string[]
       <div className="flex gap-2" style={{ height: ALTO }}>
         <div className="flex flex-col justify-between text-right shrink-0 pb-5" style={{ width: 44 }}>
           {ejeY.map((v, i) => (
-            <span key={i} className="text-[10px] leading-none" style={{ color: 'var(--faint)' }}>{mxn(v).replace('.00', '')}</span>
+            <span key={i} className="text-[11px] leading-none" style={{ color: 'var(--faint)' }}>{mxn(v).replace('.00', '')}</span>
           ))}
         </div>
         <div className="relative flex-1 flex items-end gap-3 border-l border-b" style={{ borderColor: 'var(--line)' }}>

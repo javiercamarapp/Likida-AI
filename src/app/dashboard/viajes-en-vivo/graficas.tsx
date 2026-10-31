@@ -16,7 +16,7 @@ export function Dona({ b }: { b: Extract<BloqueVista, { tipo: 'dona' }> }) {
           <span key={`${s.etiqueta}-${i}`} style={{ width: `${(s.valor / total) * 100}%`, background: COLORES[i % COLORES.length] }} />
         ))}
       </div>
-      <ul className="grid gap-1 text-[12.5px]">
+      <ul className="grid gap-1 text-[12px]">
         {b.segmentos.map((s, i) => (
           <li key={`${s.etiqueta}-${i}`} className="flex items-center justify-between gap-3">
             <span className="inline-flex items-center gap-1.5"><span aria-hidden className="inline-block h-2 w-2 rounded-full" style={{ background: COLORES[i % COLORES.length] }} />{s.etiqueta}</span>
@@ -43,7 +43,7 @@ export function Serie({ b }: { b: Extract<BloqueVista, { tipo: 'serie' }> }) {
         <polyline fill="none" stroke="var(--muted)" strokeWidth="1.5" points={puntos} />
         <circle cx={x(b.puntos.length - 1)} cy={y(ultimo.valor)} r="2.5" fill="var(--ok)" />
       </svg>
-      <div className="flex flex-wrap justify-between gap-x-3 text-[11.5px]" style={{ color: 'var(--muted)' }}>
+      <div className="flex flex-wrap justify-between gap-x-3 text-[11px]" style={{ color: 'var(--muted)' }}>
         <span>{primero.dia}: <span className="cifra-mono">{numero(primero.valor)}</span></span>
         <span>mín <span className="cifra-mono">{numero(min)}</span> · máx <span className="cifra-mono">{numero(max)}</span></span>
         <span>{ultimo.dia}: <span className="cifra-mono">{numero(ultimo.valor)}</span></span>

@@ -181,16 +181,25 @@
   --r-pill: 999px;
   --r-sheet: 16px;
 
-  /* Escala tipográfica cerrada {11 M, 12, 13, 14, 15, 16, 18, 20, 26} (§3) */
-  --fs-micro: 11px;
-  --fs-label: 12px;
-  --fs-body: 13px;
-  --fs-h2: 14px;
+  /* Escala tipográfica por tokens (L4, decisión de Javier 31-oct): --t-page 20 · --t-section 14 · --t-card 14 · --t-body 13 · --t-small 12 ·
+     --t-micro 11 · --t-kpi 26. Prohibidos 11.5 / 12.5 / 13.5 / 22 px (los vigila `tipografia_escala.test.ts`). Los --fs-* son alias de los
+     --t-* más tres tamaños de excepción (15 overlay, 16 campo en móvil, 18 KPI vacío). Cambiar un --t-* cambia toda la escala. */
+  --t-page: 20px;
+  --t-section: 14px;
+  --t-card: 14px;
+  --t-body: 13px;
+  --t-small: 12px;
+  --t-micro: 11px;
+  --t-kpi: 26px;
+  --fs-micro: var(--t-micro);
+  --fs-label: var(--t-small);
+  --fs-body: var(--t-body);
+  --fs-h2: var(--t-section);
   --fs-overlay: 15px;
   --fs-campo: 16px;
   --fs-kpi-vacio: 18px;
-  --fs-h1: 20px;
-  --fs-kpi: 26px;
+  --fs-h1: var(--t-page);
+  --fs-kpi: var(--t-kpi);
   --fs-kpi-movil: clamp(18px, 5.2vw, 21px);
 
   /* Medidas de shell y de composición (§4–§7); el shell las lee de aquí y `marco-v2.ts` las cruza con `shell.css` */
@@ -381,20 +390,29 @@ html:root[data-theme="dark"]:has([data-ui="v2"]) {
   box-shadow: none;
 }
 
-/* Piso tipográfico de 11 px SIN codemod: los 357 usos de 10 / 10.5 px (y los
-   dos de 9 / 9.5) suben solo bajo el alcance. Sin capa: ganan a las utilidades
-   de Tailwind, que viven en `@layer utilities`. */
+/* Piso tipográfico de 11 px (red de seguridad): los 9 / 9.5 / 10 / 10.5 px que pudieran quedar suben solo bajo el alcance. El código v2 ya no los usa
+   (codemod L4); esto cubre a v1 y a cualquier regresión. Sin capa: gana a las utilidades de Tailwind, que viven en `@layer utilities`. */
 [data-ui="v2"] .text-\[9px\],
 [data-ui="v2"] .text-\[9\.5px\],
 [data-ui="v2"] .text-\[10px\],
 [data-ui="v2"] .text-\[10\.5px\] {
-  font-size: 11px;
+  font-size: var(--t-micro);
 }
 
-/* Cuerpo: 13 / 400 / 1.5 con cifras tabulares (ESTILO §3); `tabular-nums` es obligatorio en el body del alcance. */
+/* Las utilidades `text-[Npx]` de la escala leen el TOKEN (una sola fuente): cambiar --t-* mueve todo el panel. Sin capa, como el piso. */
+[data-ui="v2"] .text-\[11px\] { font-size: var(--t-micro); }
+[data-ui="v2"] .text-\[12px\] { font-size: var(--t-small); }
+[data-ui="v2"] .text-\[13px\] { font-size: var(--t-body); }
+[data-ui="v2"] .text-\[14px\] { font-size: var(--t-section); }
+[data-ui="v2"] .text-\[20px\] { font-size: var(--t-page); }
+[data-ui="v2"] .text-\[26px\] { font-size: var(--t-kpi); }
+
+/* Cuerpo: 13 / 400 / 1.5, tracking 0 y cifras tabulares (ESTILO §3; Vexa mide 13/1.5). Sustituye al -0.011em que `globals.css` pone en html/body
+   (v1 lo conserva). Los títulos con `tracking-*` o `letter-spacing` propios no se ven afectados: solo cambia lo que heredaba el cuerpo. */
 [data-ui="v2"] {
-  font-size: var(--fs-body);
+  font-size: var(--t-body);
   line-height: 1.5;
+  letter-spacing: 0;
   font-variant-numeric: tabular-nums;
 }
 

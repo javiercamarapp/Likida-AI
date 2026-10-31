@@ -3,7 +3,7 @@ import { ArrowLeft, Save } from 'lucide-react';
 // SOLO tipos y constantes: el repo importa supabaseAdmin y no debe entrar al bundle de la vista.
 import type { ConfigCorreo, CanalEntrega, Revisor } from '@/lib/likida/liquidacion_externa/repo_correo';
 import { hoyMx } from '@/lib/formato';
-import { MarcoPagina, BotonEnlace } from '@/app/ui-v2/componentes';
+import { MarcoPagina, BotonEnlace, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 type Accion = (fd: FormData) => Promise<void>;
 export interface AccionesConfiguracion { guardar: Accion }
@@ -176,15 +176,15 @@ export function leerFormularioConfig(fd: FormData): ResultadoFormulario {
 
 // ── Vista ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-const CSS_INPUT = 'hairline text-[12.5px] px-2.5 py-1.5 rounded-lg w-full';
+const CSS_INPUT = 'hairline text-[12px] px-2.5 py-1.5 rounded-lg w-full';
 const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
+const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
 
 function Etiqueta({ t, children }: { t: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{t}</span>
+      <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>{t}</span>
       {children}
     </label>
   );
@@ -206,16 +206,16 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
   const renombres = (Array.isArray(config.renombres) ? config.renombres : []).filter(esRenombre);
   return (
     <MarcoPagina titulo="Configuración del desglose" apoyo="Cómo se entrega el desglose de cada liquidación, quién lo recibe, cómo se ve y qué conceptos retienen el envío." acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/liquidacion${sufijo}`} icono={<ArrowLeft width={12} height={12} strokeWidth={2} />}>Volver al agente</BotonEnlace>}>
-      {aviso && <p role="status" className="card p-3 text-[12.5px]" style={{ color: 'var(--ink)' }}>{aviso}</p>}
-      {error && <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>{error}</p>}
+      {aviso && <p role="status" className="card p-3 text-[12px]" style={{ color: 'var(--ink)' }}>{aviso}</p>}
+      {error && <p role="alert" className="card p-3 text-[12px]" style={{ color: 'var(--bad)' }}>{error}</p>}
 
       {!disponible && (
-        <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>
+        <p role="alert" className="card p-3 text-[12px]" style={{ color: 'var(--bad)' }}>
           La configuración de la entrega por correo todavía no está disponible en esta base. No se puede leer ni guardar nada hasta que se aplique.
         </p>
       )}
       {disponible && !hayFila && (
-        <p className="card p-3 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="card p-3 text-[12px]" style={{ color: 'var(--muted)' }}>
           Todavía no hay configuración guardada: el agente sigue entregando por WhatsApp y no se manda nada por correo. El envío por correo no se activa solo; tú lo enciendes cuando esté todo listo.
         </p>
       )}
@@ -225,7 +225,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
 
       <form action={acciones.guardar} className="space-y-4">
         <section className="card p-4 space-y-3">
-          <h2 className="font-display text-[15px] font-semibold">1. Entrega</h2>
+          <TituloRecuadro info="liquidacion_config.entrega">1. Entrega</TituloRecuadro>
           <div className="grid sm:grid-cols-2 gap-3">
             <Etiqueta t="Canal">
               <select name="canal" defaultValue={config.canal} className={CSS_INPUT} style={ESTILO_INPUT} disabled={off}>
@@ -233,7 +233,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
               </select>
             </Etiqueta>
             <Etiqueta t="Envío por correo">
-              <span className="flex items-center gap-2 text-[12.5px]">
+              <span className="flex items-center gap-2 text-[12px]">
                 <input type="checkbox" name="activa" defaultChecked={config.activa} disabled={off} /> Activar el envío
               </span>
               <Ayuda>Apagado, no sale ningún correo aunque haya desgloses listos: quedan en espera y salen solos al encenderlo.</Ayuda>
@@ -256,7 +256,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
         </section>
 
         <section className="card p-4 space-y-3">
-          <h2 className="font-display text-[15px] font-semibold">2. Quién lo recibe</h2>
+          <TituloRecuadro info="liquidacion_config.destinatarios">2. Quién lo recibe</TituloRecuadro>
           <div className="grid sm:grid-cols-2 gap-3">
             <Etiqueta t={`Correos de RH (hasta ${MAX_RH}, uno por renglón)`}>
               <textarea name="rhCorreos" rows={3} defaultValue={config.rhCorreos.join('\n')} placeholder="(vacío: RH no recibe copia)" className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
@@ -266,14 +266,14 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
               <Ayuda>Recibe una copia de cada desglose para el archivo de la empresa.</Ayuda>
             </Etiqueta>
             <Etiqueta t="Coordinador">
-              <span className="flex items-center gap-2 text-[12.5px]">
+              <span className="flex items-center gap-2 text-[12px]">
                 <input type="checkbox" name="enviaCoordinador" defaultChecked={config.enviaCoordinador} disabled={off} /> Enviar también al coordinador del operador
               </span>
             </Etiqueta>
             <fieldset className="flex flex-col gap-1" disabled={off}>
-              <legend className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Tipos de operador que reciben su desglose</legend>
+              <legend className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Tipos de operador que reciben su desglose</legend>
               {TIPOS_OPERADOR.map((t) => (
-                <span key={t.valor} className="flex items-center gap-2 text-[12.5px]">
+                <span key={t.valor} className="flex items-center gap-2 text-[12px]">
                   <input type="checkbox" name="tiposQueReciben" value={t.valor} defaultChecked={config.tiposQueReciben.includes(t.valor)} /> {t.etiqueta}
                 </span>
               ))}
@@ -283,7 +283,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
         </section>
 
         <section className="card p-4 space-y-3">
-          <h2 className="font-display text-[15px] font-semibold">Fecha de corte del arranque</h2>
+          <TituloRecuadro info="liquidacion_config.fecha_corte">Fecha de corte del arranque</TituloRecuadro>
           <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
             Los desgloses cuyo periodo termina ANTES de esta fecha se guardan, pero no se envían a nadie (quedan «omitidos»). Pon el día en que arranca
             el envío: así subir el histórico no manda nóminas viejas a los operadores, coordinadores ni RH. Vacío = se envía todo lo que llegue.
@@ -296,14 +296,14 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
         </section>
 
         <section className="card p-4 space-y-3">
-          <h2 className="font-display text-[15px] font-semibold">Primer mes: revisión por departamento</h2>
+          <TituloRecuadro info="liquidacion_config.primer_mes">Primer mes: revisión por departamento</TituloRecuadro>
           <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
             Durante el primer mes, cada desglose —enviado o retenido— le llega también por correo al revisor de cada departamento, con el mismo Excel.
             Al terminar la fecha, el modo se apaga solo.
           </p>
           <div className="grid sm:grid-cols-2 gap-3">
             <Etiqueta t="Modo primer mes">
-              <span className="flex items-center gap-2 text-[12.5px]">
+              <span className="flex items-center gap-2 text-[12px]">
                 <input type="checkbox" name="primerMes" defaultChecked={config.primerMesHasta !== null} disabled={off} /> Activar la revisión por departamento
               </span>
             </Etiqueta>
@@ -317,10 +317,10 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
         </section>
 
         <section className="card p-4 space-y-3">
-          <h2 className="font-display text-[15px] font-semibold">3. Cómo se ve el desglose</h2>
+          <TituloRecuadro info="liquidacion_config.formato">3. Cómo se ve el desglose</TituloRecuadro>
           <div className="grid sm:grid-cols-2 gap-3">
             <Etiqueta t="Renglón de viaje">
-              <span className="flex items-center gap-2 text-[12.5px]">
+              <span className="flex items-center gap-2 text-[12px]">
                 <input type="checkbox" name="agruparViaje" defaultChecked={config.agruparViaje} disabled={off} /> Juntar los conceptos de viaje en un solo renglón
               </span>
             </Etiqueta>
@@ -338,7 +338,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
         </section>
 
         <section className="card p-4 space-y-3">
-          <h2 className="font-display text-[15px] font-semibold">4. Qué retiene el envío</h2>
+          <TituloRecuadro info="liquidacion_config.retencion">4. Qué retiene el envío</TituloRecuadro>
           <div className="grid sm:grid-cols-2 gap-3">
             <Etiqueta t="Conceptos que retienen el envío (uno por renglón)">
               <textarea name="conceptosProhibidos" rows={3} defaultValue={config.conceptosProhibidos.join('\n')} placeholder="(ninguno)" className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
@@ -354,7 +354,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
         </section>
 
         {puedeAdministrar && disponible && (
-          <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}><Save width={13} height={13} strokeWidth={2} /> Guardar configuración</button>
+          <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}><Save width={13} height={13} strokeWidth={2} /> Guardar configuración</button>
         )}
       </form>
     </MarcoPagina>

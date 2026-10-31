@@ -5,7 +5,7 @@ import { mxn, numero, fechaCorta } from '@/lib/formato';
 import { EstadoVacio } from '../estados';
 import { FilaAcciones, type AccionHuerfano } from './acciones';
 import type { BuscarViaje } from './combo-viaje';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /** Por qué quedó suelto, en palabras de oficina. Un motivo nuevo cae al
  *  crudo en gris — visible, no roto. */
@@ -42,13 +42,13 @@ export function VistaHuerfanos({ pendientes, hayViajesVivos, buscarViaje, totalP
 
       <section className="card p-4">
         <div className="mb-3">
-          <h2 className="font-display text-[15px] font-semibold">
+          <TituloRecuadro info="huerfanos.bandeja">
             Esperan que alguien los acomode{pendientes.length > 0 && (
               <> · <span className="cifra-mono">
                 {hayMas ? `${numero(pendientes.length)} de ${numero(totalPendientes!)}` : numero(pendientes.length)}
               </span></>
             )}
-          </h2>
+          </TituloRecuadro>
           <p className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>
             Una foto nunca se rechaza: lo que llega sin viaje se guarda aquí. Al chofer también
             se le ofrece adjuntarlos por WhatsApp — quien llegue primero.
@@ -65,12 +65,12 @@ export function VistaHuerfanos({ pendientes, hayViajesVivos, buscarViaje, totalP
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Recibido</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Operador</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Comprobante</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 pr-6 text-right">Monto</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Por qué está aquí</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 text-right pr-1">Resolver</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Recibido</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Operador</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Comprobante</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pr-6 text-right">Monto</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Por qué está aquí</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right pr-1">Resolver</th>
                 </tr>
               </thead>
               <tbody>

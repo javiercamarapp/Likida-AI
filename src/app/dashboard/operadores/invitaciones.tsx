@@ -52,7 +52,7 @@ export function InvitarPendientes({ pendientes, conFallo, accion, hrefGuia }: {
         </div>
         <div className="min-w-0 flex-1 space-y-2">
           <h2 id="titulo-invitar" className="font-display text-[15px] font-semibold">Invitar a los operadores por WhatsApp</h2>
-          <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
             {pendientes > 0
               ? <><strong style={{ color: 'var(--ink)' }}>{numero(pendientes)}</strong> {pendientes === 1 ? 'operador activo espera' : 'operadores activos esperan'} su invitación. </>
               : 'Todos los operadores activos ya fueron invitados. '}
@@ -60,7 +60,7 @@ export function InvitarPendientes({ pendientes, conFallo, accion, hrefGuia }: {
             <a href={hrefGuia} className="underline">Ver el número y el flujo de arranque del chofer</a>.
           </p>
           {conFallo > 0 && (
-            <p className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
               {numero(conFallo)} {conFallo === 1 ? 'invitación falló' : 'invitaciones fallaron'} (número sin WhatsApp o inválido): corrige el teléfono en su ficha y reintenta.
             </p>
           )}

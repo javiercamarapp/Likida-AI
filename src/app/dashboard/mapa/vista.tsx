@@ -5,7 +5,7 @@ import { nivelDePosicion, contarPorFrescura, ROTULO_FRESCURA, TONO_FRESCURA, MIN
 import { MapaVivo, type ViajeEnMapa, type PinUnidad } from './mapa-vivo';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 export interface SinUbicar {
   id: string;
@@ -86,12 +86,12 @@ export function VistaMapa({ ubicados, sinUbicar, totalVivos, tope, rastreo }: {
               recientes — ~90 minutos de operación a 50k viajes/mes. Ahora
               es el conteo real de la flota; lo acotado es el DIBUJO. */}
           <Cifra etiqueta="Viajes en curso" valor={totalVivos === null ? '—' : numero(totalVivos)}
-            nota={totalVivos === null ? 'no se pudo contar' : 'abiertos o en cuadre'} />
-          <Cifra etiqueta="En el mapa" valor={numero(ubicados.length)} />
+            nota={totalVivos === null ? 'no se pudo contar' : 'abiertos o en cuadre'} info="mapa.viajes_en_curso" />
+          <Cifra etiqueta="En el mapa" valor={numero(ubicados.length)} info="mapa.en_el_mapa" />
           <Cifra etiqueta="Sin ubicar" valor={numero(sinUbicar.length)}
             nota={sinUbicar.length > 0 ? 'listados abajo, no omitidos' : undefined}
-            tono={sinUbicar.length > 0 ? 'warn' : undefined} />
-          <Cifra etiqueta="Escalados" valor={numero(escalados)} tono={escalados > 0 ? 'bad' : undefined} />
+            tono={sinUbicar.length > 0 ? 'warn' : undefined} info="mapa.sin_ubicar" />
+          <Cifra etiqueta="Escalados" valor={numero(escalados)} tono={escalados > 0 ? 'bad' : undefined} info="mapa.escalados" />
           {/* AUDITORÍA 20 (H5): el GPS existía y no se veía. `null` cuando
               la lectura no se pudo hacer — nunca un 0 inventado, que aquí
               significaría "ninguna unidad reporta". */}
@@ -102,7 +102,7 @@ export function VistaMapa({ ubicados, sinUbicar, totalVivos, tope, rastreo }: {
               : rastreo.ultimaPosicion !== null
                 ? `última: ${fechaHoraMx(rastreo.ultimaPosicion)}`
                 : 'sin una sola posición todavía'}
-            tono={rastreo.error !== null ? 'warn' : undefined} />
+            tono={rastreo.error !== null ? 'warn' : undefined} info="mapa.unidades_con_posicion" />
         </TiraCifras>
         {/* El tope se declara. Antes decía "los N viajes más recientes"
             mezclando liquidados y vivos; ahora la base ya filtró por
@@ -124,7 +124,7 @@ export function VistaMapa({ ubicados, sinUbicar, totalVivos, tope, rastreo }: {
       <section className="card p-4">
         <div className="flex items-center gap-2 mb-1">
           <Satellite width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-          <h2 className="font-display text-[15px] font-semibold">Últimas posiciones</h2>
+          <TituloRecuadro info="mapa.posiciones">Últimas posiciones</TituloRecuadro>
         </div>
 
         {rastreo.error !== null ? (
@@ -197,14 +197,14 @@ export function VistaMapa({ ubicados, sinUbicar, totalVivos, tope, rastreo }: {
             )}
 
             {rastreo.pines.length === 0 ? (
-              <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
                 {rastreo.proveedores.length === 0
                   ? 'Todavía no hay un proveedor de GPS conectado. Se captura en Conexiones, y el número de dispositivo de cada camión en su ficha de Unidades. Mientras tanto, un chofer puede mandar su ubicación por WhatsApp y aparece aquí.'
                   : 'El conector está dado de alta pero ninguna unidad activa ha reportado una posición todavía. Revisa que las unidades tengan capturado su número de dispositivo GPS.'}
               </p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-[12.5px]">
+                <table className="w-full text-[12px]">
                   <thead>
                     <tr style={{ color: 'var(--faint)' }} className="text-left">
                       <th className="py-2 font-medium">Unidad</th>
@@ -225,7 +225,7 @@ export function VistaMapa({ ubicados, sinUbicar, totalVivos, tope, rastreo }: {
                             {p.placas && <span className="ml-2 cifra-mono text-[11px]" style={{ color: 'var(--faint)' }}>{p.placas}</span>}
                           </td>
                           <td className="py-2.5" style={vieja ? { color: `var(--${TONO_FRESCURA[nivel]})` } : undefined}>
-                            <span className="mr-1.5 inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                            <span className="mr-1.5 inline-flex rounded-full px-1.5 py-0.5 text-[11px] font-medium"
                               style={{ color: `var(--${TONO_FRESCURA[nivel]})`, background: `var(--${TONO_FRESCURA[nivel]}bg)` }}>{ROTULO_FRESCURA[nivel]}</span>
                             {antiguedad(p.minutos)}
                             <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{fechaHoraMx(p.medidaEn)}</span>
@@ -259,13 +259,13 @@ export function VistaMapa({ ubicados, sinUbicar, totalVivos, tope, rastreo }: {
 
       {sinUbicar.length > 0 && (
         <section className="card p-4">
-          <h2 className="font-display text-[15px] font-semibold mb-1">Sin ubicar en el mapa</h2>
+          <TituloRecuadro info="mapa.sin_ubicar_lista" className="mb-1">Sin ubicar en el mapa</TituloRecuadro>
           <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
             Viajes vivos cuya ciudad no está en la tabla del mapa — existen igual, solo no se dibujan
           </p>
           <div className="space-y-2">
             {sinUbicar.map((v) => (
-              <div key={v.id} className="flex items-center gap-2.5 text-[12.5px]">
+              <div key={v.id} className="flex items-center gap-2.5 text-[12px]">
                 <MapPinOff width={13} height={13} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--warn)' }} />
                 <span className="font-medium">{v.folio}</span>
                 {v.operadorNombre && <span style={{ color: 'var(--muted)' }}>{v.operadorNombre}</span>}

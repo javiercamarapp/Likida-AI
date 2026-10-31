@@ -14,7 +14,7 @@ function BotonEnviar({ texto, pendienteTexto, Icono }: { texto: string; pendient
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50 shrink-0"
+      className="rv-btn rv-btn--primary inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50 shrink-0"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Icono width={13} height={13} strokeWidth={2} />
       {pending ? pendienteTexto : texto}
@@ -48,7 +48,7 @@ export function AsignarFila({ viajeId, buscarCatalogo, totalOperadores, asignarY
           <ComboCatalogo tipo="operador" name="operadorId" buscar={buscarCatalogo} requerido
             aria-label="Operador" etiquetaVacia="Escribe el nombre del chofer…"
             total={totalOperadores}
-            className="w-full min-w-0 text-[12.5px] px-2.5 py-1.5 rounded-lg hairline"
+            className="w-full min-w-0 text-[12px] px-2.5 py-1.5 rounded-lg hairline"
             estilo={{ background: 'var(--surface)' }}
           />
         </div>
@@ -85,7 +85,7 @@ export function AsignarUnidadFila({ viajeId, unidadId, unidadEco, buscarCatalogo
           <ComboCatalogo tipo="unidad" name="unidadId" buscar={buscarCatalogo}
             aria-label="Unidad" etiquetaVacia="Sin unidad"
             valorInicial={unidadId} textoInicial={unidadEco ?? ''} total={totalUnidades}
-            className="w-full min-w-0 text-[11.5px] px-2 py-1 rounded-lg hairline cifra-mono"
+            className="w-full min-w-0 text-[11px] px-2 py-1 rounded-lg hairline cifra-mono"
             estilo={{ background: 'var(--surface)' }}
           />
         </div>
@@ -101,7 +101,7 @@ function BotonAsignarUnidad({ texto }: { texto: string }) {
   return (
     <button type="submit" disabled={pending} title="Amarrar la unidad al viaje"
       aria-label={`${texto} la unidad del viaje`}
-      className="hairline inline-flex items-center gap-1 text-[11.5px] font-medium px-2 py-1 rounded-lg transition-colors hover:bg-[var(--canvas)] disabled:opacity-50 shrink-0"
+      className="rv-btn rv-btn--secondary hairline inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-lg transition-colors hover:bg-[var(--canvas)] disabled:opacity-50 shrink-0"
       style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
       {pending ? 'Asignando…' : texto}
     </button>
@@ -134,7 +134,7 @@ function BotonInsistir({ texto }: { texto: string }) {
   return (
     <button type="submit" disabled={pending} title="Mandar el aviso por WhatsApp"
       aria-label={`${texto} al chofer por WhatsApp`}
-      className="hairline inline-flex items-center gap-1 text-[11.5px] font-medium px-2 py-1 rounded-lg transition-colors hover:bg-[var(--canvas)] disabled:opacity-50"
+      className="rv-btn rv-btn--secondary hairline inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-lg transition-colors hover:bg-[var(--canvas)] disabled:opacity-50"
       style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
       <RefreshCw width={11} height={11} strokeWidth={2} className={pending ? 'animate-spin' : ''} />
       {pending ? 'Enviando…' : texto}
@@ -151,11 +151,11 @@ export function AltaOperador({ altaOperador }: { altaOperador: AccionDespacho })
     <form action={accion} className="space-y-2">
       <input name="nombre" required placeholder="Nombre del operador"
         aria-label="Nombre del operador"
-        className="w-full text-[12.5px] px-3 py-2 rounded-lg hairline" style={{ background: 'var(--surface)' }} />
+        className="w-full text-[12px] px-3 py-2 rounded-lg hairline" style={{ background: 'var(--surface)' }} />
       <div className="flex items-center gap-2">
         <input name="telefono" required placeholder="WhatsApp (10 dígitos)" inputMode="tel"
           aria-label="WhatsApp del operador"
-          className="flex-1 min-w-0 text-[12.5px] px-3 py-2 rounded-lg hairline cifra-mono" style={{ background: 'var(--surface)' }} />
+          className="flex-1 min-w-0 text-[12px] px-3 py-2 rounded-lg hairline cifra-mono" style={{ background: 'var(--surface)' }} />
         <BotonEnviar texto="Dar de alta" pendienteTexto="Guardando…" Icono={UserPlus} />
       </div>
       {estado?.error && <p className="text-[12px]" style={{ color: 'var(--bad)' }}>{estado.error}</p>}

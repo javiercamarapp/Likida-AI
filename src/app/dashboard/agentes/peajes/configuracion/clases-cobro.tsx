@@ -9,9 +9,9 @@ export interface ClasesCobroVista {
   acciones: { guardarReglasFlota: Accion };
 }
 
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
+const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const CSS_INPUT = 'hairline text-[12.5px] px-2.5 py-1.5 rounded-lg';
+const CSS_INPUT = 'hairline text-[12px] px-2.5 py-1.5 rounded-lg';
 const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
 
 /**
@@ -29,16 +29,16 @@ export function SeccionClasesCobro({ datos }: { datos: ClasesCobroVista }) {
         cómo tratar la <b>clase 1</b>, que según el cliente es la tarifa <b>por pasada</b> y no una clase de ejes.
       </p>
       {reglas === null ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No se pudo leer esta configuración ahora mismo.</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudo leer esta configuración ahora mismo.</p>
       ) : !puedeEditar ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           Utilitarios: {reglas.clasesUtilitario.length > 0 ? `clases ${reglas.clasesUtilitario.join(', ')}` : 'sin clases declaradas (no se les evalúa la clase)'}. Clase 1:{' '}
           {reglas.clase1 === 'todas' ? 'tarifa por pasada en todas las casetas' : 'solo normal en las casetas declaradas por pasada'}.
         </p>
       ) : (
         <form action={acciones.guardarReglasFlota} className="space-y-3">
           <label className="block">
-            <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Clases válidas del utilitario</span>
+            <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Clases válidas del utilitario</span>
             <input name="clases_utilitario" defaultValue={reglas.clasesUtilitario.join(', ')} maxLength={60} placeholder="Vacío = no se evalúa"
               aria-label="Clases de cobro válidas para unidades utilitario, separadas por comas"
               className={`${CSS_INPUT} w-[220px] mt-0.5`} style={ESTILO_INPUT} />
@@ -48,17 +48,17 @@ export function SeccionClasesCobro({ datos }: { datos: ClasesCobroVista }) {
             </span>
           </label>
           <fieldset className="space-y-1.5">
-            <legend className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Clase 1</legend>
-            <label className="flex items-start gap-2 text-[12.5px]">
+            <legend className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Clase 1</legend>
+            <label className="flex items-start gap-2 text-[12px]">
               <input type="radio" name="clase_uno" value="todas" defaultChecked={reglas.clase1 === 'todas'} className="mt-0.5" />
               <span><span className="font-medium">Tarifa por pasada en todas las casetas</span> (recomendado): la clase 1 no se marca. Se cuenta aparte en la revisión.</span>
             </label>
-            <label className="flex items-start gap-2 text-[12.5px]">
+            <label className="flex items-start gap-2 text-[12px]">
               <input type="radio" name="clase_uno" value="declaradas" defaultChecked={reglas.clase1 === 'declaradas'} className="mt-0.5" />
               <span><span className="font-medium">Solo en las casetas declaradas por pasada</span>: en las demás, la clase 1 se marca como candidato. Declara las casetas por pasada en el catálogo de casetas o en «Reglas de cobro».</span>
             </label>
           </fieldset>
-          <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>Guardar clases</button>
+          <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Guardar clases</button>
         </form>
       )}
     </section>

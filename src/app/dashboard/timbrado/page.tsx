@@ -61,12 +61,12 @@ export default async function PaginaTimbrado({
       )}
 
       {filas === null ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
           No se pudo leer la cola de timbrado. No es «no hay nada»: es que no se pudo mirar —
           reintenta.
         </p>
       ) : filas.length === 0 ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           Nada en la cola todavía. Aquí aparecen los viajes cuyo borrador de Carta Porte ya se
           trabajó (su XML se generó al menos una vez) y los que ya tienen timbre o un intento vivo.
           El borrador se arma en Carta Porte, con el jefe de tráfico.
@@ -89,7 +89,7 @@ export default async function PaginaTimbrado({
                 <span className="text-[12px]" style={{ color: 'var(--muted)' }}>
                   {f.origen && f.destino ? ` · ${f.origen} → ${f.destino}` : ' · ruta sin capturar'}
                 </span>
-                <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+                <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
                   {f.timbre === null
                     ? 'Sin timbre.'
                     : f.timbre.estado === 'pendiente'
@@ -104,7 +104,7 @@ export default async function PaginaTimbrado({
         </section>
       )}
 
-      <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+      <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
         Esta cola lista los viajes cuyo XML de Carta Porte ya se generó alguna vez y los que ya
         tienen timbre o reserva. NO es «todos los viajes que necesitan complemento»: eso lo decide
         el borrador viaje por viaje, y afirmarlo aquí sería inventar una lista que nadie midió.

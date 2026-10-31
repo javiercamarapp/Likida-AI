@@ -14,7 +14,7 @@ import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { fechaMx, hoyMx } from '@/lib/formato';
 import { venceDentroDe, yaVencio, DIAS_VENCE_PRONTO } from './vencimiento';
 import type { Metadata } from 'next';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 export const metadata: Metadata = { title: 'Solicitudes ARCO' };
@@ -199,16 +199,14 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
           (KpiTile lo pinta "—", no "0"); la caja roja de `errorCarga` de
           abajo ya explica por qué. */}
       <TiraCifras sello={selloHoy('Solicitudes ARCO')}>
-        <Cifra icono={<CircleAlert width={15} height={15} strokeWidth={1.75} />} etiqueta="Por responder" valor={errorCarga ? null : pendientes.length} />
-        <Cifra icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} />} etiqueta={`Vencen pronto (≤ ${DIAS_VENCE_PRONTO} días)`} valor={errorCarga ? null : vencenPronto.length} />
-        <Cifra icono={<CircleAlert width={15} height={15} strokeWidth={1.75} />} etiqueta="Vencidas sin responder" valor={errorCarga ? null : vencidas.length} />
+        <Cifra icono={<CircleAlert width={15} height={15} strokeWidth={1.75} />} etiqueta="Por responder" info="arco.por_responder" valor={errorCarga ? null : pendientes.length} />
+        <Cifra icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} />} etiqueta={`Vencen pronto (≤ ${DIAS_VENCE_PRONTO} días)`} info="arco.vencen_pronto" valor={errorCarga ? null : vencenPronto.length} />
+        <Cifra icono={<CircleAlert width={15} height={15} strokeWidth={1.75} />} etiqueta="Vencidas sin responder" info="arco.vencidas" valor={errorCarga ? null : vencidas.length} />
       </TiraCifras>
 
       <div className="glass-panel overflow-hidden">
         <section className="p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--muted)' }}>
-            Solicitudes de tus operadores
-          </h2>
+          <TituloRecuadro info="arco.solicitudes" className="mb-3">Solicitudes de tus operadores</TituloRecuadro>
           {errorCarga ? (
             <div className="rounded-lg p-3 text-sm" style={{ background: 'color-mix(in srgb, var(--color-warn) 10%, transparent)', color: 'var(--color-warn)' }}>
               No se pudieron leer las solicitudes ahora mismo ({errorCarga.slice(0, 120)}). Recarga en un momento — no hay

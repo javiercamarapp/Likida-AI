@@ -14,7 +14,7 @@ import {
   FormaEscribirRegla, FormaElegirAMano, type ResultadoForma, type PlantillaEnPantalla,
 } from './forma';
 import { ListaReglas } from './vista';
-import { MarcoPagina, Aviso } from '@/app/ui-v2/componentes';
+import { MarcoPagina, Aviso, TituloRecuadro } from '@/app/ui-v2/componentes';
 import type { Metadata } from 'next';
 export const metadata: Metadata = { title: 'Mis reglas' };
 
@@ -218,7 +218,7 @@ export default async function PaginaReglas({
           <FormaEscribirRegla accion={accionInterpretar} ejemplos={ejemplos} />
         </div>
         <details className="card p-4">
-          <summary className="cursor-pointer text-[12.5px] font-medium select-none list-none"
+          <summary className="cursor-pointer text-[12px] font-medium select-none list-none"
             style={{ color: 'var(--ink2)' }}>
             …o elígela de la lista, sin pasar por el intérprete
           </summary>
@@ -241,9 +241,7 @@ export default async function PaginaReglas({
       )}
 
       <section className="space-y-2">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-          Lo que sé vigilar hoy
-        </h2>
+        <TituloRecuadro info="reglas.vigilancia">Lo que sé vigilar hoy</TituloRecuadro>
         {/* La lista completa, siempre a la vista y no solo cuando algo
             falla: es la frontera honesta del producto. Lo que no está
             aquí, Likida no lo puede prometer. */}

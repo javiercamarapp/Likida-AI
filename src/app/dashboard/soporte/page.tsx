@@ -211,17 +211,20 @@ export default async function SoportePage({
               <Cifra
                 icono={<LifeBuoy width={15} height={15} strokeWidth={1.75} />}
                 etiqueta="Abiertos"
+                info="soporte.abiertos"
                 valor={abiertos.length}
               />
               <Cifra
                 icono={<AlertTriangle width={15} height={15} strokeWidth={1.75} />}
                 etiqueta="SLA vencido"
+                info="soporte.sla_vencido"
                 valor={vencidos.length}
                 tono={vencidos.length > 0 ? 'bad' : undefined}
               />
               <Cifra
                 icono={<Timer width={15} height={15} strokeWidth={1.75} />}
                 etiqueta="Sin SLA pactado"
+                info="soporte.sin_sla"
                 valor={sinSla.length}
                 nota="No están vencidos: nadie les puso plazo"
               />

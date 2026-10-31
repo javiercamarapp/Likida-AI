@@ -13,7 +13,7 @@ import { Plegable } from '../clientes/forma';
 import { FormaUnidad, type AccionForma, type ProveedorGps, type PatioOpcion } from './forma';
 import { ImportadorMasivo, type AccionImportacion } from '../importador-masivo';
 import { AccionesEstadoUnidad, ReactivarUnidad, type AccionEstado } from './estado';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 const PILL: Record<EstadoVigencia, { fg: string; bg: string; Icono: typeof ShieldCheck }> = {
   vencido: { fg: 'var(--bad)', bg: 'var(--badbg)', Icono: ShieldAlert },
@@ -153,7 +153,7 @@ export function VistaUnidades({
           <ShieldAlert width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" />
           <div>
             <p className="text-[13px] font-medium">Papeles que requieren atención</p>
-            <p className="text-[12.5px] mt-0.5">{aviso}</p>
+            <p className="text-[12px] mt-0.5">{aviso}</p>
           </div>
         </div>
       )}
@@ -164,7 +164,7 @@ export function VistaUnidades({
           escribe (misma puerta que clientes). */}
       {puedeEditar && (
         <section className="card p-4">
-          <h2 className="font-display text-[14px] font-semibold mb-1">Dar de alta una unidad</h2>
+          <TituloRecuadro info="unidades.alta" className="mb-1">Dar de alta una unidad</TituloRecuadro>
           <p className="text-[11px] mb-2" style={{ color: 'var(--faint)' }}>
             Con sus vigencias capturadas, Likida avisa qué papel vence primero.
           </p>
@@ -221,14 +221,14 @@ export function VistaUnidades({
           {hayFiltro && !totalActivasConocido && (
             // No se pudo contar el parque entero, así que el «de N» del
             // pie sería un número inventado. Se dice.
-            <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+            <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
               No pude contar el parque completo en este momento: el total de al lado es el de las que
               coinciden con la búsqueda, no el de la flota.
             </p>
           )}
 
           {pag.filas.length === 0 && (
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
               Ninguna unidad coincide con «{pag.q}».
             </p>
           )}
@@ -242,7 +242,7 @@ export function VistaUnidades({
                   <p.Icono width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: p.fg }} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h2 className="font-display text-[14px] font-semibold">{u.numeroEconomico}</h2>
+                      <TituloRecuadro info="unidades.ficha">{u.numeroEconomico}</TituloRecuadro>
                       {u.placas && (
                         <span className="text-[12px] cifra-mono" style={{ color: 'var(--muted)' }}>{u.placas}</span>
                       )}
@@ -251,14 +251,14 @@ export function VistaUnidades({
                         {ESTADO_UNIDAD[u.estado] ?? u.estado}
                       </span>
                       {patios.length > 0 && (
-                        <span className="text-[11.5px]" style={{ color: terminalPorUnidad[u.id] ? 'var(--ink2)' : 'var(--faint)' }}>
+                        <span className="text-[11px]" style={{ color: terminalPorUnidad[u.id] ? 'var(--ink2)' : 'var(--faint)' }}>
                           {nombrePatio.get(terminalPorUnidad[u.id] ?? '') ?? 'Sin patio'}
                         </span>
                       )}
                     </div>
 
                     {(u.marca || u.modelo || u.anio) && (
-                      <p className="text-[12.5px] mt-0.5" style={{ color: 'var(--muted)' }}>
+                      <p className="text-[12px] mt-0.5" style={{ color: 'var(--muted)' }}>
                         {[u.marca, u.modelo, u.anio].filter(Boolean).join(' · ')}
                       </p>
                     )}
@@ -351,9 +351,9 @@ export function VistaUnidades({
           historial de viajes y de taller sigue completo. */}
       {totalBajas > 0 && (
         <section className="card p-4">
-          <h2 className="font-display text-[14px] font-semibold mb-1">
+          <TituloRecuadro info="unidades.bajas" className="mb-1">
             Dadas de baja ({numero(totalBajas)})
-          </h2>
+          </TituloRecuadro>
           <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
             Fuera del parque: no se ofrecen para viajes nuevos y no cuentan en los papeles de arriba.
             Su historial se conserva.
@@ -367,7 +367,7 @@ export function VistaUnidades({
                     <span className="text-[12px] ml-2 cifra-mono" style={{ color: 'var(--muted)' }}>{u.placas}</span>
                   )}
                   {(u.marca || u.modelo || u.anio) && (
-                    <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+                    <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
                       {[u.marca, u.modelo, u.anio].filter(Boolean).join(' · ')}
                     </p>
                   )}

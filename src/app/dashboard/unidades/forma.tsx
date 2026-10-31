@@ -21,7 +21,7 @@ function Boton({ etiqueta }: { etiqueta: string }) {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Save width={14} height={14} strokeWidth={1.75} />
       {pending ? 'Guardando…' : etiqueta}
@@ -141,7 +141,7 @@ export function FormaUnidad({ accion, id = '', inicial, idPrefijo, proveedoresGp
           Vacío = sin capturar, y la unidad sale como "sin papeles" — nunca
           como vigente, que sería inventar que está en regla. */}
       <fieldset className="pt-3 border-t" style={{ borderColor: 'var(--line)' }}>
-        <legend className="etiqueta-mono text-[10px] uppercase mb-2.5" style={{ color: 'var(--faint)' }}>
+        <legend className="etiqueta-mono text-[11px] uppercase mb-2.5" style={{ color: 'var(--faint)' }}>
           Vigencias · opcionales
         </legend>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -177,7 +177,7 @@ export function FormaUnidad({ accion, id = '', inicial, idPrefijo, proveedoresGp
           — el motor lo exige y `validarAmarreGps` lo dice con esas palabras.
           No es dinero, así que no choca con `dinero_por_area.test.ts`. */}
       <fieldset className="pt-3 border-t" style={{ borderColor: 'var(--line)' }}>
-        <legend className="etiqueta-mono text-[10px] uppercase mb-2.5" style={{ color: 'var(--faint)' }}>
+        <legend className="etiqueta-mono text-[11px] uppercase mb-2.5" style={{ color: 'var(--faint)' }}>
           Rastreo GPS · opcional
         </legend>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

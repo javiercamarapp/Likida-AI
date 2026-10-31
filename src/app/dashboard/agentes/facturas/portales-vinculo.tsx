@@ -70,12 +70,12 @@ export function SeccionPortales({ filas, vinculos, autorizarRelogin, revocarRelo
       </p>
 
       {!vinculos ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--bad)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--bad)' }}>
           No se pudo leer el estado de tus portales ahora mismo. No es que no tengas ninguno vinculado:
           es que esta pantalla está ciega. Recarga en un momento.
         </p>
       ) : filas.length === 0 ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           Ninguno de los comercios de tus tickets pide cuenta de portal — no hay nada que vincular.
         </p>
       ) : (
@@ -108,14 +108,14 @@ export function SeccionPortales({ filas, vinculos, autorizarRelogin, revocarRelo
                       )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px]"
+                      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px]"
                         style={{ color: p.fg, background: p.bg }}>
                         <p.Icono width={11} height={11} strokeWidth={2} />
                         {p.rotulo}
                       </span>
                       {f.estado !== 'vinculado' && (
                         <a href={f.portal} target="_blank" rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[11.5px] underline"
+                          className="inline-flex items-center gap-1 text-[11px] underline"
                           style={{ color: 'var(--muted)' }}>
                           Abrir el portal <ExternalLink width={10} height={10} strokeWidth={2} />
                         </a>

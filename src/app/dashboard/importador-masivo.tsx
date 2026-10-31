@@ -10,6 +10,8 @@ import type { ResultadoImportacionUI } from '@/lib/likida/importacion/resultado_
 import { DialogoConfirmar } from '../admin/ui/confirmar';
 import { useNotificar } from '../admin/ui/notificaciones';
 import { AvisoResultado } from '../admin/ui/aviso-resultado';
+import { TituloRecuadro, InfoTip } from '@/app/ui-v2/componentes';
+import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA CARGA MASIVA, EN TRES TIEMPOS: plantilla → revisar → confirmar (W2).
@@ -146,8 +148,8 @@ export function ImportadorMasivo({
           <FileSpreadsheet aria-hidden width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 id="titulo-importar" className="font-display text-[15px] font-semibold">{esGps ? 'Ligar dispositivos GPS desde Excel o CSV' : `Cargar ${sustantivo} desde Excel o CSV`}</h2>
-          <p className="mt-0.5 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+          <TituloRecuadro id="titulo-importar" info="importador.carga">{esGps ? 'Ligar dispositivos GPS desde Excel o CSV' : `Cargar ${sustantivo} desde Excel o CSV`}</TituloRecuadro>
+          <p className="mt-0.5 text-[12px]" style={{ color: 'var(--muted)' }}>
             {esGps ? 'Para ligar el GPS de toda tu flota de una vez a unidades que YA existen (no se dan de alta unidades).' : 'Para dar de alta tu flota completa de una vez.'} Primero se <strong>revisa</strong> el archivo —no se escribe nada—,
             ves cuántas filas entran y cuáles traen un problema, y recién entonces confirmas.
           </p>
@@ -157,7 +159,7 @@ export function ImportadorMasivo({
               <p className="font-medium">1. Descarga la plantilla</p>
               <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{columnas}</p>
               <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(plantillaCsv)}`} download={archivoPlantilla}
-                className="hairline mt-1.5 inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)]">
+                className="hairline mt-1.5 inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12px] font-medium transition-colors hover:bg-[var(--canvas)]">
                 <Download aria-hidden width={13} height={13} strokeWidth={2} />
                 Descargar plantilla (.csv)
               </a>
@@ -169,16 +171,16 @@ export function ImportadorMasivo({
                 <input
                   ref={entrada} id={`archivo-${entidad}`} type="file" accept=".csv,.xlsx,.xls"
                   onChange={(e) => { validarArchivoElegido(e.currentTarget); setArchivo(e.currentTarget.files?.[0] ?? null); }}
-                  className="text-[12.5px] file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:px-3 file:py-1.5 file:text-[12.5px] file:font-medium"
+                  className="text-[12px] file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:px-3 file:py-1.5 file:text-[12px] file:font-medium"
                   style={{ color: 'var(--muted)' }}
                 />
                 <button type="button" onClick={() => enviar('previsualizar')} disabled={!archivo || pendiente}
-                  className="hairline inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)] disabled:opacity-50">
+                  className="rv-btn rv-btn--secondary hairline inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12px] font-medium transition-colors hover:bg-[var(--canvas)] disabled:opacity-50">
                   <FileUp aria-hidden width={13} height={13} strokeWidth={2} className={pendiente ? 'animate-pulse' : ''} />
                   {pendiente ? 'Revisando…' : 'Revisar archivo'}
                 </button>
               </div>
-              <p className="mt-1.5 text-[11.5px]" style={{ color: 'var(--faint)' }}>
+              <p className="mt-1.5 text-[11px]" style={{ color: 'var(--faint)' }}>
                 Máximo {MAX_MB} MB y {numero(tope)} filas por archivo. {esGps ? 'Un dispositivo es de una sola unidad y una unidad tiene un solo dispositivo.' : patioDelJefe
                   ? <>Tu carga cae en tu patio, <strong>{patioDelJefe}</strong>.</>
                   : <>La columna «patio» debe llevar el nombre de un patio que ya exista en <Link href={hrefPatios} className="underline">Patios</Link>.</>}
@@ -197,13 +199,13 @@ export function ImportadorMasivo({
                 </p>
 
                 <div className="grid grid-cols-3 gap-2">
-                  <Cifra titulo={estado.confirmado ? (esGps ? 'Se ligaron' : 'Se dieron de alta') : (esGps ? 'Se ligarían' : 'Se darían de alta')} valor={estado.nuevas} tono={estado.nuevas > 0 ? 'ok' : undefined} />
-                  <Cifra titulo="Ya estaban" valor={estado.yaEstaban} nota="no se tocan" />
-                  <Cifra titulo="Con problema" valor={estado.conProblema} tono={estado.conProblema > 0 ? 'bad' : undefined} nota="no entran" />
+                  <Cifra info="importador.nuevas" titulo={estado.confirmado ? (esGps ? 'Se ligaron' : 'Se dieron de alta') : (esGps ? 'Se ligarían' : 'Se darían de alta')} valor={estado.nuevas} tono={estado.nuevas > 0 ? 'ok' : undefined} />
+                  <Cifra info="importador.ya_estaban" titulo="Ya estaban" valor={estado.yaEstaban} nota="no se tocan" />
+                  <Cifra info="importador.con_problema" titulo="Con problema" valor={estado.conProblema} tono={estado.conProblema > 0 ? 'bad' : undefined} nota="no entran" />
                 </div>
 
                 {estado.excedeTope && (
-                  <p role="alert" className="flex items-start gap-2 rounded-lg px-3 py-2 text-[12.5px]" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
+                  <p role="alert" className="flex items-start gap-2 rounded-lg px-3 py-2 text-[12px]" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
                     <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
                     El archivo trae más de {numero(tope)} filas. Pártelo en archivos más chicos: no se importa a medias.
                   </p>
@@ -214,7 +216,7 @@ export function ImportadorMasivo({
                 ))}
 
                 {estado.patiosDesconocidos.length > 0 && (
-                  <p className="rounded-lg px-3 py-2 text-[12.5px]" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
+                  <p className="rounded-lg px-3 py-2 text-[12px]" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
                     El archivo menciona patios que no existen en tu flota: <strong>{estado.patiosDesconocidos.slice(0, 8).join(', ')}</strong>
                     {estado.patiosDesconocidos.length > 8 ? ` y ${numero(estado.patiosDesconocidos.length - 8)} más` : ''}.{' '}
                     <Link href={hrefPatios} className="underline">Créalos en Patios</Link> y vuelve a subir el archivo, o corrige el nombre.
@@ -223,7 +225,7 @@ export function ImportadorMasivo({
 
                 {estado.muestra.length > 0 && (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-[12.5px]">
+                    <table className="w-full text-[12px]">
                       <caption className="pb-1 text-left text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
                         {estado.confirmado ? (esGps ? 'Las primeras que se ligaron' : 'Las primeras que se dieron de alta') : (esGps ? 'Así se ligarían las primeras' : 'Así entrarían las primeras')}
                       </caption>
@@ -243,7 +245,7 @@ export function ImportadorMasivo({
                 {estado.problemas.length > 0 && (
                   <div>
                     <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-[12.5px] font-medium" style={{ color: 'var(--bad)' }}>
+                      <p className="text-[12px] font-medium" style={{ color: 'var(--bad)' }}>
                         {numero(estado.conProblema)} {estado.conProblema === 1 ? 'fila no entra' : 'filas no entran'}
                       </p>
                       {hrefErrores && (
@@ -255,12 +257,12 @@ export function ImportadorMasivo({
                       )}
                     </div>
                     <div className="max-h-64 overflow-y-auto rounded-lg hairline">
-                      <table className="w-full text-[12.5px]">
+                      <table className="w-full text-[12px]">
                         <caption className="sr-only">Filas del archivo que no entran, con su motivo</caption>
                         <thead>
                           <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                            <th scope="col" className="etiqueta-mono w-16 px-3 py-1.5 text-[10px] font-normal uppercase">Fila</th>
-                            <th scope="col" className="etiqueta-mono px-3 py-1.5 text-[10px] font-normal uppercase">Motivo</th>
+                            <th scope="col" className="etiqueta-mono w-16 px-3 py-1.5 text-[11px] font-normal uppercase">Fila</th>
+                            <th scope="col" className="etiqueta-mono px-3 py-1.5 text-[11px] font-normal uppercase">Motivo</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -274,7 +276,7 @@ export function ImportadorMasivo({
                       </table>
                     </div>
                     {estado.conProblema > estado.problemas.length && (
-                      <p className="mt-1 text-[11.5px]" style={{ color: 'var(--faint)' }}>
+                      <p className="mt-1 text-[11px]" style={{ color: 'var(--faint)' }}>
                         Se muestran las primeras {numero(estado.problemas.length)} de {numero(estado.conProblema)}; corrige el archivo y vuelve a revisarlo para ver el resto.
                       </p>
                     )}
@@ -282,7 +284,7 @@ export function ImportadorMasivo({
                 )}
 
                 {estado.confirmado && estado.invitacion && (
-                  <div className="rounded-lg px-3 py-2 text-[12.5px]" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
+                  <div className="rounded-lg px-3 py-2 text-[12px]" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
                     <p className="flex items-center gap-1.5 font-medium">
                       <MessageCircle aria-hidden width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
                       Invitaciones por WhatsApp: {numero(estado.invitacion.enviadas)} enviadas
@@ -302,7 +304,7 @@ export function ImportadorMasivo({
                 {puedeConfirmar && (
                   <div className="space-y-2 border-t pt-3" style={{ borderColor: 'var(--line)' }}>
                     {ofrecerInvitacion && (
-                      <label className="flex cursor-pointer items-start gap-2 text-[12.5px]">
+                      <label className="flex cursor-pointer items-start gap-2 text-[12px]">
                         <input type="checkbox" checked={invitar} onChange={(e) => setInvitar(e.target.checked)} className="mt-0.5 h-4 w-4" />
                         <span>
                           <strong>Invitar por WhatsApp a los operadores nuevos.</strong>{' '}
@@ -314,7 +316,7 @@ export function ImportadorMasivo({
                       </label>
                     )}
                     <button type="button" onClick={() => setConfirmando(true)} disabled={pendiente}
-                      className="h-9 rounded-lg px-4 text-[13px] font-medium transition-opacity hover:opacity-85 disabled:opacity-50"
+                      className="rv-btn rv-btn--primary h-9 rounded-lg px-4 text-[13px] font-medium transition-opacity hover:opacity-85 disabled:opacity-50"
                       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
                       {pendiente ? (esGps ? 'Ligando…' : 'Importando…') : `${esGps ? 'Ligar' : 'Importar'} ${numero(estado.nuevas)} ${estado.nuevas === 1 ? singular : sustantivo}`}
                     </button>
@@ -345,12 +347,12 @@ export function ImportadorMasivo({
   );
 }
 
-function Cifra({ titulo, valor, nota, tono }: { titulo: string; valor: number; nota?: string; tono?: 'ok' | 'bad' }) {
+function Cifra({ titulo, valor, nota, tono, info }: { titulo: string; valor: number; nota?: string; tono?: 'ok' | 'bad'; info: InfoClave }) {
   const color = tono === 'ok' ? 'var(--ok)' : tono === 'bad' ? 'var(--bad)' : 'var(--ink)';
   return (
     <div className="rounded-lg px-3 py-2" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
-      <p className="text-[11px]" style={{ color: 'var(--muted)' }}>{titulo}</p>
-      <p className="font-display text-[22px] font-semibold tabular" style={{ color }}>{numero(valor)}</p>
+      <p className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--muted)' }}>{titulo}<InfoTip clave={info} /></p>
+      <p className="font-display text-[20px] font-semibold tabular" style={{ color }}>{numero(valor)}</p>
       {nota && <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{nota}</p>}
     </div>
   );

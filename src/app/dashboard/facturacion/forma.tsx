@@ -20,7 +20,7 @@ function Boton({ etiqueta, tono = 'marca' }: { etiqueta: string; tono?: 'marca' 
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className={`rv-btn ${tono === 'marca' ? 'rv-btn--primary' : 'rv-btn--danger'} h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50`}
       style={tono === 'marca'
         ? { background: 'var(--marca)', color: 'var(--marca-fg)' }
         : { background: 'var(--badbg)', color: 'var(--bad)' }}>
@@ -90,13 +90,13 @@ export function FormaFactura({ accion, clientes, viajesSinFacturar, hoy }: {
         <div className="sm:col-span-2">
           <label htmlFor="ff-cliente" className={ETIQUETA}>Cliente</label>
           {clientes === null ? (
-            <p className="text-[12.5px]" style={{ color: 'var(--bad)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--bad)' }}>
               Tu catálogo de clientes no se pudo leer en este momento — la lista existe, el
               sistema no la alcanzó. Vuelve a cargar la pantalla en unos minutos; no registres
               la factura a ciegas.
             </p>
           ) : clientes.length === 0 ? (
-            <p className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
               No tienes clientes dados de alta. Una factura siempre es A ALGUIEN: dalos de alta
               primero en la pantalla de Clientes.
             </p>
@@ -183,7 +183,7 @@ export function FormaFactura({ accion, clientes, viajesSinFacturar, hoy }: {
             <legend className="text-[11px] font-medium px-1">Viajes que ampara esta factura</legend>
             <div className="space-y-1.5">
               {viajesSinFacturar.map((v) => (
-                <label key={v.viajeId} className="flex items-center gap-2 text-[12.5px] cursor-pointer">
+                <label key={v.viajeId} className="flex items-center gap-2 text-[12px] cursor-pointer">
                   <input type="checkbox" name="viajeIds" value={v.viajeId} />
                   <span className="cifra-mono">{v.folio}</span>
                   <span style={{ color: 'var(--muted)' }}>

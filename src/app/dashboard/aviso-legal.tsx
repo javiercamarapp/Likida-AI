@@ -18,7 +18,7 @@ export async function AvisoLegalPendiente({ sesion }: { sesion: Pick<SessionTena
     return null;
   }
   return (
-    <div role="note" className="mb-3 rounded-lg px-3 py-2 text-[12.5px]" style={{ border: '1px solid var(--line)', color: 'var(--muted)' }}>
+    <div role="note" className="mb-3 rounded-lg px-3 py-2 text-[12px]" style={{ border: '1px solid var(--line)', color: 'var(--muted)' }}>
       Falta registrar tu aceptación de los Términos y del Aviso de privacidad vigentes.{' '}
       <Link href="/dashboard/legal" className="underline font-medium">Revisar y aceptar</Link>
     </div>

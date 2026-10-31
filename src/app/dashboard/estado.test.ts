@@ -205,7 +205,7 @@ describe('estadoPanel — las consultas del selector y las fiscales también cue
   });
 
   it('se cayó solo la lectura fiscal (gastosFiscales) en un tenant vacío → parcial, no vacio', () => {
-    // "Ahorro generado — $0.00" con la lectura fiscal caída es la misma mentira
+    // "Por recuperar — $0.00" con la lectura fiscal caída es la misma mentira
     // que "aún no hay liquidaciones" con la base ciega.
     expect(estadoPanel({
       acreditables: {}, kpis: KPIS_VACIOS, liquidaciones: [], anomalias: [],

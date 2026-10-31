@@ -1,5 +1,5 @@
 import { Clock } from 'lucide-react';
-import { Aviso, BotonEnlace, Chip, MarcoPagina } from '@/app/ui-v2/componentes';
+import { Aviso, BotonEnlace, Chip, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /** Lo que muestra la pantalla «Próximamente» de un módulo: texto fijo, jamás datos de la flota. */
 export interface ContenidoProximamente {
@@ -26,7 +26,7 @@ export function Proximamente({ contenido, hrefResumen }: { contenido: ContenidoP
       acciones={<Chip><Clock width={12} height={12} strokeWidth={2} aria-hidden="true" /> Próximamente</Chip>}>
       <p className="text-[14px]" style={{ color: 'var(--muted)' }}>{contenido.queHara}</p>
       <section className="rv-tarjeta">
-        <h2 className="rv-tarjeta__titulo">Qué hará por tu operación</h2>
+        <TituloRecuadro info="proximamente.que_hara">Qué hará por tu operación</TituloRecuadro>
         <ul className="space-y-1.5 text-[14px] list-disc pl-5">
           {contenido.puntos.map((p) => <li key={p}>{p}</li>)}
         </ul>

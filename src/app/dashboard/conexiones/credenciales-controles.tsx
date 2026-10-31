@@ -71,7 +71,7 @@ function BotonGuardar() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Vault width={14} height={14} strokeWidth={1.75} />
       {pending ? 'Guardando…' : 'Guardar en el cofre'}
@@ -143,7 +143,7 @@ export function FormaCredenciales({ grupos, guardar }: {
 
         {estado && !estado.ok && <AvisoError error={estado.error} />}
         {estado?.ok && (
-          <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{estado.mensaje}</p>
+          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{estado.mensaje}</p>
         )}
         {conector && <BotonGuardar />}
       </form>
@@ -180,7 +180,7 @@ export function FormaProbar({ conectorId, probar }: {
       </form>
       {estado && !estado.ok && <AvisoError error={estado.error} />}
       {estado?.ok && (
-        <p className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg"
+        <p className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg"
           style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
           <CircleCheck width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
           {estado.mensaje}
@@ -194,7 +194,7 @@ function BotonProbar() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5 hairline transition-opacity hover:opacity-85 disabled:opacity-50">
+      className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5 hairline transition-opacity hover:opacity-85 disabled:opacity-50">
       <PlugZap width={13} height={13} strokeWidth={1.75} />
       {/* «Probando…» y no «Conectando…»: probar no deja nada conectado, y la
           espera puede ser de hasta 15 s (TIMEOUT_PRUEBA_MS). */}

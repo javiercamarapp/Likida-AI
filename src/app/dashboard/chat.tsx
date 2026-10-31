@@ -274,7 +274,7 @@ function VisualRespuesta({ v }: { v: Visual }) {
   if (v.tipo === 'cifra') {
     return (
       <div className="card px-4 py-3 mt-2 inline-block">
-        <div className="font-display text-[22px] leading-tight font-semibold tabular">{v.valor}</div>
+        <div className="font-display text-[20px] leading-tight font-semibold tabular">{v.valor}</div>
         {v.nota && <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>{v.nota}</p>}
       </div>
     );
@@ -762,7 +762,7 @@ export default function ChatFlota({
       <div className="w-full max-h-72 overflow-y-auto grid grid-cols-1 sm:grid-cols-3 gap-2.5 pr-0.5">
         {CATALOGO_CONSULTA.map((c) => (
           <div key={c.categoria} className="card p-3 self-start">
-            <div className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: 'var(--muted)' }}>
+            <div className="etiqueta-mono text-[11px] font-medium uppercase mb-1.5" style={{ color: 'var(--muted)' }}>
               {c.categoria}
             </div>
             {c.preguntas.map((rq) => (
@@ -788,7 +788,7 @@ export default function ChatFlota({
       <div ref={anclaChat} className="sticky top-0 z-30 h-0 w-full">
         {(!historialAbierto || movil) && (
           <button type="button" onClick={abrirHistorial}
-            className="absolute top-3 right-4 hairline inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 rounded-full text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)]"
+            className="absolute top-3 right-4 hairline inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 rounded-full text-[12px] font-medium transition-colors hover:bg-[var(--canvas)]"
             style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
             <History width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
             Historial
@@ -835,7 +835,7 @@ export default function ChatFlota({
             className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[13px]" />
         </div>
 
-        <div className="etiqueta-mono text-[10px] uppercase px-1 pt-1" style={{ color: 'var(--faint)' }}>
+        <div className="etiqueta-mono text-[11px] uppercase px-1 pt-1" style={{ color: 'var(--faint)' }}>
           Recientes
         </div>
 
@@ -850,13 +850,13 @@ export default function ChatFlota({
             </div>
           )}
           {convs === 'error' && (
-            <p className="text-[12.5px] px-1" style={{ color: 'var(--muted)' }}>
+            <p className="text-[12px] px-1" style={{ color: 'var(--muted)' }}>
               No se pudo leer el historial ahora mismo — tus conversaciones siguen
               guardadas; reintenta en un momento.
             </p>
           )}
           {Array.isArray(convs) && listaFiltrada.length === 0 && (
-            <p className="text-[12.5px] px-1" style={{ color: 'var(--muted)' }}>
+            <p className="text-[12px] px-1" style={{ color: 'var(--muted)' }}>
               {convs.length === 0 ? 'Sin chats recientes.' : `Nada coincide con «${busqueda.trim()}».`}
             </p>
           )}
@@ -917,7 +917,7 @@ export default function ChatFlota({
                           {pasosVivos.length > 0 && (
                             <div className="mt-2 space-y-1.5">
                               {pasosVivos.map((p, j) => (
-                                <div key={j} className="flex items-center gap-2 text-[12.5px]"
+                                <div key={j} className="flex items-center gap-2 text-[12px]"
                                   style={{ color: p.listo ? 'var(--faint)' : 'var(--ink)' }}>
                                   {p.listo
                                     ? <Check width={12} height={12} strokeWidth={2} className="shrink-0" style={{ color: 'var(--muted)' }} />

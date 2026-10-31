@@ -18,7 +18,7 @@ function Boton({ texto }: { texto: string }) {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Upload width={14} height={14} strokeWidth={1.75} />{pending ? 'Procesando…' : texto}
     </button>
@@ -31,7 +31,7 @@ export function FormaCatalogo({ accion }: { accion: AccionSitio }) {
   return (
     <form action={enviar} className="space-y-3" aria-label="Analizar o importar el catálogo depurado" encType="multipart/form-data">
       <label className="block"><span className={ETIQUETA}>Archivo CSV o JSON</span>
-        <input type="file" name="archivo" accept=".csv,.json,text/csv,application/json,text/plain" className="text-[12.5px]" />
+        <input type="file" name="archivo" accept=".csv,.json,text/csv,application/json,text/plain" className="text-[12px]" />
       </label>
       <div className="flex gap-3 flex-wrap">
         <label className="block"><span className={ETIQUETA}>Qué hacer</span>

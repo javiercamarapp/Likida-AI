@@ -54,7 +54,7 @@ export function FormaCortar({ accion, usuarioId, quien, cuantos }: {
       />
       {estado && !estado.ok && <AvisoError error={estado.error} />}
       {estado?.ok && (
-        <p role="status" className="text-[11.5px]" style={{ color: 'var(--ok)' }}>{estado.mensaje}</p>
+        <p role="status" className="text-[11px]" style={{ color: 'var(--ok)' }}>{estado.mensaje}</p>
       )}
     </form>
   );
