@@ -1,5 +1,5 @@
 import { PlugZap } from 'lucide-react';
-import { EstadoVacio } from '@/app/admin/ui/kit';
+import { EstadoVacio } from '../estados';
 import { fechaMx, fechaHoraMx } from '@/lib/formato';
 import type { ClienteMcpConectado, SesionMcpUsuario } from '@/lib/mcp/sesiones';
 import { ROL_LABEL, type RolAppUser } from '@/lib/auth/provisionar';

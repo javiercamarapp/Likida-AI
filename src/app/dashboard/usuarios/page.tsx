@@ -21,6 +21,8 @@ import { logger } from '@/lib/logger';
 import { conPisoDeTiempo } from '../../login/respuesta_otp';
 import { VistaUsuarios, type UsuarioRow } from './vista';
 import type { ResultadoForma } from './forma';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Usuarios del equipo' };
 
 export const dynamic = 'force-dynamic';
 

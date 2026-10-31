@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { Settings, Fuel, Building2 } from 'lucide-react';
+import { Fuel, Building2 } from 'lucide-react';
 import { getConfig } from '@/lib/likida/config';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -12,10 +12,13 @@ import {
 } from '@/lib/likida/administracion';
 import { validarAjustes } from '@/lib/likida/ajustes_operativos';
 import { cuentasDeclaradas } from '@/lib/likida/contabilidad/catalogo';
-import { EstadoVacio } from '../../admin/ui/kit';
+import { EstadoVacio } from '../estados';
 import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
 import { FormaAjustes, type ResultadoGuardar } from './forma';
 import { ajustesIniciales, type EstadoCatalogo } from './inicial';
+import type { Metadata } from 'next';
+import { MarcoPagina } from '@/app/ui-v2/componentes';
+export const metadata: Metadata = { title: 'Configuración' };
 
 export const dynamic = 'force-dynamic';
 
@@ -156,15 +159,7 @@ export default async function ConfiguracionPage({
   const inicial = ajustesIniciales(config, cuentas);
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <Settings width={16} height={16} strokeWidth={1.75} />
-        <div>
-          <span className="text-sm font-medium block">Configuración</span>
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>Lo que el motor usa para cuadrar tus viajes</span>
-        </div>
-      </header>
-
+    <MarcoPagina titulo="Configuración" apoyo="Lo que el motor usa para cuadrar tus viajes.">
       {config === null ? (
         <div className="glass-panel p-8 text-sm" style={{ color: 'var(--muted)' }}>
           No se pudo leer la configuración de esta flota.
@@ -272,6 +267,6 @@ export default async function ConfiguracionPage({
           </section>
         </div>
       )}
-    </div>
+    </MarcoPagina>
   );
 }
