@@ -1,5 +1,7 @@
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { VistaDescargaSat } from './vista';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Descarga del SAT' };
 
 export const dynamic = 'force-dynamic';
 

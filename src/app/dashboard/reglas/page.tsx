@@ -1,9 +1,8 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { ScanEye } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
-import { EstadoError } from '@/app/admin/ui/kit';
+import { EstadoError } from '../estados';
 import { logger } from '@/lib/logger';
 import { interpretar, interpretarAMano } from '@/lib/likida/reglas/traductor';
 import {
@@ -11,11 +10,13 @@ import {
   type ReglaEnPantalla,
 } from '@/lib/likida/reglas/repo';
 import { plantillasPara, loQueSiSeVigila } from '@/lib/likida/reglas/catalogo';
-import { BarraPagina } from '../resumen-visual';
 import {
   FormaEscribirRegla, FormaElegirAMano, type ResultadoForma, type PlantillaEnPantalla,
 } from './forma';
 import { ListaReglas } from './vista';
+import { MarcoPagina, Aviso } from '@/app/ui-v2/componentes';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Mis reglas' };
 
 export const dynamic = 'force-dynamic';
 
@@ -205,67 +206,58 @@ export default async function PaginaReglas({
   }
 
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<ScanEye width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Mis reglas"
-        />
+    <MarcoPagina titulo="Mis reglas" apoyo="Escribe de qué quieres que te avise y se traduce a una vigilancia concreta. Se revisa cada hora y cada caso avisa una vez.">
+      <Aviso tono="info">
+        Escribe de qué quieres que te avise y lo traduzco a una vigilancia concreta.
+        Te la enseño antes de encenderla: lo que queda guardado es la vigilancia, no
+        la frase. Reviso cada hora, y cada caso te suena UNA vez.
+      </Aviso>
 
-        <div className="px-5 py-5 flex-1 space-y-5">
-          <p className="text-[12.5px] max-w-2xl" style={{ color: 'var(--muted)' }}>
-            Escribe de qué quieres que te avise y lo traduzco a una vigilancia concreta.
-            Te la enseño antes de encenderla: lo que queda guardado es la vigilancia, no
-            la frase. Reviso cada hora, y cada caso te suena UNA vez.
-          </p>
-
-          <section className="space-y-3">
-            <div className="card p-4">
-              <FormaEscribirRegla accion={accionInterpretar} ejemplos={ejemplos} />
-            </div>
-            <details className="card p-4">
-              <summary className="cursor-pointer text-[12.5px] font-medium select-none list-none"
-                style={{ color: 'var(--ink2)' }}>
-                …o elígela de la lista, sin pasar por el intérprete
-              </summary>
-              <div className="pt-3">
-                <FormaElegirAMano accion={accionAMano} plantillas={plantillas} />
-              </div>
-            </details>
-          </section>
-
-          {reglas === null ? (
-            <EstadoError mensaje="No pude leer tus reglas. No se enseña una lista a medias: media lista se ve igual que la lista entera, y sobre vigilancias eso invita a declarar duplicados." />
-          ) : (
-            <ListaReglas
-              reglas={reglas}
-              acciones={{
-                confirmar: accionConfirmar, pausar: accionPausar,
-                reanudar: accionReanudar, borrar: accionBorrar, frecuencia: accionFrecuencia,
-              }}
-            />
-          )}
-
-          <section className="space-y-2">
-            <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-              Lo que sé vigilar hoy
-            </h2>
-            {/* La lista completa, siempre a la vista y no solo cuando algo
-                falla: es la frontera honesta del producto. Lo que no está
-                aquí, Likida no lo puede prometer. */}
-            <div className="card p-4">
-              <ul className="space-y-1.5">
-                {loQueSiSeVigila(rol).map((linea) => (
-                  <li key={linea} className="text-[12px] flex gap-2" style={{ color: 'var(--ink2)' }}>
-                    <span style={{ color: 'var(--faint)' }}>·</span>
-                    <span>{linea}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </section>
+      <section className="space-y-3">
+        <div className="card p-4">
+          <FormaEscribirRegla accion={accionInterpretar} ejemplos={ejemplos} />
         </div>
-      </div>
-    </main>
+        <details className="card p-4">
+          <summary className="cursor-pointer text-[12.5px] font-medium select-none list-none"
+            style={{ color: 'var(--ink2)' }}>
+            …o elígela de la lista, sin pasar por el intérprete
+          </summary>
+          <div className="pt-3">
+            <FormaElegirAMano accion={accionAMano} plantillas={plantillas} />
+          </div>
+        </details>
+      </section>
+
+      {reglas === null ? (
+        <EstadoError mensaje="No pude leer tus reglas. No se enseña una lista a medias: media lista se ve igual que la lista entera, y sobre vigilancias eso invita a declarar duplicados." />
+      ) : (
+        <ListaReglas
+          reglas={reglas}
+          acciones={{
+            confirmar: accionConfirmar, pausar: accionPausar,
+            reanudar: accionReanudar, borrar: accionBorrar, frecuencia: accionFrecuencia,
+          }}
+        />
+      )}
+
+      <section className="space-y-2">
+        <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+          Lo que sé vigilar hoy
+        </h2>
+        {/* La lista completa, siempre a la vista y no solo cuando algo
+            falla: es la frontera honesta del producto. Lo que no está
+            aquí, Likida no lo puede prometer. */}
+        <div className="card p-4">
+          <ul className="space-y-1.5">
+            {loQueSiSeVigila(rol).map((linea) => (
+              <li key={linea} className="text-[12px] flex gap-2" style={{ color: 'var(--ink2)' }}>
+                <span style={{ color: 'var(--faint)' }}>·</span>
+                <span>{linea}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+    </MarcoPagina>
   );
 }

@@ -4,6 +4,8 @@ import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { getRentabilidad, getCobranza } from '@/lib/likida/comercial';
 import { VistaRentabilidad } from './vista';
 import { sufijoTenant } from '../sufijo';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Rentabilidad y cobranza' };
 
 export const dynamic = 'force-dynamic';
 

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Stamp } from 'lucide-react';
+import { Aviso, MarcoPagina } from '@/app/ui-v2/componentes';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeTimbrar } from '@/lib/auth/permisos';
@@ -9,6 +9,8 @@ import { listarTimbrado, type RenglonTimbrado } from '@/lib/likida/carta_porte_t
 import { numero } from '@/lib/formato';
 import { logger } from '@/lib/logger';
 import { sufijoTenant } from '../sufijo';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Timbrado (Carta Porte)' };
 
 export const dynamic = 'force-dynamic';
 
@@ -47,23 +49,16 @@ export default async function PaginaTimbrado({
   }
 
   return (
-    <main className="max-w-3xl mx-auto px-6 py-8 space-y-5">
-      <header className="space-y-1">
-        <div className="flex items-center gap-2">
-          <Stamp size={16} style={{ color: 'var(--marca)' }} aria-hidden />
-          <h1 className="font-display text-[19px] font-semibold">Timbrado</h1>
-        </div>
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
-          {pac.configurado
-            ? `PAC ${pac.proveedor?.toUpperCase()} conectado — ambiente ${pac.pareceSandbox ? 'de PRUEBAS (los timbres no amparan nada)' : 'de PRODUCCIÓN'}.`
-            : 'Sin PAC configurado: el timbrado directo está apagado (variables LIKIDA_PAC_* del servidor). Likida jamás simula un timbre.'}
-        </p>
-        {!puedeTimbrar(rol) && (
-          <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
-            Puedes ver esta cola, pero emitir el CFDI es del dueño de la flota o del contador.
-          </p>
-        )}
-      </header>
+    <MarcoPagina
+      titulo="Timbrado (Carta Porte)"
+      ancho="lectura"
+      apoyo={pac.configurado
+        ? `PAC ${pac.proveedor?.toUpperCase()} conectado — ambiente ${pac.pareceSandbox ? 'de PRUEBAS (los timbres no amparan nada)' : 'de PRODUCCIÓN'}.`
+        : 'Sin PAC configurado: el timbrado directo está apagado (variables LIKIDA_PAC_* del servidor). Likida jamás simula un timbre.'}
+    >
+      {!puedeTimbrar(rol) && (
+        <Aviso tono="warn">Puedes ver esta cola, pero emitir el CFDI es del dueño de la flota o del contador.</Aviso>
+      )}
 
       {filas === null ? (
         <p className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
@@ -114,6 +109,6 @@ export default async function PaginaTimbrado({
         tienen timbre o reserva. NO es «todos los viajes que necesitan complemento»: eso lo decide
         el borrador viaje por viaje, y afirmarlo aquí sería inventar una lista que nadie midió.
       </p>
-    </main>
+    </MarcoPagina>
   );
 }

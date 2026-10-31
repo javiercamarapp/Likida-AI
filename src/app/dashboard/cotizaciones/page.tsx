@@ -1,6 +1,7 @@
+import { EstadoError, MarcoPagina } from '@/app/ui-v2/componentes';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { Calculator, TriangleAlert } from 'lucide-react';
+import { TriangleAlert } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAsignar } from '@/lib/auth/permisos';
@@ -14,6 +15,8 @@ import {
 } from '@/lib/likida/cotizador/lector';
 import { FormaConAviso, Campo, Selector, type ResultadoAccion, type AccionDeForma } from '../../admin/ui/forma';
 import { FilaAccionesCotizacion } from './acciones';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Cotizador' };
 
 export const dynamic = 'force-dynamic';
 
@@ -159,23 +162,9 @@ export default async function PaginaCotizaciones({
   ];
 
   return (
-    <div className="space-y-8">
-      <header className="flex items-center gap-3">
-        <Calculator className="h-6 w-6" style={{ color: 'var(--muted)' }} aria-hidden />
-        <div>
-          <h1 className="text-xl font-semibold">Cotizador</h1>
-          <p className="text-sm" style={{ color: 'var(--muted)' }}>
-            La ganancia real del viaje antes de aceptarlo: costos declarados, casetas medidas
-            en tus viajes liquidados, y cada supuesto a la vista.
-          </p>
-        </div>
-      </header>
-
+<MarcoPagina titulo="Cotizador" apoyo="La ganancia real del viaje antes de aceptarlo: costos declarados, casetas medidas en tus viajes liquidados y cada supuesto a la vista.">
       {!panel && (
-        <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800">
-          No se pudo leer el cotizador. No es que no haya cotizaciones: la lectura falló.
-          Recarga; si sigue, es cosa nuestra.
-        </p>
+        <EstadoError>No se pudo leer el cotizador. No es que no haya cotizaciones: la lectura falló. Recarga; si sigue, es cosa nuestra.</EstadoError>
       )}
 
       {panel && (
@@ -231,7 +220,7 @@ export default async function PaginaCotizaciones({
           </section>
         </>
       )}
-    </div>
+</MarcoPagina>
   );
 }
 
