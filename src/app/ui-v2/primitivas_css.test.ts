@@ -41,9 +41,10 @@ describe('primitivas v2 · contrato de ESTILO-LIKIDA', () => {
     expect(ratio('#f4f4f5', '#34343a')).toBeGreaterThanOrEqual(4.5);
   });
   it('overlays: 420/480/640 y 440/560; hoja 90 dvh con grabber; entrada ≤180 ms', () => {
-    for (const w of ['420px', '480px', '640px', '440px', '560px']) expect(comp).toContain(w);
-    expect(comp).toMatch(/max-height: 90dvh/);
-    expect(comp).toMatch(/\.rv-ov--drawer \.rv-ov__grabber \{ display: block/);
+    const ov = readFileSync(join(__dirname, 'overlay.css'), 'utf8');
+    for (const w of ['420px', '480px', '640px', '440px', '560px']) expect(ov).toContain(w);
+    expect(ov).toMatch(/max-height: 90dvh/);
+    expect(ov).toMatch(/\.rv-ov--drawer \.rv-ov__grabber \{ display: block/);
   });
   it('tabla: cabecera 36, fila 40 (densa 32), sin mono', () => {
     expect(comp).toMatch(/thead th \{[^}]*height: 36px/);

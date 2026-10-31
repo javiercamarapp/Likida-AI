@@ -57,9 +57,11 @@ describe('AvisoResultado — el HTML', () => {
     expect(renderToStaticMarkup(<AvisoResultado estado={null} />)).toBe('');
   });
 
-  it('la versión compacta lleva su propio tamaño y margen', () => {
+  it('es el Aviso único de ui-v2 (rv-aviso) y la versión compacta añade su margen', () => {
     const html = renderToStaticMarkup(<AvisoResultado compacto estado={{ ok: true, mensaje: 'x' }} />);
-    expect(html).toContain('text-[12px]');
+    expect(html).toContain('rv-aviso');
+    expect(html).toContain('data-tono="ok"');
     expect(html).toContain('mt-2');
+    expect(renderToStaticMarkup(<AvisoResultado estado={{ error: 'e' }} />)).toContain('data-tono="error"');
   });
 });

@@ -51,7 +51,7 @@ afterAll(async () => { await browser?.close(); });
 
 async function abrir(): Promise<Page> {
   const p = await browser!.newPage({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
-  const css = ['tokens.css', 'movimiento.css', 'componentes.css'].map((f) => readFileSync(join(RAIZ, f), 'utf8')).join('\n');
+  const css = ['tokens.css', 'movimiento.css', 'componentes.css', 'overlay.css'].map((f) => readFileSync(join(RAIZ, f), 'utf8')).join('\n');
   await p.setContent(`<!doctype html><html data-theme="light"><head><style>*{box-sizing:border-box}${css}</style></head><body><div id="raiz"></div><script>${bundle.replace(/<\/script>/g, '<\\/script>')}</script></body></html>`);
   await p.waitForSelector('#ancla');
   return p;

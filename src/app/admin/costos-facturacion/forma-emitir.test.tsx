@@ -66,7 +66,7 @@ describe('FormaEmitirMensualidad', () => {
 
   it('tono="peligro": el foco inicial del diálogo cae en Cancelar, no en el botón que emite', () => {
     const html = renderizar();
-    expect(boton(html, 'Cancelar')).toContain('data-foco-inicial');
-    expect(boton(html, 'Sí, emitir mensualidad')).not.toContain('data-foco-inicial');
+    expect(boton(html, 'Cancelar')).toContain('data-autofocus');
+    expect(boton(html, 'Sí, emitir mensualidad')).not.toContain('data-autofocus');
   });
 });

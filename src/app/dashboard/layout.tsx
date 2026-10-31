@@ -19,6 +19,7 @@ import '../ui-v2/shell.css';
 import '../ui-v2/carga.css';
 // Piezas del carril B (botones, chips, drawers, KPI, gráficas, recorrido) y páginas del carril C. Nadie las importaba todavía.
 import '../ui-v2/componentes.css';
+import '../ui-v2/overlay.css';
 import '../ui-v2/graficas.css';
 import '../ui-v2/movimiento.css';
 import '../ui-v2/paginas.css';
