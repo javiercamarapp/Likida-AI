@@ -73,7 +73,7 @@ export function cifraDeAgente(clave: string, e: EntradaCifras): CifraAgente {
     case 'peajes': {
       if (e.pesos) {
         const x = e.pesos.extemporaneos;
-        if (x.n === null) return { valor: null, etiqueta: 'candidatos extemporáneos', nota: x.motivo ?? 'Sin dato', error: x.reintentar };
+        if (x.n === null) return { valor: null, etiqueta: 'candidatos extemporáneos', nota: x.motivo ?? 'Sin dato' }; // el Reintentar vive UNA vez, en el bloque de pesos
         return { valor: String(x.n), etiqueta: x.n === 1 ? 'candidato extemporáneo' : 'candidatos extemporáneos', nota: `${x.periodo} · ${x.sello}` };
       }
       const c = e.corridaPeajes;

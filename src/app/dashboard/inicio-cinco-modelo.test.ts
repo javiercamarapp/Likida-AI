@@ -67,7 +67,8 @@ describe('cifraDeAgente', () => {
   });
   it('Peajes: con pesos, candidatos; sin pesos, tareas de la corrida; si no hay nada, sin dato', () => {
     const sin = cifrasSinDato('No se pudo leer el estado de cuenta.', true);
-    expect(cifraDeAgente('peajes', { d, pesos: sin })).toMatchObject({ valor: null, error: true });
+    expect(cifraDeAgente('peajes', { d, pesos: sin })).toMatchObject({ valor: null });
+    expect(cifraDeAgente('peajes', { d, pesos: sin }).error).toBeFalsy(); // un solo Reintentar: el del bloque de pesos
     const con = { ...sin, extemporaneos: { ...sin.extemporaneos, n: 26, valor: 12511, periodo: 'octubre de 2026', sello: 'Estimado' as const, reintentar: false } };
     expect(cifraDeAgente('peajes', { d, pesos: con }).valor).toBe('26');
     expect(cifraDeAgente('peajes', { d, corridaPeajes: corrida('ok', '2026-10-31T13:10:00Z', { tareasHechas: 8, tareasTotal: 8 }) }).valor).toBe('8 de 8');

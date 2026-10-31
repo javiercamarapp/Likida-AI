@@ -130,6 +130,8 @@ async function CarrilPeajes({ ficha, pesosP, ...resto }: {
 async function CarrilPesos({ pesosP, cual, ahora }: { pesosP: Promise<PesosLeidos | null>; cual: 'importe' | 'extemporaneos'; ahora: number }) {
   const p = await pesosP;
   if (p === null) return null; // la puerta de #777 no abrió: ni siquiera «Sin dato»
+  // Fallo TOTAL: un solo bloque con un solo Reintentar (el de importe); la tarjeta de extemporáneos no se pinta.
+  if (cual === 'extemporaneos' && p.cifras.importeDecena.reintentar && p.cifras.extemporaneos.reintentar) return null;
   return cual === 'importe'
     ? <TarjetaImporteIave c={p.cifras.importeDecena} leidoEn={p.leidoEn} ahora={ahora} />
     : <TarjetaExtemporaneos c={p.cifras.extemporaneos} leidoEn={p.leidoEn} ahora={ahora} />;
