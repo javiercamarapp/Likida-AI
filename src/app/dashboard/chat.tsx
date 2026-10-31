@@ -809,16 +809,10 @@ export default function ChatFlota({
     // pegado mientras el hilo scrollea, y la altura se midió contra el
     // ancla al abrir (arranca al nivel del gris, cinta de rol incluida).
     //
-    // H12 (auditoría 24): esos 352px fijos son correctos en escritorio, pero
-    // en un teléfono (<lg) 352px es casi TODO el ancho disponible — el hilo
-    // de la conversación quedaba comprimido a unos pocos píxeles al lado,
-    // ilegible, en vez de que el historial ocupe la pantalla completa como
-    // una cortina. Bajo `lg` y con el historial abierto, el panel se vuelve
-    // un overlay `fixed inset-0` de ancho completo (`!` fuerza el override
-    // sobre el `width` inline, que sigue animando el caso de escritorio).
-    // H12: bajo `lg` el historial NO es una cortina `fixed inset-0` a mano sino un Drawer del motor único de overlays
-    // (hoja inferior con grabber, Esc, foco atrapado, scroll lock y retorno de foco al botón «Historial»). Sobre `lg`
-    // sigue siendo la columna en flujo de 352 px. El contenido es UNO y se monta en un solo sitio a la vez.
+    // H12 (auditoría 24): 352 px fijos son correctos en escritorio, pero en un teléfono (<lg) se comían casi todo el ancho.
+    // Bajo `lg` el historial NO es una cortina a mano sino un Drawer del motor único de overlays (hoja inferior con
+    // grabber, Esc, foco atrapado, scroll lock y retorno de foco al botón «Historial»). Sobre `lg` sigue siendo la
+    // columna en flujo de 352 px. El contenido es UNO y se monta en un solo sitio a la vez.
     const cuerpoHistorial = (
       <>
         <div className="flex items-center justify-between">
