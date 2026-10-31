@@ -143,8 +143,8 @@ export function SiguienteAccion({ filas, senales, ambito, soloLectura, sufijo }:
         </div>
       )}
       <ul className="rv-atajos" aria-label={despues.length ? 'Después y atajos' : 'Atajos'}>
-        {despues.map((a) => <li key={a.id}><Link href={a.href} className="rv-atajos__fila"><span>Después: {a.titulo}</span><ChevronRight width={16} height={16} aria-hidden="true" /></Link></li>)}
-        {ATAJOS.slice(0, Math.max(0, 3 - despues.length)).map((a) => (
+        {despues.slice(0, 2).map((a) => <li key={a.id}><Link href={a.href} className="rv-atajos__fila"><span>Después: {a.titulo}</span><ChevronRight width={16} height={16} aria-hidden="true" /></Link></li>)}
+        {ATAJOS.slice(0, Math.max(0, 2 - despues.length)).map((a) => (
           <li key={a.href}><Link href={`${a.href}${sufijo}`} className="rv-atajos__fila"><span>{a.nombre}</span><ChevronRight width={16} height={16} aria-hidden="true" /></Link></li>
         ))}
       </ul>

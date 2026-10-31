@@ -109,9 +109,9 @@
    RESUMEN v2 (cuentas con perfil cinco_agentes)
    ═══════════════════════════════════════════════════════════════════════════ */
 .rv-res { display: flex; flex-direction: column; gap: 12px; min-width: 0; color: var(--ink); }
+@media (min-width: 768px) { .rv-res { min-height: 100%; } }
+.rv-res__fila--4-4-4 { flex: 1 1 auto; }
 .rv-res__nota { font-size: 12px; font-weight: 400; color: var(--muted); }
-.rv-res__ver { font-size: 12px; font-weight: 600; color: var(--marca-marino, var(--ink)); text-decoration: none; }
-.rv-res__ver:hover { text-decoration: underline; }
 .rv-res__fila { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
 .rv-res__fila--8-4 > :first-child { grid-column: span 8; }
 .rv-res__fila--8-4 > :last-child { grid-column: span 4; }
@@ -119,16 +119,20 @@
 .rv-res__fila > .rv-tarjeta > .rv-tarjeta__cuerpo { flex: 1 1 auto; display: flex; flex-direction: column; gap: 8px; }
 .rv-res__cierres .rv-tarjeta__cuerpo > * { flex: 1 1 auto; }
 .rv-res__sub { margin: 4px 0 0; font-size: 12px; font-weight: 600; color: var(--muted); }
-.rv-res__tipos { display: flex; flex-direction: column; gap: 6px; }
+.rv-res__tipos { display: flex; flex-direction: column; justify-content: space-between; gap: 6px; flex: 1 1 auto; }
+
+/* Estados vacío / error: la celda punteada llena la tarjeta (no queda un hueco bajo la línea). */
+.rv-res__fila > .rv-tarjeta > .rv-tarjeta__cuerpo > .rv-vacio, .rv-res__fila > .rv-tarjeta > .rv-tarjeta__cuerpo > .rv-tarjeta__error { flex: 1 1 auto; }
+[data-ui="v2"] .rv-res .rv-kpis { min-height: 112px; }
 
 /* Barra de periodo: mientras llega el nuevo periodo, las tarjetas conservan sus datos y se atenúan (sin capa de carga). */
 .rv-res:has([data-pendiente]) .rv-res__kpis, .rv-res:has([data-pendiente]) .rv-res__fila { opacity: .6; }
 
 /* Datos clave de una tarjeta (dl en rejilla de dos columnas). */
-.rv-datos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; margin: 0; }
+.rv-datos { display: grid; grid-template-columns: repeat(3, minmax(0, auto)); justify-content: space-between; gap: 8px 12px; margin: 0; }
 .rv-dato { min-width: 0; }
 .rv-dato dt { margin: 0; font-size: 12px; font-weight: 500; color: var(--muted); }
-.rv-dato dd { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0; font: 700 20px/1.2 var(--font-display, inherit); letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
+.rv-dato dd { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0; font: 700 15px/1.3 var(--font-display, inherit); letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
 
 /* «Requiere tu atención»: filas de 48 px con punto de severidad. */
 .rv-at { display: flex; flex-direction: column; gap: 0; margin: 0; padding: 0; list-style: none; }
@@ -150,8 +154,8 @@ button.rv-at__fila:focus-visible { outline: 2px solid var(--ink); outline-offset
 .rv-at__pie { display: flex; justify-content: flex-start; margin-top: auto; }
 
 /* «Lo que hizo solo»: filas de 32 px. */
-.rv-solo { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
-.rv-solo li { display: flex; align-items: center; gap: 8px; min-height: 36px; font-size: 13px; }
+.rv-solo { display: flex; flex-direction: column; flex: 1 1 auto; margin: 0; padding: 0; list-style: none; }
+.rv-solo li { display: flex; flex: 1 1 36px; align-items: center; gap: 8px; min-height: 36px; font-size: 13px; }
 .rv-solo li + li { border-top: 1px solid var(--line); }
 .rv-solo__icono { flex: none; display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 8px; background: var(--soft-4, var(--canvas)); color: var(--ink-4, var(--ink)); }
 .rv-solo__texto { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -161,9 +165,10 @@ button.rv-at__fila:focus-visible { outline: 2px solid var(--ink); outline-offset
 .rv-sig { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px 12px; border-radius: 8px; background: var(--marino-soft); }
 .rv-sig__titulo { margin: 0; font-size: 14px; font-weight: 600; line-height: 1.3; color: var(--marino); }
 .rv-sig__porque { margin: 0 0 4px; font-size: 13px; line-height: 1.4; color: var(--ink2); }
-.rv-atajos { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.rv-atajos { display: flex; flex-direction: column; flex: 1 1 auto; margin: 0; padding: 0; list-style: none; }
+.rv-atajos li { flex: 1 1 44px; display: flex; }
 .rv-atajos li + li { border-top: 1px solid var(--line); }
-.rv-atajos__fila { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; padding: 0 6px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--ink); text-decoration: none; }
+.rv-atajos__fila { flex: 1 1 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 0 6px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--ink); text-decoration: none; }
 .rv-atajos__fila:hover { background: var(--canvas); }
 .rv-atajos__fila:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 .rv-atajos__fila svg { color: var(--muted); flex: none; }
@@ -198,7 +203,7 @@ button.rv-at__fila:focus-visible { outline: 2px solid var(--ink); outline-offset
 .rv-res__hoy-ok svg { flex: none; margin-top: 2px; color: var(--ok, var(--ink)); }
 
 @media (max-width: 900px) {
-  .rv-res__fila--8-4 > *, .rv-res__fila--4-4-4 > * { grid-column: 1 / -1; }
+  .rv-res__fila--8-4 > :first-child, .rv-res__fila--8-4 > :last-child, .rv-res__fila--4-4-4 > *, .rv-res__fila--4-4-4 > :last-child { grid-column: 1 / -1; }
   .rv-res { gap: 10px; }
   .rv-res__fila { gap: 10px; }
   .rv-res__nota { display: none; }
@@ -211,4 +216,9 @@ button.rv-at__fila:focus-visible { outline: 2px solid var(--ink); outline-offset
   .rv-res__fila--4-4-4 > :last-child { grid-column: 1 / -1; }
   .rv-res__fila--8-4 > :first-child { grid-column: span 7; }
   .rv-res__fila--8-4 > :last-child { grid-column: span 5; }
+}
+
+/* Móvil: el marco no pone relleno en el contenido (lados 16, arriba 6, abajo 24, ESTILO §11). */
+@media (max-width: 767px) {
+  .rv-res { padding: 6px 16px 24px; }
 }

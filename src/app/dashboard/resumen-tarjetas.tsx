@@ -1,7 +1,6 @@
 import { Bell, Flag } from 'lucide-react';
-import Link from 'next/link';
 import { fechaCorta, mxnCompacto, numero, porcentaje } from '@/lib/formato';
-import { Chip, EstadoVacio, Tarjeta } from '@/app/ui-v2/componentes';
+import { BotonEnlace, Chip, EstadoVacio, Tarjeta } from '@/app/ui-v2/componentes';
 import { Bullet, Columnas, KindBadge, type ItemKpi } from '@/app/ui-v2/graficas';
 import { rotuloDiferencia } from './agentes/liquidacion/rotulo-diferencia';
 import { PERIODO_RANGO, type DatosResumen } from './resumen-datos';
@@ -102,7 +101,7 @@ export function TarjetaHizoSolo({ d, sufijo }: { d: DatosResumen; sufijo: string
     <Tarjeta
       titulo="Lo que hizo solo" info="resumen.lo_que_hizo_solo" estado={h === null ? 'error' : h.length === 0 ? 'vacio' : 'ok'} reintentar
       mensaje={h && h.length === 0 ? 'El agente todavía no ha actuado por su cuenta' : undefined}
-      acciones={<Link className="rv-res__ver" href={`/dashboard/agentes/liquidacion${sufijo}`}>Ver actividad</Link>}
+      acciones={<BotonEnlace tamano="sm" variante="ghost" href={`/dashboard/agentes/liquidacion${sufijo}`}>Ver actividad</BotonEnlace>}
     >
       {h && h.length ? (
         <ul className="rv-solo">
