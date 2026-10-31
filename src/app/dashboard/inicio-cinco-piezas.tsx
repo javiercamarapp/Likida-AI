@@ -77,9 +77,9 @@ export function TarjetaImporteIave({ c, leidoEn, ahora }: { c: CifraImporteDecen
         <StatusChip tono={TONO_SELLO[c.sello]}>{c.sello}</StatusChip>
       </p>
       <p className="rv-ic__nota">{c.periodo}{c.cruces !== null ? ` · ${numero(c.cruces)} cruces` : ''}</p>
-      {c.anterior ? <p className="rv-ic__nota">Decena anterior ({c.anterior.periodo}): {pesosCompletos(c.anterior.valor)}. {c.anterior.rotulo}</p> : null}
-      <Avisos c={c} />
-      {c.sello !== 'Medido' ? <p className="rv-ic__nota">{c.rotulo}</p> : null}
+      {c.anterior ? <p className="rv-ic__nota">Decena anterior: {pesosCompletos(c.anterior.valor)}. {c.anterior.rotulo}</p> : null}
+      {/* Faltantes y archivos sin cruces UNA vez: el rótulo ya los dice cuando es Estimado; si es Medido salen como chips. */}
+      {c.sello === 'Estimado' ? <p className="rv-ic__nota">{c.rotulo}</p> : <Avisos c={c} />}
       <PieSello c={c} leidoEn={leidoEn} ahora={ahora} />
     </Tarjeta>
   );
@@ -93,8 +93,7 @@ export function TarjetaExtemporaneos({ c, leidoEn, ahora }: { c: CifraExtemporan
         <span className="rv-ic__cifra" data-pesos="">{pesosCompletos(c.valor)}</span>
         <StatusChip tono={TONO_SELLO[c.sello]}>{c.sello}</StatusChip>
       </p>
-      <p className="rv-ic__nota">{c.n} {c.n === 1 ? 'cruce candidato' : 'cruces candidatos'} a validar con el proveedor</p>
-      <Avisos c={c} />
+      {/* El rótulo trae el conteo de candidatos, el periodo y las decenas faltantes: UNA sola vez. */}
       <p className="rv-ic__nota">{c.rotulo}</p>
       <PieSello c={c} leidoEn={leidoEn} ahora={ahora} />
     </Tarjeta>

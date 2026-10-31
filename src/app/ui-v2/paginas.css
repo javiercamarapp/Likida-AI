@@ -257,8 +257,10 @@ button.rv-at__fila:focus-visible { outline: 2px solid var(--ink); outline-offset
 .rv-ic__enlace { font-size: 13px; font-weight: 600; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
 .rv-ic__fila { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
 .rv-ic__fila > * { min-width: 0; }
-.rv-ic__fila--7-5 > :first-child { grid-column: span 7; }
-.rv-ic__fila--7-5 > :last-child { grid-column: span 5; }
+.rv-ic__fila--7-5 { align-items: start; }
+.rv-ic__fila--7-5 > :only-child { grid-column: 1 / -1; }
+.rv-ic__fila--7-5 > :first-child:not(:only-child) { grid-column: span 7; }
+.rv-ic__fila--7-5 > :last-child:not(:only-child) { grid-column: span 5; }
 .rv-ic__fila--4-4-4 > * { grid-column: span 4; }
 .rv-ic__fila--6-6 > * { grid-column: span 6; }
 .rv-ic__pesos .rv-tarjeta__cuerpo, .rv-ic__marcha .rv-tarjeta__cuerpo, .rv-ic__hoy .rv-tarjeta__cuerpo { display: flex; flex-direction: column; gap: 8px; }
@@ -277,7 +279,7 @@ button.rv-at__fila:focus-visible { outline: 2px solid var(--ink); outline-offset
   /* Móvil: UNA tira horizontal deslizable (no cinco tarjetas apiladas), para que la primera cifra quede arriba. */
   .rv-ic__agentes { display: flex; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 4px; gap: 10px; }
   .rv-ic__agentes > .rv-tarjeta { flex: 0 0 216px; scroll-snap-align: start; }
-  .rv-ic__fila--7-5 > :first-child, .rv-ic__fila--7-5 > :last-child, .rv-ic__fila--4-4-4 > *, .rv-ic__fila--6-6 > * { grid-column: 1 / -1; }
+  .rv-ic__fila--7-5 > :first-child:not(:only-child), .rv-ic__fila--7-5 > :last-child:not(:only-child), .rv-ic__fila--4-4-4 > *, .rv-ic__fila--6-6 > * { grid-column: 1 / -1; }
   /* La cifra va arriba del estado: la primera cifra queda por encima de los 300 px. */
   .rv-ic__cifra-fila { order: -1; }
   .rv-ic__fila { gap: 10px; }
