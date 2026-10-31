@@ -58,7 +58,7 @@ export function BotonEjecutar({ ejecutarAhora, enCola, activo }: {
         <button type="button" onClick={() => setConfirmando(true)}
           disabled={!activo || enCola === 0}
           title={!activo ? 'El agente está pausado' : enCola === 0 ? 'No hay a quién contactar' : 'Correr la cobranza ahora, sin esperar la ventana'}
-          className="rv-btn rv-btn--primary inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-40"
+          className="rv-btn rv-btn--primary inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-40"
           style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
           <Send width={13} height={13} strokeWidth={2} /> Ejecutar ahora
         </button>
@@ -99,7 +99,7 @@ function BotonConfirmar() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Send width={13} height={13} strokeWidth={2} className={pending ? 'animate-pulse' : ''} />
       {pending ? 'Mandando…' : 'Sí, mandar'}
@@ -128,7 +128,7 @@ function BotonPausaInterno({ activo }: { activo: boolean }) {
   return (
     <button type="submit" disabled={pending}
       title={activo ? 'El agente deja de contactar hasta que lo reanudes' : 'El agente vuelve a contactar en su ventana'}
-      className="rv-btn rv-btn--secondary hairline inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)] disabled:opacity-50"
+      className="rv-btn rv-btn--secondary hairline inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)] disabled:opacity-50"
       style={{ background: 'var(--surface)', color: activo ? 'var(--ink2)' : 'var(--ok)' }}>
       {activo
         ? <><Pause width={13} height={13} strokeWidth={2} /> {pending ? 'Pausando…' : 'Pausar agente'}</>

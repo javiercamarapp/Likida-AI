@@ -49,7 +49,7 @@ const GRAVEDAD: Record<1 | 2 | 3, { texto: string; color: string }> = {
 /** T-A5-26: rótulo de los datos de demostración del seed. Nunca se mezclan con reales sin decirlo. */
 export function EtiquetaSimulado() {
   return (
-    <span className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-semibold tracking-wide" style={{ color: 'var(--warn)', background: 'var(--warnbg)' }}>SIMULADO</span>
+    <span className="inline-flex px-1.5 py-0.5 rounded-full text-[11px] font-semibold tracking-wide" style={{ color: 'var(--warn)', background: 'var(--warnbg)' }}>SIMULADO</span>
   );
 }
 
@@ -73,7 +73,7 @@ const minutos = (m: number): string => (m < 60 ? `${numero(Math.round(m))} min` 
 
 export function IndicadoresHitos({ i, dias }: { i: IndicadoresVista | null; dias: number }) {
   if (i === null) {
-    return <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No se pudieron calcular los indicadores ahora mismo.</p>;
+    return <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudieron calcular los indicadores ahora mismo.</p>;
   }
   return (
     <div>
@@ -103,7 +103,7 @@ export function IndicadoresHitos({ i, dias }: { i: IndicadoresVista | null; dias
 export function FiltrosTablero({ f, catalogos, ocultos, accionUrl }: {
   f: FiltrosVista; catalogos: CatalogosFiltro | null; ocultos: Record<string, string>; accionUrl: string;
 }) {
-  const sel = 'hairline rounded-lg px-2 h-8 text-[12.5px] outline-none focus:border-[var(--muted)]';
+  const sel = 'hairline rounded-lg px-2 h-8 text-[12px] outline-none focus:border-[var(--muted)]';
   return (
     <form method="get" action={accionUrl} className="flex flex-wrap items-end gap-2.5" aria-label="Filtros del tablero">
       {Object.entries(ocultos).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
@@ -136,7 +136,7 @@ export function FiltrosTablero({ f, catalogos, ocultos, accionUrl }: {
           <option value="1">último día</option><option value="7">últimos 7 días</option><option value="30">últimos 30 días</option>
         </select>
       </label>
-      <button type="submit" className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12.5px] font-medium hairline transition-colors hover:bg-[var(--canvas)]">Aplicar</button>
+      <button type="submit" className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12px] font-medium hairline transition-colors hover:bg-[var(--canvas)]">Aplicar</button>
       {(f.terminalId || f.clienteId || f.operadorId || f.semaforo) && (
         <Link href={accionUrl + (Object.keys(ocultos).length ? `?${new URLSearchParams(ocultos).toString()}` : '')} className="text-[12px] underline" style={{ color: 'var(--muted)' }}>Quitar filtros</Link>
       )}
@@ -163,15 +163,15 @@ export function ColaExcepciones({ excepciones, puedeActuar, accion }: { excepcio
       <h2 className="font-display text-[15px] font-semibold mb-1">Cola de excepciones</h2>
       <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>Lo que pide una decisión tuya, lo más urgente primero.</p>
       {excepciones.length === 0 ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Nada pendiente: ningún hito escalado, atrasado ni sin coincidencia en los viajes que se listan.</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Nada pendiente: ningún hito escalado, atrasado ni sin coincidencia en los viajes que se listan.</p>
       ) : (
         <ul className="space-y-3">
           {excepciones.slice(0, 50).map((e, i) => {
             const g = GRAVEDAD[e.gravedad];
             return (
-              <li key={`${e.viajeId}-${e.tipo}-${e.hitoId ?? i}`} className="text-[12.5px] pb-3 border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}>
+              <li key={`${e.viajeId}-${e.tipo}-${e.hitoId ?? i}`} className="text-[12px] pb-3 border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10.5px] font-semibold uppercase tracking-wide" style={{ color: g.color }}>{g.texto}</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: g.color }}>{g.texto}</span>
                   <span className="font-medium">{EXCEPCION[e.tipo]}</span>
                   <span className="font-medium">{e.folio ?? 'viaje sin folio'}</span>
                   {e.desde && <span className="ml-auto text-[11px]" style={{ color: 'var(--faint)' }}>desde {fechaHoraMx(e.desde)}</span>}
@@ -310,7 +310,7 @@ export function TarjetaViaje({ f, puedeActuar, accion, accionSitios, sitios, sit
         <PuntoSemaforo s={f.semaforo} />
         <span className="font-medium text-[13px]">{v.folio ?? 'sin folio'}</span>
         {esFolioSimulado(v.folio) && <EtiquetaSimulado />}
-        <span className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{v.operadorNombre ?? 'Sin operador'}</span>
+        <span className="text-[12px]" style={{ color: 'var(--muted)' }}>{v.operadorNombre ?? 'Sin operador'}</span>
         <span className="text-[12px]" style={{ color: 'var(--faint)' }}>
           {[v.terminalNombre, v.clienteNombre].filter(Boolean).join(' · ')}
         </span>
@@ -366,15 +366,15 @@ export function EpisodiosSenalVida({ episodios, dias, hayMas }: { episodios: Epi
     <section className="card p-4 space-y-3" aria-label="Sin señal de vida">
       <h2 className="font-display text-[15px] font-semibold">Sin señal de vida</h2>
       {episodios === null ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No se pudieron leer los episodios ahora mismo.</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudieron leer los episodios ahora mismo.</p>
       ) : episodios.length === 0 ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           Ningún tractor quedó sin señal de vida en los últimos {dias} {dias === 1 ? 'día' : 'días'} (o la flota no tiene encendido este aviso: se enciende en la configuración del Conductor).
         </p>
       ) : (
         <ul className="space-y-2">
           {episodios.map((e) => (
-            <li key={e.id} className="hairline rounded-lg p-3 text-[12.5px] space-y-1" style={e.urgente ? { borderColor: 'var(--bad)' } : undefined}>
+            <li key={e.id} className="hairline rounded-lg p-3 text-[12px] space-y-1" style={e.urgente ? { borderColor: 'var(--bad)' } : undefined}>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                 <span className="font-medium">{e.folio}</span>
                 <span style={{ color: 'var(--muted)' }}>{e.chofer}</span>
@@ -414,11 +414,11 @@ export function ReubicacionesPorCliente({ filas, csv }: { filas: ReubicacionesCl
         )}
       </div>
       {filas.length === 0 ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Aún no hay llegadas con reporte del chofer en los viajes en curso.</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Aún no hay llegadas con reporte del chofer en los viajes en curso.</p>
       ) : (
         <ul className="space-y-1.5">
           {filas.map((f) => (
-            <li key={f.clienteId ?? 'sin-cliente'} className="hairline rounded-lg p-2.5 text-[12.5px] flex flex-wrap items-center gap-x-3 gap-y-0.5">
+            <li key={f.clienteId ?? 'sin-cliente'} className="hairline rounded-lg p-2.5 text-[12px] flex flex-wrap items-center gap-x-3 gap-y-0.5">
               <span className="font-medium">{f.clienteNombre}</span>
               {f.viajesConDato === 0 ? (
                 <span style={{ color: 'var(--muted)' }}>Sin dato ({numero(f.viajes)} {f.viajes === 1 ? 'viaje' : 'viajes'} sin respuesta del chofer)</span>
@@ -478,7 +478,7 @@ export function TableroHitos({
       {tablero.reubicaciones && <ReubicacionesPorCliente filas={tablero.reubicaciones.porCliente} csv={tablero.reubicaciones.csv} />}
       {episodios !== undefined && <EpisodiosSenalVida episodios={episodios} dias={dias} hayMas={hayMasEpisodios} />}
       {tablero.filas.length === 0 ? (
-        <section className="card p-4 text-[12.5px] flex items-center gap-2" style={{ color: 'var(--muted)' }}>
+        <section className="card p-4 text-[12px] flex items-center gap-2" style={{ color: 'var(--muted)' }}>
           <CircleAlert width={14} height={14} aria-hidden />
           {filtros.terminalId || filtros.clienteId || filtros.operadorId || filtros.semaforo
             ? 'Ningún viaje en curso cumple esos filtros.'

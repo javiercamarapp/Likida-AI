@@ -52,13 +52,13 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
       {legible ? (
         <FormaConfigConductor accion={accionGuardar} config={config} valores={valores} contactos={contactos} patios={patios} puedeEditar={puedeEditar} puedeForzarPreflight={puedeForzarPreflight} />
       ) : (
-        <p role="alert" className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
+        <p role="alert" className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
           <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
           No se pudo leer la configuración ahora mismo. No se muestra un formulario con valores por omisión para no confundirlos con lo guardado; intenta de nuevo en un momento.
         </p>
       )}
       {voluntarios === null && (
-        <p role="alert" className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
+        <p role="alert" className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
           <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
           No se pudo leer la lista de operadores del piloto ahora mismo (o falta aplicar la migración 0800); intenta de nuevo en un momento.
         </p>
@@ -70,7 +70,7 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
       {accionImportarRutas && (
         <section aria-labelledby="rutas-titulo" className="space-y-2">
           <h2 id="rutas-titulo" className="text-[13px] font-medium">Rutas autorizadas de Google Maps</h2>
-          <p className="text-[12.5px] max-w-[80ch]" style={{ color: 'var(--muted)' }}>
+          <p className="text-[12px] max-w-[80ch]" style={{ color: 'var(--muted)' }}>
             La base de rutas hechas con anticipación, por corredor (y, si quieres, por sitio de origen y de destino). El agente nunca arma ni
             corrige un link: solo se aceptan links de maps.app.goo.gl o google.com/maps, y una ruta vencida se trata como si no existiera.
             Cada fila se aprueba o se rechaza sola; volver a subir el mismo archivo no cambia nada.
@@ -78,7 +78,7 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
           <FormaImportarRutas accion={accionImportarRutas} />
           {rutasPendientes && (
             <div className="space-y-2 pt-2">
-              <h3 id="rutas-pendientes-titulo" className="text-[12.5px] font-medium">Rutas por revisar</h3>
+              <h3 id="rutas-pendientes-titulo" className="text-[12px] font-medium">Rutas por revisar</h3>
               <PendientesRutas pendientes={rutasPendientes} totalRutas={totalRutas} dias={diasRevisionRutas} accionRevisada={accionRutaRevisada} />
             </div>
           )}
@@ -87,7 +87,7 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
       {documentosCliente !== undefined && (
         <section aria-labelledby="documentos-cliente-titulo" className="space-y-2">
           <h2 id="documentos-cliente-titulo" className="text-[13px] font-medium">Documentos que pide cada cliente</h2>
-          <p className="text-[12.5px] max-w-[80ch]" style={{ color: 'var(--muted)' }}>
+          <p className="text-[12px] max-w-[80ch]" style={{ color: 'var(--muted)' }}>
             Cada cliente pide papeles distintos al cerrar el viaje: unos solo la carta porte firmada y sellada, otros además pedimento, DODA,
             fitosanitario o tickets de báscula. Aquí dices cuáles son y cuáles son indispensables. Un cliente sin documentos propios sigue como hoy:
             solo se le pide el comprobante de entrega.

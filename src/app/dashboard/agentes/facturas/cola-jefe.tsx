@@ -151,11 +151,11 @@ function MesaDeTrabajo({ fila, marcarFacturada }: { fila: FilaJefe; marcarFactur
 
       {conValor.length > 0 ? (
         <div className="rounded-lg hairline p-2.5 space-y-1" style={{ background: 'var(--surface)' }}>
-          <div className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>
+          <div className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>
             Lo que el portal te va a pedir, tal cual
           </div>
           {conValor.map((c) => (
-            <div key={c.etiqueta} className="flex items-center justify-between gap-2 text-[12.5px]">
+            <div key={c.etiqueta} className="flex items-center justify-between gap-2 text-[12px]">
               <span style={{ color: 'var(--muted)' }}>{c.etiqueta}</span>
               <span className="flex items-center gap-1.5 min-w-0">
                 <span className="cifra-mono truncate">{c.valor}</span>
@@ -176,13 +176,13 @@ function MesaDeTrabajo({ fila, marcarFacturada }: { fila: FilaJefe; marcarFactur
 
       <div className="flex items-center gap-2">
         <a href={liga} target="_blank" rel="noopener noreferrer"
-          className="hairline inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
+          className="hairline inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
           style={{ background: 'var(--surface)' }}>
           <ExternalLink width={13} height={13} strokeWidth={1.75} /> Abrir el portal
         </a>
         {conValor.length > 0 && (
           <button type="button" onClick={() => copiar('__todo__', conValor.map((c) => `${c.etiqueta}: ${c.valor}`).join('\n'))}
-            className="rv-btn rv-btn--secondary hairline inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
+            className="rv-btn rv-btn--secondary hairline inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
             style={{ background: 'var(--surface)', color: copiado === '__todo__' ? 'var(--ok)' : undefined }}>
             {copiado === '__todo__' ? <Check width={13} height={13} strokeWidth={2} /> : <Copy width={13} height={13} strokeWidth={1.75} />}
             Copiar todo
@@ -196,7 +196,7 @@ function MesaDeTrabajo({ fila, marcarFacturada }: { fila: FilaJefe; marcarFactur
         <input type="hidden" name="gastoId" value={fila.gastoId} />
         <input name="uuid" placeholder="Folio fiscal (UUID) del CFDI que te dio el portal"
           aria-label="Folio fiscal del CFDI"
-          className="flex-1 min-w-0 text-[12.5px] px-3 py-1.5 rounded-lg hairline cifra-mono"
+          className="flex-1 min-w-0 text-[12px] px-3 py-1.5 rounded-lg hairline cifra-mono"
           style={{ background: 'var(--surface)' }} />
         <BotonGuardar />
       </form>
@@ -209,7 +209,7 @@ function BotonGuardar() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50 shrink-0"
+      className="rv-btn rv-btn--primary text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50 shrink-0"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       {pending ? 'Guardando…' : 'Ya quedó'}
     </button>

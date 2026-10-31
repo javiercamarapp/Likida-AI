@@ -15,11 +15,11 @@ import { ROTULO_CANDIDATO } from '@/lib/likida/peajes/reglas_cobro';
 
 export type AccionDecidir = (fd: FormData) => Promise<void>;
 
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
+const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const CSS_SECUNDARIO = 'hairline text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]';
+const CSS_SECUNDARIO = 'hairline text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]';
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--ink)' } as const;
-const CSS_INPUT = 'hairline text-[12.5px] px-2.5 py-1.5 rounded-lg';
+const CSS_INPUT = 'hairline text-[12px] px-2.5 py-1.5 rounded-lg';
 const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
 const ESTILO_CANDIDATO = { color: 'var(--warn)', background: 'var(--warnbg)' } as const;
 const COLOR_ESTADO: Record<EstadoCandidato, { color: string; background: string }> = {
@@ -32,7 +32,7 @@ const ROTULO_ACCION: Record<AccionCandidato, string> = { reclamado: 'Marcar como
 const ROTULO_LOTE: Record<AccionCandidato, string> = { reclamado: 'Marcar como reclamados', descartado: 'Descartar', justificado: 'Justificar' };
 
 const Etiqueta = ({ children }: { children: React.ReactNode }) => (
-  <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>{children}</span>
+  <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>{children}</span>
 );
 
 function ExtraSufijo({ sufijo }: { sufijo: string }) {
@@ -57,7 +57,7 @@ function AccionesDeFila({ f, desglose, retorno, decidir }: { f: FilaCandidato; d
     return (
       <div className="space-y-0.5">
         <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={COLOR_ESTADO[f.estado]}>{ETIQUETA_ESTADO_CANDIDATO[f.estado]}</span>
-        {f.motivo && <p className="text-[11.5px]"><b>Motivo:</b> {f.motivo}</p>}
+        {f.motivo && <p className="text-[11px]"><b>Motivo:</b> {f.motivo}</p>}
         {f.actor && f.decididoEn && <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{f.actor} · {fechaMx(f.decididoEn)}</p>}
       </div>
     );
@@ -93,7 +93,7 @@ function Lote({ tabla, desglose, retorno, decidir, aplicables }: {
   if (!hay) return null;
   return (
     <div className="mt-4 rounded-lg hairline p-3 space-y-3" id="lote-candidatos">
-      <p className="text-[12.5px]"><b>Acciones en lote</b> sobre todo lo que cumple el filtro actual (no solo esta página). Cada una pide confirmación con el número de cruces.</p>
+      <p className="text-[12px]"><b>Acciones en lote</b> sobre todo lo que cumple el filtro actual (no solo esta página). Cada una pide confirmación con el número de cruces.</p>
       {(['reclamado', 'descartado', 'justificado'] as const).map((a) => aplicables[a] > 0 && (
         <form key={a} action={decidir} className="flex items-end gap-2 flex-wrap">
           <input type="hidden" name="desglose" value={desglose} />
@@ -111,7 +111,7 @@ function Lote({ tabla, desglose, retorno, decidir, aplicables }: {
           {a === 'reclamado'
             ? <label className="block"><Etiqueta>Enviado el (si ya lo enviaste)</Etiqueta><input type="date" name="enviado_en" className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT} /></label>
             : <label className="block"><Etiqueta>Motivo</Etiqueta><input name="motivo" required minLength={3} maxLength={300} aria-label={`Motivo para ${a === 'descartado' ? 'descartar' : 'justificar'} en lote`} className={`${CSS_INPUT} w-[220px] mt-0.5`} style={ESTILO_INPUT} /></label>}
-          <label className="flex items-center gap-1.5 text-[12.5px]">
+          <label className="flex items-center gap-1.5 text-[12px]">
             <input type="checkbox" name="confirmar" required /> Confirmo: {ROTULO_LOTE[a].toLowerCase()} {numero(aplicables[a])} {aplicables[a] === 1 ? 'cruce' : 'cruces'}
           </label>
           <button type="submit" className={a === 'reclamado' ? CSS_BOTON : CSS_SECUNDARIO} style={a === 'reclamado' ? ESTILO_PRIMARIO : ESTILO_SECUNDARIO}>
@@ -135,7 +135,7 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
     return (
       <section className="card p-4" id="candidatos">
         <h2 className="font-display text-[15px] font-semibold">Candidatos del archivo</h2>
-        <p role="alert" className="text-[12.5px] mt-3" style={{ color: 'var(--bad)' }}>No se pudo leer la tabla de candidatos ahora mismo. No es que no haya candidatos: inténtalo de nuevo.</p>
+        <p role="alert" className="text-[12px] mt-3" style={{ color: 'var(--bad)' }}>No se pudo leer la tabla de candidatos ahora mismo. No es que no haya candidatos: inténtalo de nuevo.</p>
       </section>
     );
   }
@@ -164,7 +164,7 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
 
       <div className="flex flex-wrap gap-2 mt-3">
         {ESTADOS_CANDIDATO.map((e) => (
-          <span key={e} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11.5px] font-medium" style={COLOR_ESTADO[e]}>
+          <span key={e} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium" style={COLOR_ESTADO[e]}>
             {ETIQUETA_ESTADO_CANDIDATO[e]} · {numero(tabla.porEstado[e].n)} · {mxn(tabla.porEstado[e].monto)}
           </span>
         ))}
@@ -205,26 +205,26 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
       </form>
 
       {tabla.total === 0 ? (
-        <p className="text-[12.5px] mt-4" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px] mt-4" style={{ color: 'var(--muted)' }}>
           {hayFiltro ? 'Ningún candidato cumple este filtro. Quita algún filtro para ver más.' : 'Este archivo no tiene candidatos que revisar.'}
         </p>
       ) : (
         <>
-          <p className="text-[11.5px] mt-3" style={{ color: 'var(--muted)' }}>
+          <p className="text-[11px] mt-3" style={{ color: 'var(--muted)' }}>
             Mostrando {numero(desde)}–{numero(hasta)} de {numero(tabla.total)}. Las páginas son de {TAMANO_PAGINA}: el archivo completo viaja en el Excel.
           </p>
           <div className="overflow-x-auto mt-2">
-            <table className="w-full text-[12.5px]">
+            <table className="w-full text-[12px]">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Fecha y hora</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Categoría</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Caseta</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">TAG / unidad</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 text-right">Clase</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 text-right">Importe</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 pl-3">Qué pasó</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 pl-3">Acción</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Fecha y hora</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Categoría</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Caseta</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">TAG / unidad</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Clase</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Importe</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pl-3">Qué pasó</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pl-3">Acción</th>
                 </tr>
               </thead>
               <tbody>
@@ -239,7 +239,7 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
                     <td className="py-2 pl-3 max-w-[28rem]">
                       <p>{c.quePaso}</p>
                       <details className="mt-0.5">
-                        <summary className="cursor-pointer text-[11.5px]" style={{ color: 'var(--muted)' }}>Qué significa y qué hacer</summary>
+                        <summary className="cursor-pointer text-[11px]" style={{ color: 'var(--muted)' }}>Qué significa y qué hacer</summary>
                         <p className="text-[12px]" style={{ color: 'var(--muted)' }}><b>Qué significa:</b> {c.queSignifica}</p>
                         <p className="text-[12px]" style={{ color: 'var(--muted)' }}><b>Qué hacer:</b> {c.queHacer}</p>
                       </details>
@@ -255,7 +255,7 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
             </table>
           </div>
           {tabla.paginas > 1 && (
-            <nav aria-label="Páginas de candidatos" className="flex items-center gap-3 mt-3 text-[12.5px]">
+            <nav aria-label="Páginas de candidatos" className="flex items-center gap-3 mt-3 text-[12px]">
               {tabla.pagina > 1 ? <a href={enlace(tabla.pagina - 1)} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>← Anterior</a> : <span style={{ color: 'var(--faint)' }}>← Anterior</span>}
               <span>Página {numero(tabla.pagina)} de {numero(tabla.paginas)}</span>
               {tabla.pagina < tabla.paginas ? <a href={enlace(tabla.pagina + 1)} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Siguiente →</a> : <span style={{ color: 'var(--faint)' }}>Siguiente →</span>}

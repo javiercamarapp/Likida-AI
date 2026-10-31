@@ -60,7 +60,7 @@ export function VincularAsistida({ clave, nombre }: { clave: string; nombre: str
       <form action={(fd) => { setCerrado(false); setEstado(null); iniciar(fd); }} className="inline">
         <input type="hidden" name="comercio" value={clave} />
         <button type="submit" disabled={iniciando}
-          className="inline-flex items-center gap-1 text-[11.5px] underline disabled:opacity-50" style={{ color: 'var(--muted)' }}>
+          className="inline-flex items-center gap-1 text-[11px] underline disabled:opacity-50" style={{ color: 'var(--muted)' }}>
           <MonitorSmartphone width={11} height={11} strokeWidth={2} />
           {iniciando ? 'Generando…' : 'Vincular con código'}
         </button>
@@ -73,27 +73,27 @@ export function VincularAsistida({ clave, nombre }: { clave: string; nombre: str
   return (
     <div className="mt-2 rounded-lg p-3 w-full" style={{ background: 'var(--canvas)' }} role="region" aria-label={`Vincular ${nombre}`}>
       <p className="text-[12px] font-medium">Vincular {nombre}</p>
-      <ol className="text-[11.5px] mt-1 space-y-1 list-decimal pl-4" style={{ color: 'var(--muted)' }}>
+      <ol className="text-[11px] mt-1 space-y-1 list-decimal pl-4" style={{ color: 'var(--muted)' }}>
         <li>En una computadora <strong>con pantalla</strong> (la tuya), en la carpeta de Likida, corre:</li>
       </ol>
       <div className="flex items-center gap-2 mt-1.5">
-        <code className="text-[11.5px] font-mono rounded px-2 py-1 break-all" style={{ background: 'var(--line2)' }} data-testid="comando-vinculacion">{res.comando}</code>
+        <code className="text-[11px] font-mono rounded px-2 py-1 break-all" style={{ background: 'var(--line2)' }} data-testid="comando-vinculacion">{res.comando}</code>
         <button type="button" aria-label="Copiar comando" className="shrink-0 p-1 rounded hover:bg-[var(--line2)]"
           onClick={() => { void navigator.clipboard?.writeText(res.comando); notificar({ tono: 'info', mensaje: 'Comando copiado.' }); }}>
           <Copy width={12} height={12} strokeWidth={2} />
         </button>
       </div>
-      <ol start={2} className="text-[11.5px] mt-1.5 space-y-1 list-decimal pl-4" style={{ color: 'var(--muted)' }}>
+      <ol start={2} className="text-[11px] mt-1.5 space-y-1 list-decimal pl-4" style={{ color: 'var(--muted)' }}>
         <li>Se abre el portal. <strong>Entra tú</strong> con tu cuenta y resuelve el CAPTCHA o el código de dos pasos. Likida no teclea nada ni resuelve retos.</li>
         <li>Cuando estés dentro, la ventana se cierra sola y aquí aparece «vinculado».</li>
       </ol>
       <p className="text-[11px] mt-2" style={{ color: 'var(--warn)' }}>
         El código se muestra solo ahora, sirve una vez y caduca a las {new Date(res.expiraEn).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}. No lo compartas.
       </p>
-      <p className="text-[11.5px] mt-1" role="status" style={{ color: 'var(--muted)' }}>{ROTULO[vivo] ?? ''}</p>
+      <p className="text-[11px] mt-1" role="status" style={{ color: 'var(--muted)' }}>{ROTULO[vivo] ?? ''}</p>
       <div className="mt-2">
         <button type="button" disabled={cancelando}
-          className="inline-flex items-center gap-1 text-[11.5px] underline disabled:opacity-50" style={{ color: 'var(--muted)' }}
+          className="inline-flex items-center gap-1 text-[11px] underline disabled:opacity-50" style={{ color: 'var(--muted)' }}
           onClick={() => empezarCancelar(async () => {
             const fd = new FormData(); fd.set('comercio', clave);
             const r = await accionCancelarVinculacion(null, fd);

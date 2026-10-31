@@ -111,7 +111,7 @@ export function VistaAgenteCobranza({
           ) : (
             <div className="space-y-2">
               {cola.sinTelefono.map((f) => (
-                <div key={f.viajeId} className="flex items-center gap-2.5 text-[12.5px]">
+                <div key={f.viajeId} className="flex items-center gap-2.5 text-[12px]">
                   <PhoneOff width={13} height={13} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--warn)' }} />
                   <span className="font-medium">{f.folio ?? 'Sin folio'}</span>
                   <span className="truncate" style={{ color: 'var(--muted)' }}>{f.operadorNombre ?? 'Operador sin nombre'}</span>
@@ -132,7 +132,7 @@ export function VistaAgenteCobranza({
             <Leyenda>Aún sin contactos — cada intento del agente queda escrito aquí,
               incluidos los que no salieron y su porqué.</Leyenda>
           ) : (
-            <div className="space-y-2.5 text-[12.5px]">
+            <div className="space-y-2.5 text-[12px]">
               {bitacora.map((c, i) => (
                 <div key={i} className="flex items-start gap-2">
                   {c.enviado
@@ -185,7 +185,7 @@ export function VistaAgenteCobranza({
 function Leyenda({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex-1 min-h-[110px] flex items-center justify-center">
-      <p className="text-[12.5px] text-center max-w-[34ch]" style={{ color: 'var(--muted)' }}>{children}</p>
+      <p className="text-[12px] text-center max-w-[34ch]" style={{ color: 'var(--muted)' }}>{children}</p>
     </div>
   );
 }
@@ -197,11 +197,11 @@ function TablaCola({ filas }: { filas: FilaCola[] }) {
       <table className="w-full text-[13px]">
         <thead>
           <tr className="text-left" style={{ color: 'var(--faint)' }}>
-            <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Viaje</th>
-            <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Operador</th>
-            <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 text-right">Sin comprobar</th>
-            <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 text-right">Tier que toca</th>
-            <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 text-right">Contactos previos</th>
+            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Viaje</th>
+            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Operador</th>
+            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Sin comprobar</th>
+            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Tier que toca</th>
+            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Contactos previos</th>
           </tr>
         </thead>
         <tbody>

@@ -17,7 +17,7 @@ function Revisada() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12.5px] font-medium hairline transition-opacity hover:opacity-85 disabled:opacity-50">
+      className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12px] font-medium hairline transition-opacity hover:opacity-85 disabled:opacity-50">
       {pending ? 'Marcando…' : 'Revisada'}
     </button>
   );
@@ -57,7 +57,7 @@ export function PendientesRutas({ pendientes, totalRutas, dias, accionRevisada }
 }) {
   if (pendientes.length === 0) {
     return (
-      <p role="status" className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+      <p role="status" className="text-[12px]" style={{ color: 'var(--muted)' }}>
         {totalRutas === 0
           ? 'Todavía no hay rutas cargadas; cuando importes las primeras, aquí verás cuáles necesitan revisión.'
           : `Todas las rutas se revisaron en los últimos ${dias} días. No hay nada pendiente.`}
@@ -66,7 +66,7 @@ export function PendientesRutas({ pendientes, totalRutas, dias, accionRevisada }
   }
   return (
     <div className="space-y-1.5">
-      <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
         {pendientes.length} ruta{pendientes.length === 1 ? '' : 's'} sin revisar en {dias} días o más. Ábrela en Google Maps, confirma que sigue bien y marca «Revisada».
       </p>
       <ul className="divide-y" aria-label="Rutas pendientes de revisión">

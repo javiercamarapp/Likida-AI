@@ -20,7 +20,7 @@ export function DeclararPeriodo({ declarar, desgloseId, desde, hasta }: { declar
   }, [estado, router]);
 
   return (
-    <form action={accion} className="flex items-center gap-1.5 flex-wrap text-[11.5px]" style={{ color: 'var(--muted)' }}>
+    <form action={accion} className="flex items-center gap-1.5 flex-wrap text-[11px]" style={{ color: 'var(--muted)' }}>
       <input type="hidden" name="desglose" value={desgloseId} />
       <span>Periodo oficial del archivo{desde && hasta ? `: ${desde} a ${hasta}` : ': sin declarar'}</span>
       <input type="date" name="periodo_desde" required defaultValue={desde ?? ''} aria-label="Inicio del periodo oficial"

@@ -22,15 +22,15 @@ export interface UmbralesAvisosVista {
   acciones: AccionesUmbralesAvisos;
 }
 
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
+const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const CSS_INPUT = 'hairline text-[12.5px] px-2.5 py-1.5 rounded-lg';
+const CSS_INPUT = 'hairline text-[12px] px-2.5 py-1.5 rounded-lg';
 const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
 
 function Numero({ nombre, etiqueta, valor, min, max, paso, ancho }: { nombre: string; etiqueta: string; valor: number; min: number; max: number; paso?: number; ancho?: string }) {
   return (
     <label className="block">
-      <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>{etiqueta}</span>
+      <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>{etiqueta}</span>
       <input type="number" name={nombre} defaultValue={valor} min={min} max={max} step={paso ?? 1} required
         className={`${CSS_INPUT} ${ancho ?? 'w-[110px]'} mt-0.5`} style={ESTILO_INPUT} />
     </label>
@@ -39,7 +39,7 @@ function Numero({ nombre, etiqueta, valor, min, max, paso, ancho }: { nombre: st
 
 function Interruptor({ nombre, etiqueta, activo, nota, deshabilitado }: { nombre: string; etiqueta: string; activo: boolean; nota?: string; deshabilitado?: boolean }) {
   return (
-    <label className="flex items-start gap-2 text-[12.5px]">
+    <label className="flex items-start gap-2 text-[12px]">
       <input type="checkbox" name={nombre} value="1" defaultChecked={activo} disabled={deshabilitado} className="mt-0.5" />
       <span>
         <span className="font-medium">{etiqueta}</span>
@@ -68,9 +68,9 @@ export function SeccionUmbralesAvisos({ datos }: { datos: UmbralesAvisosVista })
       </p>
 
       {config === null ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No se pudo leer la configuración ahora mismo.</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudo leer la configuración ahora mismo.</p>
       ) : !puedeAdministrar ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Solo quien administra la flota cambia estos valores.</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Solo quien administra la flota cambia estos valores.</p>
       ) : (
         <div className="space-y-5">
           <form action={acciones.guardarUmbrales} className="space-y-3" id="umbrales-atipicos">
@@ -110,7 +110,7 @@ export function SeccionUmbralesAvisos({ datos }: { datos: UmbralesAvisosVista })
             <div className="flex items-end gap-3 flex-wrap">
               <Numero nombre="plazo_meses" etiqueta="Plazo (meses)" valor={config.avisos.plazo.meses} min={PLAZO_MESES_MIN} max={PLAZO_MESES_MAX} />
               <label className="block">
-                <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Avisar cuántos días antes</span>
+                <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Avisar cuántos días antes</span>
                 <input name="aviso_dias" defaultValue={config.avisos.plazo.avisoDias.join(', ')} required maxLength={40} placeholder="30, 7"
                   aria-label={`Días de aviso antes del vencimiento (de 1 a ${AVISO_DIAS_MAX}, separados por comas)`}
                   className={`${CSS_INPUT} w-[150px] mt-0.5`} style={ESTILO_INPUT} />
@@ -130,7 +130,7 @@ export function SeccionUmbralesAvisos({ datos }: { datos: UmbralesAvisosVista })
             <h3 className={SUBTITULO} style={{ color: 'var(--muted)' }}>A quién se avisa</h3>
             <div className="flex items-end gap-2 flex-wrap">
               <label className="block">
-                <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>WhatsApp (10 a 15 dígitos)</span>
+                <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>WhatsApp (10 a 15 dígitos)</span>
                 <input name="telefono" defaultValue={config.telefono ?? ''} maxLength={30} placeholder="Vacío = solo en pantalla" inputMode="tel"
                   className={`${CSS_INPUT} w-[220px] mt-0.5`} style={ESTILO_INPUT} />
               </label>

@@ -85,7 +85,7 @@ const ETIQUETA = 'block text-[11px] font-medium mb-1';
 
 function Aviso({ children }: { children: React.ReactNode }) {
   return (
-    <p role="alert" className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
+    <p role="alert" className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
       <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />{children}
     </p>
   );
@@ -94,7 +94,7 @@ function Aviso({ children }: { children: React.ReactNode }) {
 function Enviar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className="rv-btn rv-btn--secondary hairline rounded-lg px-3 h-9 text-[12.5px] inline-flex items-center gap-1.5 disabled:opacity-60 hover:bg-[var(--canvas)]">
+    <button type="submit" disabled={pending} className="rv-btn rv-btn--secondary hairline rounded-lg px-3 h-9 text-[12px] inline-flex items-center gap-1.5 disabled:opacity-60 hover:bg-[var(--canvas)]">
       <Upload width={14} height={14} strokeWidth={1.75} aria-hidden />{pending ? 'Leyendo el archivo…' : 'Subir y leer'}
     </button>
   );
@@ -136,7 +136,7 @@ function FormaSubir({ accion }: { accion: AccionPrograma }) {
             <input name="archivo" type="file" required accept=".csv,.txt,text/csv" className={`${CAMPO} py-1.5 h-auto`} />
           </label>
         </div>
-        <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
           Sube el archivo completo del día: si ya lo habías subido, no se duplica nada; si cambió, se guarda qué cambió.
           El Excel con colores (.xlsx) todavía no se puede leer: guárdalo como CSV.
         </p>
@@ -152,7 +152,7 @@ function FormaSubir({ accion }: { accion: AccionPrograma }) {
 export function Salida({ estado }: { estado: ResultadoPrograma }) {
   if (estado && !estado.ok) return <AvisoResultado estado={estado} />;
   if (estado?.ok) return <Resultado resumen={estado.resumen} />;
-  return <p className="text-[12.5px]" style={{ color: 'var(--muted)' }} data-testid="vacio">{VACIO}</p>;
+  return <p className="text-[12px]" style={{ color: 'var(--muted)' }} data-testid="vacio">{VACIO}</p>;
 }
 
 function Resultado({ resumen: r }: { resumen: ResumenPrograma }) {
@@ -174,14 +174,14 @@ function Resultado({ resumen: r }: { resumen: ResumenPrograma }) {
             + (g.desaparecidas > 0 ? ` ${miles(g.desaparecidas)} ${plural(g.desaparecidas, 'ya no viene', 'ya no vienen')} en el archivo: las dejé ocultas, no las borré.` : '')}
         </p>
         {r.sinFecha > 0 ? (
-          <p className="text-[12.5px]" style={{ color: 'var(--bad)' }}>
+          <p className="text-[12px]" style={{ color: 'var(--bad)' }}>
             {miles(r.sinFecha)} {plural(r.sinFecha, 'fila', 'filas')} no tenían fecha de sección y no se guardaron.
           </p>
         ) : null}
       </div>
 
       {r.avisosArchivo.length > 0 ? (
-        <ul className="text-[12.5px] space-y-1 list-disc pl-5" aria-label="Avisos del archivo">
+        <ul className="text-[12px] space-y-1 list-disc pl-5" aria-label="Avisos del archivo">
           {r.avisosArchivo.map((a, i) => <li key={i}>{a}</li>)}
         </ul>
       ) : null}
@@ -189,11 +189,11 @@ function Resultado({ resumen: r }: { resumen: ResumenPrograma }) {
       {r.descartadas.length > 0 ? (
         <div className="space-y-1.5">
           <h3 className="font-display text-[14px] font-semibold">Lo que descarté</h3>
-          <ul className="text-[12.5px] space-y-0.5 list-disc pl-5">
+          <ul className="text-[12px] space-y-0.5 list-disc pl-5">
             {r.descartadas.map((d) => <li key={d.lineaCsv}>Línea {miles(d.lineaCsv)} del archivo: {MOTIVOS[d.motivo] ?? 'no se pudo entender'}.</li>)}
           </ul>
           {r.totalDescartadas > r.descartadas.length ? (
-            <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>Y {miles(r.totalDescartadas - r.descartadas.length)} más.</p>
+            <p className="text-[11px]" style={{ color: 'var(--muted)' }}>Y {miles(r.totalDescartadas - r.descartadas.length)} más.</p>
           ) : null}
         </div>
       ) : null}
@@ -201,7 +201,7 @@ function Resultado({ resumen: r }: { resumen: ResumenPrograma }) {
       <div className="space-y-1.5">
         <h3 className="font-display text-[14px] font-semibold">Por día</h3>
         <div className="overflow-x-auto">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full text-[12px]">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
                 <th className="font-medium py-1 pr-3">Día</th>
@@ -227,7 +227,7 @@ function Resultado({ resumen: r }: { resumen: ResumenPrograma }) {
       {r.filasConAviso.length > 0 ? (
         <div className="space-y-1.5">
           <h3 className="font-display text-[14px] font-semibold">Filas que conviene revisar</h3>
-          <ul className="text-[12.5px] space-y-1">
+          <ul className="text-[12px] space-y-1">
             {r.filasConAviso.map((f) => (
               <li key={f.lineaCsv}>
                 <span className="font-medium">Línea {miles(f.lineaCsv)}{f.fecha ? ` (${dia(f.fecha)})` : ''}:</span>{' '}
@@ -236,7 +236,7 @@ function Resultado({ resumen: r }: { resumen: ResumenPrograma }) {
             ))}
           </ul>
           {r.totalConAviso > r.filasConAviso.length ? (
-            <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>Y {miles(r.totalConAviso - r.filasConAviso.length)} filas más con aviso.</p>
+            <p className="text-[11px]" style={{ color: 'var(--muted)' }}>Y {miles(r.totalConAviso - r.filasConAviso.length)} filas más con aviso.</p>
           ) : null}
         </div>
       ) : null}
@@ -254,7 +254,7 @@ export function VistaProgramaVigia({ sufijo, puedeEscribir, vigiaEncendido, acci
 }) {
   return (
     <MarcoPagina titulo="Programa de despacho" apoyo="Sube el archivo del programa de despacho para que el Vigía avise a tus clientes.">
-      <nav aria-label="Volver" className="text-[12.5px]">
+      <nav aria-label="Volver" className="text-[12px]">
         <Link href={`/dashboard/agentes/vigia${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Volver a servicio al cliente</Link>
       </nav>
 
@@ -271,8 +271,8 @@ export function VistaProgramaVigia({ sufijo, puedeEscribir, vigiaEncendido, acci
           <FormaSubir accion={accion} />
         ) : (
           <>
-          <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Solo el dueño o el encargado de la flota sube el programa. Tú puedes ver esta pantalla pero no cargar archivos.</p>
-          <p className="text-[12.5px]" style={{ color: 'var(--muted)' }} data-testid="vacio">{VACIO}</p>
+          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Solo el dueño o el encargado de la flota sube el programa. Tú puedes ver esta pantalla pero no cargar archivos.</p>
+          <p className="text-[12px]" style={{ color: 'var(--muted)' }} data-testid="vacio">{VACIO}</p>
           </>
         )}
       </section>

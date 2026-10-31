@@ -61,7 +61,7 @@ export function SeccionPorGasto({ config, plan, tablero, firma, instrucciones, g
 
       {/* ── Qué comprobante falta de qué gasto ── */}
       <div>
-        <h3 className="text-[12.5px] font-semibold mb-2">Qué falta, gasto por gasto</h3>
+        <h3 className="text-[12px] font-semibold mb-2">Qué falta, gasto por gasto</h3>
         {plan.pendientes.length === 0 ? (
           <EstadoVacio icono={<FileWarning width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
             {config.porGasto
@@ -74,7 +74,7 @@ export function SeccionPorGasto({ config, plan, tablero, firma, instrucciones, g
               <thead>
                 <tr className="text-left" style={{ color: 'var(--faint)' }}>
                   {['Viaje', 'Gasto', 'Qué falta', 'Chofer', 'Días', 'Siguiente aviso'].map((t, i) => (
-                    <th key={t} className={`etiqueta-mono text-[10px] uppercase font-normal pb-2 ${i >= 4 ? 'text-right' : ''}`}>{t}</th>
+                    <th key={t} className={`etiqueta-mono text-[11px] uppercase font-normal pb-2 ${i >= 4 ? 'text-right' : ''}`}>{t}</th>
                   ))}
                 </tr>
               </thead>
@@ -100,7 +100,7 @@ export function SeccionPorGasto({ config, plan, tablero, firma, instrucciones, g
               </tbody>
             </table>
             {plan.pendientes.length > MAX_FILAS && (
-              <p className="text-[11.5px] mt-2" style={{ color: 'var(--faint)' }}>
+              <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
                 …y {numero(plan.pendientes.length - MAX_FILAS)} gastos más (los más atrasados están arriba).
               </p>
             )}
@@ -111,17 +111,17 @@ export function SeccionPorGasto({ config, plan, tablero, firma, instrucciones, g
       <div className="grid lg:grid-cols-2 gap-4">
         {/* ── Efectividad ── */}
         <div>
-          <h3 className="text-[12.5px] font-semibold mb-2 flex items-center gap-1.5">
+          <h3 className="text-[12px] font-semibold mb-2 flex items-center gap-1.5">
             <Gauge width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} /> Efectividad por tier y por motivo
           </h3>
           {ef === null ? (
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No se pudo leer la efectividad ahora mismo.</p>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudo leer la efectividad ahora mismo.</p>
           ) : ef.avisos === 0 ? (
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
               Aún sin avisos por gasto: cada aviso que salga se mide aquí — cuántos produjeron el comprobante y en cuánto tiempo.
             </p>
           ) : (
-            <div className="space-y-3 text-[12.5px]">
+            <div className="space-y-3 text-[12px]">
               <Mini titulo="Por tier (días)" filas={ef.porTier.map((t) => [`${t.tier} días`, t.avisos, t.resueltos])} />
               <Mini titulo="Por motivo" filas={ef.porMotivo.map((m) => [ROTULO_MOTIVO[m.motivo], m.avisos, m.resueltos])} />
               {ef.cerradosSinResolver > 0 && (
@@ -135,13 +135,13 @@ export function SeccionPorGasto({ config, plan, tablero, firma, instrucciones, g
 
         {/* ── Bitácora por gasto ── */}
         <div>
-          <h3 className="text-[12.5px] font-semibold mb-2">Últimos avisos por gasto</h3>
+          <h3 className="text-[12px] font-semibold mb-2">Últimos avisos por gasto</h3>
           {tablero === null ? (
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No se pudo leer la bitácora ahora mismo.</p>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudo leer la bitácora ahora mismo.</p>
           ) : tablero.bitacora.length === 0 ? (
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Aún sin avisos por gasto — cada intento queda escrito aquí, salga o no.</p>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Aún sin avisos por gasto — cada intento queda escrito aquí, salga o no.</p>
           ) : (
-            <div className="space-y-2 text-[12.5px]">
+            <div className="space-y-2 text-[12px]">
               {tablero.bitacora.map((c) => (
                 <div key={`${c.gastoId}-${c.tier}`}>
                   <span className="font-medium">{c.operadorNombre ?? 'Chofer'}</span>
@@ -164,7 +164,7 @@ export function SeccionPorGasto({ config, plan, tablero, firma, instrucciones, g
       </div>
 
       <div>
-        <h3 className="text-[12.5px] font-semibold mb-2">Configuración de la cobranza por gasto</h3>
+        <h3 className="text-[12px] font-semibold mb-2">Configuración de la cobranza por gasto</h3>
         <FormaPorGasto config={config} ejemplo={ejemplo} firma={firma} instrucciones={instrucciones} guardar={guardar} />
       </div>
     </section>
@@ -175,7 +175,7 @@ export function SeccionPorGasto({ config, plan, tablero, firma, instrucciones, g
 function Mini({ titulo, filas }: { titulo: string; filas: Array<[string, number, number]> }) {
   return (
     <div>
-      <div className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>{titulo}</div>
+      <div className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>{titulo}</div>
       {filas.map(([rotulo, avisos, resueltos]) => (
         <div key={rotulo} className="flex items-center justify-between gap-3 py-0.5">
           <span>{rotulo}</span>

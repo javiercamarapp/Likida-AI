@@ -36,7 +36,7 @@ const VACIO_PENDIENTES = 'No hay avisos esperando a nadie. Todo lo que se armó 
 
 const CAMPO = 'hairline rounded-lg px-2.5 h-9 text-[13px] outline-none focus:border-[var(--muted)] w-full';
 const ETIQUETA = 'block text-[11px] font-medium mb-1';
-const BOTON = 'hairline rounded-lg px-3 h-9 text-[12.5px] inline-flex items-center gap-1.5 disabled:opacity-60 hover:bg-[var(--canvas)]';
+const BOTON = 'hairline rounded-lg px-3 h-9 text-[12px] inline-flex items-center gap-1.5 disabled:opacity-60 hover:bg-[var(--canvas)]';
 
 /** AAAA-MM-DD → DD/MM/AAAA, sin pasar por Date. */
 function dia(fecha: string): string {
@@ -57,7 +57,7 @@ const COLOR_ESTADO: Record<string, string> = {
 
 function Aviso({ children }: { children: React.ReactNode }) {
   return (
-    <p role="alert" className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
+    <p role="alert" className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
       <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />{children}
     </p>
   );
@@ -109,13 +109,13 @@ function Tarjeta({ t, accion, puedeDecidir }: { t: TarjetaAviso; accion: AccionA
       </header>
 
       {t.interno ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Alerta interna para la oficina: no se manda al cliente.</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Alerta interna para la oficina: no se manda al cliente.</p>
       ) : null}
-      {t.cambio ? <p className="text-[12.5px]" data-testid="cambio"><span className="font-medium">Qué cambió:</span> {t.cambio}</p> : null}
+      {t.cambio ? <p className="text-[12px]" data-testid="cambio"><span className="font-medium">Qué cambió:</span> {t.cambio}</p> : null}
 
       {t.errorLlano ? <Aviso>{t.errorLlano}</Aviso> : null}
       {t.causas.length > 0 ? (
-        <ul className="text-[12.5px] list-disc pl-5 space-y-0.5" aria-label="Por qué no hay destinatario" style={{ color: 'var(--bad)' }}>
+        <ul className="text-[12px] list-disc pl-5 space-y-0.5" aria-label="Por qué no hay destinatario" style={{ color: 'var(--bad)' }}>
           {t.causas.map((c) => <li key={c}>{c}</li>)}
         </ul>
       ) : null}
@@ -124,28 +124,28 @@ function Tarjeta({ t, accion, puedeDecidir }: { t: TarjetaAviso; accion: AccionA
         <div>
           <h5 className="text-[11px] font-medium mb-1">Qué datos tiene</h5>
           {t.tiene.length > 0 ? (
-            <ul className="text-[12.5px] space-y-0.5" aria-label="Datos que tiene">
+            <ul className="text-[12px] space-y-0.5" aria-label="Datos que tiene">
               {t.tiene.map((d) => (
                 <li key={d.campo}>
                   <span className="font-medium">{d.rotulo}:</span> {d.valor} <span style={{ color: 'var(--muted)' }}>({d.fuente})</span>
                 </li>
               ))}
             </ul>
-          ) : <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Todavía no tiene ningún dato.</p>}
+          ) : <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Todavía no tiene ningún dato.</p>}
         </div>
         <div>
           <h5 className="text-[11px] font-medium mb-1">Qué falta</h5>
           {t.faltan.length > 0 ? (
-            <ul className="text-[12.5px] space-y-0.5 list-disc pl-5" aria-label="Datos que faltan" style={{ color: 'var(--bad)' }}>
+            <ul className="text-[12px] space-y-0.5 list-disc pl-5" aria-label="Datos que faltan" style={{ color: 'var(--bad)' }}>
               {t.faltan.map((f) => <li key={f.campo}>{f.texto}</li>)}
             </ul>
-          ) : <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No falta nada.</p>}
+          ) : <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No falta nada.</p>}
         </div>
       </div>
 
       <div>
         <h5 className="text-[11px] font-medium mb-1">Lo que se le va a decir al cliente</h5>
-        <pre className="hairline rounded-lg px-3 py-2 text-[12.5px] whitespace-pre-wrap font-sans" data-testid="texto">{t.texto}</pre>
+        <pre className="hairline rounded-lg px-3 py-2 text-[12px] whitespace-pre-wrap font-sans" data-testid="texto">{t.texto}</pre>
       </div>
 
       {puedeDecidir ? (
@@ -157,7 +157,7 @@ function Tarjeta({ t, accion, puedeDecidir }: { t: TarjetaAviso; accion: AccionA
           </form>
 
           {p.editar ? (
-            <details className="text-[12.5px]">
+            <details className="text-[12px]">
               <summary className="cursor-pointer inline-flex items-center gap-1.5"><Pencil width={14} height={14} strokeWidth={1.75} aria-hidden />Editar</summary>
               <form action={despachar} className="space-y-2 mt-2">
                 <input type="hidden" name="id" value={t.id} />
@@ -171,7 +171,7 @@ function Tarjeta({ t, accion, puedeDecidir }: { t: TarjetaAviso; accion: AccionA
           ) : null}
 
           {p.capturar ? (
-            <details className="text-[12.5px]">
+            <details className="text-[12px]">
               <summary className="cursor-pointer">Capturar lo que falta</summary>
               <form action={despachar} className="space-y-3 mt-2">
                 <input type="hidden" name="id" value={t.id} />
@@ -194,7 +194,7 @@ function Tarjeta({ t, accion, puedeDecidir }: { t: TarjetaAviso; accion: AccionA
                   <label><span className={ETIQUETA}>Vigencia de la licencia (no se envía)</span><input name="licenciaVence" type="date" className={CAMPO} /></label>
                   <label><span className={ETIQUETA}>Teléfono del operador (no se envía)</span><input name="telefono" inputMode="tel" maxLength={16} className={CAMPO} autoComplete="off" /></label>
                 </div>
-                <fieldset className="text-[11.5px]" data-testid="borrar-datos">
+                <fieldset className="text-[11px]" data-testid="borrar-datos">
                   <legend className={ETIQUETA}>Quitar un dato mal escrito (déjalo vacío arriba y márcalo aquí)</legend>
                   <div className="flex flex-wrap gap-x-3 gap-y-1">
                     {([['operadorNombre', 'Operador'], ['placasUnidad', 'Placas unidad'], ['placasCaja', 'Placas caja'], ['estadoCaja', 'Estado caja'], ['licencia', 'Licencia'], ['licenciaVence', 'Vigencia'], ['telefono', 'Teléfono']] as const).map(([v, r]) => (
@@ -202,14 +202,14 @@ function Tarjeta({ t, accion, puedeDecidir }: { t: TarjetaAviso; accion: AccionA
                     ))}
                   </div>
                 </fieldset>
-                <p className="text-[11.5px]" style={{ color: 'var(--muted)' }} data-testid="privacidad">{POLITICA_PRIVACIDAD}</p>
+                <p className="text-[11px]" style={{ color: 'var(--muted)' }} data-testid="privacidad">{POLITICA_PRIVACIDAD}</p>
                 <Boton accion="capturar"><Truck width={14} height={14} strokeWidth={1.75} aria-hidden />Guardar los datos</Boton>
               </form>
             </details>
           ) : null}
 
           {p.descartar ? (
-            <details className="text-[12.5px]">
+            <details className="text-[12px]">
               <summary className="cursor-pointer inline-flex items-center gap-1.5" style={{ color: 'var(--bad)' }}><Trash2 width={14} height={14} strokeWidth={1.75} aria-hidden />Descartar</summary>
               <form action={despachar} className="mt-2 space-y-2">
                 <input type="hidden" name="id" value={t.id} />
@@ -248,7 +248,7 @@ export function VistaAvisosVigia({ sufijo, grupos, total, hayMas = false, soloPe
   const conPendientes = `${base}${sufijo ? '&' : '?'}pendientes=1`;
   return (
     <MarcoPagina titulo="Avisos de viaje" apoyo="Los avisos que el Vigía arma para tus clientes, por día, para confirmarlos, editarlos o descartarlos.">
-      <nav aria-label="Navegación" className="flex flex-wrap gap-2 text-[12.5px]">
+      <nav aria-label="Navegación" className="flex flex-wrap gap-2 text-[12px]">
         <Link href={`/dashboard/agentes/vigia${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Volver a servicio al cliente</Link>
         <Link href={soloPendientes ? base : conPendientes} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]" aria-current={soloPendientes ? 'true' : undefined}>
           {soloPendientes ? 'Mostrar todos' : 'Solo pendientes'}
@@ -264,18 +264,18 @@ export function VistaAvisosVigia({ sufijo, grupos, total, hayMas = false, soloPe
         <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No pude confirmar si el aviso de viaje está encendido.</p>
       ) : null}
       {!puedeDecidir ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Solo el dueño o el encargado de la flota confirma, edita o descarta avisos. Tú puedes verlos, sin teléfonos completos.</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Solo el dueño o el encargado de la flota confirma, edita o descarta avisos. Tú puedes verlos, sin teléfonos completos.</p>
       ) : null}
 
       {sinMigrar ? <Aviso>La base de datos todavía no está lista para los avisos de viaje. Avísale a soporte.</Aviso> : null}
       {errorLectura ? <Aviso>{errorLectura}</Aviso> : null}
 
       {!sinMigrar && !errorLectura && total === 0 ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }} data-testid="vacio">{soloPendientes ? VACIO_PENDIENTES : VACIO_TODOS}</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }} data-testid="vacio">{soloPendientes ? VACIO_PENDIENTES : VACIO_TODOS}</p>
       ) : null}
 
       {hayMas ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }} data-testid="hay-mas">
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }} data-testid="hay-mas">
           Se muestran los {total} avisos más recientes; puede haber más antiguos. {soloPendientes ? 'Resuelve los pendientes para ver el resto.' : 'Usa «Solo pendientes» para ver lo que falta por resolver.'}
         </p>
       ) : null}
@@ -285,7 +285,7 @@ export function VistaAvisosVigia({ sufijo, grupos, total, hayMas = false, soloPe
           <h2 id={`dia-${g.fecha || 'sin-fecha'}`} className="font-display text-[15px] font-semibold">{dia(g.fecha)}</h2>
           {g.clientes.map((c) => (
             <div key={c.cliente} className="space-y-2">
-              <h3 className="text-[12.5px] font-medium" style={{ color: 'var(--muted)' }}>{c.cliente}</h3>
+              <h3 className="text-[12px] font-medium" style={{ color: 'var(--muted)' }}>{c.cliente}</h3>
               {c.tarjetas.map((t) => <Tarjeta key={t.id} t={t} accion={accion} puedeDecidir={puedeDecidir} />)}
             </div>
           ))}

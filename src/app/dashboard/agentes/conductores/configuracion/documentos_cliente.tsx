@@ -30,7 +30,7 @@ function BotonQuitar({ nombre }: { nombre: string }) {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending} aria-label={`Quitar ${nombre}`}
-      className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12.5px] font-medium hairline transition-opacity hover:opacity-85 disabled:opacity-50">
+      className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12px] font-medium hairline transition-opacity hover:opacity-85 disabled:opacity-50">
       {pending ? 'Quitando…' : 'Quitar'}
     </button>
   );
@@ -77,7 +77,7 @@ function FormaAgregar({ clientes, accion }: { clientes: Array<{ id: string; nomb
             <option value="complementario">Complementario (se pide, pero no frena el cierre)</option>
           </select>
         </label>
-        <div className="flex items-end gap-4 text-[12.5px] pb-2">
+        <div className="flex items-end gap-4 text-[12px] pb-2">
           <label className="inline-flex items-center gap-1.5"><input type="checkbox" name="requiereFirma" /> Debe venir firmado</label>
           <label className="inline-flex items-center gap-1.5"><input type="checkbox" name="requiereSello" /> Debe venir sellado</label>
         </div>
@@ -97,7 +97,7 @@ export function DocumentosCliente({ clientes, documentos, accionAlta, accionBaja
 }) {
   if (documentos === null) {
     return (
-      <p role="alert" className="text-[12.5px]" style={{ color: 'var(--bad)' }}>
+      <p role="alert" className="text-[12px]" style={{ color: 'var(--bad)' }}>
         No se pudo leer el catálogo de documentos ahora mismo (o falta aplicar la migración 0809); intenta de nuevo en un momento.
       </p>
     );
@@ -113,9 +113,9 @@ export function DocumentosCliente({ clientes, documentos, accionAlta, accionBaja
     <div className="space-y-3">
       {accionAlta && (clientes.length > 0
         ? <FormaAgregar clientes={clientes} accion={accionAlta} />
-        : <p role="status" className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Todavía no hay clientes dados de alta; cuando los haya, aquí eliges de cuál son los documentos.</p>)}
+        : <p role="status" className="text-[12px]" style={{ color: 'var(--muted)' }}>Todavía no hay clientes dados de alta; cuando los haya, aquí eliges de cuál son los documentos.</p>)}
       {conCatalogo.length === 0 ? (
-        <p role="status" className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p role="status" className="text-[12px]" style={{ color: 'var(--muted)' }}>
           Ningún cliente tiene documentos propios todavía. A todos se les pide solo el comprobante de entrega de siempre.
         </p>
       ) : (
@@ -124,7 +124,7 @@ export function DocumentosCliente({ clientes, documentos, accionAlta, accionBaja
             const cat = catalogoDeCliente(documentos, c.id);
             return (
               <section key={c.id} aria-label={`Documentos de ${c.nombre}`} className="space-y-1">
-                <h3 className="text-[12.5px] font-medium">{c.nombre}</h3>
+                <h3 className="text-[12px] font-medium">{c.nombre}</h3>
                 {cat.basicos.length > 0 && (
                   <div>
                     <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Básicos: sin ellos no se cierra el viaje</p>

@@ -176,15 +176,15 @@ export function leerFormularioConfig(fd: FormData): ResultadoFormulario {
 
 // ── Vista ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-const CSS_INPUT = 'hairline text-[12.5px] px-2.5 py-1.5 rounded-lg w-full';
+const CSS_INPUT = 'hairline text-[12px] px-2.5 py-1.5 rounded-lg w-full';
 const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
+const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
 
 function Etiqueta({ t, children }: { t: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{t}</span>
+      <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>{t}</span>
       {children}
     </label>
   );
@@ -206,16 +206,16 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
   const renombres = (Array.isArray(config.renombres) ? config.renombres : []).filter(esRenombre);
   return (
     <MarcoPagina titulo="Configuración del desglose" apoyo="Cómo se entrega el desglose de cada liquidación, quién lo recibe, cómo se ve y qué conceptos retienen el envío." acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/liquidacion${sufijo}`} icono={<ArrowLeft width={12} height={12} strokeWidth={2} />}>Volver al agente</BotonEnlace>}>
-      {aviso && <p role="status" className="card p-3 text-[12.5px]" style={{ color: 'var(--ink)' }}>{aviso}</p>}
-      {error && <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>{error}</p>}
+      {aviso && <p role="status" className="card p-3 text-[12px]" style={{ color: 'var(--ink)' }}>{aviso}</p>}
+      {error && <p role="alert" className="card p-3 text-[12px]" style={{ color: 'var(--bad)' }}>{error}</p>}
 
       {!disponible && (
-        <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>
+        <p role="alert" className="card p-3 text-[12px]" style={{ color: 'var(--bad)' }}>
           La configuración de la entrega por correo todavía no está disponible en esta base. No se puede leer ni guardar nada hasta que se aplique.
         </p>
       )}
       {disponible && !hayFila && (
-        <p className="card p-3 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="card p-3 text-[12px]" style={{ color: 'var(--muted)' }}>
           Todavía no hay configuración guardada: el agente sigue entregando por WhatsApp y no se manda nada por correo. El envío por correo no se activa solo; tú lo enciendes cuando esté todo listo.
         </p>
       )}
@@ -233,7 +233,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
               </select>
             </Etiqueta>
             <Etiqueta t="Envío por correo">
-              <span className="flex items-center gap-2 text-[12.5px]">
+              <span className="flex items-center gap-2 text-[12px]">
                 <input type="checkbox" name="activa" defaultChecked={config.activa} disabled={off} /> Activar el envío
               </span>
               <Ayuda>Apagado, no sale ningún correo aunque haya desgloses listos: quedan en espera y salen solos al encenderlo.</Ayuda>
@@ -266,14 +266,14 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
               <Ayuda>Recibe una copia de cada desglose para el archivo de la empresa.</Ayuda>
             </Etiqueta>
             <Etiqueta t="Coordinador">
-              <span className="flex items-center gap-2 text-[12.5px]">
+              <span className="flex items-center gap-2 text-[12px]">
                 <input type="checkbox" name="enviaCoordinador" defaultChecked={config.enviaCoordinador} disabled={off} /> Enviar también al coordinador del operador
               </span>
             </Etiqueta>
             <fieldset className="flex flex-col gap-1" disabled={off}>
-              <legend className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Tipos de operador que reciben su desglose</legend>
+              <legend className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Tipos de operador que reciben su desglose</legend>
               {TIPOS_OPERADOR.map((t) => (
-                <span key={t.valor} className="flex items-center gap-2 text-[12.5px]">
+                <span key={t.valor} className="flex items-center gap-2 text-[12px]">
                   <input type="checkbox" name="tiposQueReciben" value={t.valor} defaultChecked={config.tiposQueReciben.includes(t.valor)} /> {t.etiqueta}
                 </span>
               ))}
@@ -303,7 +303,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
           </p>
           <div className="grid sm:grid-cols-2 gap-3">
             <Etiqueta t="Modo primer mes">
-              <span className="flex items-center gap-2 text-[12.5px]">
+              <span className="flex items-center gap-2 text-[12px]">
                 <input type="checkbox" name="primerMes" defaultChecked={config.primerMesHasta !== null} disabled={off} /> Activar la revisión por departamento
               </span>
             </Etiqueta>
@@ -320,7 +320,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
           <h2 className="font-display text-[15px] font-semibold">3. Cómo se ve el desglose</h2>
           <div className="grid sm:grid-cols-2 gap-3">
             <Etiqueta t="Renglón de viaje">
-              <span className="flex items-center gap-2 text-[12.5px]">
+              <span className="flex items-center gap-2 text-[12px]">
                 <input type="checkbox" name="agruparViaje" defaultChecked={config.agruparViaje} disabled={off} /> Juntar los conceptos de viaje en un solo renglón
               </span>
             </Etiqueta>

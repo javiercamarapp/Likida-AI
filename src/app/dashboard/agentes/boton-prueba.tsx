@@ -39,7 +39,7 @@ export function BotonPrueba({ mandarPrueba, canalListo }: {
         <form action={accion} className="shrink-0">
           <BotonMandar apagado={!canalListo} />
         </form>
-        <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
           Comprueba que estos avisos llegan de verdad: la prueba va solo a tu correo, no al reparto.
         </p>
       </div>
@@ -59,7 +59,7 @@ function BotonMandar({ apagado }: { apagado: boolean }) {
     <button
       type="submit" disabled={pending || apagado}
       title={apagado ? 'El correo no está configurado en este entorno' : undefined}
-      className="rv-btn rv-btn--secondary inline-flex items-center gap-1.5 hairline text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)] disabled:opacity-40"
+      className="rv-btn rv-btn--secondary inline-flex items-center gap-1.5 hairline text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)] disabled:opacity-40"
       style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
       <Send width={13} height={13} strokeWidth={2} />
       {pending ? 'Mandando…' : 'Mándate una prueba'}

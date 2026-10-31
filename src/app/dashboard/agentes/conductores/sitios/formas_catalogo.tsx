@@ -31,7 +31,7 @@ export function FormaCatalogo({ accion }: { accion: AccionSitio }) {
   return (
     <form action={enviar} className="space-y-3" aria-label="Analizar o importar el catálogo depurado" encType="multipart/form-data">
       <label className="block"><span className={ETIQUETA}>Archivo CSV o JSON</span>
-        <input type="file" name="archivo" accept=".csv,.json,text/csv,application/json,text/plain" className="text-[12.5px]" />
+        <input type="file" name="archivo" accept=".csv,.json,text/csv,application/json,text/plain" className="text-[12px]" />
       </label>
       <div className="flex gap-3 flex-wrap">
         <label className="block"><span className={ETIQUETA}>Qué hacer</span>

@@ -29,7 +29,7 @@ export function BotonAnular({ anular, desgloseId }: { anular: AccionAnular; desg
       <input type="hidden" name="desglose" value={desgloseId} />
       <button type="button" onClick={() => setAbierto(true)}
         title="Para un archivo subido por error: deja de contar, no se borra"
-        className="rv-btn rv-btn--danger hairline inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
+        className="rv-btn rv-btn--danger hairline inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
         style={{ background: 'var(--surface)', color: 'var(--bad)' }}>
         <Ban width={13} height={13} strokeWidth={2} /> Anular
       </button>
@@ -44,9 +44,9 @@ export function BotonAnular({ anular, desgloseId }: { anular: AccionAnular; desg
               queda de constancia con quién lo anuló y por qué. El archivo correcto (o este mismo, ya arreglado) puede volver a mandarse; si había llegado por consulta automática (pull o SFTP), el sistema no lo vuelve a tomar solo: súbelo a mano para cargarlo otra vez.
             </p>
             <label className="block">
-              <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Motivo (obligatorio, hasta 500 caracteres)</span>
+              <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Motivo (obligatorio, hasta 500 caracteres)</span>
               <textarea name="motivo" required maxLength={500} rows={3}
-                className="hairline text-[12.5px] px-2.5 py-1.5 rounded-lg w-full mt-0.5"
+                className="hairline text-[12px] px-2.5 py-1.5 rounded-lg w-full mt-0.5"
                 style={{ background: 'var(--surface)', color: 'var(--ink)' }} />
             </label>
           </div>

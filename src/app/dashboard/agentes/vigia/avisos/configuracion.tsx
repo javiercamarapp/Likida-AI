@@ -65,11 +65,11 @@ export const TEXTO_PRIVACIDAD =
 
 const CAMPO = 'hairline rounded-lg px-2.5 h-9 text-[13px] outline-none focus:border-[var(--muted)] w-full';
 const ETIQUETA = 'block text-[11px] font-medium mb-1';
-const BOTON = 'hairline rounded-lg px-3 h-9 text-[12.5px] inline-flex items-center gap-1.5 disabled:opacity-60 hover:bg-[var(--canvas)]';
+const BOTON = 'hairline rounded-lg px-3 h-9 text-[12px] inline-flex items-center gap-1.5 disabled:opacity-60 hover:bg-[var(--canvas)]';
 
 function Aviso({ children }: { children: React.ReactNode }) {
   return (
-    <p role="alert" className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
+    <p role="alert" className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
       <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />{children}
     </p>
   );
@@ -97,7 +97,7 @@ function Casillas({ nombre, opciones, marcadas, deshabilitado }: { nombre: strin
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-1.5">
       {opciones.map((o) => (
-        <label key={o.valor} className="inline-flex items-center gap-1.5 text-[12.5px]">
+        <label key={o.valor} className="inline-flex items-center gap-1.5 text-[12px]">
           <input type="checkbox" name={nombre} value={o.valor} defaultChecked={marcadas.includes(o.valor)} disabled={deshabilitado} />
           {o.rotulo}
         </label>
@@ -142,14 +142,14 @@ export function VistaConfiguracionAviso({
           </div>
         </div>
         <div className="px-5 py-5 flex-1 space-y-4">
-          <nav aria-label="Navegación" className="flex flex-wrap gap-2 text-[12.5px]">
+          <nav aria-label="Navegación" className="flex flex-wrap gap-2 text-[12px]">
             <Link href={base} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Volver a los avisos</Link>
           </nav>
 
           {sinMigrar ? <Aviso>La base de datos todavía no está lista para los avisos de viaje. Avísale a soporte.</Aviso> : null}
           {errorLectura ? <Aviso>{errorLectura}</Aviso> : null}
           {!puedeEditar && config ? (
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Solo el dueño o el encargado de la flota cambia esta configuración. Tú puedes verla.</p>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Solo el dueño o el encargado de la flota cambia esta configuración. Tú puedes verla.</p>
           ) : null}
 
           {config ? (
@@ -209,7 +209,7 @@ export function VistaConfiguracionAviso({
                   <p className={ETIQUETA}>Estatus de CCP que cuentan como listo</p>
                   <Casillas nombre="ccp" opciones={opciones.ccp} marcadas={config.ccpListos} deshabilitado={sd} />
                 </div>
-                <label className="inline-flex items-center gap-2 text-[12.5px]">
+                <label className="inline-flex items-center gap-2 text-[12px]">
                   <input type="checkbox" name="exigir_transito" value="1" defaultChecked={config.exigirTransito} disabled={sd} />
                   Además, que el tránsito no esté bloqueado (p. ej. pendiente de cruce)
                 </label>
@@ -227,7 +227,7 @@ export function VistaConfiguracionAviso({
                 </div>
                 <div>
                   <p className={ETIQUETA}>Mapa de colores</p>
-                  <p className="hairline rounded-lg px-2.5 py-2 text-[12.5px]" style={{ color: 'var(--muted)' }} aria-disabled="true" data-testid="colores">{TEXTO_COLORES}</p>
+                  <p className="hairline rounded-lg px-2.5 py-2 text-[12px]" style={{ color: 'var(--muted)' }} aria-disabled="true" data-testid="colores">{TEXTO_COLORES}</p>
                 </div>
               </Seccion>
 
@@ -255,7 +255,7 @@ export function VistaConfiguracionAviso({
                 {puedeEditarPrivacidad ? <input type="hidden" name="op_presente" value="1" /> : null}
                 <div className="flex flex-wrap gap-x-4 gap-y-1.5">
                   {opciones.operador.map((o) => (
-                    <label key={o.campo} className="inline-flex items-center gap-1.5 text-[12.5px]">
+                    <label key={o.campo} className="inline-flex items-center gap-1.5 text-[12px]">
                       <input type="checkbox" name={o.control} value="1" defaultChecked={config.operador[o.campo]} disabled={!puedeEditarPrivacidad} />
                       {o.rotulo}
                     </label>
@@ -267,7 +267,7 @@ export function VistaConfiguracionAviso({
               </Seccion>
 
               <Seccion id="cfg-alias" titulo="Clientes sin ligar">
-                <p className="text-[12.5px]" style={{ color: 'var(--muted)' }} data-testid="alias">{TEXTO_ALIAS}</p>
+                <p className="text-[12px]" style={{ color: 'var(--muted)' }} data-testid="alias">{TEXTO_ALIAS}</p>
               </Seccion>
 
               {puedeEditar ? <div className="flex items-center gap-3"><Guardar /></div> : null}

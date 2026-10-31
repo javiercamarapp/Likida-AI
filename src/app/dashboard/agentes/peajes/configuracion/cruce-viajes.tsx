@@ -9,7 +9,7 @@ export interface CruceViajesVista {
   acciones: { guardarCruceViajes: Accion };
 }
 
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
+const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
 
 /**
@@ -27,10 +27,10 @@ export function SeccionCruceViajes({ datos }: { datos: CruceViajesVista }) {
         por unidad y fecha. Es una señal para revisar, no una acusación. Apagado de origen: sin viajes cargados todo saldría «sin viaje».
       </p>
       {activo === null ? (
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No se pudo leer el estado del cruce ahora mismo.</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudo leer el estado del cruce ahora mismo.</p>
       ) : (
         <div className="space-y-2">
-          <p className="text-[12.5px]">
+          <p className="text-[12px]">
             Estado: <b>{activo ? 'encendido' : 'apagado'}</b>.
             {fuente === null
               ? ' No se pudo leer cuántos viajes hay cargados.'
@@ -42,7 +42,7 @@ export function SeccionCruceViajes({ datos }: { datos: CruceViajesVista }) {
             </p>
           )}
           {!puedeAdministrar ? (
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Solo quien administra la flota lo cambia.</p>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Solo quien administra la flota lo cambia.</p>
           ) : (
             <form action={acciones.guardarCruceViajes} className="flex items-center gap-2 flex-wrap">
               <input type="hidden" name="activo" value={activo ? '0' : '1'} />

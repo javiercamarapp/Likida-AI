@@ -53,7 +53,7 @@ export function FormaPorGasto({ config, ejemplo, firma, instrucciones, guardar }
             className="mt-0.5" />
           <span className="text-[13px]">
             <span className="font-medium">Cobrar por gasto individual</span>
-            <span className="block text-[11.5px]" style={{ color: 'var(--faint)' }}>
+            <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>
               Apagado, el agente cobra por viaje como siempre. Encendido, un viaje con gastos sin comprobante se cobra por gasto
               (un solo mensaje por chofer) y el cobro por viaje solo atiende a los viajes sin gastos.
             </span>
@@ -61,7 +61,7 @@ export function FormaPorGasto({ config, ejemplo, firma, instrucciones, guardar }
         </label>
 
         <div>
-          <label htmlFor="cobg-tiers" className="etiqueta-mono text-[10px] uppercase block mb-1" style={{ color: 'var(--faint)' }}>
+          <label htmlFor="cobg-tiers" className="etiqueta-mono text-[11px] uppercase block mb-1" style={{ color: 'var(--faint)' }}>
             Cadencia por gasto (días desde que se capturó)
           </label>
           <input id="cobg-tiers" name="tiersGasto" value={tiersTexto} onChange={(e) => setTiersTexto(e.target.value)}
@@ -74,7 +74,7 @@ export function FormaPorGasto({ config, ejemplo, firma, instrucciones, guardar }
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label htmlFor="cobg-max" className="etiqueta-mono text-[10px] uppercase block mb-1" style={{ color: 'var(--faint)' }}>
+            <label htmlFor="cobg-max" className="etiqueta-mono text-[11px] uppercase block mb-1" style={{ color: 'var(--faint)' }}>
               Mensajes por chofer al día
             </label>
             <select id="cobg-max" name="maxMensajesDia" value={maxDia} onChange={(e) => setMaxDia(e.target.value)}
@@ -83,7 +83,7 @@ export function FormaPorGasto({ config, ejemplo, firma, instrucciones, guardar }
             </select>
           </div>
           <div>
-            <label htmlFor="cobg-umbral" className="etiqueta-mono text-[10px] uppercase block mb-1" style={{ color: 'var(--faint)' }}>
+            <label htmlFor="cobg-umbral" className="etiqueta-mono text-[11px] uppercase block mb-1" style={{ color: 'var(--faint)' }}>
               Foto ilegible si la lectura es menor a
             </label>
             <input id="cobg-umbral" name="umbralFoto" type="number" min={0.1} max={0.95} step={0.05} value={umbral}
@@ -93,7 +93,7 @@ export function FormaPorGasto({ config, ejemplo, firma, instrucciones, guardar }
         </div>
 
         <div>
-          <span className="etiqueta-mono text-[10px] uppercase block mb-1" style={{ color: 'var(--faint)' }}>
+          <span className="etiqueta-mono text-[11px] uppercase block mb-1" style={{ color: 'var(--faint)' }}>
             Conceptos que deben venir con factura (CFDI)
           </span>
           <div className="flex flex-wrap gap-1.5">
@@ -120,11 +120,11 @@ export function FormaPorGasto({ config, ejemplo, firma, instrucciones, guardar }
       </form>
 
       <div>
-        <div className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>
+        <div className="etiqueta-mono text-[11px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>
           {ejemplo.length > 0 ? 'Así se lee en WhatsApp — con gastos reales de la cola' : 'Así se lee en WhatsApp — con gastos de ejemplo'}
         </div>
         {'error' in borrador ? (
-          <div className="rounded-xl hairline p-4 text-[12.5px]" style={{ background: 'var(--surface)', color: 'var(--warn)' }}>
+          <div className="rounded-xl hairline p-4 text-[12px]" style={{ background: 'var(--surface)', color: 'var(--warn)' }}>
             {borrador.error}
           </div>
         ) : (
@@ -145,7 +145,7 @@ function BotonGuardar() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary text-[12px] font-medium px-3.5 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       {pending ? 'Guardando…' : 'Guardar cobranza por gasto'}
     </button>

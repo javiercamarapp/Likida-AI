@@ -27,7 +27,7 @@ export function SubirFactura({ subirFactura }: { subirFactura: AccionProveedores
       <form action={accion} className="flex items-center gap-2 flex-wrap">
         <input type="file" name="archivo" accept=".xml,text/xml,application/xml" required
           aria-label="XML de la factura de proveedor"
-          className="text-[12.5px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12.5px] file:font-medium file:cursor-pointer"
+          className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer"
           style={{ color: 'var(--muted)' }} />
         <BotonSubir />
       </form>
@@ -47,7 +47,7 @@ function BotonSubir({ rotulo = 'Subir a la bandeja', pendienteRotulo = 'Leyendo�
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Upload width={13} height={13} strokeWidth={2} className={pending ? 'animate-pulse' : ''} />
       {pending ? pendienteRotulo : rotulo}
@@ -74,7 +74,7 @@ export function SubirFotoFactura({ subirFoto }: { subirFoto: AccionProveedores }
         <input type="file" name="archivo" accept="image/jpeg,image/png,image/webp" required
           onChange={(e) => validarArchivoElegido(e.currentTarget)}
           aria-label="Foto de la factura de proveedor"
-          className="text-[12.5px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12.5px] file:font-medium file:cursor-pointer"
+          className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer"
           style={{ color: 'var(--muted)' }} />
         <BotonSubir rotulo="Leer foto con IA" pendienteRotulo="Leyendo la foto…" />
       </form>
@@ -101,10 +101,10 @@ export function BotonesDecision({ facturaId, decidir }: { facturaId: string; dec
         <form action={accion} onSubmit={() => setConfirmando(false)} className="inline-flex items-center gap-2">
           <input type="hidden" name="facturaId" value={facturaId} />
           <input type="hidden" name="decision" value="rechazada" />
-          <span className="text-[11.5px]" style={{ color: 'var(--muted)' }}>¿Rechazarla?</span>
+          <span className="text-[11px]" style={{ color: 'var(--muted)' }}>¿Rechazarla?</span>
           <BotonMini texto="Sí" pendienteTexto="…" destructivo />
           <button type="button" onClick={() => setConfirmando(false)}
-            className="rv-btn rv-btn--secondary hairline text-[11.5px] font-medium px-2 py-1 rounded-lg transition-colors hover:bg-[var(--canvas)]"
+            className="rv-btn rv-btn--secondary hairline text-[11px] font-medium px-2 py-1 rounded-lg transition-colors hover:bg-[var(--canvas)]"
             style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
             No
           </button>
@@ -119,7 +119,7 @@ export function BotonesDecision({ facturaId, decidir }: { facturaId: string; dec
             <BotonMini texto={estado?.confirmar ? 'Aprobar de todos modos' : 'Aprobar'} pendienteTexto="Guardando…" IconoOk />
           </form>
           <button type="button" onClick={() => setConfirmando(true)} title="Rechazar la factura"
-            className="rv-btn rv-btn--secondary hairline inline-flex items-center gap-1 text-[11.5px] font-medium px-2 py-1 rounded-lg transition-colors hover:bg-[var(--canvas)]"
+            className="rv-btn rv-btn--secondary hairline inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-lg transition-colors hover:bg-[var(--canvas)]"
             style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
             <X width={11} height={11} strokeWidth={2} /> Rechazar
           </button>
@@ -144,7 +144,7 @@ export function DireccionBuzon({ direccion }: { direccion: string }) {
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
-      <code className="cifra-mono text-[12.5px] px-2 py-1 rounded-lg hairline break-all"
+      <code className="cifra-mono text-[12px] px-2 py-1 rounded-lg hairline break-all"
         style={{ background: 'var(--surface)' }}>{direccion}</code>
       <button type="button" aria-label="Copiar la dirección del buzón" onClick={copiar}
         className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--canvas)]"
@@ -203,7 +203,7 @@ function BotonBuzon({ texto, pendienteTexto, destructivo }: {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className={`rv-btn ${destructivo ? 'rv-btn--danger' : 'rv-btn--primary'} inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50`}
+      className={`rv-btn ${destructivo ? 'rv-btn--danger' : 'rv-btn--primary'} inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50`}
       style={destructivo
         ? { background: 'var(--badbg)', color: 'var(--bad)' }
         : { background: 'var(--marca)', color: 'var(--marca-fg)' }}>
@@ -219,7 +219,7 @@ function BotonMini({ texto, pendienteTexto, IconoOk, destructivo }: {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="inline-flex items-center gap-1 text-[11.5px] font-medium px-2.5 py-1 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
       style={destructivo
         ? { background: 'var(--badbg)', color: 'var(--bad)' }
         : { background: 'var(--marca)', color: 'var(--marca-fg)' }}>

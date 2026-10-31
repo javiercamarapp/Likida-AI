@@ -69,7 +69,7 @@ const VACIO = 'Carga el programa del día para ver el estatus.';
 function Enviar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className="rv-btn rv-btn--secondary hairline rounded-lg px-3 h-9 text-[12.5px] inline-flex items-center gap-1.5 disabled:opacity-60 hover:bg-[var(--canvas)]">
+    <button type="submit" disabled={pending} className="rv-btn rv-btn--secondary hairline rounded-lg px-3 h-9 text-[12px] inline-flex items-center gap-1.5 disabled:opacity-60 hover:bg-[var(--canvas)]">
       <Upload width={14} height={14} strokeWidth={1.75} aria-hidden />{pending ? 'Leyendo el archivo…' : 'Subir y ver el estatus'}
     </button>
   );
@@ -85,7 +85,7 @@ function DescargarCsv({ csv }: { csv: string }) {
     URL.revokeObjectURL(url);
   }
   return (
-    <button type="button" onClick={descargar} className="rv-btn rv-btn--secondary hairline rounded-lg px-3 h-9 text-[12.5px] inline-flex items-center gap-1.5 hover:bg-[var(--canvas)]">
+    <button type="button" onClick={descargar} className="rv-btn rv-btn--secondary hairline rounded-lg px-3 h-9 text-[12px] inline-flex items-center gap-1.5 hover:bg-[var(--canvas)]">
       <Download width={14} height={14} strokeWidth={1.75} aria-hidden />Descargar CSV
     </button>
   );
@@ -106,7 +106,7 @@ function Forma({ accion }: { accion: AccionImportacion }) {
             <input name="archivo" type="file" required accept=".csv,.txt,text/csv" className={`${CAMPO} py-1.5 h-auto`} />
           </label>
         </div>
-        <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+        <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
           Aquí solo se lee el archivo para calcular el estatus: no se guarda ni se escribe en ningún otro sistema.
           El Excel con colores (.xlsx) todavía no se puede leer: guárdalo como CSV.
         </p>
@@ -121,7 +121,7 @@ function Forma({ accion }: { accion: AccionImportacion }) {
 export function Salida({ estado }: { estado: ResultadoImportacion }) {
   if (estado && !estado.ok) return <AvisoResultado estado={estado} />;
   if (estado?.ok) return <Tablero r={estado.resumen} />;
-  return <p className="text-[12.5px]" style={{ color: 'var(--muted)' }} data-testid="vacio">{VACIO}</p>;
+  return <p className="text-[12px]" style={{ color: 'var(--muted)' }} data-testid="vacio">{VACIO}</p>;
 }
 
 function Tablero({ r }: { r: ResumenImportacion }) {
@@ -139,7 +139,7 @@ function Tablero({ r }: { r: ResumenImportacion }) {
             : ''}
         </p>
         {r.sinFecha > 0 ? (
-          <p className="text-[12.5px]" style={{ color: 'var(--bad)' }}>
+          <p className="text-[12px]" style={{ color: 'var(--bad)' }}>
             {miles(r.sinFecha)} {plural(r.sinFecha, 'fila', 'filas')} no tenían fecha de sección y no se contaron.
           </p>
         ) : null}
@@ -147,7 +147,7 @@ function Tablero({ r }: { r: ResumenImportacion }) {
 
       {r.dias.length > 0 ? (
         <div className="overflow-x-auto">
-          <table className="w-full text-[12.5px]" aria-label="Cajas por estatus y por día">
+          <table className="w-full text-[12px]" aria-label="Cajas por estatus y por día">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
                 <th className="font-medium py-1 pr-3">Día</th>
@@ -181,10 +181,10 @@ function Tablero({ r }: { r: ResumenImportacion }) {
       <div className="space-y-1.5">
         <h3 className="font-display text-[14px] font-semibold">Filas que no cuadran</h3>
         {r.totalIncoherencias === 0 ? (
-          <p className="text-[12.5px]" data-testid="sin-incoherencias">Ninguna fila se contradice: lo que dice TRANSITO y lo que dice CCP es coherente.</p>
+          <p className="text-[12px]" data-testid="sin-incoherencias">Ninguna fila se contradice: lo que dice TRANSITO y lo que dice CCP es coherente.</p>
         ) : (
           <>
-            <ul className="text-[12.5px] space-y-1" data-testid="incoherencias">
+            <ul className="text-[12px] space-y-1" data-testid="incoherencias">
               {r.incoherencias.map((i, n) => (
                 <li key={`${i.lineaCsv}-${i.codigo}-${n}`}>
                   <span className="font-medium">Línea {miles(i.lineaCsv)} ({dia(i.fecha)}){i.caja ? `, caja ${i.caja}` : ''}:</span>{' '}
@@ -193,7 +193,7 @@ function Tablero({ r }: { r: ResumenImportacion }) {
               ))}
             </ul>
             {r.totalIncoherencias > r.incoherencias.length ? (
-              <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>Y {miles(r.totalIncoherencias - r.incoherencias.length)} más en el CSV.</p>
+              <p className="text-[11px]" style={{ color: 'var(--muted)' }}>Y {miles(r.totalIncoherencias - r.incoherencias.length)} más en el CSV.</p>
             ) : null}
           </>
         )}
@@ -202,11 +202,11 @@ function Tablero({ r }: { r: ResumenImportacion }) {
       <div className="space-y-1.5">
         <h3 className="font-display text-[14px] font-semibold">Comparación con Track &amp; Trace</h3>
         {c === null ? (
-          <p className="text-[12.5px]" style={{ color: 'var(--muted)' }} data-testid="sin-tt">
+          <p className="text-[12px]" style={{ color: 'var(--muted)' }} data-testid="sin-tt">
             Track &amp; Trace todavía no está conectado: no hay con qué comparar. Cuando lo esté, aquí aparecerán las cajas donde no coincidan.
           </p>
         ) : (
-          <p className="text-[12.5px]" data-testid="con-tt">
+          <p className="text-[12px]" data-testid="con-tt">
             {miles(c.comparadas)} {plural(c.comparadas, 'caja comparada', 'cajas comparadas')}: {miles(c.coinciden)} coinciden y {miles(c.difieren.length)} no.
             {c.difieren.length > 0 ? ` No coinciden: ${c.difieren.slice(0, 20).join(', ')}.` : ''}
           </p>
@@ -216,7 +216,7 @@ function Tablero({ r }: { r: ResumenImportacion }) {
       {r.totalCajas > 0 ? (
         <div className="space-y-1.5">
           <DescargarCsv csv={r.csv} />
-          <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>Para que el equipo lo pegue en su programa, en lugar de escribirlo a mano.</p>
+          <p className="text-[11px]" style={{ color: 'var(--muted)' }}>Para que el equipo lo pegue en su programa, en lugar de escribirlo a mano.</p>
         </div>
       ) : null}
     </div>
@@ -226,11 +226,11 @@ function Tablero({ r }: { r: ResumenImportacion }) {
 export function VistaImportacionVigia({ sufijo, accion }: { sufijo: string; accion: AccionImportacion }) {
   return (
     <MarcoPagina titulo="Estatus de importación" apoyo="Sube el programa del día y ve el estatus de cada viaje, derivado del archivo.">
-      <nav aria-label="Volver" className="text-[12.5px]">
+      <nav aria-label="Volver" className="text-[12px]">
         <Link href={`/dashboard/agentes/vigia${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Volver a servicio al cliente</Link>
       </nav>
 
-      <p role="note" className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--canvas)' }} data-testid="rotulo">
+      <p role="note" className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--canvas)' }} data-testid="rotulo">
         <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />{ROTULO_DERIVADO}
       </p>
 

@@ -9,17 +9,17 @@ type Accion = (fd: FormData) => Promise<void>;
 
 export interface AccionesFormato { subirMuestra: Accion; guardarAjustes: Accion; quitar: Accion; guardarTelefonos?: Accion }
 
-const CSS_INPUT = 'hairline text-[12.5px] px-2.5 py-1.5 rounded-lg w-full';
+const CSS_INPUT = 'hairline text-[12px] px-2.5 py-1.5 rounded-lg w-full';
 const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
+const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const CSS_SECUNDARIO = 'hairline text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]';
+const CSS_SECUNDARIO = 'hairline text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]';
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--muted)' } as const;
 
 function Etiqueta({ t, children }: { t: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{t}</span>
+      <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>{t}</span>
       {children}
     </label>
   );
@@ -34,8 +34,8 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefono
   const f = config?.formato ?? null;
   return (
     <MarcoPagina titulo="Formato de las liquidaciones" apoyo="Tu formato de liquidación: Likida toma el dato del pago y se lo manda al operador con el mismo formato que hoy." acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/liquidacion${sufijo}`} icono={<ArrowLeft width={12} height={12} strokeWidth={2} />}>Volver al agente</BotonEnlace>}>
-      {aviso && <p role="status" className="card p-3 text-[12.5px]" style={{ color: 'var(--ink)' }}>{aviso}</p>}
-      {error && <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>{error}</p>}
+      {aviso && <p role="status" className="card p-3 text-[12px]" style={{ color: 'var(--ink)' }}>{aviso}</p>}
+      {error && <p role="alert" className="card p-3 text-[12px]" style={{ color: 'var(--bad)' }}>{error}</p>}
 
       <section className="card p-4">
         <h2 className="font-display text-[15px] font-semibold mb-1">1. Tu formato</h2>
@@ -58,7 +58,7 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefono
 
       {!f && (
         <section className="card p-4">
-          <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
             Todavía no hay formato: las liquidaciones salen con el PDF genérico de Likida. No necesitas un Excel de muestra para
             designar a quién se le copia cada liquidación ni quién revisa las discrepancias: captúralos aquí abajo.
           </p>
@@ -119,7 +119,7 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefono
               </div>
 
               <div>
-                <p className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Datos de arriba</p>
+                <p className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Datos de arriba</p>
                 {f.datos.length === 0 ? (
                   <p className="text-[12px]" style={{ color: 'var(--faint)' }}>La muestra no traía datos sobre la tabla (operador, periodo, folio…): el documento lleva solo la tabla.</p>
                 ) : (
@@ -134,7 +134,7 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefono
               </div>
 
               <div>
-                <p className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Columnas de la tabla, en orden</p>
+                <p className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Columnas de la tabla, en orden</p>
                 <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
                   {f.columnas.map((c, i) => (
                     <Etiqueta key={`${c.campo}-${i}`} t={`Se llena con: ${ETIQUETA_CAMPO_RENGLON[c.campo]}`}>

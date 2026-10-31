@@ -126,7 +126,7 @@ function textoImportacion(m: 'importada' | 'importacion_error', imp: ExternasPro
   return det ? `${base} ${det}` : base;
 }
 
-const CLASE_CONTROL = 'text-[12.5px] rounded-lg px-2 py-1.5 min-w-[9rem]';
+const CLASE_CONTROL = 'text-[12px] rounded-lg px-2 py-1.5 min-w-[9rem]';
 
 function query(contexto: Array<[string, string]>, extra: Array<[string, string]> = []): string {
   return `?${new URLSearchParams([...contexto, ...extra]).toString()}`;
@@ -159,7 +159,7 @@ export async function SeccionExternas(p: ExternasProps) {
       </p>
 
       {p.mensaje && (
-        <p role="status" className="text-[12.5px] rounded-lg px-3 py-2 mb-3"
+        <p role="status" className="text-[12px] rounded-lg px-3 py-2 mb-3"
           style={{ background: MENSAJES[p.mensaje].tono === 'ok' ? 'var(--okbg)' : 'var(--badbg)', color: MENSAJES[p.mensaje].tono === 'ok' ? 'var(--ok)' : 'var(--bad)' }}>
           {p.mensaje === 'importada' || p.mensaje === 'importacion_error' ? textoImportacion(p.mensaje, p.importacion) : MENSAJES[p.mensaje].texto}
         </p>
@@ -167,7 +167,7 @@ export async function SeccionExternas(p: ExternasProps) {
 
       {p.subirArchivo && (
         <form action={p.subirArchivo} className="flex flex-wrap items-end gap-2 mb-3">
-          <label className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+          <label className="text-[11px]" style={{ color: 'var(--muted)' }}>
             Subir liquidaciones (CSV o Excel de tu sistema; una fila por renglón, agrupadas por clave_externa)
             <input type="file" name="archivo" accept=".csv,.txt,.xlsx,.xls,.ods" required className={`${CLASE_CONTROL} block mt-1`} style={ESTILO_CONTROL} />
           </label>
@@ -196,7 +196,7 @@ export async function SeccionExternas(p: ExternasProps) {
         <form method="get" className="flex flex-wrap items-end gap-2">
           {p.contexto.map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
           <label className="flex flex-col gap-1">
-            <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Estado</span>
+            <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Estado</span>
             <select name="ext_estado" defaultValue={p.filtroEstado ?? ''} className={CLASE_CONTROL} style={ESTILO_CONTROL}>
               <option value="">Todos</option>
               {ESTADOS.map((e) => <option key={e} value={e}>{ROTULO_ESTADO[e].rotulo}</option>)}
@@ -218,11 +218,11 @@ export async function SeccionExternas(p: ExternasProps) {
           {p.filtroEstado && p.filtroEstado !== 'no_coincide' && <input type="hidden" name="estado" value={p.filtroEstado} />}
           {p.filtroEstado === 'no_coincide' && <input type="hidden" name="respuestaChofer" value="no_coincide" />}
           <label className="flex flex-col gap-1">
-            <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Desde</span>
+            <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Desde</span>
             <input type="date" name="desde" defaultValue={hace30} className={CLASE_CONTROL} style={ESTILO_CONTROL} />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Hasta</span>
+            <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Hasta</span>
             <input type="date" name="hasta" defaultValue={hoy} className={CLASE_CONTROL} style={ESTILO_CONTROL} />
           </label>
           <button type="submit" className="rv-btn rv-btn--secondary inline-flex items-center gap-1.5 text-[12px] font-medium rounded-lg px-3 py-1.5 hairline">
@@ -352,15 +352,15 @@ function Ficha({ etiqueta, valor, ayuda, href, tono }: { etiqueta: string; valor
   const alerta = tono === 'bad' && valor !== null && valor > 0;
   return (
     <Link href={href} title={ayuda} className="card p-3 hover:opacity-80 transition-opacity block" style={alerta ? { borderColor: 'var(--bad)' } : undefined}>
-      <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>{etiqueta}</span>
+      <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>{etiqueta}</span>
       <span className="text-[20px] font-semibold cifra-mono block" style={alerta ? { color: 'var(--bad)' } : undefined}>
         {valor === null ? '—' : numero(valor)}
       </span>
-      {valor === null && <span className="text-[10px] block" style={{ color: 'var(--faint)' }}>no se pudo contar</span>}
+      {valor === null && <span className="text-[11px] block" style={{ color: 'var(--faint)' }}>no se pudo contar</span>}
     </Link>
   );
 }
 
 function Th({ children, derecha }: { children: React.ReactNode; derecha?: boolean }) {
-  return <th className={`etiqueta-mono text-[10px] uppercase font-normal pb-2${derecha ? ' text-right' : ''}`}>{children}</th>;
+  return <th className={`etiqueta-mono text-[11px] uppercase font-normal pb-2${derecha ? ' text-right' : ''}`}>{children}</th>;
 }

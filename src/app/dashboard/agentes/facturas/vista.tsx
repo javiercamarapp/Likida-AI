@@ -165,14 +165,14 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
         <section className="card p-4 flex flex-col">
           <h2 className="font-display text-[15px] font-semibold mb-3">Lo que hizo solo</h2>
           {extra.conCfdi !== null && (
-            <p className="text-[12.5px] mb-2">
+            <p className="text-[12px] mb-2">
               <span className="cifra-mono text-[20px] font-medium block">{numero(extra.conCfdi)}</span>
               <span style={{ color: 'var(--faint)' }}>tickets con factura ya amarrada — emitida sola, pescada
                 del XML que mandaron o capturada a mano (el folio tecleado solo se valida de forma, no contra el SAT), histórico.</span>
             </p>
           )}
           {bloqueados.length > 0 && (
-            <div className="space-y-2 text-[12.5px] pt-2 border-t" style={{ borderColor: 'var(--line2)' }}>
+            <div className="space-y-2 text-[12px] pt-2 border-t" style={{ borderColor: 'var(--line2)' }}>
               {bloqueados.slice(0, MAX_MINI).map(({ t, r }) => (
                 <div key={t.gastoId} className="flex items-start gap-2">
                   <ShieldAlert width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--warn)' }} />
@@ -189,7 +189,7 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
             <Leyenda>No se pudo leer el acumulado ahora mismo.</Leyenda>
           )}
           {extra.conCfdi === 0 && bloqueados.length === 0 && (
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
               Aún no amarra su primera factura en esta flota — en cuanto emita una o pesque un
               XML, aquí se cuenta.
             </p>
@@ -294,7 +294,7 @@ function Leyenda({ children, icono }: { children: React.ReactNode; icono?: React
     <div className="flex-1 min-h-[110px] flex items-center justify-center">
       <div className="text-center max-w-[32ch]">
         {icono && <div className="flex justify-center mb-2">{icono}</div>}
-        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{children}</p>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{children}</p>
       </div>
     </div>
   );

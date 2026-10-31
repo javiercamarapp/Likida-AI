@@ -31,7 +31,7 @@ export function FormaImportarRutas({ accion }: { accion: AccionSitio }) {
   return (
     <form action={enviar} className="space-y-3" aria-label="Importar rutas desde CSV" encType="multipart/form-data">
       <label className="block"><span className={ETIQUETA}>Archivo CSV</span>
-        <input type="file" name="archivo" accept=".csv,text/csv,text/plain" className="text-[12.5px]" />
+        <input type="file" name="archivo" accept=".csv,text/csv,text/plain" className="text-[12px]" />
       </label>
       <label className="block"><span className={ETIQUETA}>…o pega el contenido</span>
         <textarea name="csv" rows={4} spellCheck={false} className={`${CAMPO} h-auto py-2 font-mono text-[12px]`} placeholder={PLANTILLA_CSV_RUTAS} />

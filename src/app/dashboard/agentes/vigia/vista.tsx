@@ -113,7 +113,7 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
 }) {
   return (
     <MarcoPagina titulo="Servicio al cliente" apoyo="Atiende a los clientes de tu flota: clasifica, responde con datos reales y escala a una persona lo que lo requiere.">
-      <nav aria-label="Herramientas del agente" className="flex flex-wrap gap-2 text-[12.5px]">
+      <nav aria-label="Herramientas del agente" className="flex flex-wrap gap-2 text-[12px]">
         <Link href={`/dashboard/agentes/vigia/historial${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Grupos críticos e histórico (FAQs y tendencias)</Link>
         <Link href={`/dashboard/agentes/vigia/programa${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Programa de despacho (subir el archivo del día)</Link>
         <Link href={`/dashboard/agentes/vigia/importacion${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Estatus de importación (derivado del programa)</Link>
@@ -167,7 +167,7 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
           <ShieldCheck width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
           <h2 className="font-display text-[15px] font-semibold">Los límites del Vigía</h2>
         </div>
-        <ul className="text-[12.5px] space-y-1.5 list-disc pl-5" style={{ color: 'var(--muted)' }}>
+        <ul className="text-[12px] space-y-1.5 list-disc pl-5" style={{ color: 'var(--muted)' }}>
           <li>Solo contesta a clientes que la flota autorizó aquí, con constancia de su consentimiento. Cualquier otro número recibe la respuesta de siempre.</li>
           <li>Cada cifra de una respuesta sale de un dato real del viaje de ESE cliente. Si el dato no existe (por ejemplo la hora estimada de llegada, que Likida aún no guarda), dice que lo consulta y te avisa.</li>
           <li>Un cliente jamás ve datos de otro cliente ni de otra flota. Si pregunta por un folio que no es suyo, no se confirma ni se niega nada.</li>
@@ -193,14 +193,14 @@ function EsqKpis() {
 function Leyenda({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-[80px] flex items-center justify-center">
-      <p className="text-[12.5px] text-center max-w-[48ch]" style={{ color: 'var(--muted)' }}>{children}</p>
+      <p className="text-[12px] text-center max-w-[48ch]" style={{ color: 'var(--muted)' }}>{children}</p>
     </div>
   );
 }
 
 function Chip({ children, tono }: { children: React.ReactNode; tono?: 'warn' | 'bad' | 'ok' }) {
   return (
-    <span className="inline-flex px-2 py-0.5 rounded-full text-[10.5px] font-medium"
+    <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
       style={{ color: tono ? `var(--${tono})` : 'var(--muted)', background: tono ? `var(--${tono === 'ok' ? 'ok' : tono}bg)` : 'var(--canvas)' }}>
       {children}
     </span>
@@ -215,7 +215,7 @@ export async function BloqueEstadoYKpis({ datos: p, ahoraMs }: { datos: Promise<
   return (
     <div className="space-y-3">
       {!d.config.habilitado && (
-        <div role="status" className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
+        <div role="status" className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
           <AlertTriangle width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
           El Vigía está apagado para tu flota: ningún cliente recibe respuesta. Autoriza a tus clientes y enciéndelo en «Configuración».
         </div>
@@ -226,7 +226,7 @@ export async function BloqueEstadoYKpis({ datos: p, ahoraMs }: { datos: Promise<
         <Cifra etiqueta={`Sin respuesta (SLA ${numero(sla)} min)`} valor={numero(vencidas)} nota="esperan más de lo permitido" tono={vencidas > 0 ? 'bad' : undefined} />
         <Cifra etiqueta="Molestos o escalados" valor={numero(molestasOEscaladas)} nota="requieren a una persona" tono={molestasOEscaladas > 0 ? 'bad' : undefined} />
       </TiraCifras>
-      <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+      <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
         Tiempo de primera respuesta:{' '}
         {d.respuesta.muestra === 0
           ? 'sin datos todavía — aún no se ha enviado ninguna respuesta en los últimos 7 días.'
@@ -262,12 +262,12 @@ export async function BloqueAprobacion({ datos: p, puedeDecidir, acciones, stand
                 {!standby && m.adjuntos.length > 0 && <Chip>Adjuntará: {m.adjuntos.join(', ')}</Chip>}
                 <span className="ml-auto text-[11px]" style={{ color: 'var(--faint)' }}>{fechaHoraMx(m.creadoEn)}</span>
               </div>
-              <blockquote className="text-[12.5px] pl-3 border-l-2" style={{ borderColor: 'var(--line2)', color: 'var(--muted)' }}>
+              <blockquote className="text-[12px] pl-3 border-l-2" style={{ borderColor: 'var(--line2)', color: 'var(--muted)' }}>
                 {m.mensajeCliente ?? '(archivo o mensaje sin texto)'}
               </blockquote>
               {puedeDecidir
                 ? <FormaBorrador accion={acciones.decidir} id={m.id} texto={m.borrador} />
-                : <p className="text-[12.5px] whitespace-pre-wrap">{m.borrador}</p>}
+                : <p className="text-[12px] whitespace-pre-wrap">{m.borrador}</p>}
             </article>
           ))}
         </div>
@@ -297,7 +297,7 @@ export async function BloqueExcepciones({ datos: p, ahoraMs, puedeDecidir, accio
       ) : (
         <div className="space-y-2.5">
           {filas.map(({ c, motivos }) => (
-            <div key={c.id} className="flex flex-wrap items-center gap-2 text-[12.5px]">
+            <div key={c.id} className="flex flex-wrap items-center gap-2 text-[12px]">
               <strong>{c.clienteNombre ?? 'Cliente'}</strong>
               <span style={{ color: 'var(--muted)' }}>{c.contactoNombre ?? ''}</span>
               {motivos.map((m) => <Chip key={m} tono="bad">{m}</Chip>)}
@@ -308,7 +308,7 @@ export async function BloqueExcepciones({ datos: p, ahoraMs, puedeDecidir, accio
             </div>
           ))}
           {d.fallidos.map((f) => (
-            <div key={f.id} className="flex flex-wrap items-center gap-2 text-[12.5px]">
+            <div key={f.id} className="flex flex-wrap items-center gap-2 text-[12px]">
               <strong>{f.clienteNombre ?? 'Cliente'}</strong>
               <Chip tono="warn">Falló un envío</Chip>
               <span style={{ color: 'var(--muted)' }}>{f.error ?? 'sin detalle'}</span>
@@ -342,7 +342,7 @@ export async function BloqueConversaciones({ datos: p, ahoraMs, puedeDecidir, ac
             const espera = minutosDeEspera(c.sinRespuestaDesde, ahoraMs);
             return (
               <article key={c.id} className="hairline rounded-xl p-3.5 space-y-2" style={{ background: 'var(--surface)' }}>
-                <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
+                <div className="flex flex-wrap items-center gap-2 text-[12px]">
                   <strong>{c.clienteNombre ?? 'Cliente'}</strong>
                   <span style={{ color: 'var(--muted)' }}>{c.contactoNombre ?? ''}</span>
                   {(c.prioridad ?? 0) >= 2 && <Chip tono="bad">Prioridad alta</Chip>}
@@ -353,7 +353,7 @@ export async function BloqueConversaciones({ datos: p, ahoraMs, puedeDecidir, ac
                   {c.molestiaNivel >= 2 && <Chip tono="bad">{c.molestiaNivel >= 3 ? 'Muy molesto' : 'Molesto'}</Chip>}
                 </div>
                 {c.ultimoMensajeCliente && (
-                  <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Último mensaje: «{c.ultimoMensajeCliente}»</p>
+                  <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Último mensaje: «{c.ultimoMensajeCliente}»</p>
                 )}
                 {puedeDecidir && (
                   <div className="flex flex-wrap items-start gap-3">
@@ -384,7 +384,7 @@ export async function BloqueConfiguracion({ datos: p, puedeAdministrar, acciones
       {puedeAdministrar ? (
         <FormaConfig accion={acciones.config} valores={config} standby={standby} />
       ) : (
-        <ul className="text-[12.5px] space-y-1" style={{ color: 'var(--muted)' }}>
+        <ul className="text-[12px] space-y-1" style={{ color: 'var(--muted)' }}>
           <li>Vigía: {config.habilitado ? 'encendido' : 'apagado'}</li>
           {!standby && <li>Modo: {config.modoAprobacion === 'siempre' ? 'siempre aprobar' : 'autoenviar solo bajo riesgo ya validado'}</li>}
           <li>SLA de respuesta: {numero(config.slaRespuestaMin)} min · dueño a los {numero(config.slaRespuestaMin + config.escalarNivel2Min)} min · clientes críticos: {numero(Math.min(config.slaRespuestaMin, config.slaCriticoMin))} min</li>
@@ -408,7 +408,7 @@ export async function BloqueBitacora({ datos: p }: { datos: Promise<DatosTablero
       {eventos.length === 0 ? (
         <Leyenda>Aún sin actividad.</Leyenda>
       ) : (
-        <div className="space-y-2 text-[12.5px]">
+        <div className="space-y-2 text-[12px]">
           {eventos.map((e) => (
             <div key={e.id} className="flex items-start gap-2">
               <Clock width={12} height={12} strokeWidth={1.75} className="mt-1 shrink-0" style={{ color: 'var(--faint)' }} />
@@ -440,7 +440,7 @@ export async function BloqueContactos({ datos: p, puedeAdministrar, acciones }: 
       ) : (
         <div className="space-y-2.5 mb-4">
           {d.contactos.map((c) => (
-            <div key={c.id} className="flex flex-wrap items-center gap-2 text-[12.5px]">
+            <div key={c.id} className="flex flex-wrap items-center gap-2 text-[12px]">
               <strong>{c.clienteNombre ?? 'Cliente'}</strong>
               <span style={{ color: 'var(--muted)' }}>{c.nombre ?? 'Sin nombre'} · …{c.telefonoTerminacion}</span>
               <Chip tono={c.estado === 'activo' ? 'ok' : 'warn'}>{c.estado === 'activo' ? 'Activo' : 'Dado de baja'}</Chip>
@@ -454,11 +454,11 @@ export async function BloqueContactos({ datos: p, puedeAdministrar, acciones }: 
         <div className="pt-3 border-t" style={{ borderColor: 'var(--line2)' }}>
           <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>Autorizar a un cliente</h3>
           {d.clientes.length === 0
-            ? <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Primero da de alta al cliente en «Clientes».</p>
+            ? <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Primero da de alta al cliente en «Clientes».</p>
             : <FormaAlta accion={acciones.alta} clientes={d.clientes} gerentes={d.gerentes} />}
         </div>
       ) : (
-        <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota autoriza o da de baja contactos.</p>
+        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota autoriza o da de baja contactos.</p>
       )}
     </section>
   );
@@ -488,7 +488,7 @@ export async function BloqueDirectores({ datos: p, puedeAdministrar, acciones }:
           <div key={nivel} className="mb-4">
             <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>{NOMBRE_NIVEL[nivel]}</h3>
             {lista.length === 0 ? (
-              <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Nadie en la lista: se avisa como siempre.</p>
+              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Nadie en la lista: se avisa como siempre.</p>
             ) : (
               <div className="space-y-3">
                 {lista.map((x) => (
@@ -501,7 +501,7 @@ export async function BloqueDirectores({ datos: p, puedeAdministrar, acciones }:
                     {puedeAdministrar ? (
                       <FormaDirector accion={acciones.director} director={x} />
                     ) : (
-                      <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
+                      <div className="flex flex-wrap items-center gap-2 text-[12px]">
                         <strong>{x.nombre}</strong>
                         {x.telefono && <Chip>WhatsApp …{x.telefono.slice(-4)}</Chip>}
                         {x.correo && <Chip>Correo</Chip>}
@@ -520,7 +520,7 @@ export async function BloqueDirectores({ datos: p, puedeAdministrar, acciones }:
           <FormaDirector accion={acciones.director} />
         </div>
       ) : (
-        <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia esta lista.</p>
+        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia esta lista.</p>
       )}
     </section>
   );
@@ -546,7 +546,7 @@ export async function BloqueServicio({ datos: p, puedeAdministrar, acciones }: {
         {' '}Sin lista, se avisa como siempre: al responsable del cliente o al jefe de la flota. Hasta 10 personas.
       </p>
       {lista.length === 0 ? (
-        <p className="text-[12.5px] mb-3" style={{ color: 'var(--muted)' }}>Nadie en la lista: se avisa como siempre.</p>
+        <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>Nadie en la lista: se avisa como siempre.</p>
       ) : (
         <div className="space-y-3 mb-3">
           {lista.map((x) => (
@@ -554,7 +554,7 @@ export async function BloqueServicio({ datos: p, puedeAdministrar, acciones }: {
               {puedeAdministrar && accion ? (
                 <FormaServicio accion={accion} contacto={x} clientes={d.clientes} />
               ) : (
-                <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
+                <div className="flex flex-wrap items-center gap-2 text-[12px]">
                   <strong>{x.nombre}</strong>
                   <Chip>{x.clienteId ? (nombreCliente.get(x.clienteId) ?? 'Un cliente') : 'Todos los clientes'}</Chip>
                   {x.telefono && <Chip>WhatsApp …{x.telefono.slice(-4)}</Chip>}
@@ -572,7 +572,7 @@ export async function BloqueServicio({ datos: p, puedeAdministrar, acciones }: {
           <FormaServicio accion={accion} clientes={d.clientes} />
         </div>
       ) : (
-        <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia esta lista.</p>
+        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia esta lista.</p>
       )}
     </section>
   );
@@ -593,7 +593,7 @@ export async function BloqueCorreos({ datos: p }: { datos: Promise<DatosTablero>
       {correos.length === 0 ? (
         <Leyenda>Ningún aviso ha necesitado el respaldo por correo.</Leyenda>
       ) : (
-        <div className="space-y-2 text-[12.5px]">
+        <div className="space-y-2 text-[12px]">
           {correos.map((c) => (
             <div key={c.id} className="flex flex-wrap items-center gap-2">
               <Chip tono={c.estado === 'enviado' ? 'ok' : c.estado === 'enviando' ? undefined : 'bad'}>{TEXTO_ESTADO_CORREO[c.estado] ?? c.estado}</Chip>
@@ -622,7 +622,7 @@ export async function BloqueInsights({ datos: p }: { datos: Promise<InsightsEntr
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {tarjetas.map((t) => (
           <article key={t.id} className="hairline rounded-lg p-3.5" data-tarjeta={t.id}>
-            <div className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{t.titulo}</div>
+            <div className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>{t.titulo}</div>
             <div className="cifra-mono text-[20px] font-medium mt-1">{t.valor}</div>
             {t.rotulo && <div className="mt-1"><Chip tono="warn">{t.rotulo}</Chip></div>}
             <dl className="mt-2 space-y-1 text-[12px]">
@@ -630,7 +630,7 @@ export async function BloqueInsights({ datos: p }: { datos: Promise<InsightsEntr
               <div><dt className="inline font-medium">Qué significa: </dt><dd className="inline" style={{ color: 'var(--muted)' }}>{t.queSignifica}</dd></div>
               <div><dt className="inline font-medium">Qué hacer: </dt><dd className="inline" style={{ color: 'var(--muted)' }}>{t.queHacer}</dd></div>
             </dl>
-            <div className="text-[10.5px] mt-2" style={{ color: 'var(--faint)' }}>Fuente: {t.fuente}</div>
+            <div className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>Fuente: {t.fuente}</div>
           </article>
         ))}
       </div>

@@ -261,7 +261,7 @@ async function BloqueHizoSolo({ hizoSolo }: { hizoSolo: Promise<HizoSolo> }) {
         <Leyenda>Aún nada que presumir: cuando el agente mande un recordatorio o escale un
           viaje sin que nadie se lo pida, queda escrito aquí.</Leyenda>
       ) : (
-        <div className="space-y-2.5 text-[12.5px]">
+        <div className="space-y-2.5 text-[12px]">
           {hechos.map((h, i) => (
             <div key={i} className="flex items-start gap-2">
               {h.tipo === 'recordatorio'
@@ -314,7 +314,7 @@ export async function BloqueDineroObservado({ porTipo: p }: { porTipo: Promise<D
           de política o un ticket duplicado, aquí se desglosa.</Leyenda>
       ) : (
         <>
-          <div className="cifra-mono text-[22px] font-medium mb-2">{mxn(totalObservado)}</div>
+          <div className="cifra-mono text-[20px] font-medium mb-2">{mxn(totalObservado)}</div>
           <Dona segmentos={porTipo.map((t) => ({ etiqueta: rotuloTipo(t.tipo), valor: t.monto }))} />
           <div className="mt-2 space-y-1">
             {porTipo.map((t) => (
@@ -413,7 +413,7 @@ async function BloqueUltimosCierres({ liquidaciones, sufijo }: {
 function Leyenda({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex-1 min-h-[110px] flex items-center justify-center">
-      <p className="text-[12.5px] text-center max-w-[30ch]" style={{ color: 'var(--muted)' }}>{children}</p>
+      <p className="text-[12px] text-center max-w-[30ch]" style={{ color: 'var(--muted)' }}>{children}</p>
     </div>
   );
 }
@@ -431,11 +431,11 @@ function TablaLiqs({ filas, sufijo, conVer }: { filas: LiqRow[]; sufijo: string;
       <table className="w-full text-[13px]">
         <thead>
           <tr className="text-left" style={{ color: 'var(--faint)' }}>
-            <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Viaje</th>
-            <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Fecha</th>
-            <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 text-right">Comprobado</th>
-            <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 pr-6 text-right">Diferencia</th>
-            <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Estatus</th>
+            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Viaje</th>
+            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Fecha</th>
+            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Comprobado</th>
+            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pr-6 text-right">Diferencia</th>
+            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Estatus</th>
             {conVer && <th className="pb-2" />}
           </tr>
         </thead>

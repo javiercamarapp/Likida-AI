@@ -102,7 +102,7 @@ export function VistaAgenteConductores({
     <MarcoPagina titulo="Comunicación con operadores" apoyo="La cola de aceptación por WhatsApp, lo que el agente selló y lo que entiende de lo que escriben tus operadores.">
 
       {tablero}
-      <nav aria-label="Herramientas del agente" className="flex flex-wrap gap-2 text-[12.5px]">
+      <nav aria-label="Herramientas del agente" className="flex flex-wrap gap-2 text-[12px]">
         <Link href={`/dashboard/agentes/conductores/sitios${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Catálogo de sitios (clientes, plantas y andenes)</Link>
         <Link href={`/dashboard/agentes/conductores/estadias${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Estadías en andén</Link>
         <Link href={`/dashboard/agentes/conductores/configuracion${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Configuración (recordatorios, horario, contactos)</Link>
@@ -128,23 +128,23 @@ export function VistaAgenteConductores({
           <Sparkles width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
           <h2 className="font-display text-[15px] font-semibold">Lo que entiende por WhatsApp</h2>
         </div>
-        <div className="grid md:grid-cols-3 gap-4 text-[12.5px]">
+        <div className="grid md:grid-cols-3 gap-4 text-[12px]">
           <div>
-            <div className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>El chofer avisa</div>
+            <div className="etiqueta-mono text-[11px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>El chofer avisa</div>
             <p style={{ color: 'var(--muted)' }}>
               «ya llegué» · «estoy descargando» · «voy de regreso» — cada uno queda
               sellado con su hora. Y cada foto de recibo se anota sola en su viaje.
             </p>
           </div>
           <div>
-            <div className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>El jefe despacha</div>
+            <div className="etiqueta-mono text-[11px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>El jefe despacha</div>
             <p style={{ color: 'var(--muted)' }}>
               «nuevo viaje para Juan Pérez, Puebla a Monterrey, anticipo 8000» —
               el agente confirma antes de crear, y al confirmar el chofer recibe su aviso.
             </p>
           </div>
           <div>
-            <div className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>Solo, sin que nadie pida</div>
+            <div className="etiqueta-mono text-[11px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>Solo, sin que nadie pida</div>
             <p style={{ color: 'var(--muted)' }}>
               Persigue la aceptación del viaje y a las {HORAS_PARA_ESCALAR} horas sin respuesta
               escala al jefe. Corre con las reglas de fábrica — aún no tiene estrategia editable.
@@ -240,7 +240,7 @@ export async function BloqueCola({ cola, sufijo }: {
       ) : (
         <div className="space-y-2">
           {esperan.map((v) => (
-            <div key={v.id} className="flex items-center gap-2.5 text-[12.5px]">
+            <div key={v.id} className="flex items-center gap-2.5 text-[12px]">
               <span className="font-medium">{v.folio}</span>
               {esFolioSimulado(v.folio) && <EtiquetaSimulado />}
               <span className="truncate" style={{ color: 'var(--muted)' }}>{v.operadorNombre ?? 'Sin operador'}</span>
@@ -248,7 +248,7 @@ export async function BloqueCola({ cola, sufijo }: {
                 {v.horasDesdeAviso === 0 ? 'hace menos de 1 h' : `hace ${numero(v.horasDesdeAviso)} h`}
               </span>
               {v.avisos > 1 && (
-                <span className="shrink-0 inline-flex px-2 py-0.5 rounded-full text-[10.5px] font-medium"
+                <span className="shrink-0 inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
                   style={{ color: 'var(--muted)', background: 'var(--canvas)' }}>×{v.avisos}</span>
               )}
             </div>
@@ -305,7 +305,7 @@ async function BloqueBitacora({ eventos: p }: { eventos: Promise<EventoConductor
         <Leyenda>Aún sin actividad — cada aviso, aceptación, escalación
           o hito del chofer queda escrito aquí.</Leyenda>
       ) : (
-        <div className="space-y-2.5 text-[12.5px]">
+        <div className="space-y-2.5 text-[12px]">
           {eventos.map((e, i) => {
             const cfg = EVENTO[e.tipo];
             return (
@@ -328,7 +328,7 @@ async function BloqueBitacora({ eventos: p }: { eventos: Promise<EventoConductor
 function Leyenda({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex-1 min-h-[110px] flex items-center justify-center">
-      <p className="text-[12.5px] text-center max-w-[34ch]" style={{ color: 'var(--muted)' }}>{children}</p>
+      <p className="text-[12px] text-center max-w-[34ch]" style={{ color: 'var(--muted)' }}>{children}</p>
     </div>
   );
 }
@@ -417,7 +417,7 @@ export function TarjetaInsights({ insights, dias, discrepancias = null, recortad
 }) {
   if (insights === null) {
     return (
-      <section aria-label="Insights del agente" className="hairline rounded-xl px-4 py-3 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+      <section aria-label="Insights del agente" className="hairline rounded-xl px-4 py-3 text-[12px]" style={{ color: 'var(--muted)' }}>
         No se pudieron leer los insights del periodo.
       </section>
     );

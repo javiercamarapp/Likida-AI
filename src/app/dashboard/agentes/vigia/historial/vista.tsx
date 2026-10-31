@@ -61,10 +61,10 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
         <>
           <Seccion id="grupos" titulo="Grupos">
             {grupos.length === 0 ? (
-              <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Aún no hay grupos. Agrega el primero abajo.</p>
+              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Aún no hay grupos. Agrega el primero abajo.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-[12.5px]">
+                <table className="w-full text-[12px]">
                   <thead><tr className="text-left text-[11px]" style={{ color: 'var(--faint)' }}><th className="py-1 pr-3">Cliente</th><th className="pr-3">Grupo</th><th className="pr-3">Crítico</th><th className="pr-3">Histórico</th><th /></tr></thead>
                   <tbody>
                     {grupos.map((g) => (
@@ -106,11 +106,11 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
                   Cuando un cliente escribe algo que el Vigía no entiende y se parece a una de estas preguntas, el borrador sale con la respuesta que aprobaste. Siempre te llega para aprobar antes de enviarse. Apruébalas desde las preguntas frecuentes del reporte de abajo.
                 </p>
                 {rapidas.length === 0 ? (
-                  <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Aún no hay respuestas rápidas aprobadas.</p>
+                  <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Aún no hay respuestas rápidas aprobadas.</p>
                 ) : (
                   <ul className="space-y-2">
                     {rapidas.map((r) => (
-                      <li key={r.id} className="text-[12.5px] flex flex-wrap items-start justify-between gap-2">
+                      <li key={r.id} className="text-[12px] flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0">
                           <div><strong>{r.pregunta}</strong> <span style={{ color: 'var(--faint)' }}>· {numero(r.usos)} {r.usos === 1 ? 'uso' : 'usos'}{r.ultimoUsoEn ? ` · último ${fechaHoraMx(r.ultimoUsoEn)}` : ''}</span></div>
                           <div style={{ color: 'var(--muted)' }}>«{r.texto}»</div>
@@ -126,7 +126,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
 
           <Seccion id="reporte" titulo={grupoElegido ? 'Reporte del grupo elegido' : 'Reporte de todos los grupos'}>
             {reporte === null || reporte.mensajes === 0 ? (
-              <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Todavía no hay histórico subido: sube el chat de un grupo y aquí aparecen sus preguntas frecuentes, sus temas y los tiempos de respuesta.</p>
+              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Todavía no hay histórico subido: sube el chat de un grupo y aquí aparecen sus preguntas frecuentes, sus temas y los tiempos de respuesta.</p>
             ) : (
               <div className="space-y-5">
                 <p className="text-[12px] flex flex-wrap gap-x-3 gap-y-1">
@@ -143,15 +143,15 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
                 {pendientes && (
                   <div>
                     <h3 className="text-[13px] font-semibold mb-1.5">Pendientes de contestar en el chat subido</h3>
-                    <p className="text-[11.5px] mb-1.5" style={{ color: 'var(--faint)' }}>
+                    <p className="text-[11px] mb-1.5" style={{ color: 'var(--faint)' }}>
                       Foto del momento de la exportación{pendientes.fotoEn ? ` (${fechaHoraMx(pendientes.fotoEn)})` : ''}, no en vivo: el Vigía no lee los grupos al instante. Se ocultan los «gracias», los avisos de monitoreo y lo que el equipo ya contestó.
                     </p>
                     {pendientes.pendientes.length === 0 ? (
-                      <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No quedó ningún mensaje de cliente sin contestar en este chat.</p>
+                      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No quedó ningún mensaje de cliente sin contestar en este chat.</p>
                     ) : (
                       <ul className="space-y-2">
                         {pendientes.pendientes.map((p) => (
-                          <li key={`${p.enviadoEn}|${p.texto}`} className="text-[12.5px]">
+                          <li key={`${p.enviadoEn}|${p.texto}`} className="text-[12px]">
                             <div>
                               <strong style={{ color: p.nivel === 2 ? 'var(--bad)' : undefined }}>{p.nivel === 2 ? 'Alta' : 'Normal'}</strong>{' '}
                               <span style={{ color: 'var(--faint)' }}>· {p.grupo ? `${p.grupo} · ` : ''}esperando {duracion(p.antiguedadMin)} · {fechaHoraMx(p.enviadoEn)}</span>
@@ -166,7 +166,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
 
                 <div>
                   <h3 className="text-[13px] font-semibold mb-1.5">Tiempo de respuesta del equipo</h3>
-                  <p className="text-[12.5px]">
+                  <p className="text-[12px]">
                     Mediana {duracion(reporte.tiempos.medianaMin)} · 9 de cada 10 respuestas en {duracion(reporte.tiempos.p90Min)} ·{' '}
                     <strong>{numero(reporte.tiempos.sobreUmbral)}</strong> esperas pasaron de {numero(umbralMin)} min (incluye {numero(reporte.tiempos.sinRespuesta)} mensajes que nadie contestó).
                   </p>
@@ -175,15 +175,15 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
                 <div>
                   <h3 className="text-[13px] font-semibold mb-1.5">Preguntas frecuentes</h3>
                   {reporte.faqs.length === 0 ? (
-                    <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No hay preguntas que se repitan lo suficiente (al menos 2 veces) para llamarlas frecuentes.</p>
+                    <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No hay preguntas que se repitan lo suficiente (al menos 2 veces) para llamarlas frecuentes.</p>
                   ) : (
                     <ul className="space-y-2.5">
                       {reporte.faqs.map((f) => (
-                        <li key={f.pregunta} className="text-[12.5px]">
+                        <li key={f.pregunta} className="text-[12px]">
                           <div><strong>{f.pregunta}</strong> <span style={{ color: 'var(--faint)' }}>· {numero(f.veces)} veces en {numero(f.dias)} días</span></div>
                           <div style={{ color: 'var(--muted)' }}>{f.respuestaTipica ? <>Lo que suele contestar tu equipo: «{f.respuestaTipica}»</> : 'Sin una respuesta del equipo en la hora siguiente.'}</div>
                           {!standby && puedeAprobar && rapidas !== null && (aprobadas.has(f.pregunta.trim().toLowerCase())
-                            ? <div className="text-[11.5px]" style={{ color: 'var(--ok)' }}>Ya es una respuesta rápida aprobada.</div>
+                            ? <div className="text-[11px]" style={{ color: 'var(--ok)' }}>Ya es una respuesta rápida aprobada.</div>
                             : <FormaAprobarRapida accion={acciones.aprobarRapida} tema={f.tema} pregunta={f.pregunta} textoInicial={f.respuestaTipica ?? ''} />)}
                         </li>
                       ))}
@@ -194,7 +194,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
                 <div>
                   <h3 className="text-[13px] font-semibold mb-1.5">Temas y tendencia</h3>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-[12.5px]">
+                    <table className="w-full text-[12px]">
                       <thead><tr className="text-left text-[11px]" style={{ color: 'var(--faint)' }}><th className="py-1 pr-3">Tema</th><th className="pr-3">Mensajes</th><th className="pr-3">Últimas 4 semanas</th><th className="pr-3">4 anteriores</th><th>Cambio</th></tr></thead>
                       <tbody>
                         {reporte.tendencias.map((t) => (

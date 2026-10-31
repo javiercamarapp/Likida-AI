@@ -53,11 +53,11 @@ await fetch(URL, { method: 'POST', body: cuerpo, headers: {
   'content-type': 'application/json', 'x-likida-flota': FLOTA_ID,
   'x-likida-timestamp': String(ts), 'x-likida-firma': firma } });`;
 
-const CSS_INPUT = 'hairline text-[12.5px] px-2.5 py-1.5 rounded-lg';
+const CSS_INPUT = 'hairline text-[12px] px-2.5 py-1.5 rounded-lg';
 const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
+const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const CSS_SECUNDARIO = 'hairline text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]';
+const CSS_SECUNDARIO = 'hairline text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]';
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--muted)' } as const;
 
 export function VistaConfiguracionPeajes({
@@ -96,8 +96,8 @@ export function VistaConfiguracionPeajes({
 }) {
   return (
     <MarcoPagina titulo="Configuración del conciliador de peajes" apoyo="Buzón, entradas y mapeos con los que el agente concilia el estado de cuenta contra los gastos de los viajes." acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/peajes${sufijo}`} icono={<ArrowLeft width={12} height={12} strokeWidth={2} />}>Volver al agente</BotonEnlace>}>
-      {aviso && <p role="status" className="card p-3 text-[12.5px]" style={{ color: 'var(--ink)' }}>{aviso}</p>}
-      {error && <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>{error}</p>}
+      {aviso && <p role="status" className="card p-3 text-[12px]" style={{ color: 'var(--ink)' }}>{aviso}</p>}
+      {error && <p role="alert" className="card p-3 text-[12px]" style={{ color: 'var(--bad)' }}>{error}</p>}
       {agenteApagado && <p role="status" className="card p-3 text-[12px]" style={{ color: 'var(--warn)' }}>{agenteApagado}</p>}
 
       <SeccionBuzon buzon={buzon} archivos={archivos} acciones={acciones} sufijo={sufijo} />
@@ -127,7 +127,7 @@ function Titulo({ t, nota }: { t: string; nota: React.ReactNode }) {
 }
 
 function NoSePudoLeer({ que }: { que: string }) {
-  return <p className="text-[12.5px] mt-3" style={{ color: 'var(--muted)' }}>No se pudo leer {que} ahora mismo.</p>;
+  return <p className="text-[12px] mt-3" style={{ color: 'var(--muted)' }}>No se pudo leer {que} ahora mismo.</p>;
 }
 
 // ── Buzón firmado y archivos recibidos ──────────────────────────────────────
@@ -147,14 +147,14 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo }: { buzon: BuzonVista
         <NoSePudoLeer que="el estado del buzón" />
       ) : buzon.estado === 'inactivo' ? (
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Buzón desactivado.</span>
+          <span className="text-[12px]" style={{ color: 'var(--muted)' }}>Buzón desactivado.</span>
           {buzon.puedeAdministrar
             ? <form action={acciones.activarBuzon}><button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}><Inbox width={13} height={13} strokeWidth={2} /> Activar buzón</button></form>
             : <span className="text-[11px]" style={{ color: 'var(--faint)' }}>Solo quien administra la flota lo activa.</span>}
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="flex items-center gap-2 flex-wrap text-[12.5px]">
+          <div className="flex items-center gap-2 flex-wrap text-[12px]">
             <span className="cifra-mono px-2 py-0.5 rounded-md" style={{ background: 'var(--canvas)', color: 'var(--ok)' }}>activo</span>
             <span style={{ color: 'var(--muted)' }}>llave n.º {buzon.rotacion}</span>
             {buzon.puedeAdministrar && (
@@ -188,7 +188,7 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo }: { buzon: BuzonVista
         </div>
       )}
 
-      <h3 className="etiqueta-mono text-[10px] uppercase mt-5 mb-2" style={{ color: 'var(--faint)' }}>Archivos recibidos</h3>
+      <h3 className="etiqueta-mono text-[11px] uppercase mt-5 mb-2" style={{ color: 'var(--faint)' }}>Archivos recibidos</h3>
       {archivos === null ? <NoSePudoLeer que="los archivos recibidos" /> : archivos.length === 0 ? (
         <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
           Aún no se ha recibido ningún archivo por el buzón.
@@ -196,7 +196,7 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo }: { buzon: BuzonVista
       ) : (
         <div className="space-y-1.5">
           {archivos.map((a) => (
-            <div key={a.id} className="hairline rounded-lg px-2.5 py-2 text-[12.5px]">
+            <div key={a.id} className="hairline rounded-lg px-2.5 py-2 text-[12px]">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="truncate font-medium" title={a.nombre}>{a.nombre}</span>
                 <span style={{ color: a.estado === 'fallida' ? 'var(--bad)' : a.estado === 'procesada' ? 'var(--ok)' : 'var(--muted)' }}>{ETIQUETA_ESTADO[a.estado] ?? a.estado}</span>
@@ -213,7 +213,7 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo }: { buzon: BuzonVista
                       <input type="hidden" name="archivo" value={a.id} />
                       {/* A37-A2-01: los archivos de correo/SFTP llegan sin proveedor y su mapeo se busca por proveedor. */}
                       {!a.proveedor && (
-                        <input name="proveedor" maxLength={60} placeholder="Proveedor (p. ej. IAVE)" aria-label="Proveedor del archivo" className="hairline rounded px-1.5 py-0.5 text-[11.5px] w-36 mr-1" />
+                        <input name="proveedor" maxLength={60} placeholder="Proveedor (p. ej. IAVE)" aria-label="Proveedor del archivo" className="hairline rounded px-1.5 py-0.5 text-[11px] w-36 mr-1" />
                       )}
                       <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>
                         <RefreshCw width={11} height={11} strokeWidth={2} className="inline mr-1" />Reintentar
@@ -222,7 +222,7 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo }: { buzon: BuzonVista
                   )}
                 </span>
               </div>
-              {a.ultimoError && <p className="text-[11.5px] mt-1" style={{ color: 'var(--bad)' }}>{a.ultimoError}</p>}
+              {a.ultimoError && <p className="text-[11px] mt-1" style={{ color: 'var(--bad)' }}>{a.ultimoError}</p>}
             </div>
           ))}
         </div>
@@ -234,7 +234,7 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo }: { buzon: BuzonVista
 function Campo({ etiqueta, valor }: { etiqueta: string; valor: string }) {
   return (
     <label className="block">
-      <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{etiqueta}</span>
+      <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>{etiqueta}</span>
       <input readOnly value={valor} className={`${CSS_INPUT} w-full cifra-mono mt-0.5`} style={ESTILO_INPUT} />
     </label>
   );
@@ -248,13 +248,13 @@ function SeccionMapeo({ mapeos, acciones }: { mapeos: MapeoVista[] | null; accio
         nota={<>El lector detecta las columnas por su nombre. Si un proveedor usa otros encabezados (o el lector te dijo «no encontré la columna…»),
           declara aquí cuál es cuál: por el <b>encabezado exacto</b> («Fecha de cobro») o por la <b>letra de la columna</b> («C»). Fecha, caseta e importe son obligatorios; hora, TAG, unidad y clase, opcionales (si no los declaras, se buscan por nombre: «Tarjeta IDMX», «No. economico», «Clase»).</>} />
       {mapeos === null ? <NoSePudoLeer que="los mapeos" /> : mapeos.length === 0 ? (
-        <p className="text-[12.5px] mb-3" style={{ color: 'var(--muted)' }}>Ningún proveedor tiene mapeo: todos se leen por detección automática.</p>
+        <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>Ningún proveedor tiene mapeo: todos se leen por detección automática.</p>
       ) : (
         <div className="space-y-1.5 mb-3">
           {mapeos.map((m) => (
-            <div key={m.id} className="hairline rounded-lg px-2.5 py-2 flex items-center gap-2 flex-wrap text-[12.5px]">
+            <div key={m.id} className="hairline rounded-lg px-2.5 py-2 flex items-center gap-2 flex-wrap text-[12px]">
               <span className="font-medium">{m.proveedor}</span>
-              <span className="text-[11.5px] cifra-mono" style={{ color: 'var(--muted)' }}>
+              <span className="text-[11px] cifra-mono" style={{ color: 'var(--muted)' }}>
                 fecha=«{m.columnas.fecha}» · caseta=«{m.columnas.caseta}» · importe=«{m.columnas.monto}»
                 {m.columnas.hora ? ` · hora=«${m.columnas.hora}»` : ''}{m.columnas.tag ? ` · TAG=«${m.columnas.tag}»` : ''}{m.columnas.unidad ? ` · unidad=«${m.columnas.unidad}»` : ''}{m.columnas.clase ? ` · clase=«${m.columnas.clase}»` : ''}
               </span>
@@ -287,7 +287,7 @@ function SeccionMapeo({ mapeos, acciones }: { mapeos: MapeoVista[] | null; accio
 function Entrada({ nombre, etiqueta, ph, requerido, ancho }: { nombre: string; etiqueta: string; ph: string; requerido?: boolean; ancho?: string }) {
   return (
     <label className="block">
-      <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>{etiqueta}</span>
+      <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>{etiqueta}</span>
       <input name={nombre} placeholder={ph} required={requerido} maxLength={80} className={`${CSS_INPUT} ${ancho ?? 'w-[140px]'} mt-0.5`} style={ESTILO_INPUT} />
     </label>
   );
@@ -297,7 +297,7 @@ function SubirCsv({ accion, etiqueta, extra }: { accion: Accion; etiqueta: strin
   return (
     <form action={accion} encType="multipart/form-data" className="flex items-center gap-2 flex-wrap">
       <input type="file" name="archivo" accept=".csv,.tsv,.xlsx,.xls,.ods" required aria-label={etiqueta}
-        className="text-[12.5px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12.5px] file:font-medium file:cursor-pointer"
+        className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer"
         style={{ color: 'var(--muted)' }} />
       {extra}
       <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}><Upload width={13} height={13} strokeWidth={2} /> Cargar</button>
@@ -316,7 +316,7 @@ function SeccionTags({ tags, unidades, acciones }: { tags: TagVista[] | null; un
       <form action={acciones.altaTag} className="flex items-end gap-2 flex-wrap mt-3">
         <Entrada nombre="tag" etiqueta="TAG" ph="IMDM 12345678" requerido />
         <label className="block">
-          <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Unidad</span>
+          <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Unidad</span>
           <select name="unidad" required className={`${CSS_INPUT} w-[170px] mt-0.5`} style={ESTILO_INPUT} defaultValue="">
             <option value="" disabled>Elige…</option>
             {(unidades ?? []).map((u) => <option key={u.id} value={u.id}>{u.numeroEconomico}{u.placas ? ` · ${u.placas}` : ''}</option>)}
@@ -326,24 +326,24 @@ function SeccionTags({ tags, unidades, acciones }: { tags: TagVista[] | null; un
         <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Agregar TAG</button>
       </form>
       {tags === null ? <NoSePudoLeer que="los TAGs" /> : tags.length === 0 ? (
-        <p className="text-[12.5px] mt-3" style={{ color: 'var(--muted)' }}>Aún no hay TAGs dados de alta: el cruce no puede casar un cobro con una unidad por su TAG.</p>
+        <p className="text-[12px] mt-3" style={{ color: 'var(--muted)' }}>Aún no hay TAGs dados de alta: el cruce no puede casar un cobro con una unidad por su TAG.</p>
       ) : (
         <div className="mt-3 space-y-1 max-h-[320px] overflow-y-auto">
           <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{numero(tags.length)} TAGs</p>
           {tags.slice(0, 300).map((t) => (
-            <div key={t.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12.5px]">
+            <div key={t.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12px]">
               <span className="cifra-mono">{t.tagOriginal ?? t.tag}</span>
               <span style={{ color: 'var(--muted)' }}>→ {t.unidadEconomico ?? 'unidad borrada'}</span>
               {t.proveedor && <span className="text-[11px]" style={{ color: 'var(--faint)' }}>{t.proveedor}</span>}
               {t.bajaEn ? (
-                <span className="text-[11.5px]" style={{ color: 'var(--warn, var(--muted))' }}>
+                <span className="text-[11px]" style={{ color: 'var(--warn, var(--muted))' }}>
                   Baja desde el {t.bajaEn}{t.bajaMotivo ? ` · ${t.bajaMotivo}` : ''}. Un cruce posterior a esa fecha se marca para revisar.
                 </span>
               ) : (
                 <form action={acciones.bajaTag} className="ml-auto flex items-end gap-1.5 flex-wrap">
                   <input type="hidden" name="tag" value={t.id} />
                   <label className="block">
-                    <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Último día en uso</span>
+                    <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Último día en uso</span>
                     <input type="date" name="fecha" required className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT} />
                   </label>
                   <Entrada nombre="motivo" etiqueta="Motivo" ph="Unidad siniestrada" ancho="w-[150px]" />
@@ -373,16 +373,16 @@ function SeccionCasetas({ casetas, acciones }: { casetas: CasetaVista[] | null; 
       <SubirCsv accion={acciones.importarCasetas} etiqueta="CSV de casetas"
         extra={<input name="fuente" placeholder="Fuente de las coordenadas" aria-label="Fuente de las coordenadas" maxLength={200} className={`${CSS_INPUT} w-[230px]`} style={ESTILO_INPUT} />} />
       {casetas === null ? <NoSePudoLeer que="las casetas" /> : casetas.length === 0 ? (
-        <p className="text-[12.5px] mt-3" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px] mt-3" style={{ color: 'var(--muted)' }}>
           Catálogo vacío: el cruce por caseta no puede validar nada y cada línea queda «sin datos» (la caseta no está en el catálogo) — nunca una acusación.
         </p>
       ) : (
         <div className="mt-3 space-y-1 max-h-[320px] overflow-y-auto">
           <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{numero(casetas.filter((c) => c.activa).length)} activas de {numero(casetas.length)}</p>
           {casetas.slice(0, 300).map((c) => (
-            <div key={c.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12.5px]" style={c.activa ? undefined : { opacity: 0.55 }}>
+            <div key={c.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12px]" style={c.activa ? undefined : { opacity: 0.55 }}>
               <span className="font-medium">{c.nombre}</span>
-              <span className="cifra-mono text-[11.5px]" style={{ color: 'var(--muted)' }}>{c.lat !== null && c.lng !== null ? `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)} · ${c.radioM} m` : 'sin coordenadas · solo por nombre'}</span>
+              <span className="cifra-mono text-[11px]" style={{ color: 'var(--muted)' }}>{c.lat !== null && c.lng !== null ? `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)} · ${c.radioM} m` : 'sin coordenadas · solo por nombre'}</span>
               {c.carretera && <span className="text-[11px]" style={{ color: 'var(--muted)' }}>{c.carretera}</span>}
               {c.porPasada && <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ color: 'var(--ok)', background: 'var(--okbg)' }}>por pasada</span>}
               {c.fuente && <span className="text-[11px]" style={{ color: 'var(--faint)' }}>{c.fuente}</span>}
@@ -408,7 +408,7 @@ function SeccionGeocercas({ geocercas, tipos, acciones }: { geocercas: GeocercaV
       <form action={acciones.guardarGeocerca} className="flex items-end gap-2 flex-wrap">
         <Entrada nombre="nombre" etiqueta="Nombre" ph="Patio Querétaro" requerido />
         <label className="block">
-          <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Tipo</span>
+          <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Tipo</span>
           <select name="tipo" className={`${CSS_INPUT} w-[130px] mt-0.5`} style={ESTILO_INPUT} defaultValue="punto_interes">
             {tipos.map((t) => <option key={t} value={t}>{t.replace('_', ' ')}</option>)}
           </select>
@@ -419,14 +419,14 @@ function SeccionGeocercas({ geocercas, tipos, acciones }: { geocercas: GeocercaV
         <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Guardar geocerca</button>
       </form>
       {geocercas === null ? <NoSePudoLeer que="las geocercas" /> : geocercas.length === 0 ? (
-        <p className="text-[12.5px] mt-3" style={{ color: 'var(--muted)' }}>Aún no hay geocercas.</p>
+        <p className="text-[12px] mt-3" style={{ color: 'var(--muted)' }}>Aún no hay geocercas.</p>
       ) : (
         <div className="mt-3 space-y-1 max-h-[280px] overflow-y-auto">
           {geocercas.map((g) => (
-            <div key={g.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12.5px]" style={g.activa ? undefined : { opacity: 0.55 }}>
+            <div key={g.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12px]" style={g.activa ? undefined : { opacity: 0.55 }}>
               <span className="font-medium">{g.nombre}</span>
               <span className="text-[11px]" style={{ color: 'var(--faint)' }}>{g.tipo.replace('_', ' ')}</span>
-              <span className="cifra-mono text-[11.5px]" style={{ color: 'var(--muted)' }}>{g.lat.toFixed(5)}, {g.lng.toFixed(5)} · {g.radioM} m</span>
+              <span className="cifra-mono text-[11px]" style={{ color: 'var(--muted)' }}>{g.lat.toFixed(5)}, {g.lng.toFixed(5)} · {g.radioM} m</span>
               <form action={acciones.estadoGeocerca} className="ml-auto">
                 <input type="hidden" name="geocerca" value={g.id} />
                 <input type="hidden" name="activa" value={g.activa ? 'false' : 'true'} />
@@ -462,20 +462,20 @@ function SeccionCursos({ cursos, unidades, convenios, acciones }: {
         <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Leer los cursos de mi tabla conectada</button>
       </form>
       {cursos === null ? <NoSePudoLeer que="los cursos" /> : cursos.length === 0 ? (
-        <p className="text-[12.5px] mt-3" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px] mt-3" style={{ color: 'var(--muted)' }}>
           Aún no hay cursos: el reporte de reclamación no evalúa «fuera de curso» y lo dice (las líneas se cuentan como «sin curso declarado»).
         </p>
       ) : (
         <div className="mt-3 space-y-1 max-h-[320px] overflow-y-auto">
           <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{numero(cursos.filter((c) => c.activo).length)} activos de {numero(cursos.length)}</p>
           {cursos.slice(0, 300).map((c) => (
-            <div key={c.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12.5px]" style={c.activo ? undefined : { opacity: 0.55 }}>
+            <div key={c.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12px]" style={c.activo ? undefined : { opacity: 0.55 }}>
               <span className="font-medium">{c.nombre}</span>
               <span className="cifra-mono text-[11px]" style={{ color: 'var(--faint)' }}>{c.codigo}</span>
-              <span className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+              <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
                 {[c.unidadId ? `unidad ${eco.get(c.unidadId) ?? '—'}` : null, c.convenioId ? `convenio ${conv.get(c.convenioId) ?? '—'}` : null].filter(Boolean).join(' · ')}
               </span>
-              <span className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+              <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
                 {c.tipo === 'casetas' ? c.casetas.map((k) => k.nombre || '—').join(' → ') : `corredor de ${numero(c.corredor?.length ?? 0)} puntos · ±${numero(c.bufferM ?? 0)} m`}
               </span>
               {(c.vigenteDesde || c.vigenteHasta) && <span className="text-[11px]" style={{ color: 'var(--faint)' }}>{c.vigenteDesde ?? '…'} a {c.vigenteHasta ?? '…'}</span>}
