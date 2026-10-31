@@ -128,7 +128,7 @@ export default function ChatFlota({ kpis, acred, cabecera }: {
   return (
     <div className="rv-chat" data-has={hay} data-ocupado={a.ocupado || undefined} data-hist={histAbierto && !movil ? 'abierto' : undefined}>
       <div className="rv-chat__principal">
-        <CampoPixeles intensidad="vexa" />
+        <CampoPixeles intensidad="vexa" pausado={hay} />
         <div className="rv-chat__fila">
           {cabecera}
           <BotonHistorial convs={a.convs} expandido={histAbierto} oculto={histAbierto && !movil} boton={botonHist} onClick={() => (histAbierto ? cerrarHistorial() : setHistAbierto(true))} />

@@ -82,30 +82,30 @@ html:has(.rv-chat-pagina), html:has(.rv-chat-pagina) body { height: 100dvh; over
 .rv-chat__tema { gap: 8px; padding: 0 12px; color: var(--muted); }
 .rv-chat__tema i { flex: none; inline-size: 8px; block-size: 8px; border-radius: 50%; background: var(--cat, var(--muted)); }
 .rv-chat__tema[data-tema="1"] {
-  --cat: var(--chart-1, var(--muted));
-}
-.rv-chat__tema[data-tema="2"] {
-  --cat: var(--chart-2, var(--muted));
-}
-.rv-chat__tema[data-tema="3"] {
   --cat: var(--chart-3, var(--muted));
 }
-.rv-chat__tema[data-tema="4"] {
+.rv-chat__tema[data-tema="2"] {
   --cat: var(--chart-4, var(--muted));
 }
-.rv-chat__tema[data-tema="5"] {
+.rv-chat__tema[data-tema="3"] {
   --cat: var(--chart-5, var(--muted));
 }
-.rv-chat__tema[data-tema="6"] {
+.rv-chat__tema[data-tema="4"] {
+  --cat: var(--chart-7, var(--muted));
+}
+.rv-chat__tema[data-tema="5"] {
   --cat: var(--chart-6, var(--muted));
 }
+.rv-chat__tema[data-tema="6"] {
+  --cat: var(--chart-2, var(--muted));
+}
 .rv-chat__tema[data-tema="7"] {
-  --cat: var(--chart-7, var(--muted));
+  --cat: var(--chart-1, var(--muted));
 }
 .rv-chat__tema[data-tema="8"] {
   --cat: var(--chart-8, var(--muted));
 }
-.rv-chat__tema[aria-pressed="true"] { color: var(--ink); border-color: var(--cat, var(--ink)); background: color-mix(in srgb, var(--cat, var(--ink)) 10%, var(--surface)); }
+.rv-chat__tema[aria-pressed="true"] { color: var(--ink); border-color: var(--ink); background: var(--canvas); }
 .rv-chat__q { justify-content: flex-start; padding: 7px 12px; font-weight: 500; text-align: left; line-height: 16px; white-space: normal; }
 /* Zona táctil de 44 px por un ::after invisible. */
 .rv-chat__tema::after, .rv-chat__q::after { content: ""; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
@@ -121,7 +121,7 @@ html:has(.rv-chat-pagina), html:has(.rv-chat-pagina) body { height: 100dvh; over
   box-shadow: 0 1px 2px #0e0e100d, 0 14px 34px -20px #0e0e1040;
 }
 .rv-chat__composer:focus-within {
-  border-color: var(--input); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ui-focus, var(--ink)) 14%, transparent), 0 14px 34px -20px #0e0e1040;
+  border-color: var(--input); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ui-focus, var(--ink)) 16%, transparent), 0 14px 34px -20px #0e0e1040;
 }
 .rv-chat__composer textarea {
   grid-column: 2; grid-row: 1; display: block; width: 100%; min-height: 40px; max-height: 144px; margin: 0; padding: 9px 4px; border: 0; border-radius: 0; outline: 0;
@@ -186,7 +186,7 @@ html:has(.rv-chat-pagina), html:has(.rv-chat-pagina) body { height: 100dvh; over
 .rv-chat__respuesta-texto { display: flex; gap: 8px; align-items: flex-start; min-width: 0; }
 .rv-chat__respuesta > :not(.rv-chat__respuesta-texto) { margin-left: 24px; }
 .rv-chat__marca { display: inline-flex; flex: none; margin-top: 2px; color: var(--ink); }
-.rv-chat__texto { margin: 0; min-width: 0; font-size: 14px; line-height: 1.625; color: var(--ink); overflow-wrap: anywhere; white-space: pre-wrap; }
+.rv-chat__texto { margin: 0; min-width: 0; max-width: 72ch; font-size: 14px; line-height: 1.625; color: var(--ink); overflow-wrap: anywhere; white-space: pre-wrap; }
 .rv-chat__cancelada { margin: 0 0 0 24px; font-size: 14px; color: var(--muted); }
 .rv-chat__aviso {
   display: flex; align-items: flex-start; gap: 8px; min-width: 0; padding: 8px 12px; border: 1px solid var(--aviso-linea-warn, var(--line)); border-radius: 8px;
@@ -216,6 +216,13 @@ html:has(.rv-chat-pagina), html:has(.rv-chat-pagina) body { height: 100dvh; over
 .rv-chat__tabla td.num { text-align: right; font-weight: 500; color: var(--ink); }
 .rv-chat__tabla tr:last-child th, .rv-chat__tabla tr:last-child td { border-bottom: 0; }
 .rv-chat__bloque .rv-area__plot svg { overflow: hidden; }
+
+/* La dona usa la serie de matices de DATOS (no una rampa de un solo azul): un matiz distinto por gajo, con la cifra impresa en la leyenda. */
+.rv-chat__bloque .rv-tono-0 { --tono: var(--chart-5, var(--g4)); }
+.rv-chat__bloque .rv-tono-1 { --tono: var(--chart-4, var(--g3)); }
+.rv-chat__bloque .rv-tono-2 { --tono: var(--chart-6, var(--g5)); }
+.rv-chat__bloque .rv-tono-3 { --tono: var(--chart-7, var(--g3)); }
+.rv-chat__bloque .rv-tono-4 { --tono: var(--chart-3, var(--g2)); }
 
 /* ── Resumen desplegable («Cómo llegué a esto») ── */
 summary.rv-chat__resumen { list-style: none; width: fit-content; justify-content: flex-start; font-weight: 600; cursor: pointer; }

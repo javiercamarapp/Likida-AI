@@ -22,7 +22,7 @@ export default function BloqueRespuesta({ v, indice }: { v: Visual; indice: numb
     const total = v.segmentos.reduce((s, x) => s + x.valor, 0);
     return (
       <section className="card rv-chat__bloque" data-i={Math.min(indice, 3)} data-tipo="dona">
-        <DonaMini matiz={1} gajos={v.segmentos} etiqueta="Gráfica de dona de la respuesta" centro={numero(total)} formato={numero} />
+        <DonaMini matiz={5} gajos={v.segmentos} etiqueta="Gráfica de dona de la respuesta" centro={numero(total)} formato={numero} />
       </section>
     );
   }
@@ -30,7 +30,7 @@ export default function BloqueRespuesta({ v, indice }: { v: Visual; indice: numb
     const formato = v.formato === 'mxn' ? mxn : numero;
     return (
       <section className="card rv-chat__bloque" data-i={Math.min(indice, 3)} data-tipo="serie">
-        <AreaMini matiz={1} valores={v.puntos.map((p) => p.valor)} etiquetas={v.puntos.map((p) => p.dia)} etiqueta="Serie de la respuesta" formato={formato} />
+        <AreaMini matiz={5} valores={v.puntos.map((p) => p.valor)} etiquetas={v.puntos.map((p) => p.dia)} etiqueta="Serie de la respuesta" formato={formato} />
       </section>
     );
   }

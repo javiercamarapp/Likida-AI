@@ -34,8 +34,9 @@ function ListaPasos({ pasos }: { pasos: PasoTraza[] }) {
 export function TrazaViva({ fase, pasos }: { fase: string; pasos: PasoTraza[] }) {
   const [abierta, setAbierta] = useState(true);
   const id = useId();
+  // Sin role="status": vive DENTRO del role="log" aria-live del hilo, que ya lo anuncia (un status anidado anunciaba dos veces).
   return (
-    <div className="rv-traza" role="status" aria-live="polite" data-testid="chat-pensando">
+    <div className="rv-traza" data-testid="chat-pensando">
       <MarcaLikida pensando />
       <div className="rv-traza__cuerpo">
         <p className="rv-traza__fase">{fase}</p>

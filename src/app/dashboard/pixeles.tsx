@@ -18,8 +18,12 @@ import { useEffect, useRef } from 'react';
  * `intensidad`: `suave` (el original: color `--g3`, alfa ≤ .5; lo usan el copiloto de /admin y el
  * onboarding) o `vexa` (L5: color de tinta por CLASE, alfa .22 + d·.4 con tope .65, las constantes del campo de Vexa).
  */
-export function CampoPixeles({ intensidad = 'suave' }: { intensidad?: 'suave' | 'vexa' }) {
+export function CampoPixeles({ intensidad = 'suave', pausado = false }: { intensidad?: 'suave' | 'vexa'; pausado?: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
+  // `pausado` (el chat ya tiene una conversación abierta): el campo deja de animar y queda UN cuadro quieto detrás del hilo.
+  const pausadoRef = useRef(pausado);
+  const control = useRef<{ aplicar: () => void }>({ aplicar: () => {} });
+  useEffect(() => { pausadoRef.current = pausado; control.current.aplicar(); }, [pausado]);
 
   useEffect(() => {
     const canvas = ref.current;
@@ -99,7 +103,7 @@ export function CampoPixeles({ intensidad = 'suave' }: { intensidad?: 'suave' | 
       canvas.dataset.frames = String(cuadros);
     }
 
-    const puedeAnimar = () => vivo && visible && !document.hidden && !reducir.matches;
+    const puedeAnimar = () => vivo && visible && !document.hidden && !reducir.matches && !pausadoRef.current;
     function loop(ts: number) {
       if (!puedeAnimar()) { raf = 0; return; }
       if (ts - ultimo >= MS_CUADRO) { ultimo = ts; dibujar(ts); }
@@ -111,6 +115,7 @@ export function CampoPixeles({ intensidad = 'suave' }: { intensidad?: 'suave' | 
     medir();
     dibujar(0);
     arrancar();
+    control.current.aplicar = () => { if (pausadoRef.current) parar(); else arrancar(); };
 
     const alCambiarTamano = () => {
       // El ResizeObserver avisa una vez al empezar a observar: si el tamaño no cambió, no hay nada que repintar (y con movimiento

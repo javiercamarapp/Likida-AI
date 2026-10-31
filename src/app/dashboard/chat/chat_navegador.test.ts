@@ -290,6 +290,19 @@ describe.skipIf(SIN_NAVEGADOR)('chat · historial', () => {
 });
 
 describe.skipIf(SIN_NAVEGADOR)('chat · movimiento', () => {
+  it('con una conversación abierta el campo de puntos deja de animar, y «pensando» no anida role=status dentro del log', async () => {
+    const p = await abrir(1280, 800);
+    await p.waitForTimeout(300);
+    await preguntar(p, 'hola');
+    await p.waitForSelector('[data-testid="chat-pensando"]');
+    await p.waitForTimeout(150);
+    const quieto = await p.locator('canvas.rv-chat__pixeles').getAttribute('data-frames');
+    await p.waitForTimeout(400);
+    expect(await p.locator('canvas.rv-chat__pixeles').getAttribute('data-frames')).toBe(quieto);
+    expect(await p.locator('[role="log"] [role="status"]').count()).toBe(0);
+    await p.close();
+  }, 30_000);
+
   it('con movimiento permitido: el mensaje nuevo entra con rv-chat-entra y el campo de puntos sigue pintando', async () => {
     const p = await abrir(1280, 800);
     await preguntar(p, 'hola');

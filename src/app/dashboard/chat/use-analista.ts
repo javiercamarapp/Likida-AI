@@ -170,7 +170,10 @@ export function useAnalista({ kpis, acred }: { kpis: DashboardKpis | null; acred
     setDocumento(null);
   }
 
-  /** Detiene la generación en curso: el turno queda como «Generación detenida» y la caja vuelve a estar libre. */
+  /** Detiene la generación en curso: el turno queda como «Generación detenida» y la caja vuelve a estar libre.
+   *  LÍMITE CONOCIDO (seguimiento, NO se cambia la ruta en L5): esto solo ABORTA el fetch del cliente. `api/dashboard/chat` no escucha
+   *  `req.signal`: el servidor termina de generar y guardar, así que puede quedar una conversación huérfana con la pregunta que ya no
+   *  se ve, y Reintentar / Regenerar vuelven a preguntar lo mismo y pueden guardar el intercambio DOS veces. */
   function detener() {
     detenido.current = true;
     control.current?.abort();
