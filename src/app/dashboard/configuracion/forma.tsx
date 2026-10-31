@@ -3,6 +3,7 @@
 import { useMemo, useState, useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Save, TriangleAlert, CheckCircle2 } from 'lucide-react';
+import { Radio, StatusChip } from '@/app/ui-v2/componentes';
 import {
   validarAjustes, FORMATOS, type AjustesCrudos,
 } from '@/lib/likida/ajustes_operativos';
@@ -139,26 +140,11 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
           </legend>
           <div className="space-y-1.5">
             {FORMATOS.map((f) => (
-              <label key={f.valor}
-                className={`card p-2.5 flex items-start gap-2.5 ${f.implementado ? 'cursor-pointer' : 'cursor-not-allowed'}`}
-                style={f.implementado ? undefined : { opacity: 0.6 }}>
-                <input type="radio" disabled={!f.implementado}
-                  checked={v.salida === f.valor}
-                  onChange={() => setV((p) => ({ ...p, salida: f.valor }))}
-                  className="mt-0.5" />
-                <span className="min-w-0">
-                  <span className="text-[13px] font-medium block">
-                    {f.rotulo}
-                    {!f.implementado && (
-                      <span className="ml-1.5 inline-flex px-1.5 py-0.5 rounded-full text-[11px] font-medium align-middle"
-                        style={{ color: 'var(--muted)', background: 'var(--canvas)' }}>
-                        aún no
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-[11px]" style={{ color: 'var(--faint)' }}>{f.detalle}</span>
-                </span>
-              </label>
+              <Radio key={f.valor} name="formato_salida_ui" disabled={!f.implementado}
+                checked={v.salida === f.valor}
+                onChange={() => setV((p) => ({ ...p, salida: f.valor }))}
+                etiqueta={<>{f.rotulo}{!f.implementado && <> <StatusChip tono="muted">aún no</StatusChip></>}</>}
+                ayuda={f.detalle} />
             ))}
           </div>
         </fieldset>
