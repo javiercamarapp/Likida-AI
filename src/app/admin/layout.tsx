@@ -2,6 +2,7 @@ import { requireSuperadmin } from '@/lib/auth/guard';
 import { supabaseServer } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import AdminChrome from './chrome';
+import '../ui-v2/componentes.css';
 import '../ui-v2/overlay.css';
 
 export const dynamic = 'force-dynamic';
