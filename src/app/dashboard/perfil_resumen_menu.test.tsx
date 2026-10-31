@@ -99,10 +99,10 @@ describe('/dashboard bajo el perfil', () => {
     expect(el.type.name).toBe('InicioCincoAgentes');
   });
 
-  it('con perfil el Resumen NO ve pesos (veDinero=false) aunque el rol vea dinero, y recibe el rol', async () => {
+  it('con perfil el Inicio recibe el rol (que decide los pesos) y ya no un veDinero fijo', async () => {
     const el = await pagina('cinco_agentes', false, 'v2');
     expect(el.type.name).toBe('InicioCincoAgentes');
-    expect(el.props.veDinero).toBe(false);
+    expect(el.props.veDinero).toBeUndefined(); // decisión 31-oct: los pesos los decide el rol dentro del lector, no un booleano fijo
     expect(el.props.rol).toBe('flota_admin');
   });
 

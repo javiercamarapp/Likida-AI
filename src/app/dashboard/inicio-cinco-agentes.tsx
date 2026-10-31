@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { LayoutGrid, Route, Scale, ScrollText, UsersRound, MessagesSquare, Plus, Users, Truck, Container } from 'lucide-react';
+import { LayoutGrid, Route, Plus, Users, Truck, Container } from 'lucide-react';
 import { saludo, ahoraMs } from '@/lib/saludo';
 import { fechaMx, fechaHoraMx, hoyMx } from '@/lib/formato';
 import { ultimasCorridas, duracionLegible, type AgenteConCorridas, type CorridaRegistrada } from '@/lib/likida/agentes/corridas';
@@ -9,7 +9,7 @@ import { Bloque, EsqTabla } from './bloque';
 import { moduloProximamenteDeRuta, puedeVerRuta, rutaProximamente, type PerfilTenant } from '@/lib/auth/visibilidad';
 import { AGENTES_INSIGHT, PESO_SEVERIDAD, type AgenteInsight, type Insight } from '@/lib/likida/insights/tipos';
 import { TarjetaInsight } from './agentes/insights/tarjeta-insight';
-import { ResumenV2 } from './resumen-v2';
+import { InicioCincoV2 } from './inicio-cinco-v2';
 import type { RangoResumen } from './resumen-datos';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -28,31 +28,8 @@ import type { RangoResumen } from './resumen-datos';
 // Cero pesos en esta pantalla (el Resumen es de `operacion`).
 // ═══════════════════════════════════════════════════════════════════════════
 
-interface FichaAgente {
-  clave: string;
-  nombre: string;
-  descripcion: string;
-  href: string;
-  Icono: typeof Route;
-  /** Qué agente de `agente_corrida` lo representa; `null` si no registra corridas. */
-  corridas: AgenteConCorridas | null;
-  /** Con qué clave lo nombra el marco de insights (T-INS-02). */
-  insight: AgenteInsight;
-}
-
-/** Los cinco, en el orden en que los nombra el producto. Una sola fuente para el Resumen. */
-export const FICHAS_CINCO_AGENTES: readonly FichaAgente[] = [
-  { clave: 'liquidacion', nombre: 'Liquidación automática', href: '/dashboard/agentes/liquidacion', Icono: Route, corridas: 'liquidacion',
-    descripcion: 'Arma la liquidación de cada viaje y marca lo que no cuadra.' , insight: 'liquidacion' },
-  { clave: 'peajes', nombre: 'Conciliación de peajes', href: '/dashboard/agentes/peajes', Icono: Scale, corridas: 'peajes',
-    descripcion: 'Cruza el estado de cuenta de casetas contra los viajes.' , insight: 'peajes' },
-  { clave: 'carta_porte', nombre: 'Carta Porte en automático', href: '/dashboard/agentes/carta-porte', Icono: ScrollText, corridas: 'carta_porte',
-    descripcion: 'Prepara el borrador del complemento y pide lo que falta.' , insight: 'carta-porte' },
-  { clave: 'vigia', nombre: 'Servicio al cliente', href: '/dashboard/agentes/vigia', Icono: UsersRound, corridas: null,
-    descripcion: 'Atiende a los clientes de la flota; una persona aprueba.' , insight: 'vigia' },
-  { clave: 'conductor', nombre: 'Comunicación con operadores', href: '/dashboard/agentes/conductores', Icono: MessagesSquare, corridas: 'conductores',
-    descripcion: 'Sigue los hitos del viaje y avisa cuando algo no se reporta.' , insight: 'conductores' },
-];
+export { FICHAS_CINCO_AGENTES, type FichaAgente } from './inicio-cinco-fichas';
+import { FICHAS_CINCO_AGENTES, type FichaAgente } from './inicio-cinco-fichas';
 
 /**
  * Lectores de insights por agente: cada frente registra aquí el suyo cuando su regla
@@ -238,7 +215,7 @@ const ATAJOS: ReadonlyArray<{ href: string; nombre: string; Icono: typeof Route 
 ];
 
 export async function InicioCincoAgentes({
-  tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '', ui = 'v1', userId, soloLectura = false, veAsistente = false, veDinero = false, rango, rol = '',
+  tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '', ui = 'v1', userId, soloLectura = false, veAsistente = false, rango, rol = '',
 }: {
   tenantId: string;
   tenantNombre: string | null;
@@ -251,9 +228,7 @@ export async function InicioCincoAgentes({
   soloLectura?: boolean;
   /** ¿El rol puede abrir Puesta en marcha? (lo decide la página con `puedeVerRuta`; por omisión NO: falla cerrado). */
   veAsistente?: boolean;
-  /** ¿El rol ve el área de dinero? (lo decide la página con `puedeVerArea`; por omisión NO: falla cerrado). Solo lo usa el Resumen v2. */
-  veDinero?: boolean;
-  /** Periodo elegido en la barra de filtros (`?rango=`). Solo lo usa el Resumen v2. */
+  /** Periodo elegido en la barra de filtros (`?rango=`). Solo lo usa el Inicio v2. */
   rango?: RangoResumen;
   /** Rol efectivo (decide qué enlaces e insights se ofrecen en el Resumen v2). Por omisión vacío: falla cerrado. */
   rol?: string;
@@ -262,10 +237,10 @@ export async function InicioCincoAgentes({
   if (ui === 'v2' && userId) {
     const { principales, fallidos } = await leerInsightsResumen(tenantId, rol, 'cinco_agentes');
     return (
-      <ResumenV2
+      <InicioCincoV2
         tenantId={tenantId} userId={userId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste}
-        sufijo={sufijo} soloLectura={soloLectura} veAsistente={veAsistente} veDinero={veDinero} rango={rango}
-        principales={principales} fallidos={fallidos} rol={rol} perfil="cinco_agentes"
+        sufijo={sufijo} soloLectura={soloLectura} veAsistente={veAsistente} rango={rango} rol={rol}
+        principales={principales} fallidos={fallidos}
       />
     );
   }
