@@ -214,7 +214,7 @@ describe('el tablero de hitos — lo que ve el jefe de tráfico', () => {
 
   it('con filtros activos ofrece «Quitar filtros» y un vacío que dice que son los filtros', () => {
     const html = pintar(datos([], []), { filtros: { ...FILTROS, terminalId: 'tm1' } });
-    expect(html).toContain('Quitar filtros');
+    expect(html).toContain('Limpiar');
     expect(html).toContain('Ningún viaje en curso cumple esos filtros');
   });
 

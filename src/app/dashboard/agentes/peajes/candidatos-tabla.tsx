@@ -1,3 +1,4 @@
+import { BarraFiltros, FiltroCampo, FiltroFecha, FiltroOpciones } from '@/app/ui-v2/componentes';
 import { FileDown } from 'lucide-react';
 import { fechaMx, mxn, numero } from '@/lib/formato';
 // SOLO tipos y módulos puros: la vista no debe arrastrar `supabaseAdmin` al bundle.
@@ -34,10 +35,6 @@ const ROTULO_LOTE: Record<AccionCandidato, string> = { reclamado: 'Marcar como r
 const Etiqueta = ({ children }: { children: React.ReactNode }) => (
   <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>{children}</span>
 );
-
-function ExtraSufijo({ sufijo }: { sufijo: string }) {
-  return <>{[...new URLSearchParams(sufijo.replace(/^\?/, '')).entries()].map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}</>;
-}
 
 function Campos({ desglose, retorno, accion, indice, categoria }: { desglose: string; retorno: string; accion: AccionCandidato; indice: number; categoria: string }) {
   return (
@@ -173,36 +170,20 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
         </a>
       </div>
 
-      <form method="get" action="#candidatos" className="flex items-end gap-2 flex-wrap mt-3">
-        <ExtraSufijo sufijo={sufijo} />
-        <input type="hidden" name="desglose" value={desglose} />
-        <label className="block"><Etiqueta>Categoría</Etiqueta>
-          <select name="cat" defaultValue={f.categoria} className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT}>
-            <option value="">Todas</option>
-            {TODAS_LAS_CATEGORIAS.map((c) => <option key={c} value={c}>{etiquetaCategoriaFila(c)}</option>)}
-          </select></label>
-        <label className="block"><Etiqueta>Estado</Etiqueta>
-          <select name="estado" defaultValue={f.estado} className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT}>
-            <option value="">Todos</option>
-            {ESTADOS_CANDIDATO.map((e) => <option key={e} value={e}>{ETIQUETA_ESTADO_CANDIDATO[e]}</option>)}
-          </select></label>
-        <label className="block"><Etiqueta>Unidad</Etiqueta>
-          <input name="unidad" defaultValue={f.unidad} maxLength={60} className={`${CSS_INPUT} w-[110px] mt-0.5`} style={ESTILO_INPUT} /></label>
-        <label className="block"><Etiqueta>Caseta</Etiqueta>
-          <input name="caseta" defaultValue={f.caseta} maxLength={60} className={`${CSS_INPUT} w-[150px] mt-0.5`} style={ESTILO_INPUT} /></label>
-        <label className="block"><Etiqueta>Desde</Etiqueta>
-          <input type="date" name="desde" defaultValue={f.desde} className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT} /></label>
-        <label className="block"><Etiqueta>Hasta</Etiqueta>
-          <input type="date" name="hasta" defaultValue={f.hasta} className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT} /></label>
-        <label className="block"><Etiqueta>Orden</Etiqueta>
-          <select name="orden" defaultValue={f.orden} className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT}>
-            <option value="monto_desc">Mayor monto primero</option>
-            <option value="monto_asc">Menor monto primero</option>
-            <option value="fecha">Por fecha</option>
-          </select></label>
-        <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Filtrar</button>
-        {hayFiltro && <a href={`?${new URLSearchParams([...new URLSearchParams(sufijo.replace(/^\?/, '')).entries(), ['desglose', desglose]]).toString()}#candidatos`} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Quitar filtros</a>}
-      </form>
+      <BarraFiltros accion="#candidatos" etiqueta="Filtros de candidatos" className="mt-3" nActivos={hayFiltro ? 1 : 0}
+        ocultos={[...new URLSearchParams(sufijo.replace(/^\?/, '')).entries(), ['desglose', desglose]]}
+        limpiarHref={`?${new URLSearchParams([...new URLSearchParams(sufijo.replace(/^\?/, '')).entries(), ['desglose', desglose]]).toString()}#candidatos`}>
+        <FiltroOpciones nombre="cat" etiqueta="Categoría" valor={f.categoria}
+          opciones={[{ valor: '', rotulo: 'Todas' }, ...TODAS_LAS_CATEGORIAS.map((c) => ({ valor: c, rotulo: etiquetaCategoriaFila(c) }))]} />
+        <FiltroOpciones nombre="estado" etiqueta="Estado" valor={f.estado}
+          opciones={[{ valor: '', rotulo: 'Todos' }, ...ESTADOS_CANDIDATO.map((e) => ({ valor: e, rotulo: ETIQUETA_ESTADO_CANDIDATO[e] }))]} />
+        <FiltroCampo etiqueta="Unidad"><input className="border-0 bg-transparent" name="unidad" defaultValue={f.unidad} maxLength={60} /></FiltroCampo>
+        <FiltroCampo etiqueta="Caseta"><input className="border-0 bg-transparent" name="caseta" defaultValue={f.caseta} maxLength={60} /></FiltroCampo>
+        <FiltroFecha nombre="desde" etiqueta="Desde" valor={f.desde} />
+        <FiltroFecha nombre="hasta" etiqueta="Hasta" valor={f.hasta} />
+        <FiltroOpciones nombre="orden" etiqueta="Orden" valor={f.orden} porDefecto="monto_desc"
+          opciones={[{ valor: 'monto_desc', rotulo: 'Mayor monto primero' }, { valor: 'monto_asc', rotulo: 'Menor monto primero' }, { valor: 'fecha', rotulo: 'Por fecha' }]} />
+      </BarraFiltros>
 
       {tabla.total === 0 ? (
         <p className="text-[12px] mt-4" style={{ color: 'var(--muted)' }}>

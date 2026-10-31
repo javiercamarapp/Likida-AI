@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { FiltroOpciones } from '../ui-v2/componentes';
 import { Dona, AreaChartSimple } from '../admin/charts';
 import { GastoSemanalChart } from './gasto-semanal-chart';
 import { TopRutas } from './top-rutas';
@@ -65,15 +66,8 @@ export function PanelPeriodo({
     // (12-ago-2026) — el padding horizontal lo pone el padre.
     <>
       <div className="flex items-center justify-end">
-        <div className="inline-flex items-center gap-1 p-0.5 rounded-full shrink-0" style={{ background: 'var(--canvas)' }}>
-          {OPCIONES.map((o) => (
-            <button key={o.id} type="button" onClick={() => setModoIdx(MODOS.indexOf(o.id))}
-              className="text-xs font-medium px-2.5 py-1 rounded-full transition-colors"
-              style={modo === o.id ? { background: 'var(--marca)', color: 'var(--marca-fg)' } : { color: 'var(--muted)' }}>
-              {o.etiqueta}
-            </button>
-          ))}
-        </div>
+        <FiltroOpciones etiqueta="Periodo" valor={modo} porDefecto="" ariaLabel="Periodo de las gráficas"
+          onCambio={(v) => setModoIdx(MODOS.indexOf(v as ModoPeriodo))} opciones={OPCIONES.map((o) => ({ valor: o.id, rotulo: o.etiqueta }))} />
       </div>
 
       {/* ── Viajes / Actividad ── */}

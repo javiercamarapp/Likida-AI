@@ -15,7 +15,8 @@ test.use({ storageState: ESTADOS.duena });
 
 test('«Liquidados» enseña los liquidados y esconde el abierto', async ({ page }) => {
   await page.goto('/dashboard/viajes');
-  await page.getByRole('link', { name: 'Liquidados', exact: true }).click();
+  await page.getByRole('button', { name: /^Estado/ }).click();
+  await page.getByRole('option', { name: 'Liquidados', exact: true }).click();
   await expect(page).toHaveURL(/f=liquidados/);
   await expect(page.locator('body')).toContainText('VJ-2026-0844');
   await expect(page.locator('body')).toContainText('VJ-2026-0846');
@@ -24,7 +25,8 @@ test('«Liquidados» enseña los liquidados y esconde el abierto', async ({ page
 
 test('«Abiertos» enseña el abierto y esconde los liquidados', async ({ page }) => {
   await page.goto('/dashboard/viajes');
-  await page.getByRole('link', { name: 'Abiertos', exact: true }).click();
+  await page.getByRole('button', { name: /^Estado/ }).click();
+  await page.getByRole('option', { name: 'Abiertos', exact: true }).click();
   await expect(page).toHaveURL(/f=abiertos/);
   await expect(page.locator('body')).toContainText('VJ-2026-0001');
   await expect(page.locator('body')).not.toContainText('VJ-2026-0844');

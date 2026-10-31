@@ -1,4 +1,5 @@
 import { FileDown } from 'lucide-react';
+import { BarraFiltros, FiltroCampo, FiltroOpciones } from '@/app/ui-v2/componentes';
 import { mxn, numero } from '@/lib/formato';
 // SOLO tipos y módulos puros: la vista no debe arrastrar `supabaseAdmin` al bundle.
 import type { ReporteRevision, ReclamoVista } from '@/lib/likida/peajes/revision_cobros';
@@ -51,10 +52,6 @@ const EXPLICACION_CATEGORIA: Record<CategoriaCobro, string> = {
   tag_dado_de_baja: 'Cruces posteriores a la fecha de baja del TAG (unidad siniestrada o TAG cancelado).',
   caseta_no_debe_cruzarse: 'Casetas que la flota marcó como «no debe cruzarse».',
 };
-
-function ExtraSufijo({ sufijo }: { sufijo: string }) {
-  return <>{[...new URLSearchParams(sufijo.replace(/^\?/, '')).entries()].map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}</>;
-}
 
 function FilasCandidatos({ candidatos, justificar, desglose }: { candidatos: CandidatoCobro[]; justificar?: Accion; desglose?: string }) {
   const visibles = candidatos.slice(0, MAX_FILAS_POR_CATEGORIA);
@@ -277,28 +274,15 @@ export function SeccionCierreMensual({ mes, cierre, error, sufijo, desglose, opc
         Junta las tres decenas de un mes (y compara los cobros tardíos con el mes anterior si también lo subiste). Un mes con una decena faltante se dice incompleto.
         Con «dos meses juntos» se consolidan el mes elegido y el anterior para que los cobros tardíos se acomoden en la misma ventana.
       </p>
-      <form method="get" className="flex items-end gap-2 flex-wrap mt-3">
-        <ExtraSufijo sufijo={sufijo} />
-        {desglose && <input type="hidden" name="desglose" value={desglose} />}
-        <label className="block">
-          <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Mes</span>
-          {lista.length > 0 ? (
-            <select name="mes" defaultValue={mes ?? lista[0]} required className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT}>
-              {lista.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
-          ) : (
-            <input name="mes" defaultValue={mes ?? ''} placeholder="2026-09" pattern="\d{4}-(0[1-9]|1[0-2])" required className={`${CSS_INPUT} w-[120px] mt-0.5`} style={ESTILO_INPUT} />
-          )}
-        </label>
-        <label className="block">
-          <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Ventana</span>
-          <select name="meses" defaultValue={dosMeses ? '2' : '1'} className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT}>
-            <option value="1">Un mes</option>
-            <option value="2">Dos meses juntos</option>
-          </select>
-        </label>
-        <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>{dosMeses ? 'Ver los dos meses' : 'Ver el mes'}</button>
-      </form>
+      <BarraFiltros accion="?" etiqueta="Periodo del cierre mensual" className="mt-3" ocultos={[...new URLSearchParams(sufijo.replace(/^\?/, '')).entries(), ...(desglose ? [['desglose', desglose] as const] : [])]}>
+        {lista.length > 0 ? (
+          <FiltroOpciones nombre="mes" etiqueta="Mes" valor={mes ?? lista[0]} porDefecto="" opciones={lista.map((m) => ({ valor: m, rotulo: m }))} />
+        ) : (
+          <FiltroCampo etiqueta="Mes"><input className="border-0 bg-transparent" name="mes" defaultValue={mes ?? ''} placeholder="2026-09" pattern="\d{4}-(0[1-9]|1[0-2])" required /></FiltroCampo>
+        )}
+        <FiltroOpciones nombre="meses" etiqueta="Ventana" valor={dosMeses ? '2' : '1'} porDefecto="1"
+          opciones={[{ valor: '1', rotulo: 'Un mes' }, { valor: '2', rotulo: 'Dos meses juntos' }]} />
+      </BarraFiltros>
       {error && <p role="alert" className="text-[12px] mt-3" style={{ color: 'var(--bad)' }}>No se pudo armar el cierre ahora mismo. No es que no haya cobros: inténtalo de nuevo.</p>}
       {dosMeses && cierreDos && <CierreDosMesesVista c={cierreDos} />}
       {!dosMeses && cierre && (

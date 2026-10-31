@@ -7,7 +7,7 @@ import { prioridadEstado, ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO } from '@/
 import { MINUTOS_CAPTURA_MANUAL_EMBARQUE, type MetricasAgente } from '@/lib/likida/carta_porte_docs/metricas';
 import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_docs/repo';
 import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from './forma_accion';
-import { MarcoPagina, Aviso, BotonEnlace, TituloRecuadro, InfoTip } from '@/app/ui-v2/componentes';
+import { BarraFiltros, FiltroOpciones, MarcoPagina, Aviso, BotonEnlace, TituloRecuadro, InfoTip } from '@/app/ui-v2/componentes';
 import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 
 /**
@@ -213,24 +213,17 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
   return (
     <section className="space-y-2">
       <TituloRecuadro info="carta_porte_docs.bandeja">Bandeja de revisión</TituloRecuadro>
-      {conAsignacion && usuarioId !== null && (
-        <nav aria-label="Filtrar por persona asignada" className="flex flex-wrap items-center gap-1.5 text-[12px]">
-          <span style={{ color: 'var(--muted)' }}>Asignación:</span>
-          {[{ clave: false, rotulo: 'Todos' }, { clave: true, rotulo: 'Mis casos' }].map((f) => (
-            <Link key={String(f.clave)} href={`/dashboard/carta-porte/documentos${sufijo}${f.clave ? `${sufijo ? '&' : '?'}mios=1` : ''}`}
-              aria-current={mios === f.clave ? 'page' : undefined} className="px-2 py-0.5 rounded-full hairline hover:opacity-80"
-              style={mios === f.clave ? { background: 'var(--marca)', color: 'var(--surface)' } : { color: 'var(--muted)' }}>{f.rotulo}</Link>
-          ))}
-        </nav>
-      )}
-      <nav aria-label="Filtrar por estado de envío al TMS" className="flex flex-wrap items-center gap-1.5 text-[12px]">
-        <span style={{ color: 'var(--muted)' }}>Envío al TMS:</span>
-        {FILTROS_ENVIO.map((f) => (
-          <Link key={f.clave} href={f.clave === 'todos' ? `/dashboard/carta-porte/documentos${sufijo}` : `/dashboard/carta-porte/documentos${sufijo}${sufijo ? '&' : '?'}envio=${f.clave}`}
-            aria-current={filtroEnvio === f.clave ? 'page' : undefined} className="px-2 py-0.5 rounded-full hairline hover:opacity-80"
-            style={filtroEnvio === f.clave ? { background: 'var(--marca)', color: 'var(--surface)' } : { color: 'var(--muted)' }}>{f.rotulo}</Link>
-        ))}
-      </nav>
+      <BarraFiltros etiqueta="Filtros de la bandeja" enLinea nActivos={(mios ? 1 : 0) + (filtroEnvio !== 'todos' ? 1 : 0)} limpiarHref={`/dashboard/carta-porte/documentos${sufijo}`}>
+        {conAsignacion && usuarioId !== null && (
+          <FiltroOpciones etiqueta="Asignación" valor={mios ? 'mios' : 'todos'} porDefecto="todos" ariaLabel="Filtrar por persona asignada"
+            opciones={[
+              { valor: 'todos', rotulo: 'Todos', href: `/dashboard/carta-porte/documentos${sufijo}` },
+              { valor: 'mios', rotulo: 'Mis casos', href: `/dashboard/carta-porte/documentos${sufijo}${sufijo ? '&' : '?'}mios=1` },
+            ]} />
+        )}
+        <FiltroOpciones etiqueta="Envío al TMS" valor={filtroEnvio} porDefecto="todos" ariaLabel="Filtrar por estado de envío al TMS"
+          opciones={FILTROS_ENVIO.map((f) => ({ valor: f.clave, rotulo: f.rotulo, href: f.clave === 'todos' ? `/dashboard/carta-porte/documentos${sufijo}` : `/dashboard/carta-porte/documentos${sufijo}${sufijo ? '&' : '?'}envio=${f.clave}` }))} />
+      </BarraFiltros>
       {orden.length === 0 ? (
         <EstadoVacio icono={<FileInput width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
           {mios

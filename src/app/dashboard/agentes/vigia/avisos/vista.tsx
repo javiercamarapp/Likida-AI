@@ -1,6 +1,6 @@
 'use client';
 
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { FiltroChip, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 import Link from 'next/link';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
@@ -250,9 +250,7 @@ export function VistaAvisosVigia({ sufijo, grupos, total, hayMas = false, soloPe
     <MarcoPagina titulo="Avisos de viaje" apoyo="Los avisos que el Vigía arma para tus clientes, por día, para confirmarlos, editarlos o descartarlos.">
       <nav aria-label="Navegación" className="flex flex-wrap gap-2 text-[12px]">
         <Link href={`/dashboard/agentes/vigia${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Volver a servicio al cliente</Link>
-        <Link href={soloPendientes ? base : conPendientes} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]" aria-current={soloPendientes ? 'true' : undefined}>
-          {soloPendientes ? 'Mostrar todos' : 'Solo pendientes'}
-        </Link>
+        <FiltroChip href={soloPendientes ? base : conPendientes} activo={soloPendientes}>Solo pendientes</FiltroChip>
       </nav>
 
       <p className="text-[12px]" style={{ color: 'var(--muted)' }} data-testid="ayuda">{AYUDA_REGLA_PROVISIONAL}</p>

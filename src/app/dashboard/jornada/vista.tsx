@@ -16,7 +16,7 @@ import { ROTULO_NIVEL, horasTexto } from '@/lib/likida/jornada/alerta_tope';
 import { FormasJornada, FormaPolitica, FormaAlertaTope, type AccionJornada, type ConfigAlertaForma } from './formas';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { BarraFiltros, FiltroFecha, FiltroOpciones, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /**
  * LA PANTALLA DEL CONTRALOR — ver, corregir y cerrar el registro de jornada.
@@ -177,39 +177,18 @@ export function VistaJornada({
         {/* El filtro de fechas por GET: mueve TODO lo que hay debajo,
             incluida la liga de descarga. Un rótulo que dice «del X al Y»
             tiene que ser cierto para las dos cosas. */}
-        <form method="get" className="flex items-end gap-2 flex-wrap">
-          {/* El sufijo de previsualización del superadmin, como hidden —
-              un GET plano sin esto apagaba `?tenant=`/`?vista=`/`?rol=` al
-              filtrar (mismo patrón que `viajes/vista.tsx`). */}
-          {[...new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo).entries()]
-            .map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-          <label className="text-[11px] font-medium">
-            Desde
-            <input type="date" name="desde" defaultValue={desde}
-              className="block hairline rounded-lg px-3 h-9 text-[13px] outline-none mt-1.5" />
-          </label>
-          <label className="text-[11px] font-medium">
-            Hasta
-            <input type="date" name="hasta" defaultValue={hasta}
-              className="block hairline rounded-lg px-3 h-9 text-[13px] outline-none mt-1.5" />
-          </label>
+        <BarraFiltros accion="?" etiqueta="Filtros de la jornada" className="mb-1"
+          ocultos={[...new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo).entries()]}
+          nActivos={operador ? 1 : 0} limpiarHref={`?${new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo).toString()}`}>
+          <FiltroFecha nombre="desde" etiqueta="Desde" valor={desde} />
+          <FiltroFecha nombre="hasta" etiqueta="Hasta" valor={hasta} />
           {/* FE-19: con cientos de choferes, la ventana por omisión nace
               truncada casi siempre — sin este selector, la única forma de
               ver la jornada de UN operador era teclear su id en la URL. */}
-          <label className="text-[11px] font-medium">
-            Operador
-            <select name="operador" defaultValue={operador ?? ''}
-              disabled={operadores === null || operadores.length === 0}
-              aria-label="Filtrar por operador"
-              className="block hairline rounded-lg px-3 h-9 text-[13px] outline-none mt-1.5 max-w-[220px]">
-              <option value="">Todos</option>
-              {(operadores ?? []).map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
-            </select>
-          </label>
-          <button type="submit" className="rv-btn rv-btn--secondary h-9 px-4 rounded-lg text-[13px] font-medium hairline hover:opacity-85 transition-opacity">
-            Ver
-          </button>
-        </form>
+          <FiltroOpciones nombre="operador" etiqueta="Operador" valor={operador ?? ''} ariaLabel="Filtrar por operador"
+            deshabilitado={operadores === null || operadores.length === 0}
+            opciones={[{ valor: '', rotulo: 'Todos' }, ...(operadores ?? []).map((o) => ({ valor: o.id, rotulo: o.nombre }))]} />
+        </BarraFiltros>
         {operadores === null && (
           <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
             No se pudo leer el catálogo de operadores — el filtro por URL (<code>?operador=</code>) sigue funcionando.

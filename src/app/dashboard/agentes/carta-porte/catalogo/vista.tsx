@@ -10,7 +10,7 @@ import { plantillaCsv, TIPOS_PLANTILLA, type Registro, type TipoPlantilla } from
 import { COLUMNAS_CLAVE, ROTULO_COLUMNA, columnasDeFila, filtrarFilas, valoresDeFormulario, type FilasCatalogo } from '@/lib/likida/carta_porte_docs/catalogo_pantalla';
 import { Aviso, BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
 import type { EstadoImportacion } from './actions';
-import { Aviso as AvisoV2, BotonEnlace, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { Aviso as AvisoV2, BarraFiltros, BotonEnlace, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /**
  * LA PANTALLA «CATÁLOGO DEL CLIENTE» (T-A3-22): lo que el agente aprende UNA vez de cada cliente y usa en cada documento.
@@ -130,16 +130,12 @@ const COLUMNAS_FILTRO: Record<TipoPlantilla, string[]> = {
 function Tabla({ tipo, titulo, filas, clienteId, ver, acciones }: { tipo: TipoPlantilla; titulo: string; filas: Registro[]; clienteId: string; ver: VerComo; acciones: AccionesCatalogo }) {
   const [filtro, setFiltro] = useState('');
   const visibles = filtrarFilas(filas, filtro, COLUMNAS_FILTRO[tipo]);
-  const idFiltro = `cat-filtro-${tipo}`;
   return (
     <section aria-label={titulo} className="card p-4 space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <TituloRecuadro info={tipo === 'producto' ? 'carta_porte_catalogo.productos' : 'carta_porte_catalogo.partes'}>{titulo} <span className="font-normal" style={{ color: 'var(--faint)' }}>({fmtNumero(filas.length)})</span></TituloRecuadro>
         {filas.length > 0 && (
-          <div className="min-w-[220px]">
-            <label htmlFor={idFiltro} className={ETIQUETA}>Filtrar</label>
-            <input id={idFiltro} value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Escribe para filtrar…" autoComplete="off" className={CAMPO} style={{ background: 'var(--surface)' }} />
-          </div>
+          <BarraFiltros enLinea etiqueta={`Filtrar ${titulo}`} busqueda={{ valor: filtro, onCambio: setFiltro, placeholder: 'Escribe para filtrar…', etiqueta: 'Filtrar' }} nActivos={filtro ? 1 : 0} />
         )}
       </div>
       {filas.length === 0 ? (
