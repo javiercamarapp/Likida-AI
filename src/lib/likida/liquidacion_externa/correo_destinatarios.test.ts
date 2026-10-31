@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolverDestinatarios, type EntradaDestinatarios } from './correo_destinatarios';
+import { resolverDestinatarios, resolverRevisores, type EntradaDestinatarios } from './correo_destinatarios';
 
 const base = (): EntradaDestinatarios => ({
   operador: { correo: 'op@ejemplo.test', rebotadoEn: null },
@@ -77,5 +77,29 @@ describe('resolverDestinatarios', () => {
     const r = resolverDestinatarios(base());
     for (const d of r.destinos) expect(d.correo).not.toMatch(/[,;\s]/);
     expect(new Set(r.destinos.map((d) => d.correo)).size).toBe(r.destinos.length);
+  });
+});
+
+describe('resolverRevisores (modo primer mes, 0933)', () => {
+  const revisores = [{ departamento: 'nomina', correo: ' Nomina@Ejemplo.test ' }, { departamento: 'rh', correo: 'rh@ejemplo.test' }];
+
+  it('modo vigente: un destino rol «revisor» por departamento, con el correo normalizado', () => {
+    expect(resolverRevisores(revisores, true)).toEqual([
+      { rol: 'revisor', correo: 'nomina@ejemplo.test' }, { rol: 'revisor', correo: 'rh@ejemplo.test' },
+    ]);
+  });
+
+  it('modo apagado o sin revisores: nadie', () => {
+    expect(resolverRevisores(revisores, false)).toEqual([]);
+    expect(resolverRevisores([], true)).toEqual([]);
+  });
+
+  it('un buzón que ya recibe el desglose por otro rol no se repite (ni dos revisores con el mismo correo)', () => {
+    const r = resolverRevisores([...revisores, { departamento: 'contraloria', correo: 'NOMINA@ejemplo.test' }], true, new Set(['rh@ejemplo.test']));
+    expect(r).toEqual([{ rol: 'revisor', correo: 'nomina@ejemplo.test' }]);
+  });
+
+  it('no altera resolverDestinatarios: el revisor jamás sale de ahí', () => {
+    expect(resolverDestinatarios(base()).destinos.some((d) => d.rol === 'revisor')).toBe(false);
   });
 });

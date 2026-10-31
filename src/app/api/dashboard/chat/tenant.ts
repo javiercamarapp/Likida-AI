@@ -5,6 +5,7 @@
 // demo; y un `?tenant=` solo lo honra un superadmin, y solo si existe.
 import type { SessionTenant } from '@/lib/auth/session';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
+import { leerSeleccionFlota } from '@/lib/auth/admin-context';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { logger } from '@/lib/logger';
@@ -17,7 +18,18 @@ export async function tenantEfectivoChat(
   let tenantId = sesion.tenantId;
   if (!tenantId) {
     if (sesion.rol !== 'superadmin') return null;
-    tenantId = tenantDemo();
+    // A39-S10-01: la flota ELEGIDA en /admin/elegir-flota (cookie firmada) manda
+    // sobre la demo —igual que `resolverTenantApi` y `requireSessionTenant`—.
+    // Sin esto el chat leía, respondía y ESCRIBÍA en la demo bajo la pantalla de
+    // la flota elegida. La flota se verifica abajo como cualquier otra.
+    let seleccion: string | null = null;
+    try {
+      seleccion = await leerSeleccionFlota();
+    } catch (e) {
+      // Fuera de una petición `cookies()` lanza: se cae a la demo (lo previo).
+      logger.warn('chat.tenant_seleccion_ilegible', { err: e instanceof Error ? e.message : String(e) });
+    }
+    tenantId = seleccion ?? tenantDemo();
   }
 
   if (tenantPedido && sesion.rol === 'superadmin') {

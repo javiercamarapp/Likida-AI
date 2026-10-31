@@ -49,6 +49,7 @@ import { encolarPieza } from './cola';
 import { registrarCorrida, type DisparoCorrida } from './corridas';
 import { logger } from '@/lib/logger';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
+import { desglosarPrecio } from '@/lib/saas/iva';
 
 export const AGENTES_DIRECCION_BANDEJA = [
   'automejora', 'especialistas_incidente', 'fundraising',
@@ -843,8 +844,9 @@ async function correrEspecialistasIncidente(disparo: DisparoCorrida, hoy: string
 export interface Suscripciones {
   /** Por estado del dominio de la 0052. Conteo MEDIDO. */
   porEstado: Array<{ estado: string; n: number }>;
-  /** Las activas, con el precio de su plan. `precio` NULL = sin declarar. */
-  activas: Array<{ plan: string; precio: number | null }>;
+  /** Las activas, con el precio de su plan. `precio` NULL = sin declarar. `ivaIncluido` es `plan.precio_iva_incluido`
+   *  (A39-S26-01): true = el precio YA trae IVA (el ingreso es precio/1.16), false = el IVA va encima, null = nadie lo declaró. */
+  activas: Array<{ plan: string; precio: number | null; ivaIncluido: boolean | null }>;
 }
 
 export interface CifrasFundraising {
@@ -852,7 +854,11 @@ export interface CifrasFundraising {
   suscripciones: Suscripciones;
   /** Facturas SaaS pagadas y su suma, ventana histórica completa. */
   facturasPagadas: number;
+  /** A39-S26-01: SIN IVA (suma de `factura_saas.subtotal`): el IVA es del SAT, no ingreso. Solo de las facturas con desglose. */
   cobradoMxn: number;
+  /** Facturas pagadas SIN desglose (`subtotal` NULL, anteriores a la 0066): no se sabe cuánto de su `monto` es IVA, así que
+   *  NO se suman a `cobradoMxn`; se declaran aparte con su total CON IVA. */
+  facturasSinDesglose: { n: number; totalConIvaMxn: number };
   /** Pipeline por etapa del CRM. Conteo MEDIDO. */
   pipeline: Array<{ etapa: string; n: number }>;
   /** Viajes procesados por el motor, histórico. */
@@ -871,8 +877,10 @@ export interface Mrr {
 }
 
 /** El MRR, PURO. */
-export function calcularMrr(activas: Array<{ plan: string; precio: number | null }>): Mrr {
-  const sinPrecio = activas.filter((a) => a.precio === null);
+export function calcularMrr(activas: Array<{ plan: string; precio: number | null; ivaIncluido: boolean | null }>): Mrr {
+  // A39-S26-01: el MRR es INGRESO, o sea SIN IVA. Un precio con IVA incluido se desglosa; si el plan no declaró el criterio
+  // (`precio_iva_incluido` NULL) no se adivina: cuenta como sin cifra (INDETERMINADO), igual que un precio NULL.
+  const sinPrecio = activas.filter((a) => a.precio === null || a.ivaIncluido === null);
   if (activas.length === 0) {
     return {
       mxn: null, activas: 0, sinPrecio: 0,
@@ -882,11 +890,11 @@ export function calcularMrr(activas: Array<{ plan: string; precio: number | null
   if (sinPrecio.length > 0) {
     return {
       mxn: null, activas: activas.length, sinPrecio: sinPrecio.length,
-      motivo: `INDETERMINADO: ${numero(sinPrecio.length)} de ${numero(activas.length)} suscripción(es) activas están en un plan con \`precio_mensual\` NULL (${[...new Set(sinPrecio.map((a) => a.plan))].join(', ')}). Sumar solo las que sí tienen precio daría un MRR al que le faltan clientes — y ese número acabaría citado en una junta como si fuera el total.`,
+      motivo: `INDETERMINADO: ${numero(sinPrecio.length)} de ${numero(activas.length)} suscripción(es) activas están en un plan con \`precio_mensual\` NULL o sin declarar si su precio incluye IVA (\`precio_iva_incluido\` NULL) (${[...new Set(sinPrecio.map((a) => a.plan))].join(', ')}). Sumar solo las que sí tienen precio daría un MRR al que le faltan clientes — y ese número acabaría citado en una junta como si fuera el total.`,
     };
   }
   return {
-    mxn: Math.round(activas.reduce((s, a) => s + (a.precio as number), 0) * 100) / 100,
+    mxn: Math.round(activas.reduce((s, a) => s + desglosarPrecio(a.precio as number, a.ivaIncluido).subtotal, 0) * 100) / 100,
     activas: activas.length, sinPrecio: 0, motivo: null,
   };
 }
@@ -913,8 +921,11 @@ export function armarParteFundraising(c: CifrasFundraising, mrr: Mrr, mes: strin
   ];
   l.push(mrr.mxn === null
     ? `  · MRR: SIN CIFRA. ${mrr.motivo}`
-    : `  · MRR: ${mxn(mrr.mxn)} MXN sobre ${numero(mrr.activas)} suscripción(es) activa(s), sumando el \`precio_mensual\` declarado de cada plan.`);
-  l.push(`  · Cobrado histórico (facturas SaaS en estado 'pagada'): ${mxn(c.cobradoMxn)} MXN en ${numero(c.facturasPagadas)} factura(s). Esto es dinero que de verdad entró, no facturado.`);
+    : `  · MRR: ${mxn(mrr.mxn)} MXN sobre ${numero(mrr.activas)} suscripción(es) activa(s), sumando el \`precio_mensual\` declarado de cada plan SIN IVA (si el precio lo incluía, se desglosó).`);
+  l.push(`  · Cobrado histórico SIN IVA (suma del subtotal de las facturas SaaS en estado 'pagada'): ${mxn(c.cobradoMxn)} MXN en ${numero(c.facturasPagadas - c.facturasSinDesglose.n)} factura(s). Esto es dinero que de verdad entró, no facturado; el IVA no es ingreso.`);
+  if (c.facturasSinDesglose.n > 0) {
+    l.push(`  · ⚠️ ${numero(c.facturasSinDesglose.n)} factura(s) pagada(s) NO traen desglose de IVA (anteriores a la 0066): suman ${mxn(c.facturasSinDesglose.totalConIvaMxn)} MXN CON IVA y NO están en la cifra de arriba, porque no se sabe cuánto de ese monto es IVA.`);
+  }
 
   l.push('');
   l.push('CLIENTES');
@@ -981,7 +992,7 @@ async function leerCifras(): Promise<CifrasFundraising> {
   ]);
   return {
     flotas, liquidaciones, suscripciones: suscripciones.suscripciones,
-    facturasPagadas: facturas.n, cobradoMxn: facturas.total,
+    facturasPagadas: facturas.n, cobradoMxn: facturas.total, facturasSinDesglose: facturas.sinDesglose,
     pipeline: pipeline.etapas,
     truncado: facturas.truncado || pipeline.truncado || suscripciones.truncado,
   };
@@ -992,7 +1003,7 @@ async function leerSuscripciones(): Promise<{ suscripciones: Suscripciones; trun
   // se cita como si fuera el total.
   const { data, error, count } = await acotada(supabaseAdmin()
     .from('suscripcion')
-    .select('estado, plan_clave, plan:plan_clave(precio_mensual)', { count: 'exact' })
+    .select('estado, plan_clave, plan:plan_clave(precio_mensual, precio_iva_incluido)', { count: 'exact' })
     .neq('tenant_id', tenantDemo())
     .order('id')
     .limit(2_000), 'direccion.fundraising.suscripciones');
@@ -1000,17 +1011,19 @@ async function leerSuscripciones(): Promise<{ suscripciones: Suscripciones; trun
   const filas = (data ?? []) as Array<Record<string, unknown>>;
   const truncado = typeof count === 'number' ? count > filas.length : filas.length >= 2_000;
   const porEstado = new Map<string, number>();
-  const activas: Array<{ plan: string; precio: number | null }> = [];
+  const activas: Array<{ plan: string; precio: number | null; ivaIncluido: boolean | null }> = [];
   for (const f of filas) {
     const estado = String(f.estado);
     porEstado.set(estado, (porEstado.get(estado) ?? 0) + 1);
     if (estado === 'activa') {
-      const p = f.plan as { precio_mensual?: unknown } | null;
+      const p = f.plan as { precio_mensual?: unknown; precio_iva_incluido?: unknown } | null;
       const precio = p?.precio_mensual;
+      const iva = p?.precio_iva_incluido;
       activas.push({
         plan: String(f.plan_clave),
         // NULL se preserva: es lo que dispara el «MRR indeterminado».
         precio: precio === null || precio === undefined ? null : Number(precio),
+        ivaIncluido: typeof iva === 'boolean' ? iva : null,
       });
     }
   }
@@ -1030,17 +1043,22 @@ async function leerSuscripciones(): Promise<{ suscripciones: Suscripciones; trun
  *  el `.limit()` no prueba que se leyó todo (la lección ESC-8). */
 export const TOPE_FILAS_AGREGADO = 20_000;
 
-async function leerFacturas(): Promise<{ n: number; total: number; truncado: boolean }> {
+async function leerFacturas(): Promise<{ n: number; total: number; sinDesglose: { n: number; totalConIvaMxn: number }; truncado: boolean }> {
   const { data, error, count } = await acotada(supabaseAdmin()
     .from('factura_saas')
-    .select('monto', { count: 'exact' })
+    .select('monto, subtotal', { count: 'exact' })
     .eq('estado', 'pagada')
+    .order('id')
     .limit(TOPE_FILAS_AGREGADO), 'direccion.fundraising.facturas');
   if (error) throw new Error(`leerFacturas: ${error.message}`);
-  const filas = (data ?? []) as Array<{ monto: unknown }>;
+  const filas = (data ?? []) as Array<{ monto: unknown; subtotal: unknown }>;
+  // A39-S26-01: el ingreso es el SUBTOTAL (sin IVA). Una fila sin subtotal no se adivina: se separa y se declara.
+  const conDesglose = filas.filter((f) => f.subtotal !== null && f.subtotal !== undefined);
+  const sinDesglose = filas.filter((f) => f.subtotal === null || f.subtotal === undefined);
   return {
     n: filas.length,
-    total: Math.round(filas.reduce((s, f) => s + Number(f.monto ?? 0), 0) * 100) / 100,
+    total: Math.round(conDesglose.reduce((s, f) => s + Number(f.subtotal), 0) * 100) / 100,
+    sinDesglose: { n: sinDesglose.length, totalConIvaMxn: Math.round(sinDesglose.reduce((s, f) => s + Number(f.monto ?? 0), 0) * 100) / 100 },
     truncado: typeof count === 'number' ? count > filas.length : filas.length >= TOPE_FILAS_AGREGADO,
   };
 }

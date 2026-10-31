@@ -28,6 +28,9 @@ import type { PoliticaGasto } from './cuadre/engine';
 import { logger } from '@/lib/logger';
 import { rateLimit } from '@/lib/ratelimit';
 import { DatoInvalido } from './errores';
+import {
+  nuevoMarcadorSinTelefono, correoDeOperador, telefonoVisible, esMarcadorSinTelefono, MENSAJE_SIN_TELEFONO_NO_PERMITIDO,
+} from './operador_sin_telefono';
 import type { AjustesValidos } from './ajustes_operativos';
 import { acotada } from './presupuesto';
 import { resolverTerminalDeFlota } from './terminales';
@@ -235,6 +238,21 @@ export async function crearFlota(
 
   await anotar(tenantId, 'flota.creada', 'tenant', tenantId, { nombre, rfc: rfc ?? null }, actor);
 
+  // A39-S57-01: el alta es acto de Likida (requireSuperadmin en el llamador) y
+  // fija el RFC que autoriza el buzón del SAT; la flota edita `rfc` en
+  // Suscripción, pero esta columna no. Va APARTE del insert para que un alta
+  // no se rompa si la migración 0925 aún no está aplicada: sin la columna el
+  // buzón del SAT queda cerrado (falla cerrado), que es lo seguro.
+  const rfcVerificado = filaFiscal?.rfc ?? rfc;
+  if (rfcVerificado) {
+    const { error: errVer } = await admin.from('tenant')
+      .update({ rfc_sat_verificado: rfcVerificado }).eq('id', tenantId);
+    if (errVer) {
+      // Ruidoso a propósito: la flota quedó creada pero SIN buzón del SAT (falla cerrado) y nadie se entera con un warn.
+      logger.error('flota.alta.rfc_sat_verificado_no_guardado', { tenantId, error: errVer.message });
+    }
+  }
+
   let userId: string | undefined;
   if (f.emailAdmin?.trim()) {
     const { provisionarUsuario } = await import('@/lib/auth/provisionar');
@@ -248,9 +266,35 @@ export async function crearFlota(
 
 // ── 2. Registrar un operador ───────────────────────────────────────────────
 
+/** Falla CERRADO: sin poder leer, no se afirma que el número de empleado esté libre. */
+async function comprobarEmpleadoLibre(tenantId: string, numeroEmpleado: string): Promise<void> {
+  const { data, error } = await supabaseAdmin().from('operador').select('id, nombre')
+    .eq('tenant_id', tenantId).eq('numero_empleado', numeroEmpleado).order('id').limit(1);
+  if (error) throw new Error(`comprobarEmpleadoLibre: ${error.message}`);
+  const ya = (data ?? [])[0] as { nombre?: string } | undefined;
+  if (ya) throw new DatoInvalido(`Ya hay un operador con el número de empleado ${numeroEmpleado} en tu flota (${ya.nombre ?? 'sin nombre'}). Búscalo en el registro en vez de darlo de alta otra vez.`);
+}
+
+/** Un buzón no recibe el desglose de dos personas. Falla CERRADO. */
+async function comprobarCorreoLibre(tenantId: string, correo: string): Promise<void> {
+  // Sin distinguir mayúsculas (un correo guardado en mayúsculas por otra vía también choca); `ilike` sin comodines: se escapan \\ % _
+  // (el guion bajo es común en un correo y, sin escapar, casaría con cualquier carácter).
+  const patron = correo.trim().replace(/[\\%_]/g, (c) => `\\${c}`);
+  const { data, error } = await supabaseAdmin().from('operador').select('id')
+    .eq('tenant_id', tenantId).ilike('correo', patron).order('id').limit(1);
+  if (error) throw new Error(`comprobarCorreoLibre: ${error.message}`);
+  if ((data ?? []).length > 0) throw new DatoInvalido('Ese correo ya lo usa otro operador de tu flota: el desglose le llegaría a otra persona. Corrígelo o quítaselo al otro operador.');
+}
+
 export interface NuevoOperador {
   nombre: string;
+  /**
+   * El WhatsApp del operador. Vacío SOLO en una flota cuyo desglose de liquidación sale por correo (canal `correo`, 0932): entonces
+   * `numeroEmpleado` y `correo` son obligatorios y el operador nace sin WhatsApp. En cualquier otra flota sigue siendo obligatorio.
+   */
   telefono: string;
+  /** Correo del operador (desglose por correo, 0785). Opcional con teléfono; obligatorio sin él. */
+  correo?: string;
   numeroEmpleado?: string;
   licencia?: string;
   licenciaTipo?: string;
@@ -428,14 +472,27 @@ export async function crearOperador(
   const nombre = o.nombre.trim();
   if (nombre.length < 3) throw new DatoInvalido('El nombre del operador necesita al menos 3 caracteres.');
 
-  const telefono = normalizarTelefonoOperador(o.telefono);
+  const sinTelefono = !(o.telefono ?? '').trim();
+  const correo = correoDeOperador(o.correo);
+  if (correo === undefined) throw new DatoInvalido('El correo del operador no tiene forma de correo (falta la @ o el dominio).');
+  const numeroEmpleado = o.numeroEmpleado?.trim() || null;
+  if (sinTelefono) {
+    // Alta SIN WhatsApp (0932): solo si el desglose de esta flota sale por correo, y con número de empleado + correo.
+    // Import perezoso: la compuerta lee el perfil y la configuración (sesión y base) y este archivo lo cargan también scripts de Node.
+    const { permiteAltaSinTelefono } = await import('./operador_sin_telefono_canal');
+    if (!(await permiteAltaSinTelefono(tenantId))) throw new DatoInvalido(MENSAJE_SIN_TELEFONO_NO_PERMITIDO);
+    if (!numeroEmpleado || !correo) throw new DatoInvalido('Sin teléfono, el operador necesita número de empleado y correo: con ellos se le encuentra y se le entrega el desglose.');
+  }
+  const telefono = sinTelefono ? nuevoMarcadorSinTelefono() : normalizarTelefonoOperador(o.telefono);
   const rfc = normalizarRfcOperador(o.rfc);
   const licenciaVence = normalizarFechaLicencia(o.licenciaVence);
   // Se resuelve ANTES de comprobar el teléfono para no gastar la consulta de
   // duplicados en una fila que va a rebotar por el patio.
   const terminalId = await resolverTerminalDeFlota(tenantId, o.terminalId);
 
-  await comprobarTelefonoLibre(tenantId, telefono);
+  if (sinTelefono) await comprobarEmpleadoLibre(tenantId, numeroEmpleado as string);
+  else await comprobarTelefonoLibre(tenantId, telefono);
+  if (correo) await comprobarCorreoLibre(tenantId, correo);
 
   const admin = supabaseAdmin();
   const { data, error } = await admin
@@ -444,7 +501,8 @@ export async function crearOperador(
       tenant_id: tenantId,
       nombre,
       telefono,
-      numero_empleado: o.numeroEmpleado?.trim() || null,
+      numero_empleado: numeroEmpleado,
+      ...(correo ? { correo } : {}),
       licencia: o.licencia?.trim() || null,
       licencia_tipo: o.licenciaTipo?.trim() || null,
       licencia_vence: licenciaVence,
@@ -458,7 +516,8 @@ export async function crearOperador(
   const id = data?.id as string | undefined;
   if (!id) throw new Error('crearOperador: el insert no devolvió id');
 
-  await anotar(tenantId, 'operador.creado', 'operador', id, { nombre, telefono }, actor);
+  // La bitácora no guarda el marcador interno ni el correo: solo que el alta fue sin WhatsApp.
+  await anotar(tenantId, 'operador.creado', 'operador', id, sinTelefono ? { nombre, sinTelefono: true } : { nombre, telefono }, actor);
   return id;
 }
 
@@ -587,7 +646,10 @@ export async function actualizarOperador(
   // ya con el `admin` en mano — el orden importa para que un teléfono mal
   // tecleado rebote antes de cualquier consulta.
   let telefonoNuevo: string | null = null;
-  if (cambios.telefono !== undefined) {
+  // El formulario manda el teléfono en CADA guardado. Un operador SIN WhatsApp (0932) lo manda vacío: eso no es un cambio ni un
+  // error, y se resuelve abajo contra lo guardado (para cualquier otro operador, vacío sigue siendo `DatoInvalido`).
+  const telefonoVacio = cambios.telefono !== undefined && cambios.telefono.trim() === '';
+  if (cambios.telefono !== undefined && !telefonoVacio) {
     telefonoNuevo = normalizarTelefonoOperador(cambios.telefono);
     fila.telefono = telefonoNuevo;
   }
@@ -596,11 +658,19 @@ export async function actualizarOperador(
     fila.terminal_id = await resolverTerminalDeFlota(tenantId, cambios.terminalId);
   }
 
+  const admin = supabaseAdmin();
+
+  if (telefonoVacio) {
+    const { data: actualTel, error: errActual } = await admin.from('operador').select('telefono')
+      .eq('id', operadorId).eq('tenant_id', tenantId).maybeSingle();
+    if (errActual) throw new Error(`actualizarOperador: ${errActual.message}`);
+    // Solo el operador sin WhatsApp puede guardar con el teléfono vacío; a cualquier otro se le dice lo de siempre.
+    if (!esMarcadorSinTelefono((actualTel as { telefono?: unknown } | null)?.telefono)) normalizarTelefonoOperador(cambios.telefono as string);
+  }
+
   if (Object.keys(fila).length === 0) {
     throw new DatoInvalido('No hay ningún cambio que guardar.');
   }
-
-  const admin = supabaseAdmin();
 
   // ── EL TELÉFONO ANTERIOR, para saber si de verdad cambió (FE-4) ──────────
   // La forma manda el teléfono en CADA guardado (es un reemplazo de fila, no
@@ -792,7 +862,8 @@ export async function getOperadoresRegistro(
   const filas: FilaRegistroOperador[] = r.filas.map((f) => ({
     operadorId: String(f.operadorId),
     nombre: String(f.nombre),
-    telefono: textoONull(f.telefono),
+    // El marcador «sin WhatsApp» (0932) es un detalle interno: en el registro un operador sin teléfono lo muestra como vacío.
+    telefono: telefonoVisible(textoONull(f.telefono)),
     numeroEmpleado: textoONull(f.numeroEmpleado),
     rfc: textoONull(f.rfc),
     activo: Boolean(f.activo),

@@ -41,7 +41,7 @@ vi.mock('./presupuesto', () => ({ acotada: (q: unknown) => q }));
 // viajes cubriendo el mismo instante. `updates` registra los UPDATE a
 // incidencia (la escalada de c2-3).
 const viajes = vi.hoisted(() => ({ filas: [] as Array<Record<string, unknown>> }));
-type Abierta = { id: string; tipo?: string; prioridad?: string };
+type Abierta = { id: string; tipo?: string; prioridad?: string; abierta_en?: string };
 const abierta = vi.hoisted(() => ({
   v: null as Abierta | null,
   cola: [] as Array<Abierta | null>,
@@ -103,6 +103,9 @@ const EVENTO = {
 describe('dispararAsistenciaPorEventoCamara', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // A39-S38-01: el disparo depende de la edad del evento; el reloj se fija 30 min después de EVENTO.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-08-26T18:30:00.000Z'));
     viajes.filas = [];
     abierta.v = null;
     abierta.cola = [];
@@ -250,5 +253,44 @@ describe('dispararAsistenciaPorEventoCamara', () => {
     expect(crearIncidencia).toHaveBeenCalledWith('t-1', expect.objectContaining({
       viajeId: 'v-a', operadorId: 'op-a', unidadId: 'u-1',
     }));
+  });
+
+  // ── A39-S38-01: el backfill de 30 días y los expedientes viejos ───────────────────────────────
+
+  it('A39-S38-01: un choque de hace 3 días (backfill) NO abre un siniestro crítico ni manda «MÁRCALE AHORA»', async () => {
+    const r = await dispararAsistenciaPorEventoCamara({ ...EVENTO, ocurridoEn: '2026-08-23T18:00:00.000Z' });
+    expect(r).toMatchObject({ resultado: 'omitida_por_antiguedad', avisoEstado: 'no_requerido' });
+    expect(crearIncidencia).not.toHaveBeenCalled();
+    expect(encolarBotonesWhatsApp).not.toHaveBeenCalled();
+    expect(anotarEventoIncidencia).not.toHaveBeenCalled();
+  });
+
+  it('A39-S38-01: un evento reciente (dentro del tope de edad) sigue avisando', async () => {
+    const r = await dispararAsistenciaPorEventoCamara({ ...EVENTO, ocurridoEn: '2026-08-26T13:00:00.000Z' }); // 5.5 h
+    expect(r.resultado).toBe('abierta');
+    expect(encolarBotonesWhatsApp).toHaveBeenCalledTimes(1);
+  });
+
+  it('A39-S38-01: un evento con fecha ilegible o del futuro no se trata como viejo (se dispara como siempre)', async () => {
+    const r = await dispararAsistenciaPorEventoCamara({ ...EVENTO, ocurridoEn: '2026-08-26T19:00:00.000Z' });
+    expect(r.resultado).toBe('abierta');
+  });
+
+  it('A39-S38-01: un expediente crítico VIEJO sin resolver no suprime el aviso de un choque nuevo', async () => {
+    viajes.filas = [{ id: 'v-9', operador_id: 'op-9', folio: 'F-104', estatus: 'abierto' }];
+    abierta.v = { id: 'inc-vieja', tipo: 'siniestro', prioridad: 'critica', abierta_en: '2026-08-20T10:00:00.000Z' };
+    const r = await dispararAsistenciaPorEventoCamara({ ...EVENTO, operadorId: 'op-9', viajeId: 'v-9', viajeFolio: 'F-104' });
+    expect(r).toMatchObject({ resultado: 'anotada_en_existente', incidenciaId: 'inc-vieja', avisoEstado: 'encolado' });
+    expect(encolarBotonesWhatsApp).toHaveBeenCalledTimes(1);
+    // El reconocimiento del choque anterior se borra: la escalera arranca de nuevo.
+    expect(updates.incidencia[0]).toMatchObject({ prioridad: 'critica', reconocida_en: null, reconocida_por: null });
+    expect(anotarEventoIncidencia).toHaveBeenCalledWith('t-1', 'inc-vieja', 'escalada', expect.objectContaining({ fuente: 'camara' }));
+  });
+
+  it('A39-S38-01: un expediente crítico RECIENTE (mismo choque, segunda etiqueta) sigue sin duplicar el aviso', async () => {
+    abierta.v = { id: 'inc-reciente', tipo: 'siniestro', prioridad: 'critica', abierta_en: '2026-08-26T17:58:00.000Z' };
+    const r = await dispararAsistenciaPorEventoCamara(EVENTO);
+    expect(r).toMatchObject({ resultado: 'anotada_en_existente', incidenciaId: 'inc-reciente', avisoEstado: 'no_requerido' });
+    expect(encolarBotonesWhatsApp).not.toHaveBeenCalled();
   });
 });

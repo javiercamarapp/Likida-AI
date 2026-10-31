@@ -59,8 +59,8 @@ export interface DependenciasReenvio {
   insertarEntregas: (tenantId: string, filas: NuevaEntrega[]) => Promise<number>;
   registrarEvento: (tenantId: string, liquidacionId: string, tipo: TipoEvento, detalle?: Record<string, unknown>) => Promise<void>;
   /**
-   * A37-A1-liquidaciones-08: solo para el caso «la recepción no creó ninguna entrega». Encabezado del desglose: `null` = no se
-   * pudo leer (jamás se interpreta como «no retenido»). Opcional: sin él, ese caso sigue siendo `sin_archivo` (fail-closed).
+   * Encabezado del desglose: `null` = no se pudo leer (jamás se interpreta como «no retenido»). A1-03 (A40): se consulta SIEMPRE antes
+   * de reenviar; sin esta dependencia el reenvío se rechaza (fail-cerrado).
    */
   leerDesglose?: (tenantId: string, liquidacionId: string) => Promise<{ existe: boolean; retenidaMotivo: string | null } | null>;
   /** Ruta del Excel que la recepción ya subió (direccionada por clave + huella). */
@@ -155,19 +155,26 @@ export async function reenviarDesglose(
     return rechazo('en_curso', 'La entrega anterior todavía se está enviando. Espera a que termine antes de reenviar.');
   }
 
-  // El archivo es el mismo de la entrega original (misma huella): se hereda de la generación más reciente que lo tenga.
+  // A1-03 (A40): la retención se revalida SIEMPRE, no solo cuando la liquidación no tiene entregas. Un desglose retenido (neto negativo,
+  // concepto prohibido, permisionario…) puede tener entrega: la del REVISOR del primer mes. Antes, esa sola entrega hacía que el reenvío
+  // heredara el Excel y mandara el desglose al operador/coordinador/RH sin pasar por `liberarEnvio` (que sí rechaza lo prohibido).
+  // Si no se puede leer el encabezado, no se adivina que no esté retenido (fail-cerrado).
+  if (!deps.leerDesglose) return rechazo('no_disponible', 'No pude leer el estado de este desglose. Intenta de nuevo en unos minutos.');
+  const cab = await deps.leerDesglose(tenantId, liquidacionId);
+  if (cab === null) return rechazo('no_disponible', 'No pude leer el estado de este desglose. Intenta de nuevo en unos minutos.');
+  if (cab.existe && cab.retenidaMotivo) {
+    return rechazo('no_disponible', 'Este desglose está retenido: decide enviarlo con «Liberar envío» en lugar de reenviarlo.');
+  }
+
+  // El archivo es el mismo de la entrega original (misma huella): se hereda de la generación más reciente que lo tenga. Las entregas del
+  // REVISOR no cuentan para decidir si «hay archivo»: son copias de control del primer mes, no la entrega al destinatario.
+  const propias = entregas.filter((e) => e.rol !== 'revisor');
   let conArchivo: { xlsxRuta: string | null; xlsxSha256: string | null } | undefined =
-    [...entregas].filter((e) => e.xlsxRuta).sort((a, b) => b.generacion - a.generacion)[0];
-  if (!conArchivo && entregas.length === 0 && deps.leerDesglose && deps.rutaXlsx) {
-    // A37-A1-liquidaciones-08: la recepción no creó NINGUNA entrega (p. ej. primer día sin RH, archivo ni correos) y no hay de
-    // dónde heredar el archivo. Es el mismo Excel que `recibirDesglose` ya subió: su ruta sale de la clave y la huella, como en
-    // `liberar_envio.ts`. Un desglose RETENIDO no entra por aquí (lo decide `liberarEnvio`); si no se puede leer el encabezado
-    // no se adivina que no esté retenido.
-    const cab = await deps.leerDesglose(tenantId, liquidacionId);
-    if (cab === null) return rechazo('no_disponible', 'No pude leer el estado de este desglose. Intenta de nuevo en unos minutos.');
-    if (cab.existe && cab.retenidaMotivo) {
-      return rechazo('no_disponible', 'Este desglose está retenido: decide enviarlo con «Liberar envío» en lugar de reenviarlo.');
-    }
+    [...propias].filter((e) => e.xlsxRuta).sort((a, b) => b.generacion - a.generacion)[0];
+  if (!conArchivo && propias.length === 0 && deps.rutaXlsx) {
+    // A37-A1-liquidaciones-08: la recepción no creó NINGUNA entrega a los destinatarios (p. ej. primer día sin RH, archivo ni correos) y
+    // no hay de dónde heredar el archivo. Es el mismo Excel que `recibirDesglose` ya subió: su ruta sale de la clave y la huella, como
+    // en `liberar_envio.ts`. El encabezado ya se leyó arriba y no está retenido.
     if (cab.existe) conArchivo = { xlsxRuta: deps.rutaXlsx(tenantId, liq.claveExterna, liq.huella), xlsxSha256: null };
   }
   if (!conArchivo) return rechazo('sin_archivo', 'Este desglose no tiene archivo para reenviar.');

@@ -6,6 +6,8 @@ import { ArrowLeft, Settings2 } from 'lucide-react';
 import type { ConfigSalida } from '@/lib/likida/carta_porte_docs/salida_config';
 import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
 import { SeccionCcp, type AccionesCcp } from './seccion_ccp';
+import { SeccionPrimerMes } from './seccion_primer_mes';
+import type { PrimerMesFila } from '@/lib/likida/carta_porte_docs/repo';
 import type { CcpRecibidoVista } from '@/lib/likida/carta_porte_docs/ccp_respuesta_repo';
 import { ROTULO_ARRANQUE, erroresEnLinea, frasePrevia, nombreDestinatario, textoDeConfig, type CamposTexto } from './formato';
 
@@ -117,12 +119,15 @@ function Formulario({ config, personas, conector, ver }: { config: ConfigSalida;
   );
 }
 
-export function VistaConfiguracionSalida({ config, esArranque, personas, conector, sufijo = '', ver = {}, acciones, ccp, accionesCcp }: {
+export function VistaConfiguracionSalida({ config, esArranque, personas, conector, sufijo = '', ver = {}, acciones, ccp, accionesCcp, primerMes, accionPrimerMes }: {
   config: ConfigSalida; esArranque: boolean; personas: PersonaVista[]; conector: { hay: boolean; puedeProbar: boolean };
   sufijo?: string; ver?: VerComo; acciones: AccionesConfiguracion;
   /** A37-A3-01: los CCP timbrados recibidos (omitido = la sección no se pinta; `null` = no se pudo leer). */
   ccp?: { activa: boolean | 'sin_migracion'; filas: CcpRecibidoVista[] | 'sin_migracion' } | null;
   accionesCcp?: AccionesCcp;
+  /** OLA1-A3: el modo primer mes (omitido = la sección no se pinta; `no_disponible` = falta la 0938). */
+  primerMes?: PrimerMesFila | 'no_disponible';
+  accionPrimerMes?: AccionDoc;
 }) {
   return (
     <div className="space-y-6">
@@ -146,6 +151,7 @@ export function VistaConfiguracionSalida({ config, esArranque, personas, conecto
           <BotonEnvio variante="secundario" etiqueta="Probar conexión" pendiente="Probando…" />
         </FormaAccion>
       )}
+      {primerMes && accionPrimerMes && <SeccionPrimerMes primerMes={primerMes} ver={ver} accion={accionPrimerMes} />}
       {accionesCcp && ccp === null && (
         <p role="alert" className="text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>No se pudieron leer los CCP timbrados recibidos. Recarga la pantalla; si sigue igual, avisa a soporte.</p>
       )}

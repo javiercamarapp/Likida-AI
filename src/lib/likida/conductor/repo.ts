@@ -2,7 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { getZonaHorariaTenant } from '../repo';
 import { acotada } from '../presupuesto';
-import { IDS_POR_TANDA, exigir, traerPorIds, traerTodoPorLlave, type RespuestaPg } from '../pg';
+import { IDS_POR_TANDA, exigir, traerHastaTope, traerPorIds, traerTodoPorLlave, type RespuestaPg } from '../pg';
 import {
   TIPOS_HITO, MINUTOS_SILENCIO_JEFE, MINUTOS_SILENCIO_RECUPERADA,
   type Contacto, type FuenteHito, type HitoFila, type InterpretacionHito, type TipoHito,
@@ -136,6 +136,11 @@ export interface ViajeContexto {
    * operador así NO recibe nada proactivo aunque su viaje siga abierto. Ausente (doble de prueba, lectura vieja) = no se sabe → activo.
    */
   operadorAvisable?: boolean;
+  /**
+   * A39-A5-02 (0800): `false` = el operador NO es voluntario del piloto (o se dio de baja): el agente no le escribe ni le persigue el
+   * viaje, lo haya aceptado por importación, por su propia actividad o por la oficina. Ausente (doble de prueba, lectura vieja) = no se sabe.
+   */
+  operadorVoluntario?: boolean;
   terminalId: string | null;
   unidadId: string | null;
   aceptadoEn: string | null;
@@ -165,10 +170,10 @@ export interface ViajeContexto {
 }
 
 export const COLUMNAS_VIAJE_CTX =
-  'id, tenant_id, folio, origen, destino, estatus, operador_id, terminal_id, unidad_id, aceptado_en, aceptado_origen, cita_origen_en, cita_destino_en, eta_origen_en, eta_destino_en, despacho_ref, cliente_id, origen_geocerca_id, destino_geocerca_id, operador:operador_id(nombre, telefono, activo, oposicion_automatizada)';
+  'id, tenant_id, folio, origen, destino, estatus, operador_id, terminal_id, unidad_id, aceptado_en, aceptado_origen, cita_origen_en, cita_destino_en, eta_origen_en, eta_destino_en, despacho_ref, cliente_id, origen_geocerca_id, destino_geocerca_id, operador:operador_id(nombre, telefono, activo, oposicion_automatizada, agente_voluntario)';
 
 export function filaAViajeCtx(f: Fila): ViajeContexto {
-  type OpRel = { nombre?: string; telefono?: string; activo?: boolean | null; oposicion_automatizada?: string | null };
+  type OpRel = { nombre?: string; telefono?: string; activo?: boolean | null; oposicion_automatizada?: string | null; agente_voluntario?: boolean | null };
   const rel = f.operador as OpRel | OpRel[] | null;
   const op = Array.isArray(rel) ? rel[0] : rel;
   return {
@@ -182,6 +187,8 @@ export function filaAViajeCtx(f: Fila): ViajeContexto {
     operadorNombre: op?.nombre ?? null,
     operadorTelefono: op?.telefono ?? null,
     operadorAvisable: op ? op.activo !== false && !op.oposicion_automatizada : true,
+    // A39-A5-02: fail-closed — solo `true` explícito cuenta como voluntario (una lectura sin la columna no escribe a nadie).
+    ...(op ? { operadorVoluntario: op.agente_voluntario === true } : {}),
     terminalId: s(f.terminal_id),
     unidadId: s(f.unidad_id),
     aceptadoEn: s(f.aceptado_en),
@@ -600,6 +607,22 @@ export async function leerConfigConductor(tenantId: string): Promise<ConfigCondu
     detenidaMetros: f.detenida_metros === undefined || f.detenida_metros === null ? CONFIG_CONDUCTOR_DEFAULT.detenidaMetros : Number(f.detenida_metros),
     detenidaVentanaMin: f.detenida_ventana_min === undefined || f.detenida_ventana_min === null ? CONFIG_CONDUCTOR_DEFAULT.detenidaVentanaMin : Number(f.detenida_ventana_min),
     sinGpsPermite: f.sin_gps_permite === true,
+    // 0927 (A39-A5-06): las perillas de la fase 2 y la calibración. La base sin migrar no trae las columnas → cada una cae en su valor de partida.
+    exigirSelloInicio: f.exigir_sello_inicio === true,
+    patioEntregaActivo: f.patio_entrega_activo === true,
+    patioQueManda: f.patio_que_manda === 'destino' ? 'destino' : 'entregar_en',
+    estadiaDescargaInteractiva: f.estadia_descarga_interactiva === true,
+    estadiaDescargaMinPorCliente: f.estadia_descarga_min_por_cliente !== null && typeof f.estadia_descarga_min_por_cliente === 'object' && !Array.isArray(f.estadia_descarga_min_por_cliente)
+      ? f.estadia_descarga_min_por_cliente as Record<string, number> : {},
+    estadiaDescargaSinRespuestaMin: umbralOPartida(f.estadia_descarga_sin_respuesta_min, CONFIG_CONDUCTOR_DEFAULT.estadiaDescargaSinRespuestaMin ?? 30),
+    reporteLlegadaActivo: f.reporte_llegada_activo === true,
+    constanciaReportesActiva: f.constancia_reportes_activa === true,
+    resultadoDescargaActivo: f.resultado_descarga_activo === true,
+    pedirDocumentosCierreActivo: f.pedir_documentos_cierre_activo === true,
+    asignacionBotonesActiva: f.asignacion_botones_activa === true,
+    gastosEtcActiva: f.gastos_etc_activa === true,
+    deteccionParadaActiva: f.deteccion_parada_activa === true,
+    ...(f.detencion_escala_sin_respuesta_min === undefined || f.detencion_escala_sin_respuesta_min === null ? {} : { detencionEscalaSinRespuestaMin: Number(f.detencion_escala_sin_respuesta_min) }),
     mostrarEstadosFrontera: f.mostrar_estados_frontera === true,
     aplicarSalidaDelTms: f.aplicar_salida_del_tms === true,
     lineaBaseLlamadasPorViaje: f.linea_base_llamadas_por_viaje === undefined || f.linea_base_llamadas_por_viaje === null ? null : Number(f.linea_base_llamadas_por_viaje),
@@ -988,13 +1011,6 @@ export async function guardarCitas(tenantId: string, viajeId: string, cambio: Ca
 export async function guardarConfigConductor(
   tenantId: string, c: ConfigConductor, contactos: ContactoTrafico[] | undefined,
 ): Promise<'ok' | 'terminal_ajena'> {
-  // T-A5-37 (y T-A5-36): estas llaves se validan y se leen, pero aún NO tienen columna (falta slot de migración). Guardar algo distinto
-  // del valor de partida sería perderlo en silencio: se dice, como con las migraciones 0604/0635/0801.
-  const sinColumna = c.poleoMin !== undefined || (c.poleoPorClaveMin !== undefined && Object.keys(c.poleoPorClaveMin).length > 0)
-    || c.detenidoAvisoMin !== CONFIG_CONDUCTOR_DEFAULT.detenidoAvisoMin;
-  if (sinColumna) {
-    throw new Error('v1.conductor_config: el umbral de detención y la cadencia de poleo aún no tienen columna (migración pendiente); no se guardan. (La compuerta y sus metros/ventana tienen columna desde la 0870.)');
-  }
   const fila = {
     tenant_id: tenantId, activo: c.activo, solicitudes_min: c.solicitudesMin, escalar_tras_min: c.escalarTrasMin,
     segundo_nivel_min: c.segundoNivelMin, hora_inicio: c.horaInicio, hora_fin: c.horaFin, dias_semana: c.diasSemana,
@@ -1011,6 +1027,31 @@ export async function guardarConfigConductor(
   // partida; si el dueño pidió algo distinto (aviso encendido, otro margen, detección apagada) se dice que falta la migración
   // en vez de callarlo. Cada grupo se retira solo cuando el error de la base nombra una de SUS columnas.
   const grupos: Array<{ mig: string; cols: Record<string, unknown>; esDePartida: boolean }> = [
+    {
+      // 0927 (A39-A5-01/04/06): calibración de la compuerta al GPS, cohorte y perillas de la fase 2 (todas apagadas por omisión).
+      mig: '0927',
+      cols: {
+        poleo_min: c.poleoMin ?? null, poleo_por_clave_min: c.poleoPorClaveMin ?? null,
+        detenido_aviso_min: c.detenidoAvisoMin ?? CONFIG_CONDUCTOR_DEFAULT.detenidoAvisoMin, cohorte_piloto: c.cohortePiloto ?? null,
+        exigir_sello_inicio: c.exigirSelloInicio === true, patio_entrega_activo: c.patioEntregaActivo === true,
+        patio_que_manda: c.patioQueManda === 'destino' ? 'destino' : 'entregar_en',
+        estadia_descarga_interactiva: c.estadiaDescargaInteractiva === true,
+        estadia_descarga_min_por_cliente: { ...(c.estadiaDescargaMinPorCliente ?? {}) },
+        estadia_descarga_sin_respuesta_min: c.estadiaDescargaSinRespuestaMin ?? CONFIG_CONDUCTOR_DEFAULT.estadiaDescargaSinRespuestaMin,
+        reporte_llegada_activo: c.reporteLlegadaActivo === true, constancia_reportes_activa: c.constanciaReportesActiva === true,
+        resultado_descarga_activo: c.resultadoDescargaActivo === true, pedir_documentos_cierre_activo: c.pedirDocumentosCierreActivo === true,
+        asignacion_botones_activa: c.asignacionBotonesActiva === true, gastos_etc_activa: c.gastosEtcActiva === true,
+        deteccion_parada_activa: c.deteccionParadaActiva === true, detencion_escala_sin_respuesta_min: c.detencionEscalaSinRespuestaMin ?? null,
+      },
+      esDePartida: c.poleoMin === undefined && Object.keys(c.poleoPorClaveMin ?? {}).length === 0
+        && (c.detenidoAvisoMin ?? CONFIG_CONDUCTOR_DEFAULT.detenidoAvisoMin) === CONFIG_CONDUCTOR_DEFAULT.detenidoAvisoMin
+        && (c.cohortePiloto ?? null) === null && c.detencionEscalaSinRespuestaMin === undefined
+        && (['exigirSelloInicio', 'patioEntregaActivo', 'estadiaDescargaInteractiva', 'reporteLlegadaActivo', 'constanciaReportesActiva', 'resultadoDescargaActivo', 'pedirDocumentosCierreActivo', 'asignacionBotonesActiva', 'gastosEtcActiva', 'deteccionParadaActiva'] as const)
+          .every((k) => c[k] !== true)
+        && (c.patioQueManda ?? 'entregar_en') === 'entregar_en'
+        && Object.keys(c.estadiaDescargaMinPorCliente ?? {}).length === 0
+        && (c.estadiaDescargaSinRespuestaMin ?? CONFIG_CONDUCTOR_DEFAULT.estadiaDescargaSinRespuestaMin) === CONFIG_CONDUCTOR_DEFAULT.estadiaDescargaSinRespuestaMin,
+    },
     {
       // 0870 (A37-P-08): la compuerta «unidad detenida» por flota.
       mig: '0870',
@@ -1040,7 +1081,9 @@ export async function guardarConfigConductor(
     const faltante = error ? vigentes.find((g) => Object.keys(g.cols).some((col) => error!.message.includes(col))) : undefined;
     if (!faltante) break;
     if (!faltante.esDePartida) {
-      throw new Error(faltante.mig === '0870'
+      throw new Error(faltante.mig === '0927'
+        ? 'v1.conductor_config: la calibración de la compuerta (poleo, umbral de detención), la cohorte del piloto y las perillas de la fase 2 necesitan la migración 0927 (aún no aplicada en esta base).'
+        : faltante.mig === '0870'
         ? 'v1.conductor_config: la compuerta «unidad detenida» y sus metros/ventana necesitan la migración 0870 (aún no aplicada en esta base).'
         : faltante.mig === '0801'
         ? 'v1.conductor_config: el perfil de seguimiento, los umbrales de señal de vida y las perillas de frontera y TMS necesitan la migración 0801 (aún no aplicada en esta base).'
@@ -1479,8 +1522,9 @@ export async function leerEpisodiosParaTablero(
     if (f.terminalId && UUID_FILTRO.test(f.terminalId)) q = q.eq('terminal_id', f.terminalId);
     if (f.clienteId && UUID_FILTRO.test(f.clienteId)) q = q.eq('cliente_id', f.clienteId);
     if (f.operadorId && UUID_FILTRO.test(f.operadorId)) q = q.eq('operador_id', f.operadorId);
-    const rv = await acotada(q.gte('created_at', new Date(desde.getTime() - 45 * 86_400_000).toISOString()).order('id').limit(2000), 'tablero.episodios_viajes');
-    viajeIds = ((exigir(rv as never, 'tablero.episodios_viajes') ?? []) as unknown as Fila[]).map((x) => String(x.id));
+    // A39-S36-01: `.limit(2000)` contra max_rows=1000 recortaba a 1000 y `recortadoPorViajes` nunca era true.
+    const qv = q.gte('created_at', new Date(desde.getTime() - 45 * 86_400_000).toISOString()).order('id');
+    viajeIds = (await traerHastaTope<Fila>((d, h) => acotada(qv.range(d, h), 'tablero.episodios_viajes') as never, TOPE_VIAJES_FILTRO + 1, 'tablero.episodios_viajes')).map((x) => String(x.id));
     if (viajeIds.length === 0) return { episodios: [], hayMas: false };
     recortadoPorViajes = viajeIds.length > TOPE_VIAJES_FILTRO;
   }
@@ -1542,8 +1586,8 @@ export async function leerEntradaInsights(
     if (f.terminalId && UUID_FILTRO.test(f.terminalId)) q = q.eq('terminal_id', f.terminalId);
     if (f.clienteId && UUID_FILTRO.test(f.clienteId)) q = q.eq('cliente_id', f.clienteId);
     if (f.operadorId && UUID_FILTRO.test(f.operadorId)) q = q.eq('operador_id', f.operadorId);
-    const rv = await acotada(q.gte('created_at', new Date(desde.getTime() - 45 * 86_400_000).toISOString()).order('id').limit(2000), 'insights.viajes');
-    const todos = ((exigir(rv as never, 'insights.viajes') ?? []) as unknown as Fila[]).map((x) => String(x.id));
+    const qv = q.gte('created_at', new Date(desde.getTime() - 45 * 86_400_000).toISOString()).order('id');
+    const todos = (await traerHastaTope<Fila>((d, h) => acotada(qv.range(d, h), 'insights.viajes') as never, TOPE_VIAJES_FILTRO + 1, 'insights.viajes')).map((x) => String(x.id));
     recortadoPorViajes = todos.length > TOPE_VIAJES_FILTRO;
     viajeIds = todos.slice(0, TOPE_VIAJES_FILTRO);
     if (viajeIds.length === 0) return { hitos: [], cruces: [], episodios: [], hayMas: false };
@@ -1551,16 +1595,20 @@ export async function leerEntradaInsights(
   let qh = supabaseAdmin().from('viaje_hito').select(COLUMNAS_HITO).eq('tenant_id', tenantId).gte('updated_at', desde.toISOString());
   let qc = supabaseAdmin().from('viaje_cruce_geocerca').select('detectado_en, registrado_en').eq('tenant_id', tenantId).gte('registrado_en', desde.toISOString());
   if (viajeIds) { qh = qh.in('viaje_id', viajeIds); qc = qc.in('viaje_id', viajeIds); }
-  const [rh, rc, ep] = await Promise.all([
-    acotada(qh.order('updated_at', { ascending: false }).order('id').limit(TOPE_INSIGHTS + 1), 'insights.hitos'),
-    acotada(qc.order('registrado_en', { ascending: false }).order('id').limit(TOPE_INSIGHTS + 1), 'insights.cruces'),
+  // A39-S36-01: TOPE_INSIGHTS+1 (5,001) pasa de max_rows (1,000): se pagina para que `hayMas` y los porcentajes sean reales.
+  const qho = qh.order('updated_at', { ascending: false }).order('id');
+  const qco = qc.order('registrado_en', { ascending: false }).order('id');
+  const [filasH, filasCruces, ep] = await Promise.all([
+    traerHastaTope<Fila>((d, h) => acotada(qho.range(d, h), 'insights.hitos') as never, TOPE_INSIGHTS + 1, 'insights.hitos'),
+    traerHastaTope<Fila>((d, h) => acotada(qco.range(d, h), 'insights.cruces') as never, TOPE_INSIGHTS + 1, 'insights.cruces')
+      .then((x) => ({ filas: x, error: null as Error | null }), (e: unknown) => ({ filas: [] as Fila[], error: e instanceof Error ? e : new Error(String(e)) })),
     leerEpisodiosParaTablero(tenantId, desde, f, 500),
   ]);
-  const filasH = (exigir(rh as never, 'insights.hitos') ?? []) as unknown as Fila[];
   let filasC: Fila[] = [];
-  if (rc.error) {
-    if (!faltaEsquema(rc.error, /viaje_cruce_geocerca/i)) throw new Error(`insights.cruces: ${rc.error.message}`);
-  } else filasC = (rc.data ?? []) as unknown as Fila[];
+  if (filasCruces.error) {
+    // Sin la 0 de `viaje_cruce_geocerca` (tabla ausente) no hay cruces; cualquier otro fallo sube.
+    if (!faltaEsquema({ message: filasCruces.error.message.replace(/^insights\.cruces: /, '') }, /viaje_cruce_geocerca/i)) throw filasCruces.error;
+  } else filasC = filasCruces.filas;
   const hayMas = filasH.length > TOPE_INSIGHTS || filasC.length > TOPE_INSIGHTS || (ep?.hayMas ?? false) || recortadoPorViajes;
   return {
     hitos: filasH.slice(0, TOPE_INSIGHTS).map(filaAHito),
@@ -1578,12 +1626,10 @@ const TOPE_VIAJES_CONSTANCIA = 2000;
 export async function leerDatosConstancia(
   tenantId: string, desde: Date, hasta: Date,
 ): Promise<{ viajes: ViajeConstancia[]; hitos: HitoFila[]; hayMas: boolean }> {
-  const rv = await acotada(
-    supabaseAdmin().from('viaje').select('id, folio, estatus, operador_id, created_at, operador:operador_id(nombre)').eq('tenant_id', tenantId)
-      .gte('created_at', desde.toISOString()).lt('created_at', hasta.toISOString()).order('created_at', { ascending: false }).order('id').limit(TOPE_VIAJES_CONSTANCIA + 1),
-    'constancia.viajes',
-  );
-  const filas = (exigir(rv as never, 'constancia.viajes') ?? []) as unknown as Fila[];
+  // A39-S36-01: el tope (2,001) pasa de max_rows (1,000): se pagina, o `hayMas` nunca se enciende.
+  const consultaViajes = supabaseAdmin().from('viaje').select('id, folio, estatus, operador_id, created_at, operador:operador_id(nombre)').eq('tenant_id', tenantId)
+    .gte('created_at', desde.toISOString()).lt('created_at', hasta.toISOString()).order('created_at', { ascending: false }).order('id');
+  const filas = await traerHastaTope<Fila>((d, h) => acotada(consultaViajes.range(d, h), 'constancia.viajes') as never, TOPE_VIAJES_CONSTANCIA + 1, 'constancia.viajes');
   const hayMas = filas.length > TOPE_VIAJES_CONSTANCIA;
   const viajes: ViajeConstancia[] = filas.slice(0, TOPE_VIAJES_CONSTANCIA).map((f) => {
     const rel = Array.isArray(f.operador) ? f.operador[0] : f.operador;
@@ -1695,8 +1741,9 @@ export async function retirarVoluntario(tenantId: string, operadorId: string): P
 
 /** Lo que el preflight necesita de la base, de UNA flota. Solo LEE: no manda nada ni escribe. Lanza si la base no contesta. */
 export async function leerDatosPreflight(tenantId: string, ahora: Date = new Date()): Promise<DatosPreflight> {
-  const [config, zonaDeclarada, voluntarios, contactos] = await Promise.all([
+  const [config, zonaDeclarada, voluntarios, contactos, agenteChofer] = await Promise.all([
     leerConfigConductor(tenantId), getZonaHorariaTenant(tenantId), listarVoluntarios(tenantId), cargarContactosTrafico(tenantId),
+    leerAgenteChoferHabilitado(tenantId),   // A5-01: nunca lanza; falla cerrado
   ]);
   const ids = voluntarios.map((o) => o.id);
   let viajes: DatosPreflight['viajes'] = [];
@@ -1711,9 +1758,10 @@ export async function leerDatosPreflight(tenantId: string, ahora: Date = new Dat
     if (unidades.length > 0) {
       const desde = new Date(ahora.getTime() - HORAS_GPS_RECIENTE * 3_600_000);
       const haceUnaHora = ahora.getTime() - 3_600_000;
-      const rp = await acotada(supabaseAdmin().from('posicion').select('unidad_id, medida_en')
-        .eq('tenant_id', tenantId).in('unidad_id', unidades).neq('proveedor', 'whatsapp').gte('medida_en', desde.toISOString()).order('medida_en', { ascending: false }).order('id').limit(5000), 'conductor.preflight_posiciones');
-      const ps = (exigir(rp as never, 'conductor.preflight_posiciones') ?? []) as unknown as Fila[];
+      // A39-S36-01: `.limit(5000)` contra `max_rows = 1000` recortaba en silencio y el preflight contaba menos posiciones de las que hay.
+      const qp = supabaseAdmin().from('posicion').select('unidad_id, medida_en')
+        .eq('tenant_id', tenantId).in('unidad_id', unidades).neq('proveedor', 'whatsapp').gte('medida_en', desde.toISOString()).order('medida_en', { ascending: false }).order('id');
+      const ps = (await traerHastaTope<Fila>((d, h) => acotada(qp.range(d, h), 'conductor.preflight_posiciones') as never, 5000, 'conductor.preflight_posiciones')) as unknown as Fila[];
       const mut = posicionesPorUnidad as Record<string, { ultimas2h: number; ultimaHora: number }>;
       for (const p of ps) {
         const u = String(p.unidad_id);
@@ -1726,6 +1774,7 @@ export async function leerDatosPreflight(tenantId: string, ahora: Date = new Dat
   return {
     config: { activo: config.activo, perfilSeguimiento: config.perfilSeguimiento, solicitudesMin: config.solicitudesMin, cohortePiloto: config.cohortePiloto ?? null },
     zonaDeclarada, voluntarios: voluntarios.map((o) => ({ telefono: o.telefono })), viajes, posicionesPorUnidad, contactos,
+    agenteChoferHabilitado: agenteChofer.razon,
     // A37-S36-07: sin lectura del perfil se asume el restrictivo (falla cerrado: se exigen más plantillas, no menos).
     perfilPlantillas: (await (await import('@/lib/auth/perfil_tenant')).perfilDeTenant(tenantId)) === null ? 'piloto' : 'cinco_agentes',
   };

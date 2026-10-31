@@ -628,15 +628,52 @@ function parseEmail(t: string): string | undefined {
   return m ? m[0].toLowerCase() : undefined;
 }
 
+/**
+ * A39-S53-03: interpreta un monto de tope escrito a mano. Formas admitidas: entero («4000»), miles («4,000» / «4.000»),
+ * centavos («4000.00» / «2500,50») y miles con centavos («4,000.00» / «4.000,00»). Cualquier otra combinación es ambigua: undefined.
+ * Un tope tiene al menos 3 dígitos enteros (como antes) y a lo más 6.
+ */
+export function montoDeTope(crudo: string): number | undefined {
+  // Sin regex anidadas (security/detect-unsafe-regex): se analiza con split sobre cadenas ya acotadas a [\d.,].
+  const soloDigitos = (x: string) => /^\d+$/.test(x);
+  const milesCon = (x: string, sep: string): boolean => {
+    const g = x.split(sep);
+    return g.length > 1 && soloDigitos(g[0]) && g[0].length <= 3 && g.slice(1).every((t) => soloDigitos(t) && t.length === 3);
+  };
+  let entero: string;
+  let dec = '';
+  if (soloDigitos(crudo)) {
+    entero = crudo;
+  } else {
+    const ult = Math.max(crudo.lastIndexOf('.'), crudo.lastIndexOf(','));
+    const sepUlt = crudo[ult];
+    const otro = sepUlt === '.' ? ',' : '.';
+    const tras = crudo.slice(ult + 1);
+    const antes = crudo.slice(0, ult);
+    if (!crudo.includes(otro) && milesCon(crudo, sepUlt)) {
+      entero = crudo.split(sepUlt).join('');                    // «4,000» / «4.000» / «1,234,567»
+    } else if (soloDigitos(tras) && tras.length <= 2 && !antes.includes(sepUlt)) {
+      if (soloDigitos(antes)) entero = antes;                   // «4000.00» / «2500,50»
+      else if (milesCon(antes, otro)) entero = antes.split(otro).join('');   // «4,000.00» / «4.000,00»
+      else return undefined;
+      dec = tras;
+    } else {
+      return undefined;
+    }
+  }
+  const n = Number(dec ? `${entero}.${dec}` : entero);
+  if (!Number.isFinite(n) || Math.floor(n) < 100 || Math.floor(n) > 999_999) return undefined;
+  return Math.round(n * 100) / 100;
+}
+
 function parseTopes(t: string): DatosOnboarding['topesPolitica'] | undefined {
   const s = strip(t);
   if (s === 'topes-demo') return { diesel: 4000, caseta: 1500, alimentacion: 800, hospedaje: 2500 };
   const num = (k: string): number | undefined => {
-    // A37-S53-07: admite separador de miles («4,000» / «4.000»); sin él, «diésel 4,000» no se leía.
-    const m = s.match(new RegExp(`${k}\\s*:?\\s*\\$?\\s*(\\d{1,3}(?:[,.]\\d{3})+|\\d{3,6})(?![\\d,.]\\d)`));
-    if (!m) return undefined;
-    const n = Number(m[1].replace(/[,.]/g, ''));
-    return Number.isFinite(n) && n > 0 ? n : undefined;
+    // A39-S53-03: se toma el número COMPLETO (con sus separadores) y luego se interpreta; antes el lookahead hacía retroceder
+    // la regex y «4000.00» se leía como 400. Lo que no cierra con una forma conocida NO se adivina (undefined).
+    const m = s.match(new RegExp(`${k}\\s*:?\\s*\\$?\\s*(\\d[\\d.,]*\\d|\\d)`));
+    return m ? montoDeTope(m[1]) : undefined;
   };
   const diesel = num('diesel');
   const caseta = num('caseta') ?? num('casetas') ?? num('peaje');

@@ -1,4 +1,4 @@
-import { normalizarNombre, fechaHoraDeCelda, montoDeCelda, type Celda } from './formatos';
+import { normalizarNombre, normalizarEncabezado, fechaHoraDeCelda, montoDeCelda, esFilaDeEjemplo, FILA_DE_EJEMPLO, type Celda } from './formatos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL TARIFARIO — lectura del archivo y reglas de guardado (T-A2-06).
@@ -38,6 +38,8 @@ export interface TarifaEntrada {
 export interface TarifaImportada extends TarifaEntrada {
   fila: number;
   casetaNorm: string;
+  /** «cobra por pasada» si/no del archivo; AUSENTE = la columna no viene o la celda está vacía (no se marca ni se desmarca nada). */
+  porPasada?: boolean;
 }
 
 export interface LecturaTarifas {
@@ -59,12 +61,13 @@ export interface TarifaExistente {
   confirmadaPor: string | null;
 }
 
-const COLS: Record<'caseta' | 'clase' | 'importe' | 'desde' | 'hasta', string[]> = {
+const COLS: Record<'caseta' | 'clase' | 'importe' | 'desde' | 'hasta' | 'porPasada', string[]> = {
   caseta: ['caseta', 'nombre', 'plaza', 'nombre de la caseta', 'nombre de la plaza'],
   clase: ['clase', 'categoria', 'clase de vehiculo', 'tipo de vehiculo'],
   importe: ['importe', 'tarifa', 'costo', 'monto', 'precio', 'tarifa mxn'],
   desde: ['desde', 'vigente desde', 'vigencia desde', 'inicio', 'inicio de vigencia', 'fecha inicio'],
   hasta: ['hasta', 'vigente hasta', 'vigencia hasta', 'fin', 'fin de vigencia', 'fecha fin'],
+  porPasada: ['cobra por pasada', 'por pasada', 'tarifa por pasada', 'por_pasada'],
 };
 
 const FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/;
@@ -113,7 +116,7 @@ export function parsearTarifasMatriz(matriz: Celda[][], opciones: { desdePorDefe
   const vacio: LecturaTarifas = { tarifas: [], rechazadas: [] };
   if (matriz.length === 0) return { ...vacio, error: 'El archivo está vacío.' };
 
-  const enc = matriz[0].map(normalizarNombre);
+  const enc = matriz[0].map(normalizarEncabezado);
   const idx: Partial<Record<keyof typeof COLS, number>> = {};
   for (const k of Object.keys(COLS) as Array<keyof typeof COLS>) {
     const i = enc.findIndex((e) => COLS[k].includes(e));
@@ -124,7 +127,7 @@ export function parsearTarifasMatriz(matriz: Celda[][], opciones: { desdePorDefe
     return {
       ...vacio,
       error: `Faltan columnas: ${faltan.join(', ')}. Encabezados leídos: ${matriz[0].map((c) => `«${String(c ?? '').trim()}»`).join(', ')}. `
-        + 'El archivo necesita: caseta, clase e importe (y opcionales desde y hasta, con la vigencia).',
+        + 'El archivo necesita: caseta, clase e importe (y opcionales desde y hasta, con la vigencia, y si la caseta cobra por pasada).',
     };
   }
   if (idx.desde === undefined && !opciones.desdePorDefecto) {
@@ -147,6 +150,7 @@ export function parsearTarifasMatriz(matriz: Celda[][], opciones: { desdePorDefe
     const rechazar = (motivo: string) => { rechazadas.push({ fila: n, motivo }); };
 
     const caseta = String(celda('caseta') ?? '').trim().replace(/\s+/g, ' ');
+    if (esFilaDeEjemplo(caseta)) { rechazadas.push({ fila: n, motivo: FILA_DE_EJEMPLO }); continue; }
     const clase = claseDeCelda(celda('clase'));
     if (clase === null) { rechazar(`la clase no es un número entero de ${CLASE_MIN} a ${CLASE_MAX}`); continue; }
     const importe = montoDeCelda(celda('importe'));
@@ -180,7 +184,10 @@ export function parsearTarifasMatriz(matriz: Celda[][], opciones: { desdePorDefe
     const choca = previas.find((p) => vigenciasSeTraslapan(p, entrada));
     if (choca) { rechazar(`la vigencia (${textoVigencia(entrada)}) se traslapa con la de la fila ${choca.fila} (${textoVigencia(choca)})`); continue; }
 
-    const t: TarifaImportada = { ...entrada, fila: n, casetaNorm };
+    // «cobra por pasada (si/no)»: vacío o ilegible = no se sabe (no se marca ni se desmarca nada).
+    const pasadaCruda = idx.porPasada === undefined ? '' : normalizarNombre(String(celda('porPasada') ?? ''));
+    const porPasada = ['si', 'true', '1', 'x', 'verdadero'].includes(pasadaCruda) ? true : ['no', 'false', '0', 'falso'].includes(pasadaCruda) ? false : undefined;
+    const t: TarifaImportada = { ...entrada, fila: n, casetaNorm, ...(porPasada === undefined ? {} : { porPasada }) };
     aceptadas.set(llave, [...previas, t]);
     tarifas.push(t);
   }

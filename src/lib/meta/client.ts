@@ -781,7 +781,7 @@ export async function sendDocument(
   link: string,
   filename: string,
   caption?: string,
-): Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number }> {
+): Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number; status?: number }> {
   if (esDestinatarioBloqueado(to)) return rechazarDemo(to, 'wa.sendDocument');
   const payload = {
     messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'document',
@@ -810,7 +810,9 @@ export async function sendDocument(
     logger.error('wa.sendDocument', { filename, para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
     if (esTokenMetaInvalido(codigo, res.status)) await alFallarPorToken(payload, codigo, res.status, crudo);
     else if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
-    return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo };
+    // A39-S30-03: el `status` HTTP también sale. Un 4xx con cuerpo no JSON no trae `codigo`, y sin `status` se leía como «fallo
+    // de red ya encolado» (sellado como `encolado` sin estarlo en `wa_outbox`).
+    return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo, status: res.status };
   }
 
   // Igual que en `sendText`: el envío del PDF es EL entregable, y su éxito no

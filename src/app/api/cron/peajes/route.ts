@@ -4,6 +4,7 @@ import { ejecutarPulls, type ResumenPulls } from '@/lib/likida/peajes/pull';
 import { ejecutarSftpPeajes, type ResumenSftpPeajes } from '@/lib/likida/peajes/ingesta_sftp';
 import { reintentarAvisosPeajes, type ResumenAvisos } from '@/lib/likida/peajes/aviso_oficina';
 import { reintentarAvisosAtipicos, type ResumenAvisosAtipicos } from '@/lib/likida/peajes/aviso_atipicos';
+import { barrerAvisosPeajes, depsBarridoReales, type ResumenBarridoAvisos } from '@/lib/likida/peajes/aviso_barrido';
 import { leerInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
@@ -13,6 +14,8 @@ import { puertaCron, registrarLatido } from '@/lib/admin/salud';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
+/** A2P-15: lo que se reserva para revisar UN archivo más en el barrido de plazo (lee hasta ~26 000 líneas): si no cabe antes del tope, se corta y se cuenta. */
+const PRESUPUESTO_DESGLOSE_AVISOS_MS = 8_000;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CRON QUE PROCESA LOS DESGLOSES DE PEAJE RECIBIDOS (0376).
@@ -23,6 +26,9 @@ export const maxDuration = 120;
 // cierra solo si todavía tiene el token. Un formato que no entiende queda
 // `fallida` con el motivo exacto (y una corrida de «fallo» en la bitácora del
 // agente); un fallo de infraestructura reintenta con backoff.
+//
+// Además (A2 ola 1): AL FINAL los avisos proactivos de plazo de reclamo y de archivo decenal faltante
+// (`peajes/aviso_barrido.ts`), apagados de origen por flota.
 //
 // Además (0563): PRIMERO consulta los endpoints de las flotas con pull activo
 // (`peajes/pull.ts`: lo que traiga entra a la misma cola), TAMBIÉN PRIMERO las flotas
@@ -64,18 +70,22 @@ export async function GET(req: Request) {
   try {
     // Un margen para el latido: lo que no alcance queda con su lease y el
     // siguiente cron lo recupera.
+    // A2P-16: UN solo reloj para toda la corrida. Antes cada paso calculaba su `venceEn` con `Date.now()` al llegar a él (pull 40 s + SFTP 40 s +
+    // cola 100 s + avisos 15 s excedían `maxDuration`). Ahora todo cuelga del mismo `inicio` y el último paso cierra 10 s antes del tope.
+    const inicio = Date.now();
+    const venceTodo = inicio + (maxDuration - 10) * 1000;
     // 1. El pull: lo que traiga se encola y lo toma el paso 2 en esta misma corrida.
     let pulls: ResumenPulls | null = null;
-    try { pulls = await ejecutarPulls({ limite: 3, venceEn: Date.now() + 40_000 }); } catch (e) {
+    try { pulls = await ejecutarPulls({ limite: 3, venceEn: inicio + 25_000 }); } catch (e) {
       logger.error('cron.peajes.pull_fallo', { error: e instanceof Error ? e.message : String(e) });
     }
     // 1b. El SFTP (0843): mismo margen, mismo blindaje — una flota que falla nunca tumba el cron.
     let sftp: ResumenSftpPeajes | null = null;
-    try { sftp = await ejecutarSftpPeajes({ limite: 3, venceEn: Date.now() + 40_000 }); } catch (e) {
+    try { sftp = await ejecutarSftpPeajes({ limite: 3, venceEn: inicio + 45_000 }); } catch (e) {
       logger.error('cron.peajes.sftp_fallo', { error: e instanceof Error ? e.message : String(e) });
     }
     // 2. La cola.
-    const r = await procesarColaPeajes({ limite: 3, venceEn: Date.now() + 100_000 });
+    const r = await procesarColaPeajes({ limite: 3, venceEn: inicio + 85_000 });
     // 3. Los avisos a la oficina que no salieron al procesar.
     let avisos: ResumenAvisos | null = null;
     try { avisos = await reintentarAvisosPeajes(5); } catch (e) {
@@ -86,7 +96,13 @@ export async function GET(req: Request) {
     try { avisosAtipicos = await reintentarAvisosAtipicos(5); } catch (e) {
       logger.error('cron.peajes.avisos_atipicos_fallo', { error: e instanceof Error ? e.message : String(e) });
     }
-    logger.info('cron.peajes.ok', { ...r, pulls, sftp, avisos, avisosAtipicos });
+    // 5. Los avisos proactivos (A2 ola 1): cobros sin reclamar por vencer su plazo y archivo decenal faltante. Apagados de origen por
+    //    flota; sin destinatario no envían y no vuelven «parcial» el latido. Una flota que no se pudo evaluar sí.
+    let avisosProactivos: ResumenBarridoAvisos | null = null;
+    try { avisosProactivos = await barrerAvisosPeajes(await depsBarridoReales(), { venceEn: venceTodo, presupuestoPorDesgloseMs: PRESUPUESTO_DESGLOSE_AVISOS_MS }); } catch (e) {
+      logger.error('cron.peajes.avisos_proactivos_fallo', { error: e instanceof Error ? e.message : String(e) });
+    }
+    logger.info('cron.peajes.ok', { ...r, pulls, sftp, avisos, avisosAtipicos, avisosProactivos });
     // `fallidos` y `reintentar` son trabajo que NO terminó bien: ni «ok» ni «fallo»
     // total, que son las dos maneras de mentir aquí. Un pull, un SFTP fallido o un
     // aviso que no salió tampoco es «ok».
@@ -96,10 +112,11 @@ export async function GET(req: Request) {
       || (sftp?.fallidas ?? 0) > 0 || sftp === null
       || (avisos?.pendientes ?? 0) > 0
       || avisosAtipicos === null || avisosAtipicos.pendientes > 0
+      || avisosProactivos === null || avisosProactivos.fallidas > 0 || avisosProactivos.plazo.fallidos > 0 || avisosProactivos.recordatorios.fallidos > 0
       || (r.atipicos?.fallidos ?? 0) > 0
       || (r.discrepancia?.pendientes ?? 0) > 0;
-    await registrarLatido('peajes', parcial ? 'parcial' : 'ok', { ...r, pulls, sftp, avisos, avisosAtipicos });
-    return NextResponse.json({ corrio: true, ...r, pulls, sftp, avisos, avisosAtipicos });
+    await registrarLatido('peajes', parcial ? 'parcial' : 'ok', { ...r, pulls, sftp, avisos, avisosAtipicos, avisosProactivos });
+    return NextResponse.json({ corrio: true, ...r, pulls, sftp, avisos, avisosAtipicos, avisosProactivos });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     const codigo = codigoDeError(e);

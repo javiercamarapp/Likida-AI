@@ -104,6 +104,12 @@ DATABASE_URL="postgres://..." scripts/perfil/aplicar-cinco-agentes.sh <UUID-de-l
 DATABASE_URL="postgres://..." scripts/perfil/revertir-cinco-agentes.sh <UUID-de-la-flota>
 ```
 
+**Liquidación por correo bajo este perfil (Ola 10, A1-01):** aplicar el perfil deja `liquidacion_correo_config` con `canal = 'correo'` y
+**`activa = false`** (también al reaplicarlo sobre una fila ya activa). No sale ningún desglose hasta que alguien lo encienda a mano, y
+`guardarConfigCorreo` **rechaza activar el envío sin fecha de corte** (`no_enviar_antes_de`) en una flota con este perfil; las flotas sin
+perfil que ya estaban activas no cambian. Procedimiento completo en `liquidacion-desglose-correo.md` (5.5): aplicar la migración 0940, cargar
+contactos, poner la fecha de corte, subir con vista previa, confirmar y activar.
+
 Ambos scripts validan que el argumento sea un UUID, son idempotentes y no tocan ninguna otra flota. El cambio se
 nota en la app en menos de un minuto (caché de 30 s).
 

@@ -18,7 +18,8 @@
 
 import { createHash } from 'node:crypto';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
-import { leerConfigSalida } from './salida_config';
+import { notificarMovimiento } from './primer_mes';
+import { leerConfigSalida, plantillaParaDocumento } from './salida_config';
 import * as repo from './repo';
 import type { DocumentoFila, EnvioTmsFila, EstadoEnvioTms } from './repo';
 
@@ -72,7 +73,7 @@ export async function prepararEnvioTms(
 ): Promise<ResultadoEnvio> {
   if (doc.estado !== 'aprobado') return { ok: false, motivo: 'no_aprobado', mensaje: 'Solo se prepara el envío de un documento aprobado.' };
   const config = await leerConfigSalida(tenantId);
-  const plantilla = config.plantillaPorDefecto;
+  const plantilla = plantillaParaDocumento(config, doc.extraccion);
   const llave = llaveDeEnvio(tenantId, doc.id, doc.version, plantilla);
 
   const previos = await repo.enviosDeDocumento(tenantId, doc.id);
@@ -99,6 +100,7 @@ export type ResultadoSubidoAMano =
   | { ok: true; envio: EnvioTmsFila; yaEstaba: boolean }
   | { ok: false; motivo: 'no_aprobado' | 'version_cambio' | 'ya_enviado' | 'envio_en_curso' | 'error'; mensaje: string };
 
+export const MENSAJE_REFERENCIA_OBLIGATORIA = 'Escribe la referencia que el sistema del cliente (TMS) dio a la carga: sin ella no se puede ligar este documento con su viaje ni con el complemento timbrado.';
 const MENSAJE_YA_ENVIADO = 'Este documento ya se envió al TMS: no hay nada que subir a mano.';
 
 /**
@@ -137,6 +139,12 @@ export async function marcarSubidoAMano(
   if (envio?.estado === 'enviado') return { ok: false, motivo: 'ya_enviado', mensaje: MENSAJE_YA_ENVIADO };
   if (envio?.estado === 'enviando') return { ok: false, motivo: 'envio_en_curso', mensaje: 'El envío se está haciendo ahora. Espera a que termine antes de marcarlo como subido a mano.' };
 
+  // A3-02 (cierre100): con viajes del TMS (flota bajo el perfil), la referencia es lo que casa este envío con el viaje allá y con el
+  // CCP timbrado; sin ella el tablero «sin Carta Porte» no puede ligarlo. Es obligatoria para dar el envío por subido a mano.
+  if (ref.valor === null && (await flotaBajoPerfil(tenantId))) {
+    return { ok: false, motivo: 'error', mensaje: MENSAJE_REFERENCIA_OBLIGATORIA };
+  }
+
   if (!envio) {
     const p = await prepararEnvioTms(tenantId, doc, actor);
     if (!p.ok) return { ok: false, motivo: p.motivo === 'envio_en_curso' ? 'envio_en_curso' : 'error', mensaje: p.mensaje };
@@ -153,5 +161,6 @@ export async function marcarSubidoAMano(
   }
   if (ref.valor !== null) await repo.fijarReferenciaEnvio(tenantId, envio.id, ref.valor);
   await repo.registrarEvento(tenantId, doc.id, 'envio_subido_a_mano', actor.id, { envioId: envio.id, versionDoc: doc.version, estadoPrevio, conReferencia: ref.valor !== null });
+  await notificarMovimiento(tenantId, doc.id, 'subido_a_mano', doc.version);
   return { ok: true, envio: { ...envio, estado: 'subido_a_mano' }, yaEstaba: false };
 }

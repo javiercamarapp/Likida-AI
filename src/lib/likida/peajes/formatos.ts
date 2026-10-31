@@ -62,6 +62,20 @@ export function normalizarNombre(v: Celda): string {
 }
 
 /**
+ * El encabezado de una columna de plantilla en su forma de comparación: sin lo que va entre paréntesis ni un «(opcional)» al final.
+ * Las plantillas que se le mandan al cliente traen la explicación en el propio encabezado
+ * («nombre de la caseta (extraído de su reporte de septiembre: confirmen o corrijan)», «cobra por pasada (si/no)»,
+ * «unidad (numero economico)»): sin esto ninguna reconocía su propia plantilla.
+ */
+export function normalizarEncabezado(v: Celda): string {
+  return normalizarNombre(String(v ?? '').replace(/\([^)]*\)/g, ' ')).replace(/\s+opcional$/, '').trim();
+}
+
+/** Las plantillas que se le mandan al cliente traen una fila de EJEMPLO («EJEMPLO PERIFERICO», «EJEMPLO 0012345678»): no es un dato. */
+export const FILA_DE_EJEMPLO = 'es la fila de ejemplo de la plantilla: no se importa (borra la fila o reemplázala con tus datos)';
+export const esFilaDeEjemplo = (primeraCelda: Celda): boolean => /^ejemplo(\s|$)/.test(normalizarNombre(primeraCelda));
+
+/**
  * La unidad en su forma de comparación: «TC-9001», «tc 9001» y «TC9001» son la misma unidad.
  * Minúsculas, sin acentos, signos ni espacios. Cadena vacía si no queda nada.
  */

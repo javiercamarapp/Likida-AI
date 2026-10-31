@@ -36,6 +36,9 @@ export const ESTADOS_TICKET_CERRADO: ReadonlySet<string> = new Set(
   ESTADOS_TICKET.filter((e) => ESTADOS_TERMINALES.has(e)),
 );
 
+/** Los estados terminales, como los quiere el filtro de PostgREST. */
+const CERRADOS_PG = `(${[...ESTADOS_TICKET_CERRADO].join(',')})`;
+
 export interface TicketCruzado {
   id: string;
   asunto: string;
@@ -83,24 +86,42 @@ export interface TicketCruzado {
  */
 export async function getTicketsCruzados(
   ahoraMs: number,
-  opciones: { tenantId?: string; limite?: number } = {},
+  opciones: { tenantId?: string; limite?: number; soloAbiertos?: boolean } = {},
 ): Promise<TicketCruzado[]> {
-  let consulta = supabaseAdmin()
-    .from('ticket_soporte')
-    .select('id, asunto, categoria, prioridad, estado, abierto_en, resuelto_en, vence_en, tenant_id, '
-      + 'asignado_a, tenant:tenant_id(nombre), asignado:asignado_a(nombre)');
-  if (opciones.tenantId) consulta = consulta.eq('tenant_id', opciones.tenantId);
+  const tope = Math.max(1, Math.min(TOPE_TICKETS, opciones.limite ?? TOPE_TICKETS));
+  const columnas = 'id, asunto, categoria, prioridad, estado, abierto_en, resuelto_en, vence_en, tenant_id, '
+    + 'asignado_a, tenant:tenant_id(nombre), asignado:asignado_a(nombre)';
 
-  const { data, error } = await consulta
-    // `nullsFirst: false` = los sin SLA al final, igual que el sort viejo
-    // mandaba `Infinity` al fondo. `id` desempata para que dos cargas de la
-    // misma cola no barajen filas con el mismo vencimiento.
-    .order('vence_en', { ascending: true, nullsFirst: false })
-    .order('id')
-    .limit(Math.max(1, Math.min(TOPE_TICKETS, opciones.limite ?? TOPE_TICKETS)));
-  if (error) throw new Error(`getTicketsCruzados: ${error.message}`);
+  const leer = async (cerrados: boolean, limite: number) => {
+    let consulta = supabaseAdmin().from('ticket_soporte').select(columnas);
+    if (opciones.tenantId) consulta = consulta.eq('tenant_id', opciones.tenantId);
+    // A39-S23-01: el estado se filtra EN LA BASE, antes del tope. Con el tope
+    // sobre la tabla entera, los cerrados (que conservan su `vence_en`
+    // pasado) llenaban los 200 "más urgentes" y desplazaban a los abiertos.
+    consulta = cerrados
+      ? consulta.in('estado', [...ESTADOS_TICKET_CERRADO])
+      : consulta.not('estado', 'in', CERRADOS_PG);
+    const { data, error } = await consulta
+      // `nullsFirst: false` = los sin SLA al final, igual que el sort viejo
+      // mandaba `Infinity` al fondo. `id` desempata para que dos cargas de la
+      // misma cola no barajen filas con el mismo vencimiento.
+      .order('vence_en', { ascending: true, nullsFirst: false })
+      .order('id')
+      .limit(limite);
+    if (error) throw new Error(`getTicketsCruzados: ${error.message}`);
+    return data ?? [];
+  };
 
-  return (data ?? []).map((f): TicketCruzado => {
+  // Primero TODO lo abierto (hasta el tope) y solo con lo que sobre, el
+  // histórico cerrado. `soloAbiertos` lo usa la bandeja de escalaciones, que
+  // descarta los cerrados de todos modos.
+  const abiertos = await leer(false, tope);
+  const cerrados = !opciones.soloAbiertos && abiertos.length < tope
+    ? await leer(true, tope - abiertos.length)
+    : [];
+  const data = [...abiertos, ...cerrados];
+
+  return data.map((f): TicketCruzado => {
     // Por `unknown`: con DOS embeds (`tenant:tenant_id` y `asignado:asignado_a`
     // — dos FKs distintas a app_user desde la misma tabla) el tipo que
     // supabase-js infiere es una unión con `GenericStringError`. Se lee campo
@@ -178,8 +199,6 @@ export interface ConteosTickets {
   cerrados: number | null;
 }
 
-/** Los estados terminales, como los quiere el filtro de PostgREST. */
-const CERRADOS_PG = `(${[...ESTADOS_TICKET_CERRADO].join(',')})`;
 
 /**
  * Los cuatro conteos de la cola, CONTADOS EN LA BASE (`count exact, head`:

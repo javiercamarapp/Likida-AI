@@ -56,6 +56,7 @@ import { enviarPiezaPorCorreo, topeCorreoFrioDia, filtrarSuprimidos, TIPOS_CAMPA
 import { registrarCorrida, type DisparoCorrida } from './corridas';
 import { anotarBitacora } from '../bitacora_escritura';
 import { logger } from '@/lib/logger';
+import { esDominioDeCorreoLibre } from './correo_libre';
 
 // La lista de bajas vive ahora en la PUERTA (cola.ts, c5-1) para que el
 // camino humano también la consulte; se re-exporta para los llamadores y
@@ -295,6 +296,13 @@ export async function correrEnviador(
           .limit(50);
         if (errExtra) throw new Error(`correos de la empresa ilegibles: ${errExtra.message}`);
         copias = ((extra ?? []) as Array<{ correo: string }>).map((f) => f.correo);
+        // A39-S28-03: una copia de dominio LIBRE (gmail, hotmail…) distinta del principal NO se manda:
+        // filas ya guardadas antes de la compuerta nueva pudieron colarse por «mismo dominio que el principal».
+        const libres = copias.filter((c) => esDominioDeCorreoLibre(c) && c.trim().toLowerCase() !== principal.trim().toLowerCase());
+        if (libres.length > 0) {
+          logger.warn('enviador.copias_dominio_libre_omitidas', { pieza: pieza.id, omitidas: libres.length });
+          copias = copias.filter((c) => !libres.includes(c));
+        }
       }
       const vivos = await filtrarSuprimidos([principal, ...copias]);
       if (!vivos.includes(principal)) {

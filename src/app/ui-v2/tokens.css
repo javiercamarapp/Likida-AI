@@ -1,0 +1,376 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   UI v2 · TOKENS (SPIKE de la Fase 0 · PLAN-MAESTRO §2.2 y §3-Fase 0.3)
+
+   Se importa SOLO desde `dashboard/layout.tsx` (CSS por ruta; nunca desde
+   globals.css). Nació como spike de la Fase 0 (veredicto GO) y en la Fase 1
+   (carril A, A.3) se convirtió en la capa de tokens real.
+
+   ALCANCE: todo cuelga de `[data-ui="v2"]` (atributo que pondrá el div raíz del
+   chrome junto a `tema-neutro`). Sin el atributo este archivo es inerte y v1
+   pinta idéntico (se mide con capturas, tolerancia 0 px).
+
+   ESPECIFICIDAD: `.tema-neutro` (0,1,0) y `:root[data-theme="dark"] .tema-neutro`
+   (0,3,0) ya fijan --marca/--accent/--g1..g5 en globals.css. Aquí el claro va en
+   `:root [data-ui="v2"]` (0,2,0) y el oscuro en `:root[data-theme="dark"]
+   [data-ui="v2"].tema-neutro` (0,4,0): ganan sin depender del orden en que Next
+   ordene los chunks de CSS.
+
+   VALORES: ESTILO-LIKIDA (única fuente de números; los valores sin token propio se declaran AQUÍ y en ningún otro
+   lado). Los nombres de la primera capa (--bg, --surface, --canvas, --ink, --line, --input, --marca, --chart-n…) los
+   leen los componentes de los carriles B y C; los `--ui-*` son los alias del sistema v2 (lienzo, tarjeta, suave,
+   elevado, bordes) y apuntan a ellos, de modo que hay UN solo valor por color. Los pares tint/ink de estado miden
+   5.04–7.01:1; `contraste_v2.test.ts` mide todos los pares nuevos (≥4.5:1 texto, ≥3:1 controles y marcas).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root [data-ui="v2"] {
+  /* Marco y superficies */
+  --bg: #f6f1e7;
+  --surface: #ffffff;
+  --panel: var(--surface);
+  --canvas: #efe7d8;
+  --canvas2: #f8f4ec;
+
+  /* Tinta */
+  --ink: #17100d;
+  --ink2: #3b302a;
+  --muted: #5f544c;
+  --faint: #6e625a;
+
+  /* Líneas y controles */
+  --line: #dccfb9;
+  --line2: #cfc1a9;
+  --input: #8c8073;
+
+  /* --marca = TINTA como relleno neutro (anillo, interruptor, foco del recorrido, mosaicos de icono de KPI, barras): lo leen los
+     componentes de B/C y el kit; así el naranja de marca no se multiplica por pantalla. El naranja vive en --marca-naranja. */
+  --marca: #17100d;
+  --marca-fg: #ffffff;
+  --marca-hover: #3b302a;
+  --accent: #17100d;
+  --accent-fg: #ffffff;
+  /* ◆ IDENTIDAD DE MARCA (directiva 29-oct; mismos nombres que #772): naranja ladrillo = acción, marino = estructura, crema = superficies. */
+  --marca-naranja: #c2410c;
+  --marca-naranja-hover: #9a3412;
+  --marca-marino: #2a3f5f;
+  --marca-crema: #ede4d3;
+  /* ◆ Botón primario = naranja ladrillo con texto blanco (AA 5.18:1), máx. 1 por pliegue. */
+  --btn-bg: var(--marca-naranja);
+  --btn-fg: #ffffff;
+  --btn-borde: var(--marca-naranja);
+  --btn-hover: var(--marca-naranja-hover);
+  /* Variante secundaria de color: marino suave. */
+  --btn-soft: #e4e9f1;
+  --btn-soft-fg: #2a3f5f;
+  --btn-soft-hover: #d6dee9;
+  /* ◆ Señal «requiere acción» = burdeos (matiz 6 de datos), ≤2 % del área; nunca hover, relleno de botón ni «Salir».
+     #a6264a sobre blanco mide ≥7:1. */
+  --senal: #a6264a;
+
+  /* Estados (tint/ink) */
+  --ok: #16784a;
+  --okbg: #ecf8f1;
+  --warn: #86580d;
+  --warnbg: #fff7e5;
+  --bad: #ac2440;
+  --badbg: #fdeef0;
+  --info: #145966;
+  --infobg: #e8f3f5;
+
+  /* Rampa de gráficas (neutra) */
+  --g1: #f1ebdf;
+  --g2: #e6ded0;
+  --g3: #8c8073;
+  --g4: #3b302a;
+  --g5: #17100d;
+
+  /* Ocho matices de DATOS: solo gráficas, chips de categoría y filete de KPI. 1 = marino de marca; 2 = bronce (NO el naranja de acción). */
+  --chart-1: #2a3f5f; --chart-2: #b45f06; --chart-3: #1f7a55; --chart-4: #d9a441;
+  --chart-5: #0a84a6; --chart-6: #a6264a; --chart-7: #7b5cd6; --chart-8: #17100d;
+  --soft-1: #e4e9f1; --soft-2: #fbebd7; --soft-3: #e4efeb; --soft-4: #faf4e8;
+  --soft-5: #e2f0f4; --soft-6: #f4e5e9; --soft-7: #efebfa; --soft-8: #e6ded0;
+  --ink-1: #2a3f5f; --ink-2: #8a4a05; --ink-3: #1d7350; --ink-4: #8c6a2a;
+  --ink-5: #087593; --ink-6: #a6264a; --ink-7: #7456c9; --ink-8: #17100d;
+
+  /* Alias del sistema v2 (ESTILO-LIKIDA §1) */
+  /* ◆ IDENTIDAD DE MARCA (directiva de Javier 29-oct): naranja ladrillo = acción (--marca-naranja), azul marino = estructura/activo,
+     crema = superficies, tinta cálida. Máx. un acento fuerte por vista. */
+  --marino: var(--marca-marino);
+  --marino-soft: #e4e9f1;
+  --crema: var(--marca-crema);
+  --ui-activo-bg: var(--marino-soft);
+  --ui-activo-ink: var(--marino);
+  --ui-activo-barra: var(--marca-naranja);
+
+  --ui-canvas: var(--bg);
+  --ui-surface: var(--surface);
+  --ui-soft: var(--canvas);
+  --ui-elevated: #ffffff;
+  --ui-border: var(--line);
+  --ui-line-strong: var(--line2);
+  --ui-input: var(--input);
+  --ui-secondary: var(--ink2);
+  --ui-focus: var(--ink);
+  --ui-scrim: var(--scrim);
+  --ui-tip-bg: var(--tip);
+  --ui-tip-ink: var(--tip-ink);
+  /* ÚNICO color de la capa de carga (= el fondo de la app) */
+  --carga-fondo: #f6f1e7;
+  /* Cabecera de tabla: petróleo al 7 % sobre la superficie, texto ink-info */
+  --tabla-cab-bg: #eef0f4;
+  --tabla-cab-ink: var(--marino);
+
+  /* Neutros */
+  --n-950: #17100d;
+  --n-900: #1f1814;
+  --n-850: #2a211c;
+  --n-800: #352b25;
+  --n-700: #4a3f38;
+  --n-600: #5f544c;
+  --n-500: #8c8073;
+  --n-400: #b3a9a0;
+  --n-300: #d2c6b2;
+  --n-200: #e6ded0;
+  --n-100: #f1ebdf;
+  --n-50: #f8f4ec;
+
+  /* Texto sobre un segmento relleno con el matiz n de datos */
+  --on-1: #ffffff;
+  --on-2: #ffffff;
+  --on-3: #ffffff;
+  --on-4: #0e0e10;
+  --on-5: #000000;
+  --on-6: #ffffff;
+  --on-7: #ffffff;
+  --on-8: #ffffff;
+
+  /* Neutros de gráfica */
+  --chart-barra: #4a3f38; --chart-fuerte: #17100d; --chart-rejilla: #17100d14; --chart-eje: #17100d33;
+  --heat-0: #eee7da;
+  --heat-1: #d5cbba;
+  --heat-2: #a89c8c;
+  --heat-3: #5f544c;
+  --heat-4: #17100d;
+
+  /* Procedencia (por trazo, no por matiz): Observado silencioso; Estimado discontinuo; Inferido punteado; Sin dato discontinuo vacío */
+  --prov-obs: #17100d;
+  --prov-est-bg: #e6ded0;
+  --prov-est-borde: #5b4f46;
+  --prov-inf-bg: #f8f4ec;
+  --prov-inf-borde: #7d7166;
+  --prov-sin-borde: #8c8073;
+
+  /* Radios (§5): controles y marcas de celda 8 · tarjetas, sidebar, overlays 12 · chips y píldoras 999 · hoja móvil 16 */
+  --r-control: 8px;
+  --r-card: 12px;
+  --r-pill: 999px;
+  --r-sheet: 16px;
+
+  /* Escala tipográfica cerrada {11 M, 12, 13, 14, 15, 16, 18, 20, 26} (§3) */
+  --fs-micro: 11px;
+  --fs-label: 12px;
+  --fs-body: 13px;
+  --fs-h2: 14px;
+  --fs-overlay: 15px;
+  --fs-campo: 16px;
+  --fs-kpi-vacio: 18px;
+  --fs-h1: 20px;
+  --fs-kpi: 26px;
+  --fs-kpi-movil: clamp(18px, 5.2vw, 21px);
+
+  /* Medidas de shell y de composición (§4–§7); el shell las lee de aquí y `marco-v2.ts` las cruza con `shell.css` */
+  --marco-pad: 16px;
+  --sb-w: 232px;
+  --rail-w: 72px;
+  --topbar-h: 44px;
+  --cab-movil-h: 56px;
+  --item-h: 32px;
+  --item-h-riel: 40px;
+  --marca-h: 52px;
+  --pie-max: 150px;
+  --logo-sb: 30px;
+  --logo-riel: 28px;
+  --logo-movil: 28px;
+  --logo-carga: 40px;
+  --pad-pagina: 24px;
+  --pad-pagina-b: 28px;
+  --sp-gap: 12px;
+  --card-pad: 14px;
+  --card-pad-compacta: 12px;
+  --btn-h: 32px;
+  --btn-h-movil: 36px;
+  --input-h: 32px;
+  --toque: 44px;
+  --kpi-h: 112px; --fila-tabla: 40px; --fila-tabla-densa: 32px; --cabecera-tabla: 36px; --chart-h: 168px; --chart-h-sm: 140px;
+
+  /* Superpuestos */
+  --scrim: #17100d66;
+  --tip: #17100d;
+  --tip-ink: #f7f1e8;
+
+  /* Gemelos --color-* (los que Tailwind emite como utilidades y 29 .tsx leen) */
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+
+  /* Radios: 8 para controles, 12 para tarjetas. `rounded-lg` (630 usos) hace de
+     control Y de tarjeta; la tarjeta se devuelve a 12 con `.card` abajo. */
+  --radius-md: 8px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 12px;
+
+  /* Sin sombras en el flujo; solo los popovers flotan */
+  --shadow-card: none;
+  --shadow-pop: 0 12px 32px -8px #17100d2e, 0 2px 6px #17100d0f;
+  --sh-pop: var(--shadow-pop);
+}
+
+:root[data-theme="dark"] [data-ui="v2"].tema-neutro,
+:root[data-theme="dark"] [data-ui="v2"] {
+  --bg: #120d0a;
+  --surface: #1c1511;
+  --canvas: #2a201a;
+  --canvas2: #1c1511;
+
+  --ink: #f7f1e8;
+  --ink2: #e2d8ca;
+  --muted: #b5a99c;
+  --faint: #a89c8f;
+
+  --line: #43362e;
+  --line2: #5a4b41;
+  --input: #8f8277;
+
+  --marca: #f7f1e8;
+  --marca-fg: #17100d;
+  --marca-hover: #ffffff;
+  --accent: #f7f1e8;
+  --accent-fg: #17100d;
+  --marca-naranja: #fb923c;
+  --marca-naranja-hover: #fdba74;
+  --marca-marino: #9db4d6;
+  --marca-crema: #2a241b;
+  --btn-bg: var(--marca-naranja);
+  --btn-fg: #17100d;
+  --btn-borde: var(--marca-naranja);
+  --btn-hover: var(--marca-naranja-hover);
+  --btn-soft: #1b2431;
+  --btn-soft-fg: #9db9e0;
+  --btn-soft-hover: #141b26;
+  --senal: #cc4a6c;
+
+  --ok: #6fd6a3;
+  --okbg: #12261c;
+  --warn: #f0c987;
+  --warnbg: #33281a;
+  --bad: #ffb3c3;
+  --badbg: #342127;
+  --info: #9fd3de;
+  --infobg: #14272c;
+
+  --g1: #1c1511;
+  --g2: #2a201a;
+  --g3: #8f8277;
+  --g4: #e2d8ca;
+  --g5: #f7f1e8;
+
+  --chart-1: #7c9bcb; --chart-2: #d9892b; --chart-3: #2a9468; --chart-4: #b98526;
+  --chart-5: #1d93b0; --chart-6: #cc4a6c; --chart-7: #8d75e0; --chart-8: #f7f1e8;
+  --soft-1: #1b2431; --soft-2: #2e2113; --soft-3: #192623; --soft-4: #2a241b;
+  --soft-5: #18262c; --soft-6: #2d1d24; --soft-7: #252232; --soft-8: #2a201a;
+  --ink-1: #9db9e0; --ink-2: #e8a04a; --ink-3: #43a07a; --ink-4: #b98526;
+  --ink-5: #2b99b5; --ink-6: #d56985; --ink-7: #947de2; --ink-8: #f7f1e8;
+
+  --marino-soft: #1b2431;
+  --ui-elevated: #2a201a;
+  --carga-fondo: #120d0a;
+  --tabla-cab-bg: #1a2029;
+
+  --on-1: #17100d;
+  --on-2: #17100d;
+  --on-3: #0e0e10;
+  --on-4: #0e0e10;
+  --on-5: #000000;
+  --on-6: #000000;
+  --on-7: #17100d;
+  --on-8: #17100d;
+
+  --chart-barra: #d9d0c4; --chart-fuerte: #f7f1e8; --chart-rejilla: #f7f1e814; --chart-eje: #f7f1e833;
+  --heat-0: #2a201a;
+  --heat-1: #3e322a;
+  --heat-2: #66584c;
+  --heat-3: #a09384;
+  --heat-4: #f7f1e8;
+
+  --prov-obs: #f7f1e8;
+  --prov-est-bg: #2a201a;
+  --prov-est-borde: #b3a9a0;
+  --prov-inf-bg: #1c1511;
+  --prov-inf-borde: #857a6f;
+  --prov-sin-borde: #857a6f;
+
+  --scrim: #000a;
+  --tip: #f7f1e8;
+  --tip-ink: #17100d;
+
+  --shadow-pop: 0 12px 32px -8px #000c, 0 2px 6px #0006;
+}
+
+/* ── Lienzo fuera del alcance (riesgo del spike: `body` queda fuera del div del chrome) ──
+   `html, body { background: var(--bg) }` vive en globals.css y lee --bg del :root, así que el
+   overscroll de iOS y los huecos del documento enseñarían el color v1. Si hay un chrome v2 en la
+   página, el :root recibe los dos tokens que pinta `body`. `html:root:has(...)` (0,2,1) gana a
+   `:root[data-theme="light"]` (0,2,0) sin depender del orden de los chunks de CSS; el oscuro lleva
+   su propio bloque (0,3,1). Sin un `[data-ui="v2"]` en el documento, esto no aplica a nada. */
+html:root:has([data-ui="v2"]) {
+  --bg: #f6f1e7;
+  --ink: #17100d;
+  --carga-fondo: #f6f1e7;
+}
+html:root[data-theme="dark"]:has([data-ui="v2"]) {
+  --bg: #120d0a;
+  --ink: #f7f1e8;
+  --carga-fondo: #120d0a;
+}
+
+/* Tarjetas: 12 px, sin sombra. Selector de clase propio del alcance (0,2,0)
+   supera a `.card` (0,1,0) de globals.css, que no se edita. */
+[data-ui="v2"] .card,
+[data-ui="v2"] .glass-panel {
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+/* Piso tipográfico de 11 px SIN codemod: los 357 usos de 10 / 10.5 px (y los
+   dos de 9 / 9.5) suben solo bajo el alcance. Sin capa: ganan a las utilidades
+   de Tailwind, que viven en `@layer utilities`. */
+[data-ui="v2"] .text-\[9px\],
+[data-ui="v2"] .text-\[9\.5px\],
+[data-ui="v2"] .text-\[10px\],
+[data-ui="v2"] .text-\[10\.5px\] {
+  font-size: 11px;
+}
+
+/* Cuerpo: 13 / 400 / 1.5 con cifras tabulares (ESTILO §3); `tabular-nums` es obligatorio en el body del alcance. */
+[data-ui="v2"] {
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Divisores de tabla sólidos (v1 los pone punteados/discontinuos) */
+[data-ui="v2"] .card table tbody tr {
+  border-bottom-style: solid;
+}
+
+/* Cifras tabulares en tablas */
+[data-ui="v2"] table {
+  font-variant-numeric: tabular-nums;
+}

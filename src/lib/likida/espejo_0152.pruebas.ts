@@ -71,14 +71,19 @@ export function saldoFactura(b: BaseSintetica, f: BaseSintetica['factura_emitida
 
 // ── 1. rentabilidad_tenant ─────────────────────────────────────────────────
 export function rentabilidadSql(b: BaseSintetica, tenant: string, desde: string | null) {
-  const v = b.viaje.filter((x) => x.tenant_id === tenant && (!desde || creado(x) >= desde));
-  // 0348 (BE-A2/DAT-M1): una liquidación rechazada no cuenta como costo comprobado.
-  const l = b.liquidacion.filter((x) => x.tenant_id === tenant && (!desde || x.created_at >= desde) && x.revision !== 'rechazada');
+  // 0928 (A39-S20-01): ingreso y costo salen del MISMO universo — los viajes del periodo (por `viaje.created_at`) con al
+  // menos una liquidación NO rechazada (0348), y el costo es el de ESAS liquidaciones.
+  const vigentes = b.liquidacion.filter((x) => x.tenant_id === tenant && x.revision !== 'rechazada');
+  const viajesDelPeriodo = b.viaje.filter((x) => x.tenant_id === tenant && (!desde || creado(x) >= desde));
+  const v = viajesDelPeriodo.filter((x) => vigentes.some((l) => l.viaje_id === x.id));
+  // 0931: el costo solo cuenta los viajes CON ingreso_flete (mismo universo que el ingreso).
+  const l = vigentes.filter((x) => v.some((y) => y.id === x.viaje_id && y.ingreso_flete != null));
   return {
     ingreso: v.reduce((s, x) => s + (x.ingreso_flete ?? 0), 0),
     viajesConIngreso: v.filter((x) => x.ingreso_flete != null).length,
     viajesSinIngreso: v.filter((x) => x.ingreso_flete == null).length,
     costoComprobado: l.reduce((s, x) => s + x.total_comprobado, 0),
+    viajesSinLiquidar: viajesDelPeriodo.length - v.length,
   };
 }
 

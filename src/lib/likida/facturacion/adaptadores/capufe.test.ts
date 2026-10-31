@@ -107,6 +107,8 @@ interface OpcDoble {
   uuidPrepintado?: boolean;
   /** Texto del cuadro de error nada más abrir. */
   avisoInicial?: string;
+  /** Selectores de CAPTCHA que aparecen justo DESPUÉS de apretar emitir (A39-S41-01). */
+  captchaAlEmitir?: string[];
 }
 
 /**
@@ -194,7 +196,10 @@ class PortalDoble implements PaginaCapufe {
     if (!this.presentes.includes(sel)) throw new Error(`no existe ${sel}`);
     this.clics.push(sel);
     if (sel === S.botonValidar) this.validar();
-    if (sel === S.botonEmitir) this.emitido = true;
+    if (sel === S.botonEmitir) {
+      this.emitido = true;
+      for (const c of this.o.captchaAlEmitir ?? []) if (!this.presentes.includes(c)) this.presentes.push(c);
+    }
 
     // El camino del buscador: elegir de la lista pintada SÍ prende el `<select>`
     // de abajo. Es el comportamiento que se espera del framework cuando se usa
@@ -625,6 +630,25 @@ describe('CAPTCHA — "no se puede", que no es "no pude"', () => {
     expect(m.primera().emitido).toBe(false);
     // Se paró en el primero: no siguió tecleando contra un reto.
     expect(m.primera().escritos.filter((e) => e.sel === S.codigo)).toHaveLength(1);
+  });
+
+  it('A39-S41-01: un CAPTCHA DESPUÉS de apretar emitir marca emisionSinConfirmar (el CFDI pudo timbrarse): no es un «no se puede» limpio', async () => {
+    const m = montar({ captchaAlEmitir: ['.g-recaptcha'], uuid: 'AA11BB22-3333-4444-5555-666677778888' });
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
+
+    expect(m.primera().emitido).toBe(true);
+    expect(r.requiereCaptcha).toBe(true);
+    // La bandera que bloquea el reintento manual/automático hasta verificar con el portal.
+    expect(r.emisionSinConfirmar).toBe(true);
+    expect(r.error).toContain(MENSAJE_CAPTCHA);
+    expect(r.error).toMatch(/PUEDE QUE EL CFDI YA EXISTA/);
+  });
+
+  it('A39-S41-01: el CAPTCHA ANTES de emitir sigue siendo limpio (no hay CFDI posible)', async () => {
+    const m = montar({ presentes: [...TODOS, '.g-recaptcha'] });
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
+    expect(r.requiereCaptcha).toBe(true);
+    expect(r.emisionSinConfirmar).toBeFalsy();
   });
 
   it('lo detecta cuando el portal lo dice con palabras (v3 bloquea sin widget)', async () => {

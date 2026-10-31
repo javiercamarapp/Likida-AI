@@ -10,7 +10,7 @@ import { estado, reset } from './repo_falso.fixture';
 import { A, ACTOR, B, USUARIO_B, lecturaAtlas, llmBoreal, sembrarFlotas, subir, subirYProcesar } from './escenario.fixture';
 import {
   ConflictoDeVersion, MAX_SEGUNDOS_REVISION_MEDIBLE, abrirRevision, aplicarCambiosAExtraccion, aprobarDocumento, corregirCampos, crearViajeDeDocumento, eliminarDocumento,
-  causaSugeridaDeRechazo, motivosDeBloqueo, quitarRenglon, quitarRenglonDeExtraccion, rechazarDocumento, reabrirDocumento,
+  asignarCliente, causaSugeridaDeRechazo, motivosDeBloqueo, quitarRenglon, quitarRenglonDeExtraccion, rechazarDocumento, reabrirDocumento,
 } from './bandeja';
 import { DatoInvalido } from '../errores';
 import { cv, excelAtlas, extraccionAtlasOk, filaAtlas, EMBARQUE_ATLAS, pdfBoreal, RFC } from './documentos_sinteticos.fixture';
@@ -188,6 +188,28 @@ describe('revisar y corregir', () => {
     expect(doc().extraccion!.mercancias).toHaveLength(2);
     await quitarRenglon(A, id, doc().version, 1, ACTOR.id);
     expect(doc().extraccion!.mercancias).toHaveLength(1);
+  });
+});
+
+describe('asignarCliente (OLA1-A3)', () => {
+  it('asigna el cliente, aplica su catálogo, revalida y deja evento sin datos', async () => {
+    const { id, doc } = await documentoBoreal();
+    estado.clientes.push({ tenantId: A, id: 'cli-1', nombre: 'Acme' });
+    estado.catalogoNumeros.push({ tenantId: A, clienteId: 'cli-1', numeroInterno: 'CLI-0042', numeroPagador: null, activo: true });
+    const v = doc().version;
+    await asignarCliente(A, id, v, 'cli-1', ACTOR.id);
+    expect(doc().clienteId).toBe('cli-1');
+    expect(doc().extraccion!.campos.numero_cliente_interno).toMatchObject({ valor: 'CLI-0042', origen: 'catalogo' });
+    expect(doc().version).toBe(v + 1);
+    expect(estado.eventos.at(-1)).toMatchObject({ tipo: 'campo_corregido', detalle: { cliente_asignado: true } });
+  });
+  it('rechaza cliente ajeno, versión vieja y documento aprobado', async () => {
+    const { id, doc } = await documentoBoreal();
+    estado.clientes.push({ tenantId: B, id: 'cli-b', nombre: 'Ajeno' });
+    await expect(asignarCliente(A, id, doc().version, 'cli-b', ACTOR.id)).rejects.toThrow(/no pertenece a tu flota/);
+    await expect(asignarCliente(A, id, doc().version + 5, null, ACTOR.id)).rejects.toBeInstanceOf(ConflictoDeVersion);
+    await aprobarDocumento(A, id, doc().version, ACTOR);
+    await expect(asignarCliente(A, id, doc().version, null, ACTOR.id)).rejects.toThrow(/Reábrelo/);
   });
 });
 
@@ -385,6 +407,18 @@ describe('rechazar y reabrir', () => {
     const otra = await aprobarDocumento(A, id, estado.docs.get(id)!.version, ACTOR);
     expect(otra.salida).toMatchObject({ ok: true, accion: 'actualizado' });
     expect(estado.mercancias.filter((m) => m.documentoId === id).map((m) => m.descripcion)).toEqual(['Alimentos en lata']);
+  });
+
+  it('H759-14: si la lectura informativa de envíos previos falla, reabrir/aprobar NO lanzan (el cambio de estado ya se hizo)', async () => {
+    const { id, doc } = await documentoBoreal();
+    const espia = vi.spyOn(repo, 'enviosDeDocumento').mockRejectedValue(new Error('base lenta'));
+    try {
+      const aprobado = await aprobarDocumento(A, id, doc().version, ACTOR);
+      expect(aprobado.documento.estado).toBe('aprobado');
+      const r = await reabrirDocumento(A, id, doc().version, ACTOR.id);
+      expect(r.estado).toBe('por_revisar');
+      expect(espia).toHaveBeenCalled();
+    } finally { espia.mockRestore(); }
   });
 
   it('solo se reabren aprobados o rechazados', async () => {

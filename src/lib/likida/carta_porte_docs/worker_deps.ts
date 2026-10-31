@@ -7,6 +7,7 @@ import { telefonoJefeDe } from '../contactos';
 import * as repo from './repo';
 import { telefonoDelRevisor } from './revisor';
 import { DIAS_RETENCION, procesarDocumento, type DepsServicio } from './servicio';
+import { correosAvisoDoc, enviarAvisoDocPorCorreo } from './avisos_documento_correo';
 import type { DepsWorker } from './worker';
 
 /** `servicio` solo lo usan las pruebas (un extractor de guion); en producción va vacío y se usa el modelo real. */
@@ -22,6 +23,8 @@ export function depsWorkerReales(servicio: DepsServicio = {}): DepsWorker {
     liberarAviso: repo.liberarAvisoDoc,
     telefonoOficina: telefonoJefeDe,
     telefonoRevisor: telefonoDelRevisor,
+    correosAviso: correosAvisoDoc,
+    enviarCorreoAviso: enviarAvisoDocPorCorreo,
     avisar: (telefono, texto, parametros, contexto) => avisarOficina(telefono, texto, { parametros, contexto }),
     evento: (tenantId, id, tipo, detalle) => repo.registrarEvento(tenantId, id, tipo, null, detalle),
     ahora: () => Date.now(),

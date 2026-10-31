@@ -3,6 +3,7 @@ import {
   ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO, esCategoriaInterna, type CandidatoCobro, type CategoriaCobro, type ResultadoRevision,
 } from './reglas_cobro';
 import { ETIQUETA_CATEGORIA_TARIFA, type CategoriaTarifa, type EvaluacionTarifa } from './reglas_tarifa';
+import { CATEGORIA_DOBLE_ENTRE_ARCHIVOS, ETIQUETA_DOBLE_ENTRE_ARCHIVOS, type CandidatoDoble } from './doble_entre_archivos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL REPORTE «LISTO PARA SUBIR AL PORTAL DEL PROVEEDOR» (T-A2-25).
@@ -22,14 +23,16 @@ import { ETIQUETA_CATEGORIA_TARIFA, type CategoriaTarifa, type EvaluacionTarifa 
 // proveedor se escriben como TEXTO, jamás como fórmula.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type CategoriaArchivo = CategoriaCobro | CategoriaTarifa;
+export type CategoriaArchivo = CategoriaCobro | CategoriaTarifa | typeof CATEGORIA_DOBLE_ENTRE_ARCHIVOS;
 
 /** El orden de las hojas: el de la ficha (el importe sobre tarifa va después de los duplicados). */
 export const CATEGORIAS_ARCHIVO: readonly CategoriaArchivo[] = [
-  'unidad_inmovilizada', 'clase_fuera_de_3_5', 'extemporaneo', 'duplicado_exacto', 'importe_sobre_tarifa', 'tag_dado_de_baja', 'caseta_no_debe_cruzarse',
+  'unidad_inmovilizada', 'clase_fuera_de_3_5', 'extemporaneo', 'duplicado_exacto', 'importe_sobre_tarifa', 'posible_doble_entre_archivos', 'tag_dado_de_baja', 'caseta_no_debe_cruzarse',
 ];
 
-export const ETIQUETA_CATEGORIA_ARCHIVO: Record<CategoriaArchivo, string> = { ...ETIQUETA_CATEGORIA_COBRO, ...ETIQUETA_CATEGORIA_TARIFA };
+export const ETIQUETA_CATEGORIA_ARCHIVO: Record<CategoriaArchivo, string> = {
+  ...ETIQUETA_CATEGORIA_COBRO, ...ETIQUETA_CATEGORIA_TARIFA, [CATEGORIA_DOBLE_ENTRE_ARCHIVOS]: ETIQUETA_DOBLE_ENTRE_ARCHIVOS,
+};
 
 export const ESTADO_CANDIDATO = 'candidato';
 export const ESTADO_CONFIRMADO = 'indebido confirmado';
@@ -96,6 +99,11 @@ export interface EntradaCandidatos {
    * (antes el monto del archivo los incluía).
    */
   decididos?: ReadonlySet<string>;
+  /**
+   * A2P-04: el mismo cobro encontrado en un archivo ANTERIOR de la flota (`revisarDobleEntreArchivos`). Es la categoría reclamable del
+   * «agosto cobrado en octubre»: el monto a reclamar es el del segundo cobro (el repetido). Sigue siendo un candidato a validar.
+   */
+  dobleEntreArchivos?: readonly CandidatoDoble[];
 }
 
 const centavos = (n: number): number => Math.round((n + Number.EPSILON) * 100);
@@ -144,6 +152,17 @@ export function armarCandidatos(e: EntradaCandidatos): ReporteCandidatos {
         clase: l.clase ?? null, caseta: l.caseta, importe: l.monto, claseEsperada: l.claseEsperada, importeEsperado: l.importeEsperado,
         montoReclamar: l.montoReclamable, motivo: unaFrase(l.quePasoTarifa),
         estado: l.estadoTarifa === 'cobro_indebido_confirmado' ? ESTADO_CONFIRMADO : ESTADO_CANDIDATO,
+      });
+    }
+  }
+
+  if (!excluir.has(CATEGORIA_DOBLE_ENTRE_ARCHIVOS)) {
+    for (const d of e.dobleEntreArchivos ?? []) {
+      if (decididos.has(`${d.indice}|${CATEGORIA_DOBLE_ENTRE_ARCHIVOS}`)) { decididosOmitidos++; continue; }
+      filas.push({
+        categoria: CATEGORIA_DOBLE_ENTRE_ARCHIVOS, indice: d.indice, tag: d.tag, unidad: d.unidad, fecha: d.fecha, hora: d.hora, clase: null, caseta: d.caseta,
+        importe: d.monto, claseEsperada: null, importeEsperado: null, montoReclamar: d.monto,
+        motivo: `Mismo cobro que en «${d.archivoPrevio}», fila ${d.filaPrevia}: valida con el proveedor si fueron dos cruces.`, estado: ESTADO_CANDIDATO,
       });
     }
   }

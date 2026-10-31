@@ -10,14 +10,17 @@ import { hoyMx } from '@/lib/formato';
 import { reporteReclamacion } from '@/lib/likida/peajes/bitacora_conciliada';
 import type { ReporteReclamacion } from '@/lib/likida/peajes/reclamacion';
 import {
-  revisionDeDesglose, cierreMensualDeFlota, listarReclamos, crearReclamoDeCategoria, marcarReclamoEnviado, registrarNotaDeCredito, marcarReclamoRechazado, justificarCruce,
+  revisionDeDesglose, cierreMensualDeFlota, cierreDosMesesDeFlota, listarReclamos, crearReclamoDeCategoria, marcarReclamoEnviado, registrarNotaDeCredito, marcarReclamoRechazado, justificarCruce,
   type ReporteRevision, type ReclamoVista,
 } from '@/lib/likida/peajes/revision_cobros';
-import type { CierreMensual } from '@/lib/likida/peajes/cierre_mensual';
+import type { CierreMensual, CierreDosMeses } from '@/lib/likida/peajes/cierre_mensual';
+import { mesesRecientes } from '@/lib/likida/peajes/periodo';
 import type { ResumenSeguimiento } from '@/lib/likida/peajes/reclamos_seguimiento';
 import { CATEGORIAS_COBRO, type CategoriaCobro } from '@/lib/likida/peajes/reglas_cobro';
+import { casarNota } from '@/lib/likida/peajes/notas_credito';
+import type { PropuestaNota } from './revision';
 import { superficiePeajesDeTenant } from '@/lib/likida/peajes/superficie_perfil';
-import { listarDecisionesCandidatos, leerMargenLejosM, guardarMargenLejosM } from '@/lib/likida/peajes/datos';
+import { listarDecisionesCandidatos, leerMargenLejosM, guardarMargenLejosM, reclamosParaCasar } from '@/lib/likida/peajes/datos';
 import { MOTIVOS_VISIBLES_CINCO_AGENTES } from '@/lib/likida/peajes/reclamacion_perfil';
 import { filasDeCandidatos, filtrosAQuery, normalizarFiltros, tablaDeCandidatos, type TablaCandidatos, type AccionCandidato } from '@/lib/likida/peajes/candidatos_tabla';
 import { aplicablesDelFiltro, ejecutarAccionDeFormulario } from '../acciones-candidatos';
@@ -53,7 +56,7 @@ const volverReclamos = (sufijo: string, msg: string, desgloseId?: string, filtro
 export default async function PaginaReclamacionPeajes({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; desglose?: string; mes?: string; aviso?: string; error?: string; cat?: string; estado?: string; unidad?: string; caseta?: string; desde?: string; hasta?: string; orden?: string; pag?: string }>;
+  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; desglose?: string; mes?: string; meses?: string; nota?: string; aviso?: string; error?: string; cat?: string; estado?: string; unidad?: string; caseta?: string; desde?: string; hasta?: string; orden?: string; pag?: string }>;
 }) {
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
@@ -168,11 +171,19 @@ export default async function PaginaReclamacionPeajes({
   // El cierre mensual (solo si se pide un mes) y el seguimiento de reclamos (siempre: los plazos corren aunque nadie mire).
   const mes = /^\d{4}-(0[1-9]|1[0-2])$/.test((sp.mes ?? '').trim()) ? (sp.mes as string).trim() : null;
   let cierre: CierreMensual | null = null;
+  let cierreDos: CierreDosMeses | null = null;
   let errorCierre = false;
+  // `?meses=2`: el mes elegido y el anterior juntos, para que los cobros tardíos se acomoden en la misma ventana.
+  const dosMeses = (sp.meses ?? '').trim() === '2';
   if (mes) {
     try {
-      const c = await cierreMensualDeFlota(tenantId, mes);
-      if ('error' in c) errorCierre = true; else cierre = c;
+      if (dosMeses) {
+        const c = await cierreDosMesesDeFlota(tenantId, mes);
+        if ('error' in c) errorCierre = true; else cierreDos = c;
+      } else {
+        const c = await cierreMensualDeFlota(tenantId, mes);
+        if ('error' in c) errorCierre = true; else cierre = c;
+      }
     } catch (e) {
       logger.error('peajes.cierre_mensual_pagina', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
       errorCierre = true;
@@ -202,6 +213,23 @@ export default async function PaginaReclamacionPeajes({
     errorSeguimiento = true;
   }
 
+  // La propuesta de a qué reclamo corresponde una nota de crédito (`?nota=`): solo lectura, nada se registra.
+  let propuestaNota: PropuestaNota | null = null;
+  const textoNota = (sp.nota ?? '').trim().slice(0, 20);
+  if (textoNota) {
+    const importe = importeDeNota(textoNota);
+    if (!importe.ok) propuestaNota = { texto: textoNota, importe: null, resultado: null, motivo: importe.motivo };
+    else if (!(importe.monto > 0)) propuestaNota = { texto: textoNota, importe: null, resultado: null, motivo: 'El importe de la nota debe ser mayor que cero.' };
+    else {
+      try {
+        propuestaNota = { texto: textoNota, importe: importe.monto, resultado: casarNota({ importe: importe.monto }, await reclamosParaCasar(tenantId)) };
+      } catch (e) {
+        logger.error('peajes.casar_nota_pagina', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+        propuestaNota = { texto: textoNota, importe: null, resultado: null, fallo: true };
+      }
+    }
+  }
+
   // Perfil `cinco_agentes`: el margen de la flota para mostrarlo y fijarlo. Si no se puede leer se muestra el de siempre (la pantalla no se cae).
   let candidato: { motivos: typeof MOTIVOS_VISIBLES_CINCO_AGENTES; margenLejosM: number; guardarMargen: typeof accionGuardarMargen } | undefined;
   if (!superficie.gps) {
@@ -216,7 +244,7 @@ export default async function PaginaReclamacionPeajes({
     <VistaReclamacionPeajes
       sufijo={sufijo} desglose={desgloseValido} estado={estado} reporte={reporte} candidato={candidato}
       extras={{
-        revision, candidatos: { tabla, error: errorTabla, decidir: accionDecidirCandidato, aplicables }, errorGps, mes, cierre, errorCierre, seguimiento, errorSeguimiento,
+        revision, candidatos: { tabla, error: errorTabla, decidir: accionDecidirCandidato, aplicables }, errorGps, mes, cierre, errorCierre, mesesOpciones: mesesRecientes(hoyMx()), dosMeses, cierreDos, seguimiento, errorSeguimiento, propuestaNota,
         acciones: { crearReclamo: accionCrearReclamo, marcarEnviado: accionMarcarEnviado, registrarNota: accionRegistrarNota, rechazar: accionRechazar, justificarCruce: accionJustificarCruce },
         aviso: sp.aviso?.slice(0, 300) ?? null, error: sp.error?.slice(0, 300) ?? null,
       }}

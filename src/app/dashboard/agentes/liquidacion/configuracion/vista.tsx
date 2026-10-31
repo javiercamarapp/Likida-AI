@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { Mail, ArrowLeft, Save } from 'lucide-react';
 import { BarraPagina } from '../../../resumen-visual';
 // SOLO tipos y constantes: el repo importa supabaseAdmin y no debe entrar al bundle de la vista.
-import type { ConfigCorreo, CanalEntrega } from '@/lib/likida/liquidacion_externa/repo_correo';
+import type { ConfigCorreo, CanalEntrega, Revisor } from '@/lib/likida/liquidacion_externa/repo_correo';
+import { hoyMx } from '@/lib/formato';
 
 type Accion = (fd: FormData) => Promise<void>;
 export interface AccionesConfiguracion { guardar: Accion }
@@ -24,6 +25,7 @@ export const TIPOS_OPERADOR: ReadonlyArray<{ valor: string; etiqueta: string }> 
 const FORMA_CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const MAX_CORREO = 254;
 export const MAX_RH = 3;
+export const MAX_REVISORES = 5;
 const MAX_ETIQUETA = 80;
 const MAX_CONCEPTOS_VIAJE = 20;
 const MAX_RENOMBRES = 50;
@@ -42,6 +44,28 @@ const unicos = (xs: string[]): string[] => {
 
 function esRenombre(x: unknown): x is RenombreGuardado {
   return !!x && typeof x === 'object' && typeof (x as RenombreGuardado).texto === 'string' && typeof (x as RenombreGuardado).a === 'string';
+}
+
+/** AAAA-MM-DD + n días (calendario UTC: la fecha ya es el día de México). */
+export function sumarDias(iso: string, n: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** «departamento: correo» por renglón (también «=», «,» o «;»), p. ej. «nomina: nomina@empresa.mx». */
+export function leerRevisores(texto: string): Revisor[] | string {
+  const salida: Revisor[] = [];
+  for (const [i, l] of lineas(texto, /\n+/).entries()) {
+    const m = /^\s*([^\s:=,;]+)\s*[:=,;]\s*(\S+)\s*$/.exec(l);
+    if (!m) return `Revisor ${i + 1}: escríbelo como «departamento: correo» (por ejemplo «nomina: nomina@empresa.mx»).`;
+    const departamento = m[1].trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const correo = m[2].trim().toLowerCase();
+    if (!/^[a-z_]{2,30}$/.test(departamento)) return `Revisor ${i + 1}: el departamento va en letras, sin espacios (por ejemplo «nomina» o «rh»).`;
+    if (correo.length > MAX_CORREO || !FORMA_CORREO.test(correo)) return `Revisor ${i + 1}: el correo no tiene forma de correo (revisa que lleve @ y dominio).`;
+    salida.push({ departamento, correo });
+  }
+  return salida;
 }
 
 export type ResultadoFormulario = { ok: true; config: ConfigCorreo } | { ok: false; error: string };
@@ -68,6 +92,23 @@ export function leerFormularioConfig(fd: FormData): ResultadoFormulario {
     const rhBruto = unicos(lineas(fd.get('rhCorreos'), /[\n,;]+/));
     if (rhBruto.length > MAX_RH) return { ok: false, error: `Puedes poner hasta ${MAX_RH} correos de RH; pusiste ${rhBruto.length}.` };
     const rhCorreos = rhBruto.map((c) => correo('Correo de RH', c)).filter((c): c is string => c !== null);
+
+    const revisoresLeidos = leerRevisores(String(fd.get('revisores') ?? ''));
+    if (typeof revisoresLeidos === 'string') return { ok: false, error: revisoresLeidos };
+    if (revisoresLeidos.length > MAX_REVISORES) return { ok: false, error: `Puedes poner hasta ${MAX_REVISORES} revisores; pusiste ${revisoresLeidos.length}.` };
+    if (new Set(revisoresLeidos.map((r) => r.departamento)).size !== revisoresLeidos.length) return { ok: false, error: 'Un solo revisor por departamento.' };
+    const primerMes = fd.get('primerMes') === 'on';
+    const hastaTxt = String(fd.get('primerMesHasta') ?? '').trim();
+    if (primerMes && revisoresLeidos.length === 0) return { ok: false, error: 'Activaste el modo primer mes: pon al menos un revisor (departamento: correo).' };
+    if (primerMes && !/^\d{4}-\d{2}-\d{2}$/.test(hastaTxt)) return { ok: false, error: 'Activaste el modo primer mes: indica hasta qué día dura (AAAA-MM-DD).' };
+    const primerMesHasta = primerMes ? hastaTxt : null;
+
+    // A1-01: fecha de corte. Vacía = sin corte (se envía todo lo que llegue); con fecha, lo anterior se guarda pero no se envía.
+    const corteTxt = String(fd.get('noEnviarAntes') ?? '').trim();
+    if (corteTxt !== '' && (!/^\d{4}-\d{2}-\d{2}$/.test(corteTxt) || Number.isNaN(Date.parse(`${corteTxt}T00:00:00Z`)))) {
+      return { ok: false, error: 'La fecha de corte debe ser un día válido (AAAA-MM-DD).' };
+    }
+    const noEnviarAntes = corteTxt === '' ? null : corteTxt;
 
     const agruparViaje = fd.get('agruparViaje') === 'on';
     const etiquetaViaje = String(fd.get('etiquetaViaje') ?? '').trim();
@@ -110,6 +151,10 @@ export function leerFormularioConfig(fd: FormData): ResultadoFormulario {
         activa: fd.get('activa') === 'on',
         remitenteNombre: remitente || null,
         responderA: correo('Responder a', String(fd.get('responderA') ?? '')),
+        remitenteCorreo: correo('Correo emisor', String(fd.get('remitenteCorreo') ?? '')),
+        revisores: revisoresLeidos,
+        primerMesHasta,
+        noEnviarAntes,
         rhCorreos,
         archivoCorreo: correo('Buzón de archivo', String(fd.get('archivoCorreo') ?? '')),
         enviaCoordinador: fd.get('enviaCoordinador') === 'on',
@@ -209,6 +254,11 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
                 </Etiqueta>
                 <Etiqueta t="Responder a">
                   <input name="responderA" type="email" defaultValue={config.responderA ?? ''} maxLength={MAX_CORREO} placeholder="(sin definir)" className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
+                  <Ayuda>A este correo llegan las respuestas del operador. Si lo dejas vacío se usa el correo emisor; sin ninguno de los dos no se envía nada.</Ayuda>
+                </Etiqueta>
+                <Etiqueta t="Correo emisor de la empresa">
+                  <input name="remitenteCorreo" type="email" defaultValue={config.remitenteCorreo ?? ''} maxLength={MAX_CORREO} placeholder="(sin definir)" className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
+                  <Ayuda>El correo desde el que la empresa manda hoy los desgloses. Hoy los correos salen por Likida y las respuestas llegan aquí; el envío desde este mismo buzón queda para cuando su área de TI lo autorice.</Ayuda>
                 </Etiqueta>
                 <Etiqueta t="Hora mínima de envío (0 a 23)">
                   <input name="enviarDesdeHora" type="number" min={0} max={23} step={1} defaultValue={config.enviarDesdeHora ?? ''} placeholder="(sin restricción)" className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
@@ -240,6 +290,40 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
                   ))}
                   <Ayuda>Un tipo que no marques (o un operador sin tipo) queda retenido, no se envía.</Ayuda>
                 </fieldset>
+              </div>
+            </section>
+
+            <section className="card p-4 space-y-3">
+              <h2 className="font-display text-[15px] font-semibold">Fecha de corte del arranque</h2>
+              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+                Los desgloses cuyo periodo termina ANTES de esta fecha se guardan, pero no se envían a nadie (quedan «omitidos»). Pon el día en que arranca
+                el envío: así subir el histórico no manda nóminas viejas a los operadores, coordinadores ni RH. Vacío = se envía todo lo que llegue.
+              </p>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <Etiqueta t="No enviar desgloses anteriores a (AAAA-MM-DD)">
+                  <input name="noEnviarAntes" type="date" defaultValue={config.noEnviarAntes ?? ''} className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
+                </Etiqueta>
+              </div>
+            </section>
+
+            <section className="card p-4 space-y-3">
+              <h2 className="font-display text-[15px] font-semibold">Primer mes: revisión por departamento</h2>
+              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+                Durante el primer mes, cada desglose —enviado o retenido— le llega también por correo al revisor de cada departamento, con el mismo Excel.
+                Al terminar la fecha, el modo se apaga solo.
+              </p>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <Etiqueta t="Modo primer mes">
+                  <span className="flex items-center gap-2 text-[12.5px]">
+                    <input type="checkbox" name="primerMes" defaultChecked={config.primerMesHasta !== null} disabled={off} /> Activar la revisión por departamento
+                  </span>
+                </Etiqueta>
+                <Etiqueta t="Dura hasta (AAAA-MM-DD, inclusive)">
+                  <input name="primerMesHasta" type="date" defaultValue={config.primerMesHasta ?? sumarDias(hoyMx(), 30)} className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
+                </Etiqueta>
+                <Etiqueta t={`Revisores (hasta ${MAX_REVISORES}, «departamento: correo» por renglón)`}>
+                  <textarea name="revisores" rows={3} defaultValue={config.revisores.map((r) => `${r.departamento}: ${r.correo}`).join('\n')} placeholder={'nomina: …\nrh: …'} className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
+                </Etiqueta>
               </div>
             </section>
 

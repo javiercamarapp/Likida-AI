@@ -54,6 +54,12 @@ export const CONFIG_API_DESGLOSE: ConfigApiDesglose = {
   marcar: null,
   mapeo: {
     bitacora: 'bitacora',
+    // SUPUESTO-API: el cliente dijo que el sistema ya tiene el consecutivo de liquidación y el de pago (c3cc57d3 51:40). Si la
+    // fila no los trae, el encabezado queda en blanco (nunca se inventan). `bitacoras` (liquidación por unidad con varios
+    // viajes) solo se enciende si la API entrega la liquidación ya agregada: una fila por bitácora NO se puede agrupar aquí
+    // sin riesgo de mandar una liquidación partida entre páginas.
+    numeroLiquidacion: 'numero_liquidacion',
+    numeroPago: 'numero_pago',
     poliza: 'poliza',
     terminal: 'terminal',
     operadorNumero: 'operador_numero',

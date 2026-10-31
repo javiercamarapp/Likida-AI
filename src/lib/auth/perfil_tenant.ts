@@ -102,6 +102,60 @@ export async function perfilDeTenant(
   }
 }
 
+// ── Versión de interfaz (mig. `tenant_ui`) ─────────────────────────────────
+// La BANDERA del rediseño vive aquí, junto a la lectura del perfil, para reutilizar el mismo
+// punto de acceso a Supabase y la misma disciplina de caché (30 s por tenant). La RESOLUCIÓN
+// (env, cookie del superadmin, fila) vive en `version_ui.ts`, que no toca la base.
+//
+// FALLA HACIA v1 — lo opuesto al perfil: ante un error de lectura se usa el último valor
+// conocido y, sin él, v1 (el panel de siempre). Una tabla ausente (`42P01`/`PGRST205`: la
+// migración aún no se aplica en esa base) es «sin fila» = v1. Los errores no se cachean.
+
+export type VersionUiTenant = 'v1' | 'v2';
+
+interface EntradaUi { version: VersionUiTenant; hasta: number }
+const cacheUi = new Map<string, EntradaUi>();
+const ultimaUi = new Map<string, VersionUiTenant>();
+
+/** El ÚNICO punto de acceso a `tenant_ui` (un solo acceso directo: ver el techo de frontera_datos_guardiana). La cadena
+ *  lleva el filtro por tenant en la misma expresión: la prueba de aislamiento de consultas admin lo exige ahí. */
+const leerFilaUi = (tenantId: string) => supabaseAdmin().from('tenant_ui').select('version').eq('tenant_id', tenantId).maybeSingle();
+
+/** Solo para pruebas. */
+export function reiniciarCacheUi(): void {
+  cacheUi.clear();
+  ultimaUi.clear();
+}
+
+/**
+ * La versión de interfaz que la BASE dice para una flota (`v1` si no hay fila, si no hay tenant o si no se pudo
+ * leer). Cacheada por tenant (`TTL_PERFIL_MS`). Nunca lanza. No mira env ni cookies: eso es `version_ui.ts`.
+ */
+export async function versionUiDeTenant(
+  tenantId: string | null | undefined,
+  ahora: number = Date.now(),
+): Promise<VersionUiTenant> {
+  if (!tenantId) return 'v1';
+  const hit = cacheUi.get(tenantId);
+  if (hit && hit.hasta > ahora) return hit.version;
+  try {
+    const { data, error } = await leerFilaUi(tenantId);
+    if (error && (error.code === '42P01' || error.code === 'PGRST205')) {
+      cacheUi.set(tenantId, { version: 'v1', hasta: ahora + TTL_PERFIL_MS });
+      return 'v1';
+    }
+    if (error) throw new Error(error.message);
+    // Un valor que el código no conoce (la base ya lo rechaza con CHECK) es v1, nunca v2.
+    const version: VersionUiTenant = data?.version === 'v2' ? 'v2' : 'v1';
+    cacheUi.set(tenantId, { version, hasta: ahora + TTL_PERFIL_MS });
+    ultimaUi.set(tenantId, version);
+    return version;
+  } catch (e) {
+    logger.warn('version_ui.ilegible', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    return ultimaUi.get(tenantId) ?? 'v1';
+  }
+}
+
 /** ¿La flota tiene un perfil que la restringe? (chat, MCP y demás superficies de "todo o nada".) */
 export async function perfilRestringido(tenantId: string | null | undefined): Promise<boolean> {
   return (await perfilDeTenant(tenantId)) !== null;

@@ -1772,6 +1772,38 @@ export async function actualizarRfcOperador(tenantId: string, operadorId: string
 }
 
 /**
+ * A39-S53-01: el cotejo de FIS-C1 como pieza reutilizable. Quien vaya a DECLARAR `regimenElegible = true` (chat de onboarding,
+ * formulario) lo corre ANTES de escribir el perfil: si no, el perfil persistía «régimen elegible 15 %» aunque la clave
+ * del tenant lo niegue, y el motor (que lee el perfil, no la clave) imprimía la deducción de más. Lanza `DatoInvalido`.
+ */
+export async function exigirRegimenCompatibleConFacilidad15(tenantId: string, regimenPendiente?: string | null): Promise<void> {
+  // A39-S53-01 (residuo): se coteja contra el régimen que QUEDARÁ. Si el mismo envío declara un régimen SAT, ese es el que se
+  // guarda después en el tenant; leer el viejo rechazaba en falso a quien corrige 601 → 612 y declara la facilidad en el mismo paso.
+  // Sin régimen pendiente se lee el actual, y un error de lectura falla CERRADO.
+  const pendiente = regimenPendiente?.trim() || null;
+  let clave: string | null;
+  if (pendiente) {
+    clave = pendiente;
+  } else {
+    const { data: fila, error: errClave } = await acotada(supabaseAdmin()
+      .from('tenant')
+      .select('regimen_fiscal')
+      .eq('id', tenantId)
+      .maybeSingle(), 'actualizarFacilidad15.clave');
+    // Sin comprobar el error, una base caída se leería como "esta flota no
+    // tiene clave" y la concesión pasaría justo cuando menos se puede verificar.
+    if (errClave) throw new Error(`actualizarFacilidad15: no se pudo leer el régimen fiscal: ${errClave.message}`);
+    clave = (fila as { regimen_fiscal?: string | null } | null)?.regimen_fiscal ?? null;
+  }
+  if (regimenElegiblePorClave(clave) === false) {
+    throw new DatoInvalido(
+      `La flota está registrada con el régimen fiscal ${clave} ante el SAT, y la facilidad del 15% de la RFA 2026 regla 2.9 solo aplica a los regímenes ${REGIMENES_ELEGIBLES_15.join(' y ')}. `
+      + 'Si la flota cambió de régimen, corrige primero su régimen fiscal; si no, esta declaración imprimiría en el PDF una deducción que la norma le niega.',
+    );
+  }
+}
+
+/**
  * Actualiza la declaración de la facilidad del 15% (RFA 2026 regla 2.9) de una
  * flota. `undefined` en ambos = sin declarar (borra la llave). AUDITORÍA 14:
  * la declaración del alta no se podía ver ni corregir.
@@ -1791,6 +1823,8 @@ export async function actualizarFacilidad15(
   ded: boolean | undefined,
   reg: boolean | undefined,
   actualizadoPor: string | null,
+  /** A39-S53-01: régimen SAT que el mismo envío guardará en el tenant; el cotejo FIS-C1 lo usa en vez del vigente. */
+  regimenPendiente?: string | null,
 ): Promise<void> {
   // AUDITORÍA 29, FIS-C1 (CRÍTICO): el `<select>` sí/no de `/admin/flotas`
   // escribe por aquí, y desde FIS-A3 escribe la fuente que MANDA
@@ -1805,23 +1839,7 @@ export async function actualizarFacilidad15(
   // Se coteja SOLO la dirección peligrosa: conceder de más contra una clave
   // que lo niega se rechaza; negar de más (o declarar sin clave registrada)
   // pasa, porque fallar cerrado nunca imprime una deducción de más.
-  if (reg === true) {
-    const { data: fila, error: errClave } = await acotada(supabaseAdmin()
-      .from('tenant')
-      .select('regimen_fiscal')
-      .eq('id', tenantId)
-      .maybeSingle(), 'actualizarFacilidad15.clave');
-    // Sin comprobar el error, una base caída se leería como "esta flota no
-    // tiene clave" y la concesión pasaría justo cuando menos se puede verificar.
-    if (errClave) throw new Error(`actualizarFacilidad15: no se pudo leer el régimen fiscal: ${errClave.message}`);
-    const clave = (fila as { regimen_fiscal?: string | null } | null)?.regimen_fiscal ?? null;
-    if (regimenElegiblePorClave(clave) === false) {
-      throw new DatoInvalido(
-        `La flota está registrada con el régimen fiscal ${clave} ante el SAT, y la facilidad del 15% de la RFA 2026 regla 2.9 solo aplica a los regímenes ${REGIMENES_ELEGIBLES_15.join(' y ')}. `
-        + 'Si la flota cambió de régimen, corrige primero su régimen fiscal; si no, esta declaración imprimiría en el PDF una deducción que la norma le niega.',
-      );
-    }
-  }
+  if (reg === true) await exigirRegimenCompatibleConFacilidad15(tenantId, regimenPendiente);
 
   await guardarPerfilPatch(tenantId, declararFacilidad15(ded, reg), actualizadoPor);
 

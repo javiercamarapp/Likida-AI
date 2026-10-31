@@ -87,3 +87,75 @@ describe('atenderConformidadJornada: no se sella sobre un expediente sin fin', (
     expect(db.tablas.jornada_dia.every((d) => d.conforme_operador_en === null)).toBe(true);
   });
 });
+
+describe('A37-S48-01: turno nocturno, la conformidad llega ya en el día MX siguiente', () => {
+  it('ayer CERRADA hace 2 h y hoy sin expediente: sella la de ayer, no responde «sin_dia»', async () => {
+    base({ hoyConInicio: false, ayerConFin: true });
+    db.tablas.jornada_asiento.find((a) => a.jornada_id === 'j-ayer' && a.tipo === 'fin_jornada')!.momento = `${HOY}T00:30:00-06:00`;
+    const r = await atenderConformidadJornada({ tenantId: T, operadorId: OP, momento: ahora('02:30'), waMessageId: 'wamid.n1' });
+    expect(r.resultado).toBe('sellada');
+    expect(db.tablas.jornada_dia.find((d) => d.id === 'j-ayer')!.conforme_operador_en).not.toBeNull();
+  });
+
+  it('ayer cerrada hace más de 24 h: no se adivina, queda sin_dia', async () => {
+    base({ hoyConInicio: false, ayerConFin: true });
+    db.tablas.jornada_asiento.find((a) => a.jornada_id === 'j-ayer' && a.tipo === 'fin_jornada')!.momento = `${AYER}T01:00:00-06:00`;
+    const r = await atenderConformidadJornada({ tenantId: T, operadorId: OP, momento: ahora('14:00'), waMessageId: 'wamid.n2' });
+    expect(r.resultado).toBe('sin_dia');
+    expect(db.tablas.jornada_dia.every((d) => d.conforme_operador_en === null)).toBe(true);
+  });
+
+  it('hoy ya tiene su inicio vivo: la ambigüedad es real, no se sella la de ayer', async () => {
+    base({ hoyConInicio: true, ayerConFin: true });
+    db.tablas.jornada_asiento.find((a) => a.jornada_id === 'j-ayer' && a.tipo === 'fin_jornada')!.momento = `${HOY}T00:30:00-06:00`;
+    const r = await atenderConformidadJornada({ tenantId: T, operadorId: OP, momento: ahora('07:00'), waMessageId: 'wamid.n3' });
+    expect(r.resultado).toBe('sin_cierre');
+    expect(db.tablas.jornada_dia.every((d) => d.conforme_operador_en === null)).toBe(true);
+  });
+});
+
+describe('A37-S48-03: la conformidad no sobrevive a que la oficina anule o recapture', () => {
+  const conformada = () => {
+    base({ hoyConInicio: true });
+    db.tablas.jornada_asiento.push(asiento('j-hoy', 'fin_jornada', `${HOY}T14:00:00-06:00`));
+    const dia = db.tablas.jornada_dia.find((d) => d.id === 'j-hoy')!;
+    dia.conforme_operador_en = `${HOY}T14:05:00-06:00`;
+    dia.conforme_wa_message_id = 'wamid.conf';
+  };
+
+  it('anular el fin retira la conformidad y deja el sello retirado en el motivo (append-only)', async () => {
+    conformada();
+    const { anularAsiento } = await import('./repo');
+    const r = await anularAsiento({ tenantId: T, asientoId: 'a-j-hoy-fin_jornada', motivo: 'el fin real fue a las 20:00', usuarioId: 'u1', usuarioEmail: 'o@x.com' });
+    expect(r).toEqual({ ok: true });
+    const dia = db.tablas.jornada_dia.find((d) => d.id === 'j-hoy')!;
+    expect(dia.conforme_operador_en).toBeNull();
+    expect(dia.conforme_wa_message_id).toBeNull();
+    const a = db.tablas.jornada_asiento.find((x) => x.id === 'a-j-hoy-fin_jornada')!;
+    expect(String(a.anulado_motivo)).toContain('el fin real fue a las 20:00');
+    expect(String(a.anulado_motivo)).toContain('wamid.conf');
+  });
+
+  it('anular en un expediente SIN conformidad no toca nada más', async () => {
+    base({ hoyConInicio: true });
+    const { anularAsiento } = await import('./repo');
+    const r = await anularAsiento({ tenantId: T, asientoId: 'a-j-hoy-inicio_jornada', motivo: 'inicio mal capturado', usuarioId: 'u1', usuarioEmail: 'o@x.com' });
+    expect(r).toEqual({ ok: true });
+    expect(String(db.tablas.jornada_asiento.find((x) => x.id === 'a-j-hoy-inicio_jornada')!.anulado_motivo)).toBe('inicio mal capturado');
+  });
+
+  it('una captura de la oficina sobre un expediente conformado también retira la conformidad', async () => {
+    conformada();
+    const { asentarMarca } = await import('./repo');
+    const r = await asentarMarca({ jornadaId: 'j-hoy', tenantId: T, tipo: 'inicio_descanso', momento: new Date(`${HOY}T12:00:00-06:00`), procedencia: 'capturado_contralor', registradoPorEmail: 'o@x.com' });
+    expect(r).toBe('asentado');
+    expect(db.tablas.jornada_dia.find((d) => d.id === 'j-hoy')!.conforme_operador_en).toBeNull();
+  });
+
+  it('una marca del propio operador NO retira su conformidad', async () => {
+    conformada();
+    const { asentarMarca } = await import('./repo');
+    await asentarMarca({ jornadaId: 'j-hoy', tenantId: T, tipo: 'inicio_descanso', momento: new Date(`${HOY}T12:00:00-06:00`), procedencia: 'declarado_operador', waMessageId: 'wamid.x' });
+    expect(db.tablas.jornada_dia.find((d) => d.id === 'j-hoy')!.conforme_operador_en).not.toBeNull();
+  });
+});

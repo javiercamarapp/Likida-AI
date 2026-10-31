@@ -574,6 +574,8 @@ export function regimenSoloDeNombre(e: Extraccion): boolean {
 }
 
 /** Prefijo de la nota que deja la regla del tramo mexicano cuando el extremo elegido no es el del documento (T-A3-50). */
+/** Nota fija (idempotente) con que `derivar.ts` marca un peso NETO usado como BRUTO; la validación la convierte en hallazgo `confirmar` (A3-08). */
+export const NOTA_NETO_COMO_BRUTO = 'El documento solo da el peso neto (o «peso por embalaje»): se usó como peso bruto por defecto. Pendiente de confirmar con el cliente.';
 export const MARCA_TRAMO_DISTINTO = 'Tramo mexicano:';
 
 /**
@@ -823,7 +825,11 @@ export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): R
       reg({ campo: def.clave, renglon, severidad: 'confirmar', codigo: 'documento_con_instrucciones', mensaje: `${etiqueta}: el documento trae texto con forma de instrucción; confirma este dato a mano.` });
     }
     for (const nota of campo.notas ?? []) {
-      if (/Confírmalo|confirma la cifra|No se reconoció/i.test(nota)) {
+      if (nota === NOTA_NETO_COMO_BRUTO) {
+        // A3-08 (cierre100): el documento solo da el peso NETO y se usó como BRUTO. Antes la nota no coincidía con el filtro de abajo y
+        // no se generaba ningún hallazgo: el CCP podía salir con peso bruto = neto sin que nadie lo confirmara.
+        reg({ campo: def.clave, renglon, severidad: 'confirmar', codigo: 'peso_neto_como_bruto', mensaje: `${etiqueta}: el documento solo da el peso neto y se usó como peso bruto. Confírmalo con el cliente o captura el bruto.` });
+      } else if (/Confírmalo|confirma la cifra|No se reconoció/i.test(nota)) {
         reg({ campo: def.clave, renglon, severidad: 'confirmar', codigo: 'normalizacion_dudosa', mensaje: `${etiqueta}: ${nota}` });
       } else if (def.clave === 'destino_nombre' && nota.startsWith(MARCA_TRAMO_DISTINTO)) {
         reg({ campo: def.clave, renglon, severidad: 'aviso', codigo: 'destino_distinto_documento', mensaje: nota });
@@ -907,6 +913,11 @@ export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): R
     // debe indicar Sí/No; al hacerlo el campo queda de origen humano y este «confirmar» se levanta solo. Es una declaración regulatoria.
     if (esVacio(fila.material_peligroso)) {
       reg({ campo: 'material_peligroso', renglon: i, severidad: 'confirmar', codigo: 'peligroso_sin_dato', mensaje: `${etiquetaCampo('material_peligroso', i)}: el documento no dice si es material peligroso. Indica Sí o No.` });
+    } else if (fila.material_peligroso.origen === 'catalogo' && fila.material_peligroso.valor === 'false') {
+      // A39-S31-01: la columna del catálogo (`material_peligroso boolean not null default false`) no tiene «no sé»: un «No» que viene SOLO
+      // del catálogo puede ser un «nadie lo dijo» (celda vacía del CSV, banner que guardó solo la clave SAT). Es una declaración
+      // regulatoria: una persona la confirma (al escribirla queda de origen humano y este «confirmar» se levanta solo).
+      reg({ campo: 'material_peligroso', renglon: i, severidad: 'confirmar', codigo: 'peligroso_catalogo_sin_declarar', mensaje: `${etiquetaCampo('material_peligroso', i)}: «No» viene solo del catálogo del cliente, que no distingue «no peligroso» de «sin dato». Confirma Sí o No.` });
     }
     if (fila.valor_mercancia?.valor && !fila.moneda?.valor) {
       reg({ campo: 'moneda', renglon: i, severidad: 'confirmar', codigo: 'moneda_falta', mensaje: `${etiquetaCampo('valor_mercancia', i)}: hay valor pero el documento no dice la moneda. Indícala.` });

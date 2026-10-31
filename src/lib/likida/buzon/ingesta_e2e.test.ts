@@ -55,7 +55,7 @@ function mundo(opciones: { textosPdf?: Record<string, string>; visionConfianza?:
       },
       recepcionPrevia: async (_t, sha) => {
         const r = recepciones.find((x) => x.sha256 === sha && (x.estado === 'procesada' || x.estado === 'revision'));
-        return r ? { estado: r.estado as 'procesada', cfdiUuid: null, facturaId: null } : null;
+        return r ? { estado: r.estado as 'procesada', cfdiUuid: null, facturaId: null, emailId: r.emailId } : null;
       },
       subirPdf: async (_t, sha) => { subidos.push(sha); return `${TENANT}/${sha}.pdf`; },
       facturaPorUuid: async (_t, uuid) => {
@@ -139,6 +139,21 @@ describe('E2E buzón — del correo a la bandeja', () => {
     expect(m.facturas).toHaveLength(1);
     expect(r2.duplicadas).toBe(1);
     expect(r2.guardadas).toBe(0);
+  });
+
+  // A39-S30-01: A (PDF ilegible → `revision`, con su PDF guardado) y B (se queda sin presupuesto de tiempo → 503). Resend reintenta el
+  // MISMO correo: A no puede degradarse a `duplicada` (saldría de la cola de revisión) ni gastar visión otra vez.
+  it('A39-S30-01: el reintento del mismo correo no reescribe la fila de un PDF en revisión ni vuelve a gastar visión', async () => {
+    const m = mundo({ visionConfianza: 0.55 });
+    const a = pdf('escaneo-a');
+    await procesarCorreoBuzon(ctx('em-9'), [{ nombre: 'a.pdf', bytes: a }], m.deps);
+    expect(m.recepciones.find((x) => x.nombre === 'a.pdf')?.estado).toBe('revision');
+    expect(m.visiones()).toBe(1);
+    const r2 = await procesarCorreoBuzon(ctx('em-9'), [{ nombre: 'a.pdf', bytes: a }, { nombre: 'b.xml', bytes: xml(U1) }], m.deps);
+    expect(m.recepciones.find((x) => x.nombre === 'a.pdf')?.estado).toBe('revision'); // sigue en la cola de revisión
+    expect(m.visiones()).toBe(1);
+    expect(m.subidos).toHaveLength(1);
+    expect(r2.guardadas).toBe(1); // B sí entra
   });
 
   it('ADVERSARIAL: una bomba zip y un XML con DTD se RECHAZAN con rastro, sin tumbar al correo ni reintentar', async () => {

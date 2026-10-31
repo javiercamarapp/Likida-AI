@@ -43,6 +43,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 vi.mock('../presupuesto', async (orig) => ({ ...(await orig<typeof import('../presupuesto')>()), acotada: (q: unknown) => q }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+vi.mock('@/lib/auth/perfil_tenant', () => ({ perfilDeTenant: async () => (globalThis as { __perfilPrueba?: string | null }).__perfilPrueba ?? null }));
 
 const r = await import('./repo_correo');
 const { DatoInvalido } = await import('../errores');
@@ -573,6 +574,15 @@ describe('recepción atómica del desglose (RPC 0857, hallazgo A35-A1-01)', () =
     expect(rpcs[0].args.p_desglose).toMatchObject({ bitacora: 'B-1', total_origen: 'tms', retenida_motivo: null });
     expect(rpcs[0].args.p_entregas).toEqual([{ rol: 'operador', correo: 'op@ejemplo.test', xlsx_ruta: 'r.xlsx', xlsx_sha256: 'b'.repeat(64), disparo: 'auto' }]);
     expect(llamadas).toHaveLength(0); // nada de escrituras sueltas
+  });
+
+  it('A39-A1-01: el encabezado lleva `correccion_n` (0 la original; el ordinal de una corrección -R<n>)', async () => {
+    respuestas = [{ data: { liquidacion_id: LIQ, creada: true, reparada: false, entregas: 1 }, error: null }, { data: { liquidacion_id: LIQ, creada: true, reparada: false, entregas: 1 }, error: null }];
+    await r.recibirDesgloseAtomico(T, pedido() as unknown as Parameters<typeof r.recibirDesgloseAtomico>[1]);
+    const p = pedido();
+    await r.recibirDesgloseAtomico(T, { ...p, meta: { ...p.meta, correccionN: 2 } } as unknown as Parameters<typeof r.recibirDesgloseAtomico>[1]);
+    expect(rpcs[0].args.p_desglose).toMatchObject({ correccion_n: 0 });
+    expect(rpcs[1].args.p_desglose).toMatchObject({ correccion_n: 2 });
   });
 
   it('la función no existe todavía (42883 / PGRST202) => no_disponible, no lanza', async () => {

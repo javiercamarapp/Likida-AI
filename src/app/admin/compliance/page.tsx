@@ -35,6 +35,8 @@ const PILL_ARCO: Record<string, { estado: Estado; etiqueta: string }> = {
  * obligada a contestar en 20 días hábiles (LFPDPPP art. 31) estaba ciega.
  */
 export default async function CompliancePage() {
+  // A39-S05-01/S06-01: puerta PROPIA en el render (el layout no se re-ejecuta en una petición RSC parcial).
+  await requireSuperadmin();
   async function accionResolver(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
     await requireSuperadmin();

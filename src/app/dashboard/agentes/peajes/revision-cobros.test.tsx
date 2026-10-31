@@ -62,6 +62,12 @@ describe('estadoRevisionCobros (de los datos de la base a lo que se pinta)', () 
     expect(e.insights.tarjetas.map((t) => [t.id, t.n, t.monto])).toEqual([['extemporaneo', 2, 500], ['duplicado_exacto', 2, 200]]);
   });
 
+  it('A2P-09: lo que finanzas descarta o justifica por decisión cuenta como revisado y no avisa «por vencer»', () => {
+    const e = estadoRevisionCobros(datos({ decisiones: [{ indice: 4, categoria: 'extemporaneo', accion: 'descartado', reclamoId: null }] }));
+    if (e.tipo !== 'ok') throw new Error('esperaba ok');
+    expect(e.insights.kpis.pctRevisado.valor).toBe(100); // 4 de 4 (antes 75)
+  });
+
   it('atendidos = reclamados de ese desglose y categoria + justificados', () => {
     const e = estadoRevisionCobros(datos());
     if (e.tipo !== 'ok') throw new Error('esperaba ok');

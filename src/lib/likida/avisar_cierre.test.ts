@@ -284,6 +284,65 @@ describe('avisarCierreAlJefe · fuera de la ventana de 24 h (AGEN-5)', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+// A39-S30-03 (ALTO): el PDF del jefe sale como documento libre; su ventana de 24 h casi siempre está cerrada (131047) y el
+// documento rebotaba SIN plantilla, se sellaba `definitivo` y el jefe nunca se enteraba. Y un 4xx con cuerpo no JSON (sin
+// código) se sellaba `encolado` sin estarlo.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('avisarCierreAlJefe · A39-S30-03 · el PDF fuera de la ventana de 24 h', () => {
+  it('131047 al documento (cuadra, sin texto de decisión) → plantilla con la liga al PANEL; el jefe queda avisado', async () => {
+    sendDocument.mockResolvedValue({ ok: false, error: 'Re-engagement message', codigo: 131047, status: 400 });
+    enviarTexto.mockResolvedValue({ ok: false, error: 'Re-engagement message', codigo: 131047 });
+    const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1', urlPdf: URL_PDF });
+    expect(sendTemplate).toHaveBeenCalledTimes(1);
+    const [tel, nombre, opts] = sendTemplate.mock.calls[0] as [string, string, { parametros: string[] }];
+    expect(tel).toBe(TEL);
+    expect(nombre).toBe('aviso_operacion_v1');
+    expect(opts.parametros[1]).toContain('F-1');
+    // La liga firmada del documento caduca en 15 min: el aviso apunta al panel, no a ella.
+    expect(opts.parametros[2]).toMatch(/\/dashboard\/viajes$/);
+    expect(opts.parametros[2]).not.toContain('liq-firmada');
+    expect(r).toMatchObject({ enviado: true, pdfEnviado: false, pdfEstado: 'definitivo', pdfAvisadoPorPlantilla: true });
+  });
+
+  it('si la plantilla tampoco sale, NO se dice que el jefe quedó avisado (el llamador alerta a plataforma como siempre)', async () => {
+    sendDocument.mockResolvedValue({ ok: false, error: 'Re-engagement message', codigo: 131047, status: 400 });
+    enviarTexto.mockResolvedValue({ ok: false, error: 'Re-engagement message', codigo: 131047 });
+    sendTemplate.mockResolvedValue({ ok: false, error: 'Template name does not exist', codigo: 132001 });
+    const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1', urlPdf: URL_PDF });
+    expect(r.pdfEstado).toBe('definitivo');
+    expect(r.pdfAvisadoPorPlantilla).toBeUndefined();
+  });
+
+  it('con texto de decisión ya salido por plantilla no se manda una segunda plantilla por el PDF', async () => {
+    liq = { data: { total_comprobado: 900, total_anticipo: 1000, diferencia: 100, diferencias: [] }, error: null };
+    enviarTexto.mockResolvedValue({ ok: false, error: 'Re-engagement message', codigo: 131047 });
+    sendDocument.mockResolvedValue({ ok: false, error: 'Re-engagement message', codigo: 131047, status: 400 });
+    const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1', urlPdf: URL_PDF });
+    expect(sendTemplate).toHaveBeenCalledTimes(1); // la de «requiere tu decisión»
+    expect(r.pdfAvisadoPorPlantilla).toBe(true);
+  });
+
+  it('un rechazo definitivo que NO es de ventana (131030) no manda plantilla', async () => {
+    sendDocument.mockResolvedValue({ ok: false, error: 'número inválido', codigo: 131030, status: 400 });
+    const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1', urlPdf: URL_PDF });
+    expect(sendTemplate).not.toHaveBeenCalled();
+    expect(r.pdfAvisadoPorPlantilla).toBeUndefined();
+  });
+
+  it('pdfEstadoDe: 4xx sin código (cuerpo no JSON) es definitivo; sin código ni status (red) y 5xx/429/401 son encolados', async () => {
+    const { pdfEstadoDe } = await import('./avisar_cierre');
+    expect(pdfEstadoDe({ ok: false, status: 400 })).toBe('definitivo');
+    expect(pdfEstadoDe({ ok: false })).toBe('encolado');
+    expect(pdfEstadoDe({ ok: false, status: 503 })).toBe('encolado');
+    expect(pdfEstadoDe({ ok: false, status: 429 })).toBe('encolado');
+    expect(pdfEstadoDe({ ok: false, status: 401 })).toBe('encolado'); // token vencido: alFallarPorToken lo encola
+    expect(pdfEstadoDe({ ok: false, codigo: 190, status: 401 })).toBe('encolado');
+    expect(pdfEstadoDe({ ok: false, codigo: 131030, status: 400 })).toBe('definitivo');
+    expect(pdfEstadoDe({ ok: true })).toBe('enviado');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 18, ALTO (A28): el cierre salía al ENCARGADO, el rol que no ve
 // dinero. `ORDEN_AVISO` (despacho) ponía al encargado primero y el cierre lo
 // reusaba. El destinatario del cierre tiene que ver `dinero` en la matriz

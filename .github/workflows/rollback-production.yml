@@ -58,6 +58,6 @@ jobs:
           # Aceptable: status=ok, o degraded SOLO por migraciones adelante (la base
           # nunca atrás del código) con db ok y crons sin degradar. Cualquier otra
           # cosa (db caída, base atrás, crons vencidos) sigue siendo fallo.
-          printf '%s' "$respuesta" | jq -e '.checks.db == "ok" and (.status == "ok" or ((.migracion.atras // 1) == 0 and (.migracion.adelante // 0) > 0 and (.checks.crons | IN("ok", "config_ausente"))))' >/dev/null
+          printf '%s' "$respuesta" | jq -e '.checks.db == "ok" and (.status == "ok" or ((.migracion.atras // 1) == 0 and (.migracion.adelante // 0) > 0 and (.checks.crons | IN("ok", "config_ausente", "apagado"))))' >/dev/null
           echo '### Rollback verificado' >> "$GITHUB_STEP_SUMMARY"
           echo "- \`/api/health\`: status=$(printf '%s' "$respuesta" | jq -r '.status'), db=ok, migraciones adelante=$(printf '%s' "$respuesta" | jq -r '.migracion.adelante // 0') (esperado tras un rollback con migraciones posteriores)." >> "$GITHUB_STEP_SUMMARY"

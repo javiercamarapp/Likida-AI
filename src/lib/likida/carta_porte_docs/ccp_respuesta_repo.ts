@@ -49,12 +49,14 @@ export async function buscarEnvioPropio(tenantId: string, referencia: string) {
     .order('created_at', { ascending: false }).order('id').limit(1).maybeSingle(), 'ccp.envio');
   const envio = exigir(e, 'ccp.envio') as Fila | null;
   if (!envio) return null;
-  const d = await acotada(supabaseAdmin().from('cp_documento').select('remitente, remitente_reconocido').eq('tenant_id', tenantId).eq('id', String(envio.documento_id)).maybeSingle(), 'ccp.documento');
+  const d = await acotada(supabaseAdmin().from('cp_documento').select('remitente, remitente_reconocido, folio:extraccion->campos->folio_cliente->>valor, rfc_origen:extraccion->campos->origen_rfc->>valor, rfc_destino:extraccion->campos->destino_rfc->>valor, rfc_importador:extraccion->campos->rfc_importador->>valor').eq('tenant_id', tenantId).eq('id', String(envio.documento_id)).maybeSingle(), 'ccp.documento');
   const doc = exigir(d, 'ccp.documento') as Fila | null;
   if (!doc) return null;
   return {
     envioId: String(envio.id), documentoId: String(envio.documento_id), remitente: s(doc.remitente),
     remitenteReconocido: doc.remitente_reconocido === null || doc.remitente_reconocido === undefined ? null : Boolean(doc.remitente_reconocido),
+    folioDocumento: s(doc.folio),
+    rfcsDocumento: [s(doc.rfc_origen), s(doc.rfc_destino), s(doc.rfc_importador)].filter((x): x is string => !!x),
   };
 }
 

@@ -50,6 +50,7 @@ const ARCHIVOS: Record<string, Clase> = {
   'agentes/conductores/page.tsx': 'permitido',
   'agentes/conductores/sitios/page.tsx': 'permitido',
   'agentes/carta-porte/catalogo/actions.ts': 'permitido',  // importación CSV del catálogo por cliente (A3, T-A3-21)
+  'agentes/carta-porte/referencia/actions.ts': 'permitido',  // referencia comercial del cliente (A3, T-A3-65)
   'agentes/carta-porte/configuracion/actions.ts': 'permitido',  // configuración de la salida al TMS (A3, T-A3-32)
   'agentes/carta-porte/configuracion/ccp_actions.ts': 'permitido',  // responder al cliente con el CCP timbrado (A3, A37-A3-01); misma ruta del agente Carta Porte
   'carta-porte/documentos/[id]/page.tsx': 'permitido',
@@ -59,8 +60,12 @@ const ARCHIVOS: Record<string, Clase> = {
   'despacho/page.tsx': 'permitido',
   'inicio-contenido.tsx': 'permitido',                      // el Resumen de siempre: bajo el perfil no se monta
   'legal/page.tsx': 'permitido',
+  'llaves-api/page.tsx': 'permitido',                        // Ola 1 · A1: el dueño emite la llave `administracion` del TMS bajo el perfil
+  'patios/page.tsx': 'permitido',                            // Ola 1 · A1: ídem (catálogo operativo)
+  'usuarios/page.tsx': 'permitido',                          // Ola 1 · A1: el dueño da de alta a nómina/RH que reenvían desgloses
   'arco/page.tsx': 'permitido',                              // A37-TRANSVERSAL-06: obligación legal de la flota, no módulo comercial
   'mi-perfil/page.tsx': 'permitido',
+  'puesta-en-marcha/acciones.ts': 'permitido',               // rediseño UI v2: prueba de correo al propio usuario (asistente de puesta en marcha)
   'operadores/page.tsx': 'permitido',
   'soporte/page.tsx': 'permitido',
   'unidades/page.tsx': 'permitido',
@@ -93,15 +98,12 @@ const ARCHIVOS: Record<string, Clase> = {
   'facturacion/portal.tsx': 'standby',
   'huerfanos/page.tsx': 'standby',
   'jornada/page.tsx': 'standby',
-  'llaves-api/page.tsx': 'standby',
   'onboarding/page.tsx': 'standby',
-  'patios/page.tsx': 'standby',
   'politicas/page.tsx': 'standby',
   'reglas/page.tsx': 'standby',
   'sesiones-mcp/page.tsx': 'standby',
   'suscripcion/page.tsx': 'standby',
   'timbrado/[viajeId]/timbrar.tsx': 'standby',
-  'usuarios/page.tsx': 'standby',
 
   // ── Sin datos de ninguna flota ─────────────────────────────────────────
   // `cerrarSesion` solo cierra la sesión de quien la pide; no lee ni escribe datos del tenant.

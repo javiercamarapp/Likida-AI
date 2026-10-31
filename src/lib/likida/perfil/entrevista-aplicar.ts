@@ -1,4 +1,4 @@
-import { guardarPerfilPatch, actualizarFacilidad15, getPerfilCrudo } from '../repo';
+import { guardarPerfilPatch, actualizarFacilidad15, getPerfilCrudo, exigirRegimenCompatibleConFacilidad15 } from '../repo';
 import { guardarConfigCobranza, leerConfigCobranza } from '../agentes/cobranza';
 import { crearOperador, guardarPolitica } from '../administracion';
 import { crearUnidad } from '../operacion';
@@ -6,7 +6,7 @@ import { guardarDatosFiscalesParciales, REGIMENES } from '@/lib/saas/fiscal';
 import { getConfig } from '../config';
 import { logger } from '@/lib/logger';
 import {
-  declararHechos, declararAusente, facilidad15Declarada, type DatosOnboarding,
+  declararHechos, declararAusente, facilidad15Declarada, regimenElegibleDeclarado, regimenSatDeclarado, type DatosOnboarding,
 } from './preguntas';
 import {
   interpretarTurno, estadoEntrevista, mensajeConfirmacion, mensajeBienvenida,
@@ -79,11 +79,14 @@ export async function aplicarTurnoEntrevista(opts: {
     ...(skip.length ? declararAusente(skip) : {}),
   };
   const perfilNuevo = await marcar('guardar_perfil', async () => {
+    // A39-S53-01: cotejo FIS-C1 ANTES de persistir el perfil, contra el régimen que quedará (el del patch si viene, si no el vigente).
+    const regimenPendiente = regimenSatDeclarado(patch) ?? null;
+    if (regimenElegibleDeclarado(patch) === true) await exigirRegimenCompatibleConFacilidad15(opts.tenantId, regimenPendiente);
     await guardarPerfilPatch(opts.tenantId, patch, opts.userId);
     const leido = await getPerfilCrudo(opts.tenantId);
     const f15 = facilidad15Declarada(leido);
     if (f15) {
-      await actualizarFacilidad15(opts.tenantId, f15.dedicacionExclusivaCarga, f15.regimenElegible, opts.userId);
+      await actualizarFacilidad15(opts.tenantId, f15.dedicacionExclusivaCarga, f15.regimenElegible, opts.userId, regimenPendiente);
     }
     if (hechos.cobranzaVentana) {
       const actual = await leerConfigCobranza(opts.tenantId);

@@ -175,6 +175,8 @@ async function accionConciliar(_previo: ResultadoAccion, fd: FormData): Promise<
 }
 
 export default async function CostosFacturacionPage() {
+  // A39-S05-01/S06-01: puerta PROPIA en el render (el layout no se re-ejecuta en una petición RSC parcial).
+  await requireSuperadmin();
   const r = await getResumenNegocio();
   const costoPorViaje = r.viajesProcesados > 0 ? r.costoIaUsd / r.viajesProcesados : null;
   // Mismo cálculo que corre `accionEmitir` — el diálogo de confirmación le

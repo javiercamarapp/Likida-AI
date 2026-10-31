@@ -23,6 +23,7 @@
 // personalización permitida) y los correos van a `prospecto_correo`, que el
 // Enviador usa como lista de copias de la empresa.
 // ═══════════════════════════════════════════════════════════════════════════
+import { DOMINIOS_DE_CORREO_LIBRE } from './correo_libre';
 import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { hostNoPublico } from '@/lib/http/destino_publico';
@@ -278,11 +279,21 @@ export function separarPorDominio(
   if (sitio) {
     try { permitidos.add(dominioDe(new URL(sitio).hostname)); } catch { /* sitio ilegible: sin dominio que permitir */ }
   }
-  if (principal?.includes('@')) permitidos.add(dominioDe(principal));
+  // A39-S28-03: un principal de dominio LIBRE solo se autoriza a sí mismo (dirección exacta).
+  const exactos = new Set<string>();
+  if (principal?.includes('@')) {
+    const dom = dominioDe(principal);
+    if (DOMINIOS_DE_CORREO_LIBRE.has(dom)) exactos.add(principal.trim().toLowerCase());
+    else permitidos.add(dom);
+  }
   const propios: ExtraccionInvestigador['correos'] = [];
   const ajenos: ExtraccionInvestigador['correos'] = [];
   for (const c of correos) {
-    (permitidos.has(dominioDe(c.correo)) ? propios : ajenos).push(c);
+    const dom = dominioDe(c.correo);
+    const esPropio = DOMINIOS_DE_CORREO_LIBRE.has(dom)
+      ? exactos.has(c.correo.trim().toLowerCase())
+      : permitidos.has(dom);
+    (esPropio ? propios : ajenos).push(c);
   }
   return { propios, ajenos };
 }
@@ -527,6 +538,21 @@ const TOPE_FILAS_ESCANEADAS = 2_000;
  *  tiene dossier, sigue a la siguiente en la MISMA llamada, hasta juntar
  *  `limite` candidatos o agotar `TOPE_FILAS_ESCANEADAS`. */
 export async function candidatosSinDossier(limite: number): Promise<string[]> {
+  // A39-S28-01: con la 0930 el filtro «sin dossier» vive en la base (anti-join): sin tope de escaneo, así que no se detiene tras
+  // ~2,000 investigados. Sin la migración (la función no existe) cae al escaneo paginado de siempre y lo avisa.
+  const admin = supabaseAdmin();
+  if (typeof (admin as unknown as { rpc?: unknown }).rpc === 'function') {
+    const { data, error } = await acotada(admin.rpc('prospectos_sin_dossier', { p_limite: limite }), 'investigador.candidatos_rpc');
+    if (!error) {
+      return ((data ?? []) as Array<{ id?: unknown }>).map((f) => String(f.id)).filter((id) => id !== 'undefined' && id !== '');
+    }
+    logger.warn('investigador.candidatos_sin_rpc', { err: error.message });
+  }
+  return candidatosSinDossierEscaneo(limite);
+}
+
+/** El escaneo paginado de antes de la 0930 (con su tope): solo es el camino de respaldo. */
+async function candidatosSinDossierEscaneo(limite: number): Promise<string[]> {
   const encontrados: string[] = [];
   let cursor: { createdAt: string; id: string } | null = null;
   let escaneadas = 0;

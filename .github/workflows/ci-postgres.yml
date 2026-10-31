@@ -162,12 +162,38 @@ jobs:
                 -f scripts/ci/0335_preflight_retencion_indices.sql
             fi
             n=$((n + 1))
+            # Ola 1 de seguridad: foto de los grants justo antes de la 0947 (la restituye el paso «Grants previos a la 0947», tras capa0).
+            if [ "$(basename "$f")" = "0947_cerrar_grants_anon_authenticated.sql" ]; then
+              psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f scripts/ci/grants_previos_0947_guardar.sql
+            fi
             if ! psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f"; then
               echo "::error::La migración $f no aplicó limpia sobre una base virgen."
               exit 1
             fi
           done
           echo "$n migraciones aplicadas limpias."
+
+      # ── Capa 0: privilegios de tabla para anon/authenticated (Ola 1 de seguridad, A1) ──
+      # Estado REAL de las migraciones (0946-0948): cero grants abiertos, default ACL cerrada, sin políticas de storage, credenciales
+      # sin SELECT de columna. Corre ANTES de restituir los grants previos a la 0947 (solo en esta base efímera).
+      - name: Capa 0 — privilegios de tabla (anon/authenticated)
+        run: |
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          node scripts/ci/correr-verificaciones.mjs supabase/pruebas-aislamiento/capa0_grants_tablas.sql | tee -a "$GITHUB_STEP_SUMMARY"
+          ec=${PIPESTATUS[0]}
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          exit $ec
+
+      # H3 (verificación del PR #766): el camino de LOGIN bajo los grants REALES de la 0947 (sin restituir nada): app_user se lee con el JWT
+      # de usuario y cualquier otra tabla da 42501.
+      - name: Login bajo los grants de la 0947 (authenticated solo lee app_user)
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/pruebas-aislamiento/login_bajo_grants_0947.sql
+
+      # Devuelve a la base efímera los privilegios que había ANTES de la 0947 (producción los tiene revocados): la batería de abajo
+      # (verificaciones.sql, set role authenticated, supabase/tests) sigue viendo el mismo estado de grants que las migraciones previas
+      # dejaron y prueba RLS como capa independiente. Corre DESPUÉS de capa 0, que demuestra el estado real.
+      - name: Grants previos a la 0947 (solo base efímera)
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f scripts/ci/grants_previos_0947_restaurar.sql
 
       # Contratos acumulados de retención 0332/0335/0338. Corren sobre la misma
       # base efímera y dentro del mismo job: cero workflow o ejecución adicional.
@@ -312,6 +338,7 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0792_cp_catalogo_cliente.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0830_cp_distancias.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0832_cp_referencia_cliente.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0938_cp_primer_mes_revisores.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0795_programa_despacho.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0796_vigia_datos_viaje.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0797_vigia_aviso.sql
@@ -342,6 +369,7 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0689_vigia_purgar_por_lotes.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0690_agregados_resumen_por_grupo.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0770_tenant_perfil.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0939_tenant_ui.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0776_peaje_reglas_cobro_config.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0777_peaje_reclamo_seguimiento.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0779_peaje_atipicos.sql
@@ -363,6 +391,20 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0894_programa_carga_completada.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0909_agentes_idempotencia_purga_y_conteo_mcp.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0923_a37_z_resto_14.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0925_a39_ola8_tenant_admin.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0927_conductor_perillas_fase2_y_calibracion.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0930_a39_ola8_investigador_candidatos.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0928_a39_ola8_contratos_fiscal.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0929_a39_ola8_lote_o8_5.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0931_a39_ola9_rentabilidad_costo_con_ingreso.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0932_operador_sin_telefono_canal_correo.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0933_a1_modo_primer_mes_y_remitente.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0940_a1_fecha_de_corte_y_entregas_omitidas.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0935_a2_ola1_desglose_linea_icident.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0936_a2_ola1_peaje_regla_flota.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0937_a2_ola1_peaje_aviso_enviado.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0945_a2_ola10_peaje_atipico_reserva_aviso.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0946_tenant_buzon_token_y_grants_cerrados.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0863_sembrar_hitos_perfil_con_compuerta.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0876_gasto_ocr_extra_mezcla_atomica.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0892_vigia_datos_personales_arco_y_retencion.sql

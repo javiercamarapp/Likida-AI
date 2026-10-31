@@ -144,13 +144,14 @@ describe('la contabilidad del cierre', () => {
     expect(renglones.length, 'envíos en avisar_cierre.ts sin renglón en PASOS_CIERRE').toBeGreaterThanOrEqual(envios);
   });
 
-  it('la tabla trae los veinte pasos, con dónde vive cada uno', () => {
+  it('la tabla trae los veintiún pasos, con dónde vive cada uno', () => {
     // El `donde` no es adorno: sin él, revisar si la lista sigue completa exige
     // releer `processor.ts` entero, que es exactamente lo que nadie hizo en tres
     // rondas. Si añades un paso de red al cierre, añádelo aquí o sube el margen.
     // AUDITORÍA 25, REND-A2 (REINCIDENTE): eran 18 mientras `processor.ts` ya
     // hacía 20 (los dos `sellarEntregaLiquidacion` de AGEN-4/auditoría 24).
-    expect(PASOS_CIERRE).toHaveLength(20);
+    // A39-S30-03: 21 — se añadió el aviso por plantilla del PDF fuera de ventana (excluyente con el PDF libre; ver presupuesto.ts).
+    expect(PASOS_CIERRE).toHaveLength(21);
     for (const p of PASOS_CIERRE) {
       expect(p.ms, `${p.paso} sin costo`).toBeGreaterThan(0);
       expect(p.donde, `${p.paso} sin ubicación`).toMatch(/\.ts/);

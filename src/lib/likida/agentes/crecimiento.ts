@@ -70,6 +70,7 @@ import { ARTICULOS, type Articulo } from '../marketing/articulos';
 import { FRASE_TRACCION } from '../traccion';
 import { calcularEstimacion, CUOTA_DOF } from '../marketing/calculadora';
 import { NORMAS } from '../normas/indice';
+import { exigibleVencida } from '../normas/consulta';
 import { encolarPieza } from './cola';
 import { registrarCorrida, type DisparoCorrida } from './corridas';
 import { logger } from '@/lib/logger';
@@ -703,7 +704,8 @@ export function beneficiosVerificados(hoy: string): BeneficioVerificado[] {
     });
   }
 
-  const afirmables = Object.values(NORMAS).filter((n) => n.estado !== 'sin_verificar').length;
+  // A39-S50-01: una ficha vencida (RFA 2026 desde el 1-ene-2027) ya no es afirmable "hoy".
+  const afirmables = Object.values(NORMAS).filter((n) => n.estado !== 'sin_verificar' && !exigibleVencida(n.exigibleHasta, hoy)).length;
   b.push({
     clave: 'corpus_citable',
     titulo: 'Cada afirmación fiscal, con su ficha',
@@ -968,7 +970,7 @@ export interface SlideNoticia {
 export function slidesDelMercado(hoy: string, ventanaDias = VENTANA_NOTICIAS_DIAS): SlideNoticia[] {
   const salida: SlideNoticia[] = [];
   for (const n of Object.values(NORMAS)) {
-    if (n.estado === 'sin_verificar') continue;
+    if (n.estado === 'sin_verificar' || exigibleVencida(n.exigibleHasta, hoy)) continue;
     const desde = n.exigibleDesde ?? null;
     if (desde === null) continue;
     const d = diasEntre(desde, hoy);

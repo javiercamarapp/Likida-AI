@@ -26,9 +26,10 @@ import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina'
 import { telefonoParaDineroDe } from '../contactos';
 import { bitacoraConciliada } from './bitacora_conciliada';
 import {
-  leerEstadoAvisoDesglose, reclamarIntentoAviso, marcarAvisoEnviado, agotarIntentosAviso, avisosPendientesPeajes, MAX_INTENTOS_AVISO,
+  leerEstadoAvisoDesglose, reclamarIntentoAviso, devolverIntentoAviso, marcarAvisoRequerido, posponerAviso, marcarAvisoEnviado, agotarIntentosAviso, avisosPendientesPeajes, MAX_INTENTOS_AVISO,
 } from './datos';
 import { quedoEnCola } from './aviso_en_cola';
+import { superficiePeajesDeTenant, type SuperficiePeajes } from './superficie_perfil';
 
 export type ResultadoAvisoDesglose =
   | 'enviado' | 'no_requerido' | 'ya_avisado' | 'anulado' | 'no_existe' | 'agotado' | 'ocupado' | 'sin_destinatario' | 'rechazado';
@@ -36,8 +37,48 @@ export type ResultadoAvisoDesglose =
 export interface DepsAvisoPeajes {
   telefono: (tenantId: string) => Promise<string | null>;
   avisar: typeof avisarOficina;
+  /** Qué partes de peajes tiene la flota (perfil). Sin poder leer el perfil, la restringida (falla cerrado). */
+  superficie: (tenantId: string) => Promise<SuperficiePeajes>;
 }
-const depsPorOmision: DepsAvisoPeajes = { telefono: telefonoParaDineroDe, avisar: avisarOficina };
+const depsPorOmision: DepsAvisoPeajes = { telefono: telefonoParaDineroDe, avisar: avisarOficina, superficie: superficiePeajesDeTenant };
+
+/**
+ * Fracción mínima de cobros que deben cuadrar con un ticket de caseta para que «sin respaldo» SIGNIFIQUE algo. Si la flota casi no tiene
+ * tickets de caseta cargados (un solo gasto en el periodo, o ninguno), TODO cobro sale «sin respaldo» — miles — y avisar de eso es ruido:
+ * la comparación no tiene contra qué. Debajo de este umbral la categoría no se avisa (sigue visible en pantalla, con su explicación).
+ */
+export const COBERTURA_MINIMA_TICKETS = 0.05;
+
+export interface ConteoAviso { gpsNoCoincide: number; sinRespaldo: number; porVerificar: number }
+
+/**
+ * Lo que de verdad se avisa de una conciliación, según el PERFIL de la flota y la cobertura de sus tickets (puro):
+ *  · «el GPS no ubica la unidad» solo si la flota tiene la superficie GPS (bajo `cinco_agentes` la evidencia GPS es stand-by);
+ *  · «sin respaldo en tus tickets» / «por verificar» solo si la flota tiene tickets de caseta (`cfdiYTickets`) Y al menos
+ *    `COBERTURA_MINIMA_TICKETS` de los cobros cuadró con alguno.
+ * `motivoOmitido` dice por qué se calló una categoría que sí traía casos (para el log, no para el cliente).
+ */
+export function contarParaAviso(
+  b: { filas: ReadonlyArray<{ gps?: string | null }>; resumen: { total?: number; cuadra?: number; sinRespaldo: number; porVerificar: number } },
+  superficie: SuperficiePeajes,
+): { conteo: ConteoAviso; motivoOmitido: string | null } {
+  let motivoOmitido: string | null = null;
+  const gpsNoCoincide = superficie.gps ? b.filas.filter((f) => f.gps === 'no coincide').length : 0;
+  let sinRespaldo = b.resumen.sinRespaldo;
+  let porVerificar = b.resumen.porVerificar;
+  if (!superficie.cfdiYTickets) {
+    if (sinRespaldo > 0 || porVerificar > 0) motivoOmitido = 'perfil_sin_tickets';
+    sinRespaldo = 0; porVerificar = 0;
+  } else {
+    const total = b.resumen.total ?? b.filas.length;
+    const cuadra = b.resumen.cuadra ?? 0;
+    if (total > 0 && cuadra / total < COBERTURA_MINIMA_TICKETS) {
+      if (sinRespaldo > 0 || porVerificar > 0) motivoOmitido = 'sin_cobertura_de_tickets';
+      sinRespaldo = 0; porVerificar = 0;
+    }
+  }
+  return { conteo: { gpsNoCoincide, sinRespaldo, porVerificar }, motivoOmitido };
+}
 
 const liga = () => `${appUrl()}/dashboard/agentes/peajes`;
 
@@ -56,6 +97,12 @@ export function textoAvisoDesglose(
   return `⚠️ Peajes: en el desglose${d.proveedor ? ` de ${d.proveedor}` : ''}${periodo} hay ${partes.join(', ')}. Es una señal para revisar, no afirma que el cobro sea indebido. Revísalo: ${liga()}`;
 }
 
+/** H759-1: aparta el aviso bloqueado por configuración (backoff + tope) y deja constancia una sola vez al salir de la cola. */
+async function avisoBloqueado(tenantId: string, desgloseId: string, motivo: 'sin_destinatario' | 'plantilla_sin_aprobar'): Promise<void> {
+  const p = await posponerAviso(tenantId, desgloseId);
+  if (p?.salioDeLaCola) logger.warn('peajes.aviso_bloqueado_sale_de_la_cola', { tenant: tenantId, desglose: desgloseId, motivo, esperas: p.esperas });
+}
+
 /** Evalúa y, si hay algo que mirar, avisa UNA vez. Nunca lanza. */
 export async function avisarDesgloseConciliado(tenantId: string, desgloseId: string, deps: DepsAvisoPeajes = depsPorOmision): Promise<ResultadoAvisoDesglose> {
   try {
@@ -67,20 +114,21 @@ export async function avisarDesgloseConciliado(tenantId: string, desgloseId: str
 
     const b = await bitacoraConciliada(tenantId, desgloseId);
     if (!b) return 'anulado';
-    const c = {
-      gpsNoCoincide: b.filas.filter((f) => f.gps === 'no coincide').length,
-      sinRespaldo: b.resumen.sinRespaldo,
-      porVerificar: b.resumen.porVerificar,
-    };
+    const { conteo: c, motivoOmitido } = contarParaAviso(b, await deps.superficie(tenantId));
+    if (motivoOmitido) logger.info('peajes.aviso_categoria_omitida', { tenant: tenantId, desglose: desgloseId, motivo: motivoOmitido });
     if (c.gpsNoCoincide === 0 && c.sinRespaldo === 0) return 'no_requerido';
 
-    if (!(await reclamarIntentoAviso(tenantId, desgloseId, estado.intentos))) return 'ocupado';
-
+    // A2P-05: sin destinatario NO se reclama el intento (antes se agotaban 5 en ~75 min y nunca se reenviaba al configurar el teléfono).
     const tel = await deps.telefono(tenantId);
     if (!tel) {
       logger.warn('peajes.aviso_sin_destinatario', { tenant: tenantId, desglose: desgloseId });
+      // Queda pendiente para el barrido (sin gastar intentos): cuando haya teléfono, sale.
+      await marcarAvisoRequerido(tenantId, desgloseId);
+      // H759-1: pero APARTADO con backoff y tope, para que 5 desgloses viejos sin destinatario no acaparen la cola global de todas las flotas.
+      await avisoBloqueado(tenantId, desgloseId, 'sin_destinatario');
       return 'sin_destinatario';
     }
+    if (!(await reclamarIntentoAviso(tenantId, desgloseId, estado.intentos))) return 'ocupado';
     const proveedor = estado.proveedor?.trim() || 'peajes';
     const r = await deps.avisar(tel, textoAvisoDesglose(estado, c), {
       parametros: parametrosAvisoOficina(`Peajes ${proveedor}`, `${c.gpsNoCoincide + c.sinRespaldo} cobros por revisar`, liga()),
@@ -88,7 +136,15 @@ export async function avisarDesgloseConciliado(tenantId: string, desgloseId: str
     });
     const enCola = quedoEnCola(r);
     if (!r.ok && !enCola) {
-      logger.error('peajes.aviso_fallo', { tenant: tenantId, desglose: desgloseId, motivo: r.motivo, codigo: r.codigo });
+      if (r.fueraDeVentana) {
+        // A2P-05: ventana de 24 h cerrada y la plantilla no salió (sin aprobar): no es culpa del aviso, el intento se devuelve para cuando se
+        // apruebe. H759-1: se APARTA con backoff y tope (no se vuelve a llamar a Meta cada 15 min) y es una advertencia, no un error de Sentry.
+        logger.warn('peajes.aviso_fuera_de_ventana', { tenant: tenantId, desglose: desgloseId, motivo: r.motivo, codigo: r.codigo });
+        await devolverIntentoAviso(tenantId, desgloseId, estado.intentos);
+        await avisoBloqueado(tenantId, desgloseId, 'plantilla_sin_aprobar');
+      } else {
+        logger.error('peajes.aviso_fallo', { tenant: tenantId, desglose: desgloseId, motivo: r.motivo, codigo: r.codigo });
+      }
       return 'rechazado';
     }
     if (enCola) logger.warn('peajes.aviso_en_cola', { tenant: tenantId, desglose: desgloseId, motivo: r.ok ? null : r.motivo, codigo: r.ok ? null : r.codigo });

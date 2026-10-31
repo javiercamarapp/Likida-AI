@@ -27,6 +27,17 @@ vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams()
 // (`Record<RolAppUser, string>`) y sin `operador`.
 // ═══════════════════════════════════════════════════════════════════════════
 
+describe('A39-S16-01 · un administrador con nombre vacío no rompe el marco', () => {
+  it.each(['', '   ', null])('nombre %j: el marco pinta («Mi cuenta» como respaldo)', (nombre) => {
+    const html = renderToStaticMarkup(
+      <DashboardChrome nombre={nombre} rol="flota_admin">
+        <div />
+      </DashboardChrome>,
+    );
+    expect(html).toContain('Mi cuenta');
+  });
+});
+
 describe('DashboardChrome — el badge de rol viene de la fuente única (provisionar.ts)', () => {
   it('vendedor (0105) tiene su propio badge, no cae al fallback de mayúsculas', () => {
     const html = renderToStaticMarkup(

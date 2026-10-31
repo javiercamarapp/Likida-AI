@@ -586,7 +586,61 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 326;
 // `borrarReferencia` (baja de la foto de un personaje): lectura de la ruta (`marketing_referencia`), borrado del objeto (`storage.from`, que este
 // guardia cuenta como `.from(`) y borrado de la fila. Cubierta por `estudio.borrar.test.ts`. Si otro lote toca este techo, sumar el incremento al integrar.
 // INTEGRACION G4 (24-oct-2026, PRs #705-#724): el barrido real del arbol fusionado mide 2,386 llamadas (2,357 en master 5169fd72b: +29 de las 15 ramas, techo = medido, sin holgura).
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_386;
+// LOTE A39 OLA 8 conductor-jornada (A39-A5-03): +3 llamadas (2,386 → 2,389), medidas con el barrido real. `trabajo.ts` suma `esVoluntarioDePiloto` (operador) y
+// `leerViajesAbiertosDeTelefono` (operador + viaje), las tres por `acotada` con `.order('id').limit(...)`. Cubiertas por compuerta_operador.test.ts y
+// alerta_operador_compuerta.test.ts.
+// LOTE A39 OLA 8 O8-1 (A39-S57-01): +1 llamada (2,389 → 2,390) al integrar con el lote conductor-jornada. `crearFlota` (administracion.ts) fija `tenant.rfc_sat_verificado`
+// en un update aparte del insert (tolera que la migración 0925 aún no esté aplicada). Cubierta por administracion.test.ts. Si otro lote toca este techo, sumar el incremento al integrar.
+// LOTE A39 OLA 8 O8-6 (datos-correos): +4 llamadas (2,390 → 2,394), medidas con el barrido real. sincronizar_eventos.ts +2 (A39-S38-03: lectura de las filas mínimas
+// y update de promoción a completa, ambos por `acotada`); investigador.ts +1 (A39-S28-01: RPC prospectos_sin_dossier, 0930); vigia/repo.ts +1 (A39-S59-01: `marcarRespondida`
+// anota solo la salida cuando el cliente escribió después). Cubiertas por sincronizar_eventos_a39_s38.test.ts, investigador.test.ts y servicio.test.ts.
+// LOTE A39 OLA 8 O8-4 (A39-S57-03): +3 llamadas (2,390 → 2,393), medidas con el barrido real. `sat_descarga/ciclo.ts` suma la copia de trabajo de un paquete
+// grande del SAT (`sat_paquete_xml`, 0928): leer, guardar (upsert por tandas) y borrar, las tres por `acotada` con `tenant_id`. Cubiertas por ciclo_flota.test.ts.
+// Si otro lote toca este techo, sumar el incremento al integrar.
+// LOTE A39 OLA 8 O8-5 (A39-S14-01): +1 llamada (2,390 → 2,391; medida con el barrido real). `crearReclamoDeCandidatos` (peajes/repo.ts) lee los lotes previos de la
+// categoría (`peaje_reclamo`, por `acotada`, con `tenant_id` y `.order('id').limit(1000)`) para tomar el siguiente lote. Cubierta por acciones-candidatos.test.ts y la prueba SQL 0929.
+// LOTE A39 OLA 8 tanda 2 (A37-S48-01/03, A5-01): +5 llamadas (2,390 → 2,395), medidas con el barrido real. `jornada/repo.ts` suma `jornadaCerradaDeAyer`
+// (la conformidad de un turno nocturno) y, para retirar la conformidad al anular/recapturar, `leerConformidad`, `retirarConformidad` y la lectura previa de
+// `anularAsiento` (+4; cubiertas por wa_dia_anterior.test.ts); `admin/negocio.ts` suma `fijarAgenteChoferHabilitado` (+1; negocio_agente_chofer.test.ts).
+// INTEGRACIÓN OLA 8b: techo = 2,390 + 4 (O8-6) + 3 (O8-4) + 1 (O8-5) + 5 (tanda 2) = 2,403 (medido con el barrido real tras la fusión).
+// OLA 1 · A1 (liquidación por correo): +7 llamadas (2,403 → 2,410), medidas con el barrido real. importacion/operadores.ts +2 (buscarPorEmpleado y buscarPorCorreo: operadores
+// de la flota por número de empleado / correo, por `acotada`, con `tenant_id`; cubiertas por operadores_sin_telefono.test.ts); administracion.ts +3 (comprobarEmpleadoLibre y
+// comprobarCorreoLibre del alta sin teléfono, más la lectura del teléfono guardado al editar con el campo vacío; cubiertas por administracion_sin_telefono.test.ts);
+// liquidacion_externa/repo_correo.ts +2 (el respaldo sin las columnas de la 0933 al leer y al guardar la configuración; cubiertas por repo_correo_0933.test.ts).
+// Si otro lote toca este techo, sumar el incremento al integrar.
+// LOTE A2 OLA 1 (peajes): +17 llamadas (2,403 → 2,420), medidas con el barrido real (el conteo de arriba, bajando el techo a 1 y leyendo el resultado).
+// Todas en `peajes/repo.ts` salvo una, por `acotada` y con `tenant_id` salvo la lectura multi-flota del cron de avisos (comentada en su función):
+// `resumenFuenteViajes` (+3: viaje, viaje con despacho_ref, posicion con despacho_ref; cruce con viajes), `posicionesLocalesConDespacho` (+2: posicion, unidad),
+// `quitarInmovilizada` (+1), `leerReglasFlota`/`guardarReglasFlota` (+2; 0936), `reservarAvisoPeajes`/`liberarAvisoPeajes`/`listarFlotasConAvisos`/
+// `desglosesRecientesParaAvisos` (+4; 0937), `anclaDePeriodo` (+1; periodo inferido), `marcarCasetasPorPasada` (+1), el reintento del catálogo de casetas sin
+// `carretera` (+1), el registro del siniestro del maestro de TAGs (+1), más
+// `intake/desglose_peaje.ts` (+1: reintento del lote de líneas sin `icident`). Cubiertas por fuente_despacho.test.ts, reglas_flota.test.ts, avisos_repo.test.ts,
+// inmovilizadas_carga.test.ts, plantillas_cliente.test.ts, periodo.test.ts y desglose_peaje_icident.test.ts.
+// Si otro lote (A1, A3) toca este techo, sumar el incremento al integrar.
+// OLA1-A3 (Carta Porte): 2,403 → 2,410 (+7, medido con el barrido real; conteo leído del mensaje del propio guardián). Todas de solo lectura o upsert
+// de configuración, por `acotada`, con `tenant_id`: `carta_porte_docs/repo.ts` suma `clientesConCorreo` (reconocer al remitente → cliente), `leerPrimerMes`/`guardarPrimerMes`
+// (0938, modo primer mes) y, en `leerSalidasParaSinCcp`, los viajes por fecha de inicio y los folios de documentos aprobados y de cargas subidas (viajes sin CCP bajo
+// cinco_agentes); `referencia_cliente_puerto.ts` suma los viajes por fecha de inicio. Cubiertas por servicio.test.ts, primer_mes.test.ts y viajes_sin_ccp_repo.test.ts.
+// INTEGRACION OLA 1: A1 (+7) + A2 (+17) + A3 (+7) sobre 2,403 = 2,434 (MEDIDO con el barrido real tras integrar las tres ramas: 2,434; techo ajustado, sin holgura).
+// CORRECCIÓN PR #753 (verificación independiente, M4): 2,434 → 2,439 (+5, medido con el guardián). Sello de dos fases del aviso de peajes en `peajes/repo.ts`, todas por
+// `acotada` y con `tenant_id`: `reservarAvisoPeajes` +2 (¿ya está dado? y la reserva previa vigente/vencida; antes solo el upsert) + 1 (tomar la reserva vencida con borrado
+// condicionado) y `confirmarAvisoPeajes` +2 (sello definitivo y soltar la reserva). Cubiertas por avisos_repo.test.ts y aviso_barrido.test.ts.
+// REDISENO UI v2 (carril A, A.1): +1 llamada (2,439 -> 2,440). `lib/auth/perfil_tenant.ts` suma `versionUiDeTenant`, la lectura de `tenant_ui` (version por tenant,
+// cache de 30 s, falla hacia v1); `version_ui.ts` no consulta la base. Sin archivos nuevos con acceso directo. Cubierta por version_ui.test.ts.
+// OLA 10, carril A (A1-01/A1-02): 2,440 → 2,443 (+3, medido con el guardián). Todas en `liquidacion_externa/repo_correo.ts`, por `acotada` y con `tenant_id`:
+// `omitirEntregasPendientes` +1 (UPDATE condicionado pendiente/enviando → omitida: corte de arranque y corrección que reemplaza a la original) y, por la columna
+// de la 0940, la lectura de la configuración con respaldo si falta (+1 select) y el upsert con respaldo (+1). Cubiertas por repo_correo_0940.test.ts.
+// OLA 10 · carril B (peajes): +4 sobre su base (medido con el guardián), todas por `acotada` y con `tenant_id` salvo la recuperación global del cron:
+// `peajes/repo.ts` `devolverIntentoAviso` +1 (A2P-05: devuelve el intento tomado cuando la ventana de WhatsApp está cerrada) y `marcarAvisoRequerido` +1 (A2P-05: deja pendiente el aviso sin gastar intentos cuando falta destinatario) y `peajes/aviso_atipicos.ts`
+// `confirmar` +1 (limpia el vencimiento de la reserva tras enviar) y `recuperarVencidas` +1 (A2P-18, devuelve a `nuevo` lo reservado y vencido; multi-flota a propósito,
+// como el barrido de avisos). La reserva de siempre solo cambió de forma (sigue siendo 1 llamada). Cubiertas por aviso_oficina_ola10.test.ts, ciclo_completo.e2e.test.ts y aviso_atipicos.test.ts.
+// INTEGRACION OLA 10: 2,440 (master con el rediseno) + 3 (carril A) + 4 (carril B) + 0 (carril C) = 2,447 medido sobre el arbol fusionado; +1 por la integracion: `recuperarVencidas` (carril B) pasaba la guarda de consultas_admin_filtran_tenant solo con un UPDATE global sin tenant_id, asi que ahora lee los vencidos (+1) y devuelve por flota con `.eq('tenant_id')` (el UPDATE de siempre): 2,448 final.
+// La regla de perfil de `guardarConfigCorreo` usa `perfilDeTenant` (su acceso ya estaba contado en perfil_tenant.ts): 0 llamadas nuevas.
+// CORRECCION H759 (verificacion independiente del PR #759): 2,448 -> 2,450 (+2, medido con el guardian). H759-1: `peajes/repo.ts` `posponerAviso` (lee `aviso_esperas` y
+// aparta con backoff por compare-and-set, ambas por `acotada` y con `tenant_id`) para que un aviso bloqueado por configuracion no acapare la cola global. Cubierta por avisos_repo.test.ts.
+// H759-3: +2 (2,450 -> 2,452, medido). `liquidacion_externa/repo_correo.ts` `omitirPendientesAnterioresAlCorte` (lee con `tenant_id` las pendientes con periodo_hasta < corte y las pasa a
+// `omitida` por compare-and-set de estado; ambas por `acotada`) para que el historico subido con el envio apagado y sin corte no salga al fijar/activar el corte. Cubierta por repo_correo_0940.test.ts.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_452;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

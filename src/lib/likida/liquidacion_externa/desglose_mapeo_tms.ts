@@ -42,6 +42,15 @@ export interface MapeoRenglon {
 
 export interface MapeoTms {
   bitacora: RutaJson;
+  /** SUPUESTO-API: número de liquidación (consecutivo del sistema de origen) y número de pago; se muestran en el encabezado. */
+  numeroLiquidacion?: RutaJson;
+  numeroPago?: RutaJson;
+  /**
+   * SUPUESTO-API: todas las bitácoras de la misma liquidación (una unidad con dos viajes se liquida junta): lista de folios o
+   * de `{ bitacora, unidad }`. Solo tiene sentido con `numeroLiquidacion`, y la fuente manda los renglones YA agregados.
+   * Unidades distintas ⇒ el contrato lo rechaza (`unidades_mezcladas`). Sin esta ruta, cada fila es un desglose.
+   */
+  bitacoras?: RutaJson;
   /** Póliza; ausente o vacía = `null` (todavía no hay póliza). */
   poliza?: RutaJson;
   terminal?: RutaJson;
@@ -235,6 +244,21 @@ export function mapearBitacoraTms(raw: unknown, mapeo: MapeoTms): ResultadoMapeo
 
   const bitacora = textoOpt(leerRuta(raw, mapeo.bitacora), 'bitacora');
   const operadorNumero = textoOpt(leerRuta(raw, mapeo.operadorNumero), 'operador.numeroEmpleado');
+  const numeroLiquidacion = mapeo.numeroLiquidacion ? textoOpt(leerRuta(raw, mapeo.numeroLiquidacion), 'numeroLiquidacion') : undefined;
+  const numeroPago = mapeo.numeroPago ? textoOpt(leerRuta(raw, mapeo.numeroPago), 'numeroPago') : undefined;
+  let bitacoras: Array<string | { bitacora: string; unidad?: string }> | undefined;
+  if (mapeo.bitacoras) {
+    const lista = listaEn(raw, mapeo.bitacoras, 'bitacoras');
+    if (lista.length > 0) {
+      bitacoras = lista.map((e, i) => {
+        if (typeof e === 'string' || typeof e === 'number') return String(e).trim();
+        const folio = textoOpt(leerRuta(e, 'bitacora'), `bitacoras[${i}].bitacora`);
+        if (folio === undefined) throw new CampoInvalido(`bitacoras[${i}]`, `\`bitacoras[${i}]\` tiene que ser un folio o \`{ bitacora, unidad? }\`.`);
+        const u = textoOpt(leerRuta(e, 'unidad'), `bitacoras[${i}].unidad`);
+        return { bitacora: folio, ...(u !== undefined ? { unidad: normalizarUnidad(u) } : {}) };
+      });
+    }
+  }
   const poliza = mapeo.poliza ? textoOpt(leerRuta(raw, mapeo.poliza), 'poliza') : undefined;
   const terminal = mapeo.terminal ? textoOpt(leerRuta(raw, mapeo.terminal), 'terminal') : undefined;
   const nombre = mapeo.operadorNombre ? textoOpt(leerRuta(raw, mapeo.operadorNombre), 'operador.nombre') : undefined;
@@ -302,6 +326,9 @@ export function mapearBitacoraTms(raw: unknown, mapeo: MapeoTms): ResultadoMapeo
   const armado = {
     ...(terminal !== undefined ? { terminal } : {}),
     bitacora: bitacora ?? '',
+    ...(numeroLiquidacion !== undefined ? { numeroLiquidacion } : {}),
+    ...(numeroPago !== undefined ? { numeroPago } : {}),
+    ...(bitacoras !== undefined ? { bitacoras } : {}),
     poliza: poliza ?? null,
     operador: { numeroEmpleado: operadorNumero ?? '', ...(nombre !== undefined ? { nombre } : {}) },
     ...(unidadCruda !== undefined ? { unidad: normalizarUnidad(unidadCruda) } : {}),

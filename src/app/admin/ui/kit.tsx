@@ -277,13 +277,15 @@ export function VerMas({ href, children = 'Ver estadísticas' }: { href: string;
 
 // ── StatusPill / Semaphore ───────────────────────────────────────────────
 
-export type Estado = 'ok' | 'warn' | 'bad' | 'neutral';
+export type Estado = 'ok' | 'warn' | 'bad' | 'neutral' | 'info';
 
 const ESTILO_ESTADO: Record<Estado, { bg: string; fg: string; label: string }> = {
   ok: { bg: 'var(--okbg)', fg: 'var(--ok)', label: 'OK' },
   warn: { bg: 'var(--warnbg)', fg: 'var(--warn)', label: 'Atención' },
   bad: { bg: 'var(--badbg)', fg: 'var(--bad)', label: 'Error' },
   neutral: { bg: 'var(--canvas)', fg: 'var(--muted)', label: '—' },
+  // Aditivo (v2): en v1 --info/--infobg no existen y caen a los neutros.
+  info: { bg: 'var(--infobg, var(--canvas))', fg: 'var(--info, var(--muted))', label: 'Info' },
 };
 
 /** Nunca color solo — siempre trae texto (label o children), para no
@@ -429,7 +431,7 @@ export function BannerInsight({ etiqueta, deltaPct, href, hrefTexto = 'Ver estad
   children: React.ReactNode;
 }) {
   return (
-    <div className="card p-3 flex items-center gap-2.5">
+    <div className="card p-3 flex items-center gap-2.5" data-banner="insight">
       <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--ok)' }} />
       <span className="etiqueta-mono shrink-0" style={{ color: 'var(--muted)' }}>{etiqueta}</span>
       {/* ESCALA 50k (22-ago-2026): aquí había `truncate`, y la frase trae un
@@ -437,7 +439,7 @@ export function BannerInsight({ etiqueta, deltaPct, href, hrefTexto = 'Ver estad
           mutilaba justo la cifra. Ahora envuelve a una segunda línea; lo que
           no se parte es el monto en sí, que el llamador manda en un <b> y
           aquí se protege con `[&_b]:whitespace-nowrap`. */}
-      <span className="text-[13px] min-w-0 flex-1 break-words [&_b]:whitespace-nowrap">{children}</span>
+      <span className="text-[13px] min-w-0 flex-1 break-words [&_b]:whitespace-nowrap" data-banner-texto>{children}</span>
       {deltaPct !== null && (
         <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full shrink-0 tabular"
           style={deltaPct >= 0

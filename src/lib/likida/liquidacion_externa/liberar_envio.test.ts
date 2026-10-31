@@ -2,7 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
-import { liberarEnvio, type DependenciasLiberar } from './liberar_envio';
+import { liberarEnvio, claveSiguienteCorreccion, type DependenciasLiberar } from './liberar_envio';
+import { MARCA_RETENIDA_OMITIDA } from './desglose_reglas';
 import { CONFIG_CORREO_POR_DEFECTO, type Desglose, type EntregaCorreo, type Excepcion, type NuevaEntrega } from './repo_correo';
 import type { LiquidacionExterna } from './repo';
 
@@ -24,14 +25,15 @@ const excepcion = (id: number, tipo: Excepcion['tipo']): Excepcion => ({
 function montar(sobre: {
   retenida?: string | null; entregas?: EntregaCorreo[]; excepciones?: Excepcion[]; sinLiquidacion?: boolean; lecturaCaida?: boolean;
   contacto?: { correo: string | null } | null; liberarDevuelve?: boolean;
+  noEnviarAntes?: string | null; periodoHasta?: string; hayCorreccion?: boolean | null;
 } = {}) {
   const log = { insertadas: [] as NuevaEntrega[], resueltas: [] as number[], eventos: [] as Array<Record<string, unknown> | undefined>, orden: [] as string[], liberada: 0 };
   const retenida = sobre.retenida === undefined ? 'neto negativo' : sobre.retenida;
   const contacto = sobre.contacto === undefined ? { correo: 'ana.prueba@ejemplo.test' } : sobre.contacto;
   const deps: DependenciasLiberar = {
-    leerLiquidacion: async () => (sobre.sinLiquidacion ? null : ({ id: LIQ, tenantId: TENANT, operadorId: OPERADOR, claveExterna: 'T1-B-0001', huella: HUELLA } as unknown as LiquidacionExterna)),
+    leerLiquidacion: async () => (sobre.sinLiquidacion ? null : ({ id: LIQ, tenantId: TENANT, operadorId: OPERADOR, claveExterna: 'T1-B-0001', huella: HUELLA, periodoHasta: sobre.periodoHasta ?? '2026-10-14' } as unknown as LiquidacionExterna)),
     leerDesglose: async () => (sobre.lecturaCaida ? null : { desglose: desglose(retenida) }),
-    leerConfig: async () => ({ ...CONFIG_CORREO_POR_DEFECTO, canal: 'correo', activa: true, rhCorreos: ['rh.prueba@ejemplo.test'] }),
+    leerConfig: async () => ({ ...CONFIG_CORREO_POR_DEFECTO, canal: 'correo', activa: true, rhCorreos: ['rh.prueba@ejemplo.test'], noEnviarAntes: sobre.noEnviarAntes ?? null }),
     leerContacto: async () => (contacto ? { operadorId: OPERADOR, correo: contacto.correo, correoRebotadoEn: null, coordinadorId: 'c-1' } : null),
     leerCoordinador: async () => ({ id: 'c-1', nombre: 'Coord Prueba', correo: 'coord.prueba@ejemplo.test', activo: true }),
     entregas: async () => sobre.entregas ?? [],
@@ -39,6 +41,7 @@ function montar(sobre: {
     insertarEntregas: async (_t, filas) => { log.orden.push('insertar'); log.insertadas.push(...filas); return filas.length; },
     liberarRetencion: async () => { log.orden.push('liberar'); log.liberada++; return sobre.liberarDevuelve ?? true; },
     resolverExcepcion: async (_t, id) => { log.orden.push('resolver'); log.resueltas.push(id); return true; },
+    existeCorreccionSiguiente: async () => (sobre.hayCorreccion === undefined ? false : sobre.hayCorreccion),
     registrarEvento: async (_t, _l, _tipo, detalle) => { log.eventos.push(detalle); },
     ahora: () => new Date('2026-10-14T18:30:00.000Z'),
   };
@@ -89,6 +92,14 @@ describe('liberarEnvio', () => {
     expect(log.liberada).toBe(1);
   });
 
+  it('0933: el aviso al revisor del primer mes que ya existe en la retenida NO cuenta como «ya se envió»: se crean las entregas del operador, coordinador y RH', async () => {
+    const aviso = { id: 'e-9', liquidacionExternaId: LIQ, generacion: 1, rol: 'revisor' } as unknown as EntregaCorreo;
+    const { log, deps } = montar({ entregas: [aviso] });
+    const r = await liberarEnvio(TENANT, LIQ, ADMIN, deps);
+    expect(r).toMatchObject({ estado: 'liberado', entregas: 3 });
+    expect(log.insertadas.map((e) => e.rol).sort()).toEqual(['coordinador', 'operador', 'rh']);
+  });
+
   it('concepto prohibido ⇒ no se libera desde aquí', async () => {
     const { log, deps } = montar({ excepciones: [excepcion(1, 'neto_negativo'), excepcion(2, 'concepto_prohibido')] });
     const r = await liberarEnvio(TENANT, LIQ, ADMIN, deps);
@@ -119,5 +130,44 @@ describe('liberarEnvio', () => {
     deps.leerConfig = async () => ({ ...CONFIG_CORREO_POR_DEFECTO, canal: 'correo', activa: true, enviaCoordinador: false, enviaRh: false });
     expect(await liberarEnvio(TENANT, LIQ, ADMIN, deps)).toMatchObject({ estado: 'rechazado', motivo: 'sin_destinatarios' });
     expect(log.liberada).toBe(0);
+  });
+});
+
+describe('H759-M5: liberar respeta el corte y no libera un original reemplazado', () => {
+  it('un desglose cuyo periodo termina ANTES de la fecha de corte no se libera (no se crea nada)', async () => {
+    const { log, deps } = montar({ noEnviarAntes: '2026-10-15', periodoHasta: '2026-10-14' });
+    const r = await liberarEnvio(TENANT, LIQ, ADMIN, deps);
+    expect(r).toMatchObject({ estado: 'rechazado', motivo: 'omitido_por_corte' });
+    expect(log.insertadas).toHaveLength(0);
+    expect(log.liberada).toBe(0);
+  });
+
+  it('el día del corte SÍ se libera (el periodo termina el mismo día)', async () => {
+    const { deps } = montar({ noEnviarAntes: '2026-10-14', periodoHasta: '2026-10-14' });
+    expect(await liberarEnvio(TENANT, LIQ, ADMIN, deps)).toMatchObject({ estado: 'liberado' });
+  });
+
+  it('un histórico omitido y retenido (marca en el motivo, sin excepciones) no se libera aunque el corte ya no esté', async () => {
+    const { log, deps } = montar({ retenida: `${MARCA_RETENIDA_OMITIDA}neto negativo`, excepciones: [] });
+    expect(await liberarEnvio(TENANT, LIQ, ADMIN, deps)).toMatchObject({ estado: 'rechazado', motivo: 'omitido_por_corte' });
+    expect(log.insertadas).toHaveLength(0);
+  });
+
+  it('un original ya reemplazado por una corrección no se libera, aunque su retención ya no tenga excepciones', async () => {
+    const { log, deps } = montar({ hayCorreccion: true, excepciones: [] });
+    expect(await liberarEnvio(TENANT, LIQ, ADMIN, deps)).toMatchObject({ estado: 'rechazado', motivo: 'reemplazado' });
+    expect(log.insertadas).toHaveLength(0);
+    expect(log.liberada).toBe(0);
+  });
+
+  it('si no se puede saber si hay corrección, no se libera (fail-closed)', async () => {
+    const { deps } = montar({ hayCorreccion: null });
+    expect(await liberarEnvio(TENANT, LIQ, ADMIN, deps)).toMatchObject({ estado: 'rechazado', motivo: 'no_disponible' });
+  });
+
+  it('la clave de la corrección siguiente: base → -R1, -R<n> → -R<n+1>', () => {
+    expect(claveSiguienteCorreccion('T1-B-0001')).toBe('T1-B-0001-R1');
+    expect(claveSiguienteCorreccion('T1-B-0001-R1')).toBe('T1-B-0001-R2');
+    expect(claveSiguienteCorreccion('T1-B-0001-R19')).toBe('T1-B-0001-R20');
   });
 });

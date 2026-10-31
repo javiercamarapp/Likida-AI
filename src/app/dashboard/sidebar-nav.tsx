@@ -89,7 +89,7 @@ function Seccion({ titulo, items, sufijo, pathname, abierta, onAbrir, perfil }: 
  *  escribió— al panel de la demo, sin cinta que lo dijera. Sin sufijo, el
  *  link va pelón y la cookie firmada decide: exactamente lo que hace el
  *  servidor (`guard.ts`). */
-function useSufijoYRol(rol: string): { sufijo: string; rolMenu: string } {
+export function useSufijoYRol(rol: string): { sufijo: string; rolMenu: string } {
   const sp = useSearchParams();
   const tenant = sp.get('tenant');
   const vista = sp.get('vista');

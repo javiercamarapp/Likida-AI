@@ -2,9 +2,10 @@ import { notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { getFichaCliente } from '@/lib/admin/ficha-cliente';
 import {
-  getInterruptoresPipelineDeTenant, apagarPipelineDeTenant, encenderPipelineDeTenant,
+  getInterruptoresPipelineDeTenant, apagarPipelineDeTenant, encenderPipelineDeTenant, fijarAgenteChoferHabilitado,
 } from '@/lib/admin/negocio';
 import { requireSuperadmin } from '@/lib/auth/guard';
+import { leerAgenteChoferHabilitado } from '@/lib/likida/conductor/repo';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { EstadoError } from '../../ui/kit';
 import type { ResultadoAccion } from '../../ui/forma';
@@ -23,6 +24,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * y "no se pudo leer" son afirmaciones distintas.
  */
 export default async function PaginaFicha({ params }: { params: Promise<{ id: string }> }) {
+  // A39-S05-01/S06-01: puerta PROPIA en el render (el layout no se re-ejecuta en una petición RSC parcial).
+  await requireSuperadmin();
   const { id } = await params;
   if (!UUID.test(id)) notFound();
 
@@ -54,6 +57,25 @@ export default async function PaginaFicha({ params }: { params: Promise<{ id: st
     };
   }
 
+  // A5-01: el interruptor `agente_chofer_habilitado` (0859). SOLO superadmin (re-gateado aquí: la acción es un endpoint), con motivo y bitácora.
+  async function accionAgenteChofer(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    const { userId } = await requireSuperadmin();
+    const operacion = String(fd.get('operacion') ?? '');
+    if (operacion !== 'habilitar' && operacion !== 'deshabilitar') return { error: 'Operación desconocida.' };
+    try {
+      await fijarAgenteChoferHabilitado(id, operacion === 'habilitar', String(fd.get('motivo') ?? ''), userId);
+    } catch (e) {
+      return { error: mensajeParaPantalla(e, `${operacion} el Agente 5`) };
+    }
+    revalidatePath(`/admin/flotas/${id}`);
+    return {
+      ok: operacion === 'habilitar'
+        ? 'Agente 5 HABILITADO para esta flota: ya puede escribirle a sus choferes (con sus demás compuertas). Quedó firmado en la bitácora.'
+        : 'Agente 5 deshabilitado para esta flota: no le escribe a ningún chofer. Quedó firmado en la bitácora.',
+    };
+  }
+
   let ficha;
   try {
     ficha = await getFichaCliente(id);
@@ -70,5 +92,8 @@ export default async function PaginaFicha({ params }: { params: Promise<{ id: st
   // lectura caída, la ficha entera NO debe dejar de mostrarse por esto.
   const interruptoresPipeline = await getInterruptoresPipelineDeTenant(id).catch(() => null);
 
-  return <Ficha360 f={ficha} interruptoresPipeline={interruptoresPipeline} accionInterruptorPipeline={accionInterruptorPipeline} />;
+  // `leerAgenteChoferHabilitado` nunca lanza y falla cerrado: «compuerta_ilegible» se dice como tal, no como «apagado».
+  const agenteChofer = await leerAgenteChoferHabilitado(id);
+
+  return <Ficha360 f={ficha} interruptoresPipeline={interruptoresPipeline} accionInterruptorPipeline={accionInterruptorPipeline} agenteChofer={agenteChofer} accionAgenteChofer={accionAgenteChofer} />;
 }

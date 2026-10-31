@@ -16,7 +16,7 @@ import { Logo } from './logo';
  */
 export default function Cargando() {
   return (
-    <div className="flex-1 min-h-[60dvh] flex items-center justify-center" role="status" aria-label="Cargando">
+    <div className="flex-1 min-h-[60dvh] flex items-center justify-center" role="status" aria-label="Cargando" data-carga="pagina">
       <Logo alto="h-[42px]" className="likida-respira" />
     </div>
   );

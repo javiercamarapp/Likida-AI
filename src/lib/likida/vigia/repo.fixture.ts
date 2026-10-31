@@ -224,9 +224,13 @@ export class RepoEnMemoria implements RepoVigia {
     Object.assign(c, p);
     return true;
   }
-  async marcarRespondida(tenantId: string, conversacionId: string, ahora: Date): Promise<void> {
+  async marcarRespondida(tenantId: string, conversacionId: string, ahora: Date, respondeHasta?: string): Promise<void> {
     const c = this.conversaciones.get(conversacionId);
     if (!c || c.tenantId !== tenantId) return;
+    if (respondeHasta && c.ultimaEntradaEn && Date.parse(c.ultimaEntradaEn) > Date.parse(respondeHasta)) {
+      c.ultimaSalidaEn = ahora.toISOString(); // A39-S59-01: el cliente escribió después; el reloj sigue
+      return;
+    }
     c.sinRespuestaDesde = null; c.entradasSinRespuesta = 0; c.escalamientoNivel = 0; c.escaladoEn = null; c.atendidaEn = null;
     c.molestiaNivel = 0; c.molestiaMotivos = []; c.molestiaEn = null; c.prioridad = 0; c.ultimaSalidaEn = ahora.toISOString();
   }

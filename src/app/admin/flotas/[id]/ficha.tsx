@@ -8,6 +8,7 @@ import type { FichaCliente } from '@/lib/admin/ficha-cliente';
 import type { InterruptorPipelineTenant } from '@/lib/admin/negocio';
 import type { AccionDeForma } from '../../ui/forma';
 import { SeccionInterruptores } from '../../observabilidad/interruptores-ui';
+import { FormaConAviso, Campo } from '../../ui/forma';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA FICHA 360 — el contenido, exportado (patrón page+contenido para poder
@@ -27,7 +28,7 @@ function NoSePudo({ que }: { que: string }) {
   return <p className="text-[12.5px] m-0" style={{ color: 'var(--muted)' }}>No se pudo leer {que} ahora mismo — reintenta.</p>;
 }
 
-export function Ficha360({ f, interruptoresPipeline, accionInterruptorPipeline }: {
+export function Ficha360({ f, interruptoresPipeline, accionInterruptorPipeline, agenteChofer, accionAgenteChofer }: {
   f: FichaCliente;
   /**
    * ADM-6 (auditoría 24): las palancas del pipeline del chofer de ESTA
@@ -38,6 +39,9 @@ export function Ficha360({ f, interruptoresPipeline, accionInterruptorPipeline }
    */
   interruptoresPipeline?: InterruptorPipelineTenant[] | null;
   accionInterruptorPipeline?: AccionDeForma;
+  /** A5-01: la compuerta `agente_chofer_habilitado` (0859) de esta flota. `undefined` = la ficha no la monta (previews). */
+  agenteChofer?: { habilitado: boolean; razon: 'habilitado' | 'apagado' | 'compuerta_ilegible' };
+  accionAgenteChofer?: AccionDeForma;
 }) {
   const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
   return (
@@ -221,6 +225,37 @@ export function Ficha360({ f, interruptoresPipeline, accionInterruptorPipeline }
                     accion={accionInterruptorPipeline}
                   />
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* ── A5-01: el Agente 5 (WhatsApp al chofer): nace APAGADO, lo enciende solo un superadmin, con motivo y firma. ── */}
+          {agenteChofer !== undefined && accionAgenteChofer && (
+            <div className="card p-3.5">
+              <TituloSeccion>Agente 5 — escribirle a los choferes</TituloSeccion>
+              <div className="mt-2 flex flex-col gap-2 text-[12.5px]">
+                <p className="m-0 flex items-center gap-2">
+                  <StatusPill estado={agenteChofer.habilitado ? 'ok' : agenteChofer.razon === 'compuerta_ilegible' ? 'bad' : 'neutral'}>
+                    {agenteChofer.habilitado ? 'habilitado' : agenteChofer.razon === 'compuerta_ilegible' ? 'no se pudo leer (se trata como apagado)' : 'apagado'}
+                  </StatusPill>
+                  <span style={{ color: 'var(--muted)' }}>
+                    Mientras esté apagado, el agente no le escribe a ningún chofer de esta flota. Habilitarlo no salta las demás compuertas
+                    (ventana horaria, emergencia, unidad detenida, voluntario vigente).
+                  </span>
+                </p>
+                <FormaConAviso
+                  accion={accionAgenteChofer}
+                  boton={agenteChofer.habilitado ? 'Deshabilitar el Agente 5' : 'Habilitar el Agente 5'}
+                  columnas="md:grid-cols-1"
+                  confirmar={agenteChofer.habilitado ? undefined : {
+                    titulo: 'Habilitar el Agente 5 para esta flota',
+                    descripcion: 'Desde ahora el agente puede escribirle por WhatsApp a los choferes voluntarios de esta flota. Queda firmado en la bitácora con tu nombre y el motivo.',
+                    etiquetaConfirmar: 'Sí, habilitar',
+                  }}
+                >
+                  <input type="hidden" name="operacion" value={agenteChofer.habilitado ? 'deshabilitar' : 'habilitar'} />
+                  <Campo nombre="motivo" etiqueta="Motivo (queda en la bitácora)" requerido ayuda="Ej.: piloto autorizado por el dueño el 28-oct, cohorte definida." />
+                </FormaConAviso>
               </div>
             </div>
           )}

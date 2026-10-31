@@ -12,6 +12,8 @@ import { guardarConfigSalida, validarConfigSalida } from '@/lib/likida/carta_por
 import { sinConexionUtil } from '@/lib/likida/carta_porte_docs/tms_puerto';
 import { salidaDeFlota } from '@/lib/likida/carta_porte_docs/worker_envios_deps';
 import type { ResultadoAccion } from '@/app/dashboard/carta-porte/documentos/forma_accion';
+import { guardarPrimerMes } from '@/lib/likida/carta_porte_docs/primer_mes';
+import { revisoresDeTexto } from '@/lib/likida/carta_porte_docs/primer_mes_texto';
 import { entradaDeTexto, esProbable, type CamposTexto } from './formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -80,5 +82,26 @@ export async function probarConexionSalida(_previo: ResultadoAccion, fd: FormDat
   } catch (e) {
     logger.error('carta_porte_docs.salida_probar', { error: e instanceof Error ? e.message : String(e) });
     return { ok: false, error: mensajeParaPantalla(e, 'probar la conexión') };
+  }
+}
+
+/** Guarda el modo «primer mes» (fecha límite y revisores por departamento). Campos: `hasta` (AAAA-MM-DD o vacío) y `revisores` (un renglón por revisor). */
+export async function guardarPrimerMesAccion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  const s = await resolverTenantEfectivo(RUTA, verComo(fd));
+  if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: SIN_PERMISO };
+  try {
+    if (!(await rateLimit(`cp-primer-mes:${s.tenantId}`, 20, 60_000))) return { ok: false, error: 'Demasiados cambios en poco tiempo. Espera un minuto.' };
+    const hasta = String(fd.get('hasta') ?? '').trim();
+    let revisores;
+    try { revisores = revisoresDeTexto(String(fd.get('revisores') ?? '')); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : 'No entendí los revisores.' }; }
+    if ((hasta === '') !== (revisores.length === 0)) return { ok: false, error: 'Para encender el primer mes escribe la fecha y al menos un revisor; para apagarlo deja ambos vacíos.' };
+    await guardarPrimerMes(s.tenantId, { hasta: hasta === '' ? null : hasta, revisores }, { id: s.userId });
+    revalidatePath(RUTA);
+    return { ok: true, mensaje: hasta === '' ? 'Primer mes apagado.' : 'Primer mes guardado: cada movimiento se copiará a los revisores hasta esa fecha.' };
+  } catch (e) {
+    if (e instanceof DatoInvalido) return { ok: false, error: e.message };
+    if (e instanceof Error && /migración 0938/.test(e.message)) return { ok: false, error: e.message };
+    logger.error('carta_porte_docs.primer_mes_pantalla', { error: e instanceof Error ? e.message : String(e) });
+    return { ok: false, error: mensajeParaPantalla(e, 'guardar el primer mes') };
   }
 }

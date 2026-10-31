@@ -24,7 +24,7 @@ export const PORCENTAJE_MINIMO_CON_SITIO = 80;
 export const HORAS_GPS_RECIENTE = 2;
 
 export type IdComprobacion =
-  | 'voluntarios' | 'cohorte' | 'gps_unidades' | 'sitios' | 'escalamiento' | 'plantillas' | 'activo' | 'zona' | 'calidad_gps';
+  | 'agente_habilitado' | 'voluntarios' | 'cohorte' | 'gps_unidades' | 'sitios' | 'escalamiento' | 'plantillas' | 'activo' | 'zona' | 'calidad_gps';
 
 export interface Comprobacion {
   id: IdComprobacion;
@@ -62,6 +62,12 @@ export interface DatosPreflight {
   contactos: readonly ContactoTrafico[];
   /** A37-S36-07: perfil de la flota para exigir también las plantillas del ciclo N01-N12 (P0; con `cinco_agentes`, también P1). Sin él, solo las de config. */
   perfilPlantillas?: PerfilPlantillas;
+  /**
+   * A5-01: la compuerta `agente_chofer_habilitado` (0859) de la flota, tal como la leyó `leerAgenteChoferHabilitado` (falla cerrado).
+   * Sin ella el agente no le escribe a NINGÚN chofer, y encender la señal de vida no serviría de nada. `undefined` = el llamador no la leyó
+   * (no se juzga: no se inventa «habilitado» ni «apagado»).
+   */
+  agenteChoferHabilitado?: 'habilitado' | 'apagado' | 'compuerta_ilegible';
   /** Por omisión, `APROBADAS` (la lista que Javier actualiza cuando Meta aprueba). */
   aprobadas?: readonly string[];
 }
@@ -148,6 +154,15 @@ function comprobarActivo(d: DatosPreflight): Comprobacion {
   return falta('activo', t, 'El agente está apagado para esta flota.', 'Enciéndelo en «Estado del agente» antes de activar la señal de vida.');
 }
 
+function comprobarAgenteHabilitado(d: DatosPreflight): Comprobacion | null {
+  const t = 'Agente 5 habilitado para escribirle a los choferes';
+  if (d.agenteChoferHabilitado === undefined) return null;
+  if (d.agenteChoferHabilitado === 'habilitado') return ok('agente_habilitado', t, 'La habilitación del agente (0859) está encendida para esta flota.');
+  return falta('agente_habilitado', t,
+    d.agenteChoferHabilitado === 'apagado' ? 'La habilitación del agente está apagada: el agente no le escribe a ningún chofer de esta flota.' : 'No se pudo leer la habilitación del agente; se trata como apagada.',
+    'Pídele a Likida que habilite el Agente 5 para tu flota (solo un superadmin puede, con motivo y firma en la bitácora).');
+}
+
 function comprobarZona(d: DatosPreflight): Comprobacion {
   const t = 'Zona horaria de la flota';
   const z = d.zonaDeclarada;
@@ -170,12 +185,12 @@ function comprobarCalidadGps(d: DatosPreflight): Comprobacion {
   return falta('calidad_gps', t, `Solo ${pct} % de las unidades manda posiciones continuas en la última hora.`, `${AVISO_SOLO_EVENTOS} Pide a la fuente de GPS posiciones continuas, no solo eventos.`);
 }
 
-/** Las 9 comprobaciones, en el orden en que se le explican al dueño. */
+/** Las comprobaciones (9, y la del Agente 5 cuando se leyó), en el orden en que se le explican al dueño. */
 export function evaluarPreflight(d: DatosPreflight): ResultadoPreflight {
   const comprobaciones = [
-    comprobarActivo(d), comprobarZona(d), comprobarCohorte(d), comprobarVoluntarios(d), comprobarSitios(d),
+    comprobarActivo(d), comprobarAgenteHabilitado(d), comprobarZona(d), comprobarCohorte(d), comprobarVoluntarios(d), comprobarSitios(d),
     comprobarGpsUnidades(d), comprobarCalidadGps(d), comprobarEscalamiento(d), comprobarPlantillas(d),
-  ];
+  ].filter((c): c is Comprobacion => c !== null);
   const bloqueos = comprobaciones.filter((c) => c.estado === 'falta');
   return { comprobaciones, bloqueos, lista: bloqueos.length === 0 };
 }

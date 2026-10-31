@@ -324,10 +324,12 @@ export interface RiesgoSemana {
  * empezó — el criterio conservador, porque el tope del año anterior es siempre
  * el más alto de los dos.
  *
- * UNA SEMANA CON HUECOS NO SE CONCLUYE. Si un solo día no se pudo medir, las
- * horas de la semana son `null` y el veredicto es `dato_insuficiente`: sumar
- * los días que sí se midieron y compararlo contra el tope semanal daría siempre
- * un total MENOR al real, o sea, un falso «va bien» construido con los huecos.
+ * UNA SEMANA CON HUECOS NO SE CONCLUYE «SIN SEÑAL». Si un solo día no se pudo
+ * medir, las horas de la semana son `null` y el veredicto es `dato_insuficiente`:
+ * sumar los días que sí se midieron y compararlo contra el tope semanal daría
+ * siempre un total MENOR al real, o sea, un falso «va bien» construido con los
+ * huecos. Pero esa suma SÍ prueba un exceso (A37-S48-02): los huecos solo la bajan,
+ * así que si la cota ya rebasa el tope el veredicto es `exceso`.
  */
 export function evaluarRiesgoSemana(
   dias: readonly DiaDeSemana[],
@@ -341,13 +343,60 @@ export function evaluarRiesgoSemana(
   const diasSinDato = dias.filter((d) => d.jornada.minutosBrutos === null).map((d) => d.dia);
 
   if (diasSinDato.length > 0 || dias.length === 0) {
+    // A37-S48-02: un hueco NO impide probar un exceso, solo impide concluir
+    // «sin señal». La suma de los días medidos es una COTA INFERIOR de la
+    // semana real (los huecos solo la bajan): si esa cota ya rebasa el tope, el
+    // exceso está probado — igual que con las puntas derivadas del GPS. Sin
+    // esto, el caso normal (6 días trabajados y uno de descanso SIN marcas, que
+    // es justo lo que manda el art. 69) nunca se evaluaba: el exceso semanal solo
+    // salía si se trabajaban los 7 días. `horasMedidas` sigue en `null` (no hay
+    // total de la semana); la cota va en el texto de la señal.
+    if (dias.length > 0 && tope !== null) {
+      const minParciales = dias.reduce(
+        (s, d) => s + (d.jornada.minutosEfectivos ?? d.jornada.minutosBrutos ?? 0),
+        0,
+      );
+      const horasParciales = HORAS(minParciales);
+      if (horasParciales > tope.ordinaria) {
+        const extra = Math.round((horasParciales - tope.ordinaria) * 100) / 100;
+        // A37-ola9-N2: mismo umbral que la ruta completa: el exceso probado es rebasar ordinaria + extra, no solo la ordinaria. Entre
+        // ambos umbrales se emite la señal sin exceso (las horas extra dentro del tope legal no son infracción).
+        const rebasaExtra = extra > tope.extra;
+        senales.push({
+          clase: 'exceso_semanal',
+          esExceso: rebasaExtra,
+          dice:
+            `Los días medidos de la semana ya suman ${horasParciales} h contra las ${tope.ordinaria} h ordinarias que aplican en ${anio}: ` +
+            `al menos ${extra} h por encima. Faltan datos de ${diasSinDato.length} día(s) (${diasSinDato.join(', ')}), ` +
+            (rebasaExtra
+              ? `Rebasa también las ${tope.extra} h de horas extra de ese año, y los días faltantes solo pueden subir ese total: el exceso está probado aunque el total de la semana no se conozca.`
+              : `Todavía cabe en el tope de ${tope.extra} h de horas extra de ese año: con lo medido no se prueba un exceso, y los días faltantes impiden concluir.`),
+          fundamento:
+            'LFT art. 59 y Transitorios Segundo y Cuarto del decreto publicado en el DOF el 01-05-2026, ' +
+            'que escalonan la jornada semanal y las horas extra por año calendario.',
+        });
+      }
+    }
+    if (politica?.horasMinEntreJornadas != null && dias.length > 0) {
+      const cortos = descansosEntreJornadasCortos(dias, politica.horasMinEntreJornadas);
+      if (cortos.length > 0) {
+        senales.push({
+          clase: 'exceso_tope_flota',
+          esExceso: true,
+          dice:
+            `Entre jornadas hubo menos de las ${politica.horasMinEntreJornadas} h que esta flota declaró ` +
+            `para sí misma, en: ${cortos.join(', ')}.`,
+          fundamento: politica.fundamento ? `Fundamento declarado por la flota: ${politica.fundamento}` : null,
+        });
+      }
+    }
     return {
       anio,
       topeOrdinariaHoras: tope?.ordinaria ?? null,
       horasMedidas: null,
       diasSinDato,
       senales,
-      veredicto: 'dato_insuficiente',
+      veredicto: senales.some((x) => x.esExceso) ? 'exceso' : 'dato_insuficiente',
     };
   }
 

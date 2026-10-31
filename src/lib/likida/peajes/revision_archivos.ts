@@ -10,8 +10,10 @@
 
 import * as XLSX from 'xlsx';
 import type { ReporteRevision } from './revision_cobros';
+import { rotuloOrigenPeriodo } from './periodo';
 import { CATEGORIAS_COBRO, ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO } from './reglas_cobro';
 import { ETIQUETA_SENAL } from './cruces_atipicos';
+import { ETIQUETA_DOBLE_ENTRE_ARCHIVOS } from './doble_entre_archivos';
 
 type Fila = Array<string | number | null>;
 
@@ -30,13 +32,16 @@ export function revisionAExcel(r: ReporteRevision): Uint8Array {
     [ROTULO_CANDIDATO],
     [`Archivo: ${texto(r.archivoNombre) || 'sin nombre'} · Proveedor: ${texto(r.proveedor) || 'no declarado'}`],
     [r.periodoOficialDesde && r.periodoOficialHasta
-      ? `Periodo del archivo: ${r.periodoOficialDesde} a ${r.periodoOficialHasta} (${r.periodoOrigen === 'declarado' ? 'declarado al subirlo' : 'tomado del nombre del archivo'})`
+      ? `Periodo del archivo: ${r.periodoOficialDesde} a ${r.periodoOficialHasta} (${rotuloOrigenPeriodo(r.periodoOrigen, 'declarado al subirlo')})`
       : 'Periodo del archivo: NO SE SABE (sin periodo no se revisan los cobros extemporáneos)'],
     [`Líneas revisadas: ${rev.lineasRevisadas} · Importe revisado (MXN): ${rev.montoRevisado}`],
     [`Líneas con al menos un candidato: ${rev.lineasConCandidato} · Importe (MXN): ${rev.montoConCandidato}`],
     [],
     ['Categoría', 'Candidatos', 'Importe (MXN)'],
     ...CATEGORIAS_COBRO.map((c): Fila => [ETIQUETA_CATEGORIA_COBRO[c], rev.porCategoria[c].n, rev.porCategoria[c].monto]),
+    ...(r.dobleEntreArchivos && r.dobleEntreArchivos.candidatos.length > 0
+      ? [[ETIQUETA_DOBLE_ENTRE_ARCHIVOS, r.dobleEntreArchivos.candidatos.length, r.dobleEntreArchivos.montoCandidatos] as Fila]
+      : []),
     [],
     ['Reglas que NO se pudieron aplicar a este archivo'],
     ...(rev.reglasNoAplicadas.length === 0 ? [['(todas se aplicaron)']] : rev.reglasNoAplicadas.map((x): Fila => [ETIQUETA_CATEGORIA_COBRO[x.regla], x.motivo])),
@@ -63,6 +68,23 @@ export function revisionAExcel(r: ReporteRevision): Uint8Array {
   const hCand = XLSX.utils.aoa_to_sheet(filas);
   hCand['!cols'] = [6, 26, 12, 9, 26, 18, 14, 7, 13, 70, 70, 60, 30, 30].map((wch) => ({ wch }));
   XLSX.utils.book_append_sheet(libro, hCand, 'Candidatos');
+
+  // A2P-04: el posible doble cobro entre archivos (el mismo cruce ya aparece en un archivo anterior), con su monto.
+  const doble = r.dobleEntreArchivos;
+  if (doble && doble.candidatos.length > 0) {
+    const filasD: Fila[] = [
+      [ROTULO_CANDIDATO],
+      [`Posible doble cobro entre archivos: ${doble.candidatos.length} cruce(s) por ${doble.montoCandidatos} MXN (ventana de ${doble.ventanaMeses} meses).`],
+      [],
+      ['Línea', 'Fecha del cruce', 'Hora', 'Caseta', 'TAG', 'Unidad (archivo)', 'Importe (MXN)', 'Archivo previo', 'Fila previa', 'Qué pasó', 'Qué hacer'],
+      ...doble.candidatos.map((c): Fila => [
+        c.indice + 1, c.fecha, c.hora, texto(c.caseta), texto(c.tag), texto(c.unidad), c.monto, texto(c.archivoPrevio), c.filaPrevia, texto(c.quePaso), texto(c.queHacer),
+      ]),
+    ];
+    const hD = XLSX.utils.aoa_to_sheet(filasD);
+    hD['!cols'] = [6, 12, 9, 26, 18, 14, 13, 30, 10, 70, 60].map((wch) => ({ wch }));
+    XLSX.utils.book_append_sheet(libro, hD, 'Doble entre archivos');
+  }
 
   const calidad = r.calidad as Record<string, unknown> | null;
   const filasCal: Fila[] = [['Calidad del archivo (qué se leyó y qué NO se reconoció)']];

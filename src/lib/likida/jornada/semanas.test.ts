@@ -61,13 +61,46 @@ describe('evaluarSemanas — solo semanas enteras, y los huecos no son cero', ()
     expect(s.riesgo.senales.some((x) => x.clase === 'sin_dia_de_descanso_lft_69')).toBe(true);
   });
 
-  it('un día sin expediente NO son cero horas: la semana se niega a concluir y dice cuál falta', () => {
-    const entradas = SEMANA.filter((d) => d !== '2026-08-20').map((d) => diaTrabajado('o-1', d, 9));
+  it('un día sin expediente NO son cero horas: sin exceso probado la semana se niega a concluir y dice cuál falta', () => {
+    const entradas = SEMANA.filter((d) => d !== '2026-08-20').map((d) => diaTrabajado('o-1', d, 6));
     const [s] = evaluarSemanas(entradas, null, LUNES, '2026-08-23');
     expect(s.riesgo.veredicto).toBe('dato_insuficiente');
     expect(s.riesgo.horasMedidas).toBeNull();
     expect(s.diasSinExpediente).toEqual(['2026-08-20']);
     expect(s.riesgo.diasSinDato).toContain('2026-08-20');
+  });
+
+  // A37-S48-02: el día de descanso (art. 69) no tiene marcas por definición; 6 días de 10 h = 60 h rebasan 48 + 9 (extra) y ya prueban el
+  // exceso aunque el total de la semana no se conozca (los huecos solo lo suben).
+  it('6 días de 10 h + 1 de descanso sin expediente: exceso probado, no «dato insuficiente»', () => {
+    const entradas = SEMANA.filter((d) => d !== '2026-08-23').map((d) => diaTrabajado('o-1', d, 10));
+    const [s] = evaluarSemanas(entradas, null, LUNES, '2026-08-23');
+    expect(s.riesgo.veredicto).toBe('exceso');
+    expect(s.riesgo.horasMedidas).toBeNull();
+    expect(s.diasSinExpediente).toEqual(['2026-08-23']);
+    const sen = s.riesgo.senales.find((x) => x.clase === 'exceso_semanal');
+    expect(sen?.esExceso).toBe(true);
+    expect(sen?.dice).toContain('al menos');
+  });
+
+  // A37-ola9-N2: con huecos, 49-57 h medidas están entre la ordinaria (48) y ordinaria + extra (57): señal sin exceso, igual que la ruta completa.
+  it('con un hueco, 54 h medidas (6 días de 9 h) caben en las 9 h de extra: señal sin exceso y la semana no concluye', () => {
+    const entradas = SEMANA.filter((d) => d !== '2026-08-23').map((d) => diaTrabajado('o-1', d, 9));
+    const [s] = evaluarSemanas(entradas, null, LUNES, '2026-08-23');
+    const sen = s.riesgo.senales.find((x) => x.clase === 'exceso_semanal');
+    expect(sen?.esExceso).toBe(false);
+    expect(s.riesgo.veredicto).toBe('dato_insuficiente');
+  });
+
+  it('borde con hueco: 57 h (= 48 + 9) NO es exceso; 58 h sí', () => {
+    const base = SEMANA.filter((d) => d !== '2026-08-23');
+    const con = (ultimas: number) => base.map((d, i) => diaTrabajado('o-1', d, i === 5 ? ultimas : 9));
+    const [a] = evaluarSemanas(con(12), null, LUNES, '2026-08-23'); // 5x9 + 12 = 57
+    expect(a.riesgo.senales.find((x) => x.clase === 'exceso_semanal')?.esExceso).toBe(false);
+    expect(a.riesgo.veredicto).toBe('dato_insuficiente');
+    const [b] = evaluarSemanas(con(13), null, LUNES, '2026-08-23'); // 58
+    expect(b.riesgo.senales.find((x) => x.clase === 'exceso_semanal')?.esExceso).toBe(true);
+    expect(b.riesgo.veredicto).toBe('exceso');
   });
 
   it('media semana visible NO se evalúa: sumar el recorte daría un falso «va bien»', () => {

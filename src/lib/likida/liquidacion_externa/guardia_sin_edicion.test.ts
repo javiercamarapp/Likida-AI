@@ -168,6 +168,11 @@ describe('guardia: enumeración de rutas y acciones de servidor', () => {
       'page.tsx#reenviarCopiaExterna',
       'page.tsx#reenviarDesgloseExterno',
       'page.tsx#reintentarExterna',
+      // Ola 1 · A1: las dos cargas por archivo del canal correo. Revisadas: la primera entra por `importarDesglosesDeArchivo` →
+      // `recibirDesglose` (el MISMO camino que POST /v1/.../desgloses: importes de la fuente, idempotente, nunca edita un importe) y la
+      // segunda por `importarContactosDeArchivo` → `aplicarContactos` (solo `correo` y `coordinador_id` de un operador que YA existe).
+      'page.tsx#subirContactosOperadores',
+      'page.tsx#subirDesglosesExportados',
       'page.tsx#subirLiquidacionesExternas',
     ]);
   });
@@ -256,6 +261,7 @@ describe('guardia con base-doble: lo permitido funciona y no escribe importes', 
       guardarCorreoOperador: async (_t, _o, correo) => { guardados.push(correo); },
       insertarEntregas: async (_t, filas) => { insertadas.push(...filas); return filas.length; },
       registrarEvento: async () => undefined,
+      leerDesglose: async () => ({ existe: true, retenidaMotivo: null }),
     });
     expect(r).toMatchObject({ estado: 'reenviado', generacion: 2 });
     expect(guardados).toEqual(['ana.nueva@ejemplo.test']);

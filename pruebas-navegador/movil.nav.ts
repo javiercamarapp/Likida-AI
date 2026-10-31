@@ -19,6 +19,7 @@
  */
 import { test, expect, type Page } from './apoyo/fixture';
 import { ESTADOS } from './apoyo/sesion';
+import { abrirNavegacion } from './apoyo/navegacion';
 
 test.use({ storageState: ESTADOS.duena });
 
@@ -35,7 +36,10 @@ async function sinDesbordeHorizontal(page: Page): Promise<void> {
 
 test('el resumen carga en el teléfono sin desborde y con la navegación a mano', async ({ page }) => {
   await page.goto('/dashboard');
-  await expect(page.locator('a[href^="/dashboard/viajes"]').first()).toBeVisible();
+  // v1: el aside de íconos; v2: la hoja «Más». El ayudante devuelve el contenedor donde está el menú en cada caso.
+  const nav = await abrirNavegacion(page);
+  await expect(nav.locator('a[href^="/dashboard/viajes"]').first()).toBeVisible();
+  await page.keyboard.press('Escape');
   await sinDesbordeHorizontal(page);
 });
 
@@ -43,7 +47,8 @@ test('del resumen al registro navegando con el dedo, y la tabla es legible', asy
   await page.goto('/dashboard');
   // El rail de navegación colapsa a íconos bajo `lg` (MARCO_SIDEBAR): el
   // destino se toca, no se lee — como lo haría el pulgar.
-  await page.locator('aside a[href^="/dashboard/viajes"]').first().tap();
+  const nav = await abrirNavegacion(page);
+  await nav.locator('a[href^="/dashboard/viajes"]').first().tap();
   await expect(page).toHaveURL(/\/dashboard\/viajes/);
   await expect(page.locator('body')).toContainText('VJ-2026-0001');
   await sinDesbordeHorizontal(page);

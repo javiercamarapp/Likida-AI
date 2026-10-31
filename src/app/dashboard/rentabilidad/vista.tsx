@@ -78,11 +78,11 @@ export function VistaRentabilidad({
                   <div className="grid gap-3 sm:grid-cols-3">
                     <StatCard
                       icono={<Banknote width={14} height={14} strokeWidth={1.75} />}
-                      etiqueta="Ingreso de fletes capturado" valor={rentabilidad.ingreso} formato="mxn"
+                      etiqueta="Ingreso de fletes liquidados" valor={rentabilidad.ingreso} formato="mxn"
                     />
                     <StatCard
                       icono={<ReceiptText width={14} height={14} strokeWidth={1.75} />}
-                      etiqueta="Costo comprobado por operadores" valor={rentabilidad.costoComprobado} formato="mxn"
+                      etiqueta="Costo comprobado (esos mismos viajes)" valor={rentabilidad.costoComprobado} formato="mxn"
                     />
                     <StatCard
                       icono={<TrendingUp width={14} height={14} strokeWidth={1.75} />}
@@ -91,10 +91,12 @@ export function VistaRentabilidad({
                   </div>
                   <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
                     {rentabilidad.margenPct !== null
-                      ? `Margen: ${porcentaje(rentabilidad.margenPct)} — medido solo sobre los ${numero(rentabilidad.viajesConIngreso)} viajes con ingreso capturado.`
+                      ? `Margen: ${porcentaje(rentabilidad.margenPct)} — medido solo sobre los ${numero(rentabilidad.viajesConIngreso)} viajes liquidados con ingreso capturado.`
                       : 'Sin ingreso capturado, el margen no se calcula.'}
                     {rentabilidad.viajesSinIngreso > 0
                       && ` ${numero(rentabilidad.viajesSinIngreso)} viajes sin ingreso quedan fuera de esta medición.`}
+                    {rentabilidad.viajesSinLiquidar !== null && rentabilidad.viajesSinLiquidar > 0
+                      && ` ${numero(rentabilidad.viajesSinLiquidar)} viajes sin liquidación vigente (abiertos, en cuadre o rechazada) tampoco entran: su costo todavía no existe y sumar solo su ingreso inflaría el margen.`}
                   </p>
                   {/* Qué NO trae esa cifra. Va aquí y no en un tooltip porque
                       es la diferencia entre "este viaje dejó dinero" y "este

@@ -7,11 +7,12 @@ import { huellaContenido, huellaDesglose } from './esquema';
 import { aLiquidacionExterna } from './desglose_contrato';
 import type { LiquidacionExterna, NuevaLiquidacionExterna } from './repo';
 import { CONFIG_CORREO_POR_DEFECTO, type ConfigCorreo, type NuevaEntrega } from './repo_correo';
+import { MARCA_RETENIDA_OMITIDA } from './desglose_reglas';
 
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error('la base no debe tocarse en estas pruebas'); } }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
-const { recibirDesglose, renombresDeConfig } = await import('./desglose_recibir');
+const { recibirDesglose, renombresDeConfig, presentar } = await import('./desglose_recibir');
 type Deps = import('./desglose_recibir').DependenciasDesglose;
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -56,6 +57,9 @@ interface Banco {
   resueltas: string[];
   subidas: Array<{ ruta: string; bytes: Uint8Array }>;
   orden: string[];
+  /** A1-01/A1-02: ids de liquidación cuyas entregas pendientes se pasaron a `omitida` (y con qué motivo). */
+  omitidasIds: string[];
+  motivosOmision: string[];
 }
 
 function banco(opciones: {
@@ -65,7 +69,7 @@ function banco(opciones: {
   coordinador?: { correo: string; activo: boolean } | null;
   fallaStorage?: boolean;
 } = {}): Banco {
-  const b: Banco = { deps: null as unknown as Deps, liquidaciones: [], desgloses: [], entregas: [], excepciones: [], eventos: [], detallesEvento: [], resueltas: [], subidas: [], orden: [] };
+  const b: Banco = { deps: null as unknown as Deps, liquidaciones: [], desgloses: [], entregas: [], excepciones: [], eventos: [], detallesEvento: [], resueltas: [], subidas: [], orden: [], omitidasIds: [], motivosOmision: [] };
   const correoOperador = opciones.correoOperador === undefined ? 'operador@ejemplo.test' : opciones.correoOperador;
   const coordinador = opciones.coordinador === undefined ? { correo: 'coordinador@ejemplo.test', activo: true } : opciones.coordinador;
   b.deps = {
@@ -98,6 +102,12 @@ function banco(opciones: {
     },
     insertarDesglose: async (_t, m) => { b.desgloses.push({ ...m }); return true; },
     insertarEntregas: async (_t, filas) => { b.entregas.push(...filas); return filas.length; },
+    omitirPendientes: async (_t, ids, motivo) => {
+      b.orden.push('omitir');
+      b.omitidasIds.push(...ids);
+      b.motivosOmision.push(motivo);
+      return b.entregas.filter((e) => ids.includes(e.liquidacionExternaId) && e.estado !== 'omitida').length;
+    },
     abrirExcepcion: async (_t, clave, tipo, detalle) => {
       b.excepciones.push({ clave, tipo, detalle });
       return { id: b.excepciones.length, nueva: true };
@@ -193,9 +203,13 @@ describe('recibirDesglose: idempotencia y correcciones', () => {
     expect(b.liquidaciones[1]).toMatchObject({ claveExterna: 'BIT-T1-B-0001-R1', total: 4000 });
     expect(b.subidas).toHaveLength(2); // xlsx nuevo
     expect(b.entregas.filter((e) => e.liquidacionExternaId === 'liq-2')).toHaveLength(4);
-    expect(b.resueltas).toEqual(['BIT-T1-B-0001|correccion_pendiente']);
+    expect(b.resueltas.filter((x) => x.endsWith('|correccion_pendiente'))).toEqual(['BIT-T1-B-0001|correccion_pendiente']);
     expect(b.detallesEvento[1]).toMatchObject({ correccion_de: 'BIT-T1-B-0001', motivo_correccion: 'nómina corregida en origen', actor: 'llave:administracion' });
     expect(b.excepciones.filter((e) => e.tipo === 'correccion_pendiente')).toHaveLength(0);
+    // A39-A1-01: la corrección comparte bitácora, terminal y número con la original; los índices únicos de la base (0929) se
+    // distinguen por `correccionN`. La original no lo lleva (0); la corrección, su ordinal.
+    expect(b.desgloses[0].correccionN).toBeUndefined();
+    expect(b.desgloses[1]).toMatchObject({ bitacora: 'B-0001', terminal: 'T1', correccionN: 1 });
   });
 
   it('A37-A1-02: reintentar la MISMA corrección es idempotente; otra distinta es «-R2»', async () => {
@@ -212,6 +226,7 @@ describe('recibirDesglose: idempotencia y correcciones', () => {
     const r2 = await recibirDesglose(TENANT, c2, b.deps, op);
     expect(r2).toMatchObject({ estado: 'creada', claveExterna: 'BIT-T1-B-0001-R2' });
     expect(b.liquidaciones).toHaveLength(3);
+    expect(b.desgloses.map((d) => d.correccionN)).toEqual([undefined, 1, 2]);
   });
 
   it('A37-A1-02: sin la decisión de la persona la corrección sigue SIN enviarse (solo la excepción), y una bitácora nueva con «correccion» entra normal', async () => {
@@ -314,6 +329,34 @@ describe('recibirDesglose: guardas previas al envío', () => {
     await recibirDesglose(TENANT, desglose(), b.deps);
     expect(b.liquidaciones[0].total).toBe(4850);
     expect(b.entregas).toHaveLength(4);
+  });
+});
+
+describe('recibirDesglose: sin póliza no se envía (también por push/archivo)', () => {
+  it('poliza null => estado sin_poliza, excepción abierta y NADA guardado ni subido ni enviado', async () => {
+    const b = banco();
+    const r = await recibirDesglose(TENANT, desglose({ poliza: null }), b.deps);
+    expect(r).toEqual({ estado: 'sin_poliza', claveExterna: 'BIT-T1-B-0001' });
+    expect(b.liquidaciones).toHaveLength(0);
+    expect(b.subidas).toHaveLength(0);
+    expect(b.entregas).toHaveLength(0);
+    expect(b.excepciones).toEqual([{ clave: 'BIT-T1-B-0001', tipo: 'sin_poliza', detalle: { bitacora: 'B-0001', desde: f.desde } }]);
+  });
+
+  it('cuando la misma bitácora llega CON póliza entra normal (no queda «idempotente» contra una fila vacía) y cierra la excepción', async () => {
+    const b = banco();
+    await recibirDesglose(TENANT, desglose({ poliza: null }), b.deps);
+    const r = await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(r.estado).toBe('creada');
+    expect(b.entregas).toHaveLength(4);
+    expect(b.resueltas).toContain('BIT-T1-B-0001|sin_poliza');
+  });
+
+  it('con póliza vacía también se aparta; con póliza el flujo de siempre no cambia', async () => {
+    const b = banco();
+    const r = await recibirDesglose(TENANT, desglose({ poliza: '' }), b.deps);
+    expect(r.estado).toBe('sin_poliza');
+    expect(b.liquidaciones).toHaveLength(0);
   });
 });
 
@@ -437,7 +480,8 @@ beforeEach(() => { vi.clearAllMocks(); });
 type Pedido = import('./repo_correo').PedidoRecepcionAtomica;
 
 /** Agrega al banco una RPC atómica en memoria: o guarda todo junto, o no guarda nada (como la transacción real). */
-function conAtomica(b: Banco, modo: 'ok' | 'ausente' | 'falla'): { llamadas: Pedido[] } {
+/** `ok0933`: la RPC redefinida por la 0933 (una retenida admite SOLO la entrega al revisor); `ok`, la de la 0929. */
+function conAtomica(b: Banco, modo: 'ok' | 'ok0933' | 'ausente' | 'falla'): { llamadas: Pedido[] } {
   const llamadas: Pedido[] = [];
   b.deps.desgloseIncompleto = async (_t, id) => {
     const tiene = b.desgloses.some((x) => x.liquidacionExternaId === id);
@@ -461,7 +505,8 @@ function conAtomica(b: Banco, modo: 'ok' | 'ausente' | 'falla'): { llamadas: Ped
     if (faltaDesglose) { b.desgloses.push({ liquidacionExternaId: id, ...p.meta }); b.eventos.push('recibida'); }
     const hayEntregas = b.entregas.some((e) => e.liquidacionExternaId === id);
     let n = 0;
-    if (!p.meta.retenidaMotivo && !hayEntregas) { for (const e of p.entregas) b.entregas.push({ liquidacionExternaId: id, ...e }); n = p.entregas.length; }
+    const admitidas = p.meta.retenidaMotivo ? (modo === 'ok0933' ? p.entregas.filter((e) => e.rol === 'revisor') : []) : p.entregas;
+    if (!hayEntregas && admitidas.length > 0) { for (const e of admitidas) b.entregas.push({ liquidacionExternaId: id, ...e }); n = admitidas.length; }
     return { ok: true, valor: { liquidacionId: id, creada, reparada: !creada && (faltaDesglose || n > 0), entregas: n } };
   };
   return { llamadas };
@@ -590,5 +635,303 @@ describe('recibirDesglose: rescate de una recepción que quedó a medias', () =>
     const b = banco();
     aMedias(b);
     expect((await recibirDesglose(TENANT, desglose(), b.deps)).estado).toBe('idempotente');
+  });
+});
+
+describe('presentar: el renglón de viaje solo para foráneos (c3cc57d3 46:21)', () => {
+  const conViaje = (tipo: 'foraneo' | 'local' | 'permisionario' | undefined) => desglose({
+    tipoOperador: tipo,
+    percepciones: [{ concepto: 'Sueldo', monto: 1000 }, { concepto: 'Viáticos', monto: 500 }, { concepto: 'Complemento', monto: 200 }],
+  });
+  const cfg: ConfigCorreo = { ...CONFIG, agruparViaje: true };
+
+  it('foráneo: Sueldo + Viáticos se funden en «Pago de viaje»', () => {
+    const v = presentar(conViaje('foraneo'), cfg);
+    expect(v.percepciones.map((r) => r.concepto)).toEqual(['Pago de viaje', 'Complemento']);
+  });
+
+  it('local: conserva «Sueldo» y «Viáticos» sueltos aunque agrupar_viaje esté encendido', () => {
+    const v = presentar(conViaje('local'), cfg);
+    expect(v.percepciones.map((r) => r.concepto)).toEqual(['Sueldo', 'Viáticos', 'Complemento']);
+  });
+
+  it('agrupar_viaje apagado no cambia nada para nadie', () => {
+    expect(presentar(conViaje('foraneo'), { ...CONFIG, agruparViaje: false }).percepciones.map((r) => r.concepto)).toEqual(['Sueldo', 'Viáticos', 'Complemento']);
+  });
+});
+
+describe('recibirDesglose: modo primer mes — revisores por departamento (0933)', () => {
+  const REVISORES = [{ departamento: 'nomina', correo: 'nomina.rev@ejemplo.test' }, { departamento: 'rh', correo: 'rh.rev@ejemplo.test' }];
+  // El reloj del banco es 2026-10-15 (12:00 UTC ⇒ 15 de octubre en México).
+  const PRIMER_MES = { revisores: REVISORES, primerMesHasta: '2026-11-14' };
+  const retenible = () => desglose({ neto: -5, percepciones: [{ concepto: 'Sueldo', monto: 100 }], deducciones: [{ concepto: 'Anticipo', monto: 105 }] });
+
+  it('desglose que SE ENVÍA: además de los 4 destinatarios, un correo al revisor de cada departamento', async () => {
+    const b = banco({ config: PRIMER_MES });
+    const r = await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(b.entregas.map((e) => [e.rol, e.correo])).toEqual([
+      ['operador', 'operador@ejemplo.test'], ['coordinador', 'coordinador@ejemplo.test'], ['rh', 'rh@ejemplo.test'], ['archivo', 'archivo@ejemplo.test'],
+      ['revisor', 'nomina.rev@ejemplo.test'], ['revisor', 'rh.rev@ejemplo.test'],
+    ]);
+    expect(r).toMatchObject({ estado: 'creada', retenida: false, entregas: 6 });
+  });
+
+  it('desglose RETENIDO: al operador, coordinador, RH y archivo no sale nada, pero los revisores SÍ reciben su aviso', async () => {
+    const b = banco({ config: PRIMER_MES });
+    const r = await recibirDesglose(TENANT, retenible(), b.deps);
+    expect(r).toMatchObject({ estado: 'creada', retenida: true, entregas: 0 });
+    expect(b.entregas.map((e) => [e.rol, e.correo])).toEqual([['revisor', 'nomina.rev@ejemplo.test'], ['revisor', 'rh.rev@ejemplo.test']]);
+    expect(b.excepciones.map((e) => e.tipo)).toContain('neto_negativo');
+  });
+
+  it('con la RPC de la 0933, la retenida deja a los revisores en la MISMA transacción y no hay inserción suelta', async () => {
+    const b = banco({ config: PRIMER_MES });
+    const sueltas = vi.fn();
+    b.deps.insertarEntregas = sueltas;
+    const { llamadas } = conAtomica(b, 'ok0933');
+    await recibirDesglose(TENANT, retenible(), b.deps);
+    expect(llamadas[0].entregas.map((e) => e.rol)).toEqual(['revisor', 'revisor']);
+    expect(sueltas).not.toHaveBeenCalled();
+    expect(b.entregas.map((e) => e.rol)).toEqual(['revisor', 'revisor']);
+  });
+
+  it('con la RPC ANTERIOR (sin la 0933) ignora las entregas de una retenida: el aviso al revisor se inserta aparte, sin duplicar', async () => {
+    const b = banco({ config: PRIMER_MES });
+    conAtomica(b, 'ok');
+    await recibirDesglose(TENANT, retenible(), b.deps);
+    expect(b.entregas.map((e) => e.rol)).toEqual(['revisor', 'revisor']);
+  });
+
+  it('un buzón que ya recibe el desglose por otro rol no recibe además la copia de revisión', async () => {
+    const b = banco({ config: { ...PRIMER_MES, rhCorreos: ['nomina.rev@ejemplo.test'] } });
+    await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(b.entregas.filter((e) => e.correo === 'nomina.rev@ejemplo.test').map((e) => e.rol)).toEqual(['rh']);
+    expect(b.entregas.filter((e) => e.rol === 'revisor').map((e) => e.correo)).toEqual(['rh.rev@ejemplo.test']);
+  });
+
+  it('el modo se APAGA solo: después de «hasta» no hay revisores; y sin fecha o sin revisores, nunca', async () => {
+    for (const config of [
+      { revisores: REVISORES, primerMesHasta: '2026-10-14' },     // venció ayer
+      { revisores: REVISORES, primerMesHasta: null },              // nunca se activó
+      { revisores: [], primerMesHasta: '2026-11-14' },             // sin a quién mandar
+    ]) {
+      const b = banco({ config });
+      await recibirDesglose(TENANT, desglose(), b.deps);
+      expect(b.entregas.some((e) => e.rol === 'revisor'), JSON.stringify(config)).toBe(false);
+    }
+  });
+
+  it('el último día es inclusivo', async () => {
+    const b = banco({ config: { revisores: REVISORES, primerMesHasta: '2026-10-15' } });
+    await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(b.entregas.filter((e) => e.rol === 'revisor')).toHaveLength(2);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// OLA 10 · carril A · A1-01 (fecha de corte) y A1-02 (la corrección reemplaza a la original).
+// «Saldría» = una entrega que NO nació `omitida` y cuya liquidación no fue omitida después: lo único que el cron de envío reclamaría.
+// ═══════════════════════════════════════════════════════════════════════════
+const saldria = (b: Banco) => b.entregas.filter((e) => e.estado !== 'omitida' && !b.omitidasIds.includes(e.liquidacionExternaId));
+
+describe('A1-01: fecha de corte del arranque', () => {
+  const CORTE = { noEnviarAntes: '2026-10-15' }; // el periodo de la bitácora sintética termina el 2026-10-14
+
+  it('50 desgloses fechados antes del corte => 0 correos y 50 liquidaciones con todas sus entregas en «omitida»', async () => {
+    const b = banco({ config: CORTE });
+    for (let i = 1; i <= 50; i++) {
+      const r = await recibirDesglose(TENANT, desglose({ bitacora: `B-${1000 + i}`, operador: { numeroEmpleado: `E-${i}` } }), b.deps);
+      expect(r).toMatchObject({ estado: 'creada', omitida: 'anterior_al_corte', retenida: false });
+    }
+    expect(b.liquidaciones).toHaveLength(50);
+    expect(saldria(b)).toHaveLength(0); // 0 correos
+    expect(b.entregas.length).toBeGreaterThanOrEqual(50);
+    expect(b.entregas.every((e) => e.estado === 'omitida')).toBe(true);
+    expect(new Set(b.entregas.map((e) => e.liquidacionExternaId)).size).toBe(50); // las 50 tienen sus entregas omitidas
+    expect(b.entregas[0].ultimoError).toMatch(/fecha de corte/);
+    expect(b.detallesEvento[0]).toMatchObject({ omitida: 'anterior_al_corte' });
+  });
+
+  it('el día del corte SÍ sale (el periodo termina el mismo día de arranque); un día antes, no', async () => {
+    const b = banco({ config: { noEnviarAntes: '2026-10-14' } });
+    expect(await recibirDesglose(TENANT, desglose(), b.deps)).toMatchObject({ estado: 'creada', entregas: 4 });
+    expect(saldria(b)).toHaveLength(4);
+    const c = banco({ config: { noEnviarAntes: '2026-10-15' } });
+    await recibirDesglose(TENANT, desglose(), c.deps);
+    expect(saldria(c)).toHaveLength(0);
+  });
+
+  it('sin fecha de corte se envía como siempre (compatibilidad)', async () => {
+    const b = banco({ config: { noEnviarAntes: null } });
+    const r = await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(r).toMatchObject({ estado: 'creada', entregas: 4 });
+    expect((r as { omitida?: string }).omitida).toBeUndefined();
+    expect(saldria(b)).toHaveLength(4);
+  });
+
+  it('enviadoOrigen = true: el sistema de origen ya lo mandó, no se vuelve a mandar (aun sin fecha de corte)', async () => {
+    const b = banco();
+    const r = await recibirDesglose(TENANT, desglose({ enviadoOrigen: true }), b.deps);
+    expect(r).toMatchObject({ estado: 'creada', omitida: 'enviado_por_origen' });
+    expect(saldria(b)).toHaveLength(0);
+    expect(b.entregas[0].ultimoError).toMatch(/origen/);
+  });
+
+  it('el revisor del primer mes tampoco recibe copia de lo omitido', async () => {
+    const b = banco({ config: { ...CORTE, revisores: [{ departamento: 'nomina', correo: 'nomina.rev@ejemplo.test' }], primerMesHasta: '2026-11-14' } });
+    await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(b.entregas.some((e) => e.rol === 'revisor')).toBe(true); // la fila existe...
+    expect(saldria(b)).toHaveLength(0); // ...pero nace omitida
+  });
+
+  it('una omitida con una guarda que RETIENE sigue retenida, SIN excepciones (H759-M4) y con la marca que impide liberarla (lo prohibido no sale ni liberando después)', async () => {
+    const b = banco({ config: { ...CORTE, conceptosProhibidos: ['Retención uno'] } });
+    const r = await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(r).toMatchObject({ estado: 'creada', retenida: true, omitida: 'anterior_al_corte', excepciones: [] });
+    expect(b.excepciones).toHaveLength(0);
+    expect(String(b.desgloses[0]!.retenidaMotivo).startsWith(MARCA_RETENIDA_OMITIDA)).toBe(true);
+    expect(saldria(b)).toHaveLength(0);
+  });
+
+  it('H759-M4: un histórico omitido sin correo de operador / coordinador NO abre excepciones de destinatarios (y el mismo caso SIN corte sí)', async () => {
+    const sinCorreo = { correoOperador: null, coordinador: null };
+    const viejo = banco({ config: CORTE, ...sinCorreo });
+    expect(await recibirDesglose(TENANT, desglose(), viejo.deps)).toMatchObject({ estado: 'creada', omitida: 'anterior_al_corte', excepciones: [] });
+    expect(viejo.excepciones).toHaveLength(0);
+    const actual = banco({ config: { noEnviarAntes: null }, ...sinCorreo });
+    const r = await recibirDesglose(TENANT, desglose(), actual.deps);
+    expect(r.estado === 'creada' && r.excepciones.length).toBeGreaterThan(0);
+    expect(actual.excepciones.length).toBeGreaterThan(0);
+  });
+
+  it('H759-M4: lo ya enviado por el origen tampoco abre excepciones de destinatarios', async () => {
+    const b = banco({ correoOperador: null });
+    await recibirDesglose(TENANT, desglose({ enviadoOrigen: true }), b.deps);
+    expect(b.excepciones).toHaveLength(0);
+  });
+
+  it('atómica con RPC anterior a la 0940 (ignora «estado»): tras guardar se pasan a omitida las entregas que quedaron pendientes', async () => {
+    const b = banco({ config: CORTE });
+    b.deps.recibirAtomico = async (_t, pedido) => {
+      b.liquidaciones.push({ id: 'liq-atom', tenantId: TENANT, claveExterna: pedido.liquidacion.datos.claveExterna, huella: pedido.liquidacion.huella } as unknown as LiquidacionExterna);
+      return { ok: true, valor: { liquidacionId: 'liq-atom', creada: true, reparada: false, entregas: pedido.entregas.length } };
+    };
+    await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(b.omitidasIds).toEqual(['liq-atom']);
+    expect(b.motivosOmision[0]).toMatch(/fecha de corte/);
+  });
+
+  describe('vista previa (simular): lee todo, no escribe nada', () => {
+    it('cuenta los correos que saldrían y los omitidos, sin Storage, sin base y sin excepciones', async () => {
+      const b = banco();
+      const r = await recibirDesglose(TENANT, desglose(), b.deps, { simular: true });
+      expect(r).toEqual({ estado: 'simulada', claveExterna: 'BIT-T1-B-0001', correos: 4, omitidas: 0, retenida: false, omitida: null });
+      const c = banco({ config: CORTE });
+      expect(await recibirDesglose(TENANT, desglose(), c.deps, { simular: true })).toMatchObject({ estado: 'simulada', correos: 0, omitidas: 4, omitida: 'anterior_al_corte' });
+      for (const x of [b, c]) {
+        expect(x.subidas).toHaveLength(0);
+        expect(x.liquidaciones).toHaveLength(0);
+        expect(x.desgloses).toHaveLength(0);
+        expect(x.entregas).toHaveLength(0);
+        expect(x.eventos).toHaveLength(0);
+        expect(x.orden).toEqual([]);
+      }
+    });
+
+    it('un operador inexistente o una bitácora sin póliza no abren excepciones en la vista previa', async () => {
+      const b = banco({ operador: 'inexistente' });
+      expect(await recibirDesglose(TENANT, desglose(), b.deps, { simular: true })).toMatchObject({ estado: 'operador_no_encontrado' });
+      expect(await recibirDesglose(TENANT, desglose({ poliza: null }), b.deps, { simular: true })).toMatchObject({ estado: 'sin_poliza' });
+      expect(b.excepciones).toHaveLength(0);
+    });
+
+    it('lo ya recibido es idempotente (0 correos) y una retenida cuenta solo la copia del revisor', async () => {
+      const b = banco();
+      await recibirDesglose(TENANT, desglose(), b.deps);
+      expect(await recibirDesglose(TENANT, desglose(), b.deps, { simular: true })).toMatchObject({ estado: 'idempotente' });
+      const c = banco({ config: { conceptosProhibidos: ['Retención uno'], revisores: [{ departamento: 'nomina', correo: 'nomina.rev@ejemplo.test' }], primerMesHasta: '2026-11-14' } });
+      expect(await recibirDesglose(TENANT, desglose(), c.deps, { simular: true })).toMatchObject({ estado: 'simulada', retenida: true, correos: 1 });
+      expect(c.excepciones).toHaveLength(0);
+    });
+  });
+});
+
+describe('A1-02: una corrección -R<n> reemplaza a la original', () => {
+  const distinto = () => desglose({ neto: 4000, percepciones: [{ concepto: 'Sueldo', monto: 9000 }], deducciones: [{ concepto: 'Retención uno', monto: 5000 }] });
+  const OP = { correccion: { motivo: 'error de captura', actor: 'llave:administracion' } };
+
+  it('con el original aún pendiente (ventana/espera): queda «omitida» DESPUÉS de guardar la corrección y solo sale el correo de la -R1', async () => {
+    const b = banco({ config: { enviarDesdeHora: 12 } });
+    await recibirDesglose(TENANT, desglose(), b.deps); // original: 4 entregas pendientes esperando la ventana
+    expect(saldria(b)).toHaveLength(4);
+    b.orden.length = 0;
+    const r = await recibirDesglose(TENANT, distinto(), b.deps, OP);
+    expect(r).toMatchObject({ estado: 'creada', claveExterna: 'BIT-T1-B-0001-R1' });
+    expect(b.omitidasIds).toEqual(['liq-1']);
+    expect(b.motivosOmision[0]).toMatch(/corrección/);
+    expect(b.orden.indexOf('omitir')).toBeGreaterThan(b.orden.indexOf('insertar')); // H759-7: la original se apaga DESPUÉS de garantizar la corrección
+    const salen = saldria(b);
+    expect(salen).toHaveLength(4);
+    expect(new Set(salen.map((e) => e.liquidacionExternaId))).toEqual(new Set(['liq-2'])); // un solo desglose: el corregido
+  });
+
+  it('-R2 reemplaza a la original Y a la -R1', async () => {
+    const b = banco();
+    await recibirDesglose(TENANT, desglose(), b.deps);
+    await recibirDesglose(TENANT, distinto(), b.deps, OP);
+    b.omitidasIds.length = 0;
+    const otra = desglose({ neto: 3000, percepciones: [{ concepto: 'Sueldo', monto: 8000 }], deducciones: [{ concepto: 'Retención uno', monto: 5000 }] });
+    expect(await recibirDesglose(TENANT, otra, b.deps, OP)).toMatchObject({ claveExterna: 'BIT-T1-B-0001-R2' });
+    expect(new Set(b.omitidasIds)).toEqual(new Set(['liq-1', 'liq-2']));
+  });
+
+  it('el original RETENIDO queda sin sus excepciones de retención (ya no se puede «liberar» lo reemplazado)', async () => {
+    const b = banco({ config: { conceptosProhibidos: ['Retención uno'] } });
+    await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(b.excepciones.map((e) => e.tipo)).toContain('concepto_prohibido');
+    await recibirDesglose(TENANT, desglose({ deducciones: [{ concepto: 'Otro concepto', monto: 100 }], neto: 4000, percepciones: [{ concepto: 'Sueldo', monto: 4100 }] }), b.deps, OP);
+    expect(b.resueltas).toEqual(expect.arrayContaining(['BIT-T1-B-0001|concepto_prohibido', 'BIT-T1-B-0001|neto_negativo', 'BIT-T1-B-0001|tipo_sin_regla', 'BIT-T1-B-0001|correccion_pendiente']));
+  });
+
+  it('reintentar una corrección ya guardada (idempotente) vuelve a omitir al original: un corte entre guardar y omitir no deja dos correos', async () => {
+    const b = banco();
+    await recibirDesglose(TENANT, desglose(), b.deps);
+    await recibirDesglose(TENANT, distinto(), b.deps, OP);
+    b.omitidasIds.length = 0;
+    expect(await recibirDesglose(TENANT, distinto(), b.deps, OP)).toMatchObject({ estado: 'idempotente', claveExterna: 'BIT-T1-B-0001-R1' });
+    expect(b.omitidasIds).toEqual(['liq-1']);
+  });
+
+  it('H759-7: si GUARDAR la corrección falla, la original NO se omite (no queda cancelada sin reemplazo)', async () => {
+    const b = banco();
+    await recibirDesglose(TENANT, desglose(), b.deps);
+    const insertar = b.deps.insertarLiquidacion;
+    b.deps.insertarLiquidacion = async () => { throw new Error('base caída al guardar'); };
+    await expect(recibirDesglose(TENANT, distinto(), b.deps, OP)).rejects.toThrow('base caída al guardar');
+    expect(b.omitidasIds).toEqual([]);
+    expect(saldria(b)).toHaveLength(4); // la original sigue saliendo
+    b.deps.insertarLiquidacion = insertar;
+    await recibirDesglose(TENANT, distinto(), b.deps, OP); // el reintento sí reemplaza
+    expect(b.omitidasIds).toEqual(['liq-1']);
+  });
+
+  it('si omitir falla se LANZA (nunca dos correos en silencio) y el reintento idempotente de la corrección ya guardada lo repite', async () => {
+    const b = banco();
+    await recibirDesglose(TENANT, desglose(), b.deps);
+    const omitir = b.deps.omitirPendientes!;
+    b.deps.omitirPendientes = async () => { throw new Error('base caída'); };
+    await expect(recibirDesglose(TENANT, distinto(), b.deps, OP)).rejects.toThrow('base caída');
+    expect(b.liquidaciones).toHaveLength(2); // la corrección ya está garantizada
+    b.deps.omitirPendientes = omitir;
+    expect(await recibirDesglose(TENANT, distinto(), b.deps, OP)).toMatchObject({ estado: 'idempotente', claveExterna: 'BIT-T1-B-0001-R1' });
+    expect(b.omitidasIds).toEqual(['liq-1']);
+  });
+
+  it('sin corrección pedida (la pendiente solo se abre) no se omite nada del original', async () => {
+    const b = banco();
+    await recibirDesglose(TENANT, desglose(), b.deps);
+    await recibirDesglose(TENANT, distinto(), b.deps);
+    expect(b.omitidasIds).toEqual([]);
+    expect(saldria(b)).toHaveLength(4);
   });
 });

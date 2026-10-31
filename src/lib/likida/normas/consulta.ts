@@ -128,11 +128,19 @@ function citaLegible(n: Norma): string {
   return legible ?? n.instrumento ?? n.id;
 }
 
+/**
+ * ¿La ficha ya dejó de regir? `dia` es el día de México (AAAA-MM-DD). A39-S50-01: lo leía solo `aConsultada`; la guardia
+ * de fundamento, el corpus del contador y el contador de fichas afirmables seguían dando por vigente la RFA 2026 en 2027.
+ */
+export function exigibleVencida(exigibleHasta: string | null | undefined, dia: string): boolean {
+  return !!exigibleHasta && dia > exigibleHasta;
+}
+
 function aConsultada(n: Norma, hoy: Date): NormaConsultada {
   // A37-S50-04: `exigibleHasta` no lo leía nadie; desde 2027 el chat seguiría
   // afirmando facilidades de la RFA 2026 como vigentes. Vencida => no afirmable.
   const hasta = n.exigibleHasta ?? null;
-  const vencida = hasta !== null && hoyMx(hoy) > hasta;
+  const vencida = exigibleVencida(hasta, hoyMx(hoy));
   return {
     norma_id: n.id,
     cita: citaLegible(n),

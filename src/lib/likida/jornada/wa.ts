@@ -3,7 +3,7 @@ import { logger } from '@/lib/logger';
 import { strip_accents } from '../cuadre/util';
 import { componerJornada, aHoras, type Asiento, type TipoAsiento } from './modelo';
 import {
-  asegurarDiaJornada, asentarMarca, diaMxDe, idDeJornada, jornadaQueCierra, sellarConformidad, tieneMarcaViva,
+  asegurarDiaJornada, asentarMarca, diaMxDe, idDeJornada, jornadaCerradaDeAyer, jornadaQueCierra, sellarConformidad, tieneMarcaViva,
   type ResultadoAsiento,
 } from './repo';
 
@@ -327,7 +327,26 @@ export async function atenderConformidadJornada(args: {
   // La conformidad es sobre el día que acaba de cerrar; si no hay expediente de
   // ayer abierto, es sobre el de hoy — y si tampoco existe, no hay qué
   // confirmar y se dice.
-  const objetivo = abierta.jornada?.id ?? (await idDeJornada(args.tenantId, args.operadorId, dia));
+  let objetivo = abierta.jornada?.id ?? (await idDeJornada(args.tenantId, args.operadorId, dia));
+  // A37-S48-01: turno nocturno. Su «fin jornada» quedó asentado en el día del
+  // inicio (ayer MX) y hoy aún no tiene expediente propio (o no ha empezado):
+  // la conformidad es sobre esa jornada que cruzó la medianoche. Si hoy ya
+  // tiene su inicio vivo la ambigüedad es real y no se adivina.
+  if (!abierta.jornada) {
+    const hoyInicio = objetivo ? await tieneMarcaViva(args.tenantId, objetivo, 'inicio_jornada') : { viva: false, error: null };
+    if (hoyInicio.error) {
+      logger.error('jornada.conformidad_inicio_ilegible', { operador: args.operadorId, err: hoyInicio.error });
+      return { resultado: 'fallo', respuesta: 'No pude registrar tu confirmación ahorita — mándamela otra vez en un momento. 🙏' };
+    }
+    if (!hoyInicio.viva) {
+      const ayerCerrada = await jornadaCerradaDeAyer(args.tenantId, args.operadorId, dia, args.momento);
+      if (ayerCerrada.error) {
+        logger.error('jornada.conformidad_ayer_ilegible', { operador: args.operadorId, err: ayerCerrada.error });
+        return { resultado: 'fallo', respuesta: 'No pude registrar tu confirmación ahorita — mándamela otra vez en un momento. 🙏' };
+      }
+      if (ayerCerrada.jornada) objetivo = ayerCerrada.jornada.id;
+    }
+  }
   if (!objetivo) {
     return {
       resultado: 'sin_dia',

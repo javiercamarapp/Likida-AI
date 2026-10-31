@@ -109,9 +109,10 @@ beforeEach(() => {
 
 it('accionPrecio: no-superadmin — requireSuperadmin ya redirige (guard.test.ts la prueba); confirmamos que se invoca antes de tocar Stripe', async () => {
   dobles.getPlanes.mockResolvedValue([{ clave: 'pro', nombre: 'Pro', precioMensual: null, precioIvaIncluido: null, stripePriceId: null }]);
-  dobles.requireSuperadmin.mockRejectedValueOnce(new Error('REDIRECT:/dashboard'));
   const pagina = await CostosFacturacionPage();
   const accion = accionDelBoton(pagina, /Guardar price/);
+  // La página ya pasó su propia puerta (A39-S05-01); ahora es la ACCIÓN la que rebota al no-superadmin.
+  dobles.requireSuperadmin.mockRejectedValueOnce(new Error('REDIRECT:/dashboard'));
   await expect(accion(null, fd({ plan: 'pro', price: 'price_1' }))).rejects.toThrow('REDIRECT:/dashboard');
   expect(dobles.guardarPriceDePlan).not.toHaveBeenCalled();
 });

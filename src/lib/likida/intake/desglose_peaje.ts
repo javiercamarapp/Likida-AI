@@ -61,9 +61,9 @@ import { VENTANA_DIAS_FECHA, TOLERANCIA_MONTO_MXN } from './consolidado';
 import { registrarCorrida } from '../agentes/corridas';
 import { contextoEvidenciaGps, llaveUnidadDia } from '../peajes/evidencia_gps';
 import { resolverTagEnFecha } from '../peajes/tags';
-import { cargarVigenciaTags, gastosRespaldadosPorOtrosDesgloses, cargarMapeo, listarCasetas, evaluarGpsDeLineas } from '../peajes/datos';
+import { cargarVigenciaTags, gastosRespaldadosPorOtrosDesgloses, cargarMapeo, listarCasetas, evaluarGpsDeLineas, anclaDePeriodo } from '../peajes/datos';
 import { normalizarTag } from '../peajes/formatos';
-import { resolverPeriodo } from '../peajes/periodo';
+import { resolverPeriodo, periodoDeNombreArchivo, esPeriodoInferido, rotuloOrigenPeriodo, type AnclaPeriodo } from '../peajes/periodo';
 import { registrarNombresDeCasetas } from '../peajes/revision_cobros';
 import { matrizDeCsv } from '../peajes/csv';
 import { clasificarVerificacion } from '../peajes/verificacion';
@@ -141,6 +141,8 @@ export interface LineaDesgloseParseada {
   clase?: number | null;
   /** «Importe al 100%» cuando el archivo trae además un importe facturado distinto. AUSENTE si no aplica. */
   importe100?: number | null;
+  /** El `Icident` (número de despacho del TMS) que trae el archivo. AUSENTE si no hay columna; `null` si la celda está vacía. */
+  icident?: string | null;
 }
 
 /**
@@ -213,6 +215,8 @@ const PATRON_CLASE = /^clase\b|\bclase de cobro\b|\bclase vehicular\b/;
 const PATRON_MONTO_FACTURADO = /facturad/;
 const PATRON_MONTO_AL_100 = /al 100/;
 // El número del periodo (decena) que declara el archivo.
+// El número de despacho del TMS («Icident»): liga el cobro con su viaje.
+const PATRON_ICIDENT = /\bicident\b|^despacho$|^(id|no\.?|numero) despacho$|^(id|no\.?|numero) de despacho$/;
 const PATRON_NO_PERIODO = /^no\.?\s*de periodo|^numero de periodo|^periodo$/;
 // Una columna de HORA propia (no «fecha y hora», que ya es la fecha).
 const PATRON_HORA = /\bhora\b|\bhorario\b/;
@@ -227,6 +231,8 @@ export interface ColumnasDetectadas {
   clase?: number;
   /** «Importe al 100%» cuando `monto` apunta a otra columna (la facturada). */
   importe100?: number;
+  /** El `Icident` (número de despacho del TMS). Ausente si no hay columna. */
+  icident?: number;
   /** «No. de periodo». */
   periodo?: number;
 }
@@ -236,7 +242,7 @@ export interface ColumnasDetectadas {
  * sin repetir una columna ya usada por un campo obligatorio. Se comparte entre la
  * detección por nombre y el mapeo declarado (que solo nombra lo básico).
  */
-function detectarOpcionales(encabezados: Celda[], usadas: ReadonlySet<number>): Pick<ColumnasDetectadas, 'unidad' | 'clase' | 'importe100' | 'periodo'> {
+function detectarOpcionales(encabezados: Celda[], usadas: ReadonlySet<number>): Pick<ColumnasDetectadas, 'unidad' | 'clase' | 'importe100' | 'periodo' | 'icident'> {
   const n = encabezados.map(normalizar);
   const primero = (patron: RegExp, excluir?: RegExp) =>
     n.findIndex((h, i) => h && !usadas.has(i) && patron.test(h) && !(excluir && excluir.test(h)));
@@ -244,11 +250,13 @@ function detectarOpcionales(encabezados: Celda[], usadas: ReadonlySet<number>): 
   const clase = primero(PATRON_CLASE);
   const importe100 = primero(PATRON_MONTO_AL_100, PATRON_MONTO_EXCLUIR);
   const periodo = primero(PATRON_NO_PERIODO);
+  const icident = primero(PATRON_ICIDENT);
   return {
     ...(unidad >= 0 ? { unidad } : {}),
     ...(clase >= 0 ? { clase } : {}),
     ...(importe100 >= 0 ? { importe100 } : {}),
     ...(periodo >= 0 ? { periodo } : {}),
+    ...(icident >= 0 ? { icident } : {}),
   };
 }
 
@@ -498,6 +506,9 @@ export function parsearDesgloseHoja(filas: Celda[][], opciones: OpcionesParseo =
       const m100 = montoDeCelda(fila[columnas.importe100]);
       if (m100 !== null && Math.abs(m100 - monto) > 0.004) { linea.importe100 = m100; lineasImporteDistinto++; }
     }
+    if (columnas.icident !== undefined) {
+      linea.icident = String(fila[columnas.icident] ?? '').trim().slice(0, 80) || null;
+    }
     if (columnas.periodo !== undefined) {
       const p = String(fila[columnas.periodo] ?? '').trim();
       if (p) periodos.set(p, (periodos.get(p) ?? 0) + 1);
@@ -515,6 +526,7 @@ export function parsearDesgloseHoja(filas: Celda[][], opciones: OpcionesParseo =
   if (columnas.clase !== undefined) camposPorColumna.set(columnas.clase, 'clase');
   if (columnas.importe100 !== undefined) camposPorColumna.set(columnas.importe100, 'importe_al_100');
   if (columnas.periodo !== undefined) camposPorColumna.set(columnas.periodo, 'no_periodo');
+  if (columnas.icident !== undefined) camposPorColumna.set(columnas.icident, 'icident');
   const columnasInfo: CalidadArchivo['columnas'] = [];
   for (let c = 0; c < ancho; c++) {
     const enc = String(encabezadoFila[c] ?? '').trim();
@@ -1026,12 +1038,22 @@ export async function importarDesglose(
   // El periodo OFICIAL (el que decide qué es «extemporáneo»): el declarado, o el del nombre
   // del archivo, o ninguno. El periodo MEDIDO (min/max de fechas) se guarda aparte y se ensancha
   // con los extemporáneos, por eso no sirve para esto.
-  const periodoOficial = resolverPeriodo({ declarado: archivo.periodo ?? null, nombreArchivo: archivo.nombre, fechas });
+  // A2 ola 1: si ni lo declararon ni el nombre lo dice (un archivo que llega por correo, API o SFTP con otro nombre), se INFIERE del «No. de periodo»
+  // (contando decenas desde otro archivo de la flota cuyo periodo sí se conoce) o de la decena donde cae casi todo el archivo, y queda marcado como inferido.
+  let ancla: AnclaPeriodo | null = null;
+  if (!archivo.periodo && !periodoDeNombreArchivo(archivo.nombre, fechas) && parseo.calidad.noPeriodo) {
+    try { ancla = await anclaDePeriodo(tenantId, parseo.calidad.noPeriodo); } catch (e) {
+      logger.warn('desglose_peaje.ancla_periodo', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  let periodoOficial = resolverPeriodo({ declarado: archivo.periodo ?? null, nombreArchivo: archivo.nombre, fechas, noPeriodo: parseo.calidad.noPeriodo, ancla });
   const avisos = [...parseo.avisos];
   if (!periodoOficial) {
-    avisos.push('No pude saber el periodo del archivo (ni lo declaraste, ni el nombre lo dice, p. ej. «01 A 10 DE SEPT»): la revisión de cobros extemporáneos no se aplica hasta que lo declares.');
+    avisos.push('No pude saber el periodo del archivo (ni lo declaraste, ni el nombre lo dice, p. ej. «01 A 10 DE SEPT», ni su «No. de periodo» ni sus fechas apuntan a una sola decena): la revisión de cobros extemporáneos no se aplica hasta que lo declares.');
+  } else if (esPeriodoInferido(periodoOficial.origen)) {
+    avisos.push(`El nombre del archivo no dice su periodo; lo inferí: ${periodoOficial.desde} a ${periodoOficial.hasta} (${rotuloOrigenPeriodo(periodoOficial.origen)}). Si no es ese, decláralo y los extemporáneos se recalculan.`);
   }
-  const { data: fila, error: errDesglose } = await acotada(supabaseAdmin()
+  const insertarDesglose = (periodo: typeof periodoOficial) => acotada(supabaseAdmin()
     .from('desglose_peaje')
     .insert({
       tenant_id: tenantId,
@@ -1040,14 +1062,23 @@ export async function importarDesglose(
       periodo_hasta: fechas[fechas.length - 1] ?? null,
       archivo_nombre: archivo.nombre,
       ingesta_archivo_id: archivo.ingestaArchivoId ?? null,
-      periodo_oficial_desde: periodoOficial?.desde ?? null,
-      periodo_oficial_hasta: periodoOficial?.hasta ?? null,
-      periodo_origen: periodoOficial?.origen ?? null,
+      periodo_oficial_desde: periodo?.desde ?? null,
+      periodo_oficial_hasta: periodo?.hasta ?? null,
+      periodo_origen: periodo?.origen ?? null,
       no_periodo: parseo.calidad.noPeriodo,
       calidad: parseo.calidad,
     })
     .select('id')
     .single(), 'desglose_peaje.insertar');
+  let { data: fila, error: errDesglose } = await insertarDesglose(periodoOficial);
+  // La migración 0935 amplía el dominio de `periodo_origen`. Si aún no está aplicada, el periodo INFERIDO se descarta (no se disfraza de
+  // «nombre del archivo»): el archivo entra sin periodo oficial, se avisa, y declararlo después lo recalcula todo.
+  if (errDesglose && esPeriodoInferido(periodoOficial?.origen) && /periodo_origen_dominio/.test(errDesglose.message)) {
+    logger.warn('desglose_peaje.periodo_inferido_sin_migracion', { tenant: tenantId });
+    periodoOficial = null;
+    avisos.push('No pude guardar el periodo inferido del archivo: declara su periodo para que se apliquen los extemporáneos.');
+    ({ data: fila, error: errDesglose } = await insertarDesglose(null));
+  }
   if (errDesglose || !fila) {
     logger.error('desglose_peaje.insertar_error', { tenant: tenantId, err: errDesglose?.message ?? 'sin id' });
     return { ok: false, motivo: 'No se pudo guardar el desglose. Inténtalo de nuevo.', causa: 'infraestructura' };
@@ -1069,12 +1100,24 @@ export async function importarDesglose(
     clase: l.clase ?? null,
     unidad_archivo: l.unidad ?? null,
     importe_100: l.importe100 ?? null,
+    // El Icident del TMS (0935). La clave solo viaja si el archivo trae la columna: un archivo sin ella (el Excel decenal de hoy) no la toca.
+    ...(l.icident !== undefined ? { icident: l.icident } : {}),
   }));
   const lotes: typeof filasLinea[] = [];
   for (let i = 0; i < filasLinea.length; i += LOTE_INSERCION_LINEAS) lotes.push(filasLinea.slice(i, i + LOTE_INSERCION_LINEAS));
   const escritos = await enLotes(lotes, 2, async (lote) => {
     const { error } = await acotada(supabaseAdmin().from('desglose_peaje_linea').insert(lote), 'desglose_peaje.insertar_lineas');
-    if (error) throw new Error(error.message);
+    if (error) {
+      // La migración 0935 aún no está aplicada: la columna no existe. El archivo no se pierde: entra sin Icident y se avisa en el log.
+      if (/icident/i.test(error.message) && lote.some((f) => 'icident' in f)) {
+        logger.warn('desglose_peaje.icident_sin_migracion', { tenant: tenantId, desglose: desgloseId });
+        const sinIcident = lote.map((f) => { const resto: Record<string, unknown> = { ...f }; delete resto.icident; return resto; });
+        const { error: error2 } = await acotada(supabaseAdmin().from('desglose_peaje_linea').insert(sinIcident), 'desglose_peaje.insertar_lineas');
+        if (error2) throw new Error(error2.message);
+        return;
+      }
+      throw new Error(error.message);
+    }
   });
   const fallo = escritos.find((r) => 'error' in r);
   if (fallo) {

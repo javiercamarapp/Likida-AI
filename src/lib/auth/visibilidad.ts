@@ -166,6 +166,8 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // El catálogo del cliente del Agente de Carta Porte (T-A3-22): productos (SKU → clave SAT), remitentes/destinatarios y el
   // número interno del cliente. Misma área que su agente: cero pesos, lo usa el jefe de tráfico.
   '/dashboard/agentes/carta-porte/catalogo': 'operacion',
+  // La referencia comercial del cliente (T-A3-65, OLA1-A3): pendientes y captura. Misma área que su agente: cero pesos.
+  '/dashboard/agentes/carta-porte/referencia': 'operacion',
   // La configuración de la salida del Agente de Carta Porte (T-A3-32): modo, reintentos, frecuencia, destinatarios y plantilla.
   // Cambia a quién se avisa y cómo sale lo que el agente arma: solo dueño/administrador, como las demás configuraciones.
   '/dashboard/agentes/carta-porte/configuracion': 'administracion',
@@ -283,6 +285,8 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // Administración de la cuenta — solo el dueño
   // Conexiones (F7): la configuración de conectores de la cuenta.
   '/dashboard/conexiones': 'administracion',
+  // Puesta en marcha (rediseño, Fase 1): el asistente de conexiones del dueño. Ruta NUEVA y delgada; no reutiliza /dashboard/arranque.
+  '/dashboard/puesta-en-marcha': 'administracion',
   // Integraciones: fusionada en Conexiones (agosto-2026). La ruta sobrevive
   // como REDIRECT —hay enlaces guardados y correos que apuntan aquí— y por eso
   // sigue declarada: una ruta sin área es una ruta que `puedeVerRuta` no sabe
@@ -391,6 +395,7 @@ export const RUTAS_PERFIL_CINCO_AGENTES: Readonly<Record<string, ModuloPerfil>> 
   // dos llaves: sus páginas dinámicas gatean con la de su padre).
   '/dashboard/agentes/carta-porte': 'carta_porte',
   '/dashboard/agentes/carta-porte/catalogo': 'carta_porte',
+  '/dashboard/agentes/carta-porte/referencia': 'carta_porte',
   '/dashboard/agentes/carta-porte/configuracion': 'carta_porte',
   '/dashboard/carta-porte': 'carta_porte',
   '/dashboard/carta-porte/documentos': 'carta_porte',
@@ -416,6 +421,8 @@ export const RUTAS_PERFIL_CINCO_AGENTES: Readonly<Record<string, ModuloPerfil>> 
   '/dashboard/operadores': 'base',
   '/dashboard/unidades': 'base',
   '/dashboard/conexiones': 'base',
+  // El asistente de puesta en marcha (rediseño): el dueño ve qué falta para que sus agentes operen.
+  '/dashboard/puesta-en-marcha': 'base',
   '/dashboard/integraciones': 'base',
   '/dashboard/whatsapp': 'base',
   '/dashboard/notificaciones': 'base',
@@ -424,6 +431,12 @@ export const RUTAS_PERFIL_CINCO_AGENTES: Readonly<Record<string, ModuloPerfil>> 
   '/dashboard/legal': 'base',
   // Solicitudes ARCO (LFPDPPP art. 31): la flota es la responsable obligada y tiene 20 días hábiles; no es un módulo comercial (A37-TRANSVERSAL-06).
   '/dashboard/arco': 'base',
+  // Ola 1 · A1 (trazabilidad A1 #3/#21 y transversal [LIKIDA-CÓDIGO] 7): el dueño de la flota (y el superadmin con `?tenant=`) tiene que
+  // poder emitir la llave `administracion` del TMS del cliente, dar de alta a la gente de nómina que reenvía desgloses y manejar
+  // los patios SIN quitar el perfil. El rol sigue mandando: llaves-api y usuarios son área `administracion` (solo dueño/superadmin).
+  '/dashboard/llaves-api': 'base',
+  '/dashboard/usuarios': 'base',
+  '/dashboard/patios': 'base',
 };
 
 /**
@@ -439,10 +452,10 @@ export const RUTAS_STAND_BY_PERFIL_CINCO_AGENTES: readonly string[] = [
   '/dashboard/agentes/proveedores', '/dashboard/huerfanos', '/dashboard/combustible-casetas',
   '/dashboard/timbrado', '/dashboard/descarga-sat', '/dashboard/descarga-sat/bandeja',
   '/dashboard/cotizaciones', '/dashboard/contador', '/dashboard/conocimiento',
-  '/dashboard/convenios', '/dashboard/jornada', '/dashboard/patios', '/dashboard/asistencia',
+  '/dashboard/convenios', '/dashboard/jornada', '/dashboard/asistencia',
   '/dashboard/emergencias', '/dashboard/arranque', '/dashboard/onboarding',
-  '/dashboard/suscripcion', '/dashboard/llaves-api', '/dashboard/sesiones-mcp',
-  '/dashboard/politicas', '/dashboard/usuarios', '/dashboard/configuracion',
+  '/dashboard/suscripcion', '/dashboard/sesiones-mcp',
+  '/dashboard/politicas', '/dashboard/configuracion',
   '/dashboard/conversaciones',
 ];
 

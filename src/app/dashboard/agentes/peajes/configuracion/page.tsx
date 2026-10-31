@@ -19,6 +19,9 @@ import {
   guardarPullPeajes, apagarPullPeajes, borrarCredencialPull,
   listarTarifas, confirmarTarifa, importarTarifasArchivo,
   leerConfigPeajes, guardarUmbralesPeajes, guardarConfigAvisos,
+  leerVinculosActivo, guardarVinculosActivo, resumenFuenteViajes, vincularDesglose,
+  listarInmovilizadas, importarInmovilizadasArchivo, quitarInmovilizada,
+  leerReglasFlota, guardarReglasFlota,
   type ResultadoImportacionCatalogo,
 } from '@/lib/likida/peajes/datos';
 import { ORIGENES_TARIFA, type OrigenTarifa } from '@/lib/likida/peajes/tarifario_archivo';
@@ -83,6 +86,7 @@ function resumenImportacion(r: ResultadoImportacionCatalogo, singular: string): 
   if (r.error) return `error:${r.error}`;
   const partes = [`${r.guardadas} ${singular} guardados`];
   if (r.actualizadas > 0) partes.push(`${r.actualizadas} cambiaron algo ya existente`);
+  if (r.notas && r.notas.length > 0) partes.push(r.notas.join(' '));
   if (r.rechazadas.length > 0) {
     const ej = r.rechazadas.slice(0, 5).map((x) => `fila ${x.fila}: ${x.motivo}`).join('; ');
     partes.push(`${r.rechazadas.length} filas rechazadas (${ej}${r.rechazadas.length > 5 ? '…' : ''})`);
@@ -122,7 +126,11 @@ export default async function PaginaConfiguracionPeajes({
 
   const superficie = await superficiePeajesDeTenant(tenantId);
   const secreto = secretoMaestro();
-  const [tarifas, configPeajes, reglasCasetas, tagsBaja, excepcionesUnidad, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, buzon, archivos, entradas] = await Promise.all([
+  const [vinculosActivo, fuenteViajes, inmovilizadas, reglasFlota, tarifas, configPeajes, reglasCasetas, tagsBaja, excepcionesUnidad, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, buzon, archivos, entradas] = await Promise.all([
+    safe(() => leerVinculosActivo(tenantId)),
+    safe(() => resumenFuenteViajes(tenantId)),
+    safe(() => listarInmovilizadas(tenantId)),
+    safe(() => leerReglasFlota(tenantId)),
     safe(() => listarTarifas(tenantId)),
     safe(() => leerConfigPeajes(tenantId)),
     safe(() => listarReglasCasetas(tenantId)),
@@ -443,6 +451,50 @@ export default async function PaginaConfiguracionPeajes({
     return volverConfig(sufijo, r.ok ? (r.telefono ? 'Destinatario guardado.' : 'Sin destinatario: los avisos solo se verán en pantalla.') : `error:${r.motivo}`);
   }
 
+  // ── Cruce de cobros con viajes (T-A2-21): el interruptor por flota ──
+  async function accionGuardarCruceViajes(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId, 'administracion');
+    if (no) return volverConfig(sufijo, `error:${no}`);
+    const activo = String(fd.get('activo') ?? '') === '1';
+    if (!(await guardarVinculosActivo(tenantId, activo))) return volverConfig(sufijo, 'error:No se pudo guardar el interruptor. Inténtalo de nuevo.');
+    if (!activo) return volverConfig(sufijo, 'Cruce con viajes apagado: los archivos que se concilien no se ligan a viajes.');
+    // Al encenderlo se recalcula el último archivo, para no esperar al siguiente corte. No lanza; si falla, el interruptor ya quedó guardado.
+    let ultimo: Awaited<ReturnType<typeof listarDesgloses>> = [];
+    try { ultimo = await listarDesgloses(tenantId, 1); } catch { /* sin último archivo: solo se enciende */ }
+    const id = ultimo[0]?.desgloseId as string | undefined;
+    if (!id) return volverConfig(sufijo, 'Cruce con viajes encendido. Se aplica al siguiente archivo que se concilie.');
+    const r = await vincularDesglose(tenantId, id);
+    if (r.estado === 'ok') return volverConfig(sufijo, `Cruce con viajes encendido. Último archivo: ${r.ligados} ligado(s), ${r.ambiguos} ambiguo(s), ${r.conflictos} en conflicto, ${r.sinViaje} sin viaje, ${r.sinUnidad} sin unidad.`);
+    return volverConfig(sufijo, 'Cruce con viajes encendido, pero no se pudo recalcular el último archivo: se calculará con el siguiente corte.');
+  }
+
+  // ── Unidades inmovilizadas (T-A2-36) ──
+  async function accionCargarInmovilizadas(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId);
+    if (no) return volverConfig(sufijo, `error:${no}`);
+    const a = await archivoDeForm(fd);
+    if (typeof a === 'string') return volverConfig(sufijo, `error:${a}`);
+    const r = await importarInmovilizadasArchivo(tenantId, (a as { nombre: string }).nombre, (a as { buffer: Uint8Array }).buffer);
+    return volverConfig(sufijo, resumenImportacion(r, 'ventanas de inmovilización'));
+  }
+  async function accionQuitarInmovilizada(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId);
+    if (no) return volverConfig(sufijo, `error:${no}`);
+    return volverConfig(sufijo, (await quitarInmovilizada(tenantId, String(fd.get('ventana') ?? ''))) ? 'Ventana quitada.' : 'error:No se pudo quitar la ventana (¿ya no existía?).');
+  }
+
+  // ── Clases del cobro por flota: utilitarios y clase 1 (0936) ──
+  async function accionGuardarReglasFlota(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId);
+    if (no) return volverConfig(sufijo, `error:${no}`);
+    const r = await guardarReglasFlota(tenantId, { clasesUtilitario: String(fd.get('clases_utilitario') ?? ''), clase1: String(fd.get('clase_uno') ?? '') });
+    return volverConfig(sufijo, r.ok ? 'Clases guardadas. La revisión de cobros las usa en cuanto abras un desglose.' : `error:${r.motivo}`);
+  }
+
   // ── Mapeo de columnas ──
   async function accionGuardarMapeo(fd: FormData) {
     'use server';
@@ -496,6 +548,9 @@ export default async function PaginaConfiguracionPeajes({
           guardarExcepcionUnidad: accionGuardarExcepcionUnidad, quitarExcepcionUnidad: accionQuitarExcepcionUnidad,
         },
       }}
+      inmovilizadas={{ ventanas: inmovilizadas, puedeEditar: puedeVerArea(rol, 'dinero'), acciones: { cargarInmovilizadas: accionCargarInmovilizadas, quitarInmovilizada: accionQuitarInmovilizada } }}
+      clasesCobro={{ reglas: reglasFlota, puedeEditar: puedeVerArea(rol, 'dinero'), acciones: { guardarReglasFlota: accionGuardarReglasFlota } }}
+      cruceViajes={{ activo: vinculosActivo, fuente: fuenteViajes, puedeAdministrar, acciones: { guardarCruceViajes: accionGuardarCruceViajes } }}
       tarifario={{ tarifas, acciones: { importarTarifas: accionImportarTarifas, confirmarTarifa: accionConfirmarTarifa, sugerirPasada: accionSugerirPasada } }}
       umbralesAvisos={{
         config: configPeajes, puedeAdministrar,

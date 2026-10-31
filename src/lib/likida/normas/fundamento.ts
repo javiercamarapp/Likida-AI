@@ -21,6 +21,8 @@
 
 import type { ConceptoGasto } from '@/types/likida';
 import { NORMAS, IDS_NORMA, esVinculante } from './indice';
+import { exigibleVencida } from './consulta';
+import { hoyMx } from '@/lib/formato';
 
 /** Marca de una cita que parece normativa pero no está en el índice. */
 export const CITA_DESCONOCIDA = 'DESCONOCIDA';
@@ -428,6 +430,33 @@ export interface ResultadoFundamento {
   quitadas: string[];
 }
 
+/** La oración habla de la ficha en pasado / como ya no vigente. */
+// Una lista de regex simples (en vez de una sola con alternancias y grupos anidados) para no
+// disparar `security/detect-unsafe-regex`; el criterio es el mismo que el de la alternancia original.
+const MARCAS_DE_PASADO: RegExp[] = [
+  /\bvenci\w*/i,
+  /\brigi[óo]/i,
+  /\brigieron/i,
+  /\bya\s+no\s+rige/i,
+  /\bya\s+no\s+aplica/i,
+  /\bya\s+no\s+est[áa]\s+vigente/i,
+  /\bya\s+no\s+es\s+exigible/i,
+  /\bdej[óo]\s+de/i,
+  /\bexpir\w*/i,
+  /\bno\s+rige/i,
+  /\bno\s+est[áa]\s+vigente/i,
+  /\bno\s+aplica/i,
+  /\bhasta\s+31\s+de\s+diciembre/i,
+  /\bhasta\s+el\s+31\s+de\s+diciembre/i,
+  /\bhasta\s+2026-12-31/i,
+  /\bhasta\s+el\s+2026-12-31/i,
+];
+const MARCA_DE_PASADO = { test: (o: string): boolean => MARCAS_DE_PASADO.some((r) => r.test(o)) };
+
+function citaVencidaEnPresente(id: string, reply: string): boolean {
+  return oracionesConCita(reply, patronesDe(id)).some((o) => !MARCA_DE_PASADO.test(o));
+}
+
 /**
  * Quita del texto toda cita normativa que no venga de `permitidas` NI sea, por
  * su ORACIÓN, la misma afirmación que ya se entregó en `historial`.
@@ -436,7 +465,7 @@ export interface ResultadoFundamento {
  * @param historial texto de los turnos `assistant` previos de este viaje —
  *   fuente de la memoria por tema. Sin él, no hay memoria: solo `permitidas`.
  */
-export function guardiaFundamento(reply: string, permitidas: string[], historial = ''): ResultadoFundamento {
+export function guardiaFundamento(reply: string, permitidas: string[], historial = '', hoy: Date = new Date()): ResultadoFundamento {
   const ok = new Set(permitidas);
 
   // ── 1. ¿Se presenta como obligación algo que NO obliga? ───────────────────
@@ -455,6 +484,12 @@ export function guardiaFundamento(reply: string, permitidas: string[], historial
   // `citaEsMismoTema`.
   for (const id of citadas) {
     if (id !== CITA_DESCONOCIDA && !ok.has(id) && citaEsMismoTema(id, reply, historial)) ok.add(id);
+  }
+  // A39-S50-01: una ficha cuyo `exigibleHasta` ya pasó (RFA 2026 desde el 1-ene-2027) se puede NOMBRAR para decir que ya no rige,
+  // nunca para sostener una afirmación en presente. Una oración que la cita sin marca de pasado se trata como cita no autorizada.
+  const dia = hoyMx(hoy);
+  for (const id of citadas) {
+    if (ok.has(id) && exigibleVencida(NORMAS[id]?.exigibleHasta, dia) && citaVencidaEnPresente(id, reply)) ok.delete(id);
   }
   const sobran = citadas.filter((id) => !ok.has(id));
   if (sobran.length === 0 && !suavizar) return { reply, forzado: false, quitadas: [] };

@@ -30,6 +30,9 @@ const addGasto = vi.fn();
 const intakeDelta = vi.fn();
 const sendText = vi.fn();
 const sendButtons = vi.fn();
+const registrarSolicitudArco = vi.fn();
+const pipelineTenantApagado = vi.fn();
+const contactoVigia = vi.fn();
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
 
 vi.mock('@/lib/agents/run', () => ({ runAgent: (...a: unknown[]) => runAgent(...a) }));
@@ -105,7 +108,7 @@ vi.mock('@/lib/likida/repo', () => ({
     razonSocial: 'FLOTA SA DE CV', domicilio: 'Calle 1, Mérida', urlAvisoIntegral: 'https://flota.mx/p',
   })),
   reclamarEnvioAviso: vi.fn(async () => false), confirmarEnvioAviso: vi.fn(),
-  liberarEnvioAviso: vi.fn(), registrarSolicitudArco: vi.fn(),
+  liberarEnvioAviso: vi.fn(), registrarSolicitudArco: (...a: unknown[]) => registrarSolicitudArco(...a),
   getViaje: vi.fn(async () => ({ id: 'v1', anticipo: 0 })),
 }));
 vi.mock('@/lib/likida/costos', () => ({
@@ -125,6 +128,12 @@ vi.mock('@/lib/supabase/admin', () => ({
     from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) }),
     storage: { from: () => ({ upload: async () => ({ error: null }), createSignedUrl: async () => ({ data: null, error: { message: 'sin storage' } }) }) },
   }),
+}));
+vi.mock('@/lib/likida/interruptor_tenant', () => ({
+  pipelineTenantApagado: (...a: unknown[]) => pipelineTenantApagado(...a),
+}));
+vi.mock('./vigia/repo', () => ({
+  crearRepoVigia: () => ({ contactoPorTelefono: (...a: unknown[]) => contactoVigia(...a) }),
 }));
 vi.mock('@/lib/logger', () => ({ logger }));
 
@@ -164,6 +173,9 @@ beforeEach(() => {
   atenderAutorizacionTalacha.mockResolvedValue(null);
   atenderDespachoOficina.mockResolvedValue(null);
   atenderInformeOficina.mockResolvedValue(null);
+  registrarSolicitudArco.mockResolvedValue(true);
+  pipelineTenantApagado.mockResolvedValue(false);
+  contactoVigia.mockResolvedValue(null);
 });
 
 describe('el chofer — ROJO por texto', () => {
@@ -263,5 +275,80 @@ describe('la oficina — el botón y el ROJO del dueño', () => {
     await processInbound(texto(OFICINA_TEL, 'nuevo viaje para Juan, Puebla a Monterrey, anticipo 8000'));
     expect(atenderAsistenciaOficina).not.toHaveBeenCalled();
     expect(atenderDespachoOficina).toHaveBeenCalled();
+  });
+});
+
+// L-legal-01: el ROJO se evalúa ANTES que el trámite ARCO. Un mensaje que menciona «derechos ARCO» y reporta una emergencia no puede
+// quedar tragado por la respuesta legal.
+describe('L-legal-01 — la emergencia le gana al trámite ARCO', () => {
+  it('chofer: «chocamos, hay un herido, quiero mis derechos ARCO» abre la emergencia y deja la constancia ARCO sin segundo mensaje legal', async () => {
+    const conv = await import('@/lib/likida/conv');
+    vi.mocked(conv.buscarOperadorPorTelefono).mockResolvedValueOnce({ tenantId: 't1', operadorId: 'o1' } as never);
+    await processInbound(texto(CHOFER_TEL, 'chocamos, hay un herido, quiero ejercer mis derechos arco'));
+    expect(atenderAsistenciaChofer).toHaveBeenCalledWith(expect.objectContaining({ asistencia: expect.objectContaining({ nivel: 'rojo' }) }));
+    expect(registrarSolicitudArco).toHaveBeenCalledTimes(1);
+    const enviados = sendText.mock.calls.map((c) => String(c[1]));
+    expect(enviados.some((t) => t.includes('EMERGENCIA_ATENDIDA'))).toBe(true);
+    expect(enviados.some((t) => /FLOTA SA DE CV|aviso/i.test(t))).toBe(false);
+  });
+
+  it('chofer: un ARCO sin emergencia sigue siendo ARCO (el trámite vive)', async () => {
+    const conv = await import('@/lib/likida/conv');
+    vi.mocked(conv.buscarOperadorPorTelefono).mockResolvedValueOnce({ tenantId: 't1', operadorId: 'o1' } as never);
+    await processInbound(texto(CHOFER_TEL, 'quiero ejercer mis derechos arco'));
+    expect(atenderAsistenciaChofer).not.toHaveBeenCalled();
+    expect(registrarSolicitudArco).toHaveBeenCalledTimes(1);
+    expect(sendText.mock.calls.some((c) => /FLOTA SA DE CV/.test(String(c[1])))).toBe(true);
+  });
+
+  it('oficina: el ROJO del dueño con «derechos ARCO» abre la incidencia de flota y registra la constancia', async () => {
+    resolveOperador.mockResolvedValue(null);
+    resolverCuentaOficina.mockResolvedValue(CUENTA);
+    atenderAsistenciaOficina.mockResolvedValue('REGISTRADA 🚨');
+    await processInbound(texto(OFICINA_TEL, 'chocamos saliendo de la bodega, y quiero mis derechos arco'));
+    expect(atenderAsistenciaOficina).toHaveBeenCalled();
+    expect(registrarSolicitudArco).toHaveBeenCalledTimes(1);
+    expect(sendText.mock.calls.some((c) => String(c[1]).includes('REGISTRADA'))).toBe(true);
+  });
+});
+
+// A37-ola9-N1: la prioridad del ROJO sobre el ARCO solo vale para quien el ROJO SÍ atiende (operador activo o cuenta de oficina). Para
+// cualquier otro remitente, ARCO como siempre: la constancia (el plazo legal del art. 31) no se puede perder.
+describe('N1 — ARCO + ROJO de un remitente al que el ROJO no atiende', () => {
+  const MENSAJE = 'chocamos, hay un herido, quiero ejercer mis derechos arco';
+
+  it('operador dado de baja: se registra la constancia ARCO', async () => {
+    const conv = await import('@/lib/likida/conv');
+    resolveOperador.mockResolvedValue(null);
+    vi.mocked(conv.buscarOperadorPorTelefono).mockResolvedValueOnce({ tenantId: 't1', operadorId: 'o-baja' } as never);
+    await processInbound(texto(CHOFER_TEL, MENSAJE));
+    expect(registrarSolicitudArco).toHaveBeenCalledTimes(1);
+    expect(atenderAsistenciaChofer).not.toHaveBeenCalled();
+  });
+
+  it('cliente del Vigía: se registra la constancia ARCO a nombre de su flota', async () => {
+    resolveOperador.mockResolvedValue(null);
+    contactoVigia.mockResolvedValue({ tenantId: 't1' });
+    await processInbound(texto('5219990001111', MENSAJE));
+    expect(registrarSolicitudArco).toHaveBeenCalledTimes(1);
+  });
+
+  it('número desconocido: la respuesta es la del trámite ARCO (no se traga el mensaje)', async () => {
+    resolveOperador.mockResolvedValue(null);
+    await processInbound(texto('5219990002222', MENSAJE));
+    expect(sendText.mock.calls.some((c) => /No te tengo identificado/.test(String(c[1])))).toBe(true);
+    expect(atenderAsistenciaChofer).not.toHaveBeenCalled();
+  });
+
+  it('operador activo: sigue ganando el ROJO y la constancia ARCO se deja (una sola vez)', async () => {
+    await processInbound(texto(CHOFER_TEL, MENSAJE));
+    expect(atenderAsistenciaChofer).toHaveBeenCalledTimes(1);
+    expect(registrarSolicitudArco).toHaveBeenCalledTimes(1);
+  });
+
+  it('operador activo en una flota con el pipeline de WhatsApp apagado: la constancia ARCO no se pierde', async () => {
+    pipelineTenantApagado.mockResolvedValue(true);
+    await processInbound(texto(CHOFER_TEL, MENSAJE));
+    expect(registrarSolicitudArco).toHaveBeenCalledTimes(1);
   });
 });

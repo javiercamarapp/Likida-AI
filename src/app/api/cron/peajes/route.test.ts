@@ -24,6 +24,8 @@ const sftp = vi.fn(async (..._a: unknown[]): Promise<Record<string, number>> => 
 vi.mock('@/lib/likida/peajes/ingesta_sftp', () => ({ ejecutarSftpPeajes: (...a: unknown[]) => sftp(...a) }));
 const avisos = vi.fn(async (..._a: unknown[]): Promise<Record<string, number>> => ({ revisados: 0, enviados: 0, pendientes: 0 }));
 vi.mock('@/lib/likida/peajes/aviso_oficina', () => ({ reintentarAvisosPeajes: (...a: unknown[]) => avisos(...a) }));
+const proactivos = vi.fn(async (..._a: unknown[]): Promise<Record<string, unknown>> => ({ flotas: 0, plazo: { enviados: 0, yaAvisados: 0, sinDestinatario: 0, fallidos: 0, vencidosCruces: 0, vencidosMonto: 0 }, recordatorios: { enviados: 0, sinDestinatario: 0, fallidos: 0, yaRecordados: 0 }, fallidas: 0 }));
+vi.mock('@/lib/likida/peajes/aviso_barrido', () => ({ barrerAvisosPeajes: (...a: unknown[]) => proactivos(...a), depsBarridoReales: async () => ({}) }));
 const alertarOperador = vi.fn(async (..._a: unknown[]) => {});
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]) => alertarOperador(...a) }));
 vi.mock('@/lib/observability/sentry', () => ({ codigoDeError: () => 'cod' }));
@@ -35,7 +37,7 @@ const j = async (r: Response) => (await r.json()) as Record<string, unknown>;
 
 beforeEach(() => {
   autorizado = 'si'; interruptores = {};
-  procesar.mockClear(); registrarLatido.mockClear(); alertarOperador.mockClear(); pulls.mockClear(); sftp.mockClear(); avisos.mockClear();
+  procesar.mockClear(); registrarLatido.mockClear(); alertarOperador.mockClear(); pulls.mockClear(); sftp.mockClear(); avisos.mockClear(); proactivos.mockClear();
   pulls.mockResolvedValue({ reclamadas: 0, exitosas: 0, fallidas: 0, recibidos: 0, duplicados: 0, rechazados: 0 });
   sftp.mockResolvedValue({ reclamadas: 0, exitosas: 0, fallidas: 0, recibidos: 0, duplicados: 0, rechazados: 0 });
   avisos.mockResolvedValue({ revisados: 0, enviados: 0, pendientes: 0 });
@@ -69,6 +71,22 @@ describe('las palancas', () => {
     expect(await j(r)).toMatchObject({ corrio: false, codigo: 'interruptor_ilegible', interruptor: id });
     expect(procesar).not.toHaveBeenCalled();
     expect(registrarLatido).toHaveBeenCalledWith('peajes', 'fallo', expect.objectContaining({ codigo: 'interruptor_ilegible' }));
+  });
+});
+
+describe('A2P-16 / A2P-15: un solo reloj dentro de maxDuration', () => {
+  it('todos los pasos cuelgan del mismo inicio y los avisos reciben tope global y presupuesto por archivo', async () => {
+    const antes = Date.now();
+    await llamar();
+    const despues = Date.now();
+    const venceEn = (m: { mock: { calls: unknown[][] } }) => (m.mock.calls[0][0] as { venceEn: number }).venceEn;
+    expect(venceEn(pulls)).toBeLessThanOrEqual(despues + 25_000);
+    expect(venceEn(sftp)).toBeLessThanOrEqual(despues + 45_000);
+    expect(venceEn(procesar)).toBeLessThanOrEqual(despues + 85_000);
+    const opc = proactivos.mock.calls[0][1] as { venceEn: number; presupuestoPorDesgloseMs: number };
+    expect(opc.venceEn).toBeGreaterThanOrEqual(antes + 110_000);
+    expect(opc.venceEn).toBeLessThanOrEqual(despues + 110_000); // maxDuration = 120 s: 10 s de margen para el latido
+    expect(opc.presupuestoPorDesgloseMs).toBeGreaterThan(0);
   });
 });
 
@@ -201,5 +219,36 @@ describe('SFTP de peajes (0843) — cuarto canal, mismo blindaje que el pull', (
     sftp.mockResolvedValueOnce({ reclamadas: 1, exitosas: 1, fallidas: 0, recibidos: 5, duplicados: 0, rechazados: 0 });
     const r = await llamar();
     expect(await j(r)).toMatchObject({ pulls: { recibidos: 3 }, sftp: { recibidos: 5 } });
+  });
+});
+
+describe('A2 ola 1 · los avisos proactivos de plazo y de archivo', () => {
+  it('se barren AL FINAL de la corrida y salen en el cuerpo y en el latido', async () => {
+    proactivos.mockResolvedValueOnce({ flotas: 1, plazo: { enviados: 2, yaAvisados: 0, sinDestinatario: 0, fallidos: 0, vencidosCruces: 0, vencidosMonto: 0 }, recordatorios: { enviados: 1, sinDestinatario: 0, fallidos: 0, yaRecordados: 0 }, fallidas: 0 });
+    const r = await llamar();
+    expect(proactivos).toHaveBeenCalledTimes(1);
+    expect(await j(r)).toMatchObject({ corrio: true, avisosProactivos: { flotas: 1, plazo: { enviados: 2 } } });
+    expect(registrarLatido).toHaveBeenLastCalledWith('peajes', 'ok', expect.objectContaining({ avisosProactivos: expect.anything() }));
+  });
+  it('sin destinatario no vuelve «parcial» el latido (es configuración pendiente, no un fallo)', async () => {
+    proactivos.mockResolvedValueOnce({ flotas: 1, plazo: { enviados: 0, yaAvisados: 0, sinDestinatario: 3, fallidos: 0, vencidosCruces: 0, vencidosMonto: 0 }, recordatorios: { enviados: 0, sinDestinatario: 1, fallidos: 0, yaRecordados: 0 }, fallidas: 0 });
+    await llamar();
+    expect(registrarLatido).toHaveBeenLastCalledWith('peajes', 'ok', expect.anything());
+  });
+  it.each([
+    { flotas: 1, plazo: { enviados: 0, yaAvisados: 0, sinDestinatario: 0, fallidos: 1, vencidosCruces: 0, vencidosMonto: 0 }, recordatorios: { enviados: 0, sinDestinatario: 0, fallidos: 0, yaRecordados: 0 }, fallidas: 0 },
+    { flotas: 1, plazo: { enviados: 0, yaAvisados: 0, sinDestinatario: 0, fallidos: 0, vencidosCruces: 0, vencidosMonto: 0 }, recordatorios: { enviados: 0, sinDestinatario: 0, fallidos: 1, yaRecordados: 0 }, fallidas: 0 },
+    { flotas: 1, plazo: { enviados: 0, yaAvisados: 0, sinDestinatario: 0, fallidos: 0, vencidosCruces: 0, vencidosMonto: 0 }, recordatorios: { enviados: 0, sinDestinatario: 0, fallidos: 0, yaRecordados: 0 }, fallidas: 1 },
+  ])('un aviso que falló o una flota que no se pudo evaluar (%#) deja el latido `parcial`', async (res) => {
+    proactivos.mockResolvedValueOnce(res);
+    await llamar();
+    expect(registrarLatido).toHaveBeenLastCalledWith('peajes', 'parcial', expect.anything());
+  });
+  it('si el barrido LANZA, la cola ya procesada se conserva y el latido queda `parcial`, nunca `ok`', async () => {
+    proactivos.mockRejectedValueOnce(new Error('boom'));
+    const r = await llamar();
+    expect(r.status).toBe(200);
+    expect(procesar).toHaveBeenCalled();
+    expect(registrarLatido).toHaveBeenLastCalledWith('peajes', 'parcial', expect.anything());
   });
 });

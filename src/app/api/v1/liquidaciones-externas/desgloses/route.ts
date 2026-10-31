@@ -154,6 +154,9 @@ export async function POST(req: Request) {
         case 'operador_no_encontrado':
           salida.excepciones.push({ clave: r.claveExterna, motivo: 'operador_no_encontrado' });
           break;
+        case 'sin_poliza':
+          salida.excepciones.push({ clave: r.claveExterna, motivo: 'sin_poliza' });
+          break;
       }
     }
   } catch (e) {

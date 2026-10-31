@@ -15,20 +15,25 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { puedeAdministrar } from '@/lib/auth/permisos';
-import { leerPorId, registrarEvento, type LiquidacionExterna, type TipoEvento } from './repo';
+import { buscarPorClave, leerPorId, registrarEvento, type LiquidacionExterna, type TipoEvento } from './repo';
 import {
   entregasDe, insertarEntregas, leerConfigCorreo, leerContactoOperador, leerDesglose, liberarRetencionDesglose,
   listarCoordinadores, listarExcepciones, resolverExcepcion, rutaXlsxDesglose,
   type ConfigCorreo, type ContactoOperador, type Coordinador, type Desglose, type EntregaCorreo, type Excepcion, type NuevaEntrega,
 } from './repo_correo';
 import { resolverDestinatarios } from './correo_destinatarios';
+import { MARCA_RETENIDA_OMITIDA } from './desglose_reglas';
 
 /** Las retenciones que una persona puede decidir enviar. */
 export const TIPOS_LIBERABLES = ['neto_negativo', 'tipo_sin_regla'] as const;
 const TIPOS_RETENCION = ['neto_negativo', 'tipo_sin_regla', 'concepto_prohibido'] as const;
 
 export type MotivoRechazoLiberar =
-  | 'sin_permiso' | 'no_encontrada' | 'no_retenida' | 'no_liberable' | 'sin_destinatarios' | 'no_disponible';
+  | 'sin_permiso' | 'no_encontrada' | 'no_retenida' | 'no_liberable' | 'sin_destinatarios' | 'no_disponible'
+  /** H759-M5: el periodo termina antes de la fecha de corte (o el origen ya lo envió): histórico que no sale. */
+  | 'omitido_por_corte'
+  /** H759-M5: una corrección (-R<n>) lo reemplazó: lo que se libera es la corrección, no este original. */
+  | 'reemplazado';
 
 export type ResultadoLiberar =
   | { estado: 'liberado'; entregas: number; roles: string[] }
@@ -46,6 +51,8 @@ export interface DependenciasLiberar {
   insertarEntregas: (tenantId: string, filas: NuevaEntrega[]) => Promise<number>;
   liberarRetencion: (tenantId: string, liquidacionId: string) => Promise<boolean>;
   resolverExcepcion: (tenantId: string, id: number, ahora: Date) => Promise<boolean>;
+  /** H759-M5: ¿ya existe la corrección siguiente (`<clave>-R<n+1>`) de este desglose? `null` = no se pudo leer. Opcional (pruebas). */
+  existeCorreccionSiguiente?: (tenantId: string, claveExterna: string) => Promise<boolean | null>;
   registrarEvento: (tenantId: string, liquidacionId: string, tipo: TipoEvento, detalle?: Record<string, unknown>) => Promise<void>;
   ahora: () => Date;
 }
@@ -62,9 +69,18 @@ export const dependenciasLiberarPorOmision = (): DependenciasLiberar => ({
   insertarEntregas,
   liberarRetencion: liberarRetencionDesglose,
   resolverExcepcion,
+  existeCorreccionSiguiente: async (t, clave) => {
+    try { return (await buscarPorClave(t, claveSiguienteCorreccion(clave))) !== null; } catch { return null; }
+  },
   registrarEvento,
   ahora: () => new Date(),
 });
+
+/** `<base>` → `<base>-R1`; `<base>-R<n>` → `<base>-R<n+1>` (la clave de la corrección que reemplazaría a ésta). */
+export function claveSiguienteCorreccion(clave: string): string {
+  const m = /^(.*)-R(\d+)$/.exec(clave);
+  return m ? `${m[1]}-R${Number(m[2]) + 1}` : `${clave}-R1`;
+}
 
 const rechazo = (motivo: MotivoRechazoLiberar, mensaje: string): ResultadoLiberar => ({ estado: 'rechazado', motivo, mensaje });
 
@@ -87,6 +103,17 @@ export async function liberarEnvio(
   if (!cab.desglose) return rechazo('no_encontrada', 'No encontré ese desglose en tu flota.');
   if (!cab.desglose.retenidaMotivo) return rechazo('no_retenida', 'Este desglose ya no está retenido: no hay nada que liberar.');
 
+  // H759-M5: un histórico omitido (periodo anterior a la fecha de corte, o ya enviado por el origen) NO se libera: saldría como correo real.
+  if (cab.desglose.retenidaMotivo.startsWith(MARCA_RETENIDA_OMITIDA) || (config.noEnviarAntes !== null && liq.periodoHasta < config.noEnviarAntes)) {
+    return rechazo('omitido_por_corte', 'Este desglose es anterior a la fecha de corte (o el sistema de origen ya lo envió): no se libera desde aquí.');
+  }
+  // H759-M5: un original ya reemplazado por una corrección tampoco: la que sale es la corrección (liberarla a ella, si está retenida).
+  if (deps.existeCorreccionSiguiente) {
+    const hay = await deps.existeCorreccionSiguiente(tenantId, liq.claveExterna);
+    if (hay === null) return rechazo('no_disponible', 'No pude leer el estado de este desglose. Intenta de nuevo en unos minutos.');
+    if (hay) return rechazo('reemplazado', 'Este desglose ya fue reemplazado por una corrección: libera la corrección, no el original.');
+  }
+
   const retenciones = excepciones.filter((x) => (TIPOS_RETENCION as readonly string[]).includes(x.tipo));
   if (retenciones.some((x) => !(TIPOS_LIBERABLES as readonly string[]).includes(x.tipo))) {
     return rechazo('no_liberable', 'Este desglose trae un concepto que la empresa prohibió enviar: corrígelo en su sistema; no se libera desde aquí.');
@@ -94,7 +121,8 @@ export async function liberarEnvio(
 
   let creadas = 0;
   let roles: string[] = [];
-  if (entregas.length === 0) {
+  // 0933: la copia al revisor del primer mes sí existe en una retenida; no cuenta como «ya se envió al operador».
+  if (entregas.filter((e) => e.rol !== 'revisor').length === 0) {
     const contacto = await deps.leerContacto(tenantId, liq.operadorId);
     const coordinador = contacto?.coordinadorId ? await deps.leerCoordinador(tenantId, contacto.coordinadorId) : null;
     const { destinos } = resolverDestinatarios({

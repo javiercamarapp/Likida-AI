@@ -223,6 +223,44 @@ export async function jornadaQueCierra(
   return { jornada: { id: String(fila.id), dia: String(fila.dia) }, error: null };
 }
 
+/**
+ * A37-S48-01: el expediente de AYER ya CERRADO (con `fin_jornada` vivo) que un
+ * mensaje de conformidad de madrugada podría estar confirmando. Un turno
+ * nocturno cruza la medianoche: su «fin jornada» se asienta en el día del
+ * inicio (`jornadaQueCierra`), y la conformidad llega ya en el día MX siguiente,
+ * donde no hay expediente propio. Sin esto el operador de noche NUNCA podía
+ * sellar su día.
+ *
+ * Solo devuelve la jornada si el fin vivo cae a menos de 24 h del `momento`;
+ * más allá no es «el resumen que acaba de ver», y sellarlo sería adivinar.
+ * `error` ≠ null = la base no contestó (quien llama falla cerrado).
+ */
+export async function jornadaCerradaDeAyer(
+  tenantId: string,
+  operadorId: string,
+  diaDelMensaje: string,
+  momento: Date,
+): Promise<{ jornada: { id: string; dia: string } | null; error: string | null }> {
+  const ayer = diaAnterior(diaDelMensaje);
+  if (ayer === null) return { jornada: null, error: null };
+  const { data, error } = await acotada(
+    supabaseAdmin().from('jornada_dia').select('id, dia')
+      .eq('tenant_id', tenantId).eq('operador_id', operadorId).eq('dia', ayer).maybeSingle(),
+    'jornada.dia.cerrada_de_ayer',
+  );
+  if (error) return { jornada: null, error: error.message };
+  if (!data) return { jornada: null, error: null };
+  const fila = data as { id: string; dia: string };
+  const marcas = await marcasVivas(tenantId, fila.id, ['fin_jornada']);
+  if (marcas.error) return { jornada: null, error: marcas.error.message };
+  const fines = (marcas.data ?? []) as Array<{ tipo: string; momento: string }>;
+  const hayFinReciente = fines.some((a) => {
+    const horas = (momento.getTime() - Date.parse(a.momento)) / 3_600_000;
+    return Number.isFinite(horas) && horas >= 0 && horas <= MAX_HORAS_JORNADA_ABIERTA;
+  });
+  return { jornada: hayFinReciente ? { id: String(fila.id), dia: String(fila.dia) } : null, error: null };
+}
+
 /** ¿El expediente tiene una marca VIVA (no anulada) de ese tipo? `error` = la base no contestó (no se lee como «no hay»). */
 export async function tieneMarcaViva(
   tenantId: string, jornadaId: string, tipo: 'inicio_jornada' | 'fin_jornada',
@@ -364,8 +402,25 @@ export async function asentarMarca(m: MarcaNueva): Promise<ResultadoAsiento> {
     'jornada.asiento.insert',
   );
 
-  if (!error && data) return 'asentado';
-  if (error && (error as { code?: string }).code === UNIQUE_VIOLATION) return 'ya_estaba';
+  // A37-S48-03: una captura de la oficina cambia lo que el operador confirmó. Retirar la conformidad es idempotente.
+  const retirarSiHayConformidad = async (): Promise<boolean> => {
+    const previa = await leerConformidad(m.tenantId, m.jornadaId);
+    if (previa.error || previa.sello) {
+      const fallo = previa.error ?? (await retirarConformidad(m.tenantId, m.jornadaId));
+      if (fallo) return false;
+    }
+    return true;
+  };
+  if (!error && data) {
+    if (m.procedencia === 'capturado_contralor' && !(await retirarSiHayConformidad())) return 'fallo';
+    return 'asentado';
+  }
+  if (error && (error as { code?: string }).code === UNIQUE_VIOLATION) {
+    // A39-ola9: si la captura YA estaba insertada porque el intento anterior falló al retirar la conformidad, el reintento cae aquí
+    // como «ya estaba» y la conformidad seguiría viva sobre datos que la oficina ya cambió. Se reintenta el retiro (idempotente).
+    if (m.procedencia === 'capturado_contralor' && !(await retirarSiHayConformidad())) return 'fallo';
+    return 'ya_estaba';
+  }
   logger.error('jornada.asiento_no_escrito', {
     jornada: m.jornadaId, tipo: m.tipo, procedencia: m.procedencia,
     err: error?.message ?? 'insert sin fila ni error',
@@ -596,6 +651,43 @@ export async function leerPolitica(tenantId: string): Promise<PoliticaFlota | nu
 }
 
 /**
+ * A37-S48-03: retira la CONFORMIDAD del operador de un expediente cuyo
+ * contenido cambió después de que la dio. La conformidad es «vi este resumen y
+ * estoy de acuerdo» (LFT 132 fr. XXXIV: prueba plena si se acredita el acuerdo);
+ * si la oficina anula una marca o captura otra, el resumen que el operador vio
+ * ya no es el del expediente, y seguir imprimiendo «Sí, el <fecha>» en el
+ * reporte sería un documento laboral que afirma algo falso.
+ *
+ * No destruye evidencia: el llamador deja el sello retirado en el motivo de la
+ * anulación (append-only). Devuelve el sello que había (o `null` si no había
+ * ninguno) para que quede anotado; `error` ≠ null = la base no contestó.
+ */
+async function leerConformidad(tenantId: string, jornadaId: string): Promise<{ sello: string | null; error: string | null }> {
+  const { data, error } = await acotada(
+    supabaseAdmin().from('jornada_dia').select('conforme_operador_en, conforme_wa_message_id')
+      .eq('tenant_id', tenantId).eq('id', jornadaId).maybeSingle(),
+    'jornada.dia.conformidad_leer',
+  );
+  if (error) return { sello: null, error: error.message };
+  const f = data as { conforme_operador_en: string | null; conforme_wa_message_id: string | null } | null;
+  if (!f || !f.conforme_operador_en) return { sello: null, error: null };
+  return { sello: `${f.conforme_operador_en}${f.conforme_wa_message_id ? ` (mensaje ${f.conforme_wa_message_id})` : ''}`, error: null };
+}
+
+async function retirarConformidad(tenantId: string, jornadaId: string): Promise<string | null> {
+  const { error } = await acotada(
+    supabaseAdmin().from('jornada_dia').update({ conforme_operador_en: null, conforme_wa_message_id: null })
+      .eq('tenant_id', tenantId).eq('id', jornadaId).not('conforme_operador_en', 'is', null).select('id'),
+    'jornada.dia.conformidad_retirar',
+  );
+  if (error) {
+    logger.error('jornada.conformidad_no_retirada', { jornada: jornadaId, err: error.message });
+    return error.message;
+  }
+  return null;
+}
+
+/**
  * Anula una marca. NO la borra: le pone motivo, autor y hora, y la deja en el
  * expediente. Es la mitad de una corrección; la otra mitad es `asentarMarca`
  * con `corrigeA` apuntando a ésta.
@@ -614,12 +706,34 @@ export async function anularAsiento(args: {
   const motivo = args.motivo.trim();
   if (motivo === '') return { ok: false, error: 'Una anulación sin motivo no es una anotación: es una edición anónima.' };
 
+  // A37-S48-03: la jornada del asiento y la conformidad que tenía, ANTES de anular, para dejar el sello retirado escrito en el motivo.
+  const previo = await acotada(
+    supabaseAdmin().from('jornada_asiento').select('jornada_id')
+      .eq('id', args.asientoId).eq('tenant_id', args.tenantId).is('anulado_en', null).maybeSingle(),
+    'jornada.asiento.anular_previo',
+  );
+  if (previo.error) {
+    logger.error('jornada.anulacion_previo_ilegible', { asiento: args.asientoId, err: previo.error.message });
+    return { ok: false, error: previo.error.message };
+  }
+  const jornadaId = previo.data && typeof (previo.data as { jornada_id?: unknown }).jornada_id === 'string'
+    ? (previo.data as { jornada_id: string }).jornada_id
+    : null;
+  const conforme = jornadaId ? await leerConformidad(args.tenantId, jornadaId) : { sello: null, error: null };
+  if (conforme.error) {
+    logger.error('jornada.conformidad_ilegible', { jornada: jornadaId, err: conforme.error });
+    return { ok: false, error: conforme.error };
+  }
+  const motivoFinal = conforme.sello
+    ? `${motivo} [Conformidad del operador de ${conforme.sello} retirada por esta corrección]`
+    : motivo;
+
   const { data, error } = await acotada(
     supabaseAdmin().from('jornada_asiento').update({
       anulado_en: (args.ahora ?? new Date()).toISOString(),
       anulado_por: args.usuarioId,
       anulado_por_email: args.usuarioEmail,
-      anulado_motivo: motivo,
+      anulado_motivo: motivoFinal,
     })
       .eq('id', args.asientoId)
       .eq('tenant_id', args.tenantId)
@@ -633,6 +747,12 @@ export async function anularAsiento(args: {
   }
   if (!data || data.length === 0) {
     return { ok: false, error: 'Esa marca no existe en tu flota o ya estaba anulada.' };
+  }
+  if (jornadaId && conforme.sello) {
+    const fallo = await retirarConformidad(args.tenantId, jornadaId);
+    if (fallo) {
+      return { ok: false, error: 'La marca quedó anulada, pero no pude retirar la conformidad del operador. Avisa a soporte antes de exportar el reporte de ese día.' };
+    }
   }
   return { ok: true };
 }

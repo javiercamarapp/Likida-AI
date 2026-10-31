@@ -157,6 +157,29 @@ describe('Agente de Carta Porte: «Viajes salidos sin Carta Porte» (T-A3-66)', 
     expect(pintarSin(listado)).not.toContain('La lista está incompleta');
   });
 
+  it('A3-01 (cierre100): sin viajes importados del TMS dice «Sin datos del TMS», NO «No hay viajes» ni un 0, ni descarga', () => {
+    const html = pintarSin({ vacio: true, total: 0, grupos: [], sinDatosTms: { motivo: 'sin_viajes', ultimoImportadoEn: null, horasDesdeImportacion: null } });
+    expect(html).toContain('Sin datos del TMS');
+    expect(html).not.toContain('No hay viajes salidos');
+    expect(html).not.toContain('Descargar reporte');
+    expect(html).not.toMatch(/· 0</);
+  });
+
+  it('A3-01: con la importación vieja avisa que la lista puede estar atrasada y no pinta el estado vacío verde', () => {
+    const html = pintarSin({ vacio: true, total: 0, grupos: [], sinDatosTms: { motivo: 'importacion_vieja', ultimoImportadoEn: '2026-03-01T00:00:00Z', horasDesdeImportacion: 200 } });
+    expect(html).toContain('puede estar atrasada');
+    expect(html).not.toContain('No hay viajes salidos');
+  });
+
+  it('A3-02: muestra «N de M viajes ligados» y alerta cuando casi ninguno liga', () => {
+    const ok = pintarSin({ ...listado, ligadosPorFolio: { ligados: 8, total: 10 } });
+    expect(ok).toContain('8 de 10 viajes ligados');
+    expect(ok).not.toContain('Casi ningún viaje liga');
+    const mal = pintarSin({ ...listado, ligadosPorFolio: { ligados: 0, total: 40 } });
+    expect(mal).toContain('0 de 40 viajes ligados');
+    expect(mal).toContain('Casi ningún viaje liga');
+  });
+
   it('sin la prop no pinta el bloque', () => {
     expect(pintarSin()).not.toContain('Viajes salidos sin Carta Porte');
   });

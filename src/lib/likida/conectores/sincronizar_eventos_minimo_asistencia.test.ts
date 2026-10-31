@@ -32,7 +32,7 @@ const rpc = vi.hoisted(() => vi.fn(async (nombre: string) => {
 const from = vi.hoisted(() => vi.fn((tabla: string) => {
   if (tabla !== 'unidad' && tabla !== 'incidencia') throw new Error(`No debe resolver persona/viaje: ${tabla}`);
   const api = {
-    select: () => api, eq: () => api, in: () => api, neq: () => api, order: () => api, limit: () => api,
+    select: () => api, eq: () => api, in: () => api, neq: () => api, order: () => api, limit: () => api, range: () => api,
     maybeSingle: () => Promise.resolve({ data: { numero_economico: 'U-MINIMA' }, error: null }),
     then: (res: (v: unknown) => unknown) => res({ data: [], error: null }),
   };
@@ -44,7 +44,12 @@ vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ rpc, from }) })
 // fronteras DB/WhatsApp son dobles; ningún mensaje puede salir de esta prueba.
 import { sincronizarEventosTodas } from './sincronizar_eventos';
 
-beforeEach(() => { vi.clearAllMocks(); estado.reclamado = false; });
+beforeEach(() => {
+  vi.clearAllMocks(); estado.reclamado = false;
+  // A39-S38-01: el disparo solo avisa de lo reciente; el reloj se fija 30 min después del evento.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-09-03T11:30:00Z'));
+});
 
 it('grave mínimo reclamado crea incidencia sin persona y encola aviso operativo con el mismo claim', async () => {
   const http = vi.fn(async () => ({ estado: 500, cuerpo: '' }));

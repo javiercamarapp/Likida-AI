@@ -127,25 +127,52 @@ const filasFactura = (b: BaseSintetica, t: string) => b.factura_emitida.filter((
 beforeEach(() => { doble = crearDoble(HOY); doble.base = baseDeDosFlotas(); });
 
 describe('EQUIVALENCIA getRentabilidad — la reducción JS vieja vs rentabilidad_tenant', () => {
-  it('mismas seis cifras sobre el mismo dataset, y sin un peso de la otra flota', async () => {
+  // A39-S20-01 (0928): la rentabilidad se mide sobre los viajes CON liquidación vigente (no rechazada); el ingreso de un
+  // viaje abierto o sin liquidar no entra porque su costo todavía no existe. La reducción vieja se alimenta con ESE universo.
+  const universo = (b: BaseSintetica, t: string) => {
+    const vigentes = filasLiq(b, t).filter((l) => l.revision !== 'rechazada');
+    const viajes = filasViaje(b, t).filter((v) => vigentes.some((l) => l.viaje_id === v.id));
+    // 0931: el costo solo cuenta los viajes CON ingreso_flete (mismo universo que el ingreso).
+    return { viajes, liqs: vigentes.filter((l) => viajes.some((v) => v.id === l.viaje_id && v.ingreso_flete != null)) };
+  };
+
+  it('mismas seis cifras sobre el mismo universo, y sin un peso de la otra flota', async () => {
     const b = doble.base;
+    const u = universo(b, 't-1');
     const viejo = legacyRentabilidad(
-      filasViaje(b, 't-1').map((v) => ({ ingreso_flete: v.ingreso_flete ?? null })),
-      filasLiq(b, 't-1').map((l) => ({ total_comprobado: l.total_comprobado })),
+      u.viajes.map((v) => ({ ingreso_flete: v.ingreso_flete ?? null })),
+      u.liqs.map((l) => ({ total_comprobado: l.total_comprobado })),
     );
-    expect(await getRentabilidad('t-1')).toEqual(viejo);
+    expect(await getRentabilidad('t-1')).toEqual({ ...viejo, viajesSinLiquidar: filasViaje(b, 't-1').length - u.viajes.length });
     // Control: la flota ajena tiene cifras muy distintas; si el `where` de la
     // RPC se cayera, la comparación de arriba habría pasado por casualidad.
+    const ajeno = universo(b, 't-2');
     expect(viejo.ingreso).not.toEqual(legacyRentabilidad(
-      filasViaje(b, 't-2').map((v) => ({ ingreso_flete: v.ingreso_flete ?? null })),
-      filasLiq(b, 't-2').map((l) => ({ total_comprobado: l.total_comprobado })),
+      ajeno.viajes.map((v) => ({ ingreso_flete: v.ingreso_flete ?? null })),
+      ajeno.liqs.map((l) => ({ total_comprobado: l.total_comprobado })),
     ).ingreso);
+  });
+
+  it('A39-S20-01: el ingreso de los viajes sin liquidación vigente NO entra al margen', async () => {
+    const nuevo = await getRentabilidad('t-1');
+    // v-3 ($5,000, abierto) y v-6 ($2,500, liquidado pero sin liquidación en la base) no pueden inflar el margen.
+    expect(nuevo.ingreso).toBe(10000);
+    expect(nuevo.costoComprobado).toBe(1500);   // 0931: sin los 700 del viaje sin ingreso (v-2)
+    expect(nuevo.viajesSinLiquidar).toBe(4);   // v-3, v-4, v-5, v-6
+  });
+
+  it('una liquidación rechazada saca al viaje de la medición (ni su ingreso ni su costo)', async () => {
+    doble.base.liquidacion = doble.base.liquidacion.map((l) => (l.viaje_id === 'v-1' ? { ...l, revision: 'rechazada' } : l));
+    const r = await getRentabilidad('t-1');
+    expect(r.ingreso).toBe(0);              // v-2 no trae ingreso
+    expect(r.costoComprobado).toBe(0);       // 0931: el costo de v-2 (sin ingreso) tampoco entra
+    expect(r.viajesSinLiquidar).toBe(5);
   });
 
   it('el `null` de ingreso se cuenta aparte en las dos, no se suma como 0', async () => {
     const nuevo = await getRentabilidad('t-1');
-    expect(nuevo.viajesSinIngreso).toBe(2);   // v-2 y v-4
-    expect(nuevo.viajesConIngreso).toBe(4);   // incluye el de $0 (v-5)
+    expect(nuevo.viajesSinIngreso).toBe(1);   // v-2 (liquidado, sin ingreso capturado)
+    expect(nuevo.viajesConIngreso).toBe(1);   // v-1
   });
 });
 

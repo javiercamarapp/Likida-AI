@@ -89,6 +89,8 @@ export default async function ObservabilidadPage({
 }: {
   searchParams: Promise<{ b?: string }>;
 }) {
+  // A39-S05-01/S06-01: puerta PROPIA en el render (el layout no se re-ejecuta en una petición RSC parcial).
+  await requireSuperadmin();
   async function accionInterruptor(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
     // RE-GATEO: el action es un endpoint público en la práctica — el layout

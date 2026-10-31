@@ -703,13 +703,28 @@ export function crearRepoVigia(): RepoVigia {
       return ((data ?? []) as Fila[]).length > 0;
     },
 
-    async marcarRespondida(tenantId, conversacionId, ahora) {
-      const { error } = await acotada(supabaseAdmin().from('vigia_conversacion').update({
+    async marcarRespondida(tenantId, conversacionId, ahora, respondeHastaCrudo) {
+      // PostgREST devuelve `+00:00`; en un filtro `.or()` el `+` se leería como espacio. Se normaliza a ISO con `Z`.
+      const msCorte = respondeHastaCrudo ? Date.parse(respondeHastaCrudo) : NaN;
+      const respondeHasta = Number.isFinite(msCorte) ? new Date(msCorte).toISOString() : undefined;
+      const reinicio = {
         sin_respuesta_desde: null, entradas_sin_respuesta: 0, escalamiento_nivel: 0, escalado_en: null, atendida_en: null, atendida_por: null,
         molestia_nivel: 0, molestia_motivos: [], molestia_en: null, ultima_salida_en: ahora.toISOString(), updated_at: ahora.toISOString(),
         ...(prioridadEnBase() ? { prioridad: 0 } : {}),
-      }).eq('id', conversacionId).eq('tenant_id', tenantId), 'vigia.marcar_respondida');
+      };
+      let q = supabaseAdmin().from('vigia_conversacion').update(reinicio).eq('id', conversacionId).eq('tenant_id', tenantId);
+      // A39-S59-01: el reinicio total solo si NO llegó nada del cliente después de lo que se contestó (condicional en la base:
+      // un mensaje que entra entre la lectura y esta escritura no se pierde).
+      if (respondeHasta) q = q.or(`ultima_entrada_en.is.null,ultima_entrada_en.lte.${respondeHasta}`);
+      const { data, error } = await acotada(q.select('id'), 'vigia.marcar_respondida');
       if (error) throw new Error(`vigia.marcar_respondida: ${error.message}`);
+      if (respondeHasta && ((data ?? []) as Fila[]).length === 0) {
+        // Hay un mensaje posterior sin responder: solo se anota la salida; el reloj, la insistencia y la escalera siguen.
+        const { error: err2 } = await acotada(supabaseAdmin().from('vigia_conversacion')
+          .update({ ultima_salida_en: ahora.toISOString(), updated_at: ahora.toISOString() })
+          .eq('id', conversacionId).eq('tenant_id', tenantId), 'vigia.marcar_respondida_parcial');
+        if (err2) throw new Error(`vigia.marcar_respondida_parcial: ${err2.message}`);
+      }
     },
 
     async cerrarConversacion(tenantId, conversacionId, ahora) {

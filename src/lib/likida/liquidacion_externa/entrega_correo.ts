@@ -17,6 +17,13 @@
 //   · `enviar_desde_hora` (hora de México): antes de esa hora la fila se libera sin gastar intento.
 //   · Primer destinatario aceptado del rol `operador` ⇒ la liquidación pasa de `pendiente` a `enviada` (transición condicional).
 //   · Los logs llevan el correo enmascarado (`a***@dominio`), nunca completo.
+//   · Rol `revisor` (0933, «modo primer mes»): la copia de revisión de nómina/RH. Mismo Excel, asunto «[Revisión] …» y un párrafo que dice
+//     si el desglose salió al operador o quedó RETENIDO (con el motivo, que nunca trae importes). Una entrega fallida del revisor NO
+//     abre excepción del operador (igual que el archivo): solo el log y la entrega `fallida` visible.
+//   · PUNTO DE EXTENSIÓN del transporte del cliente (M365/Graph/SMTP, T-A1-27, NO construido): el envío sale por `EnvioCorreoPuerto`
+//     (`dependenciasEntregaCorreo().enviar`, hoy Resend). Un transporte propio es otra función con esa misma firma que, si la flota
+//     tiene `remitente_correo` y credenciales autorizadas por su TI, manda DESDE ese correo (para que llene su «Enviados») y devuelve
+//     el mismo `ResultadoEnvio`; el resto —cola, lease, idempotencia, reintentos, ventana— no cambia. Ver docs/operacion/liquidacion-desglose-correo.md.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { hoyMx } from '@/lib/formato';
@@ -28,7 +35,7 @@ import { aInstanteMx } from '../peajes/formatos';
 import { leerPorId, registrarEvento, transicionar, type TipoEvento } from './repo';
 import {
   abrirExcepcion, firmarXlsx, leerConfigCorreo, leerDesglose, marcarEnviada, marcarFallida, reclamarEntregas, reprogramarEntrega,
-  CONFIG_CORREO_POR_DEFECTO,
+  CONFIG_CORREO_POR_DEFECTO, responderAEfectivo,
   type ConfigCorreo, type EntregaCorreo, type TipoExcepcion,
 } from './repo_correo';
 
@@ -66,6 +73,8 @@ export type EnvioCorreoPuerto = (para: string, correo: Correo, op: OpcionesEnvio
 
 export interface ContextoLiquidacion {
   claveExterna: string; periodoDesde: string; periodoHasta: string;
+  /** 0933: por qué el desglose quedó RETENIDO (sin cifras), o null/ausente = no retenido. Solo lo usa la copia del revisor. */
+  retenidaMotivo?: string | null;
   /** A37-A1-liquidaciones-10: la bitácora REAL del desglose (`liquidacion_desglose.bitacora`). Sin ella se infiere de la clave. */
   bitacora?: string;
 }
@@ -138,7 +147,8 @@ export function sinCorreos(detalle: string): string {
  */
 export function llaveIdempotencia(e: Pick<EntregaCorreo, 'liquidacionExternaId' | 'generacion' | 'rol'> & { correo?: string }): string {
   const base = `liqcorreo:${e.liquidacionExternaId}:g${e.generacion}:${e.rol}`;
-  if (e.rol !== 'rh' || !e.correo) return base;
+  // `revisor` también admite varios buzones por generación (uno por departamento): misma razón que `rh`.
+  if ((e.rol !== 'rh' && e.rol !== 'revisor') || !e.correo) return base;
   return `${base}:${createHash('sha256').update(e.correo.trim().toLowerCase(), 'utf8').digest('hex').slice(0, 12)}`;
 }
 
@@ -164,14 +174,40 @@ export function bitacoraDeClave(clave: string): string {
   return m2?.[1] ?? clave;
 }
 
+/** Texto de una línea y sin importes que se le dice al revisor. */
+function sinSaltos(t: string): string { return t.replace(/\s+/g, ' ').trim().slice(0, 300); }
+
+/** Datos de la copia de revisión (rol `revisor`, 0933): el departamento del revisor y si el desglose quedó retenido. */
+export interface RevisionCorreo { departamento: string | null; retenidoMotivo: string | null }
+
 /** Asunto neutro y cuerpo de 3 líneas. NINGUNA cifra de dinero ni nombre de empresa: el dato va en el adjunto. */
-export function armarCorreoDesglose(ctx: ContextoLiquidacion): { correo: Correo; nombreAdjunto: string } {
+export function armarCorreoDesglose(ctx: ContextoLiquidacion, revision?: RevisionCorreo): { correo: Correo; nombreAdjunto: string } {
   const bitacora = ctx.bitacora && ctx.bitacora.trim() !== '' ? ctx.bitacora.trim() : bitacoraDeClave(ctx.claveExterna);
   const rango = rangoCorto(ctx.periodoDesde, ctx.periodoHasta);
   // A37-A1-02: una clave terminada en `-R<n>` es la CORRECCIÓN de un desglose ya enviado: el operador debe saberlo de inmediato.
   const esCorreccion = /-R\d+$/.test(ctx.claveExterna);
-  const asunto = `${esCorreccion ? 'CORRECCIÓN — ' : ''}Desglose de pago — bitácora ${bitacora}${rango ? ` — ${rango}` : ''}`;
+  const asunto = `${revision ? '[Revisión] ' : ''}${revision?.retenidoMotivo ? 'RETENIDO — ' : ''}${esCorreccion ? 'CORRECCIÓN — ' : ''}Desglose de pago — bitácora ${bitacora}${rango ? ` — ${rango}` : ''}`;
   const seguro = bitacora.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 60) || 'bitacora';
+  if (revision) {
+    const depto = revision.departamento ? ` (${revision.departamento})` : '';
+    return {
+      nombreAdjunto: `desglose-${seguro}.xlsx`,
+      correo: {
+        asunto,
+        avance: revision.retenidoMotivo ? 'Desglose RETENIDO: revisión pendiente.' : 'Copia de revisión del desglose de pago.',
+        titulo: revision.retenidoMotivo ? 'Desglose retenido (revisión)' : 'Desglose de pago (revisión)',
+        parrafos: [
+          ...(esCorreccion ? ['CORRECCIÓN: este desglose reemplaza al que se envió antes de esta bitácora.'] : []),
+          revision.retenidoMotivo
+            ? `El desglose de la bitácora ${bitacora} NO se envió al operador: quedó retenido. Motivo: ${sinSaltos(revision.retenidoMotivo)}`
+            : `Copia de revisión del primer mes${depto}: el desglose de la bitácora ${bitacora} se envía al operador.`,
+          'Va adjunto el Excel tal como lo ve el operador.',
+          ...(revision.retenidoMotivo ? ['Revísalo en el panel del agente de liquidación: ahí se decide si se libera o se corrige en el origen.'] : []),
+        ],
+        porQueLoRecibes: `Recibes este correo como revisor${depto} durante el primer mes del envío de desgloses.`,
+      },
+    };
+  }
   return {
     nombreAdjunto: `desglose-${seguro}.xlsx`,
     correo: {
@@ -219,11 +255,13 @@ export function dependenciasEntregaCorreo(): DependenciasEntregaCorreo {
       if (!l) return null;
       // A37-A1-liquidaciones-10: la bitácora sale del encabezado del desglose; si no se puede leer, se infiere de la clave.
       let bitacora: string | undefined;
+      let retenidaMotivo: string | null = null;
       try {
         const d = await leerDesglose(tenantId, id);
         if (d.ok && d.valor?.bitacora) bitacora = d.valor.bitacora;
+        if (d.ok && d.valor?.retenidaMotivo) retenidaMotivo = d.valor.retenidaMotivo;
       } catch { /* sin encabezado: se usa la clave */ }
-      return { claveExterna: l.claveExterna, periodoDesde: l.periodoDesde, periodoHasta: l.periodoHasta, ...(bitacora ? { bitacora } : {}) };
+      return { claveExterna: l.claveExterna, periodoDesde: l.periodoDesde, periodoHasta: l.periodoHasta, retenidaMotivo, ...(bitacora ? { bitacora } : {}) };
     },
     descargarXlsx: async (tenantId, ruta) => {
       // La URL firmada se pide con el módulo que valida que la ruta sea de la flota; se descarga con tope de tiempo.
@@ -327,7 +365,9 @@ async function procesarUna(
   // 1c. «Responder a» obligatorio (A37-A1-04). El correo promete «Si algo no coincide, responde a este correo»; sin `replyTo` la
   // respuesta cae en el buzón de campañas (`avisos@`), donde se descarta sin que nadie de la flota la vea. Fail-closed: no se
   // manda un correo con una promesa falsa a una persona. Igual que apagada: no se gasta intento, la fila espera la configuración.
-  if (!config.responderA) {
+  // 0933: la dirección de respuesta es el «Responder a» o, si falta, el correo emisor de la flota (`responderAEfectivo`).
+  const responderA = responderAEfectivo(config);
+  if (!responderA) {
     logger.warn('liqcorreo.sin_responder_a', { tenant: e.tenantId, entrega: e.id });
     await deps.reprogramar(e.tenantId, e.id, token, e.intentos, new Date(ahora.getTime() + ESPERA_FLOTA_APAGADA_MS), e.ultimoError);
     resumen.sinConfigurar += 1;
@@ -371,13 +411,19 @@ async function procesarUna(
   }
 
   // 4. Enviar.
-  const { correo, nombreAdjunto } = armarCorreoDesglose(ctx);
+  const revision: RevisionCorreo | undefined = e.rol === 'revisor'
+    ? {
+      departamento: config.revisores.find((r) => r.correo.trim().toLowerCase() === e.correo.trim().toLowerCase())?.departamento ?? null,
+      retenidoMotivo: ctx.retenidaMotivo ?? null,
+    }
+    : undefined;
+  const { correo, nombreAdjunto } = armarCorreoDesglose(ctx, revision);
   const res = await deps.enviar(e.correo, correo, {
     idempotencyKey: llaveIdempotencia(e),
     adjuntos: [{ filename: nombreAdjunto, content: Buffer.from(bytes).toString('base64'), contentType: TIPO_XLSX_CORREO }],
     sobrio: true,
     ...(config.remitenteNombre ? { remitenteNombre: config.remitenteNombre } : {}),
-    ...(config.responderA ? { replyTo: config.responderA } : {}),
+    ...(responderA ? { replyTo: responderA } : {}),
   });
 
   // 5. Anotar el resultado (las seis ramas de ResultadoEnvio).
@@ -423,11 +469,11 @@ async function procesarUna(
   // 4xx del destinatario (o rechazo local: sin destinatario válido, adjunto demasiado grande): sin reintento.
   await deps.marcarFallida(e.tenantId, e.id, token, `rechazado: ${sinCorreos(res.detalle)}`);
   resumen.fallidas += 1;
-  if (e.rol === 'archivo') {
-    // El buzón de archivo («Enviados») es una copia: que rebote no le pide nada al operador ni al coordinador, así que NO se
+  if (e.rol === 'archivo' || e.rol === 'revisor') {
+    // El buzón de archivo («Enviados») y el del revisor son copias: que rebote no le pide nada al operador ni al coordinador, así que NO se
     // abre una excepción de ellos (el tipo `coordinador_sin_correo` mentiría). Queda la entrega `fallida` visible en el
     // detalle y este aviso en el log; un tipo de excepción propio exigiría una migración (ver notas de T-A1-26).
-    logger.warn('liqcorreo.archivo_rebotado', { entrega: e.id, correo: enmascararCorreo(e.correo), detalle: sinCorreos(res.detalle) });
+    logger.warn(e.rol === 'revisor' ? 'liqcorreo.revisor_rebotado' : 'liqcorreo.archivo_rebotado', { entrega: e.id, correo: enmascararCorreo(e.correo), detalle: sinCorreos(res.detalle) });
     return;
   }
   const tipo: TipoExcepcion = e.rol === 'operador' ? 'operador_sin_correo' : 'coordinador_sin_correo';

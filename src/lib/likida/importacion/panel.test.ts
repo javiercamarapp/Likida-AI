@@ -203,3 +203,40 @@ describe('unidades', () => {
     expect(base.tabla('unidad')).toHaveLength(2);
   });
 });
+
+describe('operadores — flota con el desglose por correo (0932): altas sin teléfono', () => {
+  const OPS_CORREO = [
+    ['nombre', 'numero de empleado', 'correo'],
+    ['Ana Ruiz', 'E-1', 'ana@ejemplo.test'],
+    ['Beto Cruz', 'E-2', 'beto@ejemplo.test'],
+  ];
+  const conCanal = (canal: string) => {
+    base.tabla('liquidacion_correo_config').push({ tenant_id: T, canal, activa: false });
+  };
+
+  it('canal correo: la vista previa cuenta las filas sin teléfono como nuevas y NO escribe; confirmar las da de alta con marcador y correo', async () => {
+    conCanal('correo');
+    const prev = await cargarOperadoresDesdeArchivo(entrada(datos(csv(OPS_CORREO))));
+    expect(prev.error).toBeUndefined();
+    expect(prev).toMatchObject({ nuevas: 2, yaEstaban: 0, conProblema: 0 });
+    expect(prev.muestra[0].detalle).toContain('sin WhatsApp');
+    expect(escrituras()).toBe(0);
+    const conf = await cargarOperadoresDesdeArchivo(entrada(datos(csv(OPS_CORREO), { paso: 'confirmar', huella: prev.huella })));
+    expect(conf).toMatchObject({ confirmado: true, nuevas: 2 });
+    const guardados = base.tabla('operador');
+    expect(guardados).toHaveLength(2);
+    for (const g of guardados) expect(String(g.telefono)).toMatch(/^sin-tel:[a-z]{20}$/);
+    expect(guardados.map((g) => g.correo)).toEqual(['ana@ejemplo.test', 'beto@ejemplo.test']);
+    // idempotente: el mismo archivo otra vez no duplica
+    const otra = await cargarOperadoresDesdeArchivo(entrada(datos(csv(OPS_CORREO), { paso: 'confirmar' })));
+    expect(otra.error).toBe('No hay nada nuevo que importar.');
+    expect(base.tabla('operador')).toHaveLength(2);
+  });
+
+  it('canal whatsapp (o sin configuración): el mismo archivo se rechaza, el teléfono sigue siendo obligatorio', async () => {
+    conCanal('whatsapp');
+    const r = await cargarOperadoresDesdeArchivo(entrada(datos(csv(OPS_CORREO))));
+    expect(r.error ?? '').toMatch(/columna de teléfono/);
+    expect(base.tabla('operador')).toHaveLength(0);
+  });
+});

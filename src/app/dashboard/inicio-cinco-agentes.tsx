@@ -9,6 +9,7 @@ import { Bloque, EsqTabla } from './bloque';
 import { moduloProximamenteDeRuta, rutaProximamente } from '@/lib/auth/visibilidad';
 import { PESO_SEVERIDAD, type AgenteInsight, type Insight } from '@/lib/likida/insights/tipos';
 import { TarjetaInsight } from './agentes/insights/tarjeta-insight';
+import { ResumenV2 } from './resumen-v2';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL RESUMEN DE UNA FLOTA CON PERFIL `cinco_agentes` (mig. 0770).
@@ -156,7 +157,7 @@ function Indicador({ corrida }: { corrida: CorridaRegistrada | null | undefined 
   );
 }
 
-async function TarjetaAgente({ ficha, tenantId, sufijo, insights }: { ficha: FichaAgente; tenantId: string; sufijo: string; insights: InsightsPorAgente }) {
+export async function TarjetaAgente({ ficha, tenantId, sufijo, insights }: { ficha: FichaAgente; tenantId: string; sufijo: string; insights: InsightsPorAgente }) {
   // «Próximamente» (fase 1): la ficha se ve pero no consulta nada de la flota y su enlace va al anuncio, no a la función.
   const proximamente = moduloProximamenteDeRuta('cinco_agentes', ficha.href);
   const corrida = ficha.corridas && !proximamente ? await ultima(tenantId, ficha.corridas) : undefined;
@@ -198,16 +199,35 @@ const ATAJOS: ReadonlyArray<{ href: string; nombre: string; Icono: typeof Route 
 ];
 
 export async function InicioCincoAgentes({
-  tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '',
+  tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '', ui = 'v1', userId, soloLectura = false, veAsistente = false,
 }: {
   tenantId: string;
   tenantNombre: string | null;
   nombre: string | null;
   tenantExiste?: boolean;
   sufijo?: string;
+  /** Interfaz con la que se pinta (`versionUi`). Sin 'v2' el Resumen es el de siempre, idéntico. */
+  ui?: 'v1' | 'v2';
+  userId?: string;
+  soloLectura?: boolean;
+  /** ¿El rol puede abrir Puesta en marcha? (lo decide la página con `puedeVerRuta`; por omisión NO: falla cerrado). */
+  veAsistente?: boolean;
 }) {
   const diaMx = hoyMx(new Date(ahoraMs()));
   const insights = await leerInsightsPorAgente(tenantId);
+  if (ui === 'v2' && userId) {
+    return (
+      <ResumenV2
+        tenantId={tenantId} userId={userId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste}
+        sufijo={sufijo} soloLectura={soloLectura} veAsistente={veAsistente}
+        fichas={FICHAS_CINCO_AGENTES.map((f) => (
+          <Bloque key={f.clave} mensaje={`No se pudo leer ${f.nombre}.`} esqueleto={<EsqTabla filas={2} titulo={false} />}>
+            <TarjetaAgente ficha={f} tenantId={tenantId} sufijo={sufijo} insights={insights} />
+          </Bloque>
+        ))}
+      />
+    );
+  }
   return (
     <main className="h-full">
       <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>

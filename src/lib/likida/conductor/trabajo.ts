@@ -1,7 +1,8 @@
 import { logger } from '@/lib/logger';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
-import { exigir, traerTodo } from '../pg';
+import { exigir, traerHastaTope, traerTodo } from '../pg';
+import { variantesTelefono } from '../telefono_variantes';
 import { COLUMNAS_HITO, COLUMNAS_VIAJE_CTX, filaAHito, filaAViajeCtx, type ViajeContexto } from './repo';
 import type { AvisoReclamado } from './planificador';
 import type { HitoFila } from './tipos';
@@ -102,6 +103,9 @@ export async function leerViajesActivos(limite: number): Promise<ViajeContexto[]
   return ids.flatMap((id) => { const v = porId.get(id); return v ? [v] : []; });
 }
 
+/** Tope de emergencias abiertas que se leen por lote de flotas; rebasarlo lanza (no se recorta en silencio). */
+const TOPE_EMERGENCIAS = 2000;
+
 /**
  * A37-A5-02: las emergencias SIN RESOLVER de las flotas dadas (tipos de `TIPOS_EMERGENCIA` o prioridad crítica, abiertas en las últimas
  * `HORAS_EMERGENCIA_VIGENTE` h). LANZA si no se puede leer: quien llama se detiene (fail-closed), no asume «no hay emergencias».
@@ -111,10 +115,17 @@ export async function leerEmergenciasAbiertas(tenantIds: string[], ahora: Date =
   const desde = new Date(ahora.getTime() - HORAS_EMERGENCIA_VIGENTE * 3_600_000).toISOString();
   const filas: FilaEmergencia[] = [];
   for (const lote of trozos(tenantIds, 100)) {
-    const res = await acotada(supabaseAdmin().from('incidencia').select('tenant_id, operador_id, viaje_id, unidad_id')
+    // A39-S36-01: `.limit(2000)` contra `max_rows = 1000` devolvía 1000 filas SIN avisar y una emergencia podía quedar fuera de la
+    // lista que frena el envío al chofer. Se pagina por `range` (orden único por id) y, si la flota rebasa el tope, se LANZA: quien llama
+    // se detiene (fail-closed) en vez de asumir que no hay más emergencias.
+    const qEm = supabaseAdmin().from('incidencia').select('tenant_id, operador_id, viaje_id, unidad_id')
       .in('tenant_id', lote).neq('estado', 'resuelta').gte('abierta_en', desde)
-      .or(`tipo.in.(${TIPOS_EMERGENCIA.join(',')}),prioridad.eq.critica`).order('id').limit(2000), 'conductor.emergencias_abiertas');
-    filas.push(...((exigir(res as never, 'conductor.emergencias_abiertas') ?? []) as unknown as FilaEmergencia[]));
+      .or(`tipo.in.(${TIPOS_EMERGENCIA.join(',')}),prioridad.eq.critica`).order('id');
+    const leidas = await traerHastaTope<FilaEmergencia>(
+      (d, h) => acotada(qEm.range(d, h), 'conductor.emergencias_abiertas') as never, TOPE_EMERGENCIAS + 1, 'conductor.emergencias_abiertas',
+    );
+    if (leidas.length > TOPE_EMERGENCIAS) throw new Error(`conductor.emergencias_abiertas: más de ${TOPE_EMERGENCIAS} emergencias abiertas; no se puede afirmar quién está en emergencia`);
+    filas.push(...leidas);
   }
   return agruparEmergencias(filas);
 }
@@ -124,11 +135,35 @@ export async function leerEmergenciasAbiertas(tenantIds: string[], ahora: Date =
  * que no pasan por la lista de viajes). Lanza si no se puede leer.
  */
 export async function hayEmergenciaDeTelefono(tenantId: string, telefono: string, ahora: Date = new Date()): Promise<boolean> {
-  const op = await acotada(supabaseAdmin().from('operador').select('id').eq('tenant_id', tenantId).eq('telefono', telefono).order('id').limit(20), 'conductor.emergencia_operador');
+  const op = await acotada(supabaseAdmin().from('operador').select('id').eq('tenant_id', tenantId).in('telefono', variantesTelefono(telefono)).order('id').limit(20), 'conductor.emergencia_operador');
   const ids = ((exigir(op as never, 'conductor.emergencia_operador') ?? []) as Array<{ id: string }>).map((f) => f.id);
   if (ids.length === 0) return false;
   const em = (await leerEmergenciasAbiertas([tenantId], ahora)).get(tenantId);
   return !!em && ids.some((id) => em.operadorIds.has(id));
+}
+
+/**
+ * A39-A5-02: ¿el chofer con ESTE teléfono es voluntario VIGENTE del piloto (0800)? Última barrera del puerto de envío: la baja
+ * (`retirar_voluntario`) corta también los viajes que el chofer aceptó por su cuenta o por la oficina, no solo los de importación.
+ * Fail-closed: sin operador con ese teléfono, o ninguno voluntario, es `false`. Lanza si no se puede leer (quien llama NO envía).
+ */
+export async function esVoluntarioDePiloto(tenantId: string, telefono: string): Promise<boolean> {
+  const res = await acotada(supabaseAdmin().from('operador').select('id, agente_voluntario, activo').eq('tenant_id', tenantId).in('telefono', variantesTelefono(telefono)).order('id').limit(20), 'conductor.voluntario_operador');
+  const filas = (exigir(res as never, 'conductor.voluntario_operador') ?? []) as Array<{ agente_voluntario: boolean | null; activo: boolean | null }>;
+  return filas.some((f) => f.agente_voluntario === true && f.activo !== false);
+}
+
+/**
+ * A39-A5-03: los viajes ABIERTOS del operador con ESTE teléfono (de ESA flota), para decidir si va rodando antes de escribirle. Lanza si
+ * no se puede leer (quien llama NO envía). `[]` = ningún operador con ese teléfono o sin viaje abierto.
+ */
+export async function leerViajesAbiertosDeTelefono(tenantId: string, telefono: string): Promise<ViajeContexto[]> {
+  const op = await acotada(supabaseAdmin().from('operador').select('id').eq('tenant_id', tenantId).in('telefono', variantesTelefono(telefono)).order('id').limit(20), 'conductor.viajes_telefono_operador');
+  const ids = ((exigir(op as never, 'conductor.viajes_telefono_operador') ?? []) as Array<{ id: string }>).map((f) => f.id);
+  if (ids.length === 0) return [];
+  const res = await acotada(supabaseAdmin().from('viaje').select(COLUMNAS_VIAJE_CTX)
+    .eq('tenant_id', tenantId).in('operador_id', ids).eq('estatus', 'abierto').order('id').limit(50), 'conductor.viajes_telefono');
+  return ((exigir(res as never, 'conductor.viajes_telefono') ?? []) as unknown as Fila[]).map(filaAViajeCtx);
 }
 
 /**
@@ -141,7 +176,7 @@ export async function leerViajesAvisables(limite: number): Promise<ViajeContexto
   if (viajes.length === 0) return viajes;
   const em = await leerEmergenciasAbiertas([...new Set(viajes.map((v) => v.tenantId))]);
   const r = filtrarViajesAvisables(viajes, em);
-  if (r.enEmergencia > 0 || r.operadorNoAvisable > 0) logger.info('conductor.viajes_no_avisables', { enEmergencia: r.enEmergencia, operadorNoAvisable: r.operadorNoAvisable });
+  if (r.enEmergencia > 0 || r.operadorNoAvisable > 0 || r.noVoluntario > 0) logger.info('conductor.viajes_no_avisables', { enEmergencia: r.enEmergencia, operadorNoAvisable: r.operadorNoAvisable, noVoluntario: r.noVoluntario });
   return r.viajes;
 }
 

@@ -2,13 +2,16 @@ import { FileDown } from 'lucide-react';
 import { mxn, numero } from '@/lib/formato';
 // SOLO tipos y módulos puros: la vista no debe arrastrar `supabaseAdmin` al bundle.
 import type { ReporteRevision, ReclamoVista } from '@/lib/likida/peajes/revision_cobros';
-import type { CierreMensual } from '@/lib/likida/peajes/cierre_mensual';
+import type { CierreMensual, CierreDosMeses } from '@/lib/likida/peajes/cierre_mensual';
 import type { ResumenSeguimiento } from '@/lib/likida/peajes/reclamos_seguimiento';
 import { ETIQUETA_ESTADO_RECLAMO, PLAZO_RECLAMO_MESES } from '@/lib/likida/peajes/reclamos_seguimiento';
+import type { ResultadoCasado } from '@/lib/likida/peajes/notas_credito';
+import { rotuloOrigenPeriodo } from '@/lib/likida/peajes/periodo';
 import {
   CATEGORIAS_COBRO, ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO, type CategoriaCobro, type CandidatoCobro,
 } from '@/lib/likida/peajes/reglas_cobro';
 import { ETIQUETA_SENAL } from '@/lib/likida/peajes/cruces_atipicos';
+import { ETIQUETA_DOBLE_ENTRE_ARCHIVOS } from '@/lib/likida/peajes/doble_entre_archivos';
 import { FormaRegistrarReclamo } from './forma-registrar-reclamo';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -134,7 +137,7 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
           <p className="text-[12px] mt-0.5" style={{ color: 'var(--muted)' }}>
             {revision.archivoNombre ? `${revision.archivoNombre} · ` : ''}
             {revision.periodoOficialDesde && revision.periodoOficialHasta
-              ? `Periodo ${revision.periodoOficialDesde} a ${revision.periodoOficialHasta} (${revision.periodoOrigen === 'declarado' ? 'declarado' : 'tomado del nombre del archivo'}) · `
+              ? `Periodo ${revision.periodoOficialDesde} a ${revision.periodoOficialHasta} (${rotuloOrigenPeriodo(revision.periodoOrigen)}) · `
               : 'Periodo del archivo no declarado · '}
             {numero(r.lineasRevisadas)} cruces · {mxn(r.montoRevisado)}
           </p>
@@ -210,6 +213,27 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
         );
       })}
 
+      {revision.dobleEntreArchivos && revision.dobleEntreArchivos.candidatos.length > 0 && (
+        <details className="mt-4" id="doble-entre-archivos" open={revision.dobleEntreArchivos.candidatos.length <= 10}>
+          <summary className="cursor-pointer text-[13px] font-semibold">
+            {ETIQUETA_DOBLE_ENTRE_ARCHIVOS} · {numero(revision.dobleEntreArchivos.candidatos.length)} · {mxn(revision.dobleEntreArchivos.montoCandidatos)}
+          </summary>
+          <p className="text-[12px] my-2" style={{ color: 'var(--muted)' }}>
+            El proveedor cobró tarde un cruce que ya aparece, con el mismo TAG, segundo, caseta e importe, en un archivo anterior de los últimos {revision.dobleEntreArchivos.ventanaMeses} meses.
+            El monto es el del segundo cobro; confírmalo con el proveedor antes de reclamarlo. El Excel del portal lo trae en su propia hoja.
+          </p>
+          <ul className="space-y-2 text-[12.5px]">
+            {revision.dobleEntreArchivos.candidatos.slice(0, MAX_FILAS_POR_CATEGORIA).map((c) => (
+              <li key={`${c.indice}-${c.archivoPrevioId}`} className="rounded-lg hairline p-2.5 space-y-1">
+                <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={ESTILO_CANDIDATO}>{mxn(c.monto)} · {ROTULO_CANDIDATO}</span>
+                <p><b>Qué pasó:</b> {c.quePaso}</p>
+                <p style={{ color: 'var(--muted)' }}><b>Qué hacer:</b> {c.queHacer}</p>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
       {revision.atipicos.atipicos.length > 0 && (
         <details className="mt-4" id="atipicos">
           <summary className="cursor-pointer text-[13px] font-semibold">Cruces atípicos · {numero(revision.atipicos.atipicos.length)}</summary>
@@ -237,26 +261,47 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
 
 // ── El cierre mensual ───────────────────────────────────────────────────────
 
-export function SeccionCierreMensual({ mes, cierre, error, sufijo, desglose }: {
+export function SeccionCierreMensual({ mes, cierre, error, sufijo, desglose, opciones = [], dosMeses = false, cierreDos = null }: {
   mes: string | null; cierre: CierreMensual | null; error: boolean; sufijo: string; desglose: string | null;
+  /** Los meses que ofrece el selector (del más reciente al más viejo). Vacío = campo de texto AAAA-MM. */
+  opciones?: string[];
+  /** Vista de DOS meses juntos (el pedido y el anterior). */
+  dosMeses?: boolean;
+  cierreDos?: CierreDosMeses | null;
 }) {
+  const lista = mes && opciones.length > 0 && !opciones.includes(mes) ? [mes, ...opciones] : opciones;
   return (
     <section className="card p-4" id="cierre-mensual">
       <h2 className="font-display text-[15px] font-semibold">Cierre mensual</h2>
       <p className="text-[12px] mt-0.5" style={{ color: 'var(--muted)' }}>
         Junta las tres decenas de un mes (y compara los cobros tardíos con el mes anterior si también lo subiste). Un mes con una decena faltante se dice incompleto.
+        Con «dos meses juntos» se consolidan el mes elegido y el anterior para que los cobros tardíos se acomoden en la misma ventana.
       </p>
       <form method="get" className="flex items-end gap-2 flex-wrap mt-3">
         <ExtraSufijo sufijo={sufijo} />
         {desglose && <input type="hidden" name="desglose" value={desglose} />}
         <label className="block">
-          <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Mes (AAAA-MM)</span>
-          <input name="mes" defaultValue={mes ?? ''} placeholder="2026-09" pattern="\d{4}-(0[1-9]|1[0-2])" required className={`${CSS_INPUT} w-[120px] mt-0.5`} style={ESTILO_INPUT} />
+          <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Mes</span>
+          {lista.length > 0 ? (
+            <select name="mes" defaultValue={mes ?? lista[0]} required className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT}>
+              {lista.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          ) : (
+            <input name="mes" defaultValue={mes ?? ''} placeholder="2026-09" pattern="\d{4}-(0[1-9]|1[0-2])" required className={`${CSS_INPUT} w-[120px] mt-0.5`} style={ESTILO_INPUT} />
+          )}
         </label>
-        <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>Ver el mes</button>
+        <label className="block">
+          <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Ventana</span>
+          <select name="meses" defaultValue={dosMeses ? '2' : '1'} className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT}>
+            <option value="1">Un mes</option>
+            <option value="2">Dos meses juntos</option>
+          </select>
+        </label>
+        <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>{dosMeses ? 'Ver los dos meses' : 'Ver el mes'}</button>
       </form>
       {error && <p role="alert" className="text-[12.5px] mt-3" style={{ color: 'var(--bad)' }}>No se pudo armar el cierre ahora mismo. No es que no haya cobros: inténtalo de nuevo.</p>}
-      {cierre && (
+      {dosMeses && cierreDos && <CierreDosMesesVista c={cierreDos} />}
+      {!dosMeses && cierre && (
         <div className="mt-3 space-y-3">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
@@ -271,14 +316,7 @@ export function SeccionCierreMensual({ mes, cierre, error, sufijo, desglose }: {
             </div>
           </div>
           <div className="grid sm:grid-cols-3 gap-2">
-            {cierre.decenas.map((d) => (
-              <div key={d.etiqueta} className="rounded-lg hairline p-2.5">
-                <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Decena {d.etiqueta}</span>
-                {d.cubierta
-                  ? <><span className="text-[15px] font-semibold cifra-mono">{numero(d.cruces)}</span><span className="text-[11px] ml-1.5" style={{ color: 'var(--muted)' }}>{mxn(d.monto)}</span></>
-                  : <span className="text-[12.5px]" style={{ color: 'var(--bad)' }}>Falta el archivo</span>}
-              </div>
-            ))}
+            {cierre.decenas.map((d) => <TarjetaDecena key={d.etiqueta} d={d} />)}
           </div>
           <p className="text-[12.5px]">
             Cobros tardíos (candidatos: validar con el proveedor): {numero(cierre.tardiosMesAnterior.n)} del mes anterior ({mxn(cierre.tardiosMesAnterior.monto)}) y {numero(cierre.tardiosDecenaAnterior.n)} de una decena anterior de este mes ({mxn(cierre.tardiosDecenaAnterior.monto)}).
@@ -293,6 +331,46 @@ export function SeccionCierreMensual({ mes, cierre, error, sufijo, desglose }: {
   );
 }
 
+function TarjetaDecena({ d }: { d: CierreMensual['decenas'][number] }) {
+  return (
+    <div className="rounded-lg hairline p-2.5">
+      <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Decena {d.etiqueta}</span>
+      {d.cubierta
+        ? <><span className="text-[15px] font-semibold cifra-mono">{numero(d.cruces)}</span><span className="text-[11px] ml-1.5" style={{ color: 'var(--muted)' }}>{mxn(d.monto)}</span></>
+        : <span className="text-[12.5px]" style={{ color: 'var(--bad)' }}>Falta el archivo</span>}
+    </div>
+  );
+}
+
+function CierreDosMesesVista({ c }: { c: CierreDosMeses }) {
+  return (
+    <div className="mt-3 space-y-3" id="cierre-dos-meses">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <span className="text-[13px] font-semibold">{c.meses[0]} + {c.meses[1]}</span>
+          <span className="inline-flex ml-2 px-2 py-0.5 rounded-full text-[11px] font-medium"
+            style={c.completo ? { color: 'var(--ok)', background: 'var(--okbg)' } : { color: 'var(--warn)', background: 'var(--warnbg)' }}>
+            {c.completo ? 'Dos meses completos' : 'Ventana incompleta'}
+          </span>
+        </div>
+        <div className="text-right">
+          <span className="text-[18px] font-semibold cifra-mono">{numero(c.cruces)}</span> cruces · <span className="cifra-mono">{mxn(c.monto)}</span>
+        </div>
+      </div>
+      <div className="grid sm:grid-cols-3 gap-2">
+        {c.decenas.map((d) => <TarjetaDecena key={d.etiqueta} d={d} />)}
+      </div>
+      <p className="text-[12.5px]">
+        Cobros tardíos que caen dentro de la ventana (se acomodan): {numero(c.acomodados.n)} ({mxn(c.acomodados.monto)}). Anteriores a {c.meses[0]} (candidatos: validar con el proveedor): {numero(c.tardiosFueraDeVentana.n)} ({mxn(c.tardiosFueraDeVentana.monto)}).
+        {c.repetidosEntreArchivos.length > 0 && <> <b>{numero(c.repetidosEntreArchivos.length)} cobros aparecen en más de un archivo.</b></>}
+      </p>
+      {c.avisos.length > 0 && (
+        <ul className="text-[12px] space-y-0.5" style={{ color: 'var(--muted)' }}>{c.avisos.map((a) => <li key={a}>{a}</li>)}</ul>
+      )}
+    </div>
+  );
+}
+
 // ── El seguimiento de reclamos y notas de crédito ───────────────────────────
 
 const COLOR_ALERTA: Record<ReclamoVista['evaluacion']['alerta'], { color: string; background: string }> = {
@@ -303,9 +381,81 @@ const COLOR_ALERTA: Record<ReclamoVista['evaluacion']['alerta'], { color: string
 };
 const ROTULO_ALERTA: Record<ReclamoVista['evaluacion']['alerta'], string> = { ok: 'En plazo', por_vencer: 'Por vencer', vencido: 'Vencido', cerrado: 'Cerrado' };
 
-export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revision, error }: {
+/**
+ * La PROPUESTA de a qué reclamo(s) corresponde una nota de crédito (`casarNota`). Es solo una sugerencia por suma exacta: nada se
+ * registra solo; la persona confirma capturando la nota en el reclamo que corresponda. `texto` es lo que escribió (se devuelve al campo).
+ */
+export interface PropuestaNota {
+  texto: string;
+  /** `null` = el texto no es un importe válido (`motivo` dice por qué) o no se pudo calcular (`fallo`). */
+  importe: number | null;
+  resultado: ResultadoCasado | null;
+  motivo?: string;
+  fallo?: boolean;
+}
+
+function etiquetaReclamo(r: ReclamoVista | undefined, id: string): string {
+  if (!r) return `reclamo ${id.slice(0, 8)}`;
+  const cat = (CATEGORIAS_COBRO as readonly string[]).includes(r.categoria) ? ETIQUETA_CATEGORIA_COBRO[r.categoria as CategoriaCobro] : r.categoria;
+  const falta = Math.round((r.montoReclamado - r.montoAcreditado) * 100) / 100;
+  return `${cat} · ${numero(r.nCruces)} cruces · por acreditar ${mxn(falta)} · cobro más antiguo ${r.fechaCobroMasAntiguo}${r.referenciaPortal ? ` · folio ${r.referenciaPortal}` : ''}`;
+}
+
+/** «¿A qué reclamo corresponde esta nota?»: formulario GET (no escribe nada) y, si hay importe, la propuesta de `casarNota`. */
+export function CasarNota({ propuesta, reclamos, sufijo, desglose, mes }: {
+  propuesta: PropuestaNota | null; reclamos: ReclamoVista[]; sufijo: string; desglose: string | null; mes: string | null;
+}) {
+  const previos = new URLSearchParams(sufijo.replace(/^\?/, ''));
+  if (desglose) previos.set('desglose', desglose);
+  if (mes) previos.set('mes', mes);
+  previos.delete('nota');
+  const porId = new Map(reclamos.map((r) => [r.id, r]));
+  const r = propuesta?.resultado ?? null;
+  return (
+    <div className="mt-4 rounded-lg hairline p-3 text-[12.5px] space-y-2" id="casar-nota">
+      <h3 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>¿A qué reclamo corresponde una nota de crédito?</h3>
+      <p style={{ color: 'var(--muted)' }}>
+        El proveedor manda la nota sin decir qué cruces cubre. Escribe su importe y el sistema propone a qué reclamo(s) enviados les cuadra la suma exacta.
+        Es solo una sugerencia: no registra nada; la nota se captura en el reclamo que tú confirmes.
+      </p>
+      <form method="get" action="/dashboard/agentes/peajes/reclamacion" className="flex items-end gap-2 flex-wrap">
+        {[...previos.entries()].map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
+        <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Importe de la nota (MXN)</span>
+          <input name="nota" inputMode="decimal" required maxLength={20} defaultValue={propuesta?.texto ?? ''} className={`${CSS_INPUT} w-[140px] mt-0.5`} style={ESTILO_INPUT} /></label>
+        <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>Proponer reclamo</button>
+      </form>
+      {propuesta?.fallo && <p role="alert" style={{ color: 'var(--bad)' }}>No se pudo calcular la propuesta ahora mismo. No es que no haya coincidencia: inténtalo de nuevo.</p>}
+      {propuesta && !propuesta.fallo && propuesta.importe === null && <p role="alert" style={{ color: 'var(--bad)' }}>{propuesta.motivo ?? 'El importe no es válido.'}</p>}
+      {r && propuesta?.importe != null && (
+        <div className="space-y-1" role="status">
+          {r.alertas.includes('nota_mayor_que_reclamado') && (
+            <p style={{ color: 'var(--warn)' }}>La nota ({mxn(propuesta.importe)}) es mayor que todo lo que falta por acreditar: revisa si falta registrar un reclamo.</p>
+          )}
+          {r.tipo === 'seguro' && (
+            <p>Coincide exactamente con: <b>{etiquetaReclamo(porId.get(r.reclamoIds[0]), r.reclamoIds[0])}</b>. Confírmalo capturando la nota en ese reclamo.</p>
+          )}
+          {r.tipo === 'sugerido' && (
+            <>
+              <p>{r.ambiguo ? 'Hay más de una combinación posible; ninguna se elige sola:' : 'Podría corresponder a la suma de estos reclamos:'}</p>
+              <ul className="list-disc pl-5 space-y-0.5">
+                {r.opciones.map((op, i) => <li key={i}>{op.map((id) => etiquetaReclamo(porId.get(id), id)).join(' + ')}</li>)}
+              </ul>
+              {r.truncado && <p style={{ color: 'var(--muted)' }}>Hay más combinaciones de las que se muestran: casa la nota a mano.</p>}
+            </>
+          )}
+          {r.tipo === 'demasiados' && <p style={{ color: 'var(--muted)' }}>{r.mensaje}</p>}
+          {r.tipo === 'sin_casar' && !r.alertas.includes('importe_invalido') && (
+            <p style={{ color: 'var(--muted)' }}>Ningún reclamo enviado ni combinación de ellos suma {mxn(propuesta.importe)}. Puede ser una nota parcial: captúrala en el reclamo que creas que corresponde.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revision, error, propuestaNota, sufijo = '', mes = null }: {
   reclamos: ReclamoVista[] | null; resumen: ResumenSeguimiento | null; acciones: AccionesSeguimiento; desglose: string | null;
-  revision: ReporteRevision | null; error: boolean;
+  revision: ReporteRevision | null; error: boolean; propuestaNota?: PropuestaNota | null; sufijo?: string; mes?: string | null;
 }) {
   const conCandidatos = revision ? CATEGORIAS_COBRO.filter((c) => revision.revision.porCategoria[c].n > 0) : [];
   return (
@@ -319,6 +469,7 @@ export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revi
       {resumen && reclamos && (
         <p className="text-[12.5px] mt-3">
           {numero(resumen.reclamos)} reclamos · reclamado {mxn(resumen.montoReclamado)} · acreditado {mxn(resumen.montoAcreditado)} · <b>por acreditar {mxn(resumen.pendienteAcreditar)}</b>
+          {resumen.preparados > 0 && <> · <span style={{ color: 'var(--muted)' }}>{numero(resumen.preparados)} preparados sin enviar ({mxn(resumen.montoPreparado)}, aún no exigidos al proveedor)</span></>}
           {resumen.porVencer > 0 && <> · <span style={{ color: 'var(--warn)' }}>{numero(resumen.porVencer)} por vencer</span></>}
           {resumen.vencidos > 0 && <> · <span style={{ color: 'var(--bad)' }}>{numero(resumen.vencidos)} vencidos</span></>}
         </p>
@@ -372,6 +523,9 @@ export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revi
             </div>
           ))}
         </div>
+      )}
+      {reclamos && reclamos.some((r) => r.estado === 'enviado' || r.estado === 'acreditado_parcial') && (
+        <CasarNota propuesta={propuestaNota ?? null} reclamos={reclamos} sufijo={sufijo} desglose={desglose} mes={mes} />
       )}
       {desglose && conCandidatos.length > 0 && (
         <FormaRegistrarReclamo

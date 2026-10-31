@@ -1,4 +1,4 @@
-import { normalizarNombre, type Celda } from './formatos';
+import { normalizarNombre, normalizarEncabezado, esFilaDeEjemplo, FILA_DE_EJEMPLO, type Celda } from './formatos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CATÁLOGO DE CASETAS — importador por CSV y resolución de nombres.
@@ -7,7 +7,8 @@ import { normalizarNombre, type Celda } from './formatos';
 // y una coordenada inventada acusaría a un chofer con un dato de mentira. La
 // flota (o Likida, con el shapefile del IMT cuando se cargue) sube su CSV:
 //
-//   nombre;lat;lng;radio_m;alias;fuente;por_pasada
+//   nombre;carretera;por_pasada;lat;lng;radio_m;alias;fuente   (solo `nombre` es obligatorio; los encabezados toleran la
+//   explicación entre paréntesis de la plantilla: «nombre de la caseta (…)», «cobra por pasada (si/no)»)
 //   Caseta Ejemplo Norte;19.4326;-99.1332;300;Ejemplo N|Ej. Norte;captura propia;no
 //
 // LAS COORDENADAS SON OPCIONALES (T-A2-05). Una caseta vive por NOMBRE (+ alias):
@@ -36,6 +37,8 @@ export interface CasetaImportada {
   fuente: string | null;
   /** true/false si el archivo trae la columna; undefined = no la trae (no se pisa lo ya guardado). */
   porPasada?: boolean;
+  /** Carretera o tramo (texto libre). undefined = el archivo no trae la columna (no se pisa lo ya guardado); null = celda vacía. */
+  carretera?: string | null;
 }
 
 export interface LecturaCasetas {
@@ -44,14 +47,15 @@ export interface LecturaCasetas {
   error?: string;
 }
 
-const COLS: Record<'nombre' | 'lat' | 'lng' | 'radio' | 'alias' | 'fuente' | 'porPasada', string[]> = {
+const COLS: Record<'nombre' | 'lat' | 'lng' | 'radio' | 'alias' | 'fuente' | 'porPasada' | 'carretera', string[]> = {
   nombre: ['nombre', 'caseta', 'plaza', 'nombre de la caseta', 'nombre de la plaza'],
   lat: ['lat', 'latitud', 'latitude', 'y'],
   lng: ['lng', 'lon', 'long', 'longitud', 'longitude', 'x'],
   radio: ['radio', 'radio m', 'radio_m', 'radio metros', 'radio en metros'],
   alias: ['alias', 'otros nombres', 'sinonimos'],
   fuente: ['fuente', 'origen', 'referencia'],
-  porPasada: ['por pasada', 'por_pasada', 'tarifa por pasada', 'tarifa_por_pasada'],
+  porPasada: ['por pasada', 'por_pasada', 'tarifa por pasada', 'tarifa_por_pasada', 'cobra por pasada', 'cobra tarifa por pasada'],
+  carretera: ['carretera', 'carretera o tramo', 'tramo', 'autopista', 'carretera tramo'],
 };
 
 /** «si», «sí», «true», «1», «x» → true; «no», «false», «0» → false; vacío o raro → null. */
@@ -85,7 +89,8 @@ export function parsearCasetasMatriz(matriz: Celda[][]): LecturaCasetas {
   const vacio: LecturaCasetas = { casetas: [], rechazadas: [] };
   if (matriz.length === 0) return { ...vacio, error: 'El archivo está vacío.' };
 
-  const enc = matriz[0].map(normalizarNombre);
+  // Encabezados tolerantes: la plantilla que se le manda al cliente trae la explicación entre paréntesis en el propio encabezado.
+  const enc = matriz[0].map(normalizarEncabezado);
   const idx: Partial<Record<keyof typeof COLS, number>> = {};
   for (const k of Object.keys(COLS) as Array<keyof typeof COLS>) {
     const i = enc.findIndex((e) => COLS[k].includes(e));
@@ -99,7 +104,7 @@ export function parsearCasetasMatriz(matriz: Celda[][]): LecturaCasetas {
     return {
       ...vacio,
       error: `Faltan columnas: ${faltan.join(', ')}. Encabezados leídos: ${matriz[0].map((c) => `«${String(c ?? '').trim()}»`).join(', ')}. `
-        + 'El CSV necesita: nombre (y opcionales lat y lng —las dos juntas—, radio_m, alias, fuente, por_pasada).',
+        + 'El CSV necesita: nombre (y opcionales carretera, por pasada, lat y lng —las dos juntas—, radio_m, alias, fuente).',
     };
   }
   if (matriz.length - 1 > TOPE_CASETAS_IMPORTACION) {
@@ -117,6 +122,7 @@ export function parsearCasetasMatriz(matriz: Celda[][]): LecturaCasetas {
 
     const nombre = String(celda('nombre') ?? '').trim().replace(/\s+/g, ' ');
     if (!nombre) { rechazadas.push({ fila: n, motivo: 'sin nombre' }); continue; }
+    if (esFilaDeEjemplo(nombre)) { rechazadas.push({ fila: n, motivo: FILA_DE_EJEMPLO }); continue; }
     if (nombre.length > 120) { rechazadas.push({ fila: n, motivo: 'nombre de más de 120 caracteres' }); continue; }
     const nombreNorm = normalizarNombre(nombre);
     if (!nombreNorm) { rechazadas.push({ fila: n, motivo: 'el nombre no tiene letras ni dígitos' }); continue; }
@@ -161,7 +167,8 @@ export function parsearCasetasMatriz(matriz: Celda[][]): LecturaCasetas {
       .slice(0, 10);
     const fuente = String(celda('fuente') ?? '').trim().slice(0, 200) || null;
     const porPasada = idx.porPasada === undefined ? undefined : (booleanoDeCelda(celda('porPasada')) ?? false);
-    casetas.push({ fila: n, nombre, nombreNorm, alias, lat, lng, radioM, fuente, ...(porPasada === undefined ? {} : { porPasada }) });
+    const carretera = idx.carretera === undefined ? undefined : (String(celda('carretera') ?? '').trim().replace(/\s+/g, ' ').slice(0, 120) || null);
+    casetas.push({ fila: n, nombre, nombreNorm, alias, lat, lng, radioM, fuente, ...(porPasada === undefined ? {} : { porPasada }), ...(carretera === undefined ? {} : { carretera }) });
   }
   return { casetas, rechazadas };
 }

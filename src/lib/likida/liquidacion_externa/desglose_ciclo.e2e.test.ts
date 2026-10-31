@@ -267,6 +267,11 @@ const depsReenvio: DepsReenvio = {
   guardarCorreoOperador: async (_t, _op, correo) => { bd.contacto.correo = correo; bd.contacto.correoRebotadoEn = null; },
   insertarEntregas: async (_t, filas) => insertarEntregasEnMemoria(filas),
   registrarEvento: async (_t, id, tipo) => { bd.eventos.push({ id, tipo }); },
+  // A1-03: el reenvío revalida SIEMPRE la retención leyendo el encabezado del desglose.
+  leerDesglose: async (_t, id) => {
+    const d = bd.desgloses.find((x) => x.liquidacionExternaId === id);
+    return { existe: d !== undefined, retenidaMotivo: (d?.retenidaMotivo as string | null | undefined) ?? null };
+  },
 };
 
 // ── las tres bitácoras: ok, sin póliza y neto negativo ──────────────────────

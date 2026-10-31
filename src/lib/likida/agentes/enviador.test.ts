@@ -148,6 +148,19 @@ describe('correrEnviador', () => {
     expect(registrarCorrida).toHaveBeenCalledWith(null, 'enviador', expect.objectContaining({ estado: 'ok' }));
   });
 
+  it('A39-S28-03: una copia gmail/hotmail guardada que NO es el principal no viaja', async () => {
+    process.env.LIKIDA_ENVIADOR_AUTOAPROBAR = 'si';
+    respuestas.set('cola_aprobacion', [
+      { data: [PIEZA], error: null },
+      { data: [{ id: PIEZA.id }], error: null },
+    ]);
+    respuestas.set('prospecto_correo', [{ data: [{ correo: 'ventas@x.mx' }, { correo: 'agencia.web@gmail.com' }], error: null }]);
+    respuestas.set('correo_suprimido', [{ data: [], error: null }]);
+    respuestas.set('prospecto', [{ data: [], error: null }]);
+    await correrEnviador();
+    expect(enviarPiezaPorCorreo).toHaveBeenCalledWith(PIEZA.id, null, ['ventas@x.mx']);
+  });
+
   it('el principal en la lista de bajas: la pieza se SALTA con el motivo dicho', async () => {
     respuestas.set('cola_aprobacion', [{ data: [PIEZA], error: null }]);
     respuestas.set('prospecto_correo', [{ data: [], error: null }]);

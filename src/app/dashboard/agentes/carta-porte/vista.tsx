@@ -118,6 +118,10 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
             Lo que el agente aprende de cada cliente —productos, remitentes, destinatarios y su número interno— vive en el{' '}
             <Link href={`/dashboard/agentes/carta-porte/catalogo${sufijo}`} className="font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>catálogo del cliente →</Link>
           </p>
+          <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            Los clientes que necesitan su referencia para cobrar, y los viajes cargados que aún no la traen:{' '}
+            <Link href={`/dashboard/agentes/carta-porte/referencia${sufijo}`} className="font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>referencia del cliente →</Link>
+          </p>
 
           <section className="card p-4">
             <div className="flex items-center gap-2 mb-3">
@@ -342,6 +346,23 @@ function ViajesSinCcp({ listado }: { listado: ListadoSinCcp | 'no_leido' }) {
   if (listado === 'no_leido') {
     return <section className="card p-4"><EstadoError mensaje="No se pudo leer la lista de viajes salidos sin Carta Porte. Vuelve a intentar en un momento." /></section>;
   }
+  // A3-01 (cierre100): null no es 0. Sin ningún viaje importado del TMS no se puede decir que no haya viajes sin Carta Porte:
+  // ni cifra ni estado vacío verde, ni descarga.
+  if (listado.sinDatosTms?.motivo === 'sin_viajes') {
+    return (
+      <section className="space-y-3" aria-label="Viajes salidos sin Carta Porte">
+        <h2 className="font-display text-[15px] font-semibold">Viajes salidos sin Carta Porte</h2>
+        <p role="alert" className="card p-4 text-[13px]" style={{ color: 'var(--warn)' }}>
+          <strong>Sin datos del TMS:</strong> no se puede decir si hay viajes salidos sin Carta Porte. No hay ningún viaje importado del sistema de transporte en los últimos días
+          {listado.sinDatosTms.ultimoImportadoEn ? ` (el último que entró fue hace ${numero(listado.sinDatosTms.horasDesdeImportacion ?? 0)} h)` : ''}.
+          Esto no significa que todo tenga Carta Porte.
+        </p>
+      </section>
+    );
+  }
+  const ligados = listado.ligadosPorFolio;
+  // A3-02: si casi nada liga por folio, el supuesto «folio del TMS = folio del cliente» probablemente es falso y TODO saldría «sin CCP».
+  const pocoLigado = !!ligados && ligados.total >= 10 && ligados.ligados / ligados.total < 0.05;
   return (
     <section className="space-y-3" aria-label="Viajes salidos sin Carta Porte">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -351,12 +372,27 @@ function ViajesSinCcp({ listado }: { listado: ListadoSinCcp | 'no_leido' }) {
             className="text-[12.5px] font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>Descargar reporte (CSV)</a>
         )}
       </div>
+      {listado.sinDatosTms?.motivo === 'importacion_vieja' && (
+        <p role="alert" className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
+          La última importación de viajes del TMS fue hace {numero(listado.sinDatosTms.horasDesdeImportacion ?? 0)} h: esta lista puede estar atrasada y no debe leerse como «todo en regla».
+        </p>
+      )}
+      {ligados && (
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+          {numero(ligados.ligados)} de {numero(ligados.total)} viajes ligados a un documento por folio (cliente + folio).
+        </p>
+      )}
+      {pocoLigado && (
+        <p role="alert" className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
+          Casi ningún viaje liga con un documento por folio: es posible que el folio del TMS no sea el mismo número que el folio del cliente. Confírmalo antes de leer esta lista como riesgo de multa.
+        </p>
+      )}
       {listado.truncado && (
         <p role="alert" className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
           La lista está incompleta: hay más salidas de las que se pueden leer de una vez y faltan las más antiguas. Revisa los viajes viejos en Viajes.
         </p>
       )}
-      {listado.vacio && listado.truncado ? null : listado.vacio ? (
+      {listado.vacio && (listado.truncado || listado.sinDatosTms) ? null : listado.vacio ? (
         <EstadoVacio>No hay viajes salidos sin Carta Porte. Cuando salga uno sin complemento aparecerá aquí con las horas que lleva sin él.</EstadoVacio>
       ) : listado.grupos.map((g) => (
         <div key={g.clienteId ?? 'sin_cliente'} className="card p-4">

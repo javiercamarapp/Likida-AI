@@ -1282,6 +1282,8 @@ end $$;
 -- policy real, no un mock.
 --
 -- Corrido el 3-ago, salida real:  escribe-en-su-carpeta=t  escribe-en-carpeta-ajena=f
+-- 0948 (Ola 1 de seguridad, 29-oct-2026): se eliminaron las 4 políticas de `avatares` (el producto sube con service_role), así que AHORA
+-- ningún authenticated escribe en storage.objects, ni en su carpeta ni en la ajena: el esperado pasó de «true / false» a «false / false».
 do $$
 declare
   v_u1 uuid := gen_random_uuid();
@@ -1313,7 +1315,7 @@ begin
   set local storage.allow_delete_query = 'true';
   delete from storage.objects where bucket_id = 'avatares' and name in (v_u1::text || '/avatar.jpg', v_u2::text || '/avatar.jpg');
 
-  raise exception E'AVATARES_RLS  escribe-en-su-carpeta=%  escribe-en-carpeta-ajena=%   (esperado true / false — ajeno=true sería la fuga)',
+  raise exception E'AVATARES_RLS  escribe-en-su-carpeta=%  escribe-en-carpeta-ajena=%   (esperado false / false)',
     ok_propio, ok_ajeno;
 end $$;
 
@@ -6842,12 +6844,14 @@ begin
                        'facturacion_clientes_tenant', 'tablero_operacion_tenant',
                        'carga_operadores_tenant', 'incidencias_tenant');
 
-  -- ── 2+3. Rentabilidad: 15,000 de ingreso (el null NO suma), 2 sin ingreso ─
+  -- ── 2+3. Rentabilidad (A39-S20-01, 0928): ingreso y costo del MISMO universo, los viajes con liquidación vigente ─
+  --         (A1 y A2): 10,000 de ingreso (el null NO suma), 1 con y 1 sin ingreso; A3 y A4 no tienen liquidación.
   j := rentabilidad_tenant(ta, null);
-  ok_rent := (j->>'ingreso')::numeric = 15000        -- si B contamina: +99,999
-         and (j->>'costoComprobado')::numeric = 2200 -- si B contamina: +88,888
-         and (j->>'viajesConIngreso')::int = 2
-         and (j->>'viajesSinIngreso')::int = 2;
+  ok_rent := (j->>'ingreso')::numeric = 10000        -- si B contamina: +99,999; si entra el abierto A3: +5,000
+         and (j->>'costoComprobado')::numeric = 1500 -- 0931: solo el viaje CON ingreso (A1); el costo de A2, sin ingreso, no entra. Si B contamina: +88,888
+         and (j->>'viajesConIngreso')::int = 1
+         and (j->>'viajesSinIngreso')::int = 1
+         and (j->>'viajesSinLiquidar')::int = 2;
 
   -- ── 2+3. Cartera: reparto por cliente, saldo del más grande, sin cliente ─
   j := cartera_tenant(ta);

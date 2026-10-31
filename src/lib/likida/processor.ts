@@ -313,6 +313,26 @@ async function pegarCodigoEnEspera(tenantId: string, viajeId: string, gasto: Gas
  * registra como ERROR y no como warn, porque el silencio deja a la flota sin
  * poder cumplir y sin enterarse.
  */
+/** L-legal-01: ¿el texto trae una EMERGENCIA ROJA? Una emergencia de vida le gana al trámite ARCO aunque el mensaje mencione «derechos ARCO». */
+function esEmergenciaRoja(texto: string): boolean {
+  return interpretarAsistencia(texto)?.nivel === 'rojo';
+}
+
+/**
+ * A37-ola9-N1: la prioridad del ROJO sobre el ARCO solo vale si el remitente es alguien a quien el ROJO SÍ atiende más abajo (operador
+ * ACTIVO o cuenta de oficina con flota). Una baja, un cliente del Vigía o un número desconocido que escribe ARCO + palabras ROJO tiene que
+ * dejar su constancia ARCO (el plazo legal corre). Ante un fallo de lectura se responde falso: el camino ARCO es el que no pierde el derecho.
+ */
+async function rojoLoAtiendeOtroCamino(from: string): Promise<boolean> {
+  try {
+    if (await resolveOperador(from)) return true;
+  } catch { return false; }
+  try {
+    const cuenta = await resolverCuentaOficina(from);
+    return Boolean(cuenta?.tenantId);
+  } catch { return false; }
+}
+
 /**
  * Atiende el ejercicio del medio ARCO. Se llama ANTES del corte por "sin viaje
  * abierto": el derecho no depende de que la flota le haya asignado uno.
@@ -320,7 +340,13 @@ async function pegarCodigoEnEspera(tenantId: string, viajeId: string, gasto: Gas
  * Nunca lanza: dejar sin respuesta a quien ejerce un derecho es peor que
  * cualquier fallo que se pueda registrar.
  */
-async function atenderPrivacidad(tenantId: string, operadorId: string | null, telefono: string, texto: string, titularUserId: string | null = null): Promise<void> {
+async function atenderPrivacidad(
+  tenantId: string, operadorId: string | null, telefono: string, texto: string, titularUserId: string | null = null,
+  // L-legal-01: cuando el mismo mensaje trae una EMERGENCIA ROJA, ésta ya contestó y manda; la constancia ARCO se deja igual (el plazo del
+  // art. 31 corre) pero sin un segundo mensaje legal encima de la emergencia.
+  opciones: { soloRegistrar?: boolean } = {},
+): Promise<void> {
+  const enviar = opciones.soloRegistrar ? async (_t: string, _m: string): Promise<void> => {} : sendText;
   try {
     // ── LA CONSTANCIA SE DEJA SIEMPRE, antes de decidir qué contestar ──────
     // AUDITORÍA 12, ALTO (legal): el aviso promete "queda registrada tu
@@ -359,7 +385,7 @@ async function atenderPrivacidad(tenantId: string, operadorId: string | null, te
 
     const datos = await getDatosResponsable(tenantId);
     if (datos) {
-      await sendText(telefono, respuestaPrivacidad(datos, registrada));
+      await enviar(telefono, respuestaPrivacidad(datos, registrada));
       // ── E1 (auditoría 4): la oposición ENCIENDE algo, no solo se archiva ──
       // Hasta hoy, oponerse insertaba la fila de arriba y no ocurría nada más:
       // el aviso prometía "que la revise alguien" y el pipeline seguía
@@ -378,7 +404,7 @@ async function atenderPrivacidad(tenantId: string, operadorId: string | null, te
             // operativo — es exactamente lo que alguien tiene que arreglar mañana.
             logger.error('arco.oposicion_no_encendida', { tenantId, operadorId, err: error.message });
           } else {
-            await sendText(telefono, 'Además, desde ahora tus liquidaciones las revisa una persona antes de cerrarse. Queda registrado. 👍');
+            await enviar(telefono, 'Además, desde ahora tus liquidaciones las revisa una persona antes de cerrarse. Queda registrado. 👍');
           }
         } else {
           // AUDITORÍA 28, LEG-C1: antes esta rama se saltaba en silencio — la
@@ -394,7 +420,7 @@ async function atenderPrivacidad(tenantId: string, operadorId: string | null, te
     // la verdad en vez de dejarlo sin respuesta — y la solicitud YA quedó
     // registrada arriba (A10), así que "te confirmo" tiene algo que lo sostenga.
     logger.error('privacidad.solicitud_sin_datos_responsable', { tenantId, tipo, registrada });
-    await sendText(telefono, registrada
+    await enviar(telefono, registrada
       ? 'Tu solicitud quedó registrada. Déjame checar con la empresa los datos del responsable y te confirmo por aquí. 🙏'
       : 'Déjame checarlo con la empresa y te confirmo por aquí. 🙏');
   } catch (e) {
@@ -668,6 +694,9 @@ async function atenderTextoOficina(
       if (rOficina) {
         logger.info('oficina.asistencia_rojo', { user: cuenta.userId });
         await sendText(from, rOficina);
+        if (cuenta.tenantId && pideAtencionPrivacidad(texto)) {
+          await atenderPrivacidad(cuenta.tenantId, null, from, texto, cuenta.userId, { soloRegistrar: true });
+        }
         return true;
       }
     }
@@ -1290,7 +1319,11 @@ async function entregarCierrePendiente(op: ResolvedOperador, telefono: string, l
       // `avisar_cierre.ts` ya documentaba).
       const pdfJefeOk = pdfListoParaSellar(liq.pdfUrl, rj);
       if (rj.enviado && pdfJefeOk) {
-        if (rj.pdfEstado === 'definitivo') {
+        if (rj.pdfEstado === 'definitivo' && rj.pdfAvisadoPorPlantilla) {
+          // A39-S30-03: el documento libre no entró por la ventana de 24 h, pero el jefe SÍ fue avisado por plantilla con la
+          // liga al panel: nadie se quedó sin enterarse. Solo queda el rastro en el log.
+          logger.warn('cierre.pdf_jefe_avisado_por_plantilla', { ...ctx });
+        } else if (rj.pdfEstado === 'definitivo') {
           // Se avisa UNA vez —queda sellado, no se repite— y el motivo va al
           // log: el ejemplar del contralor no llegó y nadie más lo va a decir.
           logger.error('cierre.pdf_jefe_definitivo', { ...ctx, motivo: rj.motivo });
@@ -1642,7 +1675,9 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // pantalla que la apague. Responde a cualquiera que escriba PRIVACIDAD —
     // activo o no, dado de alta o no—, y por eso su comentario no tiene por
     // qué nombrar el inventario de escritores de `operador.activo`.
-    if ((msg.type === 'text' || msg.type === 'image') && msg.text && pideAtencionPrivacidad(msg.text)) {
+    // L-legal-01: una emergencia ROJA va ANTES que el trámite ARCO (el ROJO de más abajo la atiende y deja la constancia ARCO sin molestar).
+    if ((msg.type === 'text' || msg.type === 'image') && msg.text && pideAtencionPrivacidad(msg.text)
+      && !(esEmergenciaRoja(msg.text) && await rojoLoAtiendeOtroCamino(msg.from))) {
       // AUDITORÍA 28, LEG-C1 (CRÍTICO): antes solo resolvía `tenantId` (vía
       // `buscarTenantPorTelefono`, que no trae el id del operador) y pasaba
       // `operadorId: null` fijo — ver el comentario de
@@ -1897,6 +1932,11 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // se ve afectado, no todo el canal de WhatsApp).
     if (await pipelineTenantApagado(op.tenantId, 'whatsapp')) {
       logger.warn('wa.pipeline_tenant_apagado', { tenant: op.tenantId, operador: op.operadorId });
+      // A37-ola9-N1: el ARCO + ROJO de un operador activo lo salta la rama ARCO temprana (el ROJO lo atendería más abajo); con el pipeline
+      // pausado ese camino no se alcanza, así que la constancia se deja aquí (en silencio).
+      if ((msg.type === 'text' || msg.type === 'image') && msg.text && pideAtencionPrivacidad(msg.text) && esEmergenciaRoja(msg.text)) {
+        await atenderPrivacidad(op.tenantId, op.operadorId, msg.from, msg.text, null, { soloRegistrar: true });
+      }
       await sendText(msg.from, 'Tu flota puso en pausa la recepción automática por WhatsApp ahorita. Guarda tu foto o mensaje y reenvíamelo más tarde, o contacta a tu oficina.');
       return;
     }
@@ -1995,7 +2035,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // arriba —antes de la resolución de identidad— ya lo atiende, incluido al
     // operador dado de baja: este bloque queda como red redundante por si el
     // de arriba cambia de orden.)
-    if ((msg.type === 'text' || msg.type === 'image') && msg.text && pideAtencionPrivacidad(msg.text)) {
+    if ((msg.type === 'text' || msg.type === 'image') && msg.text && pideAtencionPrivacidad(msg.text) && !esEmergenciaRoja(msg.text)) {
       await atenderPrivacidad(op.tenantId, op.operadorId, msg.from, msg.text);
       return;
     }
@@ -2035,6 +2075,10 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         });
         logger.info('asistencia.rojo', { viaje: viajeId, tipoMsg: msg.type, mudo: emergencia.modoMudo });
         await sendText(msg.from, r.respuesta);
+        // L-legal-01: si el mismo mensaje ejercía un derecho ARCO, la constancia se deja igual (en silencio).
+        if (pideAtencionPrivacidad(msg.text)) {
+          await atenderPrivacidad(op.tenantId, op.operadorId, msg.from, msg.text, null, { soloRegistrar: true });
+        }
         return;
       }
     }
