@@ -107,11 +107,17 @@ export async function perfilDeTenant(
 // punto de acceso a Supabase y la misma disciplina de caché (30 s por tenant). La RESOLUCIÓN
 // (env, cookie del superadmin, fila) vive en `version_ui.ts`, que no toca la base.
 //
-// FALLA HACIA v1 — lo opuesto al perfil: ante un error de lectura se usa el último valor
-// conocido y, sin él, v1 (el panel de siempre). Una tabla ausente (`42P01`/`PGRST205`: la
-// migración aún no se aplica en esa base) es «sin fila» = v1. Los errores no se cachean.
+// POR OMISIÓN (30-oct-2026, orden de Javier: v2 para TODAS las cuentas): SIN FILA = v2. Una fila `v1` es la salida
+// explícita (opt-out) de una flota concreta. Antes de esa fecha la omisión era v1; el cambio es SOLO el valor de
+// `VERSION_UI_POR_OMISION` (un commit aparte, fácil de revertir).
+//
+// FALLA HACIA LA OMISIÓN: ante un error de lectura se usa el último valor conocido y, sin él, la versión por omisión.
+// Una tabla ausente (`42P01`/`PGRST205`: la migración aún no se aplica en esa base) es «sin fila». Los errores no se cachean.
 
 export type VersionUiTenant = 'v1' | 'v2';
+
+/** La interfaz de una flota SIN fila en `tenant_ui` (y la que se usa si la lectura falla sin valor previo). */
+export const VERSION_UI_POR_OMISION: VersionUiTenant = 'v2';
 
 interface EntradaUi { version: VersionUiTenant; hasta: number }
 const cacheUi = new Map<string, EntradaUi>();
@@ -128,31 +134,32 @@ export function reiniciarCacheUi(): void {
 }
 
 /**
- * La versión de interfaz que la BASE dice para una flota (`v1` si no hay fila, si no hay tenant o si no se pudo
- * leer). Cacheada por tenant (`TTL_PERFIL_MS`). Nunca lanza. No mira env ni cookies: eso es `version_ui.ts`.
+ * La versión de interfaz que la BASE dice para una flota (`VERSION_UI_POR_OMISION` si no hay fila, si no hay tenant o si
+ * no se pudo leer; una fila `v1` es la salida explícita). Cacheada por tenant (`TTL_PERFIL_MS`). Nunca lanza. No mira
+ * env ni cookies: eso es `version_ui.ts`.
  */
 export async function versionUiDeTenant(
   tenantId: string | null | undefined,
   ahora: number = Date.now(),
 ): Promise<VersionUiTenant> {
-  if (!tenantId) return 'v1';
+  if (!tenantId) return VERSION_UI_POR_OMISION;
   const hit = cacheUi.get(tenantId);
   if (hit && hit.hasta > ahora) return hit.version;
   try {
     const { data, error } = await leerFilaUi(tenantId);
     if (error && (error.code === '42P01' || error.code === 'PGRST205')) {
-      cacheUi.set(tenantId, { version: 'v1', hasta: ahora + TTL_PERFIL_MS });
-      return 'v1';
+      cacheUi.set(tenantId, { version: VERSION_UI_POR_OMISION, hasta: ahora + TTL_PERFIL_MS });
+      return VERSION_UI_POR_OMISION;
     }
     if (error) throw new Error(error.message);
-    // Un valor que el código no conoce (la base ya lo rechaza con CHECK) es v1, nunca v2.
-    const version: VersionUiTenant = data?.version === 'v2' ? 'v2' : 'v1';
+    // Solo un `v1` EXPLÍCITO es salida; sin fila (o un valor que el código no conoce: la base ya lo rechaza con CHECK) manda la omisión.
+    const version: VersionUiTenant = data?.version === 'v1' ? 'v1' : VERSION_UI_POR_OMISION;
     cacheUi.set(tenantId, { version, hasta: ahora + TTL_PERFIL_MS });
     ultimaUi.set(tenantId, version);
     return version;
   } catch (e) {
     logger.warn('version_ui.ilegible', { tenantId, err: e instanceof Error ? e.message : String(e) });
-    return ultimaUi.get(tenantId) ?? 'v1';
+    return ultimaUi.get(tenantId) ?? VERSION_UI_POR_OMISION;
   }
 }
 
