@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createElement } from 'react';
 import { Aviso } from './componentes/aviso';
 import { Chip } from './componentes/chip';
 
@@ -13,7 +12,7 @@ describe('estados informativos sin depender solo del color', () => {
   it('cada tono de Aviso lleva un icono DISTINTO y su texto, y el error es role=alert', () => {
     const iconos = new Set<string>();
     for (const t of TONOS) {
-      const html = renderToStaticMarkup(createElement(Aviso, { tono: t }, 'Mensaje de prueba'));
+      const html = renderToStaticMarkup(<Aviso tono={t}>Mensaje de prueba</Aviso>);
       expect(html).toContain('Mensaje de prueba');
       const icono = html.match(/lucide-([a-z0-9-]+)/)?.[1];
       expect(icono, `el tono ${t} no trae icono`).toBeTruthy();
@@ -24,7 +23,7 @@ describe('estados informativos sin depender solo del color', () => {
   });
 
   it('un Chip informativo siempre lleva texto (no es un punto de color)', () => {
-    const html = renderToStaticMarkup(createElement(Chip, { tono: 'info' }, 'En curso'));
+    const html = renderToStaticMarkup(<Chip tono="info">En curso</Chip>);
     expect(html).toContain('En curso');
   });
 
