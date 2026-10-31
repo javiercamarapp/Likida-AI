@@ -2,6 +2,9 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { numero } from '@/lib/formato';
 import { metrica, type MetricaId } from '../metricas';
+import type { InfoClave } from '../info-catalogo';
+import { InfoTip } from '../componentes/info-tip';
+import { ConteoKpi } from './conteo-kpi';
 import { KindBadge, type TipoDato } from './kind-badge';
 import { Sparkline } from './sparkline';
 
@@ -28,6 +31,10 @@ export interface ItemKpi {
   matiz?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
   tipo?: TipoDato;
   href?: string;
+  /** Clave del catálogo de explicaciones: pone la ⓘ en la esquina de la celda. */
+  info?: InfoClave;
+  /** Conteo corto de la cifra al montar (solo valores numéricos; sin pasar por 0; respeta reduced-motion). */
+  conteo?: boolean;
 }
 
 const FLECHA = { sube: '▲', baja: '▼', igual: '■' } as const;
@@ -57,10 +64,13 @@ export function TiraKpi({ items, etiqueta = 'Indicadores' }: { items: ItemKpi[];
           <>
             <span className="rv-kpi__cab">
               {it.icono ? <span className="rv-kpi__icono" aria-hidden="true">{it.icono}</span> : null}
-              <span className="rv-kpi__etq">{it.etiqueta}</span>
+              {it.info && it.href ? <Link href={it.href} className="rv-kpi__etq rv-kpi__enlace">{it.etiqueta}</Link> : <span className="rv-kpi__etq">{it.etiqueta}</span>}
+              {it.info ? <InfoTip clave={it.info} /> : null}
             </span>
             <span className="rv-kpi__fila">
-              <span className="rv-kpi__valor" data-vacio={vacio || undefined}>{texto}</span>
+              <span className="rv-kpi__valor" data-vacio={vacio || undefined}>
+                {it.conteo && typeof it.valor === 'number' ? <ConteoKpi valor={it.valor} formato={numero} /> : texto}
+              </span>
               {!vacio && it.serie && it.serie.length > 1 ? <span className="rv-kpi__spark"><Sparkline valores={it.serie} matiz={matiz} /></span> : null}
             </span>
             {!vacio && segs.length > 0 ? (
@@ -85,7 +95,8 @@ export function TiraKpi({ items, etiqueta = 'Indicadores' }: { items: ItemKpi[];
           </>
         );
         const comunes = { 'data-matiz': matiz, title: sello } as const;
-        return it.href ? (
+        // Un botón ⓘ no puede ir DENTRO de un enlace: con `info`, el enlace pasa a la etiqueta y la celda es un div.
+        return it.href && !it.info ? (
           <Link key={it.etiqueta} href={it.href} className="rv-kpi" {...comunes}>{cuerpo}</Link>
         ) : (
           <div key={it.etiqueta} className="rv-kpi" {...comunes}>{cuerpo}</div>

@@ -3,8 +3,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { rmSync, writeFileSync } from 'node:fs';
 import { build } from 'vite';
-import { chromium, type Browser, type Page } from 'playwright';
+import { type Browser, type Page } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { lanzarNavegador, SIN_NAVEGADOR } from '../navegador_prueba';
 
 // COMPORTAMIENTO REAL (Chromium) de Drawer y Modal: foco atrapado, Esc, retorno de foco, clic al fondo,
 // aria, alertdialog y arrastre de la hoja inferior. No es regex sobre CSS: monta React de verdad.
@@ -40,7 +41,7 @@ let bundle = '';
 
 beforeAll(async () => {
   // La entrada vive junto al código (para resolver react y lucide) y se borra al terminar.
-  const entrada = join(__dirname, '.entrada_overlay.tmp.tsx');
+  const entrada = join(__dirname, `.entrada_overlay_${process.pid}.tmp.tsx`);
   writeFileSync(entrada, ENTRADA);
   try {
     const r = await build({
@@ -51,7 +52,7 @@ beforeAll(async () => {
     const salida = (Array.isArray(r) ? r[0] : r) as { output: Array<{ type: string; code?: string }> };
     bundle = salida.output.find((o) => o.type === 'chunk')!.code!;
   } finally { rmSync(entrada, { force: true }); }
-  try { browser = await chromium.launch(); } catch { browser = null; } // sin Chromium instalado: las pruebas se omiten
+  browser = await lanzarNavegador();
 }, 60_000);
 afterAll(async () => { await browser?.close(); });
 
@@ -63,9 +64,8 @@ async function abrir(ancho = 1280, alto = 800): Promise<Page> {
   return page;
 }
 
-describe('Drawer / Modal · comportamiento en Chromium', () => {
-  it('abre como <dialog> modal, nombrado por su título, y mueve el foco adentro', async ({ skip }) => {
-    if (!browser) skip();
+describe.skipIf(SIN_NAVEGADOR)('Drawer / Modal · comportamiento en Chromium', () => {
+  it('abre como <dialog> modal, nombrado por su título, y mueve el foco adentro', async () => {
     const p = await abrir();
     await p.click('#abre-d');
     expect(await p.evaluate(() => document.querySelector('dialog.rv-ov--drawer')?.hasAttribute('open'))).toBe(true);
@@ -73,8 +73,7 @@ describe('Drawer / Modal · comportamiento en Chromium', () => {
     expect(await p.evaluate(() => document.querySelector('dialog.rv-ov--drawer')!.contains(document.activeElement))).toBe(true);
     await p.close();
   });
-  it('el foco queda atrapado: Tab repetido nunca sale del diálogo y lo de afuera es inerte', async ({ skip }) => {
-    if (!browser) skip();
+  it('el foco queda atrapado: Tab repetido nunca sale del diálogo y lo de afuera es inerte', async () => {
     const p = await abrir();
     await p.click('#abre-d');
     for (let i = 0; i < 8; i++) {
@@ -85,8 +84,7 @@ describe('Drawer / Modal · comportamiento en Chromium', () => {
     expect(await p.evaluate(() => document.querySelector('dialog.rv-ov--drawer')!.contains(document.activeElement))).toBe(true);
     await p.close();
   });
-  it('Esc llama a onCerrar una vez, cierra y devuelve el foco al disparador', async ({ skip }) => {
-    if (!browser) skip();
+  it('Esc llama a onCerrar una vez, cierra y devuelve el foco al disparador', async () => {
     const p = await abrir();
     await p.focus('#abre-d');
     await p.keyboard.press('Enter');
@@ -96,8 +94,7 @@ describe('Drawer / Modal · comportamiento en Chromium', () => {
     expect(await p.evaluate(() => document.activeElement?.id)).toBe('abre-d');
     await p.close();
   });
-  it('clic en el fondo cierra; clic dentro del panel no', async ({ skip }) => {
-    if (!browser) skip();
+  it('clic en el fondo cierra; clic dentro del panel no', async () => {
     const p = await abrir();
     await p.click('#abre-d');
     await p.click('#campo');
@@ -106,16 +103,14 @@ describe('Drawer / Modal · comportamiento en Chromium', () => {
     await p.waitForFunction(() => !document.querySelector('dialog.rv-ov--drawer')!.hasAttribute('open'));
     await p.close();
   });
-  it('Drawer mide 420 de ancho en escritorio, con margen de 8', async ({ skip }) => {
-    if (!browser) skip();
+  it('Drawer mide 420 de ancho en escritorio, con margen de 8', async () => {
     const p = await abrir(1440, 900);
     await p.click('#abre-d');
     const r = await p.evaluate(() => { const b = document.querySelector('dialog.rv-ov--drawer .rv-ov__panel')!.getBoundingClientRect(); return { w: Math.round(b.width), top: Math.round(b.top), right: Math.round(innerWidth - b.right) }; });
     expect(r).toEqual({ w: 420 - 0, top: 8, right: 8 });
     await p.close();
   });
-  it('Modal de confirmación: foco adentro y Esc; la alerta usa role=alertdialog', async ({ skip }) => {
-    if (!browser) skip();
+  it('Modal de confirmación: foco adentro y Esc; la alerta usa role=alertdialog', async () => {
     const p = await abrir();
     await p.click('#abre-m');
     expect(await p.evaluate(() => document.querySelector('dialog.rv-ov--modal')!.contains(document.activeElement))).toBe(true);
@@ -125,8 +120,7 @@ describe('Drawer / Modal · comportamiento en Chromium', () => {
     expect(await p.evaluate(() => document.querySelector('dialog[role="alertdialog"]')?.hasAttribute('open'))).toBe(true);
     await p.close();
   });
-  it('hoja inferior <820: ≤90 dvh, grabber visible y arrastrar >80 px cierra (menos de 80 no)', async ({ skip }) => {
-    if (!browser) skip();
+  it('hoja inferior <820: ≤90 dvh, grabber visible y arrastrar >80 px cierra (menos de 80 no)', async () => {
     const p = await abrir(390, 844);
     await p.click('#abre-d');
     const g = await p.evaluate(() => { const pn = document.querySelector('dialog.rv-ov--drawer .rv-ov__panel')!.getBoundingClientRect(); const gr = document.querySelector('.rv-ov__grabber')!; return { alto: pn.height, grabber: getComputedStyle(gr).display, ancho: Math.round(pn.width), pie: Math.round(innerHeight - pn.bottom) }; });

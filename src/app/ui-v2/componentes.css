@@ -366,9 +366,9 @@
 @media (max-width: 819px) and (prefers-reduced-motion: no-preference) {
 [data-ui="v2"] .rv-ov--drawer[open] .rv-ov__panel { animation-name: rv-ov-abajo; }
 }
-[data-ui="v2"] .rv-vacio { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 12px; min-height: 44px; padding: 8px 14px; border: 1.5px dotted var(--input); border-radius: 8px; background: transparent; text-align: center; }
+[data-ui="v2"] .rv-vacio { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 12px; min-height: 32px; padding: 2px 12px; border: 1.5px dotted var(--input); border-radius: 8px; background: transparent; text-align: center; }
 @media (max-width: 819px) {
-[data-ui="v2"] .rv-vacio { padding: 2px 12px; flex-wrap: nowrap; min-height: 0; }
+[data-ui="v2"] .rv-vacio { flex-wrap: nowrap; }
 [data-ui="v2"] .rv-vacio__texto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 [data-ui="v2"] .rv-vacio__titulo { margin: 0; font-size: 13px; line-height: 1.4; font-weight: 600; color: var(--ink); }
@@ -495,4 +495,95 @@
 [data-ui="v2"] .rv-menu__icono svg { width: 16px; height: 16px; }
 @media (prefers-reduced-motion: no-preference) {
   [data-ui="v2"] .rv-pop { animation: rv-ov-fondo 140ms var(--ui-ease) both; }
+}
+
+/* ═══ B4 · Chip activo (filtros, segmentados) ═══
+   Los tokens de marca (--btn-*, --marino, --crema, --chart-*) los define el shell en tokens.css: aquí NO se repiten.
+   Solo el chip activo tiene los suyos: marino con texto blanco (AA); en oscuro #3a5580 (el marino claro de tokens.css no da AA con blanco). */
+:root [data-ui="v2"] {
+  --chip-activo-bg: var(--marino, #2a3f5f);
+  --chip-activo-fg: #ffffff;
+}
+:root[data-theme="dark"] [data-ui="v2"] {
+  --chip-activo-bg: #3a5580;
+  --chip-activo-fg: #ffffff;
+}
+/* Chip activo (filtros, segmentados): marino con texto blanco (AA). */
+[data-ui="v2"] .rv-chip[aria-pressed="true"], [data-ui="v2"] .rv-chip[data-activo] { background: var(--chip-activo-bg); color: var(--chip-activo-fg); border-color: var(--chip-activo-bg); }
+[data-ui="v2"] button.rv-chip { cursor: pointer; font-family: inherit; }
+[data-ui="v2"] button.rv-chip:hover:not([aria-pressed="true"]) { background: var(--canvas); }
+[data-ui="v2"] button.rv-chip:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* ═══ B4 · PanelLateral: anchos 320 / 420 / 560 ═══ */
+[data-ui="v2"] .rv-ov--drawer[data-ancho="320"] { width: min(calc(100vw - 16px), 320px); }
+[data-ui="v2"] .rv-ov--drawer[data-ancho="420"] { width: min(calc(100vw - 16px), 420px); }
+[data-ui="v2"] .rv-ov--drawer[data-ancho="560"] { width: min(calc(100vw - 16px), 560px); }
+@media (max-width: 819px) { [data-ui="v2"] .rv-ov--drawer[data-ancho] { width: 100vw; } }
+
+/* ═══ B4 · InfoTip (ⓘ) y su explicación unificada ═══ */
+[data-ui="v2"] .rv-info { position: relative; display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; }
+[data-ui="v2"] .rv-info::after { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+[data-ui="v2"] .rv-info:hover, [data-ui="v2"] .rv-info[aria-expanded="true"] { background: var(--canvas); color: var(--ink); }
+[data-ui="v2"] .rv-info:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+[data-ui="v2"] .rv-info svg { width: 16px; height: 16px; }
+[data-ui="v2"] .rv-pop--info { width: 280px; padding: 10px 12px; }
+[data-ui="v2"] .rv-infotexto { display: grid; gap: 8px; margin: 0; font-size: 12px; line-height: 1.45; }
+[data-ui="v2"] .rv-infotexto dt { margin: 0; font-size: 12px; font-weight: 600; color: var(--ink); }
+[data-ui="v2"] .rv-infotexto dd { margin: 2px 0 0; color: var(--ink2); }
+[data-ui="v2"] .rv-infotexto__titulo { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--ink); }
+
+/* ═══ B4 · Tarjeta unificada (CardV2): título + ⓘ + acciones, radio 12, padding compacto ═══ */
+[data-ui="v2"] .rv-tarjeta { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: none; }
+[data-ui="v2"] .rv-tarjeta__cab { display: flex; align-items: center; gap: 4px; height: 32px; }
+[data-ui="v2"] .rv-tarjeta__titulo { margin: 0; min-width: 0; font: 600 14px/1.3 var(--font-sans-ui, inherit); letter-spacing: -.01em; color: var(--ink); }
+[data-ui="v2"] .rv-tarjeta__acciones { display: flex; align-items: center; gap: 8px; margin-left: auto; padding-left: 8px; flex: none; }
+/* La ⓘ va SIEMPRE en la esquina derecha del encabezado (mismo sitio en toda tarjeta y celda de KPI). */
+[data-ui="v2"] .rv-tarjeta__cab > .rv-info { margin-left: auto; }
+[data-ui="v2"] .rv-tarjeta__acciones + .rv-info { margin-left: 4px; }
+[data-ui="v2"] .rv-tarjeta__cuerpo { min-width: 0; }
+[data-ui="v2"] .rv-tarjeta[aria-busy="true"] .rv-tarjeta__cuerpo { opacity: .6; }
+[data-ui="v2"] .rv-tarjeta__error { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 2px 10px; border: 1px solid color-mix(in srgb, var(--bad) 28%, transparent); border-radius: 8px; background: var(--badbg); color: var(--bad); font-size: 13px; }
+[data-ui="v2"] .rv-tarjeta__error span { flex: 1 1 auto; min-width: 0; }
+/* KPI: la ⓘ vive en la esquina del encabezado de la celda, siempre en el mismo sitio. */
+[data-ui="v2"] .rv-kpi__cab { position: relative; }
+[data-ui="v2"] .rv-kpi__cab .rv-info { margin: -4px -6px -4px auto; }
+
+/* ═══ B4 · BarraFiltros: UNA barra de 40 px (búsqueda + chips + «Filtros»), sticky ═══ */
+[data-ui="v2"] .rv-filtros { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 8px; height: 40px; min-width: 0; padding: 4px 0; background: var(--bg); }
+[data-ui="v2"] .rv-filtros__buscar { flex: 0 1 260px; min-width: 140px; }
+[data-ui="v2"] .rv-filtros__buscar input { width: 100%; min-height: 32px; height: 32px; padding: 0 10px; border: 1px solid var(--input); border-radius: 8px; background: var(--surface); color: var(--ink); font: 400 13px/1.25 var(--font-sans-ui, inherit); }
+[data-ui="v2"] .rv-filtros__buscar input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+[data-ui="v2"] .rv-filtros__chips { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+[data-ui="v2"] .rv-filtros__chips::-webkit-scrollbar { display: none; }
+[data-ui="v2"] .rv-filtros__chips > * { flex: none; }
+[data-ui="v2"] .rv-filtros__derecha { display: flex; align-items: center; gap: 8px; flex: none; margin-left: auto; }
+[data-ui="v2"] .rv-filtros__fuentes { font-size: 12px; color: var(--muted); white-space: nowrap; }
+@media (max-width: 819px) {
+  [data-ui="v2"] .rv-tarjeta { padding: 12px; gap: 6px; }
+  [data-ui="v2"] .rv-filtros { height: 44px; }
+  [data-ui="v2"] .rv-filtros__buscar { flex: 0 1 140px; min-width: 96px; }
+  [data-ui="v2"] .rv-filtros__buscar input { height: 34px; font-size: 16px; }
+  [data-ui="v2"] .rv-filtros__fuentes { display: none; }
+}
+
+/* ═══ B4 · Entradas escalonadas (120-220 ms, sin opacidad) y respeto de reduced-motion ═══ */
+@media (prefers-reduced-motion: no-preference) {
+  [data-ui="v2"] .rv-escalona > * { animation: rv-sube 220ms var(--ui-ease) both; animation-delay: calc(var(--i, 0) * 40ms); }
+  [data-ui="v2"] .rv-escalona > :nth-child(1) { --i: 0; }
+  [data-ui="v2"] .rv-escalona > :nth-child(2) { --i: 1; }
+  [data-ui="v2"] .rv-escalona > :nth-child(3) { --i: 2; }
+  [data-ui="v2"] .rv-escalona > :nth-child(4) { --i: 3; }
+  [data-ui="v2"] .rv-escalona > :nth-child(5) { --i: 4; }
+  [data-ui="v2"] .rv-escalona > :nth-child(6) { --i: 5; }
+  [data-ui="v2"] .rv-escalona > :nth-child(n+7) { --i: 6; }
+  [data-ui="v2"] .rv-kpis .rv-kpi { animation: rv-sube 220ms var(--ui-ease) both; }
+  [data-ui="v2"] .rv-kpis .rv-kpi:nth-child(2) { animation-delay: 40ms; }
+  [data-ui="v2"] .rv-kpis .rv-kpi:nth-child(3) { animation-delay: 80ms; }
+  [data-ui="v2"] .rv-kpis .rv-kpi:nth-child(n+4) { animation-delay: 120ms; }
+  [data-ui="v2"] .rv-info { transition: background-color var(--ui-fast) ease, color var(--ui-fast) ease; }
+  [data-ui="v2"] .rv-pop--info { animation: rv-ov-fondo 140ms var(--ui-ease) both; }
+}
+@media (forced-colors: active) {
+  [data-ui="v2"] .rv-info { border: 1px solid ButtonText; }
+  [data-ui="v2"] .rv-chip[aria-pressed="true"], [data-ui="v2"] .rv-chip[data-activo] { forced-color-adjust: none; background: Highlight; color: HighlightText; border-color: Highlight; }
 }

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from 'react';
+import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode, Ref } from 'react';
 import { cx } from './clases';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -39,7 +39,7 @@ function Spinner() {
 
 export function Boton({
   variante = 'secondary', tamano = 'md', icono, loading = false, className, children, disabled, type = 'button', ...resto
-}: Comun & { loading?: boolean } & ButtonHTMLAttributes<HTMLButtonElement>) {
+}: Comun & { loading?: boolean; ref?: Ref<HTMLButtonElement> } & ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       type={type}
