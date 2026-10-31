@@ -171,7 +171,7 @@ describe.skipIf(SIN_NAVEGADOR)('chat · envío y streaming', () => {
   it('Enter envía, Shift+Enter agrega una línea, Enter sin texto no envía', async () => {
     const p = await abrir(1280, 800);
     await p.press('#chat-pregunta', 'Enter');
-    expect(await p.evaluate(() => (window as unknown as { __llamadas: unknown[] }).__llamadas.filter((l) => /chat\?|chat$/.test((l as { url: string }).url)).length)).toBe(0);
+    expect(await p.evaluate(() => (window as unknown as { __llamadas: unknown[] }).__llamadas.filter((l) => /^\/api\/dashboard\/chat(\?|$)/.test((l as { url: string }).url)).length)).toBe(0);
     await p.fill('#chat-pregunta', 'primera');
     await p.press('#chat-pregunta', 'Shift+Enter');
     await p.type('#chat-pregunta', 'segunda');

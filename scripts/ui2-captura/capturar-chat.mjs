@@ -220,7 +220,7 @@ await browser.close();
 
 // Resumen de tiempos: una fila por animación distinta (nombre + duración + retardo + curva), con cuántas veces ocurrió.
 const resumen = {};
-for (const [clave, lista] of Object.entries(tiempos)) {
+for (const lista of Object.values(tiempos)) {
   if (!Array.isArray(lista)) continue;
   for (const a of lista) {
     const k = `${a.nombre} | ${a.duracionMs} ms | retardo ${a.retardoMs} ms | ${a.curva} | x${a.iteraciones}`;
