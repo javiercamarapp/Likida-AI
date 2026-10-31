@@ -105,10 +105,13 @@ export default async function PaginaMesaControl({
   const BTN_CHICO = 'text-xs px-2.5 py-1 rounded-lg hairline';
   const criticas = leyoOk ? incidencias.filter((i) => i.prioridad === 'critica').length : null;
 
-  return (
-    <MarcoPagina titulo="Mesa de control" apoyo={leyoOk
+  // Una línea (≈90 caracteres): cuántas incidencias vivas hay y cuántas son críticas.
+  const apoyo = leyoOk
           ? `${incidencias.length} incidencia${incidencias.length === 1 ? '' : 's'} de asistencia viva${incidencias.length === 1 ? '' : 's'}${criticas ? ` · ${criticas} crítica${criticas === 1 ? '' : 's'}` : ''} — el agente propone, aquí se decide`
-          : 'Sin datos — no se pudo leer la mesa'}>
+          : 'Sin datos — no se pudo leer la mesa';
+
+  return (
+    <MarcoPagina titulo="Mesa de control" apoyo={apoyo}>
       {!leyoOk && (
         <section className="rounded-2xl px-5 py-4 hairline" style={{ background: 'var(--surface)' }}>
           <p className="text-sm">
