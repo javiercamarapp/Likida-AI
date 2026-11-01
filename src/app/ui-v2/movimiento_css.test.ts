@@ -60,6 +60,10 @@ describe.each(ARCHIVOS)('movimiento en %s', (archivo) => {
         if (ms === 1100 && /rv-chat-respira/.test(decl)) continue;
         // Única excepción: la respiración del logo de la capa de carga y del esqueleto (1.6 s, ESTILO §9 y R08, decisión de Javier); el seguro de 20 s es un retardo.
         if (ms === 1600 && /rv-(esq-)?respira/.test(m[0])) continue;
+        // Excepciones EXPLÍCITAS del recorrido (onboarding.css), con las duraciones exactas de la guía de Vexa por decisión de Javier: el
+        // pulso del anillo (1.6 s, solo 2 iteraciones, no infinito), la flecha de la etiqueta (0.9 s, 2 iteraciones), el trazo de las
+        // ilustraciones (0.9 s, una vez) y el aviso «Ahora: …» (1.9 s, una vez). Todas son opacidad/transform y todas viven bajo no-preference.
+        if (/rv-onb-(pulso|flecha|traza|banner)/.test(decl) && [1600, 900, 1900].includes(ms)) continue;
         expect(ms, m[0]).toBeLessThanOrEqual(700);
       }
     }

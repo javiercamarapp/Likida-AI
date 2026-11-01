@@ -1,14 +1,14 @@
+import { hashCorto } from '@/app/ui-v2/onboarding/estado';
 import type { Almacen, Recorrido } from './tipos';
 
 // Progreso en localStorage, versionado. SOLO ids e índice: nunca datos de negocio
-// (E-22). `ambito` aísla a quien comparte navegador (usuario/tenant), así que dos
-// tenants no se cruzan. Nunca lanza: Safari privado y cuotas llenas solo
+// (E-22). `ambito` aísla a quien comparte navegador (usuario/tenant); en la clave va HASHEADO (FNV, igual que `estado.ts`): el id nunca queda en claro en el navegador. Nunca lanza: Safari privado y cuotas llenas solo
 // significan «no se pudo guardar».
 
 export type EstadoGuardado = 'en_curso' | 'omitido' | 'terminado';
 export interface Guardado { v: 1; version: number; estado: EstadoGuardado; indice: number; pasoId: string | null }
 
-export const claveTour = (ambito: string, recorridoId: string) => `likida:tour:v1:${ambito}:${recorridoId}`;
+export const claveTour = (ambito: string, recorridoId: string) => `likida:tour:v1:${hashCorto(ambito)}:${recorridoId}`;
 
 export function leerGuardado(almacen: Almacen | null, ambito: string, recorrido: Recorrido): Guardado | null {
   if (!almacen) return null;

@@ -135,7 +135,7 @@ export default function ChatFlota({ kpis, acred, cabecera }: {
         </div>
         <div className="rv-chat__agente" data-has={hay}>
           {!hay && (
-            <header className="rv-chat__hero">
+            <header className="rv-chat__hero" data-onboarding="pantalla.titulo">
               <LogoV2 alto={28} className="rv-chat__logo" />
               <h1>Pregunta a tus datos</h1>
               <p className="rv-chat__sub">

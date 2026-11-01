@@ -1,0 +1,160 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   ONBOARDING (recorrido, invitación, pista y menú Guía). Medidas, orden y movimiento de la guía de Vexa; paleta de Likida:
+   negro / gris / blanco, SIN color de acento propio (el resalte es tinta). Solo clases: sin estilos en línea (la posición del
+   foco se escribe por CSSOM). Todo lo animado vive dentro de `prefers-reduced-motion: no-preference`.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Tarjeta del paso: fija abajo a la derecha, 380 px, borde 1, radio 12, sombra del sistema ── */
+.rv-onb, .rv-onb-inv, .rv-onb-pista {
+  position: fixed; right: 24px; bottom: 24px; box-sizing: border-box; width: min(380px, calc(100vw - 32px)); padding: 14px 18px 16px;
+  pointer-events: auto; background: var(--surface); color: var(--ink); border: 1px solid var(--line2, var(--line)); border-radius: 12px;
+  box-shadow: var(--shadow-pop, none); outline: none;
+}
+.rv-onb:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.rv-onb[data-lado="izq"] { right: auto; left: 24px; }
+.rv-onb[data-centrada] { inset: auto; left: 50%; top: 50%; translate: -50% -50%; }
+.rv-onb__marco {
+  display: grid; place-items: center; height: 104px; margin: 0 0 10px; border-radius: 8px; background: var(--canvas); overflow: hidden;
+}
+.rv-onb[data-tipo="cierre"] .rv-onb__marco { height: 120px; }
+.rv-onb__cab { display: flex; justify-content: space-between; gap: 8px; margin: 0 0 6px; }
+.rv-onb__contador { margin: 0; font-size: 11px; line-height: 1.4; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-family: var(--font-mono), ui-monospace, monospace; }
+.rv-onb__avance {
+  display: block; width: 100%; height: 4px; margin: 0 0 12px; border: 0; border-radius: 999px; overflow: hidden; background: var(--canvas);
+  accent-color: var(--ink); appearance: none;
+}
+.rv-onb__avance::-webkit-progress-bar { background: var(--canvas); }
+.rv-onb__avance::-webkit-progress-value { background: var(--ink); }
+.rv-onb__avance::-moz-progress-bar { background: var(--ink); }
+.rv-onb__titulo { margin: 0 0 6px; font-size: 16px; line-height: 1.35; font-weight: 600; letter-spacing: 0; }
+.rv-onb__texto { margin: 0 0 10px; font-size: 13px; line-height: 1.55; color: var(--muted); }
+.rv-onb__accion {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 10px; padding: 6px 10px; border-radius: 8px; background: var(--canvas);
+  border: 1px solid var(--line); font-size: 13px; color: var(--ink2, var(--ink));
+}
+.rv-onb__accion strong { color: var(--ink); font-weight: 600; }
+.rv-onb__nota { margin: 0 0 10px; padding: 6px 10px; border-radius: 8px; background: var(--canvas); font-size: 12px; line-height: 1.5; color: var(--muted); }
+.rv-onb__enlace { padding: 0; border: 0; background: none; font: inherit; color: var(--ink); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.rv-onb__enlace:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 2px; }
+
+/* Ruta del recorrido: pantallas en una ventana de 5 nombres, la actual subrayada 2 px. */
+.rv-onb__ruta { display: flex; flex-wrap: wrap; gap: 2px 6px; margin: 0 0 12px; padding: 0; list-style: none; font-size: 12px; line-height: 1.5; font-weight: 500; color: var(--muted); }
+.rv-onb__ruta li + li::before { content: "·"; margin-right: 6px; color: var(--line2, var(--line)); }
+.rv-onb__ruta li[data-actual] { color: var(--ink); font-weight: 600; }
+.rv-onb__ruta li[data-actual]::after { content: ""; display: block; height: 2px; background: var(--ink); }
+
+/* Botones de 36 px. */
+.rv-onb__pie { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: 0; }
+.rv-onb__der { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.rv-onb .rv-btn, .rv-onb-inv .rv-btn, .rv-onb-pista .rv-btn { min-height: 36px; height: 36px; padding: 0 14px; font-size: 13px; }
+
+/* ── Ilustraciones: línea monocroma de 2 px. El estado final es el que se ve sin animación. ── */
+.rv-onb-ilu { width: auto; height: 92px; fill: none; stroke: var(--muted); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; overflow: visible; }
+.rv-onb-ilu .ilu-l { stroke: var(--line2, var(--line)); }
+.rv-onb-ilu .ilu-a { stroke: var(--ink); }
+.rv-onb-ilu .ilu-f { fill: var(--surface); stroke: var(--line2, var(--line)); }
+.rv-onb-ilu .ilu-fa { fill: var(--ink); stroke: none; }
+.rv-onb-ilu .ilu-bordea { stroke: var(--ink); }
+.rv-onb-ilu .ilu-t { stroke: var(--surface); }
+.rv-onb-ilu .ilu-grueso { stroke-width: 4; }
+.rv-onb-ilu .ilu-traza { stroke-dasharray: 1; stroke-dashoffset: 0; }
+.rv-onb-ilu .ilu-barra, .rv-onb-ilu .ilu-pop { transform-box: fill-box; transform-origin: center; }
+.rv-onb-ilu .ilu-barra { transform-origin: 50% 100%; }
+
+/* ── Foco con atenuación: capa sin clics y recorte con anillo de tinta; la posición llega por CSSOM (--tour-*). ── */
+.rv-onb-capa { position: fixed; inset: 0; pointer-events: none; }
+.rv-onb-capa[data-sin-foco][data-scrim] { background: rgba(8, 10, 16, .55); }
+.rv-onb-capa[data-sin-foco] .rv-onb-foco { display: none; }
+.rv-onb-foco {
+  position: absolute; left: 0; top: 0; width: var(--tour-w, 0px); height: var(--tour-h, 0px); transform: translate(var(--tour-x, 0px), var(--tour-y, 0px));
+  border-radius: 12px; box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink), 0 0 0 9999px rgba(8, 10, 16, .55);
+}
+.rv-onb-foco::after { content: ""; position: absolute; inset: -4px; border: 2px solid var(--ink); border-radius: 12px; opacity: 0; }
+
+/* Etiqueta «Haz clic aquí: …» junto al elemento real. */
+.rv-onb-etiqueta { position: fixed; left: 0; top: 0; pointer-events: none; visibility: hidden; transform: translate(var(--lab-x, 0px), var(--lab-y, 0px)); }
+.rv-onb-etiqueta[data-lado="abajo"] { --bx: 0px; --by: -5px; }
+.rv-onb-etiqueta[data-lado="arriba"] { --bx: 0px; --by: 5px; }
+.rv-onb-etiqueta[data-lado="der"] { --bx: -5px; --by: 0px; }
+.rv-onb-etiqueta[data-lado="izq"] { --bx: 5px; --by: 0px; }
+.rv-onb-etiqueta__in {
+  display: inline-flex; align-items: center; gap: 6px; max-width: min(300px, calc(100vw - 16px)); padding: 6px 10px; border-radius: 8px;
+  background: var(--ink); color: var(--surface); font-size: 12px; line-height: 1.3; font-weight: 600; box-shadow: 0 4px 14px rgba(8, 10, 16, .3);
+}
+.rv-onb-etiqueta__flecha { flex: none; width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.rv-onb-etiqueta[data-lado="arriba"] .rv-onb-etiqueta__flecha { transform: rotate(180deg); }
+.rv-onb-etiqueta[data-lado="der"] .rv-onb-etiqueta__flecha { transform: rotate(-90deg); }
+.rv-onb-etiqueta[data-lado="izq"] .rv-onb-etiqueta__flecha { transform: rotate(90deg); }
+
+/* Aviso «Ahora: {pantalla}» al entrar a una pantalla nueva: solo existe con movimiento (aparece y se va; sin él, no se pinta). */
+.rv-onb-banner {
+  display: none; position: fixed; top: 16px; left: 50%; translate: -50% 0; padding: 6px 14px; border-radius: 999px; pointer-events: none;
+  background: var(--ink); color: var(--surface); font-size: 13px; font-weight: 600; box-shadow: 0 4px 14px rgba(8, 10, 16, .3);
+}
+
+/* ── Invitación (primer ingreso) y pista contextual: misma tarjeta, sin ilustración grande. ── */
+.rv-onb-inv h2, .rv-onb-pista h2 { margin: 0 0 6px; font-size: 16px; line-height: 1.35; font-weight: 600; letter-spacing: 0; }
+.rv-onb-inv p, .rv-onb-pista p { margin: 0 0 10px; font-size: 13px; line-height: 1.55; color: var(--muted); }
+.rv-onb-pista { padding: 12px 16px 14px; }
+.rv-onb-pista__marco { display: grid; place-items: center; height: 64px; margin: 0 0 8px; border-radius: 8px; background: var(--canvas); overflow: hidden; }
+.rv-onb-pista__marco .rv-onb-ilu { height: 56px; }
+.rv-onb-pista__desde { margin: 0 0 4px; font-size: 11px; line-height: 1.4; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-family: var(--font-mono), ui-monospace, monospace; }
+.rv-onb-acciones { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin: 0; }
+
+/* ── Menú Guía: sección de pantallas y avance. ── */
+.rv-guia-sub { margin: 0; padding: 6px 8px 2px; font-size: 11px; line-height: 1.4; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-family: var(--font-mono), ui-monospace, monospace; }
+.rv-guia-pantallas { display: grid; gap: 1px; margin: 4px 0; padding: 4px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); max-height: min(40vh, 300px); overflow: auto; }
+.rv-guia-pantallas .rv-menu__item[aria-current="step"] { background: var(--canvas); font-weight: 600; }
+.rv-guia__punto { position: absolute; top: -2px; right: -2px; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 2px var(--surface); }
+
+/* ── Alto contraste forzado ── */
+@media (forced-colors: active) {
+  .rv-onb, .rv-onb-inv, .rv-onb-pista { border-color: CanvasText; }
+  .rv-onb-foco { box-shadow: none; outline: 3px solid Highlight; outline-offset: 3px; }
+  .rv-onb-etiqueta__in, .rv-onb-banner { border: 1px solid CanvasText; background: Canvas; color: CanvasText; }
+  .rv-onb-ilu * { stroke: CanvasText; }
+}
+
+/* ── Móvil: hoja anclada abajo, por encima de la barra inferior (nunca la tapa). ── */
+@media (max-width: 767px) {
+  .rv-onb, .rv-onb-inv, .rv-onb-pista { left: 12px; right: 12px; width: auto; bottom: calc(var(--nav-inf-h, 64px) + 22px + env(safe-area-inset-bottom)); }
+  .rv-onb { max-height: min(62vh, 440px); overflow: auto; padding: 12px 14px 14px; }
+  .rv-onb[data-centrada] { inset: auto 12px calc(var(--nav-inf-h, 64px) + 22px + env(safe-area-inset-bottom)) 12px; translate: none; }
+  .rv-onb__marco { height: 64px; }
+  .rv-onb-ilu { height: 56px; }
+  .rv-onb[data-tipo="cierre"] .rv-onb__marco { height: 80px; }
+  .rv-onb__ruta li:not([data-actual]) { display: none; }
+  .rv-onb__ruta li + li::before { content: none; }
+  .rv-onb .rv-btn, .rv-onb-inv .rv-btn, .rv-onb-pista .rv-btn { min-height: 44px; height: 44px; }
+  .rv-onb-etiqueta { display: none; }
+}
+
+/* ── Movimiento (solo si la persona no pidió reducir): todo cambia en seco y las ilustraciones quedan en su estado final. ── */
+@media (prefers-reduced-motion: no-preference) {
+  .rv-onb, .rv-onb-inv, .rv-onb-pista { animation: rv-onb-entra 220ms ease-out; }
+  @keyframes rv-onb-entra { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .rv-onb[data-centrada] { animation: rv-onb-entra-centro 220ms ease-out; }
+  @keyframes rv-onb-entra-centro { from { opacity: 0; } to { opacity: 1; } }
+  .rv-onb-capa[data-animar] .rv-onb-foco { transition: transform 380ms cubic-bezier(.2, .8, .2, 1), width 380ms cubic-bezier(.2, .8, .2, 1), height 380ms cubic-bezier(.2, .8, .2, 1); }
+  .rv-onb-etiqueta { transition: transform 380ms cubic-bezier(.2, .8, .2, 1); }
+  .rv-onb-foco::after { animation: rv-onb-pulso 1600ms ease-out 2; }
+  @keyframes rv-onb-pulso { from { opacity: .8; transform: scale(1); } to { opacity: 0; transform: scale(1.12); } }
+  .rv-onb-etiqueta__in { animation: rv-onb-flecha 900ms ease-in-out 2; }
+  @keyframes rv-onb-flecha { 0%, 100% { transform: none; } 50% { transform: translate(var(--bx, 0px), var(--by, 0px)); } }
+  .rv-onb-banner { display: block; animation: rv-onb-banner 1900ms ease-out both; }
+  @keyframes rv-onb-banner { 0% { opacity: 0; transform: translateY(-6px); } 12% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; } }
+  .rv-onb__marco .ilu-traza, .rv-onb-pista__marco .ilu-traza { animation: rv-onb-traza 900ms ease-out both; }
+  @keyframes rv-onb-traza { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+  .rv-onb__marco .ilu-barra { animation: rv-onb-barra 650ms cubic-bezier(.2, .8, .2, 1) both; }
+  @keyframes rv-onb-barra { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+  .rv-onb__marco .ilu-pop { animation: rv-onb-pop 450ms cubic-bezier(.2, .9, .3, 1) both; }
+  @keyframes rv-onb-pop { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: scale(1); } }
+  .rv-onb__marco .ilu-entra { animation: rv-onb-sube 520ms cubic-bezier(.2, .8, .2, 1) both; }
+  @keyframes rv-onb-sube { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+  .rv-onb__marco .d1 { animation-delay: 80ms; }
+  .rv-onb__marco .d2 { animation-delay: 200ms; }
+  .rv-onb__marco .d3 { animation-delay: 320ms; }
+  .rv-onb__marco .d4 { animation-delay: 440ms; }
+  .rv-onb__marco .d5 { animation-delay: 560ms; }
+  .rv-onb__marco .d6 { animation-delay: 680ms; }
+}
