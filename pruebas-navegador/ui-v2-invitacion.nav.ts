@@ -35,22 +35,21 @@ for (const rol of ROLES) {
       await expect(invitacion(page)).toBeVisible();
 
       const medidas = await invitacion(page).evaluate((el) => {
-        const caja = el.getBoundingClientRect();
         const contenedor = el.closest('[data-ui="v2"]') as HTMLElement | null;
         const primario = el.querySelector('[data-onb-primario]') as HTMLElement;
-        const centro = document.elementFromPoint(caja.x + caja.width / 2, caja.y + 8);
         return {
           dentroDeV2: Boolean(contenedor),
           z: contenedor ? getComputedStyle(contenedor).zIndex : null,
           fondoPrimario: getComputedStyle(primario).backgroundColor,
-          encima: Boolean(centro && el.contains(centro)),
           anuncia: Boolean(el.querySelector('[role="status"]')),
         };
       });
       expect(medidas.dentroDeV2, 'la invitación debe vivir dentro de data-ui="v2"').toBe(true);
       expect(medidas.z).toBe('55');
       expect(medidas.fondoPrimario, 'primario negro (--marca), nunca el naranja de v1').toBe('rgb(14, 14, 16)');
-      expect(medidas.encima, 'ninguna cabecera sticky la tapa').toBe(true);
+      // Nada la tapa (cabeceras sticky, otras capas): Playwright falla el clic de prueba si otro elemento recibe el puntero.
+      await invitacion(page).getByRole('button', { name: 'Recorrido corto' }).click({ trial: true });
+      await invitacion(page).getByRole('button', { name: 'Ahora no' }).click({ trial: true });
       expect(medidas.anuncia).toBe(true);
 
       // No es modal: un enlace del menú recibe el clic; al irse a otra pantalla la invitación se cierra y no tapa sus acciones.

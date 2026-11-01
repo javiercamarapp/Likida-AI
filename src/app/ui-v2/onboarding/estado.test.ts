@@ -50,21 +50,23 @@ describe('asistente y prerrequisitos', () => {
 });
 
 describe('marca de sesión (localStorage bloqueado)', () => {
-  afterEach(() => { delete (globalThis as Record<string, unknown>).sessionStorage; delete (globalThis as Record<string, unknown>).document; });
-  it('sin ninguna marca no hay invitación previa; escribirla la deja en sessionStorage y en una cookie de sesión', () => {
+  afterEach(() => { delete (globalThis as Record<string, unknown>).sessionStorage; delete (globalThis as Record<string, unknown>).cookieStore; });
+  it('escribirla la deja en sessionStorage y en una cookie de sesión (sin caducidad) que lee el servidor', () => {
     const ses = new Map<string, string>();
-    const doc = { cookie: '' };
-    Object.assign(globalThis, { sessionStorage: { getItem: (k: string) => ses.get(k) ?? null, setItem: (k: string, v: string) => { ses.set(k, v); } }, document: doc });
+    const puestas: Array<Record<string, unknown>> = [];
+    Object.assign(globalThis, {
+      sessionStorage: { getItem: (k: string) => ses.get(k) ?? null, setItem: (k: string, v: string) => { ses.set(k, v); } },
+      cookieStore: { set: async (o: Record<string, unknown>) => { puestas.push(o); } },
+    });
     expect(leerMarcaSesion()).toBe(false);
     escribirMarcaSesion();
     expect(ses.get(MARCA_SESION)).toBe('1');
-    expect(doc.cookie).toContain(`${MARCA_SESION}=1`);
-    expect(doc.cookie).not.toMatch(/expires|max-age/i);
+    expect(puestas).toEqual([{ name: MARCA_SESION, value: '1', path: '/', sameSite: 'lax' }]);
     expect(leerMarcaSesion()).toBe(true);
   });
-  it('con sessionStorage bloqueado la cookie basta, y nada lanza', () => {
-    Object.assign(globalThis, { sessionStorage: { getItem: () => { throw new Error('bloqueado'); }, setItem: () => { throw new Error('bloqueado'); } }, document: { cookie: `x=1; ${MARCA_SESION}=1` } });
-    expect(leerMarcaSesion()).toBe(true);
+  it('con todo bloqueado o sin Cookie Store nada lanza', () => {
+    Object.assign(globalThis, { sessionStorage: { getItem: () => { throw new Error('bloqueado'); }, setItem: () => { throw new Error('bloqueado'); } }, cookieStore: { set: () => { throw new Error('no'); } } });
+    expect(leerMarcaSesion()).toBe(false);
     expect(() => escribirMarcaSesion()).not.toThrow();
   });
 });

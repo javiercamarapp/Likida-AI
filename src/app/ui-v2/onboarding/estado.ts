@@ -82,13 +82,16 @@ export function debeMostrarPista(e: EstadoOnboarding, ruta: string, opciones: { 
 }
 
 // ── Marca de sesión: con localStorage bloqueado (modo privado, datos del sitio bloqueados) la invitación NO debe reaparecer en cada
-// recarga. Se guarda «ya se le ofreció» en sessionStorage y en una cookie de SESIÓN (sin caducidad, sin datos: solo un 1). ──
+// recarga. «Ya se le ofreció» se guarda en sessionStorage y, donde existe la Cookie Store API, en una cookie de SESIÓN (sin
+// caducidad, solo un 1) que LEE EL SERVIDOR (dashboard/layout.tsx): el navegador nunca lee cookies (premisa de supabase/cookies.test.ts). ──
 export const MARCA_SESION = 'likida_onb_visto';
 export function leerMarcaSesion(): boolean {
-  try { if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(MARCA_SESION) === '1') return true; } catch { /* bloqueado */ }
-  try { return typeof document !== 'undefined' && document.cookie.split('; ').some((c) => c === `${MARCA_SESION}=1`); } catch { return false; }
+  try { return typeof sessionStorage !== 'undefined' && sessionStorage.getItem(MARCA_SESION) === '1'; } catch { return false; }
 }
 export function escribirMarcaSesion(): void {
   try { if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(MARCA_SESION, '1'); } catch { /* bloqueado */ }
-  try { if (typeof document !== 'undefined') document.cookie = `${MARCA_SESION}=1; path=/dashboard; SameSite=Lax`; } catch { /* bloqueado */ }
+  try {
+    const almacen = (globalThis as { cookieStore?: { set: (o: { name: string; value: string; path: string; sameSite: 'lax' }) => Promise<void> } }).cookieStore;
+    void almacen?.set({ name: MARCA_SESION, value: '1', path: '/', sameSite: 'lax' }).catch(() => undefined);
+  } catch { /* sin Cookie Store */ }
 }
