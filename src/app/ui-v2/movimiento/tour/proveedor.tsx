@@ -2,10 +2,10 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { crearEstadoLocal, debeInvitar, debeMostrarPista, ESTADO_VACIO, onboardingDesactivado, type AlmacenEstado, type EstadoOnboarding } from '@/lib/onboarding/estado';
-import { pistaDeRuta } from '@/lib/onboarding/pista';
-import { pantallasDeRecorrido } from '@/lib/onboarding/recorrido-util';
-import type { Modo, PistaContextual as PistaDatos } from '@/lib/onboarding/tipos';
+import { crearEstadoLocal, debeInvitar, debeMostrarPista, ESTADO_VACIO, onboardingDesactivado, type AlmacenEstado, type EstadoOnboarding } from '@/app/ui-v2/onboarding/estado';
+import { pistaDeRuta } from '@/app/ui-v2/onboarding/pista';
+import { pantallasDeRecorrido } from '@/app/ui-v2/onboarding/recorrido-util';
+import type { Modo, PistaContextual as PistaDatos } from '@/app/ui-v2/onboarding/tipos';
 import { CapaTour } from './capa';
 import { ControladorTour, rutaCoincide } from './controlador';
 import { crearAnfitrionDom } from './anfitrion-dom';

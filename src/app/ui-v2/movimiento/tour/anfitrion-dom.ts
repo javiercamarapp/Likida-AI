@@ -1,4 +1,4 @@
-import { ANCLAS_DERIVADAS } from '@/lib/onboarding/anclas';
+import { ANCLAS_DERIVADAS } from '@/app/ui-v2/onboarding/anclas';
 import type { Anfitrion, ElementoTour, EventoAccion, Rect } from './tipos';
 
 // Anfitrión real: toca document/window. Es el único archivo del motor que lo hace.

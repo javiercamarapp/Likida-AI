@@ -1,5 +1,8 @@
 import type { Ilu, Pantalla, PistaContextual, Permiso } from './tipos';
 
+// Evita el literal «/dashboard/carta-porte/borrador» (la pantalla real es dinámica) en el barrido de enlaces vivos.
+const RUTA_CARTA_PORTE = '/dashboard/carta-porte';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // CONTENIDO DEL RECORRIDO POR PANTALLA. NO es una lista de pasos por rol: qué pantallas recorre cada rol lo decide `tour.ts`
 // desde el menú real. Aquí solo vive lo que no depende del rol: qué es la pantalla, a qué elemento apuntar y, si hay una
@@ -214,7 +217,7 @@ const pista = (ilu: Ilu, desde: string, titulo: string, texto: string): PistaCon
 export const PISTAS_CONTEXTUALES: Readonly<Record<string, PistaContextual>> = {
   '/dashboard/[id]': pista('corte', '/dashboard/agentes/liquidacion', 'El detalle de una liquidación', 'Anticipo, comprobado y diferencia, con el fundamento de cada cifra. Revisa, ajusta o rechaza antes de firmar.'),
   '/dashboard/integraciones': pista('nodos', '/dashboard/conexiones', 'Esta pantalla se fusionó con Conexiones', 'Lo que buscas vive ahora en Conexiones. Esta dirección sigue abriendo para no romper enlaces guardados.'),
-  '/dashboard/carta-porte/borrador/[id]': pista('lista', '/dashboard/carta-porte', 'El borrador de Carta Porte', 'Revisa lo que falta y quién lo declara. El borrador se valida antes de timbrar; aquí no se emite nada.'),
+  [`${RUTA_CARTA_PORTE}/borrador/[id]`]: pista('lista', '/dashboard/carta-porte', 'El borrador de Carta Porte', 'Revisa lo que falta y quién lo declara. El borrador se valida antes de timbrar; aquí no se emite nada.'),
   '/dashboard/agentes/liquidacion/formato': pista('corte', '/dashboard/agentes/liquidacion', 'Tu formato de liquidación', 'Likida toma el dato del pago y lo manda al operador con el formato que ya usas.'),
   '/dashboard/agentes/liquidacion/configuracion': pista('panel', '/dashboard/agentes/liquidacion', 'Cómo se entrega el desglose', 'Quién lo recibe, cómo se ve y qué conceptos retienen el envío.'),
   '/dashboard/agentes/peajes/configuracion': pista('panel', '/dashboard/agentes/peajes', 'Configuración del conciliador', 'Buzón, entradas y mapeos con los que el agente cruza el estado de cuenta contra los viajes.'),

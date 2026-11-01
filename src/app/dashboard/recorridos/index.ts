@@ -1,11 +1,11 @@
 import type { Recorrido } from '@/app/ui-v2/movimiento/tour';
 import { menuPorPerfil } from '../shell/menu-por-perfil';
-import { asistenteDe } from '@/lib/onboarding/asistente';
-import { AGENTES, construirRecorridoAgente } from '@/lib/onboarding/agentes';
-import { PISTAS_CONTEXTUALES } from '@/lib/onboarding/pantallas';
-import { pistaDeRol } from '@/lib/onboarding/roles';
-import { construirRecorrido } from '@/lib/onboarding/tour';
-import type { PistaContextual } from '@/lib/onboarding/tipos';
+import { asistenteDe } from '@/app/ui-v2/onboarding/asistente';
+import { AGENTES, construirRecorridoAgente } from '@/app/ui-v2/onboarding/agentes';
+import { PISTAS_CONTEXTUALES } from '@/app/ui-v2/onboarding/pantallas';
+import { pistaDeRol } from '@/app/ui-v2/onboarding/roles';
+import { construirRecorrido } from '@/app/ui-v2/onboarding/tour';
+import type { PistaContextual } from '@/app/ui-v2/onboarding/tipos';
 import { puedeVerRuta, type PerfilTenant } from '@/lib/auth/visibilidad';
 
 // ═══════════════════════════════════════════════════════════════════════════

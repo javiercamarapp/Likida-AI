@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { Ilu } from '@/lib/onboarding/tipos';
+import type { Ilu } from '@/app/ui-v2/onboarding/tipos';
 
 // Ilustraciones del marco de la tarjeta: SVG en línea de 160 x 96, aria-hidden, líneas de 2 px, MONOCROMAS (tinta y grises;
 // sin color de acento). El estado final es el que se ve sin animación: con «reducir movimiento» no se mueve nada.

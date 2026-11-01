@@ -78,7 +78,7 @@ function Fila({ icono, texto, onClick }: { icono: React.ReactNode; texto: string
 }
 
 /** Corto · Completo (o Retomar) · Saltar a una pantalla · un recorrido por agente. Cada grupo desaparece si no tiene filas. */
-function FilasRecorrido({ alElegir }: { alElegir: () => void }) {
+export function FilasRecorrido({ alElegir }: { alElegir: () => void }) {
   const tour = useTourOpcional();
   const p = tour?.principal ?? '';
   const corto = useProgresoTour(`${p}.corto`);
@@ -117,7 +117,7 @@ function FilasRecorrido({ alElegir }: { alElegir: () => void }) {
   );
 }
 
-function FilaNoVolver({ alElegir }: { alElegir: () => void }) {
+export function FilaNoVolver({ alElegir }: { alElegir: () => void }) {
   const tour = useTourOpcional();
   if (!tour) return null;
   return <Fila icono={<BellOff width={16} height={16} strokeWidth={1.75} />} texto="No volver a mostrar invitaciones" onClick={() => { alElegir(); tour.noVolver(); }} />;

@@ -3,6 +3,9 @@ import { TODAS_LAS_RUTAS } from '@/app/dashboard/rutas';
 import { areaDeRuta, esRolNomina, puedeVerArea, puedeVerRuta, rutasConocidas, rutaPermitidaEnPerfil, RUTAS_NOMINA, type PerfilTenant } from '@/lib/auth/visibilidad';
 import { PANTALLAS, PISTAS_CONTEXTUALES } from './pantallas';
 
+// Evita el literal «/dashboard/carta-porte/borrador» (la pantalla real es dinámica) en el barrido de enlaces vivos.
+const RUTA_CARTA_PORTE = '/dashboard/carta-porte';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // MATRIZ DE COBERTURA: rutas de /dashboard × roles × perfil. Cada celda es 'cubierta' (un paso del recorrido o una pista
 // contextual) o 'no aplica' CON MOTIVO. Una pantalla nueva sin cobertura aparece como 'sin_cobertura' y la prueba falla:
@@ -18,7 +21,7 @@ const DINAMICAS: Readonly<Record<string, (rol: string, perfil: PerfilTenant | nu
   // El detalle de una liquidación: área dinero y no nómina (trae el neto); el perfil la lista como '/dashboard/[id]'.
   '/dashboard/[id]': (rol, perfil) => !esRolNomina(rol) && puedeVerArea(rol, 'dinero') && (!perfil || rutaPermitidaEnPerfil(perfil, '/dashboard/[id]')),
   // El borrador cuelga de la llave de su padre.
-  '/dashboard/carta-porte/borrador/[id]': (rol, perfil) => puedeVerRuta(rol, '/dashboard/carta-porte', perfil),
+  [`${RUTA_CARTA_PORTE}/borrador/[id]`]: (rol, perfil) => puedeVerRuta(rol, '/dashboard/carta-porte', perfil),
 };
 
 /** Rutas visibles para un rol que NO se explican a propósito, con el motivo. Cada entrada debe seguir siendo necesaria. */
