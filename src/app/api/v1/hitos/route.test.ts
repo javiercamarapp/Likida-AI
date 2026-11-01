@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 // GET /v1/hitos, GET /v1/hitos/eventos y PUT /v1/viajes/{id}/citas — las puertas.
 // Lo que se fija: el ÁREA (operación para leer, administración para escribir), que el
@@ -107,6 +107,21 @@ describe('GET /v1/hitos/eventos', () => {
 });
 
 describe('PUT /v1/viajes/{id}/citas', () => {
+  // A41-PR-01 · Las fechas de este bloque son LITERALES (2026-10-02) y `validarCitas`
+  // las mide contra el reloj de PARED con una ventana de −30 días
+  // (`conductor/lectura.ts:179`). El 1-nov-2026 el caso de las 08:00Z cayó fuera de
+  // la ventana y el PUT contestó 400 («fuera de un rango razonable») en vez del 404
+  // que este bloque afirma: la suite se puso en rojo sin que nadie tocara el código,
+  // y el 2-nov le tocaba al hermano de las 08:00-06:00 (=14:00Z). Los dos casos que
+  // esperan 400 (id no uuid, cuerpo enorme) habrían seguido verdes afirmando otra
+  // cosa, que es peor.
+  //
+  // Reloj clavado — sólo `Date`, para no tocar timers ni promesas — como pide la
+  // instrucción de la ronda 38. Lo que se afirma aquí es el CÓDIGO de respuesta de
+  // la puerta, no el calendario.
+  beforeAll(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-05T12:00:00Z')); });
+  afterAll(() => { vi.useRealTimers(); });
+
   it('pide el área administracion, acota por la flota de la credencial y devuelve lo guardado', async () => {
     const r = await put(V, { citaOrigen: '2026-10-02T08:00:00-06:00', tenant_id: 't-OTRA' });
     expect(r.status).toBe(200);
