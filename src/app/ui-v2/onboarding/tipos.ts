@@ -20,7 +20,7 @@ export type Ilu =
   | 'panel' | 'cierre';
 
 /** Lo que el rol debe poder hacer para que exista el paso `accion` de una pantalla. Sale de `lib/auth/permisos.ts`, nunca se copia. */
-export type Permiso = 'asignar' | 'administrar' | 'timbrar' | 'catalogo' | 'firmar' | 'exportar';
+export type Permiso = 'asignar' | 'administrar' | 'timbrar' | 'catalogo' | 'firmar' | 'exportar' | 'dinero';
 
 export interface Ancla {
   /** Nombre estable del elemento (`data-onboarding`/`data-tour`) o uno derivado de `ANCLAS_DERIVADAS`. */

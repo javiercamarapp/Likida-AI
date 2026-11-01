@@ -1,4 +1,5 @@
 import { puedeAdministrar, puedeAsignar, puedeEditarCatalogoOperativo, puedeExportar, puedeTimbrar } from '@/lib/auth/permisos';
+import { puedeVerArea } from '@/lib/auth/visibilidad';
 import type { Permiso, Pista } from './tipos';
 
 // Rol de la sesión → pista de recorrido. `vendedor` y cualquier rol desconocido no tienen (su panel no es /dashboard).
@@ -22,6 +23,7 @@ export function rolTienePermiso(rol: string, permiso: Permiso): boolean {
     case 'timbrar': return puedeTimbrar(rol);
     case 'catalogo': return puedeEditarCatalogoOperativo(rol);
     case 'exportar': return puedeExportar(rol);
+    case 'dinero': return puedeVerArea(rol, 'dinero');
     case 'firmar': return FIRMA.has(rol);
   }
 }

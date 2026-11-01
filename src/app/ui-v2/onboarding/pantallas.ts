@@ -1,7 +1,6 @@
-import type { Ilu, Pantalla, PistaContextual, Permiso } from './tipos';
+import type { Ilu, Pantalla, Permiso } from './tipos';
 
 // Evita el literal «/dashboard/carta-porte/borrador» (la pantalla real es dinámica) en el barrido de enlaces vivos.
-const RUTA_CARTA_PORTE = '/dashboard/carta-porte';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CONTENIDO DEL RECORRIDO POR PANTALLA. NO es una lista de pasos por rol: qué pantallas recorre cada rol lo decide `tour.ts`
@@ -27,7 +26,7 @@ export const PANTALLAS: Readonly<Record<string, Pantalla>> = {
     c('Empieza por lo que pide tu atención', 'Lo pendiente y lo que falló van primero. Abre el bloque que te toque y resuélvelo en su pantalla.'),
     { variantes: {
       cinco_agentes: { que: 'Tus cinco agentes de un vistazo: qué hizo cada uno y qué espera a una persona.', claveTitulo: 'Una ficha por agente', claveTexto: 'Cada ficha lleva a la pantalla de su agente. Ahí decides lo que el agente no puede decidir solo.' },
-      encargado: { que: 'Lo que hay que despachar y perseguir hoy. No muestra dinero: tu rol ve la operación.', claveTitulo: 'Lo que toca hoy', claveTexto: 'Viajes por despachar y operadores por perseguir. Abre Despacho para actuar.' },
+      encargado: { que: 'Lo que hay que despachar y perseguir hoy. Tu rol ve la operación, sin dinero.', claveTitulo: 'Sin asignar y carga por operador', claveTexto: 'Abajo ves los viajes sin asignar, la carga por operador y los viajes recientes. El botón Despacho crea un viaje.' },
     } }),
   '/dashboard/contador': p('corte',
     'El dinero comprobado y el papel que lo sostiene, con su fundamento citado.',
@@ -45,9 +44,9 @@ export const PANTALLAS: Readonly<Record<string, Pantalla>> = {
     c('Tu avance, sin adornos', 'Solo cuenta lo que está listo de verdad. Si algo no se pudo comprobar, te lo dice en vez de marcarlo.', 'asistente.lista'),
     { accion: a('administrar', 'Abre', 'un paso', 'Abre el paso que sigue', 'Cada paso explica qué se necesita, quién lo tiene y cómo pedirlo.', 'asistente.lista') }),
   '/dashboard/despacho': p('tarjetas',
-    'Aquí se actúa: creas el viaje, asignas operador y unidad, avisas e insistes al chofer.',
-    c('Un viaje nuevo empieza aquí', 'Elige operador y unidad. El aviso al chofer sale por WhatsApp; ves si lo recibió.'),
-    { accion: a('asignar', 'Crea', 'un viaje', 'Crea el viaje y asígnalo', 'Primero capturas el viaje; después asignas operador y unidad. Nada se envía hasta que lo confirmas.') }),
+    'Aquí se actúa: creas el viaje con su operador, avisas e insistes al chofer y das de alta operadores.',
+    c('Un viaje nuevo empieza aquí', 'El operador es obligatorio. Al crear el viaje, el aviso sale por WhatsApp al operador; si el aviso falla, el viaje queda y puedes reavisar.'),
+    { accion: a('asignar', 'Crea', 'un viaje', 'Crea el viaje con su operador', 'Captura el viaje y elige operador: sin él no se crea. Al crearlo, el aviso sale por WhatsApp.') }),
   '/dashboard/convenios': p('lista',
     'El perfil de cada cliente: puerta, con quién reportarse y documentos. De aquí salen las instrucciones que recibe el operador.',
     c('Un convenio por cliente', 'Lo que cargues aquí es lo que el operador recibe antes de llegar. Revisa que esté vigente.')),
@@ -76,8 +75,8 @@ export const PANTALLAS: Readonly<Record<string, Pantalla>> = {
     c('Fíjate en la edad de la posición', 'Una posición vieja se dice como vieja. Las excepciones aparecen para que una persona las atienda.')),
   '/dashboard/carta-porte': p('lista',
     'Por cada viaje en curso: si necesita el complemento Carta Porte y qué dato falta, separado por responsable.',
-    c('Qué falta y de quién es', 'La ley parte la responsabilidad entre quien contrata y quien transporta. Cada faltante dice a quién le toca.'),
-    { accion: a('asignar', 'Declara', 'la ruta', 'Declara la ruta del viaje', 'Quien conoce la ruta es quien declara si pisa vía federal. Likida no lo adivina.') }),
+    c('Qué falta y de quién es', 'Cada viaje separa lo que declara tu flota de lo que debe darte el cliente. Pídele al cliente lo suyo antes del viaje.'),
+    { accion: a('asignar', 'Declara', 'lo que falta', 'Declara lo que falta del viaje', 'Aquí se captura la declaración del viaje, como la ruta. Que la haga quien conoce la ruta; Likida no la adivina.') }),
   '/dashboard/carta-porte/documentos': p('tarjetas',
     'Los documentos que mandan tus clientes: el agente los lee y una persona los revisa y aprueba lado a lado.',
     c('Revisa lado a lado', 'A la izquierda el documento; a la derecha lo que el agente leyó. Nada se usa sin que lo apruebes.')),
@@ -94,22 +93,22 @@ export const PANTALLAS: Readonly<Record<string, Pantalla>> = {
   // ── Dinero y fiscal ──
   '/dashboard/huerfanos': p('importar',
     'Las fotos y comprobantes que llegaron sin viaje se guardan aquí hasta que alguien los acomode. Nada se rechaza.',
-    c('Acomódalos a un viaje', 'Un comprobante sin viaje no entra a ninguna liquidación. Asígnalo para que cuente.')),
+    c('Acomódalos a su viaje', 'Mientras no tengan viaje se guardan aquí y nada se rechaza. Acomoda cada comprobante al viaje que le corresponde.')),
   '/dashboard/combustible-casetas': p('corte',
     'Los dos conceptos que más pesan en un viaje, y qué tanto están facturados.',
     c('Conciliación línea por línea', 'Cada renglón se cruza contra el viaje. Lo que no cuadra queda marcado para que lo resuelvas.')),
   '/dashboard/rentabilidad': p('linea',
     'Margen real contra lo comprobado, cartera por cobrar y lo vencido por cliente. Si el dato no existe, se dice.',
-    c('Un dato ausente no es cero', 'Si falta el ingreso del flete, el margen no se calcula. La pantalla dice qué falta.')),
+    c('Un dato ausente no es cero', 'Si el dato no existe, la pantalla lo dice en vez de poner un cero. Revisa qué falta antes de leer un margen.')),
   '/dashboard/clientes': p('equipo',
     'Quién paga el flete y cuánto debe, con las tarifas por cliente. No se muestra una cartera a medias.',
-    c('Tarifa y deuda por cliente', 'Las tarifas alimentan el margen. Sin tarifa capturada, ese cliente queda fuera del cálculo.')),
+    c('Clientes, tarifas y viajes sin ingreso', 'Tres bloques: la lista de clientes, sus tarifas y los viajes sin ingreso capturado. Un dato que falta se dice; no se rellena.')),
   '/dashboard/cotizaciones': p('corte',
     'La ganancia real del viaje antes de aceptarlo: costos declarados, casetas medidas y cada supuesto a la vista.',
     c('Cada supuesto se ve', 'La cotización separa lo medido de lo declarado. Cambia un supuesto y verás cómo se mueve la ganancia.')),
   '/dashboard/facturacion': p('corte',
     'Facturas emitidas, sus pagos y los viajes liquidados por facturar. Si falta un dato, se dice; nunca se pinta un cero.',
-    c('Por facturar, emitidas y pagadas', 'Empieza por los viajes liquidados sin factura. Cada pago se liga a su factura.')),
+    c('Lo facturado y lo que te deben', 'Arriba, lo que facturaste y lo que te deben; más abajo, los viajes liquidados que nadie facturó.')),
   '/dashboard/timbrado': p('escudo',
     'Aquí se emite el CFDI con complemento Carta Porte. Es un acto fiscal: cancelarlo tiene ventana y motivo.',
     c('Revisa antes de timbrar', 'Confirma los datos fiscales y el flete. Solo el dueño y el contador pueden timbrar.'),
@@ -127,11 +126,11 @@ export const PANTALLAS: Readonly<Record<string, Pantalla>> = {
   // ── Agentes ──
   '/dashboard/agentes/liquidacion': p('corte',
     'El agente arma la liquidación de cada viaje: lo que espera tu firma, lo que hizo solo y el criterio con el que juzga.',
-    c('Lo que espera tu firma, primero', 'Abre una liquidación para ver anticipo, comprobado y diferencia con su fundamento.'),
+    c('Indicadores y cola de revisión', 'Arriba, los indicadores del agente y la cola de lo que espera revisión. Más abajo, lo que hizo solo y las reglas con que juzga.'),
     { variantes: {
       nomina: { que: 'Aquí ves solo conteos: desgloses recibidos, enviados, retenidos, rebotados y sin póliza. Ningún peso ni nombre con monto.', claveTitulo: 'Solo conteos', claveTexto: 'Tu rol no ve importes ni netos por persona. Los números cuentan documentos, no dinero.' },
     },
-    accion: a('firmar', 'Abre', 'una liquidación', 'Revisa y firma', 'Firmar autoriza un pago al chofer y cierra el expediente fiscal del viaje. Revisa antes.') }),
+    accion: a('firmar', 'Abre', 'una liquidación', 'Abre una de la cola y revísala', 'Dentro ves anticipo, comprobado y diferencia. Firmar autoriza un pago al chofer y cierra el expediente fiscal del viaje.') }),
   '/dashboard/agentes/facturas': p('importar',
     'Tickets sin CFDI: lo que te toca a ti, lo que la máquina resuelve sola y lo que está incompleto o vencido.',
     c('Tres montones', 'Atiende primero lo incompleto o vencido; lo que resuelve la máquina solo se audita después.')),
@@ -147,7 +146,7 @@ export const PANTALLAS: Readonly<Record<string, Pantalla>> = {
   '/dashboard/agentes/peajes': p('corte',
     'El estado de cuenta del TAG o monedero contra los gastos que comprobaron los viajes, y el estado del estímulo de peaje.',
     c('Sube el estado de cuenta', 'El agente lo cruza contra los viajes. Lo que no cuadra queda a tu vista, con su cruce.'),
-    { accion: a('exportar', 'Sube', 'el estado de cuenta', 'Sube el archivo del mes', 'Con el archivo cargado, el agente hace el cruce. Mientras no lo subas, no hay nada que conciliar.') }),
+    { accion: a('dinero', 'Sube', 'el estado de cuenta', 'Sube el archivo del mes', 'Con el archivo cargado, el agente hace el cruce. Mientras no lo subas, no hay nada que conciliar.') }),
   '/dashboard/agentes/proveedores': p('importar',
     'La bandeja donde el XML del taller espera tu decisión, y la salida que evita capturarlo a mano en el ERP.',
     c('Decide sobre cada XML', 'Revisa el XML del taller y apruébalo o recházalo. La salida evita la captura manual.')),
@@ -173,13 +172,13 @@ export const PANTALLAS: Readonly<Record<string, Pantalla>> = {
   '/dashboard/usuarios': p('equipo',
     'Quién entra a este panel y qué puede ver.',
     c('Un rol por persona', 'Cada rol ve solo lo suyo. Da el rol mínimo que necesite la persona.'),
-    { accion: a('administrar', 'Invita', 'a una persona', 'Invita a tu equipo', 'La persona recibe un enlace por correo. Elige su rol con cuidado: define lo que ve.') }),
+    { accion: a('administrar', 'Invita', 'a una persona', 'Invita a tu equipo', 'Capturas su correo y su rol. Entra con un enlace mágico a ese correo; no hay contraseña. El rol define lo que ve.') }),
   '/dashboard/onboarding': p('lista',
     'El perfil de la flota: lo que Likida necesita saber de tu operación para cuadrar tus viajes.',
     c('Responde con lo que sabes', 'Lo que no sepas, déjalo vacío. Likida no rellena por ti.')),
   '/dashboard/politicas': p('escudo',
     'Los topes contra los que el motor cuadra cada viaje de tu flota.',
-    c('El tope define la diferencia', 'Cambiar un tope cambia qué se marca como diferencia. Los viajes ya liquidados no se recalculan solos.')),
+    c('Topes, reglas por ruta y topes fiscales', 'Tres bloques: topes por concepto, reglas por ruta y los topes fiscales que aplica el motor. Revisa cada uno antes de guardar.')),
   '/dashboard/arco': p('escudo',
     'Solicitudes de tus operadores sobre sus datos y cómo responderlas a tiempo. La ley da veinte días hábiles.',
     c('Cada solicitud tiene plazo', 'Atiende primero la más próxima a vencer. Responder tarde es incumplir.')),
@@ -205,31 +204,5 @@ export const PANTALLAS: Readonly<Record<string, Pantalla>> = {
     c('Plan y consumo', 'Aquí ves lo que usas y tus facturas de Likida. El plan lo cambia el dueño.')),
   '/dashboard/configuracion': p('panel',
     'Lo que el motor usa para cuadrar tus viajes.',
-    c('Cambia con cuidado', 'Estos valores afectan cómo se cuadra cada viaje nuevo. Anota por qué lo cambias.')),
-};
-
-// ───────────────────────────────────────────────────────────────────────────
-// PISTAS CONTEXTUALES: pantallas que no están en el menú (subpantallas y detalles). No suman pasos al recorrido; aparecen
-// una vez, al abrir la pantalla, y se descartan con «Entendido». `desde` = la pantalla de la que se llega.
-// ───────────────────────────────────────────────────────────────────────────
-const pista = (ilu: Ilu, desde: string, titulo: string, texto: string): PistaContextual => ({ ilu, desde, titulo, texto });
-
-export const PISTAS_CONTEXTUALES: Readonly<Record<string, PistaContextual>> = {
-  '/dashboard/[id]': pista('corte', '/dashboard/agentes/liquidacion', 'El detalle de una liquidación', 'Anticipo, comprobado y diferencia, con el fundamento de cada cifra. Revisa, ajusta o rechaza antes de firmar.'),
-  '/dashboard/integraciones': pista('nodos', '/dashboard/conexiones', 'Esta pantalla se fusionó con Conexiones', 'Lo que buscas vive ahora en Conexiones. Esta dirección sigue abriendo para no romper enlaces guardados.'),
-  [`${RUTA_CARTA_PORTE}/borrador/[id]`]: pista('lista', '/dashboard/carta-porte', 'El borrador de Carta Porte', 'Revisa lo que falta y quién lo declara. El borrador se valida antes de timbrar; aquí no se emite nada.'),
-  '/dashboard/agentes/liquidacion/formato': pista('corte', '/dashboard/agentes/liquidacion', 'Tu formato de liquidación', 'Likida toma el dato del pago y lo manda al operador con el formato que ya usas.'),
-  '/dashboard/agentes/liquidacion/configuracion': pista('panel', '/dashboard/agentes/liquidacion', 'Cómo se entrega el desglose', 'Quién lo recibe, cómo se ve y qué conceptos retienen el envío.'),
-  '/dashboard/agentes/peajes/configuracion': pista('panel', '/dashboard/agentes/peajes', 'Configuración del conciliador', 'Buzón, entradas y mapeos con los que el agente cruza el estado de cuenta contra los viajes.'),
-  '/dashboard/agentes/peajes/reclamacion': pista('corte', '/dashboard/agentes/peajes', 'Reporte de reclamación', 'Los cruces candidatos a reclamo, el cierre mensual y el seguimiento de cada reclamo.'),
-  '/dashboard/agentes/carta-porte/catalogo': pista('lista', '/dashboard/agentes/carta-porte', 'Catálogo del cliente', 'Lo que el agente aprende una vez de cada cliente: productos, remitentes, destinatarios y su número interno.'),
-  '/dashboard/agentes/carta-porte/referencia': pista('lista', '/dashboard/agentes/carta-porte', 'Referencia del cliente', 'Algunos clientes exigen su referencia para cobrar. Aquí ves los viajes cargados que no la traen.'),
-  '/dashboard/agentes/carta-porte/configuracion': pista('panel', '/dashboard/agentes/carta-porte', 'Configuración de la salida', 'Cómo sale la plantilla hacia el sistema del cliente y qué hace el agente cuando falta algo.'),
-  '/dashboard/agentes/vigia/historial': pista('chat', '/dashboard/agentes/vigia', 'Grupos de clientes e histórico', 'Marca los grupos de WhatsApp de tus clientes críticos y sube el chat exportado para ver qué preguntan más.'),
-  '/dashboard/agentes/vigia/programa': pista('importar', '/dashboard/agentes/vigia', 'Programa de despacho', 'Sube el archivo del programa para que el agente avise a tus clientes.'),
-  '/dashboard/agentes/vigia/importacion': pista('lista', '/dashboard/agentes/vigia', 'Estatus de importación', 'El estatus de cada viaje se deriva del archivo que subes. Si el archivo no lo dice, aquí tampoco.'),
-  '/dashboard/agentes/vigia/avisos': pista('campana', '/dashboard/agentes/vigia', 'Avisos de viaje', 'El agente arma los avisos para tus clientes. Confírmalos, edítalos o descártalos antes de que salgan.'),
-  '/dashboard/agentes/conductores/sitios': pista('mapa', '/dashboard/agentes/conductores', 'Catálogo de sitios', 'Clientes, plantas y andenes con su centro y su radio. Ninguna coordenada se calcula ni se inventa.'),
-  '/dashboard/agentes/conductores/estadias': pista('linea', '/dashboard/agentes/conductores', 'Estadías en andén', 'El tiempo entre llegada y salida de cada carga o descarga, con la hora exacta del mensaje del chofer.'),
-  '/dashboard/agentes/conductores/configuracion': pista('panel', '/dashboard/agentes/conductores', 'Configuración del agente', 'Cuándo y cuánto insiste el agente con tus choferes, en qué horario y a quién avisa si nadie contesta.'),
+    c('La empresa, los ajustes y las unidades', 'Aquí viven los datos de la empresa, los ajustes de tu operación y las unidades calibradas. Lo que cambies lo usa el motor al cuadrar.')),
 };
