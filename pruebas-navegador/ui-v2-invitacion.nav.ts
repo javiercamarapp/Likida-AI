@@ -53,10 +53,13 @@ for (const rol of ROLES) {
       expect(medidas.anuncia).toBe(true);
 
       // No es modal: un enlace del menú recibe el clic; al irse a otra pantalla la invitación se cierra y no tapa sus acciones.
-      await page.locator(rol.destino).first().click();
+      await page.locator(`${rol.destino}:visible`).first().click();
       await expect(invitacion(page)).toHaveCount(0);
       await page.waitForLoadState('networkidle');
-      await page.locator('#contenido-principal a:visible, #contenido-principal button:visible').first().click({ trial: true });
+      await expect(page.locator('#contenido-principal')).toBeVisible();
+      // El rincón donde estaba la invitación ya pertenece a la otra pantalla: ninguna capa del recorrido lo cubre.
+      const tapado = await page.evaluate(() => Boolean(document.elementFromPoint(window.innerWidth - 80, window.innerHeight - 80)?.closest('.rv-tour, .rv-onb-inv')));
+      expect(tapado, 'la invitación no debe seguir tapando la otra pantalla').toBe(false);
     } finally {
       await ctx.close();
     }
