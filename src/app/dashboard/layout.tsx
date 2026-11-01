@@ -24,13 +24,14 @@ import '../ui-v2/piezas.css';
 import '../ui-v2/graficas.css';
 import '../ui-v2/datos.css';
 import '../ui-v2/movimiento.css';
+import '../ui-v2/onboarding.css';
 import '../ui-v2/chat.css';
 import '../ui-v2/paginas.css';
 import '../ui-v2/paginas-dominio.css';
 import { PulsoProducto } from './pulso-producto';
 import { AvisoLegalPendiente } from './aviso-legal';
 import { TourProvider } from '../ui-v2/movimiento/tour';
-import { RECORRIDOS_DASHBOARD, rutasDeRecorridos } from './recorridos/dueno';
+import { onboardingDeLaSesion } from './recorridos';
 import { insigniaDeCookie, nombreCookieAvance } from './puesta-en-marcha/progreso';
 
 // Título de la pestaña: cada pantalla exporta su nombre (el del menú) y la plantilla le pone «· Likida».
@@ -96,7 +97,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // solo. Los pasos del recorrido se limitan a las rutas que ESTE rol ve en ESTE perfil.
   const v2 = ui === 'v2';
   const avance = v2 && perfil && tenantDelMenu ? insigniaDeCookie(jarra.get(nombreCookieAvance(tenantDelMenu))?.value) : null;
-  const rutasDelRecorrido = rutasDeRecorridos().filter((r) => puedeVerRuta(sesion.rol, r, perfil));
+  const onb = v2 ? onboardingDeLaSesion(sesion.rol, perfil) : null;
+  const rutasDelRecorrido = (onb?.rutas ?? []).filter((r) => puedeVerRuta(sesion.rol, r, perfil));
   const contenido = (
     <>
       {/* El pulso de producto (0251): un POST de fuego-y-olvido por cambio de
@@ -113,10 +115,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
       nombre={sesion.nombre} rol={sesion.rol} cerrarSesion={cerrarSesion} usoIa={usoIa} perfil={perfil}
       {...(v2 && avance ? { insignias: { '/dashboard/puesta-en-marcha': avance } } : {})}
     >
-      {v2 && perfil ? (
+      {onb && onb.principal ? (
         <TourProvider
-          recorridos={RECORRIDOS_DASHBOARD} ambito={`${tenantDelMenu ?? 'sin'}:${sesion.userId}`}
+          recorridos={onb.recorridos} ambito={`${tenantDelMenu ?? 'sin'}:${sesion.userId}`}
           soloLectura={sesion.rol === 'superadmin'} rutasPermitidas={rutasDelRecorrido}
+          principal={onb.principal} asistente={onb.asistente} pistas={onb.pistas}
         >
           {contenido}
         </TourProvider>

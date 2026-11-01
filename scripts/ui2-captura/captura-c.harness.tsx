@@ -39,12 +39,8 @@ const { default: DashboardChromeV2 } = await import('@/app/dashboard/shell/chrom
 const { VistaPuestaEnMarcha } = await import('@/app/dashboard/puesta-en-marcha/vista');
 const { VistaConexiones } = await import('@/app/dashboard/conexiones/vista');
 const { ResumenV2 } = await import('@/app/dashboard/resumen-v2');
-const { GloboTour } = await import('@/app/ui-v2/movimiento/tour/globo');
-const { colocarGlobo, rectFoco, trazoVelo } = await import('@/app/ui-v2/movimiento/tour/geometria');
-const { RECORRIDO_DUENO } = await import('@/app/dashboard/recorridos/dueno');
 import type { SenalesAsistente } from '@/lib/likida/asistente/pasos_cinco_agentes';
 import type { Conector } from '@/lib/likida/conexiones';
-import type { Instantanea, Rect, Tam } from '@/app/ui-v2/movimiento/tour/tipos';
 import type { Insight } from '@/lib/likida/insights/tipos';
 import { comprobarPaginaV2, exigirV2Css, exigirV2Html } from './exigir_v2';
 import { USUARIO, textoInsight } from './fixtures/logistica_mx';
@@ -137,12 +133,6 @@ const VISTAS: Record<string, VistaDef> = {
   'c09-conexiones': { ruta: '/dashboard/conexiones', cuerpo: () => <VistaConexiones conectores={CONECTORES} credenciales={<section className="card p-4"><h2 className="font-display text-[14px] font-semibold">Credenciales de tus sistemas</h2><p className="text-[12.5px] mt-1" style={{ color: 'var(--muted)' }}>Aquí va el formulario de captura del acceso.</p></section>} /> },
 };
 
-// Pasos del recorrido a capturar: (id del paso, vista de fondo).
-const PASOS_TOUR: Array<[string, string]> = [
-  ['bienvenida', 'c04-asistente-vacio'], ['menu', 'c04-asistente-vacio'], ['avance', 'c04-asistente-vacio'], ['sistema', 'c04-asistente-vacio'],
-  ['archivo', 'c05-asistente-tms'], ['conexiones', 'c09-conexiones'], ['liquidacion', 'c04-asistente-vacio'],
-];
-
 const FUENTES_CSS = [
   ...[400, 500, 600, 700].map((w) => `@font-face{font-family:'Hanken Grotesk UI';font-weight:${w};font-style:normal;font-display:block;src:url('file://${F}/hankengrotesk-${w}.woff2') format('woff2')}`),
   ...[400, 500].map((w) => `@font-face{font-family:'IBM Plex Mono';font-weight:${w};font-style:normal;font-display:block;src:url('file://${F}/plexmono-${w}.woff2') format('woff2')}`),
@@ -195,51 +185,7 @@ describe('captura de las pantallas del carril C', () => {
         }
       }
 
-      // Recorrido: se mide el elemento REAL, se calcula foco y globo con las funciones del motor y se superpone.
-      if (w !== 1024) {
-        const total = RECORRIDO_DUENO.pasos.length;
-        for (const [pasoId, vista] of PASOS_TOUR) {
-          const i = RECORRIDO_DUENO.pasos.findIndex((p) => p.id === pasoId);
-          const paso = RECORRIDO_DUENO.pasos[i];
-          const base = readFileSync(path.join(TRABAJO, 'vistas', `${vista}.html`), 'utf8');
-          const vp: Tam = { w, h };
-          for (const tema of ['claro', 'oscuro'] as const) {
-            const archivo = path.join(TRABAJO, 'vistas', `tour-${pasoId}.doc.html`);
-            writeFileSync(archivo, doc(base));
-            await page.goto('file://' + archivo);
-            await page.evaluate(async (t: string) => { document.documentElement.setAttribute('data-theme', t === 'claro' ? 'light' : 'dark'); await document.fonts.ready; }, tema);
-            const rect: Rect | null = paso.ancla
-              ? await page.evaluate((a: string) => {
-                const el = [...document.querySelectorAll(`[data-tour="${a}"]`)].find((e) => (e as HTMLElement).offsetParent !== null) as HTMLElement | undefined;
-                if (!el) return null;
-                const r = el.getBoundingClientRect();
-                return { x: r.x, y: r.y, w: r.width, h: r.height };
-              }, paso.ancla)
-              : null;
-            const foco = rect ? rectFoco(rect, vp) : null;
-            const snap: Instantanea = {
-              fase: 'activo', indice: i, total, paso, anclaLista: true, navegando: false, reducirMovimiento: true,
-              esPrimero: i === 0, esUltimo: i === total - 1,
-            };
-            const armar = (tam: Tam) => {
-              const col = colocarGlobo(foco, tam, vp, paso.lado ?? 'auto');
-              return renderToStaticMarkup(
-                <div className="rv-tour" data-ui="v2" data-reducido>
-                  <svg className="rv-tour__velo" width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true"><path d={trazoVelo(vp, foco)} fillRule="evenodd" /></svg>
-                  {foco ? <div className="rv-tour__halo" style={{ transform: `translate(${foco.x}px, ${foco.y}px)`, width: foco.w, height: foco.h }} aria-hidden="true" /> : null}
-                  <GloboTour snap={snap} col={col} onSiguiente={() => {}} onAtras={() => {}} onSaltar={() => {}} onMasTarde={() => {}} />
-                </div>,
-              );
-            };
-            await page.evaluate((m: string) => document.body.insertAdjacentHTML('beforeend', m), armar({ w: 340, h: 260 }));
-            const medido = await page.evaluate(() => { const g = document.querySelector('.rv-tour__globo')!.getBoundingClientRect(); return { w: g.width, h: g.height }; });
-            await page.evaluate(() => document.querySelector('.rv-tour')!.remove());
-            await page.evaluate((m: string) => document.body.insertAdjacentHTML('beforeend', m), armar(medido));
-            await page.waitForTimeout(40);
-            await page.screenshot({ path: path.join(OUT, `tour-${String(i + 1).padStart(2, '0')}-${pasoId}__${w}__${tema}.png`) });
-          }
-        }
-      }
+      // El recorrido (tarjeta, foco, invitación, Guía) se captura con lo.harness.tsx.
       await ctx.close();
     }
     await browser.close();

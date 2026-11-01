@@ -143,71 +143,8 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   RECORRIDO ANIMADO (adenda 10 / 10.1). Mismo lenguaje que los drawers: superficie
-   sólida, hairline, radio 12, sombra solo de popover, tinta (no «plugin de tour»).
-   El foco es un velo SVG con agujero (los clics pasan por el agujero); el halo
-   es un aro de tinta; el globo sube 6 px al aparecer. Con reduce: todo aparece
-   quieto y el recorrido sigue igual de guiado (mismo velo, halo, texto y flecha).
+   RECORRIDO: el contenedor. La tarjeta, el foco, la etiqueta, la invitación, la pista y el menú Guía viven en `onboarding.css`.
+   z-index 55: sobre la barra inferior (45) y el encabezado, por debajo de los popovers y diálogos (60+).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-.rv-tour { position: fixed; inset: 0; z-index: 70; pointer-events: none; font-family: var(--font-sans-ui, inherit); }
-.rv-tour__velo { position: absolute; inset: 0; pointer-events: none; }
-.rv-tour__velo path { fill: var(--scrim, rgba(14, 14, 16, .55)); pointer-events: auto; }
-.rv-tour__halo {
-  position: absolute; left: 0; top: 0; border-radius: 8px; pointer-events: none;
-  box-shadow: 0 0 0 2px var(--marca, var(--ink)), 0 0 0 5px color-mix(in srgb, var(--marca, var(--ink)) 16%, transparent);
-}
-.rv-tour__bloqueo { position: absolute; pointer-events: auto; cursor: default; }
-
-.rv-tour__globo {
-  position: absolute; left: 0; top: 0; pointer-events: auto; width: min(340px, calc(100vw - 24px)); box-sizing: border-box;
-  display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 12px;
-  background: var(--surface); color: var(--ink); border: 1px solid var(--line2, var(--line)); border-radius: 12px;
-  box-shadow: var(--shadow-pop, none); outline: none;
-}
-.rv-tour__globo:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-.rv-tour__flecha {
-  position: absolute; width: 12px; height: 12px; background: var(--surface); border: 1px solid var(--line2, var(--line));
-  transform: translate(-50%, -50%) rotate(45deg);
-}
-.rv-tour__globo[data-lado="abajo"] .rv-tour__flecha { top: 0; border-right: 0; border-bottom: 0; }
-.rv-tour__globo[data-lado="arriba"] .rv-tour__flecha { top: 100%; border-left: 0; border-top: 0; }
-.rv-tour__globo[data-lado="derecha"] .rv-tour__flecha { left: 0; border-top: 0; border-right: 0; }
-.rv-tour__globo[data-lado="izquierda"] .rv-tour__flecha { left: 100%; border-bottom: 0; border-left: 0; }
-
-/* Hoja inferior en móvil: sin flecha, pegada abajo, con safe-area. */
-.rv-tour__globo[data-lado="hoja"] {
-  width: 100vw; border-width: 1px 0 0; border-radius: 12px 12px 0 0; padding-bottom: calc(12px + env(safe-area-inset-bottom));
-  max-height: 56dvh; overflow-y: auto;
-}
-
-.rv-tour__cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.rv-tour__paso { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-[data-ui="v2"] .rv-tour__paso { font-size: 12px; font-weight: 600; }
-.rv-tour__marcas { display: flex; gap: 4px; margin: 0; padding: 0; list-style: none; }
-.rv-tour__marcas li { width: 14px; height: 3px; border-radius: 2px; background: var(--line2, var(--line)); }
-.rv-tour__marcas li[data-estado="hecho"] { background: var(--ink2, var(--ink)); }
-.rv-tour__marcas li[data-estado="actual"] { background: var(--senal, var(--ink)); }
-.rv-tour__titulo { margin: 0; font-size: 15px; line-height: 1.35; font-weight: 600; letter-spacing: -.005em; }
-.rv-tour__texto { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink2, var(--ink)); }
-.rv-tour__accion {
-  display: flex; align-items: center; gap: 8px; margin: 2px 0 0; padding: 6px 10px; border-radius: 8px;
-  background: var(--canvas); border: 1px solid var(--line); font-size: 13px; color: var(--ink2, var(--ink));
-}
-.rv-tour__accion strong { color: var(--ink); font-weight: 600; }
-.rv-tour__nota { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
-.rv-tour__pie { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--line); }
-.rv-tour__izq, .rv-tour__der { display: flex; align-items: center; gap: 4px; }
-.rv-tour__enlace { padding: 0; border: 0; background: none; font: inherit; color: var(--ink); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
-.rv-tour__enlace:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 2px; }
-.rv-tour__globo[data-lado="hoja"] .rv-tour__pie { position: sticky; bottom: 0; background: var(--surface); }
-
-@media (prefers-reduced-motion: no-preference) {
-  .rv-tour__velo { animation: rv-fade var(--ui-motion) var(--ui-ease) both; }
-  .rv-tour__globo { animation: rv-globo-entra var(--ui-slow) var(--ui-ease) both; transition: transform var(--ui-slow) var(--ui-ease); }
-  .rv-tour__halo { animation: rv-halo-asienta var(--ui-slow) var(--ui-ease) both; }
-}
-/* Paso de acción: aro más ancho (distinción estática, sin pulso). */
-.rv-tour__halo[data-espera] {
-  box-shadow: 0 0 0 2px var(--marca, var(--ink)), 0 0 0 6px color-mix(in srgb, var(--marca, var(--ink)) 18%, transparent);
-}
+.rv-tour { position: fixed; inset: 0; z-index: 55; pointer-events: none; font-family: var(--font-sans-ui, inherit); }

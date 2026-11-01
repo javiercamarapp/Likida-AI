@@ -97,7 +97,7 @@ describe('recorrido derivado del menú', () => {
   it('textos sin emojis ni signos de exclamación', () => {
     for (const { rol, perfil } of COMBOS) {
       const r = construirRecorrido(rol, perfil, 'completo');
-      for (const p of r?.pasos ?? []) expect(`${p.titulo} ${p.texto}`, p.id).not.toMatch(/[!¡\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u);
+      for (const p of r?.pasos ?? []) expect(`${p.titulo} ${p.texto}`, p.id).not.toMatch(/[!¡]|\p{Extended_Pictographic}/u);
     }
   });
 });

@@ -101,4 +101,12 @@ export interface Instantanea {
   reducirMovimiento: boolean;
   esPrimero: boolean;
   esUltimo: boolean;
+  /** Contadores de la tarjeta: los saltos de menú («ir») no cuentan; el cierre sí. */
+  pasoN?: number;
+  pasoTotal?: number;
+  /** Pantalla actual y total (0-based `grupo`; `grupoTotal` = nº de pantallas del recorrido). */
+  grupo?: number;
+  grupoTotal?: number;
+  /** Pantallas del recorrido en orden, para la ruta de la tarjeta. */
+  pantallas?: ReadonlyArray<{ href: string; nombre: string }>;
 }
