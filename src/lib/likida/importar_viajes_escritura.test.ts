@@ -41,6 +41,10 @@ let paginasLectura: Array<Array<{ folio: string }>>;
 let catalogoUnidades: Array<{ id: string; numero_economico: string }>;
 let catalogoClientes: Array<{ id: string; nombre: string }>;
 let catalogoError: { message: string } | null;
+/** A35-BE-07: un folio que truena por OTRA causa (no el índice de la unidad)
+ *  — p.ej. un corte de conexión — para ejercer el reintento fila por fila
+ *  cuando YA entraron viajes. */
+let folioErrorOtro: string | null;
 /** El catálogo de OPERADORES, que desde FE-15 se lee UNA vez por corrida.
  *  Va aparte de unidad/cliente porque su error es otro caso: sin operadores
  *  legibles no se importa NADA, aunque el archivo no traiga unidad ni cliente. */
@@ -219,6 +223,7 @@ beforeEach(() => {
   rpcError = null;
   rpc.mockClear();
   resolver.mockClear();
+  folioErrorOtro = null;
   logger.error.mockClear();
 });
 

@@ -277,3 +277,59 @@ describe('A37-A1-liquidaciones-08: reenviar cuando la recepción no creó ningun
     });
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A40-BE-03 (ALTO, auditoría 40) — «Reenviar» no miraba la fecha de corte que
+// «Liberar envío» sí rechaza (`liberar_envio.ts:107`, motivo
+// `omitido_por_corte`). Las dos puertas mandan el MISMO correo al operador.
+//
+// El hueco no es el histórico ya marcado: ése trae `retenidaMotivo` y el
+// reenvío ya lo rechaza. Es el desglose anterior al corte que NO está
+// marcado, y hay al menos dos caminos para llegar ahí: el corte se fija (o se
+// corrige) DESPUÉS de haber recibido el desglose, y la barrida de omisión que
+// debía marcarlo se rinde sin avisar al tope de filas (A40-BE-02). Por eso
+// `liberar_envio` tiene DOS disyuntos y no uno: la marca no es confiable.
+//
+// Un clic en «Reenviar al operador» sobre una nómina de nov-2025, con corte
+// en 2026-10-01, se la mandaba al chofer. La UI tampoco lo frena: solo
+// deshabilita por retención (`desgloses.tsx:539`).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('A40-BE-03 — la fecha de corte se revalida en el reenvío', () => {
+  /** Desglose NO retenido cuyo periodo termina antes del corte de la flota. */
+  function montarAnteriorAlCorte(periodoHasta: string, noEnviarAntes: string | null) {
+    const { e, deps } = montar();
+    return {
+      e,
+      deps: {
+        ...deps,
+        leerLiquidacion: async () => ({ id: LIQ, tenantId: TENANT, operadorId: OPERADOR, periodoHasta } as unknown as LiquidacionExterna),
+        leerConfig: async () => ({ ...CONFIG_CORREO_POR_DEFECTO, canal: 'correo', activa: true, rhCorreos: ['rh.prueba@ejemplo.test'], noEnviarAntes }),
+      } satisfies DependenciasReenvio,
+    };
+  }
+
+  it('un desglose anterior al corte NO se reenvía, aunque no esté marcado como omitido', async () => {
+    const { e, deps } = montarAnteriorAlCorte('2025-11-15', '2026-10-01');
+    expect(await reenviarDesglose(TENANT, LIQ, op(), deps)).toMatchObject({ estado: 'rechazado', motivo: 'omitido_por_corte' });
+    expect(e.insertadas).toHaveLength(0);
+    expect(e.orden).toEqual([]); // no se escribió NADA
+  });
+
+  it('el mismo desglose, con el corte justo en su último día, SÍ se reenvía (el corte no es inclusivo)', async () => {
+    const { e, deps } = montarAnteriorAlCorte('2025-11-15', '2025-11-15');
+    expect(await reenviarDesglose(TENANT, LIQ, op(), deps)).toMatchObject({ estado: 'reenviado' });
+    expect(e.insertadas).toHaveLength(1);
+  });
+
+  it('sin fecha de corte declarada la conducta es la de siempre', async () => {
+    const { e, deps } = montarAnteriorAlCorte('2025-11-15', null);
+    expect(await reenviarDesglose(TENANT, LIQ, op(), deps)).toMatchObject({ estado: 'reenviado' });
+    expect(e.insertadas).toHaveLength(1);
+  });
+
+  it('un desglose posterior al corte se reenvía normal', async () => {
+    const { e, deps } = montarAnteriorAlCorte('2026-10-15', '2026-10-01');
+    expect(await reenviarDesglose(TENANT, LIQ, op(), deps)).toMatchObject({ estado: 'reenviado' });
+    expect(e.insertadas).toHaveLength(1);
+  });
+});
