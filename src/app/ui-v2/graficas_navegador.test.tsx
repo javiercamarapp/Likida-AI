@@ -58,12 +58,17 @@ async function columnasSinLinea(p: Page, mitad = false): Promise<number> {
       for (let fila = 0; fila < c.height && !hay; fila++) {
         const i = (fila * c.width + col) * 4;
         const [r, g, bl] = [d[i], d[i + 1], d[i + 2]];
-        if (bl > 70 && r < 110 && g < 150 && bl - r > 30) hay = true; // azul de la métrica 1 (#2f6bd8, paleta de datos de Vexa)
+        // Azul de la métrica 1 (#2f6bd8) TOLERANTE al suavizado: una línea de 1.75 px en un tramo inclinado puede no tener ni un píxel a color pleno
+        // (el rasterizador del CI la pinta más tenue que el local). Cuenta todo píxel con ≥ ~30 % de cobertura azul (r < 190); el relleno del área
+        // (.12 de opacidad, r ≥ 229) y la rejilla gris NO llegan a eso, así que una línea ausente o partida sigue dando columnas vacías.
+        if (bl > 150 && r < 190 && bl - r > 40 && bl - g > 20) hay = true;
       }
       cubiertas.push(hay);
     }
     const primera = cubiertas.indexOf(true), ultima = cubiertas.lastIndexOf(true);
-    for (let k = primera; k >= 0 && k <= ultima; k++) if (!cubiertas[k]) vacias++;
+    const huecos: number[] = [];
+    for (let k = primera; k >= 0 && k <= ultima; k++) if (!cubiertas[k]) { vacias++; huecos.push(k); }
+    if (vacias > 0) console.log(`línea del área: ${c.width}px, primera=${primera}, ultima=${ultima}, columnas sin línea=[${huecos.join(',')}]`);
     // terminada la animación, la línea debe cubrir el trazo entero (no solo no estar partida)
     if (!enCurso && (primera < 0 || primera > 44 /* padL 30 + 14 */ || ultima < cubiertas.length - 26 /* PAD_R 14 + 12 */)) vacias += 1000;
     return vacias;
