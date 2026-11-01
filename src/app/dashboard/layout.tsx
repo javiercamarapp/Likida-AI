@@ -110,20 +110,23 @@ export default async function DashboardLayout({ children }: { children: React.Re
     </>
   );
 
-  return (
+  const marco = (
     <Chrome
       nombre={sesion.nombre} rol={sesion.rol} cerrarSesion={cerrarSesion} usoIa={usoIa} perfil={perfil}
       {...(v2 && avance ? { insignias: { '/dashboard/puesta-en-marcha': avance } } : {})}
     >
-      {onb && onb.principal ? (
-        <TourProvider
-          recorridos={onb.recorridos} ambito={`${tenantDelMenu ?? 'sin'}:${sesion.userId}`}
-          soloLectura={sesion.rol === 'superadmin'} rutasPermitidas={rutasDelRecorrido}
-          principal={onb.principal} asistente={onb.asistente} pistas={onb.pistas}
-        >
-          {contenido}
-        </TourProvider>
-      ) : contenido}
+      {contenido}
     </Chrome>
   );
+
+  // El motor del recorrido envuelve TODO el chrome (no solo la página): el menú Guía vive en la barra superior y necesita su contexto.
+  return onb && onb.principal ? (
+    <TourProvider
+      recorridos={onb.recorridos} ambito={`${tenantDelMenu ?? 'sin'}:${sesion.userId}`}
+      soloLectura={sesion.rol === 'superadmin'} rutasPermitidas={rutasDelRecorrido}
+      principal={onb.principal} asistente={onb.asistente} pistas={onb.pistas}
+    >
+      {marco}
+    </TourProvider>
+  ) : marco;
 }
