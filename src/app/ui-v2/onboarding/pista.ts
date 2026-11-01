@@ -1,4 +1,4 @@
-import { PISTAS_CONTEXTUALES } from './pantallas';
+import { PISTAS_CONTEXTUALES } from './pistas';
 import type { PistaContextual } from './tipos';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

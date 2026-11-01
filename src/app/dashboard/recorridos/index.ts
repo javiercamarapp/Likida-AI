@@ -2,7 +2,7 @@ import type { Recorrido } from '@/app/ui-v2/movimiento/tour';
 import { menuPorPerfil } from '../shell/menu-por-perfil';
 import { asistenteDe } from '@/app/ui-v2/onboarding/asistente';
 import { AGENTES, construirRecorridoAgente } from '@/app/ui-v2/onboarding/agentes';
-import { PISTAS_CONTEXTUALES } from '@/app/ui-v2/onboarding/pantallas';
+import { PISTAS_CONTEXTUALES } from '@/app/ui-v2/onboarding/pistas';
 import { pistaDeRol } from '@/app/ui-v2/onboarding/roles';
 import { construirRecorrido } from '@/app/ui-v2/onboarding/tour';
 import type { PistaContextual } from '@/app/ui-v2/onboarding/tipos';

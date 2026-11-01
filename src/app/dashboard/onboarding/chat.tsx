@@ -528,7 +528,7 @@ export function ChatEntrevista({
         <div className="relative z-10 w-full flex-1 flex flex-col items-center justify-center px-4 py-10">
           <div className="w-full max-w-2xl flex flex-col items-center">
             <Logo alto="h-7" className="mb-6" />
-            <h1 className="text-[26px] leading-tight font-medium tracking-tight text-center">
+            <h1 data-onboarding="pantalla.titulo" className="text-[26px] leading-tight font-medium tracking-tight text-center">
               Configura tu flota
             </h1>
             <p className="mt-2 mb-8 text-sm text-center max-w-md" style={{ color: 'var(--muted)' }}>

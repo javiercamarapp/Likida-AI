@@ -108,6 +108,18 @@ describe('ancla ausente: salta con gracia, sin romper', () => {
 });
 
 describe('saltar, retomar, saltar a una pantalla', () => {
+  it('«Anterior» vuelve al paso previo (y no pasa del primero)', () => {
+    const r = construirRecorrido('flota_admin', null, 'completo')!;
+    const { c, siguiente } = montar(r);
+    c.iniciar();
+    c.atras();
+    expect(c.instantanea().indice).toBe(0);
+    siguiente(); siguiente();
+    expect(c.instantanea().indice).toBe(2);
+    c.atras();
+    expect(c.instantanea().indice).toBe(1);
+    expect(c.instantanea().esPrimero).toBe(false);
+  });
   it('«Omitir recorrido» guarda «omitido» y cierra; Más tarde guarda el paso y reanudar vuelve a él', () => {
     const r = construirRecorrido('flota_admin', null, 'completo')!;
     const { host, c, siguiente } = montar(r);

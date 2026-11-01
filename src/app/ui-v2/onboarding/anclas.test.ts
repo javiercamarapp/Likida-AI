@@ -1,5 +1,5 @@
 /* eslint-disable security/detect-non-literal-fs-filename -- recorre el propio árbol de src */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { hrefsDelMenu, menuPorPerfil } from '@/app/dashboard/shell/menu-por-perfil';
@@ -60,4 +60,34 @@ describe('anclas del recorrido', () => {
     }
     expect(faltan).toEqual([]);
   });
+
+  it('el ancla de CADA pantalla vive en el archivo de SU pantalla: encabezado compartido (MarcoPagina/EncabezadoPagina) y anclas propias', () => {
+    const DASH = join(SRC, 'app/dashboard');
+    const archivosDe = (ruta: string): string[] => {
+      const rel = ruta.replace(/^\/dashboard\/?/, '');
+      if (rel === '') return readdirSync(DASH).filter((n) => /\.tsx$/.test(n) && !/\.test\./.test(n)).map((n) => join(DASH, n));
+      const dir = join(DASH, rel);
+      return existsSync(dir) ? codigo(dir) : [];
+    };
+    const sinEncabezado: string[] = [];
+    const faltan: string[] = [];
+    for (const [ruta, d] of Object.entries(PANTALLAS)) {
+      const texto = archivosDe(ruta).map((f) => readFileSync(f, 'utf8')).join('\n');
+      if (!/MarcoPagina|EncabezadoPagina/.test(texto)) {
+        sinEncabezado.push(ruta);
+        // Sin el encabezado compartido, la pantalla pone el ancla de título en su propio encabezado.
+        if (!/data-onboarding="pantalla\.titulo"/.test(texto)) faltan.push(`${ruta}: pantalla.titulo propio`);
+      }
+      for (const a of [d.clave.ancla, d.accion?.ancla]) {
+        if (!a || Object.hasOwn(ANCLAS_DERIVADAS, a) || a === ANCLA_TITULO) continue;
+        const q = a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (!new RegExp(`['"\`]${q}['"\`]`).test(texto)) faltan.push(`${ruta}: ${a}`);
+      }
+    }
+    expect(faltan).toEqual([]);
+    expect(sinEncabezado).toEqual(SIN_ENCABEZADO_COMPARTIDO);
+  });
 });
+
+/** Pantallas del menú que NO usan el encabezado compartido: su paso «qué es» degrada (ancla ausente) en vez de resaltar el título. */
+const SIN_ENCABEZADO_COMPARTIDO: string[] = ['/dashboard/chat', '/dashboard/onboarding'];

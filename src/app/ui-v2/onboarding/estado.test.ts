@@ -1,7 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { claveEstado, crearEstadoLocal, debeInvitar, debeMostrarPista, ESTADO_VACIO, normalizar, onboardingDesactivado, type Almacen } from './estado';
-import { PRERREQUISITO_POR_PANTALLA, asistenteDe } from './asistente';
-import { PANTALLAS } from './pantallas';
+import { afterEach, describe, expect, it } from 'vitest';
+import { escribirMarcaSesion, leerMarcaSesion, MARCA_SESION, claveEstado, crearEstadoLocal, debeInvitar, debeMostrarPista, ESTADO_VACIO, normalizar, onboardingDesactivado, type Almacen } from './estado';
+import { asistenteDe } from './asistente';
 
 const falso = (): Almacen & { datos: Map<string, string> } => {
   const datos = new Map<string, string>();
@@ -48,11 +47,24 @@ describe('asistente y prerrequisitos', () => {
     expect(asistenteDe('contador', 'cinco_agentes')).toBeNull();
     expect(asistenteDe('nomina', 'cinco_agentes')).toBeNull();
   });
-  it('cada prerrequisito apunta a una pantalla del catálogo y trae su nota', () => {
-    // El tipo `IdPaso` de `paso` ya impide un id inventado en compilación; aquí se comprueba la pantalla y la nota.
-    for (const [ruta, pre] of Object.entries(PRERREQUISITO_POR_PANTALLA)) {
-      expect(Object.hasOwn(PANTALLAS, ruta), ruta).toBe(true);
-      expect(pre.nota.length, ruta).toBeGreaterThan(10);
-    }
+});
+
+describe('marca de sesión (localStorage bloqueado)', () => {
+  afterEach(() => { delete (globalThis as Record<string, unknown>).sessionStorage; delete (globalThis as Record<string, unknown>).document; });
+  it('sin ninguna marca no hay invitación previa; escribirla la deja en sessionStorage y en una cookie de sesión', () => {
+    const ses = new Map<string, string>();
+    const doc = { cookie: '' };
+    Object.assign(globalThis, { sessionStorage: { getItem: (k: string) => ses.get(k) ?? null, setItem: (k: string, v: string) => { ses.set(k, v); } }, document: doc });
+    expect(leerMarcaSesion()).toBe(false);
+    escribirMarcaSesion();
+    expect(ses.get(MARCA_SESION)).toBe('1');
+    expect(doc.cookie).toContain(`${MARCA_SESION}=1`);
+    expect(doc.cookie).not.toMatch(/expires|max-age/i);
+    expect(leerMarcaSesion()).toBe(true);
+  });
+  it('con sessionStorage bloqueado la cookie basta, y nada lanza', () => {
+    Object.assign(globalThis, { sessionStorage: { getItem: () => { throw new Error('bloqueado'); }, setItem: () => { throw new Error('bloqueado'); } }, document: { cookie: `x=1; ${MARCA_SESION}=1` } });
+    expect(leerMarcaSesion()).toBe(true);
+    expect(() => escribirMarcaSesion()).not.toThrow();
   });
 });

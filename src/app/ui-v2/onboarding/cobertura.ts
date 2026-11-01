@@ -1,7 +1,8 @@
 import { hrefsDelMenu, menuPorPerfil } from '@/app/dashboard/shell/menu-por-perfil';
 import { TODAS_LAS_RUTAS } from '@/app/dashboard/rutas';
-import { areaDeRuta, esRolNomina, puedeVerArea, puedeVerRuta, rutasConocidas, rutaPermitidaEnPerfil, RUTAS_NOMINA, type PerfilTenant } from '@/lib/auth/visibilidad';
-import { PANTALLAS, PISTAS_CONTEXTUALES } from './pantallas';
+import { areaDeRuta, esRolNomina, puedeVerArea, puedeVerRuta, rutasConocidas, rutaPermitidaEnPerfil, type PerfilTenant } from '@/lib/auth/visibilidad';
+import { PANTALLAS } from './pantallas';
+import { PISTAS_CONTEXTUALES } from './pistas';
 
 // Evita el literal «/dashboard/carta-porte/borrador» (la pantalla real es dinámica) en el barrido de enlaces vivos.
 const RUTA_CARTA_PORTE = '/dashboard/carta-porte';
@@ -47,14 +48,29 @@ function visible(ruta: string, rol: string, perfil: PerfilTenant | null): boolea
   return puedeVerRuta(rol, ruta, perfil);
 }
 
+/** Lista CERRADA de motivos de «no aplica» derivados (los declarados a mano viven en `NO_APLICA_DECLARADO`). */
+export const MOTIVOS = {
+  vendedor: 'El vendedor trabaja en /vendedor; no abre ninguna pantalla de /dashboard.',
+  nominaSinPerfil: 'Nómina y RH solo existe en flotas con los cinco agentes.',
+  perfil: 'El perfil de los cinco agentes no ofrece esta pantalla (stand-by).',
+  nomina: 'Nómina solo ve sus tres pantallas: conteos de Liquidación, notificaciones y su perfil.',
+  generico: 'Este rol no abre la pantalla.',
+} as const;
+export const motivoArea = (area: string) => `La pantalla es del área «${area}» y este rol no la ve.`;
+
+/** ¿El motivo sale de la derivación o de la lista declarada? Una prueba lo exige para toda celda «no aplica». */
+export function motivoEsConocido(m: string): boolean {
+  return (Object.values(MOTIVOS) as string[]).includes(m) || Object.values(NO_APLICA_DECLARADO).includes(m)
+    || /^La pantalla es del área «(operacion|dinero|administracion)» y este rol no la ve\.$/.test(m);
+}
+
 function motivoNoVe(ruta: string, rol: string, perfil: PerfilTenant | null): string {
-  if (rol === 'vendedor') return 'El vendedor trabaja en /vendedor; no abre ninguna pantalla de /dashboard.';
-  if (rol === 'nomina' && !perfil) return 'Nómina y RH solo existe en flotas con los cinco agentes.';
-  if (perfil && !rutaPermitidaEnPerfil(perfil, ruta) && !DINAMICAS[ruta]) return 'El perfil de los cinco agentes no ofrece esta pantalla (stand-by).';
-  if (esRolNomina(rol)) return RUTAS_NOMINA.has(ruta) ? 'Sin acceso.' : 'Nómina solo ve sus tres pantallas: conteos de Liquidación, notificaciones y su perfil.';
+  if (rol === 'vendedor') return MOTIVOS.vendedor;
+  if (rol === 'nomina' && !perfil) return MOTIVOS.nominaSinPerfil;
+  if (perfil && !rutaPermitidaEnPerfil(perfil, ruta) && !DINAMICAS[ruta]) return MOTIVOS.perfil;
+  if (esRolNomina(rol)) return MOTIVOS.nomina;
   const area = areaDeRuta(ruta);
-  if (area) return `La pantalla es del área «${area}» y este rol no la ve.`;
-  return 'Este rol no abre la pantalla.';
+  return area ? motivoArea(area) : MOTIVOS.generico;
 }
 
 export function celda(ruta: string, rol: string, perfil: PerfilMatriz): Celda {

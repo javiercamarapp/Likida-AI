@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { celda, NO_APLICA_DECLARADO, PERFILES_MATRIZ, resumenMatriz, ROLES_MATRIZ, rutasDeLaMatriz } from './cobertura';
-import { PANTALLAS, PISTAS_CONTEXTUALES } from './pantallas';
+import { celda, motivoEsConocido, NO_APLICA_DECLARADO, PERFILES_MATRIZ, resumenMatriz, ROLES_MATRIZ, rutasDeLaMatriz } from './cobertura';
+import { PANTALLAS } from './pantallas';
+import { PISTAS_CONTEXTUALES } from './pistas';
 import { hrefsDelMenu, menuPorPerfil } from '@/app/dashboard/shell/menu-por-perfil';
 
 describe('matriz de cobertura del onboarding', () => {
@@ -8,10 +9,10 @@ describe('matriz de cobertura del onboarding', () => {
     expect(resumenMatriz().sinCobertura).toEqual([]);
   });
 
-  it('toda celda «no aplica» trae un motivo no vacío', () => {
+  it('todo «no aplica» trae un motivo de la derivación o de la lista cerrada', () => {
     for (const ruta of rutasDeLaMatriz()) for (const rol of ROLES_MATRIZ) for (const perfil of PERFILES_MATRIZ) {
       const c = celda(ruta, rol, perfil);
-      if (c.estado === 'no_aplica') expect(c.motivo.length, `${ruta} ${rol} ${perfil}`).toBeGreaterThan(10);
+      if (c.estado === 'no_aplica') expect(motivoEsConocido(c.motivo), `${ruta} ${rol} ${perfil}: «${c.motivo}»`).toBe(true);
     }
   });
 

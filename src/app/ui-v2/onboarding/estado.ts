@@ -80,3 +80,15 @@ export function debeInvitar(e: EstadoOnboarding, opciones: { soloLectura: boolea
 export function debeMostrarPista(e: EstadoOnboarding, ruta: string, opciones: { soloLectura: boolean; desactivado: boolean }): boolean {
   return !e.descartado && !e.pistas.includes(ruta) && !opciones.desactivado && !opciones.soloLectura;
 }
+
+// ── Marca de sesión: con localStorage bloqueado (modo privado, datos del sitio bloqueados) la invitación NO debe reaparecer en cada
+// recarga. Se guarda «ya se le ofreció» en sessionStorage y en una cookie de SESIÓN (sin caducidad, sin datos: solo un 1). ──
+export const MARCA_SESION = 'likida_onb_visto';
+export function leerMarcaSesion(): boolean {
+  try { if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(MARCA_SESION) === '1') return true; } catch { /* bloqueado */ }
+  try { return typeof document !== 'undefined' && document.cookie.split('; ').some((c) => c === `${MARCA_SESION}=1`); } catch { return false; }
+}
+export function escribirMarcaSesion(): void {
+  try { if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(MARCA_SESION, '1'); } catch { /* bloqueado */ }
+  try { if (typeof document !== 'undefined') document.cookie = `${MARCA_SESION}=1; path=/dashboard; SameSite=Lax`; } catch { /* bloqueado */ }
+}
