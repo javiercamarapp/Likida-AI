@@ -1,5 +1,10 @@
 # Aplicar en producción — orden, riesgos y qué se rompe si no
 
+> **Despliegue 20 (1-nov-2026).** Sin migraciones nuevas (la base sigue en 0949). Trae las gráficas
+> interactivas (#793) y el onboarding por cobertura (#794). La invitación de primer ingreso del
+> onboarding queda APAGADA por omisión: se enciende con `ONBOARDING_INVITACION=1` en Vercel
+> (Production) cuando Javier lo decida; el menú «Guía», los recorridos y las pistas funcionan sin ella.
+
 > **Actualización 1-nov-2026.** La **0949** (rol `nomina`: solo amplía el dominio de
 > `app_user.rol`) quedó aplicada contra producción antes del despliegue 19 y verificada
 > con `pg_get_constraintdef` (el CHECK incluye `nomina`). `/api/health` reporta
