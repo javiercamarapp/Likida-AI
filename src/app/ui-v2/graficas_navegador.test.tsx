@@ -38,6 +38,11 @@ async function pagina(ancho: number, opts: { reducedMotion?: 'reduce' | 'no-pref
 
 /** Columnas de la zona de la línea (en px de pantalla) que NO tienen ningún píxel de la línea azul. */
 async function columnasSinLinea(p: Page, mitad = false): Promise<number> {
+  const r = await diagnostico(p, mitad);
+  if (r.vacias > ANILLO) throw new Error(`línea del área con ${r.vacias} columnas sin línea (máx. ${ANILLO}). Ancho ${r.ancho}px, primera=${r.primera}, ultima=${r.ultima}, vacías=[${r.huecos.join(',')}]\nColores no blancos más frecuentes: ${r.colores}\nMapa (# = línea, o = otro pixel con tinta):\n${r.mapa}`);
+  return r.vacias;
+}
+async function diagnostico(p: Page, mitad: boolean) {
   // mitad = capturar CON la animación de entrada en curso (como hace el arnés): la línea puede estar a medias,
   // pero nunca partida; el recuento son solo los huecos INTERNOS entre la primera y la última columna con línea.
   if (!mitad) await p.waitForTimeout(900); // la animación de entrada (≤ 420 ms) ya terminó
@@ -58,20 +63,40 @@ async function columnasSinLinea(p: Page, mitad = false): Promise<number> {
       for (let fila = 0; fila < c.height && !hay; fila++) {
         const i = (fila * c.width + col) * 4;
         const [r, g, bl] = [d[i], d[i + 1], d[i + 2]];
-        // Azul de la métrica 1 (#2f6bd8) TOLERANTE al suavizado: una línea de 1.75 px en un tramo inclinado puede no tener ni un píxel a color pleno
-        // (el rasterizador del CI la pinta más tenue que el local). Cuenta todo píxel con ≥ ~30 % de cobertura azul (r < 190); el relleno del área
-        // (.12 de opacidad, r ≥ 229) y la rejilla gris NO llegan a eso, así que una línea ausente o partida sigue dando columnas vacías.
-        if (bl > 150 && r < 190 && bl - r > 40 && bl - g > 20) hay = true;
+        if (bl > 70 && r < 110 && g < 150 && bl - r > 30) hay = true; // azul de la métrica 1 (#2f6bd8, paleta de datos de Vexa)
       }
       cubiertas.push(hay);
     }
     const primera = cubiertas.indexOf(true), ultima = cubiertas.lastIndexOf(true);
     const huecos: number[] = [];
     for (let k = primera; k >= 0 && k <= ultima; k++) if (!cubiertas[k]) { vacias++; huecos.push(k); }
-    if (vacias > 0) console.log(`línea del área: ${c.width}px, primera=${primera}, ultima=${ultima}, columnas sin línea=[${huecos.join(',')}]`);
     // terminada la animación, la línea debe cubrir el trazo entero (no solo no estar partida)
     if (!enCurso && (primera < 0 || primera > 44 /* padL 30 + 14 */ || ultima < cubiertas.length - 26 /* PAD_R 14 + 12 */)) vacias += 1000;
-    return vacias;
+    // Diagnóstico para el log del CI: mapa ASCII 120×30 del plano y los colores más frecuentes que no son blanco.
+    const esLinea = (i: number) => d[i + 2] > 70 && d[i] < 110 && d[i + 1] < 150 && d[i + 2] - d[i] > 30; // la MISMA regla del detector
+    const cols = 120, filas = 30, mapa: string[] = [];
+    for (let fy = 0; fy < filas; fy++) {
+      let linea = '';
+      for (let fx = 0; fx < cols; fx++) {
+        let ch = '.';
+        for (let yy = Math.floor((fy * c.height) / filas); yy < Math.floor(((fy + 1) * c.height) / filas); yy++) {
+          for (let xx = Math.floor((fx * c.width) / cols); xx < Math.floor(((fx + 1) * c.width) / cols); xx++) {
+            const i = (yy * c.width + xx) * 4;
+            if (esLinea(i)) { ch = '#'; } else if (ch === '.' && d[i] + d[i + 1] + d[i + 2] < 600) ch = 'o';
+          }
+        }
+        linea += ch;
+      }
+      mapa.push(linea);
+    }
+    const frecuencias = new Map<string, number>();
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i] + d[i + 1] + d[i + 2] > 735) continue;
+      const k = `${d[i] >> 4 << 4},${d[i + 1] >> 4 << 4},${d[i + 2] >> 4 << 4}`;
+      frecuencias.set(k, (frecuencias.get(k) ?? 0) + 1);
+    }
+    const colores = [...frecuencias.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, n]) => `rgb(${k})×${n}`).join('  ');
+    return { vacias, huecos, primera, ultima, ancho: c.width, mapa: mapa.join('\n'), colores };
   }, [png.toString('base64'), mitad] as const);
 }
 
