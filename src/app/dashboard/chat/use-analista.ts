@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
 import { mxn, litros } from '@/lib/formato';
 import {
-  FASES_PENSANDO, respuestaDeBloques, respuestaLocal,
+  FASES_PENSANDO, motivoDeFallo, respuestaDeBloques, respuestaLocal,
   type PasoTraza, type Respuesta,
 } from './respuestas';
 
@@ -277,9 +277,10 @@ export function useAnalista({ kpis, acred }: { kpis: DashboardKpis | null; acred
       } else {
         d = await resp.json().catch(() => null);
       }
-      // H4 (auditoría 24): cuando el analista falla de verdad, el servidor manda `{t:'error', error:'...'}` con `resp.ok` en 200 (el
-      // fallo va DENTRO del NDJSON). `respuestaLocal` declara el fallo antes de dar la respuesta de reserva — «fallar cerrado y decirlo».
-      const motivo = d && d.t === 'error' && typeof d.error === 'string' ? d.error : null;
+      // H4 (auditoría 24) + A41-AG-01: el fallo llega por DOS puertas — dentro del NDJSON (`{t:'error'}` con `resp.ok` en 200) y como
+      // ESTADO HTTP (401/403/429/400/503, sin `t`). `motivoDeFallo` mira las dos; mirando sólo la primera, las respuestas con estado se
+      // disfrazaban de respuesta normal. `respuestaLocal` lo declara antes de dar la de reserva — «fallar cerrado y decirlo».
+      const motivo = motivoDeFallo(resp, d);
       const bloques = resp.ok && d && Array.isArray(d.bloques) ? (d.bloques as Array<Record<string, unknown>>) : null;
       const delAnalista = bloques !== null;
       const r: Respuesta = bloques
