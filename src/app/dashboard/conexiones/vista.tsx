@@ -1,6 +1,7 @@
-import { Plug, CircleCheck, CircleAlert, CircleDashed, CircleHelp, FlaskConical } from 'lucide-react';
+import { CircleCheck, CircleAlert, CircleDashed, CircleHelp, FlaskConical } from 'lucide-react';
 import type { Conector } from '@/lib/likida/conexiones';
-import { BarraPagina } from '../resumen-visual';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+
 
 const ESTADO: Record<Conector['estado'], { rotulo: string; fg: string; bg: string; Icono: typeof CircleCheck }> = {
   listo: { rotulo: 'Listo', fg: 'var(--ok)', bg: 'var(--okbg)', Icono: CircleCheck },
@@ -36,59 +37,46 @@ export function VistaConexiones({ conectores, credenciales, integraciones, gps }
   gps?: React.ReactNode;
 }) {
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Plug width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Conexiones"
-        />
-        <div className="px-5 py-5 flex-1 space-y-3">
-          <p className="text-[12px]" style={{ color: 'var(--faint)' }}>
-            Lo que tu flota tiene conectado y lo que le falta — cada estado sale de una medición,
-            no de un semáforo de adorno.
-          </p>
-
-          <div className="space-y-3" data-tour="conexiones.estado">
-          {conectores.map((c) => {
-            const e = ESTADO[c.estado];
-            return (
-              <section key={c.id} className="card p-4">
-                <div className="flex items-start gap-3">
-                  <e.Icono width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: e.fg }} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2.5 flex-wrap">
-                      <h2 className="font-display text-[14px] font-semibold">{c.nombre}</h2>
-                      <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
-                        style={{ color: e.fg, background: e.bg }}>{e.rotulo}</span>
-                    </div>
-                    <p className="text-[12.5px] mt-1" style={{ color: 'var(--muted)' }}>{c.detalle}</p>
-                    {c.falta.length > 0 && (
-                      <ul className="mt-1.5 space-y-0.5">
-                        {c.falta.map((f) => (
-                          <li key={f} className="text-[12px] flex items-start gap-1.5" style={{ color: 'var(--warn)' }}>
-                            <span className="mt-1.5 w-1 h-1 rounded-full shrink-0" style={{ background: 'var(--warn)' }} />
-                            {f}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
+    <MarcoPagina titulo="Conexiones" apoyo="Lo que tu flota tiene conectado y lo que le falta; cada estado sale de una medición, no de un semáforo de adorno.">
+      <div className="space-y-3" data-tour="conexiones.estado">
+      {conectores.map((c) => {
+        const e = ESTADO[c.estado];
+        return (
+          <section key={c.id} className="card p-4">
+            <div className="flex items-start gap-3">
+              <e.Icono width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: e.fg }} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <TituloRecuadro info="conexiones.conector">{c.nombre}</TituloRecuadro>
+                  <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
+                    style={{ color: e.fg, background: e.bg }}>{e.rotulo}</span>
                 </div>
-              </section>
-            );
-          })}
-          </div>
-
-          {/* El orden es el del trabajo: primero QUÉ está medido, luego CON
-              QUÉ sabe conectar Likida, y al final DÓNDE se capturan los
-              accesos — que es lo que se hace después de leer las otras dos. */}
-          {integraciones}
-
-          {gps}
-
-          <div data-tour="conexiones.credenciales">{credenciales}</div>
-        </div>
+                <p className="text-[12px] mt-1" style={{ color: 'var(--muted)' }}>{c.detalle}</p>
+                {c.falta.length > 0 && (
+                  <ul className="mt-1.5 space-y-0.5">
+                    {c.falta.map((f) => (
+                      <li key={f} className="text-[12px] flex items-start gap-1.5" style={{ color: 'var(--warn)' }}>
+                        <span className="mt-1.5 w-1 h-1 rounded-full shrink-0" style={{ background: 'var(--warn)' }} />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </section>
+        );
+      })}
       </div>
-    </main>
+
+      {/* El orden es el del trabajo: primero QUÉ está medido, luego CON
+          QUÉ sabe conectar Likida, y al final DÓNDE se capturan los
+          accesos — que es lo que se hace después de leer las otras dos. */}
+      {integraciones}
+
+      {gps}
+
+      <div data-tour="conexiones.credenciales">{credenciales}</div>
+    </MarcoPagina>
   );
 }

@@ -87,7 +87,7 @@ function BotonEnvio({ etiqueta, ocupado, tono = 'marca', Icono }: {
       : { background: 'var(--surface)', color: 'var(--ink2)' };
   return (
     <button type="submit" disabled={pending}
-      className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 hairline transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--secondary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 hairline transition-opacity hover:opacity-85 disabled:opacity-50"
       style={estilo}>
       {Icono && <Icono width={14} height={14} strokeWidth={1.75} />}
       {pending ? ocupado : etiqueta}
@@ -127,7 +127,7 @@ export function FormaEscribirRegla({ accion, ejemplos }: {
       <div className="flex flex-wrap gap-1.5">
         {ejemplos.map((e) => (
           <button key={e} type="button" onClick={() => setTexto(e)}
-            className="text-[11.5px] px-2.5 h-7 rounded-full hairline transition-colors hover:bg-[var(--surface)]"
+            className="text-[11px] px-2.5 h-7 rounded-full hairline transition-colors hover:bg-[var(--surface)]"
             style={{ color: 'var(--muted)' }}>
             {e}
           </button>
@@ -211,7 +211,7 @@ export function BotonDeRegla({ accion, id, etiqueta, ocupado, tono = 'suave' }: 
         <BotonEnvio etiqueta={etiqueta} ocupado={ocupado} tono={tono} />
       </form>
       {estado && !estado.ok && (
-        <p className="text-[11.5px]" style={{ color: 'var(--bad)' }}>{estado.error}</p>
+        <p className="text-[11px]" style={{ color: 'var(--bad)' }}>{estado.error}</p>
       )}
     </div>
   );

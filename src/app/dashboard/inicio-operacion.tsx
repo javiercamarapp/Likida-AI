@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Send, UserCog, CircleSlash, CalendarDays, Plus, Users, History } from 'lucide-react';
+import { Send, UserCog, CircleSlash, Plus, Users, History } from 'lucide-react';
 import { saludo, ahoraMs } from '@/lib/saludo';
 import { fechaMx, hoyMx } from '@/lib/formato';
 import {
@@ -11,8 +11,9 @@ import {
   type TableroOperacion, type ViajesSinAsignar, type CargaOperador, type IncidenciaRow, type UnidadRow,
 } from '@/lib/likida/operacion';
 import { clasificarVigencia, contarVigencias, avisoVigencias, DIAS_AVISO } from '@/lib/likida/vigencias';
-import { EstadoVacio } from '../admin/ui/kit';
-import { BarraPagina, ChipFecha, HeroSaludo, TituloSeccion } from './resumen-visual';
+import { EstadoVacio } from './estados';
+import { BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
+import { TituloSeccion } from './resumen-visual';
 import { TableroCifras, TablaCarga, TablaViajesOperacion, type FilaViajeOperacion } from './tablero-operacion';
 import AvanceCierre from './avance-cierre';
 import type { DiaViajes } from './serie-diaria';
@@ -61,7 +62,6 @@ function diasParaVencer(vence: string, hoy: string): number {
   return Math.round((Date.parse(`${vence}T00:00:00Z`) - Date.parse(`${hoy}T00:00:00Z`)) / 86_400_000);
 }
 
-const ICONO_BARRA = { width: 15, height: 15, strokeWidth: 1.75, style: { color: 'var(--muted)' } } as const;
 const ICONO_SECCION = { width: 14, height: 14, strokeWidth: 1.75, style: { color: 'var(--marca)' } } as const;
 
 export async function InicioOperacion({
@@ -115,51 +115,30 @@ export async function InicioOperacion({
     // El scroll vive DENTRO del panel (patrón FASE 1.5). El lienzo del
     // contenido es TENUE (`--g1`) y las piezas son tarjetas blancas encima —
     // misma anatomía en toda la app; la barra y el saludo van sobre blanco.
-    <main className="h-full">
-      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Send {...ICONO_BARRA} />}
-          titulo="Operación"
-          derecha={tenantNombre && (
-            <span className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium shrink-0" style={{ color: 'var(--accent-fg)', background: 'var(--accent)' }}>
-              viendo como superadmin · {tenantNombre}
-            </span>
-          )}
-        />
-        <HeroSaludo
-          saludo={saludo()} nombre={nombre ?? 'jefe'}
-          tagline="Lo que hay que despachar y perseguir hoy"
-          derecha={
-            <div className="flex items-center gap-2.5 shrink-0 pt-1">
-              <ChipFecha icono={<CalendarDays {...ICONO_BARRA} />}>{fechaMx(diaMx)}</ChipFecha>
-              {/* Secundario a Operadores — "¿a quién le cargo el siguiente?"
-                  es la otra pregunta de la mañana. `hidden md:` para que en
-                  angosto nunca desplace al CTA primario. */}
-              <Link href={`/dashboard/operadores${sufijo}`}
-                className="hairline h-8 px-3 rounded-lg text-[13px] font-medium hidden md:inline-flex items-center gap-1.5 shrink-0 transition-opacity hover:opacity-70"
-                style={{ background: 'var(--surface)' }}>
-                <Users width={15} height={15} strokeWidth={1.75} /> Operadores
-              </Link>
-              {/* A DESPACHO (13-ago): ahí vive la forma de crear — junto con
-                  asignar, avisar y el alta de operadores. La página suelta
-                  /viajes/nuevo se retiró: era la misma forma con menos
-                  contexto, y dos puertas se desincronizan. */}
-              <Link href={`/dashboard/despacho${sufijo}`}
-                className="h-8 px-3 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 shrink-0 transition-opacity hover:opacity-85"
-                style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                <Plus width={15} height={15} strokeWidth={2} /> Nuevo viaje
-              </Link>
-            </div>
-          }
-        />
-
-        <div className="px-5 pb-5 flex-1">
+    <MarcoPagina
+      titulo="Resumen"
+      area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
+      apoyo={`${saludo()}, ${nombre ?? 'jefe'}. Lo que hay que despachar y perseguir hoy.`}
+      acciones={(
+        <>
+          {/* Secundario a Operadores — "¿a quién le cargo el siguiente?" es la otra pregunta de la mañana. */}
+          <BotonEnlace variante="secondary" tamano="sm" href={`/dashboard/operadores${sufijo}`} icono={<Users width={15} height={15} strokeWidth={1.75} />}>
+            Operadores
+          </BotonEnlace>
+          {/* A DESPACHO (13-ago): ahí vive la forma de crear — junto con asignar, avisar y el alta de operadores. La página
+              suelta /viajes/nuevo se retiró: era la misma forma con menos contexto, y dos puertas se desincronizan. */}
+          <BotonEnlace variante="primary" tamano="sm" href={`/dashboard/despacho${sufijo}`} icono={<Plus width={15} height={15} strokeWidth={2} />}>
+            Nuevo viaje
+          </BotonEnlace>
+        </>
+      )}
+    >
           {/* ANTES QUE NINGUNA CIFRA. Lo de abajo son ceros de una flota que
               no existe, y esa frase tiene que llegar antes que los ceros —
               por eso no depende de ninguna consulta y sale con el primer
               flush del stream. */}
           {!tenantExiste && (
-            <div className="mt-3"><AvisoSinFlota tenantId={tenantId} /></div>
+            <div><AvisoSinFlota tenantId={tenantId} /></div>
           )}
 
           {/* La guía del arranque (auditoría 5) — misma pieza que el Resumen
@@ -181,14 +160,14 @@ export async function InicioOperacion({
               En vez del dinero del dueño, cuántos viajes están vivos ahora
               mismo. Las dos piezas fallan por separado: un `—` con su "no se
               pudo leer" nunca se disfraza de cero. */}
-          <div className="mt-3">
+          <div>
             <Bloque mensaje="No se pudo leer el avance de cierre." esqueleto={<EsqAvance />}>
               <BloqueAvance pViajesPorDia={pViajesPorDia} pHistorico={pHistorico} pTablero={pTablero} />
             </Bloque>
           </div>
 
           {/* ── Los 6 números de operación (StatCard, caja interna) ──────── */}
-          <div className="mt-3">
+          <div>
             <Bloque mensaje="No se pudo leer el estado de la operación." esqueleto={<EsqTablero />}>
               <BloqueTablero pTablero={pTablero} />
             </Bloque>
@@ -201,7 +180,7 @@ export async function InicioOperacion({
               Cada columna es su propio boundary: la carga por operador es
               una agregación pesada y no tiene por qué retener la lista de
               viajes sin chofer, que es la urgencia real de la mañana. */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 mt-3 items-start">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
             <Bloque mensaje="No se pudo leer la lista de viajes sin chofer." esqueleto={<EsqTabla filas={4} />}>
               <BloqueSinAsignar pSinAsignar={pSinAsignar} sufijo={sufijo} />
             </Bloque>
@@ -211,14 +190,12 @@ export async function InicioOperacion({
           </div>
 
           {/* ── Viajes recientes, SIN pesos (ver TablaViajesOperacion) ───── */}
-          <div className="mt-3">
+          <div>
             <Bloque mensaje="No se pudieron leer los viajes recientes." esqueleto={<EsqTabla filas={8} />}>
               <BloqueViajes pViajes={pViajes} sufijo={sufijo} />
             </Bloque>
           </div>
-        </div>
-      </div>
-    </main>
+    </MarcoPagina>
   );
 }
 
@@ -235,8 +212,8 @@ async function BloqueArranque({ pPasos, sufijo }: {
   if (!pasos || pasos.completado) return null;
   return (
     <>
-      <div className="mt-3"><PrimeraLiquidacion datos={pasos} sufijo={sufijo} /></div>
-      <div className="mt-3"><OperaWhatsApp rol="jefe" sufijo={sufijo} /></div>
+      <div><PrimeraLiquidacion datos={pasos} sufijo={sufijo} /></div>
+      <div><OperaWhatsApp rol="jefe" sufijo={sufijo} /></div>
     </>
   );
 }
@@ -325,7 +302,7 @@ async function BloqueAlertas({ pSinAsignar, pIncidencias, pTablero, pUnidades, p
   return (
     <>
       {ciegas.length > 0 && (
-        <div className="card p-3 flex items-start gap-2.5 mt-3" style={{ borderColor: 'var(--warn)' }}>
+        <div className="card p-3 flex items-start gap-2.5" style={{ borderColor: 'var(--warn)' }}>
           <span className="inline-block w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ background: 'var(--warn)' }} />
           <p className="text-[13px] m-0">
             No se pudo leer: {ciegas.join(' · ')}. Las alertas de esa parte pueden faltar —
@@ -335,7 +312,7 @@ async function BloqueAlertas({ pSinAsignar, pIncidencias, pTablero, pUnidades, p
       )}
 
       {alertas.length > 0 && (
-        <div className="mt-3 space-y-1.5">
+        <div className="space-y-1.5">
           {alertas.map((a) => a.href ? (
             <Link key={a.texto} href={a.href}
               className="card p-3 flex items-center gap-2.5 hover:opacity-85 transition-opacity"
@@ -400,7 +377,7 @@ async function BloqueAvance({ pViajesPorDia, pHistorico, pTablero }: {
         <div className="font-display text-4xl tracking-tight tabular font-semibold">
           {tablero?.viajesActivos ?? '—'}
         </div>
-        <div className="text-[10px] font-semibold uppercase tracking-wide mt-0.5" style={{ color: 'var(--muted)' }}>
+        <div className="text-[11px] font-semibold uppercase tracking-wide mt-0.5" style={{ color: 'var(--muted)' }}>
           Viajes activos
         </div>
         <div className="text-[11px] mt-0.5" style={{ color: 'var(--muted)' }}>

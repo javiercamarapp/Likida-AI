@@ -16,6 +16,7 @@ import {
   calcularEstimacion, PRECIO_DIESEL_REFERENCIA, type ResultadoCalculadora,
 } from '@/lib/likida/marketing/calculadora';
 import { mxn, numero as litrosFmt, hoyMx } from '@/lib/formato';
+import { Boton } from '../ui-v2/componentes/boton';
 
 const num = (s: string): number | null => {
   const n = Number(s.replace(/[,$\s]/g, ''));
@@ -78,8 +79,7 @@ export function Calculadora() {
     }
   };
 
-  const campo = 'mt-1 w-full rounded-md border px-3 py-2 text-sm';
-  const estiloCampo = { borderColor: 'var(--line)', color: 'var(--ink)', background: 'var(--bg)' } as const;
+  const campo = 'rv-pub__campo mt-1';
 
   return (
     <div>
@@ -87,18 +87,18 @@ export function Calculadora() {
       <section className="mt-8 grid gap-4">
         <div>
           <label className="text-sm font-medium" style={{ color: 'var(--ink)' }}>Litros de diésel al mes</label>
-          <input className={campo} style={estiloCampo} inputMode="decimal" value={litros}
+          <input className={campo} inputMode="decimal" value={litros}
             onChange={(e) => setLitros(e.target.value)} placeholder="p. ej. 40,000" />
           <p className="mt-1 text-xs">¿No lo sabes en litros? Deja esto vacío y captura el gasto:</p>
           <div className="mt-2 grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs">Gasto de diésel al mes (MXN)</label>
-              <input className={campo} style={estiloCampo} inputMode="decimal" value={gastoDiesel}
+              <input className={campo} inputMode="decimal" value={gastoDiesel}
                 onChange={(e) => setGastoDiesel(e.target.value)} placeholder="p. ej. 1,000,000" />
             </div>
             <div>
               <label className="text-xs">Precio por litro que pagas</label>
-              <input className={campo} style={estiloCampo} inputMode="decimal" value={precioLitro}
+              <input className={campo} inputMode="decimal" value={precioLitro}
                 onChange={(e) => setPrecioLitro(e.target.value)} />
               <p className="mt-1 text-xs">Referencia editable: ajústalo al tuyo.</p>
             </div>
@@ -106,21 +106,17 @@ export function Calculadora() {
         </div>
         <div>
           <label className="text-sm font-medium" style={{ color: 'var(--ink)' }}>Gasto en casetas al mes (MXN, con IVA)</label>
-          <input className={campo} style={estiloCampo} inputMode="decimal" value={casetas}
+          <input className={campo} inputMode="decimal" value={casetas}
             onChange={(e) => setCasetas(e.target.value)} placeholder="p. ej. 250,000" />
         </div>
         <div>
           <label className="text-sm font-medium" style={{ color: 'var(--ink)' }}>Unidades de tu flota</label>
-          <input className={campo} style={estiloCampo} inputMode="numeric" value={unidades}
+          <input className={campo} inputMode="numeric" value={unidades}
             onChange={(e) => setUnidades(e.target.value)} placeholder="p. ej. 35" />
         </div>
-        <button
-          onClick={calcular}
-          className="mt-2 w-fit rounded-md px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-          style={{ background: 'var(--marca)' }}
-        >
+        <Boton variante="primary" onClick={calcular} className="mt-2 w-fit">
           Calcular con mis números
-        </button>
+        </Boton>
       </section>
 
       {/* ── El resultado — antes de pedir nada ── */}
@@ -205,25 +201,20 @@ export function Calculadora() {
                   <Link href="/aviso/prospectos" className="underline underline-offset-2">Aviso de privacidad</Link>.
                 </p>
                 <div className="mt-3 grid grid-cols-2 gap-3">
-                  <input className={campo} style={estiloCampo} placeholder="Tu nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} />
-                  <input className={campo} style={estiloCampo} placeholder="Empresa" value={empresa} onChange={(e) => setEmpresa(e.target.value)} />
-                  <input className={campo} style={estiloCampo} placeholder="Correo" inputMode="email" value={correo} onChange={(e) => setCorreo(e.target.value)} />
-                  <input className={campo} style={estiloCampo} placeholder="WhatsApp (opcional)" inputMode="tel" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+                  <input className={campo} placeholder="Tu nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} />
+                  <input className={campo} placeholder="Empresa" value={empresa} onChange={(e) => setEmpresa(e.target.value)} />
+                  <input className={campo} placeholder="Correo" inputMode="email" value={correo} onChange={(e) => setCorreo(e.target.value)} />
+                  <input className={campo} placeholder="WhatsApp (opcional)" inputMode="tel" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
                 </div>
                 {/* Honeypot: fuera de la vista; un humano jamás lo llena. */}
                 <input
                   className="absolute -left-[9999px] h-0 w-0 opacity-0" tabIndex={-1} autoComplete="off"
                   aria-hidden="true" value={sitioWeb} onChange={(e) => setSitioWeb(e.target.value)} placeholder="Sitio web"
                 />
-                {errorEnvio && <p className="mt-2 text-sm" style={{ color: 'var(--color-warn)' }}>{errorEnvio}</p>}
-                <button
-                  onClick={pedirCopia}
-                  disabled={envio === 'mandando'}
-                  className="mt-3 rounded-md px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-                  style={{ background: 'var(--marca)' }}
-                >
+                {errorEnvio && <p className="mt-2 text-sm" style={{ color: 'var(--warn)' }}>{errorEnvio}</p>}
+                <Boton variante="primary" onClick={pedirCopia} disabled={envio === 'mandando'} className="mt-3">
                   {envio === 'mandando' ? 'Mandando…' : 'Quiero mi copia'}
-                </button>
+                </Boton>
               </>
             )}
           </div>

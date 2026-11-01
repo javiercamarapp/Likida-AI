@@ -1,42 +1,44 @@
-// El controlador de la capa de carga único, SIN DOM ni React: recibe un «puerto» (¿hay pantalla de carga de página pendiente?,
-// poner estado, reloj) y decide cuándo la capa aparece, cuánto dura y cuándo se suelta. Separado de `capa-carga.tsx` para
-// probarlo con reloj falso (ESTILO-LIKIDA §9: aparece a >250 ms, ≥400 ms visible, carga inicial se libera tras 600 ms estables,
-// seguro de 20 s).
+// El controlador del TELÓN de carga, SIN DOM ni React: recibe un «puerto» (¿hay pantalla de carga de página pendiente?, poner estado,
+// reloj, ¿es la primera carga de esta sesión?) y decide cuánto dura y cuándo se suelta. Separado de `capa-carga.tsx` para probarlo con
+// reloj falso.
+//
+// DECISIÓN DE JAVIER (31-oct-2026): el telón con el logo a pantalla completa es SOLO de la primera carga de la sesión. Las
+// navegaciones internas y las tarjetas que esperan sus datos muestran esqueletos con la forma real (`EsqPagina`, `Esq*`), nunca el
+// telón. En una recarga dentro de la misma sesión el telón (que viaja en el HTML del servidor) se suelta en cuanto el contenido está listo.
 
+/** Primera carga: el contenido debe estar estable este tiempo seguido antes de soltar el telón. */
 export const VENTANA_ESTABLE_MS = 600;
-export const VENTANA_NAVEGACION_MS = 150;
-export const RETARDO_NAVEGACION_MS = 250;
+/** Primera carga: el telón dura al menos esto una vez visible. */
 export const MINIMO_VISIBLE_MS = 400;
+/** Seguro: pasado este tiempo el telón se retira y queda «No disponible ahora. No es cero» con Reintentar. */
 export const TOPE_MS = 20000;
 
-/** inicial / nav = la capa se ve · oculta = no se ve · tope = el seguro venció: capa fuera y «No disponible ahora» a la vista. */
-export type EstadoCarga = 'inicial' | 'oculta' | 'nav' | 'tope';
+/** inicial = el telón se ve · oculta = no se ve · tope = el seguro venció: telón fuera y «No disponible ahora» a la vista. */
+export type EstadoCarga = 'inicial' | 'oculta' | 'tope';
 
 export interface PuertoCarga {
   /** ¿Sigue pendiente la pantalla de carga de página (o el documento aún está llegando)? Se lee del DOM, no del registro de React. */
   hayPendiente: () => boolean;
-  /** ¿El documento aún está llegando? (para no levantar la capa en plena carga inicial) */
-  documentoCargando: () => boolean;
   poner: (e: EstadoCarga) => void;
   ahora: () => number;
   esperar: (f: () => void, ms: number) => number;
   cancelar: (id: number | undefined) => void;
+  /** ¿Es la primera carga de esta sesión del navegador? (sessionStorage; si no se puede leer, sí.) */
+  primeraVez: boolean;
+  /** Se llama al soltar el telón: deja anotado que la sesión ya lo vio. */
+  marcarVista: () => void;
 }
 
 export function crearControlador(p: PuertoCarga) {
   let estado: EstadoCarga = 'inicial';
-  let desde = p.ahora();
+  const desde = p.ahora();
   let vivo = true;
-  let tope: number | undefined;
   let espera: number | undefined;
-  let aparicion: number | undefined;
+  // El seguro: pasado TOPE_MS el telón se retira y queda «No disponible ahora».
+  const tope = p.esperar(() => { if (vivo && estado === 'inicial') poner('tope'); }, TOPE_MS);
 
   const poner = (e: EstadoCarga) => { estado = e; p.poner(e); };
-  const armarTope = () => {
-    p.cancelar(tope);
-    tope = p.esperar(() => { if (vivo && (estado === 'inicial' || estado === 'nav')) poner('tope'); }, TOPE_MS);
-  };
-  const soltar = () => { p.cancelar(tope); p.cancelar(espera); espera = undefined; poner('oculta'); };
+  const soltar = () => { p.cancelar(tope); p.cancelar(espera); espera = undefined; p.marcarVista(); poner('oculta'); };
 
   /**
    * Idempotente: se llama en cada ráfaga de mutaciones del DOM (a veces continuas: streaming, contadores, mapas) y NO reinicia
@@ -46,32 +48,17 @@ export function crearControlador(p: PuertoCarga) {
     if (!vivo) return;
     const pendiente = p.hayPendiente();
     if (estado === 'tope') { if (!pendiente) poner('oculta'); return; }
-    if (estado === 'inicial' || estado === 'nav') {
-      if (pendiente) { p.cancelar(espera); espera = undefined; return; } // volvió a haber algo pendiente: la ventana estable se pierde
-      if (espera !== undefined) return;                                  // ya corre una ventana y nada cambió: se deja correr
-      const visible = p.ahora() - desde;
-      const ventana = estado === 'inicial'
-        ? Math.max(VENTANA_ESTABLE_MS, MINIMO_VISIBLE_MS - visible)
-        : Math.max(VENTANA_NAVEGACION_MS, MINIMO_VISIBLE_MS - visible);
-      espera = p.esperar(() => { espera = undefined; if (vivo && !p.hayPendiente()) soltar(); }, ventana);
-      return;
-    }
-    // oculta: ¿empieza una navegación lenta? Solo aparece si sigue pendiente pasados 250 ms.
-    if (!pendiente || p.documentoCargando()) { p.cancelar(aparicion); aparicion = undefined; return; }
-    if (aparicion !== undefined) return; // el retardo de 250 ms ya corre
-    aparicion = p.esperar(() => {
-      aparicion = undefined;
-      if (!vivo || estado !== 'oculta' || !p.hayPendiente()) return;
-      desde = p.ahora();
-      poner('nav');
-      armarTope();
-    }, RETARDO_NAVEGACION_MS);
+    if (estado !== 'inicial') return; // oculta: el telón NO vuelve (ni en navegaciones lentas): ahí van los esqueletos
+    if (pendiente) { p.cancelar(espera); espera = undefined; return; } // volvió a haber algo pendiente: la ventana estable se pierde
+    if (espera !== undefined) return;                                  // ya corre una ventana y nada cambió: se deja correr
+    const visible = p.ahora() - desde;
+    const ventana = p.primeraVez ? Math.max(VENTANA_ESTABLE_MS, MINIMO_VISIBLE_MS - visible) : 0;
+    espera = p.esperar(() => { espera = undefined; if (vivo && !p.hayPendiente()) soltar(); }, ventana);
   }
 
-  armarTope();
   return {
     evaluar,
     estado: () => estado,
-    destruir() { vivo = false; p.cancelar(tope); p.cancelar(espera); p.cancelar(aparicion); },
+    destruir() { vivo = false; p.cancelar(tope); p.cancelar(espera); },
   };
 }

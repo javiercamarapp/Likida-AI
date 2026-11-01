@@ -14,8 +14,8 @@ export const PROPORCION_LOGO = { horizontal: 726 / 149, simbolo: 114 / 149 } as 
  * El logo de Likida en SVG. Se dimensiona por ALTURA (ESTILO-LIKIDA §4/§9: sidebar 30, riel 28, cabecera móvil 28, carga 40):
  * con 112 px de ancho el logo (4.9:1) mediría 23 px de alto y se vería tímido. `decorativo` lo saca del árbol de accesibilidad.
  */
-export default function LogoV2({ alto, variante = 'horizontal', decorativo = false, monocromo = false, className, style }: {
-  alto: number; monocromo?: boolean; variante?: 'horizontal' | 'simbolo'; decorativo?: boolean; className?: string; style?: CSSProperties;
+export default function LogoV2({ alto, variante = 'horizontal', decorativo = false, className, style }: {
+  alto: number; variante?: 'horizontal' | 'simbolo'; decorativo?: boolean; className?: string; style?: CSSProperties;
 }) {
   const ancho = Math.round(alto * PROPORCION_LOGO[variante] * 100) / 100;
   const vb = variante === 'horizontal' ? '0 0 726 149' : '0 0 114 149';
@@ -27,9 +27,8 @@ export default function LogoV2({ alto, variante = 'horizontal', decorativo = fal
       {...(decorativo ? { 'aria-hidden': true } : { role: 'img', 'aria-label': 'Likida' })}
     >
       <svg xmlns="http://www.w3.org/2000/svg" viewBox={vb} width={ancho} height={alto} aria-hidden="true" focusable="false" style={{ display: 'block' }}>
-        {/* Con color de marca: el símbolo en naranja ladrillo (`--marca-naranja`; en oscuro #fb923c) y el nombre en la tinta del contenedor.
-            `monocromo` pinta todo con `currentColor` (impresión, fondos de color). */}
-      <path fill={monocromo ? 'currentColor' : 'var(--marca-naranja, currentColor)'} fillRule="evenodd" d={D_SIMBOLO} />
+        {/* Paleta negro/gris/blanco (31-oct): símbolo y nombre en la tinta del contenedor (`currentColor`). */}
+      <path fill="currentColor" fillRule="evenodd" d={D_SIMBOLO} />
       {variante === 'horizontal' && <path fill="currentColor" fillRule="evenodd" d={D_TEXTO} />}
       </svg>
     </span>

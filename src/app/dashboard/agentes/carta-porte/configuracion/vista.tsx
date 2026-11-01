@@ -1,8 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
-import { ArrowLeft, Settings2 } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import type { ConfigSalida } from '@/lib/likida/carta_porte_docs/salida_config';
 import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
 import { SeccionCcp, type AccionesCcp } from './seccion_ccp';
@@ -10,6 +9,7 @@ import { SeccionPrimerMes } from './seccion_primer_mes';
 import type { PrimerMesFila } from '@/lib/likida/carta_porte_docs/repo';
 import type { CcpRecibidoVista } from '@/lib/likida/carta_porte_docs/ccp_respuesta_repo';
 import { ROTULO_ARRANQUE, erroresEnLinea, frasePrevia, nombreDestinatario, textoDeConfig, type CamposTexto } from './formato';
+import { Aviso, BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
 
 /**
  * LA PANTALLA «CONFIGURACIÓN DE LA SALIDA» (T-A3-32): cómo sale la plantilla hacia el sistema del cliente, cuántas veces se
@@ -25,7 +25,7 @@ export interface AccionesConfiguracion { guardar: AccionDoc; probar: AccionDoc }
 const ESTILO = { background: 'var(--surface)' } as const;
 
 function Error_({ id, mensaje }: { id: string; mensaje?: string }) {
-  return mensaje ? <p id={id} role="alert" className="text-[11.5px] mt-1" style={{ color: 'var(--bad)' }}>{mensaje}</p> : null;
+  return mensaje ? <p id={id} role="alert" className="text-[11px] mt-1" style={{ color: 'var(--bad)' }}>{mensaje}</p> : null;
 }
 
 function Formulario({ config, personas, conector, ver }: { config: ConfigSalida; personas: PersonaVista[]; conector: { hay: boolean }; ver: VerComo }) {
@@ -68,8 +68,8 @@ function Formulario({ config, personas, conector, ver }: { config: ConfigSalida;
             <option value="descarga">Descarga (la subes tú al sistema del cliente)</option>
             <option value="api" disabled={apiBloqueado}>API (el agente la sube solo){apiBloqueado ? ' — todavía no disponible' : ''}</option>
           </select>
-          {apiBloqueado && <p className="text-[11.5px] mt-1" style={{ color: 'var(--muted)' }}>El modo API se activa cuando haya una conexión probada con el sistema del cliente. Mientras tanto, la plantilla se descarga y se sube a mano.</p>}
-          {apiBloqueado && <p role="note" className="text-[11.5px] mt-1.5 px-3 py-2 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>La subida automática al sistema del cliente NO está disponible todavía: depende de la API que el cliente entregue. Hasta entonces todo envío es descarga y subida a mano, y la existencia del requerimiento en su sistema no se puede verificar («desconocido»).</p>}
+          {apiBloqueado && <p className="text-[11px] mt-1" style={{ color: 'var(--muted)' }}>El modo API se activa cuando haya una conexión probada con el sistema del cliente. Mientras tanto, la plantilla se descarga y se sube a mano.</p>}
+          {apiBloqueado && <p role="note" className="text-[11px] mt-1.5 px-3 py-2 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>La subida automática al sistema del cliente NO está disponible todavía: depende de la API que el cliente entregue. Hasta entonces todo envío es descarga y subida a mano, y la existencia del requerimiento en su sistema no se puede verificar («desconocido»).</p>}
         </div>
         <div>
           <label htmlFor="cs-plantilla" className={ETIQUETA}>Plantilla por defecto</label>
@@ -102,7 +102,7 @@ function Formulario({ config, personas, conector, ver }: { config: ConfigSalida;
             <option value="enviar">Enviar de todos modos</option>
           </select>
         </div>
-        <p data-testid="vista-previa" className="text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>{frase}</p>
+        <p data-testid="vista-previa" className="text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>{frase}</p>
       </fieldset>
 
       <fieldset className="space-y-3">
@@ -113,7 +113,7 @@ function Formulario({ config, personas, conector, ver }: { config: ConfigSalida;
           {persona('destinatarioRevisionUsuario', 'Revisión de rechazos: persona')}
           {campo('destinatarioRevisionCorreo', 'Revisión de rechazos: correo', { type: 'email' })}
         </div>
-        <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>Si no eliges a nadie, el aviso llega al jefe de tráfico por WhatsApp.</p>
+        <p className="text-[11px]" style={{ color: 'var(--muted)' }}>Si no eliges a nadie, el aviso llega al jefe de tráfico por WhatsApp.</p>
       </fieldset>
     </>
   );
@@ -130,15 +130,9 @@ export function VistaConfiguracionSalida({ config, esArranque, personas, conecto
   accionPrimerMes?: AccionDoc;
 }) {
   return (
-    <div className="space-y-6">
-      <Link href={`/dashboard/agentes/carta-porte${sufijo}`} className="inline-flex items-center gap-1.5 text-[12.5px] hover:opacity-75" style={{ color: 'var(--muted)' }}>
-        <ArrowLeft width={14} height={14} strokeWidth={1.75} />Agente de Carta Porte
-      </Link>
-      <header className="space-y-1.5">
-        <h1 className="text-[20px] font-semibold flex items-center gap-2"><Settings2 width={18} height={18} strokeWidth={1.75} />Configuración de la salida</h1>
-        <p className="text-[13px]" style={{ color: 'var(--muted)' }}>Cómo sale la plantilla hacia el sistema del cliente y qué hace el agente cuando algo falta.</p>
-        {esArranque && <p role="note" className="text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>{ROTULO_ARRANQUE}. Ajústalos cuando el cliente los defina.</p>}
-      </header>
+    <MarcoPagina titulo="Configuración de la salida" apoyo="Cómo sale la plantilla hacia el sistema del cliente y qué hace el agente cuando algo falta." acciones={<BotonEnlace tamano="sm" href={`/dashboard/agentes/carta-porte${sufijo}`} icono={<ArrowLeft width={13} height={13} strokeWidth={1.75} />}>Agente de Carta Porte</BotonEnlace>}>
+      {esArranque && <Aviso tono="warn">{ROTULO_ARRANQUE}. Ajústalos cuando el cliente los defina.</Aviso>}
+
       <FormaAccion accion={acciones.guardar} className="space-y-6">
         <Formulario config={config} personas={personas} conector={conector} ver={ver} />
         <BotonEnvio etiqueta="Guardar configuración" pendiente="Guardando…" />
@@ -153,9 +147,9 @@ export function VistaConfiguracionSalida({ config, esArranque, personas, conecto
       )}
       {primerMes && accionPrimerMes && <SeccionPrimerMes primerMes={primerMes} ver={ver} accion={accionPrimerMes} />}
       {accionesCcp && ccp === null && (
-        <p role="alert" className="text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>No se pudieron leer los CCP timbrados recibidos. Recarga la pantalla; si sigue igual, avisa a soporte.</p>
+        <p role="alert" className="text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>No se pudieron leer los CCP timbrados recibidos. Recarga la pantalla; si sigue igual, avisa a soporte.</p>
       )}
       {accionesCcp && ccp && <SeccionCcp activa={ccp.activa} filas={ccp.filas} ver={ver} acciones={accionesCcp} />}
-    </div>
+    </MarcoPagina>
   );
 }

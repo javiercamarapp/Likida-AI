@@ -1,11 +1,16 @@
 import Link from 'next/link';
-import { Truck, ArrowRight, Inbox, Search, FileUp } from 'lucide-react';
+import { ArrowRight, Inbox, FileUp } from 'lucide-react';
 import { numero, fechaMx, mxn } from '@/lib/formato';
-import { EstadoVacio, StatusPill, type Estado } from '@/app/admin/ui/kit';
-import { BarraPagina, PILL_ESTATUS } from '../resumen-visual';
+import { StatusPill, type Estado } from '@/app/admin/ui/kit';
+import { EstadoVacio } from '../estados';
+import { PILL_ESTATUS } from '../resumen-visual';
 import { PillAviso } from '../despacho/vista';
 import { ImportarViajes, type AccionImportar } from './importar';
 import { EnlacePagina, NavPaginas } from '../paginador';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { BarraFiltros, FiltroBusqueda, FiltroOpciones, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { SelloDato, TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
+import { ahoraMs } from '@/lib/saludo';
 
 export type FiltroViajes = 'todos' | 'abiertos' | 'en_cuadre' | 'liquidados' | 'escalados';
 
@@ -53,8 +58,54 @@ export function hrefRegistro(
   return `/dashboard/viajes${qs ? `?${qs}` : ''}`;
 }
 
-const TH = 'etiqueta-mono text-left text-[10px] font-medium uppercase px-3 py-2 whitespace-nowrap';
-const BTN_SEC = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12.5px] font-medium hairline transition-colors hover:bg-[var(--canvas)]';
+const BTN_SEC = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-medium hairline transition-colors hover:bg-[var(--canvas)]';
+
+/** Las columnas del registro. Los tres pesos (anticipo, comprobado, diferencia) SOLO existen si el rol ve dinero: para el jefe de
+ *  tráfico ni la cabecera se arma. El orden es el del servidor (cursor, del más reciente al más antiguo): ninguna cabecera ordena,
+ *  porque ordenar solo la página visible fingiría ordenar el total. */
+function columnasViajes(sufijo: string, verDinero: boolean): ColumnaTabla<FilaRegistroViaje>[] {
+  const dinero: ColumnaTabla<FilaRegistroViaje>[] = verDinero ? [
+    { id: 'anticipo', titulo: 'Anticipo', alinear: 'der', celda: (v) => (v.anticipo === null ? <span className="rv-tl__nada">—</span> : mxn(v.anticipo)) },
+    { id: 'comprobado', titulo: 'Comprobado', alinear: 'der', celda: (v) => (v.comprobado === null ? <span className="rv-tl__tenue rv-tl__nada">—</span> : mxn(v.comprobado)) },
+    {
+      id: 'diferencia', titulo: 'Diferencia', alinear: 'der',
+      celda: (v) => v.diferencia === null ? <span className="rv-tl__tenue rv-tl__nada">—</span>
+        : <span className={v.diferencia === 0 ? 'rv-tl__ok' : v.diferencia > 0 ? 'rv-tl__warn' : 'rv-tl__bad'}>{v.diferencia === 0 ? 'Exacta' : mxn(Math.abs(v.diferencia))}</span>,
+    },
+  ] : [];
+  return [
+    {
+      id: 'viaje', titulo: 'Viaje', principal: true,
+      celda: (v) => {
+        const ruta = v.origen && v.destino ? `${v.origen} → ${v.destino}` : v.origen ?? v.destino ?? null;
+        return (
+          <>
+            <span className="font-medium block whitespace-nowrap">{v.folio}</span>
+            <span className="rv-tl__sub">{ruta ?? 'sin ruta capturada'}</span>
+          </>
+        );
+      },
+    },
+    { id: 'operador', titulo: 'Operador', celda: (v) => v.operadorNombre ?? <span className="rv-tl__tenue">Sin asignar</span> },
+    { id: 'unidad', titulo: 'Unidad', corta: true, celda: (v) => (v.unidadEco ? <span className="cifra-mono">{v.unidadEco}</span> : <span className="rv-tl__tenue rv-tl__nada">—</span>) },
+    { id: 'inicio', titulo: 'Inicio', corta: true, celda: (v) => <span className="rv-tl__apagado">{v.fechaInicio ? fechaMx(v.fechaInicio) : '—'}</span> },
+    ...dinero,
+    { id: 'aviso', titulo: 'Aviso', corta: true, celda: (v) => (v.estatus === 'liquidado' ? <span className="rv-tl__tenue rv-tl__nada">—</span> : <PillAviso v={v} />) },
+    {
+      id: 'estatus', titulo: 'Estatus', corta: true,
+      celda: (v) => { const e = PILL_ESTATUS[v.estatus] ?? { etiqueta: v.estatus, estado: 'neutral' as Estado }; return <StatusPill estado={e.estado}>{e.etiqueta}</StatusPill>; },
+    },
+    {
+      id: 'accion', titulo: 'Acción', alinear: 'der', tituloOculto: true,
+      celda: (v) => v.liqId ? (
+        <Link href={`/dashboard/${v.liqId}${sufijo}`}
+          className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity whitespace-nowrap rv-tl__enlace">
+          Ver <ArrowRight width={12} height={12} strokeWidth={2} aria-hidden />
+        </Link>
+      ) : <span className="rv-tl__tenue rv-tl__nada">—</span>,
+    },
+  ];
+}
 
 /**
  * El Registro de Viajes (F2), v2: navegable, filtrable, buscable y paginado
@@ -73,6 +124,7 @@ export function VistaViajes({
   };
   sufijo: string;
   importar: AccionImportar;
+
   /** Solo quien puede crear viajes ve el botón de importar. */
   puedeImportar: boolean;
   /** `puedeVerArea(rol, 'dinero')`, decidido en la página. */
@@ -86,206 +138,99 @@ export function VistaViajes({
   hayMas: boolean;
   porPagina: number;
 }) {
-  const kpi = (n: number | null) => (n === null ? '—' : numero(n));
+  const conteo = (n: number | null): { valor: string; estado?: 'error'; reintentar?: boolean } => (n === null ? { valor: '—', estado: 'error', reintentar: true } : { valor: numero(n) });
   const params = new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo);
-  const columnas = verDinero ? 10 : 7;
-
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Truck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Viajes"
-        />
-        <div className="px-5 py-5 flex-1 space-y-4">
+    <MarcoPagina titulo="Viajes" apoyo="El registro de viajes de tu flota, navegable y filtrable. Crear, asignar y avisar se hace en Despacho.">
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Kpi titulo="Viajes en total" valor={kpi(conteos.total)} nota="histórico" />
-            <Kpi titulo="Abiertos" valor={kpi(conteos.abiertos)} />
-            <Kpi titulo="En cuadre" valor={kpi(conteos.enCuadre)} />
-            <Kpi titulo="Escalados sin aceptar" valor={kpi(conteos.escalados)}
-              tono={(conteos.escalados ?? 0) > 0 ? 'bad' : undefined} />
+      {/* Un conteo que no se pudo leer es `null`: NUNCA se pinta como 0. La celda dice «No disponible ahora. No es cero.» y ofrece Reintentar. */}
+      <TiraCifras>
+        <Cifra etiqueta="Viajes en total" {...conteo(conteos.total)} nota="histórico" info="viajes.total" />
+        <Cifra etiqueta="Abiertos" {...conteo(conteos.abiertos)} info="viajes.abiertos" />
+        <Cifra etiqueta="En cuadre" {...conteo(conteos.enCuadre)} info="viajes.en_cuadre" />
+        <Cifra etiqueta="Escalados sin aceptar" {...conteo(conteos.escalados)}
+          tono={(conteos.escalados ?? 0) > 0 ? 'bad' : undefined} info="viajes.escalados" />
+      </TiraCifras>
+      <div className="rv-tl__sellos"><SelloDato tipo="observado" fuente="Registro de viajes" leidoEn={ahoraMs()} edad={false} /></div>
+
+      <section className="card p-4 relative">
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+          {/* GET puro: la búsqueda vive en la URL y sobrevive a recargar, compartir y volver atrás. El sufijo y el filtro viajan como
+              campos ocultos para no perderse al enviar; el estado es un enlace (hrefRegistro) con la búsqueda vigente. */}
+          <BarraFiltros accion="/dashboard/viajes" enLinea buscar etiqueta="Filtros de viajes" nActivos={(filtro !== 'todos' ? 1 : 0) + (q ? 1 : 0)} limpiarHref={hrefRegistro(sufijo, {})}
+            ocultos={[...params.entries(), ...(filtro !== 'todos' ? [['f', filtro] as [string, string]] : [])]}>
+            <FiltroOpciones etiqueta="Estado" valor={filtro} porDefecto="todos"
+              opciones={(Object.keys(ROTULO_FILTRO) as FiltroViajes[]).map((f) => ({ valor: f, rotulo: ROTULO_FILTRO[f], href: hrefRegistro(sufijo, { f, q }) }))} />
+            <FiltroBusqueda nombre="q" valor={q} placeholder="Folio, origen o destino" etiqueta="Buscar viaje" />
+          </BarraFiltros>
+          <div className="flex items-center gap-2 flex-wrap">
+            {puedeImportar && (
+              // Sin JavaScript ni estado: `<details>` abre y cierra solo.
+              // Cerrado es un botón secundario; abierto, el panel del
+              // import aparece debajo de la barra, a lo ancho.
+              <details className="group">
+                <summary className={`${BTN_SEC} list-none cursor-pointer select-none`} style={{ background: 'var(--surface)' }}>
+                  <FileUp width={13} height={13} strokeWidth={1.75} aria-hidden /> Importar desde tu TMS
+                </summary>
+                <div className="absolute left-0 right-0 z-10 mt-2 px-4">
+                  <div className="card p-4 shadow-[var(--shadow-pop)]">
+                    <TituloRecuadro info="viajes.importar" className="mb-2">Importar desde tu TMS</TituloRecuadro>
+                    <ImportarViajes importar={importar} verDinero={verDinero} />
+                  </div>
+                </div>
+              </details>
+            )}
           </div>
-
-          <section className="card p-4 relative">
-            <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {(Object.keys(ROTULO_FILTRO) as FiltroViajes[]).map((f) => (
-                  <Link key={f} href={hrefRegistro(sufijo, { f, q })}
-                    className="px-2.5 h-7 inline-flex items-center rounded-lg text-[12px] font-medium transition-colors hairline"
-                    style={filtro === f
-                      ? { background: 'var(--marca)', color: 'var(--marca-fg)', borderColor: 'var(--marca)' }
-                      : { background: 'var(--surface)', color: 'var(--muted)' }}>
-                    {ROTULO_FILTRO[f]}
-                  </Link>
-                ))}
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* GET puro: la búsqueda vive en la URL y sobrevive a recargar,
-                    compartir y volver atrás. El sufijo y el filtro viajan como
-                    campos ocultos para no perderse al enviar. */}
-                <form method="get" action="/dashboard/viajes" className="flex items-center gap-1.5" role="search">
-                  {[...params.entries()].map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-                  {filtro !== 'todos' && <input type="hidden" name="f" value={filtro} />}
-                  <label className="relative">
-                    <span className="sr-only">Buscar viaje</span>
-                    <Search width={13} height={13} strokeWidth={1.75} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--faint)' }} aria-hidden />
-                    <input type="search" name="q" defaultValue={q} placeholder="Folio, origen o destino"
-                      className="h-8 pl-8 pr-3 rounded-lg hairline text-[12.5px] w-[220px] max-w-full"
-                      style={{ background: 'var(--surface)' }} />
-                  </label>
-                  <button type="submit" className={BTN_SEC} style={{ background: 'var(--surface)' }}>Buscar</button>
-                  {q && (
-                    <Link href={hrefRegistro(sufijo, { f: filtro })} className="text-[12px] hover:opacity-70" style={{ color: 'var(--muted)' }}>
-                      Limpiar
-                    </Link>
-                  )}
-                </form>
-                {puedeImportar && (
-                  // Sin JavaScript ni estado: `<details>` abre y cierra solo.
-                  // Cerrado es un botón secundario; abierto, el panel del
-                  // import aparece debajo de la barra, a lo ancho.
-                  <details className="group">
-                    <summary className={`${BTN_SEC} list-none cursor-pointer select-none`} style={{ background: 'var(--surface)' }}>
-                      <FileUp width={13} height={13} strokeWidth={1.75} aria-hidden /> Importar desde tu TMS
-                    </summary>
-                    <div className="absolute left-0 right-0 z-10 mt-2 px-4">
-                      <div className="card p-4 shadow-[var(--shadow-pop)]">
-                        <h2 className="font-display text-[15px] font-semibold mb-2">Importar desde tu TMS</h2>
-                        <ImportarViajes importar={importar} verDinero={verDinero} />
-                      </div>
-                    </div>
-                  </details>
-                )}
-              </div>
-            </div>
-
-            {filas.length === 0 ? (
-              <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                {q
-                  ? `Ningún viaje coincide con «${q}»${filtro !== 'todos' ? ` en «${ROTULO_FILTRO[filtro]}»` : ''}.`
-                  : filtro === 'todos'
-                    ? 'Aún no hay viajes registrados — el primero que despaches aparece aquí.'
-                    : `Ningún viaje cae en «${ROTULO_FILTRO[filtro]}».`}
-              </EstadoVacio>
-            ) : (
-              <div className="overflow-x-auto -mx-1">
-                <table className="w-full border-collapse text-[13px]">
-                  <thead>
-                    <tr style={{ background: 'var(--canvas)' }}>
-                      <th className={`${TH} rounded-l-lg`} style={{ color: 'var(--muted)' }}>Viaje</th>
-                      <th className={TH} style={{ color: 'var(--muted)' }}>Operador</th>
-                      <th className={TH} style={{ color: 'var(--muted)' }}>Unidad</th>
-                      <th className={TH} style={{ color: 'var(--muted)' }}>Inicio</th>
-                      {verDinero && (
-                        <>
-                          <th className={`${TH} text-right`} style={{ color: 'var(--muted)' }}>Anticipo</th>
-                          <th className={`${TH} text-right`} style={{ color: 'var(--muted)' }}>Comprobado</th>
-                          <th className={`${TH} text-right`} style={{ color: 'var(--muted)' }}>Diferencia</th>
-                        </>
-                      )}
-                      <th className={TH} style={{ color: 'var(--muted)' }}>Aviso</th>
-                      <th className={TH} style={{ color: 'var(--muted)' }}>Estatus</th>
-                      <th className={`${TH} rounded-r-lg text-right`} style={{ color: 'var(--muted)' }}>Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filas.map((v) => {
-                      const e = PILL_ESTATUS[v.estatus] ?? { etiqueta: v.estatus, estado: 'neutral' as Estado };
-                      const ruta = v.origen && v.destino ? `${v.origen} → ${v.destino}` : v.origen ?? v.destino ?? null;
-                      return (
-                        <tr key={v.id} className="h-14 border-b transition-colors hover:bg-[var(--canvas)]" style={{ borderColor: 'var(--line2)' }}>
-                          <td className="px-3 py-2 min-w-0">
-                            <span className="font-medium block whitespace-nowrap">{v.folio}</span>
-                            <span className="block text-[11px] truncate max-w-[240px]" style={{ color: 'var(--faint)' }}>
-                              {ruta ?? 'sin ruta capturada'}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            {v.operadorNombre ?? <span style={{ color: 'var(--faint)' }}>Sin asignar</span>}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap cifra-mono" style={{ color: v.unidadEco ? 'var(--ink)' : 'var(--faint)' }}>
-                            {v.unidadEco ?? '—'}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--muted)' }}>{v.fechaInicio ? fechaMx(v.fechaInicio) : '—'}</td>
-                          {verDinero && (
-                            <>
-                              <td className="px-3 py-2 text-right cifra-mono whitespace-nowrap">{v.anticipo === null ? '—' : mxn(v.anticipo)}</td>
-                              <td className="px-3 py-2 text-right cifra-mono whitespace-nowrap" style={{ color: v.comprobado === null ? 'var(--faint)' : undefined }}>
-                                {v.comprobado === null ? '—' : mxn(v.comprobado)}
-                              </td>
-                              <td className="px-3 py-2 text-right cifra-mono whitespace-nowrap"
-                                style={{ color: v.diferencia === null ? 'var(--faint)' : v.diferencia === 0 ? 'var(--ok)' : v.diferencia > 0 ? 'var(--warn)' : 'var(--bad)' }}>
-                                {v.diferencia === null ? '—' : v.diferencia === 0 ? 'Exacta' : mxn(Math.abs(v.diferencia))}
-                              </td>
-                            </>
-                          )}
-                          <td className="px-3 py-2">
-                            {v.estatus === 'liquidado'
-                              ? <span style={{ color: 'var(--faint)' }}>—</span>
-                              : <PillAviso v={v} />}
-                          </td>
-                          <td className="px-3 py-2"><StatusPill estado={e.estado}>{e.etiqueta}</StatusPill></td>
-                          <td className="px-3 py-2 text-right">
-                            {v.liqId ? (
-                              <Link href={`/dashboard/${v.liqId}${sufijo}`}
-                                className="inline-flex items-center gap-1 text-[12.5px] font-medium hover:opacity-70 transition-opacity whitespace-nowrap"
-                                style={{ color: 'var(--marca)' }}>
-                                Ver <ArrowRight width={12} height={12} strokeWidth={2} aria-hidden />
-                              </Link>
-                            ) : (
-                              <span className="text-[12px]" style={{ color: 'var(--faint)' }}>—</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  {verDinero && (
-                    <tfoot>
-                      <tr>
-                        <td colSpan={columnas} className="px-3 pt-2 text-[11px]" style={{ color: 'var(--faint)' }}>
-                          Diferencia en ámbar = sobrante a favor de la empresa; en rojo = faltante a favor del operador.
-                          Un guion en Comprobado es un viaje sin liquidación todavía.
-                        </td>
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
-              </div>
-            )}
-
-            {/* Paginación por CURSOR (escala 50k, 22-ago-2026): nunca más de
-                `porPagina` filas por render. No se dice "página N de M":
-                ni se cuenta el total de la consulta filtrada ni se numera —
-                el cursor es la posición del último viaje visto, y "Siguientes"
-                continúa desde ahí sin que la base relea lo anterior. Hacia
-                atrás sirve el botón del navegador o "Volver al inicio". */}
-            {(cursor || hayMas) && (
-              <div className="flex items-center justify-between gap-3 mt-3 pt-3" style={{ borderTop: '1px dashed var(--line2)' }}>
-                <span className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
-                  Hasta {numero(porPagina)} viajes por página, del más reciente al más antiguo.
-                </span>
-                <NavPaginas>
-                  {cursor ? <EnlacePagina href={hrefRegistro(sufijo, { f: filtro, q })} direccion="inicio" /> : null}
-                  {hayMas && siguiente ? <EnlacePagina href={hrefRegistro(sufijo, { f: filtro, q, c: siguiente })} direccion="siguiente" /> : null}
-                </NavPaginas>
-              </div>
-            )}
-          </section>
         </div>
-      </div>
-    </main>
+
+        {filas.length === 0 ? (
+          <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+            {q
+              ? `Ningún viaje coincide con «${q}»${filtro !== 'todos' ? ` en «${ROTULO_FILTRO[filtro]}»` : ''}.`
+              : filtro === 'todos'
+                ? 'Aún no hay viajes registrados — el primero que despaches aparece aquí.'
+                : `Ningún viaje cae en «${ROTULO_FILTRO[filtro]}».`}
+          </EstadoVacio>
+        ) : (
+          <TablaLista<FilaRegistroViaje>
+            etiqueta="Registro de viajes"
+            columnas={columnasViajes(sufijo, verDinero)}
+            filas={filas}
+            idFila={(v) => v.id}
+            base="/dashboard/viajes"
+            params={{}}
+            pie={verDinero ? (
+              <p className="rv-tl__nota">
+                Diferencia en ámbar = sobrante a favor de la empresa; en rojo = faltante a favor del operador.
+                Un guion en Comprobado es un viaje sin liquidación todavía.
+              </p>
+            ) : undefined}
+          />
+        )}
+
+        {/* Paginación por CURSOR (escala 50k, 22-ago-2026): nunca más de
+            `porPagina` filas por render. No se dice "página N de M":
+            ni se cuenta el total de la consulta filtrada ni se numera —
+            el cursor es la posición del último viaje visto, y "Siguientes"
+            continúa desde ahí sin que la base relea lo anterior. Hacia
+            atrás sirve el botón del navegador o "Volver al inicio". */}
+        <div className="rv-tl__sellos">
+          <SelloDato tipo="observado" fuente="Registro de viajes" leidoEn={ahoraMs()} edad={false} />
+        </div>
+
+        {(cursor || hayMas) && (
+          <div className="flex items-center justify-between gap-3 mt-3 pt-3" style={{ borderTop: '1px dashed var(--line2)' }}>
+            <span className="text-[11px]" style={{ color: 'var(--faint)' }}>
+              Hasta {numero(porPagina)} viajes por página, del más reciente al más antiguo.
+            </span>
+            <NavPaginas>
+              {cursor ? <EnlacePagina href={hrefRegistro(sufijo, { f: filtro, q })} direccion="inicio" /> : null}
+              {hayMas && siguiente ? <EnlacePagina href={hrefRegistro(sufijo, { f: filtro, q, c: siguiente })} direccion="siguiente" /> : null}
+            </NavPaginas>
+          </div>
+        )}
+      </section>
+    </MarcoPagina>
   );
 }
 
-function Kpi({ titulo, valor, nota, tono }: { titulo: string; valor: string; nota?: string; tono?: 'warn' | 'bad' }) {
-  return (
-    <div className="card p-3">
-      <div className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{titulo}</div>
-      <div className="cifra-mono text-[18px] font-medium mt-0.5 leading-tight"
-        style={tono ? { color: `var(--${tono})` } : undefined}>{valor}</div>
-      {nota && <div className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{nota}</div>}
-    </div>
-  );
-}

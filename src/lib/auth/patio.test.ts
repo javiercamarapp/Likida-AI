@@ -19,7 +19,7 @@ describe('alcanceDePatio', () => {
   });
 
   it('el contador, el chofer, un rol desconocido y «sin rol» no editan el catálogo: null', async () => {
-    for (const rol of ['contador', 'operador', 'vendedor', 'sin_rol', 'quien-sabe']) {
+    for (const rol of ['contador', 'operador', 'vendedor', 'nomina', 'sin_rol', 'quien-sabe']) {
       expect(await alcanceDePatio('t', 'u', rol), rol).toBeNull();
     }
     expect(terminalDeUsuario).not.toHaveBeenCalled();

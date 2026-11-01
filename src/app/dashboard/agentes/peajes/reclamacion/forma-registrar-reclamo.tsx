@@ -27,15 +27,15 @@ import { ETIQUETA_CATEGORIA_COBRO, type CategoriaCobro } from '@/lib/likida/peaj
 
 type Accion = (fd: FormData) => Promise<void>;
 
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50';
+const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const CSS_INPUT = 'hairline text-[12.5px] px-2.5 py-1.5 rounded-lg';
+const CSS_INPUT = 'hairline text-[12px] px-2.5 py-1.5 rounded-lg';
 const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
 
 function Boton() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className={CSS_BOTON} style={ESTILO_PRIMARIO}>
+    <button type="submit" disabled={pending} className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>
       {pending ? 'Registrando…' : 'Registrar reclamo'}
     </button>
   );
@@ -57,13 +57,13 @@ export function FormaRegistrarReclamo({ accion, desglose, opciones }: {
   return (
     <form action={despachar} className="flex items-end gap-2 flex-wrap mt-4">
       <input type="hidden" name="desglose" value={desglose} />
-      <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Registrar reclamo de</span>
+      <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Registrar reclamo de</span>
         <select name="categoria" required className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT}>
           {opciones.map(({ categoria, n }) => <option key={categoria} value={categoria}>{ETIQUETA_CATEGORIA_COBRO[categoria]} ({numero(n)})</option>)}
         </select></label>
-      <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Enviado el (si ya lo enviaste)</span>
+      <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Enviado el (si ya lo enviaste)</span>
         <input type="date" name="enviado_en" className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT} /></label>
-      <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Folio del portal (opc.)</span>
+      <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Folio del portal (opc.)</span>
         <input name="referencia" maxLength={120} className={`${CSS_INPUT} w-[150px] mt-0.5`} style={ESTILO_INPUT} /></label>
       <Boton />
     </form>

@@ -1,5 +1,8 @@
 import { Truck, UserCog, Wrench, TriangleAlert, PackageCheck, CircleSlash } from 'lucide-react';
-import { EstadoVacio, StatusPill, StatCard, type Estado } from '../admin/ui/kit';
+import { StatusPill, type Estado } from '../admin/ui/kit';
+import { Cifra, TiraCifras } from '../ui-v2/graficas';
+import { selloHoy } from './sello-hoy';
+import { EstadoVacio } from './estados';
 import { TituloSeccion, PILL_ESTATUS } from './resumen-visual';
 import { fechaMx } from '@/lib/formato';
 import type { TableroOperacion, CargaOperador } from '@/lib/likida/operacion';
@@ -33,32 +36,22 @@ export function TableroCifras({ t }: { t: TableroOperacion }) {
   return (
     <div>
       <TituloSeccion>Estado de la operación</TituloSeccion>
-      <div className="mt-2 flex flex-wrap gap-2.5 items-stretch">
-        <div className="flex-1 min-w-[200px]">
-          <StatCard icono={<CircleSlash width={17} height={17} strokeWidth={1.75} />}
-            etiqueta="Sin unidad" valor={t.sinUnidad} formato="entero" />
-        </div>
-        <div className="flex-1 min-w-[200px]">
-          <StatCard icono={<TriangleAlert width={17} height={17} strokeWidth={1.75} />}
-            etiqueta="Incidencias abiertas" valor={t.incidenciasAbiertas} formato="entero" />
-        </div>
-        <div className="flex-1 min-w-[200px]">
-          <StatCard icono={<PackageCheck width={17} height={17} strokeWidth={1.75} />}
-            etiqueta="Sin evidencia de entrega" valor={t.podPendientes} formato="entero" />
-        </div>
-      </div>
-      {/* `md:grid-cols-3` y NO `xl:grid-cols-6`: el ancho de la ventana no es
-          el ancho de la grilla — sidebar + rail dejan ~1100px reales a 1440px
-          de ventana, y a 6 columnas los rótulos salían cortados al 40%
-          (auditoría 10, MEDIO; la prueba lo vigila). */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 mt-2.5">
-        <StatCard icono={<Truck width={17} height={17} strokeWidth={1.75} />}
-          etiqueta="Viajes activos" valor={t.viajesActivos} formato="entero" />
-        <StatCard icono={<UserCog width={17} height={17} strokeWidth={1.75} />}
-          etiqueta="Unidades disponibles" valor={t.unidadesDisponibles} formato="entero" />
-        <StatCard icono={<Wrench width={17} height={17} strokeWidth={1.75} />}
-          etiqueta="En taller" valor={t.unidadesEnTaller} formato="entero" />
-      </div>
+      {/* UNA tira de seis indicadores (antes: dos filas de tarjetas): la tira se acomoda sola por ancho (mínimo 168 px por celda),
+          así ningún rótulo sale cortado a 1100 px de contenido (auditoría 10, MEDIO). Arriba, en el orden, los TRES que piden acción. */}
+      <TiraCifras className="mt-2" etiqueta="Estado de la operación" sello={selloHoy('Tablero de operación')}>
+        <Cifra icono={<CircleSlash width={16} height={16} strokeWidth={1.75} />}
+          etiqueta="Sin unidad" valor={t.sinUnidad} formato="entero" info="despacho.sin_unidad" />
+        <Cifra icono={<TriangleAlert width={16} height={16} strokeWidth={1.75} />}
+          etiqueta="Incidencias abiertas" valor={t.incidenciasAbiertas} formato="entero" info="despacho.incidencias" />
+        <Cifra icono={<PackageCheck width={16} height={16} strokeWidth={1.75} />}
+          etiqueta="Sin evidencia de entrega" valor={t.podPendientes} formato="entero" info="despacho.pod_pendientes" />
+        <Cifra icono={<Truck width={16} height={16} strokeWidth={1.75} />}
+          etiqueta="Viajes activos" valor={t.viajesActivos} formato="entero" info="despacho.viajes_activos" />
+        <Cifra icono={<UserCog width={16} height={16} strokeWidth={1.75} />}
+          etiqueta="Unidades disponibles" valor={t.unidadesDisponibles} formato="entero" info="despacho.unidades_libres" />
+        <Cifra icono={<Wrench width={16} height={16} strokeWidth={1.75} />}
+          etiqueta="En taller" valor={t.unidadesEnTaller} formato="entero" info="despacho.en_taller" />
+      </TiraCifras>
     </div>
   );
 }
@@ -160,7 +153,7 @@ export function TablaViajesOperacion({ viajes }: { viajes: FilaViajeOperacion[] 
     );
   }
   const visibles = viajes.slice(0, MAX_FILAS);
-  const TH = 'etiqueta-mono text-left text-[10px] font-medium uppercase px-5 py-1.5';
+  const TH = 'etiqueta-mono text-left text-[11px] font-medium uppercase px-5 py-1.5';
   return (
     <div className="overflow-x-auto pb-2">
       <table className="w-full border-collapse">

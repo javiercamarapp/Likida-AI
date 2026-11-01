@@ -28,7 +28,7 @@ function Boton({ texto, icono }: { texto: string; icono: 'guardar' | 'subir' }) 
   const Icono = icono === 'guardar' ? Save : Upload;
   return (
     <button type="submit" disabled={pending}
-      className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Icono width={14} height={14} strokeWidth={1.75} />{pending ? 'Guardando…' : texto}
     </button>
@@ -38,14 +38,14 @@ function Boton({ texto, icono }: { texto: string; icono: 'guardar' | 'subir' }) 
 export function Aviso({ r }: { r: ResultadoSitio }) {
   if (!r) return null;
   return r.ok ? (
-    <div role="status" className="text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
+    <div role="status" className="text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
       <div className="flex items-center gap-2"><CheckCircle2 width={15} height={15} strokeWidth={1.75} />{r.mensaje}</div>
       {r.detalles && r.detalles.length > 0 && (
         <ul className="mt-2 ml-6 list-disc space-y-0.5">{r.detalles.map((d, i) => <li key={i}>{d}</li>)}</ul>
       )}
     </div>
   ) : (
-    <div role="alert" className="text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
+    <div role="alert" className="text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
       <div className="flex items-start gap-2"><TriangleAlert width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />{r.error}</div>
       {r.detalles && r.detalles.length > 0 && (
         <ul className="mt-2 ml-6 list-disc space-y-0.5">{r.detalles.map((d, i) => <li key={i}>{d}</li>)}</ul>
@@ -103,7 +103,7 @@ export function FormaImportar({ accion }: { accion: AccionSitio }) {
   return (
     <form action={enviar} className="space-y-3" aria-label="Importar sitios desde CSV" encType="multipart/form-data">
       <label className="block"><span className={ETIQUETA}>Archivo CSV</span>
-        <input type="file" name="archivo" accept=".csv,text/csv,text/plain" className="text-[12.5px]" />
+        <input type="file" name="archivo" accept=".csv,text/csv,text/plain" className="text-[12px]" />
       </label>
       <label className="block"><span className={ETIQUETA}>…o pega el contenido</span>
         <textarea name="csv" rows={5} spellCheck={false} className={`${CAMPO} h-auto py-2 font-mono text-[12px]`}

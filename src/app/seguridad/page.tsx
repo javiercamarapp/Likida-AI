@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
 import { ShieldCheck, Lock, EyeOff, FileCheck2, Scale, FlaskConical, KeyRound } from 'lucide-react';
 
 export const metadata: Metadata = {
@@ -53,36 +54,27 @@ export default function PaginaSeguridad() {
   ];
 
   return (
-    <main className="min-h-dvh px-6 py-16" style={{ background: 'var(--canvas, #fff)' }}>
-      <div className="mx-auto max-w-3xl">
-        <p className="etiqueta-mono text-[11px] uppercase tracking-wide" style={{ color: 'var(--muted, #666)' }}>
-          Seguridad
-        </p>
-        <h1 className="font-display text-3xl font-semibold mt-2 tracking-tight">
-          Los datos de tu flota, tratados como dinero — porque lo son
-        </h1>
-        <p className="mt-3 text-[15px] leading-relaxed" style={{ color: 'var(--muted, #555)' }}>
-          Esta página dice lo que Likida hace hoy, mecanismo por mecanismo. Sin siglas
-          decorativas: cada afirmación es rastreable al código y a la base de datos.
-        </p>
-
-        <div className="mt-10 space-y-6">
-          {bloques.map((b) => (
-            <section key={b.titulo} className="flex items-start gap-4">
-              <b.Icono width={20} height={20} strokeWidth={1.75} className="mt-1 shrink-0" style={{ color: 'var(--marca, #111)' }} />
-              <div>
-                <h2 className="font-display text-[16px] font-semibold">{b.titulo}</h2>
-                <p className="mt-1 text-[14px] leading-relaxed" style={{ color: 'var(--muted, #555)' }}>{b.texto}</p>
-              </div>
+    <MarcoPublico
+      rotulo="Seguridad"
+      titulo="Los datos de tu flota, tratados como dinero — porque lo son"
+      apoyo="Esta página dice lo que Likida hace hoy, mecanismo por mecanismo. Sin siglas decorativas: cada afirmación es rastreable al código y a la base de datos."
+    >
+      <ul className="rv-pub__lista rv-pub__sec">
+        {bloques.map((b) => (
+          <li key={b.titulo} className="rv-pub__item">
+            <b.Icono width={20} height={20} strokeWidth={1.75} aria-hidden="true" />
+            <section>
+              <h2>{b.titulo}</h2>
+              <p>{b.texto}</p>
             </section>
-          ))}
-        </div>
+          </li>
+        ))}
+      </ul>
 
-        <p className="mt-12 text-[13px]" style={{ color: 'var(--muted, #666)' }}>
-          ¿Preguntas de seguridad o privacidad? Escríbenos — y para el detalle del tratamiento
-          de datos personales, el <Link href="/privacidad" className="underline">aviso de privacidad</Link>.
-        </p>
-      </div>
-    </main>
+      <p className="rv-pub__prosa rv-pub__sec">
+        ¿Preguntas de seguridad o privacidad? Escríbenos — y para el detalle del tratamiento de datos personales, el{' '}
+        <Link href="/privacidad">aviso de privacidad</Link>.
+      </p>
+    </MarcoPublico>
   );
 }

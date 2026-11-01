@@ -45,7 +45,7 @@ const Rejilla = ({ children, n = 2 }: { children: ReactNode; n?: number }) => <d
 const V: Record<string, () => ReactNode> = {
   'b01-botones-chips': () => (
     <>
-      <P.EncabezadoPagina rotulo="Muestrario" titulo="Botones, chips y avisos" descripcion="Primario tenue, 32 px, toque de 44 por ::after."
+      <P.EncabezadoPagina area="Muestrario" titulo="Botones, chips y avisos" apoyo="Primario tenue, 32 px, toque de 44 por ::after."
         acciones={<><P.Boton icono={<Download />}>Exportar</P.Boton><P.Boton icono={<FileUp />}>Entregar archivo</P.Boton></>} />
       <Bloque titulo="Botones">
         <Fila>
@@ -77,7 +77,7 @@ const V: Record<string, () => ReactNode> = {
   ),
   'b02-campos-tablas': () => (
     <>
-      <P.EncabezadoPagina titulo="Campos y tablas" descripcion="Alto visual 32 (36 en móvil), chevron con aire, tabla 36/40." />
+      <P.EncabezadoPagina titulo="Campos y tablas" apoyo="Alto visual 32 (36 en móvil), chevron con aire, tabla 36/40." />
       <Rejilla n={1}>
         <Bloque titulo="Campos">
           <div style={{ display: 'grid', gap: 8 }}>
@@ -115,7 +115,7 @@ const V: Record<string, () => ReactNode> = {
   ),
   'b03-kpi-graficas': () => (
     <>
-      <P.EncabezadoPagina rotulo="Muestrario" titulo="Tira KPI y gráficas" descripcion="Una tarjeta de 112 px; color = identidad de la métrica." />
+      <P.EncabezadoPagina area="Muestrario" titulo="Tira KPI y gráficas" apoyo="Una tarjeta de 112 px; color = identidad de la métrica." />
       <G.TiraKpi etiqueta="Indicadores de muestra" items={[
         { etiqueta: 'Monto comprobado', valor: '$4,825,340', icono: <Wallet />, metrica: 'dinero_comprobado', delta: { texto: '+4.2 %', dir: 'sube', bueno: 'sube' }, serie: SERIE, sello: 'TMS · hace 5 min' },
         { etiqueta: 'Peajes del periodo', valor: '$318,420', icono: <Ruta />, metrica: 'gasto_peajes', delta: { texto: '−2.1 %', dir: 'baja', bueno: 'baja' }, serie: SERIE.slice().reverse(), sello: 'Casetas · semana 43' },
@@ -138,7 +138,7 @@ const V: Record<string, () => ReactNode> = {
   ),
   'b04-estados': () => (
     <>
-      <P.EncabezadoPagina titulo="Estados de gráfica y anillo" descripcion="Carga, error, vacío y avance." />
+      <P.EncabezadoPagina titulo="Estados de gráfica y anillo" apoyo="Carga, error, vacío y avance." />
       <Rejilla n={1}>
         <Bloque titulo="Error"><G.ChartState estado="error" mensaje="No disponible ahora. No es cero: la consulta no respondió a tiempo." alto={120} accion={<P.Boton tamano="sm">Reintentar</P.Boton>} /></Bloque>
         <Bloque titulo="Vacío"><G.ChartState estado="vacio" mensaje="Sin datos en el periodo." alto={120} /></Bloque>
@@ -148,7 +148,7 @@ const V: Record<string, () => ReactNode> = {
   ),
   'b05-overlays': () => (
     <>
-      <P.EncabezadoPagina titulo="Overlays" descripcion="Drawer 420, Modal 440 y hoja inferior en móvil (abiertos para la captura)." />
+      <P.EncabezadoPagina titulo="Overlays" apoyo="Drawer 420, Modal 440 y hoja inferior en móvil (abiertos para la captura)." />
       <G.TiraKpi etiqueta="Fondo" items={[
         { etiqueta: 'Diferencias por cuadrar', valor: '$18,420', metrica: 'diferencias_por_cuadrar', sello: 'Cuadre · semana 43', delta: { texto: '+3 casos', dir: 'sube', bueno: 'baja' }, serie: SERIE },
         { etiqueta: 'Anticipos abiertos', valor: '17', metrica: 'anticipos_abiertos', sello: 'TMS · hace 5 min', segmentos: [{ etiqueta: 'Abiertos', valor: 17 }, { etiqueta: 'Por comprobar', valor: 6 }] },
@@ -168,7 +168,7 @@ const V: Record<string, () => ReactNode> = {
   ),
   'b06-modal': () => (
     <>
-      <P.EncabezadoPagina titulo="Confirmación" descripcion="Modal de alerta (alertdialog) sobre la liquidación." />
+      <P.EncabezadoPagina titulo="Confirmación" apoyo="Modal de alerta (alertdialog) sobre la liquidación." />
       <P.Modal alerta abierto={false} onCerrar={() => {}} titulo="¿Firmar la liquidación?" descripcion="Esta acción tiene efectos fiscales." pie={<><P.Boton>Cancelar</P.Boton><P.Boton variante="primary">Firmar</P.Boton></>}>
         <p>Se firma la liquidación del viaje V-4102 por $48,300. No se puede deshacer desde aquí.</p>
       </P.Modal>
@@ -176,7 +176,7 @@ const V: Record<string, () => ReactNode> = {
   ),
   'b07-menu': () => (
     <>
-      <P.EncabezadoPagina titulo="Popover y menú" descripcion="Filas de 32, radio 12, sombra de popover (abierto para la captura)." acciones={<P.Boton>Cuenta</P.Boton>} />
+      <P.EncabezadoPagina titulo="Popover y menú" apoyo="Filas de 32, radio 12, sombra de popover (abierto para la captura)." acciones={<P.Boton>Cuenta</P.Boton>} />
       <Rejilla n={1}>
         <Bloque titulo="Menú de cuenta">
           <div className="rv-pop" style={{ position: "static", width: 220 }}>
@@ -193,7 +193,7 @@ const V: Record<string, () => ReactNode> = {
   ),
   'b08-tarjeta-info': () => (
     <>
-      <P.EncabezadoPagina rotulo="Resumen" titulo="Tarjeta unificada con ⓘ" descripcion="Título + ⓘ + acciones; mismos estados en todo el producto." acciones={<P.Boton variante="primary">Exportar</P.Boton>} />
+      <P.EncabezadoPagina area="Resumen" titulo="Tarjeta unificada con ⓘ" apoyo="Título + ⓘ + acciones; mismos estados en todo el producto." acciones={<P.Boton variante="primary">Exportar</P.Boton>} />
       <P.BarraFiltros busqueda={{ valor: '', onCambio: () => {}, placeholder: 'Buscar folio' }} chips={[{ id: 'a', etiqueta: 'Este mes', activo: true }, { id: 'b', etiqueta: '30 días', activo: false }, { id: 'c', etiqueta: '90 días', activo: false }, { id: 'd', etiqueta: 'Con diferencias', activo: false }]} avanzados={<span>Avanzados</span>} nAvanzados={2} fuentes="Fuentes 5 de 7" />
       <G.TiraKpi etiqueta="Indicadores" items={[
         { etiqueta: 'Monto comprobado', valor: '$4,825,340', icono: <Wallet />, metrica: 'dinero_comprobado', info: 'resumen.monto_comprobado', delta: { texto: '+4.2 %', dir: 'sube', bueno: 'sube' }, serie: SERIE, sello: 'TMS · hace 5 min' },
@@ -226,7 +226,7 @@ const V: Record<string, () => ReactNode> = {
   ),
   'b09-panel': () => (
     <>
-      <P.EncabezadoPagina titulo="Panel lateral" descripcion="Base única de detalle, filtros avanzados y evidencia (320 / 420 / 560)." />
+      <P.EncabezadoPagina titulo="Panel lateral" apoyo="Base única de detalle, filtros avanzados y evidencia (320 / 420 / 560)." />
       <P.PanelLateral abierto={false} ancho={420} onCerrar={() => {}} titulo="Detalle del viaje V-4102" descripcion="Querétaro → Ciudad de México" pie={<><P.Boton>Cerrar</P.Boton><P.Boton variante="primary">Aprobar</P.Boton></>}>
         <div style={{ display: 'grid', gap: 12 }}>
           {['Anticipo', 'Casetas', 'Diésel', 'Maniobras', 'Viáticos', 'Diferencia'].map((r, i) => (

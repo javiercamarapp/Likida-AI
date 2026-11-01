@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { Settings, Fuel, Building2 } from 'lucide-react';
+import { Fuel, Building2 } from 'lucide-react';
 import { getConfig } from '@/lib/likida/config';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -12,10 +12,13 @@ import {
 } from '@/lib/likida/administracion';
 import { validarAjustes } from '@/lib/likida/ajustes_operativos';
 import { cuentasDeclaradas } from '@/lib/likida/contabilidad/catalogo';
-import { EstadoVacio } from '../../admin/ui/kit';
+import { EstadoVacio } from '../estados';
 import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
 import { FormaAjustes, type ResultadoGuardar } from './forma';
 import { ajustesIniciales, type EstadoCatalogo } from './inicial';
+import type { Metadata } from 'next';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+export const metadata: Metadata = { title: 'Configuración' };
 
 export const dynamic = 'force-dynamic';
 
@@ -156,15 +159,7 @@ export default async function ConfiguracionPage({
   const inicial = ajustesIniciales(config, cuentas);
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <Settings width={16} height={16} strokeWidth={1.75} />
-        <div>
-          <span className="text-sm font-medium block">Configuración</span>
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>Lo que el motor usa para cuadrar tus viajes</span>
-        </div>
-      </header>
-
+    <MarcoPagina titulo="Configuración" apoyo="Lo que el motor usa para cuadrar tus viajes.">
       {config === null ? (
         <div className="glass-panel p-8 text-sm" style={{ color: 'var(--muted)' }}>
           No se pudo leer la configuración de esta flota.
@@ -172,9 +167,7 @@ export default async function ConfiguracionPage({
       ) : (
         <div className="glass-panel overflow-hidden">
           <section className="p-5">
-            <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-              La empresa
-            </h2>
+            <TituloRecuadro info="configuracion.empresa">La empresa</TituloRecuadro>
             <div className="card p-4 mt-3 flex items-start gap-3">
               <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
                 <Building2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
@@ -199,7 +192,7 @@ export default async function ConfiguracionPage({
                 validación de receptor sobre todo el histórico); éstos se
                 SUMAN a él y por eso sí son del cliente. */}
             <div className="card p-4 mt-3">
-              <h3 className="text-[13px] font-medium">Otras razones sociales que facturas</h3>
+              <TituloRecuadro nivel="h3" info="configuracion.rfcs_adicionales">Otras razones sociales que facturas</TituloRecuadro>
               <p className="text-xs mt-1 mb-3" style={{ color: 'var(--muted)' }}>
                 Si tu operación factura con más de un RFC (dos empresas del mismo grupo, la razón social
                 vieja y la nueva), decláralos aquí y el motor aceptará como tuyos los CFDI de gasto
@@ -227,16 +220,12 @@ export default async function ConfiguracionPage({
           </section>
 
           <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-            <h2 className="text-xs font-semibold uppercase tracking-wide mb-4" style={{ color: 'var(--muted)' }}>
-              Ajustes de tu operación
-            </h2>
+            <TituloRecuadro info="configuracion.ajustes" className="mb-4">Ajustes de tu operación</TituloRecuadro>
             <FormaAjustes inicial={inicial} ejemploKm={ejemploKm} ejemploIlegible={ejemploIlegible} guardar={guardar} catalogo={estadoCatalogo} />
           </section>
 
           <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-            <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-              Unidades calibradas
-            </h2>
+            <TituloRecuadro info="configuracion.unidades">Unidades calibradas</TituloRecuadro>
             <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
               Placas con consumo propio, que le ganan al rendimiento por defecto de arriba.
             </p>
@@ -272,6 +261,6 @@ export default async function ConfiguracionPage({
           </section>
         </div>
       )}
-    </div>
+    </MarcoPagina>
   );
 }

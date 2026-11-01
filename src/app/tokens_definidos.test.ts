@@ -19,7 +19,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 // AUDITORÍA 28, FE-B2 (BAJO, reincidente). Esta prueba nació mirando SOLO
 // `mcp/autorizar/page.tsx` contra SOLO `globals.css`. Con ese recorte,
 // `login.css` (y `login/page.tsx`, que la usa) salían como DOS «huérfanos»
-// falsos: `--crema`/`--serif-marca`/`--sans-marca` SÍ están definidos, pero
+// falsos: `--suave-login`/`--serif-marca`/`--sans-marca` SÍ están definidos, pero
 // en `login.css`, no en `globals.css` — la prueba no los veía y habría
 // reportado un defecto que no existe. El barrido se amplía a TODOS los
 // `.tsx`/`.ts`/`.css` de producción bajo `src/app` (tokens definidos en
@@ -97,7 +97,7 @@ describe('FE-4/FE-B2 · ninguna pantalla de src/app referencia un token que nadi
     expect(DEFINIDOS.has('--ink')).toBe(true);
     expect(DEFINIDOS.has('--bg')).toBe(true);
     // Definido en login.css, no en globals.css — la prueba de la 26 no lo veía.
-    expect(DEFINIDOS.has('--crema')).toBe(true);
+    expect(DEFINIDOS.has('--login-bg')).toBe(true);
   });
 
   it('cada var(--x) sin fallback de TODOS los .tsx/.ts/.css de src/app está definido en algún .css de src/app', () => {
@@ -113,7 +113,7 @@ describe('FE-4/FE-B2 · ninguna pantalla de src/app referencia un token que nadi
     expect(huerfanosPorArchivo, `tokens referenciados que nadie define: ${JSON.stringify(huerfanosPorArchivo)}`).toEqual({});
   });
 
-  it('el barrido no está ciego: encuentra ≥100 archivos con var(-- y sigue viendo mcp/autorizar/page.tsx', () => {
+  it('el barrido no está ciego: encuentra ≥100 archivos con var(-- y sigue viendo ui-v2/marco-publico.css', () => {
     // Medido el 6-sep-2026: 245 en `src/` completo, la mayoría en `src/app`.
     // Un barrido que "pasara" porque devolvió 0 archivos sería una prueba
     // verde por la razón equivocada.
@@ -121,14 +121,20 @@ describe('FE-4/FE-B2 · ninguna pantalla de src/app referencia un token que nadi
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     const conVar = ARCHIVOS.filter((f) => readFileSync(f, 'utf8').includes('var(--'));
     expect(conVar.length).toBeGreaterThanOrEqual(100);
-    expect(conVar).toContain('src/app/mcp/autorizar/page.tsx');
+    expect(conVar).toContain('src/app/ui-v2/marco-publico.css');
   });
 
-  it('el botón que concede el acceso (MCP) se pinta invertido, con los dos tokens de la paleta', () => {
+  it('el botón que concede el acceso (MCP) es el primario del sistema, con sus dos tokens definidos (fondo y texto distintos)', () => {
+    // L9a: el botón dejó de llevar `style` propio; es `<Boton variante="primary">` y su pintura sale de `.rv-btn--primary`.
     const PAGINA = readFileSync('src/app/mcp/autorizar/page.tsx', 'utf8');
-    const boton = PAGINA.slice(PAGINA.indexOf('value="autorizar"'));
-    const estilo = boton.slice(0, boton.indexOf('>'));
-    expect(estilo).toContain('var(--ink)');
-    expect(estilo).toContain('var(--bg)');
+    const boton = PAGINA.slice(PAGINA.indexOf('value="autorizar"') - 80, PAGINA.indexOf('Autorizar lectura'));
+    expect(boton).toContain('<Boton');
+    expect(boton).toContain('variante="primary"');
+    const CSS = readFileSync('src/app/ui-v2/componentes.css', 'utf8');
+    const regla = CSS.match(/\[data-ui="v2"\] \.rv-btn--primary \{([^}]*)\}/)?.[1] ?? '';
+    expect(regla).toContain('background: var(--btn-bg)');
+    expect(regla).toContain('color: var(--btn-fg)');
+    expect(DEFINIDOS.has('--btn-bg')).toBe(true);
+    expect(DEFINIDOS.has('--btn-fg')).toBe(true);
   });
 });

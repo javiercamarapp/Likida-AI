@@ -15,6 +15,8 @@ import { VistaFacturacion, type CapturaFacturacion } from './vista';
 import { BloqueEstadias } from './estadias';
 import { BloquePortalPago } from './portal';
 import type { ResultadoForma } from './forma';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Facturación a clientes' };
 
 export const dynamic = 'force-dynamic';
 

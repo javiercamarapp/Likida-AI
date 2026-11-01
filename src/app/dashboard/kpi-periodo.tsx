@@ -2,10 +2,12 @@
 
 import { useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { StatCard, BOTON_PERIODO } from '../admin/ui/kit';
+import { BOTON_PERIODO } from '../admin/ui/kit';
+import { Cifra } from '../ui-v2/graficas';
 import type { ComparativoPeriodo, SeriesKpiCards } from '@/lib/likida/analytics';
 import { pctCambio } from '@/lib/formato';
 import type { FormatoPreset } from '../admin/ui/formato-preset';
+import type { InfoClave } from '../ui-v2/info-catalogo';
 
 type Modo = 'semanal' | 'mensual' | 'historico';
 const MODOS: Modo[] = ['semanal', 'mensual', 'historico'];
@@ -13,6 +15,14 @@ const ETIQUETA_MODO: Record<Modo, string> = {
   semanal: 'últimos 7 días',
   mensual: 'últimos 30 días',
   historico: 'histórico',
+};
+
+/** La clave del ⓘ de cada indicador (el texto vive en el catálogo; la ventana la dice la etiqueta de la cifra). */
+const INFO_CAMPO: Record<'gastoTotal' | 'totalViajes' | 'costoPorViaje' | 'liquidado', InfoClave> = {
+  gastoTotal: 'inicio.gasto_total',
+  totalViajes: 'inicio.total_viajes',
+  costoPorViaje: 'inicio.costo_por_viaje',
+  liquidado: 'inicio.liquidado',
 };
 
 /**
@@ -30,7 +40,7 @@ const ETIQUETA_MODO: Record<Modo, string> = {
  * único que reemplaza.
  */
 export function KpiPeriodo({
-  icono, nombre, campo, formato, subeEsBueno, series,
+  icono, nombre, campo, formato, subeEsBueno, series, sello, matiz,
 }: {
   icono: ReactNode;
   nombre: string;
@@ -45,6 +55,10 @@ export function KpiPeriodo({
    *  acordarse: solo tipos serializables entre las dos mitades). */
   subeEsBueno: boolean;
   series: SeriesKpiCards;
+  /** Sello de procedencia; lo pone la `TiraCifras` que contiene la tarjeta. */
+  sello?: string;
+  /** Matiz del filete; lo pone la `TiraCifras` que contiene la tarjeta. */
+  matiz?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 }) {
   const [modoIdx, setModoIdx] = useState(0);
   const modo = MODOS[modoIdx];
@@ -59,16 +73,19 @@ export function KpiPeriodo({
     : pctCambio(valorActual, valorAnterior);
 
   return (
-    <StatCard
+    <Cifra
+      sello={sello}
+      matiz={matiz}
       icono={icono}
       etiqueta={`${nombre} — ${ETIQUETA_MODO[modo]}`}
       // AUDITORÍA 1, CRÍTICO: se PRESERVA el `null` que el backend devuelve a
       // propósito (p. ej. costo por viaje con 0 viajes es división indefinida,
       // no cero). Colapsarlo a 0 pintaba un $0.00 inventado — la regla #1.
       valor={valorActual}
-      sinDato="sin viajes en el periodo"
+      mensaje="sin viajes en el periodo"
+      info={INFO_CAMPO[campo]}
       formato={formato}
-      delta={pct === null ? null : { pct, bueno: subeEsBueno ? pct >= 0 : pct <= 0 }}
+      deltaPct={pct === null ? null : { pct, bueno: subeEsBueno ? pct >= 0 : pct <= 0 }}
       flechas={
         // Derecha = hacia histórico, izquierda = hacia semanal (pedido
         // explícito del 8-ago-2026 — antes estaba al revés).

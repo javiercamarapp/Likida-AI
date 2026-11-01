@@ -1,5 +1,6 @@
 import { Suspense, type ReactNode } from 'react';
 import { LimiteError } from './limite-error';
+import { EsqCifrasV2, EsqTablaV2, EsqTarjetaV2 } from '../ui-v2/componentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FE-14 — STREAMING POR TARJETA.
@@ -79,83 +80,31 @@ export function Barra({ alto = 14, ancho = '100%', className = '' }: {
   return <div className={`skeleton rounded-md ${className}`} style={{ height: alto, width: ancho }} aria-hidden />;
 }
 
-/** Envoltura accesible: el lector de pantalla oye "Cargando", no el ruido de
- *  los recuadros. Misma etiqueta que `cargando.tsx`, para que el producto
- *  diga lo mismo esté esperando la página entera o una sola tarjeta. */
-function Esperando({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={className} role="status" aria-label="Cargando">{children}</div>
-  );
-}
-
 /**
- * Una tarjeta blanca del alto que va a ocupar la real. `alto` es el alto del
- * CONTENIDO (el `card` le suma su propio padding), medido contra la tarjeta
- * definitiva para que no haya salto.
+ * Una tarjeta del alto que va a ocupar la real. `alto` es el alto del CONTENIDO; se redondea al escalón más cercano de los que el
+ * CSS conoce (60/84/120/160/240/320), medidos contra las tarjetas definitivas para que no haya salto.
  */
+const ESCALONES = [60, 84, 120, 160, 240, 320] as const;
+const escalon = (alto: number) => ESCALONES.reduce((a, b) => (Math.abs(b - alto) < Math.abs(a - alto) ? b : a));
+
 export function EsqTarjeta({ alto = 84, className = '' }: { alto?: number; className?: string }) {
-  return (
-    <Esperando className={`card p-3 ${className}`}>
-      <Barra alto={12} ancho="45%" />
-      <div className="mt-2"><Barra alto={alto - 26} /></div>
-    </Esperando>
-  );
+  return <EsqTarjetaV2 alto={escalon(alto)} className={className} />;
 }
 
 /**
- * Una fila de N tarjetas de cifra (`StatCard`). `rejilla` recibe LAS MISMAS
- * clases de grid que el contenido real — así el esqueleto ocupa exactamente
- * las mismas columnas en cada breakpoint.
+ * La tira de n indicadores con la forma de `TiraCifras` (una tarjeta, celdas con filete, 112 px). `rejilla` y `alto` se aceptan por
+ * compatibilidad con las llamadas anteriores y se ignoran: la tira se acomoda sola con su CSS.
  */
-export function EsqCifras({ n = 3, rejilla = 'grid grid-cols-1 sm:grid-cols-3 gap-2', alto = 100 }: {
-  n?: number; rejilla?: string; alto?: number;
-}) {
-  return (
-    <Esperando className={rejilla}>
-      {Array.from({ length: n }).map((_, i) => (
-        <div key={i} className="card p-2" style={{ minHeight: alto }}>
-          <div className="rounded-xl px-3 py-2" style={{ background: 'var(--canvas)', border: '1px solid var(--line2)' }}>
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg shrink-0 skeleton" aria-hidden />
-              <Barra alto={12} ancho="70%" />
-            </div>
-            <div className="mt-1.5"><Barra alto={20} ancho="55%" /></div>
-          </div>
-          <div className="mx-1.5 mt-1.5 pt-1.5" style={{ borderTop: '1px dashed var(--line2)' }}>
-            <Barra alto={10} ancho="65%" />
-          </div>
-        </div>
-      ))}
-    </Esperando>
-  );
+export function EsqCifras({ n = 3 }: { n?: number; rejilla?: string; alto?: number }) {
+  return <EsqCifrasV2 n={Math.min(5, Math.max(2, n)) as 2 | 3 | 4 | 5} />;
 }
 
-/**
- * Una tabla con su encabezado y N filas parejas — la forma de "Viajes
- * recientes", "Esperan tu revisión" y "Últimos cierres". El alto de fila
- * (33px) es el de una fila real con `py-2` y texto de 13px.
- */
-export function EsqTabla({ filas = 6, titulo = true }: { filas?: number; titulo?: boolean }) {
-  return (
-    <Esperando className="card p-4">
-      {titulo && <div className="mb-3"><Barra alto={16} ancho="30%" /></div>}
-      <div className="pb-2"><Barra alto={10} ancho="100%" /></div>
-      {Array.from({ length: filas }).map((_, i) => (
-        <div key={i} className="py-2 border-t" style={{ borderColor: 'var(--line2)' }}>
-          <Barra alto={17} ancho={i % 3 === 0 ? '92%' : i % 3 === 1 ? '100%' : '85%'} />
-        </div>
-      ))}
-    </Esperando>
-  );
+/** Una tabla con su encabezado (36 px) y N filas parejas (40 px) — la forma de "Viajes recientes", "Esperan tu revisión" y "Últimos cierres". */
+export function EsqTabla({ filas = 6 }: { filas?: number; titulo?: boolean }) {
+  return <EsqTablaV2 filas={filas} />;
 }
 
 /** El cuerpo de una gráfica dentro de su tarjeta — una sola mancha alta. */
 export function EsqGrafica({ alto = 200, className = '' }: { alto?: number; className?: string }) {
-  return (
-    <Esperando className={`card p-4 ${className}`}>
-      <Barra alto={16} ancho="35%" />
-      <div className="mt-1"><Barra alto={11} ancho="22%" /></div>
-      <div className="mt-3"><Barra alto={alto} /></div>
-    </Esperando>
-  );
+  return <EsqTarjetaV2 alto={escalon(alto + 40)} className={className} />;
 }

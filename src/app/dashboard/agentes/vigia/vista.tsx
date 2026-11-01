@@ -4,11 +4,13 @@ import { UsersRound, Hand, Clock, Flame, Inbox, ShieldCheck, History, Settings2,
 import { numero, fechaHoraMx } from '@/lib/formato';
 import type { DatosTablero, ConversacionTablero } from '@/lib/likida/vigia/repo';
 import { tarjetasInsights, type InsightsEntrada } from '@/lib/likida/vigia/insights';
-import { BarraPagina } from '../../resumen-visual';
 import { Bloque, Barra, EsqTabla } from '../../bloque';
 import {
   FormaBorrador, BotonConversacion, FormaResponder, FormaConfig, FormaAlta, FormaDirector, FormaServicio, AccionesContacto, type AccionVigia,
 } from './controles';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 export interface AccionesVigia {
   decidir: AccionVigia;
@@ -110,78 +112,70 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
   acciones: AccionesVigia;
 }) {
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<UsersRound width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Servicio al cliente (Vigía)"
-        />
-        <div className="px-5 py-5 flex-1 space-y-4">
-          <nav aria-label="Herramientas del agente" className="flex flex-wrap gap-2 text-[12.5px]">
-            <Link href={`/dashboard/agentes/vigia/historial${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Grupos críticos e histórico (FAQs y tendencias)</Link>
-            <Link href={`/dashboard/agentes/vigia/programa${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Programa de despacho (subir el archivo del día)</Link>
-            <Link href={`/dashboard/agentes/vigia/importacion${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Estatus de importación (derivado del programa)</Link>
-            <Suspense fallback={<Link href={`/dashboard/agentes/vigia/avisos${sufijo}`} className={ENLACE}>Avisos de viaje</Link>}>
-              <EnlaceAvisos sufijo={sufijo} pendientes={avisosPendientes} />
-            </Suspense>
-          </nav>
-          <Bloque mensaje="No se pudo leer el tablero del Vigía." esqueleto={<EsqKpis />}>
-            <BloqueEstadoYKpis datos={datos} ahoraMs={ahoraMs} />
-          </Bloque>
+    <MarcoPagina titulo="Servicio al cliente" apoyo="Atiende a los clientes de tu flota: clasifica, responde con datos reales y escala a una persona lo que lo requiere.">
+      <nav aria-label="Herramientas del agente" className="flex flex-wrap gap-2 text-[12px]">
+        <Link href={`/dashboard/agentes/vigia/historial${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Grupos críticos e histórico (FAQs y tendencias)</Link>
+        <Link href={`/dashboard/agentes/vigia/programa${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Programa de despacho (subir el archivo del día)</Link>
+        <Link href={`/dashboard/agentes/vigia/importacion${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Estatus de importación (derivado del programa)</Link>
+        <Suspense fallback={<Link href={`/dashboard/agentes/vigia/avisos${sufijo}`} className={ENLACE}>Avisos de viaje</Link>}>
+          <EnlaceAvisos sufijo={sufijo} pendientes={avisosPendientes} />
+        </Suspense>
+      </nav>
+      <Bloque mensaje="No se pudo leer el tablero del Vigía." esqueleto={<EsqKpis />}>
+        <BloqueEstadoYKpis datos={datos} ahoraMs={ahoraMs} />
+      </Bloque>
 
-          <Bloque mensaje="No se pudo leer la cola de aprobación." esqueleto={<EsqTabla filas={3} />}>
-            <BloqueAprobacion datos={datos} puedeDecidir={puedeDecidir} acciones={acciones} standby={standby} />
-          </Bloque>
+      <Bloque mensaje="No se pudo leer la cola de aprobación." esqueleto={<EsqTabla filas={3} />}>
+        <BloqueAprobacion datos={datos} puedeDecidir={puedeDecidir} acciones={acciones} standby={standby} />
+      </Bloque>
 
-          <Bloque mensaje="No se pudieron leer las excepciones." esqueleto={<EsqTabla filas={3} />}>
-            <BloqueExcepciones datos={datos} ahoraMs={ahoraMs} puedeDecidir={puedeDecidir} acciones={acciones} />
-          </Bloque>
+      <Bloque mensaje="No se pudieron leer las excepciones." esqueleto={<EsqTabla filas={3} />}>
+        <BloqueExcepciones datos={datos} ahoraMs={ahoraMs} puedeDecidir={puedeDecidir} acciones={acciones} />
+      </Bloque>
 
-          <Bloque mensaje="No se pudieron leer las conversaciones." esqueleto={<EsqTabla filas={5} />}>
-            <BloqueConversaciones datos={datos} ahoraMs={ahoraMs} puedeDecidir={puedeDecidir} acciones={acciones} />
-          </Bloque>
+      <Bloque mensaje="No se pudieron leer las conversaciones." esqueleto={<EsqTabla filas={5} />}>
+        <BloqueConversaciones datos={datos} ahoraMs={ahoraMs} puedeDecidir={puedeDecidir} acciones={acciones} />
+      </Bloque>
 
-          <div className="grid lg:grid-cols-2 gap-4">
-            <Bloque mensaje="No se pudo leer la configuración." esqueleto={<EsqTabla filas={4} />}>
-              <BloqueConfiguracion datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} standby={standby} />
-            </Bloque>
-            <Bloque mensaje="No se pudo leer la bitácora." esqueleto={<EsqTabla filas={4} />}>
-              <BloqueBitacora datos={datos} />
-            </Bloque>
-          </div>
-
-          <Bloque mensaje="No se pudo leer la lista de directores." esqueleto={<EsqTabla filas={3} />}>
-            <BloqueDirectores datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
-          </Bloque>
-
-          <Bloque mensaje="No se pudo leer la lista de servicio al cliente." esqueleto={<EsqTabla filas={3} />}>
-            <BloqueServicio datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
-          </Bloque>
-
-          <Bloque mensaje="No se pudieron leer los correos de respaldo." esqueleto={<EsqTabla filas={3} />}>
-            <BloqueCorreos datos={datos} />
-          </Bloque>
-
-          <Bloque mensaje="No se pudieron leer los contactos autorizados." esqueleto={<EsqTabla filas={4} />}>
-            <BloqueContactos datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
-          </Bloque>
-
-          <section className="card p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <ShieldCheck width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-              <h2 className="font-display text-[15px] font-semibold">Los límites del Vigía</h2>
-            </div>
-            <ul className="text-[12.5px] space-y-1.5 list-disc pl-5" style={{ color: 'var(--muted)' }}>
-              <li>Solo contesta a clientes que la flota autorizó aquí, con constancia de su consentimiento. Cualquier otro número recibe la respuesta de siempre.</li>
-              <li>Cada cifra de una respuesta sale de un dato real del viaje de ESE cliente. Si el dato no existe (por ejemplo la hora estimada de llegada, que Likida aún no guarda), dice que lo consulta y te avisa.</li>
-              <li>Un cliente jamás ve datos de otro cliente ni de otra flota. Si pregunta por un folio que no es suyo, no se confirma ni se niega nada.</li>
-              <li>Fuera de las 24 h de su último mensaje, WhatsApp solo permite plantillas aprobadas; el Vigía no manda texto libre fuera de esa ventana.</li>
-              <li>«BAJA» corta los mensajes de inmediato. Los chats se borran solos pasado el plazo de retención, y puedes suprimir los de un contacto (derechos ARCO) desde su fila.</li>
-            </ul>
-          </section>
-        </div>
+      <div className="grid lg:grid-cols-2 gap-4">
+        <Bloque mensaje="No se pudo leer la configuración." esqueleto={<EsqTabla filas={4} />}>
+          <BloqueConfiguracion datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} standby={standby} />
+        </Bloque>
+        <Bloque mensaje="No se pudo leer la bitácora." esqueleto={<EsqTabla filas={4} />}>
+          <BloqueBitacora datos={datos} />
+        </Bloque>
       </div>
-    </main>
+
+      <Bloque mensaje="No se pudo leer la lista de directores." esqueleto={<EsqTabla filas={3} />}>
+        <BloqueDirectores datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
+      </Bloque>
+
+      <Bloque mensaje="No se pudo leer la lista de servicio al cliente." esqueleto={<EsqTabla filas={3} />}>
+        <BloqueServicio datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
+      </Bloque>
+
+      <Bloque mensaje="No se pudieron leer los correos de respaldo." esqueleto={<EsqTabla filas={3} />}>
+        <BloqueCorreos datos={datos} />
+      </Bloque>
+
+      <Bloque mensaje="No se pudieron leer los contactos autorizados." esqueleto={<EsqTabla filas={4} />}>
+        <BloqueContactos datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
+      </Bloque>
+
+      <section className="card p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <ShieldCheck width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
+          <TituloRecuadro info="vigia.limites">Los límites del Vigía</TituloRecuadro>
+        </div>
+        <ul className="text-[12px] space-y-1.5 list-disc pl-5" style={{ color: 'var(--muted)' }}>
+          <li>Solo contesta a clientes que la flota autorizó aquí, con constancia de su consentimiento. Cualquier otro número recibe la respuesta de siempre.</li>
+          <li>Cada cifra de una respuesta sale de un dato real del viaje de ESE cliente. Si el dato no existe (por ejemplo la hora estimada de llegada, que Likida aún no guarda), dice que lo consulta y te avisa.</li>
+          <li>Un cliente jamás ve datos de otro cliente ni de otra flota. Si pregunta por un folio que no es suyo, no se confirma ni se niega nada.</li>
+          <li>Fuera de las 24 h de su último mensaje, WhatsApp solo permite plantillas aprobadas; el Vigía no manda texto libre fuera de esa ventana.</li>
+          <li>«BAJA» corta los mensajes de inmediato. Los chats se borran solos pasado el plazo de retención, y puedes suprimir los de un contacto (derechos ARCO) desde su fila.</li>
+        </ul>
+      </section>
+    </MarcoPagina>
   );
 }
 
@@ -195,27 +189,18 @@ function EsqKpis() {
   );
 }
 
-function Kpi({ titulo, valor, nota, tono }: { titulo: string; valor: string; nota?: string; tono?: 'warn' | 'bad' }) {
-  return (
-    <div className="card p-3.5">
-      <div className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{titulo}</div>
-      <div className="cifra-mono text-[20px] font-medium mt-1" style={tono ? { color: `var(--${tono})` } : undefined}>{valor}</div>
-      {nota && <div className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{nota}</div>}
-    </div>
-  );
-}
 
 function Leyenda({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-[80px] flex items-center justify-center">
-      <p className="text-[12.5px] text-center max-w-[48ch]" style={{ color: 'var(--muted)' }}>{children}</p>
+      <p className="text-[12px] text-center max-w-[48ch]" style={{ color: 'var(--muted)' }}>{children}</p>
     </div>
   );
 }
 
 function Chip({ children, tono }: { children: React.ReactNode; tono?: 'warn' | 'bad' | 'ok' }) {
   return (
-    <span className="inline-flex px-2 py-0.5 rounded-full text-[10.5px] font-medium"
+    <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
       style={{ color: tono ? `var(--${tono})` : 'var(--muted)', background: tono ? `var(--${tono === 'ok' ? 'ok' : tono}bg)` : 'var(--canvas)' }}>
       {children}
     </span>
@@ -230,18 +215,18 @@ export async function BloqueEstadoYKpis({ datos: p, ahoraMs }: { datos: Promise<
   return (
     <div className="space-y-3">
       {!d.config.habilitado && (
-        <div role="status" className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
+        <div role="status" className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
           <AlertTriangle width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
           El Vigía está apagado para tu flota: ningún cliente recibe respuesta. Autoriza a tus clientes y enciéndelo en «Configuración».
         </div>
       )}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Kpi titulo="Conversaciones activas" valor={numero(d.conversaciones.length)} nota="clientes con un hilo abierto" />
-        <Kpi titulo="Por aprobar" valor={numero(d.pendientes.length)} nota="respuestas que esperan tu toque" tono={d.pendientes.length > 0 ? 'warn' : undefined} />
-        <Kpi titulo={`Sin respuesta (SLA ${numero(sla)} min)`} valor={numero(vencidas)} nota="esperan más de lo permitido" tono={vencidas > 0 ? 'bad' : undefined} />
-        <Kpi titulo="Molestos o escalados" valor={numero(molestasOEscaladas)} nota="requieren a una persona" tono={molestasOEscaladas > 0 ? 'bad' : undefined} />
-      </div>
-      <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+      <TiraCifras sello={selloHoy('Avisos de viaje')}>
+        <Cifra etiqueta="Conversaciones activas" info="vigia.conversaciones_activas" valor={numero(d.conversaciones.length)} nota="clientes con un hilo abierto" />
+        <Cifra etiqueta="Por aprobar" info="vigia.por_aprobar" valor={numero(d.pendientes.length)} nota="respuestas que esperan tu toque" tono={d.pendientes.length > 0 ? 'warn' : undefined} />
+        <Cifra etiqueta={`Sin respuesta (SLA ${numero(sla)} min)`} info="vigia.sin_respuesta" valor={numero(vencidas)} nota="esperan más de lo permitido" tono={vencidas > 0 ? 'bad' : undefined} />
+        <Cifra etiqueta="Molestos o escalados" info="vigia.molestos_escalados" valor={numero(molestasOEscaladas)} nota="requieren a una persona" tono={molestasOEscaladas > 0 ? 'bad' : undefined} />
+      </TiraCifras>
+      <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
         Tiempo de primera respuesta:{' '}
         {d.respuesta.muestra === 0
           ? 'sin datos todavía — aún no se ha enviado ninguna respuesta en los últimos 7 días.'
@@ -257,7 +242,7 @@ export async function BloqueAprobacion({ datos: p, puedeDecidir, acciones, stand
     <section className="card p-4" aria-labelledby="h-aprob">
       <div className="flex items-center gap-2 mb-1">
         <Inbox width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-        <h2 id="h-aprob" className="font-display text-[15px] font-semibold">Cola de aprobación</h2>
+        <TituloRecuadro id="h-aprob" info="vigia.cola_aprobacion">Cola de aprobación</TituloRecuadro>
       </div>
       <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
         Las respuestas que redactó el Vigía y esperan tu toque. También te llegan por WhatsApp con botones.
@@ -277,12 +262,12 @@ export async function BloqueAprobacion({ datos: p, puedeDecidir, acciones, stand
                 {!standby && m.adjuntos.length > 0 && <Chip>Adjuntará: {m.adjuntos.join(', ')}</Chip>}
                 <span className="ml-auto text-[11px]" style={{ color: 'var(--faint)' }}>{fechaHoraMx(m.creadoEn)}</span>
               </div>
-              <blockquote className="text-[12.5px] pl-3 border-l-2" style={{ borderColor: 'var(--line2)', color: 'var(--muted)' }}>
+              <blockquote className="text-[12px] pl-3 border-l-2" style={{ borderColor: 'var(--line2)', color: 'var(--muted)' }}>
                 {m.mensajeCliente ?? '(archivo o mensaje sin texto)'}
               </blockquote>
               {puedeDecidir
                 ? <FormaBorrador accion={acciones.decidir} id={m.id} texto={m.borrador} />
-                : <p className="text-[12.5px] whitespace-pre-wrap">{m.borrador}</p>}
+                : <p className="text-[12px] whitespace-pre-wrap">{m.borrador}</p>}
             </article>
           ))}
         </div>
@@ -302,7 +287,7 @@ export async function BloqueExcepciones({ datos: p, ahoraMs, puedeDecidir, accio
     <section className="card p-4" aria-labelledby="h-exc">
       <div className="flex items-center gap-2 mb-1">
         <Flame width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--bad)' }} />
-        <h2 id="h-exc" className="font-display text-[15px] font-semibold">Excepciones</h2>
+        <TituloRecuadro id="h-exc" info="vigia.excepciones">Excepciones</TituloRecuadro>
       </div>
       <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
         Clientes molestos, sin respuesta pasado el SLA o ya escalados, y envíos que fallaron en las últimas 24 h.
@@ -312,7 +297,7 @@ export async function BloqueExcepciones({ datos: p, ahoraMs, puedeDecidir, accio
       ) : (
         <div className="space-y-2.5">
           {filas.map(({ c, motivos }) => (
-            <div key={c.id} className="flex flex-wrap items-center gap-2 text-[12.5px]">
+            <div key={c.id} className="flex flex-wrap items-center gap-2 text-[12px]">
               <strong>{c.clienteNombre ?? 'Cliente'}</strong>
               <span style={{ color: 'var(--muted)' }}>{c.contactoNombre ?? ''}</span>
               {motivos.map((m) => <Chip key={m} tono="bad">{m}</Chip>)}
@@ -323,7 +308,7 @@ export async function BloqueExcepciones({ datos: p, ahoraMs, puedeDecidir, accio
             </div>
           ))}
           {d.fallidos.map((f) => (
-            <div key={f.id} className="flex flex-wrap items-center gap-2 text-[12.5px]">
+            <div key={f.id} className="flex flex-wrap items-center gap-2 text-[12px]">
               <strong>{f.clienteNombre ?? 'Cliente'}</strong>
               <Chip tono="warn">Falló un envío</Chip>
               <span style={{ color: 'var(--muted)' }}>{f.error ?? 'sin detalle'}</span>
@@ -344,7 +329,7 @@ export async function BloqueConversaciones({ datos: p, ahoraMs, puedeDecidir, ac
     <section className="card p-4" aria-labelledby="h-conv">
       <div className="flex items-center gap-2 mb-1">
         <Hand width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-        <h2 id="h-conv" className="font-display text-[15px] font-semibold">Conversaciones activas</h2>
+        <TituloRecuadro id="h-conv" info="vigia.conversaciones">Conversaciones activas</TituloRecuadro>
       </div>
       <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
         Al tomar un hilo, el Vigía deja de redactar en él y contestas tú desde aquí.
@@ -357,7 +342,7 @@ export async function BloqueConversaciones({ datos: p, ahoraMs, puedeDecidir, ac
             const espera = minutosDeEspera(c.sinRespuestaDesde, ahoraMs);
             return (
               <article key={c.id} className="hairline rounded-xl p-3.5 space-y-2" style={{ background: 'var(--surface)' }}>
-                <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
+                <div className="flex flex-wrap items-center gap-2 text-[12px]">
                   <strong>{c.clienteNombre ?? 'Cliente'}</strong>
                   <span style={{ color: 'var(--muted)' }}>{c.contactoNombre ?? ''}</span>
                   {(c.prioridad ?? 0) >= 2 && <Chip tono="bad">Prioridad alta</Chip>}
@@ -368,7 +353,7 @@ export async function BloqueConversaciones({ datos: p, ahoraMs, puedeDecidir, ac
                   {c.molestiaNivel >= 2 && <Chip tono="bad">{c.molestiaNivel >= 3 ? 'Muy molesto' : 'Molesto'}</Chip>}
                 </div>
                 {c.ultimoMensajeCliente && (
-                  <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Último mensaje: «{c.ultimoMensajeCliente}»</p>
+                  <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Último mensaje: «{c.ultimoMensajeCliente}»</p>
                 )}
                 {puedeDecidir && (
                   <div className="flex flex-wrap items-start gap-3">
@@ -394,12 +379,12 @@ export async function BloqueConfiguracion({ datos: p, puedeAdministrar, acciones
     <section className="card p-4" aria-labelledby="h-cfg">
       <div className="flex items-center gap-2 mb-3">
         <Settings2 width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-        <h2 id="h-cfg" className="font-display text-[15px] font-semibold">Configuración y SLA</h2>
+        <TituloRecuadro id="h-cfg" info="vigia.configuracion">Configuración y SLA</TituloRecuadro>
       </div>
       {puedeAdministrar ? (
         <FormaConfig accion={acciones.config} valores={config} standby={standby} />
       ) : (
-        <ul className="text-[12.5px] space-y-1" style={{ color: 'var(--muted)' }}>
+        <ul className="text-[12px] space-y-1" style={{ color: 'var(--muted)' }}>
           <li>Vigía: {config.habilitado ? 'encendido' : 'apagado'}</li>
           {!standby && <li>Modo: {config.modoAprobacion === 'siempre' ? 'siempre aprobar' : 'autoenviar solo bajo riesgo ya validado'}</li>}
           <li>SLA de respuesta: {numero(config.slaRespuestaMin)} min · dueño a los {numero(config.slaRespuestaMin + config.escalarNivel2Min)} min · clientes críticos: {numero(Math.min(config.slaRespuestaMin, config.slaCriticoMin))} min</li>
@@ -417,13 +402,13 @@ export async function BloqueBitacora({ datos: p }: { datos: Promise<DatosTablero
     <section className="card p-4" aria-labelledby="h-bit">
       <div className="flex items-center gap-2 mb-1">
         <History width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-        <h2 id="h-bit" className="font-display text-[15px] font-semibold">Bitácora</h2>
+        <TituloRecuadro id="h-bit" info="vigia.bitacora">Bitácora</TituloRecuadro>
       </div>
       <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>Lo último que hizo el Vigía y quienes lo atienden. No guarda el texto de los clientes ni sus teléfonos.</p>
       {eventos.length === 0 ? (
         <Leyenda>Aún sin actividad.</Leyenda>
       ) : (
-        <div className="space-y-2 text-[12.5px]">
+        <div className="space-y-2 text-[12px]">
           {eventos.map((e) => (
             <div key={e.id} className="flex items-start gap-2">
               <Clock width={12} height={12} strokeWidth={1.75} className="mt-1 shrink-0" style={{ color: 'var(--faint)' }} />
@@ -445,7 +430,7 @@ export async function BloqueContactos({ datos: p, puedeAdministrar, acciones }: 
     <section className="card p-4" aria-labelledby="h-ct">
       <div className="flex items-center gap-2 mb-1">
         <UsersRound width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-        <h2 id="h-ct" className="font-display text-[15px] font-semibold">Clientes autorizados</h2>
+        <TituloRecuadro id="h-ct" info="vigia.clientes_autorizados">Clientes autorizados</TituloRecuadro>
       </div>
       <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
         Solo estos números reciben atención del Vigía. Por privacidad, aquí solo se ven las últimas 4 cifras.
@@ -455,7 +440,7 @@ export async function BloqueContactos({ datos: p, puedeAdministrar, acciones }: 
       ) : (
         <div className="space-y-2.5 mb-4">
           {d.contactos.map((c) => (
-            <div key={c.id} className="flex flex-wrap items-center gap-2 text-[12.5px]">
+            <div key={c.id} className="flex flex-wrap items-center gap-2 text-[12px]">
               <strong>{c.clienteNombre ?? 'Cliente'}</strong>
               <span style={{ color: 'var(--muted)' }}>{c.nombre ?? 'Sin nombre'} · …{c.telefonoTerminacion}</span>
               <Chip tono={c.estado === 'activo' ? 'ok' : 'warn'}>{c.estado === 'activo' ? 'Activo' : 'Dado de baja'}</Chip>
@@ -467,13 +452,14 @@ export async function BloqueContactos({ datos: p, puedeAdministrar, acciones }: 
       )}
       {puedeAdministrar ? (
         <div className="pt-3 border-t" style={{ borderColor: 'var(--line2)' }}>
+          {/* sin-info: subtítulo del formulario dentro de «Clientes autorizados», que lleva su ⓘ */}
           <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>Autorizar a un cliente</h3>
           {d.clientes.length === 0
-            ? <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Primero da de alta al cliente en «Clientes».</p>
+            ? <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Primero da de alta al cliente en «Clientes».</p>
             : <FormaAlta accion={acciones.alta} clientes={d.clientes} gerentes={d.gerentes} />}
         </div>
       ) : (
-        <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota autoriza o da de baja contactos.</p>
+        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota autoriza o da de baja contactos.</p>
       )}
     </section>
   );
@@ -488,7 +474,7 @@ export async function BloqueDirectores({ datos: p, puedeAdministrar, acciones }:
     <section className="card p-4" aria-labelledby="h-dir">
       <div className="flex items-center gap-2 mb-1">
         <UsersRound width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-        <h2 id="h-dir" className="font-display text-[15px] font-semibold">A quién avisa el Vigía</h2>
+        <TituloRecuadro id="h-dir" info="vigia.directores">A quién avisa el Vigía</TituloRecuadro>
       </div>
       <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
         Cuando un cliente espera de más o se molesta, el Vigía avisa al nivel 1 y, si nadie atiende, al nivel 2. Cada persona puede tener WhatsApp, correo o ambos.
@@ -501,9 +487,10 @@ export async function BloqueDirectores({ datos: p, puedeAdministrar, acciones }:
         const lista = (d.directores ?? []).filter((x) => x.nivel === nivel);
         return (
           <div key={nivel} className="mb-4">
+            {/* sin-info: subtítulo de nivel dentro de «A quién avisa el Vigía», que lleva su ⓘ */}
             <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>{NOMBRE_NIVEL[nivel]}</h3>
             {lista.length === 0 ? (
-              <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Nadie en la lista: se avisa como siempre.</p>
+              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Nadie en la lista: se avisa como siempre.</p>
             ) : (
               <div className="space-y-3">
                 {lista.map((x) => (
@@ -516,7 +503,7 @@ export async function BloqueDirectores({ datos: p, puedeAdministrar, acciones }:
                     {puedeAdministrar ? (
                       <FormaDirector accion={acciones.director} director={x} />
                     ) : (
-                      <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
+                      <div className="flex flex-wrap items-center gap-2 text-[12px]">
                         <strong>{x.nombre}</strong>
                         {x.telefono && <Chip>WhatsApp …{x.telefono.slice(-4)}</Chip>}
                         {x.correo && <Chip>Correo</Chip>}
@@ -531,11 +518,12 @@ export async function BloqueDirectores({ datos: p, puedeAdministrar, acciones }:
       })}
       {puedeAdministrar ? (
         <div className="pt-3 border-t" style={{ borderColor: 'var(--line2)' }}>
+          {/* sin-info: subtítulo del formulario dentro de «A quién avisa el Vigía», que lleva su ⓘ */}
           <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>Agregar a la lista</h3>
           <FormaDirector accion={acciones.director} />
         </div>
       ) : (
-        <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia esta lista.</p>
+        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia esta lista.</p>
       )}
     </section>
   );
@@ -554,14 +542,14 @@ export async function BloqueServicio({ datos: p, puedeAdministrar, acciones }: {
     <section className="card p-4" aria-labelledby="h-srv">
       <div className="flex items-center gap-2 mb-1">
         <UsersRound width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-        <h2 id="h-srv" className="font-display text-[15px] font-semibold">A quién avisa cuando no hay dato</h2>
+        <TituloRecuadro id="h-srv" info="vigia.servicio">A quién avisa cuando no hay dato</TituloRecuadro>
       </div>
       <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
         Cuando un cliente pregunta algo que el sistema no tiene (por ejemplo, la caja de una unidad), el Vigía avisa en privado a estas personas de servicio al cliente.
         {' '}Sin lista, se avisa como siempre: al responsable del cliente o al jefe de la flota. Hasta 10 personas.
       </p>
       {lista.length === 0 ? (
-        <p className="text-[12.5px] mb-3" style={{ color: 'var(--muted)' }}>Nadie en la lista: se avisa como siempre.</p>
+        <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>Nadie en la lista: se avisa como siempre.</p>
       ) : (
         <div className="space-y-3 mb-3">
           {lista.map((x) => (
@@ -569,7 +557,7 @@ export async function BloqueServicio({ datos: p, puedeAdministrar, acciones }: {
               {puedeAdministrar && accion ? (
                 <FormaServicio accion={accion} contacto={x} clientes={d.clientes} />
               ) : (
-                <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
+                <div className="flex flex-wrap items-center gap-2 text-[12px]">
                   <strong>{x.nombre}</strong>
                   <Chip>{x.clienteId ? (nombreCliente.get(x.clienteId) ?? 'Un cliente') : 'Todos los clientes'}</Chip>
                   {x.telefono && <Chip>WhatsApp …{x.telefono.slice(-4)}</Chip>}
@@ -583,11 +571,12 @@ export async function BloqueServicio({ datos: p, puedeAdministrar, acciones }: {
       )}
       {puedeAdministrar && accion ? (
         <div className="pt-3 border-t" style={{ borderColor: 'var(--line2)' }}>
+          {/* sin-info: subtítulo del formulario dentro de «A quién avisa cuando no hay dato», que lleva su ⓘ */}
           <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>Agregar a servicio al cliente</h3>
           <FormaServicio accion={accion} clientes={d.clientes} />
         </div>
       ) : (
-        <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia esta lista.</p>
+        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia esta lista.</p>
       )}
     </section>
   );
@@ -600,7 +589,7 @@ export async function BloqueCorreos({ datos: p }: { datos: Promise<DatosTablero>
     <section className="card p-4" aria-labelledby="h-cor">
       <div className="flex items-center gap-2 mb-1">
         <Mail width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-        <h2 id="h-cor" className="font-display text-[15px] font-semibold">Avisos por correo (respaldo)</h2>
+        <TituloRecuadro id="h-cor" info="vigia.correos">Avisos por correo (respaldo)</TituloRecuadro>
       </div>
       <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
         Los últimos avisos que se intentaron por correo porque el WhatsApp no salió. Si dice «falta configuración», el correo de Likida aún no está encendido para tu flota: avísanos.
@@ -608,7 +597,7 @@ export async function BloqueCorreos({ datos: p }: { datos: Promise<DatosTablero>
       {correos.length === 0 ? (
         <Leyenda>Ningún aviso ha necesitado el respaldo por correo.</Leyenda>
       ) : (
-        <div className="space-y-2 text-[12.5px]">
+        <div className="space-y-2 text-[12px]">
           {correos.map((c) => (
             <div key={c.id} className="flex flex-wrap items-center gap-2">
               <Chip tono={c.estado === 'enviado' ? 'ok' : c.estado === 'enviando' ? undefined : 'bad'}>{TEXTO_ESTADO_CORREO[c.estado] ?? c.estado}</Chip>
@@ -630,14 +619,14 @@ export async function BloqueInsights({ datos: p }: { datos: Promise<InsightsEntr
   const tarjetas = tarjetasInsights(await p);
   return (
     <section className="card p-4" aria-labelledby="h-ins">
-      <h2 id="h-ins" className="font-display text-[15px] font-semibold mb-1">Resultados del agente</h2>
+      <TituloRecuadro id="h-ins" info="vigia.resultados" className="mb-1">Resultados del agente</TituloRecuadro>
       <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
         Cada número dice de dónde sale. Donde depende de un supuesto o de reglas sin validar con datos reales, va marcado.
       </p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {tarjetas.map((t) => (
           <article key={t.id} className="hairline rounded-lg p-3.5" data-tarjeta={t.id}>
-            <div className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{t.titulo}</div>
+            <div className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>{t.titulo}</div>
             <div className="cifra-mono text-[20px] font-medium mt-1">{t.valor}</div>
             {t.rotulo && <div className="mt-1"><Chip tono="warn">{t.rotulo}</Chip></div>}
             <dl className="mt-2 space-y-1 text-[12px]">
@@ -645,7 +634,7 @@ export async function BloqueInsights({ datos: p }: { datos: Promise<InsightsEntr
               <div><dt className="inline font-medium">Qué significa: </dt><dd className="inline" style={{ color: 'var(--muted)' }}>{t.queSignifica}</dd></div>
               <div><dt className="inline font-medium">Qué hacer: </dt><dd className="inline" style={{ color: 'var(--muted)' }}>{t.queHacer}</dd></div>
             </dl>
-            <div className="text-[10.5px] mt-2" style={{ color: 'var(--faint)' }}>Fuente: {t.fuente}</div>
+            <div className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>Fuente: {t.fuente}</div>
           </article>
         ))}
       </div>

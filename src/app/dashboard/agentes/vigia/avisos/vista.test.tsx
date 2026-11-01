@@ -184,10 +184,11 @@ describe('navegación', () => {
     expect(h).toContain('href="/dashboard/agentes/vigia/avisos?tenant=abc&amp;pendientes=1"');
     expect(h).toContain('Solo pendientes');
   });
-  it('sin sufijo el filtro es ?pendientes=1; con el filtro puesto ofrece mostrar todos', () => {
+  it('sin sufijo el filtro es ?pendientes=1; con el filtro puesto el chip pulsado quita el filtro', () => {
     expect(pintar([])).toContain('href="/dashboard/agentes/vigia/avisos?pendientes=1"');
     const h = pintar([], { soloPendientes: true });
-    expect(h).toContain('Mostrar todos');
+    expect(h).toContain('aria-current="true"');
+    expect(h).toContain('Solo pendientes');
     expect(h).toContain('href="/dashboard/agentes/vigia/avisos"');
   });
 });

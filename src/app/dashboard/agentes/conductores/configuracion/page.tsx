@@ -19,6 +19,8 @@ import { VistaConfigConductor } from './vista';
 import { esTelefonoDemo } from '@/lib/meta/telefono_demo';
 import type { DatosVoluntarios, ResultadoConfig } from './forma';
 import type { ResultadoSitio } from '../sitios/formas';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Configuración del agente Conductor' };
 
 export const dynamic = 'force-dynamic';
 

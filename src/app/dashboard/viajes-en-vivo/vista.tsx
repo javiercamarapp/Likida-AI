@@ -1,3 +1,4 @@
+import { BarraFiltros, BotonEnlace, FiltroInterruptor, FiltroOpciones, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 import { CircleAlert, MapPin, MapPinOff, Radio, ShieldAlert } from 'lucide-react';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import { ETIQUETA_DESTINO, type TareaAbierta } from '@/lib/likida/orquestador/escalamiento';
@@ -5,6 +6,8 @@ import { textoAntiguedad, type FilaViaje, type TableroViajes, type TipoExcepcion
 import type { NivelFrescura } from '@/lib/likida/orquestador/enganche_gps';
 import type { Semaforo } from '@/lib/likida/conductor/tablero';
 import { ActualizarSolo } from './actualizar_solo';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL TABLERO DE VIAJES EN VIVO — presentación pura (el modelo ya viene armado
@@ -41,39 +44,15 @@ const GRAVEDAD: Record<1 | 2 | 3, { texto: string; color: string }> = {
   3: { texto: 'Urgente', color: 'var(--bad)' }, 2: { texto: 'Revisar', color: 'var(--warn)' }, 1: { texto: 'Vigilar', color: 'var(--muted)' },
 };
 
-function Kpi({ titulo, valor, nota, tono }: { titulo: string; valor: string; nota?: string; tono?: 'warn' | 'bad' }) {
-  return (
-    <div className="card p-3.5">
-      <div className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{titulo}</div>
-      <div className="cifra-mono text-[20px] font-medium mt-1" style={tono ? { color: `var(--${tono})` } : undefined}>{valor}</div>
-      {nota && <div className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{nota}</div>}
-    </div>
-  );
-}
 
 function Filtros({ f, c, accionUrl, ocultos }: { f: FiltrosVistaViajes; c: CatalogoVista; accionUrl: string; ocultos: Record<string, string> }) {
-  const sel = 'hairline rounded-lg px-2 h-8 text-[12.5px] outline-none focus:border-[var(--muted)]';
+  const hay = Boolean(f.terminalId || f.clienteId || f.soloExcepciones);
   return (
-    <form method="get" action={accionUrl} className="flex flex-wrap items-end gap-2.5" aria-label="Filtros de viajes en vivo">
-      {Object.entries(ocultos).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-      <label className="text-[11px] font-medium">Terminal
-        <select name="terminal" defaultValue={f.terminalId} className={`${sel} block mt-1`}>
-          <option value="">Todas</option>
-          {c.terminales.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-        </select>
-      </label>
-      <label className="text-[11px] font-medium">Cliente
-        <select name="cliente" defaultValue={f.clienteId} className={`${sel} block mt-1`}>
-          <option value="">Todos</option>
-          {c.clientes.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
-        </select>
-      </label>
-      <label className="text-[11px] font-medium inline-flex items-center gap-1.5 h-8">
-        <input type="checkbox" name="vista" value="excepciones" defaultChecked={f.soloExcepciones} /> Solo con excepciones
-      </label>
-      <button type="submit" className="hairline rounded-lg px-3 h-8 text-[12.5px] font-medium">Aplicar</button>
-      {(f.terminalId || f.clienteId || f.soloExcepciones) && <a href={accionUrl} className="text-[12px] underline" style={{ color: 'var(--muted)' }}>Quitar filtros</a>}
-    </form>
+    <BarraFiltros accion={accionUrl} ocultos={ocultos} etiqueta="Filtros de viajes en vivo" nActivos={hay ? 1 : 0} limpiarHref={accionUrl}>
+      <FiltroOpciones nombre="terminal" etiqueta="Terminal" valor={f.terminalId} opciones={[{ valor: '', rotulo: 'Todas' }, ...c.terminales.map((t) => ({ valor: t.id, rotulo: t.nombre }))]} />
+      <FiltroOpciones nombre="cliente" etiqueta="Cliente" valor={f.clienteId} opciones={[{ valor: '', rotulo: 'Todos' }, ...c.clientes.map((x) => ({ valor: x.id, rotulo: x.nombre }))]} />
+      <FiltroInterruptor nombre="vista" valor="excepciones" etiqueta="Solo con excepciones" marcado={f.soloExcepciones} />
+    </BarraFiltros>
   );
 }
 
@@ -106,16 +85,16 @@ function FilaTabla({ f, gpsDisponible }: { f: FilaViaje; gpsDisponible: boolean 
     <tr className="border-b align-top" style={{ borderColor: 'var(--line2)' }}>
       <td className="px-3 py-2.5">
         <div className="cifra-mono text-[13px] font-medium">{f.folio ?? 'sin folio'}</div>
-        <div className="text-[11.5px]" style={{ color: 'var(--muted)' }}>{f.origen ?? '?'} → {f.destino ?? '?'}</div>
-        <div className="text-[11.5px]" style={{ color: 'var(--faint)' }}>{[f.chofer, f.terminal, f.cliente].filter(Boolean).join(' · ')}</div>
+        <div className="text-[11px]" style={{ color: 'var(--muted)' }}>{f.origen ?? '?'} → {f.destino ?? '?'}</div>
+        <div className="text-[11px]" style={{ color: 'var(--faint)' }}>{[f.chofer, f.terminal, f.cliente].filter(Boolean).join(' · ')}</div>
       </td>
       <td className="px-3 py-2.5">
         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ color: s.color, background: s.fondo }}>{s.etiqueta}</span>
-        <div className="text-[11.5px] mt-1" style={{ color: 'var(--muted)' }}>
+        <div className="text-[11px] mt-1" style={{ color: 'var(--muted)' }}>
           {f.ultimoHito ? <>Último: {f.ultimoHito.etiqueta}{f.ultimoHito.cuando ? ` · ${fechaHoraMx(f.ultimoHito.cuando)}` : ''}</> : 'Sin hitos registrados'}
         </div>
         {f.escalado && (
-          <div className="text-[11.5px] mt-0.5 inline-flex items-center gap-1" style={{ color: f.escalado.atendido ? 'var(--muted)' : 'var(--bad)' }}>
+          <div className="text-[11px] mt-0.5 inline-flex items-center gap-1" style={{ color: f.escalado.atendido ? 'var(--muted)' : 'var(--bad)' }}>
             <ShieldAlert size={12} aria-hidden /> Escalado a tráfico (nivel {f.escalado.nivel}){f.escalado.atendido ? ', atendido' : ', sin atender'}
           </div>
         )}
@@ -157,22 +136,22 @@ export function TareasAbiertas({ tareas, accion, ocultos, aviso = null, errorLec
   if (errorLectura) {
     return (
       <section aria-label="Tareas que el asistente dejó para una persona" className="card p-4 space-y-2.5">
-        <div className="flex items-center gap-2"><Radio size={15} aria-hidden /><h2 className="text-[13px] font-medium">Tareas del asistente</h2></div>
-        <p role="alert" className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No pude leer las tareas abiertas; recarga la página. Esto no significa que no haya pendientes.</p>
+        <div className="flex items-center gap-2"><Radio size={15} aria-hidden /><TituloRecuadro info="viajes_en_vivo.tareas">Tareas del asistente</TituloRecuadro></div>
+        <p role="alert" className="text-[12px]" style={{ color: 'var(--muted)' }}>No pude leer las tareas abiertas; recarga la página. Esto no significa que no haya pendientes.</p>
       </section>
     );
   }
   if (tareas === null) return null; // base sin la 0650: el asistente avisa por chat que no puede escalar
   return (
     <section aria-label="Tareas que el asistente dejó para una persona" className="card p-4 space-y-2.5">
-      <div className="flex items-center gap-2"><Radio size={15} aria-hidden /><h2 className="text-[13px] font-medium">Tareas del asistente</h2></div>
-      {aviso && AVISO_ATENCION[aviso] && <p role="status" className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{AVISO_ATENCION[aviso]}</p>}
+      <div className="flex items-center gap-2"><Radio size={15} aria-hidden /><TituloRecuadro info="viajes_en_vivo.tareas">Tareas del asistente</TituloRecuadro></div>
+      {aviso && AVISO_ATENCION[aviso] && <p role="status" className="text-[12px]" style={{ color: 'var(--muted)' }}>{AVISO_ATENCION[aviso]}</p>}
       {tareas.length === 0
-        ? <p className="text-[12.5px]" style={{ color: 'var(--faint)' }}>No hay tareas abiertas. Cuando el asistente derive algo delicado a una persona, aparece aquí.</p>
+        ? <p className="text-[12px]" style={{ color: 'var(--faint)' }}>No hay tareas abiertas. Cuando el asistente derive algo delicado a una persona, aparece aquí.</p>
         : (
           <ul className="space-y-2">
             {tareas.map((t) => (
-              <li key={t.id} className="flex flex-wrap items-start justify-between gap-2 text-[12.5px]">
+              <li key={t.id} className="flex flex-wrap items-start justify-between gap-2 text-[12px]">
                 <div>
                   <span className="font-medium">Para {ETIQUETA_DESTINO[t.destino]}</span>
                   <span style={{ color: 'var(--faint)' }}> · {fechaHoraMx(t.creadaEn)}{t.viajeFolio ? ` · viaje ${t.viajeFolio}` : ''}</span>
@@ -182,7 +161,7 @@ export function TareasAbiertas({ tareas, accion, ocultos, aviso = null, errorLec
                   <form action={accion}>
                     {Object.entries(ocultos).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
                     <input type="hidden" name="id" value={t.id} />
-                    <button type="submit" className="hairline rounded-lg px-2.5 h-7 text-[12px]">Marcar atendida</button>
+                    <button type="submit" className="rv-btn rv-btn--secondary hairline rounded-lg px-2.5 h-7 text-[12px]">Marcar atendida</button>
                   </form>
                 )}
               </li>
@@ -208,44 +187,43 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
 }) {
   const c = tablero.conteos;
   return (
-    <div className="space-y-4">
-      <header className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h1 className="font-display text-[22px] font-semibold">Viajes en vivo</h1>
-          <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
-            Todos los viajes en curso con su último hito, la posición del tractor y qué tan vieja es. Actualizado {fechaHoraMx(tablero.generadoEn)}.
-          </p>
+    <MarcoPagina
+      titulo="Viajes en vivo"
+      apoyo={`Viajes en curso con su último hito y la posición del tractor, con qué tan vieja es. Actualizado ${fechaHoraMx(tablero.generadoEn)}.`}
+      acciones={(
+        <>
           <ActualizarSolo />
-        </div>
-        <a href={hrefMapa} className="text-[12.5px] underline" style={{ color: 'var(--muted)' }}>Ver el mapa</a>
-      </header>
+          <BotonEnlace tamano="sm" href={hrefMapa}>Ver el mapa</BotonEnlace>
+        </>
+      )}
+    >
 
       {!tablero.gpsDisponible && (
-        <div role="alert" className="card p-3 text-[12.5px] inline-flex items-center gap-2" style={{ color: 'var(--warn)' }}>
+        <div role="alert" className="card p-3 text-[12px] inline-flex items-center gap-2" style={{ color: 'var(--warn)' }}>
           <CircleAlert size={14} aria-hidden /> No se pudieron leer las posiciones del GPS: aquí no se afirma que un tractor esté «sin señal», solo que no se pudo consultar.
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-        <Kpi titulo="Viajes en curso" valor={numero(c.viajes)} nota={tablero.hayMas ? 'Hay más viajes activos que los listados' : undefined} />
-        <Kpi titulo="Con excepción" valor={numero(c.conExcepcion)} tono={c.conExcepcion > 0 ? 'warn' : undefined} />
-        <Kpi titulo="Sin señal de vida" valor={numero(c.sinSenal)} nota="Chofer y tractor callados" tono={c.sinSenal > 0 ? 'bad' : undefined} />
-        <Kpi titulo="Llegadas sin confirmar" valor={numero(c.llegadaSinConfirmar)} nota={`${numero(c.escaladosATrafico)} escalados a tráfico`} />
-      </div>
+      <TiraCifras sello={selloHoy('Viajes en curso')}>
+        <Cifra etiqueta="Viajes en curso" valor={numero(c.viajes)} nota={tablero.hayMas ? 'Hay más viajes activos que los listados' : undefined} info="viajes_en_vivo.en_curso" />
+        <Cifra etiqueta="Con excepción" valor={numero(c.conExcepcion)} tono={c.conExcepcion > 0 ? 'warn' : undefined} info="viajes_en_vivo.con_excepcion" />
+        <Cifra etiqueta="Sin señal de vida" valor={numero(c.sinSenal)} nota="Chofer y tractor callados" tono={c.sinSenal > 0 ? 'bad' : undefined} info="viajes_en_vivo.sin_senal" />
+        <Cifra etiqueta="Llegadas sin confirmar" valor={numero(c.llegadaSinConfirmar)} nota={`${numero(c.escaladosATrafico)} escalados a tráfico`} info="viajes_en_vivo.llegadas_sin_confirmar" />
+      </TiraCifras>
 
       <Filtros f={filtros} c={catalogo} accionUrl={accionUrl} ocultos={ocultos} />
 
       <div className="card overflow-x-auto">
         <table className="w-full border-collapse text-left">
           <thead>
-            <tr className="etiqueta-mono text-[10px] uppercase border-b" style={{ color: 'var(--faint)', borderColor: 'var(--line2)' }}>
+            <tr className="etiqueta-mono text-[11px] uppercase border-b" style={{ color: 'var(--faint)', borderColor: 'var(--line2)' }}>
               <th className="px-3 py-2 font-normal">Viaje</th><th className="px-3 py-2 font-normal">Estado</th>
               <th className="px-3 py-2 font-normal">Posición del tractor</th><th className="px-3 py-2 font-normal">Excepciones</th>
             </tr>
           </thead>
           <tbody>
             {tablero.filas.length === 0
-              ? <tr><td colSpan={4} className="px-3 py-6 text-[12.5px]" style={{ color: 'var(--faint)' }}>{filtros.terminalId || filtros.clienteId || filtros.soloExcepciones ? 'Ningún viaje cumple los filtros.' : 'No hay viajes en curso.'}</td></tr>
+              ? <tr><td colSpan={4} className="px-3 py-6 text-[12px]" style={{ color: 'var(--faint)' }}>{filtros.terminalId || filtros.clienteId || filtros.soloExcepciones ? 'Ningún viaje cumple los filtros.' : 'No hay viajes en curso.'}</td></tr>
               : tablero.filas.map((f) => <FilaTabla key={f.viajeId} f={f} gpsDisponible={tablero.gpsDisponible} />)}
           </tbody>
         </table>
@@ -253,7 +231,7 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
       {pregunta}
       {tareas}
       {notificaciones}
-    </div>
+    </MarcoPagina>
   );
 }
 

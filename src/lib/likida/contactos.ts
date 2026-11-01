@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { variantesTelefono } from './conv';
 import { acotada } from './presupuesto';
 import { traerTodo } from './pg';
+import { esRolNomina } from '@/lib/auth/roles';
 import { ordenAvisoDeclarado, type RolAviso } from './perfil/preguntas';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -80,7 +81,9 @@ export async function resolverCuentaOficina(telefono: string): Promise<CuentaOfi
 
   // Solo el `false` EXPLÍCITO da de baja, exactamente como `session.ts:99`: una
   // fila sin la columna sigue entrando. Una regla, dos capas — no dos reglas.
-  const filas = (data ?? []).filter((f) => (f as { activo?: boolean }).activo !== false);
+  // `nomina` (0949) NO es una cuenta de oficina para el bot: solo ve conteos en el panel, y el bot de WhatsApp contesta operación y
+  // dinero por rol. Es «no te conozco» (deny-by-default), igual que una cuenta dada de baja.
+  const filas = (data ?? []).filter((f) => (f as { activo?: boolean }).activo !== false && !esRolNomina((f as { rol?: string }).rol));
   if (filas.length === 0) return null;
   if (filas.length > 1) {
     logger.error('cuenta.ambigua', {

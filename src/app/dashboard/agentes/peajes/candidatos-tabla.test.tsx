@@ -88,7 +88,7 @@ describe('la tabla de candidatos en pantalla', () => {
     const html = pintar(tabla({ unidad: 'no-existe', cat: 'extemporaneo', desde: '2026-03-01' }));
     expect(html).toContain('Ningún candidato cumple este filtro');
     expect(html).toContain('value="no-existe"');
-    expect(html).toContain('Quitar filtros');
+    expect(html).toContain('Limpiar');
   });
 
   it('la paginación enlaza conservando filtro y flota; una sola página no pinta navegación', () => {

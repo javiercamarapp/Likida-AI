@@ -7,6 +7,8 @@ import { leerSenalesMarcha } from '@/lib/likida/puesta_en_marcha_lectura';
 import { sufijoTenant } from '../sufijo';
 import { AUTOMATIZACIONES } from '../rutas';
 import { VistaPuestaEnMarcha } from './vista';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Puesta en marcha' };
 
 export const dynamic = 'force-dynamic';
 

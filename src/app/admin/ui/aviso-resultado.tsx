@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Aviso } from '../../ui-v2/componentes/aviso';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL AVISO DE RESULTADO — UNO, no dieciocho (W2 «producto», 1-oct-2026).
@@ -47,24 +47,11 @@ export function leerResultado(estado: ResultadoUI): ResultadoLeido | null {
 
 export function AvisoResultado({ estado, compacto = false }: {
   estado: ResultadoUI;
-  /** La versión de una fila (texto de 12px, margen superior). */
+  /** La versión de una fila (margen superior). */
   compacto?: boolean;
 }) {
   const r = leerResultado(estado);
   if (!r) return null;
-  const tam = compacto ? 'text-[12px] px-3 py-2 mt-2' : 'text-[12.5px] px-3.5 py-2.5';
-  const icono = compacto ? 14 : 15;
-  return r.tono === 'ok' ? (
-    <div role="status" className={`flex items-start gap-2 rounded-lg ${tam}`}
-      style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
-      <CheckCircle2 aria-hidden width={icono} height={icono} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-      <span>{r.texto}</span>
-    </div>
-  ) : (
-    <div role="alert" className={`flex items-start gap-2 rounded-lg ${tam}`}
-      style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-      <AlertTriangle aria-hidden width={icono} height={icono} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-      <span>{r.texto}</span>
-    </div>
-  );
+  // El `Aviso` único de ui-v2: icono + texto, `role="alert"` el error y `role="status"` el éxito.
+  return <Aviso tono={r.tono === 'ok' ? 'ok' : 'error'} className={compacto ? 'mt-2' : undefined}>{r.texto}</Aviso>;
 }

@@ -41,18 +41,18 @@
 [data-ui="v2"] .card:has(> .etiqueta-mono + .cifra-mono:is([style*="--ok"], [style*="ok)"])) { --rv-filete: var(--ok); }
 [data-ui="v2"] .card > .etiqueta-mono { font-size: 11px; letter-spacing: .06em; font-weight: 500; }
 [data-ui="v2"] .card > .etiqueta-mono + .cifra-mono {
-  font: 600 28px/1.15 var(--font-sans-ui, inherit); letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin-top: 6px;
+  font: 600 var(--t-kpi)/1.15 var(--font-sans-ui, inherit); letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin-top: 6px;
 }
 [data-ui="v2"] .card > .etiqueta-mono + .cifra-mono + div { font-size: 12px; margin-top: 4px; }
 
 /* ── Encabezados de tarjeta y subrótulos ──────────────────────────────────────────────────────────────────────────────── */
-[data-ui="v2"] main.h-full .card h2.font-display { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+[data-ui="v2"] :is(main.h-full, .rv-marco) .card h2.font-display { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
 
 /* ── Píldoras de estado (Conexiones, cuadre): punto de color + peso 600, sin cambiar texto ni color asignado ──────────── */
-[data-ui="v2"] main.h-full section.card span.inline-flex.rounded-full[style*="background"] {
+[data-ui="v2"] :is(main.h-full, .rv-marco) section.card span.inline-flex.rounded-full[style*="background"] {
   display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px 2px 8px; font-size: 11px; font-weight: 600; letter-spacing: .01em;
 }
-[data-ui="v2"] main.h-full section.card span.inline-flex.rounded-full[style*="background"]::before {
+[data-ui="v2"] :is(main.h-full, .rv-marco) section.card span.inline-flex.rounded-full[style*="background"]::before {
   content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor;
 }
 
@@ -64,19 +64,19 @@
 [data-ui="v2"] [data-tour="conexiones.credenciales"] section.card { padding: 20px; }
 
 /* ── Esqueletos: neutros del sistema, sin destello de color ───────────────────────────────────────────────────────────── */
-[data-ui="v2"] main.h-full .skeleton { border-radius: 6px; }
+[data-ui="v2"] :is(main.h-full, .rv-marco) .skeleton { border-radius: 6px; }
 
 /* ── Tablas dentro de las páginas de dominio: el encabezado de la tabla de v1 usa mono; en v2 va en la tipografía del sistema ── */
-[data-ui="v2"] main.h-full .card table thead th.etiqueta-mono { letter-spacing: .06em; font-weight: 500; }
+[data-ui="v2"] :is(main.h-full, .rv-marco) .card table thead th.etiqueta-mono { letter-spacing: .06em; font-weight: 500; }
 
 /* ── Móvil ────────────────────────────────────────────────────────────────────────────────────────────────────────────── */
 @media (max-width: 767.98px) {
   [data-ui="v2"] main.h-full > .hairline.rounded-2xl > .h-11.border-b { min-height: 60px; padding: 14px 16px 12px; }
   [data-ui="v2"] main.h-full > .hairline.rounded-2xl > .h-11.border-b > div:first-child { font-size: 18px; }
   [data-ui="v2"] main.h-full > .hairline.rounded-2xl > .px-5.py-5 { padding: 16px; }
-  [data-ui="v2"] .card > .etiqueta-mono + .cifra-mono { font-size: 24px; }
+  [data-ui="v2"] .card > .etiqueta-mono + .cifra-mono { font-size: var(--fs-kpi-movil); }
 }
 
 /* Controles de fecha y de archivo: nunca más anchos que su tarjeta (a 390 px empujaban el documento a un scroll horizontal) */
-[data-ui="v2"] main.h-full .card :is(input[type="date"], input[type="file"], select) { min-width: 0; max-width: 100%; }
-[data-ui="v2"] main.h-full .card :is(form, label, fieldset) { min-width: 0; }
+[data-ui="v2"] :is(main.h-full, .rv-marco) .card :is(input[type="date"], input[type="file"], select) { min-width: 0; max-width: 100%; }
+[data-ui="v2"] :is(main.h-full, .rv-marco) .card :is(form, label, fieldset) { min-width: 0; }

@@ -19,6 +19,8 @@ import {
 import { sufijoTenant } from '../../../sufijo';
 import { VistaAvisosVigia, type ResultadoAviso } from './vista';
 import { VistaConfiguracionAviso, type ConfigPantalla, type OpcionesConfigPantalla, type ResultadoConfig } from './configuracion';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Avisos de viaje' };
 
 export const dynamic = 'force-dynamic';
 

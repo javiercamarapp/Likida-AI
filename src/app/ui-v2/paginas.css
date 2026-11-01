@@ -38,7 +38,7 @@
 .rv-pem__num[data-estado="atencion"], .rv-pem__num[data-estado="sin_dato"] { background: var(--warnbg, var(--canvas)); color: var(--warn, var(--ink)); border-color: transparent; }
 .rv-pem__num[data-estado="en_curso"], .rv-pem__num[data-estado="en_espera"] { background: var(--infobg, var(--canvas)); color: var(--info, var(--ink)); border-color: transparent; }
 .rv-pem__item-texto { display: flex; flex-direction: column; min-width: 0; }
-.rv-pem__item-titulo { font-size: 13.5px; font-weight: 600; line-height: 1.3; }
+.rv-pem__item-titulo { font-size: 13px; font-weight: 600; line-height: 1.3; }
 .rv-pem__item-sub { font-size: 12px; color: var(--muted); line-height: 1.35; overflow-wrap: anywhere; }
 
 .rv-pem__despues { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
@@ -72,7 +72,7 @@
 .rv-pem__sub-item { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; }
 .rv-pem__sub-item + .rv-pem__sub-item { border-top: 1px solid var(--line); }
 .rv-pem__sub-item > :first-child { flex: none; margin-top: 1px; min-width: 128px; }
-.rv-pem__sub-titulo { margin: 0; font-size: 13.5px; font-weight: 600; }
+.rv-pem__sub-titulo { margin: 0; font-size: 13px; font-weight: 600; }
 .rv-pem__sub-detalle { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
 
 .rv-pem__acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -108,29 +108,230 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    RESUMEN v2 (cuentas con perfil cinco_agentes)
    ═══════════════════════════════════════════════════════════════════════════ */
-.rv-res { display: flex; flex-direction: column; gap: 20px; max-width: 1180px; margin: 0 auto; padding: 24px 24px 48px; color: var(--ink); }
-.rv-res__sec { margin: 0 0 10px; font: 500 11px/1.4 var(--font-mono), ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.rv-res__agentes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.rv-res { display: flex; flex-direction: column; gap: 12px; min-width: 0; color: var(--ink); }
+@media (min-width: 768px) { .rv-res { min-height: 100%; } }
+.rv-res__fila--4-4-4 { flex: 1 1 auto; }
+.rv-res__nota { font-size: 12px; font-weight: 400; color: var(--muted); }
+.rv-res__fila { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
+.rv-res__fila--8-4 > :first-child { grid-column: span 8; }
+.rv-res__fila--8-4 > :last-child { grid-column: span 4; }
+.rv-res__fila--4-4-4 > * { grid-column: span 4; }
+.rv-res__fila > .rv-tarjeta > .rv-tarjeta__cuerpo { flex: 1 1 auto; display: flex; flex-direction: column; gap: 8px; }
+.rv-res__cierres .rv-tarjeta__cuerpo > * { flex: 1 1 auto; }
+.rv-res__sub { margin: 4px 0 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+.rv-res__tipos { display: flex; flex-direction: column; justify-content: space-between; gap: 6px; flex: 1 1 auto; }
 
-.rv-res-marcha {
-  display: flex; align-items: center; gap: 16px; padding: 16px 20px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+/* Estados vacío / error: la celda punteada llena la tarjeta (no queda un hueco bajo la línea). */
+.rv-res__fila > .rv-tarjeta > .rv-tarjeta__cuerpo > .rv-vacio, .rv-res__fila > .rv-tarjeta > .rv-tarjeta__cuerpo > .rv-error { flex: 1 1 auto; }
+[data-ui="v2"] .rv-res .rv-kpis { min-height: 112px; }
+
+/* Barra de periodo: mientras llega el nuevo periodo, las tarjetas conservan sus datos y se atenúan (sin capa de carga). */
+.rv-res:has([data-pendiente]) .rv-res__kpis, .rv-res:has([data-pendiente]) .rv-res__fila { opacity: .6; }
+
+/* Datos clave de una tarjeta (dl en rejilla de dos columnas). */
+.rv-datos { display: grid; grid-template-columns: repeat(3, minmax(0, auto)); justify-content: space-between; gap: 8px 12px; margin: 0; }
+.rv-dato { min-width: 0; }
+.rv-dato dt { margin: 0; font-size: 12px; font-weight: 500; color: var(--muted); }
+.rv-dato dd { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0; font: 700 15px/1.3 var(--font-display, inherit); letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
+
+/* «Requiere tu atención»: filas de 48 px con punto de severidad. */
+.rv-at { display: flex; flex-direction: column; gap: 0; margin: 0; padding: 0; list-style: none; }
+.rv-at li + li { border-top: 1px solid var(--line); }
+.rv-at__fila { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 4px 6px; margin: 0; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; }
+button.rv-at__fila { cursor: pointer; }
+button.rv-at__fila:hover { background: var(--canvas); }
+button.rv-at__fila:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.rv-at__punto { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.rv-at__punto[data-sev="accion"] { background: var(--senal); }
+.rv-at__punto[data-sev="atencion"] { background: var(--chart-4, var(--muted)); }
+.rv-at__punto[data-sev="ok"] { background: var(--ok); }
+.rv-at__texto { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.rv-at__titulo { font-size: 13px; font-weight: 600; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-at__detalle { font-size: 12px; line-height: 1.3; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-at__flecha { flex: none; color: var(--muted); }
+.rv-at__ok { flex: none; color: var(--ok); }
+.rv-at--panel .rv-at__titulo, .rv-at--panel .rv-at__detalle { white-space: normal; }
+.rv-at__pie { display: flex; justify-content: flex-start; margin-top: auto; }
+
+/* «Lo que hizo solo»: filas de 32 px. */
+.rv-solo { display: flex; flex-direction: column; flex: 1 1 auto; margin: 0; padding: 0; list-style: none; }
+.rv-solo li { display: flex; flex: 1 1 36px; align-items: center; gap: 8px; min-height: 36px; font-size: 13px; }
+.rv-solo li + li { border-top: 1px solid var(--line); }
+.rv-solo__icono { flex: none; display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 8px; background: var(--soft-4, var(--canvas)); color: var(--ink-4, var(--ink)); }
+.rv-solo__texto { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-solo__cuando { flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* «Siguiente mejor acción». */
+.rv-sig { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px 12px; border-radius: 8px; background: var(--ui-soft); }
+.rv-sig__titulo { margin: 0; font-size: 14px; font-weight: 600; line-height: 1.3; color: var(--ink); }
+.rv-sig__porque { margin: 0 0 4px; font-size: 13px; line-height: 1.4; color: var(--ink2); }
+.rv-atajos { display: flex; flex-direction: column; flex: 1 1 auto; margin: 0; padding: 0; list-style: none; }
+.rv-atajos li { flex: 1 1 44px; display: flex; }
+.rv-atajos li + li { border-top: 1px solid var(--line); }
+.rv-atajos__fila { flex: 1 1 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 0 6px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--ink); text-decoration: none; }
+.rv-atajos__fila:hover { background: var(--canvas); }
+.rv-atajos__fila:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.rv-atajos__fila svg { color: var(--muted); flex: none; }
+
+/* Entrada escalonada de los bloques (180 ms, 5 px, sin opacidad: el HTML servido ya está a la vista). */
+@media (prefers-reduced-motion: no-preference) {
+  [data-ui="v2"] .rv-res > *, [data-ui="v2"] .rv-res__fila > * { animation: rv-sube var(--ui-motion) var(--ui-ease) both; }
+  [data-ui="v2"] .rv-res > :nth-child(2) { animation-delay: 30ms; }
+  [data-ui="v2"] .rv-res > :nth-child(3) { animation-delay: 60ms; }
+  [data-ui="v2"] .rv-res > :nth-child(4), [data-ui="v2"] .rv-res > :nth-child(5) { animation-delay: 90ms; }
+  [data-ui="v2"] .rv-res__fila > :nth-child(2) { animation-delay: 40ms; }
+  [data-ui="v2"] .rv-res__fila > :nth-child(3) { animation-delay: 80ms; }
+  [data-ui="v2"] .rv-res { transition: none; }
+  [data-ui="v2"] .rv-res__kpis, [data-ui="v2"] .rv-res__fila { transition: opacity var(--ui-fast) ease; }
+  [data-ui="v2"] .rv-at__fila, [data-ui="v2"] .rv-atajos__fila { transition: background-color var(--ui-fast) ease; }
 }
-.rv-res-marcha__texto { flex: 1 1 auto; min-width: 0; }
-.rv-res-marcha__rotulo { margin: 0 0 2px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.rv-res-marcha__titulo { margin: 0; font-size: 17px; line-height: 1.3; font-weight: 600; }
-.rv-res-marcha__sig { margin: 4px 0 0; font-size: 13px; color: var(--ink2); }
-.rv-res-marcha__falta { color: var(--muted); }
-
-.rv-res__hoy { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; }
-.rv-res__hoy .rv-res__sec { margin-bottom: 4px; }
-.rv-res__hoy-ok { display: flex; align-items: flex-start; gap: 10px; color: var(--ink2); font-size: 14px; }
-.rv-res__hoy-ok p { margin: 0; }
-.rv-res__hoy-ok svg { flex: none; margin-top: 2px; color: var(--ok, var(--ink)); }
 
 @media (max-width: 900px) {
-  .rv-res { padding: 16px 16px 40px; }
-  .rv-res__agentes { grid-template-columns: minmax(0, 1fr); }
-  .rv-res-marcha { flex-wrap: wrap; }
-  .rv-res-marcha__texto { flex-basis: calc(100% - 90px); }
+  .rv-res__fila--8-4 > :first-child, .rv-res__fila--8-4 > :last-child, .rv-res__fila--4-4-4 > *, .rv-res__fila--4-4-4 > :last-child { grid-column: 1 / -1; }
+  .rv-res { gap: 10px; }
+  .rv-res__fila { gap: 10px; }
+  .rv-res__nota { display: none; }
 }
+
+@media (min-width: 820px) and (max-width: 1199px) {
+  .rv-res__fila--4-4-4 > * { grid-column: span 6; }
+  .rv-res__fila--4-4-4 > :last-child { grid-column: 1 / -1; }
+  .rv-res__fila--8-4 > :first-child { grid-column: span 7; }
+  .rv-res__fila--8-4 > :last-child { grid-column: span 5; }
+}
+
+/* Móvil: el marco no pone relleno en el contenido (lados 16, arriba 6, abajo 24, ESTILO §11). */
+@media (max-width: 767px) {
+  .rv-res { padding: 6px 16px 24px; }
+}
+
+
+/* ═══ L2b · MarcoPagina fuera del alcance v2 (rollback a v1): una columna con el mismo ritmo, sin piel nueva ═══ */
+.rv-marco { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 20px; }
+
+/* ═══ L2b · BASE SIN ÁMBITO (rollback a v1): las piezas nuevas se ven con aire, caja y altura aunque el tenant tenga tenant_ui='v1' ═══
+   El rollback global a v1 es la red de seguridad. Estas reglas viven AQUÍ (y no en componentes.css/graficas.css, cuyo snapshot de
+   reglas sin ámbito guarda que v1 pinte idéntico) y son MÁS BAJAS que sus gemelas de [data-ui="v2"], que las pisan en v2. */
+.rv-marco { padding: 20px 20px 24px; }
+.rv-marco > .rv-encabezado { margin-bottom: 4px; }
+.rv-tarjeta { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.rv-tarjeta__cab { display: flex; align-items: center; gap: 4px; min-height: 32px; }
+.rv-tarjeta__titulo { margin: 0; font-size: 14px; font-weight: 600; }
+.rv-tarjeta__acciones { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.rv-error { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--line2, var(--line)); border-radius: 12px; background: var(--badbg, var(--canvas)); color: var(--bad, var(--ink)); font-size: 13px; }
+.rv-error__cuerpo { flex: 1 1 auto; min-width: 0; }
+.rv-esq-barra, .rv-esq-cuerpo, .rv-esq-fila { display: block; border-radius: 6px; }
+.rv-esq-barra[data-alto="12"] { height: 12px; } .rv-esq-barra[data-alto="14"] { height: 14px; } .rv-esq-barra[data-alto="16"] { height: 16px; }
+.rv-esq-barra[data-alto="24"] { height: 24px; } .rv-esq-barra[data-alto="26"] { height: 26px; }
+.rv-esq-barra[data-ancho="xs"] { width: 96px; } .rv-esq-barra[data-ancho="s"] { width: 40%; } .rv-esq-barra[data-ancho="m"] { width: 55%; }
+.rv-esq-barra[data-ancho="l"] { width: 70%; } .rv-esq-barra[data-ancho="titulo"] { width: 220px; } .rv-esq-barra[data-ancho="lectura"] { width: min(460px, 100%); }
+.rv-esq-barra[data-ancho="full"] { width: 100%; }
+.rv-esq-cuerpo { width: 100%; height: 120px; }
+.rv-esq-cuerpo[data-alto="60"] { height: 60px; } .rv-esq-cuerpo[data-alto="84"] { height: 84px; } .rv-esq-cuerpo[data-alto="160"] { height: 160px; }
+.rv-esq-cuerpo[data-alto="240"] { height: 240px; } .rv-esq-cuerpo[data-alto="320"] { height: 320px; }
+.rv-esq-fila { height: 40px; } .rv-esq-fila--cab { height: 36px; }
+.rv-esq-dos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.rv-esq-encabezado { display: flex; flex-direction: column; gap: 8px; }
+.rv-kpi__nota { font-size: 12px; color: var(--muted); }
+.rv-kpi__atencion { display: inline-flex; min-height: 20px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--canvas); }
+.rv-kpi__error, .rv-kpi__sinbase { font-size: 12px; color: var(--muted); }
+.rv-esq-pagina { min-height: 60vh; }
+.rv-esq-cifras .rv-kpi { min-height: 112px; }
+.rv-esq { min-width: 0; }
+.rv-error__icono { flex: none; }
+.rv-error__texto { min-width: 0; }
+.rv-error__accion { flex: none; display: flex; align-items: center; gap: 8px; }
+
+/* ── Inicio v2 de `cinco_agentes` (L11) · prefijo rv-ic ─────────────────────────────────────────────────────────────────────────
+   Cinco tarjetas de agente (en móvil, tira deslizable), franja de pesos 7+5, fila Hoy · Puesta en marcha · Lo que hizo solo y atajos.
+   Solo tokens existentes; sin colores propios. */
+.rv-ic__agentes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
+.rv-ic__agentes > .rv-tarjeta { min-width: 0; }
+.rv-ic__agente-cuerpo { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.rv-ic__estado { display: flex; align-items: flex-start; gap: 8px; margin: 0; color: var(--muted); }
+.rv-ic__estado > svg { flex: none; margin-top: 3px; }
+.rv-ic__cifra-fila { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; margin: 0; }
+.rv-ic__cifra { font: 700 var(--t-kpi)/1.1 var(--font-display, inherit); letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
+.rv-ic__cifra[data-vacio] { font-size: 18px; font-weight: 600; color: var(--muted); }
+.rv-ic__nota { margin: 0; font-size: 12px; line-height: 1.35; color: var(--muted); }
+.rv-ic__enlace { font-size: 13px; font-weight: 600; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.rv-ic__fila { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
+.rv-ic__fila > * { min-width: 0; }
+.rv-ic__fila--7-5 { align-items: start; }
+.rv-ic__fila--7-5 > :only-child { grid-column: 1 / -1; }
+.rv-ic__fila--7-5 > :first-child:not(:only-child) { grid-column: span 7; }
+.rv-ic__fila--7-5 > :last-child:not(:only-child) { grid-column: span 5; }
+.rv-ic__fila--4-4-4 > * { grid-column: span 4; }
+.rv-ic__fila--6-6 > * { grid-column: span 6; }
+.rv-ic__pesos .rv-tarjeta__cuerpo, .rv-ic__marcha .rv-tarjeta__cuerpo, .rv-ic__hoy .rv-tarjeta__cuerpo { display: flex; flex-direction: column; gap: 8px; }
+.rv-ic__segs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 2px; margin: 0; padding: 0; list-style: none; }
+.rv-ic__seg { height: 6px; border-radius: 3px; background: var(--line2); }
+.rv-ic__seg[data-listo] { background: var(--ink); }
+.rv-ic__seg[data-omitido] { background: var(--n-400); }
+.rv-ic__sigue { margin: 0; font-size: 13px; line-height: 1.35; color: var(--ink); }
+.rv-ic__linea { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; }
+.rv-ic__pasos { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 13px; }
+.rv-ic__paso { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--ui-border); border-radius: 8px; color: var(--ink); text-decoration: none; }
+.rv-ic__paso-titulo { font-size: 13px; font-weight: 600; }
+.rv-ic__atajos-lista { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+@media (max-width: 1099px) { .rv-ic__agentes { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 819px) {
+  /* Móvil: UNA tira horizontal deslizable (no cinco tarjetas apiladas), para que la primera cifra quede arriba. */
+  .rv-ic__agentes { display: flex; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 4px; gap: 10px; }
+  .rv-ic__agentes > .rv-tarjeta { flex: 0 0 216px; scroll-snap-align: start; }
+  .rv-ic__fila--7-5 > :first-child:not(:only-child), .rv-ic__fila--7-5 > :last-child:not(:only-child), .rv-ic__fila--4-4-4 > *, .rv-ic__fila--6-6 > * { grid-column: 1 / -1; }
+  /* La cifra va arriba del estado: la primera cifra queda por encima de los 300 px. */
+  .rv-ic__cifra-fila { order: -1; }
+  .rv-ic__fila { gap: 10px; }
+}
+@media (min-width: 820px) and (max-width: 1099px) {
+  .rv-ic__fila--4-4-4 > * { grid-column: span 6; }
+  .rv-ic__fila--4-4-4 > :last-child { grid-column: 1 / -1; }
+}
+
+/* ═══ LG · BASE SIN ÁMBITO de las gráficas interactivas (rollback a v1) ═══
+   GastoSemanalChart y las gráficas del chat se pintan también con tenant_ui='v1'. Sin esta base el SVG salía sin estilo (barras negras, texto de 16 px,
+   viñetas en la leyenda, cinta de lectura siempre visible). Solo lo mínimo para que se lean: la piel completa cuelga de [data-ui="v2"] en graficas.css. */
+.rv-gr { position: relative; margin: 0; color: var(--ink); }
+.rv-gr-plot { position: relative; width: 100%; min-width: 0; }
+.rv-gr-plot svg { display: block; max-width: 100%; overflow: visible; }
+.rv-gr-cinta { display: none; }
+.rv-gr__marca, .rv-gr__nota, .rv-gr__directa { font: 500 12px/1 inherit; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.rv-gr__directa { fill: var(--ink); font-weight: 600; }
+.rv-gr__rejilla { stroke: var(--line); stroke-width: 1; }
+.rv-colum__base { stroke: var(--line2, var(--line)); stroke-width: 1; }
+.rv-colum__golpe { fill: transparent; }
+.rv-colum__col { outline: none; }
+.rv-colum__barra { fill: var(--ink); pointer-events: none; }
+.rv-colum__barra.rv-tono-1 { fill-opacity: .72; }
+.rv-colum__barra.rv-tono-2 { fill-opacity: .52; }
+.rv-colum__barra.rv-tono-3 { fill-opacity: .4; }
+.rv-colum__trama-fondo { fill: var(--surface, #fff); fill-opacity: .55; }
+.rv-colum__trama-raya { stroke: var(--muted); stroke-width: 1.4; }
+.rv-area__linea { fill: none; stroke: var(--ink); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.rv-area__relleno { stroke: none; }
+.rv-area__hueco { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 3 4; }
+.rv-area__punto, .rv-area__activo, .rv-area__aislado { fill: var(--ink); }
+.rv-area__cruz line { stroke: var(--line2, var(--line)); }
+.rv-area__ancla { fill: none; pointer-events: none; }
+.rv-leyenda-fina, .rv-leyenda-series { display: flex; flex-wrap: wrap; gap: 2px 16px; margin: 4px 0 0; padding: 0; list-style: none; font-size: 12px; color: var(--muted); }
+.rv-leyenda-series { margin: 0 0 6px; }
+.rv-leyenda-fina > span, .rv-leyenda-series > li { display: inline-flex; align-items: center; gap: 6px; }
+.rv-gt__sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: var(--ink); }
+.rv-tabla-grafica > summary { min-height: 32px; font-size: 12px; font-weight: 500; color: var(--muted); cursor: pointer; }
+.rv-tabla-grafica__caja { overflow-x: auto; }
+.rv-tabla-grafica__caja table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.rv-tabla-grafica__caja th, .rv-tabla-grafica__caja td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.rv-tabla-grafica__caja .rv-num { text-align: right; }
+.rv-dona { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.rv-dona__pista { stroke: var(--line); }
+.rv-dona__gajo, .rv-dona__borde { stroke: var(--ink); }
+.rv-dona__gajo.rv-tono-1 { stroke-opacity: .72; }
+.rv-dona__gajo.rv-tono-2 { stroke-opacity: .52; }
+.rv-dona__gajo.rv-tono-3 { stroke-opacity: .4; }
+.rv-dona__leyenda { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 13px; }
+.rv-barlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.rv-barlist__cab { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: inherit; text-decoration: none; }
+.rv-barlist__pista { display: block; height: 4px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.rv-barlist__relleno { fill: var(--ink); }
+.rv-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

@@ -22,6 +22,12 @@ vi.mock('next/navigation', () => ({
 }));
 const SENALES_RESUMEN = { actuales: null as unknown };
 vi.mock('@/lib/likida/asistente/senales', () => ({ leerSenalesAsistente: async () => SENALES_RESUMEN.actuales }));
+// Datos del Resumen v2 (sintéticos): el lector real consulta la base; aquí lo sustituye el arnés por vista.
+const DATOS_RESUMEN = { actuales: null as unknown };
+vi.mock('@/app/dashboard/resumen-datos', async (orig) => ({
+  ...(await orig<typeof import('@/app/dashboard/resumen-datos')>()),
+  leerDatosResumen: async () => DATOS_RESUMEN.actuales,
+}));
 vi.mock('@/lib/likida/agentes/corridas', async (orig) => ({
   ...(await orig<typeof import('@/lib/likida/agentes/corridas')>()),
   ultimasCorridas: async (_t: string, agente: string) => (agente === 'liquidacion'
@@ -33,13 +39,8 @@ const { default: DashboardChromeV2 } = await import('@/app/dashboard/shell/chrom
 const { VistaPuestaEnMarcha } = await import('@/app/dashboard/puesta-en-marcha/vista');
 const { VistaConexiones } = await import('@/app/dashboard/conexiones/vista');
 const { ResumenV2 } = await import('@/app/dashboard/resumen-v2');
-const { TarjetaAgente, FICHAS_CINCO_AGENTES } = await import('@/app/dashboard/inicio-cinco-agentes');
-const { GloboTour } = await import('@/app/ui-v2/movimiento/tour/globo');
-const { colocarGlobo, rectFoco, trazoVelo } = await import('@/app/ui-v2/movimiento/tour/geometria');
-const { RECORRIDO_DUENO } = await import('@/app/dashboard/recorridos/dueno');
 import type { SenalesAsistente } from '@/lib/likida/asistente/pasos_cinco_agentes';
 import type { Conector } from '@/lib/likida/conexiones';
-import type { Instantanea, Rect, Tam } from '@/app/ui-v2/movimiento/tour/tipos';
 import type { Insight } from '@/lib/likida/insights/tipos';
 import { comprobarPaginaV2, exigirV2Css, exigirV2Html } from './exigir_v2';
 import { USUARIO, textoInsight } from './fixtures/logistica_mx';
@@ -84,20 +85,46 @@ const insight = (agente: Insight['agente']): Insight => {
   } as Insight;
 };
 
-async function fichas() {
-  const insights = Object.fromEntries(FICHAS_CINCO_AGENTES.map((f) => [f.insight, f.insight === 'liquidacion' ? [insight('liquidacion')] : []]));
-  return Promise.all(FICHAS_CINCO_AGENTES.map((f) => TarjetaAgente({ ficha: f, tenantId: 't', sufijo: '', insights: insights as never })));
-}
+const SEMANAS = [4, 6, 5, 9, 7, 11, 8, 5].map((valor, i) => ({ inicio: `2026-09-${String(7 + 7 * i).padStart(2, '0')}`, etiqueta: ['7 sep', '14 sep', '21 sep', '28 sep', '5 oct', '12 oct', '19 oct', '26 oct'][i], valor, parcial: i === 7 }));
+const DATOS_CON: unknown = {
+  rango: '30', hoy: '2026-10-28', veDinero: true,
+  kpis: { viajesLiquidados: 42, montoComprobado: 482310.5, diferenciaDetectada: 12400, conDiferencias: 5, porRevisar: 3, tasaCuadre: 88 },
+  peajes: { total: 18250, semanas: 5 }, cartaPorte: { completas: 7, total: 9 }, cierres: SEMANAS,
+  porTipo: [{ tipo: 'sobre_politica', monto: 9000, n: 3 }, { tipo: 'duplicado', monto: 3400, n: 2 }, { tipo: 'sin_comprobante', monto: 1800, n: 4 }],
+  hechos: [
+    { tipo: 'recordatorio', folio: 'VJ-1042', operador: 'Rosa Medina', cuando: '2026-10-27T15:00:00Z' },
+    { tipo: 'escalado', folio: 'VJ-1038', operador: null, cuando: '2026-10-26T15:00:00Z' },
+    { tipo: 'recordatorio', folio: 'VJ-1031', operador: 'Luis Ortega', cuando: '2026-10-25T15:00:00Z' },
+    { tipo: 'recordatorio', folio: 'VJ-1027', operador: 'Marta Ríos', cuando: '2026-10-24T15:00:00Z' },
+    { tipo: 'escalado', folio: 'VJ-1019', operador: null, cuando: '2026-10-22T15:00:00Z' },
+  ],
+  escalados: 2,
+};
+const DATOS_VACIOS: unknown = {
+  rango: '30', hoy: '2026-10-28', veDinero: true,
+  kpis: { viajesLiquidados: 0, montoComprobado: 0, diferenciaDetectada: 0, conDiferencias: 0, porRevisar: 0, tasaCuadre: 0 },
+  peajes: { total: 0, semanas: 5 }, cartaPorte: { completas: 0, total: 0 }, cierres: SEMANAS.map((c) => ({ ...c, valor: 0 })),
+  porTipo: [], hechos: [], escalados: 0,
+};
+const DATOS_CAIDOS: unknown = { rango: '30', hoy: '2026-10-28', veDinero: true, kpis: null, peajes: null, cartaPorte: null, cierres: null, porTipo: null, hechos: null, escalados: null };
+
+const sinDinero = (d: unknown): unknown => ({ ...(d as object), veDinero: false, peajes: null, porTipo: null });
+const PRINCIPALES = [insight('peajes')];
 
 const asistente = (s: SenalesAsistente, paso?: 'tms' | 'correo') => (
   <VistaPuestaEnMarcha senales={s} ambito="t:u" tenantId="t" sufijo="" soloLectura={false} pasoInicial={paso} />
 );
 
-interface VistaDef { ruta: string; cuerpo: () => Promise<ReactNode> | ReactNode; senales?: SenalesAsistente }
+interface VistaDef { ruta: string; cuerpo: () => Promise<ReactNode> | ReactNode; senales?: SenalesAsistente; datos?: unknown; rol?: string; perfil?: 'cinco_agentes' | null }
 const VISTAS: Record<string, VistaDef> = {
-  'c01-resumen-vacio': { ruta: '/dashboard', senales: VACIAS, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, fichas: await fichas() }) },
-  'c02-resumen-en-curso': { ruta: '/dashboard', senales: EN_CURSO, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, fichas: await fichas() }) },
-  'c03-resumen-sin-dato': { ruta: '/dashboard', senales: CAIDAS, cuerpo: async () => ResumenV2({ tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, fichas: await fichas() }) },
+  'c01-resumen-vacio': { ruta: '/dashboard', senales: VACIAS, datos: sinDinero(DATOS_VACIOS), cuerpo: async () => ResumenV2({ rol: 'flota_admin', perfil: 'cinco_agentes', tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, veDinero: false, principales: [] }) },
+  'c02-resumen-en-curso': { ruta: '/dashboard', senales: EN_CURSO, datos: sinDinero(DATOS_CON), cuerpo: async () => ResumenV2({ rol: 'flota_admin', perfil: 'cinco_agentes', tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, veDinero: false, principales: PRINCIPALES }) },
+  'c03-resumen-sin-dato': { ruta: '/dashboard', senales: CAIDAS, datos: sinDinero(DATOS_CAIDOS), cuerpo: async () => ResumenV2({ rol: 'flota_admin', perfil: 'cinco_agentes', tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: true, veDinero: false, principales: [] }) },
+  // Flotas SIN perfil (la mayoría): el Resumen v2 con el chrome de flota normal, para el dueño (con pesos y aviso fiscal) y el
+  // encargado (sin dinero, solo conteos y sin enlaces de dinero).
+  'c10-resumen-flota-dueno': { ruta: '/dashboard', datos: DATOS_CON, rol: 'flota_admin', perfil: null, cuerpo: async () => ResumenV2({ rol: 'flota_admin', perfil: null, tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: false, veDinero: true, principales: PRINCIPALES, fallidos: ['carta-porte'], avisoFiscalPospuesto: true }) },
+  'c11-resumen-flota-vacia': { ruta: '/dashboard', datos: DATOS_VACIOS, rol: 'flota_admin', perfil: null, cuerpo: async () => ResumenV2({ rol: 'flota_admin', perfil: null, tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: false, veDinero: true, principales: [] }) },
+  'c12-resumen-flota-encargado': { ruta: '/dashboard', datos: sinDinero(DATOS_CON), rol: 'encargado', perfil: null, cuerpo: async () => ResumenV2({ rol: 'encargado', perfil: null, tenantId: 't', userId: 'u', tenantNombre: null, nombre: USUARIO.saludo, tenantExiste: true, sufijo: '', soloLectura: false, veAsistente: false, veDinero: false, principales: [] }) },
   'c04-asistente-vacio': { ruta: '/dashboard/puesta-en-marcha', cuerpo: () => asistente(VACIAS) },
   'c05-asistente-tms': { ruta: '/dashboard/puesta-en-marcha', cuerpo: () => asistente(VACIAS, 'tms') },
   'c06-asistente-atencion': { ruta: '/dashboard/puesta-en-marcha', cuerpo: () => asistente(ATENCION, 'tms') },
@@ -105,12 +132,6 @@ const VISTAS: Record<string, VistaDef> = {
   'c08-asistente-sin-dato': { ruta: '/dashboard/puesta-en-marcha', cuerpo: () => asistente(CAIDAS) },
   'c09-conexiones': { ruta: '/dashboard/conexiones', cuerpo: () => <VistaConexiones conectores={CONECTORES} credenciales={<section className="card p-4"><h2 className="font-display text-[14px] font-semibold">Credenciales de tus sistemas</h2><p className="text-[12.5px] mt-1" style={{ color: 'var(--muted)' }}>Aquí va el formulario de captura del acceso.</p></section>} /> },
 };
-
-// Pasos del recorrido a capturar: (id del paso, vista de fondo).
-const PASOS_TOUR: Array<[string, string]> = [
-  ['bienvenida', 'c04-asistente-vacio'], ['menu', 'c04-asistente-vacio'], ['avance', 'c04-asistente-vacio'], ['sistema', 'c04-asistente-vacio'],
-  ['archivo', 'c05-asistente-tms'], ['conexiones', 'c09-conexiones'], ['liquidacion', 'c04-asistente-vacio'],
-];
 
 const FUENTES_CSS = [
   ...[400, 500, 600, 700].map((w) => `@font-face{font-family:'Hanken Grotesk UI';font-weight:${w};font-style:normal;font-display:block;src:url('file://${F}/hankengrotesk-${w}.woff2') format('woff2')}`),
@@ -120,10 +141,10 @@ const FUENTES_CSS = [
   `[data-ui="v2"]{--font-sans-ui:'Hanken Grotesk UI',ui-sans-serif,system-ui,sans-serif;--font-display:'Hanken Grotesk UI',ui-sans-serif,system-ui,sans-serif}`,
 ].join('\n');
 
-const envolver = (cuerpo: ReactNode, ruta: string) => {
+const envolver = (cuerpo: ReactNode, ruta: string, rol = 'flota_admin', perfil: 'cinco_agentes' | null = 'cinco_agentes') => {
   RUTA = ruta;
   return renderToStaticMarkup(
-    <DashboardChromeV2 nombre={USUARIO.nombre} rol="flota_admin" perfil="cinco_agentes" cerrarSesion={async () => {}}>{cuerpo}</DashboardChromeV2>,
+    <DashboardChromeV2 nombre={USUARIO.nombre} rol={rol} perfil={perfil} cerrarSesion={async () => {}}>{cuerpo}</DashboardChromeV2>,
   );
 };
 
@@ -136,7 +157,8 @@ describe('captura de las pantallas del carril C', () => {
     mkdirSync(OUT, { recursive: true });
     for (const [id, v] of Object.entries(VISTAS)) {
       SENALES_RESUMEN.actuales = v.senales ?? VACIAS;
-      const html = envolver(await v.cuerpo(), v.ruta);
+      DATOS_RESUMEN.actuales = v.datos ?? DATOS_CON;
+      const html = envolver(await v.cuerpo(), v.ruta, v.rol, v.perfil);
       exigirV2Html(html, id);
       writeFileSync(path.join(TRABAJO, 'vistas', `${id}.html`), html);
     }
@@ -163,51 +185,7 @@ describe('captura de las pantallas del carril C', () => {
         }
       }
 
-      // Recorrido: se mide el elemento REAL, se calcula foco y globo con las funciones del motor y se superpone.
-      if (w !== 1024) {
-        const total = RECORRIDO_DUENO.pasos.length;
-        for (const [pasoId, vista] of PASOS_TOUR) {
-          const i = RECORRIDO_DUENO.pasos.findIndex((p) => p.id === pasoId);
-          const paso = RECORRIDO_DUENO.pasos[i];
-          const base = readFileSync(path.join(TRABAJO, 'vistas', `${vista}.html`), 'utf8');
-          const vp: Tam = { w, h };
-          for (const tema of ['claro', 'oscuro'] as const) {
-            const archivo = path.join(TRABAJO, 'vistas', `tour-${pasoId}.doc.html`);
-            writeFileSync(archivo, doc(base));
-            await page.goto('file://' + archivo);
-            await page.evaluate(async (t: string) => { document.documentElement.setAttribute('data-theme', t === 'claro' ? 'light' : 'dark'); await document.fonts.ready; }, tema);
-            const rect: Rect | null = paso.ancla
-              ? await page.evaluate((a: string) => {
-                const el = [...document.querySelectorAll(`[data-tour="${a}"]`)].find((e) => (e as HTMLElement).offsetParent !== null) as HTMLElement | undefined;
-                if (!el) return null;
-                const r = el.getBoundingClientRect();
-                return { x: r.x, y: r.y, w: r.width, h: r.height };
-              }, paso.ancla)
-              : null;
-            const foco = rect ? rectFoco(rect, vp) : null;
-            const snap: Instantanea = {
-              fase: 'activo', indice: i, total, paso, anclaLista: true, navegando: false, reducirMovimiento: true,
-              esPrimero: i === 0, esUltimo: i === total - 1,
-            };
-            const armar = (tam: Tam) => {
-              const col = colocarGlobo(foco, tam, vp, paso.lado ?? 'auto');
-              return renderToStaticMarkup(
-                <div className="rv-tour" data-ui="v2" data-reducido>
-                  <svg className="rv-tour__velo" width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true"><path d={trazoVelo(vp, foco)} fillRule="evenodd" /></svg>
-                  {foco ? <div className="rv-tour__halo" style={{ transform: `translate(${foco.x}px, ${foco.y}px)`, width: foco.w, height: foco.h }} aria-hidden="true" /> : null}
-                  <GloboTour snap={snap} col={col} onSiguiente={() => {}} onAtras={() => {}} onSaltar={() => {}} onMasTarde={() => {}} />
-                </div>,
-              );
-            };
-            await page.evaluate((m: string) => document.body.insertAdjacentHTML('beforeend', m), armar({ w: 340, h: 260 }));
-            const medido = await page.evaluate(() => { const g = document.querySelector('.rv-tour__globo')!.getBoundingClientRect(); return { w: g.width, h: g.height }; });
-            await page.evaluate(() => document.querySelector('.rv-tour')!.remove());
-            await page.evaluate((m: string) => document.body.insertAdjacentHTML('beforeend', m), armar(medido));
-            await page.waitForTimeout(40);
-            await page.screenshot({ path: path.join(OUT, `tour-${String(i + 1).padStart(2, '0')}-${pasoId}__${w}__${tema}.png`) });
-          }
-        }
-      }
+      // El recorrido (tarjeta, foco, invitación, Guía) se captura con lo.harness.tsx.
       await ctx.close();
     }
     await browser.close();

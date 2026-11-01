@@ -3,6 +3,7 @@
 import { useMemo, useState, useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Save, TriangleAlert, CheckCircle2 } from 'lucide-react';
+import { Radio, StatusChip } from '@/app/ui-v2/componentes';
 import {
   validarAjustes, FORMATOS, type AjustesCrudos,
 } from '@/lib/likida/ajustes_operativos';
@@ -17,14 +18,14 @@ export type ResultadoGuardar = { ok: true } | { ok: false; error: string } | nul
 export type AccionGuardar = (previo: ResultadoGuardar, fd: FormData) => Promise<ResultadoGuardar>;
 
 const CAMPO = 'w-full text-[13px] px-3 py-1.5 rounded-lg hairline cifra-mono';
-const ETIQUETA = 'etiqueta-mono text-[10px] uppercase block mb-1';
+const ETIQUETA = 'etiqueta-mono text-[11px] uppercase block mb-1';
 
 function Boton() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
       className="text-[13px] px-4 py-2.5 rounded-lg font-medium inline-flex items-center gap-2 transition-opacity hover:opacity-85 disabled:opacity-50"
-      style={{ background: 'var(--marca)', color: 'white' }}>
+      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Save width={14} height={14} strokeWidth={1.75} />
       {pending ? 'Guardando…' : 'Guardar ajustes'}
     </button>
@@ -139,26 +140,11 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
           </legend>
           <div className="space-y-1.5">
             {FORMATOS.map((f) => (
-              <label key={f.valor}
-                className={`card p-2.5 flex items-start gap-2.5 ${f.implementado ? 'cursor-pointer' : 'cursor-not-allowed'}`}
-                style={f.implementado ? undefined : { opacity: 0.6 }}>
-                <input type="radio" disabled={!f.implementado}
-                  checked={v.salida === f.valor}
-                  onChange={() => setV((p) => ({ ...p, salida: f.valor }))}
-                  className="mt-0.5" />
-                <span className="min-w-0">
-                  <span className="text-[13px] font-medium block">
-                    {f.rotulo}
-                    {!f.implementado && (
-                      <span className="ml-1.5 inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium align-middle"
-                        style={{ color: 'var(--muted)', background: 'var(--canvas)' }}>
-                        aún no
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-[11px]" style={{ color: 'var(--faint)' }}>{f.detalle}</span>
-                </span>
-              </label>
+              <Radio key={f.valor} name="formato_salida_ui" form="sin-formulario" disabled={!f.implementado}
+                checked={v.salida === f.valor}
+                onChange={() => setV((p) => ({ ...p, salida: f.valor }))}
+                etiqueta={<>{f.rotulo}{!f.implementado && <> <StatusChip tono="muted">aún no</StatusChip></>}</>}
+                ayuda={f.detalle} />
             ))}
           </div>
         </fieldset>
@@ -170,7 +156,7 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
           <label htmlFor="aj-cuentas" className="sr-only">Catálogo de cuentas</label>
           <textarea id="aj-cuentas" name="cuentas" value={v.cuentas} onChange={set('cuentas')} rows={8}
             spellCheck={false}
-            className="w-full text-[12.5px] px-3 py-2 rounded-lg hairline cifra-mono"
+            className="w-full text-[12px] px-3 py-2 rounded-lg hairline cifra-mono"
             style={{ background: 'var(--surface)' }} />
           <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
             Una por línea: <span className="cifra-mono">concepto=cuenta</span>. Puedes pegar el bloque
@@ -215,21 +201,21 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
         </fieldset>
 
         {!revision.ok && (
-          <div className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg"
+          <div className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg"
             style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
             <TriangleAlert width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
             {revision.error}
           </div>
         )}
         {estado && !estado.ok && (
-          <div className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg"
+          <div className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg"
             style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
             <TriangleAlert width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
             {estado.error}
           </div>
         )}
         {estado && estado.ok && (
-          <div className="flex items-center gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg"
+          <div className="flex items-center gap-2 text-[12px] px-3.5 py-2.5 rounded-lg"
             style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
             <CheckCircle2 width={15} height={15} strokeWidth={1.75} />
             Ajustes guardados. Aplican a los viajes que se cuadren de aquí en adelante.
@@ -245,7 +231,7 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
             Qué cambia esto
           </h3>
           {previo === null ? (
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
               {!revision.ok
                 ? 'Corrige lo de la izquierda para ver el efecto.'
                 : ejemploIlegible
@@ -254,7 +240,7 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
             </p>
           ) : (
             <>
-              <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
                 En un viaje de <span className="cifra-mono">{numero(ejemploKm!)} km</span> de
                 tu operación, el motor va a esperar:
               </p>
@@ -286,7 +272,7 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
           <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>
             Lo que no se edita aquí
           </h3>
-          <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
             El estímulo del 50% de peaje, las claves de combustible del SAT y los topes de deducibilidad
             no tienen formulario a propósito: los fija la ley, no tu flota. Si la ley cambia, lo cambiamos
             nosotros para todos.

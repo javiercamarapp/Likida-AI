@@ -12,6 +12,8 @@ import { crearRepoPrograma, ProgramaSinMigrar } from '@/lib/likida/vigia/program
 import { armarLectura, sha256Hex, sincronizarPrograma } from '@/lib/likida/vigia/programa/sincronizar';
 import { sufijoTenant } from '../../../sufijo';
 import { VistaProgramaVigia, TOPE_ARCHIVO_PROGRAMA_BYTES, type ResultadoPrograma, type ResumenPrograma } from './vista';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Programa de despacho' };
 
 export const dynamic = 'force-dynamic';
 // A37-S59-05: la subida (hasta 4 MB tras quitar el relleno, escritura serial por lotes) puede pasar del tope por omisión; que no muera a medias.

@@ -104,14 +104,14 @@ describe('el tablero de hitos — lo que ve el jefe de tráfico', () => {
     expect(html).toContain('2 de 22 llegadas');
   });
 
-  it('un indicador SIN datos dice «sin datos», nunca 0', () => {
+  it('un indicador SIN datos dice «Sin dato», nunca 0', () => {
     const html = pintar(datos([], []), {
       ind: indicadoresVista({
         recibidos: 0, sinInsistencia: 0, conRespuestaMedida: 0, minutosRespuestaPromedio: null, escalados: 0, omitidos: 0, validadosUbicacion: 0, sinCoincidencia: 0, capturadosOficina: 0,
         llegadasValidables: 0, validacionDegradada: 0,
       }),
     });
-    expect(html).toContain('sin datos');
+    expect(html).toContain('Sin dato');
     expect(html).toContain('ningún hito recibido en el periodo');
     expect(html).not.toContain('0%');
   });
@@ -214,7 +214,7 @@ describe('el tablero de hitos — lo que ve el jefe de tráfico', () => {
 
   it('con filtros activos ofrece «Quitar filtros» y un vacío que dice que son los filtros', () => {
     const html = pintar(datos([], []), { filtros: { ...FILTROS, terminalId: 'tm1' } });
-    expect(html).toContain('Quitar filtros');
+    expect(html).toContain('Limpiar');
     expect(html).toContain('Ningún viaje en curso cumple esos filtros');
   });
 

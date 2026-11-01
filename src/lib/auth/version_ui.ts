@@ -7,7 +7,8 @@
 //      puede encender el rediseño para todas las flotas.
 //   2. cookie `likida-ui=v2|v1`  → SOLO para el superadmin (revisar el rediseño con datos reales antes de
 //      encenderlo para un cliente). Cualquier otro rol ignora la cookie: nadie se auto-activa una interfaz.
-//   3. la fila de `tenant_ui` (leída en `perfil_tenant.ts`, con su caché de 30 s). Sin fila = v1.
+//   3. la fila de `tenant_ui` (leída en `perfil_tenant.ts`, con su caché de 30 s). Sin fila = la versión por omisión
+//      (`VERSION_UI_POR_OMISION`, v2 desde el 30-oct-2026); una fila `v1` es la salida explícita de una flota.
 //
 // Este archivo NO consulta la base: la única consulta vive en `perfil_tenant.ts` (techo de frontera_datos_guardiana).
 // ═══════════════════════════════════════════════════════════════════════════
@@ -37,7 +38,7 @@ function dePreferenciaSuperadmin(rol: string, cookies: LectorCookies | null | un
 
 /**
  * La versión de interfaz con la que se pinta el panel de esta sesión. Nunca lanza (la lectura de la base falla
- * hacia v1).
+ * hacia la versión por omisión).
  *
  * Con `LIKIDA_UI_V2_FORZAR` o con la cookie del superadmin NO se consulta la base: la respuesta ya está decidida.
  */

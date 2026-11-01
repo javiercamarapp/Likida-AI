@@ -28,6 +28,8 @@ import { VistaOperadores, type FilaOperador } from './vista';
 import { permiteAltaSinTelefono } from '@/lib/likida/operador_sin_telefono_canal';
 import type { ResultadoForma } from './forma';
 import type { ResultadoInvitar } from './invitaciones';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Operadores' };
 
 export const dynamic = 'force-dynamic';
 

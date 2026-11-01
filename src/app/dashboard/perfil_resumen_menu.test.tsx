@@ -76,26 +76,40 @@ describe('Resumen', () => {
 describe('/dashboard bajo el perfil', () => {
   beforeEach(() => vi.resetModules());
 
-  async function pagina(perfil: string | null, onboardingCompleto: boolean) {
+  async function pagina(perfil: string | null, onboardingCompleto: boolean, ui: 'v1' | 'v2' = 'v1') {
     vi.doMock('@/lib/auth/tenant-efectivo', () => ({
       resolverTenantEfectivo: async () => ({ tenantId: 't1', tenantNombre: null, nombre: 'Ana', rol: 'flota_admin', tenantExiste: true }),
     }));
     vi.doMock('@/lib/auth/perfil_tenant', () => ({ perfilDeTenant: async () => perfil }));
     // El Resumen elige v1/v2 con la cookie de la petición: aquí no hay petición, y lo que se prueba es qué Resumen sale.
     vi.doMock('next/headers', () => ({ cookies: async () => ({ get: () => undefined }) }));
-    vi.doMock('@/lib/auth/version_ui', () => ({ versionUi: async () => 'v1' }));
+    vi.doMock('@/lib/auth/version_ui', () => ({ versionUi: async () => ui }));
     vi.doMock('@/lib/likida/repo', () => ({ getPerfilCrudo: async () => ({}) }));
     vi.doMock('@/lib/likida/perfil/preguntas', () => ({ onboardingFiscalListo: () => onboardingCompleto, onboardingPospuesto: () => false }));
     vi.doMock('./inicio-contenido', () => ({ InicioContenido: function InicioContenido() { return null; } }));
     vi.doMock('./inicio-operacion', () => ({ InicioOperacion: function InicioOperacion() { return null; } }));
-    vi.doMock('./inicio-cinco-agentes', () => ({ InicioCincoAgentes: function InicioCincoAgentes() { return null; } }));
+    vi.doMock('./inicio-cinco-agentes', () => ({ InicioCincoAgentes: function InicioCincoAgentes() { return null; }, leerInsightsResumen: async () => ({ principales: [], fallidos: [] }) }));
+    vi.doMock('./resumen-v2', () => ({ ResumenV2: function ResumenV2() { return null; } }));
     const { default: Pagina } = await import('./page');
-    return Pagina({ searchParams: Promise.resolve({}) }) as Promise<{ type: { name: string } }>;
+    return Pagina({ searchParams: Promise.resolve({}) }) as Promise<{ type: { name: string }; props: Record<string, unknown> }>;
   }
 
   it('con perfil muestra el Resumen de los cinco y NO manda al onboarding (que está en stand-by)', async () => {
     const el = await pagina('cinco_agentes', false);
     expect(el.type.name).toBe('InicioCincoAgentes');
+  });
+
+  it('con perfil el Inicio recibe el rol (que decide los pesos) y ya no un veDinero fijo', async () => {
+    const el = await pagina('cinco_agentes', false, 'v2');
+    expect(el.type.name).toBe('InicioCincoAgentes');
+    expect(el.props.veDinero).toBeUndefined(); // decisión 31-oct: los pesos los decide el rol dentro del lector, no un booleano fijo
+    expect(el.props.rol).toBe('flota_admin');
+  });
+
+  it('sin perfil y con la interfaz v2 el dueño recibe el Resumen v2, no el de siempre', async () => {
+    const el = await pagina(null, true, 'v2');
+    expect(el.type.name).toBe('ResumenV2');
+    expect(el.props).toMatchObject({ veDinero: true, perfil: null, veAsistente: false });
   });
 
   it('sin perfil y con el onboarding pendiente manda al onboarding, como siempre', async () => {

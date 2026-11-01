@@ -208,3 +208,26 @@ describe('moduloEnStandBy: la puerta del WhatsApp de la fase 1 de «Próximament
     expect(await m.moduloEnStandBy(CON, 'conductor')).toBe(false);
   });
 });
+
+describe('exigirRutaDePerfil — el rol nomina (0949)', () => {
+  it('sin perfil, un nomina no tiene nada que ver: va a /sin-acceso (deny-by-default), aunque pida su propia ruta', async () => {
+    await expect(m.exigirRutaDePerfil(SIN, '/dashboard/agentes/liquidacion', 'nomina')).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith('/sin-acceso');
+  });
+
+  it('sin perfil los demás roles pasan como siempre (nada cambia para ellos)', async () => {
+    for (const rol of ['flota_admin', 'encargado', 'contador', 'superadmin', undefined]) {
+      await expect(m.exigirRutaDePerfil(SIN, '/dashboard/chat', rol)).resolves.toBeUndefined();
+    }
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it('con perfil, su ruta permitida pasa y cualquier otra rebota a su casa (la vista de conteos), sin bucle', async () => {
+    conPerfil();
+    await expect(m.exigirRutaDePerfil(CON, '/dashboard/agentes/liquidacion', 'nomina')).resolves.toBeUndefined();
+    await expect(m.exigirRutaDePerfil(CON, '/dashboard/agentes/peajes', 'nomina')).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenLastCalledWith('/dashboard/agentes/liquidacion');
+    await expect(m.exigirRutaDePerfil(CON, '/dashboard/chat', 'nomina')).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenLastCalledWith('/dashboard/agentes/liquidacion');
+  });
+});

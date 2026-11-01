@@ -9,6 +9,7 @@
 import type { Metadata } from 'next';
 import { Calculadora } from './calc';
 import { PulsoSitio } from './pulso';
+import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
 
 export const metadata: Metadata = {
   title: 'Calculadora de recuperación fiscal — Likida',
@@ -18,17 +19,15 @@ export const metadata: Metadata = {
 
 export default function PaginaCalculadora() {
   return (
-    <main className="mx-auto max-w-2xl px-5 py-10 text-[15px] leading-relaxed" style={{ color: 'var(--muted)' }}>
+    <MarcoPublico
+      rotulo="Calculadora de recuperación fiscal"
+      titulo="Likida"
+      apoyo="Tres datos que tu flota sí tiene a la mano. El resultado sale aquí mismo, con cada supuesto junto a su cifra y la advertencia que casi todos omiten. Sin RFC, sin registro."
+    >
       <PulsoSitio pagina="calculadora" />
-      <header className="pb-6" style={{ borderBottom: '1px solid var(--line)' }}>
-        <p className="text-xs font-medium uppercase tracking-wider">Calculadora de recuperación fiscal</p>
-        <h1 className="mt-2 text-2xl font-semibold" style={{ color: 'var(--ink)' }}>Likida</h1>
-        <p className="mt-3 text-sm">
-          Tres datos que tu flota sí tiene a la mano. El resultado sale aquí mismo, con cada supuesto junto a su cifra
-          y la advertencia que casi todos omiten. Sin RFC, sin registro.
-        </p>
-      </header>
-      <Calculadora />
-    </main>
+      <div className="rv-pub__prosa">
+        <Calculadora />
+      </div>
+    </MarcoPublico>
   );
 }

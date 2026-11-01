@@ -115,7 +115,7 @@ describe('(c) Resumen: nada de dinero ni de fiscal bajo el perfil', () => {
 
   it('la extracción encuentra los títulos de dinero/fiscal del Resumen de siempre (si no, la prueba no vigilaría nada)', () => {
     expect(titulosDeDinero.length).toBeGreaterThanOrEqual(4);
-    for (const esperado of ['Gasto total', 'Costo por viaje', 'Ahorro generado', 'Diésel elegible para el estímulo']) {
+    for (const esperado of ['Gasto total', 'Costo por viaje', 'Por recuperar', 'Diésel elegible para el estímulo']) {
       expect(titulosDeDinero.some((t) => t.startsWith(esperado)), esperado).toBe(true);
     }
   });

@@ -1,14 +1,14 @@
 import Link from 'next/link';
 import { Mail, AlertTriangle, Route } from 'lucide-react';
 import { fechaCorta, numero, hoyMx, inicioDiaMx, fechaHoraMx } from '@/lib/formato';
-import { EstadoVacio } from '@/app/admin/ui/kit';
+import { EstadoVacio } from '../../estados';
 import { ESTILO_CONTROL } from '@/app/admin/ui/forma';
 import { dinero } from '@/lib/likida/liquidacion_externa/presentacion';
 import { BotonConfirmar } from '@/app/admin/ui/confirmar';
 import { calcularInsightsA1, entradaDesdeFichas, type InsightA1 } from '@/lib/likida/liquidacion_externa/insights_a1';
 import type { EntregaCorreo, EstadoEntregaCorreo, Excepcion, TipoExcepcion } from '@/lib/likida/liquidacion_externa/repo_correo';
 import type { DetalleDesglose, LecturaDetalle, RolDetalle } from './detalle_desglose';
-import { BarraPagina } from '../../resumen-visual';
+import { BarraFiltros, FiltroFecha, FiltroOpciones, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 import { EnlacePagina, NavPaginas } from '../../paginador';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -221,7 +221,7 @@ const ROTULO_FILTRO: Record<FiltroDesglose, string> = {
 
 const AYUDA_VENTANA = ' Al abrirla, la lista se limita a esos 30 días.';
 
-const CLASE_CONTROL = 'text-[12.5px] rounded-lg px-2 py-1.5 min-w-[9rem]';
+const CLASE_CONTROL = 'text-[12px] rounded-lg px-2 py-1.5 min-w-[9rem]';
 
 function query(contexto: Array<[string, string]>, extra: Array<[string, string]> = []): string {
   return `?${new URLSearchParams([...contexto, ...extra]).toString()}`;
@@ -264,10 +264,12 @@ export async function SeccionDesgloses(p: DesglosesProps) {
   return (
     <section className="card p-4" id="desgloses">
       <div className="flex items-baseline justify-between gap-3 flex-wrap mb-1">
-        <h2 className="font-display text-[15px] font-semibold flex items-center gap-1.5">
-          <Mail width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-          Desgloses de pago
-        </h2>
+        <TituloRecuadro info="desgloses.lista">
+          <span className="inline-flex items-center gap-1.5">
+            <Mail width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+            Desgloses de pago
+          </span>
+        </TituloRecuadro>
         {p.filtro && <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Filtro: {ROTULO_FILTRO[p.filtro]}</p>}
       </div>
       <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>
@@ -291,28 +293,12 @@ export async function SeccionDesgloses(p: DesglosesProps) {
 
       <BloqueInsights insights={lectura.insights ?? calcularInsightsA1(entradaDesdeFichas(fichas))} />
 
-      <form method="get" className="flex flex-wrap items-end gap-2 mb-3">
-        {p.contexto.map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-        <label className="flex flex-col gap-1">
-          <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Estado</span>
-          <select name="des_estado" defaultValue={p.filtro ?? ''} className={CLASE_CONTROL} style={ESTILO_CONTROL}>
-            <option value="">Todos</option>
-            {FILTROS.map((f) => <option key={f} value={f}>{ROTULO_FILTRO[f]}</option>)}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Desde</span>
-          <input type="date" name="des_desde" defaultValue={p.desde ?? ''} max={hoy} className={CLASE_CONTROL} style={ESTILO_CONTROL} />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Hasta</span>
-          <input type="date" name="des_hasta" defaultValue={p.hasta ?? ''} max={hoy} className={CLASE_CONTROL} style={ESTILO_CONTROL} />
-        </label>
-        <button type="submit" className="text-[12px] font-medium rounded-lg px-3 py-1.5" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>Filtrar</button>
-        {filtrando && (
-          <Link href={query(p.contexto)} className="text-[12px] font-medium px-2 py-1.5 hover:opacity-70 transition-opacity" style={{ color: 'var(--muted)' }}>Limpiar</Link>
-        )}
-      </form>
+      <BarraFiltros accion="?" ocultos={p.contexto} etiqueta="Filtros de desgloses" nActivos={filtrando ? 1 : 0} limpiarHref={query(p.contexto)} className="mb-3">
+        <FiltroOpciones nombre="des_estado" etiqueta="Estado" valor={p.filtro ?? ''}
+          opciones={[{ valor: '', rotulo: 'Todos' }, ...FILTROS.map((f) => ({ valor: f, rotulo: ROTULO_FILTRO[f] }))]} />
+        <FiltroFecha nombre="des_desde" etiqueta="Desde" valor={p.desde} max={hoy} />
+        <FiltroFecha nombre="des_hasta" etiqueta="Hasta" valor={p.hasta} max={hoy} />
+      </BarraFiltros>
 
       {verSinPoliza ? (
         sinPoliza.length === 0 ? (
@@ -421,14 +407,14 @@ export function BloqueInsights({ insights }: { insights: InsightA1[] }) {
   if (insights.length === 0) return null;
   return (
     <div className="mb-3" id="insights-desgloses" aria-label="Lectura de los desgloses">
-      <p className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>Qué pasó · qué significa · qué hacer</p>
+      <p className="etiqueta-mono text-[11px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>Qué pasó · qué significa · qué hacer</p>
       <ul className="space-y-2">
         {insights.map((i) => (
           <li key={i.id} data-insight={i.id} className="rounded-lg hairline px-3 py-2" style={{ borderLeft: `3px solid ${COLOR_INSIGHT[i.tono]}` }}>
             <p className="text-[13px] font-medium">{i.quePaso}</p>
             <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{i.queSignifica}</p>
             <p className="text-[12px]">{i.queHacer}</p>
-            <p className="text-[10px] mt-1" style={{ color: 'var(--faint)' }}>Fuente: {i.fuente}</p>
+            <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>Fuente: {i.fuente}</p>
           </li>
         ))}
       </ul>
@@ -436,22 +422,29 @@ export function BloqueInsights({ insights }: { insights: InsightA1[] }) {
   );
 }
 
-function Ficha({ etiqueta, valor, ayuda, href, tono }: { etiqueta: string; valor: number | null; ayuda: string; href: string; tono?: 'bad' }) {
+/** `href` ausente = la ficha NO es un enlace (la vista de conteos de `nomina` no lleva a ninguna lista). */
+export function Ficha({ etiqueta, valor, ayuda, href, tono }: { etiqueta: string; valor: number | null; ayuda: string; href?: string; tono?: 'bad' }) {
   // `null` = no se pudo contar: «—», jamás un cero que nadie midió.
   const alerta = tono === 'bad' && valor !== null && valor > 0;
-  return (
-    <Link href={href} title={ayuda} className="card p-3 hover:opacity-80 transition-opacity block" style={alerta ? { borderColor: 'var(--bad)' } : undefined}>
-      <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>{etiqueta}</span>
+  const contenido = (
+    <>
+      <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>{etiqueta}</span>
       <span className="text-[20px] font-semibold cifra-mono block" style={alerta ? { color: 'var(--bad)' } : undefined}>
         {valor === null ? '—' : numero(valor)}
       </span>
-      {valor === null && <span className="text-[10px] block" style={{ color: 'var(--faint)' }}>no se pudo contar</span>}
+      {valor === null && <span className="text-[11px] block" style={{ color: 'var(--faint)' }}>no se pudo contar</span>}
+    </>
+  );
+  if (href === undefined) return <div title={ayuda} className="card p-3 block" style={alerta ? { borderColor: 'var(--bad)' } : undefined}>{contenido}</div>;
+  return (
+    <Link href={href} title={ayuda} className="card p-3 hover:opacity-80 transition-opacity block" style={alerta ? { borderColor: 'var(--bad)' } : undefined}>
+      {contenido}
     </Link>
   );
 }
 
 function Th({ children, derecha }: { children: React.ReactNode; derecha?: boolean }) {
-  return <th className={`etiqueta-mono text-[10px] uppercase font-normal pb-2${derecha ? ' text-right' : ''}`}>{children}</th>;
+  return <th className={`etiqueta-mono text-[11px] uppercase font-normal pb-2${derecha ? ' text-right' : ''}`}>{children}</th>;
 }
 
 // ── Resultado de una acción (el código viaja en la URL, el texto NO) ───────
@@ -504,7 +497,7 @@ const EXCEPCION: Record<TipoExcepcion, { titulo: string; ayuda: string }> = {
 
 function Mensaje({ m }: { m: MensajeDesglose }) {
   return (
-    <p role="status" className="text-[12.5px] rounded-lg px-3 py-2 mb-3"
+    <p role="status" className="text-[12px] rounded-lg px-3 py-2 mb-3"
       style={m.tono === 'ok' ? { color: 'var(--ok)', background: 'var(--okbg)' } : { color: 'var(--bad)', background: 'var(--badbg)' }}>
       {m.texto}
     </p>
@@ -514,7 +507,7 @@ function Mensaje({ m }: { m: MensajeDesglose }) {
 function TablaRenglones({ titulo, renglones, moneda }: { titulo: string; renglones: Array<{ descripcion: string; monto: number }>; moneda: 'MXN' | 'USD' }) {
   return (
     <div className="flex-1 min-w-[16rem]">
-      <h4 className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>{titulo}</h4>
+      <h4 className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>{titulo}</h4>
       {renglones.length === 0 ? (
         <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Sin renglones.</p>
       ) : (
@@ -545,7 +538,7 @@ function Reenviar({ d, accion }: { d: DetalleDesglose; accion: AccionesDetalle['
   const hayCurso = opciones.some((o) => o.curso);
   return (
     <div>
-      <h4 className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Reenviar</h4>
+      <h4 className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Reenviar</h4>
       <div className="flex flex-wrap gap-2">
         {opciones.map((o) => (
           <form key={o.a} action={accion}>
@@ -568,7 +561,7 @@ function Reenviar({ d, accion }: { d: DetalleDesglose; accion: AccionesDetalle['
         <input type="hidden" name="a" value="operador" />
         <input type="hidden" name="motivo" value="correccion_de_correo" />
         <label className="flex flex-col gap-1">
-          <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Correo nuevo del operador</span>
+          <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Correo nuevo del operador</span>
           <input type="email" name="correo_nuevo" required maxLength={254} autoComplete="off" placeholder="Correo del operador"
             className={`${CLASE_CONTROL} min-w-[16rem]`} style={ESTILO_CONTROL} />
         </label>
@@ -585,10 +578,10 @@ function Reenviar({ d, accion }: { d: DetalleDesglose; accion: AccionesDetalle['
 function EstadoCabecera({ d }: { d: DetalleDesglose }) {
   return (
     <dl className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3 text-[13px]">
-      <div><dt className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Operador</dt><dd>{d.operador ?? '—'}</dd></div>
-      <div><dt className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Periodo</dt><dd>{`${fechaCorta(d.periodoDesde)} – ${fechaCorta(d.periodoHasta)}`}</dd></div>
-      <div><dt className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Terminal</dt><dd>{d.terminal ?? '—'}</dd></div>
-      <div><dt className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{d.totalOrigen === 'calculado' ? 'Neto calculado de los renglones' : 'Neto (de tu sistema)'}</dt><dd className="cifra-mono font-semibold">{dinero(d.neto, d.moneda)}</dd>{d.totalOrigen === 'calculado' && <dd className="text-[11px]" style={{ color: 'var(--muted)' }}>Tu sistema no mandó su propio neto: no hay con qué compararlo.</dd>}</div>
+      <div><dt className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Operador</dt><dd>{d.operador ?? '—'}</dd></div>
+      <div><dt className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Periodo</dt><dd>{`${fechaCorta(d.periodoDesde)} – ${fechaCorta(d.periodoHasta)}`}</dd></div>
+      <div><dt className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Terminal</dt><dd>{d.terminal ?? '—'}</dd></div>
+      <div><dt className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>{d.totalOrigen === 'calculado' ? 'Neto calculado de los renglones' : 'Neto (de tu sistema)'}</dt><dd className="cifra-mono font-semibold">{dinero(d.neto, d.moneda)}</dd>{d.totalOrigen === 'calculado' && <dd className="text-[11px]" style={{ color: 'var(--muted)' }}>Tu sistema no mandó su propio neto: no hay con qué compararlo.</dd>}</div>
     </dl>
   );
 }
@@ -597,7 +590,7 @@ function ListaExcepciones({ items }: { items: Array<{ tipo: TipoExcepcion; desde
   return (
     <ul className="space-y-1.5">
       {items.map((x, i) => (
-        <li key={`${x.tipo}-${i}`} className="text-[12.5px]">
+        <li key={`${x.tipo}-${i}`} className="text-[12px]">
           <span className="font-medium">{EXCEPCION[x.tipo].titulo}</span>
           <span style={{ color: 'var(--faint)' }}> · desde {fechaHoraMx(x.desde)}</span>
           <span className="block text-[12px]" style={{ color: 'var(--muted)' }}>{EXCEPCION[x.tipo].ayuda}</span>
@@ -613,7 +606,7 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
   const marco = (cuerpo: React.ReactNode, titulo = 'Detalle del desglose') => (
     <section className="card p-4" id="detalle-desglose">
       <div className="flex items-baseline justify-between gap-3 flex-wrap mb-2">
-        <h2 className="font-display text-[15px] font-semibold">{titulo}</h2>
+        <TituloRecuadro info="desgloses.detalle">{titulo}</TituloRecuadro>
         <Link href={cerrar} className="text-[12px] font-medium hover:opacity-70 transition-opacity" style={{ color: 'var(--muted)' }}>Cerrar</Link>
       </div>
       {p.mensaje && <Mensaje m={p.mensaje} />}
@@ -668,7 +661,7 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
       </div>
 
       <div>
-        <h4 className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Destinatarios</h4>
+        <h4 className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Destinatarios</h4>
         {d.destinatarios.length === 0 ? (
           <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
             {d.retenido ? 'Aún no se manda a nadie: el desglose está retenido.' : 'Este desglose no tiene correos programados.'}
@@ -697,8 +690,8 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
 
       {d.generaciones.length > 0 && (
         <div>
-          <h4 className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Historial de envíos</h4>
-          <ul className="text-[12.5px] space-y-0.5">
+          <h4 className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Historial de envíos</h4>
+          <ul className="text-[12px] space-y-0.5">
             {d.generaciones.map((g) => (
               <li key={g.generacion}>
                 <span className="font-medium">Envío {g.generacion}</span>
@@ -710,7 +703,7 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
       )}
 
       <div>
-        <h4 className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Archivo</h4>
+        <h4 className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Archivo</h4>
         {d.descargaUrl ? (
           <>
             <a href={d.descargaUrl} download={d.descargaNombre} className={`${CLASE_BOTON} inline-flex items-center`}>Descargar el Excel</a>
@@ -724,7 +717,7 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
       <Reenviar d={d} accion={p.acciones.reenviar} />
 
       <div>
-        <h4 className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Excepciones</h4>
+        <h4 className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Excepciones</h4>
         {d.excepciones.length === 0
           ? <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Sin excepciones abiertas para esta bitácora.</p>
           : <ListaExcepciones items={d.excepciones} />}
@@ -748,10 +741,12 @@ export async function SeccionExcepciones(p: SeccionExcepcionesProps) {
   }
   return (
     <section className="card p-4" id="excepciones">
-      <h2 className="font-display text-[15px] font-semibold flex items-center gap-1.5 mb-1">
-        <AlertTriangle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-        Excepciones
-      </h2>
+      <TituloRecuadro info="desgloses.excepciones" className="mb-1">
+        <span className="inline-flex items-center gap-1.5">
+          <AlertTriangle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+          Excepciones
+        </span>
+      </TituloRecuadro>
       <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>Lo que necesita a una persona antes de que el desglose llegue completo.</p>
       {lista.length === 0 ? (
         <EstadoVacio icono={<Mail width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>Sin excepciones abiertas.</EstadoVacio>
@@ -764,7 +759,7 @@ export async function SeccionExcepciones(p: SeccionExcepcionesProps) {
           {lista.map((x) => {
             const bitacora = typeof x.detalle.bitacora === 'string' ? x.detalle.bitacora : x.claveExterna;
             return (
-              <li key={x.id} className="text-[12.5px]">
+              <li key={x.id} className="text-[12px]">
                 <span className="font-medium">{EXCEPCION[x.tipo]?.titulo ?? x.tipo}</span>
                 <span style={{ color: 'var(--muted)' }}> · bitácora {bitacora}</span>
                 <span style={{ color: 'var(--faint)' }}> · desde {fechaHoraMx(x.primeraVez)}</span>
@@ -786,17 +781,12 @@ export function VistaDesgloses({ desgloses, detalle, excepciones, notificaciones
   cargas?: React.ReactNode;
 }) {
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina icono={<Route width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />} titulo="Liquidación automática" />
-        <div className="px-5 py-5 flex-1 space-y-4">
-          {desgloses}
-          {cargas}
-          {detalle}
-          {excepciones}
-          {notificaciones}
-        </div>
-      </div>
-    </main>
+    <MarcoPagina titulo="Liquidación automática" apoyo="Los desgloses de liquidación que llegan por correo, sus excepciones y las notificaciones de entrega.">
+      {desgloses}
+      {cargas}
+      {detalle}
+      {excepciones}
+      {notificaciones}
+    </MarcoPagina>
   );
 }

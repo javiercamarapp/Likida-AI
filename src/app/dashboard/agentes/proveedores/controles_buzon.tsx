@@ -27,8 +27,8 @@ function Boton({ texto, pendiente, icono, destructivo, suave }: {
 
 function Mensaje({ estado }: { estado: { error?: string; aviso?: string } | null }) {
   if (!estado) return null;
-  if (estado.error) return <p role="alert" className="text-[11.5px] mt-1" style={{ color: 'var(--bad)' }}>{estado.error}</p>;
-  if (estado.aviso) return <p role="status" className="text-[11.5px] mt-1" style={{ color: 'var(--muted)' }}>{estado.aviso}</p>;
+  if (estado.error) return <p role="alert" className="text-[11px] mt-1" style={{ color: 'var(--bad)' }}>{estado.error}</p>;
+  if (estado.aviso) return <p role="status" className="text-[11px] mt-1" style={{ color: 'var(--muted)' }}>{estado.aviso}</p>;
   return null;
 }
 
@@ -49,28 +49,28 @@ export function FormaEntrega({ config, guardar }: { config: ConfigEntrega; guard
         <input type="checkbox" name="activo" checked={activo} onChange={(e) => setActivo(e.target.checked)} className="mt-0.5" />
         <span className="text-[13px]">
           <span className="font-medium">Entregar al contador las facturas aprobadas</span>
-          <span className="block text-[11.5px]" style={{ color: 'var(--faint)' }}>
+          <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>
             Apagado (como nace), nada sale por correo: las aprobadas se descargan a mano en CSV. Solo viaja lo que una persona aprobó.
           </span>
         </span>
       </label>
-      <label className="block text-[12.5px]">
+      <label className="block text-[12px]">
         <span className="font-medium">Correo(s) del contador</span>
         <span className="block text-[11px] mb-1" style={{ color: 'var(--faint)' }}>Hasta 5, separados por coma o renglón.</span>
         <textarea name="destinatarios" defaultValue={config.destinatarios.join('\n')} rows={2} maxLength={600}
           aria-label="Correos del contador" placeholder="contador@tuempresa.mx"
-          className="hairline w-full rounded-lg px-2.5 py-1.5 text-[12.5px]" style={{ background: 'var(--surface)' }} />
+          className="hairline w-full rounded-lg px-2.5 py-1.5 text-[12px]" style={{ background: 'var(--surface)' }} />
       </label>
       <div className="flex gap-4 flex-wrap items-end">
-        <label className="text-[12.5px]">
+        <label className="text-[12px]">
           <span className="block font-medium mb-1">Formato del CSV</span>
-          <select name="formato" defaultValue={config.formato} className="hairline rounded-lg px-2 py-1.5 text-[12.5px]" style={{ background: 'var(--surface)' }}>
+          <select name="formato" defaultValue={config.formato} className="hairline rounded-lg px-2 py-1.5 text-[12px]" style={{ background: 'var(--surface)' }}>
             <option value="generico">Genérico (Excel)</option>
             <option value="sap_b1">SAP Business One</option>
             <option value="contpaqi">CONTPAQi</option>
           </select>
         </label>
-        <label className="flex items-center gap-2 text-[12.5px]">
+        <label className="flex items-center gap-2 text-[12px]">
           <input type="checkbox" name="incluirZip" defaultChecked={config.incluirZip} /> Incluir ZIP con XML y PDF
         </label>
       </div>
@@ -78,18 +78,18 @@ export function FormaEntrega({ config, guardar }: { config: ConfigEntrega; guard
         <input type="checkbox" name="automatica" checked={automatica} onChange={(e) => setAutomatica(e.target.checked)} className="mt-0.5" />
         <span className="text-[13px]">
           <span className="font-medium">Enviar solo, una vez al día</span>
-          <span className="block text-[11.5px]" style={{ color: 'var(--faint)' }}>Si no, el lote sale cuando pulsas «Enviar ahora».</span>
+          <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>Si no, el lote sale cuando pulsas «Enviar ahora».</span>
         </span>
       </label>
       {automatica && (
         <div className="flex gap-4 flex-wrap">
-          <label className="text-[12.5px]">
+          <label className="text-[12px]">
             <span className="block font-medium mb-1">A partir de las (hora de México)</span>
-            <input type="number" name="horaEnvio" min={0} max={23} defaultValue={config.horaEnvio} className="hairline rounded-lg px-2 py-1.5 w-20 text-[12.5px]" style={{ background: 'var(--surface)' }} />
+            <input type="number" name="horaEnvio" min={0} max={23} defaultValue={config.horaEnvio} className="hairline rounded-lg px-2 py-1.5 w-20 text-[12px]" style={{ background: 'var(--surface)' }} />
           </label>
-          <label className="text-[12.5px]">
+          <label className="text-[12px]">
             <span className="block font-medium mb-1">Mínimo de facturas</span>
-            <input type="number" name="minFacturas" min={1} max={100} defaultValue={config.minFacturas} className="hairline rounded-lg px-2 py-1.5 w-20 text-[12.5px]" style={{ background: 'var(--surface)' }} />
+            <input type="number" name="minFacturas" min={1} max={100} defaultValue={config.minFacturas} className="hairline rounded-lg px-2 py-1.5 w-20 text-[12px]" style={{ background: 'var(--surface)' }} />
           </label>
         </div>
       )}

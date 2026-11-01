@@ -1,5 +1,5 @@
-import { ShieldCheck, CheckCircle2, CircleAlert } from 'lucide-react';
-import { EstadoVacio, KpiTile } from '../../admin/ui/kit';
+import { CheckCircle2, CircleAlert } from 'lucide-react';
+import { EstadoVacio } from '../estados';
 import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -13,6 +13,11 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { fechaMx, hoyMx } from '@/lib/formato';
 import { venceDentroDe, yaVencio, DIAS_VENCE_PRONTO } from './vencimiento';
+import type { Metadata } from 'next';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
+export const metadata: Metadata = { title: 'Solicitudes ARCO' };
 
 export const dynamic = 'force-dynamic';
 
@@ -182,17 +187,7 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
   const vencidas = pendientes.filter((s) => yaVencio(s.venceEn, hoy));
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <ShieldCheck width={16} height={16} strokeWidth={1.75} />
-        <div>
-          <span className="text-sm font-medium block">Privacidad (ARCO)</span>
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>
-            Solicitudes de tus operadores y cómo responderlas a tiempo (LFPDPPP art. 31: 20 días hábiles)
-          </span>
-        </div>
-      </header>
-
+    <MarcoPagina titulo="Solicitudes ARCO" apoyo="Solicitudes de tus operadores y cómo responderlas a tiempo (LFPDPPP art. 31: 20 días hábiles).">
       {/* H7 (auditoría 24): las tres cifras salían de `solicitudes`, que es
           `[]` TANTO si de verdad no hay solicitudes COMO si la lectura de
           arriba falló (`errorCarga`, catch → `solicitudes = []`). Antes de
@@ -203,17 +198,15 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
           esconde bajo un cero con cara de medición. `null` es NO MEDIBLE
           (KpiTile lo pinta "—", no "0"); la caja roja de `errorCarga` de
           abajo ya explica por qué. */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <KpiTile icono={<CircleAlert width={15} height={15} strokeWidth={1.75} />} etiqueta="Por responder" valor={errorCarga ? null : pendientes.length} />
-        <KpiTile icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} />} etiqueta={`Vencen pronto (≤ ${DIAS_VENCE_PRONTO} días)`} valor={errorCarga ? null : vencenPronto.length} />
-        <KpiTile icono={<CircleAlert width={15} height={15} strokeWidth={1.75} />} etiqueta="Vencidas sin responder" valor={errorCarga ? null : vencidas.length} />
-      </div>
+      <TiraCifras sello={selloHoy('Solicitudes ARCO')}>
+        <Cifra icono={<CircleAlert width={15} height={15} strokeWidth={1.75} />} etiqueta="Por responder" info="arco.por_responder" valor={errorCarga ? null : pendientes.length} />
+        <Cifra icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} />} etiqueta={`Vencen pronto (≤ ${DIAS_VENCE_PRONTO} días)`} info="arco.vencen_pronto" valor={errorCarga ? null : vencenPronto.length} />
+        <Cifra icono={<CircleAlert width={15} height={15} strokeWidth={1.75} />} etiqueta="Vencidas sin responder" info="arco.vencidas" valor={errorCarga ? null : vencidas.length} />
+      </TiraCifras>
 
       <div className="glass-panel overflow-hidden">
         <section className="p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--muted)' }}>
-            Solicitudes de tus operadores
-          </h2>
+          <TituloRecuadro info="arco.solicitudes" className="mb-3">Solicitudes de tus operadores</TituloRecuadro>
           {errorCarga ? (
             <div className="rounded-lg p-3 text-sm" style={{ background: 'color-mix(in srgb, var(--color-warn) 10%, transparent)', color: 'var(--color-warn)' }}>
               No se pudieron leer las solicitudes ahora mismo ({errorCarga.slice(0, 120)}). Recarga en un momento — no hay
@@ -316,6 +309,6 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
           )}
         </section>
       </div>
-    </div>
+    </MarcoPagina>
   );
 }

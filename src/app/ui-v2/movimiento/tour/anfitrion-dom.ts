@@ -1,3 +1,4 @@
+import { ANCLAS_DERIVADAS } from '@/app/ui-v2/onboarding/anclas';
 import type { Anfitrion, ElementoTour, EventoAccion, Rect } from './tipos';
 
 // Anfitrión real: toca document/window. Es el único archivo del motor que lo hace.
@@ -8,6 +9,14 @@ const visibleReal = (el: Element): boolean => {
   const e = getComputedStyle(el);
   return e.visibility !== 'hidden' && e.display !== 'none';
 };
+
+/** Si `el` vive en una categoría plegada del menú (`.rv-grupo__cuerpo` cuyo botón dice aria-expanded=false), la despliega. */
+function abrirGrupoPlegado(el: HTMLElement): void {
+  const cuerpo = el.closest('.rv-grupo__cuerpo');
+  const id = cuerpo?.getAttribute('aria-labelledby');
+  const boton = id ? document.getElementById(id) : null;
+  if (boton instanceof HTMLElement && boton.getAttribute('aria-expanded') === 'false') boton.click();
+}
 
 function envolver(el: HTMLElement): ElementoTour {
   return {
@@ -47,8 +56,14 @@ function almacenLocal() {
 export function crearAnfitrionDom(extra: { navegar: (ruta: string) => void; rutaActual: () => string }): Anfitrion {
   return {
     buscarAncla(nombre) {
-      const lista = document.querySelectorAll<HTMLElement>(`[data-tour="${CSS.escape(nombre)}"]`);
+      // `data-onboarding` es el atributo canónico; `data-tour` (menú y anclas anteriores) sigue valiendo; las derivadas son estructura común.
+      const derivada = Object.hasOwn(ANCLAS_DERIVADAS, nombre) ? ANCLAS_DERIVADAS[nombre] : null;
+      const n = CSS.escape(nombre);
+      const lista = document.querySelectorAll<HTMLElement>(derivada ?? `[data-onboarding="${n}"], [data-tour="${n}"]`);
       for (const el of lista) if (visibleReal(el)) return envolver(el);
+      // Un ítem del menú escondido en una categoría plegada del sidebar: se despliega (como la persona lo haría) y el motor
+      // lo vuelve a buscar en su siguiente intento.
+      for (const el of lista) abrirGrupoPlegado(el);
       return null;
     },
     rutaActual: extra.rutaActual,

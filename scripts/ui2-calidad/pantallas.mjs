@@ -5,7 +5,7 @@
 //   carga      solo c8 (por fotograma)                  componentes   muestrario: no se juzga el pliegue
 export const TIPOS_CON_PLIEGUE = ['resumen', 'hub', 'lista', 'formulario', 'asistente'];
 export const PANTALLAS_TIPO = {
-  '01-resumen': 'resumen', 'c01-resumen-vacio': 'resumen', 'c02-resumen-en-curso': 'resumen', 'c03-resumen-sin-dato': 'resumen',
+  '01-resumen': 'resumen', 'c01-resumen-vacio': 'resumen', 'c02-resumen-en-curso': 'resumen', 'c03-resumen-sin-dato': 'resumen', 'c10-resumen-flota-dueno': 'resumen', 'c11-resumen-flota-vacia': 'resumen', 'c12-resumen-flota-encargado': 'resumen',
   'a1-liquidacion': 'hub', 'a2-peajes': 'hub', 'a3-carta-porte': 'hub',
   '03-tabla-viajes': 'lista', '11-tabla-grande': 'lista',
   'c04-asistente-vacio': 'asistente', 'c05-asistente-tms': 'asistente', 'c06-asistente-atencion': 'asistente',
@@ -15,7 +15,7 @@ export const PANTALLAS_TIPO = {
 };
 // Ruta de producto que representa cada pantalla (la salida JSON se escribe también por ruta).
 export const PANTALLAS_RUTA = {
-  '01-resumen': '/dashboard', 'c01-resumen-vacio': '/dashboard', 'c02-resumen-en-curso': '/dashboard', 'c03-resumen-sin-dato': '/dashboard',
+  '01-resumen': '/dashboard', 'c01-resumen-vacio': '/dashboard', 'c02-resumen-en-curso': '/dashboard', 'c03-resumen-sin-dato': '/dashboard', 'c10-resumen-flota-dueno': '/dashboard', 'c11-resumen-flota-vacia': '/dashboard', 'c12-resumen-flota-encargado': '/dashboard',
   'a1-liquidacion': '/dashboard/agentes/liquidacion', 'a2-peajes': '/dashboard/agentes/peajes', 'a3-carta-porte': '/dashboard/agentes/carta-porte',
   '03-tabla-viajes': '/dashboard/viajes', '11-tabla-grande': '/dashboard/viajes',
   'c04-asistente-vacio': '/dashboard/puesta-en-marcha', 'c05-asistente-tms': '/dashboard/puesta-en-marcha', 'c06-asistente-atencion': '/dashboard/puesta-en-marcha',

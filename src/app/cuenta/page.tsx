@@ -4,6 +4,8 @@ import { requireSessionTenant } from '@/lib/auth/guard';
 import { supabaseServer } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { sufijoTenant } from '@/app/dashboard/sufijo';
+import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
+import { Boton } from '../ui-v2/componentes/boton';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,30 +28,32 @@ export default async function Cuenta({
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center px-4">
-      <div className="card p-8 w-full max-w-sm">
-        <div className="text-lg font-semibold tracking-tight">Mi cuenta</div>
-        <dl className="mt-6 text-sm space-y-3">
+    <MarcoPublico
+      rotulo="Cuenta"
+      titulo="Mi cuenta"
+      ancho="estrecho"
+      centrado
+      acciones={
+        <>
+          <form action={cerrarSesion}>
+            <Boton type="submit" variante="primary">Cerrar sesión</Boton>
+          </form>
+          <Link href={`/dashboard${sufijo}`} className="rv-pub__enlace">← Volver al panel</Link>
+        </>
+      }
+    >
+      <div className="rv-pub__tarjeta">
+        <dl className="rv-pub__dl">
           <div>
-            <dt style={{ color: 'var(--muted)' }}>Flota</dt>
+            <dt>Flota</dt>
             <dd>{(tenant?.nombre as string) ?? '—'}</dd>
           </div>
           <div>
-            <dt style={{ color: 'var(--muted)' }}>Usuario</dt>
+            <dt>Usuario</dt>
             <dd>{s.nombre ?? s.userId}</dd>
           </div>
         </dl>
-        <Link href={`/dashboard${sufijo}`} className="mt-6 block text-sm underline" style={{ color: 'var(--muted)' }}>
-          ← Volver al panel
-        </Link>
-        <form action={cerrarSesion} className="mt-4">
-          <button type="submit"
-            className="w-full px-4 py-2.5 rounded-lg text-sm font-medium hairline"
-            style={{ color: 'var(--ink)' }}>
-            Cerrar sesión
-          </button>
-        </form>
       </div>
-    </main>
+    </MarcoPublico>
   );
 }

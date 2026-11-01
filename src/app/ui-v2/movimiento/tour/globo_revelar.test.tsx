@@ -5,8 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { AnfitrionFalso, ElementoFalso } from './anfitrion_falso';
 import { ControladorTour } from './controlador';
-import { colocarGlobo } from './geometria';
-import { GloboTour } from './globo';
+import { GloboTour, ventanaDeRuta } from './globo';
 import type { Instantanea, Recorrido } from './tipos';
 import { validarRecorrido } from './validar';
 import { debeOcultar, Revelar } from '../revelar';
@@ -23,9 +22,8 @@ const R: Recorrido = {
 function snap(p: Partial<Instantanea> = {}): Instantanea {
   return { fase: 'activo', indice: 0, total: 2, paso: R.pasos[0], anclaLista: true, navegando: false, reducirMovimiento: false, esPrimero: true, esUltimo: false, ...p };
 }
-const col = colocarGlobo({ x: 300, y: 100, w: 120, h: 32 }, { w: 340, h: 240 }, { w: 1280, h: 800 });
 const noop = () => {};
-const props = { col, onSiguiente: noop, onAtras: noop, onSaltar: noop, onMasTarde: noop, onIrAlElemento: noop };
+const props = { onSiguiente: noop, onAtras: noop, onSaltar: noop, onMasTarde: noop, onIrAlElemento: noop };
 
 describe('GloboTour', () => {
   it('dice exactamente qué apretar: «Aprieta aquí → Subir archivo»', () => {
@@ -34,16 +32,16 @@ describe('GloboTour', () => {
     expect(h).toContain('<strong>Subir archivo</strong>');
     expect(h).toContain('Paso 1 de 2');
   });
-  it('«Saltar» está siempre, en cualquier paso y estado', () => {
-    for (const s of [snap(), snap({ indice: 1, paso: R.pasos[1], esPrimero: false, esUltimo: true }), snap({ navegando: true }), snap({ anclaLista: false }), snap({ anclaLista: null })]) {
-      expect(renderToStaticMarkup(<GloboTour snap={s} {...props} />)).toContain('>Saltar<');
+  it('«Omitir recorrido» está siempre, salvo en el cierre, que ya terminó', () => {
+    for (const s of [snap(), snap({ navegando: true }), snap({ anclaLista: false }), snap({ anclaLista: null })]) {
+      expect(renderToStaticMarkup(<GloboTour snap={s} {...props} />)).toContain('>Omitir recorrido<');
     }
   });
-  it('último paso: «Terminar»; primero: sin «Atrás»', () => {
+  it('último paso: «Terminar»; primero: sin «Anterior»', () => {
     const ultimo = renderToStaticMarkup(<GloboTour snap={snap({ indice: 1, paso: R.pasos[1], esPrimero: false, esUltimo: true })} {...props} />);
     expect(ultimo).toContain('Terminar');
-    expect(ultimo).toContain('>Atrás<');
-    expect(renderToStaticMarkup(<GloboTour snap={snap()} {...props} />)).not.toContain('>Atrás<');
+    expect(ultimo).toContain('>Anterior<');
+    expect(renderToStaticMarkup(<GloboTour snap={snap()} {...props} />)).not.toContain('>Anterior<');
   });
   it('accesible: región con nombre y aviso en vivo; NO role=dialog ni <dialog>', () => {
     const h = renderToStaticMarkup(<GloboTour snap={snap()} {...props} />);
@@ -52,24 +50,37 @@ describe('GloboTour', () => {
     expect(h).toContain('aria-live="polite"');
     expect(h).not.toContain('role="dialog"');
     expect(h).not.toContain('<dialog');
+    expect(h).toContain('aria-hidden="true"'); // la ilustración no se lee
   });
-  it('reduced-motion: misma guía (texto, acción, foco, flecha), sin escenas dibujadas', () => {
+  it('reduced-motion: misma guía (texto, acción, botones); el marcado no cambia, solo el CSS', () => {
     const normal = renderToStaticMarkup(<GloboTour snap={snap()} {...props} />);
     const quieto = renderToStaticMarkup(<GloboTour snap={snap({ reducirMovimiento: true })} {...props} />);
-    expect(normal).not.toContain('rv-escena');
-    expect(quieto).not.toContain('rv-escena');
-    for (const t of ['Sube el archivo', 'Una muestra basta.', 'Aprieta aquí', 'rv-tour__flecha', '>Siguiente<', '>Saltar<']) expect(quieto).toContain(t);
+    for (const t of ['Sube el archivo', 'Una muestra basta.', 'Aprieta aquí', '>Siguiente<', '>Omitir recorrido<']) { expect(normal).toContain(t); expect(quieto).toContain(t); }
     expect(quieto).toContain('data-reducido="true"');
   });
   it('ancla ausente: lo dice y sigue guiando; navegando: avisa', () => {
-    expect(renderToStaticMarkup(<GloboTour snap={snap({ anclaLista: false })} {...props} />)).toContain('No vemos ese elemento');
-    expect(renderToStaticMarkup(<GloboTour snap={snap({ navegando: true, anclaLista: null })} {...props} />)).toContain('Te llevamos a la página');
+    expect(renderToStaticMarkup(<GloboTour snap={snap({ anclaLista: false })} {...props} />)).toContain('No veo este elemento en la pantalla ahora; sigue la explicación de aquí.');
+    expect(renderToStaticMarkup(<GloboTour snap={snap({ navegando: true, anclaLista: null })} {...props} />)).toContain('Te llevo a la página');
   });
-  it('móvil: hoja inferior sin flecha', () => {
-    const hoja = colocarGlobo({ x: 10, y: 10, w: 80, h: 30 }, { w: 360, h: 240 }, { w: 390, h: 800 });
-    const h = renderToStaticMarkup(<GloboTour snap={snap()} {...props} col={hoja} />);
-    expect(h).toContain('data-lado="hoja"');
-    expect(h).not.toContain('rv-tour__flecha');
+  it('dos contadores (PASO n DE N y PANTALLA n DE N), barra de avance y ruta de pantallas con la actual marcada', () => {
+    const pantallas = ['Resumen', 'Despacho', 'Viajes', 'Operadores', 'Unidades', 'Patios', 'Mapa'].map((nombre) => ({ href: `/dashboard/${nombre}`, nombre }));
+    const h = renderToStaticMarkup(<GloboTour snap={snap({ pasoN: 5, pasoTotal: 30, grupo: 3, grupoTotal: 7, pantallas })} {...props} />);
+    expect(h).toContain('Paso 5 de 30');
+    expect(h).toContain('Pantalla 4 de 7');
+    expect(h).toContain('<progress');
+    expect(h).toContain('aria-current="step">Operadores<');
+    expect(ventanaDeRuta(pantallas.map((p) => p.nombre), 3).map((r) => r.nombre)).toEqual(['Despacho', 'Viajes', 'Operadores', 'Unidades', 'Patios']);
+    expect(ventanaDeRuta(['A', 'B'], 0)).toHaveLength(2);
+    expect(ventanaDeRuta(['1', '2', '3', '4', '5', '6', '7'], 6).map((r) => r.actual)).toEqual([false, false, false, false, true]);
+  });
+  it('un salto de menú dice «Llévame»; el cierre ofrece su enlace y no repite las pantallas', () => {
+    const ir = renderToStaticMarkup(<GloboTour snap={snap({ paso: { id: 'x.ir', tipo: 'ir', titulo: 'Ve a Viajes', texto: 'Haz clic.', nombrePantalla: 'Viajes' } })} {...props} />);
+    expect(ir).toContain('>Llévame<');
+    const cierre = renderToStaticMarkup(<GloboTour snap={snap({ indice: 1, esUltimo: true, esPrimero: false, paso: { id: 'cierre', tipo: 'cierre', titulo: 'Listo', texto: 'Fin.', cta: { etiqueta: 'Ir a Puesta en marcha', ruta: '/dashboard/puesta-en-marcha' } }, pantallas: [{ href: '/a', nombre: 'A' }] })} {...props} />);
+    expect(cierre).toContain('Ir a Puesta en marcha');
+    expect(cierre).toContain('href="/dashboard/puesta-en-marcha"');
+    expect(cierre).not.toContain('rv-onb__ruta');
+    expect(cierre).not.toContain('Pantalla 1 de');
   });
 });
 

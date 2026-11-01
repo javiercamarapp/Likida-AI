@@ -17,6 +17,8 @@ import { VistaAgenteCobranza } from './vista';
 import { SeccionPorGasto } from './seccion-por-gasto';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { FichaCorridas } from '../ficha-corridas';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Seguimiento de comprobantes' };
 
 export const dynamic = 'force-dynamic';
 
@@ -197,7 +199,7 @@ export default async function PaginaAgenteCobranza({
         : (
           <section className="card p-4">
             <h2 className="font-display text-[15px] font-semibold">Cobranza por gasto</h2>
-            <p className="text-[12.5px] mt-1" style={{ color: 'var(--bad)' }}>
+            <p className="text-[12px] mt-1" style={{ color: 'var(--bad)' }}>
               No se pudo leer la cobranza por gasto ahora mismo. No se muestra una lista a medias: media lista se
               ve igual que la lista entera.
             </p>

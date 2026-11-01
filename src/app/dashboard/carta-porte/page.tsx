@@ -12,6 +12,8 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { VistaCartaPorte } from './vista';
 import { sufijoTenant } from '../sufijo';
 import type { ResultadoForma } from './forma';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Carta Porte' };
 
 export const dynamic = 'force-dynamic';
 

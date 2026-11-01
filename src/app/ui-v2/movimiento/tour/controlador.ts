@@ -115,6 +115,22 @@ export class ControladorTour {
     this.oyentes.clear();
   }
 
+  /** Salta al primer paso de una pantalla (menú «Saltar a una pantalla»). Abre el recorrido si estaba cerrado. */
+  irAPantalla(href: string): void {
+    const i = this.pasos.findIndex((p) => p.pantalla === href);
+    if (i < 0) return;
+    if (this.fase !== 'activo') { this.fase = 'activo'; }
+    this.ir(i);
+  }
+  /** Pantallas del recorrido (para el menú «Saltar a una pantalla»). */
+  pantallas(): Array<{ href: string; nombre: string }> {
+    const sal: Array<{ href: string; nombre: string }> = [];
+    for (const p of this.pasos) if (p.pantalla && !sal.some((s) => s.href === p.pantalla)) sal.push({ href: p.pantalla, nombre: p.nombrePantalla ?? p.pantalla });
+    return sal;
+  }
+  /** Id del paso en que quedó (para «Retomar donde lo dejé»). */
+  get indiceActual() { return this.indice; }
+
   /** La página avisa que cambió la ruta (usePathname). */
   alCambiarRuta(): void {
     if (this.fase !== 'activo' || !this.navegando) return;
@@ -157,7 +173,8 @@ export class ControladorTour {
       this.notificar();
       return;
     }
-    const limite = this.op.esperaAnclaMs ?? 4000;
+    // Un salto de menú que no se ve (celular: el menú está plegado) no espera 4 s: la tarjeta ya explica cómo ir.
+    const limite = paso.tipo === 'ir' ? Math.min(900, this.op.esperaAnclaMs ?? 4000) : (this.op.esperaAnclaMs ?? 4000);
     let esperado = 0;
     const intentar = () => {
       if (g !== this.gen) return;
@@ -214,7 +231,17 @@ export class ControladorTour {
   }
 
   private calcular(): Instantanea {
+    const pant = this.pantallas();
+    const actual = this.pasos[this.indice];
+    const contados = this.pasos.filter((p) => p.tipo !== 'ir');
+    const antes = this.pasos.slice(0, this.indice + 1).filter((p) => p.tipo !== 'ir').length;
     return {
+      pasoTotal: Math.max(1, contados.length),
+      // En un salto de menú se muestra el número del paso al que se va (no se cuenta, pero tampoco retrocede).
+      pasoN: Math.max(1, antes + (actual?.tipo === 'ir' ? 1 : 0)),
+      grupo: actual?.pantalla ? Math.max(0, pant.findIndex((x) => x.href === actual.pantalla)) : pant.length,
+      grupoTotal: pant.length,
+      pantallas: pant,
       fase: this.fase,
       indice: this.indice,
       total: this.pasos.length,

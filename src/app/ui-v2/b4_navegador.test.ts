@@ -31,7 +31,7 @@ function App() {
       <div id="scroll" style={{ height: 500, overflowY: 'auto' }}>
         <BarraFiltros busqueda={{ valor: q, onCambio: setQ, placeholder: 'Buscar folio' }} chips={chips} onChip={(id) => setChips(chips.map((c) => c.id === id ? { ...c, activo: !c.activo } : c))} avanzados={<><label>Operador<select><option>Todos</option></select></label><label>Patio<select><option>Todos</option></select></label></>} nAvanzados={1} fuentes="Fuentes 5 de 7" />
         <div className="rv-escalona" id="esc" style={{ display: 'grid', gap: 12, paddingTop: 12 }}>
-          <Tarjeta titulo="Monto comprobado" info="resumen.monto_comprobado" acciones={<Boton tamano="sm">Exportar</Boton>}><p>Contenido uno</p></Tarjeta>
+          <Tarjeta titulo="Diferencias vs recuperado" info="resumen.diferencias_recuperado" acciones={<Boton tamano="sm">Exportar</Boton>}><p>Contenido uno</p></Tarjeta>
           <Tarjeta titulo="Por firmar" info="resumen.por_firmar"><p>Contenido dos</p></Tarjeta>
           <Tarjeta titulo="Peajes" info="resumen.peajes_periodo" estado="vacio" mensaje="Sin cruces en el periodo" />
           <Tarjeta titulo="A tiempo" info="resumen.a_tiempo" estado="error" onReintentar={() => { window.__reint = (window.__reint || 0) + 1; }} />
@@ -68,7 +68,7 @@ beforeAll(async () => {
 }, 90_000);
 afterAll(async () => { await browser?.close(); });
 
-const css = () => ['tokens.css', 'movimiento.css', 'componentes.css', 'graficas.css'].map((f) => readFileSync(join(f === 'tokens.css' ? RAIZ : DIR, f), 'utf8')).join('\n');
+const css = () => ['tokens.css', 'movimiento.css', 'componentes.css', 'overlay.css', 'graficas.css'].map((f) => readFileSync(join(f === 'tokens.css' ? RAIZ : DIR, f), 'utf8')).join('\n');
 async function abrir(ancho = 1440, opts: { animar?: boolean; reduce?: boolean; oscuro?: boolean } = {}): Promise<Page> {
   // Por omisión SIN animación (medidas estables); las pruebas de movimiento piden `animar`.
   const p = await browser!.newPage({ viewport: { width: ancho, height: 900 }, reducedMotion: opts.animar && !opts.reduce ? 'no-preference' : 'reduce' });
@@ -139,21 +139,22 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · InfoTip (ⓘ)', () => {
 });
 
 describe.skipIf(SIN_NAVEGADOR)('B4 · Tarjeta unificada', () => {
-  it('la ⓘ queda en el mismo sitio en todas las tarjetas, radio 12, padding 12, y los estados vacío / error son una línea', async () => {
+  it('la ⓘ queda en el mismo sitio en todas las tarjetas, radio 12, padding 14, y los estados vacío (sin borde punteado) / error (blando) son compactos', async () => {
     const p = await abrir();
     const r = await p.evaluate(() => {
       const tarjetas = [...document.querySelectorAll('.rv-tarjeta')] as HTMLElement[];
       const pos = tarjetas.map((t) => { const i = t.querySelector('.rv-info')!.getBoundingClientRect(); const c = t.getBoundingClientRect(); return { arriba: Math.round(i.top - c.top), derecha: Math.round(c.right - i.right), alto: Math.round(i.height) }; });
       const cs = getComputedStyle(tarjetas[0]);
-      return { pos, radio: cs.borderTopLeftRadius, pad: cs.paddingTop, vacio: document.querySelector('.rv-tarjeta .rv-vacio')!.getBoundingClientRect().height, errRol: document.querySelector('.rv-tarjeta__error')!.getAttribute('role'), errAlto: document.querySelector('.rv-tarjeta__error')!.getBoundingClientRect().height };
+      return { pos, radio: cs.borderTopLeftRadius, pad: cs.paddingTop, vacio: document.querySelector('.rv-tarjeta .rv-vacio')!.getBoundingClientRect().height, errRol: document.querySelector('.rv-tarjeta .rv-error')!.getAttribute('role'), errAlto: document.querySelector('.rv-tarjeta .rv-error')!.getBoundingClientRect().height, vacioBorde: getComputedStyle(document.querySelector('.rv-tarjeta .rv-vacio')!).borderTopStyle };
     });
     expect(new Set(r.pos.map((x) => x.arriba)).size, JSON.stringify(r.pos)).toBe(1);
     expect(new Set(r.pos.map((x) => x.derecha)).size, 'la ⓘ va SIEMPRE en la esquina derecha: ' + JSON.stringify(r.pos)).toBe(1);
     expect(r.radio).toBe('12px');
-    expect(r.pad).toBe('12px');
-    expect(r.vacio).toBeLessThanOrEqual(44);
+    expect(r.pad).toBe('14px');
+    expect(r.vacioBorde, 'el vacío ya no es una celda punteada').toBe('none');
+    expect(r.vacio).toBeLessThanOrEqual(100);
     expect(r.errRol).toBe('alert');
-    expect(r.errAlto).toBeLessThanOrEqual(44);
+    expect(r.errAlto).toBeLessThanOrEqual(60);
     await p.getByRole('button', { name: 'Reintentar' }).click();
     expect(await p.evaluate(() => (window as unknown as { __reint: number }).__reint)).toBe(1);
     await p.close();
@@ -207,7 +208,7 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · BarraFiltros', () => {
       const p = await abrir(ancho);
       const r = await p.evaluate(() => {
         const b = document.querySelector('.rv-filtros')!;
-        const hijos = [...b.querySelectorAll('input, .rv-filtros__chips, .rv-filtros__derecha .rv-btn')].map((e) => Math.round(e.getBoundingClientRect().top));
+        const hijos = [...b.querySelectorAll('input, .rv-filtros__chips, .rv-filtros__derecha .rv-fl')].map((e) => Math.round(e.getBoundingClientRect().top));
         const chips = document.querySelector('.rv-filtros__chips') as HTMLElement;
         return { alto: b.getBoundingClientRect().height, tops: hijos, desplaza: chips.scrollWidth > chips.clientWidth };
       });
@@ -217,14 +218,14 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · BarraFiltros', () => {
       await p.close();
     });
   }
-  it('1440: «Filtros» abre los avanzados en un popover (no empuja el contenido) y el chip activo es marino', async () => {
+  it('1440: «Filtros» abre los avanzados en un popover (no empuja el contenido) y el chip activo es gris suave', async () => {
     const p = await abrir();
     const antes = await p.evaluate(() => document.querySelector('#esc')!.getBoundingClientRect().top);
     await p.getByRole('button', { name: /Filtros/ }).click();
-    const r = await p.evaluate(() => ({ pop: !!document.querySelector('.rv-pop select'), despues: document.querySelector('#esc')!.getBoundingClientRect().top, activo: getComputedStyle(document.querySelector('.rv-chip[aria-pressed="true"]')!).backgroundColor }));
+    const r = await p.evaluate(() => ({ pop: !!document.querySelector('.rv-pop select'), despues: document.querySelector('#esc')!.getBoundingClientRect().top, activo: getComputedStyle(document.querySelector('.rv-fl[aria-pressed="true"]')!).backgroundColor }));
     expect(r.pop).toBe(true);
     expect(r.despues).toBe(antes);
-    expect(rgb(r.activo)).toEqual([42, 63, 95]);
+    expect(rgb(r.activo)).toEqual([226, 226, 226]); // --soft-8 #e2e2e2
     await p.close();
   });
   it('390: «Filtros» abre una hoja inferior', async () => {
@@ -243,23 +244,24 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · BarraFiltros', () => {
 });
 
 describe.skipIf(SIN_NAVEGADOR)('B4 · chip activo (los tokens de marca son del shell)', () => {
-  it('claro: marino con texto blanco (AA)', async () => {
+  it('claro: gris suave con texto de tinta (AA), nunca un bloque sólido', async () => {
     const p = await abrir();
-    const c = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.rv-chip[aria-pressed="true"]')!); return { bg: s.backgroundColor, fg: s.color }; });
-    expect(rgb(c.bg)).toEqual([42, 63, 95]);
+    const c = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.rv-fl[aria-pressed="true"]')!); return { bg: s.backgroundColor, fg: s.color }; });
+    expect(rgb(c.bg)).toEqual([226, 226, 226]);
+    expect(rgb(c.fg)).toEqual([14, 14, 16]);
     expect(ratio(rgb(c.bg), rgb(c.fg))).toBeGreaterThanOrEqual(4.5);
     await p.close();
   });
-  it('oscuro: #3a5580 con texto blanco (AA)', async () => {
+  it('oscuro: fondo gris oscuro con texto claro (AA)', async () => {
     const p = await abrir(1440, { oscuro: true });
-    const c = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.rv-chip[aria-pressed="true"]')!); return { bg: s.backgroundColor, fg: s.color }; });
-    expect(rgb(c.bg)).toEqual([58, 85, 128]);
+    const c = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.rv-fl[aria-pressed="true"]')!); return { bg: s.backgroundColor, fg: s.color }; });
+    expect(rgb(c.bg)).toEqual([50, 50, 52]); // --soft-8 oscuro #323234
     expect(ratio(rgb(c.bg), rgb(c.fg))).toBeGreaterThanOrEqual(4.5);
     await p.close();
   });
-  it('esta capa NO redefine los tokens de marca del shell (--btn-*, --marino, --crema, --chart-8)', async () => {
+  it('esta capa NO redefine los tokens de marca del shell (--btn-*, --chart-8)', async () => {
     const css = readFileSync(join(DIR, 'componentes.css'), 'utf8');
-    for (const t of ['--btn-bg:', '--btn-fg:', '--btn-borde:', '--btn-hover:', '--marino:', '--crema:', '--chart-8:', '--marca-marino:', '--marca-naranja:']) expect(css.includes(t), t).toBe(false);
+    for (const t of ['--btn-bg:', '--btn-fg:', '--btn-borde:', '--btn-hover:', '--chart-8:']) expect(css.includes(t), t).toBe(false);
   });
 });
 

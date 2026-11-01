@@ -1,8 +1,9 @@
 'use client';
 
+import MenuAdjuntar from '../menu-adjuntar';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ArrowUp, Search, Paperclip, Camera, FileImage, X, FileText, Check } from 'lucide-react';
+import { ArrowUp, Search, Paperclip, X, FileText, Check } from 'lucide-react';
 import { mxn, litros, numero } from '@/lib/formato';
 import { Logo, LogoIcono } from '../../logo';
 import { CampoPixeles } from '../pixeles';
@@ -78,7 +79,7 @@ function VisualRespuesta({ v }: { v: Visual }) {
   if (v.tipo === 'cifra') {
     return (
       <div className="card px-4 py-3 mt-2 inline-block">
-        <div className="font-display text-[22px] leading-tight font-semibold tabular">{v.valor}</div>
+        <div className="font-display text-[20px] leading-tight font-semibold tabular">{v.valor}</div>
         {v.nota && <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>{v.nota}</p>}
       </div>
     );
@@ -136,6 +137,7 @@ export function ChatEntrevista({
   const inputArchivo = useRef<HTMLInputElement>(null);
   const inputImagen = useRef<HTMLInputElement>(null);
   const inputCamara = useRef<HTMLInputElement>(null);
+  const botonClip = useRef<HTMLButtonElement>(null);
   const finConversacion = useRef<HTMLDivElement>(null);
 
   const vacio = historial.length === 0;
@@ -353,35 +355,8 @@ export function ChatEntrevista({
         boxShadow: 'var(--shadow-card)',
       }}
     >
-      {menuAdjuntar && (
-        <>
-          <button type="button" aria-label="Cerrar menú" onClick={() => setMenuAdjuntar(false)}
-            className="fixed inset-0 z-20 cursor-default" style={{ background: 'transparent' }} />
-          <div className={`absolute left-0 right-0 z-30 card p-1.5 ${vacio ? 'top-[calc(100%+8px)]' : 'bottom-[calc(100%+8px)]'}`}>
-            <button type="button"
-              onClick={() => { setMenuAdjuntar(false); inputCamara.current?.click(); }}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors hover:bg-[var(--canvas)] text-left">
-              <Camera width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
-              <span className="text-[13.5px] font-medium shrink-0">Tomar foto</span>
-              <span className="text-[13px] truncate" style={{ color: 'var(--muted)' }}>Con la cámara del teléfono</span>
-            </button>
-            <button type="button"
-              onClick={() => { setMenuAdjuntar(false); inputImagen.current?.click(); }}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors hover:bg-[var(--canvas)] text-left">
-              <FileImage width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
-              <span className="text-[13.5px] font-medium shrink-0">Subir imágenes</span>
-              <span className="text-[13px] truncate" style={{ color: 'var(--muted)' }}>Fotos de tickets desde tu equipo</span>
-            </button>
-            <button type="button"
-              onClick={() => { setMenuAdjuntar(false); inputArchivo.current?.click(); }}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors hover:bg-[var(--canvas)] text-left">
-              <Paperclip width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
-              <span className="text-[13.5px] font-medium shrink-0">Adjuntar archivos</span>
-              <span className="text-[13px] truncate" style={{ color: 'var(--muted)' }}>PDF, Excel, CSV, XML de CFDI…</span>
-            </button>
-          </div>
-        </>
-      )}
+      <MenuAdjuntar abierto={menuAdjuntar} onCerrar={() => setMenuAdjuntar(false)} ancla={botonClip}
+      onCamara={() => inputCamara.current?.click()} onImagen={() => inputImagen.current?.click()} onArchivo={() => inputArchivo.current?.click()} />
       {documento && (
         <div className="mb-2">
           <span className="hairline inline-flex items-center gap-1.5 text-[12px] font-medium pl-2.5 pr-1.5 py-1 rounded-full" style={{ background: 'var(--canvas)' }}>
@@ -416,7 +391,7 @@ export function ChatEntrevista({
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
           <input ref={inputArchivo} type="file" accept="image/*,.pdf,.xlsx,.xls,.csv,.tsv,.ods,.xml,.txt,.json,.md" className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
-          <button type="button" aria-label="Adjuntar comprobante" title="Adjuntar comprobante"
+          <button ref={botonClip} type="button" aria-label="Adjuntar comprobante" title="Adjuntar comprobante"
             onClick={() => setMenuAdjuntar((v) => !v)} disabled={ocupado}
             className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--canvas)] disabled:opacity-50"
             style={{ color: 'var(--ink2)' }}>
@@ -444,7 +419,7 @@ export function ChatEntrevista({
     <div className="w-full max-h-72 overflow-y-auto grid grid-cols-1 sm:grid-cols-3 gap-2.5 pr-0.5">
       {CATALOGO_CONSULTA.map((c) => (
         <div key={c.categoria} className="card p-3 self-start">
-          <div className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: 'var(--muted)' }}>
+          <div className="etiqueta-mono text-[11px] font-medium uppercase mb-1.5" style={{ color: 'var(--muted)' }}>
             {c.categoria}
           </div>
           {c.preguntas.map((rq) => (
@@ -478,7 +453,7 @@ export function ChatEntrevista({
   const pillListo = listo && (
     <div className="sticky top-0 z-30 h-0 w-full">
       <a href={`/dashboard${sufijo}`}
-        className="absolute top-3 right-4 hairline inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 rounded-full text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)]"
+        className="absolute top-3 right-4 hairline inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 rounded-full text-[12px] font-medium transition-colors hover:bg-[var(--canvas)]"
         style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
         Ir al panel
       </a>
@@ -509,7 +484,7 @@ export function ChatEntrevista({
                             {pasosVivos.length > 0 && (
                               <div className="mt-2 space-y-1.5">
                                 {pasosVivos.map((p, j) => (
-                                  <div key={j} className="flex items-center gap-2 text-[12.5px]"
+                                  <div key={j} className="flex items-center gap-2 text-[12px]"
                                     style={{ color: p.listo ? 'var(--faint)' : 'var(--ink)' }}>
                                     {p.listo
                                       ? <Check width={12} height={12} strokeWidth={2} className="shrink-0" style={{ color: 'var(--muted)' }} />
@@ -553,7 +528,7 @@ export function ChatEntrevista({
         <div className="relative z-10 w-full flex-1 flex flex-col items-center justify-center px-4 py-10">
           <div className="w-full max-w-2xl flex flex-col items-center">
             <Logo alto="h-7" className="mb-6" />
-            <h1 className="text-[26px] leading-tight font-medium tracking-tight text-center">
+            <h1 data-onboarding="pantalla.titulo" className="text-[26px] leading-tight font-medium tracking-tight text-center">
               Configura tu flota
             </h1>
             <p className="mt-2 mb-8 text-sm text-center max-w-md" style={{ color: 'var(--muted)' }}>

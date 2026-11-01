@@ -164,7 +164,7 @@ export function SeccionCredenciales({ cofreListo, puedeAdministrarCofre, guardad
       {guardadas === null ? (
         // Lectura caída ≠ "no tienes credenciales": pintarlo vacío invitaría a
         // capturar de nuevo encima de lo que sí existe.
-        <p className="text-[12.5px]" style={{ color: 'var(--bad)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--bad)' }}>
           No se pudieron leer las credenciales guardadas ahora mismo. Recarga la página; si se
           repite, avísale a Likida.
         </p>
@@ -229,7 +229,7 @@ export function SeccionCredenciales({ cofreListo, puedeAdministrarCofre, guardad
             // secreto que va a tronar al guardar (y guardarlo en claro no es
             // una opción). Se dice qué falta, que es configuración del
             // sistema, no de la flota.
-            <p className="text-[12.5px] max-w-xl" style={{ color: 'var(--warn)' }}>
+            <p className="text-[12px] max-w-xl" style={{ color: 'var(--warn)' }}>
               El cofre de credenciales no está configurado en este entorno
               (falta <code className="cifra-mono">LIKIDA_COFRE_LLAVE</code>): la captura está
               deshabilitada hasta que exista. Es configuración del sistema, no de tu flota.

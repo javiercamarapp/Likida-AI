@@ -112,7 +112,7 @@ export default async function OnboardingFlotaPage({
   const preguntaInicial = entrevista.siguiente?.pregunta ?? null;
   const formulario = (
     <details className="text-left">
-      <summary className="text-[12.5px] cursor-pointer text-center" style={{ color: 'var(--faint)' }}>
+      <summary className="text-[12px] cursor-pointer text-center" style={{ color: 'var(--faint)' }}>
         Prefiero el formulario
       </summary>
       <p className="text-[11px] mt-2 mb-4" style={{ color: 'var(--muted)' }}>
@@ -142,7 +142,7 @@ export default async function OnboardingFlotaPage({
       <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
         <div className="flex-1 flex flex-col">
           {puedeAdministrar(s.rol) && !onboardingFiscalListo(perfil) && (
-            <form action={posponer} className="px-5 pt-4 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            <form action={posponer} className="px-5 pt-4 text-[12px]" style={{ color: 'var(--muted)' }}>
               ¿No tienes a la mano tus ingresos anuales o no sabes si eres parte relacionada?{' '}
               <button type="submit" className="underline font-medium" style={{ color: 'var(--ink)' }}>Lo confirmo con mi contador</button>
               {' '}— el Resumen se abre con un aviso permanente: el estímulo de peaje queda en $0 hasta que lo declares.

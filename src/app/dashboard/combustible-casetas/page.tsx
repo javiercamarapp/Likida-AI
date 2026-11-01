@@ -18,12 +18,18 @@ import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { resolverTenantPedido } from '@/lib/auth/tenant-api';
-import { KpiTile, EstadoVacio, ChartCard, StatusPill } from '../../admin/ui/kit';
+import { ChartCard, StatusPill } from '../../admin/ui/kit';
+import { EstadoVacio } from '../estados';
 import { HBars } from '../../admin/ui/graficas';
 import { Dona } from '../../admin/charts';
 import { sufijoTenant, querystringCompleto } from '../sufijo';
 import { LineasPorConciliar, NINGUNO_VALOR } from './vista-consolidado';
 import { calcularSinCfdi } from './sin-cfdi';
+import type { Metadata } from 'next';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
+export const metadata: Metadata = { title: 'Combustible y casetas' };
 
 export const dynamic = 'force-dynamic';
 
@@ -191,66 +197,55 @@ export default async function CombustibleCasetasPage({
   const anomaliasCombustible = anomalias?.filter((a) => /diesel|caseta/i.test(a.detalle)) ?? [];
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <Fuel width={16} height={16} strokeWidth={1.75} />
-        <div className="flex-1">
-          <span className="text-sm font-medium block">Combustible & Casetas</span>
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>
-            Los dos conceptos que más pesan en un viaje, y qué tanto están facturados
-          </span>
-        </div>
+    <MarcoPagina titulo="Combustible y casetas" apoyo="Los dos conceptos que más pesan en un viaje, y qué tanto están facturados." acciones={<>
         {sp.ok === 'resuelta' && <StatusPill estado="ok">Línea resuelta</StatusPill>}
         {sp.ok?.startsWith('error_') && (
           <StatusPill estado="bad">
             {MOTIVO_ERROR[sp.ok.slice('error_'.length)] ?? 'No se pudo resolver la línea.'}
           </StatusPill>
         )}
-      </header>
-
+      </>}>
       <div className="glass-panel overflow-hidden">
         <section className="p-5">
-          <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-            El gasto
-          </h2>
+          <TituloRecuadro info="combustible_casetas.el_gasto">El gasto</TituloRecuadro>
           {porConcepto === null ? (
             <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-              <KpiTile icono={<Fuel width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+            <TiraCifras className="mt-3" sello={selloHoy('Gastos de la flota')}>
+              <Cifra icono={<Fuel width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 // FE-9: `getGastoPorConcepto` no tiene ventana (histórico
                 // completo) — junto al tile vecino, que sí declara la suya
                 // ("últimos 100 comprobantes"), esto se leía como "del mes".
                 // A 15k viajes/mes este acumulado crece sin fin, y ES la
                 // pantalla que el contador abre para el cierre.
-                etiqueta="Gastado en combustible" valor={diesel?.total ?? 0} formato="mxn"
+                etiqueta="Gastado en combustible" info="combustible_casetas.gastado_combustible" valor={diesel?.total ?? 0} formato="mxn"
                 nota={diesel ? `histórico · ${numero(diesel.n)} cargas registradas` : 'Sin cargas registradas todavía'} />
-              <KpiTile icono={<RouteIcon width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                etiqueta="Gastado en casetas" valor={caseta?.total ?? 0} formato="mxn"
+              <Cifra icono={<RouteIcon width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+                etiqueta="Gastado en casetas" info="combustible_casetas.gastado_casetas" valor={caseta?.total ?? 0} formato="mxn"
                 nota={caseta ? `histórico · ${numero(caseta.n)} casetas registradas` : 'Sin casetas registradas todavía'} />
-              <KpiTile icono={<Fuel width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+              <Cifra icono={<Fuel width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 // A23-ALTO: era `acred?.litrosDiesel ?? 0` — una lectura caída
                 // se pintaba como "0 litros elegibles", una cifra fiscal FALSA
                 // (no es que no haya nada acreditable: es que no se pudo leer).
                 // FE-8: el rótulo ahora dice la ventana del ejercicio en curso,
                 // la misma que usa el contador.
-                etiqueta={vl.rotulo} valor={acred ? acred.litrosDiesel : null} formato="litros"
-                vacio={acred === null ? 'No se pudo leer lo acreditable' : undefined}
+                etiqueta={vl.rotulo} info="combustible_casetas.litros_elegibles" valor={acred ? acred.litrosDiesel : null} formato="litros"
+                mensaje={acred === null ? 'No se pudo leer lo acreditable' : undefined}
                 nota={vl.nota} />
-              <KpiTile icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+              <Cifra icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 // AUDITORÍA 1, ALTO: sin comprobantes, el valor es null — se
                 // PRESERVA para que el encabezado diga "—" y no un "0%" que se
                 // lee como "todo facturado" (buena noticia falsa en un vistazo).
                 // AUDITORÍA 25, MEDIO: "sin comprobantes" (`sin_datos`) y "la
                 // consulta falló" (`error`) ya no comparten el mismo mensaje.
-                etiqueta="Sin CFDI (combustible y casetas)" valor={sinCfdiEstado.pct} formato="porcentaje"
-                vacio={
+                etiqueta="Sin CFDI (combustible y casetas)" info="combustible_casetas.sin_cfdi" valor={sinCfdiEstado.pct} formato="porcentaje"
+                mensaje={
                   sinCfdiEstado.estado === 'error' ? 'No se pudo leer si hay CFDI de estos conceptos'
                   : sinCfdiEstado.estado === 'sin_datos' ? 'Sin comprobantes de estos conceptos todavía'
                   : undefined
                 }
                 nota={sinCfdiEstado.estado === 'ok' ? `${sinCfdiEstado.sinCfdi} de ${sinCfdiEstado.total} sin factura entre los últimos ${numero(VENTANA_DOCUMENTOS)} comprobantes registrados — es deducible que se pierde` : undefined} />
-            </div>
+            </TiraCifras>
           )}
         </section>
 
@@ -274,9 +269,7 @@ export default async function CombustibleCasetasPage({
         </section>
 
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-            Posible carga repetida
-          </h2>
+          <TituloRecuadro info="combustible_casetas.carga_repetida">Posible carga repetida</TituloRecuadro>
           {anomalias === null ? (
             <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>No se pudo revisar.</div>
           ) : anomaliasCombustible.length === 0 ? (
@@ -306,9 +299,7 @@ export default async function CombustibleCasetasPage({
         </section>
 
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-            CFDI consolidado (monedero y TAG)
-          </h2>
+          <TituloRecuadro info="combustible_casetas.cfdi_consolidado">CFDI consolidado (monedero y TAG)</TituloRecuadro>
           {!conciliacion.ok ? (
             <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</div>
           ) : conciliacion.datos === null ? (
@@ -321,17 +312,17 @@ export default async function CombustibleCasetasPage({
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
-                <KpiTile icono={<FileStack width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                  etiqueta="Líneas ligadas automáticamente" valor={conciliacion.datos.conciliadas} formato="numero"
+              <TiraCifras className="mt-3" sello={selloHoy('Gastos de la flota')}>
+                <Cifra icono={<FileStack width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+                  etiqueta="Líneas ligadas automáticamente" info="combustible_casetas.lineas_ligadas" valor={conciliacion.datos.conciliadas} formato="numero"
                   nota={`de ${conciliacion.datos.cfdis} CFDI consolidado${conciliacion.datos.cfdis === 1 ? '' : 's'} recibido${conciliacion.datos.cfdis === 1 ? '' : 's'}`} />
-                <KpiTile icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                  etiqueta="Por revisar a mano" valor={conciliacion.datos.porConciliar} formato="numero"
+                <Cifra icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+                  etiqueta="Por revisar a mano" info="combustible_casetas.por_revisar" valor={conciliacion.datos.porConciliar} formato="numero"
                   nota={conciliacion.datos.porConciliar === 0 ? 'Todo lo que llegó, concilió solo' : 'Elige el candidato correcto abajo, o marca que ninguno aplica'} />
-                <KpiTile icono={<CircleCheck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                  etiqueta="Revisadas, sin gasto que corresponda" valor={conciliacion.datos.sinMatch} formato="numero"
+                <Cifra icono={<CircleCheck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+                  etiqueta="Revisadas, sin gasto que corresponda" info="combustible_casetas.sin_gasto" valor={conciliacion.datos.sinMatch} formato="numero"
                   nota="Un humano ya las miró — quedan documentadas, sin viaje" />
-              </div>
+              </TiraCifras>
 
               {conciliacion.datos.porConciliar > 0 && (
                 lineasPendientes === null ? (
@@ -367,6 +358,6 @@ export default async function CombustibleCasetasPage({
           </EstadoVacio>
         </div>
       </div>
-    </div>
+    </MarcoPagina>
   );
 }

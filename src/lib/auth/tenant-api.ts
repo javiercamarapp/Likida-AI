@@ -5,6 +5,7 @@ import { leerSeleccionFlota } from './admin-context';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { mfaSuperadminObligatorio, veredictoMfaSuperadmin } from './mfa';
 import { apiDenegadaPorPerfil, MOTIVO_PERFIL_API } from './perfil_tenant';
+import { esRolNomina } from './roles';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DE QUÉ FLOTA HABLA UNA RUTA DE API.
@@ -45,6 +46,11 @@ export type ResultadoTenantApi =
 export async function resolverTenantApi(url: string): Promise<ResultadoTenantApi> {
   const s = await getSessionTenant();
   if (!s) return { ok: false, status: 401, motivo: 'Necesitas iniciar sesión.' };
+
+  // `nomina` (0949) NO tiene ninguna API de sesión: su vista de conteos se arma en el servidor, sin pasar por /api. Se niega aquí,
+  // en la puerta común de /api/export/*, /api/v1 por cookie y /api/dashboard/*, antes de resolver siquiera la flota: deny-by-default,
+  // sin depender de que cada ruta se acuerde de revisar el área.
+  if (esRolNomina(s.rol)) return { ok: false, status: 403, motivo: 'Tu rol no tiene acceso a esta parte del producto.' };
 
   // AUDITORÍA 25, SEGURIDAD (ALTO, línea 166, REINCIDENTE). `guard.ts` cierra
   // /admin con el segundo factor (SEG-3, auditoría 24) cuando

@@ -160,7 +160,7 @@ function KpiTarjeta({ k, monto, tono }: { k: Kpi; monto?: number | null; tono?: 
         {valorKpi(k, { monto })}
       </div>
       <div className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{k.detalle}</div>
-      <div className="text-[10px] mt-1" style={{ color: 'var(--faint)' }}>Fuente: {k.fuente}</div>
+      <div className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>Fuente: {k.fuente}</div>
     </div>
   );
 }
@@ -191,7 +191,7 @@ export function RevisionCobros({ estado }: { estado: EstadoRevisionCobros }) {
       )}
 
       {estado.tipo === 'error' && (
-        <p role="status" className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
+        <p role="status" className="text-[12px]" style={{ color: 'var(--warn)' }}>
           No se pudo calcular la revisión de cobros ahora mismo. Puedes seguir subiendo, conciliando y anulando archivos; vuelve a abrir esta pantalla en un momento.
         </p>
       )}
@@ -217,7 +217,7 @@ function CuerpoRevision({ estado }: { estado: Extract<EstadoRevisionCobros, { ti
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {r.tarjetas.map((t) => (
             <article key={t.id} className="card p-3.5" aria-labelledby={`cobro-${t.id}`}>
-              <h4 id={`cobro-${t.id}`} className="text-[12.5px] font-semibold">{t.titulo}</h4>
+              <h4 id={`cobro-${t.id}`} className="text-[12px] font-semibold">{t.titulo}</h4>
               <div className="cifra-mono text-[18px] font-medium mt-1">{mxn(t.monto)}</div>
               <div className="text-[11px]" style={{ color: 'var(--muted)' }}>{numero(t.n)} {t.n === 1 ? 'cruce' : 'cruces'}</div>
               {t.id !== 'sin_candidatos' && (
@@ -226,7 +226,7 @@ function CuerpoRevision({ estado }: { estado: Extract<EstadoRevisionCobros, { ti
               <p className="text-[12px] mt-2">{t.quePaso}</p>
               <p className="text-[11px] mt-1" style={{ color: 'var(--muted)' }}><strong>Qué significa:</strong> {t.queSignifica}</p>
               <p className="text-[11px] mt-1" style={{ color: 'var(--muted)' }}><strong>Qué hacer:</strong> {t.queHacer}</p>
-              <p className="text-[10px] mt-1" style={{ color: 'var(--faint)' }}>Fuente: {t.fuente}</p>
+              <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>Fuente: {t.fuente}</p>
             </article>
           ))}
         </div>

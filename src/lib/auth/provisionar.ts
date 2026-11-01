@@ -19,7 +19,7 @@ import { esCorreoYaRegistrado } from './invitar';
 /** El dominio de `app_user_rol_dominio` menos `operador` (sin login desde el
  *  7-ago-2026). `vendedor` (0105) es rol de LIKIDA: siempre con tenantId
  *  null, como superadmin — su panel es /vendedor, no /dashboard. */
-export type RolAppUser = 'superadmin' | 'flota_admin' | 'contador' | 'encargado' | 'vendedor';
+export type RolAppUser = 'superadmin' | 'flota_admin' | 'contador' | 'encargado' | 'vendedor' | 'nomina';
 
 /**
  * LA ÚNICA traducción de `RolAppUser` a texto de pantalla.
@@ -40,6 +40,7 @@ export const ROL_LABEL: Record<RolAppUser, string> = {
   encargado: 'Encargado',
   contador: 'Contador',
   vendedor: 'Vendedor (Likida)',
+  nomina: 'Nómina y RH',
 };
 
 /**
@@ -69,6 +70,7 @@ export const ROL_BADGE: Record<RolAppUser, string> = {
   contador: 'CONTADOR',
   vendedor: 'VENDEDOR',
   superadmin: 'SUPERADMIN',
+  nomina: 'NÓMINA',
 };
 
 /**

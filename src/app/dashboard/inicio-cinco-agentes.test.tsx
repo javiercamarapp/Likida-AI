@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 vi.mock('next/navigation', () => ({ usePathname: () => '/dashboard', useSearchParams: () => new URLSearchParams('') }));
 
 const {
-  FICHAS_CINCO_AGENTES, InsightDeAgente, insightMasSevero, leerInsightsPorAgente,
+  FICHAS_CINCO_AGENTES, InsightDeAgente, insightMasSevero, leerInsightsPorAgente, agentesInsightVisibles, resumirInsights, leerInsightsResumen,
   TEXTO_VACIO_RESUMEN, TEXTO_ERROR_RESUMEN, TEXTO_PROXIMAMENTE_RESUMEN,
 } = await import('./inicio-cinco-agentes');
 import type { Insight, AgenteInsight, Severidad } from '@/lib/likida/insights/tipos';
@@ -90,5 +90,48 @@ describe('leerInsightsPorAgente', () => {
   it('cada ficha del Resumen tiene clave de insight única y válida', () => {
     const claves = FICHAS_CINCO_AGENTES.map((f) => f.insight);
     expect(new Set(claves).size).toBe(5);
+  });
+});
+
+describe('insights en el Resumen v2: por rol y ruta, y un lector caído no se omite', () => {
+  const todos = (): Record<string, () => Promise<Insight[]>> => Object.fromEntries(
+    FICHAS_CINCO_AGENTES.map((f) => [f.insight, vi.fn(async () => [mk(f.insight, `i-${f.insight}`, 'atencion')])]),
+  );
+
+  it('el dueño sin perfil ve los cinco agentes; el encargado, solo los de operación (los de dinero no)', () => {
+    expect(agentesInsightVisibles('flota_admin').sort()).toEqual(['carta-porte', 'conductores', 'liquidacion', 'peajes', 'vigia']);
+    expect(agentesInsightVisibles('encargado').sort()).toEqual(['carta-porte', 'conductores', 'vigia']);
+    expect(agentesInsightVisibles('rol-desconocido')).toEqual([]);
+  });
+
+  it('un agente que el rol no ve NO se lee (su lector ni se llama) y no sale en el resumen', async () => {
+    const lectores = todos();
+    const { principales, fallidos } = await leerInsightsResumen('t1', 'encargado', null, lectores);
+    expect(lectores.liquidacion).not.toHaveBeenCalled();
+    expect(lectores.peajes).not.toHaveBeenCalled();
+    expect(lectores['carta-porte']).toHaveBeenCalledTimes(1);
+    expect(principales.map((i) => i.agente).sort()).toEqual(['carta-porte', 'conductores', 'vigia']);
+    expect(fallidos).toEqual([]);
+  });
+
+  it('un lector que falla queda en `fallidos`: no se omite en silencio', async () => {
+    const lectores = { ...todos(), peajes: async () => { throw new Error('boom'); } };
+    const { principales, fallidos } = await leerInsightsResumen('t1', 'flota_admin', null, lectores);
+    expect(fallidos).toEqual(['peajes']);
+    expect(principales.map((i) => i.agente)).not.toContain('peajes');
+    expect(principales).toHaveLength(4);
+  });
+
+  it('un lector caído de un agente que el rol no ve tampoco se confiesa (no se leyó)', async () => {
+    const lectores = { ...todos(), liquidacion: async () => { throw new Error('boom'); } };
+    expect((await leerInsightsResumen('t1', 'encargado', null, lectores)).fallidos).toEqual([]);
+  });
+
+  it('resumirInsights: el más grave de cada agente visible, nulos a `fallidos`', () => {
+    const r = resumirInsights({
+      liquidacion: [mk('liquidacion', 'a', 'info'), mk('liquidacion', 'b', 'urgente')], peajes: null, 'carta-porte': [], vigia: [], conductores: [],
+    }, ['liquidacion', 'peajes', 'carta-porte']);
+    expect(r.principales.map((i) => i.id)).toEqual(['b']);
+    expect(r.fallidos).toEqual(['peajes']);
   });
 });

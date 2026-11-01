@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════════════════
 # Enciende / apaga el rediseño (UI v2) para UNA flota: fila de `tenant_ui` (migración 0939 o la que la sustituya).
+# DESDE EL 30-OCT-2026 v2 ES LA OMISIÓN para todas las flotas (`VERSION_UI_POR_OMISION` en perfil_tenant.ts): sin fila = v2.
+# Por eso --revertir ya NO borra la fila: la fija en `v1` (salida explícita de ESA flota). Para volver a la omisión: aplicar.
 #
 #   DATABASE_URL="postgres://..." scripts/ui/aplicar-ui-v2.sh [--produccion] <UUID>              # v2 para la flota
-#   DATABASE_URL="postgres://..." scripts/ui/aplicar-ui-v2.sh --revertir [--produccion] <UUID>   # borra la fila (= v1)
+#   DATABASE_URL="postgres://..." scripts/ui/aplicar-ui-v2.sh --revertir [--produccion] <UUID>   # fija la fila en v1 (opt-out de esa flota)
 #   DATABASE_URL="postgres://..." scripts/ui/aplicar-ui-v2.sh --verificar <UUID>                 # solo lee
 #   scripts/ui/aplicar-ui-v2.sh --env-file <ruta> ...                                            # DATABASE_URL desde archivo
 #
@@ -87,11 +89,13 @@ SQL
 else
   psql "$DB" -X -v ON_ERROR_STOP=1 -v tenant="$TENANT" <<'SQL'
 begin;
-delete from public.tenant_ui where tenant_id = :'tenant'::uuid;
-select 'ui' as que, count(*)::text as valor from public.tenant_ui where tenant_id = :'tenant'::uuid;
+insert into public.tenant_ui (tenant_id, version, cambiado_por, cambiado_en)
+values (:'tenant'::uuid, 'v1', null, now())
+on conflict (tenant_id) do update set version = 'v1', cambiado_por = null, cambiado_en = now();
+select 'ui' as que, version as valor, cambiado_en::text from public.tenant_ui where tenant_id = :'tenant'::uuid;
 commit;
 SQL
-  echo "✔ UI v2 revertida (la flota vuelve a v1)."
+  echo "✔ UI v1 fijada para la flota (opt-out explícito de la omisión v2)."
   ACCION_REVERSA=""
 fi
 if [ -n "$ENV_FILE" ]; then ARG_ENV=" --env-file $ENV_FILE"; PREFIJO=""; else ARG_ENV=""; PREFIJO='DATABASE_URL="$DATABASE_URL" '; fi

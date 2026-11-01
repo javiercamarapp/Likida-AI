@@ -1,5 +1,5 @@
-import Link from 'next/link';
-import { ChevronRight, Download, MessageCircle, RotateCcw, Truck } from 'lucide-react';
+import { ChevronLeft, Download, MessageCircle, RotateCcw } from 'lucide-react';
+import { BotonEnlace, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 import type { LiquidacionDetalle } from '@/lib/likida/analytics';
 import type { ResumenLaboral } from '@/lib/likida/laboral/pagadero';
 import { filasDeducibilidad } from '@/lib/likida/liquidacion/deducibilidad';
@@ -7,16 +7,17 @@ import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { mxn, litros, fechaMx, fechaCorta } from '@/lib/formato';
 import { StatusPill, type Estado } from '@/app/admin/ui/kit';
 import { FormaConAviso, type ResultadoAccion } from '@/app/admin/ui/forma';
-import { BarraPagina } from '../resumen-visual';
 import type { BuscarCatalogo } from '../combo-catalogo';
 import { PanelRevision, type GastoAjustable } from './revision-panel';
 import { FormaReasignar } from './reasignar-forma';
 import type { RevisionDetalle } from '@/lib/likida/revision';
 import {
   BTN_PRIMARIO, BTN_SECUNDARIO, ESTILO_PRIMARIO, ESTILO_SECUNDARIO,
-  Kpi, Dato, Rotulo, LineaDeTiempo, Diferencia, PillRenglon, TH,
+  Dato, Rotulo, LineaDeTiempo, Diferencia, PillRenglon, TH,
   estadoRenglon, etiquetaFormaPago, TIPOS_TOPE, type Hito,
 } from './vista';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL DETALLE DE LIQUIDACIÓN, EN PANTALLA (v2, 22-ago-2026).
@@ -150,36 +151,30 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
   const sumaRenglones = d.gastos.reduce((s, g) => s + g.monto, 0);
 
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Truck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo={
-            <nav aria-label="Ruta de navegación" className="flex items-center gap-1.5 min-w-0">
-              <Link href={`/dashboard/viajes${sufijo}`} className="hover:opacity-70 transition-opacity" style={{ color: 'var(--muted)' }}>Viajes</Link>
-              <ChevronRight width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--faint)' }} aria-hidden />
-              <span className="truncate">{d.folio}</span>
-            </nav>
-          }
-          derecha={
-            <div className="flex items-center gap-2 flex-wrap justify-end">
-              {wa && (
-                <a href={wa} target="_blank" rel="noopener noreferrer" className={BTN_SECUNDARIO} style={ESTILO_SECUNDARIO}>
-                  <MessageCircle width={13} height={13} strokeWidth={1.75} aria-hidden /> Ver WhatsApp
-                </a>
-              )}
-              {/* El PDF existía, estaba autenticado y no había forma de llegar a
-                  él: `pdf_url` ni se seleccionaba (auditoría 5, frontend, MEDIO 5). */}
-              {pdfHref && (
-                <a href={pdfHref} className={BTN_PRIMARIO} style={ESTILO_PRIMARIO}>
-                  <Download width={13} height={13} strokeWidth={1.75} aria-hidden /> Descargar PDF
-                </a>
-              )}
-            </div>
-          }
-        />
-
-        <div className="px-5 py-5 flex-1 space-y-4">
+    <MarcoPagina
+      area="Viajes"
+      titulo={`Liquidación del viaje ${d.folio}`}
+      apoyo="Lo anticipado, lo comprobado y la diferencia del viaje, con el fundamento de cada cifra."
+      acciones={(
+        <>
+          <BotonEnlace tamano="sm" href={`/dashboard/viajes${sufijo}`} icono={<ChevronLeft width={13} height={13} strokeWidth={1.75} aria-hidden />}>Viajes</BotonEnlace>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+                {wa && (
+                  <a href={wa} target="_blank" rel="noopener noreferrer" className={`rv-btn rv-btn--secondary ${BTN_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>
+                    <MessageCircle width={13} height={13} strokeWidth={1.75} aria-hidden /> Ver WhatsApp
+                  </a>
+                )}
+                {/* El PDF existía, estaba autenticado y no había forma de llegar a
+                    él: `pdf_url` ni se seleccionaba (auditoría 5, frontend, MEDIO 5). */}
+                {pdfHref && (
+                  <a href={pdfHref} className={`rv-btn rv-btn--primary ${BTN_PRIMARIO}`} style={ESTILO_PRIMARIO}>
+                    <Download width={13} height={13} strokeWidth={1.75} aria-hidden /> Descargar PDF
+                  </a>
+                )}
+              </div>
+        </>
+      )}
+    >
           {/* No se pudo leer el estado de revisión (BE-A1/FE-M2): esta pantalla
               NO puede afirmar que la liquidación está vigente, porque podría
               estar rechazada y no lo sabemos. Va PRIMERO — antes que cualquier
@@ -206,12 +201,12 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="min-w-0">
                 <div className="flex items-center gap-2.5 flex-wrap">
-                  <h1 className="font-display text-[24px] font-semibold leading-tight tabular">{d.folio}</h1>
+                  <p className="font-display text-[20px] font-semibold leading-tight tabular">{d.folio}</p>
                   <StatusPill estado={estatus.estado}>{estatus.label}</StatusPill>
                 </div>
                 {/* Hora de México, no UTC: `.slice(0,10)` fechaba en agosto una
                     liquidación cerrada el 31 de julio a las 20:00 (ver formato.ts). */}
-                <p className="text-[12.5px] mt-1" style={{ color: 'var(--muted)' }}>
+                <p className="text-[12px] mt-1" style={{ color: 'var(--muted)' }}>
                   Liquidación cerrada el {fechaMx(d.creadoEn)}
                 </p>
               </div>
@@ -240,29 +235,32 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
           </section>
 
           {/* ── KPIs ── */}
-          <div className="grid grid-cols-2 min-[1100px]:grid-cols-5 gap-3">
-            <Kpi titulo="Anticipo" valor={mxn(d.totalAnticipo)} nota="entregado al operador" />
-            <Kpi titulo="Comprobado" valor={mxn(d.totalComprobado)}
-              nota={d.comprobantesCuadran ? `${comprobantes(d.gastos.length)} válidos` : 'total persistido al cierre'} />
-            <Kpi
-              titulo="Diferencia"
+          <TiraCifras sello={selloHoy('Liquidación del viaje')}>
+            <Cifra etiqueta="Anticipo" valor={mxn(d.totalAnticipo)} nota="entregado al operador" info="liquidacion_detalle.anticipo" />
+            <Cifra etiqueta="Comprobado" valor={mxn(d.totalComprobado)}
+              nota={d.comprobantesCuadran ? `${comprobantes(d.gastos.length)} válidos` : 'total persistido al cierre'} info="liquidacion_detalle.comprobado" />
+            <Cifra
+              etiqueta="Diferencia"
               valor={d.diferencia === 0 ? 'Cuadra exacto' : mxn(Math.abs(d.diferencia))}
               tono={d.diferencia === 0 ? 'ok' : d.diferencia > 0 ? 'warn' : 'bad'}
               nota={d.diferencia === 0 ? 'anticipo = comprobado' : d.diferencia > 0 ? 'sobrante · a favor de la empresa' : 'faltante · a favor del operador'}
+              info="liquidacion_detalle.diferencia"
             />
-            <Kpi
-              titulo="Sin CFDI"
+            <Cifra
+              etiqueta="Sin CFDI"
               valor={difsSinCfdi.length === 0 ? mxn(0) : sinCfdiCruzable ? mxn(montoSinCfdi) : '—'}
               tono={difsSinCfdi.length > 0 ? 'warn' : undefined}
+              info="liquidacion_detalle.sin_cfdi"
               nota={difsSinCfdi.length === 0 ? 'todo lo que lo requería trae factura' : sinCfdiCruzable ? `${comprobantes(idsSinCfdi.size)} sin factura` : `${comprobantes(difsSinCfdi.length)} — monto no cruzable`}
             />
-            <Kpi
-              titulo="Sobre tope"
+            <Cifra
+              etiqueta="Sobre tope"
               valor={mxn(excedenteTope)}
               tono={difsTope.length > 0 ? 'warn' : undefined}
+              info="liquidacion_detalle.sobre_tope"
               nota={difsTope.length === 0 ? 'nada excede política ni tope fiscal' : `excedente en ${comprobantes(difsTope.length)}`}
             />
-          </div>
+          </TiraCifras>
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
             <div className="xl:col-span-2 space-y-4">
@@ -271,7 +269,7 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
                   × litros y esa cuota no la tenemos. `ieps` solo puede venir de filas
                   viejas escritas antes del cambio; se conserva para no ocultarlas. */}
               <section className="card p-4">
-                <h2 className="font-display text-[15px] font-semibold mb-2">Acreditable / recuperable</h2>
+                <TituloRecuadro info="liquidacion_detalle.acreditable" className="mb-2">Acreditable / recuperable</TituloRecuadro>
                 <div className="overflow-x-auto -mx-1">
                   <table className="w-full border-collapse">
                     <thead>
@@ -340,10 +338,10 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
               {/* ── Diferencias en lenguaje humano ── */}
               {d.diferencias.length > 0 && (
                 <section className="card p-4">
-                  <h2 className="font-display text-[15px] font-semibold mb-1">
+                  <TituloRecuadro info="liquidacion_detalle.diferencias" className="mb-1">
                     Diferencias detectadas
                     <span className="cifra-mono text-[12px] font-normal ml-2" style={{ color: 'var(--muted)' }}>{d.diferencias.length}</span>
-                  </h2>
+                  </TituloRecuadro>
                   <ul>
                     {d.diferencias.map((df, i) => <Diferencia key={i} nota={df.nota} monto={df.monto} />)}
                   </ul>
@@ -353,7 +351,7 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
 
             {/* ── Línea de tiempo ── */}
             <section className="card p-4 xl:self-start">
-              <h2 className="font-display text-[15px] font-semibold mb-3">Línea de tiempo</h2>
+              <TituloRecuadro info="liquidacion_detalle.linea_tiempo" className="mb-3">Línea de tiempo</TituloRecuadro>
               <LineaDeTiempo hitos={hitos} />
               <p className="text-[11px] mt-3 pt-3" style={{ color: 'var(--faint)', borderTop: '1px dashed var(--line2)' }}>
                 Horas de recepción por WhatsApp, en hora de México. Un hito sin sello no se estima.
@@ -367,9 +365,9 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
               contralor no tenga que sumar la columna con el dedo. */}
           <section className="card p-4">
             <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
-              <h2 className="font-display text-[15px] font-semibold">Comprobantes</h2>
+              <TituloRecuadro info="liquidacion_detalle.comprobantes">Comprobantes</TituloRecuadro>
               {d.comprobantesExcluidos > 0 && (
-                <span className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+                <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
                   {d.comprobantesExcluidos === 1
                     ? '1 comprobante excluido del total (duplicado o monto inválido); está explicado en las diferencias.'
                     : `${d.comprobantesExcluidos} comprobantes excluidos del total (duplicados o montos inválidos); están explicados en las diferencias.`}
@@ -406,13 +404,13 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
                           <td className="px-3 py-2.5 font-medium whitespace-nowrap">
                             {etiqueta(g)}
                             {g.imagenUrl && (
-                              <span className="block text-[10.5px] font-normal" style={{ color: 'var(--faint)' }}>Foto archivada</span>
+                              <span className="block text-[11px] font-normal" style={{ color: 'var(--faint)' }}>Foto archivada</span>
                             )}
                           </td>
                           <td className="px-3 py-2.5 min-w-0">
                             <span className="cifra-mono block" style={{ color: g.folio ? 'var(--ink)' : 'var(--faint)' }}>{g.folio ?? '—'}</span>
                             {g.cfdiUuid && (
-                              <span className="cifra-mono block text-[10.5px] truncate max-w-[260px]" style={{ color: 'var(--faint)' }} title={g.cfdiUuid}>
+                              <span className="cifra-mono block text-[11px] truncate max-w-[260px]" style={{ color: 'var(--faint)' }} title={g.cfdiUuid}>
                                 {g.cfdiUuid}
                               </span>
                             )}
@@ -427,7 +425,7 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
                   </tbody>
                   <tfoot>
                     <tr>
-                      <th scope="row" colSpan={4} className="px-3 pt-3 pb-1 text-left text-[12.5px] font-medium">
+                      <th scope="row" colSpan={4} className="px-3 pt-3 pb-1 text-left text-[12px] font-medium">
                         {d.comprobantesCuadran ? 'Total comprobado' : 'Suma de los renglones'}
                         <span className="font-normal ml-2" style={{ color: 'var(--muted)' }}>{comprobantes(d.gastos.length)}</span>
                       </th>
@@ -459,7 +457,7 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
             <section className="card p-4">
               <div className="flex items-center gap-2 mb-1">
                 <RotateCcw width={14} height={14} strokeWidth={1.75} aria-hidden />
-                <h2 className="font-display text-[15px] font-semibold m-0">Reabrir este viaje</h2>
+                <TituloRecuadro info="liquidacion_detalle.reabrir" className="m-0">Reabrir este viaje</TituloRecuadro>
               </div>
               <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>
                 Vuelve a aceptar comprobantes por WhatsApp. <strong>Borra la liquidación actual y su PDF</strong> — si
@@ -478,9 +476,7 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
           <p className="text-[11px] pt-2" style={{ color: 'var(--faint)' }}>
             {LEYENDA_CORTA}
           </p>
-        </div>
-      </div>
-    </main>
+    </MarcoPagina>
   );
 }
 
@@ -494,7 +490,7 @@ export function SeccionLaboral({ laboral }: { laboral: ResumenLaboral }) {
     <div className="mt-3 pt-3" style={{ borderTop: '1px dashed var(--line2)' }}>
       <Rotulo>Lo que se le reembolsa al operador</Rotulo>
       <div className="flex items-start justify-between gap-4 mt-1.5">
-        <p className="text-[12.5px] min-w-0">{laboral.texto}</p>
+        <p className="text-[12px] min-w-0">{laboral.texto}</p>
         {laboral.montoPagadero > 0 && (
           <span className="cifra-mono text-[13px] font-medium whitespace-nowrap">{mxn(laboral.montoPagadero)}</span>
         )}

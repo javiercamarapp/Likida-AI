@@ -18,6 +18,7 @@ import type { Metadata } from 'next';
 import { ARTICULOS } from '@/lib/likida/marketing/articulos';
 import { fechaMx } from '@/lib/formato';
 import { PulsoSitio } from '../calculadora/pulso';
+import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
 
 export const metadata: Metadata = {
   title: 'Blog — Likida',
@@ -27,41 +28,27 @@ export const metadata: Metadata = {
 
 export default function Blog() {
   return (
-    <main className="mx-auto max-w-2xl px-5 py-10 text-[15px] leading-relaxed" style={{ color: 'var(--muted)' }}>
+    <MarcoPublico
+      rotulo="Blog"
+      titulo="Likida"
+      apoyo="Fiscal de transporte sin inflar cifras. Cada pieza cita su fundamento; lo que el corpus no cubre, se manda al contador."
+    >
       <PulsoSitio pagina="blog" />
-      <header className="pb-6" style={{ borderBottom: '1px solid var(--line)' }}>
-        <p className="text-xs font-medium uppercase tracking-wider">Blog</p>
-        <h1 className="mt-2 text-2xl font-semibold" style={{ color: 'var(--ink)' }}>Likida</h1>
-        <p className="mt-3 text-sm">
-          Fiscal de transporte sin inflar cifras. Cada pieza cita su fundamento; lo que el corpus no cubre, se manda al contador.
-        </p>
-      </header>
-
-      <ul className="mt-8 space-y-8">
+      <ul className="rv-pub__lista rv-pub__sec">
         {ARTICULOS.map((a) => (
           <li key={a.slug}>
-            <p className="text-xs" style={{ color: 'var(--muted)' }}>{fechaMx(a.fecha)}</p>
-            <Link
-              href={`/blog/${a.slug}`}
-              className="mt-1 block text-lg font-semibold underline-offset-2 hover:underline"
-              style={{ color: 'var(--ink)' }}
-            >
-              {a.titulo}
-            </Link>
-            <p className="mt-2 text-sm">{a.resumen}</p>
+            <p className="rv-pub__nota">{fechaMx(a.fecha)}</p>
+            <h2 className="rv-pub__item-titulo">
+              <Link href={`/blog/${a.slug}`}>{a.titulo}</Link>
+            </h2>
+            <p className="rv-pub__resumen">{a.resumen}</p>
           </li>
         ))}
       </ul>
 
-      <footer className="mt-12 pt-6 text-sm" style={{ borderTop: '1px solid var(--line)' }}>
-        <p>
-          ¿Cuánto estás dejando ir en peajes y diésel?{' '}
-          <Link href="/calculadora" className="underline underline-offset-2" style={{ color: 'var(--ink)' }}>
-            Calcúlalo con tus números
-          </Link>
-          .
-        </p>
-      </footer>
-    </main>
+      <p className="rv-pub__prosa rv-pub__sec">
+        ¿Cuánto estás dejando ir en peajes y diésel? <Link href="/calculadora">Calcúlalo con tus números</Link>.
+      </p>
+    </MarcoPublico>
   );
 }

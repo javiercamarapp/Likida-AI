@@ -5,9 +5,10 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { resolverTenantEfectivo, type TenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { provisionarUsuario } from '@/lib/auth/provisionar';
 import {
-  validarInvitacion, descifrarErrorProvision, esCorreoYaRegistrado, mensajeAltaNeutro, ROLES_INVITABLES,
+  validarInvitacion, descifrarErrorProvision, esCorreoYaRegistrado, mensajeAltaNeutro, ROLES_INVITABLES, rolesInvitablesPara, type ContextoInvitacion,
 } from '@/lib/auth/invitar';
 import {
   cambiarRolUsuario, desactivarUsuario, reactivarUsuario, reenviarAcceso, enviarCorreoDeAcceso, cerrarSesionesUsuario,
@@ -20,6 +21,8 @@ import { logger } from '@/lib/logger';
 import { conPisoDeTiempo } from '../../login/respuesta_otp';
 import { VistaUsuarios, type UsuarioRow } from './vista';
 import type { ResultadoForma } from './forma';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Usuarios del equipo' };
 
 export const dynamic = 'force-dynamic';
 
@@ -83,6 +86,11 @@ function fraseAlta(email: string): string {
   return `Si es una cuenta nueva, el correo de acceso le llega a ${email} en unos minutos; si no lo recibe, pásale tú la liga del panel, ${appUrl()}, o usa «Reenviar acceso».`;
 }
 
+/** Desde dónde se invita: el rol REAL de la sesión (un superadmin que previsualiza `?rol=flota_admin` NO invita `nomina`) y el perfil de la flota. */
+function contextoDeInvitacion(s: { rol: string; rolReal?: string }, perfil: string | null | undefined): ContextoInvitacion {
+  return { rolInvitador: s.rolReal ?? s.rol, perfil };
+}
+
 /**
  * La puerta común de las acciones que ADMINISTRAN: sesión re-resuelta, ruta
  * visible y `puedeAdministrar`. Devuelve el error listo para pantalla.
@@ -126,8 +134,9 @@ export default async function UsuariosPage({
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId, userId, rol } = await resolverTenantEfectivo(RUTA, sp);
+  const { tenantId, userId, rol, rolReal } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
+  const perfilDeLaFlota = await perfilDeTenant(tenantId);
 
   // El catch NO finge equipo vacío: `null` y la vista dice que no se pudo
   // leer — una base caída no es "no hay cuentas".
@@ -150,6 +159,8 @@ export default async function UsuariosPage({
       return { ok: false, error: `Demasiadas invitaciones en una hora (tope ${TOPE_INVITACIONES_HORA}). Espera un rato y vuelve a intentar.` };
     }
 
+    // `nomina` (0949) solo se invita a una flota con perfil `cinco_agentes` y solo por su dueño (rol REAL de la sesión).
+    const perfil = await perfilDeTenant(s.tenantId);
     let v;
     try {
       // La validación del navegador (required, type=email) avisa temprano;
@@ -162,7 +173,7 @@ export default async function UsuariosPage({
         nombre: String(fd.get('nombre') ?? ''),
         rol: String(fd.get('rol') ?? ''),
         telefono: String(fd.get('telefono') ?? ''),
-      });
+      }, contextoDeInvitacion(s, perfil));
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'invitar al usuario') };
     }
@@ -287,6 +298,8 @@ export default async function UsuariosPage({
       puedeInvitar={puedeAdministrar(rol)}
       // Como PROP y no como import del componente cliente — ver forma.tsx.
       roles={ROLES_INVITABLES}
+      // Solo el formulario de invitar ofrece `nomina` (y solo con perfil + dueño); el cambio de rol sigue con la lista de siempre.
+      rolesInvitar={rolesInvitablesPara(contextoDeInvitacion({ rol, rolReal }, perfilDeLaFlota))}
       acciones={{ invitar: invitarUsuario, cambiarRol, darDeBaja, reactivar, reenviarAcceso: reenviar, cerrarSesiones }}
     />
   );

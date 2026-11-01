@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { supabaseServer } from '@/lib/supabase/server';
@@ -18,15 +19,23 @@ import '../ui-v2/shell.css';
 import '../ui-v2/carga.css';
 // Piezas del carril B (botones, chips, drawers, KPI, gráficas, recorrido) y páginas del carril C. Nadie las importaba todavía.
 import '../ui-v2/componentes.css';
+import '../ui-v2/overlay.css';
+import '../ui-v2/piezas.css';
 import '../ui-v2/graficas.css';
+import '../ui-v2/datos.css';
 import '../ui-v2/movimiento.css';
+import '../ui-v2/onboarding.css';
+import '../ui-v2/chat.css';
 import '../ui-v2/paginas.css';
 import '../ui-v2/paginas-dominio.css';
 import { PulsoProducto } from './pulso-producto';
 import { AvisoLegalPendiente } from './aviso-legal';
 import { TourProvider } from '../ui-v2/movimiento/tour';
-import { RECORRIDOS_DASHBOARD, rutasDeRecorridos } from './recorridos/dueno';
+import { onboardingDeLaSesion } from './recorridos';
 import { insigniaDeCookie, nombreCookieAvance } from './puesta-en-marcha/progreso';
+
+// Título de la pestaña: cada pantalla exporta su nombre (el del menú) y la plantilla le pone «· Likida».
+export const metadata: Metadata = { title: { default: 'Likida — Liquidación de viajes', template: '%s · Likida' } };
 
 export const dynamic = 'force-dynamic';
 
@@ -54,8 +63,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // que eligió en el selector; con `?tenant=` el layout no ve el parámetro (limitación
   // de Next), pero las PÁGINAS sí aplican el perfil de la flota que miran.
   const tenantDelMenu = sesion.tenantId ?? (sesion.rol === 'superadmin' ? await leerSeleccionFlota() : null);
-  // La versión de interfaz (`tenant_ui`; sin fila = v1) se lee en el MISMO Promise.all que el perfil. `versionUi` nunca lanza
-  // y falla hacia v1: un bache de lectura deja el panel de siempre, no el nuevo.
+  // La versión de interfaz (`tenant_ui`; sin fila = v2, por omisión) se lee en el MISMO Promise.all que el perfil. `versionUi` nunca lanza:
+  // un bache de lectura sin valor previo cae en v2; solo una fila `v1` explícita deja el panel anterior.
   const jarra = await cookies();
   const [perfil, ui] = await Promise.all([
     perfilDeTenant(tenantDelMenu),
@@ -88,7 +97,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // solo. Los pasos del recorrido se limitan a las rutas que ESTE rol ve en ESTE perfil.
   const v2 = ui === 'v2';
   const avance = v2 && perfil && tenantDelMenu ? insigniaDeCookie(jarra.get(nombreCookieAvance(tenantDelMenu))?.value) : null;
-  const rutasDelRecorrido = rutasDeRecorridos().filter((r) => puedeVerRuta(sesion.rol, r, perfil));
+  const onb = v2 ? onboardingDeLaSesion(sesion.rol, perfil) : null;
+  const rutasDelRecorrido = (onb?.rutas ?? []).filter((r) => puedeVerRuta(sesion.rol, r, perfil));
   const contenido = (
     <>
       {/* El pulso de producto (0251): un POST de fuego-y-olvido por cambio de
@@ -100,19 +110,23 @@ export default async function DashboardLayout({ children }: { children: React.Re
     </>
   );
 
-  return (
+  const marco = (
     <Chrome
       nombre={sesion.nombre} rol={sesion.rol} cerrarSesion={cerrarSesion} usoIa={usoIa} perfil={perfil}
       {...(v2 && avance ? { insignias: { '/dashboard/puesta-en-marcha': avance } } : {})}
     >
-      {v2 && perfil ? (
-        <TourProvider
-          recorridos={RECORRIDOS_DASHBOARD} ambito={`${tenantDelMenu ?? 'sin'}:${sesion.userId}`}
-          soloLectura={sesion.rol === 'superadmin'} rutasPermitidas={rutasDelRecorrido}
-        >
-          {contenido}
-        </TourProvider>
-      ) : contenido}
+      {contenido}
     </Chrome>
   );
+
+  // El motor del recorrido envuelve TODO el chrome (no solo la página): el menú Guía vive en la barra superior y necesita su contexto.
+  return onb && onb.principal ? (
+    <TourProvider
+      recorridos={onb.recorridos} ambito={`${tenantDelMenu ?? 'sin'}:${sesion.userId}`}
+      soloLectura={sesion.rol === 'superadmin'} rutasPermitidas={rutasDelRecorrido}
+      principal={onb.principal} asistente={onb.asistente} pistas={onb.pistas} invitacion={process.env.ONBOARDING_INVITACION === '1' && jarra.get('likida_onb_visto')?.value !== '1'}
+    >
+      {marco}
+    </TourProvider>
+  ) : marco;
 }

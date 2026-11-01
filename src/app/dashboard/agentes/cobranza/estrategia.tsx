@@ -58,7 +58,7 @@ export function FormaEstrategia({ config, ejemplo, guardar }: {
     <div className="grid lg:grid-cols-2 gap-5">
       <form action={accion} className="space-y-3.5">
         <div>
-          <label htmlFor="cob-tiers" className="etiqueta-mono text-[10px] uppercase block mb-1" style={{ color: 'var(--faint)' }}>
+          <label htmlFor="cob-tiers" className="etiqueta-mono text-[11px] uppercase block mb-1" style={{ color: 'var(--faint)' }}>
             Tiers de insistencia (días sin comprobar)
           </label>
           <input id="cob-tiers" name="tiers" value={tiersTexto} onChange={(e) => setTiersTexto(e.target.value)}
@@ -72,7 +72,7 @@ export function FormaEstrategia({ config, ejemplo, guardar }: {
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label htmlFor="cob-inicio" className="etiqueta-mono text-[10px] uppercase block mb-1" style={{ color: 'var(--faint)' }}>
+            <label htmlFor="cob-inicio" className="etiqueta-mono text-[11px] uppercase block mb-1" style={{ color: 'var(--faint)' }}>
               Desde
             </label>
             <select id="cob-inicio" name="horaInicio" value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)}
@@ -81,7 +81,7 @@ export function FormaEstrategia({ config, ejemplo, guardar }: {
             </select>
           </div>
           <div>
-            <label htmlFor="cob-fin" className="etiqueta-mono text-[10px] uppercase block mb-1" style={{ color: 'var(--faint)' }}>
+            <label htmlFor="cob-fin" className="etiqueta-mono text-[11px] uppercase block mb-1" style={{ color: 'var(--faint)' }}>
               Hasta
             </label>
             <select id="cob-fin" name="horaFin" value={horaFin} onChange={(e) => setHoraFin(e.target.value)}
@@ -92,7 +92,7 @@ export function FormaEstrategia({ config, ejemplo, guardar }: {
         </div>
 
         <div>
-          <span className="etiqueta-mono text-[10px] uppercase block mb-1" style={{ color: 'var(--faint)' }}>
+          <span className="etiqueta-mono text-[11px] uppercase block mb-1" style={{ color: 'var(--faint)' }}>
             Días permitidos (hora de México)
           </span>
           <div className="flex gap-1.5">
@@ -114,7 +114,7 @@ export function FormaEstrategia({ config, ejemplo, guardar }: {
         </div>
 
         <div>
-          <label htmlFor="cob-instrucciones" className="etiqueta-mono text-[10px] uppercase block mb-1" style={{ color: 'var(--faint)' }}>
+          <label htmlFor="cob-instrucciones" className="etiqueta-mono text-[11px] uppercase block mb-1" style={{ color: 'var(--faint)' }}>
             Instrucciones del mensaje <span className="normal-case">({instrucciones.length}/300)</span>
           </label>
           <textarea id="cob-instrucciones" name="instrucciones" value={instrucciones} maxLength={300} rows={3}
@@ -125,7 +125,7 @@ export function FormaEstrategia({ config, ejemplo, guardar }: {
         </div>
 
         <div>
-          <label htmlFor="cob-firma" className="etiqueta-mono text-[10px] uppercase block mb-1" style={{ color: 'var(--faint)' }}>
+          <label htmlFor="cob-firma" className="etiqueta-mono text-[11px] uppercase block mb-1" style={{ color: 'var(--faint)' }}>
             Firma <span className="normal-case">({firma.length}/80)</span>
           </label>
           <input id="cob-firma" name="firma" value={firma} maxLength={80} onChange={(e) => setFirma(e.target.value)}
@@ -142,14 +142,14 @@ export function FormaEstrategia({ config, ejemplo, guardar }: {
 
       {/* La vista previa: el payload literal, no una maqueta */}
       <div>
-        <div className="etiqueta-mono text-[10px] uppercase mb-1.5 flex items-center gap-1.5" style={{ color: 'var(--faint)' }}>
+        <div className="etiqueta-mono text-[11px] uppercase mb-1.5 flex items-center gap-1.5" style={{ color: 'var(--faint)' }}>
           <MessageCircle width={11} height={11} strokeWidth={2} />
           {ejemplo
             ? `Así se lee en WhatsApp — el siguiente de la cola (${ejemplo.dias} días)`
             : 'Así se lee en WhatsApp — plantilla con el primer tier'}
         </div>
         {'error' in borrador ? (
-          <div className="rounded-xl hairline p-4 text-[12.5px]" style={{ background: 'var(--surface)', color: 'var(--warn)' }}>
+          <div className="rounded-xl hairline p-4 text-[12px]" style={{ background: 'var(--surface)', color: 'var(--warn)' }}>
             {borrador.error}
           </div>
         ) : (
@@ -171,7 +171,7 @@ function BotonGuardar() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="text-[12.5px] font-medium px-3.5 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary text-[12px] font-medium px-3.5 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       {pending ? 'Guardando…' : 'Guardar estrategia'}
     </button>

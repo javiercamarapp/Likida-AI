@@ -43,7 +43,7 @@ const FRENO_MS = 200;
 export function ComboCatalogo({
   tipo, name, buscar, etiquetaVacia, requerido = false, valorInicial = null,
   textoInicial = '', total = null, className, estilo, autoComplete = 'off', 'aria-label': ariaLabel,
-  campoId,
+  campoId, enBarra = false,
 }: {
   tipo: TipoCatalogo;
   /** El `name` del campo del formulario — lo lleva el hidden con el id. */
@@ -69,6 +69,9 @@ export function ComboCatalogo({
   /** `id` del input VISIBLE, para que el `<label htmlFor>` del host siga
    *  apuntando a algo enfocable — el hidden que lleva el `name` no lo es. */
   campoId?: string;
+  /** En una barra de filtros GET (LF): los avisos pasan a texto para lectores (la barra es de UNA fila) y elegir un registro —o vaciar el
+   *  campo— envía la forma, sin botón «Aplicar». */
+  enBarra?: boolean;
 }) {
   const listaId = useId();
   const [texto, setTexto] = useState(textoInicial);
@@ -103,13 +106,29 @@ export function ComboCatalogo({
     temporizador.current = setTimeout(() => pedir(v), FRENO_MS);
   };
 
+  // En barra: el id resuelto (o el campo vaciado) envía el formulario. El hidden ya trae el valor nuevo cuando corre el efecto.
+  const entrada = useRef<HTMLInputElement>(null);
+  const idEnviado = useRef<string | null>(valorInicial);
+  useEffect(() => {
+    if (!enBarra || id === idEnviado.current) return;
+    if (id === null && texto.trim() !== '') return; // texto a medias: no se adivina ni se envía
+    // Solo con coincidencia ÚNICA y que no sea prefijo de otro registro («Juan» con «Juan Carlos» en la lista espera: Intro envía).
+    if (id !== null) {
+      const t = texto.trim().toLocaleLowerCase('es');
+      if (opciones.some((o) => o.id !== id && o.etiqueta.toLocaleLowerCase('es').startsWith(t))) return;
+    }
+    const espera = setTimeout(() => { idEnviado.current = id; entrada.current?.form?.requestSubmit(); }, 400);
+    return () => clearTimeout(espera);
+  }, [enBarra, id, texto, opciones]);
+
   const sinResolver = texto.trim() !== '' && id === null;
   const ambiguo = sinResolver && coincidencias(opciones, texto).length > 1;
 
   return (
-    <div>
+    <div className={enBarra ? 'rv-fl__combo' : undefined}>
       <input type="hidden" name={name} value={id ?? ''} />
       <input
+        ref={entrada}
         id={campoId}
         type="text"
         role="combobox"
@@ -123,24 +142,24 @@ export function ComboCatalogo({
         placeholder={etiquetaVacia}
         onFocus={() => { if (opciones.length === 0) pedir(texto); }}
         onChange={(e) => alEscribir(e.target.value)}
-        className={className}
-        style={estilo}
+        className={enBarra ? 'border-0 bg-transparent' : className}
+        style={enBarra ? undefined : estilo}
       />
       <datalist id={listaId}>
         {opciones.map((o) => <option key={o.id} value={o.etiqueta} />)}
       </datalist>
       {fallo ? (
-        <p className="text-[11px] mt-1" style={{ color: 'var(--bad)' }}>
+        <p className={enBarra ? 'rv-sr' : 'text-[11px] mt-1'} style={enBarra ? undefined : { color: 'var(--bad)' }} role={enBarra ? 'status' : undefined}>
           No se pudo buscar en el catálogo — vuelve a escribir en un momento.
         </p>
       ) : sinResolver ? (
-        <p className="text-[11px] mt-1" style={{ color: 'var(--warn)' }}>
+        <p className={enBarra ? 'rv-sr' : 'text-[11px] mt-1'} style={enBarra ? undefined : { color: 'var(--warn)' }} role={enBarra ? 'status' : undefined}>
           {ambiguo
             ? 'Hay varios con ese nombre: elige uno de la lista, con su teléfono o número.'
             : 'Elige uno de la lista: se guarda el registro, no el texto.'}
         </p>
       ) : total !== null && total > opciones.length && opciones.length > 0 ? (
-        <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
+        <p className={enBarra ? 'rv-sr' : 'text-[11px] mt-1'} style={enBarra ? undefined : { color: 'var(--faint)' }}>
           {numero(opciones.length)} sugerencia{opciones.length === 1 ? '' : 's'} de {numero(total)} — escribe para acotar.
         </p>
       ) : null}

@@ -1,5 +1,5 @@
 import { revalidatePath } from 'next/cache';
-import { ScrollText, Info, Route } from 'lucide-react';
+import { Info, Route } from 'lucide-react';
 import { getConfig } from '@/lib/likida/config';
 import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { guardarPolitica, armarPolitica, mensajeParaPantalla } from '@/lib/likida/administracion';
@@ -7,8 +7,12 @@ import { mxn } from '@/lib/utils';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { EstadoVacio, StatusPill } from '../../admin/ui/kit';
+import { StatusPill } from '../../admin/ui/kit';
+import { EstadoVacio } from '../estados';
 import { FormaConAviso, type ResultadoAccion, ESTILO_CONTROL } from '../../admin/ui/forma';
+import type { Metadata } from 'next';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+export const metadata: Metadata = { title: 'Políticas de gasto' };
 
 export const dynamic = 'force-dynamic';
 
@@ -128,17 +132,7 @@ export default async function PoliticasPage({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <ScrollText width={16} height={16} strokeWidth={1.75} />
-        <div>
-          <span className="text-sm font-medium block">Políticas</span>
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>
-            Los topes contra los que el motor cuadra cada viaje de tu flota
-          </span>
-        </div>
-      </header>
-
+    <MarcoPagina titulo="Políticas de gasto" apoyo="Los topes contra los que el motor cuadra cada viaje de tu flota.">
       {config === null ? (
         <div className="glass-panel p-8 text-sm" style={{ color: 'var(--muted)' }}>
           No se pudo leer la configuración de esta flota.
@@ -146,9 +140,7 @@ export default async function PoliticasPage({
       ) : (
         <div className="glass-panel overflow-hidden">
           <div className="pt-5 pb-2 px-5 flex items-center gap-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
-              Topes por concepto
-            </h2>
+            <TituloRecuadro info="politicas.topes">Topes por concepto</TituloRecuadro>
             {politicaPropiaFalloLectura ? (
               <StatusPill estado="warn">No se pudo saber si es propia</StatusPill>
             ) : (
@@ -253,9 +245,7 @@ export default async function PoliticasPage({
             <section className="px-5 pb-5 pt-4 border-t" style={{ borderColor: 'var(--line)' }}>
               <div className="flex items-center gap-2 mb-2">
                 <Route width={15} height={15} strokeWidth={1.75} />
-                <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
-                  Reglas por ruta
-                </h2>
+                <TituloRecuadro info="politicas.reglas_ruta">Reglas por ruta</TituloRecuadro>
               </div>
               {/* H39 (auditoría 24): las otras dos tablas de esta página van
                   envueltas en overflow-x-auto — ésta no, y con nombres de
@@ -285,9 +275,7 @@ export default async function PoliticasPage({
           )}
 
           <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-            <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-              Topes fiscales que aplica el motor
-            </h2>
+            <TituloRecuadro info="politicas.topes_fiscales">Topes fiscales que aplica el motor</TituloRecuadro>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
               <div className="card p-4">
                 <div className="text-lg font-semibold tabular">{mxn(config.estimulos.viaticosTopeFiscalDiarioMxn)}</div>
@@ -324,6 +312,6 @@ export default async function PoliticasPage({
           </div>
         </div>
       )}
-    </div>
+    </MarcoPagina>
   );
 }

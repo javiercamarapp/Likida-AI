@@ -1,13 +1,14 @@
 import Link from 'next/link';
 import { FileInput, TriangleAlert, Mail, MessageCircle, Upload, Download, RotateCcw, Layers } from 'lucide-react';
-import { EstadoVacio, EstadoError } from '@/app/admin/ui/kit';
-import { BarraPagina } from '../../resumen-visual';
+import { EstadoVacio, EstadoError } from '../../estados';
 import { fechaHoraMx, numero, pesoArchivo, porcentaje, usd4 } from '@/lib/formato';
 import { soloMisCasos } from '@/lib/likida/carta_porte_docs/revisor';
 import { prioridadEstado, ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO } from '@/lib/likida/carta_porte_docs/presentacion';
 import { MINUTOS_CAPTURA_MANUAL_EMBARQUE, type MetricasAgente } from '@/lib/likida/carta_porte_docs/metricas';
 import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_docs/repo';
 import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from './forma_accion';
+import { BarraFiltros, FiltroOpciones, MarcoPagina, Aviso, BotonEnlace, TituloRecuadro, InfoTip } from '@/app/ui-v2/componentes';
+import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 
 /**
  * LOS DOCUMENTOS DE TUS CLIENTES — la bandeja del Agente de Carta Porte multi-formato.
@@ -96,12 +97,12 @@ const PILL: Record<DocumentoFila['estado'], { fg: string; bg: string }> = {
   dividido: { fg: 'var(--muted)', bg: 'var(--canvas)' },
 };
 
-function Cifra({ rotulo, valor, nota }: { rotulo: string; valor: string; nota?: string }) {
+function Cifra({ rotulo, valor, nota, info }: { rotulo: string; valor: string; nota?: string; info: InfoClave }) {
   return (
     <div className="card p-3.5 space-y-0.5">
-      <p className="text-[11px]" style={{ color: 'var(--muted)' }}>{rotulo}</p>
-      <p className="cifra-mono text-[19px] font-medium">{valor}</p>
-      {nota && <p className="text-[10.5px]" style={{ color: 'var(--faint)' }}>{nota}</p>}
+      <p className="text-[11px] flex items-center gap-1" style={{ color: 'var(--muted)' }}>{rotulo}<InfoTip clave={info} /></p>
+      <p className="cifra-mono text-[20px] font-medium">{valor}</p>
+      {nota && <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{nota}</p>}
     </div>
   );
 }
@@ -119,36 +120,27 @@ export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', 
   usuarioId?: string | null;
 }) {
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina icono={<FileInput width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />} titulo="Documentos de tus clientes" />
-        <div className="px-5 py-5 flex-1 space-y-5">
-          <p className="text-[12.5px] max-w-3xl" style={{ color: 'var(--muted)' }}>
-            Tus clientes mandan la carga en su propio formato. Aquí llegan —por carga manual, por el correo de tu flota o por
-            WhatsApp—, el agente los lee y <strong>una persona revisa y aprueba</strong> lado a lado antes de que nada llegue al viaje.
-            Cada corrección enseña al perfil de ese cliente, así que la siguiente vez se lee sin modelo. Likida no timbra: lo aprobado
-            es un borrador que sigue el camino de siempre hacia el PAC de tu flota.
-          </p>
+    <MarcoPagina titulo="Documentos de clientes" apoyo="Los documentos que mandan tus clientes: el agente los lee y una persona los revisa y aprueba lado a lado." acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/carta-porte${sufijo}`}>Volver a Carta Porte por viaje</BotonEnlace>}>
+      <Aviso tono="info">
+        Tus clientes mandan la carga en su propio formato. Aquí llegan —por carga manual, por el correo de tu flota o por
+        WhatsApp—, el agente los lee y <strong>una persona revisa y aprueba</strong> lado a lado antes de que nada llegue al viaje.
+        Cada corrección enseña al perfil de ese cliente, así que la siguiente vez se lee sin modelo. Likida no timbra: lo aprobado
+        es un borrador que sigue el camino de siempre hacia el PAC de tu flota.
+      </Aviso>
 
-          <Link href={`/dashboard/carta-porte${sufijo}`} className="text-[12px] font-medium hover:opacity-75 inline-block" style={{ color: 'var(--marca)' }}>
-            ← Volver a Carta Porte por viaje
-          </Link>
-
-          {datos === null ? (
-            <EstadoError mensaje="No pude leer los documentos de tu flota. No se pinta una bandeja vacía sobre una base que no contestó: eso diría «no hay nada que revisar» estando ciego." />
-          ) : (
-            <>
-              <Metricas m={datos.metricas} />
-              {acciones.subir && <Subir accion={acciones.subir} clientes={datos.clientes} />}
-              <Bandeja datos={datos} acciones={acciones} sufijo={sufijo} filtroEnvio={filtroEnvio} perfilRestringido={perfilRestringido} soloMios={soloMios} usuarioId={usuarioId} />
-              <Canales buzon={datos.buzon} acciones={acciones} />
-              <Perfiles perfiles={datos.perfiles} acciones={acciones} />
-              <Exportacion configs={datos.configs} acciones={acciones} apiSufijo={apiSufijo} />
-            </>
-          )}
-        </div>
-      </div>
-    </main>
+      {datos === null ? (
+        <EstadoError mensaje="No pude leer los documentos de tu flota. No se pinta una bandeja vacía sobre una base que no contestó: eso diría «no hay nada que revisar» estando ciego." />
+      ) : (
+        <>
+          <Metricas m={datos.metricas} />
+          {acciones.subir && <Subir accion={acciones.subir} clientes={datos.clientes} />}
+          <Bandeja datos={datos} acciones={acciones} sufijo={sufijo} filtroEnvio={filtroEnvio} perfilRestringido={perfilRestringido} soloMios={soloMios} usuarioId={usuarioId} />
+          <Canales buzon={datos.buzon} acciones={acciones} />
+          <Perfiles perfiles={datos.perfiles} acciones={acciones} />
+          <Exportacion configs={datos.configs} acciones={acciones} apiSufijo={apiSufijo} />
+        </>
+      )}
+    </MarcoPagina>
   );
 }
 
@@ -161,14 +153,16 @@ function Metricas({ m }: { m: MetricasAgente }) {
         </p>
       )}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Cifra rotulo="Documentos recibidos (90 días)" valor={numero(m.recibidos)} nota={`${numero(m.porRevisar)} por revisar · ${numero(m.fallidos)} sin poder leer`} />
-        <Cifra rotulo="Aprobados" valor={numero(m.aprobados)} nota={`${numero(m.rechazados)} rechazados`} />
+        <Cifra info="carta_porte_docs.recibidos" rotulo="Documentos recibidos (90 días)" valor={numero(m.recibidos)} nota={`${numero(m.porRevisar)} por revisar · ${numero(m.fallidos)} sin poder leer`} />
+        <Cifra info="carta_porte_docs.aprobados" rotulo="Aprobados" valor={numero(m.aprobados)} nota={`${numero(m.rechazados)} rechazados`} />
         <Cifra
+          info="carta_porte_docs.sin_correccion"
           rotulo="Aprobados sin corrección"
           valor={m.pctSinCorreccion === null ? '—' : porcentaje(m.pctSinCorreccion, 0)}
           nota={m.pctSinCorreccion === null ? 'Aún no hay aprobados: no se pinta un porcentaje.' : `${numero(m.sinCorreccion)} de ${numero(m.aprobados)} (confirmar un dato no cuenta como corregirlo)`}
         />
         <Cifra
+          info="carta_porte_docs.tiempo_ahorrado"
           rotulo="Tiempo ahorrado por embarque"
           valor={m.minutosAhorradosPorEmbarque === null ? '—' : `${numero(m.minutosAhorradosPorEmbarque)} min`}
           nota={m.minutosAhorradosPorEmbarque === null
@@ -188,7 +182,7 @@ function Metricas({ m }: { m: MetricasAgente }) {
 function Subir({ accion, clientes }: { accion: AccionDoc; clientes: Array<{ id: string; nombre: string }> }) {
   return (
     <section className="card p-4 space-y-3 max-w-3xl">
-      <h2 className="text-[13px] font-medium flex items-center gap-1.5"><Upload width={14} height={14} strokeWidth={1.75} /> Subir un documento</h2>
+      <TituloRecuadro info="carta_porte_docs.subir"><Upload width={14} height={14} strokeWidth={1.75} /> Subir un documento</TituloRecuadro>
       <FormaAccion accion={accion} enctype="multipart/form-data">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
@@ -218,25 +212,18 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
   const cliente = new Map(datos.clientes.map((c) => [c.id, c.nombre]));
   return (
     <section className="space-y-2">
-      <h2 className="text-[13px] font-medium">Bandeja de revisión</h2>
-      {conAsignacion && usuarioId !== null && (
-        <nav aria-label="Filtrar por persona asignada" className="flex flex-wrap items-center gap-1.5 text-[12px]">
-          <span style={{ color: 'var(--muted)' }}>Asignación:</span>
-          {[{ clave: false, rotulo: 'Todos' }, { clave: true, rotulo: 'Mis casos' }].map((f) => (
-            <Link key={String(f.clave)} href={`/dashboard/carta-porte/documentos${sufijo}${f.clave ? `${sufijo ? '&' : '?'}mios=1` : ''}`}
-              aria-current={mios === f.clave ? 'page' : undefined} className="px-2 py-0.5 rounded-full hairline hover:opacity-80"
-              style={mios === f.clave ? { background: 'var(--marca)', color: 'var(--surface)' } : { color: 'var(--muted)' }}>{f.rotulo}</Link>
-          ))}
-        </nav>
-      )}
-      <nav aria-label="Filtrar por estado de envío al TMS" className="flex flex-wrap items-center gap-1.5 text-[12px]">
-        <span style={{ color: 'var(--muted)' }}>Envío al TMS:</span>
-        {FILTROS_ENVIO.map((f) => (
-          <Link key={f.clave} href={f.clave === 'todos' ? `/dashboard/carta-porte/documentos${sufijo}` : `/dashboard/carta-porte/documentos${sufijo}${sufijo ? '&' : '?'}envio=${f.clave}`}
-            aria-current={filtroEnvio === f.clave ? 'page' : undefined} className="px-2 py-0.5 rounded-full hairline hover:opacity-80"
-            style={filtroEnvio === f.clave ? { background: 'var(--marca)', color: 'var(--surface)' } : { color: 'var(--muted)' }}>{f.rotulo}</Link>
-        ))}
-      </nav>
+      <TituloRecuadro info="carta_porte_docs.bandeja">Bandeja de revisión</TituloRecuadro>
+      <BarraFiltros etiqueta="Filtros de la bandeja" enLinea nActivos={(mios ? 1 : 0) + (filtroEnvio !== 'todos' ? 1 : 0)} limpiarHref={`/dashboard/carta-porte/documentos${sufijo}`}>
+        {conAsignacion && usuarioId !== null && (
+          <FiltroOpciones etiqueta="Asignación" valor={mios ? 'mios' : 'todos'} porDefecto="todos" ariaLabel="Filtrar por persona asignada"
+            opciones={[
+              { valor: 'todos', rotulo: 'Todos', href: `/dashboard/carta-porte/documentos${sufijo}` },
+              { valor: 'mios', rotulo: 'Mis casos', href: `/dashboard/carta-porte/documentos${sufijo}${sufijo ? '&' : '?'}mios=1` },
+            ]} />
+        )}
+        <FiltroOpciones etiqueta="Envío al TMS" valor={filtroEnvio} porDefecto="todos" ariaLabel="Filtrar por estado de envío al TMS"
+          opciones={FILTROS_ENVIO.map((f) => ({ valor: f.clave, rotulo: f.rotulo, href: f.clave === 'todos' ? `/dashboard/carta-porte/documentos${sufijo}` : `/dashboard/carta-porte/documentos${sufijo}${sufijo ? '&' : '?'}envio=${f.clave}` }))} />
+      </BarraFiltros>
       {orden.length === 0 ? (
         <EstadoVacio icono={<FileInput width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
           {mios
@@ -247,7 +234,7 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
         </EstadoVacio>
       ) : (
         <div className="card overflow-x-auto">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full text-[12px]">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
                 {['Estado', 'Archivo', 'Formato · canal', 'Lo que falta', ...(conAsignacion ? ['Asignado a'] : []), 'Recibido', ''].map((h) => <th key={h} className="px-3 py-2 font-medium text-[11px]">{h}</th>)}
@@ -335,7 +322,7 @@ function Canales({ buzon, acciones }: { buzon: BuzonVista | null; acciones: Acci
   return (
     <section className="grid grid-cols-1 lg:grid-cols-2 gap-3">
       <div className="card p-4 space-y-2.5">
-        <h2 className="text-[13px] font-medium flex items-center gap-1.5"><Mail width={14} height={14} strokeWidth={1.75} /> Correo de tu flota</h2>
+        <TituloRecuadro info="carta_porte_docs.correo"><Mail width={14} height={14} strokeWidth={1.75} /> Correo de tu flota</TituloRecuadro>
         {buzon === null ? (
           <>
             <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
@@ -349,7 +336,7 @@ function Canales({ buzon, acciones }: { buzon: BuzonVista | null; acciones: Acci
         ) : (
           <>
             {buzon.direccion ? (
-              <p className="text-[12.5px]">Dirección: <code className="cifra-mono select-all">{buzon.direccion}</code>{!buzon.activo && <strong style={{ color: 'var(--warn)' }}> (apagado)</strong>}</p>
+              <p className="text-[12px]">Dirección: <code className="cifra-mono select-all">{buzon.direccion}</code>{!buzon.activo && <strong style={{ color: 'var(--warn)' }}> (apagado)</strong>}</p>
             ) : (
               <p className="text-[12px] px-3 py-2 rounded-lg" style={{ background: 'var(--warnbg, var(--canvas))', color: 'var(--warn)' }}>
                 {buzon.dominioConfigurado ? 'La dirección no se pudo armar.' : 'El dominio de correo de Likida no está configurado en este entorno: el buzón existe pero no hay dirección que dar.'}
@@ -367,7 +354,7 @@ function Canales({ buzon, acciones }: { buzon: BuzonVista | null; acciones: Acci
         )}
       </div>
       <div className="card p-4 space-y-2">
-        <h2 className="text-[13px] font-medium flex items-center gap-1.5"><MessageCircle width={14} height={14} strokeWidth={1.75} /> WhatsApp</h2>
+        <TituloRecuadro info="carta_porte_docs.whatsapp"><MessageCircle width={14} height={14} strokeWidth={1.75} /> WhatsApp</TituloRecuadro>
         <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           Quien despacha en tu flota puede reenviar el documento del cliente al número de Likida: un PDF, un Excel o un XML con
           Carta Porte entran solos; una foto debe llevar el pie «carta porte» o «embarque». Funciona en las flotas que activaron el
@@ -381,7 +368,7 @@ function Canales({ buzon, acciones }: { buzon: BuzonVista | null; acciones: Acci
 function Perfiles({ perfiles, acciones }: { perfiles: PerfilVista[]; acciones: AccionesDocumentos }) {
   return (
     <section className="space-y-2">
-      <h2 className="text-[13px] font-medium flex items-center gap-1.5"><Layers width={14} height={14} strokeWidth={1.75} /> Formatos que Likida ya conoce</h2>
+      <TituloRecuadro info="carta_porte_docs.formatos"><Layers width={14} height={14} strokeWidth={1.75} /> Formatos que Likida ya conoce</TituloRecuadro>
       {perfiles.length === 0 ? (
         <p className="text-[12px] max-w-3xl" style={{ color: 'var(--muted)' }}>
           Todavía ninguno. Cuando apruebes el primer Excel, PDF con texto, XML o correo de un cliente, Likida recuerda en qué columna o
@@ -391,7 +378,7 @@ function Perfiles({ perfiles, acciones }: { perfiles: PerfilVista[]; acciones: A
         <div className="space-y-2">
           {perfiles.map((p) => (
             <details key={p.id} className="card p-3.5">
-              <summary className="cursor-pointer text-[12.5px] select-none">
+              <summary className="cursor-pointer text-[12px] select-none">
                 <strong>{p.nombre}</strong> <span style={{ color: 'var(--muted)' }}>· {ROTULO_FORMATO[p.formato] ?? p.formato} · versión {p.versionActiva} · {numero(p.mapeos)} campos reconocidos</span>
               </summary>
               <ul className="pt-2.5 space-y-1.5 text-[12px]">
@@ -435,7 +422,7 @@ function Exportacion({ configs, acciones, apiSufijo }: { configs: ConfigVista[];
   const liga = (config: string, formato: string) => `/api/export/carta-porte-docs?config=${encodeURIComponent(config)}&formato=${formato}${apiSufijo}`;
   return (
     <section className="space-y-2">
-      <h2 className="text-[13px] font-medium flex items-center gap-1.5"><Download width={14} height={14} strokeWidth={1.75} /> Exportar lo aprobado</h2>
+      <TituloRecuadro info="carta_porte_docs.exportar"><Download width={14} height={14} strokeWidth={1.75} /> Exportar lo aprobado</TituloRecuadro>
       <p className="text-[12px] max-w-3xl" style={{ color: 'var(--muted)' }}>
         Solo salen documentos <strong>aprobados</strong>. El formato exacto que espera tu cliente (por ejemplo el cliente de demo) todavía no se conoce:
         declara aquí qué columna lleva cada dato y se genera el CSV o JSON a tu medida. Mientras tanto, está el formato estándar de Likida.
@@ -455,7 +442,7 @@ function Exportacion({ configs, acciones, apiSufijo }: { configs: ConfigVista[];
       </div>
       {acciones.guardarExport && (
         <details className="card p-3.5 max-w-3xl">
-          <summary className="cursor-pointer text-[12.5px] font-medium select-none">Declarar un formato destino</summary>
+          <summary className="cursor-pointer text-[12px] font-medium select-none">Declarar un formato destino</summary>
           <FormaAccion accion={acciones.guardarExport} className="pt-3 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>

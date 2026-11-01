@@ -37,7 +37,7 @@ function BotonCrear() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Plus width={15} height={15} strokeWidth={2} />
       {pending ? 'Creando…' : 'Crear viaje'}
@@ -146,7 +146,7 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
           cuadrícula, el anticipo y el ingreso se confunden — y confundirlos
           produce márgenes que se ven bien y están mal. */}
       {puedeCapturarDinero && <fieldset className="pt-3.5 border-t" style={{ borderColor: 'var(--line)' }}>
-        <legend className="etiqueta-mono text-[10px] uppercase mb-2.5" style={{ color: 'var(--faint)' }}>
+        <legend className="etiqueta-mono text-[11px] uppercase mb-2.5" style={{ color: 'var(--faint)' }}>
           Lo que se le cobra al cliente · opcional
         </legend>
 

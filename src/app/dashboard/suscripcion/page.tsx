@@ -18,9 +18,13 @@ import {
 } from '@/lib/saas/fiscal';
 import { mxn } from '@/lib/utils';
 import { fechaMx } from '../formato';
-import { EstadoVacio, StatusPill } from '../../admin/ui/kit';
+import { StatusPill } from '../../admin/ui/kit';
+import { EstadoVacio } from '../estados';
 import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../admin/ui/forma';
 import { Uso, TarjetaPlan, InstruccionesTransferencia } from './vista';
+import type { Metadata } from 'next';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+export const metadata: Metadata = { title: 'Plan y facturación' };
 
 export const dynamic = 'force-dynamic';
 
@@ -246,15 +250,7 @@ export default async function SuscripcionPage({
   const pill = suscripcion ? ESTADO_PILL[suscripcion.estado] : null;
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <CreditCard width={16} height={16} strokeWidth={1.75} />
-        <div className="flex-1">
-          <span className="text-sm font-medium block">Plan &amp; Facturación</span>
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>
-            Tu plan de Likida, lo que llevas usado y tus facturas
-          </span>
-        </div>
+    <MarcoPagina titulo="Plan y facturación" apoyo="Tu plan de Likida, lo que llevas usado y tus facturas." acciones={<>
         {/* H8 (auditoría 24): aquí decía "Pago recibido" solo porque la URL
             traía `?ok=contratado` — un query string lo escribe cualquiera,
             no una lectura del cobro. La suscripción SÍ se creó (por eso el
@@ -266,8 +262,7 @@ export default async function SuscripcionPage({
             se apaga nada — el mismo criterio que el límite del plan. */}
         {suscripcion?.vencida && <StatusPill estado="warn">Venció el {fechaMx(suscripcion.periodoFin!)}</StatusPill>}
         {pill && <StatusPill estado={pill.tono}>{pill.texto}</StatusPill>}
-      </header>
-
+      </>}>
       {modo === 'prueba' && (
         <div className="glass-panel px-5 py-3 flex items-start gap-2.5 text-sm" style={{ color: 'var(--warn)' }}>
           <TriangleAlert width={16} height={16} strokeWidth={2} className="shrink-0 mt-0.5" />
@@ -284,9 +279,7 @@ export default async function SuscripcionPage({
           <section className="p-5 border-b" style={{ borderColor: 'var(--line)' }}>
             <div className="flex items-center gap-2 mb-1">
               <Landmark width={15} height={15} strokeWidth={1.75} />
-              <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
-                Cómo pagar tu mensualidad
-              </h2>
+              <TituloRecuadro info="suscripcion.como_pagar">Cómo pagar tu mensualidad</TituloRecuadro>
               <StatusPill estado="warn">Pendiente</StatusPill>
             </div>
             {banco === null ? (
@@ -321,9 +314,7 @@ export default async function SuscripcionPage({
 
         {/* ── Estado ── */}
         <section className="p-5">
-          <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-            Tu plan
-          </h2>
+          <TituloRecuadro info="suscripcion.plan">Tu plan</TituloRecuadro>
           {suscripcionCaida ? (
             <div className="mt-3">
               <EstadoVacio icono={<TriangleAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--warn)' }} />}>
@@ -369,9 +360,7 @@ export default async function SuscripcionPage({
         {/* ── Uso ── */}
         {uso && (
           <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-            <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-              Lo que llevas este mes
-            </h2>
+            <TituloRecuadro info="suscripcion.uso">Lo que llevas este mes</TituloRecuadro>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
               <Uso etiqueta="Viajes creados este mes" usado={uso.viajesMes} limite={uso.limiteViajesMes} />
               <Uso etiqueta="Operadores activos" usado={uso.operadores} limite={uso.limiteOperadores} />
@@ -387,9 +376,7 @@ export default async function SuscripcionPage({
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
           <div className="flex items-center gap-2 mb-1">
             <FileText width={15} height={15} strokeWidth={1.75} />
-            <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
-              Datos para tu factura
-            </h2>
+            <TituloRecuadro info="suscripcion.datos_factura">Datos para tu factura</TituloRecuadro>
             {puedeFacturar
               ? <StatusPill estado="ok">Completos</StatusPill>
               : <StatusPill estado="warn">Faltan</StatusPill>}
@@ -438,9 +425,7 @@ export default async function SuscripcionPage({
 
         {/* ── Planes ── */}
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-            Planes
-          </h2>
+          <TituloRecuadro info="suscripcion.planes">Planes</TituloRecuadro>
 
           {!hayStripe ? (
             <div className="mt-3">
@@ -489,9 +474,7 @@ export default async function SuscripcionPage({
 
         {/* ── Facturas ── */}
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-            Tus facturas de Likida
-          </h2>
+          <TituloRecuadro info="suscripcion.facturas">Tus facturas de Likida</TituloRecuadro>
           {facturas === null ? (
             <div className="mt-3 text-sm" style={{ color: 'var(--muted)' }}>No se pudieron leer las facturas.</div>
           ) : facturas.length === 0 ? (
@@ -567,6 +550,6 @@ export default async function SuscripcionPage({
           </div>
         )}
       </div>
-    </div>
+    </MarcoPagina>
   );
 }

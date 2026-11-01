@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { sinComentarios } from '@/lib/pruebas/codigo';
 import { execSync } from 'node:child_process';
-import { instanteRFC3339, mxn, usd, usd4, mxnCompacto, litros, fechaMx, fechaCorta, fechaHoraMx, round2, pctCambio, porcentaje, hoyMx, inicioDiaMx, finDiaMx, pesoArchivo, parsearImporteMx, parsearCoordenadaMx } from './formato';
+import { instanteRFC3339, mxn, usd, usd4, mxnCompacto, mxnEntero, litros, fechaMx, fechaCorta, fechaHoraMx, horaMx, round2, pctCambio, porcentaje, hoyMx, inicioDiaMx, finDiaMx, pesoArchivo, parsearImporteMx, parsearCoordenadaMx } from './formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 7 · MEDIO REINCIDENTE POR TERCERA RONDA — y el número CRECÍA:
@@ -657,5 +657,32 @@ describe('A37-S25-08: sin cero negativo', () => {
   it('mxn conserva el signo de los negativos reales', () => {
     expect(mxn(-0.005)).toBe('-$0.01');
     expect(mxn(-12.5)).toBe('-$12.50');
+  });
+});
+
+describe('mxnEntero — dinero sin decimales (ESTILO-LIKIDA)', () => {
+  it('bajo un millón: pesos enteros, sin centavos', () => {
+    expect(mxnEntero(482310.5)).toBe('$482,311');
+    expect(mxnEntero(839.7)).toBe('$840');
+    expect(mxnEntero(0)).toBe('$0');
+  });
+  it('un negativo que redondea a cero no se pinta «-$0»', () => {
+    expect(mxnEntero(-0.2)).toBe('$0');
+  });
+  it('desde un millón usa el compacto de siempre', () => {
+    expect(mxnEntero(1_500_000)).toBe(mxnCompacto(1_500_000));
+  });
+});
+
+describe('horaMx', () => {
+  it('hora de México en 24 h, sin la zona del servidor', () => {
+    expect(horaMx('2026-10-31T13:02:00Z')).toBe('07:02');
+    expect(horaMx('2026-10-31T06:00:00Z')).toBe('00:00'); // medianoche local: «00:00», nunca «24:00»
+    expect(horaMx('2026-10-31T23:59:00Z')).toBe('17:59');
+  });
+  it('ausente o ilegible: «—»', () => {
+    expect(horaMx(null)).toBe('—');
+    expect(horaMx(undefined)).toBe('—');
+    expect(horaMx('basura')).toBe('—');
   });
 });

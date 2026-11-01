@@ -58,7 +58,13 @@ vi.mock('@/lib/likida/perfil/preguntas', () => ({
 
 vi.mock('./inicio-contenido', () => ({ InicioContenido: () => null }));
 vi.mock('./inicio-operacion', () => ({ InicioOperacion: () => null }));
-vi.mock('./inicio-cinco-agentes', () => ({ InicioCincoAgentes: () => null }));
+const leerInsightsResumen = vi.fn(async () => ({ principales: [], fallidos: ['peajes'] }));
+vi.mock('./inicio-cinco-agentes', () => ({ InicioCincoAgentes: () => null, leerInsightsResumen: (...a: unknown[]) => leerInsightsResumen(...(a as [])) }));
+vi.mock('./resumen-v2', () => ({ ResumenV2: function ResumenV2() { return null; } }));
+// La versión de interfaz con la que el layout eligió el chrome; aquí no hay petición.
+let versionDeInterfaz: 'v1' | 'v2' = 'v1';
+vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => undefined }) }));
+vi.mock('@/lib/auth/version_ui', () => ({ versionUi: async () => versionDeInterfaz }));
 // Sin perfil de tenant (0770): este archivo prueba el Resumen de siempre.
 vi.mock('@/lib/auth/perfil_tenant', () => ({ perfilDeTenant: async () => null }));
 vi.mock('@/lib/auth/visibilidad', () => ({ puedeVerArea: () => true }));
@@ -73,6 +79,7 @@ describe('/dashboard — la compuerta de onboarding (FE-19-1)', () => {
     onboardingFiscalListo.mockReturnValue(false);
     onboardingPospuesto.mockReturnValue(false);
     getPerfilCrudo.mockResolvedValue({});
+    versionDeInterfaz = 'v1';
   });
 
   it('perfil fiscal incompleto: el NEXT_REDIRECT sale de la página, no se lo traga nadie', async () => {
@@ -127,5 +134,39 @@ describe('/dashboard — la compuerta de onboarding (FE-19-1)', () => {
     await expect(DashboardInicio({ searchParams: SIN_PARAMS })).resolves.toBeTruthy();
     expect(redirect).not.toHaveBeenCalled();
     expect(getPerfilCrudo).not.toHaveBeenCalled();
+  });
+
+  describe('con la interfaz v2 (flota sin perfil)', () => {
+    beforeEach(() => {
+      versionDeInterfaz = 'v2';
+      // El último caso de arriba deja al encargado puesto: cada caso de v2 parte del dueño.
+      resolverTenantEfectivo.mockResolvedValue({ tenantId: 'tenant-1', tenantNombre: 'el cliente de demo', nombre: 'Javier', rol: 'flota_admin', tenantExiste: true });
+    });
+    type ElV2 = { type: { name: string }; props: Record<string, unknown> };
+
+    it('el dueño recibe el Resumen v2 (no el de siempre dentro del chrome nuevo) con su rol, sin perfil y sin asistente', async () => {
+      onboardingFiscalListo.mockReturnValue(true);
+      const r = await DashboardInicio({ searchParams: SIN_PARAMS }) as ElV2;
+      expect(r.type.name).toBe('ResumenV2');
+      expect(r.props).toMatchObject({ rol: 'flota_admin', perfil: null, veDinero: true, veAsistente: false, fallidos: ['peajes'] });
+      expect(leerInsightsResumen).toHaveBeenCalledWith('tenant-1', 'flota_admin', null);
+    });
+
+    it('el aviso fiscal pospuesto viaja al Resumen v2', async () => {
+      onboardingPospuesto.mockReturnValue(true);
+      const r = await DashboardInicio({ searchParams: SIN_PARAMS }) as ElV2;
+      expect(r.props.avisoFiscalPospuesto).toBe(true);
+    });
+
+    it('la compuerta de onboarding sigue cerrando antes del Resumen v2', async () => {
+      await expect(DashboardInicio({ searchParams: SIN_PARAMS })).rejects.toMatchObject({ digest: expect.stringContaining('NEXT_REDIRECT') });
+    });
+
+    it('el encargado (sin dinero) también recibe el Resumen v2, con veDinero=false', async () => {
+      resolverTenantEfectivo.mockResolvedValue({ tenantId: 'tenant-1', tenantNombre: 'x', nombre: 'Ana', rol: 'encargado', tenantExiste: true });
+      const r = await DashboardInicio({ searchParams: SIN_PARAMS }) as ElV2;
+      expect(r.type.name).toBe('ResumenV2');
+      expect(r.props.rol).toBe('encargado');
+    });
   });
 });

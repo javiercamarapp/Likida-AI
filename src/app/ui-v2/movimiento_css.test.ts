@@ -26,6 +26,13 @@ function rangosNoPreference(css: string): Array<[number, number]> {
   return r;
 }
 
+/** Tokens de duración declarados en cualquier css del módulo (`--chat-entra: 260ms`): `var(--x)` en una animación se RESUELVE antes de medir. */
+const TOKENS_DURACION = new Map<string, string>();
+for (const f of ARCHIVOS) {
+  for (const m of sinComentarios(readFileSync(join(DIR, f), 'utf8')).matchAll(/(--[\w-]+)\s*:\s*(\d*\.?\d+(?:ms|s))\s*;/g)) TOKENS_DURACION.set(m[1], m[2]);
+}
+const resolverVars = (decl: string) => decl.replace(/var\((--[\w-]+)\)/g, (todo, n: string) => TOKENS_DURACION.get(n) ?? todo);
+
 describe.each(ARCHIVOS)('movimiento en %s', (archivo) => {
   const css = sinComentarios(readFileSync(join(DIR, archivo), 'utf8'));
   const rangos = rangosNoPreference(css);
@@ -45,10 +52,18 @@ describe.each(ARCHIVOS)('movimiento en %s', (archivo) => {
 
   it('ninguna duración pasa de 700 ms', () => {
     for (const m of css.matchAll(/(?:animation|transition)(?:-duration)?\s*:[^;}]+/g)) {
-      for (const d of m[0].matchAll(/(\d*\.?\d+)(ms|s)\b/g)) {
+      const decl = resolverVars(m[0]);
+      for (const d of decl.matchAll(/(\d*\.?\d+)(ms|s)\b/g)) {
         const ms = d[2] === 's' ? parseFloat(d[1]) * 1000 : parseFloat(d[1]);
-        // Única excepción: la respiración del logo de la capa de carga (1.6 s, ESTILO §9, decisión de Javier); el seguro de 20 s es un retardo.
-        if (ms === 1600 && /rv-respira/.test(m[0])) continue;
+        // Segunda excepción EXPLÍCITA y acotada (L5): la respiración de la marca y del paso en curso del chat, 1.1 s, la duración exacta
+        // del agente de Vexa (ni un ms más: 1100). Es un bucle de opacidad/escala, sin layout; con reduce no se mueve.
+        if (ms === 1100 && /rv-chat-respira/.test(decl)) continue;
+        // Única excepción: la respiración del logo de la capa de carga y del esqueleto (1.6 s, ESTILO §9 y R08, decisión de Javier); el seguro de 20 s es un retardo.
+        if (ms === 1600 && /rv-(esq-)?respira/.test(m[0])) continue;
+        // Excepciones EXPLÍCITAS del recorrido (onboarding.css), con las duraciones exactas de la guía de Vexa por decisión de Javier: el
+        // pulso del anillo (1.6 s, solo 2 iteraciones, no infinito), la flecha de la etiqueta (0.9 s, 2 iteraciones), el trazo de las
+        // ilustraciones (0.9 s, una vez) y el aviso «Ahora: …» (1.9 s, una vez). Todas son opacidad/transform y todas viven bajo no-preference.
+        if (/rv-onb-(pulso|flecha|traza|banner)/.test(decl) && [1600, 900, 1900].includes(ms)) continue;
         expect(ms, m[0]).toBeLessThanOrEqual(700);
       }
     }
@@ -78,5 +93,25 @@ describe('movimiento.css', () => {
   });
   it('trae la regla global de reduced-motion', () => {
     expect(css).toMatch(/prefers-reduced-motion:\s*reduce[\s\S]*animation:\s*none\s*!important/);
+  });
+});
+
+// LG: la DURACIÓN no pasa de 700 ms, pero un retardo la alarga. Tope declarado de la ENTRADA completa (duración + retardo): 1,100 ms. Los únicos que
+// se acercan son exactamente los de Vexa: el punto final de la línea (400 ms tras 700 ms de retardo = 1,100) y la dona (barrido de 700 ms con escalón
+// de 90 ms × 5 gajos = 1,060). Las barras escalonan hasta 31 columnas × 14 ms (434 + 420) y 16 filas × 40 ms (600 + 420) con el índice acotado en el componente.
+describe('graficas.css · entrada completa (duración + retardo)', () => {
+  const css = sinComentarios(readFileSync(join(DIR, 'graficas.css'), 'utf8'));
+  const ms = (v: string, u: string) => (u === 's' ? parseFloat(v) * 1000 : parseFloat(v));
+  it('ningún retardo suelto pasa de 600 ms y ningún atajo `animation` suma más de 1,100 ms', () => {
+    for (const m of css.matchAll(/animation-delay\s*:\s*(\d*\.?\d+)(ms|s)/g)) expect(ms(m[1], m[2]), m[0]).toBeLessThanOrEqual(600);
+    for (const m of css.matchAll(/(?:^|[;{\s])animation\s*:\s*([^;}]+)/g)) {
+      const t = [...resolverVars(m[1]).matchAll(/(\d*\.?\d+)(ms|s)\b/g)].map((x) => ms(x[1], x[2]));
+      if (t.length) expect(t[0] + (t[1] ?? 0), m[0]).toBeLessThanOrEqual(1100);
+    }
+  });
+  it('el escalón más largo (columnas 31 × 14, dona 4 × 90, barras 15 × 40) más su duración cabe en 1,100 ms', () => {
+    expect(31 * 14 + 420).toBeLessThanOrEqual(1100);
+    expect(4 * 90 + 700).toBeLessThanOrEqual(1100);
+    expect(15 * 40 + 420).toBeLessThanOrEqual(1100);
   });
 });

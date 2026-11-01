@@ -1,6 +1,7 @@
+import { EstadoError, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { Calculator, TriangleAlert } from 'lucide-react';
+import { TriangleAlert } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAsignar } from '@/lib/auth/permisos';
@@ -14,6 +15,8 @@ import {
 } from '@/lib/likida/cotizador/lector';
 import { FormaConAviso, Campo, Selector, type ResultadoAccion, type AccionDeForma } from '../../admin/ui/forma';
 import { FilaAccionesCotizacion } from './acciones';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Cotizador' };
 
 export const dynamic = 'force-dynamic';
 
@@ -159,29 +162,15 @@ export default async function PaginaCotizaciones({
   ];
 
   return (
-    <div className="space-y-8">
-      <header className="flex items-center gap-3">
-        <Calculator className="h-6 w-6" style={{ color: 'var(--muted)' }} aria-hidden />
-        <div>
-          <h1 className="text-xl font-semibold">Cotizador</h1>
-          <p className="text-sm" style={{ color: 'var(--muted)' }}>
-            La ganancia real del viaje antes de aceptarlo: costos declarados, casetas medidas
-            en tus viajes liquidados, y cada supuesto a la vista.
-          </p>
-        </div>
-      </header>
-
+<MarcoPagina titulo="Cotizador" apoyo="La ganancia real del viaje antes de aceptarlo: costos declarados, casetas medidas en tus viajes liquidados y cada supuesto a la vista.">
       {!panel && (
-        <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800">
-          No se pudo leer el cotizador. No es que no haya cotizaciones: la lectura falló.
-          Recarga; si sigue, es cosa nuestra.
-        </p>
+        <EstadoError>No se pudo leer el cotizador. No es que no haya cotizaciones: la lectura falló. Recarga; si sigue, es cosa nuestra.</EstadoError>
       )}
 
       {panel && (
         <>
           <section className="rounded-lg border p-4">
-            <h2 className="mb-1 font-medium">Costos declarados de la flota</h2>
+            <TituloRecuadro info="cotizaciones.costos" className="mb-1">Costos declarados de la flota</TituloRecuadro>
             <p className="mb-3 text-sm" style={{ color: 'var(--muted)' }}>
               Lo que TÚ declaras — nada se supone. Un campo vacío = sin declarar, y el
               cotizador entonces no sugiere precio: dice qué falta.
@@ -197,7 +186,7 @@ export default async function PaginaCotizaciones({
           </section>
 
           <section className="rounded-lg border p-4">
-            <h2 className="mb-1 font-medium">Nueva cotización</h2>
+            <TituloRecuadro info="cotizaciones.nueva" className="mb-1">Nueva cotización</TituloRecuadro>
             <p className="mb-3 text-sm" style={{ color: 'var(--muted)' }}>
               Si esta ruta tiene viajes liquidados, las casetas salen MEDIDAS de ahí (y la
               captura manual se ignora — la medición gana y el desglose lo dice).
@@ -216,9 +205,9 @@ export default async function PaginaCotizaciones({
           </section>
 
           <section className="rounded-lg border p-4">
-            <h2 className="mb-3 font-medium">
+            <TituloRecuadro info="cotizaciones.lista" className="mb-3">
               Cotizaciones ({panel.cotizaciones.length})
-            </h2>
+            </TituloRecuadro>
             {panel.cotizaciones.length === 0 && (
               <p className="text-sm" style={{ color: 'var(--muted)' }}>
                 Aún no hay cotizaciones. La primera se arma arriba — con los costos
@@ -231,7 +220,7 @@ export default async function PaginaCotizaciones({
           </section>
         </>
       )}
-    </div>
+</MarcoPagina>
   );
 }
 

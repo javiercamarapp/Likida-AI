@@ -54,7 +54,7 @@ export function BarraPagina({ icono, titulo, derecha }: { icono?: ReactNode; tit
  *  servidor, formateada por `lib/formato` como todo lo demás. */
 export function ChipFecha({ icono, children }: { icono?: ReactNode; children: ReactNode }) {
   return (
-    <span className="hairline inline-flex items-center gap-1.5 text-[13px] font-medium px-3 h-8 rounded-lg shrink-0" style={{ background: 'var(--surface)' }}>
+    <span className="hairline chip-fecha inline-flex items-center gap-1.5 text-[13px] font-medium px-3 h-8 rounded-lg shrink-0" style={{ background: 'var(--surface)' }}>
       {icono}
       {children}
     </span>
@@ -125,7 +125,7 @@ export function TablaViajes({ viajes, sufijo = '' }: { viajes: FilaViaje[]; sufi
       </div>
     );
   }
-  const TH = 'etiqueta-mono text-left text-[10px] font-medium uppercase px-3 py-1.5';
+  const TH = 'etiqueta-mono text-left text-[11px] font-medium uppercase px-3 py-1.5';
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse">

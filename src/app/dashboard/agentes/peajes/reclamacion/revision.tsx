@@ -1,4 +1,5 @@
 import { FileDown } from 'lucide-react';
+import { BarraFiltros, FiltroCampo, FiltroOpciones } from '@/app/ui-v2/componentes';
 import { mxn, numero } from '@/lib/formato';
 // SOLO tipos y módulos puros: la vista no debe arrastrar `supabaseAdmin` al bundle.
 import type { ReporteRevision, ReclamoVista } from '@/lib/likida/peajes/revision_cobros';
@@ -31,11 +32,11 @@ export interface AccionesSeguimiento {
   justificarCruce?: Accion;
 }
 
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
+const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const CSS_SECUNDARIO = 'hairline text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]';
+const CSS_SECUNDARIO = 'hairline text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]';
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--ink)' } as const;
-const CSS_INPUT = 'hairline text-[12.5px] px-2.5 py-1.5 rounded-lg';
+const CSS_INPUT = 'hairline text-[12px] px-2.5 py-1.5 rounded-lg';
 const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
 const ESTILO_CANDIDATO = { color: 'var(--warn)', background: 'var(--warnbg)' } as const;
 
@@ -52,24 +53,20 @@ const EXPLICACION_CATEGORIA: Record<CategoriaCobro, string> = {
   caseta_no_debe_cruzarse: 'Casetas que la flota marcó como «no debe cruzarse».',
 };
 
-function ExtraSufijo({ sufijo }: { sufijo: string }) {
-  return <>{[...new URLSearchParams(sufijo.replace(/^\?/, '')).entries()].map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}</>;
-}
-
 function FilasCandidatos({ candidatos, justificar, desglose }: { candidatos: CandidatoCobro[]; justificar?: Accion; desglose?: string }) {
   const visibles = candidatos.slice(0, MAX_FILAS_POR_CATEGORIA);
   return (
     <>
       <div className="overflow-x-auto">
-        <table className="w-full text-[12.5px]">
+        <table className="w-full text-[12px]">
           <thead>
             <tr className="text-left" style={{ color: 'var(--faint)' }}>
-              <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Fecha y hora</th>
-              <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Caseta</th>
-              <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">TAG / unidad</th>
-              <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 text-right">Clase</th>
-              <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 text-right">Importe</th>
-              <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 pl-3">Qué pasó · qué significa · qué hacer</th>
+              <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Fecha y hora</th>
+              <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Caseta</th>
+              <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">TAG / unidad</th>
+              <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Clase</th>
+              <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Importe</th>
+              <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pl-3">Qué pasó · qué significa · qué hacer</th>
             </tr>
           </thead>
           <tbody>
@@ -92,10 +89,10 @@ function FilasCandidatos({ candidatos, justificar, desglose }: { candidatos: Can
                     <form action={justificar} className="flex items-end gap-2 flex-wrap pt-1">
                       <input type="hidden" name="desglose" value={desglose} />
                       <input type="hidden" name="indice" value={c.indice} />
-                      <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Motivo</span>
+                      <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Motivo</span>
                         <input name="motivo" required minLength={3} maxLength={300} placeholder="Salida de servicio autorizada" aria-label={`Motivo para justificar el cruce del renglón ${c.indice + 1}`}
                           className={`${CSS_INPUT} w-[240px] mt-0.5`} style={ESTILO_INPUT} /></label>
-                      <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>Justificar este cruce</button>
+                      <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Justificar este cruce</button>
                     </form>
                   )}
                 </td>
@@ -105,7 +102,7 @@ function FilasCandidatos({ candidatos, justificar, desglose }: { candidatos: Can
         </table>
       </div>
       {candidatos.length > visibles.length && (
-        <p className="text-[11.5px] mt-2" style={{ color: 'var(--muted)' }}>
+        <p className="text-[11px] mt-2" style={{ color: 'var(--muted)' }}>
           Se muestran los primeros {numero(visibles.length)} de {numero(candidatos.length)}; el Excel trae todos.
         </p>
       )}
@@ -144,34 +141,34 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
           <span className="inline-flex mt-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium" style={ESTILO_CANDIDATO}>{ROTULO_CANDIDATO}</span>
         </div>
         <div className="text-right">
-          <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Cruces con algún candidato</span>
+          <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Cruces con algún candidato</span>
           <span className="text-[20px] font-semibold cifra-mono">{numero(r.lineasConCandidato)}</span>
           <span className="text-[11px] ml-1.5" style={{ color: 'var(--muted)' }}>{mxn(r.montoConCandidato)}</span>
         </div>
       </div>
       <div className="flex flex-wrap gap-2 mt-3">
-        <a href={`/api/export/peajes-revision?desglose=${desglose}${ctx}`} className={CSS_BOTON} style={ESTILO_PRIMARIO}>
+        <a href={`/api/export/peajes-revision?desglose=${desglose}${ctx}`} className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>
           <FileDown width={13} height={13} strokeWidth={2} /> Excel de la revisión
         </a>
-        <a href={`/api/export/peajes-candidatos?desglose=${desglose}${ctx}`} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>
+        <a href={`/api/export/peajes-candidatos?desglose=${desglose}${ctx}`} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>
           <FileDown width={13} height={13} strokeWidth={2} className="inline mr-1" /> Reporte para el portal del proveedor
         </a>
-        <a href={`/api/export/peajes-candidatos?desglose=${desglose}&excluirReclamados=1${ctx}`} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>
+        <a href={`/api/export/peajes-candidatos?desglose=${desglose}&excluirReclamados=1${ctx}`} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>
           Sin lo que ya reclamaste
         </a>
-        <a href={`/api/export/peajes-candidatos?desglose=${desglose}&formato=csv${ctx}`} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>
+        <a href={`/api/export/peajes-candidatos?desglose=${desglose}&formato=csv${ctx}`} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>
           CSV
         </a>
       </div>
 
-      <p className="text-[11.5px] mt-3" style={{ color: 'var(--muted)' }}>
+      <p className="text-[11px] mt-3" style={{ color: 'var(--muted)' }}>
         Son candidatos, no cobros indebidos: sin el tarifario por caseta y clase ninguna regla puede afirmar que un monto esté mal. Valida cada uno con el proveedor por su portal (tienes {PLAZO_RECLAMO_MESES} meses desde el cobro para reclamar).
       </p>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2 mt-3">
         {CATEGORIAS_COBRO.map((c) => (
           <a key={c} href={`#cat-${c}`} className="rounded-lg hairline p-2.5 hover:bg-[var(--canvas)]">
-            <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>{ETIQUETA_CATEGORIA_COBRO[c]}</span>
+            <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>{ETIQUETA_CATEGORIA_COBRO[c]}</span>
             <span className="text-[15px] font-semibold cifra-mono">{numero(r.porCategoria[c].n)}</span>
             <span className="text-[11px] ml-1.5" style={{ color: 'var(--muted)' }}>{mxn(r.porCategoria[c].monto)}</span>
           </a>
@@ -222,7 +219,7 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
             El proveedor cobró tarde un cruce que ya aparece, con el mismo TAG, segundo, caseta e importe, en un archivo anterior de los últimos {revision.dobleEntreArchivos.ventanaMeses} meses.
             El monto es el del segundo cobro; confírmalo con el proveedor antes de reclamarlo. El Excel del portal lo trae en su propia hoja.
           </p>
-          <ul className="space-y-2 text-[12.5px]">
+          <ul className="space-y-2 text-[12px]">
             {revision.dobleEntreArchivos.candidatos.slice(0, MAX_FILAS_POR_CATEGORIA).map((c) => (
               <li key={`${c.indice}-${c.archivoPrevioId}`} className="rounded-lg hairline p-2.5 space-y-1">
                 <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={ESTILO_CANDIDATO}>{mxn(c.monto)} · {ROTULO_CANDIDATO}</span>
@@ -238,7 +235,7 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
         <details className="mt-4" id="atipicos">
           <summary className="cursor-pointer text-[13px] font-semibold">Cruces atípicos · {numero(revision.atipicos.atipicos.length)}</summary>
           <p className="text-[12px] my-2" style={{ color: 'var(--muted)' }}>Patrones poco comunes de una misma unidad. Son avisos para el despacho, no cobros indebidos confirmados.</p>
-          <ul className="space-y-2 text-[12.5px]">
+          <ul className="space-y-2 text-[12px]">
             {revision.atipicos.atipicos.slice(0, MAX_FILAS_POR_CATEGORIA).map((a) => (
               <li key={`${a.senal}-${a.indices.join('-')}`} className="rounded-lg hairline p-2.5 space-y-1">
                 <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={ESTILO_CANDIDATO}>{ETIQUETA_SENAL[a.senal]} · {ROTULO_CANDIDATO}</span>
@@ -251,7 +248,7 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
         </details>
       )}
       {revision.atipicos.noAplicadas.length > 0 && (
-        <p className="text-[11.5px] mt-3" style={{ color: 'var(--faint)' }}>
+        <p className="text-[11px] mt-3" style={{ color: 'var(--faint)' }}>
           Señales de cruces atípicos sin aplicar: {revision.atipicos.noAplicadas.map((n) => `${ETIQUETA_SENAL[n.senal]} (${n.motivo})`).join(' · ')}
         </p>
       )}
@@ -277,29 +274,16 @@ export function SeccionCierreMensual({ mes, cierre, error, sufijo, desglose, opc
         Junta las tres decenas de un mes (y compara los cobros tardíos con el mes anterior si también lo subiste). Un mes con una decena faltante se dice incompleto.
         Con «dos meses juntos» se consolidan el mes elegido y el anterior para que los cobros tardíos se acomoden en la misma ventana.
       </p>
-      <form method="get" className="flex items-end gap-2 flex-wrap mt-3">
-        <ExtraSufijo sufijo={sufijo} />
-        {desglose && <input type="hidden" name="desglose" value={desglose} />}
-        <label className="block">
-          <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Mes</span>
-          {lista.length > 0 ? (
-            <select name="mes" defaultValue={mes ?? lista[0]} required className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT}>
-              {lista.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
-          ) : (
-            <input name="mes" defaultValue={mes ?? ''} placeholder="2026-09" pattern="\d{4}-(0[1-9]|1[0-2])" required className={`${CSS_INPUT} w-[120px] mt-0.5`} style={ESTILO_INPUT} />
-          )}
-        </label>
-        <label className="block">
-          <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Ventana</span>
-          <select name="meses" defaultValue={dosMeses ? '2' : '1'} className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT}>
-            <option value="1">Un mes</option>
-            <option value="2">Dos meses juntos</option>
-          </select>
-        </label>
-        <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>{dosMeses ? 'Ver los dos meses' : 'Ver el mes'}</button>
-      </form>
-      {error && <p role="alert" className="text-[12.5px] mt-3" style={{ color: 'var(--bad)' }}>No se pudo armar el cierre ahora mismo. No es que no haya cobros: inténtalo de nuevo.</p>}
+      <BarraFiltros accion="?" etiqueta="Periodo del cierre mensual" className="mt-3" ocultos={[...new URLSearchParams(sufijo.replace(/^\?/, '')).entries(), ...(desglose ? [['desglose', desglose] as const] : [])]}>
+        {lista.length > 0 ? (
+          <FiltroOpciones nombre="mes" etiqueta="Mes" valor={mes ?? lista[0]} porDefecto="" opciones={lista.map((m) => ({ valor: m, rotulo: m }))} />
+        ) : (
+          <FiltroCampo etiqueta="Mes"><input className="border-0 bg-transparent" name="mes" defaultValue={mes ?? ''} placeholder="2026-09" pattern="\d{4}-(0[1-9]|1[0-2])" required /></FiltroCampo>
+        )}
+        <FiltroOpciones nombre="meses" etiqueta="Ventana" valor={dosMeses ? '2' : '1'} porDefecto="1"
+          opciones={[{ valor: '1', rotulo: 'Un mes' }, { valor: '2', rotulo: 'Dos meses juntos' }]} />
+      </BarraFiltros>
+      {error && <p role="alert" className="text-[12px] mt-3" style={{ color: 'var(--bad)' }}>No se pudo armar el cierre ahora mismo. No es que no haya cobros: inténtalo de nuevo.</p>}
       {dosMeses && cierreDos && <CierreDosMesesVista c={cierreDos} />}
       {!dosMeses && cierre && (
         <div className="mt-3 space-y-3">
@@ -318,7 +302,7 @@ export function SeccionCierreMensual({ mes, cierre, error, sufijo, desglose, opc
           <div className="grid sm:grid-cols-3 gap-2">
             {cierre.decenas.map((d) => <TarjetaDecena key={d.etiqueta} d={d} />)}
           </div>
-          <p className="text-[12.5px]">
+          <p className="text-[12px]">
             Cobros tardíos (candidatos: validar con el proveedor): {numero(cierre.tardiosMesAnterior.n)} del mes anterior ({mxn(cierre.tardiosMesAnterior.monto)}) y {numero(cierre.tardiosDecenaAnterior.n)} de una decena anterior de este mes ({mxn(cierre.tardiosDecenaAnterior.monto)}).
             {cierre.repetidosEntreArchivos.length > 0 && <> <b>{numero(cierre.repetidosEntreArchivos.length)} cobros aparecen en más de un archivo.</b></>}
           </p>
@@ -334,10 +318,10 @@ export function SeccionCierreMensual({ mes, cierre, error, sufijo, desglose, opc
 function TarjetaDecena({ d }: { d: CierreMensual['decenas'][number] }) {
   return (
     <div className="rounded-lg hairline p-2.5">
-      <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Decena {d.etiqueta}</span>
+      <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Decena {d.etiqueta}</span>
       {d.cubierta
         ? <><span className="text-[15px] font-semibold cifra-mono">{numero(d.cruces)}</span><span className="text-[11px] ml-1.5" style={{ color: 'var(--muted)' }}>{mxn(d.monto)}</span></>
-        : <span className="text-[12.5px]" style={{ color: 'var(--bad)' }}>Falta el archivo</span>}
+        : <span className="text-[12px]" style={{ color: 'var(--bad)' }}>Falta el archivo</span>}
     </div>
   );
 }
@@ -360,7 +344,7 @@ function CierreDosMesesVista({ c }: { c: CierreDosMeses }) {
       <div className="grid sm:grid-cols-3 gap-2">
         {c.decenas.map((d) => <TarjetaDecena key={d.etiqueta} d={d} />)}
       </div>
-      <p className="text-[12.5px]">
+      <p className="text-[12px]">
         Cobros tardíos que caen dentro de la ventana (se acomodan): {numero(c.acomodados.n)} ({mxn(c.acomodados.monto)}). Anteriores a {c.meses[0]} (candidatos: validar con el proveedor): {numero(c.tardiosFueraDeVentana.n)} ({mxn(c.tardiosFueraDeVentana.monto)}).
         {c.repetidosEntreArchivos.length > 0 && <> <b>{numero(c.repetidosEntreArchivos.length)} cobros aparecen en más de un archivo.</b></>}
       </p>
@@ -412,7 +396,7 @@ export function CasarNota({ propuesta, reclamos, sufijo, desglose, mes }: {
   const porId = new Map(reclamos.map((r) => [r.id, r]));
   const r = propuesta?.resultado ?? null;
   return (
-    <div className="mt-4 rounded-lg hairline p-3 text-[12.5px] space-y-2" id="casar-nota">
+    <div className="mt-4 rounded-lg hairline p-3 text-[12px] space-y-2" id="casar-nota">
       <h3 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>¿A qué reclamo corresponde una nota de crédito?</h3>
       <p style={{ color: 'var(--muted)' }}>
         El proveedor manda la nota sin decir qué cruces cubre. Escribe su importe y el sistema propone a qué reclamo(s) enviados les cuadra la suma exacta.
@@ -420,9 +404,9 @@ export function CasarNota({ propuesta, reclamos, sufijo, desglose, mes }: {
       </p>
       <form method="get" action="/dashboard/agentes/peajes/reclamacion" className="flex items-end gap-2 flex-wrap">
         {[...previos.entries()].map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-        <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Importe de la nota (MXN)</span>
+        <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Importe de la nota (MXN)</span>
           <input name="nota" inputMode="decimal" required maxLength={20} defaultValue={propuesta?.texto ?? ''} className={`${CSS_INPUT} w-[140px] mt-0.5`} style={ESTILO_INPUT} /></label>
-        <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>Proponer reclamo</button>
+        <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Proponer reclamo</button>
       </form>
       {propuesta?.fallo && <p role="alert" style={{ color: 'var(--bad)' }}>No se pudo calcular la propuesta ahora mismo. No es que no haya coincidencia: inténtalo de nuevo.</p>}
       {propuesta && !propuesta.fallo && propuesta.importe === null && <p role="alert" style={{ color: 'var(--bad)' }}>{propuesta.motivo ?? 'El importe no es válido.'}</p>}
@@ -465,25 +449,25 @@ export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revi
         El proveedor no atiende por teléfono: se reclama por su portal y, si procede, devuelve una nota de crédito sin detalle. Aquí queda qué reclamaste, qué te acreditaron y cuánto falta.
         El plazo es de {PLAZO_RECLAMO_MESES} meses desde el cobro más antiguo del reclamo (regla dicha por el cliente: confírmala con el proveedor).
       </p>
-      {error && <p role="alert" className="text-[12.5px] mt-3" style={{ color: 'var(--bad)' }}>No se pudo leer el seguimiento ahora mismo. No es que no haya reclamos: inténtalo de nuevo.</p>}
+      {error && <p role="alert" className="text-[12px] mt-3" style={{ color: 'var(--bad)' }}>No se pudo leer el seguimiento ahora mismo. No es que no haya reclamos: inténtalo de nuevo.</p>}
       {resumen && reclamos && (
-        <p className="text-[12.5px] mt-3">
+        <p className="text-[12px] mt-3">
           {numero(resumen.reclamos)} reclamos · reclamado {mxn(resumen.montoReclamado)} · acreditado {mxn(resumen.montoAcreditado)} · <b>por acreditar {mxn(resumen.pendienteAcreditar)}</b>
           {resumen.preparados > 0 && <> · <span style={{ color: 'var(--muted)' }}>{numero(resumen.preparados)} preparados sin enviar ({mxn(resumen.montoPreparado)}, aún no exigidos al proveedor)</span></>}
           {resumen.porVencer > 0 && <> · <span style={{ color: 'var(--warn)' }}>{numero(resumen.porVencer)} por vencer</span></>}
           {resumen.vencidos > 0 && <> · <span style={{ color: 'var(--bad)' }}>{numero(resumen.vencidos)} vencidos</span></>}
         </p>
       )}
-      {reclamos && reclamos.length === 0 && <p className="text-[12.5px] mt-2" style={{ color: 'var(--muted)' }}>Aún no registras reclamos.</p>}
+      {reclamos && reclamos.length === 0 && <p className="text-[12px] mt-2" style={{ color: 'var(--muted)' }}>Aún no registras reclamos.</p>}
       {reclamos && reclamos.length > 0 && (
         <div className="space-y-2 mt-3">
           {reclamos.map((r) => (
-            <div key={r.id} className="rounded-lg hairline p-3 text-[12.5px] space-y-2">
+            <div key={r.id} className="rounded-lg hairline p-3 text-[12px] space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-medium">{(CATEGORIAS_COBRO as readonly string[]).includes(r.categoria) ? ETIQUETA_CATEGORIA_COBRO[r.categoria as CategoriaCobro] : r.categoria}</span>
                 <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={COLOR_ALERTA[r.evaluacion.alerta]}>{ROTULO_ALERTA[r.evaluacion.alerta]}</span>
                 <span style={{ color: 'var(--muted)' }}>{ETIQUETA_ESTADO_RECLAMO[r.estado]}</span>
-                {r.referenciaPortal && <span className="cifra-mono text-[11.5px]" style={{ color: 'var(--faint)' }}>Folio {r.referenciaPortal}</span>}
+                {r.referenciaPortal && <span className="cifra-mono text-[11px]" style={{ color: 'var(--faint)' }}>Folio {r.referenciaPortal}</span>}
               </div>
               <p>
                 {numero(r.nCruces)} cruces · reclamado {mxn(r.montoReclamado)} · acreditado {mxn(r.montoAcreditado)}
@@ -493,11 +477,11 @@ export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revi
               {r.estado === 'preparado' && (
                 <form action={acciones.marcarEnviado} className="flex items-end gap-2 flex-wrap">
                   <input type="hidden" name="reclamo" value={r.id} />
-                  <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Enviado el</span>
+                  <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Enviado el</span>
                     <input type="date" name="enviado_en" required className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT} /></label>
-                  <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Folio del portal (opc.)</span>
+                  <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Folio del portal (opc.)</span>
                     <input name="referencia" maxLength={120} className={`${CSS_INPUT} w-[160px] mt-0.5`} style={ESTILO_INPUT} /></label>
-                  <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>Marcar como enviado</button>
+                  <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Marcar como enviado</button>
                 </form>
               )}
               {(r.estado === 'enviado' || r.estado === 'acreditado_parcial') && (
@@ -506,17 +490,17 @@ export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revi
                     <input type="hidden" name="reclamo" value={r.id} />
                     {/* A33-06: lo que esta pantalla vio; un doble clic o pestaña repetida manda lo mismo y la base lo registra una sola vez. */}
                     <input type="hidden" name="version_vista" value={`${r.estado}:${r.montoAcreditado}`} />
-                    <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Nota de crédito (MXN)</span>
+                    <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Nota de crédito (MXN)</span>
                       <input name="monto" inputMode="decimal" required className={`${CSS_INPUT} w-[120px] mt-0.5`} style={ESTILO_INPUT} /></label>
-                    <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Fecha</span>
+                    <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Fecha</span>
                       <input type="date" name="fecha" required className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT} /></label>
-                    <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Folio de la nota (opc.)</span>
+                    <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Folio de la nota (opc.)</span>
                       <input name="referencia" maxLength={120} className={`${CSS_INPUT} w-[140px] mt-0.5`} style={ESTILO_INPUT} /></label>
-                    <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>Registrar nota de crédito</button>
+                    <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Registrar nota de crédito</button>
                   </form>
                   <form action={acciones.rechazar}>
                     <input type="hidden" name="reclamo" value={r.id} />
-                    <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>El proveedor lo rechazó</button>
+                    <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>El proveedor lo rechazó</button>
                   </form>
                 </div>
               )}

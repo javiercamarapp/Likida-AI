@@ -65,6 +65,6 @@ describe('FiltroRegistro — el tope se declara y el sufijo sobrevive (FE-12)', 
     );
     // T-1, T-10..T-19, T-100..T-199 = 111
     expect(html).toContain('111 coinciden de 200');
-    expect(html).toContain('Quitar filtro');
+    expect(html).toContain('Limpiar');
   });
 });

@@ -1,15 +1,16 @@
 import Link from 'next/link';
-import { LayoutGrid, Route, Scale, ScrollText, UsersRound, MessagesSquare, Plus, Users, Truck, Container } from 'lucide-react';
+import { LayoutGrid, Route, Plus, Users, Truck, Container } from 'lucide-react';
 import { saludo, ahoraMs } from '@/lib/saludo';
 import { fechaMx, fechaHoraMx, hoyMx } from '@/lib/formato';
 import { ultimasCorridas, duracionLegible, type AgenteConCorridas, type CorridaRegistrada } from '@/lib/likida/agentes/corridas';
 import { BarraPagina, ChipFecha, HeroSaludo, TituloSeccion } from './resumen-visual';
 import { AvisoSinFlota } from './sin-flota';
 import { Bloque, EsqTabla } from './bloque';
-import { moduloProximamenteDeRuta, rutaProximamente } from '@/lib/auth/visibilidad';
-import { PESO_SEVERIDAD, type AgenteInsight, type Insight } from '@/lib/likida/insights/tipos';
+import { moduloProximamenteDeRuta, puedeVerRuta, rutaProximamente, type PerfilTenant } from '@/lib/auth/visibilidad';
+import { AGENTES_INSIGHT, PESO_SEVERIDAD, type AgenteInsight, type Insight } from '@/lib/likida/insights/tipos';
 import { TarjetaInsight } from './agentes/insights/tarjeta-insight';
-import { ResumenV2 } from './resumen-v2';
+import { InicioCincoV2 } from './inicio-cinco-v2';
+import type { RangoResumen } from './resumen-datos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL RESUMEN DE UNA FLOTA CON PERFIL `cinco_agentes` (mig. 0770).
@@ -27,31 +28,8 @@ import { ResumenV2 } from './resumen-v2';
 // Cero pesos en esta pantalla (el Resumen es de `operacion`).
 // ═══════════════════════════════════════════════════════════════════════════
 
-interface FichaAgente {
-  clave: string;
-  nombre: string;
-  descripcion: string;
-  href: string;
-  Icono: typeof Route;
-  /** Qué agente de `agente_corrida` lo representa; `null` si no registra corridas. */
-  corridas: AgenteConCorridas | null;
-  /** Con qué clave lo nombra el marco de insights (T-INS-02). */
-  insight: AgenteInsight;
-}
-
-/** Los cinco, en el orden en que los nombra el producto. Una sola fuente para el Resumen. */
-export const FICHAS_CINCO_AGENTES: readonly FichaAgente[] = [
-  { clave: 'liquidacion', nombre: 'Liquidación automática', href: '/dashboard/agentes/liquidacion', Icono: Route, corridas: 'liquidacion',
-    descripcion: 'Arma la liquidación de cada viaje y marca lo que no cuadra.' , insight: 'liquidacion' },
-  { clave: 'peajes', nombre: 'Conciliación de peajes', href: '/dashboard/agentes/peajes', Icono: Scale, corridas: 'peajes',
-    descripcion: 'Cruza el estado de cuenta de casetas contra los viajes.' , insight: 'peajes' },
-  { clave: 'carta_porte', nombre: 'Carta Porte en automático', href: '/dashboard/agentes/carta-porte', Icono: ScrollText, corridas: 'carta_porte',
-    descripcion: 'Prepara el borrador del complemento y pide lo que falta.' , insight: 'carta-porte' },
-  { clave: 'vigia', nombre: 'Servicio al cliente', href: '/dashboard/agentes/vigia', Icono: UsersRound, corridas: null,
-    descripcion: 'Atiende a los clientes de la flota; una persona aprueba.' , insight: 'vigia' },
-  { clave: 'conductor', nombre: 'Comunicación con operadores', href: '/dashboard/agentes/conductores', Icono: MessagesSquare, corridas: 'conductores',
-    descripcion: 'Sigue los hitos del viaje y avisa cuando algo no se reporta.' , insight: 'conductores' },
-];
+export { FICHAS_CINCO_AGENTES, type FichaAgente } from './inicio-cinco-fichas';
+import { FICHAS_CINCO_AGENTES, type FichaAgente } from './inicio-cinco-fichas';
 
 /**
  * Lectores de insights por agente: cada frente registra aquí el suyo cuando su regla
@@ -73,15 +51,28 @@ export function insightMasSevero(lista: readonly Insight[]): Insight | null {
   return mejor;
 }
 
+/**
+ * Los agentes cuyo insight ESTE rol puede ver en ESTE perfil: su pantalla la abre `puedeVerRuta` y no está en «Próximamente».
+ * Es la compuerta de los lectores: un agente que el rol no ve no se LEE (ni se pinta), así que poblar `LECTORES_INSIGHTS`
+ * no filtra datos de un área ajena (p. ej. los de dinero al encargado) ni consulta módulos en stand-by.
+ */
+export function agentesInsightVisibles(rol: string, perfil: PerfilTenant | null = null): AgenteInsight[] {
+  return FICHAS_CINCO_AGENTES
+    .filter((f) => puedeVerRuta(rol, f.href, perfil) && !(perfil && moduloProximamenteDeRuta(perfil, f.href)))
+    .map((f) => f.insight);
+}
+
 export async function leerInsightsPorAgente(
   tenantId: string,
   lectores: Partial<Record<AgenteInsight, LectorInsights>> = LECTORES_INSIGHTS,
+  /** Solo se leen estos agentes (`agentesInsightVisibles`); los demás quedan en `[]` sin llamar a su lector. Sin lista: todos. */
+  visibles?: readonly AgenteInsight[],
 ): Promise<InsightsPorAgente> {
   const claves = FICHAS_CINCO_AGENTES.map((f) => f.insight);
   const pares = await Promise.all(
     claves.map(async (a) => {
       const lector = lectores[a];
-      if (!lector) return [a, []] as const;
+      if (!lector || (visibles && !visibles.includes(a))) return [a, []] as const;
       try {
         return [a, await lector(tenantId)] as const;
       } catch {
@@ -90,6 +81,31 @@ export async function leerInsightsPorAgente(
     }),
   );
   return Object.fromEntries(pares) as InsightsPorAgente;
+}
+
+/**
+ * Lo que el Resumen v2 necesita de los insights: el más grave de cada agente VISIBLE para el rol, y los agentes cuyo lector
+ * FALLÓ (`null`), que se confiesan en la pantalla en vez de omitirse (omitirlos se leería como «sin pendientes»).
+ */
+export function resumirInsights(insights: InsightsPorAgente, visibles: readonly AgenteInsight[]): { principales: Insight[]; fallidos: AgenteInsight[] } {
+  const principales: Insight[] = [];
+  const fallidos: AgenteInsight[] = [];
+  for (const a of AGENTES_INSIGHT) {
+    if (!visibles.includes(a)) continue;
+    const lista = insights[a];
+    if (lista === null) { fallidos.push(a); continue; }
+    const mas = insightMasSevero(lista);
+    if (mas) principales.push(mas);
+  }
+  return { principales, fallidos };
+}
+
+export async function leerInsightsResumen(
+  tenantId: string, rol: string, perfil: PerfilTenant | null,
+  lectores: Partial<Record<AgenteInsight, LectorInsights>> = LECTORES_INSIGHTS,
+): Promise<{ principales: Insight[]; fallidos: AgenteInsight[] }> {
+  const visibles = agentesInsightVisibles(rol, perfil);
+  return resumirInsights(await leerInsightsPorAgente(tenantId, lectores, visibles), visibles);
 }
 
 export const TEXTO_VACIO_RESUMEN = 'Todavía no hay datos para interpretar. Cuando llegue el primer archivo, aquí verás qué pasó y qué hacer.';
@@ -110,11 +126,11 @@ export function InsightDeAgente({
   return (
     <div className="mt-2" data-insight-agente>
       {proximamente ? (
-        <p className="card p-3 text-[12.5px]" style={{ color: 'var(--muted)' }} data-estado="proximamente">{TEXTO_PROXIMAMENTE_RESUMEN}</p>
+        <p className="card p-3 text-[12px]" style={{ color: 'var(--muted)' }} data-estado="proximamente">{TEXTO_PROXIMAMENTE_RESUMEN}</p>
       ) : insights == null ? (
-        <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--ink)' }} data-estado="error">{TEXTO_ERROR_RESUMEN}</p>
+        <p role="alert" className="card p-3 text-[12px]" style={{ color: 'var(--ink)' }} data-estado="error">{TEXTO_ERROR_RESUMEN}</p>
       ) : principal === null ? (
-        <p className="card p-3 text-[12.5px]" style={{ color: 'var(--muted)' }} data-estado="vacio">{TEXTO_VACIO_RESUMEN}</p>
+        <p className="card p-3 text-[12px]" style={{ color: 'var(--muted)' }} data-estado="vacio">{TEXTO_VACIO_RESUMEN}</p>
       ) : (
         <TarjetaInsight insight={principal} />
       )}
@@ -172,10 +188,10 @@ export async function TarjetaAgente({ ficha, tenantId, sufijo, insights }: { fic
           <h3 className="text-[14px] font-medium">
             {ficha.nombre}
             {proximamente && (
-              <span className="ml-2 align-middle text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>Próximamente</span>
+              <span className="ml-2 align-middle text-[11px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>Próximamente</span>
             )}
           </h3>
-          <p className="text-[12.5px] mt-0.5" style={{ color: 'var(--ink2)' }}>{ficha.descripcion}</p>
+          <p className="text-[12px] mt-0.5" style={{ color: 'var(--ink2)' }}>{ficha.descripcion}</p>
           <div className="mt-2">
             {proximamente ? (
               <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Todavía no está activo en tu cuenta.</p>
@@ -199,7 +215,7 @@ const ATAJOS: ReadonlyArray<{ href: string; nombre: string; Icono: typeof Route 
 ];
 
 export async function InicioCincoAgentes({
-  tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '', ui = 'v1', userId, soloLectura = false, veAsistente = false,
+  tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '', ui = 'v1', userId, soloLectura = false, veAsistente = false, rango, rol = '',
 }: {
   tenantId: string;
   tenantNombre: string | null;
@@ -212,22 +228,23 @@ export async function InicioCincoAgentes({
   soloLectura?: boolean;
   /** ¿El rol puede abrir Puesta en marcha? (lo decide la página con `puedeVerRuta`; por omisión NO: falla cerrado). */
   veAsistente?: boolean;
+  /** Periodo elegido en la barra de filtros (`?rango=`). Solo lo usa el Inicio v2. */
+  rango?: RangoResumen;
+  /** Rol efectivo (decide qué enlaces e insights se ofrecen en el Resumen v2). Por omisión vacío: falla cerrado. */
+  rol?: string;
 }) {
   const diaMx = hoyMx(new Date(ahoraMs()));
-  const insights = await leerInsightsPorAgente(tenantId);
   if (ui === 'v2' && userId) {
+    const { principales, fallidos } = await leerInsightsResumen(tenantId, rol, 'cinco_agentes');
     return (
-      <ResumenV2
+      <InicioCincoV2
         tenantId={tenantId} userId={userId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste}
-        sufijo={sufijo} soloLectura={soloLectura} veAsistente={veAsistente}
-        fichas={FICHAS_CINCO_AGENTES.map((f) => (
-          <Bloque key={f.clave} mensaje={`No se pudo leer ${f.nombre}.`} esqueleto={<EsqTabla filas={2} titulo={false} />}>
-            <TarjetaAgente ficha={f} tenantId={tenantId} sufijo={sufijo} insights={insights} />
-          </Bloque>
-        ))}
+        sufijo={sufijo} soloLectura={soloLectura} veAsistente={veAsistente} rango={rango} rol={rol}
+        principales={principales} fallidos={fallidos}
       />
     );
   }
+  const insights = await leerInsightsPorAgente(tenantId);
   return (
     <main className="h-full">
       <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>

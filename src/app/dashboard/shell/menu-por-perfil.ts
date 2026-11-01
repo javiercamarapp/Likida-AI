@@ -76,8 +76,6 @@ const PIE_CINCO_AGENTES = ['/dashboard/notificaciones', '/dashboard/mi-perfil', 
 
 /** La ruta del asistente: fila del pie mientras va <6/6, ítem de «Cuenta y conexiones» cuando termina. */
 export const HREF_PUESTA_EN_MARCHA = '/dashboard/puesta-en-marcha';
-/** Las filas del pie que NO se pintan como ítems de lista: viven en el menú de la tarjeta de cuenta. */
-export const HREFS_MENU_CUENTA = ['/dashboard/mi-perfil', '/dashboard/soporte'] as const;
 export const HREF_NOTIFICACIONES = '/dashboard/notificaciones';
 
 /**

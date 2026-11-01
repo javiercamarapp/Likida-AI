@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { Siren, ShieldCheck, PhoneCall, HeartHandshake } from 'lucide-react';
+import { ShieldCheck, PhoneCall, HeartHandshake } from 'lucide-react';
 import { fechaMx, hoyMx } from '@/lib/formato';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -16,6 +16,9 @@ import {
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { logger } from '@/lib/logger';
 import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../admin/ui/forma';
+import type { Metadata } from 'next';
+import { MarcoPagina } from '@/app/ui-v2/componentes';
+export const metadata: Metadata = { title: 'Emergencias' };
 
 export const dynamic = 'force-dynamic';
 
@@ -188,17 +191,7 @@ export default async function PaginaEmergencias({
   const BTN_CHICO = 'text-xs px-2.5 py-1 rounded-lg hairline';
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <Siren width={16} height={16} strokeWidth={1.75} />
-        <div>
-          <span className="text-sm font-medium block">Emergencias</span>
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>
-            La grúa, la póliza y los contactos que el escalamiento usa cuando un chofer reporta y nadie contesta
-          </span>
-        </div>
-      </header>
-
+    <MarcoPagina titulo="Emergencias" apoyo="La grúa, la póliza y los contactos que el escalamiento usa cuando un chofer reporta y nadie contesta.">
       {!leyoOk && (
         <section className="rounded-2xl px-5 py-4 hairline" style={{ background: 'var(--surface)' }}>
           <p className="text-sm">No pude leer el directorio ahorita — recarga la página. No se ofrecen los formularios para no capturar a ciegas sobre lo que no se ve.</p>
@@ -331,6 +324,6 @@ export default async function PaginaEmergencias({
           </section>
         </>
       )}
-    </div>
+    </MarcoPagina>
   );
 }

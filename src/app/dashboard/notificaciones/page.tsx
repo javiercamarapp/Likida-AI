@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { esRolNomina } from '@/lib/auth/roles';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { getKpis, detectarAnomalias, contarEscalados } from '@/lib/likida/analytics';
 import { contarHuerfanosPendientes } from '@/lib/likida/repo';
@@ -13,6 +14,8 @@ import { ahoraMs } from '@/lib/saludo';
 import { calcularAlertasFlota } from '../calcular-alertas-flota';
 import { sufijoTenant } from '../sufijo';
 import { ListaAlertas } from './lista';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Notificaciones' };
 
 export const dynamic = 'force-dynamic';
 
@@ -38,6 +41,9 @@ export default async function PaginaNotificaciones({
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/notificaciones', sp);
   if (!puedeVerRuta(rol, '/dashboard/notificaciones')) redirect('/dashboard');
+
+  // `nomina` (0949) solo ve conteos de Liquidaciones: no se leen KPIs, anomalías ni tablero (consultan dinero y operación). Sin alertas.
+  if (esRolNomina(rol)) return <ListaAlertas alertas={[]} />;
 
   const sufijo = sufijoTenant(sp);
   // El perfil de la flota (0770) recorta también las alertas: las de módulos en

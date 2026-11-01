@@ -4,12 +4,16 @@ import { sufijoTenant } from './sufijo';
 import { puedeVerArea, puedeVerRuta } from '@/lib/auth/visibilidad';
 import { InicioContenido } from './inicio-contenido';
 import { InicioOperacion } from './inicio-operacion';
-import { InicioCincoAgentes } from './inicio-cinco-agentes';
+import { InicioCincoAgentes, leerInsightsResumen } from './inicio-cinco-agentes';
+import { ResumenV2 } from './resumen-v2';
+import { leerRango } from './resumen-datos';
 import { cookies } from 'next/headers';
 import { versionUi } from '@/lib/auth/version_ui';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { getPerfilCrudo } from '@/lib/likida/repo';
 import { onboardingFiscalListo, onboardingPospuesto } from '@/lib/likida/perfil/preguntas';
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Resumen' };
 
 export const dynamic = 'force-dynamic';
 
@@ -41,6 +45,9 @@ export default async function DashboardInicio({
         tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} sufijo={sufijoTenant(sp)}
         ui={ui} userId={userId} soloLectura={Boolean(sp.tenant || sp.vista || sp.rol || tenantNombre)}
         veAsistente={puedeVerRuta(rol, '/dashboard/puesta-en-marcha', perfilFlota)}
+        // DECISIÓN (31-oct-2026): el perfil `cinco_agentes` SÍ ve pesos en el Inicio, pero solo dueño y finanzas, y solo por el lector
+        // propio `leerCifrasPesosCincoAgentes` (importe IAVE y extemporáneos). El encargado nunca; el Resumen de siempre no se toca.
+        rango={leerRango(sp.rango)} rol={rol}
       />
     );
   }
@@ -93,6 +100,22 @@ export default async function DashboardInicio({
     } catch { /* sigue al resumen */ }
   }
   if (faltaOnboarding) redirect(`/dashboard/onboarding${sufijo}`);
+
+  // El rediseño: una flota SIN perfil que ya tiene la interfaz v2 (misma versión con la que el layout eligió el chrome)
+  // recibe el Resumen v2 y no el de siempre dentro del chrome nuevo. El rol sin dinero (encargado) ve los mismos
+  // recuadros con conteos, sin ningún peso. Los enlaces y los insights se limitan a lo que ESE rol abre.
+  const ui = await versionUi(tenantId, rolReal ?? rol, await cookies());
+  if (ui === 'v2') {
+    const { principales, fallidos } = await leerInsightsResumen(tenantId, rol, null);
+    return (
+      <ResumenV2
+        tenantId={tenantId} userId={userId ?? 'sin-usuario'} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste}
+        sufijo={sufijo} soloLectura={Boolean(sp.tenant || sp.vista || sp.rol || tenantNombre)}
+        veAsistente={false} veDinero={puedeVerArea(rol, 'dinero')} rango={leerRango(sp.rango)}
+        principales={principales} fallidos={fallidos} rol={rol} perfil={null} avisoFiscalPospuesto={avisoFiscalPospuesto}
+      />
+    );
+  }
 
   if (!puedeVerArea(rol, 'dinero')) {
     return <InicioOperacion tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} sufijo={sufijo} />;

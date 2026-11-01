@@ -1,11 +1,13 @@
 import { Users, ShieldCheck } from 'lucide-react';
-import { EstadoVacio, StatusPill } from '../../admin/ui/kit';
+import { StatusPill } from '../../admin/ui/kit';
+import { EstadoVacio } from '../estados';
 import { fechaMx } from '@/lib/formato';
 import type { OpcionRol } from '@/lib/auth/invitar';
 import { nombreDeRol, detalleDeRol } from '@/lib/auth/roles';
 import {
   FormaInvitar, FormaCambiarRol, FormaDarDeBaja, FormaReactivar, FormaReenviarAcceso, FormaCerrarSesiones, type AccionForma,
 } from './forma';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 export interface UsuarioRow {
   id: string;
@@ -45,34 +47,26 @@ export interface AccionesEquipo {
  * una fila vieja con esos roles se describe en vez de quedar como «rol sin
  * descripción».
  */
-export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, acciones }: {
+export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvitar, acciones }: {
   usuarios: UsuarioRow[] | null;
   /** El de la sesión, para marcar "(tú)" en la lista y no ofrecerle baja. */
   userId: string;
   /** `puedeAdministrar(rol)`: invitar, cambiar rol, dar de baja, reenviar. */
   puedeInvitar: boolean;
   roles: ReadonlyArray<OpcionRol>;
+  /** Los roles que ofrece SOLO el formulario de invitar (con `nomina` si aplica). Sin él, los mismos de `roles`. */
+  rolesInvitar?: ReadonlyArray<OpcionRol>;
   acciones: AccionesEquipo;
 }) {
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <Users width={16} height={16} strokeWidth={1.75} />
-        <div>
-          <span className="text-sm font-medium block">Usuarios & Roles</span>
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>Quién entra a este panel y qué puede ver</span>
-        </div>
-      </header>
-
+    <MarcoPagina titulo="Usuarios del equipo" apoyo="Quién entra a este panel y qué puede ver.">
       <div className="glass-panel overflow-hidden">
         {usuarios === null ? (
           <div className="p-8 text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar el equipo.</div>
         ) : (
           <>
             <div className="pt-5 pb-2 px-5">
-              <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
-                Tu equipo
-              </h2>
+              <TituloRecuadro info="usuarios.equipo">Tu equipo</TituloRecuadro>
             </div>
             {usuarios.length === 0 ? (
               <div className="px-5 pb-5">
@@ -112,7 +106,7 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, acciones 
                       + Invitar a alguien de tu equipo
                     </summary>
                     <div className="pt-3">
-                      <FormaInvitar accion={acciones.invitar} roles={roles} />
+                      <FormaInvitar accion={acciones.invitar} roles={rolesInvitar ?? roles} />
                     </div>
                   </details>
                 </div>
@@ -143,7 +137,7 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, acciones 
           </>
         )}
       </div>
-    </div>
+    </MarcoPagina>
   );
 }
 

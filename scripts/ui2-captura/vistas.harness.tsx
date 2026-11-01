@@ -31,6 +31,7 @@ const { default: DashboardChrome } = process.env.UI2_CHROME === 'v2'
 const { BarraPagina, HeroSaludo, ChipFecha, TablaViajes } = await import('@/app/dashboard/resumen-visual');
 const { InsightDeAgente, FICHAS_CINCO_AGENTES } = await import('@/app/dashboard/inicio-cinco-agentes');
 const kit = await import('@/app/admin/ui/kit');
+const { TiraKpi, Sparkline, Columnas } = await import('@/app/ui-v2/graficas');
 const forma = await import('@/app/admin/ui/forma');
 const gr = await import('@/app/admin/ui/graficas');
 const { TarjetaInsight } = await import('@/app/dashboard/agentes/insights/tarjeta-insight');
@@ -240,6 +241,36 @@ const VISTAS: Record<string, () => ReactNode> = {
       </div>
     </Pagina>
   ),
+  // Prueba visual de que el COLOR DE DATOS llega a donde debe: los 8 matices (data-matiz 1..8) en el filete de 3 px de cada KPI, en su
+  // sparkline y en la serie de columnas; el cromo (sidebar, topbar, botones) sigue en negro/gris. Fixture 100 % sintético.
+  '13-matices': () => (
+    <Pagina titulo="Matices de datos" icono={<Wallet width={15} height={15} />}>
+      <TiraKpi etiqueta="Matices 1 a 4" items={[
+        { etiqueta: 'Dinero liquidado', valor: '$482,310', matiz: 1, serie: [3, 5, 4, 7, 6, 9, 8], sello: 'TMS · hace 5 min' },
+        { etiqueta: 'Gasto de ruta', valor: '$96,820', matiz: 2, serie: [8, 6, 7, 5, 6, 4, 5], sello: 'TMS · hace 5 min' },
+        { etiqueta: 'Cumplimiento', valor: '94 %', matiz: 3, serie: [5, 6, 6, 7, 8, 8, 9], sello: 'SAT · ayer' },
+        { etiqueta: 'Pendiente', valor: '$38,400', matiz: 4, serie: [2, 3, 5, 4, 6, 7, 7], sello: 'TMS · hace 5 min' },
+      ]} />
+      <TiraKpi etiqueta="Matices 5 a 8" items={[
+        { etiqueta: 'A tiempo', valor: '91 %', matiz: 5, serie: [6, 7, 6, 8, 8, 9, 9], sello: 'TMS · hace 5 min' },
+        { etiqueta: 'Requiere acción', valor: '7', matiz: 6, serie: [2, 4, 3, 5, 4, 6, 7], sello: 'Panel · ahora' },
+        { etiqueta: 'Incidencias', valor: '12', matiz: 7, serie: [5, 4, 6, 3, 4, 5, 3], sello: 'WhatsApp · hoy' },
+        { etiqueta: 'Viajes', valor: '128', matiz: 8, serie: [4, 5, 5, 6, 7, 7, 8], sello: 'TMS · hace 5 min' },
+      ]} />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        {[1, 2, 3, 4, 5, 6, 7, 8].map((m) => (
+          <div key={m} className="card p-3 flex items-center gap-3">
+            <span className="text-[12px]" style={{ color: 'var(--muted)', width: 64 }}>Matiz {m}</span>
+            <Sparkline valores={[3, 5, 4, 7, 6, 9, 8]} matiz={m as 1} ancho={120} alto={28} />
+            <Columnas etiqueta={`Matiz ${m}`} matiz={m as 1} datos={[{ etiqueta: 'L', valor: 4 }, { etiqueta: 'M', valor: 7 }, { etiqueta: 'X', valor: 5 }, { etiqueta: 'J', valor: 9 }]} />
+          </div>
+        ))}
+      </div>
+    </Pagina>
+  ),
+  // Variantes del SHELL por rol y estado (el contenido es mínimo: lo que se mira es el sidebar, la topbar y la barra inferior).
+  '14-shell-contador': () => (<Pagina titulo="Resumen del contador" icono={<Wallet width={15} height={15} />}><kit.EstadoVacio>Vista del contador: su barra inferior y su menú salen del mismo filtro por rol.</kit.EstadoVacio></Pagina>),
+  '15-shell-puesta': () => (<Pagina titulo="Resumen" icono={<Route width={15} height={15} />}><kit.EstadoVacio>Puesta en marcha 3/6 en el pie y avisos pendientes en la campana de la topbar.</kit.EstadoVacio></Pagina>),
   '12-vacio-total': () => (
     <Pagina titulo="Conexiones" icono={<Route width={15} height={15} />}>
       <kit.EstadoVacio>Aún no hay nada conectado. Empieza por entregar el primer archivo del proveedor.</kit.EstadoVacio>
@@ -256,12 +287,18 @@ const VISTAS: Record<string, () => ReactNode> = {
   ),
 };
 
+/** Props del chrome por vista (las demás: dueño con el perfil de cinco agentes). */
+const CHROME_POR_VISTA: Record<string, { rol?: string; insignias?: Record<string, string> }> = {
+  '14-shell-contador': { rol: 'contador' },
+  '15-shell-puesta': { insignias: { '/dashboard/puesta-en-marcha': '3/6', '/dashboard/notificaciones': '4' } },
+};
+
 describe('arnés de capturas UI v2', () => {
-  it('renderiza las 12 vistas con componentes reales y fixtures sintéticos', () => {
+  it('renderiza todas las vistas con componentes reales y fixtures sintéticos', () => {
     mkdirSync(path.join(OUT, 'vistas'), { recursive: true });
     for (const [id, vista] of Object.entries(VISTAS)) {
       const html = renderToStaticMarkup(
-        <DashboardChrome nombre={USUARIO.nombre} rol="flota_admin" perfil="cinco_agentes" cerrarSesion={async () => {}}>
+        <DashboardChrome nombre={USUARIO.nombre} rol={CHROME_POR_VISTA[id]?.rol ?? 'flota_admin'} perfil="cinco_agentes" {...(CHROME_POR_VISTA[id]?.insignias ? { insignias: CHROME_POR_VISTA[id].insignias } : {})} cerrarSesion={async () => {}}>
           {vista()}
         </DashboardChrome>,
       );

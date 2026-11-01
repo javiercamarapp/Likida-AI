@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Wallet, Calculator, Fuel, PiggyBank, LayoutGrid, CalendarDays, Plus } from 'lucide-react';
+import { Wallet, Calculator, Fuel, PiggyBank, Plus } from 'lucide-react';
 import {
   getKpis, getAcreditables, detectarAnomalias, getViajes, getViajesPorMes,
   getGastoPorSemanaSeries, getLiquidadoPorSemanaSeries, getTopRutasPorGastoSeries,
@@ -16,13 +16,15 @@ import {
   type GastoFiscal, type ResumenPerdidas, type GastosFiscalesSeries, type Periodo,
 } from '@/lib/likida/fiscal';
 import { saludo, ahoraMs } from '@/lib/saludo';
-import { fechaMx, mxn, pctCambio, hoyMx } from '@/lib/formato';
+import { mxn, pctCambio, hoyMx } from '@/lib/formato';
+import { BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
+import { selloHoy } from './sello-hoy';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { estadoPanel, liquidacionesDeViajes } from './estado';
 import type { DiaViajes } from './serie-diaria';
 import { getViajesPorDia } from './serie-diaria-servidor';
 import {
-  BarraPagina, ChipFecha, HeroSaludo, MotorFiscal, TituloSeccion,
+  MotorFiscal, TituloSeccion,
   type FilaViaje,
 } from './resumen-visual';
 import { ViajesRecientes } from './viajes-recientes';
@@ -38,6 +40,7 @@ import { getPrimerosPasos, type PrimerosPasos } from '@/lib/likida/primeros-paso
 import { PrimeraLiquidacion } from './primera-liquidacion';
 import { OperaWhatsApp } from './opera-whatsapp';
 import { Bloque, Barra, EsqCifras, EsqTabla, EsqGrafica } from './bloque';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 
 /** Resiliencia por sección: si una consulta falla, devuelve null y la
  *  tarjeta muestra un fallback en vez de tirar toda la pantalla. */
@@ -212,7 +215,6 @@ export async function InicioContenido({
     }));
   });
 
-  const ICONO_BARRA = { width: 15, height: 15, strokeWidth: 1.75, style: { color: 'var(--muted)' } } as const;
 
   /**
    * FE-5 — LA BÚSQUEDA VA A LA BASE, NO A LAS 100 FILAS CARGADAS.
@@ -258,59 +260,33 @@ export async function InicioContenido({
     // El scroll vive DENTRO del panel (patrón FASE 1.5). El lienzo del
     // contenido es TENUE (`--g1`) y las piezas son tarjetas blancas encima —
     // la anatomía de la referencia; la barra y el saludo van sobre blanco.
-    <main className="h-full">
-      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<LayoutGrid {...ICONO_BARRA} />}
-          titulo="Resumen"
-          derecha={
-            <div className="flex items-center gap-2 min-w-0">
-              {tenantNombre && (
-                <span className="hidden lg:inline-block text-[11px] px-2 py-0.5 rounded-full font-medium shrink-0" style={{ color: 'var(--accent-fg)', background: 'var(--accent)' }}>
-                  viendo como superadmin · {tenantNombre}
-                </span>
-              )}
-              {/* La campana enseña PENDIENTES reales, y para saberlos hay que
-                  leer kpis + anomalías. Su hueco se reserva con un fantasma
-                  del MISMO tamaño (h-8) para que la barra no dé el brinco al
-                  aterrizar los tres controles. */}
-              <Bloque mensaje="No se pudo cargar la barra de acciones." esqueleto={<FantasmaAcciones />}>
-                <AccionesResumen buscar={buscarViajes} pKpis={pKpis} pAnomalias={pAnomalias} sufijo={sufijo} />
-              </Bloque>
-            </div>
-          }
-        />
-        {/* La bienvenida vive DIRECTO sobre el lienzo tenue — corrección de
-            Javier sobre la referencia: lo que lleva recuadro blanco es la
-            BARRA de arriba, no el saludo. */}
-        <HeroSaludo
-            saludo={saludo()} nombre={nombre ?? 'flota'}
-            tagline="Todo listo para que sigas moviendo tu flota"
-            derecha={
-              <div className="flex items-center gap-2.5 shrink-0 pt-1">
-                {/* El DÍA DE MÉXICO, no el UTC: a las 6pm de CDMX el chip
-                    decía mañana (capturado el 12-ago). */}
-                <ChipFecha icono={<CalendarDays {...ICONO_BARRA} />}>{fechaMx(hoyMx(new Date(ahoraMs())))}</ChipFecha>
-                {/* A DESPACHO (13-ago): ahí vive la forma de crear — junto
-                    con asignar, avisar y el alta de operadores. La página
-                    suelta /viajes/nuevo se retiró: era la misma forma con
-                    menos contexto, y dos puertas se desincronizan. */}
-                <Link href={`/dashboard/despacho${sufijo}`}
-                  className="h-8 px-3 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 shrink-0 transition-opacity hover:opacity-85"
-                  style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                  <Plus width={15} height={15} strokeWidth={2} /> Nuevo viaje
-                </Link>
-              </div>
-            }
-        />
-
-        <div className="px-5 pb-5 flex-1">
+    <MarcoPagina
+      titulo="Resumen"
+      area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
+      apoyo={`${saludo()}, ${nombre ?? 'flota'}. Todo listo para que sigas moviendo tu flota.`}
+      acciones={(
+        <>
+          {/* La campana enseña PENDIENTES reales, y para saberlos hay que
+              leer kpis + anomalías. Su hueco se reserva con un fantasma
+              del MISMO tamaño (h-8) para que la barra no dé el brinco al
+              aterrizar los tres controles. */}
+          <Bloque mensaje="No se pudo cargar la barra de acciones." esqueleto={<FantasmaAcciones />}>
+            <AccionesResumen buscar={buscarViajes} pKpis={pKpis} pAnomalias={pAnomalias} sufijo={sufijo} />
+          </Bloque>
+          {/* A DESPACHO (13-ago): ahí vive la forma de crear — junto con asignar, avisar y el alta de operadores. La página
+              suelta /viajes/nuevo se retiró: era la misma forma con menos contexto, y dos puertas se desincronizan. */}
+          <BotonEnlace variante="primary" tamano="sm" href={`/dashboard/despacho${sufijo}`} icono={<Plus width={15} height={15} strokeWidth={2} />}>
+            Nuevo viaje
+          </BotonEnlace>
+        </>
+      )}
+    >
           {/* ANTES QUE NINGUNA CIFRA. Lo de abajo son ceros de una flota que
               no existe, y esa frase tiene que llegar antes que los ceros. No
               necesita consulta: sale con el primer flush, que es justo lo que
               "antes que ninguna cifra" quiere decir. */}
           {!tenantExiste && (
-            <div className="mt-3"><AvisoSinFlota tenantId={tenantId} /></div>
+            <div><AvisoSinFlota tenantId={tenantId} /></div>
           )}
 
           {/* EL ESTÍMULO SIGUE EN $0 (W2). Quien no conoce de memoria sus ingresos
@@ -318,7 +294,7 @@ export async function InicioContenido({
               motor fiscal está completo: mientras las dos preguntas sigan sin
               contestarse, el estímulo de peaje del 50 % no se acredita. */}
           {avisoFiscalPospuesto && (
-            <p role="status" className="mt-3 rounded-lg px-3.5 py-2.5 text-[12.5px]" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
+            <p role="status" className="rounded-lg px-3.5 py-2.5 text-[12px]" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
               Tu perfil fiscal sigue sin declararse, así que el <strong>estímulo de peaje</strong> se muestra en $0 y no se acredita
               hasta que lo hagas.{' '}
               <a href={`/dashboard/onboarding${sufijo}`} className="underline">Declararlo cuando ya tengas los datos</a>.
@@ -365,12 +341,12 @@ export async function InicioContenido({
 
           {/* ── KPIs (caja interna + delta como texto, referencia) ──
               "Total viajes" y "Liquidado" no van aquí: ya se ven como
-              GRÁFICA más abajo. "Ahorro generado" se queda (pedido
+              GRÁFICA más abajo. "Por recuperar" (antes «Ahorro generado») se queda (pedido
               explícito): mismo número que "Recuperable pidiendo
               factura", pero fijo al ejercicio fiscal completo. La
               dirección buena/mala no es igual para las tres: gastar
               más no es bueno aunque el número suba. */}
-          <div className="mt-2">
+          <div>
             <Bloque mensaje="No se pudieron cargar las cifras del periodo."
               esqueleto={<EsqCifras n={3} rejilla="grid grid-cols-1 sm:grid-cols-3 gap-2" />}>
               <BloqueKpis pKpis={pKpis} pSeriesKpis={pSeriesKpis} pResumenPerdidas={pResumenPerdidas}
@@ -380,7 +356,7 @@ export async function InicioContenido({
 
           {/* ── Motor fiscal — el diferenciador real, no un TMS
               genérico. Todo lo fiscal vive junto, en UNA tarjeta. */}
-          <div className="mt-2">
+          <div>
             <Bloque mensaje="No se pudo cargar el motor fiscal." esqueleto={<EsqMotorFiscal />}>
               <BloqueFiscal pAcred={pAcred} pResumenPerdidas={pResumenPerdidas}
                 pResumenPerdidasSeries={pResumenPerdidasSeries} periodoFiscal={periodoFiscal} />
@@ -389,7 +365,7 @@ export async function InicioContenido({
 
           {/* ── La tabla protagonista, con los viajes REALES y su botón
               de abrir (despliega los 100 cargados ahí mismo). */}
-          <Bloque mensaje="No se pudieron cargar los viajes recientes." esqueleto={<div className="mt-2.5"><EsqTabla filas={6} /></div>}>
+          <Bloque mensaje="No se pudieron cargar los viajes recientes." esqueleto={<div><EsqTabla filas={6} /></div>}>
             <BloqueViajes pFilasViajes={pFilasViajes} sufijo={sufijo} />
           </Bloque>
 
@@ -397,7 +373,7 @@ export async function InicioContenido({
               Top rutas — UN SOLO selector Semanal/Mensual/Histórico que
               mueve las 5 juntas (pedido explícito, 8-ago-2026). El id
               es el ancla del BannerInsight de arriba. */}
-          <div className="mt-2.5" id="estadisticas">
+          <div id="estadisticas">
             <Bloque mensaje="No se pudieron cargar las estadísticas del periodo." esqueleto={<EsqGrafica alto={260} />}>
               <BloqueEstadisticas
                 pViajesPorDia={pViajesPorDia} pViajesPorMes={pViajesPorMes} pSeriesKpis={pSeriesKpis}
@@ -406,9 +382,7 @@ export async function InicioContenido({
           </div>
 
           <p className="text-[11px] pt-3" style={{ color: 'var(--faint)' }}>{LEYENDA_CORTA}</p>
-        </div>
-      </div>
-    </main>
+    </MarcoPagina>
   );
 }
 
@@ -459,11 +433,11 @@ async function BloqueArranque({ pPasos, sufijo }: {
   if (!pasos || pasos.completado) return null;
   return (
     <>
-      <div className="mt-3"><PrimeraLiquidacion datos={pasos} sufijo={sufijo} /></div>
+      <div><PrimeraLiquidacion datos={pasos} sufijo={sufijo} /></div>
       {/* El canal, presentado con sus mensajes literales — solo mientras
           la flota arranca: ya operando, el guion lo tiene aprendido y la
           tarjeta cede el lugar a las cifras. */}
-      <div className="mt-3"><OperaWhatsApp rol="jefe" sufijo={sufijo} /></div>
+      <div><OperaWhatsApp rol="jefe" sufijo={sufijo} /></div>
     </>
   );
 }
@@ -484,7 +458,7 @@ async function BloqueInsight({ pLiquidadoSemanal }: {
   const anterior = buckets.length > 1 ? buckets[buckets.length - 2].valor : null;
   if (actual <= 0) return null;
   return (
-    <div className="mt-3">
+    <div>
       <BannerInsight etiqueta="Esta semana" deltaPct={pctCambio(actual, anterior)} href="#estadisticas">
         Tu flota liquidó <b className="tabular">{mxn(actual)}</b> en viajes cerrados
       </BannerInsight>
@@ -534,7 +508,7 @@ async function BloqueAlertas({ pKpis, pEscalados, pHuerfanos, pAnomalias, sufijo
   if (alertas.length === 0) return null;
 
   return (
-    <div className="mt-3 space-y-1.5">
+    <div className="space-y-1.5">
       {alertas.map((a) => (
         <Link key={a.texto} href={a.href}
           className="card p-3 flex items-center gap-2.5 hover:opacity-85 transition-opacity"
@@ -597,7 +571,7 @@ export async function AvisoEstado({
 
   if (estado === 'error') {
     return (
-      <div className="card p-6 mt-3" style={{ borderColor: 'var(--bad)' }}>
+      <div className="card p-6" style={{ borderColor: 'var(--bad)' }}>
         <p className="text-sm font-semibold tracking-tight m-0">No se pudieron cargar los datos</p>
         <p className="mt-1.5 text-sm m-0" style={{ color: 'var(--muted)' }}>
           Hubo un problema al leer del sistema. Recarga la página en un momento — esto NO significa
@@ -611,7 +585,7 @@ export async function AvisoEstado({
   // todo cargó bien en ambos casos: "vacío" son las mismas piezas con sus
   // propios ceros honestos.
   return (
-    <div className="card p-4 flex items-start gap-3 mt-3" style={{ borderColor: 'var(--warn)' }}>
+    <div className="card p-4 flex items-start gap-3" style={{ borderColor: 'var(--warn)' }}>
       <span className="inline-block w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: 'var(--warn)' }} />
       <div>
         <p className="text-sm font-semibold m-0">Faltan datos por cargar — esta pantalla está incompleta</p>
@@ -634,22 +608,23 @@ async function BloqueKpis({ pKpis, pSeriesKpis, pResumenPerdidas, periodoFiscal 
   return (
     <>
       {seriesKpis ? (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <TiraCifras sello={selloHoy('Gastos y liquidaciones de la flota')}>
           <KpiPeriodo icono={<Wallet width={15} height={15} strokeWidth={1.75} />}
             nombre="Gasto total" campo="gastoTotal" formato="mxn" subeEsBueno={false} series={seriesKpis} />
           <KpiPeriodo icono={<Calculator width={15} height={15} strokeWidth={1.75} />}
             nombre="Costo por viaje" campo="costoPorViaje" formato="mxn" subeEsBueno={false} series={seriesKpis} />
-          <StatCard icono={<PiggyBank width={15} height={15} strokeWidth={1.75} />}
-            etiqueta={`Ahorro generado — ${periodoFiscal.etiqueta}`}
+          <Cifra icono={<PiggyBank width={15} height={15} strokeWidth={1.75} />}
+            etiqueta={`Por recuperar — ${periodoFiscal.etiqueta}`}
             // AUDITORÍA 1, ALTO: si la lectura fiscal falló (o no hay
             // config), es `null` — se PRESERVA y la tarjeta dice "—",
             // en vez de afirmar "$0.00 de ahorro" que suena a medición.
             valor={resumenPerdidas ? resumenPerdidas.montoRecuperable : null}
-            sinDato="no se pudo leer el dato fiscal"
+            mensaje="no se pudo leer el dato fiscal"
+            info="inicio.ahorro_generado"
             // Sin `delta`: esta cifra va fija al ejercicio completo,
             // no hay "periodo anterior" contra el que compararla (A12).
             formato="mxn" />
-        </div>
+        </TiraCifras>
       ) : (
         <p className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar el comparativo de KPIs.</p>
       )}
@@ -716,7 +691,7 @@ async function BloqueViajes({ pFilasViajes, sufijo }: {
   const filas = await pFilasViajes;
   if (filas === null) {
     return (
-      <div className="card p-6 mt-2.5 text-sm" style={{ color: 'var(--muted)' }}>
+      <div className="card p-6 text-sm" style={{ color: 'var(--muted)' }}>
         No se pudieron leer los viajes recientes — no significa que no haya viajes.
       </div>
     );

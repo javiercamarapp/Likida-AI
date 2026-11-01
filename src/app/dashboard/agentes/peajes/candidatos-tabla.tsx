@@ -1,3 +1,4 @@
+import { BarraFiltros, FiltroCampo, FiltroFecha, FiltroOpciones } from '@/app/ui-v2/componentes';
 import { FileDown } from 'lucide-react';
 import { fechaMx, mxn, numero } from '@/lib/formato';
 // SOLO tipos y módulos puros: la vista no debe arrastrar `supabaseAdmin` al bundle.
@@ -15,11 +16,11 @@ import { ROTULO_CANDIDATO } from '@/lib/likida/peajes/reglas_cobro';
 
 export type AccionDecidir = (fd: FormData) => Promise<void>;
 
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
+const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const CSS_SECUNDARIO = 'hairline text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]';
+const CSS_SECUNDARIO = 'hairline text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]';
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--ink)' } as const;
-const CSS_INPUT = 'hairline text-[12.5px] px-2.5 py-1.5 rounded-lg';
+const CSS_INPUT = 'hairline text-[12px] px-2.5 py-1.5 rounded-lg';
 const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
 const ESTILO_CANDIDATO = { color: 'var(--warn)', background: 'var(--warnbg)' } as const;
 const COLOR_ESTADO: Record<EstadoCandidato, { color: string; background: string }> = {
@@ -32,12 +33,8 @@ const ROTULO_ACCION: Record<AccionCandidato, string> = { reclamado: 'Marcar como
 const ROTULO_LOTE: Record<AccionCandidato, string> = { reclamado: 'Marcar como reclamados', descartado: 'Descartar', justificado: 'Justificar' };
 
 const Etiqueta = ({ children }: { children: React.ReactNode }) => (
-  <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>{children}</span>
+  <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>{children}</span>
 );
-
-function ExtraSufijo({ sufijo }: { sufijo: string }) {
-  return <>{[...new URLSearchParams(sufijo.replace(/^\?/, '')).entries()].map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}</>;
-}
 
 function Campos({ desglose, retorno, accion, indice, categoria }: { desglose: string; retorno: string; accion: AccionCandidato; indice: number; categoria: string }) {
   return (
@@ -57,7 +54,7 @@ function AccionesDeFila({ f, desglose, retorno, decidir }: { f: FilaCandidato; d
     return (
       <div className="space-y-0.5">
         <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={COLOR_ESTADO[f.estado]}>{ETIQUETA_ESTADO_CANDIDATO[f.estado]}</span>
-        {f.motivo && <p className="text-[11.5px]"><b>Motivo:</b> {f.motivo}</p>}
+        {f.motivo && <p className="text-[11px]"><b>Motivo:</b> {f.motivo}</p>}
         {f.actor && f.decididoEn && <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{f.actor} · {fechaMx(f.decididoEn)}</p>}
       </div>
     );
@@ -69,7 +66,7 @@ function AccionesDeFila({ f, desglose, retorno, decidir }: { f: FilaCandidato; d
       {puedeReclamar && (
         <form action={decidir}>
           <Campos desglose={desglose} retorno={retorno} accion="reclamado" indice={f.indice} categoria={f.categoria} />
-          <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>{ROTULO_ACCION.reclamado}</button>
+          <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>{ROTULO_ACCION.reclamado}</button>
         </form>
       )}
       {(['descartado', 'justificado'] as const).map((a) => (
@@ -78,7 +75,7 @@ function AccionesDeFila({ f, desglose, retorno, decidir }: { f: FilaCandidato; d
           <input name="motivo" required minLength={3} maxLength={300} placeholder={a === 'descartado' ? 'Por qué se descarta' : 'Por qué está justificado'}
             aria-label={`Motivo para ${a === 'descartado' ? 'descartar' : 'justificar'} el renglón ${f.indice + 1} (${etiquetaCategoriaFila(f.categoria)})`}
             className={`${CSS_INPUT} w-[170px]`} style={ESTILO_INPUT} />
-          <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>{ROTULO_ACCION[a]}</button>
+          <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>{ROTULO_ACCION[a]}</button>
         </form>
       ))}
     </div>
@@ -93,7 +90,7 @@ function Lote({ tabla, desglose, retorno, decidir, aplicables }: {
   if (!hay) return null;
   return (
     <div className="mt-4 rounded-lg hairline p-3 space-y-3" id="lote-candidatos">
-      <p className="text-[12.5px]"><b>Acciones en lote</b> sobre todo lo que cumple el filtro actual (no solo esta página). Cada una pide confirmación con el número de cruces.</p>
+      <p className="text-[12px]"><b>Acciones en lote</b> sobre todo lo que cumple el filtro actual (no solo esta página). Cada una pide confirmación con el número de cruces.</p>
       {(['reclamado', 'descartado', 'justificado'] as const).map((a) => aplicables[a] > 0 && (
         <form key={a} action={decidir} className="flex items-end gap-2 flex-wrap">
           <input type="hidden" name="desglose" value={desglose} />
@@ -111,7 +108,7 @@ function Lote({ tabla, desglose, retorno, decidir, aplicables }: {
           {a === 'reclamado'
             ? <label className="block"><Etiqueta>Enviado el (si ya lo enviaste)</Etiqueta><input type="date" name="enviado_en" className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT} /></label>
             : <label className="block"><Etiqueta>Motivo</Etiqueta><input name="motivo" required minLength={3} maxLength={300} aria-label={`Motivo para ${a === 'descartado' ? 'descartar' : 'justificar'} en lote`} className={`${CSS_INPUT} w-[220px] mt-0.5`} style={ESTILO_INPUT} /></label>}
-          <label className="flex items-center gap-1.5 text-[12.5px]">
+          <label className="flex items-center gap-1.5 text-[12px]">
             <input type="checkbox" name="confirmar" required /> Confirmo: {ROTULO_LOTE[a].toLowerCase()} {numero(aplicables[a])} {aplicables[a] === 1 ? 'cruce' : 'cruces'}
           </label>
           <button type="submit" className={a === 'reclamado' ? CSS_BOTON : CSS_SECUNDARIO} style={a === 'reclamado' ? ESTILO_PRIMARIO : ESTILO_SECUNDARIO}>
@@ -135,7 +132,7 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
     return (
       <section className="card p-4" id="candidatos">
         <h2 className="font-display text-[15px] font-semibold">Candidatos del archivo</h2>
-        <p role="alert" className="text-[12.5px] mt-3" style={{ color: 'var(--bad)' }}>No se pudo leer la tabla de candidatos ahora mismo. No es que no haya candidatos: inténtalo de nuevo.</p>
+        <p role="alert" className="text-[12px] mt-3" style={{ color: 'var(--bad)' }}>No se pudo leer la tabla de candidatos ahora mismo. No es que no haya candidatos: inténtalo de nuevo.</p>
       </section>
     );
   }
@@ -164,67 +161,51 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
 
       <div className="flex flex-wrap gap-2 mt-3">
         {ESTADOS_CANDIDATO.map((e) => (
-          <span key={e} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11.5px] font-medium" style={COLOR_ESTADO[e]}>
+          <span key={e} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium" style={COLOR_ESTADO[e]}>
             {ETIQUETA_ESTADO_CANDIDATO[e]} · {numero(tabla.porEstado[e].n)} · {mxn(tabla.porEstado[e].monto)}
           </span>
         ))}
-        <a href={`/api/export/peajes-candidatos?desglose=${desglose}${ctx}`} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>
+        <a href={`/api/export/peajes-candidatos?desglose=${desglose}${ctx}`} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>
           <FileDown width={13} height={13} strokeWidth={2} className="inline mr-1" /> Reporte para el portal del proveedor
         </a>
       </div>
 
-      <form method="get" action="#candidatos" className="flex items-end gap-2 flex-wrap mt-3">
-        <ExtraSufijo sufijo={sufijo} />
-        <input type="hidden" name="desglose" value={desglose} />
-        <label className="block"><Etiqueta>Categoría</Etiqueta>
-          <select name="cat" defaultValue={f.categoria} className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT}>
-            <option value="">Todas</option>
-            {TODAS_LAS_CATEGORIAS.map((c) => <option key={c} value={c}>{etiquetaCategoriaFila(c)}</option>)}
-          </select></label>
-        <label className="block"><Etiqueta>Estado</Etiqueta>
-          <select name="estado" defaultValue={f.estado} className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT}>
-            <option value="">Todos</option>
-            {ESTADOS_CANDIDATO.map((e) => <option key={e} value={e}>{ETIQUETA_ESTADO_CANDIDATO[e]}</option>)}
-          </select></label>
-        <label className="block"><Etiqueta>Unidad</Etiqueta>
-          <input name="unidad" defaultValue={f.unidad} maxLength={60} className={`${CSS_INPUT} w-[110px] mt-0.5`} style={ESTILO_INPUT} /></label>
-        <label className="block"><Etiqueta>Caseta</Etiqueta>
-          <input name="caseta" defaultValue={f.caseta} maxLength={60} className={`${CSS_INPUT} w-[150px] mt-0.5`} style={ESTILO_INPUT} /></label>
-        <label className="block"><Etiqueta>Desde</Etiqueta>
-          <input type="date" name="desde" defaultValue={f.desde} className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT} /></label>
-        <label className="block"><Etiqueta>Hasta</Etiqueta>
-          <input type="date" name="hasta" defaultValue={f.hasta} className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT} /></label>
-        <label className="block"><Etiqueta>Orden</Etiqueta>
-          <select name="orden" defaultValue={f.orden} className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT}>
-            <option value="monto_desc">Mayor monto primero</option>
-            <option value="monto_asc">Menor monto primero</option>
-            <option value="fecha">Por fecha</option>
-          </select></label>
-        <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>Filtrar</button>
-        {hayFiltro && <a href={`?${new URLSearchParams([...new URLSearchParams(sufijo.replace(/^\?/, '')).entries(), ['desglose', desglose]]).toString()}#candidatos`} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>Quitar filtros</a>}
-      </form>
+      <BarraFiltros accion="#candidatos" etiqueta="Filtros de candidatos" className="mt-3" nActivos={hayFiltro ? 1 : 0}
+        ocultos={[...new URLSearchParams(sufijo.replace(/^\?/, '')).entries(), ['desglose', desglose]]}
+        limpiarHref={`?${new URLSearchParams([...new URLSearchParams(sufijo.replace(/^\?/, '')).entries(), ['desglose', desglose]]).toString()}#candidatos`}>
+        <FiltroOpciones nombre="cat" etiqueta="Categoría" valor={f.categoria}
+          opciones={[{ valor: '', rotulo: 'Todas' }, ...TODAS_LAS_CATEGORIAS.map((c) => ({ valor: c, rotulo: etiquetaCategoriaFila(c) }))]} />
+        <FiltroOpciones nombre="estado" etiqueta="Estado" valor={f.estado}
+          opciones={[{ valor: '', rotulo: 'Todos' }, ...ESTADOS_CANDIDATO.map((e) => ({ valor: e, rotulo: ETIQUETA_ESTADO_CANDIDATO[e] }))]} />
+        <FiltroCampo etiqueta="Unidad"><input className="border-0 bg-transparent" name="unidad" defaultValue={f.unidad} maxLength={60} /></FiltroCampo>
+        <FiltroCampo etiqueta="Caseta"><input className="border-0 bg-transparent" name="caseta" defaultValue={f.caseta} maxLength={60} /></FiltroCampo>
+        <FiltroFecha nombre="desde" etiqueta="Desde" valor={f.desde} />
+        <FiltroFecha nombre="hasta" etiqueta="Hasta" valor={f.hasta} />
+        <FiltroOpciones nombre="orden" etiqueta="Orden" valor={f.orden} porDefecto="monto_desc"
+          opciones={[{ valor: 'monto_desc', rotulo: 'Mayor monto primero' }, { valor: 'monto_asc', rotulo: 'Menor monto primero' }, { valor: 'fecha', rotulo: 'Por fecha' }]} />
+      </BarraFiltros>
 
       {tabla.total === 0 ? (
-        <p className="text-[12.5px] mt-4" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px] mt-4" style={{ color: 'var(--muted)' }}>
           {hayFiltro ? 'Ningún candidato cumple este filtro. Quita algún filtro para ver más.' : 'Este archivo no tiene candidatos que revisar.'}
         </p>
       ) : (
         <>
-          <p className="text-[11.5px] mt-3" style={{ color: 'var(--muted)' }}>
+          <p className="text-[11px] mt-3" style={{ color: 'var(--muted)' }}>
             Mostrando {numero(desde)}–{numero(hasta)} de {numero(tabla.total)}. Las páginas son de {TAMANO_PAGINA}: el archivo completo viaja en el Excel.
           </p>
           <div className="overflow-x-auto mt-2">
-            <table className="w-full text-[12.5px]">
+            <table className="w-full text-[12px]">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Fecha y hora</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Categoría</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Caseta</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">TAG / unidad</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 text-right">Clase</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 text-right">Importe</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 pl-3">Qué pasó</th>
-                  <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 pl-3">Acción</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Fecha y hora</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Categoría</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Caseta</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">TAG / unidad</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Clase</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Importe</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pl-3">Qué pasó</th>
+                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pl-3">Acción</th>
                 </tr>
               </thead>
               <tbody>
@@ -239,7 +220,7 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
                     <td className="py-2 pl-3 max-w-[28rem]">
                       <p>{c.quePaso}</p>
                       <details className="mt-0.5">
-                        <summary className="cursor-pointer text-[11.5px]" style={{ color: 'var(--muted)' }}>Qué significa y qué hacer</summary>
+                        <summary className="cursor-pointer text-[11px]" style={{ color: 'var(--muted)' }}>Qué significa y qué hacer</summary>
                         <p className="text-[12px]" style={{ color: 'var(--muted)' }}><b>Qué significa:</b> {c.queSignifica}</p>
                         <p className="text-[12px]" style={{ color: 'var(--muted)' }}><b>Qué hacer:</b> {c.queHacer}</p>
                       </details>
@@ -255,10 +236,10 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
             </table>
           </div>
           {tabla.paginas > 1 && (
-            <nav aria-label="Páginas de candidatos" className="flex items-center gap-3 mt-3 text-[12.5px]">
-              {tabla.pagina > 1 ? <a href={enlace(tabla.pagina - 1)} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>← Anterior</a> : <span style={{ color: 'var(--faint)' }}>← Anterior</span>}
+            <nav aria-label="Páginas de candidatos" className="flex items-center gap-3 mt-3 text-[12px]">
+              {tabla.pagina > 1 ? <a href={enlace(tabla.pagina - 1)} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>← Anterior</a> : <span style={{ color: 'var(--faint)' }}>← Anterior</span>}
               <span>Página {numero(tabla.pagina)} de {numero(tabla.paginas)}</span>
-              {tabla.pagina < tabla.paginas ? <a href={enlace(tabla.pagina + 1)} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>Siguiente →</a> : <span style={{ color: 'var(--faint)' }}>Siguiente →</span>}
+              {tabla.pagina < tabla.paginas ? <a href={enlace(tabla.pagina + 1)} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Siguiente →</a> : <span style={{ color: 'var(--faint)' }}>Siguiente →</span>}
             </nav>
           )}
         </>

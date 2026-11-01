@@ -5,15 +5,18 @@ import {
 import type {
   PanelClientes, ClienteConMetricas, TarifaRow, ViajeSinIngreso,
 } from '@/lib/likida/clientes';
-import { StatCard, EstadoVacio, EstadoError } from '@/app/admin/ui/kit';
+import { EstadoVacio, EstadoError } from '../estados';
+
 // El formato de cifras vive SOLO en formato.ts — hay una prueba que falla si
 // otro archivo formatea moneda mexicana por su cuenta.
 import { mxn, numero, fechaMx } from '@/lib/formato';
-import { BarraPagina } from '../resumen-visual';
 import { paginarRegistro, urlRegistro, type ParamsRegistro } from '../paginar-registro';
 import { FiltroRegistro } from '../registro-filtro';
 import type { BuscarCatalogo } from '../combo-catalogo';
 import { FormaCliente, FormaTarifa, Plegable, type AccionForma, type OpcionModo } from './forma';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
+import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 const RUTA = '/dashboard/clientes';
 
@@ -52,36 +55,27 @@ export function VistaClientes({
   camposOcultos: Array<[string, string]>;
 }) {
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Handshake width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Clientes y tarifas"
-        />
-
-        <div className="px-5 py-5 flex-1 space-y-4">
-          {panel === null ? (
-            <EstadoError mensaje="No pude leer tus clientes, tarifas y facturas. No se enseña una cartera a medias: media tabla sumada se ve igual que la tabla entera." />
-          ) : (
-            <>
-              <BloqueCartera panel={panel} />
-              <BloqueClientes panel={panel} puedeEditar={puedeEditar} guardarCliente={guardarCliente}
-                sp={sp} sufijo={sufijo} camposOcultos={camposOcultos} />
-              <BloqueTarifas panel={panel} puedeEditar={puedeEditar} modos={modos} guardarTarifa={guardarTarifa}
-                buscarCliente={buscarCliente} totalClientes={totalClientes}
-                sp={sp} sufijo={sufijo} camposOcultos={camposOcultos} />
-              <BloqueSinIngreso panel={panel} />
-              {!puedeEditar && (
-                <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
-                  Tu rol ve esta pantalla pero no da de alta clientes ni tarifas: el catálogo de precios
-                  es una decisión del dueño de la flota.
-                </p>
-              )}
-            </>
+    <MarcoPagina titulo="Clientes y tarifas" apoyo="Quién paga el flete y cuánto debe, con las tarifas por cliente. No se muestra una cartera a medias.">
+      {panel === null ? (
+        <EstadoError mensaje="No pude leer tus clientes, tarifas y facturas. No se enseña una cartera a medias: media tabla sumada se ve igual que la tabla entera." />
+      ) : (
+        <>
+          <BloqueCartera panel={panel} />
+          <BloqueClientes panel={panel} puedeEditar={puedeEditar} guardarCliente={guardarCliente}
+            sp={sp} sufijo={sufijo} camposOcultos={camposOcultos} />
+          <BloqueTarifas panel={panel} puedeEditar={puedeEditar} modos={modos} guardarTarifa={guardarTarifa}
+            buscarCliente={buscarCliente} totalClientes={totalClientes}
+            sp={sp} sufijo={sufijo} camposOcultos={camposOcultos} />
+          <BloqueSinIngreso panel={panel} />
+          {!puedeEditar && (
+            <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
+              Tu rol ve esta pantalla pero no da de alta clientes ni tarifas: el catálogo de precios
+              es una decisión del dueño de la flota.
+            </p>
           )}
-        </div>
-      </div>
-    </main>
+        </>
+      )}
+    </MarcoPagina>
   );
 }
 
@@ -104,35 +98,39 @@ function BloqueCartera({ panel }: { panel: PanelClientes }) {
 
   return (
     <section className="space-y-2">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <StatCard
+      <TiraCifras sello={selloHoy('Cartera de clientes')}>
+        <Cifra
           icono={<Banknote width={14} height={14} strokeWidth={1.75} />}
           etiqueta="Ingreso de fletes capturado" valor={panel.ingresoTotal} formato="mxn"
           nota={panel.conIngreso === 0
             ? 'Ningún viaje trae ingreso capturado todavía'
             : `De ${plural(panel.conIngreso, 'viaje', 'viajes')} con el dato capturado`}
+          info="clientes.ingreso"
         />
-        <StatCard
+        <Cifra
           icono={<Users width={14} height={14} strokeWidth={1.75} />}
           etiqueta="Clientes activos" valor={activos} formato="numero"
           nota={panel.clientes.length !== activos
             ? `${plural(panel.clientes.length - activos, 'dado de baja', 'dados de baja')}`
             : undefined}
+          info="clientes.activos"
         />
         {conFacturas.length > 0 ? (
-          <StatCard
+          <Cifra
             icono={<Wallet width={14} height={14} strokeWidth={1.75} />}
             etiqueta="Por cobrar a clientes" valor={porCobrar} formato="mxn"
             nota={`De ${plural(conFacturas.length, 'cliente', 'clientes')} con facturas registradas`}
+            info="clientes.por_cobrar"
           />
         ) : (
-          <div className="card p-4 text-[12.5px]" style={{ color: 'var(--muted)' }}>
-            <span className="block font-medium" style={{ color: 'var(--ink)' }}>Por cobrar</span>
-            Ninguno de tus clientes tiene facturas registradas todavía, así que no hay saldo que
-            sumar. No es cero: es que aún no se ha registrado una factura emitida.
-          </div>
+          <Cifra
+            icono={<Wallet width={14} height={14} strokeWidth={1.75} />}
+            etiqueta="Por cobrar" valor={null}
+            mensaje="Ninguno de tus clientes tiene facturas registradas todavía, así que no hay saldo que sumar. No es cero: es que aún no se ha registrado una factura emitida."
+            info="clientes.por_cobrar"
+          />
         )}
-      </div>
+      </TiraCifras>
 
       {panel.concentracion !== null && (
         <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
@@ -177,9 +175,9 @@ function BloqueClientes({ panel, puedeEditar, guardarCliente, sp, sufijo, campos
 
   return (
     <section className="space-y-3">
-      <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+      <TituloRecuadro info="clientes.lista">
         Clientes
-      </h2>
+      </TituloRecuadro>
 
       {panel.clientes.length > 0 && (
         <FiltroRegistro ruta={RUTA} sufijo={sufijo} pagina={pagClientes}
@@ -195,7 +193,7 @@ function BloqueClientes({ panel, puedeEditar, guardarCliente, sp, sufijo, campos
         </EstadoVacio>
       ) : (
         <div className="card overflow-x-auto">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full text-[12px]">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
                 <th className="px-3 py-2 font-medium">Cliente</th>
@@ -247,7 +245,7 @@ function RenglonCliente({ c, puedeEditar, guardarCliente, editando, hrefEditar }
         <td className="px-3 py-2">
           <span className="font-medium">{c.nombre}</span>
           {!c.activo && (
-            <span className="ml-2 inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium align-middle"
+            <span className="ml-2 inline-flex px-1.5 py-0.5 rounded-full text-[11px] font-medium align-middle"
               style={{ color: 'var(--muted)', background: 'var(--canvas)' }}>
               dado de baja
             </span>
@@ -263,7 +261,7 @@ function RenglonCliente({ c, puedeEditar, guardarCliente, editando, hrefEditar }
         <td className="px-3 py-2 text-right tabular">
           {numero(c.viajes)}
           {c.viajesSinIngreso > 0 && (
-            <span className="block text-[10.5px]" style={{ color: 'var(--warn)' }}>
+            <span className="block text-[11px]" style={{ color: 'var(--warn)' }}>
               {numero(c.viajesSinIngreso)} sin ingreso
             </span>
           )}
@@ -280,7 +278,7 @@ function RenglonCliente({ c, puedeEditar, guardarCliente, editando, hrefEditar }
               <>
                 {mxn(c.saldoPorCobrar)}
                 {c.vencido !== null && c.vencido > 0 && (
-                  <span className="block text-[10.5px]" style={{ color: 'var(--bad)' }}>
+                  <span className="block text-[11px]" style={{ color: 'var(--bad)' }}>
                     {mxn(c.vencido)} vencido
                   </span>
                 )}
@@ -394,9 +392,9 @@ function BloqueTarifas({
 
   return (
     <section className="space-y-3">
-      <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+      <TituloRecuadro info="clientes.tarifas">
         Tarifas
-      </h2>
+      </TituloRecuadro>
 
       {panel.tarifas.length > 0 && (
         <FiltroRegistro ruta={RUTA} sufijo={sufijo} pagina={pagTarifas} sustantivo="tarifas"
@@ -411,7 +409,7 @@ function BloqueTarifas({
         </EstadoVacio>
       ) : (
         <div className="card overflow-x-auto">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full text-[12px]">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
                 <th className="px-3 py-2 font-medium">Cliente</th>
@@ -444,7 +442,7 @@ function BloqueTarifas({
       {puedeEditar && (
         <div className="card p-4">
           {panel.clientes.length === 0 ? (
-            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
               Puedes capturar tarifas de lista sin tener clientes, pero una tarifa negociada necesita
               a quién negociársela: da de alta primero al cliente.
             </p>
@@ -491,7 +489,7 @@ function RenglonTarifa({
         <td className="px-3 py-2">{rotuloModo(t.modo)}</td>
         <td className="px-3 py-2 text-right tabular font-medium">
           {mxn(t.precio)}
-          <span className="block text-[10.5px] font-normal" style={{ color: 'var(--faint)' }}>
+          <span className="block text-[11px] font-normal" style={{ color: 'var(--faint)' }}>
             {unidadModo(t.modo)}
           </span>
         </td>
@@ -558,9 +556,9 @@ function BloqueSinIngreso({ panel }: { panel: PanelClientes }) {
 
   return (
     <section className="space-y-3">
-      <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+      <TituloRecuadro info="clientes.sin_ingreso">
         Viajes sin ingreso capturado
-      </h2>
+      </TituloRecuadro>
 
       <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
         {panel.sinIngresoTotal === 1
@@ -572,7 +570,7 @@ function BloqueSinIngreso({ panel }: { panel: PanelClientes }) {
       </p>
 
       <div className="card overflow-x-auto">
-        <table className="w-full text-[12.5px]">
+        <table className="w-full text-[12px]">
           <thead>
             <tr className="text-left" style={{ color: 'var(--muted)' }}>
               <th className="px-3 py-2 font-medium">Viaje</th>
@@ -607,13 +605,13 @@ function RenglonSinIngreso({ v }: { v: ViajeSinIngreso }) {
       <td className="px-3 py-2">
         <span className="cifra-mono">{v.folio ?? '—'}</span>
         {v.fecha && (
-          <span className="block text-[10.5px]" style={{ color: 'var(--faint)' }}>{fechaMx(v.fecha)}</span>
+          <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{fechaMx(v.fecha)}</span>
         )}
       </td>
       <td className="px-3 py-2">
         {rutaDe(v)}
         {v.km !== null && (
-          <span className="block text-[10.5px] cifra-mono" style={{ color: 'var(--faint)' }}>
+          <span className="block text-[11px] cifra-mono" style={{ color: 'var(--faint)' }}>
             {numero(v.km)} km
           </span>
         )}
@@ -631,7 +629,7 @@ function RenglonSinIngreso({ v }: { v: ViajeSinIngreso }) {
           <>
             {s.porque}
             {s.ambigua && (
-              <span className="flex items-start gap-1 text-[10.5px] mt-0.5" style={{ color: 'var(--warn)' }}>
+              <span className="flex items-start gap-1 text-[11px] mt-0.5" style={{ color: 'var(--warn)' }}>
                 <TriangleAlert width={11} height={11} strokeWidth={1.75} className="mt-0.5 shrink-0" />
                 {/* Elegir en silencio entre dos tarifas igual de aplicables es
                     cotizar a suerte: se dice y se corrige en el catálogo. */}

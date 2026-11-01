@@ -42,7 +42,7 @@ export function ViajesRecientes({ filas, sufijo }: { filas: FilaViaje[]; sufijo:
           )}
           {filas.length > 6 && (
             <button type="button" onClick={() => setAbierto((v) => !v)}
-              className="hairline inline-flex items-center gap-1 text-[12px] font-medium px-2.5 h-7 rounded-lg transition-colors hover:bg-[var(--canvas)] shrink-0">
+              className="rv-btn rv-btn--secondary hairline inline-flex items-center gap-1 text-[12px] font-medium px-2.5 h-7 rounded-lg transition-colors hover:bg-[var(--canvas)] shrink-0">
               {abierto
                 ? <>Ver menos <ChevronUp width={13} height={13} strokeWidth={2} /></>
                 : (
