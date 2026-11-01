@@ -24,6 +24,17 @@ let n = 0;
 
 // Misma colocación que ui-v2/movimiento/tour/capa.tsx
 async function colocar(page) {
+  // Igual que anfitrion-dom.ts: un ítem del menú en una categoría plegada se despliega antes de resaltarlo.
+  await page.evaluate(() => {
+    const nombre = document.querySelector('.rv-tour')?.getAttribute('data-ancla');
+    if (!nombre) return;
+    for (const el of document.querySelectorAll(`[data-tour="${nombre}"], [data-onboarding="${nombre}"]`)) {
+      const id = el.closest('.rv-grupo__cuerpo')?.getAttribute('aria-labelledby');
+      const b = id ? document.getElementById(id) : null;
+      if (b && b.getAttribute('aria-expanded') === 'false') { b.setAttribute('aria-expanded', 'true'); b.closest('.rv-grupo')?.setAttribute('data-abierto', ''); } // estático: sin React, se emula el clic
+    }
+  });
+  await page.waitForTimeout(150);
   await page.evaluate(() => {
     const raizTour = document.querySelector('.rv-tour');
     const nombre = raizTour?.getAttribute('data-ancla');
@@ -59,7 +70,7 @@ for (const [w, h] of [[1440, 900], [390, 844]]) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, reducedMotion: 'reduce', locale: 'es-MX', deviceScaleFactor: 1 });
   const page = await ctx.newPage();
   for (const id of ids) {
-    const html = `<!doctype html><html lang="es" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="file://${dir}/v2full.css"><style>${fuentes}</style></head><body>${readFileSync(path.join(dir, 'vistas', `${id}.html`), 'utf8')}</body></html>`;
+    const html = `<!doctype html><html lang="es" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="file://${dir}/v2full.css"><style>${fuentes}</style></head><body>${readFileSync(path.join(dir, 'vistas', `${id}.html`), 'utf8').replace(/ data-estado="inicial"/, ' data-estado="oculta"')}</body></html>`;
     const archivo = path.join(dir, 'vistas', `${id}.doc.html`);
     writeFileSync(archivo, html);
     for (const tema of ['claro', 'oscuro']) {

@@ -2,7 +2,7 @@
 
 import { useId, useRef, useState } from 'react';
 import Link from 'next/link';
-import { BellOff, CircleHelp, Compass, LifeBuoy, ListChecks, MapPinned, Play, RotateCcw, Zap } from 'lucide-react';
+import { BellOff, CircleHelp, Compass, LifeBuoy, ListChecks, Play, RotateCcw, Zap } from 'lucide-react';
 import type { PerfilTenant } from '@/lib/auth/visibilidad';
 import { Popover, MenuList } from '../../ui-v2/componentes/overlay';
 import { useTourOpcional, useProgresoTour } from '../../ui-v2/movimiento/tour';
@@ -100,7 +100,7 @@ export function FilasRecorrido({ alElegir }: { alElegir: () => void }) {
           <p className="rv-guia-sub" id="rv-guia-pantallas">Saltar a una pantalla</p>
           <div className="rv-guia-pantallas" role="group" aria-labelledby="rv-guia-pantallas">
             {pantallas.map((s) => (
-              <Fila key={s.href} icono={<MapPinned width={16} height={16} strokeWidth={1.75} />} texto={s.nombre} onClick={ir(() => tour.irAPantalla(`${p}.completo`, s.href))} />
+              <Fila key={s.href} icono={null} texto={s.nombre} onClick={ir(() => tour.irAPantalla(`${p}.completo`, s.href))} />
             ))}
           </div>
         </>

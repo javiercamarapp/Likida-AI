@@ -16,7 +16,7 @@ export function InvitacionRecorrido({ titulo, asistente, onElegir, onAhoraNo, on
     <section className="rv-onb-inv" role="region" aria-label="Invitación al recorrido">
       <h2>Te enseño Likida en pocos minutos</h2>
       <p>
-        {titulo}. El corto cubre lo esencial; el completo pasa por cada pantalla de tu menú.
+        Es el recorrido de «{titulo}». El corto cubre lo esencial; el completo pasa por cada pantalla de tu menú.
         {asistente ? ` Después te dejo en ${asistente}.` : ''} Puedes salir cuando quieras y volver desde Guía.
       </p>
       <div className="rv-onb-acciones">

@@ -182,7 +182,7 @@ export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPer
       {activo ? <CapaTour controlador={activo} /> : null}
       {invitar ? (
         <InvitacionRecorrido
-          titulo={principalCompleto?.titulo ?? 'Recorrido'}
+          titulo={(principalCompleto?.titulo ?? 'Recorrido').replace(/^Recorrido: /, '')}
           asistente={asistente?.nombre ?? null}
           onElegir={(modo) => abrir(`${principal}.${modo}`, 'reiniciar')}
           onAhoraNo={() => guardarEst({ visto: true })}
