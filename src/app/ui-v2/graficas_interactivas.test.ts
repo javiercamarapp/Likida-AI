@@ -232,7 +232,7 @@ describe.skipIf(SIN_NAVEGADOR)('gráficas interactivas · Chromium', () => {
       return { total: nombres.length, nombres: [...new Set(nombres)] };
     });
     expect(tipos.total).toBeGreaterThan(5);
-    expect(tipos.nombres).toEqual(expect.arrayContaining(['rv-crece-y', 'rv-trazo', 'rv-barrido', 'rv-crece']));
+    expect(tipos.nombres).toEqual(expect.arrayContaining(['rv-crece-y', 'rv-trazo-linea', 'rv-barrido', 'rv-crece']));
     await vivo.close();
   });
   it('animación de entrada: columnas 420 ms con escalón de 14 ms, línea 380 ms, dona 700 ms con escalón de 90 ms', async () => {

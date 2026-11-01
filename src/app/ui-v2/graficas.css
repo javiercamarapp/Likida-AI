@@ -221,7 +221,7 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 @media (prefers-reduced-motion: no-preference) {
 [data-ui="v2"] .rv-spark__linea { animation: rv-trazo var(--t-draw) var(--ui-ease) both; }
 [data-ui="v2"] .rv-spark__area { animation: rv-fade var(--t-draw) var(--ui-ease) both; }
-[data-ui="v2"] .rv-area__linea { animation: rv-trazo var(--t-draw) var(--ui-ease) both; }
+[data-ui="v2"] .rv-area__linea { animation: rv-trazo-linea var(--t-draw) var(--ui-ease) backwards; }
 [data-ui="v2"] .rv-area__relleno { animation: rv-fade var(--t-draw) ease both; }
 [data-ui="v2"] .rv-area__punto, [data-ui="v2"] .rv-spark__punto:last-child { animation: rv-fade 400ms ease 700ms both; }
 [data-ui="v2"] .rv-dona__gajo, [data-ui="v2"] .rv-dona__borde { animation: rv-barrido var(--t-sweep) var(--ui-ease) both; }
@@ -383,7 +383,6 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 /* ── Área interactiva (Vexa `AreaChart`) ── */
 [data-ui="v2"] .rv-area { display: block; }
 [data-ui="v2"] .rv-area__svg { max-width: 100%; outline: none; }
-[data-ui="v2"] .rv-area__linea { stroke-dasharray: 1; stroke-dashoffset: 0; }
 [data-ui="v2"] .rv-area__aislado { fill: var(--cat, var(--ink)); }
 [data-ui="v2"] .rv-area__punto { fill: var(--cat, var(--ink)); stroke: var(--surface); stroke-width: 2; }
 [data-ui="v2"] .rv-area__cruz line { stroke: var(--chart-eje); stroke-width: 1; }

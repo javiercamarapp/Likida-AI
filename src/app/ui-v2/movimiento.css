@@ -67,6 +67,11 @@
     from { stroke-dashoffset: 1; }
     to { stroke-dashoffset: 0; }
   }
+  /* Línea de área: el guion solo existe MIENTRAS se dibuja (pathLength=1); en reposo el trazo es continuo, sin dasharray (algunos Chromium lo parten). */
+  @keyframes rv-trazo-linea {
+    from { stroke-dasharray: 1; stroke-dashoffset: 1; }
+    to { stroke-dasharray: 1; stroke-dashoffset: 0; }
+  }
   /* Anillo: el arco crece hasta su valor (pathLength=100). */
   @keyframes rv-barrido {
     from { stroke-dasharray: 0 100; }

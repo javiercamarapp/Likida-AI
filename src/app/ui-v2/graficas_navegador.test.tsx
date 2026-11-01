@@ -97,11 +97,11 @@ describe.skipIf(SIN_NAVEGADOR)('gráficas y vacíos · pintados en Chromium', ()
     const r = await p.evaluate(() => ({
       hueco: getComputedStyle(document.querySelector('#a2 .rv-area__hueco')!).strokeDasharray,
       ancho: getComputedStyle(document.querySelector('#a2 .rv-area__hueco')!).strokeWidth,
-      desfase: getComputedStyle(document.querySelector('#a1 .rv-area__linea')!).strokeDashoffset,
+      guion: getComputedStyle(document.querySelector('#a1 .rv-area__linea')!).strokeDasharray,
     }));
     expect(r.hueco).not.toBe('none');
     expect(parseFloat(r.ancho)).toBeGreaterThan(0);
-    expect(parseFloat(r.desfase)).toBe(0); // la línea queda COMPLETA: el guion de pathLength solo la dibuja al entrar
+    expect(r.guion).toBe('none'); // en reposo la línea es continua: el guion de pathLength solo existe mientras se dibuja
     await p.close();
   });
   it('390: el estado vacío es un bloque compacto (título + acción) sin borde punteado, de ≤ 120 px', async () => {
