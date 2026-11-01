@@ -47,7 +47,7 @@ export default function MenuGuia({ rol, perfil, compacto = false }: { rol: strin
           if (nuevo !== null) { e.preventDefault(); e.stopPropagation(); lista[nuevo]?.focus(); }
         }}>
           <MenuList etiqueta="Guía">
-            {hayRecorrido ? <FilasRecorrido alElegir={cerrar} /> : null}
+            {hayRecorrido ? <FilasRecorrido alElegir={cerrar} hrefs={hrefs} /> : null}
             {asistente && (
               <Link role="menuitem" tabIndex={-1} href={`${asistente.href}${sufijo}`} className="rv-menu__item" onClick={cerrar}>
                 <span className="rv-menu__icono" aria-hidden><ListChecks width={16} height={16} strokeWidth={1.75} /></span>
@@ -78,7 +78,7 @@ function Fila({ icono, texto, onClick }: { icono: React.ReactNode; texto: string
 }
 
 /** Corto · Completo (o Retomar) · Saltar a una pantalla · un recorrido por agente. Cada grupo desaparece si no tiene filas. */
-export function FilasRecorrido({ alElegir }: { alElegir: () => void }) {
+export function FilasRecorrido({ alElegir, hrefs }: { alElegir: () => void; hrefs?: readonly string[] }) {
   const tour = useTourOpcional();
   const p = tour?.principal ?? '';
   const corto = useProgresoTour(`${p}.corto`);
@@ -86,7 +86,10 @@ export function FilasRecorrido({ alElegir }: { alElegir: () => void }) {
   if (!tour || !p) return null;
   const retoma = completo?.estado === 'en_curso' ? { id: `${p}.completo`, prog: completo } : corto?.estado === 'en_curso' ? { id: `${p}.corto`, prog: corto } : null;
   const hayCorto = tour.existe(`${p}.corto`);
-  const pantallas = tour.pantallas(`${p}.completo`);
+  // «Ver como» (superadmin): el recorrido se arma para el dueño, pero las filas respetan el rol PREVISUALIZADO (`hrefs` = su menú).
+  const visible = (href: string | undefined) => !hrefs || (href !== undefined && hrefs.includes(href));
+  const pantallas = tour.pantallas(`${p}.completo`).filter((s) => visible(s.href));
+  const agentes = tour.agentes.filter((a) => visible(tour.pantallas(a.id)[0]?.href));
   const ir = (fn: () => void) => () => { alElegir(); fn(); };
   return (
     <>
@@ -105,10 +108,10 @@ export function FilasRecorrido({ alElegir }: { alElegir: () => void }) {
           </div>
         </>
       ) : null}
-      {tour.agentes.length > 0 ? (
+      {agentes.length > 0 ? (
         <>
           <p className="rv-guia-sub">Recorrido por agente</p>
-          {tour.agentes.map((a) => (
+          {agentes.map((a) => (
             <Fila key={a.id} icono={<Compass width={16} height={16} strokeWidth={1.75} />} texto={a.titulo.replace(/^Agente: /, '')} onClick={ir(() => tour.reiniciar(a.id))} />
           ))}
         </>

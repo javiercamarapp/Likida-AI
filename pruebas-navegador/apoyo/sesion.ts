@@ -35,6 +35,7 @@ export const CORREOS = {
   perfilDueno: 'perfil.dueno.e2e@likida.test',
   perfilEncargado: 'perfil.encargado.e2e@likida.test',
   perfilContador: 'perfil.contador.e2e@likida.test',
+  perfilNomina: 'perfil.nomina.e2e@likida.test',
 } as const;
 
 export const ESTADOS = {

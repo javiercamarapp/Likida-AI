@@ -14,6 +14,7 @@ export function InvitacionRecorrido({ titulo, asistente, onElegir, onAhoraNo, on
 }) {
   return (
     <section className="rv-onb-inv" role="region" aria-label="Invitación al recorrido">
+      <div className="rv-sr" role="status">Invitación: recorrido corto o completo de Likida.</div>
       <h2>Te enseño Likida en pocos minutos</h2>
       <p>
         Es el recorrido de «{titulo}». El corto cubre lo esencial; el completo pasa por cada pantalla de tu menú.

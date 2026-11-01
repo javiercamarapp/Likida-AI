@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { crearEstadoLocal, debeInvitar, debeMostrarPista, ESTADO_VACIO, onboardingDesactivado, type AlmacenEstado, type EstadoOnboarding } from '@/app/ui-v2/onboarding/estado';
+import { crearEstadoLocal, debeInvitar, debeMostrarPista, ESTADO_VACIO, escribirMarcaSesion, leerMarcaSesion, onboardingDesactivado, type AlmacenEstado, type EstadoOnboarding } from '@/app/ui-v2/onboarding/estado';
 import { pistaDeRuta } from '@/app/ui-v2/onboarding/pista';
 import { pantallasDeRecorrido } from '@/app/ui-v2/onboarding/recorrido-util';
 import type { Modo, PistaContextual as PistaDatos } from '@/app/ui-v2/onboarding/tipos';
@@ -23,6 +23,9 @@ import type { Anfitrion, Recorrido } from './tipos';
 //    no escribe progreso, no invita y no muestra pistas (sí puede abrir el recorrido a mano).
 //  · `principal` = la pista de la persona (`dueno`, `encargado`…): sus recorridos son `<principal>.corto` y `<principal>.completo`.
 // ═══════════════════════════════════════════════════════════════════════════
+
+/** Lo que cuenta como «algo abierto encima»: diálogo nativo, menú/popover, avisos (alert y status de la región de avisos). */
+const SUPERPUESTO = 'dialog[open], .rv-pop, .pointer-events-none.fixed [role="alert"] > *, .pointer-events-none.fixed [role="status"] > *';
 
 export interface ProgresoTour { estado: EstadoGuardado; indice: number; total: number }
 export interface MetaRecorrido { id: string; titulo: string }
@@ -48,7 +51,7 @@ interface Api {
 }
 const Contexto = createContext<Api | null>(null);
 
-export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPermitidas, principal = null, asistente = null, pistas = {}, children }: {
+export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPermitidas, principal = null, asistente = null, pistas = {}, invitacion = false, children }: {
   recorridos: Recorrido[];
   ambito: string;
   soloLectura?: boolean;
@@ -56,6 +59,8 @@ export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPer
   principal?: string | null;
   asistente?: { href: string; nombre: string } | null;
   pistas?: Record<string, PistaDatos>;
+  /** Interruptor de servidor (`ONBOARDING_INVITACION=1`): sin él la invitación de primer ingreso NO se muestra; Guía, recorridos y pistas siguen. */
+  invitacion?: boolean;
   children: ReactNode;
 }) {
   const router = useRouter();
@@ -93,12 +98,14 @@ export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPer
     const alm = host().almacen;
     setApagado(onboardingDesactivado(alm));
     almacenEstado.current = crearEstadoLocal(ambito, alm);
-    setEst(almacenEstado.current.leer());
+    const leido = almacenEstado.current.leer();
+    setEst(!leido.visto && leerMarcaSesion() ? { ...leido, visto: true } : leido);
   }, [ambito, host]);
 
   const guardarEst = useCallback((parche: Partial<EstadoOnboarding>) => {
     if (soloLectura || !almacenEstado.current) return;
     setEst(almacenEstado.current.guardar(parche));
+    if (parche.visto || parche.descartado) escribirMarcaSesion();
   }, [soloLectura]);
 
   const controlador = useCallback((id: string): ControladorTour | null => {
@@ -170,31 +177,54 @@ export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPer
     },
   }), [abrir, recorridos, controlador, host, ambito, agentes, principal, asistente, guardarEst, est, soloLectura]);
 
+  // Nunca se invita ni se muestra una pista mientras haya un diálogo, un menú, un cajón o un aviso abiertos: se espera a que se cierren.
+  const [superpuesto, setSuperpuesto] = useState(false);
+  const pendiente = est !== null && !activo;
+  useEffect(() => {
+    if (!pendiente) return;
+    const medir = () => setSuperpuesto(Boolean(document.querySelector(SUPERPUESTO)) || document.documentElement.hasAttribute('data-overlay-abierto'));
+    medir();
+    const id = window.setInterval(medir, 400);
+    return () => window.clearInterval(id);
+  }, [pendiente, pathname]);
+
   const opciones = { soloLectura, desactivado: apagado };
-  const invitar = !activo && est !== null && principal !== null && recorridos.some((r) => r.id === `${principal}.corto`) && debeInvitar(est, opciones);
-  const pista = !activo && !invitar && est !== null ? pistaDeRuta(pathname ?? '', pistas) : null;
+  const invitar = invitacion && !superpuesto && !activo && est !== null && principal !== null && recorridos.some((r) => r.id === `${principal}.corto`) && debeInvitar(est, opciones);
+  const pista = !activo && !invitar && !superpuesto && est !== null ? pistaDeRuta(pathname ?? '', pistas) : null;
   const mostrarPista = pista !== null && debeMostrarPista(est ?? ESTADO_VACIO, pista.ruta, opciones);
+  // Si la persona se va a otra pantalla con la invitación abierta, la ignoró: cuenta como «ahora no» y no sigue tapando las demás pantallas.
+  const rutaInvitacion = useRef<string | null>(null);
+  useEffect(() => {
+    if (invitar && rutaInvitacion.current === null) rutaInvitacion.current = pathname ?? '';
+    else if (rutaInvitacion.current !== null && (pathname ?? '') !== rutaInvitacion.current) { rutaInvitacion.current = null; guardarEst({ visto: true }); }
+  }, [invitar, pathname, guardarEst]);
   const principalCompleto = recorridos.find((r) => r.id === `${principal}.completo`);
 
   return (
     <Contexto.Provider value={api}>
       {children}
       {activo ? <CapaTour controlador={activo} /> : null}
-      {invitar ? (
-        <InvitacionRecorrido
-          titulo={(principalCompleto?.titulo ?? 'Recorrido').replace(/^Recorrido: /, '')}
-          asistente={asistente?.nombre ?? null}
-          onElegir={(modo) => abrir(`${principal}.${modo}`, 'reiniciar')}
-          onAhoraNo={() => guardarEst({ visto: true })}
-          onNoVolver={() => guardarEst({ descartado: true, visto: true })}
-        />
-      ) : null}
-      {mostrarPista && pista ? (
-        <PistaContextual
-          titulo={pista.titulo} texto={pista.texto} ilu={pista.ilu} desde={pista.desde}
-          onEntendido={() => guardarEst({ pistas: [...(est?.pistas ?? []), pista.ruta] })}
-          onNoVolver={() => guardarEst({ descartado: true })}
-        />
+      {/* La invitación y la pista llevan SU PROPIA piel v2 (`data-ui`) y el z-index del recorrido (55, `.rv-tour`): fuera del chrome v2
+          no heredan los tokens y saldrían con la piel de v1. */}
+      {invitar || mostrarPista ? (
+        <div className="rv-tour" data-ui="v2">
+          {invitar ? (
+            <InvitacionRecorrido
+              titulo={(principalCompleto?.titulo ?? 'Recorrido').replace(/^Recorrido: /, '')}
+              asistente={asistente?.nombre ?? null}
+              onElegir={(modo) => abrir(`${principal}.${modo}`, 'reiniciar')}
+              onAhoraNo={() => guardarEst({ visto: true })}
+              onNoVolver={() => guardarEst({ descartado: true, visto: true })}
+            />
+          ) : null}
+          {mostrarPista && pista ? (
+            <PistaContextual
+              titulo={pista.titulo} texto={pista.texto} ilu={pista.ilu} desde={pista.desde}
+              onEntendido={() => guardarEst({ pistas: [...(est?.pistas ?? []), pista.ruta] })}
+              onNoVolver={() => guardarEst({ descartado: true })}
+            />
+          ) : null}
+        </div>
       ) : null}
     </Contexto.Provider>
   );

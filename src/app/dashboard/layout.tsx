@@ -124,7 +124,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <TourProvider
       recorridos={onb.recorridos} ambito={`${tenantDelMenu ?? 'sin'}:${sesion.userId}`}
       soloLectura={sesion.rol === 'superadmin'} rutasPermitidas={rutasDelRecorrido}
-      principal={onb.principal} asistente={onb.asistente} pistas={onb.pistas}
+      principal={onb.principal} asistente={onb.asistente} pistas={onb.pistas} invitacion={process.env.ONBOARDING_INVITACION === '1'}
     >
       {marco}
     </TourProvider>

@@ -211,7 +211,7 @@ jobs:
             sleep 1
           done
           if curl -fsS --max-time 1 http://localhost:3000/ >/dev/null 2>&1; then echo "El servidor v1 sigue vivo en :3000"; exit 1; fi
-          nohup env LIKIDA_UI_V2_FORZAR=1 npm run start -- --hostname localhost --port 3000 > "$RUNNER_TEMP/likida-next-v2.log" 2>&1 &
+          nohup env LIKIDA_UI_V2_FORZAR=1 ONBOARDING_INVITACION=1 npm run start -- --hostname localhost --port 3000 > "$RUNNER_TEMP/likida-next-v2.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/likida-next.pid"
           for i in $(seq 1 30); do
             if curl -fsS --max-time 2 http://localhost:3000/ >/dev/null; then exit 0; fi

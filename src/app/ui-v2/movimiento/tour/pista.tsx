@@ -9,6 +9,7 @@ export function PistaContextual({ titulo, texto, ilu, desde, onEntendido, onNoVo
 }) {
   return (
     <section className="rv-onb-pista" role="region" aria-label={`Pista: ${titulo}`}>
+      <div className="rv-sr" role="status">{`Pista: ${titulo}. ${texto}`}</div>
       <div className="rv-onb-pista__marco" aria-hidden="true"><Ilustracion nombre={ilu} /></div>
       <p className="rv-onb-pista__desde">Se abre desde {desde}</p>
       <h2>{titulo}</h2>

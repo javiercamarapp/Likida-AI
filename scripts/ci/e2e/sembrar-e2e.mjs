@@ -40,7 +40,7 @@
  *     no alcancen ni /admin ni los datos de la flota A.
  *   · encargado.e2e y contador.e2e → roles de oficina de Flota Demo.
  *   · vendedor.e2e → vendedor sin tenant, con cartera sintética propia y ajena.
- *   · perfil.dueno.e2e / perfil.encargado.e2e / perfil.contador.e2e → los tres
+ *   · perfil.dueno.e2e / perfil.encargado.e2e / perfil.contador.e2e / perfil.nomina.e2e → los tres
  *     roles de Flota E2E Perfil (33333333-…), la ÚNICA flota sembrada con
  *     `tenant_perfil = cinco_agentes` (0770). Existe porque los 26 e2e corren
  *     todos sobre flotas SIN perfil: nada recorría el menú recortado que ve un
@@ -83,6 +83,7 @@ const USUARIOS = [
   { email: 'perfil.dueno.e2e@likida.test', nombre: 'Dueño Perfil E2E', rol: 'flota_admin', tenant: TENANT_C },
   { email: 'perfil.encargado.e2e@likida.test', nombre: 'Encargado Perfil E2E', rol: 'encargado', tenant: TENANT_C },
   { email: 'perfil.contador.e2e@likida.test', nombre: 'Contador Perfil E2E', rol: 'contador', tenant: TENANT_C },
+  { email: 'perfil.nomina.e2e@likida.test', nombre: 'Nómina Perfil E2E', rol: 'nomina', tenant: TENANT_C },
 ];
 
 const admin = createClient(url, serviceKey, { auth: { persistSession: false }, global: { fetch: fetchLocalE2E } });

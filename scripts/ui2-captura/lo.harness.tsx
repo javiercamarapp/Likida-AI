@@ -50,7 +50,8 @@ const cuerpoConexiones = () => <VistaConexiones conectores={CONECTORES} credenci
 
 function pagina(cuerpo: ReactNode, ruta: string, rol: string, perfil: 'cinco_agentes' | null, encima: ReactNode = null) {
   RUTA = ruta;
-  return renderToStaticMarkup(<Chrome nombre="Ximena Salgado" rol={rol} perfil={perfil} cerrarSesion={async () => {}}>{cuerpo}{encima}</Chrome>);
+  // El recorrido, la invitación y la pista se montan FUERA del chrome (como el TourProvider del layout): llevan su propio data-ui="v2".
+  return renderToStaticMarkup(<><Chrome nombre="Ximena Salgado" rol={rol} perfil={perfil} cerrarSesion={async () => {}}>{cuerpo}</Chrome>{encima}</>);
 }
 
 /** Tarjeta + capa del paso `id` de un recorrido, con la instantánea REAL del controlador. */
@@ -97,18 +98,18 @@ describe('arnés del onboarding', () => {
     poner('lo-05-cierre', pagina(cuerpoPuesta(), '/dashboard/puesta-en-marcha', 'flota_admin', 'cinco_agentes', capaDePaso(corto, 'cierre')));
     // 6) Invitación del primer ingreso, 7) pista contextual, 8) recorrido por agente.
     poner('lo-06-invitacion', pagina(cuerpoPuesta(), '/dashboard/puesta-en-marcha', 'flota_admin', 'cinco_agentes',
-      <InvitacionRecorrido titulo={completo.titulo} asistente="Puesta en marcha" onElegir={() => {}} onAhoraNo={() => {}} onNoVolver={() => {}} />));
+      <div className="rv-tour" data-ui="v2"><InvitacionRecorrido titulo={completo.titulo.replace(/^Recorrido: /, '')} asistente="Puesta en marcha" onElegir={() => {}} onAhoraNo={() => {}} onNoVolver={() => {}} /></div>));
     const pista = sesion.pistas['/dashboard/agentes/peajes/reclamacion'];
     poner('lo-07-pista', pagina(cuerpoConexiones(), '/dashboard/conexiones', 'flota_admin', 'cinco_agentes',
-      <PistaContextual titulo={pista.titulo} texto={pista.texto} ilu={pista.ilu} desde={pista.desde} onEntendido={() => {}} onNoVolver={() => {}} />));
+      <div className="rv-tour" data-ui="v2"><PistaContextual titulo={pista.titulo} texto={pista.texto} ilu={pista.ilu} desde={pista.desde} onEntendido={() => {}} onNoVolver={() => {}} /></div>));
     poner('lo-08-agente', pagina(cuerpoConexiones(), '/dashboard/conexiones', 'flota_admin', 'cinco_agentes', capaDePaso(porId('agente.peajes'), 'agentes-peajes.decide')));
     // 9) Menú Guía abierto con las filas REALES (corto, completo, saltar a una pantalla, agentes, primeros pasos, ayuda).
     const menu = (
       <div className="rv-pop" role="menu" aria-label="Guía" style={{ top: 52, right: 16 }}>
         <MenuList etiqueta="Guía">
           <FilasRecorrido alElegir={() => {}} />
-          <a role="menuitem" className="rv-menu__item" href="/dashboard/puesta-en-marcha"><span>Primeros pasos</span></a>
-          <a role="menuitem" className="rv-menu__item" href="/dashboard/soporte"><span>Centro de ayuda</span></a>
+          <span role="menuitem" className="rv-menu__item">Primeros pasos</span>
+          <span role="menuitem" className="rv-menu__item">Centro de ayuda</span>
           <FilaNoVolver alElegir={() => {}} />
         </MenuList>
       </div>
