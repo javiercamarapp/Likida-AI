@@ -26,6 +26,8 @@ async function sinDesborde(page: Page): Promise<void> {
 }
 
 test.beforeEach(async ({ page }) => {
+  // Estas pruebas SÍ ejercen la invitación: se quita el interruptor que el fixture pone para las demás.
+  await page.addInitScript(() => { try { localStorage.removeItem('likida:onb:desactivado'); } catch { /* sin almacenamiento */ } });
   await entrar(page, CORREOS.perfilDueno);
   await expect(page).toHaveURL(/\/dashboard/);
 });

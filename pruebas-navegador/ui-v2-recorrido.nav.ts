@@ -26,7 +26,7 @@ test.use({ extraHTTPHeaders: { 'x-forwarded-for': '10.77.0.21' }, viewport: { wi
 
 const tarjeta = (page: Page) => page.getByRole('region', { name: /Recorrido guiado, paso \d+ de \d+/ });
 const invitacion = (page: Page) => page.getByRole('region', { name: 'Invitación al recorrido' });
-const guia = (page: Page) => page.locator('[data-onboarding="recorrido.boton"]').first();
+const guia = (page: Page) => page.locator('[data-onboarding="recorrido.boton"]:visible').first();
 const avanzar = (page: Page) => tarjeta(page).getByRole('button', { name: /^(Siguiente|Llévame|Terminar)$/ });
 
 async function numeroDePaso(page: Page): Promise<number> {
@@ -35,6 +35,8 @@ async function numeroDePaso(page: Page): Promise<number> {
 }
 
 test.beforeEach(async ({ page }) => {
+  // Estas pruebas SÍ ejercen la invitación: se quita el interruptor que el fixture pone para las demás.
+  await page.addInitScript(() => { try { localStorage.removeItem('likida:onb:desactivado'); } catch { /* sin almacenamiento */ } });
   await entrar(page, CORREOS.perfilDueno);
   await expect(page).toHaveURL(/\/dashboard/);
 });
@@ -53,7 +55,7 @@ test('el recorrido corto se recorre hasta el final y deja «terminado»', async 
   await invitacion(page).getByRole('button', { name: 'Recorrido corto' }).click();
   await expect(tarjeta(page)).toBeVisible();
   const total = Number(/de (\d+)$/.exec((await tarjeta(page).getAttribute('aria-label')) ?? '')?.[1] ?? 0);
-  expect(total).toBeGreaterThanOrEqual(10);
+  expect(total).toBeGreaterThanOrEqual(6); // el corto cuenta pasos reales; los saltos de menú no se cuentan
   for (let i = 0; i < total + 15 && (await tarjeta(page).count()) > 0; i++) {
     await avanzar(page).click();
     await page.waitForTimeout(150);
