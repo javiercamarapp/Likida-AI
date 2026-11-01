@@ -34,9 +34,15 @@ export function DonaMini({ gajos, matiz = 8, etiqueta, centro, formato = (v) => 
           {total > 0 ? vistos.map((g, i) => {
             const frac = (g.valor / total) * 100;
             const el = (
-              <circle key={g.etiqueta} className={`rv-dona__gajo rv-tono-${i}`} data-r={i} data-activo={activo === i || undefined} cx={c} cy={c} r={r} fill="none" strokeWidth={trazo}
+              <g key={g.etiqueta}>
+              {/* Borde de 1 px a pleno matiz: los tonos claros se identifican por su contorno (WCAG 1.4.11), no solo por el relleno. */}
+              <circle className={`rv-dona__borde rv-tono-${i}`} data-r={i} data-activo={activo === i || undefined} cx={c} cy={c} r={r} fill="none" strokeWidth={trazo}
                 pathLength={100} strokeDasharray={`${Math.max(0, frac - 1)} ${100 - Math.max(0, frac - 1)}`} strokeDashoffset={-acum}
                 transform={`rotate(-90 ${c} ${c})`} />
+              <circle className={`rv-dona__gajo rv-tono-${i}`} data-r={i} data-activo={activo === i || undefined} cx={c} cy={c} r={r} fill="none" strokeWidth={trazo - 2}
+                pathLength={100} strokeDasharray={`${Math.max(0, frac - 1)} ${100 - Math.max(0, frac - 1)}`} strokeDashoffset={-acum}
+                transform={`rotate(-90 ${c} ${c})`} />
+              </g>
             );
             acum += frac;
             return el;
