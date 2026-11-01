@@ -445,17 +445,32 @@ export function Tooltip({ texto, children, className }: {
 // no existe en el DOM mientras no hay selección. En móvil (<820) el CSS la oculta: ahí lee la cinta fija sobre la gráfica.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export function TooltipGrafica({ activo, ancla, children }: {
+export function TooltipGrafica({ activo, ancla, onCerrar, children }: {
   /** Hay una columna o un punto seleccionado. */
   activo: boolean;
   /** Devuelve el elemento (puede ser SVG) de la ranura o el punto activo; se lee al pintar, ya en el DOM. */
   ancla: () => Element | null;
+  /** WCAG 1.4.13: Esc la descarta sin mover el puntero ni el foco. */
+  onCerrar: () => void;
   children: ReactNode;
 }) {
   const burbuja = useRef<HTMLSpanElement>(null);
   useLayoutEffect(() => {
     if (activo && burbuja.current) colocarPanel(burbuja.current, ancla(), 'centro', 'junto');
   });
+  useEffect(() => {
+    if (!activo) return;
+    const recolocar = () => { if (burbuja.current) colocarPanel(burbuja.current, ancla(), 'centro', 'junto'); };
+    const alTeclear = (e: KeyboardEvent) => { if (e.key === 'Escape') onCerrar(); };
+    document.addEventListener('keydown', alTeclear, true);
+    window.addEventListener('resize', recolocar);
+    window.addEventListener('scroll', recolocar, true);
+    return () => {
+      document.removeEventListener('keydown', alTeclear, true);
+      window.removeEventListener('resize', recolocar);
+      window.removeEventListener('scroll', recolocar, true);
+    };
+  }, [activo, ancla, onCerrar]);
   if (!activo) return null;
   return <span ref={burbuja} role="status" className="rv-pop rv-pop--tip rv-pop--grafica" data-abierto="">{children}</span>;
 }

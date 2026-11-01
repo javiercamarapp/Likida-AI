@@ -79,6 +79,7 @@ export function TablaGrafica({ titulo, encabezados, filas, primera = 'Periodo' }
       <summary>Ver como tabla</summary>
       <div className="rv-tabla-grafica__caja" role="region" tabIndex={0} aria-label={`Tabla de ${titulo}`}>
         <table>
+          <caption className="rv-sr">{titulo}</caption>
           <thead><tr><th scope="col">{primera}</th>{encabezados.map((h) => <th key={h} scope="col" className="rv-num">{h}</th>)}</tr></thead>
           <tbody>
             {filas.map((f, i) => (
@@ -93,14 +94,15 @@ export function TablaGrafica({ titulo, encabezados, filas, primera = 'Periodo' }
 
 /** Lectura de varias series en un mismo periodo (columnas agrupadas): una fila por serie con su muestra de color (tono del matiz) y,
  *  si hay más de una, el total. El color nunca es la única señal: cada fila lleva el nombre. */
-export function LecturaSeries({ titulo, filas, total }: {
+export function LecturaSeries({ titulo, parcial, filas, total }: {
   titulo: string;
+  parcial?: boolean;
   filas: ReadonlyArray<{ tono: number; nombre: string; texto: string }>;
   total?: string;
 }) {
   return (
     <>
-      <span className="rv-gt__cab"><span className="rv-gt__titulo">{titulo}</span></span>
+      <span className="rv-gt__cab"><span className="rv-gt__titulo">{titulo}</span>{parcial ? <span className="rv-gt__chip">{TEXTO_PARCIAL}</span> : null}</span>
       {filas.map((f) => (
         <span key={f.nombre} className="rv-gt__fila"><i className={`rv-gt__sw rv-tono-${f.tono}`} aria-hidden="true" /><span>{f.nombre}</span><strong>{f.texto}</strong></span>
       ))}

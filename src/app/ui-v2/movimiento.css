@@ -23,7 +23,7 @@
   --ui-motion: 180ms;  /* overlays, tooltips, sombras */
   --ui-slow: 250ms;    /* entrada de bloque, desliz del foco del recorrido */
   --ui-ease: cubic-bezier(.22, 1, .36, 1);
-  --t-bar: 420ms;      /* crecimiento de barras (escalón de 40 ms por barra; columnas 360 ms / 14 ms) */
+  --t-bar: 420ms;      /* crecimiento de barras (escalón de 40 ms por barra; columnas 14 ms, como Vexa) */
   --t-draw: 380ms;     /* trazo de líneas y del check */
   --t-sweep: 700ms;    /* anillo de progreso (tope del sistema) */
   --chart-enter: 360ms;

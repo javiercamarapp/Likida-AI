@@ -27,7 +27,7 @@ createRoot(document.getElementById('raiz')).render(
     <section id="s-area" className="card" style={{ padding: 14, maxWidth: 640 }}><AreaMini matiz={5} valores={[3, 5, 4, 9, 7, 12]} etiquetas={['lun', 'mar', 'mié', 'jue', 'vie', 'sáb']} etiqueta="Respuestas por día" formato={(v) => v + ' resp.'} /></section>
     <section id="s-dona" className="card" style={{ padding: 14, maxWidth: 640 }}><DonaMini matiz={2} etiqueta="Rubros" gajos={[{ etiqueta: 'Diésel', valor: 91000 }, { etiqueta: 'Casetas', valor: 48200 }, { etiqueta: 'Viáticos', valor: 12000 }]} formato={(v) => '$' + v} /></section>
     <section id="s-bar" className="card" style={{ padding: 14, maxWidth: 640 }}><BarList etiqueta="Dónde pesa" matiz={6} items={[{ clave: 'a', etiqueta: 'Diésel fuera de política', valor: 9000, texto: '$9,000' }, { clave: 'b', etiqueta: 'Caseta sin comprobante', valor: 3000, texto: '$3,000' }, { clave: 'c', etiqueta: 'Sin dato', valor: null }]} /></section>
-    <section id="s-agr" className="card" style={{ padding: 14, maxWidth: 640 }}><ColumnasAgrupadas etiqueta="Gasto semanal" categorias={['S1', 'S2', 'S3']} series={[{ nombre: 'Diésel', valores: [100, 300, 200] }, { nombre: 'Caseta', valores: [50, 80, 120] }]} formato={(v) => '$' + v} /></section>
+    <section id="s-agr" className="card" style={{ padding: 14, maxWidth: 640 }}><ColumnasAgrupadas etiqueta="Gasto semanal" categorias={['S1', 'S2', 'S3', 'S4']} parciales={[3]} series={[{ nombre: 'Diésel', valores: [100, 300, 200, 90] }, { nombre: 'Caseta', valores: [50, 80, 120, null] }]} formato={(v) => '$' + v} /></section>
   </div>,
 );
 `;
@@ -191,6 +191,35 @@ describe.skipIf(SIN_NAVEGADOR)('gráficas interactivas · Chromium', () => {
     expect(t).toContain('Total $380');
     await p.click('#s-agr summary');
     expect(await p.locator('#s-agr thead th').allInnerTexts()).toEqual(['Periodo', 'Diésel', 'Caseta']);
+    await p.close();
+  });
+  it('agrupadas: un null NO es cero (s/d, «Sin datos», total «n de N»), el periodo parcial lo dice y la tabla pone «—»', async () => {
+    const p = await abrir();
+    await p.hover('#s-agr [data-i="3"] .rv-colum__golpe');
+    const t = (await tip(p).innerText()).replace(/\s+/g, ' ');
+    expect(t).toContain('parcial');
+    expect(t).toContain('Caseta Sin datos');
+    expect(t).toContain('Total $90 (1 de 2)');
+    expect(await p.locator('#s-agr [data-i="3"]').textContent()).toContain('s/d');
+    expect(await p.getAttribute('#s-agr [data-i="3"]', 'aria-label')).toContain('Caseta sin datos');
+    expect(await p.locator('#s-agr [data-i="3"] .rv-colum__barra').count()).toBe(1);
+    expect(await p.locator('#s-agr .rv-leyenda-fina').innerText()).toContain('= sin datos');
+    await p.click('#s-agr summary');
+    expect((await p.locator('#s-agr tbody tr').nth(3).innerText()).replace(/\s+/g, ' ')).toBe('S4 (incompleto) $90 —');
+    expect(await p.locator('#s-agr caption').textContent()).toBe('Gasto semanal');
+    await p.close();
+  });
+  it('WCAG 1.4.13: Esc descarta el tooltip aunque el puntero siga encima, y al hacer scroll sigue pegado a su columna', async () => {
+    const p = await abrir();
+    await p.hover('#s-col [data-i="1"] .rv-colum__golpe');
+    expect(await tip(p).count()).toBe(1);
+    const dist = async () => p.evaluate(() => { const a = document.querySelector('#s-col [data-i="1"] .rv-colum__golpe')!.getBoundingClientRect(); const b = document.querySelector('.rv-pop--grafica')!.getBoundingClientRect(); return Math.round(b.left - a.right); });
+    const antes = await dist();
+    await p.evaluate(() => window.scrollBy(0, 40));
+    await p.waitForTimeout(100);
+    expect(Math.abs((await dist()) - antes)).toBeLessThanOrEqual(2);
+    await p.keyboard.press('Escape');
+    expect(await tip(p).count()).toBe(0);
     await p.close();
   });
   it('reduced-motion: CERO animaciones en todas las gráficas; sin esa preferencia sí se animan', async () => {

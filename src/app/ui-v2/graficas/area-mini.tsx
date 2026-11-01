@@ -30,7 +30,12 @@ export function AreaMini({ valores, etiquetas, matiz = 1, etiqueta, formato = (v
   const idg = `rv-ag-${useId().replace(/:/g, '')}`;
   const ok = valores.filter((v): v is number => v !== null && Number.isFinite(v));
   if (ok.length < 2) {
-    return <figure className="rv-gr mc-vacio" aria-label={etiqueta}><svg width="1" height={alto} aria-hidden="true" /><span>Sin serie suficiente</span></figure>;
+    return (
+      <figure className="rv-gr rv-area-vacia" aria-label={etiqueta}>
+        <div className="mc-vacio"><svg width="1" height={alto} aria-hidden="true" /><span>Sin serie suficiente</span></div>
+        {valores.length > 0 ? <TablaGrafica titulo={etiqueta} primera="Periodo" encabezados={[unidad ? `Valor (${unidad})` : 'Valor']} filas={valores.map((v, i) => ({ rotulo: etiquetas?.[i] ?? String(i + 1), celdas: [v === null ? '—' : formato(v)] }))} /> : null}
+      </figure>
+    );
   }
   const n = valores.length;
   const conEtiquetas = etiquetas !== undefined;
@@ -127,7 +132,7 @@ export function AreaMini({ valores, etiquetas, matiz = 1, etiqueta, formato = (v
             </g>
           )}
         </svg>
-        <TooltipGrafica activo={sel !== null} ancla={() => plano.current?.querySelector('.rv-area__ancla') ?? null}>{lectura}</TooltipGrafica>
+        <TooltipGrafica activo={sel !== null} onCerrar={() => setSel(null)} ancla={() => plano.current?.querySelector('.rv-area__ancla') ?? null}>{lectura}</TooltipGrafica>
       </div>
       <TablaGrafica titulo={etiqueta} primera="Periodo" encabezados={[unidad ? `Valor (${unidad})` : 'Valor']} filas={tabla} />
     </figure>

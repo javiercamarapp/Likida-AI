@@ -51,7 +51,7 @@ async function columnasSinLinea(p: Page, mitad = false): Promise<number> {
     const x = c.getContext('2d')!; x.drawImage(img, 0, 0);
     const d = x.getImageData(0, 0, c.width, c.height).data;
     let vacias = 0;
-    const desde = Math.round(c.width * 0.02), hasta = Math.round(c.width * 0.97);
+    const desde = 0, hasta = c.width; // todo el ancho: se vigilan los EXTREMOS
     const cubiertas: boolean[] = [];
     for (let col = desde; col < hasta; col++) {
       let hay = false;
@@ -65,7 +65,7 @@ async function columnasSinLinea(p: Page, mitad = false): Promise<number> {
     const primera = cubiertas.indexOf(true), ultima = cubiertas.lastIndexOf(true);
     for (let k = primera; k >= 0 && k <= ultima; k++) if (!cubiertas[k]) vacias++;
     // terminada la animación, la línea debe cubrir el trazo entero (no solo no estar partida)
-    if (!enCurso && (primera < 0 || primera > 70 || ultima < cubiertas.length - 40)) vacias += 1000;
+    if (!enCurso && (primera < 0 || primera > 44 /* padL 30 + 14 */ || ultima < cubiertas.length - 26 /* PAD_R 14 + 12 */)) vacias += 1000;
     return vacias;
   }, [png.toString('base64'), mitad] as const);
 }

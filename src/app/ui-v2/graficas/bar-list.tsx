@@ -37,7 +37,7 @@ export function BarList({ items, matiz, etiqueta, formato = (v) => String(v), ma
           <li key={it.clave} className="rv-barlist__fila">
             {it.href ? <a className="rv-barlist__cab" href={it.href}>{cab}</a> : <div className="rv-barlist__cab">{cab}</div>}
             <svg className="rv-barlist__pista" data-desconocido={it.valor === null || undefined} data-tipo={it.tipo} width="100%" height="100%" aria-hidden="true">
-              {it.valor !== null ? <rect className="rv-barlist__relleno" data-r={i} x="0" y="0" height="100%" rx="3" width={`${Math.min(100, Math.max(0, (it.valor / tope) * 100)).toFixed(2)}%`} /> : null}
+              {it.valor !== null ? <rect className="rv-barlist__relleno" data-r={Math.min(i, 15)} x="0" y="0" height="100%" rx="3" width={`${Math.min(100, Math.max(0, (it.valor / tope) * 100)).toFixed(2)}%`} /> : null}
             </svg>
             {it.nota ? <small className="rv-barlist__nota">{it.nota}</small> : null}
           </li>

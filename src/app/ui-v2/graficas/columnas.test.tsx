@@ -33,6 +33,8 @@ describe('Columnas', () => {
     expect(h).toContain('Sin cierres');
     expect(h).not.toContain('rv-colum__barra');
     expect(h).toContain('<svg');
+    expect(h).toContain('Ver como tabla'); // también en la rama vacía: los ceros medidos se leen en la tabla
+    expect(h).toContain('<caption class="rv-sr">x</caption>');
   });
   it('no usa style= (CSP con nonce): el retardo escalonado sale de data-r y del CSS', () => {
     const h = renderToStaticMarkup(<Columnas datos={datos} etiqueta="x" />);

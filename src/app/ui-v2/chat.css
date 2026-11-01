@@ -215,7 +215,6 @@ html:has(.rv-chat-pagina), html:has(.rv-chat-pagina) body { height: 100dvh; over
 .rv-chat__tabla th { font-weight: 400; text-align: left; color: var(--muted); }
 .rv-chat__tabla td.num { text-align: right; font-weight: 500; color: var(--ink); }
 .rv-chat__tabla tr:last-child th, .rv-chat__tabla tr:last-child td { border-bottom: 0; }
-.rv-chat__bloque .rv-area__plot svg { overflow: hidden; }
 
 /* La dona usa la serie de matices de DATOS (no una rampa de un solo azul): un matiz distinto por gajo, con la cifra impresa en la leyenda. */
 .rv-chat__bloque .rv-tono-0 { --tono: var(--chart-5, var(--g4)); }
@@ -319,4 +318,4 @@ summary.rv-chat__resumen::marker { content: ""; }
   .rv-chat__marca[data-estado="pensando"] { opacity: .6; }
 }
 /* Un historial reabierto no re-anima sus gráficas. */
-.rv-chat__respuesta[data-nuevo="false"] .rv-chat__bloque :is(.rv-dona__gajo, .rv-area__plot svg, .rv-area__linea) { animation: none; }
+.rv-chat__respuesta[data-nuevo="false"] .rv-chat__bloque :is(.rv-dona__gajo, .rv-dona__borde, .rv-area__linea, .rv-area__relleno, .rv-area__punto) { animation: none; }

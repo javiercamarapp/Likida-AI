@@ -47,6 +47,10 @@ export function Columnas({ datos, matiz = 1, etiqueta, formato = (v) => String(v
   const max = Math.max(0, ...valores.map((v) => v ?? 0));
   const W = Math.max(ancho || 640, 240);
 
+  const conDetalle = datos.some((d) => d.detalle);
+  const nombre = (d: ColumnaDato) => d.largo ?? d.etiqueta;
+  const tabla = datos.map((d) => ({ rotulo: `${nombre(d)}${d.parcial ? ' (incompleto)' : ''}`, celdas: conDetalle ? [d.valor === null ? '—' : formato(d.valor), d.detalle ?? ''] : [d.valor === null ? '—' : formato(d.valor)] }));
+  const tablaAlterna = <TablaGrafica titulo={etiqueta} primera="Periodo" encabezados={[unidad ? `Valor (${unidad})` : 'Valor', ...(conDetalle ? ['Detalle'] : [])]} filas={tabla} />;
   if (n === 0 || max === 0) {
     return (
       <figure className="rv-gr rv-colum rv-colum--vacio" aria-label={etiqueta}>
@@ -55,6 +59,7 @@ export function Columnas({ datos, matiz = 1, etiqueta, formato = (v) => String(v
           <line className="rv-colum__base" x1="0" x2={W} y1={alto - PAD_B} y2={alto - PAD_B} vectorEffect="non-scaling-stroke" />
         </svg>
         <span className="rv-colum__vacio">{vacio}</span>
+        {n > 0 ? tablaAlterna : null}
       </figure>
     );
   }
@@ -71,7 +76,6 @@ export function Columnas({ datos, matiz = 1, etiqueta, formato = (v) => String(v
   const puntos = datos.map((d) => ({ valor: d.valor, parcial: d.parcial }));
   const rotuladas = indicesEtiquetados(puntos);
   const ultima = datos.reduce((a, d, i) => (d.valor !== null && !d.parcial ? i : a), -1);
-  const nombre = (d: ColumnaDato) => d.largo ?? d.etiqueta;
   const leer = (d: ColumnaDato) => (d.valor === null ? 'sin datos' : formato(d.valor));
 
   const lectura = activa === null ? null : (() => {
@@ -95,8 +99,6 @@ export function Columnas({ datos, matiz = 1, etiqueta, formato = (v) => String(v
     const r = e.currentTarget.getBoundingClientRect();
     setActiva(ranuraEn(e.clientX - r.left - padL, n, anchoPlano));
   };
-  const conDetalle = datos.some((d) => d.detalle);
-  const tabla = datos.map((d) => ({ rotulo: `${nombre(d)}${d.parcial ? ' (incompleto)' : ''}`, celdas: conDetalle ? [d.valor === null ? '—' : formato(d.valor), d.detalle ?? ''] : [d.valor === null ? '—' : formato(d.valor)] }));
 
   return (
     <figure className="rv-gr rv-colum" data-matiz={matiz} data-tipo={tipo} aria-label={etiqueta} data-cero-fuente="">
@@ -134,7 +136,7 @@ export function Columnas({ datos, matiz = 1, etiqueta, formato = (v) => String(v
                 <rect className="rv-colum__golpe" x={padL + ranura * i} y={PAD_T - 4} width={ranura} height={altoPlano + PAD_B + 4} rx="6" />
                 {d.valor === null
                   ? <text className="rv-gr__nota" x={cx} y={base - 6} textAnchor="middle">{TEXTO_SIN_DATO}</text>
-                  : <path className="rv-colum__barra" data-r={i} data-parcial={d.parcial || undefined} d={trazo} {...(d.parcial ? { fill: `url(#${trama})` } : {})} />}
+                  : <path className="rv-colum__barra" data-r={Math.min(i, 31)} data-parcial={d.parcial || undefined} d={trazo} {...(d.parcial ? { fill: `url(#${trama})` } : {})} />}
                 {d.parcial && d.valor !== null && activa !== i ? <text className="rv-gr__nota" x={cx} y={arriba - 5} textAnchor={cx + 18 > W ? 'end' : 'middle'}>parcial</text> : null}
                 {directa && !d.parcial ? <text className="rv-gr__directa" x={cx} y={arriba - 5} textAnchor={anclaTxt}>{directa}</text> : null}
                 {i % cada === 0 ? <text className="rv-gr__marca rv-gr__marca-x" x={cx} y={alto - 6} textAnchor="middle">{d.etiqueta}</text> : null}
@@ -142,10 +144,10 @@ export function Columnas({ datos, matiz = 1, etiqueta, formato = (v) => String(v
             );
           })}
         </svg>
-        <TooltipGrafica activo={activa !== null} ancla={() => plano.current?.querySelector(`[data-i="${activa}"] .rv-colum__golpe`) ?? null}>{lectura}</TooltipGrafica>
+        <TooltipGrafica activo={activa !== null} onCerrar={() => setActiva(null)} ancla={() => plano.current?.querySelector(`[data-i="${activa}"] .rv-colum__golpe`) ?? null}>{lectura}</TooltipGrafica>
       </div>
       <LeyendaFina parcial={datos.some((d) => d.parcial && d.valor !== null)} sinDato={datos.some((d) => d.valor === null)} />
-      <TablaGrafica titulo={etiqueta} primera="Periodo" encabezados={[unidad ? `Valor (${unidad})` : 'Valor', ...(conDetalle ? ['Detalle'] : [])]} filas={tabla} />
+      {tablaAlterna}
     </figure>
   );
 }
