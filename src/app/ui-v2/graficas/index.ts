@@ -11,3 +11,6 @@ export { BarraApilada, type Tramo } from './barra-apilada';
 export { Bullet } from './bullet';
 export { ConteoKpi } from './conteo-kpi';
 export { Columnas, type ColumnaDato } from './columnas';
+export { BarList, type ItemBarList } from './bar-list';
+export { TablaGrafica, LeyendaFina } from './partes';
+export { ColumnasAgrupadas, type SerieAgrupada } from './columnas-agrupadas';

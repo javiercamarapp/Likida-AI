@@ -3,6 +3,7 @@
 import { X } from 'lucide-react';
 import { cloneElement, isValidElement, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode, type RefObject } from 'react';
 import LogoV2 from '../../dashboard/shell/logo-v2';
+import { colocarLado } from '../graficas/escala';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DRAWER Y MODAL sobre <dialog> NATIVO (PLAN §2.3).
@@ -237,11 +238,19 @@ export function Modal({ abierto, onCerrar, titulo, descripcion, children, pie, t
 
 /** Coloca un panel `position: fixed` bajo su ancla (o encima si abajo no cabe), dentro del viewport. `lado: 'arriba'` lo prefiere encima
  *  (tooltip) y `alineacion: 'centro'` lo centra sobre el ancla. Es el ÚNICO colocador de overlays anclados (Popover y Tooltip). */
-function colocarPanel(el: HTMLElement, ancla: HTMLElement | null, alineacion: 'inicio' | 'fin' | 'centro', lado: 'abajo' | 'arriba' = 'abajo') {
+function colocarPanel(el: HTMLElement, ancla: Element | null, alineacion: 'inicio' | 'fin' | 'centro', lado: 'abajo' | 'arriba' | 'junto' = 'abajo') {
   const a = ancla?.getBoundingClientRect();
   if (!a) return;
   const p = el.getBoundingClientRect();
   const margen = 8;
+  if (lado === 'junto') {
+    // Gráficas (Vexa): a la derecha de la ranura activa, volteado a la izquierda si no cabe, siempre dentro del viewport.
+    const c = colocarLado({ ax: a.left + a.width / 2, ay: a.top + p.height / 2 + 2, w: p.width, h: p.height, vw: document.documentElement.clientWidth, vh: window.innerHeight, sep: a.width / 2 + 8, margen });
+    el.style.top = `${Math.round(c.y * 10) / 10}px`;
+    el.style.left = `${Math.round(c.x * 10) / 10}px`;
+    el.dataset.lado = c.lado === 'izquierda' ? 'izquierda' : 'derecha';
+    return;
+  }
   let left = alineacion === 'fin' ? a.right - p.width : alineacion === 'centro' ? a.left + a.width / 2 - p.width / 2 : a.left;
   left = Math.min(Math.max(margen, left), window.innerWidth - p.width - margen);
   const abajo = a.bottom + 6;
@@ -428,4 +437,40 @@ export function Tooltip({ texto, children, className }: {
       <span ref={burbuja} role="tooltip" id={id} className="rv-pop rv-pop--tip" data-abierto={abierto || undefined}>{texto}</span>
     </span>
   );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOOLTIP DE GRÁFICA (Vexa `ChartTip`): la MISMA burbuja de superficie del Tooltip (clases .rv-pop--tip, capa z 60, colocador único),
+// pero controlada por la gráfica: aparece junto a la columna o el punto activo (hover, toque o foco por teclado), no roba el foco y
+// no existe en el DOM mientras no hay selección. En móvil (<820) el CSS la oculta: ahí lee la cinta fija sobre la gráfica.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export function TooltipGrafica({ activo, ancla, onCerrar, children }: {
+  /** Hay una columna o un punto seleccionado. */
+  activo: boolean;
+  /** Devuelve el elemento (puede ser SVG) de la ranura o el punto activo; se lee al pintar, ya en el DOM. */
+  ancla: () => Element | null;
+  /** WCAG 1.4.13: Esc la descarta sin mover el puntero ni el foco. */
+  onCerrar: () => void;
+  children: ReactNode;
+}) {
+  const burbuja = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    if (activo && burbuja.current) colocarPanel(burbuja.current, ancla(), 'centro', 'junto');
+  });
+  useEffect(() => {
+    if (!activo) return;
+    const recolocar = () => { if (burbuja.current) colocarPanel(burbuja.current, ancla(), 'centro', 'junto'); };
+    const alTeclear = (e: KeyboardEvent) => { if (e.key === 'Escape') onCerrar(); };
+    document.addEventListener('keydown', alTeclear, true);
+    window.addEventListener('resize', recolocar);
+    window.addEventListener('scroll', recolocar, true);
+    return () => {
+      document.removeEventListener('keydown', alTeclear, true);
+      window.removeEventListener('resize', recolocar);
+      window.removeEventListener('scroll', recolocar, true);
+    };
+  }, [activo, ancla, onCerrar]);
+  if (!activo) return null;
+  return <span ref={burbuja} role="status" className="rv-pop rv-pop--tip rv-pop--grafica" data-abierto="">{children}</span>;
 }

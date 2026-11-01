@@ -23,7 +23,7 @@
   --ui-motion: 180ms;  /* overlays, tooltips, sombras */
   --ui-slow: 250ms;    /* entrada de bloque, desliz del foco del recorrido */
   --ui-ease: cubic-bezier(.22, 1, .36, 1);
-  --t-bar: 420ms;      /* crecimiento de barras (escalón de 40 ms por barra; columnas 360 ms / 14 ms) */
+  --t-bar: 420ms;      /* crecimiento de barras (escalón de 40 ms por barra; columnas 14 ms, como Vexa) */
   --t-draw: 380ms;     /* trazo de líneas y del check */
   --t-sweep: 700ms;    /* anillo de progreso (tope del sistema) */
   --chart-enter: 360ms;
@@ -66,6 +66,11 @@
   @keyframes rv-trazo {
     from { stroke-dashoffset: 1; }
     to { stroke-dashoffset: 0; }
+  }
+  /* Línea de área: el guion solo existe MIENTRAS se dibuja (pathLength=1); en reposo el trazo es continuo, sin dasharray (algunos Chromium lo parten). */
+  @keyframes rv-trazo-linea {
+    from { stroke-dasharray: 1; stroke-dashoffset: 1; }
+    to { stroke-dasharray: 1; stroke-dashoffset: 0; }
   }
   /* Anillo: el arco crece hasta su valor (pathLength=100). */
   @keyframes rv-barrido {

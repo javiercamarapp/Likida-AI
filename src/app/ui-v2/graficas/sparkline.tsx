@@ -1,8 +1,8 @@
 import type { Matiz } from '../metricas';
 
-/** Sparkline 60×22 (trazo 1.5, área .06, punto final r 2.25), color = matiz de la MÉTRICA.
+/** Sparkline 72×24 (Vexa) (trazo 1.5, área .06, punto final r 2.25), color = matiz de la MÉTRICA.
  *  Menos de 2 puntos válidos ⇒ no pinta una raya falsa: devuelve null (el padre dice «sin serie»). */
-export function Sparkline({ valores, matiz = 8, ancho = 60, alto = 22 }: {
+export function Sparkline({ valores, matiz = 8, ancho = 72, alto = 24 }: {
   valores: ReadonlyArray<number | null>;
   matiz?: Matiz;
   ancho?: number;
@@ -14,7 +14,7 @@ export function Sparkline({ valores, matiz = 8, ancho = 60, alto = 22 }: {
   const min = Math.min(...pts.map((p) => p[1]));
   const max = Math.max(...pts.map((p) => p[1]));
   const rango = max - min || 1;
-  const pad = 3;
+  const pad = 4;
   const xy = pts.map(([i, v]) => [pad + (i / n) * (ancho - pad * 2), alto - pad - ((v - min) / rango) * (alto - pad * 2)] as const);
   // Un nulo corta la línea: se une SOLO lo contiguo (índices consecutivos), nunca se interpola sobre el faltante.
   const tramos: Array<Array<readonly [number, number]>> = [];
