@@ -99,7 +99,7 @@ test('el menú Guía ofrece las pantallas del rol y un recorrido por agente', as
   await expect(page.getByText('Saltar a una pantalla')).toBeVisible();
   await expect(page.getByText('Recorrido por agente')).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'Primeros pasos' })).toBeVisible();
-  await page.getByRole('menuitem', { name: 'Operadores' }).click();
+  await page.getByRole('menuitem', { name: 'Operadores', exact: true }).click();
   await expect(tarjeta(page)).toBeVisible();
 });
 
