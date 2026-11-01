@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { reglasSinAmbito } from './css_reglas';
-import { Cifra, TiraCifras } from './graficas';
+import { AreaMini, BarList, Cifra, Columnas, ColumnasAgrupadas, DonaMini, TiraCifras } from './graficas';
 import { EstadoError, Tarjeta } from './componentes';
 import Loading from '../dashboard/loading';
 import { Proximamente } from '../dashboard/proximamente/proximamente';
@@ -41,5 +41,32 @@ describe('fallback v1 de las piezas L2b', () => {
     expect(base).toMatch(/\.rv-esq-fila \{[^}]*height: 40px/);
     expect(base).toMatch(/\.rv-esq-cuerpo\[data-alto="240"\] \{ height: 240px/);
     expect(base).toMatch(/\.rv-error \{[^}]*border: 1px solid/);
+  });
+});
+
+// LG: las gráficas interactivas también se pintan con tenant_ui='v1' (Gasto por categoría, chat): cada clase de gráfica debe traer regla BASE
+// sin ámbito, y la cinta táctil NO puede quedar visible por omisión.
+describe('fallback v1 de las gráficas interactivas', () => {
+  const html = renderToStaticMarkup(
+    <>
+      <Columnas etiqueta="C" datos={[{ etiqueta: 'a', valor: 2 }, { etiqueta: 'b', valor: null }, { etiqueta: 'c', valor: 4, parcial: true }]} />
+      <ColumnasAgrupadas etiqueta="G" categorias={['S1', 'S2']} series={[{ nombre: 'A', valores: [1, 2] }, { nombre: 'B', valores: [3, null] }]} parciales={[1]} />
+      <AreaMini etiqueta="A" valores={[1, null, 3, 4]} etiquetas={['a', 'b', 'c', 'd']} />
+      <DonaMini etiqueta="D" gajos={[{ etiqueta: 'x', valor: 2 }, { etiqueta: 'y', valor: 1 }]} />
+      <BarList etiqueta="B" items={[{ clave: 'a', etiqueta: 'a', valor: 3 }, { clave: 'b', etiqueta: 'b', valor: null }]} />
+    </>,
+  );
+  const CLASES = ['rv-gr', 'rv-gr-plot', 'rv-gr-cinta', 'rv-gr__marca', 'rv-gr__nota', 'rv-gr__rejilla', 'rv-colum__base', 'rv-colum__golpe', 'rv-colum__barra', 'rv-colum__trama-raya',
+    'rv-area__linea', 'rv-area__relleno', 'rv-area__punto', 'rv-leyenda-fina', 'rv-leyenda-series', 'rv-gt__sw', 'rv-tabla-grafica__caja', 'rv-dona__gajo', 'rv-dona__borde', 'rv-dona__leyenda', 'rv-barlist', 'rv-barlist__pista', 'rv-barlist__relleno', 'rv-sr'];
+  it('no pinta data-ui="v2" y todas las clases que usa tienen regla base sin ámbito', () => {
+    expect(html).not.toContain('data-ui="v2"');
+    const usadas = CLASES.filter((c) => new RegExp(`class="[^"]*\\b${c}\\b`).test(html));
+    expect(usadas.length).toBeGreaterThan(18);
+    const sin = usadas.filter((c) => !new RegExp(`\\.${c}(?![\\w-])`).test(base));
+    expect(sin).toEqual([]);
+  });
+  it('la cinta táctil está oculta por omisión y el SVG no hereda 16 px de texto', () => {
+    expect(base).toMatch(/\.rv-gr-cinta \{ display: none; \}/);
+    expect(base).toMatch(/\.rv-gr__marca[^{]*\{[^}]*font: 500 12px/);
   });
 });

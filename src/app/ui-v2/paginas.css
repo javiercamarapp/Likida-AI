@@ -288,3 +288,50 @@ button.rv-at__fila:focus-visible { outline: 2px solid var(--ink); outline-offset
   .rv-ic__fila--4-4-4 > * { grid-column: span 6; }
   .rv-ic__fila--4-4-4 > :last-child { grid-column: 1 / -1; }
 }
+
+/* ═══ LG · BASE SIN ÁMBITO de las gráficas interactivas (rollback a v1) ═══
+   GastoSemanalChart y las gráficas del chat se pintan también con tenant_ui='v1'. Sin esta base el SVG salía sin estilo (barras negras, texto de 16 px,
+   viñetas en la leyenda, cinta de lectura siempre visible). Solo lo mínimo para que se lean: la piel completa cuelga de [data-ui="v2"] en graficas.css. */
+.rv-gr { position: relative; margin: 0; color: var(--ink); }
+.rv-gr-plot { position: relative; width: 100%; min-width: 0; }
+.rv-gr-plot svg { display: block; max-width: 100%; overflow: visible; }
+.rv-gr-cinta { display: none; }
+.rv-gr__marca, .rv-gr__nota, .rv-gr__directa { font: 500 12px/1 inherit; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.rv-gr__directa { fill: var(--ink); font-weight: 600; }
+.rv-gr__rejilla { stroke: var(--line); stroke-width: 1; }
+.rv-colum__base { stroke: var(--line2, var(--line)); stroke-width: 1; }
+.rv-colum__golpe { fill: transparent; }
+.rv-colum__col { outline: none; }
+.rv-colum__barra { fill: var(--ink); pointer-events: none; }
+.rv-colum__barra.rv-tono-1 { fill-opacity: .72; }
+.rv-colum__barra.rv-tono-2 { fill-opacity: .52; }
+.rv-colum__barra.rv-tono-3 { fill-opacity: .4; }
+.rv-colum__trama-fondo { fill: var(--surface, #fff); fill-opacity: .55; }
+.rv-colum__trama-raya { stroke: var(--muted); stroke-width: 1.4; }
+.rv-area__linea { fill: none; stroke: var(--ink); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.rv-area__relleno { stroke: none; }
+.rv-area__hueco { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 3 4; }
+.rv-area__punto, .rv-area__activo, .rv-area__aislado { fill: var(--ink); }
+.rv-area__cruz line { stroke: var(--line2, var(--line)); }
+.rv-area__ancla { fill: none; pointer-events: none; }
+.rv-leyenda-fina, .rv-leyenda-series { display: flex; flex-wrap: wrap; gap: 2px 16px; margin: 4px 0 0; padding: 0; list-style: none; font-size: 12px; color: var(--muted); }
+.rv-leyenda-series { margin: 0 0 6px; }
+.rv-leyenda-fina > span, .rv-leyenda-series > li { display: inline-flex; align-items: center; gap: 6px; }
+.rv-gt__sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: var(--ink); }
+.rv-tabla-grafica > summary { min-height: 32px; font-size: 12px; font-weight: 500; color: var(--muted); cursor: pointer; }
+.rv-tabla-grafica__caja { overflow-x: auto; }
+.rv-tabla-grafica__caja table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.rv-tabla-grafica__caja th, .rv-tabla-grafica__caja td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.rv-tabla-grafica__caja .rv-num { text-align: right; }
+.rv-dona { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.rv-dona__pista { stroke: var(--line); }
+.rv-dona__gajo, .rv-dona__borde { stroke: var(--ink); }
+.rv-dona__gajo.rv-tono-1 { stroke-opacity: .72; }
+.rv-dona__gajo.rv-tono-2 { stroke-opacity: .52; }
+.rv-dona__gajo.rv-tono-3 { stroke-opacity: .4; }
+.rv-dona__leyenda { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 13px; }
+.rv-barlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.rv-barlist__cab { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: inherit; text-decoration: none; }
+.rv-barlist__pista { display: block; height: 4px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.rv-barlist__relleno { fill: var(--ink); }
+.rv-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
