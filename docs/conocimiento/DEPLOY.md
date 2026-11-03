@@ -244,6 +244,8 @@ falla si entra una ahí y no aquí):
 | `SENTRY_DSN` | No hay alerta de nada. Los errores mueren en el runtime log. |
 | `DEMO_TENANT_ID` | El panel consulta el tenant del seed y pinta **cero liquidaciones**, sin log. |
 | `ALERTA_EMAIL` | **El único canal push del sistema.** Un cron que falla (`escalar`, `facturar`, `purgar`, `wa-pendientes`, `runner`) y una lectura ilegible del kill switch mandan un correo aquí (`src/lib/observability/alerta.ts`, un correo por evento por hora). Sin ella, el fallo solo existe en Sentry — que notifica una vez por issue y después solo engorda un contador. |
+| `RESEND_API_KEY` | **El transporte de ese canal.** `ALERTA_EMAIL` dice a dónde va la alerta; esta dice con qué sale (`src/lib/correo/enviar.ts`). Sin ella la dirección es una dirección sin cartero: el arranque no fallaba, `/api/health` contestaba 200 y el sistema quedaba **sin un solo canal push**. Vigilada en `SILENCIOSAS` desde la auditoría 43 (A43-OP-01). |
+| `RESEND_EMAIL_DOMAIN` | La otra mitad de lo mismo: sin remitente verificado Resend rechaza el envío, con el mismo resultado silencioso. Media credencial es tan inútil como ninguna, así que las dos se vigilan por separado. |
 | `NEXT_PUBLIC_APP_URL` | El login arma sus redirects contra `https://app.likida.ai` (el fallback) y no contra el despliegue que los emitió: el magic link y el retorno de Google aterrizan en otro sitio, sin error. |
 | `LIKIDA_WHATSAPP_MSG_USD` | El costo por liquidación usa el default 0.008 — y esa cifra decide el precio del producto. |
 | `LIKIDA_FLOTA_COOKIE_LLAVE` | El superadmin no puede fijar una flota activa en `/admin` (la cookie no se firma ni se lee: fallar cerrado). Desde la auditoría 18 ya NO cae a la service role key. |

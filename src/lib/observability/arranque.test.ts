@@ -28,6 +28,9 @@ function ponerTodo() {
   // instancia y el techo del login se multiplica por las lambdas abiertas.
   vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://fake.upstash.io');
   vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'tok-de-prueba');
+  // A43-OP-01: el TRANSPORTE de la alerta, no sólo su destino.
+  vi.stubEnv('RESEND_API_KEY', 're_de_prueba');
+  vi.stubEnv('RESEND_EMAIL_DOMAIN', 'likida.ai');
 }
 
 describe('avisarConfiguracionSilenciosa', () => {
@@ -197,5 +200,60 @@ describe('las credenciales de Upstash entraron a la lista silenciosa', () => {
     avisarConfiguracionSilenciosa();
 
     expect(spy.mock.calls.map((c) => String(c[0])).join('\n')).toContain('UPSTASH_REDIS_REST_TOKEN');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 43 · A43-OP-01 (ALTO): se vigilaba el DESTINO de la alerta y no su
+// TRANSPORTE.
+//
+// `SILENCIOSAS` traía `ALERTA_EMAIL` —«los fallos de cron no le llegan a nadie
+// por correo»— y NADA sobre `RESEND_API_KEY`/`RESEND_EMAIL_DOMAIN`, que son lo
+// que de verdad manda el correo (`correo/enviar.ts`). Con `ALERTA_EMAIL` puesta
+// y el transporte ausente, el arranque decía `ok:true`, `/api/health` seguía
+// contestando 200, y el sistema quedaba **sin un solo canal push** — el canal
+// que avisa de todo, incapaz de avisar de sí mismo.
+//
+// `.env.example:122-123` YA decía que `ALERTA_EMAIL` «necesita además el correo
+// de Resend configurado (RESEND_API_KEY + RESEND_EMAIL_DOMAIN)» y
+// `DEPLOY.md:246` llama a `ALERTA_EMAIL` «el único canal push del sistema»: la
+// dependencia estaba escrita para el humano y no para el arranque.
+//
+// Es la misma forma que las credenciales de Upstash de arriba —media credencial
+// es tan inútil como ninguna— aplicada al canal de alerta.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('A43-OP-01: el transporte de la alerta se vigila igual que su destino', () => {
+  it('si se vigila ALERTA_EMAIL, se vigilan también las dos mitades de RESEND', async () => {
+    const { SILENCIOSAS } = await import('./arranque');
+    const nombres = SILENCIOSAS.map((v) => v.nombre);
+    expect(nombres, 'el destino de la alerta debe seguir vigilado').toContain('ALERTA_EMAIL');
+    for (const v of ['RESEND_API_KEY', 'RESEND_EMAIL_DOMAIN']) {
+      expect(nombres, `${v} es el transporte de ALERTA_EMAIL y no se vigila`).toContain(v);
+    }
+  });
+
+  it('grita si falta la LLAVE, y nombra la consecuencia (no el valor)', async () => {
+    ponerTodo();
+    vi.stubEnv('RESEND_API_KEY', '');
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { avisarConfiguracionSilenciosa } = await import('./arranque');
+
+    avisarConfiguracionSilenciosa();
+
+    const linea = spy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(linea).toContain('RESEND_API_KEY');
+    expect(linea).toContain('sin un solo canal push');
+    expect(linea).not.toContain('re_de_prueba');
+  });
+
+  it('y también si falta solo el DOMINIO: el correo no sale igual', async () => {
+    ponerTodo();
+    vi.stubEnv('RESEND_EMAIL_DOMAIN', '');
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { avisarConfiguracionSilenciosa } = await import('./arranque');
+
+    avisarConfiguracionSilenciosa();
+
+    expect(spy.mock.calls.map((c) => String(c[0])).join('\n')).toContain('RESEND_EMAIL_DOMAIN');
   });
 });
