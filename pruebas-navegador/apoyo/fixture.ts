@@ -1,5 +1,29 @@
-import { test as base } from '@playwright/test';
+import { test as base, type Page } from '@playwright/test';
 import { crearProxyLocalE2E } from '../../scripts/ci/e2e/proxy-local.mjs';
+
+// CT-BAS-07 · «strict mode violation ... resolved to 2 elements» (#folio, input[name="q"], summary «Importar desde tu TMS», filas
+// del registro, getByLabel de subidas). Evidencia de CI (run 41650614822, traza de importacion-roles.nav.ts): en la instantánea
+// previa al clic el DOM tenía DOS copias de la página: la visible dentro de `#contenido-principal` y otra bajo `<div id="S:0"
+// hidden>` en <body>, la PLANTILLA de streaming de React (Suspense) que aún no se había intercambiado. Los localizadores de
+// Playwright cuentan los elementos ocultos, así que `page.locator('#folio')` resolvía a 2 justo en esa ventana. No es un id duplicado
+// ni un doble render del producto (el HTML de la app tiene un solo `#folio`, un solo `summary`), es la carrera de la prueba contra
+// el intercambio de la frontera Suspense. Después de CADA `goto` se espera a que ya no quede ninguna plantilla `S:n` oculta; no se
+// traga el error: si la plantilla NUNCA se intercambia (CSP del `$RC`, hidratación rota), la prueba falla ahí, con nombre, que es
+// un defecto real del producto y no un parpadeo.
+export const SIN_PLANTILLAS_STREAMING = `!document.querySelector('body > div[hidden][id^="S:"]')`;
+
+async function esperarSegmentos(page: Page): Promise<void> {
+  await page.waitForFunction(SIN_PLANTILLAS_STREAMING, undefined, { timeout: 15_000 });
+}
+
+function esperarStreamingTrasGoto(page: Page): void {
+  const irA = page.goto.bind(page);
+  page.goto = (async (...args: Parameters<Page['goto']>) => {
+    const respuesta = await irA(...args);
+    await esperarSegmentos(page);
+    return respuesta;
+  }) as Page['goto'];
+}
 
 // Browser entero: cubre páginas con storageState, contextos nuevos y popups.
 // <-loopback> desactiva el bypass implícito de Chromium para localhost.
@@ -18,6 +42,14 @@ export const test = base.extend<object, { proxyLocal: string }>({
     const browser = await playwright[browserName].launch({
       ...launchOptions, proxy: { server: proxyLocal, bypass: '<-loopback>' },
     });
+    // Toda página de todo contexto (el de la prueba y los `browser.newContext()` que abren las pruebas de dueño/encargado)
+    // espera el intercambio de streaming después de cada `goto`.
+    const nuevoContexto = browser.newContext.bind(browser);
+    browser.newContext = (async (...args: Parameters<typeof browser.newContext>) => {
+      const ctx = await nuevoContexto(...args);
+      ctx.on('page', esperarStreamingTrasGoto);
+      return ctx;
+    }) as typeof browser.newContext;
     try { await usar(browser); } finally { await browser.close(); }
   },
 });
