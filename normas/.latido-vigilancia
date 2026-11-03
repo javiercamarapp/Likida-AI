@@ -1,36 +1,46 @@
----
-fecha_corrida: 2026-09-20 (domingo)
+fecha_corrida: 2026-11-03 (martes)
 ultimo_dia_barrido: 2026-09-10
-rango_pendiente: 2026-09-11 — 2026-09-19 (9 días, incluye 3 viernes:
-  11, 18-sep, y el 12 previamente reportado) sin barrer. Sigue
-  arrancando en 09-11 para la próxima corrida.
+rango_pendiente: 2026-09-11 — 2026-11-02 (53 días naturales, incluye
+  ~7 viernes de cuota de diésel, el 01-oct-2026 — fecha de la deriva
+  de ley trimestral — y toda la ventana de goteo de anexos de la
+  1ª modificación a la RMF 2026, vigente hasta el 09-jul) sin barrer.
+  Sigue arrancando en 09-11 para la próxima corrida.
 notas_revisadas: 0 — ningún endpoint respondió.
 anti_silencio: no_evaluable — sin acceso a notas/ ni a diarios/porFecha
   no hay con qué cruzar.
 fichas_disparadas: 0 — no evaluable, no confirmado "sin cambios".
-cuota_diesel: no_evaluable_hoy — hoy no es viernes, y las cuotas de los
-  viernes 11 y 18-sep tampoco se pudieron verificar (mismo bloqueo).
-  Sigue sin verificar desde el 05-sep.
-etag_sat: no_aplica_hoy — no es lunes.
-deriva_ley_check: no_aplica — no es día 1 de trimestre (próxima: 01-oct-2026)
+cuota_diesel: no_evaluable_hoy — hoy no es viernes. Sigue sin
+  verificar desde el 05-sep (≈8 viernes acumulados).
+etag_sat: no_aplica_hoy — no es lunes (martes).
+deriva_ley_check: no_evaluable — el 01-oct-2026 (trimestral) cayó
+  dentro del mismo bloqueo; no se sabe si esa corrida pudo evaluarlo.
 estado: >
-  INFRA — TERCERA corrida consecutiva bloqueada (12-sep y 15-sep
-  reportaron el mismo corte; ver latido anterior). Probado con dos rutas
-  de red independientes: curl directo por HTTPS_PROXY y la herramienta
-  WebFetch (infraestructura propia de Anthropic, no el proxy de la
-  sesión) — AMBAS devuelven bloqueo de política de egreso, no timeout ni
-  reset. curl: "CONNECT tunnel failed, response 403" contra
-  sidofqa.segob.gob.mx (notas y diarios/porFecha) y www.google.com como
-  control (también 403 — confirma que el bloqueo cubre dominios no
-  permitidos en general, no que el sitio del SIDOF esté caído). WebFetch:
-  {"error_type":"EGRESS_BLOCKED","domain":"sidofqa.segob.gob.mx"} contra
-  el mismo endpoint. /root/.ccr/__agentproxy/status muestra
-  recentRelayFailures vacío, o sea no es una caída de conexión sino un
-  rechazo de política. Per README del proxy: un 403 de política no se
-  reintenta ni se rodea, se reporta. No se leyó ninguna nota del DOF en
-  esta corrida ni en las dos anteriores. No se tocó ninguna ficha de
-  normas/. El rango sin verificar ya cubre 9 días hábiles y 3 viernes de
-  cuota de diésel. Requiere intervención humana: permitir
-  sidofqa.segob.gob.mx (y el resto de references/fuentes.md) en la
-  política de egreso de este entorno programado, o correr esta rutina
-  desde un entorno con esos dominios permitidos.
+  INFRA — CUARTA corrida consecutiva bloqueada (12-sep, 15-sep y
+  20-sep reportaron el mismo corte; ver latidos anteriores). Repetidas
+  las dos pruebas de red independientes de la corrida anterior:
+  curl directo por HTTPS_PROXY y WebFetch (infraestructura propia de
+  Anthropic, no el proxy de la sesión). AMBAS siguen bloqueadas, y el
+  modo de fallo cambió de forma reveladora:
+  - curl: "CONNECT tunnel failed, response 403" contra
+    sidofqa.segob.gob.mx (notas y diarios/porFecha) Y contra
+    www.google.com como control — confirma que sigue siendo una
+    política de egreso general, no el sitio del SIDOF.
+    /root/.ccr/__agentproxy/status muestra `connect_rejected` con
+    "gateway answered 403 to CONNECT" para decenas de hosts (no solo
+    sidofqa) — el entorno de esta sesión programada tiene una lista de
+    dominios permitidos muy corta y sidofqa.segob.gob.mx no está en
+    ella.
+  - WebFetch: ya NO reporta EGRESS_BLOCKED como en la corrida anterior;
+    ahora es `getaddrinfo ENOTFOUND sidofqa.segob.gob.mx` — el propio
+    mensaje de la herramienta dice que esto pasa cuando el host está
+    fuera de los dominios permitidos de la sesión, lo mismo que antes
+    pero con un código de error distinto. Conclusión: SIGUE siendo
+    bloqueo de política, no caída del sitio ni timeout.
+  No se leyó ninguna nota del DOF en esta corrida ni en las tres
+  anteriores. No se tocó ninguna ficha de normas/. El rango sin
+  verificar ya cubre 53 días naturales, ~8 viernes de cuota de diésel
+  y la fecha de la deriva de ley trimestral (01-oct). Requiere
+  intervención humana: permitir sidofqa.segob.gob.mx, www.sat.gob.mx
+  y diputados.gob.mx (el resto de references/fuentes.md) en la
+  política de egreso de este entorno programado, o correr esta
+  rutina desde un entorno con esos dominios permitidos.
