@@ -98,17 +98,17 @@ Reescrito en F0 (CT-BAS-10, 3-nov-2026): la lista anterior declaraba 10 números
 Rangos de números de migración asignados por fase para que dos fases en paralelo no choquen (el patrón que dejó 0277, 0293, 0295,
 0343 y 0941-0944). Dentro de su rango, cada fase usa los números en orden ascendente; los huecos sobre 0949 que caigan dentro de un
 rango reservado se toleran mientras la fase no cierre. Al cerrar la fase, los números no usados se mueven a «Huecos declarados».
-Fuera de estos rangos, un hueco sobre 0949 es error. El siguiente rango libre empieza en 1030.
+Fuera de estos rangos, un hueco sobre 0949 es error. El siguiente rango libre empieza en 1000.
 
-| Rango | Fase |
+| Rango | Fase y uso (libro de migraciones del plan maestro, sec. 4.0.4, ratificado 3-nov-2026) |
 | --- | --- |
-| `0950`-`0979` | F3 |
-| `0980`-`0989` | F4 |
-| `0990`-`0999` | F6 |
-| `1000`-`1009` | F7 |
-| `1010`-`1029` | F9 |
+| `0950`-`0959` | F1: 0950-0952 telefono unico; 0953 candado RFC si S-05 sigue abierto; 0954-0955 evento_seguridad; 0956-0959 reserva |
+| `0960`-`0974` | F2 ola 11: A 0960-0964, B 0965-0969, C 0970-0974 |
+| `0975`-`0984` | F2: vigia, canal de correo y abiertos de la auditoria 39; 0983-0984 cedidos al onboarding (onboarding_estado, onboarding_evento) |
+| `0985`-`0989` | F5: cofre v2 |
+| `0990`-`0999` | F5: olas 12 a 14 |
 
-F0, F1, F2, F5, F8 y F10 no tienen rango: no deben crear migraciones; si una las necesita, pide un rango nuevo (desde 1030) y se anota aquí.
+Bitacoras (`~/likida-bitacoras`) tiene numeracion propia desde 0111 y no usa estos rangos. F0, F3, F4 y F6 no deben crear migraciones; si una fase necesita un rango nuevo, se pide desde 1000 y se anota aqui.
 
 ## Aplicadas en la base y fuera del repo
 
