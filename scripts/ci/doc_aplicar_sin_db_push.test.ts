@@ -30,4 +30,11 @@ describe('APLICAR-EN-PRODUCCION.md (CT-BAS-08)', () => {
   it('no deja el bloque de código «supabase db push» como regla corta', () => {
     expect(doc).not.toMatch(/```bash\s*\nsupabase db push\s*\n```/);
   });
+
+  it('las secciones «Pendiente de aplicar» ya aplicadas están marcadas como históricas (CT-BAS-16)', () => {
+    expect(doc).toMatch(/Estado verificado el 3-nov-2026/);
+    const pendientes = doc.split('\n').filter((l) => /Pendiente de aplicar/.test(l));
+    expect(pendientes.length).toBeGreaterThan(0);
+    for (const l of pendientes) expect(l).toMatch(/Histórico/);
+  });
 });

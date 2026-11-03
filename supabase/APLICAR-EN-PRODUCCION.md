@@ -18,6 +18,14 @@
 > (M-01). La normalización de versiones, si algún día se quiere, es una decisión de Javier con
 > respaldo y escritura en la base; no es parte de aplicar una migración.
 
+> **Estado verificado el 3-nov-2026 (CT-BAS-16, solo lectura).** Cotejo por nombre de los 537 archivos de
+> `supabase/migrations/` contra `supabase_migrations.schema_migrations` de producción: **0 migraciones del repo sin
+> aplicar**, prefijo máximo 0949 en ambos lados, ningún prefijo repetido. Las secciones «Pendiente de aplicar» de
+> más abajo (0302/0303, 0790–0794, 0842, 0843–0848) son **históricas**: ya figuran aplicadas por nombre. Lo que ese
+> cotejo NO prueba es que el SQL aplicado sea idéntico al archivo ni que el esquema vivo tenga cada objeto (la tabla
+> registra, no prueba); para eso están `supabase/verificaciones.sql` y las baterías de aislamiento. Única
+> aplicada ausente del repo: `0351b_costo_fase_dominio_sintaxis_in` (ver `NUMERACION-SALTADA.md`).
+
 > **Despliegue 20 (1-nov-2026).** Sin migraciones nuevas (la base sigue en 0949). Trae las gráficas
 > interactivas (#793) y el onboarding por cobertura (#794). La invitación de primer ingreso del
 > onboarding queda APAGADA por omisión: se enciende con `ONBOARDING_INVITACION=1` en Vercel
@@ -39,7 +47,7 @@
 > orden de aplicación no es un detalle — sigue aplicando para la PRÓXIMA
 > tanda de migraciones.
 >
-> **El repo ya trae 0302 y 0303** (`5180c72`, 2-sep 16:06, cinco horas
+> **[Histórico, ya aplicadas: ver «Estado verificado» arriba.] El repo ya trae 0302 y 0303** (`5180c72`, 2-sep 16:06, cinco horas
 > después de esta actualización) — **sin la misma confirmación de arriba**:
 > nadie las cotejó todavía contra `schema_migrations` ni contra el esquema en
 > vivo. NO se dan por aplicadas aquí (auditoría 25, operabilidad ALTO: el job
@@ -165,7 +173,7 @@ select proconfig from pg_proc where proname = 'ejecutar_arco_cancelacion';
 
 ## Próxima tanda: Carta Porte, salida al TMS (0790 a 0794)
 
-> **Pendiente de aplicar. Este documento no la ejecuta.** Se aplica una por una en orden de archivo (ver «El procedimiento correcto», NO `supabase db push`), con copia de seguridad previa y autorización, y siempre ANTES de un `[deploy]` que use el código nuevo.
+> **[Histórico: ya aplicada, verificado por nombre el 3-nov-2026.] Pendiente de aplicar cuando se escribió. Este documento no la ejecuta.** Se aplicaba una por una en orden de archivo (ver «El procedimiento correcto», NO `supabase db push`), con copia de seguridad previa y autorización, y siempre ANTES de un `[deploy]` que use el código nuevo.
 
 Orden (el de archivo, que es el correcto):
 
@@ -185,7 +193,7 @@ Ya escrita: `0842_interruptor_carta_porte_salida_tms.sql` amplía la restricció
 
 ## Próxima tanda: 0843 a 0848 (actualización 21-oct-2026)
 
-> **Pendiente de aplicar. Este documento no la ejecuta.** Ya escritas y fusionadas a `master`, sin confirmar
+> **[Histórico: ya aplicadas, verificado por nombre el 3-nov-2026.] Pendiente de aplicar cuando se escribió. Este documento no la ejecuta.** Ya escritas y fusionadas a `master`, sin confirmar
 > todavía contra `schema_migrations` ni contra el esquema en vivo de producción. Se aplican una por una
 > en orden de archivo (NO `supabase db push`), con copia de seguridad previa y autorización, y siempre ANTES de un `[deploy]` que use el
 > código que las necesita.
