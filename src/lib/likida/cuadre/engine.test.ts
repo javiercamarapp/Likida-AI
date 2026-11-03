@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cuadrarViaje, cubetaDe, type PoliticaGasto } from './engine';
+import { cuadrarViaje, cubetaDe, NO_DEDUCIBLE_ISR, POR_CONFIRMAR, type PoliticaGasto } from './engine';
 import type { Gasto, Diferencia } from '@/types/likida';
 
 // AUDITORÍA 8: un CFDI con `cfdiUuid` y sin `rfcReceptor` ahora cuenta como
@@ -201,8 +201,8 @@ describe('cuadrarViaje', () => {
     expect(r.estatus).toBe('revisar');
   });
 
-  // CR-3: un CFDI que el SAT NO reconoce (fabricado) no debe pasar como cuadrado.
-  it('CR-3: CFDI no_encontrado se marca no deducible y manda a revisar', () => {
+  // CR-3: un CFDI que el SAT NO reconoce no debe pasar como cuadrado.
+  it('CR-3: CFDI no_encontrado sale de la cubeta deducible y manda a revisar', () => {
     const r = cuadrarViaje({
       viajeId: 'v9', anticipo: 1000, politica,
       gastos: [g({ concepto: 'factura', monto: 1000, folio: 'F4', cfdiUuid: 'u4', estadoSat: 'no_encontrado' })],
@@ -228,6 +228,48 @@ describe('cuadrarViaje', () => {
     // El veredicto de dinero NO cambia con el texto: sigue sin tomarse como deducible.
     expect(d.nota).toMatch(/no se toma como deducible/);
     expect(r.estatus).toBe('revisar');
+  });
+
+  // ── A43-FIS-02 (ALTO) ────────────────────────────────────────────────────
+  // El 602 del SAT es AMBIGUO y el repo lo dice en tres lugares: la nota de la
+  // diferencia (`engine.ts:1322`, «no se pudo confirmar… un UUID, un RFC o un
+  // total mal leídos devuelven lo mismo que un comprobante que no existe»), el
+  // test de arriba, y `intake/sat.ts`, que documenta el falso positivo como
+  // PEOR que el falso negativo. Aun así `cfdi_no_encontrado` vivía en
+  // `NO_DEDUCIBLE_ISR`, el veredicto MÁS CARO del motor: «No deducible
+  // $1,000.00» en rojo sobre un CFDI que puede ser perfectamente válido y
+  // traer un dígito mal leído por el OCR.
+  //
+  // Los otros DOS estados no concluyentes del mismo bloque ya se corrigieron
+  // por este mismo razonamiento, y está escrito en el código:
+  //   · `cfdi_pendiente`          → POR_CONFIRMAR, AUDITORÍA 12
+  //   · `cfdi_efos_indeterminado` → POR_CONFIRMAR, AUDITORÍA 21
+  //   · `gasto_otro_ejercicio`    → POR_CONFIRMAR, AUDITORÍA 25
+  // Éste es el cuarto caso del mismo patrón, y el único que quedaba.
+  //
+  // Lo que NO cambia: sigue fuera de la cubeta deducible, sigue en
+  // `SIN_IVA_ACREDITABLE` (LIVA 5-I: sin CFDI confirmado la proporción es
+  // cero) y sigue bajando la liquidación a revisar. Lo que cambia es que el
+  // motor deja de AFIRMAR una no-deducibilidad que no puede probar.
+  it('A43-FIS-02: el 602 ambiguo cae en POR CONFIRMAR, no en el veredicto «no deducible»', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v9c', anticipo: 1000, politica,
+      gastos: [g({ concepto: 'factura', monto: 1000, folio: 'F4', cfdiUuid: 'u4', estadoSat: 'no_encontrado' })],
+    });
+    // El motor no puede afirmar que NO es deducible: el 602 no lo distingue.
+    expect(r.totalNoDeducible).toBe(0);
+    // Tercer estado, como sus tres hermanas.
+    expect(r.totalPorConfirmar).toBe(1000);
+    // Y lo que no se negocia: fuera de deducible y a revisión.
+    expect(r.totalDeducible).toBe(0);
+    expect(r.estatus).toBe('revisar');
+  });
+
+  it('A43-FIS-02: las cuatro diferencias no concluyentes comparten cubeta', () => {
+    for (const t of ['cfdi_pendiente', 'cfdi_efos_indeterminado', 'gasto_otro_ejercicio', 'cfdi_no_encontrado'] as const) {
+      expect(POR_CONFIRMAR, `${t} deberia estar en POR_CONFIRMAR`).toContain(t);
+      expect(NO_DEDUCIBLE_ISR, `${t} NO deberia afirmarse no deducible`).not.toContain(t);
+    }
   });
 
   // ME-5: un monto ≤ 0 no debe reducir el total ni sesgar la diferencia.
