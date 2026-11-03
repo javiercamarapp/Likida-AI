@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { casarNota, resumirAcreditacion, type ReclamoParaCasar } from './notas_credito';
+import { casarNota, resumirAcreditacion, MAX_RECLAMOS_SUBCONJUNTO, type ReclamoParaCasar } from './notas_credito';
 
 const rec = (id: string, monto: number, fecha = '2026-08-01'): ReclamoParaCasar => ({ id, estado: 'enviado', montoReclamable: monto, fechaCobroMasAntiguo: fecha });
 
@@ -54,11 +54,15 @@ describe('casarNota', () => {
 
   it('con 40 reclamos no se cuelga: cae a «demasiados, casa a mano»', () => {
     const muchos = Array.from({ length: 40 }, (_, i) => rec(`r${i}`, 10 + i, `2026-08-${String((i % 28) + 1).padStart(2, '0')}`));
-    const t0 = Date.now();
+    // CT-BAS-14: sin reloj de pared. Lo que garantiza que no se cuelga es que el tope por
+    // CANTIDAD corta antes de buscar: el mensaje «Hay 40 reclamos» solo sale de esa rama
+    // (la búsqueda agotada dice «demasiado grande»), así que no hubo exploración alguna.
     const r = casarNota({ importe: 1001 }, muchos);
-    expect(Date.now() - t0).toBeLessThan(1000);
     expect(r.tipo).toBe('demasiados');
-    if (r.tipo === 'demasiados') expect(r.mensaje).toMatch(/a mano/);
+    if (r.tipo === 'demasiados') {
+      expect(r.mensaje).toMatch(/a mano/);
+      expect(r.mensaje).toContain(`Hay 40 reclamos abiertos (más de ${MAX_RECLAMOS_SUBCONJUNTO})`);
+    }
   });
 
   it('con 40 reclamos, un monto exacto único aún se casa (búsqueda lineal)', () => {
@@ -68,9 +72,12 @@ describe('casarNota', () => {
 
   it('25 reclamos patológicos terminan acotados', () => {
     const iguales = Array.from({ length: 25 }, (_, i) => rec(`r${i}`, 1, `2026-08-${String((i % 28) + 1).padStart(2, '0')}`));
-    const t0 = Date.now();
+    // CT-BAS-14: CPU del proceso (no pared); la cota real es PRESUPUESTO_NODOS y el tope de
+    // propuestas, que el resultado de abajo comprueba.
+    const c0 = process.cpuUsage();
     const r = casarNota({ importe: 12 }, iguales);
-    expect(Date.now() - t0).toBeLessThan(3000);
+    const c = process.cpuUsage(c0);
+    expect((c.user + c.system) / 1000).toBeLessThan(3000);
     expect(['sugerido', 'demasiados']).toContain(r.tipo);
     if (r.tipo === 'sugerido') { expect(r.opciones.length).toBeLessThanOrEqual(10); expect(r.truncado).toBe(true); }
   });
