@@ -2,7 +2,7 @@ import { ArrowLeft } from 'lucide-react';
 import { numero } from '@/lib/formato';
 import type { ClienteRef, Tablero } from '@/lib/likida/carta_porte_docs/referencia_cliente';
 import { REFERENCIA_MAX } from '@/lib/likida/carta_porte_docs/referencia_cliente';
-import { BotonEnvio, CAMPO, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
+import { BotonEnvio, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
 import { Aviso, BotonEnlace, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 export interface VerComo { tenant?: string; rol?: string; vista?: string }
@@ -52,7 +52,7 @@ export function VistaReferencia({ tablero, clientes, exigen, folios, truncado, s
                       <input type="hidden" name="viajeId" value={v.viajeId} />
                       <span className="text-[12px] w-48">Viaje {folios[v.viajeId] ?? v.viajeId.slice(0, 8)} · {numero(v.antiguedadHoras)} h</span>
                       <label className="sr-only" htmlFor={`ref-${v.viajeId}`}>Referencia del viaje</label>
-                      <input id={`ref-${v.viajeId}`} name="referencia" maxLength={REFERENCIA_MAX} className={`${CAMPO} !w-64`} placeholder="Referencia del cliente" />
+                      <input id={`ref-${v.viajeId}`} name="referencia" maxLength={REFERENCIA_MAX} className="!w-64" placeholder="Referencia del cliente" />
                       <BotonEnvio variante="secundario" etiqueta="Guardar" pendiente="Guardando…" />
                     </FormaAccion>
                   </li>

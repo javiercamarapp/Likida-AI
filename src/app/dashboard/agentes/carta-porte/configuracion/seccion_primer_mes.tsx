@@ -3,7 +3,7 @@
 import { MailCheck } from 'lucide-react';
 import type { PrimerMesFila } from '@/lib/likida/carta_porte_docs/repo';
 import { textoDeRevisores } from '@/lib/likida/carta_porte_docs/primer_mes_texto';
-import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
+import { BotonEnvio, ETIQUETA, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
 
 /**
  * «Primer mes» (OLA1-A3): hasta la fecha elegida, cada movimiento de un documento de Carta Porte se copia por correo a un
@@ -29,11 +29,11 @@ export function SeccionPrimerMes({ primerMes, ver, accion }: { primerMes: Primer
       </p>
       <div>
         <label className={ETIQUETA} htmlFor="primer-mes-hasta">Hasta el día (inclusive)</label>
-        <input id="primer-mes-hasta" name="hasta" type="date" defaultValue={primerMes.hasta ?? ''} className={`${CAMPO} !w-auto`} style={{ background: 'var(--surface)' }} />
+        <input id="primer-mes-hasta" name="hasta" type="date" defaultValue={primerMes.hasta ?? ''} className="!w-auto" style={{ background: 'var(--surface)' }} />
       </div>
       <div>
         <label className={ETIQUETA} htmlFor="primer-mes-revisores">Revisores (uno por renglón: «Departamento: correo»)</label>
-        <textarea id="primer-mes-revisores" name="revisores" rows={4} defaultValue={textoDeRevisores(primerMes.revisores)} className={`${CAMPO} !h-auto py-2`} style={{ background: 'var(--surface)' }} placeholder="Captura de Carta Porte: revisor@empresa.com" />
+        <textarea id="primer-mes-revisores" name="revisores" rows={4} defaultValue={textoDeRevisores(primerMes.revisores)} className="!h-auto py-2" style={{ background: 'var(--surface)' }} placeholder="Captura de Carta Porte: revisor@empresa.com" />
       </div>
       <BotonEnvio variante="secundario" etiqueta="Guardar primer mes" pendiente="Guardando…" />
     </FormaAccion>

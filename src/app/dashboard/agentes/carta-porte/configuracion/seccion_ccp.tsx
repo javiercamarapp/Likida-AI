@@ -4,7 +4,7 @@ import { MailCheck } from 'lucide-react';
 import type { CcpRecibidoVista } from '@/lib/likida/carta_porte_docs/ccp_respuesta_repo';
 import type { EstadoCcpTimbrado } from '@/lib/likida/carta_porte_docs/ccp_respuesta';
 import { fechaHoraMx } from '@/lib/formato';
-import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
+import { BotonEnvio, ETIQUETA, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
 
 /**
  * A37-A3-01 · «CCP timbrados recibidos»: el interruptor de la respuesta al cliente (apagado de arranque) y la lista de los CCP
@@ -86,7 +86,7 @@ export function SeccionCcp({ activa, filas, ver, acciones }: {
                     {oculto}
                     <input type="hidden" name="ccpId" value={f.id} />
                     <label htmlFor={`d-${f.id}`} className={ETIQUETA}>Correo del cliente al que se le responde</label>
-                    <input id={`d-${f.id}`} name="destino" type="email" defaultValue={f.destinoCorreo ?? ''} autoComplete="off" className={CAMPO} style={ESTILO} />
+                    <input id={`d-${f.id}`} name="destino" type="email" defaultValue={f.destinoCorreo ?? ''} autoComplete="off" style={ESTILO} />
                     <BotonEnvio etiqueta="Confirmar y responder al cliente" pendiente="Enviando…" />
                   </FormaAccion>
                 )}
