@@ -144,8 +144,8 @@ begin
   -- dos app_user con el mismo número en otra forma (la unique cruda de 0059 no los ve)
   v_ok := false;
   begin
-    insert into public.app_user (tenant_id, email, nombre, rol, telefono) values
-      ('95000000-0000-4000-8000-0000000000b1', 'dup-forma-0950@test.invalid', 'Otra forma', 'contador', '5219990950202');
+    insert into public.app_user (id, tenant_id, email, nombre, rol, telefono) values
+      ('95000000-0000-4000-8000-0000000000e1', '95000000-0000-4000-8000-0000000000b1', 'dup-forma-0950@test.invalid', 'Otra forma', 'contador', '5219990950202');
   exception when unique_violation then v_ok := true;
   end;
   if not v_ok then raise exception '0950(e): dos app_user con el mismo número en otra forma pasaron'; end if;
