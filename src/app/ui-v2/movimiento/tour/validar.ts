@@ -33,6 +33,12 @@ export function validarRecorrido(r: Recorrido): string[] {
       if (!s.accion) p.push(`${n}: avance por acción sin la frase «Aprieta aquí → …»`);
     }
     if (s.accion && (!s.accion.verbo.trim() || !s.accion.objetivo.trim())) p.push(`${n}: acción incompleta`);
+    if (s.tipo === 'hacer' || s.tipo === 'practicar') {
+      if (!s.deteccion) p.push(`${n}: un paso «${s.tipo}» necesita detección (cómo se sabe que se hizo)`);
+      if (s.deteccion?.via === 'dom' && !s.ancla && !s.deteccion.ancla) p.push(`${n}: detección por DOM sin elemento`);
+      if (!s.accion) p.push(`${n}: un paso «${s.tipo}» pide UNA acción y necesita la frase «Aprieta aquí → …»`);
+    }
+    if (s.deteccion && s.tipo !== 'hacer' && s.tipo !== 'practicar') p.push(`${n}: solo los pasos «hacer» y «practicar» llevan detección`);
     if (s.ruta !== undefined && !s.ruta.startsWith('/')) p.push(`${n}: ruta debe empezar con /`);
   });
   return p;

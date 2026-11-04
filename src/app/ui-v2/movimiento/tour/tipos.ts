@@ -37,8 +37,13 @@ export interface PasoTour {
   escena?: EscenaId;
   lado?: Lado;
   // ── Onboarding por cobertura (lote O). Todo opcional: los recorridos de antes siguen siendo válidos. ──
-  /** `ir` = señala el ítem del menú (avanza al hacer clic o con «Llévame»); `info` = explica; `cierre` = último paso. */
-  tipo?: 'ir' | 'info' | 'cierre';
+  /** `ir` = señala el ítem del menú (avanza al hacer clic o con «Llévame»); `info` = explica; `cierre` = último paso.
+   *  `hacer` pide UNA acción y avanza cuando la señal del servidor cambia; `practicar` es igual, sobre datos de muestra (rótulo fijo). */
+  tipo?: 'ir' | 'info' | 'cierre' | 'hacer' | 'practicar';
+  /** Cómo se sabe que se hizo (solo `hacer`/`practicar`). Sin ella el paso se comporta como informativo. */
+  deteccion?: DeteccionPaso;
+  /** `hacer`: tras este tiempo sin señal pasa a `sin_dato` y se ofrece «Ya lo hice». Por omisión 90 000 ms. */
+  tiempoLimiteMs?: number;
   /** Ruta de la pantalla a la que pertenece (agrupa los pasos para «PANTALLA n DE N» y la ruta de pantallas). */
   pantalla?: string;
   /** Índice de la pantalla dentro del recorrido (0..n-1). */
@@ -48,6 +53,25 @@ export interface PasoTour {
   /** Enlace final del cierre (p. ej. «Ir a Puesta en marcha»). */
   cta?: { etiqueta: string; ruta: string };
 }
+
+export type DeteccionPaso =
+  | { via: 'senal'; senal: string; modo: 'cambia' | 'existe' }
+  | { via: 'dom'; evento: EventoAccion; ancla?: string }
+  /** Complemento de algo que no se puede medir: se rotula «confirmado por ti» y nunca cuenta como medido. */
+  | { via: 'declarada'; clave: string };
+
+/** Lo que el servidor contesta de una señal. */
+export interface LecturaSenal { estado: 'si' | 'no' | 'sin_dato'; n?: number }
+
+/** Estado de espera de un paso `hacer`/`practicar` (SPEC 2.3). `declarable` = ya se puede apretar «Ya lo hice». */
+export interface EstadoEspera {
+  estado: 'leyendo' | 'esperando' | 'hecho' | 'ya_hecho' | 'sin_dato';
+  evidencia: 'medido' | 'confirmado' | null;
+  declarable: boolean;
+}
+
+export type EventoControlador =
+  | { tipo: 'paso_visto' | 'paso_hecho_senal' | 'paso_hecho_confirmado' | 'paso_ya_hecho' | 'paso_omitido' | 'paso_sin_dato'; pasoId: string; ms: number | null };
 
 export interface Recorrido {
   id: string;
@@ -85,6 +109,8 @@ export interface Anfitrion {
   /** Programa `fn`; devuelve cómo cancelarlo. */
   programar(fn: () => void, ms: number): () => void;
   almacen: Almacen | null;
+  /** Lee una señal medida por el servidor (solo para los pasos `hacer`/`practicar`). Sin ella esos pasos quedan en `sin_dato`. Nunca debe lanzar. */
+  leerSenal?(id: string): Promise<LecturaSenal>;
 }
 
 export type Fase = 'inactivo' | 'activo' | 'terminado' | 'omitido';
@@ -109,4 +135,6 @@ export interface Instantanea {
   grupoTotal?: number;
   /** Pantallas del recorrido en orden, para la ruta de la tarjeta. */
   pantallas?: ReadonlyArray<{ href: string; nombre: string }>;
+  /** Solo en pasos `hacer`/`practicar`. */
+  espera?: EstadoEspera;
 }

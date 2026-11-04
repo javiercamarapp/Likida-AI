@@ -1,4 +1,4 @@
-import type { Almacen, Anfitrion, ElementoTour, EventoAccion, Rect } from './tipos';
+import type { Almacen, Anfitrion, ElementoTour, EventoAccion, LecturaSenal, Rect } from './tipos';
 
 /** Anfitrión de pruebas: reloj manual, elementos en memoria y almacén en un Map.
  *  Se exporta también para que los carriles A/C recorran SUS recorridos en
@@ -28,6 +28,14 @@ export class AnfitrionFalso implements Anfitrion {
   reducido = false;
   datos = new Map<string, string>();
   ahora = 0;
+  /** Lo que «mide el servidor» en la prueba: señal -> lectura. Una señal ausente da `sin_dato`; una función se evalúa en cada lectura. */
+  senales = new Map<string, LecturaSenal | (() => LecturaSenal | Promise<LecturaSenal>)>();
+  lecturas: string[] = [];
+  async leerSenal(id: string): Promise<LecturaSenal> {
+    this.lecturas.push(id);
+    const v = this.senales.get(id);
+    return typeof v === 'function' ? v() : v ?? { estado: 'sin_dato' };
+  }
   private cola: Array<{ en: number; fn: () => void; vivo: boolean }> = [];
   almacen: Almacen | null = {
     getItem: (k) => this.datos.get(k) ?? null,
