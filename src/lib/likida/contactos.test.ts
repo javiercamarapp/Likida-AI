@@ -130,6 +130,19 @@ describe('resolverCuentaOficina — quién es el teléfono', () => {
     expect(await resolverCuentaOficina('529991234567')).toMatchObject({ userId: 'u-1' });
   });
 
+  it('SEG-7: la ambigüedad se registra con el teléfono ENMASCARADO (el redactor del logger solo cacha dígitos pegados)', async () => {
+    const { logger } = await import('@/lib/logger');
+    (logger.error as unknown as ReturnType<typeof vi.fn>).mockClear();
+    TABLAS.app_user = [u({ id: 'u-1' }), u({ id: 'u-2', tenant_id: 't-2' })];
+    await expect(resolverCuentaOficina('+52 999 123 4567')).rejects.toBeInstanceOf(TelefonoAmbiguo);
+    const llamadas = (logger.error as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) => c[0] === 'cuenta.ambigua');
+    expect(llamadas).toHaveLength(1);
+    const volcado = JSON.stringify(llamadas[0]);
+    expect(volcado).not.toContain('9991234567');
+    expect(volcado).not.toContain('+52 999 123 4567');
+    expect(volcado).toContain('4567');
+  });
+
   it('telefonoJefeDe devuelve null sin jefe asignado', async () => {
     expect(await telefonoJefeDe('t-1')).toBeNull();
   });

@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { variantesTelefono } from './conv';
+import { destinatarioEnmascarado } from '@/lib/meta/client';
 import { acotada } from './presupuesto';
 import { traerTodo } from './pg';
 import { esRolNomina } from '@/lib/auth/roles';
@@ -87,11 +88,12 @@ export async function resolverCuentaOficina(telefono: string): Promise<CuentaOfi
   if (filas.length === 0) return null;
   if (filas.length > 1) {
     logger.error('cuenta.ambigua', {
-      telefono,
+      // Enmascarado (SEG-7): el teléfono llega tal como lo mandó Meta o lo guardó la base; los últimos 4 alcanzan para cruzar con `app_user`.
+      para: destinatarioEnmascarado(telefono),
       tenants: [...new Set(filas.map((f) => f.tenant_id as string | null))],
       usuarios: filas.map((f) => f.id as string),
     });
-    throw new TelefonoAmbiguo(`el teléfono ${telefono} corresponde a más de una cuenta`);
+    throw new TelefonoAmbiguo(`el teléfono ${destinatarioEnmascarado(telefono)} corresponde a más de una cuenta`);
   }
 
   const f = filas[0];
