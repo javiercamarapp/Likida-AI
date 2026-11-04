@@ -1,5 +1,5 @@
 import { logger } from '@/lib/logger';
-import { redactarDetalle, type RedEvento } from './evento_red';
+import { redactarActor, redactarDetalle, type RedEvento } from './evento_red';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TRUST & SAFETY (0133) — el registro consultable de los detectores.
@@ -50,7 +50,7 @@ export async function registrarEventoSeguridad(ev: EventoSeguridad): Promise<voi
     const { supabaseAdmin } = await import('@/lib/supabase/admin');
     const sb = supabaseAdmin();
     const severidad = ev.severidad ?? 'media';
-    const actor = ev.actor?.slice(0, 120) ?? null;
+    const actor = redactarActor(ev.actor);
     const detalle = redactarDetalle(ev.detalle) ?? null;
     const base = {
       p_origen: ev.origen as string,
@@ -102,7 +102,7 @@ async function rebote(ev: EventoSeguridad, e: { message: string; code?: string }
         p_tipo: 'otro',
         p_severidad: ev.severidad ?? 'media',
         p_tenant: ev.tenantId ?? null,
-        p_actor: ev.actor?.slice(0, 120) ?? null,
+        p_actor: redactarActor(ev.actor),
         p_detalle: { ...(redactarDetalle(ev.detalle) ?? {}), tipo_real: ev.tipo, origen_real: ev.origen },
       });
       if (!r.error) return;

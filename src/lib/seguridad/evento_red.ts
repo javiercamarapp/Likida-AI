@@ -112,7 +112,7 @@ export function huellaCuenta(email: string, sal: string | undefined = salDeEntor
   return `cuenta:${limpio.slice(arroba)}`;
 }
 
-const LLAVE_SENSIBLE = /(pass|secret|token|authorization|cookie|llave|api[_-]?key|bearer|otp|jwt)/i;
+const LLAVE_SENSIBLE = /(pass|pwd|secret|secreto|clave|credencial|token|authorization|cookie|llave|api[_-]?key|bearer|otp|jwt|curp|nip|pin)/i;
 const MAX_CADENA = 300;
 const MAX_LLAVES = 20;
 const MAX_PROFUNDIDAD = 3;
@@ -120,10 +120,28 @@ const MAX_PROFUNDIDAD = 3;
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
 /** Redacta PII pero conserva los UUID (viaje, flota): son identificadores internos y sin ellos el evento no se puede rastrear. */
+// F1B: formas de PII que el redactor de logs no cubre. CURP (18 posiciones) y correos ofuscados («x [at] y.com»,
+// «x(arroba)y.com», arroba de ancho completo ya normalizada por NFKC).
+const CURP = /\b[A-Z]{4}\d{6}[HM][A-Z]{5}[0-9A-Z]\d\b/gi;
+const CORREO_OFUSCADO = /[A-Za-z0-9._%+-]{1,64}\s{0,3}[[(]\s{0,3}(?:at|arroba)\s{0,3}[\])]\s{0,3}[A-Za-z0-9.-]{1,255}\.[A-Za-z]{2,}/gi;
+
+function redactarExtras(t: string): string {
+  return t.normalize('NFKC').replace(CORREO_OFUSCADO, '[EMAIL]').replace(CURP, '[CURP]');
+}
+
+/** El actor de un evento: sin PII (el redactor completo) y a 120 caracteres. Conserva los UUID. */
+export function redactarActor(actor: string | null | undefined): string | null {
+  if (typeof actor !== 'string') return null;
+  return redactarConservandoIds(actor).slice(0, 120);
+}
+
 function redactarConservandoIds(t: string): string {
+  // F1B: se acota ANTES de redactar (la ruta de una peticion hostil puede medir decenas de KB); el resultado final se
+  // recorta a MAX_CADENA, asi que redactar mas de 4x eso solo regala CPU a quien lo manda.
+  t = t.slice(0, MAX_CADENA * 4);
   const ids: string[] = [];
   const marcado = t.replace(UUID_RE, (m) => { ids.push(m); return `\u0000${ids.length - 1}\u0000`; });
-  return redactarTexto(marcado).replace(/\u0000(\d+)\u0000/g, (_, i: string) => ids[Number(i)] ?? '');
+  return redactarTexto(redactarExtras(marcado)).replace(/\u0000(\d+)\u0000/g, (_, i: string) => ids[Number(i)] ?? '');
 }
 
 function redactarValor(v: unknown, prof: number): unknown {
@@ -134,7 +152,9 @@ function redactarValor(v: unknown, prof: number): unknown {
     if (prof >= MAX_PROFUNDIDAD) return '[recortado]';
     const out: Record<string, unknown> = {};
     for (const [k, x] of Object.entries(v as Record<string, unknown>).slice(0, MAX_LLAVES)) {
-      out[k] = LLAVE_SENSIBLE.test(k) ? '[redactado]' : redactarValor(x, prof + 1);
+      // F1B: la CLAVE tambien puede llevar PII (un correo como llave); se redacta igual que un valor.
+      const kr = redactarConservandoIds(k).slice(0, 80);
+      out[kr] = LLAVE_SENSIBLE.test(k) ? '[redactado]' : redactarValor(x, prof + 1);
     }
     return out;
   }

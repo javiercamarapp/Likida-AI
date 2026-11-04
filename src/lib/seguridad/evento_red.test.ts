@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  truncarRed, huellaDeRed, ipDeCabeceras, redDeCabeceras, uaSaneado, huellaCuenta, redactarDetalle,
+  truncarRed, huellaDeRed, ipDeCabeceras, redDeCabeceras, uaSaneado, huellaCuenta, redactarDetalle, redactarActor,
 } from './evento_red';
 
 const SAL = 'sal-de-prueba-0123456789';
@@ -129,5 +129,29 @@ describe('F1B: ipDeCabeceras de evento_red comparte la regla de ip_cliente', () 
   it('x-vercel-forwarded-for vacio no anula x-real-ip valido', () => {
     const h = new Headers({ 'x-vercel-forwarded-for': '', 'x-real-ip': '198.51.100.4' });
     expect(ipDeCabeceras(h)).toBe('198.51.100.4');
+  });
+});
+
+describe('F1B: PII que antes viajaba cruda en eventos de seguridad', () => {
+  it('redacta CURP, correos ofuscados y arroba de ancho completo en valores', () => {
+    const d = redactarDetalle({
+      a: 'curp HDFRRN09ABCDEF1234'.replace('HDFRRN09ABCDEF1234', 'HEGG560427MVZRRL04'),
+      b: 'escribe a victima [at] flota.mx hoy',
+      c: 'victima＠flota.mx',
+    })!;
+    expect(JSON.stringify(d)).not.toMatch(/HEGG560427|victima|flota\.mx/);
+  });
+  it('redacta una CLAVE de objeto con correo y las llaves clave/secreto/credencial/pwd', () => {
+    const d = redactarDetalle({ 'ana@flota.mx': 1, clave: 'x', secreto: 'y', credencial: 'z', pwd: 'w' })!;
+    expect(Object.keys(d).join(',')).not.toContain('ana@flota.mx');
+    expect(d.clave).toBe('[redactado]');
+    expect(d.secreto).toBe('[redactado]');
+    expect(d.credencial).toBe('[redactado]');
+    expect(d.pwd).toBe('[redactado]');
+  });
+  it('el actor se redacta (correo y telefono) y conserva los UUID', () => {
+    expect(redactarActor('victima@flota.mx / 5219991234567')).not.toMatch(/victima|5219991234567/);
+    const u = '123e4567-e89b-42d3-a456-426614174000';
+    expect(redactarActor(u)).toBe(u);
   });
 });
