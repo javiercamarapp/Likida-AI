@@ -18,4 +18,13 @@ describe('processor: compuerta de identidad por teléfono', () => {
     expect(iOperador).toBeGreaterThan(-1);
     expect(iCompuerta).toBeLessThan(iOperador);
   });
+
+  it('corre ANTES de las ramas que usan msg.from sin ella: ARCO, ROJO por otro camino y acuse del jefe', () => {
+    const iCompuerta = fuente.indexOf('await exigirIdentidadUnica(msg.from)');
+    for (const marca of ['pideAtencionPrivacidad(msg.text)\n', 'await buscarOperadorPorTelefono(msg.from)', 'await atenderAcuseJefe(msg.from', 'await rojoLoAtiendeOtroCamino(msg.from)']) {
+      const i = fuente.indexOf(marca, fuente.indexOf('export async function processInbound'));
+      expect(i, marca).toBeGreaterThan(-1);
+      expect(iCompuerta, marca).toBeLessThan(i);
+    }
+  });
 });

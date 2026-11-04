@@ -50,6 +50,12 @@ const vacia = (resultado: ResultadoIdentidad): IdentidadDeTelefono => ({ resulta
 
 /** El veredicto de la base para este número. Nunca lanza: lo que no se pudo leer se dice, no se inventa. */
 export async function identidadDeTelefono(telefono: string): Promise<IdentidadDeTelefono> {
+  const primera = await leerIdentidad(telefono);
+  // Un blip (timeout, red) no abre la compuerta: se reintenta UNA vez antes de rendirse a `no_consultada`.
+  return primera.resultado === 'no_consultada' ? leerIdentidad(telefono) : primera;
+}
+
+async function leerIdentidad(telefono: string): Promise<IdentidadDeTelefono> {
   let respuesta: { data: unknown; error: { code?: string; message: string } | null };
   try {
     respuesta = await acotada(

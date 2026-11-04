@@ -47,6 +47,15 @@ describe('identidadDeTelefono', () => {
   });
 });
 
+describe('exigirIdentidadUnica: un blip no abre la compuerta', () => {
+  it('un error transitorio de lectura se reintenta una vez y, si la segunda lectura dice ambigua, falla cerrado', async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: { code: '57014', message: 'statement timeout' } });
+    rpc.mockResolvedValueOnce({ data: [fila({ resultado: 'ambigua', filas: 2, flotas: 2 })], error: null });
+    await expect(exigirIdentidadUnica('5219991234567')).rejects.toBeInstanceOf(OperadorAmbiguo);
+    expect(rpc).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('exigirIdentidadUnica', () => {
   it('ambigua entre flotas: lanza OperadorAmbiguo (el mismo camino que ya dice "tu número aparece más de una vez") y registra con el número enmascarado', async () => {
     respuesta = { data: [fila({ resultado: 'ambigua', filas: 2, flotas: 2 })], error: null };

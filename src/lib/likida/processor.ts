@@ -1676,6 +1676,11 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // pantalla que la apague. Responde a cualquiera que escriba PRIVACIDAD —
     // activo o no, dado de alta o no—, y por eso su comentario no tiene por
     // qué nombrar el inventario de escritores de `operador.activo`.
+    // F1 lote B, L1H (CT-SEG-07 / X-01): la compuerta corre ANTES de cualquier rama que resuelva por `msg.from` (ARCO, ROJO por
+    // otro camino, acuse del jefe y operador). Si el número identifica a personas de MÁS DE UNA flota no se elige: lanza
+    // `OperadorAmbiguo`, que el `catch` de este turno contesta ("tu número aparece dado de alta más de una vez… avísale a tu
+    // flota") con el número enmascarado. Con la base sin migrar (0952) no hace nada nuevo; un fallo de lectura se reintenta una vez.
+    await exigirIdentidadUnica(msg.from);
     // L-legal-01: una emergencia ROJA va ANTES que el trámite ARCO (el ROJO de más abajo la atiende y deja la constancia ARCO sin molestar).
     if ((msg.type === 'text' || msg.type === 'image') && msg.text && pideAtencionPrivacidad(msg.text)
       && !(esEmergenciaRoja(msg.text) && await rojoLoAtiendeOtroCamino(msg.from))) {
@@ -1744,7 +1749,6 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // (operador en una, cuenta de oficina o contacto del Vigía en otra) no se elige: lanza `OperadorAmbiguo`, que el `catch` de este
     // turno ya contesta ("tu número aparece dado de alta más de una vez… avísale a tu flota") y deja registrado con el número
     // enmascarado. Con la base sin migrar (0952) o ante un fallo de lectura no hace nada nuevo.
-    await exigirIdentidadUnica(msg.from);
     const op = await resolveOperador(msg.from);
     if (!op) {
       // ── ¿ES UNA CUENTA DE OFICINA? ───────────────────────────────────────
