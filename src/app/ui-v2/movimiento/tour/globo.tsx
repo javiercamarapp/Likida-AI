@@ -1,6 +1,8 @@
 import { ArrowRight, MoveRight } from 'lucide-react';
 import type { Ref } from 'react';
 import { Boton, BotonEnlace } from '../../componentes/boton';
+import { Chip } from '../../componentes/chip';
+import { CheckDibujado } from './check-dibujado';
 import { Ilustracion } from './ilustraciones';
 import type { Instantanea } from './tipos';
 
@@ -22,6 +24,28 @@ export interface PropsGlobo {
   /** Cierra conservando el paso (el enlace del cierre usa esta; Esc también). */
   onMasTarde?: () => void;
   onIrAlElemento?: () => void;
+  /** «Ya lo hice» de un paso que se pide hacer: solo se ofrece cuando `snap.espera.declarable`. */
+  onDeclarar?: () => void;
+}
+
+/** Lo que dice la tarjeta de un paso `hacer`/`practicar` según lo que mide el servidor. Texto + marca: nunca solo color. */
+export function EstadoDelPaso({ snap, onDeclarar }: { snap: Instantanea; onDeclarar?: () => void }) {
+  const paso = snap.paso;
+  const e = snap.espera;
+  if (!paso || (paso.tipo !== 'hacer' && paso.tipo !== 'practicar') || !e) return null;
+  const hecho = e.estado === 'hecho';
+  return (
+    <div className="rv-onb__estado" role="status" data-estado={e.estado}>
+      {paso.tipo === 'practicar' ? <Chip>Datos de muestra</Chip> : null}
+      {e.estado === 'leyendo' ? <span>Comprobando…</span> : null}
+      {e.estado === 'esperando' ? <span>Esperando que lo hagas</span> : null}
+      {hecho ? <span className="rv-onb__hecho"><CheckDibujado tamano={16} /> Hecho{e.evidencia === 'confirmado' ? ', confirmado por ti' : ''}</span> : null}
+      {e.estado === 'ya_hecho' ? <span className="rv-onb__hecho"><CheckDibujado tamano={16} /> Ya lo tenías. Puedes continuar.</span> : null}
+      {e.estado === 'sin_dato' ? <span>No pude comprobarlo desde aquí.</span> : null}
+      {e.declarable && !hecho && e.estado !== 'ya_hecho' && onDeclarar
+        ? <button type="button" className="rv-onb__enlace" onClick={onDeclarar}>Ya lo hice</button> : null}
+    </div>
+  );
 }
 
 /** Ventana de a lo más 5 nombres alrededor de la pantalla actual. */
@@ -31,7 +55,7 @@ export function ventanaDeRuta(nombres: readonly string[], actual: number, tam = 
   return nombres.slice(ini, ini + tam).map((nombre, i) => ({ nombre, actual: ini + i === actual }));
 }
 
-export function GloboTour({ snap, lado = 'der', centrada = false, refGlobo, onSiguiente, onAtras, onSaltar, onIrAlElemento }: PropsGlobo) {
+export function GloboTour({ snap, lado = 'der', centrada = false, refGlobo, onSiguiente, onAtras, onSaltar, onIrAlElemento, onDeclarar }: PropsGlobo) {
   const paso = snap.paso;
   if (!paso) return null;
   const n = snap.pasoN ?? snap.indice + 1;
@@ -39,6 +63,8 @@ export function GloboTour({ snap, lado = 'der', centrada = false, refGlobo, onSi
   const cierre = paso.tipo === 'cierre';
   const esIr = paso.tipo === 'ir';
   const accion = paso.avance?.tipo === 'accion';
+  const pideHacer = paso.tipo === 'hacer' || paso.tipo === 'practicar';
+  const cumplido = snap.espera?.estado === 'hecho' || snap.espera?.estado === 'ya_hecho';
   const nombres = (snap.pantallas ?? []).map((p) => p.nombre);
   const grupoN = Math.min((snap.grupo ?? 0) + 1, Math.max(nombres.length, 1));
   const ruta = cierre ? [] : ventanaDeRuta(nombres, snap.grupo ?? 0);
@@ -75,6 +101,7 @@ export function GloboTour({ snap, lado = 'der', centrada = false, refGlobo, onSi
         </p>
       ) : null}
 
+      <EstadoDelPaso snap={snap} onDeclarar={onDeclarar} />
       {snap.navegando ? <p className="rv-onb__nota" role="status">Te llevo a la página de este paso…</p> : null}
       {snap.anclaLista === false ? (
         <p className="rv-onb__nota" role="status">No veo este elemento en la pantalla ahora; sigue la explicación de aquí.</p>
@@ -98,7 +125,7 @@ export function GloboTour({ snap, lado = 'der', centrada = false, refGlobo, onSi
           {!snap.esPrimero ? <Boton variante="secondary" onClick={onAtras}>Anterior</Boton> : null}
           {cierre && paso.cta ? <BotonEnlace variante="secondary" href={paso.cta.ruta} onClick={onSiguiente}>{paso.cta.etiqueta}</BotonEnlace> : null}
           <Boton variante="primary" onClick={onSiguiente} data-onb-primario icono={snap.esUltimo ? undefined : <ArrowRight width={14} height={14} aria-hidden="true" />}>
-            {snap.esUltimo ? 'Terminar' : esIr ? 'Llévame' : 'Siguiente'}
+            {snap.esUltimo ? 'Terminar' : esIr ? 'Llévame' : pideHacer ? (cumplido ? 'Continuar' : 'Omitir este paso') : 'Siguiente'}
           </Boton>
         </div>
       </div>

@@ -237,6 +237,13 @@ export class ControladorTour {
 
   private armarAvance(paso: PasoTour, el: ElementoTour | null): void {
     this.armarEspera(paso);
+    // Una acción de la persona sobre el elemento hace que se relea la señal (el servidor tarda un instante en reflejarla).
+    if (el && paso.deteccion?.via === 'senal') {
+      const g0 = this.gen;
+      for (const ev of ['click', 'change', 'submit'] as const) {
+        this.limpiezas.push(el.escuchar(ev, () => { this.limpiezas.push(this.host.programar(() => { if (g0 === this.gen) this.sondear(); }, 1200)); }));
+      }
+    }
     const dom = paso.deteccion?.via === 'dom' ? paso.deteccion : null;
     const av: Avance | undefined = paso.avance ?? (dom ? { tipo: 'accion', evento: dom.evento, ancla: dom.ancla } : undefined);
     if (!av || av.tipo !== 'accion') return;
