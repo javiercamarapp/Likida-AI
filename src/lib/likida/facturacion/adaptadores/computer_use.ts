@@ -330,6 +330,13 @@ export class AdaptadorComputerUse implements AdaptadorPortal {
     let uuid: string | undefined;
     let rendido: string | null = null;
     let captcha = false;
+    // A44-TC-01: vive en el ÁMBITO EXTERIOR, no dentro del `try`, para que la
+    // salida de EXCEPCIÓN pueda declarar `emisionSinConfirmar`. Los adaptadores
+    // hermanos ya lo hacen así (`playwright_base.ts:310`, `capufe.ts`,
+    // `guion.ts`) y por la misma razón: si el ciclo revienta DESPUÉS del clic
+    // —un `LoopGuardError` al agotar `MAX_VUELTAS`, por ejemplo— el CFDI puede
+    // existir, y callarlo libera el cupo de `control_emision.ts`.
+    let emisionClicada = false;
     const efectoId = efectoEmitir(this.comercio, campos);
 
     try {
@@ -383,7 +390,7 @@ export class AdaptadorComputerUse implements AdaptadorPortal {
       // `emitir` — TC-CANDADO-CLIC-BYPASS) volvía a apretarlo tal cual.
       // Compartida entre `case 'emitir'` y el bypass de `case 'clic'`: el
       // candado protege el CLIC FÍSICO, no el nombre de la tool que lo pidió.
-      let emisionClicada = false;
+      // (Se declara fuera del `try`: ver A44-TC-01 arriba.)
       const clicDeEmision = async (selector: string): Promise<string> => {
         // A37-S41-01: en ENSAYO nunca se aprieta el botón que emite — la tool
         // `emitir` no existe, pero `clic` sobre ese mismo botón llegaba aquí y
@@ -528,7 +535,15 @@ Inventario inicial: ${JSON.stringify(await verInventario())}`,
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       logger.warn('portal.computer_use_error', { comercio: this.comercio, error });
-      return { modo, ok: false, capturado, error };
+      // A44-TC-01: si el clic de emisión YA ocurrió, el CFDI puede existir
+      // aunque el ciclo reventara después. Sin esta señal, `motivoDeBloqueo`
+      // (`agente.ts:394`) afirma «No se llegó a intentar en el portal» —frase
+      // que su propio comentario declara falsa— y el encargado factura a mano
+      // un SEGUNDO CFDI por el mismo consumo.
+      return {
+        modo, ok: false, capturado, error,
+        ...(modo === 'emitir' && emisionClicada ? { emisionSinConfirmar: true } : {}),
+      };
     } finally {
       await abierta?.cerrar().catch(() => {});
     }
