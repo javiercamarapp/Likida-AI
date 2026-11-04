@@ -39,6 +39,7 @@ import { cookies, headers } from 'next/headers';
 import { supabaseServer } from '@/lib/supabase/server';
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
+import { firmarCorreoCookie, leerCorreoCookie } from '@/lib/auth/cookie_correo_firmada';
 
 /** El correo al que se pidió el último enlace. httpOnly: lo lee el servidor
  *  para reenviar, nunca un script. Una hora: la vida del enlace mismo. */
@@ -60,11 +61,21 @@ const OPCIONES_COOKIE = {
  *  si ese enlace muere. Se guarda ANTES de saber si el correo tiene cuenta —
  *  distinguirlo aquí reabriría el oráculo que /login cierra. */
 export async function guardarCorreoParaReenvio(email: string): Promise<void> {
+  // CT-SEG-14: el valor va FIRMADO (HMAC + vencimiento). Sin secreto
+  // configurado no se emite cookie y el reenvío queda apagado (falla cerrado).
+  const firmada = firmarCorreoCookie(email, VIDA_CORREO_SEGUNDOS);
+  if (!firmada) return;
   const jar = await cookies();
-  jar.set(COOKIE_CORREO, encodeURIComponent(email), {
+  jar.set(COOKIE_CORREO, firmada, {
     ...OPCIONES_COOKIE,
     maxAge: VIDA_CORREO_SEGUNDOS,
   });
+}
+
+/** El rechazo de Supabase por `shouldCreateUser:false` ante un correo sin cuenta. */
+function esSinCuenta(error: { code?: string; status?: number }): boolean {
+  return error.code === 'otp_disabled' || error.code === 'user_not_found' || error.code === 'signup_disabled'
+    || (error.status === 422 && !error.code);
 }
 
 export type ResultadoReenvio =
@@ -81,8 +92,9 @@ export type ResultadoReenvio =
  */
 export async function reenviarEnlaceCaducado(dest: string): Promise<ResultadoReenvio> {
   const jar = await cookies();
-  const crudo = jar.get(COOKIE_CORREO)?.value;
-  const email = crudo ? decodeURIComponent(crudo) : '';
+  // Solo vale una cookie que el servidor emitió y que sigue vigente; una
+  // fijada a mano por quien prueba direcciones se lee como "sin cookie".
+  const email = leerCorreoCookie(jar.get(COOKIE_CORREO)?.value);
   if (!email) return 'no';
   if (jar.get(COOKIE_ESPERA)) return 'reciente';
 
@@ -111,6 +123,11 @@ export async function reenviarEnlaceCaducado(dest: string): Promise<ResultadoRee
     // Sin el correo en el log, como en login.otp_sin_cuenta: código y status
     // bastan para distinguir una cuota agotada de un correo sin cuenta.
     logger.warn('login.reenvio_no_salio', { code: error.code, status: error.status });
+    // CT-SEG-14: "este correo no tiene cuenta" NO puede verse distinto de
+    // "salió": /login ya contesta igual en los dos casos, y la cookie firmada
+    // la puede obtener cualquiera tecleando una dirección ajena en /login. Solo
+    // los fallos que NO dependen de la cuenta (cuota, red) se anuncian como "no".
+    if (esSinCuenta(error)) return 'reenviado';
     return 'no';
   }
   logger.info('login.reenvio_por_caducado', {});
