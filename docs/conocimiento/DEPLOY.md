@@ -102,6 +102,12 @@ un fallo de lectura no se pueda pintar como "$0.00".
 
 ## Respaldo y restauración (RES-8)
 
+> **VERIFICAR (CT-INF-19, 4-nov-2026).** Lo de abajo describe el estado del 4-ago-2026 y no se ha vuelto a medir contra el panel.
+> Cosas que cambiaron desde entonces y que este párrafo no recoge: el workflow `backup-storage.yml` corre diario (03:17 UTC) desde
+> el 23-oct y el dump se cifra con `age` (CT-SEG-16). Lo que **solo Javier puede confirmar en el panel de Supabase** y debe quedar
+> anotado aquí con fecha: (1) el plan actual (free o de pago), (2) el compute y el límite de conexiones, (3) si PITR está contratado
+> y su ventana. Hasta entonces, la afirmación «free, sin PITR» no debe repetirse en otros documentos como hecho vigente.
+
 **Este proyecto no tiene respaldo automático ni PITR.** Verificado contra la
 Management API el 4-ago-2026: el plan de Supabase es free y su propia
 documentación es explícita en que los proyectos free exportan por su cuenta. El
@@ -196,7 +202,7 @@ nueva, jamás contra producción**:
 Anota la fecha de la última prueba de restauración aquí abajo. Sin fecha, no se
 ha hecho.
 
-- Última prueba de restauración: **nunca** (22-ago-2026).
+- Última prueba de restauración: **nunca** (22-ago-2026). El guion y el acta para el ensayo están en `docs/operacion/restauracion-guion-y-acta.md`.
 
 ### La limpieza de Storage NO libera bytes por sí sola
 
