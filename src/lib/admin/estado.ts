@@ -60,7 +60,7 @@ export function leerCuerpoHealth(httpStatus: number, cuerpo: unknown): SondeoHea
 /** Pega a `/api/health` por la URL pública. Nunca lanza: una caída es un dato (`respondio: false`), no una excepción. */
 export async function sondearHealth(url: string, f: typeof fetch = fetch, timeoutMs = 8_000): Promise<SondeoHealth> {
   try {
-    const r = await f(url, { cache: 'no-store', signal: AbortSignal.timeout(timeoutMs), redirect: 'manual', headers: { 'user-agent': 'likida-guardia/1' } });
+    const r = await f(url, { cache: 'no-store', signal: AbortSignal.timeout(timeoutMs), redirect: 'manual', headers: { 'user-agent': 'likida-guardia/1', ...(process.env.HEALTH_TOKEN ? { 'x-health-token': process.env.HEALTH_TOKEN } : {}) } });
     let cuerpo: unknown = null;
     try { cuerpo = await r.json(); } catch { /* una respuesta que no es JSON se juzga por su status */ }
     return leerCuerpoHealth(r.status, cuerpo);
