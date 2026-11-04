@@ -8,7 +8,7 @@ import {
   type Contacto, type FuenteHito, type HitoFila, type InterpretacionHito, type TipoHito,
 } from './tipos';
 import type { LegadoSello } from './maquina';
-import { CONFIG_CONDUCTOR_DEFAULT, COHORTES_PILOTO, configPorOmisionDePerfil, validarConfigConductor, zonaOCdmx, type CohortePiloto, type ConfigConductor, type PerfilSeguimiento } from './config';
+import { CONFIG_CONDUCTOR_DEFAULT, COHORTES_PILOTO, aplicarPisoDePerfil, configPorOmisionDePerfil, validarConfigConductor, zonaOCdmx, type CohortePiloto, type ConfigConductor, type PerfilSeguimiento } from './config';
 import { MOTIVO_FUERA_DE_PERFIL, hitoEnPerfil } from './perfil';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { contieneDatoDeSeguridad } from './guardia_seguridad';
@@ -536,17 +536,19 @@ export async function leerConfigConductor(tenantId: string): Promise<ConfigCondu
     acotada(supabaseAdmin()
       .from('agente_conductor_config').select('*').eq('tenant_id', tenantId).maybeSingle(), 'conductor.config'),
     getZonaHorariaTenant(tenantId),
-    // CT-A345-29: la palanca del chofer es operativa; ante un bache de lectura sin valor previo no se asume perfil (cae a la columna).
-    perfilDeTenant(tenantId, Date.now(), 'permitir'),
+    // CT-A345-29: ante un bache de lectura del perfil sin valor previo (instancia fria) se FALLA CERRADO ('restringir' = cinco_agentes): la
+    // compuerta de movimiento encendida solo exige unidad detenida; asumir «sin perfil» la apagaba y dejaba escribir con la unidad en marcha.
+    perfilDeTenant(tenantId, Date.now(), 'restringir'),
   ]);
-  const defaultsDelPerfil = (): ConfigConductor => configPorOmisionDePerfil(perfil === 'cinco_agentes' ? 'cinco_agentes' : null);
+  const perfilEfectivo = perfil === 'cinco_agentes' ? 'cinco_agentes' : null;
+  const defaultsDelPerfil = (): ConfigConductor => configPorOmisionDePerfil(perfilEfectivo);
   const f = exigir(res as never, 'conductor.config') as Fila | null;
   // La zona es de la flota (tenant.zona_horaria), no de esta tabla. Inválida o ausente → la de México, con aviso (no truena el cron).
   const zonaHoraria = zonaOCdmx(zonaCruda);
   if (zonaCruda !== null && zonaCruda !== zonaHoraria) {
     logger.warn('conductor.zona_invalida', { tenant: tenantId, zona: String(zonaCruda).slice(0, 60) });
   }
-  if (!f) return { ...defaultsDelPerfil(), agenteChoferHabilitado: false, zonaHoraria };
+  if (!f) return aplicarPisoDePerfil({ ...defaultsDelPerfil(), agenteChoferHabilitado: false, zonaHoraria }, perfilEfectivo);
   const v = validarConfigConductor({
     activo: f.activo as boolean,
     solicitudesMin: f.solicitudes_min as number[],
@@ -634,10 +636,10 @@ export async function leerConfigConductor(tenantId: string): Promise<ConfigCondu
     // con defaults, pero un `activo = false` explícito se respeta: encender por error un agente
     // que manda WhatsApp es peor que operar con la escalera de siempre.
     logger.error('conductor.config_invalida', { tenant: tenantId, err: v.error });
-    return { ...defaultsDelPerfil(), activo: f.activo !== false, agenteChoferHabilitado: false, zonaHoraria };
+    return aplicarPisoDePerfil({ ...defaultsDelPerfil(), activo: f.activo !== false, agenteChoferHabilitado: false, zonaHoraria }, perfilEfectivo);
   }
   // 0859: el interruptor explícito del Agente 5. La base sin migrar no trae la columna → undefined → apagado.
-  return { ...v.ok, agenteChoferHabilitado: f.agente_chofer_habilitado === true };
+  return aplicarPisoDePerfil({ ...v.ok, agenteChoferHabilitado: f.agente_chofer_habilitado === true }, perfilEfectivo);
 }
 
 /**

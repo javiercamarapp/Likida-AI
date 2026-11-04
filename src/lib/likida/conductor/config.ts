@@ -281,6 +281,26 @@ export function configPorOmisionDePerfil(perfil: 'cinco_agentes' | null): Config
   };
 }
 
+/** Topes bajo `cinco_agentes` para que la compuerta «unidad detenida» no quede inocua (CT-A345-29): más allá de esto «en marcha» casi nunca se detecta. */
+export const TOPE_DETENIDA_METROS_CINCO_AGENTES = 300;
+export const TOPE_DETENIDA_VENTANA_MIN_CINCO_AGENTES = 15;
+
+/**
+ * CT-A345-29: el PISO de la compuerta de movimiento bajo `cinco_agentes`. La fila de la flota puede traer `sin_gps_permite = true`
+ * o umbrales altos (p. ej. 5,000 m): la compuerta figuraría «encendida» pero dejaría escribir con la unidad en marcha. Bajo ese
+ * perfil la compuerta rige encendida, sin permitir la falta de GPS y con umbrales acotados. Sin perfil no cambia nada.
+ */
+export function aplicarPisoDePerfil(c: ConfigConductor, perfil: 'cinco_agentes' | null): ConfigConductor {
+  if (perfil !== 'cinco_agentes') return c;
+  return {
+    ...c,
+    compuertaMovimientoActiva: true,
+    sinGpsPermite: false,
+    detenidaMetros: Math.min(c.detenidaMetros ?? CONFIG_CONDUCTOR_DEFAULT.detenidaMetros ?? 150, TOPE_DETENIDA_METROS_CINCO_AGENTES),
+    detenidaVentanaMin: Math.min(c.detenidaVentanaMin ?? CONFIG_CONDUCTOR_DEFAULT.detenidaVentanaMin ?? 5, TOPE_DETENIDA_VENTANA_MIN_CINCO_AGENTES),
+  };
+}
+
 /** El tope de aplazamientos por hito: pasado esto «voy con retraso» ya no calla al agente. */
 export const MAX_POSPOSICIONES = 2;
 
