@@ -167,6 +167,10 @@ export interface ResultadoBaja {
    *  fila quedó desactivada (panel y RLS cerrados) pero el ban no entró: la
    *  pantalla lo dice para que alguien lo reintente, no lo esconde. */
   sesionRevocada: boolean;
+  /** CT-SEG-23: nombres de las llaves de API VIVAS que esa persona había creado y que la baja revocó (puede ser `[]`). */
+  llavesApiRevocadas: string[];
+  /** `true` si no se pudo revocar sus llaves de API: alguien debe revisarlas (Ajustes > Integraciones) y revocarlas a mano. */
+  llavesApiSinRevocar: boolean;
 }
 
 /**
@@ -233,8 +237,36 @@ export async function desactivarUsuario(
     logger.error('equipo.mcp_revocar_fallo', { usuario: usuarioId, err: e instanceof Error ? e.message : String(e) });
   }
 
-  await anotar(tenantId, 'usuario.desactivado', usuarioId, { rol: objetivo.rol, sesion_revocada: sesionRevocada }, actor);
-  return { sesionRevocada };
+  // CT-SEG-23: las llaves de API (`tenant_api_key`, `creada_por`) NO dependen de la sesión del panel: el ban no las toca y una
+  // llave creada por quien se va seguía leyendo/escribiendo datos de la flota con su área. Se revocan en UN update anclado a la
+  // flota y a quien las creó (solo las vivas: no se pisa el sello de una ya revocada). Best-effort como el ban: si falla, la
+  // baja ya quedó y se DICE (`llavesApiSinRevocar`) para que se revoquen a mano. Revocar es irreversible: quien integre un
+  // sistema con esa llave debe emitir otra, y por eso la pantalla recibe los nombres.
+  let llavesApiRevocadas: string[] = [];
+  let llavesApiSinRevocar = false;
+  try {
+    const { data: llaves, error: errLlaves } = await acotada(supabaseAdmin().from('tenant_api_key')
+      .update({ revocada_en: new Date().toISOString() })
+      .eq('tenant_id', tenantId)
+      .eq('creada_por', usuarioId)
+      .is('revocada_en', null)
+      .select('id, nombre'), 'equipo.llaves_api');
+    if (errLlaves) {
+      llavesApiSinRevocar = true;
+      logger.error('equipo.llaves_api_fallo', { usuario: usuarioId, err: errLlaves.message });
+    } else {
+      llavesApiRevocadas = (Array.isArray(llaves) ? llaves : []).map((l) => String((l as { nombre?: unknown }).nombre ?? ''));
+    }
+  } catch (e) {
+    llavesApiSinRevocar = true;
+    logger.error('equipo.llaves_api_fallo', { usuario: usuarioId, err: e instanceof Error ? e.message : String(e) });
+  }
+
+  await anotar(tenantId, 'usuario.desactivado', usuarioId, {
+    rol: objetivo.rol, sesion_revocada: sesionRevocada,
+    llaves_api_revocadas: llavesApiRevocadas.length, llaves_api_sin_revocar: llavesApiSinRevocar,
+  }, actor);
+  return { sesionRevocada, llavesApiRevocadas, llavesApiSinRevocar };
 }
 
 export interface ResultadoReactivacion {
