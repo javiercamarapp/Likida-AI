@@ -29,10 +29,10 @@ async function sesionDeVinculacion(flotaFirmada: unknown): Promise<{ s: NonNulla
 }
 
 export async function accionIniciarVinculacion(_prev: ResultadoVincular | null, fd: FormData): Promise<ResultadoVincular> {
-  const r = await sesionDeVinculacion(fd.get(CAMPO_FLOTA_PINTADA));
-  if (!r) return { ok: false, error: 'Tu rol no puede vincular portales de la flota.' };
-  if ('error' in r) return { ok: false, error: r.error };
-  const { s } = r;
+  const puerta = await sesionDeVinculacion(fd.get(CAMPO_FLOTA_PINTADA));
+  if (!puerta) return { ok: false, error: 'Tu rol no puede vincular portales de la flota.' };
+  if ('error' in puerta) return { ok: false, error: puerta.error };
+  const { s } = puerta;
   const comercio = String(fd.get('comercio') ?? '').trim().slice(0, 64);
   const r = await iniciarVinculacion({ tenantId: s.tenantId, userId: s.userId, comercio }, crearDepsVinculacion());
   if (!r.ok) return { ok: false, error: r.motivo };
