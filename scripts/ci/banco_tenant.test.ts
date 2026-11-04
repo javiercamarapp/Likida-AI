@@ -177,7 +177,7 @@ describe('lectura del resultado y cobertura', () => {
   });
 
   it('el canario falla si el banco no detecto alguno de los objetos abiertos a proposito', () => {
-    const todos = CANARIO_ESPERADO.map(([tipo, objeto]: [string, string]) => ({ tipo, objeto }));
+    const todos = CANARIO_ESPERADO.map(([tipo, objeto]: string[]) => ({ tipo, objeto }));
     expect(verificarCanario(todos).faltantes).toEqual([]);
     expect(verificarCanario(todos.slice(1)).faltantes).toHaveLength(1);
   });

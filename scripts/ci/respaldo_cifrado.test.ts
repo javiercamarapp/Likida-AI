@@ -18,7 +18,7 @@ function correr(env: Record<string, string>, conAge: boolean) {
     chmodSync(join(bin, 'age'), 0o755);
   }
   const r = spawnSync('bash', ['scripts/respaldo.sh', join(dir, 'destino')], {
-    env: { PATH: `${bin}:/usr/bin:/bin`, HOME: dir, ...env }, encoding: 'utf8',
+    env: { PATH: `${bin}:/usr/bin:/bin`, HOME: dir, ...env } as unknown as NodeJS.ProcessEnv, encoding: 'utf8',
   });
   return { ...r, npxLlamado: existsSync(marca), dir };
 }
