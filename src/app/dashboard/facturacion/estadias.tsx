@@ -1,6 +1,7 @@
 import { revalidatePath } from 'next/cache';
 import { Hourglass } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { clientesActivosCompletos, geocercasActivasCompletas } from '@/lib/likida/catalogo_selectores';
 import { logger } from '@/lib/logger';
@@ -144,7 +145,8 @@ export async function BloqueEstadias({
 
   async function pactarFlota(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
+    if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede pactar la detención.' };
     try {
       await guardarPoliticaDetencion(s.tenantId, null, {
@@ -160,7 +162,8 @@ export async function BloqueEstadias({
 
   async function pactarCliente(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
+    if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede pactar la detención.' };
     const clienteId = String(fd.get('clienteId') ?? '');
     if (!clienteId) return { error: 'Elige el cliente del pacto.' };

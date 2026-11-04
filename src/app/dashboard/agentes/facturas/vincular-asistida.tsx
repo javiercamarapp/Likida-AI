@@ -8,6 +8,7 @@ import {
   accionIniciarVinculacion, accionCancelarVinculacion, accionEstadoVinculacion,
   type ResultadoVincular, type EstadoVinculacionPantalla,
 } from './acciones-vinculacion';
+import { CAMPO_FLOTA_PINTADA } from '@/lib/auth/flota_cambio';
 
 // ════════════════════════════════════════════════════════════════════════════
 // «VINCULAR» — el paso humano del CAPTCHA/MFA, con pantalla en el producto (0540).
@@ -24,7 +25,7 @@ const ROTULO: Record<string, string> = {
   reclamada: 'Código aceptado: entra al portal en la ventana que se abrió y resuelve el reto.',
 };
 
-export function VincularAsistida({ clave, nombre }: { clave: string; nombre: string }) {
+export function VincularAsistida({ clave, nombre, flota = null }: { clave: string; nombre: string; flota?: string | null }) {
   const router = useRouter();
   const { notificar } = useNotificar();
   const [res, iniciar, iniciando] = useActionState<ResultadoVincular | null, FormData>(accionIniciarVinculacion, null);
@@ -40,7 +41,7 @@ export function VincularAsistida({ clave, nombre }: { clave: string; nombre: str
     if (!hayCodigo) return;
     let vivo = true;
     const t = setInterval(async () => {
-      const e = await accionEstadoVinculacion(clave);
+      const e = await accionEstadoVinculacion(clave, flota);
       if (!vivo) return;
       setEstado(e);
       if (!e.ok) return;
@@ -53,12 +54,13 @@ export function VincularAsistida({ clave, nombre }: { clave: string; nombre: str
       }
     }, 4_000);
     return () => { vivo = false; clearInterval(t); };
-  }, [hayCodigo, clave, nombre, notificar, router]);
+  }, [hayCodigo, clave, nombre, flota, notificar, router]);
 
   if (!hayCodigo) {
     return (
       <form action={(fd) => { setCerrado(false); setEstado(null); iniciar(fd); }} className="inline">
         <input type="hidden" name="comercio" value={clave} />
+        {flota && <input type="hidden" name={CAMPO_FLOTA_PINTADA} value={flota} />}
         <button type="submit" disabled={iniciando}
           className="inline-flex items-center gap-1 text-[11px] underline disabled:opacity-50" style={{ color: 'var(--muted)' }}>
           <MonitorSmartphone width={11} height={11} strokeWidth={2} />
@@ -95,7 +97,7 @@ export function VincularAsistida({ clave, nombre }: { clave: string; nombre: str
         <button type="button" disabled={cancelando}
           className="inline-flex items-center gap-1 text-[11px] underline disabled:opacity-50" style={{ color: 'var(--muted)' }}
           onClick={() => empezarCancelar(async () => {
-            const fd = new FormData(); fd.set('comercio', clave);
+            const fd = new FormData(); fd.set('comercio', clave); if (flota) fd.set(CAMPO_FLOTA_PINTADA, flota);
             const r = await accionCancelarVinculacion(null, fd);
             notificar(r.error ? { tono: 'error', mensaje: r.error } : { tono: 'info', mensaje: r.ok ?? 'Cancelada.' });
             setCerrado(true); router.refresh();

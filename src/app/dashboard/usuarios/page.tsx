@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { resolverTenantEfectivo, type TenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
@@ -104,8 +105,11 @@ function contextoDeInvitacion(s: { rol: string; rolReal?: string }, perfil: stri
  */
 async function puertaAdministrar(
   sp: { vista?: string; tenant?: string; rol?: string },
+  tenantPintado: string,
 ): Promise<{ s: TenantEfectivo } | { error: string }> {
-  const s = await resolverTenantEfectivo(RUTA, sp);
+  // MX-002: roles y bajas escriben SOLO en la flota que esta pantalla pintó (otra pestaña pudo cambiar la cookie).
+  const s = await resolverTenantAtadoAccion(RUTA, sp, tenantPintado);
+  if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
   if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede ver el equipo de la flota.' };
   if (!puedeAdministrar(s.rol)) return { error: 'Solo el dueño de la flota administra a su equipo.' };
   return { s };
@@ -150,7 +154,7 @@ export default async function UsuariosPage({
 
   async function invitarUsuario(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const p = await puertaAdministrar(sp);
+    const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
 
@@ -215,7 +219,7 @@ export default async function UsuariosPage({
 
   async function cambiarRol(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const p = await puertaAdministrar(sp);
+    const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
     try {
@@ -232,7 +236,7 @@ export default async function UsuariosPage({
 
   async function darDeBaja(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const p = await puertaAdministrar(sp);
+    const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
     try {
@@ -246,7 +250,7 @@ export default async function UsuariosPage({
 
   async function cerrarSesiones(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const p = await puertaAdministrar(sp);
+    const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
     try {
@@ -261,7 +265,7 @@ export default async function UsuariosPage({
 
   async function reactivar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const p = await puertaAdministrar(sp);
+    const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
     try {
@@ -277,7 +281,7 @@ export default async function UsuariosPage({
 
   async function reenviar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const p = await puertaAdministrar(sp);
+    const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
     if (!(await rateLimit(`invitar:${s.tenantId}`, TOPE_INVITACIONES_HORA, 3_600_000))) {

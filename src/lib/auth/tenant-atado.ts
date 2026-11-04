@@ -29,11 +29,10 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { resolverTenantEfectivo, type TenantEfectivo } from './tenant-efectivo';
-import { MENSAJE_FLOTA_CAMBIO } from './flota_cambio';
+import { MENSAJE_FLOTA_CAMBIO, CAMPO_FLOTA_PINTADA } from './flota_cambio';
 import { getSessionTenant } from './session';
 
-export { MENSAJE_FLOTA_CAMBIO };
-export const CAMPO_FLOTA_PINTADA = 'flota_pintada';
+export { MENSAJE_FLOTA_CAMBIO, CAMPO_FLOTA_PINTADA };
 /** Una pantalla abierta más de esto ya no puede escribir sin recargar. */
 export const TTL_FLOTA_PINTADA_MS = 2 * 60 * 60 * 1000;
 
@@ -84,6 +83,16 @@ export async function resolverTenantAtadoAccion(
 ): Promise<TenantEfectivo | null> {
   const s = await resolverTenantEfectivo(destino, sp);
   return s.tenantId === tenantRenderizado ? s : null;
+}
+
+/**
+ * Forma 3 (páginas que resuelven la flota por su cuenta, como el detalle de
+ * liquidación `/dashboard/[id]`, cuya ruta dinámica no pasa por
+ * `resolverTenantEfectivo`): la flota que la acción acaba de resolver tiene
+ * que ser la que la página pintó. `false` = negarse con `MENSAJE_FLOTA_CAMBIO`.
+ */
+export function exigirFlotaPintada(tenantResuelto: string | null | undefined, tenantRenderizado: string): boolean {
+  return !!tenantResuelto && tenantResuelto === tenantRenderizado;
 }
 
 /**

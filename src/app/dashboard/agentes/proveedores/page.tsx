@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { requireSessionTenant } from '@/lib/auth/guard';
+import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { parseCfdiXml } from '@/lib/likida/intake/cfdi_xml';
@@ -38,12 +38,15 @@ const MAX_XML_BYTES = 2 * 1024 * 1024;
 const MAX_FOTO_BYTES = MAX_ARCHIVO_SUBIDA_BYTES;
 const TIPOS_FOTO = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
+type SpFlota = { vista?: string; tenant?: string; rol?: string };
+
 /** El gateo de las actions — helper de módulo (una action solo captura
  *  valores serializables). */
-async function exigirPermiso(tenantId: string): Promise<{ error: string } | { quien: string }> {
-  const sesion = await requireSessionTenant('/dashboard/agentes/proveedores');
+async function exigirPermiso(sp: SpFlota, tenantId: string): Promise<{ error: string } | { quien: string }> {
+  // MX-002: la flota que se pintó es la que escribe (el superadmin ya no se salta el cruce).
+  const sesion = await resolverTenantAtadoAccion('/dashboard/agentes/proveedores', sp, tenantId);
+  if (!sesion) return { error: MENSAJE_FLOTA_CAMBIO };
   if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede operar facturas de proveedor.' };
-  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Esta bandeja no es de tu flota.' };
   return { quien: sesion.nombre ?? sesion.userId };
 }
 
@@ -56,10 +59,11 @@ async function exigirPermiso(tenantId: string): Promise<{ error: string } | { qu
  * DENTRO de la action de todos modos, porque una server action es un endpoint
  * alcanzable por POST directo, no un botón.
  */
-async function exigirControlBuzon(tenantId: string): Promise<{ error: string } | { userId: string }> {
-  const sesion = await requireSessionTenant('/dashboard/agentes/proveedores');
+async function exigirControlBuzon(sp: SpFlota, tenantId: string): Promise<{ error: string } | { userId: string }> {
+  // MX-002: la flota que se pintó es la que escribe (el superadmin ya no se salta el cruce).
+  const sesion = await resolverTenantAtadoAccion('/dashboard/agentes/proveedores', sp, tenantId);
+  if (!sesion) return { error: MENSAJE_FLOTA_CAMBIO };
   if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede operar facturas de proveedor.' };
-  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Esta bandeja no es de tu flota.' };
   if (!puedeAdministrar(sesion.rol)) return { error: 'Solo el dueño de la flota genera o rota el buzón.' };
   return { userId: sesion.userId };
 }
@@ -117,7 +121,7 @@ export default async function PaginaAgenteProveedores({
     fd: FormData,
   ): Promise<{ error?: string; aviso?: string } | null> {
     'use server';
-    const permiso = await exigirPermiso(tenantId);
+    const permiso = await exigirPermiso(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
 
     const archivo = fd.get('archivo');
@@ -166,7 +170,7 @@ export default async function PaginaAgenteProveedores({
     fd: FormData,
   ): Promise<{ error?: string; aviso?: string } | null> {
     'use server';
-    const permiso = await exigirPermiso(tenantId);
+    const permiso = await exigirPermiso(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
 
     const archivo = fd.get('archivo');
@@ -197,7 +201,7 @@ export default async function PaginaAgenteProveedores({
 
   async function decidir(_prev: { error?: string; confirmar?: boolean } | null, fd: FormData): Promise<{ error?: string; confirmar?: boolean } | null> {
     'use server';
-    const permiso = await exigirPermiso(tenantId);
+    const permiso = await exigirPermiso(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
 
     const facturaId = typeof fd.get('facturaId') === 'string' ? (fd.get('facturaId') as string).trim().slice(0, 64) : '';
@@ -215,7 +219,7 @@ export default async function PaginaAgenteProveedores({
   // función de menor aridad.
   async function generarBuzonAccion(): Promise<{ error?: string } | null> {
     'use server';
-    const permiso = await exigirControlBuzon(tenantId);
+    const permiso = await exigirControlBuzon(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
     try {
       await generarBuzonDeFlota(tenantId, { id: permiso.userId });
@@ -229,7 +233,7 @@ export default async function PaginaAgenteProveedores({
 
   async function rotarBuzonAccion(): Promise<{ error?: string } | null> {
     'use server';
-    const permiso = await exigirControlBuzon(tenantId);
+    const permiso = await exigirControlBuzon(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
     try {
       await rotarBuzonDeFlota(tenantId, { id: permiso.userId });
@@ -245,7 +249,7 @@ export default async function PaginaAgenteProveedores({
   /** La configuración de la entrega: CONTROL (a dónde se manda el dinero-papel de la flota), solo el dueño. */
   async function guardarEntrega(_prev: Estado, fd: FormData): Promise<Estado> {
     'use server';
-    const permiso = await exigirControlBuzon(tenantId);
+    const permiso = await exigirControlBuzon(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
     const crudo = typeof fd.get('destinatarios') === 'string' ? (fd.get('destinatarios') as string).slice(0, 600) : '';
     const lista = parsearDestinatarios(crudo);
@@ -271,7 +275,7 @@ export default async function PaginaAgenteProveedores({
   /** «Enviar ahora»: arma el lote con lo aprobado sin entregar y lo manda en el acto (el cron reintenta si falla). */
   async function enviarAhora(): Promise<Estado> {
     'use server';
-    const permiso = await exigirPermiso(tenantId);
+    const permiso = await exigirPermiso(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
     try {
       const deps = depsEntregaReales();
@@ -299,7 +303,7 @@ export default async function PaginaAgenteProveedores({
 
   async function reintentarEntrega(_prev: Estado, fd: FormData): Promise<Estado> {
     'use server';
-    const permiso = await exigirControlBuzon(tenantId);
+    const permiso = await exigirControlBuzon(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
     const id = idDelForm(fd, 'id');
     if (!id) return { error: 'Falta el lote.' };
@@ -310,7 +314,7 @@ export default async function PaginaAgenteProveedores({
 
   async function cancelarEntrega(_prev: Estado, fd: FormData): Promise<Estado> {
     'use server';
-    const permiso = await exigirControlBuzon(tenantId);
+    const permiso = await exigirControlBuzon(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
     const id = idDelForm(fd, 'id');
     if (!id) return { error: 'Falta el lote.' };
@@ -321,7 +325,7 @@ export default async function PaginaAgenteProveedores({
 
   async function descartarArchivo(_prev: Estado, fd: FormData): Promise<Estado> {
     'use server';
-    const permiso = await exigirPermiso(tenantId);
+    const permiso = await exigirPermiso(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
     const id = idDelForm(fd, 'id');
     if (!id) return { error: 'Falta el archivo.' };
@@ -332,7 +336,7 @@ export default async function PaginaAgenteProveedores({
   /** «Ver PDF» de una factura o de una recepción: URL firmada de 5 min del bucket privado, siempre por tenant. */
   async function verPdf(_prev: Estado, fd: FormData): Promise<Estado> {
     'use server';
-    const permiso = await exigirPermiso(tenantId);
+    const permiso = await exigirPermiso(sp, tenantId);
     if ('error' in permiso) return { error: permiso.error };
     const facturaId = idDelForm(fd, 'facturaId');
     const recepcionId = idDelForm(fd, 'recepcionId');

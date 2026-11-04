@@ -13,7 +13,7 @@ const BASE = { maxMontoTicket: 1500, maxTicketsLote: 5, maxTicketsDia: 20, maxMo
 const lote = { id: 'l1', comercio: 'enerser', nombre: 'Enerser', tickets: 3, montoTotal: 1200, estado: 'propuesto', propuestoEn: '2026-10-02T10:00:00Z', expiraEn: '2026-10-04T10:00:00Z' };
 const portal = (o = {}) => ({ clave: 'enerser', nombre: 'Enerser', verificacion: 'verificado' as const, fase: 'supervisada' as const, emisionesConfirmadas: 1, ...o });
 const render = (o: Partial<Parameters<typeof SeccionControlEmision>[0]['datos']> = {}) =>
-  renderToStaticMarkup(<SeccionControlEmision datos={{ control: { emisionReal: false, ...BASE }, lotes: [], portales: [], minimoParaAutonoma: 3, esDueno: true, ...o }} />);
+  renderToStaticMarkup(<SeccionControlEmision datos={{ control: { emisionReal: false, ...BASE }, lotes: [], portales: [], minimoParaAutonoma: 3, esDueno: true, flotaPintada: 'fp1.t-1.9999999999999.firma', ...o }} />);
 
 describe('SeccionControlEmision (0542)', () => {
   it('apagada: dice ensayo y ofrece ENCENDER (nunca «apagar»)', () => {
@@ -66,5 +66,15 @@ describe('SeccionControlEmision (0542)', () => {
     expect(encendida).toContain('Volver a supervisado');
     expect(encendida).not.toContain('Guardar límites');
     expect(apagada).toContain('dueño');
+  });
+
+  it('MX-002: CADA formulario que escribe lleva la flota pintada firmada (encender, límites, lote, portal)', () => {
+    const contar = (h: string) => (h.match(/<form /g) ?? []).length;
+    const conCampo = (h: string) => (h.match(/name="flota_pintada" value="fp1\.t-1\.9999999999999\.firma"/g) ?? []).length;
+    const apagada = render({ lotes: [lote], portales: [portal(), portal({ clave: 'otro', fase: 'autonoma', emisionesConfirmadas: 4 })] });
+    expect(contar(apagada)).toBeGreaterThanOrEqual(5);
+    expect(conCampo(apagada)).toBe(contar(apagada));
+    const encendida = render({ control: { emisionReal: true, ...BASE } });
+    expect(conCampo(encendida)).toBe(contar(encendida));
   });
 });

@@ -1,6 +1,7 @@
 import { revalidatePath } from 'next/cache';
 import { Link2 } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { logger } from '@/lib/logger';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
@@ -59,7 +60,8 @@ export async function BloquePortalPago({
 
   async function generar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
+    if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede generar enlaces de pago.' };
     const facturaId = String(fd.get('facturaId') ?? '');
     if (!facturaId) return { error: 'Elige la factura del enlace.' };
@@ -78,7 +80,8 @@ export async function BloquePortalPago({
 
   async function revocar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
+    if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede revocar enlaces de pago.' };
     try {
       await revocarLigaPago(s.tenantId, String(fd.get('ligaId') ?? ''), { id: s.userId });
@@ -91,7 +94,8 @@ export async function BloquePortalPago({
 
   async function conciliar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
+    if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede conciliar pagos.' };
     try {
       const r = await conciliarPropuesta(s.tenantId, String(fd.get('propuestaId') ?? ''), { id: s.userId });
@@ -104,7 +108,8 @@ export async function BloquePortalPago({
 
   async function descartar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
+    if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede descartar pagos.' };
     try {
       await descartarPropuesta(
@@ -122,7 +127,8 @@ export async function BloquePortalPago({
 
   async function anotarRep(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
+    if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede registrar complementos de pago.' };
     try {
       await registrarRepEmitido(s.tenantId, {

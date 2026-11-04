@@ -1,3 +1,5 @@
+import { firmarImpersonacion } from '@/lib/auth/tenant-efectivo';
+import { exigirFlotaPintada, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerArea, inicioDe, rolEfectivo } from '@/lib/auth/visibilidad';
 import { notFound, redirect } from 'next/navigation';
@@ -67,7 +69,7 @@ export default async function Detalle({
   // `resolverTenantEfectivo` directo porque su ruta es dinámica
   // (`/dashboard/<uuid>`) y `puedeVerRuta` no la conoce; el área se gatea a
   // mano abajo.
-  const { tenantId: tenantIdDemo, rol: rolReal } = await requireSessionTenant(`/dashboard/${id}`, sp);
+  const { tenantId: tenantIdDemo, rol: rolReal, userId: actorId } = await requireSessionTenant(`/dashboard/${id}`, sp);
   // AUDITORÍA 13, MEDIO (arquitectura): esta página era la única de datos que
   // no pasaba por rolEfectivo — la previsualización 'ver como' (?rol=contador)
   // gateaba con el rol REAL (superadmin) y el formulario 'Reasignar'/'Reabrir'
@@ -89,6 +91,9 @@ export default async function Detalle({
   let tenantId = tenantIdDemo;
   if (rolReal === 'superadmin' && sp?.tenant) {
     tenantId = await resolverTenantPedido(supabaseAdmin(), tenantId, sp.tenant);
+    // MX-016 / P06-06: el «ver como» de ESTA pantalla también se firma (0110), igual que en las demás de /dashboard
+    // (`resolverTenantEfectivo`); esta ruta dinámica no pasa por ahí. Una vez por (actor, flota, día), nunca rompe la página.
+    if (tenantId === sp.tenant) await firmarImpersonacion(actorId, tenantId);
   }
 
   // `vista`, `rol` y `tenant` TIENEN QUE VIAJAR EN LA VUELTA: el mismo
@@ -124,6 +129,7 @@ export default async function Detalle({
     if (s.rol === 'superadmin' && sp?.tenant) {
       t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
     }
+    if (!exigirFlotaPintada(t, tenantId)) return { error: MENSAJE_FLOTA_CAMBIO };
 
     try {
       const { pdfPerdido } = await reabrirViaje(t, d!.folio, fd.get('confirmar') === 'on', { id: s.userId });
@@ -158,6 +164,7 @@ export default async function Detalle({
     if (r === 'superadmin' && sp?.tenant) {
       t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
     }
+    if (!exigirFlotaPintada(t, tenantId)) return { error: MENSAJE_FLOTA_CAMBIO };
     const operadorId = String(formData.get('operadorId') ?? '');
     if (!operadorId) {
       return { error: 'Elige un chofer de la lista: escribir un nombre a medias no basta, y adivinar a quién te referías no es cosa de este panel.' };
@@ -217,6 +224,7 @@ export default async function Detalle({
     if (s.rol === 'superadmin' && sp?.tenant) {
       t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
     }
+    if (!exigirFlotaPintada(t, tenantId)) throw new Error(MENSAJE_FLOTA_CAMBIO);
     return buscarCatalogo(t, 'operador', typeof q === 'string' ? q : '');
   }
 
@@ -266,6 +274,7 @@ export default async function Detalle({
     if (s.rol === 'superadmin' && sp?.tenant) {
       t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
     }
+    if (!exigirFlotaPintada(t, tenantId)) return { error: MENSAJE_FLOTA_CAMBIO };
     const accion = String(fd.get('accion') ?? '') as AccionRevision;
     try {
       // Los ajustes viajan como `monto:<gastoId>`; los vacíos se saltan en
@@ -318,6 +327,7 @@ export default async function Detalle({
     }
     let t = s.tenantId;
     if (s.rol === 'superadmin' && sp?.tenant) t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
+    if (!exigirFlotaPintada(t, tenantId)) return { error: MENSAJE_FLOTA_CAMBIO };
     const gastoId = String(fd.get('gastoId') ?? '');
     // El gasto tiene que ser de ESTA liquidación y seguir disputado: el id del formulario no se acepta a ciegas.
     const det = await getLiquidacionDetalle(id, t);
@@ -352,6 +362,7 @@ export default async function Detalle({
     }
     let t = s.tenantId;
     if (s.rol === 'superadmin' && sp?.tenant) t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
+    if (!exigirFlotaPintada(t, tenantId)) return { error: MENSAJE_FLOTA_CAMBIO };
     try {
       const r = await reintentarPdfAjustado(t, id);
       revalidatePath(`/dashboard/${id}`);

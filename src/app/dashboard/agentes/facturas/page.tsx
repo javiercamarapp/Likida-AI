@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { sufijoTenant } from '../../sufijo';
-import { requireSessionTenant } from '@/lib/auth/guard';
+import { resolverTenantAtadoAccion, firmarFlotaPintada, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta, puedeVerArea, esDuenoDeFlota } from '@/lib/auth/visibilidad';
 import { getPorFacturar, contarConCfdi, validarUuidCfdi } from '@/lib/likida/facturacion/pendientes';
 import { mandatoFiscalAceptado, modoEfectivo } from '@/lib/likida/facturacion/modo';
@@ -42,7 +42,7 @@ export default async function PaginaAgenteFacturas({
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/facturas', sp);
+  const { tenantId, rol, userId } = await resolverTenantEfectivo('/dashboard/agentes/facturas', sp);
   if (!puedeVerRuta(rol, '/dashboard/agentes/facturas')) redirect('/dashboard');
 
   const sufijo = sufijoTenant(sp);
@@ -120,6 +120,7 @@ export default async function PaginaAgenteFacturas({
     portales: (fases ?? []).map((f) => ({ clave: f.comercio, nombre: nombreDe(f.comercio), verificacion: verificacionDeComercio(f.comercio), fase: f.fase, emisionesConfirmadas: f.emisionesConfirmadas })),
     minimoParaAutonoma: 3,
     esDueno: esDuenoDeFlota(rol),
+    flotaPintada: firmarFlotaPintada(tenantId, userId),
   };
 
   async function marcarFacturada(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
@@ -128,12 +129,11 @@ export default async function PaginaAgenteFacturas({
     // alcanzable por POST directo y re-verifica sesión y permiso. El tenant
     // viaja por CLOSURE del render — el cliente no lo manda ni lo elige — y
     // aun así se cruza contra el de la sesión.
-    const sesion = await requireSessionTenant('/dashboard/agentes/facturas');
+    // MX-002: la flota que se pintó es la que escribe (antes el superadmin se saltaba este cruce).
+    const sesion = await resolverTenantAtadoAccion('/dashboard/agentes/facturas', sp, tenantId);
+    if (!sesion) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerArea(sesion.rol, 'dinero')) {
       return { error: 'Tu rol no puede capturar facturas.' };
-    }
-    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) {
-      return { error: 'Esta cola no es de tu flota.' };
     }
 
     const crudoId = fd.get('gastoId');
@@ -249,12 +249,10 @@ export default async function PaginaAgenteFacturas({
     fd: FormData,
   ): Promise<{ error: string } | { comercio: string; userId: string; firma: string | null }> {
     'use server';
-    const sesion = await requireSessionTenant('/dashboard/agentes/facturas');
+    const sesion = await resolverTenantAtadoAccion('/dashboard/agentes/facturas', sp, tenantId);
+    if (!sesion) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerArea(sesion.rol, 'dinero')) {
       return { error: 'Tu rol no puede decidir sobre los accesos de la flota.' };
-    }
-    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) {
-      return { error: 'Estos portales no son de tu flota.' };
     }
 
     const crudo = fd.get('comercio');

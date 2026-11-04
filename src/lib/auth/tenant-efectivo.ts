@@ -113,7 +113,7 @@ function diaMx(): string {
  * silencio; el costo es un upsert indexado en la carga de página que ya hizo
  * la consulta del tenant.
  */
-async function firmarImpersonacion(actorId: string, tenantId: string): Promise<void> {
+export async function firmarImpersonacion(actorId: string, tenantId: string): Promise<void> {
   try {
     const dia = diaMx();
     const { data, error } = await supabaseAdmin()

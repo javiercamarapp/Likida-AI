@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { sufijoTenant } from '../../sufijo';
-import { requireSessionTenant } from '@/lib/auth/guard';
+import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import {
   colaCobranza, bitacoraCobranza, leerConfigCobranza, guardarConfigCobranza,
@@ -27,20 +27,23 @@ function safe<T>(fn: () => Promise<T>): Promise<T | null> {
   return fn().catch(() => null);
 }
 
+type SpFlota = { vista?: string; tenant?: string; rol?: string };
+
 /** El gateo que TODA action de esta página repite adentro (patrón del
  *  repo): alcanzables por POST directo, re-verifican sesión y permiso, y
  *  cruzan el tenant del closure contra el de la sesión. Es helper de módulo
  *  y no closure: una action solo puede capturar VALORES serializables
  *  (tenantId), no funciones. */
-async function exigirPermiso(tenantId: string): Promise<string | null> {
-  return (await exigirPermisoConActor(tenantId)).negado;
+async function exigirPermiso(sp: SpFlota, tenantId: string): Promise<string | null> {
+  return (await exigirPermisoConActor(sp, tenantId)).negado;
 }
 
 /** Igual, pero devuelve también el actor para la bitácora (A37-S12-04). */
-async function exigirPermisoConActor(tenantId: string): Promise<{ negado: string | null; userId: string }> {
-  const sesion = await requireSessionTenant('/dashboard/agentes/cobranza');
+async function exigirPermisoConActor(sp: SpFlota, tenantId: string): Promise<{ negado: string | null; userId: string }> {
+  // MX-002: la flota que se pintó es la que escribe (el superadmin ya no se salta el cruce).
+  const sesion = await resolverTenantAtadoAccion('/dashboard/agentes/cobranza', sp, tenantId);
+  if (!sesion) return { negado: MENSAJE_FLOTA_CAMBIO, userId: '' };
   if (!puedeVerArea(sesion.rol, 'dinero')) return { negado: 'Tu rol no puede operar este agente.', userId: sesion.userId };
-  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { negado: 'Este agente no es de tu flota.', userId: sesion.userId };
   return { negado: null, userId: sesion.userId };
 }
 
@@ -77,7 +80,7 @@ export default async function PaginaAgenteCobranza({
 
   async function guardarEstrategia(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
-    const negado = await exigirPermiso(tenantId);
+    const negado = await exigirPermiso(sp, tenantId);
     if (negado) return { error: negado };
 
     // `activo` no viene del formulario a propósito: pausar/reanudar es el
@@ -99,7 +102,7 @@ export default async function PaginaAgenteCobranza({
 
   async function guardarPorGasto(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
-    const negado = await exigirPermiso(tenantId);
+    const negado = await exigirPermiso(sp, tenantId);
     if (negado) return { error: negado };
 
     const r = await guardarConfigGasto(tenantId, {
@@ -116,7 +119,7 @@ export default async function PaginaAgenteCobranza({
 
   async function alternarPausa(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
-    const { negado, userId } = await exigirPermisoConActor(tenantId);
+    const { negado, userId } = await exigirPermisoConActor(sp, tenantId);
     if (negado) return { error: negado };
 
     // A37-S12-04: se aplica el estado DESEADO que mostraba la página, no una
@@ -141,7 +144,7 @@ export default async function PaginaAgenteCobranza({
     _fd: FormData,
   ): Promise<{ error?: string; resultado?: Awaited<ReturnType<typeof ejecutarCobranza>> } | null> {
     'use server';
-    const { negado, userId } = await exigirPermisoConActor(tenantId);
+    const { negado, userId } = await exigirPermisoConActor(sp, tenantId);
     if (negado) return { error: negado };
 
     // `ignorarVentana`: el humano que aprieta ES la autorización de contactar
