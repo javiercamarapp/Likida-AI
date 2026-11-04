@@ -1,4 +1,4 @@
--- REVERSA: `drop function if exists public.telefono_identidad_conflictos(); drop function if exists public.telefono_identidades(text); drop function if exists public.telefono_enmascarado(text); drop function if exists public.telefono_canonico(text);` (en ese orden; la 0951 y la 0952 dependen de estas funciones: revertirlas ANTES). No hay datos que reponer: la migración no escribe ninguna fila.
+-- REVERSA: `drop index if exists public.operador_telefono_canonico_idx, public.app_user_telefono_canonico_idx, public.vigia_contacto_telefono_canonico_idx;` (después de las funciones, o antes: no dependen de ellos) `drop function if exists public.telefono_identidad_conflictos(); drop function if exists public.telefono_identidades(text); drop function if exists public.telefono_enmascarado(text); drop function if exists public.telefono_canonico(text);` (en ese orden; la 0951 y la 0952 dependen de estas funciones: revertirlas ANTES). No hay datos que reponer: la migración no escribe ninguna fila.
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 0950 — F1 lote B, L1H (CT-SEG-07 / X-01 / BK-03): el teléfono es la llave de identidad de WhatsApp y hoy NO hay
 -- unicidad entre `operador`, `app_user` y `vigia_contacto` ni entre flotas. Esta migración pone la BASE común para
@@ -14,7 +14,9 @@
 --     resolutor (0952).
 --   · `telefono_identidad_conflictos()`: de solo lectura; lista los duplicados que ya existen, con el teléfono ENMASCARADO.
 --
--- Aditiva e idempotente (`create or replace`). No toca tablas ni filas. Solo `service_role` ejecuta lo que lee datos.
+-- Aditiva e idempotente (`create or replace`, `create index if not exists`). No toca filas; solo agrega 3 índices por expresión
+-- (no únicos) sobre `telefono_canonico` para que el guardián (0951) y el resolutor (0952) busquen por índice y no
+-- recorran las tablas. Solo `service_role` ejecuta lo que lee datos.
 -- ═══════════════════════════════════════════════════════════════════════════
 
 create or replace function public.telefono_canonico(p_telefono text)
@@ -59,33 +61,68 @@ $$;
 comment on function public.telefono_enmascarado(text) is
   '0950: el teléfono canónico con todo oculto salvo los 4 últimos dígitos. Para diagnósticos y logs.';
 
+-- Índices por expresión sobre la forma canónica: SIN ellos `telefono_identidades(canon)` recorre las tres tablas enteras y
+-- aplica `telefono_canonico` (regexp) a cada fila, y el disparador de la 0951 lo hace en CADA alta: insertar N operadores
+-- costaba O(N²) (5,000 altas en la batería de CI colgaban el job de 10 min). No son únicos (los duplicados históricos
+-- existen) y son aditivos/idempotentes. `telefono_canonico` es immutable, así que es indexable.
+create index if not exists operador_telefono_canonico_idx on public.operador (public.telefono_canonico(telefono));
+create index if not exists app_user_telefono_canonico_idx on public.app_user (public.telefono_canonico(telefono));
+create index if not exists vigia_contacto_telefono_canonico_idx on public.vigia_contacto (public.telefono_canonico(telefono));
+
+-- plpgsql y no sql a propósito: con `(p_canon is null or canon = p_canon)` el plan genérico de una función SQL no puede
+-- usar el índice (OR con parámetro). Aquí la rama con número consulta cada tabla con `telefono_canonico(col) = p_canon`
+-- (sargable); la rama sin número (diagnóstico de conflictos, de uso raro) sí recorre todo.
 create or replace function public.telefono_identidades(p_canon text default null)
 returns table (tabla text, ref_id uuid, tenant_id uuid, canon text)
-language sql
+language plpgsql
 stable
 set search_path = pg_catalog, public
 as $$
-  select i.tabla, i.ref_id, i.tenant_id, i.canon
-    from (
-      select 'operador'::text as tabla, o.id as ref_id, o.tenant_id as tenant_id, public.telefono_canonico(o.telefono) as canon
-        from public.operador o
-       where o.activo and o.telefono !~ '^sin-tel:' and o.telefono !~ '[A-Za-z:]'
-      union all
-      select 'app_user'::text, u.id, u.tenant_id, public.telefono_canonico(u.telefono)
-        from public.app_user u
-       -- F1B: sin flota (superadmin / vendedor de Likida, tenant_id NULL) no es una «flota» mas: contarlo daba
-       -- «ambigua» al compartir el numero con un operador y el disparador rechazaba el alta.
-       where u.telefono is not null and u.activo and u.tenant_id is not null and u.telefono !~ '[A-Za-z:]'
-      union all
-      select 'vigia_contacto'::text, c.id, c.tenant_id, public.telefono_canonico(c.telefono)
-        from public.vigia_contacto c
-       where c.estado = 'activo' and c.telefono !~ '[A-Za-z:]'
-    ) i
-   -- solo números marcables: excluye marcadores y basura. El marcador ARCO «anon:<hex>» se excluye por la columna
-   -- CRUDA (letras o «:»), no por el canónico: sus dígitos hex sueltos (1201 de 2000 marcadores aleatorios) pasaban
-   -- el filtro de 10-15 dígitos (F1B).
-   where i.canon ~ '^[0-9]{10,15}$'
-     and (p_canon is null or i.canon = p_canon)
+begin
+  if p_canon is null then
+    return query
+    select i.tabla, i.ref_id, i.tenant_id, i.canon
+      from (
+        select 'operador'::text as tabla, o.id as ref_id, o.tenant_id as tenant_id, public.telefono_canonico(o.telefono) as canon
+          from public.operador o
+         where o.activo and o.telefono !~ '^sin-tel:' and o.telefono !~ '[A-Za-z:]'
+        union all
+        select 'app_user'::text, u.id, u.tenant_id, public.telefono_canonico(u.telefono)
+          from public.app_user u
+         -- F1B: sin flota (superadmin / vendedor de Likida, tenant_id NULL) no es una «flota» mas: contarlo daba
+         -- «ambigua» al compartir el numero con un operador y el disparador rechazaba el alta.
+         where u.telefono is not null and u.activo and u.tenant_id is not null and u.telefono !~ '[A-Za-z:]'
+        union all
+        select 'vigia_contacto'::text, c.id, c.tenant_id, public.telefono_canonico(c.telefono)
+          from public.vigia_contacto c
+         where c.estado = 'activo' and c.telefono !~ '[A-Za-z:]'
+      ) i
+     -- solo números marcables: excluye marcadores y basura. El marcador ARCO «anon:<hex>» se excluye por la columna
+     -- CRUDA (letras o «:»), no por el canónico: sus dígitos hex sueltos (1201 de 2000 marcadores aleatorios) pasaban
+     -- el filtro de 10-15 dígitos (F1B).
+     where i.canon ~ '^[0-9]{10,15}$';
+  else
+    return query
+    select i.tabla, i.ref_id, i.tenant_id, i.canon
+      from (
+        select 'operador'::text as tabla, o.id as ref_id, o.tenant_id as tenant_id, public.telefono_canonico(o.telefono) as canon
+          from public.operador o
+         where public.telefono_canonico(o.telefono) = p_canon
+           and o.activo and o.telefono !~ '^sin-tel:' and o.telefono !~ '[A-Za-z:]'
+        union all
+        select 'app_user'::text, u.id, u.tenant_id, public.telefono_canonico(u.telefono)
+          from public.app_user u
+         where public.telefono_canonico(u.telefono) = p_canon
+           and u.telefono is not null and u.activo and u.tenant_id is not null and u.telefono !~ '[A-Za-z:]'
+        union all
+        select 'vigia_contacto'::text, c.id, c.tenant_id, public.telefono_canonico(c.telefono)
+          from public.vigia_contacto c
+         where public.telefono_canonico(c.telefono) = p_canon
+           and c.estado = 'activo' and c.telefono !~ '[A-Za-z:]'
+      ) i
+     where i.canon ~ '^[0-9]{10,15}$';
+  end if;
+end;
 $$;
 
 comment on function public.telefono_identidades(text) is

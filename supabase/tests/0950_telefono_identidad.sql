@@ -236,4 +236,32 @@ begin
   update public.operador set telefono = '+52 999 095 0101' where id = '95000000-0000-4000-8000-0000000000c1';
 end $$;
 
+-- (k) escala: el guardián busca por ÍNDICE, no recorre las tablas. Sin los índices por expresión de la 0950, N altas costaban
+-- O(N²) (5,000 operadores en la batería de CI colgaban el job de 10 min). Se exige que existan, que la búsqueda por número
+-- los use y que 4,000 altas en una sentencia terminen muy por debajo del tope (con índice: < 3 s; sin él: minutos).
+do $$
+declare t0 timestamptz; seg numeric; plan text; usa boolean := false; faltan text;
+begin
+  select string_agg(v.x, ', ') into faltan from (values ('operador_telefono_canonico_idx'),('app_user_telefono_canonico_idx'),
+    ('vigia_contacto_telefono_canonico_idx')) v(x)
+   where not exists (select 1 from pg_indexes i where i.schemaname = 'public' and i.indexname = v.x);
+  if faltan is not null then raise exception '0950(k): faltan indices por expresion: %', faltan; end if;
+
+  insert into public.operador (tenant_id, nombre, telefono)
+    select '95000000-0000-4000-8000-0000000000a1', 'ESCALA-' || g, '5299' || lpad(g::text, 8, '0') from generate_series(1, 200) g;
+  analyze public.operador;
+  set local enable_seqscan = off;
+  for plan in execute 'explain select 1 from public.operador o where public.telefono_canonico(o.telefono) = ''529900000001''' loop
+    if plan like '%operador_telefono_canonico_idx%' then usa := true; end if;
+  end loop;
+  set local enable_seqscan = on;
+  if not usa then raise exception '0950(k): la busqueda por telefono canonico no usa operador_telefono_canonico_idx'; end if;
+
+  t0 := clock_timestamp();
+  insert into public.operador (tenant_id, nombre, telefono)
+    select '95000000-0000-4000-8000-0000000000a1', 'ESCALA2-' || g, '5298' || lpad(g::text, 8, '0') from generate_series(1, 4000) g;
+  seg := extract(epoch from clock_timestamp() - t0);
+  if seg > 30 then raise exception '0950(k): 4000 altas de operador tardaron % s (el guardian recorre las tablas: O(N^2))', seg; end if;
+end $$;
+
 rollback;
