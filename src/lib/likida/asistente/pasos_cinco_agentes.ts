@@ -178,10 +178,10 @@ function pasoTms(s: SenalesAsistente): Borrador {
   let apiDetalle: string;
   let causa: string | null = null;
   if (s.tms === null) { viaApi = 'sin_dato'; apiDetalle = 'No pudimos revisar la conexión ahora. Vuelve a cargar en un minuto.'; }
-  else if (s.tms === 'sin_credencial') { viaApi = 'en_espera'; apiDetalle = 'Todavía no hay acceso a la API de tu sistema. Es una mejora: mientras tanto sigues con archivos.'; }
+  else if (s.tms === 'sin_credencial') { viaApi = 'en_espera'; apiDetalle = 'Por conectar: todavía no hay acceso a la API de tu sistema ni su documentación. Es una mejora: mientras tanto sigues con archivos.'; }
   else if (!s.tms.activa) { viaApi = 'omitido'; apiDetalle = 'La credencial está desactivada.'; }
   else if (s.tms.ultimoError) { viaApi = 'atencion'; causa = s.tms.ultimoError; apiDetalle = 'La última prueba falló. Casi siempre es un tema de red o de permisos, no de tu cuenta.'; }
-  else if (s.tms.probadaEn) { viaApi = 'listo'; apiDetalle = 'La prueba contra tu sistema salió bien.'; }
+  else if (s.tms.probadaEn) { viaApi = 'listo'; apiDetalle = 'La prueba de acceso salió bien. Lo que Likida lee de tu sistema (rutas y nombres de campo) se confirma con tu área de sistemas: hasta entonces la carga por archivo es la vía confirmada.'; }
   else { viaApi = 'en_curso'; apiDetalle = 'Acceso guardado, pero sin probar contra tu sistema todavía.'; }
 
   const subpasos: Subpaso[] = [
@@ -202,7 +202,7 @@ function pasoTms(s: SenalesAsistente): Borrador {
   const evid = archivo === 'listo' ? medido('Llegó al menos un archivo de muestra.') : viaApi === 'listo' ? medido('La prueba de la conexión salió bien.') : ninguna();
   return {
     id: 'tms', titulo: 'Tu sistema de transporte',
-    resumen: 'De dónde salen los viajes: por archivo hoy, por conexión directa cuando tu área de sistemas la libere.',
+    resumen: 'De dónde salen los viajes: por archivo hoy; la conexión directa está por conectar hasta que tu área de sistemas entregue su API.',
     estado, responsable: estado === 'atencion' || estado === 'en_curso' ? 'ti_tms' : 'tu_lado',
     causa, evidencia: evid, subpasos,
     accion: archivo === 'listo' ? { texto: 'Ver conexiones', href: '/dashboard/conexiones' } : { texto: 'Entregar archivo de muestra', href: '/dashboard/agentes/liquidacion' },
