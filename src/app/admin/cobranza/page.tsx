@@ -27,12 +27,15 @@ export const dynamic = 'force-dynamic';
  *
  * LO QUE EL DUNNING NO HACE, y la página lo dice: produce PROPUESTAS a la
  * bandeja de aprobación, no envíos — no hay canal de correo al cliente
- * aprobado, así que nada sale solo. Y `null` es «no se pudo leer», `[]` es
+ * aprobado, así que nada sale solo (MX-003: cablear el envío es mandar correo a
+ * clientes, un efecto externo que se decide aparte; mientras tanto el texto no
+ * promete un «editar y mandar» que no existe). Y `null` es «no se pudo leer», `[]` es
  * «no hay nada»: cada lectura falla por separado y se avisa, para no decir
  * «nada por cobrar» con la base caída.
  */
 const ROTULO_SELLO: Record<SelloToque, { texto: string; estado: Estado }> = {
   sin_propuesta: { texto: 'sin propuesta', estado: 'bad' },
+  superado: { texto: 'sin propuesta (el agente solo propone el toque más alto)', estado: 'neutral' },
   pendiente: { texto: 'propuesta pendiente', estado: 'warn' },
   aprobada: { texto: 'aprobada, sin enviar', estado: 'warn' },
   rechazada: { texto: 'rechazada', estado: 'neutral' },
@@ -95,8 +98,10 @@ export default async function CobranzaPage() {
             El agente de cobranza SaaS recorre las facturas pendientes o fallidas y, para cada una, prepara un
             recordatorio en cinco toques —3 días antes del corte, el día, y +3, +7 y +15—. Son{' '}
             <span className="font-semibold">propuestas a la bandeja de aprobación, no envíos</span>: no hay
-            canal de correo al cliente aprobado y nada sale solo; Javier edita y manda desde{' '}
-            <Link href="/admin/aprobaciones" className="underline font-medium">Aprobaciones</Link>. Emitir la mensualidad,
+            canal de correo al cliente aprobado y nada sale solo. En{' '}
+            <Link href="/admin/aprobaciones" className="underline font-medium">Aprobaciones</Link>{' '}
+            Javier solo aprueba o rechaza la propuesta; el envío al cliente lo hace él por su cuenta y el sistema
+            no lo registra, así que «enviadas» seguirá en 0 hasta que exista ese canal. Emitir la mensualidad,
             conciliar el pago contra el banco y timbrar el CFDI se hace en{' '}
             <Link href="/admin/costos-facturacion" className="underline font-medium">Costos &amp; Facturación</Link>.
             El vencimiento se toma como el inicio del periodo (la mensualidad se cobra por adelantado).
@@ -133,7 +138,7 @@ export default async function CobranzaPage() {
                 <Cifra etiqueta="Toques sin propuesta" valor={String(estado.toquesSinPropuesta)}
                   nota={estado.toquesSinPropuesta > 0 ? 'El agente no ha preparado toques que ya tocaban.' : undefined}
                   alerta={estado.toquesSinPropuesta > 0 && !piezas.error} />
-                <Cifra etiqueta="Propuestas pendientes / enviadas" valor={`${estado.propuestasPendientes} / ${estado.propuestasEnviadas}`} />
+                <Cifra etiqueta="Propuestas pendientes / enviadas por el sistema" valor={`${estado.propuestasPendientes} / ${estado.propuestasEnviadas}`} />
               </div>
 
               <div className="card p-4">

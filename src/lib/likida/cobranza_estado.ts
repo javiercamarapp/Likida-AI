@@ -7,13 +7,14 @@
 // (`agentes/exito.ts`): una sola fuente, no una copia que se desalinee.
 //
 // El dunning PRODUCE PROPUESTAS, NO ENVÍOS: nada sale solo (no hay canal de
-// correo al cliente aprobado). Esta vista no lo disfraza.
+// correo al cliente aprobado) y el sistema tampoco registra un envío hecho a mano
+// (`marcarEnviada` no tiene llamador para esta pieza). Esta vista no lo disfraza.
 
 import { HITOS_COBRANZA, toquesDeHoy, tituloToque, diasEntreDias } from './agentes/exito';
 import type { FacturaPorCobrar } from '@/lib/saas/transferencia';
 import type { PiezaDunning } from './repo';
 
-export type SelloToque = 'sin_propuesta' | 'pendiente' | 'aprobada' | 'rechazada' | 'enviada';
+export type SelloToque = 'sin_propuesta' | 'superado' | 'pendiente' | 'aprobada' | 'rechazada' | 'enviada';
 
 export interface ToqueVista { hito: number; sello: SelloToque }
 
@@ -33,8 +34,10 @@ export interface EstadoDunning {
   montoPorCobrar: number;
   vencidas: number;
   montoVencido: number;
-  /** Toques alcanzados que NO tienen propuesta en la cola: el agente no ha
-   *  corrido o falló — es la señal que más importa. */
+  /** Toques que el agente DEBIA proponer (el hito más alto alcanzado por factura,
+   *  `toquesParaProponer`) y NO tienen propuesta en la cola: el agente no ha
+   *  corrido o falló — es la señal que más importa. Los hitos inferiores sin
+   *  propuesta son `superado`: el agente nunca los propone, no son una falla. */
   toquesSinPropuesta: number;
   propuestasPendientes: number;
   propuestasEnviadas: number;
@@ -56,9 +59,14 @@ export function armarEstadoDunning(facturas: FacturaPorCobrar[], piezas: PiezaDu
 
   const filas: FacturaDunning[] = facturas.map((factura) => {
     const dias = diasEntreDias(factura.periodoInicio, hoy);
-    const toques = alcanzados
-      .filter((t) => t.factura.id === factura.id)
-      .map((t) => ({ hito: t.hito, sello: sello(porTitulo.get(tituloToque(t))) }));
+    const propios = alcanzados.filter((t) => t.factura.id === factura.id);
+    const masAlto = Math.max(...propios.map((t) => t.hito));
+    // MX-003: el agente solo propone el hito MAS ALTO por factura (`toquesParaProponer`); los de abajo sin propuesta
+    // no son una falla ni deben pintar alerta permanente.
+    const toques = propios.map((t) => {
+      const s = sello(porTitulo.get(tituloToque(t)));
+      return { hito: t.hito, sello: s === 'sin_propuesta' && t.hito < masAlto ? 'superado' as const : s };
+    });
     const proximoHito = HITOS_COBRANZA.find((h) => h > dias) ?? null;
     return { factura, dias, vencida: dias > 0, toques, proximoHito };
   });

@@ -31,8 +31,9 @@ describe('armarEstadoDunning', () => {
 
   it('un toque alcanzado sin propuesta en la cola se cuenta como «sin propuesta»', () => {
     const e = armarEstadoDunning([factura()], [], '2026-09-13');
-    expect(e.toquesSinPropuesta).toBe(4);
-    expect(e.facturas[0].toques.every((t) => t.sello === 'sin_propuesta')).toBe(true);
+    // MX-003: solo el hito MAS ALTO (+7) es una falta del agente; -3, 0 y +3 nunca se proponen (`toquesParaProponer`).
+    expect(e.toquesSinPropuesta).toBe(1);
+    expect(e.facturas[0].toques.map((t) => t.sello)).toEqual(['superado', 'superado', 'superado', 'sin_propuesta']);
   });
 
   it('cruza cada propuesta con su toque por el título-llave del agente y distingue los sellos', () => {
