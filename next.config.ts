@@ -285,6 +285,24 @@ const nextConfig: NextConfig = {
           ...(produccion ? [{ key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains; preload' }] : []),
         ],
       },
+      // CT-SEG-18: aislamiento de ventana. `same-origin-allow-popups` (no `same-origin`) a propósito: conserva `window.opener` de
+      // las ventanas que ABRE el propio panel y no toca la subida directa a Storage (eso es `connect-src`, ver `lib/seguridad/csp.ts`).
+      // No se pone COEP: exigiría CORP/CORS en cada imagen y video de Storage y OpenStreetMap, y rompería el panel.
+      {
+        source: '/:path*',
+        headers: [{ key: 'Cross-Origin-Opener-Policy', value: 'same-origin-allow-popups' }],
+      },
+      // CT-SEG-18: CORP solo donde nada legítimo se incrusta desde otro origen: los export (CSV) y /v1 (JSON) los lee un
+      // `fetch`/descarga, nunca un `<img>`/`<script>` ajeno. NO se pone en `/api/*` completo: hay rutas de media y enlaces
+      // públicos (correo, WhatsApp) que sí los carga otro origen.
+      {
+        source: '/api/export/:path*',
+        headers: [{ key: 'Cross-Origin-Resource-Policy', value: 'same-origin' }],
+      },
+      {
+        source: '/api/v1/:path*',
+        headers: [{ key: 'Cross-Origin-Resource-Policy', value: 'same-origin' }],
+      },
       // A37-L-seguridad-tenant-04: la página de baja de correo (derecho de baja LFPDPPP) SÍ es HTML y usa
       // atributos `style` en línea; con `default-src 'none'` salía sin formato. Esta regla va DESPUÉS de la
       // general (misma clave, la última gana) y solo concede estilo en línea a esa ruta: sin script, sin
