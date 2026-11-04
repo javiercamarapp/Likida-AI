@@ -6,7 +6,8 @@
 // documento. ESTA RUTA NO TIMBRA NI CREA UN CCP: guarda lo que el TMS ya timbró.
 //
 // ── LA PUERTA ───────────────────────────────────────────────────────────────
-//   · `abrir(req, 'operacion')`: tasa, llave (o sesión del panel desde nuestro sitio), flota, perfil y área ANTES de leer
+//   · `abrir(req, 'administracion')` (es una ESCRITURA que además manda correo a un tercero; el área `operacion` es de
+//     solo lectura): tasa, llave (o sesión del panel desde nuestro sitio), flota, perfil y área ANTES de leer
 //     el cuerpo. El tenant sale de la CREDENCIAL; un `tenant_id` en el cuerpo es 400.
 //   · La `referencia` debe ser de un envío de ESA flota; una ajena es 404 sin guardar y sin correo.
 //
@@ -52,7 +53,7 @@ const ERROR_POR_CODIGO: Record<CodigoErrorCcp, Parameters<typeof errorApi>[0]> =
 };
 
 export async function POST(req: Request) {
-  const acceso = await abrir(req, 'operacion');
+  const acceso = await abrir(req, 'administracion');
   if (!acceso.ok) return acceso.respuesta;
 
   const cuerpo = await leerCuerpo(req, MAX_CUERPO_CCP_BYTES);

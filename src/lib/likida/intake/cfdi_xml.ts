@@ -190,6 +190,15 @@ export function esConsolidado(xml: Pick<CfdiXmlData, 'lineas' | 'tipoComprobante
 // combustible; la DECISIÓN usa las claves de config, no este prefijo).
 const PREFIJO_COMBUSTIBLE = '15101';
 
+/**
+ * CT-SEG-19 · Un CFDI NUNCA lleva DTD (el Anexo 20 del SAT es XSD): `<!DOCTYPE>`/`<!ENTITY>` solo aparece en un ataque (XXE,
+ * «billion laughs»). Se rechaza ANTES de parsear, sin depender de cómo trate entidades `fast-xml-parser`. Misma regla que
+ * `buzon/xml_seguro.ts` (no se importa de ahí: ese módulo ya depende de éste). Cubre también `rep.ts`.
+ */
+export function xmlDeclaraDtd(xml: string): boolean {
+  return /<!\s*(doctype|entity|element|attlist|notation)\b/i.test(xml);
+}
+
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
@@ -247,6 +256,7 @@ export function metodoPagoSat(bruto: string | undefined | null): string | undefi
 }
 
 export function parseCfdiXml(xml: string): CfdiXmlData | null {
+  if (xmlDeclaraDtd(xml)) return null;
   try {
     const doc = parser.parse(xml) as Record<string, unknown>;
     // Sin nodo Comprobante no es un CFDI → null (no un objeto vacío).
@@ -415,6 +425,7 @@ export interface PagoRepXml {
  * capturó el contralor. NO decide nada fiscal: solo lee atributos.
  */
 export function leerPagosRep(xml: string): PagoRepXml[] {
+  if (xmlDeclaraDtd(xml)) return [];
   try {
     const doc = parser.parse(xml) as Record<string, unknown>;
     const comp = doc?.Comprobante as Record<string, unknown> | undefined;

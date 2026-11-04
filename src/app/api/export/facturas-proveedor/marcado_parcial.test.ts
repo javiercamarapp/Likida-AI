@@ -20,12 +20,11 @@ vi.mock('@/lib/likida/agentes/corridas', () => ({
 }));
 
 let marca: { error?: string; marcadas: number } = { marcadas: 3 };
+const exportar = vi.fn(async () => ({ filas: [{ uuid: 'u-1' }, { uuid: 'u-2' }, { uuid: 'u-3' }], ids: ['f-1', 'f-2', 'f-3'] }));
+const marcar = vi.fn(async () => marca);
 vi.mock('@/lib/likida/proveedores', () => ({
-  exportarAprobadas: async () => ({
-    filas: [{ uuid: 'u-1' }, { uuid: 'u-2' }, { uuid: 'u-3' }],
-    ids: ['f-1', 'f-2', 'f-3'],
-  }),
-  marcarExportadas: async () => marca,
+  exportarAprobadas: () => exportar(),
+  marcarExportadas: () => marcar(),
 }));
 
 const { GET } = await import('./route');
@@ -64,5 +63,30 @@ describe('BE-8 — el CSV dice cuando no se pudo marcar lo exportado', () => {
     await pedir();
 
     expect(corrida).toHaveBeenCalledWith('t-1', 'proveedores', expect.objectContaining({ estado: 'parcial', tareasHechas: 1, tareasTotal: 3 }));
+  });
+});
+
+describe('CT-SEG-17 — el GET que marca estado solo lo pide nuestro propio sitio', () => {
+  const desde = (sitio: string) => GET(new Request('https://app.likida.ai/api/export/facturas-proveedor', { headers: { 'sec-fetch-site': sitio } }));
+
+  it('una navegación cross-site o same-site es 403 y no exporta, no marca ni anota corrida', async () => {
+    exportar.mockClear(); marcar.mockClear();
+    for (const sitio of ['cross-site', 'same-site']) {
+      const r = await desde(sitio);
+      expect(r.status).toBe(403);
+    }
+    expect(exportar).not.toHaveBeenCalled();
+    expect(marcar).not.toHaveBeenCalled();
+    expect(corrida).not.toHaveBeenCalled();
+  });
+
+  it('el clic en el panel (same-origin) y la URL tecleada (none) sí descargan', async () => {
+    expect((await desde('same-origin')).status).toBe(200);
+    expect((await desde('none')).status).toBe(200);
+  });
+
+  it('un Origin ajeno sin Sec-Fetch-Site también se rechaza', async () => {
+    const r = await GET(new Request('https://app.likida.ai/api/export/facturas-proveedor', { headers: { origin: 'https://malo.example' } }));
+    expect(r.status).toBe(403);
   });
 });

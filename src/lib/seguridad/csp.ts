@@ -47,10 +47,40 @@ export function nonceActivo(env: Record<string, string | undefined> = process.en
 }
 
 /**
+ * CT-SEG-18 · El origen del proyecto de Supabase (`NEXT_PUBLIC_SUPABASE_URL`) para acotar img-src/media-src/connect-src.
+ *
+ * QUÉ NECESITA EL NAVEGADOR DE SUPABASE (recorrido del código, no plantilla):
+ *   · img-src / media-src: avatares, fotos de comprobante, video de marketing y notas de voz = URLs de Storage
+ *     (`https://<ref>.supabase.co/storage/v1/object/...`).
+ *   · connect-src: la SUBIDA DIRECTA a Storage (`lib/supabase/browser-storage.ts`, `uploadToSignedUrl`): un fetch del navegador
+ *     a `https://<ref>.supabase.co/storage/v1/object/upload/sign/...`. Con `connect-src 'self'` esa subida muere.
+ *   · NO se necesita Realtime (`wss://<ref>.supabase.co`): no hay `.channel(` ni suscripciones en el navegador, y las tablas
+ *     y Auth solo se tocan desde el servidor. Si algún día se usa Realtime hay que agregar `wss://` del MISMO host aquí.
+ *
+ * Si la variable falta o no es un origen válido se cae al comodín `https://*.supabase.co` (la política de antes): perder la
+ * restricción es mejor que romper imágenes y subidas en producción. `http:` solo se acepta para localhost (Supabase local).
+ */
+export function origenSupabase(env: Record<string, string | undefined> = process.env): string | null {
+  const crudo = env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!crudo) return null;
+  try {
+    const u = new URL(crudo);
+    const local = u.hostname === 'localhost' || u.hostname === '127.0.0.1';
+    if (u.protocol === 'https:' || (u.protocol === 'http:' && local)) return u.origin;
+  } catch { /* URL inválida: cae al comodín */ }
+  return null;
+}
+
+/**
  * La política completa. `nonce` null = política de reversa (`LIKIDA_CSP_NONCE=0`, con `'unsafe-inline'`).
  * Cada directiva sale de recorrer qué carga la app de verdad (ver el historial en proxy.ts).
  */
-export function construirCsp(nonce: string | null, dev: boolean = process.env.NODE_ENV === 'development'): string {
+export function construirCsp(
+  nonce: string | null,
+  dev: boolean = process.env.NODE_ENV === 'development',
+  env: Record<string, string | undefined> = process.env,
+): string {
+  const supabase = origenSupabase(env) ?? 'https://*.supabase.co';
   // `next dev` (Fast Refresh) parchea módulos con `eval()`: sin `unsafe-eval` la app nunca hidrata.
   // Es exclusivo del bundle de DESARROLLO; en producción nunca aparece.
   const evalDev = dev ? " 'unsafe-eval'" : '';
@@ -63,11 +93,12 @@ export function construirCsp(nonce: string | null, dev: boolean = process.env.NO
     "style-src 'self' 'unsafe-inline'",
     // Solo los orígenes que el código usa de verdad: Storage (avatares y fotos), los tiles de OpenStreetMap del mapa de prospectos
     // (`admin/mapa-prospectos/calles.tsx`) y `blob:` para la vista previa local del avatar (`URL.createObjectURL`, ronda 15).
-    "img-src 'self' data: blob: https://*.supabase.co https://tile.openstreetmap.org",
+    `img-src 'self' data: blob: ${supabase} https://tile.openstreetmap.org`,
     // SEG-5 (auditoría 24): el video de marketing y las notas de voz salen de Storage.
-    "media-src 'self' https://*.supabase.co",
+    `media-src 'self' ${supabase}`,
     "font-src 'self' data:",
-    "connect-src 'self'",
+    // Storage directo: la subida firmada va del navegador al proyecto (ver `origenSupabase`).
+    `connect-src 'self' ${supabase}`,
     "frame-src 'none'",
     "frame-ancestors 'none'",
     "object-src 'none'",

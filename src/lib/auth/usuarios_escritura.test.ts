@@ -53,6 +53,7 @@ function builder(tabla: string) {
   b.select = (cols: string, opts?: { head?: boolean }) => { r.select = cols; r.head = !!opts?.head; if (!r.op) r.op = 'select'; return b; };
   b.eq = (c: string, v: unknown) => { r.eq.push([c, v]); return b; };
   b.neq = (c: string, v: unknown) => { r.neq.push([c, v]); return b; };
+  b.is = (c: string, v: unknown) => { r.eq.push([`${c} is`, v]); return b; };
   b.maybeSingle = async () => contestar(tabla);
   b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
     Promise.resolve(contestar(tabla)).then(res, rej);
@@ -235,12 +236,12 @@ describe('desactivarUsuario — la baja en tres capas', () => {
     colas.set('app_user', [{ data: fila() }]);
     rpc.mockResolvedValueOnce({ data: 'ok', error: null });
     const r = await desactivarUsuario(TENANT, U, ACTOR);
-    expect(r).toEqual({ sesionRevocada: true });
+    expect(r).toEqual({ sesionRevocada: true, llavesApiRevocadas: [], llavesApiSinRevocar: false });
     expect(rpc).toHaveBeenCalledWith('equipo_desactivar_usuario',
       { p_tenant: TENANT, p_usuario: U, p_rol_actual: 'contador', p_actor: OTRO });
     expect(updateUserById).toHaveBeenCalledWith(U, { ban_duration: BAN_PERMANENTE });
     expect(anotarBitacora).toHaveBeenCalledWith(
-      expect.objectContaining({ accion: 'usuario.desactivado', entidadId: U, detalle: { rol: 'contador', sesion_revocada: true } }),
+      expect.objectContaining({ accion: 'usuario.desactivado', entidadId: U, detalle: { rol: 'contador', sesion_revocada: true, llaves_api_revocadas: 0, llaves_api_sin_revocar: false } }),
       expect.anything(),
     );
   });
@@ -250,10 +251,39 @@ describe('desactivarUsuario — la baja en tres capas', () => {
     rpc.mockResolvedValueOnce({ data: 'ok', error: null });
     updateUserById.mockResolvedValueOnce({ error: { message: 'auth caído' } });
     const r = await desactivarUsuario(TENANT, U, ACTOR);
-    expect(r).toEqual({ sesionRevocada: false });
+    expect(r).toMatchObject({ sesionRevocada: false });
     expect(logger.error).toHaveBeenCalledWith('equipo.ban_fallo', expect.objectContaining({ usuario: U }));
     expect(anotarBitacora).toHaveBeenCalledWith(
       expect.objectContaining({ detalle: expect.objectContaining({ sesion_revocada: false }) }), expect.anything(),
+    );
+  });
+
+  it('CT-SEG-23: la baja revoca las llaves de API VIVAS que esa persona creó, ancladas a la flota, y lo informa', async () => {
+    colas.set('app_user', [{ data: fila() }]);
+    colas.set('tenant_api_key', [{ data: [{ id: 'k1', nombre: 'TMS propio' }, { id: 'k2', nombre: 'Tablero' }], error: null }]);
+    rpc.mockResolvedValueOnce({ data: 'ok', error: null });
+    const r = await desactivarUsuario(TENANT, U, ACTOR);
+    expect(r.llavesApiRevocadas).toEqual(['TMS propio', 'Tablero']);
+    expect(r.llavesApiSinRevocar).toBe(false);
+    const u = updatesDe('tenant_api_key');
+    expect(u).toHaveLength(1);
+    expect(u[0].payload).toEqual({ revocada_en: expect.any(String) });
+    expect(u[0].eq).toEqual(expect.arrayContaining([['tenant_id', TENANT], ['creada_por', U], ['revocada_en is', null]]));
+    expect(anotarBitacora).toHaveBeenCalledWith(
+      expect.objectContaining({ detalle: expect.objectContaining({ llaves_api_revocadas: 2 }) }), expect.anything(),
+    );
+  });
+
+  it('CT-SEG-23: si no se pueden revocar las llaves, la baja queda y se DICE (llavesApiSinRevocar) en resultado, log y bitácora', async () => {
+    colas.set('app_user', [{ data: fila() }]);
+    colas.set('tenant_api_key', [{ data: null, error: { message: 'base caída' } }]);
+    rpc.mockResolvedValueOnce({ data: 'ok', error: null });
+    const r = await desactivarUsuario(TENANT, U, ACTOR);
+    expect(r.llavesApiSinRevocar).toBe(true);
+    expect(r.llavesApiRevocadas).toEqual([]);
+    expect(logger.error).toHaveBeenCalledWith('equipo.llaves_api_fallo', expect.objectContaining({ usuario: U }));
+    expect(anotarBitacora).toHaveBeenCalledWith(
+      expect.objectContaining({ detalle: expect.objectContaining({ llaves_api_sin_revocar: true }) }), expect.anything(),
     );
   });
 
@@ -337,7 +367,7 @@ describe('desactivarUsuario — la baja en tres capas', () => {
     rpc.mockResolvedValueOnce({ data: 'ok', error: null });
     rpc.mockResolvedValueOnce({ data: null, error: { message: 'rpc caída' } });
     const r = await desactivarUsuario(TENANT, U, ACTOR);
-    expect(r).toEqual({ sesionRevocada: true });
+    expect(r).toMatchObject({ sesionRevocada: true });
     expect(logger.error).toHaveBeenCalledWith('equipo.mcp_revocar_fallo',
       expect.objectContaining({ usuario: U, err: 'rpc caída' }));
   });

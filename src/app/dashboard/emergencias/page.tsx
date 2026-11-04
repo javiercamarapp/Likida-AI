@@ -87,8 +87,9 @@ export default async function PaginaEmergencias({
   // ── Server actions — re-gateo ADENTRO en todas (el rol del render no es el
   //    de la llamada, y una action es alcanzable sin pasar por la página) ───
 
+  // CT-SEG-22: `gate` es un AYUDANTE interno, no una acción. Con `'use server'` Next lo exponía como acción invocable desde
+  // el navegador (devolvía tenantId/userId); sin la directiva solo lo llaman las acciones de abajo, que sí la llevan.
   async function gate(): Promise<{ tenantId: string; userId: string } | { error: string }> {
-    'use server';
     const s = await resolverTenantEfectivo(RUTA, sp);
     if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede editar el directorio de emergencia.' };
     return { tenantId: s.tenantId, userId: s.userId };
