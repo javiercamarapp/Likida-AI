@@ -25,7 +25,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
 
-const { provisionarUsuario } = await import('./provisionar');
+const { provisionarUsuario, existeCuentaDeAcceso } = await import('./provisionar');
 
 describe('provisionarUsuario', () => {
   beforeEach(() => {
@@ -262,5 +262,27 @@ describe('provisionarUsuario', () => {
       .rejects.toThrow(/dígitos/);
     expect(createUser).not.toHaveBeenCalled();
     expect(insert).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('existeCuentaDeAcceso (CT-SEG-04)', () => {
+  beforeEach(() => { eq.mockClear(); maybeSingle.mockReset(); });
+  it('consulta app_user por el correo en minusculas y sin espacios', async () => {
+    maybeSingle.mockResolvedValueOnce({ data: { id: 'u1' }, error: null });
+    expect(await existeCuentaDeAcceso('  Ana@Flota.MX ')).toBe(true);
+    expect(eq).toHaveBeenCalledWith('email', 'ana@flota.mx');
+  });
+  it('sin fila: false', async () => {
+    maybeSingle.mockResolvedValueOnce({ data: null, error: null });
+    expect(await existeCuentaDeAcceso('nadie@x.mx')).toBe(false);
+  });
+  it('correo vacio: false sin consultar', async () => {
+    expect(await existeCuentaDeAcceso('   ')).toBe(false);
+    expect(eq).not.toHaveBeenCalled();
+  });
+  it('error de la base: lanza (no lo confunde con "no existe")', async () => {
+    maybeSingle.mockResolvedValueOnce({ data: null, error: { message: 'caida' } });
+    await expect(existeCuentaDeAcceso('ana@flota.mx')).rejects.toThrow('caida');
   });
 });

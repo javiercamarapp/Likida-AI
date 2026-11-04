@@ -19,6 +19,20 @@ import { esCorreoYaRegistrado } from './invitar';
 /** El dominio de `app_user_rol_dominio` menos `operador` (sin login desde el
  *  7-ago-2026). `vendedor` (0105) es rol de LIKIDA: siempre con tenantId
  *  null, como superadmin — su panel es /vendedor, no /dashboard. */
+/**
+ * CT-SEG-04: ¿este correo tiene una cuenta de acceso (fila en `app_user`)? Lo usa el hook de correo de Auth para NO mandar
+ * correo de marca —remitente y logo de Likida, con un enlace de un solo uso— a direcciones que nadie dio de alta. La
+ * comparacion es en minusculas (Auth y `app_user.email` guardan minusculas, A37-S24-06). LANZA si la base no responde: quien
+ * llama decide (el hook falla cerrado y ruidoso, nunca lo confunde con "no existe").
+ */
+export async function existeCuentaDeAcceso(correo: string): Promise<boolean> {
+  const email = correo.trim().toLowerCase();
+  if (!email) return false;
+  const { data, error } = await supabaseAdmin().from('app_user').select('id').eq('email', email).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data != null;
+}
+
 export type RolAppUser = 'superadmin' | 'flota_admin' | 'contador' | 'encargado' | 'vendedor' | 'nomina';
 
 /**
