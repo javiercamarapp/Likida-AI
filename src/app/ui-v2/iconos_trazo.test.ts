@@ -2,6 +2,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { etiquetas } from './guardas_jsx';
 import { BASE_SIN_TRAZO, BASE_TRAZO_MEZCLADO } from './iconos_trazo_base';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -22,25 +23,6 @@ function tsx(dir: string, salida: string[] = []): string[] {
     if (n.endsWith('.tsx') && !/\.test\.|harness|\.tmp\./.test(n)) salida.push(r);
   }
   return salida;
-}
-
-/** Etiquetas JSX `<Nombre …>` completas (con llaves anidadas). */
-function etiquetas(src: string, nombre: string): string[] {
-  const out: string[] = [];
-  const re = new RegExp(`<${nombre}(?=[\\s/>])`, 'g');
-  for (let m = re.exec(src); m; m = re.exec(src)) {
-    let d = 0, q: string | null = null, j = m.index;
-    for (; j < src.length; j++) {
-      const c = src[j];
-      if (q) { if (c === '\\') j++; else if (c === q) q = null; continue; }
-      if (c === '"' || c === "'" || c === '`') q = c;
-      else if (c === '{') d++;
-      else if (c === '}') d--;
-      else if (c === '>' && d === 0) break;
-    }
-    out.push(src.slice(m.index, j + 1));
-  }
-  return out;
 }
 
 /** Nombres (y alias) importados de lucide-react. */
