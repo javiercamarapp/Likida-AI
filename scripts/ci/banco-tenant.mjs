@@ -30,6 +30,7 @@ import {
   consultaChecks,
   extraerChecks,
   reporteCobertura,
+  sqlBases,
   sqlCandidatos,
   validarNoSembrables,
 } from './banco-tenant-siembra.mjs';
@@ -41,7 +42,7 @@ const RUTA_NO_SEMBRABLES = join(AQUI, 'banco-tenant-no-sembrables.json');
 
 export const ARCHIVOS_POR_FASE = {
   estatica: ['00_prologo.sql', '10_politicas.sql', '30_funciones.sql', '40_vistas.sql', '90_epilogo.sql'],
-  dinamica: ['00_prologo.sql', '20_siembra_lectura.sql', '90_epilogo.sql'],
+  dinamica: ['00_prologo.sql', '20_siembra_lectura.sql', '25_operador_telefono_rol.sql', '90_epilogo.sql'],
   canario: [
     '00_prologo.sql',
     '05_canario_objetos.sql',
@@ -49,9 +50,12 @@ export const ARCHIVOS_POR_FASE = {
     '30_funciones.sql',
     '40_vistas.sql',
     '20_siembra_lectura.sql',
+    '25_operador_telefono_rol.sql',
     '90_epilogo.sql',
   ],
 };
+
+const ARCHIVOS_CON_SIEMBRA = ['20_siembra_lectura.sql'];
 
 export const TIPOS = [
   'sin_rls',
@@ -63,6 +67,7 @@ export const TIPOS = [
   'funcion_authenticated',
   'vista_sin_invoker',
   'matview_expuesta',
+  'operador_forma',
 ];
 
 // Que tipos de hallazgo produce cada fase: una excepcion de una fase solo puede "quedar obsoleta" en la fase que la produce
@@ -70,11 +75,11 @@ export const TIPOS = [
 // "ya no coincidian con nada" solo porque esa fase no mide funciones.
 export const TIPOS_POR_FASE = {
   estatica: ['sin_rls', 'politica_abierta', 'funcion_anon', 'funcion_authenticated', 'vista_sin_invoker', 'matview_expuesta'],
-  dinamica: ['fuga_lectura', 'fuga_escritura', 'fuga_anon'],
+  dinamica: ['fuga_lectura', 'fuga_escritura', 'fuga_anon', 'operador_forma'],
 };
 
 // Una fuga de datos entre flotas no puede ser excepcion permanente: solo temporal, con hallazgo y fecha.
-const NO_PERMANENTES = new Set(['fuga_lectura', 'fuga_escritura', 'fuga_anon', 'sin_rls', 'politica_abierta']);
+const NO_PERMANENTES = new Set(['fuga_lectura', 'fuga_escritura', 'fuga_anon', 'sin_rls', 'politica_abierta', 'operador_forma']);
 
 // Objetos abiertos a proposito por 05_canario_objetos.sql y lo que el banco DEBE decir de cada uno.
 export const CANARIO_ESPERADO = [
@@ -169,6 +174,8 @@ export function armarSql(fase, { esquemas, candidatos = [] }) {
     partes.push(readFileSync(join(DIR_SQL, f), 'utf8'));
     // Los candidatos de la siembra se cargan justo despues del prologo (que crea ci_banco.candidatos).
     if (f === '00_prologo.sql' && candidatos.length) partes.push(sqlCandidatos(candidatos));
+    // Las bases explicitas (tablas con CHECK acoplados) tambien: la siembra las lee antes de buscar entre candidatos.
+    if (f === '00_prologo.sql' && ARCHIVOS_CON_SIEMBRA.some((a) => archivos.includes(a))) partes.push(sqlBases());
   }
   return partes.join('\n');
 }

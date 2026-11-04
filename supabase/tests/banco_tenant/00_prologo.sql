@@ -21,6 +21,10 @@ grant select, insert on ci_banco.resumen to public;
 -- '@V' = el valor generico por tipo, '=<sql>' = expresion SQL cruda, otro texto = literal.
 create table ci_banco.candidatos (tabla text not null, columna text not null, ord int not null, va text not null, vb text not null);
 
+-- Bases explicitas por (tabla, lado, columna): valores que la siembra generica no deduce (CHECK acoplados). Las arma
+-- scripts/ci/banco-tenant-siembra.mjs (BASES_EXPLICITAS) y las carga el runner; lado 1 = flota A, 2 = flota B.
+create table ci_banco.bases (tabla text not null, lado int not null, columna text not null, valor text not null);
+
 -- Esquemas expuestos que existen de verdad en esta base (graphql_public no existe en el Postgres efimero).
 create function ci_banco.esquemas() returns text[] language sql stable as $f$
   select coalesce(array_agg(nspname::text), array[]::text[])

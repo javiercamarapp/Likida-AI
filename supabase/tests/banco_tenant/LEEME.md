@@ -8,6 +8,7 @@ las migraciones aplicadas. Runner: `node scripts/ci/banco-tenant.mjs --fase=esta
 | --- | --- | --- |
 | (a) tabla con columna de tenant sin RLS; política permisiva `true` para anon/authenticated/public | `10_politicas.sql` | `sin_rls`, `politica_abierta` |
 | (b) usuario autenticado de A no lee ni toca (UPDATE) filas de B, y viceversa; anon no lee filas de ninguna flota | `20_siembra_lectura.sql` | `fuga_lectura`, `fuga_escritura`, `fuga_anon` |
+| (b') el chofer (`operador`): `operador_telefono_forma` rechaza telefono sin forma y acepta forma, marcador `sin-tel:` y anonimizado; `app_user.rol` no admite `operador` (0086) | `25_operador_telefono_rol.sql` | `operador_forma` |
 | (c) SECURITY DEFINER ejecutable por anon/PUBLIC | `30_funciones.sql` | `funcion_anon` |
 | (d) SECURITY DEFINER ejecutable por authenticated (solo-sistema = service_role) | `30_funciones.sql` | `funcion_authenticated` |
 | (e) vista sin `security_invoker` ni filtro por sesión; vista materializada expuesta | `40_vistas.sql` | `vista_sin_invoker`, `matview_expuesta` |
@@ -27,6 +28,11 @@ las migraciones aplicadas. Runner: `node scripts/ci/banco-tenant.mjs --fase=esta
   sembrar NO cuenta como probada: aparece en `cobertura.no_sembradas` con su error y debe estar en
   `scripts/ci/banco-tenant-no-sembrables.json` con el motivo (si no, el banco falla y no se calla). El runner exige
   `cobertura_minima_siembra` (0.85 de las tablas con columna de tenant) e imprime la tabla de no sembradas en el resumen del job.
+- **bases explicitas (F2)**: las 9 tablas que la busqueda no lograba sembrar (operador, geocerca, solicitud_arco, api_idempotencia,
+  prospecto, regla_vigilancia, viaje_hito, cp_documento, liquidacion_entrega_correo) se siembran con `BASES_EXPLICITAS`
+  (`banco-tenant-siembra.mjs`, cada valor con la migracion que lo exige) cargadas en `ci_banco.bases`. La causa era combinatoria: el
+  valor valido de una columna anulable (NULL) va al final de su lista y la primera columna varia mas rapido, y 600 intentos no
+  alcanzan. La lista de no sembrables quedo vacia y `cobertura_minima_siembra` subio a 0.97.
 - **canario**: crea objetos abiertos a propósito (`zz_canario_*`) y exige que el banco los marque. Si no, el banco está ciego.
 
 Todo ocurre en una transacción que termina en `rollback`; los objetos auxiliares viven en el esquema efímero `ci_banco`.

@@ -3,12 +3,14 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  BASES_EXPLICITAS,
   clasificarNoSembradas,
   construirCandidatos,
   consultaChecks,
   extraerChecks,
   muestraRegex,
   reporteCobertura,
+  sqlBases,
   sqlCandidatos,
   validarNoSembrables,
 } from './banco-tenant-siembra.mjs';
@@ -158,5 +160,69 @@ describe('tablas no sembrables', () => {
   it('el archivo real es valido', () => {
     const real = JSON.parse(readFileSync('scripts/ci/banco-tenant-no-sembrables.json', 'utf8'));
     expect(validarNoSembrables(real)).toEqual([]);
+  });
+});
+
+describe('bases explicitas de las 9 tablas con CHECK acoplados (F2)', () => {
+  const NUEVE = [
+    'public.operador',
+    'public.geocerca',
+    'public.solicitud_arco',
+    'public.api_idempotencia',
+    'public.prospecto',
+    'public.regla_vigilancia',
+    'public.viaje_hito',
+    'public.cp_documento',
+    'public.liquidacion_entrega_correo',
+  ];
+
+  it('cada una tiene base para la flota A y para la B, y ya no figura como no sembrable', () => {
+    const real = JSON.parse(readFileSync('scripts/ci/banco-tenant-no-sembrables.json', 'utf8'));
+    const aunListadas = real.tablas.map((t: { tabla: string }) => t.tabla);
+    for (const t of NUEVE) {
+      const b = (BASES_EXPLICITAS as Record<string, { a: object; b: object }>)[t];
+      expect(b, t).toBeDefined();
+      expect(Object.keys(b.a).length, t).toBeGreaterThan(0);
+      expect(Object.keys(b.b), t).toEqual(Object.keys(b.a));
+      expect(aunListadas, t).not.toContain(t);
+    }
+  });
+
+  const A = BASES_EXPLICITAS as Record<string, { a: Record<string, string>; b: Record<string, string> }>;
+
+  it('los valores cumplen las formas de las migraciones (telefono, hex de 64, correo, dominios)', () => {
+    for (const lado of ['a', 'b'] as const) {
+      expect(A['public.operador'][lado].telefono).toMatch(/^[0-9]{10,15}$/);
+      expect(A['public.operador'][lado].telefono).not.toMatch(/^521[0-9]{10}$/);
+      expect(A['public.api_idempotencia'][lado].huella).toMatch(/^[0-9a-f]{64}$/);
+      expect(A['public.cp_documento'][lado].sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(Number(A['public.cp_documento'][lado].bytes)).toBeGreaterThanOrEqual(1);
+      expect(Number(A['public.cp_documento'][lado].bytes)).toBeLessThanOrEqual(12582912);
+      expect(A['public.liquidacion_entrega_correo'][lado].correo).toMatch(/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/);
+      expect(['origen', 'destino', 'patio', 'punto_interes', 'restringida']).toContain(A['public.geocerca'][lado].tipo);
+      expect(Number(A['public.geocerca'][lado].radio_m)).toBeGreaterThanOrEqual(25);
+      expect(Number(A['public.geocerca'][lado].radio_m)).toBeLessThanOrEqual(100000);
+      expect(['acceso', 'rectificacion', 'cancelacion', 'oposicion']).toContain(A['public.solicitud_arco'][lado].tipo);
+      expect(A['public.solicitud_arco'][lado].titular_ref.length).toBeGreaterThan(0);
+      expect(A['public.prospecto'][lado].estado).toBe('cerrado');
+      expect(A['public.prospecto'][lado].cerrado_en).toMatch(/^=/);
+      expect(['llegada_carga', 'salida_carga', 'llegada_descarga', 'salida_descarga', 'regreso']).toContain(A['public.viaje_hito'][lado].tipo);
+      expect(['manual', 'correo', 'whatsapp']).toContain(A['public.cp_documento'][lado].canal);
+      expect(['operador', 'coordinador', 'rh', 'archivo', 'revisor']).toContain(A['public.liquidacion_entrega_correo'][lado].rol);
+    }
+  });
+
+  it('donde hay unico global las dos flotas reciben valores distintos', () => {
+    expect(A['public.operador'].a.telefono).not.toBe(A['public.operador'].b.telefono);
+    expect(A['public.liquidacion_entrega_correo'].a.correo).not.toBe(A['public.liquidacion_entrega_correo'].b.correo);
+  });
+
+  it('sqlBases arma el INSERT con una fila por (tabla, lado, columna) y rechaza el delimitador', () => {
+    const sql = sqlBases();
+    expect(sql).toMatch(/insert into ci_banco\.bases/);
+    const filas = Object.values(BASES_EXPLICITAS).reduce((n, b) => n + Object.keys(b.a).length + Object.keys(b.b).length, 0);
+    expect(sql.split('"tabla"').length - 1).toBe(filas);
+    expect(sqlBases({})).toBe('');
+    expect(() => sqlBases({ 'public.t': { a: { c: 'x$base$y' }, b: {} } })).toThrow(/delimitador/);
   });
 });

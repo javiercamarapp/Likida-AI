@@ -25,6 +25,7 @@ declare
   n_sin_priv int := 0; n_error int := 0; n_con_propias int := 0; n_objetivos int := 0;
   v_errores jsonb := '[]'::jsonb;
   v_no jsonb := '[]'::jsonb;
+  v_base_a jsonb; v_base_b jsonb;
 begin
   -- Siembra sin disparadores ni FKs (rol de replica): el banco prueba aislamiento, no reglas de integridad.
   set local session_replication_role = replica;
@@ -55,12 +56,17 @@ begin
     end if;
     -- Siembra el PAR (flota A + flota B) o ninguna: la generica por tipo y, si un CHECK/unico la rechaza, la busqueda entre los
     -- candidatos que arma el runner desde los CHECK del catalogo (ver scripts/ci/banco-tenant-siembra.mjs).
+    -- Base explicita (BASES_EXPLICITAS): los valores de las columnas con CHECK acoplados que la generica no deduce.
+    select coalesce(jsonb_object_agg(columna, valor) filter (where lado = 1), '{}'::jsonb),
+           coalesce(jsonb_object_agg(columna, valor) filter (where lado = 2), '{}'::jsonb)
+      into v_base_a, v_base_b
+      from ci_banco.bases where tabla = r.nombre;
     if r.nombre = 'public.app_user' then
       e1 := ci_banco.sembrar_buscando(r.rel, v_ta, v_tb,
         jsonb_build_object('id', v_ua, 'email', 'banco-a@ejemplo.test', 'rol', 'flota_admin', 'activo', true),
         jsonb_build_object('id', v_ub, 'email', 'banco-b@ejemplo.test', 'rol', 'flota_admin', 'activo', true));
     else
-      e1 := ci_banco.sembrar_buscando(r.rel, v_ta, v_tb);
+      e1 := ci_banco.sembrar_buscando(r.rel, v_ta, v_tb, v_base_a, v_base_b);
     end if;
     if e1 is null then
       n_sembradas := n_sembradas + 1;

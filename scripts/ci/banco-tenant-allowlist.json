@@ -5,7 +5,7 @@
     "public",
     "graphql_public"
   ],
-  "cobertura_minima_siembra": 0.85,
+  "cobertura_minima_siembra": 0.97,
   "entradas": [
     {
       "id": "RLS-01",
