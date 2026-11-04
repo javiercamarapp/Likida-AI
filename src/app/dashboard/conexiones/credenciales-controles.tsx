@@ -52,7 +52,6 @@ export type ResultadoCredencial =
   | null;
 export type AccionCredencial = (previo: ResultadoCredencial, fd: FormData) => Promise<ResultadoCredencial>;
 
-const CAMPO = 'w-full hairline rounded-lg px-3 h-9 text-[13px] outline-none focus:border-[var(--muted)] transition-colors';
 const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
 const AYUDA = 'text-[11px] mt-1';
 
@@ -71,7 +70,7 @@ function BotonGuardar() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Vault width={14} height={14} strokeWidth={1.75} />
       {pending ? 'Guardando…' : 'Guardar en el cofre'}
@@ -112,7 +111,7 @@ export function FormaCredenciales({ grupos, guardar }: {
           <label htmlFor="cred-conector" className={ETIQUETA}>Sistema</label>
           <select id="cred-conector" name="conector" value={elegido} required
             onChange={(e) => setElegido(e.target.value)}
-            className={CAMPO} style={{ background: 'var(--surface)' }}>
+            className="w-full" style={{ background: 'var(--surface)' }}>
             <option value="">Elige el sistema…</option>
             {grupos.map((g) => (
               <optgroup key={g.categoria} label={g.categoria}>
@@ -134,7 +133,7 @@ export function FormaCredenciales({ grupos, guardar }: {
                 <input id={`cred-${campo.clave}`} name={`campo_${campo.clave}`}
                   type={TIPO_INPUT[campo.forma]} required={campo.requerida}
                   placeholder={campo.ejemplo} autoComplete="off"
-                  className={CAMPO} style={{ background: 'var(--surface)' }} />
+                  className="w-full" style={{ background: 'var(--surface)' }} />
                 <p className={AYUDA} style={{ color: 'var(--faint)' }}>{campo.ayuda}</p>
               </div>
             ))}
@@ -194,7 +193,7 @@ function BotonProbar() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5 hairline transition-opacity hover:opacity-85 disabled:opacity-50">
+      className="rv-btn rv-btn--secondary">
       <PlugZap width={13} height={13} strokeWidth={1.75} />
       {/* «Probando…» y no «Conectando…»: probar no deja nada conectado, y la
           espera puede ser de hasta 15 s (TIMEOUT_PRUEBA_MS). */}

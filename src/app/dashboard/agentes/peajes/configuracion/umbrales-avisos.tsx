@@ -22,9 +22,7 @@ export interface UmbralesAvisosVista {
   acciones: AccionesUmbralesAvisos;
 }
 
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const CSS_INPUT = 'hairline text-[12px] px-2.5 py-1.5 rounded-lg';
 const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
 
 function Numero({ nombre, etiqueta, valor, min, max, paso, ancho }: { nombre: string; etiqueta: string; valor: number; min: number; max: number; paso?: number; ancho?: string }) {
@@ -32,7 +30,7 @@ function Numero({ nombre, etiqueta, valor, min, max, paso, ancho }: { nombre: st
     <label className="block">
       <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>{etiqueta}</span>
       <input type="number" name={nombre} defaultValue={valor} min={min} max={max} step={paso ?? 1} required
-        className={`${CSS_INPUT} ${ancho ?? 'w-[110px]'} mt-0.5`} style={ESTILO_INPUT} />
+        className={`${ancho ?? 'w-[110px]'} mt-0.5`} style={ESTILO_INPUT} />
     </label>
   );
 }
@@ -94,7 +92,7 @@ export function SeccionUmbralesAvisos({ datos }: { datos: UmbralesAvisosVista })
                 <Numero nombre="velocidad_max" etiqueta="Velocidad máx. (km/h)" valor={config.umbrales.secuencia_imposible.velocidadMaxKmh} min={VELOCIDAD_MIN_KMH} max={VELOCIDAD_MAX_KMH} ancho="w-[140px]" />
               </div>
             </div>
-            <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Guardar umbrales</button>
+            <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>Guardar umbrales</button>
           </form>
 
           <form action={acciones.guardarAvisos} className="space-y-3" id="plazo-avisos">
@@ -113,7 +111,7 @@ export function SeccionUmbralesAvisos({ datos }: { datos: UmbralesAvisosVista })
                 <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Avisar cuántos días antes</span>
                 <input name="aviso_dias" defaultValue={config.avisos.plazo.avisoDias.join(', ')} required maxLength={40} placeholder="30, 7"
                   aria-label={`Días de aviso antes del vencimiento (de 1 a ${AVISO_DIAS_MAX}, separados por comas)`}
-                  className={`${CSS_INPUT} w-[150px] mt-0.5`} style={ESTILO_INPUT} />
+                  className="w-[150px] mt-0.5" style={ESTILO_INPUT} />
               </label>
               <Numero nombre="dias_gracia" etiqueta="Gracia del archivo (días)" valor={config.avisos.recordatorio.diasGracia} min={DIAS_GRACIA_MIN} max={DIAS_GRACIA_MAX} ancho="w-[150px]" />
             </div>
@@ -123,7 +121,7 @@ export function SeccionUmbralesAvisos({ datos }: { datos: UmbralesAvisosVista })
               <Interruptor nombre="recordatorio_archivo" etiqueta="Recordar que falta el archivo de la decena" activo={config.avisos.interruptores.recordatorio_archivo}
                 nota="Un solo recordatorio por decena, pasados los días de gracia desde su cierre sin que llegue el archivo. Apagado de origen." />
             </div>
-            <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Guardar plazo y avisos</button>
+            <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>Guardar plazo y avisos</button>
           </form>
 
           <form action={acciones.guardarDestinatario} className="space-y-2" id="destinatario-avisos">
@@ -132,9 +130,9 @@ export function SeccionUmbralesAvisos({ datos }: { datos: UmbralesAvisosVista })
               <label className="block">
                 <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>WhatsApp (10 a 15 dígitos)</span>
                 <input name="telefono" defaultValue={config.telefono ?? ''} maxLength={30} placeholder="Vacío = solo en pantalla" inputMode="tel"
-                  className={`${CSS_INPUT} w-[220px] mt-0.5`} style={ESTILO_INPUT} />
+                  className="w-[220px] mt-0.5" style={ESTILO_INPUT} />
               </label>
-              <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Guardar destinatario</button>
+              <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>Guardar destinatario</button>
             </div>
             <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
               {config.telefono

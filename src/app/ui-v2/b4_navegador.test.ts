@@ -225,7 +225,7 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · BarraFiltros', () => {
     const r = await p.evaluate(() => ({ pop: !!document.querySelector('.rv-pop select'), despues: document.querySelector('#esc')!.getBoundingClientRect().top, activo: getComputedStyle(document.querySelector('.rv-fl[aria-pressed="true"]')!).backgroundColor }));
     expect(r.pop).toBe(true);
     expect(r.despues).toBe(antes);
-    expect(rgb(r.activo)).toEqual([226, 226, 226]); // --soft-8 #e2e2e2
+    expect(rgb(r.activo)).toEqual([241, 241, 242]); // --seg-activo-bg = --ui-soft #f1f1f2 (controles finos K1: el activo ya no usa --soft-8)
     await p.close();
   });
   it('390: «Filtros» abre una hoja inferior', async () => {
@@ -247,7 +247,7 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · chip activo (los tokens de marca son del s
   it('claro: gris suave con texto de tinta (AA), nunca un bloque sólido', async () => {
     const p = await abrir();
     const c = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.rv-fl[aria-pressed="true"]')!); return { bg: s.backgroundColor, fg: s.color }; });
-    expect(rgb(c.bg)).toEqual([226, 226, 226]);
+    expect(rgb(c.bg)).toEqual([241, 241, 242]); // --seg-activo-bg neutro (K1)
     expect(rgb(c.fg)).toEqual([14, 14, 16]);
     expect(ratio(rgb(c.bg), rgb(c.fg))).toBeGreaterThanOrEqual(4.5);
     await p.close();
@@ -255,7 +255,7 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · chip activo (los tokens de marca son del s
   it('oscuro: fondo gris oscuro con texto claro (AA)', async () => {
     const p = await abrir(1440, { oscuro: true });
     const c = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.rv-fl[aria-pressed="true"]')!); return { bg: s.backgroundColor, fg: s.color }; });
-    expect(rgb(c.bg)).toEqual([50, 50, 52]); // --soft-8 oscuro #323234
+    expect(rgb(c.bg)).toEqual([31, 31, 35]); // --seg-activo-bg = --ui-soft oscuro #1f1f23 (K1)
     expect(ratio(rgb(c.bg), rgb(c.fg))).toBeGreaterThanOrEqual(4.5);
     await p.close();
   });

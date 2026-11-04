@@ -13,7 +13,6 @@ import { AvisoResultado } from '../../admin/ui/aviso-resultado';
 export type ResultadoEstrategia = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionEstrategia = (previo: ResultadoEstrategia, fd: FormData) => Promise<ResultadoEstrategia>;
 
-const CAMPO = 'w-full hairline rounded-lg px-3 h-9 text-[13px] outline-none focus:border-[var(--muted)] transition-colors';
 const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
 const AYUDA = 'text-[11px] mt-1';
 
@@ -21,7 +20,7 @@ function Boton() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Save width={14} height={14} strokeWidth={1.75} />
       {pending ? 'Guardando…' : 'Guardar estrategia'}
@@ -56,7 +55,7 @@ export function FormaEstrategiaConductores({ accion, horasActuales }: {
         <div className="max-w-xs">
           <label htmlFor="est-horas" className={ETIQUETA}>Horas sin confirmación antes de escalar</label>
           <input id="est-horas" name="horasEscalacion" type="text" inputMode="numeric" required
-            defaultValue={horasActuales} className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            defaultValue={horasActuales} className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
             Si el chofer no confirma su viaje en este tiempo, se le insiste una vez y se le avisa al
             jefe de tráfico. Entre 1 y 48 horas; el estándar de Likida es 5. El cambio aplica desde
@@ -81,7 +80,7 @@ export function FormaEstrategiaLiquidacion({ accion, umbralActual }: {
         <div className="max-w-xs">
           <label htmlFor="est-umbral" className={ETIQUETA}>Confianza mínima de lectura (OCR)</label>
           <input id="est-umbral" name="umbralConfianza" type="text" inputMode="decimal" required
-            defaultValue={umbralActual} className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            defaultValue={umbralActual} className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
             Un comprobante leído con confianza por debajo de este umbral sale «a revisar» en vez de
             contarse directo. Entre 0.50 y 0.99; el estándar de Likida es 0.85. Subirlo manda más

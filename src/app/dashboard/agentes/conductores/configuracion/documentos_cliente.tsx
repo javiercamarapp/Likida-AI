@@ -12,14 +12,13 @@ import { catalogoDeCliente, type DocumentoCliente } from '@/lib/likida/conductor
 // de entrega (POD). Solo muestra y edita el catálogo: no envía mensajes ni pide nada al chofer (eso es la solicitud al cierre, T-A5-53).
 // ═══════════════════════════════════════════════════════════════════════════
 
-const CAMPO = 'hairline rounded-lg px-2.5 h-9 text-[13px] outline-none focus:border-[var(--muted)] w-full';
 const ETIQUETA = 'block text-[11px] font-medium mb-1';
 
 function BotonAgregar() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Plus width={14} height={14} strokeWidth={1.75} />{pending ? 'Guardando…' : 'Agregar documento'}
     </button>
@@ -30,7 +29,7 @@ function BotonQuitar({ nombre }: { nombre: string }) {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending} aria-label={`Quitar ${nombre}`}
-      className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12px] font-medium hairline transition-opacity hover:opacity-85 disabled:opacity-50">
+      className="rv-btn rv-btn--secondary">
       {pending ? 'Quitando…' : 'Quitar'}
     </button>
   );
@@ -63,16 +62,16 @@ function FormaAgregar({ clientes, accion }: { clientes: Array<{ id: string; nomb
     <form action={enviar} className="space-y-3" aria-label="Agregar documento de un cliente">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block"><span className={ETIQUETA}>Cliente</span>
-          <select name="clienteId" required defaultValue="" className={CAMPO}>
+          <select name="clienteId" required defaultValue="" className="w-full">
             <option value="" disabled>Elige un cliente</option>
             {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
           </select>
         </label>
         <label className="block"><span className={ETIQUETA}>Documento</span>
-          <input name="nombre" required maxLength={80} className={CAMPO} placeholder="Ej.: carta porte, ticket de báscula cargado" />
+          <input name="nombre" required maxLength={80} className="w-full" placeholder="Ej.: carta porte, ticket de báscula cargado" />
         </label>
         <label className="block"><span className={ETIQUETA}>¿Es indispensable?</span>
-          <select name="tipo" defaultValue="basico" className={CAMPO}>
+          <select name="tipo" defaultValue="basico" className="w-full">
             <option value="basico">Básico (sin él no se cierra el viaje)</option>
             <option value="complementario">Complementario (se pide, pero no frena el cierre)</option>
           </select>

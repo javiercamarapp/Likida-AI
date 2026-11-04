@@ -125,8 +125,8 @@ function FilaLote({ l, flota }: { l: LotePantalla; flota: string | null }) {
         {/* A37-S29-06: lo que se está viendo; confirmar se rechaza si el lote cambió desde que se pintó */}
         <input type="hidden" name="vistoTickets" value={l.tickets} />
         <input type="hidden" name="vistoMonto" value={l.montoTotal} />
-        {l.estado === 'propuesto' && <button type="submit" name="decision" value="confirmar" disabled={p} className="rv-btn rv-btn--secondary text-[12px] px-3 py-1.5 rounded-md border disabled:opacity-50" style={{ borderColor: 'var(--ok)', color: 'var(--ok)' }}>Confirmar lote</button>}
-        <button type="submit" name="decision" value="rechazar" disabled={p} className="rv-btn rv-btn--secondary text-[12px] px-3 py-1.5 rounded-md border disabled:opacity-50" style={{ borderColor: 'var(--line2)' }}>Rechazar</button>
+        {l.estado === 'propuesto'&& <button type="submit" name="decision" value="confirmar" disabled={p} className="rv-btn rv-btn--secondary" style={{ borderColor:'var(--ok)', color: 'var(--ok)' }}>Confirmar lote</button>}
+        <button type="submit" name="decision" value="rechazar" disabled={p} className="rv-btn rv-btn--secondary" style={{ borderColor: 'var(--line2)' }}>Rechazar</button>
       </form>
     </li>
   );

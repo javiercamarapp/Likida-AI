@@ -14,7 +14,7 @@ function BotonEnviar({ texto, pendienteTexto, Icono }: { texto: string; pendient
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50 shrink-0"
+      className="rv-btn rv-btn--primary shrink-0"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Icono width={13} height={13} strokeWidth={2} />
       {pending ? pendienteTexto : texto}
@@ -101,7 +101,7 @@ function BotonAsignarUnidad({ texto }: { texto: string }) {
   return (
     <button type="submit" disabled={pending} title="Amarrar la unidad al viaje"
       aria-label={`${texto} la unidad del viaje`}
-      className="rv-btn rv-btn--secondary hairline inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-lg transition-colors hover:bg-[var(--canvas)] disabled:opacity-50 shrink-0"
+      className="rv-btn rv-btn--secondary shrink-0"
       style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
       {pending ? 'Asignando…' : texto}
     </button>
@@ -134,7 +134,7 @@ function BotonInsistir({ texto }: { texto: string }) {
   return (
     <button type="submit" disabled={pending} title="Mandar el aviso por WhatsApp"
       aria-label={`${texto} al chofer por WhatsApp`}
-      className="rv-btn rv-btn--secondary hairline inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-lg transition-colors hover:bg-[var(--canvas)] disabled:opacity-50"
+      className="rv-btn rv-btn--secondary"
       style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
       <RefreshCw width={11} height={11} strokeWidth={2} className={pending ? 'animate-spin' : ''} />
       {pending ? 'Enviando…' : texto}

@@ -12,13 +12,15 @@ import { cx } from './clases';
 // ═══════════════════════════════════════════════════════════════════════════
 
 // `danger` (peligro) y `danger-soft` se pintan igual en v2 (rojo suave); `danger-soft` es el nombre histórico.
-export type VarianteBoton = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-soft';
+export type VarianteBoton = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-soft' | 'suave';
+// `suave` (K1): acción principal de un cajón («Aplicar») y acciones tipo «activar»; su color sale del trío --accion-cajon-* (neutro hasta que Javier decida el azul de Rovaq).
 export type TamanoBoton = 'md' | 'sm';
 
 const BASE_V1 = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-medium';
 const V1: Record<VarianteBoton, string> = {
   primary: `${BASE_V1} bg-[var(--marca)] text-[var(--marca-fg)] transition-opacity hover:opacity-85 disabled:opacity-50`,
   secondary: `${BASE_V1} bg-[var(--surface)] text-[var(--ink)] hairline transition-colors hover:bg-[var(--canvas)] disabled:opacity-50 disabled:cursor-not-allowed`,
+  suave: `${BASE_V1} bg-[var(--canvas)] text-[var(--ink)] hairline transition-colors hover:bg-[var(--line)] disabled:opacity-50 disabled:cursor-not-allowed`,
   ghost: `${BASE_V1} bg-transparent text-[var(--ink)] transition-colors hover:bg-[var(--canvas)] disabled:opacity-50 disabled:cursor-not-allowed`,
   danger: `${BASE_V1} bg-[var(--badbg)] text-[var(--bad)] transition-opacity hover:opacity-85 disabled:opacity-50`,
   'danger-soft': `${BASE_V1} bg-[var(--badbg)] text-[var(--bad)] transition-opacity hover:opacity-85 disabled:opacity-50`,

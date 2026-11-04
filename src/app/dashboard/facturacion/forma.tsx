@@ -12,7 +12,6 @@ import { AvisoResultado } from '../../admin/ui/aviso-resultado';
 export type ResultadoForma = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
 
-const CAMPO = 'w-full hairline rounded-lg px-3 h-9 text-[13px] outline-none focus:border-[var(--muted)] transition-colors';
 const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
 const AYUDA = 'text-[11px] mt-1';
 
@@ -20,7 +19,7 @@ function Boton({ etiqueta, tono = 'marca' }: { etiqueta: string; tono?: 'marca' 
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className={`rv-btn ${tono === 'marca' ? 'rv-btn--primary' : 'rv-btn--danger'} h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50`}
+      className={`rv-btn ${tono === 'marca' ? 'rv-btn--primary' : 'rv-btn--danger'}`}
       style={tono === 'marca'
         ? { background: 'var(--marca)', color: 'var(--marca-fg)' }
         : { background: 'var(--badbg)', color: 'var(--bad)' }}>
@@ -102,7 +101,7 @@ export function FormaFactura({ accion, clientes, viajesSinFacturar, hoy }: {
             </p>
           ) : (
             <select id="ff-cliente" name="clienteId" required
-              className={CAMPO} style={{ background: 'var(--surface)' }}>
+              className="w-full" style={{ background: 'var(--surface)' }}>
               <option value="">Elige al cliente…</option>
               {clientes.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -120,13 +119,13 @@ export function FormaFactura({ accion, clientes, viajesSinFacturar, hoy }: {
         <div>
           <label htmlFor="ff-fecha" className={ETIQUETA}>Fecha de la factura</label>
           <input id="ff-fecha" name="fecha" type="date" required defaultValue={hoy}
-            className={CAMPO} style={{ background: 'var(--surface)' }} />
+            className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
 
         <div>
           <label htmlFor="ff-serie" className={ETIQUETA}>Serie</label>
           <input id="ff-serie" name="serie" type="text" maxLength={25} placeholder="A (opcional)"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
             La del CFDI. Déjala vacía si tu flota no usa series. Con ella, el folio 1 de la serie A
             y el folio 1 de la serie B son dos facturas distintas — y el folio se puede reiniciar
@@ -137,19 +136,19 @@ export function FormaFactura({ accion, clientes, viajesSinFacturar, hoy }: {
         <div>
           <label htmlFor="ff-folio" className={ETIQUETA}>Folio</label>
           <input id="ff-folio" name="folio" type="text" maxLength={40} placeholder="1024 (opcional)"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
 
         <div>
           <label htmlFor="ff-subtotal" className={ETIQUETA}>Subtotal (MXN)</label>
           <input id="ff-subtotal" name="subtotal" type="text" inputMode="decimal" required
-            placeholder="10,000.00" className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            placeholder="10,000.00" className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
 
         <div>
           <label htmlFor="ff-iva" className={ETIQUETA}>IVA (MXN)</label>
           <input id="ff-iva" name="iva" type="text" inputMode="decimal" required
-            placeholder="1,600.00" className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            placeholder="1,600.00" className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
             Tal como quedó en el CFDI. El total lo calculamos nosotros: subtotal + IVA − retención,
             sin oportunidad de descuadre. Si la factura es tasa 0% o exenta, teclea 0.
@@ -159,7 +158,7 @@ export function FormaFactura({ accion, clientes, viajesSinFacturar, hoy }: {
         <div>
           <label htmlFor="ff-retencion" className={ETIQUETA}>Retención de IVA (MXN, opcional)</label>
           <input id="ff-retencion" name="retencion" type="text" inputMode="decimal"
-            placeholder="400.00 — vacío si no hay" className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            placeholder="400.00 — vacío si no hay" className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
             Si facturas a una persona moral (fletes: retención del 4 %), el CFDI trae una retención
             de IVA y el cliente te paga el total MENOS ella. Captúrala tal como está en el CFDI; si la
@@ -171,7 +170,7 @@ export function FormaFactura({ accion, clientes, viajesSinFacturar, hoy }: {
           <label htmlFor="ff-uuid" className={ETIQUETA}>Folio fiscal del CFDI (UUID)</label>
           <input id="ff-uuid" name="cfdiUuid" type="text" maxLength={36}
             placeholder="ad662d33-6934-459c-a128-bdf0393f0f44 — vacío si aún no timbras"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
             Likida no timbra: el UUID lo da tu PAC y se copia del XML o del PDF. Con UUID la factura
             queda EMITIDA y entra a la cartera; sin UUID queda en BORRADOR, que no le cobra a nadie.
@@ -225,12 +224,12 @@ export function FormaPago({ accion, facturaId, hoy }: {
         <div>
           <label htmlFor={campo('fecha')} className={ETIQUETA}>Fecha del pago</label>
           <input id={campo('fecha')} name="fecha" type="date" required defaultValue={hoy}
-            className={CAMPO} style={{ background: 'var(--surface)' }} />
+            className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
           <label htmlFor={campo('monto')} className={ETIQUETA}>Monto (MXN)</label>
           <input id={campo('monto')} name="monto" type="text" inputMode="decimal" required
-            placeholder="5,000.00" className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            placeholder="5,000.00" className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
             Los pagos parciales son la norma. Uno que rebase el saldo se rechaza con el saldo exacto.
           </p>
@@ -238,13 +237,13 @@ export function FormaPago({ accion, facturaId, hoy }: {
         <div>
           <label htmlFor={campo('metodo')} className={ETIQUETA}>Método</label>
           <input id={campo('metodo')} name="metodo" type="text" maxLength={40}
-            placeholder="transferencia (opcional)" className={CAMPO} style={{ background: 'var(--surface)' }} />
+            placeholder="transferencia (opcional)" className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
         <div className="sm:col-span-3">
           <label htmlFor={campo('ref')} className={ETIQUETA}>Referencia</label>
           <input id={campo('ref')} name="referencia" type="text" maxLength={80}
             placeholder="Clave de rastreo o folio del banco (opcional)"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
       </div>
       <Aviso estado={estado} />
@@ -271,13 +270,13 @@ export function FormaEmitir({ accion, facturaId, folioActual }: {
           <label htmlFor={campo('folio')} className={ETIQUETA}>Folio</label>
           <input id={campo('folio')} name="folio" type="text" maxLength={40}
             defaultValue={folioActual ?? ''} placeholder="El del CFDI timbrado"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
           <label htmlFor={campo('uuid')} className={ETIQUETA}>Folio fiscal (UUID)</label>
           <input id={campo('uuid')} name="cfdiUuid" type="text" maxLength={36} required
             placeholder="Del XML o del PDF del CFDI"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
       </div>
       <Aviso estado={estado} />

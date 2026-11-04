@@ -111,7 +111,7 @@ export function VistaConvenios(p: PropsVistaConvenios) {
                       <form action={p.accionEstado} className="ml-auto">
                         <input type="hidden" name="id" value={c.id} />
                         <input type="hidden" name="activo" value={c.activo ? 'no' : 'si'} />
-                        <button type="submit" className="text-[12px] underline" style={{ color: 'var(--muted)' }}>{c.activo ? 'Archivar' : 'Reactivar'}</button>
+                        <button type="submit" className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--muted)' }}>{c.activo ? 'Archivar' : 'Reactivar'}</button>
                       </form>
                     )}
                   </div>

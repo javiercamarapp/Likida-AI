@@ -62,7 +62,7 @@ export function VincularAsistida({ clave, nombre, flota = null }: { clave: strin
         <input type="hidden" name="comercio" value={clave} />
         {flota && <input type="hidden" name={CAMPO_FLOTA_PINTADA} value={flota} />}
         <button type="submit" disabled={iniciando}
-          className="inline-flex items-center gap-1 text-[11px] underline disabled:opacity-50" style={{ color: 'var(--muted)' }}>
+          className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--muted)' }}>
           <MonitorSmartphone width={11} height={11} strokeWidth={2} />
           {iniciando ? 'Generando…' : 'Vincular con código'}
         </button>
@@ -80,7 +80,7 @@ export function VincularAsistida({ clave, nombre, flota = null }: { clave: strin
       </ol>
       <div className="flex items-center gap-2 mt-1.5">
         <code className="text-[11px] font-mono rounded px-2 py-1 break-all" style={{ background: 'var(--line2)' }} data-testid="comando-vinculacion">{res.comando}</code>
-        <button type="button" aria-label="Copiar comando" className="shrink-0 p-1 rounded hover:bg-[var(--line2)]"
+        <button type="button" aria-label="Copiar comando" className="rv-icono-boton"
           onClick={() => { void navigator.clipboard?.writeText(res.comando); notificar({ tono: 'info', mensaje: 'Comando copiado.' }); }}>
           <Copy width={12} height={12} strokeWidth={2} />
         </button>
@@ -95,7 +95,7 @@ export function VincularAsistida({ clave, nombre, flota = null }: { clave: strin
       <p className="text-[11px] mt-1" role="status" style={{ color: 'var(--muted)' }}>{ROTULO[vivo] ?? ''}</p>
       <div className="mt-2">
         <button type="button" disabled={cancelando}
-          className="inline-flex items-center gap-1 text-[11px] underline disabled:opacity-50" style={{ color: 'var(--muted)' }}
+          className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--muted)' }}
           onClick={() => empezarCancelar(async () => {
             const fd = new FormData(); fd.set('comercio', clave); if (flota) fd.set(CAMPO_FLOTA_PINTADA, flota);
             const r = await accionCancelarVinculacion(null, fd);

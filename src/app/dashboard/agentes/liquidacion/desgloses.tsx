@@ -526,7 +526,6 @@ function TablaRenglones({ titulo, renglones, moneda }: { titulo: string; renglon
   );
 }
 
-const CLASE_BOTON = 'hairline h-8 rounded-lg px-3 text-[12px] font-medium transition-opacity hover:opacity-80 disabled:opacity-40';
 
 function Reenviar({ d, accion }: { d: DetalleDesglose; accion: AccionesDetalle['reenviar'] }) {
   const sinArchivo = d.retenido !== null;
@@ -548,7 +547,7 @@ function Reenviar({ d, accion }: { d: DetalleDesglose; accion: AccionesDetalle['
             <BotonConfirmar
               etiqueta={o.etiqueta} titulo="Reenviar el desglose" etiquetaConfirmar="Sí, reenviar" tono="normal"
               descripcion={`Se volverá a mandar el desglose de la bitácora ${d.bitacora} ${o.que}. Queda registrado quién lo pidió.`}
-              deshabilitado={o.curso || sinArchivo} className={CLASE_BOTON}
+              deshabilitado={o.curso || sinArchivo} className="rv-btn rv-btn--secondary"
             />
           </form>
         ))}
@@ -568,7 +567,7 @@ function Reenviar({ d, accion }: { d: DetalleDesglose; accion: AccionesDetalle['
         <BotonConfirmar
           etiqueta="Corregir correo del operador y reenviar" titulo="Corregir el correo y reenviar" etiquetaConfirmar="Sí, corregir y reenviar" tono="normal"
           descripcion="Se guarda el correo nuevo en la ficha del operador y se le vuelve a mandar este desglose. Los próximos también irán a ese correo."
-          deshabilitado={d.enCurso.operador || sinArchivo} className={CLASE_BOTON}
+          deshabilitado={d.enCurso.operador || sinArchivo} className="rv-btn rv-btn--secondary"
         />
       </form>
     </div>
@@ -648,7 +647,7 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
               <BotonConfirmar
                 etiqueta="Liberar envío" titulo="Liberar el envío" etiquetaConfirmar="Sí, liberar y enviar" tono="normal"
                 descripcion={`Se enviará el desglose de la bitácora ${d.bitacora} al operador, a su coordinador y a RH. Queda registrado quién lo liberó.`}
-                className={CLASE_BOTON}
+                className="rv-btn rv-btn--secondary"
               />
             </form>
           )}
@@ -706,7 +705,7 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
         <h4 className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Archivo</h4>
         {d.descargaUrl ? (
           <>
-            <a href={d.descargaUrl} download={d.descargaNombre} className={`${CLASE_BOTON} inline-flex items-center`}>Descargar el Excel</a>
+            <a href={d.descargaUrl} download={d.descargaNombre} className="rv-btn rv-btn--secondary">Descargar el Excel</a>
             <span className="text-[11px] ml-2" style={{ color: 'var(--faint)' }}>{d.descargaNombre} · el enlace vale 24 horas</span>
           </>
         ) : (

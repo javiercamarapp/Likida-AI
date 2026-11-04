@@ -172,7 +172,7 @@ export async function SeccionExternas(p: ExternasProps) {
             Subir liquidaciones (CSV o Excel de tu sistema; una fila por renglón, agrupadas por clave_externa)
             <input type="file" name="archivo" accept=".csv,.txt,.xlsx,.xls,.ods" required className={`${CLASE_CONTROL} block mt-1`} style={ESTILO_CONTROL} />
           </label>
-          <button type="submit" className="rv-btn rv-btn--primary text-[12px] font-medium rounded-lg px-3 py-1.5"
+          <button type="submit" className="rv-btn rv-btn--primary"
             style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>Subir y entregar</button>
         </form>
       )}
@@ -304,7 +304,7 @@ function Fila({ l, p, formato, avisos }: { l: LiquidacionExterna; p: ExternasPro
         {formato?.copia && p.reenviarCopia && l.estado !== 'pendiente' && l.estado !== 'fallida' && (
           <form action={p.reenviarCopia} className="inline mr-3">
             <input type="hidden" name="id" value={l.id} />
-            <button type="submit" title="Reenvía la copia al jefe de flota (solo se manda si aún no salió)" className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity" style={{ color: 'var(--marca)' }}>
+            <button type="submit" title="Reenvía la copia al jefe de flota (solo se manda si aún no salió)" className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--marca)' }}>
               <Send width={12} height={12} strokeWidth={2} /> Copia al jefe
             </button>
           </form>
@@ -312,7 +312,7 @@ function Fila({ l, p, formato, avisos }: { l: LiquidacionExterna; p: ExternasPro
         {puedeReavisar && p.reavisar && (
           <form action={p.reavisar} className="inline mr-3">
             <input type="hidden" name="id" value={l.id} />
-            <button type="submit" title="Vuelve a avisar a la persona responsable (no repite a quien ya recibió el aviso)" className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity" style={{ color: 'var(--marca)' }}>
+            <button type="submit" title="Vuelve a avisar a la persona responsable (no repite a quien ya recibió el aviso)" className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--marca)' }}>
               <Send width={12} height={12} strokeWidth={2} /> Reavisar
             </button>
           </form>
@@ -320,7 +320,7 @@ function Fila({ l, p, formato, avisos }: { l: LiquidacionExterna; p: ExternasPro
         {l.estado === 'fallida' && p.puedeReintentar && (
           <form action={p.reintentar} className="inline">
             <input type="hidden" name="id" value={l.id} />
-            <button type="submit" className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity" style={{ color: 'var(--marca)' }}>
+            <button type="submit" className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--marca)' }}>
               <RefreshCw width={12} height={12} strokeWidth={2} /> Reintentar
             </button>
           </form>

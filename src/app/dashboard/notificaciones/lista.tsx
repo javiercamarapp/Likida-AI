@@ -58,7 +58,7 @@ export function ListaAlertas({ alertas }: { alertas: AlertaFlota[] }) {
                         <ArrowRight width={13} height={13} strokeWidth={1.75} />
                       </Link>
                       <button type="button" onClick={() => marcarLeida(a.id)}
-                        className="text-[12px] transition-colors hover:underline" style={{ color: 'var(--muted)' }}>
+                        className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--muted)' }}>
                         Marcar leído
                       </button>
                     </div>

@@ -13,7 +13,6 @@ import type { UnidadCruda } from '@/lib/likida/operacion';
 export type ResultadoForma = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
 
-const CAMPO = 'w-full hairline rounded-lg px-3 h-9 text-[13px] outline-none focus:border-[var(--muted)] transition-colors';
 const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
 const AYUDA = 'text-[11px] mt-1';
 
@@ -21,7 +20,7 @@ function Boton({ etiqueta }: { etiqueta: string }) {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Save width={14} height={14} strokeWidth={1.75} />
       {pending ? 'Guardando…' : etiqueta}
@@ -85,7 +84,7 @@ export function FormaUnidad({ accion, id = '', inicial, idPrefijo, proveedoresGp
           <label htmlFor={campo('eco')} className={ETIQUETA}>Número económico</label>
           <input id={campo('eco')} name="numeroEconomico" type="text" required maxLength={40}
             defaultValue={inicial.numeroEconomico} placeholder="47, T-102…"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
             Como la flota la llama en la radio y en el papel. No se puede repetir.
           </p>
@@ -95,28 +94,28 @@ export function FormaUnidad({ accion, id = '', inicial, idPrefijo, proveedoresGp
           <label htmlFor={campo('placas')} className={ETIQUETA}>Placas</label>
           <input id={campo('placas')} name="placas" type="text" maxLength={20}
             defaultValue={inicial.placas} placeholder="Opcional"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
 
         <div>
           <label htmlFor={campo('marca')} className={ETIQUETA}>Marca</label>
           <input id={campo('marca')} name="marca" type="text" maxLength={60}
             defaultValue={inicial.marca} placeholder="Kenworth"
-            className={CAMPO} style={{ background: 'var(--surface)' }} />
+            className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
 
         <div>
           <label htmlFor={campo('modelo')} className={ETIQUETA}>Modelo</label>
           <input id={campo('modelo')} name="modelo" type="text" maxLength={60}
             defaultValue={inicial.modelo} placeholder="T680"
-            className={CAMPO} style={{ background: 'var(--surface)' }} />
+            className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
 
         {patios.length > 0 && (
           <div>
             <label htmlFor={campo('terminalId')} className={ETIQUETA}>Patio</label>
             <select id={campo('terminalId')} name="terminalId" defaultValue={terminalId} disabled={patioFijo}
-              className={CAMPO} style={{ background: 'var(--surface)' }}>
+              className="w-full" style={{ background: 'var(--surface)' }}>
               <option value="">Sin patio</option>
               {patios.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
             </select>
@@ -131,7 +130,7 @@ export function FormaUnidad({ accion, id = '', inicial, idPrefijo, proveedoresGp
           <label htmlFor={campo('anio')} className={ETIQUETA}>Año</label>
           <input id={campo('anio')} name="anio" type="number" min={1950} step={1}
             defaultValue={inicial.anio} placeholder="Déjalo vacío si no lo sabes"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
       </div>
 
@@ -149,19 +148,19 @@ export function FormaUnidad({ accion, id = '', inicial, idPrefijo, proveedoresGp
             <label htmlFor={campo('poliza')} className={ETIQUETA}>Póliza vence</label>
             <input id={campo('poliza')} name="polizaVence" type="date"
               defaultValue={inicial.polizaVence}
-              className={CAMPO} style={{ background: 'var(--surface)' }} />
+              className="w-full" style={{ background: 'var(--surface)' }} />
           </div>
           <div>
             <label htmlFor={campo('sict')} className={ETIQUETA}>Permiso SICT vence</label>
             <input id={campo('sict')} name="permisoSictVence" type="date"
               defaultValue={inicial.permisoSictVence}
-              className={CAMPO} style={{ background: 'var(--surface)' }} />
+              className="w-full" style={{ background: 'var(--surface)' }} />
           </div>
           <div>
             <label htmlFor={campo('verif')} className={ETIQUETA}>Verificación vence</label>
             <input id={campo('verif')} name="verificacionVence" type="date"
               defaultValue={inicial.verificacionVence}
-              className={CAMPO} style={{ background: 'var(--surface)' }} />
+              className="w-full" style={{ background: 'var(--surface)' }} />
           </div>
         </div>
         <p className={AYUDA} style={{ color: 'var(--faint)' }}>
@@ -184,7 +183,7 @@ export function FormaUnidad({ accion, id = '', inicial, idPrefijo, proveedoresGp
           <div>
             <label htmlFor={campo('gpsprov')} className={ETIQUETA}>Proveedor de rastreo</label>
             <select id={campo('gpsprov')} name="gpsProveedor" defaultValue={inicial.gpsProveedor}
-              className={CAMPO} style={{ background: 'var(--surface)' }}>
+              className="w-full" style={{ background: 'var(--surface)' }}>
               <option value="">Sin GPS conectado</option>
               {proveedoresGps.map((p) => (
                 <option key={p.id} value={p.id}>{p.nombre}</option>
@@ -199,7 +198,7 @@ export function FormaUnidad({ accion, id = '', inicial, idPrefijo, proveedoresGp
             <label htmlFor={campo('gpsdev')} className={ETIQUETA}>Número de dispositivo</label>
             <input id={campo('gpsdev')} name="gpsDeviceId" type="text" maxLength={200}
               defaultValue={inicial.gpsDeviceId} placeholder="El id que le da tu proveedor"
-              className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+              className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
             <p className={AYUDA} style={{ color: 'var(--faint)' }}>
               Es el id del vehículo EN EL SISTEMA DE TU PROVEEDOR, no las placas. Un dispositivo
               solo puede estar en un camión.

@@ -160,7 +160,7 @@ function MesaDeTrabajo({ fila, marcarFacturada }: { fila: FilaJefe; marcarFactur
               <span className="flex items-center gap-1.5 min-w-0">
                 <span className="cifra-mono truncate">{c.valor}</span>
                 <button type="button" aria-label={`Copiar ${c.etiqueta}`} onClick={() => copiar(c.etiqueta, c.valor as string)}
-                  className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--canvas)]"
+                  className="rv-icono-boton"
                   style={{ color: copiado === c.etiqueta ? 'var(--ok)' : 'var(--muted)' }}>
                   {copiado === c.etiqueta ? <Check width={12} height={12} strokeWidth={2} /> : <Copy width={12} height={12} strokeWidth={2} />}
                 </button>
@@ -182,7 +182,7 @@ function MesaDeTrabajo({ fila, marcarFacturada }: { fila: FilaJefe; marcarFactur
         </a>
         {conValor.length > 0 && (
           <button type="button" onClick={() => copiar('__todo__', conValor.map((c) => `${c.etiqueta}: ${c.valor}`).join('\n'))}
-            className="rv-btn rv-btn--secondary hairline inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
+            className="rv-btn rv-btn--secondary"
             style={{ background: 'var(--surface)', color: copiado === '__todo__' ? 'var(--ok)' : undefined }}>
             {copiado === '__todo__' ? <Check width={13} height={13} strokeWidth={2} /> : <Copy width={13} height={13} strokeWidth={1.75} />}
             Copiar todo
@@ -209,7 +209,7 @@ function BotonGuardar() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50 shrink-0"
+      className="rv-btn rv-btn--primary shrink-0"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       {pending ? 'Guardando…' : 'Ya quedó'}
     </button>

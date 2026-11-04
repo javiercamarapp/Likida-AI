@@ -161,7 +161,7 @@ export function TareasAbiertas({ tareas, accion, ocultos, aviso = null, errorLec
                   <form action={accion}>
                     {Object.entries(ocultos).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
                     <input type="hidden" name="id" value={t.id} />
-                    <button type="submit" className="rv-btn rv-btn--secondary hairline rounded-lg px-2.5 h-7 text-[12px]">Marcar atendida</button>
+                    <button type="submit" className="rv-btn rv-btn--secondary">Marcar atendida</button>
                   </form>
                 )}
               </li>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
+import { clasesBoton } from '@/app/ui-v2/componentes';
 import { Aviso, type AccionDeForma, type ResultadoAccion } from '../../admin/ui/forma';
 
 // A37-S16-06: «Tomar el control» y «Subir a nivel N» devolvían `void` y solo dejaban un warn en el log: si otra persona ya tenía el
@@ -15,13 +16,13 @@ export function BotonAccionMesa({
   campos: Record<string, string | number>;
   etiqueta: string;
   titulo: string;
-  clase: string;
+  clase?: string;
 }) {
   const [estado, enviar, pendiente] = useActionState<ResultadoAccion, FormData>(accion, null);
   return (
     <form action={enviar} className="flex flex-col gap-1.5 items-end">
       {Object.entries(campos).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-      <button type="submit" disabled={pendiente} className={`${clase} disabled:opacity-60`} title={titulo}>
+      <button type="submit" disabled={pendiente} className={clasesBoton('secondary', 'sm', clase)} title={titulo}>
         {pendiente ? 'Un momento…' : etiqueta}
       </button>
       <Aviso estado={estado} />

@@ -106,6 +106,46 @@
   --ui-activo-bg: var(--ui-soft);
   --ui-activo-ink: var(--ink);
   --ui-activo-barra: var(--n-500);
+
+  /* ── Estados activos y acción principal del cajón (controles finos, K1-0) ──
+     NEUTRO por omisión (decisión de Javier 1-nov: paleta negro/gris/blanco, sin azul de interfaz).
+     Azul de Rovaq, para activarlo con un cambio de una línea por variable (decisión de color PENDIENTE de Javier):
+       --seg-activo-bg: fondo e6edfa (oscuro 1d2433)
+       --seg-activo-borde: 2F6BD8 mezclado al 30 % con transparente (oscuro: al 45 %)
+       --seg-activo-fg: texto 1f4fb0 (oscuro a9c1f2)
+       --seg-activo-hover: fondo d8e3f8 (oscuro 26314a) */
+  --seg-activo-bg: var(--ui-soft);
+  --seg-activo-borde: var(--line2);
+  --seg-activo-fg: var(--ink);
+  --seg-activo-hover: color-mix(in srgb, var(--ink) 4%, var(--ui-soft));
+  /* Acción principal del cajón (Aplicar) y botón «suave»: mismo trío y mismo azul de Rovaq documentado arriba. */
+  --accion-cajon-bg: var(--seg-activo-bg);
+  --accion-cajon-borde: var(--seg-activo-borde);
+  --accion-cajon-fg: var(--seg-activo-fg);
+  --accion-cajon-hover: var(--seg-activo-hover);
+  /* Acento de las mini barras de lista de cajón (Rovaq: violeta 7B5CD6 del gráfico 7); neutro: gris oscuro. */
+  --barra-acento: var(--ink2);
+  --barra-fondo: var(--ui-soft);
+  /* Tooltip corto: pastilla carbón (captura 1 de Rovaq). Para volver a la tarjeta blanca de Rovaq: --tip-bg: var(--surface); --tip-fg: var(--ink); --tip-borde: var(--line). */
+  --tip-bg: #2a2a2f;
+  --tip-fg: #f4f4f5;
+  --tip-borde: transparent;
+
+  /* Bordes y foco de los controles (un valor, un lugar). Botones, chips y segmentado usan el borde claro de Rovaq; los CAMPOS conservan
+     --input porque su borde es la única señal del control (contraste). */
+  --borde-w: 1px;
+  --borde-reposo: var(--line);
+  --btn-borde-sec: var(--line2);
+  --campo-borde: var(--input);
+  --foco-ancho: 2px;
+  --foco-sep: 3px;
+  --foco-sep-campo: 2px;
+  --foco-sep-dentro: 1px;
+
+  /* Navegación: activo sutil (gris muy claro, texto tinta, peso 600; sin barra). Lo lee K2 (shell.css). */
+  --nav-activo-bg: var(--ui-soft);
+  --nav-activo-fg: var(--ink);
+  --nav-activo-peso: 600;
   /* Sombra suave del marco (sidebar flotante), como Vexa; las tarjetas del flujo siguen sin sombra. */
   --sh-marco: 0 1px 2px #0e0e100a, 0 8px 24px -16px #0e0e1029;
 
@@ -180,6 +220,7 @@
   --r-card: 12px;
   --r-pill: 999px;
   --r-sheet: 16px;
+  --r-tip: 8px;
 
   /* Escala tipográfica por tokens (L4, decisión de Javier 31-oct): --t-page 20 · --t-section 14 · --t-card 14 · --t-body 13 · --t-small 12 ·
      --t-micro 11 · --t-kpi 26. Prohibidos 11.5 / 12.5 / 13.5 / 22 px (los vigila `tipografia_escala.test.ts`). Los --fs-* son alias de los
@@ -202,6 +243,21 @@
   --fs-kpi: var(--t-kpi);
   --fs-kpi-movil: clamp(18px, 5.2vw, 21px);
 
+  /* Tipografía de controles (todo dentro de la escala cerrada 11/12/13/14/15/16/18/20/26) */
+  --t-ctl: 600 13px/1.25 var(--font-sans-ui, inherit);
+  --t-ctl-sm: 600 12px/1.3 var(--font-sans-ui, inherit);
+  --t-chip: 500 12px/1.4 var(--font-sans-ui, inherit);
+  --t-etq: 500 12px/1.4 var(--font-sans-ui, inherit);
+  --t-grupo: 500 11px/1.4 var(--font-sans-ui, inherit);
+
+  /* Iconos y espaciado de controles (trazo 1.75 = TRAZO_ICONO en icono.tsx) */
+  --ico-sm: 14px;
+  --ico: 16px;
+  --ico-lg: 18px;
+  --gap-ctl: 8px;
+  --gap-ico: 6px;
+  --btn-px: 12px;
+
   /* Medidas de shell y de composición (§4–§7); el shell las lee de aquí y `marco-v2.ts` las cruza con `shell.css` */
   --marco-pad: 16px;
   --sb-w: 232px;
@@ -210,21 +266,28 @@
   --cab-movil-h: 56px;
   --item-h: 32px;
   --item-h-riel: 40px;
-  --marca-h: 52px;
+  /* Marco fino (K1-0): la marca mide lo mismo que la barra de página (44) y el logo baja a 22 px de alto (107 de ancho); monograma 24. Forma y colores del logo no cambian. */
+  --marca-h: 44px;
   --pie-max: 100px;
   --nav-inf-h: 64px;
-  --logo-sb: 30px;
-  --logo-riel: 28px;
-  --logo-movil: 28px;
+  --logo-sb: 22px;
+  --logo-riel: 24px;
+  --logo-movil: 22px;
   --logo-carga: 40px;
   --pad-pagina: 24px;
   --pad-pagina-b: 28px;
   --sp-gap: 12px;
   --card-pad: 14px;
   --card-pad-compacta: 12px;
-  --btn-h: 32px;
-  --btn-h-movil: 36px;
-  --input-h: 32px;
+  /* Alturas de control (Rovaq: --btn-h 32, 28 en fila de tabla y cajón, 36 en móvil con zona de toque de 44). --ctl-h-lg solo lo leen /login y
+     las páginas públicas. */
+  --ctl-h: 32px;
+  --ctl-h-sm: 28px;
+  --ctl-h-lg: 40px;
+  --ctl-h-movil: 36px;
+  --btn-h: var(--ctl-h);
+  --btn-h-movil: var(--ctl-h-movil);
+  --input-h: var(--ctl-h);
   --toque: 44px;
   --kpi-h: 112px; --fila-tabla: 40px; --fila-tabla-densa: 32px; --cabecera-tabla: 36px; --chart-h: 168px; --chart-h-sm: 140px;
 
@@ -360,6 +423,9 @@
   --scrim: #000a;
   --tip: #f4f4f5;
   --tip-ink: #0e0e10;
+  /* Tooltip corto en oscuro: pastilla un tono más clara que el fondo. Los demás tokens de estado activo heredan por var(). */
+  --tip-bg: #3a3a40;
+  --tip-fg: #f4f4f5;
 
   --shadow-pop: 0 12px 32px -8px #000c, 0 2px 6px #0006;
   --sh-marco: 0 1px 2px #0006, 0 8px 24px -16px #000c;

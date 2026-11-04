@@ -47,7 +47,7 @@ export function InfoTip({ clave }: { clave: InfoClave }) {
         aria-haspopup="true" aria-expanded={abierto} aria-describedby={abierto && !movil ? idPanel : undefined}
         onClick={() => poner(abierto ? null : id)}
       >
-        <Info aria-hidden="true" strokeWidth={1.75} />
+        <Info aria-hidden="true" size={14} strokeWidth={1.75} />
       </button>
       {movil ? (
         <Drawer abierto={abierto} onCerrar={cerrar} titulo={t.titulo}><Contenido clave={clave} /></Drawer>
