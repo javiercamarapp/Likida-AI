@@ -122,6 +122,7 @@ export async function crearProveedorEmergencia(tenantId: string, p: {
   if (p.radioKm != null && (!Number.isFinite(p.radioKm) || p.radioKm <= 0 || p.radioKm > 1000)) {
     throw new DatoInvalido('El radio de cobertura debe ser mayor a 0 y de máximo 1,000 km.');
   }
+  if ((p.notas ?? '').trim().length > 500) throw new DatoInvalido('Las notas son muy largas (máx. 500 caracteres).');
   const conLat = p.lat != null;
   const conLng = p.lng != null;
   if (conLat !== conLng) throw new DatoInvalido('La posición necesita latitud Y longitud (o ninguna de las dos).');
@@ -197,12 +198,22 @@ export async function guardarPoliza(tenantId: string, p: {
   if (!telefonoValido(p.telefonoSiniestros)) {
     throw new DatoInvalido('El 800 de siniestros no se ve completo — es EL dato que se necesita en un siniestro, revísalo.');
   }
+  // MX-005: una fecha que no es AAAA-MM-DD real llegaba al INSERT y Postgres respondia 'invalid input syntax for type date'
+  // (la pantalla lo mostraba como falla del sistema). Se valida antes y se rechaza con un mensaje de captura.
+  const vigencia = (p.vigenciaHasta ?? '').trim();
+  if (vigencia) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(vigencia);
+    const f = m ? new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))) : null;
+    if (!m || !f || f.getUTCFullYear() !== Number(m[1]) || f.getUTCMonth() !== Number(m[2]) - 1 || f.getUTCDate() !== Number(m[3])) {
+      throw new DatoInvalido('La vigencia no se ve como fecha — usa el calendario (AAAA-MM-DD).');
+    }
+  }
   const { error } = await acotada(supabaseAdmin().from('flota_poliza').insert({
     tenant_id: tenantId,
     aseguradora,
     numero_poliza: numero,
     telefono_siniestros: limpiarTel(p.telefonoSiniestros),
-    vigencia_hasta: p.vigenciaHasta || null,
+    vigencia_hasta: vigencia || null,
   }), 'emergencias.guardarPoliza');
   if (error) throw new Error(`guardarPoliza: ${error.message}`);
 }

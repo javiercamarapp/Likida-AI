@@ -38,7 +38,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
 
 import {
-  crearContactoEmergencia, crearProveedorEmergencia, guardarPoliza, telefonoValido,
+  crearContactoEmergencia, crearProveedorEmergencia, guardarPoliza, telefonoValido, TIPOS_PROVEEDOR,
 } from './emergencias';
 import { DatoInvalido } from './errores';
 
@@ -145,3 +145,27 @@ describe('las validaciones de captura lanzan DatoInvalido (MX-005)', () => {
     await expect(accion()).rejects.toBeInstanceOf(DatoInvalido);
   });
 });
+
+describe('MX-005 · fecha y notas validadas antes del INSERT', () => {
+  const base = { aseguradora: 'Qualitas', numeroPoliza: 'P-1', telefonoSiniestros: '8002001234' };
+
+  it('una vigencia que no es AAAA-MM-DD real se rechaza como DatoInvalido y no llega al insert', async () => {
+    for (const v of ['31/12/2026', '2026-02-31', 'manana', '2026-13-01']) {
+      await expect(guardarPoliza('t1', { ...base, vigenciaHasta: v })).rejects.toBeInstanceOf(DatoInvalido);
+    }
+    expect(insertado).not.toHaveBeenCalled();
+  });
+
+  it('una vigencia valida y una vacia siguen entrando', async () => {
+    await guardarPoliza('t1', { ...base, vigenciaHasta: '2026-12-31' });
+    await guardarPoliza('t1', { ...base, vigenciaHasta: '' });
+    expect(insertado).toHaveBeenCalledTimes(2);
+  });
+
+  it('notas de proveedor con mas de 500 caracteres se rechazan', async () => {
+    await expect(crearProveedorEmergencia('t1', { tipo: TIPO_OK(), nombre: 'Grua', telefono: '5512345678', notas: 'x'.repeat(501) }))
+      .rejects.toBeInstanceOf(DatoInvalido);
+    expect(insertado).not.toHaveBeenCalled();
+  });
+});
+function TIPO_OK(): string { return TIPOS_PROVEEDOR[0]; }
