@@ -35,6 +35,9 @@ vi.mock('./mfa', async (original) => ({
 }));
 vi.mock('@/lib/supabase/server', () => ({ supabaseServer: async () => ({}) }));
 
+const registrarExporteDinero = vi.fn(async (..._a: unknown[]) => {});
+vi.mock('@/lib/seguridad/registro_acceso', () => ({ registrarExporteDinero: (...a: unknown[]) => registrarExporteDinero(...a) }));
+
 const { resolverTenantApi, resolverTenantPedido } = await import('./tenant-api');
 
 beforeEach(() => {
@@ -45,6 +48,22 @@ beforeEach(() => {
   leerSeleccionFlota.mockResolvedValue(null);
   veredictoMfa.mockResolvedValue('ok');
   vi.unstubAllEnvs();
+});
+
+describe('resolverTenantApi — registra quién descarga dinero (CT-SEG-11)', () => {
+  it('una descarga autorizada se anota con url, flota, rol y usuario', async () => {
+    registrarExporteDinero.mockClear();
+    const r = await resolverTenantApi('https://x/api/export/poliza?formato=sap_b1');
+    expect(r.ok).toBe(true);
+    expect(registrarExporteDinero).toHaveBeenCalledWith({ url: 'https://x/api/export/poliza?formato=sap_b1', tenantId: 't-sesion', rol: 'superadmin', userId: 'u-1' });
+  });
+  it('una puerta que NIEGA no anota el exporte (no hubo descarga autorizada)', async () => {
+    registrarExporteDinero.mockClear();
+    getSessionTenant.mockResolvedValueOnce(null as never);
+    const r = await resolverTenantApi('https://x/api/export/poliza');
+    expect(r.ok).toBe(false);
+    expect(registrarExporteDinero).not.toHaveBeenCalled();
+  });
 });
 
 describe('resolverTenantApi — la puerta del ?tenant= de las APIs', () => {

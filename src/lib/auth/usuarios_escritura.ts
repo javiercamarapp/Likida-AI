@@ -8,6 +8,7 @@ import { avisoInvitacion } from '@/lib/correo/avisos';
 import { logger } from '@/lib/logger';
 import { ROLES_INVITABLES, type RolInvitable } from './invitar';
 import { nombreDeRol } from './roles';
+import { registrarCambioRol } from '@/lib/seguridad/registro_acceso';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GESTIÓN DEL EQUIPO DE UNA FLOTA — cambiar rol, dar de baja, reactivar,
@@ -180,6 +181,9 @@ export async function cambiarRolUsuario(
   if (motivo !== 'ok') {
     throw new DatoInvalido('El rol de esa cuenta cambió mientras tanto. Recarga la pantalla y vuelve a intentarlo.');
   }
+
+  // CT-SEG-11: el cambio ya está hecho en la base; queda fila en evento_seguridad (alta si sube a dueño). Best-effort, no espera.
+  void registrarCambioRol({ tenantId, actorId: actor.id, usuarioId, de: objetivo.rol, a: rolNuevo });
 
   // CT-SEG-23: una llave `administracion` es la unica que ESCRIBE por la API con los permisos de quien la creo; degradar al dueno
   // sin revocarla dejaba ese privilegio vivo. Solo aplica al dejar de ser dueno.

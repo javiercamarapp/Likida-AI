@@ -6,6 +6,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { mfaSuperadminObligatorio, veredictoMfaSuperadmin } from './mfa';
 import { apiDenegadaPorPerfil, MOTIVO_PERFIL_API } from './perfil_tenant';
 import { esRolNomina } from './roles';
+import { registrarExporteDinero } from '@/lib/seguridad/registro_acceso';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DE QUÉ FLOTA HABLA UNA RUTA DE API.
@@ -116,6 +117,9 @@ export async function resolverTenantApi(url: string): Promise<ResultadoTenantApi
   if (await apiDenegadaPorPerfil(tenantId, new URL(url).pathname)) {
     return { ok: false, status: 403, motivo: MOTIVO_PERFIL_API };
   }
+
+  // CT-SEG-11: quién descargó dinero. Solo registra las rutas de exporte de dinero; autorizada la descarga, no terminada.
+  void registrarExporteDinero({ url, tenantId, rol: s.rol, userId: s.userId });
 
   return { ok: true, tenantId, rol: s.rol };
 }
