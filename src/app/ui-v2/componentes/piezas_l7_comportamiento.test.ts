@@ -302,16 +302,16 @@ describe.skipIf(SIN_NAVEGADOR)('Tooltip · comportamiento en Chromium', () => {
     expect(await vis()).toBe('hidden');
     await p.close();
   });
-  it('es una tarjeta de superficie (no invertida) de 160 a 280 px, encima del disparador y dentro del viewport', async () => {
+  it('es una pastilla oscura de carbón (referencia de Rovaq) de hasta 280 px, encima del disparador y dentro del viewport', async () => {
     const p = await abrir();
     await p.focus('#con-tip');
     const r = await p.evaluate(() => {
       const t = document.querySelector('[role="tooltip"]') as HTMLElement; const b = document.getElementById('con-tip')!.getBoundingClientRect(); const c = t.getBoundingClientRect(); const s = getComputedStyle(t);
       return { w: Math.round(c.width), arribaDe: c.bottom <= b.top, dentro: c.left >= 8 && c.right <= innerWidth - 8 && c.top >= 8, fondo: s.backgroundColor, radio: s.borderTopLeftRadius, fuente: s.fontSize, sup: getComputedStyle(document.documentElement).getPropertyValue('--surface') };
     });
-    expect(r.w).toBeGreaterThanOrEqual(160); expect(r.w).toBeLessThanOrEqual(280);
+    expect(r.w).toBeGreaterThan(0); expect(r.w).toBeLessThanOrEqual(280);
     expect(r.arribaDe).toBe(true); expect(r.dentro).toBe(true);
-    expect(r.fondo).toBe('rgb(255, 255, 255)'); expect(r.radio).toBe('12px'); expect(r.fuente).toBe('12px');
+    expect(r.fondo).toBe('rgb(42, 42, 47)'); expect(r.radio).toBe('8px'); expect(r.fuente).toBe('12px');
     await p.close();
   });
   it('un texto suelto se vuelve enfocable (Tab) y también se describe', async () => {
