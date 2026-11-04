@@ -643,7 +643,11 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 326;
 // ROL NOMINA (0949): 2,452 -> 2,455 (+3, medido con el guardian). `liquidacion_externa/repo.ts` `contarParaNomina`: tres `.from(` (desglose, entrega por correo y excepcion) que
 // solo cuentan (`count` con `head: true` sobre una columna identificadora, siempre con `tenant_id`, por `acotada`) para la vista de conteos del rol `nomina`, que NO puede pasar por
 // `listarDesgloses` (esa lectura trae `total_origen`) ni por `fichasDesgloses`. Funcionalidad nueva, no codigo migrado. Cubierta por conteos-nomina.test.tsx.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_455;
+// LOTE A DE F1 (CT-SEG-23): 2,455 -> 2,456 (+1, medido con el guardian). `auth/usuarios_escritura.ts` `revocarLlavesDe`: UN solo `.from('tenant_api_key').update(...)` anclado a `tenant_id` y a
+// `creada_por` (solo llaves vivas, por `acotada`) que revoca las llaves de API de quien se da de baja o deja de ser dueno. Se queda junto a `desactivarUsuario`/`cambiarRolUsuario` (el
+// resto de la baja ya escribe ahi con `supabaseAdmin()`): moverlo a likida/repo.ts acoplaria el modulo de equipo a ese repo y partiria la baja en dos capas sin quitar la consulta
+// directa. Funcionalidad nueva, no codigo migrado. Cubierta por usuarios_escritura.test.ts.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_456;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.
