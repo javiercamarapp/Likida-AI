@@ -107,7 +107,7 @@ export async function resolveOperador(telefono: string): Promise<ResolvedOperado
       tenants: [...new Set(filas.map((f) => f.tenant_id as string))],
       operadores: filas.map((f) => f.id as string),
     });
-    throw new OperadorAmbiguo(`el teléfono ${telefono} corresponde a más de un operador activo`);
+    throw new OperadorAmbiguo(`el teléfono ${destinatarioEnmascarado(telefono)} corresponde a más de un operador activo`);
   }
   const fila = filas[0];
   return { tenantId: fila.tenant_id as string, operadorId: fila.id as string, nombre: fila.nombre as string, telefono: fila.telefono as string };

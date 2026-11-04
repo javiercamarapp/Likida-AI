@@ -105,6 +105,7 @@ import {
 } from './acuse_ticket';
 import { estadoDelViaje, responderConsulta } from './consulta_chofer';
 import { resolverCuentaOficina, telefonoJefeDe, type CuentaOficina } from './contactos';
+import { exigirIdentidadUnica } from './identidad_telefono';
 import { atenderComandoAdmin } from './admin_comandos_wa';
 import { atenderConfirmacion, aceptarPorActividad } from './confirmar_viaje';
 import { enviarBriefingInicio } from './briefing_inicio_wa';
@@ -1739,6 +1740,11 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       }
     }
 
+    // F1 lote B, L1H (CT-SEG-07 / X-01): el número decide de qué flota es el mensaje. Si identifica a personas de MÁS DE UNA flota
+    // (operador en una, cuenta de oficina o contacto del Vigía en otra) no se elige: lanza `OperadorAmbiguo`, que el `catch` de este
+    // turno ya contesta ("tu número aparece dado de alta más de una vez… avísale a tu flota") y deja registrado con el número
+    // enmascarado. Con la base sin migrar (0952) o ante un fallo de lectura no hace nada nuevo.
+    await exigirIdentidadUnica(msg.from);
     const op = await resolveOperador(msg.from);
     if (!op) {
       // ── ¿ES UNA CUENTA DE OFICINA? ───────────────────────────────────────

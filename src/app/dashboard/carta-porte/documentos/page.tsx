@@ -186,7 +186,7 @@ export default async function PaginaDocumentos({
       if (mala) return { ok: false, error: `«${mala.slice(0, 60)}» no parece un correo ni un dominio.` };
       await repo.configurarBuzon(s.tenantId, { remitentesPermitidos: [...new Set(lista)] });
       revalidatePath(RUTA);
-      return { ok: true, mensaje: lista.length === 0 ? 'Sin lista: se aceptan correos de cualquier remitente (todos pasan por revisión).' : `Guardados ${lista.length} remitentes.` };
+      return { ok: true, mensaje: lista.length === 0 ? 'Sin lista: el buzón no recibe ningún correo hasta que agregues al menos un correo o dominio de tus clientes.' : `Guardados ${lista.length} remitentes.` };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'guardar los remitentes') };
     }

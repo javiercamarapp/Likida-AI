@@ -205,7 +205,7 @@ export default async function PaginaConfiguracionPeajes({
     const no = await puertaConfig(tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const r = await guardarRemitentesPeajes(tenantId, String(fd.get('remitentes') ?? '').split(/[\n,;]+/));
-    return volverConfig(sufijo, r.ok ? (r.guardados === 0 ? 'Sin lista: entra el correo de cualquiera que tenga la dirección.' : `${r.guardados} remitente(s) permitidos.`) : `error:${r.motivo}`);
+    return volverConfig(sufijo, r.ok ? (r.guardados === 0 ? 'Sin lista: el buzón no recibe ningún correo hasta que agregues al menos un remitente.' : `${r.guardados} remitente(s) permitidos.`) : `error:${r.motivo}`);
   }
   async function accionGuardarPull(fd: FormData) {
     'use server';

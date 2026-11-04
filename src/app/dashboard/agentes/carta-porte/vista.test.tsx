@@ -32,10 +32,12 @@ describe('Agente de Carta Porte: «Cómo mandarme documentos»', () => {
     expect(sinLaFrase(pintar('no_leido'))).not.toMatch(/grupo/i);
   });
 
-  it('muestra los remitentes reconocidos (remitentes_permitidos) o dice que es cualquiera', () => {
+  it('muestra los remitentes reconocidos (remitentes_permitidos) o dice que sin lista el buzón no recibe nada (S-06)', () => {
     expect(pintar(BUZON)).toContain('cliente.ejemplo.test');
     expect(pintar(BUZON)).toContain('remitente no reconocido');
-    expect(pintar({ ...BUZON, remitentes: [] })).toContain('Remitentes reconocidos: cualquiera');
+    const vacio = pintar({ ...BUZON, remitentes: [] });
+    expect(vacio).toContain('Sin remitentes autorizados');
+    expect(vacio).not.toContain('cualquiera');
   });
 
   it('sin buzón activado: estado vacío con la llamada a activarlo en el panel, y ninguna dirección inventada', () => {

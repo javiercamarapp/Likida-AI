@@ -63,6 +63,7 @@ beforeEach(async () => {
   fijarGuardiaPerfil(async (t) => t === A);
   process.env.RESEND_API_KEY = 'llave-sintetica';
   await repo.crearBuzon(A, TOKEN_A);
+  await repo.configurarBuzon(A, { remitentesPermitidos: ['cliente.example'] }); // S-06: sin lista no entra nadie
 });
 afterEach(() => { fijarGuardiaPerfil(); });
 

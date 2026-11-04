@@ -103,6 +103,15 @@ describe('descifrarErrorProvision — los errores duros salen verbatim, el resto
     expect(d?.message).toMatch(/otro número o sin WhatsApp/);
   });
 
+  it('0951: el guardián de teléfono (telefono_identidad_unica) se explica igual que el índice de 0059, sin decir de quién es el número', () => {
+    const d = descifrarErrorProvision(
+      new Error('duplicate key value violates unique constraint "telefono_identidad_unica": ese teléfono ya identifica a otra cuenta o contacto en Likida y no puede usarse aquí'),
+    );
+    expect(d).toBeInstanceOf(DatoInvalido);
+    expect(d?.message).toMatch(/no se completó/);
+    expect(d?.message).toMatch(/otro número o sin WhatsApp/);
+  });
+
   it('el teléfono corto de provisionar pasa con su propio mensaje (cinturón y tirantes)', () => {
     const d = descifrarErrorProvision(
       new Error('El teléfono "477" tiene 3 dígitos; un número mexicano necesita 10 más la lada 52.'),

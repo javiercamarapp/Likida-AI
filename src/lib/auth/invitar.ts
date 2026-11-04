@@ -203,7 +203,7 @@ export function descifrarErrorProvision(e: unknown): DatoInvalido | null {
   // del bot y no puede señalar a dos cuentas. Falla en el insert, DESPUÉS de
   // crear el usuario de Auth — por eso el mensaje pide reintentar con otro
   // correo no: con otro NÚMERO, que es lo que estorbó.
-  if (/app_user_telefono_uniq/.test(m)) {
+  if (/app_user_telefono_uniq|telefono_identidad_unica/.test(m)) {
     return new DatoInvalido(
       'Ese WhatsApp ya identifica a otra cuenta, y el bot enruta por número: no puede ser de dos personas. ' +
       'El alta no se completó — inténtalo con otro número o sin WhatsApp.',
