@@ -14,6 +14,27 @@ import { armarComponentesPlantilla, type ComponentePlantilla, type OpcionesPlant
 import { esTelefonoDemo, esDestinatarioBloqueado, RECHAZO_TELEFONO_DEMO, RECHAZO_TELEFONO_NO_ENVIABLE } from './telefono_demo';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
+
+/**
+ * CT-SEG-25 · Dominios donde Meta aloja el binario de un media (`lookaside.fbsbx.com`, CDN `fbcdn.net`, `whatsapp.net`) y la
+ * propia Graph. El `url` del media sale de una RESPUESTA de red (`GET /{media-id}`): antes de mandarle el token del negocio
+ * en `Authorization` se comprueba que apunte a Meta; si no, el token se iría a un host ajeno.
+ */
+const DOMINIOS_MEDIA_META = ['fbsbx.com', 'fbcdn.net', 'whatsapp.net', 'facebook.com'];
+
+/** Solo el host, para el log (la URL completa puede traer un token en la query). */
+function hostSeguro(crudo: unknown): string {
+  try { return new URL(String(crudo)).hostname; } catch { return 'invalido'; }
+}
+
+export function urlDeMediaConfiable(crudo: unknown): boolean {
+  if (typeof crudo !== 'string') return false;
+  let u: URL;
+  try { u = new URL(crudo); } catch { return false; }
+  if (u.protocol !== 'https:' || u.username || u.password || (u.port && u.port !== '443')) return false;
+  const host = u.hostname.toLowerCase();
+  return DOMINIOS_MEDIA_META.some((d) => host === d || host.endsWith(`.${d}`));
+}
 const DOWNLOAD_TIMEOUT_MS = 15_000;
 // AUDITORÍA 8, ALTO REINCIDENTE: `sendText`/`sendDocument` seguían con `fetch`
 // pelado, sin `signal` — el mismo hueco que `repo.ts` ya cerró para Supabase.
@@ -900,6 +921,10 @@ export async function downloadMediaAsText(mediaId: string): Promise<string | nul
       logger.warn('wa.documento_demasiado_pesado', { mediaId, bytes: file_size, etapa: 'metadatos' });
       return null;
     }
+    if (!urlDeMediaConfiable(url)) {
+      logger.warn('wa.media_url_no_confiable', { mediaId, host: hostSeguro(url) });
+      return null;
+    }
     const bin = await fetch(url, {
       headers: { Authorization: `Bearer ${token()}` },
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
@@ -941,6 +966,10 @@ export async function downloadMediaAsDataUrl(mediaId: string): Promise<string | 
     if (esImagen && typeof file_size === 'number' && file_size > MAX_IMAGEN_WHATSAPP_BYTES) {
       logger.warn('wa.imagen_demasiado_pesada', { mediaId, bytes: file_size, etapa: 'metadatos' });
       throw new ImagenDemasiadoPesadaError(file_size, MAX_IMAGEN_WHATSAPP_BYTES);
+    }
+    if (!urlDeMediaConfiable(url)) {
+      logger.warn('wa.media_url_no_confiable', { mediaId, host: hostSeguro(url) });
+      return null;
     }
     const bin = await fetch(url, {
       headers: { Authorization: `Bearer ${token()}` },
