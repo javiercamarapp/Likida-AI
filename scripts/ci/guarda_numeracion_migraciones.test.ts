@@ -1,7 +1,6 @@
 // CT-BAS-10: numero nuevo > 0949 y todo hueco no declarado esta prohibido.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-// @ts-expect-error módulo .mjs sin tipos
 import { parsearNumeracion, verificarNumeracion, verificarRepo, BASE_APLICADA } from './guarda-numeracion-migraciones.mjs';
 
 const md = `
