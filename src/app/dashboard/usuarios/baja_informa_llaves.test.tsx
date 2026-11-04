@@ -1,5 +1,5 @@
 // CT-SEG-23: la pantalla de baja informa si las llaves de API quedaron vivas.
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import type { ReactElement, ReactNode } from 'react';
 
 const m = vi.hoisted(() => ({
