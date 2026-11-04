@@ -1317,15 +1317,15 @@ function documento(servidor: string) {
       '/v1/ccp-timbrado': {
         post: {
           operationId: 'avisarCcpTimbrado',
-          'x-likida-area': 'operacion',
+          'x-likida-area': 'administracion',
           summary: 'Avisa que un CCP ya quedó timbrado en tu TMS y entrega su PDF y su XML.',
           description:
-            'Área `operacion`. LIKIDA NO TIMBRA: registra el UUID fiscal que tu sistema ya generó y guarda los archivos tal cual.\n\n'
+            'Requiere el área `administracion` (CT-SEG-08: es un acto fiscal; una llave de área `operacion` o `dinero` recibe 403, no 200). LIKIDA NO TIMBRA: registra el UUID fiscal que tu sistema ya generó y guarda los archivos tal cual.\n\n'
             + 'La `referencia` es la que tu TMS devolvió al recibir la plantilla de ese documento; tiene que ser de un envío de TU flota (una ajena es 404, sin guardar nada). La flota sale de tu llave: cualquier campo extra en el cuerpo (por ejemplo, uno que intente elegir flota) es 400.\n\n'
             + 'IDEMPOTENTE POR UUID FISCAL: el mismo aviso dos veces es 200 `duplicado: true` y nunca manda un segundo correo. Un aviso nuevo es 201.\n\n'
             + 'EL 201/200 SIGNIFICA «GUARDADO». Si la flota activó «responder al cliente» y el remitente del documento es conocido, Likida contesta por correo con el PDF y el XML (`respondido: true`); la PRIMERA vez por cliente queda `pendiente_confirmacion` hasta que una persona de la flota la confirme. Con la función apagada (el valor por omisión) solo se guarda.\n\n'
             + 'Los archivos van en base64 (el XML byte a byte: cualquier cambio invalida su sello), cada uno de hasta 8 MB.',
-          tags: ['carta-porte', 'operacion'],
+          tags: ['carta-porte'],
           requestBody: {
             required: true,
             content: {
