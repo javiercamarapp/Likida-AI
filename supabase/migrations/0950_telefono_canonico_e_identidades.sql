@@ -77,6 +77,11 @@ returns table (tabla text, ref_id uuid, tenant_id uuid, canon text)
 language plpgsql
 stable
 set search_path = pg_catalog, public
+-- Plan a la medida de cada llamada. Sin esto, plpgsql cachea el plan GENÉRICO tras 5 ejecuciones; si se armó cuando las tablas
+-- estaban vacías o recién analizadas (el disparador de la 0951 corre esta función por CADA alta), el plan es un Seq Scan con
+-- `telefono_canonico` por fila y se reutiliza aunque la tabla llegue a miles de filas: O(N²). Medido en una base con las
+-- migraciones reales: 83 s para 5,000 altas de `operador` con el plan cacheado (Seq Scan, cost 5.20) contra ~1 s con plan a medida.
+set plan_cache_mode = force_custom_plan
 as $$
 begin
   if p_canon is null then
@@ -102,23 +107,35 @@ begin
      -- el filtro de 10-15 dígitos (F1B).
      where i.canon ~ '^[0-9]{10,15}$';
   else
+    -- Cada tabla se consulta primero SOLO por `telefono_canonico(col) = p_canon` dentro de una subconsulta con `offset 0`
+    -- (barrera de optimización) y los demás filtros (activo, marcadores) se aplican fuera. Sin la barrera, `o.activo` hace
+    -- aplicable el índice parcial `operador_catalogo_idx … where activo` y, con estadísticas de tabla vacía/obsoleta (el caso
+    -- de CI tras los pasos previos), el planificador arma un BitmapAnd con él: cada consulta recorre TODOS los operadores
+    -- activos (O(N)) y 5,000 altas seguidas en la batería (verificaciones.sql, bloque 262) tardaban ~300 s (medido en el run
+    -- 41913615661: ese bloque, 301 s contra 3.5 s en seg/f1a-integracion). Así el único índice aplicable es el de la expresión.
     return query
     select i.tabla, i.ref_id, i.tenant_id, i.canon
       from (
-        select 'operador'::text as tabla, o.id as ref_id, o.tenant_id as tenant_id, public.telefono_canonico(o.telefono) as canon
-          from public.operador o
-         where public.telefono_canonico(o.telefono) = p_canon
-           and o.activo and o.telefono !~ '^sin-tel:' and o.telefono !~ '[A-Za-z:]'
+        select 'operador'::text as tabla, o.id as ref_id, o.tenant_id as tenant_id, p_canon as canon
+          from (select x.id, x.tenant_id, x.telefono, x.activo
+                  from public.operador x
+                 where public.telefono_canonico(x.telefono) = p_canon
+                offset 0) o
+         where o.activo and o.telefono !~ '^sin-tel:' and o.telefono !~ '[A-Za-z:]'
         union all
-        select 'app_user'::text, u.id, u.tenant_id, public.telefono_canonico(u.telefono)
-          from public.app_user u
-         where public.telefono_canonico(u.telefono) = p_canon
-           and u.telefono is not null and u.activo and u.tenant_id is not null and u.telefono !~ '[A-Za-z:]'
+        select 'app_user'::text, u.id, u.tenant_id, p_canon
+          from (select x.id, x.tenant_id, x.telefono, x.activo
+                  from public.app_user x
+                 where public.telefono_canonico(x.telefono) = p_canon
+                offset 0) u
+         where u.telefono is not null and u.activo and u.tenant_id is not null and u.telefono !~ '[A-Za-z:]'
         union all
-        select 'vigia_contacto'::text, c.id, c.tenant_id, public.telefono_canonico(c.telefono)
-          from public.vigia_contacto c
-         where public.telefono_canonico(c.telefono) = p_canon
-           and c.estado = 'activo' and c.telefono !~ '[A-Za-z:]'
+        select 'vigia_contacto'::text, c.id, c.tenant_id, p_canon
+          from (select x.id, x.tenant_id, x.telefono, x.estado
+                  from public.vigia_contacto x
+                 where public.telefono_canonico(x.telefono) = p_canon
+                offset 0) c
+         where c.estado = 'activo' and c.telefono !~ '[A-Za-z:]'
       ) i
      where i.canon ~ '^[0-9]{10,15}$';
   end if;
