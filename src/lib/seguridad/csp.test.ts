@@ -107,3 +107,20 @@ describe('CT-SEG-18 · CSP acotada al proyecto de Supabase', () => {
     expect(reglas.some((r) => r.headers.some((h) => h.key === 'Cross-Origin-Embedder-Policy'))).toBe(false);
   });
 });
+
+describe('Turnstile en la CSP (S-03)', () => {
+  const base = { NEXT_PUBLIC_SUPABASE_URL: 'https://abc.supabase.co' };
+  it('apagado: la politica no menciona a Cloudflare y frame-src sigue en none', () => {
+    const csp = construirCsp('n0nce', false, base);
+    expect(csp).not.toContain('cloudflare');
+    expect(csp).toContain("frame-src 'none'");
+  });
+  it('encendido: permite challenges.cloudflare.com en script-src, frame-src y connect-src', () => {
+    const csp = construirCsp('n0nce', false, { ...base, TURNSTILE_ACTIVO: '1' });
+    const dir = (n: string) => csp.split('; ').find((d) => d.startsWith(n))!;
+    expect(dir('script-src')).toContain('https://challenges.cloudflare.com');
+    expect(dir('frame-src')).toBe('frame-src https://challenges.cloudflare.com');
+    expect(dir('connect-src')).toContain('https://challenges.cloudflare.com');
+    expect(dir('img-src')).not.toContain('cloudflare');
+  });
+});

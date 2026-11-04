@@ -14,6 +14,7 @@
 
 import { NextResponse } from 'next/server';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
+import { verificarTurnstile } from '@/lib/seguridad/turnstile';
 import { registrarCliente } from '@/lib/mcp/oauth';
 import { leerTextoAcotado } from '@/lib/http/cuerpo_acotado';
 
@@ -41,6 +42,15 @@ export async function POST(req: Request) {
     cuerpo = JSON.parse(lectura.texto) as Record<string, unknown>;
   } catch {
     return NextResponse.json({ error: 'invalid_client_metadata', error_description: 'El cuerpo tiene que ser JSON.' }, { status: 400 });
+  }
+
+  // S-03: Turnstile en OBSERVACION para esta superficie (los clientes OAuth son maquinas que no resuelven retos; ver
+  // `lib/seguridad/turnstile.ts`). Si alguien la pone en TURNSTILE_SUPERFICIES, el token va en `turnstile_token` o en
+  // la cabecera `x-turnstile-token`.
+  const tokenTs = typeof cuerpo.turnstile_token === 'string' ? cuerpo.turnstile_token : req.headers.get('x-turnstile-token');
+  const turnstile = await verificarTurnstile({ token: tokenTs, superficie: 'mcp_register' });
+  if (!turnstile.ok) {
+    return NextResponse.json({ error: 'access_denied', error_description: 'Verificación fallida.' }, { status: 403 });
   }
 
   const r = await registrarCliente(cuerpo.client_name, cuerpo.redirect_uris);

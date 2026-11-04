@@ -51,3 +51,20 @@ describe('/login limita también por CUENTA, no solo por IP', () => {
     expect(iCuenta, 'el límite por cuenta debe comprobarse ANTES de mandar el correo').toBeLessThan(iGuardar);
   });
 });
+
+describe('/login + Turnstile (S-03)', () => {
+  it('el reto se verifica despues del limite por IP, ANTES del contador por cuenta y antes de guardar el correo', () => {
+    const iIp = PAGINA.indexOf("dentroDelLimite('login:email')");
+    const iReto = PAGINA.indexOf("superficie: 'login'");
+    const iCuenta = PAGINA.indexOf('dentroDelLimitePorCuenta(email)');
+    const iGuardar = PAGINA.indexOf('guardarCorreoParaReenvio(email)');
+    expect(iIp).toBeGreaterThan(-1);
+    expect(iReto).toBeGreaterThan(iIp);
+    expect(iCuenta).toBeGreaterThan(iReto);
+    expect(iGuardar).toBeGreaterThan(iCuenta);
+  });
+  it('lee el campo que inyecta el widget y falla con el mismo error generico', () => {
+    expect(PAGINA).toContain("formData.get('cf-turnstile-response')");
+    expect(PAGINA).toMatch(/!reto\.ok \|\| !\(await dentroDelLimitePorCuenta\(email\)\)\) \{\s*redirect\(`\/login\?next=\$\{encodeURIComponent\(dest\)\}&error=1`\)/);
+  });
+});
