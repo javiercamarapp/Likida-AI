@@ -24,6 +24,17 @@ export const dynamic = 'force-dynamic';
 
 const RUTA = '/dashboard/emergencias';
 
+type ParamsPagina = { tenant?: string; rol?: string; vista?: string };
+
+// CT-SEG-22: `gate` es un AYUDANTE interno, no una accion (sin `'use server'`: Next la expondria como invocable desde el
+// navegador). Vive a NIVEL DE MODULO y recibe `sp` por parametro: si fuera una funcion local del componente, las acciones
+// inline la capturarian por closure y Next no puede serializarla (incidente de /despacho, 24-ago-2026).
+async function gate(sp: ParamsPagina): Promise<{ tenantId: string; userId: string } | { error: string }> {
+  const s = await resolverTenantEfectivo(RUTA, sp);
+  if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede editar el directorio de emergencia.' };
+  return { tenantId: s.tenantId, userId: s.userId };
+}
+
 /**
  * EMERGENCIAS (Fase 5) — el directorio que el escalamiento consulta cuando un
  * chofer reporta un siniestro y nadie contesta.
@@ -46,7 +57,7 @@ const RUTA = '/dashboard/emergencias';
 export default async function PaginaEmergencias({
   searchParams,
 }: {
-  searchParams: Promise<{ tenant?: string; rol?: string; vista?: string }>;
+  searchParams: Promise<ParamsPagina>;
 }) {
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
@@ -87,17 +98,9 @@ export default async function PaginaEmergencias({
   // ── Server actions — re-gateo ADENTRO en todas (el rol del render no es el
   //    de la llamada, y una action es alcanzable sin pasar por la página) ───
 
-  // CT-SEG-22: `gate` es un AYUDANTE interno, no una acción. Con `'use server'` Next lo exponía como acción invocable desde
-  // el navegador (devolvía tenantId/userId); sin la directiva solo lo llaman las acciones de abajo, que sí la llevan.
-  async function gate(): Promise<{ tenantId: string; userId: string } | { error: string }> {
-    const s = await resolverTenantEfectivo(RUTA, sp);
-    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede editar el directorio de emergencia.' };
-    return { tenantId: s.tenantId, userId: s.userId };
-  }
-
   async function altaProveedor(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const g = await gate();
+    const g = await gate(sp);
     if ('error' in g) return { error: g.error };
     try {
       await crearProveedorEmergencia(g.tenantId, {
@@ -118,7 +121,7 @@ export default async function PaginaEmergencias({
 
   async function verificarProveedor(fd: FormData): Promise<void> {
     'use server';
-    const g = await gate();
+    const g = await gate(sp);
     if ('error' in g) return;
     try {
       await marcarProveedorVerificado(g.tenantId, String(fd.get('id') ?? ''), g.userId);
@@ -130,7 +133,7 @@ export default async function PaginaEmergencias({
 
   async function borrarProveedor(fd: FormData): Promise<void> {
     'use server';
-    const g = await gate();
+    const g = await gate(sp);
     if ('error' in g) return;
     try {
       await borrarProveedorEmergencia(g.tenantId, String(fd.get('id') ?? ''));
@@ -142,7 +145,7 @@ export default async function PaginaEmergencias({
 
   async function guardarPolizaAction(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const g = await gate();
+    const g = await gate(sp);
     if ('error' in g) return { error: g.error };
     try {
       await guardarPoliza(g.tenantId, {
@@ -160,7 +163,7 @@ export default async function PaginaEmergencias({
 
   async function altaContacto(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const g = await gate();
+    const g = await gate(sp);
     if ('error' in g) return { error: g.error };
     try {
       await crearContactoEmergencia(g.tenantId, {
@@ -179,7 +182,7 @@ export default async function PaginaEmergencias({
 
   async function borrarContacto(fd: FormData): Promise<void> {
     'use server';
-    const g = await gate();
+    const g = await gate(sp);
     if ('error' in g) return;
     try {
       await borrarContactoEmergencia(g.tenantId, String(fd.get('id') ?? ''));

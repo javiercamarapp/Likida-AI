@@ -18,11 +18,16 @@ describe('CT-SEG-22 · emergencias: solo las acciones llevan use server', () => 
     expect(cuerpoDe('gate')).not.toMatch(/'use server'/);
   });
 
+  it('gate() vive a nivel de modulo (no es closure del componente: Next no serializa funciones capturadas)', () => {
+    expect(fuente).toMatch(/^async function gate\(sp: /m);
+    expect(fuente).not.toMatch(/^ {2}async function gate\(/m);
+  });
+
   it('las seis acciones reales la conservan y todas pasan por gate()', () => {
     for (const a of ['altaProveedor', 'verificarProveedor', 'borrarProveedor', 'guardarPolizaAction', 'altaContacto', 'borrarContacto']) {
       const c = cuerpoDe(a);
       expect(c).toMatch(/'use server'/);
-      expect(c).toMatch(/await gate\(\)/);
+      expect(c).toMatch(/await gate\(sp\)/);
     }
   });
 });
