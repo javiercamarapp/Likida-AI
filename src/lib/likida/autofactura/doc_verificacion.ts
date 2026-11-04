@@ -9,9 +9,11 @@ import { estadoVerificacion, type RegistroVerificaciones } from './verificacion'
 export interface ManifiestoFixtures { portales: Record<string, { origen?: string; grabado?: { fecha: string; archivo: string } }> }
 
 const lista = (s: string | readonly string[]): string[] => (typeof s === 'string' ? [s] : [...s]);
-// OJO: dentro de un code span el backslash es LITERAL (los selectores CSS llevan `\:`), así que NO se escapa; solo `|`, que la
-// tabla GFM sí interpreta. (CodeQL js/incomplete-sanitization lo marca: falso positivo, escapar el backslash alteraría el runbook.)
-const cod = (s: string) => `\`${s.replace(/`/g, "'").replace(/\|/g, '\\|')}\``;
+// OJO: dentro de un code span el backslash es LITERAL (los selectores CSS llevan `\:`), asi que NO se escapa; solo `|`, que la
+// tabla GFM si interpreta, y la comilla invertida, que cerraria el span. Es UNA sola pasada con funcion de reemplazo (no una
+// cadena de .replace): el resultado es identico al anterior, y CodeQL js/incomplete-sanitization (alerta 276, falso positivo:
+// escapar el backslash alteraria el runbook) deja de ver un escape de `|` sin escape de `\`.
+const cod = (s: string) => `\`${s.replace(/[`|]/g, (c) => (c === '`' ? "'" : '\\|'))}\``;
 
 export function renderizarDocVerificacion(guiones: readonly GuionPortal[], registro: RegistroVerificaciones, manifiesto: ManifiestoFixtures): string {
   const filas = guiones.map((g) => {
