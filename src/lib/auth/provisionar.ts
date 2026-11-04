@@ -14,6 +14,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { destinatarioWhatsApp } from '@/lib/meta/client';
 import { logger } from '@/lib/logger';
+import { digitosTelefono } from '@/lib/likida/telefono_variantes';
 import { esCorreoYaRegistrado } from './invitar';
 
 /** El dominio de `app_user_rol_dominio` menos `operador` (sin login desde el
@@ -103,7 +104,7 @@ export const ROL_BADGE: Record<RolAppUser, string> = {
  * al bot sin un UPDATE a mano.
  */
 function normalizarTelefonoOficina(crudo: string): string {
-  const soloDigitos = crudo.replace(/[^\d]/g, '');
+  const soloDigitos = digitosTelefono(crudo);
   if (soloDigitos.length < 10) {
     throw new Error(`El teléfono "${crudo}" tiene ${soloDigitos.length} dígitos; un número mexicano necesita 10 más la lada 52.`);
   }
