@@ -52,7 +52,6 @@ export type ResultadoCredencial =
   | null;
 export type AccionCredencial = (previo: ResultadoCredencial, fd: FormData) => Promise<ResultadoCredencial>;
 
-const CAMPO = 'w-full hairline rounded-lg px-3 h-9 text-[13px] outline-none focus:border-[var(--muted)] transition-colors';
 const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
 const AYUDA = 'text-[11px] mt-1';
 
@@ -112,7 +111,7 @@ export function FormaCredenciales({ grupos, guardar }: {
           <label htmlFor="cred-conector" className={ETIQUETA}>Sistema</label>
           <select id="cred-conector" name="conector" value={elegido} required
             onChange={(e) => setElegido(e.target.value)}
-            className={CAMPO} style={{ background: 'var(--surface)' }}>
+            className="w-full" style={{ background: 'var(--surface)' }}>
             <option value="">Elige el sistema…</option>
             {grupos.map((g) => (
               <optgroup key={g.categoria} label={g.categoria}>
@@ -134,7 +133,7 @@ export function FormaCredenciales({ grupos, guardar }: {
                 <input id={`cred-${campo.clave}`} name={`campo_${campo.clave}`}
                   type={TIPO_INPUT[campo.forma]} required={campo.requerida}
                   placeholder={campo.ejemplo} autoComplete="off"
-                  className={CAMPO} style={{ background: 'var(--surface)' }} />
+                  className="w-full" style={{ background: 'var(--surface)' }} />
                 <p className={AYUDA} style={{ color: 'var(--faint)' }}>{campo.ayuda}</p>
               </div>
             ))}

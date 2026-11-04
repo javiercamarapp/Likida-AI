@@ -17,8 +17,6 @@ import type { TipoDiferencia } from '@/types/likida';
 
 /** Botón primario (tinta) y secundario (blanco con hairline) — DESIGN.md §3.
  *  Máximo UNA primaria visible por vista; en el detalle es "Descargar PDF". */
-export const BTN_PRIMARIO = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-medium transition-opacity hover:opacity-85 disabled:opacity-50';
-export const BTN_SECUNDARIO = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-medium hairline transition-colors hover:bg-[var(--canvas)] disabled:opacity-50 disabled:cursor-not-allowed';
 export const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
 export const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--ink)' } as const;
 
@@ -129,7 +127,7 @@ export function Diferencia({ nota, monto }: { nota: string; monto: number }) {
           que parece funcionar y no hace nada es un rótulo que miente. */}
       <button type="button" disabled
         title="Todavía no se puede aprobar ni descontar desde el panel: la decisión se toma sobre el PDF con tu contador."
-        className={`rv-btn rv-btn--secondary ${BTN_SECUNDARIO} h-7 px-2.5 text-[11px] shrink-0`} style={ESTILO_SECUNDARIO}>
+        className="rv-btn rv-btn--secondary rv-btn--sm shrink-0" style={ESTILO_SECUNDARIO}>
         Aprobar / Descontar
       </button>
     </li>

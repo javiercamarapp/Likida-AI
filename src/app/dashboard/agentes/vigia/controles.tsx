@@ -10,7 +10,6 @@ import { TURNOS_DIRECTOR, type TurnoDirector, type FestivoSugerido } from '@/lib
 export type ResultadoVigia = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionVigia = (previo: ResultadoVigia, fd: FormData) => Promise<ResultadoVigia>;
 
-const CAMPO = 'w-full hairline rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[var(--muted)] transition-colors';
 const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
 const AYUDA = 'text-[11px] mt-1';
 
@@ -51,7 +50,7 @@ export function FormaBorrador({ accion, id, texto }: { accion: AccionVigia; id: 
     <form action={despachar} className="space-y-2">
       <input type="hidden" name="id" value={id} />
       <label htmlFor={`b-${id}`} className={ETIQUETA}>Respuesta propuesta (puedes editarla antes de enviar)</label>
-      <textarea id={`b-${id}`} name="texto" defaultValue={texto} rows={4} maxLength={1000} className={CAMPO} style={{ background: 'var(--surface)' }} />
+      <textarea id={`b-${id}`} name="texto" defaultValue={texto} rows={4} maxLength={1000} className="w-full" style={{ background: 'var(--surface)' }} />
       <div className="flex flex-wrap gap-2">
         <Boton name="accion" value="aprobar" tono="marca" Icono={Send}>Enviar</Boton>
         <Boton name="accion" value="rechazar" Icono={X}>No enviar</Boton>
@@ -84,7 +83,7 @@ export function FormaResponder({ accion, id }: { accion: AccionVigia; id: string
     <form action={despachar} className="space-y-2">
       <input type="hidden" name="id" value={id} />
       <label htmlFor={`r-${id}`} className={ETIQUETA}>Responder al cliente</label>
-      <textarea id={`r-${id}`} name="texto" rows={2} maxLength={1000} required className={CAMPO} style={{ background: 'var(--surface)' }} />
+      <textarea id={`r-${id}`} name="texto" rows={2} maxLength={1000} required className="w-full" style={{ background: 'var(--surface)' }} />
       <Boton name="accion" value="responder" tono="marca" Icono={Send}>Enviar respuesta</Boton>
       <p className={AYUDA} style={{ color: 'var(--faint)' }}>
         Dentro de las 24 h del último mensaje del cliente sale como texto; fuera de esa ventana sale solo con la plantilla aprobada de Meta.
@@ -113,7 +112,7 @@ export function FormaConfig({ accion, valores, standby = false }: {
       <div className="grid sm:grid-cols-2 gap-3">
         <div>
           <label htmlFor="cfg-modo" className={ETIQUETA}>Modo de aprobación</label>
-          <select id="cfg-modo" name="modoAprobacion" defaultValue={standby ? 'siempre' : valores.modoAprobacion} className={CAMPO} style={{ background: 'var(--surface)' }}>
+          <select id="cfg-modo" name="modoAprobacion" defaultValue={standby ? 'siempre' : valores.modoAprobacion} className="w-full" style={{ background: 'var(--surface)' }}>
             <option value="siempre">Siempre aprobar (recomendado al empezar)</option>
             {!standby && <option value="autoenviar_bajo_riesgo">Autoenviar solo preguntas de bajo riesgo ya validadas</option>}
           </select>
@@ -128,28 +127,28 @@ export function FormaConfig({ accion, valores, standby = false }: {
         ) : (
           <div>
             <label htmlFor="cfg-min" className={ETIQUETA}>Aprobaciones sin editar para validar una pregunta</label>
-            <input id="cfg-min" name="autoenviarMinAprobaciones" type="text" inputMode="numeric" defaultValue={valores.autoenviarMinAprobaciones} className={CAMPO} style={{ background: 'var(--surface)' }} />
+            <input id="cfg-min" name="autoenviarMinAprobaciones" type="text" inputMode="numeric" defaultValue={valores.autoenviarMinAprobaciones} className="w-full" style={{ background: 'var(--surface)' }} />
             <p className={AYUDA} style={{ color: 'var(--faint)' }}>Entre 1 y 100, por tipo de pregunta (ubicación, documentos…).</p>
           </div>
         )}
         <div>
           <label htmlFor="cfg-sla" className={ETIQUETA}>Minutos sin respuesta antes de avisar al responsable</label>
-          <input id="cfg-sla" name="slaRespuestaMin" type="text" inputMode="numeric" defaultValue={valores.slaRespuestaMin} className={CAMPO} style={{ background: 'var(--surface)' }} />
+          <input id="cfg-sla" name="slaRespuestaMin" type="text" inputMode="numeric" defaultValue={valores.slaRespuestaMin} className="w-full" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>Entre 5 y 1,440 (10 por omisión; tú fijas el plazo de tu flota). Si el cliente tiene un grupo crítico, rige el menor entre este y el de clientes críticos.</p>
         </div>
         <div>
           <label htmlFor="cfg-n2" className={ETIQUETA}>Minutos adicionales antes de avisar al dueño</label>
-          <input id="cfg-n2" name="escalarNivel2Min" type="text" inputMode="numeric" defaultValue={valores.escalarNivel2Min} className={CAMPO} style={{ background: 'var(--surface)' }} />
+          <input id="cfg-n2" name="escalarNivel2Min" type="text" inputMode="numeric" defaultValue={valores.escalarNivel2Min} className="w-full" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>Entre 5 y 2,880.</p>
         </div>
         <div>
           <label htmlFor="cfg-crit" className={ETIQUETA}>Minutos sin respuesta en clientes CRÍTICOS</label>
-          <input id="cfg-crit" name="slaCriticoMin" type="text" inputMode="numeric" defaultValue={valores.slaCriticoMin} className={CAMPO} style={{ background: 'var(--surface)' }} />
+          <input id="cfg-crit" name="slaCriticoMin" type="text" inputMode="numeric" defaultValue={valores.slaCriticoMin} className="w-full" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>Entre 2 y 1,440 (10 por omisión; 5 y 10 son solo ejemplos, tú fijas el plazo). Rige para los clientes con un grupo marcado como crítico; se aplica el menor entre este y el general.</p>
         </div>
         <div>
           <label htmlFor="cfg-mol" className={ETIQUETA}>Avisar al responsable desde la molestia nivel</label>
-          <select id="cfg-mol" name="molestiaAvisoNivel" defaultValue={String(valores.molestiaAvisoNivel)} className={CAMPO} style={{ background: 'var(--surface)' }}>
+          <select id="cfg-mol" name="molestiaAvisoNivel" defaultValue={String(valores.molestiaAvisoNivel)} className="w-full" style={{ background: 'var(--surface)' }}>
             <option value="2">2 — cliente molesto (recomendado)</option>
             <option value="3">3 — solo molestia crítica</option>
           </select>
@@ -157,12 +156,12 @@ export function FormaConfig({ accion, valores, standby = false }: {
         </div>
         <div>
           <label htmlFor="cfg-ret" className={ETIQUETA}>Días que se conservan los mensajes</label>
-          <input id="cfg-ret" name="retencionDias" type="text" inputMode="numeric" defaultValue={valores.retencionDias} className={CAMPO} style={{ background: 'var(--surface)' }} />
+          <input id="cfg-ret" name="retencionDias" type="text" inputMode="numeric" defaultValue={valores.retencionDias} className="w-full" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>Entre 30 y 730. Pasado ese plazo se borran solos.</p>
         </div>
         <div>
           <label htmlFor="cfg-aviso" className={ETIQUETA}>Liga de tu aviso de privacidad para clientes (https)</label>
-          <input id="cfg-aviso" name="avisoPrivacidadUrl" type="url" defaultValue={valores.avisoPrivacidadUrl ?? ''} placeholder="https://tu-empresa.mx/privacidad" className={CAMPO} style={{ background: 'var(--surface)' }} />
+          <input id="cfg-aviso" name="avisoPrivacidadUrl" type="url" defaultValue={valores.avisoPrivacidadUrl ?? ''} placeholder="https://tu-empresa.mx/privacidad" className="w-full" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>Va en el primer mensaje que recibe cada cliente. Sin liga, se manda la de Likida.</p>
         </div>
       </div>
@@ -192,22 +191,22 @@ export function FormaDirector({ accion, director }: { accion: AccionVigia; direc
       <div className="grid sm:grid-cols-4 gap-2">
         <div>
           <label htmlFor={`dir-nombre-${k}`} className={ETIQUETA}>Nombre</label>
-          <input id={`dir-nombre-${k}`} name="nombre" type="text" required maxLength={120} defaultValue={director?.nombre ?? ''} className={CAMPO} style={{ background: 'var(--surface)' }} />
+          <input id={`dir-nombre-${k}`} name="nombre" type="text" required maxLength={120} defaultValue={director?.nombre ?? ''} className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
           <label htmlFor={`dir-nivel-${k}`} className={ETIQUETA}>Nivel</label>
-          <select id={`dir-nivel-${k}`} name="nivel" defaultValue={String(director?.nivel ?? 1)} className={CAMPO} style={{ background: 'var(--surface)' }}>
+          <select id={`dir-nivel-${k}`} name="nivel" defaultValue={String(director?.nivel ?? 1)} className="w-full" style={{ background: 'var(--surface)' }}>
             <option value="1">1 — Gerente de servicio</option>
             <option value="2">2 — Director o dueño</option>
           </select>
         </div>
         <div>
           <label htmlFor={`dir-tel-${k}`} className={ETIQUETA}>WhatsApp (10 dígitos)</label>
-          <input id={`dir-tel-${k}`} name="telefono" type="tel" inputMode="tel" defaultValue={director?.telefono ? director.telefono.replace(/^52/, '') : ''} className={CAMPO} style={{ background: 'var(--surface)' }} />
+          <input id={`dir-tel-${k}`} name="telefono" type="tel" inputMode="tel" defaultValue={director?.telefono ? director.telefono.replace(/^52/, '') : ''} className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
           <label htmlFor={`dir-correo-${k}`} className={ETIQUETA}>Correo</label>
-          <input id={`dir-correo-${k}`} name="correo" type="email" maxLength={254} defaultValue={director?.correo ?? ''} className={CAMPO} style={{ background: 'var(--surface)' }} />
+          <input id={`dir-correo-${k}`} name="correo" type="email" maxLength={254} defaultValue={director?.correo ?? ''} className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -232,22 +231,22 @@ export function FormaServicio({ accion, contacto, clientes }: { accion: AccionVi
       <div className="grid sm:grid-cols-4 gap-2">
         <div>
           <label htmlFor={`srv-nombre-${k}`} className={ETIQUETA}>Nombre</label>
-          <input id={`srv-nombre-${k}`} name="nombre" type="text" required maxLength={120} defaultValue={contacto?.nombre ?? ''} className={CAMPO} style={{ background: 'var(--surface)' }} />
+          <input id={`srv-nombre-${k}`} name="nombre" type="text" required maxLength={120} defaultValue={contacto?.nombre ?? ''} className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
           <label htmlFor={`srv-cliente-${k}`} className={ETIQUETA}>Para</label>
-          <select id={`srv-cliente-${k}`} name="clienteId" defaultValue={contacto?.clienteId ?? ''} className={CAMPO} style={{ background: 'var(--surface)' }}>
+          <select id={`srv-cliente-${k}`} name="clienteId" defaultValue={contacto?.clienteId ?? ''} className="w-full" style={{ background: 'var(--surface)' }}>
             <option value="">Todos los clientes</option>
             {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
           </select>
         </div>
         <div>
           <label htmlFor={`srv-tel-${k}`} className={ETIQUETA}>WhatsApp (10 dígitos)</label>
-          <input id={`srv-tel-${k}`} name="telefono" type="tel" inputMode="tel" defaultValue={contacto?.telefono ? contacto.telefono.replace(/^52/, '') : ''} className={CAMPO} style={{ background: 'var(--surface)' }} />
+          <input id={`srv-tel-${k}`} name="telefono" type="tel" inputMode="tel" defaultValue={contacto?.telefono ? contacto.telefono.replace(/^52/, '') : ''} className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
           <label htmlFor={`srv-correo-${k}`} className={ETIQUETA}>Correo</label>
-          <input id={`srv-correo-${k}`} name="correo" type="email" maxLength={254} defaultValue={contacto?.correo ?? ''} className={CAMPO} style={{ background: 'var(--surface)' }} />
+          <input id={`srv-correo-${k}`} name="correo" type="email" maxLength={254} defaultValue={contacto?.correo ?? ''} className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
       </div>
       <label className="flex items-center gap-2 text-[12px]">
@@ -273,22 +272,22 @@ export function FormaAlta({ accion, clientes, gerentes }: {
       <div className="grid sm:grid-cols-2 gap-3">
         <div>
           <label htmlFor="alta-cliente" className={ETIQUETA}>Cliente de la flota</label>
-          <select id="alta-cliente" name="clienteId" required className={CAMPO} style={{ background: 'var(--surface)' }} defaultValue="">
+          <select id="alta-cliente" name="clienteId" required className="w-full" style={{ background: 'var(--surface)' }} defaultValue="">
             <option value="" disabled>Elige un cliente</option>
             {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
           </select>
         </div>
         <div>
           <label htmlFor="alta-nombre" className={ETIQUETA}>Nombre de la persona</label>
-          <input id="alta-nombre" name="nombre" type="text" maxLength={120} className={CAMPO} style={{ background: 'var(--surface)' }} />
+          <input id="alta-nombre" name="nombre" type="text" maxLength={120} className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
           <label htmlFor="alta-tel" className={ETIQUETA}>WhatsApp (10 dígitos)</label>
-          <input id="alta-tel" name="telefono" type="tel" inputMode="tel" required className={CAMPO} style={{ background: 'var(--surface)' }} />
+          <input id="alta-tel" name="telefono" type="tel" inputMode="tel" required className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
           <label htmlFor="alta-ger" className={ETIQUETA}>Responsable que lo atiende</label>
-          <select id="alta-ger" name="gerenteUserId" className={CAMPO} style={{ background: 'var(--surface)' }} defaultValue="">
+          <select id="alta-ger" name="gerenteUserId" className="w-full" style={{ background: 'var(--surface)' }} defaultValue="">
             <option value="">El jefe de la flota</option>
             {gerentes.map((g) => <option key={g.id} value={g.id}>{g.nombre ?? 'Sin nombre'} ({g.rol === 'flota_admin' ? 'dueño' : 'encargado'})</option>)}
           </select>
@@ -338,7 +337,7 @@ export function FormaTurnoDirector({ accion, directorId, turno }: { accion: Acci
       <input type="hidden" name="id" value={directorId} />
       <div>
         <label htmlFor={`dir-turno-${directorId}`} className={ETIQUETA}>Recibe la alerta</label>
-        <select id={`dir-turno-${directorId}`} name="turno" defaultValue={turno} className={CAMPO} style={{ background: 'var(--surface)' }}>
+        <select id={`dir-turno-${directorId}`} name="turno" defaultValue={turno} className="w-full" style={{ background: 'var(--surface)' }}>
           {TURNOS_DIRECTOR.map((t) => <option key={t} value={t}>{ETIQUETA_TURNO[t]}</option>)}
         </select>
       </div>
@@ -370,11 +369,11 @@ export function FormaFestivos({ accion, festivos, sugeridos }: { accion: AccionV
       <div className="grid sm:grid-cols-3 gap-2">
         <div>
           <label htmlFor="festivo-fecha" className={ETIQUETA}>Fecha</label>
-          <input id="festivo-fecha" name="fecha" type="date" className={CAMPO} style={{ background: 'var(--surface)' }} />
+          <input id="festivo-fecha" name="fecha" type="date" className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
         <div className="sm:col-span-2">
           <label htmlFor="festivo-nombre" className={ETIQUETA}>Nombre</label>
-          <input id="festivo-nombre" name="nombre" type="text" maxLength={120} className={CAMPO} style={{ background: 'var(--surface)' }} />
+          <input id="festivo-nombre" name="nombre" type="text" maxLength={120} className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">

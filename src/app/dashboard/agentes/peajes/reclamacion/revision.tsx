@@ -32,11 +32,8 @@ export interface AccionesSeguimiento {
   justificarCruce?: Accion;
 }
 
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const CSS_SECUNDARIO = 'hairline text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]';
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--ink)' } as const;
-const CSS_INPUT = 'hairline text-[12px] px-2.5 py-1.5 rounded-lg';
 const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
 const ESTILO_CANDIDATO = { color: 'var(--warn)', background: 'var(--warnbg)' } as const;
 
@@ -91,8 +88,8 @@ function FilasCandidatos({ candidatos, justificar, desglose }: { candidatos: Can
                       <input type="hidden" name="indice" value={c.indice} />
                       <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Motivo</span>
                         <input name="motivo" required minLength={3} maxLength={300} placeholder="Salida de servicio autorizada" aria-label={`Motivo para justificar el cruce del renglón ${c.indice + 1}`}
-                          className={`${CSS_INPUT} w-[240px] mt-0.5`} style={ESTILO_INPUT} /></label>
-                      <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Justificar este cruce</button>
+                          className="w-[240px] mt-0.5" style={ESTILO_INPUT} /></label>
+                      <button type="submit" className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>Justificar este cruce</button>
                     </form>
                   )}
                 </td>
@@ -147,16 +144,16 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
         </div>
       </div>
       <div className="flex flex-wrap gap-2 mt-3">
-        <a href={`/api/export/peajes-revision?desglose=${desglose}${ctx}`} className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>
+        <a href={`/api/export/peajes-revision?desglose=${desglose}${ctx}`} className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>
           <FileDown width={13} height={13} strokeWidth={2} /> Excel de la revisión
         </a>
-        <a href={`/api/export/peajes-candidatos?desglose=${desglose}${ctx}`} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>
+        <a href={`/api/export/peajes-candidatos?desglose=${desglose}${ctx}`} className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>
           <FileDown width={13} height={13} strokeWidth={2} className="inline mr-1" /> Reporte para el portal del proveedor
         </a>
-        <a href={`/api/export/peajes-candidatos?desglose=${desglose}&excluirReclamados=1${ctx}`} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>
+        <a href={`/api/export/peajes-candidatos?desglose=${desglose}&excluirReclamados=1${ctx}`} className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>
           Sin lo que ya reclamaste
         </a>
-        <a href={`/api/export/peajes-candidatos?desglose=${desglose}&formato=csv${ctx}`} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>
+        <a href={`/api/export/peajes-candidatos?desglose=${desglose}&formato=csv${ctx}`} className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>
           CSV
         </a>
       </div>
@@ -405,8 +402,8 @@ export function CasarNota({ propuesta, reclamos, sufijo, desglose, mes }: {
       <form method="get" action="/dashboard/agentes/peajes/reclamacion" className="flex items-end gap-2 flex-wrap">
         {[...previos.entries()].map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
         <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Importe de la nota (MXN)</span>
-          <input name="nota" inputMode="decimal" required maxLength={20} defaultValue={propuesta?.texto ?? ''} className={`${CSS_INPUT} w-[140px] mt-0.5`} style={ESTILO_INPUT} /></label>
-        <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Proponer reclamo</button>
+          <input name="nota" inputMode="decimal" required maxLength={20} defaultValue={propuesta?.texto ?? ''} className="w-[140px] mt-0.5" style={ESTILO_INPUT} /></label>
+        <button type="submit" className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>Proponer reclamo</button>
       </form>
       {propuesta?.fallo && <p role="alert" style={{ color: 'var(--bad)' }}>No se pudo calcular la propuesta ahora mismo. No es que no haya coincidencia: inténtalo de nuevo.</p>}
       {propuesta && !propuesta.fallo && propuesta.importe === null && <p role="alert" style={{ color: 'var(--bad)' }}>{propuesta.motivo ?? 'El importe no es válido.'}</p>}
@@ -478,10 +475,10 @@ export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revi
                 <form action={acciones.marcarEnviado} className="flex items-end gap-2 flex-wrap">
                   <input type="hidden" name="reclamo" value={r.id} />
                   <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Enviado el</span>
-                    <input type="date" name="enviado_en" required className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT} /></label>
+                    <input type="date" name="enviado_en" required className="mt-0.5" style={ESTILO_INPUT} /></label>
                   <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Folio del portal (opc.)</span>
-                    <input name="referencia" maxLength={120} className={`${CSS_INPUT} w-[160px] mt-0.5`} style={ESTILO_INPUT} /></label>
-                  <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Marcar como enviado</button>
+                    <input name="referencia" maxLength={120} className="w-[160px] mt-0.5" style={ESTILO_INPUT} /></label>
+                  <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>Marcar como enviado</button>
                 </form>
               )}
               {(r.estado === 'enviado' || r.estado === 'acreditado_parcial') && (
@@ -491,16 +488,16 @@ export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revi
                     {/* A33-06: lo que esta pantalla vio; un doble clic o pestaña repetida manda lo mismo y la base lo registra una sola vez. */}
                     <input type="hidden" name="version_vista" value={`${r.estado}:${r.montoAcreditado}`} />
                     <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Nota de crédito (MXN)</span>
-                      <input name="monto" inputMode="decimal" required className={`${CSS_INPUT} w-[120px] mt-0.5`} style={ESTILO_INPUT} /></label>
+                      <input name="monto" inputMode="decimal" required className="w-[120px] mt-0.5" style={ESTILO_INPUT} /></label>
                     <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Fecha</span>
-                      <input type="date" name="fecha" required className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT} /></label>
+                      <input type="date" name="fecha" required className="mt-0.5" style={ESTILO_INPUT} /></label>
                     <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Folio de la nota (opc.)</span>
-                      <input name="referencia" maxLength={120} className={`${CSS_INPUT} w-[140px] mt-0.5`} style={ESTILO_INPUT} /></label>
-                    <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Registrar nota de crédito</button>
+                      <input name="referencia" maxLength={120} className="w-[140px] mt-0.5" style={ESTILO_INPUT} /></label>
+                    <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>Registrar nota de crédito</button>
                   </form>
                   <form action={acciones.rechazar}>
                     <input type="hidden" name="reclamo" value={r.id} />
-                    <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>El proveedor lo rechazó</button>
+                    <button type="submit" className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>El proveedor lo rechazó</button>
                   </form>
                 </div>
               )}

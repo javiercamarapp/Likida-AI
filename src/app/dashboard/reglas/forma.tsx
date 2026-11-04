@@ -43,7 +43,6 @@ export type ResultadoForma =
   | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
 
-const CAMPO = 'w-full hairline rounded-lg px-3 h-9 text-[13px] outline-none focus:border-[var(--muted)] transition-colors';
 const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
 
 function AvisoError({ estado }: { estado: { error: string; puedoVigilar?: string[] } }) {
@@ -162,7 +161,7 @@ export function FormaElegirAMano({ accion, plantillas }: {
         <label htmlFor="regla-plantilla" className={ETIQUETA}>Vigilancia</label>
         <select id="regla-plantilla" name="plantilla" value={elegida}
           onChange={(e) => setElegida(e.target.value)}
-          className={CAMPO} style={{ background: 'var(--surface)' }}>
+          className="w-full" style={{ background: 'var(--surface)' }}>
           {plantillas.map((p) => (
             <option key={p.id} value={p.id}>{p.titulo}</option>
           ))}
@@ -177,14 +176,14 @@ export function FormaElegirAMano({ accion, plantillas }: {
               {c.etiqueta}{c.sufijo ? ` (${c.sufijo})` : ''}
             </label>
             {c.tipo === 'opcion' ? (
-              <select id={`p-${c.nombre}`} name={`p_${c.nombre}`} className={CAMPO} style={{ background: 'var(--surface)' }}>
+              <select id={`p-${c.nombre}`} name={`p_${c.nombre}`} className="w-full" style={{ background: 'var(--surface)' }}>
                 {(c.opciones ?? []).map((o) => (
                   <option key={o.valor} value={o.valor}>{o.rotulo}</option>
                 ))}
               </select>
             ) : (
               <input id={`p-${c.nombre}`} name={`p_${c.nombre}`} type="number" step="any" min="0" required
-                className={CAMPO} style={{ background: 'var(--surface)' }} />
+                className="w-full" style={{ background: 'var(--surface)' }} />
             )}
           </div>
         ))}
@@ -255,12 +254,12 @@ export function FormaFrecuencia({ accion, id, maxAvisosDia, minHorasEntreAvisos 
         <label className="block">
           <span className={ETIQUETA} style={{ color: 'var(--muted)' }}>Máximo de avisos en 24 h</span>
           <input type="number" name="maxAvisosDia" min={1} max={24} step={1} required
-            defaultValue={maxAvisosDia} className={`${CAMPO} w-28`} />
+            defaultValue={maxAvisosDia} className="w-full w-28" />
         </label>
         <label className="block">
           <span className={ETIQUETA} style={{ color: 'var(--muted)' }}>Horas entre un aviso y otro</span>
           <input type="number" name="minHorasEntreAvisos" min={0} max={168} step={1} required
-            defaultValue={minHorasEntreAvisos} className={`${CAMPO} w-28`} />
+            defaultValue={minHorasEntreAvisos} className="w-full w-28" />
         </label>
         <BotonEnvio etiqueta="Guardar límite" ocupado="Guardando…" tono="suave" />
       </div>

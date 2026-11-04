@@ -30,7 +30,6 @@ export interface OperadorCrudo {
   terminalId?: string;
 }
 
-const CAMPO = 'w-full hairline rounded-lg px-3 h-9 text-[13px] outline-none focus:border-[var(--muted)] transition-colors';
 const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
 
 function Boton() {
@@ -107,7 +106,7 @@ export function FormaOperador({ accion, operadorId, inicial, idPrefijo, patios =
           <label htmlFor={campo('nombre')} className={ETIQUETA}>Nombre</label>
           <input id={campo('nombre')} name="nombre" type="text" required minLength={3} maxLength={120}
             defaultValue={inicial.nombre}
-            className={CAMPO} style={{ background: 'var(--surface)' }} />
+            className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
 
         {/* ── EL TELÉFONO DE WHATSAPP (auditoría 24, FE-4) ─────────────────
@@ -125,7 +124,7 @@ export function FormaOperador({ accion, operadorId, inicial, idPrefijo, patios =
           {/* Un operador sin WhatsApp (desglose por correo, 0932) llega con el teléfono vacío: no se le exige uno al corregir otro dato. */}
           <input id={campo('telefono')} name="telefono" type="tel" required={inicial.telefono !== ''} maxLength={25}
             defaultValue={inicial.telefono} placeholder="55 1234 5678"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
             Es con lo que el bot lo reconoce. Si lo cambias, el número anterior deja de funcionar de
             inmediato y el chofer tiene que escribir desde el nuevo.
@@ -136,14 +135,14 @@ export function FormaOperador({ accion, operadorId, inicial, idPrefijo, patios =
           <label htmlFor={campo('numeroEmpleado')} className={ETIQUETA}>Nº de empleado (opcional)</label>
           <input id={campo('numeroEmpleado')} name="numeroEmpleado" type="text" maxLength={40}
             defaultValue={inicial.numeroEmpleado}
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
 
         <div>
           <label htmlFor={campo('rfc')} className={ETIQUETA}>RFC del operador (opcional)</label>
           <input id={campo('rfc')} name="rfc" type="text" maxLength={13}
             defaultValue={inicial.rfc} placeholder="GODE561231GR8"
-            className={`${CAMPO} cifra-mono uppercase`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono uppercase" style={{ background: 'var(--surface)' }} />
           <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
             Sin él, un viático timbrado a su nombre se queda en revisar (RLISR 57) aunque el reglamento lo conceda.
           </p>
@@ -153,7 +152,7 @@ export function FormaOperador({ accion, operadorId, inicial, idPrefijo, patios =
           <div>
             <label htmlFor={campo('terminalId')} className={ETIQUETA}>Patio</label>
             <select id={campo('terminalId')} name="terminalId" defaultValue={inicial.terminalId ?? ''} disabled={patioFijo}
-              className={CAMPO} style={{ background: 'var(--surface)' }}>
+              className="w-full" style={{ background: 'var(--surface)' }}>
               <option value="">Sin patio</option>
               {patios.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
             </select>
@@ -168,21 +167,21 @@ export function FormaOperador({ accion, operadorId, inicial, idPrefijo, patios =
           <label htmlFor={campo('licencia')} className={ETIQUETA}>Licencia (opcional)</label>
           <input id={campo('licencia')} name="licencia" type="text" maxLength={40}
             defaultValue={inicial.licencia}
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
 
         <div>
           <label htmlFor={campo('licenciaTipo')} className={ETIQUETA}>Tipo (opcional)</label>
           <input id={campo('licenciaTipo')} name="licenciaTipo" type="text" maxLength={10}
             defaultValue={inicial.licenciaTipo} placeholder="B, C, E…"
-            className={CAMPO} style={{ background: 'var(--surface)' }} />
+            className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
 
         <div>
           <label htmlFor={campo('licenciaVence')} className={ETIQUETA}>Vence (opcional)</label>
           <input id={campo('licenciaVence')} name="licenciaVence" type="date"
             defaultValue={inicial.licenciaVence}
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
             Vacío = sin registrar, no vencida.
           </p>
@@ -242,12 +241,12 @@ export function FormaAltaOperador({ accion, patios = [], terminalFijo = null, si
         <div>
           <label htmlFor="alta-op-nombre" className={ETIQUETA}>Nombre</label>
           <input id="alta-op-nombre" name="nombre" type="text" required minLength={3} maxLength={120}
-            autoComplete="off" className={CAMPO} style={{ background: 'var(--surface)' }} />
+            autoComplete="off" className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
           <label htmlFor="alta-op-telefono" className={ETIQUETA}>WhatsApp del operador{sinWhatsApp ? ' (opcional)' : ''}</label>
           <input id="alta-op-telefono" name="telefono" type="tel" required={!sinWhatsApp} maxLength={25} autoComplete="off"
-            placeholder="55 1234 5678" className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            placeholder="55 1234 5678" className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
             {sinWhatsApp
               ? 'Tu flota recibe el desglose por correo: sin WhatsApp, el operador necesita su nº de empleado y su correo.'
@@ -257,13 +256,13 @@ export function FormaAltaOperador({ accion, patios = [], terminalFijo = null, si
         <div>
           <label htmlFor="alta-op-empleado" className={ETIQUETA}>Nº de empleado{sinWhatsApp ? '' : ' (opcional)'}</label>
           <input id="alta-op-empleado" name="numeroEmpleado" type="text" maxLength={40}
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
         {sinWhatsApp && (
           <div>
             <label htmlFor="alta-op-correo" className={ETIQUETA}>Correo del operador</label>
             <input id="alta-op-correo" name="correo" type="email" maxLength={254} autoComplete="off"
-              className={CAMPO} style={{ background: 'var(--surface)' }} />
+              className="w-full" style={{ background: 'var(--surface)' }} />
           </div>
         )}
         {(patios.length > 0 || terminalFijo) && (
@@ -272,7 +271,7 @@ export function FormaAltaOperador({ accion, patios = [], terminalFijo = null, si
             {terminalFijo ? (
               <p id="alta-op-patio" className="flex h-9 items-center text-[13px]" style={{ color: 'var(--muted)' }}>{terminalFijo}</p>
             ) : (
-              <select id="alta-op-patio" name="terminalId" defaultValue="" className={CAMPO} style={{ background: 'var(--surface)' }}>
+              <select id="alta-op-patio" name="terminalId" defaultValue="" className="w-full" style={{ background: 'var(--surface)' }}>
                 <option value="">Sin patio</option>
                 {patios.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
               </select>

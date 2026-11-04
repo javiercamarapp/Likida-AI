@@ -12,9 +12,7 @@ export interface InmovilizadasConfigVista {
   acciones: { cargarInmovilizadas: Accion; quitarInmovilizada: Accion };
 }
 
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const CSS_SECUNDARIO = 'hairline text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]';
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--muted)' } as const;
 
 const MAX_VISIBLES = 60;
@@ -50,7 +48,7 @@ export function SeccionInmovilizadas({ datos }: { datos: InmovilizadasConfigVist
               {puedeEditar && (
                 <form action={acciones.quitarInmovilizada} className="ml-auto">
                   <input type="hidden" name="ventana" value={v.id} />
-                  <button type="submit" aria-label={`Quitar la ventana de ${v.unidadEconomico ?? 'la unidad'} desde el ${v.desde}`} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>
+                  <button type="submit" aria-label={`Quitar la ventana de ${v.unidadEconomico ?? 'la unidad'} desde el ${v.desde}`} className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>
                     <Trash2 width={12} height={12} strokeWidth={2} />
                   </button>
                 </form>
@@ -63,7 +61,7 @@ export function SeccionInmovilizadas({ datos }: { datos: InmovilizadasConfigVist
         <form action={acciones.cargarInmovilizadas} encType="multipart/form-data" className="flex items-center gap-2 flex-wrap">
           <input type="file" name="archivo" accept=".csv,.tsv,.xlsx,.xls" required aria-label="Archivo de unidades inmovilizadas"
             className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer" style={{ color: 'var(--muted)' }} />
-          <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}><Upload width={13} height={13} strokeWidth={2} /> Cargar unidades inmovilizadas</button>
+          <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}><Upload width={13} height={13} strokeWidth={2} /> Cargar unidades inmovilizadas</button>
           <span className="text-[11px]" style={{ color: 'var(--faint)' }}>
             CSV o Excel con <span className="cifra-mono">unidad; desde; hasta; motivo; nota</span>. <span className="cifra-mono">hasta</span> y <span className="cifra-mono">nota</span> son opcionales
             (sin <span className="cifra-mono">hasta</span> = sigue inmovilizada); <span className="cifra-mono">motivo</span> es taller, siniestro o baja. Repetir el archivo es seguro.

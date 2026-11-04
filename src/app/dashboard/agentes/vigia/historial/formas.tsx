@@ -8,7 +8,6 @@ import { AvisoResultado, type ResultadoUI } from '../../../../admin/ui/aviso-res
 export type ResultadoGrupos = ResultadoUI;
 export type AccionGrupos = (previo: ResultadoGrupos, fd: FormData) => Promise<ResultadoGrupos>;
 
-const CAMPO = 'hairline rounded-lg px-2.5 h-9 text-[13px] outline-none focus:border-[var(--muted)] w-full';
 const ETIQUETA = 'block text-[11px] font-medium mb-1';
 const AYUDA = 'text-[11px] mt-1';
 
@@ -28,14 +27,14 @@ export function FormaAltaGrupo({ accion, clientes }: { accion: AccionGrupos; cli
       <div className="grid sm:grid-cols-2 gap-3">
         <label>
           <span className={ETIQUETA}>Cliente</span>
-          <select name="clienteId" required defaultValue="" className={CAMPO} style={{ background: 'var(--surface)' }}>
+          <select name="clienteId" required defaultValue="" className="w-full" style={{ background: 'var(--surface)' }}>
             <option value="" disabled>Elige un cliente…</option>
             {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
           </select>
         </label>
         <label>
           <span className={ETIQUETA}>Nombre del grupo (como se ve en WhatsApp)</span>
-          <input name="nombre" required maxLength={120} className={CAMPO} />
+          <input name="nombre" required maxLength={120} className="w-full" />
         </label>
       </div>
       <label className="flex items-start gap-2 text-[12px]">
@@ -80,20 +79,20 @@ export function FormaImportar({ accion, grupos }: { accion: AccionGrupos; grupos
       <div className="grid sm:grid-cols-2 gap-3">
         <label>
           <span className={ETIQUETA}>Grupo</span>
-          <select name="grupoId" required defaultValue="" className={CAMPO} style={{ background: 'var(--surface)' }}>
+          <select name="grupoId" required defaultValue="" className="w-full" style={{ background: 'var(--surface)' }}>
             <option value="" disabled>Elige un grupo…</option>
             {grupos.map((g) => <option key={g.id} value={g.id}>{g.cliente ? `${g.cliente} · ` : ''}{g.nombre}</option>)}
           </select>
         </label>
         <label>
           <span className={ETIQUETA}>Archivo del chat (.txt o .zip, hasta 9 MB)</span>
-          <input type="file" name="archivo" required accept=".txt,.zip,text/plain,application/zip" className={`${CAMPO} pt-1.5`} />
+          <input type="file" name="archivo" required accept=".txt,.zip,text/plain,application/zip" className="w-full pt-1.5" />
           <span className={AYUDA} style={{ color: 'var(--faint)' }}>En WhatsApp: el grupo → Exportar chat → Sin multimedia.</span>
         </label>
       </div>
       <label className="block">
         <span className={ETIQUETA}>Nombres de TU equipo en ese chat (separados por coma)</span>
-        <input name="equipo" required placeholder="Ana Servicio, Luis Tráfico" className={CAMPO} />
+        <input name="equipo" required placeholder="Ana Servicio, Luis Tráfico" className="w-full" />
         <span className={AYUDA} style={{ color: 'var(--faint)' }}>Tal como salen en el chat. Todo otro nombre se cuenta como cliente. Los nombres no se guardan, solo un código que no se puede revertir; los teléfonos y correos escritos en los mensajes se tapan.</span>
       </label>
       <Enviar Icono={Upload}>Subir histórico</Enviar>

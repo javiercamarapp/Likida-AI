@@ -12,7 +12,6 @@ import { PLANTILLA_CSV_RUTAS } from '@/lib/likida/conductor/rutas';
 // reimportar el mismo archivo = 0 cambios.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const CAMPO = 'hairline rounded-lg px-2.5 h-9 text-[13px] outline-none focus:border-[var(--muted)] w-full';
 const ETIQUETA = 'block text-[11px] font-medium mb-1';
 
 function Boton() {
@@ -34,7 +33,7 @@ export function FormaImportarRutas({ accion }: { accion: AccionSitio }) {
         <input type="file" name="archivo" accept=".csv,text/csv,text/plain" className="text-[12px]" />
       </label>
       <label className="block"><span className={ETIQUETA}>…o pega el contenido</span>
-        <textarea name="csv" rows={4} spellCheck={false} className={`${CAMPO} h-auto py-2 font-mono text-[12px]`} placeholder={PLANTILLA_CSV_RUTAS} />
+        <textarea name="csv" rows={4} spellCheck={false} className="w-full h-auto py-2 font-mono text-[12px]" placeholder={PLANTILLA_CSV_RUTAS} />
       </label>
       <div className="flex items-center gap-3 flex-wrap"><Boton /></div>
       <Aviso r={estado} />

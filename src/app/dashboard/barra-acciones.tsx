@@ -34,7 +34,6 @@ export interface ItemBusqueda {
   href: string | null;
 }
 
-const BOTON_BARRA = 'hairline h-8 rounded-lg inline-flex items-center justify-center gap-1.5 text-[13px] font-medium transition-colors hover:bg-[var(--canvas)] shrink-0';
 
 /** La búsqueda del servidor. La define la página (server action, tenant por
  *  closure) y devuelve a lo más 8 resultados. */
@@ -131,7 +130,7 @@ export function BarraAcciones({ buscar, pendientes, hrefAsistente = '/dashboard/
 
       {/* ── Preguntar a la IA — abre SU página (/dashboard/chat),
           pedido del 12-ago; antes expandía el rail. ── */}
-      <button type="button" className={`${BOTON_BARRA} px-3`}
+      <button type="button" className="rv-btn rv-btn--secondary shrink-0"
         onClick={() => { setAbierto(null); router.push(hrefAsistente); }}>
         <MessageCircle width={14} height={14} strokeWidth={1.75} />
         Chatea con tus datos
@@ -139,7 +138,7 @@ export function BarraAcciones({ buscar, pendientes, hrefAsistente = '/dashboard/
 
       {/* ── Pendientes reales ── */}
       <div className="relative">
-        <button type="button" aria-label="Pendientes" className={`${BOTON_BARRA} w-8`}
+        <button type="button" aria-label="Pendientes" className="rv-btn rv-btn--secondary w-8 !px-0 shrink-0"
           onClick={() => setAbierto(abierto === 'campana' ? null : 'campana')}>
           <Bell width={14} height={14} strokeWidth={1.75} />
           {pendientes.length > 0 && (

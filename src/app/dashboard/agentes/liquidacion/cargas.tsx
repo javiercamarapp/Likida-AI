@@ -16,8 +16,6 @@ export interface AccionesCargas {
   contactos: (fd: FormData) => Promise<void>;
 }
 
-const CSS_INPUT = 'hairline text-[12px] px-2.5 py-1.5 rounded-lg w-full';
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 
 export function SeccionCargas({ acciones, aviso, error, detalle, puedeCargar }: {
   acciones: AccionesCargas; aviso: string | null; error: string | null; detalle: string | null; puedeCargar: boolean;
@@ -42,18 +40,18 @@ export function SeccionCargas({ acciones, aviso, error, detalle, puedeCargar }: 
               opcionales: terminal, nº de liquidación, nº de pago, póliza, unidad, vale, neto y tipo de operador. Una bitácora sin póliza no se envía.
               Si el envío está activo, cada desglose nuevo sale a sus destinatarios, salvo los anteriores a la fecha de corte (se guardan sin enviar).
             </p>
-            <input type="file" name="archivo" accept=".csv,.txt,.xlsx,.xls" required className={CSS_INPUT} style={{ background: 'var(--surface)' }} />
+            <input type="file" name="archivo" accept=".csv,.txt,.xlsx,.xls" required className="w-full" style={{ background: 'var(--surface)' }} />
             <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
               Primero pulsa «Ver vista previa»: cuenta «N desgloses / M correos» sin guardar ni enviar nada. Para subir de verdad, vuelve a elegir
               el archivo, escribe M en «Correos que saldrán» y pulsa «Subir y enviar» (con 0 correos no hace falta escribirlo).
             </p>
             <label className="block text-[12px]">
               <span style={{ color: 'var(--muted)' }}>Correos que saldrán (el número de la vista previa)</span>
-              <input type="text" inputMode="numeric" name="correos" autoComplete="off" pattern="[0-9]*" className={CSS_INPUT} style={{ background: 'var(--surface)' }} />
+              <input type="text" inputMode="numeric" name="correos" autoComplete="off" pattern="[0-9]*" className="w-full" style={{ background: 'var(--surface)' }} />
             </label>
             <div className="flex flex-wrap gap-2">
-              <button type="submit" name="paso" value="previa" className={`rv-btn rv-btn--secondary ${CSS_BOTON}`} style={{ background: 'var(--canvas)', color: 'var(--ink)' }}>Ver vista previa</button>
-              <button type="submit" name="paso" value="subir" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>Subir y enviar</button>
+              <button type="submit" name="paso" value="previa" className="rv-btn rv-btn--secondary" style={{ background: 'var(--canvas)', color: 'var(--ink)' }}>Ver vista previa</button>
+              <button type="submit" name="paso" value="subir" className="rv-btn rv-btn--primary" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>Subir y enviar</button>
             </div>
           </form>
           <form action={acciones.contactos} className="space-y-2">
@@ -62,8 +60,8 @@ export function SeccionCargas({ acciones, aviso, error, detalle, puedeCargar }: 
               CSV o Excel con las columnas <code>numero_empleado;correo;coordinador_nombre;coordinador_correo</code>. Solo pone el correo y el
               coordinador de operadores que YA existen (no crea a nadie); una celda vacía no borra lo que ya había.
             </p>
-            <input type="file" name="archivo" accept=".csv,.txt,.xlsx,.xls" required className={CSS_INPUT} style={{ background: 'var(--surface)' }} />
-            <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>Subir correos</button>
+            <input type="file" name="archivo" accept=".csv,.txt,.xlsx,.xls" required className="w-full" style={{ background: 'var(--surface)' }} />
+            <button type="submit" className="rv-btn rv-btn--primary" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>Subir correos</button>
           </form>
         </div>
       )}

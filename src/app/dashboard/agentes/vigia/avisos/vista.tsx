@@ -34,9 +34,7 @@ export const POLITICA_PRIVACIDAD =
 const VACIO_TODOS = 'Aún no hay avisos de viaje. Cuando el programa del día tenga servicios con caja y unidad, aparecerán aquí para que los revises.';
 const VACIO_PENDIENTES = 'No hay avisos esperando a nadie. Todo lo que se armó ya se envió o se descartó.';
 
-const CAMPO = 'hairline rounded-lg px-2.5 h-9 text-[13px] outline-none focus:border-[var(--muted)] w-full';
 const ETIQUETA = 'block text-[11px] font-medium mb-1';
-const BOTON = 'hairline rounded-lg px-3 h-9 text-[12px] inline-flex items-center gap-1.5 disabled:opacity-60 hover:bg-[var(--canvas)]';
 
 /** AAAA-MM-DD → DD/MM/AAAA, sin pasar por Date. */
 function dia(fecha: string): string {
@@ -66,7 +64,7 @@ function Aviso({ children }: { children: React.ReactNode }) {
 function Boton({ accion, children, tono }: { accion: string; children: React.ReactNode; tono?: 'peligro' }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" name="accion" value={accion} disabled={pending} className={`rv-btn ${tono === 'peligro' ? 'rv-btn--danger' : 'rv-btn--secondary'} ${BOTON}`} style={tono === 'peligro' ? { color: 'var(--bad)' } : undefined}>
+    <button type="submit" name="accion" value={accion} disabled={pending} className={`rv-btn ${tono === 'peligro' ? 'rv-btn--danger' : 'rv-btn--secondary'}`} style={tono === 'peligro' ? { color: 'var(--bad)' } : undefined}>
       {children}
     </button>
   );
@@ -77,7 +75,7 @@ function BotonCopiar({ texto }: { texto: string }) {
   const { pending } = useFormStatus();
   return (
     <button
-      type="submit" name="accion" value="copiar" disabled={pending} className={`rv-btn rv-btn--secondary ${BOTON}`}
+      type="submit" name="accion" value="copiar" disabled={pending} className="rv-btn rv-btn--secondary"
       onClick={() => {
         try { void navigator.clipboard?.writeText(texto); } catch { /* sin portapapeles: el texto sigue a la vista para copiarlo a mano */ }
       }}
@@ -176,12 +174,12 @@ function Tarjeta({ t, accion, puedeDecidir }: { t: TarjetaAviso; accion: AccionA
               <form action={despachar} className="space-y-3 mt-2">
                 <input type="hidden" name="id" value={t.id} />
                 <div className="grid sm:grid-cols-2 gap-3">
-                  <label><span className={ETIQUETA}>Operador</span><input name="operadorNombre" maxLength={120} className={CAMPO} autoComplete="off" /></label>
-                  <label><span className={ETIQUETA}>Placas de la unidad</span><input name="placasUnidad" maxLength={14} className={CAMPO} autoComplete="off" /></label>
-                  <label><span className={ETIQUETA}>Placas de la caja</span><input name="placasCaja" maxLength={14} className={CAMPO} autoComplete="off" /></label>
+                  <label><span className={ETIQUETA}>Operador</span><input name="operadorNombre" maxLength={120} className="w-full" autoComplete="off" /></label>
+                  <label><span className={ETIQUETA}>Placas de la unidad</span><input name="placasUnidad" maxLength={14} className="w-full" autoComplete="off" /></label>
+                  <label><span className={ETIQUETA}>Placas de la caja</span><input name="placasCaja" maxLength={14} className="w-full" autoComplete="off" /></label>
                   <label>
                     <span className={ETIQUETA}>Estado de la caja</span>
-                    <select name="estadoCaja" className={CAMPO} defaultValue="">
+                    <select name="estadoCaja" className="w-full" defaultValue="">
                       <option value="">No cambiar</option>
                       <option value="vacia">Vacía</option>
                       <option value="cargada">Cargada</option>
@@ -190,9 +188,9 @@ function Tarjeta({ t, accion, puedeDecidir }: { t: TarjetaAviso; accion: AccionA
                       <option value="desconocido">Desconocido</option>
                     </select>
                   </label>
-                  <label><span className={ETIQUETA}>Licencia (no se envía al cliente)</span><input name="licencia" maxLength={40} className={CAMPO} autoComplete="off" /></label>
-                  <label><span className={ETIQUETA}>Vigencia de la licencia (no se envía)</span><input name="licenciaVence" type="date" className={CAMPO} /></label>
-                  <label><span className={ETIQUETA}>Teléfono del operador (no se envía)</span><input name="telefono" inputMode="tel" maxLength={16} className={CAMPO} autoComplete="off" /></label>
+                  <label><span className={ETIQUETA}>Licencia (no se envía al cliente)</span><input name="licencia" maxLength={40} className="w-full" autoComplete="off" /></label>
+                  <label><span className={ETIQUETA}>Vigencia de la licencia (no se envía)</span><input name="licenciaVence" type="date" className="w-full" /></label>
+                  <label><span className={ETIQUETA}>Teléfono del operador (no se envía)</span><input name="telefono" inputMode="tel" maxLength={16} className="w-full" autoComplete="off" /></label>
                 </div>
                 <fieldset className="text-[11px]" data-testid="borrar-datos">
                   <legend className={ETIQUETA}>Quitar un dato mal escrito (déjalo vacío arriba y márcalo aquí)</legend>

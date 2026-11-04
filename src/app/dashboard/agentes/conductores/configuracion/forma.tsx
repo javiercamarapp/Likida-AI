@@ -18,7 +18,6 @@ import type { ContactoTrafico } from '@/lib/likida/conductor/escalamiento';
 export type ResultadoConfig = ResultadoUI;
 export type AccionConfig = (previo: ResultadoConfig, fd: FormData) => Promise<ResultadoConfig>;
 
-const CAMPO = 'hairline rounded-lg px-2.5 h-9 text-[13px] outline-none focus:border-[var(--muted)] w-full';
 const ETIQUETA = 'block text-[11px] font-medium mb-1';
 const AYUDA = 'text-[11px] mt-1';
 
@@ -35,7 +34,7 @@ function Numero({ nombre, etiqueta, valor, ayuda, deshabilitada, placeholder }: 
   return (
     <label>
       <span className={ETIQUETA}>{etiqueta}</span>
-      <input name={`f_${nombre}`} defaultValue={valor} inputMode="numeric" disabled={deshabilitada} placeholder={placeholder} className={CAMPO} />
+      <input name={`f_${nombre}`} defaultValue={valor} inputMode="numeric" disabled={deshabilitada} placeholder={placeholder} className="w-full" />
       {ayuda && <span className={AYUDA} style={{ color: 'var(--faint)' }}>{ayuda}</span>}
     </label>
   );
@@ -111,7 +110,7 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <label className="sm:col-span-2">
             <span className={ETIQUETA}>Escalera al chofer (minutos desde que toca el hito)</span>
-            <input name="f_solicitudesMin" defaultValue={valores.solicitudesMin} disabled={off} className={CAMPO} placeholder="0, 15, 30, 45" />
+            <input name="f_solicitudesMin" defaultValue={valores.solicitudesMin} disabled={off} className="w-full" placeholder="0, 15, 30, 45" />
             <span className={AYUDA} style={{ color: 'var(--faint)' }}>El primero es la solicitud; los demás, recordatorios. Ascendente, de 1 a 6 valores.</span>
           </label>
           <Numero nombre="escalarTrasMin" etiqueta="Avisar al patio a los (min)" valor={valores.escalarTrasMin} deshabilitada={off} ayuda="Debe ser después del último recordatorio." />
@@ -198,12 +197,12 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
             const c = contactos[i];
             return (
               <div key={`${i}-${c?.telefono ?? 'nuevo'}`} className="grid grid-cols-2 sm:grid-cols-[110px_1fr_160px_1fr] gap-2">
-                <select name={`c_nivel_${i}`} defaultValue={String(c?.nivel ?? 1)} disabled={off} aria-label={`Nivel del contacto ${i + 1}`} className={CAMPO}>
+                <select name={`c_nivel_${i}`} defaultValue={String(c?.nivel ?? 1)} disabled={off} aria-label={`Nivel del contacto ${i + 1}`} className="w-full">
                   <option value="1">Nivel 1 (patio)</option><option value="2">Nivel 2 (jefe general)</option>
                 </select>
-                <input name={`c_nombre_${i}`} defaultValue={c?.nombre ?? ''} disabled={off} maxLength={80} placeholder="Nombre" aria-label={`Nombre del contacto ${i + 1}`} className={CAMPO} />
-                <input name={`c_tel_${i}`} defaultValue={c ? c.telefono.replace(/^52/, '') : ''} disabled={off} inputMode="tel" placeholder="10 dígitos" aria-label={`Teléfono del contacto ${i + 1}`} className={CAMPO} />
-                <select name={`c_patio_${i}`} defaultValue={c?.terminalId ?? ''} disabled={off} aria-label={`Patio del contacto ${i + 1}`} className={CAMPO}>
+                <input name={`c_nombre_${i}`} defaultValue={c?.nombre ?? ''} disabled={off} maxLength={80} placeholder="Nombre" aria-label={`Nombre del contacto ${i + 1}`} className="w-full" />
+                <input name={`c_tel_${i}`} defaultValue={c ? c.telefono.replace(/^52/, '') : ''} disabled={off} inputMode="tel" placeholder="10 dígitos" aria-label={`Teléfono del contacto ${i + 1}`} className="w-full" />
+                <select name={`c_patio_${i}`} defaultValue={c?.terminalId ?? ''} disabled={off} aria-label={`Patio del contacto ${i + 1}`} className="w-full">
                   <option value="">Toda la flota</option>
                   {patios.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                 </select>
@@ -298,7 +297,7 @@ export function SeccionVoluntarios({ datos, puedeEditar, accionAlta, accionBaja,
           <form action={enviarAlta} className="flex items-end gap-2" aria-label="Agregar operador al piloto">
             <label className="flex-1">
               <span className={ETIQUETA}>Operador</span>
-              <select name="operadorId" defaultValue="" className={CAMPO} aria-label="Operador a agregar">
+              <select name="operadorId" defaultValue="" className="w-full" aria-label="Operador a agregar">
                 <option value="" disabled>{datos.candidatos.length > 0 ? 'Elige un operador…' : 'Sin operadores disponibles con ese criterio'}</option>
                 {datos.candidatos.map((c) => <option key={c.id} value={c.id}>{c.nombre} · {diezDigitos(c.telefono)}</option>)}
               </select>

@@ -10,7 +10,6 @@ import { useNotificarResultado } from '../../admin/ui/notificaciones';
 export type ResultadoForma = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionForma = (previo: ResultadoForma, datos: FormData) => Promise<ResultadoForma>;
 
-const CAMPO = 'w-full hairline rounded-lg px-3 h-9 text-[13px] outline-none focus:border-[var(--muted)] transition-colors';
 const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
 
 function Enviar({ etiqueta, enviando, icono }: { etiqueta: string; enviando: string; icono: React.ReactNode }) {
@@ -34,7 +33,7 @@ export function FormaNuevoPatio({ accion }: { accion: AccionForma }) {
         <div>
           <label htmlFor="patio-nuevo-nombre" className={ETIQUETA}>Nombre del patio</label>
           <input id="patio-nuevo-nombre" name="nombre" type="text" required minLength={2} maxLength={80}
-            placeholder="Patio Norte" autoComplete="off" className={CAMPO} style={{ background: 'var(--surface)' }} />
+            placeholder="Patio Norte" autoComplete="off" className="w-full" style={{ background: 'var(--surface)' }} />
           <p className="mt-1 text-[11px]" style={{ color: 'var(--faint)' }}>
             Tal como lo escribirás en las plantillas de carga. «Patio Norte» y «patio norte» son el mismo patio.
           </p>
@@ -42,7 +41,7 @@ export function FormaNuevoPatio({ accion }: { accion: AccionForma }) {
         <div>
           <label htmlFor="patio-nuevo-ciudad" className={ETIQUETA}>Ciudad (opcional)</label>
           <input id="patio-nuevo-ciudad" name="ciudad" type="text" maxLength={80}
-            placeholder="Monterrey, N.L." autoComplete="off" className={CAMPO} style={{ background: 'var(--surface)' }} />
+            placeholder="Monterrey, N.L." autoComplete="off" className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
       </div>
       <AvisoResultado estado={estado} />
@@ -70,12 +69,12 @@ export function FormaEditarPatio({ accionEditar, accionEliminar, patio }: {
           <div>
             <label htmlFor={`${id}-nombre`} className={ETIQUETA}>Nombre</label>
             <input id={`${id}-nombre`} name="nombre" type="text" required minLength={2} maxLength={80}
-              defaultValue={patio.nombre} className={CAMPO} style={{ background: 'var(--surface)' }} />
+              defaultValue={patio.nombre} className="w-full" style={{ background: 'var(--surface)' }} />
           </div>
           <div>
             <label htmlFor={`${id}-ciudad`} className={ETIQUETA}>Ciudad (opcional)</label>
             <input id={`${id}-ciudad`} name="ciudad" type="text" maxLength={80}
-              defaultValue={patio.ciudad ?? ''} className={CAMPO} style={{ background: 'var(--surface)' }} />
+              defaultValue={patio.ciudad ?? ''} className="w-full" style={{ background: 'var(--surface)' }} />
           </div>
         </div>
         <AvisoResultado estado={estado} />
@@ -115,7 +114,7 @@ export function FormaJefe({ accion, jefe, patios }: {
       <input type="hidden" name="userId" value={jefe.userId} />
       <div className="min-w-0">
         <label htmlFor={id} className="block text-[12px] font-medium">{jefe.etiqueta}</label>
-        <select id={id} name="terminalId" defaultValue={jefe.terminalId} className={`${CAMPO} mt-1 w-56`} style={{ background: 'var(--surface)' }}>
+        <select id={id} name="terminalId" defaultValue={jefe.terminalId} className="w-full mt-1 w-56" style={{ background: 'var(--surface)' }}>
           <option value="">Toda la flota (sin patio)</option>
           {patios.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
         </select>
@@ -144,7 +143,7 @@ export function FormaSinPatio({ accion, tabla, cuantos, patios }: {
         <label htmlFor={id} className="block text-[12px] font-medium">
           {cuantos} {sustantivo} activos sin patio
         </label>
-        <select id={id} name="terminalId" required defaultValue="" className={`${CAMPO} mt-1 w-56`} style={{ background: 'var(--surface)' }}>
+        <select id={id} name="terminalId" required defaultValue="" className="w-full mt-1 w-56" style={{ background: 'var(--surface)' }}>
           <option value="" disabled>Elige el patio…</option>
           {patios.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
         </select>

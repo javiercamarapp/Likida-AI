@@ -14,7 +14,6 @@ import { Aviso, type ResultadoSitio } from '../agentes/conductores/sitios/formas
 
 export type AccionConvenio = (previo: ResultadoSitio, fd: FormData) => Promise<ResultadoSitio>;
 
-const CAMPO = 'hairline rounded-lg px-2.5 h-9 text-[13px] outline-none focus:border-[var(--muted)] w-full';
 const ETIQUETA = 'block text-[11px] font-medium mb-1';
 
 function BotonImportar() {
@@ -34,7 +33,7 @@ export function FormaImportarConvenios({ accion }: { accion: AccionConvenio }) {
     <form action={enviar} className="space-y-3" aria-label="Importar convenios desde CSV o Excel" encType="multipart/form-data">
       <CampoArchivo name="archivo" etiqueta="Archivo CSV o Excel (.xlsx)" accept=".csv,.xlsx,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
       <label className="block"><span className={ETIQUETA}>…o pega el contenido</span>
-        <textarea name="csv" rows={5} spellCheck={false} className={`${CAMPO} h-auto py-2 font-mono text-[12px]`}
+        <textarea name="csv" rows={5} spellCheck={false} className="w-full h-auto py-2 font-mono text-[12px]"
           placeholder={'cliente,convenio,categoria,instruccion,momento,lugar\nCliente Uno,Ruta norte,puerta,Puerta 3 lado poniente,ambos,destino'} />
       </label>
       <div className="flex items-center gap-3 flex-wrap"><BotonImportar /></div>
@@ -54,7 +53,7 @@ export function FormaCorregirConvenio({ accion, viajeId, folio, actual, opciones
     <form action={enviar} className="flex items-end gap-2 flex-wrap" aria-label={`Corregir el convenio del viaje ${folio}`}>
       <input type="hidden" name="viajeId" value={viajeId} />
       <label className="block min-w-0"><span className={ETIQUETA}>Convenio del viaje</span>
-        <select name="convenioId" defaultValue={actual ?? ''} className={`${CAMPO} max-w-[260px]`}>
+        <select name="convenioId" defaultValue={actual ?? ''} className="w-full max-w-[260px]">
           <option value="">Sin convenio (no mandar instrucciones)</option>
           {opciones.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
         </select>
@@ -149,42 +148,42 @@ export function FormaConvenio({ accion, catalogos, convenio }: { accion: AccionC
           <div><span className={ETIQUETA}>Cliente</span><p className="text-[13px] h-9 flex items-center">{convenio.cliente}</p></div>
         ) : (
           <label className="block"><span className={ETIQUETA}>Cliente</span>
-            <select name="clienteId" value={campos.clienteId} onChange={(e) => poner('clienteId', e.target.value)} className={CAMPO} required>
+            <select name="clienteId" value={campos.clienteId} onChange={(e) => poner('clienteId', e.target.value)} className="w-full" required>
               <option value="">Elige un cliente…</option>
               {catalogos.clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
           </label>
         )}
         <label className="block"><span className={ETIQUETA}>Nombre del convenio (la ruta)</span>
-          <input name="nombre" value={campos.nombre} onChange={(e) => poner('nombre', e.target.value)} maxLength={120} required className={CAMPO} placeholder="Ruta norte" />
+          <input name="nombre" value={campos.nombre} onChange={(e) => poner('nombre', e.target.value)} maxLength={120} required className="w-full" placeholder="Ruta norte" />
         </label>
         <label className="block"><span className={ETIQUETA}>Origen (punto A)</span>
-          <input name="origen" value={campos.origen} onChange={(e) => poner('origen', e.target.value)} maxLength={160} className={CAMPO} />
+          <input name="origen" value={campos.origen} onChange={(e) => poner('origen', e.target.value)} maxLength={160} className="w-full" />
         </label>
         <label className="block"><span className={ETIQUETA}>Destino (punto B)</span>
-          <input name="destino" value={campos.destino} onChange={(e) => poner('destino', e.target.value)} maxLength={160} className={CAMPO} />
+          <input name="destino" value={campos.destino} onChange={(e) => poner('destino', e.target.value)} maxLength={160} className="w-full" />
         </label>
         <label className="block"><span className={ETIQUETA}>Sitio de carga (catálogo de sitios)</span>
-          <select name="sitioOrigenId" value={campos.sitioOrigenId} onChange={(e) => poner('sitioOrigenId', e.target.value)} className={CAMPO}>
+          <select name="sitioOrigenId" value={campos.sitioOrigenId} onChange={(e) => poner('sitioOrigenId', e.target.value)} className="w-full">
             <option value="">Sin sitio</option>
             {catalogos.sitios.map((g) => <option key={g.id} value={g.id}>{etiquetaSitio(g)}</option>)}
           </select>
         </label>
         <label className="block"><span className={ETIQUETA}>Sitio de descarga (catálogo de sitios)</span>
-          <select name="sitioDestinoId" value={campos.sitioDestinoId} onChange={(e) => poner('sitioDestinoId', e.target.value)} className={CAMPO}>
+          <select name="sitioDestinoId" value={campos.sitioDestinoId} onChange={(e) => poner('sitioDestinoId', e.target.value)} className="w-full">
             <option value="">Sin sitio</option>
             {catalogos.sitios.map((g) => <option key={g.id} value={g.id}>{etiquetaSitio(g)}</option>)}
           </select>
         </label>
         <label className="block"><span className={ETIQUETA}>Vigente desde</span>
-          <input type="date" name="vigenteDesde" value={campos.vigenteDesde} onChange={(e) => poner('vigenteDesde', e.target.value)} className={CAMPO} />
+          <input type="date" name="vigenteDesde" value={campos.vigenteDesde} onChange={(e) => poner('vigenteDesde', e.target.value)} className="w-full" />
         </label>
         <label className="block"><span className={ETIQUETA}>Vigente hasta</span>
-          <input type="date" name="vigenteHasta" value={campos.vigenteHasta} onChange={(e) => poner('vigenteHasta', e.target.value)} className={CAMPO} />
+          <input type="date" name="vigenteHasta" value={campos.vigenteHasta} onChange={(e) => poner('vigenteHasta', e.target.value)} className="w-full" />
         </label>
       </div>
       <label className="block"><span className={ETIQUETA}>Notas internas (no se mandan al operador)</span>
-        <textarea name="notas" rows={2} maxLength={1000} value={campos.notas} onChange={(e) => poner('notas', e.target.value)} className={`${CAMPO} h-auto py-2`} />
+        <textarea name="notas" rows={2} maxLength={1000} value={campos.notas} onChange={(e) => poner('notas', e.target.value)} className="w-full h-auto py-2" />
       </label>
 
       <fieldset className="space-y-2">
@@ -192,20 +191,20 @@ export function FormaConvenio({ accion, catalogos, convenio }: { accion: AccionC
         {filas.map((f, n) => (
           <div key={n} className="grid gap-2 sm:grid-cols-[150px_minmax(0,1fr)_170px_150px_auto] items-end">
             <label className="block"><span className="sr-only">Tema de la instrucción {n + 1}</span>
-              <select name="ins_categoria" value={f.categoria} onChange={(e) => ponerFila(n, 'categoria', e.target.value)} className={CAMPO}>
+              <select name="ins_categoria" value={f.categoria} onChange={(e) => ponerFila(n, 'categoria', e.target.value)} className="w-full">
                 {CATEGORIAS.map((c) => <option key={c} value={c}>{ETIQUETA_CATEGORIA[c]}</option>)}
               </select>
             </label>
             <label className="block"><span className="sr-only">Texto de la instrucción {n + 1}</span>
-              <input name="ins_texto" value={f.texto} onChange={(e) => ponerFila(n, 'texto', e.target.value)} maxLength={MAX_TEXTO_INSTRUCCION} className={CAMPO} placeholder="Puerta 3, lado poniente" />
+              <input name="ins_texto" value={f.texto} onChange={(e) => ponerFila(n, 'texto', e.target.value)} maxLength={MAX_TEXTO_INSTRUCCION} className="w-full" placeholder="Puerta 3, lado poniente" />
             </label>
             <label className="block"><span className="sr-only">Cuándo se manda la instrucción {n + 1}</span>
-              <select name="ins_momento" value={f.momento} onChange={(e) => ponerFila(n, 'momento', e.target.value)} className={CAMPO}>
+              <select name="ins_momento" value={f.momento} onChange={(e) => ponerFila(n, 'momento', e.target.value)} className="w-full">
                 {MOMENTOS.map((m) => <option key={m} value={m}>{MOMENTO_OPCION[m]}</option>)}
               </select>
             </label>
             <label className="block"><span className="sr-only">A qué planta aplica la instrucción {n + 1}</span>
-              <select name="ins_lugar" value={f.lugar} onChange={(e) => ponerFila(n, 'lugar', e.target.value)} className={CAMPO}>
+              <select name="ins_lugar" value={f.lugar} onChange={(e) => ponerFila(n, 'lugar', e.target.value)} className="w-full">
                 {LUGARES.map((l) => <option key={l} value={l}>{LUGAR_OPCION[l]}</option>)}
               </select>
             </label>

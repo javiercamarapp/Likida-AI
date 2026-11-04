@@ -4,7 +4,7 @@ import { useActionState } from 'react';
 import { UserCog } from 'lucide-react';
 import { Aviso, type ResultadoAccion } from '@/app/admin/ui/forma';
 import { ComboCatalogo, type BuscarCatalogo } from '../combo-catalogo';
-import { BTN_SECUNDARIO, ESTILO_SECUNDARIO } from './vista';
+import { ESTILO_SECUNDARIO } from './vista';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // REASIGNAR CHOFER — con `pending` y con su rechazo en pantalla (FE-11).
@@ -42,7 +42,7 @@ export function FormaReasignar({ accion, buscar, actual, actualNombre, total }: 
           total={total}
           className="h-8 text-[12px] px-2.5 rounded-lg hairline min-w-0 max-w-[220px]"
           estilo={{ background: 'var(--surface)' }} />
-        <button type="submit" disabled={pendiente} className={`rv-btn rv-btn--secondary ${BTN_SECUNDARIO} disabled:opacity-60 disabled:cursor-not-allowed`}
+        <button type="submit" disabled={pendiente} className="rv-btn rv-btn--secondary"
           style={ESTILO_SECUNDARIO}>
           <UserCog width={13} height={13} strokeWidth={1.75} aria-hidden />
           {pendiente ? 'Reasignando…' : 'Reasignar chofer'}

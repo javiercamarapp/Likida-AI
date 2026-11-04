@@ -11,7 +11,6 @@ import { MARCAR_IGNORAR, MARCAR_INSTRUCCION } from '@/lib/likida/conductor/sitio
 // Herramienta NEUTRAL: no trae ningún diccionario, lo llena la flota. Cada fila del archivo se aprueba o se rechaza sola.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const CAMPO = 'hairline rounded-lg px-2.5 h-9 text-[13px] outline-none focus:border-[var(--muted)]';
 const ETIQUETA = 'block text-[11px] font-medium mb-1';
 
 function Boton({ texto, pendiente }: { texto: string; pendiente: string }) {
@@ -33,7 +32,7 @@ export function FormaImportarEquivalencias({ accion }: { accion: AccionSitio }) 
         <input type="file" name="archivo" accept=".csv,text/csv,text/plain" className="text-[12px]" />
       </label>
       <label className="block"><span className={ETIQUETA}>…o pega el contenido</span>
-        <textarea name="csv" rows={4} spellCheck={false} className={`${CAMPO} h-auto py-2 w-full font-mono text-[12px]`}
+        <textarea name="csv" rows={4} spellCheck={false} className="h-auto py-2 w-full font-mono text-[12px]"
           placeholder={'texto,geocerca_codigo,tipo,lado\nSTOP Planta Demo FINAL ACERO,PL-DEMO,sitio,destino'} />
       </label>
       <div className="flex items-center gap-3 flex-wrap"><Boton texto="Importar equivalencias" pendiente="Importando…" /></div>
@@ -51,7 +50,7 @@ export function FilaTextoSinSitio({ accion, texto, lado, sitios }: {
     <form action={enviar} className="flex items-center gap-2 flex-wrap" aria-label={`Asignar «${texto}»`}>
       <input type="hidden" name="texto" value={texto} />
       <input type="hidden" name="lado" value={lado} />
-      <select name="asignar" defaultValue="" className={`${CAMPO} h-8 text-[12px] max-w-[26ch]`} aria-label={`Qué es «${texto}»`}>
+      <select name="asignar" defaultValue="" className="h-8 text-[12px] max-w-[26ch]" aria-label={`Qué es «${texto}»`}>
         <option value="">Elegir…</option>
         <optgroup label="Un sitio de mi catálogo">
           {sitios.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}

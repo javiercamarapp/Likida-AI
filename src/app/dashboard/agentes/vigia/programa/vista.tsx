@@ -80,7 +80,6 @@ const MOTIVOS: Record<string, string> = {
   sin_caja_unidad_ni_cliente: 'no traía caja, unidad ni cliente',
 };
 
-const CAMPO = 'hairline rounded-lg px-2.5 h-9 text-[13px] outline-none focus:border-[var(--muted)] w-full';
 const ETIQUETA = 'block text-[11px] font-medium mb-1';
 
 function Aviso({ children }: { children: React.ReactNode }) {
@@ -129,11 +128,11 @@ function FormaSubir({ accion }: { accion: AccionPrograma }) {
         <div className="grid sm:grid-cols-2 gap-3">
           <label>
             <span className={ETIQUETA}>Terminal</span>
-            <input name="terminal" required maxLength={40} placeholder="Por ejemplo, GDL" className={CAMPO} autoComplete="off" />
+            <input name="terminal" required maxLength={40} placeholder="Por ejemplo, GDL" className="w-full" autoComplete="off" />
           </label>
           <label>
             <span className={ETIQUETA}>Archivo del programa (CSV, hasta {TOPE_ARCHIVO_PROGRAMA_BYTES / (1024 * 1024)} MB, sin contar las columnas vacías)</span>
-            <input name="archivo" type="file" required accept=".csv,.txt,text/csv" className={`${CAMPO} py-1.5 h-auto`} />
+            <input name="archivo" type="file" required accept=".csv,.txt,text/csv" className="w-full py-1.5 h-auto" />
           </label>
         </div>
         <p className="text-[11px]" style={{ color: 'var(--muted)' }}>

@@ -102,7 +102,6 @@ export default async function PaginaMesaControl({
     return { ok: r.ok };
   }
 
-  const BTN_CHICO = 'text-xs px-2.5 py-1 rounded-lg hairline';
   const criticas = leyoOk ? incidencias.filter((i) => i.prioridad === 'critica').length : null;
 
   // Una línea (≈90 caracteres): cuántas incidencias vivas hay y cuántas son críticas.
@@ -176,7 +175,7 @@ export default async function PaginaMesaControl({
             <span className="ml-auto flex gap-1.5 items-start shrink-0">
               {!inc.reconocidaEn && (
                 <BotonAccionMesa
-                  accion={tomarControl} campos={{ id: inc.id }} etiqueta="Tomar el control" clase={BTN_CHICO}
+                  accion={tomarControl} campos={{ id: inc.id }} etiqueta="Tomar el control" clase="rv-btn rv-btn--sm"
                   titulo="Reconocerla desde la mesa: detiene el escalamiento automático y queda a tu nombre"
                 />
               )}
@@ -184,7 +183,7 @@ export default async function PaginaMesaControl({
                 <div className="flex flex-col items-end">
                   {/* A37-S16-05: el aviso NO puede ir solo en el `title` (en celular no existe). Se rotula con texto visible. */}
                   <BotonAccionMesa
-                    accion={reescalar} campos={{ id: inc.id, nivel: inc.nivelEscalado + 1 }} etiqueta={`Registrar nivel ${inc.nivelEscalado + 1} (no avisa)`} clase={BTN_CHICO}
+                    accion={reescalar} campos={{ id: inc.id, nivel: inc.nivelEscalado + 1 }} etiqueta={`Registrar nivel ${inc.nivelEscalado + 1} (no avisa)`} clase="rv-btn rv-btn--sm"
                     titulo="Registra el nivel en el expediente (solo sube — bajar re-armaría avisos ya mandados). No manda WhatsApp: tú ya estás viendo esto."
                   />
                   <span className="block text-[11px] mt-1 max-w-[16rem] text-right" style={{ color: 'var(--muted)' }}>

@@ -16,7 +16,6 @@ export type ResultadoOficina = { ok: true; mensaje: string } | { ok: false; erro
 export type AccionOficinaServidor = (previo: ResultadoOficina, fd: FormData) => Promise<ResultadoOficina>;
 export type ModoAccion = 'capturar' | 'validar' | 'atender';
 
-const CAMPO = 'hairline rounded-lg px-2.5 h-8 text-[12px] outline-none focus:border-[var(--muted)]';
 
 const TITULO: Record<ModoAccion, string> = { capturar: 'Capturar a mano', validar: 'Validar', atender: 'Marcar atendido' };
 const BOTON: Record<ModoAccion, string> = { capturar: 'Guardar captura', validar: 'Validar hito', atender: 'Marcar atendido' };
@@ -62,12 +61,12 @@ function FormaAccion({ modo, accion, hitoId, viajeId }: { modo: ModoAccion; acci
         {modo === 'capturar' && (
           <label className="block">
             <span className="block text-[11px] font-medium mb-1">Hora del hito (hora de México)</span>
-            <input type="datetime-local" name="hora" required className={`${CAMPO} w-full`} />
+            <input type="datetime-local" name="hora" required className="w-full" />
           </label>
         )}
         <label className="block">
           <span className="block text-[11px] font-medium mb-1">Motivo (queda en la bitácora con tu nombre)</span>
-          <input type="text" name="motivo" required minLength={5} maxLength={200} placeholder="p. ej. avisó por radio" className={`${CAMPO} w-full`} />
+          <input type="text" name="motivo" required minLength={5} maxLength={200} placeholder="p. ej. avisó por radio" className="w-full" />
         </label>
         <div className="flex items-center gap-2 flex-wrap">
           <Enviar texto={BOTON[modo]} />
@@ -117,8 +116,8 @@ export function FormaAsignarSitios({ accion, viajeId, sitios, hayMas = false }: 
           </p>
         )}
         <div className="grid sm:grid-cols-2 gap-2">
-          <label className="block"><span className="block text-[11px] font-medium mb-1">Sitio de carga</span><select name="origen" defaultValue="" className={`${CAMPO} w-full`}>{opciones}</select></label>
-          <label className="block"><span className="block text-[11px] font-medium mb-1">Sitio de descarga</span><select name="destino" defaultValue="" className={`${CAMPO} w-full`}>{opciones}</select></label>
+          <label className="block"><span className="block text-[11px] font-medium mb-1">Sitio de carga</span><select name="origen" defaultValue="" className="w-full">{opciones}</select></label>
+          <label className="block"><span className="block text-[11px] font-medium mb-1">Sitio de descarga</span><select name="destino" defaultValue="" className="w-full">{opciones}</select></label>
         </div>
         <div className="flex items-center gap-2 flex-wrap"><Enviar texto="Guardar sitios" /><Resultado r={estado} /></div>
       </form>

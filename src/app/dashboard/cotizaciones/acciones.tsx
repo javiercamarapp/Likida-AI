@@ -25,7 +25,6 @@ function Boton({ texto, pendienteTexto, className, disabled, title }: {
 }
 
 const BTN = 'rounded border px-2 py-1 hover:bg-[var(--canvas)] disabled:opacity-50';
-const BTN_VERDE = 'rounded border border-emerald-600 px-2 py-1 text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:hover:bg-emerald-950';
 
 export function FilaAccionesCotizacion({
   id, puedeEnviar, puedeCrearViaje = true, precio, enviada, convertir, perdida,
@@ -59,7 +58,7 @@ export function FilaAccionesCotizacion({
           <form action={accConvertir}>
             <input type="hidden" name="id" value={id} />
             <Boton
-              texto="Crear viaje" pendienteTexto="Creando…" className={BTN_VERDE}
+              texto="Crear viaje" pendienteTexto="Creando…" className="rv-btn rv-btn--secondary rv-btn--sm"
               disabled={precio === null}
               title={precio === null ? 'Sin precio no hay viaje que crear' : 'Crea el viaje con esta ruta, cliente y precio'}
             />

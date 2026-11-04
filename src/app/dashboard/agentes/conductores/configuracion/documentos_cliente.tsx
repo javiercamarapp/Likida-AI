@@ -12,7 +12,6 @@ import { catalogoDeCliente, type DocumentoCliente } from '@/lib/likida/conductor
 // de entrega (POD). Solo muestra y edita el catálogo: no envía mensajes ni pide nada al chofer (eso es la solicitud al cierre, T-A5-53).
 // ═══════════════════════════════════════════════════════════════════════════
 
-const CAMPO = 'hairline rounded-lg px-2.5 h-9 text-[13px] outline-none focus:border-[var(--muted)] w-full';
 const ETIQUETA = 'block text-[11px] font-medium mb-1';
 
 function BotonAgregar() {
@@ -63,16 +62,16 @@ function FormaAgregar({ clientes, accion }: { clientes: Array<{ id: string; nomb
     <form action={enviar} className="space-y-3" aria-label="Agregar documento de un cliente">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block"><span className={ETIQUETA}>Cliente</span>
-          <select name="clienteId" required defaultValue="" className={CAMPO}>
+          <select name="clienteId" required defaultValue="" className="w-full">
             <option value="" disabled>Elige un cliente</option>
             {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
           </select>
         </label>
         <label className="block"><span className={ETIQUETA}>Documento</span>
-          <input name="nombre" required maxLength={80} className={CAMPO} placeholder="Ej.: carta porte, ticket de báscula cargado" />
+          <input name="nombre" required maxLength={80} className="w-full" placeholder="Ej.: carta porte, ticket de báscula cargado" />
         </label>
         <label className="block"><span className={ETIQUETA}>¿Es indispensable?</span>
-          <select name="tipo" defaultValue="basico" className={CAMPO}>
+          <select name="tipo" defaultValue="basico" className="w-full">
             <option value="basico">Básico (sin él no se cierra el viaje)</option>
             <option value="complementario">Complementario (se pide, pero no frena el cierre)</option>
           </select>

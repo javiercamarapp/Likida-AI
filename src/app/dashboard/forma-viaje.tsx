@@ -30,7 +30,6 @@ export type AccionCrearViaje = (
   fd: FormData,
 ) => Promise<{ error?: string } | null>;
 
-const CAMPO = 'w-full hairline rounded-lg px-3 h-9 text-sm outline-none focus:border-[var(--muted)] transition-colors';
 const ETIQUETA = 'block text-xs font-medium mb-1.5';
 
 function BotonCrear() {
@@ -79,27 +78,27 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
         <div>
           <label htmlFor="folio" className={ETIQUETA}>Folio</label>
           <input id="folio" name="folio" type="text" maxLength={40} placeholder="F-0148"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
           <label htmlFor="fechaInicio" className={ETIQUETA}>Fecha de inicio</label>
           <input id="fechaInicio" name="fechaInicio" type="date"
-            className={CAMPO} style={{ background: 'var(--surface)' }} />
+            className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
           <label htmlFor="origen" className={ETIQUETA}>Origen</label>
           <input id="origen" name="origen" type="text" maxLength={120} placeholder="Silao"
-            className={CAMPO} style={{ background: 'var(--surface)' }} />
+            className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
           <label htmlFor="destino" className={ETIQUETA}>Destino</label>
           <input id="destino" name="destino" type="text" maxLength={120} placeholder="Monterrey"
-            className={CAMPO} style={{ background: 'var(--surface)' }} />
+            className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
         {puedeCapturarAnticipo && <div>
           <label htmlFor="anticipo" className={ETIQUETA}>Anticipo (MXN)</label>
           <input id="anticipo" name="anticipo" type="number" min={0} max={topeAnticipo} step="0.01" placeholder="8000"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           {topeAnticipo !== undefined && (
             <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
               {topeAnticipoOrigen === 'politica'
@@ -117,7 +116,7 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
               Ofrecer una opción que la base rechaza es peor que no ofrecerla. */}
           <ComboCatalogo tipo="operador" name="operadorId" campoId="operadorId" buscar={buscarCatalogo} requerido
             aria-label="Operador" etiquetaVacia="Escribe el nombre del chofer…"
-            total={totalOperadores} className={CAMPO} estilo={{ background: 'var(--surface)' }} />
+            total={totalOperadores} className="w-full" estilo={{ background: 'var(--surface)' }} />
           <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
             {totalOperadores === 0
               ? 'Necesitas al menos un operador dado de alta: un viaje no puede existir sin quién lo maneje. El alta rápida está a la derecha.'
@@ -133,7 +132,7 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
           ) : (
             <ComboCatalogo tipo="unidad" name="unidadId" campoId="unidadId" buscar={buscarCatalogo}
               aria-label="Unidad" etiquetaVacia="Sin asignar todavía"
-              total={totalUnidades} className={`${CAMPO} cifra-mono`} estilo={{ background: 'var(--surface)' }} />
+              total={totalUnidades} className="w-full cifra-mono" estilo={{ background: 'var(--surface)' }} />
           )}
         </div>
       </div>
@@ -160,14 +159,14 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
             ) : (
               <ComboCatalogo tipo="cliente" name="clienteId" campoId="clienteId" buscar={buscarCatalogo}
                 aria-label="Cliente" etiquetaVacia="Sin asignar todavía"
-                total={totalClientes} className={CAMPO} estilo={{ background: 'var(--surface)' }} />
+                total={totalClientes} className="w-full" estilo={{ background: 'var(--surface)' }} />
             )}
           </div>
 
           <div>
             <label htmlFor="ingresoFlete" className={ETIQUETA}>Ingreso del flete (MXN)</label>
             <input id="ingresoFlete" name="ingresoFlete" type="text" inputMode="decimal" placeholder="38,500"
-              className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+              className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
             <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
               Lo que le cobras al cliente. NO es el anticipo: el anticipo es lo que le adelantas al
               operador. Déjalo vacío si todavía no lo sabes — vacío no es cero.
@@ -177,7 +176,7 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
           <div>
             <label htmlFor="kmRecorridos" className={ETIQUETA}>Kilómetros</label>
             <input id="kmRecorridos" name="kmRecorridos" type="text" inputMode="numeric" placeholder="1,240"
-              className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+              className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           </div>
         </div>
 
@@ -190,7 +189,7 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
       {!puedeCapturarDinero && <div>
         <label htmlFor="kmRecorridos" className={ETIQUETA}>Kilómetros</label>
         <input id="kmRecorridos" name="kmRecorridos" type="text" inputMode="numeric" placeholder="1,240"
-          className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+          className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
       </div>}
 
       {estado?.error && (

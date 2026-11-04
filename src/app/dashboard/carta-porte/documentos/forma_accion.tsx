@@ -70,5 +70,4 @@ export function BotonEnvio({ etiqueta, pendiente = 'Procesando…', intencion, v
   );
 }
 
-export const CAMPO = 'w-full hairline rounded-lg px-3 h-9 text-[13px] outline-none focus:border-[var(--muted)] transition-colors';
 export const ETIQUETA = 'block text-[11px] font-medium mb-1.5';

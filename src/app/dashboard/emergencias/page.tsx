@@ -192,7 +192,6 @@ export default async function PaginaEmergencias({
     }
   }
 
-  const BTN_CHICO = 'text-xs px-2.5 py-1 rounded-lg hairline';
 
   return (
     <MarcoPagina titulo="Emergencias" apoyo="La grúa, la póliza y los contactos que el escalamiento usa cuando un chofer reporta y nadie contesta.">
@@ -250,12 +249,12 @@ export default async function PaginaEmergencias({
                       {!p.verificadoEn && (
                         <form action={verificarProveedor}>
                           <input type="hidden" name="id" value={p.id} />
-                          <button type="submit" className={BTN_CHICO} title="Afirmo que marqué y contestaron">Verificado ✓</button>
+                          <button type="submit" className="rv-btn rv-btn--sm" title="Afirmo que marqué y contestaron">Verificado ✓</button>
                         </form>
                       )}
                       <form action={borrarProveedor}>
                         <input type="hidden" name="id" value={p.id} />
-                        <button type="submit" className={BTN_CHICO}>Quitar</button>
+                        <button type="submit" className="rv-btn rv-btn--sm">Quitar</button>
                       </form>
                     </span>
                   </li>
@@ -304,7 +303,7 @@ export default async function PaginaEmergencias({
                     <span className="ml-auto">
                       <form action={borrarContacto}>
                         <input type="hidden" name="id" value={c.id} />
-                        <button type="submit" className={BTN_CHICO}>Quitar</button>
+                        <button type="submit" className="rv-btn rv-btn--sm">Quitar</button>
                       </form>
                     </span>
                   </li>

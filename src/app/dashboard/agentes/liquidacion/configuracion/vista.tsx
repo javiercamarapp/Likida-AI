@@ -176,9 +176,7 @@ export function leerFormularioConfig(fd: FormData): ResultadoFormulario {
 
 // ── Vista ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-const CSS_INPUT = 'hairline text-[12px] px-2.5 py-1.5 rounded-lg w-full';
 const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
 
 function Etiqueta({ t, children }: { t: string; children: React.ReactNode }) {
@@ -228,7 +226,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
           <TituloRecuadro info="liquidacion_config.entrega">1. Entrega</TituloRecuadro>
           <div className="grid sm:grid-cols-2 gap-3">
             <Etiqueta t="Canal">
-              <select name="canal" defaultValue={config.canal} className={CSS_INPUT} style={ESTILO_INPUT} disabled={off}>
+              <select name="canal" defaultValue={config.canal} className="w-full" style={ESTILO_INPUT} disabled={off}>
                 {CANALES.map((c) => <option key={c.valor} value={c.valor}>{c.etiqueta}</option>)}
               </select>
             </Etiqueta>
@@ -239,18 +237,18 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
               <Ayuda>Apagado, no sale ningún correo aunque haya desgloses listos: quedan en espera y salen solos al encenderlo.</Ayuda>
             </Etiqueta>
             <Etiqueta t="Nombre del remitente">
-              <input name="remitenteNombre" defaultValue={config.remitenteNombre ?? ''} maxLength={MAX_ETIQUETA} placeholder="(sin definir)" className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
+              <input name="remitenteNombre" defaultValue={config.remitenteNombre ?? ''} maxLength={MAX_ETIQUETA} placeholder="(sin definir)" className="w-full" style={ESTILO_INPUT} disabled={off} />
             </Etiqueta>
             <Etiqueta t="Responder a">
-              <input name="responderA" type="email" defaultValue={config.responderA ?? ''} maxLength={MAX_CORREO} placeholder="(sin definir)" className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
+              <input name="responderA" type="email" defaultValue={config.responderA ?? ''} maxLength={MAX_CORREO} placeholder="(sin definir)" className="w-full" style={ESTILO_INPUT} disabled={off} />
               <Ayuda>A este correo llegan las respuestas del operador. Si lo dejas vacío se usa el correo emisor; sin ninguno de los dos no se envía nada.</Ayuda>
             </Etiqueta>
             <Etiqueta t="Correo emisor de la empresa">
-              <input name="remitenteCorreo" type="email" defaultValue={config.remitenteCorreo ?? ''} maxLength={MAX_CORREO} placeholder="(sin definir)" className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
+              <input name="remitenteCorreo" type="email" defaultValue={config.remitenteCorreo ?? ''} maxLength={MAX_CORREO} placeholder="(sin definir)" className="w-full" style={ESTILO_INPUT} disabled={off} />
               <Ayuda>El correo desde el que la empresa manda hoy los desgloses. Hoy los correos salen por Likida y las respuestas llegan aquí; el envío desde este mismo buzón queda para cuando su área de TI lo autorice.</Ayuda>
             </Etiqueta>
             <Etiqueta t="Hora mínima de envío (0 a 23)">
-              <input name="enviarDesdeHora" type="number" min={0} max={23} step={1} defaultValue={config.enviarDesdeHora ?? ''} placeholder="(sin restricción)" className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
+              <input name="enviarDesdeHora" type="number" min={0} max={23} step={1} defaultValue={config.enviarDesdeHora ?? ''} placeholder="(sin restricción)" className="w-full" style={ESTILO_INPUT} disabled={off} />
             </Etiqueta>
           </div>
         </section>
@@ -259,10 +257,10 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
           <TituloRecuadro info="liquidacion_config.destinatarios">2. Quién lo recibe</TituloRecuadro>
           <div className="grid sm:grid-cols-2 gap-3">
             <Etiqueta t={`Correos de RH (hasta ${MAX_RH}, uno por renglón)`}>
-              <textarea name="rhCorreos" rows={3} defaultValue={config.rhCorreos.join('\n')} placeholder="(vacío: RH no recibe copia)" className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
+              <textarea name="rhCorreos" rows={3} defaultValue={config.rhCorreos.join('\n')} placeholder="(vacío: RH no recibe copia)" className="w-full" style={ESTILO_INPUT} disabled={off} />
             </Etiqueta>
             <Etiqueta t="Buzón de archivo">
-              <input name="archivoCorreo" type="email" defaultValue={config.archivoCorreo ?? ''} maxLength={MAX_CORREO} placeholder="(sin definir)" className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
+              <input name="archivoCorreo" type="email" defaultValue={config.archivoCorreo ?? ''} maxLength={MAX_CORREO} placeholder="(sin definir)" className="w-full" style={ESTILO_INPUT} disabled={off} />
               <Ayuda>Recibe una copia de cada desglose para el archivo de la empresa.</Ayuda>
             </Etiqueta>
             <Etiqueta t="Coordinador">
@@ -290,7 +288,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
           </p>
           <div className="grid sm:grid-cols-2 gap-3">
             <Etiqueta t="No enviar desgloses anteriores a (AAAA-MM-DD)">
-              <input name="noEnviarAntes" type="date" defaultValue={config.noEnviarAntes ?? ''} className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
+              <input name="noEnviarAntes" type="date" defaultValue={config.noEnviarAntes ?? ''} className="w-full" style={ESTILO_INPUT} disabled={off} />
             </Etiqueta>
           </div>
         </section>
@@ -308,10 +306,10 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
               </span>
             </Etiqueta>
             <Etiqueta t="Dura hasta (AAAA-MM-DD, inclusive)">
-              <input name="primerMesHasta" type="date" defaultValue={config.primerMesHasta ?? sumarDias(hoyMx(), 30)} className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
+              <input name="primerMesHasta" type="date" defaultValue={config.primerMesHasta ?? sumarDias(hoyMx(), 30)} className="w-full" style={ESTILO_INPUT} disabled={off} />
             </Etiqueta>
             <Etiqueta t={`Revisores (hasta ${MAX_REVISORES}, «departamento: correo» por renglón)`}>
-              <textarea name="revisores" rows={3} defaultValue={config.revisores.map((r) => `${r.departamento}: ${r.correo}`).join('\n')} placeholder={'nomina: …\nrh: …'} className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
+              <textarea name="revisores" rows={3} defaultValue={config.revisores.map((r) => `${r.departamento}: ${r.correo}`).join('\n')} placeholder={'nomina: …\nrh: …'} className="w-full" style={ESTILO_INPUT} disabled={off} />
             </Etiqueta>
           </div>
         </section>
@@ -325,13 +323,13 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
               </span>
             </Etiqueta>
             <Etiqueta t="Etiqueta del renglón de viaje">
-              <input name="etiquetaViaje" defaultValue={config.etiquetaViaje} maxLength={MAX_ETIQUETA} className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
+              <input name="etiquetaViaje" defaultValue={config.etiquetaViaje} maxLength={MAX_ETIQUETA} className="w-full" style={ESTILO_INPUT} disabled={off} />
             </Etiqueta>
             <Etiqueta t="Conceptos que se funden en el viaje (uno por renglón)">
-              <textarea name="conceptosViaje" rows={3} defaultValue={config.conceptosViaje.join('\n')} className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
+              <textarea name="conceptosViaje" rows={3} defaultValue={config.conceptosViaje.join('\n')} className="w-full" style={ESTILO_INPUT} disabled={off} />
             </Etiqueta>
             <Etiqueta t="Renombres (uno por renglón: concepto → etiqueta)">
-              <textarea name="renombres" rows={3} defaultValue={renombres.map((r) => `${r.texto} → ${r.a}`).join('\n')} placeholder="(sin renombres)" className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
+              <textarea name="renombres" rows={3} defaultValue={renombres.map((r) => `${r.texto} → ${r.a}`).join('\n')} placeholder="(sin renombres)" className="w-full" style={ESTILO_INPUT} disabled={off} />
               <Ayuda>Cambia el nombre con que un concepto aparece en el desglose; el importe no cambia.</Ayuda>
             </Etiqueta>
           </div>
@@ -341,11 +339,11 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
           <TituloRecuadro info="liquidacion_config.retencion">4. Qué retiene el envío</TituloRecuadro>
           <div className="grid sm:grid-cols-2 gap-3">
             <Etiqueta t="Conceptos que retienen el envío (uno por renglón)">
-              <textarea name="conceptosProhibidos" rows={3} defaultValue={config.conceptosProhibidos.join('\n')} placeholder="(ninguno)" className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />
+              <textarea name="conceptosProhibidos" rows={3} defaultValue={config.conceptosProhibidos.join('\n')} placeholder="(ninguno)" className="w-full" style={ESTILO_INPUT} disabled={off} />
               <Ayuda>Si un desglose trae alguno, no sale: queda a la espera de que alguien lo revise y lo libere.</Ayuda>
             </Etiqueta>
             <Etiqueta t="Neto negativo">
-              <select name="netoNegativo" defaultValue={config.netoNegativo} className={CSS_INPUT} style={ESTILO_INPUT} disabled={off}>
+              <select name="netoNegativo" defaultValue={config.netoNegativo} className="w-full" style={ESTILO_INPUT} disabled={off}>
                 <option value="retener">Retener el envío</option>
                 <option value="enviar">Enviar de todos modos</option>
               </select>
@@ -354,7 +352,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
         </section>
 
         {puedeAdministrar && disponible && (
-          <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}><Save width={13} height={13} strokeWidth={2} /> Guardar configuración</button>
+          <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}><Save width={13} height={13} strokeWidth={2} /> Guardar configuración</button>
         )}
       </form>
     </MarcoPagina>

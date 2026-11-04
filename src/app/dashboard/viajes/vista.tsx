@@ -58,7 +58,6 @@ export function hrefRegistro(
   return `/dashboard/viajes${qs ? `?${qs}` : ''}`;
 }
 
-const BTN_SEC = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-medium hairline transition-colors hover:bg-[var(--canvas)]';
 
 /** Las columnas del registro. Los tres pesos (anticipo, comprobado, diferencia) SOLO existen si el rol ve dinero: para el jefe de
  *  tráfico ni la cabecera se arma. El orden es el del servidor (cursor, del más reciente al más antiguo): ninguna cabecera ordena,
@@ -169,7 +168,7 @@ export function VistaViajes({
               // Cerrado es un botón secundario; abierto, el panel del
               // import aparece debajo de la barra, a lo ancho.
               <details className="group">
-                <summary className={`${BTN_SEC} list-none cursor-pointer select-none`} style={{ background: 'var(--surface)' }}>
+                <summary className="rv-btn rv-btn--secondary list-none cursor-pointer select-none" style={{ background: 'var(--surface)' }}>
                   <FileUp width={13} height={13} strokeWidth={1.75} aria-hidden /> Importar desde tu TMS
                 </summary>
                 <div className="absolute left-0 right-0 z-10 mt-2 px-4">

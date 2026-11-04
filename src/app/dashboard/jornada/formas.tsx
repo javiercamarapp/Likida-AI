@@ -31,7 +31,6 @@ export type AccionJornada = (previo: ResultadoAccion, fd: FormData) => Promise<R
 
 const VACIO: ResultadoAccion = { ok: true };
 
-const CAMPO = 'w-full hairline rounded-lg px-3 h-9 text-[13px] outline-none focus:border-[var(--muted)] transition-colors';
 const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
 
 function Boton({ texto, cargando, icono }: { texto: string; cargando: string; icono?: React.ReactNode }) {
@@ -197,7 +196,7 @@ function MarcasDelDia({
                 <input type="hidden" name="jornadaId" value={jornadaId} />
                 <label className="flex-1 min-w-[220px]">
                   <span className={ETIQUETA}>Motivo de la corrección</span>
-                  <input name="motivo" className={CAMPO} minLength={5} required
+                  <input name="motivo" className="w-full" minLength={5} required
                     placeholder="Por qué esta marca no es correcta" />
                 </label>
                 <Boton texto="Anular" cargando="Anulando…" icono={<Ban width={14} height={14} strokeWidth={1.75} />} />
@@ -260,7 +259,7 @@ function FormaCaptura({
       <div className="flex items-end gap-2 flex-wrap">
         <label>
           <span className={ETIQUETA}>Qué</span>
-          <select name="tipo" className={CAMPO} defaultValue="inicio_jornada">
+          <select name="tipo" className="w-full" defaultValue="inicio_jornada">
             <option value="inicio_jornada">Inicio de jornada</option>
             <option value="fin_jornada">Fin de jornada</option>
             <option value="inicio_descanso">Inicio de descanso</option>
@@ -270,7 +269,7 @@ function FormaCaptura({
         <label>
           <span className={ETIQUETA}>Cuándo (expediente del {dia})</span>
           {/* A37-S19-02: SIN hora precargada. Una hora por omisión firmada sin mirar es una cifra inventada. */}
-          <input type="datetime-local" name="momento" required className={CAMPO} />
+          <input type="datetime-local" name="momento" required className="w-full" />
         </label>
         {/* LA OTRA MITAD DE LA CORRECCIÓN. Anular deja el motivo y la firma;
             esto deja el VÍNCULO — `corrige_a` — que dice cuál de las marcas
@@ -280,7 +279,7 @@ function FormaCaptura({
         {corregibles.length > 0 && (
           <label className="min-w-[220px]">
             <span className={ETIQUETA}>¿Corrige una marca anulada?</span>
-            <select name="corrigeA" className={CAMPO} defaultValue="">
+            <select name="corrigeA" className="w-full" defaultValue="">
               <option value="">No, es una marca nueva</option>
               {corregibles.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -292,7 +291,7 @@ function FormaCaptura({
         )}
         <label className="flex-1 min-w-[220px]">
           <span className={ETIQUETA}>Nota (de dónde sacaste la hora, obligatoria)</span>
-          <input name="nota" required minLength={5} className={CAMPO} placeholder="Ej.: me lo dijo por teléfono a las 8:05" />
+          <input name="nota" required minLength={5} className="w-full" placeholder="Ej.: me lo dijo por teléfono a las 8:05" />
         </label>
         <Boton texto="Capturar" cargando="Guardando…" icono={<Plus width={14} height={14} strokeWidth={1.75} />} />
       </div>
@@ -330,21 +329,21 @@ export function FormaPolitica({
         <label>
           <span className={ETIQUETA}>Jornada máxima (horas)</span>
           <input name="horasMaxJornada" type="number" step="0.25" min="0.25" max="24"
-            defaultValue={politica?.horasMaxJornada ?? ''} className={CAMPO} placeholder="sin declarar" />
+            defaultValue={politica?.horasMaxJornada ?? ''} className="w-full" placeholder="sin declarar" />
         </label>
         <label>
           <span className={ETIQUETA}>Descanso mínimo (minutos)</span>
           <input name="minutosMinDescanso" type="number" step="1" min="0" max="1440"
-            defaultValue={politica?.minutosMinDescanso ?? ''} className={CAMPO} placeholder="sin declarar" />
+            defaultValue={politica?.minutosMinDescanso ?? ''} className="w-full" placeholder="sin declarar" />
         </label>
         <label>
           <span className={ETIQUETA}>Entre jornadas (horas)</span>
           <input name="horasMinEntreJornadas" type="number" step="0.25" min="0" max="24"
-            defaultValue={politica?.horasMinEntreJornadas ?? ''} className={CAMPO} placeholder="sin declarar" />
+            defaultValue={politica?.horasMinEntreJornadas ?? ''} className="w-full" placeholder="sin declarar" />
         </label>
         <label className="flex-1 min-w-[260px]">
           <span className={ETIQUETA}>En qué se fundan (lo transcribimos sin validarlo)</span>
-          <input name="fundamento" defaultValue={politica?.fundamento ?? ''} className={CAMPO}
+          <input name="fundamento" defaultValue={politica?.fundamento ?? ''} className="w-full"
             placeholder="Ej.: cláusula 14 del contrato colectivo" />
         </label>
         <Boton texto="Guardar umbrales" cargando="Guardando…" />
@@ -388,21 +387,21 @@ export function FormaAlertaTope({
         <label>
           <span className={ETIQUETA}>Tope propio (horas, máx. 12)</span>
           <input name="topeHoras" type="number" step="0.25" min="0.25" max="12"
-            defaultValue={config?.topeHoras ?? ''} className={CAMPO} placeholder="el de la ley (12 h)" />
+            defaultValue={config?.topeHoras ?? ''} className="w-full" placeholder="el de la ley (12 h)" />
         </label>
         <label>
           <span className={ETIQUETA}>Aviso al (%)</span>
           <input name="umbralAvisoPct" type="number" step="1" min="1" max="98" required
-            defaultValue={config?.umbralAvisoPct ?? 80} className={CAMPO} />
+            defaultValue={config?.umbralAvisoPct ?? 80} className="w-full" />
         </label>
         <label>
           <span className={ETIQUETA}>Crítico al (%)</span>
           <input name="umbralCriticoPct" type="number" step="1" min="2" max="99" required
-            defaultValue={config?.umbralCriticoPct ?? 95} className={CAMPO} />
+            defaultValue={config?.umbralCriticoPct ?? 95} className="w-full" />
         </label>
         <label>
           <span className={ETIQUETA}>Avisar al encargado por</span>
-          <select name="canalEncargado" defaultValue={config?.canalEncargado ?? 'whatsapp'} className={CAMPO}>
+          <select name="canalEncargado" defaultValue={config?.canalEncargado ?? 'whatsapp'} className="w-full">
             <option value="whatsapp">WhatsApp</option>
             <option value="correo">Correo</option>
             <option value="ambos">WhatsApp y correo</option>
@@ -411,7 +410,7 @@ export function FormaAlertaTope({
         </label>
         <label>
           <span className={ETIQUETA}>Avisar al operador por</span>
-          <select name="canalOperador" defaultValue={config?.canalOperador ?? 'whatsapp'} className={CAMPO}>
+          <select name="canalOperador" defaultValue={config?.canalOperador ?? 'whatsapp'} className="w-full">
             <option value="whatsapp">WhatsApp</option>
             <option value="ninguno">No avisarle</option>
           </select>
@@ -419,7 +418,7 @@ export function FormaAlertaTope({
         <label className="flex-1 min-w-[220px]">
           <span className={ETIQUETA}>Correo del encargado (si el canal incluye correo)</span>
           <input name="correoEncargado" type="email" maxLength={254}
-            defaultValue={config?.correoEncargado ?? ''} className={CAMPO} placeholder="encargado@tu-flota.mx" />
+            defaultValue={config?.correoEncargado ?? ''} className="w-full" placeholder="encargado@tu-flota.mx" />
         </label>
         <Boton texto="Guardar la alerta" cargando="Guardando…" />
       </div>

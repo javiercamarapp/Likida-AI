@@ -19,11 +19,8 @@ export interface TarifarioVista {
   acciones: AccionesTarifario;
 }
 
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const CSS_SECUNDARIO = 'hairline text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]';
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--muted)' } as const;
-const CSS_INPUT = 'hairline text-[12px] px-2.5 py-1.5 rounded-lg';
 const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
 
 /** Tarifas que se pintan a la vez (el tarifario real son cientos de filas). */
@@ -59,12 +56,12 @@ export function SeccionTarifario({ datos }: { datos: TarifarioVista }) {
           style={{ color: 'var(--muted)' }} />
         <label className="flex items-center gap-1.5">
           <span className="text-[11px]" style={{ color: 'var(--muted)' }}>Este archivo es</span>
-          <select name="origen" defaultValue="declarada" className={`${CSS_INPUT} w-[210px]`} style={ESTILO_INPUT} aria-label="Origen del archivo de tarifas">
+          <select name="origen" defaultValue="declarada" className="w-[210px]" style={ESTILO_INPUT} aria-label="Origen del archivo de tarifas">
             <option value="declarada">una tarifa que declaro (por confirmar)</option>
             <option value="proveedor">el tarifario oficial del proveedor (queda confirmado)</option>
           </select>
         </label>
-        <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}><Upload width={13} height={13} strokeWidth={2} /> Cargar tarifario</button>
+        <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}><Upload width={13} height={13} strokeWidth={2} /> Cargar tarifario</button>
       </form>
 
       {tarifas === null ? (
@@ -92,7 +89,7 @@ export function SeccionTarifario({ datos }: { datos: TarifarioVista }) {
                 <form action={acciones.confirmarTarifa} className="ml-auto flex items-center gap-2">
                   <span className="text-[11px]" style={{ color: 'var(--warn, var(--muted))' }}>Por confirmar</span>
                   <input type="hidden" name="tarifa" value={t.id} />
-                  <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO} aria-label={`Confirmar la tarifa de ${t.casetaNorm}, clase ${t.clase}`}>Confirmar</button>
+                  <button type="submit" className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO} aria-label={`Confirmar la tarifa de ${t.casetaNorm}, clase ${t.clase}`}>Confirmar</button>
                 </form>
               )}
             </div>
@@ -106,7 +103,7 @@ export function SeccionTarifario({ datos }: { datos: TarifarioVista }) {
           <p className="text-[11px] mb-1.5" style={{ color: 'var(--faint)' }}>
             ¿Hay casetas con tarifa por pasada? Revisa el último desglose: te dice dónde casi todos los cruces son clase 1. Es solo una sugerencia; tú la declaras en «Reglas de cobro».
           </p>
-          <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Buscar sugerencias en el último desglose</button>
+          <button type="submit" className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>Buscar sugerencias en el último desglose</button>
         </form>
       )}
     </section>
