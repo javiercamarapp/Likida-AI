@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "total": 162,
+  "total": 161,
   "porArchivo": {
     "src/app/admin/agentes/contenido.tsx": 1,
     "src/app/admin/evals/page.tsx": 1,
@@ -21,7 +21,6 @@
     "src/lib/agents/copiloto-tools.ts": 1,
     "src/lib/auth/llave-api.ts": 1,
     "src/lib/correo/respuesta_campana.ts": 2,
-    "src/lib/likida/administracion.ts": 1,
     "src/lib/likida/agentes/backoffice.ts": 5,
     "src/lib/likida/agentes/cobranza.ts": 1,
     "src/lib/likida/agentes/cola.ts": 4,

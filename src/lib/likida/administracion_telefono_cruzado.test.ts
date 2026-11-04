@@ -12,7 +12,7 @@ vi.mock('@/lib/supabase/admin', () => ({
       consultadas.push(t);
       const ops: Op[] = [];
       const nodo: Record<string, unknown> = {};
-      for (const m of ['select', 'eq', 'in', 'limit']) nodo[m] = (...a: unknown[]) => { ops.push([m, a]); return nodo; };
+      for (const m of ['select', 'eq', 'in', 'order', 'limit']) nodo[m] = (...a: unknown[]) => { ops.push([m, a]); return nodo; };
       nodo.then = (r: (v: unknown) => unknown, j?: (e: unknown) => unknown) => Promise.resolve().then(() => {
         const v = tablas[t] ?? [];
         return Array.isArray(v) ? { data: v, error: null } : { data: null, error: { message: v.error } };

@@ -388,6 +388,7 @@ export async function comprobarTelefonoLibre(
     .in('telefono', variantesTelefono(telefono))
     // `limit(20)` y no 2: con el filtro de activo hecho aquí, dos filas de baja
     // podían llenar el cupo y esconder a la activa que sí choca.
+    .order('id')
     .limit(20);
 
   if (errBusca) throw new Error(`comprobarTelefonoLibre: no se pudo comprobar el teléfono — ${errBusca.message}`);
@@ -407,8 +408,8 @@ export async function comprobarTelefonoLibre(
   // quién atribuir. Misma respuesta genérica (sin oráculo) y mismo fallo cerrado ante una lectura caída. La base lo impone
   // (0951 `telefono_identidad_unica`); esto solo da el mensaje amable ANTES del insert. En la propia flota no bloquea.
   const [cuentas, contactos] = await Promise.all([
-    admin.from('app_user').select('id, tenant_id, activo').in('telefono', variantesTelefono(telefono)).limit(20),
-    admin.from('vigia_contacto').select('id, tenant_id').in('telefono', variantesTelefono(telefono)).eq('estado', 'activo').limit(20),
+    admin.from('app_user').select('id, tenant_id, activo').in('telefono', variantesTelefono(telefono)).order('id').limit(20),
+    admin.from('vigia_contacto').select('id, tenant_id').in('telefono', variantesTelefono(telefono)).eq('estado', 'activo').order('id').limit(20),
   ]);
   if (cuentas.error) throw new Error(`comprobarTelefonoLibre: no se pudo comprobar el teléfono — ${cuentas.error.message}`);
   if (contactos.error) throw new Error(`comprobarTelefonoLibre: no se pudo comprobar el teléfono — ${contactos.error.message}`);
