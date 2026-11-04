@@ -19,7 +19,7 @@
 //    a esta altura ese caso no existe. Por eso el viejo rebote `esRaiz` →
 //    /admin se retiró: su única razón era "no quedarse viendo la demo por
 //    accidente", y ya no hay accidente posible.
-import { redirect } from 'next/navigation';
+import { redirect, notFound } from 'next/navigation';
 import { requireSessionTenant } from './guard';
 import { tenantDemo } from './tenant-demo';
 import { puedeVerRuta, inicioDe, rolEfectivo } from './visibilidad';
@@ -199,15 +199,17 @@ export async function resolverTenantEfectivo(
       logger.warn('tenant_efectivo.lectura_fallo', { tenant: sp.tenant, err: error.message });
       throw new Error(`No se pudo comprobar a qué flota apunta esta pantalla (${error.message}). Recarga en un momento.`);
     }
-    if (t) {
-      tenantId = t.id as string;
-      tenantNombre = t.nombre as string;
-      // Solo aquí: `?tenant=` que RESOLVIÓ a una flota real. `?vista=demo` no
-      // pasa por este if y no se firma — mirar la demo no es mirar a un
-      // cliente. Ver `firmarImpersonacion` para el dedup y el porqué de que
-      // un fallo del registro nunca tumbe esta página.
-      await firmarImpersonacion(sesionReal.userId, t.id as string);
-    }
+    // MX-002 / P06-21: un `?tenant=` que se comprobó que NO existe es 404, no un
+    // «me quedo con la flota de la sesión» (la cookie o la demo): ahí una acción
+    // escribía en una flota que el superadmin nunca pidió.
+    if (!t) notFound();
+    tenantId = t.id as string;
+    tenantNombre = t.nombre as string;
+    // Solo aquí: `?tenant=` que RESOLVIÓ a una flota real. `?vista=demo` no
+    // pasa por este if y no se firma — mirar la demo no es mirar a un
+    // cliente. Ver `firmarImpersonacion` para el dedup y el porqué de que
+    // un fallo del registro nunca tumbe esta página.
+    await firmarImpersonacion(sesionReal.userId, t.id as string);
   }
 
   // ¿LA FLOTA ELEGIDA EN EL SELECTOR? — superadmin SIN params de preview y
@@ -259,9 +261,7 @@ export async function resolverTenantEfectivo(
 }
 
 
-/** Lo que una pantalla le dice a quien guarda después de que la flota cambió bajo sus pies. */
-export const MENSAJE_FLOTA_CAMBIO =
-  'La flota que estás viendo cambió desde que abriste esta pantalla (otra pestaña eligió otra flota). No se guardó nada: recarga la página y vuelve a intentarlo.';
+export { MENSAJE_FLOTA_CAMBIO } from './flota_cambio';
 
 /**
  * A37-S13-02 — para las ACCIONES de servidor de una pantalla: igual que

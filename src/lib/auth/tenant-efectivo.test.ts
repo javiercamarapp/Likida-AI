@@ -13,7 +13,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const redirect = vi.fn(() => { throw new Error('NEXT_REDIRECT'); });
-vi.mock('next/navigation', () => ({ redirect: (...a: unknown[]) => redirect(...(a as [])) }));
+const notFound = vi.fn(() => { throw new Error('NEXT_NOT_FOUND'); });
+vi.mock('next/navigation', () => ({ redirect: (...a: unknown[]) => redirect(...(a as [])), notFound: () => notFound() }));
 
 const requireSessionTenant = vi.fn();
 vi.mock('./guard', () => ({ requireSessionTenant: (...a: unknown[]) => requireSessionTenant(...a) }));
@@ -325,10 +326,11 @@ describe('la impersonación con ?tenant= real queda firmada', () => {
     expect(de('bitacora_auditoria')).toHaveLength(0);
   });
 
-  it('un `?tenant=` que NO resuelve (flota inexistente) no firma nada', async () => {
+  it('un `?tenant=` que NO resuelve (flota inexistente) es 404 y no firma nada (MX-002: nada de caer en silencio a la demo)', async () => {
     // El mock default contesta `{ data: null }`: la flota no existe.
     requireSessionTenant.mockResolvedValue(SUPER);
-    await resolverTenantEfectivo('/dashboard', { tenant: 't-fantasma' });
+    await expect(resolverTenantEfectivo('/dashboard', { tenant: 't-fantasma' })).rejects.toThrow('NEXT_NOT_FOUND');
+    expect(notFound).toHaveBeenCalled();
     expect(de('impersonacion_dia')).toHaveLength(0);
   });
 
