@@ -105,7 +105,25 @@ describe('motivoDeFallo — las dos puertas del fallo, no una', () => {
 
   it('una respuesta BUENA no produce motivo — lo contrario pintaría de fallo cada turno', () => {
     expect(motivoDeFallo({ ok: true, status: 200 }, { bloques: [{ tipo: 'texto', texto: 'hola' }] })).toBeNull();
-    expect(motivoDeFallo({ ok: true, status: 200 }, null)).toBeNull();
+    // A44-AG-01: aquí vivía `(ok, null) -> null` bajo el rótulo «respuesta
+    // BUENA». Un 200 sin payload no lo es, y la afirmación de al lado —que una
+    // respuesta CON bloques no produce motivo— es la que de verdad protege
+    // contra pintar de fallo cada turno. El caso vacío se afirma al revés en
+    // la prueba A44-AG-01 de abajo.
+  });
+
+  it('A44-AG-01: un 200 con el NDJSON cortado (sin `fin` ni `error`) SÍ declara motivo', () => {
+    // El stream se corta a media respuesta: `use-analista.ts:238-284` sale del
+    // bucle con `d` en null y `resp.ok` en 200. Sin motivo, `:293` no pone
+    // `fallo`, así que la dona armada con los KPIs de la carga de la página
+    // sale SIN aviso y SIN Reintentar — exactamente lo que el encabezado de
+    // este archivo declara prohibido. El otro cliente del MISMO endpoint ya lo
+    // trata como fallo (`viajes-en-vivo/respuesta.ts:59`).
+    const m = motivoDeFallo({ ok: true, status: 200 }, null);
+    expect(m, 'un 200 sin payload no es una respuesta buena, es una vacía').not.toBeNull();
+
+    const r = respuestaLocal('¿cuál es mi tasa de cuadre?', KPIS, ACRED, m);
+    expect(r.texto).toMatch(/lo último que ya tenía cargado, no una lectura nueva/i);
   });
 
   it('el 429 encadenado con `respuestaLocal` SÍ antepone el aviso (antes no se decía nada)', () => {

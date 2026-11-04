@@ -250,7 +250,13 @@ export function motivoDeFallo(
   d: Record<string, unknown> | null,
 ): string | null {
   if (d && d.t === 'error' && typeof d.error === 'string') return d.error;
-  if (resp.ok) return null;
+  // A44-AG-01: un 200 SIN payload no es una respuesta buena, es una VACÍA. El
+  // NDJSON que se corta antes de `fin`/`error` deja `d` en null con `resp.ok`,
+  // y callarlo entregaba la respuesta de reserva —armada con los KPIs de la
+  // carga de la página— sin aviso y sin Reintentar (`use-analista.ts:293`
+  // cuelga `fallo` de que haya motivo). El otro cliente del MISMO endpoint ya
+  // lo trata como fallo: `viajes-en-vivo/respuesta.ts:59`.
+  if (resp.ok) return d === null ? 'El analista no alcanzó a contestar: la respuesta llegó incompleta' : null;
   if (d && typeof d.error === 'string' && d.error.trim() !== '') return d.error;
   return `El analista no pudo contestar (error ${resp.status})`;
 }
