@@ -16,11 +16,13 @@ export const SIN_PLANTILLAS_STREAMING = `!document.querySelector('body > div[hid
 // («Evaluating a string as JavaScript violates the following Content Security Policy directive»); una función viaja por
 // el protocolo del navegador y no cae bajo la CSP. El selector se pasa como argumento para tener una sola fuente.
 async function esperarSegmentos(page: Page): Promise<void> {
+  // Mejor esfuerzo: una pagina puede conservar legitimamente una plantilla oculta (frontera Suspense pendiente, redireccion, pagina de
+  // error). Si pasan 6 s sin intercambio se sigue como antes de CT-BAS-07 (el CI mostro que un timeout duro tumbaba pruebas sanas).
   await page.waitForFunction(
     (selector: string) => !document.querySelector(selector),
     'body > div[hidden][id^="S:"]',
-    { timeout: 15_000 },
-  );
+    { timeout: 6_000 },
+  ).catch(() => undefined);
 }
 
 function esperarStreamingTrasGoto(page: Page): void {

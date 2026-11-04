@@ -11,7 +11,7 @@ const { GET } = await import('./route');
 const ctx = { params: Promise.resolve({ id: '11111111-2222-4333-8444-555555555555' }) };
 
 describe('CT-SEG-17 · export/pdf/[id] rechaza peticiones de otro sitio', () => {
-  it.each([
+  it.each<Record<string, string>>([
     { 'sec-fetch-site': 'cross-site' },
     { origin: 'https://malo.example', host: 'app.likida.ai' },
     { referer: 'https://malo.example/x', host: 'app.likida.ai' },
