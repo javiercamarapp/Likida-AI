@@ -358,12 +358,12 @@ export default async function MiPerfilFlota({
           <div>
             <label htmlFor="perfil-nombre" className="text-[13px] font-medium block mb-1.5">Nombre</label>
             <input id="perfil-nombre" name="nombre" type="text" defaultValue={s.nombre ?? ''} required maxLength={80}
-              className="w-full text-[13px] px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--surface)' }} />
+              className="w-full" style={{ background: 'var(--surface)' }} />
             <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
               Es el nombre con el que te ven tus compañeros de flota en el panel.
             </p>
           </div>
-          <button type="submit" className="text-[13px] px-4 py-2.5 rounded-lg font-medium transition-opacity hover:opacity-85"
+          <button type="submit" className="rv-btn rv-btn--primary"
             style={{ background: 'var(--marca)', color: 'white' }}>
             Guardar nombre
           </button>
@@ -383,7 +383,7 @@ export default async function MiPerfilFlota({
                 <input type="hidden" name="factorId" value={mfa.factorId ?? ''} />
                 <input name="codigo" inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="000000" required
                   className="w-28 text-[13px] px-3 py-2 rounded-lg hairline tabular" style={{ background: 'var(--surface)' }} />
-                <button type="submit" className="rv-btn rv-btn--secondary text-[12px] px-3 py-2 rounded-lg font-medium hairline transition-colors hover:bg-[var(--canvas)]">
+                <button type="submit" className="rv-btn rv-btn--secondary">
                   Verificar sesión
                 </button>
               </form>
@@ -391,7 +391,7 @@ export default async function MiPerfilFlota({
                 <input type="hidden" name="factorId" value={mfa.factorId ?? ''} />
                 <input name="codigo" inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="código" required
                   className="w-24 text-[12px] px-3 py-1.5 rounded-lg hairline tabular" style={{ background: 'var(--surface)' }} />
-                <button type="submit" className="text-[11px]" style={{ color: 'var(--bad)' }}>
+                <button type="submit" className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--bad)' }}>
                   Quitar el factor (exige el código)
                 </button>
               </form>
@@ -411,7 +411,7 @@ export default async function MiPerfilFlota({
                 <input type="hidden" name="factorId" value={qr.factorId} />
                 <input name="codigo" inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="000000" required
                   className="w-28 text-[13px] px-3 py-2 rounded-lg hairline tabular" style={{ background: 'var(--surface)' }} />
-                <button type="submit" className="text-[13px] px-4 py-2 rounded-lg font-medium transition-opacity hover:opacity-85"
+                <button type="submit" className="rv-btn rv-btn--primary"
                   style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
                   Activar
                 </button>
@@ -440,7 +440,7 @@ export default async function MiPerfilFlota({
             cierra todas tus sesiones de un tiro. Vas a tener que volver a iniciar sesión aquí también.
           </p>
           <form action={cerrarTodasMisSesiones}>
-            <button type="submit" className="text-[11px]" style={{ color: 'var(--bad)' }}>
+            <button type="submit" className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--bad)' }}>
               Cerrar sesión en todos los dispositivos
             </button>
           </form>
@@ -472,7 +472,7 @@ export default async function MiPerfilFlota({
               </p>
               <TablaClientesMcp clientes={mcp} />
               <form action={cortarMisSesionesMcp}>
-                <button type="submit" className="text-[11px]" style={{ color: 'var(--bad)' }}>
+                <button type="submit" className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--bad)' }}>
                   {/* Lo que la función de la 0265 hace, dicho tal cual: corta
                       TODOS, no uno. Un rótulo más fino prometería una
                       precisión que la revocación por usuario no tiene. */}

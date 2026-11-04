@@ -187,7 +187,7 @@ export function FilaComprobante({
                   <EstadoCandidato c={c} />
                   <button type="submit" name="operacion" value={`ligar:${c.gastoId}`}
                     disabled={pendiente || c.vive !== true || c.yaTieneCfdi === true}
-                    className="ml-auto inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-full transition-opacity hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="rv-btn rv-btn--primary ml-auto"
                     style={{ background: 'var(--ink)', color: 'var(--surface)' }}>
                     <Link2 width={12} height={12} strokeWidth={2} /> Es éste
                   </button>
@@ -229,7 +229,7 @@ export function FilaComprobante({
                           {g.rfcEmisor ? ` · ${g.rfcEmisor}` : ''}
                         </span>
                         <button type="submit" name="operacion" value={`ligar:${g.id}`} disabled={pendiente}
-                          className="ml-auto inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-full transition-opacity hover:opacity-85 disabled:opacity-50"
+                          className="rv-btn rv-btn--primary ml-auto"
                           style={{ background: 'var(--ink)', color: 'var(--surface)' }}>
                           <Link2 width={12} height={12} strokeWidth={2} /> Ligar a este gasto
                         </button>
@@ -277,18 +277,18 @@ export function FilaComprobante({
             motivando === 'ignorar' ? (
               <>
                 <button type="submit" name="operacion" value="ignorar" disabled={pendiente}
-                  className="inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-full transition-opacity hover:opacity-85 disabled:opacity-50"
+                  className="rv-btn rv-btn--danger"
                   style={{ background: 'var(--bad)', color: 'var(--surface)' }}>
                   <Archive width={12} height={12} strokeWidth={2} /> Archivar
                 </button>
                 <button type="button" onClick={() => setMotivando(null)}
-                  className="text-[12px] font-medium px-3 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">
+                  className="rv-btn rv-btn--secondary rv-btn--sm">
                   Cancelar
                 </button>
               </>
             ) : (
               <button type="button" onClick={() => setMotivando('ignorar')}
-                className="inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity"
+                className="rv-btn rv-btn--secondary rv-btn--sm"
                 style={{ color: 'var(--bad)' }}>
                 <Archive width={12} height={12} strokeWidth={1.75} /> Archivar con motivo…
               </button>
@@ -299,19 +299,19 @@ export function FilaComprobante({
             motivando === 'revertir' ? (
               <>
                 <button type="submit" name="operacion" value="revertir" disabled={pendiente}
-                  className="inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-full transition-opacity hover:opacity-85 disabled:opacity-50"
+                  className="rv-btn rv-btn--primary"
                   style={{ background: 'var(--warn)', color: 'var(--surface)' }}>
                   <RotateCcw width={12} height={12} strokeWidth={2} />
                   {fila.estatus === 'casado' ? 'Deshacer el cruce' : 'Devolver a la bandeja'}
                 </button>
                 <button type="button" onClick={() => setMotivando(null)}
-                  className="text-[12px] font-medium px-3 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">
+                  className="rv-btn rv-btn--secondary rv-btn--sm">
                   Cancelar
                 </button>
               </>
             ) : (
               <button type="button" onClick={() => setMotivando('revertir')}
-                className="inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">
+                className="rv-btn rv-btn--secondary rv-btn--sm">
                 <RotateCcw width={12} height={12} strokeWidth={1.75} />
                 {fila.estatus === 'casado' ? 'Deshacer el cruce…' : 'Devolver a la bandeja…'}
               </button>
@@ -349,7 +349,7 @@ export function FilaComprobante({
               className="text-[12px] rounded-lg px-2 py-1.5 hairline w-full" style={{ background: 'var(--canvas)' }} />
           </label>
           <button type="submit"
-            className="text-[12px] font-medium px-3 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">
+            className="rv-btn rv-btn--secondary rv-btn--sm">
             Buscar
           </button>
         </form>

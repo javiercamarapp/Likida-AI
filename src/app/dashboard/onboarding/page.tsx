@@ -144,7 +144,7 @@ export default async function OnboardingFlotaPage({
           {puedeAdministrar(s.rol) && !onboardingFiscalListo(perfil) && (
             <form action={posponer} className="px-5 pt-4 text-[12px]" style={{ color: 'var(--muted)' }}>
               ¿No tienes a la mano tus ingresos anuales o no sabes si eres parte relacionada?{' '}
-              <button type="submit" className="underline font-medium" style={{ color: 'var(--ink)' }}>Lo confirmo con mi contador</button>
+              <button type="submit" className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--ink)' }}>Lo confirmo con mi contador</button>
               {' '}— el Resumen se abre con un aviso permanente: el estímulo de peaje queda en $0 hasta que lo declares.
             </form>
           )}

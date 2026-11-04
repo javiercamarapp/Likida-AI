@@ -15,7 +15,7 @@ function Boton() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Save width={14} height={14} strokeWidth={1.75} />
       {pending ? 'Guardando…' : 'Guardar declaración'}
@@ -81,7 +81,7 @@ function BotonTexto({ rotulo, pendiente }: { rotulo: string; pendiente: string }
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Save width={14} height={14} strokeWidth={1.75} />
       {pending ? pendiente : rotulo}
@@ -229,7 +229,7 @@ export function FormaMercancia({ accion, viajeId }: { accion: AccionForma; viaje
 function BotonQuitar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className="text-[11px] underline decoration-dotted hover:opacity-75 disabled:opacity-50"
+    <button type="submit" disabled={pending} className="rv-btn rv-btn--ghost rv-btn--sm"
       style={{ color: 'var(--bad)' }}>
       {pending ? 'quitando…' : 'quitar'}
     </button>

@@ -335,7 +335,7 @@ function BotonExport({ href, rotulo }: { href: string; rotulo: string }) {
   return (
     <form method="post" action={href}>
       <button type="submit"
-        className="hairline flex w-full items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
+        className="rv-btn rv-btn--secondary rv-btn--sm w-full"
         style={{ background: 'var(--surface)' }}>
         <Download width={13} height={13} strokeWidth={1.75} />
         {rotulo}

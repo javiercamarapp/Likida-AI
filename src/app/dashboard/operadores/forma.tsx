@@ -36,7 +36,7 @@ function Boton() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Save width={14} height={14} strokeWidth={1.75} />
       {pending ? 'Guardando…' : 'Guardar'}
@@ -210,7 +210,7 @@ export function FormaOperador({ accion, operadorId, inicial, idPrefijo, patios =
           />
         ) : (
           <button type="submit" name="accion" value="reactivar"
-            className="rv-btn rv-btn--secondary hairline h-9 px-4 rounded-lg text-[13px] font-medium transition-colors hover:bg-[var(--canvas)]">
+            className="rv-btn rv-btn--secondary">
             Reactivar operador
           </button>
         )}
@@ -289,7 +289,7 @@ function BotonAlta() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <UserPlus width={14} height={14} strokeWidth={1.75} />
       {pending ? 'Dando de alta…' : 'Dar de alta'}

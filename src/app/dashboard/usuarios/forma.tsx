@@ -21,7 +21,7 @@ function Boton() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <UserPlus width={14} height={14} strokeWidth={1.75} />
       {pending ? 'Invitando…' : 'Invitar'}
@@ -126,7 +126,7 @@ function BotonChico({ etiqueta, ocupado, tono = 'neutral' }: {
     : { color: 'var(--ink)', background: 'var(--surface)' };
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5 hairline transition-opacity hover:opacity-85 disabled:opacity-50 whitespace-nowrap"
+      className="rv-btn rv-btn--secondary whitespace-nowrap"
       style={estilo}>
       {pending ? ocupado : etiqueta}
     </button>

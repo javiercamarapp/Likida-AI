@@ -34,7 +34,8 @@ const medidas = new Map<string, ConteoControles>();
 for (const a of ALCANCE) {
   for (const f of tsx(join(SRC, a))) {
     const ruta = relative(SRC, f);
-    if (excepcion(ruta)) continue;
+    const ex = excepcion(ruta);
+    if (ex && EXCEPCIONES[ex].R1 === undefined && EXCEPCIONES[ex].R2 === undefined && EXCEPCIONES[ex].R3 === undefined) continue; // excepción total (primitivas, gráficas)
     const src = readFileSync(f, 'utf8');
     const c: ConteoControles = { R1: botonesCrudos(src), R2: clasesGruesas(src), R3: constantesDuplicadas(src) };
     if (c.R1 + c.R2 + c.R3 > 0) medidas.set(ruta, c);
@@ -42,7 +43,7 @@ for (const a of ALCANCE) {
 }
 
 if (process.env.GENERAR_BASE_CONTROLES) {
-  const filas = [...medidas.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `  '${k}': { R1: ${v.R1}, R2: ${v.R2}, R3: ${v.R3} },`);
+  const filas = [...medidas.entries()].filter(([r]) => !excepcion(r)).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `  '${k}': { R1: ${v.R1}, R2: ${v.R2}, R3: ${v.R3} },`);
   writeFileSync(join(SRC, 'app/ui-v2/controles_gruesos_base.ts'),
 `// Base del trinquete de controles_gruesos_guarda.test.ts: archivos con controles gruesos, con su tope por regla (R1 botones crudos,
 // R2 clases gruesas, R3 constantes duplicadas). Solo puede BAJAR: al migrar un archivo se borra su línea. Un archivo nuevo no entra aquí.
@@ -73,7 +74,9 @@ describe('controles gruesos: trinquete (la base solo baja)', () => {
   it('ningún archivo supera su tope y los archivos nuevos entran limpios', () => {
     const fallos: string[] = [];
     for (const [ruta, c] of medidas) {
-      const b = BASE_CONTROLES[ruta] ?? { R1: 0, R2: 0, R3: 0 };
+      const ex = excepcion(ruta);
+      const t = ex ? EXCEPCIONES[ex] : undefined;
+      const b = t ? { R1: t.R1 ?? 0, R2: t.R2 ?? 0, R3: t.R3 ?? 0 } : BASE_CONTROLES[ruta] ?? { R1: 0, R2: 0, R3: 0 };
       for (const k of ['R1', 'R2', 'R3'] as const) if (c[k] > b[k]) fallos.push(`${ruta}: ${k} = ${c[k]} (tope ${b[k]})`);
     }
     expect(fallos).toEqual([]);
@@ -81,6 +84,8 @@ describe('controles gruesos: trinquete (la base solo baja)', () => {
   it('un archivo ya limpio sale de la base (obliga a borrar su línea)', () => {
     const limpios = Object.keys(BASE_CONTROLES).filter((r) => !medidas.has(r));
     expect(limpios).toEqual([]);
+    // una excepción con tope también debe seguir usándose (si el archivo quedó limpio, se borra de la lista)
+    expect(Object.entries(EXCEPCIONES).filter(([k, e]) => !k.endsWith('/') && (e.R1 ?? e.R2 ?? e.R3) !== undefined && !medidas.has(k)).map(([k]) => k)).toEqual([]);
   });
   it('las excepciones llevan razón', () => {
     for (const [k, e] of Object.entries(EXCEPCIONES)) expect(e.razon.length, k).toBeGreaterThan(15);

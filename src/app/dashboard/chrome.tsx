@@ -115,7 +115,7 @@ export default function DashboardChrome({
               {cerrarSesion && (
                 <form action={cerrarSesion} className="shrink-0">
                   <button type="submit" title="Cerrar sesión" aria-label="Cerrar sesión"
-                    className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-[var(--badbg)]"
+                    className="rv-icono-boton"
                     style={{ color: 'var(--bad)' }}>
                     <LogOut width={14} height={14} strokeWidth={1.75} />
                   </button>

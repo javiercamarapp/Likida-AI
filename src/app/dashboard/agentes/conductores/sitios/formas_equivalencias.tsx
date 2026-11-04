@@ -17,7 +17,7 @@ function Boton({ texto, pendiente }: { texto: string; pendiente: string }) {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Upload width={14} height={14} strokeWidth={1.75} />{pending ? pendiente : texto}
     </button>
@@ -68,5 +68,5 @@ export function FilaTextoSinSitio({ accion, texto, lado, sitios }: {
 
 function Boton2() {
   const { pending } = useFormStatus();
-  return <button type="submit" disabled={pending} className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12px] hairline disabled:opacity-50">{pending ? 'Guardando…' : 'Guardar'}</button>;
+  return <button type="submit" disabled={pending} className="rv-btn rv-btn--secondary">{pending ? 'Guardando…' : 'Guardar'}</button>;
 }

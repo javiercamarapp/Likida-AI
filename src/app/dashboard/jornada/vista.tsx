@@ -168,7 +168,7 @@ export function VistaJornada({
             Del {desde} al {hasta}
           </TituloRecuadro>
           <Link href={`${urlExport}`} prefetch={false}
-            className="h-9 px-3.5 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 hairline hover:opacity-85 transition-opacity">
+            className="rv-btn rv-btn--secondary">
             <Download width={14} height={14} strokeWidth={1.75} />
             Descargar el reporte (CSV)
           </Link>

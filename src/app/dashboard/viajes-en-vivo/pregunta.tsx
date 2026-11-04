@@ -51,15 +51,15 @@ export function PreguntaAlAsistente({ tenantParam }: { tenantParam: string | nul
       <h2 className="text-[13px] font-medium">Pregúntale al asistente</h2>
       <div className="flex flex-wrap gap-1.5">
         {PREGUNTAS_OPERACION.map((p) => (
-          <button key={p} type="button" disabled={ocupado} onClick={() => void preguntar(p)} className="hairline rounded-full px-2.5 py-1 text-[12px]">{p}</button>
+          <button key={p} type="button" disabled={ocupado} onClick={() => void preguntar(p)} className="rv-chip">{p}</button>
         ))}
       </div>
       <form onSubmit={(e) => { e.preventDefault(); void preguntar(texto); }} className="flex gap-2">
         <input
           value={texto} onChange={(e) => setTexto(e.target.value)} maxLength={500} placeholder="Ej. ¿cómo va la terminal de Guadalajara?"
-          aria-label="Tu pregunta" className="hairline rounded-lg px-3 h-9 text-[13px] flex-1 outline-none focus:border-[var(--muted)]"
+          aria-label="Tu pregunta" className="flex-1"
         />
-        <button type="submit" disabled={ocupado || !texto.trim()} className="rv-btn rv-btn--secondary hairline rounded-lg px-3 h-9 text-[13px] font-medium">{ocupado ? 'Consultando…' : 'Preguntar'}</button>
+        <button type="submit" disabled={ocupado || !texto.trim()} className="rv-btn rv-btn--secondary">{ocupado ? 'Consultando…' : 'Preguntar'}</button>
       </form>
       {error && <p role="alert" className="text-[12px]" style={{ color: 'var(--bad)' }}>{error}</p>}
       {bloques && (

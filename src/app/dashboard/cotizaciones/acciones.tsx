@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
+import { clasesBoton } from '@/app/ui-v2/componentes';
 import type { AccionDeForma, ResultadoAccion } from '../../admin/ui/forma';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -14,17 +15,16 @@ import type { AccionDeForma, ResultadoAccion } from '../../admin/ui/forma';
 // ═══════════════════════════════════════════════════════════════════════════
 
 function Boton({ texto, pendienteTexto, className, disabled, title }: {
-  texto: string; pendienteTexto: string; className: string; disabled?: boolean; title?: string;
+  texto: string; pendienteTexto: string; className?: string; disabled?: boolean; title?: string;
 }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending || disabled} title={title} className={className}>
+    <button type="submit" disabled={pending || disabled} title={title} className={clasesBoton('secondary', 'sm', className)}>
       {pending ? pendienteTexto : texto}
     </button>
   );
 }
 
-const BTN = 'rounded border px-2 py-1 hover:bg-[var(--canvas)] disabled:opacity-50';
 
 export function FilaAccionesCotizacion({
   id, puedeEnviar, puedeCrearViaje = true, precio, enviada, convertir, perdida,
@@ -51,14 +51,14 @@ export function FilaAccionesCotizacion({
         {puedeEnviar && (
           <form action={accEnviada}>
             <input type="hidden" name="id" value={id} />
-            <Boton texto="Marcar enviada" pendienteTexto="Marcando…" className={BTN} />
+            <Boton texto="Marcar enviada" pendienteTexto="Marcando…" />
           </form>
         )}
         {puedeCrearViaje && (
           <form action={accConvertir}>
             <input type="hidden" name="id" value={id} />
             <Boton
-              texto="Crear viaje" pendienteTexto="Creando…" className="rv-btn rv-btn--secondary rv-btn--sm"
+              texto="Crear viaje" pendienteTexto="Creando…"
               disabled={precio === null}
               title={precio === null ? 'Sin precio no hay viaje que crear' : 'Crea el viaje con esta ruta, cliente y precio'}
             />
@@ -67,12 +67,12 @@ export function FilaAccionesCotizacion({
         <form action={accPerdida}>
           <input type="hidden" name="id" value={id} />
           <input type="hidden" name="como" value="perdida" />
-          <Boton texto="Perdida" pendienteTexto="…" className={BTN} />
+          <Boton texto="Perdida" pendienteTexto="…" />
         </form>
         <form action={accVencida}>
           <input type="hidden" name="id" value={id} />
           <input type="hidden" name="como" value="vencida" />
-          <Boton texto="Vencida" pendienteTexto="…" className={BTN} />
+          <Boton texto="Vencida" pendienteTexto="…" />
         </form>
       </span>
       {error && <span className="text-xs" style={{ color: 'var(--color-bad)' }}>{error}</span>}

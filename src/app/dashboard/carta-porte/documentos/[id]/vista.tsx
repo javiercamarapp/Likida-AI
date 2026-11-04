@@ -381,7 +381,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
                     <div className="space-y-2" aria-label="Modo manual">
                       <div className="flex flex-wrap items-center gap-2">
                         <a href={`/api/export/carta-porte-docs${sufijo ? `${sufijo}&` : '?'}formato=plantilla_tms&documento=${doc.id}`} download
-                          className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 hairline transition-opacity hover:opacity-85" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
+                          className="rv-btn rv-btn--secondary" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
                           <Download width={14} height={14} strokeWidth={1.75} />Descargar plantilla del TMS
                         </a>
                         {envio?.estado !== 'subido_a_mano' && (

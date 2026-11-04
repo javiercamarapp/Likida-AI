@@ -93,7 +93,7 @@ function Aviso({ children }: { children: React.ReactNode }) {
 function Enviar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className="rv-btn rv-btn--secondary hairline rounded-lg px-3 h-9 text-[12px] inline-flex items-center gap-1.5 disabled:opacity-60 hover:bg-[var(--canvas)]">
+    <button type="submit" disabled={pending} className="rv-btn rv-btn--secondary">
       <Upload width={14} height={14} strokeWidth={1.75} aria-hidden />{pending ? 'Leyendo el archivo…' : 'Subir y leer'}
     </button>
   );

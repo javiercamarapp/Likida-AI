@@ -25,7 +25,7 @@ function Boton({ etiqueta, ocupado }: { etiqueta: string; ocupado: string }) {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <KeyRound width={14} height={14} strokeWidth={1.75} />
       {pending ? ocupado : etiqueta}
@@ -64,7 +64,7 @@ export function SecretoUnaVez({ enClaro }: { enClaro: string }) {
             pueda leer y transcribir completa. */}
         <code className="cifra-mono text-[12px] break-all flex-1">{enClaro}</code>
         <button type="button" aria-label="Copiar la llave" onClick={copiar}
-          className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--canvas)]"
+          className="rv-icono-boton"
           style={{ color: copiado ? 'var(--ok)' : 'var(--muted)' }}>
           {copiado ? <Check width={14} height={14} strokeWidth={2} /> : <Copy width={14} height={14} strokeWidth={2} />}
         </button>

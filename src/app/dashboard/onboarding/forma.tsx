@@ -11,7 +11,7 @@ function Boton() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="text-sm font-medium rounded-lg px-4 py-2 disabled:opacity-60"
+      className="rv-btn rv-btn--primary"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <span className="inline-flex items-center gap-2">
         <Save width={14} height={14} strokeWidth={1.75} />

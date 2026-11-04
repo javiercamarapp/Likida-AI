@@ -9,7 +9,7 @@ import { ESTILO_SECUNDARIO } from './vista';
 // ═══════════════════════════════════════════════════════════════════════════
 // REASIGNAR CHOFER — con `pending` y con su rechazo en pantalla (FE-11).
 //
-// Antes: `<form action={accion}>` con un `<button>` pelón y una server action
+// Antes: `<form action={accion}>` con un botón pelón y una server action
 // que hacía `await reasignarOperador(...)` sin try/catch. Dos modos de falla,
 // los dos vistos en el panel:
 //   · un chofer dado de baja o un fallo de red lanzaba DENTRO de la action y
