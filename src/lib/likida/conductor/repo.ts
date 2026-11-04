@@ -10,7 +10,6 @@ import {
 import type { LegadoSello } from './maquina';
 import { CONFIG_CONDUCTOR_DEFAULT, COHORTES_PILOTO, aplicarPisoDePerfil, configPorOmisionDePerfil, validarConfigConductor, zonaOCdmx, type CohortePiloto, type ConfigConductor, type PerfilSeguimiento } from './config';
 import { MOTIVO_FUERA_DE_PERFIL, hitoEnPerfil } from './perfil';
-import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { contieneDatoDeSeguridad } from './guardia_seguridad';
 import { aHitoApi, EVENTOS_FEED, detalleDeFeed, type EventoApi, type FiltrosHitos, type HitoApi, type CambioCitas } from './lectura';
 import type { AvisoReclamado } from './planificador';
@@ -538,7 +537,9 @@ export async function leerConfigConductor(tenantId: string): Promise<ConfigCondu
     getZonaHorariaTenant(tenantId),
     // CT-A345-29: ante un bache de lectura del perfil sin valor previo (instancia fria) se FALLA CERRADO ('restringir' = cinco_agentes): la
     // compuerta de movimiento encendida solo exige unidad detenida; asumir «sin perfil» la apagaba y dejaba escribir con la unidad en marcha.
-    perfilDeTenant(tenantId, Date.now(), 'restringir'),
+    // Import dinamico (como en leerDatosPreflight): perfil_tenant arrastra next/navigation y este repo lo importa por cadena el script
+    // Node de verificar-local.mjs (sin Next), que no resuelve ese especificador.
+    import('@/lib/auth/perfil_tenant').then((m) => m.perfilDeTenant(tenantId, Date.now(), 'restringir')),
   ]);
   const perfilEfectivo = perfil === 'cinco_agentes' ? 'cinco_agentes' : null;
   const defaultsDelPerfil = (): ConfigConductor => configPorOmisionDePerfil(perfilEfectivo);
