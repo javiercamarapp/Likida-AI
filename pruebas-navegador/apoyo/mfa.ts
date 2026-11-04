@@ -16,7 +16,7 @@ export async function completarMfaSuperadmin(page: Page) {
   let boton = 'Verificar sesión';
   if (await activar.isVisible()) {
     await activar.click();
-    const texto = await page.getByText('Si no puedes escanear:').textContent();
+    const texto = await page.getByText('Si no puedes escanear:').locator('visible=true').textContent();
     const secreto = texto?.match(/Si no puedes escanear:\s*([A-Z2-7]+)/)?.[1];
     if (!secreto) throw new Error('La UI no entregó la semilla del factor local');
     estado = { secreto, app: entorno.app, supabase: entorno.supabase, ultimoPaso: -1 };
