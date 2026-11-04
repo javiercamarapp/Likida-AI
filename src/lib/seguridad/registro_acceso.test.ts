@@ -5,6 +5,9 @@ vi.mock('./eventos', () => ({ registrarEventoSeguridad: (ev: Record<string, unkn
 let cabeceras: Headers | Error = new Headers({ 'x-real-ip': '203.0.113.5', 'user-agent': 'curl/8' });
 vi.mock('next/headers', () => ({ headers: async () => { if (cabeceras instanceof Error) throw cabeceras; return cabeceras; } }));
 
+const after = vi.fn();
+vi.mock('next/server', () => ({ after: (p: unknown) => after(p) }));
+
 const SAL = 'sal-de-prueba-0123456789';
 const mod = await import('./registro_acceso');
 
@@ -82,6 +85,20 @@ describe('registrarCambioRol', () => {
     await mod.registrarCambioRol({ tenantId: 't1', actorId: 'u1', usuarioId: 'u2', de: 'flota_admin', a: 'contador' });
     expect(registrar.mock.calls[0][0]).toMatchObject({ origen: 'auth', tipo: 'cambio_rol', severidad: 'alta', actor: 'u1', detalle: { usuario: 'u2', de: 'contador', a: 'flota_admin' } });
     expect(registrar.mock.calls[1][0]).toMatchObject({ severidad: 'media' });
+  });
+});
+
+describe('after() de Next', () => {
+  it('ata el registro a after() para que no se congele tras la respuesta', async () => {
+    after.mockClear();
+    await mod.registrarLoginFallido({ motivo: 'x' });
+    expect(after).toHaveBeenCalledTimes(1);
+    expect(after.mock.calls[0][0]).toBeInstanceOf(Promise);
+  });
+  it('fuera de una petición after() lanza y el registro sigue sin error', async () => {
+    after.mockImplementationOnce(() => { throw new Error('fuera de request'); });
+    await expect(mod.registrarLoginFallido({ motivo: 'x' })).resolves.toBeUndefined();
+    expect(registrar).toHaveBeenCalled();
   });
 });
 

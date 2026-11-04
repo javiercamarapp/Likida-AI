@@ -1,3 +1,4 @@
+import { after } from 'next/server';
 import { registrarEventoSeguridad } from './eventos';
 import { huellaCuenta, redDeCabeceras, type RedEvento } from './evento_red';
 
@@ -21,8 +22,15 @@ export async function redDeSolicitudActual(): Promise<RedEvento | undefined> {
   }
 }
 
-async function seguro(f: () => Promise<void>): Promise<void> {
-  try { await f(); } catch { /* best-effort total */ }
+/**
+ * Corre el registro y, dentro de una petición, lo ata a `after()` de Next: en Vercel el trabajo que sigue a la respuesta se congela si
+ * nadie lo espera, y un `void` pelón perdía justo los registros de los caminos que redirigen (login, callback). Fuera de una petición
+ * (pruebas, scripts) `after` lanza y se sigue con la promesa suelta, como el resto de los escritores de eventos.
+ */
+function seguro(f: () => Promise<void>): Promise<void> {
+  const p = (async () => { try { await f(); } catch { /* best-effort total */ } })();
+  try { after(p); } catch { /* fuera de una petición */ }
+  return p;
 }
 
 // Exportes que sacan dinero de la flota (liquidaciones, póliza, facturas de proveedor, conciliaciones, peajes). Los de jornada,
@@ -38,7 +46,7 @@ export function esExporteDeDinero(pathname: string): boolean {
  * quedó intentada). Solo la ruta, nunca el query (que trae los filtros pedidos y a veces el `?tenant=` de un superadmin).
  */
 export async function registrarExporteDinero(a: { url: string; tenantId: string; rol: string; userId?: string | null }): Promise<void> {
-  await seguro(async () => {
+  return seguro(async () => {
     const ruta = new URL(a.url).pathname;
     if (!esExporteDeDinero(ruta)) return;
     await registrarEventoSeguridad({
@@ -52,7 +60,7 @@ export async function registrarExporteDinero(a: { url: string; tenantId: string;
 
 /** Un intento de entrada que no terminó en sesión. El actor es una huella de la cuenta, jamás el correo. */
 export async function registrarLoginFallido(a: { motivo: string; email?: string | null }): Promise<void> {
-  await seguro(async () => {
+  return seguro(async () => {
     await registrarEventoSeguridad({
       origen: 'auth', tipo: 'login_fallido', severidad: 'media',
       actor: a.email ? huellaCuenta(a.email) : null,
@@ -64,7 +72,7 @@ export async function registrarLoginFallido(a: { motivo: string; email?: string 
 
 /** Una llave de API que no abre. La red sale de la propia petición; ni la llave ni el query se guardan. */
 export async function registrarLlaveInvalida(req: Request, motivo: string): Promise<void> {
-  await seguro(async () => {
+  return seguro(async () => {
     await registrarEventoSeguridad({
       origen: 'api_v1', tipo: 'llave_invalida', severidad: 'media',
       detalle: { ruta: new URL(req.url).pathname, motivo },
@@ -75,7 +83,7 @@ export async function registrarLlaveInvalida(req: Request, motivo: string): Prom
 
 /** Una ruta de API negada por el perfil de la flota o por el área de la llave/rol. Informativa: no es un ataque, es cobertura. */
 export async function registrarApiNegada(a: { tenantId: string | null | undefined; pathname: string; causa: 'perfil' | 'area_llave' | 'area_rol' }): Promise<void> {
-  await seguro(async () => {
+  return seguro(async () => {
     await registrarEventoSeguridad({
       origen: 'api_v1', tipo: 'api_negada', severidad: 'info',
       tenantId: a.tenantId ?? null,
@@ -87,7 +95,7 @@ export async function registrarApiNegada(a: { tenantId: string | null | undefine
 
 /** Un cambio de rol hecho desde el panel. Subir a dueño es escalada de privilegio: severidad alta (avisa). */
 export async function registrarCambioRol(a: { tenantId: string; actorId: string; usuarioId: string; de: string; a: string }): Promise<void> {
-  await seguro(async () => {
+  return seguro(async () => {
     await registrarEventoSeguridad({
       origen: 'auth', tipo: 'cambio_rol', severidad: a.a === 'flota_admin' ? 'alta' : 'media',
       tenantId: a.tenantId, actor: a.actorId,

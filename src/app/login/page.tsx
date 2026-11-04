@@ -6,6 +6,7 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { guardarCorreoParaReenvio } from '@/lib/auth/reenvio_enlace';
+import { registrarLoginFallido } from '@/lib/seguridad/registro_acceso';
 import { respuestaOtp, conPisoDeTiempo } from './respuesta_otp';
 import { VistaLogin } from './vista-login';
 import './login.css';
@@ -91,7 +92,10 @@ async function dentroDelLimite(llave: string): Promise<boolean> {
   // negar de golpe: el mismo trade-off que ya elegía `RATELIMIT_REDIS_FALLA_
   // CERRADO=false` a nivel de despliegue, aquí anclado al único endpoint
   // donde un falso "no" cierra la entrada entera, no solo un intento.
-  return await rateLimit(`${llave}:${ip}`, 10, 5 * 60_000, { fallaCerrado: false });
+  const dentro = await rateLimit(`${llave}:${ip}`, 10, 5 * 60_000, { fallaCerrado: false });
+  // CT-SEG-11: pasarse del límite por IP es un intento que no entra; queda fila (con la huella de red), sin esperar.
+  if (!dentro) void registrarLoginFallido({ motivo: 'limite_ip' });
+  return dentro;
 }
 
 /**
@@ -123,6 +127,8 @@ async function dentroDelLimitePorCuenta(email: string): Promise<boolean> {
   const ip = await ipDelCliente();
   const porIp = await rateLimit(`login:cuenta-ip:${email}:${ip}`, 10, 5 * 60_000, { fallaCerrado: false });
   const global = await rateLimit(`login:cuenta:${email}`, 30, 5 * 60_000, { fallaCerrado: false });
+  // CT-SEG-11: insistir sobre una cuenta pasado el techo queda registrado; el actor es una huella de la cuenta, nunca el correo.
+  if (!(porIp && global)) void registrarLoginFallido({ motivo: 'limite_cuenta', email });
   return porIp && global;
 }
 
@@ -165,7 +171,10 @@ export default async function Login({
       provider: 'google',
       options: { redirectTo: `${siteUrl()}/auth/callback?next=${encodeURIComponent(dest)}` },
     });
-    if (error || !data.url) redirect(`/login?next=${encodeURIComponent(dest)}&error=1`);
+    if (error || !data.url) {
+      void registrarLoginFallido({ motivo: 'oauth_error' });
+      redirect(`/login?next=${encodeURIComponent(dest)}&error=1`);
+    }
     redirect(data.url);
   }
 
@@ -214,7 +223,10 @@ export default async function Login({
     // viera distinto, esta pantalla sería un oráculo para enumerar qué correos
     // son contralores reales. Solo el correo malformado —que GoTrue rechaza
     // antes de buscar la cuenta— sale como error (`respuesta_otp.ts`).
-    if (respuestaOtp(error) === 'error') redirect(`/login?next=${encodeURIComponent(dest)}&error=1`);
+    if (respuestaOtp(error) === 'error') {
+      void registrarLoginFallido({ motivo: 'correo_invalido' });
+      redirect(`/login?next=${encodeURIComponent(dest)}&error=1`);
+    }
     if (error) {
       // El usuario ve "enviado"; el motivo real solo queda aquí. Sin correo en el
       // log: el código y el status bastan para distinguir cuenta inexistente
