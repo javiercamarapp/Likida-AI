@@ -71,7 +71,9 @@ describe('allowlist del banco multi-tenant', () => {
     expect(r.errores).toEqual([]);
     expect(r.vencidas).toEqual([]);
     expect(real.esquemas_expuestos).toContain('public');
-    expect(typeof real.cobertura_minima_siembra).toBe('number');
+    expect(real.cobertura_minima_siembra).toBeGreaterThanOrEqual(0.85);
+    // is_operador()/get_user_operador_id() las borra la 0086: sus excepciones no pueden volver sin recrear las funciones.
+    expect(real.entradas.map((e: { objeto: string }) => e.objeto).filter((o: string) => /operador/.test(o))).toEqual([]);
   });
 });
 
@@ -100,6 +102,12 @@ describe('clasificar hallazgos', () => {
   it('una excepcion que ya no coincide con ningun hallazgo se reporta como obsoleta', () => {
     const r = clasificar([], lista, HOY);
     expect(r.obsoletas.map((e: { id: string }) => e.id).sort()).toEqual(['L1K-99', 'RLS-01']);
+  });
+
+  it('una excepcion de otra fase NO se reporta como obsoleta (la dinamica no mide funciones; la estatica no mide fugas)', () => {
+    expect(clasificar([], lista, HOY, 'dinamica').obsoletas).toEqual([]);
+    expect(clasificar([], { entradas: [permanente({ id: 'F-9', tipo: 'fuga_lectura', objeto: 'public.v', permanente: false, hallazgo: 'CT-1', fecha_limite: '2026-12-31' })] }, HOY, 'estatica').obsoletas).toEqual([]);
+    expect(clasificar([], lista, HOY, 'estatica').obsoletas.map((e: { id: string }) => e.id).sort()).toEqual(['L1K-99', 'RLS-01']);
   });
 
   it('una excepcion vencida no protege al hallazgo', () => {
@@ -136,6 +144,12 @@ describe('armado del SQL por fase', () => {
     expect(sql).toMatch(/zz_canario_fuga/);
     expect(sql.indexOf('zz_canario_fuga')).toBeLessThan(sql.indexOf('POLITICAS'));
     expect(sql.indexOf('FUNCIONES')).toBeLessThan(sql.indexOf('SIEMBRA'));
+  });
+
+  it('la fase dinamica carga los candidatos de la siembra justo despues del prologo', () => {
+    const sql = armarSql('dinamica', { esquemas: ['public'], candidatos: [{ tabla: 'public.t', columna: 'c', ord: 0, va: 'x', vb: 'x' }] });
+    expect(sql.indexOf('create table ci_banco.candidatos')).toBeLessThan(sql.indexOf('insert into ci_banco.candidatos'));
+    expect(sql.indexOf('insert into ci_banco.candidatos')).toBeLessThan(sql.indexOf('SIEMBRA'));
   });
 
   it('rechaza una fase desconocida y esquemas con caracteres peligrosos', () => {

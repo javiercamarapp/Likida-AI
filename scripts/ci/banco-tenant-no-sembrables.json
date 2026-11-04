@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "comentario": "Tablas con columna de tenant que la siembra del banco (flota A contra flota B) NO puede llenar, con el motivo. Cada tabla con columna de tenant sin sembrar debe estar aqui con una razon que diga por que es imposible generar una fila valida (no basta 'falla un CHECK': la siembra lee los CHECK del catalogo y busca valores que los cumplan; si una coherencia es demasiado especifica se agrega un candidato en banco-tenant-siembra.mjs). Lo que no se siembra no se prueba por la fase dinamica (b); la fase estatica (a) si lo cubre. La cobertura minima vive en banco-tenant-allowlist.json (cobertura_minima_siembra).",
+  "tablas": []
+}

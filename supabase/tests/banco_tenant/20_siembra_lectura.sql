@@ -7,7 +7,8 @@
 --   · como `anon`, ninguna tabla ni vista devuelve filas de ninguna de las dos flotas.
 -- Corre DESPUES de restituir los grants previos a la 0947, para que los privilegios no oculten un hueco de RLS (misma razon que
 -- la capa 1). Una tabla que no se pudo sembrar NO se da por probada: queda en cobertura.no_sembradas con su error, y el runner
--- exige una cobertura minima (scripts/ci/banco-tenant-allowlist.json). Todo se deshace con el rollback del epilogo.
+-- exige una cobertura minima (scripts/ci/banco-tenant-allowlist.json) y que cada no sembrada tenga motivo escrito
+-- (scripts/ci/banco-tenant-no-sembrables.json). Todo se deshace con el rollback del epilogo.
 -- ═══════════════════════════════════════════════════════════════════════════
 do $banco$
 declare
@@ -28,8 +29,8 @@ begin
   -- Siembra sin disparadores ni FKs (rol de replica): el banco prueba aislamiento, no reglas de integridad.
   set local session_replication_role = replica;
 
-  e1 := ci_banco.sembrar('public.tenant', v_ta);
-  e2 := ci_banco.sembrar('public.tenant', v_tb);
+  e1 := ci_banco.sembrar('public.tenant', v_ta, '{}'::jsonb, 1);
+  e2 := ci_banco.sembrar('public.tenant', v_tb, '{}'::jsonb, 2);
   if e1 is not null or e2 is not null then
     raise exception 'banco: no se pudieron sembrar las dos flotas en public.tenant (%, %)', e1, e2;
   end if;
@@ -52,19 +53,21 @@ begin
       n_sembradas := n_sembradas + 1;
       continue;
     end if;
+    -- Siembra el PAR (flota A + flota B) o ninguna: la generica por tipo y, si un CHECK/unico la rechaza, la busqueda entre los
+    -- candidatos que arma el runner desde los CHECK del catalogo (ver scripts/ci/banco-tenant-siembra.mjs).
     if r.nombre = 'public.app_user' then
-      e1 := ci_banco.sembrar(r.rel, v_ta, jsonb_build_object('id', v_ua, 'email', 'banco-a@ejemplo.test', 'rol', 'flota_admin', 'activo', true));
-      e2 := ci_banco.sembrar(r.rel, v_tb, jsonb_build_object('id', v_ub, 'email', 'banco-b@ejemplo.test', 'rol', 'flota_admin', 'activo', true));
+      e1 := ci_banco.sembrar_buscando(r.rel, v_ta, v_tb,
+        jsonb_build_object('id', v_ua, 'email', 'banco-a@ejemplo.test', 'rol', 'flota_admin', 'activo', true),
+        jsonb_build_object('id', v_ub, 'email', 'banco-b@ejemplo.test', 'rol', 'flota_admin', 'activo', true));
     else
-      e1 := ci_banco.sembrar(r.rel, v_ta);
-      e2 := ci_banco.sembrar(r.rel, v_tb);
+      e1 := ci_banco.sembrar_buscando(r.rel, v_ta, v_tb);
     end if;
-    if e1 is null and e2 is null then
+    if e1 is null then
       n_sembradas := n_sembradas + 1;
       insert into ci_banco.cobertura values (r.nombre, 'sembrada', null);
     else
-      insert into ci_banco.cobertura values (r.nombre, 'no_sembrada', left(coalesce(e1, e2), 200));
-      v_no := v_no || jsonb_build_object('tabla', r.nombre, 'error', left(coalesce(e1, e2), 160));
+      insert into ci_banco.cobertura values (r.nombre, 'no_sembrada', left(e1, 400));
+      v_no := v_no || jsonb_build_object('tabla', r.nombre, 'error', left(e1, 400));
     end if;
   end loop;
 
