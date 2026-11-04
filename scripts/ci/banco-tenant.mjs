@@ -154,6 +154,12 @@ export function extraerResultado(stdout) {
   return JSON.parse(linea.slice('BANCO_JSON '.length));
 }
 
+/**
+ * @param {string} fase
+ * @param {{ esquemas: string[], candidatos?: Array<{ tabla: string, columna: string, ord: number, va: string, vb: string }> }} opciones
+ * El tipo de `candidatos` se declara aqui: con el valor por omision `[]` TypeScript lo infiere como `never[]` y el typecheck
+ * (allowJs) rechaza a quien le pasa candidatos reales (scripts/ci/banco_tenant.test.ts).
+ */
 export function armarSql(fase, { esquemas, candidatos = [] }) {
   const archivos = ARCHIVOS_POR_FASE[fase];
   if (!archivos) throw new Error(`fase desconocida: ${fase}`);
