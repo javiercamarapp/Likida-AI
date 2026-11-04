@@ -9,6 +9,7 @@ import { correoConfigurado } from '@/lib/correo/enviar';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
+import { barrerAvisosSeguridad, anonimizarRedEventosSeguridad, type ResultadoBarrido } from '@/lib/seguridad/avisos';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -218,10 +219,31 @@ export async function GET(req: Request) {
       }
     }
 
-    const parcial = cortadoPorReloj || bandejaError !== null || sinEscribir > 0 || (mantenimiento !== undefined && 'error' in mantenimiento);
+    // ── 4. Seguridad (CT-SEG-11) ───────────────────────────────────────────
+    // El barrido de avisos de evento_seguridad cuelga de esta guardia (cada 5 min) en vez de un cron propio: no se agrega un
+    // componente al health ni al calendario. APAGADO por omisión (SEGURIDAD_AVISOS=encendido): apagado no toca la base. La
+    // anonimización de la huella de red y el user-agent (30 días) corre una vez al día, en la ventana de mantenimiento.
+    // Ninguno de los dos puede tumbar la guardia: sus rutinas atrapan todo y, si aun así algo lanza, se dice y se sigue.
+    let barridoSeguridad: ResultadoBarrido | null = null;
+    let redAnonimizada: number | null | undefined;
+    if (Date.now() < vence - 6_000) {
+      try {
+        barridoSeguridad = await barrerAvisosSeguridad();
+        if (esVentanaDeMantenimiento(inicio)) redAnonimizada = await anonimizarRedEventosSeguridad();
+      } catch (e) {
+        logger.error('cron.guardia.seguridad_fallo', { err: e instanceof Error ? e.message : String(e) });
+        barridoSeguridad = { estado: 'error', reclamados: 0, enviados: 0, fallidos: 0 };
+      }
+    }
+    const seguridad = barridoSeguridad && (barridoSeguridad.estado !== 'apagado' || redAnonimizada !== undefined)
+      ? { avisos: barridoSeguridad, ...(redAnonimizada !== undefined ? { redAnonimizada } : {}) }
+      : undefined;
+    const seguridadMal = barridoSeguridad !== null && (barridoSeguridad.estado === 'error' || barridoSeguridad.estado === 'parcial');
+
+    const parcial = cortadoPorReloj || bandejaError !== null || sinEscribir > 0 || (mantenimiento !== undefined && 'error' in mantenimiento) || seguridadMal;
     const estado: EstadoLatido = parcial ? 'parcial' : 'ok';
     // `componentes` va en el latido: es lo que lee /estado para el estado ACTUAL (con la hora del propio latido).
-    const detalle = { ...estadoNuevo, ...detalleBandeja, componentes: medicion, ...(mantenimiento ? { mantenimiento } : {}), ...(cortadoPorReloj ? { cortadoPorReloj } : {}) };
+    const detalle = { ...estadoNuevo, ...detalleBandeja, componentes: medicion, ...(mantenimiento ? { mantenimiento } : {}), ...(seguridad ? { seguridad } : {}), ...(cortadoPorReloj ? { cortadoPorReloj } : {}) };
     logger.info('cron.guardia.ok', { ...detalleBandeja, componentes: JSON.stringify(medicion), parcial });
     await registrarLatido('guardia', estado, detalle);
     return NextResponse.json({ corrio: true, parcial, ...detalleBandeja, componentes: medicion });
