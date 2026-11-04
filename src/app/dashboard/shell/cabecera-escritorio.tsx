@@ -8,6 +8,7 @@ import { useMenuV2 } from './navegacion-v2';
 import { useRiel } from './colapso';
 import MenuGuia from './menu-guia';
 import FechaHoy from './fecha-hoy';
+import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
 
 /**
  * La topbar de escritorio (44 px, ESTILO §4): botón de plegar/expandir el sidebar a la izquierda y, a la derecha, «Guía» (menú),
@@ -25,14 +26,14 @@ export default function CabeceraEscritorio({ rol, perfil, insignias }: { rol: st
     <header className="rv-cab-esc">
       <button type="button" className="rv-icono-boton rv-cab-esc__plegar" onClick={alternar} aria-label={riel ? 'Expandir el menú' : 'Plegar el menú'}
         title={riel ? 'Expandir el menú' : 'Plegar el menú'} aria-expanded={!riel}>
-        <ChevronsLeft className="rv-chev-plegar" width={16} height={16} strokeWidth={1.75} aria-hidden />
+        <ChevronsLeft className="rv-chev-plegar" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
       </button>
       <div className="rv-cab-esc__der">
         <MenuGuia rol={rol} perfil={perfil} />
         {campana && (
           <Link href={`${HREF_NOTIFICACIONES}${sufijo}`} className="rv-icono-boton rv-campana" aria-current={enNotificaciones ? 'page' : undefined}
             aria-label={pendientes ? 'Notificaciones, hay pendientes' : 'Notificaciones'} title="Notificaciones" data-tour="nav-notificaciones">
-            <Bell width={16} height={16} strokeWidth={1.75} aria-hidden />
+            <Bell width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
             {pendientes && <span className="rv-campana__punto" aria-hidden />}
           </Link>
         )}

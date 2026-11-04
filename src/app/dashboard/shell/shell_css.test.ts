@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   CORTE_MOVIL_PX, CORTE_SIDEBAR_COMPLETO_PX, ANCHO_SIDEBAR_PX, ANCHO_RIEL_PX, ALTO_CABECERA_ESCRITORIO_PX,
-  ALTO_CABECERA_MOVIL_PX, ALTO_ITEM_PX, GROSOR_SENAL_PX, ALTO_PIE_MAX_PX, MARCO_PX, ALTO_BARRA_INFERIOR_PX,
+  ALTO_CABECERA_MOVIL_PX, ALTO_ITEM_PX, ALTO_PIE_MAX_PX, MARCO_PX, ALTO_BARRA_INFERIOR_PX, ALTO_LOGO_PX,
 } from '../../marco-v2';
 
 // El CSS del shell repite en px las medidas de `marco-v2.ts`; aquí se cruzan. También se prueba la invariante de las
@@ -34,11 +34,14 @@ describe('shell.css ↔ marco-v2.ts', () => {
     expect(regla('[data-ui="v2"] .rv-cab-movil')).toContain(`height: ${ALTO_CABECERA_MOVIL_PX}px`);
     expect(regla('[data-ui="v2"] .rv-cab-esc', sinComentarios.indexOf('@media (min-width: 768px)'))).toContain(`height: ${ALTO_CABECERA_ESCRITORIO_PX}px`);
     expect(regla('[data-ui="v2"] .rv-item', sinComentarios.indexOf('.rv-item {'))).toContain(`height: ${ALTO_ITEM_PX}px`);
-    // Activo = fondo marino suave + barra de 3 px de COLOR de marca (`inset 3px 0 0`), por tokens de marca; nunca bloque negro/blanco.
+    // Activo SUTIL (controles finos K2-2, SPEC §2.7 y D8): fondo gris muy claro + texto de tinta + peso 600, por los tokens --nav-activo-*.
+    // Se retiró la barra interior de 3 px: la triple señal (barra + peso + fondo) era lo tosco. Reversible: reponer `box-shadow: inset 2px 0 0 var(--ink)`.
     const activo = regla('[data-ui="v2"] .rv-item[aria-current="page"]');
-    expect(activo).toContain(`inset ${GROSOR_SENAL_PX}px 0 0 var(--ui-activo-barra)`);
-    expect(activo).toContain('background: var(--ui-activo-bg)');
-    expect(activo).toContain('color: var(--ui-activo-ink)');
+    expect(activo).toContain('background: var(--nav-activo-bg)');
+    expect(activo).toContain('color: var(--nav-activo-fg)');
+    expect(activo).toContain('font-weight: var(--nav-activo-peso)');
+    expect(activo).not.toMatch(/box-shadow|inset/);
+    expect(regla('[data-ui="v2"] .rv-puesta[aria-current="page"]')).not.toMatch(/box-shadow|inset/);
     expect(activo).not.toMatch(/background:\s*var\(--marca\)/);
     expect(regla('[data-ui="v2"] .rv-fila', sinComentarios.indexOf('@media (min-width: 768px)'))).toContain(`padding: ${MARCO_PX}px`);
   });
@@ -119,11 +122,11 @@ describe('clases del menú de cuenta', () => {
 
 describe('paleta: cromo negro/gris/blanco, color en los datos como Vexa (decisión de Javier, 31-oct)', () => {
   const tokens = readFileSync(fileURLToPath(new URL('../../ui-v2/tokens.css', import.meta.url)), 'utf8');
-  it('primario negro, activo con barra gris de 3 px y señal burdeos como acento puntual', () => {
+  it('primario negro, activo del sidebar gris sin barra y señal burdeos como acento puntual', () => {
     expect(tokens).toMatch(/--btn-bg:\s*#0e0e10/); // primario negro
     expect(tokens).toMatch(/--marca:\s*#0e0e10/);
     expect(tokens).toMatch(/--ink:\s*#0e0e10/);
-    expect(tokens).toMatch(/--ui-activo-barra:\s*var\(--n-500\)/); // barra gris, el rojo es solo acento puntual
+    expect(tokens).toMatch(/--ui-activo-barra:\s*var\(--n-500\)/); // token que se conserva (otros consumidores); el sidebar ya no lo usa
     expect(tokens).not.toMatch(/--acento-marca/);
     expect(tokens).toMatch(/--senal:\s*#a6264a/);
     // oscuro: negro neutro #0e0e10, señal #cc4a6c
@@ -209,5 +212,45 @@ describe('riel, topbar y barra inferior móvil (lote L2a)', () => {
   it('el chip de fecha de cada página se oculta en v2 (la fecha vive en el shell) y la cabecera móvil lleva la suya', () => {
     expect(sinComentarios).toContain('[data-ui="v2"] .chip-fecha { display: none; }');
     expect(sinComentarios).toContain('.rv-cab-movil__fecha');
+  });
+});
+
+describe('marco y logo finos (controles finos K2-2, SPEC §1.6 y §2.7)', () => {
+  const tokens = readFileSync(fileURLToPath(new URL('../../ui-v2/tokens.css', import.meta.url)), 'utf8');
+  const tok = (k: string) => Number(new RegExp(`${k}:\\s*(\\d+)px`).exec(tokens)?.[1]);
+  const leer = (f: string) => readFileSync(fileURLToPath(new URL(f, import.meta.url)), 'utf8');
+
+  it('los TRES lugares del logo coinciden: ALTO_LOGO_PX, --logo-* y el JSX (que lee la constante)', () => {
+    expect(ALTO_LOGO_PX).toEqual({ sidebar: 22, riel: 24, movil: 22, carga: 40 });
+    expect(tok('--logo-sb')).toBe(ALTO_LOGO_PX.sidebar);
+    expect(tok('--logo-riel')).toBe(ALTO_LOGO_PX.riel);
+    expect(tok('--logo-movil')).toBe(ALTO_LOGO_PX.movil);
+    expect(tok('--logo-carga')).toBe(ALTO_LOGO_PX.carga);
+    const sidebar = leer('./sidebar-v2.tsx');
+    expect(sidebar).toContain('alto={ALTO_LOGO_PX.sidebar}');
+    expect(sidebar).toContain('alto={ALTO_LOGO_PX.riel}');
+    expect(leer('./cabecera-movil.tsx')).toContain('alto={ALTO_LOGO_PX.movil}');
+    for (const f of ['./sidebar-v2.tsx', './cabecera-movil.tsx']) expect(leer(f), f).not.toMatch(/alto=\{\d+\}/);
+    // Solo se cambió tamaño y colocación: forma y color del logo siguen siendo los de logo-v2.tsx (currentColor).
+    expect(leer('./logo-v2.tsx')).toContain('fill="currentColor"');
+  });
+
+  it('el bloque de marca mide como la barra de página (44) y alinea logo y título', () => {
+    expect(tok('--marca-h')).toBe(ALTO_CABECERA_ESCRITORIO_PX);
+    const marca = regla('[data-ui="v2"] .rv-sb__marca');
+    expect(marca).toContain('height: var(--marca-h)');
+    expect(marca).toContain('padding: 0 12px');
+    expect(marca).not.toMatch(/min-height/);
+    expect(regla('[data-ui="v2"] .rv-sb__logo::after')).toContain('inset: -11px 0'); // 22 + 22 = 44 de toque
+    expect(regla('[data-ui="v2"] .rv-sb .rv-sb__marca')).toContain('padding: 0');
+  });
+
+  it('la tarjeta de cuenta: nombre 12/500; hoja «Más» con filas de 44 y fuente 13', () => {
+    const nombre = regla('[data-ui="v2"] .rv-cuenta__nombre');
+    expect(nombre).toContain('font-size: 12px');
+    expect(nombre).toContain('font-weight: 500');
+    const hoja = regla('[data-ui="v2"] .rv-ov .rv-item');
+    expect(hoja).toContain('height: 44px');
+    expect(hoja).toContain('font-size: 13px');
   });
 });

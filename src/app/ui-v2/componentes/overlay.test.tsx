@@ -36,7 +36,7 @@ describe('Drawer / Modal', () => {
     expect(marca?.[1]).not.toContain('aria-label'); // decorativo: el lector de pantalla no lo anuncia
     expect(modal).not.toContain('rv-ov__marca');
     const css = readFileSync(join(__dirname, '..', 'overlay.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(css).toMatch(/\.rv-ov__marca \{[^}]*border-top: 1px solid var\(--line\)[^}]*color: var\(--ink\)/); // hereda la tinta: claro y oscuro
+    expect(css).toMatch(/\.rv-ov__marca \{[^}]*border-top: 1px solid var\(--borde-reposo, var\(--line\)\)[^}]*color: var\(--ink\)/); // hereda la tinta: claro y oscuro. Controles finos K2-1 (SPEC §2.5): el filete lee --borde-reposo, con --line de respaldo para /admin.
     expect(css).toMatch(/@media \(max-width: 819px\) \{\s*\.rv-ov__marca \{ display: none; \}/); // la hoja inferior móvil no la lleva
   });
 });
