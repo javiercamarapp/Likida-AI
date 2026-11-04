@@ -40,6 +40,7 @@ vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
 import {
   crearContactoEmergencia, crearProveedorEmergencia, guardarPoliza, telefonoValido,
 } from './emergencias';
+import { DatoInvalido } from './errores';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -114,5 +115,33 @@ describe('guardarPoliza — el 800 es EL dato', () => {
   it('con los tres datos entra, teléfono limpio', async () => {
     await guardarPoliza('t-1', { aseguradora: 'Qualitas', numeroPoliza: 'P-1', telefonoSiniestros: '800 288 8500' });
     expect(insertado).toHaveBeenCalledWith('flota_poliza', expect.objectContaining({ telefono_siniestros: '8002888500' }));
+  });
+});
+
+// MX-005: toda validacion de captura es un DatoInvalido (mensaje para quien llena el
+// formulario), no un Error generico que la pantalla trata como falla del sistema.
+describe('las validaciones de captura lanzan DatoInvalido (MX-005)', () => {
+  const prov = { tipo: 'grua', nombre: 'X', telefono: '5219991234567' };
+  const poliza = { aseguradora: 'Qualitas', numeroPoliza: 'P-1', telefonoSiniestros: '8002888500' };
+  const contacto = { operadorId: 'op-1', nombre: 'María', telefono: '5219991234567' };
+
+  const casos: Array<[string, () => Promise<unknown>, () => void]> = [
+    ['tipo inexistente', () => crearProveedorEmergencia('t-1', { ...prov, tipo: 'drone' }), () => {}],
+    ['proveedor sin nombre', () => crearProveedorEmergencia('t-1', { ...prov, nombre: '' }), () => {}],
+    ['proveedor con telefono corto', () => crearProveedorEmergencia('t-1', { ...prov, telefono: '123' }), () => {}],
+    ['posicion no numerica', () => crearProveedorEmergencia('t-1', { ...prov, lat: 'abc' as unknown as number, lng: 1 }), () => {}],
+    ['radio fuera de rango', () => crearProveedorEmergencia('t-1', { ...prov, radioKm: 5000 }), () => {}],
+    ['solo latitud', () => crearProveedorEmergencia('t-1', { ...prov, lat: 19.4 }), () => {}],
+    ['posicion fuera del mapa', () => crearProveedorEmergencia('t-1', { ...prov, lat: 999, lng: 999 }), () => {}],
+    ['poliza sin aseguradora', () => guardarPoliza('t-1', { ...poliza, aseguradora: '' }), () => {}],
+    ['poliza sin numero', () => guardarPoliza('t-1', { ...poliza, numeroPoliza: '' }), () => {}],
+    ['poliza con 800 corto', () => guardarPoliza('t-1', { ...poliza, telefonoSiniestros: '800' }), () => {}],
+    ['operador de otra flota', async () => { operadorExiste = false; return crearContactoEmergencia('t-1', contacto); }, () => {}],
+    ['contacto sin nombre', () => crearContactoEmergencia('t-1', { ...contacto, nombre: '' }), () => {}],
+    ['contacto con telefono corto', () => crearContactoEmergencia('t-1', { ...contacto, telefono: '12' }), () => {}],
+  ];
+
+  it.each(casos)('%s', async (_n, accion) => {
+    await expect(accion()).rejects.toBeInstanceOf(DatoInvalido);
   });
 });

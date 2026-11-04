@@ -8,6 +8,8 @@ type Elemento = ReactElement<Record<string, unknown>>;
 let sesion: { tenantId: string; rol: string; userId: string } = { tenantId: 't-1', rol: 'encargado', userId: 'u-1' };
 vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => sesion }));
 vi.mock('next/navigation', () => ({ redirect: (r: string) => { throw new Error(`REDIRECT:${r}`); } }));
+let chatDenegado = false;
+vi.mock('@/lib/auth/perfil_tenant', () => ({ apiDenegadaPorPerfil: async () => chatDenegado }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/saludo', () => ({ ahoraMs: () => Date.parse('2026-10-02T18:00:00.000Z') }));
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error('sin base en pruebas'); } }));
@@ -15,6 +17,7 @@ vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error(
 const { ponerFuentes } = await import('@/lib/likida/orquestador/fuentes');
 const { crearFuentesEnMemoria, datosVacios, hitosDe, viajeTablero } = await import('@/lib/likida/orquestador/fuentes.fixture');
 const { VistaViajesEnVivo, TareasAbiertas } = await import('./vista');
+const { PreguntaAlAsistente } = await import('./pregunta');
 const { default: Pagina } = await import('./page');
 
 const T1 = '11111111-1111-4111-8111-111111111111';
@@ -30,6 +33,7 @@ function buscar(nodo: ReactNode, componente: unknown, salida: Elemento[] = []): 
 
 let m: ReturnType<typeof crearFuentesEnMemoria>;
 beforeEach(() => {
+  chatDenegado = false;
   sesion = { tenantId: 't-1', rol: 'encargado', userId: 'u-1' };
   const a = viajeTablero('a1', { terminalId: T1, clienteId: C1 });
   const b = viajeTablero('a2', { terminalId: 'otra', clienteId: 'otro' });
@@ -106,4 +110,14 @@ it('A37-S21-05: la tarea operativa se cierra y la segunda persona que pulsa se e
   sembrarTareas();
   expect(await pulsar(TAREA_OPERACION)).toBe('ok');
   expect(await pulsar(TAREA_OPERACION)).toContain('atencion=ya_atendida');
+});
+
+// MX-006: bajo cinco_agentes /api/dashboard/chat esta negado; la caja no debe montarse (si no, cada pregunta falla).
+it('la caja «Pregúntale al asistente» se monta con chat y NO se monta cuando el perfil niega /api/dashboard/chat', async () => {
+  const conChat = await Pagina({ searchParams: Promise.resolve({}) });
+  expect(buscar(conChat, VistaViajesEnVivo)[0].props.pregunta).not.toBeNull();
+  expect(buscar(buscar(conChat, VistaViajesEnVivo)[0].props.pregunta as ReactNode, PreguntaAlAsistente)).toHaveLength(1);
+  chatDenegado = true;
+  const sinChat = await Pagina({ searchParams: Promise.resolve({}) });
+  expect(buscar(sinChat, VistaViajesEnVivo)[0].props.pregunta).toBeNull();
 });
