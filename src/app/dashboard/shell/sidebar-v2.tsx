@@ -4,13 +4,14 @@ import Link from 'next/link';
 import { ChevronsLeft } from 'lucide-react';
 import type { PerfilTenant } from '@/lib/auth/visibilidad';
 import LogoV2 from './logo-v2';
+import { ALTO_LOGO_PX } from '../../marco-v2';
 import { ArbolMenu, PieMenu, useMenuV2 } from './navegacion-v2';
 import { useRiel } from './colapso';
 import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
 
 /**
  * El sidebar de escritorio v2: tarjeta FLOTANTE de 232 px (riel de 72 px: plegado por el usuario y por defecto entre 768 y 1023).
- * Marca arriba (logo de 30 px de alto + botón de plegar 32×32), árbol que scrollea por dentro y pie fijo (≤100 px) con
+ * Marca arriba (logo de 22 px de alto, alineado con la barra de página + botón de plegar 32×32), árbol que scrollea por dentro y pie fijo (≤100 px) con
  * «Puesta en marcha» (<6/6) y la tarjeta de cuenta, en UN solo bloque compacto. Bajo 768 px NO se ve (`display: none` en
  * `shell.css`, así que sale también del árbol de accesibilidad): ahí manda la cabecera móvil con su hoja «Más».
  *
@@ -28,9 +29,9 @@ export default function SidebarV2({ rol, rolEtiqueta, nombre, perfil, usoIa, cer
     <aside className="rv-sb" data-riel={riel ? '' : undefined}>
       <div className="rv-sb__marca">
         <Link href={`${casa}${sufijo}`} className="rv-sb__logo" aria-label="Likida, ir al inicio">
-          {/* Una sola marca visible a la vez: horizontal (30 de alto) con el sidebar completo, símbolo (28) en el riel. */}
-          <span className="rv-logo-h"><LogoV2 alto={30} /></span>
-          <span className="rv-logo-s"><LogoV2 alto={28} variante="simbolo" /></span>
+          {/* Una sola marca visible a la vez: horizontal con el sidebar completo, símbolo en el riel (alturas en `ALTO_LOGO_PX`). */}
+          <span className="rv-logo-h"><LogoV2 alto={ALTO_LOGO_PX.sidebar} /></span>
+          <span className="rv-logo-s"><LogoV2 alto={ALTO_LOGO_PX.riel} variante="simbolo" /></span>
         </Link>
         <button type="button" className="rv-icono-boton rv-sb__plegar" onClick={alternar} aria-label="Plegar el menú" title="Plegar el menú" aria-expanded={!riel}>
           <ChevronsLeft className="rv-chev-plegar" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
