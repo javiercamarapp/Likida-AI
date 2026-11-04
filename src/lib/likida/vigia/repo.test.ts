@@ -48,11 +48,12 @@ vi.mock('../contactos', () => ({
 const repoMod = await import('./repo');
 const { crearRepoVigia, estatusViajeReal, aConfig, aContacto, validarConfig, telefonoDeAllowlist, altaContactoVigia, bajaManualContacto, suprimirContactoVigia, cargarTablero, guardarDirectorVigia, quitarDirectorVigia, guardarConfigVigia, validarServicio, guardarServicioVigia, quitarServicioVigia, fijarTurnoDirector, listarFestivos, guardarFestivo } = repoMod;
 const { T1, T2, CLIENTE_A, VIAJE_1 } = await import('./datos.fixture');
+const { reiniciarCachePerfil } = await import('@/lib/auth/perfil_tenant');
 
 const tiene = (l: Llamada, op: string, col: string, valor?: unknown) =>
   l.filtros.some(([o, c, v]) => o === op && c === col && (valor === undefined || JSON.stringify(v) === JSON.stringify(valor)));
 
-beforeEach(() => { llamadas = []; respuesta = () => ({ data: [], error: null }); });
+beforeEach(() => { llamadas = []; reiniciarCachePerfil(); respuesta = () => ({ data: [], error: null }); });
 
 describe('AISLAMIENTO: toda consulta a una tabla con tenant filtra por él', () => {
   const TABLAS_CON_TENANT = ['vigia_config', 'vigia_contacto', 'vigia_conversacion', 'vigia_mensaje', 'vigia_evento', 'viaje', 'posicion', 'pod', 'factura_emitida', 'cliente', 'app_user', 'tenant', 'vigia_director', 'vigia_aviso_correo', 'vigia_servicio_cliente'];
@@ -233,6 +234,21 @@ describe('mapeos y config', () => {
     respuesta = () => ({ data: null, error: null });
     const c = await crearRepoVigia().config(T1);
     expect(c).toMatchObject({ tenantId: T1, habilitado: false, modoAprobacion: 'siempre' });
+  });
+  // CT-A345-23 (IN4-23): el autoenvio esta bloqueado solo al GUARDAR; una fila que llegue con `autoenviar_bajo_riesgo` por otra via
+  // (SQL a mano, API, copia) se autoenviaria. Bajo `cinco_agentes` la lectura la fuerza a `siempre`.
+  it('CT-A345-23: con perfil cinco_agentes una fila en autoenviar_bajo_riesgo se lee como «siempre»; sin perfil se respeta', async () => {
+    const fila = { tenant_id: T1, habilitado: true, modo_aprobacion: 'autoenviar_bajo_riesgo', autoenviar_min_aprobaciones: 3 };
+    respuesta = (l) => (l.tabla === 'tenant_perfil' ? { data: { perfil: 'cinco_agentes' }, error: null } : { data: fila, error: null });
+    expect(await crearRepoVigia().config(T1)).toMatchObject({ habilitado: true, modoAprobacion: 'siempre', autoenviarMinAprobaciones: 3 });
+    reiniciarCachePerfil();
+    respuesta = (l) => (l.tabla === 'tenant_perfil' ? { data: null, error: null } : { data: fila, error: null });
+    expect(await crearRepoVigia().config(T1)).toMatchObject({ modoAprobacion: 'autoenviar_bajo_riesgo' });
+  });
+  it('CT-A345-23: si el perfil no se puede leer, se asume el restrictivo y el autoenvio tampoco sale', async () => {
+    const fila = { tenant_id: T1, habilitado: true, modo_aprobacion: 'autoenviar_bajo_riesgo' };
+    respuesta = (l) => (l.tabla === 'tenant_perfil' ? { data: null, error: { message: 'caída' } } : { data: fila, error: null });
+    expect((await crearRepoVigia().config(T1)).modoAprobacion).toBe('siempre');
   });
   it('un error de la base al leer config LANZA (no se lee como «apagado por defecto» ni «encendido»)', async () => {
     respuesta = () => ({ data: null, error: { message: 'caída' } });
