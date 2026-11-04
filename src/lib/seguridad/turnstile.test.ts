@@ -17,7 +17,8 @@ describe('Turnstile apagado por omision (S-03)', () => {
     expect(v).toEqual({ ok: true, modo: 'apagado', motivo: 'apagado' });
     expect(f).not.toHaveBeenCalled();
     expect(turnstileActivo({})).toBe(false);
-    expect(turnstileActivo({ TURNSTILE_ACTIVO: 'true' })).toBe(false);
+    expect(turnstileActivo({ TURNSTILE_ACTIVO: 'no' })).toBe(false);
+    expect(turnstileActivo({ TURNSTILE_ACTIVO: '0' })).toBe(false);
     expect(turnstileSiteKey({ NEXT_PUBLIC_TURNSTILE_SITE_KEY: '0x4' })).toBeNull();
   });
 });
@@ -77,5 +78,33 @@ describe('encendido', () => {
   it('el token nunca aparece en el log', async () => {
     await verificarTurnstile({ token: 'TOKEN-SECRETO-123', superficie: 'login' }, { env: ENC, fetch: fetchDe(resp({ success: false, 'error-codes': ['timeout-or-duplicate'] })) });
     expect(JSON.stringify([logger.warn.mock.calls, logger.error.mock.calls, logger.info.mock.calls])).not.toContain('TOKEN-SECRETO-123');
+  });
+});
+
+describe('F1B: configuracion tolerante y falla-cerrado opcional', () => {
+  const base = { TURNSTILE_ACTIVO: '1', TURNSTILE_SECRET_KEY: 's' };
+  it('TURNSTILE_SUPERFICIES vacia o con mayusculas sigue bloqueando login', () => {
+    expect(modoDeSuperficie('login', { ...base, TURNSTILE_SUPERFICIES: '' })).toBe('bloquear');
+    expect(modoDeSuperficie('login', { ...base, TURNSTILE_SUPERFICIES: 'Login, LEAD' })).toBe('bloquear');
+    expect(modoDeSuperficie('lead', { ...base, TURNSTILE_SUPERFICIES: 'Login, LEAD' })).toBe('bloquear');
+  });
+  it("TURNSTILE_ACTIVO 'true', 'ON' o '1 ' enciende", () => {
+    for (const v of ['true', 'ON', '1 ']) expect(turnstileActivo({ TURNSTILE_ACTIVO: v })).toBe(true);
+    expect(turnstileActivo({ TURNSTILE_ACTIVO: 'no' })).toBe(false);
+  });
+  it('con TURNSTILE_FALLA_CERRADO una superficie que bloquea niega sin llave, con llave invalida y con Cloudflare caido', async () => {
+    const env = { ...base, TURNSTILE_FALLA_CERRADO: '1' };
+    const sinLlave = await verificarTurnstile({ token: 't', superficie: 'login' }, { env: { TURNSTILE_ACTIVO: '1', TURNSTILE_FALLA_CERRADO: '1' } });
+    expect(sinLlave).toMatchObject({ ok: false, motivo: 'sin_llave' });
+    const caido = await verificarTurnstile({ token: 't', superficie: 'login' }, { env, fetch: (async () => { throw new Error('red'); }) as unknown as typeof fetch });
+    expect(caido).toMatchObject({ ok: false, motivo: 'proveedor_caido' });
+    const invalida = await verificarTurnstile({ token: 't', superficie: 'login' }, {
+      env, fetch: (async () => new Response(JSON.stringify({ success: false, 'error-codes': ['invalid-input-secret'] }))) as unknown as typeof fetch,
+    });
+    expect(invalida).toMatchObject({ ok: false, motivo: 'llave_invalida' });
+  });
+  it('sin el interruptor el comportamiento de siempre se conserva (pasa)', async () => {
+    const r = await verificarTurnstile({ token: 't', superficie: 'login' }, { env: { TURNSTILE_ACTIVO: '1' } });
+    expect(r).toMatchObject({ ok: true, motivo: 'sin_llave' });
   });
 });

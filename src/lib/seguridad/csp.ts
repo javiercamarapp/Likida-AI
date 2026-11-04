@@ -87,7 +87,7 @@ export function construirCsp(
   // S-03: Cloudflare Turnstile. Solo con TURNSTILE_ACTIVO='1' (apagado = la politica de siempre, caracter por caracter).
   // El widget carga api.js (script-src; con nonce + 'strict-dynamic' el host se ignora pero va para navegadores sin
   // strict-dynamic), se dibuja en un iframe de challenges.cloudflare.com (frame-src) y habla con el mismo origen (connect-src).
-  const ts = env.TURNSTILE_ACTIVO === '1' ? ' https://challenges.cloudflare.com' : '';
+  const ts = ['1', 'true', 'on', 'si', 'yes'].includes((env.TURNSTILE_ACTIVO ?? '').trim().toLowerCase()) ? ' https://challenges.cloudflare.com' : '';
   const scriptSrc = nonce === null
     ? `script-src 'self' 'unsafe-inline'${ts}${evalDev}`
     : `script-src 'self' 'nonce-${nonce}' ${HASH_SCRIPT_TEMA} 'strict-dynamic'${ts}${evalDev}`;
