@@ -267,6 +267,20 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   lineaBaseRegistradaEn: null,
 });
 
+/**
+ * CT-A345-29 (TZ-03): la config por omisión de una flota según su perfil de tenant. Los defaults de siempre, salvo que bajo
+ * `cinco_agentes` la compuerta «unidad detenida» NACE ENCENDIDA: el cliente exige no escribirle al chofer con la unidad en marcha.
+ * `CONFIG_CONDUCTOR_DEFAULT` no cambia (sin perfil, apagada). Devuelve una copia que no comparte arreglos con el original.
+ */
+export function configPorOmisionDePerfil(perfil: 'cinco_agentes' | null): ConfigConductor {
+  return {
+    ...CONFIG_CONDUCTOR_DEFAULT,
+    solicitudesMin: [...CONFIG_CONDUCTOR_DEFAULT.solicitudesMin],
+    diasSemana: [...CONFIG_CONDUCTOR_DEFAULT.diasSemana],
+    ...(perfil === 'cinco_agentes' ? { compuertaMovimientoActiva: true } : {}),
+  };
+}
+
 /** El tope de aplazamientos por hito: pasado esto «voy con retraso» ya no calla al agente. */
 export const MAX_POSPOSICIONES = 2;
 

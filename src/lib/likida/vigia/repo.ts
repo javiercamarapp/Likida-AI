@@ -20,6 +20,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { envPuesta } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { acotada } from '../presupuesto';
 import { IDS_POR_TANDA } from '../pg';
 import { telefonoDeUsuario, telefonoJefeDe } from '../contactos';
@@ -540,7 +541,12 @@ export function crearRepoVigia(): RepoVigia {
     async config(tenantId) {
       const f = exigir('config', await acotada(supabaseAdmin().from('vigia_config')
         .select('*').eq('tenant_id', tenantId).maybeSingle(), 'vigia.config')) as Fila | null;
-      return f ? aConfig(f) : configApagada(tenantId);
+      if (!f) return configApagada(tenantId);
+      const c = aConfig(f);
+      // CT-A345-23 (IN4-23): el autoenvio se bloquea al GUARDAR bajo el perfil, pero una fila que llegue con `autoenviar_bajo_riesgo` por otra
+      // via se autoenviaria. Aqui, en la lectura que alimenta a toda la politica, se fuerza `siempre` (falla cerrado: perfil ilegible = restrictivo).
+      if (c.modoAprobacion !== 'siempre' && (await perfilDeTenant(tenantId)) === 'cinco_agentes') return { ...c, modoAprobacion: 'siempre' };
+      return c;
     },
 
     // Cruza flotas A PROPÓSITO: el webhook solo trae el número. Un número ACTIVO

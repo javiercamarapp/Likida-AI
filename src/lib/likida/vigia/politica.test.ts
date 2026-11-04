@@ -16,6 +16,14 @@ describe('política de envío', () => {
       .toEqual({ accion: 'aprobar', motivo: 'modo_siempre_aprobar' });
   });
 
+  // CT-A345-23 (IN4-23): bajo `cinco_agentes` el autoenvio no existe aunque la fila de config diga lo contrario.
+  it('CT-A345-23: con perfil cinco_agentes autoenviar_bajo_riesgo se trata como «siempre»: todo pasa por el gerente', () => {
+    expect(decidirEnvio({ ...bueno(), perfil: 'cinco_agentes' })).toEqual({ accion: 'aprobar', motivo: 'modo_siempre_aprobar' });
+    expect(decidirEnvio({ ...bueno(), perfil: null })).toEqual({ accion: 'autoenviar', motivo: 'bajo_riesgo_validado' });
+    // el perfil no resucita al agente apagado ni al hilo en manos de un humano
+    expect(decidirEnvio({ ...bueno({ config: { habilitado: false, modoAprobacion: 'autoenviar_bajo_riesgo', autoenviarMinAprobaciones: 1 } }), perfil: 'cinco_agentes' }).accion).toBe('ninguna');
+  });
+
   it('autoenviar_bajo_riesgo con TODO en regla: sale solo', () => {
     expect(decidirEnvio(bueno())).toEqual({ accion: 'autoenviar', motivo: 'bajo_riesgo_validado' });
   });

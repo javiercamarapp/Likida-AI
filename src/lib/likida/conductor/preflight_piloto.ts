@@ -24,7 +24,7 @@ export const PORCENTAJE_MINIMO_CON_SITIO = 80;
 export const HORAS_GPS_RECIENTE = 2;
 
 export type IdComprobacion =
-  | 'agente_habilitado' | 'voluntarios' | 'cohorte' | 'gps_unidades' | 'sitios' | 'escalamiento' | 'plantillas' | 'activo' | 'zona' | 'calidad_gps';
+  | 'agente_habilitado' | 'compuerta_movimiento' | 'voluntarios' | 'cohorte' | 'gps_unidades' | 'sitios' | 'escalamiento' | 'plantillas' | 'activo' | 'zona' | 'calidad_gps';
 
 export interface Comprobacion {
   id: IdComprobacion;
@@ -52,7 +52,7 @@ export interface ViajeDelPiloto {
 }
 
 export interface DatosPreflight {
-  config: Pick<ConfigConductor, 'activo' | 'perfilSeguimiento' | 'solicitudesMin' | 'cohortePiloto'>;
+  config: Pick<ConfigConductor, 'activo' | 'perfilSeguimiento' | 'solicitudesMin' | 'cohortePiloto' | 'compuertaMovimientoActiva'>;
   /** `tenant.zona_horaria` tal como está guardada (sin sustituir por la de México). */
   zonaDeclarada: string | null;
   voluntarios: ReadonlyArray<{ telefono: string }>;
@@ -163,6 +163,18 @@ function comprobarAgenteHabilitado(d: DatosPreflight): Comprobacion | null {
     'Pídele a Likida que habilite el Agente 5 para tu flota (solo un superadmin puede, con motivo y firma en la bitácora).');
 }
 
+/**
+ * CT-A345-29 (TZ-03): bajo el perfil `cinco_agentes` la compuerta «unidad detenida» (T-A5-36) debe estar encendida antes de la señal de vida:
+ * es el requisito del cliente de no escribirle al chofer con la unidad en marcha. Sin perfil (piloto) no se juzga: el comportamiento de siempre.
+ */
+function comprobarCompuertaMovimiento(d: DatosPreflight): Comprobacion | null {
+  if (d.perfilPlantillas !== 'cinco_agentes') return null;
+  const t = 'Compuerta de movimiento (no escribirle al chofer en marcha)';
+  if (d.config.compuertaMovimientoActiva === true) return ok('compuerta_movimiento', t, 'La compuerta «unidad detenida» está encendida: no se le escribe al chofer con la unidad en marcha.');
+  return falta('compuerta_movimiento', t, 'La compuerta «unidad detenida» está apagada: el agente podría escribirle al chofer con la unidad en marcha.',
+    'Enciende la compuerta «unidad detenida» en la configuración del Conductor antes de activar la señal de vida (el cliente exige no escribirle al chofer en marcha).');
+}
+
 function comprobarZona(d: DatosPreflight): Comprobacion {
   const t = 'Zona horaria de la flota';
   const z = d.zonaDeclarada;
@@ -188,7 +200,7 @@ function comprobarCalidadGps(d: DatosPreflight): Comprobacion {
 /** Las comprobaciones (9, y la del Agente 5 cuando se leyó), en el orden en que se le explican al dueño. */
 export function evaluarPreflight(d: DatosPreflight): ResultadoPreflight {
   const comprobaciones = [
-    comprobarActivo(d), comprobarAgenteHabilitado(d), comprobarZona(d), comprobarCohorte(d), comprobarVoluntarios(d), comprobarSitios(d),
+    comprobarActivo(d), comprobarAgenteHabilitado(d), comprobarCompuertaMovimiento(d), comprobarZona(d), comprobarCohorte(d), comprobarVoluntarios(d), comprobarSitios(d),
     comprobarGpsUnidades(d), comprobarCalidadGps(d), comprobarEscalamiento(d), comprobarPlantillas(d),
   ].filter((c): c is Comprobacion => c !== null);
   const bloqueos = comprobaciones.filter((c) => c.estado === 'falta');

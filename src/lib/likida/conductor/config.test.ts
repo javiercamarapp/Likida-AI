@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { COHORTES_PILOTO, CONFIG_CONDUCTOR_DEFAULT, dentroDeVentana, horaYDiaMx, inicioDiaMx, validarConfigConductor, zonaOCdmx } from './config';
+import { COHORTES_PILOTO, CONFIG_CONDUCTOR_DEFAULT, configPorOmisionDePerfil, dentroDeVentana, horaYDiaMx, inicioDiaMx, validarConfigConductor, zonaOCdmx } from './config';
 import { TZ_MX } from '@/lib/formato';
 
 describe('validarConfigConductor', () => {
@@ -223,5 +223,24 @@ describe('marca de cohorte del piloto (T-A5-64)', () => {
       const v = validarConfigConductor({ cohortePiloto: malo as never });
       expect(v, String(malo)).toEqual({ error: expect.stringContaining('cohorte') });
     }
+  });
+});
+
+describe('CT-A345-29: la compuerta de movimiento por omisión según el perfil de la flota', () => {
+  it('bajo cinco_agentes la config por omisión trae la compuerta encendida; el resto igual a los defaults', () => {
+    const c = configPorOmisionDePerfil('cinco_agentes');
+    expect(c.compuertaMovimientoActiva).toBe(true);
+    expect({ ...c, compuertaMovimientoActiva: false }).toEqual(CONFIG_CONDUCTOR_DEFAULT);
+  });
+
+  it('sin perfil: los defaults de siempre (compuerta apagada), y una copia que no comparte arreglos con el original', () => {
+    const c = configPorOmisionDePerfil(null);
+    expect(c).toEqual(CONFIG_CONDUCTOR_DEFAULT);
+    expect(c.compuertaMovimientoActiva).toBe(false);
+    expect(c.solicitudesMin).not.toBe(CONFIG_CONDUCTOR_DEFAULT.solicitudesMin);
+  });
+
+  it('el default global NO cambia: sigue apagado para flotas sin perfil', () => {
+    expect(CONFIG_CONDUCTOR_DEFAULT.compuertaMovimientoActiva).toBe(false);
   });
 });
