@@ -330,14 +330,17 @@ function linkExport(sufijo: string, formato: 'sap_b1' | 'contpaqi'): string {
   return `/api/export/facturas-proveedor${sufijo ? `${sufijo}&` : '?'}formato=${formato}`;
 }
 
+/** CT-SEG-17: exportar MARCA las facturas como exportadas, así que es un formulario POST y no un enlace GET. */
 function BotonExport({ href, rotulo }: { href: string; rotulo: string }) {
   return (
-    <a href={href}
-      className="hairline flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
-      style={{ background: 'var(--surface)' }}>
-      <Download width={13} height={13} strokeWidth={1.75} />
-      {rotulo}
-    </a>
+    <form method="post" action={href}>
+      <button type="submit"
+        className="hairline flex w-full items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
+        style={{ background: 'var(--surface)' }}>
+        <Download width={13} height={13} strokeWidth={1.75} />
+        {rotulo}
+      </button>
+    </form>
   );
 }
 

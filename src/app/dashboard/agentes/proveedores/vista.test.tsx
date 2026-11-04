@@ -163,6 +163,14 @@ describe('VistaAgenteProveedores — lo nuevo de la 0108 se dice', () => {
     expect(html).toContain('no la promete');
   });
 
+  it('CT-SEG-17: los botones de export son formularios POST (marcar exportadas es una escritura) y ya no hay enlaces <a> al export', () => {
+    const html = pintarVista([{ ...BASE, estado: 'aprobada', decididoPor: 'ana', decididoEn: '2026-08-14T17:00:00Z' }]);
+    const formPost = (fmt: string) => new RegExp(`<form(?=[^>]*method="post")(?=[^>]*action="/api/export/facturas-proveedor\\?formato=${fmt}")`);
+    expect(html).toMatch(formPost('sap_b1'));
+    expect(html).toMatch(formPost('contpaqi'));
+    expect(html).not.toMatch(/<a [^>]*href="\/api\/export\/facturas-proveedor/);
+  });
+
   it('sin facturas: estado vacío honesto, sin botones de export', () => {
     const html = pintarVista([]);
     expect(html).toContain('Aún no hay facturas de proveedor');

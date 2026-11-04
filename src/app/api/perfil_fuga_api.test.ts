@@ -226,7 +226,8 @@ describe('(0) el inventario de rutas está clasificado a mano', () => {
     expect(RUTAS.filter((r) => r.raiz === 'v1').length).toBeGreaterThanOrEqual(13);
     expect(RUTAS.filter((r) => r.raiz === 'export').length).toBe(16);
     expect(V1.length).toBeGreaterThanOrEqual(25);
-    expect(EXPORT.length).toBe(16);
+    // 16 recursos; facturas-proveedor suma el POST que marca exportadas (CT-SEG-17: GET puro, POST escribe).
+    expect(EXPORT.length).toBe(17);
   });
 
   it('cada recurso de /v1 y /export está en una de las listas de esta prueba (una ruta nueva sin clasificar la pone en rojo)', () => {
