@@ -1,4 +1,5 @@
 import { logger } from '@/lib/logger';
+import { redactarDetalle, type RedEvento } from './evento_red';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TRUST & SAFETY (0133) — el registro consultable de los detectores.
@@ -11,12 +12,20 @@ import { logger } from '@/lib/logger';
 
 export type OrigenSeguridad =
   | 'wa_webhook' | 'stripe_webhook' | 'correo_webhook' | 'copiloto'
-  | 'api_v1' | 'chat' | 'ratelimit' | 'auth' | 'otro';
+  | 'api_v1' | 'chat' | 'ratelimit' | 'auth' | 'otro'
+  // 0954:
+  | 'export';
 
 export type TipoSeguridad =
   | 'firma_invalida' | 'intent_invalido' | 'step_up_rechazado' | 'rate_limit'
   | 'inyeccion_prompt' | 'acceso_denegado' | 'cifra_sin_respaldo'
-  | 'payload_excesivo' | 'otro';
+  | 'payload_excesivo' | 'otro'
+  // 0954:
+  | 'login_fallido' | 'llave_invalida' | 'api_negada' | 'exporte_dinero' | 'cambio_rol';
+
+/** Los tipos y orígenes que nacen en la 0954: contra una base sin migrar rebotan por el check y se degradan a `otro`. */
+const TIPOS_0954: ReadonlySet<string> = new Set(['login_fallido', 'llave_invalida', 'api_negada', 'exporte_dinero', 'cambio_rol']);
+const ORIGENES_0954: ReadonlySet<string> = new Set(['export']);
 
 export interface EventoSeguridad {
   origen: OrigenSeguridad;
@@ -26,6 +35,8 @@ export interface EventoSeguridad {
   /** Quién — userId, teléfono, prefijo de llave… JAMÁS un secreto completo. */
   actor?: string | null;
   detalle?: Record<string, unknown>;
+  /** Huella de red y user-agent (0954/0955). Ver `redDeCabeceras`. */
+  red?: RedEvento;
 }
 
 /**
@@ -40,36 +51,74 @@ export async function registrarEventoSeguridad(ev: EventoSeguridad): Promise<voi
     const sb = supabaseAdmin();
     const severidad = ev.severidad ?? 'media';
     const actor = ev.actor?.slice(0, 120) ?? null;
-    const r = await sb.rpc('registrar_evento_seguridad', {
-      p_origen: ev.origen,
-      p_tipo: ev.tipo,
+    const detalle = redactarDetalle(ev.detalle) ?? null;
+    const base = {
+      p_origen: ev.origen as string,
+      p_tipo: ev.tipo as string,
       p_severidad: severidad,
       p_tenant: ev.tenantId ?? null,
       p_actor: actor,
-      p_detalle: ev.detalle ?? null,
-    });
-    if (!r.error) return;
-    if (!rpcAusente(r.error)) {
-      logger.warn('seguridad.registro_fallo', { tipo: ev.tipo, err: r.error.message });
-      return;
+      p_detalle: detalle as Record<string, unknown> | null,
+    };
+    const conRed = !!(ev.red && (ev.red.ipHash || ev.red.ua));
+
+    // 0955: con huella/ua se intenta primero el registro con red. Sin la función cae al registro de siempre (sin red).
+    let r: { error: { message: string; code?: string } | null } | null = null;
+    if (conRed) {
+      r = await sb.rpc('registrar_evento_seguridad_red', { ...base, p_ip_hash: ev.red!.ipHash, p_ua: ev.red!.ua });
+      if (!r.error) return;
+      if (!rpcAusente(r.error, 'registrar_evento_seguridad_red')) return rebote(ev, r.error);
     }
+    r = await sb.rpc('registrar_evento_seguridad', base);
+    if (!r.error) return;
+    if (!rpcAusente(r.error, 'registrar_evento_seguridad')) return rebote(ev, r.error);
+
     const { error } = await sb.from('evento_seguridad').insert({
       origen: ev.origen,
       tipo: ev.tipo,
       severidad,
       tenant_id: ev.tenantId ?? null,
       actor,
-      detalle: ev.detalle ?? null,
+      detalle,
     });
-    if (error) logger.warn('seguridad.registro_fallo', { tipo: ev.tipo, err: error.message });
+    if (error) await rebote(ev, error);
   } catch (e) {
     logger.warn('seguridad.registro_fallo', { tipo: ev.tipo, err: e instanceof Error ? e.message : String(e) });
   }
 }
 
+/**
+ * Un registro rechazado. Si el rechazo es el check de la 0133 porque la base aún no trae la 0954 (tipo/origen nuevo), el evento NO se
+ * pierde: se registra como `otro` con el tipo real en el detalle. Cualquier otro rechazo (o un tipo viejo) se dice en el log y no
+ * se reintenta: no se esquiva el tope ni el check.
+ */
+async function rebote(ev: EventoSeguridad, e: { message: string; code?: string }): Promise<void> {
+  const esCheck = e.code === '23514' || /check constraint|evento_seguridad_(tipo|origen)_check/i.test(e.message);
+  if (esCheck && (TIPOS_0954.has(ev.tipo) || ORIGENES_0954.has(ev.origen))) {
+    try {
+      const { supabaseAdmin } = await import('@/lib/supabase/admin');
+      const r = await supabaseAdmin().rpc('registrar_evento_seguridad', {
+        p_origen: 'otro',
+        p_tipo: 'otro',
+        p_severidad: ev.severidad ?? 'media',
+        p_tenant: ev.tenantId ?? null,
+        p_actor: ev.actor?.slice(0, 120) ?? null,
+        p_detalle: { ...(redactarDetalle(ev.detalle) ?? {}), tipo_real: ev.tipo, origen_real: ev.origen },
+      });
+      if (!r.error) return;
+      logger.warn('seguridad.registro_fallo', { tipo: ev.tipo, err: r.error.message });
+      return;
+    } catch (e2) {
+      logger.warn('seguridad.registro_fallo', { tipo: ev.tipo, err: e2 instanceof Error ? e2.message : String(e2) });
+      return;
+    }
+  }
+  logger.warn('seguridad.registro_fallo', { tipo: ev.tipo, err: e.message });
+}
+
 /** ¿La RPC no existe todavía en la base (0681 sin aplicar)? PostgREST: PGRST202; Postgres: 42883. */
-function rpcAusente(e: { message?: string; code?: string }): boolean {
-  return e.code === 'PGRST202' || e.code === '42883' || /registrar_evento_seguridad/.test(e.message ?? '') && /could not find|does not exist|no existe/i.test(e.message ?? '');
+function rpcAusente(e: { message?: string; code?: string }, nombre: string): boolean {
+  return e.code === 'PGRST202' || e.code === '42883' || (e.message ?? '').includes(nombre) && /could not find|does not exist|no existe/i.test(e.message ?? '');
 }
 
 export interface FilaSeguridad {
