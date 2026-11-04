@@ -61,7 +61,7 @@ const sinComentarios = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace
 export function accionesSinGuarda(fuenteCruda: string): string[] {
   const fuente = sinComentarios(fuenteCruda);
   const cuerpos = new Map<string, string>();
-  for (const m of fuente.matchAll(/(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/g)) cuerpos.set(m[1], cuerpoDeFuncion(fuente, m.index! + m[0].length));
+  for (const m of fuente.matchAll(/function\s+([A-Za-z_$][\w$]*)/g)) cuerpos.set(m[1], cuerpoDeFuncion(fuente, m.index! + m[0].length));
   const llega = (cuerpo: string, visto: Set<string>): boolean => {
     if (GUARDA.test(cuerpo)) return true;
     for (const [n, c] of cuerpos) {
@@ -79,7 +79,7 @@ export function accionesSinGuarda(fuenteCruda: string): string[] {
     return sin;
   }
   for (const m of fuente.matchAll(/^[ \t]*['"]use server['"];/gm)) {
-    const d = [...fuente.slice(0, m.index).matchAll(/(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/g)].pop();
+    const d = [...fuente.slice(0, m.index).matchAll(/function\s+([A-Za-z_$][\w$]*)/g)].pop();
     if (!d) { sin.push('(directiva sin función)'); continue; }
     if (!llega(cuerpoDeFuncion(fuente, d.index! + d[0].length), new Set([d[1]]))) sin.push(d[1]);
   }
@@ -116,7 +116,7 @@ describe('MX-002 · acciones de dinero y plazo legal atadas a la flota pintada',
       const dirs = /^\s*['"]use server['"]/.test(f)
         ? [...f.matchAll(/export\s+async\s+function\s+([A-Za-z_$][\w$]*)/g)].map((m) => [m[1], cuerpoDeFuncion(f, m.index! + m[0].length)] as const)
         : [...f.matchAll(/^[ \t]*['"]use server['"];/gm)].map((m) => {
-          const d = [...f.slice(0, m.index).matchAll(/(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/g)].pop()!;
+          const d = [...f.slice(0, m.index).matchAll(/function\s+([A-Za-z_$][\w$]*)/g)].pop()!;
           return [d[1], cuerpoDeFuncion(f, d.index! + d[0].length)] as const;
         });
       for (const [n, c] of dirs) if (/\bresolverTenantEfectivo\(/.test(c)) culpables.push(`${a}::${n}`);

@@ -33,7 +33,7 @@ function aOctetos(ip: string): number[] | null {
 /** Expande una IPv6 a ocho grupos de 16 bits, o null si no es una IPv6 válida. */
 function aGruposV6(ip: string): number[] | null {
   let s = ip;
-  const v4 = /(\d{1,3}(?:\.\d{1,3}){3})$/.exec(s);
+  const v4 = /(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(s);
   if (v4) {
     const o = aOctetos(v4[1]);
     if (!o) return null;
@@ -88,7 +88,6 @@ export function ipDeCabeceras(h: Headers): string | null {
 /** User-agent sin caracteres de control y recortado a 200; null si queda vacío. */
 export function uaSaneado(ua: string | null | undefined): string | null {
   if (typeof ua !== 'string') return null;
-  // eslint-disable-next-line no-control-regex
   const limpio = ua.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 200);
   return limpio === '' ? null : limpio;
 }

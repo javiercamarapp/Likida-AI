@@ -12,6 +12,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 
 const DIR = 'supabase/migrations';
 const migraciones = readdirSync(DIR).filter((f) => /^\d{4}_.*\.sql$/.test(f)).sort()
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- prueba de arquitectura: lee migraciones del propio repo
   .map((f) => ({ f, sql: readFileSync(`${DIR}/${f}`, 'utf8').replace(/--[^\n]*/g, '') }));
 const despuesDe = (n: string) => migraciones.filter((m) => m.f.slice(0, 4) > n);
 
@@ -29,8 +30,14 @@ describe('A39-S57-01 · la flota no puede escribir tenant (ni su RFC) por la bas
   });
 
   it('ninguna migración otorga escritura sobre tenant a anon, authenticated o public', () => {
-    const GRANT = /grant\s+[^;]*\b(insert|update|all)\b[^;]*\bon\s+(?:table\s+)?(?:public\.)?tenant\b[^;]*\bto\s+[^;]*\b(anon|authenticated|public)\b/i;
-    const culpables = migraciones.filter((m) => GRANT.test(m.sql)).map((m) => m.f);
+    // Por sentencia (separadas por ';'): evita una sola regex con varios [^;]* que se vuelve cuadratica.
+    const esGrantInseguro = (st: string): boolean => {
+      if (!/^\s*grant\b/i.test(st)) return false;
+      const [antes, ...resto] = st.split(/\bto\b/i);
+      return /\b(insert|update|all)\b/i.test(antes) && /\bon\s+tenant\b/i.test(antes.replace(/\btable\b|public\./gi, ''))
+        && /\b(anon|authenticated|public)\b/i.test(resto.join(' to '));
+    };
+    const culpables = migraciones.filter((m) => m.sql.split(';').some(esGrantInseguro)).map((m) => m.f);
     expect(culpables).toEqual([]);
   });
 

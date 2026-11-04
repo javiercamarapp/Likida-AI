@@ -32,8 +32,10 @@ const { FUENTES_SEGURIDAD, coberturaEventosSeguridad } = await import('./cobertu
 
 const RAIZ = fileURLToPath(new URL('../../', import.meta.url));
 function fuentesDelArbol(dir: string, acc: string[] = []): string[] {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- prueba de arquitectura: recorre el propio repo
   for (const n of readdirSync(dir)) {
     const p = join(dir, n);
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- idem
     if (statSync(p).isDirectory()) { if (n !== 'node_modules') fuentesDelArbol(p, acc); continue; }
     if (/\.(ts|tsx)$/.test(n) && !/\.test\.(ts|tsx)$/.test(n)) acc.push(p);
   }
@@ -41,6 +43,7 @@ function fuentesDelArbol(dir: string, acc: string[] = []): string[] {
 }
 const CODIGO = fuentesDelArbol(RAIZ)
   .filter((p) => !p.endsWith('/seguridad/cobertura.ts') && !p.endsWith('/seguridad/eventos.ts'))
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- idem
   .map((p) => readFileSync(p, 'utf8'));
 const hayEmisor = (origen: string, tipo: string) =>
   CODIGO.some((src) => new RegExp(`origen:\\s*'${origen}',\\s*tipo:\\s*'${tipo}'`).test(src));

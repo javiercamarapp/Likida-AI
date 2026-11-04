@@ -4,7 +4,9 @@ import { fileURLToPath } from 'node:url';
 
 // CT-SEG-11: un login que no termina en sesión deja fila en evento_seguridad. Los server actions de /login no se exportan, así que
 // (mismo patrón que limite_por_cuenta.test.ts) se lee la fuente: cada salida de error de la página registra su motivo.
-const leer = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
+const leer = (rel: string) =>
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- prueba de arquitectura: lee fuentes del propio repo
+  readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 const PAGINA = leer('./page.tsx');
 const CALLBACK = leer('../auth/callback/route.ts');
 

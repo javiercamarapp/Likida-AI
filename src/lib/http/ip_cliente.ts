@@ -26,7 +26,7 @@ function limpiar(crudo: string): string {
   if (v.startsWith('[')) {
     const fin = v.indexOf(']');
     if (fin > 0) v = v.slice(1, fin);
-  } else if (/^\d{1,3}(\.\d{1,3}){3}:\d+$/.test(v)) {
+  } else if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+$/.test(v)) {
     v = v.slice(0, v.lastIndexOf(':'));
   }
   const zona = v.indexOf('%');
