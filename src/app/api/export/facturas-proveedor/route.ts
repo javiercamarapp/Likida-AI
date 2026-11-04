@@ -8,6 +8,7 @@ import { puedeExportar } from '@/lib/auth/permisos';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { logger } from '@/lib/logger';
 import { LecturaIncompleta } from '@/lib/likida/pg';
+import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 
 export const runtime = 'nodejs';
 // BE-19 (auditoría 24): sin esto el tope lo pone el default de la plataforma
@@ -37,6 +38,14 @@ const FORMATOS: Record<string, FormatoExport> = {
  * tumban: si el marcado falla, el archivo sale y la corrida lo dice.
  */
 export async function GET(req: Request) {
+  // CT-SEG-17 (CSRF por navegación): este GET MARCA `exportada_en` y anota una corrida. Un link o redirección de otro sitio
+  // llevaría la cookie de la sesión y haría ambas cosas sin que el usuario lo pidiera. `vieneDeNuestroSitio` deja pasar el
+  // clic en el botón del panel (same-origin) y la URL tecleada (none), y rechaza cross-site/same-site.
+  if (!vieneDeNuestroSitio(req)) {
+    logger.warn('export.proveedor_origen_ajeno', { sitio: req.headers.get('sec-fetch-site'), origen: req.headers.get('origin') });
+    return new NextResponse('Esta descarga solo se puede pedir desde el sitio de Likida.', { status: 403 });
+  }
+
   if (!(await rateLimit(`export-prov:${clientIp(req)}`, 10, 60_000))) {
     return new NextResponse('Demasiadas peticiones', { status: 429 });
   }
