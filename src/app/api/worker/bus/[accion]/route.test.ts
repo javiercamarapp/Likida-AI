@@ -249,3 +249,18 @@ describe('A37-S04-07: lease de órdenes tomadas', () => {
     expect((await r.json()).ordenes).toEqual([{ id: 'p1' }]);
   });
 });
+
+// CT-SEG-20: el bus tenia rate limit CERO: cada peticion con llave inventada pagaba una consulta al resolver.
+describe('POST /api/worker/bus/[accion]: rate limit (CT-SEG-20)', () => {
+  it('pasado el tope por IP responde 429 sin resolver la llave ni tocar la base', async () => {
+    const { reiniciarLimites } = await import('@/lib/ratelimit');
+    reiniciarLimites();
+    let ultimo = 200;
+    for (let i = 0; i < 400 && ultimo !== 429; i++) ultimo = (await pedir('ordenes', {})).status;
+    expect(ultimo).toBe(429);
+    escrituras.length = 0;
+    expect((await pedir('ordenes', {})).status).toBe(429);
+    expect(escrituras).toHaveLength(0);
+    reiniciarLimites();
+  });
+});

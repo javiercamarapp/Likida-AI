@@ -64,6 +64,13 @@ export async function POST(req: Request) {
   if (!(await rateLimit(`client-error:${clientIp(req)}`, 20, 60_000))) {
     return NextResponse.json({ ok: false }, { status: 429 });
   }
+  // CT-SEG-20: tope GLOBAL. El de IP no frena a quien rota direcciones (o una /64 entera de IPv6);
+  // sin esto, logs y Sentry se inflan sin limite. 300/min en total es holgura de sobra para el
+  // trafico legitimo de un boundary de cliente. `fallaCerrado:false`: si Upstash parpadea, vale el
+  // conteo local; este endpoint es best-effort y no debe romper la pantalla de error de nadie.
+  if (!(await rateLimit('client-error:global', 300, 60_000, { fallaCerrado: false }))) {
+    return NextResponse.json({ ok: false }, { status: 429 });
+  }
   const lectura = await leerTextoAcotado(req, MAX_BODY);
   if (!lectura.ok) {
     return NextResponse.json({ ok: false }, { status: lectura.motivo === 'demasiado_grande' ? 413 : 400 });
