@@ -1,3 +1,4 @@
+import { ipDeCabeceras } from '@/lib/http/ip_cliente';
 import { appUrl } from '@/lib/env';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
@@ -66,7 +67,7 @@ function siteUrl(): string {
 
 async function ipDelCliente(): Promise<string> {
   const h = await headers();
-  return (h.get('x-forwarded-for')?.split(',')[0].trim() || h.get('x-real-ip')) ?? 'desconocida';
+  return ipDeCabeceras(h);
 }
 
 /**

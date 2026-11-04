@@ -33,6 +33,7 @@
 // cuenta, Supabase lo rechaza, aquí se degrada a "no se reenvió" y la pantalla
 // no distingue el caso — el oráculo de enumeración sigue cerrado.
 // ═══════════════════════════════════════════════════════════════════════════
+import { ipDeCabeceras } from '@/lib/http/ip_cliente';
 import { appUrl } from '@/lib/env';
 import { cookies, headers } from 'next/headers';
 import { supabaseServer } from '@/lib/supabase/server';
@@ -88,7 +89,7 @@ export async function reenviarEnlaceCaducado(dest: string): Promise<ResultadoRee
   // El mismo límite por IP que el formulario de /login — misma llave a
   // propósito: los dos caminos gastan del mismo presupuesto de correo.
   const h = await headers();
-  const ip = (h.get('x-forwarded-for')?.split(',')[0].trim() || h.get('x-real-ip')) ?? 'desconocida';
+  const ip = ipDeCabeceras(h);
   if (!(await rateLimit(`login:email:${ip}`, 10, 5 * 60_000))) return 'no';
 
   // Un intento por ventana de 5 minutos, salga o no el correo: la cookie va

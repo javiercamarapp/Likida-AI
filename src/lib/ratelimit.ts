@@ -306,11 +306,8 @@ export function reiniciarLimites(): void {
   avisadoBackend = false;
 }
 
-/** IP del cliente desde las cabeceras de proxy (Vercel: x-forwarded-for). */
-export function clientIp(req: Request): string {
-  const xff = req.headers.get('x-forwarded-for');
-  return (xff ? xff.split(',')[0].trim() : req.headers.get('x-real-ip')) || 'desconocida';
-}
+/** IP del cliente: UNA sola copia en `@/lib/http/ip_cliente` (CT-SEG-13); se re-exporta aquí por compatibilidad. */
+export { clientIp } from '@/lib/http/ip_cliente';
 
 /**
  * true si el body excede el tope SEGÚN `content-length`, ANTES de leerlo.
