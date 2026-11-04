@@ -1,4 +1,4 @@
-/* eslint-disable security/detect-non-literal-fs-filename -- lee las hojas del propio repo por rutas fijas relativas a este archivo. */
+/* eslint-disable security/detect-non-literal-fs-filename, security/detect-unsafe-regex -- lee las hojas del propio repo por rutas fijas relativas a este archivo. */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -74,7 +74,7 @@ describe('overlay.css fino (K2-1)', () => {
   it('ningún .rv-ov* / .rv-pop* se define en otra hoja (salvo ajustes de contexto con descendiente)', () => {
     const app = join(__dirname, '..');
     const css: string[] = [];
-    const recorre = (d: string) => { for (const n of readdirSync(d)) { if (n === 'node_modules') continue; const p = join(d, n); statSync(p).isDirectory() ? recorre(p) : p.endsWith('.css') && css.push(p); } };
+    const recorre = (d: string) => { for (const n of readdirSync(d)) { if (n === 'node_modules') continue; const p = join(d, n); if (statSync(p).isDirectory()) recorre(p); else if (p.endsWith('.css')) css.push(p); } };
     recorre(app);
     for (const f of css.filter((x) => !x.endsWith('/overlay.css') && !x.endsWith('globals.css'))) {
       const txt = readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
