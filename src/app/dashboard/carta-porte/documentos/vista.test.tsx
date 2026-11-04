@@ -6,7 +6,8 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {}, push() {} 
 vi.mock('next/link', () => ({ default: ({ href, children, ...r }: { href: string; children: React.ReactNode }) => <a href={href} {...r}>{children}</a> }));
 
 import { VistaDocumentos, filtroEnvioDe, pasaFiltroEnvio, type DatosDocumentos } from './vista';
-import { VistaRevision } from './[id]/vista';
+import { VistaRevision, fraseEnvio, FRASE_ENVIO_POR_CONECTAR } from './[id]/vista';
+import { mensajeEnvioPreparado } from '@/lib/likida/carta_porte_docs/mensajes_envio';
 import { calcularMetricas } from '@/lib/likida/carta_porte_docs/metricas';
 import { revisionDe } from '@/lib/likida/carta_porte_docs/presentacion';
 import { validarExtraccion } from '@/lib/likida/carta_porte_docs/validacion';
@@ -578,5 +579,25 @@ describe('T-A3-63: lo inferido y lo poco seguro se resaltan al lado del document
     expect(h).not.toContain('data-marca=');
     expect(h).not.toContain('resumen-marcas');
     expect(h).not.toContain('data-linea-resaltada');
+  });
+});
+
+describe('F2 superficie honesta: sin conexión real con el sistema del cliente', () => {
+  it('ninguna fase «en camino» se afirma cuando no existe adaptador', () => {
+    for (const estado of ['pendiente_prechequeo', 'listo', 'enviando', 'pendiente_reque', 'error_transitorio'] as const) {
+      const f = fraseEnvio({ estado, sinConexion: true });
+      expect(f, estado).toBe(FRASE_ENVIO_POR_CONECTAR);
+      expect(f).not.toMatch(/Enviándose|reintentará|Listo para enviar/);
+    }
+  });
+  it('lo simulado y lo real conservan su frase; el rechazo y lo subido a mano no se tocan', () => {
+    expect(fraseEnvio({ estado: 'enviado', simulado: true, sinConexion: true })).toMatch(/simulado/);
+    expect(fraseEnvio({ estado: 'listo', simulado: true, sinConexion: true })).toMatch(/Listo para enviar/);
+    expect(fraseEnvio({ estado: 'subido_a_mano', sinConexion: true })).toBe('Subido a mano.');
+  });
+  it('el mensaje de «preparar envío» no promete un envío automático que no existe', () => {
+    expect(mensajeEnvioPreparado(true, true)).toMatch(/por conectar/);
+    expect(mensajeEnvioPreparado(true, true)).not.toMatch(/lo enviará/);
+    expect(mensajeEnvioPreparado(true, false)).toMatch(/lo enviará al TMS/);
   });
 });
