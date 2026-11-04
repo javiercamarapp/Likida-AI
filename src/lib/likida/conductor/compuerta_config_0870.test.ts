@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // A37-P-08: `compuertaMovimientoActiva` (y sus metros/ventana/sin-GPS) se leen y se guardan por flota (0870). Apagada por omisión.
-const estado: { config: Record<string, unknown> | null } = { config: null };
+const estado: { config: Record<string, unknown> | null; perfil: string | null } = { config: null, perfil: null };
 const upserts: Array<Record<string, unknown>> = [];
 let respuestas: Array<{ error: { message: string } | null }> = [];
 
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: (tabla: string) => ({
-      select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: tabla === 'tenant' ? { zona_horaria: 'America/Mexico_City' } : estado.config, error: null }) }) }),
+      select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: tabla === 'tenant' ? { zona_horaria: 'America/Mexico_City' } : tabla === 'tenant_perfil' ? (estado.perfil ? { perfil: estado.perfil } : null) : estado.config, error: null }) }) }),
       upsert: (fila: Record<string, unknown>) => { upserts.push(fila); return Promise.resolve(respuestas.shift() ?? { error: null }); },
     }),
   }),
@@ -17,6 +17,7 @@ vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), error: vi.fn(), info: 
 
 const { leerConfigConductor, guardarConfigConductor } = await import('./repo');
 const { CONFIG_CONDUCTOR_DEFAULT } = await import('./config');
+const { reiniciarCachePerfil } = await import('@/lib/auth/perfil_tenant');
 
 const FILA = {
   activo: true, solicitudes_min: [0, 15, 30, 45], escalar_tras_min: 90, segundo_nivel_min: 30, hora_inicio: 6, hora_fin: 22,
@@ -28,7 +29,7 @@ const FILA = {
 };
 const falta0870 = { error: { message: "Could not find the 'compuerta_movimiento_activa' column of 'agente_conductor_config' in the schema cache" } };
 
-beforeEach(() => { estado.config = null; upserts.length = 0; respuestas = []; });
+beforeEach(() => { estado.config = null; estado.perfil = null; reiniciarCachePerfil(); upserts.length = 0; respuestas = []; });
 
 describe('A37-P-08: la compuerta de movimiento se lee de la base', () => {
   it('con las columnas de la 0870 lee la compuerta encendida y sus parámetros', async () => {
@@ -41,6 +42,38 @@ describe('A37-P-08: la compuerta de movimiento se lee de la base', () => {
     estado.config = { ...FILA };
     expect(await leerConfigConductor('t1')).toMatchObject({ compuertaMovimientoActiva: false, detenidaMetros: CONFIG_CONDUCTOR_DEFAULT.detenidaMetros, sinGpsPermite: false });
     estado.config = { ...FILA, compuerta_movimiento_activa: null, detenida_metros: null };
+    expect((await leerConfigConductor('t1')).compuertaMovimientoActiva).toBe(false);
+  });
+});
+
+// CT-A345-29 (TZ-03): bajo `cinco_agentes` la compuerta NO nace apagada. La columna es NOT NULL default false (0870), así que
+// «por omisión» no se distingue de «alguien la apagó»: bajo el perfil rige encendida (requisito de seguridad del cliente: no
+// escribirle al chofer con la unidad en marcha). Sin perfil, el comportamiento de siempre.
+describe('CT-A345-29: la compuerta de movimiento bajo el perfil cinco_agentes', () => {
+  it('con perfil y la columna en false (el default de la base): la config sale con la compuerta ENCENDIDA', async () => {
+    estado.perfil = 'cinco_agentes';
+    estado.config = { ...FILA, compuerta_movimiento_activa: false };
+    expect((await leerConfigConductor('t1')).compuertaMovimientoActiva).toBe(true);
+  });
+
+  it('con perfil y base sin migrar (columna ausente): encendida', async () => {
+    estado.perfil = 'cinco_agentes';
+    estado.config = { ...FILA };
+    expect((await leerConfigConductor('t1')).compuertaMovimientoActiva).toBe(true);
+  });
+
+  it('con perfil y SIN fila de config: los defaults del perfil traen la compuerta encendida', async () => {
+    estado.perfil = 'cinco_agentes';
+    estado.config = null;
+    expect((await leerConfigConductor('t1')).compuertaMovimientoActiva).toBe(true);
+  });
+
+  it('sin perfil nada cambia: la columna manda (false apaga, true enciende) y sin fila queda apagada', async () => {
+    estado.config = { ...FILA, compuerta_movimiento_activa: false };
+    expect((await leerConfigConductor('t1')).compuertaMovimientoActiva).toBe(false);
+    estado.config = { ...FILA, compuerta_movimiento_activa: true };
+    expect((await leerConfigConductor('t1')).compuertaMovimientoActiva).toBe(true);
+    estado.config = null;
     expect((await leerConfigConductor('t1')).compuertaMovimientoActiva).toBe(false);
   });
 });

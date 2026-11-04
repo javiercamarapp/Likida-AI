@@ -86,12 +86,33 @@ describe('preflight del piloto', () => {
   });
 
   it('A37-S36-07: con perfil cinco_agentes se exigen también las plantillas P1 del ciclo (estadía, caja cargada, evidencia)', () => {
-    const base = { ...verde(), aprobadas: [...TODAS, ...plantillasDelCicloPorPerfil('piloto')] };
+    const base = { ...verde(), config: { ...verde().config, compuertaMovimientoActiva: true }, aprobadas: [...TODAS, ...plantillasDelCicloPorPerfil('piloto')] };
     expect(faltas({ ...base, perfilPlantillas: 'piloto' })).toEqual([]);
     const r = evaluarPreflight({ ...base, perfilPlantillas: 'cinco_agentes' });
     expect(r.bloqueos.map((b) => b.id)).toEqual(['plantillas']);
     for (const n of ['conductor_estadia_descarga_v1', 'aviso_supervisor_caja_cargada_v1', 'conductor_pedir_evidencia_v1']) expect(r.bloqueos[0].detalle).toContain(n);
     expect(faltas({ ...base, perfilPlantillas: 'cinco_agentes', aprobadas: [...base.aprobadas, ...plantillasDelCicloPorPerfil('cinco_agentes')] })).toEqual([]);
+  });
+
+  // CT-A345-29 (TZ-03): la señal de vida le escribe al chofer; bajo el perfil, sin la compuerta «unidad detenida» el agente podría hacerlo en marcha.
+  it('CT-A345-29: con perfil cinco_agentes el preflight exige la compuerta de movimiento encendida', () => {
+    const base = { ...verde(), aprobadas: [...TODAS, ...plantillasDelCicloPorPerfil('cinco_agentes')], perfilPlantillas: 'cinco_agentes' as const };
+    for (const compuertaMovimientoActiva of [false, undefined]) {
+      const r = evaluarPreflight({ ...base, config: { ...base.config, compuertaMovimientoActiva } });
+      expect(r.bloqueos.map((b) => b.id), String(compuertaMovimientoActiva)).toEqual(['compuerta_movimiento']);
+      expect(r.lista).toBe(false);
+      expect(r.bloqueos[0].queHacer).toContain('compuerta');
+      expect(mensajeBloqueoSenalVida(r)).toContain('unidad detenida');
+    }
+    const ok = evaluarPreflight({ ...base, config: { ...base.config, compuertaMovimientoActiva: true } });
+    expect(ok.bloqueos).toEqual([]);
+    expect(ok.comprobaciones.map((c) => c.id)).toContain('compuerta_movimiento');
+  });
+
+  it('CT-A345-29: sin perfil (piloto) la comprobación no aparece y nada cambia', () => {
+    const r = evaluarPreflight({ ...verde(), aprobadas: [...TODAS, ...plantillasDelCicloPorPerfil('piloto')], perfilPlantillas: 'piloto' });
+    expect(r.comprobaciones.map((c) => c.id)).not.toContain('compuerta_movimiento');
+    expect(r.lista).toBe(true);
   });
 
   it('rojo 9 (T-A5-64): sin cohorte definida no se enciende nada; con cualquier cohorte del catálogo, en verde', () => {
