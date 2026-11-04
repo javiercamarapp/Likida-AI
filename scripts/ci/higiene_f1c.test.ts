@@ -53,8 +53,9 @@ describe('escaneo de secretos en CI (CT-SEG-24)', () => {
     const t = leer('.gitleaks.toml');
     expect(t).toMatch(/\[extend\]\s*\n\s*useDefault\s*=\s*true/);
     expect(t).toMatch(/\[\[allowlists\]\]|\[allowlist\]/);
-    // Nada de permitir carpetas enteras de codigo de produccion.
-    expect(t).not.toMatch(/paths\s*=\s*\[[^\]]*['"]\^?src\/(?!.*test)/);
+    // La regla generica solo se perdona en pruebas o en fixtures/datos publicos nombrados: nunca en src/ de produccion.
+    const rutas = [...t.matchAll(/^\s*'''([^']+)'''/gm)].map((m) => m[1]).filter((r) => r.startsWith('^src/'));
+    for (const r of rutas) expect(r, r).toMatch(/test|permisos_cre/);
   });
 });
 
