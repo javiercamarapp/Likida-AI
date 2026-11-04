@@ -11,8 +11,11 @@
 //    cercano, no el que escribió el cliente.
 //
 // IPv6: un atacante con una red /64 (lo normal para un hogar o un VPS) tiene
-// 2^64 direcciones; limitar por la dirección completa lo deja evadir cualquier
-// tope. La llave de límite se normaliza al prefijo /64.
+// 2^64 direcciones, y uno con un /56 (la delegacion tipica de un ISP) tiene 256
+// /64. Limitar por la direccion completa o por /64 lo deja evadir cualquier tope
+// (F1B: 256 /64 de un /56 daban 256 cupos). La llave de limite se normaliza al
+// prefijo /56. Costo asumido: usuarios legitimos que comparten un /56 comparten
+// cupo; es preferible a un tope que se evade rotando subredes.
 // ═══════════════════════════════════════════════════════════════════════════
 
 type Cabeceras = { get(nombre: string): string | null };
@@ -63,7 +66,7 @@ function hextetos(v: string): number[] | null {
 
 /**
  * Llave estable para limitar por IP: IPv4 tal cual, IPv4 mapeada en IPv6
- * como IPv4, IPv6 reducida a su /64 (`2001:db8:1:2::/64`). Lo que no se
+ * como IPv4, IPv6 reducida a su /56 (`2001:db8:1:200::/56`). Lo que no se
  * reconoce como IP se devuelve intacto (acotado) para no perder la señal.
  */
 export function llaveDeIp(crudo: string): string {
@@ -75,7 +78,21 @@ export function llaveDeIp(crudo: string): string {
   if (h.slice(0, 5).every((x) => x === 0) && h[5] === 0xffff) {
     return `${h[6] >> 8}.${h[6] & 255}.${h[7] >> 8}.${h[7] & 255}`;
   }
-  return `${h.slice(0, 4).map((x) => x.toString(16)).join(':')}::/64`;
+  return `${[h[0], h[1], h[2], h[3] & 0xff00].map((x) => x.toString(16)).join(':')}::/56`;
+}
+
+/**
+ * La IP CRUDA (sin normalizar a prefijo) elegida con la regla de confianza de arriba, o null.
+ * Es la UNICA copia de la eleccion de cabecera: `seguridad/evento_red.ts` la reutiliza (F1B: tenia
+ * su propia copia que tomaba el primer x-forwarded-for, el que escribe el cliente).
+ */
+export function ipCrudaDeCabeceras(h: Cabeceras): string | null {
+  const vercel = h.get('x-vercel-forwarded-for');
+  const real = h.get('x-real-ip');
+  const xff = h.get('x-forwarded-for');
+  const ultimoXff = xff ? xff.split(',').map((s) => s.trim()).filter(Boolean).pop() : undefined;
+  const crudo = (vercel ? vercel.split(',')[0] : undefined) || real || ultimoXff;
+  return crudo && crudo.trim() ? limpiar(crudo) : null;
 }
 
 /** IP del cliente a partir de cabeceras (Request, `headers()` de Next, etc.). */

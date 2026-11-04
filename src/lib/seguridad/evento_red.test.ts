@@ -54,10 +54,10 @@ describe('huellaDeRed — HMAC con sal sobre la red truncada', () => {
 });
 
 describe('ipDeCabeceras / redDeCabeceras', () => {
-  it('prefiere la cabecera de Vercel, luego x-real-ip, luego el primer x-forwarded-for', () => {
+  it('prefiere la cabecera de Vercel, luego x-real-ip, luego el ULTIMO x-forwarded-for (F1B)', () => {
     expect(ipDeCabeceras(new Headers({ 'x-vercel-forwarded-for': '1.1.1.1', 'x-real-ip': '2.2.2.2', 'x-forwarded-for': '3.3.3.3, 4.4.4.4' }))).toBe('1.1.1.1');
     expect(ipDeCabeceras(new Headers({ 'x-real-ip': '2.2.2.2', 'x-forwarded-for': '3.3.3.3' }))).toBe('2.2.2.2');
-    expect(ipDeCabeceras(new Headers({ 'x-forwarded-for': ' 3.3.3.3 , 4.4.4.4' }))).toBe('3.3.3.3');
+    expect(ipDeCabeceras(new Headers({ 'x-forwarded-for': ' 3.3.3.3 , 4.4.4.4' }))).toBe('4.4.4.4');
     expect(ipDeCabeceras(new Headers())).toBeNull();
   });
   it('arma huella y user-agent saneado', () => {
@@ -118,5 +118,16 @@ describe('redactarDetalle — PII fuera', () => {
   it('no lanza con ciclos', () => {
     const a: Record<string, unknown> = {}; a.a = a;
     expect(() => redactarDetalle(a)).not.toThrow();
+  });
+});
+
+describe('F1B: ipDeCabeceras de evento_red comparte la regla de ip_cliente', () => {
+  it('toma el ULTIMO x-forwarded-for (el del proxy), no el que escribe el cliente', () => {
+    const h = new Headers({ 'x-forwarded-for': '6.6.6.6, 203.0.113.9' });
+    expect(ipDeCabeceras(h)).toBe('203.0.113.9');
+  });
+  it('x-vercel-forwarded-for vacio no anula x-real-ip valido', () => {
+    const h = new Headers({ 'x-vercel-forwarded-for': '', 'x-real-ip': '198.51.100.4' });
+    expect(ipDeCabeceras(h)).toBe('198.51.100.4');
   });
 });

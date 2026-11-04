@@ -22,14 +22,19 @@ describe('clientIp (CT-SEG-13)', () => {
     const a = clientIp(req({ 'x-vercel-forwarded-for': '2001:db8:aaaa:bbbb:1111:2222:3333:4444' }));
     const b = clientIp(req({ 'x-vercel-forwarded-for': '2001:db8:aaaa:bbbb:ffff:eeee:dddd:cccc' }));
     expect(a).toBe(b);
-    expect(a).toBe('2001:db8:aaaa:bbbb::/64');
+    expect(a).toBe('2001:db8:aaaa:bb00::/56');
   });
-  it('/64 distintos dan llaves distintas', () => {
-    expect(llaveDeIp('2001:db8:aaaa:bbbc::1')).not.toBe(llaveDeIp('2001:db8:aaaa:bbbb::1'));
+  it('/56 distintos dan llaves distintas', () => {
+    expect(llaveDeIp('2001:db8:aaaa:bcbc::1')).not.toBe(llaveDeIp('2001:db8:aaaa:bbbb::1'));
+  });
+  it('F1B: 256 /64 dentro de un mismo /56 comparten UNA llave (no 256 cupos)', () => {
+    const llaves = new Set<string>();
+    for (let i = 0; i < 256; i++) llaves.add(llaveDeIp(`2001:db8:aaaa:bb${i.toString(16).padStart(2, '0')}::1`));
+    expect(llaves.size).toBe(1);
   });
   it('IPv6 comprimida y expandida coinciden; corchetes y zona se ignoran', () => {
     expect(llaveDeIp('[2001:db8::1]:443')).toBe(llaveDeIp('2001:0db8:0000:0000:0000:0000:0000:0001'));
-    expect(llaveDeIp('fe80::1%eth0')).toBe('fe80:0:0:0::/64');
+    expect(llaveDeIp('fe80::1%eth0')).toBe('fe80:0:0:0::/56');
   });
   it('IPv4 mapeada en IPv6 se trata como IPv4; IPv4 con puerto pierde el puerto', () => {
     expect(llaveDeIp('::ffff:203.0.113.7')).toBe('203.0.113.7');

@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { redactarTexto } from '@/lib/logger';
+import { ipCrudaDeCabeceras } from '@/lib/http/ip_cliente';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA RED DE UN EVENTO DE SEGURIDAD (0954, CT-SEG-11).
@@ -79,12 +80,9 @@ export function huellaDeRed(ip: string | null | undefined, sal: string | undefin
   return createHmac('sha256', sal).update(`red|${red}`).digest('hex').slice(0, 32);
 }
 
-/** La IP del cliente según las cabeceras: la de Vercel, luego x-real-ip, luego el primer x-forwarded-for. */
+/** La IP del cliente segun las cabeceras: la UNICA regla de confianza (`http/ip_cliente.ts`), sin copia propia. */
 export function ipDeCabeceras(h: Headers): string | null {
-  const v = h.get('x-vercel-forwarded-for') ?? h.get('x-real-ip') ?? h.get('x-forwarded-for');
-  if (!v) return null;
-  const primero = v.split(',')[0].trim();
-  return primero || null;
+  return ipCrudaDeCabeceras(h);
 }
 
 /** User-agent sin caracteres de control y recortado a 200; null si queda vacío. */
