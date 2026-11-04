@@ -6,6 +6,7 @@ import type { PerfilTenant } from '@/lib/auth/visibilidad';
 import LogoV2 from './logo-v2';
 import { ArbolMenu, PieMenu, useMenuV2 } from './navegacion-v2';
 import { useRiel } from './colapso';
+import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
 
 /**
  * El sidebar de escritorio v2: tarjeta FLOTANTE de 232 px (riel de 72 px: plegado por el usuario y por defecto entre 768 y 1023).
@@ -32,7 +33,7 @@ export default function SidebarV2({ rol, rolEtiqueta, nombre, perfil, usoIa, cer
           <span className="rv-logo-s"><LogoV2 alto={28} variante="simbolo" /></span>
         </Link>
         <button type="button" className="rv-icono-boton rv-sb__plegar" onClick={alternar} aria-label="Plegar el menú" title="Plegar el menú" aria-expanded={!riel}>
-          <ChevronsLeft className="rv-chev-plegar" width={16} height={16} strokeWidth={1.75} aria-hidden />
+          <ChevronsLeft className="rv-chev-plegar" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
         </button>
       </div>
       <nav aria-label="Navegación principal" className="rv-sb__nav">
