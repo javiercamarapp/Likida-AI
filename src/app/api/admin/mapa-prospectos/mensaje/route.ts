@@ -9,9 +9,10 @@ import { leerTextoAcotado } from '@/lib/http/cuerpo_acotado';
 //
 // Modelo: rol `marketing` de models.ts (hoy gpt-5.6-luna, ~$0.10/M — stack
 // 100% USA, regla legal). El costo por mensaje es ~décimas de centavo y se
-// registra en el ledger transaccional de presupuesto del tenant explícito
-// de la sesión superadmin. Sin tenant no se llama al proveedor: el control
-// de gasto falla cerrado y nunca cae en un presupuesto global implícito.
+// registra en el ledger transaccional de presupuesto de la flota elegida
+// por la sesión superadmin o, sin flota, del tenant interno de Likida (MX-004,
+// migración 0970). Sin ninguno no se llama al proveedor: el control de gasto
+// falla cerrado y nunca cae en un presupuesto global implícito.
 // ═══════════════════════════════════════════════════════════════════════════
 import { NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
@@ -32,6 +33,7 @@ import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { sesionSuperadmin } from '../puerta';
 import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
+import { tenantDePresupuestoSuperadmin } from '@/lib/admin/tenant_presupuesto_superadmin';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -65,11 +67,15 @@ export async function POST(req: Request) {
 
   const { error, sesion } = await sesionSuperadmin();
   if (error) return error;
-  if (!sesion.tenantId) {
-    logger.warn('cerebro.presupuesto_sin_tenant', { userId: sesion.userId });
+  // MX-004: el superadmin global no tiene flota (tenantId null por diseño). El presupuesto sale de la flota elegida si la hay y,
+  // si no, del tenant interno de Likida (migración 0970); sin ninguno falla cerrado y la pantalla muestra el motivo exacto.
+  const presupuesto = await tenantDePresupuestoSuperadmin(sesion.tenantId);
+  if (!presupuesto.ok) {
+    logger.warn('cerebro.presupuesto_sin_tenant', { userId: sesion.userId, motivo: presupuesto.motivo });
     return NextResponse.json({
-      error: 'El redactor requiere un tenant explícito de presupuesto asignado a la sesión superadmin.',
+      error: presupuesto.mensaje,
       codigo: 'redactor_presupuesto_sin_tenant',
+      motivo: presupuesto.motivo,
     }, { status: 503 });
   }
   // Techo de ráfaga, no de negocio: 120/hora cubre una sesión intensa de
@@ -139,7 +145,7 @@ export async function POST(req: Request) {
       maxTokens: 900,
       temperature: 0.7,
       signal: AbortSignal.timeout(30_000),
-      budget: createLlmBudget(sesion.tenantId, randomUUID(), 'interactivo'),
+      budget: createLlmBudget(presupuesto.tenantId, randomUUID(), 'interactivo'),
     });
     // A37-S08-02: las reglas duras NO se confían solo al prompt. Un validador
     // determinista revisa la salida ANTES de guardarla o entregarla; si falla,

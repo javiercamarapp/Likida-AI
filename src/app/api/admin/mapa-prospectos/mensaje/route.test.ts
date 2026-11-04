@@ -38,6 +38,14 @@ vi.mock('@/lib/supabase/admin', () => ({
     }),
   }),
 }));
+const estadoInterno = vi.hoisted(() => ({
+  resultado: { ok: false, motivo: 'sin_tenant_interno', mensaje: 'sin tenant interno de prueba' } as
+    { ok: true; tenantId: string; origen: 'sesion' | 'interno' } | { ok: false; motivo: string; mensaje: string },
+}));
+// MX-004: sin flota elegida el presupuesto sale del tenant interno; aqui se simula lo que resuelve el ayudante.
+vi.mock('@/lib/admin/tenant_presupuesto_superadmin', () => ({
+  tenantDePresupuestoSuperadmin: (t: string | null) => Promise.resolve(t ? { ok: true, tenantId: t, origen: 'sesion' } : estadoInterno.resultado),
+}));
 vi.mock('@/lib/llm/budget', () => ({
   createLlmBudget: (...args: unknown[]) => { presupuestos.push(args); return { prueba: true }; },
 }));
@@ -81,6 +89,7 @@ beforeEach(() => {
   salidaModelo = null;
   presupuestos.length = 0;
   estadoSesion.tenantId = '22222222-2222-2222-2222-222222222222';
+  estadoInterno.resultado = { ok: false, motivo: 'sin_tenant_interno', mensaje: 'sin tenant interno de prueba' };
   process.env.NEXT_PUBLIC_APP_URL = 'https://app.likida.ai';
 });
 
@@ -133,16 +142,36 @@ describe('POST /api/admin/mapa-prospectos/mensaje — la persona no sale', () =>
     expect(escrituras).toHaveLength(1);
   });
 
-  it('falla cerrado antes de llamar al modelo cuando la sesión no tiene tenant de presupuesto', async () => {
+  it('falla cerrado antes de llamar al modelo cuando no hay flota ni tenant interno, y dice por que', async () => {
     estadoSesion.tenantId = null;
 
     const r = await postear();
-    const j = await r.json() as { codigo: string };
+    const j = await r.json() as { codigo: string; motivo: string; error: string };
 
     expect(r.status).toBe(503);
     expect(j.codigo).toBe('redactor_presupuesto_sin_tenant');
+    expect(j.motivo).toBe('sin_tenant_interno');
+    expect(j.error).toBe('sin tenant interno de prueba');
     expect(llamadas).toHaveLength(0);
     expect(escrituras).toHaveLength(0);
+  });
+
+  it('MX-004: el superadmin global (sin flota) redacta y el gasto se carga al tenant interno', async () => {
+    estadoSesion.tenantId = null;
+    estadoInterno.resultado = { ok: true, tenantId: '99999999-9999-4999-8999-999999999999', origen: 'interno' };
+
+    const r = await postear();
+
+    expect(r.status).toBe(200);
+    expect(presupuestos).toHaveLength(1);
+    expect(presupuestos[0][0]).toBe('99999999-9999-4999-8999-999999999999');
+    expect(llamadas).toHaveLength(1);
+  });
+
+  it('con flota elegida el gasto sigue yendo a esa flota', async () => {
+    const r = await postear();
+    expect(r.status).toBe(200);
+    expect(presupuestos[0][0]).toBe('22222222-2222-2222-2222-222222222222');
   });
 
   it('ni el nombre, ni el correo, ni el teléfono del decisor llegan al modelo', async () => {

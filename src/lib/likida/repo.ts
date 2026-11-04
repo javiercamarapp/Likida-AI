@@ -169,6 +169,20 @@ export async function getZonaHorariaTenant(tenantId: string): Promise<string | n
 }
 
 /**
+ * Los tenants marcados como internos de Likida (`tenant.interno`, 0970; a lo más uno por índice único). De ahí sale el
+ * presupuesto de IA del superadmin global (MX-004). Devuelve el error tal cual (`42703` = la migración aún no se aplica) para
+ * que el llamador distinga «no hay tenant interno» de «no se pudo leer»; no lanza.
+ */
+export async function leerTenantsInternos(): Promise<{ data: Array<{ id: unknown }> | null; error: { code?: string; message?: string } | null }> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('tenant')
+    .select('id')
+    .eq('interno', true)
+    .limit(2), 'leerTenantsInternos');
+  return { data: (data ?? null) as Array<{ id: unknown }> | null, error: error ? { code: (error as { code?: string }).code, message: error.message } : null };
+}
+
+/**
  * Escribe la declaración del umbral de peaje (LIF 2026 art. 20-A) en
  * `tenant.perfil` + `perfil_actualizado_por` en el MISMO UPDATE — el trigger
  * de 0169 lee `NEW.perfil_actualizado_por`. Sin el actor en el mismo
