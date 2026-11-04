@@ -104,6 +104,13 @@ describe('VistaDocumentos', () => {
     expect(html(<VistaDocumentos datos={datos([], { buzon: { direccion: null, activo: true, remitentes: [], dominioConfigurado: false } })} acciones={todas} />)).toMatch(/dominio de correo de Likida no está configurado/);
   });
 
+  it('S-06: buzón activo con la lista de remitentes vacía avisa que no recibe nada (y con lista no lo avisa)', () => {
+    const vacio = html(<VistaDocumentos datos={datos([], { buzon: { direccion: 'cp-abc@mail.likida.ai', activo: true, remitentes: [], dominioConfigurado: true } })} acciones={todas} />);
+    expect(vacio).toContain('Sin remitentes autorizados');
+    const con = html(<VistaDocumentos datos={datos([], { buzon: { direccion: 'cp-abc@mail.likida.ai', activo: true, remitentes: ['cliente.com'], dominioConfigurado: true } })} acciones={todas} />);
+    expect(con).not.toContain('Sin remitentes autorizados');
+  });
+
   it('perfiles con su historial de versiones y «volver a esta»', () => {
     const h = html(<VistaDocumentos datos={datos([], { perfiles: [{ id: 'p1', nombre: 'Atlas · excel', formato: 'excel', versionActiva: 2, mapeos: 15, versiones: [{ version: 2, nota: 'Nuevo: fecha_salida', mapeos: 15 }, { version: 1, nota: null, mapeos: 14 }] }] })} acciones={todas} />);
     expect(h).toMatch(/Atlas · excel/);

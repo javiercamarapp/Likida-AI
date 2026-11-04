@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { FileInput, TriangleAlert, Mail, MessageCircle, Upload, Download, RotateCcw, Layers } from 'lucide-react';
 import { EstadoVacio, EstadoError } from '../../estados';
 import { fechaHoraMx, numero, pesoArchivo, porcentaje, usd4 } from '@/lib/formato';
+import { AVISO_SIN_REMITENTES } from '@/lib/correo/remitente';
 import { soloMisCasos } from '@/lib/likida/carta_porte_docs/revisor';
 import { prioridadEstado, ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO } from '@/lib/likida/carta_porte_docs/presentacion';
 import { MINUTOS_CAPTURA_MANUAL_EMBARQUE, type MetricasAgente } from '@/lib/likida/carta_porte_docs/metricas';
@@ -342,9 +343,12 @@ function Canales({ buzon, acciones }: { buzon: BuzonVista | null; acciones: Acci
                 {buzon.dominioConfigurado ? 'La dirección no se pudo armar.' : 'El dominio de correo de Likida no está configurado en este entorno: el buzón existe pero no hay dirección que dar.'}
               </p>
             )}
+            {buzon.activo && buzon.remitentes.length === 0 && (
+              <p className="text-[12px] px-3 py-2 rounded-lg" style={{ background: 'var(--warnbg, var(--canvas))', color: 'var(--warn)' }}>{AVISO_SIN_REMITENTES}</p>
+            )}
             {acciones.guardarRemitentes && (
               <FormaAccion accion={acciones.guardarRemitentes}>
-                <label htmlFor="cp-remitentes" className={ETIQUETA}>Remitentes de tus clientes (uno por línea: correo o dominio). Vacío = cualquiera.</label>
+                <label htmlFor="cp-remitentes" className={ETIQUETA}>Remitentes de tus clientes (uno por línea: correo o dominio). Sin al menos uno, el buzón no recibe correos.</label>
                 <textarea id="cp-remitentes" name="remitentes" rows={3} defaultValue={buzon.remitentes.join('\n')} className={`${CAMPO} h-auto py-2`} style={{ background: 'var(--surface)' }} />
                 <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Un correo de otro remitente entra igual, marcado «remitente no reconocido» para que lo revises.</p>
                 <BotonEnvio variante="secundario" etiqueta="Guardar remitentes" />

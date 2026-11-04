@@ -1055,7 +1055,7 @@ export async function rotarCorreoPeajes(tenantId: string): Promise<boolean> {
 
 const CORREO_O_DOMINIO = /^@?[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$|^@?[a-z0-9.-]+\.[a-z]{2,}$/i;
 
-/** Remitentes (correo o dominio) que pueden mandar por correo. Lista vacía = cualquiera que tenga la dirección. */
+/** Remitentes (correo o dominio) que pueden mandar por correo. Lista vacía = el buzón no acepta a nadie (S-06). */
 export async function guardarRemitentesPeajes(tenantId: string, crudos: readonly string[]): Promise<{ ok: true; guardados: number } | { ok: false; motivo: string }> {
   const lista = [...new Set(crudos.map((r) => r.trim().toLowerCase()).filter(Boolean))];
   if (lista.length > 20) return { ok: false, motivo: 'Hasta 20 remitentes.' };

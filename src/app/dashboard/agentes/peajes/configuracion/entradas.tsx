@@ -78,11 +78,11 @@ export function SeccionEntradas({ entradas, acciones }: { entradas: EntradasVist
           {puedeAdministrar && config?.correoActivo && (
             <form action={acciones.guardarRemitentes} className="space-y-1.5">
               <label className="block">
-                <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Remitentes permitidos (correo o dominio, uno por línea; vacío = cualquiera con la dirección)</span>
+                <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Remitentes permitidos (correo o dominio, uno por línea; sin al menos uno, el buzón no recibe correos)</span>
                 <textarea name="remitentes" rows={3} defaultValue={config.remitentes.join('\n')} maxLength={2500} className={`${CSS_INPUT} w-full cifra-mono mt-0.5`} style={ESTILO_INPUT} />
               </label>
               <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Guardar remitentes</button>
-              <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Con lista, un correo de otro remitente se ignora (no entra ni se cruza).</p>
+              <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Un correo de otro remitente se ignora (no entra ni se cruza). Con la lista vacía no entra ninguno.</p>
             </form>
           )}
         </div>

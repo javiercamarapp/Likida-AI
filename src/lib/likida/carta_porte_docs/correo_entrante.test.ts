@@ -74,6 +74,8 @@ describe('la dirección del buzón', () => {
 
 describe('atenderCorreoCartaPorte', () => {
   const base = { emailId: 'em-1', from: 'Logística <logistica@cliente.example>', subject: 'Embarque CG-5521' };
+  // S-06: un buzón SIN lista de remitentes ya no acepta a nadie; estas pruebas ejercen el camino de un buzón con la lista del cliente.
+  beforeEach(async () => { await repo.configurarBuzon(A, { remitentesPermitidos: ['cliente.example'] }); await repo.configurarBuzon(B, { remitentesPermitidos: ['cliente.example'] }); });
 
   it('buzón desconocido o apagado: 200 sin hacer nada', async () => {
     expect(await atenderCorreoCartaPorte('x'.repeat(24), { ...base, text: correoTexto() }, deps())).toMatchObject({ status: 200, cuerpo: { ignorado: 'buzon_desconocido' } });
@@ -211,4 +213,17 @@ describe('atenderCorreoCartaPorte', () => {
     expect(d.descargas).toHaveLength(10);
   });
   void lecturaAtlas;
+});
+
+describe('S-06 / CT-SEG-06: la lista de remitentes vacía no acepta a cualquiera', () => {
+  it('buzón activo con lista vacía: 200 sin_remitentes_autorizados, sin descargar ni reclamar el correo', async () => {
+    // Fixture por omisión: crearBuzon deja la lista vacía (igual que la base real).
+    await repo.configurarBuzon(A, { remitentesPermitidos: [] });
+    const d = deps({ a1: await pdfBoreal() });
+    const r = await atenderCorreoCartaPorte(TOKEN_A, { emailId: 'em-vacio', from: 'cualquiera@x.com', subject: 'Embarque', attachments: [{ id: 'a1', filename: 'a.pdf' }] }, d);
+    expect(r).toMatchObject({ status: 200, cuerpo: { ok: true, ignorado: 'sin_remitentes_autorizados' } });
+    expect(d.descargas).toEqual([]);
+    expect(estado.correos.size).toBe(0);
+    expect(estado.docs.size).toBe(0);
+  });
 });

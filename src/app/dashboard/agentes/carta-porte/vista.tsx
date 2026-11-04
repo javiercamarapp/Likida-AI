@@ -6,6 +6,7 @@ import type { InsightsAgente, CalidadGrupo, TarjetaInsight } from '@/lib/likida/
 import { aCsvSinCcp, type ListadoSinCcp, type ColorAntiguedad } from '@/lib/likida/carta_porte_docs/viajes_sin_ccp';
 import { EstadoError, EstadoVacio } from '../../estados';
 import { DireccionBuzon } from '../proveedores/controles';
+import { AVISO_SIN_REMITENTES } from '@/lib/correo/remitente';
 import { MarcoPagina, Aviso, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /**
@@ -198,7 +199,7 @@ function ComoMandarDocumentos({ buzon, sufijo }: { buzon: BuzonCartaPorteVista |
               <p style={{ color: 'var(--muted)' }}>
                 {buzon.remitentes.length > 0
                   ? `Remitentes de tus clientes reconocidos: ${buzon.remitentes.join(', ')}. Uno distinto entra igual, marcado «remitente no reconocido».`
-                  : 'Remitentes reconocidos: cualquiera (puedes limitarlos a los correos de tus clientes en el panel).'}
+                  : AVISO_SIN_REMITENTES}
               </p>
             </>
           ) : (

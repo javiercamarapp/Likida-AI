@@ -21,7 +21,7 @@
 
 import { logger } from '@/lib/logger';
 import { esTokenValido, generarToken } from '@/lib/correo/buzon';
-import { remitenteReconocido } from '@/lib/correo/remitente';
+import { remitenteReconocido, SIN_REMITENTES_AUTORIZADOS } from '@/lib/correo/remitente';
 import { estaApagado } from '../interruptores';
 import { aceptableSinExtension } from './contenido';
 import { ETIQUETA_HTML, quitarScriptYEstilo } from './html_quitar';
@@ -109,6 +109,13 @@ export async function atenderCorreoCartaPorte(token: string, correo: CorreoEntra
   if (!buzon) { logger.warn('cp_correo.buzon_desconocido', { emailId: correo.emailId }); return { status: 200, cuerpo: { ok: true, ignorado: 'buzon_desconocido' } }; }
   if (!buzon.activo) return { status: 200, cuerpo: { ok: true, ignorado: 'buzon_apagado' } };
   const tenantId = buzon.tenantId;
+
+  // S-06 / CT-SEG-06: SIN lista de remitentes no se acepta a nadie (antes entraba cualquiera con la dirección, todo a revisión).
+  // Falla cerrado ANTES de bajar adjuntos o reclamar el correo; 200 porque reintentar no lo arregla (lo arregla la flota en el panel).
+  if (buzon.remitentesPermitidos.length === 0) {
+    logger.warn('cp_correo.sin_remitentes_autorizados', { emailId: correo.emailId, tenantId });
+    return { status: 200, cuerpo: { ok: true, ignorado: SIN_REMITENTES_AUTORIZADOS } };
+  }
 
   // Con extensión conocida, entra; sin extensión, entra como CANDIDATO y se decide por los bytes al bajarlo (T-A3-58);
   // con una extensión que no es de documento (.exe, .zip, .docx) no se descarga.
