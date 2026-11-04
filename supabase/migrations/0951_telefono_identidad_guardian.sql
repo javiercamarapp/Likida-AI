@@ -37,15 +37,15 @@ begin
     v_activo := coalesce(new.activo, false) and new.telefono !~ '^sin-tel:';
     v_canon := public.telefono_canonico(new.telefono);
     if tg_op = 'UPDATE' then
-      v_sin_cambio := old.telefono is not distinct from new.telefono
+      v_sin_cambio := public.telefono_canonico(old.telefono) is not distinct from v_canon
                   and old.activo is not distinct from new.activo
                   and old.tenant_id is not distinct from new.tenant_id;
     end if;
   elsif tg_table_name = 'app_user' then
-    v_activo := new.telefono is not null and coalesce(new.activo, true);
+    v_activo := new.telefono is not null and coalesce(new.activo, true) and new.tenant_id is not null;
     v_canon := public.telefono_canonico(new.telefono);
     if tg_op = 'UPDATE' then
-      v_sin_cambio := old.telefono is not distinct from new.telefono
+      v_sin_cambio := public.telefono_canonico(old.telefono) is not distinct from v_canon
                   and old.activo is not distinct from new.activo
                   and old.tenant_id is not distinct from new.tenant_id;
     end if;
@@ -53,7 +53,7 @@ begin
     v_activo := new.estado = 'activo';
     v_canon := public.telefono_canonico(new.telefono);
     if tg_op = 'UPDATE' then
-      v_sin_cambio := old.telefono is not distinct from new.telefono
+      v_sin_cambio := public.telefono_canonico(old.telefono) is not distinct from v_canon
                   and old.estado is not distinct from new.estado
                   and old.tenant_id is not distinct from new.tenant_id;
     end if;
@@ -61,7 +61,8 @@ begin
     return new;
   end if;
 
-  -- Solo filas nuevas o cuyo teléfono / activo / flota cambió: los duplicados históricos no se tocan.
+  -- Solo filas nuevas o cuyo teléfono CANÓNICO / activo / flota cambió: los duplicados históricos no se tocan, ni
+  -- siquiera al reformatearlos (F1B: antes «999 111 0001» → «+52 999 111 0001» de un duplicado histórico se rechazaba).
   -- Y solo números marcables (10-15 dígitos): el teléfono seudonimizado por ARCO («anon:…») jamás debe frenar una cancelación.
   if v_sin_cambio or not v_activo or v_canon is null or v_canon !~ '^[0-9]{10,15}$' then
     return new;

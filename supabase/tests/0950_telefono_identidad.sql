@@ -200,4 +200,40 @@ do $$ begin
 end $$;
 reset role;
 
+-- (j) F1B (ataques del adversarial)
+-- (j1) prefijos de marcacion 044/045/01/0052 colapsan a la misma forma canonica
+do $$
+begin
+  if public.telefono_canonico('044 999 095 0501') is distinct from '529990950501' then raise exception '0950(j1): 044 no colapso'; end if;
+  if public.telefono_canonico('045 999 095 0501') is distinct from '529990950501' then raise exception '0950(j1): 045 no colapso'; end if;
+  if public.telefono_canonico('01 999 095 0501') is distinct from '529990950501' then raise exception '0950(j1): 01 no colapso'; end if;
+  if public.telefono_canonico('0052 999 095 0501') is distinct from '529990950501' then raise exception '0950(j1): 0052 no colapso'; end if;
+  if public.telefono_canonico('00521 999 095 0501') is distinct from '529990950501' then raise exception '0950(j1): 00521 no colapso'; end if;
+end $$;
+-- (j2) el marcador ARCO «anon:<hex>» jamas es una identidad marcable aunque sus digitos hex den 10-15 digitos
+insert into public.app_user (id, tenant_id, email, nombre, rol, telefono) values
+  ('95000000-0000-4000-8000-0000000000f1', '95000000-0000-4000-8000-0000000000a1', 'arco-0950@test.invalid', 'ARCO', 'encargado', 'anon:1234567890123456');
+do $$
+begin
+  if exists (select 1 from public.telefono_identidades(null) where canon = '1234567890123456') then
+    raise exception '0950(j2): el marcador anon: aparecio como identidad marcable';
+  end if;
+end $$;
+-- (j3) un app_user sin flota (superadmin/vendedor) NO cuenta como otra flota: ni 'ambigua' ni rechazo del alta
+insert into public.app_user (id, tenant_id, email, nombre, rol, telefono) values
+  ('95000000-0000-4000-8000-0000000000f2', null, 'vend-0950@test.invalid', 'Vendedor Likida', 'vendedor', '529990950601');
+insert into public.operador (id, tenant_id, nombre, telefono) values
+  ('95000000-0000-4000-8000-0000000000f3', '95000000-0000-4000-8000-0000000000a1', 'Chofer comparte', '529990950601');
+do $$
+declare r record;
+begin
+  select * into r from public.resolver_identidad_telefono('529990950601');
+  if r.resultado is distinct from 'unica' then raise exception '0950(j3): el personal sin flota volvio ambiguo el numero: %', r.resultado; end if;
+end $$;
+-- (j4) reformatear un duplicado HISTORICO (mismo canonico) no lo bloquea el guardian
+do $$
+begin
+  update public.operador set telefono = '+52 999 095 0101' where id = '95000000-0000-4000-8000-0000000000c1';
+end $$;
+
 rollback;

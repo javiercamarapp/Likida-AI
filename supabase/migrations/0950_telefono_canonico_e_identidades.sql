@@ -26,6 +26,11 @@ set search_path = pg_catalog, public
 as $$
   select case
            when x.d = '' then null
+           -- F1B: prefijos de marcacion historicos que NO son parte del numero: 00 internacional (0052…), 044/045
+           -- (celular local/nacional, ya desusados) y 01 (larga distancia nacional). Antes «044 999 111 0001» daba
+           -- 0449991110001 y no chocaba con 529991110001.
+           when x.d ~ '^00521[0-9]{10}$' or x.d ~ '^0052[0-9]{10}$' then '52' || right(x.d, 10)
+           when x.d ~ '^04[45][0-9]{10}$' or x.d ~ '^01[0-9]{10}$' then '52' || right(x.d, 10)
            when x.d ~ '^521[0-9]{10}$' then '52' || right(x.d, 10)
            when x.d ~ '^[0-9]{10}$' then '52' || x.d
            else x.d
@@ -64,17 +69,22 @@ as $$
     from (
       select 'operador'::text as tabla, o.id as ref_id, o.tenant_id as tenant_id, public.telefono_canonico(o.telefono) as canon
         from public.operador o
-       where o.activo and o.telefono !~ '^sin-tel:'
+       where o.activo and o.telefono !~ '^sin-tel:' and o.telefono !~ '[A-Za-z:]'
       union all
       select 'app_user'::text, u.id, u.tenant_id, public.telefono_canonico(u.telefono)
         from public.app_user u
-       where u.telefono is not null and u.activo
+       -- F1B: sin flota (superadmin / vendedor de Likida, tenant_id NULL) no es una «flota» mas: contarlo daba
+       -- «ambigua» al compartir el numero con un operador y el disparador rechazaba el alta.
+       where u.telefono is not null and u.activo and u.tenant_id is not null and u.telefono !~ '[A-Za-z:]'
       union all
       select 'vigia_contacto'::text, c.id, c.tenant_id, public.telefono_canonico(c.telefono)
         from public.vigia_contacto c
-       where c.estado = 'activo'
+       where c.estado = 'activo' and c.telefono !~ '[A-Za-z:]'
     ) i
-   where i.canon ~ '^[0-9]{10,15}$'  -- solo números marcables: excluye 'anon:…' (ARCO), marcadores y basura
+   -- solo números marcables: excluye marcadores y basura. El marcador ARCO «anon:<hex>» se excluye por la columna
+   -- CRUDA (letras o «:»), no por el canónico: sus dígitos hex sueltos (1201 de 2000 marcadores aleatorios) pasaban
+   -- el filtro de 10-15 dígitos (F1B).
+   where i.canon ~ '^[0-9]{10,15}$'
      and (p_canon is null or i.canon = p_canon)
 $$;
 
