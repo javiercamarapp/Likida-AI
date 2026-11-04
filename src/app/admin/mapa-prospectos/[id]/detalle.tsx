@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import type { DetalleProspecto } from '@/lib/admin/prospectos-mapa-client';
 import { COLOR_EMBUDO, NOMBRE_GIRO, esProspectoTerminal } from '@/lib/admin/prospectos-mapa-client';
+import { leerRespuestaMensaje } from '../respuesta_mensaje';
 import { hrefWa, hrefCorreo, mensajeWa, correoProspecto } from '../mensajes';
 import { fechaHoraMx, numero } from '@/lib/formato';
 
@@ -62,6 +63,7 @@ export function Detalle({ p }: { p: DetalleProspecto }) {
   const c = COLOR_EMBUDO[p.estado] ?? COLOR_EMBUDO.nuevo;
   const [afinando, setAfinando] = useState(false);
   const [datos, setDatos] = useState(p);
+  const [avisoIa, setAvisoIa] = useState<{ texto: string; error: boolean } | null>(null);
 
   const tocar = (canal: 'whatsapp' | 'correo') => {
     void fetch('/api/admin/mapa-prospectos/toque', {
@@ -72,14 +74,15 @@ export function Detalle({ p }: { p: DetalleProspecto }) {
 
   const afinar = async () => {
     setAfinando(true);
+    setAvisoIa(null);
     try {
       const r = await fetch('/api/admin/mapa-prospectos/mensaje', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: p.id }),
-      });
-      if (!r.ok) return;
-      const m = (await r.json()) as Pick<DetalleProspecto, 'mensajeWaIa' | 'correoAsuntoIa' | 'correoCuerpoIa' | 'mensajesGeneradosEn'>;
-      setDatos((d) => ({ ...d, ...m }));
+      }).then(leerRespuestaMensaje, () => ({ ok: false as const, error: 'No se pudo contactar al servidor. Revisa tu conexión.' }));
+      if (!r.ok) { setAvisoIa({ texto: r.error, error: true }); return; }
+      if (r.aviso) setAvisoIa({ texto: r.aviso, error: false });
+      setDatos((d) => ({ ...d, ...r.datos }));
     } finally {
       setAfinando(false);
     }
@@ -241,6 +244,9 @@ export function Detalle({ p }: { p: DetalleProspecto }) {
             </button>
           )}
         </div>
+        {avisoIa && (
+          <p role="alert" className="text-[12px] mb-3" style={{ color: avisoIa.error ? '#b91c1c' : '#b45309' }}>{avisoIa.texto}</p>
+        )}
         {datos.mensajesGeneradosEn && (
           <p className="text-[11px] mb-3" style={{ color: TENUE }}>
             Última redacción del agente experto: {fechaHoraMx(datos.mensajesGeneradosEn)}
