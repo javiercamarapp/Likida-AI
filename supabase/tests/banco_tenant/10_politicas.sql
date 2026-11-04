@@ -18,7 +18,7 @@ select 'sin_rls', format('%s.%s', n.nspname, c.relname), 'critica',
 insert into ci_banco.hallazgos
 select 'politica_abierta', format('%s.%s', n.nspname, c.relname),
        case when ci_banco.tenant_cols(c.oid) is not null then 'critica' else 'alta' end,
-       'politicas abiertas: ' || string_agg(p.polname || ' (' || p.polcmd || ')', ', ' order by p.polname)
+       'politicas abiertas: ' || string_agg(p.polname || ' (' || p.polcmd::text || ')', ', ' order by p.polname)
   from pg_policy p
   join pg_class c on c.oid = p.polrelid
   join pg_namespace n on n.oid = c.relnamespace
