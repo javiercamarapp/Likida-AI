@@ -12,8 +12,15 @@ import { crearProxyLocalE2E } from '../../scripts/ci/e2e/proxy-local.mjs';
 // un defecto real del producto y no un parpadeo.
 export const SIN_PLANTILLAS_STREAMING = `!document.querySelector('body > div[hidden][id^="S:"]')`;
 
+// Función (no cadena): Playwright evalúa una cadena con eval() en la página y la CSP del producto la bloquea
+// («Evaluating a string as JavaScript violates the following Content Security Policy directive»); una función viaja por
+// el protocolo del navegador y no cae bajo la CSP. El selector se pasa como argumento para tener una sola fuente.
 async function esperarSegmentos(page: Page): Promise<void> {
-  await page.waitForFunction(SIN_PLANTILLAS_STREAMING, undefined, { timeout: 15_000 });
+  await page.waitForFunction(
+    (selector: string) => !document.querySelector(selector),
+    'body > div[hidden][id^="S:"]',
+    { timeout: 15_000 },
+  );
 }
 
 function esperarStreamingTrasGoto(page: Page): void {
