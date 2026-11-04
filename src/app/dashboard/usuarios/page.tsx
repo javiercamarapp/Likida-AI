@@ -221,7 +221,10 @@ export default async function UsuariosPage({
     try {
       const r = await cambiarRolUsuario(s.tenantId, String(fd.get('id') ?? ''), String(fd.get('rol') ?? ''), { id: s.userId });
       revalidatePath(RUTA);
-      return { ok: true, mensaje: `Rol cambiado: de ${nombreDeRol(r.de)} a ${nombreDeRol(r.a)}. Aplica en su siguiente clic.` };
+      const llaves = r.llavesApiSinRevocar
+        ? ' ATENCIÓN: NO se pudieron revocar sus llaves de API de Administración y siguen vivas: revócalas a mano.'
+        : (r.llavesApiRevocadas?.length ? ` Se revocaron sus llaves de API de Administración: ${r.llavesApiRevocadas.join(', ')}.` : '');
+      return { ok: true, mensaje: `Rol cambiado: de ${nombreDeRol(r.de)} a ${nombreDeRol(r.a)}. Aplica en su siguiente clic.${llaves}` };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'cambiar el rol') };
     }

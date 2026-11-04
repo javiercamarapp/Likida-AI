@@ -130,12 +130,35 @@ async function anotar(
  * cambió entre la lectura y la llamada, la función devuelve 'conflicto' en
  * vez de 'ok' y se pide recargar, en vez de pisar en silencio.
  */
+/** CT-SEG-23: revoca en UN update las llaves de API VIVAS creadas por `usuarioId` en la flota (opcionalmente solo de un area).
+ *  Best-effort: devuelve los nombres revocados y si fallo (la baja/degradacion ya quedo y se DICE). */
+async function revocarLlavesDe(
+  tenantId: string, usuarioId: string, area?: string,
+): Promise<{ llavesApiRevocadas: string[]; llavesApiSinRevocar: boolean }> {
+  try {
+    let q = supabaseAdmin().from('tenant_api_key')
+      .update({ revocada_en: new Date().toISOString() })
+      .eq('tenant_id', tenantId)
+      .eq('creada_por', usuarioId);
+    if (area) q = q.eq('area', area);
+    const { data: llaves, error: errLlaves } = await acotada(q.is('revocada_en', null).select('id, nombre'), 'equipo.llaves_api');
+    if (errLlaves) {
+      logger.error('equipo.llaves_api_fallo', { usuario: usuarioId, err: errLlaves.message });
+      return { llavesApiRevocadas: [], llavesApiSinRevocar: true };
+    }
+    return { llavesApiRevocadas: (Array.isArray(llaves) ? llaves : []).map((l) => String((l as { nombre?: unknown }).nombre ?? '')), llavesApiSinRevocar: false };
+  } catch (e) {
+    logger.error('equipo.llaves_api_fallo', { usuario: usuarioId, err: e instanceof Error ? e.message : String(e) });
+    return { llavesApiRevocadas: [], llavesApiSinRevocar: true };
+  }
+}
+
 export async function cambiarRolUsuario(
   tenantId: string,
   usuarioId: string,
   rolNuevo: string,
   actor: ActorEquipo,
-): Promise<{ de: string; a: RolInvitable }> {
+): Promise<{ de: string; a: RolInvitable; llavesApiRevocadas?: string[]; llavesApiSinRevocar?: boolean }> {
   exigirUuid(usuarioId);
   if (!esRolAsignable(rolNuevo)) {
     throw new DatoInvalido('Elige el rol de la lista: contador, encargado o dueño. Ningún otro se asigna desde el panel.');
@@ -158,6 +181,15 @@ export async function cambiarRolUsuario(
     throw new DatoInvalido('El rol de esa cuenta cambió mientras tanto. Recarga la pantalla y vuelve a intentarlo.');
   }
 
+  // CT-SEG-23: una llave `administracion` es la unica que ESCRIBE por la API con los permisos de quien la creo; degradar al dueno
+  // sin revocarla dejaba ese privilegio vivo. Solo aplica al dejar de ser dueno.
+  if (objetivo.rol === 'flota_admin' && rolNuevo !== 'flota_admin') {
+    const rev = await revocarLlavesDe(tenantId, usuarioId, 'administracion');
+    await anotar(tenantId, 'usuario.rol_cambiado', usuarioId, {
+      de: objetivo.rol, a: rolNuevo, llaves_api_revocadas: rev.llavesApiRevocadas.length, llaves_api_sin_revocar: rev.llavesApiSinRevocar,
+    }, actor);
+    return { de: objetivo.rol, a: rolNuevo, ...rev };
+  }
   await anotar(tenantId, 'usuario.rol_cambiado', usuarioId, { de: objetivo.rol, a: rolNuevo }, actor);
   return { de: objetivo.rol, a: rolNuevo };
 }
@@ -242,25 +274,7 @@ export async function desactivarUsuario(
   // flota y a quien las creó (solo las vivas: no se pisa el sello de una ya revocada). Best-effort como el ban: si falla, la
   // baja ya quedó y se DICE (`llavesApiSinRevocar`) para que se revoquen a mano. Revocar es irreversible: quien integre un
   // sistema con esa llave debe emitir otra, y por eso la pantalla recibe los nombres.
-  let llavesApiRevocadas: string[] = [];
-  let llavesApiSinRevocar = false;
-  try {
-    const { data: llaves, error: errLlaves } = await acotada(supabaseAdmin().from('tenant_api_key')
-      .update({ revocada_en: new Date().toISOString() })
-      .eq('tenant_id', tenantId)
-      .eq('creada_por', usuarioId)
-      .is('revocada_en', null)
-      .select('id, nombre'), 'equipo.llaves_api');
-    if (errLlaves) {
-      llavesApiSinRevocar = true;
-      logger.error('equipo.llaves_api_fallo', { usuario: usuarioId, err: errLlaves.message });
-    } else {
-      llavesApiRevocadas = (Array.isArray(llaves) ? llaves : []).map((l) => String((l as { nombre?: unknown }).nombre ?? ''));
-    }
-  } catch (e) {
-    llavesApiSinRevocar = true;
-    logger.error('equipo.llaves_api_fallo', { usuario: usuarioId, err: e instanceof Error ? e.message : String(e) });
-  }
+  const { llavesApiRevocadas, llavesApiSinRevocar } = await revocarLlavesDe(tenantId, usuarioId);
 
   await anotar(tenantId, 'usuario.desactivado', usuarioId, {
     rol: objetivo.rol, sesion_revocada: sesionRevocada,

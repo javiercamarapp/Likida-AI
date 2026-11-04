@@ -122,6 +122,24 @@ describe('cambiarRolUsuario', () => {
     );
   });
 
+  it('CT-SEG-23: degradar a un dueno revoca sus llaves de area administracion vivas (no retiene privilegio)', async () => {
+    colas.set('app_user', [{ data: fila({ rol: 'flota_admin' }) }]);
+    colas.set('tenant_api_key', [{ data: [{ id: 'k1', nombre: 'TMS escritura' }], error: null }]);
+    rpc.mockResolvedValueOnce({ data: 'ok', error: null });
+    const r = await cambiarRolUsuario(TENANT, U, 'contador', ACTOR);
+    expect(r).toEqual({ de: 'flota_admin', a: 'contador', llavesApiRevocadas: ['TMS escritura'], llavesApiSinRevocar: false });
+    const u = updatesDe('tenant_api_key');
+    expect(u).toHaveLength(1);
+    expect(u[0].eq).toEqual(expect.arrayContaining([['tenant_id', TENANT], ['creada_por', U], ['area', 'administracion'], ['revocada_en is', null]]));
+  });
+
+  it('CT-SEG-23: cambiar el rol de quien no es dueno no toca las llaves', async () => {
+    colas.set('app_user', [{ data: fila() }]);
+    rpc.mockResolvedValueOnce({ data: 'ok', error: null });
+    await cambiarRolUsuario(TENANT, U, 'encargado', ACTOR);
+    expect(updatesDe('tenant_api_key')).toHaveLength(0);
+  });
+
   it('rechaza roles fuera del catálogo (superadmin, operador, basura) ANTES de leer nada', async () => {
     // `nomina` (0949) tampoco se asigna desde aquí: solo nace por invitación del dueño a una flota con perfil.
     for (const rol of ['superadmin', 'operador', 'vendedor', 'nomina', 'x']) {
@@ -161,7 +179,7 @@ describe('cambiarRolUsuario', () => {
   it('con otro dueño activo sí se degrada', async () => {
     colas.set('app_user', [{ data: fila({ rol: 'flota_admin' }) }]);
     rpc.mockResolvedValueOnce({ data: 'ok', error: null });
-    await expect(cambiarRolUsuario(TENANT, U, 'contador', ACTOR)).resolves.toEqual({ de: 'flota_admin', a: 'contador' });
+    await expect(cambiarRolUsuario(TENANT, U, 'contador', ACTOR)).resolves.toMatchObject({ de: 'flota_admin', a: 'contador' });
   });
 
   it('"conflicto" (el rol cambió mientras tanto) NO es éxito y no anota bitácora', async () => {
