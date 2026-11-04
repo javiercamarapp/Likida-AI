@@ -1,3 +1,4 @@
+import { mensajeDeBaja } from '@/lib/auth/mensaje_baja';
 import { appUrl } from '@/lib/env';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -234,9 +235,7 @@ export default async function UsuariosPage({
     try {
       const r = await desactivarUsuario(s.tenantId, String(fd.get('id') ?? ''), { id: s.userId });
       revalidatePath(RUTA);
-      return r.sesionRevocada
-        ? { ok: true, mensaje: 'Cuenta dada de baja: ya no entra al panel y su sesión quedó revocada.' }
-        : { ok: true, mensaje: 'Cuenta dada de baja: ya no entra al panel. La revocación de su sesión en el servicio de autenticación NO se pudo confirmar — quedó registrado; avísale a Likida si se repite.' };
+      return mensajeDeBaja(r);
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'dar de baja la cuenta') };
     }
