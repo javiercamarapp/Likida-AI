@@ -196,6 +196,11 @@ jobs:
       # Devuelve a la base efímera los privilegios que había ANTES de la 0947 (producción los tiene revocados): la batería de abajo
       # (verificaciones.sql, set role authenticated, supabase/tests) sigue viendo el mismo estado de grants que las migraciones previas
       # dejaron y prueba RLS como capa independiente. Corre DESPUÉS de capa 0, que demuestra el estado real.
+      # X-02 banco multi-tenant, fase estatica: politicas, funciones SECURITY DEFINER y vistas bajo los grants REALES (antes de
+      # restituir los previos, que tambien devuelven las ACL de funciones). Ver supabase/tests/banco_tenant/LEEME.md.
+      - name: Banco multi-tenant — fase estática (políticas, funciones, vistas)
+        run: node scripts/ci/banco-tenant.mjs --fase=estatica
+
       - name: Grants previos a la 0947 (solo base efímera)
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f scripts/ci/grants_previos_0947_restaurar.sql
 
@@ -462,3 +467,17 @@ jobs:
           ec=${PIPESTATUS[0]}
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           exit $ec
+
+      # X-02 banco multi-tenant, fase dinámica: dos flotas sembradas, lectura/UPDATE como authenticated y lectura como anon,
+      # con los grants previos restituidos (RLS como capa independiente). Y el canario: objetos abiertos a propósito que el
+      # banco DEBE detectar (si no, el banco está ciego).
+      - name: Banco multi-tenant — fase dinámica (flota A contra flota B)
+        run: |
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          BANCO_TENANT_SALIDA="$RUNNER_TEMP/banco-dinamica.json" node scripts/ci/banco-tenant.mjs --fase=dinamica | tee -a "$GITHUB_STEP_SUMMARY"
+          ec=${PIPESTATUS[0]}
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          exit $ec
+
+      - name: Banco multi-tenant — canario (el banco detecta lo abierto a propósito)
+        run: node scripts/ci/banco-tenant.mjs --fase=canario
