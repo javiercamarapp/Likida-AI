@@ -50,4 +50,9 @@ describe('VincularAsistida', () => {
     expect(html).toContain('Vincular con código');
     expect(html).not.toContain('--codigo');
   });
+  it('MX-002: el formulario de vincular lleva la flota pintada firmada (y sin ella no inventa el campo)', () => {
+    const con = renderToStaticMarkup(<VincularAsistida clave="la_gas" nombre="La Gas" flota="fp1.t-1.9999999999999.firma" />);
+    expect(con).toContain('name="flota_pintada" value="fp1.t-1.9999999999999.firma"');
+    expect(renderToStaticMarkup(<VincularAsistida clave="la_gas" nombre="La Gas" />)).not.toContain('flota_pintada');
+  });
 });

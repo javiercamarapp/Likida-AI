@@ -1077,9 +1077,29 @@ export async function guardarConfigConductor(
     { mig: '0604', cols: { avisar_llegada_sin_confirmar: c.avisarLlegadaSinConfirmar, margen_acercamiento_m: c.margenAcercamientoM }, esDePartida: !c.avisarLlegadaSinConfirmar && c.margenAcercamientoM === CONFIG_CONDUCTOR_DEFAULT.margenAcercamientoM },
   ];
   let vigentes = grupos.slice();
-  let error: { message: string } | null = null;
+  let error: { message: string; code?: string } | null = null;
+  // MX-007 / API04-02 (0956): con contactos, config + contactos viajan en UNA transacción (RPC). Si la función aún no existe en la
+  // base (42883 / PGRST202) se sigue por el camino de varios pasos de siempre: el código nuevo funciona contra la base sin migrar.
+  let viaRpc = contactos !== undefined;
+  let rpcAplicada = false;
   for (;;) {
-    ({ error } = await acotada(supabaseAdmin().from('agente_conductor_config').upsert({ ...fila, ...Object.assign({}, ...vigentes.map((g) => g.cols)) }, { onConflict: 'tenant_id' }), 'v1.conductor_config'));
+    const columnas = { ...fila, ...Object.assign({}, ...vigentes.map((g) => g.cols)) };
+    if (viaRpc) {
+      ({ error } = await acotada(supabaseAdmin().rpc('guardar_conductor_config_y_contactos', {
+        p_tenant: tenantId, p_config: columnas,
+        p_contactos: (contactos ?? []).map((x) => ({ terminalId: x.terminalId, nivel: x.nivel, nombre: x.nombre, telefono: x.telefono })),
+      }) as unknown as PromiseLike<{ error: { message: string; code?: string } | null }>, 'v1.conductor_config'));
+      if (error && (error.code === '42883' || error.code === 'PGRST202')) {
+        logger.warn('conductor.config_sin_0956', { tenant: tenantId });
+        viaRpc = false;
+        continue;
+      }
+      // La FK compuesta de la terminal (23503) revirtió TODO dentro de la RPC: nada quedó a medias.
+      if (error && error.code === '23503') return 'terminal_ajena';
+      if (!error) rpcAplicada = true;
+    } else {
+      ({ error } = await acotada(supabaseAdmin().from('agente_conductor_config').upsert(columnas, { onConflict: 'tenant_id' }), 'v1.conductor_config'));
+    }
     const faltante = error ? vigentes.find((g) => Object.keys(g.cols).some((col) => error!.message.includes(col))) : undefined;
     if (!faltante) break;
     if (!faltante.esDePartida) {
@@ -1097,7 +1117,7 @@ export async function guardarConfigConductor(
     vigentes = vigentes.filter((g) => g !== faltante);
   }
   if (error) throw new Error(`v1.conductor_config: ${error.message}`);
-  if (contactos === undefined) return 'ok';
+  if (contactos === undefined || rpcAplicada) return 'ok';
 
   const previos = await acotada(supabaseAdmin().from('conductor_contacto_trafico').select('id, nivel, telefono, terminal_id').eq('tenant_id', tenantId).order('id').limit(500), 'v1.conductor_contactos');
   const filas = (exigir(previos as never, 'v1.conductor_contactos') ?? []) as unknown as Fila[];

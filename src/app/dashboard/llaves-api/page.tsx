@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
@@ -59,7 +60,8 @@ export default async function PaginaLlavesApi({
 
   async function emitirLlave(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) {
       return { ok: false, error: 'Solo el dueño de la flota emite llaves de API.' };
     }
@@ -90,7 +92,8 @@ export default async function PaginaLlavesApi({
 
   async function revocarLlave(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) {
       return { ok: false, error: 'Solo el dueño de la flota revoca llaves de API.' };
     }

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { esRolNomina } from '@/lib/auth/roles';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
@@ -260,7 +261,8 @@ export default async function PaginaAgenteLiquidacion({
   /** Reenvía por correo el desglose de UNA liquidación («operador, no me da mi desglose»), con o sin correo corregido del operador. */
   async function reenviarDesgloseExterno(fd: FormData): Promise<void> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
+    const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
+    if (!s) throw new Error(MENSAJE_FLOTA_CAMBIO);
     if (!puedeOperarLiquidacion(s.rol)) throw new Error('Tu rol no ve esta pantalla.');
     const id = leerIdDetalle(String(fd.get('id') ?? ''));
     const a = String(fd.get('a') ?? '');
@@ -284,7 +286,8 @@ export default async function PaginaAgenteLiquidacion({
   /** Libera el envío de un desglose retenido (neto negativo, tipo sin regla): crea las entregas y deja al actor en la auditoría. */
   async function liberarEnvioExterno(fd: FormData): Promise<void> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
+    const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
+    if (!s) throw new Error(MENSAJE_FLOTA_CAMBIO);
     if (!puedeOperarLiquidacion(s.rol)) throw new Error('Tu rol no ve esta pantalla.');
     const id = leerIdDetalle(String(fd.get('id') ?? ''));
     if (!id) return volverAlDetalle(contexto, null, 'r_entrada');
@@ -306,7 +309,8 @@ export default async function PaginaAgenteLiquidacion({
   /** Sube el export de bitácoras: cada bitácora entra como si la hubiera mandado el sistema del cliente. */
   async function subirDesglosesExportados(fd: FormData): Promise<void> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
+    const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
+    if (!s) throw new Error(MENSAJE_FLOTA_CAMBIO);
     if (!puedeOperarLiquidacion(s.rol) || !puedeVerArea(s.rol, 'administracion')) throw new Error('Solo el dueño de la flota sube desgloses.');
     const f = await leerArchivoCarga(fd);
     // A1-01: dos pasos. «Ver vista previa» solo cuenta (N desgloses / M correos); «Subir y enviar» exige haber escrito M.
@@ -323,7 +327,8 @@ export default async function PaginaAgenteLiquidacion({
   /** Sube los correos de los operadores y de sus coordinadores. Nunca crea operadores. */
   async function subirContactosOperadores(fd: FormData): Promise<void> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
+    const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
+    if (!s) throw new Error(MENSAJE_FLOTA_CAMBIO);
     if (!puedeOperarLiquidacion(s.rol) || !puedeVerArea(s.rol, 'administracion')) throw new Error('Solo el dueño de la flota sube correos.');
     const f = await leerArchivoCarga(fd);
     await dejarFlash('/dashboard/agentes/liquidacion', f.ok ? await cargarContactosDePanel(s.tenantId, f.archivo) : { error: f.error });
@@ -419,7 +424,8 @@ export default async function PaginaAgenteLiquidacion({
    *  "ningún chofer se llama así". */
   async function buscarFiltro(tipo: TipoCatalogo, q: string): Promise<OpcionCatalogo[]> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
+    const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
+    if (!s) return [];
     if (!puedeOperarLiquidacion(s.rol)) throw new Error('Tu rol no ve esta pantalla.');
     if (tipo !== 'operador' && tipo !== 'unidad') throw new Error('Catálogo desconocido.');
     return buscarCatalogo(s.tenantId, tipo, typeof q === 'string' ? q : '');
@@ -462,7 +468,8 @@ export default async function PaginaAgenteLiquidacion({
    *  URL: ni un éxito ni un fallo pasan en silencio. */
   async function reintentarExterna(fd: FormData): Promise<void> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
+    const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
+    if (!s) throw new Error(MENSAJE_FLOTA_CAMBIO);
     // A37-A1-liquidaciones-20: manda por WhatsApp a teléfonos reales con cifras: lo administra el dueño, no basta VER la ruta (el contador ve dinero).
     if (!puedeOperarLiquidacion(s.rol) || !puedeAdministrar(s.rol)) throw new Error('Solo quien administra la flota puede hacer esto.');
     const id = String(fd.get('id') ?? '');
@@ -481,7 +488,8 @@ export default async function PaginaAgenteLiquidacion({
   /** Sube el CSV/Excel de liquidaciones que la oficina ya tiene: entra por el mismo camino que POST /v1/liquidaciones-externas. */
   async function subirLiquidacionesExternas(fd: FormData): Promise<void> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
+    const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
+    if (!s) throw new Error(MENSAJE_FLOTA_CAMBIO);
     if (!puedeOperarLiquidacion(s.rol) || !puedeVerArea(s.rol, 'administracion')) throw new Error('Solo el dueño de la flota sube liquidaciones.');
     const a = fd.get('archivo');
     const params: Array<[string, string]> = [...contexto];
@@ -509,7 +517,8 @@ export default async function PaginaAgenteLiquidacion({
   /** Reenvía la copia al jefe de flota de UNA liquidación ya entregada (la primera pudo no llegar). */
   async function reenviarCopiaExterna(fd: FormData): Promise<void> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
+    const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
+    if (!s) throw new Error(MENSAJE_FLOTA_CAMBIO);
     // A37-A1-liquidaciones-20: manda por WhatsApp a teléfonos reales con cifras: lo administra el dueño, no basta VER la ruta (el contador ve dinero).
     if (!puedeOperarLiquidacion(s.rol) || !puedeAdministrar(s.rol)) throw new Error('Solo quien administra la flota puede hacer esto.');
     const id = String(fd.get('id') ?? '');
@@ -531,7 +540,8 @@ export default async function PaginaAgenteLiquidacion({
    *  POST directo) y vuelve a la pantalla con el resultado en la URL. */
   async function reavisarExterna(fd: FormData): Promise<void> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
+    const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
+    if (!s) throw new Error(MENSAJE_FLOTA_CAMBIO);
     // A37-A1-liquidaciones-20: manda por WhatsApp a teléfonos reales con cifras: lo administra el dueño, no basta VER la ruta (el contador ve dinero).
     if (!puedeOperarLiquidacion(s.rol) || !puedeAdministrar(s.rol)) throw new Error('Solo quien administra la flota puede hacer esto.');
     const id = String(fd.get('id') ?? '');
@@ -580,7 +590,8 @@ export default async function PaginaAgenteLiquidacion({
 
   async function guardarEstrategia(_previo: ResultadoEstrategia, fd: FormData): Promise<ResultadoEstrategia> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
+    const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeOperarLiquidacion(s.rol) || !puedeAdministrar(s.rol)) {
       return { ok: false, error: 'Solo el dueño de la flota cambia la estrategia del agente.' };
     }

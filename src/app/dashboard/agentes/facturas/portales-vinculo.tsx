@@ -51,13 +51,15 @@ export interface FilaPortal {
   relogin: EstadoRelogin | null;
 }
 
-export function SeccionPortales({ filas, vinculos, autorizarRelogin, revocarRelogin }: {
+export function SeccionPortales({ filas, vinculos, autorizarRelogin, revocarRelogin, flota = null }: {
   filas: FilaPortal[];
   /** `false` = la lectura del estado falló. NO es «ninguno vinculado». */
   vinculos: boolean;
   /** Server actions del permiso. Re-verifican sesión, rol y flota ADENTRO. */
   autorizarRelogin: AccionRelogin;
   revocarRelogin: AccionRelogin;
+  /** MX-002: la flota pintada, firmada; viaja en los formularios de vincular. */
+  flota?: string | null;
 }) {
   const caducados = filas.filter((f) => f.estado === 'caducada');
 
@@ -125,7 +127,7 @@ export function SeccionPortales({ filas, vinculos, autorizarRelogin, revocarRelo
                   {/* 0540: el paso humano del CAPTCHA/MFA con código de un solo uso. También
                       con el portal vinculado: «re-vincular» antes de que la sesión caduque. */}
                   <div className="mt-1.5">
-                    <VincularAsistida clave={f.clave} nombre={f.nombre} />
+                    <VincularAsistida clave={f.clave} nombre={f.nombre} flota={flota} />
                   </div>
                   {/* La casilla del re-login va DEBAJO de cada portal y no en
                       un ajuste global: el permiso es por portal, porque una

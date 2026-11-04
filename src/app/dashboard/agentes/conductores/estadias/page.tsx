@@ -8,6 +8,7 @@ import { armarFilasEstadias, desdePorOmision, rangoDeDias } from '@/lib/likida/c
 import { leerCatalogosFiltro, leerDatosEstadias } from '@/lib/likida/conductor/repo_validacion';
 import { getZonaHorariaTenant } from '@/lib/likida/repo';
 import { sufijoTenant } from '../../../sufijo';
+import { urlCsvEstadias } from './csv_url';
 import { VistaEstadias } from './vista';
 import type { Metadata } from 'next';
 export const metadata: Metadata = { title: 'Estadías en andén' };
@@ -59,10 +60,7 @@ export default async function PaginaEstadias({ searchParams }: {
 
   // El CSV con dinero solo lo ofrece quien ve dinero (la ruta lo vuelve a exigir: esto es cortesía, no el candado).
   const veDinero = puedeVerRuta(rol, '/dashboard/facturacion');
-  const qs = new URLSearchParams({ desde, hasta, formato: 'csv' });
-  if (filtros.terminalId) qs.set('terminalId', filtros.terminalId);
-  if (filtros.clienteId) qs.set('clienteId', filtros.clienteId);
-  if (filtros.operadorId) qs.set('operadorId', filtros.operadorId);
+  const csvUrl = urlCsvEstadias({ desde, hasta, terminalId: filtros.terminalId, clienteId: filtros.clienteId, operadorId: filtros.operadorId }, sp.tenant);
   const ocultos: Record<string, string> = {};
   if (sp.tenant) ocultos.tenant = sp.tenant; else if (sp.vista) ocultos.vista = sp.vista;
   if (sp.rol) ocultos.rol = sp.rol;
@@ -72,7 +70,7 @@ export default async function PaginaEstadias({ searchParams }: {
       sufijo={sufijoTenant(sp)} filtros={filtros} catalogos={catalogos}
       filas={filas?.filas ?? []}
       resumen={filas?.resumen ?? { paradas: 0, cerradas: 0, enCurso: 0, minutosCerradas: 0, minutosExcedentes: null, montoPropuesto: {}, sinPacto: 0 }}
-      truncada={filas?.truncada ?? false} zonaHoraria={zona} error={error} csvUrl={veDinero ? `/api/v1/estadias?${qs.toString()}` : null} ocultos={ocultos}
+      truncada={filas?.truncada ?? false} zonaHoraria={zona} error={error} csvUrl={veDinero ? csvUrl : null} ocultos={ocultos}
     />
   );
 }

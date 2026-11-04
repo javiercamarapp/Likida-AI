@@ -112,7 +112,7 @@ const ENCONTRADOS = ZONAS.flatMap((z) => archivos(join(SRC, z))).sort();
  * la pantalla) y aquí se DERIVA de la ruta que el archivo pasa a su puerta, para
  * no duplicar la lista: se exige que sea coherente con el perfil real.
  */
-const PUERTA_DASHBOARD = /\b(resolverTenantEfectivo|requireSessionTenant|exigirVerRuta)\(\s*([^,)]+)/g;
+const PUERTA_DASHBOARD = /\b(resolverTenantEfectivo|resolverTenantAtadoAccion|resolverTenantAtadoFirmado|requireSessionTenant|exigirVerRuta)\(\s*([^,)]+)/g;
 const PUERTA_SUPERADMIN = /\b(requireSuperadmin|ejecutarComoSuperadmin)\b/;
 const PUERTA_VENDEDOR = /\b(requireVendedor|ejecutarComoVendedor)\b/;
 

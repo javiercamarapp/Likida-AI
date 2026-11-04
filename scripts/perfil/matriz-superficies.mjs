@@ -51,7 +51,7 @@ const ACCIONES_SIN_DATOS = {
   'src/app/dashboard/layout.tsx': '`cerrarSesion`: solo cierra la sesión de quien la pide',
 };
 /** Las puertas que dejan a una acción del dashboard con la flota de la sesión (A37-S04-06). */
-const PUERTA_DASHBOARD = /\b(resolverTenantEfectivo|requireSessionTenant|requireSession|resolverTenantApi)\(/;
+const PUERTA_DASHBOARD = /\b(resolverTenantEfectivo|resolverTenantAtadoAccion|resolverTenantAtadoFirmado|requireSessionTenant|requireSession|resolverTenantApi)\(/;
 /** Archivos de acciones que NO cuelgan de una página y gatean con una ruta distinta a su carpeta. */
 const ACCIONES_RUTA_EXPLICITA = {
   'src/app/dashboard/inicio-contenido.tsx': '/dashboard',                    // el Resumen de siempre; bajo el perfil no se monta
