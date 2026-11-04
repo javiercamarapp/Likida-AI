@@ -45,6 +45,7 @@ declare
   v_ventana integer := case when p_severidad = 'alta' then 60 else 600 end;
   v_tope integer := case when p_severidad = 'alta' then 500 else 100 end;
   v_tope_huella constant integer := 20;
+  v_reserva_huella constant integer := 3;
   v_cubeta bigint := floor(extract(epoch from p_ahora) / v_ventana);
   v_desde timestamptz := to_timestamp(v_cubeta * v_ventana);
   v_clave text;
@@ -66,15 +67,19 @@ begin
      where tipo = p_tipo and origen = p_origen and severidad = p_severidad
        and clave is not null and creado_en >= v_desde and creado_en < v_desde + make_interval(secs => v_ventana)
        and (detalle->>'desborde') is distinct from 'true';
-    if v_distintos >= v_tope then
+    -- Filas de la misma huella en la ventana (la huella nula cuenta como un grupo más).
+    select count(*) into v_de_huella
+      from public.evento_seguridad
+     where tipo = p_tipo and origen = p_origen and severidad = p_severidad and ip_hash is not distinct from v_ip
+       and clave is not null and creado_en >= v_desde and creado_en < v_desde + make_interval(secs => v_ventana)
+       and (detalle->>'desborde') is distinct from 'true';
+    if v_ip is not null and v_de_huella >= v_tope_huella then
       v_desborde := true;
-    elsif v_ip is not null then
-      select count(*) into v_de_huella
-        from public.evento_seguridad
-       where tipo = p_tipo and origen = p_origen and severidad = p_severidad and ip_hash = v_ip
-         and clave is not null and creado_en >= v_desde and creado_en < v_desde + make_interval(secs => v_ventana)
-         and (detalle->>'desborde') is distinct from 'true';
-      if v_de_huella >= v_tope_huella then
+    elsif v_distintos >= v_tope then
+      -- Cupo RESERVADO: el tope general lo pueden llenar pocas redes que rotan actores; una huella con pocas filas
+      -- (menos de 3) sigue entrando hasta el doble del tope, así el siguiente evento legítimo no queda ciego.
+      -- El almacenamiento sigue acotado (2 x tope filas distintas por tipo y ventana).
+      if v_distintos >= 2 * v_tope or v_de_huella >= v_reserva_huella then
         v_desborde := true;
       end if;
     end if;

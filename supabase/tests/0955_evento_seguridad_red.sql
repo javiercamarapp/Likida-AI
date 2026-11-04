@@ -45,6 +45,15 @@ begin
   r := public.registrar_evento_seguridad_red('ratelimit', 'rate_limit', 'media', null, 'otro-actor', null, h1, null, t0);
   if r <> 'nuevo' then raise exception '0955: otra huella debia seguir entrando, dio %', r; end if;
 
+  -- ── ataque: 5 redes x 25 actores llenan el tope general (5 x 20 = 100); el siguiente evento legitimo NO queda ciego ─
+  for i in 1..125 loop
+    perform public.registrar_evento_seguridad_red('inundacion', 'login_fallido', 'media', null, 'v-' || i, null, repeat((i % 5)::text, 32), null, t0);
+  end loop;
+  r := public.registrar_evento_seguridad_red('inundacion', 'login_fallido', 'media', null, 'cuenta-legitima', null, repeat('c', 32), 'ua', t0);
+  if r <> 'nuevo' then raise exception '0955: tras la inundacion el evento legitimo debia entrar con detalle, dio %', r; end if;
+  select count(*) into n from public.evento_seguridad where origen = 'inundacion' and (detalle->>'desborde') is distinct from 'true';
+  if n > 200 then raise exception '0955: el almacenamiento debia seguir acotado a 200, hay %', n; end if;
+
   -- ── lo alta jamás se descarta: la suma de repeticiones iguala los intentos ─
   for i in 1..30 loop
     perform public.registrar_evento_seguridad_red('stripe_webhook', 'firma_invalida', 'alta', null, 'a-' || i, null, h2, null, t0);
