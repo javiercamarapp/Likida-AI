@@ -441,7 +441,8 @@ export async function planificarOperadores(tenantId: string, filas: OperadorImpo
   return plan;
 }
 
-const RESTRICCIONES_TELEFONO = ['uq_operador_tenant_telefono_norm', 'uq_operador_telefono_activo', 'operador_tenant_id_telefono_key', 'uq_operador_tenant_numero_empleado_sin_tel'];
+// `telefono_identidad_unica` (0951): el guardián de teléfono entre operador, app_user y vigia_contacto y entre flotas; salta ANTES que los índices.
+const RESTRICCIONES_TELEFONO = ['uq_operador_tenant_telefono_norm', 'uq_operador_telefono_activo', 'operador_tenant_id_telefono_key', 'uq_operador_tenant_numero_empleado_sin_tel', 'telefono_identidad_unica'];
 
 /**
  * Escribe los operadores en tandas de `FILAS_POR_TANDA`. Anclado al tenant.

@@ -16,8 +16,9 @@
 -- SECURITY DEFINER con search_path fijo: el disparador tiene que VER las filas de todas las flotas aunque quien escribe
 -- tenga RLS (si viera solo su flota, el chequeo entre flotas no serviría). Serializa por teléfono con un candado
 -- consultivo de transacción para que dos altas simultáneas del mismo número en flotas distintas no pasen las dos.
--- El mensaje NO dice de qué flota ni de quién es el número (no es un oráculo); lleva el nombre de la restricción
--- `telefono_identidad_unica` (SQLSTATE 23505) para que el código lo reconozca como un choque de teléfono.
+-- El mensaje NO dice de qué flota ni de quién es el número (no es un oráculo); imita el de un índice único
+-- («duplicate key value violates unique constraint "telefono_identidad_unica"», SQLSTATE 23505) para que `chocaContra`,
+-- `violaIndice` y los demás reconocedores de choque de teléfono del código lo traten igual que a los índices de 0024/0059.
 -- ═══════════════════════════════════════════════════════════════════════════
 
 create or replace function public.telefono_identidad_guarda()
@@ -79,7 +80,7 @@ begin
     raise exception using
       errcode = '23505',
       constraint = 'telefono_identidad_unica',
-      message = 'telefono_identidad_unica: ese teléfono ya identifica a otra cuenta o contacto en Likida y no puede usarse aquí',
+      message = 'duplicate key value violates unique constraint "telefono_identidad_unica": ese teléfono ya identifica a otra cuenta o contacto en Likida y no puede usarse aquí',
       hint = 'Corrige el duplicado (scripts/f1-consulta-duplicados-telefono.sql) o usa otro número.';
   end if;
 

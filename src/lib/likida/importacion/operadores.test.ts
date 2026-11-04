@@ -211,6 +211,28 @@ describe('importarOperadores', () => {
     expect(r.duplicados).toEqual([{ fila: 3, id: 'o-gano', telefono: '525512345679', motivo: 'ya estaba, a nombre de Pedro Rápido' }]);
   });
 
+  it('0951: el guardián de teléfono entre tablas/flotas (telefono_identidad_unica) cuenta como choque de teléfono, no detiene el import', async () => {
+    let tandaIntentada = false;
+    resolver = (tabla, ops) => {
+      if (tabla !== 'operador') return { data: null, error: null };
+      const ins = ops.find(([m]) => m === 'insert');
+      if (!ins) return { data: [], error: null };
+      const filas = ins[1][0];
+      if (Array.isArray(filas)) {
+        tandaIntentada = true;
+        return { data: null, error: { message: 'duplicate key value violates unique constraint "telefono_identidad_unica": ese teléfono ya identifica a otra cuenta o contacto en Likida y no puede usarse aquí' } };
+      }
+      const f = filas as Record<string, unknown>;
+      return f.telefono === '525512345679'
+        ? { data: null, error: { message: 'duplicate key value violates unique constraint "telefono_identidad_unica": ese teléfono ya identifica a otra cuenta o contacto en Likida y no puede usarse aquí' } }
+        : { data: { id: `o-${f.telefono}` }, error: null };
+    };
+    const r = await importarOperadores('t-1', tres, { origen: 'panel' });
+    expect(tandaIntentada).toBe(true);
+    expect(r.creados.map((c) => c.fila)).toEqual([2, 4]);
+    expect(r.errores).toEqual([{ fila: 3, motivo: 'ese teléfono ya está registrado (en otra flota o dado de baja)' }]);
+  });
+
   it('un error de la base que NO es un choque detiene el import: las filas que faltaban salen como «no se intentó»', async () => {
     const muchas = interpretarFilasOperadores([
       ENC, ...Array.from({ length: 250 }, (_, i) => [`Chofer ${i}`, `55${String(20000000 + i)}`, '', '', '', '', '']),
