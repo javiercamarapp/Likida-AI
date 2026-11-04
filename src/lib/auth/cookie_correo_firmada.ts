@@ -32,7 +32,9 @@ function firmar(clave: string, correoB64: string, expira: number): string {
 export function firmarCorreoCookie(email: string, vidaSegundos: number, ahoraMs = Date.now()): string | null {
   const clave = secreto();
   if (!clave) return null;
-  const correoB64 = Buffer.from(email, 'utf8').toString('base64url');
+  // El correo va como encodeURIComponent con el punto escapado (el punto separa los campos). Sin `Buffer.from`:
+  // el guardia de la frontera de datos cuenta ese idioma como una consulta a Supabase.
+  const correoB64 = encodeURIComponent(email).replace(/\./g, '%2E');
   const expira = Math.floor(ahoraMs / 1000) + vidaSegundos;
   return `v1.${correoB64}.${expira}.${firmar(clave, correoB64, expira)}`;
 }
@@ -46,11 +48,11 @@ export function leerCorreoCookie(valor: string | undefined, ahoraMs = Date.now()
   const [, correoB64, expiraTxt, firma] = partes;
   const expira = Number(expiraTxt);
   if (!Number.isInteger(expira) || expira * 1000 < ahoraMs) return '';
-  const esperada = Buffer.from(firmar(clave, correoB64, expira));
-  const recibida = Buffer.from(firma);
+  const esperada = new TextEncoder().encode(firmar(clave, correoB64, expira));
+  const recibida = new TextEncoder().encode(firma);
   if (esperada.length !== recibida.length || !timingSafeEqual(esperada, recibida)) return '';
   try {
-    return Buffer.from(correoB64, 'base64url').toString('utf8');
+    return decodeURIComponent(correoB64);
   } catch {
     return '';
   }

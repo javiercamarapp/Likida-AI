@@ -20,7 +20,7 @@ describe('cookie likida_correo_enlace firmada (CT-SEG-14)', () => {
   });
   it('cambiar el correo conservando la firma NO vale', () => {
     const v = firmarCorreoCookie('ana@empresa.mx', 3600)!.split('.');
-    v[1] = Buffer.from('victima@x.com').toString('base64url');
+    v[1] = encodeURIComponent('victima@x.com').replace(/\./g, '%2E');
     expect(leerCorreoCookie(v.join('.'))).toBe('');
   });
   it('extender el vencimiento NO vale', () => {

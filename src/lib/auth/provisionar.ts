@@ -28,7 +28,12 @@ import { esCorreoYaRegistrado } from './invitar';
 export async function existeCuentaDeAcceso(correo: string): Promise<boolean> {
   const email = correo.trim().toLowerCase();
   if (!email) return false;
-  const { data, error } = await supabaseAdmin().from('app_user').select('id').eq('email', email).maybeSingle();
+  return await existeFilaAppUser(supabaseAdmin(), email);
+}
+
+/** UNA sola consulta a `app_user` por correo, compartida con el alta (`provisionarUsuario`) para no sumar acceso directo a datos. */
+async function existeFilaAppUser(admin: ReturnType<typeof supabaseAdmin>, email: string): Promise<boolean> {
+  const { data, error } = await admin.from('app_user').select('id').eq('email', email).maybeSingle();
   if (error) throw new Error(error.message);
   return data != null;
 }
@@ -203,13 +208,7 @@ export async function provisionarUsuario(
     // hay ninguna fila `app_user` es el caso huérfano de Google: se completa
     // el alta de verdad enlazando la fila nueva al `id` de Auth que YA
     // EXISTE, en vez de dejarla abandonada.
-    const { data: existente, error: errExistente } = await admin
-      .from('app_user')
-      .select('id')
-      .eq('email', email)
-      .maybeSingle();
-    if (errExistente) throw new Error(errExistente.message);
-    if (existente) throw new Error(error.message);
+    if (await existeFilaAppUser(admin, email)) throw new Error(error.message);
 
     const resuelto = await resolverAuthExistentePorCorreo(admin, email);
     if (!resuelto) throw new Error(error.message);

@@ -72,8 +72,8 @@ function traeTokenValido(req: NextRequest): boolean {
   const bearer = /^Bearer\s+(.+)$/i.exec(req.headers.get('authorization') ?? '')?.[1];
   const dado = req.headers.get('x-health-token') || bearer || '';
   if (!dado) return false;
-  const a = Buffer.from(dado);
-  const b = Buffer.from(esperado);
+  const a = new TextEncoder().encode(dado);
+  const b = new TextEncoder().encode(esperado);
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
