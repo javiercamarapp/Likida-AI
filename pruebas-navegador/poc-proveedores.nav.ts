@@ -98,8 +98,10 @@ test.describe('PoC B: decisión humana de proveedor y CSV SAP con marca de expor
     expect(antes[0].decidido_por).toBe('Contador E2E');
     expect(antes[0].decidido_en).toBeTruthy();
     expect(antes.every(f => f.exportada_en === null)).toBe(true);
-    const enlace = page.getByRole('link', { name: 'Exportar aprobadas (CSV SAP B1)', exact: true });
-    const href = await enlace.getAttribute('href');
+    // CT-SEG-17: exportar marca `exportada_en`, asi que ya no es un enlace GET sino un formulario POST con un boton.
+    const formulario = page.locator('form[method="post"]').filter({ has: page.getByRole('button', { name: 'Exportar aprobadas (CSV SAP B1)', exact: true }) });
+    const enlace = formulario.getByRole('button', { name: 'Exportar aprobadas (CSV SAP B1)', exact: true });
+    const href = await formulario.getAttribute('action');
     expect(href).toBe('/api/export/facturas-proveedor?formato=sap_b1');
     const negativa = await browser.newContext({ storageState: ESTADOS.encargado });
     try {
