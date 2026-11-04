@@ -78,6 +78,8 @@ const enviarCorreo = vi.fn(async (..._a: unknown[]): Promise<unknown> => ({ ok: 
 vi.mock('@/lib/correo/enviar', () => ({ enviarCorreo: (...a: unknown[]) => enviarCorreo(...(a as [])) }));
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
+const registrarCambioRol = vi.fn(async (..._a: unknown[]) => {});
+vi.mock('@/lib/seguridad/registro_acceso', () => ({ registrarCambioRol: (...a: unknown[]) => registrarCambioRol(...a) }));
 
 const {
   cambiarRolUsuario, desactivarUsuario, reactivarUsuario, reenviarAcceso, enviarCorreoDeAcceso, cerrarSesionesUsuario,
@@ -106,6 +108,7 @@ beforeEach(() => {
   enviarCorreo.mockClear();
   enviarCorreo.mockResolvedValue({ ok: true, id: 'm-1' });
   logger.error.mockClear();
+  registrarCambioRol.mockClear();
 });
 
 describe('cambiarRolUsuario', () => {
@@ -120,6 +123,20 @@ describe('cambiarRolUsuario', () => {
       expect.objectContaining({ tenantId: TENANT, accion: 'usuario.rol_cambiado', entidad: 'app_user', entidadId: U, detalle: { de: 'contador', a: 'encargado' } }),
       expect.anything(),
     );
+  });
+
+  it('CT-SEG-11: un cambio de rol hecho deja fila de seguridad (quién, a quién, de→a)', async () => {
+    colas.set('app_user', [{ data: fila() }]);
+    rpc.mockResolvedValueOnce({ data: 'ok', error: null });
+    await cambiarRolUsuario(TENANT, U, 'encargado', ACTOR);
+    expect(registrarCambioRol).toHaveBeenCalledWith({ tenantId: TENANT, actorId: ACTOR.id, usuarioId: U, de: 'contador', a: 'encargado' });
+  });
+
+  it('CT-SEG-11: un cambio de rol RECHAZADO (último dueño) no deja fila de cambio', async () => {
+    colas.set('app_user', [{ data: fila({ rol: 'flota_admin' }) }]);
+    rpc.mockResolvedValueOnce({ data: 'ultimo_dueno', error: null });
+    await expect(cambiarRolUsuario(TENANT, U, 'contador', ACTOR)).rejects.toBeInstanceOf(DatoInvalido);
+    expect(registrarCambioRol).not.toHaveBeenCalled();
   });
 
   it('CT-SEG-23: degradar a un dueno revoca sus llaves de area administracion vivas (no retiene privilegio)', async () => {
