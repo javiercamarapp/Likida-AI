@@ -17,7 +17,6 @@
   --login-soft: #f1f1f2;
   --login-input: #8a8a90;
   --login-foco: #0e0e10;
-  --login-foco-halo: #0e0e1012;
   --login-sans: var(--font-instrument), 'Instrument Sans', Arial, sans-serif;
   --login-serif: var(--font-fraunces), Fraunces, Georgia, 'Times New Roman', serif;
   min-height: 100dvh; color-scheme: light; background: var(--login-bg); color: var(--login-ink);
@@ -36,22 +35,22 @@
 
 .login-editorial .login-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 9px; width: 100%; max-width: 100%;
-  min-height: 52px; padding: 14px 22px; border-radius: 999px; border: 1px solid transparent;
-  font: 600 15px/1.5 var(--login-sans); letter-spacing: .005em; cursor: pointer; text-decoration: none; white-space: normal; text-align: center;
+  min-height: var(--ctl-h-lg, 40px); padding: 8px 16px; border-radius: 8px; border: 1px solid transparent;
+  font: 600 14px/1.4 var(--login-sans); letter-spacing: 0; cursor: pointer; text-decoration: none; white-space: normal; text-align: center;
 }
 .login-editorial .login-btn-tinta { background: #0e0e10; color: #fff; }
-.login-editorial .login-btn-tinta:not(:disabled):hover { background: #26262b; box-shadow: 0 8px 24px #0e0e1026; }
+.login-editorial .login-btn-tinta:not(:disabled):hover { background: #26262b; box-shadow: none; }
 .login-editorial .login-btn-borde { background: var(--login-surface); border-color: var(--login-input); color: var(--login-ink); }
-.login-editorial .login-btn-borde:not(:disabled):hover { border-color: var(--login-input); box-shadow: 0 8px 20px #00000012; }
+.login-editorial .login-btn-borde:not(:disabled):hover { border-color: var(--login-input); background: var(--login-soft); }
 .login-editorial .login-btn:disabled { opacity: .6; cursor: not-allowed; }
 .login-editorial .login-btn:focus-visible, .login-editorial a:focus-visible, .login-editorial summary:focus-visible { outline: 2px solid var(--login-foco); outline-offset: 2px; }
 
 .login-editorial .login-campo {
-  width: 100%; min-width: 0; min-height: 52px; padding: 14px 18px; border: 1px solid var(--login-input); border-radius: 13px;
-  background: var(--login-soft); color: var(--login-ink); font: 500 15px/1.5 var(--login-sans);
+  width: 100%; min-width: 0; min-height: var(--ctl-h-lg, 40px); padding: 8px 12px; border: 1px solid var(--login-input); border-radius: 8px;
+  background: var(--login-soft); color: var(--login-ink); font: 500 14px/1.4 var(--login-sans);
 }
 .login-editorial .login-campo::placeholder { color: var(--login-muted); }
-.login-editorial .login-campo:focus-visible { outline: 2px solid var(--login-foco); outline-offset: 2px; box-shadow: 0 0 0 4px var(--login-foco-halo); }
+.login-editorial .login-campo:focus-visible { outline: 2px solid var(--login-foco); outline-offset: 2px; }
 .login-editorial .login-campo:disabled { background: var(--login-soft); color: var(--login-muted); cursor: not-allowed; }
 .login-editorial .login-email { display: grid; gap: 16px; }
 .login-editorial .login-email .login-btn { position: relative; gap: 8px; }
@@ -127,7 +126,7 @@
 @media (max-width: 1023px) {
   .login-editorial .login-copy { max-width: 470px; padding: 40px 0 24px; }
   .login-editorial .login-campo { font-size: 16px; }
-  .login-editorial .login-btn { min-height: 48px; }
+  .login-editorial .login-btn, .login-editorial .login-campo { min-height: 44px; }
   .login-editorial .login-email-status:empty { min-height: 20px; padding: 0; }
 }
 @media (max-width: 380px) {
