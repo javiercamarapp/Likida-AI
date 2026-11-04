@@ -1,8 +1,8 @@
 # CT-SEG-24: configuracion de gitleaks (workflow secretos.yml).
 # Extiende las reglas por omision. Solo se permite lo que es un fixture
 # sintetico confirmado a mano: valores literales concretos, o la regla de
-# "llave generica" / "llave privada" SOLO dentro de archivos de prueba (no en
-# codigo de produccion, scripts ni docs). Triage del 4-nov-2026 sobre TODO el historial (9,777
+# "llave generica" SOLO en los archivos de prueba triados uno por uno (no en
+# codigo de produccion, scripts, docs ni pruebas nuevas; la llave privada nunca se perdona). Triage del 4-nov-2026 sobre TODO el historial (9,777
 # commits): los hallazgos de reglas genericas eran fixtures o datos publicos
 # (gitleaks 8.30.1 sin hallazgos con esta configuracion).
 title = "Likida gitleaks"
@@ -18,12 +18,21 @@ regexes = [
 ]
 
 [[allowlists]]
-description = "Tokens de prueba inventados dentro de pruebas unitarias/e2e y de SQL de supabase/tests"
+description = "Tokens de prueba inventados: SOLO los 12 archivos triados a mano (4-nov-2026), regla generic-api-key. Un archivo de prueba nuevo NO queda perdonado; private-key nunca se perdona en pruebas."
 condition = "AND"
-targetRules = ["generic-api-key", "private-key"]
+targetRules = ["generic-api-key"]
 paths = [
-  '''^src/.*\.test\.tsx?$''',
-  '''^supabase/tests/.*\.sql$''',
+  '''^src/lib/admin/calcom\.test\.ts$''',
+  '''^src/lib/likida/agentes/investigador\.test\.ts$''',
+  '''^src/lib/likida/carta_porte_docs/correo_entrante\.test\.ts$''',
+  '''^src/lib/likida/conectores/cofre\.test\.ts$''',
+  '''^src/lib/likida/conectores/credenciales\.test\.ts$''',
+  '''^src/lib/likida/e2e/agente-03-carta-porte\.e2e\.test\.ts$''',
+  '''^src/lib/likida/peajes/ciclo_completo\.e2e\.test\.ts$''',
+  '''^src/lib/llm/fallo_modelo\.test\.ts$''',
+  '''^supabase/tests/0563_peajes_correo_pull_anulacion\.sql$''',
+  '''^supabase/tests/0325_capacidad_wa_jornada\.sql$''',
+  '''^supabase/tests/0790_cp_envio_tms\.sql$''',
   '''^supabase/verificaciones\.sql$''',
 ]
 
