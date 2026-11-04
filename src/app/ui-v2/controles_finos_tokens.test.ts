@@ -1,5 +1,5 @@
 /* eslint-disable security/detect-non-literal-fs-filename -- lee el CSS del propio módulo por rutas fijas. */
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -107,5 +107,54 @@ describe('controles finos · tipografía, iconos y marco', () => {
     expect(valor('--nav-activo-bg')).toBe('var(--ui-soft)');
     expect(valor('--nav-activo-fg')).toBe('var(--ink)');
     expect(valor('--nav-activo-peso')).toBe('600');
+  });
+});
+
+describe('controles finos · reglas de las primitivas (K1-1)', () => {
+  const comp = sinComentarios(leer('componentes.css'));
+  const piezas = sinComentarios(leer('piezas.css'));
+  it('.rv-btn usa el borde claro de Rovaq (--btn-borde-sec), no el de los campos (--input)', () => {
+    expect(comp).toMatch(/\.rv-btn \{[^}]*border: var\(--borde-w, 1px\) solid var\(--btn-borde-sec\)/);
+    expect(/\.rv-btn \{[^}]*var\(--input\)/.test(comp)).toBe(false);
+  });
+  it('.rv-btn--suave lee el trío --accion-cajon-*', () => {
+    expect(comp).toMatch(/\.rv-btn--suave \{[^}]*var\(--accion-cajon-bg\)[^}]*var\(--accion-cajon-borde\)[^}]*var\(--accion-cajon-fg\)/);
+    expect(comp).toMatch(/\.rv-btn--suave:hover \{[^}]*var\(--accion-cajon-hover\)/);
+  });
+  it('segmentado: pista blanca con borde claro; activo con el trío y solo el anillo de 1 px, SIN sombra de relieve', () => {
+    expect(piezas).toMatch(/\.rv-seg \{[^}]*background: var\(--surface\)[^}]*var\(--btn-borde-sec\)/);
+    const activo = /\.rv-seg__btn\[aria-checked="true"\] \{([^}]*)\}/.exec(piezas)?.[1] ?? '';
+    expect(activo).toContain('var(--seg-activo-bg)');
+    expect(activo).toContain('var(--seg-activo-fg)');
+    expect(activo.replace(/\s+/g, ' ').trim()).toMatch(/box-shadow: 0 0 0 1px var\(--seg-activo-borde\);$/);
+  });
+  it('chip y filtro activos leen --seg-activo-* (ya no --chip-activo-*)', () => {
+    expect(comp).not.toMatch(/\.rv-(?:chip|fl)[^{]*\{[^}]*--chip-activo/);
+    expect(comp).toMatch(/\.rv-chip\[aria-pressed="true"\][^{]*\{[^}]*var\(--seg-activo-bg\)/);
+    expect(comp).toMatch(/\.rv-fl\[data-activo\][^{]*\{[^}]*var\(--seg-activo-bg\)/);
+  });
+  it('barra de filtros de una línea de 32 px; chip de filtro en píldora; icono (i) de 14 px', () => {
+    expect(comp).toMatch(/\.rv-filtros \{[^}]*min-height: var\(--ctl-h, 32px\)[^}]*padding: 2px/);
+    expect(comp).toMatch(/\.rv-fl--chip \{[^}]*padding: 0 12px/);
+    expect(comp).toMatch(/\.rv-info svg \{[^}]*var\(--ico-sm, 14px\)/);
+  });
+  it('ningún control del kit fija un borde de 2 px (excepciones técnicas: spinner y subrayado de pestaña)', () => {
+    for (const h of [comp, piezas]) {
+      for (const m of h.matchAll(/([^{}]*\.rv-(?:btn|fl|chip|seg|info)\b[^{}]*)\{([^}]*)\}/g)) {
+        if (/spinner|forced|Highlight/.test(m[1] + m[2])) continue;
+        expect(m[2], m[1].trim()).not.toMatch(/border(?:-width)?:\s*2px/);
+      }
+    }
+  });
+  it('--ctl-h-lg solo lo leen /login y las páginas públicas', () => {
+    const quien: string[] = [];
+    const recorrer = (dir: string) => {
+      for (const n of readdirSync(dir)) {
+        const f = join(dir, n);
+        if (statSync(f).isDirectory()) { if (n !== 'node_modules') recorrer(f); } else if (/\.(css|tsx?)$/.test(n) && !/\.test\./.test(n) && /var\(--ctl-h-lg/.test(readFileSync(f, 'utf8'))) quien.push(f.replace(join(__dirname, '..'), ''));
+      }
+    };
+    recorrer(join(__dirname, '..'));
+    for (const f of quien) expect(f, f).toMatch(/^\/(?:login\/login\.css|ui-v2\/marco-publico\.css)$/);
   });
 });
