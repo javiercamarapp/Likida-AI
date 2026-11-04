@@ -246,7 +246,7 @@ falla si entra una ahí y no aquí):
 | `ALERTA_EMAIL` | **El único canal push del sistema.** Un cron que falla (`escalar`, `facturar`, `purgar`, `wa-pendientes`, `runner`) y una lectura ilegible del kill switch mandan un correo aquí (`src/lib/observability/alerta.ts`, un correo por evento por hora). Sin ella, el fallo solo existe en Sentry — que notifica una vez por issue y después solo engorda un contador. |
 | `NEXT_PUBLIC_APP_URL` | El login arma sus redirects contra `https://app.likida.ai` (el fallback) y no contra el despliegue que los emitió: el magic link y el retorno de Google aterrizan en otro sitio, sin error. |
 | `LIKIDA_WHATSAPP_MSG_USD` | El costo por liquidación usa el default 0.008 — y esa cifra decide el precio del producto. |
-| `LIKIDA_FLOTA_COOKIE_LLAVE` | El superadmin no puede fijar una flota activa en `/admin` (la cookie no se firma ni se lee: fallar cerrado). Desde la auditoría 18 ya NO cae a la service role key. |
+| `LIKIDA_FLOTA_COOKIE_LLAVE` | El superadmin no puede fijar una flota activa en `/admin` (la cookie no se firma ni se lee: fallar cerrado). Desde la auditoría 18 ya NO cae a la service role key. **Prerrequisito del deploy de MX-002:** las acciones de módulo del dashboard (emisión real, lotes, límites, vinculación de portales, timbrado, cobranza, liquidación, llaves, usuarios) exigen al superadmin en ver-como el campo firmado con esta llave; sin ella el superadmin queda bloqueado en esas acciones (falla cerrado, mensaje «la flota cambió»), aunque `?tenant=` sea válido. Confirmar que existe en Vercel (Production) antes de desplegar. Un dueño o contador no la necesita. |
 | `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` | El límite de tasa cae al Map **por instancia**: 10 intentos de login por 5 min se vuelven 10 × (instancias abiertas en paralelo), y lo mismo el del webhook de WhatsApp, `/v1`, el formulario de leads y los exports. También es el piso de una hora de `alertarOperador`, que sin Redis se cuenta por instancia. **Verificado presente en producción el 22-ago-2026.** El estado vivo se lee en `GET /api/health` → `ratelimit: "redis" \| "memoria"`, y el arranque lo dice en `startup.ratelimit_backend`. |
 
 El gate de `/dashboard` no depende de ninguna variable de entorno: es la
@@ -519,3 +519,7 @@ curl -s https://app.likida.ai/api/health   # {"ok":true,"db":"ok","sentry":"conf
 Lee solo el asunto a propósito: con el mensaje completo, cualquier commit que
 *mencionara* la palabra en el cuerpo disparaba un build. Pasó el mismo día que
 se puso la regla.
+
+## Cambio de contrato: `GET /api/export/facturas-proveedor` (CT-SEG-17)
+
+El GET ya no marca `exportada_en` ni anota corrida (responde `X-Likida-Marcado: no`); el marcado pasa a `POST` en la misma URL. Antes del deploy, avisar a todo TMS, cron o integración que consuma ese GET: si siguen llamando solo GET re-exportarán las mismas facturas en cada corrida (riesgo de doble importación al ERP). El botón del panel ya usa el POST.
