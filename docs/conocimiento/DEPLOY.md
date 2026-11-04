@@ -124,7 +124,8 @@ deja un respaldo que *parece* completo — es la forma más cara de este fallo.
 
 ```bash
 # La base — dump de datos, se comprueba que no venga vacío, 14 días en disco.
-bash scripts/respaldo.sh
+# CT-SEG-16: exige RESPALDO_AGE_RECIPIENT (clave pública age) y el binario `age`; sin ellos se rechaza antes de volcar.
+RESPALDO_AGE_RECIPIENT=age1... bash scripts/respaldo.sh
 
 # Storage — lista con la service role, baja lo que falte, compara CONTEOS y
 # deja MANIFIESTO.tsv (bucket, ruta, bytes, sha256). Es IDEMPOTENTE: correrlo

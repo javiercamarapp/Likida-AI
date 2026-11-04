@@ -10,6 +10,7 @@ import {
   type AccionAuth,
 } from '@/lib/correo/auth';
 import { yaSeMando, sellarMandado } from './anti_replay';
+import { existeCuentaDeAcceso } from '@/lib/auth/provisionar';
 import { leerTextoAcotado } from '@/lib/http/cuerpo_acotado';
 
 export const runtime = 'nodejs';
@@ -185,6 +186,26 @@ export async function POST(req: Request) {
     || payload.email_data?.token_hash;
   const codigo = (esMitadNueva ? payload.email_data?.token_new : payload.email_data?.token)
     || payload.email_data?.token || '';
+
+  // CT-SEG-04: SOLO se manda correo de marca a quien tiene cuenta. Sin esta puerta, quien llegue a pedirle a Supabase un
+  // correo para CUALQUIER direccion (signup abierto, o un `/otp` con shouldCreateUser) hacia que Likida —con su remitente,
+  // su logo y un enlace de un solo uso— escribiera a un tercero: phishing con nuestra firma. La cuenta que se comprueba es
+  // la ACTUAL (`user.email`), no el destino: en `email_change_new` el destino es la direccion nueva, que por definicion
+  // aun no tiene cuenta. Sin cuenta: 200 con el mismo cuerpo vacio que un envio (Supabase le contesta igual a quien
+  // pregunta, asi que no se puede distinguir "existe" de "no existe") y NADA sale. La direccion no va al log.
+  // Si la base no responde NO se asume "no existe": se falla cerrado y ruidoso, como el resto del hook.
+  const cuentaDe = payload.user?.email || destino;
+  let hayCuenta: boolean;
+  try {
+    hayCuenta = await existeCuentaDeAcceso(cuentaDe);
+  } catch (e) {
+    logger.error('auth.correo.consulta_cuenta_fallo', { accion, err: e instanceof Error ? e.message : String(e) });
+    return fallo(500, 'No se pudo comprobar la cuenta del destinatario.');
+  }
+  if (!hayCuenta) {
+    logger.warn('auth.correo.destino_sin_cuenta', { accion });
+    return NextResponse.json({});
+  }
 
   // La reautenticación es la única acción sin enlace: su mecanismo es el
   // código. Todas las demás sin `token_hash` no se pueden armar.

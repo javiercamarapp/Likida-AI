@@ -45,11 +45,18 @@ export async function POST(req: Request) {
     );
   }
   const crudo = lectura.texto;
-  let body: { comprobantes: Partial<Gasto>[]; anticipo: number };
+  let body: { comprobantes?: Partial<Gasto>[]; anticipo?: number };
   try {
     body = JSON.parse(crudo) as { comprobantes: Partial<Gasto>[]; anticipo: number };
   } catch {
     return NextResponse.json({ error: 'JSON inválido' }, { status: 400 });
+  }
+  // CT-SEG-20: `null`, un numero, un arreglo o comprobantes que no son objetos tiraban un TypeError (500).
+  const esObjeto = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
+  if (!esObjeto(body)
+    || (body.comprobantes !== undefined && body.comprobantes !== null && (!Array.isArray(body.comprobantes) || !body.comprobantes.every(esObjeto)))
+    || (body.anticipo !== undefined && body.anticipo !== null && (typeof body.anticipo !== 'number' || !Number.isFinite(body.anticipo)))) {
+    return NextResponse.json({ error: 'Cuerpo inválido: se esperaba { comprobantes: [...], anticipo: número }.' }, { status: 400 });
   }
   const gastos: Gasto[] = (body.comprobantes ?? []).map((c, i) => ({
     id: `g${i}`,

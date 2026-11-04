@@ -7,6 +7,7 @@ import { logger } from '@/lib/logger';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
 import { cotejarMigracion } from './migracion';
 import { medirRuta } from '@/lib/observability/latencia';
+import { timingSafeEqual } from 'node:crypto';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -45,16 +46,35 @@ export const dynamic = 'force-dynamic';
 //    "no hubo corridas con trabajo" es lo normal y alarmaría siempre. Ese
 //    monitor llega cuando `agente_corrida` tenga tráfico real que fechar.
 //
-// SIN AUTH A PROPÓSITO: no devuelve un solo dato de negocio, nombre de cron ni
-// configuración interna — solo estado agregado, sha (público en GitHub) y hora.
-// Un health detrás de secreto es un health que el monitor gratuito no puede
-// usar. Status 200 solo cuando TODO lo medido está bien; 503 si hay fallo o
-// degradación — que es lo que un monitor entiende sin leer el cuerpo.
+// DOS NIVELES (CT-SEG-12, F1 lote B):
+//  · ANÓNIMO (sin `HEALTH_TOKEN` válido): solo pulso de vida — `ok`, `status`,
+//    sha público y hora. NO lista migraciones, NO publica el estado de los
+//    crons, NO consulta la base con service role y NO dispara alertas al
+//    operador: antes cualquier GET anónimo hacía las tres cosas.
+//  · CON TOKEN (cabecera `x-health-token: <HEALTH_TOKEN>` o
+//    `Authorization: Bearer <HEALTH_TOKEN>`): el detalle completo de siempre
+//    (db, crons, migracion) con status 200 solo si TODO lo medido está bien y
+//    503 si hay fallo o degradación. Es lo que usan la compuerta de despliegue,
+//    el workflow «Salud de producción» y la guardia. Sin `HEALTH_TOKEN` en el
+//    servidor NADIE obtiene el detalle (falla cerrado). Un token en la URL no
+//    se acepta a propósito: acaba en logs.
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** E1-A: la latencia de esta ruta (p50/p95 en /admin/observabilidad). Muestreada y sin riesgo: ver `medirRuta`. */
 export function GET(req: NextRequest) {
   return medirRuta('health', () => manejarGET(req));
+}
+
+/** CT-SEG-12: ¿la petición trae el HEALTH_TOKEN correcto? Comparación en tiempo constante. */
+function traeTokenValido(req: NextRequest): boolean {
+  const esperado = process.env.HEALTH_TOKEN;
+  if (!esperado || esperado.length < 16) return false;
+  const bearer = /^Bearer\s+(.+)$/i.exec(req.headers.get('authorization') ?? '')?.[1];
+  const dado = req.headers.get('x-health-token') || bearer || '';
+  if (!dado) return false;
+  const a = new TextEncoder().encode(dado);
+  const b = new TextEncoder().encode(esperado);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 async function manejarGET(req: NextRequest) {
@@ -71,6 +91,16 @@ async function manejarGET(req: NextRequest) {
       status: 429,
       headers: { 'cache-control': 'no-store' },
     });
+  }
+  // CT-SEG-12: sin token, solo pulso de vida. Nada de service role, alertas ni detalle.
+  if (!traeTokenValido(req)) {
+    return NextResponse.json({
+      ok: true,
+      status: 'ok',
+      acceso: 'publico',
+      version: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'local',
+      hora: new Date().toISOString(),
+    }, { status: 200, headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
   }
   let db: 'ok' | 'fallo' = 'fallo';
   try {

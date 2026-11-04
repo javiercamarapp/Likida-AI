@@ -301,7 +301,17 @@ const nextConfig: NextConfig = {
       },
       {
         source: '/api/v1/:path*',
-        headers: [{ key: 'Cross-Origin-Resource-Policy', value: 'same-origin' }],
+        headers: [
+          { key: 'Cross-Origin-Resource-Policy', value: 'same-origin' },
+          // CT-SEG-20: JSON con datos del tenant autenticado por llave de API; nunca en una cache compartida.
+          { key: 'Cache-Control', value: 'no-store' },
+        ],
+      },
+      // CT-SEG-20: el panel es contenido autenticado. El proxy ya pone no-store cuando hay sesion; esto lo garantiza
+      // tambien en las respuestas que el proxy no toca (errores, redirects y paginas servidas sin pasar por su rama de sesion).
+      {
+        source: '/dashboard/:path*',
+        headers: [{ key: 'Cache-Control', value: 'no-store' }],
       },
       // A37-L-seguridad-tenant-04: la página de baja de correo (derecho de baja LFPDPPP) SÍ es HTML y usa
       // atributos `style` en línea; con `default-src 'none'` salía sin formato. Esta regla va DESPUÉS de la

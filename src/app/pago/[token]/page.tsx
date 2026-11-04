@@ -1,3 +1,4 @@
+import { ipDeCabeceras } from '@/lib/http/ip_cliente';
 import { headers } from 'next/headers';
 import { mxn, fechaMx } from '@/lib/formato';
 import { rateLimit } from '@/lib/ratelimit';
@@ -67,7 +68,7 @@ export default async function PaginaPago({ params }: { params: Promise<{ token: 
   // token la fuerza bruta es imposible por aritmética, así que esto no protege
   // el secreto: protege la base de una ráfaga de tokens inventados que, sin
   // este límite, serían una consulta cada una.
-  const ip = (await headers()).get('x-forwarded-for')?.split(',')[0].trim() || 'desconocida';
+  const ip = ipDeCabeceras(await headers());
   if (!(await rateLimit(`portal-pago-vista:${ip}`, 60, 10 * 60_000))) {
     return (
       <Aviso

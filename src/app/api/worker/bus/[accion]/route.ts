@@ -10,6 +10,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { resolverLlaveWorker, type CapacidadWorker } from '@/lib/worker/llaves';
 import { logger } from '@/lib/logger';
+import { rateLimit, clientIp } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -36,6 +37,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ accion: string
   const { accion } = await ctx.params;
   const cap = CAP_POR_ACCION[accion];
   if (!cap) return NextResponse.json({ error: 'Acción desconocida.' }, { status: 404 });
+  // CT-SEG-20: sin tope, cada llave inventada costaba una consulta al resolver. 300/min por IP deja de sobra
+  // al worker legitimo (sondeo de ordenes + latidos + piezas); `fallaCerrado:false` porque un worker real no
+  // debe quedarse sin bus por un parpadeo de Upstash (el 429 se aplaza: el cliente reintenta).
+  if (!(await rateLimit(`worker-bus:${clientIp(req)}`, 300, 60_000, { fallaCerrado: false }))) {
+    return NextResponse.json({ error: 'Demasiadas peticiones.' }, { status: 429, headers: { 'retry-after': '30' } });
+  }
   const quien = await resolverLlaveWorker(req.headers.get('x-worker-key'), cap);
   if (!quien.ok) return NextResponse.json({ error: quien.error }, { status: 403 });
 

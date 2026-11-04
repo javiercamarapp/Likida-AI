@@ -1,3 +1,5 @@
+import { ipDeCabeceras } from '@/lib/http/ip_cliente';
+import { verificarTurnstile } from '@/lib/seguridad/turnstile';
 import { appUrl } from '@/lib/env';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
@@ -66,7 +68,7 @@ function siteUrl(): string {
 
 async function ipDelCliente(): Promise<string> {
   const h = await headers();
-  return (h.get('x-forwarded-for')?.split(',')[0].trim() || h.get('x-real-ip')) ?? 'desconocida';
+  return ipDeCabeceras(h);
 }
 
 /**
@@ -187,7 +189,14 @@ export default async function Login({
     // #13): por IP (de siempre) Y por CUENTA (ventana corta, ver
     // `dentroDelLimitePorCuenta`) — rotar de IP no sirve si la cuenta es la
     // misma.
-    if (!(await dentroDelLimite('login:email')) || !(await dentroDelLimitePorCuenta(email))) {
+    if (!(await dentroDelLimite('login:email'))) {
+      redirect(`/login?next=${encodeURIComponent(dest)}&error=1`);
+    }
+    // S-03: Turnstile (APAGADO por omision, `lib/seguridad/turnstile.ts`). Va DESPUES del limite por IP —el reto cuesta una
+    // llamada a Cloudflare— y ANTES del contador por cuenta: un token invalido no debe gastar el cupo del correo de otro.
+    // Mismo error generico que los limites: no le dice a quien prueba cual control lo paro.
+    const reto = await verificarTurnstile({ token: String(formData.get('cf-turnstile-response') ?? ''), superficie: 'login' });
+    if (!reto.ok || !(await dentroDelLimitePorCuenta(email))) {
       redirect(`/login?next=${encodeURIComponent(dest)}&error=1`);
     }
     // Deja dicho a quién reenviar si este enlace muere (reenvio_enlace.ts).

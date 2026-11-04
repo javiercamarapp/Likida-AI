@@ -23,6 +23,17 @@ vi.mock('@/lib/correo/enviar', () => ({
   },
 }));
 
+// CT-SEG-04: el hook solo manda correo de marca a un destino con cuenta en app_user.
+let cuentaExiste: boolean | 'error' = true;
+const consultasCuenta: string[] = [];
+vi.mock('@/lib/auth/provisionar', () => ({
+  existeCuentaDeAcceso: async (correo: string) => {
+    consultasCuenta.push(correo);
+    if (cuentaExiste === 'error') throw new Error('base caida');
+    return cuentaExiste;
+  },
+}));
+
 const logs: Array<[string, string, Record<string, unknown>]> = [];
 vi.mock('@/lib/logger', () => ({
   logger: {
@@ -67,6 +78,8 @@ const MAGIC = {
 beforeEach(() => {
   enviados.length = 0;
   logs.length = 0;
+  cuentaExiste = true;
+  consultasCuenta.length = 0;
   // BE-30: el candado anti-replay es un Map de módulo — sin esto, la segunda
   // prueba que reusa `msg_1` se acusaría como repetida.
   reiniciarAntiReplay();
@@ -336,5 +349,48 @@ describe('BE-30 — la misma entrega no manda dos correos', () => {
     expect((await postear(MAGIC, { firmar: false })).status).toBe(401);
     expect((await postear(MAGIC)).status).toBe(200);
     expect(enviados).toHaveLength(1);
+  });
+});
+
+
+describe('CT-SEG-04: solo se manda correo de marca a quien tiene cuenta', () => {
+  it('destino SIN cuenta: 200 con el mismo cuerpo que un envio, sin correo', async () => {
+    cuentaExiste = false;
+    const r = await postear(MAGIC);
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({});
+    expect(enviados).toHaveLength(0);
+    const l = logs.find(([, e]) => e === 'auth.correo.destino_sin_cuenta');
+    expect(l).toBeTruthy();
+    expect(JSON.stringify(logs)).not.toContain('contralor@flota.mx');
+  });
+  it('destino CON cuenta: se manda como siempre', async () => {
+    const r = await postear(MAGIC);
+    expect(r.status).toBe(200);
+    expect(enviados).toHaveLength(1);
+    expect(consultasCuenta).toEqual(['contralor@flota.mx']);
+  });
+  it('la comprobacion usa el correo ACTUAL de la cuenta: el cambio de correo manda a la direccion nueva aunque no exista aun', async () => {
+    const cambio = {
+      user: { email: 'contralor@flota.mx', new_email: 'nuevo@flota.mx' },
+      email_data: { token_new: '111111', token_hash_new: 'hash-nuevo', token_hash: 'hash-viejo', token: '222222', email_action_type: 'email_change_new', redirect_to: 'https://app.likida.ai/auth/callback' },
+    };
+    const r = await postear(cambio);
+    expect(r.status).toBe(200);
+    expect(consultasCuenta).toEqual(['contralor@flota.mx']);
+    expect(enviados).toHaveLength(1);
+    expect(enviados[0].para).toBe('nuevo@flota.mx');
+  });
+  it('si la base no responde, falla CERRADO y ruidoso (500), sin correo', async () => {
+    cuentaExiste = 'error';
+    const r = await postear(MAGIC);
+    expect(r.status).toBe(500);
+    expect(enviados).toHaveLength(0);
+    expect(logs.some(([n, e]) => n === 'error' && e === 'auth.correo.consulta_cuenta_fallo')).toBe(true);
+  });
+  it('la sonda firmada (dry run) no consulta la base', async () => {
+    const r = await postear({ likida_dry_run: true });
+    expect(r.status).toBe(200);
+    expect(consultasCuenta).toHaveLength(0);
   });
 });

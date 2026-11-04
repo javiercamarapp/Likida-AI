@@ -84,9 +84,13 @@ export function construirCsp(
   // `next dev` (Fast Refresh) parchea módulos con `eval()`: sin `unsafe-eval` la app nunca hidrata.
   // Es exclusivo del bundle de DESARROLLO; en producción nunca aparece.
   const evalDev = dev ? " 'unsafe-eval'" : '';
+  // S-03: Cloudflare Turnstile. Solo con TURNSTILE_ACTIVO='1' (apagado = la politica de siempre, caracter por caracter).
+  // El widget carga api.js (script-src; con nonce + 'strict-dynamic' el host se ignora pero va para navegadores sin
+  // strict-dynamic), se dibuja en un iframe de challenges.cloudflare.com (frame-src) y habla con el mismo origen (connect-src).
+  const ts = env.TURNSTILE_ACTIVO === '1' ? ' https://challenges.cloudflare.com' : '';
   const scriptSrc = nonce === null
-    ? `script-src 'self' 'unsafe-inline'${evalDev}`
-    : `script-src 'self' 'nonce-${nonce}' ${HASH_SCRIPT_TEMA} 'strict-dynamic'${evalDev}`;
+    ? `script-src 'self' 'unsafe-inline'${ts}${evalDev}`
+    : `script-src 'self' 'nonce-${nonce}' ${HASH_SCRIPT_TEMA} 'strict-dynamic'${ts}${evalDev}`;
   return [
     "default-src 'self'",
     scriptSrc,
@@ -98,8 +102,8 @@ export function construirCsp(
     `media-src 'self' ${supabase}`,
     "font-src 'self' data:",
     // Storage directo: la subida firmada va del navegador al proyecto (ver `origenSupabase`).
-    `connect-src 'self' ${supabase}`,
-    "frame-src 'none'",
+    `connect-src 'self' ${supabase}${ts}`,
+    ts ? `frame-src${ts}` : "frame-src 'none'",
     "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'self'",
