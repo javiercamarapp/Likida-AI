@@ -1,0 +1,14 @@
+# CT-SEG-24: dueno unico de todo el repo y, de forma explicita, de lo que
+# cambia el comportamiento de CI/despliegue o de seguridad. Con proteccion de
+# rama "Require review from Code Owners" (configuracion de Javier en GitHub)
+# nadie fusiona un cambio a estas rutas sin su revision.
+*                          @javiercamarapp
+/.github/                  @javiercamarapp
+/supabase/migrations/      @javiercamarapp
+/scripts/ci/               @javiercamarapp
+/vercel.json               @javiercamarapp
+/next.config.ts            @javiercamarapp
+/src/proxy.ts              @javiercamarapp
+/package.json              @javiercamarapp
+/package-lock.json         @javiercamarapp
+/.gitleaks.toml            @javiercamarapp
