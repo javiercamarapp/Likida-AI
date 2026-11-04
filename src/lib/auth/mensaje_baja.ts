@@ -5,7 +5,7 @@ import type { ResultadoBaja } from './usuarios_escritura';
  * (sesion y llaves de API): si alguna fallo, la baja ya quedo pero alguien debe revisar a mano; si se revocaron llaves, se
  * nombran porque revocar es irreversible y quien integre un sistema con ellas debe emitir otra.
  */
-export function mensajeDeBaja(r: Pick<ResultadoBaja, 'sesionRevocada' | 'llavesApiRevocadas' | 'llavesApiSinRevocar'>): { ok: boolean; mensaje: string } {
+export function mensajeDeBaja(r: Pick<ResultadoBaja, 'sesionRevocada' | 'llavesApiRevocadas' | 'llavesApiSinRevocar'>): { ok: true; mensaje: string } {
   const partes: string[] = [];
   partes.push(r.sesionRevocada
     ? 'Cuenta dada de baja: ya no entra al panel y su sesión quedó revocada.'
