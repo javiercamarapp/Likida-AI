@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta, conectorPermitidoEnPerfil, integracionPermitidaEnPerfil } from '@/lib/auth/visibilidad';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { puedeAdministrar } from '@/lib/auth/permisos';
@@ -93,7 +94,8 @@ export default async function PaginaConexiones({
 
   async function guardar(_previo: ResultadoCredencial, fd: FormData): Promise<ResultadoCredencial> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) {
       return { ok: false, error: 'Solo el dueño de la flota guarda credenciales.' };
     }
@@ -137,7 +139,8 @@ export default async function PaginaConexiones({
    */
   async function probar(_previo: ResultadoCredencial, fd: FormData): Promise<ResultadoCredencial> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) {
       return { ok: false, error: 'Solo el dueño de la flota prueba las conexiones.' };
     }
@@ -166,7 +169,8 @@ export default async function PaginaConexiones({
 
   async function desactivar(_previo: ResultadoCredencial, fd: FormData): Promise<ResultadoCredencial> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) {
       return { ok: false, error: 'Solo el dueño de la flota desactiva credenciales.' };
     }
@@ -189,7 +193,8 @@ export default async function PaginaConexiones({
   /** Genera o rota el secreto del GPS propio. El valor en claro viaja UNA vez, de aquí al navegador. */
   async function generarSecreto(_previo: ResultadoSecreto, _fd: FormData): Promise<ResultadoSecreto> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) return { ok: false, error: 'Solo el dueño de la flota genera el secreto del GPS propio.' };
     if (!cofreConfigurado()) return { ok: false, error: 'El cofre de credenciales no está configurado en este entorno: no se puede guardar el secreto cifrado.' };
     try {
@@ -209,7 +214,8 @@ export default async function PaginaConexiones({
       error, paso: 'previsualizar', huella: '', archivo: '', leidas: 0, nuevas: 0, yaEstaban: 0, conProblema: 0,
       muestra: [], problemas: [], patiosDesconocidos: [], avisos: [], excedeTope: false,
     });
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
+    if (!s) return vacio(MENSAJE_FLOTA_CAMBIO);
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) return vacio('Solo el dueño de la flota liga dispositivos GPS.');
     const r = await mapearGpsDesdeArchivo({ tenantId: s.tenantId, alcance: { tipo: 'flota' }, actor: { id: s.userId }, datos: fd });
     if (r.confirmado) revalidatePath(RUTA);
@@ -219,7 +225,8 @@ export default async function PaginaConexiones({
   /** Trae las geocercas de «mis propias tablas» al catálogo de sitios (el permiso lo vuelve a comprobar la acción). */
   async function importarGeocercas(_previo: ResultadoImportGeocercas, _fd: FormData): Promise<ResultadoImportGeocercas> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) return { ok: false, error: 'Solo el dueño de la flota importa sus geocercas.' };
     const r = await importarGeocercasDeTablaPropia({ tenantId: s.tenantId, rol: s.rol });
     if (!r.ok) return r;

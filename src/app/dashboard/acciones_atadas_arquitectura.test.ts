@@ -25,6 +25,9 @@ const LISTA = [
   'agentes/proveedores/page.tsx',
   'llaves-api/page.tsx',
   'usuarios/page.tsx', // roles, altas y bajas
+  'contador/estimulo-peaje.tsx', // declaracion fiscal del estimulo de peaje
+  'contador/perfil-erp.tsx', // plantilla de exportacion contable
+  'conexiones/page.tsx', // credenciales, secreto GPS, importaciones
 ];
 const GUARDA = /\b(resolverTenantAtadoAccion|resolverTenantAtadoFirmado|exigirFlotaPintada)\(/;
 
