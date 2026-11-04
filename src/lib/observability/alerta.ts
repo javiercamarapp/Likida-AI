@@ -392,6 +392,12 @@ function normalizarMotivo(motivo: string): string {
     .toLowerCase();
 }
 
+/** Atajo por instancia de `alertarHuecoConfiguracion`: llave → última vez que esta instancia pasó por el piso (CT-DAT-12). */
+const pisoLocalHuecos = new Map<string, number>();
+
+/** Solo para pruebas. */
+export function _reiniciarPisoLocalHuecos(): void { pisoLocalHuecos.clear(); }
+
 /**
  * Como `alertarOperador`, pero para un HUECO DE CONFIGURACIÓN que el propio
  * proceso YA declaró en prosa (`esHuecoDeConfiguracion` en `admin/salud.ts`
@@ -420,6 +426,16 @@ export async function alertarHuecoConfiguracion(evento: string, motivo: string, 
     // contadores de reintento, UUID): «intento 3 de 5» y «intento 4 de 5» son el
     // mismo hueco. Cambiar de variable faltante sí cambia la huella.
     const llave = `${evento}:${huella(normalizarMotivo(motivo))}`;
+    // CT-DAT-12 (F5): /api/health llama esto por cada hueco declarado EN CADA PING (~660 veces al día con un monitor
+    // externo) y cada llamada era una ida a Upstash para enterarse de lo que esta instancia ya sabía. Si esta instancia
+    // ya pasó por el piso de esta llave (sea porque mandó, sea porque otra ya había mandado), no vuelve a preguntar
+    // hasta que el piso venza. Es solo un atajo: el piso que manda sigue siendo el de Redis.
+    const visto = pisoLocalHuecos.get(llave);
+    if (visto !== undefined && ahora - visto < PISO_ALERTA_CONFIG_MS) return;
+    pisoLocalHuecos.set(llave, ahora);
+    if (pisoLocalHuecos.size > 500) {
+      for (const [k, t] of pisoLocalHuecos) if (ahora - t >= PISO_ALERTA_CONFIG_MS) pisoLocalHuecos.delete(k);
+    }
     if (!(await reservarPiso(llave, ahora, PISO_ALERTA_CONFIG_MS))) return;
 
     const datos: Array<[string, string]> = [
