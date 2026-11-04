@@ -1,6 +1,7 @@
 'use client';
 
 import { MailCheck } from 'lucide-react';
+import { CAMPO_FLOTA_PINTADA } from '@/lib/auth/flota_cambio';
 import type { CcpRecibidoVista } from '@/lib/likida/carta_porte_docs/ccp_respuesta_repo';
 import type { EstadoCcpTimbrado } from '@/lib/likida/carta_porte_docs/ccp_respuesta';
 import { fechaHoraMx } from '@/lib/formato';
@@ -12,7 +13,7 @@ import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../../
  * persona lo confirme la primera vez; el correo lleva el PDF y el XML timbrados tal como llegaron.
  */
 
-export interface VerComo { tenant?: string; rol?: string; vista?: string }
+export interface VerComo { tenant?: string; rol?: string; vista?: string; /** La flota pintada, firmada (MX-002). */ flota?: string }
 export interface AccionesCcp { fijar: AccionDoc; confirmar: AccionDoc }
 
 const ROTULO: Record<EstadoCcpTimbrado, string> = {
@@ -35,6 +36,7 @@ export function SeccionCcp({ activa, filas, ver, acciones }: {
       {ver.tenant && <input type="hidden" name="tenant" value={ver.tenant} />}
       {ver.rol && <input type="hidden" name="rol" value={ver.rol} />}
       {ver.vista && <input type="hidden" name="vista" value={ver.vista} />}
+      {ver.flota && <input type="hidden" name={CAMPO_FLOTA_PINTADA} value={ver.flota} />}
     </>
   );
   return (

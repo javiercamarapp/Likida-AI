@@ -1,7 +1,7 @@
 import { CheckCircle2, CircleAlert } from 'lucide-react';
 import { EstadoVacio } from '../estados';
 import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
-import { requireSessionTenant } from '@/lib/auth/guard';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
@@ -74,9 +74,8 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
     'use server';
     // AUDITORÍA 16, MEDIO: el superadmin que previsualiza una flota real
     // (?tenant=t-otra) no podía resolver — el action usaba el tenant de sesión.
-    const s = await requireSessionTenant(RUTA);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeResponderArco(s.rol)) return { error: NO_AUTORIZADO };
-    const sp = await searchParams;
     let tenantEfectivo = s.tenantId;
     if (s.rol === 'superadmin' && sp?.tenant) {
       const { resolverTenantPedido } = await import('@/lib/auth/tenant-api');
@@ -105,9 +104,8 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
   // humano firma (aprieta el botón); el sistema ejecuta — en ese orden.
   async function accionEjecutarCancelacion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await requireSessionTenant(RUTA);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeResponderArco(s.rol)) return { error: NO_AUTORIZADO };
-    const sp = await searchParams;
     let tenantEfectivo = s.tenantId;
     if (s.rol === 'superadmin' && sp?.tenant) {
       const { resolverTenantPedido } = await import('@/lib/auth/tenant-api');
@@ -146,9 +144,8 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
   // Primero se registra la constancia, después la persona contesta al titular.
   async function accionRegistrarOposicion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await requireSessionTenant(RUTA);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeResponderArco(s.rol)) return { error: NO_AUTORIZADO };
-    const sp = await searchParams;
     let tenantEfectivo = s.tenantId;
     if (s.rol === 'superadmin' && sp?.tenant) {
       const { resolverTenantPedido } = await import('@/lib/auth/tenant-api');

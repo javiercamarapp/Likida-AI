@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { requireSessionTenant } from '@/lib/auth/guard';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { sufijoTenant } from '../../../sufijo';
 import { logger } from '@/lib/logger';
@@ -23,8 +23,8 @@ const RUTA = '/dashboard/agentes/liquidacion/formato';
 
 /** La puerta de TODA action: una action es un endpoint alcanzable por POST directo, no un botón.
  *  Guardar el formato y a quién se copia es administrar (dueño), no solo ver dinero. */
-async function puerta(tenantId: string): Promise<{ por: string } | { error: string }> {
-  const sesion = await requireSessionTenant(RUTA);
+async function puerta(sp: { vista?: string; tenant?: string; rol?: string } | undefined, tenantId: string): Promise<{ por: string } | { error: string }> {
+  const sesion = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
   if (!puedeVerArea(sesion.rol, 'administracion')) return { error: 'Solo el dueño de la flota cambia el formato de las liquidaciones y a quién se le copian.' };
   if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Esta configuración no es de tu flota.' };
   return { por: sesion.userId };
@@ -66,7 +66,7 @@ export default async function PaginaFormatoLiquidacion({
 
   async function accionSubirMuestra(fd: FormData) {
     'use server';
-    const p = await puerta(tenantId);
+    const p = await puerta(sp, tenantId);
     if ('error' in p) return volver(sufijo, `error:${p.error}`);
     const a = fd.get('archivo');
     if (!(a instanceof File) || a.size === 0) return volver(sufijo, 'error:Elige el Excel de muestra (un .xlsx con el formato que hoy mandas a tus operadores).');
@@ -98,7 +98,7 @@ export default async function PaginaFormatoLiquidacion({
 
   async function accionGuardarAjustes(fd: FormData) {
     'use server';
-    const p = await puerta(tenantId);
+    const p = await puerta(sp, tenantId);
     if ('error' in p) return volver(sufijo, `error:${p.error}`);
     let actual: ConfigFormatoFlota | null = null;
     let version: string | null = null;
@@ -133,7 +133,7 @@ export default async function PaginaFormatoLiquidacion({
   /** Los teléfonos de la copia y del aviso de discrepancia SIN formato de Excel (flotas con el PDF genérico). */
   async function accionGuardarTelefonos(fd: FormData) {
     'use server';
-    const p = await puerta(tenantId);
+    const p = await puerta(sp, tenantId);
     if ('error' in p) return volver(sufijo, `error:${p.error}`);
     try {
       await guardarTelefonosFlota(tenantId, {
@@ -148,7 +148,7 @@ export default async function PaginaFormatoLiquidacion({
 
   async function accionQuitar() {
     'use server';
-    const p = await puerta(tenantId);
+    const p = await puerta(sp, tenantId);
     if ('error' in p) return volver(sufijo, `error:${p.error}`);
     try { await borrarFormatoFlota(tenantId); } catch (e) {
       logger.error('liqext.formato_quitar', { err: e instanceof Error ? e.message : String(e) });

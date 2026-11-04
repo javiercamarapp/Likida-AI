@@ -27,7 +27,7 @@ describe('CT-SEG-22 · emergencias: solo las acciones llevan use server', () => 
     for (const a of ['altaProveedor', 'verificarProveedor', 'borrarProveedor', 'guardarPolizaAction', 'altaContacto', 'borrarContacto']) {
       const c = cuerpoDe(a);
       expect(c).toMatch(/'use server'/);
-      expect(c).toMatch(/await gate\(sp\)/);
+      expect(c).toMatch(/await gate\(sp, tenantId\)/);
     }
   });
 });

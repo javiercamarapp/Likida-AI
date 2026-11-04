@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { firmarFlotaPintada } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { logger } from '@/lib/logger';
 import { flotaBajoPerfil } from '@/lib/likida/carta_porte_docs/envio';
@@ -22,7 +23,9 @@ const RUTA = '/dashboard/agentes/carta-porte/referencia';
  */
 export default async function PaginaReferencia({ searchParams }: { searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }> }) {
   const sp = await searchParams;
-  const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
+  const { tenantId, rol, userId } = await resolverTenantEfectivo(RUTA, sp);
+  // MX-002: la flota que pinta esta pantalla, firmada, viaja en un campo oculto; las acciones escriben solo en ella.
+  const flotaPintada = firmarFlotaPintada(tenantId, userId);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
 
   let insumos: InsumosReferencia | null = null;
@@ -44,7 +47,7 @@ export default async function PaginaReferencia({ searchParams }: { searchParams:
       folios={Object.fromEntries(foliosViaje)}
       truncado={insumos?.truncado === true}
       sufijo={sufijoTenant(sp)}
-      ver={{ ...(sp.tenant ? { tenant: sp.tenant } : {}), ...(sp.rol ? { rol: sp.rol } : {}), ...(sp.vista ? { vista: sp.vista } : {}) }}
+      ver={{ ...(sp.tenant ? { tenant: sp.tenant } : {}), ...(sp.rol ? { rol: sp.rol } : {}), ...(sp.vista ? { vista: sp.vista } : {}), ...(flotaPintada ? { flota: flotaPintada } : {}) }}
       acciones={{ capturar: capturarReferencia, exigencia: cambiarExigencia }}
     />
   );

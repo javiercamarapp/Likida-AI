@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
@@ -34,8 +35,8 @@ type Busqueda = { vista?: string; tenant?: string; rol?: string };
  * sobre una función local no es serializable; aquí `sp` entra por parámetro y lo único que la acción
  * captura son strings. El tenant sale de la sesión, nunca del formulario.
  */
-async function actor(sp: Busqueda) {
-  const s = await resolverTenantEfectivo(RUTA, sp);
+async function actor(sp: Busqueda, tenantId: string) {
+  const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
   if (!puedeVerRuta(s.rol, RUTA) || !puedeAsignar(s.rol)) return null;
   return { tenantId: s.tenantId, userId: s.userId };
 }
@@ -142,7 +143,7 @@ export default async function PaginaProgramaVigia({ searchParams }: { searchPara
 
   async function cargar(_p: ResultadoPrograma, fd: FormData): Promise<ResultadoPrograma> {
     'use server';
-    const a = await actor(sp);
+    const a = await actor(sp, tenantId);
     if (!a) return error('Solo el dueño o el encargado de la flota sube el programa de despacho.');
     try {
       const r = await subir(a, fd);

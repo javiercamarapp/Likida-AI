@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
@@ -27,8 +28,8 @@ const NO_DISPONIBLE = 'Esto no está disponible en tu plan.';
 type Busqueda = { vista?: string; tenant?: string; rol?: string; grupo?: string };
 
 /** Vuelve a resolver la sesión: una acción de servidor es un endpoint. A nivel de módulo (nada de closures serializadas). */
-async function contexto(sp: Busqueda) {
-  const s = await resolverTenantEfectivo(RUTA, sp);
+async function contexto(sp: Busqueda, tenantId: string) {
+  const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
   if (!puedeVerRuta(s.rol, RUTA)) return null;
   return { tenantId: s.tenantId, rol: s.rol, usuarioId: s.userId, email: await emailDeUsuario(s.userId).catch(() => null) };
 }
@@ -62,7 +63,7 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
 
   async function alta(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
     'use server';
-    const c = await contexto(sp);
+    const c = await contexto(sp, tenantId);
     if (!c) return { ok: false, error: 'No tienes acceso a esta pantalla.' };
     const r = await altaGrupoPanel(c, fd);
     if (r.ok) revalidatePath(RUTA);
@@ -70,7 +71,7 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
   }
   async function critico(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
     'use server';
-    const c = await contexto(sp);
+    const c = await contexto(sp, tenantId);
     if (!c) return { ok: false, error: 'No tienes acceso a esta pantalla.' };
     const r = await criticoGrupoPanel(c, fd);
     if (r.ok) revalidatePath(RUTA);
@@ -78,7 +79,7 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
   }
   async function borrar(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
     'use server';
-    const c = await contexto(sp);
+    const c = await contexto(sp, tenantId);
     if (!c) return { ok: false, error: 'No tienes acceso a esta pantalla.' };
     const r = await borrarGrupoPanel(c, fd);
     if (r.ok) revalidatePath(RUTA);
@@ -86,7 +87,7 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
   }
   async function aprobarRapida(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
     'use server';
-    const c = await contexto(sp);
+    const c = await contexto(sp, tenantId);
     if (!c) return { ok: false, error: 'No tienes acceso a esta pantalla.' };
     if ((await perfilDeTenant(c.tenantId)) === 'cinco_agentes') return { ok: false, error: NO_DISPONIBLE };
     const r = await aprobarRespuestaRapidaPanel(c, fd);
@@ -95,7 +96,7 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
   }
   async function retirarRapida(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
     'use server';
-    const c = await contexto(sp);
+    const c = await contexto(sp, tenantId);
     if (!c) return { ok: false, error: 'No tienes acceso a esta pantalla.' };
     if ((await perfilDeTenant(c.tenantId)) === 'cinco_agentes') return { ok: false, error: NO_DISPONIBLE };
     const r = await retirarRespuestaRapidaPanel(c, fd);
@@ -104,7 +105,7 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
   }
   async function importar(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
     'use server';
-    const c = await contexto(sp);
+    const c = await contexto(sp, tenantId);
     if (!c) return { ok: false, error: 'No tienes acceso a esta pantalla.' };
     const f = fd.get('archivo');
     const archivo = f instanceof File && f.size > 0 ? { nombre: f.name, bytes: new Uint8Array(await f.arrayBuffer()) } : null;

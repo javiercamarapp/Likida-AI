@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { firmarFlotaPintada } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { logger } from '@/lib/logger';
 import * as repo from '@/lib/likida/carta_porte_docs/repo';
@@ -26,7 +27,9 @@ export default async function PaginaCatalogoCliente({
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; cliente?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
+  const { tenantId, rol, userId } = await resolverTenantEfectivo(RUTA, sp);
+  // MX-002: la flota que pinta esta pantalla, firmada, viaja en un campo oculto; las acciones escriben solo en ella.
+  const flotaPintada = firmarFlotaPintada(tenantId, userId);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
 
   // Sin clientes legibles no hay nada que mostrar con honestidad: lanza (error boundary), no finge «sin clientes».
@@ -53,7 +56,7 @@ export default async function PaginaCatalogoCliente({
       catalogo={catalogo}
       lecturaFallida={lecturaFallida}
       sufijo={sufijoTenant(sp)}
-      ver={{ ...(sp.tenant ? { tenant: sp.tenant } : {}), ...(sp.rol ? { rol: sp.rol } : {}), ...(sp.vista ? { vista: sp.vista } : {}) }}
+      ver={{ ...(sp.tenant ? { tenant: sp.tenant } : {}), ...(sp.rol ? { rol: sp.rol } : {}), ...(sp.vista ? { vista: sp.vista } : {}), ...(flotaPintada ? { flota: flotaPintada } : {}) }}
       acciones={{ guardarFila: guardarFilaCatalogo, importar: importarCatalogoCsv }}
     />
   );

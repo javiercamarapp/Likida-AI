@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
 import { LifeBuoy, AlertTriangle, Timer, Plus, MessagesSquare } from 'lucide-react';
-import { exigirVerRuta, requireSessionTenant } from '@/lib/auth/guard';
+import { exigirVerRuta } from '@/lib/auth/guard';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { getTickets, abrirTicket, CATEGORIAS_TICKET, PRIORIDADES_TICKET, type TicketRow } from '@/lib/likida/comercial';
 import {
@@ -95,15 +96,15 @@ export default async function SoportePage({
   // un demo de Javier jamás cuenta como queja del cliente.
   async function accionAbrirTicket(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const sesion = await resolverTenantEfectivo('/dashboard/soporte', sp);
+    const sesion = await resolverTenantAtadoOLanza('/dashboard/soporte', sp, tenantId);
     // A37-S20-06: la convención de la señal (abierto_por NULL = lo abrió Likida) se decide con
     // el rol REAL de la sesión: con `?rol=flota_admin` el rol efectivo es el previsualizado y un
     // ticket del superadmin contaría como queja del cliente.
-    const real = await requireSessionTenant('/dashboard/soporte', sp);
+    const real = sesion;
     try {
       await abrirTicket(
         sesion.tenantId,
-        real.rol === 'superadmin' ? null : sesion.userId,
+        (real.rolReal ?? real.rol) === 'superadmin' ? null : sesion.userId,
         {
           asunto: String(fd.get('asunto') ?? ''),
           descripcion: String(fd.get('descripcion') ?? ''),
@@ -126,7 +127,7 @@ export default async function SoportePage({
   // que se perdería si este action pudiera hablar como Likida.
   async function accionResponder(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const sesion = await resolverTenantEfectivo('/dashboard/soporte', sp);
+    const sesion = await resolverTenantAtadoOLanza('/dashboard/soporte', sp, tenantId);
     try {
       await responderTicket(
         String(fd.get('ticket') ?? ''),
@@ -143,7 +144,7 @@ export default async function SoportePage({
 
   async function accionEstado(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const sesion = await resolverTenantEfectivo('/dashboard/soporte', sp);
+    const sesion = await resolverTenantAtadoOLanza('/dashboard/soporte', sp, tenantId);
     try {
       const r = await cambiarEstadoTicket(
         String(fd.get('ticket') ?? ''),

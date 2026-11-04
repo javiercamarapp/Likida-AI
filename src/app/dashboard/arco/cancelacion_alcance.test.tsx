@@ -13,7 +13,7 @@ vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => {
 vi.mock('@/lib/meta/client', async importar => ({ ...await importar<typeof import('@/lib/meta/client')>(), enviarRespuestaArco: dobles.enviar }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/auth/guard', () => ({ requireSessionTenant: async () => ({ userId: 'u-1', tenantId: 't-1', rol: 'flota_admin' }) }));
-vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => ({ tenantId: 't-1', rol: 'flota_admin' }) }));
+vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => ({ tenantId: 't-1', rol: 'flota_admin', userId: 'u-1' }) }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/likida/repo', async importar => ({
   ...await importar<typeof import('@/lib/likida/repo')>(),

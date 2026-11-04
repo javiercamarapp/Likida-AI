@@ -126,7 +126,7 @@ export default async function PaginaAgenteCartaPorte({
             <BloqueCorridas pCorridas={pCorridas} />
           </Bloque>
           <Bloque mensaje="No se pudo leer la configuración de avisos." esqueleto={<EsqTabla filas={4} />}>
-            <SeccionNotificaciones tenantId={tenantId} agenteId="carta_porte" />
+            <SeccionNotificaciones tenantId={tenantId} sp={sp} agenteId="carta_porte" />
           </Bloque>
         </>
       }

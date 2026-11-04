@@ -87,6 +87,30 @@ export async function resolverTenantAtadoAccion(
   return s.tenantId === tenantRenderizado ? s : null;
 }
 
+/** La flota cambió bajo los pies de la pantalla: la acción se niega y NO escribe nada (MX-002). */
+export class FlotaCambioError extends Error {
+  constructor() {
+    super(MENSAJE_FLOTA_CAMBIO);
+    this.name = 'FlotaCambioError';
+  }
+}
+
+/**
+ * Forma 1 para acciones que no tienen una forma propia de decir «no» (devuelven resultados de tipos muy distintos o `void`):
+ * igual que `resolverTenantAtadoAccion`, pero LANZA `FlotaCambioError` en vez de devolver `null`. La acción no llega a escribir:
+ * el lanzamiento corta antes de cualquier efecto. Es el caso raro (un superadmin con dos pestañas en flotas distintas); para el
+ * resto de los roles la atadura es trivial y nunca se dispara.
+ */
+export async function resolverTenantAtadoOLanza(
+  destino: string,
+  sp: Sp,
+  tenantRenderizado: string,
+): Promise<TenantEfectivo> {
+  const s = await resolverTenantAtadoAccion(destino, sp, tenantRenderizado);
+  if (!s) throw new FlotaCambioError();
+  return s;
+}
+
 /**
  * Forma 3 (páginas que resuelven la flota por su cuenta, como el detalle de
  * liquidación `/dashboard/[id]`, cuya ruta dinámica no pasa por

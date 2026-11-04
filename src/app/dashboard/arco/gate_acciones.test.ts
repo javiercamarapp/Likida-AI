@@ -25,7 +25,7 @@ const RUTA = '/dashboard/arco';
 
 describe('las server actions de /dashboard/arco', () => {
   it('hay exactamente tres, y las TRES traen el gate (ni una sin él)', () => {
-    const conSesion = PAGINA.match(/await requireSessionTenant\(RUTA\)/g) ?? [];
+    const conSesion = PAGINA.match(/await resolverTenantAtadoOLanza\(RUTA, sp, tenantId\)/g) ?? [];
     const conGate = PAGINA.match(/if \(!puedeResponderArco\(s\.rol\)\) return \{ error: NO_AUTORIZADO \};/g) ?? [];
     expect(conSesion).toHaveLength(3);
     expect(conGate).toHaveLength(3);

@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar, puedeAsignar } from '@/lib/auth/permisos';
 import { apiDenegadaPorPerfil } from '@/lib/auth/perfil_tenant';
@@ -63,7 +64,7 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
 
   async function atender(fd: FormData): Promise<void> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     // Dos candados: la ruta y la acción (una acción de servidor es un endpoint, no un botón).
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAsignar(s.rol)) return;
     const id = String(fd.get('id') ?? '');

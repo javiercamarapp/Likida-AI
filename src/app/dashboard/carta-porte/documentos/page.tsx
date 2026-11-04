@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { rateLimit } from '@/lib/ratelimit';
@@ -39,9 +40,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * cuerpo del componente y usada dentro de un `'use server'` se captura por closure y Next no puede serializarla.
  */
 async function sesionDeAccion(
-  sp: { tenant?: string; rol?: string; vista?: string }, opts: { configuracion?: boolean } = {},
+  sp: { tenant?: string; rol?: string; vista?: string }, tenantId: string, opts: { configuracion?: boolean } = {},
 ): Promise<{ tenantId: string; userId: string } | { error: string }> {
-  const s = await resolverTenantEfectivo(RUTA, sp);
+  // MX-002: la flota que se pintó es la que escribe.
+  const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
   if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede administrar los documentos de Carta Porte.' };
   // A37-S16-03: la configuración (buzón, remitentes, formatos de exportación, versión del perfil que lee los documentos de cada
   // cliente) es del dueño de la cuenta, no de quien solo ve la ruta (el encargado). Mismo criterio que /dashboard/arco.
@@ -120,7 +122,7 @@ export default async function PaginaDocumentos({
 
   async function subir(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp);
+    const s = await sesionDeAccion(sp, tenantId);
     if ('error' in s) return { ok: false, error: s.error };
     try {
       if (!(await rateLimit(`cp-docs-subir:${s.tenantId}`, 30, 60_000))) return { ok: false, error: 'Demasiados documentos en poco tiempo. Espera un minuto.' };
@@ -146,7 +148,7 @@ export default async function PaginaDocumentos({
 
   async function procesar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp);
+    const s = await sesionDeAccion(sp, tenantId);
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const id = String(fd.get('documentoId') ?? '');
@@ -164,7 +166,7 @@ export default async function PaginaDocumentos({
 
   async function activarBuzon(): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp, { configuracion: true });
+    const s = await sesionDeAccion(sp, tenantId, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       await repo.crearBuzon(s.tenantId, generarTokenCp());
@@ -177,7 +179,7 @@ export default async function PaginaDocumentos({
 
   async function guardarRemitentes(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp, { configuracion: true });
+    const s = await sesionDeAccion(sp, tenantId, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const lista = String(fd.get('remitentes') ?? '').split(/\r?\n/).map((x) => x.trim().toLowerCase()).filter(Boolean);
@@ -194,7 +196,7 @@ export default async function PaginaDocumentos({
 
   async function guardarExport(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp, { configuracion: true });
+    const s = await sesionDeAccion(sp, tenantId, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const nombre = String(fd.get('nombre') ?? '').trim();
@@ -215,7 +217,7 @@ export default async function PaginaDocumentos({
 
   async function borrarExport(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp, { configuracion: true });
+    const s = await sesionDeAccion(sp, tenantId, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const id = String(fd.get('id') ?? '');
@@ -230,7 +232,7 @@ export default async function PaginaDocumentos({
 
   async function volverVersion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp, { configuracion: true });
+    const s = await sesionDeAccion(sp, tenantId, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const perfilId = String(fd.get('perfilId') ?? '');

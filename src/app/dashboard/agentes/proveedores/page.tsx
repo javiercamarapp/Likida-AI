@@ -372,7 +372,7 @@ export default async function PaginaAgenteProveedores({
       // ReactNode y no datos, como las notificaciones: la vista no debe
       // importar el módulo de corridas, que trae supabaseAdmin.
       ficha={<FichaCorridas corridas={corridas} />}
-      notificaciones={<SeccionNotificaciones tenantId={tenantId} agenteId="proveedores" />}
+      notificaciones={<SeccionNotificaciones tenantId={tenantId} sp={sp} agenteId="proveedores" />}
     />
   );
 }

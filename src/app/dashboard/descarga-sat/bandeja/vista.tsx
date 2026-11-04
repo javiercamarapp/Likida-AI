@@ -2,6 +2,7 @@ import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
 import { CloudDownload, FileQuestion } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { estadoDescargaSat } from '@/lib/likida/sat_descarga';
@@ -144,7 +145,7 @@ export async function PanelBandeja({
    */
   async function resolver(_p: ResultadoFila, fd: FormData): Promise<ResultadoFila> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/descarga-sat/bandeja', searchParams);
+    const s = await resolverTenantAtadoOLanza('/dashboard/descarga-sat/bandeja', searchParams, tenantId);
     if (!puedeVerRuta(s.rol, '/dashboard/descarga-sat/bandeja') || !puedeVerArea(s.rol, 'dinero')) {
       return { error: 'Tu rol no puede resolver comprobantes del SAT: esto mueve dinero deducible de la flota.' };
     }

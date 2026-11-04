@@ -277,7 +277,7 @@ export default async function PaginaAgenteFacturas({
       notificaciones={
         <>
           <FichaCorridas corridas={corridas} />
-          <SeccionNotificaciones tenantId={tenantId} agenteId="facturas" />
+          <SeccionNotificaciones tenantId={tenantId} sp={sp} agenteId="facturas" />
         </>
       }
     />

@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
@@ -121,7 +122,7 @@ export default async function PaginaRevision({
 
   async function reasignar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA_PADRE, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA_PADRE, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA_PADRE)) return { ok: false, error: 'Tu rol no puede reasignar documentos de Carta Porte.' };
     try {
       if (String(fd.get('documentoId') ?? '') !== id) return { ok: false, error: 'La forma no corresponde a este documento. Recarga la pantalla.' };
@@ -137,7 +138,7 @@ export default async function PaginaRevision({
 
   async function asignarClienteAccion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA_PADRE, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA_PADRE, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA_PADRE)) return { ok: false, error: 'Tu rol no puede revisar documentos de Carta Porte.' };
     try {
       if (String(fd.get('documentoId') ?? '') !== id) return { ok: false, error: 'La forma no corresponde a este documento. Recarga la pantalla.' };
@@ -161,7 +162,7 @@ export default async function PaginaRevision({
   /** Una sola acción atiende todos los botones: `intencion` dice cuál se apretó. */
   async function revisar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA_PADRE, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA_PADRE, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA_PADRE)) return { ok: false, error: 'Tu rol no puede revisar documentos de Carta Porte.' };
     try {
       const docId = String(fd.get('documentoId') ?? '');

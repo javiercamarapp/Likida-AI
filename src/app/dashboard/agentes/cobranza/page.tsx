@@ -213,7 +213,7 @@ export default async function PaginaAgenteCobranza({
           {/* La ficha de corridas (B3) comparte el slot: es la otra mitad de
               "¿mi agente trabajó?" que las notificaciones no contestan. */}
           <FichaCorridas corridas={corridas} />
-          <SeccionNotificaciones tenantId={tenantId} agenteId="cobranza" />
+          <SeccionNotificaciones tenantId={tenantId} sp={sp} agenteId="cobranza" />
         </>
       }
     />

@@ -2,6 +2,7 @@ import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
 import { Archive, CloudDownload, FileCheck2, FileQuestion, Link2, Scale3d, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { estadoDescargaSat } from '@/lib/likida/sat_descarga';
@@ -84,7 +85,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
     'use server';
     // El rol del render NO es el de la acción: se re-gatea adentro, mismo
     // criterio que Políticas y el estímulo de peaje.
-    const s = await resolverTenantEfectivo('/dashboard/descarga-sat', searchParams);
+    const s = await resolverTenantAtadoOLanza('/dashboard/descarga-sat', searchParams, tenantId);
     if (!puedeVerRuta(s.rol, '/dashboard/descarga-sat')) {
       return { error: 'Tu rol no puede configurar la descarga del SAT.' };
     }
@@ -104,7 +105,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
 
   async function verificar(): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/descarga-sat', searchParams);
+    const s = await resolverTenantAtadoOLanza('/dashboard/descarga-sat', searchParams, tenantId);
     if (!puedeVerRuta(s.rol, '/dashboard/descarga-sat')) {
       return { error: 'Tu rol no puede verificar la e.firma de la flota.' };
     }
@@ -121,7 +122,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
 
   async function pedir(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/descarga-sat', searchParams);
+    const s = await resolverTenantAtadoOLanza('/dashboard/descarga-sat', searchParams, tenantId);
     if (!puedeVerRuta(s.rol, '/dashboard/descarga-sat')) {
       return { error: 'Tu rol no puede pedir descargas al SAT.' };
     }

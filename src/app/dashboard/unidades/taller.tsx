@@ -1,6 +1,7 @@
 import { revalidatePath } from 'next/cache';
 import { Wrench } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAsignar, puedeAdministrar } from '@/lib/auth/permisos';
 import { alcanceDePatio, dentroDelAlcance, exigirDentroDelAlcance } from '@/lib/auth/patio';
@@ -79,7 +80,7 @@ export async function BloqueTaller({
 
   async function accionCrearRutina(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede ver las unidades.' };
     if (!puedeAdministrar(s.rol)) return { error: 'Solo el dueño de la flota declara rutinas de mantenimiento.' };
     try {
@@ -98,7 +99,7 @@ export async function BloqueTaller({
 
   async function accionAbrirOrden(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAsignar(s.rol)) return { error: 'Abrir órdenes de taller es del encargado o del dueño.' };
     try {
       // A37-S20-01: el patio de la unidad sale de la BASE; fuera del alcance no se abre.
@@ -124,7 +125,7 @@ export async function BloqueTaller({
 
   async function accionCerrarOrden(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede ver las unidades.' };
     if (!puedeAsignar(s.rol)) return { error: 'Cerrar órdenes de taller es del encargado o del dueño.' };
     try {

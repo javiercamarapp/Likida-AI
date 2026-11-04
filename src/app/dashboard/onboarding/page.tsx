@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { CONECTORES } from '@/lib/likida/conectores/registro';
 import type { CategoriaConector } from '@/lib/likida/conectores/tipos';
@@ -53,7 +54,7 @@ export default async function OnboardingFlotaPage({
 
   async function accion(_prev: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const ses = await resolverTenantEfectivo('/dashboard/onboarding', sp);
+    const ses = await resolverTenantAtadoOLanza('/dashboard/onboarding', sp, s.tenantId);
     if (!puedeVerRuta(ses.rol, '/dashboard/onboarding')) {
       return { error: 'Tu rol no puede declarar el perfil de la flota.' };
     }
@@ -86,7 +87,7 @@ export default async function OnboardingFlotaPage({
    *  —el candado del Resumen es de él— y se vuelve a comprobar aquí adentro. */
   async function posponer(): Promise<void> {
     'use server';
-    const ses = await resolverTenantEfectivo('/dashboard/onboarding', sp);
+    const ses = await resolverTenantAtadoOLanza('/dashboard/onboarding', sp, s.tenantId);
     if (!puedeVerRuta(ses.rol, '/dashboard/onboarding') || !puedeAdministrar(ses.rol)) return;
     try {
       await guardarPerfilPatch(ses.tenantId, { [LLAVE_ONBOARDING_POSPUESTO]: new Date().toISOString() }, ses.userId);

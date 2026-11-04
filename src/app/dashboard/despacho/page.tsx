@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { sufijoTenant, querystringCompleto } from '../sufijo';
-import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import {
@@ -66,8 +66,8 @@ async function topeAnticipoDeLaFlota(tenantId: string, puedeVerDinero: boolean):
   }
 }
 
-async function guardiaDespacho(tenantId: string, requiereDinero = false): Promise<string | null> {
-  const sesion = await requireSessionTenant('/dashboard/despacho');
+async function guardiaDespacho(sp: { vista?: string; tenant?: string; rol?: string } | undefined, tenantId: string, requiereDinero = false): Promise<string | null> {
+  const sesion = await resolverTenantAtadoOLanza('/dashboard/despacho', sp, tenantId);
   if (!puedeAsignar(sesion.rol)) return 'Tu rol no puede despachar viajes.';
   if (requiereDinero && !puedeVerArea(sesion.rol, 'dinero')) return 'Tu rol no puede consultar ni capturar datos de dinero o clientes.';
   if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return 'Este despacho no es de tu flota.';
@@ -165,7 +165,7 @@ export default async function PaginaDespacho({
    */
   async function buscarCatalogoAccion(tipo: TipoCatalogo, q: string): Promise<OpcionCatalogo[]> {
     'use server';
-    const rechazo = await guardiaDespacho(tenantId, tipo === 'cliente');
+    const rechazo = await guardiaDespacho(sp, tenantId, tipo === 'cliente');
     if (rechazo) throw new Error(rechazo);
     if (tipo !== 'operador' && tipo !== 'cliente' && tipo !== 'unidad') {
       throw new Error('Catálogo desconocido.');
@@ -186,7 +186,7 @@ export default async function PaginaDespacho({
     // el encargado puede darlo, acotado por el tope de la política (abajo), igual
     // que por WhatsApp. El ingreso del flete y el cliente siguen siendo dinero.
     const requiereDinero = ['ingresoFlete', 'clienteId'].some((campo) => fd.has(campo));
-    const rechazo = await guardiaDespacho(tenantId, requiereDinero);
+    const rechazo = await guardiaDespacho(sp, tenantId, requiereDinero);
     if (rechazo) return { error: rechazo };
 
     const texto = (n: string, max: number) => {
@@ -199,7 +199,7 @@ export default async function PaginaDespacho({
     // de la política VIVA y el rol VIVO: el dueño no queda topado salvo política explícita (M3).
     let tope: TopeAnticipo | number = Number.MAX_SAFE_INTEGER;
     if (anticipo > 0) {
-      const sesion = await requireSessionTenant('/dashboard/despacho');
+      const sesion = await resolverTenantAtadoOLanza('/dashboard/despacho', sp, tenantId);
       const topeVivo = await topeAnticipoDeLaFlota(tenantId, puedeVerArea(sesion.rol, 'dinero'));
       if (!topeVivo.ok) return { error: MENSAJE_POLITICA_ILEGIBLE };
       if (topeVivo.tope) tope = topeVivo.tope;
@@ -281,7 +281,7 @@ export default async function PaginaDespacho({
 
   async function asignarYAvisar(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
-    const rechazo = await guardiaDespacho(tenantId);
+    const rechazo = await guardiaDespacho(sp, tenantId);
     if (rechazo) return { error: rechazo };
 
     const viajeId = typeof fd.get('viajeId') === 'string' ? (fd.get('viajeId') as string).trim().slice(0, 64) : '';
@@ -314,7 +314,7 @@ export default async function PaginaDespacho({
       avisoFallo = true;
     }
     if (salio) {
-      const sesion = await requireSessionTenant('/dashboard/despacho');
+      const sesion = await resolverTenantAtadoOLanza('/dashboard/despacho', sp, tenantId);
       await anotarAvisoAlChofer(tenantId, viajeId, operadorId, { contarReaviso: guarda.reaviso && guarda.contarReaviso, avisosEnviados: guarda.avisosEnviados, actor: { id: sesion.userId } });
     }
     // Después del aviso del viaje, las instrucciones del convenio (primera asignación o cambio de chofer). Nunca lanza, y un
@@ -326,7 +326,7 @@ export default async function PaginaDespacho({
 
   async function asignarUnidadViaje(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
-    const rechazo = await guardiaDespacho(tenantId);
+    const rechazo = await guardiaDespacho(sp, tenantId);
     if (rechazo) return { error: rechazo };
 
     const viajeId = typeof fd.get('viajeId') === 'string' ? (fd.get('viajeId') as string).trim().slice(0, 64) : '';
@@ -349,7 +349,7 @@ export default async function PaginaDespacho({
 
   async function reenviarAviso(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
-    const rechazo = await guardiaDespacho(tenantId);
+    const rechazo = await guardiaDespacho(sp, tenantId);
     if (rechazo) return { error: rechazo };
 
     const viajeId = typeof fd.get('viajeId') === 'string' ? (fd.get('viajeId') as string).trim().slice(0, 64) : '';
@@ -367,21 +367,21 @@ export default async function PaginaDespacho({
       return { error: 'El aviso no salió — inténtalo de nuevo en un momento.' };
     }
     if (!salio) return { error: 'El aviso no salió: el operador no tiene WhatsApp capturado o el envío fue rechazado. Revisa su teléfono.' };
-    const sesion = await requireSessionTenant('/dashboard/despacho');
+    const sesion = await resolverTenantAtadoOLanza('/dashboard/despacho', sp, tenantId);
     await anotarAvisoAlChofer(tenantId, viajeId, guarda.operadorId, { contarReaviso: guarda.contarReaviso, avisosEnviados: guarda.avisosEnviados, actor: { id: sesion.userId } });
     redirect(destino);
   }
 
   async function altaOperador(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
-    const rechazo = await guardiaDespacho(tenantId);
+    const rechazo = await guardiaDespacho(sp, tenantId);
     if (rechazo) return { error: rechazo };
 
     const nombre = typeof fd.get('nombre') === 'string' ? (fd.get('nombre') as string).trim().slice(0, 120) : '';
     const telefono = typeof fd.get('telefono') === 'string' ? (fd.get('telefono') as string).trim().slice(0, 20) : '';
     if (!nombre || !telefono) return { error: 'Faltan el nombre o el WhatsApp.' };
 
-    const sesion = await requireSessionTenant('/dashboard/despacho');
+    const sesion = await resolverTenantAtadoOLanza('/dashboard/despacho', sp, tenantId);
     // W2: un jefe de tráfico CON patio da de alta SIEMPRE en el suyo. Si su patio
     // no se pudo leer, no se da de alta a nadie: un operador sin patio quedaría
     // fuera de su alcance y nadie de su patio podría corregirlo.
