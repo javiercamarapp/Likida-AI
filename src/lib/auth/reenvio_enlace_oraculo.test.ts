@@ -43,9 +43,17 @@ describe('oraculo de existencia de cuenta en el reenvio (CT-SEG-14)', () => {
     expect(sinCuenta).toBe(conCuenta);
     expect(sinCuenta).toBe('reenviado');
   });
-  it('una cuota agotada (no depende de la cuenta) si se anuncia como no', async () => {
+  it('F1B: el tope de 60 s por correo de GoTrue (429, solo cuentas existentes) se anuncia igual que sin cuenta', async () => {
     await guardarCorreoParaReenvio('ana@empresa.mx');
     signInWithOtp.mockResolvedValueOnce({ error: { code: 'over_email_send_rate_limit', status: 429 } });
+    const conCuentaYTope = await reenviarEnlaceCaducado('/dashboard');
+    jar.delete('likida_reenvio_espera');
+    signInWithOtp.mockResolvedValueOnce({ error: { code: 'otp_disabled', status: 422 } });
+    expect(conCuentaYTope).toBe(await reenviarEnlaceCaducado('/dashboard'));
+  });
+  it('una cuota por IP (no depende de la cuenta) si se anuncia como no', async () => {
+    await guardarCorreoParaReenvio('ana@empresa.mx');
+    signInWithOtp.mockResolvedValueOnce({ error: { code: 'over_request_rate_limit', status: 429 } });
     expect(await reenviarEnlaceCaducado('/dashboard')).toBe('no');
   });
   it('sin secreto configurado no se emite cookie y no se reenvia', async () => {

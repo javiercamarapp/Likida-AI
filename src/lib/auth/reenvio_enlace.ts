@@ -39,6 +39,7 @@ import { cookies, headers } from 'next/headers';
 import { supabaseServer } from '@/lib/supabase/server';
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
+import { createHash } from 'node:crypto';
 import { firmarCorreoCookie, leerCorreoCookie } from '@/lib/auth/cookie_correo_firmada';
 
 /** El correo al que se pidió el último enlace. httpOnly: lo lee el servidor
@@ -75,7 +76,11 @@ export async function guardarCorreoParaReenvio(email: string): Promise<void> {
 /** El rechazo de Supabase por `shouldCreateUser:false` ante un correo sin cuenta. */
 function esSinCuenta(error: { code?: string; status?: number }): boolean {
   return error.code === 'otp_disabled' || error.code === 'user_not_found' || error.code === 'signup_disabled'
-    || (error.status === 422 && !error.code);
+    || (error.status === 422 && !error.code)
+    // F1B: el tope de 60 s POR CORREO de GoTrue solo salta para cuentas que acaban de recibir un enlace, o sea que
+    // distinguia "existe" (429) de "no existe" (otp_disabled). Se anuncia igual que un envio. Los topes por IP
+    // (`over_request_rate_limit`) no dependen de la cuenta y siguen siendo "no".
+    || error.code === 'over_email_send_rate_limit';
 }
 
 export type ResultadoReenvio =
@@ -103,6 +108,11 @@ export async function reenviarEnlaceCaducado(dest: string): Promise<ResultadoRee
   const h = await headers();
   const ip = ipDeCabeceras(h);
   if (!(await rateLimit(`login:email:${ip}`, 10, 5 * 60_000))) return 'no';
+
+  // F1B: el "uno cada 5 min" NO puede vivir solo en una cookie del cliente (se tira el jar y se reusa la cookie firmada
+  // durante su hora de vida). El tope real es por CORREO en el servidor (huella, nunca el correo en claro).
+  const huella = createHash('sha256').update(email.trim().toLowerCase()).digest('hex').slice(0, 32);
+  if (!(await rateLimit(`login:reenvio:correo:${huella}`, 1, ESPERA_SEGUNDOS * 1000))) return 'reciente';
 
   // Un intento por ventana de 5 minutos, salga o no el correo: la cookie va
   // antes de conocer el resultado para que un fallo repetido no reintente en
