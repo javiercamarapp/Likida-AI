@@ -709,7 +709,7 @@ export default function Copiloto({ variante = 'pagina' }: { variante?: 'pagina' 
         style={{ background: 'var(--surface)', boxShadow: 'var(--shadow-card)' }}>
         <div className="flex items-center justify-between">
           <button type="button" onClick={nuevoChat}
-            className="hairline flex-1 flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] font-medium transition-colors hover:bg-[var(--canvas)]">
+            className="hairline flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors hover:bg-[var(--canvas)]">
             <PencilLine width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
             Nuevo chat
           </button>
