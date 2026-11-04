@@ -65,8 +65,10 @@ export function flotaPintadaVerificada(valor: unknown, userId: string, ahoraMs: 
   const [, tenantId, expiraCrudo, firma] = partes;
   const expira = Number(expiraCrudo);
   if (!tenantId || !Number.isFinite(expira) || ahoraMs > expira) return null;
-  const esperada = Buffer.from(mac(l, tenantId, userId, expira), 'utf8');
-  const recibida = Buffer.from(firma, 'utf8');
+  // TextEncoder (UTF-8, los mismos bytes que el Buffer de texto): no confundirse con una consulta directa a Supabase en el guardian de la frontera.
+  const codificar = new TextEncoder();
+  const esperada = codificar.encode(mac(l, tenantId, userId, expira));
+  const recibida = codificar.encode(firma);
   if (esperada.length !== recibida.length || !timingSafeEqual(esperada, recibida)) return null;
   return tenantId;
 }

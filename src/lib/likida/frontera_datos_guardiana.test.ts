@@ -314,7 +314,10 @@ import { join, relative } from 'node:path';
 // Auditoría 37, lote M-Z-resto-10 (A37-S07-06): +1 archivo (324 → 325), `lib/perfil/avatar_huerfanos.ts` — borra del bucket público `avatares` las extensiones viejas del MISMO usuario tras guardar el avatar nuevo; solo Storage (`storage.from('avatares').remove`), cero tablas.
 // LOTE A37 M-Z-resto-06 (A37-S43-07): +1 archivo (324 → 325), `facturacion/avisar.ts` — lee la bitácora de avisos del día (`bitacora_auditoria`, filtrada por `tenant_id`, `acotada`, con `.order('id')`) para no reenviar el mismo aviso.
 // INTEGRACION G4 (24-oct-2026, PRs #705-#724): z-resto-10 (avatar_huerfanos.ts) y z-resto-06 (facturacion/avisar.ts) declaraban cada una 324 → 325 sobre la misma base; el barrido real del arbol fusionado mide 326 archivos (techo = medido).
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 326;
+// LOTE B DE F1 (CT-SEG-07/11/17/25/27, integracion sobre el lote A): +3 archivos (326 -> 329, medido con el guardian), todos de seguridad y con `supabaseAdmin()` sin Storage:
+// `likida/identidad_telefono.ts` (una RPC `resolver_identidad_telefono`, la llave de WhatsApp), `seguridad/avisos.ts` (las RPC `reclamar_avisos_seguridad` y `anonimizar_red_evento_seguridad`)
+// y `seguridad/cobertura.ts` (conteo `head` de `evento_seguridad`). `auth/tenant-atado.ts` se quedo FUERA del conteo: su `Buffer.from(` era un falso positivo del regex y ahora usa TextEncoder.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 329;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -647,7 +650,11 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 326;
 // `creada_por` (solo llaves vivas, por `acotada`) que revoca las llaves de API de quien se da de baja o deja de ser dueno. Se queda junto a `desactivarUsuario`/`cambiarRolUsuario` (el
 // resto de la baja ya escribe ahi con `supabaseAdmin()`): moverlo a likida/repo.ts acoplaria el modulo de equipo a ese repo y partiria la baja en dos capas sin quitar la consulta
 // directa. Funcionalidad nueva, no codigo migrado. Cubierta por usuarios_escritura.test.ts.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_456;
+// LOTE B DE F1: 2,456 -> 2,465 (+9, medido con el guardian): identidad_telefono.ts +1, seguridad/avisos.ts +2, seguridad/cobertura.ts +1 (archivos nuevos, ver el techo de archivos);
+// `likida/administracion.ts` +2 (las lecturas de `app_user` y `vigia_contacto` de `comprobarTelefonoLibre`, X-01, junto a la de `operador` que ya vivia ahi);
+// `conductor/repo.ts` +1 (la RPC `guardar_conductor_config_y_contactos`, que guarda configuracion y contactos en una sola transaccion); `seguridad/eventos.ts` +2 (las variantes
+// `registrar_evento_seguridad_red` y la rama sin red de la misma RPC). Todas por `acotada`/`supabaseAdmin()` y ancladas a `tenant_id` donde aplica. Funcionalidad nueva, no codigo migrado.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_465;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.
