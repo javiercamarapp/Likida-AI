@@ -47,6 +47,8 @@ export interface PasoGuia {
   ayuda?: string;
   visual: VisualRef;
   deteccion: Deteccion;
+  /** «Aprieta aquí → objetivo»: obligatorio en `hacer` y `practicar` (pide UNA acción, dicha exactamente). */
+  accion?: { verbo: string; objetivo: string };
   perfil?: 'cinco_agentes' | 'sin_perfil';
   /** `hacer`: pasa a `sin_dato` tras este tiempo sin acción. Defecto 90 000 ms. */
   tiempoLimiteMs?: number;

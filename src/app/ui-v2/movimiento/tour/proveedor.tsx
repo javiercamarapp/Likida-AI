@@ -165,21 +165,24 @@ export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPer
     }, 4000);
   }, [soloLectura, registrarEventos]);
 
+  // Lo que el arranque necesita sin volver a leer el estado cada vez que el servidor reenvía el mismo objeto.
+  const arranque = useRef({ estadoServidor, soloLectura, encolarRemoto });
+  useEffect(() => { arranque.current = { estadoServidor, soloLectura, encolarRemoto }; }, [estadoServidor, soloLectura, encolarRemoto]);
+
   // Estado: se lee ya montado (localStorage no existe en el servidor).
   useEffect(() => {
     const alm = host().almacen;
     setApagado(onboardingDesactivado(alm));
     almacenEstado.current = crearEstadoLocal(ambito, alm);
     const leido = almacenEstado.current.leer();
-    if (estadoServidor && estadoServidor.version > 0) {
+    const { estadoServidor: srv, soloLectura: lectura, encolarRemoto: encolar } = arranque.current;
+    if (srv && srv.version > 0) {
       // El servidor manda; el navegador solo guarda una copia para la próxima vez sin red.
-      const delServidor = cosmeticoDeServidor(estadoServidor.estado);
-      setEst(almacenEstado.current.guardar(delServidor));
+      setEst(almacenEstado.current.guardar(cosmeticoDeServidor(srv.estado)));
       return;
     }
-    if (estadoServidor && hayEstadoLocal(leido) && !soloLectura) encolarRemoto(parcheDeImportacion(leido)); // migración única desde local
+    if (srv && hayEstadoLocal(leido) && !lectura) encolar(parcheDeImportacion(leido)); // migración única desde local
     setEst(!leido.visto && leerMarcaSesion() ? { ...leido, visto: true } : leido);
-    // Solo al montar o al cambiar de persona: `estadoServidor` y `encolarRemoto` no deben reiniciar la lectura.
   }, [ambito, host]);
 
   const guardarEst = useCallback((parche: Partial<EstadoOnboarding>, remoto?: ParcheEstadoGuia) => {
