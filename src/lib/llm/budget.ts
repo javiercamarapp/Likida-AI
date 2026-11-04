@@ -398,13 +398,13 @@ async function avisarTopeTenant(budget: LlmBudget, pedidoUsd: number): Promise<v
   if (alertadoTopeTenant.get(budget.tenantId) === dia) return;
   alertadoTopeTenant.set(budget.tenantId, dia);
   try {
-    // Import dinámico: `alerta.ts` arrastra el correo, y este módulo lo
-    // importan 18 sitios (y sus pruebas) que no necesitan nada de eso.
-    const { alertarOperador } = await import('@/lib/observability/alerta');
-    await alertarOperador('presupuesto_ia.tope_tenant', {
-      tenantId: budget.tenantId, dia, proposito: budget.proposito,
-      topeUsd: budget.maxTenantDailyUsd, origenTope: budget.origenTope ?? 'piso', pedidoUsd,
-      msg: 'La flota agotó su techo diario de IA: el cuadre degrada a determinístico y las fotos esperan. Sube `tenant.config.presupuestoLlmUsdDia` si el tope quedó corto.',
+    // CT-IA-01 (0990): el "ya avisé hoy" que vale es el de la BASE (PK flota/día/nivel), no el de esta instancia;
+    // el Map de arriba solo ahorra la ida a la base en los cientos de rebotes que siguen al primero.
+    // Import dinámico: `alerta_tope` arrastra el correo, y este módulo lo importan 18 sitios (y sus pruebas).
+    const { avisarTopePersistido } = await import('./alerta_tope');
+    await avisarTopePersistido({
+      tenantId: budget.tenantId, nivel: 100, dia, usoUsd: budget.maxTenantDailyUsd, topeUsd: budget.maxTenantDailyUsd,
+      origen: budget.origenTope ?? 'piso', proposito: budget.proposito, pedidoUsd,
     });
   } catch (e) {
     logger.warn('presupuesto_llm.alerta_tope_fallo', { tenantId: budget.tenantId, err: e instanceof Error ? e.message : String(e) });
