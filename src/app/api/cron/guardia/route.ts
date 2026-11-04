@@ -240,10 +240,25 @@ export async function GET(req: Request) {
       : undefined;
     const seguridadMal = barridoSeguridad !== null && (barridoSeguridad.estado === 'error' || barridoSeguridad.estado === 'parcial');
 
-    const parcial = cortadoPorReloj || bandejaError !== null || sinEscribir > 0 || (mantenimiento !== undefined && 'error' in mantenimiento) || seguridadMal;
+    // ── 5. Gobierno de IA (CT-IA-01/05) ────────────────────────────────────
+    // Sonda de la llave del proveedor y barrido de topes al 80/100 %, una de cada tres pasadas (cada 15 min). Apagado por
+    // omisión (IA_GOBIERNO=encendido: necesita la migración 0990). No lanza; si algo falla se dice y se sigue.
+    let gobiernoIa: Awaited<ReturnType<typeof import('@/lib/llm/gobierno').correrGobiernoIa>> | null = null;
+    if (Date.now() < vence - 6_000) {
+      try {
+        const { correrGobiernoIa } = await import('@/lib/llm/gobierno');
+        gobiernoIa = await correrGobiernoIa(inicio);
+      } catch (e) {
+        logger.error('cron.guardia.gobierno_ia_fallo', { err: e instanceof Error ? e.message : String(e) });
+        gobiernoIa = { estado: 'error' };
+      }
+    }
+    const gobiernoIaDetalle = gobiernoIa && gobiernoIa.estado !== 'apagado' && gobiernoIa.estado !== 'omitido' ? { gobiernoIa } : undefined;
+
+    const parcial = cortadoPorReloj || bandejaError !== null || sinEscribir > 0 || (mantenimiento !== undefined && 'error' in mantenimiento) || seguridadMal || gobiernoIa?.estado === 'error';
     const estado: EstadoLatido = parcial ? 'parcial' : 'ok';
     // `componentes` va en el latido: es lo que lee /estado para el estado ACTUAL (con la hora del propio latido).
-    const detalle = { ...estadoNuevo, ...detalleBandeja, componentes: medicion, ...(mantenimiento ? { mantenimiento } : {}), ...(seguridad ? { seguridad } : {}), ...(cortadoPorReloj ? { cortadoPorReloj } : {}) };
+    const detalle = { ...estadoNuevo, ...detalleBandeja, componentes: medicion, ...(mantenimiento ? { mantenimiento } : {}), ...(seguridad ? { seguridad } : {}), ...(gobiernoIaDetalle ?? {}), ...(cortadoPorReloj ? { cortadoPorReloj } : {}) };
     logger.info('cron.guardia.ok', { ...detalleBandeja, componentes: JSON.stringify(medicion), parcial });
     await registrarLatido('guardia', estado, detalle);
     return NextResponse.json({ corrio: true, parcial, ...detalleBandeja, componentes: medicion });
