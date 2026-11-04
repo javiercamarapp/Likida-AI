@@ -1,5 +1,5 @@
 import { appUrl } from '@/lib/env';
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { logger } from '@/lib/logger';
 import { verificarFirma } from '@/lib/correo/firma_entrante';
 import { enviarCorreo } from '@/lib/correo/enviar';
@@ -12,6 +12,15 @@ import {
 import { yaSeMando, sellarMandado } from './anti_replay';
 import { existeCuentaDeAcceso } from '@/lib/auth/provisionar';
 import { leerTextoAcotado } from '@/lib/http/cuerpo_acotado';
+
+/** `after` solo existe dentro de una peticion de Next; fuera (pruebas) se lanza sin esperar. */
+function despues(tarea: () => Promise<void>): void {
+  try {
+    after(tarea);
+  } catch {
+    void tarea();
+  }
+}
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -250,24 +259,44 @@ export async function POST(req: Request) {
     correoNuevo: payload.user?.new_email,
   });
 
-  // `acceso@`, no `avisos@`: es la llave de la cuenta, no un aviso del sistema.
-  const envio = await enviarCorreo(destino, correo, { remitenteLocal: 'acceso' });
-  if (!envio.ok) {
-    logger.error('auth.correo.no_salio', { accion, motivo: envio.motivo });
-    return fallo(
-      500,
-      envio.motivo === 'sin_configurar'
-        ? 'El correo saliente no está configurado (RESEND_API_KEY / RESEND_EMAIL_DOMAIN).'
-        : 'No se pudo enviar el correo de acceso.',
-    );
+  // F1B (oraculo de tiempo/estado): si el envio se espera aqui, una cuenta EXISTENTE tarda lo que tarda Resend y una
+  // INEXISTENTE contesta al instante (y con Resend caido una da 500 y la otra 200): quien pueda llegar al hook
+  // (signup abierto) distingue "tiene cuenta" por el reloj. Por omision el envio sale DESPUES de contestar (`after`),
+  // asi las dos respuestas son 200 {} y el tiempo no depende de la cuenta. El fallo del proveedor queda GRITADO en el log
+  // (`auth.correo.no_salio`). `AUTH_CORREO_ENVIO_SINCRONO=1` vuelve al contrato anterior (500 si no salio) para quien
+  // prefiera ese costo; ver docs/correo-de-acceso.md.
+  const enviarYSellar = async (): Promise<ReturnType<typeof fallo> | null> => {
+    // `acceso@`, no `avisos@`: es la llave de la cuenta, no un aviso del sistema.
+    const envio = await enviarCorreo(destino, correo, { remitenteLocal: 'acceso' });
+    if (!envio.ok) {
+      logger.error('auth.correo.no_salio', { accion, motivo: envio.motivo });
+      return fallo(
+        500,
+        envio.motivo === 'sin_configurar'
+          ? 'El correo saliente no está configurado (RESEND_API_KEY / RESEND_EMAIL_DOMAIN).'
+          : 'No se pudo enviar el correo de acceso.',
+      );
+    }
+    // El sello va AQUÍ, con el correo ya fuera: un envío que falló no gasta la
+    // entrega, y el reintento de Supabase sí vuelve a mandarlo (BE-30).
+    if (idEntrega) sellarMandado(idEntrega);
+    // Sin la dirección en el log: este endpoint ve el correo de TODO el que
+    // intenta entrar, y un log no es lugar para un dato personal (LFPDPPP).
+    logger.info('auth.correo.enviado', { accion, id: envio.id });
+    return null;
+  };
+
+  if (process.env.AUTH_CORREO_ENVIO_SINCRONO === '1') {
+    const falla = await enviarYSellar();
+    if (falla) return falla;
+    return NextResponse.json({});
   }
-
-  // El sello va AQUÍ, con el correo ya fuera: un envío que falló no gasta la
-  // entrega, y el reintento de Supabase sí vuelve a mandarlo (BE-30).
-  if (idEntrega) sellarMandado(idEntrega);
-
-  // Sin la dirección en el log: este endpoint ve el correo de TODO el que
-  // intenta entrar, y un log no es lugar para un dato personal (LFPDPPP).
-  logger.info('auth.correo.enviado', { accion, id: envio.id });
+  despues(async () => {
+    try {
+      await enviarYSellar();
+    } catch (e) {
+      logger.error('auth.correo.no_salio', { accion, motivo: e instanceof Error ? e.message : 'excepcion' });
+    }
+  });
   return NextResponse.json({});
 }

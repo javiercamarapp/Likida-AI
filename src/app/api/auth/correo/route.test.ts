@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import crypto from 'node:crypto';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -15,11 +15,12 @@ import crypto from 'node:crypto';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const enviados: Array<{ para: unknown; correo: { asunto: string; boton?: { href: string } }; op: unknown }> = [];
+let retardoEnvio = 0;
 let resultadoEnvio: { ok: boolean; motivo?: string; id?: string } = { ok: true, id: 're_1' };
 vi.mock('@/lib/correo/enviar', () => ({
   enviarCorreo: (para: unknown, correo: never, op: unknown) => {
     enviados.push({ para, correo, op });
-    return Promise.resolve(resultadoEnvio);
+    return new Promise((r) => setTimeout(() => r(resultadoEnvio), retardoEnvio));
   },
 }));
 
@@ -49,12 +50,12 @@ const { reiniciarAntiReplay } = await import('./anti_replay');
 const LLAVE = crypto.randomBytes(24);
 const SECRETO = `v1,whsec_${LLAVE.toString('base64')}`;
 
-function postear(payload: unknown, opts: { firmar?: boolean; ts?: number; cuerpo?: string; id?: string } = {}) {
+async function postear(payload: unknown, opts: { firmar?: boolean; ts?: number; cuerpo?: string; id?: string } = {}) {
   const cuerpo = opts.cuerpo ?? JSON.stringify(payload);
   const id = opts.id ?? 'msg_1';
   const ts = String(opts.ts ?? Math.floor(Date.now() / 1000));
   const firma = crypto.createHmac('sha256', LLAVE).update(`${id}.${ts}.${cuerpo}`).digest('base64');
-  return POST(new Request('https://app.likida.ai/api/auth/correo', {
+  const r = await POST(new Request('https://app.likida.ai/api/auth/correo', {
     method: 'POST',
     headers: {
       'webhook-id': id,
@@ -63,6 +64,9 @@ function postear(payload: unknown, opts: { firmar?: boolean; ts?: number; cuerpo
     },
     body: cuerpo,
   }));
+  // El envio sale DESPUES de contestar (F1B): se deja correr su cola corta antes de que la prueba mire.
+  if (retardoEnvio === 0) await new Promise((res) => setTimeout(res, 5));
+  return r;
 }
 
 const MAGIC = {
@@ -219,7 +223,9 @@ describe('el cambio de correo va a la dirección nueva con SU token', () => {
   });
 });
 
-describe('nunca 200 en falso', () => {
+describe('nunca 200 en falso (modo sincrono AUTH_CORREO_ENVIO_SINCRONO=1)', () => {
+  beforeEach(() => { process.env.AUTH_CORREO_ENVIO_SINCRONO = '1'; });
+  afterEach(() => { delete process.env.AUTH_CORREO_ENVIO_SINCRONO; });
   it('si Resend no está configurado: 500 con el motivo, no un acuse mentiroso', async () => {
     resultadoEnvio = { ok: false, motivo: 'sin_configurar' };
     const r = await postear(MAGIC);
@@ -335,8 +341,10 @@ describe('BE-30 — la misma entrega no manda dos correos', () => {
   });
 
   it('si el envío FALLA, la entrega no se gasta: el reintento de Supabase sí manda', async () => {
+    process.env.AUTH_CORREO_ENVIO_SINCRONO = '1';
     resultadoEnvio = { ok: false, motivo: 'resend_cayo' };
     expect((await postear(MAGIC)).status).toBe(500);
+    delete process.env.AUTH_CORREO_ENVIO_SINCRONO;
 
     resultadoEnvio = { ok: true, id: 're_2' };
     const r = await postear(MAGIC);
@@ -392,5 +400,33 @@ describe('CT-SEG-04: solo se manda correo de marca a quien tiene cuenta', () => 
     const r = await postear({ likida_dry_run: true });
     expect(r.status).toBe(200);
     expect(consultasCuenta).toHaveLength(0);
+  });
+});
+
+// F1B (adversarial): oraculo de existencia por tiempo y por estado. Por omision el envio sale DESPUES de contestar.
+describe('el hook no distingue cuenta existente de inexistente (F1B)', () => {
+  it('con Resend lento (150 ms), existente e inexistente contestan igual de rapido y con el mismo cuerpo', async () => {
+    retardoEnvio = 150;
+    cuentaExiste = true;
+    const t0 = Date.now();
+    const rEx = await postear(MAGIC, { id: 'msg_t1' });
+    const dEx = Date.now() - t0;
+    cuentaExiste = false;
+    const t1 = Date.now();
+    const rNo = await postear(MAGIC, { id: 'msg_t2' });
+    const dNo = Date.now() - t1;
+    retardoEnvio = 0;
+    expect(rEx.status).toBe(rNo.status);
+    expect(await rEx.json()).toEqual(await rNo.json());
+    expect(Math.abs(dEx - dNo)).toBeLessThan(100);
+  });
+  it('con Resend caido, la cuenta existente tambien contesta 200 {} (el fallo queda en el log)', async () => {
+    cuentaExiste = true;
+    resultadoEnvio = { ok: false, motivo: 'rechazado' };
+    const r = await postear(MAGIC, { id: 'msg_t3' });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({});
+    await new Promise((res) => setTimeout(res, 0));
+    expect(logs.some(([n, e]) => n === 'error' && e === 'auth.correo.no_salio')).toBe(true);
   });
 });
