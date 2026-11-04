@@ -151,9 +151,16 @@ function podar(now: number): void {
   }
   if (buckets.size <= MAX_KEYS) return;
 
-  const porCaducidad = [...buckets.entries()].sort((a, b) => a[1].expiraEn - b[1].expiraEn);
+  // F1B (ataque de inundacion): ordenar por caducidad desalojaba justo la llave
+  // AGOTADA mas antigua (su ultimo sello es el mas viejo) y la reabria tras 5000
+  // llaves de relleno. Se desaloja primero lo que menos dice: las cubetas con
+  // MENOS sellos (relleno de un solo golpe); las que acumulan intentos —las
+  // bloqueadas— se conservan. A igual numero de sellos, la que caduca antes.
+  const porPeso = [...buckets.entries()].sort(
+    (a, b) => a[1].sellos.length - b[1].sellos.length || a[1].expiraEn - b[1].expiraEn,
+  );
   const sobran = buckets.size - OBJETIVO_TRAS_PODA;
-  for (let i = 0; i < sobran; i++) buckets.delete(porCaducidad[i][0]);
+  for (let i = 0; i < sobran; i++) buckets.delete(porPeso[i][0]);
 }
 
 // ── Backend distribuido (Upstash Redis, REST) ───────────────────────────────

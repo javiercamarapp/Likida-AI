@@ -69,3 +69,15 @@ describe('bodyExcede', () => {
     expect(bodyExcede(small, 1000)).toBe(false);
   });
 });
+
+// F1B (adversarial): inundar 6000 llaves de un solo golpe desalojaba la llave AGOTADA
+// (la poda ordenaba por caducidad) y reabria su cupo.
+describe('rateLimit: una inundacion de llaves no reabre una llave agotada', () => {
+  it('conserva el bloqueo de una llave con intentos acumulados', async () => {
+    const k = 'login:email:203.0.113.5';
+    for (let i = 0; i < 10; i++) expect(await rateLimit(k, 10, 300_000)).toBe(true);
+    expect(await rateLimit(k, 10, 300_000)).toBe(false);
+    for (let i = 0; i < 6000; i++) await rateLimit(`relleno:${i}`, 10, 300_000);
+    expect(await rateLimit(k, 10, 300_000)).toBe(false);
+  });
+});
