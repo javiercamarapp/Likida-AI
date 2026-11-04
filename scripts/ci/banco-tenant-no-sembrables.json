@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "comentario": "Tablas con columna de tenant que la siembra del banco (flota A contra flota B) NO puede llenar, con el motivo. Cada tabla con columna de tenant sin sembrar debe estar aqui con una razon que diga por que es imposible generar una fila valida (no basta 'falla un CHECK': la siembra lee los CHECK del catalogo y busca valores que los cumplan; si una coherencia es demasiado especifica se agrega un candidato en banco-tenant-siembra.mjs). Lo que no se siembra no se prueba por la fase dinamica (b); la fase estatica (a) si lo cubre. La cobertura minima vive en banco-tenant-allowlist.json (cobertura_minima_siembra).",
+  "tablas": [
+    {
+      "tabla": "public.operador",
+      "motivo": "Varios CHECK acoplados (operador_telefono_forma con operador_invitacion_coherente): la busqueda de 600 combinaciones no halla una fila valida. Pendiente F2: sembrado explicito con INSERT manual en 20_siembra_lectura.sql. Cubierta hoy por la fase estatica (RLS y grants) y por la bateria 0950 de telefono entre flotas."
+    },
+    {
+      "tabla": "public.geocerca",
+      "motivo": "CHECK geocerca_radio_sano acoplado a geocerca_catalogo_tipo_pareja: sin combinacion encontrada en 600 intentos. Pendiente F2: sembrado explicito. Cubierta por la fase estatica y por las pruebas SQL de geocercas."
+    },
+    {
+      "tabla": "public.solicitud_arco",
+      "motivo": "CHECK de dominio acoplados (arco_tipo_dominio y arco_estado_dominio) sin combinacion en 600 intentos. Pendiente F2: sembrado explicito. Cubierta por la fase estatica y por las pruebas ARCO del CI."
+    },
+    {
+      "tabla": "public.api_idempotencia",
+      "motivo": "CHECK api_idempotencia_huella_forma exige una huella cuya forma el generador no deduce (32 intentos). Pendiente F2: candidato en banco-tenant-siembra.mjs. Cubierta por la fase estatica."
+    },
+    {
+      "tabla": "public.prospecto",
+      "motivo": "CHECK prospecto_tenant_solo_cerrado: el tenant solo puede llenarse si el prospecto esta cerrado, coherencia que la siembra automatica no arma. Pendiente F2: sembrado explicito. Cubierta por la fase estatica."
+    },
+    {
+      "tabla": "public.regla_vigilancia",
+      "motivo": "CHECK regla_vigilancia_plantilla_dominio acoplado a regla_vigilancia_activa_confirmada sin combinacion en 600 intentos. Pendiente F2: sembrado explicito. Cubierta por la fase estatica y las pruebas del Vigia."
+    },
+    {
+      "tabla": "public.viaje_hito",
+      "motivo": "CHECK viaje_hito_tipo_dominio acoplado a viaje_hito_recibido_completo sin combinacion en 600 intentos. Pendiente F2: sembrado explicito. Cubierta por la fase estatica y las pruebas de hitos."
+    },
+    {
+      "tabla": "public.cp_documento",
+      "motivo": "CHECK cp_documento_canal_dominio acoplado a cp_documento_purga_coherente sin combinacion en 600 intentos. Pendiente F2: sembrado explicito. Cubierta por la fase estatica y las pruebas de Carta Porte."
+    },
+    {
+      "tabla": "public.liquidacion_entrega_correo",
+      "motivo": "CHECK liquidacion_entrega_correo_correo_forma acoplado a otro CHECK de la tabla sin combinacion en 600 intentos. Pendiente F2: sembrado explicito. Cubierta por la fase estatica y las pruebas de A1."
+    }
+  ]
+}

@@ -12,6 +12,10 @@
 //             restituidos prueba RLS como capa independiente (igual que la capa 1).
 //   canario   crea a proposito objetos abiertos y exige que el banco los detecte (prueba que el banco no esta ciego).
 //
+// La siembra no es generica a ciegas: scripts/ci/banco-tenant-siembra.mjs lee los CHECK del catalogo y arma valores candidatos
+// por columna (literales de IN, muestras de regex, rangos); el SQL busca entre ellos. Lo que aun asi no se siembra debe estar en
+// scripts/ci/banco-tenant-no-sembrables.json con motivo.
+//
 // Salida: 0 = sin hallazgos fuera de la allowlist; 1 = hallazgo no listado, excepcion vencida/invalida o cobertura insuficiente.
 // BANCO_TENANT_ESTRICTO=0 convierte "hallazgo no listado" en informe (exit 0) — solo para la primera corrida de calibracion.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -20,10 +24,20 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import {
+  clasificarNoSembradas,
+  construirCandidatos,
+  consultaChecks,
+  extraerChecks,
+  reporteCobertura,
+  sqlCandidatos,
+  validarNoSembrables,
+} from './banco-tenant-siembra.mjs';
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
 const DIR_SQL = join(AQUI, '..', '..', 'supabase', 'tests', 'banco_tenant');
 const RUTA_ALLOWLIST = join(AQUI, 'banco-tenant-allowlist.json');
+const RUTA_NO_SEMBRABLES = join(AQUI, 'banco-tenant-no-sembrables.json');
 
 export const ARCHIVOS_POR_FASE = {
   estatica: ['00_prologo.sql', '10_politicas.sql', '30_funciones.sql', '40_vistas.sql', '90_epilogo.sql'],
@@ -50,6 +64,14 @@ export const TIPOS = [
   'vista_sin_invoker',
   'matview_expuesta',
 ];
+
+// Que tipos de hallazgo produce cada fase: una excepcion de una fase solo puede "quedar obsoleta" en la fase que la produce
+// (las de funciones/politicas/vistas las mide la estatica; las fugas, la dinamica). Antes la dinamica avisaba que RLS-01..07
+// "ya no coincidian con nada" solo porque esa fase no mide funciones.
+export const TIPOS_POR_FASE = {
+  estatica: ['sin_rls', 'politica_abierta', 'funcion_anon', 'funcion_authenticated', 'vista_sin_invoker', 'matview_expuesta'],
+  dinamica: ['fuga_lectura', 'fuga_escritura', 'fuga_anon'],
+};
 
 // Una fuga de datos entre flotas no puede ser excepcion permanente: solo temporal, con hallazgo y fecha.
 const NO_PERMANENTES = new Set(['fuga_lectura', 'fuga_escritura', 'fuga_anon', 'sin_rls', 'politica_abierta']);
@@ -94,7 +116,7 @@ export function validarAllowlist(lista, hoy) {
   return { errores, vencidas };
 }
 
-export function clasificar(hallazgos, lista, hoy) {
+export function clasificar(hallazgos, lista, hoy, fase) {
   const entradas = lista?.entradas ?? [];
   const vigente = (e) => e.permanente || (e.fecha_limite && e.fecha_limite >= hoy);
   const vencidas = entradas.filter((e) => !e.permanente && !vigente(e));
@@ -109,7 +131,8 @@ export function clasificar(hallazgos, lista, hoy) {
       usadas.add(e.id);
     } else noListados.push(h);
   }
-  const obsoletas = [...porClave.values()].filter((e) => !usadas.has(e.id));
+  const deEstaFase = (e) => !TIPOS_POR_FASE[fase] || TIPOS_POR_FASE[fase].includes(e.tipo);
+  const obsoletas = [...porClave.values()].filter((e) => !usadas.has(e.id) && deEstaFase(e));
   return { permitidos, noListados, vencidas, obsoletas };
 }
 
@@ -131,12 +154,22 @@ export function extraerResultado(stdout) {
   return JSON.parse(linea.slice('BANCO_JSON '.length));
 }
 
-export function armarSql(fase, { esquemas }) {
+/**
+ * @param {string} fase
+ * @param {{ esquemas: string[], candidatos?: Array<{ tabla: string, columna: string, ord: number, va: string, vb: string }> }} opciones
+ * El tipo de `candidatos` se declara aqui: con el valor por omision `[]` TypeScript lo infiere como `never[]` y el typecheck
+ * (allowJs) rechaza a quien le pasa candidatos reales (scripts/ci/banco_tenant.test.ts).
+ */
+export function armarSql(fase, { esquemas, candidatos = [] }) {
   const archivos = ARCHIVOS_POR_FASE[fase];
   if (!archivos) throw new Error(`fase desconocida: ${fase}`);
   for (const s of esquemas) if (!/^[a-z_][a-z0-9_]*$/.test(s)) throw new Error(`esquema invalido: ${s}`);
   const partes = ['begin;', `select set_config('ci_banco.esquemas', '${esquemas.join(',')}', true);`];
-  for (const f of archivos) partes.push(readFileSync(join(DIR_SQL, f), 'utf8'));
+  for (const f of archivos) {
+    partes.push(readFileSync(join(DIR_SQL, f), 'utf8'));
+    // Los candidatos de la siembra se cargan justo despues del prologo (que crea ci_banco.candidatos).
+    if (f === '00_prologo.sql' && candidatos.length) partes.push(sqlCandidatos(candidatos));
+  }
   return partes.join('\n');
 }
 
@@ -159,7 +192,24 @@ function principal() {
   }
   const hoy = process.env.BANCO_TENANT_HOY || new Date().toISOString().slice(0, 10);
   const lista = JSON.parse(readFileSync(RUTA_ALLOWLIST, 'utf8'));
-  const sql = armarSql(fase, { esquemas: lista.esquemas_expuestos });
+  const noSembrables = JSON.parse(readFileSync(RUTA_NO_SEMBRABLES, 'utf8'));
+  // Fases que siembran: leer los CHECK reales del catalogo y armar los candidatos de cada tabla (solo lectura).
+  let candidatos = [];
+  if (fase === 'dinamica' || fase === 'canario') {
+    const q = spawnSync('psql', [url, '-v', 'ON_ERROR_STOP=1', '-X', '-q', '-A', '-t', '--no-psqlrc'], {
+      input: consultaChecks(lista.esquemas_expuestos),
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    if (q.status !== 0) {
+      console.error('::error::no se pudieron leer los CHECK del catalogo para armar la siembra:');
+      console.error((q.stderr ?? '').trim());
+      process.exit(1);
+    }
+    candidatos = construirCandidatos(extraerChecks(q.stdout ?? ''));
+    console.log(`siembra: ${candidatos.length} valores candidatos para ${new Set(candidatos.map((c) => c.tabla)).size} tablas con CHECK`);
+  }
+  const sql = armarSql(fase, { esquemas: lista.esquemas_expuestos, candidatos });
 
   const r = spawnSync('psql', [url, '-v', 'ON_ERROR_STOP=1', '-X', '-q', '-A', '-t', '--no-psqlrc'], {
     input: sql,
@@ -187,7 +237,7 @@ function principal() {
   }
 
   const val = validarAllowlist(lista, hoy);
-  const cls = clasificar(res.hallazgos, lista, hoy);
+  const cls = clasificar(res.hallazgos, lista, hoy, fase);
   let falla = false;
   for (const e of val.errores) {
     console.log(`::error::allowlist invalida: ${e}`);
@@ -200,15 +250,25 @@ function principal() {
   imprimir('permitidos por la allowlist', cls.permitidos);
   for (const e of cls.obsoletas) console.log(`::warning::excepcion ${e.id} (${e.tipo} ${e.objeto}) ya no coincide con ningun hallazgo: retirala de la allowlist`);
   if (fase === 'dinamica') {
-    const cob = verificarCobertura(c, lista.cobertura_minima_siembra ?? 0.5);
+    for (const e of validarNoSembrables(noSembrables)) {
+      console.log(`::error::lista de tablas no sembrables invalida: ${e}`);
+      falla = true;
+    }
+    const cob = verificarCobertura(c, lista.cobertura_minima_siembra ?? 0.85);
     console.log(`cobertura de siembra: ${cob.razon}`);
     if (!cob.ok) {
       console.log('::error::cobertura de siembra insuficiente (las tablas sin sembrar no se probaron)');
       falla = true;
     }
-    if (Array.isArray(c.no_sembradas) && c.no_sembradas.length) {
-      console.log(`tablas sin sembrar (${c.no_sembradas.length}): ${c.no_sembradas.map((t) => t.tabla).join(', ')}`);
+    const clas = clasificarNoSembradas(c, noSembrables);
+    console.log(reporteCobertura(c, clas));
+    if (clas.sinJustificar.length) {
+      console.log(`::error::${clas.sinJustificar.length} tabla(s) con columna de tenant sin sembrar y SIN motivo escrito en scripts/ci/banco-tenant-no-sembrables.json (no se prueba lo que no se siembra, y no se calla)`);
+      console.log('Esqueleto para banco-tenant-no-sembrables.json (solo si de verdad no se puede sembrar; si no, se arregla la siembra):');
+      console.log(JSON.stringify(clas.sinJustificar.map((t) => ({ tabla: t.tabla, motivo: '' })), null, 2));
+      falla = true;
     }
+    for (const t of clas.sobrantes) console.log(`::warning::${t} esta en banco-tenant-no-sembrables.json pero esta corrida si la sembro: retirala de la lista`);
   }
   if (cls.noListados.length) {
     imprimir('HALLAZGOS NO LISTADOS', cls.noListados);

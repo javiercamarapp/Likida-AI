@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "comentario": "Allowlist del banco multi-tenant (X-02). Permanentes: solo ayudantes de RLS (funcion_authenticated) con razon escrita. Temporales: hallazgo abierto con id, severidad y fecha_limite; vencida = el banco falla. Los hallazgos de la primera corrida de CI se agregan aqui desde el esqueleto que imprime el runner.",
+  "comentario": "Allowlist del banco multi-tenant (X-02). Permanentes: solo ayudantes de RLS (funcion_authenticated) con razon escrita. Temporales: hallazgo abierto con id, severidad y fecha_limite; vencida = el banco falla. Retiradas el 2026-11-04 (confirmado por la primera corrida de CI y por la migracion 0086): RLS-08, RLS-09, L1K-01 y L1K-02, porque public.is_operador() y public.get_user_operador_id() ya no existen (0086_retirar_rol_operador.sql las borra con DROP FUNCTION y ninguna migracion posterior las recrea); no hay superficie que registrar. Si alguien las vuelve a crear, la fase estatica las reporta como no listadas.",
   "esquemas_expuestos": [
     "public",
     "graphql_public"
   ],
-  "cobertura_minima_siembra": 0.5,
+  "cobertura_minima_siembra": 0.85,
   "entradas": [
     {
       "id": "RLS-01",
@@ -62,40 +62,6 @@
       "severidad": "info",
       "justificacion": "Debe ser ejecutable por authenticated: ayudante de politicas RLS, evaluado contra auth.uid(). No recibe tenant por parametro: no se puede apuntar a otra flota.",
       "permanente": true
-    },
-    {
-      "id": "RLS-08",
-      "tipo": "funcion_authenticated",
-      "objeto": "public.is_operador()",
-      "severidad": "info",
-      "justificacion": "Debe ser ejecutable por authenticated: ayudante de politicas RLS (0045), evaluado contra auth.uid(). No recibe tenant por parametro: no se puede apuntar a otra flota.",
-      "permanente": true
-    },
-    {
-      "id": "RLS-09",
-      "tipo": "funcion_authenticated",
-      "objeto": "public.get_user_operador_id()",
-      "severidad": "info",
-      "justificacion": "Debe ser ejecutable por authenticated: ayudante de politicas RLS (0045), evaluado contra auth.uid(). No recibe tenant por parametro: no se puede apuntar a otra flota.",
-      "permanente": true
-    },
-    {
-      "id": "L1K-01",
-      "tipo": "funcion_anon",
-      "objeto": "public.is_operador()",
-      "hallazgo": "L1K-01",
-      "severidad": "baja",
-      "justificacion": "CANDIDATO por lectura de migraciones (0045 la crea SECURITY DEFINER sin revoke; 0947 exime a las funciones que usa una politica). Para anon devuelve false/null porque depende de auth.uid(): no expone datos. A confirmar en la primera corrida de CI; el cierre es revocar a anon/public en una migracion del carril de migraciones.",
-      "fecha_limite": "2026-12-15"
-    },
-    {
-      "id": "L1K-02",
-      "tipo": "funcion_anon",
-      "objeto": "public.get_user_operador_id()",
-      "hallazgo": "L1K-01",
-      "severidad": "baja",
-      "justificacion": "CANDIDATO por lectura de migraciones (0045 la crea SECURITY DEFINER sin revoke; 0947 exime a las funciones que usa una politica). Para anon devuelve false/null porque depende de auth.uid(): no expone datos. A confirmar en la primera corrida de CI; el cierre es revocar a anon/public en una migracion del carril de migraciones.",
-      "fecha_limite": "2026-12-15"
     }
   ]
 }
