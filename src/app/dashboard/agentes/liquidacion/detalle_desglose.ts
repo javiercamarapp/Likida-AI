@@ -32,7 +32,7 @@ export interface GeneracionDetalle {
   entregas: number;
 }
 
-export interface ExcepcionDetalle { tipo: TipoExcepcion; desde: string }
+export interface ExcepcionDetalle { tipo: TipoExcepcion; desde: string; /** Solo el `motivo` (baja / ambiguo / no_existe): nada más del detalle de la excepción sale a pantalla. */ detalle?: { motivo: string } }
 
 export interface RenglonDetalle { descripcion: string; monto: number }
 
@@ -142,7 +142,7 @@ export function armarDetalle(e: EntradaDetalle): DetalleDesglose {
     percepciones: liq.conceptos.filter((c) => c.tipo === 'percepcion').map((c) => ({ descripcion: c.descripcion, monto: c.monto })),
     deducciones: liq.conceptos.filter((c) => c.tipo === 'deduccion').map((c) => ({ descripcion: c.descripcion, monto: c.monto })),
     destinatarios, generaciones, enCurso, retenido,
-    excepciones: abiertas.map((x) => ({ tipo: x.tipo, desde: x.primeraVez })),
+    excepciones: abiertas.map((x) => ({ tipo: x.tipo, desde: x.primeraVez, ...(x.detalle && typeof x.detalle.motivo === 'string' ? { detalle: { motivo: x.detalle.motivo } } : {}) })),
     descargaUrl: e.descargaUrl, descargaNombre: nombreDescarga(desglose.bitacora),
   };
 }

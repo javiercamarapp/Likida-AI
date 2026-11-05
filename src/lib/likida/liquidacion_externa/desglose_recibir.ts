@@ -21,7 +21,7 @@
 
 import { createHash } from 'node:crypto';
 import { logger } from '@/lib/logger';
-import { DatoInvalido, OperadorDeBaja } from '../errores';
+import { DatoInvalido, OperadorAmbiguo, OperadorDeBaja } from '../errores';
 import { huellaContenido, huellaDesglose } from './esquema';
 import type { LiquidacionExternaNormalizada } from './esquema';
 import {
@@ -356,7 +356,7 @@ export async function recibirDesglose(
     if (!(e instanceof DatoInvalido)) throw e;
     // A37-A1-liquidaciones-12: la excepción distingue al operador DE BAJA (finiquito, reactivar) del que no existe (dar de alta).
     await deps.abrirExcepcion(tenantId, claveExterna, 'operador_no_encontrado', {
-      bitacora: d.bitacora, motivo: e instanceof OperadorDeBaja ? 'baja' : 'no_existe',
+      bitacora: d.bitacora, motivo: e instanceof OperadorDeBaja ? 'baja' : e instanceof OperadorAmbiguo ? 'ambiguo' : 'no_existe',
     }, ahora);
     return { estado: 'operador_no_encontrado', claveExterna };
   }

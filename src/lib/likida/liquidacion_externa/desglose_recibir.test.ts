@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DatoInvalido, OperadorDeBaja } from '../errores';
+import { DatoInvalido, OperadorAmbiguo, OperadorDeBaja } from '../errores';
 import { CampoInvalido } from '@/lib/http/campos_cuerpo';
 import { DESGLOSE_SINTETICO } from './desglose.fixture';
 import type { DesgloseBitacora } from './desglose_contrato';
@@ -367,6 +367,14 @@ describe('recibirDesglose: operador y destinatarios', () => {
     const r = await recibirDesglose(TENANT, desglose(), b.deps);
     expect(r.estado).toBe('operador_no_encontrado');
     expect(b.excepciones[0]).toMatchObject({ tipo: 'operador_no_encontrado', detalle: { bitacora: 'B-0001', motivo: 'baja' } });
+  });
+
+  it('CT-A12-09: operador AMBIGUO ⇒ motivo «ambiguo», no «no_existe» (dar de alta a un duplicado empeoraría el problema)', async () => {
+    const b = banco();
+    b.deps.resolverOperador = async () => { throw new OperadorAmbiguo('Esos datos identifican a más de un operador de tu flota.'); };
+    const r = await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(r.estado).toBe('operador_no_encontrado');
+    expect(b.excepciones[0]).toMatchObject({ tipo: 'operador_no_encontrado', detalle: { bitacora: 'B-0001', motivo: 'ambiguo' } });
   });
 
   it('operador inexistente => resultado operador_no_encontrado, excepción y nada escrito', async () => {

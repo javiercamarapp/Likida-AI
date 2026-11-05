@@ -28,6 +28,17 @@ export class OperadorDeBaja extends DatoInvalido {
 }
 
 /**
+ * Los datos del operador no identifican a UNO solo: apuntan a más de uno, o `id`, `telefono` y `numeroEmpleado` apuntan a
+ * choferes distintos (CT-A12-09). Es distinto de «no existe»: dar de alta a quien ya está duplicado empeora el problema.
+ */
+export class OperadorAmbiguo extends DatoInvalido {
+  constructor(mensaje: string) {
+    super(mensaje);
+    this.name = 'OperadorAmbiguo';
+  }
+}
+
+/**
  * El abono de ESA propuesta del portal de pago ya estaba registrado.
  *
  * No es un error de captura ni una falla: es la restricción de la 0237
