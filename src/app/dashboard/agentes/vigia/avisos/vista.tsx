@@ -7,6 +7,7 @@ import { useFormStatus } from 'react-dom';
 import { Check, ClipboardCopy, Pencil, Send, Trash2, TriangleAlert, Truck } from 'lucide-react';
 import { AvisoResultado } from '../../../../admin/ui/aviso-resultado';
 import type { GrupoDia, TarjetaAviso } from '@/lib/likida/vigia/aviso/bandeja';
+import { AVISO_AUTOMATICO_CONECTADO, TEXTO_AVISO_AUTOMATICO_POR_CONECTAR, VACIO_BANDEJA_POR_CONECTAR } from '@/lib/likida/vigia/aviso/conexion';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA BANDEJA «AVISOS DE VIAJE» (Agente 4, T-A4-22).
@@ -31,7 +32,9 @@ export const POLITICA_PRIVACIDAD =
   + 'La licencia, su vigencia y el teléfono del operador se pueden guardar aquí, pero NO se envían al cliente mientras la dueña '
   + 'de la flota no los habilite por escrito.';
 
-const VACIO_TODOS = 'Aún no hay avisos de viaje. Cuando el programa del día tenga servicios con caja y unidad, aparecerán aquí para que los revises.';
+const VACIO_TODOS = AVISO_AUTOMATICO_CONECTADO
+  ? 'Aún no hay avisos de viaje. Cuando el programa del día tenga servicios con caja y unidad, aparecerán aquí para que los revises.'
+  : VACIO_BANDEJA_POR_CONECTAR;
 const VACIO_PENDIENTES = 'No hay avisos esperando a nadie. Todo lo que se armó ya se envió o se descartó.';
 
 const ETIQUETA = 'block text-[11px] font-medium mb-1';
@@ -253,6 +256,11 @@ export function VistaAvisosVigia({ sufijo, grupos, total, hayMas = false, soloPe
 
       <p className="text-[12px]" style={{ color: 'var(--muted)' }} data-testid="ayuda">{AYUDA_REGLA_PROVISIONAL}</p>
 
+      {!AVISO_AUTOMATICO_CONECTADO ? (
+        <p role="note" className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }} data-testid="por-conectar">
+          <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />{TEXTO_AVISO_AUTOMATICO_POR_CONECTAR}
+        </p>
+      ) : null}
       {avisoEncendido === false ? (
         <Aviso>El aviso de viaje está apagado: no se arman ni se envían avisos nuevos hasta que el dueño lo encienda.</Aviso>
       ) : null}
