@@ -269,25 +269,94 @@ const CP1252: Readonly<Record<number, number>> = {
 /** Un byte de arranque de UTF-8 (C2–F4) leído como Latin-1/Windows-1252, seguido de un byte de continuación leído igual. */
 const SOSPECHA = /[Â-ô][\u0080-¿ŒœŠšŸŽžƒˆ˜–—‘-„†-•…‰‹›€™]/;
 
-/**
- * Si el texto es UTF-8 que alguien leyó como Latin-1/Windows-1252 («DirecciÃ³n», «CamiÃ³n»), lo devuelve bien
- * escrito. Solo reemplaza cuando TODA la cadena vuelve a ser UTF-8 válido; si no, la deja tal cual (nunca inventa).
- */
-export function repararMojibake(texto: string): string {
-  if (!SOSPECHA.test(texto)) return texto;
+/** Un paso: los caracteres vuelven a bytes (Latin-1/Windows-1252) y se leen como UTF-8. `null` si no es UTF-8 válido de punta a punta. */
+function unPasoLatin1(texto: string): string | null {
   const bytes: number[] = [];
   for (const ch of texto) {
     const cp = ch.codePointAt(0) as number;
     if (cp <= 0xff) bytes.push(cp);
     else if (CP1252[cp] !== undefined) bytes.push(CP1252[cp]);
-    else return texto; // un carácter que no cabe en un byte: el texto es otra cosa, no mojibake
+    else return null; // un carácter que no cabe en un byte: el texto es otra cosa, no mojibake
   }
   try {
     const arreglado = new TextDecoder('utf-8', { fatal: true }).decode(new Uint8Array(bytes));
-    return arreglado.length < texto.length ? arreglado : texto;
+    return arreglado.length < texto.length ? arreglado : null;
   } catch {
-    return texto;
+    return null;
   }
+}
+
+/**
+ * Secuencias de escape que traen los bytes de un UTF-8 mal leído: «\u00c3\u00a9» (JSON doblemente escapado), «&#195;&#169;» /
+ * «&#xC3;&#xA9;» (entidades numéricas) y «%C3%A9» (URL). Una racha son DOS o más seguidas; un «\u00e9» o «%20» solos no se tocan.
+ */
+const TOKEN_ESCAPE = String.raw`(?:\\u00[0-9a-f]{2}|&#(?:x[0-9a-f]{2,4}|\d{3,4});|%[0-9a-f]{2})`;
+const RACHA_ESCAPES = new RegExp(`${TOKEN_ESCAPE}{2,}`, 'gi');
+const LEJOS = /\\u00[c-f][0-9a-f]|&#(?:x[c-f][0-9a-f]|19\d|2[0-4]\d);|%[c-f][0-9a-f]/i;
+
+function escapeACaracter(token: string): string | null {
+  let cp: number;
+  if (token[0] === '\\') cp = parseInt(token.slice(2), 16);
+  else if (token[0] === '&') cp = token[2] === 'x' || token[2] === 'X' ? parseInt(token.slice(3, -1), 16) : parseInt(token.slice(2, -1), 10);
+  else cp = parseInt(token.slice(1), 16);
+  return Number.isFinite(cp) && cp <= 0x10ffff ? String.fromCodePoint(cp) : null;
+}
+
+/** Resultado de mirar un texto: `limpio` (nada sospechoso), `reparado` (se arregló sin ambigüedad) o `revision` (se ve dañado pero NO se adivina). */
+export type EstadoMojibake = 'limpio' | 'reparado' | 'revision';
+
+/**
+ * Repara el mojibake cuando es INEQUÍVOCO y, si hay indicios pero no se puede devolver el texto con certeza, lo marca `revision`
+ * (para una persona; jamás se «adivina»). Cubre los caracteres dañados directos («DirecciÃ³n», «â€œ») y los que llegan como
+ * secuencias de escape («\u00c3\u00a9», «&#195;&#169;», «%C3%A9»). Una racha de escapes solo se sustituye si su resultado
+ * es UTF-8 válido de punta a punta; el resto del texto queda byte a byte igual.
+ */
+export function analizarMojibake(texto: string): { texto: string; estado: EstadoMojibake } {
+  let t = texto;
+  let tocado = false;
+  let dudas = false;
+
+  if (LEJOS.test(t)) {
+    t = t.replace(RACHA_ESCAPES, (racha) => {
+      const toks = racha.match(new RegExp(TOKEN_ESCAPE, 'gi')) ?? [];
+      const chars = toks.map(escapeACaracter);
+      if (chars.some((c) => c === null)) { dudas = true; return racha; }
+      const decodificada = chars.join('');
+      // «%C3%A9» es UTF-8 bien codificado para URL: sus bytes se leen directo. Los demás escapes llevan el mojibake ya hecho.
+      const porcentaje = toks.every((x) => x[0] === '%');
+      const arreglada = porcentaje ? bytesUtf8(decodificada) : unPasoLatin1(decodificada);
+      if (arreglada === null || arreglada === decodificada) { if (SOSPECHA.test(decodificada) || /[\u00c2\u00c3]/.test(decodificada) || porcentaje) dudas = true; return racha; }
+      tocado = true;
+      return arreglada;
+    });
+  }
+
+  // Latin-1/Windows-1252 leído de UTF-8, hasta 3 pasadas (doble codificación); cada pasada exige UTF-8 válido y más corto.
+  for (let i = 0; i < 3 && SOSPECHA.test(t); i++) {
+    const siguiente = unPasoLatin1(t);
+    if (siguiente === null) break;
+    t = siguiente;
+    tocado = true;
+  }
+
+  if (SOSPECHA.test(t) || t.includes('\uFFFD') || dudas) return { texto: tocado ? t : texto, estado: 'revision' };
+  return { texto: t, estado: tocado ? 'reparado' : 'limpio' };
+}
+
+/** Bytes (cada carácter ≤ 0xFF) leídos como UTF-8 estricto; `null` si no lo son. */
+function bytesUtf8(cs: string): string | null {
+  const bytes = Array.from(cs, (c) => c.codePointAt(0) as number);
+  if (bytes.some((b) => b > 0xff)) return null;
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(new Uint8Array(bytes)); } catch { return null; }
+}
+
+/**
+ * Si el texto es UTF-8 que alguien leyó como Latin-1/Windows-1252 («DirecciÃ³n», «CamiÃ³n») o llegó como escapes
+ * («\u00c3\u00b3», «%C3%B3», «&#195;&#179;»), lo devuelve bien escrito. Solo reemplaza lo inequívoco; lo dudoso se deja
+ * tal cual (nunca inventa) — `analizarMojibake` dice cuál es cuál para mandarlo a revisión humana.
+ */
+export function repararMojibake(texto: string): string {
+  return analizarMojibake(texto).texto;
 }
 
 /** Repara cada texto de un valor JSON (valores, no llaves). Devuelve el mismo objeto si nada cambió. */
@@ -312,7 +381,7 @@ export function repararJson(valor: unknown, nivel = 0): unknown {
 export function conTextoReparado(http: Http): Http {
   return async (p) => {
     const r = await http(p);
-    if (r.estado < 200 || r.estado >= 300 || !SOSPECHA.test(r.cuerpo)) return r;
+    if (r.estado < 200 || r.estado >= 300 || !(SOSPECHA.test(r.cuerpo) || LEJOS.test(r.cuerpo))) return r;
     let j: unknown;
     try { j = JSON.parse(r.cuerpo); } catch { return r; }
     const rep = repararJson(j);
